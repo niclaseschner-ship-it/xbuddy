@@ -1,49 +1,41 @@
-# Specs — Modell & Konventionen
+# Specs
 
-`specs/` ist die **Quelle der Wahrheit** für das Soll-Verhalten von XBuddy.
-Es sind **lebende Specs**: Sie beschreiben, wie das System sich *heute*
-verhalten soll — nicht, was wann geändert wurde (das steht in Tickets/PRs).
+`specs/` ist die **Quelle der Wahrheit** für das Soll-Verhalten von XBuddy —
+**lebende Specs**: Sie beschreiben, wie das System sich *heute* verhalten
+soll, nicht was wann geändert wurde (das steht in Tickets/PRs).
+
+## Die eine Regel
+
+> **Verhalten ändern = Spec im selben PR ändern.**
+
+Code und Spec wandern zusammen, im selben Branch, im selben Review. Mehr
+braucht es nicht, um die Spec synchron zu halten.
 
 ## Aufbau
 
 - `constitution.md` — übergeordnete Prinzipien, selten geändert.
-- `system.md` — Ökosystem-Architektur, Zusammenspiel der Bausteine.
-- `<komponente>.md` — eine lebende Spec je Ökosystem-Baustein
-  (`display`, `controller`, `hub`) bzw. je Buddy unter `buddies/`.
+- Eine Spec-Datei je **Fähigkeit mit eigenem Verhaltens-Vertrag** —
+  `buddies/<name>.md` (was die Familie erlebt) bzw. `platform/<name>.md`
+  (geteilte Software-Fähigkeit wie Messaging, Rendering).
 
-Eine neue Komponente bekommt **erst dann** eine Datei, wenn es echte
-Anforderungen dafür gibt — keine leeren Stubs.
+Gegliedert wird nach **Verhalten**, nicht nach Code-Modulen und nicht nach
+Hardware. Eine Datei entsteht **erst**, wenn ein Ticket die Fähigkeit
+berührt — nichts auf Vorrat.
 
-## Anforderungen & IDs
+## Eine Anforderung schreiben
 
-Jede Anforderung hat eine **stabile ID**: Präfix der Komponente + laufende
-Nummer, z. B. `DISP-1`, `CAL-3`. IDs werden **nie neu vergeben und nie
-umnummeriert** — eine entfernte Anforderung hinterlässt eine Lücke.
+Jede Anforderung hat eine **stabile ID** (Präfix + laufende Nummer) und einen
+testbaren Satz — am besten im Wenn/Dann-Stil:
 
-Formuliert wird in **EARS** (Easy Approach to Requirements Syntax):
+```markdown
+# Kalender — Spec     (ID-Präfix: KAL)
 
-| Muster | Form |
-|---|---|
-| Immer | „Das System tut X." |
-| Ereignis | „Wenn ‹Trigger›, tut das System X." |
-| Zustand | „Solange ‹Zustand›, tut das System X." |
-| Optional | „Wo ‹Funktion vorhanden›, tut das System X." |
-| Unerwünscht | „Wenn ‹unerwünschte Bedingung›, tut das System X." |
+### KAL-1 — Wochenansicht
+Das System zeigt die Termine der laufenden Woche als Tagesspalten.
 
-EARS zwingt dazu, Trigger und Bedingungen explizit zu machen — die Anforderung
-wird testbar.
+### KAL-2 — Heute hervorheben
+Wenn der angezeigte Tag der heutige ist, hebt das System ihn farblich ab.
+```
 
-## Verhältnis zu Tickets
-
-Ein Ticket ist ein **Inkrement**, kein eigener Spec-Container:
-
-1. Braucht das Ticket neue/geänderte Anforderungen → **zuerst** die
-   Komponenten-Spec anpassen, IDs vergeben, reviewen.
-2. **Dann** implementieren — gegen genau diese IDs.
-3. Erfüllte Anforderung wird in der Spec mit der Ticket-`#` annotiert.
-
-So zeigt die Spec jederzeit den Soll-Zustand, und jede Anforderung ist
-rückverfolgbar bis zu Ticket und Code. Kein Code, bevor die Anforderung in
-der Spec steht.
-
-Vorlage für eine neue Komponenten-Spec: `_TEMPLATE.md`.
+IDs werden nie neu vergeben und nie umnummeriert. Ein Ticket nennt die IDs,
+die es umsetzt — das ist der Link zwischen Ticket, Spec und Code.
