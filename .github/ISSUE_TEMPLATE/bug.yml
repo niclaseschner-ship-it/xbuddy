@@ -1,0 +1,41 @@
+name: Bug
+description: Ein Fehlverhalten melden
+title: "[Bug] "
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Was passiert?
+      description: Beschreibe das Fehlverhalten.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Was wäre erwartet?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Schritte zum Reproduzieren
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Ökosystem-Baustein
+      description: Bitte danach auch das passende `area:`-Label setzen.
+      options:
+        - Display
+        - Controller
+        - Hub
+        - Buddy
+        - Infra / übergreifend
+    validations:
+      required: false
