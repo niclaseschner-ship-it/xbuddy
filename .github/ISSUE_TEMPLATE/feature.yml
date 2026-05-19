@@ -1,0 +1,50 @@
+name: Feature
+description: Eine neue Funktionalität beschreiben
+title: "[Feature] "
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Worum geht es?
+      description: Ein, zwei Sätze — was soll XBuddy können, das es heute nicht kann?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Warum / North-Star-Bezug
+      description: >
+        Welche Barriere senkt das Feature? Verschiebt es eine Aufgabe vom
+        Elternteil zum Kind, oder lässt es XBuddy mit der Familie mitwachsen?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Akzeptanzkriterien
+      description: Woran ist erkennbar, dass das Feature fertig ist? Als Checkliste.
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Ökosystem-Baustein
+      description: Wozu gehört das Feature? Bitte danach auch das passende `area:`-Label setzen.
+      options:
+        - Display
+        - Controller
+        - Hub
+        - Buddy
+        - Infra / übergreifend
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notizen / offene Fragen
+    validations:
+      required: false
