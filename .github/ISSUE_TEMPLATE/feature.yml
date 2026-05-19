@@ -1,8 +1,14 @@
 name: Feature
-description: Eine neue Funktionalität beschreiben
+description: Ein Feature als Inkrement gegen die Spec
 title: "[Feature] "
 labels: ["type:feature"]
 body:
+  - type: markdown
+    attributes:
+      value: >
+        Ein Feature setzt Anforderungen aus den `specs/` um. Reihenfolge:
+        erst die betroffene Komponenten-Spec schärfen (Requirement-IDs
+        vergeben/ändern, reviewen) — dann implementieren.
   - type: textarea
     id: summary
     attributes:
@@ -15,25 +21,34 @@ body:
     attributes:
       label: Warum / North-Star-Bezug
       description: >
-        Welche Barriere senkt das Feature? Verschiebt es eine Aufgabe vom
-        Elternteil zum Kind, oder lässt es XBuddy mit der Familie mitwachsen?
+        Verschiebt es eine Aufgabe vom Elternteil zum Kind, oder lässt es
+        XBuddy mit der Familie mitwachsen?
+    validations:
+      required: true
+  - type: input
+    id: spec
+    attributes:
+      label: Betroffene Spec
+      description: "Welche Datei in specs/? z. B. specs/buddies/kalender.md"
+      placeholder: specs/<komponente>.md
     validations:
       required: true
   - type: textarea
-    id: acceptance
+    id: requirements
     attributes:
-      label: Akzeptanzkriterien
-      description: Woran ist erkennbar, dass das Feature fertig ist? Als Checkliste.
+      label: Requirement-IDs
+      description: >
+        Welche Anforderungs-IDs setzt dieses Ticket um? Bestehende IDs
+        nennen oder neue Kurztitel — die IDs werden in der Spec vergeben.
       value: |
-        - [ ]
-        - [ ]
+        -
     validations:
       required: true
   - type: dropdown
     id: area
     attributes:
       label: Ökosystem-Baustein
-      description: Wozu gehört das Feature? Bitte danach auch das passende `area:`-Label setzen.
+      description: Bitte danach auch das passende `area:`-Label setzen.
       options:
         - Display
         - Controller
@@ -42,6 +57,13 @@ body:
         - Infra / übergreifend
     validations:
       required: true
+  - type: checkboxes
+    id: spec-checkpoint
+    attributes:
+      label: Spec-Checkpoint
+      description: Vor dem Wechsel auf „In Progress" abhaken — kein Code davor.
+      options:
+        - label: Die Requirement-IDs stehen in der Komponenten-Spec und sind reviewt.
   - type: textarea
     id: notes
     attributes:
