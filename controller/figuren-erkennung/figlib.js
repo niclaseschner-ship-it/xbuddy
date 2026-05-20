@@ -116,7 +116,7 @@
       figure_present_ms: 150,
       pattern_tolerance: 0.05,
       match_distance_px: 60,
-      tap_dwell_ms: 100,
+      tap_dwell_ms: 30,
       button_padding_px: 30,
       angle_update_max_hz: 10,
       angle_update_min_delta_deg: 3,
