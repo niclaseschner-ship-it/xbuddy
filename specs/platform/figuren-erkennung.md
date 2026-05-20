@@ -273,7 +273,9 @@ Banner oben: **„FIGUREN-ERKENNUNG · V1-TEST · `<source_id>`"**.
 ## 4. Konfiguration
 
 ### FIG-17 — Konfigurationswerte
-Statisch in der Seite (JS-Konstanten) oder als URL-Parameter überschreibbar:
+Defaults stehen als JS-Konstanten in `figlib.js`. Sie können per
+`config.json` im selben Verzeichnis (siehe FIG-23) oder als URL-Parameter
+überschrieben werden. Priorität: **URL > config.json > Defaults**.
 
 | Parameter                    | URL-Param         | Default                                  |
 |------------------------------|-------------------|------------------------------------------|
@@ -302,6 +304,45 @@ Bucket-Quantisierung (FIG-20) und die Grenz-Hysterese (FIG-21). Wird nur
 
 *Tickets:* #1, #6, #9, #11
 
+### FIG-23 — Instanz-Konfiguration über `config.json`
+Beim Laden der Seite wird `./config.json` per `fetch` geladen und auf die
+Defaults aus FIG-17 angewendet. Damit liegen pro-Instanz-Werte
+(`source_id`, `router_url`, Tuning-Werte, Registry) **als Daten neben
+dem Code** — `figlib.js` bleibt reine Logik und ist über alle
+Controller-Instanzen identisch.
+
+**Format:** JSON-Objekt mit denselben Schlüsseln wie `configDefaults()`.
+Nicht gesetzte Schlüssel bleiben auf dem Default. Beispiel:
+
+```json
+{
+  "source_id": "phone:wohnzimmer",
+  "router_url": "https://hub.local/event",
+  "pattern_tolerance": 0.04,
+  "match_distance_px": 200,
+  "n_buckets": 4,
+  "bucket_hysteresis_deg": 5,
+  "registry": {
+    "gelbes-e": [0.650, 0.956, 1.0]
+  }
+}
+```
+
+**Fehlerfälle:** Existiert die Datei nicht oder ist sie nicht parsebar,
+fällt die Seite stumm auf die Defaults zurück und protokolliert den
+Fehler in `console.warn`. Die Seite bleibt funktionsfähig — wichtig
+für das Repo-Default-Setup ohne Live-Werte.
+
+**Priorität:** URL-Parameter (siehe FIG-17) überschreiben weiterhin
+auch `config.json`. Reihenfolge: `Defaults` → `config.json` → URL.
+
+**Selbsttragend (FIG-19):** Die Datei liegt im selben Verzeichnis wie
+`index.html` und `figlib.js` und wird mit ausgeliefert. Pro Controller-
+Instanz wird sie separat verwaltet (nicht alle Instanzen im Repo,
+sondern beim Deployment der jeweiligen URL erzeugt).
+
+*Tickets:* #11
+
 ## 5. HTML-Anforderungen
 
 ### FIG-18 — Querformat angenommen
@@ -315,11 +356,11 @@ Tester das Phone im Querformat halten.
 ### FIG-19 — Selbsttragend
 Keine externen Asset-Quellen (kein CDN, keine Drittpartei-Domain, keine
 externen Libraries). Die Seite besteht aus einer HTML-Datei mit
-Inline-CSS und einer begleitenden JS-Datei `figlib.js` im selben
-Verzeichnis. Beide werden zusammen ausgeliefert, nach erstem Laden
-offline-fähig.
+Inline-CSS, der begleitenden JS-Datei `figlib.js` und optional einer
+Instanz-Konfiguration `config.json` (FIG-23) — alles im selben
+Verzeichnis, zusammen ausgeliefert, nach erstem Laden offline-fähig.
 
-*Tickets:* #1
+*Tickets:* #1, #11
 
 ---
 
