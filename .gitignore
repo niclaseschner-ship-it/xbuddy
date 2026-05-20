@@ -21,3 +21,12 @@ desktop.ini
 # Controller-Instanz-Configs (FIG-23) — pro Instanz separat verwaltet,
 # nicht im Repo. Format ist in config.example.json dokumentiert.
 controller/**/config.json
+
+# Router-Instanz-Konfig + Routing-Tabelle (ROU-18/19) — analog
+# pro Deployment, nicht im Repo. Format: router/*.example.json
+router/routing.json
+router/config.json
+
+# Test-Caches
+.pytest_cache/
+__pycache__/
