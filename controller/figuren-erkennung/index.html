@@ -299,7 +299,7 @@
         lines.push(`zent : (${c.x.toFixed(0)}, ${c.y.toFixed(0)})`);
         const dlt = (session.lastFrameDelta || 0).toFixed(2);
         const mok = session.lastMatchOk || '—';
-        lines.push(`match: ${mok}   Δ: ${dlt}°   cum: ${session.cumulativeAngle.toFixed(1)}°`);
+        lines.push(`match: ${mok}   Δ: ${dlt}°   cum: ${session.cumulativeAngle.toFixed(1)}°   bucket: ${session.currentBucket}`);
       }
       rawEl.textContent = lines.join('\n');
     }
