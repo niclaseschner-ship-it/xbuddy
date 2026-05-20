@@ -145,19 +145,30 @@
 
 <script src="./figlib.js"></script>
 <script>
-(() => {
+(async () => {
   'use strict';
 
-  // === FIG-17 — Config aus URL-Parametern (Defaults aus figlib) ===
+  // === FIG-23 — Instanz-Konfiguration aus ./config.json ===
+  // Defaults aus figlib < config.json < URL-Parameter
+  let fileCfg = {};
+  try {
+    const res = await fetch('./config.json', { cache: 'no-store' });
+    if (res.ok) fileCfg = await res.json();
+  } catch (err) {
+    console.warn('config.json konnte nicht geladen werden — fallback auf Defaults:', err);
+  }
+
+  // === FIG-17 — URL-Parameter überschreiben config.json + Defaults ===
   const qs = new URLSearchParams(location.search);
   const num = (k, def) => { const v = parseFloat(qs.get(k)); return Number.isFinite(v) ? v : def; };
   const defaults = figLib.configDefaults();
-  const cfg = Object.assign({}, defaults, {
-    source_id:                   qs.get('source')  || defaults.source_id,
-    router_url:                  qs.get('router')  || '',
-    pattern_tolerance:           num('tol',  defaults.pattern_tolerance),
-    angle_update_min_delta_deg:  num('dead', defaults.angle_update_min_delta_deg),
-    angle_update_max_hz:         num('rate', defaults.angle_update_max_hz),
+  const base = Object.assign({}, defaults, fileCfg);
+  const cfg = Object.assign({}, base, {
+    source_id:                   qs.get('source')  || base.source_id,
+    router_url:                  qs.get('router')  || base.router_url || '',
+    pattern_tolerance:           num('tol',  base.pattern_tolerance),
+    angle_update_min_delta_deg:  num('dead', base.angle_update_min_delta_deg),
+    angle_update_max_hz:         num('rate', base.angle_update_max_hz),
   });
   document.getElementById('sid').textContent = cfg.source_id;
 
@@ -299,7 +310,7 @@
         lines.push(`zent : (${c.x.toFixed(0)}, ${c.y.toFixed(0)})`);
         const dlt = (session.lastFrameDelta || 0).toFixed(2);
         const mok = session.lastMatchOk || '—';
-        lines.push(`match: ${mok}   Δ: ${dlt}°   cum: ${session.cumulativeAngle.toFixed(1)}°`);
+        lines.push(`match: ${mok}   Δ: ${dlt}°   cum: ${session.cumulativeAngle.toFixed(1)}°   bucket: ${session.currentBucket}`);
       }
       rawEl.textContent = lines.join('\n');
     }

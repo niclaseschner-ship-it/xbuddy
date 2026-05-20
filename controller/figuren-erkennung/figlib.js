@@ -120,6 +120,10 @@
       button_padding_px: 30,
       angle_update_max_hz: 10,
       angle_update_min_delta_deg: 3,
+      // FIG-20/21 — Bucket-Quantisierung + Grenz-Hysterese
+      n_buckets: 4,
+      bucket_size_deg: 90,
+      bucket_hysteresis_deg: 5,
       registry: {
         'demo-dreieck-A': [0.50, 0.70, 1.0],
         'demo-dreieck-B': [0.85, 0.92, 1.0],
@@ -127,13 +131,42 @@
     };
   }
 
+  // FIG-20 — kanonischer Bucket für einen kumulativen Winkel.
+  function mod360(a) { return ((a % 360) + 360) % 360; }
+  function computeBucket(cum, cfg) {
+    return Math.floor(mod360(cum) / cfg.bucket_size_deg) % cfg.n_buckets;
+  }
+
+  // FIG-21 — wendet die Bucket-Hysterese an: wechselt nur, wenn der
+  // kumulative Winkel die Grenze um > `bucket_hysteresis_deg` überschreitet
+  // (gemessen als Abstand zur Mitte des aktuellen Buckets, mod-korrekt).
+  function updateBucketWithHysteresis(session) {
+    const cfg = session.config;
+    const cum = session.cumulativeAngle;
+    const b = session.currentBucket;
+    const natural = computeBucket(cum, cfg);
+    if (natural === b) return;
+    const centerB = (b + 0.5) * cfg.bucket_size_deg;
+    let d = mod360(cum - centerB);
+    if (d > 180) d -= 360;
+    if (Math.abs(d) > cfg.bucket_size_deg / 2 + cfg.bucket_hysteresis_deg) {
+      session.currentBucket = natural;
+    }
+  }
+
   // ============================================================
   //  State Machine
   // ============================================================
 
   function createSession(config) {
+    const cfg = Object.assign({}, configDefaults(), config || {});
+    // FIG-17/FIG-20 — wenn der Aufrufer `n_buckets` überschreibt, aber
+    // `bucket_size_deg` nicht, leiten wir die Größe daraus ab.
+    if (config && config.n_buckets && !('bucket_size_deg' in config)) {
+      cfg.bucket_size_deg = 360 / config.n_buckets;
+    }
     return {
-      config: Object.assign({}, configDefaults(), config || {}),
+      config: cfg,
       // FIG-2 Präsenz
       figurePresent: false,
       identifiedFigureId: null,
@@ -147,6 +180,8 @@
       // FIG-14 Diagnose: pro-Frame-Delta und Status der räumlichen Zuordnung
       lastFrameDelta: 0,
       lastMatchOk: null,  // 'ok' | 'fail' | 'reanchor' | null
+      // FIG-20/21 — quantisierter, hysteretisch geglätteter Bucket
+      currentBucket: 0,
       // FIG-8 Button
       buttonCircle: null,
       buttonDwellStart: null,
@@ -181,9 +216,12 @@
     session.lastMatchOk = null;
     session.lastSentCumulative = 0;
     session.lastAngleSentAt = now;
+    // FIG-22 — Initial-Bucket deterministisch dort, wo cum=0 fällt.
+    session.currentBucket = computeBucket(0, session.config);
     events.push(makeEvent(session, 'figure_detected', {
       figure_id: figureId,
       angle: 0,
+      bucket: session.currentBucket,
     }));
   }
 
@@ -200,6 +238,7 @@
     session.lastFrameDelta = 0;
     session.lastMatchOk = null;
     session.lastSentCumulative = null;
+    session.currentBucket = 0;
     session.buttonCircle = null;
     session.buttonDwellStart = null;
     session.buttonDwellTouchId = null;
@@ -265,6 +304,9 @@
           }
         }
 
+        // FIG-20/21 — Bucket nach Akku-Update mit Hysterese aktualisieren.
+        updateBucketWithHysteresis(session);
+
         // FIG-11 — Drosselung + Dead-Zone
         const minInterval = 1000 / cfg.angle_update_max_hz;
         if (now - session.lastAngleSentAt >= minInterval &&
@@ -273,6 +315,7 @@
           events.push(makeEvent(session, 'angle_update', {
             figure_id: session.identifiedFigureId,
             angle: Math.round(session.cumulativeAngle * 10) / 10,
+            bucket: session.currentBucket,
           }));
           session.lastSentCumulative = session.cumulativeAngle;
           session.lastAngleSentAt = now;
@@ -331,9 +374,12 @@
     // pure geometry & matching (genutzt extern in index.html und Tests)
     dist, centroid, descriptor, patternDist, identify,
     matchPoints, frameRotationDelta, pickThree,
+    // bucket-Quantisierung (FIG-20)
+    computeBucket,
     // session
     configDefaults, createSession, feedTouches,
   };
-  // Interne Helfer (nicht exportiert): wrapDelta, buttonCircle, pointInCircle,
-  // randomUuid, makeEvent, startNewFigureSession, endSessionViaButton.
+  // Interne Helfer (nicht exportiert): wrapDelta, mod360, buttonCircle,
+  // pointInCircle, updateBucketWithHysteresis, randomUuid, makeEvent,
+  // startNewFigureSession, endSessionViaButton.
 });

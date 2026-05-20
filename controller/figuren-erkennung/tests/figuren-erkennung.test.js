@@ -678,3 +678,276 @@ test('FIG-2 / FIG-14 — index.html enthält periodischen Tick für State-Machin
   assert.match(HTML, /setInterval\([\s\S]*?figLib\.feedTouches/,
     'index.html muss feedTouches periodisch aufrufen, sonst greift FIG-2-Hysterese nicht bei stillstehender Figur');
 });
+
+// ===========================================================
+//  FIG-23 — Instanz-Konfiguration via ./config.json
+// ===========================================================
+
+test('FIG-23 — index.html lädt ./config.json per fetch', () => {
+  assert.match(HTML, /fetch\(\s*['"]\.\/config\.json['"]/,
+    'index.html muss config.json aus dem selben Verzeichnis laden');
+});
+
+test('FIG-23 — Lade-Reihenfolge: Defaults < config.json < URL-Parameter', () => {
+  // URL-Param-Logik liegt nach dem fileCfg-Merge — config.json wird also
+  // VOR den URL-Params auf die Defaults gemerged, damit die URL Vorrang
+  // behält.
+  const fetchIdx  = HTML.search(/fetch\(\s*['"]\.\/config\.json/);
+  const qsIdx     = HTML.search(/URLSearchParams\(location\.search\)/);
+  assert.ok(fetchIdx > -1 && qsIdx > -1);
+  assert.ok(fetchIdx < qsIdx,
+    'config.json muss vor dem URL-Param-Merge gelesen werden — sonst überschreibt es die URL');
+});
+
+test('FIG-23 — Fehlerfall: config.json fehlt → console.warn statt fataler Fehler', () => {
+  assert.match(HTML, /catch\s*\([^)]*\)\s*\{[\s\S]*?console\.warn/,
+    'Fehlende oder defekte config.json darf die Seite nicht crashen');
+});
+
+test('FIG-23 — config.example.json ist im Repo enthalten und parsebar', () => {
+  const examplePath = path.join(__dirname, '..', 'config.example.json');
+  assert.ok(fs.existsSync(examplePath), 'config.example.json fehlt');
+  const raw = fs.readFileSync(examplePath, 'utf8');
+  const parsed = JSON.parse(raw);
+  assert.ok(typeof parsed === 'object' && parsed !== null);
+  // Format muss zu configDefaults passen (gleiche Schlüssel-Familie)
+  const defaults = fig.configDefaults();
+  for (const key of Object.keys(parsed)) {
+    if (key.startsWith('_')) continue;  // Kommentar-Felder
+    assert.ok(key in defaults,
+      `config.example.json enthält unbekannten Schlüssel "${key}" — Format-Drift?`);
+  }
+});
+
+// ===========================================================
+//  FIG-20 / FIG-21 / FIG-22 — Bucket-Quantisierung + Hysterese
+//  Architektur-Entscheidung E-FIG-7 (Ticket #11): Quantisierung
+//  und Grenz-Hysterese laufen in der Seite, nicht im Router.
+// ===========================================================
+
+test('FIG-17 — Bucket-Defaults: n_buckets=4, bucket_size_deg=90, bucket_hysteresis_deg=5', () => {
+  const cfg = fig.configDefaults();
+  assert.strictEqual(cfg.n_buckets, 4);
+  assert.strictEqual(cfg.bucket_size_deg, 90);
+  assert.strictEqual(cfg.bucket_hysteresis_deg, 5);
+  assert.strictEqual(cfg.n_buckets * cfg.bucket_size_deg, 360,
+    'n_buckets × bucket_size_deg muss 360 ergeben');
+});
+
+test('FIG-17 — n_buckets-Override leitet bucket_size_deg ab (8 → 45°)', () => {
+  const session = fig.createSession({ n_buckets: 8 });
+  assert.strictEqual(session.config.n_buckets, 8);
+  assert.strictEqual(session.config.bucket_size_deg, 45);
+});
+
+test('FIG-20 — computeBucket: cum 0 fällt in Bucket 0 (Default-Geometrie)', () => {
+  const cfg = fig.configDefaults();
+  assert.strictEqual(fig.computeBucket(0, cfg), 0);
+});
+
+test('FIG-20 — computeBucket: jeder Sektor wird korrekt erkannt', () => {
+  const cfg = fig.configDefaults();
+  assert.strictEqual(fig.computeBucket(45,  cfg), 0);
+  assert.strictEqual(fig.computeBucket(91,  cfg), 1);
+  assert.strictEqual(fig.computeBucket(181, cfg), 2);
+  assert.strictEqual(fig.computeBucket(271, cfg), 3);
+});
+
+test('FIG-20 — computeBucket: negative Winkel werden mod-360 verortet', () => {
+  const cfg = fig.configDefaults();
+  // -10° entspricht 350° → Bucket 3
+  assert.strictEqual(fig.computeBucket(-10, cfg), 3);
+  // -100° entspricht 260° → Bucket 2
+  assert.strictEqual(fig.computeBucket(-100, cfg), 2);
+});
+
+test('FIG-20 — computeBucket: Winkel > 360° werden mod-360 verortet', () => {
+  const cfg = fig.configDefaults();
+  // 730° entspricht 10° → Bucket 0
+  assert.strictEqual(fig.computeBucket(730, cfg), 0);
+  // 460° entspricht 100° → Bucket 1
+  assert.strictEqual(fig.computeBucket(460, cfg), 1);
+});
+
+test('FIG-22 — figure_detected trägt bucket:0 (Default-Geometrie)', () => {
+  const session = fig.createSession({
+    figure_present_ms: 0,
+    registry: { A: [0.50, 0.70, 1.0] },
+  });
+  const tri = trianglesWithDescriptor([0.50, 0.70, 1.0]);
+  const evs = fig.feedTouches(session, tri, 0);
+  const det = evs.find(e => e.type === 'figure_detected');
+  assert.ok(det);
+  assert.strictEqual(det.bucket, 0);
+  assert.strictEqual(session.currentBucket, 0);
+});
+
+test('FIG-10 — angle_update trägt bucket-Feld', () => {
+  const session = fig.createSession({
+    figure_present_ms: 0,
+    angle_update_min_delta_deg: 0.01,
+    angle_update_max_hz: 1000,
+    registry: { A: [0.50, 0.70, 1.0] },
+  });
+  const tri = trianglesWithDescriptor([0.50, 0.70, 1.0]);
+  fig.feedTouches(session, tri, 0);
+  const c = fig.centroid(tri);
+  const evs = fig.feedTouches(session, tri.map(p => rotateAround(c, 30, p)), 10);
+  const upd = evs.find(e => e.type === 'angle_update');
+  assert.ok(upd);
+  assert.strictEqual(typeof upd.bucket, 'number');
+  assert.strictEqual(upd.bucket, 0,
+    'cum ≈ 30° → Bucket 0 (Sektor 0°–90°)');
+});
+
+// FIG-7-Einschränkung: nächste-Nachbar-Zuordnung trägt nur bei kleinen
+// Per-Frame-Rotationen korrekt. Bucket-Tests führen Drehungen daher
+// inkrementell aus — mit Zustand über die physische Orientierung. Das
+// spiegelt auch die reale Drehbewegung auf dem Phone wider.
+function makeTurner(session, baseTri, c, stepDeg) {
+  const step = stepDeg || 10;
+  const state = { physical: 0, now: 0 };
+  return {
+    state,
+    turnBy(deltaDeg) {
+      const sign = deltaDeg < 0 ? -1 : 1;
+      const total = Math.abs(deltaDeg);
+      let acc = 0;
+      while (acc < total - 1e-9) {
+        const s = Math.min(step, total - acc);
+        state.physical += sign * s;
+        state.now += 10;
+        fig.feedTouches(session, baseTri.map(p => rotateAround(c, state.physical, p)), state.now);
+        acc += s;
+      }
+    },
+  };
+}
+
+test('FIG-21 — Hysterese: knapp jenseits der Grenze bleibt im aktuellen Bucket', () => {
+  // Default: bucket_size_deg=90, bucket_hysteresis_deg=5. Wechsel-Grenze
+  // gemessen vom Bucket-Mittelpunkt 45° → 45 + 90/2 + 5 = 95°.
+  const session = fig.createSession({
+    figure_present_ms: 0,
+    angle_update_min_delta_deg: 0.01,
+    angle_update_max_hz: 1000,
+    registry: { A: [0.50, 0.70, 1.0] },
+  });
+  const tri = trianglesWithDescriptor([0.50, 0.70, 1.0]);
+  fig.feedTouches(session, tri, 0);
+  const c = fig.centroid(tri);
+  const turner = makeTurner(session, tri, c);
+  turner.turnBy(92);
+  assert.ok(Math.abs(session.cumulativeAngle - 92) < 1,
+    `cum erwartet ≈ 92°, bekommen ${session.cumulativeAngle}`);
+  assert.strictEqual(session.currentBucket, 0,
+    'unter Hysterese-Schwelle muss currentBucket auf 0 bleiben');
+});
+
+test('FIG-21 — Hysterese: jenseits Grenze + Hysterese wechselt den Bucket', () => {
+  const session = fig.createSession({
+    figure_present_ms: 0,
+    angle_update_min_delta_deg: 0.01,
+    angle_update_max_hz: 1000,
+    registry: { A: [0.50, 0.70, 1.0] },
+  });
+  const tri = trianglesWithDescriptor([0.50, 0.70, 1.0]);
+  fig.feedTouches(session, tri, 0);
+  const c = fig.centroid(tri);
+  const turner = makeTurner(session, tri, c);
+  turner.turnBy(96);
+  assert.ok(Math.abs(session.cumulativeAngle - 96) < 1);
+  assert.strictEqual(session.currentBucket, 1,
+    'jenseits 45 + 50 = 95° muss auf Bucket 1 gewechselt werden');
+});
+
+test('FIG-21 — Hysterese: Schwankungen um die Grenze ändern den Bucket nicht', () => {
+  // Bewege cum mehrfach knapp über und unter die 90°-Grenze (88° ↔ 92°).
+  // Solange |cum − 45| ≤ 50, bleibt der Bucket auf seinem Anfangswert.
+  const session = fig.createSession({
+    figure_present_ms: 0,
+    angle_update_min_delta_deg: 0.01,
+    angle_update_max_hz: 1000,
+    registry: { A: [0.50, 0.70, 1.0] },
+  });
+  const tri = trianglesWithDescriptor([0.50, 0.70, 1.0]);
+  fig.feedTouches(session, tri, 0);
+  const c = fig.centroid(tri);
+  const turner = makeTurner(session, tri, c);
+  turner.turnBy(88);
+  assert.strictEqual(session.currentBucket, 0, 'bei cum≈88° muss Bucket 0 bleiben');
+  for (const delta of [4, -4, 4, -4, 4, -4]) {
+    turner.turnBy(delta);
+    assert.strictEqual(session.currentBucket, 0,
+      `Schwankung um cum≈${session.cumulativeAngle.toFixed(1)}° darf Bucket nicht ändern`);
+  }
+});
+
+test('FIG-21 — Großer Sprung darf mehrere Buckets überspringen', () => {
+  // Spec FIG-21: "Damit kann ein großer Sprung mehr als einen Bucket auf
+  // einmal überspringen — gewollt." Wir prüfen das auf cum-Ebene: nach
+  // einer kontinuierlichen Drehung über mehrere Bucket-Grenzen hinweg
+  // muss currentBucket dort landen, wo cum gerade liegt — auch wenn
+  // dazwischen Buckets ausgelassen würden, falls die Bucket-Logik nur
+  // direkte Nachbarn zuließe.
+  const session = fig.createSession({
+    figure_present_ms: 0,
+    angle_update_min_delta_deg: 0.01,
+    angle_update_max_hz: 1000,
+    registry: { A: [0.50, 0.70, 1.0] },
+  });
+  const tri = trianglesWithDescriptor([0.50, 0.70, 1.0]);
+  fig.feedTouches(session, tri, 0);
+  const c = fig.centroid(tri);
+  const turner = makeTurner(session, tri, c);
+  turner.turnBy(200);
+  assert.ok(Math.abs(session.cumulativeAngle - 200) < 2);
+  assert.strictEqual(session.currentBucket, 2);
+});
+
+test('FIG-21 — Hysterese korrekt um 360°/0° wrap-Grenze', () => {
+  // Bucket 3 deckt 270°–360°. Wechsel auf Bucket 0 erst wenn |cum − 315| > 50.
+  const session = fig.createSession({
+    figure_present_ms: 0,
+    angle_update_min_delta_deg: 0.01,
+    angle_update_max_hz: 1000,
+    registry: { A: [0.50, 0.70, 1.0] },
+  });
+  const tri = trianglesWithDescriptor([0.50, 0.70, 1.0]);
+  fig.feedTouches(session, tri, 0);
+  const c = fig.centroid(tri);
+  const turner = makeTurner(session, tri, c);
+  // cum ≈ 300° → Bucket 3
+  turner.turnBy(300);
+  assert.strictEqual(session.currentBucket, 3);
+  // cum ≈ 362° (mod 360 = 2°). Abstand zu 315° = 47° → unter Hysterese.
+  turner.turnBy(62);
+  assert.strictEqual(session.currentBucket, 3,
+    'an der 0°/360°-Grenze muss Hysterese mod-korrekt greifen');
+  // cum ≈ 370° (mod 360 = 10°). Abstand zu 315° = 55° > 50 → Bucket 0.
+  turner.turnBy(8);
+  assert.strictEqual(session.currentBucket, 0);
+});
+
+test('FIG-22 — neue Session nach Wechsel der Figur startet mit Bucket 0', () => {
+  const session = fig.createSession({
+    figure_present_ms: 0,
+    angle_update_min_delta_deg: 0.01,
+    angle_update_max_hz: 1000,
+    pattern_tolerance: 0.02,
+    registry: { A: [0.50, 0.70, 1.0], B: [0.85, 0.92, 1.0] },
+  });
+  const triA = trianglesWithDescriptor([0.50, 0.70, 1.0]);
+  fig.feedTouches(session, triA, 0);
+  const cA = fig.centroid(triA);
+  const turner = makeTurner(session, triA, cA);
+  turner.turnBy(200);
+  assert.strictEqual(session.currentBucket, 2);
+  // Wechsel auf andere Figur → neue Session, Bucket muss auf 0 zurück
+  const triB = trianglesWithDescriptor([0.85, 0.92, 1.0]);
+  const evs = fig.feedTouches(session, triB, turner.state.now + 1000);
+  const detB = evs.find(e => e.type === 'figure_detected' && e.figure_id === 'B');
+  assert.ok(detB, 'figure_detected für B nicht emittiert');
+  assert.strictEqual(detB.bucket, 0);
+  assert.strictEqual(session.currentBucket, 0);
+});

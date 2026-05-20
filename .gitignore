@@ -17,3 +17,7 @@ desktop.ini
 
 # Logs
 *.log
+
+# Controller-Instanz-Configs (FIG-23) — pro Instanz separat verwaltet,
+# nicht im Repo. Format ist in config.example.json dokumentiert.
+controller/**/config.json

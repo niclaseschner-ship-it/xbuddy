@@ -59,7 +59,7 @@ Toleranz → Figur gilt als „unbekannt"; kein Event nach außen.
 Vergleichs-Metrik: L1-Mittel-Distanz über die drei
 Descriptor-Komponenten.
 
-*Tickets:* #1
+*Tickets:* #1, #11
 
 ### FIG-6 — Winkel (kumuliert während Kontakt)
 Der gemeldete Winkel ist die **kumulative Rotation** seit dem
@@ -119,6 +119,46 @@ Außerhalb einer aktiven Session ist der Button nicht sichtbar.
 
 *Tickets:* #1
 
+### FIG-20 — Bucket-Quantisierung
+Der kumulative Winkel (FIG-6) wird in `n_buckets` gleich breite Sektoren
+à `bucket_size_deg` quantisiert. Der **aktuelle Bucket** ist
+`floor(mod360(cum) / bucket_size_deg) mod n_buckets` und liegt im
+geschlossenen Intervall `[0, n_buckets)`. Quantisierung passiert in der
+Seite (figlib), nicht im Router — siehe E-FIG-7.
+
+Default-Konfiguration (FIG-17): `n_buckets = 4`, `bucket_size_deg = 90`.
+Die Werte müssen konsistent sein (`n_buckets * bucket_size_deg = 360`);
+ist nur `n_buckets` gesetzt, wird `bucket_size_deg` als `360 / n_buckets`
+abgeleitet.
+
+*Tickets:* #11
+
+### FIG-21 — Hysterese an Bucket-Grenzen
+Der Wechsel auf einen Nachbar-Bucket findet erst statt, wenn der
+kumulative Winkel die Bucket-Grenze um mindestens `bucket_hysteresis_deg`
+überschreitet. Solange der Wert in der Hysterese-Zone um die Grenze
+schwankt, bleibt der Bucket auf seinem letzten Wert stehen.
+
+Konkret: gegeben aktueller Bucket `b` mit Mitte `m_b = (b + 0.5) *
+bucket_size_deg`, wechselt der Bucket erst, wenn
+`|mod360(cum) − m_b| > bucket_size_deg/2 + bucket_hysteresis_deg` mod-
+korrekt um die 360°-Grenze gemessen. Default: `bucket_hysteresis_deg = 5`.
+
+Bei Wechsel: neuer Bucket = der Sektor, in den der kumulative Winkel
+jetzt fällt (unabhängig von der Richtung der Drehung). Damit kann ein
+großer Sprung mehr als einen Bucket auf einmal überspringen — gewollt.
+
+*Tickets:* #11
+
+### FIG-22 — Initial-Bucket beim figure_detected
+Beim `figure_detected` startet der kumulative Winkel bei 0 (FIG-6). Der
+zugehörige Initial-Bucket ist deterministisch der Bucket, in den
+`cum = 0` fällt — bei Default-Geometrie also Bucket **0** (Sektor
+0°–90°). Der Wert wird im `figure_detected`-Event als `bucket: 0`
+mitgesendet (FIG-10).
+
+*Tickets:* #11
+
 ## 2. Events an den Router
 
 ### FIG-9 — Transport
@@ -137,13 +177,14 @@ sind event-spezifisch:
 // andere identifizierte Figur ohne vorheriges Session-Ende
 { "source_id": "phone:test-1", "ts": "<iso8601>",
   "type": "figure_detected",
-  "figure_id": "<string>", "angle": 0 }
+  "figure_id": "<string>", "angle": 0, "bucket": 0 }
 
 // Während die Figur präsent ist, gedrosselt; angle ist die kumulierte
-// Rotation seit figure_detected (siehe FIG-6, FIG-11)
+// Rotation seit figure_detected (siehe FIG-6, FIG-11), bucket ist der
+// quantisierte und hysteretisch geglättete Sektor (siehe FIG-20/21)
 { "source_id": "phone:test-1", "ts": "<iso8601>",
   "type": "angle_update",
-  "figure_id": "<string>", "angle": <float> }
+  "figure_id": "<string>", "angle": <float>, "bucket": <int> }
 
 // Beim Druck auf den Session-Ende-Button (FIG-8)
 { "source_id": "phone:test-1", "ts": "<iso8601>",
@@ -159,7 +200,7 @@ Konfigurations-Konstante, keine zentrale Vergabe (siehe Ticket #6).
 `angle` ist Float in Grad und kann nach mehrfachen Drehungen über ±360°
 hinausgehen.
 
-*Tickets:* #1, #6
+*Tickets:* #1, #6, #11
 
 ### FIG-11 — Sende-Logik (kumulativer Winkel)
 - `figure_detected`: bei Übergang „keine identifizierte Figur" →
@@ -232,7 +273,9 @@ Banner oben: **„FIGUREN-ERKENNUNG · V1-TEST · `<source_id>`"**.
 ## 4. Konfiguration
 
 ### FIG-17 — Konfigurationswerte
-Statisch in der Seite (JS-Konstanten) oder als URL-Parameter überschreibbar:
+Defaults stehen als JS-Konstanten in `figlib.js`. Sie können per
+`config.json` im selben Verzeichnis (siehe FIG-23) oder als URL-Parameter
+überschrieben werden. Priorität: **URL > config.json > Defaults**.
 
 | Parameter                    | URL-Param         | Default                                  |
 |------------------------------|-------------------|------------------------------------------|
@@ -245,6 +288,9 @@ Statisch in der Seite (JS-Konstanten) oder als URL-Parameter überschreibbar:
 | `button_padding_px`          | —                 | 30                                       |
 | `angle_update_max_hz`        | `?rate=<int>`     | 10                                       |
 | `angle_update_min_delta_deg` | `?dead=<float>`   | 3                                        |
+| `n_buckets`                  | —                 | 4                                        |
+| `bucket_size_deg`            | —                 | 90 (abgeleitet aus `n_buckets`)          |
+| `bucket_hysteresis_deg`      | —                 | 5                                        |
 
 `source_id` wird in jedes Event geschrieben (FIG-10). `match_distance_px`
 ist die Schwelle für die räumliche Punkt-Zuordnung (FIG-7).
@@ -252,7 +298,50 @@ ist die Schwelle für die räumliche Punkt-Zuordnung (FIG-7).
 des Centroid-Buttons addiert wird (Default 30 px → Button etwas größer als
 die reine Standfläche der Figur).
 
-*Tickets:* #1, #6, #9
+`n_buckets`, `bucket_size_deg` und `bucket_hysteresis_deg` steuern die
+Bucket-Quantisierung (FIG-20) und die Grenz-Hysterese (FIG-21). Wird nur
+`n_buckets` gesetzt, ist `bucket_size_deg = 360 / n_buckets`.
+
+*Tickets:* #1, #6, #9, #11
+
+### FIG-23 — Instanz-Konfiguration über `config.json`
+Beim Laden der Seite wird `./config.json` per `fetch` geladen und auf die
+Defaults aus FIG-17 angewendet. Damit liegen pro-Instanz-Werte
+(`source_id`, `router_url`, Tuning-Werte, Registry) **als Daten neben
+dem Code** — `figlib.js` bleibt reine Logik und ist über alle
+Controller-Instanzen identisch.
+
+**Format:** JSON-Objekt mit denselben Schlüsseln wie `configDefaults()`.
+Nicht gesetzte Schlüssel bleiben auf dem Default. Beispiel:
+
+```json
+{
+  "source_id": "phone:wohnzimmer",
+  "router_url": "https://hub.local/event",
+  "pattern_tolerance": 0.04,
+  "match_distance_px": 200,
+  "n_buckets": 4,
+  "bucket_hysteresis_deg": 5,
+  "registry": {
+    "gelbes-e": [0.650, 0.956, 1.0]
+  }
+}
+```
+
+**Fehlerfälle:** Existiert die Datei nicht oder ist sie nicht parsebar,
+fällt die Seite stumm auf die Defaults zurück und protokolliert den
+Fehler in `console.warn`. Die Seite bleibt funktionsfähig — wichtig
+für das Repo-Default-Setup ohne Live-Werte.
+
+**Priorität:** URL-Parameter (siehe FIG-17) überschreiben weiterhin
+auch `config.json`. Reihenfolge: `Defaults` → `config.json` → URL.
+
+**Selbsttragend (FIG-19):** Die Datei liegt im selben Verzeichnis wie
+`index.html` und `figlib.js` und wird mit ausgeliefert. Pro Controller-
+Instanz wird sie separat verwaltet (nicht alle Instanzen im Repo,
+sondern beim Deployment der jeweiligen URL erzeugt).
+
+*Tickets:* #11
 
 ## 5. HTML-Anforderungen
 
@@ -267,11 +356,11 @@ Tester das Phone im Querformat halten.
 ### FIG-19 — Selbsttragend
 Keine externen Asset-Quellen (kein CDN, keine Drittpartei-Domain, keine
 externen Libraries). Die Seite besteht aus einer HTML-Datei mit
-Inline-CSS und einer begleitenden JS-Datei `figlib.js` im selben
-Verzeichnis. Beide werden zusammen ausgeliefert, nach erstem Laden
-offline-fähig.
+Inline-CSS, der begleitenden JS-Datei `figlib.js` und optional einer
+Instanz-Konfiguration `config.json` (FIG-23) — alles im selben
+Verzeichnis, zusammen ausgeliefert, nach erstem Laden offline-fähig.
 
-*Tickets:* #1
+*Tickets:* #1, #11
 
 ---
 
@@ -376,3 +465,32 @@ ist im aktuellen Demo-Set ausreichend trennscharf. Ein reicherer
 Deskriptor wird nicht eingeführt. Sollten in Zukunft Figuren mit
 zueinander symmetrischen oder nahezu identischen Form-Verhältnissen
 hinzukommen, wird das punktuell mit einem neuen Ticket erneut bewertet.
+
+### E-FIG-7 — Bucket-Quantisierung in der Seite, nicht im Router
+*Datum:* 2026-05-20 (Ticket #11)
+
+E-FIG-1 hat die semantische Reduktion (rohe Touch-Snapshots → semantische
+Events) klar in die Seite gelegt, ließ aber explizit offen, wo
+**Winkel-Hysterese und Quantisierung** stattfinden — Router-seitig „pro
+Buddy/Szene konfigurierbar" war damals der Zielzustand.
+
+Die folgende Session hat das umgekehrt: Quantisierung und
+Grenz-Hysterese gehören in dieselbe Schicht wie der kumulative Winkel.
+
+**Begründung:**
+
+1. Die Phone-Seite kennt den kumulativen Winkel ohnehin und kann die
+   Bucket-Logik mit einer Handvoll Zeilen mitführen — der Router müsste
+   denselben Zustand zweimal halten (Akku + letzter Bucket pro Session).
+2. Das Event-Schema (FIG-10) trägt jetzt `bucket` als integrales Feld;
+   wer das Event konsumiert, muss nicht selbst Hysterese rechnen. Damit
+   wird der Router zu einem reinen Dispatcher: 1:1-Mapping von
+   `(figure_id, bucket)` auf Szene/View, ohne eigene Stufenlogik
+   (Ticket #5 ROU-6).
+3. Beim Test 2026-05-20 hat sich gezeigt, dass die Geometrie der
+   Quantisierung (4 × 90° vs. n × m°) eine Eigenschaft des
+   **Controllers** ist — sie hängt an der physischen Drehgeometrie der
+   Figur, nicht am Display, das das Ergebnis später anzeigt.
+
+Folgewirkung: Ticket #5 hat ROU-7/ROU-8 (Router-seitige Hysterese und
+Quantisierung) gestrichen; OPEN-ROU-A entfällt.
