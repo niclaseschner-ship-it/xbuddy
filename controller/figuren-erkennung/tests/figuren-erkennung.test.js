@@ -680,6 +680,46 @@ test('FIG-2 / FIG-14 — index.html enthält periodischen Tick für State-Machin
 });
 
 // ===========================================================
+//  FIG-23 — Instanz-Konfiguration via ./config.json
+// ===========================================================
+
+test('FIG-23 — index.html lädt ./config.json per fetch', () => {
+  assert.match(HTML, /fetch\(\s*['"]\.\/config\.json['"]/,
+    'index.html muss config.json aus dem selben Verzeichnis laden');
+});
+
+test('FIG-23 — Lade-Reihenfolge: Defaults < config.json < URL-Parameter', () => {
+  // URL-Param-Logik liegt nach dem fileCfg-Merge — config.json wird also
+  // VOR den URL-Params auf die Defaults gemerged, damit die URL Vorrang
+  // behält.
+  const fetchIdx  = HTML.search(/fetch\(\s*['"]\.\/config\.json/);
+  const qsIdx     = HTML.search(/URLSearchParams\(location\.search\)/);
+  assert.ok(fetchIdx > -1 && qsIdx > -1);
+  assert.ok(fetchIdx < qsIdx,
+    'config.json muss vor dem URL-Param-Merge gelesen werden — sonst überschreibt es die URL');
+});
+
+test('FIG-23 — Fehlerfall: config.json fehlt → console.warn statt fataler Fehler', () => {
+  assert.match(HTML, /catch\s*\([^)]*\)\s*\{[\s\S]*?console\.warn/,
+    'Fehlende oder defekte config.json darf die Seite nicht crashen');
+});
+
+test('FIG-23 — config.example.json ist im Repo enthalten und parsebar', () => {
+  const examplePath = path.join(__dirname, '..', 'config.example.json');
+  assert.ok(fs.existsSync(examplePath), 'config.example.json fehlt');
+  const raw = fs.readFileSync(examplePath, 'utf8');
+  const parsed = JSON.parse(raw);
+  assert.ok(typeof parsed === 'object' && parsed !== null);
+  // Format muss zu configDefaults passen (gleiche Schlüssel-Familie)
+  const defaults = fig.configDefaults();
+  for (const key of Object.keys(parsed)) {
+    if (key.startsWith('_')) continue;  // Kommentar-Felder
+    assert.ok(key in defaults,
+      `config.example.json enthält unbekannten Schlüssel "${key}" — Format-Drift?`);
+  }
+});
+
+// ===========================================================
 //  FIG-20 / FIG-21 / FIG-22 — Bucket-Quantisierung + Hysterese
 //  Architektur-Entscheidung E-FIG-7 (Ticket #11): Quantisierung
 //  und Grenz-Hysterese laufen in der Seite, nicht im Router.
