@@ -294,8 +294,12 @@
       if (currentTouches.length >= 3) {
         const three = figLib.pickThree(currentTouches);
         const desc = figLib.descriptor(three[0], three[1], three[2]);
-        lines.push(`d   : [${desc[0].toFixed(3)}, ${desc[1].toFixed(3)}, 1.000]`);
-        lines.push(`cum : ${session.cumulativeAngle.toFixed(1)}° (Session-Akku)`);
+        const c = figLib.centroid(three);
+        lines.push(`d    : [${desc[0].toFixed(3)}, ${desc[1].toFixed(3)}, 1.000]`);
+        lines.push(`zent : (${c.x.toFixed(0)}, ${c.y.toFixed(0)})`);
+        const dlt = (session.lastFrameDelta || 0).toFixed(2);
+        const mok = session.lastMatchOk || '—';
+        lines.push(`match: ${mok}   Δ: ${dlt}°   cum: ${session.cumulativeAngle.toFixed(1)}°`);
       }
       rawEl.textContent = lines.join('\n');
     }
@@ -354,6 +358,17 @@
       `ended:${counters.session_ended.length}`;
   }
   setInterval(updateFooter, 1000);
+
+  // === Periodischer Tick (50 ms) — treibt FIG-2-Eintritts-Hysterese und
+  //     FIG-8-Button-Dwell auch ohne neue Touch-Events. Beim Realtest
+  //     2026-05-20 hat sich gezeigt: ohne Tick wird eine ruhig liegende
+  //     Figur erst beim nächsten touchmove als präsent erkannt. ===
+  setInterval(() => {
+    if (currentTouches.length === 0 && !session.figurePresent) return;
+    const events = figLib.feedTouches(session, currentTouches, performance.now());
+    for (const ev of events) sendEvent(ev);
+    draw();
+  }, 50);
 
   // === Init ===
   resize();

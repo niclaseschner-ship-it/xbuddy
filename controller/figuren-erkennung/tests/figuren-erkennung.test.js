@@ -145,23 +145,29 @@ test('FIG-6 — Cum akkumuliert während ununterbrochenem 3-Punkt-Kontakt', () =
     `cum erwartet ≈30°, bekommen ${session.cumulativeAngle}`);
 });
 
-test('FIG-6 — Cum unverändert wenn Touches verschwinden und rotiert wiederkommen', () => {
+test('FIG-6 — Touch-Verlust + Wieder-Auflegen WEIT entfernt → match scheitert, cum bleibt 0', () => {
+  // Trade-off-Begründung (siehe Spec, E-FIG-3 + Real-Test 2026-05-20):
+  // Bei kapazitivem Flackern bleibt lastFramePoints stehen, damit die
+  // räumliche Zuordnung beim nächsten 3-Punkt-Frame Continuity oder
+  // Re-Placement unterscheiden kann. Re-Placement ist hier definiert
+  // als „Punkte weit jenseits match_distance_px" — dann scheitert das
+  // Matching und der Akku wird re-ankert ohne Beitrag.
   const session = fig.createSession({
     figure_present_ms: 0,
     angle_update_min_delta_deg: 0.01,
     angle_update_max_hz: 1000,
+    match_distance_px: 60,
     registry: { A: [0.50, 0.70, 1.0] },
   });
   const tri = trianglesWithDescriptor([0.50, 0.70, 1.0]);
   fig.feedTouches(session, tri, 0);
-  // Touches komplett weg (Hand losgelassen)
+  // Touch-Verlust
   fig.feedTouches(session, [], 10);
   assert.strictEqual(session.cumulativeAngle, 0);
-  // Selbe Figur an um 90° gedrehter Position wieder auflegen
-  const c = fig.centroid(tri);
-  const rotated = tri.map(p => rotateAround(c, 90, { ...p, id: p.id + 100 }));
-  fig.feedTouches(session, rotated, 20);
-  // In-air-Rotation darf NICHT zählen
+  // Weit entferntes Wieder-Auflegen — match_distance überschritten
+  const farAway = tri.map(p => ({ id: p.id + 100, x: p.x + 500, y: p.y + 500 }));
+  fig.feedTouches(session, farAway, 20);
+  assert.strictEqual(session.lastMatchOk, 'fail');
   assert.strictEqual(session.cumulativeAngle, 0);
 });
 
@@ -570,4 +576,105 @@ test('FIG-8 — Button-Center folgt der Figur bei kontinuierlicher Translation',
   const c2 = session.buttonCircle;
   assert.ok(Math.abs((c2.x - c1.x) - 50) < 1e-6);
   assert.ok(Math.abs((c2.y - c1.y) - 30) < 1e-6);
+});
+
+// ===========================================================
+//  FIG-6 / FIG-7 — Continuity-Fix (Re-Test 2026-05-20)
+//  Bug: vor Fix wurde lastFramePoints bei n<3 auf null gesetzt;
+//  kapazitives Flackern führte zu Re-Anker jeden Frame und cum
+//  blieb dauerhaft bei 0. Neue Semantik: lastFramePoints bleibt
+//  stehen, räumliches Matching auf dem nächsten 3-Punkt-Frame
+//  entscheidet (Continuity vs. Re-Placement).
+// ===========================================================
+
+test('FIG-6/7 — lastFramePoints bleibt bei n<3 erhalten (Continuity über kurzen Touch-Verlust)', () => {
+  const session = fig.createSession({
+    figure_present_ms: 0,
+    registry: { A: [0.50, 0.70, 1.0] },
+  });
+  const tri = trianglesWithDescriptor([0.50, 0.70, 1.0]);
+  fig.feedTouches(session, tri, 0);
+  assert.ok(session.lastFramePoints, 'lastFramePoints muss nach figure_detected gesetzt sein');
+  const snapshotBefore = session.lastFramePoints.map(p => ({ ...p }));
+
+  // Touch-Verlust — Akku pausiert, aber lastFramePoints bleibt stehen
+  fig.feedTouches(session, [], 10);
+  assert.deepStrictEqual(session.lastFramePoints, snapshotBefore,
+    'lastFramePoints darf bei n<3 NICHT auf null gesetzt werden');
+  assert.strictEqual(session.cumulativeAngle, 0);
+});
+
+test('FIG-6/7 — Touch-Verlust + Rückkehr an dieselbe Stelle: match: ok, kein spurioses Delta', () => {
+  const session = fig.createSession({
+    figure_present_ms: 0,
+    angle_update_min_delta_deg: 0.001,
+    angle_update_max_hz: 1000,
+    registry: { A: [0.50, 0.70, 1.0] },
+  });
+  const tri = trianglesWithDescriptor([0.50, 0.70, 1.0]);
+  fig.feedTouches(session, tri, 0);
+  // Touch-Verlust für einen Moment
+  fig.feedTouches(session, [], 10);
+  // Selbe Figur an derselben Position wiederkommt (neue Touch-Identifier)
+  const sameSpot = tri.map(p => ({ id: p.id + 100, x: p.x, y: p.y }));
+  fig.feedTouches(session, sameSpot, 20);
+  // matchPoints sollte erfolgreich sein, Delta ≈ 0, cum unverändert
+  assert.strictEqual(session.lastMatchOk, 'ok');
+  assert.ok(Math.abs(session.lastFrameDelta) < 0.01,
+    `Delta erwartet ≈ 0, bekommen ${session.lastFrameDelta}`);
+  assert.ok(Math.abs(session.cumulativeAngle) < 0.01);
+});
+
+test('FIG-14 — Diagnose-State (lastFrameDelta, lastMatchOk) wird gesetzt', () => {
+  const session = fig.createSession({
+    figure_present_ms: 0,
+    angle_update_min_delta_deg: 0.001,
+    angle_update_max_hz: 1000,
+    registry: { A: [0.50, 0.70, 1.0] },
+  });
+  // Vor figure_detected: keine Diagnose-Werte
+  assert.strictEqual(session.lastMatchOk, null);
+  assert.strictEqual(session.lastFrameDelta, 0);
+
+  const tri = trianglesWithDescriptor([0.50, 0.70, 1.0]);
+  fig.feedTouches(session, tri, 0);
+  // Erster 3-Punkt-Frame nach figure_detected: re-anker, kein Delta
+  assert.strictEqual(session.lastMatchOk, 'reanchor');
+  assert.strictEqual(session.lastFrameDelta, 0);
+
+  // Echte Rotation: match ok, Δ ≈ 30°
+  const c = fig.centroid(tri);
+  fig.feedTouches(session, tri.map(p => rotateAround(c, 30, p)), 10);
+  assert.strictEqual(session.lastMatchOk, 'ok');
+  assert.ok(Math.abs(session.lastFrameDelta - 30) < 0.5,
+    `lastFrameDelta erwartet ≈ 30°, bekommen ${session.lastFrameDelta}`);
+});
+
+test('FIG-7 — match: fail wird gesetzt, wenn Punkte zu weit springen', () => {
+  const session = fig.createSession({
+    figure_present_ms: 0,
+    match_distance_px: 20,
+    registry: { A: [0.50, 0.70, 1.0] },
+  });
+  const tri = trianglesWithDescriptor([0.50, 0.70, 1.0]);
+  fig.feedTouches(session, tri, 0);
+  // Punkte massiv versetzen — über match_distance hinaus
+  const farAway = tri.map(p => ({ id: p.id, x: p.x + 500, y: p.y + 500 }));
+  fig.feedTouches(session, farAway, 10);
+  assert.strictEqual(session.lastMatchOk, 'fail');
+  assert.strictEqual(session.lastFrameDelta, 0);
+  // Re-Anker → cum unverändert
+  assert.strictEqual(session.cumulativeAngle, 0);
+});
+
+// ===========================================================
+//  Periodischer Tick — HTML-Smoke
+//  Bug-Fix nach Realtest 2026-05-20: ohne setInterval(50ms)
+//  greift die 150-ms-Eintritts-Hysterese (FIG-2) nicht, wenn
+//  die Figur stillsteht und keine touchmove-Events fließen.
+// ===========================================================
+
+test('FIG-2 / FIG-14 — index.html enthält periodischen Tick für State-Machine', () => {
+  assert.match(HTML, /setInterval\([\s\S]*?figLib\.feedTouches/,
+    'index.html muss feedTouches periodisch aufrufen, sonst greift FIG-2-Hysterese nicht bei stillstehender Figur');
 });

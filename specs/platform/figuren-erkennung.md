@@ -198,12 +198,23 @@ ist das Zielfeld ausgeblendet** — der Session-Ende-Button (FIG-8)
 *Tickets:* #1
 
 ### FIG-14 — Roh-Datendarstellung
-Live aktualisiert auf jeden Touch-Event:
+Live aktualisiert auf jeden Touch-Event und auf den periodischen Tick
+(siehe Implementierung):
 
 - Liste der aktuellen Touchpunkte: `Punkt N: x=… y=…`
-- Aktueller Pattern-Descriptor (sofern ≥ 3 Punkte)
-- Aktuell erkannte `figure_id` oder „— unbekannt —"
-- Aktueller kumulativer Winkel (Session-Akku)
+- Aktueller Pattern-Descriptor `d` (sofern ≥ 3 Punkte)
+- Aktueller Schwerpunkt `zent` (Pixel-Koordinaten)
+- Status der räumlichen Punkt-Zuordnung des letzten Frames:
+  `match: ok | fail | reanchor`
+- Per-Frame-Winkeldelta `Δ` (Roh-Wert pro Tick, vor Akkumulation)
+- Aktueller kumulativer Winkel `cum` (Session-Akku, FIG-6)
+- Aktuell erkannte `figure_id` oder „— unbekannt —" (im Status-Block)
+
+`match`, `Δ` und `zent` sind Diagnose-Felder, die die Funktionsweise der
+räumlichen Punkt-Verfolgung (FIG-7) und der kumulativen Akkumulation
+(FIG-6) am laufenden System sichtbar machen. Beim Real-Test 2026-05-20
+waren sie der Schlüssel, um Bug-Ursachen vom korrekten Verhalten zu
+unterscheiden.
 
 *Tickets:* #1
 

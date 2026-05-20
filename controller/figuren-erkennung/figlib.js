@@ -144,6 +144,9 @@
       lastFramePoints: null,
       lastSentCumulative: null,
       lastAngleSentAt: 0,
+      // FIG-14 Diagnose: pro-Frame-Delta und Status der räumlichen Zuordnung
+      lastFrameDelta: 0,
+      lastMatchOk: null,  // 'ok' | 'fail' | 'reanchor' | null
       // FIG-8 Button
       buttonCircle: null,
       buttonDwellStart: null,
@@ -174,6 +177,8 @@
     session.lastIdentifiedFigureId = figureId;
     session.cumulativeAngle = 0;
     session.lastFramePoints = null;
+    session.lastFrameDelta = 0;
+    session.lastMatchOk = null;
     session.lastSentCumulative = 0;
     session.lastAngleSentAt = now;
     events.push(makeEvent(session, 'figure_detected', {
@@ -192,6 +197,8 @@
     session.identifiedFigureId = null;
     session.cumulativeAngle = 0;
     session.lastFramePoints = null;
+    session.lastFrameDelta = 0;
+    session.lastMatchOk = null;
     session.lastSentCumulative = null;
     session.buttonCircle = null;
     session.buttonDwellStart = null;
@@ -238,14 +245,23 @@
       if (session.figurePresent && session.identifiedFigureId) {
         const snapshot = three.map(p => ({ x: p.x, y: p.y }));
         if (session.lastFramePoints === null) {
+          // erstmalig nach figure_detected: re-ankern, kein Delta
           session.lastFramePoints = snapshot;
+          session.lastFrameDelta = 0;
+          session.lastMatchOk = 'reanchor';
         } else {
           const m = matchPoints(session.lastFramePoints, snapshot, cfg.match_distance_px);
           if (!m) {
-            session.lastFramePoints = snapshot;  // re-anchor, kein Delta
-          } else {
-            session.cumulativeAngle += frameRotationDelta(m);
+            // Zuordnung gescheitert → re-ankern ohne Delta (echtes Re-Placement)
             session.lastFramePoints = snapshot;
+            session.lastFrameDelta = 0;
+            session.lastMatchOk = 'fail';
+          } else {
+            const delta = frameRotationDelta(m);
+            session.cumulativeAngle += delta;
+            session.lastFramePoints = snapshot;
+            session.lastFrameDelta = delta;
+            session.lastMatchOk = 'ok';
           }
         }
 
@@ -269,7 +285,11 @@
     } else {
       // === n < 3 — KEIN Auto-Exit (FIG-2) ===
       session.presentSince = null;
-      session.lastFramePoints = null;  // Akku pausiert
+      // lastFramePoints bleibt stehen: räumliche Zuordnung beim nächsten
+      // 3-Punkt-Frame entscheidet, ob es Continuity ist (kleines Delta) oder
+      // ein echtes Re-Placement (matchPoints liefert null → re-anker ohne
+      // Delta). Re-Test 2026-05-20: ohne diese Persistenz blieb cum bei 0,
+      // weil kapazitives Flackern jeden Frame re-ankerte.
 
       if (session.figurePresent && session.buttonCircle && n === 1) {
         const t = touches[0];
