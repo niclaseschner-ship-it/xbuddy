@@ -242,13 +242,17 @@ Statisch in der Seite (JS-Konstanten) oder als URL-Parameter überschreibbar:
 | `pattern_tolerance`          | `?tol=<float>`    | 0.05                                     |
 | `match_distance_px`          | —                 | 60                                       |
 | `tap_dwell_ms`               | —                 | 100                                      |
+| `button_padding_px`          | —                 | 30                                       |
 | `angle_update_max_hz`        | `?rate=<int>`     | 10                                       |
 | `angle_update_min_delta_deg` | `?dead=<float>`   | 3                                        |
 
 `source_id` wird in jedes Event geschrieben (FIG-10). `match_distance_px`
 ist die Schwelle für die räumliche Punkt-Zuordnung (FIG-7).
+`button_padding_px` ist das „kleine Padding" aus FIG-8, das auf den Radius
+des Centroid-Buttons addiert wird (Default 30 px → Button etwas größer als
+die reine Standfläche der Figur).
 
-*Tickets:* #1, #6
+*Tickets:* #1, #6, #9
 
 ## 5. HTML-Anforderungen
 
@@ -273,10 +277,6 @@ offline-fähig.
 
 ## Offene Punkte
 
-- **OPEN-FIG-A** — Sind „normalisierte sortierte Seitenlängen" (FIG-3) als
-  Pattern-Descriptor robust genug, oder braucht es einen reicheren
-  Deskriptor (z. B. Innenwinkel zusätzlich)? Real-Test mit echten Figuren
-  auf echtem Phone entscheidet.
 - **OPEN-FIG-B** — Wie kommt eine neue Figur in die Registry
   (Onboarding-Flow)? V1 fest verdrahtet, V2 als eigene Spec. Wo lebt die
   zentrale Registry langfristig — Hub, Cloud, eigener Service?
@@ -362,3 +362,17 @@ ein zweites Phone dazukommt, ist die Quelle der Schlüssel jeder
 Routing-Entscheidung im Router. Nachträgliches Einführen würde Phone-Code
 und Router-Code je zweimal anfassen lassen — und der Router müsste zwei
 Schema-Versionen parallel halten. Jetzt mitziehen kostet wenige Zeilen.
+
+### E-FIG-6 — Descriptor (FIG-3) durch Realtest bestätigt
+*Datum:* 2026-05-20 (Ticket #9)
+
+Frühere offene Frage (OPEN-FIG-A): Sind „normalisierte sortierte
+Seitenlängen" (FIG-3) als Pattern-Descriptor robust genug, oder braucht
+es einen reicheren Deskriptor (z. B. Innenwinkel zusätzlich)?
+
+Der Real-Test am echten Phone 2026-05-20 hat das mit echten 3-Bump-
+Figuren bestätigt: Identifikation funktioniert stabil, der Descriptor
+ist im aktuellen Demo-Set ausreichend trennscharf. Ein reicherer
+Deskriptor wird nicht eingeführt. Sollten in Zukunft Figuren mit
+zueinander symmetrischen oder nahezu identischen Form-Verhältnissen
+hinzukommen, wird das punktuell mit einem neuen Ticket erneut bewertet.

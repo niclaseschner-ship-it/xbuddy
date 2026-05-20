@@ -328,11 +328,12 @@
   // ============================================================
 
   return {
-    // pure geometry & matching
+    // pure geometry & matching (genutzt extern in index.html und Tests)
     dist, centroid, descriptor, patternDist, identify,
-    wrapDelta, matchPoints, frameRotationDelta,
-    buttonCircle, pointInCircle, pickThree,
+    matchPoints, frameRotationDelta, pickThree,
     // session
     configDefaults, createSession, feedTouches,
   };
+  // Interne Helfer (nicht exportiert): wrapDelta, buttonCircle, pointInCircle,
+  // randomUuid, makeEvent, startNewFigureSession, endSessionViaButton.
 });
