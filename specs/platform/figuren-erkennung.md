@@ -1,6 +1,6 @@
 # Figuren-Erkennung — Spec     (ID-Präfix: FIG)
 
-> Status: V1-Kern · Refs #1
+> Status: V1-Kern · Refs #1 · Implementiert in #7
 
 Wiederverwendbare HTML/JS-Seite, die auf einem im Querformat liegenden
 Handy-Display physische Buddy-Figuren am Drei-Punkt-Touch-Muster erkennt,
