@@ -16,43 +16,65 @@ von der Realität weg. Details zum Spec-Modell: `specs/README.md`.
 
 ## Wo was lebt
 
+GitHub Issues sind die Datenbank — alles läuft über Labels, voll API-steuerbar.
+Kein Project-Board nötig.
+
 | Achse | Wo | Werte |
 |---|---|---|
 | Soll-Verhalten | `specs/` | Anforderungen mit IDs (`DISP-1` …) |
-| Lebenszyklus | Issue-State | `open` / `closed` |
-| Workflow-Position | Projects-Board, Feld **Status** | Todo · Spec · In Progress · In Review · Done |
+| Lebenszyklus | Issue-State | `open` / `closed` (closed ≙ Done) |
+| Workflow-Position | Label `status:*` | `spec`, `ready`, `in-progress`, `in-review` |
 | Art | Label `type:*` | `feature`, `bug`, `chore`, `docs` |
 | Ökosystem-Baustein | Label `area:*` | `display`, `controller`, `hub`, `buddy`, `infra` |
 | Priorität | Label `priority:*` | `high`, `medium`, `low` |
 | Blockiert | Label `blocked` | wartet auf etwas anderes |
 
-Faustregel: **Labels = Eigenschaften** (ändern sich selten), **Status-Feld =
-Position im Fluss** (ändert sich ständig). Status läuft nicht über Labels.
+Faustregel: **alle Eigenschaften und die Workflow-Position sind Labels**.
+Eine Eigenschaft pro Achse — kein Issue trägt zwei `status:*` gleichzeitig.
 
 ## Lebenslauf eines Tickets
 
 ```
-Todo         Ticket angelegt (Template): grobe Idee + North-Star-Bezug
-  │
-Spec         betroffene Komponenten-Spec öffnen, Anforderung(en) als
-  │          Requirement-IDs formulieren/ändern, als kleinen PR reviewen
-  │          ──── Checkpoint: kein Code, bevor das durch ist ────
-In Progress  Branch + Implementierung gegen genau diese IDs
-  │
-In Review    PR offen, verlinkt das Issue mit "Closes #nr"
-  │
-Done         gemerged; Requirement-IDs in der Spec mit Ticket-# annotiert
+status:spec        Ticket angelegt; Spec-PR offen oder ausstehend
+  │                ──── Checkpoint: kein Code, bevor Spec gemerged ist ────
+status:ready       Spec reviewt und gemerged; Implementation darf starten
+  │                (einziger MANUELLER Übergang — das Handoff-Signal)
+status:in-progress Implementierungs-PR offen (Closes #nr)
+  │                automatisch gesetzt durch ticket-status-flow Action
+status:in-review   PR markiert ready-for-review
+  │                automatisch gesetzt durch ticket-status-flow Action
+closed             PR gemerged → Issue auto-closed durch "Closes #nr"
 ```
 
-`blocked`-Label setzen, wenn etwas wartet. Schließen ohne Umsetzung →
-Grund `not planned`.
+Bei Ticket-Erstellung wird `status:spec` automatisch durch die
+`ticket-defaults`-Action gesetzt. `blocked`-Label setzen, wenn etwas wartet.
+Schließen ohne Umsetzung → Grund `not planned`.
 
 ## Ein Ticket anlegen
 
 **New issue** → Vorlage *Feature* oder *Bug*. Das Feature-Template fragt nach
 der betroffenen Spec-Datei und den Requirement-IDs. Nach dem Anlegen:
-`area:`- und `priority:`-Label setzen, aufs **XBuddy**-Board ziehen (Status
-*Todo*).
+`area:`- und `priority:`-Label setzen. `status:spec` wird automatisch
+vergeben.
+
+## Handoff an Implementierer
+
+Sobald der Spec-PR gemerged ist, setzt der Spec-Autor (oder Reviewer) das
+Label um:
+
+```bash
+gh issue edit <nr> --remove-label "status:spec" --add-label "status:ready"
+```
+
+Das ist der **einzige manuelle Status-Übergang**. Implementierer finden
+übernehmbare Tickets via:
+
+```bash
+gh issue list --label "status:ready" --state open
+```
+
+Sobald sie einen Impl-PR mit `Closes #<nr>` öffnen, übernimmt die
+`ticket-status-flow`-Action den Rest automatisch.
 
 ## Branch, Commit, PR
 

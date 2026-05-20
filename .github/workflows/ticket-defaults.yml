@@ -1,0 +1,23 @@
+name: ticket-defaults
+
+# Setzt Default-Label `status:spec` bei jedem neu angelegten Issue.
+# Siehe WORKFLOW.md — Lebenslauf eines Tickets.
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  set-default-status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add status:spec label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label "status:spec"

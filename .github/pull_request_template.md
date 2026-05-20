@@ -1,11 +1,21 @@
+<!--
+Reihenfolge laut WORKFLOW.md: erst Spec-PR (Refs #), dann Impl-PR (Closes #).
+Nur Impl-PRs lösen die Status-Übergänge in der ticket-status-flow Action aus.
+-->
+
+## PR-Art
+
+- [ ] **Spec-PR** — schärft `specs/`, schließt KEIN Issue. Referenz: `Refs #<nr>`
+- [ ] **Implementierungs-PR** — setzt Requirement-IDs im Code um. Referenz: `Closes #<nr>`
+
 ## Bezug
 
-Closes #<!-- nr -->
+<!-- Closes #<nr>  ODER  Refs #<nr> -->
 
 ## Spec & Requirements
 
 - Betroffene Spec: `specs/...`
-- Umgesetzte Requirement-IDs:
+- Umgesetzte (Impl-PR) bzw. neue/geänderte (Spec-PR) Requirement-IDs:
   - `XXX-N` — Kurztitel
   -
 
