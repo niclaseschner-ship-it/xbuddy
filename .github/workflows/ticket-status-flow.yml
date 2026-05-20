@@ -1,0 +1,111 @@
+name: ticket-status-flow
+
+# Automatische Status-Übergänge auf Tickets bei PR-Events.
+# Nur Impl-PRs lösen aus (erkannt an "Closes #<nr>" im Body → GitHub
+# verlinkt das Issue automatisch als closingIssueReference).
+# Spec-PRs nutzen "Refs #" und triggern damit nichts.
+#
+# Übergänge:
+#   PR opened (draft)        → status:in-progress
+#   PR opened (ready)        → status:in-review
+#   PR converted_to_draft    → status:in-progress
+#   PR ready_for_review      → status:in-review
+#   PR reopened              → in-progress | in-review (je nach draft)
+#   PR closed UNmerged       → status:ready (zurück in Bereitschaft)
+#   PR merged                → status:*-Label entfernt (Issue wird durch
+#                              "Closes #" auto-closed, status irrelevant)
+#
+# Siehe WORKFLOW.md — Lebenslauf eines Tickets.
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, converted_to_draft, closed]
+
+permissions:
+  issues: write
+  pull-requests: read
+
+jobs:
+  flow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine target status and apply
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+          EVENT_ACTION: ${{ github.event.action }}
+        run: |
+          set -euo pipefail
+
+          # Target-Status je Event berechnen.
+          # Leerer Wert = nichts tun (Spec-PRs landen hier nie, weil sie keine
+          # Closes-Referenz haben — siehe unten).
+          case "$EVENT_ACTION" in
+            opened|reopened)
+              if [ "$PR_DRAFT" = "true" ]; then
+                TARGET="in-progress"
+              else
+                TARGET="in-review"
+              fi
+              ;;
+            ready_for_review)
+              TARGET="in-review"
+              ;;
+            converted_to_draft)
+              TARGET="in-progress"
+              ;;
+            closed)
+              if [ "$PR_MERGED" = "true" ]; then
+                TARGET="__clear__"
+              else
+                TARGET="ready"
+              fi
+              ;;
+            *)
+              TARGET=""
+              ;;
+          esac
+
+          if [ -z "$TARGET" ]; then
+            echo "Kein Status-Übergang für Action=$EVENT_ACTION"
+            exit 0
+          fi
+
+          # Verlinkte Issues abfragen (nur die, die durch diesen PR
+          # geschlossen werden — also "Closes #<nr>"-Referenzen).
+          ISSUES=$(gh api graphql -f query='
+            query($repo: String!, $owner: String!, $pr: Int!) {
+              repository(owner: $owner, name: $repo) {
+                pullRequest(number: $pr) {
+                  closingIssuesReferences(first: 20) {
+                    nodes { number }
+                  }
+                }
+              }
+            }' \
+            -F owner="${REPO%/*}" \
+            -F repo="${REPO#*/}" \
+            -F pr="$PR_NUMBER" \
+            --jq '.data.repository.pullRequest.closingIssuesReferences.nodes[].number')
+
+          if [ -z "$ISSUES" ]; then
+            echo "Keine Closes-Referenzen — Spec-PR oder Stand-alone-PR. Nichts zu tun."
+            exit 0
+          fi
+
+          for issue in $ISSUES; do
+            echo "→ Issue #$issue: status:$TARGET"
+
+            # Erst alle status:*-Label defensiv entfernen (Invariante: max 1).
+            for label in spec ready in-progress in-review; do
+              gh issue edit "$issue" --repo "$REPO" --remove-label "status:$label" 2>/dev/null || true
+            done
+
+            # Beim Merge: Issue läuft per "Closes" leer, kein neues Label nötig.
+            if [ "$TARGET" != "__clear__" ]; then
+              gh issue edit "$issue" --repo "$REPO" --add-label "status:$TARGET"
+            fi
+          done
