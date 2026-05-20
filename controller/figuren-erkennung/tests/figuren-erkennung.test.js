@@ -975,3 +975,66 @@ test('FIG-22 — neue Session nach Wechsel der Figur startet mit Bucket 0', () =
   assert.strictEqual(detB.bucket, 0);
   assert.strictEqual(session.currentBucket, 0);
 });
+
+// ===========================================================
+//  FIG-24 / FIG-25 — PWA-Auslieferung & Vollbild im installierten Zustand
+// ===========================================================
+
+const ROOT = path.join(__dirname, '..');
+
+function readRoot(file) {
+  return fs.readFileSync(path.join(ROOT, file), 'utf8');
+}
+
+test('FIG-24 — manifest.json existiert und ist valides JSON', () => {
+  const raw = readRoot('manifest.json');
+  const m = JSON.parse(raw);
+  assert.ok(m.name && m.short_name, 'name + short_name pflicht');
+  assert.strictEqual(m.start_url, './');
+  assert.strictEqual(m.scope, './');
+  assert.strictEqual(m.display, 'standalone');
+  assert.strictEqual(m.orientation, 'landscape');
+  assert.match(m.background_color, /^#0b0b10$/i);
+  assert.match(m.theme_color, /^#0b0b10$/i);
+});
+
+test('FIG-24 — Manifest deklariert Icons 192, 512 und ein maskable-Icon', () => {
+  const m = JSON.parse(readRoot('manifest.json'));
+  assert.ok(Array.isArray(m.icons) && m.icons.length >= 2, 'mindestens 2 Icons');
+  const sizes = m.icons.map(i => i.sizes);
+  assert.ok(sizes.includes('192x192'), 'Icon 192x192 fehlt');
+  assert.ok(sizes.includes('512x512'), 'Icon 512x512 fehlt');
+  const maskable = m.icons.find(i => (i.purpose || '').includes('maskable'));
+  assert.ok(maskable, 'mindestens ein Icon mit purpose=maskable fehlt');
+});
+
+test('FIG-24 — Im Manifest referenzierte Icon-Dateien existieren', () => {
+  const m = JSON.parse(readRoot('manifest.json'));
+  for (const icon of m.icons) {
+    const p = path.join(ROOT, icon.src.replace(/^\.\//, ''));
+    assert.ok(fs.existsSync(p), `Icon-Datei fehlt: ${icon.src}`);
+    assert.ok(fs.statSync(p).size > 0, `Icon-Datei leer: ${icon.src}`);
+  }
+});
+
+test('FIG-24 — Service Worker sw.js existiert und cached die Asset-Liste', () => {
+  const sw = readRoot('sw.js');
+  assert.match(sw, /addEventListener\(\s*['"]install['"]/, 'install-Handler fehlt');
+  assert.match(sw, /addEventListener\(\s*['"]fetch['"]/, 'fetch-Handler fehlt');
+  for (const asset of ['index.html', 'figlib.js', 'manifest.json',
+                        'icon-192.png', 'icon-512.png']) {
+    assert.ok(sw.includes(asset), `Asset im SW-Cache fehlt: ${asset}`);
+  }
+});
+
+test('FIG-25 — index.html bindet Manifest und registriert Service Worker ein', () => {
+  const html = readRoot('index.html');
+  assert.match(html, /<link[^>]+rel=["']manifest["'][^>]+href=["']\.\/manifest\.json["']/,
+    'Manifest-Link im HTML fehlt');
+  assert.match(html, /navigator\.serviceWorker\.register\(['"]\.\/sw\.js['"]\)/,
+    'SW-Registrierung im HTML fehlt');
+  // Apple-Tags aus FIG-25 müssen erhalten bleiben (Vollbild auf iPadOS).
+  assert.match(html, /name=["']apple-mobile-web-app-capable["'][^>]+content=["']yes["']/);
+  assert.match(html, /name=["']apple-mobile-web-app-status-bar-style["']/);
+  assert.match(html, /viewport-fit=cover/);
+});
