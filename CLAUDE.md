@@ -81,6 +81,26 @@ Diese Regeln sind nicht verhandelbar. Im Zweifel: nachfragen, nicht raten.
   `specs/constitution.md` als operative Kurzfassung von
   `xbuddy-knowledge/CONTEXT.md` — mit dokumentierter Sync-Pflicht.
 
+**Daten vs. Code**
+
+- **Was sich ändern kann, gehört in eine Datei.** Per-Instanz-Daten
+  (Registry, Routing-Tabellen, Screen-IDs) und Tuning-Werte (Toleranzen,
+  Throttle, Hysterese) leben als JSON-File neben dem Code. Code lädt sie.
+  Code-Konstanten sind nur Fallback-Default, niemals Wahrheit.
+  Konfigurations-Abschnitte einer Spec (z. B. FIG-17, ROU-15) listen
+  jeden Wert mit Default UND Override-Pfad (Config-Datei und/oder
+  URL-Parameter). Werte, die nur als Code-Konstante existieren — ohne
+  Override-Pfad — sind Spec-Verletzung.
+
+- **Vorschlagen, wenn Werte sich vermehren.** Wer beim Implementieren
+  einen Wert mehrfach im Code anfasst oder findet, dass er bereits an
+  zwei Orten divergent lebt (z. B. Repo-Code vs. Live-Deployment): halt
+  an und schlage Externalisierung vor — eigenes Ticket oder kleiner
+  Mit-Edit, je nach Größe. Trigger ist konkreter Schmerz (zweimal in
+  derselben Woche angefasst, Code-vs-Live-Drift, Folge-Agents würden das
+  Inline-Muster kopieren), nicht Antizipation. „Auf Vorrat
+  externalisieren" bleibt Wildwuchs (siehe „Lege nichts auf Vorrat an").
+
 **Änderungs-Disziplin**
 
 - **Kleine PRs.** Ein PR = ein Thema. Wer mehr als ~20 Dateien anfasst oder
