@@ -32,5 +32,8 @@ Kein Lernprodukt · kein Spielzeug · kein Datenhändler · kein
 
 ---
 
-Ausführlicher Kontext: `xbuddy-knowledge/CONTEXT.md`.
+> **Quelle der Wahrheit für diese Prinzipien:** `xbuddy-knowledge/CONTEXT.md`.
+> Diese Constitution ist die operative Kurzfassung neben den Specs — bei
+> Änderungen in `CONTEXT.md` (§1, §4, §5) hier nachziehen.
+
 Aufbau der Specs: `specs/README.md`.
