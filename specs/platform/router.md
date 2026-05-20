@@ -154,15 +154,20 @@ V1.
 *Tickets:* #5
 
 ### ROU-11 — Lebenszyklus eines States
-- **Trigger eingegangen, Match in der Tabelle:** State wird gesetzt
-  oder aktualisiert (Felder `source_id`, `descriptor`, `payload`,
-  `since`). `since` ist der Zeitpunkt, an dem der **aktuelle Trigger**
-  zuletzt eingegangen ist (jedes neue Event mit gleichem Trigger
-  aktualisiert `since`).
-- **Trigger eingegangen, kein Match:** State wird trotzdem aktualisiert,
-  aber mit `payload: null`. Display sieht damit, dass etwas
-  Unbekanntes aufliegt — keine stumme Verschluckung.
-- **Session-Ende-Signal:** State auf `null` setzen.
+- **Trigger eingegangen, Match in der Tabelle:** Für jeden Screen aus
+  `screen_ids` des Match-Eintrags wird der State gesetzt oder
+  aktualisiert (Felder `source_id`, `descriptor`, `payload`, `since`).
+  `since` ist der Zeitpunkt, an dem der **aktuelle Trigger** zuletzt
+  eingegangen ist (jedes neue Event mit gleichem Trigger aktualisiert
+  `since`).
+- **Trigger eingegangen, kein Match:** Event wird akzeptiert (2xx)
+  aber **kein** State wird aktualisiert. Eine Warnung wird geloggt
+  (`logging.warning`), damit unbekannte Trigger im Betrieb sichtbar
+  sind. Begründung: ohne Match weiß der Router nicht, welcher Screen
+  betroffen wäre — eine breite Belegung aller Screens würde unbeteiligte
+  Displays löschen, was schlechter ist als der bestehende State zu halten.
+- **Session-Ende-Signal:** Alle Screens, deren aktueller State diese
+  `source_id` trägt, werden auf `null` gesetzt.
 
 Mehrere Trigger auf denselben Screen (M:N): jeder neue Trigger
 überschreibt den State für diesen Screen. V1 hat nur einen
@@ -207,6 +212,24 @@ Liefert eine minimale HTML-Debug-Seite, die alle bekannten Screens und
 deren aktuellen State live anzeigt. Wird mit JS-Polling (1 Hz)
 aktualisiert. Reines Debug-Werkzeug — kein Ersatz für ein Display, kein
 Production-Endpoint.
+
+*Tickets:* #5
+
+### ROU-20 — GET /display/&lt;id&gt;
+V1-Brücke zur eigenständigen Display-Komponente: liefert eine
+minimale HTML-Seite, die den aktuellen Payload-`url` (ROU-13) des
+angegebenen Screens als Iframe einbettet und automatisch tauscht,
+sobald sich der State ändert (Polling im Sekundentakt).
+
+Damit ist die vertikale Schleife „Figur drauf → Display zeigt
+gemappte Seite" mit einem Browser-Tab demonstrierbar, **bevor** die
+eigenständige Display-Komponente existiert. Sobald letztere kommt,
+ist `/display/<id>` redundant und wird per Deprecate-Schritt entfernt
+(CLAUDE.md §6 Entfernen in zwei Schritten).
+
+- Bekannte `<id>`: 200, HTML mit Polling-Logik.
+- Unbekannte `<id>`: 404, JSON `{ "error": "unknown screen" }`
+  (gleiche Definition wie ROU-12).
 
 *Tickets:* #5
 
