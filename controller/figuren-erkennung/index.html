@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Figuren-Erkennung">
+<title>XBuddy · Figuren-Erkennung · V1</title>
+<style>
+  /* FIG-19 — selbsttragend, inline */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --green: #4ade80;
+    --yellow: #facc15;
+    --red: #f87171;
+    --dim: rgba(255,255,255,0.32);
+    --line: rgba(255,255,255,0.08);
+  }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #0b0b10; color: #e8e8ea;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+  }
+  #app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+  /* FIG-15 — Header */
+  #header {
+    flex: 0 0 auto; padding: 7px 14px;
+    font-size: 11px; font-weight: 700; letter-spacing: 1.8px;
+    color: rgba(255,255,255,0.62);
+    border-bottom: 1px solid var(--line);
+    background: rgba(255,255,255,0.02);
+    text-transform: uppercase;
+  }
+  #header .sep { color: rgba(255,255,255,0.25); margin: 0 6px; }
+  #header .cid { color: var(--green); }
+
+  #main { flex: 1 1 auto; position: relative; overflow: hidden; }
+  #canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  /* FIG-13 — Zielfeld */
+  #zielfeld {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 220px; height: 220px;
+    border: 2px dashed rgba(255,255,255,0.20);
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+    font-size: 11px; color: rgba(255,255,255,0.32);
+    letter-spacing: 1.2px; text-transform: uppercase;
+  }
+
+  /* FIG-14 — Roh-Datendarstellung */
+  #raw {
+    position: absolute; top: 10px; left: 12px;
+    font-family: "SF Mono", "Menlo", Consolas, monospace;
+    font-size: 10px; color: rgba(127,255,127,0.82);
+    line-height: 1.65; pointer-events: none;
+    background: rgba(0,0,0,0.45); padding: 6px 10px;
+    border-radius: 6px; max-width: 50%;
+    white-space: pre;
+  }
+  #status {
+    position: absolute; top: 10px; right: 12px;
+    text-align: right;
+    font-size: 11px; color: rgba(255,255,255,0.85);
+    line-height: 1.5; pointer-events: none;
+    background: rgba(0,0,0,0.45); padding: 6px 10px;
+    border-radius: 6px; min-width: 130px;
+  }
+  #status .fid { font-size: 17px; font-weight: 700; color: var(--dim); }
+  #status .fid.ok { color: var(--green); }
+  #status .fid.unknown { color: var(--yellow); }
+  #status .angle { font-family: "SF Mono", monospace; font-size: 11px; color: rgba(255,255,255,0.65); margin-top: 2px; }
+  #status .npts { font-family: "SF Mono", monospace; font-size: 10px; color: rgba(255,255,255,0.40); }
+
+  /* FIG-16 — Footer */
+  #footer {
+    flex: 0 0 auto; padding: 6px 14px;
+    font-size: 10px; font-family: "SF Mono", monospace;
+    color: rgba(255,255,255,0.50);
+    border-top: 1px solid var(--line);
+    background: rgba(255,255,255,0.02);
+    display: flex; gap: 14px; flex-wrap: wrap;
+  }
+  #footer .col { flex: 1 1 auto; min-width: 0; }
+  #footer .lbl { color: rgba(255,255,255,0.30); font-size: 9px; letter-spacing: 1.2px; text-transform: uppercase; display: block; margin-bottom: 1px; }
+  #footer .err { color: var(--red); }
+  #footer .ok  { color: var(--green); }
+
+  /* FIG-18 — Portrait-Warnung */
+  #portrait {
+    display: none;
+    position: fixed; inset: 0; z-index: 999;
+    background: rgba(0,0,0,0.93);
+    align-items: center; justify-content: center;
+    font-size: 16px; color: var(--yellow); text-align: center; padding: 24px;
+    letter-spacing: 0.5px;
+  }
+  @media (orientation: portrait) { #portrait { display: flex; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    Figuren-Erkennung<span class="sep">·</span>V1-Test<span class="sep">·</span><span class="cid" id="ctrl-id">test_controller</span>
+  </div>
+  <div id="main">
+    <canvas id="canvas"></canvas>
+    <div id="zielfeld">Figur hier auflegen</div>
+    <div id="raw">— keine Punkte —</div>
+    <div id="status">
+      <div class="fid" id="fid">—</div>
+      <div class="angle" id="ang">∠ —</div>
+      <div class="npts" id="npts">0 Punkte</div>
+    </div>
+  </div>
+  <div id="footer">
+    <div class="col"><span class="lbl">Letzter POST</span><span class="ok" id="last-ok">—</span></div>
+    <div class="col"><span class="lbl">Letzter Fehler</span><span class="err" id="last-err">—</span></div>
+    <div class="col"><span class="lbl">Events 60 s</span><span id="counts">detected:0 · angle:0 · ended:0</span></div>
+  </div>
+</div>
+<div id="portrait">Bitte ins Querformat drehen.</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ============================================================
+  //  KONFIGURATION  (FIG-17)
+  // ============================================================
+  const qs = new URLSearchParams(location.search);
+  const num = (k, def) => { const v = parseFloat(qs.get(k)); return Number.isFinite(v) ? v : def; };
+  const CONFIG = {
+    controller_id:               qs.get('controller')  || 'test_controller',
+    router_url:                  qs.get('router')      || '',          // OPEN-FIG-C: leer = console.log
+    figure_present_ms:           150,                                  // FIG-2
+    figure_absent_ms:            400,                                  // FIG-2
+    pattern_tolerance:           num('tol',  0.05),                    // FIG-4, FIG-5
+    tap_dwell_ms:                100,                                  // FIG-8
+    angle_update_max_hz:         num('rate', 10),                      // FIG-11
+    angle_update_min_delta_deg:  num('dead', 3.0),                     // FIG-11
+  };
+  document.getElementById('ctrl-id').textContent = CONFIG.controller_id;
+
+  // ============================================================
+  //  DEMO-REGISTRY  (FIG-4)
+  //  pattern = sortierte normalisierte Dreiecks-Seitenlängen
+  //  [kürzeste/längste, mittlere/längste, 1.0] — siehe FIG-3
+  //  L1-Mittel-Abstand der beiden Demos > Toleranz → eindeutig.
+  // ============================================================
+  const REGISTRY = {
+    'demo-dreieck-A': [0.50, 0.70, 1.0],
+    'demo-dreieck-B': [0.85, 0.92, 1.0],
+  };
+
+  // ============================================================
+  //  STATE
+  // ============================================================
+  const touches = new Map();        // id → {id, x, y, t0}
+  let presentSince = null;          // ms-Zeit, seit der 3+ Punkte anliegen
+  let absentSince = null;           // ms-Zeit, seit der <3 Punkte anliegen (Grace)
+  let figurePresent = false;        // FIG-2 Präsenz
+  let identifiedFigureId = null;    // FIG-5 aktuell identifiziert
+  let lastIdentifiedFigureId = null;// für FIG-8 / session_ended
+  let sessionEndedSent = false;     // session_ended nur einmal pro Session
+  let lastSentAngle = null;         // FIG-11 Dead-Zone
+  let lastAngleSentAt = 0;          // FIG-11 Drosseln
+  let tapDwellStart = null;         // FIG-8
+  let tapDwellTouchId = null;
+  let sessionId = null;             // wird beim figure_detected neu vergeben
+
+  // ============================================================
+  //  CANVAS
+  // ============================================================
+  const cvs = document.getElementById('canvas');
+  const ctx = cvs.getContext('2d');
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = cvs.clientWidth, h = cvs.clientHeight;
+    cvs.width = w * dpr; cvs.height = h * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', resize);
+
+  // ============================================================
+  //  GEOMETRIE
+  // ============================================================
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  function centroid(pts) {
+    let sx = 0, sy = 0;
+    for (const p of pts) { sx += p.x; sy += p.y; }
+    return { x: sx / pts.length, y: sy / pts.length };
+  }
+  // FIG-3 — Pattern-Descriptor
+  function descriptor(p0, p1, p2) {
+    const d = [dist(p0, p1), dist(p0, p2), dist(p1, p2)].sort((a, b) => a - b);
+    const m = d[2] || 1;
+    return [d[0] / m, d[1] / m, 1.0];
+  }
+  // L1-Mittel über drei Komponenten
+  function patternDist(p, q) {
+    return (Math.abs(p[0] - q[0]) + Math.abs(p[1] - q[1]) + Math.abs(p[2] - q[2])) / 3;
+  }
+  // FIG-5 — Identifikation
+  function identify(desc) {
+    let bestId = null, bestScore = Infinity;
+    for (const [id, pat] of Object.entries(REGISTRY)) {
+      const s = patternDist(desc, pat);
+      if (s < bestScore) { bestScore = s; bestId = id; }
+    }
+    return bestScore <= CONFIG.pattern_tolerance ? bestId : null;
+  }
+  // FIG-6 — Roh-Winkel: Vektor Schwerpunkt → Punkt mit niedrigster id, gegen Horizontale.
+  // Wertebereich [0, 360). Y zeigt im Browser nach unten — atan2(dy, dx) bleibt sinnvoll, weil
+  // Hysterese/Quantisierung Router-seitig laufen.
+  function anchorAngle(pts) {
+    const sorted = [...pts].sort((a, b) => a.id - b.id).slice(0, 3);
+    const c = centroid(sorted);
+    const a = sorted[0];
+    let deg = Math.atan2(a.y - c.y, a.x - c.x) * 180 / Math.PI;
+    if (deg < 0) deg += 360;
+    return deg;
+  }
+  function angularDelta(a, b) {
+    if (b === null) return Infinity;
+    let d = Math.abs(a - b) % 360;
+    return d > 180 ? 360 - d : d;
+  }
+  function uuid() {
+    if (crypto && crypto.randomUUID) return crypto.randomUUID();
+    // Fallback
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  }
+
+  // ============================================================
+  //  TOUCH-HANDLING
+  // ============================================================
+  function rectOf() { return cvs.getBoundingClientRect(); }
+  function handleTouch(e) {
+    e.preventDefault();
+    const r = rectOf();
+    const now = performance.now();
+    const seen = new Set();
+    for (let i = 0; i < e.touches.length; i++) {
+      const t = e.touches[i];
+      seen.add(t.identifier);
+      const ex = touches.get(t.identifier);
+      touches.set(t.identifier, {
+        id: t.identifier,
+        x: t.clientX - r.left,
+        y: t.clientY - r.top,
+        t0: ex ? ex.t0 : now,
+      });
+    }
+    // Entfernte Touches rauswerfen
+    for (const id of [...touches.keys()]) if (!seen.has(id)) touches.delete(id);
+    update(now);
+    draw();
+  }
+  for (const ev of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) {
+    document.addEventListener(ev, handleTouch, { passive: false });
+  }
+
+  // ============================================================
+  //  STATE-MACHINE  (FIG-1, FIG-2, FIG-5, FIG-8, FIG-11)
+  // ============================================================
+  function update(now) {
+    const pts = [...touches.values()];
+    const n = pts.length;
+
+    if (n >= 3) {
+      // 3+ Punkte: Präsenz-Logik
+      absentSince = null;
+      if (presentSince === null) presentSince = now;
+
+      const sorted3 = [...pts].sort((a, b) => a.id - b.id).slice(0, 3);
+      const desc = descriptor(sorted3[0], sorted3[1], sorted3[2]);
+      const matched = identify(desc);
+
+      if (!figurePresent && now - presentSince >= CONFIG.figure_present_ms) {
+        // Übergang absent → present
+        figurePresent = true;
+        identifiedFigureId = matched;
+        if (matched) startSession(matched, anchorAngle(sorted3), now);
+      } else if (figurePresent && matched && matched !== identifiedFigureId) {
+        // FIG-11: Wechsel auf andere Figur während Präsenz
+        identifiedFigureId = matched;
+        startSession(matched, anchorAngle(sorted3), now);
+      }
+
+      // Tap-Dwell verwerfen, weil Figur präsent
+      tapDwellStart = null; tapDwellTouchId = null;
+    } else {
+      // < 3 Punkte
+      presentSince = null;
+
+      if (figurePresent) {
+        // Grace-Phase (FIG-2)
+        if (absentSince === null) absentSince = now;
+        if (now - absentSince >= CONFIG.figure_absent_ms) {
+          figurePresent = false;
+          identifiedFigureId = null;
+          absentSince = null;
+          // Kein Event bei „abwesend" (FIG-11) — Router hält State.
+        }
+      } else {
+        // Keine Figur, ggf. Tap (FIG-8)
+        if (n === 1) {
+          const t = pts[0];
+          if (tapDwellTouchId !== t.id) {
+            tapDwellTouchId = t.id;
+            tapDwellStart = now;
+          } else if (tapDwellStart && now - tapDwellStart >= CONFIG.tap_dwell_ms) {
+            if (lastIdentifiedFigureId && !sessionEndedSent) {
+              sendEvent({
+                type: 'session_ended',
+                figure_id: lastIdentifiedFigureId,
+                reason: 'user_tap',
+              });
+              sessionEndedSent = true;
+            }
+            tapDwellStart = null;
+            tapDwellTouchId = null;
+          }
+        } else {
+          tapDwellStart = null;
+          tapDwellTouchId = null;
+        }
+      }
+    }
+
+    // Winkel-Tracking (FIG-6, FIG-11) — nur bei präsent + identifiziert
+    if (figurePresent && identifiedFigureId && touches.size >= 3) {
+      const sorted3 = [...touches.values()].sort((a, b) => a.id - b.id).slice(0, 3);
+      const ang = anchorAngle(sorted3);
+      const minInterval = 1000 / CONFIG.angle_update_max_hz;
+      if (now - lastAngleSentAt >= minInterval &&
+          angularDelta(ang, lastSentAngle) >= CONFIG.angle_update_min_delta_deg) {
+        sendEvent({
+          type: 'angle_update',
+          figure_id: identifiedFigureId,
+          angle: Math.round(ang * 10) / 10,
+        });
+        lastSentAngle = ang;
+        lastAngleSentAt = now;
+      }
+    }
+  }
+
+  function startSession(figureId, initialAngle, now) {
+    sessionId = uuid();
+    lastIdentifiedFigureId = figureId;
+    sessionEndedSent = false;
+    lastSentAngle = initialAngle;
+    lastAngleSentAt = now;
+    sendEvent({
+      type: 'figure_detected',
+      figure_id: figureId,
+      angle: Math.round(initialAngle * 10) / 10,
+    });
+  }
+
+  // ============================================================
+  //  EVENTS  (FIG-9, FIG-10, FIG-12)
+  // ============================================================
+  const counters = { figure_detected: [], angle_update: [], session_ended: [] };
+  let lastOkAt = null, lastErrAt = null, lastErrMsg = null;
+
+  function sendEvent(extra) {
+    const event = Object.assign({
+      src: CONFIG.controller_id,
+      ts: new Date().toISOString(),
+    }, extra);
+
+    counters[event.type] = counters[event.type] || [];
+    counters[event.type].push(performance.now());
+
+    if (!CONFIG.router_url) {
+      // OPEN-FIG-C: ohne Router-URL nur console.log (V1-Default)
+      console.log('[event]', event);
+      lastOkAt = new Date();
+      updateFooter();
+      return;
+    }
+
+    const url = CONFIG.router_url.replace(/\/+$/, '') + '/event';
+    postWithRetry(url, event, 0);
+  }
+
+  // FIG-12 — Retry mit Backoff 200 / 1000 / 5000 ms
+  const BACKOFFS = [200, 1000, 5000];
+  function postWithRetry(url, body, attempt) {
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      keepalive: true,
+    }).then((r) => {
+      if (!r.ok) {
+        if (r.status >= 500 && attempt < BACKOFFS.length) {
+          setTimeout(() => postWithRetry(url, body, attempt + 1), BACKOFFS[attempt]);
+        } else {
+          recordError(body.type, 'HTTP ' + r.status);
+        }
+        return;
+      }
+      lastOkAt = new Date();
+      updateFooter();
+    }).catch((err) => {
+      if (attempt < BACKOFFS.length) {
+        setTimeout(() => postWithRetry(url, body, attempt + 1), BACKOFFS[attempt]);
+      } else {
+        recordError(body.type, err.message || 'network');
+      }
+    });
+  }
+  function recordError(type, msg) {
+    lastErrAt = new Date();
+    lastErrMsg = type + ': ' + msg;
+    updateFooter();
+  }
+
+  // ============================================================
+  //  RENDERING
+  // ============================================================
+  function draw() {
+    const W = cvs.clientWidth, H = cvs.clientHeight;
+    ctx.clearRect(0, 0, W, H);
+
+    const pts = [...touches.values()];
+
+    // FIG-14: Touch-Punkte
+    pts.forEach((t) => {
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, 22, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(74,222,128,0.15)';
+      ctx.fill();
+      ctx.strokeStyle = figurePresent ? '#4ade80' : 'rgba(255,255,255,0.55)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff';
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.font = 'bold 10px -apple-system, system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('#' + t.id, t.x, t.y - 30);
+    });
+
+    // FIG-14: Dreieck verbinden + Winkel-Marker
+    if (figurePresent && touches.size >= 3) {
+      const sorted3 = [...touches.values()].sort((a, b) => a.id - b.id).slice(0, 3);
+      ctx.beginPath();
+      ctx.moveTo(sorted3[0].x, sorted3[0].y);
+      ctx.lineTo(sorted3[1].x, sorted3[1].y);
+      ctx.lineTo(sorted3[2].x, sorted3[2].y);
+      ctx.closePath();
+      ctx.strokeStyle = 'rgba(74,222,128,0.55)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Anker-Linie (Schwerpunkt → niedrigster Punkt) zur Visualisierung des Roh-Winkels
+      const c = centroid(sorted3);
+      const a = sorted3[0];
+      ctx.beginPath();
+      ctx.moveTo(c.x, c.y);
+      ctx.lineTo(a.x, a.y);
+      ctx.strokeStyle = 'rgba(250,204,21,0.85)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(250,204,21,0.85)';
+      ctx.fill();
+    }
+
+    // Raw-Overlay (FIG-14)
+    const rawEl = document.getElementById('raw');
+    if (pts.length === 0) {
+      rawEl.textContent = '— keine Punkte —';
+    } else {
+      const lines = pts.map((p) => `P${p.id}: x=${p.x.toFixed(0)} y=${p.y.toFixed(0)}`);
+      if (touches.size >= 3) {
+        const sorted3 = [...touches.values()].sort((a, b) => a.id - b.id).slice(0, 3);
+        const desc = descriptor(sorted3[0], sorted3[1], sorted3[2]);
+        lines.push(`d  : [${desc[0].toFixed(3)}, ${desc[1].toFixed(3)}, 1.000]`);
+        lines.push(`∠  : ${anchorAngle(sorted3).toFixed(1)}°`);
+      }
+      rawEl.textContent = lines.join('\n');
+    }
+
+    // Status-Box (FIG-15-artig in der Live-Anzeige)
+    const fid = document.getElementById('fid');
+    const angEl = document.getElementById('ang');
+    const npts = document.getElementById('npts');
+    npts.textContent = pts.length + ' Punkt' + (pts.length === 1 ? '' : 'e');
+
+    if (figurePresent && identifiedFigureId) {
+      fid.textContent = identifiedFigureId;
+      fid.className = 'fid ok';
+      const sorted3 = [...touches.values()].sort((a, b) => a.id - b.id).slice(0, 3);
+      angEl.textContent = sorted3.length === 3 ? '∠ ' + anchorAngle(sorted3).toFixed(1) + '°' : '∠ —';
+    } else if (figurePresent) {
+      fid.textContent = '— unbekannt —';
+      fid.className = 'fid unknown';
+      angEl.textContent = '∠ —';
+    } else {
+      fid.textContent = '—';
+      fid.className = 'fid';
+      angEl.textContent = '∠ —';
+    }
+  }
+
+  // ============================================================
+  //  FOOTER  (FIG-16)
+  // ============================================================
+  function fmtTime(d) {
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    const s = String(d.getSeconds()).padStart(2, '0');
+    return h + ':' + m + ':' + s;
+  }
+  function updateFooter() {
+    document.getElementById('last-ok').textContent  = lastOkAt  ? fmtTime(lastOkAt)  : '—';
+    document.getElementById('last-err').textContent = lastErrAt ? (fmtTime(lastErrAt) + ' · ' + lastErrMsg) : '—';
+    const cutoff = performance.now() - 60_000;
+    for (const k of Object.keys(counters)) counters[k] = counters[k].filter((t) => t >= cutoff);
+    document.getElementById('counts').textContent =
+      `detected:${counters.figure_detected.length} · ` +
+      `angle:${counters.angle_update.length} · ` +
+      `ended:${counters.session_ended.length}`;
+  }
+  setInterval(updateFooter, 1000);
+
+  // ============================================================
+  //  INIT
+  // ============================================================
+  resize();
+  draw();
+  updateFooter();
+})();
+</script>
+</body>
+</html>
