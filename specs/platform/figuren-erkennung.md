@@ -109,15 +109,15 @@ praktisch ausgeschlossen. Erst wenn der Benutzer die Figur **abhebt**, wird
 die Button-Fläche frei.
 
 **Auslöser:** Wird innerhalb der Button-Kreisfläche ein einzelner
-Touchpunkt (`touches.size === 1`) für mindestens 100 ms gehalten, sendet
-die Seite `session_ended` mit `reason: "user_button"` und schließt die
-Session (`figurePresent` und `identifiedFigureId` werden zurückgesetzt,
-der Button verschwindet). Ein einzelner Touchpunkt **außerhalb** der
-Kreisfläche löst nichts aus.
+Touchpunkt (`touches.size === 1`) für mindestens `tap_dwell_ms` (siehe
+FIG-17) gehalten, sendet die Seite `session_ended` mit
+`reason: "user_button"` und schließt die Session (`figurePresent` und
+`identifiedFigureId` werden zurückgesetzt, der Button verschwindet).
+Ein einzelner Touchpunkt **außerhalb** der Kreisfläche löst nichts aus.
 
 Außerhalb einer aktiven Session ist der Button nicht sichtbar.
 
-*Tickets:* #1
+*Tickets:* #1, #13
 
 ### FIG-20 — Bucket-Quantisierung
 Der kumulative Winkel (FIG-6) wird in `n_buckets` gleich breite Sektoren
@@ -284,7 +284,7 @@ Defaults stehen als JS-Konstanten in `figlib.js`. Sie können per
 | `figure_present_ms`          | —                 | 150                                      |
 | `pattern_tolerance`          | `?tol=<float>`    | 0.05                                     |
 | `match_distance_px`          | —                 | 60                                       |
-| `tap_dwell_ms`               | —                 | 100                                      |
+| `tap_dwell_ms`               | —                 | 30                                       |
 | `button_padding_px`          | —                 | 30                                       |
 | `angle_update_max_hz`        | `?rate=<int>`     | 10                                       |
 | `angle_update_min_delta_deg` | `?dead=<float>`   | 3                                        |
@@ -302,7 +302,11 @@ die reine Standfläche der Figur).
 Bucket-Quantisierung (FIG-20) und die Grenz-Hysterese (FIG-21). Wird nur
 `n_buckets` gesetzt, ist `bucket_size_deg = 360 / n_buckets`.
 
-*Tickets:* #1, #6, #9, #11
+`tap_dwell_ms` ist die Mindest-Halte-Zeit für den Session-Ende-Button
+(FIG-8). Default 30 ms — kurz genug für einen natürlichen Tap,
+lang genug um Streifkontakte zu filtern (siehe E-FIG-8).
+
+*Tickets:* #1, #6, #9, #11, #13
 
 ### FIG-23 — Instanz-Konfiguration über `config.json`
 Beim Laden der Seite wird `./config.json` per `fetch` geladen und auf die
@@ -494,3 +498,34 @@ Grenz-Hysterese gehören in dieselbe Schicht wie der kumulative Winkel.
 
 Folgewirkung: Ticket #5 hat ROU-7/ROU-8 (Router-seitige Hysterese und
 Quantisierung) gestrichen; OPEN-ROU-A entfällt.
+
+### E-FIG-8 — Tap-Dwell statt Tap-Release (Bug #13)
+*Datum:* 2026-05-20 (Ticket #13)
+
+Real-Test 2026-05-20: Der Centroid-Button (FIG-8) reagierte nicht auf
+natürliche Taps. Ursache: `tap_dwell_ms` lag bei 100 ms; ein normaler
+Tap dauert oft nur 50–80 ms. Der Touch verschwand bevor die
+Dwell-Schwelle erreicht war — strikt spec-konform, aber UX-kaputt.
+
+Drei Optionen waren in der Diskussion:
+
+| Variante | Mechanik |
+|---|---|
+| **A** | `tap_dwell_ms`-Default von 100 auf 30 ms senken |
+| **B** | Auf `touchend` innerhalb des Kreises feuern, unabhängig von der Halte-Zeit |
+| **C** | Visuelles Feedback (Fortschritts-Ring) während Dwell |
+
+**Gewählt: A.** Begründung: B würde die Mechanik aufweichen — bei zwei
+nahezu gleichzeitigen Touches (eine Hand am Display, dann zweite) wäre
+ein versehentliches `touchend` ohne klare Absicht im Kreis möglich.
+A bleibt bei "halten = Absicht", aber kurz genug für einen natürlichen
+Tap. C ist eine UX-Verbesserung, kein Bugfix — separates Ticket wenn
+gewünscht.
+
+30 ms wurde gewählt, weil der periodische Tick alle 50 ms läuft —
+mindestens ein Tick passt zuverlässig in 30 ms hinein, sobald der
+Touch beim ersten Tick erfasst ist. 100 ms war für die Original-
+Spec-Sicherheit „kein Streifkontakt" gewählt, ist aber bei einem
+Button, der durch die Figur physisch verdeckt liegt (FIG-8) unnötig
+defensiv: ein Versehen ist schon durch die räumliche Verdeckung
+ausgeschlossen.
