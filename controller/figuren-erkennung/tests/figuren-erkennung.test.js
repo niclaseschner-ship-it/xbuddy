@@ -466,10 +466,34 @@ test('FIG-17 — Default-Konfiguration liefert erwartete Werte', () => {
   assert.strictEqual(cfg.figure_present_ms, 150);
   assert.strictEqual(cfg.pattern_tolerance, 0.05);
   assert.strictEqual(cfg.match_distance_px, 60);
-  assert.strictEqual(cfg.tap_dwell_ms, 100);
+  assert.strictEqual(cfg.tap_dwell_ms, 30,
+    'Default ist 30 ms — natürlicher Quick-Tap wird erkannt (E-FIG-8)');
   assert.strictEqual(cfg.angle_update_max_hz, 10);
   assert.strictEqual(cfg.angle_update_min_delta_deg, 3);
   assert.ok(typeof cfg.registry === 'object');
+});
+
+test('FIG-8 / #13 — kurzer Tap (~60 ms) im Button beendet die Session mit Default-tap_dwell_ms', () => {
+  // Regression: vor #13 lag tap_dwell_ms-Default bei 100 ms, ein
+  // natürlicher Tap (50–80 ms) lief deshalb in den touchend bevor
+  // der Dwell elapsed war — Button blieb stehen, Session nicht
+  // beendet. Nach E-FIG-8 ist der Default 30 ms.
+  const session = fig.createSession({
+    figure_present_ms: 0,
+    registry: { A: [0.50, 0.70, 1.0] },
+  });
+  const tri = trianglesWithDescriptor([0.50, 0.70, 1.0]);
+  fig.feedTouches(session, tri, 0);
+  fig.feedTouches(session, [], 5);   // Figur abgehoben
+  const c = session.buttonCircle;
+  // Quick-Tap: down bei 10 ms, immer noch da bei 50 ms (50−10 = 40 ms > 30)
+  fig.feedTouches(session, [{ id: 99, x: c.x, y: c.y }], 10);
+  const evs = fig.feedTouches(session, [{ id: 99, x: c.x, y: c.y }], 50);
+  const ended = evs.find(e => e.type === 'session_ended');
+  assert.ok(ended, 'kurzer Tap muss mit Default-Config session_ended emittieren');
+  assert.strictEqual(session.figurePresent, false);
+  assert.strictEqual(session.buttonCircle, null,
+    'Button muss nach session_ended verschwinden (buttonCircle=null)');
 });
 
 test('FIG-17 — source_id aus Config wird im Event verwendet (#6)', () => {
