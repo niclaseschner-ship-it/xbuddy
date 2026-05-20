@@ -8,14 +8,14 @@
 <meta name="apple-mobile-web-app-title" content="Figuren-Erkennung">
 <title>XBuddy · Figuren-Erkennung · V1</title>
 <style>
-  /* FIG-19 — selbsttragend, inline */
+  /* FIG-19 — selbsttragend, inline CSS, einzige externe JS-Datei figlib.js im selben Verzeichnis */
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   :root {
-    --green: #4ade80;
+    --green:  #4ade80;
     --yellow: #facc15;
-    --red: #f87171;
-    --dim: rgba(255,255,255,0.32);
-    --line: rgba(255,255,255,0.08);
+    --red:    #f87171;
+    --dim:    rgba(255,255,255,0.32);
+    --line:   rgba(255,255,255,0.08);
   }
   html, body {
     width: 100%; height: 100%; overflow: hidden;
@@ -35,12 +35,12 @@
     text-transform: uppercase;
   }
   #header .sep { color: rgba(255,255,255,0.25); margin: 0 6px; }
-  #header .cid { color: var(--green); }
+  #header .sid { color: var(--green); }
 
   #main { flex: 1 1 auto; position: relative; overflow: hidden; }
   #canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 
-  /* FIG-13 — Zielfeld */
+  /* FIG-13 — Zielfeld, versteckt während aktiver Session */
   #zielfeld {
     position: absolute; left: 50%; top: 50%;
     transform: translate(-50%, -50%);
@@ -52,6 +52,23 @@
     font-size: 11px; color: rgba(255,255,255,0.32);
     letter-spacing: 1.2px; text-transform: uppercase;
   }
+  #zielfeld.hidden { display: none; }
+
+  /* FIG-8 — Session-Ende-Button im Figur-Schwerpunkt */
+  #end-button {
+    position: absolute;
+    display: none;
+    border-radius: 50%;
+    background: rgba(248, 113, 113, 0.18);
+    border: 2px dashed rgba(248, 113, 113, 0.85);
+    color: rgba(248, 113, 113, 1);
+    font-size: 12px; font-weight: 700;
+    letter-spacing: 1.5px; text-transform: uppercase;
+    align-items: center; justify-content: center; text-align: center;
+    pointer-events: none;  /* Touches gehen über document; figlib entscheidet */
+    z-index: 5;
+  }
+  #end-button.show { display: flex; }
 
   /* FIG-14 — Roh-Datendarstellung */
   #raw {
@@ -65,8 +82,7 @@
   }
   #status {
     position: absolute; top: 10px; right: 12px;
-    text-align: right;
-    font-size: 11px; color: rgba(255,255,255,0.85);
+    text-align: right; font-size: 11px; color: rgba(255,255,255,0.85);
     line-height: 1.5; pointer-events: none;
     background: rgba(0,0,0,0.45); padding: 6px 10px;
     border-radius: 6px; min-width: 130px;
@@ -75,7 +91,7 @@
   #status .fid.ok { color: var(--green); }
   #status .fid.unknown { color: var(--yellow); }
   #status .angle { font-family: "SF Mono", monospace; font-size: 11px; color: rgba(255,255,255,0.65); margin-top: 2px; }
-  #status .npts { font-family: "SF Mono", monospace; font-size: 10px; color: rgba(255,255,255,0.40); }
+  #status .npts  { font-family: "SF Mono", monospace; font-size: 10px; color: rgba(255,255,255,0.40); }
 
   /* FIG-16 — Footer */
   #footer {
@@ -106,11 +122,12 @@
 <body>
 <div id="app">
   <div id="header">
-    Figuren-Erkennung<span class="sep">·</span>V1-Test<span class="sep">·</span><span class="cid" id="ctrl-id">test_controller</span>
+    Figuren-Erkennung<span class="sep">·</span>V1-Test<span class="sep">·</span><span class="sid" id="sid">phone:test-1</span>
   </div>
   <div id="main">
     <canvas id="canvas"></canvas>
     <div id="zielfeld">Figur hier auflegen</div>
+    <div id="end-button">Session<br>beenden</div>
     <div id="raw">— keine Punkte —</div>
     <div id="status">
       <div class="fid" id="fid">—</div>
@@ -126,57 +143,28 @@
 </div>
 <div id="portrait">Bitte ins Querformat drehen.</div>
 
+<script src="./figlib.js"></script>
 <script>
 (() => {
   'use strict';
 
-  // ============================================================
-  //  KONFIGURATION  (FIG-17)
-  // ============================================================
+  // === FIG-17 — Config aus URL-Parametern (Defaults aus figlib) ===
   const qs = new URLSearchParams(location.search);
   const num = (k, def) => { const v = parseFloat(qs.get(k)); return Number.isFinite(v) ? v : def; };
-  const CONFIG = {
-    controller_id:               qs.get('controller')  || 'test_controller',
-    router_url:                  qs.get('router')      || '',          // OPEN-FIG-C: leer = console.log
-    figure_present_ms:           150,                                  // FIG-2
-    figure_absent_ms:            400,                                  // FIG-2
-    pattern_tolerance:           num('tol',  0.05),                    // FIG-4, FIG-5
-    tap_dwell_ms:                100,                                  // FIG-8
-    angle_update_max_hz:         num('rate', 10),                      // FIG-11
-    angle_update_min_delta_deg:  num('dead', 3.0),                     // FIG-11
-  };
-  document.getElementById('ctrl-id').textContent = CONFIG.controller_id;
+  const defaults = figLib.configDefaults();
+  const cfg = Object.assign({}, defaults, {
+    source_id:                   qs.get('source')  || defaults.source_id,
+    router_url:                  qs.get('router')  || '',
+    pattern_tolerance:           num('tol',  defaults.pattern_tolerance),
+    angle_update_min_delta_deg:  num('dead', defaults.angle_update_min_delta_deg),
+    angle_update_max_hz:         num('rate', defaults.angle_update_max_hz),
+  });
+  document.getElementById('sid').textContent = cfg.source_id;
 
-  // ============================================================
-  //  DEMO-REGISTRY  (FIG-4)
-  //  pattern = sortierte normalisierte Dreiecks-Seitenlängen
-  //  [kürzeste/längste, mittlere/längste, 1.0] — siehe FIG-3
-  //  L1-Mittel-Abstand der beiden Demos > Toleranz → eindeutig.
-  // ============================================================
-  const REGISTRY = {
-    'demo-dreieck-A': [0.50, 0.70, 1.0],
-    'demo-dreieck-B': [0.85, 0.92, 1.0],
-  };
+  // === Session ===
+  const session = figLib.createSession(cfg);
 
-  // ============================================================
-  //  STATE
-  // ============================================================
-  const touches = new Map();        // id → {id, x, y, t0}
-  let presentSince = null;          // ms-Zeit, seit der 3+ Punkte anliegen
-  let absentSince = null;           // ms-Zeit, seit der <3 Punkte anliegen (Grace)
-  let figurePresent = false;        // FIG-2 Präsenz
-  let identifiedFigureId = null;    // FIG-5 aktuell identifiziert
-  let lastIdentifiedFigureId = null;// für FIG-8 / session_ended
-  let sessionEndedSent = false;     // session_ended nur einmal pro Session
-  let lastSentAngle = null;         // FIG-11 Dead-Zone
-  let lastAngleSentAt = 0;          // FIG-11 Drosseln
-  let tapDwellStart = null;         // FIG-8
-  let tapDwellTouchId = null;
-  let sessionId = null;             // wird beim figure_detected neu vergeben
-
-  // ============================================================
-  //  CANVAS
-  // ============================================================
+  // === Canvas + Resize ===
   const cvs = document.getElementById('canvas');
   const ctx = cvs.getContext('2d');
   function resize() {
@@ -188,216 +176,47 @@
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', resize);
 
-  // ============================================================
-  //  GEOMETRIE
-  // ============================================================
-  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-  function centroid(pts) {
-    let sx = 0, sy = 0;
-    for (const p of pts) { sx += p.x; sy += p.y; }
-    return { x: sx / pts.length, y: sy / pts.length };
-  }
-  // FIG-3 — Pattern-Descriptor
-  function descriptor(p0, p1, p2) {
-    const d = [dist(p0, p1), dist(p0, p2), dist(p1, p2)].sort((a, b) => a - b);
-    const m = d[2] || 1;
-    return [d[0] / m, d[1] / m, 1.0];
-  }
-  // L1-Mittel über drei Komponenten
-  function patternDist(p, q) {
-    return (Math.abs(p[0] - q[0]) + Math.abs(p[1] - q[1]) + Math.abs(p[2] - q[2])) / 3;
-  }
-  // FIG-5 — Identifikation
-  function identify(desc) {
-    let bestId = null, bestScore = Infinity;
-    for (const [id, pat] of Object.entries(REGISTRY)) {
-      const s = patternDist(desc, pat);
-      if (s < bestScore) { bestScore = s; bestId = id; }
-    }
-    return bestScore <= CONFIG.pattern_tolerance ? bestId : null;
-  }
-  // FIG-6 — Roh-Winkel: Vektor Schwerpunkt → Punkt mit niedrigster id, gegen Horizontale.
-  // Wertebereich [0, 360). Y zeigt im Browser nach unten — atan2(dy, dx) bleibt sinnvoll, weil
-  // Hysterese/Quantisierung Router-seitig laufen.
-  function anchorAngle(pts) {
-    const sorted = [...pts].sort((a, b) => a.id - b.id).slice(0, 3);
-    const c = centroid(sorted);
-    const a = sorted[0];
-    let deg = Math.atan2(a.y - c.y, a.x - c.x) * 180 / Math.PI;
-    if (deg < 0) deg += 360;
-    return deg;
-  }
-  function angularDelta(a, b) {
-    if (b === null) return Infinity;
-    let d = Math.abs(a - b) % 360;
-    return d > 180 ? 360 - d : d;
-  }
-  function uuid() {
-    if (crypto && crypto.randomUUID) return crypto.randomUUID();
-    // Fallback
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-      const r = Math.random() * 16 | 0;
-      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-    });
-  }
-
-  // ============================================================
-  //  TOUCH-HANDLING
-  // ============================================================
-  function rectOf() { return cvs.getBoundingClientRect(); }
+  // === Touch-Handler ===
+  let currentTouches = [];
   function handleTouch(e) {
     e.preventDefault();
-    const r = rectOf();
-    const now = performance.now();
-    const seen = new Set();
+    const r = cvs.getBoundingClientRect();
+    const touches = [];
     for (let i = 0; i < e.touches.length; i++) {
       const t = e.touches[i];
-      seen.add(t.identifier);
-      const ex = touches.get(t.identifier);
-      touches.set(t.identifier, {
+      touches.push({
         id: t.identifier,
         x: t.clientX - r.left,
         y: t.clientY - r.top,
-        t0: ex ? ex.t0 : now,
       });
     }
-    // Entfernte Touches rauswerfen
-    for (const id of [...touches.keys()]) if (!seen.has(id)) touches.delete(id);
-    update(now);
+    currentTouches = touches;
+    const events = figLib.feedTouches(session, touches, performance.now());
+    for (const ev of events) sendEvent(ev);
     draw();
   }
   for (const ev of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) {
     document.addEventListener(ev, handleTouch, { passive: false });
   }
 
-  // ============================================================
-  //  STATE-MACHINE  (FIG-1, FIG-2, FIG-5, FIG-8, FIG-11)
-  // ============================================================
-  function update(now) {
-    const pts = [...touches.values()];
-    const n = pts.length;
-
-    if (n >= 3) {
-      // 3+ Punkte: Präsenz-Logik
-      absentSince = null;
-      if (presentSince === null) presentSince = now;
-
-      const sorted3 = [...pts].sort((a, b) => a.id - b.id).slice(0, 3);
-      const desc = descriptor(sorted3[0], sorted3[1], sorted3[2]);
-      const matched = identify(desc);
-
-      if (!figurePresent && now - presentSince >= CONFIG.figure_present_ms) {
-        // Übergang absent → present
-        figurePresent = true;
-        identifiedFigureId = matched;
-        if (matched) startSession(matched, anchorAngle(sorted3), now);
-      } else if (figurePresent && matched && matched !== identifiedFigureId) {
-        // FIG-11: Wechsel auf andere Figur während Präsenz
-        identifiedFigureId = matched;
-        startSession(matched, anchorAngle(sorted3), now);
-      }
-
-      // Tap-Dwell verwerfen, weil Figur präsent
-      tapDwellStart = null; tapDwellTouchId = null;
-    } else {
-      // < 3 Punkte
-      presentSince = null;
-
-      if (figurePresent) {
-        // Grace-Phase (FIG-2)
-        if (absentSince === null) absentSince = now;
-        if (now - absentSince >= CONFIG.figure_absent_ms) {
-          figurePresent = false;
-          identifiedFigureId = null;
-          absentSince = null;
-          // Kein Event bei „abwesend" (FIG-11) — Router hält State.
-        }
-      } else {
-        // Keine Figur, ggf. Tap (FIG-8)
-        if (n === 1) {
-          const t = pts[0];
-          if (tapDwellTouchId !== t.id) {
-            tapDwellTouchId = t.id;
-            tapDwellStart = now;
-          } else if (tapDwellStart && now - tapDwellStart >= CONFIG.tap_dwell_ms) {
-            if (lastIdentifiedFigureId && !sessionEndedSent) {
-              sendEvent({
-                type: 'session_ended',
-                figure_id: lastIdentifiedFigureId,
-                reason: 'user_tap',
-              });
-              sessionEndedSent = true;
-            }
-            tapDwellStart = null;
-            tapDwellTouchId = null;
-          }
-        } else {
-          tapDwellStart = null;
-          tapDwellTouchId = null;
-        }
-      }
-    }
-
-    // Winkel-Tracking (FIG-6, FIG-11) — nur bei präsent + identifiziert
-    if (figurePresent && identifiedFigureId && touches.size >= 3) {
-      const sorted3 = [...touches.values()].sort((a, b) => a.id - b.id).slice(0, 3);
-      const ang = anchorAngle(sorted3);
-      const minInterval = 1000 / CONFIG.angle_update_max_hz;
-      if (now - lastAngleSentAt >= minInterval &&
-          angularDelta(ang, lastSentAngle) >= CONFIG.angle_update_min_delta_deg) {
-        sendEvent({
-          type: 'angle_update',
-          figure_id: identifiedFigureId,
-          angle: Math.round(ang * 10) / 10,
-        });
-        lastSentAngle = ang;
-        lastAngleSentAt = now;
-      }
-    }
-  }
-
-  function startSession(figureId, initialAngle, now) {
-    sessionId = uuid();
-    lastIdentifiedFigureId = figureId;
-    sessionEndedSent = false;
-    lastSentAngle = initialAngle;
-    lastAngleSentAt = now;
-    sendEvent({
-      type: 'figure_detected',
-      figure_id: figureId,
-      angle: Math.round(initialAngle * 10) / 10,
-    });
-  }
-
-  // ============================================================
-  //  EVENTS  (FIG-9, FIG-10, FIG-12)
-  // ============================================================
+  // === FIG-9 + FIG-12 — Event-Send mit Retry ===
   const counters = { figure_detected: [], angle_update: [], session_ended: [] };
   let lastOkAt = null, lastErrAt = null, lastErrMsg = null;
+  const BACKOFFS = [200, 1000, 5000];
 
-  function sendEvent(extra) {
-    const event = Object.assign({
-      src: CONFIG.controller_id,
-      ts: new Date().toISOString(),
-    }, extra);
-
+  function sendEvent(event) {
     counters[event.type] = counters[event.type] || [];
     counters[event.type].push(performance.now());
 
-    if (!CONFIG.router_url) {
-      // OPEN-FIG-C: ohne Router-URL nur console.log (V1-Default)
+    if (!cfg.router_url) {
       console.log('[event]', event);
       lastOkAt = new Date();
       updateFooter();
       return;
     }
-
-    const url = CONFIG.router_url.replace(/\/+$/, '') + '/event';
+    const url = cfg.router_url.replace(/\/+$/, '') + '/event';
     postWithRetry(url, event, 0);
   }
-
-  // FIG-12 — Retry mit Backoff 200 / 1000 / 5000 ms
-  const BACKOFFS = [200, 1000, 5000];
   function postWithRetry(url, body, attempt) {
     fetch(url, {
       method: 'POST',
@@ -429,22 +248,18 @@
     updateFooter();
   }
 
-  // ============================================================
-  //  RENDERING
-  // ============================================================
+  // === Rendering ===
   function draw() {
     const W = cvs.clientWidth, H = cvs.clientHeight;
     ctx.clearRect(0, 0, W, H);
 
-    const pts = [...touches.values()];
-
-    // FIG-14: Touch-Punkte
-    pts.forEach((t) => {
+    // Touch-Punkte
+    for (const t of currentTouches) {
       ctx.beginPath();
       ctx.arc(t.x, t.y, 22, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(74,222,128,0.15)';
       ctx.fill();
-      ctx.strokeStyle = figurePresent ? '#4ade80' : 'rgba(255,255,255,0.55)';
+      ctx.strokeStyle = session.figurePresent ? '#4ade80' : 'rgba(255,255,255,0.55)';
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.beginPath();
@@ -455,62 +270,46 @@
       ctx.font = 'bold 10px -apple-system, system-ui';
       ctx.textAlign = 'center';
       ctx.fillText('#' + t.id, t.x, t.y - 30);
-    });
+    }
 
-    // FIG-14: Dreieck verbinden + Winkel-Marker
-    if (figurePresent && touches.size >= 3) {
-      const sorted3 = [...touches.values()].sort((a, b) => a.id - b.id).slice(0, 3);
+    // Dreieck wenn präsent
+    if (session.figurePresent && currentTouches.length >= 3) {
+      const three = figLib.pickThree(currentTouches);
       ctx.beginPath();
-      ctx.moveTo(sorted3[0].x, sorted3[0].y);
-      ctx.lineTo(sorted3[1].x, sorted3[1].y);
-      ctx.lineTo(sorted3[2].x, sorted3[2].y);
+      ctx.moveTo(three[0].x, three[0].y);
+      ctx.lineTo(three[1].x, three[1].y);
+      ctx.lineTo(three[2].x, three[2].y);
       ctx.closePath();
       ctx.strokeStyle = 'rgba(74,222,128,0.55)';
       ctx.lineWidth = 1.5;
       ctx.stroke();
-
-      // Anker-Linie (Schwerpunkt → niedrigster Punkt) zur Visualisierung des Roh-Winkels
-      const c = centroid(sorted3);
-      const a = sorted3[0];
-      ctx.beginPath();
-      ctx.moveTo(c.x, c.y);
-      ctx.lineTo(a.x, a.y);
-      ctx.strokeStyle = 'rgba(250,204,21,0.85)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(c.x, c.y, 4, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(250,204,21,0.85)';
-      ctx.fill();
     }
 
-    // Raw-Overlay (FIG-14)
+    // Raw-Overlay
     const rawEl = document.getElementById('raw');
-    if (pts.length === 0) {
+    if (currentTouches.length === 0) {
       rawEl.textContent = '— keine Punkte —';
     } else {
-      const lines = pts.map((p) => `P${p.id}: x=${p.x.toFixed(0)} y=${p.y.toFixed(0)}`);
-      if (touches.size >= 3) {
-        const sorted3 = [...touches.values()].sort((a, b) => a.id - b.id).slice(0, 3);
-        const desc = descriptor(sorted3[0], sorted3[1], sorted3[2]);
-        lines.push(`d  : [${desc[0].toFixed(3)}, ${desc[1].toFixed(3)}, 1.000]`);
-        lines.push(`∠  : ${anchorAngle(sorted3).toFixed(1)}°`);
+      const lines = currentTouches.map(p => `P${p.id}: x=${p.x.toFixed(0)} y=${p.y.toFixed(0)}`);
+      if (currentTouches.length >= 3) {
+        const three = figLib.pickThree(currentTouches);
+        const desc = figLib.descriptor(three[0], three[1], three[2]);
+        lines.push(`d   : [${desc[0].toFixed(3)}, ${desc[1].toFixed(3)}, 1.000]`);
+        lines.push(`cum : ${session.cumulativeAngle.toFixed(1)}° (Session-Akku)`);
       }
       rawEl.textContent = lines.join('\n');
     }
 
-    // Status-Box (FIG-15-artig in der Live-Anzeige)
+    // Status-Box
     const fid = document.getElementById('fid');
     const angEl = document.getElementById('ang');
     const npts = document.getElementById('npts');
-    npts.textContent = pts.length + ' Punkt' + (pts.length === 1 ? '' : 'e');
-
-    if (figurePresent && identifiedFigureId) {
-      fid.textContent = identifiedFigureId;
+    npts.textContent = currentTouches.length + ' Punkt' + (currentTouches.length === 1 ? '' : 'e');
+    if (session.figurePresent && session.identifiedFigureId) {
+      fid.textContent = session.identifiedFigureId;
       fid.className = 'fid ok';
-      const sorted3 = [...touches.values()].sort((a, b) => a.id - b.id).slice(0, 3);
-      angEl.textContent = sorted3.length === 3 ? '∠ ' + anchorAngle(sorted3).toFixed(1) + '°' : '∠ —';
-    } else if (figurePresent) {
+      angEl.textContent = '∠ ' + session.cumulativeAngle.toFixed(1) + '°';
+    } else if (session.figurePresent) {
       fid.textContent = '— unbekannt —';
       fid.className = 'fid unknown';
       angEl.textContent = '∠ —';
@@ -519,11 +318,25 @@
       fid.className = 'fid';
       angEl.textContent = '∠ —';
     }
+
+    // FIG-8 — Session-Ende-Button
+    const btn = document.getElementById('end-button');
+    if (session.figurePresent && session.buttonCircle) {
+      const c = session.buttonCircle;
+      btn.style.left   = (c.x - c.r) + 'px';
+      btn.style.top    = (c.y - c.r) + 'px';
+      btn.style.width  = (c.r * 2) + 'px';
+      btn.style.height = (c.r * 2) + 'px';
+      btn.classList.add('show');
+    } else {
+      btn.classList.remove('show');
+    }
+
+    // FIG-13 — Zielfeld versteckt wenn Session aktiv
+    document.getElementById('zielfeld').classList.toggle('hidden', session.figurePresent);
   }
 
-  // ============================================================
-  //  FOOTER  (FIG-16)
-  // ============================================================
+  // === Footer (FIG-16) ===
   function fmtTime(d) {
     const h = String(d.getHours()).padStart(2, '0');
     const m = String(d.getMinutes()).padStart(2, '0');
@@ -534,7 +347,7 @@
     document.getElementById('last-ok').textContent  = lastOkAt  ? fmtTime(lastOkAt)  : '—';
     document.getElementById('last-err').textContent = lastErrAt ? (fmtTime(lastErrAt) + ' · ' + lastErrMsg) : '—';
     const cutoff = performance.now() - 60_000;
-    for (const k of Object.keys(counters)) counters[k] = counters[k].filter((t) => t >= cutoff);
+    for (const k of Object.keys(counters)) counters[k] = counters[k].filter(t => t >= cutoff);
     document.getElementById('counts').textContent =
       `detected:${counters.figure_detected.length} · ` +
       `angle:${counters.angle_update.length} · ` +
@@ -542,9 +355,7 @@
   }
   setInterval(updateFooter, 1000);
 
-  // ============================================================
-  //  INIT
-  // ============================================================
+  // === Init ===
   resize();
   draw();
   updateFooter();
