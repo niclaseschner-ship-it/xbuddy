@@ -1027,6 +1027,26 @@ test('FIG-24 — Service Worker sw.js existiert und cached die Asset-Liste', () 
   }
 });
 
+test('FIG-24 / #23 — Service Worker liefert netzwerk-bevorzugt aus', () => {
+  // Regression #23: cache-first ließ jeden Deploy unsichtbar werden.
+  // Der fetch-Handler muss zuerst fetch() versuchen und nur im Fehlerfall
+  // (offline) auf caches.match zurückfallen.
+  const sw = readRoot('sw.js');
+  // network-first: fetch zuerst, .catch → caches.match
+  assert.match(sw, /fetch\(req\)[\s\S]*?\.catch\([\s\S]*?caches\.match/,
+    'fetch-Handler muss netzwerk-bevorzugt sein (fetch zuerst, Cache als Fallback)');
+  // Negativprobe: kein cache-first-Muster mehr (caches.match zuerst,
+  // dann || fetch).
+  assert.doesNotMatch(sw, /caches\.match\(req\)\.then\(\s*\(cached\)\s*=>\s*cached\s*\|\|\s*fetch/,
+    'cache-first-Muster darf nicht mehr vorkommen (#23)');
+});
+
+test('FIG-24 / #23 — Navigationen fallen offline auf die App-Shell zurück', () => {
+  const sw = readRoot('sw.js');
+  assert.match(sw, /req\.mode\s*===\s*['"]navigate['"]/,
+    'Navigations-Requests werden nicht erkannt');
+});
+
 test('FIG-25 — index.html bindet Manifest und registriert Service Worker ein', () => {
   const html = readRoot('index.html');
   assert.match(html, /<link[^>]+rel=["']manifest["'][^>]+href=["']\.\/manifest\.json["']/,
