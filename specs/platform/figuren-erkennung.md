@@ -378,9 +378,16 @@ aktuell verfolgte. Konkrete Anforderungen:
   wie `index.html` und ist per `<link rel="manifest" href="./manifest.json">`
   eingebunden.
 - Das Manifest deklariert `name`, `short_name`, `start_url: "./"`,
-  `display: "standalone"`, `orientation: "landscape"`, `background_color`
+  `display: "fullscreen"`, `orientation: "landscape"`, `background_color`
   und `theme_color` passend zum dunklen UI-Stil der Seite (siehe
   FIG-15-Abschnitt).
+- `display: "fullscreen"` (nicht `"standalone"`): die installierte PWA
+  startet randlos ohne System-Statusleiste, **bevor** die erste
+  Nutzer-Geste erfolgt ist. FIG-26 kann den Vollbild per Fullscreen-API
+  erst nach einer abgeschlossenen Geste anfordern (Browser-Regel); der
+  Manifest-Anzeigemodus ist der einzige Hebel für das Zeitfenster davor.
+  Browser ohne `fullscreen`-Unterstützung fallen über die Manifest-
+  Fallback-Kette automatisch auf `standalone` zurück.
 - Mindestens **zwei Icons** sind angegeben (192 × 192, 512 × 512 PNG) und
   liegen im selben Verzeichnis. Mindestens ein Icon trägt `purpose:
   "maskable"`, damit Android-Launcher die Form korrekt zuschneiden.
@@ -399,7 +406,7 @@ aktuell verfolgte. Konkrete Anforderungen:
   ist per-Instanz-Daten und darf sich pro Deployment ändern.
 - Router-Events (POST) laufen nie über den Worker-Cache.
 
-*Tickets:* #18, #23
+*Tickets:* #18, #23, #26
 
 ### FIG-25 — Vollbild im installierten Zustand
 Wird die Seite über das Manifest aus FIG-24 als App installiert (iPadOS
@@ -407,10 +414,11 @@ Wird die Seite über das Manifest aus FIG-24 als App installiert (iPadOS
 Browser-Chrome (keine Adressleiste, keine Tab-Bar) im Vollbild. Die
 bereits vorhandenen Apple-Web-App-Meta-Tags (`apple-mobile-web-app-capable`,
 `apple-mobile-web-app-status-bar-style`, `viewport-fit=cover`) bleiben
-erhalten und ergänzen das Manifest für iPadOS, das `display: standalone`
-nicht über das Manifest, sondern über diese Tags interpretiert.
+erhalten und ergänzen das Manifest für iPadOS, das den Anzeigemodus
+nicht über das Manifest-`display`-Feld, sondern über diese Tags
+interpretiert.
 
-*Tickets:* #18
+*Tickets:* #18, #26
 
 ### FIG-26 — Vollbild + Wach-Halten per Tap
 Unabhängig von der Auslieferungsform (normale URL, Home-Screen-

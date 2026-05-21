@@ -992,7 +992,7 @@ test('FIG-24 — manifest.json existiert und ist valides JSON', () => {
   assert.ok(m.name && m.short_name, 'name + short_name pflicht');
   assert.strictEqual(m.start_url, './');
   assert.strictEqual(m.scope, './');
-  assert.strictEqual(m.display, 'standalone');
+  assert.strictEqual(m.display, 'fullscreen');
   assert.strictEqual(m.orientation, 'landscape');
   assert.match(m.background_color, /^#0b0b10$/i);
   assert.match(m.theme_color, /^#0b0b10$/i);

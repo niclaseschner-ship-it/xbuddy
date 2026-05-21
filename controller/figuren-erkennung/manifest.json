@@ -4,7 +4,7 @@
   "description": "XBuddy-Controller: erkennt Figuren auf dem Tablet-Touchscreen und schickt semantische Events an den Router.",
   "start_url": "./",
   "scope": "./",
-  "display": "standalone",
+  "display": "fullscreen",
   "orientation": "landscape",
   "background_color": "#0b0b10",
   "theme_color": "#0b0b10",
