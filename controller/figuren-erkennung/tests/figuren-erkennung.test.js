@@ -564,8 +564,9 @@ test('FIG-19 — figlib.js liegt im selben Verzeichnis wie index.html', () => {
 //  FIG-9 / FIG-12 — Transport (HTML-Smoke)
 // ===========================================================
 
-test('FIG-9 — HTML enthält POST an <router_url>/event mit JSON-Header', () => {
-  assert.match(HTML, /\.replace\(\/\\\/\+\$\/, ''\) \+ '\/event'/);
+test('FIG-9 — HTML enthält POST an <router_url>/api/v1/events mit JSON-Header', () => {
+  // Endpunkt folgt der URL-Konvention (urls.md URL-4) — siehe #24.
+  assert.match(HTML, /\.replace\(\/\\\/\+\$\/, ''\) \+ '\/api\/v1\/events'/);
   assert.match(HTML, /method:\s*'POST'/);
   assert.match(HTML, /'Content-Type':\s*'application\/json'/);
 });
