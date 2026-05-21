@@ -316,17 +316,30 @@ Erkennungsqualität für die Bewertungsphase; weitere Adapter (etwa Mistral)
 folgen additiv, ohne auf Vorrat spezifiziert zu werden. Dasselbe Adapter/Kern-
 Muster nutzt der Router (E-ROU-1).
 
-### E-EC-7 — Bestätigung schreibender Aufgaben per Reaktion
+### E-EC-7 — Bestätigung schreibender Aufgaben per Bestätigungswort
 *Datum:* 2026-05-21
 
-Die ausdrückliche Bestätigung aus EC-10 erfolgt als Daumen-hoch-Reaktion auf
-die Vorschlags-Nachricht des Bots.
+Die ausdrückliche Bestätigung aus EC-10 erfolgt als **Nachricht** an den Bot: ein
+👍 oder eines aus einer festen Liste von Bestätigungswörtern, gerichtet auf den
+konkreten Vorschlag — als Antwort auf die Vorschlags-Nachricht, oder, wenn im Chat
+genau ein Vorschlag offen ist, auch ohne Antwortbezug. Die Liste ist fest
+definiert: `👍` (auch mit Hautton-Modifikator), `✅`, `ok`, `okay`, `k`, `jo`,
+`ja`, `japp`, `jepp`, `passt`, `mach`, `machen`, `go`, `gogogo`, `los` — Vergleich
+case-insensitiv, ganzes Wort (keine Teilstring-Treffer).
 
-**Verworfen:** Inline-Buttons. Die Reaktion ist leichtgewichtiger und vertraut,
-ohne die Nachricht mit Bedienelementen zu überfrachten. **Caveat:** Ein Bot
-empfängt Reaktions-Updates in einer Gruppe nur als Administrator — die
-👍-Bestätigung setzt also Gruppen-Admin-Status des Bots voraus. Für eine
-Familieninstanz unproblematisch, aber eine Deployment-Bedingung.
+Der Abgleich ist **deterministisch und liegt außerhalb des Agent-Loops** (E-EC-4):
+Das Sprachmodell interpretiert die Zustimmung nicht. Sonst könnte ein
+halluziniertes »Ja« eine Datenänderung auslösen — genau das schließt EC-12 aus.
+Eine Nachricht, die keinem Bestätigungswort entspricht, ist keine Bestätigung; sie
+wird als normale Anfrage an den Agenten behandelt und der offene Vorschlag bleibt
+unbestätigt.
+
+**Verworfen:** (1) 👍 als *Reaktion* statt als Nachricht — ein Bot empfängt
+Reaktions-Updates in einer Gruppe nur als Administrator; das würde Gruppen-Admin-
+Status des Bots erzwingen, was nicht für jede Familien-Gruppe gewollt ist.
+(2) Inline-Buttons — funktional gleichwertig, aber die Nachricht-Variante ist
+leichtgewichtiger und kanal-unabhängiger. (3) Freie LLM-Interpretation der
+Zustimmung — bricht E-EC-4/EC-12.
 
 ### E-EC-8 — Gesprächsverlauf persistent ab V1
 *Datum:* 2026-05-21
