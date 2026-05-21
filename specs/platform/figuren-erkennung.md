@@ -385,15 +385,21 @@ aktuell verfolgte. Konkrete Anforderungen:
   liegen im selben Verzeichnis. Mindestens ein Icon trägt `purpose:
   "maskable"`, damit Android-Launcher die Form korrekt zuschneiden.
 - Ein **minimaler Service Worker** `sw.js` im selben Verzeichnis wird
-  beim Laden registriert. Er cached die Asset-Liste der Seite
-  (`index.html`, `figlib.js`, `manifest.json`, Icons) beim Install-Event
-  und liefert sie offline aus — damit ist die in FIG-19 zugesicherte
-  Offline-Fähigkeit nach erstem Laden tatsächlich erfüllt.
-- `config.json` (FIG-23) wird **nicht** vorgecached — sie ist
-  per-Instanz-Daten und darf sich pro Deployment ändern; der Service
-  Worker holt sie netzwerk-bevorzugt mit Fallback auf Cache.
+  beim Laden registriert. Er füllt beim Install-Event einen Cache mit
+  der Asset-Liste der Seite (`index.html`, `figlib.js`, `manifest.json`,
+  Icons), damit die Seite nach dem ersten Laden offline funktioniert
+  (Zusicherung aus FIG-19).
+- **Auslieferungs-Strategie: netzwerk-bevorzugt mit Cache-Fallback** für
+  alle GET-Requests. Ist das Netz erreichbar, liefert der Worker die
+  frische Version und aktualisiert den Cache; ist es nicht erreichbar,
+  liefert er aus dem Cache. Damit ist ein Deployment beim nächsten Laden
+  **sofort sichtbar** — eine reine Cache-First-Strategie würde alte
+  Stände bis zum Cache-Bruch ausliefern und jeden Deploy verschlucken.
+- `config.json` (FIG-23) folgt derselben Netzwerk-bevorzugt-Regel — sie
+  ist per-Instanz-Daten und darf sich pro Deployment ändern.
+- Router-Events (POST) laufen nie über den Worker-Cache.
 
-*Tickets:* #18
+*Tickets:* #18, #23
 
 ### FIG-25 — Vollbild im installierten Zustand
 Wird die Seite über das Manifest aus FIG-24 als App installiert (iPadOS
