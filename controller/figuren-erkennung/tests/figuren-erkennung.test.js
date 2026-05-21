@@ -1038,3 +1038,53 @@ test('FIG-25 — index.html bindet Manifest und registriert Service Worker ein',
   assert.match(html, /name=["']apple-mobile-web-app-status-bar-style["']/);
   assert.match(html, /viewport-fit=cover/);
 });
+
+// ===========================================================
+//  FIG-26 — Vollbild + Wach-Halten per Tap
+// ===========================================================
+
+test('FIG-26 — index.html fordert Vollbild aus touchend/click an, nicht touchstart', () => {
+  const html = readRoot('index.html');
+  assert.match(html, /requestFullscreen/,
+    'Fullscreen-API-Aufruf fehlt');
+  // Chromium gewährt die transient activation für requestFullscreen NICHT
+  // bei touchstart — der Trigger muss an touchend bzw. click hängen.
+  assert.match(html, /addEventListener\(\s*['"]touchend['"]\s*,\s*tryFullscreen/,
+    'Fullscreen muss an touchend hängen (touchstart gewährt keine Aktivierung)');
+  assert.match(html, /addEventListener\(\s*['"]click['"]\s*,\s*tryFullscreen/,
+    'Fullscreen sollte zusätzlich an click hängen');
+  assert.doesNotMatch(html, /addEventListener\(\s*['"]touchstart['"]\s*,\s*tryFullscreen/,
+    'touchstart darf NICHT der Fullscreen-Trigger sein');
+});
+
+test('FIG-26 — Vollbild-Trigger nutzt den echten Vollbild-Status als Guard', () => {
+  const html = readRoot('index.html');
+  // Kein Einmal-Guard, der bei einem Fehlversuch verbrennt — statt dessen
+  // wird der tatsächliche Vollbild-Status geprüft (self-healing).
+  assert.match(html, /document\.fullscreenElement/,
+    'Guard muss document.fullscreenElement prüfen, nicht ein verbrennbares Flag');
+});
+
+test('FIG-26 — index.html hält den Bildschirm per Wake Lock wach', () => {
+  const html = readRoot('index.html');
+  assert.match(html, /navigator\.wakeLock\.request\(\s*['"]screen['"]\s*\)/,
+    'Screen Wake Lock wird nicht angefordert');
+});
+
+test('FIG-26 — Wake Lock wird nach visibilitychange erneut angefordert', () => {
+  const html = readRoot('index.html');
+  assert.match(html, /addEventListener\(\s*['"]visibilitychange['"]/,
+    'visibilitychange-Handler fehlt — Wake Lock geht beim Verdecken verloren');
+  assert.match(html, /visibilityState\s*===\s*['"]visible['"][\s\S]{0,80}requestWakeLock/,
+    'Wake Lock wird bei Rückkehr auf sichtbar nicht erneut geholt');
+});
+
+test('FIG-26 — fehlende APIs brechen die Seite nicht (best-effort)', () => {
+  const html = readRoot('index.html');
+  // wakeLock-Pfad prüft auf API-Verfügbarkeit
+  assert.match(html, /['"]wakeLock['"]\s+in\s+navigator/,
+    'Wake-Lock-Aufruf ohne Feature-Check — bricht auf alten Browsern');
+  // Fehler werden geloggt, nicht geworfen
+  assert.match(html, /Wake Lock fehlgeschlagen|Vollbild fehlgeschlagen/,
+    'API-Fehler werden nicht abgefangen/geloggt');
+});
