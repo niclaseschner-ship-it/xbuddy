@@ -27,6 +27,11 @@ controller/**/config.json
 router/routing.json
 router/config.json
 
+# Eltern-Chat: Instanz-Konfig + Gesprächs-Datenbank (EC-15/EC-16) —
+# pro Instanz separat, nicht im Repo. Format: eltern-chat/config.example.json
+eltern-chat/config.json
+eltern-chat/*.db
+
 # Test-Caches
 .pytest_cache/
 __pycache__/

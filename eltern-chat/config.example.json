@@ -1,0 +1,7 @@
+{
+  "_comment": "EC-15 — nicht-geheime Konfigurationswerte. Kopiere als config.json. Geheimnisse (Bot-Token, Anbieter-API-Key) gehören NICHT hierher, sondern ausschließlich in Umgebungsvariablen: ELTERNCHAT_BOT_TOKEN, ELTERNCHAT_PROVIDER_API_KEY. Umgebungsvariablen (ELTERNCHAT_*) überschreiben diese Datei; nicht gesetzte Felder fallen auf die Code-Defaults zurück.",
+  "provider": "claude",
+  "provider_model": "",
+  "family_group_chat_id": "-1000000000000",
+  "context_depth": 20
+}
