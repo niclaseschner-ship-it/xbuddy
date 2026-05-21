@@ -363,8 +363,48 @@ externen Libraries). Die Seite besteht aus einer HTML-Datei mit
 Inline-CSS, der begleitenden JS-Datei `figlib.js` und optional einer
 Instanz-Konfiguration `config.json` (FIG-23) — alles im selben
 Verzeichnis, zusammen ausgeliefert, nach erstem Laden offline-fähig.
+Die PWA-Begleitdateien (FIG-24) zählen ebenfalls zum selbsttragenden
+Auslieferungspaket.
 
-*Tickets:* #1, #11
+*Tickets:* #1, #11, #18
+
+### FIG-24 — Auslieferung als installierbare PWA
+Die Seite wird zusätzlich zur reinen URL-Nutzung als installierbare
+Web-App ausgeliefert. PWA ist **eine** Auslieferungsform unter mehreren
+denkbaren (z. B. eingebettet in eine künftige Buddy-Runtime) — die
+aktuell verfolgte. Konkrete Anforderungen:
+
+- Ein **Web App Manifest** `manifest.json` liegt im selben Verzeichnis
+  wie `index.html` und ist per `<link rel="manifest" href="./manifest.json">`
+  eingebunden.
+- Das Manifest deklariert `name`, `short_name`, `start_url: "./"`,
+  `display: "standalone"`, `orientation: "landscape"`, `background_color`
+  und `theme_color` passend zum dunklen UI-Stil der Seite (siehe
+  FIG-15-Abschnitt).
+- Mindestens **zwei Icons** sind angegeben (192 × 192, 512 × 512 PNG) und
+  liegen im selben Verzeichnis. Mindestens ein Icon trägt `purpose:
+  "maskable"`, damit Android-Launcher die Form korrekt zuschneiden.
+- Ein **minimaler Service Worker** `sw.js` im selben Verzeichnis wird
+  beim Laden registriert. Er cached die Asset-Liste der Seite
+  (`index.html`, `figlib.js`, `manifest.json`, Icons) beim Install-Event
+  und liefert sie offline aus — damit ist die in FIG-19 zugesicherte
+  Offline-Fähigkeit nach erstem Laden tatsächlich erfüllt.
+- `config.json` (FIG-23) wird **nicht** vorgecached — sie ist
+  per-Instanz-Daten und darf sich pro Deployment ändern; der Service
+  Worker holt sie netzwerk-bevorzugt mit Fallback auf Cache.
+
+*Tickets:* #18
+
+### FIG-25 — Vollbild im installierten Zustand
+Wird die Seite über das Manifest aus FIG-24 als App installiert (iPadOS
+"Zum Home-Bildschirm", Android/Chrome "Installieren"), läuft sie ohne
+Browser-Chrome (keine Adressleiste, keine Tab-Bar) im Vollbild. Die
+bereits vorhandenen Apple-Web-App-Meta-Tags (`apple-mobile-web-app-capable`,
+`apple-mobile-web-app-status-bar-style`, `viewport-fit=cover`) bleiben
+erhalten und ergänzen das Manifest für iPadOS, das `display: standalone`
+nicht über das Manifest, sondern über diese Tags interpretiert.
+
+*Tickets:* #18
 
 ---
 

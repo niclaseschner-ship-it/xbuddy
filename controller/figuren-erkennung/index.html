@@ -6,7 +6,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Figuren-Erkennung">
+<meta name="theme-color" content="#0b0b10">
 <title>XBuddy · Figuren-Erkennung · V1</title>
+<!-- FIG-24 — Auslieferung als installierbare PWA -->
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
 <style>
   /* FIG-19 — selbsttragend, inline CSS, einzige externe JS-Datei figlib.js im selben Verzeichnis */
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -386,6 +392,18 @@
   draw();
   updateFooter();
 })();
+</script>
+<script>
+  // FIG-24 — Service Worker registrieren, damit die Seite installierbar und
+  // nach erstem Laden offline-fähig ist (siehe FIG-19). Fehler werden still
+  // ignoriert, die Seite bleibt funktional auch ohne SW.
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('./sw.js').catch(function (err) {
+        console.warn('SW-Registrierung fehlgeschlagen:', err);
+      });
+    });
+  }
 </script>
 </body>
 </html>
