@@ -220,31 +220,38 @@ Pfad unter `/api/v1/` (URL-4) — Diagnose zählt zum Hub-Backend.
 
 *Tickets:* #5, #24
 
-### ROU-20 — GET /display/&lt;id&gt;
-V1-Brücke zur eigenständigen Display-Komponente: liefert eine
-minimale HTML-Seite, die den aktuellen Payload-`url` (ROU-13) des
-angegebenen Displays als Iframe einbettet und automatisch tauscht,
-sobald sich der State ändert (Polling im Sekundentakt).
+### ROU-20 — GET /display/&lt;id&gt; — Auslieferung des Display-Clients
+`GET /display/<id>` liefert den Display-Client (siehe
+[`display-client.md`](display-client.md)). Der Router ist hier nur
+Auslieferungsstelle (E-DC-3); Verhalten und Eigenschaften des Clients
+legt `display-client.md` fest. Die `<id>` aus dem Pfad ist die
+Identität, mit der der Client arbeitet (DC-1).
 
-Damit ist die vertikale Schleife „Figur drauf → Display zeigt
-gemappte Seite" mit einem Browser-Tab demonstrierbar, **bevor** die
-eigenständige Display-Komponente existiert. Sobald letztere kommt,
-ist `/display/<id>` redundant und wird per Deprecate-Schritt entfernt
-(CLAUDE.md §6 Entfernen in zwei Schritten).
+Der Endpunkt liefert den Client **unabhängig davon, ob die `<id>` dem
+Router bekannt ist** — ob ein Display existiert, klärt der Client beim
+Verbinden mit seinem Zustands-Stream (ROU-22); bei unbekannter `<id>`
+zeigt er einen Einrichtungs-Hinweis (DC-8). So wird eine fehlerhafte
+Einrichtung am Gerät selbst sichtbar, statt mit einer nackten
+404-Antwort zu enden.
 
 Der Pfad sitzt unter dem erlaubten `/display/`-Prefix (URL-1), weicht
-aber bewusst von der `/display/<buddy>/<view>`-Form (URL-2) ab: die
-Brücke adressiert ein Display über seine `id`, nicht über Buddy/View.
-Bewusste, dokumentierte Übergangs-Abweichung — sie verschwindet mit dem
-Endpoint selbst, sobald die echte Display-Komponente kommt.
+aber bewusst von der `/display/<buddy>/<view>`-Form (URL-2) ab: er
+adressiert ein Display über seine `id`, nicht über Buddy/View.
+Dokumentierte Abweichung.
 
-- Bekannte `<id>`: 200, HTML mit Polling-Logik.
-- Unbekannte `<id>`: 404, JSON `{ "error": "unknown display" }`
-  (gleiche Definition wie ROU-12).
-
-*Tickets:* #5, #24
+*Tickets:* #5, #24, #30
 
 ### ROU-21 — Direkt-Push an Display via CDP
+
+> **Abgelöst (#30).** Die Display-Benachrichtigung läuft über den
+> SSE-Zustands-Stream **ROU-22** — er erreicht auch Display-Geräte, die
+> nicht am Pi hängen (Tablets); CDP erreicht nur lokales Chromium.
+> Begründung: E-DC-1 in [`display-client.md`](display-client.md). Der
+> CDP-Push-Code samt der Konfigurationswerte `cdp_target` und
+> `cdp_idle_url` (ROU-15) wird in einem separaten PR entfernt
+> (CLAUDE.md §6, Entfernen in zwei Schritten). Bis dahin bleibt das
+> bestehende Verhalten beschrieben.
+
 Wenn `cdp_target` (siehe ROU-15) gesetzt ist, ruft der Router bei
 **jeder State-Änderung** Chromium über das **Chrome DevTools Protocol**
 auf, um sofort auf die neue URL zu navigieren — kein Polling-Lag, kein
@@ -277,6 +284,25 @@ E-ROU-2), wird das Generalisieren mit Belegen entschieden — nicht
 auf Vorrat (CLAUDE.md §6).
 
 *Tickets:* #17
+
+### ROU-22 — GET /api/v1/displays/&lt;id&gt;/events — Zustands-Stream
+Liefert einen Server-Sent-Events-Stream für ein Display. Beim Verbinden
+sendet der Router den aktuellen Zustand des Displays (Format wie ROU-10)
+als erstes Ereignis; bei jeder folgenden Zustandsänderung (ROU-11) ein
+weiteres Ereignis mit dem neuen Zustand. So erfährt ein Display-Client
+([`display-client.md`](display-client.md)) Inhaltswechsel ohne Polling
+und ohne Iframe-Hop.
+
+- Bekannte `<id>`: 200, SSE-Stream (`Content-Type: text/event-stream`).
+- Unbekannte `<id>`: 404, JSON `{ "error": "unknown display" }`
+  (gleiche Definition wie ROU-12).
+
+Der Pfad sitzt unter `/api/v1/` (URL-4), Collection `displays` im
+Plural. Bricht die Verbindung ab, baut der Client sie selbsttätig
+wieder auf (`display-client.md` DC-7); der Router hält keinen Zustand
+über die Verbindung hinaus.
+
+*Tickets:* #30
 
 ## 6. Konfiguration
 
