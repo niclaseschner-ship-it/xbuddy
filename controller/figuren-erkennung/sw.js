@@ -1,7 +1,8 @@
 // FIG-24 — Service Worker für die Figuren-Erkennung.
-// Cached die statischen Asset-Dateien beim Install, liefert sie offline aus
-// (Cache-First). config.json bleibt netzwerk-bevorzugt mit Cache-Fallback,
-// weil sie per-Instanz-Daten ist (FIG-23).
+// Strategie: netzwerk-bevorzugt mit Cache-Fallback. Online wird stets die
+// frische Version geliefert (Deploy sofort sichtbar), offline aus dem Cache
+// (FIG-19-Offline-Zusicherung). Der Install-Event füllt den Cache vorab,
+// damit Offline schon nach dem ersten Laden trägt.
 
 'use strict';
 
@@ -33,29 +34,32 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// Netzwerk-bevorzugt: frische Antwort holen + Cache aktualisieren; bei
+// Netzwerk-Fehler aus dem Cache liefern. Für Navigationen fällt der Fallback
+// zusätzlich auf die App-Shell (./index.html) zurück.
+function networkFirst(req, isNavigation) {
+  return fetch(req).then((res) => {
+    const copy = res.clone();
+    caches.open(CACHE_NAME).then((c) => c.put(req, copy));
+    return res;
+  }).catch(() =>
+    caches.match(req).then((cached) =>
+      cached || (isNavigation ? caches.match('./index.html') : undefined)
+    )
+  );
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
 
-  // Router-Events (FIG-9) gehen immer ans Netz, nie aus dem Cache.
+  // Router-Events (FIG-9) gehen immer ans Netz, nie über den Worker.
   if (url.pathname.endsWith('/event')) return;
 
-  // config.json (FIG-23): netzwerk-bevorzugt, Cache als Fallback.
-  if (url.pathname.endsWith('/config.json')) {
-    event.respondWith(
-      fetch(req).then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE_NAME).then((c) => c.put(req, copy));
-        return res;
-      }).catch(() => caches.match(req))
-    );
-    return;
-  }
-
-  // Alles andere: cache-first für die in STATIC_ASSETS gelisteten Dateien.
-  event.respondWith(
-    caches.match(req).then((cached) => cached || fetch(req))
-  );
+  // Alle GET-Requests netzwerk-bevorzugt — index.html, figlib.js, Icons,
+  // config.json. Damit ist ein Deploy beim nächsten Laden sofort sichtbar;
+  // der Cache ist reiner Offline-Fallback (FIG-24).
+  event.respondWith(networkFirst(req, req.mode === 'navigate'));
 });
