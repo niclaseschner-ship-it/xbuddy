@@ -270,7 +270,8 @@
       updateFooter();
       return;
     }
-    const url = cfg.router_url.replace(/\/+$/, '') + '/event';
+    // FIG-9 — Ziel-Endpunkt folgt der URL-Konvention (urls.md URL-4).
+    const url = cfg.router_url.replace(/\/+$/, '') + '/api/v1/events';
     postWithRetry(url, event, 0);
   }
   function postWithRetry(url, body, attempt) {

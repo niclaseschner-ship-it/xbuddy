@@ -1,22 +1,22 @@
 {
-  "_comment": "ROU-18 — Beispiel-Routing-Tabelle. Kopiere als routing.json (per .gitignore aus dem Repo ausgeschlossen) und passe pro Instanz an. Jeder Eintrag ist eine Zelle des M:N-Lookups: Schlüssel (source_id, descriptor) → Wert (screen_ids, payload).",
+  "_comment": "ROU-18 — Beispiel-Routing-Tabelle. Kopiere als routing.json (per .gitignore aus dem Repo ausgeschlossen) und passe pro Instanz an. Jeder Eintrag ist eine Zelle des M:N-Lookups: Schlüssel (source_id, descriptor) → Wert (display_ids, payload).",
   "entries": [
     {
       "source_id":  "phone:test-1",
       "descriptor": { "figure_id": "rotes-a", "bucket": 0 },
-      "screen_ids": ["default"],
+      "display_ids": ["default"],
       "payload":    { "url": "http://buddyboard.local:5150/kinder/klein" }
     },
     {
       "source_id":  "phone:test-1",
       "descriptor": { "figure_id": "rotes-a", "bucket": 1 },
-      "screen_ids": ["default"],
+      "display_ids": ["default"],
       "payload":    { "url": "http://buddyboard.local:5150/kinder" }
     },
     {
       "source_id":  "phone:test-1",
       "descriptor": { "figure_id": "rotes-a", "bucket": 2 },
-      "screen_ids": ["default"],
+      "display_ids": ["default"],
       "payload":    { "url": "http://buddyboard.local:5150/kinder" }
     }
   ]

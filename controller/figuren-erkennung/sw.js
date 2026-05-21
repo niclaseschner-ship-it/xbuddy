@@ -51,12 +51,9 @@ function networkFirst(req, isNavigation) {
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
+  // Nur GET wird vom Worker behandelt — Router-Events (FIG-9) sind POST
+  // und laufen damit ohnehin direkt ans Netz.
   if (req.method !== 'GET') return;
-
-  const url = new URL(req.url);
-
-  // Router-Events (FIG-9) gehen immer ans Netz, nie über den Worker.
-  if (url.pathname.endsWith('/event')) return;
 
   // Alle GET-Requests netzwerk-bevorzugt — index.html, figlib.js, Icons,
   // config.json. Damit ist ein Deploy beim nächsten Laden sofort sichtbar;

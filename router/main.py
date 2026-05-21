@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """XBuddy Router V1 — siehe specs/platform/router.md (Refs #5).
 
-Adapter ↔ Routing-Kern strikt getrennt (ROU-1). Nimmt POST /event
+Adapter ↔ Routing-Kern strikt getrennt (ROU-1). Nimmt POST /api/v1/events
 entgegen, mappt Phone-Events 1:1 auf das kanonische Trigger-Modell
 (ROU-6), löst per M:N-Tabelle aus routing.json (ROU-18) auf und hält
-State pro Screen in-memory (ROU-10).
+State pro Display in-memory (ROU-10).
 """
 
 from flask import Flask, request, jsonify, abort
@@ -21,9 +21,9 @@ import urllib.request
 #  Zustand (in-memory, V1)
 # ============================================================
 
-state = {}                # ROU-10: { screen_id: {…} | None }
+state = {}                # ROU-10: { display_id: {…} | None }
 routing_entries = []      # ROU-9 / ROU-18
-known_screens = set()     # Vereinigung aller screen_ids in den Einträgen
+known_displays = set()    # Vereinigung aller display_ids in den Einträgen
 
 
 def now_iso():
@@ -41,20 +41,20 @@ def lookup(source_id, descriptor):
             continue
         e_desc = entry.get('descriptor', {})
         if all(descriptor.get(k) == v for k, v in e_desc.items()):
-            return entry.get('screen_ids', []), entry.get('payload', {})
+            return entry.get('display_ids', []), entry.get('payload', {})
     return None
 
 
 def apply_trigger(source_id, descriptor):
-    """ROU-11 Match: setzt State für alle screen_ids. Kein Match: nur loggen."""
+    """ROU-11 Match: setzt State für alle display_ids. Kein Match: nur loggen."""
     match = lookup(source_id, descriptor)
     if match is None:
         logging.warning('kein Match: source_id=%s descriptor=%s', source_id, descriptor)
         return
-    screen_ids, payload = match
+    display_ids, payload = match
     ts = now_iso()
-    for sid in screen_ids:
-        state[sid] = {
+    for did in display_ids:
+        state[did] = {
             'source_id': source_id,
             'descriptor': descriptor,
             'payload':   payload,
@@ -67,12 +67,12 @@ def apply_trigger(source_id, descriptor):
 
 
 def apply_session_end(source_id):
-    """ROU-11: alle Screens, deren State diese source_id trägt, auf null."""
+    """ROU-11: alle Displays, deren State diese source_id trägt, auf null."""
     affected = False
-    for sid in list(state.keys()):
-        s = state[sid]
+    for did in list(state.keys()):
+        s = state[did]
         if s and s.get('source_id') == source_id:
-            state[sid] = None
+            state[did] = None
             affected = True
     # ROU-21: bei State=null auf idle-URL springen
     if affected:
@@ -131,7 +131,7 @@ def cdp_navigate(target, url, timeout=2.0):
 
 
 def cdp_navigate_async(url):
-    """Feuert den CDP-Push in einem Daemon-Thread — POST /event bleibt schnell."""
+    """Feuert den CDP-Push in einem Daemon-Thread — POST /api/v1/events bleibt schnell."""
     target = runtime_config.get('cdp_target') or ''
     if not target:
         return
@@ -166,9 +166,9 @@ def adapt_phone(event):
 # ============================================================
 
 def load_routing(path):
-    global routing_entries, known_screens
+    global routing_entries, known_displays
     routing_entries = []
-    known_screens = set()
+    known_displays = set()
     try:
         with open(path) as f:
             data = json.load(f)
@@ -180,10 +180,10 @@ def load_routing(path):
         return
     routing_entries = data.get('entries', []) or []
     for e in routing_entries:
-        for s in e.get('screen_ids', []):
-            known_screens.add(s)
-    logging.info('routing geladen: %d Einträge, %d Screens (%s)',
-                 len(routing_entries), len(known_screens), ', '.join(sorted(known_screens)) or '—')
+        for d in e.get('display_ids', []):
+            known_displays.add(d)
+    logging.info('routing geladen: %d Einträge, %d Displays (%s)',
+                 len(routing_entries), len(known_displays), ', '.join(sorted(known_displays)) or '—')
 
 
 def load_config(path, defaults):
@@ -218,8 +218,8 @@ def add_cors(resp):
     return resp
 
 
-@app.route('/event', methods=['POST', 'OPTIONS'])
-def event_endpoint():
+@app.route('/api/v1/events', methods=['POST', 'OPTIONS'])
+def events_endpoint():
     if request.method == 'OPTIONS':
         return '', 204
     body = request.get_json(silent=True)
@@ -238,41 +238,41 @@ def event_endpoint():
     return '', 204
 
 
-@app.route('/screen/<screen_id>/state', methods=['GET'])
-def get_state(screen_id):
-    if screen_id not in known_screens:
-        return jsonify({'error': 'unknown screen'}), 404
-    return jsonify(state.get(screen_id))
+@app.route('/api/v1/displays/<display_id>/state', methods=['GET'])
+def get_state(display_id):
+    if display_id not in known_displays:
+        return jsonify({'error': 'unknown display'}), 404
+    return jsonify(state.get(display_id))
 
 
-@app.route('/diag', methods=['GET'])
+@app.route('/api/v1/diag', methods=['GET'])
 def diag():
     rows = []
-    for sid in sorted(known_screens):
+    for did in sorted(known_displays):
         rows.append('<h4>%s</h4><pre>%s</pre>' % (
-            sid,
-            json.dumps(state.get(sid), indent=2, ensure_ascii=False)))
+            did,
+            json.dumps(state.get(did), indent=2, ensure_ascii=False)))
     return (
-        '<!DOCTYPE html><html><head><title>Router /diag</title>'
+        '<!DOCTYPE html><html><head><title>Router /api/v1/diag</title>'
         '<meta http-equiv="refresh" content="1">'
         '<style>body{font-family:monospace;background:#0b0b10;color:#e8e8e8;padding:20px;margin:0}'
         'pre{background:#1a1a25;padding:14px;border-radius:6px;overflow:auto}'
         'h2,h3,h4{color:#4ade80;margin:14px 0 6px}p{color:#888}</style>'
-        '</head><body><h2>Router /diag</h2>'
-        '<p>screens: %s · routing-einträge: %d</p>'
-        '<h3>State pro Screen</h3>%s</body></html>') % (
-            ', '.join(sorted(known_screens)) or '(keine)',
+        '</head><body><h2>Router /api/v1/diag</h2>'
+        '<p>displays: %s · routing-einträge: %d</p>'
+        '<h3>State pro Display</h3>%s</body></html>') % (
+            ', '.join(sorted(known_displays)) or '(keine)',
             len(routing_entries),
             ''.join(rows) or '<p>(noch nichts)</p>')
 
 
-@app.route('/display/<screen_id>', methods=['GET'])
-def display(screen_id):
-    if screen_id not in known_screens:
-        return jsonify({'error': 'unknown screen'}), 404
-    sid_json = json.dumps(screen_id)
+@app.route('/display/<display_id>', methods=['GET'])
+def display(display_id):
+    if display_id not in known_displays:
+        return jsonify({'error': 'unknown display'}), 404
+    did_json = json.dumps(display_id)
     return (
-        '<!DOCTYPE html><html><head><title>Display ' + screen_id + '</title>'
+        '<!DOCTYPE html><html><head><title>Display ' + display_id + '</title>'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         '<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#000;color:#e8e8e8;font-family:system-ui;overflow:hidden}'
         '#bar{position:fixed;top:0;left:0;right:0;padding:4px 10px;background:rgba(0,0,0,0.45);'
@@ -283,15 +283,15 @@ def display(screen_id):
         '#frame{position:fixed;inset:0;width:100%;height:100%;border:0;background:#000}'
         '#empty{position:fixed;inset:0;background:#000}'
         '</style></head><body>'
-        '<div id="bar"><span class="lbl">screen</span><span class="v">' + screen_id + '</span>'
+        '<div id="bar"><span class="lbl">display</span><span class="v">' + display_id + '</span>'
         '<span class="lbl">url</span><span class="v" id="url">—</span>'
         '<span class="lbl">since</span><span class="v" id="since">—</span></div>'
         '<div id="empty"></div>'
         '<iframe id="frame" style="display:none"></iframe>'
         '<script>'
-        'const sid=' + sid_json + ';let lastUrl=null;'
+        'const did=' + did_json + ';let lastUrl=null;'
         'async function poll(){try{'
-        'const r=await fetch("/screen/"+sid+"/state",{cache:"no-store"});'
+        'const r=await fetch("/api/v1/displays/"+did+"/state",{cache:"no-store"});'
         'const st=await r.json();'
         'const url=st&&st.payload&&st.payload.url?st.payload.url:null;'
         'document.getElementById("url").textContent=url||"—";'
