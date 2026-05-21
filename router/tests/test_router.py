@@ -304,3 +304,90 @@ def test_cors_options_preflight_returns_204(client_with_routing):
     r = client_with_routing.options('/event')
     assert r.status_code == 204
     assert 'POST' in r.headers.get('Access-Control-Allow-Methods', '')
+
+
+# ============================================================
+#  ROU-21 — CDP-Push
+# ============================================================
+
+def test_ROU_21_push_on_state_set(client_with_routing, monkeypatch):
+    """Trigger mit Match → cdp_navigate_async wird mit payload.url aufgerufen."""
+    router_main.runtime_config['cdp_target'] = 'http://localhost:9222'
+    calls = []
+    monkeypatch.setattr(router_main, 'cdp_navigate_async', lambda url: calls.append(url))
+    post_event(client_with_routing, {
+        'source_id': 'phone:test-1', 'type': 'figure_detected',
+        'figure_id': 'rotes-a', 'angle': 0, 'bucket': 1,
+    })
+    assert calls == ['http://example.test/groß']
+
+
+def test_ROU_21_push_on_session_end_uses_idle_url(client_with_routing, monkeypatch):
+    router_main.runtime_config['cdp_target']   = 'http://localhost:9222'
+    router_main.runtime_config['cdp_idle_url'] = 'http://example.test/idle'
+    calls = []
+    monkeypatch.setattr(router_main, 'cdp_navigate_async', lambda url: calls.append(url))
+    # Erst state setzen
+    post_event(client_with_routing, {
+        'source_id': 'phone:test-1', 'type': 'figure_detected',
+        'figure_id': 'rotes-a', 'angle': 0, 'bucket': 0,
+    })
+    calls.clear()
+    # session_ended → idle-url
+    post_event(client_with_routing, {
+        'source_id': 'phone:test-1', 'type': 'session_ended',
+        'figure_id': 'rotes-a', 'reason': 'user_button',
+    })
+    assert calls == ['http://example.test/idle']
+
+
+def test_ROU_21_no_match_no_push(client_with_routing, monkeypatch):
+    """Unbekannter Trigger ändert State nicht und löst keinen Push aus."""
+    router_main.runtime_config['cdp_target'] = 'http://localhost:9222'
+    calls = []
+    monkeypatch.setattr(router_main, 'cdp_navigate_async', lambda url: calls.append(url))
+    post_event(client_with_routing, {
+        'source_id': 'phone:test-1', 'type': 'figure_detected',
+        'figure_id': 'unbekannte-figur', 'angle': 0, 'bucket': 0,
+    })
+    assert calls == []
+
+
+def test_ROU_21_empty_cdp_target_skips_push(monkeypatch):
+    """cdp_target leer → cdp_navigate_async startet keinen Thread."""
+    router_main.runtime_config['cdp_target'] = ''
+    real_calls = []
+    monkeypatch.setattr(router_main, 'cdp_navigate', lambda *a, **k: real_calls.append(a))
+    router_main.cdp_navigate_async('http://example.test/x')
+    import time
+    time.sleep(0.05)
+    assert real_calls == []
+
+
+def test_ROU_21_navigate_failure_returns_false_no_raise():
+    """Verbindungs-Fehler → False, kein Exception nach außen."""
+    # Port 65530 ist mit hoher Wahrscheinlichkeit frei → connection refused
+    result = router_main.cdp_navigate('http://127.0.0.1:65530', 'http://example.test', timeout=0.5)
+    assert result is False
+
+
+def test_ROU_21_push_does_not_break_event_endpoint(client_with_routing, monkeypatch):
+    """Ein scheiternder Push darf POST /event nicht in 5xx kippen."""
+    router_main.runtime_config['cdp_target'] = 'http://127.0.0.1:65530'  # tot
+    # synchroner cdp_navigate — kein Thread, damit der Test deterministisch ist
+    monkeypatch.setattr(router_main, 'cdp_navigate_async',
+                        lambda url: router_main.cdp_navigate(router_main.runtime_config['cdp_target'], url, timeout=0.3))
+    r = post_event(client_with_routing, {
+        'source_id': 'phone:test-1', 'type': 'figure_detected',
+        'figure_id': 'rotes-a', 'angle': 0, 'bucket': 0,
+    })
+    assert r.status_code == 204
+
+
+def test_ROU_15_cdp_env_vars_resolve(monkeypatch, tmp_path):
+    monkeypatch.setenv('ROUTER_CDP_TARGET',   'http://foo:9222')
+    monkeypatch.setenv('ROUTER_CDP_IDLE_URL', 'http://foo/idle')
+    args = router_main.parse_args(['--routing', str(tmp_path / 'missing.json')])
+    cfg = router_main.resolved_config(args)
+    assert cfg['cdp_target']   == 'http://foo:9222'
+    assert cfg['cdp_idle_url'] == 'http://foo/idle'
