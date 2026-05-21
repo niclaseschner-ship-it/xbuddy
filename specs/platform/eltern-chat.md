@@ -161,25 +161,29 @@ Aufgabe und keine stumme Nicht-Antwort.
 ## 5. Konfiguration
 
 ### EC-15 — Konfigurationswerte
-Das System wird je Instanz über Konfigurationswerte eingerichtet. Geheimnisse
-— Bot-Token, Anbieter-API-Key — werden ausschließlich über Umgebungsvariablen
-gesetzt und nie in einer Datei im Repo abgelegt (CLAUDE.md §8). Übrige Werte
-werden per Umgebungsvariable oder Konfigurationsdatei gesetzt; Priorität:
-**Umgebungsvariable > Konfigurationsdatei > Default**.
+Das System wird je Instanz über Konfigurationswerte eingerichtet. Der Bot-Token
+wird ausschließlich über eine Umgebungsvariable gesetzt. Der Anbieter-API-Key
+und die Familien-Gruppen-Chat-ID kommen aus Umgebungsvariable/Konfiguration oder
+werden per Onboarding gesetzt (siehe
+[`eltern-chat-onboarding.md`](eltern-chat-onboarding.md)); fehlt der
+Anbieter-API-Key auf beiden Wegen, läuft die Instanz im Onboarding-Modus
+(ONB-1). Geheimnisse liegen nie in einer Datei im Repo (CLAUDE.md §8). Priorität
+je Wert: **Umgebungsvariable > Konfigurationsdatei > Onboarding-Speicher >
+Default**.
 
-| Wert                      | Default               | Quelle         |
-|---------------------------|-----------------------|----------------|
-| Telegram-Bot-Token        | (Pflicht, kein Default) | Env          |
-| Anbieter-API-Key          | (Pflicht, kein Default) | Env          |
-| Familien-Gruppen-Chat-ID  | (Pflicht, kein Default) | Env · Config |
-| KI-Anbieter               | `claude`              | Env · Config   |
-| Anbieter-Modell           | Anbieter-Default      | Env · Config   |
-| Gesprächskontext-Tiefe    | letzte 20 Nachrichten | Env · Config   |
+| Wert                     | Default                 | Quelle                            |
+|--------------------------|-------------------------|-----------------------------------|
+| Telegram-Bot-Token       | (Pflicht, kein Default) | Env                               |
+| Anbieter-API-Key         | (kein Default)          | Env · Onboarding (ONB-5)          |
+| Familien-Gruppen-Chat-ID | (kein Default)          | Env · Config · Onboarding (ONB-6) |
+| KI-Anbieter              | `claude`                | Env · Config                      |
+| Anbieter-Modell          | Anbieter-Default        | Env · Config                      |
+| Gesprächskontext-Tiefe   | letzte 20 Nachrichten   | Env · Config                      |
 
 Werte, die nur als Code-Konstante existieren — ohne Override-Pfad — sind
 Spec-Verletzung (CLAUDE.md §6 Daten vs. Code).
 
-*Tickets:* #27
+*Tickets:* #27 · #33
 
 ### EC-16 — Gesprächs-Datenbank als Per-Instanz-Datei
 Der dauerhafte Gesprächsverlauf (EC-6) liegt als Datei neben dem Code, je
