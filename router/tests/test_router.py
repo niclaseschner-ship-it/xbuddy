@@ -23,13 +23,13 @@ DEMO_ROUTING = {
         {
             "source_id":  "phone:test-1",
             "descriptor": {"figure_id": "rotes-a", "bucket": 0},
-            "screen_ids": ["default"],
+            "display_ids": ["default"],
             "payload":    {"url": "http://example.test/klein"},
         },
         {
             "source_id":  "phone:test-1",
             "descriptor": {"figure_id": "rotes-a", "bucket": 1},
-            "screen_ids": ["default"],
+            "display_ids": ["default"],
             "payload":    {"url": "http://example.test/groß"},
         },
     ]
@@ -57,13 +57,13 @@ def client_no_routing(tmp_path):
 
 
 def post_event(client, payload):
-    return client.post('/event',
+    return client.post('/api/v1/events',
                        data=json.dumps(payload),
                        content_type='application/json')
 
 
 # ============================================================
-#  ROU-3 / ROU-4 / ROU-5 — POST /event
+#  ROU-3 / ROU-4 / ROU-5 — POST /api/v1/events
 # ============================================================
 
 def test_ROU_3_event_accepts_phone_event(client_with_routing):
@@ -98,7 +98,7 @@ def test_ROU_5_error_body_describes_problem(client_with_routing):
 
 
 def test_ROU_5_invalid_json_body_returns_4xx(client_with_routing):
-    r = client_with_routing.post('/event', data='not json',
+    r = client_with_routing.post('/api/v1/events', data='not json',
                                   content_type='application/json')
     assert r.status_code == 400
 
@@ -179,7 +179,7 @@ def test_ROU_11_session_ended_sets_state_to_null(client_with_routing):
 
 
 # ============================================================
-#  ROU-12 / ROU-13 — GET /screen/<id>/state
+#  ROU-12 / ROU-13 — GET /api/v1/displays/<id>/state
 # ============================================================
 
 def test_ROU_12_get_state_returns_current_payload(client_with_routing):
@@ -187,7 +187,7 @@ def test_ROU_12_get_state_returns_current_payload(client_with_routing):
         'source_id': 'phone:test-1', 'type': 'figure_detected',
         'figure_id': 'rotes-a', 'angle': 0, 'bucket': 1,
     })
-    r = client_with_routing.get('/screen/default/state')
+    r = client_with_routing.get('/api/v1/displays/default/state')
     assert r.status_code == 200
     body = r.get_json()
     assert body['payload']['url'] == 'http://example.test/groß'
@@ -195,14 +195,14 @@ def test_ROU_12_get_state_returns_current_payload(client_with_routing):
 
 
 def test_ROU_12_get_state_returns_null_when_inactive(client_with_routing):
-    """Bekannter Screen ohne aktiven Trigger → 200 mit null."""
-    r = client_with_routing.get('/screen/default/state')
+    """Bekanntes Display ohne aktiven Trigger → 200 mit null."""
+    r = client_with_routing.get('/api/v1/displays/default/state')
     assert r.status_code == 200
     assert r.get_json() is None
 
 
-def test_ROU_12_unknown_screen_returns_404(client_with_routing):
-    r = client_with_routing.get('/screen/nonexistent/state')
+def test_ROU_12_unknown_display_returns_404(client_with_routing):
+    r = client_with_routing.get('/api/v1/displays/nonexistent/state')
     assert r.status_code == 404
     assert 'error' in r.get_json()
 
@@ -222,20 +222,20 @@ def test_ROU_13_payload_is_object_not_string(client_with_routing):
 # ============================================================
 
 def test_ROU_14_diag_serves_html(client_with_routing):
-    r = client_with_routing.get('/diag')
+    r = client_with_routing.get('/api/v1/diag')
     assert r.status_code == 200
     assert b'<html' in r.data.lower()
-    assert b'/diag' in r.data
+    assert b'/api/v1/diag' in r.data
 
 
-def test_ROU_20_display_known_screen_serves_html(client_with_routing):
+def test_ROU_20_display_known_display_serves_html(client_with_routing):
     r = client_with_routing.get('/display/default')
     assert r.status_code == 200
     assert b'<iframe' in r.data
-    assert b'/screen/' in r.data  # JS-Polling-Snippet drin
+    assert b'/api/v1/displays/' in r.data  # JS-Polling-Snippet drin
 
 
-def test_ROU_20_display_unknown_screen_404(client_with_routing):
+def test_ROU_20_display_unknown_display_404(client_with_routing):
     r = client_with_routing.get('/display/nonexistent')
     assert r.status_code == 404
 
@@ -245,8 +245,8 @@ def test_ROU_20_display_unknown_screen_404(client_with_routing):
 # ============================================================
 
 def test_ROU_18_missing_routing_starts_with_empty_table(client_no_routing):
-    """Fehlende routing.json → leere Tabelle, keine bekannten Screens, 404."""
-    r = client_no_routing.get('/screen/default/state')
+    """Fehlende routing.json → leere Tabelle, keine bekannten Displays, 404."""
+    r = client_no_routing.get('/api/v1/displays/default/state')
     assert r.status_code == 404
 
 
@@ -256,7 +256,7 @@ def test_ROU_18_unparseable_routing_starts_with_empty_table(tmp_path):
     router_main.state = {}
     router_main.load_routing(str(bad))
     assert router_main.routing_entries == []
-    assert router_main.known_screens == set()
+    assert router_main.known_displays == set()
 
 
 # ============================================================
@@ -301,7 +301,7 @@ def test_cors_headers_on_post_event(client_with_routing):
 
 
 def test_cors_options_preflight_returns_204(client_with_routing):
-    r = client_with_routing.options('/event')
+    r = client_with_routing.options('/api/v1/events')
     assert r.status_code == 204
     assert 'POST' in r.headers.get('Access-Control-Allow-Methods', '')
 
@@ -372,7 +372,7 @@ def test_ROU_21_navigate_failure_returns_false_no_raise():
 
 
 def test_ROU_21_push_does_not_break_event_endpoint(client_with_routing, monkeypatch):
-    """Ein scheiternder Push darf POST /event nicht in 5xx kippen."""
+    """Ein scheiternder Push darf POST /api/v1/events nicht in 5xx kippen."""
     router_main.runtime_config['cdp_target'] = 'http://127.0.0.1:65530'  # tot
     # synchroner cdp_navigate — kein Thread, damit der Test deterministisch ist
     monkeypatch.setattr(router_main, 'cdp_navigate_async',

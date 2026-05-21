@@ -23,9 +23,9 @@ CLI > ENV (`ROUTER_HOST`, `ROUTER_PORT`, `ROUTER_LOG_LEVEL`) > `config.json` > D
 
 | Endpunkt | Zweck | Spec |
 |---|---|---|
-| `POST /event` | Controller-Events entgegennehmen | ROU-3 |
-| `GET /screen/<id>/state` | aktuellen State holen | ROU-12 |
-| `GET /diag` | Debug-HTML, alle Screens | ROU-14 |
+| `POST /api/v1/events` | Controller-Events entgegennehmen | ROU-3 |
+| `GET /api/v1/displays/<id>/state` | aktuellen State holen | ROU-12 |
+| `GET /api/v1/diag` | Debug-HTML, alle Displays | ROU-14 |
 | `GET /display/<id>` | V1-Display-Brücke (Iframe) | ROU-20 |
 
 ## Dateien

@@ -57,16 +57,18 @@ gegen Einträge der Routing-Tabelle (ROU-9) per Feld-Gleichheit.
 
 ## 2. HTTP-Eingang
 
-### ROU-3 — POST /event
-Generischer Eingang: `POST /event` mit JSON-Body. Pflichtfelder auf
-allen Events: `source_id` (`string`), `type` (`string`). Weitere Felder
-sind event-spezifisch und werden vom Adapter validiert.
+### ROU-3 — POST /api/v1/events
+Generischer Eingang: `POST /api/v1/events` mit JSON-Body. Pfad folgt der
+URL-Konvention (URL-4: Backend unter `/api/v1/`, Collection im Plural).
+Pflichtfelder auf allen Events: `source_id` (`string`), `type`
+(`string`). Weitere Felder sind event-spezifisch und werden vom Adapter
+validiert.
 
 Phone V1 unterstützt die drei Event-Typen aus FIG-10
 (`figure_detected`, `angle_update`, `session_ended`). Neue Event-Typen
 sind reine Erweiterung des Adapters — keine Änderung am Kern.
 
-*Tickets:* #5
+*Tickets:* #5, #24
 
 ### ROU-4 — Antwortverhalten
 - **2xx** wenn Event akzeptiert und petrarbeitet (auch wenn unbekannter
@@ -122,22 +124,22 @@ schlüsselt:
 
 ```
 key   = (source_id, descriptor)
-value = (screen_ids: [<string>], payload: <object>)
+value = (display_ids: [<string>], payload: <object>)
 ```
 
 Datenhaltung: als JSON-Datei `routing.json` (siehe ROU-18). V1 enthält
 genau einen Demo-Eintrag; die Tabellenform ist aber bereits M:N-tauglich
-— ein Trigger kann mehrere Screens treffen, ein Screen kann von
+— ein Trigger kann mehrere Displays treffen, ein Display kann von
 mehreren Triggern bedient werden.
 
 Vergleich: ein eingehender Trigger wird mit Feld-Gleichheit gegen die
 Einträge gematcht. Erster Match gewinnt — die V1-Tabelle ist klein
 genug, dass Reihenfolge bewusst gewählt werden kann.
 
-*Tickets:* #5
+*Tickets:* #5, #24
 
-### ROU-10 — In-Memory State pro Screen
-Der Router hält pro `screen_id` einen State:
+### ROU-10 — In-Memory State pro Display
+Der Router hält pro `display_id` einen State:
 
 ```json
 { "source_id": "<string>",
@@ -151,11 +153,11 @@ oder `null`, wenn kein Trigger aktiv ist.
 State lebt im Prozess-Speicher; **kein** Persistieren über Restart in
 V1.
 
-*Tickets:* #5
+*Tickets:* #5, #24
 
 ### ROU-11 — Lebenszyklus eines States
-- **Trigger eingegangen, Match in der Tabelle:** Für jeden Screen aus
-  `screen_ids` des Match-Eintrags wird der State gesetzt oder
+- **Trigger eingegangen, Match in der Tabelle:** Für jedes Display aus
+  `display_ids` des Match-Eintrags wird der State gesetzt oder
   aktualisiert (Felder `source_id`, `descriptor`, `payload`, `since`).
   `since` ist der Zeitpunkt, an dem der **aktuelle Trigger** zuletzt
   eingegangen ist (jedes neue Event mit gleichem Trigger aktualisiert
@@ -163,37 +165,40 @@ V1.
 - **Trigger eingegangen, kein Match:** Event wird akzeptiert (2xx)
   aber **kein** State wird aktualisiert. Eine Warnung wird geloggt
   (`logging.warning`), damit unbekannte Trigger im Betrieb sichtbar
-  sind. Begründung: ohne Match weiß der Router nicht, welcher Screen
-  betroffen wäre — eine breite Belegung aller Screens würde unbeteiligte
-  Displays löschen, was schlechter ist als der bestehende State zu halten.
-- **Session-Ende-Signal:** Alle Screens, deren aktueller State diese
+  sind. Begründung: ohne Match weiß der Router nicht, welches Display
+  betroffen wäre — eine breite Belegung aller Displays würde
+  unbeteiligte Displays löschen, was schlechter ist als der bestehende
+  State zu halten.
+- **Session-Ende-Signal:** Alle Displays, deren aktueller State diese
   `source_id` trägt, werden auf `null` gesetzt.
 
-Mehrere Trigger auf denselben Screen (M:N): jeder neue Trigger
-überschreibt den State für diesen Screen. V1 hat nur einen
+Mehrere Trigger auf dasselbe Display (M:N): jeder neue Trigger
+überschreibt den State für dieses Display. V1 hat nur einen
 Phone-Controller — Multi-Source-Konflikte sind nicht modelliert.
 
-*Tickets:* #5
+*Tickets:* #5, #24
 
 ## 5. HTTP-Ausgang
 
-### ROU-12 — GET /screen/&lt;id&gt;/state
-Liefert den aktuellen State des angegebenen Screens als JSON.
+### ROU-12 — GET /api/v1/displays/&lt;id&gt;/state
+Liefert den aktuellen State des angegebenen Displays als JSON. Pfad
+folgt der URL-Konvention (URL-4: `/api/v1/`, Collection `displays` im
+Plural, `state` als singuläres Aggregat).
 
 - **Bekannte** `<id>` mit aktivem State: 200, JSON-Objekt wie in ROU-10.
 - **Bekannte** `<id>` ohne aktiven State: 200, JSON `null`.
-- **Unbekannte** `<id>`: 404, JSON `{ "error": "unknown screen" }`.
+- **Unbekannte** `<id>`: 404, JSON `{ "error": "unknown display" }`.
 
-„Bekannt" heißt: in mindestens einem `screen_ids`-Feld der
+„Bekannt" heißt: in mindestens einem `display_ids`-Feld der
 Routing-Tabelle (ROU-9) referenziert. Bei fehlender oder leerer
-`routing.json` (siehe ROU-18) ist damit kein Screen bekannt — jede
+`routing.json` (siehe ROU-18) ist damit kein Display bekannt — jede
 Anfrage liefert 404. Das ist gewollt: ein Dev der den Router ohne
 Tabelle startet sieht sofort, dass nichts geroutet wird, statt
 stumm `null` zu bekommen.
 
 V1: gängiger Wert für `<id>` ist `default`.
 
-*Tickets:* #5
+*Tickets:* #5, #24
 
 ### ROU-13 — Display-Payload-Schema
 `payload` ist ein **JSON-Objekt**, nie ein bloßer String. V1-Minimum:
@@ -207,18 +212,18 @@ ohne Breaking Change.
 
 *Tickets:* #5
 
-### ROU-14 — GET /diag
-Liefert eine minimale HTML-Debug-Seite, die alle bekannten Screens und
+### ROU-14 — GET /api/v1/diag
+Liefert eine minimale HTML-Debug-Seite, die alle bekannten Displays und
 deren aktuellen State live anzeigt. Wird mit JS-Polling (1 Hz)
-aktualisiert. Reines Debug-Werkzeug — kein Ersatz für ein Display, kein
-Production-Endpoint.
+aktualisiert. Reines Debug-Werkzeug — kein Ersatz für ein Display.
+Pfad unter `/api/v1/` (URL-4) — Diagnose zählt zum Hub-Backend.
 
-*Tickets:* #5
+*Tickets:* #5, #24
 
 ### ROU-20 — GET /display/&lt;id&gt;
 V1-Brücke zur eigenständigen Display-Komponente: liefert eine
 minimale HTML-Seite, die den aktuellen Payload-`url` (ROU-13) des
-angegebenen Screens als Iframe einbettet und automatisch tauscht,
+angegebenen Displays als Iframe einbettet und automatisch tauscht,
 sobald sich der State ändert (Polling im Sekundentakt).
 
 Damit ist die vertikale Schleife „Figur drauf → Display zeigt
@@ -227,11 +232,17 @@ eigenständige Display-Komponente existiert. Sobald letztere kommt,
 ist `/display/<id>` redundant und wird per Deprecate-Schritt entfernt
 (CLAUDE.md §6 Entfernen in zwei Schritten).
 
+Der Pfad sitzt unter dem erlaubten `/display/`-Prefix (URL-1), weicht
+aber bewusst von der `/display/<buddy>/<view>`-Form (URL-2) ab: die
+Brücke adressiert ein Display über seine `id`, nicht über Buddy/View.
+Bewusste, dokumentierte Übergangs-Abweichung — sie verschwindet mit dem
+Endpoint selbst, sobald die echte Display-Komponente kommt.
+
 - Bekannte `<id>`: 200, HTML mit Polling-Logik.
-- Unbekannte `<id>`: 404, JSON `{ "error": "unknown screen" }`
+- Unbekannte `<id>`: 404, JSON `{ "error": "unknown display" }`
   (gleiche Definition wie ROU-12).
 
-*Tickets:* #5
+*Tickets:* #5, #24
 
 ### ROU-21 — Direkt-Push an Display via CDP
 Wenn `cdp_target` (siehe ROU-15) gesetzt ist, ruft der Router bei
@@ -252,7 +263,7 @@ Iframe-Hop. Mechanik:
 
 **Fehlerverhalten:** Der Push läuft **nicht-blockierend** (Thread oder
 Async). Verbindungs- oder Protokoll-Fehler werden mit
-`logging.warning` protokolliert; `POST /event` bleibt 204 und schnell.
+`logging.warning` protokolliert; `POST /api/v1/events` bleibt 204 und schnell.
 
 **Wenn `cdp_target` leer ist:** Feature ist inaktiv. Der Router pollt-
 nur wie zuvor; das ist der Default und das Verhalten des V1-Tests
@@ -307,7 +318,7 @@ Router-Code (analog FIG-23 für die Phone-Seite). Format:
     {
       "source_id": "phone:test-1",
       "descriptor": { "figure_id": "gelbes-e", "bucket": 0 },
-      "screen_ids": ["default"],
+      "display_ids": ["default"],
       "payload": { "url": "https://buddy.local/scene/gelbes-e-0" }
     }
   ]
@@ -326,7 +337,7 @@ Router-Code (analog FIG-23 für die Phone-Seite). Format:
 - **Reload:** V1 lädt die Datei beim Start. Hot-Reload kommt mit einem
   eigenen Ticket, sobald jemand sie regelmäßig anfasst.
 
-*Tickets:* #5
+*Tickets:* #5, #24
 
 ### ROU-19 — `config.json` für Tuning-Werte
 Analog FIG-23: optionale Datei `config.json` im Router-Verzeichnis,
@@ -345,20 +356,20 @@ Flask-Testclient — reproduzierbar ohne Phone.
 
 Mindest-Abdeckung:
 
-- ROU-3 — POST /event akzeptiert ein gültiges Phone-Event.
+- ROU-3 — POST /api/v1/events akzeptiert ein gültiges Phone-Event.
 - ROU-4/ROU-5 — fehlende Pflichtfelder ergeben 4xx mit
   Fehler-Beschreibung.
 - ROU-6 — Phone-Event wird 1:1 auf den kanonischen Trigger gemappt
   (keine Quantisierung).
-- ROU-9/ROU-11 — Trigger mit Match setzt State; ohne Match setzt
-  State mit `payload: null`.
+- ROU-9/ROU-11 — Trigger mit Match setzt State; ohne Match bleibt der
+  State unverändert.
 - ROU-11 — `session_ended` setzt State auf `null`.
-- ROU-12/ROU-13 — `GET /screen/default/state` liefert das aktuelle
-  Payload-Objekt; unbekannte `<id>` liefert 404.
+- ROU-12/ROU-13 — `GET /api/v1/displays/default/state` liefert das
+  aktuelle Payload-Objekt; unbekannte `<id>` liefert 404.
 - ROU-18 — fehlendes `routing.json` startet den Router mit leerer
-  Tabelle; jeder `GET /screen/<id>/state` liefert dann 404.
+  Tabelle; jeder `GET /api/v1/displays/<id>/state` liefert dann 404.
 
-*Tickets:* #5
+*Tickets:* #5, #24
 
 ---
 
@@ -398,9 +409,9 @@ Verteiler-Architektur — siehe brainstorm-Architektur
 2026-05-15). Für V1 mit einem Display, das pollen kann, ist Reconnect-
 und State-Recovery-Logik überdimensioniert.
 
-Display V1 pollt `GET /screen/<id>/state`. MQTT kommt als eigenes
-Ticket, sobald ein zweites Display oder ein offline-fähiges Tablet
-ins Spiel kommt.
+Display V1 pollt `GET /api/v1/displays/<id>/state`. MQTT kommt als
+eigenes Ticket, sobald ein zweites Display oder ein offline-fähiges
+Tablet ins Spiel kommt.
 
 ### E-ROU-3 — Routing-DB (SQLite) raus für V1
 *Datum:* 2026-05-20
@@ -444,3 +455,28 @@ spalten wir gleich von Anfang an in zwei Dateien:
 
 Der Lebenszyklus ist unterschiedlich genug, dass eine gemeinsame Datei
 gegenseitiges Übermalen begünstigen würde.
+
+### E-ROU-7 — URL-Konvention nachgezogen + „screen" → „display"
+*Datum:* 2026-05-21 (Ticket #24)
+
+Der Router V1 (#5) wurde gebaut, bevor `specs/platform/urls.md` (die
+URL-Konvention) gemergt war — die Endpunkte `POST /event`,
+`GET /screen/<id>/state` und `GET /diag` verletzten URL-1/URL-4. Mit
+#24 wurden sie auf `/api/v1/events`, `/api/v1/displays/<id>/state` und
+`/api/v1/diag` gezogen.
+
+Zugleich wurde der Begriff **„screen" vollständig durch „display"
+ersetzt** — `screen_id` → `display_id`, `screen_ids` → `display_ids`.
+„screen" und „display" bezeichneten dasselbe Konzept (eine Fläche, die
+eine Buddy-View zeigt); „display" ist die etablierte Produktsprache
+(das BuddyBoard *ist* der Display). Es gibt in V1 kein verstecktes
+zweites Konzept.
+
+**Bewusst offen gelassen:** Sollte ein Display je mehrere unabhängige
+Regionen bekommen (Split-Screen), wäre „screen" als Unter-Region eines
+Displays eine echte zweite Ebene. Spekulativ — wird erst mit Beleg
+eingeführt (CLAUDE.md §6).
+
+Lehre: Eine Konvention, die als offener Spec-PR herumliegt, bindet
+nicht. Wäre `urls.md` vor dem Router-Bau gemergt gewesen, hätte es
+diese Migration nicht gebraucht.
