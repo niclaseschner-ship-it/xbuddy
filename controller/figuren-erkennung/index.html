@@ -216,6 +216,43 @@
     document.addEventListener(ev, handleTouch, { passive: false });
   }
 
+  // === FIG-26 — Vollbild + Wach-Halten ===
+  // Wach-Halten: Wake Lock beim Laden + nach jedem Sichtbarkeitswechsel
+  // erneut anfordern (das System gibt ihn beim Verdecken frei).
+  let wakeLock = null;
+  async function requestWakeLock() {
+    if (!('wakeLock' in navigator)) return;
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+    } catch (err) {
+      console.warn('Wake Lock fehlgeschlagen:', err);
+    }
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') requestWakeLock();
+  });
+  requestWakeLock();
+
+  // Vollbild: beim ersten Touch-Gesture anfordern (Browser erlauben
+  // requestFullscreen nur aus einem Nutzer-Gesture heraus).
+  let fullscreenTried = false;
+  function tryFullscreen() {
+    if (fullscreenTried) return;
+    fullscreenTried = true;
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!req) return;
+    try {
+      const p = req.call(el);
+      if (p && p.catch) p.catch(function (err) {
+        console.warn('Vollbild fehlgeschlagen:', err);
+      });
+    } catch (err) {
+      console.warn('Vollbild fehlgeschlagen:', err);
+    }
+  }
+  document.addEventListener('touchstart', tryFullscreen, { passive: true });
+
   // === FIG-9 + FIG-12 — Event-Send mit Retry ===
   const counters = { figure_detected: [], angle_update: [], session_ended: [] };
   let lastOkAt = null, lastErrAt = null, lastErrMsg = null;
