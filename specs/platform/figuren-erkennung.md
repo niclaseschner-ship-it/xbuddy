@@ -406,6 +406,33 @@ nicht über das Manifest, sondern über diese Tags interpretiert.
 
 *Tickets:* #18
 
+### FIG-26 — Vollbild + Wach-Halten per Tap
+Unabhängig von der Auslieferungsform (normale URL, Home-Screen-
+Verknüpfung, PWA-Install) sorgt die Seite selbst für Vollbild und
+wachen Bildschirm:
+
+- **Vollbild:** Beim ersten Touch-Gesture nach dem Laden fordert die
+  Seite per Fullscreen API (`requestFullscreen`) den Vollbild-Modus an
+  — das Browser-Chrome verschwindet. Ein Nutzer-Gesture ist nötig, weil
+  Browser Vollbild nicht ohne Interaktion erlauben; der erste Touch
+  (Figur auflegen oder Tippen) genügt.
+- **Wach-Halten:** Die Seite hält per Screen Wake Lock API
+  (`navigator.wakeLock`) einen Wake Lock, solange sie sichtbar ist.
+  Der Wake Lock wird beim Laden angefordert und nach jedem
+  Sichtbarkeitswechsel (`visibilitychange` zurück auf sichtbar) erneut
+  geholt — das System gibt ihn beim Verdecken der Seite frei.
+- **Best-effort:** Fehlt eine der APIs oder schlägt sie fehl, läuft die
+  Seite normal weiter und protokolliert `console.warn` — keine
+  Fehlermeldung an den Nutzer, kein Blockieren der Erkennung.
+
+FIG-26 ergänzt FIG-24/25: die PWA-Auslieferung bleibt für den
+Eigengeräte-Fall gültig, FIG-26 macht Vollbild und Display-an aber
+auch ohne Installation verfügbar — relevant für ein dediziertes
+Tablet, das die Seite einfach als URL bzw. Home-Screen-Verknüpfung
+öffnet.
+
+*Tickets:* #20
+
 ---
 
 ## Offene Punkte
