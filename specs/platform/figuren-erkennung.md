@@ -162,10 +162,12 @@ mitgesendet (FIG-10).
 ## 2. Events an den Router
 
 ### FIG-9 — Transport
-Events gehen per HTTP POST an `<router_url>/event`, JSON-Body,
-`Content-Type: application/json`.
+Events gehen per HTTP POST an `<router_url>/api/v1/events`, JSON-Body,
+`Content-Type: application/json`. Der Pfad `/api/v1/events` folgt der
+URL-Konvention (siehe `urls.md`, URL-4) und ist die Gegenseite von
+ROU-3 in `router.md`.
 
-*Tickets:* #1
+*Tickets:* #1, #24
 
 ### FIG-10 — Event-Schema
 Drei Event-Typen, alle als Zustands-Aussage (idempotent). **Pflichtfelder
@@ -321,7 +323,7 @@ Nicht gesetzte Schlüssel bleiben auf dem Default. Beispiel:
 ```json
 {
   "source_id": "phone:wohnzimmer",
-  "router_url": "https://hub.local/event",
+  "router_url": "https://hub.local",
   "pattern_tolerance": 0.04,
   "match_distance_px": 200,
   "n_buckets": 4,
