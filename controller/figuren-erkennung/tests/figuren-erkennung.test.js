@@ -1038,3 +1038,47 @@ test('FIG-25 — index.html bindet Manifest und registriert Service Worker ein',
   assert.match(html, /name=["']apple-mobile-web-app-status-bar-style["']/);
   assert.match(html, /viewport-fit=cover/);
 });
+
+// ===========================================================
+//  FIG-26 — Vollbild + Wach-Halten per Tap
+// ===========================================================
+
+test('FIG-26 — index.html fordert Vollbild aus einem Touch-Gesture an', () => {
+  const html = readRoot('index.html');
+  assert.match(html, /requestFullscreen/,
+    'Fullscreen-API-Aufruf fehlt');
+  // Der Trigger muss an einem touchstart hängen — Browser erlauben
+  // requestFullscreen nur aus einem Nutzer-Gesture.
+  assert.match(html, /addEventListener\(\s*['"]touchstart['"]\s*,\s*tryFullscreen/,
+    'Fullscreen muss an einem touchstart-Gesture hängen');
+});
+
+test('FIG-26 — Vollbild wird nur einmal angefordert (Gesture-Guard)', () => {
+  const html = readRoot('index.html');
+  assert.match(html, /fullscreenTried/,
+    'Einmal-Guard für den Fullscreen-Trigger fehlt');
+});
+
+test('FIG-26 — index.html hält den Bildschirm per Wake Lock wach', () => {
+  const html = readRoot('index.html');
+  assert.match(html, /navigator\.wakeLock\.request\(\s*['"]screen['"]\s*\)/,
+    'Screen Wake Lock wird nicht angefordert');
+});
+
+test('FIG-26 — Wake Lock wird nach visibilitychange erneut angefordert', () => {
+  const html = readRoot('index.html');
+  assert.match(html, /addEventListener\(\s*['"]visibilitychange['"]/,
+    'visibilitychange-Handler fehlt — Wake Lock geht beim Verdecken verloren');
+  assert.match(html, /visibilityState\s*===\s*['"]visible['"][\s\S]{0,80}requestWakeLock/,
+    'Wake Lock wird bei Rückkehr auf sichtbar nicht erneut geholt');
+});
+
+test('FIG-26 — fehlende APIs brechen die Seite nicht (best-effort)', () => {
+  const html = readRoot('index.html');
+  // wakeLock-Pfad prüft auf API-Verfügbarkeit
+  assert.match(html, /['"]wakeLock['"]\s+in\s+navigator/,
+    'Wake-Lock-Aufruf ohne Feature-Check — bricht auf alten Browsern');
+  // Fehler werden geloggt, nicht geworfen
+  assert.match(html, /Wake Lock fehlgeschlagen|Vollbild fehlgeschlagen/,
+    'API-Fehler werden nicht abgefangen/geloggt');
+});
