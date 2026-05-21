@@ -233,12 +233,13 @@
   });
   requestWakeLock();
 
-  // Vollbild: beim ersten Touch-Gesture anfordern (Browser erlauben
-  // requestFullscreen nur aus einem Nutzer-Gesture heraus).
-  let fullscreenTried = false;
+  // Vollbild: aus einem abgeschlossenen Gesture (touchend/click) anfordern,
+  // solange nicht schon im Vollbild. touchend/click werden breiter als
+  // touchstart als gültiges Nutzer-Gesture für requestFullscreen akzeptiert.
+  // Guard ist der tatsächliche Vollbild-Status — damit self-healing: verlässt
+  // der Nutzer den Vollbild, holt ihn der nächste Tap zurück.
   function tryFullscreen() {
-    if (fullscreenTried) return;
-    fullscreenTried = true;
+    if (document.fullscreenElement || document.webkitFullscreenElement) return;
     const el = document.documentElement;
     const req = el.requestFullscreen || el.webkitRequestFullscreen;
     if (!req) return;
@@ -251,7 +252,8 @@
       console.warn('Vollbild fehlgeschlagen:', err);
     }
   }
-  document.addEventListener('touchstart', tryFullscreen, { passive: true });
+  document.addEventListener('touchend', tryFullscreen, { passive: true });
+  document.addEventListener('click', tryFullscreen);
 
   // === FIG-9 + FIG-12 — Event-Send mit Retry ===
   const counters = { figure_detected: [], angle_update: [], session_ended: [] };

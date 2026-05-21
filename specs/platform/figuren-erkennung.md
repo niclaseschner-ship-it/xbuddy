@@ -411,11 +411,15 @@ Unabhängig von der Auslieferungsform (normale URL, Home-Screen-
 Verknüpfung, PWA-Install) sorgt die Seite selbst für Vollbild und
 wachen Bildschirm:
 
-- **Vollbild:** Beim ersten Touch-Gesture nach dem Laden fordert die
-  Seite per Fullscreen API (`requestFullscreen`) den Vollbild-Modus an
-  — das Browser-Chrome verschwindet. Ein Nutzer-Gesture ist nötig, weil
-  Browser Vollbild nicht ohne Interaktion erlauben; der erste Touch
-  (Figur auflegen oder Tippen) genügt.
+- **Vollbild:** Aus einem **abgeschlossenen** Nutzer-Gesture heraus
+  (`touchend` oder `click`) fordert die Seite per Fullscreen API
+  (`requestFullscreen`) den Vollbild-Modus an — das Browser-Chrome
+  verschwindet. Der Gesture-Typ ist nicht beliebig: Chromium-Browser
+  gewähren die für `requestFullscreen` nötige „transient activation"
+  **nicht** bei `touchstart`, sondern erst bei `touchend`/`click`.
+  Solange die Seite nicht im Vollbild ist, löst jeder Tap einen neuen
+  Versuch aus; verlässt der Nutzer den Vollbild, holt ihn der nächste
+  Tap zurück (self-healing).
 - **Wach-Halten:** Die Seite hält per Screen Wake Lock API
   (`navigator.wakeLock`) einen Wake Lock, solange sie sichtbar ist.
   Der Wake Lock wird beim Laden angefordert und nach jedem

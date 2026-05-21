@@ -1043,20 +1043,26 @@ test('FIG-25 — index.html bindet Manifest und registriert Service Worker ein',
 //  FIG-26 — Vollbild + Wach-Halten per Tap
 // ===========================================================
 
-test('FIG-26 — index.html fordert Vollbild aus einem Touch-Gesture an', () => {
+test('FIG-26 — index.html fordert Vollbild aus touchend/click an, nicht touchstart', () => {
   const html = readRoot('index.html');
   assert.match(html, /requestFullscreen/,
     'Fullscreen-API-Aufruf fehlt');
-  // Der Trigger muss an einem touchstart hängen — Browser erlauben
-  // requestFullscreen nur aus einem Nutzer-Gesture.
-  assert.match(html, /addEventListener\(\s*['"]touchstart['"]\s*,\s*tryFullscreen/,
-    'Fullscreen muss an einem touchstart-Gesture hängen');
+  // Chromium gewährt die transient activation für requestFullscreen NICHT
+  // bei touchstart — der Trigger muss an touchend bzw. click hängen.
+  assert.match(html, /addEventListener\(\s*['"]touchend['"]\s*,\s*tryFullscreen/,
+    'Fullscreen muss an touchend hängen (touchstart gewährt keine Aktivierung)');
+  assert.match(html, /addEventListener\(\s*['"]click['"]\s*,\s*tryFullscreen/,
+    'Fullscreen sollte zusätzlich an click hängen');
+  assert.doesNotMatch(html, /addEventListener\(\s*['"]touchstart['"]\s*,\s*tryFullscreen/,
+    'touchstart darf NICHT der Fullscreen-Trigger sein');
 });
 
-test('FIG-26 — Vollbild wird nur einmal angefordert (Gesture-Guard)', () => {
+test('FIG-26 — Vollbild-Trigger nutzt den echten Vollbild-Status als Guard', () => {
   const html = readRoot('index.html');
-  assert.match(html, /fullscreenTried/,
-    'Einmal-Guard für den Fullscreen-Trigger fehlt');
+  // Kein Einmal-Guard, der bei einem Fehlversuch verbrennt — statt dessen
+  // wird der tatsächliche Vollbild-Status geprüft (self-healing).
+  assert.match(html, /document\.fullscreenElement/,
+    'Guard muss document.fullscreenElement prüfen, nicht ein verbrennbares Flag');
 });
 
 test('FIG-26 — index.html hält den Bildschirm per Wake Lock wach', () => {
