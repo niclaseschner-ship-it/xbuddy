@@ -105,6 +105,21 @@ Content-Negotiation, nicht im URL-Pfad.
 
 *Tickets:* #24
 
+### URL-11 — HTTPS für alle Endpunkte
+
+Alle HTTP-Endpunkte des XBuddy-Ökosystems (URL-1) werden über HTTPS
+ausgeliefert; einen Klartext-Zugang im laufenden Betrieb gibt es nicht. Damit
+ist Mixed Content zwischen einer Display-Seite und darin eingebettetem
+Buddy-Inhalt ausgeschlossen, und Browser-Fähigkeiten, die einen Secure Context
+verlangen (Kamera, Mikrofon, Service-Worker und PWA-Installation), stehen zur
+Verfügung. Das Server-Zertifikat einer Instanz wird von der lokalen Root-CA
+dieser Instanz signiert, der die Geräte der Familie vertrauen — wie diese CA
+erzeugt und auf die Geräte verteilt wird, ist Sache der Umsetzung, nicht dieses
+Pfad-Vertrags. Lokale Entwicklung und automatisierte Tests dürfen ohne TLS
+laufen.
+
+*Tickets:* #36
+
 ## Beispiele
 
 ```
