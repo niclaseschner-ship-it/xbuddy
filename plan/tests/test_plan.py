@@ -669,6 +669,22 @@ def test_PLAN_27_tokens_css_taken_verbatim():
 
 
 # ============================================================
+#  URL-13 — statische Assets im Display-Namensraum des Buddys
+# ============================================================
+
+def test_URL_13_css_link_lives_under_display_namespace(demo_config, demo_registry):
+    """Die gerenderte Wochen-Seite referenziert ihr CSS unter
+    /display/plan/ — nicht unter dem Flask-Default /static/, der hinter der
+    einen Origin (URL-12) nicht geroutet würde (#61, URL-13)."""
+    client = make_client(demo_config, demo_registry, FakeTransport())
+    text = client.get("/display/plan/woche").data.decode("utf-8")
+    # Der Stylesheet-<link> zeigt in den Display-Namensraum des Buddys.
+    assert "/display/plan/static/design/tokens.css" in text
+    # Und NICHT auf einen Top-Level-/static-Pfad außerhalb der URL-1-Prefixe.
+    assert 'href="/static/' not in text
+
+
+# ============================================================
 #  PLAN-28 — Konfigurationswerte
 # ============================================================
 

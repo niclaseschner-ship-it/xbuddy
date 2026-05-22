@@ -132,6 +132,18 @@ verteilt wird, ist Sache der Umsetzung.
 
 *Tickets:* #36
 
+### URL-13 — Statische Assets im Display-Namensraum des Buddys
+
+Statische Assets eines Buddys (Stylesheets, Schriften, Bilder, Skripte) werden
+unter einem reservierten Sub-Pfad seines Display-Namensraums ausgeliefert:
+`/display/<buddy>/static/<asset>`. Damit liegen sie unter einem der vier
+Top-Level-Prefixe (URL-1) und sind hinter der einen Origin (URL-12) erreichbar —
+ein Buddy darf seine Assets nicht unter einem eigenen Top-Level-Pfad wie
+`/static/…` anbieten, weil ein solcher Pfad von der Origin nicht geroutet wird
+und ins Leere fällt.
+
+*Tickets:* #61
+
 ## Beispiele
 
 ```
