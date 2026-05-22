@@ -38,6 +38,21 @@ class TelegramError(Exception):
     """Ein Telegram-API-Aufruf ist fehlgeschlagen."""
 
 
+class ChatMigratedError(TelegramError):
+    """Der angesprochene Chat wurde zu einer Supergruppe migriert (EC-18).
+
+    Trägt die alte und die neue Chat-ID — der Aufrufer zieht damit die Bindung
+    der Familien-Gruppe nach, statt den Fehler als Berechtigungs-Absage zu
+    werten.
+    """
+
+    def __init__(self, old_chat_id, new_chat_id):
+        super().__init__("Chat %s zu Supergruppe %s migriert"
+                         % (old_chat_id, new_chat_id))
+        self.old_chat_id = old_chat_id
+        self.new_chat_id = new_chat_id
+
+
 class TelegramClient:
     """Schmaler Client für genau die Bot-API-Aufrufe, die V1 braucht."""
 
@@ -61,12 +76,27 @@ class TelegramClient:
         except urllib.error.HTTPError as e:
             # 4xx/5xx — Body kann eine Telegram-Fehlerbeschreibung enthalten.
             detail = e.read().decode("utf-8", "replace")
+            migrated_to = self._migrated_to(detail)
+            if migrated_to is not None:
+                # EC-18: Der Chat wurde zu einer Supergruppe migriert.
+                raise ChatMigratedError((params or {}).get("chat_id"), migrated_to)
             raise TelegramError("%s: HTTP %s %s" % (method, e.code, detail))
         except (urllib.error.URLError, OSError, json.JSONDecodeError) as e:
             raise TelegramError("%s: %s" % (method, e))
         if not body.get("ok"):
             raise TelegramError("%s: %s" % (method, body.get("description", "unbekannt")))
         return body.get("result")
+
+    @staticmethod
+    def _migrated_to(error_body):
+        """Liest aus einem Telegram-Fehler-Body die neue Chat-ID, wenn der Chat
+        zu einer Supergruppe migriert wurde (EC-18) — sonst None. Telegram legt
+        die neue ID als `parameters.migrate_to_chat_id` bei."""
+        try:
+            params = json.loads(error_body).get("parameters") or {}
+        except (json.JSONDecodeError, AttributeError):
+            return None
+        return params.get("migrate_to_chat_id")
 
     # -- API-Methoden -----------------------------------------
 
@@ -172,6 +202,27 @@ class TelegramClient:
         if new_status in ("member", "administrator") and \
                 old_status in ("left", "kicked", None):
             return chat.get("id")
+        return None
+
+    @staticmethod
+    def extract_migration(update):
+        """Liefert `(alte_id, neue_id)`, wenn dieses Update eine Gruppen-
+        Migration zu einer Supergruppe meldet (EC-18) — sonst None.
+
+        Telegram sendet dazu eine Dienst-Nachricht: in der bisherigen Gruppe
+        mit `migrate_to_chat_id`, in der neuen Supergruppe mit
+        `migrate_from_chat_id`. Beide Formen ergeben dasselbe Paar.
+        """
+        msg = update.get("message")
+        if not isinstance(msg, dict):
+            return None
+        chat_id = (msg.get("chat") or {}).get("id")
+        if chat_id is None:
+            return None
+        if msg.get("migrate_to_chat_id") is not None:
+            return (chat_id, msg["migrate_to_chat_id"])
+        if msg.get("migrate_from_chat_id") is not None:
+            return (msg["migrate_from_chat_id"], chat_id)
         return None
 
     @staticmethod

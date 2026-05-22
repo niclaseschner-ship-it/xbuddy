@@ -53,6 +53,44 @@ keine Rollen zwischen Familienmitgliedern (siehe Offene Punkte).
 
 *Tickets:* #27
 
+### EC-18 — Familien-Gruppe übersteht eine Supergruppen-Migration
+Telegram wandelt eine reguläre Gruppe ohne Zutun der Familie in eine
+Supergruppe um — etwa beim Aktivieren bestimmter Funktionen oder beim
+Überschreiten einer Mitgliederzahl. Dabei wechselt die Chat-ID der Gruppe
+dauerhaft; die alte ID ist danach ungültig. Wird die in EC-2 gebundene
+Familien-Gruppe so migriert, zieht die Instanz die Bindung selbsttätig nach:
+Sie übernimmt die neue Supergruppen-ID, speichert sie persistent (ONB-5) und
+bedient die Gruppe ohne Unterbrechung weiter — ohne Neustart und ohne
+manuellen Eingriff. Wird bereits die Onboarding-Gruppe vor dem Abschluss
+migriert, gilt dasselbe — gebunden wird dann die nachgezogene ID (ONB-6).
+
+Telegram meldet die Migration auf zwei Wegen, die das System beide auswertet:
+(1) eine Dienst-Nachricht in der bisherigen Gruppe trägt die neue ID; (2) ein
+Mitgliedschafts-Aufruf gegen die alte ID schlägt fehl und nennt die neue ID
+mit. Weg (2) ist die Absicherung, falls die Dienst-Nachricht verpasst wurde —
+ein solcher Fehler darf nicht als fehlende Berechtigung (EC-2) gewertet werden,
+sondern löst die Nachführung aus.
+
+Ist die Familien-Gruppe per Umgebungsvariable oder Konfiguration fest gebunden,
+wird eine Migration protokolliert, aber die gesetzte ID nicht überschrieben —
+ein bewusst gesetzter Wert hat Vorrang (analog ONB-6), seine Pflege liegt dann
+bei der Betreiberin.
+
+*Tickets:* #45
+
+### EC-19 — Empfangs-Voraussetzung beim Start geprüft
+Damit Telegram der Instanz die Nachrichten ihrer Familien-Gruppe zustellt, muss
+der Bot in dieser Gruppe Administrator sein oder sein Privacy-Modus deaktiviert
+sein; andernfalls erhält er dort nur Kommandos und Antworten auf eigene
+Nachrichten, nicht aber eine bloße Erwähnung (vgl. EC-5). Beim Start prüft die
+Instanz, ob diese Voraussetzung für die gebundene Familien-Gruppe erfüllt ist,
+und schreibt, wenn nicht, eine eindeutige Warnung ins Log. So wird ein »der Bot
+schweigt in der Gruppe« sofort als Betriebs- und nicht als Code-Problem
+erkennbar. Liegt noch keine Familien-Gruppe vor (Onboarding-Modus, ONB-1),
+greift die Prüfung nicht.
+
+*Tickets:* #45
+
 ## 2. Gespräch
 
 ### EC-4 — Natürlichsprachliche Anfrage
@@ -374,3 +412,22 @@ Zuerst muss sich zeigen, welcher Anbieter taugt und wie der Datenfluss
 tatsächlich aussieht — ein Anonymisierungs-Layer davor wäre Bau ohne belegte
 Grundlage. Die Aktivierung ist als OPEN-EC-A festgehalten und bleibt eine
 Voraussetzung für den Regelbetrieb über die Testphase hinaus.
+
+### E-EC-10 — Supergruppen-Migration wird automatisch nachgezogen
+*Datum:* 2026-05-22
+
+Migriert Telegram die Familien-Gruppe zu einer Supergruppe, zieht die Instanz
+die geänderte Chat-ID selbsttätig nach (EC-18), statt sie als Betreiber-Aufgabe
+zu behandeln.
+
+**Verworfen:** die ID nach einer Migration von Hand in Konfiguration oder
+Onboarding-Speicher nachzutragen. XBuddy läuft pro Familie auf einem eigenen
+Hub (E-EC-1), oft ohne technische Betreuung. Eine Migration ist ein
+unangekündigtes Telegram-Ereignis; bliebe sie unbehandelt, fiele der Bot ohne
+für die Familie erkennbaren Grund und ohne Weg zurück aus. Das automatische
+Nachziehen ist daher kein Komfort, sondern Voraussetzung für den unbetreuten
+Per-Familie-Betrieb. Eine bewusst per Env/Config gesetzte Bindung bleibt
+ausgenommen — dort hat der explizit gesetzte Wert Vorrang (EC-18).
+
+Diese Entscheidung stammt aus dem #33-Live-Test (2026-05-22): die Gruppe der
+Test-Familie migrierte währenddessen, der Bot fiel mit einer toten Chat-ID aus.

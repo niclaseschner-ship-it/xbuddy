@@ -87,11 +87,11 @@ class OnboardingState:
     `pending_group_chat_id` ist die Gruppe, in der das Onboarding begann — sie
     wird beim Abschluss zur Familien-Gruppe (ONB-6). Sie wird nur im Speicher
     gehalten: nach einem Neustart genügt es, den Bot erneut anzusprechen (ONB-2).
+    Der Onboarding-Speicher und die Gruppen-Sperre liegen am Context — eine
+    Wahrheitsquelle für beide Modi.
     """
     provider_name: str
     provider_model: str
-    store: object               # onboarding_store.OnboardingStore
-    family_group_locked: bool   # True ⇒ Familien-Gruppe per Env/Config, Vorrang
     pending_group_chat_id: object = None
 
 
@@ -194,13 +194,13 @@ def _complete(ctx, key, provider):
     st = ctx.onboarding
 
     # ONB-5: Key persistent außerhalb des Repos speichern.
-    st.store.save(provider_api_key=key)
+    ctx.store.save(provider_api_key=key)
 
     # ONB-6: Onboarding-Gruppe als Familien-Gruppe binden — außer eine
     # Env-/Config-Bindung hat Vorrang.
-    if not st.family_group_locked:
+    if not ctx.family_group_locked:
         ctx.family_group_chat_id = str(st.pending_group_chat_id)
-        st.store.save(family_group_chat_id=ctx.family_group_chat_id)
+        ctx.store.save(family_group_chat_id=ctx.family_group_chat_id)
 
     # ONB-7: Moduswechsel in den KI-Modus — ab jetzt gelten EC-4 ff.
     ctx.provider = provider
