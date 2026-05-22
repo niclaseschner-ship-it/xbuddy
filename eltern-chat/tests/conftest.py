@@ -6,6 +6,7 @@ Telegram-Kanal sind durch kontrollierte Doppelungen ersetzt.
 
 import os
 import sys
+from dataclasses import dataclass
 
 # eltern-chat/ (eine Ebene über tests/) auf den Importpfad legen.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -13,6 +14,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from model import GenerationResponse, TaskCallBlock          # noqa: E402
 from tasks import Proposal, ReadTask, WriteTask              # noqa: E402
 from telegram import IncomingMessage                         # noqa: E402
+
+
+@dataclass
+class BotAdded:
+    """Test-Marker: der Bot wurde einer Gruppe hinzugefügt (ONB-2)."""
+    chat_id: object
 
 
 class FakeProvider:
@@ -87,8 +94,13 @@ class FakeTelegram:
         self._next_id = 5000
 
     def extract_message(self, update, bot_username):
-        # Orchestrierungs-Tests reichen ein IncomingMessage direkt herein.
-        return update
+        # Tests reichen ein IncomingMessage direkt herein; andere Marker
+        # (z. B. BotAdded) sind keine Nachricht.
+        return update if isinstance(update, IncomingMessage) else None
+
+    def extract_bot_added(self, update):
+        # ONB-2: Tests reichen einen BotAdded-Marker herein.
+        return update.chat_id if isinstance(update, BotAdded) else None
 
     def get_chat_member(self, chat_id, user_id):
         return self._members.get(user_id)

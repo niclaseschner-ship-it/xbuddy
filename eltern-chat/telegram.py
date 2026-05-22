@@ -75,9 +75,11 @@ class TelegramClient:
         return self._call("getMe")
 
     def get_updates(self, offset=None, timeout=30):
-        """Long-Poll für neue Updates. Nur `message`-Updates werden angefragt —
-        Reaktionen braucht V1 nicht (E-EC-7)."""
-        params = {"timeout": timeout, "allowed_updates": ["message"]}
+        """Long-Poll für neue Updates. Angefragt werden `message`-Updates und
+        `my_chat_member` — letzteres meldet, dass der Bot einer Gruppe
+        hinzugefügt wurde (ONB-2)."""
+        params = {"timeout": timeout,
+                  "allowed_updates": ["message", "my_chat_member"]}
         if offset is not None:
             params["offset"] = offset
         return self._call("getUpdates", params) or []
@@ -154,6 +156,23 @@ class TelegramClient:
             reply_to_from_bot=reply_to_from_bot,
             mentions_bot=mentions_bot,
         )
+
+    @staticmethod
+    def extract_bot_added(update):
+        """Liefert die Chat-ID, wenn dieses Update meldet, dass der Bot einer
+        Gruppe als Mitglied hinzugefügt wurde (ONB-2) — sonst None."""
+        cmu = update.get("my_chat_member")
+        if not isinstance(cmu, dict):
+            return None
+        chat = cmu.get("chat") or {}
+        if chat.get("type") not in ("group", "supergroup"):
+            return None
+        old_status = (cmu.get("old_chat_member") or {}).get("status")
+        new_status = (cmu.get("new_chat_member") or {}).get("status")
+        if new_status in ("member", "administrator") and \
+                old_status in ("left", "kicked", None):
+            return chat.get("id")
+        return None
 
     @staticmethod
     def _mentions_bot(msg, text, bot_username):

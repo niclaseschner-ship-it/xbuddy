@@ -1,31 +1,36 @@
-"""Konfigurations-Auflösung — siehe specs/platform/eltern-chat.md EC-15 (Refs #27).
+"""Konfigurations-Auflösung — siehe specs/platform/eltern-chat.md EC-15 und
+specs/platform/eltern-chat-onboarding.md (Refs #27, #33).
 
-Priorität: Umgebungsvariable > Konfigurationsdatei > Default. Geheimnisse
-(Bot-Token, Anbieter-API-Key) kommen ausschließlich aus Umgebungsvariablen und
-landen nie in einer Datei im Repo (CLAUDE.md §8).
+Priorität je Wert: Umgebungsvariable > Konfigurationsdatei > Onboarding-Speicher
+> Default. Der Bot-Token kommt ausschließlich aus einer Umgebungsvariablen
+(Pflicht). Der Anbieter-API-Key und die Familien-Gruppen-Chat-ID können aus
+Umgebungsvariable/Konfiguration ODER aus dem Onboarding-Speicher stammen; fehlt
+der Anbieter-Key auf beiden Wegen, läuft die Instanz im Onboarding-Modus
+(ONB-1). Geheimnisse landen nie in einer Datei im Repo (CLAUDE.md §8).
 """
 
 import json
 import logging
 import os
 
+from onboarding_store import KEY_FAMILY_GROUP, KEY_PROVIDER_API_KEY, OnboardingStore
 
-# EC-15: nicht-geheime Werte mit ihren Defaults.
+
+# EC-15: nicht-geheime Werte mit ihren Defaults (Env > Datei > Default).
 DEFAULTS = {
-    "provider":             "claude",     # KI-Anbieter (EC-11)
-    "provider_model":       "",           # leer → Anbieter-Default des Adapters
-    "family_group_chat_id": "",           # Pflicht (kein sinnvoller Default)
-    "context_depth":        20,           # Gesprächskontext-Tiefe (EC-6)
+    "provider":       "claude",     # KI-Anbieter (EC-11)
+    "provider_model": "",           # leer → Anbieter-Default des Adapters
+    "context_depth":  20,           # Gesprächskontext-Tiefe (EC-6)
 }
 
 # Umgebungsvariablen-Namen.
-ENV_BOT_TOKEN        = "ELTERNCHAT_BOT_TOKEN"          # Geheimnis
-ENV_PROVIDER_API_KEY = "ELTERNCHAT_PROVIDER_API_KEY"   # Geheimnis
+ENV_BOT_TOKEN        = "ELTERNCHAT_BOT_TOKEN"          # Geheimnis, Pflicht
+ENV_PROVIDER_API_KEY = "ELTERNCHAT_PROVIDER_API_KEY"   # Geheimnis, optional
+ENV_FAMILY_GROUP     = "ELTERNCHAT_FAMILY_GROUP_CHAT_ID"
 ENV_OVERRIDES = {
-    "provider":             "ELTERNCHAT_PROVIDER",
-    "provider_model":       "ELTERNCHAT_PROVIDER_MODEL",
-    "family_group_chat_id": "ELTERNCHAT_FAMILY_GROUP_CHAT_ID",
-    "context_depth":        "ELTERNCHAT_CONTEXT_DEPTH",
+    "provider":       "ELTERNCHAT_PROVIDER",
+    "provider_model": "ELTERNCHAT_PROVIDER_MODEL",
+    "context_depth":  "ELTERNCHAT_CONTEXT_DEPTH",
 }
 
 
@@ -34,15 +39,22 @@ class ConfigError(Exception):
 
 
 class Config:
-    """Aufgelöste Instanz-Konfiguration."""
+    """Aufgelöste Instanz-Konfiguration.
+
+    `provider_api_key` und `family_group_chat_id` können leer sein — dann ist
+    das Onboarding zuständig (ONB-1/ONB-6). `family_group_locked` ist True, wenn
+    die Familien-Gruppe per Env/Config gesetzt wurde; dann hat sie Vorrang vor
+    einer Onboarding-Bindung (ONB-6).
+    """
 
     def __init__(self, bot_token, provider_api_key, provider, provider_model,
-                 family_group_chat_id, context_depth):
+                 family_group_chat_id, family_group_locked, context_depth):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
         self.provider = provider
         self.provider_model = provider_model
         self.family_group_chat_id = family_group_chat_id
+        self.family_group_locked = family_group_locked
         self.context_depth = context_depth
 
 
@@ -59,25 +71,25 @@ def _load_file(path):
     return {k: v for k, v in data.items() if not k.startswith("_")}
 
 
-def resolve(config_path, env=None):
+def resolve(config_path, store_path=None, env=None):
     """Löst die Konfiguration nach EC-15 auf. `env` ist überschreibbar (Tests).
 
-    Wirft ConfigError, wenn ein Pflicht-Wert fehlt.
+    Wirft ConfigError nur, wenn der Bot-Token fehlt oder ein Wert ungültig ist.
+    Ein fehlender Anbieter-Key ist kein Fehler — er führt in den Onboarding-Modus.
     """
     if env is None:
         env = os.environ
     file_cfg = _load_file(config_path)
+    store = OnboardingStore(store_path).load() if store_path else {}
 
     # Nicht-geheime Werte: Env > Datei > Default.
     values = dict(DEFAULTS)
     for key in DEFAULTS:
         if key in file_cfg:
             values[key] = file_cfg[key]
-        env_name = ENV_OVERRIDES[key]
-        if env_name in env:
-            values[key] = env[env_name]
+        if ENV_OVERRIDES[key] in env:
+            values[key] = env[ENV_OVERRIDES[key]]
 
-    # context_depth muss eine positive Ganzzahl sein.
     try:
         context_depth = int(values["context_depth"])
     except (TypeError, ValueError):
@@ -85,23 +97,33 @@ def resolve(config_path, env=None):
     if context_depth < 1:
         raise ConfigError("context_depth muss >= 1 sein, ist %d" % context_depth)
 
-    # Geheimnisse: nur aus Env, Pflicht.
+    # Bot-Token: nur Env, Pflicht (Henne-Ei — siehe E-ONB-5).
     bot_token = env.get(ENV_BOT_TOKEN, "").strip()
     if not bot_token:
         raise ConfigError("%s ist nicht gesetzt (Pflicht, EC-15)" % ENV_BOT_TOKEN)
-    provider_api_key = env.get(ENV_PROVIDER_API_KEY, "").strip()
-    if not provider_api_key:
-        raise ConfigError("%s ist nicht gesetzt (Pflicht, EC-15)" % ENV_PROVIDER_API_KEY)
 
-    family_group_chat_id = str(values["family_group_chat_id"]).strip()
-    if not family_group_chat_id:
-        raise ConfigError("family_group_chat_id ist nicht gesetzt (Pflicht, EC-15)")
+    # Anbieter-Key: Env > Onboarding-Speicher > leer (→ Onboarding-Modus, ONB-1).
+    provider_api_key = (env.get(ENV_PROVIDER_API_KEY)
+                        or store.get(KEY_PROVIDER_API_KEY)
+                        or "").strip()
+
+    # Familien-Gruppe: Env > Datei > Onboarding-Speicher > leer.
+    # Per Env/Datei gesetzt → gesperrt, hat Vorrang vor Onboarding-Bindung (ONB-6).
+    family_group = ""
+    family_group_locked = False
+    if env.get(ENV_FAMILY_GROUP):
+        family_group, family_group_locked = str(env[ENV_FAMILY_GROUP]).strip(), True
+    elif file_cfg.get("family_group_chat_id"):
+        family_group, family_group_locked = str(file_cfg["family_group_chat_id"]).strip(), True
+    elif store.get(KEY_FAMILY_GROUP):
+        family_group = str(store[KEY_FAMILY_GROUP]).strip()
 
     return Config(
         bot_token=bot_token,
         provider_api_key=provider_api_key,
         provider=str(values["provider"]).strip(),
         provider_model=str(values["provider_model"]).strip(),
-        family_group_chat_id=family_group_chat_id,
+        family_group_chat_id=family_group,
+        family_group_locked=family_group_locked,
         context_depth=context_depth,
     )

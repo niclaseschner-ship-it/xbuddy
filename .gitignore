@@ -32,6 +32,10 @@ router/config.json
 eltern-chat/config.json
 eltern-chat/*.db
 
+# Eltern-Chat: Onboarding-Speicher (ONB-5) — enthält den per Chat gesetzten
+# Anbieter-Key, niemals ins Repo.
+eltern-chat/onboarding-store.json
+
 # Test-Caches
 .pytest_cache/
 __pycache__/
