@@ -74,10 +74,11 @@ aus.
 Die Erwähnung wird unabhängig von Groß-/Kleinschreibung erkannt: Telegram-
 Usernames sind case-insensitiv — der Bot gilt also auch dann als angesprochen,
 wenn sein Name anders geschrieben wird als offiziell geführt. Damit Telegram
-dem Bot schlichte (nicht an ihn gerichtete) Gruppennachrichten überhaupt
-zustellt, müsste sein Privacy-Modus deaktiviert sein; für EC-5 ist das nicht
-nötig, da Erwähnungen und Antworten an den Bot ihn auch bei aktivem
-Privacy-Modus erreichen.
+dem Bot Gruppennachrichten überhaupt zustellt, muss sein Privacy-Modus
+deaktiviert sein oder der Bot in der Gruppe Administrator sein: bei aktivem
+Privacy-Modus erhält der Bot nur Kommandos und Antworten auf seine Nachrichten
+— eine bloße @-Erwähnung erreicht ihn nicht. Diese Betriebs-Voraussetzung gilt
+damit auch für EC-5 (siehe ONB-2).
 
 *Tickets:* #27
 

@@ -56,12 +56,15 @@ verpasst hat oder den Bot nicht exakt erwähnt, bekommt die Anleitung trotzdem
 dann reagiert der Bot in der Gruppe nur noch auf ausdrückliche Ansprache. Im
 Privatchat wird weiterhin jede Nachricht beantwortet (ONB-3).
 
-Damit der Bot jede Gruppennachricht überhaupt empfängt, muss der Telegram-
+Damit der Bot Gruppennachrichten überhaupt empfängt, muss der Telegram-
 Privacy-Modus des Bots deaktiviert sein (BotFather → `/setprivacy` →
-*Disable*). Bei aktivem Privacy-Modus liefert Telegram dem Bot nur Erwähnungen,
-Kommandos und Antworten auf seine Nachrichten — eine schlichte »Hallo«-Nachricht
-erreicht ihn dann nicht. Das ist eine Betriebs-Voraussetzung der Instanz, kein
-Code-Verhalten, und daher ohne eigenen Test (ONB-9).
+*Disable*; die Änderung wirkt für eine bestehende Gruppe erst, nachdem der Bot
+dort erneut hinzugefügt wurde) — alternativ genügt es, den Bot in der Gruppe
+zum Administrator zu machen, dann empfängt er unabhängig vom Privacy-Modus alle
+Nachrichten. Bei aktivem Privacy-Modus stellt Telegram dem Bot nur Kommandos
+und Antworten auf seine Nachrichten zu; eine schlichte Nachricht und auch eine
+bloße @-Erwähnung erreichen ihn dann nicht. Das ist eine Betriebs-Voraussetzung
+der Instanz, kein Code-Verhalten, und daher ohne eigenen Test (ONB-9).
 
 *Tickets:* #33
 
