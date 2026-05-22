@@ -5,19 +5,19 @@
       "source_id":  "phone:test-1",
       "descriptor": { "figure_id": "rotes-a", "bucket": 0 },
       "display_ids": ["default"],
-      "payload":    { "url": "http://buddyboard.local:5150/kinder/klein" }
+      "payload":    { "url": "/display/plan/woche?ansicht=klein" }
     },
     {
       "source_id":  "phone:test-1",
       "descriptor": { "figure_id": "rotes-a", "bucket": 1 },
       "display_ids": ["default"],
-      "payload":    { "url": "http://buddyboard.local:5150/kinder" }
+      "payload":    { "url": "/display/plan/woche" }
     },
     {
       "source_id":  "phone:test-1",
       "descriptor": { "figure_id": "rotes-a", "bucket": 2 },
       "display_ids": ["default"],
-      "payload":    { "url": "http://buddyboard.local:5150/kinder" }
+      "payload":    { "url": "/display/plan/woche" }
     }
   ]
 }

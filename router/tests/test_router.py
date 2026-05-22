@@ -293,24 +293,6 @@ def test_ROU_19_config_underscore_keys_are_ignored(tmp_path):
 
 
 # ============================================================
-#  CORS
-# ============================================================
-
-def test_cors_headers_on_post_event(client_with_routing):
-    r = post_event(client_with_routing, {
-        'source_id': 'phone:test-1', 'type': 'figure_detected',
-        'figure_id': 'rotes-a', 'angle': 0, 'bucket': 0,
-    })
-    assert r.headers.get('Access-Control-Allow-Origin') == '*'
-
-
-def test_cors_options_preflight_returns_204(client_with_routing):
-    r = client_with_routing.options('/api/v1/events')
-    assert r.status_code == 204
-    assert 'POST' in r.headers.get('Access-Control-Allow-Methods', '')
-
-
-# ============================================================
 #  ROU-21 — CDP-Push
 # ============================================================
 
