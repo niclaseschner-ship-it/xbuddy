@@ -13,13 +13,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from model import GenerationResponse, TaskCallBlock          # noqa: E402
 from tasks import Proposal, ReadTask, WriteTask              # noqa: E402
-from telegram import IncomingMessage                         # noqa: E402
+from telegram import ChatMigratedError, IncomingMessage      # noqa: E402
 
 
 @dataclass
 class BotAdded:
     """Test-Marker: der Bot wurde einer Gruppe hinzugefügt (ONB-2)."""
     chat_id: object
+
+
+@dataclass
+class Migrated:
+    """Test-Marker: eine Gruppe wurde zu einer Supergruppe migriert (EC-18)."""
+    old_chat_id: object
+    new_chat_id: object
 
 
 class FakeProvider:
@@ -87,9 +94,12 @@ class FakeWriteTask(WriteTask):
 class FakeTelegram:
     """Kontrollierte Doppelung des Telegram-Kanals (EC-17)."""
 
-    def __init__(self, members=None):
+    def __init__(self, members=None, migrated=None):
         # members: dict user_id -> Telegram-getChatMember-Antwort
         self._members = dict(members or {})
+        # migrated: dict alte_chat_id -> neue_chat_id. get_chat_member gegen
+        # eine migrierte ID wirft ChatMigratedError (EC-18).
+        self._migrated = dict(migrated or {})
         self.sent = []
         self._next_id = 5000
 
@@ -102,7 +112,15 @@ class FakeTelegram:
         # ONB-2: Tests reichen einen BotAdded-Marker herein.
         return update.chat_id if isinstance(update, BotAdded) else None
 
+    def extract_migration(self, update):
+        # EC-18: Tests reichen einen Migrated-Marker herein.
+        if isinstance(update, Migrated):
+            return (update.old_chat_id, update.new_chat_id)
+        return None
+
     def get_chat_member(self, chat_id, user_id):
+        if chat_id in self._migrated:
+            raise ChatMigratedError(chat_id, self._migrated[chat_id])
         return self._members.get(user_id)
 
     def send_message(self, chat_id, text, reply_to_message_id=None):

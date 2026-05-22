@@ -11,6 +11,8 @@ nie auf. agent.py importiert authz nicht.
 
 import logging
 
+from telegram import ChatMigratedError
+
 # Telegram-Mitglieds-Status, die als „in der Gruppe" gelten.
 _MEMBER_STATUSES = frozenset({"creator", "administrator", "member"})
 
@@ -24,7 +26,12 @@ def is_authorized(tg, family_group_chat_id, user_id):
     """
     try:
         member = tg.get_chat_member(family_group_chat_id, user_id)
-    except Exception as e:  # noqa: BLE001 — jeder Fehler ⇒ nicht berechtigt
+    except ChatMigratedError:
+        # EC-18: Eine Supergruppen-Migration ist keine Berechtigungsfrage — der
+        # Aufrufer zieht die Gruppen-Bindung nach. Nicht als „nicht berechtigt"
+        # verschlucken.
+        raise
+    except Exception as e:  # noqa: BLE001 — jeder andere Fehler ⇒ nicht berechtigt
         logging.warning("Mitgliedschaftsprüfung fehlgeschlagen für %s: %s", user_id, e)
         return False
     if not isinstance(member, dict):
