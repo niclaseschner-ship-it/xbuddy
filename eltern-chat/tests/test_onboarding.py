@@ -74,11 +74,15 @@ def test_ONB_2_addressed_in_group_sends_entry_message(tmp_path):
     assert ctx.onboarding.pending_group_chat_id == -100
 
 
-def test_ONB_2_unaddressed_group_message_is_ignored(tmp_path):
+def test_ONB_2_any_group_message_sends_entry_message(tmp_path):
+    """ONB-2/E-ONB-6: im Onboarding-Modus beantwortet der Bot JEDE
+    Gruppennachricht mit der Einstiegs-Nachricht — auch ohne ausdrückliche
+    Ansprache. Der Erstkontakt hängt so nicht an der Erwähnungs-Erkennung."""
     tg = FakeTelegram()
     ctx = _ctx(tmp_path, tg)
     dispatch(make_message("essen ist fertig", chat_type="group", chat_id=-100), ctx)
-    assert tg.sent == []
+    assert tg.sent[0]["text"] == ENTRY_MESSAGE
+    assert ctx.onboarding.pending_group_chat_id == -100
 
 
 # -- ONB-3: Key-Eingabe im Privatchat ----------------------------

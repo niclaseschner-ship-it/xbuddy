@@ -117,15 +117,15 @@ def handle_update(update, ctx):
     if msg is None:
         return
 
-    # In einer Gruppe: nur auf ausdrückliche Ansprache reagieren — dann
-    # dieselbe Einstiegs-Nachricht (ONB-2), wer den Hinzufügen-Moment verpasst
-    # hat, kommt so hinein.
+    # In einer Gruppe: im Onboarding-Modus bleibt der Bot nie stumm — jede
+    # Gruppennachricht wird mit der Einstiegs-Nachricht beantwortet, nicht nur
+    # die ausdrückliche Ansprache (ONB-2, E-ONB-6). So hängt der Erstkontakt
+    # nicht an der Erwähnungs-Erkennung. Nach dem Abschluss gilt wieder EC-5.
     if msg.chat_type in ("group", "supergroup"):
-        if msg.mentions_bot or msg.reply_to_from_bot:
-            st.pending_group_chat_id = msg.chat_id
-            logging.info("Onboarding: in Gruppe %s angesprochen — "
-                         "Einstiegs-Nachricht (ONB-2)", msg.chat_id)
-            _send(ctx, msg.chat_id, ENTRY_MESSAGE)
+        st.pending_group_chat_id = msg.chat_id
+        logging.info("Onboarding: Gruppennachricht in %s — "
+                     "Einstiegs-Nachricht (ONB-2)", msg.chat_id)
+        _send(ctx, msg.chat_id, ENTRY_MESSAGE)
         return
 
     # Privatchat — hier läuft die Key-Eingabe (ONB-3).
