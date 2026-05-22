@@ -8,7 +8,7 @@ Verhalten auch gegen absichtlich abwegige Modell-Ausgaben (EC-12).
 import pytest
 
 import agent
-from conftest import FakeProvider, FakeReadTask, FakeWriteTask, task_call_response, text_response
+from fakes import FakeProvider, FakeReadTask, FakeWriteTask, task_call_response, text_response
 from model import GenerationResponse, Message, ProviderError, TaskCallBlock, TaskResultBlock, TextBlock
 from tasks import Catalog
 

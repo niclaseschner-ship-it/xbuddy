@@ -8,7 +8,7 @@ Doppelung ausgelöst.
 
 import logging
 
-from conftest import FakeTelegram, Migrated, make_message
+from fakes import FakeTelegram, Migrated, make_message
 from main import Context, _check_group_reception, dispatch
 from onboarding import OnboardingState
 from onboarding_store import OnboardingStore
