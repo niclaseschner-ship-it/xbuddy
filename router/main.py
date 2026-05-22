@@ -7,12 +7,13 @@ entgegen, mappt Phone-Events 1:1 auf das kanonische Trigger-Modell
 State pro Display in-memory (ROU-10).
 """
 
-from flask import Flask, request, jsonify, abort
+from flask import Flask, request, jsonify
 from datetime import datetime, timezone
 import argparse
 import json
 import logging
 import os
+import queue
 import sys
 import threading
 import urllib.request
@@ -60,6 +61,8 @@ def apply_trigger(source_id, descriptor):
             'payload':   payload,
             'since':     ts,
         }
+        # ROU-22: jede Zustandsänderung an die offenen SSE-Streams melden.
+        publish(did, state[did])
     # ROU-21: Direkt-Push an Chromium via CDP, falls konfiguriert.
     url = payload.get('url') if isinstance(payload, dict) else None
     if url:
@@ -74,9 +77,76 @@ def apply_session_end(source_id):
         if s and s.get('source_id') == source_id:
             state[did] = None
             affected = True
+            # ROU-22: den null-Zustand an die offenen SSE-Streams melden.
+            publish(did, None)
     # ROU-21: bei State=null auf idle-URL springen
     if affected:
         cdp_navigate_async(runtime_config.get('cdp_idle_url') or 'about:blank')
+
+
+# ============================================================
+#  SSE-Zustands-Stream (ROU-22)
+# ============================================================
+#
+#  Pro offener Stream-Verbindung eine Queue. Eine Zustandsänderung (ROU-11)
+#  legt den neuen Zustand in jede Queue des betroffenen Displays. Reine
+#  Intra-Prozess-Verdrahtung — kein Broker, keine Topics: E-DC-1 grenzt SSE
+#  ausdrücklich vom verschobenen MQTT-Transport (E-ROU-2) ab.
+
+_subscribers = {}                 # display_id -> set[queue.Queue]
+_subscribers_lock = threading.Lock()
+
+# Heartbeat-Intervall: hält die Verbindung über Proxies offen und lässt den
+# Generator abgebrochene Clients erkennen (sonst bliebe seine Queue für immer
+# blockiert und die Subscription läge als Leiche herum).
+SSE_HEARTBEAT_SECONDS = 15
+
+
+def subscribe(display_id):
+    q = queue.Queue()
+    with _subscribers_lock:
+        _subscribers.setdefault(display_id, set()).add(q)
+    return q
+
+
+def unsubscribe(display_id, q):
+    with _subscribers_lock:
+        subs = _subscribers.get(display_id)
+        if subs:
+            subs.discard(q)
+            if not subs:
+                del _subscribers[display_id]
+
+
+def publish(display_id, display_state):
+    """Legt den neuen Zustand in jede offene Stream-Queue des Displays."""
+    with _subscribers_lock:
+        subs = list(_subscribers.get(display_id, ()))
+    for q in subs:
+        q.put(display_state)
+
+
+def sse_pack(display_state):
+    """Formatiert einen Display-State (ROU-10) als SSE-Nachricht."""
+    return 'data: ' + json.dumps(display_state, ensure_ascii=False) + '\n\n'
+
+
+def display_event_stream(display_id):
+    """Generator für ROU-22: liefert den aktuellen Zustand beim Verbinden,
+    danach jede Änderung. Heartbeat-Kommentare halten die Verbindung und
+    räumen die Subscription ab, sobald der Client weg ist."""
+    q = subscribe(display_id)
+    try:
+        yield sse_pack(state.get(display_id))      # Zustand beim Verbinden
+        while True:
+            try:
+                s = q.get(timeout=SSE_HEARTBEAT_SECONDS)
+            except queue.Empty:
+                yield ': keepalive\n\n'
+                continue
+            yield sse_pack(s)
+    finally:
+        unsubscribe(display_id, q)
 
 
 # ============================================================
@@ -234,6 +304,17 @@ def get_state(display_id):
     return jsonify(state.get(display_id))
 
 
+@app.route('/api/v1/displays/<display_id>/events', methods=['GET'])
+def display_events(display_id):
+    # ROU-22: SSE-Zustands-Stream. Unbekannte id → 404 (wie ROU-12).
+    if display_id not in known_displays:
+        return jsonify({'error': 'unknown display'}), 404
+    resp = app.response_class(display_event_stream(display_id),
+                              mimetype='text/event-stream')
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
+
 @app.route('/api/v1/diag', methods=['GET'])
 def diag():
     rows = []
@@ -255,43 +336,35 @@ def diag():
             ''.join(rows) or '<p>(noch nichts)</p>')
 
 
+# ============================================================
+#  Display-Client-Auslieferung (ROU-20 / E-DC-3)
+# ============================================================
+
+DISPLAY_CLIENT_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), '..', 'display-client'))
+
+
+def render_display_client():
+    """Liefert die Display-Client-Seite: index.html mit inline gezogenem
+    displib.js, damit der Client als eine einzige same-origin-Antwort
+    ankommt (E-DC-3). Identität und Verhalten bestimmt der Client selbst
+    aus der Einstiegs-URL (specs/platform/display-client.md)."""
+    with open(os.path.join(DISPLAY_CLIENT_DIR, 'index.html'), encoding='utf-8') as f:
+        html = f.read()
+    with open(os.path.join(DISPLAY_CLIENT_DIR, 'displib.js'), encoding='utf-8') as f:
+        displib = f.read()
+    return html.replace(
+        '<script src="displib.js"></script>',
+        '<script>\n' + displib + '\n</script>')
+
+
 @app.route('/display/<display_id>', methods=['GET'])
 def display(display_id):
-    if display_id not in known_displays:
-        return jsonify({'error': 'unknown display'}), 404
-    did_json = json.dumps(display_id)
-    return (
-        '<!DOCTYPE html><html><head><title>Display ' + display_id + '</title>'
-        '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        '<style>html,body{margin:0;padding:0;width:100%;height:100%;background:#000;color:#e8e8e8;font-family:system-ui;overflow:hidden}'
-        '#bar{position:fixed;top:0;left:0;right:0;padding:4px 10px;background:rgba(0,0,0,0.45);'
-        'font-family:monospace;font-size:10px;letter-spacing:0.5px;z-index:99;'
-        'opacity:0.25;transition:opacity 0.2s}'
-        '#bar:hover{opacity:1;background:rgba(0,0,0,0.85)}'
-        '#bar .lbl{color:#888;margin-right:6px}#bar .v{color:#4ade80;margin-right:18px}'
-        '#frame{position:fixed;inset:0;width:100%;height:100%;border:0;background:#000}'
-        '#empty{position:fixed;inset:0;background:#000}'
-        '</style></head><body>'
-        '<div id="bar"><span class="lbl">display</span><span class="v">' + display_id + '</span>'
-        '<span class="lbl">url</span><span class="v" id="url">—</span>'
-        '<span class="lbl">since</span><span class="v" id="since">—</span></div>'
-        '<div id="empty"></div>'
-        '<iframe id="frame" style="display:none"></iframe>'
-        '<script>'
-        'const did=' + did_json + ';let lastUrl=null;'
-        'async function poll(){try{'
-        'const r=await fetch("/api/v1/displays/"+did+"/state",{cache:"no-store"});'
-        'const st=await r.json();'
-        'const url=st&&st.payload&&st.payload.url?st.payload.url:null;'
-        'document.getElementById("url").textContent=url||"—";'
-        'document.getElementById("since").textContent=st&&st.since?st.since:"—";'
-        'if(url!==lastUrl){'
-        'const f=document.getElementById("frame"),e=document.getElementById("empty");'
-        'if(url){f.src=url;f.style.display="block";e.style.display="none";}'
-        'else{f.src="about:blank";f.style.display="none";e.style.display="flex";}'
-        'lastUrl=url;}}catch(err){console.warn("poll",err);}}'
-        'setInterval(poll,500);poll();'
-        '</script></body></html>')
+    # ROU-20: liefert den Display-Client unabhängig davon, ob <display_id>
+    # bekannt ist. Ob das Display existiert, klärt der Client beim Verbinden
+    # mit seinem Zustands-Stream (ROU-22); bei unbekannter id zeigt er einen
+    # Einrichtungs-Hinweis (DC-8). Die id liest der Client aus der URL.
+    return render_display_client()
 
 
 # ============================================================
