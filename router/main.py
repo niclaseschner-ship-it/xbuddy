@@ -209,19 +209,8 @@ def load_config(path, defaults):
 app = Flask(__name__)
 
 
-@app.after_request
-def add_cors(resp):
-    # V1: offen für jede Origin — Phone-Page ist HTTPS auf 8443, Router :5000.
-    resp.headers['Access-Control-Allow-Origin'] = '*'
-    resp.headers['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS'
-    resp.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-    return resp
-
-
-@app.route('/api/v1/events', methods=['POST', 'OPTIONS'])
+@app.route('/api/v1/events', methods=['POST'])
 def events_endpoint():
-    if request.method == 'OPTIONS':
-        return '', 204
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
         return jsonify({'error': 'JSON-Body fehlt oder ungültig'}), 400
