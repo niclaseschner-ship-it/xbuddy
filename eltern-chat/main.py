@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""XBuddy Eltern-Chat V1 — siehe specs/platform/eltern-chat.md (Refs #27).
+"""XBuddy Eltern-Chat V1 — siehe specs/platform/eltern-chat.md und
+eltern-chat-onboarding.md (Refs #27, #33).
 
 Eigener Prozess, eigener Telegram-Kanal per Polling. Diese Datei ist die
 ORCHESTRIERUNG: sie nimmt Nachrichten entgegen und verdrahtet die Bausteine.
@@ -12,6 +13,10 @@ Die Sicherheits-Gates liegen hier — außerhalb des Agent-Loops (E-EC-4):
     → sonst: Agent-Loop (agent), Antwort/Vorschlag, Verlauf persistieren
 
 agent.py kennt weder authz noch confirm — der LLM kann die Gates nicht umgehen.
+
+Liegt beim Start kein Anbieter-Key vor, läuft die Instanz zunächst im
+Onboarding-Modus (onboarding.py, ONB-1) — der Polling-Loop reicht Updates dann
+an onboarding.handle_update, bis der Key per Chat eingerichtet ist.
 """
 
 import argparse
@@ -29,9 +34,12 @@ import agent
 import authz
 import config as config_mod
 import confirm
+import onboarding
 from confirm import PendingProposal, PendingStore
 from history import History
 from model import ImageBlock, Message, ProviderError, TextBlock
+from onboarding import OnboardingState
+from onboarding_store import OnboardingStore
 from providers import get_provider
 from tasks import build_catalog
 from telegram import TelegramClient, TelegramError
@@ -56,10 +64,11 @@ class Context:
     bot_username: str
     family_group_chat_id: object
     context_depth: int
-    provider: object           # KI-Anbieter-Adapter (oder Doppelung)
+    provider: object           # KI-Anbieter-Adapter (oder Doppelung); None im Onboarding-Modus
     catalog: object            # tasks.Catalog
     history: object            # history.History
     pending: object            # confirm.PendingStore
+    onboarding: object = None  # onboarding.OnboardingState — None ⇒ KI-Modus (ONB-1)
 
 
 # ============================================================
@@ -74,9 +83,15 @@ def handle_update(update, ctx):
 
     # EC-5: In einer Gruppe reagiert das System nur, wenn es ausdrücklich
     # angesprochen wird. Im Privatchat bezieht sich jede Nachricht auf den Bot.
+    # Das Verwerfen wird protokolliert — sonst ist ein „Bot schweigt in der
+    # Gruppe" nicht von „Nachricht nie angekommen" zu unterscheiden.
     if msg.chat_type in ("group", "supergroup"):
         if not (msg.mentions_bot or msg.reply_to_from_bot):
+            logging.debug("Gruppe %s: Nachricht ohne Ansprache — ignoriert (EC-5)",
+                          msg.chat_id)
             return
+        logging.info("Gruppe %s: ausdrücklich angesprochen — Anfrage wird "
+                     "bearbeitet (EC-5)", msg.chat_id)
 
     # EC-2/EC-3: Berechtigung — Live-Mitgliedschaftsprüfung. Nicht-Mitglieder
     # werden ohne Antwort ignoriert. Dieses Gate liegt außerhalb des Agenten.
@@ -180,6 +195,15 @@ def _send(ctx, chat_id, text, reply_to_message_id=None):
 #  Polling-Loop
 # ============================================================
 
+def dispatch(update, ctx):
+    """Reicht ein Update an den passenden Handler: den Onboarding-Flow (ONB-1),
+    solange kein Anbieter-Key vorliegt — sonst die reguläre Orchestrierung."""
+    if ctx.onboarding is not None:
+        onboarding.handle_update(update, ctx)
+    else:
+        handle_update(update, ctx)
+
+
 def poll_loop(ctx, get_updates_timeout=30):
     """Liest fortlaufend Updates und verarbeitet sie (E-EC-2: Polling)."""
     offset = None
@@ -194,7 +218,7 @@ def poll_loop(ctx, get_updates_timeout=30):
         for update in updates:
             offset = update.get("update_id", 0) + 1
             try:
-                handle_update(update, ctx)
+                dispatch(update, ctx)
             except Exception:  # noqa: BLE001 — ein Update darf den Loop nie killen
                 logging.exception("Verarbeitung eines Updates fehlgeschlagen")
 
@@ -209,27 +233,49 @@ def parse_args(argv):
                    help="Pfad zur Konfigurationsdatei (EC-15)")
     p.add_argument("--db", default="conversations.db",
                    help="Pfad zur Gesprächs-Datenbank (EC-16)")
+    p.add_argument("--store", default="onboarding-store.json",
+                   help="Pfad zum Onboarding-Speicher (ONB-5)")
     p.add_argument("--log-level", dest="log_level", default="INFO",
                    help="DEBUG | INFO | WARNING | ERROR")
     return p.parse_args(argv)
 
 
-def build_context(cfg, db_path):
-    """Verdrahtet aus der Konfiguration einen lauffähigen Context."""
+def build_context(cfg, db_path, store_path):
+    """Verdrahtet aus der Konfiguration einen lauffähigen Context.
+
+    Liegt kein Anbieter-Key vor, startet die Instanz im Onboarding-Modus
+    (ONB-1): `provider` bleibt None, `onboarding` trägt den Onboarding-Zustand.
+    """
     tg = TelegramClient(cfg.bot_token)
-    me = tg.get_me()
-    bot_username = me.get("username", "")
-    provider = get_provider(cfg.provider, cfg.provider_api_key, cfg.provider_model)
-    return Context(
+    bot_username = tg.get_me().get("username", "")
+
+    ctx = Context(
         tg=tg,
         bot_username=bot_username,
         family_group_chat_id=cfg.family_group_chat_id,
         context_depth=cfg.context_depth,
-        provider=provider,
+        provider=None,
         catalog=build_catalog(),
         history=History(db_path),
         pending=PendingStore(),
     )
+
+    if cfg.provider_api_key:
+        # KI-Modus — Anbieter steht; die Familien-Gruppe muss gesetzt sein (EC-2).
+        if not cfg.family_group_chat_id:
+            raise config_mod.ConfigError(
+                "Anbieter-Key vorhanden, aber keine Familien-Gruppe — "
+                "Onboarding unvollständig?")
+        ctx.provider = get_provider(cfg.provider, cfg.provider_api_key,
+                                    cfg.provider_model)
+    else:
+        # Onboarding-Modus (ONB-1) — der Bot richtet sich per Chat selbst ein.
+        ctx.onboarding = OnboardingState(
+            provider_name=cfg.provider,
+            provider_model=cfg.provider_model,
+            store=OnboardingStore(store_path),
+            family_group_locked=cfg.family_group_locked)
+    return ctx
 
 
 def main(argv=None):
@@ -238,13 +284,17 @@ def main(argv=None):
         level=getattr(logging, args.log_level.upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(message)s")
     try:
-        cfg = config_mod.resolve(args.config)
+        cfg = config_mod.resolve(args.config, args.store)
+        ctx = build_context(cfg, args.db, args.store)
     except config_mod.ConfigError as e:
         logging.error("Konfigurationsfehler: %s", e)
         return 2
-    ctx = build_context(cfg, args.db)
-    logging.info("Bot @%s, Anbieter '%s', Familien-Gruppe %s",
-                 ctx.bot_username, cfg.provider, cfg.family_group_chat_id)
+    if ctx.onboarding is not None:
+        logging.info("Bot @%s — Onboarding-Modus: warte auf KI-Anbieter-Key (ONB-1).",
+                     ctx.bot_username)
+    else:
+        logging.info("Bot @%s, Anbieter '%s', Familien-Gruppe %s",
+                     ctx.bot_username, cfg.provider, ctx.family_group_chat_id)
     poll_loop(ctx)
     return 0
 

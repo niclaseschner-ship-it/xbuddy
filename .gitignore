@@ -32,6 +32,10 @@ router/config.json
 eltern-chat/config.json
 eltern-chat/*.db
 
+# Eltern-Chat: Onboarding-Speicher (ONB-5) — enthält den per Chat gesetzten
+# Anbieter-Key, niemals ins Repo.
+eltern-chat/onboarding-store.json
+
 # Familien-Registry: Per-Instanz-Datei + Profilfotos (FAM-6) — je Instanz
 # separat gepflegt, nicht im Repo. Format: familie/familie.example.json
 familie/familie.json
