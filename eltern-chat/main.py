@@ -68,7 +68,6 @@ class Context:
     catalog: object            # tasks.Catalog
     history: object            # history.History
     pending: object            # confirm.PendingStore
-    ca_pem_path: str = ""              # CAV-3: Pfad zum öffentlichen Root-CA-Zertifikat
     store: object = None               # onboarding_store.OnboardingStore — Persistenz der Familien-Gruppe (ONB-5, EC-18)
     family_group_locked: bool = False  # True ⇒ Familien-Gruppe per Env/Config gesetzt, Vorrang (ONB-6, EC-18)
     onboarding: object = None  # onboarding.OnboardingState — None ⇒ KI-Modus (ONB-1)
@@ -348,7 +347,6 @@ def build_context(cfg, db_path, store_path):
         pending=PendingStore(),
         store=OnboardingStore(store_path),
         family_group_locked=cfg.family_group_locked,
-        ca_pem_path=cfg.ca_pem_path,
     )
 
     if cfg.provider_api_key:

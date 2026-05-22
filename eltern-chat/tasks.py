@@ -126,6 +126,7 @@ def build_catalog(tg, ca_pem_path):
     (`tg`, `ca_pem_path`) reicht die Orchestrierung hier herein. Weitere
     Aufgaben werden additiv ergänzt (EC-8).
     """
+    # Lokaler Import: bricht den Import-Zyklus tasks <-> ca_task — nicht hochziehen.
     from ca_task import CaVerteilungTask
 
     catalog = Catalog()

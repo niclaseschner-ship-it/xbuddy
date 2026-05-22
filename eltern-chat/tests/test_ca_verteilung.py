@@ -53,8 +53,7 @@ def _ctx(tmp_path, tg, ca_pem_path, provider=None):
         context_depth=20,
         provider=provider if provider is not None else FakeProvider([]),
         catalog=build_catalog(tg, ca_pem_path),
-        history=History(str(tmp_path / "ca.db")), pending=PendingStore(),
-        ca_pem_path=ca_pem_path)
+        history=History(str(tmp_path / "ca.db")), pending=PendingStore())
 
 
 # ============================================================
