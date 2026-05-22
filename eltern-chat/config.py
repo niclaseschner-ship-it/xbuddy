@@ -21,6 +21,10 @@ DEFAULTS = {
     "provider":       "claude",     # KI-Anbieter (EC-11)
     "provider_model": "",           # leer → Anbieter-Default des Adapters
     "context_depth":  20,           # Gesprächskontext-Tiefe (EC-6)
+    # CAV-3: Pfad zum öffentlichen Root-CA-Zertifikat, das die CA-Verteilung
+    # ausliefert. Per-Instanz-Wert; Default = Standard-Ausgabe des CA-Werkzeugs
+    # (tools/ca/make-ca.sh, #36). Niemals der CA-Privatschlüssel.
+    "ca_pem_path":    "../tools/ca/out/rootCA.pem",
 }
 
 # Umgebungsvariablen-Namen.
@@ -31,6 +35,7 @@ ENV_OVERRIDES = {
     "provider":       "ELTERNCHAT_PROVIDER",
     "provider_model": "ELTERNCHAT_PROVIDER_MODEL",
     "context_depth":  "ELTERNCHAT_CONTEXT_DEPTH",
+    "ca_pem_path":    "ELTERNCHAT_CA_PEM_PATH",
 }
 
 
@@ -48,7 +53,8 @@ class Config:
     """
 
     def __init__(self, bot_token, provider_api_key, provider, provider_model,
-                 family_group_chat_id, family_group_locked, context_depth):
+                 family_group_chat_id, family_group_locked, context_depth,
+                 ca_pem_path):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
         self.provider = provider
@@ -56,6 +62,7 @@ class Config:
         self.family_group_chat_id = family_group_chat_id
         self.family_group_locked = family_group_locked
         self.context_depth = context_depth
+        self.ca_pem_path = ca_pem_path           # CAV-3: Pfad zum öffentlichen Root-CA-Zertifikat
 
 
 def _load_file(path):
@@ -126,4 +133,5 @@ def resolve(config_path, store_path=None, env=None):
         family_group_chat_id=family_group,
         family_group_locked=family_group_locked,
         context_depth=context_depth,
+        ca_pem_path=str(values["ca_pem_path"]).strip(),
     )

@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from model import GenerationResponse, TaskCallBlock          # noqa: E402
 from tasks import Proposal, ReadTask, WriteTask              # noqa: E402
-from telegram import ChatMigratedError, IncomingMessage      # noqa: E402
+from telegram import ChatMigratedError, IncomingMessage, TelegramError  # noqa: E402
 
 
 @dataclass
@@ -99,13 +99,16 @@ class FakeWriteTask(WriteTask):
 class FakeTelegram:
     """Kontrollierte Doppelung des Telegram-Kanals (EC-17)."""
 
-    def __init__(self, members=None, migrated=None):
+    def __init__(self, members=None, migrated=None, send_document_error=None):
         # members: dict user_id -> Telegram-getChatMember-Antwort
         self._members = dict(members or {})
         # migrated: dict alte_chat_id -> neue_chat_id. get_chat_member gegen
         # eine migrierte ID wirft ChatMigratedError (EC-18).
         self._migrated = dict(migrated or {})
+        # send_document_error: optionale TelegramError-Doppelung für CAV-Tests.
+        self._send_document_error = send_document_error
         self.sent = []
+        self.documents = []          # CAV-4: ausgelieferte Dokumente
         self._next_id = 5000
 
     def extract_message(self, update, bot_username):
@@ -133,6 +136,16 @@ class FakeTelegram:
         self.sent.append({"chat_id": chat_id, "text": text,
                           "reply_to": reply_to_message_id,
                           "message_id": self._next_id})
+        return {"message_id": self._next_id}
+
+    def send_document(self, chat_id, file_name, file_bytes, caption=None):
+        # CAV-4: Auslieferung eines Telegram-Dokuments über den Bot-Kanal.
+        if self._send_document_error is not None:
+            raise self._send_document_error
+        self._next_id += 1
+        self.documents.append({"chat_id": chat_id, "file_name": file_name,
+                               "file_bytes": file_bytes, "caption": caption,
+                               "message_id": self._next_id})
         return {"message_id": self._next_id}
 
 

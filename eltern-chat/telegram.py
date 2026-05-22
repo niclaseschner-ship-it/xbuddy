@@ -121,6 +121,64 @@ class TelegramClient:
             params["reply_to_message_id"] = reply_to_message_id
         return self._call("sendMessage", params)
 
+    def send_document(self, chat_id, file_name, file_bytes, caption=None):
+        """Sendet eine Datei als Telegram-Dokument (sendDocument).
+
+        Genutzt von der CA-Verteilung (CAV-4), um das öffentliche Root-CA-
+        Zertifikat als Datei auszuliefern. Liefert das gesendete Nachrichten-
+        Objekt. Anders als die JSON-Aufrufe braucht sendDocument einen
+        multipart/form-data-Upload — die Datei wird als Formularfeld
+        `document` mitgesendet.
+        """
+        fields = {"chat_id": str(chat_id)}
+        if caption is not None:
+            fields["caption"] = caption
+        return self._call_multipart(
+            "sendDocument", fields,
+            file_field="document", file_name=file_name, file_bytes=file_bytes)
+
+    def _call_multipart(self, method, fields, file_field, file_name, file_bytes):
+        """Ruft eine Bot-API-Methode mit multipart/form-data auf (Datei-Upload).
+
+        Eigener Pfad neben `_call`, weil ein Datei-Upload nicht als JSON-Body
+        geht. Fehlerbehandlung identisch zu `_call`.
+        """
+        boundary = "----xbuddy%d" % id(file_bytes)
+        body = self._encode_multipart(boundary, fields, file_field,
+                                      file_name, file_bytes)
+        url = "%s/%s" % (self._api, method)
+        req = urllib.request.Request(
+            url, data=body,
+            headers={"Content-Type": "multipart/form-data; boundary=%s" % boundary})
+        try:
+            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", "replace")
+            raise TelegramError("%s: HTTP %s %s" % (method, e.code, detail))
+        except (urllib.error.URLError, OSError, json.JSONDecodeError) as e:
+            raise TelegramError("%s: %s" % (method, e))
+        if not result.get("ok"):
+            raise TelegramError("%s: %s" % (method, result.get("description", "unbekannt")))
+        return result.get("result")
+
+    @staticmethod
+    def _encode_multipart(boundary, fields, file_field, file_name, file_bytes):
+        """Kodiert Formularfelder und eine Datei als multipart/form-data-Body."""
+        out = []
+        for name, value in fields.items():
+            out.append(("--%s\r\n" % boundary).encode("utf-8"))
+            out.append(('Content-Disposition: form-data; name="%s"\r\n\r\n'
+                        % name).encode("utf-8"))
+            out.append(("%s\r\n" % value).encode("utf-8"))
+        out.append(("--%s\r\n" % boundary).encode("utf-8"))
+        out.append(('Content-Disposition: form-data; name="%s"; filename="%s"\r\n'
+                    % (file_field, file_name)).encode("utf-8"))
+        out.append(b"Content-Type: application/octet-stream\r\n\r\n")
+        out.append(file_bytes)
+        out.append(("\r\n--%s--\r\n" % boundary).encode("utf-8"))
+        return b"".join(out)
+
     def get_chat_member(self, chat_id, user_id):
         """Liefert den Mitglieds-Status eines Nutzers in einem Chat (EC-2)."""
         return self._call("getChatMember", {"chat_id": chat_id, "user_id": user_id})
