@@ -71,6 +71,14 @@ ausdrücklich angesprochen wird (Erwähnung des Bots oder Antwort auf eine seine
 Nachrichten). Normale Familienkommunikation in der Gruppe löst keine Reaktion
 aus.
 
+Die Erwähnung wird unabhängig von Groß-/Kleinschreibung erkannt: Telegram-
+Usernames sind case-insensitiv — der Bot gilt also auch dann als angesprochen,
+wenn sein Name anders geschrieben wird als offiziell geführt. Damit Telegram
+dem Bot schlichte (nicht an ihn gerichtete) Gruppennachrichten überhaupt
+zustellt, müsste sein Privacy-Modus deaktiviert sein; für EC-5 ist das nicht
+nötig, da Erwähnungen und Antworten an den Bot ihn auch bei aktivem
+Privacy-Modus erreichen.
+
 *Tickets:* #27
 
 ### EC-6 — Gesprächskontext, über Neustart hinweg

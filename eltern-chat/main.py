@@ -83,9 +83,15 @@ def handle_update(update, ctx):
 
     # EC-5: In einer Gruppe reagiert das System nur, wenn es ausdrücklich
     # angesprochen wird. Im Privatchat bezieht sich jede Nachricht auf den Bot.
+    # Das Verwerfen wird protokolliert — sonst ist ein „Bot schweigt in der
+    # Gruppe" nicht von „Nachricht nie angekommen" zu unterscheiden.
     if msg.chat_type in ("group", "supergroup"):
         if not (msg.mentions_bot or msg.reply_to_from_bot):
+            logging.debug("Gruppe %s: Nachricht ohne Ansprache — ignoriert (EC-5)",
+                          msg.chat_id)
             return
+        logging.info("Gruppe %s: ausdrücklich angesprochen — Anfrage wird "
+                     "bearbeitet (EC-5)", msg.chat_id)
 
     # EC-2/EC-3: Berechtigung — Live-Mitgliedschaftsprüfung. Nicht-Mitglieder
     # werden ohne Antwort ignoriert. Dieses Gate liegt außerhalb des Agenten.
