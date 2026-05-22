@@ -46,6 +46,7 @@ def client_with_routing(tmp_path):
     routing_path = tmp_path / "routing.json"
     routing_path.write_text(json.dumps(DEMO_ROUTING))
     router_main.state = {}
+    router_main._subscribers.clear()
     router_main.load_routing(str(routing_path))
     router_main.app.testing = True
     return router_main.app.test_client()
@@ -222,7 +223,7 @@ def test_ROU_13_payload_is_object_not_string(client_with_routing):
 
 
 # ============================================================
-#  ROU-14 / ROU-20 — Debug + Display
+#  ROU-14 / ROU-20 — Debug + Display-Client
 # ============================================================
 
 def test_ROU_14_diag_serves_html(client_with_routing):
@@ -232,16 +233,103 @@ def test_ROU_14_diag_serves_html(client_with_routing):
     assert b'/api/v1/diag' in r.data
 
 
-def test_ROU_20_display_known_display_serves_html(client_with_routing):
+def test_ROU_20_display_serves_display_client(client_with_routing):
+    """ROU-20 / E-DC-3: /display/<id> liefert den Display-Client —
+    displib.js ist inline gezogen (eine same-origin-Antwort)."""
     r = client_with_routing.get('/display/default')
     assert r.status_code == 200
-    assert b'<iframe' in r.data
-    assert b'/api/v1/displays/' in r.data  # JS-Polling-Snippet drin
+    assert b'dispLib' in r.data
+    assert b'createClient' in r.data
 
 
-def test_ROU_20_display_unknown_display_404(client_with_routing):
+def test_ROU_20_display_serves_client_for_unknown_id(client_with_routing):
+    """ROU-20: der Client wird auch für eine unbekannte <id> ausgeliefert —
+    fehlerhafte Einrichtung wird am Gerät sichtbar (DC-8), nicht als 404."""
     r = client_with_routing.get('/display/nonexistent')
+    assert r.status_code == 200
+    assert b'createClient' in r.data
+
+
+# ============================================================
+#  ROU-22 — GET /api/v1/displays/<id>/events — Zustands-Stream
+# ============================================================
+
+def test_ROU_22_unknown_display_returns_404(client_with_routing):
+    r = client_with_routing.get('/api/v1/displays/nonexistent/events')
     assert r.status_code == 404
+    assert 'error' in r.get_json()
+
+
+def test_ROU_22_known_display_serves_event_stream(client_with_routing, monkeypatch):
+    """Bekannte id → 200 mit Content-Type text/event-stream. Der endlose
+    Stream wird für den HTTP-Test durch einen endlichen Generator ersetzt."""
+    monkeypatch.setattr(router_main, 'display_event_stream',
+                        lambda did: iter(['data: null\n\n']))
+    r = client_with_routing.get('/api/v1/displays/default/events')
+    assert r.status_code == 200
+    assert r.mimetype == 'text/event-stream'
+
+
+def test_ROU_22_stream_sends_current_state_on_connect(client_with_routing):
+    """Beim Verbinden liefert der Stream den aktuellen Zustand des Displays."""
+    post_event(client_with_routing, {
+        'source_id': 'phone:test-1', 'type': 'figure_detected',
+        'figure_id': 'rotes-a', 'angle': 0, 'bucket': 1,
+    })
+    gen = router_main.display_event_stream('default')
+    try:
+        first = next(gen)
+        assert first.startswith('data: ')
+        payload = json.loads(first[len('data: '):].strip())
+        assert payload['payload']['url'] == 'http://example.test/groß'
+    finally:
+        gen.close()
+
+
+def test_ROU_22_stream_sends_event_on_state_change(client_with_routing):
+    """Jede Zustandsänderung (ROU-11) erzeugt ein weiteres Stream-Ereignis."""
+    gen = router_main.display_event_stream('default')
+    try:
+        first = next(gen)                       # Verbinden: aktuell null
+        assert json.loads(first[len('data: '):].strip()) is None
+        post_event(client_with_routing, {       # Zustandsänderung
+            'source_id': 'phone:test-1', 'type': 'figure_detected',
+            'figure_id': 'rotes-a', 'angle': 0, 'bucket': 0,
+        })
+        second = next(gen)
+        payload = json.loads(second[len('data: '):].strip())
+        assert payload['payload']['url'] == 'http://example.test/klein'
+    finally:
+        gen.close()
+
+
+def test_ROU_22_stream_sends_null_on_session_end(client_with_routing):
+    """session_ended setzt den State auf null — der Stream meldet es."""
+    post_event(client_with_routing, {
+        'source_id': 'phone:test-1', 'type': 'figure_detected',
+        'figure_id': 'rotes-a', 'angle': 0, 'bucket': 0,
+    })
+    gen = router_main.display_event_stream('default')
+    try:
+        next(gen)                               # Verbinden: aktueller Zustand
+        post_event(client_with_routing, {
+            'source_id': 'phone:test-1', 'type': 'session_ended',
+            'figure_id': 'rotes-a', 'reason': 'user_button',
+        })
+        evt = next(gen)
+        assert json.loads(evt[len('data: '):].strip()) is None
+    finally:
+        gen.close()
+
+
+def test_ROU_22_stream_unsubscribes_after_close(client_with_routing):
+    """Nach dem Schließen hält der Router keinen Zustand über die Verbindung
+    hinaus — die Subscription ist wieder abgeräumt."""
+    gen = router_main.display_event_stream('default')
+    next(gen)
+    assert router_main._subscribers.get('default')
+    gen.close()
+    assert not router_main._subscribers.get('default')
 
 
 # ============================================================

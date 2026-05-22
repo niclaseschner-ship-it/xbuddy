@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>XBuddy Display</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  /* DC-5 — Ruhe-Zustand: vollständig schwarze Fläche. Body-Hintergrund ist
+     der schwärzeste Wert; im Ruhe-Zustand verdeckt nichts ihn. */
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%;
+    background: #000000; overflow: hidden; }
+
+  /* Inhalt läuft im iframe: ein Wechsel tauscht iframe.src, der Client
+     selbst navigiert sich nie weg (E-DC-2 / DC-2). */
+  #content { position: fixed; inset: 0; width: 100%; height: 100%;
+    border: 0; background: #000000; }
+  #content[hidden] { display: none; }
+
+  /* DC-8 — Einrichtungs-Hinweis: lesbar, nicht der schwarze Ruhe-Zustand,
+     keine kaputte Seite. Richtet sich an die Person, die das Display
+     einrichtet. */
+  #setup { position: fixed; inset: 0; display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 0.7em; box-sizing: border-box; padding: 8vh 8vw;
+    background: #1b2330; color: #e8eef7; text-align: center;
+    font-family: system-ui, -apple-system, sans-serif; }
+  #setup.show { display: flex; }
+  #setup h1 { margin: 0; font-weight: 600; font-size: clamp(20px, 4vw, 40px); }
+  #setup p { margin: 0; max-width: 32em; line-height: 1.5;
+    color: #aab8cc; font-size: clamp(14px, 2.4vw, 22px); }
+</style>
+</head>
+<body>
+  <iframe id="content" hidden></iframe>
+  <div id="setup">
+    <h1>Dieses Anzeigegerät ist noch nicht eingerichtet</h1>
+    <p id="setup-msg"></p>
+  </div>
+
+  <script src="displib.js"></script>
+  <script>
+    (function () {
+      'use strict';
+      var iframe   = document.getElementById('content');
+      var setup    = document.getElementById('setup');
+      var setupMsg = document.getElementById('setup-msg');
+
+      // View — die DOM-Seite des Clients. dispLib ruft genau diese drei
+      // Methoden; getestet wird die Logik gegen eine Doppelung (DC-10).
+      var view = {
+        // DC-3 / DC-4 — gerouteten Inhalt zeigen, innerhalb des Clients.
+        showContent: function (url) {
+          setup.classList.remove('show');
+          if (iframe.getAttribute('src') !== url) iframe.src = url;
+          iframe.hidden = false;
+        },
+        // DC-5 — schwarzer Ruhe-Zustand.
+        showIdle: function () {
+          setup.classList.remove('show');
+          iframe.hidden = true;
+          iframe.removeAttribute('src');
+        },
+        // DC-8 — Einrichtungs-Hinweis, nennt die display_id soweit vorhanden.
+        showSetup: function (displayId) {
+          iframe.hidden = true;
+          setupMsg.textContent = displayId
+            ? 'Der Router kennt die Display-Kennung „' + displayId + '“ nicht. '
+              + 'Prüfe die Einstiegs-URL des Geräts oder lege das Display im Router an.'
+            : 'Diesem Gerät ist keine Display-Kennung zugeordnet. '
+              + 'Richte den Browser dauerhaft auf eine /display/<id>-URL.';
+          setup.classList.add('show');
+        }
+      };
+
+      // DC-9 — keine Konfiguration: die Identität ergibt sich aus der URL,
+      // die Router-Herkunft aus derselben Origin, das Reconnect-Verhalten
+      // aus dem SSE-Standard.
+      dispLib.createClient({
+        pathname: location.pathname,
+        view: view,
+        EventSourceImpl: window.EventSource
+      });
+    })();
+  </script>
+</body>
+</html>
