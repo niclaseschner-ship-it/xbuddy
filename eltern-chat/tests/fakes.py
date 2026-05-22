@@ -62,9 +62,11 @@ class FakeReadTask(ReadTask):
                          {"type": "object", "properties": {}})
         self._result = result
         self.run_calls = []
+        self.turn_contexts = []
 
-    def run(self, arguments):
+    def run(self, arguments, turn_context):
         self.run_calls.append(arguments)
+        self.turn_contexts.append(turn_context)
         if isinstance(self._result, Exception):
             raise self._result
         return self._result
@@ -82,15 +84,18 @@ class FakeWriteTask(WriteTask):
         self._propose_error = propose_error
         self.propose_calls = []
         self.execute_calls = []
+        self.turn_contexts = []
 
-    def propose(self, arguments):
+    def propose(self, arguments, turn_context):
         self.propose_calls.append(arguments)
+        self.turn_contexts.append(turn_context)
         if self._propose_error is not None:
             raise self._propose_error
         return Proposal(self._summary)
 
-    def execute(self, arguments):
+    def execute(self, arguments, turn_context):
         self.execute_calls.append(arguments)
+        self.turn_contexts.append(turn_context)
         if isinstance(self._result, Exception):
             raise self._result
         return self._result

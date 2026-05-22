@@ -12,8 +12,8 @@ ihren Aufrufer nicht (E-CAV-1).
 
 **V1-Scope:** die CA-Verteilung als trigger-agnostische Funktion · Auslieferung
 des öffentlichen Root-CA-Zertifikats über den Eltern-Chat-Bot · OS-spezifische
-Installations-Anleitung · ein direkter Aufruf-Weg, solange der
-Geräte-Onboarding-Flow noch fehlt.
+Installations-Anleitung · der Trigger als Eltern-Chat-Aufgabe (EC-8), solange
+der Geräte-Onboarding-Flow noch fehlt.
 
 **Out-of-Scope V1** (je eigenes Ticket): der Geräte-Onboarding-Flow selbst
 (OPEN-CAV-A) · die Erzeugung der CA (Ticket #36) · automatische/Push-Installation
@@ -28,8 +28,8 @@ Die CA-Verteilung ist eine klar abgegrenzte, **aufrufbare Funktion**. Aufgerufen
 stellt sie einem Familienmitglied das öffentliche Root-CA-Zertifikat und die zu
 seinem Gerät passende Installations-Anleitung über den Eltern-Chat bereit. Die
 Funktion ist **trigger-agnostisch**: wer sie aufruft — ein Geräte-Onboarding-Flow
-(CAV-6) oder ein direkter Aufruf — ist nicht Teil ihres Vertrags. Das ist das
-XBuddy-Funktions-Muster (E-CAV-1).
+oder eine Eltern-Chat-Aufgabe (CAV-6) — ist nicht Teil ihres Vertrags. Das ist
+das XBuddy-Funktions-Muster (E-CAV-1).
 
 *Tickets:* #39
 
@@ -69,16 +69,21 @@ hart-codiert und braucht keinen KI-Anbieter.
 
 ## 3. Aufruf
 
-### CAV-6 — Aufruf durch den Onboarding-Flow; direkter Aufruf in V1
+### CAV-6 — Aufruf durch den Onboarding-Flow; Eltern-Chat-Aufgabe in V1
 Die CA-Verteilung wird vom Geräte-Onboarding-Flow aufgerufen, wenn ein Gerät der
 Familie eingerichtet wird. Solange dieser Flow noch nicht spezifiziert ist
-(OPEN-CAV-A), stellt V1 zusätzlich einen **direkten Aufruf-Weg** bereit — einen
-Chat-Befehl an den Bot —, damit die Funktion eigenständig nutzbar und testbar
-ist und ein bereits eingerichtetes Setup ein weiteres Gerät nachrüsten kann.
-Beide sind nur Aufrufer derselben Funktion (CAV-1); der Funktions-Vertrag
-ändert sich dadurch nicht.
+(OPEN-CAV-A), ist der Trigger in V1 eine **Aufgabe im Aufgaben-Katalog des
+Eltern-Chats** (`eltern-chat.md` EC-8): versteht der Agent die
+natürlichsprachige Bitte eines Familienmitglieds („schick mir das Zertifikat"),
+ruft er die Funktion auf — ohne dass die Familie einen Tippbefehl lernen muss.
+Es ist eine **lesende** Aufgabe (EC-9): die Funktion verändert keine
+Familien-Daten, daher kein Bestätigungs-Gate. Die Berechtigung läuft über die
+reguläre Eltern-Chat-Ansprache- und Mitgliedschaftsprüfung (EC-2, EC-5). So ist
+die Funktion eigenständig nutzbar und testbar und ein bereits eingerichtetes
+Setup kann ein weiteres Gerät nachrüsten. Aufgabe wie Onboarding-Flow sind nur
+Aufrufer derselben Funktion (CAV-1); der Funktions-Vertrag ändert sich nicht.
 
-*Tickets:* #39
+*Tickets:* #39, #63
 
 ## 4. Tests
 
@@ -98,7 +103,7 @@ ersetzt (analog `eltern-chat-onboarding.md` ONB-9).
   Geräte-Onboarding ausdrücklich aus, der Display-Client (#30/#35) ist in
   Arbeit. Der Flow bekommt eine eigene Spec und ein eigenes Ticket; die
   CA-Verteilung ist seine Voraussetzung, nicht sein Bestandteil. Bis dahin
-  greift der direkte Aufruf-Weg (CAV-6).
+  ist die Eltern-Chat-Aufgabe der Trigger (CAV-6).
 
 - **OPEN-CAV-B — Kiosk-Displays.** Ein BuddyBoard-Kiosk-Display hat keinen
   Telegram-Nutzer davor. Wie sein CA-Trust provisioniert wird (durch die
@@ -144,3 +149,21 @@ Konfigurationsprofile, ein tiefer Eingriff ins Gerät und zu schwer für eine
 Familie. (2) Eine eigene Verteil-Infrastruktur (E-Mail, QR-Code-Seite): der
 Eltern-Chat ist der bereits etablierte, berechtigungsgeprüfte Draht zur Familie
 — ein zweiter Kanal wäre Mehrgewicht ohne belegten Bedarf.
+
+### E-CAV-3 — Trigger der V1-Verteilung: eine Eltern-Chat-Aufgabe
+*Datum:* 2026-05-22
+
+Solange der Geräte-Onboarding-Flow fehlt (OPEN-CAV-A), ist der V1-Trigger der
+CA-Verteilung eine Aufgabe im Aufgaben-Katalog des Eltern-Chats (EC-8). Die
+Familie bittet natürlichsprachig um das Zertifikat; der Agent ruft die Funktion
+auf. Das passt zum konversationellen Bot — niemand muss einen Befehl lernen —
+und nutzt die ohnehin vorhandenen Eltern-Chat-Gates (Ansprache EC-5,
+Mitgliedschaft EC-2).
+
+**Verworfen:** ein Slash-Befehl `/ca` an den Bot (die ursprüngliche
+V1-Fassung dieser Spec). Ein konversationeller LLM-Agent sollte keine
+Tippbefehle verlangen; ein Befehl wäre eine zweite, parallele Auslöse-Logik
+neben dem Agent-Weg. Zudem griff die Befehls-Erkennung in der Familien-Gruppe
+nur am Satzanfang — eine bloße @-Erwähnung des Bots löste ihn nicht aus. Der
+Aufgaben-Weg läuft über die reguläre Ansprache-Logik und kennt dieses Problem
+nicht. Der Spec-Miss in der ursprünglichen CAV-6 ist eingeräumt (#63).

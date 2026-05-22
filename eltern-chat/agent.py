@@ -54,13 +54,17 @@ class AgentResult:
     pending_call: object = None    # model.TaskCallBlock | None
 
 
-def run_turn(history_messages, user_message, provider, catalog,
+def run_turn(history_messages, user_message, provider, catalog, turn_context,
              max_iterations=MAX_ITERATIONS):
     """Petrarbeitet eine Anfrage und liefert ein `AgentResult`.
 
     `history_messages` ist der geladene Gesprächskontext (EC-6), `user_message`
     die neue Anfrage. `provider` erfüllt `generate(GenerationRequest)`, `catalog`
     ist der Aufgaben-Katalog.
+
+    `turn_context` (`tasks.TurnContext`) ist der deterministische
+    Ausführungs-Kontext. Der Loop reicht ihn UNVERÄNDERT an die Aufgaben durch
+    (`run`/`propose`); das Modell sieht ihn nie — sein Kanal bleibt `arguments`.
 
     Wirft `model.ProviderError` weiter, wenn der Anbieter scheitert (EC-14) —
     die Behandlung liegt bei der Orchestrierung.
@@ -103,7 +107,7 @@ def run_turn(history_messages, user_message, provider, catalog,
             # Bestätigung, außerhalb dieses Moduls (E-EC-4).
             if task.kind == WRITE:
                 try:
-                    proposal = task.propose(call.arguments)
+                    proposal = task.propose(call.arguments, turn_context)
                 except Exception as e:  # noqa: BLE001 — Aufgabe isoliert melden
                     result_blocks.append(TaskResultBlock(
                         call_id=call.call_id,
@@ -113,7 +117,7 @@ def run_turn(history_messages, user_message, provider, catalog,
 
             # EC-9: lesende Aufgabe — direkt ausführen, Ergebnis zurückspeisen.
             try:
-                content = task.run(call.arguments)
+                content = task.run(call.arguments, turn_context)
             except Exception as e:  # noqa: BLE001 — Aufgabe isoliert melden
                 result_blocks.append(TaskResultBlock(
                     call_id=call.call_id,
