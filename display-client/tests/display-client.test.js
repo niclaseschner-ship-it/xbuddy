@@ -57,8 +57,8 @@ function spyView() {
 function setup(pathname) {
   FakeEventSource.instances = [];
   const view = spyView();
-  const client = disp.createClient({ pathname, view, EventSourceImpl: FakeEventSource });
-  return { view, client, es: FakeEventSource.instances[0] };
+  disp.createClient({ pathname, view, EventSourceImpl: FakeEventSource });
+  return { view, es: FakeEventSource.instances[0] };
 }
 
 // Display-States im ROU-10-Format.
@@ -187,9 +187,8 @@ test('DC-8 — unbekannte display_id (Stream-404) zeigt den Einrichtungs-Hinweis
 });
 
 test('DC-8 — fehlende display_id zeigt den Hinweis und öffnet keinen Stream', () => {
-  const { view, client } = setup('/display/');
+  const { view } = setup('/display/');
   assert.deepEqual(view.calls, [['setup', null]]);
-  assert.equal(client.source, null);
   assert.equal(FakeEventSource.instances.length, 0);
 });
 

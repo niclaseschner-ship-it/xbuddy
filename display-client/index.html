@@ -49,9 +49,10 @@
       // Methoden; getestet wird die Logik gegen eine Doppelung (DC-10).
       var view = {
         // DC-3 / DC-4 — gerouteten Inhalt zeigen, innerhalb des Clients.
+        // dispLib ruft das nur bei echtem Wechsel (Dedup liegt dort).
         showContent: function (url) {
           setup.classList.remove('show');
-          if (iframe.getAttribute('src') !== url) iframe.src = url;
+          iframe.src = url;
           iframe.hidden = false;
         },
         // DC-5 — schwarzer Ruhe-Zustand.

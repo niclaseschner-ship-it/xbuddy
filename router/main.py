@@ -312,7 +312,6 @@ def display_events(display_id):
     resp = app.response_class(display_event_stream(display_id),
                               mimetype='text/event-stream')
     resp.headers['Cache-Control'] = 'no-cache'
-    resp.headers['X-Accel-Buffering'] = 'no'   # kein Proxy-Buffering des Streams
     return resp
 
 

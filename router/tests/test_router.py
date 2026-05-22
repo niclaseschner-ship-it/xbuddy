@@ -234,12 +234,13 @@ def test_ROU_14_diag_serves_html(client_with_routing):
 
 
 def test_ROU_20_display_serves_display_client(client_with_routing):
-    """ROU-20 / E-DC-3: /display/<id> liefert den Display-Client —
-    displib.js ist inline gezogen (eine same-origin-Antwort)."""
+    """ROU-20 / E-DC-3: /display/<id> liefert den Display-Client mit
+    inline gezogenem displib.js (eine same-origin-Antwort)."""
     r = client_with_routing.get('/display/default')
     assert r.status_code == 200
-    assert b'dispLib' in r.data
-    assert b'createClient' in r.data
+    assert b'createClient' in r.data                   # index.html-Bootstrap
+    assert b'function parseDisplayId' in r.data         # displib.js inline gezogen
+    assert b'<script src="displib.js">' not in r.data   # Tag wurde ersetzt
 
 
 def test_ROU_20_display_serves_client_for_unknown_id(client_with_routing):

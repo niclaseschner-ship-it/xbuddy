@@ -51,32 +51,27 @@
     // der Einrichtungs-Hinweis.
     if (!displayId) {
       view.showSetup(null);
-      return { displayId: null, source: null };
+      return;
     }
 
-    // Zuletzt gezeigte Inhalts-URL — ein unveränderter Zustand löst damit
-    // keinen erneuten Wechsel aus (kein Reload, DC-2).
-    var lastUrl = null;
+    // Zuletzt an die View übergebener Zustand: Inhalts-URL oder null
+    // (Ruhe-Zustand); undefined, solange noch nichts kam. Ein unveränderter
+    // Zustand löst keinen erneuten Wechsel aus — kein Reload (DC-2).
+    var current;
 
     var source = new EventSourceImpl(streamUrl(displayId));
 
-    // DC-3 / DC-4 — der Zustand beim Verbinden und jede folgende Änderung
-    // kommen als SSE-Nachricht. Der Inhalt wird innerhalb des laufenden
-    // Clients gewechselt (DC-2) — der Client lädt sich dafür nicht neu.
+    // DC-3 / DC-4 / DC-5 — der Zustand beim Verbinden und jede folgende
+    // Änderung kommen als SSE-Nachricht. Der Inhalt wird innerhalb des
+    // laufenden Clients gewechselt (DC-2) — der Client lädt sich nicht neu.
     source.onmessage = function (ev) {
       var stateObj;
       try { stateObj = JSON.parse(ev.data); } catch (e) { return; }
-      var url = contentUrl(stateObj);
-      if (url) {
-        if (url !== lastUrl) {
-          lastUrl = url;
-          view.showContent(url);
-        }
-      } else {
-        // DC-5 — kein Inhalt zugeordnet (State null): schwarzer Ruhe-Zustand.
-        lastUrl = null;
-        view.showIdle();
-      }
+      var next = contentUrl(stateObj);   // Inhalts-URL oder null (Ruhe-Zustand)
+      if (next === current) return;      // unveränderter Zustand: kein Reload
+      current = next;
+      if (next) view.showContent(next);
+      else view.showIdle();              // DC-5 — schwarzer Ruhe-Zustand
     };
 
     // onerror — zwei Fälle, am readyState unterschieden:
@@ -91,14 +86,12 @@
       // selbsttätig wieder (DC-7, SSE-Standard). DC-6: der zuletzt gezeigte
       // Inhalt bleibt stehen — also nichts tun.
     };
-
-    return { displayId: displayId, source: source };
   }
 
+  // contentUrl bleibt intern — nur createClient nutzt es.
   return {
     parseDisplayId: parseDisplayId,
     streamUrl: streamUrl,
-    contentUrl: contentUrl,
     createClient: createClient,
   };
 });
