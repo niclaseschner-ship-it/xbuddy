@@ -51,6 +51,14 @@ def test_EC_5_explicit_mention_is_detected():
     assert msg.mentions_bot is True
 
 
+def test_EC_5_mention_is_case_insensitive():
+    """Telegram-Usernames sind case-insensitiv — @MyBot spricht mybot an."""
+    update = _update(text="@MyBot hallo",
+                     entities=[{"type": "mention", "offset": 0, "length": 6}])
+    msg = _tg().extract_message(update, "mybot")
+    assert msg.mentions_bot is True
+
+
 def test_EC_5_mention_of_other_user_is_not_bot_mention():
     update = _update(text="@jemandanders hallo",
                      entities=[{"type": "mention", "offset": 0, "length": 13}])
