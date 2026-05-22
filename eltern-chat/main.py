@@ -42,7 +42,7 @@ from onboarding import OnboardingState
 from onboarding_store import OnboardingStore
 from providers import get_provider
 from tasks import build_catalog
-from telegram import TelegramClient, TelegramError
+from telegram import ChatMigratedError, TelegramClient, TelegramError
 
 
 # Klartext-Antworten.
@@ -68,6 +68,8 @@ class Context:
     catalog: object            # tasks.Catalog
     history: object            # history.History
     pending: object            # confirm.PendingStore
+    store: object = None               # onboarding_store.OnboardingStore — Persistenz der Familien-Gruppe (ONB-5, EC-18)
+    family_group_locked: bool = False  # True ⇒ Familien-Gruppe per Env/Config gesetzt, Vorrang (ONB-6, EC-18)
     onboarding: object = None  # onboarding.OnboardingState — None ⇒ KI-Modus (ONB-1)
 
 
@@ -95,7 +97,17 @@ def handle_update(update, ctx):
 
     # EC-2/EC-3: Berechtigung — Live-Mitgliedschaftsprüfung. Nicht-Mitglieder
     # werden ohne Antwort ignoriert. Dieses Gate liegt außerhalb des Agenten.
-    if not authz.is_authorized(ctx.tg, ctx.family_group_chat_id, msg.from_user_id):
+    try:
+        authorized = authz.is_authorized(ctx.tg, ctx.family_group_chat_id,
+                                         msg.from_user_id)
+    except ChatMigratedError as e:
+        # EC-18 (Weg 2): die Familien-Gruppe ist zu einer Supergruppe migriert.
+        # Bindung nachziehen und die Berechtigung gegen die neue ID erneut
+        # prüfen — die Nachricht nicht fälschlich als unberechtigt verwerfen.
+        rebind_family_group(ctx, e.new_chat_id)
+        authorized = authz.is_authorized(ctx.tg, ctx.family_group_chat_id,
+                                         msg.from_user_id)
+    if not authorized:
         logging.info("Nachricht von nicht-berechtigtem Absender %s ignoriert",
                      msg.from_user_id)
         return
@@ -195,9 +207,57 @@ def _send(ctx, chat_id, text, reply_to_message_id=None):
 #  Polling-Loop
 # ============================================================
 
+def rebind_family_group(ctx, new_chat_id):
+    """EC-18: zieht die Bindung der Familien-Gruppe auf eine neue Chat-ID nach
+    (Supergruppen-Migration) und persistiert sie (ONB-5).
+
+    Ist die Gruppe per Env/Config fest gebunden, bleibt der gesetzte Wert
+    unangetastet — nur eine Warnung wird protokolliert (Vorrang analog ONB-6).
+    """
+    new_chat_id = str(new_chat_id)
+    if str(ctx.family_group_chat_id) == new_chat_id:
+        return
+    if ctx.family_group_locked:
+        logging.warning(
+            "Familien-Gruppe zu %s migriert, ist aber per Env/Config fest "
+            "gebunden (%s) — bitte dort manuell nachziehen (EC-18)",
+            new_chat_id, ctx.family_group_chat_id)
+        return
+    old = ctx.family_group_chat_id
+    ctx.family_group_chat_id = new_chat_id
+    if ctx.store is not None:
+        ctx.store.save(family_group_chat_id=new_chat_id)
+    logging.info("Familien-Gruppe migriert: %s → %s — Bindung nachgezogen (EC-18)",
+                 old, new_chat_id)
+
+
+def _apply_migration(ctx, old_chat_id, new_chat_id):
+    """EC-18: behandelt eine gemeldete Gruppen-Migration. Betrifft sie die
+    gebundene Familien-Gruppe (KI-Modus) oder die Onboarding-Gruppe
+    (Onboarding-Modus), wird die jeweilige Bindung nachgezogen."""
+    old_chat_id = str(old_chat_id)
+    if ctx.onboarding is not None:
+        st = ctx.onboarding
+        if st.pending_group_chat_id is not None and \
+                str(st.pending_group_chat_id) == old_chat_id:
+            st.pending_group_chat_id = new_chat_id
+            logging.info("Onboarding-Gruppe migriert: %s → %s (EC-18)",
+                         old_chat_id, new_chat_id)
+        return
+    if str(ctx.family_group_chat_id) == old_chat_id:
+        rebind_family_group(ctx, new_chat_id)
+
+
 def dispatch(update, ctx):
     """Reicht ein Update an den passenden Handler: den Onboarding-Flow (ONB-1),
-    solange kein Anbieter-Key vorliegt — sonst die reguläre Orchestrierung."""
+    solange kein Anbieter-Key vorliegt — sonst die reguläre Orchestrierung.
+
+    Eine gemeldete Supergruppen-Migration (EC-18) wird vorab abgefangen — sie
+    betrifft die Gruppen-Bindung in beiden Modi."""
+    migration = ctx.tg.extract_migration(update)
+    if migration is not None:
+        _apply_migration(ctx, migration[0], migration[1])
+        return
     if ctx.onboarding is not None:
         onboarding.handle_update(update, ctx)
     else:
@@ -240,6 +300,27 @@ def parse_args(argv):
     return p.parse_args(argv)
 
 
+def _check_group_reception(tg, family_group_chat_id, me):
+    """EC-19: warnt beim Start, wenn der Bot die Nachrichten der Familien-Gruppe
+    nicht empfangen kann — er ist dort weder Administrator, noch ist sein
+    Telegram-Privacy-Modus deaktiviert. Dann stellt Telegram ihm nur Kommandos
+    und Antworten zu, keine bloße Erwähnung (vgl. EC-5)."""
+    if me.get("can_read_all_group_messages"):
+        return  # Privacy-Modus deaktiviert — der Bot empfängt alle Nachrichten.
+    try:
+        member = tg.get_chat_member(family_group_chat_id, me.get("id"))
+    except TelegramError as e:
+        logging.warning("EC-19: Empfangs-Voraussetzung nicht prüfbar: %s", e)
+        return
+    status = member.get("status") if isinstance(member, dict) else None
+    if status not in ("administrator", "creator"):
+        logging.warning(
+            "EC-19: Der Bot ist in der Familien-Gruppe %s weder Administrator, "
+            "noch ist sein Privacy-Modus deaktiviert — eine bloße Erwähnung "
+            "erreicht ihn dort nicht. Bot zum Admin der Gruppe machen.",
+            family_group_chat_id)
+
+
 def build_context(cfg, db_path, store_path):
     """Verdrahtet aus der Konfiguration einen lauffähigen Context.
 
@@ -247,17 +328,19 @@ def build_context(cfg, db_path, store_path):
     (ONB-1): `provider` bleibt None, `onboarding` trägt den Onboarding-Zustand.
     """
     tg = TelegramClient(cfg.bot_token)
-    bot_username = tg.get_me().get("username", "")
+    me = tg.get_me()
 
     ctx = Context(
         tg=tg,
-        bot_username=bot_username,
+        bot_username=me.get("username", ""),
         family_group_chat_id=cfg.family_group_chat_id,
         context_depth=cfg.context_depth,
         provider=None,
         catalog=build_catalog(),
         history=History(db_path),
         pending=PendingStore(),
+        store=OnboardingStore(store_path),
+        family_group_locked=cfg.family_group_locked,
     )
 
     if cfg.provider_api_key:
@@ -268,13 +351,13 @@ def build_context(cfg, db_path, store_path):
                 "Onboarding unvollständig?")
         ctx.provider = get_provider(cfg.provider, cfg.provider_api_key,
                                     cfg.provider_model)
+        # EC-19: kann der Bot die Nachrichten der Familien-Gruppe empfangen?
+        _check_group_reception(tg, cfg.family_group_chat_id, me)
     else:
         # Onboarding-Modus (ONB-1) — der Bot richtet sich per Chat selbst ein.
         ctx.onboarding = OnboardingState(
             provider_name=cfg.provider,
-            provider_model=cfg.provider_model,
-            store=OnboardingStore(store_path),
-            family_group_locked=cfg.family_group_locked)
+            provider_model=cfg.provider_model)
     return ctx
 
 

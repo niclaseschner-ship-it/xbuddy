@@ -61,7 +61,8 @@ dauerhaft; die alte ID ist danach ungültig. Wird die in EC-2 gebundene
 Familien-Gruppe so migriert, zieht die Instanz die Bindung selbsttätig nach:
 Sie übernimmt die neue Supergruppen-ID, speichert sie persistent (ONB-5) und
 bedient die Gruppe ohne Unterbrechung weiter — ohne Neustart und ohne
-manuellen Eingriff.
+manuellen Eingriff. Wird bereits die Onboarding-Gruppe vor dem Abschluss
+migriert, gilt dasselbe — gebunden wird dann die nachgezogene ID (ONB-6).
 
 Telegram meldet die Migration auf zwei Wegen, die das System beide auswertet:
 (1) eine Dienst-Nachricht in der bisherigen Gruppe trägt die neue ID; (2) ein

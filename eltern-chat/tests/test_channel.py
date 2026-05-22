@@ -91,3 +91,34 @@ def test_plain_message_has_no_addressing_flags():
     msg = _tg().extract_message(_update(text="essen ist fertig"), "mybot")
     assert msg.mentions_bot is False
     assert msg.reply_to_from_bot is False
+
+
+# -- EC-18: Supergruppen-Migration aus einem Update lesen --------
+
+def test_EC_18_extract_migration_to_supergroup():
+    """Dienst-Nachricht in der bisherigen Gruppe trägt die neue Supergruppen-ID."""
+    msg = _tg().extract_migration(_update(migrate_to_chat_id=-1009999))
+    assert msg == (42, -1009999)
+
+
+def test_EC_18_extract_migration_from_in_new_supergroup():
+    """Dienst-Nachricht in der neuen Supergruppe trägt die alte ID."""
+    assert _tg().extract_migration(_update(migrate_from_chat_id=-555)) == (-555, 42)
+
+
+def test_EC_18_extract_migration_none_for_normal_update():
+    assert _tg().extract_migration(_update(text="hallo")) is None
+    assert _tg().extract_migration({"update_id": 1}) is None
+
+
+def test_EC_18_migrated_to_reads_new_id_from_error_body():
+    """Aus dem 400-Fehler-Body wird die neue Chat-ID gelesen."""
+    body = ('{"ok":false,"error_code":400,"description":"Bad Request: group '
+            'chat was upgraded to a supergroup chat",'
+            '"parameters":{"migrate_to_chat_id":-1009999}}')
+    assert TelegramClient._migrated_to(body) == -1009999
+
+
+def test_EC_18_migrated_to_none_for_unrelated_error():
+    assert TelegramClient._migrated_to('{"ok":false,"description":"x"}') is None
+    assert TelegramClient._migrated_to("kein json") is None

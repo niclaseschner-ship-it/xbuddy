@@ -18,14 +18,12 @@ _KEY = "sk-ant-api03-0123456789abcdefABCDEFxyz"
 
 def _ctx(tmp_path, tg, family_group="", locked=False):
     """Baut einen Context im Onboarding-Modus (provider=None, onboarding gesetzt)."""
-    state = OnboardingState(
-        provider_name="claude", provider_model="",
-        store=OnboardingStore(str(tmp_path / "store.json")),
-        family_group_locked=locked)
+    state = OnboardingState(provider_name="claude", provider_model="")
     return Context(
         tg=tg, bot_username="mybot", family_group_chat_id=family_group,
         context_depth=20, provider=None, catalog=None, history=None,
-        pending=None, onboarding=state)
+        pending=None, store=OnboardingStore(str(tmp_path / "store.json")),
+        family_group_locked=locked, onboarding=state)
 
 
 def _provider_ok(monkeypatch):
@@ -134,7 +132,7 @@ def test_ONB_4_invalid_key_reported_stays_in_onboarding(tmp_path, monkeypatch):
     tg = FakeTelegram(members={7: {"status": "member"}})
     ctx = _ctx(tmp_path, tg)
     ctx.onboarding.pending_group_chat_id = -100
-    store = ctx.onboarding.store
+    store = ctx.store
     dispatch(make_message(_KEY, chat_type="private", from_user_id=7), ctx)
     assert tg.sent[-1]["text"] == KEY_INVALID
     assert ctx.onboarding is not None        # bleibt im Onboarding-Modus
@@ -148,7 +146,7 @@ def test_ONB_567_valid_key_completes_onboarding(tmp_path, monkeypatch):
     validated = _provider_ok(monkeypatch)
     tg = FakeTelegram(members={7: {"status": "member"}})
     ctx = _ctx(tmp_path, tg)
-    store = ctx.onboarding.store
+    store = ctx.store
     ctx.onboarding.pending_group_chat_id = -100
     dispatch(make_message(_KEY, chat_type="private",
                           from_user_id=7, chat_id=555), ctx)
@@ -173,7 +171,7 @@ def test_ONB_6_locked_family_group_is_not_rebound(tmp_path, monkeypatch):
     _provider_ok(monkeypatch)
     tg = FakeTelegram(members={7: {"status": "member"}})
     ctx = _ctx(tmp_path, tg, family_group="-999", locked=True)
-    store = ctx.onboarding.store
+    store = ctx.store
     ctx.onboarding.pending_group_chat_id = -100
     dispatch(make_message(_KEY, chat_type="private", from_user_id=7), ctx)
     assert ctx.family_group_chat_id == "-999"            # gesperrte Gruppe bleibt
