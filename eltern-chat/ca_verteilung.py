@@ -5,11 +5,11 @@ E-CAV-1): Aufgerufen, liefert sie einem Familienmitglied das öffentliche
 Root-CA-Zertifikat als Telegram-Dokument plus eine OS-spezifische
 Installations-Anleitung über den Eltern-Chat-Bot aus.
 
-Die Funktion kennt ihren Aufrufer NICHT. Wer sie aufruft — der direkte
-Chat-Befehl aus CAV-6 (main.py) oder ein künftiger Geräte-Onboarding-Flow
-(OPEN-CAV-A) — ist nicht Teil ihres Vertrags. Sie nimmt nur die für die
-Auslieferung nötigen Dinge entgegen: den Kanal, den Zielchat, den Pfad zum
-Zertifikat.
+Die Funktion kennt ihren Aufrufer NICHT. Wer sie aufruft — die
+Eltern-Chat-Aufgabe aus CAV-6 (ca_task.py) oder ein künftiger
+Geräte-Onboarding-Flow (OPEN-CAV-A) — ist nicht Teil ihres Vertrags. Sie nimmt
+nur die für die Auslieferung nötigen Dinge entgegen: den Kanal, den Zielchat,
+den Pfad zum Zertifikat.
 
 Die Berechtigungsprüfung (CAV-4, analog EC-2) liegt — wie bei agent.py — beim
 Aufrufer/der Orchestrierung, nicht in dieser Funktion. So bleibt die Funktion

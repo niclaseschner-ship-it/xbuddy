@@ -154,9 +154,12 @@ bestehende Katalog bleibt unberührt.
 
 ### EC-9 — Lesende Aufgaben laufen direkt
 Eine Aufgabe, die nur Information liefert und keine Familien-Daten verändert,
-führt das System ohne Zwischenschritt aus und antwortet mit dem Ergebnis.
+führt das System ohne Zwischenschritt aus und antwortet mit dem Ergebnis. Eine
+solche Aufgabe darf ihr Ergebnis auch selbst über den Bot-Kanal ausliefern
+(z. B. als Datei) und nur eine kurze Quittung zurückgeben (Beispiel:
+`ca-verteilung.md` CAV-6).
 
-*Tickets:* #27
+*Tickets:* #27, #63
 
 ### EC-10 — Schreibende Aufgaben nur nach Bestätigung
 Bevor eine Aufgabe ausgeführt wird, die Familien-Daten verändert, legt das

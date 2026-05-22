@@ -1,22 +1,23 @@
-"""Tests für die CA-Verteilung — CAV-1 … CAV-7 (Refs #39).
+"""Tests für die CA-Verteilung — CAV-1 … CAV-7 (Refs #39, #63).
 
 Geprüft wird das Code-Verhalten der CA-Verteilung: die aufrufbare Funktion
-selbst (ca_verteilung) und der direkte Aufruf-Weg über den Chat-Befehl
-(main.handle_update). Telegram ist durch die kontrollierte Doppelung
-`FakeTelegram` ersetzt — die Tests laufen reproduzierbar und ohne Netz (CAV-7,
-analog EC-17/ONB-9).
+selbst (ca_verteilung) und ihr Trigger als EC-8-Aufgabe (`ca_task`,
+CAV-6). Telegram ist durch die kontrollierte Doppelung `FakeTelegram` ersetzt
+— die Tests laufen reproduzierbar und ohne Netz (CAV-7, analog EC-17/ONB-9).
 """
 
 import inspect
 
 import ca_verteilung
-import main
+from ca_task import CaVerteilungTask
 from ca_verteilung import CaVerteilungError, CaVerteilungResult, verteile_ca
 from confirm import PendingStore
-from fakes import FakeProvider, FakeTelegram, make_message, text_response
+from fakes import (FakeProvider, FakeTelegram, make_message,
+                   task_call_response, text_response)
 from history import History
 from main import Context, handle_update
-from tasks import Catalog
+from model import READ
+from tasks import TurnContext, build_catalog
 from telegram import TelegramError
 
 
@@ -42,11 +43,16 @@ def _members(*user_ids):
     return {uid: {"status": "member"} for uid in user_ids}
 
 
-def _ctx(tmp_path, tg, ca_pem_path):
-    """Context für die Orchestrierungs-Tests des Chat-Befehls (CAV-6)."""
+def _ctx(tmp_path, tg, ca_pem_path, provider=None):
+    """Context für die Orchestrierungs-Tests des Aufgaben-Wegs (CAV-6).
+
+    Der Katalog enthält die CA-Verteilungs-Aufgabe — wie zur Laufzeit von
+    `build_catalog` verdrahtet (#63)."""
     return Context(
         tg=tg, bot_username="mybot", family_group_chat_id="-100",
-        context_depth=20, provider=FakeProvider([]), catalog=Catalog(),
+        context_depth=20,
+        provider=provider if provider is not None else FakeProvider([]),
+        catalog=build_catalog(tg, ca_pem_path),
         history=History(str(tmp_path / "ca.db")), pending=PendingStore(),
         ca_pem_path=ca_pem_path)
 
@@ -165,14 +171,17 @@ def test_CAV_4_send_failure_is_reported_as_error(tmp_path):
         pass
 
 
-def test_CAV_4_command_is_behind_the_group_membership_gate(tmp_path):
-    """Der direkte Aufruf-Weg (CAV-6) liegt hinter der Live-Berechtigung
-    (CAV-4, analog EC-2): ein Nicht-Mitglied bekommt kein Zertifikat."""
+def test_CAV_4_task_is_behind_the_group_membership_gate(tmp_path):
+    """Der Aufgaben-Weg (CAV-6) liegt hinter der Live-Berechtigung (CAV-4,
+    analog EC-2): von einem Nicht-Mitglied erreicht die Anfrage den Agenten
+    gar nicht — kein Zertifikat, kein Anbieter-Aufruf."""
     tg = FakeTelegram(members={})           # niemand ist Mitglied
-    ctx = _ctx(tmp_path, tg, _write_ca(tmp_path))
-    handle_update(make_message("/ca", from_user_id=7), ctx)
+    provider = FakeProvider([])             # darf nicht aufgerufen werden
+    ctx = _ctx(tmp_path, tg, _write_ca(tmp_path), provider=provider)
+    handle_update(make_message("schick mir das Zertifikat", from_user_id=7), ctx)
     assert tg.documents == []
     assert tg.sent == []
+    assert provider.requests == []
 
 
 # ============================================================
@@ -202,67 +211,73 @@ def test_CAV_5_install_guide_needs_no_ai_provider(tmp_path):
 
 
 # ============================================================
-#  CAV-6 — direkter Aufruf-Weg: ein Chat-Befehl ruft dieselbe Funktion
+#  CAV-6 — Trigger: die CA-Verteilung als EC-8-Aufgabe (#63)
 # ============================================================
 
-def test_CAV_6_chat_command_delivers_certificate_and_guide(tmp_path):
-    """Der Chat-Befehl /ca eines berechtigten Mitglieds löst die Auslieferung
-    aus — Zertifikat als Dokument plus Anleitung."""
-    tg = FakeTelegram(members=_members(7))
-    ctx = _ctx(tmp_path, tg, _write_ca(tmp_path))
-    handle_update(make_message("/ca", from_user_id=7), ctx)
+def test_CAV_6_is_a_read_task_without_a_confirmation_gate(tmp_path):
+    """F4: die CA-Verteilungs-Aufgabe ist lesend (EC-9) — verteile_ca verändert
+    keine Familien-Daten, also kein Bestätigungs-Gate."""
+    task = CaVerteilungTask(FakeTelegram(), _write_ca(tmp_path))
+    assert task.kind == READ
+    assert task.name == "ca_verteilen"
+    # Leere Parameter: das Modell liefert nichts — der Zielchat kommt aus dem
+    # turn_context, nicht aus arguments.
+    assert task.parameters == {"type": "object", "properties": {}}
+
+
+def test_CAV_6_task_delivers_certificate_and_guide_itself(tmp_path):
+    """F3: die Aufgabe liefert Zertifikat und Anleitung selbst über das
+    injizierte tg aus und gibt nur eine kurze Quittung zurück."""
+    tg = FakeTelegram()
+    task = CaVerteilungTask(tg, _write_ca(tmp_path))
+    receipt = task.run(arguments={}, turn_context=TurnContext(chat_id=42))
     assert len(tg.documents) == 1
     assert tg.documents[0]["file_name"] == "rootCA.pem"
     assert "Android" in tg.sent[0]["text"]
+    assert "Zertifikat" in receipt
 
 
-def test_CAV_6_command_handler_only_calls_the_function(tmp_path, monkeypatch):
-    """Der Befehls-Handler ist ein dünner Aufrufer: er ruft genau die Funktion
-    aus CAV-1 auf und gibt ihr Kanal, Zielchat und Zertifikatspfad weiter —
-    keine eigene Auslieferungs-Logik. Genauso würde ein Onboarding-Flow sie
-    aufrufen."""
-    calls = []
+def test_CAV_6_task_uses_chat_id_from_turn_context_not_arguments(tmp_path):
+    """F3: der Zielchat kommt aus dem turn_context — nie aus den vom Modell
+    gelieferten arguments. Das Modell bestimmt nicht, an wen ausgeliefert wird."""
+    tg = FakeTelegram()
+    task = CaVerteilungTask(tg, _write_ca(tmp_path))
+    # Das Modell „schlägt" einen abweichenden chat_id vor — er wird ignoriert.
+    task.run(arguments={"chat_id": 999}, turn_context=TurnContext(chat_id=42))
+    assert tg.documents[0]["chat_id"] == 42
+    assert tg.sent[0]["chat_id"] == 42
 
-    def spy(tg, chat_id, ca_pem_path):
-        calls.append((tg, chat_id, ca_pem_path))
-        return CaVerteilungResult(chat_id, 1, 2)
 
-    monkeypatch.setattr(main.ca_verteilung, "verteile_ca", spy)
+def test_CAV_6_task_failure_propagates_to_the_agent_loop(tmp_path):
+    """Scheitert die Auslieferung, reicht die Aufgabe den CaVerteilungError an
+    den Agent-Loop weiter — der meldet ihn isoliert (EC-9)."""
+    tg = FakeTelegram(send_document_error=TelegramError("Kanal weg"))
+    task = CaVerteilungTask(tg, _write_ca(tmp_path))
+    try:
+        task.run(arguments={}, turn_context=TurnContext(chat_id=42))
+        assert False, "die Aufgabe hätte den Fehler weiterreichen müssen"
+    except CaVerteilungError:
+        pass
+
+
+def test_CAV_6_natural_language_request_delivers_via_the_agent(tmp_path):
+    """End-to-End: eine natürlichsprachige Bitte erreicht den Agenten, der die
+    Katalog-Aufgabe aufruft — Auslieferung ohne Tippbefehl (#63)."""
     tg = FakeTelegram(members=_members(7))
-    ctx = _ctx(tmp_path, tg, "/pfad/rootCA.pem")
-    handle_update(make_message("/ca", from_user_id=7, chat_id=42), ctx)
-    assert calls == [(tg, 42, "/pfad/rootCA.pem")]
-
-
-def test_CAV_6_command_accepts_botname_qualified_form(tmp_path):
-    """In Gruppen darf der Befehl mit @botname qualifiziert sein: /ca@mybot."""
-    tg = FakeTelegram(members=_members(7))
-    ctx = _ctx(tmp_path, tg, _write_ca(tmp_path))
-    handle_update(make_message("/ca@mybot", from_user_id=7,
-                               chat_type="group", mentions_bot=True), ctx)
+    provider = FakeProvider([
+        task_call_response("ca_verteilen"),
+        text_response("Ich habe dir das Zertifikat geschickt."),
+    ])
+    ctx = _ctx(tmp_path, tg, _write_ca(tmp_path), provider=provider)
+    handle_update(make_message("kannst du mir das Zertifikat schicken?",
+                               from_user_id=7, chat_id=42), ctx)
+    # Die Aufgabe hat selbst ausgeliefert ...
     assert len(tg.documents) == 1
-
-
-def test_CAV_6_non_command_text_goes_to_the_agent_not_the_function(tmp_path):
-    """Normale Anfragen lösen die CA-Verteilung nicht aus — nur der Befehl tut
-    es. Der Befehl und der Agent-Pfad sind sauber getrennt."""
-    tg = FakeTelegram(members=_members(7))
-    ctx = _ctx(tmp_path, tg, _write_ca(tmp_path))
-    ctx.provider = FakeProvider([text_response("Antwort vom Agenten.")])
-    handle_update(make_message("was ist ein Zertifikat?", from_user_id=7), ctx)
-    assert tg.documents == []
-    assert tg.sent[0]["text"] == "Antwort vom Agenten."
-
-
-def test_CAV_6_command_failure_yields_a_clear_hint(tmp_path):
-    """Schlägt die Auslieferung fehl, antwortet der Befehls-Handler dem
-    Mitglied mit einem klaren Hinweis, statt stumm zu bleiben."""
-    tg = FakeTelegram(members=_members(7),
-                      send_document_error=TelegramError("Kanal weg"))
-    ctx = _ctx(tmp_path, tg, _write_ca(tmp_path))
-    handle_update(make_message("/ca", from_user_id=7), ctx)
-    assert tg.documents == []
-    assert tg.sent[0]["text"] == main._CA_FAILED
+    assert tg.documents[0]["chat_id"] == 42
+    # ... an den Chat aus dem turn_context, nicht aus Modell-arguments.
+    assert "Android" in [s["text"] for s in tg.sent if "Android" in s["text"]][0]
+    # ... und der Agent hat zum Schluss geantwortet.
+    assert tg.sent[-1]["text"] == "Ich habe dir das Zertifikat geschickt."
 
 
 # ============================================================

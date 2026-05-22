@@ -1,8 +1,8 @@
-"""Tests für den Aufgaben-Katalog-Rahmen — EC-8/EC-9/EC-10 (Refs #27)."""
+"""Tests für den Aufgaben-Katalog-Rahmen — EC-8/EC-9/EC-10 (Refs #27, #63)."""
 
 import pytest
 
-from fakes import FakeReadTask, FakeWriteTask
+from fakes import FakeReadTask, FakeTelegram, FakeWriteTask
 from model import READ, WRITE
 from tasks import Catalog, build_catalog
 
@@ -43,6 +43,10 @@ def test_EC_10_write_task_kind_is_write():
     assert FakeWriteTask().kind == WRITE
 
 
-def test_EC_8_build_catalog_v1_is_empty():
-    """V1 registriert keine konkrete Aufgabe — die erste kommt aus eigenem Ticket."""
-    assert build_catalog().task_defs() == []
+def test_EC_8_build_catalog_registers_the_ca_task():
+    """#63/CAV-6: build_catalog registriert die CA-Verteilungs-Aufgabe als
+    erste konkrete Katalog-Aufgabe — lesend (EC-9)."""
+    catalog = build_catalog(FakeTelegram(), "/instanz/rootCA.pem")
+    defs = {d.name: d for d in catalog.task_defs()}
+    assert "ca_verteilen" in defs
+    assert defs["ca_verteilen"].kind == READ
