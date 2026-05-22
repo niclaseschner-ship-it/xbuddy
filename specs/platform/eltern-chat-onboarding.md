@@ -29,11 +29,12 @@ den ersten hinaus.
 ### ONB-1 — Onboarding-Modus
 Solange für die Instanz kein KI-Anbieter-Key vorliegt — weder über eine
 Umgebungsvariable noch im Onboarding-Speicher (ONB-5) —, läuft sie im
-**Onboarding-Modus**: Sie ruft keinen KI-Anbieter auf und führt keine
-Katalog-Aufgaben aus. Sie reagiert ausschließlich mit den deterministischen,
-hart-codierten Nachrichten dieser Spec. Liegt ein Key vor, ist der
-Onboarding-Modus inaktiv und es gelten die regulären Anforderungen aus
-`eltern-chat.md` (EC-4 ff.).
+**Onboarding-Modus**: Sie führt keine Katalog-Aufgaben aus und nutzt den
+KI-Anbieter nicht für Gespräche — sie reagiert ausschließlich mit den
+deterministischen, hart-codierten Nachrichten dieser Spec. Der einzige
+Anbieter-Aufruf im Onboarding-Modus ist die Key-Validierung (ONB-4). Liegt ein
+Key vor, ist der Onboarding-Modus inaktiv und es gelten die regulären
+Anforderungen aus `eltern-chat.md` (EC-4 ff.).
 
 *Tickets:* #33
 
