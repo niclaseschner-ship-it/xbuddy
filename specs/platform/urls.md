@@ -120,6 +120,18 @@ laufen.
 
 *Tickets:* #36
 
+### URL-12 — Eine Origin für alle Endpunkte
+
+Alle HTTP-Endpunkte einer XBuddy-Instanz (URL-1) werden unter **einer** Origin
+ausgeliefert: gleiches Schema, gleicher Host, gleicher Port. Welche Komponente
+eine Anfrage bedient, ergibt sich allein aus dem Pfad-Prefix (URL-1) — nicht aus
+Host oder Port. Damit sind eine Display-Seite und ein darin eingebetteter
+Buddy-Inhalt same-origin (kein Mixed Content), und eine Instanz trägt genau ein
+Server-Zertifikat (URL-11). Wie die Origin intern auf die Komponenten-Prozesse
+verteilt wird, ist Sache der Umsetzung.
+
+*Tickets:* #36
+
 ## Beispiele
 
 ```
