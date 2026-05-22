@@ -52,6 +52,18 @@ plan/plan.json
 plan/plan.db
 plan/plan.db-journal
 
+# CA-Werkzeug: erzeugte Root-CA + Server-Zertifikat (#36) — die *-key.pem
+# sind Per-Instanz-Geheimnisse (CLAUDE.md §8), niemals ins Repo. Nur das
+# Skript tools/ca/make-ca.sh ist versioniert. Default-Ausgabe: tools/ca/out/.
+tools/ca/out/
+# Defense-in-depth: CA-Artefakte bleiben ausgeschlossen, auch wenn make-ca.sh
+# per --out in einen anderen Repo-Pfad schreibt.
+**/rootCA-key.pem
+**/rootCA.pem
+**/server-key.pem
+**/server-cert.pem
+**/server.csr
+
 # Test-Caches
 .pytest_cache/
 __pycache__/
