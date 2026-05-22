@@ -50,6 +50,12 @@ ausdrücklich angesprochen (Erwähnung oder Antwort auf eine seiner Nachrichten)
 sendet er dieselbe Einstiegs-Nachricht — wer den Hinzufügen-Moment verpasst hat,
 kommt so trotzdem hinein.
 
+Im Onboarding-Modus bleibt der Bot nie stumm: jede an ihn gerichtete Nachricht
+— in der Gruppe die ausdrückliche Ansprache (EC-5), im Privatchat jede
+Nachricht — wird beantwortet, solange noch kein Schlüssel vorliegt. Normale,
+nicht an den Bot gerichtete Gruppenkommunikation löst weiterhin keine Reaktion
+aus.
+
 *Tickets:* #33
 
 ## 3. Einrichtung
@@ -61,6 +67,11 @@ Mitglieder sichtbar wird. Der Bot führt im Privatchat hart-codiert durch die
 Anbieter-Wahl und nimmt den Key als Nachricht entgegen. Berechtigt zur Eingabe
 ist, wer Mitglied der Gruppe ist, in der das Onboarding begonnen wurde — geprüft
 live (analog EC-2).
+
+Eine Privatnachricht, die erkennbar keine Schlüssel-Eingabe ist (etwa eine
+Begrüßung oder eine Frage), wird nicht als Schlüssel gewertet und nicht
+validiert: der Bot antwortet stattdessen mit der Anleitung. So bleibt er nie
+stumm und meldet nie fälschlich einen ungültigen Schlüssel.
 
 *Tickets:* #33
 

@@ -24,15 +24,22 @@ from telegram import TelegramError
 
 ENTRY_MESSAGE = (
     "👋 Hallo! Ich bin euer XBuddy-Bot — aber noch nicht schlau: mir fehlt "
-    "der Zugang zu einer KI.\n\n"
-    "Ihr müsst mich erst schlau machen. So geht's:\n\n"
-    "1) Holt euch einen Anbieter-Schlüssel. Unterstützt: Claude (Anthropic) — "
-    "Schlüssel unter console.anthropic.com.\n"
-    "2) Öffnet dann den Privatchat mit mir (tippt mich an).\n"
-    "3) Schickt mir dort euren Schlüssel. Ich prüfe ihn und bin danach für "
+    "der Zugang zu einer KI. Den richtet ihr einmalig ein, dann bin ich für "
     "euch da.\n\n"
-    "Den Schlüssel bitte nur im Privatchat senden — hier in der Gruppe würde "
-    "ihn jedes Mitglied sehen."
+    "Ich nutze dafür Claude von Anthropic. So kommt ihr an den Schlüssel:\n\n"
+    "1) Öffnet im Browser console.anthropic.com und legt ein Konto an "
+    "(oder meldet euch an).\n"
+    "2) Hinterlegt unter »Billing« eine Zahlungsmethode und ladet ein kleines "
+    "Startguthaben auf — abgerechnet wird je Anfrage, für den Anfang genügt "
+    "der Mindestbetrag.\n"
+    "3) Geht auf »API Keys« und erstellt mit »Create Key« einen neuen "
+    "Schlüssel (Name z. B. »XBuddy«). Kopiert ihn sofort — er beginnt mit "
+    "»sk-ant-« und wird nur ein einziges Mal angezeigt.\n"
+    "4) Öffnet den Privatchat mit mir (tippt meinen Namen an) und schickt mir "
+    "den Schlüssel dort als Nachricht.\n\n"
+    "⚠️ Den Schlüssel bitte NUR im Privatchat mit mir senden — niemals hier "
+    "in der Gruppe, sonst sehen ihn alle Mitglieder. Ich prüfe ihn sofort und "
+    "sage euch Bescheid."
 )
 
 NEED_GROUP_FIRST = (
@@ -67,6 +74,11 @@ DONE_GROUP = (
 _VALIDATION_SYSTEM = "Antworte mit einem einzigen Wort."
 _VALIDATION_PING = "ping"
 
+# ONB-3: Heuristik, ob eine Privatnachricht eine Schlüssel-Eingabe ist —
+# anbieter-neutral: ein langes, zusammenhängendes Token ohne Leerzeichen. Eine
+# Begrüßung oder Frage ist das typischerweise nicht.
+_MIN_KEY_LENGTH = 20
+
 
 @dataclass
 class OnboardingState:
@@ -96,6 +108,8 @@ def handle_update(update, ctx):
     added_chat_id = ctx.tg.extract_bot_added(update)
     if added_chat_id is not None:
         st.pending_group_chat_id = added_chat_id
+        logging.info("Onboarding: Bot zu Gruppe %s hinzugefügt — "
+                     "Einstiegs-Nachricht (ONB-2)", added_chat_id)
         _send(ctx, added_chat_id, ENTRY_MESSAGE)
         return
 
@@ -109,6 +123,8 @@ def handle_update(update, ctx):
     if msg.chat_type in ("group", "supergroup"):
         if msg.mentions_bot or msg.reply_to_from_bot:
             st.pending_group_chat_id = msg.chat_id
+            logging.info("Onboarding: in Gruppe %s angesprochen — "
+                         "Einstiegs-Nachricht (ONB-2)", msg.chat_id)
             _send(ctx, msg.chat_id, ENTRY_MESSAGE)
         return
 
@@ -127,18 +143,30 @@ def handle_update(update, ctx):
         return
 
     key = (msg.text or "").strip()
-    if not key:
+    if not _looks_like_key(key):
+        # ONB-3: keine Schlüssel-Eingabe (Begrüßung, Frage …) — der Bot bleibt
+        # nie stumm und meldet nicht fälschlich »ungültig«, sondern leitet an.
         _send(ctx, msg.chat_id, ASK_FOR_KEY)
         return
 
     # ONB-4: Validierung per minimalem Anbieter-Aufruf.
+    logging.info("Onboarding: Key im Privatchat empfangen — Validierung läuft (ONB-4)")
     provider = _validate_key(st.provider_name, st.provider_model, key)
     if provider is None:
+        logging.info("Onboarding: Key-Validierung fehlgeschlagen — bleibe im Onboarding-Modus")
         _send(ctx, msg.chat_id, KEY_INVALID)
         return
 
     _complete(ctx, key, provider)
     _send(ctx, msg.chat_id, KEY_OK_PRIVATE)
+
+
+def _looks_like_key(text):
+    """ONB-3: True, wenn `text` wie ein API-Schlüssel aussieht — ein
+    zusammenhängendes Token ohne Leerzeichen, ausreichend lang. So lässt sich
+    eine Schlüssel-Eingabe von normaler Chat-Nachricht unterscheiden."""
+    return (len(text) >= _MIN_KEY_LENGTH
+            and not any(ch.isspace() for ch in text))
 
 
 def _validate_key(provider_name, provider_model, key):
@@ -177,6 +205,8 @@ def _complete(ctx, key, provider):
     # ONB-7: Moduswechsel in den KI-Modus — ab jetzt gelten EC-4 ff.
     ctx.provider = provider
     ctx.onboarding = None
+    logging.info("Onboarding abgeschlossen — KI-Modus aktiv, Familien-Gruppe %s (ONB-7)",
+                 ctx.family_group_chat_id)
     _send(ctx, ctx.family_group_chat_id, DONE_GROUP)
 
 

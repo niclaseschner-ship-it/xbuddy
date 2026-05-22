@@ -176,19 +176,26 @@ class TelegramClient:
 
     @staticmethod
     def _mentions_bot(msg, text, bot_username):
-        """Prüft, ob die Nachricht den Bot ausdrücklich anspricht (EC-5)."""
+        """Prüft, ob die Nachricht den Bot ausdrücklich anspricht (EC-5).
+
+        Telegram-Usernames sind case-insensitiv — der Abgleich daher auch.
+        Erwähnungen können in `entities` (Text) oder `caption_entities` (Bild)
+        stehen.
+        """
         if not bot_username:
             return False
-        handle = "@" + bot_username
-        for entity in msg.get("entities", []) or []:
+        handle = ("@" + bot_username).lower()
+        uname = bot_username.lower()
+        entities = msg.get("entities") or msg.get("caption_entities") or []
+        for entity in entities:
             etype = entity.get("type")
             if etype == "mention":
                 off, length = entity.get("offset", 0), entity.get("length", 0)
-                if text[off:off + length] == handle:
+                if text[off:off + length].lower() == handle:
                     return True
             elif etype == "text_mention":
                 user = entity.get("user") or {}
-                if user.get("username") == bot_username:
+                if (user.get("username") or "").lower() == uname:
                     return True
         return False
 
