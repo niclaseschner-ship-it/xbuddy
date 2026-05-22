@@ -1,0 +1,49 @@
+{
+  "_comment": "FAM-6 — Familien-Registry einer Instanz. Kopiere als familie.json (per .gitignore aus dem Repo ausgeschlossen, je Instanz separat gepflegt). 'erwachsene' und 'kinder' sind die zwei Personen-Arten (FAM-2). Jede Person: id (Pflicht, stabil), name (Pflicht), ring (Pflicht, aus der Palette blue/orange/green/red/purple/teal/gray — FAM-4), foto (optional, Dateiname im Foto-Verzeichnis — FAM-5), email (optional, nur Erwachsene — FAM-3), telegram_id (optional, jede Person — FAM-3). Die Foto-Dateien liegen je Instanz im Foto-Verzeichnis (Default fotos/ neben dieser Datei, FAM-9) und gehören wie diese Datei nicht ins Repo.",
+  "erwachsene": [
+    {
+      "id": "niclas",
+      "name": "Niclas",
+      "ring": "blue",
+      "foto": "niclas.png",
+      "email": "niclas@example.org",
+      "telegram_id": 100000001
+    },
+    {
+      "id": "sophia",
+      "name": "Sophia",
+      "ring": "red",
+      "foto": "sophia.png",
+      "email": "sophia@example.org"
+    },
+    {
+      "id": "julian",
+      "name": "Julian",
+      "ring": "green",
+      "foto": "julian.png",
+      "email": "julian@example.org"
+    },
+    {
+      "id": "vera",
+      "name": "Vera",
+      "ring": "orange",
+      "foto": "vera.png",
+      "email": "vera@example.org"
+    }
+  ],
+  "kinder": [
+    {
+      "id": "paula",
+      "name": "Paula",
+      "ring": "purple",
+      "foto": "paula.png"
+    },
+    {
+      "id": "neko",
+      "name": "Neko",
+      "ring": "teal",
+      "foto": "neko.png",
+      "telegram_id": 100000002
+    }
+  ]
+}

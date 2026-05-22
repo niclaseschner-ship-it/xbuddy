@@ -36,6 +36,16 @@ eltern-chat/*.db
 # Anbieter-Key, niemals ins Repo.
 eltern-chat/onboarding-store.json
 
+# Familien-Registry: Per-Instanz-Datei + Profilfotos (FAM-6) — je Instanz
+# separat gepflegt, nicht im Repo. Format: familie/familie.example.json
+familie/familie.json
+familie/fotos/
+
+# Zugangsdaten-Speicher (ZD-3) — Per-Instanz-Geheimnis-Datei. Hält
+# Klartext-Geheimnisse, darf nie ins Repo (CLAUDE.md §8). Format:
+# zugangsdaten/zugangsdaten.example.json
+zugangsdaten/zugangsdaten.json
+
 # Test-Caches
 .pytest_cache/
 __pycache__/
