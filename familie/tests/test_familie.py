@@ -15,11 +15,19 @@ import zlib
 
 import pytest
 
-# familie/ (eine Ebene über tests/) auf den Importpfad legen.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# familie/ ist ein Paket — die Repo-Wurzel (zwei Ebenen über tests/) auf den
+# Importpfad legen und die Module als familie.main / familie.registry
+# importieren. So bleiben die Modulnamen eindeutig und kollidieren beim
+# repo-weiten Lauf nicht mit den main-Modulen anderer Komponenten (#52).
+_FAMILIE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_REPO_ROOT = os.path.dirname(_FAMILIE_DIR)
+sys.path.insert(0, _REPO_ROOT)
+# familie/ selbst muss ebenfalls auf den Pfad: familie/main.py importiert
+# registry über `import registry`, wenn es direkt gestartet wird.
+sys.path.insert(0, _FAMILIE_DIR)
 
-import main as familie_main      # noqa: E402
-import registry as registry_mod  # noqa: E402
+from familie import main as familie_main      # noqa: E402
+from familie import registry as registry_mod  # noqa: E402
 
 
 # ============================================================

@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import FakeReadTask, FakeWriteTask
+from fakes import FakeReadTask, FakeWriteTask
 from model import READ, WRITE
 from tasks import Catalog, build_catalog
 

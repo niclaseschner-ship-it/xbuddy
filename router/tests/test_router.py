@@ -9,9 +9,13 @@ import sys
 
 import pytest
 
-# Modul laden — router/main.py liegt eine Ebene über tests/
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import main as router_main  # noqa: E402
+# router/ ist ein Paket — die Repo-Wurzel (zwei Ebenen über tests/) auf den
+# Importpfad legen und main als router.main importieren. So bleibt der
+# Modulname eindeutig und kollidiert beim repo-weiten Lauf nicht mit den
+# main-Modulen anderer Komponenten (#52).
+sys.path.insert(
+    0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from router import main as router_main  # noqa: E402
 
 
 # ============================================================

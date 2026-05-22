@@ -5,8 +5,8 @@ Agenten. Telegram-Kanal und KI-Anbieter sind kontrollierte Doppelungen (EC-17).
 """
 
 from confirm import PendingStore
-from conftest import (FakeProvider, FakeTelegram, FakeWriteTask, make_message,
-                      task_call_response, text_response)
+from fakes import (FakeProvider, FakeTelegram, FakeWriteTask, make_message,
+                   task_call_response, text_response)
 from history import History
 from main import Context, handle_update
 from main import _PROVIDER_DOWN
