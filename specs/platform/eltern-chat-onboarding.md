@@ -29,11 +29,12 @@ den ersten hinaus.
 ### ONB-1 — Onboarding-Modus
 Solange für die Instanz kein KI-Anbieter-Key vorliegt — weder über eine
 Umgebungsvariable noch im Onboarding-Speicher (ONB-5) —, läuft sie im
-**Onboarding-Modus**: Sie ruft keinen KI-Anbieter auf und führt keine
-Katalog-Aufgaben aus. Sie reagiert ausschließlich mit den deterministischen,
-hart-codierten Nachrichten dieser Spec. Liegt ein Key vor, ist der
-Onboarding-Modus inaktiv und es gelten die regulären Anforderungen aus
-`eltern-chat.md` (EC-4 ff.).
+**Onboarding-Modus**: Sie führt keine Katalog-Aufgaben aus und nutzt den
+KI-Anbieter nicht für Gespräche — sie reagiert ausschließlich mit den
+deterministischen, hart-codierten Nachrichten dieser Spec. Der einzige
+Anbieter-Aufruf im Onboarding-Modus ist die Key-Validierung (ONB-4). Liegt ein
+Key vor, ist der Onboarding-Modus inaktiv und es gelten die regulären
+Anforderungen aus `eltern-chat.md` (EC-4 ff.).
 
 *Tickets:* #33
 
@@ -44,10 +45,26 @@ Wird der Bot einer Telegram-Gruppe als Mitglied hinzugefügt, während die Insta
 im Onboarding-Modus ist, sendet er unaufgefordert eine hart-codierte
 Einstiegs-Nachricht in diese Gruppe: dass er noch keinen KI-Zugang hat, welche
 Anbieter zur Wahl stehen, und die Aufforderung, die Einrichtung im Privatchat
-mit dem Bot fortzusetzen. Wird der Bot im Onboarding-Modus in einer Gruppe
-ausdrücklich angesprochen (Erwähnung oder Antwort auf eine seiner Nachrichten),
-sendet er dieselbe Einstiegs-Nachricht — wer den Hinzufügen-Moment verpasst hat,
-kommt so trotzdem hinein.
+mit dem Bot fortzusetzen.
+
+Im Onboarding-Modus bleibt der Bot in der Gruppe nie stumm: solange noch kein
+Schlüssel vorliegt, beantwortet er **jede** Gruppennachricht mit derselben
+Einstiegs-Nachricht — nicht nur die ausdrückliche Ansprache. Der Erstkontakt
+darf nicht an der Erwähnungs-Erkennung hängen: wer den Hinzufügen-Moment
+verpasst hat oder den Bot nicht exakt erwähnt, bekommt die Anleitung trotzdem
+(E-ONB-6). Erst mit dem Abschluss des Onboardings (ONB-7) gilt wieder EC-5 —
+dann reagiert der Bot in der Gruppe nur noch auf ausdrückliche Ansprache. Im
+Privatchat wird weiterhin jede Nachricht beantwortet (ONB-3).
+
+Damit der Bot Gruppennachrichten überhaupt empfängt, muss der Telegram-
+Privacy-Modus des Bots deaktiviert sein (BotFather → `/setprivacy` →
+*Disable*; die Änderung wirkt für eine bestehende Gruppe erst, nachdem der Bot
+dort erneut hinzugefügt wurde) — alternativ genügt es, den Bot in der Gruppe
+zum Administrator zu machen, dann empfängt er unabhängig vom Privacy-Modus alle
+Nachrichten. Bei aktivem Privacy-Modus stellt Telegram dem Bot nur Kommandos
+und Antworten auf seine Nachrichten zu; eine schlichte Nachricht und auch eine
+bloße @-Erwähnung erreichen ihn dann nicht. Das ist eine Betriebs-Voraussetzung
+der Instanz, kein Code-Verhalten, und daher ohne eigenen Test (ONB-9).
 
 *Tickets:* #33
 
@@ -60,6 +77,11 @@ Mitglieder sichtbar wird. Der Bot führt im Privatchat hart-codiert durch die
 Anbieter-Wahl und nimmt den Key als Nachricht entgegen. Berechtigt zur Eingabe
 ist, wer Mitglied der Gruppe ist, in der das Onboarding begonnen wurde — geprüft
 live (analog EC-2).
+
+Eine Privatnachricht, die erkennbar keine Schlüssel-Eingabe ist (etwa eine
+Begrüßung oder eine Frage), wird nicht als Schlüssel gewertet und nicht
+validiert: der Bot antwortet stattdessen mit der Anleitung. So bleibt er nie
+stumm und meldet nie fälschlich einen ungültigen Schlüssel.
 
 *Tickets:* #33
 
@@ -188,3 +210,18 @@ Der Bot-Token kann nicht per Chat eingerichtet werden: ohne ihn gäbe es den Bot
 und damit den Chat-Kanal überhaupt nicht (Henne-Ei). Er bleibt daher zwingend
 über eine Umgebungsvariable gesetzt (EC-15). Das Onboarding setzt genau dort an,
 wo ein Chat-Kanal bereits existiert, aber noch kein KI-Zugang.
+
+### E-ONB-6 — Im Onboarding-Modus auf jede Gruppennachricht antworten
+*Datum:* 2026-05-22
+
+Im Onboarding-Modus antwortet der Bot auf jede Gruppennachricht mit der
+Einstiegs-Nachricht, nicht nur auf ausdrückliche Ansprache.
+
+**Verworfen:** die Reaktion wie im KI-Modus an die ausdrückliche Ansprache
+(EC-5) zu koppeln. Der Live-Test zeigte: hängt der Erstkontakt an der
+Erwähnungs-Erkennung, genügt eine einzige Fehlerquelle — falsche Schreibweise,
+nicht erkanntes Entity, aktiver Privacy-Modus —, damit der Bot stumm bleibt und
+das Onboarding nicht in Gang kommt. Da der Bot im Onboarding-Modus ohnehin nur
+eine einzige, feste Nachricht kennt, ist »immer antworten« hier unkritisch und
+macht den Einstieg robust. Mit dem Abschluss (ONB-7) endet dieser Modus, und
+EC-5 greift wieder.
