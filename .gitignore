@@ -32,6 +32,11 @@ router/config.json
 eltern-chat/config.json
 eltern-chat/*.db
 
+# Familien-Registry: Per-Instanz-Datei + Profilfotos (FAM-6) — je Instanz
+# separat gepflegt, nicht im Repo. Format: familie/familie.example.json
+familie/familie.json
+familie/fotos/
+
 # Test-Caches
 .pytest_cache/
 __pycache__/
