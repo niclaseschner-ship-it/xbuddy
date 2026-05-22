@@ -1,0 +1,146 @@
+# CA-Verteilung — Spec     (ID-Präfix: CAV)
+
+> Status: V1 · Refs #39
+
+Damit die Geräte einer Familie die XBuddy-HTTPS-Origin ohne Browser-Warnung
+erreichen (URL-11, URL-12), müssen sie der lokalen Root-CA der Instanz
+vertrauen. Diese Spec definiert die **CA-Verteilung als aufrufbare Funktion**:
+Aufgerufen, stellt sie einem Familienmitglied das öffentliche Root-CA-Zertifikat
+samt Installations-Anleitung über den Eltern-Chat bereit. Ein
+Geräte-Onboarding-Flow ruft diese Funktion auf — die Funktion selbst kennt
+ihren Aufrufer nicht (E-CAV-1).
+
+**V1-Scope:** die CA-Verteilung als trigger-agnostische Funktion · Auslieferung
+des öffentlichen Root-CA-Zertifikats über den Eltern-Chat-Bot · OS-spezifische
+Installations-Anleitung · ein direkter Aufruf-Weg, solange der
+Geräte-Onboarding-Flow noch fehlt.
+
+**Out-of-Scope V1** (je eigenes Ticket): der Geräte-Onboarding-Flow selbst
+(OPEN-CAV-A) · die Erzeugung der CA (Ticket #36) · automatische/Push-Installation
+über MDM oder Konfigurationsprofile · Zertifikats-Rotation/-Erneuerung
+(OPEN-CAV-C) · die Trust-Provisionierung von Kiosk-Displays ohne
+Telegram-Nutzer (OPEN-CAV-B).
+
+## 1. Die Funktion
+
+### CAV-1 — CA-Verteilung ist eine aufrufbare Funktion
+Die CA-Verteilung ist eine klar abgegrenzte, **aufrufbare Funktion**. Aufgerufen,
+stellt sie einem Familienmitglied das öffentliche Root-CA-Zertifikat und die zu
+seinem Gerät passende Installations-Anleitung über den Eltern-Chat bereit. Die
+Funktion ist **trigger-agnostisch**: wer sie aufruft — ein Geräte-Onboarding-Flow
+(CAV-6) oder ein direkter Aufruf — ist nicht Teil ihres Vertrags. Das ist das
+XBuddy-Funktions-Muster (E-CAV-1).
+
+*Tickets:* #39
+
+### CAV-2 — Zweck: Geräte-Vertrauen
+Ziel der Funktion ist, dass ein Familien-Gerät die Root-CA der Instanz als
+vertrauenswürdigen Anker installiert hat — die Voraussetzung dafür, dass es
+XBuddy-HTTPS-Seiten ohne Browser-Warnung öffnet und Secure-Context-Fähigkeiten
+(PWA-Installation, Kamera, Mikrofon) nutzen kann (URL-11).
+
+*Tickets:* #39
+
+## 2. Auslieferung
+
+### CAV-3 — Nur das öffentliche Zertifikat
+Verteilt wird ausschließlich das öffentliche Root-CA-Zertifikat — **niemals** der
+CA-Privatschlüssel (CLAUDE.md §8). Das öffentliche Zertifikat ist kein
+Geheimnis; der Privatschlüssel verlässt den Hub nie.
+
+*Tickets:* #39
+
+### CAV-4 — Auslieferung über den Eltern-Chat-Bot
+Die Funktion liefert das Zertifikat als Datei (Telegram-Dokument) an ein
+Mitglied der Familien-Gruppe aus. Die Berechtigung wird live über die
+Gruppen-Mitgliedschaft geprüft (analog `eltern-chat.md` EC-2). Die Auslieferung
+läuft über den bestehenden Bot-Kanal — keine eigene Verteil-Infrastruktur
+(E-CAV-2).
+
+*Tickets:* #39
+
+### CAV-5 — OS-spezifische Installations-Anleitung
+Zur Zertifikatsdatei liefert die Funktion eine Anleitung, wie das Zertifikat auf
+dem Zielgerät als vertrauenswürdig installiert wird — adressatengerecht für die
+gängigen Plattformen (Android, iOS/iPadOS, Windows, macOS). Die Anleitung ist
+hart-codiert und braucht keinen KI-Anbieter.
+
+*Tickets:* #39
+
+## 3. Aufruf
+
+### CAV-6 — Aufruf durch den Onboarding-Flow; direkter Aufruf in V1
+Die CA-Verteilung wird vom Geräte-Onboarding-Flow aufgerufen, wenn ein Gerät der
+Familie eingerichtet wird. Solange dieser Flow noch nicht spezifiziert ist
+(OPEN-CAV-A), stellt V1 zusätzlich einen **direkten Aufruf-Weg** bereit — einen
+Chat-Befehl an den Bot —, damit die Funktion eigenständig nutzbar und testbar
+ist und ein bereits eingerichtetes Setup ein weiteres Gerät nachrüsten kann.
+Beide sind nur Aufrufer derselben Funktion (CAV-1); der Funktions-Vertrag
+ändert sich dadurch nicht.
+
+*Tickets:* #39
+
+## 4. Tests
+
+### CAV-7 — Automatisierte Tests je Anforderung
+Jede Anforderung dieser Spec mit Code-Verhalten hat einen automatisierten Test,
+reproduzierbar und ohne Netz — Telegram wird durch eine kontrollierte Doppelung
+ersetzt (analog `eltern-chat-onboarding.md` ONB-9).
+
+*Tickets:* #39
+
+---
+
+## Offene Punkte
+
+- **OPEN-CAV-A — Der Geräte-Onboarding-Flow.** Der Flow, der diese Funktion
+  aufruft, ist noch nicht spezifiziert: `eltern-chat-onboarding.md` schließt
+  Geräte-Onboarding ausdrücklich aus, der Display-Client (#30/#35) ist in
+  Arbeit. Der Flow bekommt eine eigene Spec und ein eigenes Ticket; die
+  CA-Verteilung ist seine Voraussetzung, nicht sein Bestandteil. Bis dahin
+  greift der direkte Aufruf-Weg (CAV-6).
+
+- **OPEN-CAV-B — Kiosk-Displays.** Ein BuddyBoard-Kiosk-Display hat keinen
+  Telegram-Nutzer davor. Wie sein CA-Trust provisioniert wird (durch die
+  einrichtende Person, ein vorbereitetes Image, …), ist offen.
+
+- **OPEN-CAV-C — CA-Erneuerung.** Läuft die Root-CA ab (~10 Jahre, #36) oder
+  wird sie neu erzeugt, müssen alle Geräte neu verteilt bekommen. Kein
+  V1-Bedarf belegt.
+
+- **OPEN-CAV-D — HTTP-Download-Endpunkt.** Der heutige dev_server bietet ad-hoc
+  `/xbuddy-ca.crt` zum Browser-Download. Ob XBuddy zusätzlich zum Telegram-Weg
+  einen URL-1-konformen Download-Endpunkt führt, ist offen — V1 geht den
+  Telegram-Weg.
+
+## Entscheidungen
+
+### E-CAV-1 — CA-Verteilung als aufrufbare Funktion, Onboarding als Aufrufer
+*Datum:* 2026-05-22
+
+Die CA-Verteilung wird als eigenständige, trigger-agnostische **Funktion**
+definiert — nicht als fest verdrahteter Schritt eines Onboarding-Ablaufs.
+
+Ein Onboarding ist ein **Flow, der nach und nach Funktionen aufruft**:
+CA-Verteilung, KI-Key-Einrichtung (`eltern-chat-onboarding.md`),
+Familienmitglieder, Geräte und weitere, die mit der Zeit dazukommen. Jede
+Funktion einzeln und unabhängig vom Flow zu definieren hält sie testbar, einzeln
+nutzbar und den Flow schlank. Es ist dasselbe Eigentümer/Nutzer-Muster, das für
+die XBuddy-Apps gilt (`plan.md` E-PLAN-1: eine Komponente besitzt eine Funktion
+und stellt sie über eine Schnittstelle bereit, Aufrufer sind Nutzer).
+
+**Verworfen:** die Verteilung direkt in einen Onboarding-Ablauf zu verdrahten.
+Dann wäre sie nur über den Flow erreichbar, nicht einzeln testbar, und jeder
+weitere Onboarding-Schritt ließe den Ablauf-Code anschwellen.
+
+### E-CAV-2 — Nur öffentliches Zertifikat, Auslieferung über den Chat-Kanal
+*Datum:* 2026-05-22
+
+Verteilt wird nur das öffentliche Zertifikat; die Installation bleibt ein
+bewusster, per Anleitung geführter Nutzerschritt.
+
+**Verworfen:** (1) automatischer Cert-Install — ginge nur über MDM oder
+Konfigurationsprofile, ein tiefer Eingriff ins Gerät und zu schwer für eine
+Familie. (2) Eine eigene Verteil-Infrastruktur (E-Mail, QR-Code-Seite): der
+Eltern-Chat ist der bereits etablierte, berechtigungsgeprüfte Draht zur Familie
+— ein zweiter Kanal wäre Mehrgewicht ohne belegten Bedarf.
