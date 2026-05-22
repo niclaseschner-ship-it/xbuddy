@@ -9,7 +9,8 @@ Sie besitzt diese Daten und stellt sie über eine Schnittstelle bereit; andere
 Komponenten sind ihre Nutzer.
 
 **V1-Scope:** Genau **Identität** — die Personen, je Person Name, Profilfoto,
-Ring-Farbe und (bei Erwachsenen) E-Mail. Die Personen-Liste als Per-Instanz-
+Ring-Farbe und optionale Kontakt-Merkmale (E-Mail, Telegram-ID). Die
+Personen-Liste als Per-Instanz-
 Datei, eine Schnittstelle, über die Konsumenten Personen-Daten und Fotos
 abrufen.
 
@@ -41,16 +42,24 @@ Slots nur Erwachsenen zu).
 ### FAM-3 — Eigenschaften einer Person
 Jede Person trägt:
 
-| Feld    | Erwachsene | Kinder  | Bedeutung |
-|---------|------------|---------|-----------|
-| `id`    | Pflicht    | Pflicht | Stabiler, eindeutiger Bezeichner. Wird nie neu vergeben. |
-| `name`  | Pflicht    | Pflicht | Anzeigename. |
-| `ring`  | Pflicht    | Pflicht | Ring-Farbe aus der Palette (FAM-4). |
-| `foto`  | optional   | optional| Dateiname des Profilfotos (FAM-5). |
-| `email` | Pflicht    | —       | E-Mail-Adresse — Konsumenten nutzen sie, um Personen aufzulösen (z. B. die Kalender-Anbindung der Plan-Buddy-App über die Event-Creator-Adresse). |
+| Feld          | Erwachsene | Kinder   | Bedeutung |
+|---------------|------------|----------|-----------|
+| `id`          | Pflicht    | Pflicht  | Stabiler, eindeutiger Bezeichner. Wird nie neu vergeben. |
+| `name`        | Pflicht    | Pflicht  | Anzeigename. |
+| `ring`        | Pflicht    | Pflicht  | Ring-Farbe aus der Palette (FAM-4). |
+| `foto`        | optional   | optional | Dateiname des Profilfotos (FAM-5). |
+| `email`       | optional   | —        | E-Mail-Adresse. Konsumenten nutzen sie, um Personen aufzulösen (z. B. die Kalender-Anbindung der Plan-Buddy-App über die Event-Creator-Adresse). |
+| `telegram_id` | optional   | optional | Telegram-Benutzer-ID. Bildet die Person auf ihr Telegram-Konto ab. |
 
 Die Personen sind **Daten** und stehen vollständig in der Datei aus FAM-6 —
 nicht im Code (CLAUDE.md §6).
+
+`email` und `telegram_id` sind **optionale Kontakt-Merkmale**: sie ordnen eine
+Person einer E-Mail-Adresse bzw. einem Telegram-Konto zu. Beides ist eine
+reine Identitäts-Zuordnung, **keine Berechtigung** (E-FAM-2). Fehlt ein
+Merkmal, ist das kein Fehler — nur die darauf gestützte Auflösung entfällt für
+diese Person. Kinder tragen keine E-Mail; eine `telegram_id` kann jede Person
+haben, die ein Telegram-Konto hat.
 
 *Tickets:* #38
 
@@ -91,9 +100,11 @@ Abhängigkeiten — die Registry besitzt die Daten, andere sind Nutzer).
 
 *Tickets:* #38
 
-### FAM-8 — Profilfotos über HTTP
-Profilfotos liefert die Registry über `GET /api/v1/familie/foto/<id>` aus
-(URL-4: Backend unter `/api/v1/`). Bekannte `id` mit Foto: 200 mit der
+### FAM-8 — Profilfotos über einen HTTP-Endpunkt
+Profilfotos liefert die Registry über den HTTP-Endpunkt
+`GET /api/v1/familie/foto/<id>` (URL-4: Backend unter `/api/v1/`); wie alle
+XBuddy-Endpunkte wird er über HTTPS ausgeliefert (URL-11) — eine eigene
+Klartext-Auslieferung gibt es nicht. Bekannte `id` mit Foto: 200 mit der
 Bilddatei. Bekannte `id` ohne Foto oder unbekannte `id`: 404. Der Pfad ist
 geräte-neutral (URL-10).
 
