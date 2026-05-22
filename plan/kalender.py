@@ -1,0 +1,339 @@
+"""Plan-Buddy — Kalender-Anbindung (PLAN-15 … PLAN-20).
+
+Siehe specs/buddies/plan.md §6. Die Anbindung an den Google-Familien-Kalender
+ist eine Funktion **dieser App** (E-PLAN-6). Sie liest Events eines Zeitraums
+und legt sie an / ändert / löscht sie — alles auf genau einen konfigurierten
+Kalender (PLAN-15).
+
+Aufbau — Test-Naht (PLAN-29):
+
+  GoogleTransport   spricht HTTP mit Google (OAuth + Calendar v3). Das ist die
+                    EINZIGE Stelle mit Netz-Zugriff.
+  Kalender          die App-Funktion: nimmt einen `transport`, normalisiert
+                    die Rohantwort (PLAN-17) und löst Personen auf (PLAN-19).
+
+Für Tests wird `GoogleTransport` durch ein FakeTransport ersetzt, das
+kontrollierte Rohantworten liefert (PLAN-29) — kein Netz nötig. `Kalender`
+selbst (Normalisierung, Personen-Match, Multi-Day) wird so vollständig ohne
+Google geprüft.
+
+Die OAuth-Daten (Client + Refresh-Token) kommen aus dem zentralen
+Zugangsdaten-Speicher (PLAN-16, `zugangsdaten.md`) — die App legt KEINE eigene
+Token-Datei an.
+"""
+
+import json
+import logging
+import urllib.parse
+import urllib.request
+from datetime import date, datetime, timedelta
+
+logger = logging.getLogger(__name__)
+
+# PLAN-16: Namen, unter denen OAuth-Client und Refresh-Token im
+# Zugangsdaten-Speicher liegen (ZD-2: stabile Namen).
+ZD_NAME_OAUTH_CLIENT = "plan-google-oauth-client"
+ZD_NAME_OAUTH_TOKEN = "plan-google-oauth-refresh-token"
+
+_GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+_GOOGLE_CAL_BASE = "https://www.googleapis.com/calendar/v3/calendars"
+
+
+class CalendarUnavailable(Exception):
+    """Der Kalender ist nicht erreichbar oder es fehlen Credentials (PLAN-20).
+
+    Eine Schreib-Anfrage wirft das als klar erkennbaren Misserfolg; eine
+    Lese-Anfrage fängt es ab und liefert ein leeres Ergebnis (PLAN-20).
+    """
+
+
+# ============================================================
+#  Normalisiertes Event-Modell (PLAN-17)
+# ============================================================
+
+class Event:
+    """Ein anbieter-neutrales Kalender-Event (PLAN-17).
+
+    Felder: stabile `id` (trägt die Multi-Day-Gruppierung, PLAN-14), `titel`,
+    `beginn` und `ende` (date oder datetime), `ganztags` (bool), `person`
+    (aufgelöste Personen-`id` oder None, PLAN-19). Google-Rohfelder, die V1
+    nicht braucht, werden nicht durchgereicht (CLAUDE.md §6).
+    """
+
+    def __init__(self, id, titel, beginn, ende, ganztags, person=None):
+        self.id = id
+        self.titel = titel
+        self.beginn = beginn
+        self.ende = ende
+        self.ganztags = ganztags
+        self.person = person
+
+    def to_dict(self):
+        """Serialisierbare Form — für die Termin-Schnittstelle (PLAN-22)."""
+        return {
+            "id": self.id,
+            "titel": self.titel,
+            "beginn": self.beginn.isoformat() if self.beginn else None,
+            "ende": self.ende.isoformat() if self.ende else None,
+            "ganztags": self.ganztags,
+            "person": self.person,
+        }
+
+
+# ============================================================
+#  Transport — die Netz-Naht (PLAN-29)
+# ============================================================
+
+class GoogleTransport:
+    """Spricht HTTP mit Google: OAuth-Refresh + Calendar v3 (PLAN-16/17/18).
+
+    Dies ist die einzige Klasse mit Netz-Zugriff. In Tests wird sie durch ein
+    Fake ersetzt (PLAN-29). Die OAuth-Daten holt sie aus dem
+    Zugangsdaten-Speicher (PLAN-16).
+
+    `store` ist eine Zugangsdaten-Instanz (zugangsdaten.Zugangsdaten),
+    `kalender_id` die konfigurierte Google-Kalender-ID (PLAN-15).
+    """
+
+    def __init__(self, store, kalender_id, timeout=12):
+        self._store = store
+        self._kalender_id = kalender_id
+        self._timeout = timeout
+
+    def credentials_available(self):
+        """True, wenn OAuth-Client UND Refresh-Token im Speicher liegen (PLAN-20)."""
+        return (self._store.get(ZD_NAME_OAUTH_CLIENT) is not None
+                and self._store.get(ZD_NAME_OAUTH_TOKEN) is not None)
+
+    def _access_token(self):
+        """Holt einen frischen Access-Token aus dem Refresh-Token (PLAN-16).
+
+        Client und Token liegen im Zugangsdaten-Speicher. Wirft
+        CalendarUnavailable, wenn etwas fehlt oder Google nicht antwortet.
+        """
+        client = self._store.get(ZD_NAME_OAUTH_CLIENT)
+        token = self._store.get(ZD_NAME_OAUTH_TOKEN)
+        if client is None or token is None:
+            raise CalendarUnavailable("OAuth-Client oder -Token fehlt im Speicher")
+        # Der Client-Eintrag folgt dem Google-Format ({"installed"|"web": {...}}).
+        if isinstance(client, dict):
+            client = client.get("installed", client.get("web", client))
+        try:
+            client_id = client["client_id"]
+            client_secret = client["client_secret"]
+            refresh_token = token["refresh_token"] if isinstance(token, dict) else token
+        except (KeyError, TypeError) as e:
+            raise CalendarUnavailable("OAuth-Daten unvollständig: %s" % e)
+        data = urllib.parse.urlencode({
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+        }).encode()
+        try:
+            req = urllib.request.Request(
+                _GOOGLE_TOKEN_URL, data=data, method="POST",
+                headers={"Content-Type": "application/x-www-form-urlencoded"})
+            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+                body = json.loads(resp.read())
+        except Exception as e:  # noqa: BLE001 — jeder Netzfehler → PLAN-20
+            raise CalendarUnavailable("OAuth-Token-Refresh fehlgeschlagen: %s" % e)
+        if "access_token" not in body:
+            raise CalendarUnavailable("OAuth-Antwort ohne access_token")
+        return body["access_token"]
+
+    def _request(self, method, path, query=None, body=None):
+        """Authentifizierter Calendar-v3-Request gegen den konfigurierten Kalender."""
+        token = self._access_token()
+        url = "%s/%s%s" % (_GOOGLE_CAL_BASE,
+                           urllib.parse.quote(self._kalender_id), path)
+        if query:
+            url += "?" + urllib.parse.urlencode(query)
+        data = json.dumps(body).encode() if body is not None else None
+        headers = {"Authorization": "Bearer " + token}
+        if data is not None:
+            headers["Content-Type"] = "application/json"
+        try:
+            req = urllib.request.Request(url, data=data, method=method, headers=headers)
+            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+                raw = resp.read()
+            return json.loads(raw) if raw else {}
+        except Exception as e:  # noqa: BLE001 — jeder Netzfehler → PLAN-20
+            raise CalendarUnavailable("Calendar-Request %s %s: %s" % (method, path, e))
+
+    def list_events(self, time_min, time_max):
+        """Roh-Events des Kalenders im Zeitfenster [time_min, time_max) (PLAN-17).
+
+        `time_min`/`time_max` sind ISO-Datetime-Strings. Wiederkehrende Events
+        werden von Google in Einzel-Vorkommen aufgelöst (`singleEvents=true`).
+        Liefert die Liste der Google-Roh-Items.
+        """
+        body = self._request("GET", "/events", query={
+            "timeMin": time_min,
+            "timeMax": time_max,
+            "singleEvents": "true",
+            "orderBy": "startTime",
+            "maxResults": 250,
+        })
+        return body.get("items", [])
+
+    def insert_event(self, raw_event):
+        """Legt ein Event an (PLAN-18). Liefert das Google-Roh-Item."""
+        return self._request("POST", "/events", body=raw_event)
+
+    def patch_event(self, event_id, raw_patch):
+        """Ändert ein Event über seine `id` (PLAN-18). Liefert das Roh-Item."""
+        return self._request(
+            "PATCH", "/events/" + urllib.parse.quote(event_id), body=raw_patch)
+
+    def delete_event(self, event_id):
+        """Löscht ein Event über seine `id` (PLAN-18)."""
+        self._request("DELETE", "/events/" + urllib.parse.quote(event_id))
+
+
+# ============================================================
+#  Personen-Auflösung (PLAN-19)
+# ============================================================
+
+def resolve_person(titel, creator_email, personen):
+    """Ordnet ein Event höchstens einer Person zu (PLAN-19).
+
+    `personen` ist eine Liste von familie.Person. Reihenfolge:
+      1. Titel-Treffer — kommt ein Personenname im Titel vor, gewinnt der
+         früheste (kleinster Fundindex).
+      2. Creator-E-Mail — sonst, ist die Creator-Adresse die E-Mail eines
+         Erwachsenen, ist das die Person.
+      3. sonst None.
+
+    Liefert die Personen-`id` oder None.
+    """
+    titel_lo = (titel or "").lower()
+    bester = None  # (fundindex, person_id)
+    for p in personen:
+        pos = titel_lo.find((p.name or "").lower()) if p.name else -1
+        if pos >= 0 and (bester is None or pos < bester[0]):
+            bester = (pos, p.id)
+    if bester is not None:
+        return bester[1]
+    # 2. Creator-E-Mail.
+    if creator_email:
+        ce = creator_email.lower()
+        for p in personen:
+            if p.email and p.email.lower() == ce:
+                return p.id
+    return None
+
+
+# ============================================================
+#  Kalender — die App-Funktion (PLAN-17 … PLAN-20)
+# ============================================================
+
+def _parse_when(when):
+    """Übersetzt einen Google-{date|dateTime}-Block in (wert, ganztags).
+
+    Ganztags-Events tragen `date` (ein date), zeitgebundene `dateTime` (ein
+    datetime). Liefert (None, False), wenn der Block leer ist.
+    """
+    if not when:
+        return None, False
+    if "dateTime" in when:
+        raw = when["dateTime"]
+        # Google liefert mit Offset (…+02:00) oder Z; fromisoformat versteht
+        # beides ab Python 3.11.
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00")), False
+        except ValueError:
+            return None, False
+    if "date" in when:
+        try:
+            return date.fromisoformat(when["date"]), True
+        except ValueError:
+            return None, True
+    return None, False
+
+
+class Kalender:
+    """Die Kalender-Anbindung des Plan-Buddys (PLAN-15 … PLAN-20).
+
+    Nimmt einen `transport` (GoogleTransport in Produktion, ein Fake in Tests —
+    PLAN-29) und eine Personen-Liste der Familien-Registry (PLAN-19).
+    """
+
+    def __init__(self, transport, personen):
+        self._transport = transport
+        self._personen = list(personen)
+
+    def credentials_available(self):
+        """True, wenn der Transport Credentials hat (PLAN-20)."""
+        return self._transport.credentials_available()
+
+    def events(self, start_tag, anzahl_tage):
+        """Liefert die normalisierten Events des Fensters (PLAN-17).
+
+        `start_tag` ist ein date, `anzahl_tage` die Fenster-Größe. Fehlen die
+        Credentials oder ist Google nicht erreichbar, kommt eine leere Liste
+        zurück — kein unbehandelter Fehler (PLAN-20).
+        """
+        if not self._transport.credentials_available():
+            logger.info("Kalender: keine Credentials — leeres Lese-Ergebnis (PLAN-20)")
+            return []
+        end_tag = start_tag + timedelta(days=anzahl_tage)
+        time_min = start_tag.isoformat() + "T00:00:00Z"
+        time_max = end_tag.isoformat() + "T00:00:00Z"
+        try:
+            raw_items = self._transport.list_events(time_min, time_max)
+        except CalendarUnavailable as e:
+            logger.warning("Kalender nicht erreichbar (%s) — leeres Lese-Ergebnis", e)
+            return []
+        events = []
+        for raw in raw_items:
+            ev = self._normalise(raw)
+            if ev is not None:
+                events.append(ev)
+        return events
+
+    def _normalise(self, raw):
+        """Übersetzt ein Google-Roh-Item in das neutrale Modell (PLAN-17/PLAN-19)."""
+        beginn, ganztags = _parse_when(raw.get("start"))
+        if beginn is None:
+            return None
+        ende, _ = _parse_when(raw.get("end"))
+        titel = raw.get("summary") or "(ohne Titel)"
+        creator_email = (raw.get("creator") or {}).get("email")
+        person = resolve_person(titel, creator_email, self._personen)
+        return Event(
+            id=raw.get("id"),
+            titel=titel,
+            beginn=beginn,
+            ende=ende,
+            ganztags=ganztags,
+            person=person,
+        )
+
+    # -- Schreiben (PLAN-18) ---------------------------------------------
+
+    def event_anlegen(self, titel, start_tag, ganztags=True):
+        """Legt einen Termin an (PLAN-18). Liefert die `id` des neuen Events.
+
+        Wirft CalendarUnavailable bei fehlenden Credentials oder Netzfehler
+        (PLAN-20: Schreiben meldet einen klar erkennbaren Misserfolg).
+        """
+        if ganztags:
+            raw = {
+                "summary": titel,
+                "start": {"date": start_tag.isoformat()},
+                "end": {"date": (start_tag + timedelta(days=1)).isoformat()},
+            }
+        else:
+            raw = {"summary": titel, "start": {"dateTime": start_tag.isoformat()}}
+        res = self._transport.insert_event(raw)
+        return res.get("id")
+
+    def event_aendern(self, event_id, titel):
+        """Ändert den Titel eines Events über seine `id` (PLAN-18)."""
+        res = self._transport.patch_event(event_id, {"summary": titel})
+        return res.get("id")
+
+    def event_loeschen(self, event_id):
+        """Löscht ein Event über seine `id` (PLAN-18)."""
+        self._transport.delete_event(event_id)

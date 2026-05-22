@@ -46,6 +46,12 @@ familie/fotos/
 # zugangsdaten/zugangsdaten.example.json
 zugangsdaten/zugangsdaten.json
 
+# Plan-Buddy: Per-Instanz-Konfig + Petrantwortlichkeiten-DB (PLAN-9/PLAN-28) —
+# je Instanz separat, nicht im Repo. Format: plan/plan.example.json
+plan/plan.json
+plan/plan.db
+plan/plan.db-journal
+
 # Test-Caches
 .pytest_cache/
 __pycache__/

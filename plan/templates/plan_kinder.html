@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PlanBuddy · mein Plan</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Patrick+Hand&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="{{ url_for('static', filename='design/tokens.css') }}?v={{ anchor }}">
+
+<style>
+  *,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--kids-bg);
+    color: var(--kids-ink);
+    font-family: var(--kids-font-body);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  /* Outer page — zentriert das 1500-Frame auf 1920er-Display */
+  .page {
+    width: 100vw; height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+
+  /* Inneres Frame — feste Design-Maße aus dem Handoff.
+     BG neutral cream, damit die Pastell-Wochentagsspalten klar sichtbar
+     gegen die Page (--kids-bg, gelblich) abgesetzt sind. */
+  .frame {
+    width: 100%;
+    max-width: 1500px;
+    height: 100%;
+    max-height: 1020px;
+    background: #fdfaf2;
+    display: flex; flex-direction: column;
+  }
+
+  /* ─── Header ───────────────────────────────────────────────── */
+  .header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding: 20px 32px 12px;
+    border-bottom: 2px dashed var(--kids-border-soft);
+  }
+  .brand { display: flex; align-items: center; gap: 16px; }
+  .brand-swatch {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: var(--kids-today);
+    border: 2px solid var(--kids-ink);
+    transform: rotate(-6deg);
+  }
+  .brand-title {
+    font-family: var(--kids-font-display);
+    font-size: 38px; font-weight: 700;
+    color: var(--kids-ink); line-height: 1;
+  }
+  .brand-subtitle {
+    font-size: 18px; color: var(--kids-ink-soft);
+    margin-top: 4px;
+  }
+  .week-label {
+    font-size: 18px; color: var(--kids-ink-soft);
+  }
+
+  /* ─── Day-Chips ────────────────────────────────────────────── */
+  .day-row {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    padding: 14px 24px 8px;
+  }
+  .day-cells {
+    display: grid;
+    grid-template-columns: repeat(var(--col-count, 7), minmax(0, 1fr));
+    gap: 10px;
+  }
+  .day-chip-wrap {
+    display: flex; justify-content: center;
+  }
+  .day-chip {
+    width: 120px; height: 64px;
+    border-radius: 14px;
+    border: 2.5px solid var(--kids-ink);
+    background: var(--kids-paper);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    font-family: var(--kids-font-display);
+    color: var(--kids-ink);
+    flex-shrink: 0;
+  }
+  /* Jeder Day-Chip bekommt seine Pastellfarbe (soft); Heute kräftiger (strong)
+     plus Rotation + Schatten als zusätzliches Hervorhebungs-Pattern. */
+  .day-chip[data-wd="0"]       { background: var(--kids-wd-mo-soft); }
+  .day-chip[data-wd="1"]       { background: var(--kids-wd-di-soft); }
+  .day-chip[data-wd="2"]       { background: var(--kids-wd-mi-soft); }
+  .day-chip[data-wd="3"]       { background: var(--kids-wd-do-soft); }
+  .day-chip[data-wd="4"]       { background: var(--kids-wd-fr-soft); }
+  .day-chip[data-wd="5"]       { background: var(--kids-wd-sa-soft); }
+  .day-chip[data-wd="6"]       { background: var(--kids-wd-so-soft); }
+  .day-chip.today              { transform: rotate(-1.5deg); box-shadow: 3px 4px 0 var(--kids-ink); }
+  .day-chip.today[data-wd="0"] { background: var(--kids-wd-mo-strong); }
+  .day-chip.today[data-wd="1"] { background: var(--kids-wd-di-strong); }
+  .day-chip.today[data-wd="2"] { background: var(--kids-wd-mi-strong); }
+  .day-chip.today[data-wd="3"] { background: var(--kids-wd-do-strong); }
+  .day-chip.today[data-wd="4"] { background: var(--kids-wd-fr-strong); }
+  .day-chip.today[data-wd="5"] { background: var(--kids-wd-sa-strong); }
+  .day-chip.today[data-wd="6"] { background: var(--kids-wd-so-strong); }
+  .day-chip-label { font-size: 30px; font-weight: 700; line-height: 1; }
+  .day-chip-date {
+    font-family: var(--kids-font-body);
+    font-size: 14px;
+    color: var(--kids-ink-soft);
+    margin-top: 2px;
+  }
+  /* Kleine Über-Label für heute/morgen ("Sprungbrett zum Datum") */
+  .day-chip-wrap { flex-direction: column; gap: 4px; align-items: center; }
+  .day-overlabel {
+    font-family: var(--kids-font-display);
+    font-size: 18px; font-weight: 700;
+    color: var(--kids-ink); line-height: 1;
+    height: 18px;  /* Höhe reservieren, damit Chips ausgerichtet bleiben */
+  }
+  .day-overlabel:empty { visibility: hidden; }
+
+  /* ─── Schedule Rail ────────────────────────────────────────── */
+  .schedule {
+    padding: 0 24px;
+    flex: 1 1 auto;
+    display: flex; flex-direction: column;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    align-items: stretch;
+    border-top: 2px solid var(--kids-border-soft);
+    flex: 1 1 0;
+    min-height: 88px;
+  }
+  .rail-cell {
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; padding: 0 8px;
+  }
+  .row-cells {
+    display: grid;
+    grid-template-columns: repeat(var(--col-count, 7), minmax(0, 1fr));
+    gap: 0;
+  }
+  .cell {
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+    border-right: 1px dashed var(--kids-border-soft);
+  }
+  .cell:last-child { border-right: none; }
+  /* Pastell-Spaltenfarbe pro Wochentag (data-wd 0=Mo … 6=So). */
+  .cell[data-wd="0"]       { background: var(--kids-wd-mo-soft); }
+  .cell[data-wd="1"]       { background: var(--kids-wd-di-soft); }
+  .cell[data-wd="2"]       { background: var(--kids-wd-mi-soft); }
+  .cell[data-wd="3"]       { background: var(--kids-wd-do-soft); }
+  .cell[data-wd="4"]       { background: var(--kids-wd-fr-soft); }
+  .cell[data-wd="5"]       { background: var(--kids-wd-sa-soft); }
+  .cell[data-wd="6"]       { background: var(--kids-wd-so-soft); }
+  /* Heute = kräftige Variante derselben Tagesfarbe. */
+  .cell.today[data-wd="0"] { background: var(--kids-wd-mo-strong); }
+  .cell.today[data-wd="1"] { background: var(--kids-wd-di-strong); }
+  .cell.today[data-wd="2"] { background: var(--kids-wd-mi-strong); }
+  .cell.today[data-wd="3"] { background: var(--kids-wd-do-strong); }
+  .cell.today[data-wd="4"] { background: var(--kids-wd-fr-strong); }
+  .cell.today[data-wd="5"] { background: var(--kids-wd-sa-strong); }
+  .cell.today[data-wd="6"] { background: var(--kids-wd-so-strong); }
+  .cell.today-first::before {
+    content: "";
+    position: absolute;
+    top: -6px; left: 6px; right: 6px; height: 3px;
+    background: var(--kids-ink);
+    border-radius: 3px;
+    opacity: 0.4;
+  }
+
+  /* ─── Face / Ring-Foto ─────────────────────────────────────── */
+  .face {
+    border-radius: 50%;
+    background: var(--kids-paper);
+    display: inline-flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    flex-shrink: 0;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.04);
+  }
+  .face img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .face.size-76  { width: 76px; height: 76px; }
+  .face.size-54  { width: 54px; height: 54px; }
+  .face.size-24  { width: 24px; height: 24px; }
+
+  .face.ring-blue   { border: 4px solid var(--kids-ring-blue); }
+  .face.ring-orange { border: 4px solid var(--kids-ring-orange); }
+  .face.ring-green  { border: 4px solid var(--kids-ring-green); }
+  .face.ring-red    { border: 4px solid var(--kids-ring-red); }
+  .face.ring-purple { border: 4px solid var(--kids-ring-purple); }
+  .face.ring-teal   { border: 4px solid var(--kids-ring-teal); }
+  .face.ring-gray   { border: 4px solid var(--kids-ring-gray); }
+
+  .face.size-54.ring-blue,
+  .face.size-54.ring-orange,
+  .face.size-54.ring-green,
+  .face.size-54.ring-red,
+  .face.size-54.ring-purple,
+  .face.size-54.ring-teal,
+  .face.size-54.ring-gray { border-width: 3px; }
+
+  .face.size-24.ring-blue,
+  .face.size-24.ring-orange,
+  .face.size-24.ring-green,
+  .face.size-24.ring-red,
+  .face.size-24.ring-purple,
+  .face.size-24.ring-teal,
+  .face.size-24.ring-gray { border-width: 2px; }
+
+  .empty-face {
+    width: 60px; height: 60px; border-radius: 50%;
+    border: 2px dashed #cdc7bd;
+    display: flex; align-items: center; justify-content: center;
+    color: #cdc7bd;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .empty-face::before {
+    content: "+";
+    font-family: var(--kids-font-display);
+    font-size: 38px; font-weight: 700; line-height: 1;
+    margin-top: -4px;
+  }
+  .empty-face:hover {
+    border-color: var(--kids-ink-soft);
+    color: var(--kids-ink-soft);
+  }
+
+  /* Adult-Face in den Schedule-Cells (bring/pickup/dinner/bed1/bed2) ist
+     clickable und cycled durch die Personen. Activity-Cells und Termin-Faces
+     sollen NICHT als Adult-Cycle behandelt werden. */
+  .cell .face.size-76 { cursor: pointer; transition: transform 0.1s; }
+  .cell .face.size-76:hover { transform: scale(1.04); }
+
+  /* ─── Activity-Chip (act1/act2) ────────────────────────────── */
+  .activity-chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 14px;
+    background: var(--kids-paper);
+    border: 2.5px solid var(--kids-ink);
+    border-radius: 999px;
+    transform: rotate(-1deg);
+    box-shadow: 2px 2px 0 var(--kids-ink);
+    font-family: var(--kids-font-display);
+    font-size: 22px; font-weight: 700;
+    color: var(--kids-ink);
+  }
+  .activity-chip svg { display: block; }
+
+  /* ─── Appointments-Bar ─────────────────────────────────────── */
+  .appts {
+    padding: 12px 24px 22px;
+    border-top: 2px dashed var(--kids-border-soft);
+    background: var(--kids-paper);
+  }
+  .appts-grid {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    align-items: flex-start;
+  }
+  .appts-rail {
+    display: flex; align-items: center; justify-content: center;
+    padding-top: 8px;
+  }
+  .appts-stack {
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .appts-spans {
+    display: grid;
+    grid-template-columns: repeat(var(--col-count, 7), minmax(0, 1fr));
+    gap: 10px;
+  }
+  .appts-spans:empty { display: none; }
+  .pill.span {
+    /* Spalten-Span wird inline gesetzt (grid-column: start / end+1).
+       Style sonst wie eine normale Pille — width: 100% innerhalb der Spans. */
+  }
+  .appts-cells {
+    display: grid;
+    grid-template-columns: repeat(var(--col-count, 7), minmax(0, 1fr));
+    gap: 10px;
+  }
+  .appts-col {
+    display: flex; flex-direction: column; gap: 6px;
+    min-height: 80px;
+  }
+  .pill {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 8px;
+    background: var(--kids-paper);
+    border: 2px solid var(--kids-ink);
+    border-radius: 10px;
+    color: var(--kids-ink);
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .pill.muted {
+    background: var(--kids-weekend-bg);
+    border-color: var(--kids-muted);
+    opacity: 0.75;
+  }
+  .pill-body { min-width: 0; flex: 1; }
+  .pill-time {
+    font-weight: 700; font-size: 11px;
+    color: var(--kids-ink-soft); line-height: 1;
+  }
+  .pill-label {
+    font-family: var(--kids-font-display);
+    font-size: 19px; font-weight: 700;
+    line-height: 1; margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  /* SVG-Icons — generelle Defaults */
+  svg.icon { display: block; }
+
+  /* ═══ Toddler-Variante (A2) ════════════════════════════════════
+     Größere Maße aus dem Design-Handoff. Aktiv durch .frame--toddler.
+     Overrides hier am Ende — schlagen frühere generelle Regeln. */
+  .frame--toddler .day-overlabel { font-size: 38px; height: 38px; }
+  .frame--toddler .day-chip {
+    width: 160px; height: 88px; border-width: 3px;
+  }
+  .frame--toddler .day-chip-label { font-size: 44px; }
+  .frame--toddler .day-chip-date  { font-size: 18px; }
+
+  /* Row-Höhen sind aufs 1080-Display heruntergerechnet (Design-Original 132px
+     würde auf 1220px Frame gehören). Wenn das Display kleiner ist, scrollt
+     die page (siehe body-Override). */
+  .frame--toddler .row {
+    grid-template-columns: 220px 1fr;
+    min-height: 116px;
+  }
+  .frame--toddler .rail-cell { gap: 16px; padding: 0 12px; }
+  .frame--toddler .rail-cell > svg.icon { width: 68px !important; height: 68px !important; }
+
+  /* Adult-Face in der Cell: ~96×96 statt 76×76, dickerer Ring. */
+  .frame--toddler .cell .face.size-76 {
+    width: 96px; height: 96px; border-width: 5px;
+  }
+  /* Kid-Face im Rail: 68×68 statt 54×54. */
+  .frame--toddler .rail-cell .face.size-54 {
+    width: 68px; height: 68px; border-width: 4px;
+  }
+
+  /* Empty-Slot größer, Plus prominenter. */
+  .frame--toddler .empty-face {
+    width: 86px; height: 86px; border-width: 3px;
+  }
+  .frame--toddler .empty-face::before { font-size: 52px; }
+
+  /* Aktivitäts-Chip wird zum runden "Stempel" — kein Label, nur Icon. */
+  .frame--toddler .activity-chip {
+    width: 100px; height: 100px;
+    border-radius: 50%;
+    padding: 0;
+    border-width: 4px;
+    box-shadow: 4px 4px 0 var(--kids-ink);
+    transform: rotate(-2deg);
+    justify-content: center;
+  }
+  .frame--toddler .activity-chip > svg.icon {
+    width: 56px !important; height: 56px !important;
+  }
+  .frame--toddler .activity-chip > span { display: none; }
+
+  /* Größerer Header-Bereich und Gap zwischen Day-Chips. */
+  .frame--toddler .day-cells { gap: 36px; }
+  .frame--toddler .row-cells { gap: 36px; }
+  .frame--toddler .day-row   { padding: 18px 40px 10px; }
+  .frame--toddler .schedule  { padding: 0 40px; }
+
+  /* Falls auf einem kleineren Display nicht alles reinpasst: erlaube Scroll
+     statt etwas wegzuklippen. body global hat overflow:hidden für A1. */
+  body:has(.frame--toddler) { overflow: auto; }
+  .page:has(.frame--toddler) { align-items: flex-start; padding-top: 12px; padding-bottom: 12px; }
+  .frame--toddler { max-height: none; }
+
+  /* ─── Event-Picker Popup ─── */
+  .picker-backdrop {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(43, 42, 38, 0.18);
+    display: none;
+  }
+  .picker-backdrop.open { display: block; }
+  .picker {
+    position: absolute;
+    width: 340px;
+    background: var(--kids-bg);
+    border: 3px solid var(--kids-ink);
+    border-radius: 18px;
+    box-shadow: 6px 8px 0 var(--kids-ink);
+    padding: 16px;
+    font-family: var(--kids-font-body);
+  }
+  .picker-delete {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%; background: transparent; border: none;
+    padding: 6px 10px 10px; margin: 0 auto 12px;
+    cursor: pointer;
+    font-family: var(--kids-font-display); font-weight: 700;
+    font-size: 22px; color: var(--kids-ink);
+    border-bottom: 2px dashed var(--kids-border-soft);
+  }
+  .picker-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  }
+  .picker-tile {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 4px;
+    padding: 12px 6px 10px;
+    border: 2.5px solid var(--kids-ink);
+    border-radius: 14px;
+    box-shadow: 2px 3px 0 var(--kids-ink);
+    cursor: pointer;
+    font-family: inherit;
+    min-height: 90px;
+    background: var(--kids-paper);
+  }
+  .picker-tile-label {
+    font-family: var(--kids-font-display); font-weight: 700;
+    font-size: 18px; color: var(--kids-ink); line-height: 1;
+    margin-top: 3px;
+  }
+</style>
+</head>
+<body>
+
+{# ─── Inline SVG Icons (Schedule + Aktivitäten + Termine) ─── #}
+{% macro icon_sun(size=52) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="32" cy="36" r="9"/>
+  <path d="M32 18 L32 14 M44 24 L47 21 M50 36 L54 36 M20 24 L17 21 M14 36 L10 36"/>
+  <path d="M10 50 L54 50"/>
+</svg>
+{% endmacro %}
+
+{% macro icon_clock(size=52) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="32" cy="32" r="20"/>
+  <path d="M32 20 L32 32 L42 36"/>
+</svg>
+{% endmacro %}
+
+{% macro icon_star(size=52) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M32 12 L38 26 L52 27 L41 36 L45 50 L32 42 L19 50 L23 36 L12 27 L26 26 Z"/>
+</svg>
+{% endmacro %}
+
+{% macro icon_fork(size=52) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M22 12 L22 30 M18 12 L18 22 Q18 28 22 28 M26 12 L26 22 Q26 28 22 28 M22 30 L22 54"/>
+  <path d="M42 12 Q38 16 38 24 Q38 30 42 30 L42 54"/>
+</svg>
+{% endmacro %}
+
+{% macro icon_moon(size=52) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M44 18 Q30 18 26 32 Q26 46 40 50 Q28 48 22 38 Q18 22 32 14 Q40 14 44 18 Z"/>
+</svg>
+{% endmacro %}
+
+{% macro icon_sparkle(size=42) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M32 10 L34 28 L52 32 L34 36 L32 54 L30 36 L12 32 L30 28 Z"/>
+  <path d="M50 16 L51 22 L57 23 L51 24 L50 30 L49 24 L43 23 L49 22 Z"/>
+</svg>
+{% endmacro %}
+
+{# Aktivitäts-Icons (für Activity-Chip in act1/act2) #}
+{% macro icon_climb(size=28) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M8 52 L24 24 L34 40 L44 18 L56 52 Z"/>
+  <circle cx="44" cy="22" r="2" fill="var(--kids-ink)"/>
+</svg>
+{% endmacro %}
+
+{% macro icon_brush(size=28) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M14 50 Q14 56 20 56 Q26 56 26 50 L26 44 L14 44 Z"/>
+  <path d="M14 44 L40 18 L46 24 L20 50"/>
+</svg>
+{% endmacro %}
+
+{% macro icon_wave(size=28) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M6 28 Q14 22 22 28 Q30 34 38 28 Q46 22 54 28 Q58 30 60 28"/>
+  <path d="M6 40 Q14 34 22 40 Q30 46 38 40 Q46 34 54 40 Q58 42 60 40"/>
+  <path d="M6 52 Q14 46 22 52 Q30 58 38 52 Q46 46 54 52 Q58 54 60 52"/>
+</svg>
+{% endmacro %}
+
+{% macro icon_play(size=28) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="20" cy="44" r="10"/>
+  <path d="M10 44 Q20 38 30 44 M20 34 Q14 44 20 54 M20 34 Q26 44 20 54"/>
+  <path d="M40 18 L40 50 M40 18 L54 18 M40 30 L52 26 M40 50 Q48 42 56 48"/>
+</svg>
+{% endmacro %}
+
+{% macro icon_music(size=28) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M22 50 L22 18 L48 14 L48 44"/>
+  <ellipse cx="18" cy="50" rx="6" ry="4"/>
+  <ellipse cx="44" cy="44" rx="6" ry="4"/>
+</svg>
+{% endmacro %}
+
+{% macro icon_pin(size=28) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M32 8 Q18 8 18 22 Q18 34 32 56 Q46 34 46 22 Q46 8 32 8 Z"/>
+  <circle cx="32" cy="22" r="6"/>
+</svg>
+{% endmacro %}
+
+{% macro icon_cake(size=28) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="10" y="34" width="44" height="18" rx="2"/>
+  <path d="M10 42 Q14 38 18 42 Q22 46 26 42 Q30 38 34 42 Q38 46 42 42 Q46 38 50 42 Q52 44 54 42"/>
+  <path d="M20 34 L20 24 M32 34 L32 22 M44 34 L44 24"/>
+</svg>
+{% endmacro %}
+
+{% macro icon_friends(size=28) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="22" cy="20" r="6"/>
+  <path d="M12 50 Q12 34 22 32 Q32 34 32 50"/>
+  <circle cx="44" cy="22" r="5"/>
+  <path d="M34 50 Q34 38 44 36 Q54 38 54 50"/>
+</svg>
+{% endmacro %}
+
+{% macro icon_trees(size=28) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M20 10 L10 28 L16 28 L8 42 L18 42 L18 52"/>
+  <path d="M16 42 L24 42"/>
+  <path d="M44 14 L34 30 L40 30 L32 44 L42 44 L42 54"/>
+  <path d="M40 44 L48 44"/>
+  <path d="M42 30 L48 30 L40 16"/>
+</svg>
+{% endmacro %}
+
+{% macro icon_tooth(size=22) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M22 14 Q14 14 14 24 Q14 32 18 38 Q20 50 26 52 Q30 52 30 44 Q30 38 32 38 Q34 38 34 44 Q34 52 38 52 Q44 50 46 38 Q50 32 50 24 Q50 14 42 14 Q36 14 32 18 Q28 14 22 14 Z"/>
+</svg>
+{% endmacro %}
+
+{% macro icon_house(size=22) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M10 32 L32 14 L54 32 L54 54 L10 54 Z"/>
+  <path d="M26 54 L26 38 L38 38 L38 54"/>
+</svg>
+{% endmacro %}
+
+{% macro icon_holiday(size=22) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="32" cy="28" r="10"/>
+  <path d="M32 12 L32 8 M48 28 L52 28 M16 28 L12 28 M44 16 L47 13 M20 16 L17 13"/>
+  <path d="M8 50 Q20 42 32 50 Q44 58 56 50"/>
+  <path d="M8 54 Q20 46 32 54 Q44 62 56 54"/>
+</svg>
+{% endmacro %}
+
+{% macro icon_x_close(size=22) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M14 14 L50 50 M50 14 L14 50"/>
+</svg>
+{% endmacro %}
+
+{% macro icon_flower(size=22) %}
+<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="32" cy="22" r="5"/>
+  <circle cx="22" cy="28" r="5"/>
+  <circle cx="42" cy="28" r="5"/>
+  <circle cx="26" cy="38" r="5"/>
+  <circle cx="38" cy="38" r="5"/>
+  <path d="M32 42 L32 56"/>
+  <path d="M32 50 Q26 46 22 50 M32 50 Q38 46 42 50"/>
+</svg>
+{% endmacro %}
+
+{# Macro: Face mit Foto im Ring #}
+{% macro face(ring, photo_url, size_class='size-76') %}
+<div class="face {{size_class}} ring-{{ring or 'gray'}}">
+  {% if photo_url %}<img src="{{photo_url}}" alt="">{% endif %}
+</div>
+{% endmacro %}
+
+{# Helper: Activity-/Termin-Icon nach Key. Akzeptiert sowohl Activity-Types
+   (klettern/kreativ/…) als auch Termin-Icon-Keys (tooth/sparkle/house/…). #}
+{% macro activity_icon(key, size=28) %}
+  {% if key == 'klettern' or key == 'climb' %}{{ icon_climb(size) }}
+  {% elif key == 'kreativ' or key == 'brush'  %}{{ icon_brush(size) }}
+  {% elif key == 'schwimmen' or key == 'wave' %}{{ icon_wave(size) }}
+  {% elif key == 'spielplatz' or key == 'play'%}{{ icon_play(size) }}
+  {% elif key == 'musik' or key == 'music'    %}{{ icon_music(size) }}
+  {% elif key == 'ausflug' or key == 'pin'    %}{{ icon_pin(size) }}
+  {% elif key == 'geburtstag' or key == 'cake'%}{{ icon_cake(size) }}
+  {% elif key == 'petrabredung' or key == 'friends' %}{{ icon_friends(size) }}
+  {% elif key == 'waldgang' or key == 'trees' %}{{ icon_trees(size) }}
+  {% elif key == 'tooth'   %}{{ icon_tooth(size) }}
+  {% elif key == 'house'   %}{{ icon_house(size) }}
+  {% elif key == 'holiday' %}{{ icon_holiday(size) }}
+  {% elif key == 'flower'  %}{{ icon_flower(size) }}
+  {% elif key == 'sparkle' %}{{ icon_sparkle(size) }}
+  {% else %}{{ icon_star(size) }}{% endif %}
+{% endmacro %}
+
+{# Label-Lookup pro Activity-Type #}
+{% set ACT_LABEL = {
+  'klettern': 'Klettern', 'kreativ': 'Kreativ', 'schwimmen': 'Schwimmen',
+  'spielplatz': 'Spielplatz', 'musik': 'Musik', 'ausflug': 'Ausflug',
+  'geburtstag': 'Geburtstag', 'petrabredung': 'Petrabredung', 'waldgang': 'Waldgang'
+} %}
+
+{# ── XBuddy-Datenanbindung ──────────────────────────────────────────────
+   `personen` kommt aus der Familien-Registry (FAM-7), `slots` aus der
+   Plan-Buddy-Config (PLAN-6). Identität wird ausschließlich über Foto im
+   Ring gezeigt (PLAN-24) — Fotos liefert der Registry-Endpunkt FAM-8. #}
+{% set person_ring = {} %}
+{% for p in personen %}
+  {% set _ = person_ring.update({p.id: p.ring}) %}
+{% endfor %}
+
+{# Foto-URL je Person-id — Profilfoto liefert die Familien-Registry über
+   ihren HTTP-Endpunkt FAM-8 (/api/v1/familie/foto/<id>). `person_photo_url`
+   wird von main.py befüllt: nur Personen, die ein Foto tragen. #}
+
+{# Wochentags-Slugs für die Pastell-Spaltenfarben. #}
+{% set wd_names = ['mo','di','mi','do','fr','sa','so'] %}
+
+<div class="page">
+  <div class="frame {% if variant == 'toddler' %}frame--toddler{% endif %}" style="--col-count: {{ days|length }};">
+
+    {# ─── Header ─── #}
+    <div class="header">
+      <div class="brand">
+        <div class="brand-swatch"></div>
+        <div>
+          <div class="brand-title">mein Plan</div>
+          <div class="brand-subtitle">heute und die nächsten Tage</div>
+        </div>
+      </div>
+      <div class="week-label">{{ days[0].date_short }} – {{ (days|last).date_short }}</div>
+    </div>
+
+    {# ─── Day-Chips (rollierendes Fenster ab heute, PLAN-4/5) ─── #}
+    <div class="day-row">
+      <div></div>
+      <div class="day-cells">
+        {% for d in days %}
+        <div class="day-chip-wrap">
+          <div class="day-overlabel">
+            {%- if d.is_today %}heute{% elif d.is_tomorrow %}morgen{% endif -%}
+          </div>
+          <div class="day-chip {% if d.is_today %}today{% endif %}" data-wd="{{ d.wd }}">
+            <div class="day-chip-label">{{ d.weekday }}</div>
+            <div class="day-chip-date">{{ d.date_short }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    {# ─── Schedule-Rail (Slot-Zeilen aus der Config, PLAN-6/7) ─── #}
+    <div class="schedule">
+      {% for slot in slots %}
+        {% set is_first_row = loop.first %}
+        <div class="row">
+          <div class="rail-cell">
+            {% if slot.icon == 'sun'   %}{{ icon_sun(52)  }}{% endif %}
+            {% if slot.icon == 'clock' %}{{ icon_clock(52)}}{% endif %}
+            {% if slot.icon == 'star'  %}{{ icon_star(52) }}{% endif %}
+            {% if slot.icon == 'fork'  %}{{ icon_fork(52) }}{% endif %}
+            {% if slot.icon == 'moon'  %}{{ icon_moon(52) }}{% endif %}
+            {% if slot.kind %}
+              {% set kid_ring = person_ring.get(slot.kind) %}
+              {% set kid_photo = person_photo_url.get(slot.kind) %}
+              {{ face(kid_ring, kid_photo, 'size-54') }}
+            {% endif %}
+          </div>
+          <div class="row-cells">
+            {% for d in days %}
+              {% set cell = schedule[d.iso][slot.schluessel] %}
+              {% set cell_classes = [] %}
+              {% if d.is_today %}{% set _ = cell_classes.append('today') %}{% endif %}
+              {% if d.is_today and is_first_row %}{% set _ = cell_classes.append('today-first') %}{% endif %}
+              {% set wd_name = wd_names[d.wd] %}
+              {% set wd_strength = 'strong' if d.is_today else 'soft' %}
+              <div class="cell {{ cell_classes|join(' ') }}"
+                   data-slot="{{ slot.schluessel }}"
+                   data-slot-art="{{ slot.art }}"
+                   data-date="{{ d.iso }}"
+                   data-week-start="{{ d.week_start }}"
+                   data-day-in-week="{{ d.wd }}"
+                   data-wd="{{ d.wd }}"
+                   style="background: var(--kids-wd-{{ wd_name }}-{{ wd_strength }});"
+                   {% if slot.kind %}data-child="{{ slot.kind }}"{% endif %}
+                   {% if slot.art == 'erwachsenen-slot' and cell and cell is mapping and cell.person %}data-person-id="{{ cell.person }}"{% endif %}
+                   {% if cell and cell is mapping and cell.event_id %}data-event-id="{{ cell.event_id }}"{% endif %}>
+                {% if slot.art == 'aktivitaets-slot' and cell and cell is mapping %}
+                  <div class="activity-chip">
+                    {{ activity_icon(cell.type, 28) }}
+                    <span>{{ cell.label or ACT_LABEL.get(cell.type, '') }}</span>
+                  </div>
+                {% elif slot.art == 'erwachsenen-slot' and cell and cell is mapping %}
+                  {% set photo = person_photo_url.get(cell.person) %}
+                  {{ face(cell.ring, photo, 'size-76') }}
+                {% elif slot.art == 'erwachsenen-slot' %}
+                  <div class="empty-face"></div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    {# ─── Termin-Leiste — entfällt in der Kleinkind-Stufe (PLAN-3/13) ─── #}
+    {% if show_appointments %}
+    <div class="appts">
+      <div class="appts-grid">
+        <div class="appts-rail">{{ icon_sparkle(42) }}</div>
+        <div class="appts-stack">
+          {# Mehrtages-Termine oben als Span über mehrere Spalten (PLAN-14) #}
+          <div class="appts-spans">
+            {% for s in span_appointments %}
+              <div class="pill span"
+                   style="grid-column: {{ s.start_day + 1 }} / {{ s.end_day + 2 }};">
+                {{ activity_icon(s.icon, 22) }}
+                <div class="pill-body">
+                  <div class="pill-label">{{ s.label }}</div>
+                </div>
+                {% if s.ring %}
+                  {% set p = person_photo_url.get(s.person) %}
+                  {{ face(s.ring, p, 'size-24') }}
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          {# Einzel-Termine je Spalte (PLAN-13) #}
+          <div class="appts-cells">
+            {% for d in days %}
+            <div class="appts-col">
+              {% for a in appointments[d.iso] %}
+                <div class="pill">
+                  {{ activity_icon(a.icon, 22) }}
+                  <div class="pill-body">
+                    {% if a.time %}<div class="pill-time">{{ a.time }}</div>{% endif %}
+                    <div class="pill-label">{{ a.label }}</div>
+                  </div>
+                  {% if a.ring %}
+                    {% set p = person_photo_url.get(a.person) %}
+                    {{ face(a.ring, p, 'size-24') }}
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+{# ─── Event-Picker (versteckt, JS macht visible) ─── #}
+<div class="picker-backdrop" id="pickerBackdrop">
+  <div class="picker" id="picker">
+    <button class="picker-delete" type="button" data-action="delete">
+      {{ icon_x_close(22) }}
+      <span>Event löschen</span>
+    </button>
+    <div class="picker-grid">
+      {% set picker_options = [
+        ('klettern',   'Klettern',   '#d6ecc7'),
+        ('kreativ',    'Kreativ',    '#dcd0f0'),
+        ('schwimmen',  'Schwimmen',  '#cfe6f5'),
+        ('spielplatz', 'Spielplatz', '#d6ecc7'),
+        ('musik',      'Musik',      '#dcd0f0'),
+        ('ausflug',    'Ausflug',    '#ffe1c2'),
+        ('geburtstag', 'Geburtstag', '#ffe1c2'),
+        ('petrabredung','Petrabredung','#f9c8c8'),
+        ('waldgang',   'Waldgang',   '#cfe6f5'),
+      ] %}
+      {% for atype, label, tint in picker_options %}
+        <button class="picker-tile" type="button"
+                data-action="set" data-type="{{ atype }}"
+                style="background: {{ tint }};">
+          {{ activity_icon(atype, 38) }}
+          <div class="picker-tile-label">{{ label }}</div>
+        </button>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<script>
+// PLAN-7: Erwachsenen-Cycle. ADULTS = Erwachsene der Familien-Registry in
+// Registry-Reihenfolge (FAM-2). Identität nur über Foto im Ring (PLAN-24).
+const ADULTS = [
+  {% for p in personen if p.art == 'erwachsene' -%}
+    {id: {{ p.id|tojson }}, ring: {{ p.ring|tojson }},
+     photo: {{ person_photo_url.get(p.id)|tojson if person_photo_url.get(p.id) else 'null' }}}{% if not loop.last %},{% endif %}
+  {% endfor %}
+];
+
+// Cycle-Reihenfolge: null → ADULTS[0] → ADULTS[1] → … → null
+function nextAdult(currentId) {
+  if (currentId === null) return ADULTS[0] || null;
+  const idx = ADULTS.findIndex(a => a.id === currentId);
+  if (idx === -1) return ADULTS[0] || null;
+  if (idx === ADULTS.length - 1) return null;
+  return ADULTS[idx + 1];
+}
+
+function currentAdultOfCell(cell) {
+  return cell.dataset.personId || null;
+}
+
+function renderAdultCell(cell, adult) {
+  if (adult) {
+    cell.dataset.personId = adult.id;
+    cell.innerHTML = `<div class="face size-76 ring-${adult.ring}">${adult.photo ? `<img src="${adult.photo}" alt="">` : ''}</div>`;
+  } else {
+    delete cell.dataset.personId;
+    cell.innerHTML = `<div class="empty-face"></div>`;
+  }
+}
+
+document.addEventListener('click', async (e) => {
+  const cell = e.target.closest('.cell[data-slot]');
+  if (!cell) return;
+  const slotArt = cell.dataset.slotArt;
+
+  // PLAN-7/8: Erwachsenen-Slot — Cycle, dann lokal speichern.
+  if (slotArt === 'erwachsenen-slot') {
+    const cur = currentAdultOfCell(cell);
+    const nxt = nextAdult(cur);
+    renderAdultCell(cell, nxt);
+    try {
+      await fetch('/api/v1/plan/zuteilung', {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          week_start: cell.dataset.weekStart,
+          day:        parseInt(cell.dataset.dayInWeek, 10),
+          slot:       cell.dataset.slot,
+          person_id:  nxt ? nxt.id : null,
+        }),
+      });
+    } catch (err) {
+      console.error('zuteilung failed', err);
+    }
+    return;
+  }
+
+  // PLAN-11: Aktivitäts-Slot — Picker öffnen.
+  if (slotArt === 'aktivitaets-slot') {
+    openPicker(cell);
+  }
+});
+
+// ─── Event-Picker (PLAN-11) ───
+const picker          = document.getElementById('picker');
+const pickerBackdrop  = document.getElementById('pickerBackdrop');
+let activeCell = null;
+
+function openPicker(cell) {
+  activeCell = cell;
+  pickerBackdrop.classList.add('open');
+  const r = cell.getBoundingClientRect();
+  const pw = 340, ph = 460;
+  let left = r.right + 12;
+  let top  = r.top;
+  if (left + pw > window.innerWidth - 12) left = Math.max(12, r.left - pw - 12);
+  if (top + ph > window.innerHeight - 12) top = Math.max(12, window.innerHeight - ph - 12);
+  if (top < 12) top = 12;
+  picker.style.left = `${left}px`;
+  picker.style.top  = `${top}px`;
+}
+
+function closePicker() {
+  pickerBackdrop.classList.remove('open');
+  activeCell = null;
+}
+
+pickerBackdrop.addEventListener('click', (e) => {
+  if (e.target === pickerBackdrop) closePicker();
+});
+
+picker.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn || !activeCell) return;
+  const action = btn.dataset.action;  // 'set' | 'delete'
+  const type   = action === 'set' ? btn.dataset.type : null;
+  const cell   = activeCell;
+  closePicker();
+  try {
+    let r;
+    if (action === 'delete') {
+      // PLAN-11/18: Event löschen.
+      r = await fetch('/api/v1/plan/aktivitaet', {
+        method: 'DELETE', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({event_id: cell.dataset.eventId || null}),
+      });
+    } else {
+      // PLAN-11/18: Aktivität anlegen oder ändern.
+      r = await fetch('/api/v1/plan/aktivitaet', {
+        method: 'PUT', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          datum:    cell.dataset.date,
+          kind:     cell.dataset.child,
+          type:     type,
+          event_id: cell.dataset.eventId || null,
+        }),
+      });
+    }
+    if (!r.ok) throw new Error(await r.text());
+    // OPEN-PLAN-C: Page-Reload spiegelt den frischen Kalender-Stand.
+    location.reload();
+  } catch (err) {
+    console.error('aktivitaet update failed', err);
+    alert('Konnte Aktivität nicht speichern: ' + err.message);
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && pickerBackdrop.classList.contains('open')) closePicker();
+});
+</script>
+
+</body>
+</html>

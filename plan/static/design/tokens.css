@@ -1,0 +1,180 @@
+/* ══════════════════════════════════════════════════════════════════════
+   BuddyBoard Design Tokens  ·  boxly – Nordic AAC  ·  v1.0  2026-04
+   ══════════════════════════════════════════════════════════════════════
+   SINGLE SOURCE OF TRUTH for all visual brand values.
+
+   DESIGNER — when you arrive:
+     1. Read docs/standards/branding-todo.md for a full briefing.
+     2. Change values in the sections marked "DESIGNER" below.
+     3. Do NOT rename variables — only change the values.
+        Renaming breaks all apps; new names go in a migration ticket.
+
+   DEVELOPER — rules:
+     • Never hardcode a colour, radius or shadow in app CSS.
+     • Always reference a token: color: var(--berry), not color: #B85F6B.
+     • New token needed? Add it here first, open a ticket if it needs
+       designer input, mark it with "/* TODO designer *\/".
+   ══════════════════════════════════════════════════════════════════════ */
+
+:root {
+
+  /* ── Backgrounds & Surfaces ────────────────────────────────────────
+     DESIGNER: The warm linen feel of BuddyBoard lives here.            */
+  --bg:           #F5F1E8;   /* Page background — warm linen parchment  */
+  --bg-soft:      #EFE8DC;   /* Slightly deeper, nested backgrounds     */
+  --surface:      #FFFFFF;   /* Card / panel / modal surface            */
+  --surface-2:    #F0EBE0;   /* Secondary surface, hover states         */
+  --surface-soft: #FAF7F2;   /* Very light surface, subtle highlight    */
+
+
+  /* ── Borders ───────────────────────────────────────────────────────  */
+  --border:        #E3DCCF;  /* Default border                          */
+  --border-soft:   #DED6C9;  /* Softer, less prominent border           */
+  --border-strong: #D5CDBF;  /* Emphasis / active border                */
+
+
+  /* ── Text ──────────────────────────────────────────────────────────
+     DESIGNER: Near-black on warm background — avoid pure #000000.      */
+  --text:       #2B2A28;     /* Body copy, primary labels               */
+  --text-2:     #6B6761;     /* Secondary text, captions                */
+  --text-soft:  #6A655D;     /* Alias for --text-2 (older apps)         */
+  --text-3:     #9A938A;     /* Placeholder, disabled, faint            */
+  --text-faint: #938D84;     /* Alias for --text-3 (older apps)         */
+
+
+  /* ── Brand Primary ─────────────────────────────────────────────────
+     DESIGNER: The main action colour — buttons, active nav, focus.
+     Currently a dark forest green. Warm, calm, natural.                */
+  --primary:       #47503C;  /* Main CTA colour                         */
+  --primary-light: #56624B;  /* Lighter variant, hover states           */
+  --moss:          #5D7458;  /* Alias used in AdminBuddy + KIBuddy      */
+  --forest:        #445245;  /* Deep primary — dark variant             */
+
+
+  /* ── Semantic Accent Palette ────────────────────────────────────────
+     DESIGNER: Named by role/meaning, not by visual colour.
+     These are the canonical accent colours from the boxly spec.
+
+     Colour-to-category mapping:
+       Navigation / active states   → --primary / --moss
+       Needs (water / drink)        → --lake
+       Feelings / persons           → --berry
+       Food / hunger                → --straw
+       Activities / creativity      → --clay
+       Sleep / routines             → --lavender-earth
+       Knowledge / media            → --lake
+       Joy / favourites             → --straw                           */
+  --clay:           #B06B3C; /* Creativity, Activity, warm highlight    */
+  --terracotta:     #C97A4A; /* Buttons, warm accent                    */
+  --sand:           #D6B98C; /* Soft surfaces, decorative               */
+  --straw:          #E7C968; /* Joy, Learning, Favourites               */
+  --berry:          #B85F6B; /* Emotion, Persons, Warning               */
+  --lake:           #668EA8; /* Knowledge, Navigation, Water            */
+  --sky:            #83AFC0; /* Weather, Rain, calm                     */
+  --lavender-earth: #8D829B; /* Routines, Sleep, transition             */
+
+
+  /* ── App Accent Colours (PlanBuddy / modern palette) ───────────────
+     NOTE: These are PlanBuddy's evolved colour set. Values differ from
+     the semantic palette above. A future designer ticket will reconcile
+     these two systems into one coherent palette.
+     See: docs/standards/branding-todo.md → "Palette reconciliation"   */
+  --a-orange:       #E6782E;  --a-orange-tint:  rgba(230,120,46,.10);
+  --a-coral:        #E45749;  --a-coral-tint:   rgba(228,87,73,.10);
+  --a-yellow:       #F2C84B;  --a-yellow-tint:  rgba(242,200,75,.12);
+  --a-moss:         #2F9E5A;  --a-moss-tint:    rgba(47,158,90,.10);
+  --a-sky:          #3B82F6;  --a-sky-tint:     rgba(59,130,246,.10);
+  --a-violet:       #8B5CF6;  --a-violet-tint:  rgba(139,92,246,.10);
+  --a-pink:         #EC4899;  --a-pink-tint:    rgba(236,72,153,.10);
+  --a-teal:         #14B8A6;  --a-teal-tint:    rgba(20,184,166,.10);
+
+
+  /* ── Border Radius ─────────────────────────────────────────────────
+     DESIGNER: Controls the "roundness" feel. Higher = friendlier.
+     PlanBuddy names (--radius-s/m/l) and spec names (--radius-sm/md)
+     coexist — they will be unified in the backfill pass.               */
+  --radius-s:    8px;   --radius-xs:  8px;   /* small chips, tags       */
+  --radius-m:   12px;   --radius-sm: 12px;   /* cards, inputs           */
+  --radius-l:   16px;   --radius-md: 16px;   /* panels, modals          */
+  --radius-xl:  22px;                        /* PlanBuddy large cards    */
+  --radius-lg:  20px;                        /* spec large cards         */
+  --radius-2xl: 28px;                        /* spec extra-large         */
+  --radius-full: 9999px;                     /* pills, circular elements */
+
+
+  /* ── Shadows ───────────────────────────────────────────────────────  */
+  --shadow-soft: 0 6px 20px rgba(37,31,24,.04);   /* Subtle lift        */
+  --shadow:      0 4px 16px rgba(44,42,39,.08);   /* Card hover         */
+  --shadow-lg:   0 12px 40px rgba(44,42,39,.16);  /* Modals, drawers    */
+
+
+  /* ── Typography ────────────────────────────────────────────────────
+     DESIGNER: Inter is the brand typeface. Scale and weights are fixed.
+     To change the typeface, update --font-family only.
+
+     Scale (for 1920×1080 kiosk at 16px base):
+       Display  44px / 600 / letter-spacing -1px
+       Heading  28px / 600 / letter-spacing -0.5px
+       Body     16px / 400 / line-height 1.6
+       Label    12px / 700 / uppercase / letter-spacing 1px           */
+  --font-family:    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-weight-regular:  400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+
+
+  /* ── Icon System ───────────────────────────────────────────────────  */
+  --icon-stroke: 1.8px;  /* stroke-width for all inline SVG icons       */
+
+
+  /* ══════════════════════════════════════════════════════════════════
+     Kids-Wireframe-Theme (PlanBuddy /kinder Dashboards)
+     Aus dem Design-Handoff "PlanBuddy Kids Wireframes" — kindgerechte
+     Sub-Palette mit handgezeichnetem Look. Alle Variablen mit `--kids-`
+     prefixed, um Kollision mit der Haupt-Palette zu vermeiden.
+     Diese Werte sind im Handoff verbindlich.
+     ════════════════════════════════════════════════════════════════ */
+  --kids-bg:           #fbf2d4;
+  --kids-paper:        #ffffff;
+  --kids-ink:          #2b2a26;
+  --kids-ink-soft:     #6b6356;
+  --kids-muted:        #b8af9e;
+  --kids-today:        #ff9b6b;   /* Peach — sticht aus gelblichem BG */
+  --kids-today-bg:     #ffe1c2;   /* dezentes Peach für die Spalten-Tönung */
+  --kids-weekend:      #ece6d9;
+  --kids-weekend-bg:   #f3eddf;
+  --kids-border-soft:  #cdc4af;
+
+  --kids-ring-blue:    #4a90d9;
+  --kids-ring-orange:  #e58e3f;
+  --kids-ring-green:   #5fa971;
+  --kids-ring-red:     #d96655;
+  --kids-ring-purple:  #9b6dc7;
+  --kids-ring-teal:    #3f9d9d;
+  --kids-ring-gray:    #a0a0a0;
+
+  --kids-tint-mint:    #d6ecc7;
+  --kids-tint-lilac:   #dcd0f0;
+  --kids-tint-peach:   #ffe1c2;
+  --kids-tint-sky:     #cfe6f5;
+  --kids-tint-rose:    #f9c8c8;
+  --kids-tint-lemon:   #fff2a8;
+
+  /* Pro Wochentag eine Pastell-Farbe (soft = HSL 30% saturation, dezent
+     fürs Spaltenraster + Day-Chip) und eine kräftigere Variante für
+     den Heute-Tag (strong). */
+  /* Soft = dezent (22–30% Sättigung), nur farblicher Hauch. Strong =
+     deutlich kräftiger (50–100% Sättigung) — der heutige Tag sticht
+     klar gegen alle anderen heraus. */
+  --kids-wd-mo-soft:   hsl(340, 28%, 87%);   --kids-wd-mo-strong: #d885a8;  /* rosé */
+  --kids-wd-di-soft:   hsl( 18, 30%, 86%);   --kids-wd-di-strong: #ffb072;  /* apricot */
+  --kids-wd-mi-soft:   hsl( 48, 32%, 87%);   --kids-wd-mi-strong: #ffd840;  /* lemon */
+  --kids-wd-do-soft:   hsl(100, 22%, 87%);   --kids-wd-do-strong: #9ecb7f;  /* mint */
+  --kids-wd-fr-soft:   hsl(200, 28%, 86%);   --kids-wd-fr-strong: #87bce0;  /* sky */
+  --kids-wd-sa-soft:   hsl(265, 25%, 87%);   --kids-wd-sa-strong: #a98ddb;  /* lilac */
+  --kids-wd-so-soft:   hsl( 32, 22%, 82%);   --kids-wd-so-strong: #c9a85e;  /* sand-tan */
+
+  --kids-font-display: 'Caveat', cursive;
+  --kids-font-body:    'Patrick Hand', cursive;
+}
