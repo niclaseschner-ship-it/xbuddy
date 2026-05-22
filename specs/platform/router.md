@@ -302,6 +302,11 @@ Plural. Bricht die Verbindung ab, baut der Client sie selbsttätig
 wieder auf (`display-client.md` DC-7); der Router hält keinen Zustand
 über die Verbindung hinaus.
 
+> Hinweis (Deployment): Hinter einem Reverse-Proxy darf dieser
+> Long-Lived-Stream nicht gepuffert werden, sonst erreichen die
+> Ereignisse den Client nie. Die HTTPS-Origin schaltet das Puffern
+> für diesen Pfad ab (`deploy/nginx/xbuddy-origin.conf`, #70).
+
 *Tickets:* #30
 
 ## 6. Konfiguration
