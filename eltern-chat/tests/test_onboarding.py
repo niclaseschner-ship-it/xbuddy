@@ -5,7 +5,7 @@ wird je Test ersetzt, der Validierungs-Aufruf läuft so ohne Netz.
 """
 
 import onboarding
-from conftest import BotAdded, FakeProvider, FakeTelegram, make_message, text_response
+from fakes import BotAdded, FakeProvider, FakeTelegram, make_message, text_response
 from main import Context, dispatch
 from model import ProviderError
 from onboarding import (ASK_FOR_KEY, DONE_GROUP, ENTRY_MESSAGE, KEY_INVALID,
