@@ -89,7 +89,10 @@ def _db():
 #  Flask-App
 # ============================================================
 
-app = Flask(__name__)
+# URL-13: statische Assets des Plan-Buddys liegen in seinem Display-
+# Namensraum. So werden sie hinter der einen Origin (URL-12) geroutet —
+# der Flask-Default `/static` läge außerhalb der URL-1-Prefixe (#61).
+app = Flask(__name__, static_url_path="/display/plan/static")
 
 # FAM-8: der HTTP-Endpunkt der Familien-Registry, der Profilfotos liefert.
 # Eine stabile Cross-Komponenten-URL (URL-8) — der Plan-Buddy verlinkt
