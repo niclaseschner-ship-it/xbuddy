@@ -32,6 +32,11 @@ router/config.json
 eltern-chat/config.json
 eltern-chat/*.db
 
+# Zugangsdaten-Speicher (ZD-3) — Per-Instanz-Geheimnis-Datei. Hält
+# Klartext-Geheimnisse, darf nie ins Repo (CLAUDE.md §8). Format:
+# zugangsdaten/zugangsdaten.example.json
+zugangsdaten/zugangsdaten.json
+
 # Test-Caches
 .pytest_cache/
 __pycache__/
