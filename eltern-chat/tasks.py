@@ -1,10 +1,10 @@
 """Aufgaben-Katalog — siehe specs/platform/eltern-chat.md EC-8/EC-9/EC-10
 (Refs #27).
 
-Dieses Modul ist der RAHMEN, nicht der Inhalt: ein Registrierungs-Mechanismus
-und die Unterscheidung lesend/schreibend. Die einzelnen Aufgaben kommen je aus
-einer eigenen, reviewten Spec mit eigenem Ticket (EC-8) — V1 dieser Komponente
-liefert keine konkrete Aufgabe mit.
+Dieses Modul ist der RAHMEN: ein Registrierungs-Mechanismus, die Unterscheidung
+lesend/schreibend und der deterministische Ausführungs-Kontext (`TurnContext`).
+Die einzelnen Aufgaben kommen je aus einer eigenen, reviewten Spec mit eigenem
+Ticket (EC-8) und leben in eigenen Modulen; `build_catalog` registriert sie.
 
 Lesende Aufgaben (EC-9) laufen direkt: `ReadTask.run()`. Schreibende Aufgaben
 (EC-10) sind zweiphasig: `WriteTask.propose()` legt einen strukturierten
@@ -16,6 +16,22 @@ Bestätigung selbst liegt außerhalb dieses Moduls und außerhalb des Agent-Loop
 from dataclasses import dataclass
 
 from model import READ, WRITE, TaskDef
+
+
+@dataclass
+class TurnContext:
+    """Deterministischer Ausführungs-Kontext einer Anfrage, getrennt vom Modell.
+
+    Diese Daten reicht die Orchestrierung an eine Aufgabe durch, OHNE dass das
+    Sprachmodell sie sieht oder beeinflusst (EC-12-Geist): der Modell-Kanal ist
+    allein `arguments`. So kann eine Aufgabe z. B. ihren Zielchat verlässlich
+    aus dem Kontext nehmen, statt einer vom Modell gelieferten ID zu vertrauen.
+
+    V1 trägt nur `chat_id`. Bewusst keine Felder auf Vorrat (CLAUDE.md §6) —
+    aber als Dataclass angelegt, damit die geplante Anonymisierungs-Schicht
+    (eltern-chat.md OPEN-EC-A) sauber ein weiteres Feld ergänzen kann.
+    """
+    chat_id: object
 
 
 @dataclass
@@ -51,8 +67,12 @@ class ReadTask(Task):
 
     kind = READ
 
-    def run(self, arguments):
-        """Führt die Aufgabe aus und liefert das Ergebnis als Text."""
+    def run(self, arguments, turn_context):
+        """Führt die Aufgabe aus und liefert das Ergebnis als Text.
+
+        `arguments` ist der Modell-Kanal; `turn_context` ist der deterministische
+        Ausführungs-Kontext (`TurnContext`), den das Modell nicht beeinflusst.
+        """
         raise NotImplementedError
 
 
@@ -61,11 +81,11 @@ class WriteTask(Task):
 
     kind = WRITE
 
-    def propose(self, arguments):
+    def propose(self, arguments, turn_context):
         """Legt einen `Proposal` vor — führt NICHTS aus."""
         raise NotImplementedError
 
-    def execute(self, arguments):
+    def execute(self, arguments, turn_context):
         """Führt die Aufgabe aus (erst nach Bestätigung aufzurufen)."""
         raise NotImplementedError
 
@@ -98,10 +118,17 @@ class Catalog:
         return [t.to_def() for t in self._tasks.values()]
 
 
-def build_catalog():
+def build_catalog(tg, ca_pem_path):
     """Baut den Katalog für eine laufende Instanz.
 
-    V1 registriert hier keine Aufgabe — die erste konkrete Aufgabe kommt aus
-    einem eigenen Spec+Ticket (EC-8) und ergänzt diese Funktion additiv.
+    Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6) — eine
+    lesende Aufgabe (EC-9). Die instanz-festen Abhängigkeiten der Aufgabe
+    (`tg`, `ca_pem_path`) reicht die Orchestrierung hier herein. Weitere
+    Aufgaben werden additiv ergänzt (EC-8).
     """
-    return Catalog()
+    # Lokaler Import: bricht den Import-Zyklus tasks <-> ca_task — nicht hochziehen.
+    from ca_task import CaVerteilungTask
+
+    catalog = Catalog()
+    catalog.register(CaVerteilungTask(tg, ca_pem_path))
+    return catalog

@@ -32,7 +32,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import agent
 import authz
-import ca_verteilung
 import config as config_mod
 import confirm
 import onboarding
@@ -42,7 +41,7 @@ from model import ImageBlock, Message, ProviderError, TextBlock
 from onboarding import OnboardingState
 from onboarding_store import OnboardingStore
 from providers import get_provider
-from tasks import build_catalog
+from tasks import TurnContext, build_catalog
 from telegram import ChatMigratedError, TelegramClient, TelegramError
 
 
@@ -52,11 +51,6 @@ _PROVIDER_DOWN = ("Ich kann deine Anfrage gerade nicht bearbeiten — der "
                   "noch einmal.")   # EC-14
 _TASK_GONE = "Diese Aufgabe ist nicht mehr verfügbar."
 _TASK_FAILED = "Die Aufgabe konnte nicht ausgeführt werden: %s"
-
-# CAV-6: direkter Aufruf-Weg der CA-Verteilung — ein Chat-Befehl an den Bot.
-_CA_COMMAND = "/ca"
-_CA_FAILED = ("Das XBuddy-Zertifikat konnte gerade nicht zugestellt werden. "
-              "Bitte versuch es später noch einmal.")
 
 
 @dataclass
@@ -74,7 +68,6 @@ class Context:
     catalog: object            # tasks.Catalog
     history: object            # history.History
     pending: object            # confirm.PendingStore
-    ca_pem_path: str = ""              # CAV-3: Pfad zum öffentlichen Root-CA-Zertifikat
     store: object = None               # onboarding_store.OnboardingStore — Persistenz der Familien-Gruppe (ONB-5, EC-18)
     family_group_locked: bool = False  # True ⇒ Familien-Gruppe per Env/Config gesetzt, Vorrang (ONB-6, EC-18)
     onboarding: object = None  # onboarding.OnboardingState — None ⇒ KI-Modus (ONB-1)
@@ -130,42 +123,7 @@ def handle_update(update, ctx):
         # Kein passender Vorschlag → „ok" ist hier nur Gesprächstext, weiter
         # an den Agenten.
 
-    # CAV-6: direkter Aufruf-Weg der CA-Verteilung. Dünner Befehls-Handler —
-    # er ruft nur die Funktion auf, ohne ihr seinen Aufruf-Kontext mitzugeben.
-    if _is_ca_command(msg.text, ctx.bot_username):
-        _handle_ca_command(msg, ctx)
-        return
-
     _run_agent(msg, ctx)
-
-
-def _is_ca_command(text, bot_username):
-    """True, wenn `text` der CA-Verteilungs-Befehl ist (CAV-6).
-
-    Telegram-Befehle dürfen in Gruppen mit `@botname` qualifiziert sein
-    (`/ca@mybot`); beide Formen werden erkannt, Vergleich case-insensitiv.
-    """
-    if not text:
-        return False
-    first = text.strip().split()[0].lower()
-    if first == _CA_COMMAND:
-        return True
-    if bot_username:
-        return first == "%s@%s" % (_CA_COMMAND, bot_username.lower())
-    return False
-
-
-def _handle_ca_command(msg, ctx):
-    """Dünner Befehls-Handler für CAV-6: ruft die CA-Verteilungs-Funktion auf.
-
-    Der Handler trägt KEINE Auslieferungs-Logik — er verortet nur den Zielchat
-    und delegiert an ca_verteilung.verteile_ca (CAV-1). Genauso würde ein
-    künftiger Geräte-Onboarding-Flow die Funktion aufrufen (OPEN-CAV-A)."""
-    try:
-        ca_verteilung.verteile_ca(ctx.tg, msg.chat_id, ctx.ca_pem_path)
-    except ca_verteilung.CaVerteilungError as e:
-        logging.warning("CA-Verteilung (Befehl) fehlgeschlagen: %s", e)
-        _send(ctx, msg.chat_id, _CA_FAILED, reply_to_message_id=msg.message_id)
 
 
 def _run_agent(msg, ctx):
@@ -173,8 +131,13 @@ def _run_agent(msg, ctx):
     history = ctx.history.load(msg.chat_id, ctx.context_depth)
     user_message = _user_message_from(msg)
 
+    # F2: deterministischer Ausführungs-Kontext, getrennt vom Modell. Der
+    # Agent-Loop reicht ihn unverändert an die Aufgaben durch (#63).
+    turn_context = TurnContext(chat_id=msg.chat_id)
+
     try:
-        result = agent.run_turn(history, user_message, ctx.provider, ctx.catalog)
+        result = agent.run_turn(history, user_message, ctx.provider,
+                                ctx.catalog, turn_context)
     except ProviderError:
         # EC-14: klarer Hinweis, sauberer Abbruch — keine halbfertige Aufgabe.
         _send(ctx, msg.chat_id, _PROVIDER_DOWN)
@@ -206,8 +169,9 @@ def _execute_confirmed(pending, msg, ctx):
     if task is None:
         _send(ctx, msg.chat_id, _TASK_GONE, reply_to_message_id=msg.message_id)
         return
+    turn_context = TurnContext(chat_id=msg.chat_id)
     try:
-        result = task.execute(pending.arguments)
+        result = task.execute(pending.arguments, turn_context)
     except Exception as e:  # noqa: BLE001 — Aufgabe isoliert melden
         logging.warning("Ausführung von '%s' fehlgeschlagen: %s", pending.task_name, e)
         _send(ctx, msg.chat_id, _TASK_FAILED % e, reply_to_message_id=msg.message_id)
@@ -378,12 +342,11 @@ def build_context(cfg, db_path, store_path):
         family_group_chat_id=cfg.family_group_chat_id,
         context_depth=cfg.context_depth,
         provider=None,
-        catalog=build_catalog(),
+        catalog=build_catalog(tg, cfg.ca_pem_path),
         history=History(db_path),
         pending=PendingStore(),
         store=OnboardingStore(store_path),
         family_group_locked=cfg.family_group_locked,
-        ca_pem_path=cfg.ca_pem_path,
     )
 
     if cfg.provider_api_key:
