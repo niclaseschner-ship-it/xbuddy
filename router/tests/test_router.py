@@ -334,6 +334,101 @@ def test_ROU_22_stream_unsubscribes_after_close(client_with_routing):
 
 
 # ============================================================
+#  ROU-23 — Controller-PWA-Auslieferung
+# ============================================================
+
+
+def test_ROU_23_index_html_served_with_html_content_type(client_with_routing):
+    r = client_with_routing.get('/controller/')
+    assert r.status_code == 200
+    assert r.mimetype == 'text/html'
+    # Die echte index.html der Controller-PWA enthält den Titel.
+    assert b'Figuren-Erkennung' in r.data
+
+
+def test_ROU_23_sw_js_served_with_javascript_content_type(client_with_routing):
+    r = client_with_routing.get('/controller/sw.js')
+    assert r.status_code == 200
+    assert r.mimetype == 'application/javascript'
+
+
+def test_ROU_23_manifest_json_served_with_manifest_content_type(client_with_routing):
+    r = client_with_routing.get('/controller/manifest.json')
+    assert r.status_code == 200
+    # Manifests MÜSSEN application/manifest+json sein — sonst verwirft der
+    # Browser sie und die PWA ist nicht installierbar.
+    assert r.mimetype == 'application/manifest+json'
+
+
+@pytest.mark.parametrize('icon', [
+    'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'])
+def test_ROU_23_icons_served_with_png_content_type(client_with_routing, icon):
+    r = client_with_routing.get('/controller/' + icon)
+    assert r.status_code == 200
+    assert r.mimetype == 'image/png'
+
+
+def test_ROU_23_figlib_js_served_with_javascript_content_type(client_with_routing):
+    r = client_with_routing.get('/controller/figlib.js')
+    assert r.status_code == 200
+    assert r.mimetype == 'application/javascript'
+
+
+def test_ROU_23_path_traversal_returns_404(client_with_routing):
+    """Versuch, aus dem Controller-Wurzelverzeichnis auszubrechen → 404.
+    Flask normalisiert .. im URL-Pfad selbst, deshalb prüfen wir mehrere
+    Angriffsvektoren: kodiert und über send_from_directory direkt."""
+    # Klassischer Path-Traversal-Versuch via Asset-Pfad. Flask leitet ihn
+    # nicht weiter; falls doch, muss der Router 404 antworten.
+    r = client_with_routing.get('/controller/..%2Frouter%2Fmain.py')
+    assert r.status_code == 404
+    # Direkter Aufruf der Asset-Funktion mit ../ — werkzeug safe_join +
+    # unser realpath-Check müssen beide zuschlagen.
+    r2 = client_with_routing.get('/controller/../router/main.py')
+    # Flask wird '..' im URL meist normalisieren oder ablehnen — beide
+    # Wege sind ok, solange nicht 200 zurückkommt.
+    assert r2.status_code != 200
+
+
+def test_ROU_23_nonexistent_asset_returns_404(client_with_routing):
+    r = client_with_routing.get('/controller/does-not-exist.txt')
+    assert r.status_code == 404
+
+
+def test_ROU_23_controller_dir_override_via_runtime_config(tmp_path, client_with_routing):
+    """runtime_config['controller_dir'] schaltet den Wurzelpfad um — der
+    Code liest nicht hartcodiert, sondern aus der Config (ROU-15)."""
+    fake_root = tmp_path / 'fake-controller'
+    fake_root.mkdir()
+    (fake_root / 'index.html').write_text('<!doctype html><title>FAKE</title>')
+    original = router_main.runtime_config.get('controller_dir', '')
+    router_main.runtime_config['controller_dir'] = str(fake_root)
+    try:
+        r = client_with_routing.get('/controller/')
+        assert r.status_code == 200
+        assert b'FAKE' in r.data
+    finally:
+        router_main.runtime_config['controller_dir'] = original
+
+
+def test_ROU_15_controller_dir_env_var_resolves(monkeypatch, tmp_path):
+    monkeypatch.setenv('ROUTER_CONTROLLER_DIR', '/tmp/some-controller')
+    args = router_main.parse_args(['--routing', str(tmp_path / 'missing.json')])
+    cfg = router_main.resolved_config(args)
+    assert cfg['controller_dir'] == '/tmp/some-controller'
+
+
+def test_ROU_15_controller_dir_cli_overrides_env(monkeypatch, tmp_path):
+    monkeypatch.setenv('ROUTER_CONTROLLER_DIR', '/tmp/from-env')
+    args = router_main.parse_args([
+        '--routing', str(tmp_path / 'missing.json'),
+        '--controller-dir', '/tmp/from-cli',
+    ])
+    cfg = router_main.resolved_config(args)
+    assert cfg['controller_dir'] == '/tmp/from-cli'
+
+
+# ============================================================
 #  ROU-18 — Routing aus Datei
 # ============================================================
 
