@@ -94,6 +94,22 @@ ersetzt (analog `eltern-chat-onboarding.md` ONB-9).
 
 *Tickets:* #39
 
+## 5. Zertifikats-Eigenschaften
+
+### CAV-8 — Server-Zertifikat-Laufzeit ≤ 398 Tage
+Das von der Instanz ausgestellte Server-Zertifikat (das die Funktion über seine
+Root-CA verteilbar macht, CAV-3) hat eine Laufzeit von **höchstens 398 Tagen**
+(`notAfter − notBefore`). Das CA/Browser-Forum schreibt diese Obergrenze für
+TLS-Server-Zertifikate vor, Apple-Plattformen (iOS/iPadOS/macOS/Safari) lehnen
+längere Laufzeiten **aktiv ab** — auch wenn die Root-CA korrekt im Geräte-Trust
+liegt (CAV-2). Eine längere Laufzeit macht die CA-Verteilung auf Apple-Geräten
+wirkungslos. Die Beschränkung gilt **ausschließlich für das Server-Leaf-Cert**;
+die Root-CA selbst trägt eine lange Laufzeit (~10 Jahre, URL-11), weil die
+398-Tage-Grenze nur Leaf-Server-Zertifikate betrifft und ein einmal verteilter
+Trust-Anker nicht ständig erneuert werden soll.
+
+*Tickets:* #76
+
 ---
 
 ## Offene Punkte

@@ -30,7 +30,7 @@ set -euo pipefail
 # ----------------------------------------------------------------------
 OUT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/out"
 CA_DAYS=3650          # ~10 Jahre Root-CA-Laufzeit (URL-11: lange Laufzeit)
-SERVER_DAYS=825       # Server-Cert: <=825 Tage, von Browsern akzeptierte Obergrenze
+SERVER_DAYS=365       # Server-Cert: <=398 Tage (CAV-8: CA/Browser-Forum, Apple-Strenge)
 CA_CN="XBuddy Dev CA"
 CA_O="XBuddy"
 SERVER_CN="xbuddy-hub"
@@ -52,7 +52,7 @@ Optionen:
                       Beispiel: --san "DNS:xbuddy-hub.local,IP:192.168.178.78"
   --server-cn NAME    Common Name des Server-Certs (Default: xbuddy-hub)
   --ca-days N         Laufzeit der Root-CA in Tagen (Default: 3650, ~10 Jahre)
-  --server-days N     Laufzeit des Server-Certs in Tagen (Default: 825)
+  --server-days N     Laufzeit des Server-Certs in Tagen (Default: 365, max 398 — CAV-8)
   -h, --help          diese Hilfe
 
 Ergebnis im Ausgabe-Verzeichnis:
