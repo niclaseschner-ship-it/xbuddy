@@ -24,39 +24,40 @@ from telegram import TelegramError
 
 # CAV-5: OS-spezifische Installations-Anleitung — hart-codiert, kein KI-Anbieter.
 # Für die gängigen Plattformen, adressatengerecht für eine Familie formuliert.
+# Stolpersteine je OS adressiert (Quellen siehe PR #75/#77).
 _INSTALL_GUIDE = """\
-So machst du das Zertifikat auf deinem Gerät vertrauenswürdig:
+So machst du das XBuddy-Zertifikat (xbuddy-rootCA.crt) auf deinem Gerät vertrauenswürdig. Wähle den Abschnitt für dein Gerät:
 
-📱 Android
-1. Öffne die heruntergeladene Datei rootCA.pem (oder Einstellungen →
-   Sicherheit → Verschlüsselung → Zertifikat installieren).
-2. Wähle als Verwendung „CA-Zertifikat" bzw. „VPN und Apps".
-3. Bestätige die Sicherheitsabfrage. Fertig.
+🪟 Windows (10 / 11)
+1. Tippe doppelt auf xbuddy-rootCA.crt → „Zertifikat installieren…"
+2. Erste Frage „Speicherort": wähle „Aktueller Benutzer" (reicht für dich allein) oder „Lokaler Computer" (für alle Konten auf dem PC, Admin-Passwort nötig). Weiter.
+3. Zweite Frage „Zertifikatspeicher": wähle NICHT die automatische Auswahl, sondern „Alle Zertifikate in folgendem Speicher speichern" → „Durchsuchen…" → „Vertrauenswürdige Stammzertifizierungsstellen" → OK → Weiter → Fertig stellen. Sicherheitswarnung mit Ja bestätigen.
+4. Prüfen: Start → certmgr.msc (oder certlm.msc bei „Lokaler Computer") → unter „Vertrauenswürdige Stammzertifizierungsstellen" muss „XBuddy" auftauchen.
+5. Schließe deinen Browser komplett (alle Fenster) und öffne ihn neu.
+6. Firefox? Firefox nutzt einen eigenen Zertifikatsspeicher. Dort zusätzlich: about:preferences#privacy → unten „Zertifikate" → „Zertifikate anzeigen…" → Reiter „Zertifizierungsstellen" → „Importieren…" → xbuddy-rootCA.crt → „Dieser CA vertrauen, um Websites zu identifizieren" aktivieren → OK.
 
- iOS / iPadOS
-1. Öffne die Datei rootCA.pem — iOS lädt sie als Konfigurationsprofil.
-2. Einstellungen → Allgemein → VPN & Geräteverwaltung → Profil installieren.
-3. Zusätzlich: Einstellungen → Allgemein → Info → Zertifikatsvertrauens-
-   einstellungen — und das XBuddy-Zertifikat dort aktivieren. Dieser zweite
-   Schritt ist nötig, sonst bleibt das Zertifikat ohne Wirkung.
+📱 Android (12 / 13 / 14)
+1. Einstellungen → „Sicherheit & Datenschutz" → „Weitere Sicherheitseinstellungen" → „Verschlüsselung & Anmeldedaten" → „Zertifikat installieren" → „CA-Zertifikat". (Auf älteren Android-Versionen heißt der Pfad ähnlich, z. B. Einstellungen → Sicherheit → Verschlüsselung & Zugangsdaten.) Eine PIN/Sperre muss eingerichtet sein.
+2. Die Warnung „Ihre Daten sind nicht privat" ist hier normal — mit „Trotzdem installieren" bestätigen.
+3. xbuddy-rootCA.crt auswählen.
+4. Wichtig zu wissen: Browser (Chrome, Firefox) und der Großteil der Apps akzeptieren dieses Zertifikat. Manche Apps trauen nur System-CAs und ignorieren von dir installierte Zertifikate — das ist eine Android-Sicherheitsmaßnahme und nicht zu umgehen. Für XBuddy im Browser/PWA reicht der Schritt aus.
 
-🪟 Windows
-1. Doppelklicke auf rootCA.pem.
-2. „Zertifikat installieren" → Speicherort „Lokaler Computer".
-3. „Alle Zertifikate in folgendem Speicher speichern" →
-   „Vertrauenswürdige Stammzertifizierungsstellen" wählen → Fertig stellen.
+🍏 iOS / iPadOS (16 / 17 / 18)
+ZWEI Schritte — beide sind nötig, sonst bleibt das Zertifikat wirkungslos.
+1. Profil installieren: Tippe in Mail/Safari/Dateien auf xbuddy-rootCA.crt. iOS lädt es als „Profil". Einstellungen öffnen → oben erscheint „Profil geladen" → antippen → „Installieren" (rechts oben) → Code eingeben → noch einmal „Installieren" → Fertig.
+2. Vertrauen aktivieren: Einstellungen → Allgemein → Info → ganz unten „Zertifikatsvertrauenseinstellungen" → unter „Vollständiges Vertrauen für Stammzertifikate aktivieren" den Schalter für „XBuddy" einschalten → Warnung mit „Fortfahren" bestätigen.
 
-🍎 macOS
-1. Doppelklicke auf rootCA.pem — die Schlüsselbundverwaltung öffnet sich.
-2. Lege das Zertifikat im Schlüsselbund „System" ab.
-3. Doppelklicke auf den neuen Eintrag → „Vertrauen" aufklappen →
-   „Bei Verwendung dieses Zertifikats" auf „Immer vertrauen" setzen.
+🍎 macOS (Sonoma / Sequoia)
+1. Doppeltippe auf xbuddy-rootCA.crt → die App „Schlüsselbundverwaltung" öffnet sich (Programme → Dienstprogramme).
+2. Im Fenster oben „System" als Schlüsselbund wählen (NICHT „Anmeldung"). Admin-Passwort eingeben.
+3. Im Schlüsselbund „System" das neue Zertifikat „XBuddy" doppeltippen → den Abschnitt „Vertrauen" aufklappen → „Bei Verwendung dieses Zertifikats" auf „Immer vertrauen" stellen → Fenster schließen → Admin-Passwort bestätigen.
+4. Browser komplett beenden und neu öffnen.
 
-Danach öffnen die XBuddy-Seiten ohne Sicherheitswarnung."""
+Danach öffnen die XBuddy-Seiten ohne Sicherheitswarnung. Klappt etwas nicht — schreib mir hier, ich helfe."""
 
-_CAPTION = ("XBuddy Root-Zertifikat. Installiere es auf diesem Gerät, damit "
-            "die XBuddy-Seiten ohne Browser-Warnung öffnen — Anleitung folgt "
-            "in der nächsten Nachricht.")
+_CAPTION = ("XBuddy Root-Zertifikat (xbuddy-rootCA.crt). Installiere es auf "
+            "diesem Gerät, damit die XBuddy-Seiten ohne Browser-Warnung "
+            "öffnen — Anleitung folgt in der nächsten Nachricht.")
 
 # CAV-3: Ein PEM-Privatschlüssel trägt diese Markierung. Wird der konfigurierte
 # Pfad versehentlich auf eine Schlüsseldatei gesetzt, bricht die Funktion ab,
@@ -95,7 +96,12 @@ def verteile_ca(tg, chat_id, ca_pem_path):
 
     try:
         # CAV-3/CAV-4: nur das öffentliche Zertifikat, als Telegram-Dokument.
-        sent_doc = tg.send_document(chat_id, "rootCA.pem", pem, caption=_CAPTION)
+        # Dateiname „xbuddy-rootCA.crt": Windows hat für `.pem` keinen Cert-
+        # Handler — Doppelklick öffnet den Editor statt des Import-Assistenten
+        # (#75). `.crt` ist der gemeinsame Nenner: Windows/Android/iOS/macOS
+        # erkennen ihn alle als Zertifikat, der Inhalt bleibt PEM-kodiertes
+        # X.509. Quelldatei auf der Platte (ca_pem_path) bleibt `rootCA.pem`.
+        sent_doc = tg.send_document(chat_id, "xbuddy-rootCA.crt", pem, caption=_CAPTION)
         # CAV-5: OS-spezifische Installations-Anleitung hinterher.
         sent_guide = tg.send_message(chat_id, _INSTALL_GUIDE)
     except TelegramError as e:
