@@ -12,18 +12,17 @@ wenn über die Zeit dutzende bis ~100 Endpunkte dazukommen.
 
 ## Anforderungen
 
-### URL-1 — Vier Top-Level-Prefixe
+### URL-1 — Drei Top-Level-Prefixe
 
-Das System bietet HTTP-Endpunkte nur unter einem dieser vier Prefixe an:
+Das System bietet HTTP-Endpunkte nur unter einem dieser drei Prefixe an:
 
 - `/display/<buddy>/<view>` — Display-Views eines Buddys
 - `/controller/<source>/<action>` — Controller-Aktionen
 - `/api/v1/<resource>` — Hub-Backend (State, Events, Config, Diagnose)
-- `/health`, `/version` — System-Meta
 
 Andere Top-Level-Pfade sind nicht erlaubt.
 
-*Tickets:* #24
+*Tickets:* #24, #66
 
 ### URL-2 — Display-Pfade
 
@@ -54,14 +53,6 @@ Aggregate im Singular (`/api/v1/displays/<id>/state`).
 
 *Tickets:* #24
 
-### URL-5 — Meta-Pfade
-
-Liveness- und Versions-Endpunkte sitzen flach auf Top-Level:
-`/health` liefert den Gesundheitszustand des Diensts, `/version` die
-laufende Version. Sie tragen kein Prefix.
-
-*Tickets:* #24
-
 ### URL-6 — Casing und Trennzeichen
 
 Alle URL-Segmente sind kleingeschrieben und nutzen Bindestriche (`-`) als
@@ -73,8 +64,8 @@ erlaubt — also `now-playing`, nicht `now_playing` oder `nowPlaying`.
 ### URL-7 — Sprache
 
 App-Domänen-Begriffe sind deutsch (`kalender`, `woche`, `morgen`,
-`wetter`). Technische Begriffe sind englisch (`state`, `events`, `health`,
-`version`). Folgt der Sprach-Konvention aus `CLAUDE.md` §3.
+`wetter`). Technische Begriffe sind englisch (`state`, `events`). Folgt
+der Sprach-Konvention aus `CLAUDE.md` §3.
 
 *Tickets:* #24
 
@@ -159,7 +150,4 @@ und ins Leere fällt.
 /api/v1/events
 /api/v1/displays/wohnzimmer/state
 /api/v1/diag
-
-/health
-/version
 ```
