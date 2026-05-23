@@ -183,8 +183,11 @@ class TelegramClient:
         """Liefert den Mitglieds-Status eines Nutzers in einem Chat (EC-2)."""
         return self._call("getChatMember", {"chat_id": chat_id, "user_id": user_id})
 
-    def _download_file(self, file_id):
-        """Lädt eine Datei (Foto) herunter und liefert die Rohbytes."""
+    def download_file(self, file_id):
+        """Lädt eine Datei (Foto oder Datei-Anhang) herunter und liefert die
+        Rohbytes. Konsumenten: Bild-Aufbereitung im Agent-Pfad (intern, via
+        `_extract_images`) und FAA (Profilbild-Annahme, FAA-6) — die Methode
+        ist deshalb Teil der dünnen Adapter-Grenze, nicht privat."""
         meta = self._call("getFile", {"file_id": file_id})
         file_path = meta.get("file_path")
         if not file_path:
@@ -316,7 +319,7 @@ class TelegramClient:
             # Telegram liefert mehrere Auflösungen — die größte nehmen.
             largest = max(photo_sizes, key=lambda p: p.get("file_size", 0))
             try:
-                raw = self._download_file(largest["file_id"])
+                raw = self.download_file(largest["file_id"])
             except TelegramError as e:
                 logging.warning("Bild konnte nicht geladen werden: %s", e)
                 return out

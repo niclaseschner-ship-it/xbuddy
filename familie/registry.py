@@ -115,6 +115,15 @@ def effective_setting(value, env_var, default):
     return default
 
 
+# FAM-9-Defaults: hier liegen sie für ALLE Konsumenten an einer Stelle, damit
+# `familie/main.py` und `eltern-chat/familie_anlegen.py` denselben Default
+# verwenden, ohne sich gegenseitig importieren zu müssen.
+FAM9_DEFAULTS = {
+    "foto_verzeichnis": "fotos",
+    "profilbild_max_kante": 1280,
+}
+
+
 class Registry:
     """Die geladene Familien-Registry — eine Instanz, eine Familie (FAM-1).
 
@@ -258,8 +267,16 @@ def save(registry, path):
     der Registry übernommen, optionale Felder erscheinen nur wenn gesetzt
     (analog Person.to_dict / Settings.to_dict).
     """
-    erwachsene = [p.to_dict() for p in registry.alle() if p.is_erwachsene()]
-    kinder = [p.to_dict() for p in registry.alle() if p.is_kind()]
+    # `art` ist in der Datei durch die Liste (`erwachsene` vs. `kinder`)
+    # bereits codiert — beim Schreiben weglassen, damit bestehende, von Hand
+    # gepflegte Einträge byte-gleich bleiben (FAM-11) und es keine
+    # Doppelt-Quelle der Wahrheit für die Art gibt.
+    def _storage_dict(p):
+        d = p.to_dict()
+        d.pop("art", None)
+        return d
+    erwachsene = [_storage_dict(p) for p in registry.alle() if p.is_erwachsene()]
+    kinder = [_storage_dict(p) for p in registry.alle() if p.is_kind()]
     payload = {
         "erwachsene": erwachsene,
         "kinder": kinder,

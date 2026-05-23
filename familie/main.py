@@ -98,9 +98,10 @@ DEFAULTS = {
     "listen_port": 5010,
     "log_level":   "INFO",
     # FAM-9-Tabelle: Default-Werte, die der Settings-Lader einsetzt, wenn
-    # weder familie.json noch ENV den jeweiligen Wert setzt.
-    "foto_verzeichnis":     "fotos",
-    "profilbild_max_kante": 1280,
+    # weder familie.json noch ENV den jeweiligen Wert setzt. Liegen zentral
+    # in registry.FAM9_DEFAULTS, damit FAA dieselbe Quelle nutzt.
+    "foto_verzeichnis":     registry_mod.FAM9_DEFAULTS["foto_verzeichnis"],
+    "profilbild_max_kante": registry_mod.FAM9_DEFAULTS["profilbild_max_kante"],
 }
 
 
