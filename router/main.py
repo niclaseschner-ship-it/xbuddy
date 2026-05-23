@@ -7,7 +7,7 @@ entgegen, mappt Phone-Events 1:1 auf das kanonische Trigger-Modell
 State pro Display in-memory (ROU-10).
 """
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory, abort
 from datetime import datetime, timezone
 import argparse
 import json
@@ -157,6 +157,7 @@ def display_event_stream(display_id):
 runtime_config = {
     'cdp_target':   '',
     'cdp_idle_url': 'about:blank',
+    'controller_dir': '',   # ROU-23: leer = Default aus DEFAULTS_CONTROLLER_DIR
 }
 
 
@@ -368,6 +369,63 @@ def display(display_id):
 
 
 # ============================================================
+#  Controller-PWA-Auslieferung (ROU-23)
+# ============================================================
+#
+# Anders als der Display-Client ist der Controller eine echte PWA: sw.js,
+# manifest.json und Icons müssen als eigene Pfade mit korrekten
+# Content-Types ankommen. Flask's send_from_directory blockiert
+# Path-Traversal von sich aus (werkzeug safe_join), zusätzlich prüfen wir
+# explizit, dass der aufgelöste Pfad innerhalb des Wurzelverzeichnisses
+# liegt — Defense in Depth.
+
+DEFAULT_CONTROLLER_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), '..', 'controller', 'figuren-erkennung'))
+
+# Explizites Content-Type-Mapping. Browser entscheiden anhand des Headers,
+# nicht anhand der Endung — ein .json mit text/html würde das Manifest
+# verwerfen, ein .js mit text/plain die SW-Registrierung scheitern lassen.
+_CONTROLLER_MIME = {
+    '.html': 'text/html; charset=utf-8',
+    '.js':   'application/javascript',
+    '.json': 'application/manifest+json',
+    '.png':  'image/png',
+}
+
+
+def controller_dir():
+    return runtime_config.get('controller_dir') or DEFAULT_CONTROLLER_DIR
+
+
+def _send_controller_asset(rel_path):
+    root = os.path.realpath(controller_dir())
+    # werkzeug safe_join würfe bei .. selbst; wir lassen es flach abprüfen,
+    # damit send_from_directory sauber 404 wirft und wir uns nicht auf
+    # ein einziges Verteidigungs-Layer verlassen.
+    target = os.path.realpath(os.path.join(root, rel_path))
+    if target != root and not target.startswith(root + os.sep):
+        abort(404)
+    if not os.path.isfile(target):
+        abort(404)
+    ext = os.path.splitext(target)[1].lower()
+    mime = _CONTROLLER_MIME.get(ext, 'application/octet-stream')
+    return send_from_directory(root, rel_path, mimetype=mime)
+
+
+@app.route('/controller/', methods=['GET'])
+def controller_index():
+    # ROU-23: /controller/ → index.html mit text/html.
+    return _send_controller_asset('index.html')
+
+
+@app.route('/controller/<path:asset>', methods=['GET'])
+def controller_asset(asset):
+    # ROU-23: alle Statik-Pfade unter /controller/ aus controller_dir().
+    # send_from_directory + realpath-Check verhindern Path-Traversal.
+    return _send_controller_asset(asset)
+
+
+# ============================================================
 #  Entrypoint (ROU-15 / ROU-16)
 # ============================================================
 
@@ -377,6 +435,7 @@ DEFAULTS = {
     'log_level':    'INFO',
     'cdp_target':   '',
     'cdp_idle_url': 'about:blank',
+    'controller_dir': '',  # ROU-23: leer = DEFAULT_CONTROLLER_DIR
 }
 
 
@@ -387,6 +446,8 @@ def parse_args(argv):
     p.add_argument('--host',    help='Bind-Host (überschreibt config + ENV)')
     p.add_argument('--port',    type=int, help='Bind-Port (überschreibt config + ENV)')
     p.add_argument('--log-level', dest='log_level', help='DEBUG | INFO | WARNING | ERROR')
+    p.add_argument('--controller-dir', dest='controller_dir',
+                   help='Pfad zur Controller-PWA-Statik (ROU-23)')
     p.add_argument('--cert', help='TLS-Cert (optional, für HTTPS-Modus)')
     p.add_argument('--key',  help='TLS-Key (optional, für HTTPS-Modus)')
     return p.parse_args(argv)
@@ -400,9 +461,11 @@ def resolved_config(args):
     if 'ROUTER_LOG_LEVEL'    in os.environ: cfg['log_level']    = os.environ['ROUTER_LOG_LEVEL']
     if 'ROUTER_CDP_TARGET'   in os.environ: cfg['cdp_target']   = os.environ['ROUTER_CDP_TARGET']
     if 'ROUTER_CDP_IDLE_URL' in os.environ: cfg['cdp_idle_url'] = os.environ['ROUTER_CDP_IDLE_URL']
-    if args.host:      cfg['listen_host'] = args.host
-    if args.port:      cfg['listen_port'] = args.port
-    if args.log_level: cfg['log_level']   = args.log_level
+    if 'ROUTER_CONTROLLER_DIR' in os.environ: cfg['controller_dir'] = os.environ['ROUTER_CONTROLLER_DIR']
+    if args.host:           cfg['listen_host']    = args.host
+    if args.port:           cfg['listen_port']    = args.port
+    if args.log_level:      cfg['log_level']      = args.log_level
+    if args.controller_dir: cfg['controller_dir'] = args.controller_dir
     return cfg
 
 
@@ -412,8 +475,10 @@ def main(argv=None):
     logging.basicConfig(
         level=getattr(logging, cfg['log_level'].upper(), logging.INFO),
         format='%(asctime)s %(levelname)s %(message)s')
-    runtime_config['cdp_target']   = cfg.get('cdp_target', '')
-    runtime_config['cdp_idle_url'] = cfg.get('cdp_idle_url', 'about:blank')
+    runtime_config['cdp_target']    = cfg.get('cdp_target', '')
+    runtime_config['cdp_idle_url']  = cfg.get('cdp_idle_url', 'about:blank')
+    runtime_config['controller_dir'] = cfg.get('controller_dir', '')
+    logging.info('Controller-PWA-Statik: %s', controller_dir())
     if runtime_config['cdp_target']:
         logging.info('CDP-Push aktiv: %s (idle=%s)',
                      runtime_config['cdp_target'], runtime_config['cdp_idle_url'])

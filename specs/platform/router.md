@@ -285,6 +285,38 @@ auf Vorrat (CLAUDE.md §6).
 
 *Tickets:* #17
 
+### ROU-23 — GET /controller/&lt;asset&gt; — Auslieferung der Controller-PWA
+`GET /controller/` und `GET /controller/<asset>` liefern die Controller-PWA
+(siehe [`figuren-erkennung.md`](figuren-erkennung.md)) unter dem
+`/controller/`-Prefix aus URL-1 aus. Der Router ist hier nur
+Auslieferungsstelle der Statik; Verhalten und Eigenschaften der PWA legt
+`figuren-erkennung.md` fest.
+
+Anders als der Display-Client (ROU-20, eine inline gezogene Seite) ist
+der Controller eine echte PWA — `sw.js`, `manifest.json` und Icons müssen
+als **eigene Pfade mit ihrem korrekten Content-Type** ankommen, sonst
+verweigert der Browser Service-Worker-Registrierung oder Manifest-Parse.
+Acceptance-Kriterien:
+
+| Pfad | Antwort |
+|---|---|
+| `GET /controller/` | 200, `text/html`, Inhalt aus `index.html` |
+| `GET /controller/sw.js` | 200, `application/javascript` |
+| `GET /controller/manifest.json` | 200, `application/manifest+json` |
+| `GET /controller/icon-192.png` | 200, `image/png` |
+| `GET /controller/icon-512.png` | 200, `image/png` |
+| `GET /controller/icon-maskable-512.png` | 200, `image/png` |
+| `GET /controller/figlib.js` | 200, `application/javascript` |
+| Pfad außerhalb des Controller-Wurzelverzeichnisses (Path-Traversal, z. B. `/controller/../router/main.py`) | 404 |
+| Nicht existierendes Asset im Controller-Verzeichnis | 404 |
+
+Das Wurzelverzeichnis ist konfigurierbar (`controller_dir`, ROU-15).
+Defaults zeigen auf `controller/figuren-erkennung/` neben dem Router-Code.
+Anfragen, die auflöst aus diesem Wurzelverzeichnis ausbrechen würden,
+liefern 404 — kein Dateizugriff jenseits der Wurzel.
+
+*Tickets:* #71
+
 ### ROU-22 — GET /api/v1/displays/&lt;id&gt;/events — Zustands-Stream
 Liefert einen Server-Sent-Events-Stream für ein Display. Beim Verbinden
 sendet der Router den aktuellen Zustand des Displays (Format wie ROU-10)
@@ -324,6 +356,7 @@ ENV-Variable / CLI-Flag überschrieben werden. Priorität:
 | `log_level`    | `INFO`        | ENV `ROUTER_LOG_LEVEL` · CLI `--log-level`   |
 | `cdp_target`   | `""` (aus)    | ENV `ROUTER_CDP_TARGET` · config             |
 | `cdp_idle_url` | `about:blank` | ENV `ROUTER_CDP_IDLE_URL` · config           |
+| `controller_dir` | `../controller/figuren-erkennung` (relativ zum Router-Code) | ENV `ROUTER_CONTROLLER_DIR` · CLI `--controller-dir` · config |
 
 Werte, die nur als Code-Konstante existieren — ohne Override-Pfad —
 sind Spec-Verletzung (CLAUDE.md §6 Daten vs. Code).
@@ -399,6 +432,8 @@ Mindest-Abdeckung:
   aktuelle Payload-Objekt; unbekannte `<id>` liefert 404.
 - ROU-18 — fehlendes `routing.json` startet den Router mit leerer
   Tabelle; jeder `GET /api/v1/displays/<id>/state` liefert dann 404.
+- ROU-23 — `/controller/` liefert die PWA-Statik mit korrekten
+  Content-Types; Path-Traversal-Anfragen werden mit 404 abgewiesen.
 
 *Tickets:* #5, #24
 
