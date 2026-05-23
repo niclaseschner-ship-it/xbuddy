@@ -48,7 +48,12 @@ Verteilt wird ausschließlich das öffentliche Root-CA-Zertifikat — **niemals*
 CA-Privatschlüssel (CLAUDE.md §8). Das öffentliche Zertifikat ist kein
 Geheimnis; der Privatschlüssel verlässt den Hub nie.
 
-*Tickets:* #39
+Der Auslieferungs-Dateiname trägt die Endung **`.crt`** (Inhalt PEM-kodiertes
+X.509). `.pem` ist auf Windows keinem Zertifikats-Handler zugeordnet und auf
+dem Zielgerät nicht per Standard-Aktion installierbar; `.crt` ist der gemeinsame
+Nenner über Windows, Android, iOS/iPadOS und macOS.
+
+*Tickets:* #39, #75
 
 ### CAV-4 — Auslieferung über den Eltern-Chat-Bot
 Die Funktion liefert das Zertifikat als Datei (Telegram-Dokument) an ein
@@ -65,7 +70,28 @@ dem Zielgerät als vertrauenswürdig installiert wird — adressatengerecht für
 gängigen Plattformen (Android, iOS/iPadOS, Windows, macOS). Die Anleitung ist
 hart-codiert und braucht keinen KI-Anbieter.
 
-*Tickets:* #39
+Die Anleitung deckt alle vier Plattformen **gleichgewichtig** ab — kein OS wird
+bevorzugt, weil eine Familie mit beliebigen Geräten ankommt. Jeder OS-Abschnitt
+muss die plattformspezifischen Stolpersteine benennen, die einen Import scheitern
+lassen oder den Trust wirkungslos machen — die heute bekannten:
+
+- **Windows:** der Import-Assistent fragt **zwei** getrennte Speicherorte ab
+  (Speicherort *Benutzer/Lokaler Computer* zuerst, später Zertifikat*speicher*) —
+  letzterer muss manuell auf „Vertrauenswürdige Stammzertifizierungsstellen"
+  gestellt werden, nicht Auto-Auswahl. Firefox führt einen eigenen Cert-Store
+  und braucht einen separaten Import-Hinweis.
+- **Android:** der CA-Import-Pfad unter aktuellen Versionen + Hinweis, dass
+  von User-CAs nur Browser/PWAs profitieren — Apps können sie ignorieren.
+- **iOS/iPadOS:** zwei **zwingende** Schritte — Profil installieren UND danach
+  Einstellungen → Allgemein → Info → Zertifikatsvertrauenseinstellungen → volles
+  Vertrauen aktivieren. Ohne den zweiten Schritt bleibt das Zertifikat wirkungslos.
+- **macOS:** Import in den Schlüsselbund „System" (nicht „Anmeldung") und
+  manuelles Setzen auf „Immer vertrauen".
+
+Die Spec normiert das *Soll* (Symmetrie und Stolperstein-Abdeckung); der konkrete
+Anleitungstext lebt im Code (`_INSTALL_GUIDE`) — eine Stelle, nicht doppelt.
+
+*Tickets:* #39, #77
 
 ## 3. Aufruf
 

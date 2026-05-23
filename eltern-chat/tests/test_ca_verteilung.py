@@ -151,12 +151,14 @@ def test_CAV_3_config_resolves_ca_pem_path(tmp_path):
 
 def test_CAV_4_certificate_is_delivered_as_telegram_document(tmp_path):
     """Das Zertifikat geht als Datei (Telegram-Dokument) über den Bot-Kanal —
-    an den übergebenen Zielchat, mit dem Dateinamen rootCA.pem."""
+    an den übergebenen Zielchat, mit dem Dateinamen xbuddy-rootCA.crt (#75:
+    `.pem` ist auf Windows keinem Cert-Handler zugeordnet, `.crt` ist der
+    OS-übergreifende Standard; Inhalt bleibt PEM)."""
     tg = FakeTelegram()
     verteile_ca(tg, chat_id=777, ca_pem_path=_write_ca(tmp_path))
     assert len(tg.documents) == 1
     assert tg.documents[0]["chat_id"] == 777
-    assert tg.documents[0]["file_name"] == "rootCA.pem"
+    assert tg.documents[0]["file_name"] == "xbuddy-rootCA.crt"
 
 
 def test_CAV_4_send_failure_is_reported_as_error(tmp_path):
@@ -198,6 +200,31 @@ def test_CAV_5_install_guide_covers_all_target_platforms(tmp_path):
         assert platform in guide, "Anleitung deckt %s nicht ab" % platform
 
 
+def test_CAV_5_install_guide_addresses_known_stumbling_blocks(tmp_path):
+    """#77: pro OS müssen die im Real-Test 2026-05-22 belegten Stolpersteine
+    benannt sein — sonst regrediert die Anleitung wieder zur dünnen Fassung.
+
+    Marker je OS:
+    - Windows: zweite Speicher-Frage „Vertrauenswürdige Stammzertifizierungsstellen"
+      explizit auswählen + eigener Firefox-Speicher.
+    - Android: PIN/Sperre-Voraussetzung und App-vs-Browser-Trust-Hinweis.
+    - iOS/iPadOS: BEIDE Schritte (Profil-Installation UND Vertrauen aktivieren
+      unter „Zertifikatsvertrauenseinstellungen").
+    - macOS: Schlüsselbund „System" (nicht „Anmeldung") und „Immer vertrauen".
+    """
+    guide = ca_verteilung._INSTALL_GUIDE
+    # Windows
+    assert "Vertrauenswürdige Stammzertifizierungsstellen" in guide
+    assert "Firefox" in guide
+    # Android
+    assert "CA-Zertifikat" in guide
+    # iOS / iPadOS
+    assert "Zertifikatsvertrauenseinstellungen" in guide
+    # macOS
+    assert "System" in guide
+    assert "Immer vertrauen" in guide
+
+
 def test_CAV_5_install_guide_needs_no_ai_provider(tmp_path):
     """Die Anleitung ist hart-codiert: derselbe Aufruf liefert deterministisch
     denselben Text — kein KI-Anbieter im Spiel."""
@@ -231,7 +258,7 @@ def test_CAV_6_task_delivers_certificate_and_guide_itself(tmp_path):
     task = CaVerteilungTask(tg, _write_ca(tmp_path))
     receipt = task.run(arguments={}, turn_context=TurnContext(chat_id=42))
     assert len(tg.documents) == 1
-    assert tg.documents[0]["file_name"] == "rootCA.pem"
+    assert tg.documents[0]["file_name"] == "xbuddy-rootCA.crt"
     assert "Android" in tg.sent[0]["text"]
     assert "Zertifikat" in receipt
 
