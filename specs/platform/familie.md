@@ -113,10 +113,11 @@ geräte-neutral (URL-10).
 ## 4. Konfiguration
 
 ### FAM-9 — Konfigurationswerte
-| Wert             | Default                              | Quelle |
-|------------------|--------------------------------------|--------|
-| Registry-Datei   | `familie.json` neben dem Code        | Env · CLI |
-| Foto-Verzeichnis | `fotos/` neben der Registry-Datei    | Env · Config |
+| Wert                 | Default                              | Quelle |
+|----------------------|--------------------------------------|--------|
+| Registry-Datei       | `familie.json` neben dem Code        | Env · CLI |
+| Foto-Verzeichnis     | `fotos/` neben der Registry-Datei    | Env · Config |
+| Profilbild-Max-Kante | `1280` Pixel (längste Kante)         | Env · Config |
 
 *Tickets:* #38
 
