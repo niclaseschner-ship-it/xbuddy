@@ -397,6 +397,12 @@ def controller_dir():
     return runtime_config.get('controller_dir') or DEFAULT_CONTROLLER_DIR
 
 
+def controller_app_slug():
+    # URL-3 / ROU-23: der gültige App-Slug im Pfad ist der Basisname des
+    # konfigurierten Controller-Wurzelverzeichnisses.
+    return os.path.basename(controller_dir().rstrip('/'))
+
+
 def _send_controller_asset(rel_path):
     root = os.path.realpath(controller_dir())
     # werkzeug safe_join würfe bei .. selbst; wir lassen es flach abprüfen,
@@ -412,16 +418,21 @@ def _send_controller_asset(rel_path):
     return send_from_directory(root, rel_path, mimetype=mime)
 
 
-@app.route('/controller/', methods=['GET'])
-def controller_index():
-    # ROU-23: /controller/ → index.html mit text/html.
+@app.route('/controller/<app>/', methods=['GET'])
+def controller_index(app):
+    # ROU-23: /controller/<app>/ → index.html mit text/html.
+    # Nur der konfigurierte App-Slug ist gültig (URL-3, zwei Segmente).
+    if app != controller_app_slug():
+        abort(404)
     return _send_controller_asset('index.html')
 
 
-@app.route('/controller/<path:asset>', methods=['GET'])
-def controller_asset(asset):
-    # ROU-23: alle Statik-Pfade unter /controller/ aus controller_dir().
+@app.route('/controller/<app>/<path:asset>', methods=['GET'])
+def controller_asset(app, asset):
+    # ROU-23: alle Statik-Pfade unter /controller/<app>/ aus controller_dir().
     # send_from_directory + realpath-Check verhindern Path-Traversal.
+    if app != controller_app_slug():
+        abort(404)
     return _send_controller_asset(asset)
 
 

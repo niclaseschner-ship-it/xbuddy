@@ -339,7 +339,7 @@ def test_ROU_22_stream_unsubscribes_after_close(client_with_routing):
 
 
 def test_ROU_23_index_html_served_with_html_content_type(client_with_routing):
-    r = client_with_routing.get('/controller/')
+    r = client_with_routing.get('/controller/figuren-erkennung/')
     assert r.status_code == 200
     assert r.mimetype == 'text/html'
     # Die echte index.html der Controller-PWA enthält den Titel.
@@ -347,13 +347,13 @@ def test_ROU_23_index_html_served_with_html_content_type(client_with_routing):
 
 
 def test_ROU_23_sw_js_served_with_javascript_content_type(client_with_routing):
-    r = client_with_routing.get('/controller/sw.js')
+    r = client_with_routing.get('/controller/figuren-erkennung/sw.js')
     assert r.status_code == 200
     assert r.mimetype == 'application/javascript'
 
 
 def test_ROU_23_manifest_json_served_with_manifest_content_type(client_with_routing):
-    r = client_with_routing.get('/controller/manifest.json')
+    r = client_with_routing.get('/controller/figuren-erkennung/manifest.json')
     assert r.status_code == 200
     # Manifests MÜSSEN application/manifest+json sein — sonst verwirft der
     # Browser sie und die PWA ist nicht installierbar.
@@ -363,13 +363,13 @@ def test_ROU_23_manifest_json_served_with_manifest_content_type(client_with_rout
 @pytest.mark.parametrize('icon', [
     'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'])
 def test_ROU_23_icons_served_with_png_content_type(client_with_routing, icon):
-    r = client_with_routing.get('/controller/' + icon)
+    r = client_with_routing.get('/controller/figuren-erkennung/' + icon)
     assert r.status_code == 200
     assert r.mimetype == 'image/png'
 
 
 def test_ROU_23_figlib_js_served_with_javascript_content_type(client_with_routing):
-    r = client_with_routing.get('/controller/figlib.js')
+    r = client_with_routing.get('/controller/figuren-erkennung/figlib.js')
     assert r.status_code == 200
     assert r.mimetype == 'application/javascript'
 
@@ -380,33 +380,52 @@ def test_ROU_23_path_traversal_returns_404(client_with_routing):
     Angriffsvektoren: kodiert und über send_from_directory direkt."""
     # Klassischer Path-Traversal-Versuch via Asset-Pfad. Flask leitet ihn
     # nicht weiter; falls doch, muss der Router 404 antworten.
-    r = client_with_routing.get('/controller/..%2Frouter%2Fmain.py')
+    r = client_with_routing.get('/controller/figuren-erkennung/..%2F..%2Frouter%2Fmain.py')
     assert r.status_code == 404
     # Direkter Aufruf der Asset-Funktion mit ../ — werkzeug safe_join +
     # unser realpath-Check müssen beide zuschlagen.
-    r2 = client_with_routing.get('/controller/../router/main.py')
+    r2 = client_with_routing.get('/controller/figuren-erkennung/../../router/main.py')
     # Flask wird '..' im URL meist normalisieren oder ablehnen — beide
     # Wege sind ok, solange nicht 200 zurückkommt.
     assert r2.status_code != 200
 
 
 def test_ROU_23_nonexistent_asset_returns_404(client_with_routing):
-    r = client_with_routing.get('/controller/does-not-exist.txt')
+    r = client_with_routing.get('/controller/figuren-erkennung/does-not-exist.txt')
     assert r.status_code == 404
+
+
+def test_ROU_23_controller_root_without_app_slug_returns_404(client_with_routing):
+    # URL-3: zwei Segmente Pflicht. /controller/ ohne App-Slug existiert nicht.
+    r = client_with_routing.get('/controller/')
+    assert r.status_code == 404
+
+
+def test_ROU_23_unknown_app_slug_returns_404(client_with_routing):
+    # Nur der konfigurierte App-Slug (basename(controller_dir)) ist gültig —
+    # andere Slugs liefern 404, kein Statik-Leak.
+    r = client_with_routing.get('/controller/nicht-konfigurierte-app/sw.js')
+    assert r.status_code == 404
+    r2 = client_with_routing.get('/controller/nicht-konfigurierte-app/')
+    assert r2.status_code == 404
 
 
 def test_ROU_23_controller_dir_override_via_runtime_config(tmp_path, client_with_routing):
     """runtime_config['controller_dir'] schaltet den Wurzelpfad um — der
-    Code liest nicht hartcodiert, sondern aus der Config (ROU-15)."""
+    Code liest nicht hartcodiert, sondern aus der Config (ROU-15). Der gültige
+    App-Slug im URL leitet sich aus dem Basisnamen des Verzeichnisses ab."""
     fake_root = tmp_path / 'fake-controller'
     fake_root.mkdir()
     (fake_root / 'index.html').write_text('<!doctype html><title>FAKE</title>')
     original = router_main.runtime_config.get('controller_dir', '')
     router_main.runtime_config['controller_dir'] = str(fake_root)
     try:
-        r = client_with_routing.get('/controller/')
+        r = client_with_routing.get('/controller/fake-controller/')
         assert r.status_code == 200
         assert b'FAKE' in r.data
+        # Der alte App-Slug ist nach dem Override nicht mehr gültig.
+        r2 = client_with_routing.get('/controller/figuren-erkennung/')
+        assert r2.status_code == 404
     finally:
         router_main.runtime_config['controller_dir'] = original
 

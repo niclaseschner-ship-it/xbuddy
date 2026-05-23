@@ -36,11 +36,23 @@ Query-Parameter ausgedrückt, nicht im Pfad.
 
 ### URL-3 — Controller-Pfade
 
-Controller-Pfade folgen dem Muster `/controller/<source>/<action>`, wo
-`<source>` die Eingabequelle (z. B. `figure`, `nfc`, `voice`) und
-`<action>` die Aktion (z. B. `place`, `rotate`, `scan`) ist. Verben sind
-hier erlaubt — die Aktion ist die Semantik. Das Prefix heißt `controller`,
-auch wenn es keinen dedizierten Controller-Buddy gibt.
+Controller-Pfade folgen dem Muster `/controller/<source>/<X>` — zwei
+Segmente unter dem `controller`-Prefix. Das erste Segment `<source>` ist
+entweder die Eingabequelle einer Action (z. B. `figure`, `nfc`, `voice`)
+oder der Slug einer Controller-App, die als PWA ausgeliefert wird
+(z. B. `figuren-erkennung`). Das zweite Segment hängt vom HTTP-Verb ab:
+
+- POST: `<X>` ist die Aktion (z. B. `place`, `rotate`, `scan`) — Verben
+  sind hier erlaubt, die Aktion ist die Semantik.
+- GET: `<X>` ist ein Asset-Pfad innerhalb der Controller-App (z. B.
+  `sw.js`, `manifest.json`, `icon-192.png`). Die Statik-Auslieferung
+  legt ROU-23 fest.
+
+Eingabequellen sind kurz und beschreibend (`figure`, `nfc`, `voice`),
+App-Slugs ausführlicher (`figuren-erkennung`) — eine Kollision würde
+auffallen und ist über Naming-Disziplin auszuschließen. Das Prefix
+heißt `controller`, auch wenn es keinen dedizierten Controller-Buddy
+gibt.
 
 *Tickets:* #24
 
