@@ -83,22 +83,45 @@ das kein Fehler; die Schnittstelle macht das für Konsumenten erkennbar (FAM-8).
 ## 3. Datenhaltung & Schnittstelle
 
 ### FAM-6 — Registry als Per-Instanz-Datei
-Die Personen-Liste liegt als JSON-Datei neben dem Code, je Instanz separat
-gepflegt und per `.gitignore` aus dem Repo ausgeschlossen — analog
-`routing.json` (`router.md` ROU-18). Eine `familie.example.json` dokumentiert
-das Format. Fehlt die Datei beim Start, protokolliert das System eine Warnung
-und läuft mit leerer Familie weiter, statt abzubrechen.
+Die Personen-Liste **und die familienspezifischen Settings (FAM-9)** liegen
+gemeinsam als JSON-Datei neben dem Code, je Instanz separat gepflegt und per
+`.gitignore` aus dem Repo ausgeschlossen — analog `routing.json` (`router.md`
+ROU-18). Die Datei hat zwei Abschnitte: `erwachsene`/`kinder` (Personen,
+FAM-3) und `settings` (Werte aus FAM-9). Eine `familie.example.json`
+dokumentiert das Format. Fehlt die Datei beim Start, protokolliert das System
+eine Warnung und läuft mit leerer Familie und Default-Settings (FAM-9)
+weiter, statt abzubrechen. Eine Wahrheit pro Fakt (CLAUDE.md §6): Personen
+und Settings einer Familie leben in derselben Datei und wandern beim
+Repo-Fork je Familie (E-PLAN-8) gemeinsam mit.
 
-*Tickets:* #38
+*Tickets:* #38, #60
 
-### FAM-7 — Personen-Daten über die Schnittstelle
-Die Registry stellt die Personen-Daten (FAM-3, ohne das Foto-Binär) über eine
-Schnittstelle bereit: alle Personen, eine Person je `id`. Konsumenten
-(`plan.md`) lesen Personen-Daten **nur** über diese Schnittstelle, nicht über
-eigenen Zugriff auf die Registry-Datei (CLAUDE.md §6: einseitige
-Abhängigkeiten — die Registry besitzt die Daten, andere sind Nutzer).
+### FAM-7 — Daten über die Lese-Schnittstelle
+Die Registry stellt die Personen-Daten (FAM-3, ohne das Foto-Binär) **und die
+familienspezifischen Settings (FAM-9)** über eine Schnittstelle bereit: alle
+Personen, eine Person je `id`, die Settings als zusammenhängende Werte.
+Konsumenten (`plan.md`, `familie-anlegen.md`) lesen diese Daten **nur** über
+diese Schnittstelle, nicht über eigenen Zugriff auf die Registry-Datei
+(CLAUDE.md §6: einseitige Abhängigkeiten — die Registry besitzt die Daten,
+andere sind Nutzer). Schreiben erfolgt symmetrisch über FAM-11.
 
-*Tickets:* #38
+*Tickets:* #38, #60
+
+### FAM-11 — Schreib-Schnittstelle der Registry
+Konsumenten ergänzen oder ändern Personen-Daten und Settings (FAM-7) **nur**
+über die Schreib-Schnittstelle der Registry, nicht über eigenen Zugriff auf
+die Registry-Datei — symmetrisch zur Lese-Seite (FAM-7) und im Sinne von
+CLAUDE.md §6 (die Registry besitzt die Daten). Schreibvorgänge sind **atomar**
+(Temp-Datei + Rename, sodass ein zeitgleicher Lesezugriff nie eine halb
+geschriebene Datei sieht). Bestehende Personen bleiben unberührt, außer der
+Aufrufer ändert sie explizit. Foto-Dateien gehören nicht in den
+Schreib-Vertrag der Registry — sie liegen neben der Datei im
+Foto-Verzeichnis (FAM-5/FAM-9), und Konsumenten, die ein Foto annehmen,
+schreiben es vor dem Registry-Schreiben an seinen Zielpfad (vgl.
+`familie-anlegen.md` FAA-8). Schreib-Konsumenten heute: `familie-anlegen.md`
+FAA-8.
+
+*Tickets:* #60
 
 ### FAM-8 — Profilfotos über einen HTTP-Endpunkt
 Profilfotos liefert die Registry über den HTTP-Endpunkt
@@ -113,24 +136,34 @@ geräte-neutral (URL-10).
 ## 4. Konfiguration
 
 ### FAM-9 — Konfigurationswerte
-| Wert                 | Default                              | Quelle |
-|----------------------|--------------------------------------|--------|
-| Registry-Datei       | `familie.json` neben dem Code        | Env · CLI |
-| Foto-Verzeichnis     | `fotos/` neben der Registry-Datei    | Env · Config |
-| Profilbild-Max-Kante | `1280` Pixel (längste Kante)         | Env · Config |
+Familienspezifische Werte leben **in `familie.json` (FAM-6) im Abschnitt
+`settings`** und werden über die Lese-Schnittstelle (FAM-7) gelesen. Ein
+Override über Umgebungsvariablen ist nur für Ops-Notfälle vorgesehen; eine
+Übersteuerung per CLI-Flag gibt es nicht. Der Pfad zur Registry-Datei
+selbst kann nicht in der Datei stehen und bleibt deshalb Env/CLI.
 
-*Tickets:* #38
+| Wert                 | Default                              | Quelle                                                            |
+|----------------------|--------------------------------------|-------------------------------------------------------------------|
+| Registry-Datei       | `familie.json` neben dem Code        | Env (`FAMILIE_REGISTRY`) · CLI (`--registry`)                     |
+| Foto-Verzeichnis     | `fotos/` neben der Registry-Datei    | `familie.json` settings (Override `FAMILIE_FOTOS`)                |
+| Profilbild-Max-Kante | `1280` Pixel (längste Kante)         | `familie.json` settings (Override `FAMILIE_PROFILBILD_MAX_KANTE`) |
+
+*Tickets:* #38, #60
 
 ## 5. Tests
 
 ### FAM-10 — Automatisierte Tests je Anforderung
 Jede Anforderung mit Code-Verhalten hat einen automatisierten Test
-(CLAUDE.md §6), ohne Netz. Mindest-Abdeckung: FAM-6 (fehlende Datei → Warnung,
-leere Familie, kein Crash) · FAM-7 (alle Personen; eine Person je `id`;
-unbekannte `id`) · FAM-8 (Foto-Endpoint: 200 mit Foto, 404 ohne Foto / bei
-unbekannter `id`).
+(CLAUDE.md §6), ohne Netz. Mindest-Abdeckung: FAM-6 (fehlende Datei →
+Warnung, leere Familie und Default-Settings, kein Crash; Datei mit Personen
+und Settings → beides geladen) · FAM-7 (alle Personen; eine Person je `id`;
+unbekannte `id`; Settings über die Schnittstelle) · FAM-8 (Foto-Endpoint:
+200 mit Foto, 404 ohne Foto / bei unbekannter `id`) · FAM-11 (atomares
+Schreiben: bestehende Personen byte-gleich nach Schreiben einer neuen Person;
+simulierter Schreib-Abbruch hinterlässt keine halbe Datei; Settings können
+geschrieben und re-gelesen werden).
 
-*Tickets:* #38
+*Tickets:* #38, #60
 
 ---
 
