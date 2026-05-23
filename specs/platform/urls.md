@@ -119,7 +119,8 @@ eine Anfrage bedient, ergibt sich allein aus dem Pfad-Prefix (URL-1) — nicht a
 Host oder Port. Damit sind eine Display-Seite und ein darin eingebetteter
 Buddy-Inhalt same-origin (kein Mixed Content), und eine Instanz trägt genau ein
 Server-Zertifikat (URL-11). Wie die Origin intern auf die Komponenten-Prozesse
-verteilt wird, ist Sache der Umsetzung.
+verteilt wird, ist Sache der Umsetzung — die konkrete Pfad-zu-Upstream-Zuordnung
+regelt URL-14.
 
 *Tickets:* #36
 
@@ -134,6 +135,43 @@ ein Buddy darf seine Assets nicht unter einem eigenen Top-Level-Pfad wie
 und ins Leere fällt.
 
 *Tickets:* #61
+
+### URL-14 — Origin-Routing-Tabelle
+
+Die eine Origin (URL-12) verteilt eingehende Anfragen nach Pfad-Prefix auf die
+getrennten Komponenten-Prozesse einer Instanz. Welcher Prefix zu welchem
+Upstream gehört, ist nicht Sache der Umsetzung, sondern Vertrag — sonst hat
+jeder Konsument (nginx-Conf, Onboarding-Schritte, neue Komponenten) eine eigene
+Annahme.
+
+Die Origin matcht Pfade in dieser Reihenfolge (spezifisch vor allgemein — der
+längste Prefix gewinnt, das ist Teil der Spec, nicht nur eine nginx-Marotte):
+
+| # | Pfad-Prefix                     | Upstream-Komponente | Bemerkung                                                                 |
+|---|---------------------------------|---------------------|---------------------------------------------------------------------------|
+| 1 | `/display/plan/`                | Plan-Buddy          | Display-Views des Plan-Buddys (URL-2).                                    |
+| 2 | `/api/v1/plan/`                 | Plan-Buddy          | Plan-Buddy-Backend (Termine, Zuteilung, Aktivität).                       |
+| 3 | `/api/v1/familie/`              | Familie             | Familien-Mit-Host (Personen, Foto). Aktuell nicht in nginx (#85).         |
+| 4 | `/api/v1/displays/<id>/events`  | Router              | SSE-Zustands-Stream (ROU-22); Long-Lived, ohne Proxy-Puffer.              |
+| 5 | `/display/`                     | Router              | Display-Views (außer den oben abgefangenen spezifischen Buddy-Prefixen).  |
+| 6 | `/controller/`                  | Router              | Controller-Aktionen (URL-3).                                              |
+| 7 | `/api/v1/`                      | Router              | Hub-Backend (State, Events, Diagnose).                                    |
+| 8 | `/` (alles übrige)              | —                   | 404 (URL-1: andere Top-Level-Pfade sind nicht erlaubt).                   |
+
+Diese Tabelle ist die Quelle für (a) die nginx-Origin-Konfiguration in
+`deploy/nginx/xbuddy-origin.conf` und (b) Onboarding-Schritte, die Origin-Routing
+eintragen (z. B. wenn das Geräte-Profil bestimmt, welche Komponenten lokal
+laufen). Konsumenten dieser Tabelle: #85 (nginx-Origin-Conf: Familie-Upstream
+ergänzen), #60 (Familie anlegen agentisch — schreibt Familie in den Routing-Plan
+einer Instanz), #82 (Geräte-Profil im Onboarding — wählt aus dieser Tabelle die
+Prefixe, die auf der Instanz aktiv sind).
+
+Eine neue Komponente, die einen eigenen Prozess hinter der Origin betreibt,
+muss zuerst hier eine Zeile bekommen — dann nginx, dann Code. Reihenfolge
+spezifisch-vor-allgemein wird beibehalten; spezifischere Prefixe (`/api/v1/plan/`,
+`/api/v1/familie/`) stehen immer vor allgemeineren (`/api/v1/`).
+
+*Tickets:* #85
 
 ## Beispiele
 
