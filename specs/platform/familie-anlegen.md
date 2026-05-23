@@ -31,11 +31,16 @@ Nachträge (eigener PR, sobald belegt).
 Die Funktion ist eine klar abgegrenzte, **aufrufbare Funktion** mit definierter
 Schnittstelle. **Eingang:** der Telegram-Privatchat des Aufrufers (Chat-ID
 und Telegram-User-ID), die ID der gebundenen Familien-Gruppe (`eltern-chat.md`
-EC-2) und ein Zugriff auf die Registry-Datei und das Foto-Verzeichnis aus
-`familie.md` FAM-9. **Wirkung:** nach erfolgreichem Durchlauf sind **eine oder
-mehrere** neue Personen in `familie.json` ergänzt (jede Person für sich
-bestätigt und atomar geschrieben, FAA-7/FAA-8) und — falls der Aufrufer pro
-Person ein Foto geschickt hat — die Bilddateien im Foto-Verzeichnis abgelegt.
+EC-2) und ein Zugriff auf die Familien-Registry über deren Schnittstellen
+(`familie.md` FAM-7 lesen, FAM-11 schreiben). Familienspezifische Werte
+(Foto-Verzeichnis, Profilbild-Max-Kante) holt die Funktion über die
+Registry-Schnittstelle aus den Settings (`familie.md` FAM-9), **nicht** als
+separate Aufruf-Parameter — der Aufrufer muss diese Werte nicht duplizieren,
+und die Funktion sieht immer den Stand der Familie, die sie gerade bedient.
+**Wirkung:** nach erfolgreichem Durchlauf sind **eine oder mehrere** neue
+Personen in der Registry ergänzt (jede Person für sich bestätigt und atomar
+über FAM-11 geschrieben, FAA-7/FAA-8) und — falls der Aufrufer pro Person
+ein Foto geschickt hat — die Bilddateien im Foto-Verzeichnis (FAM-9) abgelegt.
 **Ausgang:** ein Ergebnis-Signal an den Aufrufer mit der Liste der vergebenen
 `id`s der angelegten Personen (kann leer sein, wenn der Aufrufer die erste
 Anlage abgebrochen hat). Die Funktion kennt ihren Aufrufer nicht — sie weiß
@@ -150,16 +155,16 @@ Implementierungs-Detail.
 
 ## 3. Schreiben
 
-### FAA-8 — Atomares Ergänzen in `familie.json`
-Nach Bestätigung (FAA-7) ergänzt die Funktion die neue Person in
-`familie.json` (`familie.md` FAM-6): bestehende Personen werden gelesen, die
-neue Person additiv angehängt, und die Datei wird **atomar** zurückgeschrieben
-(temporäre Datei + Rename), damit ein zeitgleicher Lesezugriff (`familie.md`
-FAM-7) nie eine halb geschriebene Datei sieht. Bestehende Personen werden
-nicht verändert. Falls die Funktion ein Foto angenommen hat (FAA-6), liegt
-die Bilddatei vor dem Schreiben in `familie.json` bereits an ihrem Zielpfad.
-Schlägt das Schreiben fehl, bleiben weder die neue Person in `familie.json`
-noch eine etwaige Foto-Datei zurück — sonst hätte die Registry einen
+### FAA-8 — Ergänzen über die Registry-Schreib-Schnittstelle
+Nach Bestätigung (FAA-7) ergänzt die Funktion die neue Person in der Registry
+**ausschließlich über die Schreib-Schnittstelle der Registry**
+(`familie.md` FAM-11) — die Funktion fasst die Registry-Datei nicht selbst an.
+FAM-11 garantiert das atomare Schreiben (Temp-Datei + Rename) und bewahrt
+bestehende Personen unverändert. Falls die Funktion ein Foto angenommen hat
+(FAA-6), liegt die Bilddatei vor dem Aufruf der Schreib-Schnittstelle bereits
+an ihrem Zielpfad im Foto-Verzeichnis (FAM-9). Schlägt der Schreib-Aufruf
+fehl, sorgt die Funktion dafür, dass weder die neue Person in der Registry
+noch eine etwaige Foto-Datei zurückbleibt — sonst hätte die Registry einen
 Foto-Verweis ohne Datei oder umgekehrt.
 
 *Tickets:* #60
@@ -321,9 +326,10 @@ Personen-Typ; die Konversations-Struktur (FAA-3) ist dafür offen.
 ## Querverweise
 
 - `familie.md` FAM-2 (zwei Arten von Personen), FAM-3 (Personen-Eigenschaften),
-  FAM-4 (Ring-Palette), FAM-5 (Profilfoto optional), FAM-6 (Registry-Datei),
-  FAM-7 (Lese-Schnittstelle), FAM-9 (Konfigurationswerte inkl. Profilbild-
-  Max-Kante), FAM-10 (Tests).
+  FAM-4 (Ring-Palette), FAM-5 (Profilfoto optional), FAM-6 (Registry-Datei
+  mit Personen + Settings), FAM-7 (Lese-Schnittstelle), FAM-9
+  (Konfigurationswerte inkl. Profilbild-Max-Kante, aus Registry-Settings),
+  FAM-10 (Tests), FAM-11 (Schreib-Schnittstelle).
 - `eltern-chat.md` EC-2 (Berechtigung über Gruppen-Mitgliedschaft), EC-8
   (Aufgaben-Katalog — für OPEN-FAA-A), E-EC-7 (Bestätigungswort-Pattern).
 - `eltern-chat-onboarding.md` ONB-3 (Privatchat als Eingabekanal), ONB-9
