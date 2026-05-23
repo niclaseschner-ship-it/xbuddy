@@ -11,9 +11,10 @@ Bestätigung in `familie.json`. Die Funktion ist **trigger-agnostisch**
 über den Eltern-Chat (`eltern-chat.md` EC-8) oder ein Slash-Aufruf — ist nicht
 Teil ihres Vertrags.
 
-**V1-Scope:** die Anlage **einer** Person je Aufruf · die Konversation läuft
-im Privatchat mit dem Aufrufer (analog `eltern-chat-onboarding.md` ONB-3) ·
-deterministisch, ohne LLM, hart-codierter Ablauf · Schreiben erst nach
+**V1-Scope:** die Anlage **einer oder mehrerer** Personen je Aufruf
+(„noch jemand?"-Schleife, FAA-9) · die Konversation läuft im Privatchat mit
+dem Aufrufer (analog `eltern-chat-onboarding.md` ONB-3) · deterministisch,
+ohne LLM, hart-codierter Ablauf · Schreiben pro Person erst nach
 Bestätigungswort (`eltern-chat.md` E-EC-7) · nur Familienmitglieder im Sinne
 von `familie.md` FAM-2 (Erwachsene und Kinder).
 
@@ -31,13 +32,15 @@ Die Funktion ist eine klar abgegrenzte, **aufrufbare Funktion** mit definierter
 Schnittstelle. **Eingang:** der Telegram-Privatchat des Aufrufers (Chat-ID
 und Telegram-User-ID), die ID der gebundenen Familien-Gruppe (`eltern-chat.md`
 EC-2) und ein Zugriff auf die Registry-Datei und das Foto-Verzeichnis aus
-`familie.md` FAM-9. **Wirkung:** nach erfolgreichem Durchlauf ist genau eine
-neue Person in `familie.json` ergänzt und — falls der Aufrufer ein Foto
-geschickt hat — die Bilddatei im Foto-Verzeichnis abgelegt. **Ausgang:** ein
-Ergebnis-Signal an den Aufrufer, das mitteilt, ob die Person angelegt wurde
-(mit ihrer `id`) oder ob der Vorgang abgebrochen wurde. Die Funktion kennt
-ihren Aufrufer nicht — sie weiß nicht, ob ein Onboarding-Flow, ein
-konversationeller Aufruf oder ein anderer Auslöser sie gestartet hat (E-FAA-1).
+`familie.md` FAM-9. **Wirkung:** nach erfolgreichem Durchlauf sind **eine oder
+mehrere** neue Personen in `familie.json` ergänzt (jede Person für sich
+bestätigt und atomar geschrieben, FAA-7/FAA-8) und — falls der Aufrufer pro
+Person ein Foto geschickt hat — die Bilddateien im Foto-Verzeichnis abgelegt.
+**Ausgang:** ein Ergebnis-Signal an den Aufrufer mit der Liste der vergebenen
+`id`s der angelegten Personen (kann leer sein, wenn der Aufrufer die erste
+Anlage abgebrochen hat). Die Funktion kennt ihren Aufrufer nicht — sie weiß
+nicht, ob ein Onboarding-Flow, ein konversationeller Aufruf oder ein anderer
+Auslöser sie gestartet hat (E-FAA-1).
 
 *Tickets:* #60
 
@@ -73,11 +76,12 @@ Implementierungs-Detail:
    Schritt, `familie.md` FAM-3): syntaktisch gültige E-Mail-Adresse oder
    explizit übersprungen.
 6. **Telegram-ID** (optional, beide Arten): eine Zahl oder explizit
-   übersprungen. Welche IDs die Funktion akzeptiert (z. B. die ID des
-   Aufrufers automatisch, wenn die Person der Aufrufer selbst ist) ist
-   Implementierungs-Detail; die Spec verlangt nur, dass eine eingetragene
-   `telegram_id` eine Telegram-User-ID ist und nicht doppelt in
-   `familie.json` vorkommt (FAA-10).
+   übersprungen. Die Funktion bietet die Telegram-User-ID des Aufrufers als
+   Default an, wenn der Aufrufer signalisiert, dass die anzulegende Person er
+   selbst ist (etwa über ein „ich"-Signal in der Konversation — der konkrete
+   Wortlaut ist Implementierungs-Detail). Eine eingetragene `telegram_id`
+   muss eine Telegram-User-ID sein und darf nicht bereits einer anderen Person
+   in `familie.json` zugeordnet sein (FAA-10).
 
 Pflicht-Schritte ohne gültige Antwort wiederholen die Frage. Optionale
 Schritte können übersprungen werden, indem der Aufrufer ein erkennbares
@@ -110,16 +114,25 @@ mehr geändert.
 *Tickets:* #60
 
 ### FAA-6 — Profilbild-Annahme
-Ein Foto wird über Telegram als Foto-Nachricht entgegengenommen, **nicht** als
-Datei-Anhang. Die Funktion lädt die Bilddatei aus dem Telegram-Update herunter
-und legt sie unter dem Foto-Verzeichnis aus `familie.md` FAM-9 ab. Der
-Dateiname ist `<id>.jpg` — `id` aus FAA-5; die Endung `.jpg` ist gesetzt,
-weil Telegram Fotos als JPEG ausliefert (siehe FAA-10 für ein abweichendes
-Format). Die Funktion wählt unter den von Telegram angebotenen Größen die
-größte, deren längste Kante den Tuning-Wert „Profilbild-Max-Kante" aus
-`familie.md` FAM-9 nicht überschreitet. Der Dateiname (ohne Verzeichnis)
-landet in `familie.md` FAM-3 `foto`. Hat der Aufrufer das Foto übersprungen,
-bleibt `foto` ungesetzt — `familie.md` FAM-5 lässt das ausdrücklich zu.
+Ein Foto wird über Telegram **entweder** als Foto-Nachricht **oder** als
+Datei-Anhang mit Bild-MIME entgegengenommen. Akzeptierte MIME-Typen sind
+`image/jpeg` und `image/png`; andere Anhänge weist die Funktion ab (FAA-10).
+Diese Lockerung gegenüber „nur Foto-Nachricht" ist gewollt, weil einige Geräte
+(z. B. iOS, je nach Workflow) Bilder als Dokument-Anhang versenden — der
+Aufrufer soll nicht an der Anhang-Form scheitern.
+
+Die Funktion lädt die Bilddatei aus dem Telegram-Update herunter und legt sie
+unter dem Foto-Verzeichnis aus `familie.md` FAM-9 ab. Der Dateiname ist
+`<id>.<ext>` — `id` aus FAA-5; `ext` folgt dem Eingangsformat (`jpg` für JPEG,
+`png` für PNG). Bei einer Telegram-Foto-Nachricht ist das Format immer JPEG,
+und die Funktion wählt unter den angebotenen Größen die größte, deren längste
+Kante den Tuning-Wert „Profilbild-Max-Kante" aus `familie.md` FAM-9 nicht
+überschreitet. Bei einem Datei-Anhang nimmt die Funktion die Datei wie gesandt
+und prüft die Kantenlänge gegen denselben Tuning-Wert (FAA-10).
+
+Der Dateiname (ohne Verzeichnis, inklusive Endung) landet in `familie.md`
+FAM-3 `foto`. Hat der Aufrufer das Foto übersprungen, bleibt `foto`
+ungesetzt — `familie.md` FAM-5 lässt das ausdrücklich zu.
 
 *Tickets:* #60
 
@@ -153,14 +166,28 @@ Foto-Verweis ohne Datei oder umgekehrt.
 
 ## 4. Lebenszyklus
 
-### FAA-9 — Zwischenzustand nur im Speicher
-Der Zustand einer laufenden Anlage-Konversation (welche Felder schon erfasst
-sind, welche Frage als nächstes kommt, welches Foto schon heruntergeladen
-wurde) liegt im Prozess-Speicher und **nicht** auf Disk. Stürzt der Prozess
-ab oder wird er neu gestartet, startet die Anlage **dieser** Person von
-vorne — bereits durch FAA-8 in `familie.json` geschriebene Personen bleiben
-unberührt. Diese Wahl orientiert sich an `eltern-chat-onboarding.md` ONB-3 /
-`onboarding.py` (Privatchat-Zustand im Speicher, kein Wiederaufnahme-Pfad).
+### FAA-9 — Mehr-Personen-Schleife; Zwischenzustand nur im Speicher
+
+**(a) „Noch jemand?"-Schleife.** Nach erfolgreichem Bestätigen (FAA-7) und
+Schreiben (FAA-8) **einer** Person fragt die Funktion im Privatchat, ob eine
+weitere Person angelegt werden soll. Eine Bestätigung nach `eltern-chat.md`
+E-EC-7 führt zurück zu FAA-3 Schritt 1 (Art) für die nächste Person; eine
+nicht-bestätigende Antwort beendet die Funktion und liefert das Ergebnis-Signal
+(FAA-1) mit der Liste aller in diesem Aufruf angelegten `id`s. Jede Person
+durchläuft FAA-3..8 in voller Länge — kein gemeinsamer Zustand zwischen
+Personen außer der Tatsache, dass `familie.json` zwischen den Personen jeweils
+um die zuletzt bestätigte Person gewachsen ist (FAA-8 atomar je Person).
+
+**(b) Zwischenzustand nur im Speicher.** Der Zustand der aktuell laufenden
+Personen-Anlage (welche Felder schon erfasst sind, welche Frage als nächstes
+kommt, welches Foto schon heruntergeladen wurde) liegt im Prozess-Speicher und
+**nicht** auf Disk. Stürzt der Prozess ab oder wird er neu gestartet, ist der
+Funktions-Aufruf beendet; die Anlage der aktuell laufenden Person ist verloren,
+und die Funktion wird ihre Schleife (a) nicht fortsetzen — bereits durch FAA-8
+in `familie.json` geschriebene Personen aus diesem oder früheren Aufrufen
+bleiben unberührt. Diese Wahl orientiert sich an `eltern-chat-onboarding.md`
+ONB-3 / `onboarding.py` (Privatchat-Zustand im Speicher, kein
+Wiederaufnahme-Pfad).
 
 *Tickets:* #60
 
@@ -168,12 +195,13 @@ unberührt. Diese Wahl orientiert sich an `eltern-chat-onboarding.md` ONB-3 /
 Die Funktion reagiert auf erkennbare Eingabe- und Umweltfehler, ohne den
 Aufrufer im Stich zu lassen und ohne fehlerhafte Daten zu schreiben:
 
-- **Foto in falschem Format** (Telegram liefert ausnahmsweise nicht JPEG,
-  etwa weil der Aufrufer das Bild als Dokument-Anhang schickt): die Funktion
-  weist den Anhang ab und bietet erneut die Schritt-3-Frage an.
-- **Foto zu groß** (alle von Telegram angebotenen Größen überschreiten den
-  FAM-9-Tuning-Wert „Profilbild-Max-Kante"): die Funktion weist das Foto ab
-  und bietet erneut die Schritt-3-Frage an.
+- **Anhang ohne Bild-MIME** (Dokument oder anderer MIME außerhalb
+  `image/jpeg` / `image/png`): die Funktion weist den Anhang ab und bietet
+  erneut die Schritt-3-Frage an.
+- **Foto zu groß** (Telegram-Foto: alle angebotenen Größen überschreiten den
+  FAM-9-Tuning-Wert „Profilbild-Max-Kante"; oder Datei-Anhang: längste Kante
+  überschreitet diesen Wert): die Funktion weist das Foto ab und bietet
+  erneut die Schritt-3-Frage an.
 - **Name leer oder nur Whitespace:** die Funktion wiederholt die Namens-Frage.
 - **Ring-Farbe außerhalb der Palette:** die Funktion wiederholt die
   Farb-Frage.
@@ -200,27 +228,34 @@ reproduzierbar und ohne Netz — Telegram wird durch eine kontrollierte
 Doppelung ersetzt. Mindest-Abdeckung:
 
 - **FAA-1** — Aufruf mit minimalem Eingang gibt nach Durchlauf das
-  Ergebnis-Signal mit der vergebenen `id` zurück; Aufruf bei Abbruch (FAA-7)
-  gibt das Abbruch-Signal zurück.
+  Ergebnis-Signal mit der Liste der vergebenen `id`s zurück (eine `id` bei
+  einer Person, mehrere `id`s bei einer Mehr-Personen-Schleife); Aufruf mit
+  sofortigem Abbruch der ersten Person (FAA-7) gibt eine leere Liste zurück.
 - **FAA-2** — Aufruf eines Nicht-Familien-Mitglieds wird abgelehnt;
   `familie.json` bleibt unverändert.
 - **FAA-3** — Reihenfolge der Fragen wird eingehalten; eine leere Antwort auf
   einen Pflicht-Schritt wiederholt die Frage; bei Art „Kind" wird die
-  E-Mail-Frage übersprungen.
+  E-Mail-Frage übersprungen; bei „ich"-Signal in Schritt 6 wird die
+  Telegram-User-ID des Aufrufers als Default vorgeschlagen.
 - **FAA-4** — Vorschlag ist die erste freie Palette-Farbe; Override mit
   Palette-Wort wird übernommen; Wort außerhalb der Palette wird abgelehnt.
 - **FAA-5** — Slug aus Namen wird vergeben; Kollision führt zu `-2`-Suffix.
-- **FAA-6** — Telegram-Foto landet als `<id>.jpg` im Foto-Verzeichnis,
-  Auswahl unter den Telegram-Größen respektiert die FAM-9-Max-Kante;
-  übersprungenes Foto lässt `foto` in `familie.json` ungesetzt.
+- **FAA-6** — Telegram-Foto-Nachricht landet als `<id>.jpg`, PNG-Datei-Anhang
+  als `<id>.png` im Foto-Verzeichnis; Auswahl unter den Telegram-Größen
+  respektiert die FAM-9-Max-Kante; ein Datei-Anhang über der Max-Kante wird
+  abgewiesen; ein Datei-Anhang ohne Bild-MIME wird abgewiesen; übersprungenes
+  Foto lässt `foto` in `familie.json` ungesetzt.
 - **FAA-7** — Bestätigungswort nach E-EC-7 schaltet das Schreiben frei; eine
   nicht-bestätigende Antwort schreibt nicht.
 - **FAA-8** — neue Person wird additiv ergänzt, bestehende Personen bleiben
   bytegleich; ein simulierter Schreibfehler hinterlässt weder Eintrag noch
   Foto.
-- **FAA-9** — ein während des Ablaufs verlorener Prozess-Zustand führt zu
-  einem Neustart der Anlage; eine vor dem Abbruch bereits committete Person
-  ist weiterhin in `familie.json`.
+- **FAA-9** — nach Bestätigung einer Person fragt die Funktion „noch
+  jemand?"; eine Bestätigung führt zur nächsten Personen-Anlage mit FAA-3
+  Schritt 1, eine nicht-bestätigende Antwort beendet die Funktion mit der
+  Liste der angelegten `id`s; ein während des Ablaufs verlorener
+  Prozess-Zustand beendet die Funktion, bereits committete Personen aus
+  diesem oder früheren Aufrufen bleiben in `familie.json`.
 - **FAA-10** — die fünf in FAA-10 genannten Fehlerklassen führen zu den dort
   beschriebenen Reaktionen, ohne `familie.json` zu mutieren.
 
