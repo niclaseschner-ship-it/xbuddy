@@ -139,6 +139,14 @@ Diese Regeln sind nicht verhandelbar. Im Zweifel: nachfragen, nicht raten.
   Nichts aus dem Gedächtnis oder aus alten Sessions ohne Beleg übernehmen.
   Unbelegbares wird als unsicher gekennzeichnet oder nachgefragt.
 
+- **Ticket-/PR-Nummern nie nackt nennen.** Wer in Chats, Berichten oder
+  Zusammenfassungen eine Issue- oder PR-Nummer schreibt (`#27`, `PR #31`,
+  `DISP-1`), nennt im selben Satz eine kurze Überschrift dazu — worum
+  geht's in dem Ticket. Beispiel: nicht „blockiert durch #27", sondern
+  „blockiert durch #27 (Eltern-Chat V1)". Eine nackte Nummer zwingt den
+  Menschen zum Nachschlagen und verliert in jeder späteren Lesung
+  Kontext. Gilt für KI-Agents und Menschen.
+
 ## 8. Git & Safety — verbindlich
 
 - **Kein `push` ohne Freigabe.** Lokal committen ist erlaubt. `git push`
