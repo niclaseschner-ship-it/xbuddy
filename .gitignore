@@ -10,6 +10,9 @@ desktop.ini
 *.swo
 *~
 
+# Claude Code agent worktrees + local state
+.claude/
+
 # Secrets / environment
 .env
 .env.*
