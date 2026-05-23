@@ -458,3 +458,38 @@ XBuddy legt einen eigenen Google-OAuth-Client an und veröffentlicht ihn auf
 **Production**. Ein Client im Testing-Modus lässt Refresh-Tokens nach 7 Tagen
 verfallen (Symptom: HTTP 400 `invalid_grant`, Termine verschwinden) — ein
 Betriebs-Risiko, das das Veröffentlichen einmalig beseitigt.
+
+### E-PLAN-8 — V1 ist familienspezifisch hartcodiert; Familie 2–4 per Repo-Fork
+*Datum:* 2026-05-23
+
+Der Plan-Buddy ist in V1 auf die Abläufe **einer** Familie zugeschnitten —
+zwei Kinder, abendliche Bringen-und-Ins-Bett-Routine, eine spezifische Liste
+von Kind-Aktivitäten. Diese familienspezifischen Inhalte leben absichtlich
+als Code-Konstanten: der Aktivitäts-Katalog in `plan/main.py`
+(`_aktivitaet_label`), die Personen-Auflösung über Titel-Treffer in
+`plan/kalender.py` (PLAN-19), die Abend-Routine als feste Slot-Sequenz
+hinter E-PLAN-2.
+
+Familie 2–4 entstehen per **Repo-Fork und Hand-Anpassung mit Claude**,
+nicht über generische Konfiguration. Das ist nicht Bequemlichkeit, sondern
+bewusste Anwendung von CLAUDE.md §6 („auf Vorrat externalisieren bleibt
+Wildwuchs"): solange keine fünfte Familie da ist, deren Ablauf wieder
+anders ist, gibt es keinen konkreten Schmerz, der eine Plan-Engine
+rechtfertigt.
+
+**Trigger zum Umdenken** — frühestens dann generalisieren wir:
+- ≥5 aktive Familien-Forks, ODER
+- eine Familien-Anpassung berührt mehr als ~3 Code-Stellen pro Familie,
+  ODER
+- Code-vs-Live-Drift zwischen zwei Familien wird zum wiederkehrenden
+  Sync-Problem.
+
+**Verworfen:** jetzt eine Plan-Engine mit Aktivitäts-Katalog-DSL und
+Ablauf-Templates bauen. Wäre exakt die Vorrats-Generalisierung, die §6
+verbietet — und würde die V1-Liefermenge in eine offene Architektur-Frage
+zurückwerfen.
+
+Diese Entscheidung ergänzt E-PLAN-2: dort ist die **Slot-Struktur** Daten
+(sieben Slots als Config), hier sind die **Familien-Routinen** Code. Die
+Linie liegt bewusst tief — wer den Plan inhaltlich ändert, fasst Python
+an. Wer einen Slot dazunimmt, fasst die Config an.
