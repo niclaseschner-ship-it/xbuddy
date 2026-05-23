@@ -9,6 +9,7 @@ erzeugte Root-CA verifiziert (URL-11) und die SAN-Einträge der Origin trägt.
 
 import os
 import subprocess
+from datetime import datetime, timezone
 
 import pytest
 
@@ -87,6 +88,30 @@ def test_root_ca_ist_eine_ca(ca):
     )
     assert res.returncode == 0
     assert "CA:TRUE" in res.stdout
+
+
+def test_server_cert_laufzeit_unter_398_tagen(ca):
+    """CAV-8: Das Server-Cert hat eine Laufzeit von höchstens 398 Tagen
+    (CA/Browser-Forum-Limit, Apple lehnt längere aktiv ab — #76)."""
+    res = subprocess.run(
+        ["openssl", "x509", "-in", ca["srv_cert"], "-noout",
+         "-startdate", "-enddate"],
+        capture_output=True, text=True,
+    )
+    assert res.returncode == 0, res.stderr
+    # openssl gibt "notBefore=May 23 10:00:00 2026 GMT" / "notAfter=..." aus
+    dates = {}
+    for line in res.stdout.strip().splitlines():
+        key, _, value = line.partition("=")
+        dates[key.strip()] = value.strip()
+    fmt = "%b %d %H:%M:%S %Y %Z"
+    not_before = datetime.strptime(dates["notBefore"], fmt).replace(tzinfo=timezone.utc)
+    not_after = datetime.strptime(dates["notAfter"], fmt).replace(tzinfo=timezone.utc)
+    delta_days = (not_after - not_before).days
+    assert delta_days <= 398, (
+        f"Server-Cert-Laufzeit {delta_days} Tage > 398 — verletzt CAV-8 "
+        f"(CA/B-Forum-Limit, Apple-Strenge)."
+    )
 
 
 def test_ca_lauf_ist_idempotent(ca):
