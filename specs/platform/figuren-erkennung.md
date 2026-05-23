@@ -347,7 +347,13 @@ auch `config.json`. Reihenfolge: `Defaults` → `config.json` → URL.
 Instanz wird sie separat verwaltet (nicht alle Instanzen im Repo,
 sondern beim Deployment der jeweiligen URL erzeugt).
 
-*Tickets:* #11
+**Kopplung zum Router:** `router_url` ist die Origin des Routers
+(Schema + Host[:Port], **ohne Pfad**) — `figlib.js` hängt den Endpunkt
+`/api/v1/events` selbst an (FIG-9). `source_id` muss mit dem
+`source_id`-Wert eines Eintrags der Routing-Tabelle (ROU-18)
+übereinstimmen, sonst greift kein Match (ROU-9).
+
+*Tickets:* #11, #72
 
 ## 5. HTML-Anforderungen
 

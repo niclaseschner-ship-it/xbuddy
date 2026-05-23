@@ -398,10 +398,14 @@ Router-Code (analog FIG-23 für die Phone-Seite). Format:
   ausgeliefert. Pro Instanz separat verwaltet — `routing.json` ist per
   `.gitignore` aus dem Repo ausgeschlossen, `routing.example.json`
   dokumentiert das Format.
+- **Kopplung zur Controller-Instanz:** `source_id` muss mit dem
+  `source_id`-Wert in der Controller-Instanz-Konfiguration (FIG-23)
+  übereinstimmen — sonst findet `lookup` (ROU-9) für die Events dieser
+  Instanz keinen Eintrag.
 - **Reload:** V1 lädt die Datei beim Start. Hot-Reload kommt mit einem
   eigenen Ticket, sobald jemand sie regelmäßig anfasst.
 
-*Tickets:* #5, #24
+*Tickets:* #5, #24, #72
 
 ### ROU-19 — `config.json` für Tuning-Werte
 Analog FIG-23: optionale Datei `config.json` im Router-Verzeichnis,
