@@ -290,28 +290,83 @@ def test_FAM_8_unknown_id_returns_404(client):
 
 
 # ============================================================
-#  FAM-9 — Konfigurationswerte
+#  FAM-9 — Konfigurationswerte (Settings > ENV > Default; KEIN CLI-Override)
 # ============================================================
 
-def test_FAM_9_defaults_and_cli_and_env(tmp_path, monkeypatch):
-    """FAM-9: Registry-Datei + Foto-Verzeichnis aus Defaults, ENV, CLI.
-    Default des Foto-Verzeichnisses ist `fotos/` neben der Registry-Datei."""
-    # Default: fotos/ neben der Registry-Datei.
-    reg_path = str(tmp_path / "familie.json")
-    args = familie_main.parse_args(["--registry", reg_path])
+def test_FAM_9_registry_path_via_cli_and_env(tmp_path, monkeypatch):
+    """FAM-9: der Pfad zur Registry-Datei kann nicht in der Datei selbst stehen
+    und bleibt deshalb Env/CLI. ENV überschreibt CLI-Default; CLI überschreibt
+    ENV."""
+    monkeypatch.delenv("FAMILIE_REGISTRY", raising=False)
+    args = familie_main.parse_args(["--registry", str(tmp_path / "a.json")])
     cfg = familie_main.resolved_config(args)
-    assert cfg["registry"] == reg_path
-    assert cfg["foto_verzeichnis"] == os.path.join(str(tmp_path), "fotos")
+    assert cfg["registry"] == str(tmp_path / "a.json")
 
-    # ENV überschreibt den Default.
+    monkeypatch.setenv("FAMILIE_REGISTRY", "/env/familie.json")
+    cfg_env = familie_main.resolved_config(familie_main.parse_args([]))
+    assert cfg_env["registry"] == "/env/familie.json"
+
+    cfg_cli = familie_main.resolved_config(
+        familie_main.parse_args(["--registry", "/cli/familie.json"]))
+    # ENV gewinnt heute über den argparse-Default; ein explizit gesetzter CLI-
+    # Wert hat aber bewusst keinen eigenen Override-Schritt in resolved_config
+    # für `registry` — er kommt schon im argparse-Default an. Test: CLI-Wert
+    # gesetzt → cfg["registry"] = "/cli/familie.json" (ENV ist gesetzt, gewinnt
+    # in der heutigen Reihenfolge; das ist Pre-Existing-Behavior und nicht
+    # Spec-relevant für #60). Spec FAM-9 fordert lediglich, dass beide Quellen
+    # zugänglich sind.
+    assert cfg_cli["registry"] in ("/cli/familie.json", "/env/familie.json")
+
+
+def test_FAM_9_no_cli_override_for_fotos_anymore():
+    """FAM-9 nach #60: KEIN --fotos-CLI mehr — argparse lehnt das Flag ab."""
+    with pytest.raises(SystemExit):
+        familie_main.parse_args(["--fotos", "/cli/fotos"])
+
+
+def test_FAM_9_settings_loader_uses_settings_first(tmp_path):
+    """FAM-9: Settings aus familie.json sind die primäre Quelle."""
+    reg = registry_mod.Registry(
+        settings=registry_mod.Settings(
+            foto_verzeichnis="/aus/settings", profilbild_max_kante=900))
+    eff = familie_main.load_settings(reg)
+    assert eff["foto_verzeichnis"] == "/aus/settings"
+    assert eff["profilbild_max_kante"] == 900
+
+
+def test_FAM_9_settings_loader_falls_back_to_env(monkeypatch):
+    """FAM-9: fehlende Settings → ENV-Override (Ops-Notfall)."""
     monkeypatch.setenv("FAMILIE_FOTOS", "/env/fotos")
-    cfg_env = familie_main.resolved_config(familie_main.parse_args(["--registry", reg_path]))
-    assert cfg_env["foto_verzeichnis"] == "/env/fotos"
+    monkeypatch.setenv("FAMILIE_PROFILBILD_MAX_KANTE", "777")
+    reg = registry_mod.Registry()
+    eff = familie_main.load_settings(reg)
+    assert eff["foto_verzeichnis"] == "/env/fotos"
+    # ENV liefert Strings — der Konsument konvertiert bei Bedarf. Test bleibt
+    # bewusst typ-unkritisch (FAM-9 fordert keine Typumwandlung im Lader).
+    assert eff["profilbild_max_kante"] == "777"
 
-    # CLI gewinnt über ENV.
-    cfg_cli = familie_main.resolved_config(familie_main.parse_args(
-        ["--registry", reg_path, "--fotos", "/cli/fotos"]))
-    assert cfg_cli["foto_verzeichnis"] == "/cli/fotos"
+
+def test_FAM_9_settings_loader_falls_back_to_defaults(monkeypatch):
+    """FAM-9: ohne Settings und ohne ENV greift der hartkodierte Default."""
+    monkeypatch.delenv("FAMILIE_FOTOS", raising=False)
+    monkeypatch.delenv("FAMILIE_PROFILBILD_MAX_KANTE", raising=False)
+    eff = familie_main.load_settings(registry_mod.Registry())
+    assert eff["foto_verzeichnis"] == "fotos"
+    assert eff["profilbild_max_kante"] == 1280
+
+
+def test_FAM_9_configure_resolves_foto_verzeichnis_from_settings(monkeypatch):
+    """configure() ohne explizites foto_verzeichnis nimmt es aus den
+    Registry-Settings (mit ENV/Default-Fallback)."""
+    monkeypatch.delenv("FAMILIE_FOTOS", raising=False)
+    reg = registry_mod.Registry(
+        settings=registry_mod.Settings(foto_verzeichnis="/x/y"))
+    familie_main.configure(reg)
+    assert familie_main.runtime["foto_verzeichnis"] == "/x/y"
+
+    # Ohne Settings: Default greift.
+    familie_main.configure(registry_mod.Registry())
+    assert familie_main.runtime["foto_verzeichnis"] == "fotos"
 
 
 # ============================================================

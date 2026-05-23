@@ -37,9 +37,19 @@ runtime = {
 }
 
 
-def configure(reg, foto_verzeichnis):
-    """Setzt die laufende Registry + das Foto-Verzeichnis (FAM-9)."""
+def configure(reg, foto_verzeichnis=None):
+    """Setzt die laufende Registry + das aufgelöste Foto-Verzeichnis (FAM-9).
+
+    Wird `foto_verzeichnis` nicht übergeben, leitet die Funktion es aus
+    `reg.settings` ab (mit ENV/Default-Fallback über FAM-9). So gibt es eine
+    Stelle für die Settings-Auflösung — der Entrypoint nutzt sie ebenso wie
+    Tests, die nur eine Registry hereinreichen.
+    """
     runtime["registry"] = reg
+    if foto_verzeichnis is None:
+        foto_verzeichnis = registry_mod.effective_setting(
+            reg.settings.foto_verzeichnis, "FAMILIE_FOTOS",
+            DEFAULTS["foto_verzeichnis"])
     runtime["foto_verzeichnis"] = foto_verzeichnis
 
 
@@ -87,15 +97,20 @@ DEFAULTS = {
     "listen_host": "127.0.0.1",
     "listen_port": 5010,
     "log_level":   "INFO",
+    # FAM-9-Tabelle: Default-Werte, die der Settings-Lader einsetzt, wenn
+    # weder familie.json noch ENV den jeweiligen Wert setzt.
+    "foto_verzeichnis":     "fotos",
+    "profilbild_max_kante": 1280,
 }
 
 
 def parse_args(argv):
     p = argparse.ArgumentParser(description="XBuddy Familien-Registry V1")
+    # FAM-9: Der Pfad zur Registry-Datei kann nicht in der Datei selbst stehen
+    # und bleibt deshalb Env/CLI. Alle übrigen familienspezifischen Werte
+    # liegen in `familie.json` settings (kein eigenes CLI-Flag, FAM-9).
     p.add_argument("--registry", default="familie.json",
                    help="Pfad zur Registry-Datei (FAM-9)")
-    p.add_argument("--fotos", dest="foto_verzeichnis",
-                   help="Foto-Verzeichnis (FAM-9; Default: fotos/ neben der Registry-Datei)")
     p.add_argument("--host", help="Bind-Host")
     p.add_argument("--port", type=int, help="Bind-Port")
     p.add_argument("--log-level", dest="log_level", help="DEBUG | INFO | WARNING | ERROR")
@@ -105,22 +120,45 @@ def parse_args(argv):
 
 
 def resolved_config(args):
-    """FAM-9-Auflösung: Defaults < ENV < CLI."""
-    cfg = dict(DEFAULTS)
+    """Auflösung der RUNTIME-Konfiguration: Defaults < ENV < CLI.
+
+    Familienspezifische Werte (Foto-Verzeichnis, Profilbild-Max-Kante) liegen
+    nach FAM-9 in `familie.json` settings und werden über den
+    Settings-Lader (`load_settings_from_registry`) aufgelöst — nicht hier.
+    Diese Funktion deckt nur die Werte ab, die NICHT in `familie.json`
+    stehen können: Pfad zur Registry-Datei selbst, Host/Port/Log-Level.
+    """
+    cfg = {k: DEFAULTS[k] for k in ("listen_host", "listen_port", "log_level")}
     cfg["registry"] = args.registry
-    # FAM-9: Foto-Verzeichnis Default ist `fotos/` NEBEN der Registry-Datei.
-    cfg["foto_verzeichnis"] = os.path.join(
-        os.path.dirname(os.path.abspath(args.registry)), "fotos")
-    if "FAMILIE_REGISTRY"  in os.environ: cfg["registry"]         = os.environ["FAMILIE_REGISTRY"]
-    if "FAMILIE_FOTOS"     in os.environ: cfg["foto_verzeichnis"] = os.environ["FAMILIE_FOTOS"]
-    if "FAMILIE_HOST"      in os.environ: cfg["listen_host"]      = os.environ["FAMILIE_HOST"]
-    if "FAMILIE_PORT"      in os.environ: cfg["listen_port"]      = int(os.environ["FAMILIE_PORT"])
-    if "FAMILIE_LOG_LEVEL" in os.environ: cfg["log_level"]        = os.environ["FAMILIE_LOG_LEVEL"]
-    if args.foto_verzeichnis: cfg["foto_verzeichnis"] = args.foto_verzeichnis
-    if args.host:             cfg["listen_host"]      = args.host
-    if args.port:             cfg["listen_port"]      = args.port
-    if args.log_level:        cfg["log_level"]        = args.log_level
+    if "FAMILIE_REGISTRY"  in os.environ: cfg["registry"]    = os.environ["FAMILIE_REGISTRY"]
+    if "FAMILIE_HOST"      in os.environ: cfg["listen_host"] = os.environ["FAMILIE_HOST"]
+    if "FAMILIE_PORT"      in os.environ: cfg["listen_port"] = int(os.environ["FAMILIE_PORT"])
+    if "FAMILIE_LOG_LEVEL" in os.environ: cfg["log_level"]   = os.environ["FAMILIE_LOG_LEVEL"]
+    if args.host:      cfg["listen_host"] = args.host
+    if args.port:      cfg["listen_port"] = args.port
+    if args.log_level: cfg["log_level"]   = args.log_level
     return cfg
+
+
+def load_settings(registry):
+    """FAM-9-Auflösung der familienspezifischen Settings.
+
+    Liefert ein Dict {`foto_verzeichnis`, `profilbild_max_kante`} mit den
+    EFFEKTIVEN Werten — das ist, was die Konsumenten sehen sollen. Quelle je
+    Wert: Registry-Settings (`familie.json`) > ENV-Override (Ops-Notfall) >
+    hartkodierter Default (DEFAULTS). Es gibt nach FAM-9 KEIN CLI-Override
+    mehr.
+    """
+    return {
+        "foto_verzeichnis": registry_mod.effective_setting(
+            registry.settings.foto_verzeichnis,
+            "FAMILIE_FOTOS",
+            DEFAULTS["foto_verzeichnis"]),
+        "profilbild_max_kante": registry_mod.effective_setting(
+            registry.settings.profilbild_max_kante,
+            "FAMILIE_PROFILBILD_MAX_KANTE",
+            DEFAULTS["profilbild_max_kante"]),
+    }
 
 
 def main(argv=None):
@@ -131,7 +169,8 @@ def main(argv=None):
         format="%(asctime)s %(levelname)s %(message)s")
 
     reg = registry_mod.load(cfg["registry"])
-    configure(reg, cfg["foto_verzeichnis"])
+    settings = load_settings(reg)
+    configure(reg, settings["foto_verzeichnis"])
 
     ssl_context = None
     scheme = "http"
@@ -139,7 +178,8 @@ def main(argv=None):
         ssl_context = (args.cert, args.key)
         scheme = "https"
     logging.info("Familien-Registry hört auf %s://%s:%s (fotos=%s)",
-                 scheme, cfg["listen_host"], cfg["listen_port"], cfg["foto_verzeichnis"])
+                 scheme, cfg["listen_host"], cfg["listen_port"],
+                 settings["foto_verzeichnis"])
     app.run(host=cfg["listen_host"], port=cfg["listen_port"],
             debug=False, threaded=True, ssl_context=ssl_context)
 
