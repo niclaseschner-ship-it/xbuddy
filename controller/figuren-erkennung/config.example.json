@@ -1,7 +1,9 @@
 {
   "_comment": "FIG-23 — Beispiel einer Instanz-Konfiguration. Kopiere diese Datei als config.json und passe die Werte an. config.json ist per .gitignore vom Repo ausgeschlossen, weil sie pro Controller-Instanz separat lebt (z. B. Phone Wohnzimmer vs. Phone Kinderzimmer).",
+  "_router_url_comment": "FIG-9: router_url ist die Origin des Routers (Schema+Host[:Port]) ohne Pfad — figlib hängt /api/v1/events selbst an.",
+  "_source_id_comment": "FIG-10: source_id muss mit dem source_id-Wert der gewünschten routing.json-Einträge übereinstimmen, sonst greift kein Match (ROU-9).",
   "source_id": "phone:wohnzimmer",
-  "router_url": "https://hub.local/event",
+  "router_url": "https://hub.local",
   "pattern_tolerance": 0.04,
   "match_distance_px": 200,
   "figure_present_ms": 150,
