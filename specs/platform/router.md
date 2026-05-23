@@ -285,35 +285,46 @@ auf Vorrat (CLAUDE.md §6).
 
 *Tickets:* #17
 
-### ROU-23 — GET /controller/&lt;asset&gt; — Auslieferung der Controller-PWA
-`GET /controller/` und `GET /controller/<asset>` liefern die Controller-PWA
-(siehe [`figuren-erkennung.md`](figuren-erkennung.md)) unter dem
-`/controller/`-Prefix aus URL-1 aus. Der Router ist hier nur
-Auslieferungsstelle der Statik; Verhalten und Eigenschaften der PWA legt
-`figuren-erkennung.md` fest.
+### ROU-23 — GET /controller/&lt;app&gt;/&lt;asset&gt; — Auslieferung der Controller-PWA
+`GET /controller/<app>/` und `GET /controller/<app>/<asset>` liefern die
+Controller-PWA (siehe [`figuren-erkennung.md`](figuren-erkennung.md)) unter
+einem zwei-segmentigen Pfad nach URL-3 aus — das erste Segment ist der
+Slug der Controller-App (z. B. `figuren-erkennung`), das zweite das
+Asset. Der Router ist hier nur Auslieferungsstelle der Statik; Verhalten
+und Eigenschaften der PWA legt `figuren-erkennung.md` fest.
 
 Anders als der Display-Client (ROU-20, eine inline gezogene Seite) ist
 der Controller eine echte PWA — `sw.js`, `manifest.json` und Icons müssen
 als **eigene Pfade mit ihrem korrekten Content-Type** ankommen, sonst
 verweigert der Browser Service-Worker-Registrierung oder Manifest-Parse.
-Acceptance-Kriterien:
+Acceptance-Kriterien (mit dem Default-App-Slug `figuren-erkennung`):
 
 | Pfad | Antwort |
 |---|---|
-| `GET /controller/` | 200, `text/html`, Inhalt aus `index.html` |
-| `GET /controller/sw.js` | 200, `application/javascript` |
-| `GET /controller/manifest.json` | 200, `application/manifest+json` |
-| `GET /controller/icon-192.png` | 200, `image/png` |
-| `GET /controller/icon-512.png` | 200, `image/png` |
-| `GET /controller/icon-maskable-512.png` | 200, `image/png` |
-| `GET /controller/figlib.js` | 200, `application/javascript` |
-| Pfad außerhalb des Controller-Wurzelverzeichnisses (Path-Traversal, z. B. `/controller/../router/main.py`) | 404 |
+| `GET /controller/figuren-erkennung/` | 200, `text/html`, Inhalt aus `index.html` |
+| `GET /controller/figuren-erkennung/sw.js` | 200, `application/javascript` |
+| `GET /controller/figuren-erkennung/manifest.json` | 200, `application/manifest+json` |
+| `GET /controller/figuren-erkennung/icon-192.png` | 200, `image/png` |
+| `GET /controller/figuren-erkennung/icon-512.png` | 200, `image/png` |
+| `GET /controller/figuren-erkennung/icon-maskable-512.png` | 200, `image/png` |
+| `GET /controller/figuren-erkennung/figlib.js` | 200, `application/javascript` |
+| `GET /controller/` (ohne App-Slug) | 404 — URL-3 verlangt zwei Segmente |
+| `GET /controller/<anderer-slug>/...` | 404 — nur der konfigurierte App-Slug ist gültig |
+| Pfad außerhalb des Controller-Wurzelverzeichnisses (Path-Traversal, z. B. `/controller/figuren-erkennung/../../router/main.py`) | 404 |
 | Nicht existierendes Asset im Controller-Verzeichnis | 404 |
 
-Das Wurzelverzeichnis ist konfigurierbar (`controller_dir`, ROU-15).
-Defaults zeigen auf `controller/figuren-erkennung/` neben dem Router-Code.
-Anfragen, die auflöst aus diesem Wurzelverzeichnis ausbrechen würden,
-liefern 404 — kein Dateizugriff jenseits der Wurzel.
+Das Wurzelverzeichnis ist konfigurierbar (`controller_dir`, ROU-15);
+sein Basisname ist der gültige App-Slug im Pfad. Defaults zeigen auf
+`controller/figuren-erkennung/` neben dem Router-Code — daher der
+Default-App-Slug `figuren-erkennung`. Anfragen, die auflöst aus diesem
+Wurzelverzeichnis ausbrechen würden, liefern 404 — kein Dateizugriff
+jenseits der Wurzel.
+
+Service-Worker-Scope: Da `sw.js` unter `/controller/<app>/sw.js` liegt,
+kontrolliert die PWA per Default nur ihren eigenen App-Namensraum
+`/controller/<app>/` — nicht den ganzen `/controller/`-Prefix. Das passt
+zur Trennung in URL-3: Action-Endpoints anderer Sources (z. B.
+`/controller/figure/place`) bleiben außerhalb des PWA-Caches.
 
 *Tickets:* #71
 
