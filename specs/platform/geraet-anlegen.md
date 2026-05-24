@@ -22,7 +22,7 @@ Bestätigungswort (`eltern-chat.md` E-EC-7) · nur Geräte-Typen aus
 bereits angelegter Geräte (E-GAA-2; `geraete.md` OPEN-GER-A) · automatische
 Auflösungs-Detektion (OPEN-GAA-B) · die Einbettung in einen
 Geräte-Onboarding-Flow (eigene additive Spec, eigener PR; OPEN-GAA-C) ·
-Controller-URL-Vergabe — V1 liefert nur die Display-URL aus (OPEN-GAA-D) ·
+Controller-Geräte-Anlage — V1 nimmt nur `verwendung: display`, weitere Werte folgen sobald `geraete.md` GER-3 um `controller_app` ergänzt ist (OPEN-GAA-D) ·
 eine LLM-fähige konversationelle Trigger-Schicht jenseits der EC-8-Aufgabe
 (GAA-5 deckt den V1-Trigger; eine spätere, freier formulierte Auslöse-
 Konvention ist eigene Spec).
@@ -86,12 +86,14 @@ Implementierungs-Detail:
    Liste wird abgelehnt und die Frage wiederholt. Das `unbekannt` aus
    GER-3 ist V1 kein Konversations-Ergebnis — wer hier ankommt, weiß sein
    OS; `unbekannt` bleibt der manuellen Datei-Pflege vorbehalten.
-5. **Verwendung** (Pflicht): einer aus `geraete.md` GER-3
-   `verwendung`-Werten (`display` / `controller` / `beides`). Quick-Reply;
-   Antwort außerhalb der Liste wiederholt die Frage. (OPEN-GAA-D: die
-   Geräte-URL aus GAA-3.7 deckt V1 nur den Display-Pfad ab — die
-   Controller-Wahl wird erfasst, aber die Rückgabe weist auf den fehlenden
-   Controller-URL-Vertrag hin.)
+5. **Verwendung** (Pflicht): V1 nimmt nur `display` aus `geraete.md` GER-3
+   `verwendung`. Die Funktion bietet `display` als einzige Auswahl
+   (Quick-Reply mit nur dieser Option) und schreibt den Wert ohne
+   Rückfrage in das Gerät. Die Werte `controller` und `beides` folgen
+   sobald `geraete.md` GER-3 um eine Eigenschaft `controller_app`
+   erweitert ist (OPEN-GAA-D) — heutige Anlage über GAA ist nur für
+   reine Display-Geräte gedacht; Controller-Geräte werden bis dahin
+   manuell in `geraete.json` und `router/routing.json` gepflegt.
 6. **Bestätigung mit Zusammenfassung**: Vor dem Schreiben fasst die
    Funktion alle erfassten Felder im Privatchat zusammen und fordert eine
    Bestätigung nach dem Pattern aus `eltern-chat.md` E-EC-7. Erst eine
@@ -310,19 +312,21 @@ Doppelung ersetzt. Mindest-Abdeckung:
   additive Spec und einen eigenen PR und ruft GAA + CAV in passender
   Reihenfolge auf. Bis dahin ist die EC-8-Aufgabe der Trigger (GAA-5).
 
-- **OPEN-GAA-D — Controller-URL-Schema.** Das URL-Schema für
-  Display-Geräte ist heute stabil (`/display/<display_id>`, DC-1 / URL-2).
-  Das URL-Schema für Controller-Geräte ist es **nicht**: `urls.md` URL-3
-  führt Controller-Pfade als `/controller/<source>/<action>` —
-  eingangsquellen- oder app-orientiert, nicht geräte-orientiert. Eine
-  „Controller-URL pro `display_id`" existiert in URL-3 nicht. V1 erfasst
-  daher die Verwendung (GAA-3.5) inkl. `controller` und `beides`, gibt in
-  GAA-3.7 aber nur die Display-URL zurück und weist im Privatchat darauf
-  hin, dass die Controller-Verwendung erfasst, aber URL-seitig noch nicht
-  bedient ist. Sobald `urls.md` ein geräte-bezogenes Controller-URL-
-  Schema spezifiziert (z. B. `/controller/<display_id>/…`), erweitert
-  GAA-3.7 die Rückgabe — eigene Spec-Erweiterung, eigenes Ticket. Bis
-  dahin bleibt OPEN-GAA-D offen.
+- **OPEN-GAA-D — Controller-Geräte-Anlage vertagt.** V1 nimmt in GAA-3.5
+  nur `verwendung: display`. Der Grund ist keine URL-Lücke (die
+  Controller-URL bleibt geräte-agnostisch und ist app-bezogen,
+  `/controller/<source>/<X>` nach `urls.md` URL-3; die Übersetzung
+  „welche Eingabe → welche Wirkung" lebt im Router über
+  `router/routing.json`), sondern eine Spec-Lücke in der Registry:
+  `geraete.md` GER-3 kennt heute kein Feld dafür, **welche Controller-App**
+  auf einem Gerät läuft (`controller_app`, z. B. `figuren-erkennung`).
+  Ohne dieses Feld kann die Funktion einer Familie kein vollständiges
+  „dein Tablet ist Controller mit App X" anlegen. Folge-Arbeit (eigenes
+  Ticket): `geraete.md` GER-3 um `controller_app?` ergänzen und GAA-3
+  um einen Schritt 5.5 „Welche Controller-App?" mit Quick-Reply über
+  die V1-Liste der ausgelieferten Apps. Erst danach öffnet GAA-3.5 die
+  Werte `controller` und `beides`. Bis dahin bleibt OPEN-GAA-D offen
+  und die manuelle Pflege deckt Controller-Geräte ab.
 
 - **OPEN-GAA-E — Auflösungs-Eingabe-Format.** V1 nimmt die Auflösung als
   Freitext `<int>x<int>` an (GAA-3.3 + GAA-7). Sollte sich
