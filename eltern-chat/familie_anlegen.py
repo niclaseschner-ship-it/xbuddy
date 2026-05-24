@@ -209,7 +209,7 @@ def _eine_person_anlegen(tg, chat_id, user_id, registry_path, next_message):
     # in derselben Schleife frisch angelegte Person nicht für Slug-Kollision
     # (FAA-5) oder Telegram-ID-Duplikat (FAA-10).
     current = registry_mod.load(registry_path)
-    settings = _effective_settings(current.settings)
+    settings = _effective_settings(current.settings, registry_path)
 
     # FAA-3 Schritt 1: Art.
     art = _frage_art(tg, chat_id, next_message)
@@ -466,14 +466,19 @@ def _frage_telegram(tg, chat_id, user_id, next_message, current, name):
 #  Helpers
 # ============================================================
 
-def _effective_settings(settings):
+def _effective_settings(settings, registry_path):
     """FAM-9-Werte aus den Registry-Settings + ENV-Override + Default —
     identisch zum Settings-Lader in `familie/main.py` (geteilte Helper-
-    Funktion `effective_setting`)."""
+    Funktion `effective_setting`).
+
+    Das `foto_verzeichnis` wird über `resolved_foto_verzeichnis` ausgewertet,
+    damit ein relativer Wert (Default `fotos`, Settings-Wert, ENV-Override)
+    immer **neben der Registry-Datei** landet (FAM-9) — und nicht im CWD
+    des Eltern-Chat-Bots, wo der Pi-Live-Test die Fotos versehentlich
+    abgelegt hatte."""
     return {
-        "foto_verzeichnis": registry_mod.effective_setting(
-            settings.foto_verzeichnis, "FAMILIE_FOTOS",
-            registry_mod.FAM9_DEFAULTS["foto_verzeichnis"]),
+        "foto_verzeichnis": registry_mod.resolved_foto_verzeichnis(
+            settings, registry_path),
         "profilbild_max_kante": registry_mod.effective_setting(
             settings.profilbild_max_kante,
             "FAMILIE_PROFILBILD_MAX_KANTE",

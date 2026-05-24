@@ -29,27 +29,38 @@ import registry as registry_mod
 #  Laufzeit-Zustand
 # ============================================================
 
-# Die geladene Registry + das Foto-Verzeichnis (FAM-9). Der Entrypoint befüllt
-# sie; Tests setzen sie direkt über configure().
+# Die geladene Registry + das Foto-Verzeichnis (FAM-9) + der Registry-Pfad
+# (Fix-Familie-Registry-Konsistenz: Pro-Request-Reload + Foto-Pfad „neben
+# der Registry-Datei"). Der Entrypoint befüllt das Dict; Tests setzen es
+# direkt über configure().
 runtime = {
     "registry":         registry_mod.Registry(),
     "foto_verzeichnis": "fotos",
+    "registry_path":    None,
 }
 
 
-def configure(reg, foto_verzeichnis=None):
+def configure(reg, foto_verzeichnis=None, registry_path=None):
     """Setzt die laufende Registry + das aufgelöste Foto-Verzeichnis (FAM-9).
 
     Wird `foto_verzeichnis` nicht übergeben, leitet die Funktion es aus
-    `reg.settings` ab (mit ENV/Default-Fallback über FAM-9). So gibt es eine
-    Stelle für die Settings-Auflösung — der Entrypoint nutzt sie ebenso wie
-    Tests, die nur eine Registry hereinreichen.
+    `reg.settings` ab. Wenn auch `registry_path` gesetzt ist, wird die
+    FAM-9-Aussage „**neben der Registry-Datei**" eingelöst:
+    `registry_mod.resolved_foto_verzeichnis` löst relative Werte gegen das
+    Registry-Verzeichnis auf. Ohne `registry_path` bleibt das alte
+    Verhalten (nackter Settings/ENV/Default-Wert) — für Tests, die nur eine
+    Registry hereinreichen und das Foto-Verzeichnis selbst absolut machen.
     """
     runtime["registry"] = reg
+    runtime["registry_path"] = registry_path
     if foto_verzeichnis is None:
-        foto_verzeichnis = registry_mod.effective_setting(
-            reg.settings.foto_verzeichnis, "FAMILIE_FOTOS",
-            DEFAULTS["foto_verzeichnis"])
+        if registry_path is not None:
+            foto_verzeichnis = registry_mod.resolved_foto_verzeichnis(
+                reg.settings, registry_path)
+        else:
+            foto_verzeichnis = registry_mod.effective_setting(
+                reg.settings.foto_verzeichnis, "FAMILIE_FOTOS",
+                DEFAULTS["foto_verzeichnis"])
     runtime["foto_verzeichnis"] = foto_verzeichnis
 
 
@@ -141,7 +152,7 @@ def resolved_config(args):
     return cfg
 
 
-def load_settings(registry):
+def load_settings(registry, registry_path=None):
     """FAM-9-Auflösung der familienspezifischen Settings.
 
     Liefert ein Dict {`foto_verzeichnis`, `profilbild_max_kante`} mit den
@@ -149,12 +160,23 @@ def load_settings(registry):
     Wert: Registry-Settings (`familie.json`) > ENV-Override (Ops-Notfall) >
     hartkodierter Default (DEFAULTS). Es gibt nach FAM-9 KEIN CLI-Override
     mehr.
+
+    Bei gesetztem `registry_path` löst `foto_verzeichnis` zusätzlich die
+    FAM-9-Aussage „neben der Registry-Datei" ein: ein relativer Wert wird
+    gegen das Verzeichnis der Registry-Datei aufgelöst, statt gegen den
+    CWD des Prozesses (Bug aus dem Pi-Live-Test: drei Konsumenten, drei
+    CWDs, drei Auflösungen — Fotos lagen woanders als die Registry).
     """
-    return {
-        "foto_verzeichnis": registry_mod.effective_setting(
+    if registry_path is not None:
+        foto_verzeichnis = registry_mod.resolved_foto_verzeichnis(
+            registry.settings, registry_path)
+    else:
+        foto_verzeichnis = registry_mod.effective_setting(
             registry.settings.foto_verzeichnis,
             "FAMILIE_FOTOS",
-            DEFAULTS["foto_verzeichnis"]),
+            DEFAULTS["foto_verzeichnis"])
+    return {
+        "foto_verzeichnis": foto_verzeichnis,
         "profilbild_max_kante": registry_mod.effective_setting(
             registry.settings.profilbild_max_kante,
             "FAMILIE_PROFILBILD_MAX_KANTE",
@@ -170,8 +192,8 @@ def main(argv=None):
         format="%(asctime)s %(levelname)s %(message)s")
 
     reg = registry_mod.load(cfg["registry"])
-    settings = load_settings(reg)
-    configure(reg, settings["foto_verzeichnis"])
+    settings = load_settings(reg, registry_path=cfg["registry"])
+    configure(reg, settings["foto_verzeichnis"], registry_path=cfg["registry"])
 
     ssl_context = None
     scheme = "http"

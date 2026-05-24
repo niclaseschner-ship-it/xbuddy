@@ -428,6 +428,64 @@ def test_FAM_9_effective_setting_falls_back_to_default(monkeypatch):
 
 
 # ============================================================
+#  FAM-9 — Foto-Verzeichnis „neben der Registry-Datei" (CWD-unabhängig)
+# ============================================================
+
+def test_FAM_9_resolved_foto_verzeichnis_default_is_next_to_registry(tmp_path, monkeypatch):
+    """Default ohne Settings + ohne ENV: <dirname(registry_path)>/fotos —
+    egal wo das CWD steht (Pi-Bug: drei Prozesse, drei CWDs, drei Auflösungen)."""
+    monkeypatch.delenv("FAMILIE_FOTOS", raising=False)
+    reg_path = tmp_path / "familie" / "familie.json"
+    reg_path.parent.mkdir()
+    # CWD bewusst woanders: das Ergebnis bleibt deterministisch.
+    monkeypatch.chdir("/tmp")
+    got = registry_mod.resolved_foto_verzeichnis(
+        registry_mod.Settings(), str(reg_path))
+    assert got == str(tmp_path / "familie" / "fotos")
+
+
+def test_FAM_9_resolved_foto_verzeichnis_relative_settings_against_registry(tmp_path, monkeypatch):
+    """Settings-Override (relativ) → gegen das Registry-Verzeichnis aufgelöst."""
+    monkeypatch.delenv("FAMILIE_FOTOS", raising=False)
+    reg_path = tmp_path / "f" / "familie.json"
+    reg_path.parent.mkdir()
+    monkeypatch.chdir("/tmp")
+    settings = registry_mod.Settings(foto_verzeichnis="bilder")
+    got = registry_mod.resolved_foto_verzeichnis(settings, str(reg_path))
+    assert got == str(tmp_path / "f" / "bilder")
+
+
+def test_FAM_9_resolved_foto_verzeichnis_absolute_settings_unchanged(tmp_path, monkeypatch):
+    """Settings-Override (absolut) → 1:1 durch, Registry-Pfad irrelevant."""
+    monkeypatch.delenv("FAMILIE_FOTOS", raising=False)
+    reg_path = tmp_path / "familie.json"
+    settings = registry_mod.Settings(foto_verzeichnis="/srv/xbuddy/fotos")
+    got = registry_mod.resolved_foto_verzeichnis(settings, str(reg_path))
+    assert got == "/srv/xbuddy/fotos"
+
+
+def test_FAM_9_resolved_foto_verzeichnis_env_relative_against_registry(tmp_path, monkeypatch):
+    """ENV-Override (relativ) → gegen das Registry-Verzeichnis aufgelöst —
+    konsistent mit Default und Settings-Override."""
+    monkeypatch.setenv("FAMILIE_FOTOS", "ops-fotos")
+    reg_path = tmp_path / "x" / "familie.json"
+    reg_path.parent.mkdir()
+    monkeypatch.chdir("/tmp")
+    got = registry_mod.resolved_foto_verzeichnis(
+        registry_mod.Settings(), str(reg_path))
+    assert got == str(tmp_path / "x" / "ops-fotos")
+
+
+def test_FAM_9_resolved_foto_verzeichnis_env_absolute_unchanged(tmp_path, monkeypatch):
+    """ENV-Override (absolut) → 1:1 durch."""
+    monkeypatch.setenv("FAMILIE_FOTOS", "/srv/ops/fotos")
+    reg_path = tmp_path / "familie.json"
+    got = registry_mod.resolved_foto_verzeichnis(
+        registry_mod.Settings(), str(reg_path))
+    assert got == "/srv/ops/fotos"
+
+
+# ============================================================
 #  FAM-11 — Schreib-Schnittstelle der Registry
 # ============================================================
 
