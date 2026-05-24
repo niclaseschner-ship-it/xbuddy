@@ -21,9 +21,10 @@ von `familie.md` FAM-2 (Erwachsene und Kinder).
 **Out-of-Scope V1** (je eigenes Ticket, sobald gebraucht): Ändern und Löschen
 bereits angelegter Personen (E-FAA-2) · weitere Personen, die keine
 Familienmitglieder sind (E-FAA-3; `familie.md` OPEN-FAM-A) · die Einbettung
-in den Onboarding-Flow (eigene additive Spec, eigener PR) · ein Aufgaben-
-Eintrag im Eltern-Chat-Katalog (`eltern-chat.md` EC-8) für laufende
-Nachträge (eigener PR, sobald belegt).
+in den Onboarding-Flow (eigene additive Spec, eigener PR) · eine
+LLM-fähige konversationelle Trigger-Schicht jenseits der EC-8-Aufgabe
+(FAA-12 deckt den V1-Trigger; eine spätere, freier formulierte Auslöse-
+Konvention ist eigene Spec).
 
 ## 1. Die Funktion
 
@@ -224,7 +225,33 @@ Implementierungs-Detail.
 
 *Tickets:* #60
 
-## 5. Tests
+## 5. Trigger
+
+### FAA-12 — Trigger als Eltern-Chat-Aufgabe (V1)
+Solange die Konvention für eine LLM-fähige, freier formulierte konversationelle
+Trigger-Schicht noch nicht spezifiziert ist, läuft der V1-Trigger der Funktion
+als **Aufgabe im Aufgaben-Katalog des Eltern-Chats** (`eltern-chat.md` EC-8) —
+dasselbe Muster wie für die CA-Verteilung (`ca-verteilung.md` CAV-6). Die
+Aufgabe nimmt das Auslöse-Wort eines Familien-Gruppen-Mitglieds entgegen, ruft
+die Funktion (FAA-1) im **Privatchat** des Aufrufers auf (analog
+`eltern-chat-onboarding.md` ONB-3 — der Anlage-Dialog gehört nicht in die
+Familien-Gruppe) und liefert das Ergebnis-Signal (FAA-1) an den Aufrufer
+zurück.
+
+Die Aufgabe ist **schreibend** (EC-10, `WriteTask`): über die Funktion landen
+neue Personen in `familie.json`. Das EC-10-Bestätigungs-Gate vor dem
+Aufgaben-Start ist redundant mit FAA-7 (das jede einzelne Person bestätigen
+lässt), aber Pattern-treu — die Spec macht hier keine Ausnahme.
+
+Die Berechtigung der Aufgabe deckt sich mit FAA-2 (Live-Mitgliedschaft in der
+Familien-Gruppe): die Aufgabe leitet die Live-Prüfung an die Funktion durch,
+die ihre eigene Gate-Logik behält und der Trigger-Agnostik (E-FAA-1) nicht
+unterläuft. Die Aufgabe ist additiv im Sinne von EC-8 — der bestehende Katalog
+bleibt unberührt.
+
+*Tickets:* #60
+
+## 6. Tests
 
 ### FAA-11 — Automatisierte Tests je Anforderung
 Jede Anforderung dieser Spec mit Code-Verhalten hat einen automatisierten Test
@@ -263,6 +290,12 @@ Doppelung ersetzt. Mindest-Abdeckung:
   diesem oder früheren Aufrufen bleiben in `familie.json`.
 - **FAA-10** — die fünf in FAA-10 genannten Fehlerklassen führen zu den dort
   beschriebenen Reaktionen, ohne `familie.json` zu mutieren.
+- **FAA-12** — die EC-8-Aufgabe wird vom Catalog gefunden und ist als
+  `WriteTask` registriert; sie ruft FAA mit den korrekten Parametern auf
+  (Privatchat-Chat-ID und User-ID des Aufrufers, gebundene Familien-Gruppe,
+  Registry-Pfad) und reicht das Ergebnis-Signal an den Aufrufer zurück; ein
+  Aufruf aus dem Familien-Gruppen-Chat adressiert die Anlage im Privatchat,
+  nicht in der Gruppe.
 
 *Tickets:* #60
 
@@ -271,10 +304,13 @@ Doppelung ersetzt. Mindest-Abdeckung:
 ## Offene Punkte
 
 - **OPEN-FAA-A — Konversationeller Aufruf über den Eltern-Chat-Katalog.**
-  Ein Aufgaben-Eintrag im Sinne von `eltern-chat.md` EC-8 (Familienmitglied
-  per Satz im laufenden Betrieb nachtragen) ist in V1 nicht enthalten —
-  eigenes Ticket, sobald der Bedarf belegt ist. FAA selbst ist
-  trigger-agnostisch (E-FAA-1) und ändert sich dafür nicht.
+  *Erfüllt durch FAA-12 (V1: EC-8-Aufgabe).* Der Bedarf, ein Familienmitglied
+  per Satz im laufenden Betrieb nachzutragen, ist heute belegt; die V1-Form
+  ist die EC-8-Aufgabe (siehe FAA-12 + E-FAA-4). Offen bleibt eine spätere,
+  LLM-fähige konversationelle Trigger-Schicht, die ohne den festen
+  Aufgaben-Namen auskommt — eigene Spec, sobald sie sich einer Konvention für
+  freier formulierte Auslöser hängen kann. FAA selbst ist trigger-agnostisch
+  (E-FAA-1) und ändert sich dafür nicht.
 
 ## Entscheidungen
 
@@ -321,6 +357,23 @@ als nicht-V1, ohne belegten Bedarf — „Nichts auf Vorrat" (CLAUDE.md §6).
 Sobald OPEN-FAM-A geklärt ist, ergänzt die FAA-Spec einen zweiten
 Personen-Typ; die Konversations-Struktur (FAA-3) ist dafür offen.
 
+### E-FAA-4 — Trigger der V1-Anbindung: eine Eltern-Chat-Aufgabe
+*Datum:* 2026-05-24
+
+Solange eine LLM-fähige konversationelle Trigger-Konvention noch nicht
+spezifiziert ist (vgl. OPEN-FAA-A), ist der V1-Trigger der Funktion eine
+**Aufgabe im Aufgaben-Katalog des Eltern-Chats** (FAA-12, EC-8) — analog
+`ca-verteilung.md` E-CAV-3.
+
+**Verworfen:** (1) den Trigger direkt in den Onboarding-Flow oder einen
+Slash-Befehl zu verdrahten — beides bricht E-FAA-1 (Trigger-Agnostik) und
+macht die Funktion abhängig von einer einzelnen Aufrufer-Spur. (2) eine
+eigene, freiere natürlichsprachige Trigger-Schicht jetzt schon — diese
+Konvention fehlt noch, sie ist eine eigene Spec, und die EC-8-Aufgabe liefert
+zwischenzeitlich denselben Effekt ohne Tippbefehl. Eine spätere Erweiterung
+nimmt die Aufgabe nicht weg, sondern setzt einen zweiten Aufrufer neben sie
+— die Funktion (FAA-1) bleibt unverändert.
+
 ---
 
 ## Querverweise
@@ -331,7 +384,9 @@ Personen-Typ; die Konversations-Struktur (FAA-3) ist dafür offen.
   (Konfigurationswerte inkl. Profilbild-Max-Kante, aus Registry-Settings),
   FAM-10 (Tests), FAM-11 (Schreib-Schnittstelle).
 - `eltern-chat.md` EC-2 (Berechtigung über Gruppen-Mitgliedschaft), EC-8
-  (Aufgaben-Katalog — für OPEN-FAA-A), E-EC-7 (Bestätigungswort-Pattern).
+  (Aufgaben-Katalog — Heimat von FAA-12), EC-9 (lesende Aufgaben), EC-10
+  (schreibende Aufgaben nur nach Bestätigung — Pattern der FAA-12-Aufgabe),
+  E-EC-7 (Bestätigungswort-Pattern).
 - `eltern-chat-onboarding.md` ONB-3 (Privatchat als Eingabekanal), ONB-9
   (Test-Doppelung für Telegram), E-ONB-1 (deterministischer Ablauf ohne LLM).
 - `ca-verteilung.md` CAV-1 (Funktions-Muster), E-CAV-1 (Onboarding-Funktionen
