@@ -14,7 +14,9 @@ bei Verbindungsverlust und -wiederkehr.
 
 **Out-of-Scope V1** (jeweils eigenes Ticket, sobald gebraucht): mehrere
 unabhängige Regionen auf einem Display (Split-Screen, siehe Offene Punkte) ·
-die Content-Views selbst (Buddy-Sache) · das Controller-Aufsetzen.
+die Content-Views selbst (Buddy-Sache) · das Controller-Aufsetzen · echte
+responsive Plan-Templates mit Schrift-Skalierung statt geometrischer
+Skalierung (siehe Offene Punkte).
 
 ## 1. Identität & Einstieg
 
@@ -97,7 +99,96 @@ Zuverlässigkeit (Platz 1) über Nicht-invasiv (Platz 5).
 
 *Tickets:* #30
 
-## 5. Einrichtung
+## 5. Vollbild & Skalierung
+
+Damit Tablets, Monitore und Pi-Displays in der Familie wie *Displays*
+wirken — nicht wie Browser-Tabs —, übernimmt der Display-Client zwei
+Geräte-Aufgaben: er stellt sich selbst in den Vollbild-/Wach-Zustand und
+er skaliert den gerouteten Inhalt geometrisch ins verfügbare Viewport. So
+gilt das xBuddy-Grundprinzip „Dashboards füllen das Display, kein
+Scroll" auch dort, wo Display-Auflösung und Design-Auflösung des Inhalts
+auseinanderlaufen — ohne dass der Inhalt selbst dafür Verantwortung
+übernehmen muss (Plan-Buddy bleibt bei seiner Design-Auflösung).
+
+### DC-11 — Vollbild & Bildschirm wach halten
+Der Display-Client läuft im Vollbild und hält den Bildschirm wach,
+solange er sichtbar ist — analog dem Controller (FIG-24/FIG-26). Konkret:
+
+- Das PWA-Manifest deklariert `display: fullscreen`, damit der Client als
+  installierte App ohne Browser-Chrome startet.
+- Der Client fordert beim Laden `navigator.wakeLock.request('screen')`
+  an und fordert ihn bei jedem `visibilitychange` auf `visible` erneut
+  an — das System gibt den Lock beim Verdecken frei.
+- Beim ersten Nutzer-Gesture (`touchend`/`click`) versucht der Client
+  `requestFullscreen()`. Fehlt die API oder schlägt der Aufruf fehl, ist
+  das kein Fehler — der Client läuft weiter, der nächste Tap holt den
+  Vollbild erneut (self-healing).
+
+Begründung: Tablet-Browser zeigen sonst URL-Leiste, der Bildschirm geht
+nach ~30 s aus — das Display wirkt nicht wie ein Display.
+
+*Tickets:* #107
+
+### DC-12 — Skalierungs-Adapter für den gerouteten Inhalt
+Der Display-Client lädt den gerouteten Inhalt (DC-3) nicht direkt in sein
+eigenes Dokument, sondern in ein **iframe**, das auf eine feste
+Design-Auflösung (DC-15) gesetzt ist. Das iframe wird per CSS
+`transform: scale(s)` proportional in das Viewport eingepasst, mit
+
+    s = min(viewport.w / design.w, viewport.h / design.h)
+
+So füllt der Inhalt das Display so groß wie möglich, ohne Verzerrung und
+ohne Überlauf. Verbleibender Raum (Letterbox/Pillarbox) trägt die
+Display-Ruhe-Farbe aus DC-5 (`#000000`) — kein weißer Rand.
+
+Begründung: Plan-Buddy ist für 1920×1080 entworfen
+(`plan/static/design/tokens.css`, „Scale for 1920×1080 kiosk"); auf
+einem 1280×800-Tablet erzeugte er ohne Adapter Scrollbalken oder
+Überlauf und bräche „Dashboards füllen das Display, kein Scroll"
+(Constitution). Der Adapter löst das, ohne Plan-Buddy responsiv machen
+zu müssen.
+
+*Tickets:* #107
+
+### DC-13 — Adapter ist unsichtbar
+Der Skalierungs-Adapter (DC-12) hat keine eigene UI-Schicht über dem
+Inhalt: kein Border-Glow, kein Label, kein Lade-Indikator, kein
+Debug-Overlay. Wer auf das Display schaut, sieht den gerouteten Inhalt
+und den schwarzen Restraum aus DC-5 — sonst nichts. Folge: ein gut
+skalierter Plan ist visuell ununterscheidbar von einem nativ in
+Design-Auflösung gerenderten Plan.
+
+Begründung: Nicht-invasiv (Constitution). Der Display-Client ist
+*Renderer*, nicht *Rahmen*.
+
+*Tickets:* #107
+
+### DC-14 — Re-Skalierung bei Viewport-Änderung
+Ändert sich das Viewport des Display-Geräts — Geräte-Rotation, Browser-
+Resize, App-Wechsel mit anderer Fläche —, berechnet der Adapter den
+Skalierungs-Faktor (DC-12) neu und wendet ihn an. Die Re-Skalierung
+geschieht ohne Animation und ohne Inhaltswechsel: das iframe bleibt
+geladen, sein Zustand bleibt erhalten (DC-2). Quelle für die Änderung
+sind die Standard-Browser-Ereignisse (`resize`, ggf. `orientationchange`).
+
+*Tickets:* #107
+
+### DC-15 — Design-Auflösung des Inhalts
+Der Adapter braucht die Design-Auflösung des gerouteten Inhalts, um den
+Skalierungs-Faktor (DC-12) zu bestimmen. V1 verwendet hartcodiert
+**1920×1080** — das ist der heutige Plan-Buddy-Standard und gleichzeitig
+der einzige produzierende Konsument des Display-Clients. Eine
+konsumenten-spezifische Design-Auflösung (Meta-Header, Query-Parameter,
+Registry-Eintrag) ist V2 und liegt außerhalb dieser Spec (OPEN-DC-B).
+
+Begründung: V1 hat genau einen Inhaltstyp; den Adapter erst dann
+konfigurierbar zu machen, wenn ein zweiter Konsument mit anderer
+Design-Auflösung existiert, vermeidet Antizipations-Komplexität
+(CLAUDE.md §6, „Lege nichts auf Vorrat an").
+
+*Tickets:* #107
+
+## 6. Einrichtung
 
 ### DC-9 — Keine Geräte-Konfiguration
 Der Display-Client kommt ohne eigene Konfigurationsdatei und ohne
@@ -109,7 +200,7 @@ auf die statische Einstiegs-URL richten — mehr nicht.
 
 *Tickets:* #30
 
-## 6. Tests
+## 7. Tests
 
 ### DC-10 — Automatisierte Tests je Anforderung
 Jede Anforderung dieser Spec, die Code-Verhalten beschreibt, hat einen
@@ -129,6 +220,18 @@ reproduzierbar und ohne laufenden Router prüfbar.
   einen Inhalt. Sollte ein Display mehrere unabhängige Regionen bekommen
   (Split-Screen), wäre das eine echte zweite Ebene — eigene Spec, sobald
   relevant. Deckt sich mit der bewussten Nicht-Entscheidung in Ticket #24.
+
+- **OPEN-DC-B — Echte responsive Plan-Templates.** Der Skalierungs-Adapter
+  (DC-12) ist geometrisch: bei sehr kleinen Displays wird die Schrift klein,
+  bei sehr großen unscharf-skaliert. Solange das niemandem konkret weh tut,
+  bleibt es dabei. Sobald ein realer Display-Standort (kleines Tablet, alter
+  Monitor) das spürbar macht, ist die Antwort *nicht* mehr Adapter,
+  sondern responsive Templates im jeweiligen Buddy — eigenes Ticket.
+
+- **OPEN-DC-C — Konsumenten-spezifische Design-Auflösung.** DC-15 hartcodiert
+  1920×1080. Erst wenn ein zweiter Inhaltstyp mit anderer Design-Auflösung
+  existiert, wird der Weg dahin (Meta-Header im gerouteten Dokument,
+  Query-Parameter, Eintrag in der Geräte-Registry #105) Spec-relevant.
 
 ---
 
