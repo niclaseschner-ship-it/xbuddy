@@ -44,6 +44,11 @@ eltern-chat/onboarding-store.json
 familie/familie.json
 familie/fotos/
 
+# Geräte-Registry: Per-Instanz-Datei (GER-4) — je Instanz separat gepflegt,
+# nicht im Repo. Trägt 0600-Rechte (analog zugangsdaten.json/onboarding-store).
+# Format: geraete/geraete.example.json
+geraete/geraete.json
+
 # Zugangsdaten-Speicher (ZD-3) — Per-Instanz-Geheimnis-Datei. Hält
 # Klartext-Geheimnisse, darf nie ins Repo (CLAUDE.md §8). Format:
 # zugangsdaten/zugangsdaten.example.json
