@@ -185,6 +185,26 @@ spezifisch-vor-allgemein wird beibehalten; spezifischere Prefixe (`/api/v1/plan/
 
 *Tickets:* #85
 
+### URL-15 — Origin im LAN erreichbar, nicht nur lokal
+
+Die eine HTTPS-Origin einer XBuddy-Instanz (URL-12) muss von den Endgeräten
+der Familie im selben LAN erreichbar sein — nicht nur lokal auf dem Host, der
+sie bedient. Konkret heißt das: die Origin antwortet sowohl über den
+Host-Namen, den ihr Server-Zertifikat (URL-11) als Subject Alternative Name
+trägt (z. B. `xbuddy-hub.local`), als auch über die LAN-IP des Hosts —
+identisch zu `localhost`. Eine Origin, die nur auf `localhost` antwortet,
+schließt Tablets und Handys aus und macht das Single-Origin-Design (URL-12)
+für die Familie unbenutzbar.
+
+Umsetzung: der HTTPS-Listener bindet auf alle Interfaces (nicht nur
+`127.0.0.1`), der `server_name` deckt Host-Name und ggf. `localhost` ab, und
+das Server-Zertifikat enthält den Host-Namen sowie die LAN-IP als SAN
+(`tools/ca/make-ca.sh --san "DNS:xbuddy-hub.local,IP:<pi-lan-ip>"`). Die
+Komponenten-Prozesse hinter der Origin bleiben auf `127.0.0.1` gebunden
+(URL-12, Routing ausschließlich über die Origin).
+
+*Tickets:* #67
+
 ## Beispiele
 
 ```

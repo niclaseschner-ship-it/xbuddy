@@ -1,0 +1,21 @@
+# XBuddy Router — systemd-Service-Vorlage.
+#
+# Diese Datei ist eine VORLAGE. Vor `systemctl enable` Platzhalter ersetzen
+# (siehe deploy/systemd/README.md). Per-Instanz-Werte stehen nie im Repo.
+
+[Unit]
+Description=XBuddy Router
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__XBUDDY_USER__
+WorkingDirectory=__XBUDDY_REPO__/router
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=__XBUDDY_HOME__
+ExecStart=__XBUDDY_PYTHON__ main.py --host 127.0.0.1 --port 5000
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
