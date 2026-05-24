@@ -58,26 +58,51 @@ else:  # python3 plan/main.py
 # Der Entrypoint befüllt `runtime`; Tests setzen es direkt über configure().
 runtime = {
     "config": None,            # plan.config.Config
-    "registry": registry_mod.Registry(),
+    "registry": registry_mod.Registry(),  # nur Test-/Fallback-Quelle
+    "registry_path": None,     # Live: Pfad zur familie.json — Quelle des Wahren Stands
     "transport": None,         # plan.kalender.GoogleTransport (oder Fake in Tests)
 }
 
 
-def configure(cfg, registry, transport):
+def configure(cfg, registry, transport, registry_path=None):
     """Setzt Konfiguration, Familien-Registry und Kalender-Transport.
 
     `transport` ist die Test-Naht (PLAN-29): in Produktion ein
     GoogleTransport, in Tests ein Fake.
+
+    `registry_path` ist die Naht für den Live-Reload (Bugfix
+    Familie-Registry-Konsistenz): wird er gesetzt, lädt der Plan-Buddy die
+    Registry bei jedem Endpoint frisch aus der Datei — sodass extern (z. B.
+    durch FAA über den Eltern-Chat-Bot) angelegte Personen ohne Service-
+    Restart sichtbar sind. Tests übergeben heute nur das in-memory-Objekt;
+    bleibt `registry_path=None`, ist das `registry`-Objekt die feste Quelle.
     """
     runtime["config"] = cfg
     runtime["registry"] = registry
+    runtime["registry_path"] = registry_path
     runtime["transport"] = transport
+
+
+def _aktuelle_registry():
+    """Liefert die aktuelle Familien-Registry für genau diesen Request.
+
+    Live (mit `registry_path`): pro Request frisch aus `familie.json` —
+    extern angelegte Personen sind ohne Restart sichtbar. Heute ist die
+    Familie winzig (≤10 Personen), JSON-Disk-IO unter 1 ms. Kein
+    mtime-Cache (eigenes Ticket, falls je teurer).
+    Test/in-memory (ohne `registry_path`): das übergebene Registry-Objekt
+    bleibt die Quelle.
+    """
+    path = runtime.get("registry_path")
+    if path is None:
+        return runtime["registry"]
+    return registry_mod.load(path)
 
 
 def _kalender():
     """Baut die Kalender-Anbindung aus dem laufenden Transport (PLAN-15…20)."""
     return kalender_mod.Kalender(
-        runtime["transport"], runtime["registry"].alle())
+        runtime["transport"], _aktuelle_registry().alle())
 
 
 def _db():
@@ -132,14 +157,15 @@ def woche():
 
     anker = _anker_aus_request()
     conn = _db()
+    registry = _aktuelle_registry()
     try:
         view = render_mod.baue_view(
-            cfg, conn, _kalender(), runtime["registry"],
+            cfg, conn, _kalender(), registry,
             anker, anzahl_tage, mit_terminen)
     finally:
         conn.close()
 
-    personen = runtime["registry"].alle()
+    personen = registry.alle()
     # PLAN-24: Identität nur über Foto im Ring. Das Foto liefert die
     # Familien-Registry über ihren HTTP-Endpunkt FAM-8 — eine stabile
     # Cross-Komponenten-URL (URL-8). Nur Personen mit Foto bekommen einen
@@ -180,7 +206,7 @@ def api_zuteilung():
     if slot is None or not slot.ist_erwachsenen_slot():
         return jsonify({"error": "kein Erwachsenen-Slot: %r" % body["slot"]}), 400
     person_id = body.get("person_id")
-    if person_id is not None and runtime["registry"].get(person_id) is None:
+    if person_id is not None and _aktuelle_registry().get(person_id) is None:
         return jsonify({"error": "unbekannte person_id: %r" % person_id}), 400
     try:
         day = int(body["day"])
@@ -215,7 +241,7 @@ def api_aktivitaet():
         kind_id = body.get("kind")
         art = body.get("type")
         datum = body.get("datum")
-        kind = runtime["registry"].get(kind_id)
+        kind = _aktuelle_registry().get(kind_id)
         if kind is None or not kind.is_kind():
             return jsonify({"error": "unbekanntes Kind: %r" % kind_id}), 400
         if not art:
@@ -339,7 +365,7 @@ def main(argv=None):
     registry = registry_mod.load(args.registry)
     store = Zugangsdaten(resolve_store_path())
     transport = kalender_mod.GoogleTransport(store, cfg.kalender_id)
-    configure(cfg, registry, transport)
+    configure(cfg, registry, transport, registry_path=args.registry)
 
     ssl_context = None
     scheme = "http"

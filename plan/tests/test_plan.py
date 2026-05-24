@@ -823,3 +823,77 @@ def test_PLAN_16_oauth_comes_from_zugangsdaten_store(tmp_path):
               {"installed": {"client_id": "id", "client_secret": "secret"}})
     store.set(kalender_mod.ZD_NAME_OAUTH_TOKEN, {"refresh_token": "rt"})
     assert transport.credentials_available() is True
+
+
+# ============================================================
+#  PLAN-19 (Bugfix Familie-Registry-Konsistenz) — Reload pro Request
+# ============================================================
+
+def test_PLAN_19_render_reflects_external_registry_mutation(tmp_path, demo_config):
+    """Bug aus dem Pi-Live-Test: Plan-Buddy hielt die Registry in
+    `runtime["registry"]` gecached — extern (FAA) angelegte Personen
+    erschienen erst nach Service-Restart in der Wochen-View. Fix:
+    `registry_path` setzen → Plan-Buddy lädt pro Request frisch."""
+    # familie.json auf Disk anlegen: erst nur ein Erwachsener.
+    reg_path = tmp_path / "familie.json"
+    reg_path.write_text(json.dumps({
+        "erwachsene": [{"id": "emil", "name": "Niclas", "ring": "blue"}],
+        "kinder": [],
+        "settings": {},
+    }))
+    initial = registry_mod.load(str(reg_path))
+    plan_main.configure(demo_config, initial, FakeTransport(),
+                        registry_path=str(reg_path))
+    plan_main.app.testing = True
+    client = plan_main.app.test_client()
+
+    # Erst-Render: Niclas ist drin.
+    r1 = client.get("/display/plan/woche")
+    assert r1.status_code == 200
+    assert b"emil" in r1.data
+
+    # Extern mutieren: Petra dazu.
+    extern = registry_mod.load(str(reg_path))
+    extern.add_person(registry_mod.Person(
+        "petra", "Petra", "orange", registry_mod.KIND_ERWACHSENE,
+        email="petra@example.org"))
+    registry_mod.save(extern, str(reg_path))
+
+    # Ohne Restart: Petra ist im neuen Render sichtbar.
+    r2 = client.get("/display/plan/woche")
+    assert r2.status_code == 200
+    assert b"petra" in r2.data
+
+
+def test_PLAN_19_zuteilung_validates_against_fresh_registry(tmp_path, demo_config):
+    """Eine extern neu angelegte Person darf ohne Restart über die
+    Zuteilungs-API benutzt werden (Bugfix Familie-Registry-Konsistenz)."""
+    reg_path = tmp_path / "familie.json"
+    reg_path.write_text(json.dumps({
+        "erwachsene": [{"id": "emil", "name": "Niclas", "ring": "blue"}],
+        "kinder": [], "settings": {},
+    }))
+    initial = registry_mod.load(str(reg_path))
+    plan_main.configure(demo_config, initial, FakeTransport(),
+                        registry_path=str(reg_path))
+    plan_main.app.testing = True
+    client = plan_main.app.test_client()
+
+    # Vor der externen Mutation: 'petra' unbekannt → 400.
+    r0 = client.put("/api/v1/plan/zuteilung", json={
+        "week_start": "2026-05-25", "day": 0, "slot": "bring",
+        "person_id": "petra"})
+    assert r0.status_code == 400
+
+    # Extern Petra anlegen.
+    extern = registry_mod.load(str(reg_path))
+    extern.add_person(registry_mod.Person(
+        "petra", "Petra", "orange", registry_mod.KIND_ERWACHSENE,
+        email="petra@example.org"))
+    registry_mod.save(extern, str(reg_path))
+
+    # Ohne Restart: Petra ist eine gültige Zuteilung.
+    r1 = client.put("/api/v1/plan/zuteilung", json={
+        "week_start": "2026-05-25", "day": 0, "slot": "bring",
+        "person_id": "petra"})
+    assert r1.status_code == 200

@@ -124,6 +124,28 @@ FAM9_DEFAULTS = {
 }
 
 
+def resolved_foto_verzeichnis(settings, registry_path):
+    """FAM-9: das Foto-Verzeichnis **neben der Registry-Datei** auflösen.
+
+    Der Default (FAM-9 Tabelle) sagt explizit „`fotos/` neben der Registry-
+    Datei". Ein relativer Wert — egal ob aus dem Default, einem Settings-
+    Eintrag oder dem ENV-Override (`FAMILIE_FOTOS`) — wird gegen das
+    Verzeichnis der Registry-Datei aufgelöst, damit er CWD-unabhängig immer
+    dieselbe physische Stelle bezeichnet. Ein absoluter Wert geht 1:1 durch.
+
+    Konsumenten (familie/main.py, eltern-chat/familie_anlegen.py) rufen diese
+    Funktion auf, nicht den nackten `effective_setting`-Wert — eine Stelle,
+    die die Spec-Aussage „neben der Registry-Datei" einlöst.
+    """
+    wert = effective_setting(
+        settings.foto_verzeichnis, "FAMILIE_FOTOS",
+        FAM9_DEFAULTS["foto_verzeichnis"])
+    if os.path.isabs(wert):
+        return wert
+    basis = os.path.dirname(os.path.abspath(registry_path))
+    return os.path.join(basis, wert)
+
+
 class Registry:
     """Die geladene Familien-Registry — eine Instanz, eine Familie (FAM-1).
 
