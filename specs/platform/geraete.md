@@ -1,0 +1,241 @@
+# Geräte-Registry — Spec     (ID-Präfix: GER)
+
+> Status: V1 · Refs #105
+
+Die Geräte-Registry ist die **zentrale** Liste der Geräte einer Familie —
+Tablets, Handys, Monitore und das Pi-Display. Sie ist die eine Quelle für
+„welche Geräte gehören zu dieser Familie" und liefert je Gerät stabile
+Identität, Typ, Auflösung, OS, Verwendungszweck und Status. Sie besitzt
+diese Daten und stellt sie über eine Schnittstelle bereit; andere
+Komponenten sind ihre Nutzer.
+
+**V1-Scope:** Genau **Geräte-Identität** — die Geräte, je Gerät die
+Eigenschaften aus GER-3. Die Geräte-Liste als Per-Instanz-Datei, eine
+Lese- und eine Schreib-Schnittstelle, über die Konsumenten Geräte-Daten
+abrufen und ergänzen.
+
+**Out-of-Scope V1** (je eigenes Ticket, sobald gebraucht): Geräte über
+UI oder Eltern-Chat-Editor ändern oder löschen (V1: Datei + Schreib-
+Schnittstelle, Anlage über GAA #106 — OPEN-GER-A) · Health-Monitoring /
+Heartbeat (V1: `status` manuell gesetzt — OPEN-GER-B) · Telemetrie über
+tatsächliche Nutzung (OPEN-GER-C).
+
+## 1. Reichweite
+
+### GER-1 — Eine Instanz, eine Geräte-Registry
+Die Registry einer Instanz beschreibt genau die Geräte einer Familie —
+der Familie des Hubs, auf dem die Instanz läuft. Es gibt keinen familien-
+übergreifenden Bezeichner und keinen Cross-Familie-Zugriff. Konsistent
+mit `familie.md` FAM-1 und `eltern-chat.md` EC-1.
+
+*Tickets:* #105
+
+### GER-2 — Geräte-Typen V1
+Die Registry kennt vier Geräte-Typen:
+
+| Typ          | Bedeutung                                                     |
+|--------------|---------------------------------------------------------------|
+| `tablet`     | Tragbares Touch-Display (Familien-Tablet, Plan-Buddy-Display) |
+| `handy`      | Smartphone eines Familienmitglieds (üblicherweise Controller) |
+| `monitor`    | Stationärer Bildschirm (z. B. an einem PC), wird als Display angesteuert |
+| `pi-display` | Das am Hub-Pi direkt angeschlossene Display (Kiosk-Chromium)  |
+
+Die Liste ist endlich; ein weiterer Geräte-Typ ist eine Spec-Änderung
+(neue Zeile + eigenes Ticket), kein Config-Wert.
+
+*Tickets:* #105
+
+## 2. Geräte-Modell
+
+### GER-3 — Eigenschaften eines Geräts
+Jedes Gerät trägt:
+
+| Feld          | Pflicht  | Werte                                                                | Bedeutung |
+|---------------|----------|----------------------------------------------------------------------|-----------|
+| `id`          | Pflicht  | stabile `display_id` (GER-7)                                          | Stabiler, eindeutiger Bezeichner. Wird nie neu vergeben. Dieselbe `id`, die Konsumenten (Router, Display-Client) referenzieren. |
+| `typ`         | Pflicht  | einer aus GER-2                                                       | Geräte-Typ. |
+| `name`        | Pflicht  | freier String                                                         | Anzeigename für Menschen (z. B. „Tablet Wohnzimmer"). |
+| `aufloesung`  | Pflicht  | `{ "w": <int>, "h": <int> }` in Pixeln                                | Physische bzw. logische Bildschirm-Auflösung. Konsumenten skalieren darauf (z. B. Display-Client-Aspect-Adapter aus #107). |
+| `os`          | Pflicht  | einer aus `android`/`ios`/`windows`/`macos`/`linux`/`unbekannt`       | Betriebssystem-Familie. Quelle für die CA-Anleitung pro Gerät (#82). |
+| `verwendung`  | Pflicht  | einer aus `display`/`controller`/`beides`                             | Wofür wird das Gerät genutzt. |
+| `status`      | Pflicht  | einer aus `aktiv`/`inaktiv`                                           | Soll-Zustand: ist das Gerät in Betrieb. V1 manuell gesetzt (OPEN-GER-B). |
+
+Die Geräte sind **Daten** und stehen vollständig in der Datei aus GER-4 —
+nicht im Code (CLAUDE.md §6).
+
+*Tickets:* #105
+
+## 3. Datenhaltung & Schnittstelle
+
+### GER-4 — Registry als Per-Instanz-Datei
+Die Geräte-Liste liegt als JSON-Datei `geraete.json` neben dem Code, je
+Instanz separat gepflegt und per `.gitignore` aus dem Repo ausgeschlossen
+— analog `familie.json` (`familie.md` FAM-6) und `routing.json`
+(`router.md` ROU-18). Die Datei trägt Eigentümer-Rechte `0600` und hebt
+damit das Muster der Geheimnis-Datei (`zugangsdaten.md` ZD-3,
+`eltern-chat-onboarding.md` ONB-5 / #103) für die Geräte-Daten auf — auch
+wenn die Geräte-Felder keine Geheimnisse sind, sind sie familienprivat und
+sollen denselben Eigentümer-Schutz haben. Eine `geraete.example.json`
+dokumentiert das Format (kommt mit dem Impl-PR).
+
+Fehlt die Datei beim Start, protokolliert das System eine Warnung und
+läuft mit leerer Geräte-Liste weiter, statt abzubrechen (symmetrisch zu
+FAM-6 / ROU-18). Konsumenten, deren Antwort von einem unbekannten Gerät
+abhängt, behandeln das im eigenen Kontext (z. B. Display-Client zeigt
+nach DC-8 einen Einrichtungs-Hinweis).
+
+*Tickets:* #105
+
+### GER-5 — Lese-Schnittstelle
+Die Registry stellt die Geräte-Daten (GER-3) über eine Schnittstelle
+bereit:
+
+- ein Gerät je `id` holen,
+- alle Geräte der Familie listen,
+- nach `verwendung` filtern (Liste aller Display-Geräte / Controller-
+  Geräte / „beides"-Geräte).
+
+Konsumenten (Router, Display-Client, CA-Verteilung — GER-8) lesen die
+Geräte-Daten **nur** über diese Schnittstelle, nicht über eigenen
+Zugriff auf die Registry-Datei (CLAUDE.md §6: einseitige Abhängigkeiten —
+die Registry besitzt die Daten, andere sind Nutzer). Analog `familie.md`
+FAM-7. Schreiben erfolgt symmetrisch über GER-6.
+
+*Tickets:* #105
+
+### GER-6 — Schreib-Schnittstelle
+Konsumenten legen Geräte an, ändern bestehende Felder oder deaktivieren
+ein Gerät (`status` auf `inaktiv`) **nur** über die Schreib-Schnittstelle
+der Registry, nicht über eigenen Zugriff auf die Registry-Datei —
+symmetrisch zur Lese-Seite (GER-5) und im Sinne von CLAUDE.md §6 (die
+Registry besitzt die Daten). Schreibvorgänge sind **atomar** (Temp-Datei
++ Rename, sodass ein zeitgleicher Lesezugriff nie eine halb geschriebene
+Datei sieht) — race-freies Schreib-Muster wie `zugangsdaten.md` ZD-3.
+Bestehende Geräte bleiben unberührt, außer der Aufrufer ändert sie
+explizit. Beim Schreiben werden die Dateirechte aus GER-4 (`0600`)
+durchgesetzt. Analog `familie.md` FAM-11.
+
+Schreib-Konsumenten in V1: `geraet-anlegen.md` (GAA, #106 — die Eltern-
+Chat-Funktion „Gerät anlegen") und manuelle Datei-Pflege (vertikale
+Scheibe dieses PRs).
+
+*Tickets:* #105
+
+### GER-7 — `display_id`-Vergabe
+Die `id` eines Geräts ist seine **`display_id`** — derselbe Bezeichner,
+über den Router (ROU-9/ROU-18) und Display-Client (DC-1) das Gerät heute
+schon adressieren. Sie wird kollisionsfrei je Familie vergeben und ist
+für Menschen lesbar — keine UUID. Schema:
+
+```
+<typ>-<name-slug>-<laufende-nr>
+```
+
+mit:
+
+- `<typ>` aus GER-2 (`tablet`, `handy`, `monitor`, `pi-display`),
+- `<name-slug>` kleingeschrieben, Bindestrich-getrennt, ohne
+  Sonderzeichen (URL-6 sinngemäß — die `display_id` taucht in
+  Display-URLs auf, vgl. ROU-20),
+- `<laufende-nr>` zweistellig (`01`, `02`, …), beginnt je
+  (Typ + Slug)-Kombination bei `01`.
+
+Beispiele: `tablet-elias-01`, `tablet-wohnzimmer-01`, `handy-mama-01`,
+`pi-display-flur-01`.
+
+Die Registry stellt sicher, dass eine neu vergebene `id` in der Familie
+noch nicht existiert. Eine einmal vergebene `id` wird nicht neu vergeben
+(URL-8 sinngemäß: stabile Identität).
+
+*Tickets:* #105
+
+### GER-8 — Konsumenten
+Diese Spec benennt die heutigen Konsumenten der Registry. Die jeweiligen
+Konsumenten-Specs ändern sich durch diesen PR nicht — sie ziehen ihre
+Anbindung in eigenen Tickets nach:
+
+- **Router** (`router.md`): `routing.json` (ROU-18) referenziert nur
+  noch `display_id`s, die in der Registry stehen. Die Pflege der
+  `display_id`s wandert damit aus „Strings in `routing.json`" in die
+  Registry.
+- **Display-Client** (`display-client.md`): Holt die Auflösung seines
+  Geräts aus der Registry (per `display_id`, DC-1) und skaliert
+  entsprechend (z. B. der Aspect-Adapter aus #107).
+- **CA-Verteilung** (`ca-verteilung.md`, #82): Liest das `os`-Feld aus
+  der Registry und erzeugt die CA-Installations-Anleitung pro Gerät —
+  ersetzt damit den heute statischen `_INSTALL_GUIDE`.
+
+*Tickets:* #105
+
+## 4. Konfiguration
+
+### GER-9 — Konfigurationswerte
+Familienspezifische Werte leben in `geraete.json` (GER-4). Der Pfad zur
+Registry-Datei selbst kann nicht in der Datei stehen und bleibt deshalb
+Env/CLI.
+
+| Wert            | Default                       | Quelle                                            |
+|-----------------|-------------------------------|---------------------------------------------------|
+| Registry-Datei  | `geraete.json` neben dem Code | Env (`GERAETE_REGISTRY`) · CLI (`--geraete`)      |
+
+*Tickets:* #105
+
+## 5. Tests
+
+### GER-10 — Automatisierte Tests je Anforderung
+Jede Anforderung mit Code-Verhalten hat einen automatisierten Test
+(CLAUDE.md §6), ohne Netz. Mindest-Abdeckung:
+
+- **GER-4** — fehlende Datei → Warnung, leere Geräte-Liste, kein Crash;
+  Datei mit Geräten → alle Felder aus GER-3 geladen; Schreiben setzt
+  `0600`.
+- **GER-5** — Holen einer Person je `id`; unbekannte `id` liefert
+  „nicht gefunden"; alle Geräte listen; Filter nach `verwendung`
+  liefert nur die passenden Geräte.
+- **GER-6** — atomares Schreiben: bestehende Geräte byte-gleich nach
+  Schreiben eines neuen Geräts; simulierter Schreib-Abbruch hinterlässt
+  keine halbe Datei; Deaktivieren ändert nur `status`.
+- **GER-7** — neu vergebene `id` kollidiert nicht mit bestehender;
+  Schema (`<typ>-<slug>-<nn>`) wird eingehalten; eine einmal vergebene
+  `id` wird nicht neu vergeben.
+
+*Tickets:* #105
+
+---
+
+## Offene Punkte
+
+- **OPEN-GER-A — Geräte über UI/Eltern-Chat-Editor ändern oder löschen.**
+  V1 hat die Schreib-Schnittstelle (GER-6) und die Anlage über die
+  Eltern-Chat-Funktion `geraet-anlegen.md` (GAA, #106). Ein Editor —
+  bestehende Geräte umbenennen, Auflösung korrigieren, ein Gerät hart
+  löschen statt nur deaktivieren — ist V1 nicht spezifiziert. Korrekturen
+  laufen V1 über manuelle Datei-Pflege. Kein V1-Bedarf belegt.
+
+- **OPEN-GER-B — Health-Monitoring / Heartbeat.** Das Feld `status`
+  (GER-3) wird V1 manuell gesetzt. Ob die Registry automatisch erkennt,
+  dass ein Display seit einer Stunde keinen Stream-Reconnect mehr
+  hatte, und dann `status` auf `inaktiv` setzt, ist offen — das wäre
+  eine echte zweite Verantwortung (Beobachtung statt nur Identität).
+  Erst spezifizieren, wenn ein konkreter Schmerz auftaucht.
+
+- **OPEN-GER-C — Telemetrie über tatsächliche Nutzung.** Welches Gerät
+  wurde zuletzt wann benutzt, welche Inhalte hat es gezeigt — V1 nicht
+  geführt. Sobald die Registry Nutzung kennt, ist sie kein reines
+  Identitäts-Modell mehr; eigene Spec, sobald Bedarf belegt ist.
+
+---
+
+## Bezug
+
+- **Analog-Vorlage:** `familie.md` (FAM-Registry-Pattern — Per-Instanz-
+  Datei, Lese- und Schreib-Schnittstelle, atomares Schreiben).
+- **Konsumenten:** `router.md` ROU-18 (`routing.json` referenziert
+  `display_id`s); `display-client.md` DC-1 (`display_id` als Identität);
+  `ca-verteilung.md` (#82, KI-generierte CA-Anleitung pro `os`).
+- **Schreib-Pattern:** `zugangsdaten.md` ZD-3 (gitignorierte `0600`-
+  Datei, atomares Schreiben).
+- **Bestehender Ticket-Aufschlag:** #82 (Geräteprofil-CA) — wird auf
+  diese Registry umgestellt, kein eigenes Geräte-Modell mehr.
+- **Hängt an:** nichts. Andere Tickets hängen an dieser Spec
+  (insbesondere #106 „Gerät anlegen", #82 „CA-Anleitung pro Gerät").
