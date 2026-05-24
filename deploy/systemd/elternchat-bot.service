@@ -1,0 +1,26 @@
+# XBuddy Eltern-Chat Telegram-Bot — systemd-Service-Vorlage.
+#
+# Diese Datei ist eine VORLAGE. Vor `systemctl enable` Platzhalter ersetzen
+# (siehe deploy/systemd/README.md). Per-Instanz-Werte stehen nie im Repo.
+#
+# Geheimnisse (Telegram-Bot-Token u. a.) lädt der Bot aus der EnvironmentFile-
+# Datei, die NICHT im Repo liegt. Die Familie legt sie nach dem Schema unter
+# dem hier referenzierten Pfad an (siehe deploy/systemd/README.md).
+
+[Unit]
+Description=XBuddy Eltern-Chat Telegram Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__XBUDDY_USER__
+WorkingDirectory=__XBUDDY_REPO__/eltern-chat
+EnvironmentFile=__XBUDDY_REPO__/eltern-chat/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=__XBUDDY_HOME__
+ExecStart=__XBUDDY_PYTHON__ main.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

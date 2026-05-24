@@ -1,0 +1,21 @@
+# XBuddy Plan-Buddy — systemd-Service-Vorlage.
+#
+# Diese Datei ist eine VORLAGE. Vor `systemctl enable` Platzhalter ersetzen
+# (siehe deploy/systemd/README.md). Per-Instanz-Werte stehen nie im Repo.
+
+[Unit]
+Description=XBuddy Plan-Buddy-App
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__XBUDDY_USER__
+WorkingDirectory=__XBUDDY_REPO__
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=__XBUDDY_HOME__
+ExecStart=__XBUDDY_PYTHON__ -m plan.main --host 127.0.0.1 --port 5020
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
