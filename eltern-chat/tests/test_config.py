@@ -122,3 +122,31 @@ def test_EC_15_underscore_keys_in_file_ignored(tmp_path):
 def test_EC_15_invalid_context_depth_raises(tmp_path):
     with pytest.raises(config_mod.ConfigError):
         config_mod.resolve(_missing(tmp_path), env=_env(ELTERNCHAT_CONTEXT_DEPTH="0"))
+
+
+# -- GAA-3.7 display_url_origin ----------------------------------
+
+def test_GAA_3_7_display_url_origin_default_empty(tmp_path):
+    cfg = config_mod.resolve(_missing(tmp_path), env=_env())
+    assert cfg.display_url_origin == ""
+
+
+def test_GAA_3_7_display_url_origin_from_env(tmp_path):
+    cfg = config_mod.resolve(
+        _missing(tmp_path),
+        env=_env(ELTERNCHAT_DISPLAY_URL_ORIGIN="https://xbuddy-hub.local:8443"))
+    assert cfg.display_url_origin == "https://xbuddy-hub.local:8443"
+
+
+def test_GAA_3_7_display_url_origin_strips_trailing_slash(tmp_path):
+    cfg = config_mod.resolve(
+        _missing(tmp_path),
+        env=_env(ELTERNCHAT_DISPLAY_URL_ORIGIN="https://xbuddy-hub.local:8443/"))
+    assert cfg.display_url_origin == "https://xbuddy-hub.local:8443"
+
+
+def test_GAA_3_7_display_url_origin_from_file(tmp_path):
+    cfg_file = tmp_path / "config.json"
+    cfg_file.write_text(json.dumps({"display_url_origin": "https://pi.local"}))
+    cfg = config_mod.resolve(str(cfg_file), env=_env())
+    assert cfg.display_url_origin == "https://pi.local"

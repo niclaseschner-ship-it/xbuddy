@@ -125,19 +125,23 @@ class Catalog:
 
 
 def build_catalog(tg, ca_pem_path, family_registry_path=None,
-                  faa_sessions=None, family_group_chat_id_getter=None):
+                  faa_sessions=None, family_group_chat_id_getter=None,
+                  geraete_registry_path=None, gaa_sessions=None,
+                  cav_call_hook=None, display_url_origin=None):
     """Baut den Katalog für eine laufende Instanz.
 
-    Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend)
-    und — wenn die FAA-Abhängigkeiten vorliegen — die »Familie anlegen«-
-    Aufgabe (`familie-anlegen.md` FAA-12, schreibend). Die instanz-festen
-    Abhängigkeiten reicht die Orchestrierung hier herein; das ermöglicht
-    einer Test-Umgebung, den Katalog ohne FAA-Setup zu bauen (`build_catalog
-    (tg, ca_path)` bleibt unverändert kompatibel zu den CAV-Tests). Weitere
-    Aufgaben werden additiv ergänzt (EC-8).
+    Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
+    — wenn die FAA-Abhängigkeiten vorliegen — die »Familie anlegen«-Aufgabe
+    (`familie-anlegen.md` FAA-12, schreibend) und — wenn die GAA-Abhängigkeiten
+    vorliegen — die »Gerät anlegen«-Aufgabe (`geraet-anlegen.md` GAA-5,
+    schreibend). Die instanz-festen Abhängigkeiten reicht die Orchestrierung
+    hier herein; das ermöglicht einer Test-Umgebung, den Katalog ohne
+    FAA-/GAA-Setup zu bauen (`build_catalog(tg, ca_path)` bleibt unverändert
+    kompatibel zu den CAV-Tests). Weitere Aufgaben werden additiv ergänzt
+    (EC-8).
     """
-    # Lokale Imports: brechen den Import-Zyklus tasks <-> ca_task/faa_task —
-    # nicht hochziehen.
+    # Lokale Imports: brechen den Import-Zyklus tasks <-> ca_task/faa_task/
+    # gaa_task — nicht hochziehen.
     from ca_task import CaVerteilungTask
 
     catalog = Catalog()
@@ -149,4 +153,13 @@ def build_catalog(tg, ca_pem_path, family_registry_path=None,
         catalog.register(FamilieAnlegenTask(
             tg, family_registry_path, faa_sessions,
             family_group_chat_id_getter))
+
+    if geraete_registry_path is not None and gaa_sessions is not None \
+            and family_group_chat_id_getter is not None:
+        from geraet_anlegen_task import GeraetAnlegenTask
+        catalog.register(GeraetAnlegenTask(
+            tg, geraete_registry_path, gaa_sessions,
+            family_group_chat_id_getter,
+            cav_call_hook=cav_call_hook,
+            display_url_origin=display_url_origin))
     return catalog
