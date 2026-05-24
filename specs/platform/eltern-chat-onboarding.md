@@ -97,11 +97,14 @@ klaren, hart-codierten Hinweis samt der Möglichkeit, es erneut zu versuchen.
 ### ONB-5 — Persistente Speicherung außerhalb des Repos
 Ein validierter Key wird persistent gespeichert: je Instanz, in einer Datei
 neben dem Code, per `.gitignore` aus dem Repo ausgeschlossen und mit
-Dateirechten auf den Eigentümer beschränkt. Die Speicherung übersteht einen
-Neustart — eine einmal eingerichtete Instanz durchläuft das Onboarding nicht
-erneut.
+Dateirechten auf den Eigentümer beschränkt (`0600`). Die Datei wird *mit*
+diesen restriktiven Rechten angelegt, sodass der Inhalt zu keinem Zeitpunkt
+mit offeneren Rechten auf der Platte liegt — auch nicht zwischen Anlage und
+nachträglichem Setzen der Rechte (analog `zugangsdaten.md` ZD-3). Die
+Speicherung übersteht einen Neustart — eine einmal eingerichtete Instanz
+durchläuft das Onboarding nicht erneut.
 
-*Tickets:* #33
+*Tickets:* #33, #100
 
 ### ONB-6 — Bindung der Familien-Gruppe
 Mit dem erfolgreichen Abschluss des Onboardings wird die Gruppe, in der das
