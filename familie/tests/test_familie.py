@@ -18,13 +18,10 @@ import pytest
 # familie/ ist ein Paket — die Repo-Wurzel (zwei Ebenen über tests/) auf den
 # Importpfad legen und die Module als familie.main / familie.registry
 # importieren. So bleiben die Modulnamen eindeutig und kollidieren beim
-# repo-weiten Lauf nicht mit den main-Modulen anderer Komponenten (#52).
+# repo-weiten Lauf nicht mit den main-Modulen anderer Komponenten.
 _FAMILIE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _REPO_ROOT = os.path.dirname(_FAMILIE_DIR)
 sys.path.insert(0, _REPO_ROOT)
-# familie/ selbst muss ebenfalls auf den Pfad: familie/main.py importiert
-# registry über `import registry`, wenn es direkt gestartet wird.
-sys.path.insert(0, _FAMILIE_DIR)
 
 from familie import main as familie_main      # noqa: E402
 from familie import registry as registry_mod  # noqa: E402
@@ -658,3 +655,23 @@ def test_FAM_10_every_requirement_has_a_test():
     # FAM-1 .. FAM-9 + FAM-11 haben Code-Verhalten; FAM-10 ist dieser Test.
     for fam in list(range(1, 10)) + [11]:
         assert "def test_FAM_%d_" % fam in quelle, "FAM-%d ungetestet" % fam
+
+
+# ============================================================
+#  Regressions-Test: familie/main.py ist Plan-Stil-Paket-Modul
+# ============================================================
+
+def test_familie_main_runs_as_module_from_repo_root():
+    """Bugfix Import-Pfad: `familie/main.py` muss als `python -m familie.main`
+    aus dem Repo-Root startbar sein — wie `plan/main.py`. Bisher: nackter
+    `import registry` brach mit ModuleNotFoundError, sobald nicht aus dem
+    familie/-Verzeichnis gestartet wurde. Workaround auf dem Pi war
+    `WorkingDirectory=…/familie` im systemd-File; mit dem Fix entfällt das."""
+    import subprocess
+    result = subprocess.run(
+        [sys.executable, "-m", "familie.main", "--help"],
+        cwd=_REPO_ROOT, capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, (
+        "python -m familie.main --help schlug fehl:\n"
+        "stdout=%r\nstderr=%r" % (result.stdout, result.stderr))
+    assert "Familien-Registry" in result.stdout

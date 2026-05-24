@@ -22,7 +22,12 @@ import sys
 
 from flask import Flask, jsonify, send_file
 
-import registry as registry_mod
+# Paket-Import wie der Plan-Buddy (plan/main.py): `from familie import …`,
+# damit `python -m familie.main` aus dem Repo-Root funktioniert. Der nackte
+# `import registry` funktionierte nur, wenn der Service aus dem
+# familie/-Verzeichnis direkt gestartet wurde — Workaround auf dem Pi war
+# `WorkingDirectory=…/familie` im systemd-File.
+from familie import registry as registry_mod
 
 
 # ============================================================
