@@ -72,6 +72,7 @@ class Context:
     family_group_locked: bool = False  # True ⇒ Familien-Gruppe per Env/Config gesetzt, Vorrang (ONB-6, EC-18)
     onboarding: object = None  # onboarding.OnboardingState — None ⇒ KI-Modus (ONB-1)
     faa_sessions: dict = None  # FAA-12: laufende »Familie anlegen«-Sessions (chat_id → FaaSession)
+    gaa_sessions: dict = None  # GAA-5: laufende »Gerät anlegen«-Sessions (chat_id → GaaSession)
 
 
 # ============================================================
@@ -92,6 +93,15 @@ def handle_update(update, ctx):
         if session is not None and not session.is_finished():
             from familie_anlegen_task import make_faa_input
             session.deliver(make_faa_input(msg))
+            return
+
+    # GAA-5: analog FAA-12 für »Gerät anlegen«-Sessions — eine laufende
+    # GAA-Session beansprucht den Privatchat bis zum Ende.
+    if ctx.gaa_sessions is not None and msg.chat_type == "private":
+        session = ctx.gaa_sessions.get(msg.chat_id)
+        if session is not None and not session.is_finished():
+            from geraet_anlegen_task import make_gaa_input
+            session.deliver(make_gaa_input(msg))
             return
 
     # EC-5: In einer Gruppe reagiert das System nur, wenn es ausdrücklich
@@ -358,6 +368,8 @@ def build_context(cfg, db_path, store_path):
     # FAA-12: in-memory Session-Registry je Privatchat. Wird vom
     # FamilieAnlegenTask gefüllt und von `handle_update` ausgelesen.
     faa_sessions = {}
+    # GAA-5: analog FAA, eigene Session-Map für die »Gerät anlegen«-Aufgabe.
+    gaa_sessions = {}
 
     ctx = Context(
         tg=tg,
@@ -371,15 +383,28 @@ def build_context(cfg, db_path, store_path):
         store=OnboardingStore(store_path),
         family_group_locked=cfg.family_group_locked,
         faa_sessions=faa_sessions,
+        gaa_sessions=gaa_sessions,
     )
-    # FAA-12: Familien-Gruppen-ID darf nach einer Migration (EC-18) wechseln —
-    # der Getter liest sie zur Laufzeit aus dem Context, statt sie einmal beim
-    # Bootstrap zu kopieren.
+    # FAA-12 / GAA-5: Familien-Gruppen-ID darf nach einer Migration (EC-18)
+    # wechseln — der Getter liest sie zur Laufzeit aus dem Context, statt sie
+    # einmal beim Bootstrap zu kopieren.
+    # GAA-6: CAV-Hook — bindet die CA-Verteilung an den Privatchat des
+    # Aufrufers. GAA bleibt CAV-agnostisch (E-GAA-5), die Orchestrierung
+    # verdrahtet die beiden Funktionen.
+    import ca_verteilung as _cav
+
+    def _cav_hook(_os_wert, private_chat_id, _user_id):
+        _cav.verteile_ca(tg, private_chat_id, cfg.ca_pem_path)
+
     ctx.catalog = build_catalog(
         tg, cfg.ca_pem_path,
         family_registry_path=cfg.family_registry_path,
         faa_sessions=faa_sessions,
-        family_group_chat_id_getter=lambda: ctx.family_group_chat_id)
+        family_group_chat_id_getter=lambda: ctx.family_group_chat_id,
+        geraete_registry_path=cfg.geraete_registry_path,
+        gaa_sessions=gaa_sessions,
+        cav_call_hook=_cav_hook,
+        display_url_origin=cfg.display_url_origin)
 
     if cfg.provider_api_key:
         # KI-Modus — Anbieter steht; die Familien-Gruppe muss gesetzt sein (EC-2).
