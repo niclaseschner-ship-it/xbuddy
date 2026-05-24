@@ -25,6 +25,10 @@ DEFAULTS = {
     # ausliefert. Per-Instanz-Wert; Default = Standard-Ausgabe des CA-Werkzeugs
     # (tools/ca/make-ca.sh, #36). Niemals der CA-Privatschlüssel.
     "ca_pem_path":    "../tools/ca/out/rootCA.pem",
+    # FAA-12: Pfad zur Familien-Registry (`familie.md` FAM-6), die die
+    # FamilieAnlegenTask über FAM-11 fortschreibt. Per-Instanz-Wert; Default
+    # passt zum Pi-Setup (familie/familie.json neben dem Eltern-Chat-Repo).
+    "family_registry_path": "../familie/familie.json",
 }
 
 # Umgebungsvariablen-Namen.
@@ -32,10 +36,11 @@ ENV_BOT_TOKEN        = "ELTERNCHAT_BOT_TOKEN"          # Geheimnis, Pflicht
 ENV_PROVIDER_API_KEY = "ELTERNCHAT_PROVIDER_API_KEY"   # Geheimnis, optional
 ENV_FAMILY_GROUP     = "ELTERNCHAT_FAMILY_GROUP_CHAT_ID"
 ENV_OVERRIDES = {
-    "provider":       "ELTERNCHAT_PROVIDER",
-    "provider_model": "ELTERNCHAT_PROVIDER_MODEL",
-    "context_depth":  "ELTERNCHAT_CONTEXT_DEPTH",
-    "ca_pem_path":    "ELTERNCHAT_CA_PEM_PATH",
+    "provider":             "ELTERNCHAT_PROVIDER",
+    "provider_model":       "ELTERNCHAT_PROVIDER_MODEL",
+    "context_depth":        "ELTERNCHAT_CONTEXT_DEPTH",
+    "ca_pem_path":          "ELTERNCHAT_CA_PEM_PATH",
+    "family_registry_path": "ELTERNCHAT_FAMILY_REGISTRY_PATH",
 }
 
 
@@ -54,7 +59,7 @@ class Config:
 
     def __init__(self, bot_token, provider_api_key, provider, provider_model,
                  family_group_chat_id, family_group_locked, context_depth,
-                 ca_pem_path):
+                 ca_pem_path, family_registry_path):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
         self.provider = provider
@@ -63,6 +68,7 @@ class Config:
         self.family_group_locked = family_group_locked
         self.context_depth = context_depth
         self.ca_pem_path = ca_pem_path           # CAV-3: Pfad zum öffentlichen Root-CA-Zertifikat
+        self.family_registry_path = family_registry_path   # FAA-12: Pfad zur Familien-Registry (FAM-6)
 
 
 def _load_file(path):
@@ -134,4 +140,5 @@ def resolve(config_path, store_path=None, env=None):
         family_group_locked=family_group_locked,
         context_depth=context_depth,
         ca_pem_path=str(values["ca_pem_path"]).strip(),
+        family_registry_path=str(values["family_registry_path"]).strip(),
     )

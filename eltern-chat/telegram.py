@@ -20,7 +20,14 @@ API_BASE = "https://api.telegram.org"
 
 @dataclass
 class IncomingMessage:
-    """Eine eingehende Nachricht, anbieter-/kanal-neutral aufbereitet."""
+    """Eine eingehende Nachricht, anbieter-/kanal-neutral aufbereitet.
+
+    Die FAA-relevanten Anhang-Felder (photo_*, document_*) sind zusätzlich zur
+    Agent-Aufbereitung (images, Base64) bereit — die FAA-Funktion will die
+    Telegram-file_id, nicht das Base64-Bild (siehe familie_anlegen_task.py).
+    Lebt hier neutral, damit familie_anlegen die Telegram-Doppelung der
+    Eltern-Chat-Suite ohne weitere Abhängigkeit nutzen kann.
+    """
     update_id: int
     chat_id: int
     chat_type: str                       # "private" | "group" | "supergroup"
@@ -32,6 +39,14 @@ class IncomingMessage:
     reply_to_message_id: int = None
     reply_to_from_bot: bool = False
     mentions_bot: bool = False
+    # FAA-6: Telegram-Foto-Nachricht — file_id der größten Auflösung, die die
+    # Max-Kante (FAM-9) nicht überschreitet, oder None (alle zu groß ⇒ oversize).
+    photo_file_id: object = None
+    photo_oversize: bool = False
+    # FAA-6: Datei-Anhang.
+    document_file_id: object = None
+    document_mime_type: str = ""
+    document_size_hint: tuple = None     # (breite, höhe), wenn bekannt
 
 
 class TelegramError(Exception):
@@ -234,6 +249,10 @@ class TelegramClient:
         for media_type, data_b64 in self._extract_images(msg):
             images.append((media_type, data_b64))
 
+        # FAA-6: Anhang-Felder zusätzlich befüllen (ohne Download).
+        photo_file_id, document_file_id, document_mime_type, document_size_hint \
+            = self._extract_attachment_refs(msg)
+
         return IncomingMessage(
             update_id=update.get("update_id"),
             chat_id=chat_id,
@@ -246,7 +265,35 @@ class TelegramClient:
             reply_to_message_id=reply_to_message_id,
             reply_to_from_bot=reply_to_from_bot,
             mentions_bot=mentions_bot,
+            photo_file_id=photo_file_id,
+            document_file_id=document_file_id,
+            document_mime_type=document_mime_type,
+            document_size_hint=document_size_hint,
         )
+
+    @staticmethod
+    def _extract_attachment_refs(msg):
+        """Liest die FAA-relevanten Anhang-Referenzen aus einer rohen
+        Telegram-Nachricht — ohne Datei-Download (das macht FAA selbst über
+        `download_file`). FAA-12-Adapter; die Max-Kanten-Prüfung der
+        Foto-Größen liegt in der FAA-Funktion (FAA-6/FAA-10)."""
+        photo_file_id = None
+        photo_sizes = msg.get("photo") or []
+        if photo_sizes:
+            # Telegram liefert mehrere Auflösungen aufsteigend — die größte
+            # nehmen; die FAM-9-Max-Kanten-Prüfung der FAA-Funktion (FAA-6)
+            # lehnt sie ab, falls die Datei tatsächlich zu groß ist.
+            largest = max(photo_sizes, key=lambda p: p.get("file_size", 0))
+            photo_file_id = largest.get("file_id")
+
+        document = msg.get("document") or {}
+        document_file_id = document.get("file_id")
+        document_mime_type = document.get("mime_type", "") or ""
+        document_size_hint = None
+        # Telegram-Document liefert keine width/height direkt; thumb.width/height
+        # ist ungenau. Wir lassen size_hint leer — die FAA-Funktion fällt auf
+        # PNG-Header-Parsing zurück (FAA-6).
+        return photo_file_id, document_file_id, document_mime_type, document_size_hint
 
     @staticmethod
     def extract_bot_added(update):
