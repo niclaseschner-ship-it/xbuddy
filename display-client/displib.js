@@ -88,10 +88,99 @@
     };
   }
 
+  // ============================================================
+  //  DC-12 — Skalierungs-Adapter (pure Berechnung)
+  // ============================================================
+  //
+  // Pure Funktion: gibt den proportionalen Skalierungs-Faktor zurück, mit
+  // dem ein iframe der Größe designW×designH per CSS-transform in ein
+  // viewportW×viewportH-Viewport eingepasst wird. Der Inhalt wird so groß
+  // wie möglich, ohne Verzerrung und ohne Überlauf — verbleibender Raum
+  // ist Letterbox/Pillarbox und trägt die Display-Ruhe-Farbe (DC-5).
+  //
+  //     s = min(viewport.w / design.w, viewport.h / design.h)
+  //
+  // Defaults design = 1920×1080 (DC-15 — heutiger Plan-Buddy-Standard,
+  // V1 einziger Konsument). Konsumenten-spezifische Design-Auflösung ist
+  // V2 / OPEN-DC-C.
+  function computeScale(viewportW, viewportH, designW, designH) {
+    var dW = designW || 1920;
+    var dH = designH || 1080;
+    if (!isFinite(viewportW) || !isFinite(viewportH)) return 0;
+    if (viewportW <= 0 || viewportH <= 0) return 0;
+    if (dW <= 0 || dH <= 0) return 0;
+    return Math.min(viewportW / dW, viewportH / dH);
+  }
+
+  // applyScale — wendet den Skalierungs-Faktor (computeScale) auf ein
+  // iframe an. Reine DOM-Anwendung, damit die Pure-Function-Logik
+  // (computeScale) ohne DOM testbar bleibt (DC-10). `transform-origin`
+  // wird auf `top left` gesetzt; die Zentrierung im Viewport übernimmt
+  // der umgebende Container per Flexbox (siehe index.html). Re-Aufruf
+  // wechselt nur die `transform`-Eigenschaft, nicht die iframe.src — der
+  // gerouteten Inhalt behält seinen Zustand (DC-14 / DC-2).
+  function applyScale(iframeEl, viewportW, viewportH, designW, designH) {
+    var s = computeScale(viewportW, viewportH, designW, designH);
+    iframeEl.style.transformOrigin = 'top left';
+    iframeEl.style.transform = 'scale(' + s + ')';
+    return s;
+  }
+
+  // ============================================================
+  //  DC-11 — Wakelock-Helper
+  // ============================================================
+  //
+  // Pattern aus FIG-26 (controller/figuren-erkennung): fordere den Lock
+  // beim Laden an UND nach jedem Sichtbarkeits-Wechsel auf `visible`
+  // (das System gibt den Lock beim Verdecken frei). Fehlt die API, ist
+  // das kein Fehler — der Client läuft weiter (self-healing).
+  function attachWakeLock(doc, nav) {
+    var lock = null;
+    function request() {
+      if (!nav || !('wakeLock' in nav)) return;
+      try {
+        var p = nav.wakeLock.request('screen');
+        if (p && p.then) p.then(function (l) { lock = l; }, function () {});
+      } catch (e) { /* still */ }
+    }
+    doc.addEventListener('visibilitychange', function () {
+      if (doc.visibilityState === 'visible') request();
+    });
+    request();
+  }
+
+  // ============================================================
+  //  DC-11 — Fullscreen-Hook auf erstem User-Gesture
+  // ============================================================
+  //
+  // requestFullscreen() braucht ein abgeschlossenes User-Gesture
+  // (touchend/click), nicht touchstart. Guard ist der echte
+  // Vollbild-Status — verlässt der Nutzer den Vollbild, holt ihn der
+  // nächste Tap zurück (self-healing). Fehlt die API oder schlägt der
+  // Aufruf fehl, ist das kein Fehler — der Client läuft weiter.
+  function attachFullscreenOnGesture(doc) {
+    function tryFullscreen() {
+      if (doc.fullscreenElement || doc.webkitFullscreenElement) return;
+      var el = doc.documentElement;
+      var req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (!req) return;
+      try {
+        var p = req.call(el);
+        if (p && p.catch) p.catch(function () {});
+      } catch (e) { /* still */ }
+    }
+    doc.addEventListener('touchend', tryFullscreen, { passive: true });
+    doc.addEventListener('click', tryFullscreen);
+  }
+
   // contentUrl bleibt intern — nur createClient nutzt es.
   return {
     parseDisplayId: parseDisplayId,
     streamUrl: streamUrl,
     createClient: createClient,
+    computeScale: computeScale,
+    applyScale: applyScale,
+    attachWakeLock: attachWakeLock,
+    attachFullscreenOnGesture: attachFullscreenOnGesture,
   };
 });
