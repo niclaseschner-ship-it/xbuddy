@@ -71,16 +71,36 @@ def configure(reg, foto_verzeichnis=None, registry_path=None):
 app = Flask(__name__)
 
 
+def _aktuelle_registry():
+    """Liefert die aktuelle Familien-Registry für genau diesen Request.
+
+    Bugfix aus dem Pi-Live-Test: Service-Start lud `familie.json` einmal in
+    `runtime["registry"]` als Python-Objekt im RAM. Sobald FAA über den
+    Eltern-Chat-Bot extern eine Person ergänzte, sah dieser Service den
+    neuen Stand erst nach Restart — kein Produkt.
+
+    Heute ist die Familie winzig (≤10 Personen), JSON-Disk-IO unter 1 ms.
+    Wir laden bei jedem Request frisch, statt einen mtime-Cache zu bauen
+    (eigenes Ticket, wenn das je teurer wird). Im Test-Modus (kein
+    `registry_path` gesetzt) bleibt das in-memory-Objekt aus `configure()`
+    die Quelle.
+    """
+    path = runtime.get("registry_path")
+    if path is None:
+        return runtime["registry"]
+    return registry_mod.load(path)
+
+
 @app.route("/api/v1/familie/personen", methods=["GET"])
 def get_personen():
     """FAM-7: alle Personen der Familie (ohne Foto-Binär)."""
-    return jsonify([p.to_dict() for p in runtime["registry"].alle()])
+    return jsonify([p.to_dict() for p in _aktuelle_registry().alle()])
 
 
 @app.route("/api/v1/familie/personen/<person_id>", methods=["GET"])
 def get_person(person_id):
     """FAM-7: eine Person je id. Unbekannte id: 404."""
-    person = runtime["registry"].get(person_id)
+    person = _aktuelle_registry().get(person_id)
     if person is None:
         return jsonify({"error": "unbekannte id"}), 404
     return jsonify(person.to_dict())
@@ -93,8 +113,17 @@ def get_foto(person_id):
     Bekannte id mit Foto: 200 mit der Bilddatei. Bekannte id ohne Foto oder
     unbekannte id: 404. Der Pfad ist geräte-neutral (URL-10).
     """
-    pfad = registry_mod.foto_pfad(
-        runtime["registry"], runtime["foto_verzeichnis"], person_id)
+    # Foto-Verzeichnis ebenfalls je Request über den FAM-9-Resolver auflösen,
+    # damit ein Settings-Wechsel in `familie.json` (Foto-Verzeichnis) ohne
+    # Service-Restart greift — gleiche Begründung wie für Personen.
+    reg = _aktuelle_registry()
+    path = runtime.get("registry_path")
+    if path is not None:
+        foto_verzeichnis = registry_mod.resolved_foto_verzeichnis(
+            reg.settings, path)
+    else:
+        foto_verzeichnis = runtime["foto_verzeichnis"]
+    pfad = registry_mod.foto_pfad(reg, foto_verzeichnis, person_id)
     if pfad is None:
         return jsonify({"error": "kein Foto"}), 404
     return send_file(pfad)

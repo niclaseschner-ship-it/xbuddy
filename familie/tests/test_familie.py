@@ -598,6 +598,56 @@ def test_FAM_11_add_person_rejects_duplicate_id():
 
 
 # ============================================================
+#  FAM-7 — Reader lädt Registry pro Request frisch (Bugfix Konsistenz)
+# ============================================================
+
+def test_FAM_7_endpoint_reflects_external_mutation_without_restart(demo_instanz):
+    """Bug aus dem Pi-Live-Test: FAA legte über den Eltern-Chat-Bot Personen
+    in `familie.json` an, der Familie-Service zeigte aber weiterhin den alten
+    Stand (leere Liste), bis er neu gestartet wurde. Fix: `registry_path`
+    setzen → der Service lädt bei jedem Request frisch."""
+    reg = registry_mod.load(demo_instanz["registry"])
+    familie_main.configure(
+        reg, demo_instanz["fotos"], registry_path=demo_instanz["registry"])
+    familie_main.app.testing = True
+    client = familie_main.app.test_client()
+
+    # (a) Erst-Lesung — DEMO-Stand: drei Personen.
+    r1 = client.get("/api/v1/familie/personen")
+    assert r1.status_code == 200
+    assert {p["id"] for p in r1.get_json()} == {"niclas", "vera", "paula"}
+
+    # (b) Extern mutieren: eine vierte Person über die Schreib-Schnittstelle.
+    extern = registry_mod.load(demo_instanz["registry"])
+    extern.add_person(registry_mod.Person(
+        "neko", "Neko", "teal", registry_mod.KIND_KINDER))
+    registry_mod.save(extern, demo_instanz["registry"])
+
+    # (c) Ohne Service-Restart: die neue Person ist da.
+    r2 = client.get("/api/v1/familie/personen")
+    assert r2.status_code == 200
+    assert {p["id"] for p in r2.get_json()} == {"niclas", "vera", "paula", "neko"}
+
+
+def test_FAM_7_in_memory_mode_unchanged_when_no_registry_path(demo_instanz):
+    """Ohne `registry_path` (Test-Modus): das übergebene Registry-Objekt
+    bleibt die Quelle — kein Disk-Reload, alte Tests bleiben stabil."""
+    reg = registry_mod.load(demo_instanz["registry"])
+    familie_main.configure(reg, demo_instanz["fotos"])  # kein registry_path
+    familie_main.app.testing = True
+    client = familie_main.app.test_client()
+
+    # Extern mutieren — sollte NICHT sichtbar werden, weil kein Disk-Reload.
+    extern = registry_mod.load(demo_instanz["registry"])
+    extern.add_person(registry_mod.Person(
+        "neko", "Neko", "teal", registry_mod.KIND_KINDER))
+    registry_mod.save(extern, demo_instanz["registry"])
+
+    r = client.get("/api/v1/familie/personen")
+    assert {p["id"] for p in r.get_json()} == {"niclas", "vera", "paula"}
+
+
+# ============================================================
 #  FAM-10 — Automatisierte Tests je Anforderung
 # ============================================================
 
