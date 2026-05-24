@@ -71,6 +71,7 @@ class Context:
     store: object = None               # onboarding_store.OnboardingStore — Persistenz der Familien-Gruppe (ONB-5, EC-18)
     family_group_locked: bool = False  # True ⇒ Familien-Gruppe per Env/Config gesetzt, Vorrang (ONB-6, EC-18)
     onboarding: object = None  # onboarding.OnboardingState — None ⇒ KI-Modus (ONB-1)
+    faa_sessions: dict = None  # FAA-12: laufende »Familie anlegen«-Sessions (chat_id → FaaSession)
 
 
 # ============================================================
@@ -82,6 +83,16 @@ def handle_update(update, ctx):
     msg = ctx.tg.extract_message(update, ctx.bot_username)
     if msg is None:
         return
+
+    # FAA-12: läuft eine »Familie anlegen«-Session in diesem Privatchat,
+    # gehen Privatchat-Nachrichten an die Session statt zum Agenten —
+    # die Konversation gehört der Funktion, bis sie endet.
+    if ctx.faa_sessions is not None and msg.chat_type == "private":
+        session = ctx.faa_sessions.get(msg.chat_id)
+        if session is not None and not session.is_finished():
+            from familie_anlegen_task import make_faa_input
+            session.deliver(make_faa_input(msg))
+            return
 
     # EC-5: In einer Gruppe reagiert das System nur, wenn es ausdrücklich
     # angesprochen wird. Im Privatchat bezieht sich jede Nachricht auf den Bot.
@@ -133,7 +144,11 @@ def _run_agent(msg, ctx):
 
     # F2: deterministischer Ausführungs-Kontext, getrennt vom Modell. Der
     # Agent-Loop reicht ihn unverändert an die Aufgaben durch (#63).
-    turn_context = TurnContext(chat_id=msg.chat_id)
+    turn_context = TurnContext(
+        chat_id=msg.chat_id,
+        from_user_id=msg.from_user_id,
+        private_chat_id=(msg.chat_id if msg.chat_type == "private"
+                         else msg.from_user_id))
 
     try:
         result = agent.run_turn(history, user_message, ctx.provider,
@@ -169,7 +184,11 @@ def _execute_confirmed(pending, msg, ctx):
     if task is None:
         _send(ctx, msg.chat_id, _TASK_GONE, reply_to_message_id=msg.message_id)
         return
-    turn_context = TurnContext(chat_id=msg.chat_id)
+    turn_context = TurnContext(
+        chat_id=msg.chat_id,
+        from_user_id=msg.from_user_id,
+        private_chat_id=(msg.chat_id if msg.chat_type == "private"
+                         else msg.from_user_id))
     try:
         result = task.execute(pending.arguments, turn_context)
     except Exception as e:  # noqa: BLE001 — Aufgabe isoliert melden
@@ -336,18 +355,31 @@ def build_context(cfg, db_path, store_path):
     tg = TelegramClient(cfg.bot_token)
     me = tg.get_me()
 
+    # FAA-12: in-memory Session-Registry je Privatchat. Wird vom
+    # FamilieAnlegenTask gefüllt und von `handle_update` ausgelesen.
+    faa_sessions = {}
+
     ctx = Context(
         tg=tg,
         bot_username=me.get("username", ""),
         family_group_chat_id=cfg.family_group_chat_id,
         context_depth=cfg.context_depth,
         provider=None,
-        catalog=build_catalog(tg, cfg.ca_pem_path),
+        catalog=None,                # gleich gesetzt — braucht ctx-Verweis
         history=History(db_path),
         pending=PendingStore(),
         store=OnboardingStore(store_path),
         family_group_locked=cfg.family_group_locked,
+        faa_sessions=faa_sessions,
     )
+    # FAA-12: Familien-Gruppen-ID darf nach einer Migration (EC-18) wechseln —
+    # der Getter liest sie zur Laufzeit aus dem Context, statt sie einmal beim
+    # Bootstrap zu kopieren.
+    ctx.catalog = build_catalog(
+        tg, cfg.ca_pem_path,
+        family_registry_path=cfg.family_registry_path,
+        faa_sessions=faa_sessions,
+        family_group_chat_id_getter=lambda: ctx.family_group_chat_id)
 
     if cfg.provider_api_key:
         # KI-Modus — Anbieter steht; die Familien-Gruppe muss gesetzt sein (EC-2).

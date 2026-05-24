@@ -27,11 +27,17 @@ class TurnContext:
     allein `arguments`. So kann eine Aufgabe z. B. ihren Zielchat verlässlich
     aus dem Kontext nehmen, statt einer vom Modell gelieferten ID zu vertrauen.
 
-    V1 trägt nur `chat_id`. Bewusst keine Felder auf Vorrat (CLAUDE.md §6) —
-    aber als Dataclass angelegt, damit die geplante Anonymisierungs-Schicht
-    (eltern-chat.md OPEN-EC-A) sauber ein weiteres Feld ergänzen kann.
+    `chat_id` ist der Chat der eingehenden Anfrage (Familien-Gruppe oder
+    Privatchat). `private_chat_id` ist der Privatchat des Aufrufers — bei
+    einer Privatchat-Anfrage identisch zu `chat_id`, bei einer Gruppen-Anfrage
+    die User-ID des Aufrufers (Telegram-Privatchat-ID == User-ID). `from_user_id`
+    ist die Telegram-User-ID des Aufrufers. Die Aufnahme dieser Felder ist load-
+    bearing für FAA-12 (`familie_anlegen_task`): der Anlage-Dialog läuft im
+    Privatchat, nicht in der Gruppe (analog ONB-3).
     """
     chat_id: object
+    from_user_id: object = None
+    private_chat_id: object = None
 
 
 @dataclass
@@ -118,17 +124,29 @@ class Catalog:
         return [t.to_def() for t in self._tasks.values()]
 
 
-def build_catalog(tg, ca_pem_path):
+def build_catalog(tg, ca_pem_path, family_registry_path=None,
+                  faa_sessions=None, family_group_chat_id_getter=None):
     """Baut den Katalog für eine laufende Instanz.
 
-    Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6) — eine
-    lesende Aufgabe (EC-9). Die instanz-festen Abhängigkeiten der Aufgabe
-    (`tg`, `ca_pem_path`) reicht die Orchestrierung hier herein. Weitere
+    Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend)
+    und — wenn die FAA-Abhängigkeiten vorliegen — die »Familie anlegen«-
+    Aufgabe (`familie-anlegen.md` FAA-12, schreibend). Die instanz-festen
+    Abhängigkeiten reicht die Orchestrierung hier herein; das ermöglicht
+    einer Test-Umgebung, den Katalog ohne FAA-Setup zu bauen (`build_catalog
+    (tg, ca_path)` bleibt unverändert kompatibel zu den CAV-Tests). Weitere
     Aufgaben werden additiv ergänzt (EC-8).
     """
-    # Lokaler Import: bricht den Import-Zyklus tasks <-> ca_task — nicht hochziehen.
+    # Lokale Imports: brechen den Import-Zyklus tasks <-> ca_task/faa_task —
+    # nicht hochziehen.
     from ca_task import CaVerteilungTask
 
     catalog = Catalog()
     catalog.register(CaVerteilungTask(tg, ca_pem_path))
+
+    if family_registry_path is not None and faa_sessions is not None \
+            and family_group_chat_id_getter is not None:
+        from familie_anlegen_task import FamilieAnlegenTask
+        catalog.register(FamilieAnlegenTask(
+            tg, family_registry_path, faa_sessions,
+            family_group_chat_id_getter))
     return catalog
