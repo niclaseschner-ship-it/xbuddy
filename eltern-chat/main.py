@@ -403,7 +403,8 @@ def build_context(cfg, db_path, store_path):
         family_group_chat_id_getter=lambda: ctx.family_group_chat_id,
         geraete_registry_path=cfg.geraete_registry_path,
         gaa_sessions=gaa_sessions,
-        cav_call_hook=_cav_hook)
+        cav_call_hook=_cav_hook,
+        display_url_origin=cfg.display_url_origin)
 
     if cfg.provider_api_key:
         # KI-Modus — Anbieter steht; die Familien-Gruppe muss gesetzt sein (EC-2).

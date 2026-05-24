@@ -33,6 +33,13 @@ DEFAULTS = {
     # GeraetAnlegenTask über GER-6 fortschreibt. Per-Instanz-Wert; Default
     # passt zum Pi-Setup (geraete/geraete.json neben dem Eltern-Chat-Repo).
     "geraete_registry_path": "../geraete/geraete.json",
+    # GAA-3.7: HTTPS-Origin, unter der die ausgelieferten Display-URLs
+    # erreichbar sind (z. B. "https://xbuddy-hub.local:8443"). Per-Instanz-
+    # Wert. Leer (Default) → Bot gibt nur den Pfad `/display/<id>` aus —
+    # ausreichend für Tests/CI, für Familien-Anlage muss der Origin gesetzt
+    # sein, damit das ausgeteilte Stück direkt aufs Tablet getippt werden
+    # kann.
+    "display_url_origin": "",
 }
 
 # Umgebungsvariablen-Namen.
@@ -46,6 +53,7 @@ ENV_OVERRIDES = {
     "ca_pem_path":          "ELTERNCHAT_CA_PEM_PATH",
     "family_registry_path": "ELTERNCHAT_FAMILY_REGISTRY_PATH",
     "geraete_registry_path": "ELTERNCHAT_GERAETE_REGISTRY_PATH",
+    "display_url_origin":    "ELTERNCHAT_DISPLAY_URL_ORIGIN",
 }
 
 
@@ -64,7 +72,8 @@ class Config:
 
     def __init__(self, bot_token, provider_api_key, provider, provider_model,
                  family_group_chat_id, family_group_locked, context_depth,
-                 ca_pem_path, family_registry_path, geraete_registry_path):
+                 ca_pem_path, family_registry_path, geraete_registry_path,
+                 display_url_origin):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
         self.provider = provider
@@ -75,6 +84,7 @@ class Config:
         self.ca_pem_path = ca_pem_path           # CAV-3: Pfad zum öffentlichen Root-CA-Zertifikat
         self.family_registry_path = family_registry_path   # FAA-12: Pfad zur Familien-Registry (FAM-6)
         self.geraete_registry_path = geraete_registry_path # GAA-5: Pfad zur Geräte-Registry (GER-4)
+        self.display_url_origin = display_url_origin       # GAA-3.7: HTTPS-Origin für Display-URLs
 
 
 def _load_file(path):
@@ -148,4 +158,5 @@ def resolve(config_path, store_path=None, env=None):
         ca_pem_path=str(values["ca_pem_path"]).strip(),
         family_registry_path=str(values["family_registry_path"]).strip(),
         geraete_registry_path=str(values["geraete_registry_path"]).strip(),
+        display_url_origin=str(values["display_url_origin"]).strip().rstrip("/"),
     )
