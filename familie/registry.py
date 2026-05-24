@@ -1,17 +1,21 @@
 """Familien-Registry — Personen-Modell + Datenhaltung.
 
-Siehe specs/platform/familie.md (Refs #38). Dieses Modul besitzt die
-Personen-Daten der Familie (FAM-1) und stellt sie über eine Schnittstelle
-bereit (FAM-7). Es kennt zwei Arten von Personen — Erwachsene und Kinder
-(FAM-2) — und lädt sie aus einer Per-Instanz-Datei (FAM-6).
+Siehe specs/platform/familie.md (Refs #38, #60). Dieses Modul besitzt die
+Personen-Daten **und die familienspezifischen Settings** der Familie (FAM-1)
+und stellt beides über eine Schnittstelle bereit (FAM-7, FAM-11). Es kennt
+zwei Arten von Personen — Erwachsene und Kinder (FAM-2) — und lädt sie
+zusammen mit den Settings aus einer Per-Instanz-Datei (FAM-6).
 
-Die Personen sind Daten, nicht Code (CLAUDE.md §6): dieses Modul enthält
-keine fest verdrahtete Personen-Liste, nur das Laden und die Schnittstelle.
+Die Personen und Settings sind Daten, nicht Code (CLAUDE.md §6): dieses
+Modul enthält keine fest verdrahtete Personen-Liste und keine Familien-
+Default-Werte im Code, nur das Laden, das atomare Schreiben und die
+Schnittstelle.
 """
 
 import json
 import logging
 import os
+import tempfile
 
 
 # FAM-4: feste Ring-Farb-Palette. Endlich; mehr Personen als Farben ist eine
@@ -69,18 +73,72 @@ class Person:
         return d
 
 
+class Settings:
+    """Familienspezifische Settings (FAM-6/FAM-9).
+
+    Werte aus dem `settings`-Abschnitt der Registry-Datei. Alle Felder
+    sind optional — `None` heißt „dieses Setting ist in `familie.json`
+    nicht gesetzt, ein Konsument soll den Default verwenden" (FAM-9
+    Tabelle). Die Defaults selbst stehen NICHT hier (sondern beim
+    Konsumenten), damit die Settings-Klasse nicht die Doppelt-Quelle
+    der Wahrheit für die Defaults wird.
+    """
+
+    def __init__(self, foto_verzeichnis=None, profilbild_max_kante=None):
+        self.foto_verzeichnis = foto_verzeichnis
+        self.profilbild_max_kante = profilbild_max_kante
+
+    def to_dict(self):
+        """Settings für die Schnittstelle/Datei — analog `Person.to_dict()`:
+        nur explizit gesetzte Werte schreiben, fehlende Felder erscheinen
+        gar nicht. Eine leere Settings-Instanz wird zu `{}`."""
+        d = {}
+        if self.foto_verzeichnis is not None:
+            d["foto_verzeichnis"] = self.foto_verzeichnis
+        if self.profilbild_max_kante is not None:
+            d["profilbild_max_kante"] = self.profilbild_max_kante
+        return d
+
+
+def effective_setting(value, env_var, default):
+    """FAM-9-Auflösung eines Settings-Werts.
+
+    Reihenfolge: expliziter Settings-Wert (aus `familie.json`) > Env-Variable
+    (Ops-Notfall) > hartkodierter Default. Genau das Muster aus FAM-9 — eine
+    Funktion, weil sowohl `familie/main.py` als auch
+    `eltern-chat/familie_anlegen.py` dieselbe Auflösung brauchen.
+    """
+    if value is not None:
+        return value
+    if env_var and env_var in os.environ:
+        return os.environ[env_var]
+    return default
+
+
+# FAM-9-Defaults: hier liegen sie für ALLE Konsumenten an einer Stelle, damit
+# `familie/main.py` und `eltern-chat/familie_anlegen.py` denselben Default
+# verwenden, ohne sich gegenseitig importieren zu müssen.
+FAM9_DEFAULTS = {
+    "foto_verzeichnis": "fotos",
+    "profilbild_max_kante": 1280,
+}
+
+
 class Registry:
     """Die geladene Familien-Registry — eine Instanz, eine Familie (FAM-1).
 
-    Hält die Personen in-memory und stellt die Schnittstelle bereit:
-    alle Personen, eine Person je `id` (FAM-7).
+    Hält die Personen und die Settings in-memory und stellt die Schnittstelle
+    bereit: alle Personen, eine Person je `id`, die Settings als
+    zusammenhängende Werte (FAM-7).
     """
 
-    def __init__(self, personen=None):
+    def __init__(self, personen=None, settings=None):
         # id -> Person; dict bewahrt die Datei-Reihenfolge.
         self._by_id = {}
         for p in (personen or []):
             self._by_id[p.id] = p
+        # FAM-6/FAM-7: Settings sind Teil der Registry.
+        self.settings = settings if settings is not None else Settings()
 
     def alle(self):
         """Alle Personen der Familie (FAM-7) — Datei-Reihenfolge."""
@@ -90,9 +148,22 @@ class Registry:
         """Eine Person je `id` (FAM-7). Unbekannte `id`: None."""
         return self._by_id.get(person_id)
 
+    def add_person(self, person):
+        """Ergänzt eine Person in der In-Memory-Registry (FAM-11-Helfer).
+
+        Hebt RegistryError, wenn die `id` bereits vergeben ist — Aufrufer
+        (FAA-5) vergeben einen kollisionsfreien Slug, eine Kollision an
+        dieser Stelle wäre also ein echter Programmierfehler. Bestehende
+        Personen bleiben unberührt (FAM-11).
+        """
+        if person.id in self._by_id:
+            raise RegistryError("Person mit id %r existiert bereits" % person.id)
+        self._by_id[person.id] = person
+
 
 class RegistryError(Exception):
-    """Die Registry-Datei ist inhaltlich ungültig (z. B. Ring außerhalb der Palette)."""
+    """Die Registry-Datei ist inhaltlich ungültig (z. B. Ring außerhalb der
+    Palette) ODER der Schreib-Aufruf ist fehlgeschlagen (FAM-11)."""
 
 
 def _parse_person(raw, art):
@@ -125,13 +196,28 @@ def _parse_person(raw, art):
     )
 
 
+def _parse_settings(raw):
+    """Baut Settings aus dem `settings`-Abschnitt der Registry-Datei.
+
+    Fehlt der Abschnitt oder einzelne Felder, bleibt das Feld `None`
+    (Konsument verwendet den Default — FAM-9). Keine Warnung: ein fehlender
+    `settings`-Block ist der Normalfall einer minimalen `familie.json`.
+    """
+    raw = raw or {}
+    return Settings(
+        foto_verzeichnis=raw.get("foto_verzeichnis"),
+        profilbild_max_kante=raw.get("profilbild_max_kante"),
+    )
+
+
 def load(path):
-    """Lädt die Registry-Datei (FAM-6).
+    """Lädt die Registry-Datei — Personen + Settings (FAM-6).
 
     Fehlt die Datei oder ist sie nicht parsebar, protokolliert das System eine
-    Warnung und liefert eine leere Familie — kein Crash (FAM-6). Inhaltlich
-    ungültige Daten (fehlende Pflichtfelder, Ring außerhalb der Palette) sind
-    dagegen ein echter Fehler und werfen RegistryError.
+    EINE Warnung und liefert eine leere Familie mit Default-Settings — kein
+    Crash (FAM-6). Inhaltlich ungültige Daten (fehlende Pflichtfelder, Ring
+    außerhalb der Palette) sind dagegen ein echter Fehler und werfen
+    RegistryError.
     """
     try:
         with open(path) as f:
@@ -156,12 +242,64 @@ def load(path):
             seen.add(p.id)
             personen.append(p)
 
+    settings = _parse_settings(data.get("settings"))
+
     logging.info(
         "familie geladen: %d Personen (%d Erwachsene, %d Kinder)",
         len(personen),
         sum(1 for p in personen if p.is_erwachsene()),
         sum(1 for p in personen if p.is_kind()))
-    return Registry(personen)
+    return Registry(personen, settings=settings)
+
+
+def save(registry, path):
+    """Schreibt die Registry — Personen + Settings — atomar in die Datei (FAM-11).
+
+    Schreibt zuerst in eine Temp-Datei im **Zielverzeichnis** (damit
+    `os.replace` ein In-Filesystem-Rename ist und tatsächlich atomar
+    funktioniert) und ersetzt dann die Zieldatei. Bei einem Fehlschlag
+    (z. B. kein Schreibrecht, Disk voll) wird die Temp-Datei aufgeräumt
+    und ein `RegistryError` geworfen — die alte Datei bleibt unverändert,
+    und es bleibt keine verwaiste Temp-Datei zurück.
+
+    Bestehende Personen bleiben byte-gleich, solange der Aufrufer sie nicht
+    explizit ändert (FAM-11): die Datei-Reihenfolge der Personen wird aus
+    der Registry übernommen, optionale Felder erscheinen nur wenn gesetzt
+    (analog Person.to_dict / Settings.to_dict).
+    """
+    # `art` ist in der Datei durch die Liste (`erwachsene` vs. `kinder`)
+    # bereits codiert — beim Schreiben weglassen, damit bestehende, von Hand
+    # gepflegte Einträge byte-gleich bleiben (FAM-11) und es keine
+    # Doppelt-Quelle der Wahrheit für die Art gibt.
+    def _storage_dict(p):
+        d = p.to_dict()
+        d.pop("art", None)
+        return d
+    erwachsene = [_storage_dict(p) for p in registry.alle() if p.is_erwachsene()]
+    kinder = [_storage_dict(p) for p in registry.alle() if p.is_kind()]
+    payload = {
+        "erwachsene": erwachsene,
+        "kinder": kinder,
+        "settings": registry.settings.to_dict(),
+    }
+
+    target_dir = os.path.dirname(os.path.abspath(path))
+    # Temp-Datei im Zielverzeichnis → os.replace ist ein Filesystem-internes
+    # atomares Rename.
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        prefix=".familie.", suffix=".json.tmp", dir=target_dir)
+    try:
+        with os.fdopen(tmp_fd, "w") as f:
+            json.dump(payload, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+        os.replace(tmp_path, path)
+    except OSError as e:
+        # Aufräumen: Temp darf nicht zurückbleiben (FAM-11 „kein verwaistes Temp").
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise RegistryError("familie.json konnte nicht geschrieben werden: %s" % e)
 
 
 def foto_pfad(registry, foto_verzeichnis, person_id):

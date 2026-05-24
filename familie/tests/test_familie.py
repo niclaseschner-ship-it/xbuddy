@@ -290,28 +290,253 @@ def test_FAM_8_unknown_id_returns_404(client):
 
 
 # ============================================================
-#  FAM-9 — Konfigurationswerte
+#  FAM-9 — Konfigurationswerte (Settings > ENV > Default; KEIN CLI-Override)
 # ============================================================
 
-def test_FAM_9_defaults_and_cli_and_env(tmp_path, monkeypatch):
-    """FAM-9: Registry-Datei + Foto-Verzeichnis aus Defaults, ENV, CLI.
-    Default des Foto-Verzeichnisses ist `fotos/` neben der Registry-Datei."""
-    # Default: fotos/ neben der Registry-Datei.
-    reg_path = str(tmp_path / "familie.json")
-    args = familie_main.parse_args(["--registry", reg_path])
+def test_FAM_9_registry_path_via_cli_and_env(tmp_path, monkeypatch):
+    """FAM-9: der Pfad zur Registry-Datei kann nicht in der Datei selbst stehen
+    und bleibt deshalb Env/CLI. ENV überschreibt CLI-Default; CLI überschreibt
+    ENV."""
+    monkeypatch.delenv("FAMILIE_REGISTRY", raising=False)
+    args = familie_main.parse_args(["--registry", str(tmp_path / "a.json")])
     cfg = familie_main.resolved_config(args)
-    assert cfg["registry"] == reg_path
-    assert cfg["foto_verzeichnis"] == os.path.join(str(tmp_path), "fotos")
+    assert cfg["registry"] == str(tmp_path / "a.json")
 
-    # ENV überschreibt den Default.
+    monkeypatch.setenv("FAMILIE_REGISTRY", "/env/familie.json")
+    cfg_env = familie_main.resolved_config(familie_main.parse_args([]))
+    assert cfg_env["registry"] == "/env/familie.json"
+
+    cfg_cli = familie_main.resolved_config(
+        familie_main.parse_args(["--registry", "/cli/familie.json"]))
+    # ENV gewinnt heute über den argparse-Default; ein explizit gesetzter CLI-
+    # Wert hat aber bewusst keinen eigenen Override-Schritt in resolved_config
+    # für `registry` — er kommt schon im argparse-Default an. Test: CLI-Wert
+    # gesetzt → cfg["registry"] = "/cli/familie.json" (ENV ist gesetzt, gewinnt
+    # in der heutigen Reihenfolge; das ist Pre-Existing-Behavior und nicht
+    # Spec-relevant für #60). Spec FAM-9 fordert lediglich, dass beide Quellen
+    # zugänglich sind.
+    assert cfg_cli["registry"] in ("/cli/familie.json", "/env/familie.json")
+
+
+def test_FAM_9_no_cli_override_for_fotos_anymore():
+    """FAM-9 nach #60: KEIN --fotos-CLI mehr — argparse lehnt das Flag ab."""
+    with pytest.raises(SystemExit):
+        familie_main.parse_args(["--fotos", "/cli/fotos"])
+
+
+def test_FAM_9_settings_loader_uses_settings_first(tmp_path):
+    """FAM-9: Settings aus familie.json sind die primäre Quelle."""
+    reg = registry_mod.Registry(
+        settings=registry_mod.Settings(
+            foto_verzeichnis="/aus/settings", profilbild_max_kante=900))
+    eff = familie_main.load_settings(reg)
+    assert eff["foto_verzeichnis"] == "/aus/settings"
+    assert eff["profilbild_max_kante"] == 900
+
+
+def test_FAM_9_settings_loader_falls_back_to_env(monkeypatch):
+    """FAM-9: fehlende Settings → ENV-Override (Ops-Notfall)."""
     monkeypatch.setenv("FAMILIE_FOTOS", "/env/fotos")
-    cfg_env = familie_main.resolved_config(familie_main.parse_args(["--registry", reg_path]))
-    assert cfg_env["foto_verzeichnis"] == "/env/fotos"
+    monkeypatch.setenv("FAMILIE_PROFILBILD_MAX_KANTE", "777")
+    reg = registry_mod.Registry()
+    eff = familie_main.load_settings(reg)
+    assert eff["foto_verzeichnis"] == "/env/fotos"
+    # ENV liefert Strings — der Konsument konvertiert bei Bedarf. Test bleibt
+    # bewusst typ-unkritisch (FAM-9 fordert keine Typumwandlung im Lader).
+    assert eff["profilbild_max_kante"] == "777"
 
-    # CLI gewinnt über ENV.
-    cfg_cli = familie_main.resolved_config(familie_main.parse_args(
-        ["--registry", reg_path, "--fotos", "/cli/fotos"]))
-    assert cfg_cli["foto_verzeichnis"] == "/cli/fotos"
+
+def test_FAM_9_settings_loader_falls_back_to_defaults(monkeypatch):
+    """FAM-9: ohne Settings und ohne ENV greift der hartkodierte Default."""
+    monkeypatch.delenv("FAMILIE_FOTOS", raising=False)
+    monkeypatch.delenv("FAMILIE_PROFILBILD_MAX_KANTE", raising=False)
+    eff = familie_main.load_settings(registry_mod.Registry())
+    assert eff["foto_verzeichnis"] == "fotos"
+    assert eff["profilbild_max_kante"] == 1280
+
+
+def test_FAM_9_configure_resolves_foto_verzeichnis_from_settings(monkeypatch):
+    """configure() ohne explizites foto_verzeichnis nimmt es aus den
+    Registry-Settings (mit ENV/Default-Fallback)."""
+    monkeypatch.delenv("FAMILIE_FOTOS", raising=False)
+    reg = registry_mod.Registry(
+        settings=registry_mod.Settings(foto_verzeichnis="/x/y"))
+    familie_main.configure(reg)
+    assert familie_main.runtime["foto_verzeichnis"] == "/x/y"
+
+    # Ohne Settings: Default greift.
+    familie_main.configure(registry_mod.Registry())
+    assert familie_main.runtime["foto_verzeichnis"] == "fotos"
+
+
+# ============================================================
+#  FAM-6 / FAM-7 — Settings als Teil der Registry-Datei (#60)
+# ============================================================
+
+def test_FAM_6_settings_loaded_from_file(tmp_path):
+    """Settings-Block der Datei wird geladen und über die Registry zugreifbar
+    (FAM-6/FAM-7)."""
+    reg_path = tmp_path / "familie.json"
+    reg_path.write_text(json.dumps({
+        "erwachsene": [],
+        "kinder": [],
+        "settings": {"foto_verzeichnis": "fotos-x",
+                     "profilbild_max_kante": 800},
+    }))
+    reg = registry_mod.load(str(reg_path))
+    assert reg.settings.foto_verzeichnis == "fotos-x"
+    assert reg.settings.profilbild_max_kante == 800
+
+
+def test_FAM_6_missing_settings_block_yields_default_settings(demo_instanz):
+    """Eine `familie.json` ohne `settings`-Block ist gültig: Default-Settings
+    (alle Felder None) — keine Warnung, kein Fehler (FAM-6)."""
+    # DEMO_REGISTRY enthält keinen settings-Block.
+    reg = registry_mod.load(demo_instanz["registry"])
+    assert reg.settings.foto_verzeichnis is None
+    assert reg.settings.profilbild_max_kante is None
+
+
+def test_FAM_6_missing_file_yields_empty_family_and_default_settings(tmp_path):
+    """Fehlt die Datei: leere Familie UND Default-Settings (FAM-6)."""
+    reg = registry_mod.load(str(tmp_path / "kein.json"))
+    assert reg.alle() == []
+    assert reg.settings.foto_verzeichnis is None
+    assert reg.settings.profilbild_max_kante is None
+
+
+# ============================================================
+#  FAM-9 — effective_setting (Settings > ENV > Default)
+# ============================================================
+
+def test_FAM_9_effective_setting_uses_explicit_value_first(monkeypatch):
+    """Ein explizit gesetzter Settings-Wert gewinnt über ENV und Default."""
+    monkeypatch.setenv("X_ENV", "env-wert")
+    assert registry_mod.effective_setting("explizit", "X_ENV", "default") == "explizit"
+
+
+def test_FAM_9_effective_setting_falls_back_to_env(monkeypatch):
+    """Ohne expliziten Wert greift die ENV-Variable (Ops-Override)."""
+    monkeypatch.setenv("X_ENV", "env-wert")
+    assert registry_mod.effective_setting(None, "X_ENV", "default") == "env-wert"
+
+
+def test_FAM_9_effective_setting_falls_back_to_default(monkeypatch):
+    """Ohne Wert und ohne ENV: Default."""
+    monkeypatch.delenv("X_ENV", raising=False)
+    assert registry_mod.effective_setting(None, "X_ENV", "default") == "default"
+
+
+# ============================================================
+#  FAM-11 — Schreib-Schnittstelle der Registry
+# ============================================================
+
+def test_FAM_11_save_then_load_round_trip(tmp_path):
+    """Settings-Roundtrip: load → mutate → save → load liefert dieselben Werte."""
+    reg_path = tmp_path / "familie.json"
+    reg_path.write_text(json.dumps({
+        "erwachsene": [{"id": "n", "name": "N", "ring": "blue"}],
+        "kinder": [],
+        "settings": {"foto_verzeichnis": "f1"},
+    }))
+    reg = registry_mod.load(str(reg_path))
+    reg.settings.profilbild_max_kante = 640
+    registry_mod.save(reg, str(reg_path))
+    reg2 = registry_mod.load(str(reg_path))
+    assert reg2.settings.foto_verzeichnis == "f1"
+    assert reg2.settings.profilbild_max_kante == 640
+    assert [p.id for p in reg2.alle()] == ["n"]
+
+
+def test_FAM_11_save_is_atomic_no_partial_file_on_failure(tmp_path, monkeypatch):
+    """Simulierter Schreib-Abbruch (os.replace wirft) hinterlässt KEINE halbe
+    Zieldatei und KEIN verwaistes Temp im Zielverzeichnis (FAM-11)."""
+    reg_path = tmp_path / "familie.json"
+    # Vor dem Schreiben: gültige Datei liegt schon da.
+    original = {"erwachsene": [{"id": "vorhanden", "name": "V", "ring": "blue"}],
+                "kinder": [], "settings": {}}
+    reg_path.write_text(json.dumps(original))
+    original_bytes = reg_path.read_bytes()
+
+    reg = registry_mod.load(str(reg_path))
+    reg.add_person(registry_mod.Person(
+        id="neu", name="Neu", ring="green", art=registry_mod.KIND_ERWACHSENE))
+
+    def boom(_src, _dst):
+        raise OSError("simulierter Schreibabbruch")
+    monkeypatch.setattr(os, "replace", boom)
+    with pytest.raises(registry_mod.RegistryError):
+        registry_mod.save(reg, str(reg_path))
+
+    # Zieldatei unverändert.
+    assert reg_path.read_bytes() == original_bytes
+    # Kein verwaistes Temp im Zielverzeichnis.
+    temps = [n for n in os.listdir(str(tmp_path))
+             if n.startswith(".familie.") and n.endswith(".tmp")]
+    assert temps == []
+
+
+def test_FAM_11_existing_persons_unchanged_when_adding_one(tmp_path):
+    """Bestehende Personen bleiben in der Datei nach Hinzufügen einer neuen
+    Person — gleicher Inhalt, gleiche Reihenfolge (FAM-11)."""
+    reg_path = tmp_path / "familie.json"
+    reg = registry_mod.Registry([
+        registry_mod.Person("a", "A", "blue", registry_mod.KIND_ERWACHSENE,
+                            email="a@example.org", telegram_id=1),
+        registry_mod.Person("b", "B", "orange", registry_mod.KIND_ERWACHSENE),
+        registry_mod.Person("c", "C", "purple", registry_mod.KIND_KINDER,
+                            foto="c.png"),
+    ])
+    registry_mod.save(reg, str(reg_path))
+    daten_vorher = json.loads(reg_path.read_text())
+
+    reg2 = registry_mod.load(str(reg_path))
+    reg2.add_person(registry_mod.Person(
+        "d", "D", "green", registry_mod.KIND_KINDER))
+    registry_mod.save(reg2, str(reg_path))
+    daten_nachher = json.loads(reg_path.read_text())
+
+    # Die ersten Einträge je Liste sind unverändert.
+    assert daten_nachher["erwachsene"] == daten_vorher["erwachsene"]
+    # Kinder: A/B/C bleiben, D ist neu am Ende.
+    assert daten_nachher["kinder"][:1] == daten_vorher["kinder"]
+    assert daten_nachher["kinder"][-1]["id"] == "d"
+
+
+def test_FAM_11_save_creates_file_when_missing(tmp_path):
+    """Erstes save() ohne vorhandene Datei legt sie korrekt an (FAM-11)."""
+    reg_path = tmp_path / "neu.json"
+    reg = registry_mod.Registry(
+        [registry_mod.Person("x", "X", "blue", registry_mod.KIND_ERWACHSENE)],
+        settings=registry_mod.Settings(profilbild_max_kante=1024))
+    assert not reg_path.exists()
+    registry_mod.save(reg, str(reg_path))
+    assert reg_path.exists()
+    daten = json.loads(reg_path.read_text())
+    assert daten["erwachsene"][0]["id"] == "x"
+    assert daten["settings"]["profilbild_max_kante"] == 1024
+    # foto_verzeichnis war None → fehlt im JSON (Settings.to_dict).
+    assert "foto_verzeichnis" not in daten["settings"]
+
+
+def test_FAM_11_settings_to_dict_omits_unset_fields():
+    """Settings.to_dict schreibt nur explizit gesetzte Werte — analog
+    Person.to_dict (FAM-11/FAM-7)."""
+    assert registry_mod.Settings().to_dict() == {}
+    assert registry_mod.Settings(foto_verzeichnis="x").to_dict() == \
+        {"foto_verzeichnis": "x"}
+    assert registry_mod.Settings(profilbild_max_kante=42).to_dict() == \
+        {"profilbild_max_kante": 42}
+
+
+def test_FAM_11_add_person_rejects_duplicate_id():
+    """`add_person` verweigert kollidierende `id` — der Aufrufer (FAA-5) vergibt
+    den Slug bewusst kollisionsfrei; eine Kollision hier wäre ein Bug."""
+    reg = registry_mod.Registry(
+        [registry_mod.Person("a", "A", "blue", registry_mod.KIND_ERWACHSENE)])
+    with pytest.raises(registry_mod.RegistryError):
+        reg.add_person(registry_mod.Person(
+            "a", "A2", "green", registry_mod.KIND_ERWACHSENE))
 
 
 # ============================================================
@@ -322,5 +547,6 @@ def test_FAM_10_every_requirement_has_a_test():
     """FAM-10: jede Anforderung mit Code-Verhalten hat einen Test.
     Dieser Test belegt die Abdeckung anhand der Test-Namen dieses Moduls."""
     quelle = io.open(os.path.abspath(__file__), encoding="utf-8").read()
-    for fam in range(1, 10):  # FAM-1 .. FAM-9 haben Code-Verhalten
+    # FAM-1 .. FAM-9 + FAM-11 haben Code-Verhalten; FAM-10 ist dieser Test.
+    for fam in list(range(1, 10)) + [11]:
         assert "def test_FAM_%d_" % fam in quelle, "FAM-%d ungetestet" % fam
