@@ -333,6 +333,49 @@ def test_ROU_22_stream_unsubscribes_after_close(client_with_routing):
     assert not router_main._subscribers.get('default')
 
 
+def test_ROU_22_stream_emits_heartbeat_when_idle(client_with_routing, monkeypatch):
+    """ROU-22 Heartbeat (#116): solange keine Zustandsänderung ansteht,
+    sendet der Stream periodisch einen SSE-Kommentar. Das hält
+    Reverse-Proxies (nginx `proxy_read_timeout`) und Mobil-NAT-Boxen davon
+    ab, den idle wirkenden Stream stillschweigend zu schließen — wäre der
+    Heartbeat weg, hätte der Browser keinen sauberen Abbruch zu erkennen
+    und der Standard-Reconnect (DC-7) griffe nicht.
+
+    Wir verkürzen das Heartbeat-Intervall auf ~0 s, damit der Test nicht
+    SSE_HEARTBEAT_SECONDS (15 s) abwartet. Der Effekt ist derselbe: nach
+    dem Initial-Event (Zustand beim Verbinden) liefert `next(gen)` einen
+    Heartbeat-Kommentar, weil keine Zustandsänderung in der Queue liegt.
+    """
+    monkeypatch.setattr(router_main, 'SSE_HEARTBEAT_SECONDS', 0.01)
+    gen = router_main.display_event_stream('default')
+    try:
+        first = next(gen)                       # Initial-Zustand (null)
+        assert first.startswith('data: ')
+        # Keine Zustandsänderung publiziert → nächster Yield muss ein
+        # SSE-Kommentar sein (Zeile beginnt mit ":"; kein "data:"-Feld,
+        # damit der Client ihn nicht als Inhalts-Ereignis sieht).
+        beat = next(gen)
+        assert beat.startswith(':'), (
+            f'Heartbeat erwartet (SSE-Kommentar, beginnt mit ":"), bekam: {beat!r}'
+        )
+        assert 'data:' not in beat, (
+            'Heartbeat darf kein data:-Feld tragen — sonst wechselt der Client '
+            f'fälschlich den Inhalt: {beat!r}'
+        )
+    finally:
+        gen.close()
+
+
+def test_ROU_22_heartbeat_intervall_default_unter_30s():
+    """ROU-22 Spec: Heartbeat-Abstand ≤ 30 s. Default-Konstante muss diese
+    Garantie tragen, sonst weicht der Code von der Spec ab."""
+    assert router_main.SSE_HEARTBEAT_SECONDS <= 30, (
+        'SSE_HEARTBEAT_SECONDS darf laut ROU-22 30 s nicht überschreiten — '
+        'nginx-Idle-Timeouts und Mobilfunk-NAT-Boxen schließen sonst den Stream '
+        f'(aktuell: {router_main.SSE_HEARTBEAT_SECONDS}).'
+    )
+
+
 # ============================================================
 #  ROU-23 — Controller-PWA-Auslieferung
 # ============================================================

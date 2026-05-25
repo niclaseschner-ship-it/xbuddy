@@ -78,12 +78,36 @@ Zuverlässigkeit). Reiner Renderer mit Content-Cache (CONTEXT.md).
 *Tickets:* #30
 
 ### DC-7 — Wiederverbindung & Aufholen
-Nach einem Abbruch baut der Client den Stream selbsttätig wieder auf. Beim
-Wiederverbinden liefert der Stream erneut den aktuellen Zustand — ein während
-der Unterbrechung verpasster Inhaltswechsel wird damit aufgeholt, sobald der
-Router wieder erreichbar ist.
+Nach einem Abbruch baut der Client den Stream selbsttätig wieder auf — über
+den eingebauten Reconnect des `EventSource` (Browser-Standard, üblicherweise
+nach ~3 s, vom Server steuerbar via `retry:`-Feld). Beim Wiederverbinden
+liefert der Stream erneut den aktuellen Zustand (ROU-22, erstes Ereignis) —
+ein während der Unterbrechung verpasster Inhaltswechsel wird damit
+aufgeholt, sobald der Router wieder erreichbar ist.
 
-*Tickets:* #30
+Damit der Reconnect zuverlässig greift, muss der Abbruch beim Client als
+Abbruch ankommen. Zwei Mechanismen tragen das zusammen:
+
+- **Server-Heartbeat** (ROU-22): der Router schreibt regelmäßig (≤ 30 s)
+  einen SSE-Kommentar, damit Zwischenboxen (Reverse-Proxy, NAT,
+  Mobilfunk-Carrier) den Stream nicht stillschweigend wegen Idle-Timeout
+  schließen. Eine als „idle aber offen" geglaubte Verbindung wäre für
+  den Browser kein Abbruch — kein Reconnect.
+- **Browser-Standard-Reconnect**: bei sauberem Abbruch (Server-Restart,
+  TCP-Reset, sichtbarer Netzfehler) verbindet `EventSource` selbsttätig
+  erneut. Der Display-Client tut explizit nichts — er verlässt sich auf
+  den Standard (siehe `displib.js`, `createClient`).
+
+> **Bekannte Grenze (mobile Tab-Suspend):** iOS- und Android-Browser
+> pausieren `EventSource` in Hintergrund-Tabs oder Standby-Zuständen, ohne
+> die Verbindung sauber abzubrechen. Beim Re-Foreground kann der Reconnect
+> verzögert oder ausbleibend sein. Diagnostiziert in #116 (Vertical-Test
+> Track #108) — ein Client-seitiger Watchdog (`readyState`-Prüfung,
+> Re-Instanziierung des `EventSource`) ist eine mögliche Antwort, wird
+> aber erst nach Messung am echten Tablet entschieden (Antizipation
+> vermeiden). Offen als OPEN-DC-D.
+
+*Tickets:* #30, #116
 
 ## 4. Sonderfälle
 
@@ -244,6 +268,16 @@ nicht nur die Pure-Math `computeScale`, sondern auch die DOM-Anwendung
   1920×1080. Erst wenn ein zweiter Inhaltstyp mit anderer Design-Auflösung
   existiert, wird der Weg dahin (Meta-Header im gerouteten Dokument,
   Query-Parameter, Eintrag in der Geräte-Registry #105) Spec-relevant.
+
+- **OPEN-DC-D — Mobile Tab-Suspend & Reconnect-Watchdog.** Auf iOS-/Android-
+  Tablets pausiert `EventSource` im Hintergrund-Tab oder Standby ohne sauberen
+  Abbruch — der Browser-Standard-Reconnect (DC-7) greift dann nicht. Beobachtet
+  in #116 (Track #108): Tablet bleibt schwarz, Plan erscheint erst nach
+  manuellem Neuladen. Mögliche Antwort: Client-seitiger `readyState`-Watchdog
+  (z. B. bei `visibilitychange` auf `visible` und periodisch) mit
+  Re-Instanziierung des `EventSource`. Entscheidung erst nach Messung am echten
+  Tablet (wie oft tritt es real auf, hilft der Watchdog) — bis dahin lebt das
+  Symptom mit dem manuellen Neuladen.
 
 ---
 
