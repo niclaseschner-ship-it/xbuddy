@@ -17,12 +17,11 @@ Kachel-Konfiguration als Datei (`tiles.json`); zwei Event-Typen
 separate `config.json`-Dateien.
 
 **Out-of-Scope (je eigenes Folge-Ticket):** Implementierungscode der
-Seite und der PWA-Begleitdateien; Eltern-Chat als Schreiber der
-Kachel-Konfiguration (Phase 2, → OPEN-PANEL-A); zeitgesteuerte
-Sichtbarkeit von Kacheln (→ OPEN-PANEL-B); Auth- bzw.
-Kiosk-Absicherung des Panels (→ OPEN-PANEL-C); die Apps und Views, die
-über die Kacheln aufgerufen werden, selbst (`buddies/<name>.md`, z. B.
-`plan.md`).
+Seite (einschließlich der PWA-Begleitdateien aus PANEL-10) — kommt im
+Impl-Folge-Ticket; Eltern-Chat als Schreiber der Kachel-Konfiguration
+(Phase 2, → OPEN-PANEL-A); zeitgesteuerte Sichtbarkeit von Kacheln
+(→ OPEN-PANEL-B); die Apps und Views, die über die Kacheln aufgerufen
+werden, selbst (`buddies/<name>.md`, z. B. `plan.md`).
 
 ## Erweiterbarkeit (Leitgedanke)
 
@@ -149,14 +148,37 @@ Descriptor (PANEL-7), damit der Router-Adapter ohne Rückgriff auf
 Kachel in `tiles.json` ein `query`-Objekt hat — andernfalls fehlt das
 Feld.
 
-`panel_cleared` kommt von einem **fest in der Seite eingebauten
-Ruhe-Element** (kein konfigurierbarer Kachel-Eintrag in `tiles.json`)
-und wirkt analog zu `session_ended` der Figuren-Erkennung: der
-Router-Adapter (ROU-24) übersetzt es in das Session-Ende-Signal aus
-ROU-11. Begründung der Aufnahme: ein Panel hat kein physisches „Figur
-abheben"; ohne expliziten Ruhe-Pfad könnte das Display nie wieder
-dunkel werden, was der Constitution „nicht-invasiv" und dem
-Display-Ruhe-Zustand DC-5 widerspricht. (Decision 3)
+`panel_cleared` kommt von einer **eigenen 'Aus'-Kachel im Kachel-Grid**,
+die **von der Seite eingefügt wird** und **nicht aus `tiles.json`
+gerendert** ist. Sie wirkt analog zu `session_ended` der
+Figuren-Erkennung: der Router-Adapter (ROU-24) übersetzt das Event in
+das Session-Ende-Signal aus ROU-11. Begründung der Aufnahme: ein Panel
+hat kein physisches „Figur abheben"; ohne expliziten Ruhe-Pfad könnte
+das Display nie wieder dunkel werden, was der Constitution
+„nicht-invasiv" und dem Display-Ruhe-Zustand DC-5 widerspricht.
+(Decision 3)
+
+**Form & Position der Aus-Kachel:**
+
+- **Position:** stets am **Ende der Kachel-Liste**, nach allen
+  sichtbaren Kacheln aus `tiles.json`. Reihenfolge:
+  `[tiles.json (sichtbare)] → [Aus-Kachel]`. Die Aus-Kachel ist auch
+  dann die letzte Position, wenn `tiles.json` leer ist.
+- **Visualisierung:** gleiche Kachelgröße und gleiches Gitter-Verhalten
+  wie eine reguläre Kachel — sie unterscheidet sich nur durch Inhalt
+  (`label` „Aus" und ein neutrales, dunkles Symbol). Die genauen
+  Design-Tokens (Icon-Datei, exakte Farbe) kommen im Impl-PR; die Spec
+  verlangt nur „gleich groß wie eine reguläre Kachel" und „neutraler
+  dunkler Bildinhalt".
+- **Tap-Mechanik:** **einfacher Tap** (`tap`/`click`) — symmetrisch zu
+  regulären Kacheln. Kein Long-Press, keine Doppel-Bestätigung.
+- **Sichtbarkeit:** **immer sichtbar**, unabhängig vom Display-State.
+  PANEL-1 bleibt: die Seite kennt den Display-State nicht. Ein Tap bei
+  bereits leerem Display sendet trotzdem `panel_cleared` (idempotent,
+  analog FIG-10).
+- **Nicht in `tiles.json`:** die Aus-Kachel ist kein konfigurierbarer
+  Kachel-Eintrag. Editieren von `tiles.json` (auch `sichtbar: false`)
+  hat keinen Effekt auf die Aus-Kachel.
 
 *Tickets:* #58
 
@@ -215,7 +237,34 @@ sonst greift der Adapter (ROU-24) für diese Panel-Instanz nicht.
 
 *Tickets:* #58
 
-## 5. Tests
+## 5. Kiosk-Absicherung
+
+### PANEL-10 — Vollbild & Bildschirm wach halten
+Das Panel läuft im Vollbild und hält den Bildschirm wach, solange es
+sichtbar ist — **analog DC-11** (Display-Client). Konkret:
+
+- Das PWA-Manifest deklariert `display: fullscreen`, damit das Panel
+  als installierte App ohne Browser-Chrome startet.
+- Der Code fordert beim Laden `navigator.wakeLock.request('screen')`
+  an und fordert ihn bei jedem `visibilitychange` auf `visible` erneut
+  an — das System gibt den Lock beim Verdecken frei.
+- Beim ersten Nutzer-Gesture (`touchend`/`click`) versucht der Code
+  `requestFullscreen()`. Fehlt die API oder schlägt der Aufruf fehl,
+  ist das kein Fehler — das Panel läuft weiter, der nächste Tap holt
+  den Vollbild erneut (self-healing).
+
+Begründung: Tablet-Browser zeigen sonst URL-Leiste, der Bildschirm
+geht nach ~30 s aus — das Panel wirkt nicht wie eine Familien-App.
+Identisches Problem, identische Lösung wie DC-11.
+
+**Hinweis:** **App-Pinning** ist Familien-Onboarding-Aufgabe und kein
+Code-Verhalten — wird in einem entsprechenden Onboarding-Schritt für
+das Familien-Tablet eingerichtet (analog dem Display-Tablet). Die
+Spec nennt das, fordert aber keinen Code dafür.
+
+*Tickets:* #58
+
+## 6. Tests
 
 ### PANEL-9 — Automatisierte Tests pro Requirement
 Jede Requirement-ID, die Code-Verhalten beschreibt, hat einen
@@ -242,7 +291,12 @@ Mindest-Abdeckung:
 - PANEL-6 — `tile_selected`-Event hat alle Pflichtfelder (`source_id`,
   `ts`, `type`, `app`, `view`) und `query` nur wenn in `tiles.json`
   gesetzt. `panel_cleared` hat `source_id`, `ts`, `type` und kein
-  Descriptor-Feld.
+  Descriptor-Feld. **Aus-Kachel:** wird **immer** als letzte Kachel
+  gerendert, auch wenn `tiles.json` leer ist; ist **nicht** in
+  `tiles.json` enthalten und wird **nicht** durch ein Editieren der
+  Datei beeinflusst (kein `sichtbar: false`-Effekt); ein Tap auf die
+  Aus-Kachel sendet `panel_cleared` mit den drei Pflichtfeldern
+  (`source_id`, `ts`, `type`) und ohne Descriptor-Felder.
 - PANEL-7 — Descriptor ist flach (Strings/Zahlen); ein verschachteltes
   `query` wird als Konfigurations-Fehler abgewiesen.
 - PANEL-8 — Fehlende oder kaputte `config.json` lässt die Seite mit
@@ -257,6 +311,11 @@ Mindest-Abdeckung:
   zu FIG-23/ROU-19 — geprüft wird, dass beide Wege (sichtbarer
   Konsistenz-Fehler vs. stummer Datei-Fallback) sich nicht
   vermischen.
+- PANEL-10 — Das PWA-Manifest deklariert `display: fullscreen`
+  (Manifest-Test). `navigator.wakeLock.request('screen')` wird beim
+  Laden aufgerufen; bei `visibilitychange` auf `visible` erneut.
+  `requestFullscreen()` wird beim ersten Nutzer-Gesture versucht; ein
+  Fehler dabei wirft den Code nicht ab.
 
 *Tickets:* #58
 
@@ -274,11 +333,6 @@ Mindest-Abdeckung:
   `sichtbar: true|false` (PANEL-4). Eine spätere Variante könnte
   Tageszeit-, Wochentag- oder Personen-Filter unterstützen (z. B.
   „Foto-Kachel nur am Wochenende"). Eigenes Ticket, sobald gebraucht.
-- **OPEN-PANEL-C** — Auth- und Kiosk-Absicherung: Das Panel läuft V1
-  ungesichert (jeder, der die URL aufruft, kann tippen). Wie das Panel
-  auf einem dedizierten Familien-Tablet gegen versehentliches
-  Verlassen, fremde Zugriffe oder versehentliche Konfigurations-
-  Änderungen abgesichert wird, ist ein eigenes Folge-Ticket.
 
 ---
 
@@ -329,6 +383,13 @@ Panel-Instanz gehören, kehren in den Ruhe-Zustand zurück.
 Die Symmetrie zum `session_ended` der Figuren-Erkennung ist
 beabsichtigt — der Router-Kern bleibt agnostisch davon, welcher
 Controller-Typ ein Session-Ende signalisiert.
+
+Eigene **'Aus'-Kachel im Grid** statt diskretem Aus-Knopf am Rand:
+konsistent zum Kachel-Pattern — ein Kind erkennt, dass auch das
+Ruhe-Element „eine Kachel ist, die etwas tut". Einfacher Tap analog
+zu regulären Kacheln; eine Doppel-Bestätigung würde die Ruhe-Aktion
+gegenüber den anderen Aktionen aufwerten und damit der
+Constitution-Eigenschaft `nicht-invasiv` zuwiderlaufen.
 
 ### E-PANEL-3 — Zwei Dateien: `tiles.json` (Daten) ↔ `config.json` (Tuning)
 *Datum:* 2026-05-25 (Ticket #58)
