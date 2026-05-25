@@ -116,6 +116,50 @@ Quantisierung und Hysterese. Beide entfallen, weil die Logik mit
 E-FIG-7 / Ticket #11 in die Phone-Seite gewandert ist. IDs werden
 nicht neu vergeben (siehe `specs/README.md`).
 
+## 3a. App-Panel-Adapter
+
+### ROU-24 — App-Panel-Adapter
+Der App-Panel-Adapter ist der zweite Controller-Adapter neben dem
+Phone-Adapter (ROU-6). Er nimmt die zwei Event-Typen des
+App-Panel-Controllers (siehe [`app-panel.md`](app-panel.md), PANEL-6):
+
+| App-Panel-Event (PANEL-6) | Adapter-Verhalten |
+|---|---|
+| `tile_selected { app, view, query? }` | Bildet einen kanonischen Trigger und setzt den State (ROU-11) für die `display_id` aus dem `panels`-Eintrag der Routing-Tabelle (ROU-18). |
+| `panel_cleared` | Session-Ende-Signal (ROU-11): das Display, dessen aktueller State die `source_id` dieser Panel-Instanz trägt, wird auf `null` gesetzt. |
+
+**Routing per Konvention, nicht per Kachel-Eintrag.** Der Adapter
+nutzt **nicht** das Descriptor-Matching von ROU-9. Stattdessen leitet er
+die Payload-URL **per Konvention** aus dem Descriptor ab:
+
+- Bei `tile_selected` ist `payload.url` = `/display/<app>/<view>` nach
+  URL-2; ist `query` im Event gesetzt, wird sie als
+  Query-String an die URL gehängt (`?<key>=<value>&…`,
+  URL-Encoding nach Standard).
+- `display_id` für das State-Update kommt aus dem `panels`-Abschnitt
+  der `routing.json` (ROU-18), Schlüssel `source_id` — genau ein Display
+  pro Panel-Instanz (E-PANEL-5). Findet der Adapter die Panel-Instanz
+  dort nicht, wird wie bei einem nicht-gematchten Trigger im
+  Routing-Kern verfahren (ROU-11, „Trigger ohne Match"): Event mit 2xx
+  beantworten, eine Warnung loggen, keinen State ändern.
+
+**Hardcode-frei.** Der Adapter führt **keine App-Liste**, kein `switch`
+über App-Namen und keine Mapping-Tabelle `app → URL`. Eine neue App in
+einem Panel ist allein eine neue Zeile in der `tiles.json` des Panels
+(PANEL-3) — weder Router-Code noch `routing.json` müssen angefasst
+werden. Dieses Konventions-Routing ist die Entscheidung E-ROU-8.
+
+`payload` folgt ROU-13 (`{ "url": "<string>" }`); spätere Felder sind
+reine Erweiterung. Der Trigger im internen State (ROU-10) trägt für
+Panel-Events `descriptor = { app, view, query? }` — analog zum
+Phone-Descriptor, mit den App-Panel-Feldern statt
+`figure_id`/`bucket`.
+
+ROU-1 bleibt gewahrt: das Panel entscheidet nichts, der Adapter
+übersetzt und übergibt; der Routing-Kern setzt State.
+
+*Tickets:* #58
+
 ## 4. Routing-Kern
 
 ### ROU-9 — M:N-Lookup-Tabelle
@@ -402,7 +446,9 @@ Hör auf `listen_host:listen_port` (ROU-15).
 
 ### ROU-18 — Routing-Tabelle via `routing.json`
 Die M:N-Tabelle (ROU-9) lebt als JSON-Datei `routing.json` neben dem
-Router-Code (analog FIG-23 für die Phone-Seite). Format:
+Router-Code (analog FIG-23 für die Phone-Seite). Format mit zwei
+Abschnitten — `entries` für descriptor-basiertes Matching (ROU-9) und
+`panels` für den App-Panel-Adapter (ROU-24, Konventions-Routing):
 
 ```json
 {
@@ -413,9 +459,24 @@ Router-Code (analog FIG-23 für die Phone-Seite). Format:
       "display_ids": ["default"],
       "payload": { "url": "https://buddy.local/scene/gelbes-e-0" }
     }
-  ]
+  ],
+  "panels": {
+    "app-panel:kueche": { "display_id": "default" }
+  }
 }
 ```
+
+Der `panels`-Abschnitt ist eine Map `source_id` → `{ display_id: <string> }`
+— **eine Zeile pro Panel-Instanz, nicht pro Kachel**, und genau **ein
+Display pro Panel-Instanz** (E-PANEL-5; siehe auch PANEL-8). Wechselt ein
+Panel auf ein anderes Display, ändert sich diese eine Zeile; das Hinzufügen
+einer neuen Kachel ändert hier **nichts** (E-ROU-8, ROU-24). Wer zwei
+Displays steuern will, betreibt **zwei Panel-Instanzen** mit eigener
+`source_id` und eigener `tiles.json`/`config.json` (PANEL-3/PANEL-8) —
+symmetrisch zum Muster „mehrere Familien-Hubs = mehrere Instanzen". Fehlt
+der `panels`-Abschnitt oder fehlt eine Panel-`source_id` darin, verhält
+sich der App-Panel-Adapter wie bei einem nicht-gematchten Trigger
+(ROU-11/ROU-24): 2xx, Warnung, kein State-Update.
 
 - **Fehlerfälle:** Datei fehlt oder nicht parsebar → der Router startet
   mit leerer Tabelle und protokolliert eine Warnung. Ein laufender
@@ -464,10 +525,19 @@ Mindest-Abdeckung:
   aktuelle Payload-Objekt; unbekannte `<id>` liefert 404.
 - ROU-18 — fehlendes `routing.json` startet den Router mit leerer
   Tabelle; jeder `GET /api/v1/displays/<id>/state` liefert dann 404.
+  `panels`-Abschnitt fehlt → App-Panel-Adapter behandelt jedes
+  `tile_selected` wie einen unbekannten Trigger (2xx, kein State).
 - ROU-23 — `/controller/` liefert die PWA-Statik mit korrekten
   Content-Types; Path-Traversal-Anfragen werden mit 404 abgewiesen.
+- ROU-24 — App-Panel-Adapter: `tile_selected { app, view }` setzt
+  State des Displays aus dem `panels`-Eintrag mit
+  `payload.url = /display/<app>/<view>`; `tile_selected` mit
+  `query` hängt den Query-String korrekt an die URL; `panel_cleared`
+  setzt State des Displays mit dieser `source_id` auf `null`;
+  Panel-`source_id` ohne `panels`-Eintrag wird wie ein unbekannter
+  Trigger behandelt (2xx, Warnung, kein State).
 
-*Tickets:* #5, #24
+*Tickets:* #5, #24, #58
 
 ---
 
@@ -578,3 +648,36 @@ eingeführt (CLAUDE.md §6).
 Lehre: Eine Konvention, die als offener Spec-PR herumliegt, bindet
 nicht. Wäre `urls.md` vor dem Router-Bau gemergt gewesen, hätte es
 diese Migration nicht gebraucht.
+
+### E-ROU-8 — App-Panel: Routing per Konvention, nicht per Kachel
+*Datum:* 2026-05-25 (Ticket #58)
+
+Frühe Variante: Jede Kachel eines App-Panels ist ein vollständiger
+Eintrag in `routing.json` — analog zum descriptor-basierten Matching
+der Figuren-Erkennung (ROU-9). **Verworfen** aus zwei Gründen:
+
+1. **Doppelpflege Controller-Konfig ⇄ Router-Konfig.** Eine neue Kachel
+   müsste sowohl in der `tiles.json` des Panels (PANEL-3, UI-Wahrheit)
+   als auch in der `routing.json` des Routers (Routing-Wahrheit)
+   gepflegt werden. Der spätere Schreiber aus OPEN-PANEL-A (Eltern-Chat
+   schreibt Kacheln) müsste damit zusätzlich in die Router-Konfiguration
+   schreiben — eine zweite, technisch sensitivere Datei.
+2. **Der Descriptor `{ app, view }` (E-PANEL-1) ist bereits fast die
+   Ziel-URL** nach URL-2. Der Adapter kann sie per Konvention
+   zusammensetzen, ohne dass irgendwo eine zweite Tabelle
+   `(app, view) → URL` gepflegt wird.
+
+Stattdessen: Der App-Panel-Adapter (ROU-24) leitet die Payload-URL
+**per Konvention** aus dem Descriptor ab; `routing.json` hält im
+`panels`-Abschnitt nur **eine Zeile pro Panel-Instanz**:
+`source_id → { display_id }` (Singular, ein Display pro Panel-Instanz,
+E-PANEL-5). ROU-1 bleibt gewahrt — der Router
+(über seinen Adapter) entscheidet das Routing, das Panel niemals selbst.
+
+`tiles.json` ist damit **alleinige Wahrheit der Kacheln**; Änderungen
+an Apps und Views eines Panels passieren ohne Eingriff in
+`routing.json` oder Router-Code. Die Router-Konfiguration ändert sich
+nur, wenn ein Panel installiert, umgezogen oder entfernt wird.
+
+Folgewirkung: Der App-Panel-Adapter ist **hardcode-frei** — keine
+App-Liste, kein `switch` über App-Namen (siehe ROU-24).
