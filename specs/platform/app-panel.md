@@ -216,6 +216,7 @@ Tuning-Werte können später dazukommen, ohne Breaking Change):
 | Feld         | Typ    | Bedeutung                                                          |
 |--------------|--------|--------------------------------------------------------------------|
 | `source_id`  | string | Identität dieser Panel-Instanz, z. B. `app-panel:kueche`.          |
+| `display_id` | string | Identität des Displays, das diese Panel-Instanz steuert (Form `display:<name>` analog der `figure:`-Konvention der Figuren-Erkennung). |
 | `router_url` | string | Origin des Routers (Schema + Host[:Port], **ohne Pfad**, analog FIG-23). |
 
 **Priorität & Fehler-Fallback:** Identisch zu FIG-23 / ROU-19. URL-
@@ -234,6 +235,12 @@ Verzeichnis.
 **Kopplung zum Router:** `source_id` muss mit dem `source_id`-Wert
 eines `panels`-Eintrags der Routing-Tabelle (ROU-18) übereinstimmen,
 sonst greift der Adapter (ROU-24) für diese Panel-Instanz nicht.
+Zusätzlich muss `display_id` mit dem `display_id`-Wert desselben
+`panels`-Eintrags übereinstimmen — der Panel-Code abonniert genau
+diesen Display-Zustands-Stream (ROU-22) für die Aktiv-Kachel-Markierung
+(PANEL-11). Diese load-bearing-Kopplung wird beim Start geprüft
+(analog der `source_id`-Konsistenz-Prüfung); eine Diskrepanz erscheint
+als sichtbarer Fehler.
 
 *Tickets:* #58
 
@@ -264,7 +271,47 @@ Spec nennt das, fordert aber keinen Code dafür.
 
 *Tickets:* #58
 
-## 6. Tests
+## 6. Aktive-Kachel-Markierung
+
+### PANEL-11 — Aktive Kachel im Panel-UI optisch markieren
+Wenn der User eine Kachel antippt und das zugeordnete Display den
+entsprechenden Inhalt zeigt, wird **diese Kachel im Panel-UI optisch
+markiert** — sichtbar von der Restmenge unterschieden
+(Hintergrund-Hervorhebung oder Border). Die konkreten Design-Tokens
+kommen im Impl-PR; die Spec verlangt nur „sichtbar unterscheidbar".
+
+**Quelle der Wahrheit der Markierung:** der Panel-Code abonniert beim
+Laden den **SSE-Zustands-Stream seines zugeordneten Displays**
+(ROU-22: `GET /api/v1/displays/<display_id>/events`, `<display_id>`
+aus `config.json`, PANEL-8) und vergleicht die im Stream gelieferte
+`payload.url` mit den `{ app, view, query? }`-Werten seiner Kacheln.
+Die Kachel, deren Konvention `/display/<app>/<view>[?<query>]` (vgl.
+ROU-24) zur aktuellen Display-`payload.url` passt, ist aktiv markiert
+— maximal eine Kachel gleichzeitig.
+
+- **Display-Ruhe-Zustand** (Stream meldet `null` / Session-Ende,
+  ROU-10/ROU-11/ROU-12) → **keine** Kachel markiert.
+- **Stream-Abbruch** (Netz-Fehler) → die zuletzt bekannte Markierung
+  **bleibt stehen** (analog DC-6 „Inhalt bleibt bei Störung stehen").
+  Re-Verbindung über den Browser-`EventSource`-Standard-Reconnect
+  (analog DC-7); nach erfolgreicher Wiederverbindung richtet sich die
+  Markierung neu nach dem Stream-Zustand.
+- **Display-Inhalt ohne Kachel-Match** (z. B. eine URL, die durch
+  Figuren-Erkennung übersteuert wurde und zu keiner Panel-Kachel passt)
+  → **keine** Kachel markiert (kein Match → kein Highlight).
+- **`panel_cleared`-Tap:** der Panel-Code wartet auf das Stream-Update,
+  das den Wechsel auf `null` meldet, dann verschwindet die Markierung.
+  Ein optimistisches lokales Update (Markierung sofort weg) ist
+  erlaubt, aber das Stream-Update bleibt die Wahrheit — bei Diskrepanz
+  korrigiert sich die Markierung beim nächsten Stream-Ereignis.
+
+PANEL-1 bleibt gewahrt: das Panel entscheidet weiterhin **nichts** über
+das Routing — es liest den Display-Zustand nur, um seine eigene UI zu
+spiegeln.
+
+*Tickets:* #58
+
+## 7. Tests
 
 ### PANEL-9 — Automatisierte Tests pro Requirement
 Jede Requirement-ID, die Code-Verhalten beschreibt, hat einen
@@ -306,16 +353,33 @@ Mindest-Abdeckung:
   `config.json` == Schlüssel im `panels`-Abschnitt der `routing.json`
   des Routers" (siehe PANEL-8 Body, ROU-18) wird beim Start geprüft;
   eine Diskrepanz erscheint als sichtbarer Fehler (Test prüft die
-  sichtbare Fehler-Signalisierung). Der stumme Default-Fallback bei
-  fehlender/kaputter `config.json` bleibt erlaubt und ist konsistent
-  zu FIG-23/ROU-19 — geprüft wird, dass beide Wege (sichtbarer
-  Konsistenz-Fehler vs. stummer Datei-Fallback) sich nicht
-  vermischen.
+  sichtbare Fehler-Signalisierung). Zusätzlich wird die Kopplung
+  „`display_id` aus `config.json` == `display_id` desselben
+  `panels`-Eintrags" beim Start geprüft; ein fehlendes oder
+  abweichendes `display_id` erscheint ebenfalls als sichtbarer Fehler.
+  Der stumme Default-Fallback bei fehlender/kaputter `config.json`
+  bleibt erlaubt und ist konsistent zu FIG-23/ROU-19 — geprüft wird,
+  dass beide Wege (sichtbarer Konsistenz-Fehler vs. stummer
+  Datei-Fallback) sich nicht vermischen.
 - PANEL-10 — Das PWA-Manifest deklariert `display: fullscreen`
   (Manifest-Test). `navigator.wakeLock.request('screen')` wird beim
   Laden aufgerufen; bei `visibilitychange` auf `visible` erneut.
   `requestFullscreen()` wird beim ersten Nutzer-Gesture versucht; ein
   Fehler dabei wirft den Code nicht ab.
+- PANEL-11 — Das Panel verbindet sich beim Laden mit
+  `/api/v1/displays/<display_id>/events` (ROU-22), `display_id` aus
+  `config.json` (PANEL-8). Ein Stream-Update mit
+  `payload.url = /display/plan/woche` markiert die zugehörige Kachel
+  (`app: plan`, `view: woche`); ein folgendes Update mit
+  `payload.url = /display/plan/woche?ansicht=klein` verschiebt die
+  Markierung auf die Kachel mit passendem `query`. Ein Stream-Update
+  auf `null` (Session-Ende, ROU-11) entfernt jede Markierung.
+  Display-Inhalt, der zu keiner Kachel passt (z. B. eine URL aus
+  einer anderen App, durch Figuren-Erkennung übersteuert), markiert
+  keine Kachel. Ein simulierter Stream-Abbruch lässt die letzte
+  Markierung sichtbar (analog DC-6); nach erfolgter Reconnect-Phase
+  (analog DC-7) richtet sich die Markierung neu nach dem aktuellen
+  Stream-Zustand.
 
 *Tickets:* #58
 
@@ -420,3 +484,31 @@ Controller-Typen. Eine zusätzliche Action-URL pro Controller-Typ
 würde dieses Prinzip aufweichen und für jeden neuen Controller-Typ
 einen weiteren Pfad in der Origin-Routing-Tabelle (URL-14) verlangen.
 Die Figuren-Erkennung folgt derselben Linie (FIG-9 / ROU-3).
+
+### E-PANEL-5 — Ein Panel = genau ein Display
+*Datum:* 2026-05-25 (Ticket #58)
+
+**Verworfen:** ein Panel kann mehrere Displays gleichzeitig steuern
+(frühere ROU-18-Variante mit `display_ids`-Plural im `panels`-Eintrag).
+
+**Stattdessen:** harte 1:1-Bindung Panel ↔ Display, verbalisiert in
+PANEL-8 (`display_id` als Pflichtfeld in `config.json`) und in ROU-18
+(`panels`-Eintrag mit Singular `display_id`).
+
+Begründungen:
+
+- **Aktiv-Markierung wird eindeutig (PANEL-11):** Die Markierung
+  braucht **genau einen** Display-Stream als Wahrheits-Quelle (ROU-22).
+  Bei mehreren Displays pro Panel wäre unklar, welche Display-`payload.url`
+  für die Markierung maßgeblich ist; eine neue Router-API zur
+  Mehrziel-Auflösung wäre nötig — Infrastruktur-Aufwand ohne
+  V1-Nutzen.
+- **Familie-3-Probe / Symmetrie zu Mehrfach-Instanzen:** Wer zwei
+  Displays steuern will, betreibt **zwei Panel-Instanzen** — dasselbe
+  Muster wie bei mehreren Familien-Hubs oder mehreren
+  Phone-Controllern. Symmetrisch, kein Sonderfall im Code.
+- **CLAUDE.md §6 „nichts auf Vorrat":** Mehrziel-Steuerung ist heute
+  kein konkreter Bedarf. Spätere Wiederzulassung ist als kompatible
+  Erweiterung möglich (`display_id` → `display_ids[]` in einer
+  zukünftigen Spec-Version, mit Migrations-Hinweis) — die Entscheidung
+  ist nicht endgültig zubetoniert, nur für V1 die einfachere Form.

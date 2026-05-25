@@ -125,8 +125,8 @@ App-Panel-Controllers (siehe [`app-panel.md`](app-panel.md), PANEL-6):
 
 | App-Panel-Event (PANEL-6) | Adapter-Verhalten |
 |---|---|
-| `tile_selected { app, view, query? }` | Bildet einen kanonischen Trigger und setzt den State (ROU-11) für die `display_ids` aus dem `panels`-Eintrag der Routing-Tabelle (ROU-18). |
-| `panel_cleared` | Session-Ende-Signal (ROU-11): alle Displays, deren aktueller State die `source_id` dieser Panel-Instanz trägt, werden auf `null` gesetzt. |
+| `tile_selected { app, view, query? }` | Bildet einen kanonischen Trigger und setzt den State (ROU-11) für die `display_id` aus dem `panels`-Eintrag der Routing-Tabelle (ROU-18). |
+| `panel_cleared` | Session-Ende-Signal (ROU-11): das Display, dessen aktueller State die `source_id` dieser Panel-Instanz trägt, wird auf `null` gesetzt. |
 
 **Routing per Konvention, nicht per Kachel-Eintrag.** Der Adapter
 nutzt **nicht** das Descriptor-Matching von ROU-9. Stattdessen leitet er
@@ -136,11 +136,12 @@ die Payload-URL **per Konvention** aus dem Descriptor ab:
   URL-2; ist `query` im Event gesetzt, wird sie als
   Query-String an die URL gehängt (`?<key>=<value>&…`,
   URL-Encoding nach Standard).
-- `display_ids` für das State-Update kommt aus dem `panels`-Abschnitt
-  der `routing.json` (ROU-18), Schlüssel `source_id`. Findet der Adapter
-  die Panel-Instanz dort nicht, wird wie bei einem nicht-gematchten
-  Trigger im Routing-Kern verfahren (ROU-11, „Trigger ohne Match"):
-  Event mit 2xx beantworten, eine Warnung loggen, keinen State ändern.
+- `display_id` für das State-Update kommt aus dem `panels`-Abschnitt
+  der `routing.json` (ROU-18), Schlüssel `source_id` — genau ein Display
+  pro Panel-Instanz (E-PANEL-5). Findet der Adapter die Panel-Instanz
+  dort nicht, wird wie bei einem nicht-gematchten Trigger im
+  Routing-Kern verfahren (ROU-11, „Trigger ohne Match"): Event mit 2xx
+  beantworten, eine Warnung loggen, keinen State ändern.
 
 **Hardcode-frei.** Der Adapter führt **keine App-Liste**, kein `switch`
 über App-Namen und keine Mapping-Tabelle `app → URL`. Eine neue App in
@@ -460,17 +461,21 @@ Abschnitten — `entries` für descriptor-basiertes Matching (ROU-9) und
     }
   ],
   "panels": {
-    "app-panel:kueche": { "display_ids": ["default"] }
+    "app-panel:kueche": { "display_id": "default" }
   }
 }
 ```
 
-Der `panels`-Abschnitt ist eine Map `source_id` → `{ display_ids: [...] }`
-— **eine Zeile pro Panel-Instanz, nicht pro Kachel**. Wechselt ein
+Der `panels`-Abschnitt ist eine Map `source_id` → `{ display_id: <string> }`
+— **eine Zeile pro Panel-Instanz, nicht pro Kachel**, und genau **ein
+Display pro Panel-Instanz** (E-PANEL-5; siehe auch PANEL-8). Wechselt ein
 Panel auf ein anderes Display, ändert sich diese eine Zeile; das Hinzufügen
-einer neuen Kachel ändert hier **nichts** (E-ROU-8, ROU-24). Fehlt der
-`panels`-Abschnitt oder fehlt eine Panel-`source_id` darin, verhält sich
-der App-Panel-Adapter wie bei einem nicht-gematchten Trigger
+einer neuen Kachel ändert hier **nichts** (E-ROU-8, ROU-24). Wer zwei
+Displays steuern will, betreibt **zwei Panel-Instanzen** mit eigener
+`source_id` und eigener `tiles.json`/`config.json` (PANEL-3/PANEL-8) —
+symmetrisch zum Muster „mehrere Familien-Hubs = mehrere Instanzen". Fehlt
+der `panels`-Abschnitt oder fehlt eine Panel-`source_id` darin, verhält
+sich der App-Panel-Adapter wie bei einem nicht-gematchten Trigger
 (ROU-11/ROU-24): 2xx, Warnung, kein State-Update.
 
 - **Fehlerfälle:** Datei fehlt oder nicht parsebar → der Router startet
@@ -525,10 +530,10 @@ Mindest-Abdeckung:
 - ROU-23 — `/controller/` liefert die PWA-Statik mit korrekten
   Content-Types; Path-Traversal-Anfragen werden mit 404 abgewiesen.
 - ROU-24 — App-Panel-Adapter: `tile_selected { app, view }` setzt
-  State der Displays aus dem `panels`-Eintrag mit
+  State des Displays aus dem `panels`-Eintrag mit
   `payload.url = /display/<app>/<view>`; `tile_selected` mit
   `query` hängt den Query-String korrekt an die URL; `panel_cleared`
-  setzt State aller Displays mit dieser `source_id` auf `null`;
+  setzt State des Displays mit dieser `source_id` auf `null`;
   Panel-`source_id` ohne `panels`-Eintrag wird wie ein unbekannter
   Trigger behandelt (2xx, Warnung, kein State).
 
@@ -665,7 +670,8 @@ der Figuren-Erkennung (ROU-9). **Verworfen** aus zwei Gründen:
 Stattdessen: Der App-Panel-Adapter (ROU-24) leitet die Payload-URL
 **per Konvention** aus dem Descriptor ab; `routing.json` hält im
 `panels`-Abschnitt nur **eine Zeile pro Panel-Instanz**:
-`source_id → { display_ids }`. ROU-1 bleibt gewahrt — der Router
+`source_id → { display_id }` (Singular, ein Display pro Panel-Instanz,
+E-PANEL-5). ROU-1 bleibt gewahrt — der Router
 (über seinen Adapter) entscheidet das Routing, das Panel niemals selbst.
 
 `tiles.json` ist damit **alleinige Wahrheit der Kacheln**; Änderungen
