@@ -115,13 +115,15 @@
   // applyScale — wendet den Skalierungs-Faktor (computeScale) auf ein
   // iframe an. Reine DOM-Anwendung, damit die Pure-Function-Logik
   // (computeScale) ohne DOM testbar bleibt (DC-10). `transform-origin`
-  // wird auf `top left` gesetzt; die Zentrierung im Viewport übernimmt
+  // wird auf `center` gesetzt: die Skalierung passiert um den Mittelpunkt
+  // des iframe-Layouts, sodass die Letterbox/Pillarbox symmetrisch um den
+  // Inhalt verteilt ist (DC-12). Die Zentrierung im Viewport übernimmt
   // der umgebende Container per Flexbox (siehe index.html). Re-Aufruf
   // wechselt nur die `transform`-Eigenschaft, nicht die iframe.src — der
   // gerouteten Inhalt behält seinen Zustand (DC-14 / DC-2).
   function applyScale(iframeEl, viewportW, viewportH, designW, designH) {
     var s = computeScale(viewportW, viewportH, designW, designH);
-    iframeEl.style.transformOrigin = 'top left';
+    iframeEl.style.transformOrigin = 'center';
     iframeEl.style.transform = 'scale(' + s + ')';
     return s;
   }

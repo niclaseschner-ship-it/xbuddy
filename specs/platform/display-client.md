@@ -141,6 +141,13 @@ So füllt der Inhalt das Display so groß wie möglich, ohne Verzerrung und
 ohne Überlauf. Verbleibender Raum (Letterbox/Pillarbox) trägt die
 Display-Ruhe-Farbe aus DC-5 (`#000000`) — kein weißer Rand.
 
+`transform-origin: center` — die Skalierung passiert um den Mittelpunkt
+des iframe-Layouts, damit die Letterbox/Pillarbox symmetrisch um den
+Inhalt verteilt ist. Andernfalls (`top left`) zöge die Skalierung den
+sichtbaren Inhalt in die obere linke Ecke der Layout-Box, weil
+CSS-Transformen die Layout-Größe nicht ändern und die umgebende Flex-
+Zentrierung weiterhin am unskalierten 1920×1080-Element angreift.
+
 Begründung: Plan-Buddy ist für 1920×1080 entworfen
 (`plan/static/design/tokens.css`, „Scale for 1920×1080 kiosk"); auf
 einem 1280×800-Tablet erzeugte er ohne Adapter Scrollbalken oder
@@ -148,7 +155,7 @@ einem 1280×800-Tablet erzeugte er ohne Adapter Scrollbalken oder
 (Constitution). Der Adapter löst das, ohne Plan-Buddy responsiv machen
 zu müssen.
 
-*Tickets:* #107
+*Tickets:* #107, #115
 
 ### DC-13 — Adapter ist unsichtbar
 Der Skalierungs-Adapter (DC-12) hat keine eigene UI-Schicht über dem
@@ -210,7 +217,12 @@ aktueller Zustand beim Verbinden, Zustandsänderungen, Stream-Abbruch und
 Wiederverbindung, unbekannte `display_id`. So ist das Client-Verhalten
 reproduzierbar und ohne laufenden Router prüfbar.
 
-*Tickets:* #30
+Die visuelle Position des skalierten Inhalts (DC-12) ist Teil des Tests:
+nicht nur die Pure-Math `computeScale`, sondern auch die DOM-Anwendung
+(`applyScale`) wird geprüft — insbesondere, dass `transform-origin` auf
+`center` gesetzt wird, damit die Skalierung mittig im Layout passiert.
+
+*Tickets:* #30, #115
 
 ---
 

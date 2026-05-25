@@ -89,10 +89,10 @@ function fakeIframe() {
   return { style: {} };
 }
 
-test('DC-12 — applyScale schreibt transform=scale(s) und transform-origin=top left', () => {
+test('DC-12 — applyScale schreibt transform=scale(s) und transform-origin=center', () => {
   const el = fakeIframe();
   const s = disp.applyScale(el, 1280, 800);
-  assert.equal(el.style.transformOrigin, 'top left');
+  assert.equal(el.style.transformOrigin, 'center');
   assert.equal(el.style.transform, 'scale(' + (1280 / 1920) + ')');
   assert.ok(Math.abs(s - (1280 / 1920)) < 1e-9);
 });
@@ -101,6 +101,29 @@ test('DC-12 — applyScale auf 1.0 bei nativ aufgelöstem Display (1920×1080)',
   const el = fakeIframe();
   disp.applyScale(el, 1920, 1080);
   assert.equal(el.style.transform, 'scale(1)');
+});
+
+// Bug #115 (Display-Adapter zentriert) — Regression-Schutz:
+// `transform-origin` MUSS `center` sein, nicht `top left`. Sonst zöge
+// die Skalierung den sichtbaren Inhalt in die obere linke Ecke der
+// Layout-Box, weil CSS-Transformen die Layout-Größe nicht ändern und
+// die umgebende Flex-Zentrierung weiterhin am unskalierten Element
+// angreift — siehe DC-12, Erklärungs-Absatz. Echte Browser-Engine-
+// Pixel-Position ist ohne headless-Browser nicht abbildbar; der Test
+// prüft den CSS-Mechanismus (transform-origin), aus dem die zentrierte
+// Position folgt.
+test('#115 — transform-origin=center bei jedem Viewport (Letterbox symmetrisch)', () => {
+  const cases = [
+    [1920, 1200],  // Tablet 1920×1200 — Reproduktions-Fall aus #115
+    [1280, 800],   // 16:10-Tablet
+    [2560, 1440],  // 16:9-Monitor
+    [800, 1280],   // Hochformat
+  ];
+  for (const [w, h] of cases) {
+    const el = fakeIframe();
+    disp.applyScale(el, w, h);
+    assert.equal(el.style.transformOrigin, 'center', 'viewport=' + w + 'x' + h);
+  }
 });
 
 // ============================================================
