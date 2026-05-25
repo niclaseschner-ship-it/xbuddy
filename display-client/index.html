@@ -27,11 +27,12 @@
 
   /* DC-12 / DC-15 — iframe in fester Design-Auflösung 1920×1080.
      `transform: scale(s)` (von displib.applyScale gesetzt) passt es
-     proportional ins Viewport ein; `transform-origin: top left`
-     macht die Skalierung berechenbar — die Zentrierung übernimmt
-     der Flex-Container. */
+     proportional ins Viewport ein; `transform-origin: center`
+     skaliert um den Mittelpunkt des iframe-Layouts, damit die
+     Letterbox/Pillarbox symmetrisch verteilt ist — die Zentrierung
+     übernimmt der Flex-Container. */
   #content { width: 1920px; height: 1080px; border: 0; flex: none;
-    background: #000000; transform-origin: top left; }
+    background: #000000; transform-origin: center; }
 
   /* DC-8 — Einrichtungs-Hinweis: lesbar, nicht der schwarze Ruhe-Zustand,
      keine kaputte Seite. Richtet sich an die Person, die das Display
