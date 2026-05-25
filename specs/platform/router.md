@@ -345,12 +345,29 @@ Plural. Bricht die Verbindung ab, baut der Client sie selbsttätig
 wieder auf (`display-client.md` DC-7); der Router hält keinen Zustand
 über die Verbindung hinaus.
 
+**Heartbeat:** Solange der Stream offen ist und kein Zustands-Ereignis
+ansteht, sendet der Router in regelmäßigem Abstand (≤ 30 s, Default
+15 s) einen SSE-Kommentar (`: keepalive\n\n`). Das hat zwei Zwecke:
+
+1. Der Stream sieht für Reverse-Proxies und Mobil-NAT-Boxen nicht idle
+   aus — sie schließen ihn nicht stillschweigend wegen Idle-Timeout
+   (vgl. `deploy/nginx/xbuddy-origin.conf`, `proxy_read_timeout 1h`).
+2. Der Router-Generator erkennt verschwundene Clients zuverlässig
+   (write-Fehler), räumt seine Subscription ab und hinterlässt keine
+   Leiche.
+
+Der Kommentar ist keine SSE-Nachricht (kein `data:`-Feld) — der Client
+sieht ihn nicht als Inhalts-Ereignis. Verlässt sich der Client allein
+auf den Standard-Reconnect des Browsers (DC-7), trägt dieser Heartbeat
+die Garantie, dass eine offene Verbindung tatsächlich offen *bleibt*,
+solange Netz und Router stehen.
+
 > Hinweis (Deployment): Hinter einem Reverse-Proxy darf dieser
 > Long-Lived-Stream nicht gepuffert werden, sonst erreichen die
 > Ereignisse den Client nie. Die HTTPS-Origin schaltet das Puffern
 > für diesen Pfad ab (`deploy/nginx/xbuddy-origin.conf`, #70).
 
-*Tickets:* #30
+*Tickets:* #30, #116
 
 ## 6. Konfiguration
 
