@@ -623,3 +623,292 @@ def test_ROU_15_cdp_env_vars_resolve(monkeypatch, tmp_path):
     cfg = router_main.resolved_config(args)
     assert cfg['cdp_target']   == 'http://foo:9222'
     assert cfg['cdp_idle_url'] == 'http://foo/idle'
+
+
+# ============================================================
+#  ROU-24 — App-Panel-Adapter
+# ============================================================
+#
+# Konventions-Routing per Descriptor `{app, view, query?}`. Hardcode-frei —
+# Tests fahren bewusst zwei verschiedene App-Slugs (`plan` und einen fiktiven
+# `xyz`) gegeneinander, damit eine versehentliche App-Liste / Mapping-Tabelle
+# im Adapter (E-ROU-8 verboten) sofort sichtbar wäre.
+
+PANEL_ROUTING = {
+    "entries": [],
+    "panels": {
+        "app-panel:kueche": {"display_id": "display:wohnzimmer"},
+        "app-panel:flur":   {"display_id": "display:flur"},
+    },
+}
+
+
+@pytest.fixture
+def client_with_panels(tmp_path):
+    routing_path = tmp_path / "routing.json"
+    routing_path.write_text(json.dumps(PANEL_ROUTING))
+    router_main.state = {}
+    router_main._subscribers.clear()
+    router_main.load_routing(str(routing_path))
+    router_main.app.testing = True
+    return router_main.app.test_client()
+
+
+def test_ROU_24_tile_selected_sets_state_with_convention_url(client_with_panels):
+    """Konvention: payload.url = /display/<app>/<view>. Erstes Beispiel mit
+    App-Slug `plan` (Pi-Demo)."""
+    r = post_event(client_with_panels, {
+        'source_id': 'app-panel:kueche', 'ts': '2026-05-25T10:00:00Z',
+        'type': 'tile_selected', 'app': 'plan', 'view': 'woche',
+    })
+    assert r.status_code == 204
+    s = router_main.state['display:wohnzimmer']
+    assert s is not None
+    assert s['payload'] == {'url': '/display/plan/woche'}
+    assert s['descriptor'] == {'app': 'plan', 'view': 'woche'}
+    assert s['source_id'] == 'app-panel:kueche'
+
+
+def test_ROU_24_tile_selected_works_for_unknown_app_hardcode_free(client_with_panels):
+    """Hardcode-Frei-Probe: ein dem Router unbekannter App-Slug (`xyz`)
+    funktioniert genauso wie `plan`. Eine versehentliche App-Liste im
+    Adapter würde diesen Test rot machen — genau der Schutz, den E-ROU-8
+    fordert."""
+    r = post_event(client_with_panels, {
+        'source_id': 'app-panel:kueche', 'type': 'tile_selected',
+        'app': 'xyz', 'view': 'irgendwas',
+    })
+    assert r.status_code == 204
+    s = router_main.state['display:wohnzimmer']
+    assert s['payload'] == {'url': '/display/xyz/irgendwas'}
+
+
+def test_ROU_24_tile_selected_with_query_urlencodes(client_with_panels):
+    """`query` wird URL-encoded an die Konventions-URL gehängt."""
+    r = post_event(client_with_panels, {
+        'source_id': 'app-panel:kueche', 'type': 'tile_selected',
+        'app': 'plan', 'view': 'woche', 'query': {'ansicht': 'klein'},
+    })
+    assert r.status_code == 204
+    s = router_main.state['display:wohnzimmer']
+    assert s['payload']['url'] == '/display/plan/woche?ansicht=klein'
+
+
+def test_ROU_24_tile_selected_query_escapes_special_chars(client_with_panels):
+    """URL-Encoding nach Standard — Leerzeichen, &, =, Sonderzeichen."""
+    r = post_event(client_with_panels, {
+        'source_id': 'app-panel:kueche', 'type': 'tile_selected',
+        'app': 'plan', 'view': 'woche',
+        'query': {'titel': 'a b&c=d'},
+    })
+    assert r.status_code == 204
+    s = router_main.state['display:wohnzimmer']
+    assert s['payload']['url'] == '/display/plan/woche?titel=a+b%26c%3Dd'
+
+
+def test_ROU_24_panel_cleared_sets_state_to_null(client_with_panels):
+    """`panel_cleared` ist Session-Ende-Signal: das Display, dessen State
+    diese source_id trägt, wird auf null gesetzt (ROU-11)."""
+    post_event(client_with_panels, {
+        'source_id': 'app-panel:kueche', 'type': 'tile_selected',
+        'app': 'plan', 'view': 'woche',
+    })
+    assert router_main.state['display:wohnzimmer'] is not None
+    r = post_event(client_with_panels, {
+        'source_id': 'app-panel:kueche', 'type': 'panel_cleared',
+    })
+    assert r.status_code == 204
+    assert router_main.state['display:wohnzimmer'] is None
+
+
+def test_ROU_24_unknown_panel_source_warns_no_state_change(client_with_panels, caplog):
+    """Panel-source_id ohne `panels`-Eintrag → 2xx, Warnung, kein State."""
+    with caplog.at_level('WARNING'):
+        r = post_event(client_with_panels, {
+            'source_id': 'app-panel:nicht-konfiguriert',
+            'type': 'tile_selected', 'app': 'plan', 'view': 'woche',
+        })
+    assert r.status_code == 204
+    assert 'display:wohnzimmer' not in router_main.state or \
+        router_main.state['display:wohnzimmer'] is None
+    assert any('panels-Eintrag' in rec.message or 'App-Panel' in rec.message
+               for rec in caplog.records)
+
+
+def test_ROU_24_missing_app_returns_400(client_with_panels):
+    r = post_event(client_with_panels, {
+        'source_id': 'app-panel:kueche', 'type': 'tile_selected',
+        'view': 'woche',
+    })
+    assert r.status_code == 400
+    assert 'app' in r.get_json()['error']
+
+
+def test_ROU_24_missing_view_returns_400(client_with_panels):
+    r = post_event(client_with_panels, {
+        'source_id': 'app-panel:kueche', 'type': 'tile_selected',
+        'app': 'plan',
+    })
+    assert r.status_code == 400
+    assert 'view' in r.get_json()['error']
+
+
+def test_ROU_24_nested_query_object_returns_400(client_with_panels):
+    """PANEL-7: query ist flach. Verschachteltes query verletzt das Schema."""
+    r = post_event(client_with_panels, {
+        'source_id': 'app-panel:kueche', 'type': 'tile_selected',
+        'app': 'plan', 'view': 'woche',
+        'query': {'nested': {'inner': 'value'}},
+    })
+    assert r.status_code == 400
+    assert 'query' in r.get_json()['error']
+
+
+def test_ROU_24_query_with_list_returns_400(client_with_panels):
+    r = post_event(client_with_panels, {
+        'source_id': 'app-panel:kueche', 'type': 'tile_selected',
+        'app': 'plan', 'view': 'woche',
+        'query': {'liste': [1, 2, 3]},
+    })
+    assert r.status_code == 400
+
+
+def test_ROU_24_unknown_event_type_returns_400(client_with_panels):
+    r = post_event(client_with_panels, {
+        'source_id': 'app-panel:kueche', 'type': 'foobar',
+    })
+    assert r.status_code == 400
+
+
+def test_ROU_24_two_panels_route_to_two_displays(client_with_panels):
+    """Hardcode-Frei-Probe Teil 2: zwei verschiedene Panel-Instanzen mit
+    unterschiedlichen `display_id`-Zielen werden korrekt auseinandergehalten —
+    der Adapter liest die Zuordnung ausschließlich aus `panels`, nicht aus
+    irgendeiner Code-Tabelle."""
+    post_event(client_with_panels, {
+        'source_id': 'app-panel:kueche', 'type': 'tile_selected',
+        'app': 'plan', 'view': 'woche',
+    })
+    post_event(client_with_panels, {
+        'source_id': 'app-panel:flur', 'type': 'tile_selected',
+        'app': 'kalender', 'view': 'heute',
+    })
+    assert router_main.state['display:wohnzimmer']['payload']['url'] \
+        == '/display/plan/woche'
+    assert router_main.state['display:flur']['payload']['url'] \
+        == '/display/kalender/heute'
+
+
+def test_ROU_18_panels_singular_display_id_form(tmp_path):
+    """E-PANEL-5 / ROU-18: Singular `display_id`. Eine versehentlich
+    wiederbelebte Plural-Form `display_ids` im `panels`-Abschnitt muss
+    ignoriert werden (Migration-Schutz), damit das Doppel-Display-Setup
+    nicht stumm wieder einkippt."""
+    routing = tmp_path / "routing.json"
+    routing.write_text(json.dumps({
+        "entries": [],
+        "panels": {
+            "app-panel:legacy": {"display_ids": ["display:a", "display:b"]},
+            "app-panel:neu":    {"display_id":  "display:c"},
+        },
+    }))
+    router_main.state = {}
+    router_main.load_routing(str(routing))
+    # Plural-Form: ignoriert.
+    assert 'app-panel:legacy' not in router_main.panels
+    # Singular-Form: übernommen.
+    assert router_main.panels['app-panel:neu']['display_id'] == 'display:c'
+
+
+def test_ROU_18_panels_section_missing_is_ok(tmp_path):
+    """Fehlender `panels`-Abschnitt → leeres dict, App-Panel-Adapter
+    behandelt jedes `tile_selected` wie unbekannten Trigger (2xx, kein State)."""
+    routing = tmp_path / "routing.json"
+    routing.write_text(json.dumps({"entries": []}))
+    router_main.state = {}
+    router_main.load_routing(str(routing))
+    assert router_main.panels == {}
+    router_main.app.testing = True
+    client = router_main.app.test_client()
+    r = post_event(client, {
+        'source_id': 'app-panel:irgendwas', 'type': 'tile_selected',
+        'app': 'plan', 'view': 'woche',
+    })
+    assert r.status_code == 204
+    assert router_main.state == {}
+
+
+def test_ROU_24_stream_publishes_panel_state_change(client_with_panels):
+    """Ein `tile_selected` löst publish() auf den SSE-Stream des
+    zugeordneten Displays aus — PANEL-11 verlässt sich darauf."""
+    gen = router_main.display_event_stream('display:wohnzimmer')
+    try:
+        first = next(gen)
+        assert json.loads(first[len('data: '):].strip()) is None
+        post_event(client_with_panels, {
+            'source_id': 'app-panel:kueche', 'type': 'tile_selected',
+            'app': 'plan', 'view': 'woche',
+        })
+        second = next(gen)
+        payload = json.loads(second[len('data: '):].strip())
+        assert payload['payload']['url'] == '/display/plan/woche'
+    finally:
+        gen.close()
+
+
+# ============================================================
+#  PANEL-2 — App-Panel-Auslieferung unter /controller/app-panel/<id>
+# ============================================================
+
+def test_PANEL_2_app_panel_index_served_with_html(client_with_panels):
+    r = client_with_panels.get('/controller/app-panel/kueche')
+    assert r.status_code == 200
+    assert r.mimetype == 'text/html'
+    # Die <id> aus der URL muss im gerenderten HTML auftauchen, damit die
+    # Seite ihre eigene Panel-Identität ohne weiteren Roundtrip kennt.
+    assert b'data-panel-id="kueche"' in r.data
+
+
+def test_PANEL_2_app_panel_index_id_per_instance(client_with_panels):
+    """Zwei verschiedene Instanzen → zwei verschiedene Daten-Attribute."""
+    r1 = client_with_panels.get('/controller/app-panel/kueche')
+    r2 = client_with_panels.get('/controller/app-panel/flur-tablet')
+    assert b'data-panel-id="kueche"' in r1.data
+    assert b'data-panel-id="flur-tablet"' in r2.data
+
+
+def test_PANEL_2_app_panel_assets_served(client_with_panels):
+    """app.js, style.css, manifest.json, sw.js müssen mit korrektem Content-Type
+    auftauchen — PWA-Registrierung scheitert sonst (analog ROU-23 für die
+    Figuren-Erkennung)."""
+    r = client_with_panels.get('/controller/app-panel/kueche/app.js')
+    assert r.status_code == 200
+    assert r.mimetype == 'application/javascript'
+    r = client_with_panels.get('/controller/app-panel/kueche/style.css')
+    assert r.status_code == 200
+    assert r.mimetype == 'text/css'
+    r = client_with_panels.get('/controller/app-panel/kueche/manifest.json')
+    assert r.status_code == 200
+    assert r.mimetype == 'application/manifest+json'
+    r = client_with_panels.get('/controller/app-panel/kueche/sw.js')
+    assert r.status_code == 200
+    assert r.mimetype == 'application/javascript'
+
+
+def test_PANEL_2_app_panel_unknown_asset_returns_404(client_with_panels):
+    r = client_with_panels.get('/controller/app-panel/kueche/does-not-exist.js')
+    assert r.status_code == 404
+
+
+def test_PANEL_2_app_panel_path_traversal_blocked(client_with_panels):
+    """Defense in Depth — Versuch, aus app-panel/ auszubrechen."""
+    r = client_with_panels.get('/controller/app-panel/kueche/../../router/main.py')
+    assert r.status_code != 200
+
+
+def test_PANEL_2_figuren_erkennung_still_works(client_with_panels):
+    """Die generische `/controller/<app>/` Route darf durch die App-Panel-
+    Sonderbehandlung nicht beschädigt werden."""
+    r = client_with_panels.get('/controller/figuren-erkennung/')
+    assert r.status_code == 200
+    assert r.mimetype == 'text/html'
