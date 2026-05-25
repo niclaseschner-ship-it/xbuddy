@@ -1,6 +1,6 @@
 # App-Panel — Spec     (ID-Präfix: PANEL)
 
-> Status: V1-Scope · Refs #58
+> Status: V1-Kern · Refs #58
 
 Ein zweiter Controller-Typ neben der Figuren-Erkennung
 ([`figuren-erkennung.md`](figuren-erkennung.md)): ein Bildschirm mit
@@ -219,14 +219,20 @@ sonst greift der Adapter (ROU-24) für diese Panel-Instanz nicht.
 
 ### PANEL-9 — Automatisierte Tests pro Requirement
 Jede Requirement-ID, die Code-Verhalten beschreibt, hat einen
-automatisierten Test (CLAUDE.md §6; analog ROU-17, FIG-29-Ähnlich,
-PLAN-29). Die Tests entstehen mit dem Implementierungs-Ticket.
+automatisierten Test (CLAUDE.md §6; analog ROU-17, PLAN-29). Die Tests
+entstehen mit dem Implementierungs-Ticket.
 
 Mindest-Abdeckung:
 
 - PANEL-1 — Ein Tap auf eine Kachel sendet ein Event und löst keine
   Routing-Entscheidung im Panel selbst aus (kein Display-Wechsel
   ohne Router-Antwort).
+- PANEL-2 — *Tests:* GET `/controller/app-panel/<id>` antwortet mit
+  HTTP 200 und `Content-Type: text/html`; der `<id>`-Wert aus dem
+  URL-Segment landet im gerenderten HTML als Instanz-Identität
+  (z. B. als `data-source-id`-Attribut oder vergleichbares
+  Spec-neutrales Token), so dass die Seite ihre eigene Panel-Identität
+  ohne weiteren Roundtrip kennt.
 - PANEL-3 — `tiles.json` mit gemischten Einträgen wird in der
   Listen-Reihenfolge gerendert; `key` ist eindeutig.
 - PANEL-4 — Eintrag mit `sichtbar: false` wird nicht gerendert und
@@ -242,7 +248,15 @@ Mindest-Abdeckung:
 - PANEL-8 — Fehlende oder kaputte `config.json` lässt die Seite mit
   Defaults laufen (keine Crashen, `console.warn`-Eintrag).
   Konfigurierbare Werte überschreiben Defaults in der dokumentierten
-  Priorität.
+  Priorität. *Tests:* die load-bearing Kopplung „`source_id` aus
+  `config.json` == Schlüssel im `panels`-Abschnitt der `routing.json`
+  des Routers" (siehe PANEL-8 Body, ROU-18) wird beim Start geprüft;
+  eine Diskrepanz erscheint als sichtbarer Fehler (Test prüft die
+  sichtbare Fehler-Signalisierung). Der stumme Default-Fallback bei
+  fehlender/kaputter `config.json` bleibt erlaubt und ist konsistent
+  zu FIG-23/ROU-19 — geprüft wird, dass beide Wege (sichtbarer
+  Konsistenz-Fehler vs. stummer Datei-Fallback) sich nicht
+  vermischen.
 
 *Tickets:* #58
 
