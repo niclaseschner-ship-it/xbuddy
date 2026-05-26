@@ -954,3 +954,197 @@ def test_PANEL_2_figuren_erkennung_still_works(client_with_panels):
     r = client_with_panels.get('/controller/figuren-erkennung/')
     assert r.status_code == 200
     assert r.mimetype == 'text/html'
+
+
+# ============================================================
+#  Admin-Reload (#140, EC-21) — POST /api/v1/router/admin/reload
+# ============================================================
+#
+# EC-21 (Eltern-Chat-Spec): „Änderungen wirken sofort und ehrlich". Schreibt
+# ein Skill routing.json, muss der Router den neuen Zustand übernehmen — ohne
+# Reload-Aufruf bliebe der In-Memory-Routing-Cache stehen und das Versprechen
+# wäre falsch. Der Endpoint ist loopback-only (nginx leitet ihn zusätzlich
+# nicht weiter) und atomar (alter State bleibt bei Lade-Fehler erhalten).
+
+RELOAD_URL = '/api/v1/router/admin/reload'
+
+DEMO_ROUTING_INITIAL = {
+    "entries": [
+        {
+            "source_id":  "phone:test-1",
+            "descriptor": {"figure_id": "rotes-a", "bucket": 0},
+            "display_ids": ["default"],
+            "payload":    {"url": "http://example.test/klein"},
+        },
+    ]
+}
+
+DEMO_ROUTING_RELOADED = {
+    "entries": [
+        {
+            "source_id":  "phone:test-1",
+            "descriptor": {"figure_id": "rotes-a", "bucket": 0},
+            "display_ids": ["default"],
+            "payload":    {"url": "http://example.test/klein"},
+        },
+        {
+            "source_id":  "phone:test-1",
+            "descriptor": {"figure_id": "blaues-b", "bucket": 0},
+            "display_ids": ["default", "neuer-bildschirm"],
+            "payload":    {"url": "http://example.test/blau"},
+        },
+    ]
+}
+
+
+@pytest.fixture
+def reload_client(tmp_path):
+    """Frischer Router, der von einer schreibbaren routing.json geladen wurde.
+    Tests verändern die Datei und triggern dann den Reload-Endpoint."""
+    routing_file = tmp_path / "routing.json"
+    routing_file.write_text(json.dumps(DEMO_ROUTING_INITIAL))
+    router_main.state = {}
+    router_main._subscribers.clear()
+    router_main.load_routing(str(routing_file))
+    router_main.app.testing = True
+    client = router_main.app.test_client()
+    return client, routing_file
+
+
+def test_140_reload_endpoint_success_returns_200_with_details(reload_client):
+    """Erfolg: Endpoint liefert HTTP 200 und JSON {reloaded: true, details: ...}.
+    Die geänderte routing.json muss sichtbar geworden sein."""
+    client, routing_file = reload_client
+    # Datei ergänzen — der Router hat den neuen Eintrag noch nicht.
+    assert 'neuer-bildschirm' not in router_main.known_displays
+    routing_file.write_text(json.dumps(DEMO_ROUTING_RELOADED))
+
+    r = client.post(RELOAD_URL)
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body['reloaded'] is True
+    assert 'routing.json reloaded' in body['details']
+    assert '2 Eintr' in body['details']
+    # Neuer Eintrag ist in-memory angekommen — EC-21 „sofort und ehrlich".
+    assert 'neuer-bildschirm' in router_main.known_displays
+
+
+def test_140_reload_endpoint_is_idempotent(reload_client):
+    """Idempotenz: zweimal aufrufen → gleicher Endzustand, gleiches Ergebnis.
+    Der Endpoint hat keine Akkumulationssemantik."""
+    client, _ = reload_client
+    r1 = client.post(RELOAD_URL)
+    state_after_1 = (
+        list(router_main.routing_entries),
+        dict(router_main.panels),
+        set(router_main.known_displays),
+    )
+    r2 = client.post(RELOAD_URL)
+    state_after_2 = (
+        list(router_main.routing_entries),
+        dict(router_main.panels),
+        set(router_main.known_displays),
+    )
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert state_after_1 == state_after_2
+    # Beide Antworten enthalten dieselbe Einträge-Zahl.
+    assert r1.get_json()['details'] == r2.get_json()['details']
+
+
+def test_140_reload_endpoint_atomar_bei_parse_fehler(reload_client):
+    """Atomarität (E-RELOAD-1): kaputtes routing.json → 500 mit
+    {reloaded: false, error: ...}, ABER der alte State bleibt unverändert.
+    Der Router beantwortet Events nach dem Fehler weiter wie vor dem Aufruf."""
+    client, routing_file = reload_client
+    # Zustand vor dem Reload-Versuch festhalten.
+    entries_before = list(router_main.routing_entries)
+    panels_before = dict(router_main.panels)
+    known_before = set(router_main.known_displays)
+
+    # Datei zerschießen.
+    routing_file.write_text('{nicht valides json')
+
+    r = client.post(RELOAD_URL)
+    assert r.status_code == 500
+    body = r.get_json()
+    assert body['reloaded'] is False
+    assert 'error' in body and body['error']
+
+    # Alter State unverändert.
+    assert router_main.routing_entries == entries_before
+    assert router_main.panels == panels_before
+    assert router_main.known_displays == known_before
+
+    # Der Router antwortet weiter wie vorher.
+    s = client.get('/api/v1/displays/default/state')
+    assert s.status_code == 200
+
+
+def test_140_reload_endpoint_atomar_bei_fehlender_datei(reload_client):
+    """Atomarität bei FileNotFoundError: routing.json wird gelöscht →
+    500, alter State steht. Eine versehentlich gelöschte Datei darf den
+    laufenden Router nicht in den leeren Zustand kippen."""
+    client, routing_file = reload_client
+    entries_before = list(router_main.routing_entries)
+    known_before = set(router_main.known_displays)
+
+    routing_file.unlink()
+
+    r = client.post(RELOAD_URL)
+    assert r.status_code == 500
+    assert r.get_json()['reloaded'] is False
+    assert router_main.routing_entries == entries_before
+    assert router_main.known_displays == known_before
+
+
+def test_140_reload_endpoint_rejects_non_loopback(reload_client):
+    """Loopback-Schutz: Aufruf aus dem Netz (z. B. 10.0.0.5) → HTTP 403.
+    Flask-Testclient erlaubt environ_overrides, um remote_addr zu setzen —
+    das simuliert einen Aufruf, der NICHT von 127.0.0.1 kommt."""
+    client, _ = reload_client
+    r = client.post(RELOAD_URL, environ_overrides={'REMOTE_ADDR': '10.0.0.5'})
+    assert r.status_code == 403
+    body = r.get_json()
+    assert body['reloaded'] is False
+    assert '127.0.0.1' in body['error'] or 'loopback' in body['error'].lower()
+
+
+def test_140_reload_endpoint_accepts_ipv6_loopback(reload_client):
+    """IPv6-Loopback (::1) zählt auch als loopback — sonst schlägt der
+    Endpoint auf Systemen fehl, die lokal über IPv6 angebunden sind."""
+    client, _ = reload_client
+    r = client.post(RELOAD_URL, environ_overrides={'REMOTE_ADDR': '::1'})
+    assert r.status_code == 200
+    assert r.get_json()['reloaded'] is True
+
+
+def test_140_reload_endpoint_only_post_allowed(reload_client):
+    """Der Endpoint ist eine Aktion (POST), kein Lese-Endpoint. GET → 405."""
+    client, _ = reload_client
+    r = client.get(RELOAD_URL)
+    assert r.status_code == 405
+
+
+def test_140_reload_picks_up_new_panels_section(reload_client):
+    """Realistisches Szenario: ein Eltern-Chat-Skill schreibt einen neuen
+    panels-Eintrag. Vor dem Reload kennt der Router den panels-source_id
+    nicht; nach dem Reload schon — und ein `tile_selected` triggert den
+    neuen Eintrag."""
+    client, routing_file = reload_client
+    # Neue routing.json mit panels-Eintrag.
+    routing_file.write_text(json.dumps({
+        "entries": [],
+        "panels": {
+            "app-panel:neu": {"display_id": "display:neu"},
+        },
+    }))
+    r = client.post(RELOAD_URL)
+    assert r.status_code == 200
+    assert router_main.panels.get('app-panel:neu') == {'display_id': 'display:neu'}
+    # tile_selected → neues Display kennt jetzt seinen State.
+    post_event(client, {
+        'source_id': 'app-panel:neu', 'type': 'tile_selected',
+        'app': 'plan', 'view': 'woche',
+    })
+    assert router_main.state['display:neu']['payload']['url'] == '/display/plan/woche'

@@ -27,6 +27,7 @@ state = {}                # ROU-10: { display_id: {…} | None }
 routing_entries = []      # ROU-9 / ROU-18
 panels = {}               # ROU-18 panels-Abschnitt: source_id → { display_id }
 known_displays = set()    # Vereinigung aller display_ids in den Einträgen + panels
+routing_path = None       # zuletzt geladener Pfad — für den Reload-Endpoint (#140)
 
 
 def now_iso():
@@ -326,28 +327,42 @@ def apply_panel_trigger(source_id, descriptor):
 #  Laden von Dateien (ROU-18 / ROU-19)
 # ============================================================
 
-def load_routing(path):
-    global routing_entries, known_displays, panels
-    routing_entries = []
-    panels = {}
-    known_displays = set()
+class RoutingLoadError(Exception):
+    """Wird vom strikten Reload-Pfad (#140) geworfen, wenn die Datei nicht
+    gelesen oder geparst werden konnte. Der Start-Pfad (load_routing) fängt
+    das ab und arbeitet weiter mit leerer Tabelle — der Reload-Pfad gibt
+    den Fehler nach oben und lässt den alten State stehen (Atomarität)."""
+
+
+def _parse_routing(path):
+    """Liest und validiert routing.json und liefert ein Tupel
+    (entries, panels, known_displays). Wirft RoutingLoadError bei IO- oder
+    Parse-Fehler. Die Funktion ändert KEINEN globalen Zustand — das macht
+    erst die aufrufende Schicht (load_routing oder reload_routing).
+
+    Damit ist die Atomarität (E-RELOAD-1, #140) sauber getrennt: solange
+    diese Funktion einen Fehler wirft, hat der Router seinen alten State
+    nicht verändert und beantwortet weitere Events wie zuvor."""
     try:
         with open(path) as f:
             data = json.load(f)
-    except FileNotFoundError:
-        logging.warning('routing.json nicht gefunden: %s — starte mit leerer Tabelle', path)
-        return
+    except FileNotFoundError as e:
+        raise RoutingLoadError('routing.json nicht gefunden: %s' % path) from e
+    except OSError as e:
+        raise RoutingLoadError('routing.json nicht lesbar (%s): %s' % (path, e)) from e
     except json.JSONDecodeError as e:
-        logging.warning('routing.json nicht parsebar (%s): %s — starte mit leerer Tabelle', path, e)
-        return
-    routing_entries = data.get('entries', []) or []
-    for e in routing_entries:
+        raise RoutingLoadError('routing.json nicht parsebar (%s): %s' % (path, e)) from e
+
+    new_entries = data.get('entries', []) or []
+    new_panels = {}
+    new_known = set()
+    for e in new_entries:
         # Migrations-Schutz: die alte Form `display_ids` (Plural) bleibt für
         # descriptor-basiertes Matching (ROU-9) gültig. Eine alte Form
         # `display_ids` im panels-Abschnitt würde E-PANEL-5 widersprechen —
         # darum wird der panels-Abschnitt strikt gegen Singular validiert.
         for d in e.get('display_ids', []):
-            known_displays.add(d)
+            new_known.add(d)
     raw_panels = data.get('panels', {}) or {}
     if not isinstance(raw_panels, dict):
         logging.warning('panels-Abschnitt ist kein Objekt — ignoriere')
@@ -369,11 +384,52 @@ def load_routing(path):
         if not isinstance(display_id, str) or not display_id:
             logging.warning('panels[%s] ohne gültiges `display_id` — ignoriere', source_id)
             continue
-        panels[source_id] = {'display_id': display_id}
-        known_displays.add(display_id)
+        new_panels[source_id] = {'display_id': display_id}
+        new_known.add(display_id)
+    return new_entries, new_panels, new_known
+
+
+def _install_routing(new_entries, new_panels, new_known):
+    """Übernimmt die geparsten Daten in den globalen State. Eigene Funktion,
+    damit Start- und Reload-Pfad denselben Übernahme-Schritt nutzen (DRY)."""
+    global routing_entries, panels, known_displays
+    routing_entries = new_entries
+    panels = new_panels
+    known_displays = new_known
     logging.info('routing geladen: %d Einträge, %d Panels, %d Displays (%s)',
                  len(routing_entries), len(panels), len(known_displays),
                  ', '.join(sorted(known_displays)) or '—')
+
+
+def load_routing(path):
+    """Start-Pfad (ROU-18): bei Lesefehler wird mit leerer Tabelle gestartet —
+    der Router läuft auch ohne routing.json an. Der Reload-Pfad (reload_routing)
+    nutzt dieselbe Parse-Funktion, gibt Fehler aber nach oben durch."""
+    global routing_path
+    routing_path = path
+    try:
+        new_entries, new_panels, new_known = _parse_routing(path)
+    except RoutingLoadError as e:
+        logging.warning('%s — starte mit leerer Tabelle', e)
+        _install_routing([], {}, set())
+        return
+    _install_routing(new_entries, new_panels, new_known)
+
+
+def reload_routing():
+    """Reload-Pfad (#140, E-RELOAD-1): lädt die zuletzt gesetzte routing.json
+    erneut. Bei Erfolg liefert die Funktion die Anzahl der übernommenen
+    Einträge, bei Lade-/Parse-Fehler wirft sie RoutingLoadError — der globale
+    State bleibt in diesem Fall unverändert (Atomarität).
+
+    Die eigentliche Übernahme passiert erst NACH erfolgreichem Parsen; ein
+    zerschossenes routing.json verfälscht damit weder routing_entries noch
+    panels/known_displays."""
+    if not routing_path:
+        raise RoutingLoadError('kein routing.json-Pfad konfiguriert')
+    new_entries, new_panels, new_known = _parse_routing(routing_path)
+    _install_routing(new_entries, new_panels, new_known)
+    return len(new_entries)
 
 
 def load_config(path, defaults):
@@ -449,6 +505,66 @@ def display_events(display_id):
                               mimetype='text/event-stream')
     resp.headers['Cache-Control'] = 'no-cache'
     return resp
+
+
+# ============================================================
+#  Admin: Reload (#140, EC-21)
+# ============================================================
+#
+# Eltern-Chat-Skills schreiben routing.json (z. B. „App einbinden") und müssen
+# danach den Router zur Übernahme zwingen — EC-21 verlangt, dass Änderungen
+# „sofort und ehrlich" wirken. Ohne Reload-Aufruf bliebe der Router auf seinem
+# In-Memory-State stehen und das Eltern-Versprechen wäre eine Lüge.
+#
+# Drei harte Eigenschaften:
+#   1. Loopback-only (`request.remote_addr == 127.0.0.1`) — andere Aufrufer
+#      bekommen HTTP 403. Der Endpoint ist ein Admin-Werkzeug, kein API.
+#   2. Atomar: bei Lade-/Parse-Fehler bleibt der alte State unverändert
+#      (siehe _parse_routing — die Übernahme passiert erst NACH erfolgreichem
+#      Parsen).
+#   3. nginx-Origin leitet `/api/v1/<komponente>/admin/...` NICHT weiter
+#      (siehe deploy/nginx/xbuddy-origin.conf) — Defense in Depth, der
+#      Loopback-Guard hier ist die zweite Schicht.
+
+# Zulässige Aufrufer-Adressen. IPv4-Loopback (127.0.0.1) und IPv6-Loopback (::1)
+# — der Flask-Testclient setzt 127.0.0.1, ein lokaler `curl` auf den Server
+# je nach Stack auch ::1. Beide sind dasselbe physische Interface.
+_RELOAD_ALLOWED_REMOTES = {'127.0.0.1', '::1'}
+
+
+def _is_loopback(remote_addr):
+    """Ein Aufruf gilt als loopback, wenn er aus 127.0.0.1 oder ::1 stammt.
+    Reverse-Proxy-Forwarding (X-Forwarded-For) wird absichtlich ignoriert —
+    der Loopback-Guard prüft, wer wirklich angeklopft hat, nicht was der
+    Header behauptet."""
+    return remote_addr in _RELOAD_ALLOWED_REMOTES
+
+
+@app.route('/api/v1/router/admin/reload', methods=['POST'])
+def admin_reload():
+    if not _is_loopback(request.remote_addr or ''):
+        # 403 statt 404, damit Bedienfehler im LAN sichtbar sind: ein Aufruf
+        # aus dem Netz von außen bekommt ein klares „nicht erlaubt", kein
+        # diffuses „gibts nicht".
+        logging.warning('admin/reload abgelehnt: remote_addr=%s', request.remote_addr)
+        return jsonify({
+            'reloaded': False,
+            'error':    'nur 127.0.0.1 darf den Endpoint erreichen',
+        }), 403
+    try:
+        n = reload_routing()
+    except RoutingLoadError as e:
+        # Atomarität: alter State steht unverändert weiter — der Router
+        # beantwortet Events nach dem Fehler wie vor dem Aufruf.
+        logging.warning('admin/reload fehlgeschlagen: %s', e)
+        return jsonify({
+            'reloaded': False,
+            'error':    str(e),
+        }), 500
+    return jsonify({
+        'reloaded': True,
+        'details':  'routing.json reloaded (%d Einträge)' % n,
+    }), 200
 
 
 @app.route('/api/v1/diag', methods=['GET'])
