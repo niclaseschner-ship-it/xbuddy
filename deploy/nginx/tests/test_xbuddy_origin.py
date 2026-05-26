@@ -91,3 +91,58 @@ def test_URL_14_familie_location_steht_nach_plan_locations():
     assert pos_plan_api < pos_familie, (
         "URL-14-Tabellenreihenfolge: /api/v1/plan/ kommt vor /api/v1/familie/"
     )
+
+
+# ============================================================
+#  Admin-Endpoints sind nicht vom Netz erreichbar (#140, EC-21)
+# ============================================================
+#
+# Der Router-Reload-Endpoint hat einen Loopback-Guard in der App; nginx ist
+# die zweite Verteidigungslinie und blockiert /api/v1/<komp>/admin/* bereits
+# an der Origin. Diese Tests fixieren die textuellen Eigenschaften der Conf:
+# Regex-Block existiert, gibt 404 zurück, steht VOR den durchreichenden
+# /api/v1/-Locations (Regex hat in nginx Vorrang, aber wir wollen die
+# Tabellenreihenfolge auch visuell — siehe Routing-Tabelle im Conf-Header).
+
+
+def test_140_admin_block_existiert():
+    """Eine `location ~ ^/api/v1/[^/]+/admin/` mit `return 404` muss da sein."""
+    text = _conf_text()
+    match = re.search(
+        r"location\s+~\s+\^/api/v1/\[\^/\]\+/admin/\s*\{[^}]*return\s+404\s*;[^}]*\}",
+        text,
+        re.DOTALL,
+    )
+    assert match is not None, (
+        "Admin-Block fehlt: nginx muss /api/v1/<komp>/admin/* mit 404 "
+        "ablehnen (#140 Defense in Depth, EC-21)"
+    )
+
+
+def test_140_admin_block_steht_vor_router_api_v1():
+    """Der Admin-Block muss VOR dem durchreichenden /api/v1/-Block stehen,
+    damit die Routing-Tabelle im Conf-Header die Datei-Reihenfolge eins zu
+    eins spiegelt — Reviewer und neue Komponenten finden den Schutz da, wo
+    URL-14 ihn anlegt (spezifisch vor allgemein)."""
+    text = _conf_text()
+    pos_admin = text.find("location ~ ^/api/v1/[^/]+/admin/")
+    pos_api_v1 = text.find("location /api/v1/ ")
+    assert pos_admin != -1, "Admin-Block (Regex-location) nicht gefunden"
+    assert pos_api_v1 != -1, "location /api/v1/ nicht gefunden"
+    assert pos_admin < pos_api_v1, (
+        "Admin-Block muss VOR /api/v1/ stehen — die Routing-Tabelle im "
+        "Conf-Header schreibt diese Reihenfolge fest."
+    )
+
+
+def test_140_admin_block_in_routing_tabelle_dokumentiert():
+    """Die Routing-Tabelle im Conf-Header muss den Admin-Block listen —
+    sonst weichen Dokumentation und Verhalten auseinander."""
+    text = _conf_text()
+    # Akzeptiert sowohl /api/v1/<komp>/admin/ als auch ähnliche Formen,
+    # solange „admin" auftaucht und ein 404-Hinweis dabei ist.
+    header = text.split("server {", 1)[0]
+    assert "/admin/" in header, (
+        "Routing-Tabelle im Conf-Header listet den /admin/-Block nicht — "
+        "Doku und Verhalten dürfen nicht auseinanderlaufen."
+    )
