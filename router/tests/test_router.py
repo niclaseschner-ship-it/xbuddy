@@ -894,7 +894,7 @@ def test_ROU_24_stream_publishes_panel_state_change(client_with_panels):
 # ============================================================
 
 def test_PANEL_2_app_panel_index_served_with_html(client_with_panels):
-    r = client_with_panels.get('/controller/app-panel/kueche')
+    r = client_with_panels.get('/controller/app-panel/kueche/')
     assert r.status_code == 200
     assert r.mimetype == 'text/html'
     # Die <id> aus der URL muss im gerenderten HTML auftauchen, damit die
@@ -904,10 +904,19 @@ def test_PANEL_2_app_panel_index_served_with_html(client_with_panels):
 
 def test_PANEL_2_app_panel_index_id_per_instance(client_with_panels):
     """Zwei verschiedene Instanzen → zwei verschiedene Daten-Attribute."""
-    r1 = client_with_panels.get('/controller/app-panel/kueche')
-    r2 = client_with_panels.get('/controller/app-panel/flur-tablet')
+    r1 = client_with_panels.get('/controller/app-panel/kueche/')
+    r2 = client_with_panels.get('/controller/app-panel/flur-tablet/')
     assert b'data-panel-id="kueche"' in r1.data
     assert b'data-panel-id="flur-tablet"' in r2.data
+
+
+def test_PANEL_2_app_panel_no_slash_redirects_to_slash(client_with_panels):
+    """Refs #128: ohne Trailing-Slash kommt 301 zur Slash-Variante — sonst
+    brechen die relativen Asset-Pfade (./app.js → /controller/app-panel/app.js
+    statt /controller/app-panel/<id>/app.js)."""
+    r = client_with_panels.get('/controller/app-panel/kueche')
+    assert r.status_code == 301
+    assert r.headers['Location'].endswith('/controller/app-panel/kueche/')
 
 
 def test_PANEL_2_app_panel_assets_served(client_with_panels):
