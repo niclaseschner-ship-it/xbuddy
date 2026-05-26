@@ -179,6 +179,17 @@ def _run_agent(msg, ctx):
         private_chat_id=(msg.chat_id if msg.chat_type == "private"
                          else msg.from_user_id))
 
+    # Issue #93: Typing-Indikator vor dem Provider-Aufruf — bei mehreren
+    # Sekunden Provider-Latenz wirkt der Bot sonst eingefroren. Der Wrapper
+    # `TelegramClient.send_chat_action` schluckt Telegram-Fehler bereits
+    # (Komfort, kein Gate). Der zusätzliche try/except hier ist eine doppelte
+    # Sicherung — der Indikator darf den Turn unter keinen Umständen blockieren.
+    try:
+        ctx.tg.send_chat_action(msg.chat_id, "typing")
+    except TelegramError as e:
+        logging.warning("Typing-Indikator-Aufruf hat trotz Wrapper-Schluck "
+                        "geworfen: %s", e)
+
     try:
         result = agent.run_turn(history, user_message, ctx.provider,
                                 ctx.catalog, turn_context)
@@ -428,8 +439,13 @@ def build_context(cfg, db_path, store_path):
     # verdrahtet die beiden Funktionen.
     import skills.ca_verteilung as _cav
 
-    def _cav_hook(_os_wert, private_chat_id, _user_id):
-        _cav.verteile_ca(tg, private_chat_id, cfg.ca_pem_path)
+    def _cav_hook(os_wert, private_chat_id, _user_id):
+        # GAA-6/CAV-5 (#95): das von der GAA erfragte Betriebssystem reicht
+        # die Orchestrierung an die CA-Verteilung weiter — sie liefert dann
+        # nur den passenden Anleitungs-Abschnitt aus. Wirft die CAV bei einem
+        # unbekannten Wert (z. B. `linux`, das die CA-Anleitung in V1 nicht
+        # abdeckt), fängt sie der GAA-Hook-Wrapper auf (geraet_anlegen.py).
+        _cav.verteile_ca(tg, private_chat_id, cfg.ca_pem_path, geraet=os_wert)
 
     ctx.catalog = build_catalog(
         tg, cfg.ca_pem_path,

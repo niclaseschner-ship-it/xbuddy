@@ -15,19 +15,16 @@ Die Aufgabe ist ein dünner Aufrufer der trigger-agnostischen Funktion
 Privatchat-Stream als `next_message`-Callable und gibt die Quittung zurück,
 die der Agent dem Aufrufer weiterreicht.
 
-Querverweis-Kommentar (E-KAV-2): Das Privatchat-Session-Muster
-(`KavSession`) ist 1:1 wiederverwendet aus `familie_anlegen_task.FaaSession`
-und `geraet_anlegen_task.GaaSession`. Mit KAV taucht das Muster zum
-**dritten** Mal auf — der Refactor in einen gemeinsamen Plattform-Baustein
-ist damit der **logische Folge-Schritt** (E-KAV-2: dritter Trigger erreicht),
-gehört aber **nicht in diesen PR** (kleine PRs, CLAUDE.md §6).
+Querverweis-Kommentar (EC-20, Refs #130): Das Privatchat-Session-Muster
+(`KavSession`) ist mit FAA-12 / GAA-5 das dritte Vorkommen gewesen — der
+Refactor in die Plattform-Klasse `PrivateChatSession` (eltern-chat/
+private_chat_session.py) hat den dritten Trigger eingelöst.
 """
 
 import logging
-import queue
-import threading
 
 from hooks import ReloadHook
+from private_chat_session import PrivateChatSession
 from skills import kalender_verbinden
 from tasks import Proposal, WriteTask
 
@@ -59,12 +56,7 @@ _PROPOSAL_SUMMARY = (
     "schreiben).")
 
 
-# E-KAV-2: identisch zu `_SESSION_TIMEOUT_SECONDS` in FAA/GAA — der
-# Querverweis-Kommentar gehört in den Code, nicht in die Spec.
-_SESSION_TIMEOUT_SECONDS = kalender_verbinden.SESSION_TIMEOUT_SECONDS
-
-
-class KavSession:
+class KavSession(PrivateChatSession):
     """Eine laufende »Kalender verbinden«-Session in einem Privatchat.
 
     Analog `FaaSession` / `GaaSession`: der Worker-Thread läuft
@@ -72,42 +64,13 @@ class KavSession:
     auf der Queue. Die main-Loop steckt eingehende Privatchat-Updates dieses
     Chats per `deliver()` in die Queue, statt sie dem Agenten weiterzureichen —
     solange die Session aktiv ist.
+
+    Die Worker-Thread+Queue+Timeout-Mechanik lebt in `PrivateChatSession`
+    (EC-20, Refs #130); diese Subklasse benennt nur Thread- und Logging-Präfix.
     """
 
-    def __init__(self, chat_id):
-        self.chat_id = chat_id
-        self._queue = queue.Queue()
-        self._thread = None
-        self._finished = threading.Event()
-
-    def start(self, target, args):
-        """Startet den Worker-Thread, der `target(*args)` ausführt."""
-        def run():
-            try:
-                target(*args)
-            except Exception:  # noqa: BLE001 — Session-Fehler isoliert melden
-                logging.exception("KAV-Session in Chat %s abgebrochen",
-                                  self.chat_id)
-            finally:
-                self._finished.set()
-        self._thread = threading.Thread(
-            target=run, name="kav-session-%s" % self.chat_id, daemon=True)
-        self._thread.start()
-
-    def deliver(self, kav_input):
-        """Reicht eine Privatchat-Nachricht an den Worker durch."""
-        self._queue.put(kav_input)
-
-    def next_message(self):
-        """`next_message`-Callable für `kalender_verbinden` — blockiert auf
-        der Queue, bis eine Nachricht eintrifft oder das Timeout greift."""
-        try:
-            return self._queue.get(timeout=_SESSION_TIMEOUT_SECONDS)
-        except queue.Empty:
-            return None
-
-    def is_finished(self):
-        return self._finished.is_set()
+    THREAD_NAME_PREFIX = "kav"
+    LOG_PREFIX = "KAV"
 
 
 class KalenderVerbindenTask(WriteTask):

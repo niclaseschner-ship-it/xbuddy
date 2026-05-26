@@ -139,6 +139,36 @@ eine definierte Aufgabe (Abschnitt 3) gedeckt ist.
 
 *Tickets:* #27
 
+### EC-22 — Gezielt fragen statt Varianten ausbreiten
+Bei Anfragen, deren passende Antwort vom Kontext abhängt (z. B. Anleitungen
+mit Geräte-Varianten), fragt das System einmal kurz nach dem fehlenden Kontext
+und liefert dann gezielt — statt mehrere Varianten gleichzeitig auszubreiten.
+Wenn das System eine angefragte Tatsache nicht sicher kennt, sagt es das offen,
+statt einen plausiblen Pfad zu raten. (Verschärft EC-7; betrifft die Antwort
+*innerhalb* der Katalog-Grenze.)
+
+Erkennt das System nachträglich, dass es einen Holzweg eingeschlagen hat
+(z. B. einen Schritt vorgeschlagen, der am Gerät nachweislich nicht
+funktioniert), entschuldigt es sich kurz und macht mit dem nun bekannten
+Stand weiter — keine stille Korrektur, kein erneutes Ausbreiten aller
+Möglichkeiten.
+
+**Was sich für die Familie ändert** — Beispiel: Zertifikat installieren.
+
+- Ohne EC-22: Mama bittet den Bot um die Zertifikat-Anleitung. Der Bot
+  schickt einen Block mit allen vier OS-Varianten (Windows, Android, iOS,
+  macOS). Mama muss erst durchlesen, welcher Abschnitt für ihr iPhone gilt
+  — auf einem 6"-Display, neben Familien-Gruppen-Nachrichten.
+- Mit EC-22: Der Bot fragt einmal kurz: »Welches Gerät — Android-Handy,
+  iPhone/iPad, Windows-PC oder Mac?« Mama tippt »iPhone«. Der Bot schickt
+  nur den iOS-Abschnitt — kein Suchen, kein Scrollen.
+
+Begründung: Eltern müssen das nicht selbst leisten — die gezielte Rückfrage
+ist Sekunden, das Suchen im falschen Abschnitt ist Reibung jeder Familie
+ohne Geräte-Detail.
+
+*Tickets:* #95
+
 ## 3. Aufgaben
 
 ### EC-8 — Aufgaben-Katalog

@@ -16,6 +16,7 @@ Quittungstext zurück — den der Agent dem Familienmitglied weiterreicht.
 import logging
 
 from skills import ca_verteilung
+from skills.ca_verteilung import SUPPORTED_GERAETE
 from tasks import ReadTask
 
 
@@ -31,6 +32,12 @@ class CaVerteilungTask(ReadTask):
     zum öffentlichen `rootCA.pem` — werden im Konstruktor injiziert. Der
     Zielchat kommt aus dem `TurnContext`, NIE aus den Modell-`arguments`: so
     bestimmt nicht das Sprachmodell, an wen das Zertifikat geht.
+
+    Das Zielgerät dagegen kommt vom Modell — als `geraet`-Argument
+    (CAV-5, #95). Es ist als JSON-Schema-`required` markiert; fehlt es im
+    Modell-Aufruf, wird die Aufgabe nicht ausgeführt, der Anbieter sieht
+    den Fehler und fragt die Familie gezielt nach dem Gerät (EC-22). So
+    bekommt die Familie nie alle vier OS-Anleitungen auf einmal.
     """
 
     def __init__(self, tg, ca_pem_path):
@@ -38,21 +45,43 @@ class CaVerteilungTask(ReadTask):
             name="ca_verteilen",
             description=(
                 "Schickt dem anfragenden Familienmitglied das XBuddy-Root-"
-                "Zertifikat als Datei plus eine Installations-Anleitung. "
-                "Aufrufen, wenn jemand das Zertifikat möchte oder ein Gerät "
-                "die XBuddy-Seiten mit einer Sicherheitswarnung öffnet."),
-            parameters={"type": "object", "properties": {}})
+                "Zertifikat als Datei plus eine Installations-Anleitung für "
+                "das angegebene Zielgerät. Aufrufen, wenn jemand das "
+                "Zertifikat möchte oder ein Gerät die XBuddy-Seiten mit einer "
+                "Sicherheitswarnung öffnet. Vorher das Zielgerät erfragen, "
+                "falls noch nicht bekannt — niemals alle Geräte-Anleitungen "
+                "gleichzeitig anbieten."),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "geraet": {
+                        "type": "string",
+                        "enum": list(SUPPORTED_GERAETE),
+                        "description": (
+                            "Zielgerät, auf dem das Zertifikat installiert "
+                            "werden soll. Pflicht — vorher beim "
+                            "Familienmitglied erfragen."),
+                    },
+                },
+                "required": ["geraet"],
+            })
         self._tg = tg
         self._ca_pem_path = ca_pem_path
 
     def run(self, arguments, turn_context):
-        """Liefert Zertifikat und Anleitung an den Chat aus `turn_context` aus.
+        """Liefert Zertifikat und gerätespezifische Anleitung an den Chat aus
+        `turn_context` aus.
 
         Sendet selbst über das konstruktor-injizierte `tg` (CAV-4) und gibt nur
         eine kurze Quittung zurück. Scheitert die Auslieferung, wird der Fehler
-        als `CaVerteilungError` an den Agent-Loop weitergereicht (EC-9).
+        als `CaVerteilungError` an den Agent-Loop weitergereicht (EC-9). Fehlt
+        `geraet` in den Argumenten, wird `ValueError` geworfen — der Agent
+        meldet das dem Modell zurück, das daraufhin die Familie nach dem
+        Gerät fragt (EC-22, CAV-5).
         """
+        geraet = (arguments or {}).get("geraet")
         ca_verteilung.verteile_ca(self._tg, turn_context.chat_id,
-                                  self._ca_pem_path)
-        logging.info("CA-Verteilung über EC-8-Aufgabe ausgelöst (CAV-6)")
+                                  self._ca_pem_path, geraet=geraet)
+        logging.info("CA-Verteilung über EC-8-Aufgabe ausgelöst (CAV-6, geraet=%s)",
+                     geraet)
         return _QUITTUNG

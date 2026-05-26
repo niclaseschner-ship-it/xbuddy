@@ -61,10 +61,13 @@ runtime = {
     "registry": registry_mod.Registry(),  # nur Test-/Fallback-Quelle
     "registry_path": None,     # Live: Pfad zur familie.json — Quelle des Wahren Stands
     "transport": None,         # plan.kalender.GoogleTransport (oder Fake in Tests)
+    "config_path": None,       # Pfad zur plan.json — Naht für den Reload-Endpoint (#140)
+    "transport_factory": None, # cfg -> transport — neu binden nach Config-Reload (#140)
 }
 
 
-def configure(cfg, registry, transport, registry_path=None):
+def configure(cfg, registry, transport, registry_path=None,
+              config_path=None, transport_factory=None):
     """Setzt Konfiguration, Familien-Registry und Kalender-Transport.
 
     `transport` ist die Test-Naht (PLAN-29): in Produktion ein
@@ -76,11 +79,25 @@ def configure(cfg, registry, transport, registry_path=None):
     durch FAA über den Eltern-Chat-Bot) angelegte Personen ohne Service-
     Restart sichtbar sind. Tests übergeben heute nur das in-memory-Objekt;
     bleibt `registry_path=None`, ist das `registry`-Objekt die feste Quelle.
+
+    `config_path` ist die Naht für den Reload-Endpoint (#140, EC-21): wird
+    er gesetzt, kann `POST /api/v1/plan/admin/reload` plan.json neu laden —
+    z. B. nachdem KAV (Kalender verbinden) eine neue `kalender_id`
+    geschrieben hat. Ohne `config_path` ist der Reload-Endpoint nicht
+    benutzbar (er antwortet 500).
+
+    `transport_factory(cfg) -> transport` wird im Reload-Pfad aufgerufen,
+    sobald eine neue Config geparst wurde, und liefert einen frischen
+    Transport mit der ggf. geänderten `kalender_id`. In Tests bleibt der
+    Default-Wert `None` — die Tests setzen den Transport direkt oder
+    übergeben einen eigenen Factory-Stub.
     """
     runtime["config"] = cfg
     runtime["registry"] = registry
     runtime["registry_path"] = registry_path
     runtime["transport"] = transport
+    runtime["config_path"] = config_path
+    runtime["transport_factory"] = transport_factory
 
 
 def _aktuelle_registry():
@@ -314,6 +331,124 @@ def _aktivitaet_label(art):
 
 
 # ============================================================
+#  Admin: Reload (#140, EC-21)
+# ============================================================
+#
+# EC-21 (Eltern-Chat-Spec): „Änderungen wirken sofort und ehrlich". Der
+# Plan-Buddy lädt heute beim Start `plan.json` (PLAN-28) und hält die
+# aufgelöste Config im Speicher; KAV (Kalender verbinden) schreibt aber im
+# laufenden Betrieb eine neue `kalender_id` in genau diese Datei. Ohne
+# Reload-Aufruf bliebe der Plan-Buddy auf dem alten Kalender stehen und das
+# Versprechen wäre falsch.
+#
+# Die Zugangsdaten (OAuth-Client + Refresh-Token) brauchen KEINEN expliziten
+# Reload: `zugangsdaten.Zugangsdaten.get(...)` liest pro Aufruf frisch von
+# Disk (ZD-4) — KAV-geschriebene Tokens sind ab dem nächsten Aufruf sichtbar.
+# Was im Speicher hängt, ist die aufgelöste `Config` (mit `kalender_id`,
+# Slots, Default-Verantwortlichkeiten, Fenster-Größen). Genau die laden wir
+# neu, und bauen anschließend den Transport mit der ggf. neuen kalender_id
+# neu (`transport_factory`).
+#
+# Drei harte Eigenschaften — analog Router-Reload-Endpoint (PR #149):
+#   1. Loopback-only (`request.remote_addr` ∈ {127.0.0.1, ::1}). Andere
+#      Aufrufer bekommen HTTP 403.
+#   2. Atomar (E-RELOAD-1): bei Parse-Fehler bleibt der alte State unberührt
+#      — Config UND Transport. Die Übernahme passiert erst, nachdem die
+#      neue Config erfolgreich gebaut wurde.
+#   3. nginx-Origin leitet `/api/v1/<komponente>/admin/...` NICHT weiter —
+#      die nginx-Conf ist von PR #149 bereits gehärtet. Der Loopback-Guard
+#      hier ist die zweite Schicht.
+
+
+class PlanReloadError(Exception):
+    """Wird vom strikten Reload-Pfad (#140) geworfen, wenn plan.json nicht
+    gelesen oder geparst werden konnte. Der Start-Pfad (main) lässt
+    ConfigError nach oben durch — der Reload-Pfad fängt ihn ab und gibt ihn
+    als PlanReloadError zurück, sodass der Endpoint einen klaren Fehler
+    serialisieren kann."""
+
+
+def reload_plan_config():
+    """Lädt plan.json neu (#140, E-RELOAD-1) und ersetzt den In-Memory-State.
+
+    Liefert die neue `Config` bei Erfolg. Wirft PlanReloadError, wenn der
+    Pfad nicht konfiguriert ist oder die Datei nicht parsbar ist — in dem
+    Fall bleibt `runtime["config"]` und `runtime["transport"]` unverändert
+    (Atomarität).
+
+    Der Transport wird über die `transport_factory` neu gebaut — sonst
+    bliebe die alte `kalender_id` an die alte Transport-Instanz gebunden.
+    Tests dürfen `transport_factory=None` lassen; dann tauscht der Reload
+    nur die Config aus und der Test-Transport bleibt stehen (das ist genau
+    das, was die Test-Naht braucht)."""
+    path = runtime.get("config_path")
+    if not path:
+        raise PlanReloadError("kein plan.json-Pfad konfiguriert")
+    try:
+        new_cfg = config_mod.resolve(path)
+    except config_mod.ConfigError as e:
+        raise PlanReloadError("plan.json nicht ladbar: %s" % e) from e
+    except OSError as e:
+        raise PlanReloadError("plan.json nicht lesbar (%s): %s" % (path, e)) from e
+
+    # Neuer Transport mit ggf. geänderter kalender_id — erst NACH erfolg-
+    # reichem Config-Parse, damit ein zerschossenes plan.json den alten
+    # Transport nicht kippt.
+    factory = runtime.get("transport_factory")
+    new_transport = factory(new_cfg) if factory is not None else runtime["transport"]
+
+    # Atomare Übernahme — bis hierher hat kein globaler Slot sich geändert.
+    runtime["config"] = new_cfg
+    runtime["transport"] = new_transport
+    logger.info("plan.json neu geladen: kalender_id=%s, slots=%d",
+                new_cfg.kalender_id, len(new_cfg.slots))
+    return new_cfg
+
+
+# Zulässige Aufrufer-Adressen — IPv4- und IPv6-Loopback. Der Flask-
+# Testclient setzt per Default 127.0.0.1; ein lokaler `curl` auf den Server
+# je nach Stack auch ::1. Beide sind dasselbe physische Interface.
+_RELOAD_ALLOWED_REMOTES = {"127.0.0.1", "::1"}
+
+
+def _is_loopback(remote_addr):
+    """Ein Aufruf gilt als loopback, wenn er aus 127.0.0.1 oder ::1 stammt.
+    Reverse-Proxy-Forwarding (X-Forwarded-For) wird absichtlich ignoriert —
+    der Loopback-Guard prüft, wer wirklich angeklopft hat, nicht was der
+    Header behauptet."""
+    return remote_addr in _RELOAD_ALLOWED_REMOTES
+
+
+@app.route("/api/v1/plan/admin/reload", methods=["POST"])
+def admin_reload():
+    if not _is_loopback(request.remote_addr or ""):
+        # 403 statt 404, damit Bedienfehler im LAN sichtbar sind: ein
+        # Aufruf aus dem Netz bekommt ein klares „nicht erlaubt", kein
+        # diffuses „gibts nicht".
+        logger.warning("admin/reload abgelehnt: remote_addr=%s",
+                       request.remote_addr)
+        return jsonify({
+            "reloaded": False,
+            "error":    "nur 127.0.0.1 darf den Endpoint erreichen",
+        }), 403
+    try:
+        new_cfg = reload_plan_config()
+    except PlanReloadError as e:
+        # Atomarität: alter State steht unverändert weiter — der Plan-
+        # Buddy beantwortet Requests nach dem Fehler wie vor dem Aufruf.
+        logger.warning("admin/reload fehlgeschlagen: %s", e)
+        return jsonify({
+            "reloaded": False,
+            "error":    str(e),
+        }), 500
+    return jsonify({
+        "reloaded": True,
+        "details":  ("plan.json reloaded (kalender_id=%s, slots=%d)"
+                     % (new_cfg.kalender_id, len(new_cfg.slots))),
+    }), 200
+
+
+# ============================================================
 #  Entrypoint (PLAN-28)
 # ============================================================
 
@@ -361,11 +496,25 @@ def main(argv=None):
         level=getattr(logging, rt["log_level"].upper(), logging.INFO),
         format="%(asctime)s %(levelname)s %(message)s")
 
-    cfg = config_mod.resolve(args.config_file)
+    # Pfad zur plan.json explizit auflösen — sowohl der erste Lade-Versuch
+    # als auch der Reload-Endpoint (#140) nutzen denselben Pfad.
+    config_path = (args.config_file
+                   or os.environ.get(config_mod.ENV_CONFIG_FILE)
+                   or config_mod.DEFAULT_CONFIG_FILE)
+    cfg = config_mod.resolve(config_path)
     registry = registry_mod.load(args.registry)
     store = Zugangsdaten(resolve_store_path())
-    transport = kalender_mod.GoogleTransport(store, cfg.kalender_id)
-    configure(cfg, registry, transport, registry_path=args.registry)
+    # Naht für #140: der Factory wird im Reload-Pfad mit der frisch
+    # geladenen Config aufgerufen und liefert einen Transport, der die
+    # ggf. neue kalender_id kennt. Der `store` ist live (ZD-4) und liest
+    # OAuth-Daten pro Aufruf frisch von Disk.
+    def transport_factory(cfg):
+        return kalender_mod.GoogleTransport(store, cfg.kalender_id)
+    transport = transport_factory(cfg)
+    configure(cfg, registry, transport,
+              registry_path=args.registry,
+              config_path=config_path,
+              transport_factory=transport_factory)
 
     ssl_context = None
     scheme = "http"

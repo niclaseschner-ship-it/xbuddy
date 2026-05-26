@@ -12,6 +12,7 @@ from main import Context, handle_update
 from main import _PROVIDER_DOWN
 from model import ProviderError
 from tasks import Catalog
+from telegram import TelegramError
 
 
 def _ctx(tmp_path, tg, provider, catalog=None):
@@ -134,3 +135,43 @@ def test_EC_14_provider_error_yields_clear_hint(tmp_path):
     handle_update(make_message("hallo", from_user_id=7), ctx)
     # klarer Hinweis, sauberer Abbruch — kein Absturz.
     assert tg.sent[0]["text"] == _PROVIDER_DOWN
+
+
+# -- Issue #93: Typing-Indikator vor Provider-Aufruf -------------
+
+def test_typing_action_sent_before_provider_call(tmp_path):
+    """Vor jedem Provider-Aufruf wird `send_chat_action(chat_id, "typing")`
+    abgesetzt — der Familien-Chat sieht „Bot tippt …", solange der Provider
+    rechnet (Issue #93).
+    """
+    tg = FakeTelegram(members=_members(7))
+    provider = FakeProvider([text_response("Antwort.")])
+    ctx = _ctx(tmp_path, tg, provider)
+
+    handle_update(make_message("hallo", chat_id=42, from_user_id=7), ctx)
+
+    # Typing-Indikator ist genau einmal abgesetzt — auf dem richtigen Chat,
+    # mit der richtigen Aktion.
+    assert tg.chat_actions == [{"chat_id": 42, "action": "typing"}]
+    # Reihenfolge: der Indikator kommt VOR dem Provider-Aufruf — der Provider
+    # hat genau einen Aufruf bekommen, also war der Indikator vorher dran.
+    assert len(provider.requests) == 1
+
+
+def test_typing_action_failure_does_not_block_turn(tmp_path):
+    """Ein scheiternder Typing-Indikator (TelegramError) darf den Turn nicht
+    abbrechen — er ist Komfort, kein Gate (Issue #93).
+    """
+    tg = FakeTelegram(members=_members(7),
+                      send_chat_action_error=TelegramError("API down"))
+    provider = FakeProvider([text_response("Trotzdem geantwortet.")])
+    ctx = _ctx(tmp_path, tg, provider)
+
+    handle_update(make_message("hallo", from_user_id=7), ctx)
+
+    # Aufruf wurde versucht …
+    assert len(tg.chat_actions) == 1
+    # … der Provider wurde trotzdem aufgerufen …
+    assert len(provider.requests) == 1
+    # … und der Bot hat geantwortet.
+    assert tg.sent[0]["text"] == "Trotzdem geantwortet."
