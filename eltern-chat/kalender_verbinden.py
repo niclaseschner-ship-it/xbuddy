@@ -28,7 +28,9 @@ Privatchat-Session entsteht erst beim **dritten** Vorkommen des Musters
 
 import json
 import logging
+import os
 import secrets
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -60,8 +62,18 @@ ZD_NAME_ACCOUNT_EMAIL = "kav-account-email"
 _GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 _GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+# KAV-X: calendarList-Endpunkt — Liste der Kalender des Accounts, wird mit
+# dem frischen Access-Token aus KAV-7 abgerufen.
+_GOOGLE_CALENDAR_LIST_URL = (
+    "https://www.googleapis.com/calendar/v3/users/me/calendarList")
 _REDIRECT_URI = "http://localhost:1"
-_OAUTH_SCOPE = "https://www.googleapis.com/auth/calendar.events"
+# KAV-5: zwei Scopes, space-separiert. `calendar.events` deckt PLAN-17/PLAN-18
+# (Termine lesen+schreiben) ab; `calendar.readonly` ist zusätzlich nötig, weil
+# `calendar.events` allein an `calendarList.list` mit HTTP 403 abgewiesen wird
+# (verifiziert auf Pi 2026-05-26). Beide brauchen wir für die Kalender-Auswahl
+# (KAV-X).
+_OAUTH_SCOPE = ("https://www.googleapis.com/auth/calendar.events "
+                "https://www.googleapis.com/auth/calendar.readonly")
 
 # KAV-6: Timeout der Privatchat-Session (analog FAA-9 / GAA-5: 30 Minuten).
 SESSION_TIMEOUT_SECONDS = 30 * 60
@@ -123,18 +135,72 @@ TOKEN_EXCHANGE_FAILED = (
     "der Code ist abgelaufen (er gilt nur kurz) oder das Netz war kurz "
     "weg. Bitte ruf »Kalender verbinden« noch einmal auf.")
 
+# KAV-Y: Restart-Hinweis als Suffix in der Erfolgs-Nachricht — Plan-Buddy
+# liest die Konfiguration nur beim Start, ein automatischer Reload kommt mit
+# Folge-Ticket #140. Der Hinweis nennt das Ticket, damit klar ist, dass der
+# manuelle Schritt ein bewusstes V1-Provisorium ist.
+RESTART_HINT = (
+    "\n\n*Letzter Schritt:* Damit der Plan-Buddy den neuen Kalender liest, "
+    "bitte einmal auf der Familien-Instanz `sudo systemctl restart "
+    "xbuddy-plan` ausführen. Der automatische Reload kommt mit Folge-Ticket "
+    "#140.")
+
+# KAV-8 / KAV-X: Bestätigung nennt den gewählten Kalender + Account-E-Mail
+# (soweit ableitbar), und endet mit dem Restart-Hinweis (KAV-Y).
 BESTAETIGT_MIT_EMAIL = (
-    "Geschafft — der Google-Kalender ist verbunden (%s). Der Plan-Buddy "
-    "kann jetzt Termine lesen und schreiben. 🎉")
+    "Geschafft — der Google-Kalender »%(kalender)s« ist verbunden (%(email)s). "
+    "Der Plan-Buddy kann jetzt Termine lesen und schreiben. 🎉" + RESTART_HINT)
 
 BESTAETIGT_OHNE_EMAIL = (
-    "Geschafft — der Google-Kalender ist verbunden. Der Plan-Buddy kann "
-    "jetzt Termine lesen und schreiben. 🎉")
+    "Geschafft — der Google-Kalender »%(kalender)s« ist verbunden. Der "
+    "Plan-Buddy kann jetzt Termine lesen und schreiben. 🎉" + RESTART_HINT)
+
+# KAV-X: nummerierte Kalender-Liste — Bot postet sie nach erfolgreichem
+# Token-Tausch. `%s` füllt die nummerierte Liste, eine Zeile je Kalender.
+KALENDER_AUSWAHL_PROMPT = (
+    "Welchen Kalender soll der Plan-Buddy benutzen? Hier ist die Liste "
+    "der Kalender deines Google-Accounts (nur die, in die der Plan-Buddy "
+    "auch schreiben kann):\n\n%s\n\n"
+    "Schick mir bitte einfach die Nummer (1–%d).")
+
+KALENDER_AUSWAHL_REMINDER = (
+    "Das war keine gültige Nummer. Bitte schick mir nur die Nummer des "
+    "Kalenders aus der Liste oben (1–%d).")
+
+# KAV-X: Kalender-Auswahl gescheitert (calendarList-Abfrage fehlgeschlagen
+# oder leere Liste). Tokens sind dennoch gespeichert (KAV-7 ist nicht
+# rückgängig zu machen) — Ergebnis verbunden_ohne_kalender.
+KALENDER_LIST_FETCH_FAILED = (
+    "Die Tokens sind gespeichert, aber ich konnte die Liste deiner Kalender "
+    "nicht abrufen. Bitte ruf »Kalender verbinden« noch einmal auf — die "
+    "Tokens bleiben gültig, der Auswahl-Schritt fehlt noch.")
+
+KALENDER_LIST_EMPTY = (
+    "Die Tokens sind gespeichert, aber ich habe in deinem Google-Konto "
+    "keinen Kalender mit Schreibrecht gefunden. Bitte prüf in Google "
+    "Kalender, ob ein Familienkalender existiert (oder leg einen an), und "
+    "ruf »Kalender verbinden« dann noch einmal auf.")
+
+# KAV-X: plan.json-Schreibvorgang fehlgeschlagen — Tokens sind gespeichert,
+# aber Plan-Buddy wird die alte `kalender_id` weiter lesen.
+PLAN_JSON_WRITE_FAILED = (
+    "Die Tokens sind gespeichert und die Kalender-Auswahl ist getroffen, "
+    "aber ich konnte die Auswahl nicht in die Plan-Konfiguration "
+    "schreiben. Bitte sag jemandem aus der Familie Bescheid, der die "
+    "Instanz administriert — `plan/plan.json` muss von Hand auf den "
+    "gewählten Kalender gesetzt werden.")
 
 ABGEBROCHEN = (
     "Ok — kein Kalender verbunden (Timeout oder du hast abgebrochen). Ruf "
     "»Kalender verbinden« einfach noch einmal auf, wenn du es nochmal "
     "versuchen willst.")
+
+# KAV-X: Abbruch *nach* erfolgreichem Token-Tausch (Timeout in der Kalender-
+# Auswahl). Tokens sind gespeichert, aber `plan.json` ist unverändert.
+ABGEBROCHEN_NACH_TOKEN = (
+    "Ok — die Tokens sind gespeichert, aber du hast die Kalender-Auswahl "
+    "nicht abgeschlossen. Ruf »Kalender verbinden« noch einmal auf, wenn "
+    "du den Kalender wählen willst.")
 
 
 # ============================================================
@@ -156,6 +222,11 @@ class KavInput:
 ERGEBNIS_VERBUNDEN = "verbunden"
 ERGEBNIS_ABGEBROCHEN = "abgebrochen"
 ERGEBNIS_ABGELEHNT = "abgelehnt"
+# KAV-1 / KAV-X: Tokens sind gespeichert (KAV-7), aber der nachgelagerte
+# Kalender-Auswahl-Schritt (calendarList-Abfrage, plan.json-Schreibvorgang)
+# ist gescheitert oder vom User abgebrochen — Plan-Buddy hat eine gültige
+# Token-Paarung, aber `plan.json` `kalender_id` ist nicht aktualisiert.
+ERGEBNIS_VERBUNDEN_OHNE_KALENDER = "verbunden_ohne_kalender"
 
 
 @dataclass
@@ -334,6 +405,162 @@ def fetch_account_email(access_token, userinfo_url=_GOOGLE_USERINFO_URL,
     return str(email) if email else ""
 
 
+def fetch_calendar_list(access_token, list_url=_GOOGLE_CALENDAR_LIST_URL,
+                        timeout=12):
+    """KAV-X: Liste der Kalender des Accounts vom Google-`calendarList`-
+    Endpunkt holen, gefiltert auf für Plan-Buddy nutzbare Einträge.
+
+    Filter: alle Kalender mit `accessRole` ∈ {`owner`, `writer`} (Plan-Buddy
+    braucht Schreibrecht, PLAN-18) plus jeder Kalender mit `primary=true`
+    (auch read-only — der Primary-Kalender ist der übliche Default-Fall).
+    Reader-only Kalender ohne `primary`-Flag werden bewusst **ausgeblendet**:
+    Plan-Buddy könnte in sie nicht schreiben, ein „verbunden, aber sileht
+    fehl beim ersten Schreibversuch" wäre eine stille Falle für den User.
+
+    Liefert eine Liste von Dicts mit den für die Anzeige nötigen Feldern:
+    `{"id": "...", "summary": "...", "accessRole": "...", "primary": bool}`.
+    Wirft `CalendarListFetchError` bei HTTP-/Netzfehlern oder Antworten,
+    die kein JSON-Objekt mit `items` sind. Bearer-Token wird nie in den
+    Fehler-Text gespiegelt (ZD-6).
+    """
+    req = urllib.request.Request(
+        list_url, method="GET",
+        headers={"Authorization": "Bearer " + access_token})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read()
+    except urllib.error.HTTPError as e:
+        raise CalendarListFetchError(
+            "calendarList.list fehlgeschlagen (HTTP %s)" % e.code)
+    except urllib.error.URLError as e:
+        raise CalendarListFetchError(
+            "calendarList.list fehlgeschlagen (Netz): %s" % e.reason)
+    try:
+        parsed = json.loads(body)
+    except (ValueError, TypeError):
+        raise CalendarListFetchError("calendarList.list lieferte keine JSON-Antwort")
+    if not isinstance(parsed, dict):
+        raise CalendarListFetchError("calendarList.list lieferte keine JSON-Antwort")
+    items = parsed.get("items") or []
+    result = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        access_role = item.get("accessRole") or ""
+        is_primary = bool(item.get("primary"))
+        # Filter: writable OR primary.
+        if access_role not in ("owner", "writer") and not is_primary:
+            continue
+        cal_id = item.get("id")
+        summary = item.get("summary") or item.get("summaryOverride") or cal_id
+        if not cal_id:
+            continue
+        result.append({
+            "id": cal_id,
+            "summary": str(summary),
+            "accessRole": access_role,
+            "primary": is_primary,
+        })
+    return result
+
+
+class CalendarListFetchError(Exception):
+    """Die `calendarList.list`-Abfrage ist gescheitert (KAV-X).
+
+    Bearer-Token werden nie in die Fehler-Meldung kopiert (ZD-6).
+    """
+
+
+def format_calendar_list(calendars):
+    """KAV-X: nummerierte Anzeige-Form der Kalender-Liste — eine Zeile je
+    Kalender, mit Name + Rolle + ggf. „Primary"-Markierung.
+
+    Liefert einen einzelnen String mit Zeilen `"1. <Name> (Rolle…)"`. Diese
+    Funktion ist rein darstellend; sie schreibt nichts und liest nichts.
+    """
+    lines = []
+    for index, cal in enumerate(calendars, start=1):
+        role = cal.get("accessRole") or "reader"
+        primary = cal.get("primary")
+        markers = [role]
+        if primary:
+            markers.append("Primary")
+        lines.append("%d. %s (%s)" % (index, cal["summary"], ", ".join(markers)))
+    return "\n".join(lines)
+
+
+def parse_selection(message_text, count):
+    """KAV-X: parst die Antwort des Users als Ganzzahl im Bereich 1..count.
+
+    Akzeptiert nur Eingaben, die nach Trimmen ausschließlich Ziffern enthalten
+    (sonst ist es eine Gesprächsnachricht, analog `extract_code`-Geist).
+    Liefert den 0-basierten Index in die Kalender-Liste oder `None`, wenn die
+    Eingabe ungültig ist.
+    """
+    if not message_text:
+        return None
+    text = message_text.strip()
+    if not text or not text.isdigit():
+        return None
+    try:
+        number = int(text)
+    except ValueError:
+        return None
+    if number < 1 or number > count:
+        return None
+    return number - 1
+
+
+def write_kalender_id_to_plan_json(plan_json_path, kalender_id):
+    """KAV-X: aktualisiert nur den `kalender_id`-Schlüssel in `plan/plan.json`,
+    alle anderen Felder bleiben byte-gleich.
+
+    Pfad zur Datei kommt vom Aufrufer (Per-Instanz, gitignored). Schreibt
+    atomar (Temp-Datei + `os.replace`, analog `familie/registry.py::save`),
+    Format-Konsistenz: Indent 2, `ensure_ascii=False`, abschließender
+    Zeilenumbruch.
+
+    Wirft `PlanJsonWriteError`, wenn die Datei nicht existiert, nicht parsebar
+    ist, das Wurzel-Element kein JSON-Objekt ist oder der Schreibvorgang
+    fehlschlägt (kein Schreibrecht, Disk voll, …). Bestehende Werte (`slots`,
+    `default_petrantwortlichkeiten`, …) bleiben **nur** dann byte-gleich, wenn
+    der Aufrufer sie nicht ändert; KAV-X aktualisiert ausschließlich
+    `kalender_id` (Cross-Service-FS-Provisorium, sauber gelöst in #140).
+    """
+    try:
+        with open(plan_json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError) as e:
+        raise PlanJsonWriteError(
+            "plan.json nicht lesbar (%s): %s" % (plan_json_path, e))
+    if not isinstance(data, dict):
+        raise PlanJsonWriteError(
+            "plan.json hat kein JSON-Objekt als Wurzel (%s)" % plan_json_path)
+
+    data["kalender_id"] = kalender_id
+
+    target_dir = os.path.dirname(os.path.abspath(plan_json_path))
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        prefix=".plan.", suffix=".json.tmp", dir=target_dir)
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+        os.replace(tmp_path, plan_json_path)
+    except OSError as e:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise PlanJsonWriteError(
+            "plan.json konnte nicht geschrieben werden (%s): %s"
+            % (plan_json_path, e))
+
+
+class PlanJsonWriteError(Exception):
+    """`write_kalender_id_to_plan_json` ist gescheitert (KAV-X)."""
+
+
 def store_tokens_in_zd(zd, refresh_token, access_token, expires_in,
                        account_email, clock=None):
     """KAV-7: legt die Token-Werte über die Schreib-Schnittstelle des
@@ -414,8 +641,9 @@ def _load_oauth_client(zd):
 # ============================================================
 
 def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
-                      zd, next_message, clock=None,
-                      exchange=None, fetch_email=None):
+                      zd, next_message, plan_json_path=None, clock=None,
+                      exchange=None, fetch_email=None,
+                      fetch_calendars=None, write_plan_json=None):
     """Verbindet den Familien-Google-Kalender über den Privatchat (KAV-1).
 
     `tg`                    — Telegram-Kanal (mit `send_message`,
@@ -429,16 +657,26 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
     `next_message`          — Callable, das den nächsten `KavInput` aus dem
                               Privatchat liefert. Liefert `None` → die
                               Funktion gilt als abgebrochen (KAV-6 Timeout).
-    `clock`/`exchange`/`fetch_email` — Test-Naht: Standardwerte sprechen
-                              das echte Netz; Tests reichen Doppelungen herein.
+    `plan_json_path`        — KAV-X: Pfad zur Per-Instanz-`plan/plan.json`.
+                              Ist er `None` (Test/Legacy), überspringt die
+                              Funktion den Auswahl-Schritt und das Ergebnis
+                              ist `verbunden_ohne_kalender`.
+    `clock`/`exchange`/`fetch_email`/`fetch_calendars`/`write_plan_json` —
+                              Test-Naht: Standardwerte sprechen das echte
+                              Netz/FS; Tests reichen Doppelungen herein.
 
-    Liefert ein `KalenderVerbindenResult`. Schreibt ausschliesslich über
-    `zd.set(...)` (ZD-5).
+    Liefert ein `KalenderVerbindenResult`. Schreibt über `zd.set(...)`
+    (ZD-5) und — bei erfolgreicher Kalender-Auswahl — atomar in
+    `plan/plan.json` (KAV-X, bewusstes V1-Provisorium, #140).
     """
     if exchange is None:
         exchange = exchange_code_for_tokens
     if fetch_email is None:
         fetch_email = fetch_account_email
+    if fetch_calendars is None:
+        fetch_calendars = fetch_calendar_list
+    if write_plan_json is None:
+        write_plan_json = write_kalender_id_to_plan_json
 
     # KAV-2: Live-Berechtigung. Die Prüfung liegt **bei der Funktion**
     # (nicht beim Aufrufer), damit die Trigger-Agnostik erhalten bleibt.
@@ -523,11 +761,83 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
     store_tokens_in_zd(zd, refresh_token, access_token, expires_in,
                        account_email, clock=clock)
 
-    # KAV-8: Bestätigung im Privatchat — Token wird nie gespiegelt (ZD-6).
+    # KAV-X: Kalender-Auswahl. Schlägt sie fehl, sind die Tokens trotzdem
+    # gespeichert (KAV-7 ist nicht rückgängig zu machen) — Ergebnis ist dann
+    # `verbunden_ohne_kalender`.
+    if plan_json_path is None:
+        # Legacy-Aufruf ohne `plan_json_path` — KAV-X übersprungen. Tests, die
+        # die Kalender-Auswahl nicht prüfen wollen, nutzen diesen Pfad.
+        logging.info("kalender_verbinden: kein plan_json_path — Kalender-Auswahl "
+                     "übersprungen (KAV-X, verbunden_ohne_kalender).")
+        return KalenderVerbindenResult(
+            ergebnis=ERGEBNIS_VERBUNDEN_OHNE_KALENDER,
+            account_email=account_email)
+
+    # KAV-X: calendarList-Abfrage mit dem frischen Access-Token.
+    try:
+        calendars = fetch_calendars(access_token)
+    except CalendarListFetchError as e:
+        logging.warning("kalender_verbinden: calendarList-Abfrage fehlgeschlagen "
+                        "(%s) — Tokens gespeichert, Kalender-Auswahl offen", e)
+        _send(tg, chat_id, KALENDER_LIST_FETCH_FAILED)
+        return KalenderVerbindenResult(
+            ergebnis=ERGEBNIS_VERBUNDEN_OHNE_KALENDER,
+            account_email=account_email)
+
+    if not calendars:
+        logging.warning("kalender_verbinden: calendarList ist leer (keine "
+                        "writable Kalender) — Tokens gespeichert, Auswahl offen")
+        _send(tg, chat_id, KALENDER_LIST_EMPTY)
+        return KalenderVerbindenResult(
+            ergebnis=ERGEBNIS_VERBUNDEN_OHNE_KALENDER,
+            account_email=account_email)
+
+    # KAV-X: nummerierte Liste posten und auf Auswahl warten.
+    _send(tg, chat_id, KALENDER_AUSWAHL_PROMPT
+          % (format_calendar_list(calendars), len(calendars)))
+
+    chosen_index = None
+    while True:
+        msg = next_message()
+        if msg is None:
+            # KAV-X: Timeout *nach* Token-Tausch — Tokens bleiben, plan.json
+            # ist unverändert. Ergebnis verbunden_ohne_kalender.
+            _send(tg, chat_id, ABGEBROCHEN_NACH_TOKEN)
+            return KalenderVerbindenResult(
+                ergebnis=ERGEBNIS_VERBUNDEN_OHNE_KALENDER,
+                account_email=account_email)
+        text = msg.text if isinstance(msg, KavInput) else (msg or "")
+        idx = parse_selection(text, len(calendars))
+        if idx is not None:
+            chosen_index = idx
+            break
+        _send(tg, chat_id, KALENDER_AUSWAHL_REMINDER % len(calendars))
+
+    chosen = calendars[chosen_index]
+    chosen_id = chosen["id"]
+    chosen_name = chosen["summary"]
+
+    # KAV-X: plan.json atomar aktualisieren — nur `kalender_id`, alles andere
+    # bleibt byte-gleich. Cross-Service-FS-Write, V1-Provisorium (#140).
+    try:
+        write_plan_json(plan_json_path, chosen_id)
+    except PlanJsonWriteError as e:
+        logging.error(
+            "kalender_verbinden: plan.json-Schreibvorgang fehlgeschlagen (%s) — "
+            "Tokens gespeichert, Kalender-Auswahl ist getroffen, aber plan.json "
+            "unverändert (KAV-X)", e)
+        _send(tg, chat_id, PLAN_JSON_WRITE_FAILED)
+        return KalenderVerbindenResult(
+            ergebnis=ERGEBNIS_VERBUNDEN_OHNE_KALENDER,
+            account_email=account_email)
+
+    # KAV-8 + KAV-Y: Bestätigung mit Kalender-Name + Restart-Hinweis.
+    # Token-Wert wird nie gespiegelt (ZD-6).
     if account_email:
-        _send(tg, chat_id, BESTAETIGT_MIT_EMAIL % account_email)
+        _send(tg, chat_id,
+              BESTAETIGT_MIT_EMAIL % {"kalender": chosen_name, "email": account_email})
     else:
-        _send(tg, chat_id, BESTAETIGT_OHNE_EMAIL)
+        _send(tg, chat_id, BESTAETIGT_OHNE_EMAIL % {"kalender": chosen_name})
 
     return KalenderVerbindenResult(
         ergebnis=ERGEBNIS_VERBUNDEN, account_email=account_email)

@@ -15,6 +15,7 @@ kontrollierte Doppelungen ersetzt (kein Netz, KAV-10). Die Patterns folgen
 """
 
 import json
+import os
 import urllib.parse
 from datetime import datetime, timezone
 
@@ -25,13 +26,17 @@ import kalender_verbinden_task
 from fakes import FakeTelegram
 from kalender_verbinden import (
     AUFKLAERUNG_TEXT, BESTAETIGT_MIT_EMAIL, BESTAETIGT_OHNE_EMAIL,
-    CODE_REMINDER, ERGEBNIS_ABGEBROCHEN, ERGEBNIS_ABGELEHNT,
-    ERGEBNIS_VERBUNDEN, KavInput, NOT_AUTHORIZED, OAUTH_CLIENT_MISSING,
+    CalendarListFetchError, CODE_REMINDER, ERGEBNIS_ABGEBROCHEN,
+    ERGEBNIS_ABGELEHNT, ERGEBNIS_VERBUNDEN, ERGEBNIS_VERBUNDEN_OHNE_KALENDER,
+    KALENDER_AUSWAHL_PROMPT, KALENDER_AUSWAHL_REMINDER, KALENDER_LIST_EMPTY,
+    KALENDER_LIST_FETCH_FAILED, KavInput, NOT_AUTHORIZED, OAUTH_CLIENT_MISSING,
+    PLAN_JSON_WRITE_FAILED, PlanJsonWriteError, RESTART_HINT,
     TOKEN_EXCHANGE_FAILED, TokenExchangeError, ZD_NAME_ACCESS_TOKEN,
     ZD_NAME_ACCESS_TOKEN_EXPIRES_AT, ZD_NAME_ACCOUNT_EMAIL,
     ZD_NAME_OAUTH_CLIENT, ZD_NAME_OAUTH_TOKEN, build_auth_url,
-    exchange_code_for_tokens, extract_code, kalender_verbinden,
-    store_tokens_in_zd)
+    exchange_code_for_tokens, extract_code, fetch_calendar_list,
+    format_calendar_list, kalender_verbinden, parse_selection,
+    store_tokens_in_zd, write_kalender_id_to_plan_json)
 from kalender_verbinden_task import (KalenderVerbindenTask, KavSession,
                                       make_kav_input)
 from model import WRITE
@@ -141,6 +146,61 @@ def fake_fetch_email_empty():
     def doubled(access_token):
         return ""
     return doubled
+
+
+# KAV-X: kontrollierte Doppelungen für `fetch_calendar_list` und für den
+# `write_plan_json`-Schritt. Beide reichen die Aufrufer-Argumente an
+# Test-Assertions weiter.
+
+def fake_fetch_calendars(calendars=None):
+    """KAV-X: liefert eine feste Kalender-Liste an `kalender_verbinden`.
+
+    Default-Liste hat einen writable Primary plus einen weiteren writer-
+    Kalender — passt zum typischen Pi-Family-Setup.
+    """
+    if calendars is None:
+        calendars = [
+            {"id": "primary-id", "summary": "Persönlich", "accessRole": "owner",
+             "primary": True},
+            {"id": "family@group.calendar.google.com", "summary": "Familie",
+             "accessRole": "writer", "primary": False},
+        ]
+    calls = []
+
+    def doubled(access_token):
+        calls.append({"access_token": access_token})
+        return list(calendars)
+    doubled.calls = calls
+    return doubled
+
+
+def fake_fetch_calendars_fail():
+    def doubled(access_token):
+        raise CalendarListFetchError("simulated HTTP 403")
+    return doubled
+
+
+def fake_write_plan_json():
+    """KAV-X: Doppelung für `write_kalender_id_to_plan_json` — protokolliert
+    die Aufrufe statt wirklich zu schreiben."""
+    calls = []
+
+    def doubled(plan_json_path, kalender_id):
+        calls.append({"plan_json_path": plan_json_path,
+                      "kalender_id": kalender_id})
+    doubled.calls = calls
+    return doubled
+
+
+def fake_write_plan_json_fail():
+    def doubled(plan_json_path, kalender_id):
+        raise PlanJsonWriteError("simulated FS error")
+    return doubled
+
+
+# Hilfs-Konstanten für die häufige Aufruf-Form: Code abgeben, dann „2"
+# wählen (zweiter Kalender aus der Default-Liste = Familie).
+_DEFAULT_PLAN_PATH = "/tmp/plan-for-tests.json"
 
 
 def _members(*user_ids):
@@ -303,10 +363,10 @@ def test_KAV_4_aufklaerung_kommt_vor_dem_login_link():
 
 
 def test_KAV_5_auth_url_has_required_oauth_parameters():
-    """KAV-5: `build_auth_url` enthält Scope `calendar.events`,
-    `access_type=offline`, `prompt=consent`, `response_type=code`,
-    `redirect_uri=http://localhost:1`, die OAuth-Client-ID und einen
-    `state`-Parameter."""
+    """KAV-5: `build_auth_url` enthält Scopes `calendar.events` **plus**
+    `calendar.readonly` (KAV-X-load-bearing), `access_type=offline`,
+    `prompt=consent`, `response_type=code`, `redirect_uri=http://localhost:1`,
+    die OAuth-Client-ID und einen `state`-Parameter."""
     url = build_auth_url(client_id="CID-XY", state="STATE-XY")
     parsed = urllib.parse.urlparse(url)
     assert parsed.scheme == "https"
@@ -316,10 +376,27 @@ def test_KAV_5_auth_url_has_required_oauth_parameters():
     assert q["client_id"] == ["CID-XY"]
     assert q["redirect_uri"] == ["http://localhost:1"]
     assert q["response_type"] == ["code"]
-    assert q["scope"] == ["https://www.googleapis.com/auth/calendar.events"]
+    # KAV-5 / KAV-X: beide Scopes, space-separiert. `calendar.events` für
+    # PLAN-17/PLAN-18, `calendar.readonly` für die `calendarList`-Abfrage.
+    scope_value = q["scope"][0]
+    assert "https://www.googleapis.com/auth/calendar.events" in scope_value
+    assert "https://www.googleapis.com/auth/calendar.readonly" in scope_value
     assert q["access_type"] == ["offline"]
     assert q["prompt"] == ["consent"]
     assert q["state"] == ["STATE-XY"]
+
+
+def test_KAV_5_scope_includes_readonly():
+    """KAV-5 / KAV-X: der OAuth-URL enthält beide Scopes, `calendar.events`
+    und `calendar.readonly`. Ohne `readonly` antwortet Google bei
+    `calendarList.list` mit HTTP 403 (verifiziert auf Pi 2026-05-26)."""
+    url = build_auth_url(client_id="CID-XY", state="STATE-XY")
+    q = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+    scope_value = q["scope"][0]
+    # space-separiert, beide drin.
+    parts = scope_value.split(" ")
+    assert "https://www.googleapis.com/auth/calendar.events" in parts
+    assert "https://www.googleapis.com/auth/calendar.readonly" in parts
 
 
 def test_KAV_5_state_is_unique_per_call():
@@ -413,13 +490,16 @@ def test_KAV_6_implausible_messages_trigger_reminder_then_session_continues():
     tg = FakeTelegram(members=_members(user_id))
     zd = _zd_with_client()
     exchange = fake_exchange_ok()
-    # Erst eine Begrüßung (nicht passend), dann der echte Code.
-    nm = stream("hallo!", "http://localhost:1/?code=GOOD")
+    # Erst eine Begrüßung (nicht passend), dann der echte Code, dann „1"
+    # für die Kalender-Auswahl (KAV-X).
+    nm = stream("hallo!", "http://localhost:1/?code=GOOD", "1")
     result = kalender_verbinden(
         tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
-        zd=zd, next_message=nm,
+        zd=zd, next_message=nm, plan_json_path=_DEFAULT_PLAN_PATH,
         exchange=exchange,
-        fetch_email=fake_fetch_email_empty())
+        fetch_email=fake_fetch_email_empty(),
+        fetch_calendars=fake_fetch_calendars(),
+        write_plan_json=fake_write_plan_json())
     assert result.ergebnis == ERGEBNIS_VERBUNDEN
     assert any(CODE_REMINDER in s["text"] for s in tg.sent)
     # Token-Tausch wurde mit dem zweiten (echten) Code aufgerufen, nicht mit
@@ -583,17 +663,19 @@ def test_KAV_7_store_tokens_helper_writes_expected_keys():
 
 
 def test_KAV_8_confirmation_contains_account_email_when_available():
-    """KAV-8: nach erfolgreicher Speicherung enthält die Bestätigungs-Nachricht
-    die `kav-account-email` — niemals den Refresh-Token."""
+    """KAV-8: nach erfolgreicher Kalender-Auswahl + Speicherung enthält die
+    Bestätigungs-Nachricht die `kav-account-email` — niemals den Refresh-Token."""
     user_id = 7
     tg = FakeTelegram(members=_members(user_id))
     zd = _zd_with_client()
-    nm = stream("http://localhost:1/?code=GOOD")
+    nm = stream("http://localhost:1/?code=GOOD", "1")
     kalender_verbinden(
         tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
-        zd=zd, next_message=nm,
+        zd=zd, next_message=nm, plan_json_path=_DEFAULT_PLAN_PATH,
         exchange=fake_exchange_ok(refresh="SECRET-RT"),
-        fetch_email=fake_fetch_email("mia@example.com"))
+        fetch_email=fake_fetch_email("mia@example.com"),
+        fetch_calendars=fake_fetch_calendars(),
+        write_plan_json=fake_write_plan_json())
     msgs = [s["text"] for s in tg.sent if s["chat_id"] == user_id]
     assert any("mia@example.com" in m for m in msgs)
     # Refresh-Token taucht in keiner Nachricht auf (ZD-6).
@@ -606,14 +688,17 @@ def test_KAV_8_confirmation_without_email_when_not_available():
     user_id = 7
     tg = FakeTelegram(members=_members(user_id))
     zd = _zd_with_client()
-    nm = stream("http://localhost:1/?code=GOOD")
+    nm = stream("http://localhost:1/?code=GOOD", "1")
     kalender_verbinden(
         tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
-        zd=zd, next_message=nm,
+        zd=zd, next_message=nm, plan_json_path=_DEFAULT_PLAN_PATH,
         exchange=fake_exchange_ok(),
-        fetch_email=fake_fetch_email_empty())
+        fetch_email=fake_fetch_email_empty(),
+        fetch_calendars=fake_fetch_calendars(),
+        write_plan_json=fake_write_plan_json())
     msgs = [s["text"] for s in tg.sent if s["chat_id"] == user_id]
-    assert any(BESTAETIGT_OHNE_EMAIL in m for m in msgs)
+    # Die formatierte Bestätigung enthält den Kalender-Namen + Restart-Hinweis.
+    assert any("ist verbunden" in m and "Persönlich" in m for m in msgs)
 
 
 def test_KAV_8_failed_exchange_preserves_existing_account_email():
@@ -688,6 +773,344 @@ def test_KAV_9_failed_call_preserves_existing_refresh_token():
 
 
 # ============================================================
+#  KAV-X — Kalender-Auswahl nach Token-Erfolg
+# ============================================================
+
+
+def test_KAV_X_fetch_calendar_list_filters_writable(monkeypatch):
+    """KAV-X: `fetch_calendar_list` filtert die `calendarList`-Antwort auf
+    Kalender mit `accessRole` ∈ {owner, writer} plus jeden `primary=true`-
+    Kalender. Reader-only ohne Primary-Flag wird ausgeblendet."""
+    body = json.dumps({
+        "items": [
+            {"id": "p", "summary": "Persönlich",
+             "accessRole": "owner", "primary": True},
+            {"id": "fam", "summary": "Familie",
+             "accessRole": "writer", "primary": False},
+            {"id": "ro", "summary": "Nur lesen",
+             "accessRole": "reader", "primary": False},
+            {"id": "ext", "summary": "Externer Kalender (read-only)",
+             "accessRole": "reader", "primary": False},
+            {"id": "shared-write", "summary": "Geteilter Schreib-Kalender",
+             "accessRole": "writer"},
+        ]
+    }).encode()
+
+    class FakeResp:
+        def read(self):
+            return body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        assert req.full_url.startswith(
+            "https://www.googleapis.com/calendar/v3/users/me/calendarList")
+        # KAV-X: Bearer-Token im Header.
+        assert req.headers.get("Authorization") == "Bearer AT-X"
+        return FakeResp()
+
+    monkeypatch.setattr(kv.urllib.request, "urlopen", fake_urlopen)
+    result = fetch_calendar_list("AT-X")
+    ids = [c["id"] for c in result]
+    assert ids == ["p", "fam", "shared-write"]
+    # Primary-Markierung ist mit drin.
+    assert result[0]["primary"] is True
+    assert result[1]["primary"] is False
+
+
+def test_KAV_X_fetch_calendar_list_raises_on_http_error(monkeypatch):
+    """KAV-X: HTTPError bei `calendarList.list` → `CalendarListFetchError`,
+    Bearer-Token taucht im Fehler-Text nicht auf (ZD-6)."""
+    import urllib.error
+
+    def fake_urlopen(req, timeout=None):
+        raise urllib.error.HTTPError(req.full_url, 403, "Forbidden", {}, None)
+
+    monkeypatch.setattr(kv.urllib.request, "urlopen", fake_urlopen)
+    with pytest.raises(CalendarListFetchError) as exc:
+        fetch_calendar_list("SECRET-AT")
+    assert "SECRET-AT" not in str(exc.value)
+
+
+def test_KAV_X_parse_selection_accepts_valid_numbers():
+    """KAV-X: Ganzzahl im Bereich 1..N wird in den 0-basierten Index
+    übersetzt; Whitespace wird gestrippt."""
+    assert parse_selection("1", 3) == 0
+    assert parse_selection("  2  ", 3) == 1
+    assert parse_selection("3", 3) == 2
+
+
+def test_KAV_X_parse_selection_rejects_invalid_input():
+    """KAV-X: ungültige Eingabe (Buchstaben, außerhalb des Bereichs, leer)
+    liefert `None`."""
+    assert parse_selection("0", 3) is None
+    assert parse_selection("4", 3) is None
+    assert parse_selection("bla", 3) is None
+    assert parse_selection("", 3) is None
+    assert parse_selection(None, 3) is None
+    assert parse_selection("1.5", 3) is None
+    assert parse_selection("eins", 3) is None
+
+
+def test_KAV_X_format_calendar_list_numbers_each_entry():
+    """KAV-X: die nummerierte Anzeige enthält pro Kalender eine Zeile mit
+    Index, Name, Rolle und ggf. „Primary"-Markierung."""
+    cals = [
+        {"id": "p", "summary": "Persönlich", "accessRole": "owner",
+         "primary": True},
+        {"id": "fam", "summary": "Familie", "accessRole": "writer",
+         "primary": False},
+    ]
+    text = format_calendar_list(cals)
+    assert "1. Persönlich" in text
+    assert "owner" in text
+    assert "Primary" in text
+    assert "2. Familie" in text
+    assert "writer" in text
+
+
+def test_KAV_X_user_selects_calendar_writes_chosen_id():
+    """KAV-X: Bot postet die Liste, User schickt „2", Skill ruft
+    `write_kalender_id_to_plan_json` mit der `id` des **zweiten** Kalenders auf."""
+    user_id = 7
+    tg = FakeTelegram(members=_members(user_id))
+    zd = _zd_with_client()
+    write = fake_write_plan_json()
+    fetch = fake_fetch_calendars()  # zwei Kalender, Default
+    nm = stream("http://localhost:1/?code=GOOD", "2")
+    result = kalender_verbinden(
+        tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
+        zd=zd, next_message=nm, plan_json_path="/tmp/instance/plan.json",
+        exchange=fake_exchange_ok(),
+        fetch_email=fake_fetch_email("mia@example.com"),
+        fetch_calendars=fetch, write_plan_json=write)
+    assert result.ergebnis == ERGEBNIS_VERBUNDEN
+    assert len(write.calls) == 1
+    assert write.calls[0]["plan_json_path"] == "/tmp/instance/plan.json"
+    # Default-Liste: Index 1 (zweiter Kalender) = family@group.calendar.google.com.
+    assert write.calls[0]["kalender_id"] == "family@group.calendar.google.com"
+    # Liste wurde im Chat angekündigt (KAV-X-Prompt).
+    msgs = [s["text"] for s in tg.sent if s["chat_id"] == user_id]
+    assert any("Welchen Kalender" in m for m in msgs)
+
+
+def test_KAV_X_invalid_selection_asks_again_then_continues():
+    """KAV-X: User schickt „bla" → freundliche Erinnerung; danach gültige
+    „1" → Skill wählt den ersten Kalender, der Schreibvorgang läuft durch."""
+    user_id = 7
+    tg = FakeTelegram(members=_members(user_id))
+    zd = _zd_with_client()
+    write = fake_write_plan_json()
+    nm = stream("http://localhost:1/?code=GOOD", "bla", "5", "1")
+    result = kalender_verbinden(
+        tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
+        zd=zd, next_message=nm, plan_json_path="/tmp/instance/plan.json",
+        exchange=fake_exchange_ok(),
+        fetch_email=fake_fetch_email_empty(),
+        fetch_calendars=fake_fetch_calendars(),
+        write_plan_json=write)
+    assert result.ergebnis == ERGEBNIS_VERBUNDEN
+    # Reminder kam mindestens einmal (KAV_AUSWAHL_REMINDER, parametrisiert
+    # mit der Anzahl der Kalender).
+    msgs = [s["text"] for s in tg.sent if s["chat_id"] == user_id]
+    reminder_substr = "Das war keine gültige Nummer"
+    assert sum(1 for m in msgs if reminder_substr in m) >= 2
+    # Geschrieben wurde der erste Kalender, „1" → primary-id.
+    assert write.calls[0]["kalender_id"] == "primary-id"
+
+
+def test_KAV_X_calendar_list_fetch_failure_returns_verbunden_ohne_kalender():
+    """KAV-X: schlägt `calendarList.list` fehl, sind die Tokens trotzdem
+    gespeichert (KAV-7 läuft vor KAV-X); Ergebnis ist
+    `verbunden_ohne_kalender`, plan.json wird nicht angefasst."""
+    user_id = 7
+    tg = FakeTelegram(members=_members(user_id))
+    zd = _zd_with_client()
+    write = fake_write_plan_json()
+    nm = stream("http://localhost:1/?code=GOOD")
+    result = kalender_verbinden(
+        tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
+        zd=zd, next_message=nm, plan_json_path="/tmp/instance/plan.json",
+        exchange=fake_exchange_ok(refresh="RT-1"),
+        fetch_email=fake_fetch_email_empty(),
+        fetch_calendars=fake_fetch_calendars_fail(),
+        write_plan_json=write)
+    assert result.ergebnis == ERGEBNIS_VERBUNDEN_OHNE_KALENDER
+    # Tokens sind dennoch geschrieben (KAV-7 vor KAV-X).
+    assert zd.get(ZD_NAME_OAUTH_TOKEN) == {"refresh_token": "RT-1"}
+    # plan.json wurde *nicht* angefasst.
+    assert write.calls == []
+    assert any(KALENDER_LIST_FETCH_FAILED in s["text"] for s in tg.sent)
+
+
+def test_KAV_X_empty_calendar_list_returns_verbunden_ohne_kalender():
+    """KAV-X: liefert `calendarList.list` keine writable Kalender, gilt das
+    als gescheiterte Auswahl — Tokens bleiben gespeichert, `plan.json` nicht."""
+    user_id = 7
+    tg = FakeTelegram(members=_members(user_id))
+    zd = _zd_with_client()
+    write = fake_write_plan_json()
+    nm = stream("http://localhost:1/?code=GOOD")
+    result = kalender_verbinden(
+        tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
+        zd=zd, next_message=nm, plan_json_path="/tmp/instance/plan.json",
+        exchange=fake_exchange_ok(),
+        fetch_email=fake_fetch_email_empty(),
+        fetch_calendars=fake_fetch_calendars(calendars=[]),
+        write_plan_json=write)
+    assert result.ergebnis == ERGEBNIS_VERBUNDEN_OHNE_KALENDER
+    assert write.calls == []
+    assert any(KALENDER_LIST_EMPTY in s["text"] for s in tg.sent)
+
+
+def test_KAV_X_plan_json_write_failure_returns_verbunden_ohne_kalender():
+    """KAV-X: schlägt der `plan.json`-Schreibvorgang fehl, sind Tokens und
+    Auswahl getroffen, aber Plan-Buddy wird die alte `kalender_id` weiter
+    lesen. User bekommt einen klaren Hinweis."""
+    user_id = 7
+    tg = FakeTelegram(members=_members(user_id))
+    zd = _zd_with_client()
+    nm = stream("http://localhost:1/?code=GOOD", "1")
+    result = kalender_verbinden(
+        tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
+        zd=zd, next_message=nm, plan_json_path="/tmp/instance/plan.json",
+        exchange=fake_exchange_ok(),
+        fetch_email=fake_fetch_email_empty(),
+        fetch_calendars=fake_fetch_calendars(),
+        write_plan_json=fake_write_plan_json_fail())
+    assert result.ergebnis == ERGEBNIS_VERBUNDEN_OHNE_KALENDER
+    assert any(PLAN_JSON_WRITE_FAILED in s["text"] for s in tg.sent)
+
+
+def test_KAV_X_plan_json_kalender_id_written_atomically(tmp_path):
+    """KAV-X (Unit-Test des Helpers): bestehende `plan.json` wird gelesen,
+    **nur** `kalender_id` geändert, alle anderen Felder bleiben byte-gleich.
+
+    Atomare Schreibung: nach erfolgreichem Aufruf liegt keine Temp-Datei mehr."""
+    p = tmp_path / "plan.json"
+    original = {
+        "slots": [{"schluessel": "bring", "art": "erwachsenen-slot",
+                   "icon": "sun"}],
+        "default_petrantwortlichkeiten": {"bring": ["a", "b", "c", "d", "e",
+                                                    None, None]},
+        "fenster_lesekind": 7,
+        "wochenstart": 0,
+        "zeitzone": "Europe/Berlin",
+        "kalender_id": "alte-id@group.calendar.google.com",
+    }
+    p.write_text(json.dumps(original, indent=2, ensure_ascii=False) + "\n",
+                 encoding="utf-8")
+
+    write_kalender_id_to_plan_json(
+        str(p), "neue-id@group.calendar.google.com")
+
+    written = json.loads(p.read_text(encoding="utf-8"))
+    # Nur kalender_id ist neu, alles andere identisch.
+    assert written["kalender_id"] == "neue-id@group.calendar.google.com"
+    assert written["slots"] == original["slots"]
+    assert written["default_petrantwortlichkeiten"] == \
+        original["default_petrantwortlichkeiten"]
+    assert written["fenster_lesekind"] == 7
+    assert written["wochenstart"] == 0
+    assert written["zeitzone"] == "Europe/Berlin"
+    # Keine verwaiste Temp-Datei.
+    leftovers = [n for n in os.listdir(str(tmp_path))
+                 if n.startswith(".plan.")]
+    assert leftovers == []
+
+
+def test_KAV_X_plan_json_write_raises_on_missing_file(tmp_path):
+    """KAV-X: fehlt `plan.json`, wirft die write-Funktion `PlanJsonWriteError`
+    — der Aufrufer schlägt sauber auf »verbunden_ohne_kalender« um."""
+    with pytest.raises(PlanJsonWriteError):
+        write_kalender_id_to_plan_json(
+            str(tmp_path / "nicht-da.json"), "x@group.calendar.google.com")
+
+
+def test_KAV_X_plan_json_write_raises_on_invalid_root(tmp_path):
+    """KAV-X: enthält `plan.json` kein JSON-Objekt am Root (z. B. eine Liste,
+    eine Zahl), schreibt die Funktion **nicht** — `PlanJsonWriteError`."""
+    p = tmp_path / "plan.json"
+    p.write_text("[1, 2, 3]\n", encoding="utf-8")
+    with pytest.raises(PlanJsonWriteError):
+        write_kalender_id_to_plan_json(str(p), "x@group.calendar.google.com")
+    # Bytes der Datei sind unverändert.
+    assert p.read_text(encoding="utf-8") == "[1, 2, 3]\n"
+
+
+def test_KAV_X_timeout_during_selection_returns_verbunden_ohne_kalender():
+    """KAV-X: Timeout in der Kalender-Auswahl-Schleife (Stream erschöpft)
+    beendet die Funktion mit `verbunden_ohne_kalender` — Tokens bleiben."""
+    user_id = 7
+    tg = FakeTelegram(members=_members(user_id))
+    zd = _zd_with_client()
+    write = fake_write_plan_json()
+    # Code abgeben, dann nichts mehr → Timeout während der Auswahl.
+    nm = stream("http://localhost:1/?code=GOOD")
+    result = kalender_verbinden(
+        tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
+        zd=zd, next_message=nm, plan_json_path="/tmp/instance/plan.json",
+        exchange=fake_exchange_ok(refresh="RT-1"),
+        fetch_email=fake_fetch_email_empty(),
+        fetch_calendars=fake_fetch_calendars(),
+        write_plan_json=write)
+    assert result.ergebnis == ERGEBNIS_VERBUNDEN_OHNE_KALENDER
+    # Tokens sind gespeichert, plan.json *nicht* angefasst.
+    assert zd.get(ZD_NAME_OAUTH_TOKEN) == {"refresh_token": "RT-1"}
+    assert write.calls == []
+
+
+# ============================================================
+#  KAV-Y — Restart-Hinweis in der Erfolgs-Nachricht
+# ============================================================
+
+
+def test_KAV_Y_restart_hint_in_bestaetigung():
+    """KAV-Y: die finale Erfolgs-Nachricht enthält den Restart-Hinweis
+    `sudo systemctl restart xbuddy-plan` plus den Verweis auf #140 als
+    klare Folge-Aktion für den User."""
+    user_id = 7
+    tg = FakeTelegram(members=_members(user_id))
+    zd = _zd_with_client()
+    nm = stream("http://localhost:1/?code=GOOD", "1")
+    kalender_verbinden(
+        tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
+        zd=zd, next_message=nm, plan_json_path="/tmp/instance/plan.json",
+        exchange=fake_exchange_ok(),
+        fetch_email=fake_fetch_email("mia@example.com"),
+        fetch_calendars=fake_fetch_calendars(),
+        write_plan_json=fake_write_plan_json())
+    msgs = [s["text"] for s in tg.sent if s["chat_id"] == user_id]
+    # Restart-Hinweis und Ticket-Referenz sind in mindestens einer Nachricht.
+    assert any("sudo systemctl restart xbuddy-plan" in m for m in msgs)
+    assert any("#140" in m for m in msgs)
+    # Substring der RESTART_HINT-Konstante (das ist die load-bearing Stelle).
+    assert any("Letzter Schritt" in m for m in msgs)
+
+
+def test_KAV_Y_no_restart_hint_when_calendar_selection_failed():
+    """KAV-Y: scheitert die Kalender-Auswahl, wird der Restart-Hinweis nicht
+    gepostet (Plan-Buddy hat ja keine neue `kalender_id` zum Lesen)."""
+    user_id = 7
+    tg = FakeTelegram(members=_members(user_id))
+    zd = _zd_with_client()
+    nm = stream("http://localhost:1/?code=GOOD")
+    kalender_verbinden(
+        tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
+        zd=zd, next_message=nm, plan_json_path="/tmp/instance/plan.json",
+        exchange=fake_exchange_ok(),
+        fetch_email=fake_fetch_email_empty(),
+        fetch_calendars=fake_fetch_calendars_fail(),
+        write_plan_json=fake_write_plan_json())
+    msgs = [s["text"] for s in tg.sent if s["chat_id"] == user_id]
+    assert not any("sudo systemctl restart xbuddy-plan" in m for m in msgs)
+
+
+# ============================================================
 #  KAV-3-Adapter: FaaSession-artige Privatchat-Session beansprucht Chat
 # ============================================================
 
@@ -729,7 +1152,7 @@ def test_KAV_10_every_kav_id_has_at_least_one_test():
     import inspect
     src = inspect.getsource(inspect.getmodule(test_KAV_1_task_is_registered_in_catalog_as_write_task))
     for kav_id in ("KAV_1", "KAV_2", "KAV_3", "KAV_4", "KAV_5", "KAV_6",
-                   "KAV_7", "KAV_8", "KAV_9", "KAV_10"):
+                   "KAV_7", "KAV_8", "KAV_9", "KAV_10", "KAV_X", "KAV_Y"):
         # Token kommt entweder als Funktionsname oder im Docstring vor.
         assert "test_%s" % kav_id in src or kav_id.replace("_", "-") in src, \
             "Keine Test-Funktion für %s gefunden" % kav_id.replace("_", "-")
