@@ -897,3 +897,191 @@ def test_PLAN_19_zuteilung_validates_against_fresh_registry(tmp_path, demo_confi
         "week_start": "2026-05-25", "day": 0, "slot": "bring",
         "person_id": "petra"})
     assert r1.status_code == 200
+
+
+# ============================================================
+#  Admin-Reload (#140, EC-21) — POST /api/v1/plan/admin/reload
+# ============================================================
+#
+# EC-21 (Eltern-Chat-Spec): „Änderungen wirken sofort und ehrlich". KAV
+# (Kalender verbinden) schreibt im laufenden Betrieb eine neue
+# `kalender_id` in plan.json — ohne Reload-Aufruf bliebe der Plan-Buddy auf
+# dem alten Kalender. Der Endpoint ist loopback-only und atomar; der
+# Vertrag spiegelt den Router-Reload-Endpoint (PR #149).
+
+RELOAD_URL = "/api/v1/plan/admin/reload"
+
+
+def _write_plan_json(path, kalender_id="demo@group.calendar.google.com",
+                     extra_slot=False):
+    """Schreibt eine valide plan.json an `path`. `extra_slot=True` hängt
+    einen zusätzlichen Slot an — der Test prüft so, dass die geänderten
+    Daten nach dem Reload wirklich übernommen wurden."""
+    data = json.loads(json.dumps(DEMO_CONFIG))  # tiefe Kopie
+    data["kalender_id"] = kalender_id
+    data["db_datei"] = str(os.path.dirname(path) + "/plan.db")
+    if extra_slot:
+        data["slots"].append({
+            "schluessel": "wash", "art": "erwachsenen-slot", "icon": "drop",
+        })
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+
+@pytest.fixture
+def reload_client(tmp_path, demo_registry):
+    """Frischer Plan-Buddy, der von einer schreibbaren plan.json geladen
+    wurde. Tests verändern die Datei und triggern dann den Reload-Endpoint.
+
+    `transport_factory` liefert pro Reload einen frischen FakeTransport, der
+    sich seine `kalender_id` für die Test-Assertions merkt — analog
+    GoogleTransport in Produktion (PLAN-29)."""
+    cfg_path = tmp_path / "plan.json"
+    _write_plan_json(str(cfg_path))
+
+    built_transports = []
+
+    def factory(cfg):
+        t = FakeTransport()
+        # Wir hängen die kalender_id ans Fake-Objekt, damit Tests
+        # nachprüfen können, mit welchem Wert der Transport gebaut wurde.
+        t.kalender_id = cfg.kalender_id
+        built_transports.append(t)
+        return t
+
+    cfg = config_mod.resolve(str(cfg_path))
+    transport = factory(cfg)
+    plan_main.configure(cfg, demo_registry, transport,
+                        config_path=str(cfg_path),
+                        transport_factory=factory)
+    plan_main.app.testing = True
+    client = plan_main.app.test_client()
+    return client, cfg_path, built_transports
+
+
+def test_140_reload_endpoint_success_returns_200_with_details(reload_client):
+    """Erfolg: Endpoint liefert HTTP 200 und JSON {reloaded: true, details: ...}.
+    Die geänderte plan.json muss sichtbar geworden sein — neue
+    kalender_id ist im Transport, neuer Slot ist in der Config."""
+    client, cfg_path, built = reload_client
+    # Vorher: ein Transport, alte kalender_id.
+    assert len(built) == 1
+    assert plan_main.runtime["config"].kalender_id \
+        == "demo@group.calendar.google.com"
+    assert plan_main.runtime["config"].slot("wash") is None
+
+    # KAV-Szenario: eine neue kalender_id wird in plan.json geschrieben,
+    # zusätzlich ein neuer Slot.
+    _write_plan_json(str(cfg_path), kalender_id="neu@group.calendar.google.com",
+                     extra_slot=True)
+
+    r = client.post(RELOAD_URL)
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["reloaded"] is True
+    assert "plan.json reloaded" in body["details"]
+    assert "neu@group.calendar.google.com" in body["details"]
+
+    # In-Memory-State ist tatsächlich neu — EC-21 „sofort und ehrlich".
+    assert plan_main.runtime["config"].kalender_id \
+        == "neu@group.calendar.google.com"
+    assert plan_main.runtime["config"].slot("wash") is not None
+    # Transport wurde neu gebaut und kennt die neue kalender_id.
+    assert len(built) == 2
+    assert plan_main.runtime["transport"] is built[1]
+    assert built[1].kalender_id == "neu@group.calendar.google.com"
+
+
+def test_140_reload_endpoint_is_idempotent(reload_client):
+    """Idempotenz: zweimal aufrufen → gleicher Endzustand. Der Endpoint hat
+    keine Akkumulationssemantik."""
+    client, _, _ = reload_client
+    r1 = client.post(RELOAD_URL)
+    cfg_after_1 = plan_main.runtime["config"]
+    state_after_1 = (cfg_after_1.kalender_id, len(cfg_after_1.slots))
+    r2 = client.post(RELOAD_URL)
+    cfg_after_2 = plan_main.runtime["config"]
+    state_after_2 = (cfg_after_2.kalender_id, len(cfg_after_2.slots))
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert state_after_1 == state_after_2
+    assert r1.get_json()["details"] == r2.get_json()["details"]
+
+
+def test_140_reload_endpoint_atomar_bei_parse_fehler(reload_client):
+    """Atomarität (E-RELOAD-1): kaputtes plan.json → 500 mit
+    {reloaded: false, error: ...}, ABER alter State bleibt unverändert.
+    Plan-Buddy beantwortet Requests nach dem Fehler weiter wie zuvor."""
+    client, cfg_path, built = reload_client
+    cfg_before = plan_main.runtime["config"]
+    transport_before = plan_main.runtime["transport"]
+    kalender_id_before = cfg_before.kalender_id
+
+    # Datei zerschießen: ungültiges JSON.
+    cfg_path.write_text("{nicht valides json")
+
+    r = client.post(RELOAD_URL)
+    assert r.status_code == 500
+    body = r.get_json()
+    assert body["reloaded"] is False
+    assert "error" in body and body["error"]
+
+    # Alter State unverändert — gleiche Objekte, gleiche kalender_id.
+    assert plan_main.runtime["config"] is cfg_before
+    assert plan_main.runtime["transport"] is transport_before
+    assert plan_main.runtime["config"].kalender_id == kalender_id_before
+    # Es wurde KEIN neuer Transport gebaut — der Factory hat nicht gefeuert.
+    assert len(built) == 1
+
+    # Plan-Buddy beantwortet Requests weiter.
+    r2 = client.get("/display/plan/woche")
+    assert r2.status_code == 200
+
+
+def test_140_reload_endpoint_atomar_bei_kaputter_config(reload_client):
+    """Atomarität bei Config-Fehler: plan.json ohne kalender_id (Pflicht-
+    feld, PLAN-28) → 500, alter State steht. Eine versehentlich kaputte
+    Config darf den laufenden Plan-Buddy nicht in einen leeren Zustand
+    kippen — er hatte vorher einen gültigen Kalender, den behält er."""
+    client, cfg_path, built = reload_client
+    cfg_before = plan_main.runtime["config"]
+
+    # plan.json mit leerer kalender_id (Pflichtwert, wirft ConfigError).
+    data = json.loads(json.dumps(DEMO_CONFIG))
+    data["kalender_id"] = ""
+    cfg_path.write_text(json.dumps(data))
+
+    r = client.post(RELOAD_URL)
+    assert r.status_code == 500
+    assert r.get_json()["reloaded"] is False
+    # Alter State unverändert.
+    assert plan_main.runtime["config"] is cfg_before
+    assert len(built) == 1
+
+
+def test_140_reload_endpoint_rejects_non_loopback(reload_client):
+    """Loopback-Schutz: Aufruf aus dem Netz (z. B. 10.0.0.5) → HTTP 403.
+    Flask-Testclient erlaubt environ_overrides, um remote_addr zu setzen —
+    das simuliert einen Aufruf, der NICHT von 127.0.0.1 kommt."""
+    client, _, _ = reload_client
+    r = client.post(RELOAD_URL, environ_overrides={"REMOTE_ADDR": "10.0.0.5"})
+    assert r.status_code == 403
+    body = r.get_json()
+    assert body["reloaded"] is False
+    assert "127.0.0.1" in body["error"] or "loopback" in body["error"].lower()
+
+
+def test_140_reload_endpoint_accepts_ipv6_loopback(reload_client):
+    """IPv6-Loopback (::1) zählt auch als loopback — sonst schlägt der
+    Endpoint auf Systemen fehl, die lokal über IPv6 angebunden sind."""
+    client, _, _ = reload_client
+    r = client.post(RELOAD_URL, environ_overrides={"REMOTE_ADDR": "::1"})
+    assert r.status_code == 200
+    assert r.get_json()["reloaded"] is True
+
+
+def test_140_reload_endpoint_only_post_allowed(reload_client):
+    """Der Endpoint ist eine Aktion (POST), kein Lese-Endpoint. GET → 405."""
+    client, _, _ = reload_client
+    r = client.get(RELOAD_URL)
+    assert r.status_code == 405
