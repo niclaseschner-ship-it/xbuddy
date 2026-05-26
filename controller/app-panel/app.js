@@ -209,6 +209,30 @@
   }
 
   // ============================================================
+  //  PANEL-11 — Stream-Handler-Fabrik (testbare Logik)
+  // ============================================================
+  //
+  // Trennt die reine Logik (welche Kachel ist aktiv?) von der DOM-Anbindung
+  // im Bootstrap. Ein Aufrufer übergibt `getTiles` und einen `onActive`-
+  // Callback (Marker-Update). `onerror` ist ein No-Op: bei Stream-Abbruch
+  // bleibt die letzte Markierung (DC-6); der Browser führt den
+  // EventSource-Standard-Reconnect (DC-7) selbst.
+
+  function makeStreamHandlers(getTiles, onActive) {
+    function onMessage(ev) {
+      var st = null;
+      try { st = JSON.parse(ev.data); } catch (e) { return; }
+      var payloadUrl = (st && st.payload && st.payload.url) || null;
+      var active = findActiveTile(getTiles(), payloadUrl);
+      onActive(active);
+    }
+    function onError() {
+      // No-Op (DC-6): letzte Markierung bleibt, Browser reconnected (DC-7).
+    }
+    return { onMessage: onMessage, onError: onError };
+  }
+
+  // ============================================================
   //  PANEL-8 — Konsistenz-Check der Instanz-Konfiguration
   // ============================================================
 
@@ -242,6 +266,7 @@
     BACKOFFS: BACKOFFS,
     postWithRetry: postWithRetry,
     checkConfigConsistency: checkConfigConsistency,
+    makeStreamHandlers: makeStreamHandlers,
   };
 });
 
@@ -293,6 +318,12 @@
         if (err) {
           // Diskrepanz = sichtbarer Fehler. (FIG-23/ROU-19 Linie für stummen
           // Fallback gilt NUR bei fehlender/kaputter Datei.)
+          // PANEL-8: Diskrepanz wird als sichtbarer Fehler gezeigt (Spec-Vorgabe),
+          // das Panel läuft aber weiter. Begründung: ein Panel mit falscher
+          // source_id schadet nicht (Router verwirft Events mit unbekannter
+          // source_id mit 4xx/Warn), und ein hartes Abbruch hier wäre eine
+          // Spec-Verschärfung jenseits der „sichtbarer Fehler"-Forderung.
+          // Bewusste Entscheidung gegen Hard-Stop.
           showError('Konfigurations-Fehler: ' + err);
         }
       }
@@ -395,15 +426,12 @@
     if (!displayId) return null;
     var url = '/api/v1/displays/' + encodeURIComponent(displayId) + '/events';
     var es = new EventSource(url);
-    es.addEventListener('message', function (ev) {
-      var state = null;
-      try { state = JSON.parse(ev.data); } catch (e) { return; }
-      var payloadUrl = (state && state.payload && state.payload.url) || null;
-      var active = panelLib.findActiveTile(getTiles(), payloadUrl);
-      updateActiveMarker(active);
-    });
-    // DC-6/DC-7-Linie: Stream-Abbruch → letzte Markierung bleibt; der Browser
-    // führt automatisch den EventSource-Standard-Reconnect aus.
+    var handlers = panelLib.makeStreamHandlers(getTiles, updateActiveMarker);
+    es.addEventListener('message', handlers.onMessage);
+    // Stream-Abbruch: nichts unternehmen (DC-6-Linie); EventSource-Reconnect
+    // läuft Browser-seitig (DC-7). Expliziter Handler dokumentiert die
+    // Absicht — kein updateActiveMarker(null), kein Reset der active-Klasse.
+    es.onerror = handlers.onError;
     return es;
   }
 

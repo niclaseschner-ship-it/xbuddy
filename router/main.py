@@ -406,11 +406,13 @@ def events_endpoint():
         return jsonify({'error': 'JSON-Body fehlt oder ungültig'}), 400
     if 'source_id' not in body or 'type' not in body:
         return jsonify({'error': 'source_id und type sind Pflicht'}), 400
-    # ROU-24: App-Panel-Source wählt den App-Panel-Adapter (Source-Erkennung
-    # per `app-panel:`-Prefix auf source_id, analog zur `phone:`-Konvention
-    # der Figuren-Erkennung). Der Routing-Kern bleibt agnostisch (ROU-1).
-    sid = body.get('source_id')
-    if isinstance(sid, str) and sid.startswith('app-panel:'):
+    # ROU-24: Adapter-Auswahl per Event-Type. ROU-24 beschreibt den App-Panel-
+    # Adapter über die Events, die er verarbeitet (`tile_selected`,
+    # `panel_cleared`) — nicht über eine `source_id`-Konvention. Damit bleibt
+    # der Routing-Kern hardcode-frei (ROU-1) und keine source_id-Form ist
+    # auf der Dispatch-Ebene privilegiert.
+    etype = body.get('type')
+    if etype in ('tile_selected', 'panel_cleared'):
         adapted, err = adapt_app_panel(body)
         if err:
             return jsonify({'error': err}), 400

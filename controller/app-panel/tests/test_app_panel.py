@@ -532,17 +532,42 @@ def test_PANEL_11_mismatch_no_active_tile():
 
 
 def test_PANEL_11_stream_break_keeps_last_marker():
-    """DC-6-Linie: Bei Stream-Abbruch macht der Code nichts aktiv (kein
-    clearAll-Aufruf). Statisch geprüft: kein Reset der active-Klasse im
-    error/onerror-Handler."""
+    """DC-6-Linie: Bei Stream-Abbruch darf die letzte Markierung NICHT
+    gelöscht werden. Dynamische Probe über die Stream-Handler-Fabrik
+    (panelLib.makeStreamHandlers): erst onMessage mit passender Payload-URL
+    setzt die Markierung; danach feuert onError; assert: onError ruft den
+    onActive-Callback nicht (kein Reset auf null)."""
+    out = run_node('''
+        const tiles = [
+            { key: 'a', app: 'plan', view: 'woche', label: 'L', icon: 'i', sichtbar: true },
+        ];
+        const calls = [];
+        const handlers = panelLib.makeStreamHandlers(
+            () => tiles,
+            (active) => { calls.push(active && active.key); });
+        // Stream liefert State, der zur Kachel passt → Marker aktiv.
+        handlers.onMessage({ data: JSON.stringify({
+            payload: { url: '/display/plan/woche' }
+        }) });
+        // Stream bricht ab.
+        handlers.onError();
+        console.log(JSON.stringify({ calls }));
+    ''')
+    # Genau ein Aufruf: das onMessage. onError darf onActive NICHT triggern,
+    # damit die letzte Markierung im UI hängen bleibt (DC-6).
+    assert out['calls'] == ['a'], (
+        'onError darf den Marker nicht ändern — letzte Markierung muss bleiben (DC-6). '
+        'Gesehen: %r' % out['calls'])
+
+
+def test_PANEL_11_stream_handlers_registered_on_eventsource():
+    """Strukturelle Probe: app.js registriert für die EventSource sowohl einen
+    message-Listener als auch einen onerror-Handler. Ohne den onerror-Handler
+    wäre die DC-6-Garantie nur konventionell („Browser löscht ja nichts“) —
+    der explizite No-Op-Handler dokumentiert die Absicht."""
     js = read(APPJS_PATH)
-    # Keine 'updateActiveMarker(null)'-Stelle im EventSource-error-Pfad.
-    # Vereinfachte Negativ-Probe: kein 'es.onerror' der Markierung löscht.
-    if re.search(r"es\.onerror|addEventListener\(\s*['\"]error['\"]", js):
-        # Falls vorhanden, darf er die Markierung nicht resetten.
-        assert not re.search(
-            r"(es\.onerror|addEventListener\(\s*['\"]error['\"][\s\S]{0,200}?updateActiveMarker\s*\(\s*null",
-            js), 'Bei Stream-Abbruch darf die letzte Markierung nicht gelöscht werden (DC-6)'
+    assert re.search(r"es\.onerror\s*=", js), \
+        'EventSource muss einen expliziten onerror-Handler haben (DC-6 dokumentiert)'
 
 
 def test_PANEL_11_eventsource_used_for_reconnect():

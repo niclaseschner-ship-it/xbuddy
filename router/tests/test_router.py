@@ -780,6 +780,39 @@ def test_ROU_24_unknown_event_type_returns_400(client_with_panels):
     assert r.status_code == 400
 
 
+def test_ROU_24_dispatch_by_event_type_not_source_id_prefix(tmp_path):
+    """Hardcode-Frei-Probe auf der Dispatch-Ebene: ROU-24 wählt den App-Panel-
+    Adapter über den Event-Type (`tile_selected`/`panel_cleared`) — nicht über
+    eine `source_id`-Prefix-Konvention. Ein `tile_selected`-Event mit einer
+    source_id OHNE `app-panel:`-Prefix muss trotzdem im App-Panel-Adapter
+    landen und gegen den `panels`-Lookup geprüft werden."""
+    routing = tmp_path / "routing.json"
+    routing.write_text(json.dumps({
+        "entries": [],
+        "panels": {
+            # Bewusst KEIN `app-panel:`-Prefix — der Adapter muss source_ids
+            # in beliebiger Form akzeptieren, solange sie im panels-Abschnitt
+            # stehen.
+            "some-other-name": {"display_id": "display:wohnzimmer"},
+        },
+    }))
+    router_main.state = {}
+    router_main._subscribers.clear()
+    router_main.load_routing(str(routing))
+    router_main.app.testing = True
+    client = router_main.app.test_client()
+    r = post_event(client, {
+        'source_id': 'some-other-name',
+        'type': 'tile_selected', 'app': 'plan', 'view': 'woche',
+    })
+    assert r.status_code == 204, \
+        'Dispatch muss über Event-Type laufen, nicht über source_id-Prefix'
+    s = router_main.state['display:wohnzimmer']
+    assert s is not None
+    assert s['payload'] == {'url': '/display/plan/woche'}
+    assert s['source_id'] == 'some-other-name'
+
+
 def test_ROU_24_two_panels_route_to_two_displays(client_with_panels):
     """Hardcode-Frei-Probe Teil 2: zwei verschiedene Panel-Instanzen mit
     unterschiedlichen `display_id`-Zielen werden korrekt auseinandergehalten —
