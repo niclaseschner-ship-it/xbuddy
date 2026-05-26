@@ -91,7 +91,15 @@ lassen oder den Trust wirkungslos machen — die heute bekannten:
 Die Spec normiert das *Soll* (Symmetrie und Stolperstein-Abdeckung); der konkrete
 Anleitungstext lebt im Code (`_INSTALL_GUIDE`) — eine Stelle, nicht doppelt.
 
-*Tickets:* #39, #77
+Die Funktion erwartet das Zielgerät als Pflicht-Eingabe (Werte
+`windows | android | ios | macos`). Geliefert wird nur der zu diesem Gerät
+passende Abschnitt der Anleitung — die Familie bekommt nie alle vier OS auf
+einmal. Fehlt die Geräte-Angabe, ist der Aufruf ungültig. So verteilt die
+Spec die Last vom Elternteil (durch alle vier OS-Abschnitte lesen, das
+relevante Stück finden) zum Agenten, der vor dem Aufruf gezielt nach dem
+Gerät fragt (Eltern-Chat EC-22).
+
+*Tickets:* #39, #77, #95
 
 ## 3. Aufruf
 

@@ -1,4 +1,4 @@
-"""Tests für die CA-Verteilung — CAV-1 … CAV-7 (Refs #39, #63).
+"""Tests für die CA-Verteilung — CAV-1 … CAV-7 (Refs #39, #63, #95).
 
 Geprüft wird das Code-Verhalten der CA-Verteilung: die aufrufbare Funktion
 selbst (ca_verteilung) und ihr Trigger als EC-8-Aufgabe (`ca_task`,
@@ -8,9 +8,12 @@ CAV-6). Telegram ist durch die kontrollierte Doppelung `FakeTelegram` ersetzt
 
 import inspect
 
+import pytest
+
 from skills import ca_verteilung
 from skills.ca_task import CaVerteilungTask
-from skills.ca_verteilung import CaVerteilungError, CaVerteilungResult, verteile_ca
+from skills.ca_verteilung import (CaVerteilungError, CaVerteilungResult,
+                                  SUPPORTED_GERAETE, verteile_ca)
 from confirm import PendingStore
 from fakes import (FakeProvider, FakeTelegram, make_message,
                    task_call_response, text_response)
@@ -63,7 +66,8 @@ def _ctx(tmp_path, tg, ca_pem_path, provider=None):
 def test_CAV_1_is_a_callable_function_returning_a_result(tmp_path):
     """verteile_ca ist eine aufrufbare Funktion und liefert ein Ergebnis."""
     tg = FakeTelegram()
-    result = verteile_ca(tg, chat_id=42, ca_pem_path=_write_ca(tmp_path))
+    result = verteile_ca(tg, chat_id=42,
+                         ca_pem_path=_write_ca(tmp_path), geraet="android")
     assert isinstance(result, CaVerteilungResult)
     assert result.chat_id == 42
     assert result.document_message_id is not None
@@ -72,10 +76,10 @@ def test_CAV_1_is_a_callable_function_returning_a_result(tmp_path):
 
 def test_CAV_1_function_does_not_know_its_caller(tmp_path):
     """E-CAV-1: der Aufrufer ist nicht Teil des Funktions-Vertrags. Die
-    Signatur nimmt nur Kanal, Zielchat und Zertifikatspfad — keinen Trigger,
-    keinen Onboarding-Flow, keinen Befehls-Kontext."""
+    Signatur nimmt nur Kanal, Zielchat, Zertifikatspfad und Zielgerät —
+    keinen Trigger, keinen Onboarding-Flow, keinen Befehls-Kontext."""
     params = list(inspect.signature(verteile_ca).parameters)
-    assert params == ["tg", "chat_id", "ca_pem_path"]
+    assert params == ["tg", "chat_id", "ca_pem_path", "geraet"]
 
 
 # ============================================================
@@ -86,7 +90,7 @@ def test_CAV_2_delivers_the_public_root_ca_certificate(tmp_path):
     """Die Funktion stellt dem Gerät genau das öffentliche Root-CA-Zertifikat
     bereit — den Trust-Anker, ohne den XBuddy-HTTPS-Seiten warnen."""
     tg = FakeTelegram()
-    verteile_ca(tg, chat_id=42, ca_pem_path=_write_ca(tmp_path))
+    verteile_ca(tg, chat_id=42, ca_pem_path=_write_ca(tmp_path), geraet="android")
     assert len(tg.documents) == 1
     doc = tg.documents[0]
     assert doc["file_bytes"] == _PUBLIC_CA_PEM
@@ -103,7 +107,7 @@ def test_CAV_3_refuses_to_send_a_private_key(tmp_path):
     tg = FakeTelegram()
     key_path = _write_ca(tmp_path, content=_PRIVATE_KEY_PEM)
     try:
-        verteile_ca(tg, chat_id=42, ca_pem_path=key_path)
+        verteile_ca(tg, chat_id=42, ca_pem_path=key_path, geraet="android")
         assert False, "verteile_ca hätte abbrechen müssen"
     except CaVerteilungError:
         pass
@@ -116,7 +120,8 @@ def test_CAV_3_missing_certificate_file_aborts_cleanly(tmp_path):
     Teil-Versand, keine stumme Auslieferung."""
     tg = FakeTelegram()
     try:
-        verteile_ca(tg, chat_id=42, ca_pem_path=str(tmp_path / "fehlt.pem"))
+        verteile_ca(tg, chat_id=42, ca_pem_path=str(tmp_path / "fehlt.pem"),
+                    geraet="android")
         assert False, "verteile_ca hätte abbrechen müssen"
     except CaVerteilungError:
         pass
@@ -155,7 +160,8 @@ def test_CAV_4_certificate_is_delivered_as_telegram_document(tmp_path):
     `.pem` ist auf Windows keinem Cert-Handler zugeordnet, `.crt` ist der
     OS-übergreifende Standard; Inhalt bleibt PEM)."""
     tg = FakeTelegram()
-    verteile_ca(tg, chat_id=777, ca_pem_path=_write_ca(tmp_path))
+    verteile_ca(tg, chat_id=777, ca_pem_path=_write_ca(tmp_path),
+                geraet="android")
     assert len(tg.documents) == 1
     assert tg.documents[0]["chat_id"] == 777
     assert tg.documents[0]["file_name"] == "xbuddy-rootCA.crt"
@@ -166,7 +172,8 @@ def test_CAV_4_send_failure_is_reported_as_error(tmp_path):
     keine stille Nicht-Auslieferung."""
     tg = FakeTelegram(send_document_error=TelegramError("Kanal weg"))
     try:
-        verteile_ca(tg, chat_id=42, ca_pem_path=_write_ca(tmp_path))
+        verteile_ca(tg, chat_id=42, ca_pem_path=_write_ca(tmp_path),
+                    geraet="android")
         assert False, "verteile_ca hätte den Sendefehler melden müssen"
     except CaVerteilungError:
         pass
@@ -186,18 +193,19 @@ def test_CAV_4_task_is_behind_the_group_membership_gate(tmp_path):
 
 
 # ============================================================
-#  CAV-5 — OS-spezifische Installations-Anleitung, hart-codiert
+#  CAV-5 — OS-spezifische Installations-Anleitung, hart-codiert,
+#          Auslieferung gerätespezifisch (#95)
 # ============================================================
 
-def test_CAV_5_install_guide_covers_all_target_platforms(tmp_path):
-    """Zur Datei liefert die Funktion eine Anleitung für Android, iOS/iPadOS,
-    Windows und macOS — als eigene Nachricht über den Bot-Kanal."""
-    tg = FakeTelegram()
-    verteile_ca(tg, chat_id=42, ca_pem_path=_write_ca(tmp_path))
-    assert len(tg.sent) == 1
-    guide = tg.sent[0]["text"]
-    for platform in ("Android", "iOS", "iPadOS", "Windows", "macOS"):
-        assert platform in guide, "Anleitung deckt %s nicht ab" % platform
+def test_CAV_5_install_guide_covers_all_target_platforms_in_code(tmp_path):
+    """Die Spec normiert das Soll: alle vier Plattformen sind im Code
+    gleichgewichtig abgedeckt — die *Auslieferung* ist pro Aufruf
+    gerätespezifisch (#95)."""
+    # Jeder OS-Block existiert im Code und benennt die zugehörige Plattform.
+    assert "Windows" in ca_verteilung._GUIDE_WINDOWS
+    assert "Android" in ca_verteilung._GUIDE_ANDROID
+    assert "iOS" in ca_verteilung._GUIDE_IOS and "iPadOS" in ca_verteilung._GUIDE_IOS
+    assert "macOS" in ca_verteilung._GUIDE_MACOS
 
 
 def test_CAV_5_install_guide_addresses_known_stumbling_blocks(tmp_path):
@@ -212,28 +220,92 @@ def test_CAV_5_install_guide_addresses_known_stumbling_blocks(tmp_path):
       unter „Zertifikatsvertrauenseinstellungen").
     - macOS: Schlüsselbund „System" (nicht „Anmeldung") und „Immer vertrauen".
     """
-    guide = ca_verteilung._INSTALL_GUIDE
     # Windows
-    assert "Vertrauenswürdige Stammzertifizierungsstellen" in guide
-    assert "Firefox" in guide
+    assert "Vertrauenswürdige Stammzertifizierungsstellen" in ca_verteilung._GUIDE_WINDOWS
+    assert "Firefox" in ca_verteilung._GUIDE_WINDOWS
     # Android
-    assert "CA-Zertifikat" in guide
+    assert "CA-Zertifikat" in ca_verteilung._GUIDE_ANDROID
     # iOS / iPadOS
-    assert "Zertifikatsvertrauenseinstellungen" in guide
+    assert "Zertifikatsvertrauenseinstellungen" in ca_verteilung._GUIDE_IOS
     # macOS
-    assert "System" in guide
-    assert "Immer vertrauen" in guide
+    assert "System" in ca_verteilung._GUIDE_MACOS
+    assert "Immer vertrauen" in ca_verteilung._GUIDE_MACOS
 
 
 def test_CAV_5_install_guide_needs_no_ai_provider(tmp_path):
     """Die Anleitung ist hart-codiert: derselbe Aufruf liefert deterministisch
     denselben Text — kein KI-Anbieter im Spiel."""
     tg1, tg2 = FakeTelegram(), FakeTelegram()
-    verteile_ca(tg1, chat_id=1, ca_pem_path=_write_ca(tmp_path))
-    verteile_ca(tg2, chat_id=2, ca_pem_path=_write_ca(tmp_path))
+    verteile_ca(tg1, chat_id=1, ca_pem_path=_write_ca(tmp_path), geraet="ios")
+    verteile_ca(tg2, chat_id=2, ca_pem_path=_write_ca(tmp_path), geraet="ios")
     assert tg1.sent[0]["text"] == tg2.sent[0]["text"]
     # Die Anleitung ist eine feste Modul-Konstante, kein generierter Text.
-    assert tg1.sent[0]["text"] == ca_verteilung._INSTALL_GUIDE
+    assert tg1.sent[0]["text"] == ca_verteilung._GUIDE_IOS
+
+
+# ------------------------------------------------------------
+#  CAV-5 (#95) — `geraet` ist Pflicht-Eingabe, Auslieferung gerätespezifisch
+# ------------------------------------------------------------
+
+def test_CAV_5_geraet_is_required(tmp_path):
+    """#95: ohne `geraet` ist der Aufruf ungültig. Nichts wird ausgeliefert —
+    keine stille Default-Wahl, keine Vier-OS-Sammlung."""
+    tg = FakeTelegram()
+    with pytest.raises(ValueError):
+        verteile_ca(tg, chat_id=42, ca_pem_path=_write_ca(tmp_path),
+                    geraet=None)
+    assert tg.documents == []
+    assert tg.sent == []
+
+
+def test_CAV_5_unknown_geraet_is_rejected(tmp_path):
+    """#95: ein OS-Wert außerhalb der Enum (z. B. das von der GAA
+    unterstützte `linux`, das CAV in V1 nicht abdeckt) wird abgelehnt."""
+    tg = FakeTelegram()
+    with pytest.raises(ValueError):
+        verteile_ca(tg, chat_id=42, ca_pem_path=_write_ca(tmp_path),
+                    geraet="linux")
+    assert tg.documents == []
+    assert tg.sent == []
+
+
+@pytest.mark.parametrize("geraet,foreign_markers,own_marker", [
+    ("windows",
+     ("iPadOS", "Schlüsselbundverwaltung", "Android (12 / 13 / 14)"),
+     "Vertrauenswürdige Stammzertifizierungsstellen"),
+    ("android",
+     ("Schlüsselbundverwaltung", "Zertifikatsvertrauenseinstellungen",
+      "Vertrauenswürdige Stammzertifizierungsstellen"),
+     "Android (12 / 13 / 14)"),
+    ("ios",
+     ("Schlüsselbundverwaltung", "Android (12 / 13 / 14)",
+      "Vertrauenswürdige Stammzertifizierungsstellen"),
+     "Zertifikatsvertrauenseinstellungen"),
+    ("macos",
+     ("iPadOS", "Android (12 / 13 / 14)",
+      "Vertrauenswürdige Stammzertifizierungsstellen"),
+     "Schlüsselbundverwaltung"),
+])
+def test_CAV_5_only_the_matching_block_is_delivered(
+        tmp_path, geraet, foreign_markers, own_marker):
+    """#95: pro Aufruf bekommt die Familie nur den passenden OS-Block,
+    nicht alle vier auf einmal."""
+    tg = FakeTelegram()
+    verteile_ca(tg, chat_id=42, ca_pem_path=_write_ca(tmp_path), geraet=geraet)
+    assert len(tg.sent) == 1
+    guide = tg.sent[0]["text"]
+    assert own_marker in guide, (
+        "%s-Anleitung enthält den eigenen Marker nicht" % geraet)
+    for foreign in foreign_markers:
+        assert foreign not in guide, (
+            "%s-Anleitung enthält fremden Marker %r" % (geraet, foreign))
+
+
+def test_CAV_5_enum_matches_supported_geraete():
+    """#95: die als Modul-API exportierte SUPPORTED_GERAETE-Tupel deckt sich
+    mit der Enum, die die Task-Definition (ca_task.parameters) ans Modell
+    reicht. Eine Stelle, nicht doppelt."""
+    assert set(SUPPORTED_GERAETE) == {"windows", "android", "ios", "macos"}
 
 
 # ============================================================
@@ -246,9 +318,20 @@ def test_CAV_6_is_a_read_task_without_a_confirmation_gate(tmp_path):
     task = CaVerteilungTask(FakeTelegram(), _write_ca(tmp_path))
     assert task.kind == READ
     assert task.name == "ca_verteilen"
-    # Leere Parameter: das Modell liefert nichts — der Zielchat kommt aus dem
-    # turn_context, nicht aus arguments.
-    assert task.parameters == {"type": "object", "properties": {}}
+
+
+def test_CAV_6_task_requires_geraet_as_parameter():
+    """#95: Die Task-Definition deklariert `geraet` als Pflicht-Parameter mit
+    Enum der vier OS-Werte — damit fragt das Modell von selbst nach (EC-22),
+    statt alle Varianten gleichzeitig zu liefern."""
+    task = CaVerteilungTask(FakeTelegram(), "/tmp/dummy.pem")
+    params = task.parameters
+    assert params["type"] == "object"
+    assert "geraet" in params["properties"]
+    assert params["properties"]["geraet"]["type"] == "string"
+    assert set(params["properties"]["geraet"]["enum"]) == {
+        "windows", "android", "ios", "macos"}
+    assert params["required"] == ["geraet"]
 
 
 def test_CAV_6_task_delivers_certificate_and_guide_itself(tmp_path):
@@ -256,7 +339,8 @@ def test_CAV_6_task_delivers_certificate_and_guide_itself(tmp_path):
     injizierte tg aus und gibt nur eine kurze Quittung zurück."""
     tg = FakeTelegram()
     task = CaVerteilungTask(tg, _write_ca(tmp_path))
-    receipt = task.run(arguments={}, turn_context=TurnContext(chat_id=42))
+    receipt = task.run(arguments={"geraet": "android"},
+                       turn_context=TurnContext(chat_id=42))
     assert len(tg.documents) == 1
     assert tg.documents[0]["file_name"] == "xbuddy-rootCA.crt"
     assert "Android" in tg.sent[0]["text"]
@@ -269,9 +353,23 @@ def test_CAV_6_task_uses_chat_id_from_turn_context_not_arguments(tmp_path):
     tg = FakeTelegram()
     task = CaVerteilungTask(tg, _write_ca(tmp_path))
     # Das Modell „schlägt" einen abweichenden chat_id vor — er wird ignoriert.
-    task.run(arguments={"chat_id": 999}, turn_context=TurnContext(chat_id=42))
+    task.run(arguments={"chat_id": 999, "geraet": "android"},
+             turn_context=TurnContext(chat_id=42))
     assert tg.documents[0]["chat_id"] == 42
     assert tg.sent[0]["chat_id"] == 42
+
+
+def test_CAV_6_task_without_geraet_raises_and_delivers_nothing(tmp_path):
+    """#95: ruft der Agent die Aufgabe ohne `geraet` auf (z. B. weil der
+    Anbieter die JSON-Schema-`required`-Vorgabe ignoriert), wirft die
+    Aufgabe — und der Loop meldet das dem Modell, statt blind alle vier
+    OS-Blöcke zu schicken."""
+    tg = FakeTelegram()
+    task = CaVerteilungTask(tg, _write_ca(tmp_path))
+    with pytest.raises(ValueError):
+        task.run(arguments={}, turn_context=TurnContext(chat_id=42))
+    assert tg.documents == []
+    assert tg.sent == []
 
 
 def test_CAV_6_task_failure_propagates_to_the_agent_loop(tmp_path):
@@ -280,28 +378,32 @@ def test_CAV_6_task_failure_propagates_to_the_agent_loop(tmp_path):
     tg = FakeTelegram(send_document_error=TelegramError("Kanal weg"))
     task = CaVerteilungTask(tg, _write_ca(tmp_path))
     try:
-        task.run(arguments={}, turn_context=TurnContext(chat_id=42))
+        task.run(arguments={"geraet": "android"},
+                 turn_context=TurnContext(chat_id=42))
         assert False, "die Aufgabe hätte den Fehler weiterreichen müssen"
     except CaVerteilungError:
         pass
 
 
 def test_CAV_6_natural_language_request_delivers_via_the_agent(tmp_path):
-    """End-to-End: eine natürlichsprachige Bitte erreicht den Agenten, der die
-    Katalog-Aufgabe aufruft — Auslieferung ohne Tippbefehl (#63)."""
+    """End-to-End: eine natürlichsprachige Bitte mit angegebenem Gerät
+    erreicht den Agenten, der die Katalog-Aufgabe aufruft — Auslieferung
+    ohne Tippbefehl (#63), nur der iOS-Abschnitt geht raus (#95)."""
     tg = FakeTelegram(members=_members(7))
     provider = FakeProvider([
-        task_call_response("ca_verteilen"),
+        task_call_response("ca_verteilen", arguments={"geraet": "ios"}),
         text_response("Ich habe dir das Zertifikat geschickt."),
     ])
     ctx = _ctx(tmp_path, tg, _write_ca(tmp_path), provider=provider)
-    handle_update(make_message("kannst du mir das Zertifikat schicken?",
+    handle_update(make_message("schick mir bitte das Zertifikat für mein iPhone",
                                from_user_id=7, chat_id=42), ctx)
     # Die Aufgabe hat selbst ausgeliefert ...
     assert len(tg.documents) == 1
     assert tg.documents[0]["chat_id"] == 42
-    # ... an den Chat aus dem turn_context, nicht aus Modell-arguments.
-    assert "Android" in [s["text"] for s in tg.sent if "Android" in s["text"]][0]
+    # ... mit nur dem iOS-Abschnitt (nicht alle vier OS).
+    delivered_guides = [s for s in tg.sent
+                        if s.get("text") == ca_verteilung._GUIDE_IOS]
+    assert len(delivered_guides) == 1
     # ... und der Agent hat zum Schluss geantwortet.
     assert tg.sent[-1]["text"] == "Ich habe dir das Zertifikat geschickt."
 
@@ -314,6 +416,7 @@ def test_CAV_7_delivery_runs_without_network(tmp_path):
     """CAV-7: die CA-Verteilung ist mit der Telegram-Doppelung vollständig
     ohne Netz prüfbar — dieser Lauf belegt es, kein Socket wird geöffnet."""
     tg = FakeTelegram()
-    result = verteile_ca(tg, chat_id=42, ca_pem_path=_write_ca(tmp_path))
+    result = verteile_ca(tg, chat_id=42, ca_pem_path=_write_ca(tmp_path),
+                         geraet="android")
     assert isinstance(result, CaVerteilungResult)
     assert len(tg.documents) == 1 and len(tg.sent) == 1
