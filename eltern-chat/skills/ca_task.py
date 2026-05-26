@@ -15,7 +15,7 @@ Quittungstext zurück — den der Agent dem Familienmitglied weiterreicht.
 
 import logging
 
-import ca_verteilung
+from skills import ca_verteilung
 from tasks import ReadTask
 
 

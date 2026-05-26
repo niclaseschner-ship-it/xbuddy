@@ -27,7 +27,7 @@ import logging
 import queue
 import threading
 
-import kalender_verbinden
+from skills import kalender_verbinden
 from tasks import Proposal, WriteTask
 
 

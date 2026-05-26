@@ -145,21 +145,21 @@ def build_catalog(tg, ca_pem_path, family_registry_path=None,
     """
     # Lokale Imports: brechen den Import-Zyklus tasks <-> ca_task/faa_task/
     # gaa_task/kav_task — nicht hochziehen.
-    from ca_task import CaVerteilungTask
+    from skills.ca_task import CaVerteilungTask
 
     catalog = Catalog()
     catalog.register(CaVerteilungTask(tg, ca_pem_path))
 
     if family_registry_path is not None and faa_sessions is not None \
             and family_group_chat_id_getter is not None:
-        from familie_anlegen_task import FamilieAnlegenTask
+        from skills.familie_anlegen_task import FamilieAnlegenTask
         catalog.register(FamilieAnlegenTask(
             tg, family_registry_path, faa_sessions,
             family_group_chat_id_getter))
 
     if geraete_registry_path is not None and gaa_sessions is not None \
             and family_group_chat_id_getter is not None:
-        from geraet_anlegen_task import GeraetAnlegenTask
+        from skills.geraet_anlegen_task import GeraetAnlegenTask
         catalog.register(GeraetAnlegenTask(
             tg, geraete_registry_path, gaa_sessions,
             family_group_chat_id_getter,
@@ -168,7 +168,7 @@ def build_catalog(tg, ca_pem_path, family_registry_path=None,
 
     if zd_store_getter is not None and kav_sessions is not None \
             and family_group_chat_id_getter is not None:
-        from kalender_verbinden_task import KalenderVerbindenTask
+        from skills.kalender_verbinden_task import KalenderVerbindenTask
         catalog.register(KalenderVerbindenTask(
             tg, zd_store_getter, kav_sessions,
             family_group_chat_id_getter,

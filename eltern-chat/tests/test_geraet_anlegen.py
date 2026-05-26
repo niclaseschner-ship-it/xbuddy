@@ -12,7 +12,7 @@ import os
 
 import geraete as geraete_pkg
 from fakes import FakeTelegram
-from geraet_anlegen import (CANCELLED, CAV_FAILED, GaaInput,
+from skills.geraet_anlegen import (CANCELLED, CAV_FAILED, GaaInput,
                             NOT_AUTHORIZED, REJECT_AUFLOESUNG, REJECT_OS,
                             REJECT_TYP, REJECT_VERWENDUNG, WRITE_FAILED,
                             geraet_anlegen)
