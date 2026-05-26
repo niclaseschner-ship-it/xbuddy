@@ -1,4 +1,8 @@
-"""Tests für die Anbieter-Auswahl — EC-11 (Refs #27)."""
+"""Tests für die Anbieter-Auswahl und den Claude-Adapter — EC-11 / E-EC-6
+(Refs #27, #93).
+"""
+
+import logging
 
 import pytest
 
@@ -10,3 +14,165 @@ def test_EC_11_unknown_provider_raises():
     Konfigurationsfehler, kein stiller Fallback."""
     with pytest.raises(ValueError):
         get_provider("gibt-es-nicht", api_key="egal")
+
+
+# ============================================================
+#  Claude-Adapter — Cache-Marker (#93 Item 1) + Token-Log (#93 Item 3)
+# ============================================================
+
+class _FakeUsage:
+    """Doppelung des Anthropic-`usage`-Objekts (vier int-Counter)."""
+
+    def __init__(self, input_tokens, cache_creation_input_tokens,
+                 cache_read_input_tokens, output_tokens):
+        self.input_tokens = input_tokens
+        self.cache_creation_input_tokens = cache_creation_input_tokens
+        self.cache_read_input_tokens = cache_read_input_tokens
+        self.output_tokens = output_tokens
+
+
+class _FakeContentBlock:
+    """Doppelung eines Anthropic-Content-Blocks (Typ `text` reicht hier)."""
+
+    def __init__(self, text):
+        self.type = "text"
+        self.text = text
+
+
+class _FakeAnthropicResponse:
+    """Doppelung der Anthropic-Antwort: Content-Blöcke + `usage`."""
+
+    def __init__(self, text="ok", usage=None):
+        self.content = [_FakeContentBlock(text)]
+        self.usage = usage
+
+
+class _FakeMessages:
+    """Doppelung des `client.messages`-Untermoduls: zeichnet kwargs auf."""
+
+    def __init__(self, response):
+        self._response = response
+        self.kwargs = None
+
+    def create(self, **kwargs):
+        self.kwargs = kwargs
+        return self._response
+
+
+class _FakeClient:
+    def __init__(self, response):
+        self.messages = _FakeMessages(response)
+
+
+def _build_provider_with(monkeypatch, response):
+    """Baut einen ClaudeProvider, dessen `anthropic.Anthropic`-Client durch eine
+    Doppelung ersetzt ist. Liefert (provider, fake_client)."""
+    # Lazy-Import des Adapters; `providers/claude.py` importiert anthropic auf
+    # Modul-Ebene — das SDK ist in requirements.txt, also vorhanden.
+    from providers.claude import ClaudeProvider
+    import providers.claude as claude_mod
+
+    fake_client = _FakeClient(response)
+    monkeypatch.setattr(claude_mod.anthropic, "Anthropic",
+                        lambda api_key: fake_client)
+    provider = ClaudeProvider(api_key="test-key", model="claude-test")
+    return provider, fake_client
+
+
+def _empty_request():
+    """Eine minimale GenerationRequest ohne Aufgaben."""
+    from model import GenerationRequest, Message, TextBlock
+    return GenerationRequest(
+        system="Du bist ein Test-Bot.",
+        messages=[Message(role="user", blocks=[TextBlock("hallo")])],
+        task_defs=[])
+
+
+def _request_with_tasks():
+    """Eine GenerationRequest mit zwei Aufgaben — prüft das Markieren des
+    letzten Aufgaben-Eintrags."""
+    from model import GenerationRequest, Message, TaskDef, TextBlock, READ
+    return GenerationRequest(
+        system="Du bist ein Test-Bot.",
+        messages=[Message(role="user", blocks=[TextBlock("hallo")])],
+        task_defs=[
+            TaskDef(name="erste", description="Erste Aufgabe", kind=READ,
+                    parameters={"type": "object", "properties": {}}),
+            TaskDef(name="zweite", description="Zweite Aufgabe", kind=READ,
+                    parameters={"type": "object", "properties": {}}),
+        ])
+
+
+def test_issue_93_cache_marker_sits_on_system_block(monkeypatch):
+    """#93 Item 1: der Cache-Marker liegt am letzten `system`-Block — NICHT
+    mehr als Top-Level-Kwarg. So trägt der Cache über Turns, weil der
+    System-Prompt zwischen Turns stabil ist."""
+    provider, fake = _build_provider_with(
+        monkeypatch, _FakeAnthropicResponse(text="hi", usage=None))
+
+    provider.generate(_empty_request())
+
+    kwargs = fake.messages.kwargs
+    # Top-Level-Kwarg darf nicht mehr gesetzt sein.
+    assert "cache_control" not in kwargs, \
+        "Top-Level cache_control darf nicht gesetzt sein (#93)"
+    # `system` muss Listen-Form sein, mit cache_control am letzten Block.
+    assert isinstance(kwargs["system"], list)
+    assert kwargs["system"][-1].get("cache_control") == {"type": "ephemeral"}
+    # Der Text bleibt erhalten.
+    assert kwargs["system"][-1]["text"] == "Du bist ein Test-Bot."
+
+
+def test_issue_93_cache_marker_sits_on_last_tool(monkeypatch):
+    """#93 Item 1: der letzte Eintrag der `tools`-Liste trägt den Cache-Marker
+    (Anthropic-Cache-Semantik markiert vorhergehende Tools implizit mit)."""
+    provider, fake = _build_provider_with(
+        monkeypatch, _FakeAnthropicResponse(text="hi", usage=None))
+
+    provider.generate(_request_with_tasks())
+
+    tools = fake.messages.kwargs["tools"]
+    assert len(tools) == 2
+    # Nur der letzte Eintrag wird explizit markiert.
+    assert "cache_control" not in tools[0]
+    assert tools[-1].get("cache_control") == {"type": "ephemeral"}
+    # Andere Felder bleiben unangetastet.
+    assert tools[-1]["name"] == "zweite"
+
+
+def test_issue_93_token_usage_logged_as_info(monkeypatch, caplog):
+    """#93 Item 3: nach jedem Anbieter-Aufruf wird die Token-Nutzung als
+    INFO-Log-Zeile geschrieben — vier Counter + Modell, in einer Zeile."""
+    usage = _FakeUsage(input_tokens=1234,
+                       cache_creation_input_tokens=200,
+                       cache_read_input_tokens=890,
+                       output_tokens=156)
+    provider, _ = _build_provider_with(
+        monkeypatch, _FakeAnthropicResponse(text="ok", usage=usage))
+
+    with caplog.at_level(logging.INFO, logger="providers.claude"):
+        provider.generate(_empty_request())
+
+    token_records = [r for r in caplog.records
+                     if r.name == "providers.claude" and "tokens" in r.message]
+    assert len(token_records) == 1, "genau eine Token-Log-Zeile je Aufruf"
+    message = token_records[0].getMessage()
+    assert "input=1234" in message
+    assert "cache_create=200" in message
+    assert "cache_read=890" in message
+    assert "output=156" in message
+    assert "model=claude-test" in message
+
+
+def test_issue_93_token_log_handles_missing_usage(monkeypatch, caplog):
+    """Anbieter-Antworten ohne `usage` (etwa zukünftige Adapter oder ein
+    schmaler Test-Mock) dürfen nicht crashen — kein Token-Log, kein Fehler."""
+    provider, _ = _build_provider_with(
+        monkeypatch, _FakeAnthropicResponse(text="ok", usage=None))
+
+    with caplog.at_level(logging.INFO, logger="providers.claude"):
+        provider.generate(_empty_request())
+
+    token_records = [r for r in caplog.records
+                     if r.name == "providers.claude" and "tokens" in r.message]
+    assert token_records == []
