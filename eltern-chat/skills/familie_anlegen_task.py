@@ -21,13 +21,25 @@ import logging
 
 from private_chat_session import PrivateChatSession
 from skills import familie_anlegen
-from tasks import Proposal, WriteTask
+from tasks import Proposal, WriteTask, is_from_private_chat
 
 
 # Quittung in den Agent-Loop zurück — die Anlage selbst läuft im Privatchat,
 # der Agent formuliert daraus seine kurze Antwort.
-_QUITTUNG_START = ("Ich richte das im Privatchat mit dir ein — antworte mir "
-                   "dort einfach Schritt für Schritt.")
+#
+# Wir unterscheiden zwei Faelle (Refs #157):
+# - Aufgabe aus dem Familien-Chat gestartet → Wechsel-Quittung
+#   `_QUITTUNG_START_FROM_GROUP`.
+# - Aufgabe schon IM Privatchat gestartet → keine Wechsel-Ankuendigung; die
+#   erste Frage (FAA-3 Art-Schritt: „Wer wird angelegt …") erscheint direkt
+#   im selben Chat asynchron aus dem Session-Thread. Die Quittung leitet
+#   den Schritt kurz ein.
+_QUITTUNG_START_FROM_GROUP = (
+    "Ich richte das im Privatchat mit dir ein — antworte mir "
+    "dort einfach Schritt für Schritt.")
+_QUITTUNG_START_FROM_PRIVATE = (
+    "Ich lege das hier mit dir an — Schritt für Schritt. Die erste Frage "
+    "kommt gleich.")
 _QUITTUNG_DONE_EMPTY = ("Ok — niemand angelegt (du hast abgebrochen). Sag "
                         "Bescheid, wenn ich es noch mal versuchen soll.")
 _PROPOSAL_SUMMARY = ("Neue(s) Familienmitglied(er) im Privatchat anlegen — "
@@ -118,7 +130,12 @@ class FamilieAnlegenTask(WriteTask):
                 sessions.pop(private_chat_id, None)
 
         session.start(run_faa, ())
-        return _QUITTUNG_START
+        # Refs #157: Wechsel-Quittung NUR, wenn der Aufrufer noch nicht im
+        # Privatchat ist. Sonst direkt mit der Einleitung — die erste Frage
+        # (Art-Schritt) kommt asynchron im selben Chat.
+        if is_from_private_chat(turn_context):
+            return _QUITTUNG_START_FROM_PRIVATE
+        return _QUITTUNG_START_FROM_GROUP
 
 
 def make_faa_input(incoming_message):

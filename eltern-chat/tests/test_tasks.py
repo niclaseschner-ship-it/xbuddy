@@ -9,7 +9,8 @@ import pytest
 from fakes import FakeReadTask, FakeTelegram, FakeWriteTask
 from hooks import HookContext, HookFailure, HookSuccess
 from model import READ, WRITE
-from tasks import Catalog, WriteTaskResult, build_catalog
+from tasks import (Catalog, TurnContext, WriteTaskResult, build_catalog,
+                   is_from_private_chat)
 
 
 def test_EC_8_register_and_get():
@@ -216,3 +217,28 @@ def test_EC_21_hook_context_carries_task_name_and_turn_context():
     assert isinstance(captured[0], HookContext)
     assert captured[0].task_name == "kalender_verbinden"
     assert captured[0].turn_context is sentinel_turn_context
+
+
+# ============================================================
+#  Refs #157 — is_from_private_chat-Helfer
+# ============================================================
+
+def test_157_is_from_private_chat_true_when_chat_id_equals_private_chat_id():
+    """Refs #157: Konvention aus `TurnContext` — Privatchat-Anfrage hat
+    `chat_id == private_chat_id` (s. main._user_message_from-Bau)."""
+    tc = TurnContext(chat_id=7, from_user_id=7, private_chat_id=7)
+    assert is_from_private_chat(tc) is True
+
+
+def test_157_is_from_private_chat_false_for_group_request():
+    """Refs #157: Gruppen-Anfrage — chat_id ist die Gruppe, private_chat_id
+    die User-ID; sie unterscheiden sich."""
+    tc = TurnContext(chat_id="-100", from_user_id=7, private_chat_id=7)
+    assert is_from_private_chat(tc) is False
+
+
+def test_157_is_from_private_chat_false_without_private_chat_id():
+    """Refs #157: Ohne `private_chat_id` (z. B. ein degenerierter Kontext)
+    gilt die Anfrage nicht als „aus dem Privatchat" — defensiver Default."""
+    tc = TurnContext(chat_id="-100", from_user_id=None, private_chat_id=None)
+    assert is_from_private_chat(tc) is False

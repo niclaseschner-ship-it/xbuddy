@@ -41,6 +41,29 @@ class TurnContext:
     private_chat_id: object = None
 
 
+def is_from_private_chat(turn_context):
+    """True, wenn die Anfrage IM Privatchat des Aufrufers gestellt wurde
+    (Refs #157).
+
+    Konvention aus `TurnContext` (s.o.): bei einer Privatchat-Anfrage sind
+    `chat_id` und `private_chat_id` identisch (`main._user_message_from`
+    bzw. der Bau in `handle_update`/`_execute_confirmed` setzt
+    `private_chat_id = chat_id` für `chat_type == "private"`). Bei einer
+    Gruppen-Anfrage steht in `chat_id` die Gruppe und in `private_chat_id`
+    die User-ID — sie unterscheiden sich.
+
+    Helfer hier in `tasks.py`, weil die drei Privatchat-Sessions (FAA/GAA/KAV)
+    dieselbe Logik brauchen und `tasks.py` schon Heimat des `TurnContext`
+    ist — kein zusaetzliches Modul noetig, kein Import-Zyklus.
+    """
+    if turn_context is None:
+        return False
+    pid = turn_context.private_chat_id
+    if pid is None:
+        return False
+    return turn_context.chat_id == pid
+
+
 @dataclass
 class WriteTaskResult:
     """Ergebnis einer ueber das Framework ausgefuehrten Schreib-Aufgabe

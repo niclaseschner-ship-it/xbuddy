@@ -331,3 +331,50 @@ def test_FAA_12_non_member_caller_is_rejected_by_faa(tmp_path):
     # Aufrufers gesendet.
     assert any(familie_anlegen.NOT_AUTHORIZED in s["text"]
                for s in tg.sent if s["chat_id"] == 9)
+
+
+# ============================================================
+#  Refs #157 — Quittung haengt am Aufruf-Chat
+# ============================================================
+
+def test_FAA_157_group_trigger_returns_switch_receipt(tmp_path):
+    """Refs #157: Wird die Aufgabe aus dem Familien-Chat aufgerufen
+    (chat_id != private_chat_id), enthaelt die Quittung den Wechsel-Hinweis
+    auf den Privatchat — heute schon Verhalten, hier explizit fixiert."""
+    user_id = 7
+    tg = FakeTelegram(members=_members(user_id))
+    sessions = {}
+    task = FamilieAnlegenTask(
+        tg, _empty_registry(tmp_path),
+        sessions=sessions,
+        family_group_chat_id_getter=lambda: "-100")
+    receipt = task.execute(
+        arguments={}, turn_context=TurnContext(
+            chat_id="-100", from_user_id=user_id, private_chat_id=user_id))
+    assert "Privatchat" in receipt
+
+
+def test_FAA_157_private_trigger_omits_switch_receipt(tmp_path):
+    """Refs #157: Wird die Aufgabe IM Privatchat des Aufrufers aufgerufen
+    (chat_id == private_chat_id), unterdrueckt die Quittung den Wechsel-
+    Hinweis — der Aufrufer ist schon im Privatchat. Stattdessen kommt die
+    Einleitung („… mit dir an …") und die erste Frage folgt asynchron
+    aus dem Session-Thread."""
+    user_id = 7
+    tg = FakeTelegram(members=_members(user_id))
+    sessions = {}
+    task = FamilieAnlegenTask(
+        tg, _empty_registry(tmp_path),
+        sessions=sessions,
+        family_group_chat_id_getter=lambda: "-100")
+    receipt = task.execute(
+        arguments={}, turn_context=TurnContext(
+            chat_id=user_id, from_user_id=user_id, private_chat_id=user_id))
+    assert "Privatchat" not in receipt
+    # Die erste FAA-Frage erscheint im Session-Thread asynchron im selben
+    # Chat — der eigentliche Beleg fuer „kein Wechsel".
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline and not tg.sent:
+        time.sleep(0.01)
+    assert tg.sent, "FAA haette die erste Frage stellen muessen"
+    assert tg.sent[0]["chat_id"] == user_id

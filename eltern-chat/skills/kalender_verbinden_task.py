@@ -26,7 +26,7 @@ import logging
 from hooks import ReloadHook
 from private_chat_session import PrivateChatSession
 from skills import kalender_verbinden
-from tasks import Proposal, WriteTask
+from tasks import Proposal, WriteTask, is_from_private_chat
 
 
 # EC-21 / #140: nach einer erfolgreichen KAV-Aenderung muss der Plan-Buddy
@@ -41,8 +41,22 @@ _PLAN_BUDDY_RELOAD_URL = "http://127.0.0.1:5020/api/v1/plan/admin/reload"
 
 # Quittung in den Agent-Loop zurück — der eigentliche Verbinden-Flow läuft
 # im Privatchat (KAV-3).
-_QUITTUNG_START = ("Ich richte das im Privatchat mit dir ein — antworte mir "
-                   "dort einfach Schritt für Schritt.")
+#
+# Wir unterscheiden zwei Faelle (Refs #157):
+# - Aufgabe aus dem Familien-Chat gestartet → Wechsel-Quittung
+#   `_QUITTUNG_START_FROM_GROUP` (der Aufrufer muss tatsaechlich in seinen
+#   Privatchat wechseln, um die naechste Frage zu sehen).
+# - Aufgabe schon IM Privatchat gestartet → keine Wechsel-Ankuendigung; die
+#   erste Frage erscheint direkt im selben Chat. Die Quittung selbst leitet
+#   nur kurz auf den anstehenden Login hin — der Wortlaut spiegelt die
+#   Einleitung der KAV-Aufklaerung in `kalender_verbinden.AUFKLAERUNG_TEXT`,
+#   damit der Uebergang fuer den Aufrufer fluessig ist.
+_QUITTUNG_START_FROM_GROUP = (
+    "Ich richte das im Privatchat mit dir ein — antworte mir "
+    "dort einfach Schritt für Schritt.")
+_QUITTUNG_START_FROM_PRIVATE = (
+    "Ich richte den Google-Kalender ein. Bitte verbinde den Kalender am "
+    "Laptop oder PC — die nächsten Schritte folgen gleich hier.")
 _QUITTUNG_NO_PRIVATE = (
     "Ich brauche deinen Privatchat, um den Google-Login zu starten. "
     "Schreib mir bitte direkt eine Nachricht.")
@@ -153,7 +167,12 @@ class KalenderVerbindenTask(WriteTask):
                 sessions.pop(private_chat_id, None)
 
         session.start(run_kav, ())
-        return _QUITTUNG_START
+        # Refs #157: Wechsel-Quittung NUR, wenn der Aufrufer noch nicht im
+        # Privatchat ist. Sonst direkt mit der ersten Frage einleiten —
+        # die kommt asynchron aus dem Session-Thread (KAV-4) im selben Chat.
+        if is_from_private_chat(turn_context):
+            return _QUITTUNG_START_FROM_PRIVATE
+        return _QUITTUNG_START_FROM_GROUP
 
 
 def make_kav_input(incoming_message):
