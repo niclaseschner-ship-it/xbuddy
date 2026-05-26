@@ -21,6 +21,9 @@
       source_id:  'app-panel:demo',
       display_id: 'display:demo',
       router_url: '',
+      // PANEL-5: Retry-Backoffs als Daten (CLAUDE.md §6 — Tuning extern).
+      // Default = FIG-12-Pattern; config.json darf überschreiben.
+      backoffs:   [200, 1000, 5000],
     };
   }
 
@@ -158,10 +161,15 @@
   //  PANEL-5 — POST mit Retry (FIG-12-Pattern, Backoff 200/1000/5000)
   // ============================================================
 
+  // Code-Default-Fallback. SSoT für den Live-Wert ist `backoffs` in
+  // config.json bzw. configDefaults() — diese Konstante existiert nur als
+  // Sicherheitsnetz, falls postWithRetry ohne explizite Backoffs aufgerufen
+  // wird (Tests, Legacy). CLAUDE.md §6 „Daten vs. Code".
   var BACKOFFS = [200, 1000, 5000];
 
   function postWithRetry(opts) {
-    // opts: { fetchImpl, setTimeoutImpl, url, body, onSuccess, onDrop }
+    // opts: { fetchImpl, setTimeoutImpl, url, body, onSuccess, onDrop, backoffs? }
+    var backoffs = Array.isArray(opts.backoffs) ? opts.backoffs : BACKOFFS;
     var attempt = 0;
     function fire() {
       opts.fetchImpl(opts.url, {
@@ -180,11 +188,11 @@
       });
     }
     function retry(reason) {
-      if (attempt >= BACKOFFS.length) {
+      if (attempt >= backoffs.length) {
         if (opts.onDrop) opts.onDrop(reason);
         return;
       }
-      var delay = BACKOFFS[attempt];
+      var delay = backoffs[attempt];
       attempt += 1;
       opts.setTimeoutImpl(fire, delay);
     }
@@ -250,6 +258,97 @@
   }
 
   // ============================================================
+  //  PANEL-8 — Konfigurations-Lader als testbare Fabrik
+  // ============================================================
+  //
+  // Bootstrap-Schicht (DOM/Browser) ruft das hier mit echtem `fetch`. Tests
+  // injizieren ein fakeFetch und beobachten Verhalten (Defaults bei Fehler,
+  // Merge, sichtbarer Konsistenz-Fehler) — kein Regex-Grep mehr (Finding 5).
+
+  function loadConfigImpl(opts) {
+    // opts: { fetchImpl, panelIdFromHtml, onWarn, onError }
+    var defaults = configDefaults();
+    var fetchImpl = opts.fetchImpl;
+    var warn = opts.onWarn || function () {};
+    var showError = opts.onError || function () {};
+    return Promise.resolve()
+      .then(function () { return fetchImpl('./config.json', { cache: 'no-store' }); })
+      .then(function (res) {
+        if (!res || !res.ok) throw new Error('HTTP ' + (res && res.status));
+        return res.json();
+      })
+      .then(function (fileCfg) {
+        var merged = Object.assign({}, defaults, fileCfg);
+        if (opts.panelIdFromHtml) {
+          var err = checkConfigConsistency(merged, opts.panelIdFromHtml);
+          if (err) showError('Konfigurations-Fehler: ' + err);
+        }
+        return merged;
+      })
+      .catch(function (err) {
+        // PANEL-8: fehlt/kaputt → stumm auf Defaults, console.warn.
+        warn('config.json konnte nicht geladen werden — fallback auf Defaults:', err);
+        return defaults;
+      });
+  }
+
+  // ============================================================
+  //  PANEL-10 — Wake-Lock und Vollbild als testbare Fabriken
+  // ============================================================
+  //
+  // Bootstrap reicht echte `document` und `navigator` rein; Tests übergeben
+  // Stub-Objekte und beobachten echte Aufrufe statt Quelltext-Pattern.
+
+  function attachWakeLockImpl(opts) {
+    // opts: { doc, nav }
+    var doc = opts.doc;
+    var nav = opts.nav;
+    var lock = null;
+    function request() {
+      if (!nav || !('wakeLock' in nav) || !nav.wakeLock) return;
+      try {
+        var p = nav.wakeLock.request('screen');
+        if (p && p.then) {
+          p.then(function (l) { lock = l; }, function () {});
+        }
+      } catch (e) { /* still */ }
+    }
+    function onVisibility() {
+      if (doc && doc.visibilityState === 'visible') request();
+    }
+    if (doc && doc.addEventListener) {
+      doc.addEventListener('visibilitychange', onVisibility);
+    }
+    request();
+    // Test-Hook: aktueller Lock + Trigger für visibilitychange.
+    return { requestNow: request, onVisibility: onVisibility,
+             getLock: function () { return lock; } };
+  }
+
+  function attachFullscreenImpl(opts) {
+    // opts: { doc }
+    var doc = opts.doc;
+    function tryFullscreen() {
+      if (!doc) return;
+      // Guard: schon im Vollbild → nichts tun (PANEL-10).
+      if (doc.fullscreenElement || doc.webkitFullscreenElement) return;
+      var el = doc.documentElement;
+      if (!el) return;
+      var req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if (!req) return;
+      try {
+        var p = req.call(el);
+        if (p && p.catch) p.catch(function () {});
+      } catch (e) { /* still — Fehler dürfen die Seite nicht abreißen */ }
+    }
+    if (doc && doc.addEventListener) {
+      doc.addEventListener('touchend', tryFullscreen, { passive: true });
+      doc.addEventListener('click', tryFullscreen);
+    }
+    return { tryFullscreen: tryFullscreen };
+  }
+
+  // ============================================================
   //  API
   // ============================================================
 
@@ -267,6 +366,9 @@
     postWithRetry: postWithRetry,
     checkConfigConsistency: checkConfigConsistency,
     makeStreamHandlers: makeStreamHandlers,
+    loadConfigImpl: loadConfigImpl,
+    attachWakeLockImpl: attachWakeLockImpl,
+    attachFullscreenImpl: attachFullscreenImpl,
   };
 });
 
@@ -303,36 +405,25 @@
   // ============================================================
   //  PANEL-8 — config.json laden (stumm auf Defaults falls fehlt)
   // ============================================================
+  //
+  // Die eigentliche Logik (Fetch, Fallback, Konsistenz-Check) lebt in
+  // panelLib.loadConfigImpl und wird dort dynamisch getestet (PANEL-8).
+  // Hier nur die Bootstrap-Verdrahtung: echte `fetch`, echte console.warn,
+  // sichtbare Fehlermeldung im DOM.
+  //
+  // PANEL-8 (Diskrepanz source_id): wird als sichtbarer Fehler im UI
+  // gezeigt (Spec-Vorgabe), das Panel läuft aber weiter. Begründung: ein
+  // Panel mit falscher source_id schadet nicht (Router verwirft Events
+  // mit unbekannter source_id), und ein harter Abbruch wäre eine
+  // Spec-Verschärfung jenseits der „sichtbarer Fehler"-Forderung.
 
-  async function loadConfig() {
-    var defaults = panelLib.configDefaults();
-    try {
-      var res = await fetch('./config.json', { cache: 'no-store' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      var fileCfg = await res.json();
-      var merged = Object.assign({}, defaults, fileCfg);
-      // PANEL-8 Konsistenz-Check: source_id muss zur HTML-Identität passen.
-      // display_id wird unten gegen den Router (ROU-22) abgeglichen.
-      if (panelIdFromHtml) {
-        var err = panelLib.checkConfigConsistency(merged, panelIdFromHtml);
-        if (err) {
-          // Diskrepanz = sichtbarer Fehler. (FIG-23/ROU-19 Linie für stummen
-          // Fallback gilt NUR bei fehlender/kaputter Datei.)
-          // PANEL-8: Diskrepanz wird als sichtbarer Fehler gezeigt (Spec-Vorgabe),
-          // das Panel läuft aber weiter. Begründung: ein Panel mit falscher
-          // source_id schadet nicht (Router verwirft Events mit unbekannter
-          // source_id mit 4xx/Warn), und ein hartes Abbruch hier wäre eine
-          // Spec-Verschärfung jenseits der „sichtbarer Fehler"-Forderung.
-          // Bewusste Entscheidung gegen Hard-Stop.
-          showError('Konfigurations-Fehler: ' + err);
-        }
-      }
-      return merged;
-    } catch (err) {
-      // Stumm: fehlt/kaputt → console.warn + Defaults. Identisch zu FIG-23.
-      console.warn('config.json konnte nicht geladen werden — fallback auf Defaults:', err);
-      return defaults;
-    }
+  function loadConfig() {
+    return panelLib.loadConfigImpl({
+      fetchImpl: function (u, init) { return fetch(u, init); },
+      panelIdFromHtml: panelIdFromHtml,
+      onWarn: function () { console.warn.apply(console, arguments); },
+      onError: showError,
+    });
   }
 
   async function loadTiles() {
@@ -452,18 +543,20 @@
   //  PANEL-5 — Tap → POST /api/v1/events mit Retry
   // ============================================================
 
-  function sendEvent(routerUrl, body) {
+  function sendEvent(cfg, body) {
     // Leerer router_url → same-origin (Browser nimmt die Origin der Seite).
     // Funktioniert für jeden Host (hub.local, IP, beliebiger DNS-Name) und
     // verhindert CORS-Blocks, wenn die Seite unter einem anderen Host
     // geladen wird als der hartkodierte Router-URL. Refs #128.
-    var base = routerUrl ? routerUrl.replace(/\/+$/, '') : '';
+    var base = cfg.router_url ? cfg.router_url.replace(/\/+$/, '') : '';
     var url = base + '/api/v1/events';
     panelLib.postWithRetry({
       fetchImpl: function (u, init) { return fetch(u, init); },
       setTimeoutImpl: function (fn, ms) { setTimeout(fn, ms); },
       url: url,
       body: body,
+      // PANEL-5 / Tuning extern: Backoffs aus config.json, sonst Code-Default.
+      backoffs: cfg.backoffs,
       onSuccess: function () { /* still */ },
       onDrop: function (reason) {
         console.warn('Event-Drop nach Retry-Schema:', reason, body);
@@ -476,33 +569,11 @@
   // ============================================================
 
   function attachWakeLock() {
-    var lock = null;
-    function request() {
-      if (!('wakeLock' in navigator)) return;
-      try {
-        var p = navigator.wakeLock.request('screen');
-        if (p && p.then) p.then(function (l) { lock = l; }, function () {});
-      } catch (e) { /* still */ }
-    }
-    document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible') request();
-    });
-    request();
+    panelLib.attachWakeLockImpl({ doc: document, nav: navigator });
   }
 
   function attachFullscreenOnGesture() {
-    function tryFullscreen() {
-      if (document.fullscreenElement || document.webkitFullscreenElement) return;
-      var el = document.documentElement;
-      var req = el.requestFullscreen || el.webkitRequestFullscreen;
-      if (!req) return;
-      try {
-        var p = req.call(el);
-        if (p && p.catch) p.catch(function () {});
-      } catch (e) { /* still */ }
-    }
-    document.addEventListener('touchend', tryFullscreen, { passive: true });
-    document.addEventListener('click', tryFullscreen);
+    panelLib.attachFullscreenImpl({ doc: document });
   }
 
   // ============================================================
@@ -514,10 +585,10 @@
     var tiles = await loadTiles();
     renderGrid(tiles,
       function onTap(tile) {
-        sendEvent(cfg.router_url, panelLib.makeTileSelected(cfg.source_id, tile));
+        sendEvent(cfg, panelLib.makeTileSelected(cfg.source_id, tile));
       },
       function onClear() {
-        sendEvent(cfg.router_url, panelLib.makePanelCleared(cfg.source_id));
+        sendEvent(cfg, panelLib.makePanelCleared(cfg.source_id));
       });
     attachWakeLock();
     attachFullscreenOnGesture();
