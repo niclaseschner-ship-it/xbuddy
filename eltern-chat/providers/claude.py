@@ -13,6 +13,9 @@ from model import (GenerationResponse, ImageBlock, ProviderError, TaskCallBlock,
                    TaskResultBlock, TextBlock)
 
 
+logger = logging.getLogger(__name__)
+
+
 class ClaudeProvider:
     """Übersetzt kanonisches Modell <-> Anthropic-Messages-API."""
 
@@ -33,24 +36,56 @@ class ClaudeProvider:
         anthropic_messages = [self._to_anthropic_message(m) for m in request.messages]
         tools = [self._to_anthropic_tool(t) for t in request.task_defs]
 
+        # Prompt-Caching (#93): den Cache-Marker an die STABILEN Präfix-Blöcke
+        # setzen — System-Prompt und Aufgaben-Liste ändern sich praktisch nie
+        # zwischen Turns, der Verlauf wächst nur ans Ende. Würden wir stattdessen
+        # das Top-Level-Kwarg `cache_control` setzen, markiert der anthropic-SDK
+        # automatisch den letzten cacheable Block — heute typischerweise die
+        # frische Nutzer-Nachricht; der Cache trägt dann nicht über Turns.
+        system_blocks = [{
+            "type": "text",
+            "text": request.system,
+            "cache_control": {"type": "ephemeral"},
+        }]
+
         kwargs = dict(
             model=self._model,
             max_tokens=self.MAX_TOKENS,
-            system=request.system,
+            system=system_blocks,
             messages=anthropic_messages,
-            # Stabiles Präfix (System + Aufgaben) cachen, sofern groß genug.
-            cache_control={"type": "ephemeral"},
         )
         if tools:
+            # Letzten Eintrag der Aufgaben-Liste markieren — markiert implizit
+            # alle vorhergehenden Tools mit (Anthropic-Cache-Semantik).
+            tools[-1] = {**tools[-1], "cache_control": {"type": "ephemeral"}}
             kwargs["tools"] = tools
 
         try:
             response = self._client.messages.create(**kwargs)
         except anthropic.APIError as e:
-            logging.warning("Claude-Anbieter nicht erreichbar: %s", e)
+            logger.warning("Claude-Anbieter nicht erreichbar: %s", e)
             raise ProviderError(str(e))
 
+        self._log_token_usage(response)
         return self._from_anthropic_response(response)
+
+    def _log_token_usage(self, response):
+        """Schreibt eine kompakte INFO-Zeile mit der Token-Nutzung pro Aufruf
+        (#93 Item 3) — Grundlage für Kosten-Aggregation per `grep` über die Zeit.
+
+        Format: eine Zeile pro Aufruf, vier Counter + Modell. Fehlt das Feld
+        `usage` (etwa in einem Test-Mock ohne Usage), bleibt das Logging still."""
+        usage = getattr(response, "usage", None)
+        if usage is None:
+            return
+        logger.info(
+            "tokens input=%s cache_create=%s cache_read=%s output=%s model=%s",
+            getattr(usage, "input_tokens", 0),
+            getattr(usage, "cache_creation_input_tokens", 0) or 0,
+            getattr(usage, "cache_read_input_tokens", 0) or 0,
+            getattr(usage, "output_tokens", 0),
+            self._model,
+        )
 
     # -- kanonisch -> Anthropic -------------------------------
 
