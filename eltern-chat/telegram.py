@@ -136,6 +136,21 @@ class TelegramClient:
             params["reply_to_message_id"] = reply_to_message_id
         return self._call("sendMessage", params)
 
+    def send_chat_action(self, chat_id, action):
+        """Zeigt im Telegram-Chat einen Aktivitäts-Indikator (z. B. „Bot tippt …",
+        Issue #93). Die Anzeige läuft bei Telegram für rund fünf Sekunden bzw.
+        bis die nächste Nachricht gesendet wird — der Aufruf direkt vor dem
+        Provider-Aufruf reicht für die übliche LLM-Latenz.
+
+        Ein `TelegramError` wird geschluckt: der Indikator ist Komfort, kein
+        Gate; ein scheiterndes `sendChatAction` darf den Turn nicht abbrechen.
+        """
+        try:
+            self._call("sendChatAction", {"chat_id": chat_id, "action": action})
+        except TelegramError as e:
+            logging.warning("sendChatAction(%s, %s) fehlgeschlagen: %s",
+                            chat_id, action, e)
+
     def send_document(self, chat_id, file_name, file_bytes, caption=None):
         """Sendet eine Datei als Telegram-Dokument (sendDocument).
 
