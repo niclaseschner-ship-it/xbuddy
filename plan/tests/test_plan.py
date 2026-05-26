@@ -13,6 +13,7 @@ import os
 import pytest
 
 from familie import registry as registry_mod
+from plan import aktivitaeten as aktivitaeten_mod
 from plan import config as config_mod
 from plan import db as db_mod
 from plan import kalender as kalender_mod
@@ -357,6 +358,40 @@ def test_PLAN_12_event_with_child_name_becomes_activity(demo_config, demo_regist
     assert zelle is not None and zelle["type"] == "klettern"
     # Es ist KEIN Termin geworden.
     assert view["appointments"][heute.isoformat()] == []
+
+
+def test_PLAN_12_aktivitaeten_katalog_round_trip():
+    """Schreib- und Leseseite teilen denselben Katalog (Refs #101).
+
+    Für jede Aktivitäts-Art im Katalog gilt: schreibt der Plan-Buddy einen
+    Event-Titel mit dem Schreib-Label (`label_fuer_art`), erkennt die
+    Leseseite (`art_aus_titel`, vormals `aktivitaets_art`) wieder dieselbe
+    Art. Vergisst jemand eine Aktivität auf nur einer Seite zu ergänzen,
+    bricht dieser Test — die zwei alten Listen können nicht mehr
+    auseinanderlaufen."""
+    for art, _label, _keywords in aktivitaeten_mod.AKTIVITAETEN:
+        titel = "%s Paula" % aktivitaeten_mod.label_fuer_art(art)
+        zurueck_gelesen = aktivitaeten_mod.art_aus_titel(titel)
+        assert zurueck_gelesen == art, (
+            "Round-Trip kaputt: %r geschrieben als %r, gelesen als %r"
+            % (art, titel, zurueck_gelesen))
+        # Und über die Public-API von `render` (Lese-Seite im Produktivpfad)
+        # gilt dasselbe — der Refactor lässt das alte Symbol stehen.
+        assert render_mod.aktivitaets_art(titel) == art
+
+
+def test_PLAN_12_aktivitaeten_katalog_single_source():
+    """Lese- und Schreibseite ziehen aus EINER Quelle (CLAUDE.md §6, Refs #101).
+
+    Der alte Doppel-Eintrag (`AKTIVITAETS_KEYWORDS` in `render`,
+    `_aktivitaet_label`-Inline-Dict in `main`) ist beseitigt; beide Seiten
+    delegieren an `plan.aktivitaeten`. Dieser Test belegt das strukturell:
+    `render.aktivitaets_art` und `plan_main._aktivitaet_label` liefern für
+    jede Art exakt das, was der gemeinsame Katalog sagt."""
+    for art, label, keywords in aktivitaeten_mod.AKTIVITAETEN:
+        assert plan_main._aktivitaet_label(art) == label
+        for kw in keywords:
+            assert render_mod.aktivitaets_art("Test " + kw + " Paula") == art
 
 
 def test_PLAN_12_event_without_child_name_becomes_termin(demo_config, demo_registry):
