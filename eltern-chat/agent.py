@@ -40,6 +40,12 @@ SYSTEM_PROMPT = (
     "war (etwa ein Hinweis, der am Gerät nachweislich nicht funktioniert), "
     "entschuldige dich kurz und mach mit dem nun bekannten Stand weiter — "
     "keine stille Korrektur, kein erneutes Ausbreiten aller Möglichkeiten.\n"
+    "- Willst du eine schreibende Aufgabe vorschlagen, rufe das Werkzeug "
+    "DIREKT auf — frage nicht zuerst in der natürlichen Sprache nach "
+    "Bestätigung (kein 'antworte mit ja zum Bestätigen'). Das System holt "
+    "die Bestätigung deterministisch ein, sobald du das Werkzeug aufrufst; "
+    "eine zusätzliche Sprach-Vorabfrage erzeugt nur eine doppelte "
+    "Bestätigung (Issue #158).\n"
     "- Beziehe dich auf den bisherigen Gesprächsverlauf, wenn eine Anfrage "
     "daran anknüpft."
 )
@@ -66,7 +72,7 @@ class AgentResult:
 
 
 def run_turn(history_messages, user_message, provider, catalog, turn_context,
-             max_iterations=MAX_ITERATIONS):
+             max_iterations=MAX_ITERATIONS, before_provider_call=None):
     """Verarbeitet eine Anfrage und liefert ein `AgentResult`.
 
     `history_messages` ist der geladene Gesprächskontext (EC-6), `user_message`
@@ -77,6 +83,13 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
     Ausführungs-Kontext. Der Loop reicht ihn UNVERÄNDERT an die Aufgaben durch
     (`run`/`propose`); das Modell sieht ihn nie — sein Kanal bleibt `arguments`.
 
+    `before_provider_call` (Issue #156): optionaler Callback ohne Argumente, der
+    VOR jedem `provider.generate(...)` läuft — also auch bei jedem Tool-Loop-
+    Durchgang, nicht nur beim ersten Aufruf. Die Orchestrierung nutzt ihn, um
+    den Telegram-Typing-Indikator nachzulegen (Telegram löscht ihn nach ~5 s).
+    Fehler des Callbacks werden geschluckt; er ist Komfort, kein Gate, und
+    darf den Turn nicht abbrechen.
+
     Wirft `model.ProviderError` weiter, wenn der Anbieter scheitert (EC-14) —
     die Behandlung liegt bei der Orchestrierung.
     """
@@ -84,6 +97,14 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
     task_defs = catalog.task_defs()
 
     for _ in range(max_iterations):
+        if before_provider_call is not None:
+            # Issue #156: Typing-Indikator vor JEDEM Provider-Call, nicht nur
+            # vor dem ersten — sonst läuft er in Tool-Loops aus. Komfort, kein
+            # Gate: Fehler werden geschluckt.
+            try:
+                before_provider_call()
+            except Exception:  # noqa: BLE001 — Indikator darf den Turn nicht abbrechen
+                pass
         response = provider.generate(GenerationRequest(
             system=SYSTEM_PROMPT, messages=messages, task_defs=task_defs))
 

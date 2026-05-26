@@ -217,6 +217,76 @@ def test_EC_22_agent_prompt_instructs_to_apologise_on_dead_end():
     assert "entschuldige" in prompt.lower()
 
 
+def test_agent_prompt_forbids_natural_language_confirmation_prefetch():
+    """Issue #158: Der LLM darf NICHT in seiner natürlich-sprachlichen Antwort
+    nach Bestätigung fragen, bevor er das Werkzeug aufruft — sonst entsteht
+    eine Doppel-Bestätigung (erst LLM-Frage, dann deterministisches EC-10-
+    Gate). Die Regel steht als Lebenszeichen im System-Prompt; das echte
+    Modell-Verhalten ist über den Prompt erzwingbar, der Test prüft die
+    Anwesenheit der Regel."""
+    prompt = agent.SYSTEM_PROMPT.lower()
+    # Direkt-Aufruf-Anweisung statt Sprach-Vorabfrage.
+    assert "direkt" in prompt
+    # Negation der Sprach-Vorabfrage („nicht zuerst", „nicht vorher" o. ä.)
+    assert "nicht zuerst" in prompt or "nicht vorher" in prompt
+    # Verweis auf die deterministische Bestätigung — damit klar ist, WARUM
+    # die Vorabfrage entfällt.
+    assert "deterministisch" in prompt or "system holt" in prompt
+
+
+def test_agent_does_not_double_confirm_when_model_calls_tool_directly():
+    """Issue #158 — Verhalten: Wenn das Modell der Anweisung folgt und einen
+    schreibenden Tool-Call DIREKT ausgibt (ohne natürlich-sprachliche
+    Vorabfrage), liefert der Agent einen Proposal — ohne dass eine zusätzliche
+    Bestätigungs-Frage in der Antwort steckt. Das deterministische EC-10-Gate
+    fragt erst danach."""
+    write = FakeWriteTask(name="kalender_verbinden", summary="Kalender verbinden")
+    provider = FakeProvider([
+        # Modell folgt der Regel: KEIN Text, der nach „ja" fragt — direkt Tool-Call.
+        task_call_response("kalender_verbinden", arguments={}),
+    ])
+    result = agent.run_turn([], _user("kann ich einen Kalender integrieren?"),
+                            provider, _catalog(write), _TURN)
+    # Genau ein Proposal — keine zweite Sprach-Vorabfrage des LLM dazwischen.
+    assert result.proposal is not None
+    assert result.reply_text is None
+    # Aufgabe ist nicht ausgeführt (EC-10) — erst Bestätigung, dann execute.
+    assert write.execute_calls == []
+    # Nur ein einziger Provider-Call passierte — das Modell hat NICHT zuerst
+    # eine Sprach-Vorabfrage gebaut, auf die der Nutzer antworten müsste.
+    assert len(provider.requests) == 1
+
+
+def test_agent_run_turn_calls_before_provider_call_hook_each_round():
+    """Issue #156: `run_turn` ruft den optionalen `before_provider_call`-Hook
+    vor JEDEM Provider-Call — auch in Tool-Loop-Iterationen. main.py nutzt
+    den Hook für den Telegram-Typing-Indikator (sonst läuft er nach ~5 s aus)."""
+    read = FakeReadTask(name="info_lesen", result="42")
+    provider = FakeProvider([
+        task_call_response("info_lesen"),
+        text_response("Die Antwort ist 42."),
+    ])
+    calls = []
+    agent.run_turn([], _user(), provider, _catalog(read), _TURN,
+                   before_provider_call=lambda: calls.append("typing"))
+    # Zwei Provider-Calls ⇒ Hook zweimal gerufen.
+    assert calls == ["typing", "typing"]
+
+
+def test_agent_run_turn_swallows_hook_errors():
+    """Issue #156: der Hook ist Komfort, kein Gate — wirft er, läuft der Turn
+    trotzdem durch (Telegram-Fehler im Typing-Indikator dürfen die Antwort
+    nicht blockieren)."""
+    provider = FakeProvider([text_response("ok")])
+
+    def boom():
+        raise RuntimeError("Telegram down")
+
+    result = agent.run_turn([], _user(), provider, Catalog(), _TURN,
+                            before_provider_call=boom)
+    assert result.reply_text == "ok"
+
+
 def test_EC_22_agent_asks_back_when_model_signals_missing_context():
     """EC-22 (#95): Ein Test gegen das Verhalten — bekommt der Agent vom
     Modell statt eines Tool-Aufrufs eine gezielte Rückfrage zurück, gibt er
