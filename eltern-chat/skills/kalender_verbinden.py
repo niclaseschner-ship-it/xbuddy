@@ -38,6 +38,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import authz
+from private_chat_session import SESSION_TIMEOUT_SECONDS  # KAV-6 Re-export (EC-20)
 from telegram import TelegramError
 
 
@@ -75,8 +76,9 @@ _REDIRECT_URI = "http://localhost:1"
 _OAUTH_SCOPE = ("https://www.googleapis.com/auth/calendar.events "
                 "https://www.googleapis.com/auth/calendar.readonly")
 
-# KAV-6: Timeout der Privatchat-Session (analog FAA-9 / GAA-5: 30 Minuten).
-SESSION_TIMEOUT_SECONDS = 30 * 60
+# KAV-6: `SESSION_TIMEOUT_SECONDS` ist hier nur als Re-export für Aufrufer
+# sichtbar — die effektive Quelle ist `private_chat_session.SESSION_TIMEOUT_SECONDS`
+# (EC-20, Refs #130: Konsolidierung aus FAA/GAA/KAV).
 
 
 # ============================================================
