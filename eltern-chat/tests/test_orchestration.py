@@ -5,8 +5,8 @@ Agenten. Telegram-Kanal und KI-Anbieter sind kontrollierte Doppelungen (EC-17).
 """
 
 from confirm import PendingStore
-from fakes import (FakeProvider, FakeTelegram, FakeWriteTask, make_message,
-                   task_call_response, text_response)
+from fakes import (FakeProvider, FakeReadTask, FakeTelegram, FakeWriteTask,
+                   make_message, task_call_response, text_response)
 from history import History
 from main import Context, handle_update
 from main import _PROVIDER_DOWN
@@ -175,3 +175,33 @@ def test_typing_action_failure_does_not_block_turn(tmp_path):
     assert len(provider.requests) == 1
     # … und der Bot hat geantwortet.
     assert tg.sent[0]["text"] == "Trotzdem geantwortet."
+
+
+def test_typing_action_sent_for_each_provider_call_in_tool_loop(tmp_path):
+    """Issue #156: in einem Tool-Use-Loop (Agent ruft Tool, bekommt Ergebnis,
+    ruft Provider erneut) muss der Typing-Indikator VOR JEDEM Provider-Call
+    abgesetzt werden — nicht nur vor dem ersten. Sonst löscht Telegram ihn
+    nach ~5 s und der Bot wirkt eingefroren, obwohl er gerade die zweite
+    Provider-Runde rechnet.
+    """
+    read = FakeReadTask(name="info_lesen", result="Es sind 22 Grad.")
+    catalog = Catalog()
+    catalog.register(read)
+    tg = FakeTelegram(members=_members(7))
+    # Zwei Provider-Runden: erst Tool-Aufruf, dann finale Antwort.
+    provider = FakeProvider([
+        task_call_response("info_lesen", arguments={"ort": "Berlin"}),
+        text_response("In Berlin sind es 22 Grad."),
+    ])
+    ctx = _ctx(tmp_path, tg, provider, catalog)
+
+    handle_update(make_message("wetter?", chat_id=42, from_user_id=7), ctx)
+
+    # Zwei Provider-Calls passiert ⇒ zwei Typing-Aufrufe — einer vor jedem.
+    assert len(provider.requests) == 2
+    assert tg.chat_actions == [
+        {"chat_id": 42, "action": "typing"},
+        {"chat_id": 42, "action": "typing"},
+    ]
+    # Antwort ist trotzdem korrekt durchgelaufen.
+    assert tg.sent[-1]["text"] == "In Berlin sind es 22 Grad."
