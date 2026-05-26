@@ -138,13 +138,27 @@ class WriteTask(Task):
     Liste zustandsloser Hooks, die nach erfolgreichem `execute()` laufen
     und typisch einen konsumierenden Buddy auffordern, seinen In-Memory-
     Cache neu zu laden. Default ist leer: ohne explizite Deklaration
-    aendert sich am Verhalten nichts."""
+    aendert sich am Verhalten nichts.
+
+    `is_async` (Refs #159): wenn True, kehrt `execute()` mit einer
+    Kurzquittung zurueck und ein Worker-Thread macht die eigentliche
+    Schreib-Operation (Privatchat-Flow, FAA/GAA/KAV). In diesem Fall
+    SKIPT `Catalog.execute_write_task` die inline-Hook-Iteration — die
+    Hooks sind dann Selbstaufgabe des Workers (er feuert sie nach
+    erfolgreichem Abschluss am Thread-Ende, siehe `PrivateChatSession`).
+    Default ist False: sync-Tasks verhalten sich wie vor #159."""
 
     kind = WRITE
 
     # Klassenattribut — Unterklassen ueberschreiben es mit ihrer eigenen
     # Hook-Liste. Wird vom Framework gelesen, nicht von der Aufgabe selbst.
     post_execute_hooks = ()
+
+    # Klassenattribut — Unterklassen mit Worker-Thread-Pattern (FAA/GAA/KAV)
+    # setzen es auf True. Wird vom Framework (`execute_write_task`) gelesen,
+    # um zu entscheiden, ob die Hooks inline laufen (sync) oder am
+    # Worker-Thread-Ende (async).
+    is_async = False
 
     def propose(self, arguments, turn_context):
         """Legt einen `Proposal` vor — führt NICHTS aus."""
@@ -200,8 +214,22 @@ class Catalog:
         Hook-Aufrufe sind isoliert: wirft ein Hook (gegen die Konvention!)
         doch eine Exception, faengt das Framework sie als HookFailure ab —
         sonst koennten weitere Hooks oder die Quittung verloren gehen.
+
+        Async-Tasks (Refs #159): wenn `task.is_async` True ist, kehrt
+        `execute()` nur mit einer Privatchat-Kurzquittung zurueck — die
+        eigentliche Schreib-Operation laeuft in einem Worker-Thread, der
+        erst Minuten spaeter abschliesst. In diesem Fall SKIPT das
+        Framework die inline-Hook-Iteration: die Hooks sind dann
+        Selbstaufgabe des Workers (`PrivateChatSession` feuert sie nach
+        erfolgreichem Worker-Ende). Der Task verkabelt das in seinem
+        `execute()` — wir lesen hier nur das Klassenattribut.
         """
         reply = task.execute(arguments, turn_context)
+        if getattr(task, "is_async", False):
+            # Async-Task: Hooks laufen am Worker-Ende, nicht hier. Der
+            # Aufrufer bekommt nur die Kurzquittung; eine etwaige Warnung
+            # geht direkt aus dem Worker in den Privatchat (`on_warning`).
+            return WriteTaskResult(reply=reply)
         hooks = getattr(task, "post_execute_hooks", ()) or ()
         if not hooks:
             return WriteTaskResult(reply=reply)
