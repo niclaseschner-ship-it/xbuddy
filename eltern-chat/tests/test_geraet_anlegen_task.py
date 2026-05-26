@@ -270,3 +270,45 @@ def test_GAA_5_non_member_caller_is_rejected_by_gaa(tmp_path):
     assert data == {"geraete": []}
     assert any(geraet_anlegen.NOT_AUTHORIZED in s["text"]
                for s in tg.sent if s["chat_id"] == 9)
+
+
+# ============================================================
+#  Refs #157 — Quittung haengt am Aufruf-Chat
+# ============================================================
+
+def test_GAA_157_group_trigger_returns_switch_receipt(tmp_path):
+    """Refs #157: Wird die Aufgabe aus dem Familien-Chat aufgerufen, enthaelt
+    die Quittung den Wechsel-Hinweis auf den Privatchat."""
+    user_id = 7
+    tg = FakeTelegram(members=_members(user_id))
+    sessions = {}
+    task = GeraetAnlegenTask(
+        tg, _empty_registry(tmp_path),
+        sessions=sessions,
+        family_group_chat_id_getter=lambda: "-100")
+    receipt = task.execute(
+        arguments={}, turn_context=TurnContext(
+            chat_id="-100", from_user_id=user_id, private_chat_id=user_id))
+    assert "Privatchat" in receipt
+
+
+def test_GAA_157_private_trigger_omits_switch_receipt(tmp_path):
+    """Refs #157: Wird die Aufgabe IM Privatchat aufgerufen, unterdrueckt die
+    Quittung den Wechsel-Hinweis — der Aufrufer ist schon im Privatchat. Die
+    erste Frage (Typ-Schritt) erscheint asynchron im selben Chat."""
+    user_id = 7
+    tg = FakeTelegram(members=_members(user_id))
+    sessions = {}
+    task = GeraetAnlegenTask(
+        tg, _empty_registry(tmp_path),
+        sessions=sessions,
+        family_group_chat_id_getter=lambda: "-100")
+    receipt = task.execute(
+        arguments={}, turn_context=TurnContext(
+            chat_id=user_id, from_user_id=user_id, private_chat_id=user_id))
+    assert "Privatchat" not in receipt
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline and not tg.sent:
+        time.sleep(0.01)
+    assert tg.sent, "GAA haette die erste Frage stellen muessen"
+    assert tg.sent[0]["chat_id"] == user_id
