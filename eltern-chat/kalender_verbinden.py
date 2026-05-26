@@ -81,13 +81,23 @@ OAUTH_CLIENT_MISSING = (
     "ist auf dieser Instanz noch nicht eingerichtet. Bitte sag jemandem aus "
     "der Familie Bescheid, der die Instanz administriert.")
 
-# KAV-4: Aufklärungstext — deckt zwei Stolpersteine ab:
+# KAV-4: Aufklärungstext — deckt drei Stolpersteine ab:
+# 0) **Bitte am Laptop/PC verbinden, nicht am Handy.** Mobile Browser zeigen
+#    die `http://localhost:1/?code=…`-URL nach dem Verbindungsfehler nicht
+#    zuverlässig in der Adressleiste; vom Desktop ist sie kopierbar.
+#    Folge-Ticket #133 (Web-Forwarder für mobilen Pfad).
 # 1) „Diese App ist nicht bestätigt" (unverified, vgl. E-KAV-3) →
 #    *Erweitert → Weiter zu XBuddy*.
 # 2) Browser zeigt nach dem Login eine **Verbindungsfehler-Seite** — die
 #    Adressleiste enthält den Code, das ist beabsichtigt.
 AUFKLAERUNG_TEXT = (
-    "Ich richte den Google-Kalender für die Familie ein. Zwei Dinge vorab:\n\n"
+    "Ich richte den Google-Kalender für die Familie ein. Bitte verbinde "
+    "den Kalender **am Laptop oder PC, nicht am Handy** — am Ende zeigt "
+    "der Browser eine Fehler-Seite mit der wichtigen URL in der "
+    "Adressleiste, und auf dem Handy ist diese URL dann oft nicht mehr "
+    "zu sehen. Vom Laptop/PC kannst du sie einfach kopieren. (Der mobile "
+    "Pfad ist in Arbeit.)\n\n"
+    "Zwei weitere Dinge vorab:\n\n"
     "1) Google zeigt dir während des Logins einen Warnscreen — »Diese App "
     "ist nicht bestätigt«. Das ist erwartet: die XBuddy-OAuth-App läuft in "
     "Produktion, ist aber noch nicht von Google verifiziert. Klick auf "
