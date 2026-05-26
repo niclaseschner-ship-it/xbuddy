@@ -421,8 +421,13 @@ def build_context(cfg, db_path, store_path):
     # verdrahtet die beiden Funktionen.
     import skills.ca_verteilung as _cav
 
-    def _cav_hook(_os_wert, private_chat_id, _user_id):
-        _cav.verteile_ca(tg, private_chat_id, cfg.ca_pem_path)
+    def _cav_hook(os_wert, private_chat_id, _user_id):
+        # GAA-6/CAV-5 (#95): das von der GAA erfragte Betriebssystem reicht
+        # die Orchestrierung an die CA-Verteilung weiter — sie liefert dann
+        # nur den passenden Anleitungs-Abschnitt aus. Wirft die CAV bei einem
+        # unbekannten Wert (z. B. `linux`, das die CA-Anleitung in V1 nicht
+        # abdeckt), fängt sie der GAA-Hook-Wrapper auf (geraet_anlegen.py).
+        _cav.verteile_ca(tg, private_chat_id, cfg.ca_pem_path, geraet=os_wert)
 
     ctx.catalog = build_catalog(
         tg, cfg.ca_pem_path,

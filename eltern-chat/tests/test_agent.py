@@ -190,3 +190,48 @@ def test_E_EC_5_loop_stops_at_iteration_limit():
     result = agent.run_turn([], _user(), provider, _catalog(read), _TURN, max_iterations=2)
     assert result.proposal is None
     assert result.reply_text is not None   # sauberer Abbruch-Hinweis
+
+
+# -- EC-22: bei Mehrdeutigkeit erst rückfragen, statt Varianten auszubreiten --
+
+def test_EC_22_agent_prompt_instructs_to_ask_back_on_ambiguity():
+    """EC-22 (#95): der System-Prompt enthält die Verhaltensregel, dass der
+    Agent bei Mehrdeutigkeit (z. B. Geräte-Varianten) erst zurückfragt, bevor
+    er ein Werkzeug aufruft oder antwortet — die Regel ist hier nur deshalb
+    überhaupt prüfbar, weil sie als Klartext-Anweisung im Prompt steht (statt
+    sich in jeder Aufgabe einzeln zu wiederholen)."""
+    prompt = agent.SYSTEM_PROMPT
+    assert "Geräte-Varianten" in prompt
+    assert "fehlenden Kontext" in prompt
+    # Mehrere Varianten gleichzeitig auszubreiten ist ausdrücklich verboten.
+    assert "mehrere Varianten gleichzeitig" in prompt.lower() \
+        or "niemals mehrere varianten gleichzeitig" in prompt.lower()
+
+
+def test_EC_22_agent_prompt_instructs_to_apologise_on_dead_end():
+    """EC-22 (#95): merkt der Agent, dass er einen Holzweg eingeschlagen hat
+    (Beispiel iOS-Telegram-Falle 2026-05-24), entschuldigt er sich kurz und
+    macht weiter — keine stille Korrektur. Die Regel steht im Prompt."""
+    prompt = agent.SYSTEM_PROMPT
+    assert "Holzweg" in prompt
+    assert "entschuldige" in prompt.lower()
+
+
+def test_EC_22_agent_asks_back_when_model_signals_missing_context():
+    """EC-22 (#95): Ein Test gegen das Verhalten — bekommt der Agent vom
+    Modell statt eines Tool-Aufrufs eine gezielte Rückfrage zurück, gibt er
+    diese Frage als Antwort weiter (statt mit einem ungezielten Standardtext
+    eine Variantensammlung auszubreiten). Das prüft hier vor allem, dass die
+    Test-Doppelung des Modells einen passenden Rückfrage-Lauf abbilden kann —
+    in echt formuliert der LLM die Rückfrage anhand des Prompts."""
+    # Aufgabe ist registriert, aber das Modell ruft sie nicht direkt auf —
+    # es fragt erst zurück.
+    read = FakeReadTask(name="ca_verteilen", result="ausgeliefert")
+    provider = FakeProvider([
+        text_response("Auf welchem Gerät möchtest du das Zertifikat installieren?")])
+    result = agent.run_turn([], _user("schick mir bitte das Zertifikat"),
+                            provider, _catalog(read), _TURN)
+    # Antwort ist die Rückfrage — keine Aufgabe ausgeführt.
+    assert result.reply_text.startswith("Auf welchem Gerät")
+    assert read.run_calls == []
+    assert result.proposal is None

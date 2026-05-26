@@ -139,6 +139,29 @@ eine definierte Aufgabe (Abschnitt 3) gedeckt ist.
 
 *Tickets:* #27
 
+### EC-22 — Gezielt fragen statt Varianten ausbreiten
+Bei Anfragen, deren passende Antwort vom Kontext abhängt (z. B. Anleitungen
+mit Geräte-Varianten), fragt das System einmal kurz nach dem fehlenden Kontext
+und liefert dann gezielt — statt mehrere Varianten gleichzeitig auszubreiten.
+Wenn das System eine angefragte Tatsache nicht sicher kennt, sagt es das offen,
+statt einen plausiblen Pfad zu raten. (Verschärft EC-7; betrifft die Antwort
+*innerhalb* der Katalog-Grenze.)
+
+Erkennt das System nachträglich, dass es einen Holzweg eingeschlagen hat
+(z. B. einen Schritt vorgeschlagen, der am Gerät nachweislich nicht
+funktioniert), entschuldigt es sich kurz und macht mit dem nun bekannten
+Stand weiter — keine stille Korrektur, kein erneutes Ausbreiten aller
+Möglichkeiten.
+
+Mechanisch wird dies durch zwei Mittel getragen, die zusammenwirken:
+(a) Aufgaben-Parameter, deren Fehlen die Auslieferung verhindert (etwa
+`ca-verteilung.md` CAV-5: `geraet` als Pflicht-Eingabe), zwingen den Agenten
+zur gezielten Rückfrage; (b) eine Verhaltensregel im Agent-System-Prompt, die
+das Verhalten auch dort durchträgt, wo die Aufgabe selbst keinen Pflicht-
+Parameter setzt.
+
+*Tickets:* #95
+
 ## 3. Aufgaben
 
 ### EC-8 — Aufgaben-Katalog
