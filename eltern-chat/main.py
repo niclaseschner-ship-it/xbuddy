@@ -30,6 +30,14 @@ from dataclasses import dataclass
 # Import-aus-Tests-Fall sorgt tests/conftest.py.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Repo-Wurzel auf den Importpfad — der Bot konsumiert die Public-API der
+# zentralen Komponente `zugangsdaten` (für die Kalender-Verbinden-Skill,
+# analog plan/main.py). Im systemd-Setup ist WorkingDirectory=eltern-chat/,
+# damit `from zugangsdaten import …` ohne PYTHONPATH funktioniert.
+_REPO_ROOT_FOR_IMPORTS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO_ROOT_FOR_IMPORTS not in sys.path:
+    sys.path.insert(0, _REPO_ROOT_FOR_IMPORTS)
+
 import agent
 import authz
 import config as config_mod
