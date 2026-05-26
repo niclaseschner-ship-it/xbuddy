@@ -29,6 +29,7 @@ Privatchat-Session entsteht erst beim **dritten** Vorkommen des Musters
 import json
 import logging
 import os
+import re
 import secrets
 import tempfile
 import urllib.error
@@ -137,25 +138,21 @@ TOKEN_EXCHANGE_FAILED = (
     "der Code ist abgelaufen (er gilt nur kurz) oder das Netz war kurz "
     "weg. Bitte ruf »Kalender verbinden« noch einmal auf.")
 
-# KAV-Y: Restart-Hinweis als Suffix in der Erfolgs-Nachricht — Plan-Buddy
-# liest die Konfiguration nur beim Start, ein automatischer Reload kommt mit
-# Folge-Ticket #140. Der Hinweis nennt das Ticket, damit klar ist, dass der
-# manuelle Schritt ein bewusstes V1-Provisorium ist.
-RESTART_HINT = (
-    "\n\n*Letzter Schritt:* Damit der Plan-Buddy den neuen Kalender liest, "
-    "bitte einmal auf der Familien-Instanz `sudo systemctl restart "
-    "xbuddy-plan` ausführen. Der automatische Reload kommt mit Folge-Ticket "
-    "#140.")
-
-# KAV-8 / KAV-X: Bestätigung nennt den gewählten Kalender + Account-E-Mail
-# (soweit ableitbar), und endet mit dem Restart-Hinweis (KAV-Y).
+# KAV-Y / KAV-8: Bestätigung nennt den gewählten Kalender + Account-E-Mail
+# (soweit ableitbar). Plan-Buddy übernimmt die neue `kalender_id` automatisch:
+# der `kalender_verbinden_task` deklariert seinen Plan-Buddy-`ReloadHook`, das
+# Skill-Framework triggert ihn nach erfolgreichem `execute()` (EC-21, #140).
+# Schlägt der Hook fehl, hängt das Framework eine Warnung an die Quittung —
+# darum nennen wir den manuellen Restart hier nicht mehr (Refs #154).
 BESTAETIGT_MIT_EMAIL = (
     "Geschafft — der Google-Kalender »%(kalender)s« ist verbunden (%(email)s). "
-    "Der Plan-Buddy kann jetzt Termine lesen und schreiben. 🎉" + RESTART_HINT)
+    "Der Plan-Buddy hat die Änderung übernommen — neue Termine sind im "
+    "Wochenplan sichtbar. 🎉")
 
 BESTAETIGT_OHNE_EMAIL = (
     "Geschafft — der Google-Kalender »%(kalender)s« ist verbunden. Der "
-    "Plan-Buddy kann jetzt Termine lesen und schreiben. 🎉" + RESTART_HINT)
+    "Plan-Buddy hat die Änderung übernommen — neue Termine sind im "
+    "Wochenplan sichtbar. 🎉")
 
 # KAV-X: nummerierte Kalender-Liste — Bot postet sie nach erfolgreichem
 # Token-Tausch. `%s` füllt die nummerierte Liste, eine Zeile je Kalender.
@@ -494,18 +491,19 @@ def format_calendar_list(calendars):
 def parse_selection(message_text, count):
     """KAV-X: parst die Antwort des Users als Ganzzahl im Bereich 1..count.
 
-    Akzeptiert nur Eingaben, die nach Trimmen ausschließlich Ziffern enthalten
-    (sonst ist es eine Gesprächsnachricht, analog `extract_code`-Geist).
-    Liefert den 0-basierten Index in die Kalender-Liste oder `None`, wenn die
-    Eingabe ungültig ist.
+    Extrahiert die **erste Ziffernfolge** aus der Antwort. Damit gelten als
+    gültig: »1«, »1. bitte«, »die 3«, »nimm 2«, »2)«, »3.« — alles, was den
+    User in der Live-Anwendung verlangsamen würde. Wortzahlen (»eins«,
+    »zwei«) bleiben in V1 außen vor (Refs #155). Eingaben ganz ohne Ziffer
+    oder mit einer Ziffer außerhalb von 1..count liefern `None`.
     """
     if not message_text:
         return None
-    text = message_text.strip()
-    if not text or not text.isdigit():
+    match = re.search(r"\d+", message_text)
+    if match is None:
         return None
     try:
-        number = int(text)
+        number = int(match.group(0))
     except ValueError:
         return None
     if number < 1 or number > count:
@@ -833,8 +831,11 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
             ergebnis=ERGEBNIS_VERBUNDEN_OHNE_KALENDER,
             account_email=account_email)
 
-    # KAV-8 + KAV-Y: Bestätigung mit Kalender-Name + Restart-Hinweis.
-    # Token-Wert wird nie gespiegelt (ZD-6).
+    # KAV-8 + KAV-Y: Bestätigung mit Kalender-Name. Kein manueller Restart-
+    # Hinweis mehr — Plan-Buddy übernimmt die Änderung automatisch über den
+    # post_execute_hook des Tasks (EC-21, #140, Refs #154). Schlägt der Hook
+    # fehl, hängt das Framework eine Warnung an die Quittung (`Catalog.
+    # execute_write_task`). Token-Wert wird nie gespiegelt (ZD-6).
     if account_email:
         _send(tg, chat_id,
               BESTAETIGT_MIT_EMAIL % {"kalender": chosen_name, "email": account_email})
