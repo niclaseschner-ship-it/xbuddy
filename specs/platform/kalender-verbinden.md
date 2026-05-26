@@ -90,8 +90,12 @@ sonst zum stillen Abbruch des Logins führen:
   läuft, aber noch nicht verifiziert ist (Verifizierungs-Status siehe
   `plan.md` E-PLAN-7, autoritative Stelle). Der Aufklärungstext nennt den
   Warnscreen und führt durch *Erweitert → Weiter zu XBuddy*.
-- Das Familienmitglied wird darauf hingewiesen, was es danach bei Google sieht
-  (Code anzeigen / URL kopieren — abhängig von KAV-5) und wo es weitermacht.
+- Das Familienmitglied wird darauf hingewiesen, was es danach im Browser
+  sieht: nach dem Login leitet Google auf `http://localhost:1/?code=…` weiter
+  und der Browser zeigt eine **Verbindungsfehler-Seite** („Diese Website ist
+  nicht erreichbar" o. ä.). Das ist normal und so beabsichtigt — die Adressleiste
+  enthält den Code. Anleitung: **komplette URL aus der Adressleiste kopieren
+  und in den Privatchat einfügen** (KAV-5, KAV-6).
 
 Der konkrete Wortlaut lebt im Code als hart-codierter String (E-KAV-1: keine
 LLM-Formulierung, weil die Aufklärung load-bearing ist); die Spec normiert das
@@ -101,27 +105,42 @@ Wortlaut.
 *Tickets:* #57
 
 ### KAV-5 — OAuth-Login-Link
-Die Funktion postet im Privatchat einen OAuth-2.0-Authorization-Link mit:
+Die Funktion postet im Privatchat einen OAuth-2.0-Authorization-Link nach dem
+Schema `https://accounts.google.com/o/oauth2/v2/auth?…` mit folgenden
+Parametern:
 
-- **Scope `https://www.googleapis.com/auth/calendar.events`** (deckt PLAN-17
+- **`client_id`** — die OAuth-Client-ID aus dem Zugangsdaten-Speicher
+  (`zugangsdaten.md` ZD-5; eingerichtet wie in `plan.md` PLAN-16 verlangt).
+- **`redirect_uri=http://localhost:1`** — **Loopback-Redirect mit Port 1**.
+  Port 1 antwortet bewusst nie; der Browser zeigt nach erfolgreichem Login
+  eine Verbindungsfehler-Seite, aber die Adressleiste enthält
+  `http://localhost:1/?code=4/0A…`. Der Code wird aus der **URL in der
+  Adressleiste** geholt, kein Server muss antworten. Das ist **kein** OOB-Flow
+  (`urn:ietf:wg:oauth:2.0:oob`, deprecated 31.01.2023), sondern der von Google
+  weiterhin sanktionierte **Loopback-Redirect** für Desktop-/Installed-App-
+  OAuth-Clients.
+- **`response_type=code`**.
+- **`scope=https://www.googleapis.com/auth/calendar.events`** (deckt PLAN-17
   Lesen und PLAN-18 Schreiben mit einer einzigen Consent-Erteilung ab; ein
   späterer Scope-Wechsel würde Re-Consent durch alle Familien erfordern und
   ist daher zu vermeiden).
 - **`access_type=offline`** + **`prompt=consent`**, damit Google ein
-  Refresh-Token ausstellt.
-- Einem einmaligen, kurzlebigen **`state`**-Parameter, der serverseitig dem
+  Refresh-Token ausstellt. Ohne `prompt=consent` liefert Google bei einem
+  Account, der der App schon einmal zugestimmt hat, nur ein Access-Token —
+  V1 braucht aber zwingend ein frisches Refresh-Token (KAV-7).
+- Ein einmaliger, kurzlebiger **`state`**-Parameter, der serverseitig dem
   Tupel (Instanz × `from_user_id` × Privatchat-ID) zugeordnet ist (Replay-
   und Verwechslungsschutz). TTL: 30 min, im Prozess-Speicher (analog
   `familie-anlegen.md` FAA-9 (b)).
-- Der **OAuth-Client-ID** aus dem Zugangsdaten-Speicher (`zugangsdaten.md`
-  ZD-5; eingerichtet wie in `plan.md` PLAN-16 verlangt).
 
-Der **Redirect-URI** des Links ist **OPEN-KAV-C** — Google hat den OOB-Flow
-(`urn:ietf:wg:oauth:2.0:oob`) zum 31.01.2023 vollständig deprecated, und ohne
-öffentlich erreichbaren NAT-tauglichen Callback-Endpunkt gibt es keine
-trivial-saubere Variante. Diese Spec **definiert KAV-5 erst vollständig**,
-wenn OPEN-KAV-C entschieden ist; bis dahin steht die Implementierung von
-KAV-5 unter Vorbehalt (siehe Halt-Markierung im PR-Body).
+**Voraussetzung an die Google-Cloud-Console-Konfiguration** (load-bearing für
+den Loopback-Redirect): der OAuth-Client ist als **Application Type „Desktop
+App" / „Installed"** angelegt, **nicht** als „Web Application". Google erlaubt
+Loopback-Redirect-URIs (`http://localhost`, `http://127.0.0.1`) ausschließlich
+für Desktop-/Installed-Clients; ein Web-App-Client würde den Login mit
+`redirect_uri_mismatch` abweisen. Diese Voraussetzung gilt pro
+OAuth-Client-Konfiguration und ist Teil des Einrichtungs-Schritts hinter
+PLAN-16 / ZD-2.
 
 *Tickets:* #57
 
@@ -129,17 +148,34 @@ KAV-5 unter Vorbehalt (siehe Halt-Markierung im PR-Body).
 Nach dem Posten des Login-Links wartet die Funktion im selben Privatchat auf
 die nächste eingehende Textnachricht des Aufrufers (Session-Muster analog
 `familie_anlegen_task.py` `FaaSession.next_message`, siehe E-KAV-2). Die erste
-eingehende Nachricht wird als Authorization-Code interpretiert.
+eingehende Nachricht wird als Träger des Authorization-Codes interpretiert.
 
-- Hat die Nachricht das Format eines Google-Codes (alphanumerisch, plausibler
-  Länge), versucht die Funktion den Token-Tausch (KAV-7).
-- Sieht die Nachricht erkennbar nicht wie ein Code aus (Begrüßung, Frage,
-  Foto), antwortet die Funktion mit einer freundlichen Erinnerung und wartet
-  weiter — analog `eltern-chat-onboarding.md` ONB-3 letzter Absatz.
-- **Timeout: 30 Minuten** ohne Antwort beendet die Session und liefert das
-  Ergebnis-Signal „abgebrochen" (gleicher Wert wie `familie_anlegen_task.py`
-  `_SESSION_TIMEOUT_SECONDS` — derselbe Use-Case: eine Onboarding-typische
-  Konversation, die nicht ewig blockieren darf).
+Die Funktion akzeptiert zwei Eingabe-Formen — beides ist gleichwertig, weil
+der Loopback-Redirect (KAV-5) genau diese beiden Wege offenlässt:
+
+- **Komplette URL** aus der Browser-Adressleiste, etwa
+  `http://localhost:1/?code=4/0A…&scope=…`. Erkennungsmerkmal: die Nachricht
+  enthält den Substring `?code=` (oder `&code=`). Der Code wird per
+  URL-Parsing aus dem Query-String extrahiert (Implementierungs-Hinweis:
+  `urllib.parse.urlparse` + `parse_qs`, der erste Wert von `code` ist der
+  Authorization-Code).
+- **Blanker Code-String**, falls das Familienmitglied den Code-Wert aus der
+  URL bereits selbst herausgeschnitten hat. Erkennungsmerkmal: die Nachricht
+  enthält **kein** `?code=`/`&code=`, sondern nur den Code-Wert. Die
+  Nachricht wird getrimmt (Whitespace, Zeilenumbrüche) und direkt als Code
+  verwendet.
+
+Mit dem so gewonnenen Code versucht die Funktion den Token-Tausch (KAV-7).
+Sieht die Nachricht weder nach URL mit `code=` noch nach plausiblem Code aus
+(Begrüßung, Frage, Foto, leere Nachricht), antwortet die Funktion mit einer
+freundlichen Erinnerung („bitte die komplette URL aus dem Browser oder nur
+den Code-Wert einfügen") und wartet weiter — analog
+`eltern-chat-onboarding.md` ONB-3 letzter Absatz.
+
+**Timeout: 30 Minuten** ohne passende Antwort beendet die Session und liefert
+das Ergebnis-Signal „abgebrochen" (gleicher Wert wie
+`familie_anlegen_task.py` `_SESSION_TIMEOUT_SECONDS` — derselbe Use-Case:
+eine Onboarding-typische Konversation, die nicht ewig blockieren darf).
 
 Zwischenzustand der Session (welcher `state`-Token offen ist, ob der
 Login-Link schon gepostet wurde) liegt **nur im Prozess-Speicher**, analog
@@ -240,15 +276,19 @@ durch kontrollierte Doppelungen ersetzt. Mindest-Abdeckung:
   (sequentielle Reihenfolge der Nachrichten); der Text benennt den
   „Unbestätigte App"-Warnscreen mit *Erweitert → Weiter*.
 - **KAV-5** — der gepostete Link enthält Scope `calendar.events`,
-  `access_type=offline`, `prompt=consent`, eine OAuth-Client-ID aus dem
+  `access_type=offline`, `prompt=consent`, `response_type=code`,
+  `redirect_uri=http://localhost:1`, eine OAuth-Client-ID aus dem
   Zugangsdaten-Speicher und einen `state`-Parameter, der pro Aufruf
-  einmalig ist. *Test-Vorbehalt:* solange OPEN-KAV-C nicht entschieden ist,
-  prüft der Test den Redirect-URI nicht spezifisch — der Test wird mit der
-  Entscheidung ergänzt.
-- **KAV-6** — eine eingehende Nicht-Code-Nachricht im Privatchat löst eine
-  Erinnerung aus, nicht den Token-Tausch; ein 30-Minuten-Timeout beendet
-  die Session und liefert „abgebrochen"; ein Prozess-Neustart während der
-  Session beendet sie ohne Token-Schreibung.
+  einmalig ist.
+- **KAV-6** — die Funktion akzeptiert eine vollständige URL
+  `http://localhost:1/?code=ABC&scope=…` und extrahiert daraus `ABC` als
+  Code (Token-Tausch wird mit `ABC` aufgerufen); die Funktion akzeptiert
+  einen blanken Code-String `ABC` (mit umliegenden Leerzeichen/Zeilenumbruch)
+  und nutzt ihn nach Trimmen als Code; eine Nachricht ohne `code=` und ohne
+  plausible Code-Form (z. B. „hallo?") löst eine höfliche Erinnerung aus,
+  nicht den Token-Tausch; ein 30-Minuten-Timeout beendet die Session und
+  liefert „abgebrochen"; ein Prozess-Neustart während der Session beendet
+  sie ohne Token-Schreibung.
 - **KAV-7** — erfolgreicher Token-Tausch schreibt die vier Schlüssel aus
   KAV-7 (`refresh_token`, `access_token`, `access_token_expires_at`,
   `account_email`) über die ZD-5-Schreib-Schnittstelle; ein simulierter
@@ -287,35 +327,6 @@ durch kontrollierte Doppelungen ersetzt. Mindest-Abdeckung:
   Fall belegt ist. KAV-9 (letzter gewinnt) liefert den passenden
   Schreibpfad — was fehlt, ist die Erkennung und der Re-Connect-Trigger.
 
-- **OPEN-KAV-C — Redirect-URI für den OAuth-Login-Link.** ⚠️ **Halt-
-  relevant.** Die Watchdog-Vorgabe E-KAV-1 schreibt Variante (c) „manueller
-  Code-Weg" fest: User loggt sich bei Google ein, sieht den Code, kopiert ihn
-  in den Telegram-Privatchat. Diese Variante hieß im OAuth-Vokabular **OOB**
-  (`urn:ietf:wg:oauth:2.0:oob`) und ist von Google **seit 31.01.2023
-  vollständig deprecated** — neue OAuth-Clients können den OOB-Redirect-URI
-  nicht mehr eintragen, bestehende Clients erhalten Ablehnungen. Quelle:
-  [Out-of-band (OOB) flow migration guide](https://developers.google.com/identity/protocols/oauth2/resources/oob-migration).
-  Google empfiehlt für Desktop-Clients den **Loopback-Flow**
-  (`localhost`/`127.0.0.1`); für Hubs hinter NAT ohne öffentliche IP gibt es
-  **keine sanktionierte Copy-Paste-Variante**. Mögliche Wege — alle mit
-  Architektur-Implikationen, die diese Spec nicht eigenmächtig trifft:
-
-  1. **Loopback auf dem Hub** — der Hub-Backend bietet einen lokalen
-     Redirect-Endpunkt auf `127.0.0.1:<port>`; der Familienmitglied-Browser
-     muss aber denselben Hub erreichen (Tablet im selben WLAN: OK;
-     Telefon-Datenverbindung: nicht OK).
-  2. **Statischer Redirect auf eine XBuddy-Domain mit Code-Anzeige** —
-     bricht E-EC-1 (Per-Familie, kein zentraler Dienst).
-  3. **Cloudflare-Tunnel je Familie** — von der Architektur-Vorlage als
-     „Familie-3-Komplexität auf Vorrat" verworfen (CLAUDE.md §6).
-
-  **Diese Spec markiert den Punkt als Halt**: Nic legt fest, wie der
-  Redirect-URI realisiert wird, bevor KAV-5 implementiert wird. Die Spec
-  selbst ist bis dahin **vollständig bis auf KAV-5**; die Aufrufer-Schicht
-  (KAV-1..KAV-3), Aufklärung (KAV-4), Code-Empfang (KAV-6), Token-Tausch
-  (KAV-7), Bestätigung (KAV-8), Idempotenz (KAV-9) und Tests (KAV-10)
-  bleiben unverändert, sobald OPEN-KAV-C entschieden ist.
-
 ---
 
 ## Entscheidungen
@@ -329,8 +340,40 @@ Folge-Tickets load-bearing bleiben.
 
 Das Verbinden läuft als **manueller Code-Weg** (Variante (c) der
 Architektur-Vorlage): der Bot postet den OAuth-Login-Link, das Familienmitglied
-loggt sich bei Google ein, kopiert den von Google angezeigten Code, fügt ihn in
-denselben Telegram-Privatchat ein, der Bot holt damit das Refresh-Token.
+loggt sich bei Google ein, kopiert die URL aus der Browser-Adressleiste (oder
+nur den darin enthaltenen Code), fügt sie in denselben Telegram-Privatchat
+ein, der Bot extrahiert daraus den Code und holt das Refresh-Token.
+
+**Umsetzung des Code-Wegs — Loopback-Trick mit Port 1.** Der Redirect-URI im
+Login-Link ist `http://localhost:1` (KAV-5). Port 1 antwortet nie, der
+Browser zeigt nach dem Google-Login eine Verbindungsfehler-Seite, aber die
+Adressleiste enthält `http://localhost:1/?code=…`. User kopiert die URL (oder
+den Code-Wert), Bot extrahiert per URL-Parsing (KAV-6). Kein Server muss
+antworten, kein Hub-Endpunkt wird gebraucht. Das ist **kein** OOB-Flow
+(`urn:ietf:wg:oauth:2.0:oob`, von Google zum 31.01.2023 vollständig
+deprecated), sondern der weiterhin sanktionierte **Loopback-Redirect** für
+Desktop-/Installed-App-OAuth-Clients. Google supportet Loopback-Redirects
+(`http://localhost`, `http://127.0.0.1`) ausdrücklich auch nach der
+OOB-Deprecation — der Loopback dient hier nur als Träger des Codes in der
+URL, nicht als Callback-Empfänger. Port 1 ist absichtlich gewählt, damit
+ausgeschlossen ist, dass irgendein lokaler Dienst auf dem Endgerät den
+Redirect tatsächlich beantwortet.
+
+**Pattern-Herkunft.** Der Mechanismus (Loopback-Redirect + URL-Copy-Paste +
+Code-Extraktion via `urllib.parse.urlparse`/`parse_qs`) wurde im
+BuddyBoard-Vorgänger-Setup (AdminBuddy) erfolgreich eingesetzt; er ist
+erprobt. Die Code-Basis hier wird **neu** in `eltern-chat/` geschrieben
+(Folge-PR zur Implementierung von KAV) — kein Copy aus dem
+BuddyBoard-Archiv, sondern Übernahme des Konzepts.
+
+**Familie-3-Probe.** Unverändert bestanden: jede Familie hat ihre eigene
+OAuth-Client-Konfiguration im Zugangsdaten-Speicher (oder eine geteilte
+Desktop-App-Konfiguration, deren `client_id`/`client_secret` pro Familie
+deponiert werden — die Wahl gehört in den OAuth-Client-Einrichtungs-Schritt
+hinter PLAN-16 / ZD-2, nicht in diese Spec). Kein zentraler Dienst, kein
+Tunnel, kein neuer Onboarding-Schritt jenseits dessen, was KAV-3..KAV-8
+schon beschreibt. Per-Familie-Architektur (`eltern-chat.md` E-EC-1) bleibt
+zu 100 % gewahrt.
 
 **Verworfen:**
 - **(b) Zentraler XBuddy-Forwarder/Code-Tunnel** mit einer öffentlich
@@ -351,10 +394,8 @@ Begründung für (c): symmetrisch zu bestehenden Eltern-Chat-Funktionen, die
 sensitive Eingaben im Privatchat entgegennehmen — Anbieter-Key
 (`eltern-chat-onboarding.md` ONB-3), Familien-Mitglieder
 (`familie-anlegen.md` FAA-3). Der manuelle Schritt ist die Reibung; die
-Architektur bleibt sauber Per-Familie.
-
-**Hinweis:** die technische Umsetzbarkeit von (c) hängt am Redirect-URI —
-siehe OPEN-KAV-C / Halt-Markierung im PR-Body.
+Architektur bleibt sauber Per-Familie. Die technische Umsetzbarkeit von (c)
+ist durch den Loopback-Trick (KAV-5) gegeben — kein Halt mehr.
 
 ### E-KAV-2 — Session-Muster wiederverwendet, generischer Refactor erst beim dritten Vorkommen
 *Datum:* 2026-05-25
