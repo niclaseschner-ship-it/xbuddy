@@ -18,9 +18,8 @@ Agent dem Aufrufer weiterreicht.
 """
 
 import logging
-import queue
-import threading
 
+from private_chat_session import PrivateChatSession
 from skills import familie_anlegen
 from tasks import Proposal, WriteTask
 
@@ -35,56 +34,21 @@ _PROPOSAL_SUMMARY = ("Neue(s) Familienmitglied(er) im Privatchat anlegen — "
                      "ich frage dort der Reihe nach nach Art, Name, Foto, "
                      "Ring-Farbe und optional E-Mail/Telegram-ID.")
 
-# Wie lang der Worker auf eine eingehende Privatchat-Nachricht wartet, bevor
-# er die Session als abgebrochen behandelt. 30 Minuten passt zu einer
-# Onboarding-typischen Konversation; die Familie hat genug Zeit, ein Foto vom
-# Telefon zu schicken — aber eine vergessene Session blockiert nicht ewig
-# einen Privatchat.
-_SESSION_TIMEOUT_SECONDS = 30 * 60
 
-
-class FaaSession:
+class FaaSession(PrivateChatSession):
     """Eine laufende »Familie anlegen«-Session in einem Privatchat.
 
     Der Worker-Thread läuft `familie_anlegen.familie_anlegen(...)` synchron
     und blockiert in `next_message()` auf der Queue. Die main-Loop steckt
     eingehende Privatchat-Updates dieses Chats per `deliver()` in die Queue,
     statt sie dem Agenten weiterzureichen — solange die Session aktiv ist.
+
+    Die Worker-Thread+Queue+Timeout-Mechanik lebt in `PrivateChatSession`
+    (EC-20, Refs #130); diese Subklasse benennt nur Thread- und Logging-Präfix.
     """
 
-    def __init__(self, chat_id):
-        self.chat_id = chat_id
-        self._queue = queue.Queue()
-        self._thread = None
-        self._finished = threading.Event()
-
-    def start(self, target, args):
-        """Startet den Worker-Thread, der `target(*args)` ausführt."""
-        def run():
-            try:
-                target(*args)
-            except Exception:  # noqa: BLE001 — Session-Fehler isoliert melden
-                logging.exception("FAA-Session in Chat %s abgebrochen", self.chat_id)
-            finally:
-                self._finished.set()
-        self._thread = threading.Thread(
-            target=run, name="faa-session-%s" % self.chat_id, daemon=True)
-        self._thread.start()
-
-    def deliver(self, faa_input):
-        """Reicht eine Privatchat-Nachricht an den Worker durch."""
-        self._queue.put(faa_input)
-
-    def next_message(self):
-        """`next_message`-Callable für `familie_anlegen` — blockiert auf der
-        Queue, bis eine Nachricht eintrifft oder das Timeout greift."""
-        try:
-            return self._queue.get(timeout=_SESSION_TIMEOUT_SECONDS)
-        except queue.Empty:
-            return None
-
-    def is_finished(self):
-        return self._finished.is_set()
+    THREAD_NAME_PREFIX = "faa"
+    LOG_PREFIX = "FAA"
 
 
 class FamilieAnlegenTask(WriteTask):
