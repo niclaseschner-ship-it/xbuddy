@@ -11,6 +11,7 @@ import time
 
 import pytest
 
+from hooks import HookContext, HookFailure, HookSuccess
 from private_chat_session import PrivateChatSession, SESSION_TIMEOUT_SECONDS
 
 
@@ -135,6 +136,170 @@ def test_session_result_hook_is_optional():
     while time.monotonic() < deadline and not session.is_finished():
         time.sleep(0.005)
     assert session.result() == {"ergebnis": "ok"}
+
+
+# ============================================================
+#  Refs #159 — Post-Execute-Hooks am Worker-Thread-Ende
+# ============================================================
+
+
+def _wait_finished(session, timeout=1.0):
+    """Helfer: pollt das ``_finished``-Event mit Timeout — Tests sollen
+    nicht haengen, falls die Implementierung das Event nie setzt."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and not session.is_finished():
+        time.sleep(0.005)
+    assert session.is_finished(), "Worker hat sich nicht beendet"
+
+
+def test_159_fires_hooks_after_worker_success():
+    """Refs #159: Worker laeuft normal durch → die mitgegebenen Hooks
+    feuern danach. Das ist der Async-Aequivalent zum EC-21-Inline-Hook
+    am ``Catalog.execute_write_task``-Ende — die KAV-Token-Schreibung ist
+    JETZT durch, der Plan-Buddy soll seinen Cache nachziehen."""
+    hook_calls = []
+
+    def reload_hook(context):
+        hook_calls.append(context)
+        return HookSuccess(details="reloaded")
+
+    reload_hook.consumer = "Plan-Buddy"
+
+    sentinel = HookContext(task_name="kalender_verbinden", turn_context=None)
+    session = PrivateChatSession(chat_id=80)
+    session.start(
+        lambda: None,
+        post_execute_hooks=(reload_hook,),
+        hook_context=sentinel)
+    _wait_finished(session)
+    assert len(hook_calls) == 1
+    # Der Hook sieht den deklarierten HookContext — task_name + turn_context.
+    assert hook_calls[0] is sentinel
+    assert hook_calls[0].task_name == "kalender_verbinden"
+
+
+def test_159_skips_hooks_on_worker_exception():
+    """Refs #159: Wirft der Worker, gibt es keinen erfolgreichen Zustand,
+    den der Konsument nachladen muesste — der Hook MUSS ausbleiben.
+    Symmetrisch zu ``test_EC_21_execute_exception_propagates_no_hooks_run``
+    im sync-Pfad. Eine kaputte FAA-/GAA-/KAV-Session darf kein
+    Plan-Buddy-Reload anstossen, das auf einem nicht-vorhandenen Token
+    aufsetzt."""
+    hook_calls = []
+
+    def reload_hook(context):
+        hook_calls.append(context)
+        return HookSuccess()
+
+    reload_hook.consumer = "Plan-Buddy"
+
+    def crashy_skill():
+        raise RuntimeError("kaputt")
+
+    session = PrivateChatSession(chat_id=81)
+    session.start(
+        crashy_skill,
+        post_execute_hooks=(reload_hook,),
+        hook_context=HookContext(task_name="kalender_verbinden"))
+    _wait_finished(session)
+    assert hook_calls == [], "Hook darf nach Worker-Exception NICHT laufen"
+
+
+def test_159_summarized_warning_via_on_warning():
+    """Refs #159: Mehrere Hook-Failures landen in EINER zusammengefassten
+    Warnung, die ueber ``on_warning(message)`` an den Privatchat geht
+    (symmetrisch zu ``WriteTaskResult.warning`` im sync-Pfad). Die Familie
+    bekommt EINEN Hinweis, nicht je Konsument einen."""
+    warnings = []
+
+    def failing_hook_plan(context):
+        return HookFailure(consumer="Plan-Buddy", error="HTTP 500")
+
+    failing_hook_plan.consumer = "Plan-Buddy"
+
+    def failing_hook_router(context):
+        return HookFailure(consumer="Router", error="nicht erreichbar")
+
+    failing_hook_router.consumer = "Router"
+
+    def on_warning(message):
+        warnings.append(message)
+
+    session = PrivateChatSession(chat_id=82)
+    session.start(
+        lambda: None,
+        post_execute_hooks=(failing_hook_plan, failing_hook_router),
+        hook_context=HookContext(task_name="kalender_verbinden"),
+        on_warning=on_warning)
+    _wait_finished(session)
+    # Genau EINE Warnung — beide Konsumenten in derselben Nachricht.
+    assert len(warnings) == 1
+    assert "Plan-Buddy" in warnings[0]
+    assert "Router" in warnings[0]
+
+
+def test_159_no_warning_when_all_hooks_succeed():
+    """Refs #159: Laufen alle Hooks sauber durch, geht KEINE Warnung an
+    ``on_warning`` — die Familie soll keinen Geistertext sehen, wenn der
+    Konsument den Reload anstandslos quittiert."""
+    warnings = []
+
+    def good_hook(context):
+        return HookSuccess()
+
+    good_hook.consumer = "Plan-Buddy"
+
+    session = PrivateChatSession(chat_id=83)
+    session.start(
+        lambda: None,
+        post_execute_hooks=(good_hook,),
+        hook_context=HookContext(task_name="kalender_verbinden"),
+        on_warning=lambda msg: warnings.append(msg))
+    _wait_finished(session)
+    assert warnings == []
+
+
+def test_159_hook_exception_is_captured_not_propagated():
+    """Refs #159 (analog EC-21 sync-Pfad): wirft ein Hook am Worker-Ende
+    (gegen Konvention), darf das die Session nicht zerlegen. Das Framework
+    verpackt die Exception als ``HookFailure``, andere Hooks laufen weiter,
+    eine Warnung geht an ``on_warning``."""
+    warnings = []
+
+    def explosive_hook(context):
+        raise RuntimeError("boom")
+
+    explosive_hook.consumer = "Plan-Buddy"
+
+    def good_hook(context):
+        return HookSuccess()
+
+    good_hook.consumer = "Router"
+
+    session = PrivateChatSession(chat_id=84)
+    session.start(
+        lambda: None,
+        post_execute_hooks=(explosive_hook, good_hook),
+        hook_context=HookContext(task_name="kalender_verbinden"),
+        on_warning=lambda msg: warnings.append(msg))
+    _wait_finished(session)
+    # explosive_hook -> Warnung; good_hook OK -> erscheint nicht in der Warnung.
+    assert len(warnings) == 1
+    assert "Plan-Buddy" in warnings[0]
+
+
+def test_159_no_hooks_default_keeps_old_behavior():
+    """Refs #159: Ohne ``post_execute_hooks`` (Default) bleibt das Verhalten
+    pre-#159 — kein Hook, kein on_warning. Sonst wuerden vorhandene
+    Subklassen (FaaSession/GaaSession ohne Hooks heute) verhalten brechen."""
+    warnings = []
+
+    session = PrivateChatSession(chat_id=85)
+    session.start(
+        lambda: None,
+        on_warning=lambda msg: warnings.append(msg))
+    _wait_finished(session)
+    assert warnings == []
 
 
 def test_session_next_message_custom_timeout():
