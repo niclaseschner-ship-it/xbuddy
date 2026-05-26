@@ -288,6 +288,11 @@ def test_KAV_4_aufklaerung_kommt_vor_dem_login_link():
     # »Verbindungsfehler«-Seite.
     assert "nicht bestätigt" in AUFKLAERUNG_TEXT
     assert "Verbindungsfehler" in AUFKLAERUNG_TEXT
+    # KAV-4 (Refs #133): bis der mobile Pfad gebaut ist, wird im
+    # Aufklärungstext explizit empfohlen, am Desktop/Laptop zu verbinden —
+    # Loopback-Redirect-URL ist auf Mobile-Browsern nicht zuverlässig sichtbar.
+    assert "Laptop" in AUFKLAERUNG_TEXT
+    assert "nicht am Handy" in AUFKLAERUNG_TEXT
     # Login-Link kommt direkt danach.
     assert "accounts.google.com" in texts[1]
 

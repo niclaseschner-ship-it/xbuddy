@@ -83,9 +83,16 @@ werden — Privacy-Symmetrie zur Key-Eingabe (E-ONB-2).
 
 ### KAV-4 — Aufklärungstext vor dem Login-Link
 Bevor die Funktion den OAuth-Login-Link postet, sendet sie im Privatchat eine
-hart-codierte Aufklärungs-Nachricht. Sie deckt zwei Stolpersteine ab, die
+hart-codierte Aufklärungs-Nachricht. Sie deckt drei Stolpersteine ab, die
 sonst zum stillen Abbruch des Logins führen:
 
+- **Bitte am Laptop oder PC verbinden, nicht am Handy.** Der Loopback-Redirect
+  (KAV-5) endet auf einer Browser-Fehler-Seite mit der URL `http://localhost:1/?code=…`
+  in der Adressleiste; auf Mobile-Browsern (Chrome Android, Safari iOS,
+  Telegram-In-App) wird diese URL nach dem Verbindungsfehler nicht zuverlässig
+  angezeigt — vom Laptop/PC ist sie sichtbar und kopierbar. Der mobile Pfad
+  (Web-Forwarder statt Loopback-Redirect) ist in Arbeit, Folge-Ticket **#133**;
+  bis dahin: **am Desktop verbinden**.
 - Google zeigt während des Logins den Warnscreen **„Diese App ist nicht
   bestätigt"**, weil der XBuddy-OAuth-Client zwar im Status „In production"
   läuft, aber noch nicht verifiziert ist (Verifizierungs-Status siehe
