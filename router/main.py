@@ -9,6 +9,7 @@ State pro Display in-memory (ROU-10).
 
 from flask import Flask, request, jsonify, send_from_directory, abort
 from datetime import datetime, timezone
+from urllib.parse import urlencode
 import argparse
 import json
 import logging
@@ -24,7 +25,8 @@ import urllib.request
 
 state = {}                # ROU-10: { display_id: {…} | None }
 routing_entries = []      # ROU-9 / ROU-18
-known_displays = set()    # Vereinigung aller display_ids in den Einträgen
+panels = {}               # ROU-18 panels-Abschnitt: source_id → { display_id }
+known_displays = set()    # Vereinigung aller display_ids in den Einträgen + panels
 
 
 def now_iso():
@@ -233,12 +235,101 @@ def adapt_phone(event):
 
 
 # ============================================================
+#  App-Panel-Adapter (ROU-24)
+# ============================================================
+#
+# Hardcode-frei: keine App-Liste, kein switch über App-Namen. Die Payload-URL
+# wird per Konvention aus dem Descriptor abgeleitet (URL-2: /display/<app>/<view>),
+# `query` (optional) hängt als URL-encoded Query-String an. `display_id` für
+# das State-Update kommt aus dem panels-Abschnitt der routing.json (ROU-18) —
+# eine Zeile pro Panel-Instanz, nicht pro Kachel (E-PANEL-5).
+
+def adapt_app_panel(event):
+    """Validiert ein App-Panel-Event und liefert (kind, source_id, descriptor)
+    oder (None, fehler-string). Behandelt zwei Event-Typen (PANEL-6):
+    `tile_selected` mit Pflichtfeldern `app`, `view` (Strings/Zahlen) und
+    optional flachem `query`; `panel_cleared` ohne Descriptor.
+
+    Wir akzeptieren nur flache Werte (Strings/Zahlen) — verschachtelte query-
+    Objekte oder Listen verletzen ROU-2 und PANEL-7 und werden mit einem
+    sprechenden Fehler abgewiesen.
+    """
+    t = event.get('type')
+    sid = event.get('source_id')
+    if t == 'panel_cleared':
+        return ('end', sid, None), None
+    if t == 'tile_selected':
+        if 'app' not in event:
+            return None, 'app fehlt'
+        if 'view' not in event:
+            return None, 'view fehlt'
+        app_val = event['app']
+        view_val = event['view']
+        if not isinstance(app_val, (str, int, float)) or isinstance(app_val, bool):
+            return None, 'app muss String oder Zahl sein'
+        if not isinstance(view_val, (str, int, float)) or isinstance(view_val, bool):
+            return None, 'view muss String oder Zahl sein'
+        query = event.get('query')
+        if query is not None:
+            if not isinstance(query, dict):
+                return None, 'query muss ein flaches Objekt sein'
+            for k, v in query.items():
+                # PANEL-7: Strings/Zahlen, keine verschachtelten Objekte/Listen.
+                if isinstance(v, bool) or not isinstance(v, (str, int, float)):
+                    return None, ('query.%s muss String oder Zahl sein '
+                                  '(keine verschachtelten Objekte/Listen)' % k)
+        descriptor = {'app': app_val, 'view': view_val}
+        if query:
+            descriptor['query'] = dict(query)
+        return ('trigger', sid, descriptor), None
+    return None, 'unbekannter type "%s"' % t
+
+
+def build_panel_url(app_val, view_val, query):
+    """ROU-24 Konvention: /display/<app>/<view>[?<urlencoded query>].
+    Hardcode-frei — funktioniert für jedes app/view-Tupel ohne Code-Änderung."""
+    base = '/display/%s/%s' % (app_val, view_val)
+    if query:
+        # Stabile, deterministische Reihenfolge der Query-Schlüssel — testbar.
+        items = [(k, query[k]) for k in sorted(query.keys())]
+        return base + '?' + urlencode(items)
+    return base
+
+
+def apply_panel_trigger(source_id, descriptor):
+    """ROU-24: Panel-Trigger anwenden. display_id aus panels-Eintrag, payload.url
+    per Konvention. Findet sich kein Eintrag → wie ROU-11 unbekannter Trigger:
+    2xx, Warnung, kein State-Update."""
+    panel_entry = panels.get(source_id)
+    if panel_entry is None:
+        logging.warning('App-Panel ohne panels-Eintrag: source_id=%s', source_id)
+        return
+    display_id = panel_entry.get('display_id')
+    if not display_id:
+        logging.warning('panels-Eintrag ohne display_id: source_id=%s', source_id)
+        return
+    url = build_panel_url(
+        descriptor['app'], descriptor['view'], descriptor.get('query'))
+    payload = {'url': url}
+    ts = now_iso()
+    state[display_id] = {
+        'source_id':  source_id,
+        'descriptor': descriptor,
+        'payload':    payload,
+        'since':      ts,
+    }
+    publish(display_id, state[display_id])
+    cdp_navigate_async(url)
+
+
+# ============================================================
 #  Laden von Dateien (ROU-18 / ROU-19)
 # ============================================================
 
 def load_routing(path):
-    global routing_entries, known_displays
+    global routing_entries, known_displays, panels
     routing_entries = []
+    panels = {}
     known_displays = set()
     try:
         with open(path) as f:
@@ -251,10 +342,38 @@ def load_routing(path):
         return
     routing_entries = data.get('entries', []) or []
     for e in routing_entries:
+        # Migrations-Schutz: die alte Form `display_ids` (Plural) bleibt für
+        # descriptor-basiertes Matching (ROU-9) gültig. Eine alte Form
+        # `display_ids` im panels-Abschnitt würde E-PANEL-5 widersprechen —
+        # darum wird der panels-Abschnitt strikt gegen Singular validiert.
         for d in e.get('display_ids', []):
             known_displays.add(d)
-    logging.info('routing geladen: %d Einträge, %d Displays (%s)',
-                 len(routing_entries), len(known_displays), ', '.join(sorted(known_displays)) or '—')
+    raw_panels = data.get('panels', {}) or {}
+    if not isinstance(raw_panels, dict):
+        logging.warning('panels-Abschnitt ist kein Objekt — ignoriere')
+        raw_panels = {}
+    for source_id, entry in raw_panels.items():
+        if not isinstance(entry, dict):
+            logging.warning('panels[%s] ist kein Objekt — ignoriere', source_id)
+            continue
+        # E-PANEL-5 / ROU-18: Singular `display_id`. Die Plural-Form aus dem
+        # frühen Entwurf wird hier sichtbar abgelehnt, damit eine versehentliche
+        # Wiedereinführung beim Reload nicht stumm verschwindet.
+        if 'display_ids' in entry and 'display_id' not in entry:
+            logging.warning(
+                'panels[%s] nutzt veraltete Form `display_ids` (Plural); '
+                'E-PANEL-5 verlangt `display_id` (Singular) — Eintrag ignoriert',
+                source_id)
+            continue
+        display_id = entry.get('display_id')
+        if not isinstance(display_id, str) or not display_id:
+            logging.warning('panels[%s] ohne gültiges `display_id` — ignoriere', source_id)
+            continue
+        panels[source_id] = {'display_id': display_id}
+        known_displays.add(display_id)
+    logging.info('routing geladen: %d Einträge, %d Panels, %d Displays (%s)',
+                 len(routing_entries), len(panels), len(known_displays),
+                 ', '.join(sorted(known_displays)) or '—')
 
 
 def load_config(path, defaults):
@@ -287,6 +406,22 @@ def events_endpoint():
         return jsonify({'error': 'JSON-Body fehlt oder ungültig'}), 400
     if 'source_id' not in body or 'type' not in body:
         return jsonify({'error': 'source_id und type sind Pflicht'}), 400
+    # ROU-24: Adapter-Auswahl per Event-Type. ROU-24 beschreibt den App-Panel-
+    # Adapter über die Events, die er verarbeitet (`tile_selected`,
+    # `panel_cleared`) — nicht über eine `source_id`-Konvention. Damit bleibt
+    # der Routing-Kern hardcode-frei (ROU-1) und keine source_id-Form ist
+    # auf der Dispatch-Ebene privilegiert.
+    etype = body.get('type')
+    if etype in ('tile_selected', 'panel_cleared'):
+        adapted, err = adapt_app_panel(body)
+        if err:
+            return jsonify({'error': err}), 400
+        kind, source_id, descriptor = adapted
+        if kind == 'end':
+            apply_session_end(source_id)
+            return '', 204
+        apply_panel_trigger(source_id, descriptor)
+        return '', 204
     adapted, err = adapt_phone(body)
     if err:
         return jsonify({'error': err}), 400
@@ -382,6 +517,13 @@ def display(display_id):
 DEFAULT_CONTROLLER_DIR = os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), '..', 'controller', 'figuren-erkennung'))
 
+# ROU-24 / PANEL-2: App-Panel-Statik liegt unter controller/app-panel/.
+# Anders als der Figuren-Erkennung-Controller (1 Slug) ist app-panel ein
+# Controller-Typ mit beliebig vielen Instanzen — `<id>` im Pfad ist die
+# Instanz-Identität (E-PANEL-4), nicht ein App-Slug.
+DEFAULT_APP_PANEL_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), '..', 'controller', 'app-panel'))
+
 # Explizites Content-Type-Mapping. Browser entscheiden anhand des Headers,
 # nicht anhand der Endung — ein .json mit text/html würde das Manifest
 # verwerfen, ein .js mit text/plain die SW-Registrierung scheitern lassen.
@@ -431,9 +573,82 @@ def controller_index(app):
 def controller_asset(app, asset):
     # ROU-23: alle Statik-Pfade unter /controller/<app>/ aus controller_dir().
     # send_from_directory + realpath-Check verhindern Path-Traversal.
+    # App-Panel hat seinen eigenen Pfad-Baum (ROU-24, PANEL-2) — siehe unten.
+    if app == 'app-panel':
+        abort(404)
     if app != controller_app_slug():
         abort(404)
     return _send_controller_asset(asset)
+
+
+# ============================================================
+#  App-Panel-Auslieferung (PANEL-2, ROU-24)
+# ============================================================
+#
+# Anders als der Figuren-Erkennung-Controller (ein Slug, eine Identität via
+# config.json) ist die App-Panel-Seite ein Controller-Typ mit beliebig vielen
+# Instanzen — jede Instanz adressiert über `<id>` im Pfad (E-PANEL-4). Der
+# Router liefert dieselbe Statik unter jeder `<id>` aus und rendert die
+# `<id>` als Datenattribut in die HTML — die Seite kennt damit ohne weiteren
+# Roundtrip ihre eigene Panel-Identität (PANEL-2 Test).
+
+def app_panel_dir():
+    # Defense in Depth: realpath, damit symbolische Links keine traversierung
+    # aus dem Wurzelverzeichnis erlauben.
+    return DEFAULT_APP_PANEL_DIR
+
+
+def _send_app_panel_asset(rel_path):
+    root = os.path.realpath(app_panel_dir())
+    target = os.path.realpath(os.path.join(root, rel_path))
+    if target != root and not target.startswith(root + os.sep):
+        abort(404)
+    if not os.path.isfile(target):
+        abort(404)
+    ext = os.path.splitext(target)[1].lower()
+    mime = _CONTROLLER_MIME.get(ext, None)
+    # CSS muss als text/css ausgeliefert werden — sonst lehnen Browser das
+    # Stylesheet ab. App-Panel hat als einziger Controller heute eine eigene
+    # CSS-Datei, daher das Mime-Mapping hier lokal erweitert.
+    if mime is None and ext == '.css':
+        mime = 'text/css; charset=utf-8'
+    if mime is None and ext == '.svg':
+        mime = 'image/svg+xml'
+    return send_from_directory(root, rel_path,
+                               mimetype=mime or 'application/octet-stream')
+
+
+def render_app_panel_index(panel_id):
+    """PANEL-2: liefert index.html mit der Panel-Identität als data-source-id
+    im <body>-Tag. Die Seite kennt damit ohne weiteren Roundtrip ihre eigene
+    Identität — die Konsistenz-Prüfung (PANEL-8) vergleicht den Wert dann mit
+    der `source_id` aus config.json."""
+    index_path = os.path.join(app_panel_dir(), 'index.html')
+    with open(index_path, encoding='utf-8') as f:
+        html = f.read()
+    # data-source-id ist Spec-neutrales Token (PANEL-2 Test). Wir setzen es
+    # auf der <body>-Wurzel, damit JS es per document.body.dataset lesen kann.
+    return html.replace(
+        '<body>',
+        '<body data-panel-id="%s">' % panel_id,
+        1)
+
+
+@app.route('/controller/app-panel/<panel_id>', methods=['GET'])
+def app_panel_index_no_slash(panel_id):
+    return render_app_panel_index(panel_id), 200, {
+        'Content-Type': 'text/html; charset=utf-8'}
+
+
+@app.route('/controller/app-panel/<panel_id>/', methods=['GET'])
+def app_panel_index_slash(panel_id):
+    return render_app_panel_index(panel_id), 200, {
+        'Content-Type': 'text/html; charset=utf-8'}
+
+
+@app.route('/controller/app-panel/<panel_id>/<path:asset>', methods=['GET'])
+def app_panel_asset(panel_id, asset):
+    return _send_app_panel_asset(asset)
 
 
 # ============================================================

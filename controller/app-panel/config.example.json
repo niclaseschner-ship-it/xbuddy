@@ -1,0 +1,9 @@
+{
+  "_comment": "PANEL-8 — Beispiel-Instanz-Konfiguration. Kopiere als config.json (per .gitignore aus dem Repo ausgeschlossen) und passe pro Panel-Instanz an.",
+  "_source_id_comment": "PANEL-8: muss mit einem Schlüssel im `panels`-Abschnitt der routing.json des Routers übereinstimmen (ROU-18).",
+  "_display_id_comment": "PANEL-8: muss mit dem `display_id`-Wert desselben `panels`-Eintrags übereinstimmen — der Panel-Code abonniert genau diesen Stream (ROU-22, PANEL-11).",
+  "_router_url_comment": "Origin des Routers (Schema + Host[:Port], ohne Pfad).",
+  "source_id":  "app-panel:demo",
+  "display_id": "display:demo",
+  "router_url": "https://hub.local:8443"
+}

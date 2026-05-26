@@ -1,0 +1,22 @@
+{
+  "_comment": "PANEL-3 — Beispiel-Kachel-Konfiguration. Kopiere als tiles.json (per .gitignore aus dem Repo ausgeschlossen) und passe pro Panel-Instanz an. Listen-Reihenfolge ist Anzeige-Reihenfolge. `key` ist stabil — ein späterer Schreiber (OPEN-PANEL-A) identifiziert eine Kachel daran. Die Aus-Kachel ist NICHT hier konfiguriert; sie wird von der Seite eingefügt (PANEL-6).",
+  "tiles": [
+    {
+      "key":      "wochenplan-lese",
+      "app":      "plan",
+      "view":     "woche",
+      "label":    "Wochenplan",
+      "icon":     "icons/plan-lese.svg",
+      "sichtbar": true
+    },
+    {
+      "key":      "wochenplan-klein",
+      "app":      "plan",
+      "view":     "woche",
+      "query":    { "ansicht": "klein" },
+      "label":    "Wochenplan klein",
+      "icon":     "icons/plan-klein.svg",
+      "sichtbar": true
+    }
+  ]
+}
