@@ -23,9 +23,20 @@ private_chat_session.py) hat den dritten Trigger eingelöst.
 
 import logging
 
+from hooks import ReloadHook
 from private_chat_session import PrivateChatSession
 from skills import kalender_verbinden
 from tasks import Proposal, WriteTask
+
+
+# EC-21 / #140: nach einer erfolgreichen KAV-Aenderung muss der Plan-Buddy
+# seinen Tokens-Cache neu lesen — er konsumiert das Refresh-Token aus dem
+# Zugangsdaten-Speicher und haelt es im In-Memory-State. Ein direkter
+# Datei-Zugriff aus dem Eltern-Chat in den Plan-Buddy wuerde den Cache nicht
+# ungueltig machen (siehe memory/feedback_api_vs_direct_fs.md) — wir rufen
+# stattdessen den Plan-Buddy-Reload-Endpunkt, der seinerseits den Cache neu
+# aufbaut. Der HTTP-Vertrag stammt aus PR #151 (Plan-Reload).
+_PLAN_BUDDY_RELOAD_URL = "http://127.0.0.1:5020/api/v1/plan/admin/reload"
 
 
 # Quittung in den Agent-Loop zurück — der eigentliche Verbinden-Flow läuft
@@ -66,7 +77,18 @@ class KalenderVerbindenTask(WriteTask):
     """Schreibende Katalog-Aufgabe (EC-10), die »Kalender verbinden« auslöst
     (KAV-3). Die Konversation selbst läuft im Privatchat — der Task startet
     die Session und gibt eine kurze Quittung zurück.
+
+    EC-21 / #140: nach erfolgreichem `execute()` ruft das Framework den
+    Plan-Buddy-Reload, damit dort die neuen Tokens auch ohne Pi-Neustart
+    sichtbar werden. Die Hook-Liste ist ein Klassenattribut — der Task
+    bleibt zustandslos gegenueber dem Reload (keine Logik im Task selbst).
     """
+
+    # EC-21: konsumierender Buddy ist der Plan-Buddy (er liest das
+    # Refresh-Token aus dem Zugangsdaten-Speicher und cached es). Eine
+    # Liste, damit weitere Konsumenten additiv ergaenzt werden koennen.
+    post_execute_hooks = (
+        ReloadHook(url=_PLAN_BUDDY_RELOAD_URL, consumer="Plan-Buddy"),)
 
     def __init__(self, tg, zd_store_getter, sessions,
                  family_group_chat_id_getter, plan_json_path=None):
