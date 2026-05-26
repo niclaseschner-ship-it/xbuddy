@@ -153,12 +153,19 @@ funktioniert), entschuldigt es sich kurz und macht mit dem nun bekannten
 Stand weiter — keine stille Korrektur, kein erneutes Ausbreiten aller
 Möglichkeiten.
 
-Mechanisch wird dies durch zwei Mittel getragen, die zusammenwirken:
-(a) Aufgaben-Parameter, deren Fehlen die Auslieferung verhindert (etwa
-`ca-verteilung.md` CAV-5: `geraet` als Pflicht-Eingabe), zwingen den Agenten
-zur gezielten Rückfrage; (b) eine Verhaltensregel im Agent-System-Prompt, die
-das Verhalten auch dort durchträgt, wo die Aufgabe selbst keinen Pflicht-
-Parameter setzt.
+**Was sich für die Familie ändert** — Beispiel: Zertifikat installieren.
+
+- Ohne EC-22: Mama bittet den Bot um die Zertifikat-Anleitung. Der Bot
+  schickt einen Block mit allen vier OS-Varianten (Windows, Android, iOS,
+  macOS). Mama muss erst durchlesen, welcher Abschnitt für ihr iPhone gilt
+  — auf einem 6"-Display, neben Familien-Gruppen-Nachrichten.
+- Mit EC-22: Der Bot fragt einmal kurz: »Welches Gerät — Android-Handy,
+  iPhone/iPad, Windows-PC oder Mac?« Mama tippt »iPhone«. Der Bot schickt
+  nur den iOS-Abschnitt — kein Suchen, kein Scrollen.
+
+Begründung: Eltern müssen das nicht selbst leisten — die gezielte Rückfrage
+ist Sekunden, das Suchen im falschen Abschnitt ist Reibung jeder Familie
+ohne Geräte-Detail.
 
 *Tickets:* #95
 
