@@ -219,7 +219,12 @@ def _run_agent(msg, ctx):
 
 
 def _execute_confirmed(pending, msg, ctx):
-    """Führt eine bestätigte schreibende Aufgabe aus (nach EC-10-Bestätigung)."""
+    """Führt eine bestätigte schreibende Aufgabe aus (nach EC-10-Bestätigung).
+
+    Nach erfolgreicher Ausfuehrung laufen die deklarierten post_execute_hooks
+    der Aufgabe (EC-21, #140). Hook-Fehler rollen die Schreib-Aufgabe NICHT
+    zurueck — sie werden als zusammengefasste Warnung an die Quittung
+    angehaengt."""
     task = ctx.catalog.get(pending.task_name)
     if task is None:
         _send(ctx, msg.chat_id, _TASK_GONE, reply_to_message_id=msg.message_id)
@@ -230,13 +235,15 @@ def _execute_confirmed(pending, msg, ctx):
         private_chat_id=(msg.chat_id if msg.chat_type == "private"
                          else msg.from_user_id))
     try:
-        result = task.execute(pending.arguments, turn_context)
+        outcome = ctx.catalog.execute_write_task(
+            task, pending.arguments, turn_context)
     except Exception as e:  # noqa: BLE001 — Aufgabe isoliert melden
         logging.warning("Ausführung von '%s' fehlgeschlagen: %s", pending.task_name, e)
         _send(ctx, msg.chat_id, _TASK_FAILED % e, reply_to_message_id=msg.message_id)
         return
-    _send(ctx, msg.chat_id, result, reply_to_message_id=msg.message_id)
-    ctx.history.append(msg.chat_id, Message("assistant", [TextBlock(result)]))
+    text = outcome.combined_text()
+    _send(ctx, msg.chat_id, text, reply_to_message_id=msg.message_id)
+    ctx.history.append(msg.chat_id, Message("assistant", [TextBlock(text)]))
 
 
 def _user_message_from(msg):
