@@ -56,6 +56,32 @@ gibt.
 
 *Tickets:* #24
 
+### URL-3a — Dokumentierte Abweichungen vom Zwei-Segment-Muster
+
+Zwei Pfade sitzen unter einem zulässigen Top-Level-Prefix (URL-1),
+weichen aber bewusst von der Action-/Asset-Form (URL-2 bzw. URL-3) ab,
+weil ihr zweites Segment eine **Instanz-Identität** ist und kein Verb
+und kein Asset:
+
+- **ROU-20** — `GET /display/<id>` liefert den Display-Client; `<id>` ist
+  die Display-Identität (DC-1). Abweichung von URL-2
+  (`/display/<buddy>/<view>`). Quelle: [`router.md`](router.md), ROU-20.
+- **PANEL-2** — `/controller/app-panel/<id>` liefert die Panel-Seite;
+  `<id>` ist die Panel-Instanz-Identität (PANEL-8). Abweichung von URL-3
+  (`/controller/<source>/<X>`). Quelle: [`app-panel.md`](app-panel.md),
+  PANEL-2.
+
+Die Identitäts-Form ist konsistent über Event-Schema, Config und
+Routing-Tabelle: die Schlüssel des `panels`-Abschnitts in `routing.json`
+(ROU-18) tragen die volle `source_id`-Form (`app-panel:<id>`, analog
+`figure:<id>` für die Figuren-Routing-Tabelle).
+
+Neue Abweichungen werden hier eingetragen, sobald sie in ihrer
+Komponenten-Spec eine eigene ID bekommen — `urls.md` bleibt die
+Übersicht, die jeweilige Komponenten-Spec die Begründung.
+
+*Tickets:* #122
+
 ### URL-4 — API-Pfade
 
 Backend-API-Pfade folgen dem Muster `/api/v<n>/<resource>` mit explizitem
