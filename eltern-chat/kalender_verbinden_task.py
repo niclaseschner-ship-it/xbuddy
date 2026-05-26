@@ -1,0 +1,178 @@
+"""Kalender verbinden als Aufgaben-Katalog-Aufgabe — siehe specs/platform/
+kalender-verbinden.md (KAV-3 ff., Refs #57) und eltern-chat.md EC-8/EC-10.
+
+Diese Aufgabe ist der V1-Trigger der `kalender_verbinden`-Funktion (KAV-1):
+versteht der Agent eine natürlichsprachige Bitte („verbind unseren Google-
+Kalender"), schlägt er den Verbinden-Schritt vor — nach EC-10-Bestätigung
+startet der Task die Funktion im Privatchat des Aufrufers (KAV-3).
+
+Eine **schreibende** Aufgabe (EC-10, KAV-7): die Funktion ergänzt den
+Zugangsdaten-Speicher (`zugangsdaten.md` ZD-5) um das Refresh-Token unter
+dem PLAN-16-Schlüssel.
+
+Die Aufgabe ist ein dünner Aufrufer der trigger-agnostischen Funktion
+(KAV-1 / E-KAV-1) — keine eigene OAuth-Logik. Sie liefert nur den
+Privatchat-Stream als `next_message`-Callable und gibt die Quittung zurück,
+die der Agent dem Aufrufer weiterreicht.
+
+Querverweis-Kommentar (E-KAV-2): Das Privatchat-Session-Muster
+(`KavSession`) ist 1:1 wiederverwendet aus `familie_anlegen_task.FaaSession`
+und `geraet_anlegen_task.GaaSession`. Mit KAV taucht das Muster zum
+**dritten** Mal auf — der Refactor in einen gemeinsamen Plattform-Baustein
+ist damit der **logische Folge-Schritt** (E-KAV-2: dritter Trigger erreicht),
+gehört aber **nicht in diesen PR** (kleine PRs, CLAUDE.md §6).
+"""
+
+import logging
+import queue
+import threading
+
+import kalender_verbinden
+from tasks import Proposal, WriteTask
+
+
+# Quittung in den Agent-Loop zurück — der eigentliche Verbinden-Flow läuft
+# im Privatchat (KAV-3).
+_QUITTUNG_START = ("Ich richte das im Privatchat mit dir ein — antworte mir "
+                   "dort einfach Schritt für Schritt.")
+_QUITTUNG_NO_PRIVATE = (
+    "Ich brauche deinen Privatchat, um den Google-Login zu starten. "
+    "Schreib mir bitte direkt eine Nachricht.")
+_QUITTUNG_SESSION_RUNNING = (
+    "Ein Kalender-Verbinden läuft schon in deinem Privatchat — bitte dort "
+    "antworten oder einfach abwarten.")
+_PROPOSAL_SUMMARY = (
+    "Google-Kalender der Familie im Privatchat verbinden — ich führe dich "
+    "dort durch den Google-Login und lege das Refresh-Token im "
+    "Zugangsdaten-Speicher ab (Plan-Buddy kann dann Termine lesen und "
+    "schreiben).")
+
+
+# E-KAV-2: identisch zu `_SESSION_TIMEOUT_SECONDS` in FAA/GAA — der
+# Querverweis-Kommentar gehört in den Code, nicht in die Spec.
+_SESSION_TIMEOUT_SECONDS = kalender_verbinden.SESSION_TIMEOUT_SECONDS
+
+
+class KavSession:
+    """Eine laufende »Kalender verbinden«-Session in einem Privatchat.
+
+    Analog `FaaSession` / `GaaSession`: der Worker-Thread läuft
+    `kalender_verbinden(...)` synchron und blockiert in `next_message()`
+    auf der Queue. Die main-Loop steckt eingehende Privatchat-Updates dieses
+    Chats per `deliver()` in die Queue, statt sie dem Agenten weiterzureichen —
+    solange die Session aktiv ist.
+    """
+
+    def __init__(self, chat_id):
+        self.chat_id = chat_id
+        self._queue = queue.Queue()
+        self._thread = None
+        self._finished = threading.Event()
+
+    def start(self, target, args):
+        """Startet den Worker-Thread, der `target(*args)` ausführt."""
+        def run():
+            try:
+                target(*args)
+            except Exception:  # noqa: BLE001 — Session-Fehler isoliert melden
+                logging.exception("KAV-Session in Chat %s abgebrochen",
+                                  self.chat_id)
+            finally:
+                self._finished.set()
+        self._thread = threading.Thread(
+            target=run, name="kav-session-%s" % self.chat_id, daemon=True)
+        self._thread.start()
+
+    def deliver(self, kav_input):
+        """Reicht eine Privatchat-Nachricht an den Worker durch."""
+        self._queue.put(kav_input)
+
+    def next_message(self):
+        """`next_message`-Callable für `kalender_verbinden` — blockiert auf
+        der Queue, bis eine Nachricht eintrifft oder das Timeout greift."""
+        try:
+            return self._queue.get(timeout=_SESSION_TIMEOUT_SECONDS)
+        except queue.Empty:
+            return None
+
+    def is_finished(self):
+        return self._finished.is_set()
+
+
+class KalenderVerbindenTask(WriteTask):
+    """Schreibende Katalog-Aufgabe (EC-10), die »Kalender verbinden« auslöst
+    (KAV-3). Die Konversation selbst läuft im Privatchat — der Task startet
+    die Session und gibt eine kurze Quittung zurück.
+    """
+
+    def __init__(self, tg, zd_store_getter, sessions,
+                 family_group_chat_id_getter):
+        super().__init__(
+            name="kalender_verbinden",
+            description=(
+                "Verbindet den Google-Kalender der Familie im Privatchat "
+                "des Aufrufers. Aufrufen, wenn jemand sagt »verbinde unseren "
+                "Google-Kalender«, »leg den Familienkalender an«, »Kalender "
+                "neu verbinden« oder Ähnliches. Der Login läuft im Browser, "
+                "der Code wird im Privatchat zurückgegeben."),
+            parameters={"type": "object", "properties": {}})
+        self._tg = tg
+        self._zd_store_getter = zd_store_getter
+        self._sessions = sessions   # dict chat_id -> KavSession (in-memory)
+        self._family_group_chat_id_getter = family_group_chat_id_getter
+
+    def propose(self, arguments, turn_context):
+        """EC-10-Vorschlag — der Aufrufer bestätigt, bevor die Konversation
+        im Privatchat startet (Pattern-treu, KAV-3)."""
+        return Proposal(_PROPOSAL_SUMMARY)
+
+    def execute(self, arguments, turn_context):
+        """Startet die KAV-Session im Privatchat des Aufrufers (KAV-3).
+
+        Der Zielchat — der Privatchat des Aufrufers — entstammt dem
+        `TurnContext` (private_chat_id), nie den Modell-`arguments`: so
+        bestimmt nicht das Sprachmodell, wo der OAuth-Login-Link landet
+        (EC-12-Geist; Symmetrie zur Key-Eingabe ONB-3, KAV-3).
+        """
+        private_chat_id = turn_context.private_chat_id
+        user_id = turn_context.from_user_id
+        if private_chat_id is None or user_id is None:
+            return _QUITTUNG_NO_PRIVATE
+
+        if private_chat_id in self._sessions:
+            return _QUITTUNG_SESSION_RUNNING
+
+        session = KavSession(private_chat_id)
+        self._sessions[private_chat_id] = session
+
+        family_group_chat_id = self._family_group_chat_id_getter()
+        tg = self._tg
+        sessions = self._sessions
+        zd_store = self._zd_store_getter()
+
+        def run_kav():
+            try:
+                result = kalender_verbinden.kalender_verbinden(
+                    tg, private_chat_id, user_id, family_group_chat_id,
+                    zd_store, session.next_message)
+                logging.info(
+                    "KAV-Session in Chat %s beendet — ergebnis=%s",
+                    private_chat_id, result.ergebnis)
+            finally:
+                sessions.pop(private_chat_id, None)
+
+        session.start(run_kav, ())
+        return _QUITTUNG_START
+
+
+def make_kav_input(incoming_message):
+    """Übersetzt eine `IncomingMessage` (Privatchat-Nachricht des Aufrufers)
+    in den `KavInput`, den `kalender_verbinden.next_message` erwartet
+    (KAV-6-Adapter, analog `make_faa_input` / `make_gaa_input`).
+
+    Der Adapter ist hier, nicht in `telegram.py` — `IncomingMessage` bleibt
+    so eine reine Datenklasse ohne KAV-Wissen, und KAV muss nicht
+    `IncomingMessage` importieren (die Funktion lebt im Eltern-Chat,
+    KAV-Funktion ist trigger-agnostisch, E-KAV-1).
+    """
+    return kalender_verbinden.KavInput(text=incoming_message.text or "")
