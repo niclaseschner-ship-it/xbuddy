@@ -22,7 +22,7 @@ mit Namen und freiem Editieren · ein Personen-Picker statt des Klick-Cycles
 (PLAN-8) · eine Sperre/Auth vor dem Editieren am Display · Routine-Module
 (Morgen-/Abendablauf) · weitere Views über `woche` hinaus · mehrere Aktivitäten
 pro Kind pro Tag · mehrere Kalender je Familie (OPEN-PLAN-F) · ein geführtes
-OAuth-Onboarding (OPEN-PLAN-E).
+OAuth-Onboarding (geschlossen durch `kalender-verbinden.md`).
 
 ## 1. Die App & ihre Views
 
@@ -362,12 +362,6 @@ Standard-Durchlaufs (analog `eltern-chat.md` EC-17).
 - **OPEN-PLAN-D — Sperre vor dem Editieren.** V1 erlaubt jedem am Display jede
   Änderung (PLAN-25). Ob Petrantwortlichkeiten gegen versehentliches Ändern
   geschützt werden, ist eine spätere Entscheidung.
-
-- **OPEN-PLAN-E — Geführtes OAuth-Onboarding.** V1 setzt voraus, dass
-  OAuth-Client und -Token im Zugangsdaten-Speicher liegen (von Hand gelegt). Ein
-  geführter Onboarding-Flow berührt sich mit der Brainstorm-Idee
-  `xbuddy-onboarding-journey` (Phase „Kalender") und dem Eltern-Chat-Onboarding
-  — eigenes Ticket, vor dem Schneiden prüfen, wo es hingehört.
 
 - **OPEN-PLAN-F — Mehrere Kalender je Familie.** Familien- und Schul-/Vereins-
   Kalender getrennt zu führen, bräuchte eine Quellen-Zuordnung je Event. V1
