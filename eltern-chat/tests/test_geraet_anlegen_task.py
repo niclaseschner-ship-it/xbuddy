@@ -10,11 +10,11 @@ Doppelung `FakeTelegram` ersetzt (Pattern wie FAA-12, ohne Netz).
 import json
 import time
 
-import geraet_anlegen
+from skills import geraet_anlegen
 from confirm import PendingStore
 from fakes import FakeProvider, FakeTelegram, make_message
-from geraet_anlegen import GaaInput
-from geraet_anlegen_task import GaaSession, GeraetAnlegenTask, make_gaa_input
+from skills.geraet_anlegen import GaaInput
+from skills.geraet_anlegen_task import GaaSession, GeraetAnlegenTask, make_gaa_input
 from history import History
 from main import Context, handle_update
 from model import WRITE

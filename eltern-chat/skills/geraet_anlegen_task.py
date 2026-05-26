@@ -21,7 +21,7 @@ import logging
 import queue
 import threading
 
-import geraet_anlegen
+from skills import geraet_anlegen
 from tasks import Proposal, WriteTask
 
 

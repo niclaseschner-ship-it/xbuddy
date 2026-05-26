@@ -21,7 +21,7 @@ import logging
 import queue
 import threading
 
-import familie_anlegen
+from skills import familie_anlegen
 from tasks import Proposal, WriteTask
 
 

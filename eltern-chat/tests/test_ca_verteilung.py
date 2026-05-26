@@ -8,9 +8,9 @@ CAV-6). Telegram ist durch die kontrollierte Doppelung `FakeTelegram` ersetzt
 
 import inspect
 
-import ca_verteilung
-from ca_task import CaVerteilungTask
-from ca_verteilung import CaVerteilungError, CaVerteilungResult, verteile_ca
+from skills import ca_verteilung
+from skills.ca_task import CaVerteilungTask
+from skills.ca_verteilung import CaVerteilungError, CaVerteilungResult, verteile_ca
 from confirm import PendingStore
 from fakes import (FakeProvider, FakeTelegram, make_message,
                    task_call_response, text_response)

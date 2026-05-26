@@ -21,10 +21,10 @@ from datetime import datetime, timezone
 
 import pytest
 
-import kalender_verbinden as kv
-import kalender_verbinden_task
+from skills import kalender_verbinden as kv
+from skills import kalender_verbinden_task
 from fakes import FakeTelegram
-from kalender_verbinden import (
+from skills.kalender_verbinden import (
     AUFKLAERUNG_TEXT, BESTAETIGT_MIT_EMAIL, BESTAETIGT_OHNE_EMAIL,
     CalendarListFetchError, CODE_REMINDER, ERGEBNIS_ABGEBROCHEN,
     ERGEBNIS_ABGELEHNT, ERGEBNIS_VERBUNDEN, ERGEBNIS_VERBUNDEN_OHNE_KALENDER,
@@ -37,7 +37,7 @@ from kalender_verbinden import (
     exchange_code_for_tokens, extract_code, fetch_calendar_list,
     format_calendar_list, kalender_verbinden, parse_selection,
     store_tokens_in_zd, write_kalender_id_to_plan_json)
-from kalender_verbinden_task import (KalenderVerbindenTask, KavSession,
+from skills.kalender_verbinden_task import (KalenderVerbindenTask, KavSession,
                                       make_kav_input)
 from model import WRITE
 from tasks import TurnContext, build_catalog
