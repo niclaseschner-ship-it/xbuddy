@@ -23,17 +23,16 @@ Code-Vorbild ist der `FaaSession`-/`familie_anlegen`-Stil
 (`familie_anlegen.py`). Querverweis-Kommentar an die FAA-Session ist hier
 KAV-spezifisch dokumentiert; ein gemeinsamer Plattform-Baustein für die
 Privatchat-Session entsteht erst beim **dritten** Vorkommen des Musters
-(E-KAV-2 — CLAUDE.md §6 „dieselbe Logik dreimal").
+(E-KAV-2 — CLAUDE.md §6 „dieselbe Logik zweimal").
 """
 
 import json
 import logging
 import secrets
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import authz
@@ -360,24 +359,18 @@ def store_tokens_in_zd(zd, refresh_token, access_token, expires_in,
 
 
 # ============================================================
-#  Hilfe für die State-Verwaltung (KAV-5 / KAV-6, Prozess-Speicher)
+#  Hilfe für die State-Verwaltung (KAV-5, Prozess-Speicher)
 # ============================================================
 
-@dataclass
-class _StateEntry:
-    """Ein offener `state`-Token (KAV-5) im Prozess-Speicher.
-
-    Bindet die Tupel (instanz × from_user_id × privatchat-id) — beim
-    Token-Tausch wird der Code nur mit einem aktiven State akzeptiert
-    (Replay-/Verwechslungs-Schutz).
-    """
-    user_id: object
-    chat_id: object
-    created_at: float
-
-
 def _new_state():
-    """Erzeugt einen einmaligen URL-sicheren State-Token (KAV-5)."""
+    """Erzeugt einen einmaligen URL-sicheren State-Token (KAV-5).
+
+    State ist ein zufälliger Marker, der Login-Versuch und Code-Rückkehr
+    verklammert (Eindeutigkeit gegen Verwechslung paralleler Sessions
+    desselben Bots). Die Bindung an User/Privatchat trägt implizit die
+    Privatchat-Session-Mechanik (analog FAA-12); eine serverseitige
+    Tupel-Tabelle ist nicht nötig.
+    """
     return secrets.token_urlsafe(24)
 
 
@@ -455,6 +448,13 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
             "kalender_verbinden: OAuth-Client '%s' fehlt oder ist unvollständig "
             "— Verbindung kann nicht starten (Pi-Deploy-Vorbedingung).",
             ZD_NAME_OAUTH_CLIENT)
+        # Setup-Lücke (ZD-Eintrag `plan-google-oauth-client` fehlt) ist hier ein
+        # Sonderfall von ABGEBROCHEN — die Spec (KAV-1) kennt drei Ergebnis-Signale
+        # (verbunden/abgebrochen/abgelehnt), und ein eigenes „nicht_konfiguriert"-
+        # Signal würde den Aufrufer-Vertrag erweitern ohne praktischen Nutzen heute.
+        # Klare User-Meldung im Bot-Output reicht: der Aufrufer sieht „abgebrochen"
+        # plus eine spezifische Begründungs-Nachricht im Chat (OAUTH_CLIENT_MISSING
+        # nennt die Setup-Lücke, ohne `client_secret` zu zeigen — ZD-6).
         _send(tg, chat_id, OAUTH_CLIENT_MISSING)
         return KalenderVerbindenResult(ergebnis=ERGEBNIS_ABGEBROCHEN)
     client_id, client_secret = client_pair
