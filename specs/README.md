@@ -17,6 +17,9 @@ braucht es nicht, um die Spec synchron zu halten.
 - Eine Spec-Datei je **Fähigkeit mit eigenem Verhaltens-Vertrag** —
   `buddies/<name>.md` (was die Familie erlebt) bzw. `platform/<name>.md`
   (geteilte Software-Fähigkeit wie Messaging, Rendering).
+- `../conventions/` — paralleles Genre für das *Wie* (Bauregeln,
+  einheitliche Form). Specs zitieren Konventions-IDs (z. B. „folgt
+  IDENT-1"), beschreiben selbst kein „Wie".
 
 Gegliedert wird nach **Verhalten**, nicht nach Code-Modulen und nicht nach
 Hardware. Eine Datei entsteht **erst**, wenn ein Ticket die Fähigkeit
