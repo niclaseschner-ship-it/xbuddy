@@ -15,8 +15,9 @@ Teil ihres Vertrags.
 
 **V1-Scope:** das Verbinden **eines** Google-Kalenders je Familie über den
 Eltern-Chat-Bot · Aufklärung über den „Unbestätigte App"-Warnscreen vor dem
-Login-Link · Refresh- und Access-Token in den zentralen Zugangsdaten-Speicher
-(`zugangsdaten.md` ZD-5) unter dem PLAN-16-Schlüssel · die Konversation läuft im
+Login-Link · Refresh-Token in den zentralen Zugangsdaten-Speicher
+(`zugangsdaten.md` ZD-5) unter dem von PLAN-16 erwarteten Schlüssel-Namen
+(`plan-google-oauth-refresh-token`, KAV-7) · die Konversation läuft im
 Privatchat des Aufrufers (analog `eltern-chat-onboarding.md` ONB-3,
 `familie-anlegen.md` FAA-12) · OAuth-Scope `calendar.events` (Lesen +
 Schreiben, deckt PLAN-17 und PLAN-18 ab).
@@ -110,7 +111,9 @@ Schema `https://accounts.google.com/o/oauth2/v2/auth?…` mit folgenden
 Parametern:
 
 - **`client_id`** — die OAuth-Client-ID aus dem Zugangsdaten-Speicher
-  (`zugangsdaten.md` ZD-5; eingerichtet wie in `plan.md` PLAN-16 verlangt).
+  (`zugangsdaten.md` ZD-5, unter dem Schlüssel `plan-google-oauth-client`,
+  siehe KAV-7; eingerichtet wie in `plan.md` PLAN-16 verlangt; gemeinsame
+  XBuddy-OAuth-App, siehe E-KAV-4).
 - **`redirect_uri=http://localhost:1`** — **Loopback-Redirect mit Port 1**.
   Port 1 antwortet bewusst nie; der Browser zeigt nach erfolgreichem Login
   eine Verbindungsfehler-Seite, aber die Adressleiste enthält
@@ -146,9 +149,9 @@ PLAN-16 / ZD-2.
 
 ### KAV-6 — Code-Empfang im Privatchat
 Nach dem Posten des Login-Links wartet die Funktion im selben Privatchat auf
-die nächste eingehende Textnachricht des Aufrufers (Session-Muster analog
-`familie_anlegen_task.py` `FaaSession.next_message`, siehe E-KAV-2). Die erste
-eingehende Nachricht wird als Träger des Authorization-Codes interpretiert.
+die nächste eingehende Textnachricht des Aufrufers (Privatchat-Session-Muster
+analog `familie-anlegen.md` FAA-9, siehe E-KAV-2). Die erste eingehende
+Nachricht wird als Träger des Authorization-Codes interpretiert.
 
 Die Funktion akzeptiert zwei Eingabe-Formen — beides ist gleichwertig, weil
 der Loopback-Redirect (KAV-5) genau diese beiden Wege offenlässt:
@@ -173,15 +176,15 @@ den Code-Wert einfügen") und wartet weiter — analog
 `eltern-chat-onboarding.md` ONB-3 letzter Absatz.
 
 **Timeout: 30 Minuten** ohne passende Antwort beendet die Session und liefert
-das Ergebnis-Signal „abgebrochen" (gleicher Wert wie
-`familie_anlegen_task.py` `_SESSION_TIMEOUT_SECONDS` — derselbe Use-Case:
-eine Onboarding-typische Konversation, die nicht ewig blockieren darf).
+das Ergebnis-Signal „abgebrochen" — gleicher Wert wie heute in
+`familie-anlegen.md` FAA-9: eine Onboarding-typische Konversation, die nicht
+ewig blockieren darf.
 
 Zwischenzustand der Session (welcher `state`-Token offen ist, ob der
 Login-Link schon gepostet wurde) liegt **nur im Prozess-Speicher**, analog
-`familie-anlegen.md` FAA-9 (b) und `eltern-chat-onboarding.md` ONB-3 /
-`onboarding.py`. Stürzt der Prozess während der Session ab, ist sie verloren
-und der Aufrufer fängt an — kein Wiederaufnahme-Pfad.
+`familie-anlegen.md` FAA-9 (b) und `eltern-chat-onboarding.md` ONB-3. Stürzt
+der Prozess während der Session ab, ist sie verloren und der Aufrufer fängt
+an — kein Wiederaufnahme-Pfad.
 
 *Tickets:* #57
 
@@ -194,21 +197,29 @@ auf und tauscht den Code gegen ein **Refresh-Token** + initiales
 des Zugangsdaten-Speichers abgelegt (`zugangsdaten.md` ZD-5) — die Funktion
 fasst keine eigene Datei an.
 
-**Schlüssel-Konvention** (KAV-7-load-bearing, weil PLAN-16-Konsument):
+**Schlüssel-Konvention** (KAV-7-load-bearing, weil PLAN-16-Konsument). Die
+Schlüssel-Namen folgen der heute in `plan/kalender.py` etablierten Konvention
+(`plan-google-oauth-*`) — Plan-Buddy liest unter genau diesen Namen, und eine
+Abweichung würde Plan-Buddy beim Token-Tausch ins Leere greifen lassen
+(CLAUDE.md §6, eine Wahrheit pro Fakt):
 
-| Schlüssel | Wert |
-|---|---|
-| `google.calendar.refresh_token` | Refresh-Token (langlebig) |
-| `google.calendar.access_token` | aktuelles Access-Token (kurzlebig, Plan-Buddy zieht bei Bedarf nach) |
-| `google.calendar.access_token_expires_at` | Ablauf-Zeitpunkt des Access-Tokens (ISO-8601 UTC) |
-| `google.calendar.account_email` | E-Mail des verbundenen Google-Accounts (aus `id_token` ableitbar, für die Bestätigungs-Nachricht KAV-8) |
+| Schlüssel | Wert | Konsument |
+|---|---|---|
+| `plan-google-oauth-refresh-token` | Refresh-Token (langlebig); Wert ist ein Dict `{"refresh_token": "..."}` (Form, die `plan/kalender.py` heute liest) | Plan-Buddy (PLAN-16) |
+| `plan-google-oauth-client` | OAuth-Client-Eintrag im Google-Format (`{"installed": {"client_id": "...", "client_secret": "..."}}` oder analog `"web"`); existiert vor dem Verbinden, weil V1 von Hand gelegt (E-KAV-1, gemeinsame XBuddy-OAuth-App) | Plan-Buddy (PLAN-16); diese Funktion **liest** ihn (für KAV-5-Link), schreibt ihn nicht |
+| `kav-access-token` | aktuelles Access-Token aus dem Token-Tausch (kurzlebig) — **Bot-interne Hilfsdate**, Plan-Buddy braucht sie nicht (zieht bei Bedarf selbst über den Refresh-Token nach, `plan/kalender.py::_access_token`) | nur diese Funktion |
+| `kav-access-token-expires-at` | Ablauf-Zeitpunkt des `kav-access-token` (ISO-8601 UTC) — **Bot-intern**, wie oben | nur diese Funktion |
+| `kav-account-email` | E-Mail des verbundenen Google-Accounts (aus `id_token` ableitbar, für die Bestätigungs-Nachricht KAV-8) — **Bot-intern** | nur diese Funktion |
 
-Diese Namen sind die Konsumenten-Konvention für `plan.md` PLAN-16: Plan-Buddy
-liest unter genau diesen Namen. Eine Spec-Änderung an einer Stelle hieße,
-beide Specs ändern (CLAUDE.md §6, eine Wahrheit pro Fakt). Die
-OAuth-Client-ID + Client-Secret liegen im selben Speicher unter Namen, die
-`plan.md` PLAN-16 / `zugangsdaten.md` ZD-2 vergibt (für V1 von Hand gelegt —
-`plan.md` OPEN-PLAN-E ersatzlos erledigt durch diese Spec).
+Die Schlüssel-Namen folgen der heute in `plan/kalender.py` etablierten
+Konvention (`plan-google-oauth-*`). Eine spätere Migration auf einen
+neutraleren Namensraum (etwa `google.calendar.*`) gehört in ein **eigenes
+Folge-Ticket**, sobald ein zweiter Konsument neben Plan-Buddy entsteht — kein
+Antizipieren auf Vorrat (CLAUDE.md §6).
+
+Die OAuth-Client-Konfiguration (`plan-google-oauth-client`) liegt für V1 von
+Hand im Zugangsdaten-Speicher (`plan.md` OPEN-PLAN-E ersatzlos erledigt durch
+diese Spec; gemeinsame XBuddy-OAuth-App, siehe E-KAV-1).
 
 Verschlüsselung im Ruhezustand folgt der Zugangsdaten-Speicher-Konvention
 (`zugangsdaten.md` E-ZD-2: Klartext mit `0600`-Rechten, Verschlüsselung
@@ -226,11 +237,19 @@ oder „abbrechen". Token wandern nie in Logs oder Klartext-Echo
 ### KAV-8 — Bestätigung im Privatchat
 Nach erfolgreicher Speicherung (KAV-7) postet die Funktion eine hart-codierte
 Bestätigungs-Nachricht im Privatchat, die den verbundenen Google-Account
-benennt (E-Mail-Adresse aus `google.calendar.account_email`). So sieht der
-Aufrufer, welches Konto verbunden wurde — ein häufiger Stolperstein, wenn
-mehrere Google-Konten im Browser angemeldet sind. Das Refresh-Token selbst
-wird **niemals** gespiegelt (`zugangsdaten.md` ZD-6 / `eltern-chat-onboarding.md`
+benennt (E-Mail-Adresse aus `kav-account-email`). So sieht der Aufrufer,
+welches Konto verbunden wurde — ein häufiger Stolperstein, wenn mehrere
+Google-Konten im Browser angemeldet sind. Das Refresh-Token selbst wird
+**niemals** gespiegelt (`zugangsdaten.md` ZD-6 / `eltern-chat-onboarding.md`
 ONB-8).
+
+Bei einem fehlschlagenden Token-Tausch (KAV-6/KAV-7) bleibt ein bereits
+gespeicherter `kav-account-email`-Eintrag aus einer früheren erfolgreichen
+Verbindung unverändert (KAV-9 idempotent, „letzter erfolgreicher Tausch
+gewinnt"); ein Re-Connect-Versuch wird nur bei Erfolg in der
+Bestätigungs-Nachricht sichtbar, nicht beim Fehler. Diese Schiefe ist
+dokumentiert, kein Verhaltens-Change in V1 nötig — sie liegt am Pfad
+„Schreiben erst bei Erfolg", den KAV-7 absichtlich wählt.
 
 *Tickets:* #57
 
@@ -239,7 +258,8 @@ ONB-8).
 ### KAV-9 — Idempotenz: „letzter Verbindungsversuch gewinnt"
 Eine bestehende Verbindung wird beim erneuten erfolgreichen Aufruf der
 Funktion überschrieben — der zuletzt erfolgreich getauschte Refresh-Token
-ersetzt den vorherigen unter `google.calendar.refresh_token`. Spec-Anker:
+ersetzt den vorherigen unter `plan-google-oauth-refresh-token` (dem
+Konsum-Pfad von `plan/kalender.py` PLAN-16). Spec-Anker:
 `plan.md` PLAN-15 (genau **ein** Familien-Kalender je Instanz). Ein
 Re-Connect-Dialog („du hast schon einen Kalender verbunden, willst du den
 ersetzen?") ist **nicht** Teil von V1 — wer den Aufruf startet, wollte
@@ -290,15 +310,18 @@ durch kontrollierte Doppelungen ersetzt. Mindest-Abdeckung:
   liefert „abgebrochen"; ein Prozess-Neustart während der Session beendet
   sie ohne Token-Schreibung.
 - **KAV-7** — erfolgreicher Token-Tausch schreibt die vier Schlüssel aus
-  KAV-7 (`refresh_token`, `access_token`, `access_token_expires_at`,
-  `account_email`) über die ZD-5-Schreib-Schnittstelle; ein simulierter
-  Google-Fehler (HTTP 400 `invalid_grant`) schreibt **nichts**, der
-  bestehende Speicher-Inhalt bleibt byte-gleich; Token tauchen in keinem
-  Test-Log auf (ZD-6).
-- **KAV-8** — Bestätigungs-Nachricht enthält die `account_email`, niemals
-  den Refresh-Token.
+  KAV-7 (`plan-google-oauth-refresh-token`, `kav-access-token`,
+  `kav-access-token-expires-at`, `kav-account-email`) über die
+  ZD-5-Schreib-Schnittstelle; der `plan-google-oauth-refresh-token`-Wert
+  hat die von `plan/kalender.py` erwartete Form (`{"refresh_token": "..."}`,
+  PLAN-16); ein simulierter Google-Fehler (HTTP 400 `invalid_grant`)
+  schreibt **nichts**, der bestehende Speicher-Inhalt bleibt byte-gleich;
+  Token tauchen in keinem Test-Log auf (ZD-6).
+- **KAV-8** — Bestätigungs-Nachricht enthält die `kav-account-email`,
+  niemals den Refresh-Token; bei fehlschlagendem Token-Tausch bleibt eine
+  zuvor gesetzte `kav-account-email` byte-gleich (KAV-9-Idempotenz).
 - **KAV-9** — ein zweiter erfolgreicher Aufruf überschreibt den
-  Refresh-Token unter `google.calendar.refresh_token`; ein
+  Refresh-Token unter `plan-google-oauth-refresh-token`; ein
   fehlgeschlagener Aufruf (KAV-7-Fehler) lässt den vorherigen Token
   unverändert.
 
@@ -366,14 +389,17 @@ erprobt. Die Code-Basis hier wird **neu** in `eltern-chat/` geschrieben
 (Folge-PR zur Implementierung von KAV) — kein Copy aus dem
 BuddyBoard-Archiv, sondern Übernahme des Konzepts.
 
-**Familie-3-Probe.** Unverändert bestanden: jede Familie hat ihre eigene
-OAuth-Client-Konfiguration im Zugangsdaten-Speicher (oder eine geteilte
-Desktop-App-Konfiguration, deren `client_id`/`client_secret` pro Familie
-deponiert werden — die Wahl gehört in den OAuth-Client-Einrichtungs-Schritt
-hinter PLAN-16 / ZD-2, nicht in diese Spec). Kein zentraler Dienst, kein
-Tunnel, kein neuer Onboarding-Schritt jenseits dessen, was KAV-3..KAV-8
-schon beschreibt. Per-Familie-Architektur (`eltern-chat.md` E-EC-1) bleibt
-zu 100 % gewahrt.
+**Familie-3-Probe.** Unverändert bestanden — die OAuth-App-Wahl gehört in
+E-KAV-4 (gemeinsame XBuddy-OAuth-App), nicht in diese Entscheidung. Kern hier:
+kein zentraler Dienst, kein Tunnel, kein neuer Onboarding-Schritt jenseits
+dessen, was KAV-3..KAV-8 schon beschreibt. Familie 3 braucht keinen zusätzlichen
+App-Registrierungs-Schritt bei Google (Begründung und Verteil-Pfad in E-KAV-4);
+KAV-3..KAV-8 bleibt damit die vollständige Liste der Eltern-Schritte.
+Per-Familie-Architektur (`eltern-chat.md` E-EC-1) bleibt zu 100 % gewahrt: die
+gemeinsame OAuth-App ändert nichts am Daten-Pfad (keine geteilten
+Refresh-Tokens, kein zentraler Service, der Codes sieht — nur die
+`client_id`/`client_secret` sind geteilt, und das sind keine
+Familien-Geheimnisse).
 
 **Verworfen:**
 - **(b) Zentraler XBuddy-Forwarder/Code-Tunnel** mit einer öffentlich
@@ -400,18 +426,18 @@ ist durch den Loopback-Trick (KAV-5) gegeben — kein Halt mehr.
 ### E-KAV-2 — Session-Muster wiederverwendet, generischer Refactor erst beim dritten Vorkommen
 *Datum:* 2026-05-25
 
-Die Funktion verwendet das `FaaSession`-Muster aus
-`eltern-chat/familie_anlegen_task.py` (Worker-Thread + Queue +
-`next_message`-Callable) für den Privatchat-Dialog (KAV-6). Die
-WriteTask-Catalog-Registrierung folgt
-`eltern-chat/tasks.py:build_catalog` analog `FamilieAnlegenTask`.
+Die Funktion verwendet das Privatchat-Session-Muster aus
+`familie-anlegen.md` FAA-9 (Session-Zustand im Speicher, Worker + Queue +
+`next_message`-Callable als Konversations-Mechanik) für den Dialog in KAV-6.
+Die V1-Trigger-Aufhängung folgt der EC-8-Aufgabe-Linie (`familie-anlegen.md`
+FAA-12 / E-FAA-4 als Pattern-Vorbild) — Trigger-Heimat ist die Aufrufer-
+Schicht (`eltern-chat.md` EC-8), nicht diese Funktion.
 
-Mit „Kalender verbinden" taucht das Privatchat-Session-Muster im Code zum
-**zweiten** Mal auf — `FaaSession` (FAA) und eine künftige
-`KavSession` (KAV). CLAUDE.md §6 nennt den Trigger für Externalisierung
-genau so: **„dieselbe Logik zweimal"**. Ein Refactor `FaaSession` → generische
-`PrivateChatSession` in `tasks.py` ist deshalb **das logische Folge-Ticket**,
-**aber nicht Teil dieses PRs**:
+Mit „Kalender verbinden" taucht das Privatchat-Session-Muster zum
+**zweiten** Mal als Spec auf — FAA und KAV. CLAUDE.md §6 nennt den Trigger
+für Externalisierung genau so: **„dieselbe Logik zweimal"**. Ein Refactor
+des Session-Musters in einen gemeinsamen Plattform-Baustein ist deshalb
+**das logische Folge-Ticket**, **aber nicht Teil dieses PRs**:
 
 - Ein Refactor jetzt würde diesen PR von einer reinen V1-Funktion zu einem
   Plattform-Pattern-Refactor aufpumpen (Kleine PRs, CLAUDE.md §6).
@@ -426,19 +452,38 @@ genau so: **„dieselbe Logik zweimal"**. Ein Refactor `FaaSession` → generisc
 Vorrat" greift zwar nicht (Pattern existiert ja), aber „kleine PRs" und
 „Refactor als eigenes Ticket bei nicht-trivialer Größe" greifen.
 
-Folge-Ticket-Trigger: erstes Vorkommen einer dritten `*Session`-Klasse in
-`eltern-chat/`. Hinweis-Stelle: Implementierungs-PR von KAV soll im Code mit
-einem Querverweis-Kommentar an `FaaSession` heften, damit der Trigger sichtbar
-bleibt.
+Folge-Ticket-Trigger: drittes Vorkommen einer Privatchat-Session-Spec
+(neben FAA und KAV). Hinweis-Stelle: der Implementierungs-PR von KAV soll
+im Code einen Querverweis-Kommentar an die heutige FAA-Session-Klasse
+heften, damit der Trigger sichtbar bleibt.
+
+**Heutige Code-Realisierung** (Stand 2026-05-26, nicht load-bearing für die
+Spec): das FAA-Session-Muster lebt aktuell in `eltern-chat/familie_anlegen_task.py`,
+die Aufgaben-Registrierung in `eltern-chat/tasks.py`. Klassennamen können
+sich beim oben genannten Refactor (drittes Vorkommen) ändern — die Spec
+verlinkt dann weiter über die Spec-Anker (FAA-9, FAA-12), nicht über
+Datei-/Klassen-Namen.
 
 ### E-KAV-3 — OAuth-App-Status erbt von `plan.md` E-PLAN-7
 *Datum:* 2026-05-25
 
 Diese Spec macht **keine eigene** Aussage zum Verifizierungs-Status der
 OAuth-App — sie verweist auf `plan.md` E-PLAN-7 als autoritative Stelle: die
-XBuddy-OAuth-App läuft als **„In production, unverified"** (Verifizierung
-nicht abgeschlossen). Eine parallele Status-Aussage in dieser Spec wäre
-zweite Wahrheit (CLAUDE.md §6).
+XBuddy-OAuth-App läuft auf **Status „Production"** (E-PLAN-7 normiert das).
+Eine parallele Status-Aussage in dieser Spec wäre zweite Wahrheit
+(CLAUDE.md §6).
+
+**Präzisierung „unverified":** „Production" und „verifiziert" sind in der
+Google-Cloud-Console **zwei getrennte Eigenschaften**. Der Verifizierungs-
+Status der XBuddy-Cloud-Console-App ist heute (Stand 2026-05-26)
+**nicht-verifiziert** — Google zeigt deshalb beim ersten Consent jedes
+neuen Accounts den Warnscreen „Diese App ist nicht bestätigt". Der
+Warnscreen-Hinweis (KAV-3/KAV-4 Aufklärungstext) gehört in **diese** Spec,
+weil er user-facing ist und mit dem heutigen Status zusammenhängt — er ist
+**nicht** Teil von E-PLAN-7. Wenn die App später verifiziert wird (eigenes
+Pre-Public-Launch-Ticket, OPEN-KAV-A-naher Trigger), wird der
+Warnscreen-Hinweis in KAV-3/KAV-4 gestrichen, **nicht** E-KAV-3 oder
+E-PLAN-7.
 
 Konsequenzen, die sich aus E-PLAN-7 für diese Spec **ableiten**:
 
@@ -455,6 +500,67 @@ Konsequenzen, die sich aus E-PLAN-7 für diese Spec **ableiten**:
 zu fixieren. Wer E-PLAN-7 ändert, muss alle Folge-Aussagen mitziehen — das
 geht nur, wenn es genau eine Stelle gibt, die den Status hält (CLAUDE.md §6,
 Specs als SSoT).
+
+### E-KAV-4 — Gemeinsame XBuddy-OAuth-App für alle Familien-Instanzen
+*Datum:* 2026-05-26
+
+XBuddy nutzt **eine gemeinsame OAuth-Client-Registrierung** bei Google
+(eine `client_id`/`client_secret`-Paarung) für alle Familien-Instanzen —
+nicht eine eigene Registrierung je Familie.
+
+**Begründung.** Per-Familie-Registrierung bei Google wäre ein massiver
+zusätzlicher Onboarding-Schritt für jede Familie: in der Google-Cloud-Console
+ein eigenes Projekt anlegen, OAuth-Consent-Screen ausfüllen, Scopes setzen,
+Redirect-URIs hinterlegen, Verifizierungs-Warnungen erklären — und das alles
+*bevor* die eigentliche Verbinden-Konversation in KAV-3..KAV-8 überhaupt
+startet. Das verträgt sich nicht mit der „schlankesten" Onboarding-Linie der
+Constitution. Eine gemeinsame App nimmt diesen Schritt aus dem Familien-Pfad
+heraus — die Familie sieht nur den XBuddy-Bot und den Google-Consent-Screen,
+nicht die Cloud-Console.
+
+**Verteilung der `client_id`/`client_secret`.** Beide liegen in der
+Per-Instanz-Zugangsdaten-Datei (ZD-2) auf jeder Familien-Instanz — denselben
+Wert auf allen Instanzen. Wie der Wert auf eine neue Instanz kommt, ist
+**nicht V1-Scope** dieser Spec:
+
+- V1 (heute, 10 Test-Familien): manuell beim initialen Anlegen der Instanz —
+  derselbe Schritt, mit dem auch andere Per-Instanz-Konfiguration eingerichtet
+  wird (`eltern-chat.md` EC-15 / EC-16).
+- Folge-Ticket (sobald belegter Schmerz): zentraler Verteil-Mechanismus für
+  Plattform-Geheimnisse, die auf jeder Instanz identisch sind — gehört in ein
+  eigenes Plattform-Spec-Ticket, nicht in diese Funktion.
+
+Per-Familie-Architektur (`eltern-chat.md` E-EC-1) bleibt gewahrt: die
+`client_id`/`client_secret` sind **kein** Familien-Geheimnis. Sie
+identifizieren die XBuddy-App gegenüber Google, nicht die Familie. Refresh-
+Token, Access-Token und `kav-account-email` sind Familien-Geheimnisse — die
+liegen weiterhin nur auf der Per-Instanz-Datei.
+
+**OAuth-App-Status.** Diese Spec verlinkt E-PLAN-7 als autoritative Stelle
+(siehe E-KAV-3): Status „Production", nicht-verifiziert, kein
+7-Tage-Refresh-Token-Ablauf, jeder Google-Account kann verbinden,
+**100-User-Lifetime-Cap** als bekannter Schwellenwert (OPEN-KAV-A).
+
+**Familie-3-Probe.** Familie 3 braucht keinen zusätzlichen
+App-Registrierungs-Schritt bei Google. Sie erhält die gemeinsame
+`client_id`/`client_secret` als Teil ihrer Familien-Einrichtung (über die
+Familien-Anlage hinaus kein zusätzlicher Onboarding-Schritt im Sinne von
+„weitere Eltern-Aktion"). KAV-3..KAV-8 ist damit die vollständige Liste der
+Eltern-Schritte beim Verbinden.
+
+**Verworfen:**
+
+- **Per-Familie-OAuth-App.** Bricht die schlanke Onboarding-Linie der
+  Constitution (jede Familie müsste in der Google-Cloud-Console arbeiten —
+  ein technischer Schritt, der die Zielgruppe „Eltern, nicht Admins"
+  überfordert). Auch betrieblich teuer: 100-User-Cap wäre auf 100 Eltern pro
+  *Familie* gehoben statt 100 *insgesamt* — kein echter Gewinn bei
+  V1-Größenordnung 10 Familien.
+- **Zentraler XBuddy-OAuth-Hub-Service**, der das `client_secret` zentral
+  hält und im Namen aller Familien Token tauscht. Bricht E-KAV-1 (kein
+  zentraler Dienst, kein Tunnel) und `eltern-chat.md` E-EC-1 (Per-Familie,
+  Privacy by construction) — denn der Hub würde Codes verschiedener
+  Familien sehen.
 
 ---
 
