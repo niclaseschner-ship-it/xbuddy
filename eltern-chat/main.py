@@ -100,7 +100,7 @@ def handle_update(update, ctx):
     if ctx.faa_sessions is not None and msg.chat_type == "private":
         session = ctx.faa_sessions.get(msg.chat_id)
         if session is not None and not session.is_finished():
-            from familie_anlegen_task import make_faa_input
+            from skills.familie_anlegen_task import make_faa_input
             session.deliver(make_faa_input(msg))
             return
 
@@ -109,7 +109,7 @@ def handle_update(update, ctx):
     if ctx.gaa_sessions is not None and msg.chat_type == "private":
         session = ctx.gaa_sessions.get(msg.chat_id)
         if session is not None and not session.is_finished():
-            from geraet_anlegen_task import make_gaa_input
+            from skills.geraet_anlegen_task import make_gaa_input
             session.deliver(make_gaa_input(msg))
             return
 
@@ -119,7 +119,7 @@ def handle_update(update, ctx):
     if ctx.kav_sessions is not None and msg.chat_type == "private":
         session = ctx.kav_sessions.get(msg.chat_id)
         if session is not None and not session.is_finished():
-            from kalender_verbinden_task import make_kav_input
+            from skills.kalender_verbinden_task import make_kav_input
             session.deliver(make_kav_input(msg))
             return
 
@@ -419,7 +419,7 @@ def build_context(cfg, db_path, store_path):
     # GAA-6: CAV-Hook — bindet die CA-Verteilung an den Privatchat des
     # Aufrufers. GAA bleibt CAV-agnostisch (E-GAA-5), die Orchestrierung
     # verdrahtet die beiden Funktionen.
-    import ca_verteilung as _cav
+    import skills.ca_verteilung as _cav
 
     def _cav_hook(_os_wert, private_chat_id, _user_id):
         _cav.verteile_ca(tg, private_chat_id, cfg.ca_pem_path)

@@ -17,9 +17,9 @@ import pytest
 
 # Familien-Registry wird vom Modul direkt importiert; um plan/familie an den
 # Importpfad zu bringen, reicht das was eltern-chat/familie_anlegen.py tut.
-import familie_anlegen as fa
+from skills import familie_anlegen as fa
 from familie import registry as registry_mod
-from familie_anlegen import (CANCELLED, DONE_MULTI, DONE_SINGLE, FaaInput,
+from skills.familie_anlegen import (CANCELLED, DONE_MULTI, DONE_SINGLE, FaaInput,
                               NOT_AUTHORIZED, REJECT_FOTO_GROSS,
                               REJECT_FOTO_MIME, REJECT_KIND, REJECT_NAME,
                               REJECT_RING, REJECT_TELEGRAM_DUP, WRITE_FAILED,

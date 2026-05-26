@@ -11,12 +11,12 @@ import json
 import threading
 import time
 
-import familie_anlegen
-import familie_anlegen_task
+from skills import familie_anlegen
+from skills import familie_anlegen_task
 from confirm import PendingProposal, PendingStore
 from fakes import FakeProvider, FakeTelegram, make_message
-from familie_anlegen import FaaInput
-from familie_anlegen_task import (FamilieAnlegenTask, FaaSession,
+from skills.familie_anlegen import FaaInput
+from skills.familie_anlegen_task import (FamilieAnlegenTask, FaaSession,
                                   make_faa_input)
 from history import History
 from main import Context, handle_update
