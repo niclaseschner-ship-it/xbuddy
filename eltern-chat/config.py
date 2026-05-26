@@ -40,6 +40,12 @@ DEFAULTS = {
     # sein, damit das ausgeteilte Stück direkt aufs Tablet getippt werden
     # kann.
     "display_url_origin": "",
+    # KAV-X: Pfad zur Per-Instanz-`plan/plan.json` (PLAN-28). Nach
+    # erfolgreicher Kalender-Auswahl schreibt die »Kalender verbinden«-Skill
+    # die gewählte `kalender_id` atomar hier hinein (V1-Provisorium gegen die
+    # FS-Linie, sauber gelöst in Folge-Ticket #140). Default zeigt auf das
+    # Pi-Layout (plan/plan.json neben dem Eltern-Chat-Repo).
+    "plan_json_path": "../plan/plan.json",
 }
 
 # Umgebungsvariablen-Namen.
@@ -54,6 +60,7 @@ ENV_OVERRIDES = {
     "family_registry_path": "ELTERNCHAT_FAMILY_REGISTRY_PATH",
     "geraete_registry_path": "ELTERNCHAT_GERAETE_REGISTRY_PATH",
     "display_url_origin":    "ELTERNCHAT_DISPLAY_URL_ORIGIN",
+    "plan_json_path":        "ELTERNCHAT_PLAN_JSON_PATH",
 }
 
 
@@ -73,7 +80,7 @@ class Config:
     def __init__(self, bot_token, provider_api_key, provider, provider_model,
                  family_group_chat_id, family_group_locked, context_depth,
                  ca_pem_path, family_registry_path, geraete_registry_path,
-                 display_url_origin):
+                 display_url_origin, plan_json_path):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
         self.provider = provider
@@ -85,6 +92,7 @@ class Config:
         self.family_registry_path = family_registry_path   # FAA-12: Pfad zur Familien-Registry (FAM-6)
         self.geraete_registry_path = geraete_registry_path # GAA-5: Pfad zur Geräte-Registry (GER-4)
         self.display_url_origin = display_url_origin       # GAA-3.7: HTTPS-Origin für Display-URLs
+        self.plan_json_path = plan_json_path     # KAV-X: Pfad zur Per-Instanz-`plan/plan.json`
 
 
 def _load_file(path):
@@ -159,4 +167,5 @@ def resolve(config_path, store_path=None, env=None):
         family_registry_path=str(values["family_registry_path"]).strip(),
         geraete_registry_path=str(values["geraete_registry_path"]).strip(),
         display_url_origin=str(values["display_url_origin"]).strip().rstrip("/"),
+        plan_json_path=str(values["plan_json_path"]).strip(),
     )

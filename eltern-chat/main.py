@@ -434,7 +434,8 @@ def build_context(cfg, db_path, store_path):
         cav_call_hook=_cav_hook,
         display_url_origin=cfg.display_url_origin,
         zd_store_getter=lambda: zd_store,
-        kav_sessions=kav_sessions)
+        kav_sessions=kav_sessions,
+        plan_json_path=cfg.plan_json_path)
 
     if cfg.provider_api_key:
         # KI-Modus — Anbieter steht; die Familien-Gruppe muss gesetzt sein (EC-2).

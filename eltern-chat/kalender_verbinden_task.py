@@ -106,7 +106,7 @@ class KalenderVerbindenTask(WriteTask):
     """
 
     def __init__(self, tg, zd_store_getter, sessions,
-                 family_group_chat_id_getter):
+                 family_group_chat_id_getter, plan_json_path=None):
         super().__init__(
             name="kalender_verbinden",
             description=(
@@ -120,6 +120,10 @@ class KalenderVerbindenTask(WriteTask):
         self._zd_store_getter = zd_store_getter
         self._sessions = sessions   # dict chat_id -> KavSession (in-memory)
         self._family_group_chat_id_getter = family_group_chat_id_getter
+        # KAV-X: Per-Instanz-Pfad zur `plan/plan.json`. Wird vom Bootstrap
+        # heineingegeben (`build_catalog`); `None` heißt: V1-Auswahl-Schritt
+        # übersprungen (Legacy/Test).
+        self._plan_json_path = plan_json_path
 
     def propose(self, arguments, turn_context):
         """EC-10-Vorschlag — der Aufrufer bestätigt, bevor die Konversation
@@ -149,12 +153,14 @@ class KalenderVerbindenTask(WriteTask):
         tg = self._tg
         sessions = self._sessions
         zd_store = self._zd_store_getter()
+        plan_json_path = self._plan_json_path
 
         def run_kav():
             try:
                 result = kalender_verbinden.kalender_verbinden(
                     tg, private_chat_id, user_id, family_group_chat_id,
-                    zd_store, session.next_message)
+                    zd_store, session.next_message,
+                    plan_json_path=plan_json_path)
                 logging.info(
                     "KAV-Session in Chat %s beendet — ergebnis=%s",
                     private_chat_id, result.ergebnis)

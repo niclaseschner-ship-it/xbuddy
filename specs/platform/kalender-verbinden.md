@@ -17,10 +17,19 @@ Teil ihres Vertrags.
 Eltern-Chat-Bot · Aufklärung über den „Unbestätigte App"-Warnscreen vor dem
 Login-Link · Refresh-Token in den zentralen Zugangsdaten-Speicher
 (`zugangsdaten.md` ZD-5) unter dem von PLAN-16 erwarteten Schlüssel-Namen
-(`plan-google-oauth-refresh-token`, KAV-7) · die Konversation läuft im
-Privatchat des Aufrufers (analog `eltern-chat-onboarding.md` ONB-3,
-`familie-anlegen.md` FAA-12) · OAuth-Scope `calendar.events` (Lesen +
-Schreiben, deckt PLAN-17 und PLAN-18 ab).
+(`plan-google-oauth-refresh-token`, KAV-7) · **die Skill holt nach erfolgreichem
+Token-Tausch die Liste der Kalender des Accounts vom Google-`calendarList`-
+Endpunkt ab, der User wählt einen aus, die Skill schreibt die gewählte
+`kalender_id` in `plan/plan.json` (KAV-X)** · **Restart-Hinweis an den User:
+Plan-Buddy übernimmt die neue `kalender_id` erst nach `sudo systemctl restart
+xbuddy-plan` — automatischer Reload kommt mit #140 (KAV-Y, OPEN-KAV-X)** · die
+Konversation läuft im Privatchat des Aufrufers (analog
+`eltern-chat-onboarding.md` ONB-3, `familie-anlegen.md` FAA-12) · OAuth-Scopes
+`calendar.events` (Lesen + Schreiben, deckt PLAN-17 und PLAN-18 ab) **plus
+`calendar.readonly`**, weil `calendar.events` allein keine
+`calendarList`-Abfrage erlaubt (Google antwortet HTTP 403, verifiziert auf
+Pi 2026-05-26) und die Kalender-Auswahl (KAV-X) ohne `calendarList` nicht
+möglich wäre.
 
 **Out-of-Scope V1** (je eigenes Ticket, sobald gebraucht):
 
@@ -49,10 +58,15 @@ Schnittstelle (`zugangsdaten.md` ZD-5). **Wirkung:** nach erfolgreichem
 Durchlauf liegt im Zugangsdaten-Speicher ein gültiges Google-OAuth-Refresh-
 Token unter dem PLAN-16-Schlüssel (KAV-7), aus dem Plan-Buddy bei Bedarf
 Access-Token nachzieht. **Ausgang:** ein Ergebnis-Signal an den Aufrufer:
-„verbunden" (mit der Google-Account-E-Mail, soweit aus dem Token ableitbar) ·
-„abgebrochen" (Aufrufer hat aufgegeben oder Timeout) · „abgelehnt"
-(Berechtigung fehlt, KAV-2). Die Funktion kennt ihren Aufrufer nicht (E-KAV-1,
-analog `familie-anlegen.md` E-FAA-1).
+„verbunden" (Tokens **und** `kalender_id` sind geschrieben, mit der
+Google-Account-E-Mail, soweit aus dem Token ableitbar) · „verbunden_ohne_kalender"
+(Tokens sind gespeichert, aber die Kalender-Auswahl KAV-X ist gescheitert oder
+abgebrochen — Plan-Buddy hat eine gültige Token-Paarung, aber `plan.json`
+`kalender_id` ist nicht aktualisiert; der User kann einen Re-Connect anstoßen
+und sich für KAV-X neu entscheiden) · „abgebrochen" (Aufrufer hat aufgegeben
+oder Timeout *vor* dem Token-Tausch) · „abgelehnt" (Berechtigung fehlt, KAV-2).
+Die Funktion kennt ihren Aufrufer nicht (E-KAV-1, analog `familie-anlegen.md`
+E-FAA-1).
 
 *Tickets:* #57
 
@@ -130,10 +144,16 @@ Parametern:
   weiterhin sanktionierte **Loopback-Redirect** für Desktop-/Installed-App-
   OAuth-Clients.
 - **`response_type=code`**.
-- **`scope=https://www.googleapis.com/auth/calendar.events`** (deckt PLAN-17
-  Lesen und PLAN-18 Schreiben mit einer einzigen Consent-Erteilung ab; ein
-  späterer Scope-Wechsel würde Re-Consent durch alle Familien erfordern und
-  ist daher zu vermeiden).
+- **`scope=https://www.googleapis.com/auth/calendar.events
+  https://www.googleapis.com/auth/calendar.readonly`** (space-separiert, beide
+  Scopes). `calendar.events` deckt PLAN-17 Lesen und PLAN-18 Schreiben in
+  *einem* Kalender ab; `calendar.readonly` ist zusätzlich nötig, weil die
+  Skill nach dem Token-Tausch die Liste der Kalender des Accounts abrufen
+  muss (`calendarList.list`, KAV-X) — `calendar.events` allein liefert dort
+  HTTP 403 (verifiziert auf Pi 2026-05-26). Ein späterer Scope-Wechsel würde
+  Re-Consent durch alle bereits verbundenen Familien erfordern und ist daher
+  zu vermeiden; die `readonly`-Ergänzung ist bewusst V1-Bestandteil, nicht
+  Folge-Erweiterung.
 - **`access_type=offline`** + **`prompt=consent`**, damit Google ein
   Refresh-Token ausstellt. Ohne `prompt=consent` liefert Google bei einem
   Account, der der App schon einmal zugestimmt hat, nur ein Access-Token —
@@ -243,7 +263,67 @@ hart-codierte Fehlermeldung mit der Wahl „erneut versuchen" (zurück zu KAV-4)
 oder „abbrechen". Token wandern nie in Logs oder Klartext-Echo
 (`zugangsdaten.md` ZD-6).
 
-*Tickets:* #57
+**Zusätzlich** schreibt die Funktion nach erfolgreicher Kalender-Auswahl
+(KAV-X) die gewählte `kalender_id` in `plan/plan.json` (PLAN-28-Datei,
+PLAN-15-Anker, Schlüssel `kalender_id` im JSON-Objekt-Root). Das ist ein
+**bewusstes V1-Provisorium** (Cross-Service-FS-Write, gegen die Memory-Linie
+„API statt direkter FS-Zugriff"): die saubere Lösung ist eine Plan-Admin-
+API, an der Plan-Buddy seine Konfiguration per HTTP entgegennimmt; sie ist
+als Folge-Ticket **#140** geschnitten. V1 schreibt deshalb direkt in die
+Per-Instanz-Datei `plan/plan.json` — gitignored, atomar (Temp-Datei +
+`os.replace` analog `familie/registry.py::save`), nur der `kalender_id`-
+Schlüssel wird modifiziert, alle anderen Werte (`slots`,
+`default_verantwortlichkeiten`, …) bleiben byte-gleich.
+
+*Tickets:* #57, #139
+
+### KAV-X — Kalender-Auswahl nach Token-Erfolg
+Nach erfolgreichem Token-Tausch (KAV-7) ruft die Funktion **mit dem frisch
+gewonnenen Access-Token** den Google-`calendarList`-Endpunkt auf
+(`GET https://www.googleapis.com/calendar/v3/users/me/calendarList`,
+`Authorization: Bearer <access_token>`). Aus der Antwort werden die für
+Plan-Buddy nutzbaren Kalender herausgefiltert: alle mit `accessRole` ∈
+{`owner`, `writer`} (Plan-Buddy braucht Schreibrecht — PLAN-18) plus jeder
+Kalender mit `primary=true` (auch read-only, der Primary-Kalender ist der
+übliche Default-Fall). Reader-only Kalender ohne `primary`-Flag werden in V1
+**nicht angezeigt**, weil Plan-Buddy in sie nicht schreiben könnte und das
+für den User eine stille Falle wäre; eine spätere Auflockerung (anzeigen
+mit Markierung, oder eigenes Read-Only-Modell) gehört in ein Folge-Ticket.
+
+Die Liste wird im Privatchat als **nummerierte Auswahl** gepostet: pro
+Kalender Name (`summary`), Rolle (`accessRole`) und ggf. der Hinweis
+„Primary"; der User antwortet mit der gewünschten Nummer (1..N). Die
+Eingabe wird als Ganzzahl im Bereich 1..N geparst; bei ungültiger Eingabe
+(keine Zahl, außerhalb des Bereichs, leere Nachricht) schickt die Funktion
+eine freundliche Erinnerung und wartet weiter — gleiches Privatchat-Session-
+Muster wie KAV-6 mit demselben **30-Minuten-Timeout** (analog FAA-9).
+
+Bei gültiger Auswahl schreibt die Funktion die `id` des gewählten Kalenders
+in `plan/plan.json` unter dem Schlüssel `kalender_id` (PLAN-15-load-bearing
+Wahrheit für Plan-Buddy beim nächsten Start). Schlägt der Schreibvorgang
+fehl (Datei nicht vorhanden, nicht parsebar, Schreibrecht fehlt), liefert
+die Funktion das Ergebnis-Signal „verbunden_ohne_kalender" (KAV-1) — die
+Tokens sind dann zwar gespeichert (KAV-7 ist nicht rückgängig zu machen),
+aber `plan.json` ist nicht aktualisiert; der User bekommt einen klaren
+Hinweis, dass er den Verbinden-Aufruf wiederholen muss.
+
+Schlägt die `calendarList`-Abfrage selbst fehl (HTTP-Fehler, leere Liste
+ohne writable Kalender, Netz tot), gilt dasselbe: Tokens bleiben
+gespeichert, Ergebnis „verbunden_ohne_kalender", User-Hinweis im Privatchat.
+
+*Tickets:* #139
+
+### KAV-Y — Restart-Hinweis an den User
+Nach erfolgreichem Schreiben der `kalender_id` in `plan/plan.json` (KAV-X)
+postet die Funktion im Privatchat eine hart-codierte Hinweis-Nachricht:
+Plan-Buddy liest die Konfiguration nur beim Start (`plan/main.py`), ein
+automatischer Reload existiert in V1 noch nicht — der Aufrufer muss
+**einmal `sudo systemctl restart xbuddy-plan` ausführen**, damit der neue
+Kalender wirksam wird. Der Hinweis nennt das Folge-Ticket **#140** (Skill-
+Service-Reload-Pattern), damit klar ist, dass der manuelle Schritt ein
+bewusstes V1-Provisorium ist.
+
+*Tickets:* #139
 
 ### KAV-8 — Bestätigung im Privatchat
 Nach erfolgreicher Speicherung (KAV-7) postet die Funktion eine hart-codierte
@@ -306,7 +386,8 @@ durch kontrollierte Doppelungen ersetzt. Mindest-Abdeckung:
 - **KAV-4** — vor dem OAuth-Link wird der Aufklärungstext gepostet
   (sequentielle Reihenfolge der Nachrichten); der Text benennt den
   „Unbestätigte App"-Warnscreen mit *Erweitert → Weiter*.
-- **KAV-5** — der gepostete Link enthält Scope `calendar.events`,
+- **KAV-5** — der gepostete Link enthält Scope `calendar.events` **plus
+  `calendar.readonly`** (beide space-separiert, KAV-X-load-bearing),
   `access_type=offline`, `prompt=consent`, `response_type=code`,
   `redirect_uri=http://localhost:1`, eine OAuth-Client-ID aus dem
   Zugangsdaten-Speicher und einen `state`-Parameter, der pro Aufruf
@@ -335,8 +416,19 @@ durch kontrollierte Doppelungen ersetzt. Mindest-Abdeckung:
   Refresh-Token unter `plan-google-oauth-refresh-token`; ein
   fehlgeschlagener Aufruf (KAV-7-Fehler) lässt den vorherigen Token
   unverändert.
+- **KAV-X** — die Funktion ruft nach Token-Erfolg `calendarList.list` ab,
+  filtert auf schreibbare Kalender (`accessRole` ∈ {`owner`, `writer`}
+  plus `primary`-Markierte) und postet eine nummerierte Liste; gültige
+  Nummern-Eingabe wählt den Kalender und löst den `plan.json`-Schreibvorgang
+  aus; ungültige Eingabe (keine Zahl, außerhalb 1..N) löst eine höfliche
+  Erinnerung aus, die Session wartet weiter; ein erfolgreicher Schreibvorgang
+  ändert nur den `kalender_id`-Schlüssel in `plan/plan.json` und lässt alle
+  anderen Felder byte-gleich; ein Fehler im Schreibvorgang oder in der
+  `calendarList`-Abfrage liefert das Ergebnis-Signal „verbunden_ohne_kalender".
+- **KAV-Y** — die finale Erfolgs-Nachricht (KAV-8) enthält den
+  Restart-Hinweis (`sudo systemctl restart xbuddy-plan`).
 
-*Tickets:* #57
+*Tickets:* #57, #139
 
 ---
 
@@ -350,6 +442,16 @@ durch kontrollierte Doppelungen ersetzt. Mindest-Abdeckung:
   Familien ist das kein Druck, vor dem Public-Launch ist ein Verifizierungs-
   Antrag bei Google nötig (App Review, kann Wochen dauern). Eigenes
   Pre-Public-Launch-Ticket, **nicht V1-Scope**.
+
+- **OPEN-KAV-X — Automatischer Plan-Buddy-Reload nach `kalender_id`-Update.**
+  V1 dieser Spec schreibt die `kalender_id` direkt in `plan/plan.json` (KAV-X)
+  und postet einen manuellen Restart-Hinweis (KAV-Y). Plan-Buddy liest seine
+  Konfiguration nur beim Start; ein automatischer Reload existiert noch
+  nicht. Die saubere Lösung — eine Plan-Admin-API, an der Plan-Buddy seine
+  `kalender_id` per HTTP entgegennimmt + ein generisches Skill-Service-
+  Reload-Pattern, das den manuellen `systemctl restart` ersetzt — gehört in
+  **Folge-Ticket #140**. Bis dahin bleibt der manuelle Restart-Schritt ein
+  bewusstes V1-Provisorium.
 
 - **OPEN-KAV-B — Token-Rotation und Self-Healing.** Entzieht ein Elternteil
   bei Google den Zugriff der XBuddy-App (`myaccount.google.com` → Apps mit

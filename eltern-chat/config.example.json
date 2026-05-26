@@ -7,5 +7,7 @@
   "_ca_pem_path": "CAV-3 — Pfad zum oeffentlichen Root-CA-Zertifikat (rootCA.pem), das die CA-Verteilung ausliefert. Niemals der CA-Privatschluessel. Default unten ist die Standard-Ausgabe von tools/ca/make-ca.sh (#36).",
   "ca_pem_path": "../tools/ca/out/rootCA.pem",
   "_display_url_origin": "GAA-3.7 — HTTPS-Origin der xBuddy-Auslieferung (z. B. https://xbuddy-hub.local:8443). Leer lassen, wenn der Bot nur den Pfad zurueckgeben soll (Tests/CI). Fuer Familien-Tablet-Anlage gesetzt sein, damit die zurueckgelieferte Display-URL direkt geoeffnet werden kann.",
-  "display_url_origin": ""
+  "display_url_origin": "",
+  "_plan_json_path": "KAV-X — Pfad zur Per-Instanz-plan/plan.json. Die »Kalender verbinden«-Skill schreibt nach erfolgreicher Kalender-Auswahl die gewaehlte kalender_id atomar hier hinein. V1-Provisorium gegen die FS-Linie, sauber geloest in Folge-Ticket #140. Default passt zum Pi-Setup (plan/plan.json neben dem Eltern-Chat-Repo).",
+  "plan_json_path": "../plan/plan.json"
 }
