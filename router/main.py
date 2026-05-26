@@ -7,7 +7,7 @@ entgegen, mappt Phone-Events 1:1 auf das kanonische Trigger-Modell
 State pro Display in-memory (ROU-10).
 """
 
-from flask import Flask, request, jsonify, send_from_directory, abort
+from flask import Flask, request, jsonify, send_from_directory, abort, redirect
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 import argparse
@@ -636,8 +636,12 @@ def render_app_panel_index(panel_id):
 
 @app.route('/controller/app-panel/<panel_id>', methods=['GET'])
 def app_panel_index_no_slash(panel_id):
-    return render_app_panel_index(panel_id), 200, {
-        'Content-Type': 'text/html; charset=utf-8'}
+    # Relative Asset-Pfade in index.html (./app.js, ./manifest.json, …) brauchen
+    # einen Trailing-Slash, sonst resolvt der Browser ./ auf den Parent und
+    # holt /controller/app-panel/app.js (HTML-Fallback) statt
+    # /controller/app-panel/<id>/app.js. 301 → /<id>/ ist HTTP-Standard
+    # für Directory-vs-File-Disambiguation. Refs #128.
+    return redirect('/controller/app-panel/' + panel_id + '/', code=301)
 
 
 @app.route('/controller/app-panel/<panel_id>/', methods=['GET'])

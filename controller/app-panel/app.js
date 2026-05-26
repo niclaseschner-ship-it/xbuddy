@@ -453,11 +453,12 @@
   // ============================================================
 
   function sendEvent(routerUrl, body) {
-    if (!routerUrl) {
-      console.log('[event]', body);
-      return;
-    }
-    var url = routerUrl.replace(/\/+$/, '') + '/api/v1/events';
+    // Leerer router_url → same-origin (Browser nimmt die Origin der Seite).
+    // Funktioniert für jeden Host (hub.local, IP, beliebiger DNS-Name) und
+    // verhindert CORS-Blocks, wenn die Seite unter einem anderen Host
+    // geladen wird als der hartkodierte Router-URL. Refs #128.
+    var base = routerUrl ? routerUrl.replace(/\/+$/, '') : '';
+    var url = base + '/api/v1/events';
     panelLib.postWithRetry({
       fetchImpl: function (u, init) { return fetch(u, init); },
       setTimeoutImpl: function (fn, ms) { setTimeout(fn, ms); },
