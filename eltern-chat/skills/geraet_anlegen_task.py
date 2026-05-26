@@ -67,6 +67,13 @@ class GeraetAnlegenTask(WriteTask):
     danach autonom im Privatchat.
     """
 
+    # Refs #159: `execute()` startet nur den Worker-Thread und kehrt sofort
+    # mit der Quittung zurueck — die eigentliche Schreib-Operation passiert
+    # erst spaeter im Worker. Das Framework skipt die inline-Hook-Iteration
+    # (GAA deklariert heute keine Hooks; das Flag haelt das Verhalten
+    # konsistent mit FAA/KAV).
+    is_async = True
+
     def __init__(self, tg, registry_path, sessions,
                  family_group_chat_id_getter, cav_call_hook=None,
                  display_url_origin=None):

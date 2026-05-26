@@ -70,6 +70,13 @@ class FamilieAnlegenTask(WriteTask):
     danach autonom im Privatchat.
     """
 
+    # Refs #159: `execute()` startet nur den Worker-Thread und kehrt sofort
+    # mit der Quittung zurueck — die eigentliche Schreib-Operation passiert
+    # erst spaeter im Worker. Das Framework skipt die inline-Hook-Iteration
+    # (FAA deklariert heute keine Hooks; das Flag haelt das Verhalten
+    # konsistent mit GAA/KAV).
+    is_async = True
+
     def __init__(self, tg, registry_path, sessions, family_group_chat_id_getter):
         super().__init__(
             name="familie_anlegen",

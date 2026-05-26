@@ -196,6 +196,35 @@ def test_EC_21_execute_exception_propagates_no_hooks_run():
     assert hook_calls == []
 
 
+def test_159_async_writetask_skips_inline_hook_iteration():
+    """Refs #159: Markiert sich eine WriteTask als ``is_async=True``, kehrt
+    ``execute()`` mit einer Privatchat-Kurzquittung zurueck — der eigentliche
+    Schreib-Vorgang laeuft erst im Worker-Thread. Das Framework darf in dem
+    Fall die Hooks NICHT inline iterieren (sie wuerden den Konsumenten
+    reloaden, bevor das echte Schreiben durch ist — Live-Beleg 2026-05-26).
+    Die Hooks sind dann Selbstaufgabe des Workers (siehe
+    ``PrivateChatSession.start(post_execute_hooks=...)``)."""
+    catalog = Catalog()
+    task = FakeWriteTask(name="async_task", result="Worker gestartet")
+    task.is_async = True
+    hook_calls = []
+
+    def tracking_hook(context):
+        hook_calls.append(context)
+        return HookSuccess()
+
+    tracking_hook.consumer = "Plan-Buddy"
+    task.post_execute_hooks = (tracking_hook,)
+    catalog.register(task)
+    outcome = catalog.execute_write_task(task, {}, turn_context=None)
+    assert outcome.reply == "Worker gestartet"
+    # Async-Pfad: Hook wird NICHT inline gerufen (Worker kuemmert sich).
+    assert hook_calls == []
+    # Keine Inline-Warnung — die kommt ggf. direkt vom Worker via on_warning.
+    assert outcome.warning == ""
+    assert outcome.hook_failures == ()
+
+
 def test_EC_21_hook_context_carries_task_name_and_turn_context():
     """Der `HookContext` reicht task_name und turn_context an den Hook —
     das macht den Hook stateless (kein `self`, der Kontext kommt

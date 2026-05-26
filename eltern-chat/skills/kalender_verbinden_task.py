@@ -23,7 +23,7 @@ private_chat_session.py) hat den dritten Trigger eingelöst.
 
 import logging
 
-from hooks import ReloadHook
+from hooks import HookContext, ReloadHook
 from private_chat_session import PrivateChatSession
 from skills import kalender_verbinden
 from tasks import Proposal, WriteTask, is_from_private_chat
@@ -104,6 +104,16 @@ class KalenderVerbindenTask(WriteTask):
     post_execute_hooks = (
         ReloadHook(url=_PLAN_BUDDY_RELOAD_URL, consumer="Plan-Buddy"),)
 
+    # Refs #159: execute() startet nur den Worker-Thread und kehrt sofort
+    # mit der Kurzquittung zurueck — die eigentliche Schreib-Operation
+    # (OAuth-Code, Kalender-Auswahl, Token-Speicherung) laeuft erst Minuten
+    # spaeter im Worker. Hooks duerfen deshalb NICHT inline nach execute()
+    # feuern (sie wuerden den Plan-Buddy reloaden, bevor das Token im
+    # Zugangsdaten-Speicher liegt — Live-Beleg 2026-05-26). Das Framework
+    # skipt die inline-Iteration; die Hooks feuern am Worker-Thread-Ende
+    # (siehe `PrivateChatSession.start(post_execute_hooks=...)`).
+    is_async = True
+
     def __init__(self, tg, zd_store_getter, sessions,
                  family_group_chat_id_getter, plan_json_path=None):
         super().__init__(
@@ -166,7 +176,20 @@ class KalenderVerbindenTask(WriteTask):
             finally:
                 sessions.pop(private_chat_id, None)
 
-        session.start(run_kav, ())
+        # Refs #159: Hooks feuern am Worker-Ende, nicht inline nach execute().
+        # `hook_context.task_name` ist der Eintrag im EC-21-Logging; eine
+        # etwaige Familien-Warnung geht direkt aus dem Worker als
+        # Privatchat-Nachricht ueber `on_warning`. Wir greifen auf
+        # `type(self).post_execute_hooks` zu (Klassenattribut), damit Tests,
+        # die die Hook-Liste auf der Instanz patchen, weiterhin greifen —
+        # aber `self.post_execute_hooks` reicht (Python normalisiert).
+        session.start(
+            run_kav, (),
+            post_execute_hooks=self.post_execute_hooks,
+            hook_context=HookContext(
+                task_name=self.name, turn_context=turn_context),
+            on_warning=lambda message: tg.send_message(
+                private_chat_id, message))
         # Refs #157: Wechsel-Quittung NUR, wenn der Aufrufer noch nicht im
         # Privatchat ist. Sonst direkt mit der ersten Frage einleiten —
         # die kommt asynchron aus dem Session-Thread (KAV-4) im selben Chat.

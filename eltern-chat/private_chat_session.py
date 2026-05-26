@@ -25,6 +25,8 @@ import logging
 import queue
 import threading
 
+from hooks import HookContext, HookFailure, summarize_failures
+
 
 # Wie lang der Worker auf eine eingehende Privatchat-Nachricht wartet, bevor
 # er die Session als abgebrochen behandelt. 30 Minuten passt zu einer
@@ -86,22 +88,42 @@ class PrivateChatSession:
         self._timeout_seconds = timeout_seconds
         self._result = None
 
-    def start(self, target, args=()):
+    def start(self, target, args=(), post_execute_hooks=(),
+              hook_context=None, on_warning=None):
         """Startet den Worker-Thread, der ``target(*args)`` ausführt.
 
         Exceptions im Skill-Code werden isoliert geloggt — ``logging.exception``
         nimmt den Crash, der ``LOG_PREFIX``-Subklassen-Hook benennt den Skill,
         und die Session wird als finished markiert, damit die main-Loop sie
         aus ihrem Sessions-Dict räumen kann.
-        """
+
+        Async-WriteTask-Hooks (Refs #159): wer ``post_execute_hooks`` mitgibt,
+        bekommt sie NACH erfolgreichem Worker-Ende abgearbeitet — analog zum
+        sync-Pfad in ``Catalog.execute_write_task``. ``hook_context`` ist der
+        :class:`HookContext` (typisch ``HookContext(task_name=..., turn_context=
+        ...)``); ``on_warning`` ist eine Callable ``(message: str) -> None``,
+        mit der die Session eine zusammengefasste Familien-Warnung in den
+        Privatchat geben kann (gleicher Inhalt wie in ``WriteTaskResult.warning``
+        beim sync-Pfad).
+
+        Hook-Aufrufe sind isoliert: Exceptions in einem Hook werden als
+        :class:`HookFailure` verpackt, weitere Hooks laufen trotzdem. Wirft der
+        Worker selbst, laufen KEINE Hooks (es gibt keinen erfolgreichen
+        Zustand, der nachgezogen werden müsste — symmetrisch zu EC-21 im
+        sync-Pfad)."""
         def run():
+            worker_ok = False
             try:
                 target(*args)
+                worker_ok = True
             except Exception:  # noqa: BLE001 — Session-Fehler isoliert melden
                 logging.exception(
                     "%s-Session in Chat %s abgebrochen",
                     self.LOG_PREFIX, self.chat_id)
             finally:
+                if worker_ok and post_execute_hooks:
+                    self._run_post_execute_hooks(
+                        post_execute_hooks, hook_context, on_warning)
                 self._finished.set()
 
         self._thread = threading.Thread(
@@ -109,6 +131,40 @@ class PrivateChatSession:
             name="%s-session-%s" % (self.THREAD_NAME_PREFIX, self.chat_id),
             daemon=True)
         self._thread.start()
+
+    def _run_post_execute_hooks(self, hooks, context, on_warning):
+        """Iteriert die Hooks am Worker-Ende und fasst Failures zu EINER
+        Warnung zusammen (analog ``Catalog.execute_write_task`` im sync-Pfad).
+
+        Eigene Methode, damit der ``start()``-Trampolin-Code lesbar bleibt;
+        die Logik ist absichtlich struktur-gleich zur sync-Variante in
+        ``tasks.Catalog.execute_write_task``."""
+        task_name = getattr(context, "task_name", "?")
+        failures = []
+        for hook in hooks:
+            try:
+                result = hook(context)
+            except Exception as e:   # noqa: BLE001 — Hook-Fehler isoliert melden
+                failures.append(HookFailure(
+                    consumer=getattr(hook, "consumer", task_name),
+                    error="unerwarteter Fehler (%s)" % e))
+                continue
+            if isinstance(result, HookFailure):
+                failures.append(result)
+        if failures:
+            warning = summarize_failures(failures)
+            if callable(on_warning) and warning:
+                try:
+                    on_warning(warning)
+                except Exception:   # noqa: BLE001 — Warnung-Versand isoliert
+                    logging.exception(
+                        "%s-Session in Chat %s: Versand der Hook-Warnung "
+                        "fehlgeschlagen", self.LOG_PREFIX, self.chat_id)
+            logging.info(
+                "Hook ausgefuehrt fuer %s — warnung gesendet (%d failure(s))",
+                task_name, len(failures))
+        else:
+            logging.info("Hook ausgefuehrt fuer %s — ok", task_name)
 
     def deliver(self, value):
         """Reicht eine Privatchat-Nachricht an den Worker durch."""
