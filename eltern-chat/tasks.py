@@ -128,7 +128,8 @@ def build_catalog(tg, ca_pem_path, family_registry_path=None,
                   faa_sessions=None, family_group_chat_id_getter=None,
                   geraete_registry_path=None, gaa_sessions=None,
                   cav_call_hook=None, display_url_origin=None,
-                  zd_store_getter=None, kav_sessions=None):
+                  zd_store_getter=None, kav_sessions=None,
+                  plan_json_path=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
@@ -170,5 +171,6 @@ def build_catalog(tg, ca_pem_path, family_registry_path=None,
         from kalender_verbinden_task import KalenderVerbindenTask
         catalog.register(KalenderVerbindenTask(
             tg, zd_store_getter, kav_sessions,
-            family_group_chat_id_getter))
+            family_group_chat_id_getter,
+            plan_json_path=plan_json_path))
     return catalog
