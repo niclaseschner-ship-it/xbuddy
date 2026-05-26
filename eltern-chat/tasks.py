@@ -15,6 +15,7 @@ Bestätigung selbst liegt außerhalb dieses Moduls und außerhalb des Agent-Loop
 
 from dataclasses import dataclass
 
+from hooks import HookContext, HookFailure, summarize_failures
 from model import READ, WRITE, TaskDef
 
 
@@ -38,6 +39,31 @@ class TurnContext:
     chat_id: object
     from_user_id: object = None
     private_chat_id: object = None
+
+
+@dataclass
+class WriteTaskResult:
+    """Ergebnis einer ueber das Framework ausgefuehrten Schreib-Aufgabe
+    (EC-21, #140).
+
+    `reply` ist die Quittung der Aufgabe (das, was `execute()` zurueckgegeben
+    hat). `warning` ist eine optionale Familien-Warnung, die das Framework
+    aus den fehlgeschlagenen Hooks zusammensetzt — leer, wenn alle Hooks
+    durchgelaufen sind oder gar keine deklariert waren.
+
+    Aufrufer bauen aus beiden Feldern die Antwort an die Familie: typisch
+    `reply + "\\n\\n" + warning` (siehe `combined_text`). Die Trennung gibt
+    main.py Spielraum, die Warnung anders zu formatieren, falls noetig.
+    """
+    reply: str
+    warning: str = ""
+    hook_failures: tuple = ()
+
+    def combined_text(self):
+        """Antwort + Warnung als ein Stueck Text — was an die Familie geht."""
+        if not self.warning:
+            return self.reply
+        return "%s\n\n%s" % (self.reply, self.warning)
 
 
 @dataclass
@@ -83,9 +109,19 @@ class ReadTask(Task):
 
 
 class WriteTask(Task):
-    """Eine schreibende Aufgabe (EC-10): verändert Familien-Daten."""
+    """Eine schreibende Aufgabe (EC-10): verändert Familien-Daten.
+
+    Eine Unterklasse darf `post_execute_hooks` setzen (EC-21, #140) — eine
+    Liste zustandsloser Hooks, die nach erfolgreichem `execute()` laufen
+    und typisch einen konsumierenden Buddy auffordern, seinen In-Memory-
+    Cache neu zu laden. Default ist leer: ohne explizite Deklaration
+    aendert sich am Verhalten nichts."""
 
     kind = WRITE
+
+    # Klassenattribut — Unterklassen ueberschreiben es mit ihrer eigenen
+    # Hook-Liste. Wird vom Framework gelesen, nicht von der Aufgabe selbst.
+    post_execute_hooks = ()
 
     def propose(self, arguments, turn_context):
         """Legt einen `Proposal` vor — führt NICHTS aus."""
@@ -122,6 +158,45 @@ class Catalog:
     def task_defs(self):
         """Anbieter-neutrale Definitionen aller registrierten Aufgaben."""
         return [t.to_def() for t in self._tasks.values()]
+
+    def execute_write_task(self, task, arguments, turn_context):
+        """Fuehrt eine schreibende Aufgabe inkl. Post-Execute-Hooks aus
+        (EC-21, #140).
+
+        Lifecycle:
+        1. `task.execute(arguments, turn_context)` — die eigentliche Aufgabe.
+           Wirft sie eine Exception, propagiert die nach aussen (das
+           Framework rollt nicht zurueck — der Aufrufer entscheidet, ob
+           er das als Aufgaben-Fehlschlag meldet).
+        2. Nach erfolgreichem `execute()`: ueber `task.post_execute_hooks`
+           iterieren, jeden synchron aufrufen, Ergebnisse sammeln.
+        3. Hook-Fehler **rollen die Schreib-Aufgabe nicht zurueck** (EC-21):
+           die Aenderung ist durch. Mehrere fehlgeschlagene Hooks landen
+           in EINER zusammengefassten Warnung an die Familie.
+
+        Hook-Aufrufe sind isoliert: wirft ein Hook (gegen die Konvention!)
+        doch eine Exception, faengt das Framework sie als HookFailure ab —
+        sonst koennten weitere Hooks oder die Quittung verloren gehen.
+        """
+        reply = task.execute(arguments, turn_context)
+        hooks = getattr(task, "post_execute_hooks", ()) or ()
+        if not hooks:
+            return WriteTaskResult(reply=reply)
+        context = HookContext(task_name=task.name, turn_context=turn_context)
+        failures = []
+        for hook in hooks:
+            try:
+                result = hook(context)
+            except Exception as e:   # noqa: BLE001 — siehe EC-21-Notiz oben
+                failures.append(HookFailure(
+                    consumer=getattr(hook, "consumer", task.name),
+                    error="unerwarteter Fehler (%s)" % e))
+                continue
+            if isinstance(result, HookFailure):
+                failures.append(result)
+        warning = summarize_failures(failures)
+        return WriteTaskResult(reply=reply, warning=warning,
+                               hook_failures=tuple(failures))
 
 
 def build_catalog(tg, ca_pem_path, family_registry_path=None,
