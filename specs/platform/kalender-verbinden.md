@@ -20,9 +20,11 @@ Login-Link · Refresh-Token in den zentralen Zugangsdaten-Speicher
 (`plan-google-oauth-refresh-token`, KAV-7) · **die Skill holt nach erfolgreichem
 Token-Tausch die Liste der Kalender des Accounts vom Google-`calendarList`-
 Endpunkt ab, der User wählt einen aus, die Skill schreibt die gewählte
-`kalender_id` in `plan/plan.json` (KAV-X)** · **Restart-Hinweis an den User:
-Plan-Buddy übernimmt die neue `kalender_id` erst nach `sudo systemctl restart
-xbuddy-plan` — automatischer Reload kommt mit #140 (KAV-Y, OPEN-KAV-X)** · die
+`kalender_id` in `plan/plan.json` (KAV-X)** · **Plan-Buddy übernimmt die neue
+`kalender_id` automatisch — das Skill-Framework triggert nach erfolgreichem
+`execute()` einen `ReloadHook` gegen den Plan-Buddy (EC-21, #140); die
+Erfolgs-Quittung an die Familie ist deshalb frei von manuellen Restart-
+Hinweisen (KAV-Y, Refs #154)** · die
 Konversation läuft im Privatchat des Aufrufers (analog
 `eltern-chat-onboarding.md` ONB-3, `familie-anlegen.md` FAA-12) · OAuth-Scopes
 `calendar.events` (Lesen + Schreiben, deckt PLAN-17 und PLAN-18 ab) **plus
@@ -293,10 +295,14 @@ mit Markierung, oder eigenes Read-Only-Modell) gehört in ein Folge-Ticket.
 Die Liste wird im Privatchat als **nummerierte Auswahl** gepostet: pro
 Kalender Name (`summary`), Rolle (`accessRole`) und ggf. der Hinweis
 „Primary"; der User antwortet mit der gewünschten Nummer (1..N). Die
-Eingabe wird als Ganzzahl im Bereich 1..N geparst; bei ungültiger Eingabe
-(keine Zahl, außerhalb des Bereichs, leere Nachricht) schickt die Funktion
-eine freundliche Erinnerung und wartet weiter — gleiches Privatchat-Session-
-Muster wie KAV-6 mit demselben **30-Minuten-Timeout** (analog FAA-9).
+Eingabe wird als Ganzzahl im Bereich 1..N geparst — der Parser extrahiert
+die **erste Ziffernfolge aus der Antwort**, damit übliche User-Sprache wie
+»1. bitte«, »die 3«, »nimm 2«, »2)« akzeptiert wird (Refs #155). Wortzahlen
+(»eins«, »zwei«) bleiben in V1 außen vor. Bei ungültiger Eingabe (keine
+Zahl in der Antwort, extrahierte Zahl außerhalb 1..N, leere Nachricht)
+schickt die Funktion eine freundliche Erinnerung und wartet weiter —
+gleiches Privatchat-Session-Muster wie KAV-6 mit demselben **30-Minuten-
+Timeout** (analog FAA-9).
 
 Bei gültiger Auswahl schreibt die Funktion die `id` des gewählten Kalenders
 in `plan/plan.json` unter dem Schlüssel `kalender_id` (PLAN-15-load-bearing
@@ -313,17 +319,19 @@ gespeichert, Ergebnis „verbunden_ohne_kalender", User-Hinweis im Privatchat.
 
 *Tickets:* #139
 
-### KAV-Y — Restart-Hinweis an den User
+### KAV-Y — Automatische Übernahme durch Plan-Buddy
 Nach erfolgreichem Schreiben der `kalender_id` in `plan/plan.json` (KAV-X)
-postet die Funktion im Privatchat eine hart-codierte Hinweis-Nachricht:
-Plan-Buddy liest die Konfiguration nur beim Start (`plan/main.py`), ein
-automatischer Reload existiert in V1 noch nicht — der Aufrufer muss
-**einmal `sudo systemctl restart xbuddy-plan` ausführen**, damit der neue
-Kalender wirksam wird. Der Hinweis nennt das Folge-Ticket **#140** (Skill-
-Service-Reload-Pattern), damit klar ist, dass der manuelle Schritt ein
-bewusstes V1-Provisorium ist.
+soll die neue Kalender-Auswahl **ohne manuellen Eingriff** beim Plan-Buddy
+wirksam werden. Der `kalender_verbinden_task` deklariert dazu einen
+`ReloadHook` gegen den Plan-Buddy-Admin-Reload-Endpoint (EC-21, #140); das
+Skill-Framework triggert ihn nach erfolgreichem `execute()`. Schlägt der
+Hook fehl, hängt EC-21 eine zusammengefasste Warnung an die Erfolgs-
+Quittung — die Familie sieht dann, dass etwas mit der automatischen
+Übernahme nicht stimmt. Die hart-codierte Erfolgs-Nachricht der Funktion
+selbst enthält **keinen** manuellen Restart-Hinweis mehr (Refs #154,
+Live-Test 2026-05-26 hat das veraltete Wording aufgedeckt).
 
-*Tickets:* #139
+*Tickets:* #139, #140, #154
 
 ### KAV-8 — Bestätigung im Privatchat
 Nach erfolgreicher Speicherung (KAV-7) postet die Funktion eine hart-codierte
@@ -420,13 +428,17 @@ durch kontrollierte Doppelungen ersetzt. Mindest-Abdeckung:
   filtert auf schreibbare Kalender (`accessRole` ∈ {`owner`, `writer`}
   plus `primary`-Markierte) und postet eine nummerierte Liste; gültige
   Nummern-Eingabe wählt den Kalender und löst den `plan.json`-Schreibvorgang
-  aus; ungültige Eingabe (keine Zahl, außerhalb 1..N) löst eine höfliche
-  Erinnerung aus, die Session wartet weiter; ein erfolgreicher Schreibvorgang
-  ändert nur den `kalender_id`-Schlüssel in `plan/plan.json` und lässt alle
-  anderen Felder byte-gleich; ein Fehler im Schreibvorgang oder in der
-  `calendarList`-Abfrage liefert das Ergebnis-Signal „verbunden_ohne_kalender".
-- **KAV-Y** — die finale Erfolgs-Nachricht (KAV-8) enthält den
-  Restart-Hinweis (`sudo systemctl restart xbuddy-plan`).
+  aus; der Parser akzeptiert die übliche User-Sprache (»1. bitte«, »die 3«,
+  »2)«, »nimm 2« — Refs #155), wirft Antworten ohne Ziffer oder mit
+  out-of-range-Ziffer mit einer höflichen Erinnerung zurück und wartet weiter;
+  ein erfolgreicher Schreibvorgang ändert nur den `kalender_id`-Schlüssel in
+  `plan/plan.json` und lässt alle anderen Felder byte-gleich; ein Fehler im
+  Schreibvorgang oder in der `calendarList`-Abfrage liefert das Ergebnis-
+  Signal „verbunden_ohne_kalender".
+- **KAV-Y** — die finale Erfolgs-Nachricht (KAV-8) enthält KEINEN
+  manuellen `sudo systemctl restart`-Hinweis und keinen Folge-Ticket-
+  Verweis mehr (Refs #154); die Übernahme durch Plan-Buddy läuft als
+  `post_execute_hook` automatisch (EC-21, #140).
 
 *Tickets:* #57, #139
 
@@ -444,14 +456,13 @@ durch kontrollierte Doppelungen ersetzt. Mindest-Abdeckung:
   Pre-Public-Launch-Ticket, **nicht V1-Scope**.
 
 - **OPEN-KAV-X — Automatischer Plan-Buddy-Reload nach `kalender_id`-Update.**
-  V1 dieser Spec schreibt die `kalender_id` direkt in `plan/plan.json` (KAV-X)
-  und postet einen manuellen Restart-Hinweis (KAV-Y). Plan-Buddy liest seine
-  Konfiguration nur beim Start; ein automatischer Reload existiert noch
-  nicht. Die saubere Lösung — eine Plan-Admin-API, an der Plan-Buddy seine
-  `kalender_id` per HTTP entgegennimmt + ein generisches Skill-Service-
-  Reload-Pattern, das den manuellen `systemctl restart` ersetzt — gehört in
-  **Folge-Ticket #140**. Bis dahin bleibt der manuelle Restart-Schritt ein
-  bewusstes V1-Provisorium.
+  *(Geschlossen mit #140, gemergt 2026-05-26.)* Das Skill-Framework führt
+  jetzt einen `post_execute_hook` aus, der gegen den Plan-Buddy-Admin-
+  Reload-Endpoint geht (EC-21). KAV-Y wurde entsprechend umformuliert
+  (Erfolgs-Quittung ohne manuellen Restart-Hinweis, Refs #154). Das
+  V1-Provisorium ist beendet — V2-Schritt wäre, die direkte
+  `plan.json`-Schreib-Stelle in KAV-X durch eine echte Plan-Admin-API zu
+  ersetzen (eigener offener Punkt, sobald gebraucht).
 
 - **OPEN-KAV-B — Token-Rotation und Self-Healing.** Entzieht ein Elternteil
   bei Google den Zugriff der XBuddy-App (`myaccount.google.com` → Apps mit

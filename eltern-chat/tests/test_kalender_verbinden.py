@@ -30,7 +30,7 @@ from skills.kalender_verbinden import (
     ERGEBNIS_ABGELEHNT, ERGEBNIS_VERBUNDEN, ERGEBNIS_VERBUNDEN_OHNE_KALENDER,
     KALENDER_AUSWAHL_PROMPT, KALENDER_AUSWAHL_REMINDER, KALENDER_LIST_EMPTY,
     KALENDER_LIST_FETCH_FAILED, KavInput, NOT_AUTHORIZED, OAUTH_CLIENT_MISSING,
-    PLAN_JSON_WRITE_FAILED, PlanJsonWriteError, RESTART_HINT,
+    PLAN_JSON_WRITE_FAILED, PlanJsonWriteError,
     TOKEN_EXCHANGE_FAILED, TokenExchangeError, ZD_NAME_ACCESS_TOKEN,
     ZD_NAME_ACCESS_TOKEN_EXPIRES_AT, ZD_NAME_ACCOUNT_EMAIL,
     ZD_NAME_OAUTH_CLIENT, ZD_NAME_OAUTH_TOKEN, build_auth_url,
@@ -844,16 +844,30 @@ def test_KAV_X_parse_selection_accepts_valid_numbers():
     assert parse_selection("3", 3) == 2
 
 
+def test_KAV_X_parse_selection_accepts_robust_variants():
+    """KAV-X / Refs #155: der Parser akzeptiert die übliche User-Sprache —
+    extrahiert die erste Ziffer aus der Antwort und prüft den Range. Damit
+    werden Antworten wie »1. bitte«, »die 3«, »2)«, »nimm 2« nicht mehr
+    abgewiesen, wie im Live-Test heute geschehen."""
+    assert parse_selection("1. bitte", 3) == 0
+    assert parse_selection("die 3", 3) == 2
+    assert parse_selection("2)", 3) == 1
+    assert parse_selection("3.", 3) == 2
+    assert parse_selection("nimm 2", 3) == 1
+
+
 def test_KAV_X_parse_selection_rejects_invalid_input():
-    """KAV-X: ungültige Eingabe (Buchstaben, außerhalb des Bereichs, leer)
-    liefert `None`."""
+    """KAV-X: ungültige Eingabe (Buchstaben ohne Zahl, außerhalb des
+    Bereichs, leer) liefert `None`. Wortzahlen wie »eins« bleiben in V1
+    außen vor (Folge-Ticket, falls relevant)."""
     assert parse_selection("0", 3) is None
     assert parse_selection("4", 3) is None
+    assert parse_selection("5", 3) is None  # out of range bei 3 Optionen
     assert parse_selection("bla", 3) is None
     assert parse_selection("", 3) is None
     assert parse_selection(None, 3) is None
-    assert parse_selection("1.5", 3) is None
-    assert parse_selection("eins", 3) is None
+    assert parse_selection("acht", 3) is None  # Wortzahl → kein Match
+    assert parse_selection("eins", 3) is None  # Wortzahl → kein Match
 
 
 def test_KAV_X_format_calendar_list_numbers_each_entry():
@@ -1065,14 +1079,18 @@ def test_KAV_X_timeout_during_selection_returns_verbunden_ohne_kalender():
 
 
 # ============================================================
-#  KAV-Y — Restart-Hinweis in der Erfolgs-Nachricht
+#  KAV-Y — Erfolgs-Quittung ohne manuellen Restart-Hinweis
+#  (Refs #154 — #140 ist gemergt, der Plan-Buddy-Reload läuft als
+#  post_execute_hook im Skill-Framework; eine Warn-Nachricht für den
+#  Hook-Fehlerfall hängt EC-21 selbst an die Quittung.)
 # ============================================================
 
 
-def test_KAV_Y_restart_hint_in_bestaetigung():
-    """KAV-Y: die finale Erfolgs-Nachricht enthält den Restart-Hinweis
-    `sudo systemctl restart xbuddy-plan` plus den Verweis auf #140 als
-    klare Folge-Aktion für den User."""
+def test_KAV_Y_bestaetigung_frei_von_manuellem_restart_hint():
+    """KAV-Y / Refs #154: die finale Erfolgs-Nachricht enthält KEINEN Hinweis
+    mehr auf `sudo systemctl restart xbuddy-plan` und keinen Verweis auf
+    ein Folge-Ticket — der Reload läuft automatisch (post_execute_hook,
+    EC-21, #140)."""
     user_id = 7
     tg = FakeTelegram(members=_members(user_id))
     zd = _zd_with_client()
@@ -1085,16 +1103,21 @@ def test_KAV_Y_restart_hint_in_bestaetigung():
         fetch_calendars=fake_fetch_calendars(),
         write_plan_json=fake_write_plan_json())
     msgs = [s["text"] for s in tg.sent if s["chat_id"] == user_id]
-    # Restart-Hinweis und Ticket-Referenz sind in mindestens einer Nachricht.
-    assert any("sudo systemctl restart xbuddy-plan" in m for m in msgs)
-    assert any("#140" in m for m in msgs)
-    # Substring der RESTART_HINT-Konstante (das ist die load-bearing Stelle).
-    assert any("Letzter Schritt" in m for m in msgs)
+    # Erfolgs-Nachricht wurde gepostet (Kalender-Name + Account-E-Mail).
+    assert any("VPSJNN" in m or "Familie" in m or "Persönlich" in m
+               for m in msgs)
+    # KEIN manueller Restart-Hinweis, KEIN „Letzter Schritt"-Wortlaut,
+    # KEIN Folge-Ticket-Verweis (Refs #154).
+    assert not any("sudo systemctl restart" in m for m in msgs)
+    assert not any("Letzter Schritt" in m for m in msgs)
+    assert not any("Folge-Ticket" in m for m in msgs)
 
 
 def test_KAV_Y_no_restart_hint_when_calendar_selection_failed():
-    """KAV-Y: scheitert die Kalender-Auswahl, wird der Restart-Hinweis nicht
-    gepostet (Plan-Buddy hat ja keine neue `kalender_id` zum Lesen)."""
+    """KAV-Y: scheitert die Kalender-Auswahl, gibt es ebenfalls keinen
+    manuellen Restart-Hinweis — die normalen Fehler-Nachrichten (KAV-X)
+    decken den Fall ab, und der Reload-Hook läuft sowieso nur nach
+    erfolgreichem Schreiben."""
     user_id = 7
     tg = FakeTelegram(members=_members(user_id))
     zd = _zd_with_client()
@@ -1107,7 +1130,8 @@ def test_KAV_Y_no_restart_hint_when_calendar_selection_failed():
         fetch_calendars=fake_fetch_calendars_fail(),
         write_plan_json=fake_write_plan_json())
     msgs = [s["text"] for s in tg.sent if s["chat_id"] == user_id]
-    assert not any("sudo systemctl restart xbuddy-plan" in m for m in msgs)
+    assert not any("sudo systemctl restart" in m for m in msgs)
+    assert not any("Folge-Ticket" in m for m in msgs)
 
 
 # ============================================================
