@@ -131,10 +131,14 @@ Parametern:
   Refresh-Token ausstellt. Ohne `prompt=consent` liefert Google bei einem
   Account, der der App schon einmal zugestimmt hat, nur ein Access-Token —
   V1 braucht aber zwingend ein frisches Refresh-Token (KAV-7).
-- Ein einmaliger, kurzlebiger **`state`**-Parameter, der serverseitig dem
-  Tupel (Instanz × `from_user_id` × Privatchat-ID) zugeordnet ist (Replay-
-  und Verwechslungsschutz). TTL: 30 min, im Prozess-Speicher (analog
-  `familie-anlegen.md` FAA-9 (b)).
+- Ein einmaliger, kurzlebiger **`state`**-Parameter, der Login-Versuch und
+  Code-Rückkehr verklammert (Eindeutigkeits-Marker gegen Verwechslung
+  paralleler Sessions desselben Bots, z. B. zwei Eltern verbinden
+  gleichzeitig). Die Bindung an User und Privatchat trägt **implizit** die
+  Privatchat-Session-Mechanik (analog `familie-anlegen.md` FAA-12) —
+  Telegram routet die nächste Privatchat-Nachricht garantiert vom selben
+  User aus demselben Chat zurück; eine zusätzliche serverseitige
+  Tupel-Tabelle ist deshalb nicht nötig.
 
 **Voraussetzung an die Google-Cloud-Console-Konfiguration** (load-bearing für
 den Loopback-Redirect): der OAuth-Client ist als **Application Type „Desktop
