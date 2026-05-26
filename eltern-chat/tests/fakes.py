@@ -104,7 +104,8 @@ class FakeWriteTask(WriteTask):
 class FakeTelegram:
     """Kontrollierte Doppelung des Telegram-Kanals (EC-17)."""
 
-    def __init__(self, members=None, migrated=None, send_document_error=None):
+    def __init__(self, members=None, migrated=None, send_document_error=None,
+                 send_chat_action_error=None):
         # members: dict user_id -> Telegram-getChatMember-Antwort
         self._members = dict(members or {})
         # migrated: dict alte_chat_id -> neue_chat_id. get_chat_member gegen
@@ -112,8 +113,14 @@ class FakeTelegram:
         self._migrated = dict(migrated or {})
         # send_document_error: optionale TelegramError-Doppelung für CAV-Tests.
         self._send_document_error = send_document_error
+        # send_chat_action_error: optionale Exception, die ein Typing-Indikator-
+        # Aufruf wirft (Issue #93). Der echte TelegramClient.send_chat_action
+        # schluckt TelegramError — die Doppelung simuliert den rohen Fehler
+        # vor dem Schluck, damit der Schluck-Pfad in main.py geprüft werden kann.
+        self._send_chat_action_error = send_chat_action_error
         self.sent = []
         self.documents = []          # CAV-4: ausgelieferte Dokumente
+        self.chat_actions = []       # Issue #93: aufgezeichnete Typing-Aufrufe
         self._next_id = 5000
 
     def extract_message(self, update, bot_username):
@@ -142,6 +149,14 @@ class FakeTelegram:
                           "reply_to": reply_to_message_id,
                           "message_id": self._next_id})
         return {"message_id": self._next_id}
+
+    def send_chat_action(self, chat_id, action):
+        # Issue #93: Typing-Indikator. Aufrufe werden vor einem etwaigen Fehler
+        # aufgezeichnet — die Tests prüfen so auch, dass der Aufruf überhaupt
+        # erfolgt ist, bevor der Fehler greift.
+        self.chat_actions.append({"chat_id": chat_id, "action": action})
+        if self._send_chat_action_error is not None:
+            raise self._send_chat_action_error
 
     def send_document(self, chat_id, file_name, file_bytes, caption=None):
         # CAV-4: Auslieferung eines Telegram-Dokuments über den Bot-Kanal.
