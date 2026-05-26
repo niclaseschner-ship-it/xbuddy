@@ -179,20 +179,25 @@ def _run_agent(msg, ctx):
         private_chat_id=(msg.chat_id if msg.chat_type == "private"
                          else msg.from_user_id))
 
-    # Issue #93: Typing-Indikator vor dem Provider-Aufruf — bei mehreren
-    # Sekunden Provider-Latenz wirkt der Bot sonst eingefroren. Der Wrapper
-    # `TelegramClient.send_chat_action` schluckt Telegram-Fehler bereits
-    # (Komfort, kein Gate). Der zusätzliche try/except hier ist eine doppelte
-    # Sicherung — der Indikator darf den Turn unter keinen Umständen blockieren.
-    try:
-        ctx.tg.send_chat_action(msg.chat_id, "typing")
-    except TelegramError as e:
-        logging.warning("Typing-Indikator-Aufruf hat trotz Wrapper-Schluck "
-                        "geworfen: %s", e)
+    # Issue #93 / #156: Typing-Indikator vor JEDEM Provider-Aufruf — auch in
+    # Tool-Loops, in denen der Loop nach einem Tool-Ergebnis erneut den
+    # Anbieter ruft. Telegram löscht den Indikator nach rund 5 s, lange
+    # Provider-Calls hinterlassen sonst einen toten Indikator. Der Callback
+    # läuft pro Iteration; der Wrapper `TelegramClient.send_chat_action`
+    # schluckt Telegram-Fehler bereits (Komfort, kein Gate). Das zusätzliche
+    # try/except ist doppelte Sicherung — der Indikator darf den Turn unter
+    # keinen Umständen blockieren.
+    def _typing():
+        try:
+            ctx.tg.send_chat_action(msg.chat_id, "typing")
+        except TelegramError as e:
+            logging.warning("Typing-Indikator-Aufruf hat trotz Wrapper-Schluck "
+                            "geworfen: %s", e)
 
     try:
         result = agent.run_turn(history, user_message, ctx.provider,
-                                ctx.catalog, turn_context)
+                                ctx.catalog, turn_context,
+                                before_provider_call=_typing)
     except ProviderError:
         # EC-14: klarer Hinweis, sauberer Abbruch — keine halbfertige Aufgabe.
         _send(ctx, msg.chat_id, _PROVIDER_DOWN)
