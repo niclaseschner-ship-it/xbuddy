@@ -1,0 +1,12 @@
+{
+  "name": "XBuddy App-Panel",
+  "short_name": "App-Panel",
+  "description": "XBuddy-Controller: Kachel-Panel, das per Tap eine App-View aufs Display schickt.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0b0b10",
+  "theme_color": "#0b0b10",
+  "lang": "de"
+}

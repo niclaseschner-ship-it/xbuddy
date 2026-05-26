@@ -1,5 +1,5 @@
 {
-  "_comment": "ROU-18 — Beispiel-Routing-Tabelle. Kopiere als routing.json (per .gitignore aus dem Repo ausgeschlossen) und passe pro Instanz an. Jeder Eintrag ist eine Zelle des M:N-Lookups: Schlüssel (source_id, descriptor) → Wert (display_ids, payload).",
+  "_comment": "ROU-18 — Beispiel-Routing-Tabelle. Kopiere als routing.json (per .gitignore aus dem Repo ausgeschlossen) und passe pro Instanz an. Zwei Abschnitte: `entries` für descriptor-basiertes Matching (ROU-9), `panels` für den App-Panel-Adapter (ROU-24, Konvention-Routing — eine Zeile pro Panel-Instanz, Singular `display_id` nach E-PANEL-5).",
   "entries": [
     {
       "source_id":  "phone:test-1",
@@ -19,5 +19,8 @@
       "display_ids": ["default"],
       "payload":    { "url": "/display/plan/woche" }
     }
-  ]
+  ],
+  "panels": {
+    "app-panel:kueche": { "display_id": "display:wohnzimmer" }
+  }
 }

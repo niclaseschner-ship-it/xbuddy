@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="XBuddy App-Panel">
+<meta name="theme-color" content="#0b0b10">
+<title>XBuddy · App-Panel</title>
+<!-- PANEL-10 — installierbar als Vollbild-PWA -->
+<link rel="manifest" href="./manifest.json">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <!-- PANEL-2 — Panel-Identität liegt als data-panel-id am body und wird vom
+       Router beim Ausliefern in den HTML-Body geschrieben. Die Seite kennt
+       ihre Identität damit ohne weiteren Roundtrip. -->
+  <main id="app">
+    <div id="error" class="hidden" role="alert"></div>
+    <div id="grid"></div>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -25,6 +25,10 @@ desktop.ini
 # nicht im Repo. Format ist in config.example.json dokumentiert.
 controller/**/config.json
 
+# App-Panel-Kachel-Konfig (PANEL-3) — pro Panel-Instanz separat, nicht im Repo.
+# Format: controller/app-panel/tiles.example.json
+controller/app-panel/tiles.json
+
 # Router-Instanz-Konfig + Routing-Tabelle (ROU-18/19) — analog
 # pro Deployment, nicht im Repo. Format: router/*.example.json
 router/routing.json
