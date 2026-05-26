@@ -73,6 +73,7 @@ class Context:
     onboarding: object = None  # onboarding.OnboardingState — None ⇒ KI-Modus (ONB-1)
     faa_sessions: dict = None  # FAA-12: laufende »Familie anlegen«-Sessions (chat_id → FaaSession)
     gaa_sessions: dict = None  # GAA-5: laufende »Gerät anlegen«-Sessions (chat_id → GaaSession)
+    kav_sessions: dict = None  # KAV-3: laufende »Kalender verbinden«-Sessions (chat_id → KavSession)
 
 
 # ============================================================
@@ -102,6 +103,16 @@ def handle_update(update, ctx):
         if session is not None and not session.is_finished():
             from geraet_anlegen_task import make_gaa_input
             session.deliver(make_gaa_input(msg))
+            return
+
+    # KAV-3 / KAV-6: analog FAA-12 / GAA-5 für »Kalender verbinden«-Sessions
+    # — eine laufende KAV-Session beansprucht den Privatchat bis zum Ende
+    # (Aufklärungstext + Login-Link + Code-Empfang).
+    if ctx.kav_sessions is not None and msg.chat_type == "private":
+        session = ctx.kav_sessions.get(msg.chat_id)
+        if session is not None and not session.is_finished():
+            from kalender_verbinden_task import make_kav_input
+            session.deliver(make_kav_input(msg))
             return
 
     # EC-5: In einer Gruppe reagiert das System nur, wenn es ausdrücklich
@@ -370,6 +381,14 @@ def build_context(cfg, db_path, store_path):
     faa_sessions = {}
     # GAA-5: analog FAA, eigene Session-Map für die »Gerät anlegen«-Aufgabe.
     gaa_sessions = {}
+    # KAV-3: analog FAA/GAA, eigene Session-Map für »Kalender verbinden«.
+    kav_sessions = {}
+
+    # KAV-7: Zugangsdaten-Speicher als Per-Instanz-Datei (ZD-1/ZD-8). Lazy-
+    # importiert, damit Tests, die `build_context` nicht aufrufen, keine
+    # zugangsdaten-Abhängigkeit aufbauen müssen.
+    from zugangsdaten import Zugangsdaten, resolve_store_path
+    zd_store = Zugangsdaten(resolve_store_path())
 
     ctx = Context(
         tg=tg,
@@ -384,10 +403,11 @@ def build_context(cfg, db_path, store_path):
         family_group_locked=cfg.family_group_locked,
         faa_sessions=faa_sessions,
         gaa_sessions=gaa_sessions,
+        kav_sessions=kav_sessions,
     )
-    # FAA-12 / GAA-5: Familien-Gruppen-ID darf nach einer Migration (EC-18)
-    # wechseln — der Getter liest sie zur Laufzeit aus dem Context, statt sie
-    # einmal beim Bootstrap zu kopieren.
+    # FAA-12 / GAA-5 / KAV-3: Familien-Gruppen-ID darf nach einer Migration
+    # (EC-18) wechseln — der Getter liest sie zur Laufzeit aus dem Context,
+    # statt sie einmal beim Bootstrap zu kopieren.
     # GAA-6: CAV-Hook — bindet die CA-Verteilung an den Privatchat des
     # Aufrufers. GAA bleibt CAV-agnostisch (E-GAA-5), die Orchestrierung
     # verdrahtet die beiden Funktionen.
@@ -404,7 +424,9 @@ def build_context(cfg, db_path, store_path):
         geraete_registry_path=cfg.geraete_registry_path,
         gaa_sessions=gaa_sessions,
         cav_call_hook=_cav_hook,
-        display_url_origin=cfg.display_url_origin)
+        display_url_origin=cfg.display_url_origin,
+        zd_store_getter=lambda: zd_store,
+        kav_sessions=kav_sessions)
 
     if cfg.provider_api_key:
         # KI-Modus — Anbieter steht; die Familien-Gruppe muss gesetzt sein (EC-2).
