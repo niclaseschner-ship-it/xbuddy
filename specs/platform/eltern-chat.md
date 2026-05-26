@@ -171,6 +171,69 @@ Nachrichten eingehen.
 
 *Tickets:* #27
 
+### EC-20 — Mehrstufige Aufgaben überfluten die Familien-Gruppe nicht
+
+Eine schreibende Aufgabe, die mehrere Antworten der Familie braucht — Familie
+anlegen, Gerät anlegen, Kalender verbinden, künftig Controller einrichten —
+führt der Bot im **Privatchat** mit dem anfragenden Familienmitglied weiter.
+Die Familien-Gruppe sieht nur den Anstoß und das Ergebnis — nicht
+Foto-Uploads, Eingaben, Zwischennachfragen. Der Bot behält den Gesprächsfaden
+dieses Privatchats, auch wenn dazwischen andere Anfragen aus der Gruppe
+kommen. Antwortet die Familie 30 Minuten lang nicht, beendet der Bot die
+Aufgabe stumm; sie kann jederzeit neu gestartet werden.
+
+**Was sich für die Familie ändert** — Beispiel: Schul-Termine erfassen.
+
+- Ohne EC-20: Mama bittet den Bot in der Familien-Gruppe, die Schul-Termine
+  vom Foto des Schulplans zu übernehmen. Der Bot fragt im selben Gruppen-Chat
+  nach dem Foto — Mama lädt es dort hoch, neben den Nachrichten der Kinder.
+  Papa schreibt parallel etwas anderes, der Bot mischt beide Fäden. Der
+  Schulplan liegt jetzt für alle Familienmitglieder sichtbar im Verlauf der
+  Gruppe.
+- Mit EC-20: Mama startet die Aufgabe in der Familien-Gruppe. Der Bot
+  antwortet öffentlich nur kurz: »Okay Mama, ich frage dich gleich im
+  Privatchat.« Im 1:1-Chat zwischen Mama und Bot folgen Foto-Upload, Rückfrage
+  zu unklaren Terminen, Korrekturen. In der Familien-Gruppe erscheint
+  später nur: »Schul-Termine erfasst — 5 neue Termine im Wochenplan.«
+
+Begründung: Privatsphäre und Bedienkomfort. Eltern sollen weder unter
+Beobachtung der Kinder Token oder Foto hochladen müssen, noch sich ihren
+Gesprächsfaden vom nächsten Gruppen-Wortbeitrag zerreißen lassen.
+
+*Tickets:* #130 (PrivateChatSession-Refactor) — Umsetzung als gemeinsame
+Session-Klasse statt drei kopierter Worker-Loops.
+
+### EC-21 — Änderungen wirken sofort und ehrlich
+
+Wenn eine bestätigte schreibende Aufgabe abgeschlossen ist, **wirkt** die
+Änderung sofort auf die abhängigen Buddies — neue Kalender-Termine erscheinen
+beim nächsten Öffnen des Wochenplans, ein neu angelegtes Gerät beim nächsten
+Erkennungsvorgang. Niemand muss den Bot, das Tablet oder den Pi neu starten,
+nichts „aktualisieren" tippen. Klappt diese Übernahme im Ausnahmefall nicht,
+sagt der Bot in einer Nachricht klar, was zu tun ist — kein stiller
+Schwebezustand zwischen „Aufgabe durch" und „Wirkung sichtbar".
+
+**Was sich für die Familie ändert** — Beispiel: Kalender verbinden.
+
+- Ohne EC-21: Mama verbindet ihren Google-Kalender per Bot. Der Bot meldet
+  »Kalender verbunden«. Mama tippt am Display auf den Wochenplan — die neuen
+  Termine sind nicht da. Sie fragt sich, ob es geklappt hat. In Wirklichkeit
+  läuft der Plan-Buddy mit seinem alten Cache weiter; erst ein Pi-Neustart
+  würde ihn dazu bringen, den neuen Kalender zu lesen. Niemand sagt ihr das.
+- Mit EC-21: Mama verbindet ihren Google-Kalender per Bot. Sobald sie »passt«
+  sagt, antwortet der Bot »Kalender verbunden — neue Termine sind jetzt im
+  Wochenplan sichtbar.« Sie tippt aufs Display, die Termine sind da. Hakt es
+  ausnahmsweise (Plan-Buddy gerade abgestürzt), schreibt der Bot konkret:
+  »Plan-Buddy hat die Änderung evtl. noch nicht geladen — bitte einmal das
+  Display neu öffnen.«
+
+Begründung: Vertrauen kommt von sofortiger sichtbarer Wirkung. Eine
+Familie, die nach einer Aufgabe vor einem unveränderten Display steht und
+nicht weiß, ob es geklappt hat, glaubt dem System nicht mehr.
+
+*Tickets:* #140 (Skill-Service-Reload) — Umsetzung als Reload-Aufruf vom
+Skill an die konsumierenden Buddies.
+
 ## 4. KI-Anbieter & Datensicherheit
 
 ### EC-11 — KI-Anbieter je Instanz wählbar
