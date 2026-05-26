@@ -21,13 +21,24 @@ import logging
 
 from private_chat_session import PrivateChatSession
 from skills import geraet_anlegen
-from tasks import Proposal, WriteTask
+from tasks import Proposal, WriteTask, is_from_private_chat
 
 
 # Quittung in den Agent-Loop zurück — die Anlage selbst läuft im Privatchat,
 # der Agent formuliert daraus seine kurze Antwort.
-_QUITTUNG_START = ("Ich richte das im Privatchat mit dir ein — antworte mir "
-                   "dort einfach Schritt für Schritt.")
+#
+# Wir unterscheiden zwei Faelle (Refs #157):
+# - Aufgabe aus dem Familien-Chat gestartet → Wechsel-Quittung
+#   `_QUITTUNG_START_FROM_GROUP`.
+# - Aufgabe schon IM Privatchat gestartet → keine Wechsel-Ankuendigung; die
+#   erste Frage (GAA-3.1 Typ-Schritt: „Was für ein Gerät …") erscheint direkt
+#   im selben Chat asynchron aus dem Session-Thread.
+_QUITTUNG_START_FROM_GROUP = (
+    "Ich richte das im Privatchat mit dir ein — antworte mir "
+    "dort einfach Schritt für Schritt.")
+_QUITTUNG_START_FROM_PRIVATE = (
+    "Ich lege das Gerät hier mit dir an — Schritt für Schritt. Die erste "
+    "Frage kommt gleich.")
 _PROPOSAL_SUMMARY = ("Neues Gerät im Privatchat anlegen — ich frage dort der "
                      "Reihe nach nach Typ, Name, Auflösung, Betriebssystem "
                      "und Verwendung (V1 nur Display-Geräte).")
@@ -124,7 +135,12 @@ class GeraetAnlegenTask(WriteTask):
                 sessions.pop(private_chat_id, None)
 
         session.start(run_gaa, ())
-        return _QUITTUNG_START
+        # Refs #157: Wechsel-Quittung NUR, wenn der Aufrufer noch nicht im
+        # Privatchat ist. Sonst direkt mit der Einleitung — die erste Frage
+        # (Typ-Schritt) kommt asynchron im selben Chat.
+        if is_from_private_chat(turn_context):
+            return _QUITTUNG_START_FROM_PRIVATE
+        return _QUITTUNG_START_FROM_GROUP
 
 
 def make_gaa_input(incoming_message):
