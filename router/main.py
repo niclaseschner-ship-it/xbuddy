@@ -17,7 +17,6 @@ import os
 import queue
 import sys
 import threading
-import urllib.request
 
 # ============================================================
 #  Zustand (in-memory, V1)
@@ -66,25 +65,16 @@ def apply_trigger(source_id, descriptor):
         }
         # ROU-22: jede Zustandsänderung an die offenen SSE-Streams melden.
         publish(did, state[did])
-    # ROU-21: Direkt-Push an Chromium via CDP, falls konfiguriert.
-    url = payload.get('url') if isinstance(payload, dict) else None
-    if url:
-        cdp_navigate_async(url)
 
 
 def apply_session_end(source_id):
     """ROU-11: alle Displays, deren State diese source_id trägt, auf null."""
-    affected = False
     for did in list(state.keys()):
         s = state[did]
         if s and s.get('source_id') == source_id:
             state[did] = None
-            affected = True
             # ROU-22: den null-Zustand an die offenen SSE-Streams melden.
             publish(did, None)
-    # ROU-21: bei State=null auf idle-URL springen
-    if affected:
-        cdp_navigate_async(runtime_config.get('cdp_idle_url') or 'about:blank')
 
 
 # ============================================================
@@ -153,64 +143,13 @@ def display_event_stream(display_id):
 
 
 # ============================================================
-#  Chrome DevTools Protocol Push (ROU-21)
+#  Laufzeit-Konfig
 # ============================================================
 
 # Laufzeit-Konfig wird vom Entrypoint befüllt. Tests setzen direkt.
 runtime_config = {
-    'cdp_target':   '',
-    'cdp_idle_url': 'about:blank',
     'controller_dir': '',   # ROU-23: leer = Default aus DEFAULTS_CONTROLLER_DIR
 }
-
-
-def cdp_navigate(target, url, timeout=2.0):
-    """Synchrone Variante (für Tests + interne Nutzung).
-
-    Liefert True bei Erfolg, False bei jedem Fehler (gelogged).
-    Blockiert nie länger als `timeout` Sekunden insgesamt.
-    """
-    if not target:
-        return False
-    try:
-        # 1. Liste der Tabs holen
-        with urllib.request.urlopen(target.rstrip('/') + '/json', timeout=timeout) as resp:
-            tabs = json.loads(resp.read().decode('utf-8'))
-        ws_url = None
-        for tab in tabs:
-            if tab.get('type') == 'page' and tab.get('webSocketDebuggerUrl'):
-                ws_url = tab['webSocketDebuggerUrl']
-                break
-        if not ws_url:
-            logging.warning('CDP: kein Page-Tab gefunden auf %s', target)
-            return False
-        # 2. WebSocket + Page.navigate (websocket-client, synchron)
-        import websocket  # lazy import: nicht benötigt wenn cdp_target leer
-        ws = websocket.create_connection(ws_url, timeout=timeout)
-        try:
-            ws.send(json.dumps({
-                'id': 1,
-                'method': 'Page.navigate',
-                'params': {'url': url},
-            }))
-            # Antwort lesen (best effort) — Page.navigate bestätigt schnell.
-            ws.recv()
-        finally:
-            ws.close()
-        logging.info('CDP push → %s', url)
-        return True
-    except Exception as e:  # noqa: BLE001 — V1: alle Fehler isolieren
-        logging.warning('CDP push fehlgeschlagen (%s): %s', target, e)
-        return False
-
-
-def cdp_navigate_async(url):
-    """Feuert den CDP-Push in einem Daemon-Thread — POST /api/v1/events bleibt schnell."""
-    target = runtime_config.get('cdp_target') or ''
-    if not target:
-        return
-    t = threading.Thread(target=cdp_navigate, args=(target, url), daemon=True)
-    t.start()
 
 
 # ============================================================
@@ -320,7 +259,6 @@ def apply_panel_trigger(source_id, descriptor):
         'since':      ts,
     }
     publish(display_id, state[display_id])
-    cdp_navigate_async(url)
 
 
 # ============================================================
@@ -779,8 +717,6 @@ DEFAULTS = {
     'listen_host':  '127.0.0.1',
     'listen_port':  5000,
     'log_level':    'INFO',
-    'cdp_target':   '',
-    'cdp_idle_url': 'about:blank',
     'controller_dir': '',  # ROU-23: leer = DEFAULT_CONTROLLER_DIR
 }
 
@@ -802,11 +738,23 @@ def parse_args(argv):
 def resolved_config(args):
     """ROU-15-Priorität: Defaults < config.json < ENV < CLI."""
     cfg = load_config(args.config, DEFAULTS)
+    # Migrations-Hinweis (#102): die alten CDP-Push-Keys aus dem abgelösten
+    # ROU-21 werden ignoriert — eine ältere config.json soll deshalb keinen
+    # Crash auslösen, sondern nur einen sichtbaren Log-Hinweis hinterlassen.
+    for legacy_key in ('cdp_target', 'cdp_idle_url'):
+        if legacy_key in cfg:
+            logging.warning(
+                'config-Schlüssel %r wird ignoriert (ROU-21 abgelöst durch '
+                'SSE ROU-22, Refs #102)', legacy_key)
+            cfg.pop(legacy_key, None)
+    for legacy_env in ('ROUTER_CDP_TARGET', 'ROUTER_CDP_IDLE_URL'):
+        if legacy_env in os.environ:
+            logging.warning(
+                'ENV %s wird ignoriert (ROU-21 abgelöst durch SSE ROU-22, '
+                'Refs #102)', legacy_env)
     if 'ROUTER_HOST'         in os.environ: cfg['listen_host']  = os.environ['ROUTER_HOST']
     if 'ROUTER_PORT'         in os.environ: cfg['listen_port']  = int(os.environ['ROUTER_PORT'])
     if 'ROUTER_LOG_LEVEL'    in os.environ: cfg['log_level']    = os.environ['ROUTER_LOG_LEVEL']
-    if 'ROUTER_CDP_TARGET'   in os.environ: cfg['cdp_target']   = os.environ['ROUTER_CDP_TARGET']
-    if 'ROUTER_CDP_IDLE_URL' in os.environ: cfg['cdp_idle_url'] = os.environ['ROUTER_CDP_IDLE_URL']
     if 'ROUTER_CONTROLLER_DIR' in os.environ: cfg['controller_dir'] = os.environ['ROUTER_CONTROLLER_DIR']
     if args.host:           cfg['listen_host']    = args.host
     if args.port:           cfg['listen_port']    = args.port
@@ -821,13 +769,8 @@ def main(argv=None):
     logging.basicConfig(
         level=getattr(logging, cfg['log_level'].upper(), logging.INFO),
         format='%(asctime)s %(levelname)s %(message)s')
-    runtime_config['cdp_target']    = cfg.get('cdp_target', '')
-    runtime_config['cdp_idle_url']  = cfg.get('cdp_idle_url', 'about:blank')
     runtime_config['controller_dir'] = cfg.get('controller_dir', '')
     logging.info('Controller-PWA-Statik: %s', controller_dir())
-    if runtime_config['cdp_target']:
-        logging.info('CDP-Push aktiv: %s (idle=%s)',
-                     runtime_config['cdp_target'], runtime_config['cdp_idle_url'])
     load_routing(args.routing)
     ssl_context = None
     if args.cert and args.key:
