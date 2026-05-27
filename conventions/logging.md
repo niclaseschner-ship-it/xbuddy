@@ -55,10 +55,11 @@ Bootstrap-Setup vor Config-Resolve ist erlaubt: Wenn die
 Config-Auflösung selbst loggen können soll (z. B. damit ein
 `ConfigError` mit LOG-1-Format auf journalctl landet, statt als nackter
 Traceback), darf eine Komponente vor dem Resolve `setup(level)` mit
-einem Default-Level (CLI-Argument oder `INFO`) aufrufen und nach
-erfolgreichem Resolve erneut `setup(cfg.log_level)` mit dem
-Config-Wert. Die Idempotenz-Klausel oben macht das Re-Setup sauber —
-der Root-Handler wird ersetzt, kein doppelter Handler. Eltern-Chat
+einem Default-Level (CLI-Argument oder `INFO`, CLI-Vorrang gemäß
+CONFIG-1) aufrufen und nach erfolgreichem Resolve erneut
+`setup(cfg.log_level)` mit dem Config-Wert. Die Idempotenz-Klausel oben
+macht das Re-Setup sauber — der Root-Handler wird ersetzt, kein
+doppelter Handler. Eltern-Chat
 nutzt dieses Pattern (Refs PR #196); Router/Plan-Buddy/Familien-Registry
 kommen ohne aus, weil ihr Config-Resolve nicht logged.
 
