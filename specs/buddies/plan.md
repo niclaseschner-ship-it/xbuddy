@@ -301,23 +301,52 @@ Buddy-CSS sind unzulässig.
 ## 9. Konfiguration
 
 ### PLAN-28 — Konfigurationswerte
-| Wert                         | Default                          | Quelle |
-|------------------------------|----------------------------------|--------|
-| Slot-Definitionen            | die 7 Slots des Handoffs         | Config-Datei |
-| Default-Verantwortlichkeiten | leer                             | Config-Datei |
-| Fenster Lese-Kind            | 7 Tage                           | Config |
-| Fenster Kleinkind            | 3 Tage                           | Config |
-| Wochenstart                  | Montag                           | Config |
-| SQLite-Datei                 | `plan.db` neben dem Code         | Env · Config |
-| Google-Kalender-ID           | (Pflicht, kein Default)          | Env · Config |
-| OAuth-Client / -Token        | (Pflicht)                        | Zugangsdaten-Speicher (`zugangsdaten.md`) |
-| Zeitzone                     | `Europe/Berlin`                  | Env · Config |
+Die Konfiguration verteilt sich auf zwei Per-Instanz-Dateien neben dem
+Code (CONFIG-1) — beide gitignored:
 
-Slot-Definitionen und Default-Verantwortlichkeiten sind **Daten** und stehen in
-einer Config-Datei, nicht im Code (E-PLAN-2). Werte, die nur als Code-Konstante
-existieren, sind Spec-Verletzung (CLAUDE.md §6).
+- `plan/plan.json` — Daten-Konfig (Slots, Defaults, Kalender-ID, …).
+  Format: `plan/plan.example.json`. Wird vom Eltern-Chat geschrieben.
+- `plan/config.json` — Runtime-Konfig (Bind-Adresse, Log-Level).
+  Existiert nicht „by default"; fehlt sie, greifen die Schema-Defaults
+  (CONFIG-1). Der gemeinsame `tools/configloader.py` (#179) lädt diese
+  Datei nach der CONFIG-1-Form.
 
-*Tickets:* #40
+**Daten-Konfig (`plan/plan.json`)** — der Eltern-Chat ist die einzige
+Schreibstelle (CONFIG-1).
+
+| Name                         | Default                          | Datei-Schlüssel                | Gesetzt durch (Onboarding-Schritt) |
+|------------------------------|----------------------------------|--------------------------------|------------------------------------|
+| Slot-Definitionen            | die 7 Slots des Handoffs         | `slots`                        | n/a V1 (familienspezifisch hartcodiert, E-PLAN-8) |
+| Default-Verantwortlichkeiten | leer                             | `defaults`                     | n/a V1 (Familie trägt initial in Datei ein) |
+| Fenster Lese-Kind            | 7 Tage                           | `fenster_lesekind`             | n/a (Default reicht) |
+| Fenster Kleinkind            | 3 Tage                           | `fenster_kleinkind`            | n/a (Default reicht) |
+| Wochenstart                  | Montag (`0`)                     | `wochenstart`                  | n/a (Default reicht) |
+| SQLite-Datei                 | `plan.db` neben dem Code         | `db_datei`                     | n/a (Default reicht) |
+| Google-Kalender-ID           | (Pflicht, kein Default)          | `kalender_id`                  | KAV — Kalender verbinden (`kalender-verbinden.md`) |
+| OAuth-Client / -Token        | (Pflicht)                        | — (im Zugangsdaten-Speicher, ZD-3) | KAV — Kalender verbinden |
+| Zeitzone                     | `Europe/Berlin`                  | `zeitzone`                     | n/a (Default reicht) |
+
+**Runtime-Konfig (`plan/config.json`)** — Bind/Log, vom gemeinsamen
+Loader gelesen (#179). Defaults reichen heute auf dem Pi; der
+Eltern-Chat schreibt diese Werte nicht (kein Onboarding-Schritt).
+
+| Name        | Default       | Datei-Schlüssel | Gesetzt durch (Onboarding-Schritt) |
+|-------------|---------------|-----------------|------------------------------------|
+| Listen-Host | `127.0.0.1`   | `listen_host`   | n/a (Default reicht, falls Pi nicht abweicht) |
+| Listen-Port | `5020`        | `listen_port`   | n/a (Default reicht, falls Pi nicht abweicht) |
+| Log-Level   | `INFO`        | `log_level`     | n/a (Default reicht) |
+
+Slot-Definitionen und Default-Verantwortlichkeiten sind **Daten** und
+stehen in einer Config-Datei, nicht im Code (E-PLAN-2). Werte, die nur
+als Code-Konstante existieren, sind Spec-Verletzung (CLAUDE.md §6).
+
+ENV-Variablen (`PLAN_LISTEN_HOST`, `PLAN_LISTEN_PORT`, `PLAN_LOG_LEVEL`,
+sowie die `PLAN_*` der Daten-Konfig) sind nach CONFIG-1 Dev-Override,
+keine Familien-Form — und gehören deshalb nicht in diese Tabelle.
+CLI-Flags (`--host`, `--port`, `--log-level`, `--config`) sind
+Test-Werkzeug.
+
+*Tickets:* #40, #179
 
 ## 10. Tests
 
