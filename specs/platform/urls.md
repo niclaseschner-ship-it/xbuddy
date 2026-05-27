@@ -189,7 +189,7 @@ längste Prefix gewinnt, das ist Teil der Spec, nicht nur eine nginx-Marotte):
 |---|---------------------------------|---------------------|---------------------------------------------------------------------------|
 | 1 | `/display/plan/`                | Plan-Buddy          | Display-Views des Plan-Buddys (URL-2).                                    |
 | 2 | `/api/v1/plan/`                 | Plan-Buddy          | Plan-Buddy-Backend (Termine, Zuteilung, Aktivität).                       |
-| 3 | `/api/v1/familie/`              | Familie             | Familien-Mit-Host (Personen, Foto). Aktuell nicht in nginx (#85).         |
+| 3 | `/api/v1/familie/`              | Familie             | Familien-Mit-Host (Personen, Foto).                                       |
 | 4 | `/api/v1/displays/<id>/events`  | Router              | SSE-Zustands-Stream (ROU-22); Long-Lived, ohne Proxy-Puffer.              |
 | 5 | `/display/`                     | Router              | Display-Views (außer den oben abgefangenen spezifischen Buddy-Prefixen).  |
 | 6 | `/controller/`                  | Router              | Controller-Aktionen (URL-3).                                              |

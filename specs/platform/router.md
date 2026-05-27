@@ -499,6 +499,27 @@ protokolliert `console.warn`-Äquivalent (Python: `logging.warning`).
 
 *Tickets:* #5
 
+### ROU-25 — E-RELOAD-1: Atomarer Reload-Geist
+Der Reload-Pfad (Admin-Reload nach ROU-18, Reload-on-Read als Fallback
+nach DCOMP-2) ist **atomar**: solange Datei-Read oder JSON-Parse einer
+geladenen Datei (`routing.json`) scheitern, bleibt der zuletzt
+erfolgreich geladene Stand unverändert in Kraft, und der Router
+beantwortet Lookups (ROU-9, ROU-22, ROU-24) weiter aus diesem Snapshot.
+Übernommen wird erst nach erfolgreich vollständigem Parse — ein halb
+geschriebenes oder kaputtes JSON darf weder `routing_entries` noch
+`panels`/`known_displays` verfälschen.
+
+Dieselbe Eigenschaft trägt der Anker-Name **E-RELOAD-1**, der heute
+schon in Router-Code (`router/main.py`) und in benachbarten
+Komponenten zitiert wird, die denselben Geist umsetzen (z. B. der
+Plan-Buddy beim Reload von `plan/plan.json`, vgl. `plan/main.py`). Die
+allgemeine Verortung als Bauregel für alle Daten-Komponenten ist Sache
+einer eigenen Konvention (DCOMP-3, eigenes Ticket); bis dahin definiert
+diese Stelle die Anforderung im Router-Kontext, und andere Komponenten
+verweisen darauf, statt eigene Anker zu erfinden.
+
+*Tickets:* #140
+
 ## 7. Tests
 
 ### ROU-17 — Automatisierte Tests pro Requirement
