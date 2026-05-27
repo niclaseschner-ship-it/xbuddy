@@ -330,11 +330,11 @@ nicht — ONB-6) liegen daneben — der Loader rührt Geheimnisse nicht an
 | KI-Anbieter                | `claude`                                    | `provider`              | n/a (Default reicht)                           |
 | Anbieter-Modell            | leer (→ Anbieter-Default)                   | `provider_model`        | n/a (Default reicht)                           |
 | Gesprächskontext-Tiefe     | `20`                                        | `context_depth`         | n/a (Default reicht)                           |
-| CA-Pfad (CAV-3)            | `../tools/ca/out/rootCA.pem`                | `ca_pem_path`           | n/a (Default reicht beim Standard-Layout)      |
+| CA-Pfad                    | `../tools/ca/out/rootCA.pem`                | `ca_pem_path`           | n/a (Default reicht beim Standard-Layout)      |
 | Familien-Registry-Pfad     | `../familie/familie.json`                   | `family_registry_path`  | n/a (Default reicht beim Standard-Layout)      |
 | Geräte-Registry-Pfad       | `../geraete/geraete.json`                   | `geraete_registry_path` | n/a (Default reicht beim Standard-Layout)      |
 | Display-URL-Origin (GAA-3.7) | leer (Bot gibt nur `/display/<id>` aus)   | `display_url_origin`    | — (offen, OPEN-EC-Origin)                      |
-| Plan-JSON-Pfad (KAV-X)     | `../plan/plan.json`                         | `plan_json_path`        | n/a (Default reicht beim Standard-Layout)      |
+| Plan-JSON-Pfad             | `../plan/plan.json`                         | `plan_json_path`        | n/a (Default reicht beim Standard-Layout)      |
 | Log-Level (LOG-1/LOG-4)    | `INFO`                                      | `log_level`             | n/a (Default reicht; Dev-Override per ENV/CLI) |
 
 Werte, die nur als Code-Konstante existieren — ohne Override-Pfad — sind
