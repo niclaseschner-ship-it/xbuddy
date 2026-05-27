@@ -18,6 +18,15 @@ import queue
 import sys
 import threading
 
+# Repo-Wurzel auf den Importpfad, damit `tools.configloader` (CONFIG-1, #179)
+# auch beim Direktstart `python3 router/main.py` gefunden wird.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.dirname(_HERE)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from tools import configloader  # noqa: E402
+
 # ============================================================
 #  Zustand (in-memory, V1)
 # ============================================================
@@ -370,22 +379,6 @@ def reload_routing():
     return len(new_entries)
 
 
-def load_config(path, defaults):
-    cfg = dict(defaults)
-    try:
-        with open(path) as f:
-            file_cfg = json.load(f)
-        for k, v in file_cfg.items():
-            if k.startswith('_'):  # Kommentar-Felder
-                continue
-            cfg[k] = v
-    except FileNotFoundError:
-        pass
-    except json.JSONDecodeError as e:
-        logging.warning('config.json nicht parsebar (%s): %s — Defaults bleiben', path, e)
-    return cfg
-
-
 # ============================================================
 #  Flask-App
 # ============================================================
@@ -713,10 +706,17 @@ def app_panel_asset(panel_id, asset):
 #  Entrypoint (ROU-15 / ROU-16)
 # ============================================================
 
-DEFAULTS = {
-    'listen_host':  '127.0.0.1',
-    'listen_port':  5000,
-    'log_level':    'INFO',
+# Runtime-Konfig-Schema (CONFIG-1, #179): host/port/log_level/controller_dir
+# sind die Werte, die der Service-Start braucht. Datei + ENV laufen über den
+# gemeinsamen `tools.configloader` (Konvention `<COMPONENT>_<KEY>`), CLI-Flags
+# überschreiben den Loader-Output danach.
+#
+# `routing.json` (ROU-18) ist eine ANDERE Sache (Routing-Tabelle, kein
+# Runtime-Wert) und bleibt eigene Mechanik mit Hot-Reload (#140).
+RUNTIME_SCHEMA = {
+    'listen_host':    '127.0.0.1',
+    'listen_port':    5000,
+    'log_level':      'INFO',
     'controller_dir': '',  # ROU-23: leer = DEFAULT_CONTROLLER_DIR
 }
 
@@ -724,9 +724,11 @@ DEFAULTS = {
 def parse_args(argv):
     p = argparse.ArgumentParser(description='XBuddy Router V1')
     p.add_argument('--routing', default='routing.json', help='Pfad zur Routing-Tabelle (ROU-18)')
-    p.add_argument('--config',  default='config.json',  help='Pfad zur Konfig (ROU-19)')
-    p.add_argument('--host',    help='Bind-Host (überschreibt config + ENV)')
-    p.add_argument('--port',    type=int, help='Bind-Port (überschreibt config + ENV)')
+    p.add_argument('--config',  default='config.json',
+                   help='Pfad zur Runtime-Konfig (ROU-19); '
+                        'CONFIG-1: Datei < ENV < CLI')
+    p.add_argument('--host',    help='Bind-Host (Test-Werkzeug, CONFIG-1)')
+    p.add_argument('--port',    type=int, help='Bind-Port (Test-Werkzeug, CONFIG-1)')
     p.add_argument('--log-level', dest='log_level', help='DEBUG | INFO | WARNING | ERROR')
     p.add_argument('--controller-dir', dest='controller_dir',
                    help='Pfad zur Controller-PWA-Statik (ROU-23)')
@@ -736,26 +738,39 @@ def parse_args(argv):
 
 
 def resolved_config(args):
-    """ROU-15-Priorität: Defaults < config.json < ENV < CLI."""
-    cfg = load_config(args.config, DEFAULTS)
+    """ROU-15 / CONFIG-1: Datei + ENV kommen vom gemeinsamen
+    `tools.configloader`, CLI-Flags überschreiben den Loader-Output danach.
+
+    ENV-Konvention: `<COMPONENT>_<KEY>` → `ROUTER_LISTEN_HOST`,
+    `ROUTER_LISTEN_PORT`, `ROUTER_LOG_LEVEL`, `ROUTER_CONTROLLER_DIR`.
+    """
     # Migrations-Hinweis (#102): die alten CDP-Push-Keys aus dem abgelösten
     # ROU-21 werden ignoriert — eine ältere config.json soll deshalb keinen
-    # Crash auslösen, sondern nur einen sichtbaren Log-Hinweis hinterlassen.
-    for legacy_key in ('cdp_target', 'cdp_idle_url'):
-        if legacy_key in cfg:
-            logging.warning(
-                'config-Schlüssel %r wird ignoriert (ROU-21 abgelöst durch '
-                'SSE ROU-22, Refs #102)', legacy_key)
-            cfg.pop(legacy_key, None)
+    # Crash auslösen, sondern nur einen sichtbaren Log-Hinweis mit Ticket-
+    # Bezug hinterlassen. Der Loader warnt parallel über unbekannte Keys;
+    # wir warnen zusätzlich, weil unser Hinweis das Folge-Ticket nennt.
+    try:
+        with open(args.config) as _f:
+            _raw = json.load(_f)
+        if isinstance(_raw, dict):
+            for legacy_key in ('cdp_target', 'cdp_idle_url'):
+                if legacy_key in _raw:
+                    logging.warning(
+                        'config-Schlüssel %r wird ignoriert (ROU-21 abgelöst '
+                        'durch SSE ROU-22, Refs #102)', legacy_key)
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        # Datei fehlt/kaputt → der Loader hat das bereits passend behandelt.
+        pass
     for legacy_env in ('ROUTER_CDP_TARGET', 'ROUTER_CDP_IDLE_URL'):
         if legacy_env in os.environ:
             logging.warning(
                 'ENV %s wird ignoriert (ROU-21 abgelöst durch SSE ROU-22, '
                 'Refs #102)', legacy_env)
-    if 'ROUTER_HOST'         in os.environ: cfg['listen_host']  = os.environ['ROUTER_HOST']
-    if 'ROUTER_PORT'         in os.environ: cfg['listen_port']  = int(os.environ['ROUTER_PORT'])
-    if 'ROUTER_LOG_LEVEL'    in os.environ: cfg['log_level']    = os.environ['ROUTER_LOG_LEVEL']
-    if 'ROUTER_CONTROLLER_DIR' in os.environ: cfg['controller_dir'] = os.environ['ROUTER_CONTROLLER_DIR']
+
+    cfg = configloader.load(
+        component='router',
+        schema=RUNTIME_SCHEMA,
+        config_path=args.config)
     if args.host:           cfg['listen_host']    = args.host
     if args.port:           cfg['listen_port']    = args.port
     if args.log_level:      cfg['log_level']      = args.log_level

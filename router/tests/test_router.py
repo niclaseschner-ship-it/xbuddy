@@ -516,7 +516,9 @@ def test_ROU_18_unparseable_routing_starts_with_empty_table(tmp_path):
 def test_ROU_15_cli_overrides_env_overrides_config(tmp_path, monkeypatch):
     cfg = tmp_path / "config.json"
     cfg.write_text(json.dumps({'listen_port': 6001, 'log_level': 'DEBUG'}))
-    monkeypatch.setenv('ROUTER_PORT', '6002')
+    # CONFIG-1-Konvention (#179): ENV-Override über `<COMPONENT>_<KEY>`,
+    # hier `ROUTER_LISTEN_PORT` statt früher `ROUTER_PORT`.
+    monkeypatch.setenv('ROUTER_LISTEN_PORT', '6002')
 
     args = router_main.parse_args([
         '--config', str(cfg),
@@ -530,10 +532,17 @@ def test_ROU_15_cli_overrides_env_overrides_config(tmp_path, monkeypatch):
     assert cfg_resolved['log_level'] == 'DEBUG'
 
 
-def test_ROU_19_config_underscore_keys_are_ignored(tmp_path):
-    cfg = tmp_path / "config.json"
-    cfg.write_text(json.dumps({'_comment': 'doc', 'listen_port': 7000}))
-    resolved = router_main.load_config(str(cfg), {'listen_port': 5000})
+def test_ROU_19_unknown_config_keys_are_ignored(tmp_path):
+    """Unbekannte Schlüssel in config.json (z. B. Kommentar-Felder) tauchen
+    nicht im aufgelösten cfg auf. Der gemeinsame Loader (CONFIG-1, #179)
+    übernimmt nur Schema-Keys; alles andere wird mit Warn-Log ignoriert."""
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text(json.dumps({'_comment': 'doc', 'listen_port': 7000}))
+    args = router_main.parse_args([
+        '--config', str(cfg_path),
+        '--routing', str(tmp_path / "missing.json"),
+    ])
+    resolved = router_main.resolved_config(args)
     assert resolved['listen_port'] == 7000
     assert '_comment' not in resolved
 

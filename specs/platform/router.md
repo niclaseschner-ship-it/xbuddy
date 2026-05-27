@@ -386,21 +386,30 @@ solange Netz und Router stehen.
 
 ### ROU-15 — Tuning-Werte (analog FIG-17)
 Defaults stehen als Konstanten im Code. Sie können per
-`config.json` im Router-Verzeichnis (siehe ROU-19) oder per
-ENV-Variable / CLI-Flag überschrieben werden. Priorität:
-**ENV/CLI > config.json > Defaults**.
+`config.json` im Router-Verzeichnis (siehe ROU-19) überschrieben werden.
+Die Tabelle folgt der Konfigurations-Konvention CONFIG-2: jeder Wert hat
+einen Default und einen Datei-Schlüssel in `config.json` (ROU-19). Der
+Onboarding-Schritt, der einen Wert produktiv setzt, ist heute noch nicht
+definiert — Router-Werte werden in V1 manuell beim Deployment befüllt;
+ein Eltern-Chat-Schritt für Router-Setup ist ein offener Punkt (siehe
+OPEN-ROU-C).
 
-| Parameter      | Default       | Override                                     |
-|----------------|---------------|----------------------------------------------|
-| `listen_host`  | `127.0.0.1`   | ENV `ROUTER_HOST` · CLI `--host` · config    |
-| `listen_port`  | `5000`        | ENV `ROUTER_PORT` · CLI `--port` · config    |
-| `log_level`    | `INFO`        | ENV `ROUTER_LOG_LEVEL` · CLI `--log-level`   |
-| `controller_dir` | `../controller/figuren-erkennung` (relativ zum Router-Code) | ENV `ROUTER_CONTROLLER_DIR` · CLI `--controller-dir` · config |
+Dev-Override per ENV-Variable und CLI-Flag ist möglich (CONFIG-1:
+ENV/CLI sind Dev-Werkzeug bzw. Test-Werkzeug, nicht produktive
+Familien-Form) — Liste am Ende der Spec unter „Dev-Anhang". Priorität
+bleibt **CLI > ENV > config.json > Defaults**.
+
+| Name             | Default                                                     | Datei-Schlüssel  | gesetzt durch (Onboarding-Schritt) |
+|------------------|-------------------------------------------------------------|------------------|------------------------------------|
+| `listen_host`    | `127.0.0.1`                                                 | `listen_host`    | — (offen, OPEN-ROU-C)              |
+| `listen_port`    | `5000`                                                      | `listen_port`    | — (offen, OPEN-ROU-C)              |
+| `log_level`      | `INFO`                                                      | `log_level`      | — (offen, OPEN-ROU-C)              |
+| `controller_dir` | `../controller/figuren-erkennung` (relativ zum Router-Code) | `controller_dir` | — (offen, OPEN-ROU-C)              |
 
 Werte, die nur als Code-Konstante existieren — ohne Override-Pfad —
 sind Spec-Verletzung (CLAUDE.md §6 Daten vs. Code).
 
-*Tickets:* #5
+*Tickets:* #5, #180
 
 ### ROU-16 — Lokaler Start
 Der Router startet lokal per einem dokumentierten Kommando (siehe
@@ -515,6 +524,34 @@ Mindest-Abdeckung:
   brainstorm-Architektur; V3 ggf. zentraler Figuren-Registry-Service
   (vgl. OPEN-FIG-B). Keine V1-Entscheidung nötig — Kontext für
   Folge-Tickets.
+- **OPEN-ROU-C** — Onboarding-Schritt für Router-Setup. Die
+  CONFIG-2-Tabelle in ROU-15 hat heute keine Onboarding-Schritte für
+  `listen_host`, `listen_port`, `log_level` und `controller_dir` —
+  Router werden in V1 manuell beim Deployment befüllt (vgl. die
+  systemd-Vorlage `router/router.service`, SVC-2). Sobald der Router
+  über den Eltern-Chat eingerichtet werden kann (analog der
+  Funktions-Spec `familie-anlegen.md`, vgl. das schwester-Ticket
+  Eltern-Chat-Skill „Panel-Tablet einrichten" #183), bekommt jede
+  Zeile der ROU-15-Tabelle einen konkreten Schritt-Namen.
+
+---
+
+## Dev-Anhang — ENV-Variable und CLI-Flag (Dev-Override)
+
+Nach CONFIG-1 sind ENV-Variablen ein **Dev-Override** und CLI-Flags ein
+**Test-Werkzeug**, nicht die produktive Familien-Form. Die folgenden
+Overrides überschreiben für den laufenden Router-Prozess die Werte aus
+`config.json` (ROU-19) bzw. die Code-Defaults. ENV-Namen folgen der
+Konvention `<COMPONENT>_<KEY>` (CONFIG-1).
+
+| Datei-Schlüssel  | ENV                       | CLI                |
+|------------------|---------------------------|--------------------|
+| `listen_host`    | `ROUTER_LISTEN_HOST`      | `--host`           |
+| `listen_port`    | `ROUTER_LISTEN_PORT`      | `--port`           |
+| `log_level`      | `ROUTER_LOG_LEVEL`        | `--log-level`      |
+| `controller_dir` | `ROUTER_CONTROLLER_DIR`   | `--controller-dir` |
+
+Priorität: **CLI > ENV > config.json > Defaults**.
 
 ---
 
