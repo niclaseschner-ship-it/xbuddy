@@ -62,6 +62,21 @@ unter den Namen `plan-google-oauth-client` und
 
 `plan.db` wird beim ersten Start leer angelegt (PLAN-9).
 
+### Reload-on-Read (DCOMP-2, Refs #210, #166)
+
+`plan.json` wird **pro Aufruf frisch von Disk gelesen** ([DCOMP-2](../conventions/data-components.md)).
+Schreibvorgänge des Eltern-Chats (KAV — Kalender verbinden, EC-21) werden ohne
+Service-Restart und ohne expliziten Reload-Trigger sichtbar. Bei einem
+gescheiterten Read (Datei kurz weg, atomares Replace-Race, kaputtes JSON,
+fehlende Pflichtwerte) fällt der Plan-Buddy auf den zuletzt erfolgreich
+geladenen Snapshot zurück — gleicher atomarer Geist wie der Admin-Reload
+(E-RELOAD-1).
+
+Der Admin-Reload-Endpoint (`POST /api/v1/plan/admin/reload`, #140) bleibt
+bestehen, ist aber für die Sichtbarkeit nicht mehr nötig — er ist nur noch
+expliziter, loggbarer Reload-Marker (Skill-Service-Reload-Pattern, EC-21)
+und aktualisiert den Snapshot.
+
 ## Start
 
 ```bash
