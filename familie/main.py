@@ -22,13 +22,21 @@ import sys
 
 from flask import Flask, jsonify, send_file
 
+# Repo-Wurzel auf den Importpfad, damit `tools.configloader` (CONFIG-1, #179)
+# auch beim Direktstart `python3 familie/main.py` gefunden wird — analog zu
+# plan/main.py und router/main.py.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.dirname(_HERE)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
 # Paket-Import wie der Plan-Buddy (plan/main.py): `from familie import …`,
 # damit `python -m familie.main` aus dem Repo-Root funktioniert. Der nackte
 # `import registry` funktionierte nur, wenn der Service aus dem
 # familie/-Verzeichnis direkt gestartet wurde — Workaround auf dem Pi war
 # `WorkingDirectory=…/familie` im systemd-File.
-from familie import registry as registry_mod
-from tools import logsetup
+from familie import registry as registry_mod  # noqa: E402
+from tools import configloader, logsetup  # noqa: E402
 
 
 # ============================================================
@@ -139,15 +147,26 @@ def get_foto(person_id):
 #  Entrypoint (FAM-9)
 # ============================================================
 
+# Familienspezifische Defaults (FAM-9-Tabelle) — diese Werte liegen in
+# `familie.json` settings und werden über den Settings-Lader aufgelöst
+# (`load_settings`), nicht über `tools.configloader`. Sie bleiben hier als
+# Fallback-Defaults für `load_settings()`/`configure()`, damit FAA dieselbe
+# Quelle nutzt (zentral in `registry.FAM9_DEFAULTS`).
 DEFAULTS = {
+    "foto_verzeichnis":     registry_mod.FAM9_DEFAULTS["foto_verzeichnis"],
+    "profilbild_max_kante": registry_mod.FAM9_DEFAULTS["profilbild_max_kante"],
+}
+
+# Runtime-Konfig-Schema (CONFIG-1, #179): nur die Werte, die der Service-Start
+# braucht — Bind, Log-Level. Datei + ENV laufen über den gemeinsamen
+# `tools.configloader`, CLI-Flags überschreiben den Loader-Output danach.
+# Familienspezifische Werte (Foto-Verzeichnis, Profilbild-Max-Kante) liegen
+# weiter in `familie.json` settings (FAM-9) — das ist eine andere Sache,
+# Registry-Datei statt Runtime-Knöpfe.
+RUNTIME_SCHEMA = {
     "listen_host": "127.0.0.1",
     "listen_port": 5010,
     "log_level":   "INFO",
-    # FAM-9-Tabelle: Default-Werte, die der Settings-Lader einsetzt, wenn
-    # weder familie.json noch ENV den jeweiligen Wert setzt. Liegen zentral
-    # in registry.FAM9_DEFAULTS, damit FAA dieselbe Quelle nutzt.
-    "foto_verzeichnis":     registry_mod.FAM9_DEFAULTS["foto_verzeichnis"],
-    "profilbild_max_kante": registry_mod.FAM9_DEFAULTS["profilbild_max_kante"],
 }
 
 
@@ -167,20 +186,25 @@ def parse_args(argv):
 
 
 def resolved_config(args):
-    """Auflösung der RUNTIME-Konfiguration: Defaults < ENV < CLI.
+    """Auflösung der RUNTIME-Konfiguration: Datei < ENV < CLI (CONFIG-1).
+
+    Host/Port/Log-Level kommen vom gemeinsamen `tools.configloader` (CONFIG-1,
+    #179) — Datei (`familie/config.json`, gitignored, optional) und ENV
+    (`FAMILIE_LISTEN_HOST`, `FAMILIE_LISTEN_PORT`, `FAMILIE_LOG_LEVEL`).
+    CLI-Flags überschreiben den Loader-Output danach (CONFIG-1: CLI ist
+    Test-Werkzeug, nicht Konfiguration).
+
+    `registry` ist der Pfad zur Registry-Datei (FAM-9) selbst und bleibt
+    außerhalb des Loader-Schemas — analog zu plan/main.py, wo `--config` /
+    `ENV_CONFIG_FILE` ebenfalls separat aufgelöst werden. ENV-Override
+    `FAMILIE_REGISTRY` bleibt erhalten.
 
     Familienspezifische Werte (Foto-Verzeichnis, Profilbild-Max-Kante) liegen
-    nach FAM-9 in `familie.json` settings und werden über den
-    Settings-Lader (`load_settings_from_registry`) aufgelöst — nicht hier.
-    Diese Funktion deckt nur die Werte ab, die NICHT in `familie.json`
-    stehen können: Pfad zur Registry-Datei selbst, Host/Port/Log-Level.
+    nach FAM-9 in `familie.json` settings und werden über `load_settings`
+    aufgelöst — nicht hier.
     """
-    cfg = {k: DEFAULTS[k] for k in ("listen_host", "listen_port", "log_level")}
-    cfg["registry"] = args.registry
-    if "FAMILIE_REGISTRY"  in os.environ: cfg["registry"]    = os.environ["FAMILIE_REGISTRY"]
-    if "FAMILIE_HOST"      in os.environ: cfg["listen_host"] = os.environ["FAMILIE_HOST"]
-    if "FAMILIE_PORT"      in os.environ: cfg["listen_port"] = int(os.environ["FAMILIE_PORT"])
-    if "FAMILIE_LOG_LEVEL" in os.environ: cfg["log_level"]   = os.environ["FAMILIE_LOG_LEVEL"]
+    cfg = configloader.load(component="familie", schema=RUNTIME_SCHEMA)
+    cfg["registry"] = os.environ.get("FAMILIE_REGISTRY", args.registry)
     if args.host:      cfg["listen_host"] = args.host
     if args.port:      cfg["listen_port"] = args.port
     if args.log_level: cfg["log_level"]   = args.log_level
@@ -222,10 +246,8 @@ def load_settings(registry, registry_path=None):
 def main(argv=None):
     args = parse_args(argv if argv is not None else sys.argv[1:])
     cfg = resolved_config(args)
-    # LOG-4: gemeinsamer Logging-Setup über tools/logsetup (#166). Familie
-    # ist noch nicht auf tools/configloader migriert (eigener Track) —
-    # `cfg["log_level"]` kommt weiter aus der FAM-9-Auflösung
-    # (Defaults < ENV < CLI in resolved_config).
+    # LOG-4 (#166): zentraler Setup statt eigenem basicConfig. Level kommt
+    # aus der Runtime-Config (CONFIG-1/CONFIG-2, RUNTIME_SCHEMA — #209).
     logsetup.setup(cfg["log_level"])
 
     reg = registry_mod.load(cfg["registry"])

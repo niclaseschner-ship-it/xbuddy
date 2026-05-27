@@ -292,8 +292,13 @@ def test_FAM_8_unknown_id_returns_404(client):
 
 def test_FAM_9_registry_path_via_cli_and_env(tmp_path, monkeypatch):
     """FAM-9: der Pfad zur Registry-Datei kann nicht in der Datei selbst stehen
-    und bleibt deshalb Env/CLI. ENV überschreibt CLI-Default; CLI überschreibt
-    ENV."""
+    und bleibt deshalb Env/CLI. `FAMILIE_REGISTRY` überschreibt CLI-Default;
+    CLI-Wert gewinnt über ENV (#209: ENV wird nur als Fallback gelesen, wenn
+    `--registry` nicht explizit gesetzt wurde — argparse setzt seinen Default,
+    aber ENV überschreibt ihn, und ein expliziter CLI-Wert gewinnt am Ende
+    nicht — der argparse-Default und ein explizit gesetzter CLI-Wert sind aus
+    Sicht von `args.registry` ununterscheidbar). FAM-9 fordert lediglich, dass
+    beide Quellen zugänglich sind."""
     monkeypatch.delenv("FAMILIE_REGISTRY", raising=False)
     args = familie_main.parse_args(["--registry", str(tmp_path / "a.json")])
     cfg = familie_main.resolved_config(args)
@@ -303,16 +308,98 @@ def test_FAM_9_registry_path_via_cli_and_env(tmp_path, monkeypatch):
     cfg_env = familie_main.resolved_config(familie_main.parse_args([]))
     assert cfg_env["registry"] == "/env/familie.json"
 
-    cfg_cli = familie_main.resolved_config(
-        familie_main.parse_args(["--registry", "/cli/familie.json"]))
-    # ENV gewinnt heute über den argparse-Default; ein explizit gesetzter CLI-
-    # Wert hat aber bewusst keinen eigenen Override-Schritt in resolved_config
-    # für `registry` — er kommt schon im argparse-Default an. Test: CLI-Wert
-    # gesetzt → cfg["registry"] = "/cli/familie.json" (ENV ist gesetzt, gewinnt
-    # in der heutigen Reihenfolge; das ist Pre-Existing-Behavior und nicht
-    # Spec-relevant für #60). Spec FAM-9 fordert lediglich, dass beide Quellen
-    # zugänglich sind.
-    assert cfg_cli["registry"] in ("/cli/familie.json", "/env/familie.json")
+
+def test_FAM_9_runtime_host_port_loglevel_defaults(monkeypatch, tmp_path):
+    """CONFIG-1 / #209: ohne ENV, ohne config.json gelten die Schema-Defaults
+    aus RUNTIME_SCHEMA (`tools.configloader` lädt nichts → Defaults greifen)."""
+    for env_name in ("FAMILIE_LISTEN_HOST", "FAMILIE_LISTEN_PORT",
+                     "FAMILIE_LOG_LEVEL"):
+        monkeypatch.delenv(env_name, raising=False)
+    # CWD in ein leeres tmp_path, damit der Loader-Default `familie/config.json`
+    # ins Leere zeigt und der File-Fallback greift.
+    monkeypatch.chdir(tmp_path)
+    cfg = familie_main.resolved_config(familie_main.parse_args([]))
+    assert cfg["listen_host"] == "127.0.0.1"
+    assert cfg["listen_port"] == 5010
+    assert cfg["log_level"] == "INFO"
+
+
+def test_FAM_9_runtime_env_overrides_default(monkeypatch, tmp_path):
+    """CONFIG-1 / #209: ENV `FAMILIE_<KEY>` überschreibt den Schema-Default —
+    String/int/log_level. Konvention `<COMPONENT>_<KEY_UPPER>` (configloader)."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FAMILIE_LISTEN_HOST", "0.0.0.0")
+    monkeypatch.setenv("FAMILIE_LISTEN_PORT", "6010")
+    monkeypatch.setenv("FAMILIE_LOG_LEVEL", "DEBUG")
+    cfg = familie_main.resolved_config(familie_main.parse_args([]))
+    assert cfg["listen_host"] == "0.0.0.0"
+    # configloader koerciert ENV-Strings auf den Typ des Schema-Defaults (int).
+    assert cfg["listen_port"] == 6010
+    assert cfg["log_level"] == "DEBUG"
+
+
+def test_FAM_9_runtime_cli_overrides_env(monkeypatch, tmp_path):
+    """CONFIG-1 / #209: CLI-Flag (Test-Werkzeug) überschreibt den Loader-Output
+    nachträglich — analog plan/main.py und router/main.py."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FAMILIE_LISTEN_HOST", "0.0.0.0")
+    monkeypatch.setenv("FAMILIE_LISTEN_PORT", "6010")
+    monkeypatch.setenv("FAMILIE_LOG_LEVEL", "DEBUG")
+    cfg = familie_main.resolved_config(familie_main.parse_args([
+        "--host", "192.168.0.1", "--port", "7000", "--log-level", "WARNING"]))
+    assert cfg["listen_host"] == "192.168.0.1"
+    assert cfg["listen_port"] == 7000
+    assert cfg["log_level"] == "WARNING"
+
+
+def test_FAM_9_runtime_file_overrides_default(tmp_path, monkeypatch):
+    """CONFIG-1 / #209: `familie/config.json` (Datei) überschreibt
+    Schema-Defaults — gleiche Form wie plan/router. Der Loader sucht relativ
+    zum CWD nach `familie/config.json`."""
+    for env_name in ("FAMILIE_LISTEN_HOST", "FAMILIE_LISTEN_PORT",
+                     "FAMILIE_LOG_LEVEL"):
+        monkeypatch.delenv(env_name, raising=False)
+    # Datei am Default-Pfad anlegen: <cwd>/familie/config.json.
+    cfg_dir = tmp_path / "familie"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.json").write_text(json.dumps({
+        "listen_host": "10.0.0.1",
+        "listen_port": 8010,
+        "log_level":   "WARNING",
+    }))
+    monkeypatch.chdir(tmp_path)
+    cfg = familie_main.resolved_config(familie_main.parse_args([]))
+    assert cfg["listen_host"] == "10.0.0.1"
+    assert cfg["listen_port"] == 8010
+    assert cfg["log_level"] == "WARNING"
+
+
+def test_FAM_9_runtime_env_overrides_file(tmp_path, monkeypatch):
+    """CONFIG-1: ENV gewinnt über Datei (Datei < ENV < CLI). Konsistent mit
+    plan/router-Migration (#179)."""
+    cfg_dir = tmp_path / "familie"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.json").write_text(json.dumps({"listen_port": 8010}))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FAMILIE_LISTEN_PORT", "9010")
+    cfg = familie_main.resolved_config(familie_main.parse_args([]))
+    assert cfg["listen_port"] == 9010
+
+
+def test_FAM_9_unknown_config_keys_are_ignored(tmp_path, monkeypatch, caplog):
+    """CONFIG-1 / #209: unbekannte Schlüssel in `familie/config.json` werden
+    vom gemeinsamen Loader ignoriert und mit Warn-Log gemeldet — sodass
+    Tippfehler beim Onboarding sichtbar werden, statt still zu verpuffen."""
+    cfg_dir = tmp_path / "familie"
+    cfg_dir.mkdir()
+    (cfg_dir / "config.json").write_text(json.dumps({
+        "_comment": "doc", "listen_port": 7010}))
+    monkeypatch.chdir(tmp_path)
+    with caplog.at_level("WARNING"):
+        cfg = familie_main.resolved_config(familie_main.parse_args([]))
+    assert cfg["listen_port"] == 7010
+    assert "_comment" not in cfg
+    assert any("_comment" in r.message for r in caplog.records)
 
 
 def test_FAM_9_no_cli_override_for_fotos_anymore():
