@@ -136,19 +136,64 @@ geräte-neutral (URL-10).
 ## 4. Konfiguration
 
 ### FAM-9 — Konfigurationswerte
-Familienspezifische Werte leben **in `familie.json` (FAM-6) im Abschnitt
-`settings`** und werden über die Lese-Schnittstelle (FAM-7) gelesen. Ein
-Override über Umgebungsvariablen ist nur für Ops-Notfälle vorgesehen; eine
-Übersteuerung per CLI-Flag gibt es nicht. Der Pfad zur Registry-Datei
-selbst kann nicht in der Datei stehen und bleibt deshalb Env/CLI.
+Die Konfiguration verteilt sich auf zwei Per-Instanz-Dateien neben dem
+Code (CONFIG-1) — beide gitignored:
 
-| Wert                 | Default                              | Quelle                                                            |
-|----------------------|--------------------------------------|-------------------------------------------------------------------|
-| Registry-Datei       | `familie.json` neben dem Code        | Env (`FAMILIE_REGISTRY`) · CLI (`--registry`)                     |
-| Foto-Verzeichnis     | `fotos/` neben der Registry-Datei    | `familie.json` settings (Override `FAMILIE_FOTOS`)                |
-| Profilbild-Max-Kante | `1280` Pixel (längste Kante)         | `familie.json` settings (Override `FAMILIE_PROFILBILD_MAX_KANTE`) |
+- `familie/familie.json` — Daten-Konfig (Personen + familienspezifische
+  Settings). Format: `familie/familie.example.json`. Wird von Hand bzw. vom
+  Eltern-Chat (FAM-11) gepflegt.
+- `familie/config.json` — Runtime-Konfig (Bind-Adresse, Log-Level).
+  Existiert nicht „by default"; fehlt sie, greifen die Schema-Defaults
+  (CONFIG-1). Der gemeinsame `tools/configloader.py` (#179) lädt diese
+  Datei nach der CONFIG-1-Form (Refs #209).
 
-*Tickets:* #38, #60
+**Daten-Konfig (`familie/familie.json`)** — familienspezifische Werte
+(FAM-3 Personen + Settings) leben hier. Die Settings werden über die
+Lese-Schnittstelle (FAM-7) gelesen. Ein Override über Umgebungsvariablen
+ist nur für Ops-Notfälle vorgesehen; eine Übersteuerung per CLI-Flag gibt
+es nicht. Der Pfad zur Registry-Datei selbst kann nicht in der Datei
+stehen und bleibt deshalb Env/CLI.
+
+Die Tabelle folgt der Konfigurations-Konvention CONFIG-2: jeder Wert hat
+einen Default und einen Datei-Schlüssel. Der Onboarding-Schritt, der
+einen Wert produktiv setzt, ist heute noch nicht für jeden Wert definiert
+— die Settings werden in V1 manuell beim Deployment bzw. über FAA
+(`familie-anlegen.md`) befüllt.
+
+| Name                 | Default                              | Datei-Schlüssel                | Gesetzt durch (Onboarding-Schritt)                |
+|----------------------|--------------------------------------|--------------------------------|---------------------------------------------------|
+| Registry-Datei       | `familie.json` neben dem Code        | — (nicht in Datei; Env/CLI)    | n/a (Pfad ist Deployment-Sache)                   |
+| Foto-Verzeichnis     | `fotos/` neben der Registry-Datei    | `settings.foto_verzeichnis`    | n/a (Default reicht, FAA-Override möglich)        |
+| Profilbild-Max-Kante | `1280` Pixel (längste Kante)         | `settings.profilbild_max_kante`| n/a (Default reicht)                              |
+
+Dev-Override per ENV-Variable ist möglich (CONFIG-1: ENV ist
+Dev-/Ops-Werkzeug, nicht produktive Familien-Form):
+`FAMILIE_REGISTRY` (Pfad zur Registry-Datei) · `FAMILIE_FOTOS`
+(Foto-Verzeichnis) · `FAMILIE_PROFILBILD_MAX_KANTE` (Max-Kante).
+CLI-Flag gibt es nur für den Registry-Pfad (`--registry`).
+
+**Runtime-Konfig (`familie/config.json`)** — Bind/Log, vom gemeinsamen
+Loader gelesen (#179, #209). Defaults reichen heute auf dem Pi; der
+Eltern-Chat schreibt diese Werte nicht (kein Onboarding-Schritt). Form
+analog `plan.md` PLAN-28 und `router.md` ROU-15 (CONFIG-2):
+
+| Name        | Default       | Datei-Schlüssel | Gesetzt durch (Onboarding-Schritt)            |
+|-------------|---------------|-----------------|-----------------------------------------------|
+| Listen-Host | `127.0.0.1`   | `listen_host`   | n/a (Default reicht, falls Pi nicht abweicht) |
+| Listen-Port | `5010`        | `listen_port`   | n/a (Default reicht, falls Pi nicht abweicht) |
+| Log-Level   | `INFO`        | `log_level`     | n/a (Default reicht)                          |
+
+ENV-Variablen (`FAMILIE_LISTEN_HOST`, `FAMILIE_LISTEN_PORT`,
+`FAMILIE_LOG_LEVEL`, Konvention `<COMPONENT>_<KEY>`) sind nach CONFIG-1
+Dev-Override, keine Familien-Form — und gehören deshalb nicht in die
+Datei-Schlüssel-Spalte. CLI-Flags (`--host`, `--port`, `--log-level`)
+sind Test-Werkzeug; sie überschreiben den Loader-Output nachträglich
+(Priorität: **CLI > ENV > config.json > Defaults**).
+
+Werte, die nur als Code-Konstante existieren — ohne Override-Pfad —
+sind Spec-Verletzung (CLAUDE.md §6 Daten vs. Code).
+
+*Tickets:* #38, #60, #179, #209
 
 ## 5. Tests
 
