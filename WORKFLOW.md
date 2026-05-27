@@ -10,6 +10,12 @@ Wahrheit, ein Ticket ist ein Inkrement dagegen.
 Anforderungen, die stabile IDs tragen (`DISP-1`, `CAL-3` …). Ein Ticket
 bringt eine Handvoll dieser Anforderungen in den Code.
 
+`conventions/` ist das parallele Doku-Genre für **Bauregeln**, die mehrere
+Komponenten gemeinsam tragen (`IDENT-1`, `SVC-1`, `LOG-4` …) — Genre seit
+2026-05-26. Konvention beschreibt *wie etwas gebaut wird*, Spec *was eine
+Komponente tut*. Konventions-Änderungen folgen demselben Spec-Halt-Reflex
+wie Spec-Änderungen (siehe CLAUDE.md §7).
+
 **Kein Code, bevor die Anforderung als Requirement-ID in der Spec steht und
 reviewt ist.** Spec und Code wandern zusammen — so driftet die Spec nicht
 von der Realität weg. Details zum Spec-Modell: `specs/README.md`.

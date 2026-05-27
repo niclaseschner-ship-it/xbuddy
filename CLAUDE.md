@@ -7,7 +7,11 @@
 
 `xbuddy` ist das Code-Repo von XBuddy. Es enthält:
 
-- `specs/` — die lebenden Specs (Quelle der Wahrheit für das Soll-Verhalten)
+- `specs/` — die lebenden Specs (Quelle der Wahrheit für das Soll-**Verhalten**)
+- `conventions/` — Bauregeln, die für mehrere Komponenten gelten (IDENT,
+  CONFIG, SVC, PORT, LOG, APP, DCOMP …). Genre seit 2026-05-26, eigene
+  ID-Präfixe, eigene README. Spec = was eine Komponente tut; Konvention =
+  wie es gebaut wird.
 - den **Implementierungscode**
 - den **Ticket-Workflow** (GitHub Issues + Projects)
 
@@ -39,9 +43,16 @@ Issue, …) bleiben englisch.
 
 ## 4. Spec-Driven
 
-`specs/` ist die Quelle der Wahrheit für das Soll-Verhalten von XBuddy.
+`specs/` ist die Quelle der Wahrheit für das Soll-**Verhalten** von XBuddy.
 Vor jeder Implementierung die betroffene Komponenten-Spec lesen und ggf.
 schärfen — kein Code ohne Requirement-ID in der Spec. Modell: specs/README.md.
+
+`conventions/` ist das parallele Doku-Genre für **Bauregeln**, die mehrere
+Komponenten gemeinsam tragen (`IDENT-1`, `SVC-1`, `LOG-4`, `PORT-2`,
+`DCOMP-1` …). Wenn eine Aussage „wie wird das gebaut" für künftige
+Geschwister-Komponenten gilt, gehört sie nach `conventions/<sache>.md`,
+nicht in eine Komponenten-Spec. Verhalten → `specs/`, Bauregel →
+`conventions/`. Modell: `conventions/README.md`.
 
 ## 5. Tickets & Workflow
 
