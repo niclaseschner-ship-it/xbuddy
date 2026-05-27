@@ -19,7 +19,7 @@ EnvironmentFile=__XBUDDY_REPO__/eltern-chat/.env
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=__XBUDDY_HOME__
 ExecStart=__XBUDDY_PYTHON__ main.py
-Restart=always
+Restart=on-failure
 RestartSec=10
 
 [Install]
