@@ -210,14 +210,21 @@ Pro-Instanz-Werte liegen damit **als Daten neben dem Code** — der
 Panel-Code bleibt reine Logik und ist über alle Panel-Instanzen
 identisch.
 
-**Format:** JSON-Objekt mit mindestens den folgenden Feldern (weitere
-Tuning-Werte können später dazukommen, ohne Breaking Change):
+**Format:** JSON-Objekt mit mindestens den folgenden Feldern in
+CONFIG-2-Form (weitere Tuning-Werte können später dazukommen, ohne
+Breaking Change):
 
-| Feld         | Typ    | Bedeutung                                                          |
-|--------------|--------|--------------------------------------------------------------------|
-| `source_id`  | string | Identität dieser Panel-Instanz, z. B. `app-panel:kueche`.          |
-| `display_id` | string | Identität des Displays, das diese Panel-Instanz steuert (Form `display:<name>` analog der `figure:`-Konvention der Figuren-Erkennung). |
-| `router_url` | string | Origin des Routers (Schema + Host[:Port], **ohne Pfad**, analog FIG-23). |
+| Name         | Default                          | Datei-Schlüssel | gesetzt durch (Onboarding-Schritt) |
+|--------------|----------------------------------|-----------------|------------------------------------|
+| `source_id`  | (kein Default — Pflicht)         | `source_id`     | — (offen, OPEN-PANEL-C)            |
+| `display_id` | (kein Default — Pflicht)         | `display_id`    | — (offen, OPEN-PANEL-C)            |
+| `router_url` | (kein Default — Pflicht)         | `router_url`    | — (offen, OPEN-PANEL-C)            |
+
+`source_id` ist die Identität dieser Panel-Instanz (z. B.
+`app-panel:kueche`). `display_id` ist die Identität des Displays, das
+diese Panel-Instanz steuert (Form `display:<name>` analog der
+`figure:`-Konvention der Figuren-Erkennung). `router_url` ist die
+Origin des Routers (Schema + Host[:Port], **ohne Pfad**, analog FIG-23).
 
 **Priorität & Fehler-Fallback:** Identisch zu FIG-23 / ROU-19. URL-
 Parameter überschreiben `config.json` überschreibt Defaults. Existiert
@@ -397,6 +404,21 @@ Mindest-Abdeckung:
   `sichtbar: true|false` (PANEL-4). Eine spätere Variante könnte
   Tageszeit-, Wochentag- oder Personen-Filter unterstützen (z. B.
   „Foto-Kachel nur am Wochenende"). Eigenes Ticket, sobald gebraucht.
+- **OPEN-PANEL-C** — Onboarding-Schritt für Panel-Instanz-Setup. Die
+  CONFIG-2-Tabelle in PANEL-8 hat heute drei Pflicht-Felder ohne
+  Default **und** ohne Onboarding-Schritt (`source_id`, `display_id`,
+  `router_url`) — formell eine CONFIG-2-Verletzung. Praktisch werden
+  Panel-Instanzen in V1 manuell beim Deployment befüllt
+  (`config.example.json` als Vorlage). Sobald Panel-Instanzen über den
+  Eltern-Chat eingerichtet werden können (analog der Funktions-Spec
+  `familie-anlegen.md`), bekommt jede Zeile der PANEL-8-Tabelle einen
+  konkreten Schritt-Namen.
+- **OPEN-PANEL-D** — Backoff-Werte des Event-Transports in PANEL-5
+  („200 ms / 1 s / 5 s", 3 Wiederholungen) sind heute Code-Konstanten
+  ohne Override-Pfad — nach CONFIG-2 / CLAUDE.md §6 (Daten vs. Code)
+  eine Spec-Verletzung. Saubere Lösung: eine eigene Tuning-Tabelle
+  (analog FIG-17 oder ROU-15) mit Datei-Schlüsseln in `config.json`.
+  Verhaltens-Änderung — separates Ticket.
 
 ---
 
