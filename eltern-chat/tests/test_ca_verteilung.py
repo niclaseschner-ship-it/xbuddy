@@ -130,23 +130,24 @@ def test_CAV_3_missing_certificate_file_aborts_cleanly(tmp_path):
 
 def test_CAV_3_ca_pem_path_is_a_per_instance_config_value():
     """CAV-3: der Pfad zur CA-Datei ist ein Per-Instanz-Konfigurationswert mit
-    Default UND Override-Pfad (Env/Datei) — keine reine Code-Konstante."""
+    Default UND Override-Pfad — keine reine Code-Konstante. Der Override-Pfad
+    folgt seit #179 der Loader-Konvention `ELTERNCHAT_<KEY>` und wird durch
+    das Schema (`DEFAULTS`) sichergestellt."""
     import config as config_mod
     assert "ca_pem_path" in config_mod.DEFAULTS
     assert config_mod.DEFAULTS["ca_pem_path"]                 # sinnvoller Default
-    assert "ca_pem_path" in config_mod.ENV_OVERRIDES          # Env-Override
 
 
-def test_CAV_3_config_resolves_ca_pem_path(tmp_path):
+def test_CAV_3_config_resolves_ca_pem_path(tmp_path, monkeypatch):
     """Die eltern-chat-Konfiguration löst ca_pem_path auf (Env > Datei > Default)."""
     import config as config_mod
-    env = {config_mod.ENV_BOT_TOKEN: "t",
-           "ELTERNCHAT_CA_PEM_PATH": "/instanz/rootCA.pem"}
-    cfg = config_mod.resolve(str(tmp_path / "config.json"), env=env)
+    monkeypatch.setenv(config_mod.ENV_BOT_TOKEN, "t")
+    monkeypatch.setenv("ELTERNCHAT_CA_PEM_PATH", "/instanz/rootCA.pem")
+    cfg = config_mod.resolve(str(tmp_path / "config.json"))
     assert cfg.ca_pem_path == "/instanz/rootCA.pem"
     # Ohne Override greift der Default.
-    cfg_default = config_mod.resolve(str(tmp_path / "config.json"),
-                                     env={config_mod.ENV_BOT_TOKEN: "t"})
+    monkeypatch.delenv("ELTERNCHAT_CA_PEM_PATH")
+    cfg_default = config_mod.resolve(str(tmp_path / "config.json"))
     assert cfg_default.ca_pem_path == config_mod.DEFAULTS["ca_pem_path"]
 
 
