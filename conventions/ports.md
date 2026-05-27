@@ -15,16 +15,10 @@ in einer Service-Datei oder im Code als wahre Quelle.
 | 5000 | Router | xbuddy-router |
 | 5010 | Familien-Registry | xbuddy-familie |
 | 5020 | Plan-Buddy | xbuddy-plan |
-| 5030 | Wetter-Buddy | xbuddy-wetter (Soll; Drift heute: 5001) |
-| 5040-5099 | für neue Buddys reserviert | — |
-
-Drift gegenüber dem Katalog wird in der SVC-Migration (Folge-Ticket F1)
-angeglichen.
+| 5030-5099 | für neue Buddys reserviert | — |
 
 ### PORT-3 — Komponenten binden nur an 127.0.0.1, nie an 0.0.0.0
 Komponenten binden ihren HTTP-Server an `127.0.0.1`, nicht an `0.0.0.0`.
 Öffentlich gemacht werden sie ausschließlich durch den Reverse-Proxy
 (nginx-Origin). Wer extern erreichbar sein muss, sagt das im Routing,
 nicht durch direktes Lauschen.
-
-Drift heute: Wetter bindet `0.0.0.0:5001` (gunicorn) — Folge-Ticket F1.

@@ -20,17 +20,12 @@ Komponenten-Prozesse, die durch diese Services am Leben gehalten werden.
 | `xbuddy-plan.service` | `plan/plan.service` | Plan-Buddy (`/display/plan/`, `/api/v1/plan/`) | `127.0.0.1:5020` |
 | `xbuddy-familie.service` | `familie/familie.service` | Familien-Mit-Host (FAM-7/FAM-8, `/api/v1/familie/`) | `127.0.0.1:5010` |
 | `xbuddy-eltern-chat.service` | `eltern-chat/eltern-chat.service` | Eltern-Chat Telegram-Bot (kein HTTP-Port, geht raus zu Telegram) | — |
-| `xbuddy-wetter.service` | `wetter/wetter.service` | Wetter-Buddy (`/display/wetter/`, `/api/v1/wetter/`) | `127.0.0.1:5030` |
 
 Jeder HTTP-Service bindet ausschließlich auf `127.0.0.1` (PORT-3) — von
 außen erreichbar ist nur die nginx-Origin auf `:8443` (URL-12). Alle
 Services laufen mit `Restart=on-failure` (SVC-3) und überleben Reboots,
 sobald sie `enabled` sind. Logs gehen an stdout/stderr (SVC-4) —
 `journalctl -u <service>` ist die Quelle der Wahrheit.
-
-Der Wetter-Service ist heute noch nicht in einer Instanz enabled
-(Wetter-Code lebt instanz-lokal außerhalb des Repos; PORT-3-Bind-Wechsel
-ist ein eigener PR).
 
 ## Platzhalter-Konvention
 
@@ -43,7 +38,6 @@ Die `*.service`-Dateien enthalten Per-Instanz-Werte als Platzhalter im Format
 | `__XBUDDY_HOME__` | Home-Verzeichnis dieses Users (`$HOME`). | `/home/buddy` |
 | `__XBUDDY_REPO__` | Pfad zum gecheckten xbuddy-Repo auf der Instanz. | `/home/buddy/repos/xbuddy` |
 | `__XBUDDY_PYTHON__` | Python-Interpreter mit installierten Repo-Abhängigkeiten. | `/home/buddy/apps/venv/bin/python` |
-| `__XBUDDY_WETTER_DIR__` | Working-Dir des Wetter-Buddys auf der Instanz (Wetter-Code lebt instanz-lokal, nicht im Repo). | `/home/buddy/apps/wetter` |
 
 Die `__…__`-Platzhalter erzwingen, dass nichts versehentlich vor dem `cp`
 als „passt schon" durchgeht — wer einen Service-File mit `__XBUDDY_REPO__`
@@ -79,7 +73,6 @@ Die übrigen Services haben keine `EnvironmentFile`-Abhängigkeit.
      [xbuddy-plan]=plan/plan.service
      [xbuddy-familie]=familie/familie.service
      [xbuddy-eltern-chat]=eltern-chat/eltern-chat.service
-     [xbuddy-wetter]=wetter/wetter.service
    )
    for svc in "${!SVC_SRC[@]}"; do
      sudo sed \
@@ -87,7 +80,6 @@ Die übrigen Services haben keine `EnvironmentFile`-Abhängigkeit.
        -e 's|__XBUDDY_HOME__|/home/buddy|g' \
        -e 's|__XBUDDY_REPO__|/home/buddy/repos/xbuddy|g' \
        -e 's|__XBUDDY_PYTHON__|/home/buddy/apps/venv/bin/python|g' \
-       -e 's|__XBUDDY_WETTER_DIR__|/home/buddy/apps/wetter|g' \
        "${SVC_SRC[$svc]}" \
        | sudo tee "/etc/systemd/system/${svc}.service" >/dev/null
    done
@@ -105,7 +97,6 @@ Die übrigen Services haben keine `EnvironmentFile`-Abhängigkeit.
    sudo systemctl enable --now xbuddy-plan.service
    sudo systemctl enable --now xbuddy-familie.service
    sudo systemctl enable --now xbuddy-eltern-chat.service
-   # xbuddy-wetter erst nach PORT-3-Bind-Wechsel (eigener PR)
    ```
 
 5. **Status prüfen** — alle Services müssen `active (running)` melden:
@@ -129,7 +120,6 @@ Zuordnung (analog zur Memory-Notiz `feedback-pi-service-restart`):
 | `plan/` | `sudo systemctl restart xbuddy-plan` |
 | `familie/` | `sudo systemctl restart xbuddy-familie` |
 | `eltern-chat/` | `sudo systemctl restart xbuddy-eltern-chat` |
-| Wetter-Code (instanz-lokal) | `sudo systemctl restart xbuddy-wetter` |
 | `deploy/nginx/xbuddy-origin.conf` | `sudo nginx -t && sudo systemctl reload nginx` |
 
 Configs (`routing.json`, `config.json`, `familie.json`, …) zählen wie Code:
@@ -138,7 +128,7 @@ Config-Änderungen den jeweiligen Service neu starten.
 
 Reihenfolge bei einem Sammel-Pull, der mehrere Komponenten anfasst:
 zuerst die unabhängigen Backends (`xbuddy-familie`, `xbuddy-plan`,
-`xbuddy-eltern-chat`, `xbuddy-wetter`), dann der Router (er fasst die anderen
+`xbuddy-eltern-chat`), dann der Router (er fasst die anderen
 über die nginx-Origin zusammen), zuletzt `nginx reload`, falls die Conf mit
 angefasst wurde.
 
