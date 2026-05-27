@@ -193,6 +193,44 @@ def test_PANEL_5_backoffs_constant_exported():
     assert out == [200, 1000, 5000]
 
 
+def test_PANEL_5_backoffs_overridable_via_opts():
+    """Nit (#126) Tuning-Externalisierung: postWithRetry akzeptiert eine
+    `backoffs`-Option und nutzt sie anstelle der Code-Default-Konstante.
+    Damit darf config.json den Wert ohne Code-Edit aendern."""
+    out = run_node('''
+        const delays = [];
+        const fakeFetch = () => Promise.reject(new Error('x'));
+        const fakeTimeout = (fn, ms) => { delays.push(ms); fn(); };
+        panelLib.postWithRetry({
+            fetchImpl: fakeFetch,
+            setTimeoutImpl: fakeTimeout,
+            url: 'http://x',
+            body: {},
+            backoffs: [10, 20],
+            onDrop: () => {},
+        });
+        setImmediate(() => console.log(JSON.stringify({ delays })));
+    ''')
+    assert out['delays'] == [10, 20], (
+        'postWithRetry muss opts.backoffs nutzen (bekommen: %r)' % out['delays'])
+
+
+def test_PANEL_5_backoffs_in_config_defaults():
+    """Tuning-Externalisierung: configDefaults() exponiert backoffs als
+    Daten-Feld, damit config.json es ueberschreiben kann."""
+    out = run_node('console.log(JSON.stringify(panelLib.configDefaults()));')
+    assert out.get('backoffs') == [200, 1000, 5000], (
+        'configDefaults muss backoffs als Default-Wert tragen (bekommen: %r)' % out.get('backoffs'))
+
+
+def test_PANEL_5_backoffs_in_example_config():
+    """Tuning-Externalisierung: config.example.json dokumentiert den
+    backoffs-Override-Pfad explizit (CLAUDE.md §6: Default UND Override-Pfad)."""
+    data = json.loads(read(CONFIG_EXAMPLE))
+    assert data.get('backoffs') == [200, 1000, 5000], (
+        'config.example.json muss backoffs explizit zeigen (CLAUDE.md §6)')
+
+
 def test_PANEL_5_success_no_retry():
     """Erfolgreicher POST → kein Retry."""
     out = run_node('''
@@ -329,19 +367,88 @@ def test_PANEL_7_flat_string_or_number_query_ok():
 #                         sichtbarer Fehler bei Konsistenz-Verletzung
 # ============================================================
 
-def test_PANEL_8_html_loads_config_via_fetch():
-    js = read(APPJS_PATH)
-    assert re.search(r"fetch\(\s*['\"]\.\/config\.json['\"]", js), \
-        'app.js muss ./config.json per fetch laden'
+def test_PANEL_8_loadConfigImpl_fetches_config_json():
+    """Verhaltens-Probe (Finding 5, #126): loadConfigImpl ruft den injizierten
+    fetchImpl mit './config.json' und no-store Cache auf. Statt Quelltext-
+    Regex prüfen wir, dass der echte Aufruf passiert."""
+    out = run_node('''
+        const calls = [];
+        const fakeFetch = (u, init) => {
+            calls.push({ url: u, init: init });
+            return Promise.resolve({
+                ok: true, json: () => Promise.resolve({ source_id: 'app-panel:x', display_id: 'display:y' })
+            });
+        };
+        panelLib.loadConfigImpl({ fetchImpl: fakeFetch })
+            .then((cfg) => {
+                console.log(JSON.stringify({ calls, cfg }));
+            });
+    ''')
+    assert out['calls'][0]['url'] == './config.json'
+    assert out['calls'][0]['init']['cache'] == 'no-store'
 
 
 def test_PANEL_8_missing_config_falls_back_silently_to_defaults():
-    """Fehlende/kaputte config.json → console.warn + Defaults. Keine Crash."""
-    js = read(APPJS_PATH)
-    # In loadConfig: catch-Block mit console.warn und Rückgabe der Defaults.
-    assert re.search(
-        r"catch\s*\([^)]*\)\s*\{[\s\S]*?console\.warn[\s\S]*?return\s+defaults",
-        js), 'Fehlende config.json darf die Seite nicht crashen — stumm auf Defaults'
+    """Verhaltens-Probe (Finding 5, #126): fetch wirft → loadConfigImpl ruft
+    onWarn, gibt die Defaults zurück. Kein Quelltext-Grep mehr — wir
+    beobachten den echten Promise-Ausgang."""
+    out = run_node('''
+        const warns = [];
+        const fakeFetch = () => Promise.reject(new Error('boom'));
+        panelLib.loadConfigImpl({
+            fetchImpl: fakeFetch,
+            onWarn: (...args) => { warns.push(String(args[0])); },
+        }).then((cfg) => {
+            console.log(JSON.stringify({ warns, cfg }));
+        });
+    ''')
+    assert len(out['warns']) == 1, 'Genau ein console.warn-aequivalenter Aufruf erwartet'
+    assert 'fallback' in out['warns'][0].lower()
+    # Defaults intakt: source_id startet mit "app-panel:", display_id mit "display:".
+    assert out['cfg']['source_id'].startswith('app-panel:')
+    assert out['cfg']['display_id'].startswith('display:')
+
+
+def test_PANEL_8_http_error_also_falls_back_to_defaults():
+    """Verhaltens-Probe: fetch liefert !ok → derselbe stumme Fallback-Pfad."""
+    out = run_node('''
+        const warns = [];
+        const fakeFetch = () => Promise.resolve({ ok: false, status: 500 });
+        panelLib.loadConfigImpl({
+            fetchImpl: fakeFetch,
+            onWarn: (...args) => { warns.push(String(args[0])); },
+        }).then((cfg) => {
+            console.log(JSON.stringify({ warns, cfg, isDefault: cfg.source_id === 'app-panel:demo' }));
+        });
+    ''')
+    assert len(out['warns']) == 1
+    assert out['isDefault'] is True
+
+
+def test_PANEL_8_consistency_mismatch_calls_onError():
+    """Verhaltens-Probe: gemergte cfg passt nicht zur Panel-ID → onError
+    bekommt eine sichtbare Meldung; cfg wird trotzdem zurueckgegeben
+    (kein Hard-Stop, siehe Doku-Kommentar in app.js)."""
+    out = run_node('''
+        const errors = [];
+        const fakeFetch = () => Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+                source_id: 'app-panel:wohnzimmer', display_id: 'display:x'
+            }),
+        });
+        panelLib.loadConfigImpl({
+            fetchImpl: fakeFetch,
+            panelIdFromHtml: 'kueche',
+            onError: (msg) => { errors.push(msg); },
+        }).then((cfg) => {
+            console.log(JSON.stringify({ errors, sourceId: cfg.source_id }));
+        });
+    ''')
+    assert len(out['errors']) == 1
+    assert 'source_id' in out['errors'][0].lower() or 'konfig' in out['errors'][0].lower()
+    # cfg wird trotzdem geliefert (Spec: sichtbarer Fehler, kein Abbruch).
+    assert out['sourceId'] == 'app-panel:wohnzimmer'
 
 
 def test_PANEL_8_config_overrides_defaults():
@@ -432,34 +539,135 @@ def test_PANEL_10_html_binds_manifest_and_registers_sw():
 
 
 def test_PANEL_10_wake_lock_requested_on_load_and_visibility():
-    js = read(APPJS_PATH)
-    assert re.search(r"navigator\.wakeLock\.request\(\s*['\"]screen['\"]\s*\)", js), \
-        'Wake Lock wird nicht angefordert'
-    # Erneut bei visibilitychange→visible.
-    assert re.search(r"visibilitychange", js)
-    assert re.search(
-        r"visibilityState\s*===\s*['\"]visible['\"][\s\S]{0,80}?request\s*\(",
-        js), 'Wake Lock muss nach visibilitychange erneut geholt werden'
+    """Verhaltens-Probe (Finding 5, #126): attachWakeLockImpl ruft beim
+    Anhaengen sofort wakeLock.request('screen'), registriert einen
+    visibilitychange-Listener und ruft request erneut, wenn der Listener
+    bei sichtbarer Seite feuert. Keine Quelltext-Greps."""
+    out = run_node('''
+        const requests = [];
+        const events = [];
+        const fakeNav = {
+            wakeLock: {
+                request: (kind) => {
+                    requests.push(kind);
+                    return Promise.resolve({ release: () => {} });
+                },
+            },
+        };
+        const fakeDoc = {
+            visibilityState: 'visible',
+            addEventListener: (type, cb) => { events.push({ type, cb }); },
+        };
+        const handle = panelLib.attachWakeLockImpl({ doc: fakeDoc, nav: fakeNav });
+        // Listener-Registrierung beobachten.
+        const visTypes = events.map(e => e.type);
+        // Listener feuern lassen, um den Re-Request zu beobachten.
+        events.filter(e => e.type === 'visibilitychange').forEach(e => e.cb());
+        // Hidden-State: KEIN weiterer Request.
+        fakeDoc.visibilityState = 'hidden';
+        events.filter(e => e.type === 'visibilitychange').forEach(e => e.cb());
+        console.log(JSON.stringify({ requests, visTypes }));
+    ''')
+    # Initial-Request + 1 Re-Request bei visible. Hidden darf nicht ausloesen.
+    assert out['requests'] == ['screen', 'screen'], (
+        'Erwartet: 1 Initial- + 1 Re-Request bei sichtbarer Seite (bekommen: %r)' % out['requests'])
+    assert 'visibilitychange' in out['visTypes']
+
+
+def test_PANEL_10_wake_lock_silent_when_unsupported():
+    """Verhaltens-Probe: nav ohne wakeLock-Property → kein Crash, kein Aufruf."""
+    out = run_node('''
+        const events = [];
+        const fakeNav = {};  // kein wakeLock
+        const fakeDoc = {
+            visibilityState: 'visible',
+            addEventListener: (type, cb) => { events.push({ type, cb }); },
+        };
+        let threw = false;
+        try { panelLib.attachWakeLockImpl({ doc: fakeDoc, nav: fakeNav }); }
+        catch (e) { threw = true; }
+        console.log(JSON.stringify({ threw, eventTypes: events.map(e => e.type) }));
+    ''')
+    assert out['threw'] is False
+    # visibilitychange-Listener wird trotzdem registriert (Konsistenz).
+    assert 'visibilitychange' in out['eventTypes']
 
 
 def test_PANEL_10_request_fullscreen_on_first_gesture():
-    js = read(APPJS_PATH)
-    assert re.search(r"requestFullscreen", js)
-    assert re.search(
-        r"addEventListener\(\s*['\"]touchend['\"]\s*,\s*tryFullscreen",
-        js), 'Fullscreen-Trigger muss an touchend hängen (touchstart gewährt keine Aktivierung)'
-    assert re.search(
-        r"addEventListener\(\s*['\"]click['\"]\s*,\s*tryFullscreen", js)
-    # Fehler abfangen, nicht werfen
-    assert re.search(r"document\.fullscreenElement", js), \
-        'Vollbild-Guard muss den echten Status prüfen (nicht ein verbrennbares Flag)'
+    """Verhaltens-Probe (Finding 5, #126): attachFullscreenImpl registriert
+    touchend+click; der Handler ruft documentElement.requestFullscreen,
+    aber NUR wenn nicht schon im Vollbild (Guard auf fullscreenElement)."""
+    out = run_node('''
+        const events = [];
+        const calls = [];
+        const fakeDoc = {
+            fullscreenElement: null,
+            documentElement: {
+                requestFullscreen: function () {
+                    calls.push('req');
+                    return Promise.resolve();
+                },
+            },
+            addEventListener: (type, cb, opts) => { events.push({ type, cb, opts }); },
+        };
+        const h = panelLib.attachFullscreenImpl({ doc: fakeDoc });
+        // touchend-Handler feuert → Request.
+        events.filter(e => e.type === 'touchend').forEach(e => e.cb());
+        // Jetzt sind wir „im Vollbild" — weitere Gesten muessen ignoriert werden.
+        fakeDoc.fullscreenElement = fakeDoc.documentElement;
+        events.filter(e => e.type === 'click').forEach(e => e.cb());
+        console.log(JSON.stringify({
+            calls,
+            types: events.map(e => e.type),
+            touchendPassive: events.find(e => e.type === 'touchend').opts && events.find(e => e.type === 'touchend').opts.passive,
+        }));
+    ''')
+    assert out['calls'] == ['req'], (
+        'requestFullscreen darf nur beim ersten Gesture feuern (bekommen: %r)' % out['calls'])
+    assert 'touchend' in out['types']
+    assert 'click' in out['types']
+    # touchend muss passive registriert sein, sonst blockiert Scroll-Verhalten.
+    assert out['touchendPassive'] is True
 
 
 def test_PANEL_10_fullscreen_failure_does_not_throw():
-    js = read(APPJS_PATH)
-    # try/catch um requestFullscreen — Fehler werden geschluckt.
-    assert re.search(r"try\s*\{[\s\S]{0,200}?req\.call\(el\)[\s\S]{0,200}?catch", js), \
-        'Fehler beim requestFullscreen müssen abgefangen werden'
+    """Verhaltens-Probe: requestFullscreen wirft synchron → kein Throw
+    aus attachFullscreenImpl.tryFullscreen heraus."""
+    out = run_node('''
+        const fakeDoc = {
+            fullscreenElement: null,
+            documentElement: {
+                requestFullscreen: function () { throw new Error('nope'); },
+            },
+            addEventListener: () => {},
+        };
+        const h = panelLib.attachFullscreenImpl({ doc: fakeDoc });
+        let threw = false;
+        try { h.tryFullscreen(); } catch (e) { threw = true; }
+        console.log(JSON.stringify({ threw }));
+    ''')
+    assert out['threw'] is False, 'Fehler beim requestFullscreen muss verschluckt werden'
+
+
+def test_PANEL_10_fullscreen_rejected_promise_does_not_throw():
+    """Verhaltens-Probe: requestFullscreen liefert rejected Promise → kein
+    unhandled rejection-Bruch. Wir verifizieren, dass der Code .catch anhaengt."""
+    out = run_node('''
+        let caught = false;
+        const fakeDoc = {
+            fullscreenElement: null,
+            documentElement: {
+                requestFullscreen: function () {
+                    return { then: function () { return this; }, catch: function (cb) { caught = true; return this; } };
+                },
+            },
+            addEventListener: () => {},
+        };
+        const h = panelLib.attachFullscreenImpl({ doc: fakeDoc });
+        h.tryFullscreen();
+        console.log(JSON.stringify({ caught }));
+    ''')
+    assert out['caught'] is True, 'attachFullscreenImpl muss .catch auf das Promise haengen'
 
 
 # ============================================================
@@ -568,6 +776,25 @@ def test_PANEL_11_stream_handlers_registered_on_eventsource():
     js = read(APPJS_PATH)
     assert re.search(r"es\.onerror\s*=", js), \
         'EventSource muss einen expliziten onerror-Handler haben (DC-6 dokumentiert)'
+
+
+def test_PANEL_11_duplicate_descriptor_returns_first_match():
+    """Finding 6 (#126): zwei Kacheln mit identischem {app, view, query}
+    sind in tiles.json zwar deskriptiv legal (PANEL-3 erzwingt nur den
+    `key`-Unique-Constraint, nicht den Descriptor), beim Aktiv-Match nimmt
+    findActiveTile aber den ersten Treffer in Listen-Reihenfolge — V1-
+    Verhalten explizit abgesichert."""
+    out = run_node('''
+        const tiles = [
+            { key: 'first',  app: 'plan', view: 'woche', label: 'L', icon: 'i', sichtbar: true },
+            { key: 'second', app: 'plan', view: 'woche', label: 'L', icon: 'i', sichtbar: true },
+        ];
+        const active = panelLib.findActiveTile(tiles, '/display/plan/woche');
+        console.log(JSON.stringify({ key: active && active.key }));
+    ''')
+    assert out['key'] == 'first', (
+        'findActiveTile muss bei doppeltem Descriptor den ersten Treffer liefern (V1) — '
+        'bekommen: %r' % out['key'])
 
 
 def test_PANEL_11_eventsource_used_for_reconnect():
