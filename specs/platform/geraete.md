@@ -124,9 +124,8 @@ Scheibe dieses PRs).
 ### GER-7 — `display_id`-Vergabe
 Die `id` eines Geräts ist seine **`display_id`** — derselbe Bezeichner,
 über den Router (ROU-9/ROU-18) und Display-Client (DC-1) das Gerät heute
-schon adressieren. Sie folgt der Objekt-ID-Bauregel — siehe IDENT-1 in
-`conventions/identifiers.md` (`<typ>-<slug>-<nn>`, stabil, nicht neu
-vergeben).
+schon adressieren. Die `id` folgt IDENT-1
+(`<typ>-<slug>-<nn>`, stabil, nicht neu vergeben).
 
 Geräte-spezifisch zur allgemeinen Regel:
 
@@ -190,8 +189,7 @@ Jede Anforderung mit Code-Verhalten hat einen automatisierten Test
 - **GER-6** — atomares Schreiben: bestehende Geräte byte-gleich nach
   Schreiben eines neuen Geräts; simulierter Schreib-Abbruch hinterlässt
   keine halbe Datei; Deaktivieren ändert nur `status`.
-- **GER-7** — Schema-Prüfung siehe IDENT-1 in
-  `conventions/identifiers.md`. Geräte-spezifisch: `<typ>` ist genau
+- **GER-7** — Schema-Prüfung folgt IDENT-1. Geräte-spezifisch: `<typ>` ist genau
   einer aus GER-2 (kein anderer Wert); Kollisionsfreiheit prüft je
   Familie — eine in dieser Instanz bereits vergebene `id` wird nicht
   erneut vergeben; eine einmal vergebene `id` wird nicht neu vergeben.
