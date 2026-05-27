@@ -25,6 +25,21 @@ die sie in ihrer aktuellen Entwicklung brauchen.
 4. **Offline-Fähigkeit** — mit Hub läuft XBuddy ohne Internet.
 5. **Nicht-invasiv** — kein Engagement-Design, keine Pushes.
 
+## App-Eigentümerschaft
+
+XBuddy besteht aus Apps, die einander nutzen, nicht gemeinsam besitzen.
+Jede App besitzt ihre Daten, ihre Funktion und ihre Schnittstelle —
+Konsumenten sind Nutzer, nicht Mit-Eigentümer. Eine App-Fähigkeit
+existiert für ihre Konsumenten genau dann, wenn die App installiert ist
+(Plan-Buddy fehlt → der Eltern-Chat kann keine Termine eintragen).
+
+Konsequenz für Plattform-Specs: was zwei Apps brauchen, wird *nicht*
+automatisch zur Plattform-Fähigkeit, solange eine App es als Eigentum
+trägt. Die Plattform ist Verbindung (Routing, Identität, Auth), nicht
+Funktion.
+
+Operative Ausformulierung: `conventions/apps.md` (Präfix APP).
+
 ## Anti-Goals
 
 Kein Lernprodukt · kein Spielzeug · kein Datenhändler · kein

@@ -388,12 +388,11 @@ zweiten Eigentümer für dieselbe Funktion geschaffen. Klare Eigentümerschaft �
 eine App besitzt, andere nutzen — hält die Abhängigkeiten einseitig
 (CLAUDE.md §6).
 
-> **Hinweis für XBuddy:** Diese Entscheidung ist als **Muster für alle
-> XBuddy-Apps** gedacht — jede App besitzt ihre Daten + Funktion + Schnittstelle,
-> Konsumenten-Fähigkeiten hängen an der Installation der App. Soll das
-> verbindlich für alle Apps gelten, gehört es als Prinzip in die
-> `constitution.md` / `xbuddy-knowledge/CONTEXT.md` — das ist eine
-> Richtungsentscheidung des XBuddy-Teams, kein Teil dieser Buddy-Spec.
+> **Hochgehoben (2026-05-27):** Das Muster „App besitzt Daten + Funktion +
+> Schnittstelle" gilt seit heute für alle XBuddy-Apps — als Prinzip in der
+> [Constitution](../constitution.md#app-eigentümerschaft) und operativ in
+> [`conventions/apps.md`](../../conventions/apps.md) (APP-1 … APP-3).
+> E-PLAN-1 bleibt als historische Erstanwendung des Musters stehen.
 
 ### E-PLAN-2 — Slots und Defaults sind Konfiguration, nicht Code
 *Datum:* 2026-05-22
