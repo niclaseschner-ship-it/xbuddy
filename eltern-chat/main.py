@@ -38,6 +38,8 @@ _REPO_ROOT_FOR_IMPORTS = os.path.dirname(os.path.dirname(os.path.abspath(__file_
 if _REPO_ROOT_FOR_IMPORTS not in sys.path:
     sys.path.insert(0, _REPO_ROOT_FOR_IMPORTS)
 
+from tools import logsetup  # noqa: E402 — LOG-4 (#166), Repo-Root liegt schon auf sys.path
+
 import agent
 import authz
 import config as config_mod
@@ -372,8 +374,9 @@ def parse_args(argv):
                    help="Pfad zur Gesprächs-Datenbank (EC-16)")
     p.add_argument("--store", default="onboarding-store.json",
                    help="Pfad zum Onboarding-Speicher (ONB-5)")
-    p.add_argument("--log-level", dest="log_level", default="INFO",
-                   help="DEBUG | INFO | WARNING | ERROR")
+    p.add_argument("--log-level", dest="log_level", default=None,
+                   help="DEBUG | INFO | WARNING | ERROR "
+                        "(überschreibt den Config-Wert, CONFIG-1)")
     # ZD-8: einheitliches Flag aus der Zugangsdaten-Komponente, damit der Bot
     # genauso wie andere Komponenten eine alternative ZD-Datei akzeptiert
     # (Test-/Debug-Workflow, Refs #131).
@@ -494,9 +497,12 @@ def build_context(cfg, db_path, store_path, zd_cli_path=None):
 
 def main(argv=None):
     args = parse_args(argv if argv is not None else sys.argv[1:])
-    logging.basicConfig(
-        level=getattr(logging, args.log_level.upper(), logging.INFO),
-        format="%(asctime)s %(levelname)s %(message)s")
+    # LOG-4 (#166): zentraler Setup statt eigenem basicConfig. Bootstrap-Level
+    # ist der CLI-Wert oder INFO — damit Config-Fehler unten bereits mit dem
+    # LOG-1-Format protokolliert werden. Nach erfolgreichem Resolve setzen
+    # wir auf den Config-Wert um (CLI-Flag > Config > Default; CONFIG-1,
+    # EC-15-Schema).
+    logsetup.setup(args.log_level or "INFO")
     try:
         cfg = config_mod.resolve(args.config, args.store)
         ctx = build_context(cfg, args.db, args.store,
@@ -504,6 +510,8 @@ def main(argv=None):
     except config_mod.ConfigError as e:
         logging.error("Konfigurationsfehler: %s", e)
         return 2
+    # CLI-Flag (Test-Werkzeug, CONFIG-1) überschreibt den Config-Wert.
+    logsetup.setup(args.log_level or cfg.log_level)
     if ctx.onboarding is not None:
         logging.info("Bot @%s — Onboarding-Modus: warte auf KI-Anbieter-Key (ONB-1).",
                      ctx.bot_username)
