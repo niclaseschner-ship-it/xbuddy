@@ -17,7 +17,7 @@ python3 router/main.py \
   --key  /tmp/xbuddy-serve/key.pem
 ```
 
-CLI > ENV (`ROUTER_HOST`, `ROUTER_PORT`, `ROUTER_LOG_LEVEL`) > `config.json` > Defaults (ROU-15).
+`config.json` ist die Wahrheit (CONFIG-1), ENV ist Dev-Override (`ROUTER_LISTEN_HOST`, `ROUTER_LISTEN_PORT`, `ROUTER_LOG_LEVEL`), CLI ist Test-Werkzeug, Defaults sind Fallback (ROU-15).
 
 ## Endpunkte
 
