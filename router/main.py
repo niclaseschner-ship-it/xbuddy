@@ -32,10 +32,15 @@ from tools import configloader, logsetup  # noqa: E402
 # ============================================================
 
 state = {}                # ROU-10: { display_id: {…} | None }
-routing_entries = []      # ROU-9 / ROU-18
-panels = {}               # ROU-18 panels-Abschnitt: source_id → { display_id }
-known_displays = set()    # Vereinigung aller display_ids in den Einträgen + panels
-routing_path = None       # zuletzt geladener Pfad — für den Reload-Endpoint (#140)
+# Snapshot-Caches der zuletzt erfolgreich gelesenen routing.json. Sie sind
+# NICHT mehr die Lookup-Wahrheit (DCOMP-2 / ROU-18: pro Aufruf frisch von
+# Disk lesen) — siehe _current_routing(). Sie bleiben als „last-known-good"
+# Fallback, wenn ein einzelner Read scheitert, und für den Admin-Reload-
+# Endpoint (#140) als sichtbarer Reload-Marker.
+routing_entries = []      # ROU-9 / ROU-18 Snapshot
+panels = {}               # ROU-18 panels-Snapshot: source_id → { display_id }
+known_displays = set()    # Snapshot der Vereinigung aller display_ids
+routing_path = None       # zuletzt geladener Pfad — Lookup-Quelle (DCOMP-2)
 
 
 def now_iso():
@@ -47,8 +52,14 @@ def now_iso():
 # ============================================================
 
 def lookup(source_id, descriptor):
-    """Erster Match per Feld-Gleichheit. None wenn kein Eintrag passt."""
-    for entry in routing_entries:
+    """Erster Match per Feld-Gleichheit. None wenn kein Eintrag passt.
+
+    DCOMP-2 / ROU-18: liest die Routing-Einträge pro Aufruf frisch von
+    Disk — Cross-Service-Schreibvorgänge (Eltern-Chat-Skills) werden
+    sofort sichtbar, ohne Service-Restart und ohne Admin-Reload-Aufruf.
+    """
+    entries, _panels, _known = _current_routing()
+    for entry in entries:
         if entry.get('source_id') != source_id:
             continue
         e_desc = entry.get('descriptor', {})
@@ -248,8 +259,14 @@ def build_panel_url(app_val, view_val, query):
 def apply_panel_trigger(source_id, descriptor):
     """ROU-24: Panel-Trigger anwenden. display_id aus panels-Eintrag, payload.url
     per Konvention. Findet sich kein Eintrag → wie ROU-11 unbekannter Trigger:
-    2xx, Warnung, kein State-Update."""
-    panel_entry = panels.get(source_id)
+    2xx, Warnung, kein State-Update.
+
+    DCOMP-2 / ROU-18: panels-Abschnitt wird pro Aufruf frisch von Disk
+    gelesen — Skill-Schreibvorgänge an `routing.json` (z. B. neues Panel
+    anlegen) werden ohne Restart sichtbar.
+    """
+    _entries, current_panels, _known = _current_routing()
+    panel_entry = current_panels.get(source_id)
     if panel_entry is None:
         logging.warning('App-Panel ohne panels-Eintrag: source_id=%s', source_id)
         return
@@ -337,8 +354,10 @@ def _parse_routing(path):
 
 
 def _install_routing(new_entries, new_panels, new_known):
-    """Übernimmt die geparsten Daten in den globalen State. Eigene Funktion,
-    damit Start- und Reload-Pfad denselben Übernahme-Schritt nutzen (DRY)."""
+    """Übernimmt die geparsten Daten in den Snapshot-Cache. Eigene Funktion,
+    damit Start- und Admin-Reload-Pfad denselben Übernahme-Schritt nutzen
+    (DRY). Lookups gehen NICHT mehr gegen diesen Cache, sondern via
+    _current_routing() pro Aufruf frisch zur Disk (DCOMP-2)."""
     global routing_entries, panels, known_displays
     routing_entries = new_entries
     panels = new_panels
@@ -346,6 +365,32 @@ def _install_routing(new_entries, new_panels, new_known):
     logging.info('routing geladen: %d Einträge, %d Panels, %d Displays (%s)',
                  len(routing_entries), len(panels), len(known_displays),
                  ', '.join(sorted(known_displays)) or '—')
+
+
+def _current_routing():
+    """DCOMP-2 / ROU-18 Reload-on-Read: liest `routing.json` pro Aufruf frisch
+    von Disk und liefert `(entries, panels, known_displays)`. Eltern-Chat-Skills
+    schreiben Cross-Service in diese Datei; der Lookup-Pfad muss den neuen
+    Stand ohne Service-Restart und ohne Admin-Reload-Aufruf sehen.
+
+    Fehlertoleranz: scheitert der Read oder Parse (Datei kurz weg, atomares
+    Replace im Halbschritt, kaputtes JSON), fällt der Aufruf auf den
+    Snapshot-Cache zurück, der beim letzten erfolgreichen Load installiert
+    wurde. Damit kippt der Router bei einem kurzen Race nicht in einen
+    leeren Zustand — gleicher Geist wie der atomare Admin-Reload (E-RELOAD-1).
+
+    Ohne konfigurierten `routing_path` (z. B. unter Tests, die `load_routing`
+    nicht aufgerufen haben) wird ebenfalls der Snapshot-Cache zurückgegeben.
+    """
+    if not routing_path:
+        return routing_entries, panels, known_displays
+    try:
+        return _parse_routing(routing_path)
+    except RoutingLoadError as e:
+        logging.debug(
+            'reload-on-read fiel auf snapshot zurück (%s); '
+            'Lookup nutzt zuletzt erfolgreich geladenen Stand', e)
+        return routing_entries, panels, known_displays
 
 
 def load_routing(path):
@@ -422,7 +467,10 @@ def events_endpoint():
 
 @app.route('/api/v1/displays/<display_id>/state', methods=['GET'])
 def get_state(display_id):
-    if display_id not in known_displays:
+    # DCOMP-2: known_displays pro Aufruf frisch berechnen — sonst sieht
+    # der Endpoint ein neu via Skill geschriebenes Display nicht.
+    _entries, _panels, current_known = _current_routing()
+    if display_id not in current_known:
         return jsonify({'error': 'unknown display'}), 404
     return jsonify(state.get(display_id))
 
@@ -430,7 +478,10 @@ def get_state(display_id):
 @app.route('/api/v1/displays/<display_id>/events', methods=['GET'])
 def display_events(display_id):
     # ROU-22: SSE-Zustands-Stream. Unbekannte id → 404 (wie ROU-12).
-    if display_id not in known_displays:
+    # DCOMP-2: frisch lesen, damit neu angelegte Displays auch hier
+    # sofort verbindungsbereit sind.
+    _entries, _panels, current_known = _current_routing()
+    if display_id not in current_known:
         return jsonify({'error': 'unknown display'}), 404
     resp = app.response_class(display_event_stream(display_id),
                               mimetype='text/event-stream')
@@ -500,8 +551,10 @@ def admin_reload():
 
 @app.route('/api/v1/diag', methods=['GET'])
 def diag():
+    # DCOMP-2: Diag spiegelt den aktuellen Lese-Stand — frisch von Disk.
+    current_entries, _panels, current_known = _current_routing()
     rows = []
-    for did in sorted(known_displays):
+    for did in sorted(current_known):
         rows.append('<h4>%s</h4><pre>%s</pre>' % (
             did,
             json.dumps(state.get(did), indent=2, ensure_ascii=False)))
@@ -514,8 +567,8 @@ def diag():
         '</head><body><h2>Router /api/v1/diag</h2>'
         '<p>displays: %s · routing-einträge: %d</p>'
         '<h3>State pro Display</h3>%s</body></html>') % (
-            ', '.join(sorted(known_displays)) or '(keine)',
-            len(routing_entries),
+            ', '.join(sorted(current_known)) or '(keine)',
+            len(current_entries),
             ''.join(rows) or '<p>(noch nichts)</p>')
 
 
