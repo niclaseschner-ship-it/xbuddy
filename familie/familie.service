@@ -1,10 +1,10 @@
-# XBuddy Plan-Buddy — systemd-Service-Vorlage.
+# XBuddy Familien-Registry HTTP-Service (FAM-7/FAM-8) — systemd-Service-Vorlage.
 #
 # Diese Datei ist eine VORLAGE. Vor `systemctl enable` Platzhalter ersetzen
 # (siehe deploy/systemd/README.md). Per-Instanz-Werte stehen nie im Repo.
 
 [Unit]
-Description=XBuddy Plan-Buddy-App
+Description=XBuddy Familien-Registry HTTP-Service (FAM-7/FAM-8)
 After=network-online.target
 Wants=network-online.target
 
@@ -13,8 +13,8 @@ User=__XBUDDY_USER__
 WorkingDirectory=__XBUDDY_REPO__
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=__XBUDDY_HOME__
-ExecStart=__XBUDDY_PYTHON__ -m plan.main --host 127.0.0.1 --port 5020
-Restart=always
+ExecStart=__XBUDDY_PYTHON__ -m familie.main --host 127.0.0.1 --port 5010 --registry __XBUDDY_REPO__/familie/familie.json
+Restart=on-failure
 RestartSec=10
 
 [Install]
