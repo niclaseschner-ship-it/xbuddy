@@ -45,4 +45,10 @@ Ausnahme: Test-Code darf eigenständig Logging konfigurieren
 (pytest-Caplog, eigene Handler) — die Konvention adressiert
 Service-Prozesse, nicht Test-Harnesses.
 
+`setup()` ersetzt den Root-Handler — wer zusätzliche Handler (z. B.
+`RotatingFileHandler` für lokale Tests) anhängen will, tut das **nach**
+dem `setup()`-Aufruf. Mehrfacher `setup()`-Aufruf bleibt idempotent;
+jeder Aufruf reisst die Handler-Liste auf einen einzigen LOG-1-Handler
+zurück.
+
 Querverweise: LOG-1, LOG-2, CONFIG-1, CLAUDE.md §6, `tools/logsetup.py`.
