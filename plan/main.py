@@ -59,13 +59,18 @@ else:  # python3 plan/main.py
 # ============================================================
 
 # Der Entrypoint befüllt `runtime`; Tests setzen es direkt über configure().
+# Der `config`-Slot ist ab DCOMP-2 (Reload-on-Read, #210) der Last-Known-Good-
+# Snapshot — nicht mehr die Lookup-Wahrheit. Endpoints lesen via
+# `_current_config()` pro Aufruf frisch von Disk; der Snapshot dient nur als
+# Fallback, wenn ein einzelner Read scheitert (gleicher atomarer Geist wie
+# E-RELOAD-1).
 runtime = {
-    "config": None,            # plan.config.Config
+    "config": None,            # plan.config.Config — Last-Known-Good-Snapshot
     "registry": registry_mod.Registry(),  # nur Test-/Fallback-Quelle
     "registry_path": None,     # Live: Pfad zur familie.json — Quelle des Wahren Stands
     "transport": None,         # plan.kalender.GoogleTransport (oder Fake in Tests)
-    "config_path": None,       # Pfad zur plan.json — Naht für den Reload-Endpoint (#140)
-    "transport_factory": None, # cfg -> transport — neu binden nach Config-Reload (#140)
+    "config_path": None,       # Pfad zur plan.json — Naht für DCOMP-2 + Reload-Endpoint (#140)
+    "transport_factory": None, # cfg -> transport — neu binden, wenn kalender_id wechselt
 }
 
 
@@ -83,17 +88,19 @@ def configure(cfg, registry, transport, registry_path=None,
     Restart sichtbar sind. Tests übergeben heute nur das in-memory-Objekt;
     bleibt `registry_path=None`, ist das `registry`-Objekt die feste Quelle.
 
-    `config_path` ist die Naht für den Reload-Endpoint (#140, EC-21): wird
-    er gesetzt, kann `POST /api/v1/plan/admin/reload` plan.json neu laden —
-    z. B. nachdem KAV (Kalender verbinden) eine neue `kalender_id`
-    geschrieben hat. Ohne `config_path` ist der Reload-Endpoint nicht
-    benutzbar (er antwortet 500).
+    `config_path` ist die Naht für DCOMP-2 (Reload-on-Read, #210) UND den
+    Admin-Reload-Endpoint (#140, EC-21): wird er gesetzt, liest der
+    Plan-Buddy `plan.json` pro Aufruf frisch von Disk — KAV-Schreibvorgänge
+    (Kalender verbinden) werden ohne Service-Restart und ohne Admin-Reload-
+    Aufruf sichtbar. Ohne `config_path` bleibt das übergebene `cfg`-Objekt
+    die Quelle (Test-Modus, kein Disk-IO).
 
-    `transport_factory(cfg) -> transport` wird im Reload-Pfad aufgerufen,
-    sobald eine neue Config geparst wurde, und liefert einen frischen
-    Transport mit der ggf. geänderten `kalender_id`. In Tests bleibt der
-    Default-Wert `None` — die Tests setzen den Transport direkt oder
-    übergeben einen eigenen Factory-Stub.
+    `transport_factory(cfg) -> transport` wird sowohl im Reload-on-Read-Pfad
+    (`_kalender()`, sobald die `kalender_id` wechselt) als auch im Admin-
+    Reload-Pfad aufgerufen, sobald eine neue Config geparst wurde, und liefert
+    einen frischen Transport mit der ggf. geänderten `kalender_id`. In Tests
+    bleibt der Default-Wert `None` — die Tests setzen den Transport direkt
+    oder übergeben einen eigenen Factory-Stub.
     """
     runtime["config"] = cfg
     runtime["registry"] = registry
@@ -119,15 +126,73 @@ def _aktuelle_registry():
     return registry_mod.load(path)
 
 
+def _current_config():
+    """DCOMP-2 Reload-on-Read: liefert die plan.json-Config pro Aufruf
+    frisch von Disk (#210, Refs #166).
+
+    Eltern-Chat-Skills schreiben Cross-Service in `plan.json` (KAV — Kalender
+    verbinden, EC-21). Der lesende Plan-Buddy muss den neuen Stand ohne
+    Service-Restart und ohne Admin-Reload-Aufruf sehen — sonst zeigt er den
+    alten Kalender, obwohl KAV bereits eine neue `kalender_id` geschrieben hat.
+
+    Fehlertoleranz (gleicher atomarer Geist wie der Admin-Reload, E-RELOAD-1):
+    scheitert der Read oder Parse (Datei kurz weg, atomares Replace im
+    Halbschritt, kaputtes JSON, ungültige Pflichtwerte wie fehlende
+    `kalender_id`), fällt der Aufruf auf den Last-Known-Good-Snapshot in
+    `runtime["config"]` zurück. Damit kippt der Plan-Buddy bei einem kurzen
+    Race nicht in einen leeren Zustand.
+
+    Ohne konfigurierten `config_path` (z. B. unter Tests, die `configure()`
+    ohne `config_path` aufgerufen haben) wird der Snapshot direkt
+    zurückgegeben — dann ist `runtime["config"]` weiterhin die Quelle und
+    die Test-Naht bleibt erhalten.
+    """
+    path = runtime.get("config_path")
+    snapshot = runtime["config"]
+    if not path:
+        return snapshot
+    try:
+        new_cfg = config_mod.resolve(path)
+    except (config_mod.ConfigError, OSError) as e:
+        logger.debug(
+            "reload-on-read fiel auf snapshot zurück (%s); "
+            "Lookup nutzt zuletzt erfolgreich geladenen Stand", e)
+        return snapshot
+    # Snapshot mitführen — der nächste fehlgeschlagene Read hat immer den
+    # zuletzt erfolgreichen Stand als Fallback.
+    runtime["config"] = new_cfg
+    return new_cfg
+
+
 def _kalender():
-    """Baut die Kalender-Anbindung aus dem laufenden Transport (PLAN-15…20)."""
-    return kalender_mod.Kalender(
-        runtime["transport"], _aktuelle_registry().alle())
+    """Baut die Kalender-Anbindung aus dem laufenden Transport (PLAN-15…20).
+
+    DCOMP-2 (#210): wechselt die `kalender_id` in plan.json (KAV-Schreibvorgang),
+    muss auch der Transport die neue ID kennen. Steht eine `transport_factory`
+    bereit (Live-Pfad), bauen wir den Transport bei Bedarf pro Aufruf neu —
+    der Snapshot in `runtime["transport"]` bleibt als Fallback. Tests, die
+    `transport_factory=None` lassen, behalten den festen Test-Transport — die
+    Test-Naht (PLAN-29) bleibt unberührt.
+    """
+    cfg = _current_config()
+    transport = runtime["transport"]
+    factory = runtime.get("transport_factory")
+    if factory is not None and getattr(transport, "kalender_id", None) != cfg.kalender_id:
+        # `kalender_id` hat sich gegenüber dem zuletzt gebauten Transport
+        # geändert — frischen Transport bauen und als neuen Snapshot halten.
+        transport = factory(cfg)
+        runtime["transport"] = transport
+    return kalender_mod.Kalender(transport, _aktuelle_registry().alle())
 
 
 def _db():
-    """Öffnet die SQLite-Verbindung (PLAN-9). Pro Request frisch (V1)."""
-    return db_mod.connect(runtime["config"].db_datei)
+    """Öffnet die SQLite-Verbindung (PLAN-9). Pro Request frisch (V1).
+
+    DCOMP-2 (#210): `db_datei` kommt aus dem frisch gelesenen plan.json —
+    falls ein Onboarding-Schritt das Datei-Verzeichnis migriert, wirkt das
+    ohne Service-Restart.
+    """
+    return db_mod.connect(_current_config().db_datei)
 
 
 # ============================================================
@@ -164,7 +229,10 @@ def woche():
     `?ansicht=klein`: Kleinkind (weniger Tage, XL-Maße, keine Termin-Leiste).
     `?ab=<iso>`: verschiebt den Anker (PLAN-4).
     """
-    cfg = runtime["config"]
+    # DCOMP-2 (#210): plan.json pro Request frisch von Disk — KAV-Schreibvorgänge
+    # (neue Slot-Liste, neue Defaults, neue Fenster-Größen, neue kalender_id)
+    # werden ohne Service-Restart in der View sichtbar.
+    cfg = _current_config()
     kleinkind = request.args.get("ansicht") == "klein"
     if kleinkind:
         anzahl_tage = cfg.fenster_kleinkind
@@ -222,7 +290,10 @@ def api_zuteilung():
     for feld in ("week_start", "day", "slot"):
         if feld not in body:
             return jsonify({"error": "%s ist Pflicht" % feld}), 400
-    slot = runtime["config"].slot(body["slot"])
+    # DCOMP-2 (#210): die Slot-Definition für die Validierung kommt aus dem
+    # frischen plan.json — eine eben hinzugefügte Slot-Form wird sofort als
+    # gültig akzeptiert, ohne Restart.
+    slot = _current_config().slot(body["slot"])
     if slot is None or not slot.ist_erwachsenen_slot():
         return jsonify({"error": "kein Erwachsenen-Slot: %r" % body["slot"]}), 400
     person_id = body.get("person_id")
@@ -336,27 +407,30 @@ def _aktivitaet_label(art):
 #  Admin: Reload (#140, EC-21)
 # ============================================================
 #
-# EC-21 (Eltern-Chat-Spec): „Änderungen wirken sofort und ehrlich". Der
-# Plan-Buddy lädt heute beim Start `plan.json` (PLAN-28) und hält die
-# aufgelöste Config im Speicher; KAV (Kalender verbinden) schreibt aber im
-# laufenden Betrieb eine neue `kalender_id` in genau diese Datei. Ohne
-# Reload-Aufruf bliebe der Plan-Buddy auf dem alten Kalender stehen und das
-# Versprechen wäre falsch.
+# Seit DCOMP-2 / #210 liest der Plan-Buddy `plan.json` pro Aufruf frisch von
+# Disk (`_current_config()`). KAV-Schreibvorgänge (Eltern-Chat „Kalender
+# verbinden", EC-21) werden damit ohne diesen Endpoint sichtbar — der
+# Reload-Endpoint ist NICHT MEHR NÖTIG, damit Skill-Schreibvorgänge wirken.
 #
-# Die Zugangsdaten (OAuth-Client + Refresh-Token) brauchen KEINEN expliziten
-# Reload: `zugangsdaten.Zugangsdaten.get(...)` liest pro Aufruf frisch von
-# Disk (ZD-4) — KAV-geschriebene Tokens sind ab dem nächsten Aufruf sichtbar.
-# Was im Speicher hängt, ist die aufgelöste `Config` (mit `kalender_id`,
-# Slots, Default-Verantwortlichkeiten, Fenster-Größen). Genau die laden wir
-# neu, und bauen anschließend den Transport mit der ggf. neuen kalender_id
-# neu (`transport_factory`).
+# Er bleibt aber als **expliziter, loggbarer Reload-Marker** für das
+# Skill-Service-Reload-Pattern (EC-21): ein Skill kann nach seinem
+# Schreibvorgang den Endpoint aufrufen, um ein klares Log-Ereignis zu erzeugen
+# („plan.json reloaded: kalender_id=…, slots=…"), und er aktualisiert den
+# Last-Known-Good-Snapshot in `runtime["config"]` (sodass spätere
+# Read-Fehler den frisch geschriebenen Stand als Fallback haben).
 #
-# Drei harte Eigenschaften — analog Router-Reload-Endpoint (PR #149):
+# Die Zugangsdaten (OAuth-Client + Refresh-Token) brauchen ebenfalls keinen
+# expliziten Reload: `zugangsdaten.Zugangsdaten.get(...)` liest pro Aufruf
+# frisch von Disk (ZD-4) — KAV-geschriebene Tokens sind ab dem nächsten
+# Aufruf sichtbar.
+#
+# Drei harte Eigenschaften des Endpoints — analog Router-Reload-Endpoint
+# (PR #149):
 #   1. Loopback-only (`request.remote_addr` ∈ {127.0.0.1, ::1}). Andere
 #      Aufrufer bekommen HTTP 403.
-#   2. Atomar (E-RELOAD-1): bei Parse-Fehler bleibt der alte State unberührt
-#      — Config UND Transport. Die Übernahme passiert erst, nachdem die
-#      neue Config erfolgreich gebaut wurde.
+#   2. Atomar (E-RELOAD-1): bei Parse-Fehler bleibt der alte Snapshot
+#      unberührt — Config UND Transport. Die Übernahme passiert erst,
+#      nachdem die neue Config erfolgreich gebaut wurde.
 #   3. nginx-Origin leitet `/api/v1/<komponente>/admin/...` NICHT weiter —
 #      die nginx-Conf ist von PR #149 bereits gehärtet. Der Loopback-Guard
 #      hier ist die zweite Schicht.
@@ -371,7 +445,9 @@ class PlanReloadError(Exception):
 
 
 def reload_plan_config():
-    """Lädt plan.json neu (#140, E-RELOAD-1) und ersetzt den In-Memory-State.
+    """Aktualisiert den Last-Known-Good-Snapshot aus plan.json (#140,
+    E-RELOAD-1). Expliziter Reload-Marker — die Lookup-Sichtbarkeit hängt
+    seit DCOMP-2 (#210) NICHT mehr davon ab.
 
     Liefert die neue `Config` bei Erfolg. Wirft PlanReloadError, wenn der
     Pfad nicht konfiguriert ist oder die Datei nicht parsbar ist — in dem

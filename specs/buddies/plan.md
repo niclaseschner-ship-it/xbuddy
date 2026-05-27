@@ -305,7 +305,22 @@ Die Konfiguration verteilt sich auf zwei Per-Instanz-Dateien neben dem
 Code (CONFIG-1) — beide gitignored:
 
 - `plan/plan.json` — Daten-Konfig (Slots, Defaults, Kalender-ID, …).
-  Format: `plan/plan.example.json`. Wird vom Eltern-Chat geschrieben.
+  Format: `plan/plan.example.json`. Wird vom Eltern-Chat geschrieben
+  (KAV — Kalender verbinden, EC-21). Der Plan-Buddy liest die Datei
+  **pro Aufruf frisch von Disk**
+  ([`conventions/data-components.md`](../../conventions/data-components.md)
+  DCOMP-2, Reload-on-Read): jeder Request, der die Daten-Konfig braucht
+  (View `woche`, Aktivitäts-Endpoint, Termin-Schnittstelle, Zuteilungs-
+  Endpoint), holt sich den aktuellen Stand frisch — ohne Service-
+  Restart und ohne expliziten Reload-Trigger. Der zuletzt erfolgreich
+  geladene Stand wird als Snapshot gehalten und nur dann als Fallback
+  verwendet, wenn ein einzelner Read scheitert (Datei kurz weg,
+  atomares Replace-Race, kaputtes JSON, ungültige Pflichtwerte) —
+  gleicher atomarer Geist wie der Admin-Reload (E-RELOAD-1). Der
+  Admin-Reload-Endpoint (`POST /api/v1/plan/admin/reload`, #140) bleibt
+  bestehen, ist aber **nicht mehr nötig**, damit Skill-Schreibvorgänge
+  sichtbar werden — er ist nur noch expliziter, loggbarer Reload-Marker
+  (Skill-Service-Reload-Pattern, EC-21) und aktualisiert den Snapshot.
 - `plan/config.json` — Runtime-Konfig (Bind-Adresse, Log-Level).
   Existiert nicht „by default"; fehlt sie, greifen die Schema-Defaults
   (CONFIG-1). Der gemeinsame `tools/configloader.py` (#179) lädt diese
@@ -346,7 +361,7 @@ keine Familien-Form — und gehören deshalb nicht in diese Tabelle.
 CLI-Flags (`--host`, `--port`, `--log-level`, `--config`) sind
 Test-Werkzeug.
 
-*Tickets:* #40, #179
+*Tickets:* #40, #179, #210
 
 ## 10. Tests
 

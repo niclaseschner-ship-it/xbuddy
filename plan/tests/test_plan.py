@@ -1120,3 +1120,150 @@ def test_140_reload_endpoint_only_post_allowed(reload_client):
     client, _, _ = reload_client
     r = client.get(RELOAD_URL)
     assert r.status_code == 405
+
+
+# ============================================================
+#  DCOMP-2 — Reload-on-Read (Refs #210, #166)
+# ============================================================
+#
+# `conventions/data-components.md` DCOMP-2 verlangt: Komponenten, die
+# persistente Daten lesen, lesen sie pro Aufruf frisch von Disk — kein In-
+# Memory-Cache als Lookup-Wahrheit. Eltern-Chat-Skills schreiben Cross-
+# Service in plan.json (KAV — Kalender verbinden, EC-21). Der Plan-Buddy
+# muss den neuen Stand ohne Service-Restart und ohne Admin-Reload-Aufruf
+# sehen — analog Router (PR #204). Der Last-Known-Good-Snapshot
+# (runtime["config"]) ist Fallback, nicht Lookup-Quelle.
+
+
+def test_DCOMP_2_view_sieht_neue_kalender_id_ohne_reload(reload_client):
+    """KAV-Szenario Ende-zu-Ende: ein Skill schreibt eine neue kalender_id
+    in plan.json. Der nächste Request, der die Kalender-Anbindung braucht
+    (Termin-Schnittstelle GET /api/v1/plan/termine), nutzt den neuen
+    Transport — OHNE dass der Admin-Reload-Endpoint aufgerufen wurde."""
+    client, cfg_path, built = reload_client
+    # Vor dem Schreibvorgang: ein Transport mit der alten ID.
+    assert len(built) == 1
+    assert built[0].kalender_id == "demo@group.calendar.google.com"
+
+    # KAV schreibt eine neue kalender_id (kein POST /admin/reload!).
+    _write_plan_json(str(cfg_path),
+                     kalender_id="neu@group.calendar.google.com")
+
+    # Nächster Termin-Request: der Plan-Buddy liest plan.json frisch und
+    # baut einen Transport mit der neuen ID — ohne Admin-Reload.
+    r = client.get("/api/v1/plan/termine?ab=2026-05-20&tage=7")
+    assert r.status_code == 200
+    assert len(built) == 2
+    assert built[1].kalender_id == "neu@group.calendar.google.com"
+
+
+def test_DCOMP_2_woche_sieht_neuen_slot_ohne_reload(reload_client, demo_registry):
+    """Ein Skill ergänzt einen neuen Slot in plan.json. Der nächste Aufruf
+    der View `woche` rendert die neue Slot-Spalte sofort — ohne Admin-
+    Reload-Call. Vorher: 7 Slots; nachher: 8 Slots."""
+    client, cfg_path, _ = reload_client
+    # Vorab: Wochen-View kennt die 7 Handoff-Slots.
+    cfg_vorher = plan_main._current_config()
+    assert len(cfg_vorher.slots) == 7
+
+    # Skill schreibt einen zusätzlichen Slot — kein POST /admin/reload.
+    _write_plan_json(str(cfg_path), extra_slot=True)
+
+    # Nächster Aufruf: der frische Read sieht den neuen Slot.
+    cfg_nachher = plan_main._current_config()
+    assert len(cfg_nachher.slots) == 8
+    assert cfg_nachher.slot("wash") is not None
+
+
+def test_DCOMP_2_zuteilung_validiert_gegen_frische_slots(reload_client,
+                                                          demo_registry):
+    """Eine vom Skill neu ergänzte Slot-Definition wird sofort als gültiger
+    Zuteilungs-Slot akzeptiert — ohne Admin-Reload-Call. Analog
+    test_PLAN_19_zuteilung_validates_against_fresh_registry für die
+    Registry-Naht."""
+    client, cfg_path, _ = reload_client
+    # Vor dem Skill-Schreibvorgang: 'wash' kennt der Plan-Buddy nicht → 400.
+    r0 = client.put("/api/v1/plan/zuteilung", json={
+        "week_start": "2026-05-25", "day": 0, "slot": "wash",
+        "person_id": "niclas"})
+    assert r0.status_code == 400
+
+    # Skill ergänzt den 'wash'-Slot (Erwachsenen-Slot) — kein Admin-Reload.
+    _write_plan_json(str(cfg_path), extra_slot=True)
+
+    # Ohne Restart: 'wash' ist eine gültige Slot-ID.
+    r1 = client.put("/api/v1/plan/zuteilung", json={
+        "week_start": "2026-05-25", "day": 0, "slot": "wash",
+        "person_id": "niclas"})
+    assert r1.status_code == 200
+
+
+def test_DCOMP_2_kaputtes_plan_json_faellt_auf_snapshot(reload_client):
+    """Resilienz: scheitert ein einzelner Read (kaputtes JSON, atomares
+    Replace im Halbschritt), kippt der Plan-Buddy NICHT in einen leeren
+    Zustand — er liefert den zuletzt erfolgreichen Snapshot. Gleicher
+    atomarer Geist wie der Admin-Reload (E-RELOAD-1)."""
+    client, cfg_path, built = reload_client
+    cfg_before = plan_main.runtime["config"]
+    kalender_id_before = cfg_before.kalender_id
+
+    # plan.json kurz kaputt — ein Halbschritt im atomaren Replace.
+    cfg_path.write_text("{nicht valides json")
+
+    # Der nächste View-Aufruf greift via _current_config() → Read fails →
+    # Snapshot-Fallback. Die View bleibt funktionsfähig.
+    r = client.get("/display/plan/woche")
+    assert r.status_code == 200
+
+    # Snapshot in runtime["config"] ist unverändert — kein Kippen in leeren
+    # Zustand. Lookup nutzt weiterhin den letzten guten Stand.
+    assert plan_main.runtime["config"] is cfg_before
+    assert plan_main.runtime["config"].kalender_id == kalender_id_before
+    # Es wurde KEIN neuer Transport gebaut (kalender_id hat sich nicht
+    # geändert — der Snapshot blieb stehen).
+    assert len(built) == 1
+
+
+def test_DCOMP_2_unvollstaendige_plan_json_faellt_auf_snapshot(reload_client):
+    """Resilienz, zweite Form: plan.json wird mit fehlender kalender_id
+    geschrieben (ConfigError beim Parse — Pflichtwert fehlt). Der Snapshot
+    bleibt die Wahrheit, kein Kippen in leeren Zustand."""
+    client, cfg_path, _ = reload_client
+    cfg_before = plan_main.runtime["config"]
+
+    # plan.json ohne kalender_id-Pflichtwert.
+    data = json.loads(json.dumps(DEMO_CONFIG))
+    data["kalender_id"] = ""
+    cfg_path.write_text(json.dumps(data))
+
+    # Der nächste View-Aufruf liest, scheitert am Pflicht-Validate, fällt
+    # auf Snapshot zurück und bleibt funktionsfähig.
+    r = client.get("/display/plan/woche")
+    assert r.status_code == 200
+    assert plan_main.runtime["config"] is cfg_before
+
+
+def test_DCOMP_2_admin_reload_aktualisiert_snapshot(reload_client):
+    """Der Admin-Reload-Endpoint ist ab DCOMP-2 nicht mehr für die
+    Sichtbarkeit nötig (das macht Reload-on-Read), aber er ist weiterhin
+    expliziter Reload-Marker (EC-21) und aktualisiert den Snapshot — sodass
+    spätere Read-Fehler den frisch geschriebenen Stand als Fallback haben."""
+    client, cfg_path, built = reload_client
+    # Eine neue Config wird geschrieben + Admin-Reload aufgerufen.
+    _write_plan_json(str(cfg_path),
+                     kalender_id="neu@group.calendar.google.com",
+                     extra_slot=True)
+    r = client.post(RELOAD_URL)
+    assert r.status_code == 200
+
+    # Snapshot ist aktualisiert.
+    snapshot = plan_main.runtime["config"]
+    assert snapshot.kalender_id == "neu@group.calendar.google.com"
+    assert snapshot.slot("wash") is not None
+
+    # Jetzt plan.json wieder kaputt machen — der Snapshot soll den frisch
+    # geschriebenen Stand widerspiegeln, nicht den ursprünglichen.
+    cfg_path.write_text("{kaputt")
+    fallback = plan_main._current_config()
+    assert fallback is snapshot
+    assert fallback.kalender_id == "neu@group.calendar.google.com"
