@@ -335,6 +335,7 @@ nicht — ONB-6) liegen daneben — der Loader rührt Geheimnisse nicht an
 | Geräte-Registry-Pfad       | `../geraete/geraete.json`                   | `geraete_registry_path` | n/a (Default reicht beim Standard-Layout)      |
 | Display-URL-Origin (GAA-3.7) | leer (Bot gibt nur `/display/<id>` aus)   | `display_url_origin`    | — (offen, OPEN-EC-Origin)                      |
 | Plan-JSON-Pfad (KAV-X)     | `../plan/plan.json`                         | `plan_json_path`        | n/a (Default reicht beim Standard-Layout)      |
+| Log-Level (LOG-1/LOG-4)    | `INFO`                                      | `log_level`             | n/a (Default reicht; Dev-Override per ENV/CLI) |
 
 Werte, die nur als Code-Konstante existieren — ohne Override-Pfad — sind
 Spec-Verletzung (CLAUDE.md §6 Daten vs. Code).
@@ -342,10 +343,13 @@ Spec-Verletzung (CLAUDE.md §6 Daten vs. Code).
 ENV-Variablen (`ELTERNCHAT_PROVIDER`, `ELTERNCHAT_PROVIDER_MODEL`,
 `ELTERNCHAT_CONTEXT_DEPTH`, `ELTERNCHAT_CA_PEM_PATH`,
 `ELTERNCHAT_FAMILY_REGISTRY_PATH`, `ELTERNCHAT_GERAETE_REGISTRY_PATH`,
-`ELTERNCHAT_DISPLAY_URL_ORIGIN`, `ELTERNCHAT_PLAN_JSON_PATH`) sind nach
-CONFIG-1 Dev-Override, keine Familien-Form — und gehören deshalb nicht
-in diese Tabelle. CLI-Flags gibt es für den Eltern-Chat nicht (außer
-`--config`, `--db`, `--store` als Test-Werkzeug).
+`ELTERNCHAT_DISPLAY_URL_ORIGIN`, `ELTERNCHAT_PLAN_JSON_PATH`,
+`ELTERNCHAT_LOG_LEVEL`) sind nach CONFIG-1 Dev-Override, keine
+Familien-Form — und gehören deshalb nicht in diese Tabelle. CLI-Flags
+sind `--config`, `--db`, `--store` als Test-Werkzeug, plus
+`--log-level` als Dev-Override für LOG-4 (gleiches Vehikel wie bei
+Router/Plan, vgl. `conventions/logging.md`). Priorität bleibt
+**CLI > ENV > config.json > Defaults**.
 
 Bot-Token (`ELTERNCHAT_BOT_TOKEN`) und Anbieter-API-Key
 (`ELTERNCHAT_PROVIDER_API_KEY`, optional) sind Geheimnisse und stehen
