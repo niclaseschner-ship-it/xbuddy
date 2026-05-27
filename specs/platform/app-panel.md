@@ -67,6 +67,9 @@ sitzt im richtigen Prefix, weicht aber bewusst von der
 Action-/Asset-Form ab, weil eine Panel-Instanz adressiert wird, nicht
 eine Aktion oder ein Asset. (Decision 5)
 
+Diese Abweichung ist zentral als Teil der Übersicht aller
+URL-3a-Abweichungen in [`urls.md`](urls.md) (URL-3a) aufgelistet.
+
 Die Aktion eines Kachel-Taps läuft **nicht** über einen eigenen
 Controller-Aktions-Pfad (kein `/controller/app-panel/<id>/select`),
 sondern über den generischen Event-Eingang `POST /api/v1/events`

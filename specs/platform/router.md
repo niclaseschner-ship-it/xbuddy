@@ -281,7 +281,8 @@ Einrichtung am Gerät selbst sichtbar, statt mit einer nackten
 Der Pfad sitzt unter dem erlaubten `/display/`-Prefix (URL-1), weicht
 aber bewusst von der `/display/<buddy>/<view>`-Form (URL-2) ab: er
 adressiert ein Display über seine `id`, nicht über Buddy/View.
-Dokumentierte Abweichung.
+Dokumentierte Abweichung — zentral als Teil der Übersicht aller
+URL-3a-Abweichungen in [`urls.md`](urls.md) (URL-3a) aufgelistet.
 
 *Tickets:* #5, #24, #30
 
