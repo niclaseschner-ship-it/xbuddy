@@ -34,6 +34,7 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from familie import registry as registry_mod  # noqa: E402
+from tools import configloader  # noqa: E402
 from zugangsdaten import Zugangsdaten, resolve_store_path  # noqa: E402
 
 # Das plan-Paket wird als Paket importiert, damit die relativen Imports in
@@ -455,10 +456,13 @@ def admin_reload():
 
 logger = logging.getLogger(__name__)
 
-DEFAULTS = {
+# Runtime-Konfig-Schema (CONFIG-1, #179): nur die nicht-PLAN-28-Werte,
+# die der Service-Start braucht — Bind, Log-Level. Slots/Kalender-ID etc.
+# leben weiter in plan.json (PLAN-28), das ist eine andere Sache.
+RUNTIME_SCHEMA = {
     "listen_host": "127.0.0.1",
     "listen_port": 5020,
-    "log_level": "INFO",
+    "log_level":   "INFO",
 }
 
 
@@ -479,14 +483,16 @@ def parse_args(argv):
 
 
 def resolved_runtime_config(args):
-    """Host/Port/Log-Level: Defaults < ENV < CLI."""
-    cfg = dict(DEFAULTS)
-    if "PLAN_HOST" in os.environ:      cfg["listen_host"] = os.environ["PLAN_HOST"]
-    if "PLAN_PORT" in os.environ:      cfg["listen_port"] = int(os.environ["PLAN_PORT"])
-    if "PLAN_LOG_LEVEL" in os.environ: cfg["log_level"] = os.environ["PLAN_LOG_LEVEL"]
+    """Host/Port/Log-Level: Datei < ENV < CLI.
+
+    Datei + ENV kommen vom gemeinsamen `tools.configloader` (CONFIG-1,
+    #179). CLI-Flags bleiben Test-Werkzeug (CONFIG-1) und überschreiben
+    den Loader-Output.
+    """
+    cfg = configloader.load(component="plan", schema=RUNTIME_SCHEMA)
     if args.host:      cfg["listen_host"] = args.host
     if args.port:      cfg["listen_port"] = args.port
-    if args.log_level: cfg["log_level"] = args.log_level
+    if args.log_level: cfg["log_level"]   = args.log_level
     return cfg
 
 
