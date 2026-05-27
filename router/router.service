@@ -1,20 +1,20 @@
-# XBuddy Familien-Registry HTTP-Service (FAM-7/FAM-8) — systemd-Service-Vorlage.
+# XBuddy Router — systemd-Service-Vorlage.
 #
 # Diese Datei ist eine VORLAGE. Vor `systemctl enable` Platzhalter ersetzen
 # (siehe deploy/systemd/README.md). Per-Instanz-Werte stehen nie im Repo.
 
 [Unit]
-Description=XBuddy Familien-Registry HTTP-Service (FAM-7/FAM-8)
+Description=XBuddy Router
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 User=__XBUDDY_USER__
-WorkingDirectory=__XBUDDY_REPO__
+WorkingDirectory=__XBUDDY_REPO__/router
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=__XBUDDY_HOME__
-ExecStart=__XBUDDY_PYTHON__ -m familie.main --host 127.0.0.1 --port 5010 --registry __XBUDDY_REPO__/familie/familie.json
-Restart=always
+ExecStart=__XBUDDY_PYTHON__ main.py --host 127.0.0.1 --port 5000
+Restart=on-failure
 RestartSec=10
 
 [Install]

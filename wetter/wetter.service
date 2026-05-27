@@ -1,0 +1,27 @@
+# XBuddy Wetter-Buddy — systemd-Service-Vorlage.
+#
+# Diese Datei ist eine VORLAGE. Vor `systemctl enable` Platzhalter ersetzen
+# (siehe deploy/systemd/README.md). Per-Instanz-Werte stehen nie im Repo.
+#
+# Hinweis: Der Wetter-Code lebt heute außerhalb des xbuddy-Repos
+# (Per-Instanz-Pfad, Platzhalter `__XBUDDY_WETTER_DIR__`). Das Soll von
+# PORT-3 (`127.0.0.1:5030`) ist hier bereits abgebildet; der zugehörige
+# Code-Wechsel (Bind-Adresse) ist ein eigener PR (Track T8) und dieser
+# Service wird erst danach am Pi enabled.
+
+[Unit]
+Description=XBuddy Wetter-Buddy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__XBUDDY_USER__
+WorkingDirectory=__XBUDDY_WETTER_DIR__
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=__XBUDDY_HOME__
+ExecStart=__XBUDDY_PYTHON__ -m wetter.main --host 127.0.0.1 --port 5030
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
