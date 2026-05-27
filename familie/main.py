@@ -28,6 +28,7 @@ from flask import Flask, jsonify, send_file
 # familie/-Verzeichnis direkt gestartet wurde — Workaround auf dem Pi war
 # `WorkingDirectory=…/familie` im systemd-File.
 from familie import registry as registry_mod
+from tools import logsetup
 
 
 # ============================================================
@@ -221,9 +222,11 @@ def load_settings(registry, registry_path=None):
 def main(argv=None):
     args = parse_args(argv if argv is not None else sys.argv[1:])
     cfg = resolved_config(args)
-    logging.basicConfig(
-        level=getattr(logging, cfg["log_level"].upper(), logging.INFO),
-        format="%(asctime)s %(levelname)s %(message)s")
+    # LOG-4: gemeinsamer Logging-Setup über tools/logsetup (#166). Familie
+    # ist noch nicht auf tools/configloader migriert (eigener Track) —
+    # `cfg["log_level"]` kommt weiter aus der FAM-9-Auflösung
+    # (Defaults < ENV < CLI in resolved_config).
+    logsetup.setup(cfg["log_level"])
 
     reg = registry_mod.load(cfg["registry"])
     settings = load_settings(reg, registry_path=cfg["registry"])
