@@ -122,10 +122,6 @@ Zuordnung (analog zur Memory-Notiz `feedback-pi-service-restart`):
 | `eltern-chat/` | `sudo systemctl restart xbuddy-eltern-chat` |
 | `deploy/nginx/xbuddy-origin.conf` | `sudo nginx -t && sudo systemctl reload nginx` |
 
-Configs (`routing.json`, `config.json`, `familie.json`, …) zählen wie Code:
-sie werden beim Start geladen, kein Hot-Reload (ROU-18). Also auch nach reinen
-Config-Änderungen den jeweiligen Service neu starten.
-
 Reihenfolge bei einem Sammel-Pull, der mehrere Komponenten anfasst:
 zuerst die unabhängigen Backends (`xbuddy-familie`, `xbuddy-plan`,
 `xbuddy-eltern-chat`), dann der Router (er fasst die anderen

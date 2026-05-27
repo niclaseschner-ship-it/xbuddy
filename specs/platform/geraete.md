@@ -166,7 +166,9 @@ Anbindung in eigenen Tickets nach:
 ### GER-9 — Konfigurationswerte
 Familienspezifische Werte leben in `geraete.json` (GER-4). Der Pfad zur
 Registry-Datei selbst kann nicht in der Datei stehen und bleibt deshalb
-Env/CLI.
+Env/CLI. Die Tabelle folgt der Konfigurations-Konvention
+[`conventions/config.md`](../../conventions/config.md) CONFIG-2: jeder
+Wert hat einen Default und eine Quelle.
 
 | Wert            | Default                       | Quelle                                            |
 |-----------------|-------------------------------|---------------------------------------------------|

@@ -304,9 +304,9 @@ def _parse_routing(path):
     Parse-Fehler. Die Funktion ändert KEINEN globalen Zustand — das macht
     erst die aufrufende Schicht (load_routing oder reload_routing).
 
-    Damit ist die Atomarität (E-RELOAD-1, #140) sauber getrennt: solange
-    diese Funktion einen Fehler wirft, hat der Router seinen alten State
-    nicht verändert und beantwortet weitere Events wie zuvor."""
+    Damit ist die Atomarität (E-RELOAD-1 / ROU-25, #140) sauber getrennt:
+    solange diese Funktion einen Fehler wirft, hat der Router seinen alten
+    State nicht verändert und beantwortet weitere Events wie zuvor."""
     try:
         with open(path) as f:
             data = json.load(f)
