@@ -41,23 +41,25 @@ def _members(*user_ids):
 
 def test_GAA_5_geraete_registry_path_is_a_per_instance_config_value():
     """GAA-5: der Pfad zur Geräte-Registry ist ein Per-Instanz-Konfigurations-
-    wert mit Default UND Override-Pfad (Env/Datei) — keine Code-Konstante
-    (CLAUDE.md §6 / EC-15 / GER-9)."""
+    wert mit Default UND Override-Pfad — keine Code-Konstante
+    (CLAUDE.md §6 / EC-15 / GER-9). Der Override-Pfad folgt seit #179 der
+    Loader-Konvention `ELTERNCHAT_<KEY>` und wird durch das Schema
+    (`DEFAULTS`) sichergestellt."""
     import config as config_mod
     assert "geraete_registry_path" in config_mod.DEFAULTS
     assert config_mod.DEFAULTS["geraete_registry_path"]
-    assert "geraete_registry_path" in config_mod.ENV_OVERRIDES
 
 
-def test_GAA_5_config_resolves_geraete_registry_path(tmp_path):
+def test_GAA_5_config_resolves_geraete_registry_path(tmp_path, monkeypatch):
     """EC-15: Env > Datei > Default für `geraete_registry_path`."""
     import config as config_mod
-    env = {config_mod.ENV_BOT_TOKEN: "t",
-           "ELTERNCHAT_GERAETE_REGISTRY_PATH": "/var/lib/xbuddy/geraete.json"}
-    cfg = config_mod.resolve(str(tmp_path / "config.json"), env=env)
+    monkeypatch.setenv(config_mod.ENV_BOT_TOKEN, "t")
+    monkeypatch.setenv("ELTERNCHAT_GERAETE_REGISTRY_PATH",
+                       "/var/lib/xbuddy/geraete.json")
+    cfg = config_mod.resolve(str(tmp_path / "config.json"))
     assert cfg.geraete_registry_path == "/var/lib/xbuddy/geraete.json"
-    cfg_default = config_mod.resolve(
-        str(tmp_path / "config.json"), env={config_mod.ENV_BOT_TOKEN: "t"})
+    monkeypatch.delenv("ELTERNCHAT_GERAETE_REGISTRY_PATH")
+    cfg_default = config_mod.resolve(str(tmp_path / "config.json"))
     assert cfg_default.geraete_registry_path == \
         config_mod.DEFAULTS["geraete_registry_path"]
 

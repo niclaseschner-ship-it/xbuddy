@@ -310,23 +310,51 @@ und die Familien-Gruppen-Chat-ID kommen aus Umgebungsvariable/Konfiguration oder
 werden per Onboarding gesetzt (siehe
 [`eltern-chat-onboarding.md`](eltern-chat-onboarding.md)); fehlt der
 Anbieter-API-Key auf beiden Wegen, läuft die Instanz im Onboarding-Modus
-(ONB-1). Geheimnisse liegen nie in einer Datei im Repo (CLAUDE.md §8). Priorität
-je Wert: **Umgebungsvariable > Konfigurationsdatei > Onboarding-Speicher >
-Default**.
+(ONB-1). Geheimnisse liegen nie in einer Datei im Repo (CLAUDE.md §8).
 
-| Wert                     | Default                 | Quelle                            |
-|--------------------------|-------------------------|-----------------------------------|
-| Telegram-Bot-Token       | (Pflicht, kein Default) | Env                               |
-| Anbieter-API-Key         | (kein Default)          | Env · Onboarding (ONB-5)          |
-| Familien-Gruppen-Chat-ID | (kein Default)          | Env · Config · Onboarding (ONB-6) |
-| KI-Anbieter              | `claude`                | Env · Config                      |
-| Anbieter-Modell          | Anbieter-Default        | Env · Config                      |
-| Gesprächskontext-Tiefe   | letzte 20 Nachrichten   | Env · Config                      |
+Die nicht-geheimen Werte leben in der Per-Instanz-Datei
+`eltern-chat/config.json` (gitignored). Sie folgt der Konfigurations-
+Konvention CONFIG-1/CONFIG-2: jeder Wert hat einen Default und einen
+Datei-Schlüssel, und der gemeinsame `tools/configloader.py` (#179) lädt
+die Datei nach der CONFIG-1-Form (Datei < ENV (`ELTERNCHAT_<KEY>`) <
+Default). Geheimnisse (Bot-Token, Anbieter-API-Key) und das Sperr-
+Verhalten der Familien-Gruppe (ENV/Datei sperren, Onboarding-Bindung
+nicht — ONB-6) liegen daneben — der Loader rührt Geheimnisse nicht an
+(CONFIG-3).
+
+| Name                       | Default                                     | Datei-Schlüssel         | Gesetzt durch (Onboarding-Schritt)             |
+|----------------------------|---------------------------------------------|-------------------------|------------------------------------------------|
+| Telegram-Bot-Token         | (Pflicht, kein Default)                     | — (nur ENV, Geheimnis)  | manuell beim Deployment (Geheimnis, CLAUDE.md §8) |
+| Anbieter-API-Key           | (kein Default → Onboarding-Modus)           | — (nur ENV/Store, Geheimnis) | ONB-5 (Onboarding-Speicher)               |
+| Familien-Gruppen-Chat-ID   | leer (→ ONB-6 bindet)                       | `family_group_chat_id`  | ONB-6 (Onboarding-Speicher; ENV/Datei sperren) |
+| KI-Anbieter                | `claude`                                    | `provider`              | n/a (Default reicht)                           |
+| Anbieter-Modell            | leer (→ Anbieter-Default)                   | `provider_model`        | n/a (Default reicht)                           |
+| Gesprächskontext-Tiefe     | `20`                                        | `context_depth`         | n/a (Default reicht)                           |
+| CA-Pfad (CAV-3)            | `../tools/ca/out/rootCA.pem`                | `ca_pem_path`           | n/a (Default reicht beim Standard-Layout)      |
+| Familien-Registry-Pfad     | `../familie/familie.json`                   | `family_registry_path`  | n/a (Default reicht beim Standard-Layout)      |
+| Geräte-Registry-Pfad       | `../geraete/geraete.json`                   | `geraete_registry_path` | n/a (Default reicht beim Standard-Layout)      |
+| Display-URL-Origin (GAA-3.7) | leer (Bot gibt nur `/display/<id>` aus)   | `display_url_origin`    | — (offen, OPEN-EC-Origin)                      |
+| Plan-JSON-Pfad (KAV-X)     | `../plan/plan.json`                         | `plan_json_path`        | n/a (Default reicht beim Standard-Layout)      |
 
 Werte, die nur als Code-Konstante existieren — ohne Override-Pfad — sind
 Spec-Verletzung (CLAUDE.md §6 Daten vs. Code).
 
-*Tickets:* #27 · #33
+ENV-Variablen (`ELTERNCHAT_PROVIDER`, `ELTERNCHAT_PROVIDER_MODEL`,
+`ELTERNCHAT_CONTEXT_DEPTH`, `ELTERNCHAT_CA_PEM_PATH`,
+`ELTERNCHAT_FAMILY_REGISTRY_PATH`, `ELTERNCHAT_GERAETE_REGISTRY_PATH`,
+`ELTERNCHAT_DISPLAY_URL_ORIGIN`, `ELTERNCHAT_PLAN_JSON_PATH`) sind nach
+CONFIG-1 Dev-Override, keine Familien-Form — und gehören deshalb nicht
+in diese Tabelle. CLI-Flags gibt es für den Eltern-Chat nicht (außer
+`--config`, `--db`, `--store` als Test-Werkzeug).
+
+Bot-Token (`ELTERNCHAT_BOT_TOKEN`) und Anbieter-API-Key
+(`ELTERNCHAT_PROVIDER_API_KEY`, optional) sind Geheimnisse und stehen
+in der EnvironmentFile des systemd-Service (`eltern-chat/.env`), nicht
+in `config.json` — der Loader berührt sie nie (CONFIG-3). Die Familien-
+Gruppen-Chat-ID darf in `config.json` stehen (kein Geheimnis) oder im
+Onboarding-Speicher (`onboarding-store.json`, ONB-6).
+
+*Tickets:* #27 · #33 · #179
 
 ### EC-16 — Gesprächs-Datenbank als Per-Instanz-Datei
 Der dauerhafte Gesprächsverlauf (EC-6) liegt als Datei neben dem Code, je
@@ -370,6 +398,14 @@ Bestandteil eines Standard-Durchlaufs.
   natürliche Quelle: Gruppen-Admin-Status (= Eltern) vs. normales Mitglied
   (= Kind). Eine spätere Sicherheits-Iteration kann darauf aufsetzen, etwa
   sensible oder schreibende Aufgaben nur für Admins.
+
+- **OPEN-EC-Origin — Display-URL-Origin im Onboarding setzen.** EC-15
+  führt `display_url_origin` als Per-Instanz-Wert (GAA-3.7). Für die
+  Familien-Anlage muss er gesetzt sein, damit ausgeteilte Display-URLs
+  direkt aufs Tablet getippt werden können. Heute wird er manuell beim
+  Deployment in `eltern-chat/config.json` eingetragen — ein eigener
+  Onboarding-Schritt, der ihn aus der Bot-Konfiguration zieht (Origin
+  des HTTPS-Servers, auf dem der Bot läuft), ist offen.
 
 ---
 
