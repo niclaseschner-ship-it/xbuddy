@@ -59,13 +59,29 @@ des Repos.
    Weichen die Ablage-Pfade ab, die beiden `ssl_certificate*`-Zeilen in
    `xbuddy-origin.conf` entsprechend anpassen.
 
-3. **Config installieren** und nginx neu laden:
+3. **Config installieren** und nginx neu laden — über das Deploy-Skript
+   `install.sh` (#164):
 
    ```bash
-   sudo cp deploy/nginx/xbuddy-origin.conf /etc/nginx/conf.d/
-   sudo nginx -t            # Syntax + Zertifikats-Pfade prüfen
-   sudo systemctl reload nginx
+   ./deploy/nginx/install.sh
    ```
+
+   Das Skript ist explizit, idempotent und reload-sicher:
+
+   - Quelle: `deploy/nginx/xbuddy-origin.conf` (Repo).
+   - Ziel: `/etc/nginx/conf.d/xbuddy-origin.conf` (überschreibbar per
+     `XBUDDY_NGINX_DEST=…` für Tests).
+   - Sind Quelle und Ziel identisch, beendet sich das Skript mit Exit 0
+     („nichts zu tun") — Reruns sind ungefährlich.
+   - Bei jedem echten Wechsel wird vor dem `cp` ein Backup
+     `xbuddy-origin.conf.bak` neben dem Ziel angelegt.
+   - Anschließend prüft das Skript per `sudo nginx -t`. **Schlägt die
+     Validierung fehl, wird das Backup automatisch zurückgespielt** und
+     nginx bleibt unverändert; bei Erst-Installation entfällt das Backup
+     und die kaputte Ziel-Datei wird entfernt.
+   - Bei erfolgreicher Validierung folgt `sudo systemctl reload nginx`.
+
+   Das Skript braucht `sudo` (für `cp`, `nginx -t`, `systemctl reload`).
 
 4. **Komponenten-Prozesse** laufen lassen — Router auf `127.0.0.1:5000`,
    Plan-Buddy auf `127.0.0.1:5020` (die Default-Ports; bei abweichender
