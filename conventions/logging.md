@@ -25,3 +25,30 @@ nicht. Privacy & Datensicherheit ist Constitution-Qualitätsattribut #3.
 
 Für notwendige Identifikation reichen anonymisierte IDs (z. B.
 `chat:abcd1234` statt Klarnamen).
+
+### LOG-4 — Komponenten nutzen `tools/logsetup.py`, kein eigenes `basicConfig`
+XBuddy-Service-Komponenten richten ihr Logging über
+`tools.logsetup.setup(level)` ein, nicht durch einen eigenen
+`logging.basicConfig(...)`-Aufruf. Konkret: Jede Komponente ruft `setup`
+einmal im Hauptpfad ihres Prozesses auf (typischerweise `main.py`) und
+übergibt den Log-Level aus ihrer eigenen Config (CONFIG-1/CONFIG-2-Bahn,
+`tools/configloader.py`). Module-lokale `logging.getLogger(__name__)`-
+Aufrufe bleiben unberührt — das ist Standard-Python und nicht Teil
+dieser Konvention.
+
+Begründung: Das LOG-1-Format ist eine Konvention, die an *einer* Stelle
+gelebt wird (CLAUDE.md §6, „gemeinsamer Code lebt an EINEM Ort"). Wenn
+sich das Format später ändert (etwa Service-Name als Spalte ergänzen),
+trifft die Änderung **eine** Datei, nicht vier.
+
+Ausnahme: Test-Code darf eigenständig Logging konfigurieren
+(pytest-Caplog, eigene Handler) — die Konvention adressiert
+Service-Prozesse, nicht Test-Harnesses.
+
+`setup()` ersetzt den Root-Handler — wer zusätzliche Handler (z. B.
+`RotatingFileHandler` für lokale Tests) anhängen will, tut das **nach**
+dem `setup()`-Aufruf. Mehrfacher `setup()`-Aufruf bleibt idempotent;
+jeder Aufruf reisst die Handler-Liste auf einen einzigen LOG-1-Handler
+zurück.
+
+Querverweise: LOG-1, LOG-2, CONFIG-1, CLAUDE.md §6, `tools/logsetup.py`.
