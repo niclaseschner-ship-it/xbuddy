@@ -374,6 +374,11 @@ def parse_args(argv):
                    help="Pfad zum Onboarding-Speicher (ONB-5)")
     p.add_argument("--log-level", dest="log_level", default="INFO",
                    help="DEBUG | INFO | WARNING | ERROR")
+    # ZD-8: einheitliches Flag aus der Zugangsdaten-Komponente, damit der Bot
+    # genauso wie andere Komponenten eine alternative ZD-Datei akzeptiert
+    # (Test-/Debug-Workflow, Refs #131).
+    from zugangsdaten import add_cli_argument as _add_zd_cli_argument
+    _add_zd_cli_argument(p)
     return p.parse_args(argv)
 
 
@@ -398,11 +403,15 @@ def _check_group_reception(tg, family_group_chat_id, me):
             family_group_chat_id)
 
 
-def build_context(cfg, db_path, store_path):
+def build_context(cfg, db_path, store_path, zd_cli_path=None):
     """Verdrahtet aus der Konfiguration einen lauffähigen Context.
 
     Liegt kein Anbieter-Key vor, startet die Instanz im Onboarding-Modus
     (ONB-1): `provider` bleibt None, `onboarding` trägt den Onboarding-Zustand.
+
+    `zd_cli_path` ist der Wert eines CLI-Flags (ZD-8, Refs #131): liegt er vor,
+    überschreibt er Umgebungsvariable und Default bei der Auflösung des
+    Zugangsdaten-Speicher-Pfads.
     """
     tg = TelegramClient(cfg.bot_token)
     me = tg.get_me()
@@ -419,7 +428,7 @@ def build_context(cfg, db_path, store_path):
     # importiert, damit Tests, die `build_context` nicht aufrufen, keine
     # zugangsdaten-Abhängigkeit aufbauen müssen.
     from zugangsdaten import Zugangsdaten, resolve_store_path
-    zd_store = Zugangsdaten(resolve_store_path())
+    zd_store = Zugangsdaten(resolve_store_path(cli_path=zd_cli_path))
 
     ctx = Context(
         tg=tg,
@@ -490,7 +499,8 @@ def main(argv=None):
         format="%(asctime)s %(levelname)s %(message)s")
     try:
         cfg = config_mod.resolve(args.config, args.store)
-        ctx = build_context(cfg, args.db, args.store)
+        ctx = build_context(cfg, args.db, args.store,
+                            zd_cli_path=args.zugangsdaten_file)
     except config_mod.ConfigError as e:
         logging.error("Konfigurationsfehler: %s", e)
         return 2
