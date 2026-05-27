@@ -25,7 +25,7 @@ _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from tools import configloader  # noqa: E402
+from tools import configloader, logsetup  # noqa: E402
 
 # ============================================================
 #  Zustand (in-memory, V1)
@@ -781,9 +781,9 @@ def resolved_config(args):
 def main(argv=None):
     args = parse_args(argv if argv is not None else sys.argv[1:])
     cfg = resolved_config(args)
-    logging.basicConfig(
-        level=getattr(logging, cfg['log_level'].upper(), logging.INFO),
-        format='%(asctime)s %(levelname)s %(message)s')
+    # LOG-4 (#166): zentraler Setup statt eigenem basicConfig. Level kommt
+    # aus der Runtime-Config (CONFIG-1/CONFIG-2, RUNTIME_SCHEMA).
+    logsetup.setup(cfg['log_level'])
     runtime_config['controller_dir'] = cfg.get('controller_dir', '')
     logging.info('Controller-PWA-Statik: %s', controller_dir())
     load_routing(args.routing)
