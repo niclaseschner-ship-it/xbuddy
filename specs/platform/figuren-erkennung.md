@@ -275,24 +275,32 @@ Banner oben: **„FIGUREN-ERKENNUNG · V1-TEST · `<source_id>`"**.
 ## 4. Konfiguration
 
 ### FIG-17 — Konfigurationswerte
-Defaults stehen als JS-Konstanten in `figlib.js`. Sie können per
-`config.json` im selben Verzeichnis (siehe FIG-23) oder als URL-Parameter
-überschrieben werden. Priorität: **URL > config.json > Defaults**.
+Defaults stehen als JS-Konstanten in `figlib.js` und folgen der
+Konfigurations-Konvention CONFIG-2: jeder Wert hat einen Default und einen
+Datei-Schlüssel in `config.json` (FIG-23, im selben Verzeichnis wie die
+Seite). Der Onboarding-Schritt, der einen Wert produktiv setzt, ist heute
+noch nicht definiert — Phone-Controller werden in V1 manuell beim
+Deployment befüllt; ein Eltern-Chat-Schritt für Phone-Controller-Setup
+ist ein offener Punkt (siehe OPEN-FIG-D).
 
-| Parameter                    | URL-Param         | Default                                  |
-|------------------------------|-------------------|------------------------------------------|
-| `source_id`                  | `?source=<id>`    | `phone:test-1`                           |
-| `router_url`                 | `?router=<url>`   | leer → Events nur in `console.log`       |
-| `figure_present_ms`          | —                 | 150                                      |
-| `pattern_tolerance`          | `?tol=<float>`    | 0.05                                     |
-| `match_distance_px`          | —                 | 60                                       |
-| `tap_dwell_ms`               | —                 | 30                                       |
-| `button_padding_px`          | —                 | 30                                       |
-| `angle_update_max_hz`        | `?rate=<int>`     | 10                                       |
-| `angle_update_min_delta_deg` | `?dead=<float>`   | 3                                        |
-| `n_buckets`                  | —                 | 4                                        |
-| `bucket_size_deg`            | —                 | 90 (abgeleitet aus `n_buckets`)          |
-| `bucket_hysteresis_deg`      | —                 | 5                                        |
+Dev-Override per URL-Parameter ist möglich (CONFIG-1: ENV/CLI/URL sind
+Dev-Werkzeuge, nicht produktive Familien-Form) — Liste am Ende der Spec
+unter „Dev-Anhang". Priorität bleibt **URL > config.json > Defaults**.
+
+| Name                         | Default                          | Datei-Schlüssel              | gesetzt durch (Onboarding-Schritt) |
+|------------------------------|----------------------------------|------------------------------|------------------------------------|
+| `source_id`                  | `phone:test-1`                   | `source_id`                  | — (offen, OPEN-FIG-D)              |
+| `router_url`                 | leer → Events nur in `console.log` | `router_url`               | — (offen, OPEN-FIG-D)              |
+| `figure_present_ms`          | 150                              | `figure_present_ms`          | —                                  |
+| `pattern_tolerance`          | 0.05                             | `pattern_tolerance`          | —                                  |
+| `match_distance_px`          | 60                               | `match_distance_px`          | —                                  |
+| `tap_dwell_ms`               | 30                               | `tap_dwell_ms`               | —                                  |
+| `button_padding_px`          | 30                               | `button_padding_px`          | —                                  |
+| `angle_update_max_hz`        | 10                               | `angle_update_max_hz`        | —                                  |
+| `angle_update_min_delta_deg` | 3                                | `angle_update_min_delta_deg` | —                                  |
+| `n_buckets`                  | 4                                | `n_buckets`                  | —                                  |
+| `bucket_size_deg`            | 90 (abgeleitet aus `n_buckets`)  | `bucket_size_deg`            | —                                  |
+| `bucket_hysteresis_deg`      | 5                                | `bucket_hysteresis_deg`      | —                                  |
 
 `source_id` wird in jedes Event geschrieben (FIG-10). `match_distance_px`
 ist die Schwelle für die räumliche Punkt-Zuordnung (FIG-7).
@@ -469,6 +477,32 @@ Tablet, das die Seite einfach als URL bzw. Home-Screen-Verknüpfung
 - **OPEN-FIG-C** — Konkreter Test-Endpoint für POSTs in V1: Router-Stub,
   Echo-Server oder reine `console.log`? Entscheidung beim
   Implementierungs-Ticket.
+- **OPEN-FIG-D** — Onboarding-Schritt für Phone-Controller-Setup. Die
+  CONFIG-2-Tabelle in FIG-17 hat heute keine Onboarding-Schritte für
+  `source_id` und `router_url` — Phone-Controller werden in V1 manuell
+  beim Deployment befüllt. Sobald Phone-Controller über den Eltern-Chat
+  eingerichtet werden können (analog der Funktions-Spec
+  `familie-anlegen.md`), bekommt jede Zeile der FIG-17-Tabelle einen
+  konkreten Schritt-Namen.
+
+---
+
+## Dev-Anhang — URL-Parameter (Dev-Override)
+
+Nach CONFIG-1 sind URL-Parameter ein **Dev-Override**, nicht die
+produktive Familien-Form. Die folgenden Parameter überschreiben für
+die laufende Seiten-Session die Werte aus `config.json` (FIG-23) bzw.
+die Code-Defaults:
+
+| URL-Param         | überschreibt                 |
+|-------------------|------------------------------|
+| `?source=<id>`    | `source_id`                  |
+| `?router=<url>`   | `router_url`                 |
+| `?tol=<float>`    | `pattern_tolerance`          |
+| `?rate=<int>`     | `angle_update_max_hz`        |
+| `?dead=<float>`   | `angle_update_min_delta_deg` |
+
+Priorität: **URL > config.json > Defaults**.
 
 ---
 
