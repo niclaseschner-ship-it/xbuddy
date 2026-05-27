@@ -34,7 +34,7 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from familie import registry as registry_mod  # noqa: E402
-from tools import configloader  # noqa: E402
+from tools import configloader, logsetup  # noqa: E402
 from zugangsdaten import Zugangsdaten, resolve_store_path  # noqa: E402
 
 # Das plan-Paket wird als Paket importiert, damit die relativen Imports in
@@ -499,9 +499,9 @@ def resolved_runtime_config(args):
 def main(argv=None):
     args = parse_args(argv if argv is not None else sys.argv[1:])
     rt = resolved_runtime_config(args)
-    logging.basicConfig(
-        level=getattr(logging, rt["log_level"].upper(), logging.INFO),
-        format="%(asctime)s %(levelname)s %(message)s")
+    # LOG-4 (#166): zentraler Setup statt eigenem basicConfig. Level kommt
+    # aus der Runtime-Config (CONFIG-1/CONFIG-2, RUNTIME_SCHEMA).
+    logsetup.setup(rt["log_level"])
 
     # Pfad zur plan.json explizit auflösen — sowohl der erste Lade-Versuch
     # als auch der Reload-Endpoint (#140) nutzen denselben Pfad.
