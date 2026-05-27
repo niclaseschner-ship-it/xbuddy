@@ -287,47 +287,16 @@ Dokumentierte Abweichung.
 
 ### ROU-21 — Direkt-Push an Display via CDP
 
-> **Abgelöst (#30).** Die Display-Benachrichtigung läuft über den
-> SSE-Zustands-Stream **ROU-22** — er erreicht auch Display-Geräte, die
-> nicht am Pi hängen (Tablets); CDP erreicht nur lokales Chromium.
+> **Abgelöst (#30), entfernt (#102).** Die Display-Benachrichtigung läuft
+> über den SSE-Zustands-Stream **ROU-22** — er erreicht auch Display-Geräte,
+> die nicht am Pi hängen (Tablets); CDP erreichte nur lokales Chromium.
 > Begründung: E-DC-1 in [`display-client.md`](display-client.md). Der
 > CDP-Push-Code samt der Konfigurationswerte `cdp_target` und
-> `cdp_idle_url` (ROU-15) wird in einem separaten PR entfernt
-> (CLAUDE.md §6, Entfernen in zwei Schritten). Bis dahin bleibt das
-> bestehende Verhalten beschrieben.
+> `cdp_idle_url` ist mit #102 aus dem Router entfernt; ältere `config.json`-
+> Dateien mit diesen Schlüsseln werden beim Laden ignoriert und mit einem
+> Log-Hinweis quittiert (kein Crash).
 
-Wenn `cdp_target` (siehe ROU-15) gesetzt ist, ruft der Router bei
-**jeder State-Änderung** Chromium über das **Chrome DevTools Protocol**
-auf, um sofort auf die neue URL zu navigieren — kein Polling-Lag, kein
-Iframe-Hop. Mechanik:
-
-1. `GET <cdp_target>/json` — liefert die Liste offener Tabs samt
-   `webSocketDebuggerUrl`.
-2. WebSocket-Verbindung zum ersten Tab.
-3. Senden von `{ "id": <n>, "method": "Page.navigate", "params": { "url": "<ziel>" } }`.
-
-**Push-Trigger:**
-
-- Trigger mit Match (ROU-11): push auf `payload.url`.
-- Session-Ende (ROU-11): push auf `cdp_idle_url` (Default `about:blank`).
-- Trigger ohne Match: kein Push (State ändert sich nicht).
-
-**Fehlerverhalten:** Der Push läuft **nicht-blockierend** (Thread oder
-Async). Verbindungs- oder Protokoll-Fehler werden mit
-`logging.warning` protokolliert; `POST /api/v1/events` bleibt 204 und schnell.
-
-**Wenn `cdp_target` leer ist:** Feature ist inaktiv. Der Router pollt-
-nur wie zuvor; das ist der Default und das Verhalten des V1-Tests
-ohne Pi-Kiosk.
-
-**Warum direkt, nicht per Adapter-Schicht:** V1 hat genau einen
-Output-Typ (lokales Chromium). Eine generalisierte
-„Output-Adapter"-Abstraktion wäre Antizipation ohne konkreten zweiten
-Output. Sobald ein zweiter Push-Pfad dazukommt (etwa MQTT, siehe
-E-ROU-2), wird das Generalisieren mit Belegen entschieden — nicht
-auf Vorrat (CLAUDE.md §6).
-
-*Tickets:* #17
+*Tickets:* #17, #102
 
 ### ROU-23 — GET /controller/&lt;app&gt;/&lt;asset&gt; — Auslieferung der Controller-PWA
 `GET /controller/<app>/` und `GET /controller/<app>/<asset>` liefern die
@@ -426,8 +395,6 @@ ENV-Variable / CLI-Flag überschrieben werden. Priorität:
 | `listen_host`  | `127.0.0.1`   | ENV `ROUTER_HOST` · CLI `--host` · config    |
 | `listen_port`  | `5000`        | ENV `ROUTER_PORT` · CLI `--port` · config    |
 | `log_level`    | `INFO`        | ENV `ROUTER_LOG_LEVEL` · CLI `--log-level`   |
-| `cdp_target`   | `""` (aus)    | ENV `ROUTER_CDP_TARGET` · config             |
-| `cdp_idle_url` | `about:blank` | ENV `ROUTER_CDP_IDLE_URL` · config           |
 | `controller_dir` | `../controller/figuren-erkennung` (relativ zum Router-Code) | ENV `ROUTER_CONTROLLER_DIR` · CLI `--controller-dir` · config |
 
 Werte, die nur als Code-Konstante existieren — ohne Override-Pfad —
