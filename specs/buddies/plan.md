@@ -458,8 +458,8 @@ Betriebs-Risiko, das das Veröffentlichen einmalig beseitigt.
 Der Plan-Buddy ist in V1 auf die Abläufe **einer** Familie zugeschnitten —
 zwei Kinder, abendliche Bringen-und-Ins-Bett-Routine, eine spezifische Liste
 von Kind-Aktivitäten. Diese familienspezifischen Inhalte leben absichtlich
-als Code-Konstanten: der Aktivitäts-Katalog in `plan/main.py`
-(`_aktivitaet_label`), die Personen-Auflösung über Titel-Treffer in
+als Code-Konstanten: der Aktivitäts-Katalog in `plan/aktivitaeten.py`
+(`AKTIVITAETEN`), die Personen-Auflösung über Titel-Treffer in
 `plan/kalender.py` (PLAN-19), die Abend-Routine als feste Slot-Sequenz
 hinter E-PLAN-2.
 
