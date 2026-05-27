@@ -1,5 +1,5 @@
 """Konfigurations-Auflösung — siehe specs/platform/eltern-chat.md EC-15 und
-specs/platform/eltern-chat-onboarding.md (Refs #27, #33).
+specs/platform/eltern-chat-onboarding.md (Refs #27, #33, #179).
 
 Priorität je Wert: Umgebungsvariable > Konfigurationsdatei > Onboarding-Speicher
 > Default. Der Bot-Token kommt ausschließlich aus einer Umgebungsvariablen
@@ -7,16 +7,40 @@ Priorität je Wert: Umgebungsvariable > Konfigurationsdatei > Onboarding-Speiche
 Umgebungsvariable/Konfiguration ODER aus dem Onboarding-Speicher stammen; fehlt
 der Anbieter-Key auf beiden Wegen, läuft die Instanz im Onboarding-Modus
 (ONB-1). Geheimnisse landen nie in einer Datei im Repo (CLAUDE.md §8).
+
+Seit #179: die generische Datei+ENV-Auflösung der nicht-geheimen Schema-Werte
+übernimmt der gemeinsame `tools.configloader` (CONFIG-1, Konvention
+`ELTERNCHAT_<KEY>`). Geheimnisse (Bot-Token, Anbieter-API-Key) und der
+Onboarding-Speicher-Lookup (Anbieter-Key, Familien-Gruppen-Chat-ID) bleiben
+hier komponentenspezifisch — der Loader rührt Geheimnisse nicht an (CONFIG-3).
 """
 
 import json
-import logging
 import os
+import sys
+
+# Repo-Wurzel auf den Importpfad — der Loader liegt unter `tools/`, das
+# eltern-chat-Paket ist wegen seines Bindestrichs paketlos und sieht das
+# Repo-Root sonst nicht (auch nicht beim Direktstart von main.py über
+# systemd). Analog plan/main.py / router/main.py.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.dirname(_HERE)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from tools import configloader  # noqa: E402
 
 from onboarding_store import KEY_FAMILY_GROUP, KEY_PROVIDER_API_KEY, OnboardingStore
 
 
-# EC-15: nicht-geheime Werte mit ihren Defaults (Env > Datei > Default).
+# EC-15: nicht-geheime Werte mit ihren Defaults — Schema für den gemeinsamen
+# `tools.configloader` (CONFIG-1, #179). Der Loader macht Datei < ENV nach
+# Konvention `ELTERNCHAT_<KEY>` (Großbuchstaben des Schema-Schlüssels).
+#
+# `family_group_chat_id` steht hier mit Default `""`, weil sie im Onboarding-
+# Pfad leer bleiben darf (ONB-1/ONB-6). Die *Sperr*-Logik (ENV/Datei sperren,
+# Onboarding bindet ohne Sperre) sitzt unten in `resolve` — der Loader liefert
+# nur den Wert, nicht die Quelle.
 DEFAULTS = {
     "provider":       "claude",     # KI-Anbieter (EC-11)
     "provider_model": "",           # leer → Anbieter-Default des Adapters
@@ -46,22 +70,18 @@ DEFAULTS = {
     # FS-Linie, sauber gelöst in Folge-Ticket #140). Default zeigt auf das
     # Pi-Layout (plan/plan.json neben dem Eltern-Chat-Repo).
     "plan_json_path": "../plan/plan.json",
+    # ONB-6 / EC-15: Familien-Gruppen-Chat-ID. Default leer = Onboarding-
+    # Bindung. Über ENV oder Datei gesetzt → gesperrt (Vorrang vor
+    # Onboarding-Bindung) — die Sperr-Logik sitzt in `resolve`, nicht im
+    # Loader.
+    "family_group_chat_id": "",
 }
 
-# Umgebungsvariablen-Namen.
+# Umgebungsvariablen-Namen der Geheimnisse / Pflicht-Werte. Diese gehen am
+# Loader vorbei (CONFIG-3) — Geheimnisse berührt der Loader nicht.
 ENV_BOT_TOKEN        = "ELTERNCHAT_BOT_TOKEN"          # Geheimnis, Pflicht
 ENV_PROVIDER_API_KEY = "ELTERNCHAT_PROVIDER_API_KEY"   # Geheimnis, optional
 ENV_FAMILY_GROUP     = "ELTERNCHAT_FAMILY_GROUP_CHAT_ID"
-ENV_OVERRIDES = {
-    "provider":             "ELTERNCHAT_PROVIDER",
-    "provider_model":       "ELTERNCHAT_PROVIDER_MODEL",
-    "context_depth":        "ELTERNCHAT_CONTEXT_DEPTH",
-    "ca_pem_path":          "ELTERNCHAT_CA_PEM_PATH",
-    "family_registry_path": "ELTERNCHAT_FAMILY_REGISTRY_PATH",
-    "geraete_registry_path": "ELTERNCHAT_GERAETE_REGISTRY_PATH",
-    "display_url_origin":    "ELTERNCHAT_DISPLAY_URL_ORIGIN",
-    "plan_json_path":        "ELTERNCHAT_PLAN_JSON_PATH",
-}
 
 
 class ConfigError(Exception):
@@ -95,63 +115,81 @@ class Config:
         self.plan_json_path = plan_json_path     # KAV-X: Pfad zur Per-Instanz-`plan/plan.json`
 
 
-def _load_file(path):
-    """Lädt die optionale Konfigurationsdatei. Fehlt sie, ist das in Ordnung."""
+def _family_group_in_file(config_path):
+    """Prüft, ob `family_group_chat_id` explizit in der Konfigurations-Datei
+    steht — getrennt vom Loader, weil die Quelle (Datei vs. Default) das
+    Sperr-Verhalten bestimmt (ONB-6: ENV/Datei sperren, Onboarding-Bindung
+    nicht). Eine fehlende oder kaputte Datei zählt als „nicht in Datei"."""
     try:
-        with open(path) as f:
+        with open(config_path, encoding="utf-8") as f:
             data = json.load(f)
-    except FileNotFoundError:
-        return {}
-    except json.JSONDecodeError as e:
-        logging.warning("config.json nicht parsebar (%s): %s — Defaults bleiben", path, e)
-        return {}
-    return {k: v for k, v in data.items() if not k.startswith("_")}
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    val = data.get("family_group_chat_id")
+    return val is not None and str(val).strip() != ""
 
 
-def resolve(config_path, store_path=None, env=None):
-    """Löst die Konfiguration nach EC-15 auf. `env` ist überschreibbar (Tests).
+def resolve(config_path, store_path=None):
+    """Löst die Konfiguration nach EC-15 auf.
+
+    Generische Schicht (DEFAULTS-Schema-Werte): geht durch den gemeinsamen
+    `tools.configloader` — Datei < ENV (`ELTERNCHAT_<KEY>`) < Default.
+    Geheimnisse (Bot-Token, Anbieter-Key) und die Sperr-Logik der Familien-
+    Gruppe sitzen darunter — der Loader rührt sie nicht an (CONFIG-3).
 
     Wirft ConfigError nur, wenn der Bot-Token fehlt oder ein Wert ungültig ist.
-    Ein fehlender Anbieter-Key ist kein Fehler — er führt in den Onboarding-Modus.
+    Ein fehlender Anbieter-Key ist kein Fehler — er führt in den Onboarding-
+    Modus (ONB-1).
     """
-    if env is None:
-        env = os.environ
-    file_cfg = _load_file(config_path)
-    store = OnboardingStore(store_path).load() if store_path else {}
+    try:
+        values = configloader.load(
+            component="elternchat",
+            schema=DEFAULTS,
+            config_path=config_path,
+        )
+    except configloader.ConfigLoaderError as e:
+        # Loader-Fehler (kaputte Datei, ENV-Coercion) werden als ConfigError
+        # nach oben gereicht — Aufrufer erwartet eine einzige Fehlerklasse.
+        raise ConfigError(str(e)) from e
 
-    # Nicht-geheime Werte: Env > Datei > Default.
-    values = dict(DEFAULTS)
-    for key in DEFAULTS:
-        if key in file_cfg:
-            values[key] = file_cfg[key]
-        if ENV_OVERRIDES[key] in env:
-            values[key] = env[ENV_OVERRIDES[key]]
-
+    # EC-15: context_depth muss >= 1 sein. Der Loader hat schon auf int
+    # koerciert (Schema-Default 20 ist int); wir prüfen hier nur noch die
+    # untere Grenze und die Boundary-Fälle, bei denen Datei einen Nicht-Int
+    # eingeschmuggelt haben könnte.
     try:
         context_depth = int(values["context_depth"])
     except (TypeError, ValueError):
-        raise ConfigError("context_depth ist keine Ganzzahl: %r" % values["context_depth"])
+        raise ConfigError(
+            "context_depth ist keine Ganzzahl: %r" % values["context_depth"])
     if context_depth < 1:
         raise ConfigError("context_depth muss >= 1 sein, ist %d" % context_depth)
 
     # Bot-Token: nur Env, Pflicht (Henne-Ei — siehe E-ONB-5).
-    bot_token = env.get(ENV_BOT_TOKEN, "").strip()
+    bot_token = os.environ.get(ENV_BOT_TOKEN, "").strip()
     if not bot_token:
         raise ConfigError("%s ist nicht gesetzt (Pflicht, EC-15)" % ENV_BOT_TOKEN)
 
     # Anbieter-Key: Env > Onboarding-Speicher > leer (→ Onboarding-Modus, ONB-1).
-    provider_api_key = (env.get(ENV_PROVIDER_API_KEY)
+    store = OnboardingStore(store_path).load() if store_path else {}
+    provider_api_key = (os.environ.get(ENV_PROVIDER_API_KEY)
                         or store.get(KEY_PROVIDER_API_KEY)
                         or "").strip()
 
     # Familien-Gruppe: Env > Datei > Onboarding-Speicher > leer.
     # Per Env/Datei gesetzt → gesperrt, hat Vorrang vor Onboarding-Bindung (ONB-6).
+    # Der Loader-Output liefert den ENV-/Datei-/Default-Wert; das Sperr-Bit
+    # erkennen wir an der Quelle (ENV-gesetzt ODER Datei-gesetzt, nicht
+    # Default).
     family_group = ""
     family_group_locked = False
-    if env.get(ENV_FAMILY_GROUP):
-        family_group, family_group_locked = str(env[ENV_FAMILY_GROUP]).strip(), True
-    elif file_cfg.get("family_group_chat_id"):
-        family_group, family_group_locked = str(file_cfg["family_group_chat_id"]).strip(), True
+    if os.environ.get(ENV_FAMILY_GROUP):
+        family_group = os.environ[ENV_FAMILY_GROUP].strip()
+        family_group_locked = True
+    elif _family_group_in_file(config_path):
+        family_group = str(values["family_group_chat_id"]).strip()
+        family_group_locked = True
     elif store.get(KEY_FAMILY_GROUP):
         family_group = str(store[KEY_FAMILY_GROUP]).strip()
 

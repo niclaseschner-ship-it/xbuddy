@@ -63,23 +63,25 @@ def _members(*user_ids):
 
 def test_FAA_12_family_registry_path_is_a_per_instance_config_value():
     """FAA-12: der Pfad zur Familien-Registry ist ein Per-Instanz-Konfigurations-
-    wert mit Default UND Override-Pfad (Env/Datei) — keine Code-Konstante
-    (CLAUDE.md §6 / EC-15)."""
+    wert mit Default UND Override-Pfad — keine Code-Konstante
+    (CLAUDE.md §6 / EC-15). Der Override-Pfad folgt seit #179 der
+    Loader-Konvention `ELTERNCHAT_<KEY>` und wird durch das Schema
+    (`DEFAULTS`) sichergestellt."""
     import config as config_mod
     assert "family_registry_path" in config_mod.DEFAULTS
     assert config_mod.DEFAULTS["family_registry_path"]
-    assert "family_registry_path" in config_mod.ENV_OVERRIDES
 
 
-def test_FAA_12_config_resolves_family_registry_path(tmp_path):
+def test_FAA_12_config_resolves_family_registry_path(tmp_path, monkeypatch):
     """EC-15: Env > Datei > Default."""
     import config as config_mod
-    env = {config_mod.ENV_BOT_TOKEN: "t",
-           "ELTERNCHAT_FAMILY_REGISTRY_PATH": "/var/lib/xbuddy/familie.json"}
-    cfg = config_mod.resolve(str(tmp_path / "config.json"), env=env)
+    monkeypatch.setenv(config_mod.ENV_BOT_TOKEN, "t")
+    monkeypatch.setenv("ELTERNCHAT_FAMILY_REGISTRY_PATH",
+                       "/var/lib/xbuddy/familie.json")
+    cfg = config_mod.resolve(str(tmp_path / "config.json"))
     assert cfg.family_registry_path == "/var/lib/xbuddy/familie.json"
-    cfg_default = config_mod.resolve(
-        str(tmp_path / "config.json"), env={config_mod.ENV_BOT_TOKEN: "t"})
+    monkeypatch.delenv("ELTERNCHAT_FAMILY_REGISTRY_PATH")
+    cfg_default = config_mod.resolve(str(tmp_path / "config.json"))
     assert cfg_default.family_registry_path == \
         config_mod.DEFAULTS["family_registry_path"]
 
