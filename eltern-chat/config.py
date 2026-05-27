@@ -75,6 +75,11 @@ DEFAULTS = {
     # Onboarding-Bindung) — die Sperr-Logik sitzt in `resolve`, nicht im
     # Loader.
     "family_group_chat_id": "",
+    # LOG-4 (#166): Log-Level für `tools.logsetup.setup`. Default INFO
+    # entspricht LOG-2 („INFO im Betrieb"). Override per ENV
+    # `ELTERNCHAT_LOG_LEVEL` oder Konfig-Datei; das CLI-Flag `--log-level`
+    # überschreibt den Loader-Output im Aufrufer (Test-Werkzeug, CONFIG-1).
+    "log_level":           "INFO",
 }
 
 # Umgebungsvariablen-Namen der Geheimnisse / Pflicht-Werte. Diese gehen am
@@ -100,7 +105,7 @@ class Config:
     def __init__(self, bot_token, provider_api_key, provider, provider_model,
                  family_group_chat_id, family_group_locked, context_depth,
                  ca_pem_path, family_registry_path, geraete_registry_path,
-                 display_url_origin, plan_json_path):
+                 display_url_origin, plan_json_path, log_level):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
         self.provider = provider
@@ -113,6 +118,7 @@ class Config:
         self.geraete_registry_path = geraete_registry_path # GAA-5: Pfad zur Geräte-Registry (GER-4)
         self.display_url_origin = display_url_origin       # GAA-3.7: HTTPS-Origin für Display-URLs
         self.plan_json_path = plan_json_path     # KAV-X: Pfad zur Per-Instanz-`plan/plan.json`
+        self.log_level = log_level               # LOG-4 (#166): Level-String für tools.logsetup
 
 
 def _family_group_in_file(config_path):
@@ -206,4 +212,5 @@ def resolve(config_path, store_path=None):
         geraete_registry_path=str(values["geraete_registry_path"]).strip(),
         display_url_origin=str(values["display_url_origin"]).strip().rstrip("/"),
         plan_json_path=str(values["plan_json_path"]).strip(),
+        log_level=str(values["log_level"]).strip(),
     )

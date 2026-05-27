@@ -182,6 +182,31 @@ def test_GAA_3_7_display_url_origin_from_file(tmp_path, monkeypatch):
     assert cfg.display_url_origin == "https://pi.local"
 
 
+# -- LOG-4 (#166): log_level über Loader (Datei/ENV/Default) -----
+
+def test_LOG_4_log_level_default_is_INFO(tmp_path, monkeypatch):
+    _set_bot_token(monkeypatch)
+    monkeypatch.delenv("ELTERNCHAT_LOG_LEVEL", raising=False)
+    cfg = config_mod.resolve(_missing(tmp_path))
+    assert cfg.log_level == "INFO"
+
+
+def test_LOG_4_log_level_from_env(tmp_path, monkeypatch):
+    _set_bot_token(monkeypatch)
+    monkeypatch.setenv("ELTERNCHAT_LOG_LEVEL", "DEBUG")
+    cfg = config_mod.resolve(_missing(tmp_path))
+    assert cfg.log_level == "DEBUG"
+
+
+def test_LOG_4_log_level_from_file(tmp_path, monkeypatch):
+    _set_bot_token(monkeypatch)
+    monkeypatch.delenv("ELTERNCHAT_LOG_LEVEL", raising=False)
+    cfg_file = tmp_path / "config.json"
+    cfg_file.write_text(json.dumps({"log_level": "WARNING"}))
+    cfg = config_mod.resolve(str(cfg_file))
+    assert cfg.log_level == "WARNING"
+
+
 # -- Loader-Integration (#179): Underscore-Keys in der Datei -----
 
 def test_EC_15_underscore_keys_in_file_are_tolerated(tmp_path, monkeypatch, caplog):
