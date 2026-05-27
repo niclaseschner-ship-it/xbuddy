@@ -39,12 +39,14 @@ from zugangsdaten import Zugangsdaten, resolve_store_path  # noqa: E402
 # Das plan-Paket wird als Paket importiert, damit die relativen Imports in
 # config/db/kalender/render greifen — auch wenn main.py direkt gestartet wird.
 if __package__:
+    from . import aktivitaeten as aktivitaeten_mod
     from . import config as config_mod
     from . import db as db_mod
     from . import kalender as kalender_mod
     from . import render as render_mod
 else:  # python3 plan/main.py
     sys.path.insert(0, _REPO_ROOT)
+    from plan import aktivitaeten as aktivitaeten_mod
     from plan import config as config_mod
     from plan import db as db_mod
     from plan import kalender as kalender_mod
@@ -321,13 +323,12 @@ def api_termine():
 
 
 def _aktivitaet_label(art):
-    """Anzeige-Label einer Aktivitäts-Art für den Event-Titel (PLAN-11)."""
-    return {
-        "klettern": "Klettern", "kreativ": "Kreativ", "schwimmen": "Schwimmen",
-        "spielplatz": "Spielplatz", "musik": "Musik", "ausflug": "Ausflug",
-        "geburtstag": "Geburtstag", "petrabredung": "Petrabredung",
-        "waldgang": "Waldgang",
-    }.get(art, art.capitalize() if art else art)
+    """Anzeige-Label einer Aktivitäts-Art für den Event-Titel (PLAN-11).
+
+    Delegiert an `plan.aktivitaeten` — den gemeinsamen Aktivitäts-Katalog
+    (Refs #101).
+    """
+    return aktivitaeten_mod.label_fuer_art(art)
 
 
 # ============================================================
