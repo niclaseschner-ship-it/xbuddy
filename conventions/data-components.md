@@ -40,13 +40,11 @@ sehen — sonst zeigt der Plan-Buddy noch den alten Termin, obwohl der
 Skill bereits geschrieben hat. Stale Cache nach Cross-Service-Write ist
 der konkrete Schaden, den diese Konvention verhindert.
 
-Reload-on-Read ist damit der Default. Der Reload-Endpoint, der heute in
-`plan/main.py` (Admin-Reload) den frischen Stand erzwingt, wird mit
-DCOMP-2 überflüssig — er war eine Brücke, solange Caching der Default
-war. Das eigentliche Cross-Service-Vertragsmodell bleibt APP-3
-(„andere Apps sprechen eine App nur über deren Schnittstelle an");
-DCOMP-2 deckt den internen Lese-Pfad innerhalb derselben App ab, der
-durch Skill-Schreibvorgänge berührt wird.
+Reload-on-Read ist damit der Default. Das eigentliche
+Cross-Service-Vertragsmodell bleibt APP-3 („andere Apps sprechen eine
+App nur über deren Schnittstelle an"); DCOMP-2 deckt den internen
+Lese-Pfad innerhalb derselben App ab, der durch Skill-Schreibvorgänge
+berührt wird.
 
 Ausnahme: wer aus Performance-Gründen cachen will (z. B. heiße Hot-Path-
 Lookups), begründet das in der Komponenten-Spec und benennt einen
