@@ -12,25 +12,15 @@ Aktivität-↔-Kind-Routing.
 import logging
 from datetime import date, datetime, timedelta
 
+from . import aktivitaeten as aktivitaeten_mod
+
 logger = logging.getLogger(__name__)
 
 # PLAN-5: Wochentags-Kürzel (Mo=0 … So=6).
 DAY_SHORT = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 
-# PLAN-12: Schlüsselwörter im Titel → Aktivitäts-Art (Icon/Label). Eine
-# Heuristik (OPEN-PLAN-B). Reihenfolge zählt: der erste Treffer gewinnt.
-AKTIVITAETS_KEYWORDS = [
-    ("klettern", "klettern"),
-    ("kreativ", "kreativ"),
-    ("schwimm", "schwimmen"),
-    ("spielplatz", "spielplatz"),
-    ("musik", "musik"),
-    ("ausflug", "ausflug"),
-    ("geburtstag", "geburtstag"),
-    ("geburts", "geburtstag"),
-    ("verabredung", "verabredung"),
-    ("wald", "waldgang"),
-]
+# PLAN-12: Schlüsselwörter im Titel → Aktivitäts-Art. Eine Heuristik
+# (OPEN-PLAN-B). Quelle des Katalogs: `plan.aktivitaeten` (Refs #101).
 
 # PLAN-13: Schlüsselwörter im Titel → Termin-Icon-Key (Heuristik).
 TERMIN_ICON_KEYWORDS = [
@@ -70,12 +60,12 @@ def termin_icon(titel):
 
 
 def aktivitaets_art(titel):
-    """Aktivitäts-Art aus einem Titel-Schlüsselwort (PLAN-12). None, wenn keins passt."""
-    s = (titel or "").lower()
-    for needle, art in AKTIVITAETS_KEYWORDS:
-        if needle in s:
-            return art
-    return None
+    """Aktivitäts-Art aus einem Titel-Schlüsselwort (PLAN-12). None, wenn keins passt.
+
+    Delegiert an `plan.aktivitaeten` — den gemeinsamen Aktivitäts-Katalog
+    (Refs #101).
+    """
+    return aktivitaeten_mod.art_aus_titel(titel)
 
 
 def klassifiziere_event(titel, kinder):
