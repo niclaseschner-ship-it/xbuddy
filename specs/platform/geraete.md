@@ -124,28 +124,23 @@ Scheibe dieses PRs).
 ### GER-7 — `display_id`-Vergabe
 Die `id` eines Geräts ist seine **`display_id`** — derselbe Bezeichner,
 über den Router (ROU-9/ROU-18) und Display-Client (DC-1) das Gerät heute
-schon adressieren. Sie wird kollisionsfrei je Familie vergeben und ist
-für Menschen lesbar — keine UUID. Schema:
+schon adressieren. Sie folgt der Objekt-ID-Bauregel — siehe IDENT-1 in
+`conventions/identifiers.md` (`<typ>-<slug>-<nn>`, stabil, nicht neu
+vergeben).
 
-```
-<typ>-<name-slug>-<laufende-nr>
-```
+Geräte-spezifisch zur allgemeinen Regel:
 
-mit:
-
-- `<typ>` aus GER-2 (`tablet`, `handy`, `monitor`, `pi-display`),
-- `<name-slug>` kleingeschrieben, Bindestrich-getrennt, ohne
+- `<typ>` ist genau einer aus GER-2 (`tablet`, `handy`, `monitor`,
+  `pi-display`) — kein anderer Wert.
+- `<slug>` ist kleingeschrieben, Bindestrich-getrennt, ohne
   Sonderzeichen (URL-6 sinngemäß — die `display_id` taucht in
-  Display-URLs auf, vgl. ROU-20),
-- `<laufende-nr>` zweistellig (`01`, `02`, …), beginnt je
-  (Typ + Slug)-Kombination bei `01`.
+  Display-URLs auf, vgl. ROU-20).
+- `<nn>` beginnt je (Typ + Slug)-Kombination bei `01`.
+- Kollisionsfreiheit prüft die Registry **je Familie** — eine `id`,
+  die in dieser Instanz schon existiert, wird nicht erneut vergeben.
 
 Beispiele: `tablet-elias-01`, `tablet-wohnzimmer-01`, `handy-mama-01`,
 `pi-display-flur-01`.
-
-Die Registry stellt sicher, dass eine neu vergebene `id` in der Familie
-noch nicht existiert. Eine einmal vergebene `id` wird nicht neu vergeben
-(URL-8 sinngemäß: stabile Identität).
 
 *Tickets:* #105
 
@@ -195,9 +190,11 @@ Jede Anforderung mit Code-Verhalten hat einen automatisierten Test
 - **GER-6** — atomares Schreiben: bestehende Geräte byte-gleich nach
   Schreiben eines neuen Geräts; simulierter Schreib-Abbruch hinterlässt
   keine halbe Datei; Deaktivieren ändert nur `status`.
-- **GER-7** — neu vergebene `id` kollidiert nicht mit bestehender;
-  Schema (`<typ>-<slug>-<nn>`) wird eingehalten; eine einmal vergebene
-  `id` wird nicht neu vergeben.
+- **GER-7** — Schema-Prüfung siehe IDENT-1 in
+  `conventions/identifiers.md`. Geräte-spezifisch: `<typ>` ist genau
+  einer aus GER-2 (kein anderer Wert); Kollisionsfreiheit prüft je
+  Familie — eine in dieser Instanz bereits vergebene `id` wird nicht
+  erneut vergeben; eine einmal vergebene `id` wird nicht neu vergeben.
 
 *Tickets:* #105
 
