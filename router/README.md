@@ -35,6 +35,10 @@ python3 router/main.py \
 - `routing.example.json` — Format der M:N-Tabelle. `routing.json` selbst ist per Repo-`.gitignore` ausgeschlossen — pro Deployment separat.
 - `config.example.json` — Format der Tuning-Datei.
 
+## Reload-on-Read
+
+`routing.json` wird pro Lookup frisch von Disk gelesen (Reload-on-Read, [DCOMP-2](../conventions/data-components.md)). Schreibt ein Skill die Datei, sieht der nächste Event-Lookup den neuen Stand ohne Service-Restart und ohne Admin-Reload-Aufruf. Der Admin-Reload-Endpoint (`POST /api/v1/router/admin/reload`, #140) bleibt als expliziter Reload-Marker erhalten, ist für die Sichtbarkeit aber nicht mehr nötig.
+
 ## Tests
 
 ```bash

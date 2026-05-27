@@ -1107,3 +1107,130 @@ def test_140_reload_picks_up_new_panels_section(reload_client):
         'app': 'plan', 'view': 'woche',
     })
     assert router_main.state['display:neu']['payload']['url'] == '/display/plan/woche'
+
+
+# ============================================================
+#  DCOMP-2 — Reload-on-Read (Refs #11, #166)
+# ============================================================
+#
+# Die Konvention DCOMP-2 (conventions/data-components.md) verlangt:
+# Komponenten, die persistente Daten lesen, lesen sie pro Aufruf frisch von
+# Disk. Stale Cache nach Cross-Service-Write (Eltern-Chat-Skill schreibt
+# routing.json) ist genau der Schaden, den DCOMP-2 verhindert.
+#
+# Diese Tests beweisen den Vertrag für den Router: routing.json wird zur
+# Laufzeit editiert, und der nächste Lookup sieht den neuen Stand OHNE
+# Service-Restart UND OHNE Admin-Reload-Aufruf (#140).
+
+def test_DCOMP_2_lookup_sieht_neuen_eintrag_ohne_reload(reload_client):
+    """Reload-on-Read auf dem descriptor-basierten Match-Pfad (ROU-9):
+    Schreibt ein Skill einen neuen Routing-Eintrag in routing.json, sieht
+    der nächste `POST /api/v1/events` den Eintrag bereits — ohne dass
+    irgendwer den Admin-Reload-Endpoint angetriggert hat."""
+    client, routing_file = reload_client
+    # Initial: nur ein Eintrag (bucket 0 → /klein). bucket 1 ist unbekannt.
+    post_event(client, {
+        'source_id': 'phone:test-1', 'type': 'figure_detected',
+        'figure_id': 'rotes-a', 'bucket': 1,
+    })
+    # bucket 1 ist nicht in DEMO_ROUTING_INITIAL → kein State-Update.
+    assert router_main.state.get('default') is None or \
+        router_main.state.get('default', {}).get('descriptor', {}).get('bucket') != 1
+
+    # Skill schreibt routing.json um — neuer Eintrag für bucket 1.
+    routing_file.write_text(json.dumps(DEMO_ROUTING_RELOADED))
+
+    # KEIN Admin-Reload-Aufruf hier — DCOMP-2 verlangt, dass der nächste
+    # Lookup den Stand frisch von Disk holt.
+    post_event(client, {
+        'source_id': 'phone:test-1', 'type': 'figure_detected',
+        'figure_id': 'blaues-b', 'bucket': 0,
+    })
+    # Der neue Eintrag (blaues-b → /blau für default + neuer-bildschirm)
+    # ist sichtbar geworden, ohne Service-Restart, ohne Admin-Reload.
+    s = router_main.state.get('default')
+    assert s is not None
+    assert s['payload']['url'] == 'http://example.test/blau'
+
+
+def test_DCOMP_2_panels_sieht_neue_zeile_ohne_reload(reload_client):
+    """Reload-on-Read auf dem panels-Pfad (ROU-24): ein neuer panels-Eintrag
+    in routing.json wirkt sofort — der Eltern-Chat-Skill-Workflow für
+    Panel-Onboarding muss ohne expliziten Reload-Aufruf funktionieren."""
+    client, routing_file = reload_client
+    # Initial hat keinen panels-Abschnitt — tile_selected würde als
+    # unbekannter Trigger durchlaufen (2xx, kein State).
+    routing_file.write_text(json.dumps({
+        "entries": list(DEMO_ROUTING_INITIAL["entries"]),
+        "panels": {
+            "app-panel:hot": {"display_id": "display:wohnzimmer"},
+        },
+    }))
+    # KEIN Reload-Aufruf — direkt das Event schicken.
+    r = post_event(client, {
+        'source_id': 'app-panel:hot', 'type': 'tile_selected',
+        'app': 'plan', 'view': 'woche',
+    })
+    assert r.status_code == 204
+    s = router_main.state.get('display:wohnzimmer')
+    assert s is not None, \
+        'DCOMP-2: neuer panels-Eintrag muss ohne Admin-Reload sichtbar sein'
+    assert s['payload']['url'] == '/display/plan/woche'
+
+
+def test_DCOMP_2_get_state_sieht_neues_display_ohne_reload(reload_client):
+    """Reload-on-Read auf dem Read-Endpoint: ein neu via Skill angelegtes
+    Display ist sofort über `GET /api/v1/displays/<id>/state` erreichbar
+    (200/null statt 404). Sonst hinkt der Endpoint dem Skill nach."""
+    client, routing_file = reload_client
+    # Vorher: 'neu-display' ist unbekannt → 404.
+    r0 = client.get('/api/v1/displays/neu-display/state')
+    assert r0.status_code == 404
+
+    # Skill schreibt routing.json um.
+    routing_file.write_text(json.dumps({
+        "entries": [
+            {
+                "source_id":  "phone:test-1",
+                "descriptor": {"figure_id": "rotes-a", "bucket": 0},
+                "display_ids": ["neu-display"],
+                "payload":    {"url": "http://example.test/neu"},
+            },
+        ]
+    }))
+    # Kein Reload-Aufruf.
+    r1 = client.get('/api/v1/displays/neu-display/state')
+    assert r1.status_code == 200, \
+        'DCOMP-2: neu angelegtes Display muss ohne Admin-Reload erreichbar sein'
+    assert r1.get_json() is None  # bekannt, aber noch kein aktiver State
+
+
+def test_DCOMP_2_kaputtes_routing_json_faellt_auf_snapshot(reload_client, caplog):
+    """Resilienz-Anforderung: kippt die Datei kurzzeitig (atomares
+    Replace-Race, kaputtes JSON), fällt der Lookup auf den letzten
+    erfolgreich geladenen Snapshot zurück — der laufende Router rutscht
+    nicht in einen leeren Zustand, nur weil ein Skill mitten im Schreiben
+    war. Spiegel des atomaren Admin-Reload-Verhaltens (E-RELOAD-1)."""
+    client, routing_file = reload_client
+    # Snapshot enthält den 'default'-Eintrag aus DEMO_ROUTING_INITIAL.
+    assert 'default' in router_main.known_displays
+
+    # Datei zerschießen.
+    routing_file.write_text('{nicht-valides-json')
+
+    # Lookup soll trotzdem aus Snapshot bedient werden — kein 500, kein
+    # leeres known_displays, der Router bleibt antwortfähig.
+    with caplog.at_level('DEBUG'):
+        r = client.get('/api/v1/displays/default/state')
+    assert r.status_code == 200, \
+        'DCOMP-2 Resilienz: kaputtes routing.json darf bekannte Displays nicht ' \
+        'aus dem Endpoint kippen — Snapshot-Fallback muss greifen'
+
+    # Ein neuer Trigger gegen den Snapshot-Eintrag landet sauber.
+    post_event(client, {
+        'source_id': 'phone:test-1', 'type': 'figure_detected',
+        'figure_id': 'rotes-a', 'bucket': 0,
+    })
+    s = router_main.state.get('default')
+    assert s is not None
+    assert s['payload']['url'] == 'http://example.test/klein'

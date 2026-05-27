@@ -180,7 +180,11 @@ Vergleich: ein eingehender Trigger wird mit Feld-Gleichheit gegen die
 Einträge gematcht. Erster Match gewinnt — die V1-Tabelle ist klein
 genug, dass Reihenfolge bewusst gewählt werden kann.
 
-*Tickets:* #5, #24
+Der Lookup liest `routing.json` **pro Aufruf frisch von Disk**
+(Reload-on-Read, [`conventions/data-components.md`](../../conventions/data-components.md)
+DCOMP-2) — Details unter ROU-18.
+
+*Tickets:* #5, #24, #11
 
 ### ROU-10 — In-Memory State pro Display
 Der Router hält pro `display_id` einen State:
@@ -468,10 +472,24 @@ sich der App-Panel-Adapter wie bei einem nicht-gematchten Trigger
   `source_id`-Wert in der Controller-Instanz-Konfiguration (FIG-23)
   übereinstimmen — sonst findet `lookup` (ROU-9) für die Events dieser
   Instanz keinen Eintrag.
-- **Reload:** V1 lädt die Datei beim Start. Hot-Reload kommt mit einem
-  eigenen Ticket, sobald jemand sie regelmäßig anfasst.
+- **Reload-on-Read** ([`conventions/data-components.md`](../../conventions/data-components.md)
+  DCOMP-2): Lookups (descriptor-Match nach ROU-9, panels-Lookup nach
+  ROU-24, `known`-Prüfung für `GET /api/v1/displays/<id>/state` und
+  `/events`) lesen `routing.json` **pro Aufruf frisch von Disk**.
+  Schreibt ein Skill die Datei (Cross-Service-Write, EC-21), wird der
+  neue Stand vom nächsten Lookup sofort gesehen — ohne Service-Restart
+  und ohne expliziten Reload-Trigger. Der zuletzt erfolgreich geladene
+  Stand wird als Snapshot gehalten und nur dann als Fallback verwendet,
+  wenn ein einzelner Read scheitert (Datei kurz weg, atomares Replace-
+  Race, kaputtes JSON) — gleicher atomarer Geist wie der Admin-Reload
+  (E-RELOAD-1).
+- **Admin-Reload** (`POST /api/v1/router/admin/reload`, #140): bleibt
+  bestehen, ist aber **nicht mehr nötig**, damit Skill-Schreibvorgänge
+  sichtbar werden — das übernimmt Reload-on-Read. Der Endpoint bleibt
+  nützlich als expliziter, loggbarer Reload-Marker (Skill-Service-
+  Reload-Pattern, EC-21) und aktualisiert den Snapshot-Cache.
 
-*Tickets:* #5, #24, #72
+*Tickets:* #5, #24, #72, #11
 
 ### ROU-19 — `config.json` für Tuning-Werte
 Analog FIG-23: optionale Datei `config.json` im Router-Verzeichnis,
