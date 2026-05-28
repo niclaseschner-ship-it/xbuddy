@@ -68,7 +68,8 @@ Action-/Asset-Form ab, weil eine Panel-Instanz adressiert wird, nicht
 eine Aktion oder ein Asset. (Decision 5)
 
 Diese Abweichung ist zentral als Teil der Übersicht aller
-URL-3a-Abweichungen in [`urls.md`](urls.md) (URL-3a) aufgelistet.
+URL-3a-Abweichungen in
+[`../../conventions/urls.md`](../../conventions/urls.md) (URL-3a) aufgelistet.
 
 Die Aktion eines Kachel-Taps läuft **nicht** über einen eigenen
 Controller-Aktions-Pfad (kein `/controller/app-panel/<id>/select`),

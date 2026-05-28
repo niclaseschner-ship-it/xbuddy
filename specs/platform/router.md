@@ -286,7 +286,8 @@ Der Pfad sitzt unter dem erlaubten `/display/`-Prefix (URL-1), weicht
 aber bewusst von der `/display/<buddy>/<view>`-Form (URL-2) ab: er
 adressiert ein Display über seine `id`, nicht über Buddy/View.
 Dokumentierte Abweichung — zentral als Teil der Übersicht aller
-URL-3a-Abweichungen in [`urls.md`](urls.md) (URL-3a) aufgelistet.
+URL-3a-Abweichungen in
+[`../../conventions/urls.md`](../../conventions/urls.md) (URL-3a) aufgelistet.
 
 *Tickets:* #5, #24, #30
 
@@ -671,7 +672,7 @@ gegenseitiges Übermalen begünstigen würde.
 ### E-ROU-7 — URL-Konvention nachgezogen + „screen" → „display"
 *Datum:* 2026-05-21 (Ticket #24)
 
-Der Router V1 (#5) wurde gebaut, bevor `specs/platform/urls.md` (die
+Der Router V1 (#5) wurde gebaut, bevor `conventions/urls.md` (die
 URL-Konvention) gemergt war — die Endpunkte `POST /event`,
 `GET /screen/<id>/state` und `GET /diag` verletzten URL-1/URL-4. Mit
 #24 wurden sie auf `/api/v1/events`, `/api/v1/displays/<id>/state` und
@@ -690,8 +691,8 @@ Displays eine echte zweite Ebene. Spekulativ — wird erst mit Beleg
 eingeführt (CLAUDE.md §6).
 
 Lehre: Eine Konvention, die als offener Spec-PR herumliegt, bindet
-nicht. Wäre `urls.md` vor dem Router-Bau gemergt gewesen, hätte es
-diese Migration nicht gebraucht.
+nicht. Wäre `conventions/urls.md` vor dem Router-Bau gemergt gewesen,
+hätte es diese Migration nicht gebraucht.
 
 ### E-ROU-8 — App-Panel: Routing per Konvention, nicht per Kachel
 *Datum:* 2026-05-25 (Ticket #58)

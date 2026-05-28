@@ -1,16 +1,9 @@
-# URLs — Spec
+# URLs — Konvention     (ID-Präfix: URL)
 
-> ID-Präfix: URL
-> Plattform-Vertrag zwischen Display, Controller und Hub: wie HTTP-Pfade
-> aufgebaut sind und benannt werden.
-
-## Zweck
-
-URL-Konventionen für alle HTTP-Endpunkte des XBuddy-Ökosystems. Stellt
-sicher, dass Pfade vorhersagbar, stabil und kollisionsfrei sind — auch
-wenn über die Zeit dutzende bis ~100 Endpunkte dazukommen.
-
-## Anforderungen
+Plattform-Vertrag zwischen Display, Controller und Hub: wie HTTP-Pfade
+aufgebaut sind und benannt werden. Stellt sicher, dass Pfade
+vorhersagbar, stabil und kollisionsfrei sind — auch wenn über die Zeit
+dutzende bis ~100 Endpunkte dazukommen.
 
 ### URL-1 — Drei Top-Level-Prefixe
 
@@ -65,10 +58,12 @@ und kein Asset:
 
 - **ROU-20** — `GET /display/<id>` liefert den Display-Client; `<id>` ist
   die Display-Identität (DC-1). Abweichung von URL-2
-  (`/display/<buddy>/<view>`). Quelle: [`router.md`](router.md), ROU-20.
+  (`/display/<buddy>/<view>`). Quelle:
+  [`../specs/platform/router.md`](../specs/platform/router.md), ROU-20.
 - **PANEL-2** — `/controller/app-panel/<id>` liefert die Panel-Seite;
   `<id>` ist die Panel-Instanz-Identität (PANEL-8). Abweichung von URL-3
-  (`/controller/<source>/<X>`). Quelle: [`app-panel.md`](app-panel.md),
+  (`/controller/<source>/<X>`). Quelle:
+  [`../specs/platform/app-panel.md`](../specs/platform/app-panel.md),
   PANEL-2.
 
 Die Identitäts-Form ist konsistent über Event-Schema, Config und
