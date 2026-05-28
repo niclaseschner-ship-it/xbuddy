@@ -14,7 +14,7 @@ holt er von zentralen Komponenten:
 
 - **Personen-Identität** von der Familien-Registry (`familie/`) — Name, Foto,
   Ring-Farbe, E-Mail (PLAN-19, PLAN-24).
-- **Geheimnisse** vom Zugangsdaten-Speicher (`zugangsdaten/`) — der
+- **Geheimnisse** vom Zugangsdaten-Speicher (`tools/zugangsdaten/`) — der
   Google-OAuth-Client und das Refresh-Token (PLAN-16). Die App legt **keine**
   eigene Token-Datei an.
 

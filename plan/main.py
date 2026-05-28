@@ -26,8 +26,9 @@ from datetime import date, timedelta
 
 from flask import Flask, jsonify, render_template, request
 
-# Repo-Wurzel auf den Importpfad — die App konsumiert die Public-API der
-# zentralen Komponenten `zugangsdaten` (PLAN-16) und `familie` (PLAN-19).
+# Repo-Wurzel auf den Importpfad — die App konsumiert die Library
+# `tools.zugangsdaten` (PLAN-16, DCOMP-1) und die Public-API der Komponente
+# `familie` (PLAN-19).
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
@@ -35,7 +36,7 @@ if _REPO_ROOT not in sys.path:
 
 from familie import registry as registry_mod  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
-from zugangsdaten import Zugangsdaten, resolve_store_path  # noqa: E402
+from tools.zugangsdaten import Zugangsdaten, resolve_store_path  # noqa: E402
 
 # Das plan-Paket wird als Paket importiert, damit die relativen Imports in
 # config/db/kalender/render greifen — auch wenn main.py direkt gestartet wird.

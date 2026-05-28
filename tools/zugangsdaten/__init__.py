@@ -1,12 +1,15 @@
-"""Zugangsdaten-Speicher — Public-API (Refs #37).
+"""Zugangsdaten-Speicher — Public-API (Refs #37, #211).
 
 Siehe specs/platform/zugangsdaten.md. Komponenten, die Geheimnisse halten
 müssen, importieren ausschließlich aus diesem Paket — nicht aus internen
-Pfaden (CLAUDE.md §6, ZD-5).
+Pfaden (CLAUDE.md §6, ZD-5). Das Paket lebt unter `tools/zugangsdaten/`,
+weil es eine Library ist (kein eigener Prozess, kein Service) — DCOMP-1
+erlaubt für solchen geteilten Code genau den Import aus `tools/`
+(analog `tools.configloader`, `tools.logsetup`).
 
 Typische Nutzung:
 
-    from zugangsdaten import Zugangsdaten, resolve_store_path
+    from tools.zugangsdaten import Zugangsdaten, resolve_store_path
 
     speicher = Zugangsdaten(resolve_store_path())
     key = speicher.get("ki-anbieter-key")        # None, wenn nicht gesetzt
