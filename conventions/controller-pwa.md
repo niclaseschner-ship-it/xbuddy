@@ -87,3 +87,5 @@ das Repo-Default-Setup ohne Live-Werte (vgl. CONFIG-4).
 Pro Controller-Instanz wird `config.json` separat verwaltet (nicht
 alle Instanzen im Repo, sondern beim Deployment der jeweiligen URL
 erzeugt); ein `config.example.json` dokumentiert das Format.
+
+Implementierungs-Naht: `controller/_shared/config.js` (`pwaShared.loadPwaConfig`).

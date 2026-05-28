@@ -149,32 +149,29 @@
 </div>
 <div id="portrait">Bitte ins Querformat drehen.</div>
 
+<script src="../_shared/config.js"></script>
 <script src="./figlib.js"></script>
 <script>
 (async () => {
   'use strict';
 
-  // === FIG-23 — Instanz-Konfiguration aus ./config.json ===
-  // Defaults aus figlib < config.json < URL-Parameter
-  let fileCfg = {};
-  try {
-    const res = await fetch('./config.json', { cache: 'no-store' });
-    if (res.ok) fileCfg = await res.json();
-  } catch (err) {
-    console.warn('config.json konnte nicht geladen werden — fallback auf Defaults:', err);
-  }
-
-  // === FIG-17 — URL-Parameter überschreiben config.json + Defaults ===
+  // === FIG-23/FIG-17 — Instanz-Konfiguration laden (PWA-4) ===
+  // Lade-Reihenfolge: Defaults (figLib) → config.json → URL-Parameter
+  // Umsetzung über gemeinsamen Helfer (controller/_shared/config.js).
   const qs = new URLSearchParams(location.search);
   const num = (k, def) => { const v = parseFloat(qs.get(k)); return Number.isFinite(v) ? v : def; };
-  const defaults = figLib.configDefaults();
-  const base = Object.assign({}, defaults, fileCfg);
-  const cfg = Object.assign({}, base, {
-    source_id:                   qs.get('source')  || base.source_id,
-    router_url:                  qs.get('router')  || base.router_url || '',
-    pattern_tolerance:           num('tol',  base.pattern_tolerance),
-    angle_update_min_delta_deg:  num('dead', base.angle_update_min_delta_deg),
-    angle_update_max_hz:         num('rate', base.angle_update_max_hz),
+  const cfg = await pwaShared.loadPwaConfig({
+    defaults: figLib.configDefaults(),
+    urlParams: qs,
+    applyUrlParams: function (base, qs) {
+      return {
+        source_id:                  qs.get('source')  || base.source_id,
+        router_url:                 qs.get('router')  || base.router_url || '',
+        pattern_tolerance:          num('tol',  base.pattern_tolerance),
+        angle_update_min_delta_deg: num('dead', base.angle_update_min_delta_deg),
+        angle_update_max_hz:        num('rate', base.angle_update_max_hz),
+      };
+    },
   });
   document.getElementById('sid').textContent = cfg.source_id;
 
