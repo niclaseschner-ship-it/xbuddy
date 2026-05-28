@@ -20,9 +20,9 @@
     <div id="error" class="hidden" role="alert"></div>
     <div id="grid"></div>
   </main>
-  <!-- PWA-4 — gemeinsamer Config-Lader (controller/_shared/config.js).
-       Muss vor app.js stehen, damit pwaShared im Bootstrap verfügbar ist. -->
-  <script src="../_shared/config.js"></script>
+  <!-- PWA-4 — Bootstrap-Migration auf pwaShared erfolgt als Folge-Ticket
+       (panelLib.loadConfigImpl hat eine Test-Naht, die koordiniert migriert
+       werden muss). Bis dahin lädt app-panel den Shared-Helper nicht. -->
   <script src="./app.js"></script>
 </body>
 </html>
