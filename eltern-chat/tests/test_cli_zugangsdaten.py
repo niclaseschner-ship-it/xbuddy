@@ -69,8 +69,9 @@ def test_build_context_passes_cli_path_to_resolve_store_path(monkeypatch,
     monkeypatch.setattr(main, "TelegramClient", _FakeTelegramClient)
 
     # Wir fangen den Aufruf am Public-Symbol des zugangsdaten-Pakets ab —
-    # build_context importiert genau von dort (KAV-7-Lazy-Import).
-    import zugangsdaten as zd_pkg
+    # build_context importiert genau von dort (KAV-7-Lazy-Import). Seit #211
+    # lebt die Library unter `tools.zugangsdaten` (DCOMP-1).
+    import tools.zugangsdaten as zd_pkg
 
     aufrufe = []
 
@@ -99,7 +100,7 @@ def test_build_context_default_zd_cli_path_is_none(monkeypatch, tmp_path):
     """Ohne CLI-Flag bleibt `cli_path` None — Env/Default greifen (ZD-8)."""
     monkeypatch.setattr(main, "TelegramClient", _FakeTelegramClient)
 
-    import zugangsdaten as zd_pkg
+    import tools.zugangsdaten as zd_pkg
 
     aufrufe = []
 

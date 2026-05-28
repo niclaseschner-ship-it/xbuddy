@@ -30,10 +30,11 @@ from dataclasses import dataclass
 # Import-aus-Tests-Fall sorgt tests/conftest.py.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Repo-Wurzel auf den Importpfad — der Bot konsumiert die Public-API der
-# zentralen Komponente `zugangsdaten` (für die Kalender-Verbinden-Skill,
-# analog plan/main.py). Im systemd-Setup ist WorkingDirectory=eltern-chat/,
-# damit `from zugangsdaten import …` ohne PYTHONPATH funktioniert.
+# Repo-Wurzel auf den Importpfad — der Bot konsumiert die Library
+# `tools.zugangsdaten` (für die Kalender-Verbinden-Skill, analog plan/main.py)
+# und die gemeinsamen Tools (`tools.logsetup`, …). Im systemd-Setup ist
+# WorkingDirectory=eltern-chat/, damit `from tools.zugangsdaten import …`
+# ohne PYTHONPATH funktioniert.
 _REPO_ROOT_FOR_IMPORTS = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO_ROOT_FOR_IMPORTS not in sys.path:
     sys.path.insert(0, _REPO_ROOT_FOR_IMPORTS)
@@ -380,7 +381,7 @@ def parse_args(argv):
     # ZD-8: einheitliches Flag aus der Zugangsdaten-Komponente, damit der Bot
     # genauso wie andere Komponenten eine alternative ZD-Datei akzeptiert
     # (Test-/Debug-Workflow, Refs #131).
-    from zugangsdaten import add_cli_argument as _add_zd_cli_argument
+    from tools.zugangsdaten import add_cli_argument as _add_zd_cli_argument
     _add_zd_cli_argument(p)
     return p.parse_args(argv)
 
@@ -430,7 +431,7 @@ def build_context(cfg, db_path, store_path, zd_cli_path=None):
     # KAV-7: Zugangsdaten-Speicher als Per-Instanz-Datei (ZD-1/ZD-8). Lazy-
     # importiert, damit Tests, die `build_context` nicht aufrufen, keine
     # zugangsdaten-Abhängigkeit aufbauen müssen.
-    from zugangsdaten import Zugangsdaten, resolve_store_path
+    from tools.zugangsdaten import Zugangsdaten, resolve_store_path
     zd_store = Zugangsdaten(resolve_store_path(cli_path=zd_cli_path))
 
     ctx = Context(

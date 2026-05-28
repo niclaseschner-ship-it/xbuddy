@@ -55,8 +55,8 @@ geraete/geraete.json
 
 # Zugangsdaten-Speicher (ZD-3) — Per-Instanz-Geheimnis-Datei. Hält
 # Klartext-Geheimnisse, darf nie ins Repo (CLAUDE.md §8). Format:
-# zugangsdaten/zugangsdaten.example.json
-zugangsdaten/zugangsdaten.json
+# tools/zugangsdaten/zugangsdaten.example.json
+tools/zugangsdaten/zugangsdaten.json
 
 # Plan-Buddy: Per-Instanz-Konfig + Verantwortlichkeiten-DB (PLAN-9/PLAN-28) —
 # je Instanz separat, nicht im Repo. Format: plan/plan.example.json
