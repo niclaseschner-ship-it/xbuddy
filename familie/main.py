@@ -10,17 +10,20 @@ starten, und ihre Endpunkte sind über `app` als Blueprint-loses Flask-Objekt
 auch von einem späteren Mit-Host importierbar. Mehr braucht V1 nicht.
 
 Endpunkte:
-  GET /api/v1/familie/personen        — alle Personen (FAM-7)
-  GET /api/v1/familie/personen/<id>   — eine Person je id (FAM-7)
-  GET /api/v1/familie/foto/<id>       — Profilfoto, 200/404 (FAM-8)
+  GET  /api/v1/familie/personen              — alle Personen (FAM-7)
+  GET  /api/v1/familie/personen/<id>         — eine Person je id (FAM-7)
+  GET  /api/v1/familie/foto/<id>             — Profilfoto, 200/404 (FAM-8)
+  POST /api/v1/familie/personen              — Person anlegen (FAM-12)
+  POST /api/v1/familie/personen/<id>/foto    — Profilfoto setzen (FAM-13)
 """
 
 import argparse
 import logging
 import os
 import sys
+import threading
 
-from flask import Flask, jsonify, send_file
+from flask import Flask, jsonify, request, send_file
 
 # Repo-Wurzel auf den Importpfad, damit `tools.configloader` (CONFIG-1, #179)
 # auch beim Direktstart `python3 familie/main.py` gefunden wird — analog zu
@@ -76,6 +79,14 @@ def configure(reg, foto_verzeichnis=None, registry_path=None):
                 reg.settings.foto_verzeichnis, "FAMILIE_FOTOS",
                 DEFAULTS["foto_verzeichnis"])
     runtime["foto_verzeichnis"] = foto_verzeichnis
+
+
+# Schreib-Serialisierung (FAM-12/FAM-13): Read-Modify-Write der Registry-
+# Datei aus parallelen Flask-Threads würde ohne Lock verloren-gehende
+# Updates produzieren (zwei POSTs lesen denselben Stand, beide schreiben,
+# der zweite überschreibt den ersten). Das Lock klammert nur den Schreib-
+# Pfad — Lesen bleibt lock-frei (DCOMP-2 Reload-on-Read).
+_write_lock = threading.Lock()
 
 
 # ============================================================
@@ -141,6 +152,121 @@ def get_foto(person_id):
     if pfad is None:
         return jsonify({"error": "kein Foto"}), 404
     return send_file(pfad)
+
+
+def _aktuelles_foto_verzeichnis(reg):
+    """Foto-Verzeichnis je Request über den FAM-9-Resolver auflösen, damit ein
+    Settings-Wechsel in `familie.json` ohne Restart greift — wie für die
+    Lese-Endpoints (siehe `get_foto`)."""
+    path = runtime.get("registry_path")
+    if path is not None:
+        return registry_mod.resolved_foto_verzeichnis(reg.settings, path)
+    return runtime["foto_verzeichnis"]
+
+
+def _bad_request(msg):
+    """FAM-12/FAM-13: 4xx mit JSON-Fehler, keine Stack-Traces (Disziplin
+    aus dem Auftrag #213)."""
+    return jsonify({"error": msg}), 400
+
+
+@app.route("/api/v1/familie/personen", methods=["POST"])
+def post_person():
+    """FAM-12: Person anlegen. JSON-Body `{name, art?, ring?, foto?, email?,
+    telegram_id?}`, Antwort 200 mit dem Personen-JSON inkl. vergebener
+    IDENT-1-`id`.
+
+    Read-Modify-Write läuft hinter `_write_lock`, damit parallele POSTs nicht
+    den jeweils anderen Eintrag verlieren — zwei Threads bekommen damit zwei
+    verschiedene `id`s und beide Einträge landen in der Registry.
+    """
+    path = runtime.get("registry_path")
+    if path is None:
+        # In-Memory-Modus (Tests): wir schreiben nicht auf Disk, sondern nur
+        # in das geladene Registry-Objekt — analog `_aktuelle_registry`.
+        # Praktisch wird die Schreib-API immer mit `registry_path` betrieben;
+        # diesen Pfad markieren wir als 503, statt eine halbe Wahrheit zu
+        # liefern.
+        return jsonify({"error": "kein Registry-Pfad konfiguriert"}), 503
+
+    body = request.get_json(silent=True) or {}
+    name = (body.get("name") or "").strip()
+    if not name:
+        return _bad_request("name fehlt oder ist leer")
+    art = body.get("art") or registry_mod.KIND_ERWACHSENE
+    if art not in (registry_mod.KIND_ERWACHSENE, registry_mod.KIND_KINDER):
+        return _bad_request("art muss 'erwachsene' oder 'kinder' sein")
+    ring = body.get("ring") or None
+    foto = body.get("foto") or None
+    email = body.get("email") or None
+    telegram_id = body.get("telegram_id")
+
+    with _write_lock:
+        # DCOMP-2: frisch von Disk lesen — sonst sehen wir parallele
+        # Cross-Service-Schreibvorgänge (z. B. von der Eltern-Chat-Skill-
+        # Anlage) nicht und überschreiben sie.
+        reg = registry_mod.load(path)
+        try:
+            person = registry_mod.add_person(
+                reg, name=name, art=art, ring=ring, foto=foto,
+                email=email, telegram_id=telegram_id)
+        except registry_mod.RegistryError as e:
+            return _bad_request(str(e))
+        try:
+            registry_mod.save(reg, path)
+        except registry_mod.RegistryError as e:
+            logging.warning("post_person: Schreiben fehlgeschlagen: %s", e)
+            return jsonify({"error": str(e)}), 503
+    return jsonify(person.to_dict()), 200
+
+
+@app.route("/api/v1/familie/personen/<person_id>/foto", methods=["POST"])
+def post_foto(person_id):
+    """FAM-13: Profilfoto setzen. Multipart-Feld `foto`. Schreibt das Foto
+    atomar in `<foto_verzeichnis>/<id>/<dateiname>` und aktualisiert das
+    `foto`-Feld der Person — beides hinter `_write_lock`, sodass ein
+    paralleles `POST /personen` nicht die gerade geschriebene Foto-Person
+    überschreibt."""
+    path = runtime.get("registry_path")
+    if path is None:
+        return jsonify({"error": "kein Registry-Pfad konfiguriert"}), 503
+
+    if "foto" not in request.files:
+        return _bad_request("multipart-Feld 'foto' fehlt")
+    upload = request.files["foto"]
+    dateiname = (upload.filename or "").strip()
+    if not dateiname:
+        return _bad_request("Foto-Dateiname fehlt")
+    daten = upload.read()
+    if not daten:
+        return _bad_request("Foto-Inhalt ist leer")
+
+    with _write_lock:
+        reg = registry_mod.load(path)
+        if reg.get(person_id) is None:
+            return jsonify({"error": "unbekannte id"}), 404
+        foto_verzeichnis = _aktuelles_foto_verzeichnis(reg)
+        try:
+            foto_pfad = registry_mod.setze_foto(
+                reg, foto_verzeichnis, person_id, dateiname, daten)
+        except registry_mod.RegistryError as e:
+            logging.warning("post_foto: Foto-Anlage fehlgeschlagen: %s", e)
+            return jsonify({"error": str(e)}), 503
+        try:
+            registry_mod.save(reg, path)
+        except registry_mod.RegistryError as e:
+            # Foto bereits geschrieben, aber Registry-Save scheitert:
+            # geschriebene Foto-Datei zurückrollen, sonst hätten wir eine
+            # Foto-Datei ohne Verweis im Registry (FAM-11 letzter Satz).
+            ziel = os.path.join(
+                foto_verzeichnis, person_id, os.path.basename(dateiname))
+            try:
+                os.remove(ziel)
+            except OSError:
+                pass
+            logging.warning("post_foto: Registry-Save fehlgeschlagen: %s", e)
+            return jsonify({"error": str(e)}), 503
+    return jsonify({"id": person_id, "foto_pfad": foto_pfad}), 200
 
 
 # ============================================================
