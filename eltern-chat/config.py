@@ -49,14 +49,19 @@ DEFAULTS = {
     # ausliefert. Per-Instanz-Wert; Default = Standard-Ausgabe des CA-Werkzeugs
     # (tools/ca/make-ca.sh, #36). Niemals der CA-Privatschlüssel.
     "ca_pem_path":    "../tools/ca/out/rootCA.pem",
-    # FAA-12: Pfad zur Familien-Registry (`familie.md` FAM-6), die die
-    # FamilieAnlegenTask über FAM-11 fortschreibt. Per-Instanz-Wert; Default
-    # passt zum Pi-Setup (familie/familie.json neben dem Eltern-Chat-Repo).
-    "family_registry_path": "../familie/familie.json",
-    # GAA-5 / GER-9: Pfad zur Geräte-Registry (`geraete.md` GER-4), die die
-    # GeraetAnlegenTask über GER-6 fortschreibt. Per-Instanz-Wert; Default
-    # passt zum Pi-Setup (geraete/geraete.json neben dem Eltern-Chat-Repo).
-    "geraete_registry_path": "../geraete/geraete.json",
+    # FAA-12 / Auftrag #215: Origin der Familien-Komponente, ueber die die
+    # FamilieAnlegenTask Personen schreibt (`POST /api/v1/familie/personen`
+    # FAM-12) und liest (`GET /api/v1/familie/personen` FAM-7). Per-Instanz-
+    # Wert; Default passt zum Pi-Setup (PORT-2 Familie auf 5010).
+    "familie_origin_url": "http://127.0.0.1:5010",
+    # GAA-5 / Auftrag #215: Origin der Geraete-Komponente, ueber die die
+    # GeraetAnlegenTask Geraete schreibt (`POST /api/v1/geraete/` GER-15).
+    # Per-Instanz-Wert; Default passt zum Pi-Setup (PORT-2 Geraete auf 5040).
+    "geraete_origin_url": "http://127.0.0.1:5040",
+    # EC-21 / Auftrag #215: Origin der Plan-Buddy-Reload-Schnittstelle
+    # (`POST /api/v1/plan/admin/reload`, #151). Per-Instanz-Wert; Default
+    # passt zum Pi-Setup (PORT-2 Plan-Buddy auf 5020).
+    "plan_origin_url": "http://127.0.0.1:5020",
     # GAA-3.7: HTTPS-Origin, unter der die ausgelieferten Display-URLs
     # erreichbar sind (z. B. "https://xbuddy-hub.local:8443"). Per-Instanz-
     # Wert. Leer (Default) → Bot gibt nur den Pfad `/display/<id>` aus —
@@ -67,8 +72,9 @@ DEFAULTS = {
     # KAV-X: Pfad zur Per-Instanz-`plan/plan.json` (PLAN-28). Nach
     # erfolgreicher Kalender-Auswahl schreibt die »Kalender verbinden«-Skill
     # die gewählte `kalender_id` atomar hier hinein (V1-Provisorium gegen die
-    # FS-Linie, sauber gelöst in Folge-Ticket #140). Default zeigt auf das
-    # Pi-Layout (plan/plan.json neben dem Eltern-Chat-Repo).
+    # FS-Linie, sauber gelöst in Folge-Ticket #140 — bewusst noch nicht auf
+    # HTTP umgezogen, eigenes Ticket). Default zeigt auf das Pi-Layout
+    # (plan/plan.json neben dem Eltern-Chat-Repo).
     "plan_json_path": "../plan/plan.json",
     # ONB-6 / EC-15: Familien-Gruppen-Chat-ID. Default leer = Onboarding-
     # Bindung. Über ENV oder Datei gesetzt → gesperrt (Vorrang vor
@@ -104,8 +110,9 @@ class Config:
 
     def __init__(self, bot_token, provider_api_key, provider, provider_model,
                  family_group_chat_id, family_group_locked, context_depth,
-                 ca_pem_path, family_registry_path, geraete_registry_path,
-                 display_url_origin, plan_json_path, log_level):
+                 ca_pem_path, familie_origin_url, geraete_origin_url,
+                 plan_origin_url, display_url_origin, plan_json_path,
+                 log_level):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
         self.provider = provider
@@ -113,12 +120,13 @@ class Config:
         self.family_group_chat_id = family_group_chat_id
         self.family_group_locked = family_group_locked
         self.context_depth = context_depth
-        self.ca_pem_path = ca_pem_path           # CAV-3: Pfad zum öffentlichen Root-CA-Zertifikat
-        self.family_registry_path = family_registry_path   # FAA-12: Pfad zur Familien-Registry (FAM-6)
-        self.geraete_registry_path = geraete_registry_path # GAA-5: Pfad zur Geräte-Registry (GER-4)
-        self.display_url_origin = display_url_origin       # GAA-3.7: HTTPS-Origin für Display-URLs
-        self.plan_json_path = plan_json_path     # KAV-X: Pfad zur Per-Instanz-`plan/plan.json`
-        self.log_level = log_level               # LOG-4 (#166): Level-String für tools.logsetup
+        self.ca_pem_path = ca_pem_path             # CAV-3: Pfad zum öffentlichen Root-CA-Zertifikat
+        self.familie_origin_url = familie_origin_url   # FAA-12 / #215: Origin der Familien-Komponente
+        self.geraete_origin_url = geraete_origin_url   # GAA-5 / #215: Origin der Geraete-Komponente
+        self.plan_origin_url = plan_origin_url         # EC-21 / #215: Origin der Plan-Buddy-Reload-Schnittstelle
+        self.display_url_origin = display_url_origin   # GAA-3.7: HTTPS-Origin für Display-URLs
+        self.plan_json_path = plan_json_path       # KAV-X: Pfad zur Per-Instanz-`plan/plan.json`
+        self.log_level = log_level                 # LOG-4 (#166): Level-String für tools.logsetup
 
 
 def _family_group_in_file(config_path):
@@ -208,8 +216,9 @@ def resolve(config_path, store_path=None):
         family_group_locked=family_group_locked,
         context_depth=context_depth,
         ca_pem_path=str(values["ca_pem_path"]).strip(),
-        family_registry_path=str(values["family_registry_path"]).strip(),
-        geraete_registry_path=str(values["geraete_registry_path"]).strip(),
+        familie_origin_url=str(values["familie_origin_url"]).strip().rstrip("/"),
+        geraete_origin_url=str(values["geraete_origin_url"]).strip().rstrip("/"),
+        plan_origin_url=str(values["plan_origin_url"]).strip().rstrip("/"),
         display_url_origin=str(values["display_url_origin"]).strip().rstrip("/"),
         plan_json_path=str(values["plan_json_path"]).strip(),
         log_level=str(values["log_level"]).strip(),

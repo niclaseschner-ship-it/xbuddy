@@ -6,10 +6,11 @@ versteht der Agent eine natürlichsprachige Bitte („leg mir Paula als Kind
 an"), schlägt er die Anlage vor — nach EC-10-Bestätigung startet der Task die
 Funktion im Privatchat des Aufrufers.
 
-Eine **schreibende** Aufgabe (EC-10, FAA-12): die Funktion ergänzt
-`familie.json` über die Registry-Schreib-Schnittstelle (FAM-11). Das
-EC-10-Bestätigungs-Gate vor dem Aufgaben-Start ist redundant mit FAA-7 (jede
-Person wird in der Konversation einzeln bestätigt), aber Pattern-treu.
+Eine **schreibende** Aufgabe (EC-10, FAA-12): die Funktion ergänzt die
+Familien-Registry über die HTTP-Schreib-Schnittstelle der Familien-
+Komponente (FAM-12/FAM-13, Auftrag #215). Das EC-10-Bestätigungs-Gate vor
+dem Aufgaben-Start ist redundant mit FAA-7 (jede Person wird in der
+Konversation einzeln bestätigt), aber Pattern-treu.
 
 Die Aufgabe ist ein dünner Aufrufer der trigger-agnostischen Funktion (FAA-1
 / E-FAA-1) — keine eigene Anlage-Logik. Sie liefert nur den Privatchat-
@@ -21,6 +22,7 @@ import logging
 
 from private_chat_session import PrivateChatSession
 from skills import familie_anlegen
+from skills.familie_client import FamilieClient
 from tasks import Proposal, WriteTask, is_from_private_chat
 
 
@@ -77,7 +79,14 @@ class FamilieAnlegenTask(WriteTask):
     # konsistent mit GAA/KAV).
     is_async = True
 
-    def __init__(self, tg, registry_path, sessions, family_group_chat_id_getter):
+    def __init__(self, tg, familie_origin_url, sessions,
+                 family_group_chat_id_getter, client=None):
+        """`familie_origin_url` ist die Origin der Familien-Komponente (z. B.
+        `http://127.0.0.1:5010`). `client` ist die Test-Naht: liefert ein
+        vorgefertigter `FamilieClient` (mit `transport=`-Callable) hereingegeben,
+        nutzt der Task diesen statt einer neuen Instanz — so testen wir die
+        Anbindung an die HTTP-Schicht ohne echten Server (Vorlage:
+        `plan/familie_client.py`)."""
         super().__init__(
             name="familie_anlegen",
             description=(
@@ -88,7 +97,8 @@ class FamilieAnlegenTask(WriteTask):
                 "Schritt-für-Schritt-Konversation im Privatchat."),
             parameters={"type": "object", "properties": {}})
         self._tg = tg
-        self._registry_path = registry_path
+        self._client = client if client is not None else FamilieClient(
+            familie_origin_url)
         self._sessions = sessions   # dict chat_id -> FaaSession (in-memory)
         self._family_group_chat_id_getter = family_group_chat_id_getter
 
@@ -121,7 +131,7 @@ class FamilieAnlegenTask(WriteTask):
         self._sessions[private_chat_id] = session
 
         family_group_chat_id = self._family_group_chat_id_getter()
-        registry_path = self._registry_path
+        client = self._client
         tg = self._tg
         sessions = self._sessions
 
@@ -129,7 +139,7 @@ class FamilieAnlegenTask(WriteTask):
             try:
                 result = familie_anlegen.familie_anlegen(
                     tg, private_chat_id, user_id, family_group_chat_id,
-                    registry_path, session.next_message)
+                    client, session.next_message)
                 logging.info(
                     "FAA-Session in Chat %s beendet — authorized=%s, ids=%s",
                     private_chat_id, result.authorized, result.vergebene_ids)

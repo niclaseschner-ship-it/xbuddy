@@ -108,14 +108,10 @@ FAM-4).
 
 *Tickets:* #60
 
-### FAA-5 — ID-Vergabe aus dem Namen
-Die `id` (`familie.md` FAM-3 Pflicht, „stabil") vergibt die Funktion selbst —
-der Aufrufer sieht und wählt sie nicht. Sie wird aus dem Anzeigenamen als
-Slug abgeleitet (Kleinschreibung, Umlaute aufgelöst, Nicht-Wort-Zeichen
-zusammengezogen). Kollidiert der Slug mit einer bereits in `familie.json`
-vergebenen `id`, hängt die Funktion ein numerisches Suffix `-2`, `-3`, … an,
-bis der Slug eindeutig ist. Die `id` wird nach dem Schreiben (FAA-8) nicht
-mehr geändert.
+### FAA-5 — ID-Vergabe durch den Server
+Die `id` (`familie.md` FAM-3 Pflicht, „stabil") vergibt der Server (FAM-12);
+Form und Kollisionsvermeidung folgen IDENT-1. Der Aufrufer sieht und wählt
+sie nicht. Die `id` wird nach dem Schreiben (FAA-8) nicht mehr geändert.
 
 *Tickets:* #60
 
@@ -127,18 +123,17 @@ Diese Lockerung gegenüber „nur Foto-Nachricht" ist gewollt, weil einige Gerä
 (z. B. iOS, je nach Workflow) Bilder als Dokument-Anhang versenden — der
 Aufrufer soll nicht an der Anhang-Form scheitern.
 
-Die Funktion lädt die Bilddatei aus dem Telegram-Update herunter und legt sie
-unter dem Foto-Verzeichnis aus `familie.md` FAM-9 ab. Der Dateiname ist
-`<id>.<ext>` — `id` aus FAA-5; `ext` folgt dem Eingangsformat (`jpg` für JPEG,
-`png` für PNG). Bei einer Telegram-Foto-Nachricht ist das Format immer JPEG,
-und die Funktion wählt unter den angebotenen Größen die größte, deren längste
-Kante den Tuning-Wert „Profilbild-Max-Kante" aus `familie.md` FAM-9 nicht
-überschreitet. Bei einem Datei-Anhang nimmt die Funktion die Datei wie gesandt
-und prüft die Kantenlänge gegen denselben Tuning-Wert (FAA-10).
+Die Funktion lädt die Bilddatei aus dem Telegram-Update herunter und sendet
+sie via FAM-13 (Multipart-Upload) an die Familie-Komponente. Speicherort und
+Dateiname werden serverseitig entschieden (Server-Logik FAM-13). Bei einer
+Telegram-Foto-Nachricht wählt die Funktion unter den angebotenen Größen die
+größte, deren längste Kante den Tuning-Wert „Profilbild-Max-Kante" aus
+`familie.md` FAM-9 nicht überschreitet. Bei einem Datei-Anhang nimmt die
+Funktion die Datei wie gesandt und prüft die Kantenlänge gegen denselben
+Tuning-Wert (FAA-10).
 
-Der Dateiname (ohne Verzeichnis, inklusive Endung) landet in `familie.md`
-FAM-3 `foto`. Hat der Aufrufer das Foto übersprungen, bleibt `foto`
-ungesetzt — `familie.md` FAM-5 lässt das ausdrücklich zu.
+Hat der Aufrufer das Foto übersprungen, entfällt der FAM-13-Aufruf — `foto`
+bleibt ungesetzt (`familie.md` FAM-5 lässt das ausdrücklich zu).
 
 *Tickets:* #60
 
@@ -156,17 +151,14 @@ Implementierungs-Detail.
 
 ## 3. Schreiben
 
-### FAA-8 — Ergänzen über die Registry-Schreib-Schnittstelle
-Nach Bestätigung (FAA-7) ergänzt die Funktion die neue Person in der Registry
-**ausschließlich über die Schreib-Schnittstelle der Registry**
-(`familie.md` FAM-11) — die Funktion fasst die Registry-Datei nicht selbst an.
-FAM-11 garantiert das atomare Schreiben (Temp-Datei + Rename) und bewahrt
-bestehende Personen unverändert. Falls die Funktion ein Foto angenommen hat
-(FAA-6), liegt die Bilddatei vor dem Aufruf der Schreib-Schnittstelle bereits
-an ihrem Zielpfad im Foto-Verzeichnis (FAM-9). Schlägt der Schreib-Aufruf
-fehl, sorgt die Funktion dafür, dass weder die neue Person in der Registry
-noch eine etwaige Foto-Datei zurückbleibt — sonst hätte die Registry einen
-Foto-Verweis ohne Datei oder umgekehrt.
+### FAA-8 — Anlegen über zwei HTTP-Calls (Person + Foto)
+Nach Bestätigung (FAA-7) legt die Funktion die Person über FAM-12 an; der
+Server vergibt dabei die `id` (FAA-5). Hat der Aufrufer ein Foto gesendet,
+folgt danach ein separater Foto-Upload über FAM-13. Person und Foto sind seit
+C4 zwei getrennte HTTP-Calls — der Ablauf ist damit **nicht** atomar über
+beide hinweg. Schlägt FAM-13 fehl, bleibt die Person in der Registry bestehen
+(Foto fehlt). Die Funktion loggt das und meldet dem Aufrufer Erfolg-mit-Hinweis
+(„Person angelegt, Foto konnte nicht hochgeladen werden").
 
 *Tickets:* #60
 
