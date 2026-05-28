@@ -51,12 +51,33 @@ Lookups), begründet das in der Komponenten-Spec und benennt einen
 expliziten Invalidierungs-Pfad. Stillschweigendes Caching ist
 Konventions-Verstoß.
 
-### DCOMP-3 — Persistente Schreibvorgänge sind atomar (Temp-Datei + Rename)
+### DCOMP-3 — Last-Known-Good bei Lese-Fehler (Reload-Pattern E-RELOAD-1)
+Wer DCOMP-2 (Reload-on-Read) umsetzt, hält zusätzlich den **zuletzt
+erfolgreich geladenen Stand als Snapshot** und benutzt ihn als Fallback,
+**wenn ein einzelner Read scheitert** — Datei kurz weg (atomares
+Replace-Race aus DCOMP-4), kaputtes JSON, ungültige Pflichtwerte.
+Übernommen wird der neue Stand erst nach erfolgreich vollständigem
+Parse; ein halb geschriebenes oder kaputtes JSON darf den Snapshot
+nicht verfälschen.
+
+Dieselbe Eigenschaft trägt der Anker-Name **E-RELOAD-1**, der heute
+schon in Router-Code (`router/main.py`) und Plan-Buddy-Code
+(`plan/main.py`) zitiert wird. Komponenten, die dasselbe Muster
+umsetzen, verweisen auf DCOMP-3 (oder den Anker-Namen E-RELOAD-1),
+statt eigene Anker zu erfinden.
+
+Heimat in den Specs: `router.md` ROU-25 (Router-spezifische
+Ausprägung), `plan.md` Daten-Konfig-Abschnitt (Plan-Buddy-Ausprägung).
+Optional: Komponenten ohne Last-Known-Good-Pflicht (z. B. weil ihr
+Lese-Pfad einen leeren Default verkraftet) dokumentieren das in ihrer
+Spec.
+
+### DCOMP-4 — Persistente Schreibvorgänge sind atomar (Temp-Datei + Rename)
 Komponenten, die eine persistente Datendatei schreiben (`familie.json`,
-`geraete.json`, der Zugangsdaten-Speicher und ähnliche), schreiben
-**atomar**: erst in eine Temp-Datei im selben Verzeichnis, dann
-`os.replace` (oder ein gleichwertiges atomares Rename) auf den Zielnamen.
-Ein zeitgleicher Lesezugriff sieht **nie** eine halb geschriebene Datei.
+`geraete.json` und ähnliche), schreiben **atomar**: erst in eine
+Temp-Datei im selben Verzeichnis, dann `os.replace` (oder ein
+gleichwertiges atomares Rename) auf den Zielnamen. Ein zeitgleicher
+Lesezugriff sieht **nie** eine halb geschriebene Datei.
 
 Begründung: Eltern-Chat-Skills schreiben Cross-Service in Datendateien
 (EC-21, siehe DCOMP-2), während der besitzende Service parallel liest.
@@ -67,25 +88,9 @@ Lese-Sicht existiert nur „alter Stand" oder „neuer Stand", nie
 „dazwischen".
 
 Heimat des Patterns in den Specs: `familie.md` FAM-11, `geraete.md`
-GER-6, `zugangsdaten.md` ZD-3.
+GER-6.
 
-### DCOMP-4 — Last-Known-Good bei Lese-Fehler (Reload-Pattern E-RELOAD-1)
-Wer DCOMP-2 (Reload-on-Read) umsetzt, hält zusätzlich den **zuletzt
-erfolgreich geladenen Stand als Snapshot** und benutzt ihn als Fallback,
-**wenn ein einzelner Read scheitert** — Datei kurz weg (atomares
-Replace-Race aus DCOMP-3), kaputtes JSON, ungültige Pflichtwerte.
-Übernommen wird der neue Stand erst nach erfolgreich vollständigem
-Parse; ein halb geschriebenes oder kaputtes JSON darf den Snapshot
-nicht verfälschen.
-
-Dieselbe Eigenschaft trägt der Anker-Name **E-RELOAD-1**, der heute
-schon in Router-Code (`router/main.py`) und Plan-Buddy-Code
-(`plan/main.py`) zitiert wird. Komponenten, die dasselbe Muster
-umsetzen, verweisen auf DCOMP-4 (oder den Anker-Namen E-RELOAD-1),
-statt eigene Anker zu erfinden.
-
-Heimat in den Specs: `router.md` ROU-25 (Router-spezifische
-Ausprägung), `plan.md` Daten-Konfig-Abschnitt (Plan-Buddy-Ausprägung).
-Optional: Komponenten ohne Last-Known-Good-Pflicht (z. B. weil ihr
-Lese-Pfad einen leeren Default verkraftet) dokumentieren das in ihrer
-Spec.
+Die Zugangsdaten-Komponente (`tools/zugangsdaten/store.py`) trägt das
+Pattern heute nicht — `zugangsdaten.md` ZD-3 regelt nur Per-Instanz-
+Datei + `0600`-Rechte, nicht atomares Schreiben; Nachzug ist
+Folge-Ticket.

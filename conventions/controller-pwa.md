@@ -1,14 +1,20 @@
 # Controller-PWA — Konvention     (ID-Präfix: PWA)
 
 Controller-Seiten (Figuren-Erkennung auf dem Phone, App-Panel auf dem
-Tablet, Display-Client) werden als **installierbare Web-Apps** auf
+Tablet) werden als **installierbare Web-Apps** unter `controller/` auf
 Familien-Geräten ausgeliefert. Diese Konvention legt fest, welche
 Dateien und welches Verhalten jede solche Seite mitbringen muss — damit
 ein installierter Controller wie eine Familien-App wirkt und nicht wie
 ein Browser-Tab.
 
 Heimat in den Komponenten: `figuren-erkennung.md` FIG-24/FIG-26,
-`display-client.md` DC-11, `app-panel.md` PANEL-10.
+`app-panel.md` PANEL-10.
+
+Der Display-Client (`specs/platform/display-client.md` DC-11) ist eine
+eigene PWA-Anwendung mit reduziertem Pflichten-Set — er teilt das
+Manifest-`display: fullscreen` und das Wake-Lock+Fullscreen-Gesture-
+Muster aus PWA-2/PWA-3, kennt aber kein `sw.js` und keine
+`config.json`. Er ist daher **nicht** durch diese Konvention gedeckt.
 
 ### PWA-1 — Pflicht-Dateien neben dem Seiten-Code
 Eine Controller-PWA liefert im selben Verzeichnis wie `index.html`
