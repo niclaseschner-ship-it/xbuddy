@@ -34,11 +34,11 @@ Die Funktion ist eine klar abgegrenzte, **aufrufbare Funktion** mit
 definierter Schnittstelle. **Eingang:** der Telegram-Privatchat des Aufrufers
 (Chat-ID und Telegram-User-ID), die ID der gebundenen Familien-Gruppe
 (`eltern-chat.md` EC-2) und ein Zugriff auf die Geräte-Registry über deren
-Schnittstellen (`geraete.md` GER-5 lesen, GER-6 schreiben).
+Schnittstellen (`geraete.md` GER-5 lesen, GER-15 schreiben).
 **Wirkung:** nach erfolgreichem Durchlauf sind **ein oder mehrere** neue
-Geräte in der Registry ergänzt (jedes Gerät für sich bestätigt und atomar
-über GER-6 geschrieben, GAA-3.6/GAA-3.7), jedes mit einer kollisionsfrei
-vergebenen `display_id` nach dem Schema aus `geraete.md` GER-7.
+Geräte in der Registry ergänzt (jedes Gerät für sich bestätigt und über
+GER-15 (POST /api/v1/geraete/) geschrieben, GAA-3.6/GAA-3.7); die
+Atomarität ist serverseitige GER-6-Eigenschaft.
 **Ausgang:** ein Ergebnis-Signal an den Aufrufer mit der Liste der vergebenen
 `display_id`s der angelegten Geräte (kann leer sein, wenn der Aufrufer die
 erste Anlage abgebrochen hat). Die Funktion kennt ihren Aufrufer nicht — sie
@@ -103,19 +103,17 @@ Implementierungs-Detail:
    dieses Gerät endet ohne Wirkung auf `geraete.json` (E-GAA-3). Die
    Funktion klopft den Wortlaut der Zusammenfassungs- und
    Abbruch-Nachrichten nicht fest; das ist Implementierungs-Detail.
-7. **Schreiben + Geräte-URL zurück**: Nach Bestätigung vergibt die
-   Funktion die `display_id` nach `geraete.md` GER-7 (Schema
-   `<typ>-<name-slug>-<laufende-nr>`, kollisionsfrei je Familie), schreibt
-   das Gerät **ausschließlich** über die Schreib-Schnittstelle der
-   Registry (`geraete.md` GER-6 — atomar, `0600`, bestehende Geräte
-   unverändert) und liefert dem Aufrufer im Privatchat die Display-URL
-   des Geräts zurück: `https://<origin>/display/<display_id>` (URL-2
-   sinngemäß, `display-client.md` DC-1 — der Router-Pfad, der den
-   Display-Client ausliefert). Das `status`-Feld (`geraete.md` GER-3) ist
-   V1 hart `aktiv` — ein neu angelegtes Gerät ist nach Konvention in
-   Betrieb (OPEN-GER-B führt das manuelle Setzen von `status` ohnehin
-   noch). Schlägt der Schreib-Aufruf fehl, signalisiert die Funktion den
-   Misserfolg und schreibt nichts (GAA-7).
+7. **Anlegen über GER-15 + Geräte-URL zurück**: Nach Bestätigung legt die
+   Funktion das Gerät über GER-15 (HTTP-POST) an; der Server vergibt die
+   `display_id` nach IDENT-1 (Schema `<typ>-<name-slug>-<laufende-nr>`,
+   kollisionsfrei je Familie). Die Funktion liefert dem Aufrufer im
+   Privatchat die Display-URL des Geräts zurück:
+   `https://<origin>/display/<display_id>` (URL-2 sinngemäß,
+   `display-client.md` DC-1 — der Router-Pfad, der den Display-Client
+   ausliefert). Das `status`-Feld (`geraete.md` GER-3) ist V1 hart `aktiv` —
+   ein neu angelegtes Gerät ist nach Konvention in Betrieb (OPEN-GER-B führt
+   das manuelle Setzen von `status` ohnehin noch). Schlägt GER-15 fehl,
+   signalisiert die Funktion den Misserfolg und schreibt nichts (GAA-7).
 
 Pflicht-Schritte ohne gültige Antwort wiederholen die Frage. Optionale
 Schritte gibt es V1 nicht — alle Felder aus `geraete.md` GER-3 außer `id`
@@ -137,8 +135,8 @@ beendet die Funktion und liefert das Ergebnis-Signal (GAA-1) mit der Liste
 aller in diesem Aufruf angelegten `display_id`s. Jedes Gerät durchläuft
 GAA-3.1..3.7 in voller Länge — kein gemeinsamer Zustand zwischen Geräten
 außer der Tatsache, dass `geraete.json` zwischen den Geräten jeweils um das
-zuletzt bestätigte Gerät gewachsen ist (GAA-3.7 atomar je Gerät über
-GER-6).
+zuletzt bestätigte Gerät gewachsen ist (GAA-3.7 ruft GER-15-POST; Server
+schreibt atomar, GER-6).
 
 **(b) Zwischenzustand nur im Speicher.** Der Zustand der aktuell laufenden
 Geräte-Anlage (welche Felder schon erfasst sind, welche Frage als nächstes
@@ -258,10 +256,9 @@ Doppelung ersetzt. Mindest-Abdeckung:
   `geraete.json` bleibt unverändert.
 - **GAA-3** — Reihenfolge der Fragen wird eingehalten; eine leere oder
   invalide Antwort auf einen Pflicht-Schritt wiederholt die Frage; die
-  `display_id` aus GAA-3.7 folgt dem GER-7-Schema und kollidiert nicht
-  mit einer bestehenden; `status` des neuen Geräts ist `aktiv`; der
-  Aufrufer bekommt die Display-URL `/display/<display_id>` (DC-1)
-  zurück.
+  Funktion sendet keine display_id, übernimmt die Server-ID aus der
+  GER-15-Antwort; `status` des neuen Geräts ist `aktiv`; der Aufrufer
+  bekommt die Display-URL `/display/<display_id>` (DC-1) zurück.
 - **GAA-4** — nach Bestätigung eines Geräts fragt die Funktion „Noch ein
   Gerät?"; eine Bestätigung führt zur nächsten Geräte-Anlage mit GAA-3
   Schritt 1, eine nicht-bestätigende Antwort beendet die Funktion mit
@@ -426,7 +423,7 @@ nachgezogen werden.
 
 ## Bezug
 
-- **Fundament:** `geraete.md` GER-6 (Schreib-Schnittstelle), GER-7
+- **Fundament:** `geraete.md` GER-15 (HTTP-Schreib-Schnittstelle), GER-7
   (`display_id`-Schema), GER-3 (Geräte-Eigenschaften), GER-2 (Geräte-Typen)
   — Issue #105 (Geräte-Registry).
 - **Analog-Vorlage:** `familie-anlegen.md` (FAA-Pattern — aufrufbare

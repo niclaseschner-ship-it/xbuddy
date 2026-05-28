@@ -1,5 +1,7 @@
 """Plan-Buddy — HTTP-Client zur Familien-Registry (DCOMP-1, FAM-7).
 
+Folgt `conventions/http-client.md` (CLIENT-1..4).
+
 Der Plan-Buddy konsumiert Familien-Personen ausschliesslich ueber die HTTP-
 Schnittstelle der Familie-Komponente (`GET /api/v1/familie/personen`,
 FAM-7). Ein direkter `from familie import …` waere ein DCOMP-1-Bruch

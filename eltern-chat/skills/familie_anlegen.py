@@ -5,39 +5,66 @@ Refs #60).
 (E-FAA-1) — analog `ca_verteilung.verteile_ca` (E-CAV-1). Aufgerufen, führt
 sie ein Familienmitglied im Privatchat durch die Anlage einer oder mehrerer
 Personen und ergänzt sie nach Bestätigungswort (FAA-7, `eltern-chat.md`
-E-EC-7) atomar über die Schreib-Schnittstelle der Familien-Registry
-(FAA-8, `familie.md` FAM-11).
+E-EC-7) atomar über die HTTP-Schreib-Schnittstelle der Familien-Komponente
+(FAA-8, `familie.md` FAM-12/FAM-13).
 
 Die Funktion kennt ihren Aufrufer nicht. Wer sie aufruft — Onboarding-Flow,
 konversationeller Aufruf, Slash-Aufruf — ist nicht Teil ihres Vertrags
 (E-FAA-1). Sie nimmt nur die für die Anlage nötigen Dinge entgegen: den
 Telegram-Kanal, den Privatchat (Chat-ID + User-ID), die ID der gebundenen
 Familien-Gruppe (für die Live-Prüfung der Mitgliedschaft, FAA-2 analog
-EC-2), den Pfad zur Registry-Datei und eine `next_message()`-Funktion,
-über die sie die nächste eingehende Privatchat-Nachricht des Aufrufers
-abholt. Letzteres macht den Konversations-Schritt **synchron** und
-testbar, ohne dass die Funktion an die Update-Schleife der Eltern-Chat-
-Orchestrierung gebunden wäre — die Anbindung an die Orchestrierung ist
-nach FAA-1 nicht Teil dieser Spec.
+EC-2), den `FamilieClient` (HTTP-Naht zur Familien-Komponente, Auftrag #215)
+und eine `next_message()`-Funktion, über die sie die nächste eingehende
+Privatchat-Nachricht des Aufrufers abholt. Letzteres macht den Konversations-
+Schritt **synchron** und testbar, ohne dass die Funktion an die Update-
+Schleife der Eltern-Chat-Orchestrierung gebunden wäre — die Anbindung an
+die Orchestrierung ist nach FAA-1 nicht Teil dieser Spec.
+
+Seit Auftrag #215 (`familie_client.FamilieClient`) spricht die Skill nur
+noch über HTTP (DCOMP-1): IDENT-1-`id` und Slug-Vergabe leistet FAM-12
+serverseitig (Skill liest die zurueckgegebene `id`); Foto laeuft per
+`POST /api/v1/familie/personen/<id>/foto` (FAM-13). Die fruehere
+Eigenleistung (slug-collision `-2`/`-3`-Suffix, direkter Datei-Write) ist
+entfallen.
 """
 
 import logging
-import os
-import re
 import struct
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import authz
 import confirm
 from telegram import TelegramError
 
-# Pakete der Familien-Registry: das schreibende und lesende Modul.
-import sys
-_ELTERN_CHAT_DIR = os.path.dirname(os.path.abspath(__file__))
-_REPO_ROOT = os.path.dirname(_ELTERN_CHAT_DIR)
-if _REPO_ROOT not in sys.path:
-    sys.path.insert(0, _REPO_ROOT)
-from familie import registry as registry_mod  # noqa: E402
+from skills.familie_client import FamilieClientError
+
+
+# ============================================================
+#  Konstanten (FAM-3/FAM-4 spiegelnde Werte fuer die Konversation)
+# ============================================================
+
+# FAM-2: Werte fuer das `art`-Feld. Spiegeln familie/registry.KIND_ERWACHSENE
+# / KIND_KINDER — die Skill spricht ueber HTTP (DCOMP-1) und ueberlaesst die
+# Validierung der Familie. Die Konversation braucht aber die String-Konstanten
+# selbst, weil sie die Eingabe direkt prueft (»erwachsene« / »kind«).
+KIND_ERWACHSENE = "erwachsene"
+KIND_KINDER = "kinder"
+
+# FAM-4: feste Ring-Farb-Palette (Reihenfolge wichtig fuer den FAA-4-
+# Vorschlag). `gray` bleibt zuletzt. Spiegel der Palette in
+# familie/registry.RING_PALETTE — die Skill braucht die Liste lokal, weil
+# der Vorschlag aus dem Snapshot der bereits belegten Ringe abgeleitet wird.
+RING_PALETTE = ("blue", "orange", "green", "red", "purple", "teal", "gray")
+
+# FAM-9 / FAA-10: zulaessige Profilbild-Kantenlaenge (Default in Pixel).
+# Die Skill prueft das nur lokal als UX-Filter, bevor sie den Anhang
+# hochlaedt — Wahrheit ueber den effektiven Wert liegt nach FAM-9 in der
+# Familie-Komponente. 1280 ist der hartkodierte Default aus
+# `familie/registry.FAM9_DEFAULTS`. Per-Familie-Override leistet die
+# Familie selbst; ein eigener HTTP-Settings-Endpunkt waere Wildwuchs
+# fuer V1 (Skill schickt das Foto im Zweifel weiter, der Server hat das
+# letzte Wort).
+PROFILBILD_MAX_KANTE_DEFAULT = 1280
 
 
 # ============================================================
@@ -91,10 +118,6 @@ _MIME_JPEG = "image/jpeg"
 _MIME_PNG = "image/png"
 _EXT_BY_MIME = {_MIME_JPEG: "jpg", _MIME_PNG: "png"}
 
-# Umlaut-Auflösung für FAA-5 (Slug).
-_UMLAUTE = {"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss",
-            "Ä": "ae", "Ö": "oe", "Ü": "ue"}
-
 
 # ============================================================
 #  Eingabe-Protokoll (Test-Doppelung & Live-Adapter haben dieselbe Form)
@@ -139,8 +162,12 @@ class FamilieAnlegenResult:
     abgebrochen hat (FAA-7) oder das Mitglied nicht berechtigt war (FAA-2).
     `authorized` unterscheidet diesen letzteren Fall.
     """
-    vergebene_ids: list = field(default_factory=list)
+    vergebene_ids: list = None
     authorized: bool = True
+
+    def __post_init__(self):
+        if self.vergebene_ids is None:
+            self.vergebene_ids = []
 
 
 # ============================================================
@@ -148,7 +175,8 @@ class FamilieAnlegenResult:
 # ============================================================
 
 def familie_anlegen(tg, chat_id, user_id, family_group_chat_id,
-                    registry_path, next_message):
+                    client, next_message,
+                    profilbild_max_kante=PROFILBILD_MAX_KANTE_DEFAULT):
     """Legt eine oder mehrere Familienmitglieder an (FAA-1).
 
     `tg`                    — Telegram-Kanal (mit `send_message`, `download_file`,
@@ -156,17 +184,22 @@ def familie_anlegen(tg, chat_id, user_id, family_group_chat_id,
     `chat_id`               — Privatchat des Aufrufers (FAA-3).
     `user_id`               — Telegram-User-ID des Aufrufers (FAA-2/FAA-3 Schritt 6).
     `family_group_chat_id`  — ID der gebundenen Familien-Gruppe (FAA-2).
-    `registry_path`         — Pfad zur familie.json (Schreiben über FAM-11).
+    `client`                — `FamilieClient` (HTTP-Naht, DCOMP-1). Wird fuer
+                              den Snapshot (Ring-Vorschlag, Dup-Check),
+                              die Anlage (FAM-12) und den Foto-Upload
+                              (FAM-13) verwendet.
     `next_message`          — Callable, das die nächste eingehende
                               Privatchat-Nachricht des Aufrufers liefert
                               (FaaInput). Liefert `None`, gilt die Anlage als
                               abgebrochen.
+    `profilbild_max_kante`  — UX-Filter fuer den Foto-Upload (FAA-10). Default
+                              `PROFILBILD_MAX_KANTE_DEFAULT` (1280). Wert
+                              `None` schaltet den Filter aus — der Server hat
+                              das letzte Wort (FAM-9).
 
     Liefert ein `FamilieAnlegenResult` mit `vergebene_ids`. Schreibt
-    ausschliesslich über die Registry-Schreib-Schnittstelle (FAA-8, FAM-11).
-    Familienspezifische Werte (Foto-Verzeichnis, Profilbild-Max-Kante) holt
-    die Funktion über die Registry-Settings + ENV/Default (FAM-9) —
-    **nicht** als Aufruf-Parameter (FAA-1).
+    ausschliesslich über die HTTP-Schreib-Schnittstelle der Familien-
+    Komponente (FAA-8, FAM-12/FAM-13).
     """
     # FAA-2: Berechtigung live über die Familien-Gruppen-Mitgliedschaft.
     if not authz.is_authorized(tg, family_group_chat_id, user_id):
@@ -179,7 +212,7 @@ def familie_anlegen(tg, chat_id, user_id, family_group_chat_id,
 
     while True:
         person_id = _eine_person_anlegen(
-            tg, chat_id, user_id, registry_path, next_message)
+            tg, chat_id, user_id, client, next_message, profilbild_max_kante)
         if person_id is None:
             # Abbruch (FAA-7) oder Eingabe-Strom zu Ende — wir beenden den Aufruf.
             break
@@ -203,13 +236,20 @@ def familie_anlegen(tg, chat_id, user_id, family_group_chat_id,
 #  Anlage genau einer Person — FAA-3 in fester Reihenfolge
 # ============================================================
 
-def _eine_person_anlegen(tg, chat_id, user_id, registry_path, next_message):
+def _eine_person_anlegen(tg, chat_id, user_id, client, next_message,
+                          profilbild_max_kante):
     """Legt EINE Person an. Liefert die vergebene `id` oder None (Abbruch)."""
-    # Bei jedem Personen-Start die Registry frisch lesen — sonst sehen wir die
-    # in derselben Schleife frisch angelegte Person nicht für Slug-Kollision
-    # (FAA-5) oder Telegram-ID-Duplikat (FAA-10).
-    current = registry_mod.load(registry_path)
-    settings = _effective_settings(current.settings, registry_path)
+    # Bei jedem Personen-Start den aktuellen Personen-Stand frisch holen —
+    # sonst sehen wir die in derselben Schleife frisch angelegte Person nicht
+    # fuer Ring-Vorschlag (FAA-4) oder Telegram-ID-Duplikat (FAA-10).
+    # FAM-12 ueberprueft selbst (Dup-Check serverseitig), aber die Skill
+    # liefert dem Aufrufer schon vorher einen REJECT_TELEGRAM_DUP.
+    try:
+        current = client.alle_personen()
+    except FamilieClientError as e:
+        logging.warning("familie_anlegen: Familie-Service nicht erreichbar: %s", e)
+        _send(tg, chat_id, WRITE_FAILED)
+        return None
 
     # FAA-3 Schritt 1: Art.
     art = _frage_art(tg, chat_id, next_message)
@@ -222,17 +262,11 @@ def _eine_person_anlegen(tg, chat_id, user_id, registry_path, next_message):
         return None
 
     # Schritt 3: Foto (optional).
-    foto_filename, foto_bytes = _frage_foto(
-        tg, chat_id, next_message, settings)
-    if foto_filename is False:
+    foto_ext, foto_bytes, foto_content_type = _frage_foto(
+        tg, chat_id, next_message, profilbild_max_kante)
+    if foto_ext is False:
         # Abbruch im Foto-Schritt.
         return None
-
-    # FAA-5: Slug aus dem Namen, kollisionsfrei machen.
-    person_id = _slug(name, taken=set(p.id for p in current.alle()))
-    if foto_filename is not None:
-        # FAA-6: Dateiname = <id>.<ext>; die Endung kennt _frage_foto schon.
-        foto_filename = "%s.%s" % (person_id, foto_filename)
 
     # Schritt 4: Ring-Farbe.
     ring = _frage_ring(tg, chat_id, next_message, current)
@@ -241,7 +275,7 @@ def _eine_person_anlegen(tg, chat_id, user_id, registry_path, next_message):
 
     # Schritt 5: E-Mail (nur Erwachsene).
     email = None
-    if art == registry_mod.KIND_ERWACHSENE:
+    if art == KIND_ERWACHSENE:
         email = _frage_email(tg, chat_id, next_message)
         if email is False:
             return None
@@ -252,9 +286,10 @@ def _eine_person_anlegen(tg, chat_id, user_id, registry_path, next_message):
     if telegram_id is False:
         return None
 
-    # FAA-7: Zusammenfassung + Bestätigungswort.
-    summary = _zusammenfassung(person_id, name, art, ring, foto_filename,
-                                email, telegram_id)
+    # FAA-7: Zusammenfassung + Bestätigungswort. Die `id` vergibt FAM-12 erst
+    # nach dem Bestaetigungswort; in der Zusammenfassung zeigen wir nur die
+    # vom Aufrufer erfassten Werte.
+    summary = _zusammenfassung(name, art, ring, foto_ext, email, telegram_id)
     _send(tg, chat_id, summary)
     bestaetigung = next_message()
     if bestaetigung is None or not confirm.is_confirmation(
@@ -262,38 +297,41 @@ def _eine_person_anlegen(tg, chat_id, user_id, registry_path, next_message):
         _send(tg, chat_id, CANCELLED)
         return None
 
-    # FAA-6 fortsetzen: das Foto-Binär an den Zielpfad schreiben, BEVOR die
-    # Schreib-Schnittstelle aufgerufen wird (FAA-8 letzter Satz: Foto liegt
-    # bei FAM-11-Aufruf bereits am Zielpfad).
-    if foto_filename is not None and foto_bytes is not None:
-        try:
-            os.makedirs(settings["foto_verzeichnis"], exist_ok=True)
-            foto_zielpfad = os.path.join(
-                settings["foto_verzeichnis"], foto_filename)
-            with open(foto_zielpfad, "wb") as f:
-                f.write(foto_bytes)
-        except OSError as e:
-            logging.warning("familie_anlegen: Foto konnte nicht abgelegt werden: %s", e)
-            _send(tg, chat_id, WRITE_FAILED)
-            return None
-
-    # FAA-8: Schreiben ausschliesslich über die Registry-Schreib-Schnittstelle.
-    neue_person = registry_mod.Person(
-        id=person_id, name=name, ring=ring, art=art,
-        foto=foto_filename, email=email, telegram_id=telegram_id)
-    current.add_person(neue_person)
+    # FAA-8: Schreiben ausschliesslich ueber FAM-12 (HTTP). Server vergibt
+    # die IDENT-1-`id` (`person-<slug>-<nn>`).
     try:
-        registry_mod.save(current, registry_path)
-    except registry_mod.RegistryError as e:
-        logging.warning("familie_anlegen: Schreiben fehlgeschlagen: %s", e)
-        # FAA-8: weder Person noch Foto-Datei bleiben zurück.
-        if foto_filename is not None:
-            try:
-                os.remove(os.path.join(settings["foto_verzeichnis"], foto_filename))
-            except OSError:
-                pass
+        angelegt = client.person_anlegen(
+            name=name, art=art, ring=ring,
+            email=email, telegram_id=telegram_id)
+    except FamilieClientError as e:
+        logging.warning("familie_anlegen: Anlage fehlgeschlagen: %s", e)
         _send(tg, chat_id, WRITE_FAILED)
         return None
+
+    person_id = angelegt.get("id")
+    if not person_id:
+        logging.warning(
+            "familie_anlegen: FAM-12-Antwort ohne id: %r", angelegt)
+        _send(tg, chat_id, WRITE_FAILED)
+        return None
+
+    # FAA-6: Foto haengt am `<id>/<dateiname>`-Schema der Schreib-API
+    # (FAM-13). Wir wissen die `id` erst nach FAM-12, also haengt der
+    # Foto-Upload hinten dran — bei Fehlschlag bleibt die Person aber
+    # angelegt (kein Rollback, FAM-13 ist eigenstaendig).
+    if foto_bytes is not None and foto_ext is not None:
+        dateiname = "%s.%s" % (person_id, foto_ext)
+        try:
+            client.foto_hochladen(
+                person_id=person_id, dateiname=dateiname,
+                daten=foto_bytes, content_type=foto_content_type)
+        except FamilieClientError as e:
+            # Foto-Upload-Fehlschlag waere unschoen, aber die Person ist
+            # bereits angelegt — wir loggen und melden den Teilerfolg an
+            # die Familie, statt die ganze Anlage zu kippen.
+            logging.warning(
+                "familie_anlegen: Foto-Upload fehlgeschlagen (Person %s bleibt "
+                "angelegt): %s", person_id, e)
 
     return person_id
 
@@ -311,9 +349,9 @@ def _frage_art(tg, chat_id, next_message):
             return None
         text = (msg.text or "").strip().lower()
         if text in _ART_ERWACHSEN:
-            return registry_mod.KIND_ERWACHSENE
+            return KIND_ERWACHSENE
         if text in _ART_KIND:
-            return registry_mod.KIND_KINDER
+            return KIND_KINDER
         _send(tg, chat_id, REJECT_KIND)
 
 
@@ -330,23 +368,22 @@ def _frage_name(tg, chat_id, next_message):
         _send(tg, chat_id, REJECT_NAME)
 
 
-def _frage_foto(tg, chat_id, next_message, settings):
+def _frage_foto(tg, chat_id, next_message, max_kante):
     """FAA-3 Schritt 3: Profilfoto — optional.
 
-    Liefert `(ext_or_None, bytes_or_None)`:
-      - `(None, None)`  : Aufrufer hat übersprungen.
-      - `("jpg"/"png", b"…")` : Foto-Bytes liegen vor, Endung steht fest.
-      - `(False, None)` : Aufrufer hat die ganze Anlage abgebrochen.
+    Liefert `(ext_or_None, bytes_or_None, content_type_or_None)`:
+      - `(None, None, None)`               : Aufrufer hat übersprungen.
+      - `("jpg"/"png", b"…", "image/...")` : Foto-Bytes liegen vor, Endung steht fest.
+      - `(False, None, None)`              : Aufrufer hat die ganze Anlage abgebrochen.
     """
-    max_kante = _as_int(settings["profilbild_max_kante"])
     while True:
         _send(tg, chat_id, ASK_FOTO)
         msg = next_message()
         if msg is None:
-            return False, None
+            return False, None, None
         text = (msg.text or "").strip().lower()
         if text in _SKIP_WORDS:
-            return None, None
+            return None, None, None
 
         # Telegram-Foto-Nachricht (FAA-6: immer JPEG).
         if msg.photo_file_id is not None:
@@ -356,7 +393,7 @@ def _frage_foto(tg, chat_id, next_message, settings):
                 logging.warning("familie_anlegen: Foto-Download fehlgeschlagen: %s", e)
                 _send(tg, chat_id, REJECT_FOTO_GROSS)
                 continue
-            return "jpg", raw
+            return "jpg", raw, _MIME_JPEG
         if msg.photo_oversize:
             _send(tg, chat_id, REJECT_FOTO_GROSS)
             continue
@@ -386,7 +423,7 @@ def _frage_foto(tg, chat_id, next_message, settings):
                 if masse is not None and max(masse) > max_kante:
                     _send(tg, chat_id, REJECT_FOTO_GROSS)
                     continue
-            return _EXT_BY_MIME[mime], raw
+            return _EXT_BY_MIME[mime], raw, mime
 
         # Keine Foto-Form erkannt — Frage wiederholen.
         _send(tg, chat_id, REJECT_FOTO_MIME)
@@ -403,7 +440,7 @@ def _frage_ring(tg, chat_id, next_message, current):
         text = (msg.text or "").strip().lower()
         if text in _RING_OK or text == vorschlag:
             return vorschlag
-        if text in registry_mod.RING_PALETTE:
+        if text in RING_PALETTE:
             return text
         _send(tg, chat_id, REJECT_RING)
 
@@ -431,14 +468,9 @@ def _frage_telegram(tg, chat_id, user_id, next_message, current, name):
 
     Bietet die eigene User-ID als Default an, wenn der Aufrufer signalisiert,
     dass die anzulegende Person er selbst ist (»ich«). FAA-10: eine bereits
-    vergebene Telegram-ID wird abgelehnt.
+    vergebene Telegram-ID wird abgelehnt — der Pre-Check basiert auf dem
+    Snapshot; FAM-12 weist Dup zusaetzlich serverseitig ab.
     """
-    # »Ich«-Signal: heuristisch, wenn der erfasste Name mit »ich« oder dem
-    # Default-Bot-Setup matched — die Spec ist hier explizit „Implementierungs-
-    # Detail". Wir bieten die self-id einfach IMMER als Default an: der
-    # Aufrufer kann sie mit »ich« übernehmen oder eine andere Zahl schicken.
-    # Falls eine andere Person diese Person über »ich« anlegt, ist das ein
-    # gewolltes Komfort-Verhalten.
     while True:
         _send(tg, chat_id, ASK_TELEGRAM_SELF % user_id)
         msg = next_message()
@@ -456,7 +488,7 @@ def _frage_telegram(tg, chat_id, user_id, next_message, current, name):
                 _send(tg, chat_id, REJECT_TELEGRAM)
                 continue
         # FAA-10: Doppelung verhindern — eine Telegram-ID = eine Person.
-        if any(p.telegram_id == kandidat for p in current.alle()):
+        if any(p.get("telegram_id") == kandidat for p in current):
             _send(tg, chat_id, REJECT_TELEGRAM_DUP)
             continue
         return kandidat
@@ -466,55 +498,13 @@ def _frage_telegram(tg, chat_id, user_id, next_message, current, name):
 #  Helpers
 # ============================================================
 
-def _effective_settings(settings, registry_path):
-    """FAM-9-Werte aus den Registry-Settings + ENV-Override + Default —
-    identisch zum Settings-Lader in `familie/main.py` (geteilte Helper-
-    Funktion `effective_setting`).
-
-    Das `foto_verzeichnis` wird über `resolved_foto_verzeichnis` ausgewertet,
-    damit ein relativer Wert (Default `fotos`, Settings-Wert, ENV-Override)
-    immer **neben der Registry-Datei** landet (FAM-9) — und nicht im CWD
-    des Eltern-Chat-Bots, wo der Pi-Live-Test die Fotos versehentlich
-    abgelegt hatte."""
-    return {
-        "foto_verzeichnis": registry_mod.resolved_foto_verzeichnis(
-            settings, registry_path),
-        "profilbild_max_kante": registry_mod.effective_setting(
-            settings.profilbild_max_kante,
-            "FAMILIE_PROFILBILD_MAX_KANTE",
-            registry_mod.FAM9_DEFAULTS["profilbild_max_kante"]),
-    }
-
-
-def _as_int(value):
-    """Wandelt die Max-Kante aus Settings/ENV/Default in int — None bleibt None."""
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _slug(name, taken):
-    """FAA-5: Slug aus dem Namen; kollidierende ids bekommen `-2`, `-3`, …"""
-    s = "".join(_UMLAUTE.get(ch, ch) for ch in name).lower()
-    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
-    s = s or "person"
-    if s not in taken:
-        return s
-    n = 2
-    while True:
-        kand = "%s-%d" % (s, n)
-        if kand not in taken:
-            return kand
-        n += 1
-
-
 def _ring_vorschlag(current):
-    """FAA-4: erste freie Palette-Farbe, gray bleibt zuletzt."""
-    belegt = set(p.ring for p in current.alle())
-    for farbe in registry_mod.RING_PALETTE:  # FAM-4: Reihenfolge der Palette
+    """FAA-4: erste freie Palette-Farbe, gray bleibt zuletzt.
+
+    `current` ist die Liste der Personen-Dicts aus FAM-7.
+    """
+    belegt = set(p.get("ring") for p in current)
+    for farbe in RING_PALETTE:  # FAM-4: Reihenfolge der Palette
         if farbe == "gray":
             continue
         if farbe not in belegt:
@@ -531,18 +521,22 @@ def _looks_like_email(text):
     return bool(local) and "." in domain and not domain.startswith(".")
 
 
-def _zusammenfassung(person_id, name, art, ring, foto, email, telegram_id):
-    """FAA-7: Zusammenfassung vor dem Bestätigungswort."""
-    art_label = "Erwachsene" if art == registry_mod.KIND_ERWACHSENE else "Kind"
+def _zusammenfassung(name, art, ring, foto_ext, email, telegram_id):
+    """FAA-7: Zusammenfassung vor dem Bestätigungswort.
+
+    Die `id` ist hier noch nicht bekannt — FAM-12 vergibt sie erst beim
+    POST-Aufruf (`person-<slug>-<nn>`). Die Zusammenfassung zeigt deshalb
+    nur die vom Aufrufer erfassten Werte.
+    """
+    art_label = "Erwachsene" if art == KIND_ERWACHSENE else "Kind"
     teile = [
         "Bitte bestätigen (»ok« / »ja«):",
         "• Art: %s" % art_label,
         "• Name: %s" % name,
-        "• id: %s" % person_id,
         "• Ring: %s" % ring,
     ]
-    if foto:
-        teile.append("• Foto: %s" % foto)
+    if foto_ext:
+        teile.append("• Foto: ja (.%s)" % foto_ext)
     if email:
         teile.append("• E-Mail: %s" % email)
     if telegram_id is not None:
