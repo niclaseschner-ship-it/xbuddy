@@ -44,12 +44,18 @@ Jede Person trägt:
 
 | Feld          | Erwachsene | Kinder   | Bedeutung |
 |---------------|------------|----------|-----------|
-| `id`          | Pflicht    | Pflicht  | Stabiler, eindeutiger Bezeichner. Wird nie neu vergeben. |
+| `id`          | Pflicht    | Pflicht  | Stabile Personen-ID nach IDENT-1 (Typ `person`, z. B. `person-mira-01`). Wird nie neu vergeben. |
 | `name`        | Pflicht    | Pflicht  | Anzeigename. |
 | `ring`        | Pflicht    | Pflicht  | Ring-Farbe aus der Palette (FAM-4). |
 | `foto`        | optional   | optional | Dateiname des Profilfotos (FAM-5). |
 | `email`       | optional   | —        | E-Mail-Adresse. Konsumenten nutzen sie, um Personen aufzulösen (z. B. die Kalender-Anbindung der Plan-Buddy-App über die Event-Creator-Adresse). |
 | `telegram_id` | optional   | optional | Telegram-Benutzer-ID. Bildet die Person auf ihr Telegram-Konto ab. |
+
+Die `id`-Form folgt der Konvention IDENT-1
+(`conventions/identifiers.md`) — analog `geraete.md` GER-7. Vergeben wird
+sie über die Schreib-API (FAM-12); Bestands-IDs aus früheren Vergaben
+(reine Slug-Form ohne Typ-/Suffix-Anteil) bleiben unverändert, weil FAM-3
+„wird nie neu vergeben" verlangt — neue Personen folgen IDENT-1.
 
 Die Personen sind **Daten** und stehen vollständig in der Datei aus FAM-6 —
 nicht im Code (CLAUDE.md §6).
@@ -61,7 +67,7 @@ Merkmal, ist das kein Fehler — nur die darauf gestützte Auflösung entfällt 
 diese Person. Kinder tragen keine E-Mail; eine `telegram_id` kann jede Person
 haben, die ein Telegram-Konto hat.
 
-*Tickets:* #38
+*Tickets:* #38, #222
 
 ### FAM-4 — Ring-Farbe aus fester Palette
 Jede Person hat genau eine Ring-Farbe aus einer festen Palette:
@@ -112,16 +118,65 @@ Konsumenten ergänzen oder ändern Personen-Daten und Settings (FAM-7) **nur**
 über die Schreib-Schnittstelle der Registry, nicht über eigenen Zugriff auf
 die Registry-Datei — symmetrisch zur Lese-Seite (FAM-7) und im Sinne von
 CLAUDE.md §6 (die Registry besitzt die Daten). Schreibvorgänge sind **atomar**
-(Temp-Datei + Rename, sodass ein zeitgleicher Lesezugriff nie eine halb
-geschriebene Datei sieht). Bestehende Personen bleiben unberührt, außer der
-Aufrufer ändert sie explizit. Foto-Dateien gehören nicht in den
-Schreib-Vertrag der Registry — sie liegen neben der Datei im
+nach der Konvention DCOMP-4 (`conventions/data-components.md`) — Temp-Datei
+im Zielverzeichnis + atomares Rename, sodass ein zeitgleicher Lesezugriff
+nie eine halb geschriebene Datei sieht. Bestehende Personen bleiben
+unberührt, außer der Aufrufer ändert sie explizit. Foto-Dateien gehören
+nicht in den Schreib-Vertrag der Registry — sie liegen neben der Datei im
 Foto-Verzeichnis (FAM-5/FAM-9), und Konsumenten, die ein Foto annehmen,
 schreiben es vor dem Registry-Schreiben an seinen Zielpfad (vgl.
-`familie-anlegen.md` FAA-8). Schreib-Konsumenten heute: `familie-anlegen.md`
-FAA-8.
+`familie-anlegen.md` FAA-8). Die Schreib-HTTP-Endpunkte FAM-12/FAM-13
+machen diese Schnittstelle Cross-Service nutzbar (DCOMP-1). Schreib-
+Konsumenten heute: `familie-anlegen.md` FAA-8 (über FAM-12/FAM-13).
 
-*Tickets:* #60
+*Tickets:* #60, #213
+
+### FAM-12 — Schreib-HTTP-Endpunkt: Person anlegen
+Die Registry stellt das Anlegen einer Person über den HTTP-Endpunkt
+`POST /api/v1/familie/personen` bereit (URL-4: Backend unter `/api/v1/`;
+URL-11: HTTPS). Eingang: JSON-Body mit `name` (Pflicht, nicht leer; FAM-3)
+und optional `art` (`erwachsene`/`kinder`, Default `erwachsene` —
+FAM-2), `ring` (Palette FAM-4), `foto` (Dateiname), `email` (nur
+Erwachsene — FAM-3), `telegram_id`. Wirkung: die Person wird in
+`familie.json` ergänzt, atomar nach FAM-11/DCOMP-4; bestehende Personen
+bleiben unberührt. Ausgang: 200 mit dem JSON-Objekt der angelegten
+Person (Schnittstellen-Form FAM-7, einschließlich der vergebenen `id`).
+
+ID-Vergabe: die Funktion vergibt die `id` selbst in IDENT-1-Form
+(`person-<slug>-<nn>`, FAM-3). Den Slug bildet sie aus dem Namen
+(Kleinschreibung, Umlaut-Auflösung, Nicht-Wort-Zeichen zusammengezogen);
+`<nn>` startet je Slug bei `01` und wird kollisionsfrei erhöht, bis die
+`id` in der Registry frei ist.
+
+Fehler-Semantik (kein 5xx bei Eingabe-Fehlern): `400` mit JSON
+`{"error": ...}` für fehlenden/leeren `name`, Ring außerhalb der
+Palette (FAM-4), E-Mail an einer Kind-Person (FAM-3), bereits vergebene
+`telegram_id`. `503` mit JSON-Fehler nur, wenn das atomare Schreiben
+(FAM-11/DCOMP-4) am Dateisystem scheitert (Disk voll, Schreibrecht
+entzogen) — der Aufrufer kann später wiederholen. Bei jedem Fehlerpfad
+bleibt die Registry-Datei byte-gleich (FAM-11).
+
+*Tickets:* #213
+
+### FAM-13 — Schreib-HTTP-Endpunkt: Profilfoto setzen
+Die Registry nimmt ein Profilfoto über den HTTP-Endpunkt
+`POST /api/v1/familie/personen/<id>/foto` als `multipart/form-data`
+entgegen (Form-Feld `foto`, URL-4/URL-11). Wirkung: das Foto-Binär landet
+im Foto-Verzeichnis (FAM-9) unter `<id>/<dateiname>`, und das Feld
+`foto` der Person wird auf den geschriebenen Dateinamen gesetzt. Beide
+Schritte zusammen sind atomar im Sinne von FAM-11/DCOMP-4: die Foto-
+Datei wird zuerst über Temp + Rename am Zielort platziert, danach wird
+die Registry-Datei selbst atomar geschrieben. Ausgang: 200 mit
+`{"id": ..., "foto_pfad": ...}` (`foto_pfad` ist der Datei-relative
+Pfad unterhalb des Foto-Verzeichnisses, FAM-9).
+
+Fehler: `404` mit JSON-Fehler bei unbekannter `id` (FAM-7), `400` mit
+JSON-Fehler bei fehlendem Datei-Feld. `503` mit JSON-Fehler, wenn das
+atomare Schreiben (Foto-Datei oder Registry) scheitert; in diesem Fall
+bleibt **weder** eine teilweise geschriebene Foto-Datei **noch** eine
+Registry mit Foto-Verweis ohne Datei zurück (FAM-11 letzter Satz).
+
+*Tickets:* #213
 
 ### FAM-8 — Profilfotos über einen HTTP-Endpunkt
 Profilfotos liefert die Registry über den HTTP-Endpunkt
@@ -206,9 +261,14 @@ unbekannte `id`; Settings über die Schnittstelle) · FAM-8 (Foto-Endpoint:
 200 mit Foto, 404 ohne Foto / bei unbekannter `id`) · FAM-11 (atomares
 Schreiben: bestehende Personen byte-gleich nach Schreiben einer neuen Person;
 simulierter Schreib-Abbruch hinterlässt keine halbe Datei; Settings können
-geschrieben und re-gelesen werden).
+geschrieben und re-gelesen werden) · FAM-12 (POST mit gültigem `name` →
+200 + IDENT-1-`id`; POST ohne `name` → 400 mit JSON-Fehler; parallele POSTs
+führen zu zwei verschiedenen `id`s und zwei Einträgen in der Registry; die
+Registry-Datei ist nach jedem POST byte-konsistent) · FAM-13 (POST mit
+Foto → Datei im Foto-Verzeichnis und `foto`-Feld gesetzt; POST mit
+unbekannter `id` → 404 mit JSON-Fehler).
 
-*Tickets:* #38, #60
+*Tickets:* #38, #60, #213
 
 ---
 
