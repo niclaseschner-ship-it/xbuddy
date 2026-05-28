@@ -848,7 +848,7 @@ def test_PLAN_15_one_calendar_configured(demo_config):
 def test_PLAN_16_oauth_comes_from_zugangsdaten_store(tmp_path):
     """GoogleTransport holt OAuth-Client und -Token aus dem Zugangsdaten-
     Speicher — keine eigene Token-Datei der App."""
-    from zugangsdaten import Zugangsdaten
+    from tools.zugangsdaten import Zugangsdaten
     store = Zugangsdaten(str(tmp_path / "zugangsdaten.json"))
     # Ohne Einträge: keine Credentials.
     transport = kalender_mod.GoogleTransport(store, "demo@group.calendar.google.com")
