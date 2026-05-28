@@ -253,6 +253,28 @@ ohne selbst eine Kalender-Anbindung zu haben.
 
 *Tickets:* #40
 
+### PLAN-30 — Lese-API für Wochenzuteilungen
+Der Plan-Buddy stellt die persistierten Erwachsenen-Slot-Zuteilungen einer
+Woche unter `GET /api/v1/plan/zuteilung?week_start=<YYYY-MM-DD>` bereit —
+Form analog FAM-7 (GET, Query-Parameter, JSON-Antwort). Antwort:
+`{ "week_start": "<YYYY-MM-DD>", "slots": [ { "day": 0..6, "slot": "<key>",
+"person_id": "<id>|null" }, … ] }`. Die Liste enthält je Wochentag je
+Erwachsenen-Slot eine Zeile; leere Stellen tragen `person_id: null`. Ein
+ungültiges oder fehlendes `week_start` antwortet HTTP 400 mit JSON-Fehler,
+kein 500.
+
+Die Lese-API folgt der DCOMP-2-Linie (Reload-on-Read): plan.json und
+plan.db werden pro Aufruf frisch gelesen (`_current_config()`, `_db()`).
+Auf dem Erst-Lesepfad wird die Woche wie in der View aus den
+Default-Verantwortlichkeiten (PLAN-10) vorbelegt — damit liefert die
+Lese-API denselben Stand wie eine View-Anfrage.
+
+Damit haben andere XBuddy-Apps (z. B. ein zukünftiges Eltern-Chat-Skill,
+das Wochen-Verantwortlichkeiten anzeigt) einen stabilen Lese-Vertrag —
+ohne direkten Zugriff auf `plan.db` (APP-3, einseitige Abhängigkeit).
+
+*Tickets:* #214
+
 ### PLAN-23 — Eine App-Fähigkeit gibt es nur, wenn die App installiert ist
 Die Termin-Schnittstelle (PLAN-22) existiert genau dann, wenn der Plan-Buddy
 auf dem Hub installiert ist und läuft. Ist er es nicht, ist die Schnittstelle
@@ -305,29 +327,17 @@ Die Konfiguration verteilt sich auf zwei Per-Instanz-Dateien neben dem
 Code (CONFIG-1) — beide gitignored:
 
 - `plan/plan.json` — Daten-Konfig (Slots, Defaults, Kalender-ID, …).
-  Format: `plan/plan.example.json`. Wird vom Eltern-Chat geschrieben
-  (KAV — Kalender verbinden, EC-21). Der Plan-Buddy liest die Datei
-  **pro Aufruf frisch von Disk**
-  ([`conventions/data-components.md`](../../conventions/data-components.md)
-  DCOMP-2, Reload-on-Read): jeder Request, der die Daten-Konfig braucht
-  (View `woche`, Aktivitäts-Endpoint, Termin-Schnittstelle, Zuteilungs-
-  Endpoint), holt sich den aktuellen Stand frisch — ohne Service-
-  Restart und ohne expliziten Reload-Trigger. Der zuletzt erfolgreich
-  geladene Stand wird als Snapshot gehalten und nur dann als Fallback
-  verwendet, wenn ein einzelner Read scheitert (Datei kurz weg,
-  atomares Replace-Race, kaputtes JSON, ungültige Pflichtwerte) —
-  gleicher atomarer Geist wie der Admin-Reload (E-RELOAD-1). Der
-  Admin-Reload-Endpoint (`POST /api/v1/plan/admin/reload`, #140) bleibt
-  bestehen, ist aber **nicht mehr nötig**, damit Skill-Schreibvorgänge
-  sichtbar werden — er ist nur noch expliziter, loggbarer Reload-Marker
-  (Skill-Service-Reload-Pattern, EC-21) und aktualisiert den Snapshot.
-- `plan/config.json` — Runtime-Konfig (Bind-Adresse, Log-Level).
-  Existiert nicht „by default"; fehlt sie, greifen die Schema-Defaults
-  (CONFIG-1). Der gemeinsame `tools/configloader.py` (#179) lädt diese
-  Datei nach der CONFIG-1-Form.
+  Format: `plan/plan.example.json`. Der Plan-Buddy liest die Datei pro
+  Aufruf frisch von Disk (DCOMP-2 / DCOMP-3, Reload-on-Read mit
+  Last-Known-Good-Fallback, siehe
+  [`conventions/data-components.md`](../../conventions/data-components.md)).
+  Der Admin-Reload-Endpoint (`POST /api/v1/plan/admin/reload`, #140)
+  ist nur noch expliziter Reload-Marker.
+- `plan/config.json` — Runtime-Konfig (Bind-Adresse, Log-Level), vom
+  gemeinsamen `tools/configloader.py` (#179) nach CONFIG-1 geladen.
 
-**Daten-Konfig (`plan/plan.json`)** — der Eltern-Chat ist die einzige
-Schreibstelle (CONFIG-1).
+**Daten-Konfig (`plan/plan.json`)** — Schreibstelle ist der Eltern-Chat
+(CONFIG-1).
 
 | Name                         | Default                          | Datei-Schlüssel                | Gesetzt durch (Onboarding-Schritt) |
 |------------------------------|----------------------------------|--------------------------------|------------------------------------|
@@ -340,10 +350,16 @@ Schreibstelle (CONFIG-1).
 | Google-Kalender-ID           | (Pflicht, kein Default)          | `kalender_id`                  | KAV — Kalender verbinden (`kalender-verbinden.md`) |
 | OAuth-Client / -Token        | (Pflicht)                        | — (im Zugangsdaten-Speicher, ZD-3) | KAV — Kalender verbinden |
 | Zeitzone                     | `Europe/Berlin`                  | `zeitzone`                     | n/a (Default reicht) |
+| Familie-Origin-URL           | `http://127.0.0.1:5010`          | `familie_origin_url`           | n/a (Default reicht; Loopback auf den Familie-Port aus PORT-2) |
 
-**Runtime-Konfig (`plan/config.json`)** — Bind/Log, vom gemeinsamen
-Loader gelesen (#179). Defaults reichen heute auf dem Pi; der
-Eltern-Chat schreibt diese Werte nicht (kein Onboarding-Schritt).
+`familie_origin_url` ist die Loopback-Origin, unter der der Plan-Buddy
+die Familie-Komponente per HTTP anspricht (FAM-7) — kein direkter
+Python-Import (DCOMP-1). Default zeigt auf den Familie-Port aus PORT-2;
+ein abweichendes Pi-Setup setzt die Datei (CONFIG-1) oder die ENV-
+Variable `PLAN_FAMILIE_ORIGIN_URL` (CONFIG-5).
+
+**Runtime-Konfig (`plan/config.json`)** — Bind/Log, gemeinsamer Loader
+(#179). Eltern-Chat schreibt diese Werte nicht.
 
 | Name        | Default       | Datei-Schlüssel | Gesetzt durch (Onboarding-Schritt) |
 |-------------|---------------|-----------------|------------------------------------|
@@ -351,17 +367,11 @@ Eltern-Chat schreibt diese Werte nicht (kein Onboarding-Schritt).
 | Listen-Port | `5020`        | `listen_port`   | n/a (Default reicht, falls Pi nicht abweicht) |
 | Log-Level   | `INFO`        | `log_level`     | n/a (Default reicht) |
 
-Slot-Definitionen und Default-Verantwortlichkeiten sind **Daten** und
-stehen in einer Config-Datei, nicht im Code (E-PLAN-2). Werte, die nur
-als Code-Konstante existieren, sind Spec-Verletzung (CLAUDE.md §6).
+ENV-Variablen folgen CONFIG-5 (`PLAN_<KEY>`) und sind Dev-Override, keine
+Familien-Form. CLI-Flags (`--host`, `--port`, `--log-level`, `--config`)
+sind Test-Werkzeug.
 
-ENV-Variablen (`PLAN_LISTEN_HOST`, `PLAN_LISTEN_PORT`, `PLAN_LOG_LEVEL`,
-sowie die `PLAN_*` der Daten-Konfig) sind nach CONFIG-1 Dev-Override,
-keine Familien-Form — und gehören deshalb nicht in diese Tabelle.
-CLI-Flags (`--host`, `--port`, `--log-level`, `--config`) sind
-Test-Werkzeug.
-
-*Tickets:* #40, #179, #210
+*Tickets:* #40, #179, #210, #214
 
 ## 10. Tests
 
@@ -379,7 +389,8 @@ schlägt Creator-E-Mail; früherer Treffer gewinnt) · PLAN-18 (anlegen/ändern/
 löschen rufen die richtige Operation) · PLAN-20 (fehlende Credentials → leeres
 Lese-Ergebnis, View funktioniert) · PLAN-22/PLAN-23 (Termin-Schnittstelle
 liefert Termine; ist der Plan-Buddy nicht erreichbar, ist die Schnittstelle
-nicht erreichbar).
+nicht erreichbar) · PLAN-30 (Lese-API liefert Defaults bei leerer Woche,
+spiegelt PUTs, antwortet 400 bei ungültigem `week_start`).
 
 Läufe gegen den **echten** Kalender sind opt-in und nicht Teil des
 Standard-Durchlaufs (analog `eltern-chat.md` EC-17).
