@@ -3,7 +3,7 @@
 `xbuddy-origin.conf` ist die nginx-Reverse-Proxy-Konfiguration für die
 **eine HTTPS-Origin** einer XBuddy-Instanz (#36).
 
-Hintergrund: `specs/platform/urls.md` — **URL-11** (HTTPS für alle
+Hintergrund: `conventions/urls.md` — **URL-11** (HTTPS für alle
 Endpunkte), **URL-12** (eine Origin, Routing allein über das Pfad-Prefix)
 und **URL-1** (die vier Top-Level-Prefixe).
 

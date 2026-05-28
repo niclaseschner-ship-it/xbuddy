@@ -188,15 +188,6 @@ def post_geraet():
                 id=display_id, typ=typ, name=name,
                 aufloesung=aufloesung_raw, os=os_wert,
                 verwendung=verwendung, status=status)
-            # `Registry.add` validiert per `_validate_dict` über den
-            # update-Pfad NICHT — `add` selbst prüft nur die ID-Kollision.
-            # Wir nutzen `update`-äquivalente Validierung durch das
-            # Round-Trip: zuerst add, dann ein read-Pass über `_validate_dict`
-            # ist Overhead; einfacher ist, beim Construct schon zu prüfen.
-            # Das macht `_validate_dict` für uns über `to_dict()` + erneutes
-            # Parsen — wir nutzen ihn direkt, damit Auflösungs-Fehler im
-            # 400-Pfad landen statt im 500.
-            registry_mod._validate_dict(geraet.to_dict())
             reg.add(geraet)
         except registry_mod.RegistryError as e:
             return _bad_request(str(e))
