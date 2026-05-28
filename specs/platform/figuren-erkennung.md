@@ -164,7 +164,7 @@ mitgesendet (FIG-10).
 ### FIG-9 — Transport
 Events gehen per HTTP POST an `<router_url>/api/v1/events`, JSON-Body,
 `Content-Type: application/json`. Der Pfad `/api/v1/events` folgt der
-URL-Konvention (siehe `urls.md`, URL-4) und ist die Gegenseite von
+URL-Konvention (siehe `conventions/urls.md`, URL-4) und ist die Gegenseite von
 ROU-3 in `router.md`.
 
 *Tickets:* #1, #24
