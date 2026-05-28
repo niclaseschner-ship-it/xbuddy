@@ -185,11 +185,12 @@ längste Prefix gewinnt, das ist Teil der Spec, nicht nur eine nginx-Marotte):
 | 1 | `/display/plan/`                | Plan-Buddy          | Display-Views des Plan-Buddys (URL-2).                                    |
 | 2 | `/api/v1/plan/`                 | Plan-Buddy          | Plan-Buddy-Backend (Termine, Zuteilung, Aktivität).                       |
 | 3 | `/api/v1/familie/`              | Familie             | Familien-Mit-Host (Personen, Foto).                                       |
-| 4 | `/api/v1/displays/<id>/events`  | Router              | SSE-Zustands-Stream (ROU-22); Long-Lived, ohne Proxy-Puffer.              |
-| 5 | `/display/`                     | Router              | Display-Views (außer den oben abgefangenen spezifischen Buddy-Prefixen).  |
-| 6 | `/controller/`                  | Router              | Controller-Aktionen (URL-3).                                              |
-| 7 | `/api/v1/`                      | Router              | Hub-Backend (State, Events, Diagnose).                                    |
-| 8 | `/` (alles übrige)              | —                   | 404 (URL-1: andere Top-Level-Pfade sind nicht erlaubt).                   |
+| 4 | `/api/v1/geraete/`              | Geräte              | Geräte-Registry (GER-13/14/15) — Liste, Einzeln, Anlegen.                 |
+| 5 | `/api/v1/displays/<id>/events`  | Router              | SSE-Zustands-Stream (ROU-22); Long-Lived, ohne Proxy-Puffer.              |
+| 6 | `/display/`                     | Router              | Display-Views (außer den oben abgefangenen spezifischen Buddy-Prefixen).  |
+| 7 | `/controller/`                  | Router              | Controller-Aktionen (URL-3).                                              |
+| 8 | `/api/v1/`                      | Router              | Hub-Backend (State, Events, Diagnose).                                    |
+| 9 | `/` (alles übrige)              | —                   | 404 (URL-1: andere Top-Level-Pfade sind nicht erlaubt).                   |
 
 Diese Tabelle ist die Quelle für (a) die nginx-Origin-Konfiguration in
 `deploy/nginx/xbuddy-origin.conf` und (b) Onboarding-Schritte, die Origin-Routing
