@@ -154,6 +154,29 @@ def test_KAV_159_session_receives_post_execute_hooks(monkeypatch):
                for msg in tg.sent)
 
 
+def test_KAV_plan_origin_url_override_sets_reload_hook_url():
+    """EC-21 / Auftrag #215: Wird `KalenderVerbindenTask` mit einem
+    `plan_origin_url`-Wert instanziiert, ueberschreibt die Instanz die
+    Klassen-Hook-Liste — der erste ReloadHook zeigt auf den Override-Origin
+    plus den stabilen Reload-Pfad."""
+    from skills.kalender_verbinden_task import PLAN_BUDDY_RELOAD_PATH
+    task = KalenderVerbindenTask(
+        tg=None,
+        zd_store_getter=lambda: None,
+        sessions={},
+        family_group_chat_id_getter=lambda: "-100",
+        plan_origin_url="http://andere:9999",
+    )
+    hooks = task.post_execute_hooks
+    assert hooks, "Instanz muss nach Override mindestens einen Hook haben"
+    reload_hooks = [h for h in hooks if isinstance(h, ReloadHook)]
+    assert reload_hooks, "Mindestens ein ReloadHook muss vorhanden sein"
+    hook_url = reload_hooks[0].url
+    assert hook_url == "http://andere:9999" + PLAN_BUDDY_RELOAD_PATH, (
+        "ReloadHook-URL muss Override-Origin + stabilen Reload-Pfad enthalten, "
+        "war: %r" % hook_url)
+
+
 def test_KAV_157_private_trigger_omits_switch_receipt():
     """Refs #157 (Live-Beleg 2026-05-26): Wird die KAV-Aufgabe IM Privatchat
     des Aufrufers aufgerufen, unterdrueckt die Quittung den Wechsel-Hinweis.

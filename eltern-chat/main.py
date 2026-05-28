@@ -467,16 +467,17 @@ def build_context(cfg, db_path, store_path, zd_cli_path=None):
 
     ctx.catalog = build_catalog(
         tg, cfg.ca_pem_path,
-        family_registry_path=cfg.family_registry_path,
+        familie_origin_url=cfg.familie_origin_url,
         faa_sessions=faa_sessions,
         family_group_chat_id_getter=lambda: ctx.family_group_chat_id,
-        geraete_registry_path=cfg.geraete_registry_path,
+        geraete_origin_url=cfg.geraete_origin_url,
         gaa_sessions=gaa_sessions,
         cav_call_hook=_cav_hook,
         display_url_origin=cfg.display_url_origin,
         zd_store_getter=lambda: zd_store,
         kav_sessions=kav_sessions,
-        plan_json_path=cfg.plan_json_path)
+        plan_json_path=cfg.plan_json_path,
+        plan_origin_url=cfg.plan_origin_url)
 
     if cfg.provider_api_key:
         # KI-Modus — Anbieter steht; die Familien-Gruppe muss gesetzt sein (EC-2).

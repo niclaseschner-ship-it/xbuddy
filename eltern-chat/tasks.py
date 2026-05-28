@@ -250,12 +250,12 @@ class Catalog:
                                hook_failures=tuple(failures))
 
 
-def build_catalog(tg, ca_pem_path, family_registry_path=None,
+def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   faa_sessions=None, family_group_chat_id_getter=None,
-                  geraete_registry_path=None, gaa_sessions=None,
+                  geraete_origin_url=None, gaa_sessions=None,
                   cav_call_hook=None, display_url_origin=None,
                   zd_store_getter=None, kav_sessions=None,
-                  plan_json_path=None):
+                  plan_json_path=None, plan_origin_url=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
@@ -268,6 +268,12 @@ def build_catalog(tg, ca_pem_path, family_registry_path=None,
     ermöglicht einer Test-Umgebung, den Katalog ohne FAA-/GAA-/KAV-Setup
     zu bauen (`build_catalog(tg, ca_path)` bleibt unverändert kompatibel zu
     den CAV-Tests). Weitere Aufgaben werden additiv ergänzt (EC-8).
+
+    FAA-/GAA-Pfade waren bis Auftrag #215 Datei-Pfade
+    (`family_registry_path`/`geraete_registry_path`); seit Auftrag #215
+    sprechen die Skills ueber HTTP — die Parameter heissen
+    `familie_origin_url` und `geraete_origin_url` und tragen die jeweilige
+    Origin (z. B. `http://127.0.0.1:5010` und `http://127.0.0.1:5040`).
     """
     # Lokale Imports: brechen den Import-Zyklus tasks <-> ca_task/faa_task/
     # gaa_task/kav_task — nicht hochziehen.
@@ -276,18 +282,18 @@ def build_catalog(tg, ca_pem_path, family_registry_path=None,
     catalog = Catalog()
     catalog.register(CaVerteilungTask(tg, ca_pem_path))
 
-    if family_registry_path is not None and faa_sessions is not None \
+    if familie_origin_url is not None and faa_sessions is not None \
             and family_group_chat_id_getter is not None:
         from skills.familie_anlegen_task import FamilieAnlegenTask
         catalog.register(FamilieAnlegenTask(
-            tg, family_registry_path, faa_sessions,
+            tg, familie_origin_url, faa_sessions,
             family_group_chat_id_getter))
 
-    if geraete_registry_path is not None and gaa_sessions is not None \
+    if geraete_origin_url is not None and gaa_sessions is not None \
             and family_group_chat_id_getter is not None:
         from skills.geraet_anlegen_task import GeraetAnlegenTask
         catalog.register(GeraetAnlegenTask(
-            tg, geraete_registry_path, gaa_sessions,
+            tg, geraete_origin_url, gaa_sessions,
             family_group_chat_id_getter,
             cav_call_hook=cav_call_hook,
             display_url_origin=display_url_origin))
@@ -298,5 +304,6 @@ def build_catalog(tg, ca_pem_path, family_registry_path=None,
         catalog.register(KalenderVerbindenTask(
             tg, zd_store_getter, kav_sessions,
             family_group_chat_id_getter,
-            plan_json_path=plan_json_path))
+            plan_json_path=plan_json_path,
+            plan_origin_url=plan_origin_url))
     return catalog

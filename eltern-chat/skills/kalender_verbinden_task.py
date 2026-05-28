@@ -36,7 +36,13 @@ from tasks import Proposal, WriteTask, is_from_private_chat
 # ungueltig machen (siehe memory/feedback_api_vs_direct_fs.md) — wir rufen
 # stattdessen den Plan-Buddy-Reload-Endpunkt, der seinerseits den Cache neu
 # aufbaut. Der HTTP-Vertrag stammt aus PR #151 (Plan-Reload).
-_PLAN_BUDDY_RELOAD_URL = "http://127.0.0.1:5020/api/v1/plan/admin/reload"
+#
+# Der Reload-Pfad ist stabil; die Origin (`plan_origin_url`) liegt heute als
+# Per-Instanz-Konfigurationswert in `eltern-chat/config.json` (Auftrag #215,
+# CONFIG-2). Default-Origin entspricht dem Pi-Layout (PORT-2 Plan-Buddy).
+PLAN_BUDDY_RELOAD_PATH = "/api/v1/plan/admin/reload"
+PLAN_BUDDY_DEFAULT_ORIGIN = "http://127.0.0.1:5020"
+_PLAN_BUDDY_RELOAD_URL = PLAN_BUDDY_DEFAULT_ORIGIN + PLAN_BUDDY_RELOAD_PATH
 
 
 # Quittung in den Agent-Loop zurück — der eigentliche Verbinden-Flow läuft
@@ -115,7 +121,8 @@ class KalenderVerbindenTask(WriteTask):
     is_async = True
 
     def __init__(self, tg, zd_store_getter, sessions,
-                 family_group_chat_id_getter, plan_json_path=None):
+                 family_group_chat_id_getter, plan_json_path=None,
+                 plan_origin_url=None):
         super().__init__(
             name="kalender_verbinden",
             description=(
@@ -131,8 +138,20 @@ class KalenderVerbindenTask(WriteTask):
         self._family_group_chat_id_getter = family_group_chat_id_getter
         # KAV-X: Per-Instanz-Pfad zur `plan/plan.json`. Wird vom Bootstrap
         # heineingegeben (`build_catalog`); `None` heißt: V1-Auswahl-Schritt
-        # übersprungen (Legacy/Test).
+        # übersprungen (Legacy/Test). Bewusstes V1-Provisorium (#140) — die
+        # Cross-Service-FS-Linie bleibt vorerst bestehen; HTTP-Migration des
+        # KAV-Auswahl-Schritts ist ein eigenes Ticket.
         self._plan_json_path = plan_json_path
+        # EC-21 / Auftrag #215 / CONFIG-2: Per-Instanz-Origin der Plan-
+        # Buddy-Reload-Schnittstelle. Wenn ein Wert gesetzt ist, ueberschreibt
+        # er die Klassen-Hook-Liste fuer diese Instanz — die Klassen-Hooks
+        # bleiben fuer Tests lesbar (`KalenderVerbindenTask.post_execute_hooks`,
+        # vgl. test_kalender_verbinden_task.py).
+        if plan_origin_url:
+            origin = plan_origin_url.rstrip("/")
+            self.post_execute_hooks = (
+                ReloadHook(url=origin + PLAN_BUDDY_RELOAD_PATH,
+                           consumer="Plan-Buddy"),)
 
     def propose(self, arguments, turn_context):
         """EC-10-Vorschlag — der Aufrufer bestätigt, bevor die Konversation

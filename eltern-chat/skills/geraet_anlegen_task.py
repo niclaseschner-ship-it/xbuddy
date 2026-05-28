@@ -6,10 +6,11 @@ versteht der Agent eine natürlichsprachige Bitte („leg mein Tablet an"),
 schlägt er die Anlage vor — nach EC-10-Bestätigung startet der Task die
 Funktion im Privatchat des Aufrufers (GAA-5).
 
-Eine **schreibende** Aufgabe (EC-10, GAA-5): die Funktion ergänzt
-`geraete.json` über die Registry-Schreib-Schnittstelle (GER-6). Das
-EC-10-Bestätigungs-Gate vor dem Aufgaben-Start ist redundant mit GAA-3.6
-(jedes Gerät wird einzeln bestätigt), aber Pattern-treu.
+Eine **schreibende** Aufgabe (EC-10, GAA-5): die Funktion ergänzt die
+Geraete-Registry über die HTTP-Schreib-Schnittstelle der Geraete-Komponente
+(GER-15, Auftrag #215). Das EC-10-Bestätigungs-Gate vor dem Aufgaben-Start
+ist redundant mit GAA-3.6 (jedes Gerät wird einzeln bestätigt), aber
+Pattern-treu.
 
 Die Aufgabe ist ein dünner Aufrufer der trigger-agnostischen Funktion
 (GAA-1 / E-GAA-1) — keine eigene Anlage-Logik. Sie liefert nur den
@@ -21,6 +22,7 @@ import logging
 
 from private_chat_session import PrivateChatSession
 from skills import geraet_anlegen
+from skills.geraete_client import GeraeteClient
 from tasks import Proposal, WriteTask, is_from_private_chat
 
 
@@ -74,9 +76,14 @@ class GeraetAnlegenTask(WriteTask):
     # konsistent mit FAA/KAV).
     is_async = True
 
-    def __init__(self, tg, registry_path, sessions,
+    def __init__(self, tg, geraete_origin_url, sessions,
                  family_group_chat_id_getter, cav_call_hook=None,
-                 display_url_origin=None):
+                 display_url_origin=None, client=None):
+        """`geraete_origin_url` ist die Origin der Geraete-Komponente (z. B.
+        `http://127.0.0.1:5040`). `client` ist die Test-Naht: liefert ein
+        vorgefertigter `GeraeteClient` (mit `transport=`-Callable) hereingegeben,
+        nutzt der Task diesen statt einer neuen Instanz — symmetrisch zur
+        FAA-Aufgabe."""
         super().__init__(
             name="geraet_anlegen",
             description=(
@@ -88,7 +95,8 @@ class GeraetAnlegenTask(WriteTask):
                 "Konversation im Privatchat."),
             parameters={"type": "object", "properties": {}})
         self._tg = tg
-        self._registry_path = registry_path
+        self._client = client if client is not None else GeraeteClient(
+            geraete_origin_url)
         self._sessions = sessions   # dict chat_id -> GaaSession (in-memory)
         self._family_group_chat_id_getter = family_group_chat_id_getter
         self._cav_call_hook = cav_call_hook
@@ -121,7 +129,7 @@ class GeraetAnlegenTask(WriteTask):
         self._sessions[private_chat_id] = session
 
         family_group_chat_id = self._family_group_chat_id_getter()
-        registry_path = self._registry_path
+        client = self._client
         tg = self._tg
         sessions = self._sessions
         cav_call_hook = self._cav_call_hook
@@ -131,7 +139,7 @@ class GeraetAnlegenTask(WriteTask):
             try:
                 result = geraet_anlegen.geraet_anlegen(
                     tg, private_chat_id, user_id, family_group_chat_id,
-                    registry_path, session.next_message,
+                    client, session.next_message,
                     cav_call_hook=cav_call_hook,
                     display_url_origin=display_url_origin)
                 logging.info(
