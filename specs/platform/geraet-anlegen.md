@@ -103,19 +103,17 @@ Implementierungs-Detail:
    dieses Gerät endet ohne Wirkung auf `geraete.json` (E-GAA-3). Die
    Funktion klopft den Wortlaut der Zusammenfassungs- und
    Abbruch-Nachrichten nicht fest; das ist Implementierungs-Detail.
-7. **Schreiben + Geräte-URL zurück**: Nach Bestätigung vergibt die
-   Funktion die `display_id` nach `geraete.md` GER-7 (Schema
-   `<typ>-<name-slug>-<laufende-nr>`, kollisionsfrei je Familie), schreibt
-   das Gerät **ausschließlich** über die Schreib-Schnittstelle der
-   Registry (`geraete.md` GER-6 — atomar, `0600`, bestehende Geräte
-   unverändert) und liefert dem Aufrufer im Privatchat die Display-URL
-   des Geräts zurück: `https://<origin>/display/<display_id>` (URL-2
-   sinngemäß, `display-client.md` DC-1 — der Router-Pfad, der den
-   Display-Client ausliefert). Das `status`-Feld (`geraete.md` GER-3) ist
-   V1 hart `aktiv` — ein neu angelegtes Gerät ist nach Konvention in
-   Betrieb (OPEN-GER-B führt das manuelle Setzen von `status` ohnehin
-   noch). Schlägt der Schreib-Aufruf fehl, signalisiert die Funktion den
-   Misserfolg und schreibt nichts (GAA-7).
+7. **Anlegen über GER-15 + Geräte-URL zurück**: Nach Bestätigung legt die
+   Funktion das Gerät über GER-15 (HTTP-POST) an; der Server vergibt die
+   `display_id` nach IDENT-1 (Schema `<typ>-<name-slug>-<laufende-nr>`,
+   kollisionsfrei je Familie). Die Funktion liefert dem Aufrufer im
+   Privatchat die Display-URL des Geräts zurück:
+   `https://<origin>/display/<display_id>` (URL-2 sinngemäß,
+   `display-client.md` DC-1 — der Router-Pfad, der den Display-Client
+   ausliefert). Das `status`-Feld (`geraete.md` GER-3) ist V1 hart `aktiv` —
+   ein neu angelegtes Gerät ist nach Konvention in Betrieb (OPEN-GER-B führt
+   das manuelle Setzen von `status` ohnehin noch). Schlägt GER-15 fehl,
+   signalisiert die Funktion den Misserfolg und schreibt nichts (GAA-7).
 
 Pflicht-Schritte ohne gültige Antwort wiederholen die Frage. Optionale
 Schritte gibt es V1 nicht — alle Felder aus `geraete.md` GER-3 außer `id`

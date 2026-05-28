@@ -1,5 +1,7 @@
 """Eltern-Chat — HTTP-Client zur Familien-Komponente (DCOMP-1, FAM-7/FAM-12/FAM-13).
 
+Folgt `conventions/http-client.md` (CLIENT-1..4).
+
 Der Eltern-Chat ist Konsument der Familien-Komponente: die FAA-Skill liest
 Personen (Ring-Vorschlag, Telegram-ID-Dup-Check) und legt sie an. Diese
 Aufrufe laufen ausschliesslich ueber die HTTP-API der Familie

@@ -1,5 +1,7 @@
 """Eltern-Chat — HTTP-Client zur Geraete-Komponente (DCOMP-1, GER-13/GER-15).
 
+Folgt `conventions/http-client.md` (CLIENT-1..4).
+
 Der Eltern-Chat ist Konsument der Geraete-Komponente: die GAA-Skill legt
 Geraete an. Die Aufrufe laufen ausschliesslich ueber die HTTP-API der
 Geraete-Komponente (`POST /api/v1/geraete/`) — ein direktes
