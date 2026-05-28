@@ -27,14 +27,15 @@ from datetime import date, timedelta
 from flask import Flask, jsonify, render_template, request
 
 # Repo-Wurzel auf den Importpfad — die App konsumiert die Library
-# `tools.zugangsdaten` (PLAN-16, DCOMP-1) und die Public-API der Komponente
-# `familie` (PLAN-19).
+# `tools.zugangsdaten` (PLAN-16, DCOMP-1-Ausnahme: `tools/` ist gemeinsamer
+# Bibliotheks-Code, kein Komponenten-Code). Personen-Daten holt der
+# Plan-Buddy ueber HTTP von der Familie-Komponente (`familie_client`,
+# DCOMP-1) — kein `from familie import …` mehr.
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from familie import registry as registry_mod  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
 from tools.zugangsdaten import Zugangsdaten, resolve_store_path  # noqa: E402
 
@@ -44,6 +45,7 @@ if __package__:
     from . import aktivitaeten as aktivitaeten_mod
     from . import config as config_mod
     from . import db as db_mod
+    from . import familie_client as familie_client_mod
     from . import kalender as kalender_mod
     from . import render as render_mod
 else:  # python3 plan/main.py
@@ -51,6 +53,7 @@ else:  # python3 plan/main.py
     from plan import aktivitaeten as aktivitaeten_mod
     from plan import config as config_mod
     from plan import db as db_mod
+    from plan import familie_client as familie_client_mod
     from plan import kalender as kalender_mod
     from plan import render as render_mod
 
@@ -67,27 +70,32 @@ else:  # python3 plan/main.py
 # E-RELOAD-1).
 runtime = {
     "config": None,            # plan.config.Config — Last-Known-Good-Snapshot
-    "registry": registry_mod.Registry(),  # nur Test-/Fallback-Quelle
-    "registry_path": None,     # Live: Pfad zur familie.json — Quelle des Wahren Stands
+    "registry": None,          # Test-Naht: direkt gesetzte RegistryView (oder duck-typed)
+    "familie_client": None,    # Live: FamilieClient — HTTP zur Familie-Komponente (DCOMP-1)
     "transport": None,         # plan.kalender.GoogleTransport (oder Fake in Tests)
     "config_path": None,       # Pfad zur plan.json — Naht für DCOMP-2 + Reload-Endpoint (#140)
     "transport_factory": None, # cfg -> transport — neu binden, wenn kalender_id wechselt
 }
 
 
-def configure(cfg, registry, transport, registry_path=None,
+def configure(cfg, registry, transport, familie_client=None,
               config_path=None, transport_factory=None):
-    """Setzt Konfiguration, Familien-Registry und Kalender-Transport.
+    """Setzt Konfiguration, Familien-Zugang und Kalender-Transport.
 
     `transport` ist die Test-Naht (PLAN-29): in Produktion ein
     GoogleTransport, in Tests ein Fake.
 
-    `registry_path` ist die Naht für den Live-Reload (Bugfix
-    Familie-Registry-Konsistenz): wird er gesetzt, lädt der Plan-Buddy die
-    Registry bei jedem Endpoint frisch aus der Datei — sodass extern (z. B.
-    durch FAA über den Eltern-Chat-Bot) angelegte Personen ohne Service-
-    Restart sichtbar sind. Tests übergeben heute nur das in-memory-Objekt;
-    bleibt `registry_path=None`, ist das `registry`-Objekt die feste Quelle.
+    `registry` ist die Test-Naht fuer Personen-Daten: ein in-memory-
+    Objekt mit `.alle()`/`.get(id)` (`plan.familie_client.RegistryView`
+    oder das alte `familie.registry.Registry` — beide duck-kompatibel).
+    Tests setzen das direkt; `familie_client` bleibt dann `None`.
+
+    `familie_client` ist die Live-Naht (DCOMP-1): ein
+    `plan.familie_client.FamilieClient`, der pro Request ueber HTTP einen
+    frischen Personen-Snapshot von der Familie-Komponente holt — extern
+    (z. B. durch FAA ueber den Eltern-Chat-Bot) angelegte Personen sind
+    ohne Plan-Service-Restart sichtbar. Ist `familie_client` gesetzt, hat
+    er Vorrang vor `registry`.
 
     `config_path` ist die Naht für DCOMP-2 (Reload-on-Read, #210) UND den
     Admin-Reload-Endpoint (#140, EC-21): wird er gesetzt, liest der
@@ -105,26 +113,27 @@ def configure(cfg, registry, transport, registry_path=None,
     """
     runtime["config"] = cfg
     runtime["registry"] = registry
-    runtime["registry_path"] = registry_path
+    runtime["familie_client"] = familie_client
     runtime["transport"] = transport
     runtime["config_path"] = config_path
     runtime["transport_factory"] = transport_factory
 
 
 def _aktuelle_registry():
-    """Liefert die aktuelle Familien-Registry für genau diesen Request.
+    """Liefert die aktuelle Familien-Sicht für genau diesen Request.
 
-    Live (mit `registry_path`): pro Request frisch aus `familie.json` —
-    extern angelegte Personen sind ohne Restart sichtbar. Heute ist die
-    Familie winzig (≤10 Personen), JSON-Disk-IO unter 1 ms. Kein
-    mtime-Cache (eigenes Ticket, falls je teurer).
-    Test/in-memory (ohne `registry_path`): das übergebene Registry-Objekt
-    bleibt die Quelle.
+    Live (mit `familie_client`): pro Request ein frischer
+    `RegistryView`-Snapshot ueber HTTP von der Familie-Komponente (FAM-7,
+    DCOMP-1) — extern angelegte Personen sind ohne Restart sichtbar. Bei
+    Erreichbarkeitsproblemen liefert der Client einen leeren Snapshot +
+    Log-Warnung (PLAN-20-Geist), kein Stack-Trace.
+    Test/in-memory (ohne `familie_client`): das uebergebene `registry`-
+    Objekt bleibt die Quelle.
     """
-    path = runtime.get("registry_path")
-    if path is None:
+    client = runtime.get("familie_client")
+    if client is None:
         return runtime["registry"]
-    return registry_mod.load(path)
+    return client.snapshot()
 
 
 def _current_config():
@@ -276,6 +285,60 @@ def woche():
         variant=variant,
         anchor=anker.isoformat(),
     )
+
+
+@app.route("/api/v1/plan/zuteilung", methods=["GET"])
+def api_zuteilung_lesen():
+    """PLAN-30: Lese-API fuer Wochenzuteilungen (analog FAM-7-Form).
+
+    Query: `?week_start=YYYY-MM-DD` (Pflicht). Liefert die persistierten
+    Zuteilungen dieser Woche als Liste:
+        [ { "day": 0..6, "slot": "<schluessel>", "person_id": "<id>|null" }, ... ]
+    Ist die Woche noch nicht initialisiert, antwortet die API mit den
+    Default-Verantwortlichkeiten (PLAN-10) — der Erst-Lesepfad belegt die
+    Woche aus plan.json vor, sodass ein Konsument denselben Stand sieht wie
+    eine View-Anfrage.
+
+    Ungueltiges `week_start` → HTTP 400 mit JSON-Fehler.
+
+    DCOMP-2 (#210): wir lesen plan.json frisch von Disk (`_db()`,
+    `_current_config()`) — ein KAV-Schreibvorgang oder eine neue Default-
+    Liste ist ohne Service-Restart sichtbar.
+    """
+    week_start = request.args.get("week_start")
+    if not week_start:
+        return jsonify({"error": "week_start ist Pflicht"}), 400
+    try:
+        date.fromisoformat(week_start)
+    except (TypeError, ValueError):
+        return jsonify({
+            "error": "week_start muss ein ISO-Datum YYYY-MM-DD sein"
+        }), 400
+
+    cfg = _current_config()
+    erwachsenen_keys = [s.schluessel for s in cfg.erwachsenen_slots()]
+    conn = _db()
+    try:
+        # Erst-Lese-Pfad: die Woche wird wie in der View aus den Defaults
+        # vorbelegt (PLAN-10). Damit liefert die Lese-API dieselbe Wahrheit
+        # wie die View — kein Sonderstand „API sieht Defaults nicht".
+        db_mod.init_week(conn, week_start, cfg.default_verantwortlichkeiten)
+        zuweisungen = db_mod.assignments_for_weeks(conn, [week_start])
+    finally:
+        conn.close()
+
+    # Wir liefern eine Zeile je Erwachsenen-Slot je Wochentag (0..6). Slots,
+    # die nicht in der Config stehen, erscheinen nicht — die Form orientiert
+    # sich an der aktuellen Slot-Definition (DCOMP-2).
+    slots = []
+    for day in range(7):
+        for key in erwachsenen_keys:
+            slots.append({
+                "day": day,
+                "slot": key,
+                "person_id": zuweisungen.get((week_start, day, key)),
+            })
+    return jsonify({"week_start": week_start, "slots": slots})
 
 
 @app.route("/api/v1/plan/zuteilung", methods=["PUT"])
@@ -547,10 +610,6 @@ def parse_args(argv):
     p = argparse.ArgumentParser(description="XBuddy Plan-Buddy-App V1")
     p.add_argument("--config", dest="config_file", default=None,
                    help="Pfad zur plan.json (PLAN-28; sonst $PLAN_CONFIG_FILE / Default)")
-    p.add_argument("--registry", default="familie/familie.json",
-                   help="Pfad zur Familien-Registry-Datei (FAM-9)")
-    p.add_argument("--fotos", dest="foto_verzeichnis",
-                   help="Foto-Verzeichnis der Registry (FAM-9)")
     p.add_argument("--host", help="Bind-Host")
     p.add_argument("--port", type=int, help="Bind-Port")
     p.add_argument("--log-level", dest="log_level", help="DEBUG | INFO | WARNING | ERROR")
@@ -586,7 +645,10 @@ def main(argv=None):
                    or os.environ.get(config_mod.ENV_CONFIG_FILE)
                    or config_mod.DEFAULT_CONFIG_FILE)
     cfg = config_mod.resolve(config_path)
-    registry = registry_mod.load(args.registry)
+    # DCOMP-1: Personen ueber HTTP von der Familie-Komponente. Der Client
+    # haelt nur die Origin-URL — den Personen-Snapshot baut er pro Request
+    # frisch (FAM-7).
+    familie_client = familie_client_mod.FamilieClient(cfg.familie_origin_url)
     store = Zugangsdaten(resolve_store_path())
     # Naht für #140: der Factory wird im Reload-Pfad mit der frisch
     # geladenen Config aufgerufen und liefert einen Transport, der die
@@ -595,8 +657,8 @@ def main(argv=None):
     def transport_factory(cfg):
         return kalender_mod.GoogleTransport(store, cfg.kalender_id)
     transport = transport_factory(cfg)
-    configure(cfg, registry, transport,
-              registry_path=args.registry,
+    configure(cfg, registry=None, transport=transport,
+              familie_client=familie_client,
               config_path=config_path,
               transport_factory=transport_factory)
 
@@ -605,9 +667,9 @@ def main(argv=None):
     if args.cert and args.key:
         ssl_context = (args.cert, args.key)
         scheme = "https"
-    logger.info("Plan-Buddy hört auf %s://%s:%s (kalender=%s, db=%s)",
+    logger.info("Plan-Buddy hört auf %s://%s:%s (kalender=%s, db=%s, familie=%s)",
                 scheme, rt["listen_host"], rt["listen_port"],
-                cfg.kalender_id, cfg.db_datei)
+                cfg.kalender_id, cfg.db_datei, cfg.familie_origin_url)
     app.run(host=rt["listen_host"], port=rt["listen_port"],
             debug=False, threaded=True, ssl_context=ssl_context)
 
