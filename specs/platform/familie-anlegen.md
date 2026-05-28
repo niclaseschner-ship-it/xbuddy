@@ -33,15 +33,15 @@ Die Funktion ist eine klar abgegrenzte, **aufrufbare Funktion** mit definierter
 Schnittstelle. **Eingang:** der Telegram-Privatchat des Aufrufers (Chat-ID
 und Telegram-User-ID), die ID der gebundenen Familien-Gruppe (`eltern-chat.md`
 EC-2) und ein Zugriff auf die Familien-Registry über deren Schnittstellen
-(`familie.md` FAM-7 lesen, FAM-11 schreiben). Familienspezifische Werte
+(`familie.md` FAM-7 lesen, FAM-12 + FAM-13 schreiben). Familienspezifische Werte
 (Foto-Verzeichnis, Profilbild-Max-Kante) holt die Funktion über die
 Registry-Schnittstelle aus den Settings (`familie.md` FAM-9), **nicht** als
 separate Aufruf-Parameter — der Aufrufer muss diese Werte nicht duplizieren,
 und die Funktion sieht immer den Stand der Familie, die sie gerade bedient.
 **Wirkung:** nach erfolgreichem Durchlauf sind **eine oder mehrere** neue
-Personen in der Registry ergänzt (jede Person für sich bestätigt und atomar
-über FAM-11 geschrieben, FAA-7/FAA-8) und — falls der Aufrufer pro Person
-ein Foto geschickt hat — die Bilddateien im Foto-Verzeichnis (FAM-9) abgelegt.
+Personen in der Registry ergänzt (jede Person für sich bestätigt und über
+FAM-12 + FAM-13 (HTTP) geschrieben, FAA-7/FAA-8) und — falls der Aufrufer
+pro Person ein Foto geschickt hat — das Foto serverseitig abgelegt (FAM-13).
 **Ausgang:** ein Ergebnis-Signal an den Aufrufer mit der Liste der vergebenen
 `id`s der angelegten Personen (kann leer sein, wenn der Aufrufer die erste
 Anlage abgebrochen hat). Die Funktion kennt ihren Aufrufer nicht — sie weiß
@@ -260,17 +260,18 @@ Doppelung ersetzt. Mindest-Abdeckung:
   Telegram-User-ID des Aufrufers als Default vorgeschlagen.
 - **FAA-4** — Vorschlag ist die erste freie Palette-Farbe; Override mit
   Palette-Wort wird übernommen; Wort außerhalb der Palette wird abgelehnt.
-- **FAA-5** — Slug aus Namen wird vergeben; Kollision führt zu `-2`-Suffix.
-- **FAA-6** — Telegram-Foto-Nachricht landet als `<id>.jpg`, PNG-Datei-Anhang
-  als `<id>.png` im Foto-Verzeichnis; Auswahl unter den Telegram-Größen
-  respektiert die FAM-9-Max-Kante; ein Datei-Anhang über der Max-Kante wird
-  abgewiesen; ein Datei-Anhang ohne Bild-MIME wird abgewiesen; übersprungenes
-  Foto lässt `foto` in `familie.json` ungesetzt.
+- **FAA-5** — die Funktion sendet keine ID, übernimmt die Server-ID aus der
+  FAM-12-Antwort, ID-Form ist IDENT-1-konform.
+- **FAA-6** — FAM-13-Multipart-Call mit MIME + Bytes wird ausgeführt, Server
+  entscheidet Speicherort; Auswahl unter den Telegram-Größen respektiert die
+  FAM-9-Max-Kante; ein Datei-Anhang über der Max-Kante wird abgewiesen; ein
+  Datei-Anhang ohne Bild-MIME wird abgewiesen; übersprungenes Foto lässt
+  `foto` in `familie.json` ungesetzt.
 - **FAA-7** — Bestätigungswort nach E-EC-7 schaltet das Schreiben frei; eine
   nicht-bestätigende Antwort schreibt nicht.
 - **FAA-8** — neue Person wird additiv ergänzt, bestehende Personen bleiben
-  bytegleich; ein simulierter Schreibfehler hinterlässt weder Eintrag noch
-  Foto.
+  bytegleich; Foto-Fehlschlag (FAM-13) lässt Person bestehen, Skill meldet
+  Erfolg-mit-Hinweis.
 - **FAA-9** — nach Bestätigung einer Person fragt die Funktion „noch
   jemand?"; eine Bestätigung führt zur nächsten Personen-Anlage mit FAA-3
   Schritt 1, eine nicht-bestätigende Antwort beendet die Funktion mit der
@@ -371,7 +372,7 @@ nimmt die Aufgabe nicht weg, sondern setzt einen zweiten Aufrufer neben sie
   FAM-4 (Ring-Palette), FAM-5 (Profilfoto optional), FAM-6 (Registry-Datei
   mit Personen + Settings), FAM-7 (Lese-Schnittstelle), FAM-9
   (Konfigurationswerte inkl. Profilbild-Max-Kante, aus Registry-Settings),
-  FAM-10 (Tests), FAM-11 (Schreib-Schnittstelle).
+  FAM-10 (Tests), FAM-12 + FAM-13 (HTTP-Schreib-Schnittstellen).
 - `eltern-chat.md` EC-2 (Berechtigung über Gruppen-Mitgliedschaft), EC-8
   (Aufgaben-Katalog — Heimat von FAA-12), EC-9 (lesende Aufgaben), EC-10
   (schreibende Aufgaben nur nach Bestätigung — Pattern der FAA-12-Aufgabe),
