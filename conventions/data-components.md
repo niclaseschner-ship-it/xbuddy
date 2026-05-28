@@ -80,7 +80,7 @@ gleichwertiges atomares Rename) auf den Zielnamen. Ein zeitgleicher
 Lesezugriff sieht **nie** eine halb geschriebene Datei.
 
 Begründung: Eltern-Chat-Skills schreiben Cross-Service in Datendateien
-(EC-21, siehe DCOMP-2), während der besitzende Service parallel liest.
+(EC-21, siehe DCOMP-1), während der besitzende Service parallel liest.
 Ein nicht-atomarer Schreibvorgang würde dem Leser entweder ein leeres
 oder ein abgeschnittenes JSON zeigen — der Lese-Pfad würde brechen,
 obwohl der Schreiber „nur kurz" mittendrin war. Atomar heißt: aus

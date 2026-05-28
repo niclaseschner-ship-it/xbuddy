@@ -312,7 +312,7 @@ Doppelung ersetzt. Mindest-Abdeckung:
 - **OPEN-GAA-D — Controller-Geräte-Anlage vertagt.** V1 nimmt in GAA-3.5
   nur `verwendung: display`. Der Grund ist keine URL-Lücke (die
   Controller-URL bleibt geräte-agnostisch und ist app-bezogen,
-  `/controller/<source>/<X>` nach `urls.md` URL-3; die Übersetzung
+  `/controller/<source>/<X>` nach `conventions/urls.md` URL-3; die Übersetzung
   „welche Eingabe → welche Wirkung" lebt im Router über
   `router/routing.json`), sondern eine Spec-Lücke in der Registry:
   `geraete.md` GER-3 kennt heute kein Feld dafür, **welche Controller-App**
@@ -436,7 +436,7 @@ nachgezogen werden.
   Gates — Bestätigung und Berechtigung hängen nicht am Sprachmodell;
   GAA-2 und GAA-3.6 sind solche Gates).
 - **Display-URL:** `display-client.md` DC-1 (`/display/<display_id>`),
-  `urls.md` URL-2 (Display-Pfad-Vertrag).
+  `conventions/urls.md` URL-2 (Display-Pfad-Vertrag).
 - **Memory-Anchor:** [[feedback-funktion-nicht-schritt]],
   [[feedback-onboarding-flow-prerequisites]].
 - **Konsument-Folge:** #82 (CA-Anleitung pro Gerät — nutzt das `os`-Feld,

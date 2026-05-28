@@ -3,7 +3,7 @@
 `make-ca.sh` erzeugt die lokale **Root-CA** einer XBuddy-Instanz und ein
 davon signiertes **Server-Zertifikat** für die eine HTTPS-Origin (#36).
 
-Hintergrund: `specs/platform/urls.md` — **URL-11** (HTTPS für alle
+Hintergrund: `conventions/urls.md` — **URL-11** (HTTPS für alle
 Endpunkte) und **URL-12** (eine Origin). Jede Instanz trägt genau ein
 Server-Zertifikat; die Geräte der Familie vertrauen einmalig der Root-CA.
 

@@ -151,7 +151,8 @@ class Registry:
         if geraet.id in self._by_id:
             raise RegistryError(
                 "Gerät mit id %r existiert bereits (GER-7)" % geraet.id)
-        self._by_id[geraet.id] = geraet
+        validated = _validate_dict(geraet.to_dict())
+        self._by_id[geraet.id] = validated
 
     def update(self, geraet_id, **felder):
         """Ändert Felder eines bestehenden Geräts (GER-6).
