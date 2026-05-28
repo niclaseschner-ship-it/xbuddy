@@ -78,10 +78,13 @@ Anbieter-Wahl und nimmt den Key als Nachricht entgegen. Berechtigt zur Eingabe
 ist, wer Mitglied der Gruppe ist, in der das Onboarding begonnen wurde — geprüft
 live (analog EC-2).
 
-Eine Privatnachricht, die erkennbar keine Schlüssel-Eingabe ist (etwa eine
-Begrüßung oder eine Frage), wird nicht als Schlüssel gewertet und nicht
-validiert: der Bot antwortet stattdessen mit der Anleitung. So bleibt er nie
-stumm und meldet nie fälschlich einen ungültigen Schlüssel.
+Die Privatchat-Konversation folgt dem Session-Muster aus
+`conventions/privatchat-session.md` (SESS-1 Worker-Form, SESS-2
+Zwischenzustand nur im Speicher, SESS-3 30-Minuten-Timeout, SESS-4
+Re-Prompt bei nicht-passender Eingabe) — eine Privatnachricht, die
+erkennbar keine Schlüssel-Eingabe ist (Begrüßung, Frage, Foto), wird
+nach SESS-4 nicht als ungültig gewertet, sondern mit der Anleitung
+re-prompted.
 
 *Tickets:* #33
 

@@ -220,8 +220,9 @@ die Seite **kein** Event — die Session läuft weiter, der Akku pausiert.
 *Tickets:* #1
 
 ### FIG-12 — Retry
-Bei fehlgeschlagenem POST: bis zu **3 Wiederholungen** mit Backoff
-200 ms / 1 s / 5 s. Danach Drop. Kein Persistenz-Puffer.
+Retry- und Drop-Verhalten der Phone-Events folgt der Event-Transport-
+Konvention `conventions/event-transport.md` (EVT-1 Retry-Backoff,
+EVT-2 Drop nach N Versuchen, kein Persistenz-Puffer).
 
 *Tickets:* #1
 
@@ -342,10 +343,8 @@ Nicht gesetzte Schlüssel bleiben auf dem Default. Beispiel:
 }
 ```
 
-**Fehlerfälle:** Existiert die Datei nicht oder ist sie nicht parsebar,
-fällt die Seite stumm auf die Defaults zurück und protokolliert den
-Fehler in `console.warn`. Die Seite bleibt funktionsfähig — wichtig
-für das Repo-Default-Setup ohne Live-Werte.
+**Fehlerfälle:** folgen `conventions/config.md` CONFIG-4 (fehlende oder
+kaputte Datei → Defaults + Warnung, Prozess startet weiter).
 
 **Priorität:** URL-Parameter (siehe FIG-17) überschreiben weiterhin
 auch `config.json`. Reihenfolge: `Defaults` → `config.json` → URL.
@@ -388,36 +387,23 @@ Auslieferungspaket.
 Die Seite wird zusätzlich zur reinen URL-Nutzung als installierbare
 Web-App ausgeliefert. PWA ist **eine** Auslieferungsform unter mehreren
 denkbaren (z. B. eingebettet in eine künftige Buddy-Runtime) — die
-aktuell verfolgte. Konkrete Anforderungen:
+aktuell verfolgte. Pflicht-Dateien, Manifest-Pflichtfelder und die
+Config-Lade-Reihenfolge folgen der Controller-PWA-Konvention
+`conventions/controller-pwa.md` (PWA-1 bis PWA-4).
 
-- Ein **Web App Manifest** `manifest.json` liegt im selben Verzeichnis
-  wie `index.html` und ist per `<link rel="manifest" href="./manifest.json">`
-  eingebunden.
-- Das Manifest deklariert `name`, `short_name`, `start_url: "./"`,
-  `display: "fullscreen"`, `orientation: "landscape"`, `background_color`
-  und `theme_color` passend zum dunklen UI-Stil der Seite (siehe
-  FIG-15-Abschnitt).
-- `display: "fullscreen"` (nicht `"standalone"`): die installierte PWA
-  startet randlos ohne System-Statusleiste, **bevor** die erste
-  Nutzer-Geste erfolgt ist. FIG-26 kann den Vollbild per Fullscreen-API
-  erst nach einer abgeschlossenen Geste anfordern (Browser-Regel); der
-  Manifest-Anzeigemodus ist der einzige Hebel für das Zeitfenster davor.
-  Browser ohne `fullscreen`-Unterstützung fallen über die Manifest-
-  Fallback-Kette automatisch auf `standalone` zurück.
-- Mindestens **zwei Icons** sind angegeben (192 × 192, 512 × 512 PNG) und
-  liegen im selben Verzeichnis. Mindestens ein Icon trägt `purpose:
-  "maskable"`, damit Android-Launcher die Form korrekt zuschneiden.
-- Ein **minimaler Service Worker** `sw.js` im selben Verzeichnis wird
-  beim Laden registriert. Er füllt beim Install-Event einen Cache mit
-  der Asset-Liste der Seite (`index.html`, `figlib.js`, `manifest.json`,
-  Icons), damit die Seite nach dem ersten Laden offline funktioniert
-  (Zusicherung aus FIG-19).
-- **Auslieferungs-Strategie: netzwerk-bevorzugt mit Cache-Fallback** für
-  alle GET-Requests. Ist das Netz erreichbar, liefert der Worker die
-  frische Version und aktualisiert den Cache; ist es nicht erreichbar,
-  liefert er aus dem Cache. Damit ist ein Deployment beim nächsten Laden
-  **sofort sichtbar** — eine reine Cache-First-Strategie würde alte
-  Stände bis zum Cache-Bruch ausliefern und jeden Deploy verschlucken.
+Komponentenspezifische Ergänzungen über die Konvention hinaus:
+
+- Manifest-Feld `orientation: "landscape"` (Querformat passt zur
+  Phone-Auflage-Geometrie, FIG-18); `background_color`/`theme_color`
+  passen zum dunklen UI-Stil aus dem FIG-15-Abschnitt.
+- **Auslieferungs-Strategie des Service Workers: netzwerk-bevorzugt mit
+  Cache-Fallback** für alle GET-Requests. Ist das Netz erreichbar, liefert
+  der Worker die frische Version und aktualisiert den Cache; ist es nicht
+  erreichbar, liefert er aus dem Cache. Damit ist ein Deployment beim
+  nächsten Laden **sofort sichtbar** — eine reine Cache-First-Strategie
+  würde alte Stände bis zum Cache-Bruch ausliefern und jeden Deploy
+  verschlucken. PWA-1 nennt nur den Install-Cache; die Liefer-Strategie
+  ist Phone-spezifisch.
 - `config.json` (FIG-23) folgt derselben Netzwerk-bevorzugt-Regel — sie
   ist per-Instanz-Daten und darf sich pro Deployment ändern.
 - Router-Events (POST) laufen nie über den Worker-Cache.
@@ -437,27 +423,9 @@ interpretiert.
 *Tickets:* #18, #26
 
 ### FIG-26 — Vollbild + Wach-Halten per Tap
-Unabhängig von der Auslieferungsform (normale URL, Home-Screen-
-Verknüpfung, PWA-Install) sorgt die Seite selbst für Vollbild und
-wachen Bildschirm:
-
-- **Vollbild:** Aus einem **abgeschlossenen** Nutzer-Gesture heraus
-  (`touchend` oder `click`) fordert die Seite per Fullscreen API
-  (`requestFullscreen`) den Vollbild-Modus an — das Browser-Chrome
-  verschwindet. Der Gesture-Typ ist nicht beliebig: Chromium-Browser
-  gewähren die für `requestFullscreen` nötige „transient activation"
-  **nicht** bei `touchstart`, sondern erst bei `touchend`/`click`.
-  Solange die Seite nicht im Vollbild ist, löst jeder Tap einen neuen
-  Versuch aus; verlässt der Nutzer den Vollbild, holt ihn der nächste
-  Tap zurück (self-healing).
-- **Wach-Halten:** Die Seite hält per Screen Wake Lock API
-  (`navigator.wakeLock`) einen Wake Lock, solange sie sichtbar ist.
-  Der Wake Lock wird beim Laden angefordert und nach jedem
-  Sichtbarkeitswechsel (`visibilitychange` zurück auf sichtbar) erneut
-  geholt — das System gibt ihn beim Verdecken der Seite frei.
-- **Best-effort:** Fehlt eine der APIs oder schlägt sie fehl, läuft die
-  Seite normal weiter und protokolliert `console.warn` — keine
-  Fehlermeldung an den Nutzer, kein Blockieren der Erkennung.
+Wake-Lock-Anforderung und Fullscreen-API beim ersten User-Gesture
+folgen der Controller-PWA-Konvention `conventions/controller-pwa.md`
+PWA-3 (best-effort, kein Blockieren bei fehlender API).
 
 FIG-26 ergänzt FIG-24/25: die PWA-Auslieferung bleibt für den
 Eigengeräte-Fall gültig, FIG-26 macht Vollbild und Display-an aber

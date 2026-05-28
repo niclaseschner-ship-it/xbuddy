@@ -494,9 +494,10 @@ sich der App-Panel-Adapter wie bei einem nicht-gematchten Trigger
 
 ### ROU-19 — `config.json` für Tuning-Werte
 Analog FIG-23: optionale Datei `config.json` im Router-Verzeichnis,
-deren Werte die Code-Defaults überschreiben. Felder gemäß ROU-15. Datei
-ist optional; Fehler beim Laden fällt stumm auf Defaults zurück und
-protokolliert `console.warn`-Äquivalent (Python: `logging.warning`).
+deren Werte die Code-Defaults überschreiben. Felder gemäß ROU-15.
+Verhalten bei fehlender oder kaputter Datei folgt
+`conventions/config.md` CONFIG-4 (Defaults + Warnung, Prozess startet
+weiter) — Python: `logging.warning`.
 
 *Tickets:* #5
 
@@ -579,11 +580,10 @@ Mindest-Abdeckung:
 
 ## Dev-Anhang — ENV-Variable und CLI-Flag (Dev-Override)
 
-Nach CONFIG-1 sind ENV-Variablen ein **Dev-Override** und CLI-Flags ein
-**Test-Werkzeug**, nicht die produktive Familien-Form. Die folgenden
-Overrides überschreiben für den laufenden Router-Prozess die Werte aus
-`config.json` (ROU-19) bzw. die Code-Defaults. ENV-Namen folgen der
-Konvention `<COMPONENT>_<KEY>` (CONFIG-1).
+ENV-Naming, Priorität (`CLI > ENV > config.json > Default`) und der
+gemeinsame `--log-level`-Flag folgen `conventions/config.md` CONFIG-5.
+Die folgende Tabelle ist die konkrete Router-Belegung dieser
+Konvention:
 
 | Datei-Schlüssel  | ENV                       | CLI                |
 |------------------|---------------------------|--------------------|
@@ -591,8 +591,6 @@ Konvention `<COMPONENT>_<KEY>` (CONFIG-1).
 | `listen_port`    | `ROUTER_LISTEN_PORT`      | `--port`           |
 | `log_level`      | `ROUTER_LOG_LEVEL`        | `--log-level`      |
 | `controller_dir` | `ROUTER_CONTROLLER_DIR`   | `--controller-dir` |
-
-Priorität: **CLI > ENV > config.json > Defaults**.
 
 ---
 
