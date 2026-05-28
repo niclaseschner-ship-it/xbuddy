@@ -20,6 +20,9 @@
     <div id="error" class="hidden" role="alert"></div>
     <div id="grid"></div>
   </main>
+  <!-- PWA-4 — gemeinsamer Config-Lader (controller/_shared/config.js).
+       Muss vor app.js stehen, damit pwaShared im Bootstrap verfügbar ist. -->
+  <script src="../_shared/config.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
