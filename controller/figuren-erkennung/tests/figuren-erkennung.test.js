@@ -545,9 +545,12 @@ test('FIG-18 — Portrait-Warnung im Markup mit @media (orientation: portrait)',
 test('FIG-19 — Selbsttragend: keine externen Script-/Link-Quellen', () => {
   const scriptSrcs = [...HTML.matchAll(/<script[^>]*\bsrc="([^"]+)"/g)].map(m => m[1]);
   const linkHrefs  = [...HTML.matchAll(/<link[^>]*\bhref="([^"]+)"/g)].map(m => m[1]);
+  // Erlaubte Script-Quellen: figlib.js (sibling) und der gemeinsame
+  // Config-Lader (controller/_shared/config.js, Refs #219).
+  const ALLOWED_SRCS = new Set(['./figlib.js', 'figlib.js', '../_shared/config.js']);
   for (const src of scriptSrcs) {
-    assert.ok(src === './figlib.js' || src === 'figlib.js',
-      `Unerwartete script src: "${src}" — nur sibling figlib.js erlaubt`);
+    assert.ok(ALLOWED_SRCS.has(src),
+      `Unerwartete script src: "${src}" — nur figlib.js + ../_shared/config.js erlaubt`);
   }
   for (const href of linkHrefs) {
     assert.ok(!href.includes('://'),
@@ -708,20 +711,48 @@ test('FIG-2 / FIG-14 — index.html enthält periodischen Tick für State-Machin
 //  FIG-23 — Instanz-Konfiguration via ./config.json
 // ===========================================================
 
-test('FIG-23 — index.html lädt ./config.json per fetch', () => {
-  assert.match(HTML, /fetch\(\s*['"]\.\/config\.json['"]/,
-    'index.html muss config.json aus dem selben Verzeichnis laden');
+// FIG-23-Verhaltens-Probe: nach der Migration auf den gemeinsamen Helper
+// (controller/_shared/config.js, Refs #219) steht fetch/URLSearchParams
+// nicht mehr direkt im HTML, sondern im Helper. Die folgenden Tests
+// prüfen das Verhalten über pwaShared.loadPwaConfig direkt.
+
+const pwaShared = require('../../_shared/config.js');
+
+test('FIG-23 — Lade-Reihenfolge: Defaults < config.json < URL-Parameter (Verhaltens-Probe)', async () => {
+  // Simuliere: config.json liefert { router_url: 'http://from-file' },
+  // URL-Param setzt router_url auf 'http://from-url'.
+  // Ergebnis muss URL-Param-Wert haben (URL > config.json > Defaults).
+  const origFetch = global.fetch;
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({ router_url: 'http://from-file' }),
+  });
+  try {
+    const cfg = await pwaShared.loadPwaConfig({
+      defaults: { router_url: 'http://default', sid: 'X' },
+      urlParams: new URLSearchParams('router_url=http%3A%2F%2Ffrom-url'),
+      applyUrlParams: function (base, qs) {
+        const v = qs.get('router_url');
+        return v ? { router_url: v } : {};
+      },
+    });
+    assert.strictEqual(cfg.router_url, 'http://from-url',
+      'URL-Parameter müssen config.json-Wert überschreiben');
+    assert.strictEqual(cfg.sid, 'X',
+      'Defaults-Schlüssel ohne Override müssen erhalten bleiben');
+  } finally {
+    global.fetch = origFetch;
+  }
 });
 
-test('FIG-23 — Lade-Reihenfolge: Defaults < config.json < URL-Parameter', () => {
-  // URL-Param-Logik liegt nach dem fileCfg-Merge — config.json wird also
-  // VOR den URL-Params auf die Defaults gemerged, damit die URL Vorrang
-  // behält.
-  const fetchIdx  = HTML.search(/fetch\(\s*['"]\.\/config\.json/);
-  const qsIdx     = HTML.search(/URLSearchParams\(location\.search\)/);
-  assert.ok(fetchIdx > -1 && qsIdx > -1);
-  assert.ok(fetchIdx < qsIdx,
-    'config.json muss vor dem URL-Param-Merge gelesen werden — sonst überschreibt es die URL');
+test('FIG-23 — index.html nutzt pwaShared.loadPwaConfig für den Config-Lauf', () => {
+  // Nach der Migration delegiert index.html an den Shared-Helper.
+  // Prüfe, dass der Aufruf im HTML-Code steht und der Helper per
+  // script-Tag eingebunden ist.
+  assert.match(HTML, /pwaShared\.loadPwaConfig\s*\(/,
+    'index.html muss pwaShared.loadPwaConfig aufrufen (Refs #219)');
+  assert.match(HTML, /<script[^>]*src=["'][^"']*\/_shared\/config\.js["']/,
+    'index.html muss ../_shared/config.js per script-Tag einbinden');
 });
 
 test('FIG-23 — Fehlerfall: config.json fehlt → console.warn statt fataler Fehler', () => {

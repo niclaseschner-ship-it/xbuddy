@@ -11,6 +11,7 @@ const CACHE_NAME = 'figuren-erkennung-v1';
 const STATIC_ASSETS = [
   './',
   './index.html',
+  '../_shared/config.js',
   './figlib.js',
   './manifest.json',
   './icon-192.png',
