@@ -53,8 +53,10 @@ class _Cfg:
     context_depth = 20
     family_group_locked = False
     ca_pem_path = "ca.pem"
-    family_registry_path = "familien.json"
-    geraete_registry_path = "geraete.json"
+    # Seit Auftrag #215: Origin-URLs statt Datei-Pfade fuer FAA/GAA.
+    familie_origin_url = "http://127.0.0.1:5010"
+    geraete_origin_url = "http://127.0.0.1:5040"
+    plan_origin_url = "http://127.0.0.1:5020"
     display_url_origin = "https://example.test"
     plan_json_path = "plan.json"
     provider_api_key = None

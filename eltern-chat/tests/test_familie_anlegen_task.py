@@ -1,41 +1,52 @@
-"""Tests für die »Familie anlegen«-Aufgabe — FAA-12 (Refs #60).
+"""Tests für die »Familie anlegen«-Aufgabe — FAA-12 (Refs #60, #215).
 
 Geprüft wird das Code-Verhalten der EC-8-Aufgabe und ihre Anbindung an die
 trigger-agnostische FAA-Funktion: Catalog-Registrierung, propose/execute,
 Privatchat-Adapter, FaaInput-Adapter aus IncomingMessage und das Routing
 laufender Sessions durch `handle_update`. Telegram ist durch die kontrollierte
 Doppelung `FakeTelegram` ersetzt (CAV-7-Pattern, ohne Netz).
+
+Seit Auftrag #215: die Aufgabe nimmt eine `familie_origin_url` statt
+eines Datei-Pfads entgegen — die Tests reichen einen vorgefertigten
+`FakeFamilieClient` (Test-Naht aus `test_familie_anlegen.py`) ueber das
+`client=`-Argument hinein.
 """
 
-import json
-import threading
 import time
 
 from skills import familie_anlegen
-from skills import familie_anlegen_task
 from confirm import PendingProposal, PendingStore
 from fakes import FakeProvider, FakeTelegram, make_message
 from skills.familie_anlegen import FaaInput
 from skills.familie_anlegen_task import (FamilieAnlegenTask, FaaSession,
                                   make_faa_input)
+from skills.familie_client import FamilieClientError
 from history import History
 from main import Context, handle_update
 from model import WRITE
 from tasks import TurnContext, build_catalog
+from test_familie_anlegen import FakeFamilieClient
 
 
 # ============================================================
 #  Test-Helfer
 # ============================================================
 
-def _ctx(tmp_path, tg, registry_path, provider=None, family_group_chat_id="-100"):
+def _ctx(tmp_path, tg, client, provider=None, family_group_chat_id="-100"):
     """Context für die Orchestrierungs-Tests des FAA-Aufgaben-Wegs."""
     faa_sessions = {}
     catalog = build_catalog(
         tg, "/instanz/rootCA.pem",
-        family_registry_path=registry_path,
+        familie_origin_url="http://test",
         faa_sessions=faa_sessions,
         family_group_chat_id_getter=lambda: family_group_chat_id)
+    # Den im Katalog gebauten Task durch einen mit `client=` ersetzen — so
+    # bleibt die HTTP-Schicht in der Test-Naht.
+    task = FamilieAnlegenTask(
+        tg, "http://test", faa_sessions,
+        family_group_chat_id_getter=lambda: family_group_chat_id,
+        client=client)
+    catalog._tasks["familie_anlegen"] = task
     return Context(
         tg=tg, bot_username="mybot",
         family_group_chat_id=family_group_chat_id,
@@ -47,43 +58,37 @@ def _ctx(tmp_path, tg, registry_path, provider=None, family_group_chat_id="-100"
         faa_sessions=faa_sessions)
 
 
-def _empty_registry(tmp_path):
-    p = tmp_path / "familie.json"
-    p.write_text(json.dumps({"erwachsene": [], "kinder": []}))
-    return str(p)
-
-
 def _members(*user_ids):
     return {uid: {"status": "member"} for uid in user_ids}
 
 
 # ============================================================
-#  FAA-12 — Config trägt family_registry_path (EC-15-Konformität)
+#  FAA-12 — Config trägt familie_origin_url (EC-15-Konformität)
 # ============================================================
 
-def test_FAA_12_family_registry_path_is_a_per_instance_config_value():
-    """FAA-12: der Pfad zur Familien-Registry ist ein Per-Instanz-Konfigurations-
-    wert mit Default UND Override-Pfad — keine Code-Konstante
+def test_FAA_12_familie_origin_url_is_a_per_instance_config_value():
+    """FAA-12 (#215): die Origin der Familien-Komponente ist ein Per-Instanz-
+    Konfigurations-wert mit Default UND Override-Pfad — keine Code-Konstante
     (CLAUDE.md §6 / EC-15). Der Override-Pfad folgt seit #179 der
     Loader-Konvention `ELTERNCHAT_<KEY>` und wird durch das Schema
     (`DEFAULTS`) sichergestellt."""
     import config as config_mod
-    assert "family_registry_path" in config_mod.DEFAULTS
-    assert config_mod.DEFAULTS["family_registry_path"]
+    assert "familie_origin_url" in config_mod.DEFAULTS
+    assert config_mod.DEFAULTS["familie_origin_url"]
 
 
-def test_FAA_12_config_resolves_family_registry_path(tmp_path, monkeypatch):
-    """EC-15: Env > Datei > Default."""
+def test_FAA_12_config_resolves_familie_origin_url(tmp_path, monkeypatch):
+    """EC-15 (#215): Env > Datei > Default für `familie_origin_url`."""
     import config as config_mod
     monkeypatch.setenv(config_mod.ENV_BOT_TOKEN, "t")
-    monkeypatch.setenv("ELTERNCHAT_FAMILY_REGISTRY_PATH",
-                       "/var/lib/xbuddy/familie.json")
+    monkeypatch.setenv("ELTERNCHAT_FAMILIE_ORIGIN_URL",
+                       "http://familie.example.org:5010")
     cfg = config_mod.resolve(str(tmp_path / "config.json"))
-    assert cfg.family_registry_path == "/var/lib/xbuddy/familie.json"
-    monkeypatch.delenv("ELTERNCHAT_FAMILY_REGISTRY_PATH")
+    assert cfg.familie_origin_url == "http://familie.example.org:5010"
+    monkeypatch.delenv("ELTERNCHAT_FAMILIE_ORIGIN_URL")
     cfg_default = config_mod.resolve(str(tmp_path / "config.json"))
-    assert cfg_default.family_registry_path == \
-        config_mod.DEFAULTS["family_registry_path"]
+    assert cfg_default.familie_origin_url == \
+        config_mod.DEFAULTS["familie_origin_url"]
 
 
 # ============================================================
@@ -96,7 +101,7 @@ def test_FAA_12_task_is_registered_in_catalog(tmp_path):
     faa_sessions = {}
     catalog = build_catalog(
         FakeTelegram(), "/instanz/rootCA.pem",
-        family_registry_path=_empty_registry(tmp_path),
+        familie_origin_url="http://127.0.0.1:5010",
         faa_sessions=faa_sessions,
         family_group_chat_id_getter=lambda: "-100")
     defs = {d.name: d for d in catalog.task_defs()}
@@ -120,12 +125,13 @@ def test_FAA_12_legacy_build_catalog_signature_still_works():
 #  FAA-12 — Task ist schreibend (EC-10) und hat einen Vorschlag
 # ============================================================
 
-def test_FAA_12_task_is_a_write_task_with_proposal(tmp_path):
+def test_FAA_12_task_is_a_write_task_with_proposal():
     """FAA-12: die Aufgabe ist `WriteTask` — sie ergänzt die Registry. Der
     Vorschlag ist Pattern-treu (EC-10) und kommt vor dem Konversations-Start."""
     task = FamilieAnlegenTask(
-        FakeTelegram(), _empty_registry(tmp_path),
-        sessions={}, family_group_chat_id_getter=lambda: "-100")
+        FakeTelegram(), "http://test",
+        sessions={}, family_group_chat_id_getter=lambda: "-100",
+        client=FakeFamilieClient())
     assert task.kind == WRITE
     assert task.name == "familie_anlegen"
     proposal = task.propose(
@@ -148,7 +154,7 @@ def _wait_until_session_done(sessions, chat_id, timeout=2.0):
     raise AssertionError("FAA-Session in Chat %s nicht beendet" % chat_id)
 
 
-def test_FAA_12_group_trigger_addresses_callers_private_chat(tmp_path):
+def test_FAA_12_group_trigger_addresses_callers_private_chat():
     """FAA-12 / Privatchat-Adapter: wird die Aufgabe aus dem Familien-Gruppen-
     Chat aufgerufen, läuft die FAA-Anlage im Privatchat des Aufrufers (Chat-ID
     == User-ID), nicht in der Gruppe. Geprüft am Beobachtungs-Punkt: die
@@ -157,52 +163,35 @@ def test_FAA_12_group_trigger_addresses_callers_private_chat(tmp_path):
     tg = FakeTelegram(members=_members(user_id))
     sessions = {}
     task = FamilieAnlegenTask(
-        tg, _empty_registry(tmp_path),
+        tg, "http://test",
         sessions=sessions,
-        family_group_chat_id_getter=lambda: "-100")
-    # Gruppen-Anfrage: chat_id = -100 (Gruppe), private_chat_id = user_id.
+        family_group_chat_id_getter=lambda: "-100",
+        client=FakeFamilieClient())
     receipt = task.execute(
         arguments={}, turn_context=TurnContext(
             chat_id="-100", from_user_id=user_id, private_chat_id=user_id))
     assert "Privatchat" in receipt
-    # Die Session legt sofort die erste Frage im Privatchat ab; die Session
-    # blockiert dann auf next_message — wir liefern „cancel"-Folge, damit sie
-    # schnell endet.
-    # Drei Nachrichten reichen für sofortigen Abbruch im FAA-3-Schritt 1
-    # (Art): wir senden „bitte abbrechen" (kein Art-Match → wiederholt) und
-    # lassen die Queue leerlaufen.
-    session = sessions[user_id]
-    # Eine ungültige Antwort, danach läuft die Session ins Timeout. Für den
-    # Test forcieren wir das Ende per leeren Updates: das Queue.get-Timeout
-    # ist 30 Min — zu lang. Stattdessen schließen wir die Session sauber,
-    # indem wir „erwachsene"/Name/etc. nicht senden — direkter Abbruch durch
-    # Verlust des next_message: wir liefern eine None-äquivalente Nachricht
-    # via Queue per Patching ist heikel. Einfacher: wir nehmen die Session
-    # selbst und stossen ein Ende über die Test-fähige API an.
-    # Pragmatik: wir testen hier nur den Adressat — die erste Bot-Nachricht
-    # ging an den Privatchat des Aufrufers.
     private_sends = [s for s in tg.sent if s["chat_id"] == user_id]
-    # Wir warten bis FAA mindestens eine Nachricht (Art-Frage) geschickt hat.
     deadline = time.monotonic() + 1.0
     while time.monotonic() < deadline and not private_sends:
         time.sleep(0.01)
         private_sends = [s for s in tg.sent if s["chat_id"] == user_id]
     assert private_sends, "FAA hätte die erste Frage im Privatchat senden müssen"
-    # Keine Anlage-Nachricht ging in den Gruppen-Chat.
     group_sends = [s for s in tg.sent if s["chat_id"] == "-100"]
     assert not group_sends
 
 
-def test_FAA_12_existing_session_blocks_a_second_start(tmp_path):
+def test_FAA_12_existing_session_blocks_a_second_start():
     """Eine zweite Anlage-Anfrage, während eine Session schon läuft, wird
     abgewiesen — nicht doppelt gestartet."""
     user_id = 7
     tg = FakeTelegram(members=_members(user_id))
     sessions = {user_id: FaaSession(user_id)}  # Eine Session läuft schon.
     task = FamilieAnlegenTask(
-        tg, _empty_registry(tmp_path),
+        tg, "http://test",
         sessions=sessions,
-        family_group_chat_id_getter=lambda: "-100")
+        family_group_chat_id_getter=lambda: "-100",
+        client=FakeFamilieClient())
     receipt = task.execute(
         arguments={}, turn_context=TurnContext(
             chat_id=user_id, from_user_id=user_id, private_chat_id=user_id))
@@ -265,34 +254,36 @@ def test_FAA_12_session_routes_private_chat_messages_to_faa(tmp_path):
     """End-to-End-Schichtprobe: läuft eine Session, gehen Privatchat-Updates
     dorthin (statt zum Agenten) und FAA legt am Ende eine Person an."""
     user_id = 7
-    reg_path = _empty_registry(tmp_path)
+    client = FakeFamilieClient()
     tg = _DownloadingFakeTelegram(members=_members(user_id))
     sessions = {}
     task = FamilieAnlegenTask(
-        tg, reg_path,
+        tg, "http://test",
         sessions=sessions,
-        family_group_chat_id_getter=lambda: "-100")
+        family_group_chat_id_getter=lambda: "-100",
+        client=client)
 
     # 1) Aufgabe ausführen — Session läuft.
     task.execute(
         arguments={}, turn_context=TurnContext(
             chat_id=user_id, from_user_id=user_id, private_chat_id=user_id))
-    # Warten bis die erste Frage gestellt ist.
     deadline = time.monotonic() + 1.0
     while time.monotonic() < deadline and not tg.sent:
         time.sleep(0.01)
     assert tg.sent, "FAA hätte die erste Frage stellen müssen"
 
-    # 2) Context vorbereiten und die Anlage-Antworten über handle_update
-    #    durchreichen — das ist der Live-Pfad.
+    # 2) Context vorbereiten — den `client` halten wir manuell, damit der
+    #    Routing-Test denselben Client trifft.
+    catalog = build_catalog(
+        tg, "/instanz/rootCA.pem",
+        familie_origin_url="http://test",
+        faa_sessions=sessions,
+        family_group_chat_id_getter=lambda: "-100")
+    catalog._tasks["familie_anlegen"] = task
     ctx = Context(
         tg=tg, bot_username="mybot", family_group_chat_id="-100",
         context_depth=20, provider=FakeProvider([]),
-        catalog=build_catalog(
-            tg, "/instanz/rootCA.pem",
-            family_registry_path=reg_path,
-            faa_sessions=sessions,
-            family_group_chat_id_getter=lambda: "-100"),
+        catalog=catalog,
         history=History(str(tmp_path / "h.db")),
         pending=PendingStore(),
         faa_sessions=sessions)
@@ -306,40 +297,61 @@ def test_FAA_12_session_routes_private_chat_messages_to_faa(tmp_path):
             ctx)
 
     _wait_until_session_done(sessions, user_id, timeout=2.0)
-    data = json.loads(open(reg_path).read())
-    assert [p["id"] for p in data["erwachsene"]] == ["niclas"]
+    assert len(client.anlage_calls) == 1
+    assert client.anlage_calls[0]["name"] == "Niclas"
 
 
-def test_FAA_12_non_member_caller_is_rejected_by_faa(tmp_path):
+def test_FAA_12_non_member_caller_is_rejected_by_faa():
     """FAA-2 wird von der Funktion selbst geprüft, nicht von der Aufgabe —
     so bleibt die Funktion trigger-agnostisch (E-FAA-1). Ein Nicht-Mitglied
-    bekommt die Ablehnung, die Registry bleibt unverändert."""
-    reg_path = _empty_registry(tmp_path)
+    bekommt die Ablehnung, kein Schreib-Aufruf an FAM-12."""
+    client = FakeFamilieClient()
     # `members` ist leer — niemand ist Mitglied. Der Aufrufer ist nicht
     # berechtigt; die FAA-Funktion wird das im Hintergrund-Thread feststellen.
     tg = FakeTelegram(members={})
     sessions = {}
     task = FamilieAnlegenTask(
-        tg, reg_path, sessions=sessions,
-        family_group_chat_id_getter=lambda: "-100")
+        tg, "http://test", sessions=sessions,
+        family_group_chat_id_getter=lambda: "-100",
+        client=client)
     task.execute(
         arguments={}, turn_context=TurnContext(
             chat_id=9, from_user_id=9, private_chat_id=9))
     _wait_until_session_done(sessions, 9, timeout=2.0)
-    # familie.json bleibt unverändert.
-    data = json.loads(open(reg_path).read())
-    assert data == {"erwachsene": [], "kinder": []}
+    # Kein POST gegangen.
+    assert client.anlage_calls == []
     # Die Funktion hat die NOT_AUTHORIZED-Nachricht in den Privatchat des
     # Aufrufers gesendet.
     assert any(familie_anlegen.NOT_AUTHORIZED in s["text"]
                for s in tg.sent if s["chat_id"] == 9)
 
 
+def test_FAA_12_unreachable_server_yields_clear_bot_message_no_stack():
+    """Auftrag #215: Familie unreachable → klare Bot-Nachricht in den
+    Privatchat, kein Stack-Trace nach oben (DCOMP-1-Erreichbarkeit)."""
+    client = FakeFamilieClient(
+        alle_error=FamilieClientError("Service nicht erreichbar"))
+    user_id = 7
+    tg = FakeTelegram(members=_members(user_id))
+    sessions = {}
+    task = FamilieAnlegenTask(
+        tg, "http://test", sessions=sessions,
+        family_group_chat_id_getter=lambda: "-100",
+        client=client)
+    task.execute(
+        arguments={}, turn_context=TurnContext(
+            chat_id=user_id, from_user_id=user_id, private_chat_id=user_id))
+    _wait_until_session_done(sessions, user_id, timeout=2.0)
+    # Die Skill hat die WRITE_FAILED-Nachricht in den Privatchat geschickt.
+    assert any(familie_anlegen.WRITE_FAILED in s["text"]
+               for s in tg.sent if s["chat_id"] == user_id)
+
+
 # ============================================================
 #  Refs #157 — Quittung haengt am Aufruf-Chat
 # ============================================================
 
-def test_FAA_157_group_trigger_returns_switch_receipt(tmp_path):
+def test_FAA_157_group_trigger_returns_switch_receipt():
     """Refs #157: Wird die Aufgabe aus dem Familien-Chat aufgerufen
     (chat_id != private_chat_id), enthaelt die Quittung den Wechsel-Hinweis
     auf den Privatchat — heute schon Verhalten, hier explizit fixiert."""
@@ -347,16 +359,17 @@ def test_FAA_157_group_trigger_returns_switch_receipt(tmp_path):
     tg = FakeTelegram(members=_members(user_id))
     sessions = {}
     task = FamilieAnlegenTask(
-        tg, _empty_registry(tmp_path),
+        tg, "http://test",
         sessions=sessions,
-        family_group_chat_id_getter=lambda: "-100")
+        family_group_chat_id_getter=lambda: "-100",
+        client=FakeFamilieClient())
     receipt = task.execute(
         arguments={}, turn_context=TurnContext(
             chat_id="-100", from_user_id=user_id, private_chat_id=user_id))
     assert "Privatchat" in receipt
 
 
-def test_FAA_157_private_trigger_omits_switch_receipt(tmp_path):
+def test_FAA_157_private_trigger_omits_switch_receipt():
     """Refs #157: Wird die Aufgabe IM Privatchat des Aufrufers aufgerufen
     (chat_id == private_chat_id), unterdrueckt die Quittung den Wechsel-
     Hinweis — der Aufrufer ist schon im Privatchat. Stattdessen kommt die
@@ -366,9 +379,10 @@ def test_FAA_157_private_trigger_omits_switch_receipt(tmp_path):
     tg = FakeTelegram(members=_members(user_id))
     sessions = {}
     task = FamilieAnlegenTask(
-        tg, _empty_registry(tmp_path),
+        tg, "http://test",
         sessions=sessions,
-        family_group_chat_id_getter=lambda: "-100")
+        family_group_chat_id_getter=lambda: "-100",
+        client=FakeFamilieClient())
     receipt = task.execute(
         arguments={}, turn_context=TurnContext(
             chat_id=user_id, from_user_id=user_id, private_chat_id=user_id))

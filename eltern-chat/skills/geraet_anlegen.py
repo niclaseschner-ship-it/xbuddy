@@ -6,39 +6,53 @@ Refs #106).
 `ca_verteilung.verteile_ca` (E-CAV-1). Aufgerufen, führt sie ein
 Familienmitglied im Privatchat durch die Anlage **eines oder mehrerer**
 Geräte und ergänzt sie nach Bestätigungswort (GAA-3.6, `eltern-chat.md`
-E-EC-7) atomar über die Schreib-Schnittstelle der Geräte-Registry
-(GAA-3.7, `geraete.md` GER-6).
+E-EC-7) atomar über die HTTP-Schreib-Schnittstelle der Geraete-Komponente
+(GAA-3.7, `geraete.md` GER-15).
 
 Die Funktion kennt ihren Aufrufer NICHT. Wer sie aufruft — eine
 EC-8-Aufgabe (GAA-5), ein späterer Geräte-Onboarding-Flow (OPEN-GAA-C)
 oder ein anderer Aufrufer — ist nicht Teil ihres Vertrags. Sie nimmt nur
 die für die Anlage nötigen Dinge entgegen: den Telegram-Kanal, den
 Privatchat (Chat-ID + User-ID), die ID der gebundenen Familien-Gruppe
-(für die Live-Prüfung der Mitgliedschaft, GAA-2 analog EC-2), den Pfad
-zur Registry-Datei und eine `next_message()`-Funktion, über die sie die
-nächste eingehende Privatchat-Nachricht des Aufrufers abholt. Optional
-ein `cav_call_hook` (GAA-6, E-GAA-5) — wenn gesetzt, ruft die Funktion
-ihn nach jeder erfolgreich angelegten Geräte-Anlage auf (bei Bestätigung
-durch den Aufrufer); ohne Hook entfällt der CA-Verteilungs-Schritt
-stillschweigend, damit die Funktion auch ohne CAV-Setup testbar bleibt.
+(für die Live-Prüfung der Mitgliedschaft, GAA-2 analog EC-2), den
+`GeraeteClient` (HTTP-Naht zur Geraete-Komponente, Auftrag #215) und eine
+`next_message()`-Funktion, über die sie die nächste eingehende
+Privatchat-Nachricht des Aufrufers abholt. Optional ein `cav_call_hook`
+(GAA-6, E-GAA-5) — wenn gesetzt, ruft die Funktion ihn nach jeder
+erfolgreich angelegten Geräte-Anlage auf (bei Bestätigung durch den
+Aufrufer); ohne Hook entfällt der CA-Verteilungs-Schritt stillschweigend,
+damit die Funktion auch ohne CAV-Setup testbar bleibt.
+
+Seit Auftrag #215 (`geraete_client.GeraeteClient`) spricht die Skill nur
+noch über HTTP (DCOMP-1): IDENT-1-`display_id` und Validierung leistet
+GER-15 serverseitig.
 """
 
 import logging
-import os
 import re
-import sys
 from dataclasses import dataclass
 
 import authz
 import confirm
 from telegram import TelegramError
 
-# Geräte-Registry — Public-API über das Paket geraete/ (GAA-3.7 / GER-6).
-_ELTERN_CHAT_DIR = os.path.dirname(os.path.abspath(__file__))
-_REPO_ROOT = os.path.dirname(_ELTERN_CHAT_DIR)
-if _REPO_ROOT not in sys.path:
-    sys.path.insert(0, _REPO_ROOT)
-import geraete as geraete_pkg  # noqa: E402
+from skills.geraete_client import GeraeteClientError
+
+
+# ============================================================
+#  Konstanten (GER-2/GER-3 spiegelnde Werte fuer die Konversation)
+# ============================================================
+
+# GER-2: endliche Liste der Geräte-Typen V1. Spiegel von
+# geraete.registry.TYPEN — die Skill spricht ueber HTTP (DCOMP-1) und
+# ueberlaesst die Validierung der Geraete-Komponente; die Liste ist hier
+# aber gegenwaertig, weil die Konversation die Eingabe direkt prueft.
+TYPEN = ("tablet", "handy", "monitor", "pi-display")
+
+# GER-3: zulaessige `os`-Werte fuer V1 (ohne `unbekannt` — V1 fragt nach
+# einem konkreten OS, siehe GAA-3.4). Spiegel von
+# geraete.registry.OS_WERTE minus `unbekannt`.
+OS_WERTE_V1 = ("android", "ios", "windows", "macos", "linux")
 
 
 # ============================================================
@@ -139,7 +153,7 @@ class GeraetAnlegenResult:
 # ============================================================
 
 def geraet_anlegen(tg, chat_id, user_id, family_group_chat_id,
-                   registry_path, next_message,
+                   client, next_message,
                    cav_call_hook=None, display_url_origin=None):
     """Legt ein oder mehrere Geräte an (GAA-1).
 
@@ -148,7 +162,8 @@ def geraet_anlegen(tg, chat_id, user_id, family_group_chat_id,
     `chat_id`               — Privatchat des Aufrufers (GAA-3).
     `user_id`               — Telegram-User-ID des Aufrufers (GAA-2).
     `family_group_chat_id`  — ID der gebundenen Familien-Gruppe (GAA-2).
-    `registry_path`         — Pfad zur geraete.json (Schreiben über GER-6).
+    `client`                — `GeraeteClient` (HTTP-Naht, DCOMP-1). Wird
+                              fuer die Anlage (GER-15) verwendet.
     `next_message`          — Callable, das die nächste eingehende
                               Privatchat-Nachricht des Aufrufers liefert
                               (GaaInput). Liefert `None`, gilt die Anlage als
@@ -168,7 +183,7 @@ def geraet_anlegen(tg, chat_id, user_id, family_group_chat_id,
                               an seinen Origin hängen.
 
     Liefert ein `GeraetAnlegenResult`. Schreibt ausschließlich über die
-    Registry-Schreib-Schnittstelle (GAA-3.7, GER-6).
+    HTTP-Schreib-Schnittstelle der Geraete-Komponente (GAA-3.7, GER-15).
     """
     # GAA-2: Berechtigung live über die Familien-Gruppen-Mitgliedschaft.
     if not authz.is_authorized(tg, family_group_chat_id, user_id):
@@ -180,8 +195,7 @@ def geraet_anlegen(tg, chat_id, user_id, family_group_chat_id,
     vergebene = []
 
     while True:
-        outcome = _ein_geraet_anlegen(
-            tg, chat_id, registry_path, next_message)
+        outcome = _ein_geraet_anlegen(tg, chat_id, client, next_message)
         if outcome.display_id is not None:
             vergebene.append(outcome.display_id)
             _antworte_display_url(tg, chat_id, outcome.display_id,
@@ -219,7 +233,7 @@ class _Outcome:
     """Ausgang eines Einzel-Geräte-Versuchs.
 
     `display_id`/`os_wert` gesetzt → Erfolg (GAA-3.7).
-    `display_id` None und `should_loop` True → Disk-Schreibfehler (GAA-7
+    `display_id` None und `should_loop` True → Server-Schreibfehler (GAA-7
       letzter Punkt) — Schleife (GAA-4) fragt trotzdem „noch ein Gerät?".
     `display_id` None und `should_loop` False → Konversations-Abbruch
       (GAA-3.6 ohne Bestätigung oder Eingabe-Strom zu Ende) — die Funktion
@@ -230,20 +244,8 @@ class _Outcome:
     should_loop: bool = False
 
 
-def _ein_geraet_anlegen(tg, chat_id, registry_path, next_message):
+def _ein_geraet_anlegen(tg, chat_id, client, next_message):
     """Legt EIN Gerät an. Liefert ein `_Outcome`."""
-    # Bei jedem Geräte-Start die Registry frisch lesen — sonst sehen wir das
-    # in derselben Schleife frisch angelegte Gerät nicht für die laufende
-    # `display_id`-Vergabe (GER-7) oder Schreib-Konflikte.
-    try:
-        registry = geraete_pkg.load(registry_path)
-    except geraete_pkg.RegistryError as e:
-        # Registry-Datei selbst ist kaputt — kein guter Ausgangspunkt für
-        # weitere Anlagen. Schleife nicht fortsetzen.
-        logging.warning("geraet_anlegen: Registry-Datei nicht lesbar: %s", e)
-        _send(tg, chat_id, WRITE_FAILED)
-        return _Outcome(should_loop=False)
-
     # GAA-3.1: Typ.
     typ = _frage_typ(tg, chat_id, next_message)
     if typ is None:
@@ -279,30 +281,24 @@ def _ein_geraet_anlegen(tg, chat_id, registry_path, next_message):
         _send(tg, chat_id, CANCELLED)
         return _Outcome(should_loop=False)
 
-    # GAA-3.7: kollisionsfreie `display_id` (GER-7) + atomares Schreiben
-    # ausschließlich über die Registry-Schreib-Schnittstelle (GER-6).
+    # GAA-3.7: Anlage über GER-15. Server vergibt die IDENT-1-`display_id`
+    # (`<typ>-<slug>-<nn>`) und prueft die Werte ein zweites Mal.
     try:
-        display_id = geraete_pkg.neue_id(registry, typ, name)
-    except (geraete_pkg.RegistryError, ValueError) as e:
-        # Disk-/Schema-Fehler bei der ID-Vergabe — gemäß GAA-7 letzter Punkt
-        # ist das ein Disk-Schreibfehler-äquivalenter Misserfolg: die Schleife
-        # darf weitergehen.
-        logging.warning("geraet_anlegen: id-Vergabe abgelehnt: %s", e)
+        angelegt = client.geraet_anlegen(
+            typ=typ, name=name, aufloesung=aufloesung,
+            os_wert=os_wert, verwendung=verwendung, status=_STATUS_V1)
+    except GeraeteClientError as e:
+        # GAA-7 letzter Punkt: Schreibfehler — Misserfolg signalisieren,
+        # nichts in geraete.json mutieren (atomar serverseitig), aber die
+        # Schleife (GAA-4) fragt trotzdem „noch ein Gerät?".
+        logging.warning("geraet_anlegen: Anlage fehlgeschlagen: %s", e)
         _send(tg, chat_id, WRITE_FAILED)
         return _Outcome(should_loop=True)
 
-    geraet = geraete_pkg.Geraet(
-        id=display_id, typ=typ, name=name,
-        aufloesung=aufloesung, os=os_wert,
-        verwendung=verwendung, status=_STATUS_V1)
-    registry.add(geraet)
-    try:
-        geraete_pkg.save(registry, registry_path)
-    except geraete_pkg.RegistryError as e:
-        # GAA-7 letzter Punkt: Disk-Schreibfehler — Misserfolg signalisieren,
-        # nichts in geraete.json mutieren (save ist atomar, GER-6), aber
-        # die Schleife (GAA-4) fragt trotzdem „noch ein Gerät?".
-        logging.warning("geraet_anlegen: Schreiben fehlgeschlagen: %s", e)
+    display_id = angelegt.get("id")
+    if not display_id:
+        logging.warning(
+            "geraet_anlegen: GER-15-Antwort ohne id: %r", angelegt)
         _send(tg, chat_id, WRITE_FAILED)
         return _Outcome(should_loop=True)
 
@@ -321,7 +317,7 @@ def _frage_typ(tg, chat_id, next_message):
         if msg is None:
             return None
         text = (msg.text or "").strip().lower()
-        if text in geraete_pkg.TYPEN:
+        if text in TYPEN:
             return text
         _send(tg, chat_id, REJECT_TYP)
 
@@ -362,15 +358,13 @@ def _frage_os(tg, chat_id, next_message):
     `unbekannt` aus GER-3 ist V1 kein Konversations-Ergebnis (GAA-3.4) —
     wir akzeptieren nur die fünf bekannten Werte.
     """
-    # OS_WERTE aus der Registry enthält auch `unbekannt`; wir filtern ihn raus.
-    erlaubt = tuple(w for w in geraete_pkg.OS_WERTE if w != "unbekannt")
     while True:
         _send(tg, chat_id, ASK_OS)
         msg = next_message()
         if msg is None:
             return None
         text = (msg.text or "").strip().lower()
-        if text in erlaubt:
+        if text in OS_WERTE_V1:
             return text
         _send(tg, chat_id, REJECT_OS)
 

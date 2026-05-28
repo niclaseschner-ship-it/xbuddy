@@ -313,14 +313,12 @@ Anbieter-API-Key auf beiden Wegen, läuft die Instanz im Onboarding-Modus
 (ONB-1). Geheimnisse liegen nie in einer Datei im Repo (CLAUDE.md §8).
 
 Die nicht-geheimen Werte leben in der Per-Instanz-Datei
-`eltern-chat/config.json` (gitignored). Sie folgt der Konfigurations-
-Konvention CONFIG-1/CONFIG-2: jeder Wert hat einen Default und einen
-Datei-Schlüssel, und der gemeinsame `tools/configloader.py` (#179) lädt
-die Datei nach der CONFIG-1-Form (Datei < ENV (`ELTERNCHAT_<KEY>`) <
-Default). Geheimnisse (Bot-Token, Anbieter-API-Key) und das Sperr-
+`eltern-chat/config.json` (gitignored). Auflösung, Datei-Schlüssel, ENV-
+Form und Priorität folgen der gemeinsamen Konvention CONFIG-5 (siehe
+`conventions/config.md`); diese Tabelle nennt nur die Werte selbst
+mit Default. Geheimnisse (Bot-Token, Anbieter-API-Key) und das Sperr-
 Verhalten der Familien-Gruppe (ENV/Datei sperren, Onboarding-Bindung
-nicht — ONB-6) liegen daneben — der Loader rührt Geheimnisse nicht an
-(CONFIG-3).
+nicht — ONB-6) sind Komponenten-spezifisch und liegen daneben.
 
 | Name                       | Default                                     | Datei-Schlüssel         | Gesetzt durch (Onboarding-Schritt)             |
 |----------------------------|---------------------------------------------|-------------------------|------------------------------------------------|
@@ -331,8 +329,9 @@ nicht — ONB-6) liegen daneben — der Loader rührt Geheimnisse nicht an
 | Anbieter-Modell            | leer (→ Anbieter-Default)                   | `provider_model`        | n/a (Default reicht)                           |
 | Gesprächskontext-Tiefe     | `20`                                        | `context_depth`         | n/a (Default reicht)                           |
 | CA-Pfad                    | `../tools/ca/out/rootCA.pem`                | `ca_pem_path`           | n/a (Default reicht beim Standard-Layout)      |
-| Familien-Registry-Pfad     | `../familie/familie.json`                   | `family_registry_path`  | n/a (Default reicht beim Standard-Layout)      |
-| Geräte-Registry-Pfad       | `../geraete/geraete.json`                   | `geraete_registry_path` | n/a (Default reicht beim Standard-Layout)      |
+| Familien-Origin (FAA, #215) | `http://127.0.0.1:5010`                    | `familie_origin_url`    | n/a (Default reicht beim Standard-Layout)      |
+| Geraete-Origin (GAA, #215) | `http://127.0.0.1:5040`                     | `geraete_origin_url`    | n/a (Default reicht beim Standard-Layout)      |
+| Plan-Origin (EC-21, #215)  | `http://127.0.0.1:5020`                     | `plan_origin_url`       | n/a (Default reicht beim Standard-Layout)      |
 | Display-URL-Origin (GAA-3.7) | leer (Bot gibt nur `/display/<id>` aus)   | `display_url_origin`    | — (offen, OPEN-EC-Origin)                      |
 | Plan-JSON-Pfad             | `../plan/plan.json`                         | `plan_json_path`        | n/a (Default reicht beim Standard-Layout)      |
 | Log-Level (LOG-1/LOG-4)    | `INFO`                                      | `log_level`             | n/a (Default reicht; Dev-Override per ENV/CLI) |
@@ -340,16 +339,9 @@ nicht — ONB-6) liegen daneben — der Loader rührt Geheimnisse nicht an
 Werte, die nur als Code-Konstante existieren — ohne Override-Pfad — sind
 Spec-Verletzung (CLAUDE.md §6 Daten vs. Code).
 
-ENV-Variablen (`ELTERNCHAT_PROVIDER`, `ELTERNCHAT_PROVIDER_MODEL`,
-`ELTERNCHAT_CONTEXT_DEPTH`, `ELTERNCHAT_CA_PEM_PATH`,
-`ELTERNCHAT_FAMILY_REGISTRY_PATH`, `ELTERNCHAT_GERAETE_REGISTRY_PATH`,
-`ELTERNCHAT_DISPLAY_URL_ORIGIN`, `ELTERNCHAT_PLAN_JSON_PATH`,
-`ELTERNCHAT_LOG_LEVEL`) sind nach CONFIG-1 Dev-Override, keine
-Familien-Form — und gehören deshalb nicht in diese Tabelle. CLI-Flags
-sind `--config`, `--db`, `--store` als Test-Werkzeug, plus
+CLI-Flags sind `--config`, `--db`, `--store` als Test-Werkzeug, plus
 `--log-level` als Dev-Override für LOG-4 (gleiches Vehikel wie bei
-Router/Plan, vgl. `conventions/logging.md`). Priorität bleibt
-**CLI > ENV > config.json > Defaults**.
+Router/Plan, vgl. `conventions/logging.md`).
 
 Bot-Token (`ELTERNCHAT_BOT_TOKEN`) und Anbieter-API-Key
 (`ELTERNCHAT_PROVIDER_API_KEY`, optional) sind Geheimnisse und stehen
@@ -358,7 +350,14 @@ in `config.json` — der Loader berührt sie nie (CONFIG-3). Die Familien-
 Gruppen-Chat-ID darf in `config.json` stehen (kein Geheimnis) oder im
 Onboarding-Speicher (`onboarding-store.json`, ONB-6).
 
-*Tickets:* #27 · #33 · #179
+Auftrag #215 hat den FAA-/GAA-Schreibweg auf HTTP umgestellt (DCOMP-1):
+statt eines `family_registry_path`/`geraete_registry_path` (Datei-Pfade)
+zeigen `familie_origin_url`/`geraete_origin_url` heute auf die HTTP-API
+der Familien-/Geraete-Komponente. Der `plan_json_path` bleibt für den
+KAV-Auswahl-Schritt erhalten (V1-Provisorium gegen die FS-Linie, #140) —
+HTTP-Migration ist ein eigenes Folge-Ticket.
+
+*Tickets:* #27 · #33 · #179 · #215
 
 ### EC-16 — Gesprächs-Datenbank als Per-Instanz-Datei
 Der dauerhafte Gesprächsverlauf (EC-6) liegt als Datei neben dem Code, je
