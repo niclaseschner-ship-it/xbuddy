@@ -624,6 +624,12 @@ DEFAULT_CONTROLLER_DIR = os.path.normpath(os.path.join(
 DEFAULT_APP_PANEL_DIR = os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), '..', 'controller', 'app-panel'))
 
+# ROU-23: controller/_shared/ liefert PWA-übergreifende Helper (z.B. config.js,
+# `conventions/controller-pwa.md` PWA-4 Implementierungs-Naht). Wird von
+# /controller/_shared/<asset> ausgeliefert, parallel zu /controller/<app>/.
+DEFAULT_CONTROLLER_SHARED_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), '..', 'controller', '_shared'))
+
 # Explizites Content-Type-Mapping. Browser entscheiden anhand des Headers,
 # nicht anhand der Endung — ein .json mit text/html würde das Manifest
 # verwerfen, ein .js mit text/plain die SW-Registrierung scheitern lassen.
@@ -658,6 +664,28 @@ def _send_controller_asset(rel_path):
     ext = os.path.splitext(target)[1].lower()
     mime = _CONTROLLER_MIME.get(ext, 'application/octet-stream')
     return send_from_directory(root, rel_path, mimetype=mime)
+
+
+def _send_shared_asset(rel_path):
+    # ROU-23: PWA-übergreifender Helper-Pfad (controller/_shared/), parallel
+    # zur App-spezifischen controller/<app>/. Defense in Depth analog
+    # _send_controller_asset.
+    root = os.path.realpath(DEFAULT_CONTROLLER_SHARED_DIR)
+    target = os.path.realpath(os.path.join(root, rel_path))
+    if target != root and not target.startswith(root + os.sep):
+        abort(404)
+    if not os.path.isfile(target):
+        abort(404)
+    ext = os.path.splitext(target)[1].lower()
+    mime = _CONTROLLER_MIME.get(ext, 'application/octet-stream')
+    return send_from_directory(root, rel_path, mimetype=mime)
+
+
+@app.route('/controller/_shared/<path:asset>', methods=['GET'])
+def controller_shared_asset(asset):
+    # ROU-23: /controller/_shared/<asset> aus controller/_shared/.
+    # conventions/controller-pwa.md PWA-4-Implementierungs-Naht.
+    return _send_shared_asset(asset)
 
 
 @app.route('/controller/<app>/', methods=['GET'])
