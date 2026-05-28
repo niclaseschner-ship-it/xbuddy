@@ -739,9 +739,203 @@ def test_FAM_10_every_requirement_has_a_test():
     """FAM-10: jede Anforderung mit Code-Verhalten hat einen Test.
     Dieser Test belegt die Abdeckung anhand der Test-Namen dieses Moduls."""
     quelle = io.open(os.path.abspath(__file__), encoding="utf-8").read()
-    # FAM-1 .. FAM-9 + FAM-11 haben Code-Verhalten; FAM-10 ist dieser Test.
-    for fam in list(range(1, 10)) + [11]:
+    # FAM-1 .. FAM-9 + FAM-11 + FAM-12 + FAM-13 haben Code-Verhalten;
+    # FAM-10 ist dieser Test.
+    for fam in list(range(1, 10)) + [11, 12, 13]:
         assert "def test_FAM_%d_" % fam in quelle, "FAM-%d ungetestet" % fam
+
+
+# ============================================================
+#  FAM-12 — Schreib-HTTP-Endpunkt: Person anlegen
+# ============================================================
+
+@pytest.fixture
+def write_client(demo_instanz):
+    """Flask-Testclient im Schreib-Modus: `registry_path` ist gesetzt, damit
+    die POST-Endpunkte auf Disk schreiben (FAM-12/FAM-13)."""
+    reg = registry_mod.load(demo_instanz["registry"])
+    familie_main.configure(
+        reg, demo_instanz["fotos"], registry_path=demo_instanz["registry"])
+    familie_main.app.testing = True
+    return familie_main.app.test_client(), demo_instanz
+
+
+def test_FAM_12_post_with_valid_name_returns_200_with_ident1_id(write_client):
+    """POST `{name: ...}` → 200 + JSON mit IDENT-1-`id` `person-<slug>-<nn>`."""
+    client, _ = write_client
+    r = client.post("/api/v1/familie/personen", json={"name": "Mira Müller"})
+    assert r.status_code == 200
+    body = r.get_json()
+    # IDENT-1-Form: typ-slug-nn; Slug aus Namen mit Umlaut-Auflösung.
+    assert body["id"] == "person-mira-mueller-01"
+    assert body["name"] == "Mira Müller"
+    assert body["art"] == registry_mod.KIND_ERWACHSENE  # Default
+    assert body["ring"] in registry_mod.RING_PALETTE
+
+
+def test_FAM_12_post_without_name_returns_400_with_json_error(write_client):
+    """POST ohne `name` → 400 mit JSON-Fehler, kein 500/Stack-Trace."""
+    client, instanz = write_client
+    vorher = open(instanz["registry"]).read()
+    r = client.post("/api/v1/familie/personen", json={})
+    assert r.status_code == 400
+    assert "error" in r.get_json()
+    # Registry unverändert.
+    assert open(instanz["registry"]).read() == vorher
+
+
+def test_FAM_12_post_empty_name_returns_400(write_client):
+    """`name: ""` → 400 (FAM-3 verlangt nicht-leer)."""
+    client, _ = write_client
+    r = client.post("/api/v1/familie/personen", json={"name": "   "})
+    assert r.status_code == 400
+    assert "error" in r.get_json()
+
+
+def test_FAM_12_post_child_with_email_returns_400(write_client):
+    """Kind mit `email` → 400 (FAM-3: Kinder tragen keine E-Mail)."""
+    client, _ = write_client
+    r = client.post("/api/v1/familie/personen", json={
+        "name": "Liam", "art": "kinder", "email": "k@example.org"})
+    assert r.status_code == 400
+    assert "error" in r.get_json()
+
+
+def test_FAM_12_post_ring_outside_palette_returns_400(write_client):
+    """Ring außerhalb der Palette → 400 (FAM-4)."""
+    client, _ = write_client
+    r = client.post("/api/v1/familie/personen", json={
+        "name": "Liam", "ring": "magenta"})
+    assert r.status_code == 400
+
+
+def test_FAM_12_post_duplicate_telegram_id_returns_400(write_client):
+    """Bereits vergebene `telegram_id` → 400 (FAA-10/FAM-3 — eine ID,
+    eine Person)."""
+    client, _ = write_client
+    # emil hat telegram_id 100000001 in DEMO_REGISTRY.
+    r = client.post("/api/v1/familie/personen", json={
+        "name": "Doppelt", "telegram_id": 100000001})
+    assert r.status_code == 400
+
+
+def test_FAM_12_post_slug_collision_increments_nn(write_client):
+    """Zweimal denselben Namen anlegen → `-01`, `-02` (FAM-12 IDENT-1)."""
+    client, _ = write_client
+    r1 = client.post("/api/v1/familie/personen", json={"name": "Mira"})
+    r2 = client.post("/api/v1/familie/personen", json={"name": "Mira"})
+    assert r1.get_json()["id"] == "person-mira-01"
+    assert r2.get_json()["id"] == "person-mira-02"
+
+
+def test_FAM_12_post_persists_atomically_to_registry(write_client):
+    """Nach POST steht die Person in `familie.json` und ist über `GET` lesbar."""
+    client, instanz = write_client
+    r = client.post("/api/v1/familie/personen", json={"name": "Mira"})
+    assert r.status_code == 200
+    neue_id = r.get_json()["id"]
+    # Datei direkt prüfen — Persistenz auf Disk (FAM-11/DCOMP-4).
+    daten = json.loads(open(instanz["registry"]).read())
+    assert any(p["id"] == neue_id for p in daten["erwachsene"])
+    # Bestand byte-konsistent (DEMO drei Personen + neue → vier).
+    r_get = client.get("/api/v1/familie/personen")
+    ids = {p["id"] for p in r_get.get_json()}
+    assert {"emil", "petra", "mia", neue_id} == ids
+
+
+def test_FAM_12_parallel_posts_yield_two_distinct_ids(write_client):
+    """Parallele POSTs (verschiedene Threads) führen zu zwei verschiedenen
+    `id`s — der `_write_lock` verhindert verlorengehende Updates."""
+    import threading as _th
+    client, instanz = write_client
+    ergebnisse = []
+    barrier = _th.Barrier(2)
+
+    def post_einmal(name):
+        barrier.wait()
+        r = client.post("/api/v1/familie/personen", json={"name": name})
+        ergebnisse.append(r.get_json()["id"])
+
+    t1 = _th.Thread(target=post_einmal, args=("Lina",))
+    t2 = _th.Thread(target=post_einmal, args=("Lina",))
+    t1.start(); t2.start()
+    t1.join(); t2.join()
+    assert len(ergebnisse) == 2
+    assert ergebnisse[0] != ergebnisse[1]
+    # Beide Einträge stehen in der Registry — kein Lost Update.
+    daten = json.loads(open(instanz["registry"]).read())
+    alle_ids = {p["id"] for p in daten["erwachsene"]}
+    assert ergebnisse[0] in alle_ids
+    assert ergebnisse[1] in alle_ids
+
+
+# ============================================================
+#  FAM-13 — Schreib-HTTP-Endpunkt: Profilfoto setzen
+# ============================================================
+
+def test_FAM_13_post_foto_writes_file_and_sets_foto_field(write_client):
+    """POST `<id>/foto` mit Multipart-Foto → Datei im `<id>/`-Unterordner,
+    `foto`-Feld der Person zeigt darauf."""
+    client, instanz = write_client
+    # Erst eine Person anlegen, dann Foto setzen.
+    r1 = client.post("/api/v1/familie/personen", json={"name": "Avi"})
+    pid = r1.get_json()["id"]
+    daten = _png_bytes()
+    r2 = client.post(
+        "/api/v1/familie/personen/%s/foto" % pid,
+        data={"foto": (io.BytesIO(daten), "avatar.png")},
+        content_type="multipart/form-data")
+    assert r2.status_code == 200
+    body = r2.get_json()
+    assert body["id"] == pid
+    assert body["foto_pfad"] == "%s/avatar.png" % pid
+    # Datei liegt unter `<foto_verzeichnis>/<id>/avatar.png`.
+    foto_disk = os.path.join(instanz["fotos"], pid, "avatar.png")
+    assert os.path.isfile(foto_disk)
+    assert open(foto_disk, "rb").read() == daten
+    # `foto`-Feld der Person zeigt darauf (FAM-13 letzter Satz).
+    reg = registry_mod.load(instanz["registry"])
+    assert reg.get(pid).foto == "%s/avatar.png" % pid
+
+
+def test_FAM_13_post_foto_unknown_id_returns_404(write_client):
+    """Unbekannte `id` → 404 mit JSON-Fehler (FAM-7-Form)."""
+    client, _ = write_client
+    r = client.post(
+        "/api/v1/familie/personen/niemand/foto",
+        data={"foto": (io.BytesIO(_png_bytes()), "x.png")},
+        content_type="multipart/form-data")
+    assert r.status_code == 404
+    assert "error" in r.get_json()
+
+
+def test_FAM_13_post_foto_without_file_returns_400(write_client):
+    """Fehlt das Multipart-Feld, ist die Eingabe ungültig → 400."""
+    client, _ = write_client
+    # Person anlegen, dann ohne Datei posten.
+    r1 = client.post("/api/v1/familie/personen", json={"name": "Avi"})
+    pid = r1.get_json()["id"]
+    r2 = client.post("/api/v1/familie/personen/%s/foto" % pid,
+                     data={}, content_type="multipart/form-data")
+    assert r2.status_code == 400
+    assert "error" in r2.get_json()
+
+
+def test_FAM_13_foto_endpoint_serves_new_layout(write_client):
+    """Foto via POST geschrieben → GET /api/v1/familie/foto/<id> liefert
+    das Bild (foto_pfad-Format `<id>/<dateiname>` wird vom Reader erkannt)."""
+    client, instanz = write_client
+    r1 = client.post("/api/v1/familie/personen", json={"name": "Avi"})
+    pid = r1.get_json()["id"]
+    daten = _png_bytes()
+    client.post(
+        "/api/v1/familie/personen/%s/foto" % pid,
+        data={"foto": (io.BytesIO(daten), "avatar.png")},
+        content_type="multipart/form-data")
+    # Disk-Reload-Sicht — der GET-Endpunkt löst über `registry_path` neu.
+    r = client.get("/api/v1/familie/foto/%s" % pid)
+    assert r.status_code == 200
+    assert r.data == daten
 
 
 # ============================================================

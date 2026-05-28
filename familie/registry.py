@@ -15,6 +15,7 @@ Schnittstelle.
 import json
 import logging
 import os
+import re
 import tempfile
 
 
@@ -324,6 +325,152 @@ def save(registry, path):
         raise RegistryError("familie.json konnte nicht geschrieben werden: %s" % e)
 
 
+# ============================================================
+#  IDENT-1-Slug + Personen-ID-Vergabe (FAM-12)
+# ============================================================
+
+# Umlaut-Auflösung für den Slug-Teil der IDENT-1-Person-ID (FAM-3/FAM-12).
+# Bewusst dieselbe Tabelle wie in `eltern-chat/skills/familie_anlegen.py`
+# (FAA-5) — der Slug-Begriff ist hier konvergent. Wenn FAA später über die
+# HTTP-Schreib-API geht (#213 → L8), entfällt die Doppelung dort von selbst.
+_UMLAUTE = {"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss",
+            "Ä": "ae", "Ö": "oe", "Ü": "ue"}
+
+
+def _slug_aus_name(name):
+    """Personen-Slug nach IDENT-1 — Kleinschreibung, Umlaute aufgelöst,
+    Nicht-Wort-Zeichen zu `-` zusammengezogen, Rand-`-` entfernt.
+
+    Leerer/komplett invalider Name → `person` als Fallback-Slug (die
+    Aufruf-Schicht weist solche Namen ohnehin ab, FAM-12).
+    """
+    s = "".join(_UMLAUTE.get(ch, ch) for ch in name).lower()
+    s = re.sub(r"[^a-z0-9]+", "-", s).strip("-")
+    return s or "person"
+
+
+def naechste_person_id(registry, name):
+    """Vergibt eine freie IDENT-1-Personen-ID `person-<slug>-<nn>` (FAM-12).
+
+    Sucht je Slug die kleinste freie `<nn>` ab `01`. Bestands-IDs aus
+    älterer Vergabe (reiner Slug ohne Typ-Präfix, FAM-3 Bestandsklausel)
+    werden mitberücksichtigt: ist `<slug>` selbst belegt oder taucht
+    `person-<slug>-NN` schon auf, wird die nächste Zahl genommen. Reine
+    Funktion ohne Disk-Zugriff — der Aufrufer reicht die aktuell geladene
+    Registry herein.
+    """
+    slug = _slug_aus_name(name)
+    belegt = set(p.id for p in registry.alle())
+    n = 1
+    while True:
+        kand = "person-%s-%02d" % (slug, n)
+        if kand not in belegt:
+            return kand
+        n += 1
+
+
+def add_person(registry, name, art=KIND_ERWACHSENE, ring=None, foto=None,
+               email=None, telegram_id=None):
+    """Ergänzt eine Person in der Registry und liefert die vergebene `Person`
+    zurück — Schreib-Helper für die HTTP-Schreib-API (FAM-12).
+
+    Validiert nach FAM-3/FAM-4: `name` darf nicht leer sein, `ring` muss
+    in der Palette liegen (Default: erste freie Palette-Farbe, FAM-4),
+    eine `email` an einer Kind-Person ist ein Fehler, eine bereits
+    vergebene `telegram_id` ebenfalls. Schreibt **nicht** auf Disk — der
+    Aufrufer (FAM-12-Endpunkt) speichert anschließend atomar über
+    `save()`/DCOMP-4, sodass Person- und Foto-Anlage in *einer* atomaren
+    Klammer liegen können. Hebt RegistryError bei Validierungsfehlern.
+    """
+    name = (name or "").strip()
+    if not name:
+        raise RegistryError("name darf nicht leer sein (FAM-3)")
+    if art not in (KIND_ERWACHSENE, KIND_KINDER):
+        raise RegistryError(
+            "art muss %r oder %r sein (FAM-2)" % (KIND_ERWACHSENE, KIND_KINDER))
+    if email is not None and art == KIND_KINDER:
+        raise RegistryError("Kinder tragen keine E-Mail (FAM-3)")
+    if ring is None:
+        ring = _naechster_freier_ring(registry)
+    if ring not in RING_PALETTE:
+        raise RegistryError(
+            "Ring %r nicht in der Palette %r (FAM-4)"
+            % (ring, list(RING_PALETTE)))
+    if telegram_id is not None and any(
+            p.telegram_id == telegram_id for p in registry.alle()):
+        raise RegistryError(
+            "telegram_id %r ist bereits vergeben (FAM-3/FAA-10)" % telegram_id)
+
+    person_id = naechste_person_id(registry, name)
+    person = Person(
+        id=person_id, name=name, ring=ring, art=art,
+        foto=foto or None, email=email, telegram_id=telegram_id)
+    registry.add_person(person)
+    return person
+
+
+def _naechster_freier_ring(registry):
+    """Erste freie Palette-Farbe in der FAM-4-Reihenfolge; `gray` bleibt
+    Schluss (FAA-4-Analog für die Schreib-API)."""
+    belegt = set(p.ring for p in registry.alle())
+    for farbe in RING_PALETTE:
+        if farbe == "gray":
+            continue
+        if farbe not in belegt:
+            return farbe
+    return "gray"
+
+
+def setze_foto(registry, foto_verzeichnis, person_id, dateiname, daten):
+    """Schreibt ein Foto-Binär unter `<foto_verzeichnis>/<person_id>/<dateiname>`
+    und setzt das `foto`-Feld der Person — Schreib-Helper für FAM-13.
+
+    Die Foto-Datei landet atomar via Temp + Rename im gleichen Zielverzeichnis
+    (DCOMP-4); zusammen mit dem nachfolgenden `save()` des Aufrufers ist die
+    Sicht eines parallelen Lesers entweder „kein Foto" oder „Foto + foto-Feld
+    gesetzt" — niemals dazwischen.
+
+    Liefert den Foto-Pfad relativ zum `foto_verzeichnis` (z. B.
+    `person-mira-01/avatar.jpg`). Hebt RegistryError, wenn die `id`
+    unbekannt ist oder das Schreiben fehlschlägt; in beiden Fällen wird
+    keine teilweise geschriebene Foto-Datei zurückgelassen.
+    """
+    person = registry.get(person_id)
+    if person is None:
+        raise RegistryError("unbekannte id %r" % person_id)
+    # Dateiname auf den Basisnamen reduzieren (FAM-5: `foto` ist ein
+    # Dateiname, kein Pfad-Anteil), keine Pfad-Traversal-Anteile durchlassen.
+    basename = os.path.basename(dateiname or "")
+    if not basename:
+        raise RegistryError("foto-Dateiname fehlt oder ist leer")
+    ziel_dir = os.path.join(foto_verzeichnis, person_id)
+    try:
+        os.makedirs(ziel_dir, exist_ok=True)
+    except OSError as e:
+        raise RegistryError("Foto-Verzeichnis konnte nicht angelegt werden: %s" % e)
+    ziel = os.path.join(ziel_dir, basename)
+    # Atomar schreiben (DCOMP-4): Temp im selben Verzeichnis + os.replace.
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        prefix=".foto.", suffix=".tmp", dir=ziel_dir)
+    try:
+        with os.fdopen(tmp_fd, "wb") as f:
+            f.write(daten)
+        os.replace(tmp_path, ziel)
+    except OSError as e:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise RegistryError("Foto konnte nicht geschrieben werden: %s" % e)
+    # FAM-13: das `foto`-Feld trägt den Dateinamen, nicht den vollen Pfad —
+    # symmetrisch zu FAM-5/FAM-3. Foto-Auflösung beim Lesen läuft in `main.py`
+    # bei FAM-13-Personen über das `<id>/<dateiname>`-Schema; Bestands-Personen
+    # (FAM-5) liegen flach im Foto-Verzeichnis. `foto_pfad()` kennt beide
+    # Layouts (siehe dort).
+    person.foto = "%s/%s" % (person_id, basename)
+    return person.foto
+
+
 def foto_pfad(registry, foto_verzeichnis, person_id):
     """Pfad zur Profilfoto-Datei einer Person — oder None (FAM-5/FAM-8).
 
@@ -334,8 +481,20 @@ def foto_pfad(registry, foto_verzeichnis, person_id):
     person = registry.get(person_id)
     if person is None or not person.foto:
         return None
-    # FAM-5: `foto` ist ein Dateiname — basename schließt Pfad-Anteile aus.
-    pfad = os.path.join(foto_verzeichnis, os.path.basename(person.foto))
-    if not os.path.isfile(pfad):
+    # FAM-5/FAM-13: das `foto`-Feld trägt entweder einen flachen Dateinamen
+    # (Bestand, FAM-5) oder ein zweistufiges `<id>/<dateiname>` (FAM-13,
+    # Schreib-API). Wir versuchen beide Layouts, in dieser Reihenfolge:
+    #   1. exakt der gespeicherte Wert, gegen das Foto-Verzeichnis aufgelöst,
+    #   2. der flache basename — der Pi-Bestand schreibt das.
+    # Pfad-Traversal schließt der `..`-Check aus.
+    rel = person.foto.lstrip("/")
+    if ".." in rel.split("/"):
         return None
-    return pfad
+    kandidaten = [os.path.join(foto_verzeichnis, rel)]
+    basename = os.path.basename(rel)
+    if basename != rel:
+        kandidaten.append(os.path.join(foto_verzeichnis, basename))
+    for pfad in kandidaten:
+        if os.path.isfile(pfad):
+            return pfad
+    return None
