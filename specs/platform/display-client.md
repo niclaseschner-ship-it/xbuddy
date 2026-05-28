@@ -148,6 +148,12 @@ solange er sichtbar ist — analog dem Controller (FIG-24/FIG-26). Konkret:
   das kein Fehler — der Client läuft weiter, der nächste Tap holt den
   Vollbild erneut (self-healing).
 
+Der Display-Client teilt das Manifest-`display: fullscreen`- und das
+Wake-Lock+Fullscreen-Gesture-Muster aus `conventions/controller-pwa.md`
+PWA-2/PWA-3, kennt aber kein `sw.js` und keine `config.json` (PWA-1 /
+PWA-4) — er ist daher **nicht** durch die Controller-PWA-Konvention
+gedeckt und führt sein reduziertes Pflichten-Set hier eigenständig.
+
 Begründung: Tablet-Browser zeigen sonst URL-Leiste, der Bildschirm geht
 nach ~30 s aus — das Display wirkt nicht wie ein Display.
 

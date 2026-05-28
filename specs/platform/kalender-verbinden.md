@@ -182,12 +182,15 @@ PLAN-16 / ZD-2.
 
 ### KAV-6 — Code-Empfang im Privatchat
 Nach dem Posten des Login-Links wartet die Funktion im selben Privatchat auf
-die nächste eingehende Textnachricht des Aufrufers (Privatchat-Session-Muster
-analog `familie-anlegen.md` FAA-9, siehe E-KAV-2). Die erste eingehende
-Nachricht wird als Träger des Authorization-Codes interpretiert.
+die nächste eingehende Textnachricht des Aufrufers. Die Privatchat-Session
+folgt dem Muster aus `conventions/privatchat-session.md` (SESS-1 Worker-Form,
+SESS-2 Zwischenzustand nur im Speicher, SESS-3 30-Minuten-Timeout → Ergebnis
+„abgebrochen", SESS-4 Re-Prompt bei nicht-passender Eingabe).
 
-Die Funktion akzeptiert zwei Eingabe-Formen — beides ist gleichwertig, weil
-der Loopback-Redirect (KAV-5) genau diese beiden Wege offenlässt:
+Die erste eingehende Nachricht wird als Träger des Authorization-Codes
+interpretiert. Die Funktion akzeptiert zwei Eingabe-Formen — beides ist
+gleichwertig, weil der Loopback-Redirect (KAV-5) genau diese beiden Wege
+offenlässt:
 
 - **Komplette URL** aus der Browser-Adressleiste, etwa
   `http://localhost:1/?code=4/0A…&scope=…`. Erkennungsmerkmal: die Nachricht
@@ -203,21 +206,9 @@ der Loopback-Redirect (KAV-5) genau diese beiden Wege offenlässt:
 
 Mit dem so gewonnenen Code versucht die Funktion den Token-Tausch (KAV-7).
 Sieht die Nachricht weder nach URL mit `code=` noch nach plausiblem Code aus
-(Begrüßung, Frage, Foto, leere Nachricht), antwortet die Funktion mit einer
-freundlichen Erinnerung („bitte die komplette URL aus dem Browser oder nur
-den Code-Wert einfügen") und wartet weiter — analog
-`eltern-chat-onboarding.md` ONB-3 letzter Absatz.
-
-**Timeout: 30 Minuten** ohne passende Antwort beendet die Session und liefert
-das Ergebnis-Signal „abgebrochen" — gleicher Wert wie heute in
-`familie-anlegen.md` FAA-9: eine Onboarding-typische Konversation, die nicht
-ewig blockieren darf.
-
-Zwischenzustand der Session (welcher `state`-Token offen ist, ob der
-Login-Link schon gepostet wurde) liegt **nur im Prozess-Speicher**, analog
-`familie-anlegen.md` FAA-9 (b) und `eltern-chat-onboarding.md` ONB-3. Stürzt
-der Prozess während der Session ab, ist sie verloren und der Aufrufer fängt
-an — kein Wiederaufnahme-Pfad.
+(Begrüßung, Frage, Foto, leere Nachricht), greift SESS-4: die Funktion
+antwortet mit einer freundlichen Erinnerung („bitte die komplette URL aus dem
+Browser oder nur den Code-Wert einfügen") und wartet weiter.
 
 *Tickets:* #57
 
@@ -548,45 +539,21 @@ Architektur bleibt sauber Per-Familie. Die technische Umsetzbarkeit von (c)
 ist durch den Loopback-Trick (KAV-5) gegeben — kein Halt mehr.
 
 ### E-KAV-2 — Session-Muster wiederverwendet, generischer Refactor erst beim dritten Vorkommen
-*Datum:* 2026-05-25
+*Datum:* 2026-05-25 — *Erfüllt durch `conventions/privatchat-session.md`
+(SESS-1..SESS-4).*
 
 Die Funktion verwendet das Privatchat-Session-Muster aus
-`familie-anlegen.md` FAA-9 (Session-Zustand im Speicher, Worker + Queue +
-`next_message`-Callable als Konversations-Mechanik) für den Dialog in KAV-6.
-Die V1-Trigger-Aufhängung folgt der EC-8-Aufgabe-Linie (`familie-anlegen.md`
-FAA-12 / E-FAA-4 als Pattern-Vorbild) — Trigger-Heimat ist die Aufrufer-
-Schicht (`eltern-chat.md` EC-8), nicht diese Funktion.
+`familie-anlegen.md` FAA-9 für den Dialog in KAV-6. Mit dem dritten
+Vorkommen (FAA, KAV, ONB) hat das Muster seine Heimat in der Konvention
+`conventions/privatchat-session.md` (SESS-1 Worker-Form, SESS-2
+Zwischenzustand nur im Speicher, SESS-3 30-Minuten-Timeout, SESS-4
+Re-Prompt) bekommen — KAV-6 verweist seither dorthin, nicht mehr auf
+FAA-9.
 
-Mit „Kalender verbinden" taucht das Privatchat-Session-Muster zum
-**zweiten** Mal als Spec auf — FAA und KAV. CLAUDE.md §6 nennt den Trigger
-für Externalisierung genau so: **„dieselbe Logik zweimal"**. Ein Refactor
-des Session-Musters in einen gemeinsamen Plattform-Baustein ist deshalb
-**das logische Folge-Ticket**, **aber nicht Teil dieses PRs**:
-
-- Ein Refactor jetzt würde diesen PR von einer reinen V1-Funktion zu einem
-  Plattform-Pattern-Refactor aufpumpen (Kleine PRs, CLAUDE.md §6).
-- Eine Verallgemeinerung *vor* dem zweiten konkreten Use-Case wäre
-  Antizipation gewesen; jetzt liegt sie vor, und der Refactor kann auf den
-  beiden echten Use-Cases ruhen statt auf einem spekulativen Modell.
-- Wenn ein **drittes** Privatchat-Session-Muster geschnitten wird, bevor der
-  Refactor läuft, ist das ein klarer Schmerz — bis dahin reicht
-  Kopier-mit-Awareness.
-
-**Verworfen:** den Refactor in diesen PR zu nehmen. CLAUDE.md §6 „nichts auf
-Vorrat" greift zwar nicht (Pattern existiert ja), aber „kleine PRs" und
-„Refactor als eigenes Ticket bei nicht-trivialer Größe" greifen.
-
-Folge-Ticket-Trigger: drittes Vorkommen einer Privatchat-Session-Spec
-(neben FAA und KAV). Hinweis-Stelle: der Implementierungs-PR von KAV soll
-im Code einen Querverweis-Kommentar an die heutige FAA-Session-Klasse
-heften, damit der Trigger sichtbar bleibt.
-
-**Heutige Code-Realisierung** (Stand 2026-05-26, nicht load-bearing für die
-Spec): das FAA-Session-Muster lebt aktuell in `eltern-chat/familie_anlegen_task.py`,
-die Aufgaben-Registrierung in `eltern-chat/tasks.py`. Klassennamen können
-sich beim oben genannten Refactor (drittes Vorkommen) ändern — die Spec
-verlinkt dann weiter über die Spec-Anker (FAA-9, FAA-12), nicht über
-Datei-/Klassen-Namen.
+Die V1-Trigger-Aufhängung folgt weiterhin der EC-8-Aufgabe-Linie
+(`familie-anlegen.md` FAA-12 / E-FAA-4 als Pattern-Vorbild) — Trigger-
+Heimat ist die Aufrufer-Schicht (`eltern-chat.md` EC-8), nicht diese
+Funktion.
 
 ### E-KAV-3 — OAuth-App-Status erbt von `plan.md` E-PLAN-7
 *Datum:* 2026-05-25

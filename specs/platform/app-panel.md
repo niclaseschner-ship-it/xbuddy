@@ -124,8 +124,10 @@ verlangt entweder ein Flag oder das Entfernen der Zeile aus
 Events gehen per HTTP POST an `<router_url>/api/v1/events`, JSON-Body,
 `Content-Type: application/json` — derselbe Eingang wie für die
 Figuren-Erkennung (FIG-9). Der Pfad folgt URL-4 und ist die Gegenseite
-von ROU-3. Retry-Verhalten analog FIG-12: bis zu **3 Wiederholungen**
-mit Backoff 200 ms / 1 s / 5 s, danach Drop, kein Persistenz-Puffer.
+von ROU-3. Retry- und Drop-Verhalten folgt der Event-Transport-
+Konvention `conventions/event-transport.md` (EVT-1 Retry-Backoff,
+EVT-2 Drop nach N Versuchen, kein Persistenz-Puffer) — symmetrisch
+zu FIG-12.
 
 *Tickets:* #58
 
@@ -230,11 +232,10 @@ diese Panel-Instanz steuert (Form `display:<name>` analog der
 `figure:`-Konvention der Figuren-Erkennung). `router_url` ist die
 Origin des Routers (Schema + Host[:Port], **ohne Pfad**, analog FIG-23).
 
-**Priorität & Fehler-Fallback:** Identisch zu FIG-23 / ROU-19. URL-
-Parameter überschreiben `config.json` überschreibt Defaults. Existiert
-die Datei nicht oder ist sie nicht parsebar, fällt die Seite **stumm**
-auf die Defaults zurück und protokolliert `console.warn` — die Seite
-bleibt funktionsfähig. (Decision 4)
+**Priorität & Fehler-Fallback:** Folgen der Konfigurations-Konvention
+`conventions/config.md` (CONFIG-4: fehlende/kaputte Datei → Defaults
++ Warnung, Prozess startet) — analog FIG-23 / ROU-19. URL-Parameter
+überschreiben `config.json` überschreibt Defaults. (Decision 4)
 
 **Selbsttragend:** Datei liegt im Panel-Verzeichnis und wird
 mitausgeliefert. Pro Instanz separat verwaltet — `config.json` ist
@@ -258,22 +259,11 @@ als sichtbarer Fehler.
 ## 5. Kiosk-Absicherung
 
 ### PANEL-10 — Vollbild & Bildschirm wach halten
-Das Panel läuft im Vollbild und hält den Bildschirm wach, solange es
-sichtbar ist — **analog DC-11** (Display-Client). Konkret:
-
-- Das PWA-Manifest deklariert `display: fullscreen`, damit das Panel
-  als installierte App ohne Browser-Chrome startet.
-- Der Code fordert beim Laden `navigator.wakeLock.request('screen')`
-  an und fordert ihn bei jedem `visibilitychange` auf `visible` erneut
-  an — das System gibt den Lock beim Verdecken frei.
-- Beim ersten Nutzer-Gesture (`touchend`/`click`) versucht der Code
-  `requestFullscreen()`. Fehlt die API oder schlägt der Aufruf fehl,
-  ist das kein Fehler — das Panel läuft weiter, der nächste Tap holt
-  den Vollbild erneut (self-healing).
-
-Begründung: Tablet-Browser zeigen sonst URL-Leiste, der Bildschirm
-geht nach ~30 s aus — das Panel wirkt nicht wie eine Familien-App.
-Identisches Problem, identische Lösung wie DC-11.
+Das Panel ist eine Controller-PWA und erfüllt damit die Pflichten aus
+`conventions/controller-pwa.md` (PWA-1 Pflicht-Dateien, PWA-2
+Manifest-Pflichtfelder inkl. `display: fullscreen`, PWA-3 Wake-Lock +
+Fullscreen-API beim ersten User-Gesture, PWA-4 Config-Lade-Konvention)
+— analog DC-11 und FIG-24/FIG-26.
 
 **Hinweis:** **App-Pinning** ist Familien-Onboarding-Aufgabe und kein
 Code-Verhalten — wird in einem entsprechenden Onboarding-Schritt für
@@ -417,12 +407,12 @@ Mindest-Abdeckung:
   Eltern-Chat eingerichtet werden können (analog der Funktions-Spec
   `familie-anlegen.md`), bekommt jede Zeile der PANEL-8-Tabelle einen
   konkreten Schritt-Namen.
-- **OPEN-PANEL-D** — Backoff-Werte des Event-Transports in PANEL-5
-  („200 ms / 1 s / 5 s", 3 Wiederholungen) sind heute Code-Konstanten
-  ohne Override-Pfad — nach CONFIG-2 / CLAUDE.md §6 (Daten vs. Code)
-  eine Spec-Verletzung. Saubere Lösung: eine eigene Tuning-Tabelle
-  (analog FIG-17 oder ROU-15) mit Datei-Schlüsseln in `config.json`.
-  Verhaltens-Änderung — separates Ticket.
+- **OPEN-PANEL-D** — *Erfüllt:* Backoff-Werte des Event-Transports in
+  PANEL-5 leben jetzt in der Event-Transport-Konvention
+  `conventions/event-transport.md` (EVT-1/EVT-2) — eine eigene
+  Tuning-Tabelle in `app-panel.md` ist damit nicht mehr nötig. Ein
+  späterer Override-Pfad (Datei-Schlüssel je Controller) gehört in die
+  Konvention, nicht in diese Spec.
 
 ---
 

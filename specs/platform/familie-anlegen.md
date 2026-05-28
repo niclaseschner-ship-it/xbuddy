@@ -172,7 +172,7 @@ Foto-Verweis ohne Datei oder umgekehrt.
 
 ## 4. Lebenszyklus
 
-### FAA-9 — Mehr-Personen-Schleife; Zwischenzustand nur im Speicher
+### FAA-9 — Mehr-Personen-Schleife; Privatchat-Session
 
 **(a) „Noch jemand?"-Schleife.** Nach erfolgreichem Bestätigen (FAA-7) und
 Schreiben (FAA-8) **einer** Person fragt die Funktion im Privatchat, ob eine
@@ -184,16 +184,13 @@ durchläuft FAA-3..8 in voller Länge — kein gemeinsamer Zustand zwischen
 Personen außer der Tatsache, dass `familie.json` zwischen den Personen jeweils
 um die zuletzt bestätigte Person gewachsen ist (FAA-8 atomar je Person).
 
-**(b) Zwischenzustand nur im Speicher.** Der Zustand der aktuell laufenden
-Personen-Anlage (welche Felder schon erfasst sind, welche Frage als nächstes
-kommt, welches Foto schon heruntergeladen wurde) liegt im Prozess-Speicher und
-**nicht** auf Disk. Stürzt der Prozess ab oder wird er neu gestartet, ist der
-Funktions-Aufruf beendet; die Anlage der aktuell laufenden Person ist verloren,
-und die Funktion wird ihre Schleife (a) nicht fortsetzen — bereits durch FAA-8
-in `familie.json` geschriebene Personen aus diesem oder früheren Aufrufen
-bleiben unberührt. Diese Wahl orientiert sich an `eltern-chat-onboarding.md`
-ONB-3 / `onboarding.py` (Privatchat-Zustand im Speicher, kein
-Wiederaufnahme-Pfad).
+**(b) Privatchat-Session.** Die Konversation folgt dem Session-Muster aus
+`conventions/privatchat-session.md` (SESS-1..SESS-4). Folge für FAA: stürzt
+der Prozess während eines laufenden Aufrufs ab oder wird er neu gestartet,
+ist der Funktions-Aufruf beendet, die Anlage der aktuell laufenden Person
+verloren und die Schleife (a) wird nicht fortgesetzt (SESS-2). Bereits durch
+FAA-8 in `familie.json` geschriebene Personen aus diesem oder früheren
+Aufrufen bleiben unberührt.
 
 *Tickets:* #60
 
