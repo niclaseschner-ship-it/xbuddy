@@ -1,11 +1,18 @@
 # Zugangsdaten-Speicher — Spec     (ID-Präfix: ZD)
 
-> Status: V1 · Refs #37
+> Status: V1 · Refs #37, #211
 
 Der Zugangsdaten-Speicher ist die **eine** Stelle, an der eine XBuddy-Instanz
 ihre Geheimnisse hält — KI-Anbieter-Key, Google-OAuth-Token und was später
 dazukommt. Statt dass jede Komponente ihre eigene Geheimnis-Datei führt, lesen
 und schreiben alle über diesen geteilten Speicher.
+
+**Library-Status (DCOMP-1):** Der Speicher ist eine **Library** — kein eigener
+Prozess, kein Service, kein HTTP-Endpoint (E-ZD-3). Code lebt unter
+`tools/zugangsdaten/`, Konsumenten importieren via
+`from tools.zugangsdaten import …` (analog `tools.configloader`,
+`tools.logsetup`). Persistenter Speicher ist eine gitignored Per-Instanz-Datei
+mit `0600`-Rechten (ZD-3).
 
 **V1-Scope:** Ein zentraler Per-Instanz-Speicher als gitignorierte Datei mit
 Eigentümer-Rechten · benannte Zugangsdaten lesen/schreiben über ein geteiltes

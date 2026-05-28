@@ -1,6 +1,6 @@
 """Tests pro ZD-Requirement (ZD-9). pytest, ohne Netz.
 
-Lauf: python3 -m pytest zugangsdaten/tests/ -v
+Lauf: python3 -m pytest tests/tools/test_zugangsdaten.py -v
 
 Test-Naming wie in router/tests/: test_ZD_<n>_<beschreibung>. Jede
 Anforderung mit Code-Verhalten hat mindestens einen abdeckenden Test.
@@ -13,12 +13,13 @@ import sys
 
 import pytest
 
-# Paket laden — zugangsdaten/ liegt eine Ebene über tests/, das Paket-Verzeichnis
-# selbst zwei Ebenen darüber muss auf sys.path, damit `import zugangsdaten` greift.
+# Repo-Wurzel auf den Importpfad — wir importieren `tools.zugangsdaten` als
+# Bibliothek im `tools/`-Namespace (analog tests/tools/test_configloader.py).
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, _REPO_ROOT)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
-from zugangsdaten import (  # noqa: E402
+from tools.zugangsdaten import (  # noqa: E402
     DEFAULT_STORE_FILE,
     ENV_STORE_FILE,
     FILE_MODE,
@@ -26,7 +27,7 @@ from zugangsdaten import (  # noqa: E402
     is_owner_only,
     resolve_store_path,
 )
-from zugangsdaten import config as zd_config  # noqa: E402
+from tools.zugangsdaten import config as zd_config  # noqa: E402
 
 
 # ============================================================
@@ -198,7 +199,7 @@ def test_ZD_6_value_not_logged_in_plaintext(tmp_path, caplog):
     """Beim Setzen taucht der Wert in keiner Log-Zeile auf (Mindest-Abdeckung ZD-9)."""
     secret = "sk-streng-geheim-9999"
     speicher = Zugangsdaten(tmp_path / "zd.json")
-    with caplog.at_level("DEBUG", logger="zugangsdaten.store"):
+    with caplog.at_level("DEBUG", logger="tools.zugangsdaten.store"):
         speicher.set("ki-anbieter-key", secret)
         speicher.get("ki-anbieter-key")
     all_log = "\n".join(rec.getMessage() for rec in caplog.records)
@@ -220,7 +221,7 @@ def test_ZD_6_unparseable_file_warning_has_no_value(tmp_path, caplog):
     secret_lookalike = "sk-koennte-ein-key-sein"
     path = tmp_path / "kaputt.json"
     path.write_text(secret_lookalike)  # kein JSON, sieht aus wie ein Key
-    with caplog.at_level("WARNING", logger="zugangsdaten.store"):
+    with caplog.at_level("WARNING", logger="tools.zugangsdaten.store"):
         Zugangsdaten(path).get("irgendwas")
     all_log = "\n".join(rec.getMessage() for rec in caplog.records)
     assert secret_lookalike not in all_log
@@ -287,8 +288,8 @@ def test_ZD_8_cli_argument_is_parseable():
 def test_ZD_9_suite_imports_no_network_modules():
     """Die Suite zieht keine Netz-Bibliothek — der Speicher ist rein lokal (E-ZD-3)."""
     # store.py und config.py importieren nichts Netzhaftes.
-    import zugangsdaten.store as store_mod
-    import zugangsdaten.config as config_mod
+    import tools.zugangsdaten.store as store_mod
+    import tools.zugangsdaten.config as config_mod
     for mod in (store_mod, config_mod):
         src = open(mod.__file__, encoding="utf-8").read()
         assert "import socket" not in src

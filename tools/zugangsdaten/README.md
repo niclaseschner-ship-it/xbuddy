@@ -1,17 +1,21 @@
 # Zugangsdaten-Speicher
 
-V1-Implementierung der Spec [`specs/platform/zugangsdaten.md`](../specs/platform/zugangsdaten.md). Refs #37.
+V1-Implementierung der Spec [`specs/platform/zugangsdaten.md`](../../specs/platform/zugangsdaten.md). Refs #37, #211.
 
 Der **eine** Per-Instanz-Speicher für die Geheimnisse einer XBuddy-Instanz —
 KI-Anbieter-Key, Google-OAuth-Token und was später dazukommt. Statt dass jede
 Komponente ihre eigene Geheimnis-Datei führt, lesen und schreiben alle über
-dieses geteilte Modul (ZD-5). Geschwister von [`router/`](../router/) und
-[`eltern-chat/`](../eltern-chat/).
+dieses geteilte Modul (ZD-5).
+
+Library im `tools/`-Genre (DCOMP-1, #211), nicht eine eigene Komponente —
+analog [`tools/configloader.py`](../configloader.py) und
+[`tools/logsetup.py`](../logsetup.py): kein eigener Prozess, kein Service,
+kein HTTP-Endpoint (E-ZD-3).
 
 ## Nutzung
 
 ```python
-from zugangsdaten import Zugangsdaten, resolve_store_path
+from tools.zugangsdaten import Zugangsdaten, resolve_store_path
 
 speicher = Zugangsdaten(resolve_store_path())   # Pfad nach ZD-8 aufgelöst
 
@@ -23,7 +27,7 @@ key = speicher.get("ki-anbieter-key", default="")
 speicher.set("ki-anbieter-key", "sk-...")
 ```
 
-Eine Komponente importiert **nur** aus dem Paket `zugangsdaten`, nie aus
+Eine Komponente importiert **nur** aus dem Paket `tools.zugangsdaten`, nie aus
 internen Pfaden — und greift nie selbst auf die Datei zu (ZD-5, CLAUDE.md §6).
 
 Ob eine Umgebungsvariable Vorrang vor dem Speicher hat, entscheidet die
@@ -51,7 +55,7 @@ bewusst out-of-scope (OPEN-ZD-A, E-ZD-2).
 
 | Wert | Default | Override |
 |---|---|---|
-| Speicher-Datei | `zugangsdaten/zugangsdaten.json` (neben dem Code) | `$XBUDDY_ZUGANGSDATEN_FILE` · CLI `--zugangsdaten-file` |
+| Speicher-Datei | `tools/zugangsdaten/zugangsdaten.json` (neben dem Code) | `$XBUDDY_ZUGANGSDATEN_FILE` · CLI `--zugangsdaten-file` |
 
 Priorität: CLI > Env > Default. Eine Komponente, die den Speicher nutzt, kann
 das Flag über `add_cli_argument(parser)` an ihren eigenen `ArgumentParser`
@@ -68,8 +72,10 @@ hängen.
 ## Tests
 
 ```bash
-python3 -m pytest zugangsdaten/tests/ -v
+python3 -m pytest tests/tools/test_zugangsdaten.py -v
 ```
 
-Ein Test je ZD-Requirement mit Code-Verhalten (ZD-9), ohne Netz — der Speicher
-ist ein lokales Modul, kein Dienst (E-ZD-3).
+Tests liegen in `tests/tools/test_zugangsdaten.py` (analog
+`tests/tools/test_configloader.py`). Ein Test je ZD-Requirement mit
+Code-Verhalten (ZD-9), ohne Netz — der Speicher ist ein lokales Modul, kein
+Dienst (E-ZD-3).
