@@ -329,6 +329,7 @@ Acceptance-Kriterien (mit dem Default-App-Slug `figuren-erkennung`):
 | `GET /controller/figuren-erkennung/figlib.js` | 200, `application/javascript` |
 | `GET /controller/` (ohne App-Slug) | 404 — URL-3 verlangt zwei Segmente |
 | `GET /controller/<anderer-slug>/...` | 404 — nur der konfigurierte App-Slug ist gültig |
+| `GET /controller/_shared/<asset>` | 200 mit Content-Type aus `controller/_shared/` — PWA-übergreifender Helper-Pfad (`conventions/controller-pwa.md` PWA-4) |
 | Pfad außerhalb des Controller-Wurzelverzeichnisses (Path-Traversal, z. B. `/controller/figuren-erkennung/../../router/main.py`) | 404 |
 | Nicht existierendes Asset im Controller-Verzeichnis | 404 |
 
