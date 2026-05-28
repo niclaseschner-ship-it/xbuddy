@@ -23,5 +23,8 @@
   "fenster_kleinkind": 3,
   "wochenstart": 0,
   "zeitzone": "Europe/Berlin",
-  "kalender_id": "deine-familie@group.calendar.google.com"
+  "kalender_id": "deine-familie@group.calendar.google.com",
+
+  "_familie_origin_url_comment": "DCOMP-1: Loopback-Origin der Familie-Komponente (PORT-2). Default ueblicherweise korrekt; nur setzen, wenn das Pi-Setup abweicht.",
+  "familie_origin_url": "http://127.0.0.1:5010"
 }

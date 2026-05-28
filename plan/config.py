@@ -29,6 +29,10 @@ SLOT_ARTEN = (SLOT_ERWACHSENEN, SLOT_AKTIVITAET)
 
 # PLAN-28: nicht-geheime Werte mit ihren Defaults. Code-Konstanten sind hier
 # nur Fallback-Default — jeder Wert hat einen Override-Pfad (Config/Env).
+#
+# `familie_origin_url` ist die Loopback-Origin der Familie-Komponente
+# (DCOMP-1): der Plan-Buddy spricht die Familie ueber HTTP an, nicht ueber
+# Python-Import. Default zeigt auf den lokalen Familie-Port (PORT-2: 5010).
 DEFAULTS = {
     "fenster_lesekind": 7,              # PLAN-3/PLAN-4
     "fenster_kleinkind": 3,             # PLAN-3/PLAN-4
@@ -36,9 +40,11 @@ DEFAULTS = {
     "zeitzone": "Europe/Berlin",        # PLAN-28
     "db_datei": os.path.join(HERE, "plan.db"),        # PLAN-9/PLAN-28
     "kalender_id": "",                  # PLAN-15/PLAN-28 — Pflicht
+    "familie_origin_url": "http://127.0.0.1:5010",    # DCOMP-1 / PORT-2
 }
 
-# PLAN-28: Umgebungsvariablen, die die Datei-Werte überschreiben.
+# PLAN-28: Umgebungsvariablen, die die Datei-Werte überschreiben (CONFIG-5:
+# `PLAN_<KEY>`-Schema).
 ENV_OVERRIDES = {
     "fenster_lesekind": "PLAN_FENSTER_LESEKIND",
     "fenster_kleinkind": "PLAN_FENSTER_KLEINKIND",
@@ -46,6 +52,7 @@ ENV_OVERRIDES = {
     "zeitzone": "PLAN_ZEITZONE",
     "db_datei": "PLAN_DB_DATEI",
     "kalender_id": "PLAN_KALENDER_ID",
+    "familie_origin_url": "PLAN_FAMILIE_ORIGIN_URL",
 }
 
 # PLAN-28: Pfad der Config-Datei selbst — per Env überschreibbar.
@@ -91,7 +98,8 @@ class Config:
     """Aufgelöste Plan-Buddy-Instanz-Konfiguration (PLAN-28)."""
 
     def __init__(self, slots, default_petrantwortlichkeiten, fenster_lesekind,
-                 fenster_kleinkind, wochenstart, zeitzone, db_datei, kalender_id):
+                 fenster_kleinkind, wochenstart, zeitzone, db_datei, kalender_id,
+                 familie_origin_url):
         # PLAN-6: Slot-Liste (Reihenfolge = Rail-Reihenfolge).
         self.slots = slots
         # PLAN-10: Default-Zuweisungen je Slot-Schlüssel und Wochentag.
@@ -103,6 +111,8 @@ class Config:
         self.zeitzone = zeitzone
         self.db_datei = db_datei
         self.kalender_id = kalender_id
+        # DCOMP-1: Loopback-Origin der Familie-Komponente — HTTP statt Import.
+        self.familie_origin_url = familie_origin_url
 
     def slot(self, schluessel):
         """Slot-Definition je Schlüssel, oder None."""
@@ -235,6 +245,8 @@ def resolve(config_path=None, env=None):
             "kalender_id ist nicht gesetzt (Pflicht, PLAN-28) — "
             "Config-Feld `kalender_id` oder $%s" % ENV_OVERRIDES["kalender_id"])
 
+    familie_origin_url = str(values["familie_origin_url"]).strip().rstrip("/")
+
     return Config(
         slots=slots,
         default_petrantwortlichkeiten=defaults,
@@ -244,4 +256,5 @@ def resolve(config_path=None, env=None):
         zeitzone=str(values["zeitzone"]).strip(),
         db_datei=str(values["db_datei"]),
         kalender_id=kalender_id,
+        familie_origin_url=familie_origin_url,
     )

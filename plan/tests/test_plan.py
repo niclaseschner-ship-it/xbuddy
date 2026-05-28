@@ -12,10 +12,10 @@ import os
 
 import pytest
 
-from familie import registry as registry_mod
 from plan import aktivitaeten as aktivitaeten_mod
 from plan import config as config_mod
 from plan import db as db_mod
+from plan import familie_client as familie_client_mod
 from plan import kalender as kalender_mod
 from plan import main as plan_main
 from plan import render as render_mod
@@ -774,10 +774,10 @@ def test_PLAN_29_every_requirement_has_a_test():
     """PLAN-29: jede Anforderung mit Code-Verhalten hat einen Test.
     Belegt anhand der Test-Namen dieses Moduls."""
     quelle = io.open(os.path.abspath(__file__), encoding="utf-8").read()
-    # Jede PLAN-ID mit Code-Verhalten hat einen eigenen Test (PLAN-1 .. PLAN-29).
+    # Jede PLAN-ID mit Code-Verhalten hat einen eigenen Test (PLAN-1 .. PLAN-30).
     # PLAN-21 (Display-Views sind die Schnittstelle zur Familie) hat kein
     # eigenes Code-Verhalten über PLAN-2/3 hinaus — dort mit abgedeckt.
-    for plan in range(1, 30):
+    for plan in range(1, 31):
         if plan == 21:
             continue
         assert "test_PLAN_%d_" % plan in quelle, "PLAN-%d ungetestet" % plan
@@ -861,24 +861,35 @@ def test_PLAN_16_oauth_comes_from_zugangsdaten_store(tmp_path):
 
 
 # ============================================================
-#  PLAN-19 (Bugfix Familie-Registry-Konsistenz) — Reload pro Request
+#  PLAN-19 / DCOMP-1 — Personen ueber HTTP, pro Request frischer Snapshot
 # ============================================================
 
-def test_PLAN_19_render_reflects_external_registry_mutation(tmp_path, demo_config):
-    """Bug aus dem Pi-Live-Test: Plan-Buddy hielt die Registry in
-    `runtime["registry"]` gecached — extern (FAA) angelegte Personen
-    erschienen erst nach Service-Restart in der Wochen-View. Fix:
-    `registry_path` setzen → Plan-Buddy lädt pro Request frisch."""
-    # familie.json auf Disk anlegen: erst nur ein Erwachsener.
-    reg_path = tmp_path / "familie.json"
-    reg_path.write_text(json.dumps({
-        "erwachsene": [{"id": "emil", "name": "Niclas", "ring": "blue"}],
-        "kinder": [],
-        "settings": {},
-    }))
-    initial = registry_mod.load(str(reg_path))
-    plan_main.configure(demo_config, initial, FakeTransport(),
-                        registry_path=str(reg_path))
+class _MutableFamilieTransport:
+    """Test-Doppelung fuer den FamilieClient: ein `transport=`-Callable, das
+    eine petraenderliche Liste von Personen-JSON ausspielt. Imitiert die
+    Familie-Komponente (FAM-7) auf Loopback — kein echtes HTTP."""
+
+    def __init__(self, personen_json):
+        self.personen = list(personen_json)
+        self.calls = []
+
+    def __call__(self, url):
+        self.calls.append(url)
+        return json.dumps(self.personen).encode("utf-8")
+
+
+def test_PLAN_19_render_reflects_external_registry_mutation(demo_config):
+    """Bug aus dem Pi-Live-Test: Plan-Buddy hielt die Familien-Sicht im
+    Speicher gecached — extern (FAA) angelegte Personen erschienen erst nach
+    Restart in der Wochen-View. Fix (DCOMP-1, #214): die Familie wird ueber
+    HTTP angesprochen (`FamilieClient.snapshot()`), pro Request frisch."""
+    transport = _MutableFamilieTransport([
+        {"id": "emil", "name": "Niclas", "ring": "blue", "art": "erwachsene"},
+    ])
+    client_obj = familie_client_mod.FamilieClient(
+        "http://127.0.0.1:5010", transport=transport)
+    plan_main.configure(demo_config, registry=None, transport=FakeTransport(),
+                        familie_client=client_obj)
     plan_main.app.testing = True
     client = plan_main.app.test_client()
 
@@ -887,30 +898,29 @@ def test_PLAN_19_render_reflects_external_registry_mutation(tmp_path, demo_confi
     assert r1.status_code == 200
     assert b"emil" in r1.data
 
-    # Extern mutieren: Petra dazu.
-    extern = registry_mod.load(str(reg_path))
-    extern.add_person(registry_mod.Person(
-        "petra", "Petra", "orange", registry_mod.KIND_ERWACHSENE,
-        email="petra@example.org"))
-    registry_mod.save(extern, str(reg_path))
+    # Extern mutieren: Petra dazu (Familie-Komponente wuerde das ueber FAM-12
+    # tun — wir simulieren das durch Anhaengen ans Transport-Inventar).
+    transport.personen.append({
+        "id": "petra", "name": "Petra", "ring": "orange", "art": "erwachsene",
+        "email": "petra@example.org"})
 
-    # Ohne Restart: Petra ist im neuen Render sichtbar.
+    # Ohne Restart: Petra ist im neuen Render sichtbar (HTTP-Snapshot pro Request).
     r2 = client.get("/display/plan/woche")
     assert r2.status_code == 200
     assert b"petra" in r2.data
 
 
-def test_PLAN_19_zuteilung_validates_against_fresh_registry(tmp_path, demo_config):
-    """Eine extern neu angelegte Person darf ohne Restart über die
-    Zuteilungs-API benutzt werden (Bugfix Familie-Registry-Konsistenz)."""
-    reg_path = tmp_path / "familie.json"
-    reg_path.write_text(json.dumps({
-        "erwachsene": [{"id": "emil", "name": "Niclas", "ring": "blue"}],
-        "kinder": [], "settings": {},
-    }))
-    initial = registry_mod.load(str(reg_path))
-    plan_main.configure(demo_config, initial, FakeTransport(),
-                        registry_path=str(reg_path))
+def test_PLAN_19_zuteilung_validates_against_fresh_registry(demo_config):
+    """Eine extern neu angelegte Person darf ohne Restart ueber die
+    Zuteilungs-API benutzt werden (DCOMP-1: Plan fragt die Familie pro
+    Request via HTTP)."""
+    transport = _MutableFamilieTransport([
+        {"id": "emil", "name": "Niclas", "ring": "blue", "art": "erwachsene"},
+    ])
+    client_obj = familie_client_mod.FamilieClient(
+        "http://127.0.0.1:5010", transport=transport)
+    plan_main.configure(demo_config, registry=None, transport=FakeTransport(),
+                        familie_client=client_obj)
     plan_main.app.testing = True
     client = plan_main.app.test_client()
 
@@ -921,13 +931,11 @@ def test_PLAN_19_zuteilung_validates_against_fresh_registry(tmp_path, demo_confi
     assert r0.status_code == 400
 
     # Extern Petra anlegen.
-    extern = registry_mod.load(str(reg_path))
-    extern.add_person(registry_mod.Person(
-        "petra", "Petra", "orange", registry_mod.KIND_ERWACHSENE,
-        email="petra@example.org"))
-    registry_mod.save(extern, str(reg_path))
+    transport.personen.append({
+        "id": "petra", "name": "Petra", "ring": "orange", "art": "erwachsene",
+        "email": "petra@example.org"})
 
-    # Ohne Restart: Petra ist eine gültige Zuteilung.
+    # Ohne Restart: Petra ist eine gueltige Zuteilung.
     r1 = client.put("/api/v1/plan/zuteilung", json={
         "week_start": "2026-05-25", "day": 0, "slot": "bring",
         "person_id": "petra"})
@@ -1267,3 +1275,160 @@ def test_DCOMP_2_admin_reload_aktualisiert_snapshot(reload_client):
     fallback = plan_main._current_config()
     assert fallback is snapshot
     assert fallback.kalender_id == "neu@group.calendar.google.com"
+
+
+# ============================================================
+#  PLAN-30 — GET /api/v1/plan/zuteilung (Lese-API analog FAM-7)
+# ============================================================
+#
+# Ausgangslage #214: andere XBuddy-Apps brauchen die Wochenzuteilungen ueber
+# eine stabile HTTP-Schnittstelle (Lego-Prinzip + DCOMP-1), nicht ueber
+# direkten Zugriff auf plan.db. Form orientiert sich an FAM-7:
+# GET-Endpoint, Query-Parameter, JSON-Antwort.
+
+def test_PLAN_30_zuteilung_get_empty_week_returns_defaults_or_empty(
+        demo_config, demo_registry):
+    """Eine noch nicht beruehrte Woche → HTTP 200 + Slots-Liste. Mit den
+    Default-Petrantwortlichkeiten aus DEMO_CONFIG (`bring` Mo emil, Di petra).
+    Slots, die in den Defaults nicht stehen, kommen mit person_id=null
+    zurueck — eine vollstaendige Erwachsenen-Slot-x-Wochentag-Matrix."""
+    client = make_client(demo_config, demo_registry, FakeTransport())
+    r = client.get("/api/v1/plan/zuteilung?week_start=2026-06-01")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["week_start"] == "2026-06-01"
+    # 4 Erwachsenen-Slots (bring, pick, cook, bed1, bed2) × 7 Tage.
+    # DEMO_CONFIG: bring + pick + cook + bed1 + bed2 = 5 Erwachsenen-Slots.
+    erwachsenen_keys = [s.schluessel for s in demo_config.erwachsenen_slots()]
+    assert len(body["slots"]) == 7 * len(erwachsenen_keys)
+    # Mo bring → emil (aus den Defaults), Di bring → petra, Rest leer.
+    mo_bring = next(s for s in body["slots"] if s["day"] == 0 and s["slot"] == "bring")
+    di_bring = next(s for s in body["slots"] if s["day"] == 1 and s["slot"] == "bring")
+    mo_pick = next(s for s in body["slots"] if s["day"] == 0 and s["slot"] == "pick")
+    assert mo_bring["person_id"] == "emil"
+    assert di_bring["person_id"] == "petra"
+    assert mo_pick["person_id"] is None
+
+
+def test_PLAN_30_zuteilung_get_reflects_put_assignment(demo_config, demo_registry):
+    """Nach einem PUT auf einen Slot liefert der GET fuer dieselbe Woche
+    die neue Zuteilung — Persistenz-Round-Trip (PLAN-8 + Lese-API)."""
+    client = make_client(demo_config, demo_registry, FakeTransport())
+    # Petra am Mittwoch bringen (PLAN-7/PLAN-8).
+    r_put = client.put("/api/v1/plan/zuteilung", json={
+        "week_start": "2026-06-08", "day": 2, "slot": "pick",
+        "person_id": "petra"})
+    assert r_put.status_code == 200
+
+    # GET sieht die Zuteilung.
+    r_get = client.get("/api/v1/plan/zuteilung?week_start=2026-06-08")
+    assert r_get.status_code == 200
+    eintrag = next(s for s in r_get.get_json()["slots"]
+                   if s["day"] == 2 and s["slot"] == "pick")
+    assert eintrag["person_id"] == "petra"
+
+
+def test_PLAN_30_zuteilung_get_without_week_start_is_400(demo_config, demo_registry):
+    """Fehlt der Query-Parameter `week_start`, antwortet die API 400."""
+    client = make_client(demo_config, demo_registry, FakeTransport())
+    r = client.get("/api/v1/plan/zuteilung")
+    assert r.status_code == 400
+    assert "week_start" in r.get_json()["error"]
+
+
+def test_PLAN_30_zuteilung_get_invalid_week_start_is_400(demo_config, demo_registry):
+    """`week_start=garbage` → HTTP 400 mit JSON-Fehler (kein 500/Stack)."""
+    client = make_client(demo_config, demo_registry, FakeTransport())
+    r = client.get("/api/v1/plan/zuteilung?week_start=keine-iso")
+    assert r.status_code == 400
+    body = r.get_json()
+    assert "week_start" in body["error"]
+    assert "ISO" in body["error"] or "iso" in body["error"].lower()
+
+
+# ============================================================
+#  DCOMP-1 — FamilieClient: HTTP-Mock, Unreachable-Verhalten
+# ============================================================
+
+def test_DCOMP_1_familie_client_parses_fam7_response():
+    """`FamilieClient.snapshot()` baut aus einer FAM-7-JSON-Antwort eine
+    `RegistryView` mit Person-Objekten in der Form, die `render.baue_view`
+    und `kalender.Kalender` brauchen."""
+    payload = json.dumps([
+        {"id": "emil", "name": "Niclas", "ring": "blue", "art": "erwachsene",
+         "email": "emil@example.org"},
+        {"id": "mia", "name": "Mia", "ring": "purple", "art": "kinder"},
+    ]).encode("utf-8")
+
+    transport_calls = []
+
+    def transport(url):
+        transport_calls.append(url)
+        return payload
+
+    fc = familie_client_mod.FamilieClient(
+        "http://127.0.0.1:5010/", transport=transport)
+    view = fc.snapshot()
+    assert transport_calls == ["http://127.0.0.1:5010/api/v1/familie/personen"]
+    namen = sorted(p.name for p in view.alle())
+    assert namen == ["Niclas", "Mia"]
+    emil = view.get("emil")
+    assert emil is not None
+    assert emil.is_erwachsene()
+    assert emil.email == "emil@example.org"
+    mia = view.get("mia")
+    assert mia.is_kind()
+
+
+def test_DCOMP_1_familie_client_unreachable_returns_empty_and_logs(caplog):
+    """Ist die Familie-Komponente nicht erreichbar (Connection refused o.ae.),
+    liefert der Client eine leere `RegistryView` UND schreibt eine klare
+    Log-Warnung — kein Stack-Trace nach oben (PLAN-20-Geist)."""
+    import urllib.error
+
+    def transport(url):
+        raise urllib.error.URLError("Connection refused")
+
+    fc = familie_client_mod.FamilieClient(
+        "http://127.0.0.1:5010", transport=transport)
+    with caplog.at_level("WARNING", logger="plan.familie_client"):
+        view = fc.snapshot()
+    assert view.alle() == []
+    assert any("nicht erreichbar" in rec.message.lower()
+               for rec in caplog.records), \
+        "Erwartet: explizite Log-Warnung 'nicht erreichbar' im FamilieClient"
+
+
+def test_DCOMP_1_familie_client_http_error_returns_empty(caplog):
+    """HTTP 500 von der Familie → leerer Snapshot + Log-Warnung."""
+    import urllib.error
+
+    def transport(url):
+        raise urllib.error.HTTPError(
+            url, 500, "boom", hdrs=None, fp=None)
+
+    fc = familie_client_mod.FamilieClient(
+        "http://127.0.0.1:5010", transport=transport)
+    with caplog.at_level("WARNING", logger="plan.familie_client"):
+        view = fc.snapshot()
+    assert view.alle() == []
+    assert any("HTTP 500" in rec.message for rec in caplog.records)
+
+
+def test_DCOMP_1_familie_unreachable_view_returns_200(demo_config):
+    """End-to-End: ist die Familie nicht erreichbar, antwortet
+    /display/plan/woche trotzdem mit 200 — die View funktioniert ohne
+    Familie (analog PLAN-20 ohne Kalender), nur ohne Personen-Ringe."""
+    import urllib.error
+
+    def transport(url):
+        raise urllib.error.URLError("Connection refused")
+
+    fc = familie_client_mod.FamilieClient(
+        "http://127.0.0.1:5010", transport=transport)
+    plan_main.configure(demo_config, registry=None, transport=FakeTransport(),
+                        familie_client=fc)
+    plan_main.app.testing = True
+    client = plan_main.app.test_client()
+    r = client.get("/display/plan/woche")
+    assert r.status_code == 200

@@ -2,7 +2,11 @@
 
 Die Suite läuft OHNE Netz: der Google-Kalender-Zugriff wird durch eine
 kontrollierte Doppelung (FakeTransport) ersetzt — die Test-Naht aus
-plan/kalender.py. Keine echten HTTP-Aufrufe.
+plan/kalender.py. Keine echten HTTP-Aufrufe. Auch der Personen-Zugang zur
+Familie-Komponente (FAM-7) ist durch `plan.familie_client.RegistryView`-
+Snapshots ersetzbar (Test-Naht in `configure()`) oder durch einen
+`FamilieClient` mit einem `transport=`-Callable, das die HTTP-Schicht
+ersetzt.
 """
 
 import json
@@ -11,15 +15,16 @@ import sys
 
 import pytest
 
-# Repo-Wurzel auf den Importpfad — die Suite importiert `plan`, `familie` und
-# `zugangsdaten` als Pakete.
+# Repo-Wurzel auf den Importpfad — die Suite importiert `plan` als Paket.
+# Die Tests bauen Person-Fixture-Objekte direkt ueber das schlanke
+# `plan.familie_client`-Modul — kein `from familie import …` mehr (DCOMP-1).
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from familie import registry as registry_mod  # noqa: E402
-from plan import config as config_mod          # noqa: E402
-from plan import kalender as kalender_mod      # noqa: E402
+from plan import config as config_mod                   # noqa: E402
+from plan import familie_client as familie_client_mod   # noqa: E402
+from plan import kalender as kalender_mod               # noqa: E402
 
 
 # ============================================================
@@ -113,16 +118,25 @@ DEMO_CONFIG = {
 
 @pytest.fixture
 def demo_registry():
-    """Geladene Familien-Registry aus DEMO_REGISTRY."""
-    return registry_mod.Registry([
-        registry_mod.Person(p["id"], p["name"], p["ring"],
-                            registry_mod.KIND_ERWACHSENE, email=p.get("email"))
+    """Familien-Sicht aus DEMO_REGISTRY (Test-Naht fuer `configure()`).
+
+    Liefert eine `plan.familie_client.RegistryView` — derselbe duck-Typ,
+    den der Live-`FamilieClient.snapshot()` liefert. So bleibt der
+    Test-Pfad konstruktiv identisch zum Live-Pfad und der Test-Setup
+    haengt nicht mehr an `familie/registry.py` (DCOMP-1).
+    """
+    personen = [
+        familie_client_mod.Person(
+            p["id"], p["name"], p["ring"],
+            familie_client_mod.KIND_ERWACHSENE, email=p.get("email"))
         for p in DEMO_REGISTRY["erwachsene"]
     ] + [
-        registry_mod.Person(p["id"], p["name"], p["ring"],
-                            registry_mod.KIND_KINDER)
+        familie_client_mod.Person(
+            p["id"], p["name"], p["ring"],
+            familie_client_mod.KIND_KINDER)
         for p in DEMO_REGISTRY["kinder"]
-    ])
+    ]
+    return familie_client_mod.RegistryView(personen)
 
 
 @pytest.fixture
