@@ -174,7 +174,7 @@ nicht-bestätigende Antwort beendet die Funktion und liefert das Ergebnis-Signal
 (FAA-1) mit der Liste aller in diesem Aufruf angelegten `id`s. Jede Person
 durchläuft FAA-3..8 in voller Länge — kein gemeinsamer Zustand zwischen
 Personen außer der Tatsache, dass `familie.json` zwischen den Personen jeweils
-um die zuletzt bestätigte Person gewachsen ist (FAA-8 atomar je Person).
+um die zuletzt bestätigte Person gewachsen ist.
 
 **(b) Privatchat-Session.** Die Konversation folgt dem Session-Muster aus
 `conventions/privatchat-session.md` (SESS-1..SESS-4). Folge für FAA: stürzt
