@@ -190,3 +190,26 @@ def task_call_response(task, arguments=None, text="", call_id="call-1"):
         text=text,
         task_calls=[TaskCallBlock(call_id=call_id, task=task,
                                   arguments=arguments or {})])
+
+
+class FakePlanClient:
+    """Kontrollierte Doppelung des PlanClients für TER-11-Tests (EC-17).
+
+    Kann entweder eine feste Ereignis-Liste liefern oder einen Fehler werfen.
+    Alle Aufrufe an `termine()` werden unter `calls` aufgezeichnet.
+
+    Analog `FakeReadTask` / `FakeWriteTask` — minimal, nur was TER braucht.
+    """
+
+    def __init__(self, events=None, error=None):
+        self._events = events if events is not None else []
+        self._error = error
+        self.calls = []   # [(ab: str, tage: int), …]
+
+    def termine(self, ab, tage):
+        """Gibt die skriptierte Event-Liste zurück oder wirft den skriptierten
+        Fehler (PlanClientError), analog dem echten PlanClient."""
+        self.calls.append((ab, tage))
+        if self._error is not None:
+            raise self._error
+        return list(self._events)
