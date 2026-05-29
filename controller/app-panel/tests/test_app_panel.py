@@ -26,6 +26,7 @@ MANIFEST_PATH = os.path.join(ROOT, 'manifest.json')
 SW_PATH      = os.path.join(ROOT, 'sw.js')
 TILES_EXAMPLE = os.path.join(ROOT, 'tiles.example.json')
 CONFIG_EXAMPLE = os.path.join(ROOT, 'config.example.json')
+SHARED_CONFIG_PATH = os.path.join(ROOT, '..', '_shared', 'config.js')
 
 
 def read(path):
@@ -40,6 +41,27 @@ def run_node(snippet):
         const panelLib = require(%r);
         %s
     ''' % (APPJS_PATH, snippet))
+    res = subprocess.run(
+        ['node', '-e', src],
+        capture_output=True, text=True, timeout=10)
+    if res.returncode != 0:
+        raise AssertionError(
+            'node-Subprozess fehlgeschlagen:\n' + res.stderr + '\n--- src ---\n' + src)
+    out = res.stdout.strip()
+    if not out:
+        return None
+    return json.loads(out)
+
+
+def run_node_with_shared(snippet):
+    """Lädt pwaShared (_shared/config.js) UND panelLib (app.js), führt
+    JS-Snippet aus. Für PANEL-8-Tests, die pwaShared.loadPwaConfig
+    über global.fetch mocken (PWA-4-Verhaltens-Proben)."""
+    src = textwrap.dedent('''
+        const pwaShared = require(%r);
+        const panelLib = require(%r);
+        %s
+    ''' % (SHARED_CONFIG_PATH, APPJS_PATH, snippet))
     res = subprocess.run(
         ['node', '-e', src],
         capture_output=True, text=True, timeout=10)
@@ -367,36 +389,37 @@ def test_PANEL_7_flat_string_or_number_query_ok():
 #                         sichtbarer Fehler bei Konsistenz-Verletzung
 # ============================================================
 
-def test_PANEL_8_loadConfigImpl_fetches_config_json():
-    """Verhaltens-Probe (Finding 5, #126): loadConfigImpl ruft den injizierten
-    fetchImpl mit './config.json' und no-store Cache auf. Statt Quelltext-
-    Regex prüfen wir, dass der echte Aufruf passiert."""
-    out = run_node('''
+def test_PANEL_8_pwaShared_fetches_config_json():
+    """Verhaltens-Probe (PWA-4): pwaShared.loadPwaConfig ruft global.fetch
+    mit './config.json' und no-store Cache auf. Testet das migrierte
+    Bootstrap (PWA-4, #246)."""
+    out = run_node_with_shared('''
         const calls = [];
-        const fakeFetch = (u, init) => {
+        global.fetch = (u, init) => {
             calls.push({ url: u, init: init });
             return Promise.resolve({
                 ok: true, json: () => Promise.resolve({ source_id: 'app-panel:x', display_id: 'display:y' })
             });
         };
-        panelLib.loadConfigImpl({ fetchImpl: fakeFetch })
-            .then((cfg) => {
-                console.log(JSON.stringify({ calls, cfg }));
-            });
+        pwaShared.loadPwaConfig({
+            defaults: panelLib.configDefaults(),
+        }).then((cfg) => {
+            console.log(JSON.stringify({ calls, cfg }));
+        });
     ''')
     assert out['calls'][0]['url'] == './config.json'
     assert out['calls'][0]['init']['cache'] == 'no-store'
 
 
 def test_PANEL_8_missing_config_falls_back_silently_to_defaults():
-    """Verhaltens-Probe (Finding 5, #126): fetch wirft → loadConfigImpl ruft
-    onWarn, gibt die Defaults zurück. Kein Quelltext-Grep mehr — wir
-    beobachten den echten Promise-Ausgang."""
-    out = run_node('''
+    """Verhaltens-Probe (PWA-4): fetch wirft → pwaShared.loadPwaConfig ruft
+    onWarn, gibt die Defaults zurück (CONFIG-4 stummer Fallback). Testet
+    das migrierte Bootstrap (#246)."""
+    out = run_node_with_shared('''
         const warns = [];
-        const fakeFetch = () => Promise.reject(new Error('boom'));
-        panelLib.loadConfigImpl({
-            fetchImpl: fakeFetch,
+        global.fetch = () => Promise.reject(new Error('boom'));
+        pwaShared.loadPwaConfig({
+            defaults: panelLib.configDefaults(),
             onWarn: (...args) => { warns.push(String(args[0])); },
         }).then((cfg) => {
             console.log(JSON.stringify({ warns, cfg }));
@@ -411,11 +434,11 @@ def test_PANEL_8_missing_config_falls_back_silently_to_defaults():
 
 def test_PANEL_8_http_error_also_falls_back_to_defaults():
     """Verhaltens-Probe: fetch liefert !ok → derselbe stumme Fallback-Pfad."""
-    out = run_node('''
+    out = run_node_with_shared('''
         const warns = [];
-        const fakeFetch = () => Promise.resolve({ ok: false, status: 500 });
-        panelLib.loadConfigImpl({
-            fetchImpl: fakeFetch,
+        global.fetch = () => Promise.resolve({ ok: false, status: 500 });
+        pwaShared.loadPwaConfig({
+            defaults: panelLib.configDefaults(),
             onWarn: (...args) => { warns.push(String(args[0])); },
         }).then((cfg) => {
             console.log(JSON.stringify({ warns, cfg, isDefault: cfg.source_id === 'app-panel:demo' }));
@@ -426,22 +449,23 @@ def test_PANEL_8_http_error_also_falls_back_to_defaults():
 
 
 def test_PANEL_8_consistency_mismatch_calls_onError():
-    """Verhaltens-Probe: gemergte cfg passt nicht zur Panel-ID → onError
-    bekommt eine sichtbare Meldung; cfg wird trotzdem zurueckgegeben
-    (kein Hard-Stop, siehe Doku-Kommentar in app.js)."""
-    out = run_node('''
+    """Verhaltens-Probe: nach pwaShared.loadPwaConfig prüft checkConfigConsistency
+    die Kopplung source_id ↔ panelId; bei Diskrepanz wird onError mit einer
+    sichtbaren Meldung aufgerufen; cfg wird trotzdem geliefert (kein Hard-Stop).
+    Testet die Zwei-Schritte-Zusammensetzung des migrierten Bootstrap (#246)."""
+    out = run_node_with_shared('''
         const errors = [];
-        const fakeFetch = () => Promise.resolve({
+        global.fetch = () => Promise.resolve({
             ok: true,
             json: () => Promise.resolve({
                 source_id: 'app-panel:wohnzimmer', display_id: 'display:x'
             }),
         });
-        panelLib.loadConfigImpl({
-            fetchImpl: fakeFetch,
-            panelIdFromHtml: 'kueche',
-            onError: (msg) => { errors.push(msg); },
+        pwaShared.loadPwaConfig({
+            defaults: panelLib.configDefaults(),
         }).then((cfg) => {
+            const errMsg = panelLib.checkConfigConsistency(cfg, 'kueche');
+            if (errMsg) errors.push('Konfigurations-Fehler: ' + errMsg);
             console.log(JSON.stringify({ errors, sourceId: cfg.source_id }));
         });
     ''')

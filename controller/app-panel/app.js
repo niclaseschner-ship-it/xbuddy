@@ -258,41 +258,6 @@
   }
 
   // ============================================================
-  //  PANEL-8 — Konfigurations-Lader als testbare Fabrik
-  // ============================================================
-  //
-  // Bootstrap-Schicht (DOM/Browser) ruft das hier mit echtem `fetch`. Tests
-  // injizieren ein fakeFetch und beobachten Verhalten (Defaults bei Fehler,
-  // Merge, sichtbarer Konsistenz-Fehler) — kein Regex-Grep mehr (Finding 5).
-
-  function loadConfigImpl(opts) {
-    // opts: { fetchImpl, panelIdFromHtml, onWarn, onError }
-    var defaults = configDefaults();
-    var fetchImpl = opts.fetchImpl;
-    var warn = opts.onWarn || function () {};
-    var showError = opts.onError || function () {};
-    return Promise.resolve()
-      .then(function () { return fetchImpl('./config.json', { cache: 'no-store' }); })
-      .then(function (res) {
-        if (!res || !res.ok) throw new Error('HTTP ' + (res && res.status));
-        return res.json();
-      })
-      .then(function (fileCfg) {
-        var merged = Object.assign({}, defaults, fileCfg);
-        if (opts.panelIdFromHtml) {
-          var err = checkConfigConsistency(merged, opts.panelIdFromHtml);
-          if (err) showError('Konfigurations-Fehler: ' + err);
-        }
-        return merged;
-      })
-      .catch(function (err) {
-        // PANEL-8: fehlt/kaputt → stumm auf Defaults, console.warn.
-        warn('config.json konnte nicht geladen werden — fallback auf Defaults:', err);
-        return defaults;
-      });
-  }
-
-  // ============================================================
   //  PANEL-10 — Wake-Lock und Vollbild als testbare Fabriken
   // ============================================================
   //
@@ -366,7 +331,6 @@
     postWithRetry: postWithRetry,
     checkConfigConsistency: checkConfigConsistency,
     makeStreamHandlers: makeStreamHandlers,
-    loadConfigImpl: loadConfigImpl,
     attachWakeLockImpl: attachWakeLockImpl,
     attachFullscreenImpl: attachFullscreenImpl,
   };
@@ -403,13 +367,12 @@
   }
 
   // ============================================================
-  //  PANEL-8 — config.json laden (stumm auf Defaults falls fehlt)
+  //  PANEL-8 — config.json laden (PWA-4: pwaShared.loadPwaConfig)
   // ============================================================
   //
-  // Die eigentliche Logik (Fetch, Fallback, Konsistenz-Check) lebt in
-  // panelLib.loadConfigImpl und wird dort dynamisch getestet (PANEL-8).
-  // Hier nur die Bootstrap-Verdrahtung: echte `fetch`, echte console.warn,
-  // sichtbare Fehlermeldung im DOM.
+  // Bootstrap-Schicht: pwaShared.loadPwaConfig übernimmt Fetch, Merge und
+  // stummen Fallback (CONFIG-4). Danach prüft checkConfigConsistency die
+  // Kopplung source_id ↔ data-panel-id und macht Diskrepanzen im UI sichtbar.
   //
   // PANEL-8 (Diskrepanz source_id): wird als sichtbarer Fehler im UI
   // gezeigt (Spec-Vorgabe), das Panel läuft aber weiter. Begründung: ein
@@ -418,11 +381,15 @@
   // Spec-Verschärfung jenseits der „sichtbarer Fehler"-Forderung.
 
   function loadConfig() {
-    return panelLib.loadConfigImpl({
-      fetchImpl: function (u, init) { return fetch(u, init); },
-      panelIdFromHtml: panelIdFromHtml,
+    return pwaShared.loadPwaConfig({
+      defaults: panelLib.configDefaults(),
       onWarn: function () { console.warn.apply(console, arguments); },
-      onError: showError,
+    }).then(function (cfg) {
+      if (panelIdFromHtml) {
+        var err = panelLib.checkConfigConsistency(cfg, panelIdFromHtml);
+        if (err) showError('Konfigurations-Fehler: ' + err);
+      }
+      return cfg;
     });
   }
 
