@@ -14,11 +14,20 @@ import json
 import logging
 import os
 import stat
+import tempfile
 
 logger = logging.getLogger(__name__)
 
 # ZD-3: Dateirechte auf den Eigentümer beschränkt — Lesen+Schreiben, sonst nichts.
 FILE_MODE = 0o600
+
+
+class StoreError(Exception):
+    """Der Speicher konnte nicht geschrieben werden (z. B. kein Schreibrecht, Disk voll).
+
+    Analog RegistryError in familie/registry.py und geraete/registry.py —
+    eine typisierte Fehler-Sorte, damit Konsumenten gezielt reagieren können.
+    """
 
 
 class Zugangsdaten:
@@ -94,22 +103,44 @@ class Zugangsdaten:
         logger.info("Zugangsdate gesetzt: %s", name)
 
     def _write(self, data):
-        """Schreibt `data` als JSON nach `self.path` mit Rechten 0600 (ZD-3).
+        """Schreibt `data` als JSON atomar nach `self.path` mit Rechten 0600 (ZD-3, DCOMP-4).
 
-        Die Datei wird mit den restriktiven Rechten *angelegt*, sodass der
-        Inhalt zu keinem Zeitpunkt mit offeneren Rechten auf der Platte liegt.
-        Auf einer bestehenden Datei werden die Rechte zusätzlich erzwungen.
+        Atomar nach DCOMP-4: zuerst in eine Temp-Datei im Zielverzeichnis,
+        dann `os.replace` auf den Zielnamen — ein zeitgleicher Lesezugriff
+        sieht nie eine halb geschriebene Datei. Die Temp-Datei entsteht
+        direkt mit `0600`, `os.chmod` nach `os.replace` als defense-in-depth
+        (exotische FS). Bei einem Fehlschlag wird die Temp-Datei aufgeräumt
+        und ein StoreError geworfen — die alte Zieldatei bleibt unverändert.
         """
         directory = os.path.dirname(os.path.abspath(self.path))
         if directory and not os.path.isdir(directory):
             os.makedirs(directory, exist_ok=True)
-        # os.open mit explizitem Modus: die Datei entsteht direkt mit 0600,
-        # nicht erst mit dem (offeneren) umask-Default.
-        fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, FILE_MODE)
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2, sort_keys=True)
-            f.write("\n")
-        # Bestehende Datei kann offenere Rechte gehabt haben — erzwingen.
+        # Temp-Datei im Zielverzeichnis → os.replace ist In-Filesystem atomar.
+        # mkstemp reserviert den Pfad race-frei; wir schließen den fd sofort
+        # und öffnen die Temp-Datei kontrolliert mit os.open + FILE_MODE,
+        # damit der Inhalt zu keinem Zeitpunkt mit offeneren Rechten auf
+        # der Platte liegt.
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            prefix=".zugangsdaten.", suffix=".json.tmp", dir=directory)
+        os.close(tmp_fd)
+        try:
+            fd = os.open(tmp_path, os.O_WRONLY | os.O_TRUNC, FILE_MODE)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2, sort_keys=True)
+                f.write("\n")
+            # Defense-in-depth: Modus erzwingen, bevor das Rename passiert.
+            os.chmod(tmp_path, FILE_MODE)
+            os.replace(tmp_path, self.path)
+        except OSError as e:
+            # Aufräumen: Temp darf nicht zurückbleiben (analog GER-6).
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+            raise StoreError(
+                "Zugangsdaten-Datei konnte nicht geschrieben werden: %s" % e) from e
+        # Bestehende Zieldatei kann offenere Rechte gehabt haben —
+        # defense-in-depth nach DCOMP-4 (analog geraete/registry.py GER-6).
         os.chmod(self.path, FILE_MODE)
 
     # -- Diagnose ---------------------------------------------------------
