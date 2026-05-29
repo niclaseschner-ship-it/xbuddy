@@ -23,12 +23,13 @@ E-TES-4: geteilte Wahrheit, kein Kopieren).
 
 import logging
 import re
-from datetime import date, timedelta
+from datetime import date
 
 import authz
 import confirm
 from skills.plan_client import PlanClient, PlanClientError
-from skills.termine_erfragen import parse_zeitraum
+from skills.termine_erfragen import (parse_naechsten_wochentag, parse_wochentag,
+                                      parse_zeitraum)
 from telegram import TelegramError
 
 
@@ -104,19 +105,6 @@ _TRIG_TOKENS = frozenset({
 #  TES-4 — Datum-Parsing (baut auf TER-4 auf, erweitert um Einzel-Tag)
 # ============================================================
 
-# Wochentag-Mapping für Einzel-Tag-Erkennung (TES-4-Pflicht).
-# Montag = 0 (PLAN-28 wochenstart=0), Sonntag = 6.
-_WOCHENTAG_NR = {
-    "montag": 0, "mo": 0,
-    "dienstag": 1, "di": 1,
-    "mittwoch": 2, "mi": 2,
-    "donnerstag": 3, "do": 3,
-    "freitag": 4, "fr": 4,
-    "samstag": 5, "sa": 5,
-    "sonntag": 6, "so": 6,
-}
-
-
 def parse_datum(text, heute=None):
     """Löst einen Anstoß-Text in ein einzelnes Termin-Datum auf (TES-4).
 
@@ -138,47 +126,32 @@ def parse_datum(text, heute=None):
         heute = date.today()
     t = (text or "").lower().strip()
 
-    # Kurze Einzel-Tag-Ausdrücke: „heute", „morgen" via parse_zeitraum.
-    if "heute" in t:
-        return heute
-    if "morgen" in t:
-        return heute + timedelta(days=1)
-
-    # „nächsten <Wochentag>" — via parse_zeitraum liefert das None (mehrdeutig).
-    # Wir behandeln es als eindeutig NÄCHSTE WOCHE: der Wochentag wird in der
-    # kommenden Woche gesucht, nicht in der aktuellen. Das entspricht der
-    # natürlichen Sprachbedeutung: „nächsten Donnerstag" von einem Montag aus
-    # meint den Donnerstag der nächsten Woche, nicht den Donnerstag in 3 Tagen.
+    # „nächsten <Wochentag>" — E-TES-4: Helfer aus termine_erfragen (SSoT).
     match_naechst = re.search(
         r"n[äa]chsten?\s+(montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|mo|di|mi|do|fr|sa|so)",
         t)
     if match_naechst:
-        wt_name = match_naechst.group(1)
-        ziel_wt = _WOCHENTAG_NR[wt_name]
-        # Nächste Woche: erst zum nächsten Montag springen, dann zum Ziel-Wochentag.
-        tage_bis_naechsten_montag = (7 - heute.weekday()) % 7
-        if tage_bis_naechsten_montag == 0:
-            tage_bis_naechsten_montag = 7
-        naechster_montag = heute + timedelta(days=tage_bis_naechsten_montag)
-        delta_vom_montag = (ziel_wt - 0) % 7   # 0 = Montag
-        return naechster_montag + timedelta(days=delta_vom_montag)
+        return parse_naechsten_wochentag(heute, match_naechst.group(1))
 
-    # Konkreter Wochentag ohne „nächste"-Marker: nächster solcher Tag ab heute
-    # (inkl. heute). „Donnerstag" → nächster oder heutiger Donnerstag.
-    for wt_name, wt_nr in _WOCHENTAG_NR.items():
-        # Nur ganzes Wort (Wortgrenze), damit „Mittwoch" nicht „Mi" überlappt.
+    # Konkreter Wochentag ohne „nächste"-Marker — E-TES-4: Helfer aus termine_erfragen (SSoT).
+    # Wortgrenze prüfen, damit „Mittwoch" nicht „Mi" überlappt.
+    from skills.termine_erfragen import _WOCHENTAG_NR as _WT_NR
+    for wt_name in _WT_NR:
         if re.search(r'\b' + re.escape(wt_name) + r'\b', t):
-            delta = (wt_nr - heute.weekday()) % 7
-            return heute + timedelta(days=delta)
+            ergebnis = parse_wochentag(wt_name, heute)
+            if ergebnis is not None:
+                return ergebnis
 
-    # Mehrdeutige Zeitraum-Ausdrücke aus TER-4 (diese Woche, nächste Woche,
-    # die nächsten N Tage): parse_zeitraum gibt dafür (start, tage) mit tage>1
-    # zurück — TES braucht einen Einzel-Tag, also → Rückfrage (None).
+    # Alle übrigen Datums-Ausdrücke (heute, morgen, diese Woche, nächste Woche,
+    # die nächsten N Tage) via parse_zeitraum aus termine_erfragen (E-TES-4).
+    # Wochentage liefert parse_zeitraum als None (mehrdeutig, TER-4) — die sind
+    # oben bereits abgehandelt.
     zeitraum = parse_zeitraum(t, heute=heute)
     if zeitraum is None:
         return None
     start, tage = zeitraum
     if tage == 1:
+        # Einzel-Tag (heute, morgen): direktes Datum.
         return start
     # Zeitraum (z. B. „diese Woche" = 7 Tage) ist kein einzelner Tag → Rückfrage.
     return None

@@ -43,6 +43,19 @@ _WOCHENTAGE = [
     "Freitag", "Samstag", "Sonntag",
 ]
 
+# TER-4 / E-TES-4: Wochentag-Mapping (SSoT für TER + TES).
+# Montag = 0 (PLAN-28 wochenstart=0), Sonntag = 6.
+# Exportiert als Helfer-Basis — nicht direkt von außen nutzen.
+_WOCHENTAG_NR = {
+    "montag": 0, "mo": 0,
+    "dienstag": 1, "di": 1,
+    "mittwoch": 2, "mi": 2,
+    "donnerstag": 3, "do": 3,
+    "freitag": 4, "fr": 4,
+    "samstag": 5, "sa": 5,
+    "sonntag": 6, "so": 6,
+}
+
 
 # ============================================================
 #  TER-4 — Datums-Vokabular (hart-codiert, kein LLM, EC-12)
@@ -107,6 +120,50 @@ def parse_zeitraum(text, heute=None):
 
     # Default (TER-4): „was steht an", kein erkennbarer Datums-Ausdruck
     return (heute, 7)
+
+
+def parse_wochentag(wort, heute):
+    """Löst einen konkreten Wochentag-Namen in ein date auf (E-TES-4, SSoT).
+
+    Erkennt Kurz- und Langform (z. B. „do", „donnerstag") ohne „nächsten"-
+    Marker: liefert den nächsten solchen Wochentag ab heute (inkl. heute,
+    wenn heute bereits dieser Wochentag ist).
+
+    `wort`  — Wochentag-Name in Kleinschreibung.
+    `heute` — Bezugsdatum (date).
+
+    Gibt `None` zurück, wenn `wort` kein bekannter Wochentag ist.
+    """
+    wt_nr = _WOCHENTAG_NR.get(wort.lower().strip())
+    if wt_nr is None:
+        return None
+    delta = (wt_nr - heute.weekday()) % 7
+    return heute + timedelta(days=delta)
+
+
+def parse_naechsten_wochentag(heute, wort):
+    """Löst „nächsten <Wochentag>" in ein date auf (E-TES-4, SSoT).
+
+    Liefert den Wochentag der NÄCHSTEN (kommenden) Woche — semantisch
+    „nächsten Donnerstag" von einem Montag meint den Donnerstag der
+    übernächsten Woche, nicht den in 3 Tagen. Entspricht der natürlichen
+    Sprachbedeutung im deutschen Familien-Alltag (TES-4).
+
+    `heute` — Bezugsdatum (date).
+    `wort`  — Wochentag-Name in Kleinschreibung.
+
+    Gibt `None` zurück, wenn `wort` kein bekannter Wochentag ist.
+    """
+    wt_nr = _WOCHENTAG_NR.get(wort.lower().strip())
+    if wt_nr is None:
+        return None
+    # Erst zum nächsten Montag (Wochenanfang) springen.
+    tage_bis_naechsten_montag = (7 - heute.weekday()) % 7
+    if tage_bis_naechsten_montag == 0:
+        tage_bis_naechsten_montag = 7
+    naechster_montag = heute + timedelta(days=tage_bis_naechsten_montag)
+    delta_vom_montag = wt_nr % 7   # Montag=0 entspricht ISO-0
+    return naechster_montag + timedelta(days=delta_vom_montag)
 
 
 # ============================================================
