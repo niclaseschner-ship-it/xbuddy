@@ -1,11 +1,12 @@
-"""Eltern-Chat — HTTP-Client zur Plan-Buddy-Termin-Schnittstelle (PLAN-22, TER-5).
+"""Eltern-Chat — HTTP-Client zur Plan-Buddy-Termin-Schnittstelle (PLAN-22,
+TER-5, TES-8).
 
 Folgt der HTTP-Client-Form aus `famille_client.py` (DCOMP-1, APP-3):
 transport=Callable als Test-Naht, 2-s-Timeout, eigene Fehler-Klasse.
 
 Der Eltern-Chat ist Konsument der Plan-Buddy-Termin-Schnittstelle; der
-Google-Kalender wird nicht direkt angesprochen (E-TER-2). Jeder Aufruf geht
-frisch an PLAN-22 — kein eigener Cache (TER-5, CLAUDE.md §6).
+Google-Kalender wird nicht direkt angesprochen (E-TER-2, E-TES-2). Jeder
+Aufruf geht frisch an PLAN-22 — kein eigener Cache (TER-5, TES-8, CLAUDE.md §6).
 """
 
 import json
@@ -29,22 +30,22 @@ PFAD_TERMINE = "/api/v1/plan/termine"
 class PlanClientError(Exception):
     """Aufruf an die Plan-Buddy-Termin-Schnittstelle ist fehlgeschlagen.
 
-    Die Funktion `termine_erfragen` fängt das ab und liefert das
-    Ergebnis-Signal „nicht_erreichbar" (TER-7).
+    Die Funktionen `termine_erfragen` (TER-7) und `termin_eintragen` (TES-9)
+    fangen das ab und liefern das Ergebnis-Signal „nicht_erreichbar".
     """
 
 
 class PlanClient:
-    """HTTP-Client zur Plan-Buddy-Termin-Schnittstelle (PLAN-22, TER-5).
+    """HTTP-Client zur Plan-Buddy-Termin-Schnittstelle (PLAN-22, TER-5, TES-8).
 
     `origin_url` ist die Basis-Origin des Plan-Buddys (z. B.
     `http://127.0.0.1:5020`, PORT-2). `transport` ist die Test-Naht: ein
     Callable `(method, path, *, body=None, content_type=None) -> (status, bytes)`,
     das HTTP ersetzt; bleibt der Wert None, nutzen wir `urllib.request`.
 
-    Schmaler Schnitt: nur der Lese-Endpunkt, den `termine_erfragen` braucht
-    (GET /api/v1/plan/termine). Schreib-Endpunkte liegen in einem anderen
-    Ticket (#144, TES).
+    Endpunkte:
+      - GET  /api/v1/plan/termine  — lesen (TER-5)
+      - PUT  /api/v1/plan/termine  — schreiben (TES-8, #144)
     """
 
     def __init__(self, origin_url, transport=None,
@@ -82,6 +83,52 @@ class PlanClient:
                 "Plan-Buddy: Antwort hat unerwartete Form (%r)"
                 % type(data).__name__)
         return data
+
+    # -- Schreiben --------------------------------------------------------
+
+    def put_termin(self, titel, datum):
+        """Legt einen neuen Termin über PLAN-22 an (TES-8).
+
+        `titel` — Titel des Termins (str, Pflicht, roh aus der Nutzer-Eingabe,
+                  TES-5). `datum` — ISO-Datum-String des Termin-Tags (TES-4).
+
+        V1 schreibt immer ganztägig (TES-6): der Body enthält ausschließlich
+        `{titel, datum}` — kein `event_id`, kein `ganztags`-Feld (PLAN-22
+        legt ganztägig an, wenn kein Zeitfeld mitgegeben wird).
+
+        Bei Erfolg (HTTP 200, `{ok: true, action: "created", event_id: ...}`)
+        wird die `event_id` als String zurückgegeben (TES-8, TES-1).
+
+        Fehler-Antworten (TES-8):
+          - HTTP 400  — Plan-Buddy lehnt Body ab → PlanClientError.
+          - HTTP 502  — Google-Kalender nicht erreichbar → PlanClientError.
+          - Alle anderen HTTP-Stati ≠ 200 → PlanClientError.
+          - Connection-Fehler / Antwort nicht parsbar → PlanClientError.
+
+        Kein eigener Retry (E-TES-2): bei PlanClientError gibt der Aufrufer
+        das Ergebnis-Signal „nicht_erreichbar" zurück.
+        """
+        body_bytes = json.dumps({"titel": titel, "datum": datum}).encode("utf-8")
+        status, resp_bytes = self._call(
+            "PUT", PFAD_TERMINE,
+            body=body_bytes,
+            content_type="application/json")
+        if status != 200:
+            raise PlanClientError(
+                "Plan-Buddy: HTTP %s bei PUT %s" % (status, PFAD_TERMINE))
+        try:
+            data = json.loads(resp_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise PlanClientError(
+                "Plan-Buddy: PUT-Antwort nicht parsebar (%s)" % e)
+        if not isinstance(data, dict) or not data.get("ok"):
+            raise PlanClientError(
+                "Plan-Buddy: PUT-Antwort hat unerwartete Form (%r)" % data)
+        event_id = data.get("event_id")
+        if not event_id:
+            raise PlanClientError(
+                "Plan-Buddy: PUT-Antwort ohne event_id (%r)" % data)
+        return str(event_id)
 
     # -- HTTP-Innerei -----------------------------------------------------
 

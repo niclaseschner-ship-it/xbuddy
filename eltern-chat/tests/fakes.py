@@ -193,18 +193,27 @@ def task_call_response(task, arguments=None, text="", call_id="call-1"):
 
 
 class FakePlanClient:
-    """Kontrollierte Doppelung des PlanClients für TER-11-Tests (EC-17).
+    """Kontrollierte Doppelung des PlanClients für TER-11- und TES-11-Tests
+    (EC-17).
 
-    Kann entweder eine feste Ereignis-Liste liefern oder einen Fehler werfen.
-    Alle Aufrufe an `termine()` werden unter `calls` aufgezeichnet.
+    Kann entweder feste Ergebnisse liefern oder Fehler werfen.
+    Alle Aufrufe werden aufgezeichnet.
 
-    Analog `FakeReadTask` / `FakeWriteTask` — minimal, nur was TER braucht.
+    Analog `FakeReadTask` / `FakeWriteTask` — minimal, nur was TER/TES braucht.
+
+    TES-11: `put_termin(titel, datum)` ist additiv ergänzt — bestehende
+    Klassen-Signaturen (`termine()`) sind UNBERÜHRT.
     """
 
-    def __init__(self, events=None, error=None):
+    def __init__(self, events=None, error=None,
+                 put_event_id="evt-new-1", put_error=None):
         self._events = events if events is not None else []
         self._error = error
         self.calls = []   # [(ab: str, tage: int), …]
+        # TES-11: PUT-Seite.
+        self._put_event_id = put_event_id
+        self._put_error = put_error
+        self.put_calls = []   # [(titel: str, datum: str), …]
 
     def termine(self, ab, tage):
         """Gibt die skriptierte Event-Liste zurück oder wirft den skriptierten
@@ -213,3 +222,11 @@ class FakePlanClient:
         if self._error is not None:
             raise self._error
         return list(self._events)
+
+    def put_termin(self, titel, datum):
+        """TES-8: legt einen Termin an und gibt die skriptierte event_id zurück
+        oder wirft den skriptierten Fehler (PlanClientError)."""
+        self.put_calls.append((titel, datum))
+        if self._put_error is not None:
+            raise self._put_error
+        return self._put_event_id

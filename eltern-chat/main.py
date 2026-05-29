@@ -85,6 +85,7 @@ class Context:
     faa_sessions: dict = None  # FAA-12: laufende »Familie anlegen«-Sessions (chat_id → FaaSession)
     gaa_sessions: dict = None  # GAA-5: laufende »Gerät anlegen«-Sessions (chat_id → GaaSession)
     kav_sessions: dict = None  # KAV-3: laufende »Kalender verbinden«-Sessions (chat_id → KavSession)
+    tes_sessions: dict = None  # TES-3: laufende »Termin eintragen«-Sessions (chat_id → TesSession)
 
 
 # ============================================================
@@ -124,6 +125,16 @@ def handle_update(update, ctx):
         if session is not None and not session.is_finished():
             from skills.kalender_verbinden_task import make_kav_input
             session.deliver(make_kav_input(msg))
+            return
+
+    # TES-3: analog FAA-12 / GAA-5 / KAV-3 für »Termin eintragen«-Sessions
+    # — eine laufende TES-Session beansprucht den Privatchat bis zum Ende
+    # (Datum-/Titel-Klärung + Bestätigung + PUT).
+    if ctx.tes_sessions is not None and msg.chat_type == "private":
+        session = ctx.tes_sessions.get(msg.chat_id)
+        if session is not None and not session.is_finished():
+            from skills.termin_eintragen_task import make_tes_input
+            session.deliver(make_tes_input(msg))
             return
 
     # EC-5: In einer Gruppe reagiert das System nur, wenn es ausdrücklich
@@ -427,6 +438,8 @@ def build_context(cfg, db_path, store_path, zd_cli_path=None):
     gaa_sessions = {}
     # KAV-3: analog FAA/GAA, eigene Session-Map für »Kalender verbinden«.
     kav_sessions = {}
+    # TES-3: analog FAA/GAA/KAV, eigene Session-Map für »Termin eintragen«.
+    tes_sessions = {}
 
     # KAV-7: Zugangsdaten-Speicher als Per-Instanz-Datei (ZD-1/ZD-8). Lazy-
     # importiert, damit Tests, die `build_context` nicht aufrufen, keine
@@ -448,6 +461,7 @@ def build_context(cfg, db_path, store_path, zd_cli_path=None):
         faa_sessions=faa_sessions,
         gaa_sessions=gaa_sessions,
         kav_sessions=kav_sessions,
+        tes_sessions=tes_sessions,
     )
     # FAA-12 / GAA-5 / KAV-3: Familien-Gruppen-ID darf nach einer Migration
     # (EC-18) wechseln — der Getter liest sie zur Laufzeit aus dem Context,
@@ -477,7 +491,8 @@ def build_context(cfg, db_path, store_path, zd_cli_path=None):
         zd_store_getter=lambda: zd_store,
         kav_sessions=kav_sessions,
         plan_json_path=cfg.plan_json_path,
-        plan_origin_url=cfg.plan_origin_url)
+        plan_origin_url=cfg.plan_origin_url,
+        tes_sessions=tes_sessions)
 
     if cfg.provider_api_key:
         # KI-Modus — Anbieter steht; die Familien-Gruppe muss gesetzt sein (EC-2).
