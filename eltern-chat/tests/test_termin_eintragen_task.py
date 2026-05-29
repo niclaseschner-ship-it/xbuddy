@@ -4,11 +4,18 @@ Analog `test_kalender_verbinden_task.py`:
 - WriteTask-Prüfung: is_async, propose(), Quittungstext.
 - Catalog-Probe: TermineEintragenTask ist via build_catalog registrierbar.
 - AND-Guard: task erscheint nur wenn plan_origin_url UND family_group_chat_id_getter.
+
+Seit T144-IMPL-S2: handle_update-Routing-Test (AC2) prüft, dass eingehende
+Privatchat-Nachrichten an eine laufende TES-Session geleitet werden —
+analog FAA-12 (test_familie_anlegen_task.py Z.253-300).
 """
 
 import time
 
-from fakes import FakePlanClient, FakeTelegram
+from confirm import PendingStore
+from fakes import FakePlanClient, FakeTelegram, FakeProvider, make_message
+from history import History
+from main import Context, handle_update
 from skills.termin_eintragen_task import (
     TermineEintragenTask,
     TesSession,
@@ -243,3 +250,85 @@ def test_TesSession_prefix():
     session = TesSession(chat_id=42)
     assert TesSession.THREAD_NAME_PREFIX == "tes"
     assert TesSession.LOG_PREFIX == "TES"
+
+
+# ============================================================
+#  TES-3 / AC2 — handle_update routet Privatchat-Nachrichten an TES-Session
+# ============================================================
+
+def _ctx_with_tes_session(tmp_path, tg, tes_sessions,
+                           family_group_chat_id="-100"):
+    """Minimaler Context für den handle_update-Routing-Test (TES-3, AC2).
+
+    Analog `_ctx` in `test_familie_anlegen_task.py` (Z.35-58): Context hat
+    eine tes_sessions-Map, damit handle_update eingehende Privatchat-Updates
+    an die laufende Session leiten kann.
+    """
+    catalog = build_catalog(
+        tg, "/instanz/rootCA.pem",
+        plan_origin_url="http://test-plan",
+        family_group_chat_id_getter=lambda: family_group_chat_id,
+        tes_sessions=tes_sessions,
+    )
+    return Context(
+        tg=tg,
+        bot_username="mybot",
+        family_group_chat_id=family_group_chat_id,
+        context_depth=20,
+        provider=FakeProvider([]),
+        catalog=catalog,
+        history=History(str(tmp_path / "tes_routing.db")),
+        pending=PendingStore(),
+        tes_sessions=tes_sessions,
+    )
+
+
+def test_handle_update_routes_to_tes_session(tmp_path):
+    """TES-3 / AC2: läuft eine TES-Session in einem Privatchat, gehen eingehende
+    Privatchat-Updates dorthin (statt zum Agenten) — analog FAA-12.
+
+    Prüft: handle_update ruft session.deliver() auf, wenn eine aktive TES-Session
+    für den eingehenden chat_id existiert. Die Nachricht landet NICHT beim Agenten
+    (FakeProvider bleibt ohne Aufruf).
+    """
+    user_id = 42
+    tg = FakeTelegram(members={user_id: {"status": "member"}})
+    tes_sessions = {}
+    ctx = _ctx_with_tes_session(tmp_path, tg, tes_sessions)
+
+    # Session manuell starten: eine TesSession in die Map eintragen.
+    session = TesSession(chat_id=user_id)
+    tes_sessions[user_id] = session
+
+    # Eingabe aufzeichnen, die via deliver() ankommt.
+    delivered = []
+
+    def _run():
+        msg = session.next_message()
+        if msg is not None:
+            delivered.append(msg)
+
+    session.start(_run, ())
+    # Warten, bis der Worker-Thread auf next_message() blockiert.
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline and not session._queue is not None:
+        time.sleep(0.01)
+    time.sleep(0.05)  # Worker ist nun in next_message() blockiert.
+
+    # handle_update aufrufen — Privatchat-Nachricht von user_id.
+    msg = make_message("Klettern Donnerstag",
+                       chat_id=user_id, from_user_id=user_id,
+                       chat_type="private", message_id=200)
+    handle_update(msg, ctx)
+
+    # Warten, bis deliver() die Nachricht petrarbeitet hat.
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline and not delivered:
+        time.sleep(0.01)
+
+    assert delivered, (
+        "handle_update hätte die Privatchat-Nachricht an tes_sessions[%s].deliver() "
+        "leiten müssen — stattdessen wurde sie nicht an die Session zugestellt" % user_id)
+    assert delivered[0].text == "Klettern Donnerstag"
+    # Session wird nach _run() aus der Map entfernt — kein Agent-Aufruf.
+    assert not tg.sent, "Der Agent hätte bei laufender TES-Session nicht antworten dürfen"
