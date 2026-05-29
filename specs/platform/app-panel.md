@@ -350,7 +350,11 @@ Mindest-Abdeckung:
 - PANEL-8 — Fehlende oder kaputte `config.json` lässt die Seite mit
   Defaults laufen (keine Crashen, `console.warn`-Eintrag).
   Konfigurierbare Werte überschreiben Defaults in der dokumentierten
-  Priorität. *Tests:* die load-bearing Kopplung „`source_id` aus
+  Priorität. Der Config-Bootstrap nutzt `pwaShared.loadPwaConfig`
+  (PWA-4, `controller/_shared/config.js`) für Fetch, Merge und stummen
+  Fallback; `panelLib.checkConfigConsistency` prüft danach die
+  load-bearing Kopplungen.
+  *Tests:* die load-bearing Kopplung „`source_id` aus
   `config.json` == Schlüssel im `panels`-Abschnitt der `routing.json`
   des Routers" (siehe PANEL-8 Body, ROU-18) wird beim Start geprüft;
   eine Diskrepanz erscheint als sichtbarer Fehler (Test prüft die
