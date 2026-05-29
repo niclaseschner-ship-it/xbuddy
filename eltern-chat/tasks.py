@@ -255,7 +255,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   geraete_origin_url=None, gaa_sessions=None,
                   cav_call_hook=None, display_url_origin=None,
                   zd_store_getter=None, kav_sessions=None,
-                  plan_json_path=None, plan_origin_url=None):
+                  plan_json_path=None, plan_origin_url=None,
+                  tes_sessions=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
@@ -344,5 +345,36 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             tg=tg,
             plan_client=plan_client,
             is_member_fn=_is_member))
+
+    # TES-10: »Termin eintragen« als schreibende Aufgabe (EC-10). AND-Guard:
+    # plan_origin_url UND family_group_chat_id_getter müssen gesetzt sein —
+    # analog der KAV-Guard-Linie oben. Der TES-Task braucht beide, um:
+    # (a) den Plan-Buddy über die PUT-Schnittstelle anzusprechen (plan_origin_url),
+    # (b) die Live-Berechtigung gegen die Familien-Gruppe zu prüfen (TES-2).
+    # `tes_sessions` ist die externe Session-Registry aus main.build_context —
+    # dieselbe Map, die handle_update für das Routing liest (TES-3, AC2+AC3).
+    # Wenn plan_origin_url bereits oben gesetzt war, ist plan_client schon
+    # gebaut — wir bauen ihn hier separat (oder teilen ihn), beide Wege sind
+    # korrekt; separater Bau hält die Guards unabhängig lesbar.
+    if plan_origin_url is not None and family_group_chat_id_getter is not None:
+        from skills.plan_client import PlanClient as _PlanClient
+        from skills.termin_eintragen_task import TermineEintragenTask
+        _tes_plan_client = _PlanClient(origin_url=plan_origin_url)
+        _tes_fgcid_getter = family_group_chat_id_getter
+        _tes_tg = tg
+        _tes_sessions = tes_sessions if tes_sessions is not None else {}
+        def _tes_is_member(user_id):
+            fgcid = _tes_fgcid_getter()
+            if not fgcid:
+                return False
+            member = _tes_tg.get_chat_member(fgcid, user_id)
+            return member is not None and member.get("status") in (
+                "creator", "administrator", "member")
+        catalog.register(TermineEintragenTask(
+            tg=tg,
+            plan_client=_tes_plan_client,
+            sessions=_tes_sessions,
+            family_group_chat_id_getter=family_group_chat_id_getter,
+            is_member_fn=_tes_is_member))
 
     return catalog
