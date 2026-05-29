@@ -22,6 +22,14 @@ logger = logging.getLogger(__name__)
 FILE_MODE = 0o600
 
 
+class StoreError(Exception):
+    """Der Speicher konnte nicht geschrieben werden (z. B. kein Schreibrecht, Disk voll).
+
+    Analog RegistryError in familie/registry.py und geraete/registry.py —
+    eine typisierte Fehler-Sorte, damit Konsumenten gezielt reagieren können.
+    """
+
+
 class Zugangsdaten:
     """Per-Instanz-Speicher für benannte Zugangsdaten (ZD-1, ZD-2).
 
@@ -97,16 +105,12 @@ class Zugangsdaten:
     def _write(self, data):
         """Schreibt `data` als JSON atomar nach `self.path` mit Rechten 0600 (ZD-3, DCOMP-4).
 
-        Muster nach geraete/registry.py::save() (GER-6):
-        Schreibt zuerst in eine Temp-Datei im Zielverzeichnis (damit
-        `os.replace` ein Filesystem-internes atomares Rename ist und der
-        Leser nie eine halb geschriebene Datei sieht), dann atomares
-        Rename auf den Zielnamen.
-
-        Die Datei entsteht direkt mit `0600` — nicht erst mit dem
-        (offeneren) umask-Default. `os.chmod` nach `os.replace` als
-        defense-in-depth (exotische FS). Bei einem Fehlschlag wird die
-        Temp-Datei aufgeräumt; die alte Zieldatei bleibt unverändert.
+        Atomar nach DCOMP-4: zuerst in eine Temp-Datei im Zielverzeichnis,
+        dann `os.replace` auf den Zielnamen — ein zeitgleicher Lesezugriff
+        sieht nie eine halb geschriebene Datei. Die Temp-Datei entsteht
+        direkt mit `0600`, `os.chmod` nach `os.replace` als defense-in-depth
+        (exotische FS). Bei einem Fehlschlag wird die Temp-Datei aufgeräumt
+        und ein StoreError geworfen — die alte Zieldatei bleibt unverändert.
         """
         directory = os.path.dirname(os.path.abspath(self.path))
         if directory and not os.path.isdir(directory):
@@ -127,15 +131,16 @@ class Zugangsdaten:
             # Defense-in-depth: Modus erzwingen, bevor das Rename passiert.
             os.chmod(tmp_path, FILE_MODE)
             os.replace(tmp_path, self.path)
-        except OSError:
+        except OSError as e:
             # Aufräumen: Temp darf nicht zurückbleiben (analog GER-6).
             try:
                 os.remove(tmp_path)
             except OSError:
                 pass
-            raise
+            raise StoreError(
+                "Zugangsdaten-Datei konnte nicht geschrieben werden: %s" % e) from e
         # Bestehende Zieldatei kann offenere Rechte gehabt haben —
-        # defense-in-depth analog geraete/registry.py.
+        # defense-in-depth nach DCOMP-4 (analog geraete/registry.py GER-6).
         os.chmod(self.path, FILE_MODE)
 
     # -- Diagnose ---------------------------------------------------------

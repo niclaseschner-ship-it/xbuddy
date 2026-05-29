@@ -22,10 +22,11 @@ from .config import (
     add_cli_argument,
     resolve_store_path,
 )
-from .store import FILE_MODE, Zugangsdaten, is_owner_only
+from .store import FILE_MODE, StoreError, Zugangsdaten, is_owner_only
 
 __all__ = [
     "Zugangsdaten",
+    "StoreError",
     "FILE_MODE",
     "is_owner_only",
     "resolve_store_path",
