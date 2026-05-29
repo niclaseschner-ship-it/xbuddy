@@ -345,4 +345,32 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             plan_client=plan_client,
             is_member_fn=_is_member))
 
+    # TES-10: »Termin eintragen« als schreibende Aufgabe (EC-10). AND-Guard:
+    # plan_origin_url UND family_group_chat_id_getter müssen gesetzt sein —
+    # analog der KAV-Guard-Linie oben. Der TES-Task braucht beide, um:
+    # (a) den Plan-Buddy über die PUT-Schnittstelle anzusprechen (plan_origin_url),
+    # (b) die Live-Berechtigung gegen die Familien-Gruppe zu prüfen (TES-2).
+    # Wenn plan_origin_url bereits oben gesetzt war, ist plan_client schon
+    # gebaut — wir bauen ihn hier separat (oder teilen ihn), beide Wege sind
+    # korrekt; separater Bau hält die Guards unabhängig lesbar.
+    if plan_origin_url is not None and family_group_chat_id_getter is not None:
+        from skills.plan_client import PlanClient as _PlanClient
+        from skills.termin_eintragen_task import TermineEintragenTask
+        _tes_plan_client = _PlanClient(origin_url=plan_origin_url)
+        _tes_fgcid_getter = family_group_chat_id_getter
+        _tes_tg = tg
+        def _tes_is_member(user_id):
+            fgcid = _tes_fgcid_getter()
+            if not fgcid:
+                return False
+            member = _tes_tg.get_chat_member(fgcid, user_id)
+            return member is not None and member.get("status") in (
+                "creator", "administrator", "member")
+        catalog.register(TermineEintragenTask(
+            tg=tg,
+            plan_client=_tes_plan_client,
+            sessions={},
+            family_group_chat_id_getter=family_group_chat_id_getter,
+            is_member_fn=_tes_is_member))
+
     return catalog
