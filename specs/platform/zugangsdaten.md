@@ -52,7 +52,13 @@ beschränkt (`0600`). Geheimnisse liegen nie im Repo (CLAUDE.md §8). Dies hebt
 das Muster des Eltern-Chat-Onboarding-Speichers (`eltern-chat-onboarding.md`
 ONB-5, E-ONB-4) auf die Plattform-Ebene.
 
-*Tickets:* #37
+Schreibvorgänge auf den Speicher sind **atomar** (Temp-Datei im
+Zielverzeichnis + `os.replace`), damit ein zeitgleicher Lesezugriff nie
+eine halb geschriebene Datei sieht — Bauregel DCOMP-4. Die `0600`-Rechte
+werden race-frei bei Anlage der Temp-Datei gesetzt und nach dem Rename
+per `os.chmod` als defense-in-depth erzwungen.
+
+*Tickets:* #37, #245
 
 ### ZD-4 — Fehlender Speicher ist kein Fehler
 Fehlt die Datei beim Start, gilt der Speicher als leer — das System bricht
