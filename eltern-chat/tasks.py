@@ -262,12 +262,14 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
     — wenn die FAA-Abhängigkeiten vorliegen — die »Familie anlegen«-Aufgabe
     (`familie-anlegen.md` FAA-12, schreibend), — wenn die GAA-Abhängigkeiten
     vorliegen — die »Gerät anlegen«-Aufgabe (`geraet-anlegen.md` GAA-5,
-    schreibend) und — wenn die KAV-Abhängigkeiten vorliegen — die »Kalender
-    verbinden«-Aufgabe (`kalender-verbinden.md` KAV-3, schreibend). Die
-    instanz-festen Abhängigkeiten reicht die Orchestrierung hier herein; das
-    ermöglicht einer Test-Umgebung, den Katalog ohne FAA-/GAA-/KAV-Setup
-    zu bauen (`build_catalog(tg, ca_path)` bleibt unverändert kompatibel zu
-    den CAV-Tests). Weitere Aufgaben werden additiv ergänzt (EC-8).
+    schreibend), — wenn die KAV-Abhängigkeiten vorliegen — die »Kalender
+    verbinden«-Aufgabe (`kalender-verbinden.md` KAV-3, schreibend) und —
+    wenn `plan_origin_url` gesetzt ist — die »Termine erfragen«-Aufgabe
+    (`termine-erfragen.md` TER-10, lesend). Die instanz-festen Abhängigkeiten
+    reicht die Orchestrierung hier herein; das ermöglicht einer Test-Umgebung,
+    den Katalog ohne FAA-/GAA-/KAV-Setup zu bauen (`build_catalog(tg, ca_path)`
+    bleibt unverändert kompatibel zu den CAV-Tests). Weitere Aufgaben werden
+    additiv ergänzt (EC-8).
 
     FAA-/GAA-Pfade waren bis Auftrag #215 Datei-Pfade
     (`family_registry_path`/`geraete_registry_path`); seit Auftrag #215
@@ -306,4 +308,41 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             family_group_chat_id_getter,
             plan_json_path=plan_json_path,
             plan_origin_url=plan_origin_url))
+
+    if plan_origin_url is not None:
+        # TER-10: »Termine erfragen« als lesende Aufgabe (EC-9). Die
+        # is_member_fn prüft live die Telegram-Gruppen-Mitgliedschaft (TER-2)
+        # — hier als reines tg.get_chat_member-Proxy, damit build_catalog
+        # keinen family_group_chat_id-Getter separat braucht. In der
+        # Laufzeit-Instanz ist family_group_chat_id_getter gesetzt; fehlt es,
+        # läuft die Berechtigung über die is_member_fn im Task, die das
+        # authz-Gate in main.py bereits abbildet — die Aufgabe bekommt hier
+        # eine Immer-true-Funktion (Sicherheits-Gate liegt außen, EC-2, E-EC-4).
+        # Die echte Berechtigungs-Prüfung (TER-2) nutzt die family_group_chat_id;
+        # da diese aber im normalen Betrieb durch authz.py geprüft wurde, bevor
+        # der Catalog-Aufruf erreicht wird, ist die Task-interne Prüfung eine
+        # zweite Sicherheitslinie — nützlich bei direktem Task-Aufruf.
+        from skills.plan_client import PlanClient
+        from skills.termine_erfragen_task import TermineErfragenTask
+        plan_client = PlanClient(origin_url=plan_origin_url)
+        # TER-2: is_member_fn nutzt family_group_chat_id_getter, wenn vorhanden;
+        # sonst wird die Prüfung ans Task-run delegiert (authz.py vor dem Loop).
+        if family_group_chat_id_getter is not None:
+            _fgcid_getter = family_group_chat_id_getter
+            _tg = tg
+            def _is_member(user_id):
+                fgcid = _fgcid_getter()
+                if not fgcid:
+                    return False
+                member = _tg.get_chat_member(fgcid, user_id)
+                return member is not None and member.get("status") in (
+                    "creator", "administrator", "member")
+        else:
+            # Kein Getter → Immer-true (authz.py hat die Prüfung bereits gemacht)
+            _is_member = lambda uid: True
+        catalog.register(TermineErfragenTask(
+            tg=tg,
+            plan_client=plan_client,
+            is_member_fn=_is_member))
+
     return catalog
