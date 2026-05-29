@@ -52,7 +52,13 @@ beschränkt (`0600`). Geheimnisse liegen nie im Repo (CLAUDE.md §8). Dies hebt
 das Muster des Eltern-Chat-Onboarding-Speichers (`eltern-chat-onboarding.md`
 ONB-5, E-ONB-4) auf die Plattform-Ebene.
 
-*Tickets:* #37
+Schreibvorgänge sind **atomar** nach
+[`conventions/data-components.md`](../../conventions/data-components.md)
+**DCOMP-4** — ein zeitgleicher Lesezugriff sieht nie eine halb geschriebene
+Datei; die `0600`-Rechte bleiben dabei erhalten. Die Konvention ist die
+eine Quelle für das Muster — diese Spec wiederholt es nicht mehr.
+
+*Tickets:* #37, #245
 
 ### ZD-4 — Fehlender Speicher ist kein Fehler
 Fehlt die Datei beim Start, gilt der Speicher als leer — das System bricht
@@ -102,9 +108,10 @@ Auflösungs-Reihenfolge.
 
 ### ZD-9 — Automatisierte Tests je Anforderung
 Jede Anforderung mit Code-Verhalten hat einen automatisierten Test
-(CLAUDE.md §6), ohne Netz. Mindest-Abdeckung: ZD-3 (Schreiben setzt `0600`) ·
-ZD-4 (fehlende Datei → leerer Speicher, kein Crash) · ZD-5 (Setzen und
-anschließendes Holen je Name) · ZD-6 (kein Wert im Log).
+(CLAUDE.md §6), ohne Netz. Mindest-Abdeckung: ZD-3 (Schreiben setzt `0600`
+und ist atomar — ein zeitgleicher Lesezugriff sieht nie eine halb
+geschriebene Datei) · ZD-4 (fehlende Datei → leerer Speicher, kein Crash) ·
+ZD-5 (Setzen und anschließendes Holen je Name) · ZD-6 (kein Wert im Log).
 
 *Tickets:* #37
 

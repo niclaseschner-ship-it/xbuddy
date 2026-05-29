@@ -88,9 +88,4 @@ Lese-Sicht existiert nur „alter Stand" oder „neuer Stand", nie
 „dazwischen".
 
 Heimat des Patterns in den Specs: `familie.md` FAM-11, `geraete.md`
-GER-6.
-
-Die Zugangsdaten-Komponente (`tools/zugangsdaten/store.py`) trägt das
-Pattern heute nicht — `zugangsdaten.md` ZD-3 regelt nur Per-Instanz-
-Datei + `0600`-Rechte, nicht atomares Schreiben; Nachzug ist
-Folge-Ticket.
+GER-6, `zugangsdaten.md` ZD-3.
