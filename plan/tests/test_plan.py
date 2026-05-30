@@ -1471,3 +1471,149 @@ def test_DCOMP_1_familie_unreachable_view_returns_200(demo_config):
     client = plan_main.app.test_client()
     r = client.get("/display/plan/woche")
     assert r.status_code == 200
+
+
+# ============================================================
+#  PLAN-22 — PUT termine: Mehrtages-Spannen + Uhrzeit (#256, T256-S2)
+# ============================================================
+#
+# Spec-Erweiterung: PUT /api/v1/plan/termine akzeptiert nun neben
+# dem alten `datum` auch `beginn`/`ende` für Mehrtages-Ganztags-Spannen
+# (AC1) und zeitgebundene Termine (AC2). `datum` bleibt als Alias (AC3).
+# Validierungsfehler → HTTP 400 (AC4). Round-Trip via FakeTransport (AC5).
+
+
+def test_PLAN_22_put_mehrtages_ganztags(demo_config, demo_registry):
+    """AC1: PUT mit beginn+ende (beide ISO-Datum) legt eine Mehrtages-Ganztags-
+    Spanne an. Das Google-Roh-Event trägt start.date=beginn,
+    end.date=ende+1Tag (exklusiv, Google-Konvention) — PLAN-22, #256."""
+    transport = FakeTransport()
+    client = make_client(demo_config, demo_registry, transport)
+    r = client.put("/api/v1/plan/termine", data=json.dumps({
+        "titel": "Urlaub", "beginn": "2026-07-01", "ende": "2026-07-05",
+    }), content_type="application/json")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["action"] == "created"
+    assert "event_id" in body
+    # Raw-Event prüfen: start.date=beginn, end.date=ende+1 (exklusiv).
+    insert_raw = next(c[1] for c in transport.calls if c[0] == "insert")
+    assert insert_raw["start"]["date"] == "2026-07-01"
+    assert insert_raw["end"]["date"] == "2026-07-06"   # inklusiv 05 → exklusiv 06
+    assert "dateTime" not in insert_raw["start"]
+    assert "dateTime" not in insert_raw["end"]
+
+
+def test_PLAN_22_put_zeitgebunden(demo_config, demo_registry):
+    """AC2: PUT mit beginn+ende als ISO-Datetimes legt einen zeitgebundenen
+    Termin an. Das Raw-Event trägt start.dateTime/end.dateTime mit UTC-Offset.
+    ganztags=False entspricht dem normalisierten Lese-Modell — PLAN-22, #256."""
+    transport = FakeTransport()
+    client = make_client(demo_config, demo_registry, transport)
+    r = client.put("/api/v1/plan/termine", data=json.dumps({
+        "titel": "Elternabend",
+        "beginn": "2026-09-10T19:00:00+02:00",
+        "ende":   "2026-09-10T21:00:00+02:00",
+    }), content_type="application/json")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["action"] == "created"
+    insert_raw = next(c[1] for c in transport.calls if c[0] == "insert")
+    assert "dateTime" in insert_raw["start"]
+    assert "dateTime" in insert_raw["end"]
+    # Der UTC-Offset muss im isoformat() enthalten sein (kein naive datetime).
+    assert "+" in insert_raw["start"]["dateTime"] or "Z" in insert_raw["start"]["dateTime"]
+    assert "date" not in insert_raw["start"] or insert_raw["start"].get("date") is None
+
+
+def test_PLAN_22_put_datum_alias_backward_compat(demo_config, demo_registry):
+    """AC3: PUT mit `datum` (altes Format) legt weiterhin einen eintägig-
+    ganztägigen Termin an — vollständige Rückwärts-Kompatibilität (#256)."""
+    transport = FakeTransport()
+    client = make_client(demo_config, demo_registry, transport)
+    r = client.put("/api/v1/plan/termine", data=json.dumps({
+        "titel": "Zahnarzt", "datum": "2026-06-15",
+    }), content_type="application/json")
+    assert r.status_code == 200
+    assert r.get_json()["action"] == "created"
+    insert_raw = next(c[1] for c in transport.calls if c[0] == "insert")
+    assert insert_raw["start"]["date"] == "2026-06-15"
+    assert insert_raw["end"]["date"] == "2026-06-16"   # eintägig: +1 Tag
+
+
+def test_PLAN_22_put_validation_ende_vor_beginn_ganztags(demo_config, demo_registry):
+    """AC4 (ganztags): ende vor beginn → HTTP 400."""
+    client = make_client(demo_config, demo_registry, FakeTransport())
+    r = client.put("/api/v1/plan/termine", data=json.dumps({
+        "titel": "Rückwärts", "beginn": "2026-07-10", "ende": "2026-07-05",
+    }), content_type="application/json")
+    assert r.status_code == 400
+    assert "error" in r.get_json()
+
+
+def test_PLAN_22_put_validation_ende_gleich_beginn_zeitgebunden(demo_config, demo_registry):
+    """AC4 (zeitgebunden): ende <= beginn → HTTP 400 (Dauer 0 ist kein gültiger Termin)."""
+    client = make_client(demo_config, demo_registry, FakeTransport())
+    r = client.put("/api/v1/plan/termine", data=json.dumps({
+        "titel": "Punkt",
+        "beginn": "2026-09-10T19:00:00+02:00",
+        "ende":   "2026-09-10T19:00:00+02:00",  # identisch → <= check schlägt an
+    }), content_type="application/json")
+    assert r.status_code == 400
+
+
+def test_PLAN_22_put_validation_zeitgebunden_ohne_ende(demo_config, demo_registry):
+    """AC4: zeitgebundenes beginn (enthält 'T') ohne ende → HTTP 400."""
+    client = make_client(demo_config, demo_registry, FakeTransport())
+    r = client.put("/api/v1/plan/termine", data=json.dumps({
+        "titel": "Halbfertig", "beginn": "2026-09-10T19:00:00+02:00",
+    }), content_type="application/json")
+    assert r.status_code == 400
+    assert "Pflicht" in r.get_json()["error"] or "ende" in r.get_json()["error"].lower()
+
+
+def test_PLAN_22_put_validation_typ_mismatch(demo_config, demo_registry):
+    """AC4: beginn als date, ende als datetime (Typ-Mismatch) → HTTP 400."""
+    client = make_client(demo_config, demo_registry, FakeTransport())
+    r = client.put("/api/v1/plan/termine", data=json.dumps({
+        "titel": "Mismatch",
+        "beginn": "2026-07-01",
+        "ende":   "2026-07-05T18:00:00+02:00",   # datetime, aber beginn ist date
+    }), content_type="application/json")
+    assert r.status_code == 400
+    assert "Mismatch" in r.get_json()["error"] or "mismatch" in r.get_json()["error"].lower()
+
+
+def test_PLAN_14_put_mehrtages_spanne_roundtrip_via_get(demo_config, demo_registry):
+    """AC5: nach PUT einer Mehrtages-Spanne liefert GET /api/v1/plan/termine
+    das Event mit korrektem beginn/ende/ganztags (FakeTransport read-back).
+    Spiegelt den normalisierten PLAN-17-Vertrag — PLAN-14/PLAN-22, #256."""
+    from datetime import date as _date, timedelta as _td
+    # FakeTransport mit einem vorbereiteten Roh-Event, das eine 5-Tages-Spanne
+    # darstellt (start.date=07-01, end.date=07-06 exklusiv = inklusiv 07-05).
+    raw_span = {
+        "id": "span1",
+        "summary": "Sommercamp",
+        "start": {"date": "2026-07-01"},
+        "end":   {"date": "2026-07-06"},
+    }
+    transport = FakeTransport(raw_events=[raw_span])
+    client = make_client(demo_config, demo_registry, transport)
+
+    # PUT legt die Spanne an (AC1 — insert in FakeTransport).
+    r_put = client.put("/api/v1/plan/termine", data=json.dumps({
+        "titel": "Sommercamp", "beginn": "2026-07-01", "ende": "2026-07-05",
+    }), content_type="application/json")
+    assert r_put.status_code == 200
+    assert r_put.get_json()["action"] == "created"
+
+    # GET im Zeitraum — der FakeTransport liefert das vorbereitete Roh-Event zurück.
+    r_get = client.get("/api/v1/plan/termine?ab=2026-07-01&tage=7")
+    assert r_get.status_code == 200
+    events = r_get.get_json()
+    sommercamp = next((e for e in events if e["titel"] == "Sommercamp"), None)
+    assert sommercamp is not None, "Sommercamp-Event fehlt in GET-Antwort"
+    assert sommercamp["ganztags"] is True
+    # beginn = 2026-07-01, ende = 2026-07-06 (Google-exklusiv, normalisiert als date)
+    assert sommercamp["beginn"] == "2026-07-01"
+    assert sommercamp["ende"] == "2026-07-06"
