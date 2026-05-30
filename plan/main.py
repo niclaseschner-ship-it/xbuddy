@@ -514,8 +514,14 @@ def api_termine():
     """Termin-Schnittstelle für andere XBuddy-Apps (PLAN-22).
 
     GET ?ab=<iso>&tage=<n>: liefert die normalisierten Termine des Zeitraums.
-    PUT-Body: { titel, datum[, event_id] } — legt einen ganztägigen Termin an
-    oder ändert seinen Titel. Der Familien-Kalender ist nur über diese
+
+    PUT-Body (vollständiger Vertrag → PLAN-22, #256):
+      { titel, beginn, [ende], [event_id] }
+      - beginn als ISO-Datum (YYYY-MM-DD)  → ganztägig; ende optional (fehlt: eintägig)
+      - beginn als ISO-Datum-Zeit           → zeitgebunden; ende Pflicht
+      - datum ist Rückwärts-Alias für ganztägiges beginn (Compat AC3)
+      - event_id angegeben                  → Titel-Patch (PLAN-18)
+    Validierungsfehler → HTTP 400. Der Familien-Kalender ist nur über diese
     Schnittstelle erreichbar — Apps rufen Google nicht direkt (PLAN-22).
     """
     kalender = _kalender()

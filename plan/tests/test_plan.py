@@ -1586,28 +1586,24 @@ def test_PLAN_22_put_validation_typ_mismatch(demo_config, demo_registry):
 
 def test_PLAN_14_put_mehrtages_spanne_roundtrip_via_get(demo_config, demo_registry):
     """AC5: nach PUT einer Mehrtages-Spanne liefert GET /api/v1/plan/termine
-    das Event mit korrektem beginn/ende/ganztags (FakeTransport read-back).
+    das Event mit korrektem beginn/ende/ganztags — echter PUT→GET-Round-Trip.
+
+    FakeTransport speichert insert_event-Ergebnisse in raw_events, sodass
+    list_events sie zurückliefert (echte Kette, kein pre-seeded Fixture).
     Spiegelt den normalisierten PLAN-17-Vertrag — PLAN-14/PLAN-22, #256."""
-    from datetime import date as _date, timedelta as _td
-    # FakeTransport mit einem vorbereiteten Roh-Event, das eine 5-Tages-Spanne
-    # darstellt (start.date=07-01, end.date=07-06 exklusiv = inklusiv 07-05).
-    raw_span = {
-        "id": "span1",
-        "summary": "Sommercamp",
-        "start": {"date": "2026-07-01"},
-        "end":   {"date": "2026-07-06"},
-    }
-    transport = FakeTransport(raw_events=[raw_span])
+    # Leerer FakeTransport — kein pre-seeded Event. Das Event kommt ausschließlich
+    # über den PUT (insert_event → raw_events → list_events) in den GET zurück.
+    transport = FakeTransport()
     client = make_client(demo_config, demo_registry, transport)
 
-    # PUT legt die Spanne an (AC1 — insert in FakeTransport).
+    # PUT legt die Spanne an (AC1 — insert_event speichert in raw_events).
     r_put = client.put("/api/v1/plan/termine", data=json.dumps({
         "titel": "Sommercamp", "beginn": "2026-07-01", "ende": "2026-07-05",
     }), content_type="application/json")
     assert r_put.status_code == 200
     assert r_put.get_json()["action"] == "created"
 
-    # GET im Zeitraum — der FakeTransport liefert das vorbereitete Roh-Event zurück.
+    # GET im Zeitraum — das Event kommt aus dem insert_event-Speicher des FakeTransport.
     r_get = client.get("/api/v1/plan/termine?ab=2026-07-01&tage=7")
     assert r_get.status_code == 200
     events = r_get.get_json()
