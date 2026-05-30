@@ -45,6 +45,7 @@ _WOCHENTAGE = [
 
 # TER-4 / E-TES-4: Wochentag-Mapping (SSoT für TER + TES).
 # Montag = 0 (PLAN-28 wochenstart=0), Sonntag = 6.
+# Externer Zugriff ausschließlich über `wochentag_nr_dict()` (CLAUDE.md §6).
 _WOCHENTAG_NR = {
     "montag": 0, "mo": 0,
     "dienstag": 1, "di": 1,
