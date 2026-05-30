@@ -29,7 +29,7 @@ import authz
 import confirm
 from skills.plan_client import PlanClient, PlanClientError
 from skills.termine_erfragen import (parse_naechsten_wochentag, parse_wochentag,
-                                      parse_zeitraum)
+                                      parse_zeitraum, wochentag_nr_dict)
 from telegram import TelegramError
 
 
@@ -139,8 +139,7 @@ def parse_datum(text, heute=None):
 
     # Konkreter Wochentag ohne „nächste"-Marker — E-TES-4: Helfer aus termine_erfragen (SSoT).
     # Wortgrenze prüfen, damit „Mittwoch" nicht „Mi" überlappt.
-    from skills.termine_erfragen import _WOCHENTAG_NR as _WT_NR
-    for wt_name in _WT_NR:
+    for wt_name in wochentag_nr_dict():
         if re.search(r'\b' + re.escape(wt_name) + r'\b', t):
             ergebnis = parse_wochentag(wt_name, heute)
             if ergebnis is not None:

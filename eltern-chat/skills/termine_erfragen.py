@@ -45,7 +45,7 @@ _WOCHENTAGE = [
 
 # TER-4 / E-TES-4: Wochentag-Mapping (SSoT für TER + TES).
 # Montag = 0 (PLAN-28 wochenstart=0), Sonntag = 6.
-# Exportiert als Helfer-Basis — nicht direkt von außen nutzen.
+# Externer Zugriff ausschließlich über `wochentag_nr_dict()` (CLAUDE.md §6).
 _WOCHENTAG_NR = {
     "montag": 0, "mo": 0,
     "dienstag": 1, "di": 1,
@@ -55,6 +55,19 @@ _WOCHENTAG_NR = {
     "samstag": 5, "sa": 5,
     "sonntag": 6, "so": 6,
 }
+
+
+def wochentag_nr_dict():
+    """Public-API: liefert eine Kopie des Wochentag-Nummer-Mappings (E-TES-4).
+
+    Schlüssel: Wochentag-Namen und Kürzel in Kleinschreibung.
+    Wert: ISO-Wochentag-Nummer (Montag=0, Sonntag=6, PLAN-28).
+
+    Externe Konsumenten (z. B. TES) importieren ausschließlich diese Funktion,
+    nicht das modul-private `_WOCHENTAG_NR` (CLAUDE.md §6: einseitige
+    Abhängigkeiten über Public-API).
+    """
+    return dict(_WOCHENTAG_NR)
 
 
 # ============================================================
