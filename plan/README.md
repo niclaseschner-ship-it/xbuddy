@@ -42,7 +42,7 @@ umgestellt — keine Layout-Änderung, keine hardcodierten Farben/Maße.
 | `GET /display/plan/woche?ab=<iso>` | Anker des rollierenden Fensters verschieben (PLAN-4) |
 | `PUT /api/v1/plan/zuteilung` | Erwachsenen-Slot zuweisen, lokal gespeichert (PLAN-7/8) |
 | `PUT \| DELETE /api/v1/plan/aktivitaet` | Kind-Aktivität im Kalender setzen/ändern/löschen (PLAN-11) |
-| `GET \| PUT /api/v1/plan/termine` | Termin-Schnittstelle für andere XBuddy-Apps (PLAN-22) |
+| `GET \| PUT /api/v1/plan/termine` | Termin-Schnittstelle für andere XBuddy-Apps — lesen und anlegen (eintägig/Mehrtages/zeitgebunden, PLAN-22, #256) |
 
 ## Konfiguration
 

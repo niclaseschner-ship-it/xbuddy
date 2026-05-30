@@ -22,7 +22,8 @@ import argparse
 import logging
 import os
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from flask import Flask, jsonify, render_template, request
 
@@ -410,7 +411,8 @@ def api_aktivitaet():
             return jsonify({"ok": True, "action": "patched", "event_id": neue_id})
         if not datum:
             return jsonify({"error": "datum ist Pflicht"}), 400
-        neue_id = kalender.event_anlegen(titel, date.fromisoformat(datum), ganztags=True)
+        # event_anlegen ohne ende → eintägig ganztägig (PLAN-11, verhaltensneutral).
+        neue_id = kalender.event_anlegen(titel, date.fromisoformat(datum))
         return jsonify({"ok": True, "action": "created", "event_id": neue_id})
     except kalender_mod.CalendarUnavailable as e:
         # PLAN-20: Schreib-Misserfolg ist klar erkennbar.
@@ -420,13 +422,106 @@ def api_aktivitaet():
         return jsonify({"error": str(e)}), 400
 
 
+def _parse_beginn_ende(body):
+    """Parst beginn/ende aus einem PUT-/termine-Body (PLAN-22, #256).
+
+    Erkennung via 'T' im String (spiegelt _parse_when aus kalender.py):
+    - Enthält der Wert ein 'T': datetime-Modus (zeitgebunden).
+    - Sonst: date-Modus (ganztägig).
+
+    Rückwärts-Compat: `datum` ist Alias für ganztägiges `beginn`. Beide
+    gesetzt und ungleich → ValueError (AC4).
+
+    Zeitzone (PLAN-28, #256): naive Datum-Zeiten werden in der Familien-
+    Zeitzone (`_current_config().zeitzone`, Default Europe/Berlin) aware
+    gemacht, bevor sie an event_anlegen übergeben werden.
+
+    Liefert (beginn, ende) wobei `ende` None sein kann (eintägig-ganztägig).
+    Wirft ValueError bei Validierungsfehlern (AC4).
+    """
+    beginn_raw = body.get("beginn")
+    datum_raw = body.get("datum")
+
+    # datum ist Alias für ganztägiges beginn (Rückwärts-Compat, AC3).
+    if datum_raw and beginn_raw:
+        if datum_raw != beginn_raw:
+            raise ValueError(
+                "datum und beginn sind beide gesetzt aber ungleich — "
+                "datum ist Alias für beginn (ganztägig)")
+        # Beide identisch: beginn_raw gewinnt, datum_raw ignorieren.
+    if beginn_raw is None:
+        if datum_raw:
+            beginn_raw = datum_raw
+        else:
+            raise ValueError("beginn (oder datum als Alias) ist Pflicht")
+
+    ende_raw = body.get("ende")
+
+    # Typ-Erkennung via 'T': entspricht der Logik in _parse_when.
+    beginn_ist_datetime = isinstance(beginn_raw, str) and "T" in beginn_raw
+    ende_ist_datetime = isinstance(ende_raw, str) and "T" in ende_raw if ende_raw else None
+
+    if beginn_ist_datetime:
+        # Zeitgebunden: ende Pflicht (AC4).
+        if not ende_raw:
+            raise ValueError(
+                "zeitgebundener Termin (beginn enthält 'T'): ende ist Pflicht")
+        if ende_raw and not ende_ist_datetime:
+            raise ValueError(
+                "Typ-Mismatch: beginn ist datetime, ende muss datetime sein (nicht date)")
+        try:
+            beginn_dt = datetime.fromisoformat(beginn_raw.replace("Z", "+00:00"))
+        except ValueError:
+            raise ValueError("beginn ist kein gültiges ISO-Datetime: %r" % beginn_raw)
+        try:
+            ende_dt = datetime.fromisoformat(ende_raw.replace("Z", "+00:00"))
+        except ValueError:
+            raise ValueError("ende ist kein gültiges ISO-Datetime: %r" % ende_raw)
+        # Naive Datetimes in Familien-Zeitzone aware machen.
+        tz = ZoneInfo(_current_config().zeitzone)
+        if beginn_dt.tzinfo is None:
+            beginn_dt = beginn_dt.replace(tzinfo=tz)
+        if ende_dt.tzinfo is None:
+            ende_dt = ende_dt.replace(tzinfo=tz)
+        # Validierung ende > beginn (AC4).
+        if ende_dt <= beginn_dt:
+            raise ValueError("zeitgebundener Termin: ende muss nach beginn liegen")
+        return beginn_dt, ende_dt
+    else:
+        # Ganztägig: beginn und ggf. ende sind Datumsstrings.
+        if ende_raw and ende_ist_datetime:
+            raise ValueError(
+                "Typ-Mismatch: beginn ist date (ganztägig), ende muss date sein (nicht datetime)")
+        try:
+            beginn_d = date.fromisoformat(beginn_raw)
+        except ValueError:
+            raise ValueError("beginn ist kein gültiges ISO-Datum: %r" % beginn_raw)
+        if ende_raw:
+            try:
+                ende_d = date.fromisoformat(ende_raw)
+            except ValueError:
+                raise ValueError("ende ist kein gültiges ISO-Datum: %r" % ende_raw)
+            # Validierung ende >= beginn (AC4).
+            if ende_d < beginn_d:
+                raise ValueError(
+                    "ganztägiger Termin: ende darf nicht vor beginn liegen")
+            return beginn_d, ende_d
+        return beginn_d, None
+
+
 @app.route("/api/v1/plan/termine", methods=["GET", "PUT"])
 def api_termine():
     """Termin-Schnittstelle für andere XBuddy-Apps (PLAN-22).
 
     GET ?ab=<iso>&tage=<n>: liefert die normalisierten Termine des Zeitraums.
-    PUT-Body: { titel, datum[, event_id] } — legt einen ganztägigen Termin an
-    oder ändert seinen Titel. Der Familien-Kalender ist nur über diese
+
+    PUT-Body (vollständiger Vertrag → PLAN-22, #256):
+      { titel, beginn, [ende], [event_id] }
+      - beginn als ISO-Datum (YYYY-MM-DD)  → ganztägig; ende optional (fehlt: eintägig)
+      - beginn als ISO-Datum-Zeit           → zeitgebunden; ende Pflicht
+      - datum ist Rückwärts-Alias für ganztägiges beginn (Compat AC3)
+      - event_id angegeben                  → Titel-Patch (PLAN-18)
+    Validierungsfehler → HTTP 400. Der Familien-Kalender ist nur über diese
     Schnittstelle erreichbar — Apps rufen Google nicht direkt (PLAN-22).
     """
     kalender = _kalender()
@@ -448,10 +543,9 @@ def api_termine():
         if body.get("event_id"):
             neue_id = kalender.event_aendern(body["event_id"], titel)
             return jsonify({"ok": True, "action": "patched", "event_id": neue_id})
-        datum = body.get("datum")
-        if not datum:
-            return jsonify({"error": "datum ist Pflicht"}), 400
-        neue_id = kalender.event_anlegen(titel, date.fromisoformat(datum), ganztags=True)
+        # Mehrtages-Spannen und zeitgebundene Termine (PLAN-22, #256).
+        beginn, ende = _parse_beginn_ende(body)
+        neue_id = kalender.event_anlegen(titel, beginn, ende)
         return jsonify({"ok": True, "action": "created", "event_id": neue_id})
     except kalender_mod.CalendarUnavailable as e:
         logger.error("Termin-Schreibvorgang fehlgeschlagen: %s", e)
