@@ -98,6 +98,31 @@ def test_TES10_propose_liefert_proposal():
 
 
 # ============================================================
+#  TES-10 / EC-10 #266 — Vorschlag ist kontextabhängig
+# ============================================================
+
+def test_TES266_propose_from_group_nennt_privatchat():
+    """EC-10 #266: aus der Familien-Gruppe gestartet → Vorschlag nennt
+    den Privatchat als Ort der Klärung (chat_id != private_chat_id)."""
+    task = _make_task()
+    ctx = TurnContext(chat_id=200, from_user_id=42, private_chat_id=42)
+    proposal = task.propose({}, ctx)
+    assert isinstance(proposal, Proposal)
+    assert "Privatchat" in proposal.summary
+
+
+def test_TES266_propose_from_privatchat_kein_wechselhinweis():
+    """EC-10 #266: schon im Privatchat gestartet → Vorschlag ohne
+    Ortswechsel-Hinweis (chat_id == private_chat_id)."""
+    task = _make_task()
+    ctx = TurnContext(chat_id=42, from_user_id=42, private_chat_id=42)
+    proposal = task.propose({}, ctx)
+    assert isinstance(proposal, Proposal)
+    assert "Privatchat" not in proposal.summary
+    assert proposal.summary  # Nicht leer
+
+
+# ============================================================
 #  TES-10 — execute() Quittungstext
 # ============================================================
 

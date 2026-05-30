@@ -199,7 +199,13 @@ bestätigt hat. Ohne Bestätigung geschieht keine Veränderung. Die Bestätigung
 ist eindeutig einem konkreten Vorschlag zugeordnet, auch wenn dazwischen andere
 Nachrichten eingehen.
 
-*Tickets:* #27
+Die Vor-Bestätigung mehrstufiger schreibender Aufgaben (EC-20) benennt den Ort
+der nächsten Schritte kontextabhängig: in der Familien-Gruppe gestartet →
+Verweis auf Privatchat; bereits im Privatchat gestartet → kein
+Ortswechsel-Hinweis. Der Wortlaut suggeriert keinen Ortswechsel, wenn keiner
+stattfindet.
+
+*Tickets:* #27 · #266
 
 ### EC-20 — Mehrstufige Aufgaben überfluten die Familien-Gruppe nicht
 
