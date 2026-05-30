@@ -189,6 +189,12 @@ class TermineEintragenTask(WriteTask):
                 return member is not None and member.get("status") in (
                     "creator", "administrator", "member")
 
+        # EC-14 / Issue #165: Typing-Indikator vor jeder send_message-Phase im
+        # Privatchat. Best-Effort: Fehler werden in _fire_typing geschluckt.
+        # Vgl. _typing-Closure in main.py (before_provider_call-Pattern, #156).
+        def typing_fn():
+            tg.send_chat_action(private_chat_id, "typing")
+
         def run_tes():
             try:
                 result = tes_mod.termin_eintragen(
@@ -199,7 +205,8 @@ class TermineEintragenTask(WriteTask):
                     anstos_text=anstos_text,
                     plan_client=plan_client,
                     is_member_fn=is_member_fn,
-                    next_message=session.next_message)
+                    next_message=session.next_message,
+                    typing_fn=typing_fn)
                 logger.info(
                     "TES-Session in Chat %s beendet — ergebnis=%s",
                     private_chat_id, result)

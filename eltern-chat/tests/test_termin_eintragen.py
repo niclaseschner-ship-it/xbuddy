@@ -25,6 +25,7 @@ from skills.termin_eintragen import (
     parse_datum,
     termin_eintragen,
 )
+from telegram import TelegramError
 
 
 # ============================================================
@@ -525,3 +526,127 @@ def test_TES7_quittung_eingetragen():
     assert "Klettern" in letzte, "Titel fehlt in Quittung: %r" % letzte
     # Datum muss im DD.MM.YYYY-Format enthalten sein (DONNERSTAG = 04.06.2026)
     assert "04.06.2026" in letzte, "Datum fehlt in Quittung: %r" % letzte
+
+
+# ============================================================
+#  T280 — typing_fn-Hook vor jeder Send-Phase (EC-14, Issue #280)
+# ============================================================
+
+def test_TES_typing_fn_called_before_each_send():
+    """T280 / AC1+AC3: typing_fn wird vor jeder send_message-Phase aufgerufen.
+
+    Vollständige Erfolgssequenz (Datum bekannt + Titel bekannt + Bestätigung):
+    1× Vorschlag-Send + 1× Quittungs-Send = 2 Sends → Counter >= 2.
+    Mit einem Datum-Rückfrage-Pfad kämen weitere Sends dazu.
+
+    Wir erzwingen den 4-Send-Pfad: mehrdeutiges Datum (→ Rückfrage),
+    eindeutiges Datum danach, kein Titel im Text (→ Rückfrage), Bestätigung.
+    Damit: _RUECKFRAGE_DATUM + _RUECKFRAGE_TITEL + _VORSCHLAG + _ANTWORT_EINGETRAGEN
+    = 4 Sends → Counter muss >= 4 sein.
+    """
+    counter = [0]
+
+    def _counting_typing():
+        counter[0] += 1
+
+    tg = FakeTelegram(members={42: {"status": "member"}})
+    plan_client = FakePlanClient(put_event_id="evt-typing-1")
+    # „trag diese Woche ein": kein Datum (→ Rückfrage), kein Titel (→ Rückfrage)
+    signal = termin_eintragen(
+        tg=tg, private_chat_id=100, from_user_id=42,
+        family_group_chat_id=200,
+        anstos_text="trag diese Woche ein",   # kein Datum, kein Titel
+        plan_client=plan_client, is_member_fn=_member(42),
+        next_message=_messages("Donnerstag", "Zahnarzt", "ok"),
+        heute=MONTAG,
+        typing_fn=_counting_typing,
+    )
+    assert signal == SIGNAL_EINGETRAGEN
+    assert counter[0] >= 4, (
+        "typing_fn hätte mindestens 4× aufgerufen werden müssen "
+        "(RUECKFRAGE_DATUM + RUECKFRAGE_TITEL + VORSCHLAG + QUITTUNG), "
+        "aber es waren %d Aufrufe" % counter[0])
+
+
+def test_TES_typing_fn_called_simple_success():
+    """T280 / AC3: im einfachen Erfolgspfad (Datum+Titel bekannt) wird
+    typing_fn mindestens 2× aufgerufen: vor Vorschlag + vor Quittung."""
+    counter = [0]
+
+    def _counting_typing():
+        counter[0] += 1
+
+    signal, tg, plan_client = _run(
+        anstos_text="Klettern Donnerstag",
+        today=MONTAG,
+        messages=_messages("ok"),
+    )
+    # Test nochmal direkt mit typing_fn:
+    counter[0] = 0
+    tg2 = FakeTelegram(members={42: {"status": "member"}})
+    pc2 = FakePlanClient()
+    signal2 = termin_eintragen(
+        tg=tg2, private_chat_id=100, from_user_id=42,
+        family_group_chat_id=200, anstos_text="Klettern Donnerstag",
+        plan_client=pc2, is_member_fn=_member(42),
+        next_message=_messages("ok"), heute=MONTAG,
+        typing_fn=_counting_typing,
+    )
+    assert signal2 == SIGNAL_EINGETRAGEN
+    assert counter[0] >= 2, (
+        "Im einfachen Erfolgspfad müssen mindestens 2 typing_fn-Aufrufe erfolgen "
+        "(Vorschlag + Quittung), aber es waren %d" % counter[0])
+
+
+def test_TES_typing_fn_none_ist_no_op():
+    """T280 / AC4: typing_fn=None ist Backward-Compat — keine Exception,
+    bestehende Erfolgs- und Fehler-Pfade laufen durch."""
+    # Erfolgspfad
+    signal, _, _ = _run(
+        anstos_text="Klettern Donnerstag",
+        today=MONTAG,
+        messages=_messages("ok"),
+    )
+    assert signal == SIGNAL_EINGETRAGEN
+
+    # Fehler-Pfad (PlanClientError)
+    signal2, _, _ = _run(
+        anstos_text="Klettern Donnerstag",
+        today=MONTAG,
+        put_error=PlanClientError("kein Plan-Buddy"),
+        messages=_messages("ok"),
+    )
+    assert signal2 == SIGNAL_NICHT_ERREICHBAR
+
+    # Verworfen-Pfad
+    signal3, _, _ = _run(
+        anstos_text="Klettern Donnerstag",
+        today=MONTAG,
+        messages=_messages("nein"),
+    )
+    assert signal3 == SIGNAL_VERWORFEN
+
+
+def test_TES_typing_fn_wirft_exception_kein_abbruch():
+    """T280 / AC1 (Best-Effort): eine typing_fn, die TelegramError wirft,
+    darf termin_eintragen() nicht unterbrechen — analog before_provider_call
+    in agent.py (Issue #156, EC-14).
+
+    Die Funktion muss 'eingetragen' zurückliefern, obwohl typing_fn immer wirft.
+    """
+
+    def _immer_werfend():
+        raise TelegramError("Typing fehlgeschlagen")
+
+    tg = FakeTelegram(members={42: {"status": "member"}})
+    plan_client = FakePlanClient(put_event_id="evt-robust-1")
+    signal = termin_eintragen(
+        tg=tg, private_chat_id=100, from_user_id=42,
+        family_group_chat_id=200, anstos_text="Klettern Donnerstag",
+        plan_client=plan_client, is_member_fn=_member(42),
+        next_message=_messages("ok"), heute=MONTAG,
+        typing_fn=_immer_werfend,
+    )
+    assert signal == SIGNAL_EINGETRAGEN, (
+        "typing_fn-Exception darf termin_eintragen() nicht abbrechen — "
+        "erwartet SIGNAL_EINGETRAGEN, bekam %r" % signal)
