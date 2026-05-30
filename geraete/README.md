@@ -47,7 +47,7 @@ Konsumenten importieren **nur** aus `geraete` (Paket-Public-API), nicht aus
 ## Daten je Instanz
 
 `geraete.json` liegt neben dem Code, ist per Repo-`.gitignore` ausgeschlossen
-und trägt Eigentümer-Rechte 0600 — analog `zugangsdaten/zugangsdaten.json`
+und trägt Eigentümer-Rechte 0600 — analog `tools/zugangsdaten/zugangsdaten.json`
 (ZD-3) und `eltern-chat/onboarding-store.json` (ONB-5). `geraete.example.json`
 in diesem Verzeichnis dokumentiert das Format.
 

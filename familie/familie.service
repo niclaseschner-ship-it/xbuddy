@@ -13,7 +13,7 @@ User=__XBUDDY_USER__
 WorkingDirectory=__XBUDDY_REPO__
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=__XBUDDY_HOME__
-ExecStart=__XBUDDY_PYTHON__ -m familie.main --host 127.0.0.1 --port 5010 --registry __XBUDDY_REPO__/familie/familie.json
+ExecStart=__XBUDDY_PYTHON__ -m familie.main --registry __XBUDDY_REPO__/familie/familie.json
 Restart=on-failure
 RestartSec=10
 

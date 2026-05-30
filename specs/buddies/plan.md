@@ -251,6 +251,28 @@ Zeitraums lesen und Termine anlegen/ändern. Andere Apps rufen den Google-Kalend
 Abhängigkeit, CLAUDE.md §6). So kann etwa der Eltern-Chat Termine verwalten,
 ohne selbst eine Kalender-Anbindung zu haben.
 
+**GET-Vertrag** — `GET /api/v1/plan/termine`:
+
+Query-Parameter: `ab=<ISO-Datum>` (Start-Tag; Default: heute), `tage=<n>`
+(Anzahl Tage; Default: `7`). Antwort: JSON-Array der normalisierten Events
+im Zeitraum — je Event mindestens `id`, `titel`, `beginn`, `ende`,
+`ganztags`, `person_id` (oder `null`). Events werden nach PLAN-17 in ein
+anbieter-neutrales Modell übersetzt. Ungültige `ab`- oder `tage`-Werte
+antworten HTTP 400 mit JSON-Fehler. Fehlen Credentials oder ist Google
+nicht erreichbar, liefert die Schnittstelle ein leeres Array (PLAN-20).
+Reload-on-Read: Config und Transport werden pro Aufruf frisch geladen
+(DCOMP-2), sodass ein KAV-Schreibvorgang ohne Service-Restart sichtbar
+wird.
+
+**PUT-Vertrag** — `PUT /api/v1/plan/termine`:
+
+Body: `{ "titel": "<string>", "datum": "<ISO-Datum>" [, "event_id": "<id>"] }`.
+`titel` ist Pflicht (nicht leer). Ohne `event_id`: neuer ganztägiger Termin
+unter `titel` an `datum` — antwortet `{ "ok": true, "action": "created",
+"event_id": "<id>" }`. Mit `event_id`: bestehenden Termin umbenennen —
+antwortet `{ "ok": true, "action": "patched", "event_id": "<id>" }`.
+Kalender nicht erreichbar: HTTP 502. Ungültige Eingabe: HTTP 400.
+
 *Tickets:* #40
 
 ### PLAN-30 — Lese-API für Wochenzuteilungen
@@ -272,6 +294,22 @@ Lese-API denselben Stand wie eine View-Anfrage.
 Damit haben andere XBuddy-Apps (z. B. ein zukünftiges Eltern-Chat-Skill,
 das Wochen-Petrantwortlichkeiten anzeigt) einen stabilen Lese-Vertrag —
 ohne direkten Zugriff auf `plan.db` (APP-3, einseitige Abhängigkeit).
+
+*Tickets:* #214
+
+### PLAN-31 — Schreib-API für Erwachsenen-Slot-Zuteilungen
+Der Plan-Buddy nimmt Zuteilungen von anderen XBuddy-Apps über
+`PUT /api/v1/plan/zuteilung` entgegen — analog PLAN-30 (Lese-Seite).
+Body: `{ "week_start": "<YYYY-MM-DD>", "day": 0..6, "slot": "<key>",
+"person_id": "<id>"|null }`. Alle vier Felder sind Pflicht (außer
+`person_id`, das `null` sein darf, um einen Slot zu leeren). Wirkung:
+schreibt die Zuweisung atomar in `plan.db` (PLAN-9) — identisch mit dem
+Klick-Cycle im View (PLAN-7/PLAN-8). Antwort: `{ "ok": true }`.
+
+Fehler-Semantik: `400` mit JSON-Fehler bei fehlendem Pflichtfeld, `slot`
+nicht vorhanden oder kein Erwachsenen-Slot (PLAN-6), `person_id` unbekannt
+(FAM-3), ungültigem `day`. Reload-on-Read gilt auch hier: Slot-Definition
+und Registry werden pro Aufruf frisch gelesen (DCOMP-2).
 
 *Tickets:* #214
 
@@ -347,6 +385,11 @@ Code (CONFIG-1) — beide gitignored:
 | Fenster Kleinkind            | 3 Tage                           | `fenster_kleinkind`            | n/a (Default reicht) |
 | Wochenstart                  | Montag (`0`)                     | `wochenstart`                  | n/a (Default reicht) |
 | SQLite-Datei                 | `plan.db` neben dem Code         | `db_datei`                     | n/a (Default reicht) |
+
+> **Begriffsabgrenzung:** `wochenstart` (PLAN-28) legt den **Wochentag** fest,
+> an dem eine Datenbankwoche beginnt (0 = Montag) — intern für PLAN-10 und
+> `plan.db`. Er ist unabhängig vom **View-Anker** (`?ab=`, PLAN-4), der
+> steuert, welcher Tag als erste Spalte angezeigt wird.
 | Google-Kalender-ID           | (Pflicht, kein Default)          | `kalender_id`                  | KAV — Kalender verbinden (`kalender-verbinden.md`) |
 | OAuth-Client / -Token        | (Pflicht)                        | — (im Zugangsdaten-Speicher, ZD-3) | KAV — Kalender verbinden |
 | Zeitzone                     | `Europe/Berlin`                  | `zeitzone`                     | n/a (Default reicht) |
@@ -389,8 +432,13 @@ schlägt Creator-E-Mail; früherer Treffer gewinnt) · PLAN-18 (anlegen/ändern/
 löschen rufen die richtige Operation) · PLAN-20 (fehlende Credentials → leeres
 Lese-Ergebnis, View funktioniert) · PLAN-22/PLAN-23 (Termin-Schnittstelle
 liefert Termine; ist der Plan-Buddy nicht erreichbar, ist die Schnittstelle
-nicht erreichbar) · PLAN-30 (Lese-API liefert Defaults bei leerer Woche,
-spiegelt PUTs, antwortet 400 bei ungültigem `week_start`).
+nicht erreichbar) · PLAN-28 (Reload-on-Read: nach Cross-Service-Schreibvorgang
+in plan.json liefern `_current_config()` und `_db()` beim nächsten Request den
+neuen Stand ohne Service-Restart — DCOMP-2) · PLAN-30 (Lese-API liefert
+Defaults bei leerer Woche, spiegelt PUTs, antwortet 400 bei ungültigem
+`week_start`) · PLAN-31 (PUT /api/v1/plan/zuteilung: Pflichtfeld-400, ungültiger
+Slot-400, unbekannte person_id-400, gültiger PUT schreibt und ist per GET
+sichtbar).
 
 Läufe gegen den **echten** Kalender sind opt-in und nicht Teil des
 Standard-Durchlaufs (analog `eltern-chat.md` EC-17).

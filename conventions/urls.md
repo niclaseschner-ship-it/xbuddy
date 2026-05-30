@@ -182,8 +182,8 @@ längste Prefix gewinnt, das ist Teil der Spec, nicht nur eine nginx-Marotte):
 
 | # | Pfad-Prefix                     | Upstream-Komponente | Bemerkung                                                                 |
 |---|---------------------------------|---------------------|---------------------------------------------------------------------------|
-| 1 | `/display/plan/`                | Plan-Buddy          | Display-Views des Plan-Buddys (URL-2).                                    |
-| 2 | `/api/v1/plan/`                 | Plan-Buddy          | Plan-Buddy-Backend (Termine, Zuteilung, Aktivität).                       |
+| 1 | `/display/plan/`                | Plan-Buddy          | Display-Views des Plan-Buddys (URL-2): `/display/plan/woche` (PLAN-2/3).  |
+| 2 | `/api/v1/plan/`                 | Plan-Buddy          | Plan-Buddy-Backend: `GET\|PUT /api/v1/plan/termine` (PLAN-22), `GET /api/v1/plan/zuteilung` (PLAN-30), `PUT /api/v1/plan/zuteilung` (PLAN-31), `PUT\|DELETE /api/v1/plan/aktivitaet` (PLAN-11). |
 | 3 | `/api/v1/familie/`              | Familie             | Familien-Mit-Host (Personen, Foto).                                       |
 | 4 | `/api/v1/geraete/`              | Geräte              | Geräte-Registry (GER-13/14/15) — Liste, Einzeln, Anlegen.                 |
 | 5 | `/api/v1/displays/<id>/events`  | Router              | SSE-Zustands-Stream (ROU-22); Long-Lived, ohne Proxy-Puffer.              |

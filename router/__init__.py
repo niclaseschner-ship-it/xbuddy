@@ -7,7 +7,7 @@ getrennt (ROU-1).
 Dieses Verzeichnis ist ein Paket, damit `router.main` einen eindeutigen
 Modulnamen trägt und beim repo-weiten pytest-Lauf nicht mit den gleichnamigen
 main-Modulen anderer Komponenten kollidiert (#52) — analog plan/ und
-zugangsdaten/.
+tools/zugangsdaten/.
 
 Module:
   main — Flask-App: Event-Schnittstelle, Routing-Kern, State je Display

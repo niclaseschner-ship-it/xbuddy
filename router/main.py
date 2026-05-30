@@ -377,7 +377,7 @@ def _current_routing():
     Replace im Halbschritt, kaputtes JSON), fällt der Aufruf auf den
     Snapshot-Cache zurück, der beim letzten erfolgreichen Load installiert
     wurde. Damit kippt der Router bei einem kurzen Race nicht in einen
-    leeren Zustand — gleicher Geist wie der atomare Admin-Reload (E-RELOAD-1).
+    leeren Zustand — gleicher Geist wie der atomare Admin-Reload (E-RELOAD-1 / ROU-25).
 
     Ohne konfigurierten `routing_path` (z. B. unter Tests, die `load_routing`
     nicht aufgerufen haben) wird ebenfalls der Snapshot-Cache zurückgegeben.
@@ -409,7 +409,7 @@ def load_routing(path):
 
 
 def reload_routing():
-    """Reload-Pfad (#140, E-RELOAD-1): lädt die zuletzt gesetzte routing.json
+    """Reload-Pfad (#140, E-RELOAD-1 / ROU-25): lädt die zuletzt gesetzte routing.json
     erneut. Bei Erfolg liefert die Funktion die Anzahl der übernommenen
     Einträge, bei Lade-/Parse-Fehler wirft sie RoutingLoadError — der globale
     State bleibt in diesem Fall unverändert (Atomarität).

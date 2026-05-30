@@ -1052,7 +1052,7 @@ def test_140_reload_endpoint_is_idempotent(reload_client):
 
 
 def test_140_reload_endpoint_atomar_bei_parse_fehler(reload_client):
-    """Atomarität (E-RELOAD-1): kaputtes plan.json → 500 mit
+    """Atomarität (E-RELOAD-1 / ROU-25): kaputtes plan.json → 500 mit
     {reloaded: false, error: ...}, ABER alter State bleibt unverändert.
     Plan-Buddy beantwortet Requests nach dem Fehler weiter wie zuvor."""
     client, cfg_path, built = reload_client
@@ -1210,7 +1210,7 @@ def test_DCOMP_2_kaputtes_plan_json_faellt_auf_snapshot(reload_client):
     """Resilienz: scheitert ein einzelner Read (kaputtes JSON, atomares
     Replace im Halbschritt), kippt der Plan-Buddy NICHT in einen leeren
     Zustand — er liefert den zuletzt erfolgreichen Snapshot. Gleicher
-    atomarer Geist wie der Admin-Reload (E-RELOAD-1)."""
+    atomarer Geist wie der Admin-Reload (E-RELOAD-1 / ROU-25)."""
     client, cfg_path, built = reload_client
     cfg_before = plan_main.runtime["config"]
     kalender_id_before = cfg_before.kalender_id

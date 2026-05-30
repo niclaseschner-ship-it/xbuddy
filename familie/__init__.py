@@ -7,7 +7,7 @@ router/, eltern-chat/ und plan/. Sie besitzt die Personen-Daten der Familie
 Dieses Verzeichnis ist ein Paket, damit `familie.main` und `familie.registry`
 eindeutige Modulnamen tragen und beim repo-weiten pytest-Lauf nicht mit den
 gleichnamigen main-Modulen anderer Komponenten kollidieren (#52) — analog
-plan/ und zugangsdaten/. plan/ konsumiert `familie.registry` ohnehin bereits
+plan/ und tools/zugangsdaten/. plan/ konsumiert `familie.registry` ohnehin bereits
 als Paket.
 
 Module:
