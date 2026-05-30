@@ -405,7 +405,7 @@ def save(registry, path):
             os.remove(tmp_path)
         except OSError:
             pass
-        raise RegistryError("geraete.json konnte nicht geschrieben werden: %s" % e)
+        raise RegistryError("geraete.json konnte nicht geschrieben werden: %s" % e) from e
 
     # Bestehende Zieldatei kann offenere Rechte gehabt haben — auch wenn
     # os.replace die Inode der Temp-Datei mit ihren 0600-Rechten übernimmt,
