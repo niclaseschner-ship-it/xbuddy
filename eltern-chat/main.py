@@ -211,7 +211,8 @@ def _run_agent(msg, ctx):
     try:
         result = agent.run_turn(history, user_message, ctx.provider,
                                 ctx.catalog, turn_context,
-                                before_provider_call=_typing)
+                                before_provider_call=_typing,
+                                chat_action_renewer=_typing)  # Issue #165
     except ProviderError:
         # EC-14: klarer Hinweis, sauberer Abbruch — keine halbfertige Aufgabe.
         _send(ctx, msg.chat_id, _PROVIDER_DOWN)

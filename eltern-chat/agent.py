@@ -13,6 +13,8 @@ ausgeführt: der Loop gibt nur einen Vorschlag zurück (EC-10); die Ausführung
 nach Bestätigung passiert außerhalb.
 """
 
+import logging
+import threading
 from dataclasses import dataclass
 
 from model import (GenerationRequest, Message, TaskResultBlock, TextBlock, WRITE)
@@ -53,6 +55,12 @@ SYSTEM_PROMPT = (
 # Obergrenze der Loop-Durchläufe — schützt vor einer Aufgaben-Schleife ohne Ende.
 MAX_ITERATIONS = 6
 
+# Renewal-Intervall für den Typing-Indikator (Issue #165). Telegram löscht den
+# Indikator nach ~5 s; das Renewal kommt deshalb etwas früher (4 s), damit
+# lange Provider-Calls sichtbar bleiben, ohne den Indikator zwischenzeitlich
+# verschwinden zu lassen.
+_TYPING_RENEWAL_INTERVAL = 4
+
 # Fallbacks, falls der Anbieter keinen Text liefert.
 _EMPTY_REPLY = "Ich habe dazu gerade keine Antwort."
 _GAVE_UP = ("Ich konnte die Anfrage nicht abschließen. Bitte formuliere sie "
@@ -71,8 +79,54 @@ class AgentResult:
     pending_call: object = None    # model.TaskCallBlock | None
 
 
+class _NullContext:
+    """No-op Kontextmanager — ersetzt `_TypingRenewal` wenn kein Renewer gesetzt."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        pass
+
+
+class _TypingRenewal:
+    """Hintergrund-Thread, der `renewer()` alle `_TYPING_RENEWAL_INTERVAL` Sekunden
+    aufruft, während ein Provider-Aufruf läuft (Issue #165).
+
+    Genutzt als Kontextmanager: `__enter__` startet den Thread, `__exit__` stoppt
+    ihn — garantiert, dass nach dem Provider-Return kein weiterer Renewal-Call
+    mehr kommt. Fehler im Renewer werden geschluckt (Komfort, kein Gate).
+    """
+
+    def __init__(self, renewer, interval=_TYPING_RENEWAL_INTERVAL):
+        self._renewer = renewer
+        self._interval = interval
+        self._stop = threading.Event()
+        self._thread = None
+
+    def __enter__(self):
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, *_):
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join()
+
+    def _run(self):
+        while not self._stop.wait(self._interval):
+            try:
+                self._renewer()
+            except Exception:  # noqa: BLE001 — Renewal ist Komfort, kein Gate
+                logging.debug("Typing-Renewal-Aufruf fehlgeschlagen (geschluckt)",
+                              exc_info=True)
+
+
 def run_turn(history_messages, user_message, provider, catalog, turn_context,
-             max_iterations=MAX_ITERATIONS, before_provider_call=None):
+             max_iterations=MAX_ITERATIONS, before_provider_call=None,
+             chat_action_renewer=None):
     """Petrarbeitet eine Anfrage und liefert ein `AgentResult`.
 
     `history_messages` ist der geladene Gesprächskontext (EC-6), `user_message`
@@ -90,6 +144,14 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
     Fehler des Callbacks werden geschluckt; er ist Komfort, kein Gate, und
     darf den Turn nicht abbrechen.
 
+    `chat_action_renewer` (Issue #165): optionaler Callback ohne Argumente, der
+    WÄHREND `provider.generate(...)` alle `_TYPING_RENEWAL_INTERVAL` Sekunden in
+    einem Hintergrund-Thread aufgerufen wird. Damit bleibt der Typing-Indikator
+    auch bei Provider-Calls >5 s sichtbar. Thread-Fehler werden geschluckt; der
+    Renewer ist Komfort, kein Gate. Der Thread terminiert garantiert nach dem
+    Provider-Return — kein Leak. `chat_action_renewer` ist UNABHÄNGIG von
+    `before_provider_call`; beide können gleichzeitig gesetzt sein.
+
     Wirft `model.ProviderError` weiter, wenn der Anbieter scheitert (EC-14) —
     die Behandlung liegt bei der Orchestrierung.
     """
@@ -105,8 +167,20 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
                 before_provider_call()
             except Exception:  # noqa: BLE001 — Indikator darf den Turn nicht abbrechen
                 pass
-        response = provider.generate(GenerationRequest(
-            system=SYSTEM_PROMPT, messages=messages, task_defs=task_defs))
+
+        # Issue #165: Renewal-Thread hält den Typing-Indikator für die Dauer
+        # des Provider-Calls lebendig. Kein `chat_action_renewer` → normaler Pfad
+        # ohne Thread-Overhead.
+        if chat_action_renewer is not None:
+            # Intervall zur Laufzeit lesen — erlaubt Überschreiben im Test.
+            _renewal = _TypingRenewal(chat_action_renewer,
+                                      interval=_TYPING_RENEWAL_INTERVAL)
+        else:
+            _renewal = None
+
+        with (_renewal if _renewal is not None else _NullContext()):
+            response = provider.generate(GenerationRequest(
+                system=SYSTEM_PROMPT, messages=messages, task_defs=task_defs))
 
         # Keine Aufgaben-Aufrufe → fertige Antwort (EC-4).
         if not response.task_calls:
