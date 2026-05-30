@@ -79,6 +79,7 @@ _ANTWORT_ABGELEHNT = (
 
 # TES-5: Datums-Wortliste zum Herausfiltern aus dem Titel.
 # Erweitert das TER-4-Vokabular um Trigger-Wörter für TES-5.
+# „am" ist Datums-Präposition (z. B. „am Freitag") und kein Inhalts-Wort.
 _DATUM_TOKENS = frozenset({
     "heute", "morgen",
     "montag", "dienstag", "mittwoch", "donnerstag",
@@ -86,18 +87,21 @@ _DATUM_TOKENS = frozenset({
     "mo", "di", "mi", "do", "fr", "sa", "so",
     "nächsten", "nächste", "naechsten", "naechste",
     "dieser", "diese", "nächster", "naechster",
-    "woche",
+    "woche", "am",
 })
 
 # TES-5: Trigger-Wörter, die die Absicht „eintragen" signalisieren — werden
 # beim Titel-Extrahieren entfernt (kein Vokabular-Duplikat mit TER-4, nur
 # TES-spezifische Semantik).
+# Enthält nur echte Aktions-Verben + trennbare Verb-Partikel „ein";
+# Inhaltswörter wie „bitte" und „termin" wurden entfernt (Ticket #262,
+# TES-5: Titel bleibt roh — Inhaltswörter gehören in den Titel).
 _TRIG_TOKENS = frozenset({
     "trag", "trage", "eintrag", "eintrage", "einträgen",
     "eintragen", "einzutragen", "erstell", "erstelle",
     "erstellen", "leg", "lege", "anlegen", "anlege",
-    "termineintragen", "termin",
-    "ein", "bitte", "mal", "doch",
+    "termineintragen",
+    "ein",   # trennbares Verb-Partikel von „eintragen/einlegen/…"
 })
 
 
