@@ -385,15 +385,15 @@ Code (CONFIG-1) — beide gitignored:
 | Fenster Kleinkind            | 3 Tage                           | `fenster_kleinkind`            | n/a (Default reicht) |
 | Wochenstart                  | Montag (`0`)                     | `wochenstart`                  | n/a (Default reicht) |
 | SQLite-Datei                 | `plan.db` neben dem Code         | `db_datei`                     | n/a (Default reicht) |
+| Google-Kalender-ID           | (Pflicht, kein Default)          | `kalender_id`                  | KAV — Kalender verbinden (`kalender-verbinden.md`) |
+| OAuth-Client / -Token        | (Pflicht)                        | — (im Zugangsdaten-Speicher, ZD-3) | KAV — Kalender verbinden |
+| Zeitzone                     | `Europe/Berlin`                  | `zeitzone`                     | n/a (Default reicht) |
+| Familie-Origin-URL           | `http://127.0.0.1:5010`          | `familie_origin_url`           | n/a (Default reicht; Loopback auf den Familie-Port aus PORT-2) |
 
 > **Begriffsabgrenzung:** `wochenstart` (PLAN-28) legt den **Wochentag** fest,
 > an dem eine Datenbankwoche beginnt (0 = Montag) — intern für PLAN-10 und
 > `plan.db`. Er ist unabhängig vom **View-Anker** (`?ab=`, PLAN-4), der
 > steuert, welcher Tag als erste Spalte angezeigt wird.
-| Google-Kalender-ID           | (Pflicht, kein Default)          | `kalender_id`                  | KAV — Kalender verbinden (`kalender-verbinden.md`) |
-| OAuth-Client / -Token        | (Pflicht)                        | — (im Zugangsdaten-Speicher, ZD-3) | KAV — Kalender verbinden |
-| Zeitzone                     | `Europe/Berlin`                  | `zeitzone`                     | n/a (Default reicht) |
-| Familie-Origin-URL           | `http://127.0.0.1:5010`          | `familie_origin_url`           | n/a (Default reicht; Loopback auf den Familie-Port aus PORT-2) |
 
 `familie_origin_url` ist die Loopback-Origin, unter der der Plan-Buddy
 die Familie-Komponente per HTTP anspricht (FAM-7) — kein direkter

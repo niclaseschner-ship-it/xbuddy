@@ -774,10 +774,10 @@ def test_PLAN_29_every_requirement_has_a_test():
     """PLAN-29: jede Anforderung mit Code-Verhalten hat einen Test.
     Belegt anhand der Test-Namen dieses Moduls."""
     quelle = io.open(os.path.abspath(__file__), encoding="utf-8").read()
-    # Jede PLAN-ID mit Code-Verhalten hat einen eigenen Test (PLAN-1 .. PLAN-30).
+    # Jede PLAN-ID mit Code-Verhalten hat einen eigenen Test (PLAN-1 .. PLAN-31).
     # PLAN-21 (Display-Views sind die Schnittstelle zur Familie) hat kein
     # eigenes Code-Verhalten über PLAN-2/3 hinaus — dort mit abgedeckt.
-    for plan in range(1, 31):
+    for plan in range(1, 32):
         if plan == 21:
             continue
         assert "test_PLAN_%d_" % plan in quelle, "PLAN-%d ungetestet" % plan
@@ -1344,6 +1344,45 @@ def test_PLAN_30_zuteilung_get_invalid_week_start_is_400(demo_config, demo_regis
     body = r.get_json()
     assert "week_start" in body["error"]
     assert "ISO" in body["error"] or "iso" in body["error"].lower()
+
+
+# ============================================================
+#  PLAN-31 — PUT /api/v1/plan/zuteilung (Schreib-API)
+# ============================================================
+
+def test_PLAN_31_put_zuteilung_writes_and_get_reflects(demo_config, demo_registry):
+    """PUT /api/v1/plan/zuteilung mit gueltigem Body → 200 {ok: true};
+    anschliessender GET liefert die geschriebene Zuteilung (PLAN-31)."""
+    client = make_client(demo_config, demo_registry, FakeTransport())
+    r_put = client.put("/api/v1/plan/zuteilung", data=json.dumps({
+        "week_start": "2026-09-07", "day": 3, "slot": "bring",
+        "person_id": "niclas",
+    }), content_type="application/json")
+    assert r_put.status_code == 200
+    assert r_put.get_json()["ok"] is True
+
+    # GET spiegelt die Zuweisung zurueck.
+    r_get = client.get("/api/v1/plan/zuteilung?week_start=2026-09-07")
+    assert r_get.status_code == 200
+    eintrag = next(
+        s for s in r_get.get_json()["slots"]
+        if s["day"] == 3 and s["slot"] == "bring"
+    )
+    assert eintrag["person_id"] == "niclas"
+
+
+# ============================================================
+#  PLAN-22 (GET-400) — ungültiger ab-Parameter → HTTP 400
+# ============================================================
+
+def test_PLAN_22_get_invalid_ab_400(demo_config, demo_registry):
+    """GET /api/v1/plan/termine?ab=<garbage> → HTTP 400 (PLAN-22, main.py
+    except ValueError-Pfad: ungültige ab/tage-Parameter werden abgewiesen)."""
+    client = make_client(demo_config, demo_registry, FakeTransport())
+    r = client.get("/api/v1/plan/termine?ab=kein-datum")
+    assert r.status_code == 400
+    body = r.get_json()
+    assert "error" in body
 
 
 # ============================================================
