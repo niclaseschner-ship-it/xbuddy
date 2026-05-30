@@ -24,6 +24,7 @@ import logging
 import os
 import sys
 import time
+import uuid
 from dataclasses import dataclass
 
 # eltern-chat/ liegt auf sys.path, wenn main.py direkt gestartet wird; für den
@@ -54,6 +55,7 @@ from onboarding_store import OnboardingStore
 from providers import get_provider
 from tasks import TurnContext, build_catalog
 from telegram import ChatMigratedError, TelegramClient, TelegramError
+from telemetry import TelemetryStore
 
 
 # Klartext-Antworten.
@@ -79,6 +81,7 @@ class Context:
     catalog: object            # tasks.Catalog
     history: object            # history.History
     pending: object            # confirm.PendingStore
+    telemetry_store: object = None     # telemetry.TelemetryStore — None ⇒ Persistenz aus (Test-Default, EC-23/#268)
     store: object = None               # onboarding_store.OnboardingStore — Persistenz der Familien-Gruppe (ONB-5, EC-18)
     family_group_locked: bool = False  # True ⇒ Familien-Gruppe per Env/Config gesetzt, Vorrang (ONB-6, EC-18)
     onboarding: object = None  # onboarding.OnboardingState — None ⇒ KI-Modus (ONB-1)
@@ -180,10 +183,45 @@ def handle_update(update, ctx):
     _run_agent(msg, ctx)
 
 
+def _maybe_append_telemetry(text, telemetry):
+    """Hängt den EC-23-Suffix an `text`, wenn der Turn mindestens einen
+    Provider-Call hatte (AC2). Bei AC3 (keine Calls) bleibt `text` unverändert.
+
+    Der Suffix kommt NUR an die Telegram-Sendung (R7) — die History speichert
+    den Originaltext. So bleibt der Verlauf neutral und Folge-Turns sehen
+    keine Telemetrie als »Bot-Wortlaut«.
+    """
+    if telemetry is None or not telemetry.has_calls():
+        return text
+    suffix = telemetry.format_suffix()
+    if not suffix:
+        return text
+    return "%s\n\n%s" % (text, suffix)
+
+
+def _persist_telemetry(ctx, turn_id, chat_id, telemetry):
+    """Persistiert die Turn-Telemetrie in `conversations.db` (EC-23/AC4).
+
+    Komfort, kein Gate (R1): ein Persistenz-Fehler darf den Turn nicht
+    sprengen. Ohne `ctx.telemetry_store` (Test-Default) passiert nichts.
+    """
+    if ctx.telemetry_store is None or telemetry is None:
+        return
+    try:
+        ctx.telemetry_store.persist_turn(turn_id, chat_id, telemetry)
+    except Exception as e:  # noqa: BLE001 — Persistenz ist Komfort, nicht Gate
+        logging.warning("Telemetrie-Persistenz fehlgeschlagen (turn=%s): %s",
+                        turn_id, e)
+
+
 def _run_agent(msg, ctx):
     """Lässt den Agenten eine Anfrage bearbeiten und sendet das Ergebnis."""
     history = ctx.history.load(msg.chat_id, ctx.context_depth)
     user_message = _user_message_from(msg)
+    # EC-23 (#268): turn_id verknüpft die Provider-Calls eines Turns in
+    # `provider_calls`. UUID statt Sequenz: ohne Lock, ohne DB-Roundtrip,
+    # ohne Kollisionen über Restarts.
+    turn_id = uuid.uuid4().hex
 
     # F2: deterministischer Ausführungs-Kontext, getrennt vom Modell. Der
     # Agent-Loop reicht ihn unverändert an die Aufgaben durch (#63).
@@ -213,8 +251,14 @@ def _run_agent(msg, ctx):
                                 ctx.catalog, turn_context,
                                 before_provider_call=_typing,
                                 chat_action_renewer=_typing)  # Issue #165
-    except ProviderError:
+    except ProviderError as err:
         # EC-14: klarer Hinweis, sauberer Abbruch — keine halbfertige Aufgabe.
+        # EC-23 (#268): der Wrapper im Agenten hat einen Stub-Call angehängt
+        # und ihn an `err.telemetry` gepinnt. Wir persistieren ihn (R3) und
+        # senden den Provider-Down-Hinweis OHNE Suffix — kein Provider-Call
+        # ist erfolgreich durchgekommen, also wäre ein Suffix irreführend.
+        _persist_telemetry(ctx, turn_id, msg.chat_id,
+                           getattr(err, "telemetry", None))
         _send(ctx, msg.chat_id, _PROVIDER_DOWN)
         return
 
@@ -223,8 +267,13 @@ def _run_agent(msg, ctx):
 
     if result.proposal is not None:
         # EC-10: schreibende Aufgabe — Vorschlag vorlegen, auf Bestätigung warten.
+        # EC-23/AC2 (#268): der Vorschlag entsteht aus mind. einem Provider-Call;
+        # der Suffix kommt an die Telegram-Sendung. R7: History bekommt den
+        # Originaltext OHNE Suffix — Folge-Turns sehen die Telemetrie nicht.
         text = _format_proposal(result.proposal)
-        sent = _send(ctx, msg.chat_id, text, reply_to_message_id=msg.message_id)
+        sent = _send(ctx, msg.chat_id,
+                     _maybe_append_telemetry(text, result.telemetry),
+                     reply_to_message_id=msg.message_id)
         if sent is not None:
             ctx.pending.add(PendingProposal(
                 chat_id=msg.chat_id,
@@ -232,10 +281,15 @@ def _run_agent(msg, ctx):
                 task_name=result.pending_call.task,
                 arguments=result.pending_call.arguments))
         ctx.history.append(msg.chat_id, Message("assistant", [TextBlock(text)]))
+        _persist_telemetry(ctx, turn_id, msg.chat_id, result.telemetry)
         return
 
-    _send(ctx, msg.chat_id, result.reply_text)
+    # EC-23/AC2 (#268): Erfolgs-Pfad ohne schreibende Aufgabe — Suffix dran,
+    # History neutral, Telemetrie persistieren.
+    _send(ctx, msg.chat_id,
+          _maybe_append_telemetry(result.reply_text, result.telemetry))
     ctx.history.append(msg.chat_id, Message("assistant", [TextBlock(result.reply_text)]))
+    _persist_telemetry(ctx, turn_id, msg.chat_id, result.telemetry)
 
 
 def _execute_confirmed(pending, msg, ctx):
@@ -457,6 +511,9 @@ def build_context(cfg, db_path, store_path, zd_cli_path=None):
         catalog=None,                # gleich gesetzt — braucht ctx-Verweis
         history=History(db_path),
         pending=PendingStore(),
+        # EC-23/AC4 (#268): Telemetrie liegt in derselben SQLite-Datei wie der
+        # Verlauf — kein zweiter SSoT, kein zweites Backup-Ziel.
+        telemetry_store=TelemetryStore(db_path),
         store=OnboardingStore(store_path),
         family_group_locked=cfg.family_group_locked,
         faa_sessions=faa_sessions,

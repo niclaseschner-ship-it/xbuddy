@@ -169,6 +169,24 @@ ohne Geräte-Detail.
 
 *Tickets:* #95
 
+### EC-23 — Telemetrie an Bot-Antworten
+
+Wenn eine Bot-Antwort durch mindestens einen Provider-Call entstanden ist,
+sieht die Familie am Ende der Antwort eine kompakte Telemetrie: Gesamt-
+Laufzeit dieses Turns, Token-Verbrauch und geschätzte Kosten in Euro. Bei
+Antworten ohne Provider-Call (z. B. EC-7-Bestätigungswort-Quittung,
+deterministische Skill-Antworten) entfällt die Annotation. Persistenz pro
+Provider-Call (Modell, Token-Aufteilung, Wall-Clock, Kosten, Verknüpfung
+Chat+Turn) — V2 aggregierte Sicht. V1: an, nicht abschaltbar.
+
+Die Telemetrie ist Diagnose-Werkzeug für die Bewertungsphase: sie macht
+sichtbar, wo Latenz und Kosten anfallen, statt blind an der Wahrnehmung zu
+optimieren. Der Suffix erscheint nur in der gesendeten Nachricht — er wird
+NICHT in den Gesprächsverlauf (EC-6) aufgenommen, damit Folge-Turns die
+Telemetrie nicht als »Bot-Wortlaut« mitschleppen.
+
+*Tickets:* #268
+
 ## 3. Aufgaben
 
 ### EC-8 — Aufgaben-Katalog
@@ -572,3 +590,30 @@ ausgenommen — dort hat der explizit gesetzte Wert Vorrang (EC-18).
 
 Diese Entscheidung stammt aus dem #33-Live-Test (2026-05-22): die Gruppe der
 Test-Familie migrierte währenddessen, der Bot fiel mit einer toten Chat-ID aus.
+
+### E-EC-11 — Telemetrie-Wrapper im Agenten, Pricing-Tabelle als Konstante
+*Datum:* 2026-05-30
+
+Ein Wrapper um `provider.generate(...)` in `eltern-chat/agent.py` misst die
+Wall-Clock per `time.monotonic()` und liest die Token-Counts aus dem Provider-
+Response (anbieter-neutrales `ProviderUsage`-Feld). Die Pricing-Tabelle steht
+als Konstante in `eltern-chat/providers/pricing.py` pro Modell-ID
+`(input_per_million, cached_input_per_million, output_per_million)` in USD;
+der EUR-Wechselkurs ist eine feste Konstante `1.0` (V1-Vereinfachung). Die
+Persistenz liegt in `conversations.db` in einer eigenen Tabelle
+`provider_calls`, verknüpft über `turn_id` und `chat_id`. Der Suffix
+`— ⏱ X.Xs · 🪙 X.Xk tok · ≈ X.XXX €` wird in der Orchestrierung an die
+gesendete Bot-Antwort angehängt — Aggregation pro Turn (Summe aller Provider-
+Calls in `run_turn`), nicht pro Einzel-Call.
+
+**Verworfen:** (1) eine Live-EUR/USD-Rate von einem Wechselkurs-Dienst — die
+Telemetrie ist Diagnose-Werkzeug für die Bewertungsphase; eine schwankende
+Rate wäre Bau ohne belegte Notwendigkeit, ein weiterer Außenabhängigkeit.
+Eine spätere Iteration kann hier ohne Schnittstellen-Bruch eine echte Rate
+einziehen. (2) Annotation pro Einzel-Call statt pro Turn — der Familie hilft
+die Gesamt-Wartezeit eines Turns, nicht die Aufschlüsselung in Tool-Loop-
+Schritte. Die Per-Call-Aufschlüsselung lebt in der DB (V2 aggregierte Sicht).
+(3) Suffix in den Verlauf persistieren — das hätte den Bot-Wortlaut um
+Diagnose-Daten kontaminiert; Folge-Turns würden den Suffix als »Bot sagt« in
+den Anbieter-Kontext mitnehmen. Der Suffix kommt deshalb NUR an die
+Telegram-Sendung (siehe EC-23).

@@ -15,9 +15,13 @@ nach Bestätigung passiert außerhalb.
 
 import logging
 import threading
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 
-from model import (GenerationRequest, Message, TaskResultBlock, TextBlock, WRITE)
+from model import (GenerationRequest, Message, ProviderError, TaskResultBlock,
+                   TextBlock, WRITE)
+from providers.pricing import estimate_cost
+from telemetry import ProviderCall, TurnTelemetry
 
 
 SYSTEM_PROMPT = (
@@ -73,10 +77,15 @@ class AgentResult:
 
     Entweder `reply_text` (fertige Antwort) ODER `proposal`/`pending_call`
     (eine schreibende Aufgabe wartet auf Bestätigung, EC-10).
+
+    `telemetry` (EC-23/#268) trägt die aggregierten Provider-Calls dieses
+    Turns. None bedeutet: kein Telemetrie-Sammler war aktiv (alte Aufrufer);
+    eine Instanz ohne Calls bedeutet: keine Provider-Calls passiert (AC3).
     """
     reply_text: str = None
     proposal: object = None        # tasks.Proposal | None
     pending_call: object = None    # model.TaskCallBlock | None
+    telemetry: object = None       # TurnTelemetry | None
 
 
 class _NullContext:
@@ -157,6 +166,10 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
     """
     messages = list(history_messages) + [user_message]
     task_defs = catalog.task_defs()
+    # EC-23 (#268): Sammler für die Provider-Calls dieses Turns. Auch ohne
+    # einen einzigen Call bleibt das Objekt gesetzt — die Orchestrierung
+    # erkennt an `has_calls()`, ob ein Suffix anzuhängen ist (AC2/AC3).
+    telemetry = TurnTelemetry()
 
     for _ in range(max_iterations):
         if before_provider_call is not None:
@@ -179,12 +192,57 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
             _renewal = None
 
         with (_renewal if _renewal is not None else _NullContext()):
-            response = provider.generate(GenerationRequest(
-                system=SYSTEM_PROMPT, messages=messages, task_defs=task_defs))
+            # EC-23 (#268): Wall-Clock-Wrapper um den Provider-Call. Im
+            # Fehlerfall hängen wir einen Stub-Call an die Telemetrie
+            # (model_id soweit bekannt, wall_ms gemessen, tokens=0,
+            # est_cost=None) und setzen `err.telemetry`, bevor wir
+            # weiterwerfen — die Orchestrierung persistiert das.
+            _start = time.monotonic()
+            try:
+                response = provider.generate(GenerationRequest(
+                    system=SYSTEM_PROMPT, messages=messages, task_defs=task_defs))
+            except ProviderError as err:
+                wall_ms = int((time.monotonic() - _start) * 1000)
+                model_id = getattr(provider, "_model", "") or ""
+                telemetry.add(ProviderCall(
+                    model_id=model_id,
+                    input_tokens=0, output_tokens=0,
+                    cache_read_tokens=0, cache_creation_tokens=0,
+                    wall_ms=wall_ms,
+                    est_cost_usd=None, est_cost_eur=None))
+                err.telemetry = telemetry
+                raise
+            wall_ms = int((time.monotonic() - _start) * 1000)
+
+        # EC-23 (#268): Token-Counts aus der anbieter-neutralen Usage in einen
+        # ProviderCall heben. Liefert der Adapter keine Usage (älterer Test-
+        # Mock ohne Anthropic-Anbindung), entsteht KEIN ProviderCall — sonst
+        # wäre der Suffix bei jedem alten Test ein Format-Bruch, und »tokens=0,
+        # est_cost=None« wäre kein ehrlicher Diagnose-Wert, sondern reine
+        # Geräusche. Der reale ClaudeProvider liefert immer Usage; nur die
+        # Test-Doppelungen ohne Usage produzieren den »kein Telemetrie-Eintrag«-
+        # Fall.
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            cost_usd, cost_eur = estimate_cost(
+                usage.model_id,
+                usage.input_tokens,
+                usage.cache_read_tokens,
+                usage.output_tokens)
+            telemetry.add(ProviderCall(
+                model_id=usage.model_id,
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
+                cache_read_tokens=usage.cache_read_tokens,
+                cache_creation_tokens=usage.cache_creation_tokens,
+                wall_ms=wall_ms,
+                est_cost_usd=cost_usd,
+                est_cost_eur=cost_eur))
 
         # Keine Aufgaben-Aufrufe → fertige Antwort (EC-4).
         if not response.task_calls:
-            return AgentResult(reply_text=response.text or _EMPTY_REPLY)
+            return AgentResult(reply_text=response.text or _EMPTY_REPLY,
+                               telemetry=telemetry)
 
         # Assistant-Zug mit Text und Aufgaben-Aufrufen festhalten.
         assistant_blocks = []
@@ -219,7 +277,8 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
                         call_id=call.call_id,
                         content="Aufgabe nicht möglich: %s" % e, is_error=True))
                     continue
-                return AgentResult(proposal=proposal, pending_call=call)
+                return AgentResult(proposal=proposal, pending_call=call,
+                                   telemetry=telemetry)
 
             # EC-9: lesende Aufgabe — direkt ausführen, Ergebnis zurückspeisen.
             try:
@@ -236,4 +295,4 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
         messages.append(Message(role="user", blocks=result_blocks))
 
     # Obergrenze erreicht — sauber abbrechen statt endlos zu schleifen.
-    return AgentResult(reply_text=_GAVE_UP)
+    return AgentResult(reply_text=_GAVE_UP, telemetry=telemetry)
