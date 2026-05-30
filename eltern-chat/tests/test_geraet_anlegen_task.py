@@ -109,17 +109,49 @@ def test_GAA_5_catalog_keeps_faa_and_gaa_side_by_side():
 def test_GAA_5_task_is_a_write_task_with_proposal():
     """GAA-5: die Aufgabe ist `WriteTask` — sie ergänzt die Geräte-Registry.
     Der Vorschlag ist Pattern-treu (EC-10) und kommt vor dem Konversations-
-    Start."""
+    Start. Aus der Gruppe → Vorschlag nennt Privatchat (EC-10 #266)."""
     task = GeraetAnlegenTask(
         FakeTelegram(), "http://test",
         sessions={}, family_group_chat_id_getter=lambda: "-100",
         client=FakeGeraeteClient())
     assert task.kind == WRITE
     assert task.name == "geraet_anlegen"
-    proposal = task.propose(
-        arguments={}, turn_context=TurnContext(chat_id=7, from_user_id=7,
+    # Gruppen-Kontext: Vorschlag nennt Privatchat als Zielort.
+    proposal_group = task.propose(
+        arguments={}, turn_context=TurnContext(chat_id="-100", from_user_id=7,
                                                private_chat_id=7))
+    assert "Privatchat" in proposal_group.summary
+
+
+# ============================================================
+#  GAA-5 / EC-10 #266 — Vorschlag ist kontextabhängig
+# ============================================================
+
+def test_GAA_266_propose_from_group_nennt_privatchat():
+    """EC-10 #266: aus der Familien-Gruppe gestartet → Vorschlag nennt
+    den Privatchat als Ort der Einrichtung (chat_id != private_chat_id)."""
+    task = GeraetAnlegenTask(
+        FakeTelegram(), "http://test",
+        sessions={}, family_group_chat_id_getter=lambda: "-100",
+        client=FakeGeraeteClient())
+    proposal = task.propose(
+        arguments={}, turn_context=TurnContext(
+            chat_id="-100", from_user_id=7, private_chat_id=7))
     assert "Privatchat" in proposal.summary
+
+
+def test_GAA_266_propose_from_privatchat_kein_wechselhinweis():
+    """EC-10 #266: schon im Privatchat gestartet → Vorschlag ohne
+    Ortswechsel-Hinweis (chat_id == private_chat_id)."""
+    task = GeraetAnlegenTask(
+        FakeTelegram(), "http://test",
+        sessions={}, family_group_chat_id_getter=lambda: "-100",
+        client=FakeGeraeteClient())
+    proposal = task.propose(
+        arguments={}, turn_context=TurnContext(
+            chat_id=7, from_user_id=7, private_chat_id=7))
+    assert "Privatchat" not in proposal.summary
+    assert proposal.summary  # Nicht leer
 
 
 # ============================================================
