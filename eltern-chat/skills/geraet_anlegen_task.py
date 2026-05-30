@@ -41,9 +41,16 @@ _QUITTUNG_START_FROM_GROUP = (
 _QUITTUNG_START_FROM_PRIVATE = (
     "Ich lege das Gerät hier mit dir an — Schritt für Schritt. Die erste "
     "Frage kommt gleich.")
-_PROPOSAL_SUMMARY = ("Neues Gerät im Privatchat anlegen — ich frage dort der "
-                     "Reihe nach nach Typ, Name, Auflösung, Betriebssystem "
-                     "und Verwendung (V1 nur Display-Geräte).")
+
+# EC-10 / #266: Vorschlags-Zusammenfassung ist kontextabhängig (EC-10-Wortlaut):
+# - Aufruf aus der Familien-Gruppe → nennt den Privatchat als Ort der Einrichtung.
+# - Aufruf schon IM Privatchat → kein Ortswechsel-Hinweis.
+_PROPOSAL_SUMMARY_FROM_GROUP = (
+    "Neues Gerät im Privatchat anlegen — ich frage dort der Reihe nach nach "
+    "Typ, Name, Auflösung, Betriebssystem und Verwendung (V1 nur Display-Geräte).")
+_PROPOSAL_SUMMARY_FROM_PRIVATE = (
+    "Neues Gerät anlegen — ich frage hier der Reihe nach nach Typ, Name, "
+    "Auflösung, Betriebssystem und Verwendung (V1 nur Display-Geräte).")
 
 
 class GaaSession(PrivateChatSession):
@@ -103,9 +110,11 @@ class GeraetAnlegenTask(WriteTask):
         self._display_url_origin = display_url_origin
 
     def propose(self, arguments, turn_context):
-        """EC-10-Vorschlag — der Aufrufer bestätigt, bevor die Konversation
-        im Privatchat startet (Pattern-treu, GAA-5)."""
-        return Proposal(_PROPOSAL_SUMMARY)
+        """EC-10-Vorschlag — kontextabhängiger Wortlaut (EC-10 #266):
+        aus der Gruppe → Privatchat-Hinweis; schon im Privatchat → kein Wechsel."""
+        if is_from_private_chat(turn_context):
+            return Proposal(_PROPOSAL_SUMMARY_FROM_PRIVATE)
+        return Proposal(_PROPOSAL_SUMMARY_FROM_GROUP)
 
     def execute(self, arguments, turn_context):
         """Startet die GAA-Session im Privatchat des Aufrufers (GAA-5).

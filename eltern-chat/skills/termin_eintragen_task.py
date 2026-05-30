@@ -47,9 +47,16 @@ _QUITTUNG_NO_PRIVATE = (
 _QUITTUNG_SESSION_RUNNING = (
     "Eine Termin-Eintragung läuft schon in deinem Privatchat — bitte dort "
     "antworten oder einfach abwarten.")
-_PROPOSAL_SUMMARY = (
+
+# EC-10 / #266: Vorschlags-Zusammenfassung ist kontextabhängig (EC-10-Wortlaut):
+# - Aufruf aus der Familien-Gruppe → nennt den Privatchat als Ort der Klärung.
+# - Aufruf schon IM Privatchat → kein Ortswechsel-Hinweis.
+_PROPOSAL_SUMMARY_FROM_GROUP = (
     "Einen neuen Termin im Privatchat eintragen — ich frage dort nach "
     "Datum und Titel und trage den Termin nach Bestätigung im Familien-Kalender ein.")
+_PROPOSAL_SUMMARY_FROM_PRIVATE = (
+    "Einen neuen Termin eintragen — ich frage hier nach Datum und Titel und "
+    "trage den Termin nach Bestätigung im Familien-Kalender ein.")
 
 
 # ============================================================
@@ -140,8 +147,11 @@ class TermineEintragenTask(WriteTask):
         self._is_member_fn = is_member_fn
 
     def propose(self, arguments, turn_context):
-        """EC-10-Vorschlag — Pattern-treu (TES-10), redundant mit TES-7."""
-        return Proposal(_PROPOSAL_SUMMARY)
+        """EC-10-Vorschlag — kontextabhängiger Wortlaut (EC-10 #266):
+        aus der Gruppe → Privatchat-Hinweis; schon im Privatchat → kein Wechsel."""
+        if is_from_private_chat(turn_context):
+            return Proposal(_PROPOSAL_SUMMARY_FROM_PRIVATE)
+        return Proposal(_PROPOSAL_SUMMARY_FROM_GROUP)
 
     def execute(self, arguments, turn_context):
         """Startet die TES-Session im Privatchat des Aufrufers (TES-3).
