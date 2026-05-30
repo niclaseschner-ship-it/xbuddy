@@ -73,6 +73,9 @@ _ANTWORT_VERWORFEN = (
     "Ok — kein Termin eingetragen. Wenn du es erneut versuchen möchtest, "
     "formuliere einfach eine neue Anfrage.")
 
+# TES-7: Quittung nach erfolgreichem PUT (E-EC-7: deterministische Bestätigung).
+_ANTWORT_EINGETRAGEN = "Eingetragen ✅: {titel} am {datum_fmt}"
+
 # TES-3: Rückfrage bei abgelaufener oder fehlender Session.
 _ANTWORT_ABGELEHNT = (
     "Termin eintragen geht nur für Mitglieder der Familien-Gruppe.")
@@ -307,6 +310,8 @@ def termin_eintragen(tg, private_chat_id, from_user_id,
 
     logger.info("termin_eintragen: Termin »%s« am %s eingetragen (event_id=%s)",
                 titel, tag.isoformat(), event_id)
+    _send(tg, private_chat_id,
+          _ANTWORT_EINGETRAGEN.format(titel=titel, datum_fmt=_formatiere_datum(tag)))
     return SIGNAL_EINGETRAGEN
 
 
