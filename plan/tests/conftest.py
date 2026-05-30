@@ -62,7 +62,11 @@ class FakeTransport:
             raise kalender_mod.CalendarUnavailable("FakeTransport: simulierter Ausfall")
         eid = "neu-%d" % self._next_id
         self._next_id += 1
-        return {"id": eid, **raw_event}
+        stored = {"id": eid, **raw_event}
+        # Eingefügte Events in raw_events speichern, damit list_events sie zurückliefert.
+        # So ist ein echter PUT→GET-Round-Trip ohne pre-seeded Fixture möglich (AC5).
+        self.raw_events.append(stored)
+        return stored
 
     def patch_event(self, event_id, raw_patch):
         self.calls.append(("patch", event_id, raw_patch))
