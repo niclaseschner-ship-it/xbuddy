@@ -9,8 +9,8 @@ import logging
 
 import anthropic
 
-from model import (GenerationResponse, ImageBlock, ProviderError, TaskCallBlock,
-                   TaskResultBlock, TextBlock)
+from model import (GenerationResponse, ImageBlock, ProviderError, ProviderUsage,
+                   TaskCallBlock, TaskResultBlock, TextBlock)
 
 
 logger = logging.getLogger(__name__)
@@ -67,7 +67,20 @@ class ClaudeProvider:
             raise ProviderError(str(e))
 
         self._log_token_usage(response)
-        return self._from_anthropic_response(response)
+        result = self._from_anthropic_response(response)
+        # EC-23 (#268): Token-Counts in das anbieter-neutrale Modell heben, damit
+        # der Agent-Loop sie ohne Anthropic-Wissen in die Turn-Telemetrie hängen
+        # kann. Fehlt `usage` (älterer Test-Mock), bleibt `result.usage` None.
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            result.usage = ProviderUsage(
+                input_tokens=getattr(usage, "input_tokens", 0) or 0,
+                output_tokens=getattr(usage, "output_tokens", 0) or 0,
+                cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
+                cache_creation_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
+                model_id=self._model,
+            )
+        return result
 
     def _log_token_usage(self, response):
         """Schreibt eine kompakte INFO-Zeile mit der Token-Nutzung pro Aufruf
