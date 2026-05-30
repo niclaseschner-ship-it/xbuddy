@@ -17,19 +17,30 @@ bleibt beim Eltern-Chat (Telegram-Gruppen-Mitgliedschaft).
 # Minimal (lokal, HTTP, familie.json im Arbeitsverzeichnis, fotos/ daneben)
 python3 familie/main.py
 
-# Mit Pfaden, Bind auf 0.0.0.0, HTTPS (Pi-Dev-Setup)
+# Mit Registry-Pfad und HTTPS (Pi-Dev-Setup)
 python3 familie/main.py \
   --registry /tmp/xbuddy-serve/familie/familie.json \
-  --fotos    /tmp/xbuddy-serve/familie/fotos \
-  --host 0.0.0.0 --port 5010 \
   --cert /tmp/xbuddy-serve/cert.pem \
   --key  /tmp/xbuddy-serve/key.pem
 ```
 
-CLI > ENV (`FAMILIE_REGISTRY`, `FAMILIE_FOTOS`, `FAMILIE_HOST`, `FAMILIE_PORT`,
-`FAMILIE_LOG_LEVEL`) > Code-Defaults (FAM-9). Fehlt die Registry-Datei beim
+CLI > ENV > config.json > Code-Defaults (FAM-9). Fehlt die Registry-Datei beim
 Start, läuft der Dienst mit leerer Familie weiter und protokolliert eine
 Warnung (FAM-6).
+
+ENV-Variablen (CONFIG-5, nach `<KOMPONENTE>_<KEY>`-Schema):
+
+| Variable                 | Bedeutung                       |
+|--------------------------|---------------------------------|
+| `FAMILIE_REGISTRY`       | Pfad zur Registry-Datei         |
+| `FAMILIE_FOTOS`          | Foto-Verzeichnis                |
+| `FAMILIE_LISTEN_HOST`    | Bind-Adresse (Default: `127.0.0.1`) |
+| `FAMILIE_LISTEN_PORT`    | Bind-Port (Default: `5010`)     |
+| `FAMILIE_LOG_LEVEL`      | Log-Level (Default: `INFO`)     |
+
+Runtime-Konfig (`familie/config.json`) — Override über `listen_host`,
+`listen_port`, `log_level`. CLI-Flags `--host`, `--port`, `--log-level`
+sind Test-Werkzeug (FAM-9).
 
 ## Service-Topologie
 

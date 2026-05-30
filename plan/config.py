@@ -129,7 +129,17 @@ class Config:
 
 
 def _load_file(path):
-    """Lädt die Config-Datei. Fehlt sie, ist das in Ordnung — Defaults gelten."""
+    """Lädt die Config-Datei. Fehlt sie, ist das in Ordnung — Defaults gelten.
+
+    Fehler-Pfade (alle geben `{}` zurück, kein Absturz):
+    - FileNotFoundError: plan.json noch nicht angelegt → INFO-Log, leere Config.
+    - json.JSONDecodeError: Datei kaputt oder halb geschrieben (atomares
+      Replace-Race, DCOMP-4) → WARNING-Log, leere Config; der Aufrufer
+      (_current_config) greift auf den Last-Known-Good-Snapshot zurück
+      (DCOMP-3 / E-RELOAD-1 / ROU-25), sodass kein kaputtes JSON je den
+      laufenden Stand verfälscht.
+    - Inhalt kein dict: format-ungültig → WARNING-Log, leere Config.
+    """
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)

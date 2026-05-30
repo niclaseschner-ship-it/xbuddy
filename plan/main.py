@@ -67,7 +67,7 @@ else:  # python3 plan/main.py
 # Snapshot — nicht mehr die Lookup-Wahrheit. Endpoints lesen via
 # `_current_config()` pro Aufruf frisch von Disk; der Snapshot dient nur als
 # Fallback, wenn ein einzelner Read scheitert (gleicher atomarer Geist wie
-# E-RELOAD-1).
+# E-RELOAD-1 / ROU-25).
 runtime = {
     "config": None,            # plan.config.Config — Last-Known-Good-Snapshot
     "registry": None,          # Test-Naht: direkt gesetzte RegistryView (oder duck-typed)
@@ -145,7 +145,7 @@ def _current_config():
     Service-Restart und ohne Admin-Reload-Aufruf sehen — sonst zeigt er den
     alten Kalender, obwohl KAV bereits eine neue `kalender_id` geschrieben hat.
 
-    Fehlertoleranz (gleicher atomarer Geist wie der Admin-Reload, E-RELOAD-1):
+    Fehlertoleranz (gleicher atomarer Geist wie der Admin-Reload, E-RELOAD-1 / ROU-25):
     scheitert der Read oder Parse (Datei kurz weg, atomares Replace im
     Halbschritt, kaputtes JSON, ungültige Pflichtwerte wie fehlende
     `kalender_id`), fällt der Aufruf auf den Last-Known-Good-Snapshot in
@@ -198,9 +198,11 @@ def _kalender():
 def _db():
     """Öffnet die SQLite-Verbindung (PLAN-9). Pro Request frisch (V1).
 
-    DCOMP-2 (#210): `db_datei` kommt aus dem frisch gelesenen plan.json —
-    falls ein Onboarding-Schritt das Datei-Verzeichnis migriert, wirkt das
-    ohne Service-Restart.
+    DCOMP-2 (#210): `db_datei` kommt aus `_current_config()`, das pro Aufruf
+    frisch von Disk liest — damit wäre ein Pfad-Wechsel in plan.json ohne
+    Service-Restart wirksam. Automatisiert abgedeckt ist hier nur, dass pro
+    Request eine neue Connection geöffnet wird (kein Session-Cache); ein
+    Test für den db_datei-Pfad-Wechsel selbst ist Folge-Ticket #233.
     """
     return db_mod.connect(_current_config().db_datei)
 
@@ -492,7 +494,7 @@ def _aktivitaet_label(art):
 # (PR #149):
 #   1. Loopback-only (`request.remote_addr` ∈ {127.0.0.1, ::1}). Andere
 #      Aufrufer bekommen HTTP 403.
-#   2. Atomar (E-RELOAD-1): bei Parse-Fehler bleibt der alte Snapshot
+#   2. Atomar (E-RELOAD-1 / ROU-25): bei Parse-Fehler bleibt der alte Snapshot
 #      unberührt — Config UND Transport. Die Übernahme passiert erst,
 #      nachdem die neue Config erfolgreich gebaut wurde.
 #   3. nginx-Origin leitet `/api/v1/<komponente>/admin/...` NICHT weiter —
@@ -510,7 +512,7 @@ class PlanReloadError(Exception):
 
 def reload_plan_config():
     """Aktualisiert den Last-Known-Good-Snapshot aus plan.json (#140,
-    E-RELOAD-1). Expliziter Reload-Marker — die Lookup-Sichtbarkeit hängt
+    E-RELOAD-1 / ROU-25). Expliziter Reload-Marker — die Lookup-Sichtbarkeit hängt
     seit DCOMP-2 (#210) NICHT mehr davon ab.
 
     Liefert die neue `Config` bei Erfolg. Wirft PlanReloadError, wenn der

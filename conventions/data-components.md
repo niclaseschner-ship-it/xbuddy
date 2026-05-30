@@ -87,5 +87,10 @@ obwohl der Schreiber „nur kurz" mittendrin war. Atomar heißt: aus
 Lese-Sicht existiert nur „alter Stand" oder „neuer Stand", nie
 „dazwischen".
 
+Implementierungs-Hinweis: Wirft eine Komponente nach einem `except OSError as e:`
+einen eigenen Fehler (z. B. `RegistryError`), muss sie `raise ... from e` schreiben,
+damit die Fehler-Kausalkette im Traceback erhalten bleibt — der ursprüngliche
+`OSError` ist dann als `__cause__` sichtbar und vereinfacht die Diagnose.
+
 Heimat des Patterns in den Specs: `familie.md` FAM-11, `geraete.md`
 GER-6, `zugangsdaten.md` ZD-3.

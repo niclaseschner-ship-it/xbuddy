@@ -322,7 +322,7 @@ def save(registry, path):
             os.remove(tmp_path)
         except OSError:
             pass
-        raise RegistryError("familie.json konnte nicht geschrieben werden: %s" % e)
+        raise RegistryError("familie.json konnte nicht geschrieben werden: %s" % e) from e
 
 
 # ============================================================
@@ -447,7 +447,7 @@ def setze_foto(registry, foto_verzeichnis, person_id, dateiname, daten):
     try:
         os.makedirs(ziel_dir, exist_ok=True)
     except OSError as e:
-        raise RegistryError("Foto-Verzeichnis konnte nicht angelegt werden: %s" % e)
+        raise RegistryError("Foto-Verzeichnis konnte nicht angelegt werden: %s" % e) from e
     ziel = os.path.join(ziel_dir, basename)
     # Atomar schreiben (DCOMP-4): Temp im selben Verzeichnis + os.replace.
     tmp_fd, tmp_path = tempfile.mkstemp(
@@ -461,7 +461,7 @@ def setze_foto(registry, foto_verzeichnis, person_id, dateiname, daten):
             os.remove(tmp_path)
         except OSError:
             pass
-        raise RegistryError("Foto konnte nicht geschrieben werden: %s" % e)
+        raise RegistryError("Foto konnte nicht geschrieben werden: %s" % e) from e
     # FAM-13: das `foto`-Feld trägt den Dateinamen, nicht den vollen Pfad —
     # symmetrisch zu FAM-5/FAM-3. Foto-Auflösung beim Lesen läuft in `main.py`
     # bei FAM-13-Personen über das `<id>/<dateiname>`-Schema; Bestands-Personen
