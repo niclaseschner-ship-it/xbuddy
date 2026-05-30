@@ -266,14 +266,32 @@ wird.
 
 **PUT-Vertrag** — `PUT /api/v1/plan/termine`:
 
-Body: `{ "titel": "<string>", "datum": "<ISO-Datum>" [, "event_id": "<id>"] }`.
-`titel` ist Pflicht (nicht leer). Ohne `event_id`: neuer ganztägiger Termin
-unter `titel` an `datum` — antwortet `{ "ok": true, "action": "created",
-"event_id": "<id>" }`. Mit `event_id`: bestehenden Termin umbenennen —
-antwortet `{ "ok": true, "action": "patched", "event_id": "<id>" }`.
+Body: `{ "titel": "<string>", "beginn": "<ISO>", "ende"?: "<ISO>" [, "event_id": "<id>"] }`.
+`titel` ist Pflicht (nicht leer). `datum` ist Alias für ganztägiges `beginn`
+(Rückwärts-Compat — `{ "titel", "datum" }` verhält sich wie `{ "titel", "beginn" }`).
+
+**Typ-Erkennung über `T` im String** (spiegelt `_parse_when` aus dem Lese-Pfad):
+
+- `beginn` ohne `T` → **ganztägig**: `beginn` und `ende` sind ISO-Datumsstrings
+  (`YYYY-MM-DD`). `ende` ist optional; fehlt es, ist der Termin eintägig. Der
+  Adapter schreibt `start.date=beginn`, `end.date=ende+1Tag` (Google-exklusiv-Ende).
+  `ende` darf nicht vor `beginn` liegen → 400.
+- `beginn` mit `T` → **zeitgebunden**: `beginn` und `ende` sind ISO-Datetime-Strings
+  mit Offset. `ende` ist Pflicht; `ende` muss nach `beginn` liegen → sonst 400.
+  Der Adapter schreibt `start.dateTime=beginn.isoformat()`,
+  `end.dateTime=ende.isoformat()`. Naive Datetimes werden in der Familien-Zeitzone
+  (`plan.json`-Schlüssel `zeitzone`, Default `Europe/Berlin`) aware gemacht.
+- Typ-Mismatch: `beginn` date + `ende` datetime oder umgekehrt → 400.
+- `datum` und `beginn` beide gesetzt, aber ungleich → 400.
+- Datum/Zeit eines bestehenden Termins via `event_id` ändern ist nicht unterstützt
+  (nur Umbenennen) — Folge-Ticket.
+
+Ohne `event_id` → `{ "ok": true, "action": "created", "event_id": "<id>" }`.
+Mit `event_id` → bestehenden Termin umbenennen →
+`{ "ok": true, "action": "patched", "event_id": "<id>" }`.
 Kalender nicht erreichbar: HTTP 502. Ungültige Eingabe: HTTP 400.
 
-*Tickets:* #40
+*Tickets:* #40, #256
 
 ### PLAN-30 — Lese-API für Wochenzuteilungen
 Der Plan-Buddy stellt die persistierten Erwachsenen-Slot-Zuteilungen einer
@@ -432,7 +450,12 @@ schlägt Creator-E-Mail; früherer Treffer gewinnt) · PLAN-18 (anlegen/ändern/
 löschen rufen die richtige Operation) · PLAN-20 (fehlende Credentials → leeres
 Lese-Ergebnis, View funktioniert) · PLAN-22/PLAN-23 (Termin-Schnittstelle
 liefert Termine; ist der Plan-Buddy nicht erreichbar, ist die Schnittstelle
-nicht erreichbar) · PLAN-28 (Reload-on-Read: nach Cross-Service-Schreibvorgang
+nicht erreichbar; PUT mit beginn+ende als Datumsstrings legt eine
+Mehrtages-Ganztags-Spanne an; PUT mit beginn+ende als Datetimes legt einen
+zeitgebundenen Termin an; datum als Alias für ganztägiges beginn bleibt
+rückwärtskompatibel; fehlende oder widersprüchliche Felder antworten 400;
+nach einem PUT liefert GET das Event mit korrektem beginn/ende/ganztags zurück)
+· PLAN-28 (Reload-on-Read: nach Cross-Service-Schreibvorgang
 in plan.json liefern `_current_config()` und `_db()` beim nächsten Request den
 neuen Stand ohne Service-Restart — DCOMP-2) · PLAN-30 (Lese-API liefert
 Defaults bei leerer Woche, spiegelt PUTs, antwortet 400 bei ungültigem

@@ -312,20 +312,53 @@ class Kalender:
 
     # -- Schreiben (PLAN-18) ---------------------------------------------
 
-    def event_anlegen(self, titel, start_tag, ganztags=True):
-        """Legt einen Termin an (PLAN-18). Liefert die `id` des neuen Events.
+    def event_anlegen(self, titel, beginn, ende=None):
+        """Legt einen Termin an (PLAN-18, #256). Liefert die `id` des neuen Events.
 
-        Wirft CalendarUnavailable bei fehlenden Credentials oder Netzfehler
-        (PLAN-20: Schreiben meldet einen klar erkennbaren Misserfolg).
+        `beginn` ist ein `date` (ganztägig) oder `datetime` (zeitgebunden, aware).
+        `ende` ist optional für ganztägige Termine (fehlt → eintägig, exklusiv-Ende
+        +1 Tag) und Pflicht für zeitgebundene Termine.
+
+        Semantik (PLAN-22 PUT-Vertrag):
+        - datetime-Erkennung kommt zuerst, weil datetime Subklasse von date ist.
+        - Ganztägig: start.date=beginn, end.date=(ende or beginn)+1 Tag (exklusiv).
+        - Zeitgebunden: start.dateTime/end.dateTime als ISO-String mit UTC-Offset.
+
+        Wirft ValueError bei ungültigen Kombinationen (AC4) und CalendarUnavailable
+        bei fehlenden Credentials oder Netzfehler (PLAN-20).
         """
-        if ganztags:
+        # isinstance(datetime) muss VOR isinstance(date) kommen, weil datetime
+        # eine Subklasse von date ist.
+        if isinstance(beginn, datetime):
+            if ende is None:
+                raise ValueError(
+                    "zeitgebundener Termin: ende ist Pflicht wenn beginn ein datetime ist")
+            if not isinstance(ende, datetime):
+                raise ValueError(
+                    "Typ-Mismatch: beginn ist datetime, ende muss datetime sein (nicht date)")
+            if ende <= beginn:
+                raise ValueError(
+                    "zeitgebundener Termin: ende muss nach beginn liegen")
             raw = {
                 "summary": titel,
-                "start": {"date": start_tag.isoformat()},
-                "end": {"date": (start_tag + timedelta(days=1)).isoformat()},
+                "start": {"dateTime": beginn.isoformat()},
+                "end": {"dateTime": ende.isoformat()},
             }
         else:
-            raw = {"summary": titel, "start": {"dateTime": start_tag.isoformat()}}
+            # Ganztägig — beginn ist ein date.
+            if ende is not None:
+                if isinstance(ende, datetime):
+                    raise ValueError(
+                        "Typ-Mismatch: beginn ist date (ganztägig), ende muss date sein (nicht datetime)")
+                if ende < beginn:
+                    raise ValueError(
+                        "ganztägiger Termin: ende darf nicht vor beginn liegen")
+            end_exklusiv = (ende if ende is not None else beginn) + timedelta(days=1)
+            raw = {
+                "summary": titel,
+                "start": {"date": beginn.isoformat()},
+                "end": {"date": end_exklusiv.isoformat()},
+            }
         res = self._transport.insert_event(raw)
         return res.get("id")
 
