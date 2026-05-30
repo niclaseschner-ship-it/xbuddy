@@ -1012,7 +1012,7 @@ def test_140_reload_endpoint_is_idempotent(reload_client):
 
 
 def test_140_reload_endpoint_atomar_bei_parse_fehler(reload_client):
-    """Atomarität (E-RELOAD-1): kaputtes routing.json → 500 mit
+    """Atomarität (E-RELOAD-1 / ROU-25): kaputtes routing.json → 500 mit
     {reloaded: false, error: ...}, ABER der alte State bleibt unverändert.
     Der Router beantwortet Events nach dem Fehler weiter wie vor dem Aufruf."""
     client, routing_file = reload_client
@@ -1210,7 +1210,7 @@ def test_DCOMP_2_kaputtes_routing_json_faellt_auf_snapshot(reload_client, caplog
     Replace-Race, kaputtes JSON), fällt der Lookup auf den letzten
     erfolgreich geladenen Snapshot zurück — der laufende Router rutscht
     nicht in einen leeren Zustand, nur weil ein Skill mitten im Schreiben
-    war. Spiegel des atomaren Admin-Reload-Verhaltens (E-RELOAD-1)."""
+    war. Spiegel des atomaren Admin-Reload-Verhaltens (E-RELOAD-1 / ROU-25)."""
     client, routing_file = reload_client
     # Snapshot enthält den 'default'-Eintrag aus DEMO_ROUTING_INITIAL.
     assert 'default' in router_main.known_displays

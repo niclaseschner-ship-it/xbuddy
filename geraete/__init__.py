@@ -8,7 +8,7 @@ sie über eine Schnittstelle bereit (GER-5/GER-6); andere Komponenten
 Dieses Verzeichnis ist ein Paket, damit `geraete.registry` einen eindeutigen
 Modulnamen trägt und beim repo-weiten pytest-Lauf nicht mit gleichnamigen
 Modulen anderer Komponenten kollidiert (#52) — analog `familie/`,
-`plan/`, `zugangsdaten/`.
+`plan/`, `tools/zugangsdaten/`.
 
 Public-API (was Konsumenten importieren):
 

@@ -484,7 +484,7 @@ sich der App-Panel-Adapter wie bei einem nicht-gematchten Trigger
   Stand wird als Snapshot gehalten und nur dann als Fallback verwendet,
   wenn ein einzelner Read scheitert (Datei kurz weg, atomares Replace-
   Race, kaputtes JSON) — gleicher atomarer Geist wie der Admin-Reload
-  (E-RELOAD-1).
+  (E-RELOAD-1 / ROU-25).
 - **Admin-Reload** (`POST /api/v1/router/admin/reload`, #140): bleibt
   bestehen, ist aber **nicht mehr nötig**, damit Skill-Schreibvorgänge
   sichtbar werden — das übernimmt Reload-on-Read. Der Endpoint bleibt
