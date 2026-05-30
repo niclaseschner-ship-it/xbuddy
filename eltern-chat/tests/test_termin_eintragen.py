@@ -502,3 +502,26 @@ def test_TES9_kein_halluzinierter_event_id():
         if "eingetragen" in m["text"].lower() and "evt" in m["text"].lower()
     ]
     assert not eingetragen_msgs, "Halluzinierte Erfolgs-Meldung gefunden"
+
+
+# ============================================================
+#  TES-7 — Quittungs-Nachricht nach erfolgreichem PUT
+# ============================================================
+
+def test_TES7_quittung_eingetragen():
+    """TES-7 / E-EC-7: nach erfolgreichem PUT sendet der Bot eine
+    Quittungs-Nachricht mit Titel und Datum an private_chat_id."""
+    tg = FakeTelegram(members={42: {"status": "member"}})
+    plan_client = FakePlanClient(put_event_id="evt-q1")
+    termin_eintragen(
+        tg=tg, private_chat_id=100, from_user_id=42,
+        family_group_chat_id=200, anstos_text="Klettern Donnerstag",
+        plan_client=plan_client, is_member_fn=_member(42),
+        next_message=_messages("ok"), heute=MONTAG)
+    # Letzte Nachricht im Privatchat muss die Quittung sein
+    letzte = tg.sent[-1]["text"]
+    assert letzte.startswith("Eingetragen ✅"), (
+        "Quittungs-Nachricht beginnt nicht mit 'Eingetragen ✅': %r" % letzte)
+    assert "Klettern" in letzte, "Titel fehlt in Quittung: %r" % letzte
+    # Datum muss im DD.MM.YYYY-Format enthalten sein (DONNERSTAG = 04.06.2026)
+    assert "04.06.2026" in letzte, "Datum fehlt in Quittung: %r" % letzte
