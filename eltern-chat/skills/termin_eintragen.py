@@ -24,6 +24,7 @@ E-TES-4: geteilte Wahrheit, kein Kopieren).
 import logging
 import re
 from datetime import date
+from typing import Callable
 
 import authz
 import confirm
@@ -214,7 +215,8 @@ def _ist_nur_datum_vokabular(titel):
 def termin_eintragen(tg, private_chat_id, from_user_id,
                      family_group_chat_id, anstos_text,
                      plan_client, is_member_fn, next_message,
-                     heute=None):
+                     heute=None,
+                     typing_fn: Callable[[], None] | None = None):
     """Termin eintragen — aufrufbare Funktion (TES-1).
 
     Klärt einen Termin im Privatchat des Aufrufers und trägt ihn nach
@@ -229,6 +231,11 @@ def termin_eintragen(tg, private_chat_id, from_user_id,
     `is_member_fn`          — Callable `(user_id) -> bool` (TES-2).
     `next_message`          — Callable → TesInput|None (Privatchat-Stream, TES-3).
     `heute`                 — Injektierbar für Tests (Default: date.today()).
+    `typing_fn`             — Optionaler Callable ohne Argumente; wird vor jeder
+                              send_message-Phase aufgerufen (EC-14: Best-Effort,
+                              Fehler werden geschluckt). Default None → No-op
+                              (Backward-Compat). Vgl. before_provider_call in
+                              agent.py (Issue #156).
 
     Ergebnis-Signal (TES-1):
       „eingetragen"       — Termin angelegt (event_id aus PLAN-22).
@@ -250,6 +257,7 @@ def termin_eintragen(tg, private_chat_id, from_user_id,
     if from_user_id is None or not is_member_fn(from_user_id):
         logger.info("termin_eintragen: User %s ist kein Familienmitglied — abgelehnt",
                     from_user_id)
+        _fire_typing(typing_fn)
         _send(tg, private_chat_id, _ANTWORT_ABGELEHNT)
         return SIGNAL_ABGELEHNT
 
@@ -258,6 +266,7 @@ def termin_eintragen(tg, private_chat_id, from_user_id,
 
     if tag is None:
         # Mehrdeutiger Datums-Ausdruck → eine Rückfrage (EC-22).
+        _fire_typing(typing_fn)
         _send(tg, private_chat_id, _RUECKFRAGE_DATUM)
         msg = next_message()
         if msg is None:
@@ -269,11 +278,13 @@ def termin_eintragen(tg, private_chat_id, from_user_id,
     # TES-4 Edge-Case Vergangenheit: einmalige Rückfrage.
     if tag < heute:
         datum_str = _formatiere_datum(tag)
+        _fire_typing(typing_fn)
         _send(tg, private_chat_id, _RUECKFRAGE_VERGANGENHEIT % datum_str)
         msg = next_message()
         if msg is None:
             return SIGNAL_ABGEBROCHEN
         if not confirm.is_confirmation(_get_text(msg)):
+            _fire_typing(typing_fn)
             _send(tg, private_chat_id, _ANTWORT_VERWORFEN)
             return SIGNAL_VERWORFEN
 
@@ -282,6 +293,7 @@ def termin_eintragen(tg, private_chat_id, from_user_id,
 
     if _ist_nur_datum_vokabular(titel):
         # Kein erkennbarer Titel → eine Rückfrage.
+        _fire_typing(typing_fn)
         _send(tg, private_chat_id, _RUECKFRAGE_TITEL)
         msg = next_message()
         if msg is None:
@@ -292,11 +304,13 @@ def termin_eintragen(tg, private_chat_id, from_user_id,
 
     # TES-7: Vorschlag + Bestätigungswort vor dem PUT.
     datum_str = _formatiere_datum(tag)
+    _fire_typing(typing_fn)
     _send(tg, private_chat_id, _VORSCHLAG_TEMPLATE % (titel, datum_str))
     msg = next_message()
     if msg is None:
         return SIGNAL_ABGEBROCHEN
     if not confirm.is_confirmation(_get_text(msg)):
+        _fire_typing(typing_fn)
         _send(tg, private_chat_id, _ANTWORT_VERWORFEN)
         return SIGNAL_VERWORFEN
 
@@ -305,11 +319,13 @@ def termin_eintragen(tg, private_chat_id, from_user_id,
         event_id = plan_client.put_termin(titel, tag.isoformat())
     except PlanClientError as e:
         logger.warning("termin_eintragen: Plan-Buddy nicht erreichbar — %s", e)
+        _fire_typing(typing_fn)
         _send(tg, private_chat_id, _ANTWORT_NICHT_ERREICHBAR)
         return SIGNAL_NICHT_ERREICHBAR
 
     logger.info("termin_eintragen: Termin »%s« am %s eingetragen (event_id=%s)",
                 titel, tag.isoformat(), event_id)
+    _fire_typing(typing_fn)
     _send(tg, private_chat_id,
           _ANTWORT_EINGETRAGEN.format(titel=titel, datum_fmt=_formatiere_datum(tag)))
     return SIGNAL_EINGETRAGEN
@@ -318,6 +334,21 @@ def termin_eintragen(tg, private_chat_id, from_user_id,
 # ============================================================
 #  Helpers
 # ============================================================
+
+def _fire_typing(typing_fn):
+    """Ruft typing_fn auf, wenn gesetzt — Fehler werden geschluckt (EC-14: Best-Effort).
+
+    Analog `before_provider_call` in agent.py (Issue #156): der Typing-Indikator
+    ist Komfort, kein Gate. Scheitert der Aufruf (z. B. wegen TelegramError),
+    läuft termin_eintragen() trotzdem durch.
+    """
+    if typing_fn is None:
+        return
+    try:
+        typing_fn()
+    except Exception:  # noqa: BLE001 — Typing ist Komfort, kein Gate
+        logger.debug("_fire_typing: Aufruf fehlgeschlagen (geschluckt)", exc_info=True)
+
 
 def _get_text(msg):
     """Liest den Text aus einem TesInput-Objekt oder einem String."""
