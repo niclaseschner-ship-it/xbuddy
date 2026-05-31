@@ -66,3 +66,14 @@ im Eigentum der Familien-Schnittstelle, sondern der zuständigen App
 APP-1 bis APP-4 gelten für Apps; die Familien-Schnittstelle ist davon
 ausgenommen, weil sie keine App-Funktion besitzt. Ihre eigene Spec ist
 `specs/platform/eltern-chat.md`.
+
+### APP-6 — Spec-Datei-Verortung: buddies/ vs. platform/
+
+Eine Fähigkeit mit eigener **Display-View** für die Familie wird unter
+`specs/buddies/<name>.md` spezifiziert. Eine Fähigkeit **ohne** eigene
+Display-View — Router, Familien-/Geräte-Registry, Eltern-Chat (Telegram-getriggert)
+— wird unter `specs/platform/<name>.md` spezifiziert.
+
+Diese Heuristik ergänzt APP-5 (Plattform-Bereich vs. App-Eigentümer) um die
+konkrete Datei-Verortung: APP-5 grenzt inhaltlich ab, was Plattform-Bereich ist
+und was App; APP-6 übersetzt das in die Ordnerwahl für die Spec-Datei.
