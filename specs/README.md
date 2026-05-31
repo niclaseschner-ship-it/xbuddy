@@ -15,11 +15,26 @@ braucht es nicht, um die Spec synchron zu halten.
 
 - `constitution.md` — übergeordnete Prinzipien, selten geändert.
 - Eine Spec-Datei je **Fähigkeit mit eigenem Verhaltens-Vertrag** —
-  `buddies/<name>.md` (was die Familie erlebt) bzw. `platform/<name>.md`
-  (geteilte Software-Fähigkeit wie Messaging, Rendering).
+  `buddies/<name>.md` oder `platform/<name>.md` — Ordnerwahl nach APP-6
+  (`conventions/apps.md`).
 - `../conventions/` — paralleles Genre für das *Wie* (Bauregeln,
   einheitliche Form). Specs zitieren Konventions-IDs (z. B. „folgt
   IDENT-1"), beschreiben selbst kein „Wie".
+
+<!-- Buddy-Spec — Gliederungs-Checkliste (optional, kein Pflichtrahmen)
+
+   Eine Buddy-Spec ist vollständig, wenn sie View-Verhalten und Tests
+   abdeckt. Die folgenden Punkte sind eine Checkliste zum Durchdenken —
+   keine Pflichtüberschriften. Was nicht zutrifft, wird weggelassen;
+   eine leere Sektion ist ein Fehler (CLAUDE.md §6: nichts auf Vorrat).
+
+   - App & ihre Views: welche Display-Views existieren, Slug, URL-Schema
+   - Datenhaltung: was die App besitzt, wo es liegt, welches Format
+   - Schnittstellen Display: Routing-Einträge, URL-Parameter, Varianten
+   - Schnittstellen API: HTTP-Endpunkte für andere Apps/Plattform
+   - Konfiguration: Werte mit Default und Override-Pfad
+   - Registrierung: Slug-Eintrag, Familien-Schnittstelle-Beitrag (APP-4)
+-->
 
 Gegliedert wird nach **Verhalten**, nicht nach Code-Modulen und nicht nach
 Hardware. Eine Datei entsteht **erst**, wenn ein Ticket die Fähigkeit
