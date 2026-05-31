@@ -452,3 +452,30 @@ def test_T280_S1W_run_tes_typing_fn_uses_private_chat_id(tmp_path):
         "send_chat_action wurde an family_group_chat_id=%s gesendet — "
         "typing_fn-Lambda schließt falsche ID ein. Aufrufe: %r"
         % (_FAMILY_GROUP_ID, tg.chat_actions))
+
+
+# ============================================================
+#  Unit-Tests: skills/typing_indicator.fire_typing (EC-25, T285a)
+# ============================================================
+
+from skills.typing_indicator import fire_typing  # noqa: E402 — nach Klassen-Defs
+
+
+def test_fire_typing_ruft_callable_auf():
+    """EC-25: fire_typing ruft den übergebenen Callable genau einmal auf."""
+    calls = []
+    fire_typing(lambda: calls.append(1))
+    assert calls == [1]
+
+
+def test_fire_typing_none_ist_noop():
+    """EC-25: fire_typing mit None → kein Fehler, kein Aufruf."""
+    fire_typing(None)  # kein Exception erwartet
+
+
+def test_fire_typing_schluckt_exception():
+    """EC-25: fire_typing schluckt jede Exception — kein Abbruch der aufrufenden Aufgabe."""
+    def kaputt():
+        raise RuntimeError("Telegram-Fehler simuliert")
+
+    fire_typing(kaputt)  # darf nicht weitergeworfen werden
