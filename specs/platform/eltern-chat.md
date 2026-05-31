@@ -187,6 +187,34 @@ Telemetrie nicht als »Bot-Wortlaut« mitschleppen.
 
 *Tickets:* #268
 
+### EC-25 — Typing-Indikator vor Bot-Nachrichten in mehrstufigen Schreib-Aufgaben
+
+Während der Bot eine mehrstufige Schreib-Aufgabe (EC-20) im Privatchat abwickelt,
+sendet er vor jeder eigenen Nachricht in diesem Privatchat den Telegram-Typing-
+Indikator (`sendChatAction`, `action=typing`). Das gilt für alle Nachrichten
+innerhalb der Session: Rückfragen zu Pflicht-Feldern, der strukturierte Vorschlag
+(EC-10) und — wenn die Aufgabe abgeschlossen ist — die Abschluss-Quittung.
+
+Der Typing-Indikator ist **Best-Effort-Komfort** und kein Sicherheits-Gate:
+
+- Schlägt der `sendChatAction`-Aufruf fehl (Netzwerk-Fehler, Telegram-Rate-Limit
+  oder beliebiger HTTP-Fehler), läuft die Aufgabe **ohne Unterbrechung weiter** —
+  kein Abbruch, keine Fehler-Antwort an die Familie.
+- Der Typing-Indikator blockiert den Aufgaben-Fortschritt nicht; er wird
+  Fire-and-Forget vor der eigentlichen Sende-Operation abgesetzt.
+
+**Was sich für die Familie ändert.** Ohne EC-25 sieht die Familie nach dem
+Absenden ihres Bestätigungswortes oder einer Rückfragen-Antwort zunächst Stille
+— je nach Petrarbeitungsdauer mehrere Sekunden, ohne Signal, dass der Bot noch
+aktiv ist. Mit EC-25 erscheint sofort das „tippt gerade"-Signal im Privatchat,
+bevor die Bot-Antwort kommt. Das reduziert Verwirrung bei längeren
+Provider-Calls (EC-14, EC-11), ohne die Latenz zu verändern.
+
+Code-Verweise, die heute den Typing-Indikator an EC-14 koppeln, werden auf EC-25
+umgezeigt — das ist Aufgabe der Code-Tracks, nicht dieser Spec.
+
+*Tickets:* #284
+
 ## 3. Aufgaben
 
 ### EC-8 — Aufgaben-Katalog
@@ -217,13 +245,31 @@ bestätigt hat. Ohne Bestätigung geschieht keine Veränderung. Die Bestätigung
 ist eindeutig einem konkreten Vorschlag zugeordnet, auch wenn dazwischen andere
 Nachrichten eingehen.
 
+**Ein-Schritt-Bestätigung bei vollständigem Anstoß.** Liefert der Anstoß
+bereits alle für die Schreib-Aufgabe nötigen Felder (d. h. keine Rückfrage
+nach Pflicht-Feldern mehr nötig), kombiniert der Bot Daten-Übersicht und
+Bestätigungs-Frage zu **einer** Nachricht: er legt den strukturierten Vorschlag
+(„was genau geschehen würde") direkt vor und fordert in derselben Nachricht
+das Bestätigungswort (E-EC-7). Laufen keine Rückfragen zum Auflösen der Pflicht-
+Felder, entfällt eine zusätzliche Zwischennachricht. Das Schreib-Gate selbst
+(Ausführung erst nach ausdrücklicher Bestätigung) bleibt vollständig erhalten —
+keine Änderung an der Sicherheits-Garantie.
+
+**Zweistufige Variante als Fallback.** Ist der Anstoß unvollständig (mindestens
+ein Pflicht-Feld fehlt oder ist mehrdeutig), fragt der Bot erst gezielt nach
+(EC-22) und legt den strukturierten Vorschlag erst vor, sobald alle Pflicht-
+Felder geklärt sind. Das ist der bisherige Pfad.
+
+Diese Verfeinerung gilt global für alle schreibenden Aufgaben (TES, FAA, GAA,
+KAV und künftige Aufgaben desselben Musters).
+
 Die Vor-Bestätigung mehrstufiger schreibender Aufgaben (EC-20) benennt den Ort
 der nächsten Schritte kontextabhängig: in der Familien-Gruppe gestartet →
 Verweis auf Privatchat; bereits im Privatchat gestartet → kein
 Ortswechsel-Hinweis. Der Wortlaut suggeriert keinen Ortswechsel, wenn keiner
 stattfindet.
 
-*Tickets:* #27 · #266
+*Tickets:* #27 · #266 · #278
 
 ### EC-20 — Mehrstufige Aufgaben überfluten die Familien-Gruppe nicht
 
