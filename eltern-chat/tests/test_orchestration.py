@@ -143,6 +143,11 @@ def test_typing_action_sent_before_provider_call(tmp_path):
     """Vor jedem Provider-Aufruf wird `send_chat_action(chat_id, "typing")`
     abgesetzt — der Familien-Chat sieht „Bot tippt …", solange der Provider
     rechnet (Issue #93).
+
+    EC-25 / AC2 (Ticket #287): Im Privatchat feuert ein zusätzlicher
+    Typing-Aufruf VOR dem Auth-Check — damit der Nutzer auch während der
+    getChatMember-Latenz „tippt gerade" sieht. Im Privatchat-Pfad sind das
+    insgesamt zwei Aufrufe: einer vor Auth, einer vor dem Provider-Call.
     """
     tg = FakeTelegram(members=_members(7))
     provider = FakeProvider([text_response("Antwort.")])
@@ -150,17 +155,22 @@ def test_typing_action_sent_before_provider_call(tmp_path):
 
     handle_update(make_message("hallo", chat_id=42, from_user_id=7), ctx)
 
-    # Typing-Indikator ist genau einmal abgesetzt — auf dem richtigen Chat,
-    # mit der richtigen Aktion.
-    assert tg.chat_actions == [{"chat_id": 42, "action": "typing"}]
-    # Reihenfolge: der Indikator kommt VOR dem Provider-Aufruf — der Provider
-    # hat genau einen Aufruf bekommen, also war der Indikator vorher dran.
+    # EC-25/AC2: Privatchat ⇒ ein Typing vor Auth + ein Typing vor Provider-Call.
+    assert tg.chat_actions == [
+        {"chat_id": 42, "action": "typing"},   # vor Auth (EC-25/AC2)
+        {"chat_id": 42, "action": "typing"},   # vor Provider-Call (Issue #93)
+    ]
+    # Provider hat genau einen Aufruf bekommen.
     assert len(provider.requests) == 1
 
 
 def test_typing_action_failure_does_not_block_turn(tmp_path):
     """Ein scheiternder Typing-Indikator (TelegramError) darf den Turn nicht
     abbrechen — er ist Komfort, kein Gate (Issue #93).
+
+    EC-25/AC2 (Ticket #287): Im Privatchat werden zwei Typing-Aufrufe
+    unternommen (vor Auth, vor Provider). Schlagen beide fehl, läuft der Turn
+    trotzdem durch.
     """
     tg = FakeTelegram(members=_members(7),
                       send_chat_action_error=TelegramError("API down"))
@@ -169,8 +179,8 @@ def test_typing_action_failure_does_not_block_turn(tmp_path):
 
     handle_update(make_message("hallo", from_user_id=7), ctx)
 
-    # Aufruf wurde versucht …
-    assert len(tg.chat_actions) == 1
+    # Beide Aufrufe wurden versucht (beide fehlgeschlagen, aber kein Abbruch) …
+    assert len(tg.chat_actions) == 2
     # … der Provider wurde trotzdem aufgerufen …
     assert len(provider.requests) == 1
     # … und der Bot hat geantwortet.
@@ -197,11 +207,12 @@ def test_typing_action_sent_for_each_provider_call_in_tool_loop(tmp_path):
 
     handle_update(make_message("wetter?", chat_id=42, from_user_id=7), ctx)
 
-    # Zwei Provider-Calls passiert ⇒ zwei Typing-Aufrufe — einer vor jedem.
+    # EC-25/AC2: Privatchat ⇒ Typing vor Auth + zwei mal vor Provider-Call (Tool-Loop).
     assert len(provider.requests) == 2
     assert tg.chat_actions == [
-        {"chat_id": 42, "action": "typing"},
-        {"chat_id": 42, "action": "typing"},
+        {"chat_id": 42, "action": "typing"},   # vor Auth (EC-25/AC2)
+        {"chat_id": 42, "action": "typing"},   # vor erstem Provider-Call (Issue #93)
+        {"chat_id": 42, "action": "typing"},   # vor zweitem Provider-Call (Issue #156)
     ]
     # Antwort ist trotzdem korrekt durchgelaufen.
     assert tg.sent[-1]["text"] == "In Berlin sind es 22 Grad."
