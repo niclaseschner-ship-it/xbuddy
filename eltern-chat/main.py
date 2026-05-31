@@ -27,6 +27,10 @@ import time
 import uuid
 from dataclasses import dataclass
 
+# AC4 (Ticket #287): begrenzter Backoff für Poll-Fehler (statt fixer 3-s-Pause).
+_POLL_RETRY_SLEEP_MIN = 1      # s — Startintervall bei erstem Fehler
+_POLL_RETRY_SLEEP_MAX = 30     # s — Obergrenze, damit DNS-Bursts nicht ewig blockieren
+
 # eltern-chat/ liegt auf sys.path, wenn main.py direkt gestartet wird; für den
 # Import-aus-Tests-Fall sorgt tests/conftest.py.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -152,6 +156,21 @@ def handle_update(update, ctx):
         logging.info("Gruppe %s: ausdrücklich angesprochen — Anfrage wird "
                      "bearbeitet (EC-5)", msg.chat_id)
 
+    # AC3 (Ticket #287): T0 — Update-Eingang, nach Routing-Dispatch, vor Auth.
+    t0 = time.monotonic()
+
+    # EC-25 / AC2 (Ticket #287): Typing-Indikator VOR dem Auth-Check im Privatchat.
+    # Der Nutzer sieht „tippt gerade" während des getChatMember-Aufrufs (bis zu 35 s
+    # Stille bisher). Best-Effort: Fehler dürfen den Turn nicht abbrechen.
+    # Nur im Privatchat: in der Familien-Gruppe ist Typing nicht sinnvoll (EC-25
+    # spricht explizit von „Privatchat" für mehrstufige Schreib-Aufgaben).
+    if msg.chat_type == "private":
+        try:
+            ctx.tg.send_chat_action(msg.chat_id, "typing")
+        except TelegramError as e:
+            logging.warning("Typing vor Auth-Check fehlgeschlagen "
+                            "chat_id=%s fehler=%s", msg.chat_id, e)
+
     # EC-2/EC-3: Berechtigung — Live-Mitgliedschaftsprüfung. Nicht-Mitglieder
     # werden ohne Antwort ignoriert. Dieses Gate liegt außerhalb des Agenten.
     try:
@@ -169,18 +188,23 @@ def handle_update(update, ctx):
                      msg.from_user_id)
         return
 
+    # AC3 (Ticket #287): T1 — nach Auth-Check. Long-Poll-Pickup + Auth-Latenz
+    # = t1 - t0; für spätere Latenz-Analyse getrennt messbar.
+    t1 = time.monotonic()
+    logging.debug("latenz t0_bis_t1_auth_s=%.3f chat_id=%s", t1 - t0, msg.chat_id)
+
     # EC-10: Bestätigung schreibender Aufgaben — deterministisch (E-EC-7),
     # außerhalb des Agenten. Nur wenn der Text ein Bestätigungswort ist UND ein
     # passender offener Vorschlag existiert, wird ausgeführt.
     if confirm.is_confirmation(msg.text):
         pending = ctx.pending.take(msg.chat_id, msg.reply_to_message_id)
         if pending is not None:
-            _execute_confirmed(pending, msg, ctx)
+            _execute_confirmed(pending, msg, ctx, t1=t1)
             return
         # Kein passender Vorschlag → „ok" ist hier nur Gesprächstext, weiter
         # an den Agenten.
 
-    _run_agent(msg, ctx)
+    _run_agent(msg, ctx, t1=t1)
 
 
 def _maybe_append_telemetry(text, telemetry):
@@ -214,8 +238,12 @@ def _persist_telemetry(ctx, turn_id, chat_id, telemetry):
                         turn_id, e)
 
 
-def _run_agent(msg, ctx):
-    """Lässt den Agenten eine Anfrage bearbeiten und sendet das Ergebnis."""
+def _run_agent(msg, ctx, t1=None):
+    """Lässt den Agenten eine Anfrage bearbeiten und sendet das Ergebnis.
+
+    t1: monotonic-Zeitstempel nach Auth-Check (AC3, Ticket #287) — optional,
+    damit bestehende Aufrufer ohne t1 weiterhin funktionieren.
+    """
     history = ctx.history.load(msg.chat_id, ctx.context_depth)
     user_message = _user_message_from(msg)
     # EC-23 (#268): turn_id verknüpft die Provider-Calls eines Turns in
@@ -246,6 +274,11 @@ def _run_agent(msg, ctx):
             logging.warning("Typing-Indikator-Aufruf hat trotz Wrapper-Schluck "
                             "geworfen: %s", e)
 
+    # AC3 (Ticket #287): T2 — vor Provider-Call.
+    t2 = time.monotonic()
+    if t1 is not None:
+        logging.debug("latenz t1_bis_t2_setup_s=%.3f chat_id=%s", t2 - t1, msg.chat_id)
+
     try:
         result = agent.run_turn(history, user_message, ctx.provider,
                                 ctx.catalog, turn_context,
@@ -274,6 +307,10 @@ def _run_agent(msg, ctx):
         sent = _send(ctx, msg.chat_id,
                      _maybe_append_telemetry(text, result.telemetry),
                      reply_to_message_id=msg.message_id)
+        # AC3 (Ticket #287): T3 — nach sendMessage (Proposal-Pfad).
+        t3 = time.monotonic()
+        logging.debug("latenz t2_bis_t3_provider_send_s=%.3f chat_id=%s",
+                      t3 - t2, msg.chat_id)
         if sent is not None:
             ctx.pending.add(PendingProposal(
                 chat_id=msg.chat_id,
@@ -288,17 +325,29 @@ def _run_agent(msg, ctx):
     # History neutral, Telemetrie persistieren.
     _send(ctx, msg.chat_id,
           _maybe_append_telemetry(result.reply_text, result.telemetry))
+    # AC3 (Ticket #287): T3 — nach sendMessage (Antwort-Pfad).
+    t3 = time.monotonic()
+    logging.debug("latenz t2_bis_t3_provider_send_s=%.3f chat_id=%s",
+                  t3 - t2, msg.chat_id)
     ctx.history.append(msg.chat_id, Message("assistant", [TextBlock(result.reply_text)]))
     _persist_telemetry(ctx, turn_id, msg.chat_id, result.telemetry)
 
 
-def _execute_confirmed(pending, msg, ctx):
+def _execute_confirmed(pending, msg, ctx, t1=None):
     """Führt eine bestätigte schreibende Aufgabe aus (nach EC-10-Bestätigung).
 
     Nach erfolgreicher Ausfuehrung laufen die deklarierten post_execute_hooks
     der Aufgabe (EC-21, #140). Hook-Fehler rollen die Schreib-Aufgabe NICHT
     zurueck — sie werden als zusammengefasste Warnung an die Quittung
-    angehaengt."""
+    angehaengt.
+
+    t1: monotonic-Zeitstempel nach Auth-Check (AC3, Ticket #287) — optional.
+    """
+    # AC3 (Ticket #287): T2 — vor Worker-Start (execute_write_task).
+    t2 = time.monotonic()
+    if t1 is not None:
+        logging.debug("latenz t1_bis_t2_setup_s=%.3f chat_id=%s", t2 - t1, msg.chat_id)
+
     task = ctx.catalog.get(pending.task_name)
     if task is None:
         _send(ctx, msg.chat_id, _TASK_GONE, reply_to_message_id=msg.message_id)
@@ -317,6 +366,9 @@ def _execute_confirmed(pending, msg, ctx):
         return
     text = outcome.combined_text()
     _send(ctx, msg.chat_id, text, reply_to_message_id=msg.message_id)
+    # AC3 (Ticket #287): T3 — nach sendMessage (Execute-Pfad).
+    t3 = time.monotonic()
+    logging.debug("latenz t2_bis_t3_worker_send_s=%.3f chat_id=%s", t3 - t2, msg.chat_id)
     ctx.history.append(msg.chat_id, Message("assistant", [TextBlock(text)]))
 
 
@@ -411,15 +463,26 @@ def dispatch(update, ctx):
 
 
 def poll_loop(ctx, get_updates_timeout=30):
-    """Liest fortlaufend Updates und verarbeitet sie (E-EC-2: Polling)."""
+    """Liest fortlaufend Updates und verarbeitet sie (E-EC-2: Polling).
+
+    AC4 (Ticket #287): Retry-Sleep nach getUpdates-Fehler als begrenzter
+    Backoff (statt fixer 3-s-Pause). Das verhindert, dass DNS-Bursts oder
+    kurze Netz-Unterbrechungen den Loop in schneller Folge hammern;
+    der Backoff wächst exponentiell bis _POLL_RETRY_SLEEP_MAX und setzt sich
+    bei Erfolg zurück.
+    """
     offset = None
+    retry_sleep = _POLL_RETRY_SLEEP_MIN
     logging.info("Eltern-Chat läuft — warte auf Nachrichten.")
     while True:
         try:
             updates = ctx.tg.get_updates(offset, timeout=get_updates_timeout)
+            retry_sleep = _POLL_RETRY_SLEEP_MIN   # Erfolg: Backoff zurücksetzen
         except TelegramError as e:
-            logging.warning("getUpdates fehlgeschlagen: %s — neuer Versuch in 3 s", e)
-            time.sleep(3)
+            logging.warning("getUpdates fehlgeschlagen: %s — neuer Versuch in %.0f s",
+                            e, retry_sleep)
+            time.sleep(retry_sleep)
+            retry_sleep = min(retry_sleep * 2, _POLL_RETRY_SLEEP_MAX)
             continue
         for update in updates:
             offset = update.get("update_id", 0) + 1
