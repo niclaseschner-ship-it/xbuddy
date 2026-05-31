@@ -189,9 +189,9 @@ class TermineEintragenTask(WriteTask):
                 return member is not None and member.get("status") in (
                     "creator", "administrator", "member")
 
-        # EC-14 / Issue #165: Typing-Indikator vor jeder send_message-Phase im
-        # Privatchat. Best-Effort: Fehler werden in _fire_typing geschluckt.
-        # Vgl. _typing-Closure in main.py (before_provider_call-Pattern, #156).
+        # EC-25 / Issue #165: Typing-Indikator vor jeder send_message-Phase im
+        # Privatchat. Best-Effort: Fehler werden in fire_typing geschluckt.
+        # Vgl. skills/typing_indicator.py (EC-25-Helfer, gemeinsam für TES/FAA/GAA/KAV).
         def typing_fn():
             tg.send_chat_action(private_chat_id, "typing")
 
