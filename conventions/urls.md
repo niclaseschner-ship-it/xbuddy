@@ -69,7 +69,7 @@ und kein Asset:
 Die Identitäts-Form ist konsistent über Event-Schema, Config und
 Routing-Tabelle: die Schlüssel des `panels`-Abschnitts in `routing.json`
 (ROU-18) tragen die volle `source_id`-Form (`app-panel:<id>`, analog
-`figure:<id>` für die Figuren-Routing-Tabelle).
+`phone:<instanz>` für die Phone/Controller-Routing-Tabelle — IDENT-2).
 
 Neue Abweichungen werden hier eingetragen, sobald sie in ihrer
 Komponenten-Spec eine eigene ID bekommen — `urls.md` bleibt die

@@ -227,9 +227,9 @@ Breaking Change):
 | `router_url` | (kein Default — Pflicht)         | `router_url`    | — (offen, OPEN-PANEL-C)            |
 
 `source_id` ist die Identität dieser Panel-Instanz (z. B.
-`app-panel:kueche`). `display_id` ist die Identität des Displays, das
-diese Panel-Instanz steuert (Form `display:<name>` analog der
-`figure:`-Konvention der Figuren-Erkennung). `router_url` ist die
+`app-panel:kueche`). `display_id` ist die IDENT-1-Objekt-ID des Displays,
+das diese Panel-Instanz steuert (Form `<typ>-<slug>-<nn>`, z. B.
+`tablet-wohnzimmer-01` — GER-7). `router_url` ist die
 Origin des Routers (Schema + Host[:Port], **ohne Pfad**, analog FIG-23).
 
 **Priorität & Fehler-Fallback:** Folgen der Konfigurations-Konvention
