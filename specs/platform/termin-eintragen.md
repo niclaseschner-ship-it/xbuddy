@@ -200,9 +200,11 @@ trägt den Termin **zeitgebunden** ein. Das Vokabular:
   interpretiert (Mitternachts-Übergang).
 - **Dauer** (`für X Stunden` / `X h`): → `ende = beginn + X * 3600 s`.
 - Nur Startuhrzeit ohne Enduhrzeit und ohne Dauer: eine **gezielte Rückfrage**
-  (EC-22) nach der Enduhrzeit, da `ende` im zeitgebundenen Fall Pflicht
-  ist (PLAN-22). Antwortet der Aufrufer nicht (SESS-3), endet die Funktion
-  mit „unklar".
+  (EC-22) nach der Enduhrzeit **oder einer Dauer**, da `ende` im zeitgebundenen
+  Fall Pflicht ist (PLAN-22). Die Antwort wird mit demselben Uhrzeit-Vokabular
+  geparst — sowohl eine Enduhrzeit (z. B. „bis 17 Uhr") als auch eine Dauer
+  (z. B. „für eine Stunde", „1 h") ist gültig. Antwortet der Aufrufer nicht
+  (SESS-3), endet die Funktion mit „unklar".
 
 Enthält der Anstoß-Text eine **Mehrtages-Spanne** (Ausdrücke wie „von Montag
 bis Mittwoch", „Dienstag und Mittwoch", „bis Freitag") und **keine** Uhrzeit,
