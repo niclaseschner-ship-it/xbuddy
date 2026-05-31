@@ -23,7 +23,7 @@ AKTIVITAETEN = [
     ("kreativ",     "Kreativ",     ["kreativ"]),
     ("schwimmen",   "Schwimmen",   ["schwimm"]),
     ("spielplatz",  "Spielplatz",  ["spielplatz"]),
-    ("musik",       "Musik",       ["musik"]),
+    ("musik",       "Musik",       ["musik", "klavier", "geige", "gitarre"]),
     ("ausflug",     "Ausflug",     ["ausflug"]),
     ("geburtstag",  "Geburtstag",  ["geburtstag", "geburts"]),
     ("petrabredung", "Petrabredung", ["petrabredung"]),

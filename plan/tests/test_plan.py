@@ -860,13 +860,13 @@ def test_PLAN_13_child_named_timed_event_appears_in_both_views(
 
 def test_PLAN_12_child_named_without_keyword_has_fallback_symbol(
         demo_config, demo_registry):
-    """AC2: Ein child-named Event ohne Katalog-Schlüsselwort landet trotzdem im
+    """Ein child-named Event ohne Katalog-Schlüsselwort landet trotzdem im
     Kind-Slot und trägt einen Typ (generisches Fallback) — ein Kind-Slot-
-    Eintrag ist nie symbol-/typlos (PLAN-12)."""
+    Eintrag ist nie symbol-/typlos (PLAN-12, AC3-Regression)."""
     heute = date(2026, 5, 20)
-    # „Klavier" ist (noch) kein Katalog-Keyword → art_aus_titel == None.
-    assert aktivitaeten_mod.art_aus_titel("Klavier Mia") is None
-    raw = [gcal_allday("kf1", "Klavier Mia", heute.isoformat())]
+    # „Turnen" ist kein Katalog-Keyword → art_aus_titel == None → Fallback.
+    assert aktivitaeten_mod.art_aus_titel("Turnen Mia") is None
+    raw = [gcal_allday("kf1", "Turnen Mia", heute.isoformat())]
     kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
     conn = db_mod.connect(demo_config.db_datei)
     view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
@@ -876,6 +876,76 @@ def test_PLAN_12_child_named_without_keyword_has_fallback_symbol(
     assert slot is not None
     assert slot["type"] is not None
     assert slot["type"] == render_mod.GENERIC_ACT_FALLBACK
+
+
+def test_PLAN_12_musik_synonyme_klavier_geige_gitarre(demo_config, demo_registry):
+    """AC1 (T302): „Klavier", „Geige", „Gitarre" im Titel → Musik-Symbol.
+    Synonym-Erweiterung im gemeinsamen Katalog (aktivitaeten.py PLAN-12,
+    E-PLAN-8). Alle drei Synonyme kommen aus EINER Katalog-Quelle (AC2).
+    Render-Pfad wird für Klavier über den Flask-Testclient geprüft (AC1-Entry-Path)."""
+    # Katalog-Ebene: alle drei Synonyme → art "musik".
+    assert aktivitaeten_mod.art_aus_titel("Klavier Mia") == "musik"
+    assert aktivitaeten_mod.art_aus_titel("Geige Finn") == "musik"
+    assert aktivitaeten_mod.art_aus_titel("Gitarre Mia") == "musik"
+    # Über render.aktivitaets_art (Lese-Pfad im Produktivpfad, Refs #101).
+    assert render_mod.aktivitaets_art("Klavier Mia") == "musik"
+    assert render_mod.aktivitaets_art("Geige Finn") == "musik"
+    assert render_mod.aktivitaets_art("Gitarre Mia") == "musik"
+    # Render-Integration: "Klavier Mia" landet im Kind-Slot mit type=="musik".
+    heute = date(2026, 5, 20)
+    raw = [gcal_allday("mu1", "Klavier Mia", heute.isoformat())]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    slot = view["schedule"][heute.isoformat()]["act1"]  # act1 = mia
+    assert slot is not None
+    assert slot["type"] == "musik"
+
+
+def test_PLAN_12_musik_synonyme_entry_path_html(demo_config, demo_registry):
+    """AC1-Entry-Path (T302): GET /display/plan/woche rendert einen
+    „Klavier Mia"-Event mit activity_icon 'musik' im act1-Schedule-Slot —
+    der Render-Pfad plan/render.py → template ist durchgängig geprüft.
+
+    Erkennungs-Artefakt: Der icon_music-SVG trägt den eindeutigen Pfad
+    `M22 50 L22 18 L48 14 L48 44`. Dieser Pfad erscheint im HTML ZWEIMAL,
+    wenn die Aktivität als 'musik' klassifiziert wurde — einmal im
+    act1-Activity-Chip (size=28) und einmal in der statischen Picker-Kachel
+    (size=38). Ist die Klassifizierung defekt und ein anderes Icon landet im
+    Chip, erscheint der Pfad nur EINMAL (nur Picker, nicht Chip).
+
+    Negativ-Kontrolle: mit „Turnen Mia" (kein Katalog-Keyword → Fallback-
+    Icon) landet der Musik-Pfad nur einmal (Picker) — der Test würde FEHL-
+    schlagen, wenn die Klassifizierung bräche und Klavier als Fallback
+    behandelt würde."""
+    # ── Positiv-Probe: Klavier Mia → musik-Icon im Chip ──────────────
+    MUSIK_SVG_PFAD = b"M22 50 L22 18 L48 14 L48 44"
+    raw = [gcal_allday("mu2", "Klavier Mia", "2026-05-20")]
+    client = make_client(demo_config, demo_registry, FakeTransport(raw))
+    r = client.get("/display/plan/woche?ab=2026-05-20")
+    assert r.status_code == 200
+    # Der Musik-SVG-Pfad kommt ZWEIMAL vor: einmal im act1-Chip, einmal im Picker.
+    # Wäre die Klassifizierung defekt, käme er nur einmal (nur Picker).
+    anzahl_positiv = r.data.count(MUSIK_SVG_PFAD)
+    assert anzahl_positiv == 2, (
+        "Musik-Icon erwartet 2× im HTML (Chip + Picker), gefunden: %d — "
+        "act1-Slot hat 'Klavier Mia' nicht als 'musik' klassifiziert?"
+        % anzahl_positiv
+    )
+
+    # ── Negativ-Kontrolle: Turnen Mia → Fallback-Icon, kein Musik-Chip ─
+    raw_negativ = [gcal_allday("tu1", "Turnen Mia", "2026-05-20")]
+    client_neg = make_client(demo_config, demo_registry, FakeTransport(raw_negativ))
+    r_neg = client_neg.get("/display/plan/woche?ab=2026-05-20")
+    assert r_neg.status_code == 200
+    # Nur 1× — allein aus dem Picker; kein Musik-Chip.
+    anzahl_negativ = r_neg.data.count(MUSIK_SVG_PFAD)
+    assert anzahl_negativ == 1, (
+        "Negativ-Kontrolle: mit 'Turnen Mia' (kein musik) Musik-Pfad nur "
+        "1× erwartet (Picker), gefunden: %d" % anzahl_negativ
+    )
 
 
 def test_PLAN_13_child_named_allday_only_in_kid_slot(demo_config, demo_registry):
