@@ -159,3 +159,74 @@ def test_persist_handles_none_costs(tmp_path):
     ).fetchone()
     conn.close()
     assert row == (None, None)
+
+
+# ============================================================
+#  created_at — AC1/AC2 (Ticket #277)
+# ============================================================
+
+def test_AC1_AC2_created_at_written_and_format(tmp_path):
+    """AC1+AC2: jede Row in provider_calls trägt created_at; Format ist
+    ISO-ähnlicher SQL-Datetime-String (YYYY-MM-DD HH:MM:SS) — kein None."""
+    import re
+    db_path = str(tmp_path / "tel.db")
+    store = TelemetryStore(db_path)
+    t = TurnTelemetry()
+    t.add(_call())
+    store.persist_turn("turn-ts", "7", t)
+    store.close()
+
+    conn = sqlite3.connect(db_path)
+    row = conn.execute("SELECT created_at FROM provider_calls").fetchone()
+    conn.close()
+
+    created_at = row[0]
+    assert created_at is not None, "created_at darf nicht NULL sein"
+    # SQLite datetime('now') liefert 'YYYY-MM-DD HH:MM:SS'
+    assert re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$", created_at), (
+        f"Unerwartetes created_at-Format: {created_at!r}")
+
+
+def test_AC1_migration_adds_created_at_to_existing_db(tmp_path):
+    """AC1: Bestehende DB (ohne created_at) wird beim Öffnen idempotent
+    migriert — Spalte wird via ALTER TABLE ergänzt, INSERT klappt danach."""
+    db_path = str(tmp_path / "legacy.db")
+
+    # Altes Schema ohne created_at anlegen (simuliert Pi-Bestand).
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        CREATE TABLE provider_calls (
+            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+            turn_id                TEXT    NOT NULL,
+            chat_id                TEXT    NOT NULL,
+            model_id               TEXT    NOT NULL,
+            input_tokens           INTEGER NOT NULL,
+            output_tokens          INTEGER NOT NULL,
+            cache_read_tokens      INTEGER NOT NULL,
+            cache_creation_tokens  INTEGER NOT NULL,
+            wall_ms                INTEGER NOT NULL,
+            est_cost_usd           REAL,
+            est_cost_eur           REAL
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+    # TelemetryStore öffnen — Migration soll created_at ergänzen.
+    store = TelemetryStore(db_path)
+    t = TurnTelemetry()
+    t.add(_call())
+    store.persist_turn("turn-mig", "99", t)
+    store.close()
+
+    conn = sqlite3.connect(db_path)
+    # Spalte muss jetzt da sein.
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(provider_calls)")}
+    assert "created_at" in cols, "Migration hat created_at nicht ergänzt"
+    # Und der INSERT hat geklappt — Row ist da.
+    row = conn.execute(
+        "SELECT created_at FROM provider_calls WHERE turn_id='turn-mig'"
+    ).fetchone()
+    conn.close()
+    assert row is not None, "Nach Migration wurde kein Row eingefügt"
+    assert row[0] is not None, "created_at ist NULL nach Migration+Insert"
