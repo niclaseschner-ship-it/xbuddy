@@ -136,23 +136,19 @@ auseinanderlaufen — ohne dass der Inhalt selbst dafür Verantwortung
 
 ### DC-11 — Vollbild & Bildschirm wach halten
 Der Display-Client läuft im Vollbild und hält den Bildschirm wach,
-solange er sichtbar ist — analog dem Controller (FIG-24/FIG-26). Konkret:
+solange er sichtbar ist — analog dem Controller (FIG-24/FIG-26).
 
-- Das PWA-Manifest deklariert `display: fullscreen`, damit der Client als
-  installierte App ohne Browser-Chrome startet.
-- Der Client fordert beim Laden `navigator.wakeLock.request('screen')`
-  an und fordert ihn bei jedem `visibilitychange` auf `visible` erneut
-  an — das System gibt den Lock beim Verdecken frei.
-- Beim ersten Nutzer-Gesture (`touchend`/`click`) versucht der Client
-  `requestFullscreen()`. Fehlt die API oder schlägt der Aufruf fehl, ist
-  das kein Fehler — der Client läuft weiter, der nächste Tap holt den
-  Vollbild erneut (self-healing).
+Das Manifest deklariert `display: fullscreen` (PWA-2); Wake-Lock und
+Fullscreen-Gesture folgen dem Muster aus `conventions/controller-pwa.md`
+**PWA-3** (Wake-Lock auf `visibilitychange` zurückfordern, Fullscreen per
+`requestFullscreen` beim ersten Nutzer-Gesture, self-healing bei
+fehlender API).
 
 Der Display-Client teilt das Manifest-`display: fullscreen`- und das
-Wake-Lock+Fullscreen-Gesture-Muster aus `conventions/controller-pwa.md`
-PWA-2/PWA-3, kennt aber kein `sw.js` und keine `config.json` (PWA-1 /
-PWA-4) — er ist daher **nicht** durch die Controller-PWA-Konvention
-gedeckt und führt sein reduziertes Pflichten-Set hier eigenständig.
+Wake-Lock+Fullscreen-Gesture-Muster aus PWA-2/PWA-3, kennt aber kein
+`sw.js` und keine `config.json` (PWA-1 / PWA-4) — er ist daher **nicht**
+durch die Controller-PWA-Konvention gedeckt (vgl. Hinweis in
+`conventions/controller-pwa.md` vor PWA-1).
 
 Begründung: Tablet-Browser zeigen sonst URL-Leiste, der Bildschirm geht
 nach ~30 s aus — das Display wirkt nicht wie ein Display.
