@@ -10,13 +10,13 @@ from providers.pricing import EUR_PER_USD, estimate_cost
 # Tokens am Cache-Preis abgerechnet werden und vom regulären Input abgezogen.
 
 def test_AC5_opus_4_7_pricing_matches_table():
-    """claude-opus-4-7: 15/1.5/75 USD per 1M Tokens."""
+    """claude-opus-4-7: 5/0.5/25 USD per 1M Tokens (aktualisiert 2026-05-31)."""
     cost_usd, cost_eur = estimate_cost("claude-opus-4-7",
                                        input_tokens=1_000_000,
                                        cached_input_tokens=0,
                                        output_tokens=1_000_000)
-    assert cost_usd == pytest.approx(15.00 + 75.00)
-    assert cost_eur == pytest.approx((15.00 + 75.00) * EUR_PER_USD)
+    assert cost_usd == pytest.approx(5.00 + 25.00)
+    assert cost_eur == pytest.approx((5.00 + 25.00) * EUR_PER_USD)
 
 
 def test_AC5_sonnet_4_6_pricing_matches_table():
@@ -51,13 +51,13 @@ def test_cached_input_billed_at_cached_price():
     """Cache-Reads kosten am Cached-Input-Preis, nicht am vollen Input-Preis.
     Sonst wäre der Cache-Vorteil aus #93 für die Kosten-Schätzung unsichtbar.
     """
-    # opus-4-7: 1.5 USD/1M cached_input, 15 USD/1M input.
-    # 1M Tokens insgesamt, davon 800k cached → 800k * 1.5 + 200k * 15 = 1.2 + 3.0 = 4.2 USD
+    # opus-4-7: 0.5 USD/1M cached_input, 5 USD/1M input (aktualisiert 2026-05-31).
+    # 1M Tokens insgesamt, davon 800k cached → 800k * 0.5 + 200k * 5 = 0.4 + 1.0 = 1.4 USD
     cost_usd, _ = estimate_cost("claude-opus-4-7",
                                 input_tokens=1_000_000,
                                 cached_input_tokens=800_000,
                                 output_tokens=0)
-    assert cost_usd == pytest.approx(4.2)
+    assert cost_usd == pytest.approx(1.4)
 
 
 def test_zero_tokens_yields_zero_cost():

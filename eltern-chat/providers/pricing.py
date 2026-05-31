@@ -6,7 +6,7 @@ Provider-Calls. `estimate_cost` rechnet Token-Counts in US-Dollar und Euro
 um. Ein unbekanntes Modell liefert `(None, None)` — die Telemetrie zeigt
 dann keinen Kosten-Wert (EC-23, AC5).
 
-Stand 2026-05-30. Preise je 1 Million Tokens (USD), Quelle Anthropic-
+Stand 2026-05-31. Preise je 1 Million Tokens (USD), Quelle Anthropic-
 Pricing-Seite. Wer neue Modelle aufnimmt: hier ergänzen, sonst sind sie
 für die Kosten-Schätzung unbekannt.
 """
@@ -16,11 +16,11 @@ für die Kosten-Schätzung unbekannt.
 # Cached-Input gilt für Cache-Reads (Cache-Creation kostet bei Anthropic den
 # vollen Input-Preis und liegt für die V1-Schätzung im input-Bucket).
 _PRICES_USD_PER_MILLION = {
-    # claude-opus-4-7: Stand Anthropic-Pricing 2026-05-30
-    "claude-opus-4-7":   (15.00, 1.50, 75.00),
-    # claude-sonnet-4-6: Stand Anthropic-Pricing 2026-05-30
+    # claude-opus-4-7: Stand Anthropic-Pricing 2026-05-31 (korrigiert von 15/1.50/75)
+    "claude-opus-4-7":   (5.00, 0.50, 25.00),
+    # claude-sonnet-4-6: Stand Anthropic-Pricing 2026-05-31
     "claude-sonnet-4-6": (3.00,  0.30, 15.00),
-    # claude-haiku-4-5: Stand Anthropic-Pricing 2026-05-30
+    # claude-haiku-4-5: Stand Anthropic-Pricing 2026-05-31
     "claude-haiku-4-5":  (1.00,  0.10, 5.00),
 }
 
