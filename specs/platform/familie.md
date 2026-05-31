@@ -243,7 +243,7 @@ ENV-Variablen (`FAMILIE_LISTEN_HOST`, `FAMILIE_LISTEN_PORT`,
 Dev-Override, keine Familien-Form — und gehören deshalb nicht in die
 Datei-Schlüssel-Spalte. CLI-Flags (`--host`, `--port`, `--log-level`)
 sind Test-Werkzeug; sie überschreiben den Loader-Output nachträglich
-(Priorität: **CLI > ENV > config.json > Defaults**).
+(Priorität nach `conventions/config.md` CONFIG-5).
 
 Werte, die nur als Code-Konstante existieren — ohne Override-Pfad —
 sind Spec-Verletzung (CLAUDE.md §6 Daten vs. Code).
