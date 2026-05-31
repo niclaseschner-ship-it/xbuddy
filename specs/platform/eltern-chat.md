@@ -174,10 +174,10 @@ ohne Geräte-Detail.
 Wenn eine Bot-Antwort durch mindestens einen Provider-Call entstanden ist,
 sieht die Familie am Ende der Antwort eine kompakte Telemetrie: Gesamt-
 Laufzeit dieses Turns, Token-Verbrauch und geschätzte Kosten in Euro. Bei
-Antworten ohne Provider-Call (z. B. EC-7-Bestätigungswort-Quittung,
-deterministische Skill-Antworten) entfällt die Annotation. Persistenz pro
-Provider-Call (Modell, Token-Aufteilung, Wall-Clock, Kosten, Verknüpfung
-Chat+Turn) — V2 aggregierte Sicht. V1: an, nicht abschaltbar.
+Antworten ohne Provider-Call (z. B. EC-7-Bestätigungswort-Quittung)
+entfällt die Annotation. Persistenz pro Provider-Call (Modell,
+Token-Aufteilung, Wall-Clock, Kosten, Zeitpunkt (`created_at`),
+Verknüpfung Chat+Turn) — V2 aggregierte Sicht. V1: an, nicht abschaltbar.
 
 Die Telemetrie ist Diagnose-Werkzeug für die Bewertungsphase: sie macht
 sichtbar, wo Latenz und Kosten anfallen, statt blind an der Wahrnehmung zu
