@@ -18,10 +18,12 @@ ein späteres anderes Interface — ist nicht Teil ihres Vertrags.
 
 **V1-Scope:** das Eintragen **eines** Termins je Aufruf · die Konversation
 läuft im Privatchat des Aufrufers (TES-3, E-TES-3 analog
-`kalender-verbinden.md` KAV-3) · ein hart-codiertes Datums-Vokabular für den
-Termin-Tag (TES-4 verweist auf `termine-erfragen.md` TER-4 — geteilte
-Wahrheit, kein Kopieren) · der Titel kommt aus der Nutzer-Eingabe (TES-5,
-roh übernommen, keine automatische Personen-Anreicherung in V1) · ein
+`kalender-verbinden.md` KAV-3) · ein hart-codiertes Datums- und
+Uhrzeit-Vokabular (TES-4 für den Tag, TES-6 für Uhrzeit und Mehrtages-
+Spanne, TES-4 verweist auf `termine-erfragen.md` TER-4 — geteilte
+Wahrheit, kein Kopieren) · ganztägige, zeitgebundene und mehrtägige
+Termine (TES-6) · der Titel kommt aus der Nutzer-Eingabe (TES-5, roh
+übernommen, keine automatische Personen-Anreicherung in V1) · ein
 strukturierter Vorschlag im Privatchat + Bestätigungswort nach
 `eltern-chat.md` E-EC-7 (TES-7) · Schreiben über die Plan-Buddy-Termin-
 Schnittstelle (PLAN-22, `PUT /api/v1/plan/termine`, TES-8) · der Trigger
@@ -170,19 +172,53 @@ gleicher Titel löst eine Rückfrage aus.
 
 *Tickets:* #144
 
-### TES-6 — Ganztägige Termine in V1
-V1 trägt jeden Termin **ganztägig** ein (`ganztags=true` im Plan-Buddy-
-Sinne, vgl. `plan/main.py` Z. 452 `kalender.event_anlegen(titel, datum,
-ganztags=True)`). Eine Uhrzeit-Eingabe wird nicht ausgewertet — Termine
-mit Uhrzeit sind Folge-Ticket (OPEN-TES-A).
+### TES-6 — Termin-Typ: ganztägig, zeitgebunden oder mehrtägig
 
-Begründung: der Plan-Buddy-PUT-Vertrag (PLAN-22) akzeptiert in seiner
-heutigen Form nur `{titel, datum}` und legt damit grundsätzlich
-ganztägig an; ein zeitgebundenes Anlegen wäre ein neuer Vertrag und
-gehört zum Plan-Buddy-Track, nicht in diese Spec (APP-1: Plan-Buddy
-besitzt die Schnittstelle).
+Der Plan-Buddy-PUT-Vertrag (PLAN-22, #256) unterscheidet den Termin-Typ
+über das Format von `beginn`:
 
-*Tickets:* #144
+- **Ganztägig (kein `T` in `beginn`):** `beginn = "YYYY-MM-DD"`, `ende`
+  optional (`"YYYY-MM-DD"`). Fehlt `ende`, ist der Termin eintägig.
+- **Zeitgebunden (`T` in `beginn`):** `beginn` und `ende` sind
+  ISO-Datetime-Strings mit Offset, z. B. `"2026-06-04T14:00:00+02:00"`.
+  `ende` ist **Pflicht**; `ende` muss nach `beginn` liegen.
+- **Mehrtage (ganztägig + `ende`):** `beginn` = Starttag, `ende` =
+  letzter Tag der Spanne (beide `YYYY-MM-DD`, `ende ≥ beginn`).
+
+**Was die Funktion aus dem Anstoß ableitet:**
+
+Enthält der Anstoß-Text ein **Uhrzeit-Vokabular** (Ausdrücke wie „um 14 Uhr",
+„14:00", „von 14 bis 15 Uhr", „ab 9 Uhr"), erkennt der Parser die Uhrzeit
+hart-codiert (analog TES-4/TES-5: keine LLM-Formulierung, EC-12) und
+trägt den Termin **zeitgebunden** ein. Das Vokabular:
+
+- **Startuhrzeit** (`HH:MM` oder `H Uhr` / `H:MM Uhr`, ganzzahlige Stunden):
+  → `beginn = <datum>T<HH:MM>:00+<offset>` (Familien-Zeitzone aus `plan.json`
+  `zeitzone`, Default `Europe/Berlin`).
+- **Enduhrzeit** (`bis HH:MM` / `bis H Uhr`): → `ende = <datum>T<HH:MM>:00+<offset>`.
+  Liegt die Enduhrzeit vor der Startuhrzeit, wird sie als nächsten Tag
+  interpretiert (Mitternachts-Übergang).
+- **Dauer** (`für X Stunden` / `X h`): → `ende = beginn + X * 3600 s`.
+- Nur Startuhrzeit ohne Enduhrzeit und ohne Dauer: eine **gezielte Rückfrage**
+  (EC-22) nach der Enduhrzeit **oder einer Dauer**, da `ende` im zeitgebundenen
+  Fall Pflicht ist (PLAN-22). Die Antwort wird mit demselben Uhrzeit-Vokabular
+  geparst — sowohl eine Enduhrzeit (z. B. „bis 17 Uhr") als auch eine Dauer
+  (z. B. „für eine Stunde", „1 h") ist gültig. Antwortet der Aufrufer nicht
+  (SESS-3), endet die Funktion mit „unklar".
+
+Enthält der Anstoß-Text eine **Mehrtages-Spanne** (Ausdrücke wie „von Montag
+bis Mittwoch", „Dienstag und Mittwoch", „bis Freitag") und **keine** Uhrzeit,
+trägt die Funktion den Termin als **ganztägige Spanne** ein:
+`beginn = erster Tag`, `ende = letzter Tag` (beide `YYYY-MM-DD`).
+Enddatum-Vokabular folgt dem Mindest-Vokabular aus TES-4/TER-4.
+
+Enthält der Anstoß weder Uhrzeit noch Mehrtages-Spanne, trägt die Funktion
+**ganztägig eintägig** ein — bisheriges V1-Verhalten, unverändert.
+
+**Vorschlag und Bestätigung (TES-7)** benennen Typ, Tag(e) und ggf. Uhrzeit,
+sodass die Familie sehen kann, was genau eingetragen wird.
+
+*Tickets:* #144 · #289
 
 ### TES-7 — Vorschlag + Bestätigungswort vor dem Schreiben
 Vor dem Schreiben legt die Funktion im Privatchat einen **strukturierten
@@ -204,8 +240,10 @@ Aufrufer als neuen Anstoß formulieren; V1 startet dafür einen neuen Aufruf
 `familie-anlegen.md` FAA-7).
 
 Der konkrete Wortlaut des Vorschlags lebt im Code als hart-codierter
-String; die Spec normiert das **Soll** (Vorschlag enthält Titel und Tag,
-ist eindeutig einem PUT zuordenbar, fordert ein E-EC-7-Wort).
+String; die Spec normiert das **Soll** (Vorschlag enthält Titel, den
+oder die Tage sowie — bei zeitgebundenen Terminen — Anfangs- und
+Endzeit; der Vorschlag ist eindeutig einem PUT zuordenbar und fordert
+ein E-EC-7-Wort).
 
 *Tickets:* #144
 
@@ -218,8 +256,13 @@ Nach Bestätigung (TES-7) schreibt die Funktion den Termin ausschließlich
 - **Methode:** `PUT`.
 - **Pfad:** `/api/v1/plan/termine` (URL-4-konform, Plural-Resource).
 - **Body** (`Content-Type: application/json`): `{ "titel": <string,
-  Pflicht>, "datum": <ISO-Datum, Pflicht> }`. V1 setzt **kein**
+  Pflicht>, "beginn": <ISO, Pflicht> [, "ende": <ISO, optional>] }`.
+  Typ-Erkennung nach PLAN-22: kein `T` in `beginn` → ganztägig;
+  `T` in `beginn` → zeitgebunden (`ende` dann Pflicht, Datetime mit
+  Offset). Mehrtages-Spanne: ganztägig + `ende`-Datum. V1 setzt **kein**
   `event_id` — TES legt nur an, ändert nicht (siehe „Out-of-Scope V1").
+  (Backward-Compat: das `datum`-Alias aus PLAN-22 ist im Konsumenten
+  nicht mehr nötig — TES-8 schreibt immer `beginn`.)
 - **Erfolgs-Antwort:** HTTP 200 mit JSON `{ "ok": true, "action":
   "created", "event_id": <string> }`. Die Funktion übernimmt die
   `event_id` ins Ergebnis-Signal (TES-1, Wert „eingetragen") — der
@@ -254,7 +297,7 @@ Die Funktion hält **keinen eigenen Cache** der PUT-Antwort und führt
 (PLAN-20 entscheidet dort), nicht in den Konsumenten (E-TES-2,
 einseitige Abhängigkeit analog `termine-erfragen.md` E-TER-2).
 
-*Tickets:* #144
+*Tickets:* #144 · #289
 
 ### TES-9 — Plan-Buddy nicht erreichbar
 Schlägt der HTTP-Aufruf an die Plan-Buddy-Schnittstelle fehl (Connection
@@ -338,24 +381,31 @@ ersetzt, analog `eltern-chat.md` EC-17, `kalender-verbinden.md` KAV-10,
   übernommen (kein automatisches Anhängen eines Personen-Namens); ein
   leerer Titel oder ein Titel, der nur aus Datums-Vokabular besteht,
   löst eine Rückfrage aus.
-- **TES-6** — der PUT-Body enthält ausschließlich `titel` und `datum`;
-  eine Uhrzeit im Anstoß-Text wird ignoriert (V1: ganztägig) — eine
-  Uhrzeit löst keine Rückfrage aus, fließt aber auch nicht in den
-  PUT-Body.
+- **TES-6** — Ganztägig eintägig: PUT-Body enthält `titel` und
+  `beginn` (ISO-Datum ohne `T`), kein `ende`; Mehrtage: `beginn` +
+  `ende` beide ISO-Datum; zeitgebunden: `beginn` und `ende` als
+  ISO-Datetime mit Offset. Uhrzeit-Anstoß → zeitgebundener Body;
+  Uhrzeit ohne Enduhrzeit/Dauer → Rückfrage nach Ende (EC-22), kein
+  blinder PUT. Mehrtages-Anstoß ohne Uhrzeit → ganztägige Spanne.
+  Anstoß ohne Uhrzeit und ohne Spanne → eintägig ganztägig wie bisher.
 - **TES-7** — vor dem PUT wird ein Vorschlag im Privatchat gepostet, der
-  Titel und Tag enthält; erst ein E-EC-7-Wort als Antwort löst den PUT
-  aus; eine nicht-bestätigende Antwort (z. B. „nein", „abbrechen", eine
-  inhaltliche Korrektur) liefert „verworfen", **ohne** PUT; ein
-  E-EC-7-Wort, das nicht eindeutig dem TES-Vorschlag zugeordnet werden
-  kann (`eltern-chat/confirm.py` `PendingStore.take()` liefert `None`),
-  löst keinen PUT aus.
+  Titel, den oder die Tage sowie — bei zeitgebundenen Terminen —
+  Anfangs- und Endzeit enthält; erst ein E-EC-7-Wort als Antwort löst
+  den PUT aus; eine nicht-bestätigende Antwort (z. B. „nein",
+  „abbrechen", eine inhaltliche Korrektur) liefert „verworfen",
+  **ohne** PUT; ein E-EC-7-Wort, das nicht eindeutig dem TES-Vorschlag
+  zugeordnet werden kann (`eltern-chat/confirm.py` `PendingStore.take()`
+  liefert `None`), löst keinen PUT aus.
 - **TES-8** — der HTTP-Aufruf nutzt Methode `PUT`, Pfad
-  `/api/v1/plan/termine`, Body `{titel, datum}` ohne `event_id`; eine
-  HTTP-200-Antwort mit `{ok: true, action: "created", event_id: ...}`
-  übernimmt die `event_id` ins Ergebnis-Signal; HTTP 400 / HTTP 502 /
-  Connection-tot / „Plan-Buddy nicht installiert" liefern alle
-  „nicht_erreichbar" mit hart-codierter ehrlicher Antwort und **ohne**
-  irgendeine Annahme über den Termin-Stand; kein eigener Retry.
+  `/api/v1/plan/termine`, Body `{titel, beginn [, ende]}` ohne
+  `event_id`; ganztägig eintägig → nur `beginn`; zeitgebunden →
+  `beginn`+`ende` als Datetime mit Offset; Mehrtage → `beginn`+`ende`
+  als Datum; eine HTTP-200-Antwort mit `{ok: true, action: "created",
+  event_id: ...}` übernimmt die `event_id` ins Ergebnis-Signal;
+  HTTP 400 / HTTP 502 / Connection-tot / „Plan-Buddy nicht installiert"
+  liefern alle „nicht_erreichbar" mit hart-codierter ehrlicher Antwort
+  und **ohne** irgendeine Annahme über den Termin-Stand; kein eigener
+  Retry.
 - **TES-9** — eine fehlschlagende Plan-Buddy-Antwort (HTTP 502,
   PLAN-23-Szenario, Connection tot) postet die hart-codierte Ehrlich-
   Antwort im Privatchat und liefert „nicht_erreichbar"; keine
@@ -378,13 +428,11 @@ sind opt-in und nicht Teil des Standard-Durchlaufs (analog
 
 ## Offene Punkte
 
-- **OPEN-TES-A — Termine mit Uhrzeit.** V1 trägt ganztägig ein (TES-6),
-  weil die Plan-Buddy-PUT-Schnittstelle (PLAN-22) heute kein
-  zeitgebundenes Anlegen kennt. Eine Erweiterung würde auf zwei Seiten
-  passieren: PLAN-22 nimmt zusätzliche Felder (`beginn`, `ende`,
-  `ganztags=false`) entgegen, TES versteht ein Uhrzeit-Vokabular im
-  Anstoß-Text. Folge-Ticket sobald belegter Bedarf da ist (eine Familie
-  fragt es wiederholt).
+- ~~**OPEN-TES-A — Termine mit Uhrzeit.**~~ **Erledigt (#289).** PLAN-22
+  (#256) nimmt jetzt `beginn`/`ende` als Datetime-Strings entgegen
+  und legt zeitgebundene Termine an. TES-6 ist entsprechend erweitert
+  (Uhrzeit-Vokabular + Mehrtages-Spanne). Dieses Offener Punkt ist
+  geschlossen.
 
 - **OPEN-TES-B — Personen-Anreicherung im Titel.** TES-5 übernimmt den
   Titel roh, weil der Plan-Buddy beim Lesen ohnehin die Personen-
