@@ -1,4 +1,4 @@
-"""Tests für die Funktion termin_eintragen — TES-1 … TES-9 (Refs #144).
+"""Tests für die Funktion termin_eintragen — TES-1 … TES-9 (Refs #144, #289).
 
 Jede Anforderung der Spec mit Code-Verhalten hat einen automatisierten Test
 (TES-11, CLAUDE.md §6). Telegram, Plan-Buddy und Privatchat-Stream werden durch
@@ -6,6 +6,13 @@ kontrollierte Doppelungen ersetzt — die Tests laufen ohne Netz (EC-17).
 
 Datums-Vokabular: parse_datum/extrahiere_titel werden direkt getestet;
 die Datums-Grundlagen stammen aus `termine_erfragen.parse_zeitraum` (E-TES-4).
+
+TES-6 (Refs #289): neue Tests für Uhrzeit-Vokabular (zeitgebunden), Mehrtages-
+Spanne (ganztägig + beginn/ende) und EC-10-kombinierte-Bestätigung.
+
+Hinweis: FakePlanClientV2 erweitert FakePlanClient lokal, da fakes.py (Shared-
+Doppelung) außerhalb des Whitelist liegt. FakePlanClientV2 überschreibt nur
+put_termin auf die neue (titel, beginn, ende=None)-Signatur (AC1, TES-8).
 """
 
 from datetime import date, timedelta
@@ -23,9 +30,41 @@ from skills.termin_eintragen import (
     SIGNAL_VERWORFEN,
     extrahiere_titel,
     parse_datum,
+    parse_mehrtage_spanne,
+    parse_uhrzeit,
     termin_eintragen,
 )
 from telegram import TelegramError
+
+
+# ============================================================
+#  FakePlanClientV2 — lokale Erweiterung für TES-6/AC1 (Refs #289)
+#
+#  fakes.py ist außerhalb des Whitelist (Shared-Doppelung) und kann nicht
+#  direkt editiert werden. Diese Subklasse überschreibt put_termin auf die
+#  neue PLAN-22-Signatur (titel, beginn, ende=None) und speichert alle drei
+#  Argumente in put_calls als 3-Tuple. Bestehende Tests importieren weiterhin
+#  FakePlanClient (2-Arg-Signatur, ganztägig-Backward-Compat). Neue TES-6-Tests
+#  nutzen FakePlanClientV2.
+# ============================================================
+
+class FakePlanClientV2(FakePlanClient):
+    """Erweiterter FakePlanClient mit PLAN-22-Signatur (TES-8, #289).
+
+    put_calls speichert (titel, beginn, ende) als 3-Tuple.
+    """
+
+    def __init__(self, put_event_id="evt-new-1", put_error=None):
+        super().__init__(put_event_id=put_event_id, put_error=put_error)
+        # Eigene put_calls-Liste mit 3-Tupeln — überlagert die aus FakePlanClient.
+        self.put_calls = []
+
+    def put_termin(self, titel, beginn, ende=None):
+        """TES-8 / AC1: neue Signatur put_termin(titel, beginn, ende=None)."""
+        self.put_calls.append((titel, beginn, ende))
+        if self._put_error is not None:
+            raise self._put_error
+        return self._put_event_id
 
 
 # ============================================================
@@ -76,9 +115,12 @@ def _run(anstos_text="Klettern Donnerstag", today=MONTAG,
          event_id="evt-1", put_error=None,
          messages=None, user_id=42, private_chat_id=100,
          family_group_chat_id=200, is_member=None):
-    """Hilfsfunktion: führt termin_eintragen mit kontrollierten Doppelungen aus."""
+    """Hilfsfunktion: führt termin_eintragen mit kontrollierten Doppelungen aus.
+
+    Nutzt FakePlanClientV2 (neue PLAN-22-Signatur, put_calls als 3-Tuple).
+    """
     tg = FakeTelegram(members={user_id: {"status": "member"}})
-    plan_client = FakePlanClient(put_event_id=event_id, put_error=put_error)
+    plan_client = FakePlanClientV2(put_event_id=event_id, put_error=put_error)
     if is_member is None:
         is_member = _member(user_id)
     if messages is None:
@@ -315,7 +357,7 @@ def test_TES5_leerer_titel_stellt_rueckfrage():
     )
     assert signal == SIGNAL_EINGETRAGEN
     assert len(client.put_calls) == 1
-    titel_im_put, _ = client.put_calls[0]
+    titel_im_put, _, _ = client.put_calls[0]
     assert "Zahnarzt" in titel_im_put
 
 
@@ -326,7 +368,7 @@ def test_TES5_titel_roh_ohne_anreicherung():
         today=MONTAG,
     )
     assert signal == SIGNAL_EINGETRAGEN
-    titel_im_put, _ = client.put_calls[0]
+    titel_im_put, _, _ = client.put_calls[0]
     # Roh: enthält Mila, kein automatisch angehängter Name
     assert "Mila" in titel_im_put
 
@@ -335,35 +377,385 @@ def test_TES5_titel_roh_ohne_anreicherung():
 #  TES-6 — Ganztägig, kein Uhrzeit-Feld im Body
 # ============================================================
 
-def test_TES6_body_nur_titel_und_datum():
-    """TES-6: PUT-Body enthält ausschließlich titel + datum (kein event_id, kein ganztags)."""
-    # Wir testen via FakePlanClient — der PUT-Body wird in plan_client.py zusammengebaut.
-    # Hier prüfen wir, dass die übergebenen Argumente nur Titel und Datum sind.
+def test_TES6_body_ganztags_eintaeig():
+    """TES-6: Ganztägig eintägig — PUT-Body enthält titel + beginn (ISO-Datum ohne T),
+    kein ende. AC3-Regression: bisheriges Verhalten bleibt grün."""
     signal, _, client = _run(
         anstos_text="Klettern Donnerstag",
         today=MONTAG,
     )
     assert signal == SIGNAL_EINGETRAGEN
-    titel, datum = client.put_calls[0]
+    titel, beginn, ende = client.put_calls[0]
     assert isinstance(titel, str)
-    assert isinstance(datum, str)
-    # Datum muss ISO-Format sein
+    assert isinstance(beginn, str)
+    # Ganztägig: kein »T« in beginn
+    assert "T" not in beginn
+    # ende ist None (eintägig)
+    assert ende is None
+    # beginn muss gültiges ISO-Datum sein
     from datetime import date as _date
-    d = _date.fromisoformat(datum)
+    d = _date.fromisoformat(beginn)
     assert d == DONNERSTAG
 
 
-def test_TES6_uhrzeit_im_text_ignoriert():
-    """TES-6: Uhrzeit im Anstoß-Text wird ignoriert, kein Uhrzeit-Feld im PUT."""
+# ============================================================
+#  TES-6 (Refs #289) — parse_uhrzeit: Einzel-Uhrzeit-Parser
+# ============================================================
+
+def test_TES6_parse_uhrzeit_HH_MM():
+    """TES-6: »14:00« → start_h=14, start_m=0, kein end, keine dauer."""
+    u = parse_uhrzeit("Zahnarzt 14:00")
+    assert u is not None
+    assert u["start_h"] == 14
+    assert u["start_m"] == 0
+    assert u["end_h"] is None
+    assert u["dauer_min"] is None
+
+
+def test_TES6_parse_uhrzeit_H_Uhr():
+    """TES-6: »14 Uhr« → start_h=14, start_m=0."""
+    u = parse_uhrzeit("um 14 Uhr Termin")
+    assert u is not None
+    assert u["start_h"] == 14
+    assert u["start_m"] == 0
+
+
+def test_TES6_parse_uhrzeit_von_bis():
+    """TES-6: »von 14 bis 15 Uhr« → start=14:00, end=15:00."""
+    u = parse_uhrzeit("von 14 bis 15 Uhr Termin")
+    assert u is not None
+    assert u["start_h"] == 14
+    assert u["end_h"] == 15
+    assert u["end_m"] == 0
+
+
+def test_TES6_parse_uhrzeit_HH_MM_bis_HH_MM():
+    """TES-6: »14:00 bis 15:30« → start=14:00, end=15:30."""
+    u = parse_uhrzeit("14:00 bis 15:30")
+    assert u is not None
+    assert u["start_h"] == 14
+    assert u["start_m"] == 0
+    assert u["end_h"] == 15
+    assert u["end_m"] == 30
+
+
+def test_TES6_parse_uhrzeit_bis_H_Uhr():
+    """TES-6: Startuhrzeit + »bis 15 Uhr« → end_h=15."""
+    u = parse_uhrzeit("Termin 14 Uhr bis 15 Uhr")
+    assert u is not None
+    assert u["start_h"] == 14
+    assert u["end_h"] == 15
+
+
+def test_TES6_parse_uhrzeit_fuer_X_stunden():
+    """TES-6: »für 2 Stunden« → dauer_min=120."""
+    u = parse_uhrzeit("Termin 14 Uhr für 2 Stunden")
+    assert u is not None
+    assert u["start_h"] == 14
+    assert u["dauer_min"] == 120
+
+
+def test_TES6_parse_uhrzeit_fuer_eine_stunde():
+    """TES-6: »für eine Stunde« → dauer_min=60."""
+    u = parse_uhrzeit("Termin 14 Uhr für eine Stunde")
+    assert u is not None
+    assert u["dauer_min"] == 60
+
+
+def test_TES6_parse_uhrzeit_X_h():
+    """TES-6: »1 h« → dauer_min=60."""
+    u = parse_uhrzeit("Termin 14:00 1 h")
+    assert u is not None
+    assert u["dauer_min"] == 60
+
+
+def test_TES6_parse_uhrzeit_kein_vokabular():
+    """TES-6: kein Uhrzeit-Vokabular → None."""
+    assert parse_uhrzeit("Klettern Donnerstag") is None
+    assert parse_uhrzeit("Schulausflug Freitag") is None
+    assert parse_uhrzeit("") is None
+
+
+# ============================================================
+#  TES-6 (Refs #289) — parse_mehrtage_spanne
+# ============================================================
+
+def test_TES6_parse_mehrtage_von_montag_bis_mittwoch():
+    """TES-6: »von Montag bis Mittwoch« → (Montag, Mittwoch) als date."""
+    result = parse_mehrtage_spanne("von Montag bis Mittwoch", heute=MONTAG)
+    assert result is not None
+    beginn, ende = result
+    assert beginn == MONTAG
+    assert ende == MITTWOCH
+
+
+def test_TES6_parse_mehrtage_und():
+    """TES-6: »Dienstag und Mittwoch« → (Dienstag, Mittwoch)."""
+    result = parse_mehrtage_spanne("Schulausflug Dienstag und Mittwoch", heute=MONTAG)
+    assert result is not None
+    beginn, ende = result
+    assert beginn == DIENSTAG
+    assert ende == MITTWOCH
+
+
+def test_TES6_parse_mehrtage_kein_match():
+    """TES-6: kein Mehrtages-Ausdruck → None."""
+    assert parse_mehrtage_spanne("Klettern Donnerstag", heute=MONTAG) is None
+    assert parse_mehrtage_spanne("Termin morgen", heute=MONTAG) is None
+
+
+# ============================================================
+#  TES-6 / AC2 (Refs #289) — Zeitgebundener Anstoß → zeitgebundener PUT
+# ============================================================
+
+def test_TES6_uhrzeit_anstos_zeitgebundener_put():
+    """TES-6 / AC2: Uhrzeit im Anstoß → zeitgebundener PUT (beginn/ende mit T)."""
+    signal, _, client = _run(
+        anstos_text="Zahnarzt Dienstag 10 Uhr bis 11 Uhr",
+        today=MONTAG,
+    )
+    assert signal == SIGNAL_EINGETRAGEN
+    titel, beginn, ende = client.put_calls[0]
+    # Zeitgebunden: »T« in beginn und ende
+    assert "T" in beginn, "beginn muss Datetime (T) sein, nicht Datum: %r" % beginn
+    assert ende is not None and "T" in ende, "ende muss Datetime (T) sein: %r" % ende
+    # Uhrzeit im PUT-Beginn muss stimmen
+    assert "10:00:00" in beginn
+    assert "11:00:00" in ende
+
+
+def test_TES6_nur_startzeit_stellt_rueckfrage():
+    """TES-6 / AC2: Nur Startzeit ohne Ende/Dauer → Rückfrage nach Ende, kein blinder PUT."""
+    signal, tg, client = _run(
+        anstos_text="Zahnarzt Dienstag 10 Uhr",   # nur Startzeit
+        today=MONTAG,
+        messages=_messages("bis 11 Uhr", "ok"),   # Endzeit-Rückfrage + Bestätigung
+    )
+    assert signal == SIGNAL_EINGETRAGEN
+    assert len(client.put_calls) == 1
+    titel, beginn, ende = client.put_calls[0]
+    assert "T" in beginn
+    assert ende is not None and "T" in ende
+    assert "11:00:00" in ende
+
+
+def test_TES6_nur_startzeit_mit_dauer_in_rueckfrage():
+    """TES-6 / AC2: Rückfrage nach Ende — »für eine Stunde« als Dauer ist gültig."""
+    signal, _, client = _run(
+        anstos_text="Zahnarzt Dienstag 10 Uhr",   # nur Startzeit
+        today=MONTAG,
+        messages=_messages("für eine Stunde", "ok"),   # Dauer-Antwort + Bestätigung
+    )
+    assert signal == SIGNAL_EINGETRAGEN
+    _, beginn, ende = client.put_calls[0]
+    assert "T" in beginn
+    assert "11:00:00" in ende   # 10:00 + 60 min = 11:00
+
+
+def test_TES6_nur_startzeit_rueckfrage_timeout_unklar():
+    """TES-6 / AC2: Rückfrage nach Ende — Timeout → 'unklar', kein PUT."""
     signal, _, client = _run(
         anstos_text="Zahnarzt Dienstag 10 Uhr",
         today=MONTAG,
+        messages=_messages(None),   # Timeout auf die Endzeit-Rückfrage
     )
-    # Das Signal soll 'eingetragen' sein (Uhrzeit löst keine Rückfrage aus)
+    assert signal == SIGNAL_ABGEBROCHEN
+    assert len(client.put_calls) == 0
+
+
+def test_TES6_vollstaendige_startend_kein_rueckfrage():
+    """TES-6 / AC2: »16:00 bis 17:00« → direkt ohne Rückfrage eingetragen."""
+    signal, tg, client = _run(
+        anstos_text="Arzttermin Donnerstag 16:00 bis 17:00",
+        today=MONTAG,
+        messages=_messages("ok"),   # Nur Bestätigung, keine Endzeit-Rückfrage
+    )
     assert signal == SIGNAL_EINGETRAGEN
-    titel, datum = client.put_calls[0]
-    # Kein Uhrzeit-Feld, nur Titel + Datum
-    assert isinstance(datum, str)
+    # Keine Rückfrage nach Endzeit: nur eine message verbraucht (ok)
+    assert len(client.put_calls) == 1
+    _, beginn, ende = client.put_calls[0]
+    assert "16:00:00" in beginn
+    assert "17:00:00" in ende
+
+
+def test_TES6_validierung_ende_kleiner_beginn_mitternacht():
+    """TES-6: Enduhrzeit vor Startuhrzeit → Mitternachts-Übergang (+1 Tag)."""
+    signal, _, client = _run(
+        anstos_text="Silvester Donnerstag 23 Uhr bis 1 Uhr",
+        today=MONTAG,
+        messages=_messages("ok"),
+    )
+    assert signal == SIGNAL_EINGETRAGEN
+    _, beginn, ende = client.put_calls[0]
+    # Beginn ist am Donnerstag, Ende am Freitag (Mitternachts-Übergang)
+    beginn_datum = beginn.split("T")[0]
+    ende_datum = ende.split("T")[0]
+    assert beginn_datum == DONNERSTAG.isoformat()
+    assert ende_datum == FREITAG.isoformat()
+
+
+def test_TES6_zeitgebunden_put_kein_event_id():
+    """TES-6 / TES-8: zeitgebundener PUT enthält kein event_id."""
+    signal, _, client = _run(
+        anstos_text="Zahnarzt Dienstag 10 Uhr bis 11 Uhr",
+        today=MONTAG,
+    )
+    assert signal == SIGNAL_EINGETRAGEN
+    # Der FakePlanClientV2 bekommt nur (titel, beginn, ende) — kein event_id.
+    assert len(client.put_calls) == 1
+
+
+# ============================================================
+#  TES-6 / AC3 (Refs #289) — Mehrtages-Anstoß → ganztägige Spanne
+# ============================================================
+
+def test_TES6_mehrtage_put_beginn_ende_datum():
+    """TES-6 / AC3: Mehrtages-Anstoß → PUT mit beginn+ende als ISO-Datum (kein T)."""
+    signal, _, client = _run(
+        anstos_text="Schulausflug von Dienstag bis Mittwoch",
+        today=MONTAG,
+    )
+    assert signal == SIGNAL_EINGETRAGEN
+    titel, beginn, ende = client.put_calls[0]
+    # Ganztägig: kein T in beginn/ende
+    assert "T" not in beginn
+    assert ende is not None and "T" not in ende
+    # Datumsangaben stimmen
+    from datetime import date as _date
+    assert _date.fromisoformat(beginn) == DIENSTAG
+    assert _date.fromisoformat(ende) == MITTWOCH
+
+
+def test_TES6_mehrtage_vorschlag_zeigt_von_bis():
+    """TES-6 / AC3: Vorschlag bei Mehrtages-Termin zeigt Von/Bis-Zeilen."""
+    tg = FakeTelegram(members={42: {"status": "member"}})
+    plan_client = FakePlanClientV2()
+    termin_eintragen(
+        tg=tg, private_chat_id=100, from_user_id=42,
+        family_group_chat_id=200,
+        anstos_text="Schulausflug von Dienstag bis Mittwoch",
+        plan_client=plan_client, is_member_fn=_member(42),
+        next_message=_messages("ok"), heute=MONTAG)
+    vorschlaege = [m for m in tg.sent if "Von:" in m["text"] or "von" in m["text"].lower()]
+    assert vorschlaege, "Kein Vorschlag mit Von-Bis-Angabe gefunden: %r" % tg.sent
+
+
+def test_TES6_mehrtage_ohne_uhrzeit():
+    """TES-6 / AC3: Mehrtage ohne Uhrzeit → ganztägige Spanne, kein T."""
+    signal, _, client = _run(
+        anstos_text="Elternabend Dienstag und Mittwoch",
+        today=MONTAG,
+    )
+    assert signal == SIGNAL_EINGETRAGEN
+    _, beginn, ende = client.put_calls[0]
+    assert "T" not in beginn
+    assert ende is not None and "T" not in ende
+
+
+# ============================================================
+#  TES-6 / AC4 (Refs #289) — EC-10: kombinierte Bestätigungsnachricht
+# ============================================================
+
+def test_TES6_EC10_vollstaendiger_anstos_eine_nachricht():
+    """TES-6 / AC4 / EC-10: vollständiger Anstoß (Titel+Datum bekannt) →
+    EINE kombinierte Nachricht (Vorschlag + Bestätigungsfrage)."""
+    tg = FakeTelegram(members={42: {"status": "member"}})
+    plan_client = FakePlanClientV2()
+    termin_eintragen(
+        tg=tg, private_chat_id=100, from_user_id=42,
+        family_group_chat_id=200,
+        anstos_text="Klettern Donnerstag",
+        plan_client=plan_client, is_member_fn=_member(42),
+        next_message=_messages("ok"), heute=MONTAG)
+    # Alle gesendeten Nachrichten an private_chat_id=100:
+    nachrichten_privat = [m["text"] for m in tg.sent if m["chat_id"] == 100]
+    # Exakt zwei Nachrichten: Vorschlag (kombiniert) + Quittung.
+    vorschlaege = [t for t in nachrichten_privat if "Soll ich diesen Termin" in t]
+    assert len(vorschlaege) == 1, (
+        "Erwarte genau EINE kombinierte Vorschlags-Nachricht, "
+        "bekam %d: %r" % (len(vorschlaege), nachrichten_privat))
+    # Bestätigungsfrage ist in der GLEICHEN Nachricht wie Vorschlag (EC-10).
+    vorschlag_text = vorschlaege[0]
+    assert "ok" in vorschlag_text.lower() or "bestätige" in vorschlag_text.lower(), (
+        "Bestätigungsaufforderung fehlt in der kombinierten Nachricht: %r" % vorschlag_text)
+
+
+def test_TES6_EC10_vollstaendiger_zeitgebundener_anstos_eine_nachricht():
+    """TES-6 / AC4 / EC-10: vollständiger Anstoß mit Uhrzeit →
+    EINE kombinierte Nachricht mit Zeit-Zeile."""
+    tg = FakeTelegram(members={42: {"status": "member"}})
+    plan_client = FakePlanClientV2()
+    termin_eintragen(
+        tg=tg, private_chat_id=100, from_user_id=42,
+        family_group_chat_id=200,
+        anstos_text="Zahnarzt Dienstag 10 Uhr bis 11 Uhr",
+        plan_client=plan_client, is_member_fn=_member(42),
+        next_message=_messages("ok"), heute=MONTAG)
+    nachrichten_privat = [m["text"] for m in tg.sent if m["chat_id"] == 100]
+    vorschlaege = [t for t in nachrichten_privat if "Soll ich diesen Termin" in t]
+    assert len(vorschlaege) == 1, (
+        "Erwarte genau EINE kombinierte Vorschlags-Nachricht: %r" % nachrichten_privat)
+    # Zeitgebundener Vorschlag enthält Zeit-Zeile (TES-6-Spec).
+    assert "10:00" in vorschlaege[0] or "Zeit" in vorschlaege[0], (
+        "Zeitgebundener Vorschlag soll Uhrzeit enthalten: %r" % vorschlaege[0])
+
+
+def test_TES6_EC10_unvollstaendiger_anstos_zweistufig():
+    """TES-6 / AC4 / EC-10: unvollständiger Anstoß (Datum unbekannt) →
+    zweistufig (erst Rückfrage, dann Vorschlag)."""
+    tg = FakeTelegram(members={42: {"status": "member"}})
+    plan_client = FakePlanClientV2()
+    termin_eintragen(
+        tg=tg, private_chat_id=100, from_user_id=42,
+        family_group_chat_id=200,
+        anstos_text="Klettern diese Woche",   # Datum unbekannt → Rückfrage
+        plan_client=plan_client, is_member_fn=_member(42),
+        next_message=_messages("Donnerstag", "ok"), heute=MONTAG)
+    nachrichten_privat = [m["text"] for m in tg.sent if m["chat_id"] == 100]
+    # Mindestens 2 Nachrichten: Rückfrage + Vorschlag
+    assert len(nachrichten_privat) >= 2, (
+        "Bei unvollständigem Anstoß erwarte mindestens 2 Nachrichten: %r" % nachrichten_privat)
+    # Erste Nachricht ist die Rückfrage (nicht der Vorschlag).
+    assert "Soll ich diesen Termin" not in nachrichten_privat[0], (
+        "Erste Nachricht bei unvollständigem Anstoß darf kein Vorschlag sein: %r"
+        % nachrichten_privat[0])
+    # Eine der Nachrichten ist der Vorschlag.
+    vorschlaege = [t for t in nachrichten_privat if "Soll ich diesen Termin" in t]
+    assert vorschlaege, "Kein Vorschlag-Nachricht gefunden: %r" % nachrichten_privat
+
+
+def test_TES6_EC10_nur_startzeit_zweistufig():
+    """TES-6 / AC4 / EC-10: Anstoß mit Startzeit, aber ohne Ende/Dauer →
+    zweistufig (Rückfrage nach Ende, dann Vorschlag)."""
+    tg = FakeTelegram(members={42: {"status": "member"}})
+    plan_client = FakePlanClientV2()
+    termin_eintragen(
+        tg=tg, private_chat_id=100, from_user_id=42,
+        family_group_chat_id=200,
+        anstos_text="Zahnarzt Dienstag 10 Uhr",   # nur Startzeit
+        plan_client=plan_client, is_member_fn=_member(42),
+        next_message=_messages("bis 11 Uhr", "ok"), heute=MONTAG)
+    nachrichten_privat = [m["text"] for m in tg.sent if m["chat_id"] == 100]
+    # Mindestens 2 Nachrichten: Endzeit-Rückfrage + Vorschlag
+    assert len(nachrichten_privat) >= 2, (
+        "Bei Anstoß ohne Ende erwarte mindestens 2 Nachrichten: %r" % nachrichten_privat)
+
+
+# ============================================================
+#  TES-6 / AC1 (Refs #289) — plan_client.put_termin Backward-Compat
+# ============================================================
+
+def test_TES6_AC1_ganztags_backward_compat():
+    """TES-6 / AC1: bestehende ganztägige Aufrufe (beginn=ISO-Datum, ende=None)
+    bleiben lauffähig — Rückwärts-Kompatibilität."""
+    signal, _, client = _run(
+        anstos_text="Klettern Donnerstag",
+        today=MONTAG,
+    )
+    assert signal == SIGNAL_EINGETRAGEN
+    # put_termin(titel, beginn) ohne ende entspricht dem alten put_termin(titel, datum)
+    titel, beginn, ende = client.put_calls[0]
+    assert ende is None  # Rückwärts-Compat: ende bleibt None für ganztägig eintägig
 
 
 # ============================================================
@@ -422,14 +814,14 @@ def test_TES7_timeout_bei_vorschlag_abgebrochen():
 # ============================================================
 
 def test_TES8_put_methode_und_datum():
-    """TES-8: PUT-Body enthält korrektes datum im ISO-Format."""
+    """TES-8: PUT-Body enthält korrektes beginn im ISO-Datum-Format (ganztägig)."""
     signal, _, client = _run(
         anstos_text="Klettern Donnerstag",
         today=MONTAG,
     )
     assert signal == SIGNAL_EINGETRAGEN
-    _, datum = client.put_calls[0]
-    assert datum == DONNERSTAG.isoformat()
+    _, beginn, _ = client.put_calls[0]
+    assert beginn == DONNERSTAG.isoformat()
 
 
 def test_TES8_event_id_aus_plan_antwort():
