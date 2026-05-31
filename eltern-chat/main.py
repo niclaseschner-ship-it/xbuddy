@@ -152,6 +152,18 @@ def handle_update(update, ctx):
         logging.info("Gruppe %s: ausdrücklich angesprochen — Anfrage wird "
                      "bearbeitet (EC-5)", msg.chat_id)
 
+    # EC-25 / AC2 (Ticket #287): Typing-Indikator VOR dem Auth-Check im Privatchat.
+    # Der Nutzer sieht „tippt gerade" während des getChatMember-Aufrufs (bis zu 35 s
+    # Stille bisher). Best-Effort: Fehler dürfen den Turn nicht abbrechen.
+    # Nur im Privatchat: in der Familien-Gruppe ist Typing nicht sinnvoll (EC-25
+    # spricht explizit von „Privatchat" für mehrstufige Schreib-Aufgaben).
+    if msg.chat_type == "private":
+        try:
+            ctx.tg.send_chat_action(msg.chat_id, "typing")
+        except TelegramError as e:
+            logging.warning("Typing vor Auth-Check fehlgeschlagen "
+                            "chat_id=%s fehler=%s", msg.chat_id, e)
+
     # EC-2/EC-3: Berechtigung — Live-Mitgliedschaftsprüfung. Nicht-Mitglieder
     # werden ohne Antwort ignoriert. Dieses Gate liegt außerhalb des Agenten.
     try:

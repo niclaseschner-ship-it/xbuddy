@@ -144,11 +144,15 @@ class TelegramClient:
 
         Ein `TelegramError` wird geschluckt: der Indikator ist Komfort, kein
         Gate; ein scheiterndes `sendChatAction` darf den Turn nicht abbrechen.
+
+        AC1 (Ticket #287): jeder Versuch wird geloggt (DEBUG), jeder Fehler
+        als WARNING — damit Ausfälle in den Logs sichtbar sind (keine Stille mehr).
         """
+        logging.debug("send_chat_action chat_id=%s action=%s", chat_id, action)
         try:
             self._call("sendChatAction", {"chat_id": chat_id, "action": action})
         except TelegramError as e:
-            logging.warning("sendChatAction(%s, %s) fehlgeschlagen: %s",
+            logging.warning("send_chat_action chat_id=%s action=%s fehler=%s",
                             chat_id, action, e)
 
     def send_document(self, chat_id, file_name, file_bytes, caption=None):
