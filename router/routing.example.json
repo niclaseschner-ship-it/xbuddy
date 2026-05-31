@@ -21,6 +21,6 @@
     }
   ],
   "panels": {
-    "app-panel:kueche": { "display_id": "display:wohnzimmer" }
+    "app-panel:kueche": { "display_id": "tablet-wohnzimmer-01" }
   }
 }
