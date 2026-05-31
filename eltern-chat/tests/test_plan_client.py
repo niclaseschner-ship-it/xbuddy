@@ -177,8 +177,9 @@ def test_PUT_termin_method_und_pfad():
     assert calls[0]["path"] == PFAD_TERMINE
 
 
-def test_PUT_termin_body_titel_datum():
-    """TES-8: der Body enthält ausschließlich {titel, datum} — kein event_id."""
+def test_PUT_termin_body_titel_beginn_ganztags():
+    """TES-8 / AC1: der Body enthält {titel, beginn} für ganztägig eintägig —
+    kein event_id, kein ende (PLAN-22)."""
     transport, calls = _fake_transport([
         (200, json.dumps({"ok": True, "action": "created",
                           "event_id": "evt-42"}).encode("utf-8")),
@@ -186,8 +187,9 @@ def test_PUT_termin_body_titel_datum():
     client = PlanClient("http://x", transport=transport)
     client.put_termin("Schulausflug", "2026-06-10")
     body = json.loads(calls[0]["body"].decode("utf-8"))
-    assert body == {"titel": "Schulausflug", "datum": "2026-06-10"}
+    assert body == {"titel": "Schulausflug", "beginn": "2026-06-10"}
     assert "event_id" not in body
+    assert "ende" not in body
 
 
 def test_PUT_termin_content_type_json():
@@ -270,3 +272,71 @@ def test_PUT_termin_antwort_ohne_event_id_wirft_PlanClientError():
     client = PlanClient("http://x", transport=transport)
     with pytest.raises(PlanClientError):
         client.put_termin("Termin", "2026-06-01")
+
+
+# ============================================================
+#  AC1 / TES-8 / TES-6 (Refs #289) — PLAN-22-Body mit beginn/ende
+# ============================================================
+
+def test_PUT_termin_body_zeitgebunden():
+    """TES-8 / AC1 / TES-6: zeitgebundener PUT — Body enthält {titel, beginn, ende}
+    mit ISO-Datetime-Strings (T + Offset) — kein event_id."""
+    transport, calls = _fake_transport([
+        (200, json.dumps({"ok": True, "action": "created",
+                          "event_id": "evt-z1"}).encode("utf-8")),
+    ])
+    client = PlanClient("http://x", transport=transport)
+    beginn = "2026-06-04T14:00:00+02:00"
+    ende   = "2026-06-04T15:00:00+02:00"
+    event_id = client.put_termin("Zahnarzt", beginn, ende)
+    body = json.loads(calls[0]["body"].decode("utf-8"))
+    assert body == {"titel": "Zahnarzt", "beginn": beginn, "ende": ende}
+    assert "event_id" not in body
+    assert event_id == "evt-z1"
+
+
+def test_PUT_termin_body_mehrtage():
+    """TES-8 / AC1 / TES-6: Mehrtages-PUT — Body enthält {titel, beginn, ende}
+    mit ISO-Datum-Strings (kein T) — ganztägige Spanne."""
+    transport, calls = _fake_transport([
+        (200, json.dumps({"ok": True, "action": "created",
+                          "event_id": "evt-mt1"}).encode("utf-8")),
+    ])
+    client = PlanClient("http://x", transport=transport)
+    beginn = "2026-06-02"
+    ende   = "2026-06-03"
+    event_id = client.put_termin("Schulausflug", beginn, ende)
+    body = json.loads(calls[0]["body"].decode("utf-8"))
+    assert body == {"titel": "Schulausflug", "beginn": beginn, "ende": ende}
+    assert "T" not in body["beginn"]
+    assert "T" not in body["ende"]
+    assert event_id == "evt-mt1"
+
+
+def test_PUT_termin_body_ganztags_eintaeig_kein_ende():
+    """TES-8 / AC1: ganztägig eintägig (ende=None) → Body hat kein `ende`-Feld."""
+    transport, calls = _fake_transport([
+        (200, json.dumps({"ok": True, "action": "created",
+                          "event_id": "evt-g1"}).encode("utf-8")),
+    ])
+    client = PlanClient("http://x", transport=transport)
+    client.put_termin("Klettern", "2026-06-04")
+    body = json.loads(calls[0]["body"].decode("utf-8"))
+    assert "ende" not in body
+    assert body == {"titel": "Klettern", "beginn": "2026-06-04"}
+
+
+def test_PUT_termin_backward_compat_positional():
+    """TES-8 / AC1: put_termin(titel, beginn) ohne ende= funktioniert wie vor #289
+    (Backward-Compat — ganztägig eintägig)."""
+    transport, calls = _fake_transport([
+        (200, json.dumps({"ok": True, "action": "created",
+                          "event_id": "evt-bc"}).encode("utf-8")),
+    ])
+    client = PlanClient("http://x", transport=transport)
+    # Positional-Aufruf ohne ende-Argument — analog alter put_termin(titel, datum).
+    event_id = client.put_termin("Termin", "2026-06-01")
+    body = json.loads(calls[0]["body"].decode("utf-8"))
+    assert body == {"titel": "Termin", "beginn": "2026-06-01"}
+    assert "ende" not in body
+    assert event_id == "evt-bc"

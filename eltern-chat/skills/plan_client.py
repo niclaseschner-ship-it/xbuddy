@@ -86,15 +86,25 @@ class PlanClient:
 
     # -- Schreiben --------------------------------------------------------
 
-    def put_termin(self, titel, datum):
-        """Legt einen neuen Termin über PLAN-22 an (TES-8).
+    def put_termin(self, titel, beginn, ende=None):
+        """Legt einen neuen Termin über PLAN-22 an (TES-8, #289).
 
-        `titel` — Titel des Termins (str, Pflicht, roh aus der Nutzer-Eingabe,
-                  TES-5). `datum` — ISO-Datum-String des Termin-Tags (TES-4).
+        `titel`  — Titel des Termins (str, Pflicht, roh aus der Nutzer-Eingabe,
+                   TES-5).
+        `beginn` — ISO-String des Termin-Beginns (TES-6, PLAN-22):
+                   - ISO-Datum ohne »T« (YYYY-MM-DD) → ganztägig.
+                   - ISO-Datetime mit »T« und Offset (z. B.
+                     „2026-06-04T14:00:00+02:00") → zeitgebunden.
+                   Backward-Compat: ein reines ISO-Datum als `beginn` ohne
+                   `ende` entspricht dem bisherigen ganztägig-eintägigen Verhalten.
+        `ende`   — ISO-String des Termin-Endes (optional):
+                   - Ganztägig ohne Ende: eintägig.
+                   - Ganztägig + Ende (Datum): Mehrtages-Spanne.
+                   - Zeitgebunden: ende Pflicht (TES-6, PLAN-22); muss nach
+                     beginn liegen — Validierung liegt beim Aufrufer (TES-6).
 
-        V1 schreibt immer ganztägig (TES-6): der Body enthält ausschließlich
-        `{titel, datum}` — kein `event_id`, kein `ganztags`-Feld (PLAN-22
-        legt ganztägig an, wenn kein Zeitfeld mitgegeben wird).
+        PLAN-22-Body: `{titel, beginn[, ende]}` — kein `event_id` (V1, TES-8).
+        Typ-Erkennung durch Plan-Buddy anhand des »T«-Zeichens in `beginn`.
 
         Bei Erfolg (HTTP 200, `{ok: true, action: "created", event_id: ...}`)
         wird die `event_id` als String zurückgegeben (TES-8, TES-1).
@@ -108,7 +118,10 @@ class PlanClient:
         Kein eigener Retry (E-TES-2): bei PlanClientError gibt der Aufrufer
         das Ergebnis-Signal „nicht_erreichbar" zurück.
         """
-        body_bytes = json.dumps({"titel": titel, "datum": datum}).encode("utf-8")
+        body = {"titel": titel, "beginn": beginn}
+        if ende is not None:
+            body["ende"] = ende
+        body_bytes = json.dumps(body).encode("utf-8")
         status, resp_bytes = self._call(
             "PUT", PFAD_TERMINE,
             body=body_bytes,
