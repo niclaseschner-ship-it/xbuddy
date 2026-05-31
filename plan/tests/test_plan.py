@@ -832,6 +832,85 @@ def test_PLAN_13_appointment_carries_time_and_person(demo_config, demo_registry)
     assert termin["ring"] == "orange"  # petra
 
 
+def test_PLAN_13_child_named_timed_event_appears_in_both_views(
+        demo_config, demo_registry):
+    """AC1: Ein zeitgebundener Einzel-Termin mit Kindername (z. B.
+    „Klaviertermin Mia" 16–17 Uhr) erscheint in BEIDEN Ansichten — mit
+    Uhrzeit in der Termin-Leiste UND im Kind-Aktivitäts-Slot — und beide
+    Darstellungen tragen dieselbe Event-id (PLAN-13)."""
+    heute = date(2026, 5, 20)
+    raw = [gcal_timed("kt1", "Klaviertermin Mia",
+                      heute.isoformat() + "T16:00:00+02:00",
+                      heute.isoformat() + "T17:00:00+02:00")]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    # Termin-Leiste: mit Uhrzeit.
+    termine = view["appointments"][heute.isoformat()]
+    assert len(termine) == 1
+    assert termine[0]["time"] == "16:00"
+    # Kind-Slot (act1 = mia) ist gefüllt.
+    slot = view["schedule"][heute.isoformat()]["act1"]
+    assert slot is not None
+    # Beide zeigen denselben Kalender-Event.
+    assert termine[0]["event_id"] == slot["event_id"] == "kt1"
+
+
+def test_PLAN_12_child_named_without_keyword_has_fallback_symbol(
+        demo_config, demo_registry):
+    """AC2: Ein child-named Event ohne Katalog-Schlüsselwort landet trotzdem im
+    Kind-Slot und trägt einen Typ (generisches Fallback) — ein Kind-Slot-
+    Eintrag ist nie symbol-/typlos (PLAN-12)."""
+    heute = date(2026, 5, 20)
+    # „Klavier" ist (noch) kein Katalog-Keyword → art_aus_titel == None.
+    assert aktivitaeten_mod.art_aus_titel("Klavier Mia") is None
+    raw = [gcal_allday("kf1", "Klavier Mia", heute.isoformat())]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    slot = view["schedule"][heute.isoformat()]["act1"]  # act1 = mia
+    assert slot is not None
+    assert slot["type"] is not None
+    assert slot["type"] == render_mod.GENERIC_ACT_FALLBACK
+
+
+def test_PLAN_13_child_named_allday_only_in_kid_slot(demo_config, demo_registry):
+    """AC3: Eine ganztägige Kind-Aktivität erscheint NUR im Aktivitäts-Slot,
+    nicht in der Termin-Leiste und nicht als Spanne (PLAN-13)."""
+    heute = date(2026, 5, 20)
+    raw = [gcal_allday("ka1", "Klettern Mia", heute.isoformat())]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    # Kind-Slot gefüllt.
+    assert view["schedule"][heute.isoformat()]["act1"] is not None
+    # Termin-Leiste leer an allen Tagen, keine Spanne.
+    for tag in view["tage"]:
+        assert view["appointments"][tag["iso"]] == []
+    assert view["span_appointments"] == []
+
+
+def test_PLAN_13_child_named_timed_event_board_html_shows_time(
+        demo_config, demo_registry):
+    """AC1-Entry-Path-Beleg: GET /display/plan/woche (Board-HTML, Lese-Kind-
+    Stufe) zeigt die Uhrzeit eines child-named zeitgebundenen Termins in der
+    Termin-Leiste — die untere Schicht live über den Flask-Testclient."""
+    # Anker auf den Event-Tag legen (?ab=), damit das Fenster ihn enthält.
+    raw = [gcal_timed("kt2", "Klaviertermin Mia",
+                      "2026-05-20T16:00:00+02:00",
+                      "2026-05-20T17:00:00+02:00")]
+    client = make_client(demo_config, demo_registry, FakeTransport(raw))
+    r = client.get("/display/plan/woche?ab=2026-05-20")
+    assert r.status_code == 200
+    assert b"16:00" in r.data
+
+
 # ============================================================
 #  PLAN-15 — genau ein Familien-Kalender
 # ============================================================

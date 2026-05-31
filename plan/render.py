@@ -19,6 +19,13 @@ logger = logging.getLogger(__name__)
 # PLAN-5: Wochentags-Kürzel (Mo=0 … So=6).
 DAY_SHORT = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 
+# PLAN-12: Fallback-Typ für einen Kind-Aktivitäts-Slot, dessen Titel kein
+# Katalog-Schlüsselwort trägt — ein Kind-Slot-Eintrag ist nie symbol-/typlos.
+# Bewusst NICHT im aktivitaeten-Katalog (das ist die Familien-Aktivitätsliste,
+# E-PLAN-8); `activity_icon('termin', …)` fällt im Template auf icon_star
+# (akzeptierter generischer Visual-Fallback).
+GENERIC_ACT_FALLBACK = "termin"
+
 # PLAN-12: Schlüsselwörter im Titel → Aktivitäts-Art. Eine Heuristik
 # (OPEN-PLAN-B). Quelle des Katalogs: `plan.aktivitaeten` (Refs #101).
 
@@ -197,22 +204,30 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
         if not tag_isos:
             continue
 
+        ring = _ring_fuer_person(ev.person, registry) if ev.person else None
+
         kid_act = klassifiziere_event(ev.titel, kinder)
         if kid_act is not None:
-            # PLAN-12: Kind-Aktivität → Aktivitäts-Slot (nicht Termin-Leiste).
+            # PLAN-12: Kind-Aktivität → Aktivitäts-Slot. Ein Kind-Slot-Eintrag
+            # trägt immer ein Symbol: die erkannte Art oder ein generisches
+            # Fallback-Symbol — nie symbol-/typlos.
             kind_id, art = kid_act
             slot_key = kind_zu_slot.get(kind_id)
             if slot_key is not None:
                 for iso in tag_isos:
                     schedule[iso][slot_key] = {
-                        "type": art,
+                        "type": art or GENERIC_ACT_FALLBACK,
                         "label": strip_kind_name(ev.titel, kinder),
                         "event_id": ev.id,
                     }
+            # PLAN-13: Ein zeitgebundener Einzel-Termin erscheint zusätzlich in
+            # der Termin-Leiste mit seiner Uhrzeit — derselbe Event (gleiche id).
+            # Ganztägig/mehrtägig bleibt nur im Kind-Slot.
+            if len(tag_isos) == 1 and not ev.ganztags and ev.beginn is not None:
+                appointments[tag_isos[0]].append(_einzel_termin(ev, ring))
             continue
 
         # PLAN-13/PLAN-14: Termin. Mehrtägig → eine Spanne, sonst je Tag.
-        ring = _ring_fuer_person(ev.person, registry) if ev.person else None
         if len(tag_isos) > 1:
             indices = sorted(iso_index[i] for i in tag_isos)
             span_appointments.append({
@@ -225,19 +240,7 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
                 "event_id": ev.id,
             })
         else:
-            iso = tag_isos[0]
-            uhrzeit = None
-            if not ev.ganztags and ev.beginn is not None:
-                uhrzeit = ev.beginn.strftime("%H:%M")
-            appointments[iso].append({
-                "time": uhrzeit,
-                "label": ev.titel,
-                "ring": ring,
-                "person": ev.person,
-                "icon": termin_icon(ev.titel),
-                "allday": ev.ganztags,
-                "event_id": ev.id,
-            })
+            appointments[tag_isos[0]].append(_einzel_termin(ev, ring))
 
     return {
         "tage": tage,
@@ -245,6 +248,27 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
         "appointments": appointments,
         "span_appointments": span_appointments if mit_terminen else [],
         "show_appointments": mit_terminen,
+    }
+
+
+def _einzel_termin(ev, ring):
+    """Ein Einzel-Termin-Eintrag der Termin-Leiste (PLAN-13).
+
+    Der gemeinsame Append-Pfad für Kind-Termine und Nicht-Kind-Termine —
+    beide bauen ihren Termin-Leisten-Eintrag identisch (CLAUDE.md §6, keine
+    duplizierte Logik). Uhrzeit nur bei zeitgebundenen Events.
+    """
+    uhrzeit = None
+    if not ev.ganztags and ev.beginn is not None:
+        uhrzeit = ev.beginn.strftime("%H:%M")
+    return {
+        "time": uhrzeit,
+        "label": ev.titel,
+        "ring": ring,
+        "person": ev.person,
+        "icon": termin_icon(ev.titel),
+        "allday": ev.ganztags,
+        "event_id": ev.id,
     }
 
 
