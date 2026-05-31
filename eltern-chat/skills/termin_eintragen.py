@@ -94,7 +94,7 @@ _ANTWORT_VERWORFEN = (
     "Ok — kein Termin eingetragen. Wenn du es erneut versuchen möchtest, "
     "formuliere einfach eine neue Anfrage.")
 
-# TES-7: Quittung nach erfolgreichem PUT (E-EC-7: deterministische Bestätigung).
+# TES-12: Erfolgs-Quittung im Privatchat nach erfolgreichem PUT (deterministisch, kein Agent-Loop).
 _ANTWORT_EINGETRAGEN = "Eingetragen ✅: {titel} am {datum_fmt}"
 _ANTWORT_EINGETRAGEN_ZEITGEBUNDEN = "Eingetragen ✅: {titel} am {datum_fmt}, {start_fmt} — {ende_fmt} Uhr"
 _ANTWORT_EINGETRAGEN_MEHRTAGE = "Eingetragen ✅: {titel} von {beginn_fmt} bis {ende_fmt}"
