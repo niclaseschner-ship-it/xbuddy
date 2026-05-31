@@ -319,6 +319,25 @@ Antwort + keine Halluzination + kein stiller Abbruch).
 
 *Tickets:* #144
 
+### TES-12 — Erfolgs-Quittung im Privatchat nach erfolgreichem PUT
+Liefert der Plan-Buddy-PUT HTTP 200 mit `{ "ok": true }`, postet die
+Funktion im **Privatchat** des Aufrufers eine **deterministische**
+Erfolgs-Quittung — kein Agent-Loop, keine Halluzination, kein optionaler
+Satz. Der Wortlaut der Quittung hängt vom Termin-Typ ab:
+
+- **Ganztägig/eintägig:** „Eingetragen ✅: {Titel} am {Datum}"
+- **Zeitgebunden:** „Eingetragen ✅: {Titel} am {Datum}, {Startzeit} —
+  {Endzeit} Uhr"
+- **Mehrtägig:** „Eingetragen ✅: {Titel} von {Beginn} bis {Ende}"
+
+Titel und Datum/Zeit stammen ausschließlich aus dem bestätigten Vorschlag
+(TES-7) — keine erneute Auflösung. Der konkrete Wortlaut lebt im Code;
+die Spec normiert das Soll (Existenz der Quittung + Termin-Typ-Differenzierung
++ kein stiller Abbruch). Die Quittung erscheint **im Privatchat**, nicht
+in der Familien-Gruppe (TES-3).
+
+*Tickets:* #282
+
 ## 4. Trigger
 
 ### TES-10 — Trigger als Eltern-Chat-Aufgabe (V1)
@@ -411,6 +430,12 @@ ersetzt, analog `eltern-chat.md` EC-17, `kalender-verbinden.md` KAV-10,
   PLAN-23-Szenario, Connection tot) postet die hart-codierte Ehrlich-
   Antwort im Privatchat und liefert „nicht_erreichbar"; keine
   Halluzination einer `event_id`.
+- **TES-12** — nach einem erfolgreichen PUT liefert der Stub HTTP 200
+  mit `{ok: true}`; im Privatchat erscheint für ganztägige Termine
+  die eintägige Quittung mit Titel + Datum, für zeitgebundene die
+  Uhrzeit-Variante und für Mehrtage die Spannen-Variante; keine der
+  Varianten enthält halluzinierten Text außerhalb des bestätigten
+  Vorschlags.
 - **TES-10** — die EC-8-Aufgabe wird vom Aufgaben-Katalog gefunden und
   ist als `WriteTask` (EC-10) registriert; sie ruft TES mit den
   korrekten Parametern auf (Privatchat-Chat-ID und User-ID des
