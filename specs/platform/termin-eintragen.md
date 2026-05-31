@@ -193,8 +193,9 @@ hart-codiert (analog TES-4/TES-5: keine LLM-Formulierung, EC-12) und
 trägt den Termin **zeitgebunden** ein. Das Vokabular:
 
 - **Startuhrzeit** (`HH:MM` oder `H Uhr` / `H:MM Uhr`, ganzzahlige Stunden):
-  → `beginn = <datum>T<HH:MM>:00+<offset>` (Familien-Zeitzone aus `plan.json`
-  `zeitzone`, Default `Europe/Berlin`).
+  → `beginn = <datum>T<HH:MM>:00+<offset>`. V1 verwendet für den Offset fest
+  die Default-Zeitzone `Europe/Berlin`; die familien-spezifische Zeitzone aus
+  `plan.json` `zeitzone` zu lesen ist Folge-Ticket (OPEN-TES-E).
 - **Enduhrzeit** (`bis HH:MM` / `bis H Uhr`): → `ende = <datum>T<HH:MM>:00+<offset>`.
   Liegt die Enduhrzeit vor der Startuhrzeit, wird sie als nächsten Tag
   interpretiert (Mitternachts-Übergang).
@@ -433,6 +434,14 @@ sind opt-in und nicht Teil des Standard-Durchlaufs (analog
   und legt zeitgebundene Termine an. TES-6 ist entsprechend erweitert
   (Uhrzeit-Vokabular + Mehrtages-Spanne). Dieses Offener Punkt ist
   geschlossen.
+
+- **OPEN-TES-E — Familien-spezifische Zeitzone aus `plan.json`.** TES-6
+  baut den Uhrzeit-Offset in V1 fest mit `Europe/Berlin`. Die familien-
+  spezifische Zeitzone aus `plan.json` `zeitzone` zu lesen (und damit
+  Familien außerhalb dieser Zone korrekt zu bedienen) ist Folge-Ticket.
+  Offen ist dabei auch, ob der Konsument den Offset selbst setzt oder
+  naive Datetimes sendet und der Plan-Buddy sie nach PLAN-22 auflöst
+  (eine Wahrheit statt doppelter Offset-Berechnung).
 
 - **OPEN-TES-B — Personen-Anreicherung im Titel.** TES-5 übernimmt den
   Titel roh, weil der Plan-Buddy beim Lesen ohnehin die Personen-
