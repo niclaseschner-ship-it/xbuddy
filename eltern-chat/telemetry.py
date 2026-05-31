@@ -110,7 +110,8 @@ CREATE TABLE IF NOT EXISTS provider_calls (
     cache_creation_tokens  INTEGER NOT NULL,
     wall_ms                INTEGER NOT NULL,
     est_cost_usd           REAL,
-    est_cost_eur           REAL
+    est_cost_eur           REAL,
+    created_at             TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_provider_calls_turn ON provider_calls (turn_id);
 CREATE INDEX IF NOT EXISTS idx_provider_calls_chat ON provider_calls (chat_id);
@@ -130,6 +131,13 @@ class TelemetryStore:
     def __init__(self, db_path):
         self._conn = sqlite3.connect(db_path)
         self._conn.executescript(_SCHEMA)
+        # Migration: bestehende DBs (ohne created_at) idempotent nachziehen.
+        # SQLite erlaubt keinen DEFAULT bei ALTER TABLE — Spalte ohne Default.
+        cols = {row[1] for row in
+                self._conn.execute("PRAGMA table_info(provider_calls)")}
+        if "created_at" not in cols:
+            self._conn.execute(
+                "ALTER TABLE provider_calls ADD COLUMN created_at TEXT")
         self._conn.commit()
 
     def persist_turn(self, turn_id, chat_id, telemetry):
@@ -156,8 +164,8 @@ class TelemetryStore:
             "INSERT INTO provider_calls "
             "(turn_id, chat_id, model_id, input_tokens, output_tokens, "
             " cache_read_tokens, cache_creation_tokens, wall_ms, "
-            " est_cost_usd, est_cost_eur) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " est_cost_usd, est_cost_eur, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
             rows)
         self._conn.commit()
 
