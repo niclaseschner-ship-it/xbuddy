@@ -9,6 +9,7 @@ Orchestrierung (main.py) und der Agent-Kern sehen nur das neutrale
 import base64
 import json
 import logging
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -16,6 +17,12 @@ from dataclasses import dataclass, field
 
 
 API_BASE = "https://api.telegram.org"
+
+# Polling-Härtung (AC4): get_updates läuft mit Long-Poll-Timeout (Standard 30 s).
+# Der Socket-Timeout muss > Long-Poll-Timeout sein, damit der Server die Verbindung
+# aufräumt, bevor der Client abbricht. Eigener Wert, getrennt vom 35-s-Default für
+# reguläre API-Calls. Wert: long_poll_timeout + 10 s Reserve.
+_GETUP_SOCKET_TIMEOUT_BUFFER = 10
 
 
 @dataclass
@@ -122,12 +129,34 @@ class TelegramClient:
     def get_updates(self, offset=None, timeout=30):
         """Long-Poll für neue Updates. Angefragt werden `message`-Updates und
         `my_chat_member` — letzteres meldet, dass der Bot einer Gruppe
-        hinzugefügt wurde (ONB-2)."""
+        hinzugefügt wurde (ONB-2).
+
+        AC4 (Ticket #287): der Socket-Timeout für getUpdates ist größer als der
+        Long-Poll-Timeout (timeout + _GETUP_SOCKET_TIMEOUT_BUFFER), damit der
+        Server die Verbindung sauber schließt, bevor der Client abbricht. Reguläre
+        API-Calls nutzen self._timeout (35 s) — die Polling-Verbindung bleibt
+        bewusst offen, braucht daher einen eigenen höheren Wert.
+        """
         params = {"timeout": timeout,
                   "allowed_updates": ["message", "my_chat_member"]}
         if offset is not None:
             params["offset"] = offset
-        return self._call("getUpdates", params) or []
+        socket_timeout = timeout + _GETUP_SOCKET_TIMEOUT_BUFFER
+        url = "%s/getUpdates" % self._api
+        data = json.dumps(params).encode("utf-8")
+        req = urllib.request.Request(
+            url, data=data, headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=socket_timeout) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", "replace")
+            raise TelegramError("getUpdates: HTTP %s %s" % (e.code, detail))
+        except (urllib.error.URLError, OSError, json.JSONDecodeError) as e:
+            raise TelegramError("getUpdates: %s" % e)
+        if not body.get("ok"):
+            raise TelegramError("getUpdates: %s" % body.get("description", "unbekannt"))
+        return body.get("result") or []
 
     def send_message(self, chat_id, text, reply_to_message_id=None):
         """Sendet eine Textnachricht. Liefert das gesendete Nachrichten-Objekt."""
@@ -144,11 +173,15 @@ class TelegramClient:
 
         Ein `TelegramError` wird geschluckt: der Indikator ist Komfort, kein
         Gate; ein scheiterndes `sendChatAction` darf den Turn nicht abbrechen.
+
+        AC1 (Ticket #287): jeder Versuch wird geloggt (DEBUG), jeder Fehler
+        als WARNING — damit Ausfälle in den Logs sichtbar sind (keine Stille mehr).
         """
+        logging.debug("send_chat_action chat_id=%s action=%s", chat_id, action)
         try:
             self._call("sendChatAction", {"chat_id": chat_id, "action": action})
         except TelegramError as e:
-            logging.warning("sendChatAction(%s, %s) fehlgeschlagen: %s",
+            logging.warning("send_chat_action chat_id=%s action=%s fehler=%s",
                             chat_id, action, e)
 
     def send_document(self, chat_id, file_name, file_bytes, caption=None):
