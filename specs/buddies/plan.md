@@ -150,6 +150,11 @@ Die Art der Aktivität (Icon/Label) folgt aus einem Schlüsselwort im Titel.
 Trägt ein Event keinen Kindernamen, ist es kein Aktivitäts-Slot-Inhalt, sondern
 ein Termin (PLAN-13).
 
+Ein Kind-Aktivitäts-Eintrag trägt immer ein Symbol: das Piktogramm der
+erkannten Aktivitäts-Art (Schlüsselwort im Titel) oder — wenn kein Schlüsselwort
+passt — ein generisches Fallback-Symbol. Ein Kind-Slot-Eintrag ist nie
+symbol-/typlos.
+
 *Tickets:* #40
 
 ## 5. Termin-Leiste
@@ -162,6 +167,14 @@ Titel und das Foto-im-Ring der zugeordneten Person (PLAN-19 → `familie.md`
 FAM-4). Sind keine Credentials da oder ist der Kalender nicht erreichbar
 (PLAN-20), bleibt die Leiste leer; die übrige View funktioniert weiter. Die
 Kleinkind-Stufe hat keine Termin-Leiste (PLAN-3).
+
+Ein zeitgebundener (nicht-ganztägiger) Einzel-Termin erscheint in der
+Termin-Leiste mit seiner Uhrzeit — auch wenn sein Titel einen Kindernamen
+trägt (PLAN-12) und er deshalb zusätzlich im Aktivitäts-Slot erscheint. Beide
+Darstellungen zeigen denselben Kalender-Event (gleiche Event-`id`). Eine
+ganztägige Kind-Aktivität erscheint nur im Aktivitäts-Slot, nicht in der
+Termin-Leiste. Mehrtägige Events folgen PLAN-14 bzw. bleiben bei child-named
+mehrtägig im Kind-Slot.
 
 *Tickets:* #40
 
@@ -444,7 +457,11 @@ wird durch eine kontrollierte Doppelung ersetzt. Mindest-Abdeckung: PLAN-3
 heute; `?ab=` schiebt den Anker) · PLAN-7/PLAN-8 (Klick-Cycle schreibt, erneuter
 Abruf zeigt die Zuweisung) · PLAN-10 (erste Anzeige einer Woche belegt aus
 Defaults; Fenster über zwei Wochen liest beide) · PLAN-12 (Event mit Kindername
-→ Aktivitäts-Slot; ohne → Termin) · PLAN-14 (Event über mehrere Tage → eine
+→ Aktivitäts-Slot; ohne → Termin; child-named ohne Katalog-Keyword → Kind-Slot
+trägt trotzdem ein Symbol, ist nie typlos) · PLAN-13 (child-named zeitgebundener
+Einzel-Termin erscheint mit Uhrzeit in der Termin-Leiste UND im Kind-Slot, beide
+mit derselben Event-`id`; child-named ganztägige Aktivität nur im Kind-Slot,
+nicht in der Termin-Leiste) · PLAN-14 (Event über mehrere Tage → eine
 Spanne) · PLAN-17/PLAN-19 (Rohantwort → normalisiertes Modell; Titel-Treffer
 schlägt Creator-E-Mail; früherer Treffer gewinnt) · PLAN-18 (anlegen/ändern/
 löschen rufen die richtige Operation) · PLAN-20 (fehlende Credentials → leeres
