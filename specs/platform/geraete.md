@@ -175,7 +175,7 @@ als JSON-Array — je Gerät die GER-3-Felder, in der Reihenfolge der
 Registry-Datei (aktive UND inaktive Geräte; Konsumenten filtern, GER-5).
 Der Endpunkt ist über die eine Origin erreichbar (`conventions/urls.md`
 URL-14): nginx routet `/api/v1/geraete/` auf den Geräte-Prozess
-(`xbuddy_geraete`, PORT-2 = 5040). Konsumenten reden ausschließlich über
+(`xbuddy-geraete`, PORT-2 = 5040). Konsumenten reden ausschließlich über
 HTTP, nicht über `import geraete` (`conventions/data-components.md`
 DCOMP-1).
 

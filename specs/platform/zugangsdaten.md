@@ -121,10 +121,12 @@ ZD-5 (Setzen und anschließendes Holen je Name) · ZD-6 (kein Wert im Log).
 
 - **OPEN-ZD-A — Verschlüsselung im Ruhezustand.** V1 schützt die Datei über
   Eigentümer-Rechte (`0600`), nicht über Verschlüsselung — konsistent mit dem
-  heute ausgelieferten Eltern-Chat-Speicher (E-ONB-4). Der Kalender-Sync-Plan
-  (Brainstorm-Idee `xbuddy-eltern-chat`, EC-23) sah eine Fernet-Verschlüsselung
-  der OAuth-Token vor. Ob und wann der Speicher verschlüsselt — und woher der
-  Schlüssel käme —, ist ein eigenes Ticket. Kein V1-Bedarf belegt.
+  heute ausgelieferten Eltern-Chat-Speicher (E-ONB-4). Eine frühe Brainstorm-Idee
+  im `xbuddy-eltern-chat`-Brainstorm-Ordner sah eine Fernet-Verschlüsselung
+  der OAuth-Token vor (Brainstorm-Notiz, keine Live-Anforderung — nicht zu
+  verwechseln mit EC-23 (Telemetrie) in `eltern-chat.md`). Ob und wann der
+  Speicher verschlüsselt — und woher der Schlüssel käme —, ist ein eigenes
+  Ticket. Kein V1-Bedarf belegt.
 
 - **OPEN-ZD-B — Migration des Eltern-Chat-Onboarding-Speichers.** Der
   Eltern-Chat hat heute seinen eigenen `OnboardingStore`
