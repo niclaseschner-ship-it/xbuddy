@@ -137,8 +137,11 @@ def test_issue_310_user_message_not_double_appended(tmp_path):
 
 
 def test_issue_310_proposal_persists_tool_turn_plus_proposal_text(tmp_path):
-    """AC2 + proposal-Pfad: das Tool-Transkript (user → assistant tool_use)
-    landet in der History, gefolgt vom reinen Vorschlagstext OHNE Suffix."""
+    """AC-FIX1 + proposal-Pfad (T310-S3): das vorgeschlagene tool_use wird
+    GEPAART persistiert — das synthetische tool_result steht direkt danach,
+    sonst säße ein unpaariges tool_use mitten im Verlauf (Anthropic-400 im
+    Folge-Turn). Sequenz: user → assistant tool_use → user tool_result →
+    assistant Vorschlagstext (OHNE Suffix, R7)."""
     write = FakeWriteTask(name="termin", summary="Termin eintragen",
                           result="erledigt")
     catalog = Catalog()
@@ -155,14 +158,62 @@ def test_issue_310_proposal_persists_tool_turn_plus_proposal_text(tmp_path):
                                from_user_id=7), ctx)
 
     loaded = history.load(42, 20)
-    # user-Anfrage, assistant tool_use, assistant Vorschlagstext.
-    assert [m.role for m in loaded] == ["user", "assistant", "assistant"]
+    # user-Anfrage, assistant tool_use, user synth. tool_result, assistant Text.
+    assert [m.role for m in loaded] == \
+        ["user", "assistant", "user", "assistant"]
     call = loaded[1].blocks[-1]
     assert isinstance(call, TaskCallBlock)
     assert call.call_id == "c-7"
-    proposal_block = loaded[2].blocks[0]
+    # Synthetisches tool_result paart das tool_use — gleiche call_id, kein Error.
+    res = loaded[2].blocks[0]
+    assert isinstance(res, TaskResultBlock)
+    assert res.call_id == "c-7"
+    assert res.is_error is False
+    # EC-7: der Result-Text behauptet NICHT, der Write sei ausgeführt.
+    assert "erledigt" not in res.content
+    proposal_block = loaded[3].blocks[0]
     assert isinstance(proposal_block, TextBlock)
     assert "⏱" not in proposal_block.text   # R7: kein Suffix in der History
     # Aber die Sendung trug den Suffix.
     assert "⏱" in tg.sent[-1]["text"]
     history.close()
+
+
+def test_issue_310_proposal_reload_maps_paired_to_anthropic(tmp_path):
+    """AC-FIX1 (Entry-Path): nach dem proposal-Pfad wird die persistierte
+    History ERNEUT geladen und über `_to_anthropic_message` gemappt. Es darf
+    KEIN unpaariges tool_use/tool_result an den Provider gehen — jede tool_use
+    `id` hat ein tool_result `tool_use_id` und umgekehrt. Das ist der
+    eigentliche Bruch-Pfad (T310-S2-W): das mittige tool_use des Vorschlags."""
+    from providers.claude import ClaudeProvider
+
+    write = FakeWriteTask(name="termin", summary="Termin eintragen",
+                          result="erledigt")
+    catalog = Catalog()
+    catalog.register(write)
+    tg = FakeTelegram(members=_members(7))
+    resp = GenerationResponse(
+        text="", task_calls=[TaskCallBlock(call_id="c-7", task="termin",
+                                           arguments={})],
+        usage=_usage(input_tokens=200, output_tokens=20))
+    provider = FakeProvider([resp])
+    ctx, history = _ctx(tmp_path, tg, provider, catalog)
+
+    handle_update(make_message("trag Termin ein", chat_id=42, message_id=100,
+                               from_user_id=7), ctx)
+
+    # Reload + Mapping auf Anthropic-Messages (wie im Folge-Turn).
+    loaded = history.load(42, 20)
+    mapped = [ClaudeProvider._to_anthropic_message(m) for m in loaded]
+    history.close()
+
+    use_ids, result_ids = set(), set()
+    for msg in mapped:
+        for blk in msg["content"]:
+            if blk["type"] == "tool_use":
+                use_ids.add(blk["id"])
+            elif blk["type"] == "tool_result":
+                result_ids.add(blk["tool_use_id"])
+    # Vollständig paarig — keine Seite hängt unpaarig.
+    assert use_ids == result_ids
+    assert "c-7" in use_ids

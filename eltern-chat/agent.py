@@ -70,6 +70,12 @@ _EMPTY_REPLY = "Ich habe dazu gerade keine Antwort."
 _GAVE_UP = ("Ich konnte die Anfrage nicht abschließen. Bitte formuliere sie "
             "noch einmal etwas anders.")
 
+# #310 (T310-S3): synthetischer tool_result-Inhalt, der das vorgeschlagene
+# WRITE-tool_use im persistierten Verlauf paart (EC-10). EC-7: er sagt ehrlich,
+# dass der Vorschlag NUR vorgelegt wurde — nicht, dass der Write lief.
+_PROPOSAL_PENDING = ("Vorschlag der Familie vorgelegt — Ausführung erst nach "
+                     "Bestätigung.")
+
 
 @dataclass
 class AgentResult:
@@ -297,9 +303,22 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
                         call_id=call.call_id,
                         content="Aufgabe nicht möglich: %s" % e, is_error=True))
                     continue
-                # #310: das Transkript endet mit dem letzten Tool-Turn (der
-                # Assistant-tool_use mit diesem Aufruf wurde oben angehängt). Den
-                # reinen Vorschlagstext hängt die Orchestrierung an (via
+                # #310 (T310-S3): das vorgeschlagene tool_use MUSS gepaart
+                # werden, sonst sitzt ein unpaariges tool_use in der Mitte der
+                # persistierten History → Folge-Turn schickt es ungepaart an
+                # Anthropic → 400. Wir hängen einen SYNTHETISCHEN TaskResultBlock
+                # mit derselben call_id an (als User-Zug, wie ein echtes
+                # tool_result). Das tool_use bleibt damit sichtbar — das Modell
+                # sieht für WRITE-Aufgaben weiterhin seinen Werkzeug-Aufruf
+                # (sonst dieselbe Vergiftung wie der Ursprungs-Bug, nur fürs
+                # Eintragen). EC-7 (Ehrlichkeit): der Result-Text behauptet NICHT,
+                # der Write sei ausgeführt — nur dass der Vorschlag vorliegt; die
+                # Ausführung passiert erst nach Bestätigung (EC-10).
+                messages.append(Message(role="user", blocks=[TaskResultBlock(
+                    call_id=call.call_id,
+                    content=_PROPOSAL_PENDING,
+                    is_error=False)]))
+                # Den reinen Vorschlagstext hängt die Orchestrierung an (via
                 # _format_proposal) — er ist nicht Teil des Loop-Transkripts.
                 return AgentResult(proposal=proposal, pending_call=call,
                                    telemetry=telemetry,

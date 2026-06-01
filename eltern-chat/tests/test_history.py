@@ -201,7 +201,7 @@ def test_issue_310_depth_drops_trailing_half_pair(tmp_path):
 
 def test_issue_310_complete_pair_in_window_is_kept(tmp_path):
     """AC4: liegt ein vollständiges Paar im Fenster, bleibt es unangetastet —
-    der Paar-Schutz greift nur an den Kanten, nicht innen."""
+    der Paar-Schutz greift nur bei UNPAARIGEN Blöcken, nie bei vollständigen."""
     hist = History(str(tmp_path / "c.db"))
     hist.append("chat-1", Message("user", [TextBlock("frag")]))
     hist.append("chat-1", Message("assistant", [
@@ -214,4 +214,30 @@ def test_issue_310_complete_pair_in_window_is_kept(tmp_path):
     assert [m.role for m in loaded] == ["user", "assistant", "user", "assistant"]
     assert isinstance(loaded[1].blocks[0], TaskCallBlock)
     assert isinstance(loaded[2].blocks[0], TaskResultBlock)
+    hist.close()
+
+
+def test_issue_310_drops_mid_window_unpaired_tool_use(tmp_path):
+    """AC-FIX2 (T310-S3): ein unpaariges tool_use MITTEN im Fenster (nicht an
+    der Kante) wird beim Laden verworfen. Das ist genau der T310-S2-W-Befund:
+    der frühe WRITE-Vorschlag persistierte `[user, assistant(tool_use),
+    assistant(text)]` mit einem unpaarigen tool_use in der Mitte; der
+    Kanten-only-Schutz übersah ihn → Anthropic-400 im Folge-Turn. Jetzt
+    überlebt der unpaarige Block an KEINER Position."""
+    hist = History(str(tmp_path / "c.db"))
+    hist.append("chat-1", Message("user", [TextBlock("trag Termin ein")]))
+    # tool_use OHNE folgendes tool_result (Vorschlag aus der Zeit vor T310-S3).
+    hist.append("chat-1", Message("assistant", [
+        TaskCallBlock(call_id="c-7", task="termin", arguments={})]))
+    hist.append("chat-1", Message("assistant", [TextBlock("Soll ich das so eintragen?")]))
+
+    loaded = hist.load("chat-1", 20)
+    # Das mittige unpaarige tool_use ist weg; seine Assistant-Message war nur
+    # dieser Block → ganz weggelassen. Kein TaskCallBlock überlebt.
+    for m in loaded:
+        for b in m.blocks:
+            assert not isinstance(b, TaskCallBlock)
+    assert [m.role for m in loaded] == ["user", "assistant"]
+    assert loaded[0].blocks[0].text == "trag Termin ein"
+    assert loaded[1].blocks[0].text == "Soll ich das so eintragen?"
     hist.close()
