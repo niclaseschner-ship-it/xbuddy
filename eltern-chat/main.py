@@ -274,8 +274,15 @@ def _run_agent(msg, ctx):
         _send(ctx, msg.chat_id, _PROVIDER_DOWN)
         return
 
-    # Anfrage erst nach erfolgreichem Lauf in den Verlauf aufnehmen.
-    ctx.history.append(msg.chat_id, user_message)
+    # #310: das VOLLE Turn-Transkript in Loop-Reihenfolge persistieren — nicht
+    # nur die finale Text-Quittung. Das Modell muss in Folge-Turns seine eigenen
+    # Tool-Aufrufe sehen (EC-6, Modell-Kohärenz), sonst hält es den Tool-Aufruf
+    # für überflüssig und hört auf, Werkzeuge zu rufen. `transcript` beginnt mit
+    # user_message (Element 0) → kein doppeltes append.
+    # R7 (#268): der Telemetrie-Suffix hängt NUR an der Telegram-Sendung, NIE an
+    # den persistierten Messages — das gilt hier unverändert weiter.
+    for message in result.transcript:
+        ctx.history.append(msg.chat_id, message)
 
     if result.proposal is not None:
         # EC-10: schreibende Aufgabe — Vorschlag vorlegen, auf Bestätigung warten.
@@ -292,15 +299,18 @@ def _run_agent(msg, ctx):
                 proposal_message_id=sent.get("message_id"),
                 task_name=result.pending_call.task,
                 arguments=result.pending_call.arguments))
+        # #310: das Transkript endet auf dem proposal-Pfad mit dem letzten
+        # Tool-Turn; der reine Vorschlagstext (OHNE Suffix, R7) kommt als
+        # finaler Assistant-TextBlock zusätzlich in die History.
         ctx.history.append(msg.chat_id, Message("assistant", [TextBlock(text)]))
         _persist_telemetry(ctx, turn_id, msg.chat_id, result.telemetry)
         return
 
-    # EC-23/AC2 (#268): Erfolgs-Pfad ohne schreibende Aufgabe — Suffix dran,
-    # History neutral, Telemetrie persistieren.
+    # EC-23/AC2 (#268): Erfolgs-Pfad ohne schreibende Aufgabe — Suffix an die
+    # Sendung. Der finale Assistant-Text steckt bereits im Transkript (oben
+    # persistiert, OHNE Suffix — R7); hier wird nur noch gesendet.
     _send(ctx, msg.chat_id,
           _maybe_append_telemetry(result.reply_text, result.telemetry))
-    ctx.history.append(msg.chat_id, Message("assistant", [TextBlock(result.reply_text)]))
     _persist_telemetry(ctx, turn_id, msg.chat_id, result.telemetry)
 
 

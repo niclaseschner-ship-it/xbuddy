@@ -81,11 +81,21 @@ class AgentResult:
     `telemetry` (EC-23/#268) trägt die aggregierten Provider-Calls dieses
     Turns. None bedeutet: kein Telemetrie-Sammler war aktiv (alte Aufrufer);
     eine Instanz ohne Calls bedeutet: keine Provider-Calls passiert (AC3).
+
+    `transcript` (#310) ist das volle Turn-Transkript in Loop-Reihenfolge:
+    die Nutzer-Nachricht (Element 0), alle Assistant-Tool-Aufrufe und
+    User-Tool-Ergebnisse dieses Turns, plus der finale Assistant-Text (auf dem
+    Erfolgs-Pfad). Die Orchestrierung persistiert genau diese Messages, damit
+    das Modell in Folge-Turns seine eigenen Tool-Aufrufe sieht (EC-6,
+    Modell-Kohärenz). Die geladene History ist NICHT enthalten — nur der neue
+    Turn. Auf dem proposal-Pfad endet das Transkript mit dem letzten
+    Tool-Turn; der reine Vorschlagstext hängt die Orchestrierung an.
     """
     reply_text: str = None
     proposal: object = None        # tasks.Proposal | None
     pending_call: object = None    # model.TaskCallBlock | None
     telemetry: object = None       # TurnTelemetry | None
+    transcript: list = field(default_factory=list)   # list[Message] (#310)
 
 
 class _NullContext:
@@ -241,8 +251,18 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
 
         # Keine Aufgaben-Aufrufe → fertige Antwort (EC-4).
         if not response.task_calls:
-            return AgentResult(reply_text=response.text or _EMPTY_REPLY,
-                               telemetry=telemetry)
+            # #310: den finalen Assistant-TextBlock ans Transkript hängen, damit
+            # die persistierte History den ganzen Tool-Turn-Verlauf bis zur
+            # Antwort trägt (EC-6, Modell-Kohärenz). `transcript` enthält nur den
+            # neuen Turn (ab user_message), nicht die geladene History. Wir bauen
+            # eine NEUE Liste statt `messages` zu mutieren — die provider-
+            # sichtbare Anfrage darf nicht nachträglich um den Antwort-Block
+            # wachsen (EC-13).
+            reply_text = response.text or _EMPTY_REPLY
+            transcript = (messages[len(history_messages):]
+                          + [Message(role="assistant", blocks=[TextBlock(reply_text)])])
+            return AgentResult(reply_text=reply_text, telemetry=telemetry,
+                               transcript=transcript)
 
         # Assistant-Zug mit Text und Aufgaben-Aufrufen festhalten.
         assistant_blocks = []
@@ -277,8 +297,13 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
                         call_id=call.call_id,
                         content="Aufgabe nicht möglich: %s" % e, is_error=True))
                     continue
+                # #310: das Transkript endet mit dem letzten Tool-Turn (der
+                # Assistant-tool_use mit diesem Aufruf wurde oben angehängt). Den
+                # reinen Vorschlagstext hängt die Orchestrierung an (via
+                # _format_proposal) — er ist nicht Teil des Loop-Transkripts.
                 return AgentResult(proposal=proposal, pending_call=call,
-                                   telemetry=telemetry)
+                                   telemetry=telemetry,
+                                   transcript=messages[len(history_messages):])
 
             # EC-9: lesende Aufgabe — direkt ausführen, Ergebnis zurückspeisen.
             try:
@@ -295,4 +320,11 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
         messages.append(Message(role="user", blocks=result_blocks))
 
     # Obergrenze erreicht — sauber abbrechen statt endlos zu schleifen.
-    return AgentResult(reply_text=_GAVE_UP, telemetry=telemetry)
+    # #310: den Abbruch-Text als finalen Assistant-TextBlock ans Transkript
+    # hängen (neue Liste, nicht `messages` mutieren — EC-13), damit die
+    # persistierte History auch hier den vollen Tool-Turn-Verlauf bis zur
+    # Antwort trägt (gleiche Reihenfolge wie der Erfolgs-Pfad).
+    transcript = (messages[len(history_messages):]
+                  + [Message(role="assistant", blocks=[TextBlock(_GAVE_UP)])])
+    return AgentResult(reply_text=_GAVE_UP, telemetry=telemetry,
+                       transcript=transcript)
