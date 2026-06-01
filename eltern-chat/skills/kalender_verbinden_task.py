@@ -183,12 +183,19 @@ class KalenderVerbindenTask(WriteTask):
         zd_store = self._zd_store_getter()
         plan_json_path = self._plan_json_path
 
+        # EC-25 / Issue #285: Typing-Indikator vor jeder send_message-Phase im
+        # Privatchat. Best-Effort: Fehler werden in fire_typing geschluckt.
+        # Vgl. skills/typing_indicator.py (EC-25-Helfer, gemeinsam für TES/FAA/GAA/KAV).
+        def typing_fn():
+            tg.send_chat_action(private_chat_id, "typing")
+
         def run_kav():
             try:
                 result = kalender_verbinden.kalender_verbinden(
                     tg, private_chat_id, user_id, family_group_chat_id,
                     zd_store, session.next_message,
-                    plan_json_path=plan_json_path)
+                    plan_json_path=plan_json_path,
+                    typing_fn=typing_fn)
                 logging.info(
                     "KAV-Session in Chat %s beendet — ergebnis=%s",
                     private_chat_id, result.ergebnis)
