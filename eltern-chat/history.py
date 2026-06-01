@@ -69,33 +69,51 @@ def _blocks_from_json(raw):
     return blocks
 
 
-def _has_block(message, block_type):
-    return any(isinstance(b, block_type) for b in message.blocks)
-
-
 def _drop_dangling_pairs(messages):
-    """Verwirft an den Fenster-Kanten halbe Tool-Paare (#310).
+    """Verwirft unpaarige Tool-Blöcke an JEDER Position im Fenster (#310,
+    T310-S3).
 
-    Das depth-Fenster (`ORDER BY seq DESC LIMIT depth`) kann mitten in einem
-    Tool-Paar schneiden. Innerhalb des Fensters sind Paare vollständig (sie
-    werden in Loop-Reihenfolge persistiert). Zu prüfen bleiben nur die beiden
-    Kanten:
+    Anthropic verlangt jedes `tool_use` mit passendem `tool_result` und
+    umgekehrt — sonst 400. Ein unpaariger Block kann an mehreren Stellen
+    entstehen:
 
-    - Führendes halbes Paar: die erste Message ist `user` mit einem
-      TaskResultBlock — der zugehörige TaskCallBlock fiel aus dem Fenster.
-    - Abschließendes halbes Paar: die letzte Message ist `assistant` mit einem
-      TaskCallBlock, dessen tool_result nicht mehr ins Fenster passte.
+    - Kanten-Schnitt des depth-Fensters (`ORDER BY seq DESC LIMIT depth`)
+      mitten durch ein Paar.
+    - Ein WRITE-Vorschlag, dessen tool_use früher (vor T310-S3) ohne
+      tool_result mitten im Verlauf landete.
+    - Künftige Persist-Pfade.
 
-    Beide werden verworfen, damit Anthropic kein 400 (unpaariges
-    tool_use/tool_result) wirft.
+    Deshalb wird hier NICHT mehr nur erste/letzte Message geprüft, sondern das
+    GANZE Fenster: jeder TaskCallBlock/TaskResultBlock, dessen Partner (gleiche
+    call_id) nicht ebenfalls im Fenster steht, wird gedroppt — egal an welcher
+    Position. Mit T310-S3-Fix 1 hat der Vorschlags-tool_use jetzt seinen
+    synthetischen Partner und überlebt korrekt.
+
+    Eine Message, deren Blöcke dadurch alle wegfallen, wird ganz weggelassen —
+    eine leere Message würde Anthropic ebenfalls zurückweisen.
     """
-    if messages and messages[0].role == "user" \
-            and _has_block(messages[0], TaskResultBlock):
-        messages = messages[1:]
-    if messages and messages[-1].role == "assistant" \
-            and _has_block(messages[-1], TaskCallBlock):
-        messages = messages[:-1]
-    return messages
+    call_ids = set()
+    result_ids = set()
+    for m in messages:
+        for b in m.blocks:
+            if isinstance(b, TaskCallBlock):
+                call_ids.add(b.call_id)
+            elif isinstance(b, TaskResultBlock):
+                result_ids.add(b.call_id)
+
+    kept = []
+    for m in messages:
+        blocks = []
+        for b in m.blocks:
+            if isinstance(b, TaskCallBlock) and b.call_id not in result_ids:
+                continue   # tool_use ohne tool_result → droppen
+            if isinstance(b, TaskResultBlock) and b.call_id not in call_ids:
+                continue   # tool_result ohne tool_use → droppen
+            blocks.append(b)
+        if blocks:
+            kept.append(Message(role=m.role, blocks=blocks))
+        # Sonst: Message hatte nur unpaarige Tool-Blöcke → ganz weglassen.
+    return kept
 
 
 class History:
@@ -121,11 +139,12 @@ class History:
     def load(self, chat_id, depth):
         """Liefert die letzten `depth` Nachrichten eines Chats, chronologisch.
 
-        Paar-Schutz (#310): das depth-Fenster darf kein halbes Tool-Paar
-        schneiden. Ein TaskCallBlock (assistant) und sein TaskResultBlock
-        (user) müssen IMMER gemeinsam im Fenster stehen, sonst weist Anthropic
-        die Messages mit 400 zurück (tool_use/tool_result unpaarig). Hier ist
-        der EINZIGE Truncation-Ort, deshalb wird beide Kanten beschnitten.
+        Paar-Schutz (#310, T310-S3): ein TaskCallBlock (assistant) und sein
+        TaskResultBlock (user) müssen IMMER gemeinsam im Fenster stehen, sonst
+        weist Anthropic die Messages mit 400 zurück (tool_use/tool_result
+        unpaarig). `_drop_dangling_pairs` neutralisiert jeden unpaarigen Block
+        an JEDER Position — egal ob er durch den depth-Schnitt, einen frühen
+        WRITE-Vorschlag oder einen künftigen Pfad unpaarig wurde.
         """
         chat_id = str(chat_id)
         cur = self._conn.execute(

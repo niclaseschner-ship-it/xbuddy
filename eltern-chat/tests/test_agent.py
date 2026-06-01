@@ -348,10 +348,13 @@ def test_issue_310_transcript_carries_tool_turns_in_order():
     assert t[3].blocks[0].text == "Es sind 22 Grad."
 
 
-def test_issue_310_proposal_transcript_ends_with_tool_use():
-    """AC2: auf dem proposal-Pfad endet das Transkript mit dem Assistant-
-    tool_use; der reine Vorschlagstext ist NICHT Teil des Transkripts (den
-    hängt die Orchestrierung an)."""
+def test_issue_310_proposal_transcript_pairs_tool_use():
+    """AC-FIX1 + AC-FIX4 (T310-S3): auf dem proposal-Pfad bleibt das WRITE-
+    tool_use im Transkript SICHTBAR (nicht weggelassen — sonst sähe das Modell
+    für Schreib-Aufgaben wieder nur Text, dieselbe Vergiftung) UND es ist
+    GEPAART: direkt danach ein synthetischer tool_result mit derselben call_id.
+    Der reine Vorschlagstext ist NICHT Teil des Transkripts (den hängt die
+    Orchestrierung an)."""
     write = FakeWriteTask(name="termin", summary="Termin eintragen")
     user = _user("trag einen Termin ein")
     provider = FakeProvider([task_call_response("termin", call_id="c-7")])
@@ -359,11 +362,19 @@ def test_issue_310_proposal_transcript_ends_with_tool_use():
 
     assert result.proposal is not None
     t = result.transcript
-    assert [m.role for m in t] == ["user", "assistant"]
+    # user → assistant(tool_use) → user(synth. tool_result) — paarig.
+    assert [m.role for m in t] == ["user", "assistant", "user"]
     assert t[0] is user
-    last = t[-1].blocks[-1]
-    assert isinstance(last, TaskCallBlock)
-    assert last.call_id == "c-7"
+    call = t[1].blocks[-1]
+    assert isinstance(call, TaskCallBlock)   # AC-FIX4: tool_use sichtbar
+    assert call.call_id == "c-7"
+    res = t[2].blocks[0]
+    assert isinstance(res, TaskResultBlock)
+    assert res.call_id == "c-7"              # AC-FIX1: gepaart
+    assert res.is_error is False
+    # EC-7: der synthetische Result behauptet NICHT, der Write sei ausgeführt.
+    assert "eingetragen" not in res.content.lower()
+    assert "erledigt" not in res.content.lower()
 
 
 def test_issue_310_transcript_does_not_mutate_provider_request():
