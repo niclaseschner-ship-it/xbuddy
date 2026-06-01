@@ -662,3 +662,108 @@ def test_TER_4_mehrdeutig_loest_rueckfrage_aus():
     assert len(tg.sent) == 1
     assert "?" in tg.sent[0]["text"]  # eine Rückfrage
     assert pc.calls == []   # kein blinder Plan-Buddy-Aufruf
+
+
+# ============================================================
+#  TER-4 — explizite Kalenderdaten (#309)
+# ============================================================
+
+# MITTWOCH ist 2026-06-03 → liegt nach MONTAG 2026-06-01
+MITTWOCH_DATUM = date(2026, 6, 3)
+# Ein Datum in der Vergangenheit (relativ zu MONTAG = 2026-06-01)
+VERGANGEN = date(2026, 5, 15)
+
+
+def test_TER_4_explizit_dd_mm_punkt_punkt():
+    """TER-4 #309: '3.6.' → start=2026-06-03, tage=1."""
+    assert parse_zeitraum("3.6.", MONTAG) == (MITTWOCH_DATUM, 1)
+
+
+def test_TER_4_explizit_dd_mm_fuehrende_null():
+    """TER-4 #309: '03.06.' → start=2026-06-03, tage=1."""
+    assert parse_zeitraum("03.06.", MONTAG) == (MITTWOCH_DATUM, 1)
+
+
+def test_TER_4_explizit_dd_mm_jjjj():
+    """TER-4 #309: '03.06.2026' → start=2026-06-03, tage=1."""
+    assert parse_zeitraum("03.06.2026", MONTAG) == (MITTWOCH_DATUM, 1)
+
+
+def test_TER_4_explizit_den_dd_mm():
+    """TER-4 #309: 'den 3.6.' → start=2026-06-03, tage=1."""
+    assert parse_zeitraum("den 3.6.", MONTAG) == (MITTWOCH_DATUM, 1)
+
+
+def test_TER_4_explizit_am_dd_monat():
+    """TER-4 #309: 'am 3. Juni' → start=2026-06-03, tage=1."""
+    assert parse_zeitraum("am 3. Juni", MONTAG) == (MITTWOCH_DATUM, 1)
+
+
+def test_TER_4_explizit_am_dd_monat_kleinschreibung():
+    """TER-4 #309: 'am 3. juni' → start=2026-06-03, tage=1 (Kleinschreibung)."""
+    assert parse_zeitraum("am 3. juni", MONTAG) == (MITTWOCH_DATUM, 1)
+
+
+def test_TER_4_explizit_im_satz():
+    """TER-4 #309: Datum eingebettet in Satz → korrekt geparst."""
+    assert parse_zeitraum("gib mir die Termine für den 3.6. bitte", MONTAG) == (MITTWOCH_DATUM, 1)
+
+
+def test_TER_4_explizit_heute_ist_explizites_datum():
+    """TER-4 #309: explizites Datum = heute → start=heute, tage=1."""
+    assert parse_zeitraum("1.6.", MONTAG) == (MONTAG, 1)
+
+
+def test_TER_4_explizit_vergangen_ohne_jahr_gibt_rueckfrage():
+    """TER-4 #309 EC-22: jahrloses Datum in der Vergangenheit → Rückfrage-Signal,
+    kein Default, kein Folgejahr."""
+    result = parse_zeitraum("15.5.", MONTAG)
+    # Ergebnis darf weder (MONTAG, 7) noch ein Tupel mit date sein
+    assert result is not None
+    assert not isinstance(result, tuple)
+
+
+def test_TER_4_explizit_vergangen_sendet_naechstes_jahr_rueckfrage():
+    """TER-4 #309 EC-22: vergangenes jahrloses Datum → gezielte 'nächstes Jahr'-
+    Rückfrage im Chat, kein blinder Plan-Buddy-Aufruf."""
+    tg = FakeTelegram()
+    pc = FakePlanClient(events=[_event()])
+    signal = termine_erfragen(
+        tg=tg, chat_id=42, from_user_id=7,
+        anfrage_text="15.5.",
+        plan_client=pc, is_member_fn=_member([7]),
+        heute=MONTAG,
+    )
+    assert signal == SIGNAL_BEANTWORTET
+    assert len(tg.sent) == 1
+    assert "nächstes Jahr" in tg.sent[0]["text"]
+    assert pc.calls == []   # kein blinder Plan-Buddy-Aufruf
+
+
+def test_TER_4_explizit_default_bleibt_default():
+    """TER-4 #309: 'was steht an' ohne Datum → Default (heute, 7) unverändert."""
+    assert parse_zeitraum("was steht an", MONTAG) == (MONTAG, 7)
+
+
+def test_TER_4_explizit_heute_bleibt_heute():
+    """TER-4 #309: 'heute' bleibt bei (heute, 1) — kein Kurzschluss zum Datum-Parser."""
+    assert parse_zeitraum("heute", MONTAG) == (MONTAG, 1)
+
+
+def test_TER_4_explizit_e2e_plan_client_erhaelt_korrekten_zeitraum():
+    """TER-4 #309 AC3: Plan-Buddy wird mit dem tatsächlichen (start, tage=1) aufgerufen,
+    nicht mit Default-7-Tage — ehrliche Grenze (EC-7)."""
+    tg = FakeTelegram()
+    pc = FakePlanClient(events=[
+        _event("Geburtstag", beginn="2026-06-03", ende="2026-06-04", ganztags=True),
+    ])
+    termine_erfragen(
+        tg=tg, chat_id=42, from_user_id=7,
+        anfrage_text="3.6.",
+        plan_client=pc, is_member_fn=_member([7]),
+        heute=MONTAG,
+    )
+    assert len(pc.calls) == 1
+    ab, tage = pc.calls[0]
+    assert ab == "2026-06-03"
+    assert tage == 1
