@@ -28,6 +28,12 @@ SIGNAL_ABGELEHNT     = "abgelehnt"
 SIGNAL_LEER          = "leer"
 SIGNAL_NICHT_ERREICHBAR = "nicht_erreichbar"
 
+# Interner Sentinel: parse_zeitraum gibt ihn zurück, wenn ein jahrloses
+# explizites Datum in der Vergangenheit liegt → gezielte Rückfrage nächstes Jahr.
+# Nicht exportiert — nur für die Kommunikation zwischen parse_zeitraum und
+# termine_erfragen (EC-22, TER-4 Jahres-Grenzfall #309).
+_RUECKFRAGE_VERGANGEN = object()
+
 # TER-7: Ehrliche Antwort bei nicht erreichbarem Plan-Buddy (EC-7, EC-22).
 # Wortlaut lebt im Code, Spec normiert Existenz + Inhalt.
 _ANTWORT_NICHT_ERREICHBAR = (
@@ -42,6 +48,22 @@ _WOCHENTAGE = [
     "Montag", "Dienstag", "Mittwoch", "Donnerstag",
     "Freitag", "Samstag", "Sonntag",
 ]
+
+# TER-4: Monatsname → Monats-Nummer (hart-codiert, kein LLM, #309).
+_MONATSNAME_NR = {
+    "januar": 1, "jan": 1,
+    "februar": 2, "feb": 2,
+    "märz": 3, "mar": 3,
+    "april": 4, "apr": 4,
+    "mai": 5,
+    "juni": 6, "jun": 6,
+    "juli": 7, "jul": 7,
+    "august": 8, "aug": 8,
+    "september": 9, "sep": 9,
+    "oktober": 10, "okt": 10,
+    "november": 11, "nov": 11,
+    "dezember": 12, "dez": 12,
+}
 
 # TER-4 / E-TES-4: Wochentag-Mapping (SSoT für TER + TES).
 # Montag = 0 (PLAN-28 wochenstart=0), Sonntag = 6.
@@ -78,9 +100,13 @@ def parse_zeitraum(text, heute=None):
     """Löst einen freien Anfragetext in (start, tage) auf (TER-4).
 
     Erkennt das hart-codierte Mindest-Vokabular und gibt ein Tupel
-    `(start: date, tage: int)` zurück. Bei mehrdeutigen Ausdrücken
-    (die die Spec in TER-4 nennt) wird `None` zurückgegeben — der
-    Aufrufer stellt dann eine gezielte Rückfrage (EC-22).
+    `(start: date, tage: int)` zurück. Sonderfälle:
+
+    - Bei mehrdeutigen Ausdrücken (die die Spec in TER-4 nennt) wird `None`
+      zurückgegeben — der Aufrufer stellt dann eine gezielte Rückfrage (EC-22).
+    - Bei einem jahrlosen expliziten Datum, das im laufenden Jahr in der
+      Vergangenheit liegt, wird `_RUECKFRAGE_VERGANGEN` zurückgegeben — der
+      Aufrufer stellt eine gezielte „nächstes Jahr"-Rückfrage (TER-4, #309).
 
     `heute` ist für Tests injizierbar (Default: `date.today()`).
     """
@@ -131,8 +157,71 @@ def parse_zeitraum(text, heute=None):
     if re.search(r"n[äa]chsten?\s+(montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag)", t):
         return None
 
+    # Explizite Kalenderdaten (TER-4, #309): DD.MM.JJJJ / DD.MM. / „am D. Monat"
+    # Hart-codiert, kein LLM (EC-12, anbieter-unabhängig).
+    explizit = _parse_explizites_datum(t, heute)
+    if explizit is not None:
+        return explizit  # (date, 1) oder _RUECKFRAGE_VERGANGEN
+
     # Default (TER-4): „was steht an", kein erkennbarer Datums-Ausdruck
     return (heute, 7)
+
+
+def _parse_explizites_datum(t, heute):
+    """Parst explizite Kalenderdaten aus einem Anfragetext (TER-4, #309).
+
+    Erkennt:
+    - DD.MM.JJJJ  (z. B. „03.06.2026")
+    - DD.MM.       (z. B. „3.6.", „03.06.")
+    - Vorsilben „den", „dem", „am", „für den", „für" (z. B. „den 3.6.", „am 3. Juni")
+    - Monatsname statt Zahl (z. B. „am 3. Juni", „3. Juni")
+
+    Jahres-Inferenz ohne Jahresangabe: laufendes Jahr. Liegt das Datum in der
+    Vergangenheit (< heute), gibt die Funktion `_RUECKFRAGE_VERGANGEN` zurück —
+    statt blind das Folgejahr anzunehmen (EC-22, TER-4 Grenzfall).
+
+    Gibt `(start: date, tage=1)` oder `_RUECKFRAGE_VERGANGEN` zurück.
+    Gibt `None` zurück, wenn kein explizites Datum erkannt wurde.
+    """
+    # Muster 1: DD.MM.JJJJ — vollständiges Datum mit Jahr
+    m = re.search(r"\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b", t)
+    if m:
+        try:
+            kandidat = date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+            return (kandidat, 1)
+        except ValueError:
+            return None  # ungültiges Datum (z. B. 31.02.)
+
+    # Muster 2: DD.MM. — ohne Jahr (z. B. „3.6.", „03.06.")
+    # Auch nach optionalen Vorsilben wie „den", „dem", „am", „für den"
+    m = re.search(r"\b(\d{1,2})\.(\d{1,2})\.", t)
+    if m:
+        try:
+            kandidat = date(heute.year, int(m.group(2)), int(m.group(1)))
+        except ValueError:
+            return None  # ungültiges Datum
+        if kandidat < heute:
+            return _RUECKFRAGE_VERGANGEN
+        return (kandidat, 1)
+
+    # Muster 3: „am D. Monat" / „den D. Monat" (z. B. „am 3. Juni", „den 3. März")
+    monatsnamen = "|".join(_MONATSNAME_NR.keys())
+    m = re.search(
+        r"\b(\d{1,2})\.\s*(" + monatsnamen + r")\b", t)
+    if m:
+        tag_nr = int(m.group(1))
+        monat_nr = _MONATSNAME_NR.get(m.group(2))
+        if monat_nr is None:
+            return None
+        try:
+            kandidat = date(heute.year, monat_nr, tag_nr)
+        except ValueError:
+            return None  # ungültiges Datum
+        if kandidat < heute:
+            return _RUECKFRAGE_VERGANGEN
+        return (kandidat, 1)
+
+    return None
 
 
 def parse_wochentag(wort, heute):
@@ -349,6 +438,11 @@ def termine_erfragen(tg, chat_id, from_user_id, anfrage_text,
 
     # TER-4: Datums-Vokabular auflösen
     zeitraum = parse_zeitraum(anfrage_text, heute=heute)
+    if zeitraum is _RUECKFRAGE_VERGANGEN:
+        # TER-4 EC-22: jahrloses Datum liegt in der Vergangenheit → gezielte
+        # Rückfrage statt blind Folgejahr annehmen (#309).
+        tg.send_message(chat_id, "Du meinst nächstes Jahr, oder?")
+        return SIGNAL_BEANTWORTET
     if zeitraum is None:
         # TER-4 EC-22: mehrdeutig → Rückfrage
         tg.send_message(
