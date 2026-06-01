@@ -31,12 +31,14 @@ GER-15 serverseitig.
 import logging
 import re
 from dataclasses import dataclass
+from typing import Callable
 
 import authz
 import confirm
 from telegram import TelegramError
 
 from skills.geraete_client import GeraeteClientError
+from skills.typing_indicator import fire_typing
 
 
 # ============================================================
@@ -154,7 +156,8 @@ class GeraetAnlegenResult:
 
 def geraet_anlegen(tg, chat_id, user_id, family_group_chat_id,
                    client, next_message,
-                   cav_call_hook=None, display_url_origin=None):
+                   cav_call_hook=None, display_url_origin=None,
+                   typing_fn: Callable[[], None] | None = None):
     """Legt ein oder mehrere Geräte an (GAA-1).
 
     `tg`                    — Telegram-Kanal (mit `send_message`,
@@ -181,6 +184,10 @@ def geraet_anlegen(tg, chat_id, user_id, family_group_chat_id,
                               `/display/<display_id>` (DC-1) — der Aufrufer
                               erfährt die `display_id`, kann sie aber selbst
                               an seinen Origin hängen.
+    `typing_fn`             — Optionaler Callable ohne Argumente; wird vor jeder
+                              send_message-Phase aufgerufen (EC-25: Typing-Indikator,
+                              Best-Effort, Fehler werden geschluckt). Default None →
+                              No-op (Backward-Compat). Vgl. skills/typing_indicator.py.
 
     Liefert ein `GeraetAnlegenResult`. Schreibt ausschließlich über die
     HTTP-Schreib-Schnittstelle der Geraete-Komponente (GAA-3.7, GER-15).
@@ -189,22 +196,25 @@ def geraet_anlegen(tg, chat_id, user_id, family_group_chat_id,
     if not authz.is_authorized(tg, family_group_chat_id, user_id):
         logging.info("geraet_anlegen: %s nicht in Familien-Gruppe — abgewiesen",
                      user_id)
+        fire_typing(typing_fn)
         _send(tg, chat_id, NOT_AUTHORIZED)
         return GeraetAnlegenResult(vergebene_display_ids=[], authorized=False)
 
     vergebene = []
 
     while True:
-        outcome = _ein_geraet_anlegen(tg, chat_id, client, next_message)
+        outcome = _ein_geraet_anlegen(tg, chat_id, client, next_message,
+                                      typing_fn)
         if outcome.display_id is not None:
             vergebene.append(outcome.display_id)
+            fire_typing(typing_fn)
             _antworte_display_url(tg, chat_id, outcome.display_id,
                                   display_url_origin)
             # GAA-6: optional CA-Verteilung anstoßen — erst nach erfolgreicher
             # Anlage, vor der Schleifen-Frage. Ablehnung oder CAV-Fehler bricht
             # die Schleife nicht ab.
             _frage_und_rufe_cav(tg, chat_id, user_id, outcome.os_wert,
-                                next_message, cav_call_hook)
+                                next_message, cav_call_hook, typing_fn)
         elif not outcome.should_loop:
             # Konversations-Abbruch (GAA-3.6 ohne Bestätigung) oder
             # Eingabe-Strom zu Ende — die Funktion endet ohne Schleifen-Frage.
@@ -213,6 +223,7 @@ def geraet_anlegen(tg, chat_id, user_id, family_group_chat_id,
         # (GAA-7 letzter Punkt) — Schleifen-Frage trotzdem stellen.
 
         # GAA-4: »Noch ein Gerät?« — bei nicht-bestätigender Antwort beenden.
+        fire_typing(typing_fn)
         _send(tg, chat_id, ASK_NOCH_EIN)
         msg = next_message()
         if msg is None or not confirm.is_confirmation((msg.text or "").strip()):
@@ -220,6 +231,7 @@ def geraet_anlegen(tg, chat_id, user_id, family_group_chat_id,
 
     if vergebene:
         if len(vergebene) > 1:
+            fire_typing(typing_fn)
             _send(tg, chat_id, DONE_MULTI_FMT % ", ".join(vergebene))
     return GeraetAnlegenResult(vergebene_display_ids=vergebene, authorized=True)
 
@@ -244,40 +256,42 @@ class _Outcome:
     should_loop: bool = False
 
 
-def _ein_geraet_anlegen(tg, chat_id, client, next_message):
+def _ein_geraet_anlegen(tg, chat_id, client, next_message, typing_fn=None):
     """Legt EIN Gerät an. Liefert ein `_Outcome`."""
     # GAA-3.1: Typ.
-    typ = _frage_typ(tg, chat_id, next_message)
+    typ = _frage_typ(tg, chat_id, next_message, typing_fn)
     if typ is None:
         return _Outcome(should_loop=False)
 
     # GAA-3.2: Anzeigename.
-    name = _frage_name(tg, chat_id, next_message)
+    name = _frage_name(tg, chat_id, next_message, typing_fn)
     if name is None:
         return _Outcome(should_loop=False)
 
     # GAA-3.3: Auflösung.
-    aufloesung = _frage_aufloesung(tg, chat_id, next_message)
+    aufloesung = _frage_aufloesung(tg, chat_id, next_message, typing_fn)
     if aufloesung is None:
         return _Outcome(should_loop=False)
 
     # GAA-3.4: OS.
-    os_wert = _frage_os(tg, chat_id, next_message)
+    os_wert = _frage_os(tg, chat_id, next_message, typing_fn)
     if os_wert is None:
         return _Outcome(should_loop=False)
 
     # GAA-3.5: Verwendung — V1 hart `display`, aber wir holen die Bestätigung
     # über einen Quick-Reply-Schritt mit dieser einzigen Option.
-    verwendung = _frage_verwendung(tg, chat_id, next_message)
+    verwendung = _frage_verwendung(tg, chat_id, next_message, typing_fn)
     if verwendung is None:
         return _Outcome(should_loop=False)
 
     # GAA-3.6: Zusammenfassung + Bestätigungswort.
     summary = _zusammenfassung(typ, name, aufloesung, os_wert, verwendung)
+    fire_typing(typing_fn)
     _send(tg, chat_id, summary)
     bestaetigung = next_message()
     if bestaetigung is None or not confirm.is_confirmation(
             (bestaetigung.text or "").strip()):
+        fire_typing(typing_fn)
         _send(tg, chat_id, CANCELLED)
         return _Outcome(should_loop=False)
 
@@ -292,6 +306,7 @@ def _ein_geraet_anlegen(tg, chat_id, client, next_message):
         # nichts in geraete.json mutieren (atomar serverseitig), aber die
         # Schleife (GAA-4) fragt trotzdem „noch ein Gerät?".
         logging.warning("geraet_anlegen: Anlage fehlgeschlagen: %s", e)
+        fire_typing(typing_fn)
         _send(tg, chat_id, WRITE_FAILED)
         return _Outcome(should_loop=True)
 
@@ -299,6 +314,7 @@ def _ein_geraet_anlegen(tg, chat_id, client, next_message):
     if not display_id:
         logging.warning(
             "geraet_anlegen: GER-15-Antwort ohne id: %r", angelegt)
+        fire_typing(typing_fn)
         _send(tg, chat_id, WRITE_FAILED)
         return _Outcome(should_loop=True)
 
@@ -309,9 +325,10 @@ def _ein_geraet_anlegen(tg, chat_id, client, next_message):
 #  Einzel-Schritte (GAA-3.1..3.5)
 # ============================================================
 
-def _frage_typ(tg, chat_id, next_message):
+def _frage_typ(tg, chat_id, next_message, typing_fn=None):
     """GAA-3.1: Typ — einer aus GER-2."""
     while True:
+        fire_typing(typing_fn)
         _send(tg, chat_id, ASK_TYP)
         msg = next_message()
         if msg is None:
@@ -319,12 +336,14 @@ def _frage_typ(tg, chat_id, next_message):
         text = (msg.text or "").strip().lower()
         if text in TYPEN:
             return text
+        fire_typing(typing_fn)
         _send(tg, chat_id, REJECT_TYP)
 
 
-def _frage_name(tg, chat_id, next_message):
+def _frage_name(tg, chat_id, next_message, typing_fn=None):
     """GAA-3.2: Anzeigename — Pflicht, nicht leer."""
     while True:
+        fire_typing(typing_fn)
         _send(tg, chat_id, ASK_NAME)
         msg = next_message()
         if msg is None:
@@ -332,12 +351,14 @@ def _frage_name(tg, chat_id, next_message):
         text = (msg.text or "").strip()
         if text:
             return text
+        fire_typing(typing_fn)
         _send(tg, chat_id, REJECT_NAME)
 
 
-def _frage_aufloesung(tg, chat_id, next_message):
+def _frage_aufloesung(tg, chat_id, next_message, typing_fn=None):
     """GAA-3.3: Auflösung als Freitext <int>x<int>."""
     while True:
+        fire_typing(typing_fn)
         _send(tg, chat_id, ASK_AUFLOESUNG)
         msg = next_message()
         if msg is None:
@@ -349,16 +370,18 @@ def _frage_aufloesung(tg, chat_id, next_message):
             h = int(m.group(2))
             if w > 0 and h > 0:
                 return {"w": w, "h": h}
+        fire_typing(typing_fn)
         _send(tg, chat_id, REJECT_AUFLOESUNG)
 
 
-def _frage_os(tg, chat_id, next_message):
+def _frage_os(tg, chat_id, next_message, typing_fn=None):
     """GAA-3.4: OS — einer aus android/ios/windows/macos/linux.
 
     `unbekannt` aus GER-3 ist V1 kein Konversations-Ergebnis (GAA-3.4) —
     wir akzeptieren nur die fünf bekannten Werte.
     """
     while True:
+        fire_typing(typing_fn)
         _send(tg, chat_id, ASK_OS)
         msg = next_message()
         if msg is None:
@@ -366,16 +389,18 @@ def _frage_os(tg, chat_id, next_message):
         text = (msg.text or "").strip().lower()
         if text in OS_WERTE_V1:
             return text
+        fire_typing(typing_fn)
         _send(tg, chat_id, REJECT_OS)
 
 
-def _frage_verwendung(tg, chat_id, next_message):
+def _frage_verwendung(tg, chat_id, next_message, typing_fn=None):
     """GAA-3.5: Verwendung — V1 nur `display` (Spec-Schnitt / OPEN-GAA-D).
 
     Quick-Reply mit nur einer Option: nur „display" wird akzeptiert.
     `controller` / `beides` werden abgelehnt — bewusst, V1-Schnitt.
     """
     while True:
+        fire_typing(typing_fn)
         _send(tg, chat_id, ASK_VERWENDUNG)
         msg = next_message()
         if msg is None:
@@ -383,6 +408,7 @@ def _frage_verwendung(tg, chat_id, next_message):
         text = (msg.text or "").strip().lower()
         if text == _VERWENDUNG_V1:
             return _VERWENDUNG_V1
+        fire_typing(typing_fn)
         _send(tg, chat_id, REJECT_VERWENDUNG)
 
 
@@ -391,7 +417,7 @@ def _frage_verwendung(tg, chat_id, next_message):
 # ============================================================
 
 def _frage_und_rufe_cav(tg, chat_id, user_id, os_wert,
-                        next_message, cav_call_hook):
+                        next_message, cav_call_hook, typing_fn=None):
     """GAA-6: bietet die CA-Verteilung an und ruft den Hook bei Bestätigung.
 
     Ohne Hook (Tests ohne CAV-Setup) entfällt der ganze Schritt stillschweigend
@@ -403,6 +429,7 @@ def _frage_und_rufe_cav(tg, chat_id, user_id, os_wert,
     """
     if cav_call_hook is None:
         return
+    fire_typing(typing_fn)
     _send(tg, chat_id, ASK_CA)
     msg = next_message()
     if msg is None or not confirm.is_confirmation((msg.text or "").strip()):
@@ -411,6 +438,7 @@ def _frage_und_rufe_cav(tg, chat_id, user_id, os_wert,
         cav_call_hook(os_wert, chat_id, user_id)
     except Exception as e:  # noqa: BLE001 — CAV-Fehler isoliert melden
         logging.warning("geraet_anlegen: CAV-Aufruf fehlgeschlagen: %s", e)
+        fire_typing(typing_fn)
         _send(tg, chat_id, CAV_FAILED)
 
 

@@ -31,12 +31,14 @@ entfallen.
 import logging
 import struct
 from dataclasses import dataclass
+from typing import Callable
 
 import authz
 import confirm
 from telegram import TelegramError
 
 from skills.familie_client import FamilieClientError
+from skills.typing_indicator import fire_typing
 
 
 # ============================================================
@@ -176,7 +178,8 @@ class FamilieAnlegenResult:
 
 def familie_anlegen(tg, chat_id, user_id, family_group_chat_id,
                     client, next_message,
-                    profilbild_max_kante=PROFILBILD_MAX_KANTE_DEFAULT):
+                    profilbild_max_kante=PROFILBILD_MAX_KANTE_DEFAULT,
+                    typing_fn: Callable[[], None] | None = None):
     """Legt eine oder mehrere Familienmitglieder an (FAA-1).
 
     `tg`                    — Telegram-Kanal (mit `send_message`, `download_file`,
@@ -196,6 +199,10 @@ def familie_anlegen(tg, chat_id, user_id, family_group_chat_id,
                               `PROFILBILD_MAX_KANTE_DEFAULT` (1280). Wert
                               `None` schaltet den Filter aus — der Server hat
                               das letzte Wort (FAM-9).
+    `typing_fn`             — Optionaler Callable ohne Argumente; wird vor jeder
+                              send_message-Phase aufgerufen (EC-25: Typing-Indikator,
+                              Best-Effort, Fehler werden geschluckt). Default None →
+                              No-op (Backward-Compat). Vgl. skills/typing_indicator.py.
 
     Liefert ein `FamilieAnlegenResult` mit `vergebene_ids`. Schreibt
     ausschliesslich über die HTTP-Schreib-Schnittstelle der Familien-
@@ -205,6 +212,7 @@ def familie_anlegen(tg, chat_id, user_id, family_group_chat_id,
     if not authz.is_authorized(tg, family_group_chat_id, user_id):
         logging.info("familie_anlegen: %s nicht in Familien-Gruppe — abgewiesen",
                      user_id)
+        fire_typing(typing_fn)
         _send(tg, chat_id, NOT_AUTHORIZED)
         return FamilieAnlegenResult(vergebene_ids=[], authorized=False)
 
@@ -212,19 +220,22 @@ def familie_anlegen(tg, chat_id, user_id, family_group_chat_id,
 
     while True:
         person_id = _eine_person_anlegen(
-            tg, chat_id, user_id, client, next_message, profilbild_max_kante)
+            tg, chat_id, user_id, client, next_message, profilbild_max_kante,
+            typing_fn)
         if person_id is None:
             # Abbruch (FAA-7) oder Eingabe-Strom zu Ende — wir beenden den Aufruf.
             break
         vergebene_ids.append(person_id)
 
         # FAA-9: »Noch jemand?« — bei nicht-bestätigender Antwort beenden.
+        fire_typing(typing_fn)
         _send(tg, chat_id, ASK_NOCH_JEMAND)
         msg = next_message()
         if msg is None or not confirm.is_confirmation((msg.text or "").strip()):
             break
 
     if vergebene_ids:
+        fire_typing(typing_fn)
         if len(vergebene_ids) == 1:
             _send(tg, chat_id, DONE_SINGLE % vergebene_ids[0])
         else:
@@ -237,7 +248,7 @@ def familie_anlegen(tg, chat_id, user_id, family_group_chat_id,
 # ============================================================
 
 def _eine_person_anlegen(tg, chat_id, user_id, client, next_message,
-                          profilbild_max_kante):
+                          profilbild_max_kante, typing_fn=None):
     """Legt EINE Person an. Liefert die vergebene `id` oder None (Abbruch)."""
     # Bei jedem Personen-Start den aktuellen Personen-Stand frisch holen —
     # sonst sehen wir die in derselben Schleife frisch angelegte Person nicht
@@ -248,41 +259,42 @@ def _eine_person_anlegen(tg, chat_id, user_id, client, next_message,
         current = client.alle_personen()
     except FamilieClientError as e:
         logging.warning("familie_anlegen: Familie-Service nicht erreichbar: %s", e)
+        fire_typing(typing_fn)
         _send(tg, chat_id, WRITE_FAILED)
         return None
 
     # FAA-3 Schritt 1: Art.
-    art = _frage_art(tg, chat_id, next_message)
+    art = _frage_art(tg, chat_id, next_message, typing_fn)
     if art is None:
         return None
 
     # Schritt 2: Name.
-    name = _frage_name(tg, chat_id, next_message)
+    name = _frage_name(tg, chat_id, next_message, typing_fn)
     if name is None:
         return None
 
     # Schritt 3: Foto (optional).
     foto_ext, foto_bytes, foto_content_type = _frage_foto(
-        tg, chat_id, next_message, profilbild_max_kante)
+        tg, chat_id, next_message, profilbild_max_kante, typing_fn)
     if foto_ext is False:
         # Abbruch im Foto-Schritt.
         return None
 
     # Schritt 4: Ring-Farbe.
-    ring = _frage_ring(tg, chat_id, next_message, current)
+    ring = _frage_ring(tg, chat_id, next_message, current, typing_fn)
     if ring is None:
         return None
 
     # Schritt 5: E-Mail (nur Erwachsene).
     email = None
     if art == KIND_ERWACHSENE:
-        email = _frage_email(tg, chat_id, next_message)
+        email = _frage_email(tg, chat_id, next_message, typing_fn)
         if email is False:
             return None
 
     # Schritt 6: Telegram-ID (optional, beide Arten).
     telegram_id = _frage_telegram(
-        tg, chat_id, user_id, next_message, current, name)
+        tg, chat_id, user_id, next_message, current, name, typing_fn)
     if telegram_id is False:
         return None
 
@@ -290,10 +302,12 @@ def _eine_person_anlegen(tg, chat_id, user_id, client, next_message,
     # nach dem Bestaetigungswort; in der Zusammenfassung zeigen wir nur die
     # vom Aufrufer erfassten Werte.
     summary = _zusammenfassung(name, art, ring, foto_ext, email, telegram_id)
+    fire_typing(typing_fn)
     _send(tg, chat_id, summary)
     bestaetigung = next_message()
     if bestaetigung is None or not confirm.is_confirmation(
             (bestaetigung.text or "").strip()):
+        fire_typing(typing_fn)
         _send(tg, chat_id, CANCELLED)
         return None
 
@@ -305,6 +319,7 @@ def _eine_person_anlegen(tg, chat_id, user_id, client, next_message,
             email=email, telegram_id=telegram_id)
     except FamilieClientError as e:
         logging.warning("familie_anlegen: Anlage fehlgeschlagen: %s", e)
+        fire_typing(typing_fn)
         _send(tg, chat_id, WRITE_FAILED)
         return None
 
@@ -312,6 +327,7 @@ def _eine_person_anlegen(tg, chat_id, user_id, client, next_message,
     if not person_id:
         logging.warning(
             "familie_anlegen: FAM-12-Antwort ohne id: %r", angelegt)
+        fire_typing(typing_fn)
         _send(tg, chat_id, WRITE_FAILED)
         return None
 
@@ -340,9 +356,10 @@ def _eine_person_anlegen(tg, chat_id, user_id, client, next_message,
 #  Einzel-Schritte (FAA-3)
 # ============================================================
 
-def _frage_art(tg, chat_id, next_message):
+def _frage_art(tg, chat_id, next_message, typing_fn=None):
     """FAA-3 Schritt 1: Art — Erwachsene oder Kind."""
     while True:
+        fire_typing(typing_fn)
         _send(tg, chat_id, ASK_ART)
         msg = next_message()
         if msg is None:
@@ -352,12 +369,14 @@ def _frage_art(tg, chat_id, next_message):
             return KIND_ERWACHSENE
         if text in _ART_KIND:
             return KIND_KINDER
+        fire_typing(typing_fn)
         _send(tg, chat_id, REJECT_KIND)
 
 
-def _frage_name(tg, chat_id, next_message):
+def _frage_name(tg, chat_id, next_message, typing_fn=None):
     """FAA-3 Schritt 2: Name — Pflicht, nicht leer."""
     while True:
+        fire_typing(typing_fn)
         _send(tg, chat_id, ASK_NAME)
         msg = next_message()
         if msg is None:
@@ -365,10 +384,11 @@ def _frage_name(tg, chat_id, next_message):
         text = (msg.text or "").strip()
         if text:
             return text
+        fire_typing(typing_fn)
         _send(tg, chat_id, REJECT_NAME)
 
 
-def _frage_foto(tg, chat_id, next_message, max_kante):
+def _frage_foto(tg, chat_id, next_message, max_kante, typing_fn=None):
     """FAA-3 Schritt 3: Profilfoto — optional.
 
     Liefert `(ext_or_None, bytes_or_None, content_type_or_None)`:
@@ -377,6 +397,7 @@ def _frage_foto(tg, chat_id, next_message, max_kante):
       - `(False, None, None)`              : Aufrufer hat die ganze Anlage abgebrochen.
     """
     while True:
+        fire_typing(typing_fn)
         _send(tg, chat_id, ASK_FOTO)
         msg = next_message()
         if msg is None:
@@ -391,10 +412,12 @@ def _frage_foto(tg, chat_id, next_message, max_kante):
                 raw = tg.download_file(msg.photo_file_id)
             except TelegramError as e:
                 logging.warning("familie_anlegen: Foto-Download fehlgeschlagen: %s", e)
+                fire_typing(typing_fn)
                 _send(tg, chat_id, REJECT_FOTO_GROSS)
                 continue
             return "jpg", raw, _MIME_JPEG
         if msg.photo_oversize:
+            fire_typing(typing_fn)
             _send(tg, chat_id, REJECT_FOTO_GROSS)
             continue
 
@@ -402,18 +425,21 @@ def _frage_foto(tg, chat_id, next_message, max_kante):
         if msg.document_file_id is not None:
             mime = (msg.document_mime_type or "").lower()
             if mime not in _EXT_BY_MIME:
+                fire_typing(typing_fn)
                 _send(tg, chat_id, REJECT_FOTO_MIME)
                 continue
             # FAA-10: Kantenlänge prüfen, wenn der Anhang die Maße mitliefert.
             if msg.document_size_hint is not None and max_kante is not None:
                 w, h = msg.document_size_hint
                 if max(w, h) > max_kante:
+                    fire_typing(typing_fn)
                     _send(tg, chat_id, REJECT_FOTO_GROSS)
                     continue
             try:
                 raw = tg.download_file(msg.document_file_id)
             except TelegramError as e:
                 logging.warning("familie_anlegen: Anhang-Download fehlgeschlagen: %s", e)
+                fire_typing(typing_fn)
                 _send(tg, chat_id, REJECT_FOTO_GROSS)
                 continue
             # PNG: Kantenlänge aus dem PNG-Header lesen, falls die Eingabe keine
@@ -421,18 +447,21 @@ def _frage_foto(tg, chat_id, next_message, max_kante):
             if mime == _MIME_PNG and max_kante is not None:
                 masse = _png_dimensions(raw)
                 if masse is not None and max(masse) > max_kante:
+                    fire_typing(typing_fn)
                     _send(tg, chat_id, REJECT_FOTO_GROSS)
                     continue
             return _EXT_BY_MIME[mime], raw, mime
 
         # Keine Foto-Form erkannt — Frage wiederholen.
+        fire_typing(typing_fn)
         _send(tg, chat_id, REJECT_FOTO_MIME)
 
 
-def _frage_ring(tg, chat_id, next_message, current):
+def _frage_ring(tg, chat_id, next_message, current, typing_fn=None):
     """FAA-3 Schritt 4 / FAA-4: Ring-Farbe mit Vorschlag."""
     vorschlag = _ring_vorschlag(current)
     while True:
+        fire_typing(typing_fn)
         _send(tg, chat_id, ASK_RING % vorschlag)
         msg = next_message()
         if msg is None:
@@ -442,15 +471,17 @@ def _frage_ring(tg, chat_id, next_message, current):
             return vorschlag
         if text in RING_PALETTE:
             return text
+        fire_typing(typing_fn)
         _send(tg, chat_id, REJECT_RING)
 
 
-def _frage_email(tg, chat_id, next_message):
+def _frage_email(tg, chat_id, next_message, typing_fn=None):
     """FAA-3 Schritt 5: E-Mail (nur Erwachsene), optional.
 
     Liefert die E-Mail-Adresse, None (übersprungen) oder False (Abbruch).
     """
     while True:
+        fire_typing(typing_fn)
         _send(tg, chat_id, ASK_EMAIL)
         msg = next_message()
         if msg is None:
@@ -460,10 +491,12 @@ def _frage_email(tg, chat_id, next_message):
             return None
         if _looks_like_email(text):
             return text
+        fire_typing(typing_fn)
         _send(tg, chat_id, REJECT_EMAIL)
 
 
-def _frage_telegram(tg, chat_id, user_id, next_message, current, name):
+def _frage_telegram(tg, chat_id, user_id, next_message, current, name,
+                    typing_fn=None):
     """FAA-3 Schritt 6: Telegram-ID (optional, beide Arten).
 
     Bietet die eigene User-ID als Default an, wenn der Aufrufer signalisiert,
@@ -472,6 +505,7 @@ def _frage_telegram(tg, chat_id, user_id, next_message, current, name):
     Snapshot; FAM-12 weist Dup zusaetzlich serverseitig ab.
     """
     while True:
+        fire_typing(typing_fn)
         _send(tg, chat_id, ASK_TELEGRAM_SELF % user_id)
         msg = next_message()
         if msg is None:
@@ -485,10 +519,12 @@ def _frage_telegram(tg, chat_id, user_id, next_message, current, name):
             try:
                 kandidat = int(text)
             except (TypeError, ValueError):
+                fire_typing(typing_fn)
                 _send(tg, chat_id, REJECT_TELEGRAM)
                 continue
         # FAA-10: Doppelung verhindern — eine Telegram-ID = eine Person.
         if any(p.get("telegram_id") == kandidat for p in current):
+            fire_typing(typing_fn)
             _send(tg, chat_id, REJECT_TELEGRAM_DUP)
             continue
         return kandidat
