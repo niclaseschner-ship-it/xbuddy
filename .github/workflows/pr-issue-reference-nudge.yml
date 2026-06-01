@@ -1,0 +1,54 @@
+name: pr-issue-reference-nudge
+
+# Nicht-blockierender Hinweis. Erinnert daran, ein Issue zu verlinken, wenn ein
+# PR im Body WEDER "Closes #" (Impl-PR) NOCH "Refs #" (Spec-PR) trägt. Erzwingt
+# nichts — postet nur einen Kommentar, blockt nie den Merge.
+#
+# Hintergrund: Messung 2026-06 — ~48 % der gemergten PRs (12 von 25) gingen ohne
+# Closing-Link durch; das Issue bleibt dann still offen (kein Auto-Close), und der
+# Status-Flow greift nicht. Fängt die Drift an der QUELLE (PR-Anlegen), nicht am
+# Tagesende. Ob ein PR ein Issue wirklich erledigt, ist Urteilsfrage → bewusst nur
+# Hinweis, kein Block. Siehe WORKFLOW.md (Lebenslauf eines Tickets) + PR-Template.
+
+on:
+  pull_request:
+    types: [opened, edited, ready_for_review]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  nudge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hinweis posten, wenn keine Issue-Referenz im Body
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          MARKER="<!-- issue-reference-nudge -->"
+
+          # Body auf eine Issue-Referenz prüfen: GitHub-Closing-Keywords
+          # (close/fix/resolve in allen Beugungen) ODER die xbuddy-Spec-Referenz "Refs #".
+          if printf '%s' "$PR_BODY" \
+              | grep -qiE '(close[sd]?|fix(es|ed)?|resolve[sd]?|refs?)[[:space:]]+#[0-9]+'; then
+            echo "Issue-Referenz vorhanden — kein Hinweis nötig."
+            exit 0
+          fi
+
+          # Nicht doppeln: schon ein Nudge-Kommentar an diesem PR?
+          if gh pr view "$PR_NUMBER" --repo "$REPO" --json comments \
+              --jq '.comments[].body' 2>/dev/null | grep -qF "$MARKER"; then
+            echo "Hinweis bereits vorhanden — nichts zu tun."
+            exit 0
+          fi
+
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$MARKER
+          🔗 **Kein Issue-Bezug im PR-Body gefunden.** Falls dieser PR ein Ticket betrifft, ergänze eine Referenz, damit das Issue nicht still offen bleibt und der Status-Flow greift:
+          - Implementierungs-PR → \`Closes #<nr>\`
+          - Spec-PR → \`Refs #<nr>\`
+
+          Falls der PR bewusst kein Issue hat (reine Infra/Chore), ignoriere diesen Hinweis. *(nicht-blockierend — dieser Check verhindert nie einen Merge)*"
