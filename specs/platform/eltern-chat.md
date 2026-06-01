@@ -215,6 +215,16 @@ umgezeigt — das ist Aufgabe der Code-Tracks, nicht dieser Spec.
 
 *Tickets:* #284
 
+### EC-26 — Telegram-Transport blockiert die familienseitige Antwort nicht durch tote Netzpfade
+
+Der Verbindungsaufbau zur Telegram-Bot-API ist zeitlich gebunden und blockiert die familienseitige Antwort nicht: ein nicht erreichbarer Netzpfad scheitert schnell, statt einen Turn zu blockieren. Der Connect-Timeout ist vom Read-Timeout getrennt — Lese-Operationen (Long-Poll `getUpdates`) dürfen lange laufen, der Verbindungsaufbau jedoch nicht.
+
+Die Regel gilt für alle Calls desselben Clients — Long-Poll, Berechtigungsprüfung (`getChatMember`), Typing-Indikator (EC-25), Versand —, weil sie über denselben Transport laufen. Sie ergänzt EC-25: dort ist der Typing-Indikator als „blockiert nicht" gefordert; EC-26 entfernt die Stall-Ursache am Transport selbst.
+
+Umsetzung: siehe E-EC-12.
+
+*Tickets:* #287, #294, #299, #300, #301
+
 ## 3. Aufgaben
 
 ### EC-8 — Aufgaben-Katalog
@@ -663,3 +673,19 @@ Schritte. Die Per-Call-Aufschlüsselung lebt in der DB (V2 aggregierte Sicht).
 Diagnose-Daten kontaminiert; Folge-Turns würden den Suffix als »Bot sagt« in
 den Anbieter-Kontext mitnehmen. Der Suffix kommt deshalb NUR an die
 Telegram-Sendung (siehe EC-23).
+
+### E-EC-12 — IPv4 für den Telegram-Transport (intermittentes IPv6-Blackhole)
+*Datum:* 2026-06-01
+
+Gemessen (/arbeitstag 2026-06-01, instrumentierte Probe, 110 Verbindungsversuche zu `api.telegram.org`): 10 von 110 (≈9 %) liefen über IPv6 in den 35-s-Socket-Timeout (TimeoutError beim TCP-Connect), danach verband IPv4 in 0,0 s. DNS, TLS, Send, Recv durchweg <0,2 s — einziger langsamer Schritt war der IPv6-Connect. Der Hub löst `api.telegram.org` IPv6-zuerst auf (Tailscale-MagicDNS), der native IPv6-Egress ist zeitweise tot. Das zeigte sich der Familie als „eingefrorener" Bot: zufällig fehlendes „tippt" und Antwort-Latenz bis über eine Minute, obwohl der KI-Anbieter durchweg in Sekunden antwortete.
+
+**Entscheidung:** Der Telegram-Client verbindet über IPv4.
+
+**Verworfen:**
+- *IPv6 auf dem Pi abschalten / `/etc/gai.conf`* — Familie-1-Hack: gälte nur für unseren Pi; jede Familie hätte das Problem neu auf ihrem Heim-Router. Robustheit gehört in den Code, der bei jeder Familie gleich greift (Familie-3-Probe).
+- *Dual-Stack mit kurzem Connect-Timeout + Fallback* — behält IPv6, kostet aber weiter ~3 s in ~9 % der Fälle, ohne dass IPv6 für einen ausgehenden Client zu einer großen, dual-stack-fähigen API einen konkreten Vorteil bringt.
+- *Happy Eyeballs (RFC 8305, paralleler v6/v4-Connect)* — korrekt, aber für einen Heim-Bot zu einer bekannten API Über-Engineering.
+
+IPv4 ist für einen ausgehenden Client zu Telegram der universell zuverlässige Pfad; IPv6' Vorteile (Adressraum, eingehende Erreichbarkeit ohne NAT) greifen hier nicht.
+
+**Offen/Folge:** Trifft derselbe Blackhole später einen anderen ausgehenden Pfad (Plan→Google-Kalender, Anbieter-LLM — heute nicht beobachtet), wird eine komponentenübergreifende Transport-Bauregel in `conventions/` erwogen — nicht auf Vorrat.

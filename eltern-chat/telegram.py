@@ -4,11 +4,20 @@ Dünne Adapter-Grenze: hier liegt die einzige Kenntnis der Telegram-Bot-API. Die
 Orchestrierung (main.py) und der Agent-Kern sehen nur das neutrale
 `IncomingMessage`, kein Telegram-JSON. Polling per getUpdates — kein
 öffentlicher Webhook nötig (E-EC-2).
+
+Transport (EC-26, E-EC-12): Alle Calls laufen über einen gemeinsamen
+IPv4-Opener. Connect-Timeout und Read-Timeout sind getrennt — der
+Verbindungsaufbau scheitert schnell, laufende Lese-Operationen (Long-Poll
+getUpdates) laufen unbegrenzt weiter. TLS-Zertifikatsprüfung ist vollständig
+intakt; server_hostname=api.telegram.org auch bei IPv4-Connect.
 """
 
 import base64
+import http.client
 import json
 import logging
+import socket
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -16,6 +25,77 @@ from dataclasses import dataclass, field
 
 
 API_BASE = "https://api.telegram.org"
+_API_HOST = "api.telegram.org"
+
+# EC-26 / E-EC-12: Getrennte Timeouts — kurzer Connect, langer Read (Long-Poll).
+_CONNECT_TIMEOUT = 5   # Sekunden; scheitert schnell bei totem Netzpfad
+_READ_TIMEOUT_DEFAULT = 35  # Sekunden; Fallback-Read-Timeout (kein Long-Poll)
+
+
+class _IPv4HTTPSConnection(http.client.HTTPSConnection):
+    """HTTPS-Verbindung, die ausschließlich über IPv4 verbindet (EC-26, E-EC-12).
+
+    Löst den Hostnamen via `socket.getaddrinfo` auf AF_INET-Einträge auf,
+    verbindet den Socket mit kurzem Connect-Timeout (`connect_timeout`) und
+    stellt danach den Socket auf `read_timeout` um — so laufen laufende
+    Lese-Operationen (Long-Poll getUpdates) lang weiter, während der
+    Verbindungsaufbau schnell scheitert, wenn ein Netzpfad tot ist.
+
+    TLS: `ssl.create_default_context()` + `server_hostname=api.telegram.org` —
+    Zertifikatsprüfung vollständig intakt, auch wenn per IPv4-Adresse verbunden
+    wird (AC3).
+    """
+
+    def __init__(self, host, connect_timeout, read_timeout, **kwargs):
+        super().__init__(host, **kwargs)
+        self._connect_timeout = connect_timeout
+        self._read_timeout = read_timeout
+
+    def connect(self):
+        # IPv4-Adresse auflösen — nur AF_INET-Einträge (E-EC-12).
+        infos = socket.getaddrinfo(
+            self.host, self.port,
+            family=socket.AF_INET,
+            type=socket.SOCK_STREAM,
+        )
+        if not infos:
+            raise OSError("IPv4: keine Adresse für %s" % self.host)
+        _family, _type, _proto, _canonname, sockaddr = infos[0]
+        raw = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        raw.settimeout(self._connect_timeout)
+        raw.connect(sockaddr)
+        # Nach erfolgreichem Connect auf Read-Timeout umschalten (Long-Poll).
+        raw.settimeout(self._read_timeout)
+        ctx = ssl.create_default_context()
+        self.sock = ctx.wrap_socket(raw, server_hostname=_API_HOST)
+
+
+class _IPv4HTTPSHandler(urllib.request.HTTPSHandler):
+    """urllib-Handler, der _IPv4HTTPSConnection für alle HTTPS-Requests nutzt."""
+
+    def __init__(self, connect_timeout, read_timeout):
+        super().__init__()
+        self._connect_timeout = connect_timeout
+        self._read_timeout = read_timeout
+
+    def https_open(self, req):
+        return self.do_open(self._make_conn, req)
+
+    def _make_conn(self, host, **kwargs):
+        # urllib übergibt `timeout` als kwarg — wir ignorieren es, weil wir
+        # connect- und read-Timeout getrennt setzen.
+        kwargs.pop("timeout", None)
+        return _IPv4HTTPSConnection(
+            host,
+            connect_timeout=self._connect_timeout,
+            read_timeout=self._read_timeout,
+        )
+
+
+def _build_ipv4_opener(connect_timeout, read_timeout):
+    """Erstellt einen urllib-Opener, der ausschließlich IPv4-HTTPS nutzt."""
+    handler = _IPv4HTTPSHandler(connect_timeout, read_timeout)
+    return urllib.request.build_opener(handler)
 
 
 @dataclass
@@ -69,24 +149,39 @@ class ChatMigratedError(TelegramError):
 
 
 class TelegramClient:
-    """Schmaler Client für genau die Bot-API-Aufrufe, die V1 braucht."""
+    """Schmaler Client für genau die Bot-API-Aufrufe, die V1 braucht.
 
-    def __init__(self, token, timeout=35):
+    Transport (EC-26, E-EC-12): Alle HTTP-Calls laufen über `_opener` —
+    einen gemeinsamen IPv4-Opener mit getrennten Connect- und Read-Timeouts.
+    `timeout` steuert den Read-Timeout (Long-Poll-relevant); der
+    Connect-Timeout ist fest auf `_CONNECT_TIMEOUT` (5 s).
+    """
+
+    def __init__(self, token, timeout=_READ_TIMEOUT_DEFAULT):
         self._token = token
         self._timeout = timeout
         self._api = "%s/bot%s" % (API_BASE, token)
         self._file_base = "%s/file/bot%s" % (API_BASE, token)
+        # EC-26 / E-EC-12: zentraler IPv4-Opener für alle urlopen-Calls.
+        self._opener = _build_ipv4_opener(
+            connect_timeout=_CONNECT_TIMEOUT,
+            read_timeout=timeout,
+        )
 
     # -- HTTP --------------------------------------------------
 
     def _call(self, method, params=None):
-        """Ruft eine Bot-API-Methode auf. Wirft TelegramError bei Fehlern."""
+        """Ruft eine Bot-API-Methode auf. Wirft TelegramError bei Fehlern.
+
+        Nutzt `_opener` (EC-26): IPv4, getrennter Connect-/Read-Timeout,
+        TLS vollständig intakt.
+        """
         url = "%s/%s" % (self._api, method)
         data = json.dumps(params or {}).encode("utf-8")
         req = urllib.request.Request(
             url, data=data, headers={"Content-Type": "application/json"})
         try:
-            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+            with self._opener.open(req) as resp:
                 body = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             # 4xx/5xx — Body kann eine Telegram-Fehlerbeschreibung enthalten.
@@ -175,7 +270,7 @@ class TelegramClient:
         """Ruft eine Bot-API-Methode mit multipart/form-data auf (Datei-Upload).
 
         Eigener Pfad neben `_call`, weil ein Datei-Upload nicht als JSON-Body
-        geht. Fehlerbehandlung identisch zu `_call`.
+        geht. Fehlerbehandlung identisch zu `_call`. Nutzt `_opener` (EC-26).
         """
         boundary = "----xbuddy%d" % id(file_bytes)
         body = self._encode_multipart(boundary, fields, file_field,
@@ -185,7 +280,7 @@ class TelegramClient:
             url, data=body,
             headers={"Content-Type": "multipart/form-data; boundary=%s" % boundary})
         try:
-            with urllib.request.urlopen(req, timeout=self._timeout) as resp:
+            with self._opener.open(req) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", "replace")
@@ -228,7 +323,7 @@ class TelegramClient:
             raise TelegramError("getFile: kein file_path")
         url = "%s/%s" % (self._file_base, file_path)
         try:
-            with urllib.request.urlopen(url, timeout=self._timeout) as resp:
+            with self._opener.open(url) as resp:
                 return resp.read()
         except (urllib.error.URLError, OSError) as e:
             raise TelegramError("Datei-Download fehlgeschlagen: %s" % e)
