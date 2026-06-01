@@ -394,3 +394,90 @@ def test_FAA_157_private_trigger_omits_switch_receipt():
         time.sleep(0.01)
     assert tg.sent, "FAA haette die erste Frage stellen muessen"
     assert tg.sent[0]["chat_id"] == user_id
+
+
+# ============================================================
+#  T285-S1 — Smoke-Test: run_faa baut typing_fn-Lambda korrekt (EC-25)
+# ============================================================
+
+_FAA_PRIVATE_CHAT_ID = 7
+_FAA_FAMILY_GROUP_ID = "-100"
+
+
+class _DownloadingFakeTelegramFaa(FakeTelegram):
+    """FakeTelegram + download_file für FAA-6 in einer Live-Session."""
+
+    def download_file(self, file_id):
+        return b""  # leere Bytes — Foto-Upload braucht nur Bytes, kein Inhalt
+
+
+def test_T285_S1_faa_typing_fn_fires_per_session_step():
+    """T285-S1 / AC1+AC2: run_faa() baut typing_fn-Lambda korrekt — sendet
+    send_chat_action an private_chat_id, NICHT an family_group_chat_id.
+
+    Smoke-Test für den Pfad execute() → run_faa() → familie_anlegen():
+    Die Closure in familie_anlegen_task.py bindet private_chat_id aus dem
+    TurnContext. Vollständiger Anlage-Dialog für eine Person (Erwachsene,
+    Name, Foto-Überspringen, Ring-ok, Email-Überspringen, Telegram-ich,
+    Bestätigung) — jeder send_message-Schritt hat fire_typing davor.
+
+    AC1: mindestens ein send_chat_action(private_chat_id, 'typing').
+    AC2: kein send_chat_action an family_group_chat_id.
+    """
+    client = FakeFamilieClient()
+    tg = _DownloadingFakeTelegramFaa(
+        members={_FAA_PRIVATE_CHAT_ID: {"status": "member"}})
+    sessions = {}
+    task = FamilieAnlegenTask(
+        tg, "http://test",
+        sessions=sessions,
+        family_group_chat_id_getter=lambda: _FAA_FAMILY_GROUP_ID,
+        client=client)
+
+    ctx_turn = TurnContext(
+        chat_id=_FAA_FAMILY_GROUP_ID,
+        from_user_id=_FAA_PRIVATE_CHAT_ID,
+        private_chat_id=_FAA_PRIVATE_CHAT_ID,
+    )
+    quittung = task.execute(arguments={}, turn_context=ctx_turn)
+    assert quittung
+
+    assert _FAA_PRIVATE_CHAT_ID in sessions, (
+        "execute() hätte sessions[%s] anlegen müssen" % _FAA_PRIVATE_CHAT_ID)
+    session = sessions[_FAA_PRIVATE_CHAT_ID]
+
+    # Worker auf next_message() warten lassen.
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline and not tg.sent:
+        time.sleep(0.01)
+    time.sleep(0.05)
+
+    # Vollständiger Dialog: Art, Name, Foto-Skip, Ring-ok, Email-Skip,
+    # Telegram-ich, Bestätigung, Noch-jemand-Nein.
+    for answer in ("erwachsene", "Niclas", "überspringen",
+                   "ok", "überspringen", "ich", "ok", "nein"):
+        session.deliver(FaaInput(text=answer))
+        time.sleep(0.02)
+
+    session._finished.wait(timeout=4.0)
+    assert session.is_finished(), (
+        "Worker-Thread hätte nach vollständigem Dialog fertig sein müssen")
+
+    # AC1: mindestens ein Typing-Aufruf an den Privatchat.
+    typing_private = [
+        a for a in tg.chat_actions
+        if a["chat_id"] == _FAA_PRIVATE_CHAT_ID and a["action"] == "typing"
+    ]
+    assert typing_private, (
+        "Kein send_chat_action(chat_id=%s, action='typing') gefunden. "
+        "Alle aufgezeichneten Aufrufe: %r" % (_FAA_PRIVATE_CHAT_ID, tg.chat_actions))
+
+    # AC2: kein Typing-Aufruf an die Familien-Gruppe.
+    typing_group = [
+        a for a in tg.chat_actions
+        if a["chat_id"] == _FAA_FAMILY_GROUP_ID
+    ]
+    assert not typing_group, (
+        "send_chat_action wurde an family_group_chat_id=%s gesendet — "
+        "typing_fn-Lambda schließt falsche ID ein. Aufrufe: %r"
+        % (_FAA_FAMILY_GROUP_ID, tg.chat_actions))

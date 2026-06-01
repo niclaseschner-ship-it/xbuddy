@@ -135,11 +135,18 @@ class FamilieAnlegenTask(WriteTask):
         tg = self._tg
         sessions = self._sessions
 
+        # EC-25 / Issue #285: Typing-Indikator vor jeder send_message-Phase im
+        # Privatchat. Best-Effort: Fehler werden in fire_typing geschluckt.
+        # Vgl. skills/typing_indicator.py (EC-25-Helfer, gemeinsam für TES/FAA/GAA/KAV).
+        def typing_fn():
+            tg.send_chat_action(private_chat_id, "typing")
+
         def run_faa():
             try:
                 result = familie_anlegen.familie_anlegen(
                     tg, private_chat_id, user_id, family_group_chat_id,
-                    client, session.next_message)
+                    client, session.next_message,
+                    typing_fn=typing_fn)
                 logging.info(
                     "FAA-Session in Chat %s beendet — authorized=%s, ids=%s",
                     private_chat_id, result.authorized, result.vergebene_ids)
