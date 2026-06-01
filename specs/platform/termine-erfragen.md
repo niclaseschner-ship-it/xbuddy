@@ -104,21 +104,27 @@ Soll-Abdeckung (Mindest-Vokabular):
 - **„nächste Woche"** → `start=` nächster Montag (ISO-Wochenanfang),
   `tage=7`.
 - **„die nächsten N Tage"** (1 ≤ N ≤ 31) → `start=heute`, `tage=N`.
+- **explizites Kalenderdatum** (`DD.MM.` / `DD.MM.JJJJ` / „am D. \<Monat\>",
+  z. B. „3.6.", „am 3. Juni") → `start=<dieses Datum>`, `tage=1`.
+  **Jahres-Inferenz** ohne Jahresangabe: es gilt das **laufende Jahr**. Liegt
+  das so bestimmte Datum **in der Vergangenheit** (< heute), löst die Funktion
+  eine **gezielte Rückfrage** aus („Du meinst nächstes Jahr, oder?") statt
+  blind das Folgejahr oder den Default anzunehmen — `eltern-chat.md` EC-22.
+  Datumsbereiche („vom–bis", „am Wochenende") bleiben **Out-of-Scope V1**.
 - **Default** (keine erkennbare Zeitangabe oder Anfragetext „was steht
   an", „welche Termine") → `start=heute`, `tage=7`.
 
 Eine Anfrage mit einem **mehrdeutigen** Datums-Ausdruck (z. B. „nächsten
-Freitag", wenn unklar ist, ob diese oder nächste Woche, oder ein konkretes
-Datum ohne Jahr im Grenzbereich Jahreswechsel) löst eine **gezielte
+Freitag", wenn unklar ist, ob diese oder nächste Woche) löst eine **gezielte
 Rückfrage** aus, statt blind zu raten — `eltern-chat.md` EC-22. Die Spec
 normiert das **Soll** (welche Ausdrücke erkannt sein müssen, welcher Default
-gilt); der konkrete Wortlaut der Rückfrage lebt im Code als hart-codierter
+gilt); der konkrete Wortlaut der Rückfragen lebt im Code als hart-codierter
 String.
 
 Wochenstart-Anker für „diese/nächste Woche" ist **Montag**, analog
 `plan.md` PLAN-28 (`wochenstart: 0`).
 
-*Tickets:* #143
+*Tickets:* #143, #309
 
 ## 3. Konsumenten-Vertrag
 
@@ -298,12 +304,10 @@ sind opt-in und nicht Teil des Standard-Durchlaufs (analog
   Aufruf wäre. Folge-Ticket sobald die Antwort ohne Namen zu nichtssagend
   wird.
 
-- **OPEN-TER-C — Konkrete Datumsangaben jenseits des Vokabulars.** TER-4
-  deckt natürlichsprachiges Datums-Vokabular ab. Eine Anfrage mit
-  konkretem ISO-Datum („am 2026-06-15") oder umgangssprachlichem Datum
-  („am 15.6.") ist heute nicht spezifiziert — fällt sie unter den
-  Default? Wird sie als Punkt-Anfrage (`start=<datum>, tage=1`)
-  interpretiert? Folge-Ticket sobald das im Realbetrieb auftaucht.
+- ~~**OPEN-TER-C — Konkrete Datumsangaben jenseits des Vokabulars.**~~
+  Geschlossen durch #309: TER-4 deckt nun `DD.MM.` / `DD.MM.JJJJ` /
+  „am D. Monat" als explizite Punkt-Anfragen ab (`start=<datum>, tage=1`),
+  inklusive Jahres-Inferenz und Rückfrage bei vergangenem jahrlosen Datum.
 
 ---
 
