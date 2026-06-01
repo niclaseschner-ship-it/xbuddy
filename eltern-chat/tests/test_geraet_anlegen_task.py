@@ -326,3 +326,82 @@ def test_GAA_5_unreachable_server_yields_clear_bot_message_no_stack():
     # Die Session hat sich nicht auf den Bauch gelegt — sie wartet auf
     # die Eingabe; der Fehler-Pfad greift erst beim POST nach den Antworten.
     # Hier reicht der Bestand der ersten Frage als „kein Stack vor Eingabe".
+
+
+# ============================================================
+#  T285-S1 — Smoke-Test: run_gaa baut typing_fn-Lambda korrekt (EC-25)
+# ============================================================
+
+_GAA_PRIVATE_CHAT_ID = 7
+_GAA_FAMILY_GROUP_ID = "-100"
+
+
+def test_T285_S1_gaa_typing_fn_fires_per_session_step():
+    """T285-S1 / AC1+AC2: run_gaa() baut typing_fn-Lambda korrekt — sendet
+    send_chat_action an private_chat_id, NICHT an family_group_chat_id.
+
+    Smoke-Test für den Pfad execute() → run_gaa() → geraet_anlegen():
+    Die Closure in geraet_anlegen_task.py bindet private_chat_id aus dem
+    TurnContext. Vollständiger Anlage-Dialog für ein Tablet — jeder
+    send_message-Schritt hat fire_typing davor.
+
+    AC1: mindestens ein send_chat_action(private_chat_id, 'typing').
+    AC2: kein send_chat_action an family_group_chat_id.
+    """
+    client = FakeGeraeteClient()
+    tg = FakeTelegram(
+        members={_GAA_PRIVATE_CHAT_ID: {"status": "member"}})
+    sessions = {}
+    task = GeraetAnlegenTask(
+        tg, "http://test",
+        sessions=sessions,
+        family_group_chat_id_getter=lambda: _GAA_FAMILY_GROUP_ID,
+        client=client)
+
+    ctx_turn = TurnContext(
+        chat_id=_GAA_FAMILY_GROUP_ID,
+        from_user_id=_GAA_PRIVATE_CHAT_ID,
+        private_chat_id=_GAA_PRIVATE_CHAT_ID,
+    )
+    quittung = task.execute(arguments={}, turn_context=ctx_turn)
+    assert quittung
+
+    assert _GAA_PRIVATE_CHAT_ID in sessions, (
+        "execute() hätte sessions[%s] anlegen müssen" % _GAA_PRIVATE_CHAT_ID)
+    session = sessions[_GAA_PRIVATE_CHAT_ID]
+
+    # Worker auf next_message() warten lassen.
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline and not tg.sent:
+        time.sleep(0.01)
+    time.sleep(0.05)
+
+    # Vollständiger Dialog: Typ, Name, Auflösung, OS, Verwendung, Bestätigung,
+    # Noch-ein-Gerät-Nein.
+    for answer in ("tablet", "Elias", "1280x800", "android", "display",
+                   "ok", "nein"):
+        session.deliver(GaaInput(text=answer))
+        time.sleep(0.02)
+
+    session._finished.wait(timeout=4.0)
+    assert session.is_finished(), (
+        "Worker-Thread hätte nach vollständigem Dialog fertig sein müssen")
+
+    # AC1: mindestens ein Typing-Aufruf an den Privatchat.
+    typing_private = [
+        a for a in tg.chat_actions
+        if a["chat_id"] == _GAA_PRIVATE_CHAT_ID and a["action"] == "typing"
+    ]
+    assert typing_private, (
+        "Kein send_chat_action(chat_id=%s, action='typing') gefunden. "
+        "Alle aufgezeichneten Aufrufe: %r" % (_GAA_PRIVATE_CHAT_ID, tg.chat_actions))
+
+    # AC2: kein Typing-Aufruf an die Familien-Gruppe.
+    typing_group = [
+        a for a in tg.chat_actions
+        if a["chat_id"] == _GAA_FAMILY_GROUP_ID
+    ]
+    assert not typing_group, (
+        "send_chat_action wurde an family_group_chat_id=%s gesendet — "
+        "typing_fn-Lambda schließt falsche ID ein. Aufrufe: %r"
+        % (_GAA_FAMILY_GROUP_ID, tg.chat_actions))

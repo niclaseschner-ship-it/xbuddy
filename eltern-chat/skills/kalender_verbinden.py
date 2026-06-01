@@ -37,10 +37,13 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Callable
 
 import authz
 from private_chat_session import SESSION_TIMEOUT_SECONDS  # KAV-6 Re-export (EC-20)
 from telegram import TelegramError
+
+from skills.typing_indicator import fire_typing
 
 
 # ============================================================
@@ -643,7 +646,8 @@ def _load_oauth_client(zd):
 def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
                       zd, next_message, plan_json_path=None, clock=None,
                       exchange=None, fetch_email=None,
-                      fetch_calendars=None, write_plan_json=None):
+                      fetch_calendars=None, write_plan_json=None,
+                      typing_fn: Callable[[], None] | None = None):
     """Verbindet den Familien-Google-Kalender über den Privatchat (KAV-1).
 
     `tg`                    — Telegram-Kanal (mit `send_message`,
@@ -664,6 +668,10 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
     `clock`/`exchange`/`fetch_email`/`fetch_calendars`/`write_plan_json` —
                               Test-Naht: Standardwerte sprechen das echte
                               Netz/FS; Tests reichen Doppelungen herein.
+    `typing_fn`             — Optionaler Callable ohne Argumente; wird vor jeder
+                              send_message-Phase aufgerufen (EC-25: Typing-Indikator,
+                              Best-Effort, Fehler werden geschluckt). Default None →
+                              No-op (Backward-Compat). Vgl. skills/typing_indicator.py.
 
     Liefert ein `KalenderVerbindenResult`. Schreibt über `zd.set(...)`
     (ZD-5) und — bei erfolgreicher Kalender-Auswahl — atomar in
@@ -683,6 +691,7 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
     if not authz.is_authorized(tg, family_group_chat_id, user_id):
         logging.info("kalender_verbinden: %s nicht in Familien-Gruppe — abgewiesen",
                      user_id)
+        fire_typing(typing_fn)
         _send(tg, chat_id, NOT_AUTHORIZED)
         return KalenderVerbindenResult(ergebnis=ERGEBNIS_ABGELEHNT)
 
@@ -703,17 +712,20 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
         # Klare User-Meldung im Bot-Output reicht: der Aufrufer sieht „abgebrochen"
         # plus eine spezifische Begründungs-Nachricht im Chat (OAUTH_CLIENT_MISSING
         # nennt die Setup-Lücke, ohne `client_secret` zu zeigen — ZD-6).
+        fire_typing(typing_fn)
         _send(tg, chat_id, OAUTH_CLIENT_MISSING)
         return KalenderVerbindenResult(ergebnis=ERGEBNIS_ABGEBROCHEN)
     client_id, client_secret = client_pair
 
     # KAV-4: Aufklärungstext **vor** dem Login-Link.
+    fire_typing(typing_fn)
     _send(tg, chat_id, AUFKLAERUNG_TEXT)
 
     # KAV-5: einmaliger State, im Prozess-Speicher gehalten (analog
     # FAA-9 (b)); Verfall implizit über das `next_message`-Timeout (KAV-6).
     state = _new_state()
     auth_url = build_auth_url(client_id, state)
+    fire_typing(typing_fn)
     _send(tg, chat_id, LOGIN_LINK_PROMPT % auth_url)
 
     # KAV-6: auf die nächste Privatchat-Nachricht warten. Nicht-passende
@@ -724,12 +736,14 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
         msg = next_message()
         if msg is None:
             # Timeout (30 min) oder Prozess-Ende — KAV-6.
+            fire_typing(typing_fn)
             _send(tg, chat_id, ABGEBROCHEN)
             return KalenderVerbindenResult(ergebnis=ERGEBNIS_ABGEBROCHEN)
         text = msg.text if isinstance(msg, KavInput) else (msg or "")
         code = extract_code(text)
         if code is not None:
             break
+        fire_typing(typing_fn)
         _send(tg, chat_id, CODE_REMINDER)
 
     # KAV-7: Code-Tausch beim Google-Token-Endpunkt.
@@ -740,6 +754,7 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
         # Tatsache des Fehlschlags.
         logging.warning("kalender_verbinden: Token-Tausch fehlgeschlagen (%s) "
                         "— nichts gespeichert", e)
+        fire_typing(typing_fn)
         _send(tg, chat_id, TOKEN_EXCHANGE_FAILED)
         return KalenderVerbindenResult(ergebnis=ERGEBNIS_ABGEBROCHEN)
 
@@ -779,6 +794,7 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
     except CalendarListFetchError as e:
         logging.warning("kalender_verbinden: calendarList-Abfrage fehlgeschlagen "
                         "(%s) — Tokens gespeichert, Kalender-Auswahl offen", e)
+        fire_typing(typing_fn)
         _send(tg, chat_id, KALENDER_LIST_FETCH_FAILED)
         return KalenderVerbindenResult(
             ergebnis=ERGEBNIS_VERBUNDEN_OHNE_KALENDER,
@@ -787,12 +803,14 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
     if not calendars:
         logging.warning("kalender_verbinden: calendarList ist leer (keine "
                         "writable Kalender) — Tokens gespeichert, Auswahl offen")
+        fire_typing(typing_fn)
         _send(tg, chat_id, KALENDER_LIST_EMPTY)
         return KalenderVerbindenResult(
             ergebnis=ERGEBNIS_VERBUNDEN_OHNE_KALENDER,
             account_email=account_email)
 
     # KAV-X: nummerierte Liste posten und auf Auswahl warten.
+    fire_typing(typing_fn)
     _send(tg, chat_id, KALENDER_AUSWAHL_PROMPT
           % (format_calendar_list(calendars), len(calendars)))
 
@@ -802,6 +820,7 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
         if msg is None:
             # KAV-X: Timeout *nach* Token-Tausch — Tokens bleiben, plan.json
             # ist unverändert. Ergebnis verbunden_ohne_kalender.
+            fire_typing(typing_fn)
             _send(tg, chat_id, ABGEBROCHEN_NACH_TOKEN)
             return KalenderVerbindenResult(
                 ergebnis=ERGEBNIS_VERBUNDEN_OHNE_KALENDER,
@@ -811,6 +830,7 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
         if idx is not None:
             chosen_index = idx
             break
+        fire_typing(typing_fn)
         _send(tg, chat_id, KALENDER_AUSWAHL_REMINDER % len(calendars))
 
     chosen = calendars[chosen_index]
@@ -826,6 +846,7 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
             "kalender_verbinden: plan.json-Schreibvorgang fehlgeschlagen (%s) — "
             "Tokens gespeichert, Kalender-Auswahl ist getroffen, aber plan.json "
             "unverändert (KAV-X)", e)
+        fire_typing(typing_fn)
         _send(tg, chat_id, PLAN_JSON_WRITE_FAILED)
         return KalenderVerbindenResult(
             ergebnis=ERGEBNIS_VERBUNDEN_OHNE_KALENDER,
@@ -836,6 +857,7 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
     # post_execute_hook des Tasks (EC-21, #140, Refs #154). Schlägt der Hook
     # fehl, hängt das Framework eine Warnung an die Quittung (`Catalog.
     # execute_write_task`). Token-Wert wird nie gespiegelt (ZD-6).
+    fire_typing(typing_fn)
     if account_email:
         _send(tg, chat_id,
               BESTAETIGT_MIT_EMAIL % {"kalender": chosen_name, "email": account_email})

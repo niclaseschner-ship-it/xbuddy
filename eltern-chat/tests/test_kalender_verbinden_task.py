@@ -201,3 +201,70 @@ def test_KAV_157_private_trigger_omits_switch_receipt():
         time.sleep(0.01)
     assert tg.sent, "KAV haette mindestens eine Nachricht im Privatchat senden muessen"
     assert tg.sent[0]["chat_id"] == user_id
+
+
+# ============================================================
+#  T285-S1 — Smoke-Test: run_kav baut typing_fn-Lambda korrekt (EC-25)
+# ============================================================
+
+_KAV_PRIVATE_CHAT_ID = 7
+_KAV_FAMILY_GROUP_ID = "-100"
+
+
+def test_T285_S1_kav_typing_fn_fires_per_session_step():
+    """T285-S1 / AC1+AC2: run_kav() baut typing_fn-Lambda korrekt — sendet
+    send_chat_action an private_chat_id, NICHT an family_group_chat_id.
+
+    Smoke-Test für den Pfad execute() → run_kav() → kalender_verbinden():
+    Die Closure in kalender_verbinden_task.py bindet private_chat_id aus dem
+    TurnContext. Wir lassen die Session bis zur ersten send_message laufen
+    (Aufklärungstext nach NOT_AUTHORIZED-Prüfung) und prüfen, dass davor
+    fire_typing gefeuert hat.
+
+    AC1: mindestens ein send_chat_action(private_chat_id, 'typing').
+    AC2: kein send_chat_action an family_group_chat_id.
+    """
+    user_id = _KAV_PRIVATE_CHAT_ID
+    tg = FakeTelegram(members=_members(user_id))
+    sessions = {}
+    task = KalenderVerbindenTask(
+        tg, lambda: _FakeZd(),
+        sessions=sessions,
+        family_group_chat_id_getter=lambda: _KAV_FAMILY_GROUP_ID)
+
+    ctx_turn = TurnContext(
+        chat_id=_KAV_FAMILY_GROUP_ID,
+        from_user_id=user_id,
+        private_chat_id=user_id,
+    )
+    quittung = task.execute(arguments={}, turn_context=ctx_turn)
+    assert quittung
+
+    # Warten, bis die Session mindestens eine Nachricht gesendet hat
+    # (Aufklärungstext = erster send_message nach fire_typing).
+    deadline = time.monotonic() + 1.5
+    while time.monotonic() < deadline and not tg.sent:
+        time.sleep(0.01)
+    assert tg.sent, "KAV haette mindestens eine Nachricht gesendet haben muessen"
+
+    # AC1: mindestens ein Typing-Aufruf an den Privatchat.
+    typing_private = [
+        a for a in tg.chat_actions
+        if a["chat_id"] == user_id and a["action"] == "typing"
+    ]
+    assert typing_private, (
+        "Kein send_chat_action(chat_id=%s, action='typing') gefunden. "
+        "Alle aufgezeichneten Aufrufe: %r" % (user_id, tg.chat_actions))
+
+    # AC2: kein Typing-Aufruf an die Familien-Gruppe.
+    typing_group = [
+        a for a in tg.chat_actions
+        if a["chat_id"] == _KAV_FAMILY_GROUP_ID
+    ]
+    assert not typing_group, (
+        "send_chat_action wurde an family_group_chat_id=%s gesendet — "
+        "typing_fn-Lambda schließt falsche ID ein. Aufrufe: %r"
+        % (_KAV_FAMILY_GROUP_ID, tg.chat_actions))
+
+    # Cleanup: Session aus der Map entfernen, damit kein Worker-Thread haengt.
+    sessions.pop(user_id, None)
