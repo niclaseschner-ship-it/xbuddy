@@ -1003,6 +1003,39 @@ def test_PANEL_2_figuren_erkennung_still_works(client_with_panels):
     assert r.mimetype == 'text/html'
 
 
+def test_PANEL_2_index_config_js_uses_absolute_path(client_with_panels):
+    """Regressions-Guard #317: config.js-Referenz in index.html muss den
+    ABSOLUTEN Pfad /controller/_shared/config.js tragen, NICHT den kaputten
+    Relativpfad ../_shared/config.js.
+
+    Hintergrund: Das App-Panel wird unter /controller/app-panel/<panel_id>/
+    serviert (drei URL-Segmente tief unter /controller/). Der Relativpfad
+    ../_shared/ würde von dort zu /controller/app-panel/_shared/ auflösen —
+    404. Nur /controller/_shared/config.js ist tiefenrobust, egal wie tief
+    die panel_id-URL liegt."""
+    r = client_with_panels.get('/controller/app-panel/kueche/')
+    assert r.status_code == 200
+    html = r.data.decode('utf-8')
+    # Absoluter Pfad muss vorhanden sein.
+    assert '/controller/_shared/config.js' in html, (
+        'index.html muss config.js über den absoluten Pfad '
+        '/controller/_shared/config.js laden (Ticket #317)'
+    )
+    # Kaputten Relativpfad darf es nicht mehr geben.
+    assert '../_shared/config.js' not in html, (
+        'Kaputten Relativpfad ../_shared/config.js in index.html gefunden — '
+        'führt zu 404 und schwarzer Seite (Ticket #317)'
+    )
+    # Alle übrigen Script-/Link-Tags nutzen ./-Relativpfade (kein ../).
+    import re
+    cross_tree = re.findall(
+        r'(?:src|href)=["\'](\.\./[^"\']+)["\']', html)
+    non_config = [p for p in cross_tree if '_shared/config.js' not in p]
+    assert non_config == [], (
+        'Unerwartete ../  Relativpfade in index.html: %s' % non_config
+    )
+
+
 # ============================================================
 #  Admin-Reload (#140, EC-21) — POST /api/v1/router/admin/reload
 # ============================================================
