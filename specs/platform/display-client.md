@@ -139,10 +139,8 @@ Der Display-Client läuft im Vollbild und hält den Bildschirm wach,
 solange er sichtbar ist — analog dem Controller (FIG-24/FIG-26).
 
 Das Manifest deklariert `display: fullscreen` (PWA-2); Wake-Lock und
-Fullscreen-Gesture folgen dem Muster aus `conventions/controller-pwa.md`
-**PWA-3** (Wake-Lock auf `visibilitychange` zurückfordern, Fullscreen per
-`requestFullscreen` beim ersten Nutzer-Gesture, self-healing bei
-fehlender API).
+Fullscreen-Gesture folgen der Konvention `conventions/controller-pwa.md`
+**PWA-3**.
 
 Der Display-Client teilt das Manifest-`display: fullscreen`- und das
 Wake-Lock+Fullscreen-Gesture-Muster aus PWA-2/PWA-3, kennt aber kein
