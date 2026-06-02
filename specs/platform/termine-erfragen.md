@@ -112,7 +112,7 @@ Soll-Abdeckung (Mindest-Vokabular):
   blind das Folgejahr oder den Default anzunehmen — `eltern-chat.md` EC-22.
   Datumsbereiche („vom–bis", „am Wochenende") bleiben **Out-of-Scope V1**.
 - **Default** (keine erkennbare Zeitangabe oder Anfragetext „was steht
-  an", „welche Termine") → `start=heute`, `tage=7`.
+  an", „welche Termine") → `start=heute`, `tage=7` (eine ganze Woche, Wochenstart s. u.).
 
 Eine Anfrage mit einem **mehrdeutigen** Datums-Ausdruck (z. B. „nächsten
 Freitag", wenn unklar ist, ob diese oder nächste Woche) löst eine **gezielte
@@ -121,7 +121,7 @@ normiert das **Soll** (welche Ausdrücke erkannt sein müssen, welcher Default
 gilt); der konkrete Wortlaut der Rückfragen lebt im Code als hart-codierter
 String.
 
-Wochenstart-Anker für „diese/nächste Woche" ist **Montag**, analog
+Wochenstart-Anker für „diese/nächste Woche" und Default ist **Montag**, analog
 `plan.md` PLAN-28 (`wochenstart: 0`).
 
 *Tickets:* #143, #309
