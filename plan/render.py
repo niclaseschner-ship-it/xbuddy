@@ -33,14 +33,23 @@ GENERIC_ACT_FALLBACK = "termin"
 # Gemeinsame Aktivitäts-Keywords kommen aus dem Katalog (`aktivitaeten.py`),
 # damit PLAN-12 und PLAN-13 nicht divergieren — ein Keyword wie "klavier"
 # führt in beiden Pfaden konsistent zum richtigen Symbol (#308).
-# Nur View-spezifische Einträge ohne Aktivitäts-Art (Zahnarzt, Ferien,
-# Urlaub, Treffen, Garten) bleiben hier hartcodiert.
+# Nur View-spezifische Einträge bleiben hier hartcodiert:
+#   - Aktivitäten ohne Aktivitäts-Art (Zahnarzt, Ferien, Urlaub, Treffen, Garten).
+#   - Präfix-Varianten für Aktivitäten, deren Katalog-Keyword im Termin-Titel
+#     oft als Teil eines längeren Worts auftritt: "Kletterhalle" (klett),
+#     "Kreativ-Workshop" (kreat). Die Aktivitäts-Erkennung (PLAN-12) bleibt
+#     katalog-basiert — nur die Termin-Icon-Heuristik (PLAN-13) bekommt hier
+#     die breiteren Präfixe als zweiten Treffer-Anker (#308-fix).
 _TERMIN_ICON_EXTRAS = [
     ("zahn",   "tooth"),
     ("ferien", "holiday"),
     ("urlaub", "holiday"),
     ("treff",  "sparkle"),
     ("garten", "flower"),
+    # Präfix-Varianten — greifen für zusammengesetzte Wörter wie "Kletterhalle"
+    # und "Kreativ-Workshop", die den vollen Katalog-Keyword nicht tragen.
+    ("klett",  "climb"),
+    ("kreat",  "brush"),
 ]
 TERMIN_ICON_KEYWORDS = aktivitaeten_mod.termin_icon_keywords_aus_katalog() + _TERMIN_ICON_EXTRAS
 
