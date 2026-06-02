@@ -33,10 +33,25 @@ Drei Schichten, Abhängigkeiten fließen nur abwärts:
 import-linter erfasst ausschließlich **Python-Importe**. Die
 Service↔Service-Kommunikation über HTTP (DCOMP-1) ist kein Import und
 damit hier nicht maschinell prüfbar — diese Kante bleibt eine
-Konvention. `wetter/` ist ausgeschlossen, weil die Quellen nicht im Repo
-liegen. Test-Verzeichnisse werden von grimp mit-gescannt; sie halten
-heute dieselben Grenzen ein und müssen das auch, denn ein Test, der die
-Architektur verletzt, ist selbst ein Befund.
+Konvention.
+
+**Scan-Reichweite und Ausnahmen:**
+
+- `wetter/` existiert noch nicht im Repo (PR #137, Wetter-Integration,
+  offen) — es gibt nichts zu scannen; der Linter erfasst es daher nicht.
+  Sobald #137 landet, wird `wetter` in `root_packages` aufgenommen.
+
+- **Paket-interne Tests** (z. B. `familie/tests/`, `tools/tests/`) liegen
+  innerhalb der `root_packages` und werden von grimp mit-gescannt. Sie
+  halten dieselben Grenzen ein und müssen das auch — ein Test, der die
+  Architektur verletzt, ist selbst ein Befund.
+
+- **Top-Level-`tests/`** (z. B. `tests/tools/test_zugangsdaten.py`) liegt
+  *außerhalb* der `root_packages` und wird von grimp **nicht erfasst**.
+  Dort lebt bewusst Whitebox-Introspektionstest ZD-9, der
+  `tools.zugangsdaten.store` und `tools.zugangsdaten.config` direkt
+  importiert — das ist kein Produktiv-Pfad und daher legitim ausgenommen.
+  Diese Ausnahme ist explizit, nicht versehentlich.
 
 ## Die Contracts als Bauregeln
 
