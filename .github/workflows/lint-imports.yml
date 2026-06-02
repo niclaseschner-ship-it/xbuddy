@@ -1,0 +1,31 @@
+name: lint-imports
+
+# Architektur-Gate: prüft die Modul-Grenzen (conventions/module-boundaries.md,
+# MOD-*) mit import-linter gegen .importlinter. Läuft bei jedem PR und auf
+# main. Bricht der Lauf ab, ist eine Modul-Grenze verletzt (Zyklus,
+# Service↔Service-Python-Import, Zugriff an der zugangsdaten-Public-API vorbei).
+# Lokal identisch via `make lint`.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-imports:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: import-linter installieren
+        run: pip install "import-linter==2.11.*"
+
+      - name: Modul-Grenzen prüfen
+        run: lint-imports
