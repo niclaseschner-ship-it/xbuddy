@@ -72,9 +72,18 @@
   function validateTile(tile) {
     // PANEL-3 Pflichtfelder + PANEL-7 flacher Descriptor.
     if (!tile || typeof tile !== 'object') return 'tile ist kein Objekt';
-    for (var k of ['key', 'app', 'view', 'label', 'icon']) {
+    for (var k of ['key', 'app', 'view', 'label']) {
       if (typeof tile[k] !== 'string' || tile[k].length === 0) {
         return 'Pflichtfeld "' + k + '" fehlt oder ist kein String';
+      }
+    }
+    // PANEL-3: icons muss ein nicht-leeres Array von Strings sein (≥1, max 3).
+    if (!Array.isArray(tile.icons) || tile.icons.length === 0) {
+      return 'Pflichtfeld "icons" fehlt oder ist kein Array (≥1 Eintrag erwartet)';
+    }
+    for (var i = 0; i < tile.icons.length; i++) {
+      if (typeof tile.icons[i] !== 'string' || tile.icons[i].length === 0) {
+        return '"icons[' + i + ']" ist kein nicht-leerer String';
       }
     }
     if (typeof tile.sichtbar !== 'boolean') {
@@ -197,6 +206,21 @@
       opts.setTimeoutImpl(fire, delay);
     }
     fire();
+  }
+
+  // ============================================================
+  //  PANEL-3 (#136) — Icon-Basis-URL-Auflösung
+  // ============================================================
+  //
+  // Baut die Icon-Basis für die zentrale ARASAAC-Bibliothek (ICONS-5, ROU-26).
+  // Leerer router_url → same-origin (kein Prefix). Muster analog sendEvent
+  // (router_url-Base-Auflösung aus dem Bootstrap, Z.514-518).
+
+  function resolveIconBase(routerUrl) {
+    var base = (typeof routerUrl === 'string' && routerUrl)
+      ? routerUrl.replace(/\/+$/, '')
+      : '';
+    return base + '/display/_shared/icons/';
   }
 
   // ============================================================
@@ -323,6 +347,7 @@
     makeTileSelected: makeTileSelected,
     makePanelCleared: makePanelCleared,
     validateTile: validateTile,
+    resolveIconBase: resolveIconBase,
     parseDisplayUrl: parseDisplayUrl,
     tileMatchesUrl: tileMatchesUrl,
     findActiveTile: findActiveTile,
@@ -421,55 +446,71 @@
   //  Rendering (PANEL-3, PANEL-4, PANEL-6 Aus-Kachel)
   // ============================================================
 
-  function renderGrid(tiles, onTap, onClear) {
+  function renderGrid(tiles, cfg, onTap, onClear) {
     var grid = document.getElementById('grid');
     if (!grid) return;
     grid.innerHTML = '';
     var visible = panelLib.visibleTiles(tiles);
     for (var i = 0; i < visible.length; i++) {
       var t = visible[i];
-      grid.appendChild(makeTileElement(t, function (tile) { onTap(tile); }));
+      grid.appendChild(makeTileElement(t, function (tile) { onTap(tile); }, cfg));
     }
     // PANEL-6: eingebaute Aus-Kachel, immer letzte Position, nicht aus
     // tiles.json, nicht durch `sichtbar` beeinflussbar.
-    grid.appendChild(makeAusKachel(onClear));
+    grid.appendChild(makeAusKachel(onClear, cfg));
   }
 
-  function makeTileElement(tile, onTap) {
+  // PANEL-3 (#136): Icon-Basis delegiert an panelLib.resolveIconBase
+  // (reine Logik — testbar ohne DOM).
+  function iconBase(cfg) {
+    return panelLib.resolveIconBase(cfg && cfg.router_url);
+  }
+
+  function makeTileElement(tile, onTap, cfg) {
     var el = document.createElement('button');
     el.type = 'button';
     el.className = 'tile';
     el.dataset.tileKey = tile.key;
     el.dataset.tileApp = tile.app;
     el.dataset.tileView = tile.view;
-    var icon = document.createElement('img');
-    icon.src = tile.icon;
-    icon.alt = '';
-    icon.className = 'tile-icon';
+    // PANEL-3 (#136): icons[] — mehrere <img> nebeneinander im Icon-Slot.
+    var iconSlot = document.createElement('span');
+    iconSlot.className = 'tile-icons';
+    var base = iconBase(cfg);
+    for (var i = 0; i < tile.icons.length; i++) {
+      var img = document.createElement('img');
+      img.src = base + tile.icons[i];
+      img.alt = '';
+      img.className = 'tile-icon-img';
+      iconSlot.appendChild(img);
+    }
     var label = document.createElement('span');
     label.className = 'tile-label';
     label.textContent = tile.label;
-    el.appendChild(icon);
+    el.appendChild(iconSlot);
     el.appendChild(label);
     el.addEventListener('click', function () { onTap(tile); });
     return el;
   }
 
-  function makeAusKachel(onClear) {
+  function makeAusKachel(onClear, cfg) {
+    // PANEL-6 (#136): Aus-Kachel mit ARASAAC-Icon 8252 (= „aus") aus der
+    // zentralen Bibliothek (ICONS-5, ROU-26, arasaac/8252.png).
     var el = document.createElement('button');
     el.type = 'button';
     el.className = 'tile tile-aus';
     el.dataset.tileKey = '__aus__';
-    var icon = document.createElement('span');
-    icon.className = 'tile-icon';
-    icon.innerHTML = '<svg viewBox="0 0 64 64" aria-hidden="true">'
-      + '<circle cx="32" cy="32" r="22" fill="none" stroke="#888" stroke-width="4"/>'
-      + '<line x1="32" y1="14" x2="32" y2="32" stroke="#888" stroke-width="4" stroke-linecap="round"/>'
-      + '</svg>';
+    var iconSlot = document.createElement('span');
+    iconSlot.className = 'tile-icons';
+    var img = document.createElement('img');
+    img.src = iconBase(cfg) + 'arasaac/8252.png';
+    img.alt = '';
+    img.className = 'tile-icon-img';
+    iconSlot.appendChild(img);
     var label = document.createElement('span');
     label.className = 'tile-label';
     label.textContent = 'Aus';
-    el.appendChild(icon);
+    el.appendChild(iconSlot);
     el.appendChild(label);
     el.addEventListener('click', function () { onClear(); });
     return el;
@@ -550,7 +591,7 @@
   (async function boot() {
     var cfg = await loadConfig();
     var tiles = await loadTiles();
-    renderGrid(tiles,
+    renderGrid(tiles, cfg,
       function onTap(tile) {
         sendEvent(cfg, panelLib.makeTileSelected(cfg.source_id, tile));
       },
