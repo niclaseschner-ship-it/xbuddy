@@ -250,6 +250,69 @@
   }
 
   // ============================================================
+  //  PANEL-3/6 (#136) — Render-Funktionen (Library-Schicht)
+  // ============================================================
+  //
+  // Parametrisiert: document + cfg/iconBaseStr als Argumente, keine globalen
+  // Abhängigkeiten. Damit über Node via panelLib.makeTileElement(doc, …) testbar —
+  // analoges Muster zu resolveIconBase (bereits in Library-Schicht).
+
+  function makeTileElement(doc, tile, onTap, iconBaseStr) {
+    var el = doc.createElement('button');
+    el.type = 'button';
+    el.className = 'tile';
+    el.dataset.tileKey = tile.key;
+    el.dataset.tileApp = tile.app;
+    el.dataset.tileView = tile.view;
+    // PANEL-3 (#136): icons[] — mehrere <img> nebeneinander im Icon-Slot.
+    var iconSlot = doc.createElement('span');
+    iconSlot.className = 'tile-icons';
+    for (var i = 0; i < tile.icons.length; i++) {
+      var img = doc.createElement('img');
+      img.src = iconBaseStr + tile.icons[i];
+      img.alt = '';
+      img.className = 'tile-icon-img';
+      // PANEL-6 (#136): Icon lädt nicht → Slot leeren; kein Broken-Image-Placeholder,
+      // Kachel bleibt funktionsfähig (Label + Tap).
+      img.onerror = function () { this.parentNode && this.parentNode.removeChild(this); };
+      iconSlot.appendChild(img);
+    }
+    var label = doc.createElement('span');
+    label.className = 'tile-label';
+    label.textContent = tile.label;
+    el.appendChild(iconSlot);
+    el.appendChild(label);
+    el.addEventListener('click', function () { onTap(tile); });
+    return el;
+  }
+
+  function makeAusKachel(doc, onClear, iconBaseStr) {
+    // PANEL-6 (#136): Aus-Kachel mit ARASAAC-Icon AUS_ICON_PATH (= „aus") aus der
+    // zentralen Bibliothek (ICONS-5, ROU-26). Konstante AUS_ICON_PATH —
+    // der eine Änder-Ort für das Aus-Symbol.
+    var el = doc.createElement('button');
+    el.type = 'button';
+    el.className = 'tile tile-aus';
+    el.dataset.tileKey = '__aus__';
+    var iconSlot = doc.createElement('span');
+    iconSlot.className = 'tile-icons';
+    var img = doc.createElement('img');
+    img.src = iconBaseStr + AUS_ICON_PATH;
+    img.alt = '';
+    img.className = 'tile-icon-img';
+    // PANEL-6 (#136): Icon lädt nicht → Slot leeren; Kachel bleibt funktionsfähig.
+    img.onerror = function () { this.parentNode && this.parentNode.removeChild(this); };
+    iconSlot.appendChild(img);
+    var label = doc.createElement('span');
+    label.className = 'tile-label';
+    label.textContent = 'Aus';
+    el.appendChild(iconSlot);
+    el.appendChild(label);
+    el.addEventListener('click', function () { onClear(); });
+    return el;
+  }
+
+  // ============================================================
   //  PANEL-11 — Stream-Handler-Fabrik (testbare Logik)
   // ============================================================
   //
@@ -358,6 +421,8 @@
     validateTile: validateTile,
     resolveIconBase: resolveIconBase,
     AUS_ICON_PATH: AUS_ICON_PATH,
+    makeTileElement: makeTileElement,
+    makeAusKachel: makeAusKachel,
     parseDisplayUrl: parseDisplayUrl,
     tileMatchesUrl: tileMatchesUrl,
     findActiveTile: findActiveTile,
@@ -455,81 +520,23 @@
   // ============================================================
   //  Rendering (PANEL-3, PANEL-4, PANEL-6 Aus-Kachel)
   // ============================================================
+  //
+  // Bootstrap delegiert vollständig an die Library-Funktionen (DRY).
+  // Keine zweite Implementierung hier — nur DOM-Verdrahtung.
 
   function renderGrid(tiles, cfg, onTap, onClear) {
     var grid = document.getElementById('grid');
     if (!grid) return;
     grid.innerHTML = '';
     var visible = panelLib.visibleTiles(tiles);
+    var base = panelLib.resolveIconBase(cfg && cfg.router_url);
     for (var i = 0; i < visible.length; i++) {
       var t = visible[i];
-      grid.appendChild(makeTileElement(t, function (tile) { onTap(tile); }, cfg));
+      grid.appendChild(panelLib.makeTileElement(document, t, function (tile) { onTap(tile); }, base));
     }
     // PANEL-6: eingebaute Aus-Kachel, immer letzte Position, nicht aus
     // tiles.json, nicht durch `sichtbar` beeinflussbar.
-    grid.appendChild(makeAusKachel(onClear, cfg));
-  }
-
-  // PANEL-3 (#136): Icon-Basis delegiert an panelLib.resolveIconBase
-  // (reine Logik — testbar ohne DOM).
-  function iconBase(cfg) {
-    return panelLib.resolveIconBase(cfg && cfg.router_url);
-  }
-
-  function makeTileElement(tile, onTap, cfg) {
-    var el = document.createElement('button');
-    el.type = 'button';
-    el.className = 'tile';
-    el.dataset.tileKey = tile.key;
-    el.dataset.tileApp = tile.app;
-    el.dataset.tileView = tile.view;
-    // PANEL-3 (#136): icons[] — mehrere <img> nebeneinander im Icon-Slot.
-    var iconSlot = document.createElement('span');
-    iconSlot.className = 'tile-icons';
-    var base = iconBase(cfg);
-    for (var i = 0; i < tile.icons.length; i++) {
-      var img = document.createElement('img');
-      img.src = base + tile.icons[i];
-      img.alt = '';
-      img.className = 'tile-icon-img';
-      // PANEL-6 (#136): Icon lädt nicht → Slot leeren; kein Broken-Image-Placeholder,
-      // Kachel bleibt funktionsfähig (Label + Tap).
-      img.onerror = function () { this.parentNode && this.parentNode.removeChild(this); };
-      iconSlot.appendChild(img);
-    }
-    var label = document.createElement('span');
-    label.className = 'tile-label';
-    label.textContent = tile.label;
-    el.appendChild(iconSlot);
-    el.appendChild(label);
-    el.addEventListener('click', function () { onTap(tile); });
-    return el;
-  }
-
-  function makeAusKachel(onClear, cfg) {
-    // PANEL-6 (#136): Aus-Kachel mit ARASAAC-Icon AUS_ICON_PATH (= „aus") aus der
-    // zentralen Bibliothek (ICONS-5, ROU-26). Konstante in panelLib.AUS_ICON_PATH
-    // (UMD-Export) — der eine Änder-Ort für das Aus-Symbol.
-    var el = document.createElement('button');
-    el.type = 'button';
-    el.className = 'tile tile-aus';
-    el.dataset.tileKey = '__aus__';
-    var iconSlot = document.createElement('span');
-    iconSlot.className = 'tile-icons';
-    var img = document.createElement('img');
-    img.src = iconBase(cfg) + AUS_ICON_PATH;
-    img.alt = '';
-    img.className = 'tile-icon-img';
-    // PANEL-6 (#136): Icon lädt nicht → Slot leeren; Kachel bleibt funktionsfähig.
-    img.onerror = function () { this.parentNode && this.parentNode.removeChild(this); };
-    iconSlot.appendChild(img);
-    var label = document.createElement('span');
-    label.className = 'tile-label';
-    label.textContent = 'Aus';
-    el.appendChild(iconSlot);
-    el.appendChild(label);
-    el.addEventListener('click', function () { onClear(); });
-    return el;
+    grid.appendChild(panelLib.makeAusKachel(document, onClear, base));
   }
 
   // ============================================================

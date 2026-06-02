@@ -424,9 +424,9 @@ def test_PANEL_6_aus_kachel_is_not_from_tiles_json():
     keys = [t.get('key') for t in data.get('tiles', [])]
     assert '__aus__' not in keys, 'Aus-Kachel darf kein tiles.json-Eintrag sein'
     js = read(APPJS_PATH)
-    # makeAusKachel wird unkonditional aufgerufen — kein Branch über sichtbar.
-    # Signatur: makeAusKachel(onClear, cfg) — cfg ist das zweite Argument (#136).
-    assert re.search(r"makeAusKachel\(onClear\b", js), \
+    # panelLib.makeAusKachel wird unkonditional aufgerufen — kein Branch über sichtbar.
+    # Signatur: panelLib.makeAusKachel(document, onClear, base) (#136 Refactor).
+    assert re.search(r"panelLib\.makeAusKachel\(", js), \
         'Aus-Kachel muss unkonditional gerendert werden'
 
 
@@ -977,31 +977,17 @@ function makeDom() {
 
 
 def run_node_dom(snippet):
-    """Wie run_node, aber mit DOM-Attrappe und document injiziert.
-    Der Code im Bootstrap-Block von app.js wird wegen `typeof document === 'undefined'`
-    NICHT ausgeführt. Wir rufen makeTileElement/makeAusKachel DIREKT aus dem
-    Bootstrap-Source-Code heraus auf, indem wir ihn als isolierte Funktion
-    einhüllen und document als Parameter hereingeben."""
+    """Lädt panelLib aus der echten app.js, baut eine DOM-Attrappe (makeDom)
+    und führt das Snippet mit Zugriff auf `panelLib` und `makeDom` aus.
+    Der Bootstrap-Block von app.js wird wegen `typeof document === 'undefined'`
+    NICHT ausgeführt — wir rufen panelLib.makeTileElement / panelLib.makeAusKachel
+    direkt auf und übergeben den DOM-Stub als erstes Argument (echte exportierte
+    Library-Funktion, kein Kopie-Muster)."""
     src = textwrap.dedent('''
         const panelLib = require(%r);
         %s
-        // Bootstrap-Sektion von app.js als Funktion mit document-Injektion
-        const appJsSrc = require('fs').readFileSync(%r, 'utf8');
-        // Wir extrahieren den Bootstrap-Block (nach dem UMD-Abschluss)
-        // und werten ihn mit document = fakeDoc aus.
-        const doc = makeDom();
-        // makeTileElement und makeAusKachel aus dem Quelltext herausziehen und
-        // mit echtem document und panelLib ausführen.
-        (function(document, panelLib) {
-          'use strict';
-          // Lokale Helper, die der Bootstrap-Block braucht:
-          function iconBase(cfg) {
-            return panelLib.resolveIconBase(cfg && cfg.router_url);
-          }
-          var AUS_ICON_PATH = panelLib.AUS_ICON_PATH;
-          %s
-        })(doc, panelLib);
-    ''' % (APPJS_PATH, _DOM_STUB, APPJS_PATH, snippet))
+        %s
+    ''' % (APPJS_PATH, _DOM_STUB, snippet))
     res = subprocess.run(
         ['node', '-e', src],
         capture_output=True, text=True, timeout=10)
@@ -1016,37 +1002,16 @@ def run_node_dom(snippet):
 
 
 def test_PANEL_3_makeTileElement_icon_src_single(tmp_path):
-    """PANEL-3 / PANEL-9 Render-Pfad: makeTileElement baut img.src korrekt
-    für eine Kachel mit einem Icon (same-origin). Prüft die echte
-    img.src-Verkettung, nicht nur den Helfer resolveIconBase."""
+    """PANEL-3 / PANEL-9 Render-Pfad: panelLib.makeTileElement (echte exportierte
+    Library-Funktion) baut img.src korrekt für eine Kachel mit einem Icon (same-origin).
+    DOM-Stub wird als erstes Argument übergeben — kein Kopie-Muster."""
     out = run_node_dom(r"""
-        function makeTileElement(tile, onTap, cfg) {
-          var el = document.createElement('button');
-          el.type = 'button';
-          el.className = 'tile';
-          el.dataset = { tileKey: tile.key, tileApp: tile.app, tileView: tile.view };
-          var iconSlot = document.createElement('span');
-          iconSlot.className = 'tile-icons';
-          var base = iconBase(cfg);
-          for (var i = 0; i < tile.icons.length; i++) {
-            var img = document.createElement('img');
-            img.src = base + tile.icons[i];
-            img.alt = '';
-            img.onerror = function () { this.parentNode && this.parentNode.removeChild(this); };
-            iconSlot.appendChild(img);
-          }
-          var label = document.createElement('span');
-          label.textContent = tile.label;
-          el.appendChild(iconSlot);
-          el.appendChild(label);
-          el.addEventListener('click', function () { onTap(tile); });
-          return el;
-        }
+        var doc = makeDom();
         var tile = { key: 'plan', app: 'plan', view: 'woche', label: 'Wochenplan',
                      icons: ['arasaac/32488.png'], sichtbar: true };
-        var cfg = { router_url: '' };
-        var el = makeTileElement(tile, function(){}, cfg);
-        // iconSlot ist erstes Kind, erstes Kind darin ist das img
+        var iconBaseStr = panelLib.resolveIconBase('');
+        var el = panelLib.makeTileElement(doc, tile, function(){}, iconBaseStr);
+        // iconSlot ist erstes Kind, die img-Kinder darin tragen die srcs
         var iconSlot = el._children[0];
         var srcs = iconSlot._children.map(function(c){ return c.src; });
         console.log(JSON.stringify({ srcs: srcs }));
@@ -1057,29 +1022,15 @@ def test_PANEL_3_makeTileElement_icon_src_single(tmp_path):
 
 
 def test_PANEL_3_makeTileElement_icon_src_kinder_marker(tmp_path):
-    """PANEL-3 / PANEL-9 Render-Pfad: makeTileElement baut zwei img-Elemente
-    für das Kinder-Marker-Pattern (icons: ['arasaac/32488.png','arasaac/2484.png']).
-    Prüft, dass beide img.src korrekt zusammengebaut werden."""
+    """PANEL-3 / PANEL-9 Render-Pfad: panelLib.makeTileElement (echte exportierte
+    Library-Funktion) baut zwei img-Elemente für das Kinder-Marker-Pattern
+    (icons: ['arasaac/32488.png','arasaac/2484.png'])."""
     out = run_node_dom(r"""
-        function makeTileElement(tile, onTap, cfg) {
-          var el = document.createElement('button');
-          el.dataset = {};
-          var iconSlot = document.createElement('span');
-          var base = iconBase(cfg);
-          for (var i = 0; i < tile.icons.length; i++) {
-            var img = document.createElement('img');
-            img.src = base + tile.icons[i];
-            img.onerror = function () { this.parentNode && this.parentNode.removeChild(this); };
-            iconSlot.appendChild(img);
-          }
-          el.appendChild(iconSlot);
-          el.appendChild(document.createElement('span'));
-          return el;
-        }
+        var doc = makeDom();
         var tile = { key: 'klein', app: 'plan', view: 'woche', label: 'Kids',
                      icons: ['arasaac/32488.png', 'arasaac/2484.png'], sichtbar: true };
-        var cfg = { router_url: '' };
-        var el = makeTileElement(tile, function(){}, cfg);
+        var iconBaseStr = panelLib.resolveIconBase('');
+        var el = panelLib.makeTileElement(doc, tile, function(){}, iconBaseStr);
         var iconSlot = el._children[0];
         var srcs = iconSlot._children.map(function(c){ return c.src; });
         console.log(JSON.stringify({ srcs: srcs, count: srcs.length }));
@@ -1093,29 +1044,15 @@ def test_PANEL_3_makeTileElement_icon_src_kinder_marker(tmp_path):
 
 
 def test_PANEL_6_makeAusKachel_icon_src(tmp_path):
-    """PANEL-6 / PANEL-9 Render-Pfad: makeAusKachel baut img.src mit AUS_ICON_PATH
-    (arasaac/8252.png) korrekt. Prüft die echte Verkettung über die Konstante."""
+    """PANEL-6 / PANEL-9 Render-Pfad: panelLib.makeAusKachel (echte exportierte
+    Library-Funktion) baut img.src mit AUS_ICON_PATH (arasaac/8252.png) korrekt."""
     out = run_node_dom(r"""
-        function makeAusKachel(onClear, cfg) {
-          var el = document.createElement('button');
-          el.dataset = { tileKey: '__aus__' };
-          var iconSlot = document.createElement('span');
-          var img = document.createElement('img');
-          img.src = iconBase(cfg) + AUS_ICON_PATH;
-          img.onerror = function () { this.parentNode && this.parentNode.removeChild(this); };
-          iconSlot.appendChild(img);
-          var label = document.createElement('span');
-          label.textContent = 'Aus';
-          el.appendChild(iconSlot);
-          el.appendChild(label);
-          el.addEventListener('click', function () { onClear(); });
-          return el;
-        }
-        var cfg = { router_url: '' };
-        var el = makeAusKachel(function(){}, cfg);
+        var doc = makeDom();
+        var iconBaseStr = panelLib.resolveIconBase('');
+        var el = panelLib.makeAusKachel(doc, function(){}, iconBaseStr);
         var iconSlot = el._children[0];
         var srcs = iconSlot._children.map(function(c){ return c.src; });
-        console.log(JSON.stringify({ srcs: srcs, ausIconPath: AUS_ICON_PATH }));
+        console.log(JSON.stringify({ srcs: srcs, ausIconPath: panelLib.AUS_ICON_PATH }));
     """)
     assert len(out['srcs']) == 1
     assert out['srcs'][0].endswith('/display/_shared/icons/arasaac/8252.png'), \
@@ -1125,31 +1062,15 @@ def test_PANEL_6_makeAusKachel_icon_src(tmp_path):
 
 
 def test_PANEL_6_onerror_removes_broken_img(tmp_path):
-    """PANEL-6 / PANEL-9 Fallback: onerror-Handler auf img entfernt das Bild
-    aus dem Icon-Slot, sodass kein Broken-Image-Placeholder erscheint.
+    """PANEL-6 / PANEL-9 Fallback: onerror-Handler auf img (aus der echten
+    panelLib.makeTileElement-Funktion) entfernt das Bild aus dem Icon-Slot.
     Simuliert einen Ladefehler durch direktes Aufrufen von img.onerror()."""
     out = run_node_dom(r"""
-        function makeTileElement(tile, onTap, cfg) {
-          var el = document.createElement('button');
-          el.dataset = {};
-          var iconSlot = document.createElement('span');
-          var base = iconBase(cfg);
-          for (var i = 0; i < tile.icons.length; i++) {
-            var img = document.createElement('img');
-            img.src = base + tile.icons[i];
-            img.onerror = function () { this.parentNode && this.parentNode.removeChild(this); };
-            iconSlot.appendChild(img);
-          }
-          var label = document.createElement('span');
-          label.textContent = tile.label;
-          el.appendChild(iconSlot);
-          el.appendChild(label);
-          return el;
-        }
+        var doc = makeDom();
         var tile = { key: 'plan', app: 'plan', view: 'woche', label: 'Wochenplan',
                      icons: ['arasaac/32488.png'], sichtbar: true };
-        var cfg = { router_url: '' };
-        var el = makeTileElement(tile, function(){}, cfg);
+        var iconBaseStr = panelLib.resolveIconBase('');
+        var el = panelLib.makeTileElement(doc, tile, function(){}, iconBaseStr);
         var iconSlot = el._children[0];
         // Vor dem Fehler: 1 img im Slot
         var countBefore = iconSlot._children.length;
@@ -1172,25 +1093,12 @@ def test_PANEL_6_onerror_removes_broken_img(tmp_path):
 
 
 def test_PANEL_6_onerror_aus_kachel_removes_broken_img(tmp_path):
-    """PANEL-6 / PANEL-9 Fallback Aus-Kachel: onerror entfernt Bild auch bei
-    der eingebauten Aus-Kachel; Kachel und Label bleiben funktionsfähig."""
+    """PANEL-6 / PANEL-9 Fallback Aus-Kachel: onerror (aus der echten
+    panelLib.makeAusKachel-Funktion) entfernt Bild; Kachel und Label bleiben."""
     out = run_node_dom(r"""
-        function makeAusKachel(onClear, cfg) {
-          var el = document.createElement('button');
-          el.dataset = {};
-          var iconSlot = document.createElement('span');
-          var img = document.createElement('img');
-          img.src = iconBase(cfg) + AUS_ICON_PATH;
-          img.onerror = function () { this.parentNode && this.parentNode.removeChild(this); };
-          iconSlot.appendChild(img);
-          var label = document.createElement('span');
-          label.textContent = 'Aus';
-          el.appendChild(iconSlot);
-          el.appendChild(label);
-          return el;
-        }
-        var cfg = { router_url: '' };
-        var el = makeAusKachel(function(){}, cfg);
+        var doc = makeDom();
+        var iconBaseStr = panelLib.resolveIconBase('');
+        var el = panelLib.makeAusKachel(doc, function(){}, iconBaseStr);
         var iconSlot = el._children[0];
         var countBefore = iconSlot._children.length;
         iconSlot._children[0].onerror.call(iconSlot._children[0]);
