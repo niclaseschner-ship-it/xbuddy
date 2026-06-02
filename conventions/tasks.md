@@ -1,0 +1,137 @@
+# Katalog-Aufgaben — Konvention     (ID-Präfix: TASK)
+
+Der Eltern-Chat-Agent verfügt über einen **Katalog** abgrenzbarer Aufgaben,
+die er auf Wunsch der Familie ausführt (EC-8). Es gibt bereits mehrere
+Exemplare derselben Sorte — lesende (CAV, TER) und schreibende (FAA, GAA, KAV,
+TES). Diese Konvention legt fest, wie ein **neues** Katalog-Aufgaben-Exemplar
+gebaut, registriert und verkabelt wird, damit ein Beitragender ein weiteres
+liefern kann, indem er die hier **benannten** Andock-Punkte bedient — statt sie
+aus sechs Beispielen zusammenzureimen. Sie verspricht **nicht**, dass kein
+gemeinsamer Code angefasst wird: die Aktivierung ist heute zentral
+(`build_catalog`, TASK-7), und eine async-Privatchat-Aufgabe braucht zusätzlich
+einen namentlichen Block in der Agenten-Mitte (`handle_update`, siehe der
+dokumentierte Schmerz am Ende). Die Konvention macht diese Punkte sichtbar; sie
+beseitigt sie nicht.
+
+Verhalten der einzelnen Aufgaben gehört **nicht** hierher, sondern in die
+jeweilige Komponenten-Spec. Heimat der Katalog-Mechanik:
+`specs/platform/eltern-chat.md` EC-8 (Katalog), EC-9 (lesend), EC-10
+(schreibend mit Bestätigungs-Gate), EC-21 (Post-Execute-Hooks). Die
+Privatchat-Form schreibender, mehrstufiger Aufgaben regelt
+`conventions/privatchat-session.md` (SESS); die Verortung familienseitiger
+App-Beiträge regelt `conventions/apps.md` APP-4.
+
+### TASK-1 — Eine Aufgabe = ein `_task`-Modul, dünner Trigger
+Jede Katalog-Aufgabe wohnt in einem eigenen Modul `skills/<aufgabe>_task.py`,
+benannt nach der **Aufgabe** (z. B. `ca_task.py`, `termine_erfragen_task.py`,
+`geraet_anlegen_task.py`, `termin_eintragen_task.py`,
+`kalender_verbinden_task.py`, `familie_anlegen_task.py`). Das Modul enthält
+die `ReadTask`/`WriteTask`-Unterklasse und ist ein **dünner Trigger** der
+eigentlichen, trigger-agnostischen Funktion — nicht deren Heimat.
+
+Die trigger-agnostische Funktion darf **anders heißen** als das Modul und in
+einem **eigenen** Modul wohnen: `ca_task.py` ruft `verteile_ca` aus
+`skills/ca_verteilung.py` (`ca_task.py:83`), die Aufgaben-Klasse heißt
+`CaVerteilungTask` (`ca_task.py:28`). So bleibt dieselbe Fähigkeit von einem
+anderen Trigger (Onboarding, Display) aufrufbar, ohne den Telegram-Pfad
+mitzuschleppen.
+
+### TASK-2 — `arguments` ist der Modell-Kanal, `turn_context` der Fakten-Kanal
+Eine Aufgabe trennt zwei Eingabe-Quellen strikt: `arguments` ist das, was das
+**Modell** vorschlägt (vom Nutzer-Text abgeleitet, manipulierbar);
+`turn_context` (`TurnContext`) trägt die **deterministischen** Fakten der
+Laufzeit (Chat-ID, ausführende Person, Berechtigungs-Ergebnis), die das Modell
+**nicht** beeinflusst.
+
+Sicherheits- und Routing-relevante Werte — vor allem der **Ziel-Chat** —
+werden **immer** aus `turn_context` gelesen, **nie** aus `arguments`. Eine
+Aufgabe, die den Zielchat aus dem Modell-Kanal nähme, ließe sich per
+Prompt-Injection umleiten (vgl. `ca_task.py:33`).
+
+### TASK-3 — Lesende Aufgabe: `ReadTask` mit `run`
+Eine lesende Aufgabe (EC-9) erbt von `ReadTask` und implementiert
+`run(self, arguments, turn_context) -> str`. Sie liefert nur Information und
+ändert **keine** Familien-Daten — kein Bestätigungs-Gate, kein Hook
+(`tasks.py:120-131`).
+
+### TASK-4 — Schreibende Aufgabe: `WriteTask` mit `propose` + `execute`
+Eine schreibende Aufgabe (EC-10) erbt von `WriteTask` und implementiert beide
+Hälften des Bestätigungs-Gates: `propose(self, arguments, turn_context)` legt
+einen `Proposal` vor und führt **nichts** aus; `execute(self, arguments,
+turn_context)` führt erst **nach** Bestätigung aus (`tasks.py:163-169`).
+
+Vom Typsystem erzwungen ist nur die **Basisklasse**: `Catalog.register` wirft
+`TypeError`, wenn eine Aufgabe weder `ReadTask` noch `WriteTask` ist
+(`tasks.py:185-186`). Die **Methoden** selbst sind nicht abstrakt, sondern
+werfen `NotImplementedError` (`tasks.py:125-131`, `tasks.py:163-169`) — eine
+`WriteTask` ohne korrekt signiertes `execute` wird **registriert** und bricht
+erst zur Laufzeit. Die Vollständigkeit von `run`/`propose`/`execute` muss
+deshalb Review/Test prüfen, nicht der Import.
+
+### TASK-5 — `is_async` deklariert das Worker-Thread-Pattern korrekt
+Eine schreibende Aufgabe, deren `execute()` nur eine **Privatchat-Kurzquittung**
+zurückgibt und die eigentliche Schreib-Operation in einem **Worker-Thread**
+fortsetzt (mehrstufiger Privatchat-Dialog, SESS), setzt `is_async = True`. Das
+Framework liest dieses Klassenattribut und **überspringt** dann die
+inline-Hook-Iteration — die Post-Execute-Hooks werden zur Selbstaufgabe des
+Workers und am Thread-Ende gefeuert, nicht beim `execute()`-Return
+(`tasks.py:218-232`).
+
+`is_async` ist **nicht** code-erzwungen: vergisst eine async-Aufgabe das Flag,
+laufen ihre Hooks zu früh (auf einer noch nicht geschriebenen Änderung). Eine
+synchrone Aufgabe lässt das Attribut beim Default `False` (`tasks.py:161`).
+
+### TASK-6 — `post_execute_hooks` sind zustandslos und dürfen nicht zurückrollen
+Eine schreibende Aufgabe, die nach erfolgreicher Schreib-Operation einen
+Konsumenten zum Cache-Reload auffordern muss (EC-21, #140 Skill-Service-Reload),
+deklariert das über das Klassenattribut `post_execute_hooks` — eine Liste
+**zustandsloser** Hooks. Das Framework iteriert sie nach `execute()`, isoliert
+jeden Hook (eine Hook-Exception wird als `HookFailure` gefangen) und fasst
+Fehler in **einer** Warnung an die Familie zusammen (`tasks.py:233-250`).
+
+Ein Hook-Fehler rollt die Schreib-Aufgabe **nicht** zurück: die Änderung ist
+durch (`tasks.py:210-212`). Default ist die leere Liste — ohne Deklaration
+ändert sich am Verhalten nichts (`tasks.py:155`).
+
+Deklariert wird typischerweise als **Klassenattribut**; eine Aufgabe darf die
+Liste aber **per Instanz** überschreiben, wenn familien-spezifische
+Konfiguration in den Hook muss (Origin/Port des Konsumenten) — KAV baut seine
+`ReloadHook`-Liste je Instanz aus `plan_origin_url`
+(`kalender_verbinden_task.py:150-154`). Der Hook bleibt zustandslos; nur seine
+Ziel-URL ist instanz-konfiguriert (CONFIG-2).
+
+### TASK-7 — Registrierung in `build_catalog`, mit der RICHTIGEN Session-Map (V1)
+Eine neue Aufgabe wird in `build_catalog` (`tasks.py:253-380`) registriert —
+das ist die heutige V1-Heimat der Aktivierung, **bis** der in `apps.md` APP-4
+beschriebene Installations-/Aktivierungs-Mechanismus existiert (#296 —
+App-Installations-Prozess für Familien-Schnittstelle fehlt). Diese Regel
+versteinert `build_catalog` nicht; sie hält den heutigen Beitrag nur an einem
+Ort.
+
+Eine schreibende Aufgabe mit Worker-Thread (TASK-5) **muss** dabei mit der
+**richtigen** Session-Map verkabelt werden — genau der Map, die `handle_update`
+für das Privatchat-Routing liest (`main.py:136-140` für TES, analog
+FAA/GAA/KAV `main.py:107-131`). Wird eine async-Schreib-Aufgabe ohne ihre
+Session-Map oder mit der falschen Map registriert, fängt ein reiner
+**Registrierungs**-Test das **nicht**: `build_catalog` ersetzt eine fehlende
+Map durch ein leeres `{}` (`tasks.py:365`), und der Katalog-Test prüft nur die
+Anwesenheit der Aufgabe (`tests/test_termin_eintragen_task.py:180-199`). Die
+stille Lego-Falle: Die Aufgabe ist registriert und der Worker schreibt in seine
+Map, aber `handle_update` liest eine **andere** Map — die Familie antwortet im
+Privatchat und landet nie beim Worker. Eine neue async-Aufgabe braucht deshalb
+einen Test, der das **Routing** durch `handle_update` über die geteilte
+Session-Map prüft — so wie TES ihn inzwischen hat
+(`test_handle_update_routes_to_tes_session`,
+`tests/test_termin_eintragen_task.py:316`), nicht nur die Katalog-Anwesenheit.
+
+---
+
+**Bekannter, dokumentierter Schmerz (nicht Inhalt dieser Konvention):** Das
+Privatchat-Session-Routing in `handle_update` (`main.py:104-141`) besteht aus
+vier **namentlichen** Blöcken (FAA, GAA, KAV, TES), die je eine eigene
+Session-Map prüfen — kein gemeinsamer Session-Router. Jede neue async-Aufgabe
+fügt heute einen weiteren namentlichen Block hinzu (Verletzung des
+Lego-Prinzips „einheitlicher Dispatch statt namentlicher Sonderfälle"). Diese
+Konvention schreibt hier bewusst **keine** Soll-Regel vor (sie wäre ab Tag 1
+verletzt); der Umbau zu einem gemeinsamen Session-Router gehört in ein
+separates Refactor-Ticket.
