@@ -1,0 +1,334 @@
+# Wetter-Buddy — Spec     (ID-Präfix: WETTER)
+
+> Status: V1 · Refs #137
+
+## Problem & North-Star-Bezug
+
+Eltern müssen morgens für die Kinder die Wetter-App öffnen und übersetzen, was sie
+anziehen sollen. Die Kinder gehen in den **Waldkindergarten** (8:00–13:00, ganzen
+Tag draußen). Der Wetter-Buddy gibt dem Kind **selbst** Zugang zu dem, was es
+braucht: Wie warm wird es? Regnet es, und wie viel? Was muss ich anziehen, was ist
+optional? Besonders wichtig: das Kind sieht **selbst, wann Sonnencreme gebraucht
+wird**. Das verschiebt eine Aufgabe vom Elternteil zum Kind (North Star) und gibt
+ihm Freiraum, in einem gewissen Rahmen selbst zu entscheiden.
+
+Der Wetter-Buddy ist eine eigenständige XBuddy-**App** mit einer Display-View —
+einem **Diptychon** aus Wetter-Karte („Wie ist das Wetter heute?") und
+Anziehen-Karte („Was zieh ich an?"). Als App **besitzt** er seine Daten (Ort und
+Garderoben-Regeln) und seine Funktion (die Wetter-Anbindung) und stellt das
+Ergebnis über die View bereit (WETTER-1, APP-1).
+
+**V1-Scope:** Single-Page-View `heute` als Diptychon · Mitwachsen-Stufe
+`toddler` (3–6 J, noch nicht lesend) als einzige V1-Stufe · zwei Tageszeiten
+(Morgens + Mittags) gleichzeitig · Abend-Rollover auf morgen · Wetter-Metriken als
+Bilder statt Zahlen · kindgerechte Darstellung **ohne sichtbaren UV-Wert**
+(Sonnencreme als abgeleitete Ja/Nein-Empfehlung) · Empfehlung nach **gefühlter
+Temperatur** · Garderoben-Regeln (inkl. Mützen- und Regen-/Matsch-Logik) und Ort
+als Per-Instanz-Daten · zweistufige Iconografie (Lucide/ARASAAC) mit Attribution ·
+Anbindung an Open-Meteo · **keine** API für andere Apps · eigener Service ·
+**raumfüllende Darstellung mit einheitlicher Schriftgröße** (Lesbarkeit, WETTER-25).
+
+**Out-of-Scope V1** (je eigenes Ticket): die `reader`-Stufe (OPEN-WETTER-A) · eine
+Lese-API `/api/v1/wetter/` (OPEN-WETTER-B) · Mehrtages-Vorhersage und mehrere Orte
+(OPEN-WETTER-C) · jegliche Interaktion · Anbieter-Cache / Offline-Last-Known-Good
+(OPEN-WETTER-E) · Controller-Trigger / Erreichbarkeit jenseits Dauer-Kiosk (F4/F5).
+
+## 1. Die App & ihre View
+
+### WETTER-1 — Wetter-Buddy ist eine App mit eigenem Besitz
+Der Wetter-Buddy ist die XBuddy-App mit dem Buddy-Slug `wetter`. Er besitzt seine
+**Daten** (Ort und Garderoben-Regeln, WETTER-21), seine **Funktion** (die
+Wetter-Anbindung, Abschnitt 5) und stellt das Ergebnis über seine **Display-View**
+bereit (APP-1). Der Ort liegt mangels Ort-Feld in der Familien-Registry (FAM-3)
+als App-eigene Config. V1 exponiert **keine** API für andere Apps (E-WETTER-3).
+
+### WETTER-2 — Single-Page-View `heute`, Diptychon
+Die View liegt unter `/display/wetter/heute` (URL-2, URL-7) und ist eine
+**einzige Canvas** — kein Routing, kein Tab, kein Toggle, keine Settings. Sie zeigt
+zwei nebeneinanderliegende Karten: links die **Wetter-Karte** (Abschnitt 3),
+rechts die **Anziehen-Karte** (Abschnitt 4).
+
+### WETTER-3 — Statisch, keine Interaktion (Kiosk)
+Die View ist für ein Touch-/Kiosk-Display gebaut und **vollständig statisch**:
+kein Hover, kein Aufklappen, keine Bedien-Elemente. V1 nimmt einen Dauer-Kiosk an;
+wie das Kind die View sonst erreicht (Controller-Trigger), ist F4/F5-Integration.
+
+### WETTER-4 — Mitwachsen-Stufe als URL-Parameter
+Die Stufe ist ein Query-Parameter `?stage=toddler|reader` (URL-8; Muster wie
+PLAN-3). **V1 implementiert nur `toddler`** (Default ohne Parameter; 3–6 J,
+noch nicht lesend — die Zielgruppe Waldkindergarten). Eine `reader`-Stufe für
+ältere, lesende Kinder ist die geplante Mitwachsen-Achse, aber V1-Out-of-Scope
+(OPEN-WETTER-A, E-WETTER-4).
+
+## 2. Zeit-Modell
+
+### WETTER-5 — Zwei Tageszeiten, gleichzeitig sichtbar
+Die View zeigt **zwei Tageszeiten desselben Tages gleichzeitig**: **Morgens**
+(Richtwert 08:00) und **Mittags** (Richtwert 12:00) — orientiert am
+Waldkindergarten-Tag (8:00–13:00). Die Tageszeit-Uhrzeiten sind konfigurierbar
+(WETTER-21). Beide sind immer sichtbar; kein Umschalten.
+
+### WETTER-6 — Tages-Rollover am Abend
+Tagsüber zeigt der Kiosk **heute**. Ab einer konfigurierbaren **Abend-Uhrzeit**
+(Default z. B. 17:00, WETTER-21) springt die Anzeige auf **morgen** — damit man
+abends die Kleidung für den nächsten Tag herauslegen kann.
+
+## 3. Wetter-Karte (links)
+
+### WETTER-7 — Wetter-Hero
+Oben in der Wetter-Karte steht ein großes **ARASAAC-Piktogramm** des
+Wetterzustands (aus der neutralen Kategorie `kind`, WETTER-16) mit Kurztext
+(`desc`). Das Piktogramm wird über die geteilte Icon-Plattform bezogen
+(ICONS-5, WETTER-18), nicht buddy-eigen.
+
+### WETTER-8 — Temperatur mit Gesicht, nach gefühlter Temperatur
+Die Karte zeigt die Temperatur mit einem **Gesichts-Symbol**. Maßgeblich ist die
+**gefühlte Temperatur** (`feelsLike`), nicht die reine Lufttemperatur — weil das
+Kind ganztags draußen ist und Wind kühlt. (Dieselbe gefühlte Temperatur treibt die
+Kleidungs-Empfehlung, WETTER-12/14.)
+
+### WETTER-9 — Temperatur-Spektrum
+Ein Gradient-Balken zeigt das **gesamte mögliche Temperatur-Spektrum** (z. B. üblich
+−5 bis 35°) mit der **heute erwarteten Spanne** (`low`–`high`) **hervorgehoben**.
+Entlang des Balkens repräsentieren **Kinderkopf-Icons** die Temperatur: frierend bei
+Kälte, fröhlich/angenehm in der Mitte, schwitzend bei ~30°, überhitzt bei ~35°. Die
+Skala ist Bild, nicht nackte Zahl (WETTER-10).
+
+### WETTER-10 — Drei Metrik-Karten, als Bilder statt Zahlen
+Unter dem Hero stehen drei Metrik-Karten, jede als **Symbol/Bild** statt als nackte
+Zahl: **Regen** (Eimer-Symbol, Menge aus `rainProb`/`rainAmount`), **Wind**
+(Gauge-Symbol, `wind`), **Sonnencreme** (Ja/Nein, WETTER-11).
+
+### WETTER-11 — Sonnencreme abgeleitet; UV bleibt unsichtbar
+Die Sonnencreme-Karte zeigt einen **Backend-entschiedenen Ja/Nein-Wert**, abgeleitet
+aus dem UV-Index (`uv` gegen die Schwelle aus WETTER-21 → `sunscreen`). Dem Kind
+wird **weder die UV-Zahl noch das UV-Label gezeigt** — nur die fertige Empfehlung
+„Sonnencreme: Ja/Nein" (E-WETTER-2). Das ist die im Problem hervorgehobene Fähigkeit:
+das Kind sieht selbst, wann Sonnencreme nötig ist.
+
+## 4. Anziehen-Karte (rechts)
+
+### WETTER-12 — Zwei Outfit-Blöcke: Morgens + Mittags, je eigenständig
+Die Karte zeigt **zwei Outfit-Blöcke** desselben Tages untereinander: **Morgens**
+und **Mittags**, beide gleichzeitig sichtbar. Jeder Block wird **eigenständig** aus
+der gefühlten Temperatur und dem Wetter *seiner* Tageszeit gerechnet — zwei
+getrennte Outfits, nicht aufeinander aufbauend (E-WETTER-10).
+
+### WETTER-13 — Aufbau eines Outfit-Blocks
+Jeder Block zeigt ein **Pflicht-Set** („MIT"), ein **Optional-Set** („WENN DU
+MAGST") und einen kurzen **Hinweistext**. Die Kleidungsstücke sind
+ARASAAC-Piktogramme (WETTER-18).
+
+### WETTER-14 — Garderoben-Regeln (Per-Instanz-Daten)
+Das Outfit je Tageszeit wird aus den **Garderoben-Regeln** der Familie (Config,
+WETTER-21, E-WETTER-5) abgeleitet. Eine Regel bildet eine **Wetterbedingung**
+(gefühlte-Temp-Band, Regen, Wind, Sonne) auf ein **Kleidungs-Set** (Teile als
+pflicht/optional + Hinweis) ab. Die Regeln sind geordnet; die **erste passende**
+Regel gewinnt. Trifft keine zu, zeigt der Block ein **Fallback-Set** (nie leer, nie
+ein Fehler vor dem Kind). Die Regeln sind Per-Instanz-Daten, kein Code — eine
+Familie passt sie an, ohne Python anzufassen.
+
+### WETTER-15 — Mützen-Logik und Regen-/Matsch-Logik
+Zwei für den Waldkindergarten zentrale Regel-Familien sind Teil von WETTER-14:
+- **Mützen-Logik:** warm → Cappy/Sonnenmütze; kalt → Wintermütze (Bommel).
+- **Regen-/Matsch-Logik:** aus `rainProb`/`rainAmount` → Regenjacke, Matschhose,
+  Gummistiefel (pflicht/optional je nach Regenmenge).
+
+## 5. Wetter-Anbindung (App-eigene Funktion)
+
+> Die Anbindung ist eine Funktion **dieser App** — keine Plattform-Fähigkeit. V1
+> erreicht keine andere App sie (keine API).
+
+### WETTER-16 — Wetter lesen, anbieter-neutrales Modell
+Für den konfigurierten Ort liefert die Anbindung das Wetter je Tageszeit (Morgens,
+Mittags) und übersetzt die Anbieter-Antwort in ein **anbieter-neutrales Modell**.
+Felder mindestens: `desc`, `kind` (neutrale Zustands-Kategorie für WETTER-7), `temp`,
+`feelsLike`, `low`, `high`, `wind`, `rainProb`, `rainAmount`, `uv`, `uvLabel`,
+`sunscreen` (abgeleiteter Boolean, WETTER-11). Rohfelder, die V1 nicht braucht,
+werden nicht durchgereicht (CLAUDE.md §6). V1-Anbieter ist Open-Meteo (kein
+API-Key); der Anbieter ist hinter dem Modell austauschbar. *(In der Quell-Vorarbeit
+heißen die View-Daten `WB_WEATHER`/`WB_OUTFITS` — Implementierungsdetail, nicht Spec.)*
+
+### WETTER-17 — Anbieter nicht erreichbar → neutraler Zustand
+Ist der Anbieter nicht erreichbar oder fehlt der Ort, wirft die App keinen
+unbehandelten Fehler: der Kiosk zeigt einen **neutralen Zustand** (kein Fehler, kein
+leerer Bildschirm vor dem Kind) und bleibt an — protokolliert (analog PLAN-20). Ein
+Anbieter-Cache / Last-Known-Good ist V1-Out-of-Scope (OPEN-WETTER-E).
+
+## 6. Iconografie & Gestaltung
+
+### WETTER-18 — Zweistufige Iconografie, Piktogramme über die geteilte Icon-Plattform
+**Lucide** für UI-Verben/funktionale Symbole, **ARASAAC-Piktogramme** für Inhalte
+(Wetterzustand, Kleidung, Temperatur-Köpfe). **Kein Emoji**; **keine Mischung**
+beider Quellen innerhalb einer Komponente. Die ARASAAC-Piktogramme werden **über
+die zentrale Icon-Plattform** bezogen — read-only unter der geteilten URL
+`/display/_shared/icons/arasaac/<id>.png` (`icons.md` **ICONS-5**, ausgeliefert vom
+Router ROU-26) — **kein buddy-eigener ARASAAC-Bezug** (sonst zweiter Icon-Pfad,
+CLAUDE.md §6 / Lego). Die `kind`-Kategorie (WETTER-16) und die Kleidungsstücke
+bilden auf numerische ARASAAC-IDs ab.
+
+### WETTER-19 — ARASAAC-Attribution-Footer
+Jede Instanz der View trägt einen **ARASAAC-Attribution-Footer** (ARASAAC / Sergio
+Palao) — das ist View-Verhalten des Wetter-Buddys. Die **Lizenz- und NC-Frage**
+(CC BY-NC-SA, kommerzielle Nutzung) wird **nicht hier** entschieden, sondern liegt
+zentral in `icons.md` **ICONS-6**; diese Spec verweist nur darauf (CLAUDE.md §6,
+kein dupliziertes Lizenz-Urteil).
+
+### WETTER-20 — Visueller Stil aus dem xbuddy Design System *(Design System folgt)*
+Der visuelle Stil bindet an das **xbuddy Design System**, das als Ganzes **separat**
+geliefert wird (OPEN-WETTER-H). Bis dahin werden hier **keine konkreten Stilwerte**
+(Farben, Maße, Schriften, Token-Quelle) festgeklopft. Verbindlich ist nur die
+Bauregel: **keine hartcodierten Farben/Maße im Buddy-CSS**, alle Stilwerte als Token
+(Quelle = das nachgelieferte Design System). (E-WETTER-6.)
+
+### WETTER-25 — Raumfüllende Darstellung, einheitliche Schriftgröße, Lesbarkeit
+Symbole und Karten **nutzen den vorhandenen Platz** — sie verteilen sich über die
+gesamte Kiosk-Fläche, statt klein in einer Ecke zu sitzen; das Board ist immer gut
+gefüllt. Wo Text vorkommt, gilt **eine einheitliche Schriftgröße über das gesamte
+Board** — keine konkurrierenden Textgrößen. Leitlinie: **gute Lesbarkeit aus
+Kiosk-Distanz** und volle Platznutzung. Die konkreten Werte (Schriftgröße,
+Abstände, Skalierung) kommen mit dem Design System (WETTER-20, OPEN-WETTER-H);
+diese Regel legt das **Prinzip** fest, nicht die Pixel.
+
+## 7. Konfiguration
+
+### WETTER-21 — Konfigurationswerte
+Zwei Per-Instanz-Dateien neben dem Code (CONFIG-1), beide gitignored:
+
+- `wetter/wetter.json` — **Daten-Konfig.** Format: `wetter/wetter.example.json`.
+- `wetter/config.json` — **Runtime-Konfig** (Bind, Log), via `tools/configloader.py`.
+
+| Name                 | Default                  | Datei-Schlüssel    | Gesetzt durch |
+|----------------------|--------------------------|--------------------|---------------|
+| Ort                  | (Pflicht, kein Default)  | `ort`              | Familie (V1 in Datei) |
+| Garderoben-Regeln    | Beispiel-Set im Example  | `wardrobe`         | Familie (V1 in Datei) |
+| Sonnencreme-Schwelle | UV-Schwelle (OPEN-WETTER-G) | `sunscreen_uv`  | n/a (Default reicht) |
+| Tageszeit Morgens    | `08:00`                  | `zeit_morgens`     | n/a |
+| Tageszeit Mittags    | `12:00`                  | `zeit_mittags`     | n/a |
+| Abend-Rollover-Zeit  | `17:00`                  | `rollover_abend`   | n/a |
+| Listen-Host          | `127.0.0.1`              | `listen_host`      | n/a |
+| Listen-Port          | (PORT-2, WETTER-22)      | `listen_port`      | n/a |
+| Log-Level            | `INFO`                   | `log_level`        | n/a |
+
+Ort und Garderoben-Regeln sind der Musterfall der **Familie-3-Probe**: was sich je
+Familie ändert, ist Config, nicht Code (E-WETTER-5). Anders als beim Plan-Buddy
+(E-PLAN-8) ist beim Wetter nichts familienspezifisch hartcodiert.
+
+## 8. Service & Registrierung
+
+### WETTER-22 — Eigener Service, fester Port
+Der Wetter-Buddy läuft als eigener Prozess `xbuddy-wetter.service` (SVC-1..4,
+Service-Datei im Repo, `Restart=on-failure`, Logs an stdout/stderr) und bindet nur
+an `127.0.0.1` (PORT-3). Die feste Port-Nummer kommt aus dem PORT-2-Katalog
+(Reserveblock 5030/5050-5099) — **in F4 zu belegen** (OPEN-WETTER-D).
+
+### WETTER-23 — Registrierung in der Plattform
+Der Slug `wetter` wird im Origin-Routing (URL-14) registriert, damit
+`/display/wetter/heute` über die Origin erreichbar ist. Diese Verkabelung ist
+**Integration**, nicht App-Eigentum — Gegenstand des arbeitstag-Track-Schnitts
+(F4/F5). **Familien-Schnittstelle-Beitrag (APP-4): keiner in V1** — Wetter hat
+keinen Eltern-Chat-Skill; Ort und Regeln werden per Datei gesetzt. Damit berührt
+die Spec den offenen Installations-Mechanismus (#296) **nicht**.
+
+## 9. Tests
+
+### WETTER-24 — Automatisierte Tests je Anforderung
+Jede Anforderung mit Code-Verhalten hat einen automatisierten Test (CLAUDE.md §6),
+reproduzierbar und **ohne Netz** — der Anbieter-Zugriff wird durch eine
+kontrollierte Doppelung ersetzt (analog PLAN-29). Mindest-Abdeckung: WETTER-2 (beide
+Karten auf einer Canvas) · WETTER-4 (`toddler` Default, `reader` V1 nicht
+implementiert) · WETTER-6 (vor Abend-Zeit → heute; danach → morgen) · WETTER-8/14
+(Gesicht und Outfit aus `feelsLike`) · WETTER-11 (UV-Zahl/-Label nicht in der
+Ausgabe; `sunscreen`-Boolean steuert die Karte) · WETTER-12 (beide Tageszeit-Blöcke
+gerendert, unabhängig gerechnet) · WETTER-14/15 (erste passende Regel gewinnt; keine
+Regel → Fallback; Mützen-Logik warm/kalt; Regen-Logik aus `rainAmount`) · WETTER-16
+(Rohantwort → neutrales Modell, je Tageszeit) · WETTER-17 (Anbieter nicht erreichbar
+→ neutraler Zustand, View funktioniert). Läufe gegen den echten Anbieter sind
+opt-in.
+
+---
+
+## Offene Punkte
+
+- **OPEN-WETTER-A — `reader`-Stufe.** V1 implementiert nur `toddler` (WETTER-4).
+  Die `reader`-Stufe (ältere, lesende Kinder) ist die geplante Mitwachsen-Achse,
+  aber ohne belegten V1-Bedarf vertagt (E-WETTER-4).
+- **OPEN-WETTER-B — Lese-API für andere Apps.** Kein Konsument → keine
+  `/api/v1/wetter/` in V1 (E-WETTER-3).
+- **OPEN-WETTER-C — Mehrtages-Vorhersage & mehrere Orte.** V1 kennt heute/morgen
+  (Rollover, WETTER-6) und einen Ort.
+- **OPEN-WETTER-D — Port-Nummer.** Aus dem PORT-2-Reserveblock (5030?) in F4 belegen;
+  ändert `conventions/ports.md` (GETEILT).
+- **OPEN-WETTER-E — Anbieter-Cache / Offline.** V1 zeigt bei Ausfall einen neutralen
+  Zustand (WETTER-17); Last-Known-Good (Qualitätsattribut 4) später.
+- **OPEN-WETTER-F — Lizenz/NC: zentral in ICONS-6 geführt.** Die ARASAAC-NC-Klausel
+  vs. kommerzielles Produkt wird in `icons.md` ICONS-6 behandelt, nicht hier — dieser
+  Punkt ist nur ein Verweis, kein wetter-eigener offener Punkt.
+- **OPEN-WETTER-G — Sonnencreme-Schwelle.** Ab welchem UV-Wert „Ja" — Config
+  (`sunscreen_uv`) mit sinnvollem Default; familienspezifisch oder fix ist offen.
+- **OPEN-WETTER-H — Design System.** Visueller Stil bindet ans xbuddy Design System,
+  das separat als Ganzes geliefert wird (WETTER-20); bis dahin keine Stilwerte fix.
+
+---
+
+## Entscheidungen
+
+### E-WETTER-1 — Wetter-Buddy ist eine App: besitzt Daten, Funktion, View
+*Datum:* 2026-06-02 · App-Muster (Constitution „App-Eigentümerschaft", APP-1,
+Erstanwendung E-PLAN-1). Besitzt Ort + Garderoben-Regeln (Daten) und die
+Wetter-Anbindung (Funktion); stellt das Ergebnis über die Display-View bereit.
+
+### E-WETTER-2 — UV bleibt unsichtbar; Sonnencreme wird abgeleitet gezeigt
+*Datum:* 2026-06-02 · Aus #137 („kein UV vors Kind") und Nics Spec-Übersicht
+(„Sonnencreme als Backend-entschiedener Boolean"). Modell trägt `uv`/`uvLabel`
+(für die Ableitung), die View zeigt nur die Ja/Nein-Empfehlung. **Verworfen:**
+UV-Zahl/-Label vors Kind.
+
+### E-WETTER-3 — V1 ohne API für andere Apps
+*Datum:* 2026-06-02 · Kein Konsument; die „Was zieh ich an"-Logik ist
+wetter-intern. API ohne Konsument wäre Vorrat (§6) und Heim-Server-Overhead.
+Kommt als eigenes Ticket bei Bedarf (OPEN-WETTER-B). **Verworfen:** Lese-API auf
+Vorrat.
+
+### E-WETTER-4 — V1 nur `toddler`-Stufe; stage-Achse existiert
+*Datum:* 2026-06-02 · Zielgruppe Waldkindergarten (3–6 J, noch nicht lesend) → V1
+ist die `toddler`-Stufe. Die Mitwachsen-Achse ist als `?stage=`-Parameter
+angelegt, aber V1 baut nur `toddler`. **Verworfen:** `reader` jetzt mitzubauen
+(ohne belegten Bedarf Vorrat, §6).
+
+### E-WETTER-5 — Ort und Garderoben-Regeln sind Per-Instanz-Daten, nicht Code
+*Datum:* 2026-06-02 · Beide ändern sich je Familie → Config (§6, Familie-3-Probe).
+Anders als beim Plan-Buddy (E-PLAN-8) ist beim Wetter nichts familienspezifisch
+hartcodiert. **Verworfen:** Garderoben-Regeln als Python-Dict.
+
+### E-WETTER-6 — Visueller Stil aus dem zentralen Design System (separat geliefert)
+*Datum:* 2026-06-02 · Wetter bindet an das xbuddy Design System, das als Ganzes
+nachgeliefert wird (OPEN-WETTER-H) — nicht an den handgezeichneten Plan-Kids-Look
+(plan-spezifischer 1:1-Wireframe-Handoff, E-PLAN-5). Bis zur Lieferung keine
+festen Stilwerte; nur die Token-Bauregel gilt. **Verworfen:** jetzt Stilwerte
+festklopfen oder den Plan-Kids-Look kopieren.
+
+### E-WETTER-7 — Zweistufige Iconografie über die geteilte Icon-Plattform
+*Datum:* 2026-06-02 · Lucide für UI, ARASAAC für Inhalte, kein Emoji, keine
+Mischung je Komponente (WETTER-18). ARASAAC-Piktogramme werden über die zentrale
+Icon-Plattform bezogen (ICONS-5, geteilte URL), **nicht** buddy-eigen — sonst
+entstünde ein zweiter Icon-Pfad (CLAUDE.md §6, Lego-Prinzip). Der Attribution-Footer
+ist View-Verhalten (WETTER-19); die Lizenz/NC-Frage liegt zentral in ICONS-6, hier
+nur referenziert. **Verworfen:** eigener ARASAAC-Bezug und ein eigenes Lizenz-Urteil
+im Wetter-Buddy (wäre Geschwister-Drift gegen die bestehende `icons.md`).
+
+### E-WETTER-8 — Empfehlung und Gesicht nach gefühlter Temperatur
+*Datum:* 2026-06-02 · Outfit und Temperatur-Gesicht richten sich nach `feelsLike`,
+nicht `temp` — das Kind ist ganztags draußen, Wind kühlt. **Verworfen:** reine
+Lufttemperatur als Treiber (Wind flösse dann nur über die Wind-Metrik ein).
+
+### E-WETTER-9 — Abend-Rollover auf morgen
+*Datum:* 2026-06-02 · Der Dauer-Kiosk zeigt tagsüber heute, ab einer
+konfigurierbaren Abend-Uhrzeit morgen (WETTER-6) — passend zum Familien-Ablauf
+(abends Kleidung herauslegen). **Verworfen:** immer nur heute zu zeigen.
+
+### E-WETTER-10 — Zwei getrennte Outfits statt Zwiebellook
+*Datum:* 2026-06-02 · Morgens- und Mittags-Block werden je eigenständig gerechnet
+(WETTER-12), nicht als eine aufeinander aufbauende Schicht-Empfehlung.
+**Verworfen:** Zwiebellook („mittags eine Schicht ausziehen") als ein
+zusammenhängendes Outfit.
