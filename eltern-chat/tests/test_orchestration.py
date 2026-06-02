@@ -351,15 +351,15 @@ def test_backoff_resets_after_update(tmp_path, monkeypatch):
             "erhalten: %s (alle sleeps: %s)" % (post_update_sleeps[0], sleep_calls))
 
 
-def test_backoff_caps_at_30s(tmp_path, monkeypatch):
-    """AC3 (#294): Der Backoff wird bei 30 s gedeckelt — kein unbegrenztes
-    Wachstum. Nach genügend leeren Polls darf keine Pause über 30 s gehen.
+def test_backoff_caps_at_5s(tmp_path, monkeypatch):
+    """AC3 (#294): Der Backoff wird bei 5 s gedeckelt — kein unbegrenztes
+    Wachstum. Nach genügend leeren Polls darf keine Pause über 5 s gehen.
     """
     sleep_calls = []
     monkeypatch.setattr("main.time.sleep", lambda s: sleep_calls.append(s))
 
-    # 10 leere Polls reichen, damit der Backoff die Cap erreicht (1→2→4→8→16→30).
-    responses = [[] for _ in range(10)] + [_StopAfterN("stop")]
+    # 6 leere Polls reichen, damit der Backoff die Cap erreicht (1→2→4→5→5→5).
+    responses = [[] for _ in range(6)] + [_StopAfterN("stop")]
     tg = _FakeTelegramPoll(responses)
     ctx = _poll_ctx(tmp_path, tg)
 
@@ -369,8 +369,8 @@ def test_backoff_caps_at_30s(tmp_path, monkeypatch):
         pass
 
     assert sleep_calls, "poll_loop muss bei leeren Polls schlafen"
-    assert max(sleep_calls) <= 30, (
-        "Backoff-Cap ist 30 s — kein Sleep darf darüber liegen. "
+    assert max(sleep_calls) <= 5, (
+        "Backoff-Cap ist 5 s — kein Sleep darf darüber liegen. "
         "Max: %s, alle sleeps: %s" % (max(sleep_calls), sleep_calls))
 
 

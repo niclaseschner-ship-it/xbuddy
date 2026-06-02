@@ -436,7 +436,7 @@ def poll_loop(ctx, get_updates_timeout=30):
     """Liest fortlaufend Updates und verarbeitet sie (E-EC-2: Polling).
 
     Backoff (E-EC-2, #294): Leere oder fehlgeschlagene Polls werden mit
-    exponentiellem Backoff verlangsamt — Start 1 s, Faktor 2, Cap 30 s.
+    exponentiellem Backoff verlangsamt — Start 1 s, Faktor 2, Cap 5 s.
     Ein eintreffendes Update setzt den Backoff auf 0 zurück.
     Der Long-Poll-`timeout`-Parameter (wie lange Telegram auf Updates wartet)
     ist davon unabhängig — der Backoff betrifft nur den Abstand zwischen
@@ -448,7 +448,7 @@ def poll_loop(ctx, get_updates_timeout=30):
     """
     _BACKOFF_START = 1      # Sekunden — Startverzögerung bei leerem Poll
     _BACKOFF_FACTOR = 2     # Multiplikator je aufeinanderfolgendem leeren Poll
-    _BACKOFF_CAP = 30       # Sekunden — maximale Backoff-Pause
+    _BACKOFF_CAP = 5        # Sekunden — maximale Backoff-Pause
 
     offset = None
     backoff = 0.0           # aktuelle Backoff-Pause (0 = kein Backoff)
