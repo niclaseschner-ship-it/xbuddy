@@ -361,6 +361,12 @@ Mindest-Abdeckung:
   ohne weiteren Roundtrip kennt.
 - PANEL-3 — `tiles.json` mit gemischten Einträgen wird in der
   Listen-Reihenfolge gerendert; `key` ist eindeutig.
+  **Render-Pfad (Icon-Verhalten):** `makeTileElement` baut für jedes
+  Element in `icons[]` ein `<img>` mit `src = iconBase + icons[i]`
+  — geprüft per DOM-Stub-Test für ein einzelnes Icon und für das
+  Kinder-Marker-Pattern (zwei Icons: `arasaac/32488.png` +
+  `arasaac/2484.png`). Die erzeugten `img.src`-Werte müssen auf
+  `/display/_shared/icons/<pfad>` enden (same-origin-Basis).
 - PANEL-4 — Eintrag mit `sichtbar: false` wird nicht gerendert und
   sendet beim Versuch kein Event (Element existiert nicht).
 - PANEL-5 — Erfolgreicher POST wird gesendet; bei Netzwerk-Fehler
@@ -374,6 +380,14 @@ Mindest-Abdeckung:
   Datei beeinflusst (kein `sichtbar: false`-Effekt); ein Tap auf die
   Aus-Kachel sendet `panel_cleared` mit den drei Pflichtfeldern
   (`source_id`, `ts`, `type`) und ohne Descriptor-Felder.
+  **Render-Pfad (Icon-Verhalten):** `makeAusKachel` baut `img.src` aus
+  `iconBase + AUS_ICON_PATH` (`arasaac/8252.png`) — geprüft per
+  DOM-Stub-Test.
+  **Icon-Fallback (onerror):** alle Tile-Icons und das Aus-Kachel-Icon
+  tragen einen `onerror`-Handler, der das `<img>` aus dem Icon-Slot
+  entfernt. Kein Broken-Image-Placeholder; Kachel und Label bleiben
+  funktionsfähig — geprüft per DOM-Stub-Test (Ladefehler-Simulation
+  durch direktes Aufrufen von `img.onerror`).
 - PANEL-7 — Descriptor ist flach (Strings/Zahlen); ein verschachteltes
   `query` wird als Konfigurations-Fehler abgewiesen.
 - PANEL-8 — Fehlende oder kaputte `config.json` lässt die Seite mit

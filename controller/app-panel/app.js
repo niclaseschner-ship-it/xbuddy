@@ -209,6 +209,15 @@
   }
 
   // ============================================================
+  //  PANEL-6 (#136) — Aus-Kachel: ARASAAC-Icon-Konstanté
+  // ============================================================
+  //
+  // ARASAAC ID 8252 = „aus" (Wort→ID aus pictogram_cache.json, Stand 2026-06-02).
+  // Pfad relativ zur Icon-Basis (ICONS-5, ROU-26). Wer das Aus-Symbol tauschen
+  // will, ändert genau diese Konstante — kein Suchen im Code nötig.
+  var AUS_ICON_PATH = 'arasaac/8252.png'; // PANEL-6: ARASAAC 8252='aus'; Aus-Symbol hier änderbar
+
+  // ============================================================
   //  PANEL-3 (#136) — Icon-Basis-URL-Auflösung
   // ============================================================
   //
@@ -348,6 +357,7 @@
     makePanelCleared: makePanelCleared,
     validateTile: validateTile,
     resolveIconBase: resolveIconBase,
+    AUS_ICON_PATH: AUS_ICON_PATH,
     parseDisplayUrl: parseDisplayUrl,
     tileMatchesUrl: tileMatchesUrl,
     findActiveTile: findActiveTile,
@@ -482,6 +492,9 @@
       img.src = base + tile.icons[i];
       img.alt = '';
       img.className = 'tile-icon-img';
+      // PANEL-6 (#136): Icon lädt nicht → Slot leeren; kein Broken-Image-Placeholder,
+      // Kachel bleibt funktionsfähig (Label + Tap).
+      img.onerror = function () { this.parentNode && this.parentNode.removeChild(this); };
       iconSlot.appendChild(img);
     }
     var label = document.createElement('span');
@@ -494,8 +507,9 @@
   }
 
   function makeAusKachel(onClear, cfg) {
-    // PANEL-6 (#136): Aus-Kachel mit ARASAAC-Icon 8252 (= „aus") aus der
-    // zentralen Bibliothek (ICONS-5, ROU-26, arasaac/8252.png).
+    // PANEL-6 (#136): Aus-Kachel mit ARASAAC-Icon AUS_ICON_PATH (= „aus") aus der
+    // zentralen Bibliothek (ICONS-5, ROU-26). Konstante in panelLib.AUS_ICON_PATH
+    // (UMD-Export) — der eine Änder-Ort für das Aus-Symbol.
     var el = document.createElement('button');
     el.type = 'button';
     el.className = 'tile tile-aus';
@@ -503,9 +517,11 @@
     var iconSlot = document.createElement('span');
     iconSlot.className = 'tile-icons';
     var img = document.createElement('img');
-    img.src = iconBase(cfg) + 'arasaac/8252.png';
+    img.src = iconBase(cfg) + AUS_ICON_PATH;
     img.alt = '';
     img.className = 'tile-icon-img';
+    // PANEL-6 (#136): Icon lädt nicht → Slot leeren; Kachel bleibt funktionsfähig.
+    img.onerror = function () { this.parentNode && this.parentNode.removeChild(this); };
     iconSlot.appendChild(img);
     var label = document.createElement('span');
     label.className = 'tile-label';
