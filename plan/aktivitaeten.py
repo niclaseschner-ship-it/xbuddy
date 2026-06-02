@@ -1,9 +1,15 @@
-"""Plan-Buddy — Aktivitäts-Katalog (PLAN-12, E-PLAN-8).
+"""Plan-Buddy — Aktivitäts-Katalog (PLAN-12, PLAN-13, E-PLAN-8).
 
 EINE Quelle für die familienspezifische Liste der Kind-Aktivitäten. Sowohl
 die Lese-Seite (Titel → Art, `render.py`) als auch die Schreib-Seite (Art →
 Titel-Label, `main.py`) beziehen sich auf diesen Katalog — vorher lebten
 beide Hälften in zwei voneinander entkoppelten Listen (Refs #101).
+
+Seit #308 speist dieser Katalog zusätzlich PLAN-13: `icon_fuer_art()` liefert
+den Termin-Icon-Key für eine Art, `termin_icon_keywords_aus_katalog()` erzeugt
+die zugehörigen (keyword, icon)-Paare für `render.py`. Damit sind
+Aktivitäts-Erkennung (PLAN-12) und Termin-Icon-Zuordnung (PLAN-13) konsistent —
+kein Keyword kann mehr in einer Heuristik fehlen, wenn es in der anderen steht.
 
 Per E-PLAN-8 ist V1 familienspezifisch hartcodiert: die Liste hier ist die
 einzige Stelle, an der eine Familie ihren Aktivitäts-Katalog anpasst.
@@ -29,6 +35,22 @@ AKTIVITAETEN = [
     ("petrabredung", "Petrabredung", ["petrabredung"]),
     ("waldgang",    "Waldgang",    ["wald"]),
 ]
+
+# PLAN-13: Aktivitäts-Art → Termin-Icon-Key.
+# Wird von `render.py` über `icon_fuer_art()` und
+# `termin_icon_keywords_aus_katalog()` abgerufen, damit Termin-Icons
+# konsistent mit der Aktivitäts-Erkennung bleiben (#308).
+_ART_ZU_ICON = {
+    "klettern":    "climb",
+    "kreativ":     "brush",
+    "schwimmen":   "wave",
+    "spielplatz":  "play",
+    "musik":       "music",
+    "ausflug":     "pin",
+    "geburtstag":  "cake",
+    "petrabredung": "friends",
+    "waldgang":    "trees",
+}
 
 
 def keyword_paare():
@@ -56,3 +78,29 @@ def label_fuer_art(art):
             return label
     # Unbekannte Art: capitalize als Fallback (altes Verhalten).
     return art.capitalize() if art else art
+
+
+def icon_fuer_art(art):
+    """Termin-Icon-Key für eine Aktivitäts-Art (PLAN-13).
+
+    Liefert den Icon-Key aus `_ART_ZU_ICON`. Unbekannte Art → None.
+    Wird von `render.termin_icon()` für den gemeinsamen Icon-Pfad benutzt (#308).
+    """
+    return _ART_ZU_ICON.get(art)
+
+
+def termin_icon_keywords_aus_katalog():
+    """Flache Liste `(keyword, icon_key)` aus dem Aktivitäts-Katalog (PLAN-13).
+
+    Liefert für jedes Keyword jeder Aktivitäts-Art den zugehörigen Icon-Key.
+    Keywords ohne Icon-Eintrag in `_ART_ZU_ICON` werden übersprungen.
+    Wird von `render.py` als Teil von TERMIN_ICON_KEYWORDS verwendet (#308).
+    """
+    pairs = []
+    for art, _label, keywords in AKTIVITAETEN:
+        icon = _ART_ZU_ICON.get(art)
+        if icon is None:
+            continue
+        for kw in keywords:
+            pairs.append((kw, icon))
+    return pairs

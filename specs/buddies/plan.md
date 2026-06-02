@@ -155,7 +155,13 @@ erkannten Aktivitäts-Art (Schlüsselwort im Titel) oder — wenn kein Schlüsse
 passt — ein generisches Fallback-Symbol. Ein Kind-Slot-Eintrag ist nie
 symbol-/typlos.
 
-*Tickets:* #40
+Die Schlüsselwörter zur Aktivitäts-Erkennung und die zugehörigen Termin-Icons
+(PLAN-13) kommen aus **einer gemeinsamen Quelle**: `plan/aktivitaeten.py`
+(`AKTIVITAETEN` + `_ART_ZU_ICON`). Es gibt keine separate Keyword-Liste in
+`render.py` — beide Heuristiken ziehen aus demselben Katalog, damit sie nicht
+divergieren können.
+
+*Tickets:* #40, #308
 
 ## 5. Termin-Leiste
 
@@ -176,7 +182,12 @@ ganztägige Kind-Aktivität erscheint nur im Aktivitäts-Slot, nicht in der
 Termin-Leiste. Mehrtägige Events folgen PLAN-14 bzw. bleiben bei child-named
 mehrtägig im Kind-Slot.
 
-*Tickets:* #40
+Die Keyword-Heuristik für Termin-Icons bezieht ihre Aktivitäts-Keywords aus
+`plan/aktivitaeten.py` (gemeinsame Quelle mit PLAN-12, #308). View-spezifische
+Einträge ohne Aktivitäts-Art (Zahnarzt `zahn`, Ferien `ferien`/`urlaub`,
+Treff `treff`, Garten `garten`) leben weiterhin lokal in `render.py`.
+
+*Tickets:* #40, #308
 
 ### PLAN-14 — Mehrtages-Termine als Spanne
 Ein Termin über mehrere Tage des Fensters wird **einmal** als durchgehender

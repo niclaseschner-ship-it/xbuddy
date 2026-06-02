@@ -904,6 +904,111 @@ def test_PLAN_12_musik_synonyme_klavier_geige_gitarre(demo_config, demo_registry
     assert slot["type"] == "musik"
 
 
+def test_PLAN_13_keyword_konsistenz_gemeinsame_quelle(demo_config, demo_registry):
+    """AC4 (#308): Keywords aus dem Aktivitäts-Katalog wirken in BEIDEN Pfaden
+    konsistent — Aktivitäts-Erkennung (PLAN-12) und Termin-Icon-Zuordnung
+    (PLAN-13) ziehen aus EINER Quelle (aktivitaeten.py, #308).
+
+    Für jede Art im Katalog gilt:
+    - `art_aus_titel(kw)` liefert die Art (PLAN-12-Pfad).
+    - `termin_icon(kw)` liefert NICHT 'sparkle' (den Default für „kein
+      Treffer") — das Keyword ist auch in PLAN-13 bekannt (#308).
+    - `termin_icon(kw)` liefert genau das Icon aus `_ART_ZU_ICON` (#308).
+
+    Dieser Test bricht, wenn ein Keyword nur in EINER der beiden Heuristiken
+    steht — die Divergenz aus dem ursprünglichen Bug (klavier/geige/gitarre
+    in PLAN-12 bekannt, in PLAN-13 fehlend) würde ihn fehlschlagen lassen."""
+    from plan import aktivitaeten as ak
+    from plan import render as render_mod
+    for art, _label, keywords in ak.AKTIVITAETEN:
+        expected_icon = ak.icon_fuer_art(art)
+        if expected_icon is None:
+            # Keine Icon-Zuordnung für diese Art — kein PLAN-13-Anteil.
+            continue
+        for kw in keywords:
+            # PLAN-12-Pfad.
+            assert ak.art_aus_titel(kw) == art, (
+                "PLAN-12: Keyword %r sollte Art %r liefern" % (kw, art))
+            # PLAN-13-Pfad.
+            got_icon = render_mod.termin_icon(kw)
+            assert got_icon != "sparkle", (
+                "PLAN-13: Keyword %r liefert Default-Sparkle — "
+                "nicht in TERMIN_ICON_KEYWORDS?" % kw)
+            assert got_icon == expected_icon, (
+                "PLAN-13: Keyword %r erwartet Icon %r, bekam %r"
+                % (kw, expected_icon, got_icon))
+
+
+def test_PLAN_13_nicht_kind_termin_icon_via_baue_view(demo_config, demo_registry):
+    """FIX1 — Entry-Pfad-Test (AC4-Ergänzung, #308-fix): ein Nicht-Kind-Termin
+    „Klaviertermin" ohne Kindernamen durchläuft den ECHTEN Render-Pfad
+    `baue_view(...)` und landet mit icon=='music' in appointments[...].
+
+    Schliesst die #310-artige Lücke: der AC4-Test prüft nur den Helper
+    `render_mod.termin_icon(kw)` direkt. Dieser Test benutzt den echten
+    Entry-Point und assertiert, dass das Icon am appointments-Eintrag ankommt."""
+    heute = date(2026, 5, 20)
+    # Kein Kindname im Titel → kein Kind-Slot, stattdessen Termin-Leiste.
+    raw = [gcal_timed("kt_icon1", "Klaviertermin",
+                      heute.isoformat() + "T15:00:00+02:00",
+                      heute.isoformat() + "T16:00:00+02:00")]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    termine = view["appointments"][heute.isoformat()]
+    assert len(termine) == 1
+    # Icon muss "music" sein — "klavier" ist im Katalog als Musik-Keyword (#308).
+    assert termine[0]["icon"] == "music", (
+        "Termin 'Klaviertermin' erwartet icon=='music', bekam %r — "
+        "PLAN-13/PLAN-12-Konsistenz via baue_view nicht gegeben?" % termine[0]["icon"]
+    )
+
+
+def test_PLAN_13_praefix_termin_icon_kletterhalle_kreativworkshop(
+        demo_config, demo_registry):
+    """FIX2 — Präfix-Regression (#308-fix): 'Kletterhalle' → climb,
+    'Kreativ-Workshop' → brush. Vor #308 matchte das Termin-Icon per Präfix
+    'klett'/'kreat'; der Katalog trägt nur 'klettern'/'kreativ' (volle Wörter).
+    Die Präfix-Einträge in _TERMIN_ICON_EXTRAS stellen das alte Verhalten
+    wieder her, ohne die Aktivitäts-Erkennung (PLAN-12, katalog-basiert)
+    zu berühren.
+
+    Zwei Stufen:
+    a) Helper `render_mod.termin_icon` direkt.
+    b) Entry-Path `baue_view(...)`: Nicht-Kind-Event „Kletterhalle" landet
+       mit icon=='climb' in appointments."""
+    # a) Helper-Ebene.
+    assert render_mod.termin_icon("Kletterhalle") == "climb", (
+        "render_mod.termin_icon('Kletterhalle') erwartet 'climb' — "
+        "Präfix-Regression in _TERMIN_ICON_EXTRAS?"
+    )
+    assert render_mod.termin_icon("Kreativ-Workshop") == "brush", (
+        "render_mod.termin_icon('Kreativ-Workshop') erwartet 'brush' — "
+        "Präfix-Regression in _TERMIN_ICON_EXTRAS?"
+    )
+    # Aktivitäts-Erkennung bleibt UNANGETASTET — kein Kindname, kein art-Treffer.
+    assert aktivitaeten_mod.art_aus_titel("Kletterhalle") is None, (
+        "art_aus_titel('Kletterhalle') soll None liefern (kein Kindname, "
+        "kein volles Katalog-Keyword) — Aktivitäts-Erkennung wurde versehentlich verbreitert?"
+    )
+    # b) Entry-Path via baue_view.
+    heute = date(2026, 5, 20)
+    raw = [gcal_allday("kh1", "Kletterhalle", heute.isoformat())]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    termine = view["appointments"][heute.isoformat()]
+    assert len(termine) == 1
+    assert termine[0]["icon"] == "climb", (
+        "Termin 'Kletterhalle' erwartet icon=='climb' via baue_view, bekam %r"
+        % termine[0]["icon"]
+    )
+
+
 def test_PLAN_12_musik_synonyme_entry_path_html(demo_config, demo_registry):
     """AC1-Entry-Path (T302): GET /display/plan/woche rendert einen
     „Klavier Mia"-Event mit activity_icon 'musik' im act1-Schedule-Slot —
