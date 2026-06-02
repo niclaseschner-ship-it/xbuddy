@@ -44,9 +44,17 @@ _QUITTUNG_START_FROM_PRIVATE = (
     "kommt gleich.")
 _QUITTUNG_DONE_EMPTY = ("Ok — niemand angelegt (du hast abgebrochen). Sag "
                         "Bescheid, wenn ich es noch mal versuchen soll.")
-_PROPOSAL_SUMMARY = ("Neue(s) Familienmitglied(er) im Privatchat anlegen — "
-                     "ich frage dort der Reihe nach nach Art, Name, Foto, "
-                     "Ring-Farbe und optional E-Mail/Telegram-ID.")
+
+# EC-10 / #278: Vorschlags-Zusammenfassung ist kontextabhängig (EC-10-Wortlaut):
+# - Aufruf aus der Familien-Gruppe → nennt den Privatchat als Ort der Anlage.
+# - Aufruf schon IM Privatchat → kein Ortswechsel-Hinweis.
+_PROPOSAL_SUMMARY_FROM_GROUP = (
+    "Neue(s) Familienmitglied(er) im Privatchat anlegen — ich frage dort "
+    "der Reihe nach nach Art, Name, Foto, Ring-Farbe und optional "
+    "E-Mail/Telegram-ID.")
+_PROPOSAL_SUMMARY_FROM_PRIVATE = (
+    "Neue(s) Familienmitglied(er) anlegen — ich frage hier der Reihe nach "
+    "nach Art, Name, Foto, Ring-Farbe und optional E-Mail/Telegram-ID.")
 
 
 class FaaSession(PrivateChatSession):
@@ -103,9 +111,11 @@ class FamilieAnlegenTask(WriteTask):
         self._family_group_chat_id_getter = family_group_chat_id_getter
 
     def propose(self, arguments, turn_context):
-        """EC-10-Vorschlag — der Aufrufer bestätigt, bevor die Konversation
-        im Privatchat startet (Pattern-treu, vgl. FAA-12)."""
-        return Proposal(_PROPOSAL_SUMMARY)
+        """EC-10-Vorschlag — kontextabhängiger Wortlaut (EC-10 #278):
+        aus der Gruppe → Privatchat-Hinweis; schon im Privatchat → kein Wechsel."""
+        if is_from_private_chat(turn_context):
+            return Proposal(_PROPOSAL_SUMMARY_FROM_PRIVATE)
+        return Proposal(_PROPOSAL_SUMMARY_FROM_GROUP)
 
     def execute(self, arguments, turn_context):
         """Startet die FAA-Session im Privatchat des Aufrufers (FAA-12).
