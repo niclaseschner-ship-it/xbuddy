@@ -168,7 +168,8 @@ def display_event_stream(display_id):
 
 # Laufzeit-Konfig wird vom Entrypoint befüllt. Tests setzen direkt.
 runtime_config = {
-    'controller_dir': '',   # ROU-23: leer = Default aus DEFAULTS_CONTROLLER_DIR
+    'controller_dir': '',   # ROU-23: leer = Default aus DEFAULT_CONTROLLER_DIR
+    'icon_root':      '',   # ROU-26: leer = Default aus DEFAULT_ICON_ROOT
 }
 
 
@@ -630,6 +631,14 @@ DEFAULT_APP_PANEL_DIR = os.path.normpath(os.path.join(
 DEFAULT_CONTROLLER_SHARED_DIR = os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), '..', 'controller', '_shared'))
 
+# ROU-26 / ICONS-2: die zentrale Icon-Bibliothek (ARASAAC-Piktogramme) wird
+# unter /display/_shared/icons/ ausgeliefert — Zwilling zu /controller/_shared/
+# (ROU-23). Anders als die Controller-Helper liegt die icon-root als
+# Per-Instanz-Daten AUSSERHALB des Repos (Default /home/buddy/apps/icons/);
+# der Router liest sie als User `buddy` problemlos, während ein statischer
+# nginx-`alias` an der 0700-Home-Permission (nginx=www-data) scheiterte (#135).
+DEFAULT_ICON_ROOT = '/home/buddy/apps/icons/'
+
 # Explizites Content-Type-Mapping. Browser entscheiden anhand des Headers,
 # nicht anhand der Endung — ein .json mit text/html würde das Manifest
 # verwerfen, ein .js mit text/plain die SW-Registrierung scheitern lassen.
@@ -643,6 +652,11 @@ _CONTROLLER_MIME = {
 
 def controller_dir():
     return runtime_config.get('controller_dir') or DEFAULT_CONTROLLER_DIR
+
+
+def icon_root():
+    # ROU-26: konfigurierbare icon-root (ICONS-2). Leer = Default.
+    return runtime_config.get('icon_root') or DEFAULT_ICON_ROOT
 
 
 def controller_app_slug():
@@ -686,6 +700,30 @@ def controller_shared_asset(asset):
     # ROU-23: /controller/_shared/<asset> aus controller/_shared/.
     # conventions/controller-pwa.md PWA-4-Implementierungs-Naht.
     return _send_shared_asset(asset)
+
+
+def _send_icon_asset(rel_path):
+    # ROU-26: geteilte Display-Assets (Icon-Bibliothek) aus der icon-root
+    # (ICONS-2), Zwilling zu _send_shared_asset (ROU-23). Defense in Depth:
+    # werkzeug safe_join + expliziter realpath-Check gegen Path-Traversal.
+    root = os.path.realpath(icon_root())
+    target = os.path.realpath(os.path.join(root, rel_path))
+    if target != root and not target.startswith(root + os.sep):
+        abort(404)
+    if not os.path.isfile(target):
+        abort(404)
+    ext = os.path.splitext(target)[1].lower()
+    mime = _CONTROLLER_MIME.get(ext, 'application/octet-stream')
+    return send_from_directory(root, rel_path, mimetype=mime)
+
+
+@app.route('/display/_shared/icons/<path:asset>', methods=['GET'])
+def display_shared_icon(asset):
+    # ROU-26 / URL-16 / ICONS-5: read-only-Auslieferung der zentralen
+    # Icon-Bibliothek unter /display/_shared/icons/<source>/<id>.png aus der
+    # icon-root. Zwilling zu /controller/_shared/ (ROU-23). Die Assets sind
+    # Per-Instanz-Daten außerhalb des Repos (ICONS-2).
+    return _send_icon_asset(asset)
 
 
 @app.route('/controller/<app>/', methods=['GET'])
@@ -799,6 +837,7 @@ RUNTIME_SCHEMA = {
     'listen_port':    5000,
     'log_level':      'INFO',
     'controller_dir': '',  # ROU-23: leer = DEFAULT_CONTROLLER_DIR
+    'icon_root':      '',  # ROU-26: leer = DEFAULT_ICON_ROOT
 }
 
 
@@ -813,6 +852,8 @@ def parse_args(argv):
     p.add_argument('--log-level', dest='log_level', help='DEBUG | INFO | WARNING | ERROR')
     p.add_argument('--controller-dir', dest='controller_dir',
                    help='Pfad zur Controller-PWA-Statik (ROU-23)')
+    p.add_argument('--icon-root', dest='icon_root',
+                   help='Pfad zur Icon-Bibliothek (ROU-26, ICONS-2)')
     p.add_argument('--cert', help='TLS-Cert (optional, für HTTPS-Modus)')
     p.add_argument('--key',  help='TLS-Key (optional, für HTTPS-Modus)')
     return p.parse_args(argv)
@@ -823,7 +864,8 @@ def resolved_config(args):
     `tools.configloader`, CLI-Flags überschreiben den Loader-Output danach.
 
     ENV-Konvention: `<COMPONENT>_<KEY>` → `ROUTER_LISTEN_HOST`,
-    `ROUTER_LISTEN_PORT`, `ROUTER_LOG_LEVEL`, `ROUTER_CONTROLLER_DIR`.
+    `ROUTER_LISTEN_PORT`, `ROUTER_LOG_LEVEL`, `ROUTER_CONTROLLER_DIR`,
+    `ROUTER_ICON_ROOT`.
     """
     # Migrations-Hinweis (#102): die alten CDP-Push-Keys aus dem abgelösten
     # ROU-21 werden ignoriert — eine ältere config.json soll deshalb keinen
@@ -856,6 +898,7 @@ def resolved_config(args):
     if args.port:           cfg['listen_port']    = args.port
     if args.log_level:      cfg['log_level']      = args.log_level
     if args.controller_dir: cfg['controller_dir'] = args.controller_dir
+    if args.icon_root:      cfg['icon_root']      = args.icon_root
     return cfg
 
 
@@ -866,7 +909,9 @@ def main(argv=None):
     # aus der Runtime-Config (CONFIG-1/CONFIG-2, RUNTIME_SCHEMA).
     logsetup.setup(cfg['log_level'])
     runtime_config['controller_dir'] = cfg.get('controller_dir', '')
+    runtime_config['icon_root'] = cfg.get('icon_root', '')
     logging.info('Controller-PWA-Statik: %s', controller_dir())
+    logging.info('Icon-Bibliothek (ROU-26): %s', icon_root())
     load_routing(args.routing)
     ssl_context = None
     if args.cert and args.key:
