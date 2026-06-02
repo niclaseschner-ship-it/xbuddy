@@ -305,3 +305,86 @@ def test_EC_22_agent_asks_back_when_model_signals_missing_context():
     assert result.reply_text.startswith("Auf welchem Gerät")
     assert read.run_calls == []
     assert result.proposal is None
+
+
+# ============================================================
+#  #310 — AgentResult.transcript trägt den vollen Tool-Turn-Verlauf
+# ============================================================
+
+def test_issue_310_transcript_excludes_loaded_history():
+    """AC2: das Transkript enthält nur den NEUEN Turn (ab user_message), nicht
+    die geladene History — sonst würde die Orchestrierung History doppeln."""
+    history = [Message("user", [TextBlock("alt")]),
+               Message("assistant", [TextBlock("alte Antwort")])]
+    user = _user("neue Anfrage")
+    provider = FakeProvider([text_response("ok")])
+    result = agent.run_turn(history, user, provider, Catalog(), _TURN)
+    # Element 0 ist die neue user_message, dann der finale Assistant-Text.
+    assert result.transcript[0] is user
+    assert [m.role for m in result.transcript] == ["user", "assistant"]
+    assert result.transcript[-1].blocks[0].text == "ok"
+
+
+def test_issue_310_transcript_carries_tool_turns_in_order():
+    """AC2: bei einer lesenden Aufgabe trägt das Transkript in Loop-Reihenfolge
+    user → assistant(tool_use) → user(tool_result) → assistant(text)."""
+    read = FakeReadTask(name="info_lesen", result="22 Grad")
+    user = _user("wie warm?")
+    provider = FakeProvider([
+        task_call_response("info_lesen", call_id="c-1"),
+        text_response("Es sind 22 Grad."),
+    ])
+    result = agent.run_turn([], user, provider, _catalog(read), _TURN)
+
+    t = result.transcript
+    assert [m.role for m in t] == ["user", "assistant", "user", "assistant"]
+    assert t[0] is user
+    call = t[1].blocks[-1]
+    assert isinstance(call, TaskCallBlock)
+    assert call.call_id == "c-1"
+    res = t[2].blocks[0]
+    assert isinstance(res, TaskResultBlock)
+    assert res.call_id == "c-1"
+    assert t[3].blocks[0].text == "Es sind 22 Grad."
+
+
+def test_issue_310_proposal_transcript_pairs_tool_use():
+    """AC-FIX1 + AC-FIX4 (T310-S3): auf dem proposal-Pfad bleibt das WRITE-
+    tool_use im Transkript SICHTBAR (nicht weggelassen — sonst sähe das Modell
+    für Schreib-Aufgaben wieder nur Text, dieselbe Vergiftung) UND es ist
+    GEPAART: direkt danach ein synthetischer tool_result mit derselben call_id.
+    Der reine Vorschlagstext ist NICHT Teil des Transkripts (den hängt die
+    Orchestrierung an)."""
+    write = FakeWriteTask(name="termin", summary="Termin eintragen")
+    user = _user("trag einen Termin ein")
+    provider = FakeProvider([task_call_response("termin", call_id="c-7")])
+    result = agent.run_turn([], user, provider, _catalog(write), _TURN)
+
+    assert result.proposal is not None
+    t = result.transcript
+    # user → assistant(tool_use) → user(synth. tool_result) — paarig.
+    assert [m.role for m in t] == ["user", "assistant", "user"]
+    assert t[0] is user
+    call = t[1].blocks[-1]
+    assert isinstance(call, TaskCallBlock)   # AC-FIX4: tool_use sichtbar
+    assert call.call_id == "c-7"
+    res = t[2].blocks[0]
+    assert isinstance(res, TaskResultBlock)
+    assert res.call_id == "c-7"              # AC-FIX1: gepaart
+    assert res.is_error is False
+    # EC-7: der synthetische Result behauptet NICHT, der Write sei ausgeführt.
+    assert "eingetragen" not in res.content.lower()
+    assert "erledigt" not in res.content.lower()
+
+
+def test_issue_310_transcript_does_not_mutate_provider_request():
+    """AC2/EC-13: der finale Antwort-Block landet im Transkript, NICHT
+    nachträglich in der provider-sichtbaren Anfrage. Sonst würde der letzte
+    Provider-Request um einen Block wachsen, den er nie gesehen hat."""
+    user = _user("neue Anfrage")
+    provider = FakeProvider([text_response("ok")])
+    result = agent.run_turn([], user, provider, Catalog(), _TURN)
+    # Die letzte (einzige) Anfrage sah genau [user] — kein Antwort-Block.
+    assert provider.requests[0].messages == [user]
+    # Das Transkript dagegen trägt den Antwort-Block.
+    assert result.transcript[-1].blocks[0].text == "ok"
