@@ -298,9 +298,13 @@ def _eine_person_anlegen(tg, chat_id, user_id, client, next_message,
     if telegram_id is False:
         return None
 
-    # FAA-7: Zusammenfassung + Bestätigungswort. Die `id` vergibt FAM-12 erst
-    # nach dem Bestaetigungswort; in der Zusammenfassung zeigen wir nur die
-    # vom Aufrufer erfassten Werte.
+    # FAA-7 / EC-10: Zusammenfassung + Bestätigungswort in EINER Nachricht.
+    # FAA hat immer Pflicht-Felder (Art, Name, Foto, Ring) → zweistufige Variante
+    # ist der einzige Pfad (vollständiger Anstoß ist strukturell nicht möglich).
+    # Die _zusammenfassung enthält bereits die Bestätigungsfrage als ersten Satz
+    # — das ist die EC-10-konforme kombinierte Nachricht nach Abschluss aller
+    # Rückfragen. Die `id` vergibt FAM-12 erst nach dem Bestaetigungswort;
+    # in der Zusammenfassung zeigen wir nur die vom Aufrufer erfassten Werte.
     summary = _zusammenfassung(name, art, ring, foto_ext, email, telegram_id)
     fire_typing(typing_fn)
     _send(tg, chat_id, summary)

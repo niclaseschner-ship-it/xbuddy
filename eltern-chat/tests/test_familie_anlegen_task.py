@@ -19,7 +19,9 @@ from confirm import PendingProposal, PendingStore
 from fakes import FakeProvider, FakeTelegram, make_message
 from skills.familie_anlegen import FaaInput
 from skills.familie_anlegen_task import (FamilieAnlegenTask, FaaSession,
-                                  make_faa_input)
+                                  make_faa_input,
+                                  _PROPOSAL_SUMMARY_FROM_GROUP,
+                                  _PROPOSAL_SUMMARY_FROM_PRIVATE)
 from skills.familie_client import FamilieClientError
 from history import History
 from main import Context, handle_update
@@ -134,10 +136,63 @@ def test_FAA_12_task_is_a_write_task_with_proposal():
         client=FakeFamilieClient())
     assert task.kind == WRITE
     assert task.name == "familie_anlegen"
+    # Aus der Gruppe aufgerufen → Privatchat-Hinweis im Vorschlag (EC-10 #278).
     proposal = task.propose(
-        arguments={}, turn_context=TurnContext(chat_id=7, from_user_id=7,
+        arguments={}, turn_context=TurnContext(chat_id="-100", from_user_id=7,
                                                private_chat_id=7))
     assert "Privatchat" in proposal.summary
+
+
+# ============================================================
+#  EC-10 / #278 — AC1+AC2: kontextabhängiger Vorschlag (_PROPOSAL_SUMMARY)
+# ============================================================
+
+def test_EC10_278_propose_from_group_mentions_privatchat():
+    """AC2 / EC-10 #278: Aufruf aus der Familien-Gruppe → Vorschlag enthält
+    Privatchat-Hinweis (_PROPOSAL_SUMMARY_FROM_GROUP)."""
+    task = FamilieAnlegenTask(
+        FakeTelegram(), "http://test",
+        sessions={}, family_group_chat_id_getter=lambda: "-100",
+        client=FakeFamilieClient())
+    proposal = task.propose(
+        arguments={}, turn_context=TurnContext(
+            chat_id="-100", from_user_id=7, private_chat_id=7))
+    assert proposal.summary == _PROPOSAL_SUMMARY_FROM_GROUP
+    assert "Privatchat" in proposal.summary
+
+
+def test_EC10_278_propose_from_private_omits_privatchat_hint():
+    """AC2 / EC-10 #278: Aufruf schon im Privatchat → kein Ortswechsel-Hinweis
+    im Vorschlag (_PROPOSAL_SUMMARY_FROM_PRIVATE, kein »Privatchat«-Verweis)."""
+    task = FamilieAnlegenTask(
+        FakeTelegram(), "http://test",
+        sessions={}, family_group_chat_id_getter=lambda: "-100",
+        client=FakeFamilieClient())
+    proposal = task.propose(
+        arguments={}, turn_context=TurnContext(
+            chat_id=7, from_user_id=7, private_chat_id=7))
+    assert proposal.summary == _PROPOSAL_SUMMARY_FROM_PRIVATE
+    assert "Privatchat" not in proposal.summary
+
+
+def test_EC10_278_one_step_confirmation_summary_includes_confirmation_question():
+    """AC1 / EC-10 #278: Nach Abschluss aller Pflicht-Felder liefert
+    _zusammenfassung Vorschlag + Bestätigungsfrage in EINER Nachricht —
+    das ist die EC-10-konforme kombinierte Nachricht für FAA.
+
+    FAA hat immer Pflicht-Felder (Art, Name, …) → vollständiger Anstoß ist
+    strukturell nicht möglich; zweistufige Variante ist der einzige Pfad.
+    Das Schreib-Gate bleibt vollständig erhalten (Ausführung erst nach
+    ausdrücklicher Bestätigung, FAA-7 / EC-10).
+    """
+    from skills.familie_anlegen import _zusammenfassung, KIND_ERWACHSENE
+    summary = _zusammenfassung("Niclas", KIND_ERWACHSENE, "blue", None, None, None)
+    # Die Zusammenfassung enthält Bestätigungsfrage als erstes Element.
+    assert "ok" in summary.lower() or "ja" in summary.lower()
+    assert "bestätigen" in summary.lower() or "bestätig" in summary.lower()
+    # Und enthält die Daten-Übersicht.
+    assert "Niclas" in summary
+    assert "blue" in summary
 
 
 # ============================================================
