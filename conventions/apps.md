@@ -71,7 +71,7 @@ ausgenommen, weil sie keine App-Funktion besitzt. Ihre eigene Spec ist
 
 Eine Fähigkeit mit eigener **Display-View** für die Familie wird unter
 `specs/buddies/<name>.md` spezifiziert. Eine Fähigkeit **ohne** eigene
-Display-View — Router, Familien-/Geräte-Registry, Eltern-Chat (Telegram-getriggert)
+Display-View — z. B. Router, Familien-/Geräte-Registry, Eltern-Chat (Telegram-getriggert)
 — wird unter `specs/platform/<name>.md` spezifiziert.
 
 Diese Heuristik ergänzt APP-5 (Plattform-Bereich vs. App-Eigentümer) um die

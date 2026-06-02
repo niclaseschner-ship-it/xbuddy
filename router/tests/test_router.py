@@ -27,13 +27,13 @@ DEMO_ROUTING = {
         {
             "source_id":  "phone:test-1",
             "descriptor": {"figure_id": "rotes-a", "bucket": 0},
-            "display_ids": ["default"],
+            "display_ids": ["display-default-01"],
             "payload":    {"url": "http://example.test/klein"},
         },
         {
             "source_id":  "phone:test-1",
             "descriptor": {"figure_id": "rotes-a", "bucket": 1},
-            "display_ids": ["default"],
+            "display_ids": ["display-default-01"],
             "payload":    {"url": "http://example.test/groß"},
         },
     ]
@@ -117,7 +117,7 @@ def test_ROU_6_phone_event_maps_1to1_to_canonical_trigger(client_with_routing):
         'source_id': 'phone:test-1', 'type': 'figure_detected',
         'figure_id': 'rotes-a', 'angle': 0, 'bucket': 0,
     })
-    s = router_main.state.get('default')
+    s = router_main.state.get('display-default-01')
     assert s is not None
     assert s['source_id'] == 'phone:test-1'
     assert s['descriptor'] == {'figure_id': 'rotes-a', 'bucket': 0}
@@ -129,7 +129,7 @@ def test_ROU_6_angle_field_is_not_used_for_routing(client_with_routing):
         'source_id': 'phone:test-1', 'type': 'angle_update',
         'figure_id': 'rotes-a', 'angle': 723.4, 'bucket': 1,
     })
-    s = router_main.state.get('default')
+    s = router_main.state.get('display-default-01')
     assert s['payload']['url'] == 'http://example.test/groß'
     # angle taucht weder im descriptor noch im State auf
     assert 'angle' not in s['descriptor']
@@ -144,7 +144,7 @@ def test_ROU_9_match_sets_state_with_payload(client_with_routing):
         'source_id': 'phone:test-1', 'type': 'figure_detected',
         'figure_id': 'rotes-a', 'angle': 0, 'bucket': 1,
     })
-    s = router_main.state['default']
+    s = router_main.state['display-default-01']
     assert s['payload'] == {'url': 'http://example.test/groß'}
 
 
@@ -155,7 +155,7 @@ def test_ROU_11_no_match_does_not_update_state(client_with_routing, caplog):
         'source_id': 'phone:test-1', 'type': 'figure_detected',
         'figure_id': 'rotes-a', 'angle': 0, 'bucket': 0,
     })
-    before = dict(router_main.state['default'])
+    before = dict(router_main.state['display-default-01'])
 
     # Dann unbekanntes figure_id schicken
     with caplog.at_level('WARNING'):
@@ -165,7 +165,7 @@ def test_ROU_11_no_match_does_not_update_state(client_with_routing, caplog):
         })
 
     # State unverändert
-    assert router_main.state['default'] == before
+    assert router_main.state['display-default-01'] == before
     # Warning wurde geloggt
     assert any('kein Match' in rec.message for rec in caplog.records)
 
@@ -175,12 +175,12 @@ def test_ROU_11_session_ended_sets_state_to_null(client_with_routing):
         'source_id': 'phone:test-1', 'type': 'figure_detected',
         'figure_id': 'rotes-a', 'angle': 0, 'bucket': 0,
     })
-    assert router_main.state['default'] is not None
+    assert router_main.state['display-default-01'] is not None
     post_event(client_with_routing, {
         'source_id': 'phone:test-1', 'type': 'session_ended',
         'figure_id': 'rotes-a', 'reason': 'user_button',
     })
-    assert router_main.state['default'] is None
+    assert router_main.state['display-default-01'] is None
 
 
 # ============================================================
@@ -192,7 +192,7 @@ def test_ROU_12_get_state_returns_current_payload(client_with_routing):
         'source_id': 'phone:test-1', 'type': 'figure_detected',
         'figure_id': 'rotes-a', 'angle': 0, 'bucket': 1,
     })
-    r = client_with_routing.get('/api/v1/displays/default/state')
+    r = client_with_routing.get('/api/v1/displays/display-default-01/state')
     assert r.status_code == 200
     body = r.get_json()
     assert body['payload']['url'] == 'http://example.test/groß'
@@ -201,7 +201,7 @@ def test_ROU_12_get_state_returns_current_payload(client_with_routing):
 
 def test_ROU_12_get_state_returns_null_when_inactive(client_with_routing):
     """Bekanntes Display ohne aktiven Trigger → 200 mit null."""
-    r = client_with_routing.get('/api/v1/displays/default/state')
+    r = client_with_routing.get('/api/v1/displays/display-default-01/state')
     assert r.status_code == 200
     assert r.get_json() is None
 
@@ -217,7 +217,7 @@ def test_ROU_13_payload_is_object_not_string(client_with_routing):
         'source_id': 'phone:test-1', 'type': 'figure_detected',
         'figure_id': 'rotes-a', 'angle': 0, 'bucket': 0,
     })
-    s = router_main.state['default']
+    s = router_main.state['display-default-01']
     assert isinstance(s['payload'], dict)
     assert 'url' in s['payload']
 
@@ -266,7 +266,7 @@ def test_ROU_22_known_display_serves_event_stream(client_with_routing, monkeypat
     Stream wird für den HTTP-Test durch einen endlichen Generator ersetzt."""
     monkeypatch.setattr(router_main, 'display_event_stream',
                         lambda did: iter(['data: null\n\n']))
-    r = client_with_routing.get('/api/v1/displays/default/events')
+    r = client_with_routing.get('/api/v1/displays/display-default-01/events')
     assert r.status_code == 200
     assert r.mimetype == 'text/event-stream'
 
@@ -277,7 +277,7 @@ def test_ROU_22_stream_sends_current_state_on_connect(client_with_routing):
         'source_id': 'phone:test-1', 'type': 'figure_detected',
         'figure_id': 'rotes-a', 'angle': 0, 'bucket': 1,
     })
-    gen = router_main.display_event_stream('default')
+    gen = router_main.display_event_stream('display-default-01')
     try:
         first = next(gen)
         assert first.startswith('data: ')
@@ -289,7 +289,7 @@ def test_ROU_22_stream_sends_current_state_on_connect(client_with_routing):
 
 def test_ROU_22_stream_sends_event_on_state_change(client_with_routing):
     """Jede Zustandsänderung (ROU-11) erzeugt ein weiteres Stream-Ereignis."""
-    gen = router_main.display_event_stream('default')
+    gen = router_main.display_event_stream('display-default-01')
     try:
         first = next(gen)                       # Verbinden: aktuell null
         assert json.loads(first[len('data: '):].strip()) is None
@@ -310,7 +310,7 @@ def test_ROU_22_stream_sends_null_on_session_end(client_with_routing):
         'source_id': 'phone:test-1', 'type': 'figure_detected',
         'figure_id': 'rotes-a', 'angle': 0, 'bucket': 0,
     })
-    gen = router_main.display_event_stream('default')
+    gen = router_main.display_event_stream('display-default-01')
     try:
         next(gen)                               # Verbinden: aktueller Zustand
         post_event(client_with_routing, {
@@ -326,11 +326,11 @@ def test_ROU_22_stream_sends_null_on_session_end(client_with_routing):
 def test_ROU_22_stream_unsubscribes_after_close(client_with_routing):
     """Nach dem Schließen hält der Router keinen Zustand über die Verbindung
     hinaus — die Subscription ist wieder abgeräumt."""
-    gen = router_main.display_event_stream('default')
+    gen = router_main.display_event_stream('display-default-01')
     next(gen)
-    assert router_main._subscribers.get('default')
+    assert router_main._subscribers.get('display-default-01')
     gen.close()
-    assert not router_main._subscribers.get('default')
+    assert not router_main._subscribers.get('display-default-01')
 
 
 def test_ROU_22_stream_emits_heartbeat_when_idle(client_with_routing, monkeypatch):
@@ -347,7 +347,7 @@ def test_ROU_22_stream_emits_heartbeat_when_idle(client_with_routing, monkeypatc
     Heartbeat-Kommentar, weil keine Zustandsänderung in der Queue liegt.
     """
     monkeypatch.setattr(router_main, 'SSE_HEARTBEAT_SECONDS', 0.01)
-    gen = router_main.display_event_stream('default')
+    gen = router_main.display_event_stream('display-default-01')
     try:
         first = next(gen)                       # Initial-Zustand (null)
         assert first.startswith('data: ')
@@ -496,7 +496,7 @@ def test_ROU_15_controller_dir_cli_overrides_env(monkeypatch, tmp_path):
 
 def test_ROU_18_missing_routing_starts_with_empty_table(client_no_routing):
     """Fehlende routing.json → leere Tabelle, keine bekannten Displays, 404."""
-    r = client_no_routing.get('/api/v1/displays/default/state')
+    r = client_no_routing.get('/api/v1/displays/display-default-01/state')
     assert r.status_code == 404
 
 
@@ -932,7 +932,7 @@ DEMO_ROUTING_INITIAL = {
         {
             "source_id":  "phone:test-1",
             "descriptor": {"figure_id": "rotes-a", "bucket": 0},
-            "display_ids": ["default"],
+            "display_ids": ["display-default-01"],
             "payload":    {"url": "http://example.test/klein"},
         },
     ]
@@ -943,13 +943,13 @@ DEMO_ROUTING_RELOADED = {
         {
             "source_id":  "phone:test-1",
             "descriptor": {"figure_id": "rotes-a", "bucket": 0},
-            "display_ids": ["default"],
+            "display_ids": ["display-default-01"],
             "payload":    {"url": "http://example.test/klein"},
         },
         {
             "source_id":  "phone:test-1",
             "descriptor": {"figure_id": "blaues-b", "bucket": 0},
-            "display_ids": ["default", "neuer-bildschirm"],
+            "display_ids": ["display-default-01", "neuer-bildschirm"],
             "payload":    {"url": "http://example.test/blau"},
         },
     ]
@@ -1036,7 +1036,7 @@ def test_140_reload_endpoint_atomar_bei_parse_fehler(reload_client):
     assert router_main.known_displays == known_before
 
     # Der Router antwortet weiter wie vorher.
-    s = client.get('/api/v1/displays/default/state')
+    s = client.get('/api/v1/displays/display-default-01/state')
     assert s.status_code == 200
 
 
@@ -1134,8 +1134,8 @@ def test_DCOMP_2_lookup_sieht_neuen_eintrag_ohne_reload(reload_client):
         'figure_id': 'rotes-a', 'bucket': 1,
     })
     # bucket 1 ist nicht in DEMO_ROUTING_INITIAL → kein State-Update.
-    assert router_main.state.get('default') is None or \
-        router_main.state.get('default', {}).get('descriptor', {}).get('bucket') != 1
+    assert router_main.state.get('display-default-01') is None or \
+        router_main.state.get('display-default-01', {}).get('descriptor', {}).get('bucket') != 1
 
     # Skill schreibt routing.json um — neuer Eintrag für bucket 1.
     routing_file.write_text(json.dumps(DEMO_ROUTING_RELOADED))
@@ -1148,7 +1148,7 @@ def test_DCOMP_2_lookup_sieht_neuen_eintrag_ohne_reload(reload_client):
     })
     # Der neue Eintrag (blaues-b → /blau für default + neuer-bildschirm)
     # ist sichtbar geworden, ohne Service-Restart, ohne Admin-Reload.
-    s = router_main.state.get('default')
+    s = router_main.state.get('display-default-01')
     assert s is not None
     assert s['payload']['url'] == 'http://example.test/blau'
 
@@ -1212,8 +1212,8 @@ def test_DCOMP_2_kaputtes_routing_json_faellt_auf_snapshot(reload_client, caplog
     nicht in einen leeren Zustand, nur weil ein Skill mitten im Schreiben
     war. Spiegel des atomaren Admin-Reload-Verhaltens (E-RELOAD-1 / ROU-25)."""
     client, routing_file = reload_client
-    # Snapshot enthält den 'default'-Eintrag aus DEMO_ROUTING_INITIAL.
-    assert 'default' in router_main.known_displays
+    # Snapshot enthält den 'display-default-01'-Eintrag aus DEMO_ROUTING_INITIAL.
+    assert 'display-default-01' in router_main.known_displays
 
     # Datei zerschießen.
     routing_file.write_text('{nicht-valides-json')
@@ -1221,7 +1221,7 @@ def test_DCOMP_2_kaputtes_routing_json_faellt_auf_snapshot(reload_client, caplog
     # Lookup soll trotzdem aus Snapshot bedient werden — kein 500, kein
     # leeres known_displays, der Router bleibt antwortfähig.
     with caplog.at_level('DEBUG'):
-        r = client.get('/api/v1/displays/default/state')
+        r = client.get('/api/v1/displays/display-default-01/state')
     assert r.status_code == 200, \
         'DCOMP-2 Resilienz: kaputtes routing.json darf bekannte Displays nicht ' \
         'aus dem Endpoint kippen — Snapshot-Fallback muss greifen'
@@ -1231,6 +1231,6 @@ def test_DCOMP_2_kaputtes_routing_json_faellt_auf_snapshot(reload_client, caplog
         'source_id': 'phone:test-1', 'type': 'figure_detected',
         'figure_id': 'rotes-a', 'bucket': 0,
     })
-    s = router_main.state.get('default')
+    s = router_main.state.get('display-default-01')
     assert s is not None
     assert s['payload']['url'] == 'http://example.test/klein'
