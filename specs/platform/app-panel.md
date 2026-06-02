@@ -233,9 +233,8 @@ das diese Panel-Instanz steuert (Form `<typ>-<slug>-<nn>`, z. B.
 Origin des Routers (Schema + Host[:Port], **ohne Pfad**, analog FIG-23).
 
 **Priorität & Fehler-Fallback:** Folgen der Konfigurations-Konvention
-`conventions/config.md` (CONFIG-4: fehlende/kaputte Datei → Defaults
-+ Warnung, Prozess startet) — analog FIG-23 / ROU-19. URL-Parameter
-überschreiben `config.json` überschreibt Defaults. (Decision 4)
+`conventions/config.md` (CONFIG-5: Priorität CLI > ENV > config.json > Defaults;
+CONFIG-4: fehlende/kaputte Datei → Defaults + Warnung, Prozess startet) — analog FIG-23 / ROU-19. (Decision 4)
 
 **Selbsttragend:** Datei liegt im Panel-Verzeichnis und wird
 mitausgeliefert. Pro Instanz separat verwaltet — `config.json` ist

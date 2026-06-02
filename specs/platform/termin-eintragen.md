@@ -270,12 +270,12 @@ Nach Bestätigung (TES-7) schreibt die Funktion den Termin ausschließlich
   Aufrufer kann sie für ein späteres Ändern/Löschen referenzieren (heute
   außerhalb des V1-Scopes, aber stabiles Vertrags-Element).
 - **Fehler-Antworten** (vgl. `plan/main.py` Z. 441–458):
-  - **HTTP 400** — Plan-Buddy lehnt Body ab (fehlende Pflicht-Felder
-    oder ungültiges Datum); die Funktion wertet das als interner Fehler
-    der eigenen Vorschlags-Konstruktion (TES-4/TES-5 hätten das vorher
-    abfangen müssen) und liefert „nicht_erreichbar" mit einer hart-
-    codierten Ehrlich-Antwort im Privatchat. Der Termin ist nicht
-    geschrieben.
+  - **HTTP 400** — (Defense-in-Depth) Plan-Buddy lehnt Body ab (fehlende
+    Pflicht-Felder oder ungültiges Datum). Die Funktion wertet das als
+    interner Fehler der eigenen Vorschlags-Konstruktion (TES-4/TES-5
+    hätten das vorher abfangen müssen) und liefert „nicht_erreichbar" mit
+    einer hart-codierten Ehrlich-Antwort im Privatchat. Der Termin ist
+    nicht geschrieben.
   - **HTTP 502** — Plan-Buddy meldet `CalendarUnavailable`
     (Google-Kalender nicht erreichbar, PLAN-20). Ergebnis-Signal
     „nicht_erreichbar"; Privatchat-Antwort hart-codiert („Kalender ist

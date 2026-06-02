@@ -404,7 +404,7 @@ OPEN-ROU-C).
 Dev-Override per ENV-Variable und CLI-Flag ist möglich (CONFIG-1:
 ENV/CLI sind Dev-Werkzeug bzw. Test-Werkzeug, nicht produktive
 Familien-Form) — Liste am Ende der Spec unter „Dev-Anhang". Priorität
-bleibt **CLI > ENV > config.json > Defaults**.
+folgt `conventions/config.md` **CONFIG-5**.
 
 | Name             | Default                                                     | Datei-Schlüssel  | gesetzt durch (Onboarding-Schritt) |
 |------------------|-------------------------------------------------------------|------------------|------------------------------------|

@@ -434,8 +434,10 @@ Auftrag #215 hat den FAA-/GAA-Schreibweg auf HTTP umgestellt (DCOMP-1):
 statt eines `family_registry_path`/`geraete_registry_path` (Datei-Pfade)
 zeigen `familie_origin_url`/`geraete_origin_url` heute auf die HTTP-API
 der Familien-/Geraete-Komponente. Der `plan_json_path` bleibt für den
-KAV-Auswahl-Schritt erhalten (V1-Provisorium gegen die FS-Linie, #140) —
-HTTP-Migration ist ein eigenes Folge-Ticket.
+KAV-Auswahl-Schritt erhalten: die direkte Schreib-Stelle ist ein
+**bewusstes V1-Provisorium** gegen die FS-Linie (siehe `kalender-verbinden.md`
+KAV-X); #140 hat den automatischen ReloadHook geschlossen, die saubere
+HTTP-API-Lösung für den Konfig-Schreibzugriff ist ein eigenes Folge-Ticket.
 
 *Tickets:* #27 · #33 · #179 · #215
 

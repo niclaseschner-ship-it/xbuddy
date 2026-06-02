@@ -266,7 +266,9 @@ als Folge-Ticket **#140** geschnitten. V1 schreibt deshalb direkt in die
 Per-Instanz-Datei `plan/plan.json` — gitignored, atomar (Temp-Datei +
 `os.replace` analog `familie/registry.py::save`), nur der `kalender_id`-
 Schlüssel wird modifiziert, alle anderen Werte (`slots`,
-`default_verantwortlichkeiten`, …) bleiben byte-gleich.
+`default_verantwortlichkeiten`, …) bleiben byte-gleich. Das ist ein
+**bewusstes V1-Provisorium**: die saubere Lösung ist eine Plan-Admin-API
+(Folge-Ticket, wenn die API existiert; heute offen ohne Ticket-Nr).
 
 *Tickets:* #57, #139
 
@@ -320,9 +322,10 @@ Hook fehl, hängt EC-21 eine zusammengefasste Warnung an die Erfolgs-
 Quittung — die Familie sieht dann, dass etwas mit der automatischen
 Übernahme nicht stimmt. Die hart-codierte Erfolgs-Nachricht der Funktion
 selbst enthält **keinen** manuellen Restart-Hinweis mehr (Refs #154,
-Live-Test 2026-05-26 hat das veraltete Wording aufgedeckt).
+Live-Test 2026-05-26 hat das veraltete Wording aufgedeckt; mit #140
+ReloadHook geschlossen, Erfolgs-Quittung ohne Restart-Anleitung stabil).
 
-*Tickets:* #139, #140, #154
+*Tickets:* #139, #140 (ReloadHook), #154
 
 ### KAV-8 — Bestätigung im Privatchat
 Nach erfolgreicher Speicherung (KAV-7) postet die Funktion eine hart-codierte
