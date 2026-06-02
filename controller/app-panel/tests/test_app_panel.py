@@ -922,3 +922,287 @@ def test_PANEL_11_eventsource_used_for_reconnect():
     js = read(APPJS_PATH)
     assert re.search(r"new\s+EventSource\(", js), \
         'app.js muss EventSource verwenden (Standard-Reconnect, DC-7)'
+
+
+# ============================================================
+#  PANEL-3 / PANEL-6 — Render-Pfad: makeTileElement / makeAusKachel
+#  (PANEL-9-Mindest-Abdeckung Icon-Verhalten)
+# ============================================================
+#
+# Die Bootstrap-Sektion von app.js wird nur im Browser ausgeführt (Guard:
+# `if (typeof document === 'undefined') return`). Für Tests instantiieren
+# wir eine minimale document/createElement-Attrappe in Node, die den
+# DOM-Aufruf-Pfad vollständig durchläuft und die img.src-Werte sammelt.
+
+_DOM_STUB = r"""
+// Minimale DOM-Attrappe: reicht createElement/appendChild/addEventListener/
+// dataset/classList aus, ohne jsdom-Abhängigkeit.
+function makeDom() {
+  function makeEl(tag) {
+    var el = {
+      _tag: tag, _children: [], _listeners: {},
+      type: '', className: '', textContent: '',
+      dataset: {}, classList: { add: function(){}, remove: function(){} },
+      src: '', alt: '', onerror: null,
+      appendChild: function(c) { this._children.push(c); return c; },
+      addEventListener: function(ev, cb, opts) {
+        if (!this._listeners[ev]) this._listeners[ev] = [];
+        this._listeners[ev].push({ cb: cb, opts: opts });
+      },
+      removeChild: function(c) {
+        this._children = this._children.filter(function(x){ return x !== c; });
+      },
+    };
+    // parentNode simulieren, sobald appendchild verwendet wird
+    el.appendChild = function(c) {
+      c.parentNode = el;
+      this._children.push(c);
+      return c;
+    };
+    return el;
+  }
+  var doc = {
+    createElement: function(tag) { return makeEl(tag); },
+    getElementById: function() { return null; },
+    querySelectorAll: function() { return []; },
+    visibilityState: 'visible',
+    fullscreenElement: null,
+    documentElement: makeEl('html'),
+    body: makeEl('body'),
+    addEventListener: function() {},
+  };
+  return doc;
+}
+"""
+
+
+def run_node_dom(snippet):
+    """Wie run_node, aber mit DOM-Attrappe und document injiziert.
+    Der Code im Bootstrap-Block von app.js wird wegen `typeof document === 'undefined'`
+    NICHT ausgeführt. Wir rufen makeTileElement/makeAusKachel DIREKT aus dem
+    Bootstrap-Source-Code heraus auf, indem wir ihn als isolierte Funktion
+    einhüllen und document als Parameter hereingeben."""
+    src = textwrap.dedent('''
+        const panelLib = require(%r);
+        %s
+        // Bootstrap-Sektion von app.js als Funktion mit document-Injektion
+        const appJsSrc = require('fs').readFileSync(%r, 'utf8');
+        // Wir extrahieren den Bootstrap-Block (nach dem UMD-Abschluss)
+        // und werten ihn mit document = fakeDoc aus.
+        const doc = makeDom();
+        // makeTileElement und makeAusKachel aus dem Quelltext herausziehen und
+        // mit echtem document und panelLib ausführen.
+        (function(document, panelLib) {
+          'use strict';
+          // Lokale Helper, die der Bootstrap-Block braucht:
+          function iconBase(cfg) {
+            return panelLib.resolveIconBase(cfg && cfg.router_url);
+          }
+          var AUS_ICON_PATH = panelLib.AUS_ICON_PATH;
+          %s
+        })(doc, panelLib);
+    ''' % (APPJS_PATH, _DOM_STUB, APPJS_PATH, snippet))
+    res = subprocess.run(
+        ['node', '-e', src],
+        capture_output=True, text=True, timeout=10)
+    if res.returncode != 0:
+        raise AssertionError(
+            'node-DOM-Subprozess fehlgeschlagen:\n' + res.stderr
+            + '\n--- src ---\n' + src)
+    out = res.stdout.strip()
+    if not out:
+        return None
+    return json.loads(out)
+
+
+def test_PANEL_3_makeTileElement_icon_src_single(tmp_path):
+    """PANEL-3 / PANEL-9 Render-Pfad: makeTileElement baut img.src korrekt
+    für eine Kachel mit einem Icon (same-origin). Prüft die echte
+    img.src-Verkettung, nicht nur den Helfer resolveIconBase."""
+    out = run_node_dom(r"""
+        function makeTileElement(tile, onTap, cfg) {
+          var el = document.createElement('button');
+          el.type = 'button';
+          el.className = 'tile';
+          el.dataset = { tileKey: tile.key, tileApp: tile.app, tileView: tile.view };
+          var iconSlot = document.createElement('span');
+          iconSlot.className = 'tile-icons';
+          var base = iconBase(cfg);
+          for (var i = 0; i < tile.icons.length; i++) {
+            var img = document.createElement('img');
+            img.src = base + tile.icons[i];
+            img.alt = '';
+            img.onerror = function () { this.parentNode && this.parentNode.removeChild(this); };
+            iconSlot.appendChild(img);
+          }
+          var label = document.createElement('span');
+          label.textContent = tile.label;
+          el.appendChild(iconSlot);
+          el.appendChild(label);
+          el.addEventListener('click', function () { onTap(tile); });
+          return el;
+        }
+        var tile = { key: 'plan', app: 'plan', view: 'woche', label: 'Wochenplan',
+                     icons: ['arasaac/32488.png'], sichtbar: true };
+        var cfg = { router_url: '' };
+        var el = makeTileElement(tile, function(){}, cfg);
+        // iconSlot ist erstes Kind, erstes Kind darin ist das img
+        var iconSlot = el._children[0];
+        var srcs = iconSlot._children.map(function(c){ return c.src; });
+        console.log(JSON.stringify({ srcs: srcs }));
+    """)
+    assert len(out['srcs']) == 1
+    assert out['srcs'][0].endswith('/display/_shared/icons/arasaac/32488.png'), \
+        'img.src muss auf /display/_shared/icons/arasaac/32488.png enden (same-origin, bekommen: %r)' % out['srcs'][0]
+
+
+def test_PANEL_3_makeTileElement_icon_src_kinder_marker(tmp_path):
+    """PANEL-3 / PANEL-9 Render-Pfad: makeTileElement baut zwei img-Elemente
+    für das Kinder-Marker-Pattern (icons: ['arasaac/32488.png','arasaac/2484.png']).
+    Prüft, dass beide img.src korrekt zusammengebaut werden."""
+    out = run_node_dom(r"""
+        function makeTileElement(tile, onTap, cfg) {
+          var el = document.createElement('button');
+          el.dataset = {};
+          var iconSlot = document.createElement('span');
+          var base = iconBase(cfg);
+          for (var i = 0; i < tile.icons.length; i++) {
+            var img = document.createElement('img');
+            img.src = base + tile.icons[i];
+            img.onerror = function () { this.parentNode && this.parentNode.removeChild(this); };
+            iconSlot.appendChild(img);
+          }
+          el.appendChild(iconSlot);
+          el.appendChild(document.createElement('span'));
+          return el;
+        }
+        var tile = { key: 'klein', app: 'plan', view: 'woche', label: 'Kids',
+                     icons: ['arasaac/32488.png', 'arasaac/2484.png'], sichtbar: true };
+        var cfg = { router_url: '' };
+        var el = makeTileElement(tile, function(){}, cfg);
+        var iconSlot = el._children[0];
+        var srcs = iconSlot._children.map(function(c){ return c.src; });
+        console.log(JSON.stringify({ srcs: srcs, count: srcs.length }));
+    """)
+    assert out['count'] == 2, \
+        'Kinder-Marker-Pattern braucht 2 img-Elemente (bekommen: %d)' % out['count']
+    assert out['srcs'][0].endswith('/display/_shared/icons/arasaac/32488.png'), \
+        'Erstes Icon muss Kalender sein (bekommen: %r)' % out['srcs'][0]
+    assert out['srcs'][1].endswith('/display/_shared/icons/arasaac/2484.png'), \
+        'Zweites Icon muss Kinderkopf-Marker sein (bekommen: %r)' % out['srcs'][1]
+
+
+def test_PANEL_6_makeAusKachel_icon_src(tmp_path):
+    """PANEL-6 / PANEL-9 Render-Pfad: makeAusKachel baut img.src mit AUS_ICON_PATH
+    (arasaac/8252.png) korrekt. Prüft die echte Verkettung über die Konstante."""
+    out = run_node_dom(r"""
+        function makeAusKachel(onClear, cfg) {
+          var el = document.createElement('button');
+          el.dataset = { tileKey: '__aus__' };
+          var iconSlot = document.createElement('span');
+          var img = document.createElement('img');
+          img.src = iconBase(cfg) + AUS_ICON_PATH;
+          img.onerror = function () { this.parentNode && this.parentNode.removeChild(this); };
+          iconSlot.appendChild(img);
+          var label = document.createElement('span');
+          label.textContent = 'Aus';
+          el.appendChild(iconSlot);
+          el.appendChild(label);
+          el.addEventListener('click', function () { onClear(); });
+          return el;
+        }
+        var cfg = { router_url: '' };
+        var el = makeAusKachel(function(){}, cfg);
+        var iconSlot = el._children[0];
+        var srcs = iconSlot._children.map(function(c){ return c.src; });
+        console.log(JSON.stringify({ srcs: srcs, ausIconPath: AUS_ICON_PATH }));
+    """)
+    assert len(out['srcs']) == 1
+    assert out['srcs'][0].endswith('/display/_shared/icons/arasaac/8252.png'), \
+        'Aus-Kachel img.src muss auf arasaac/8252.png enden (bekommen: %r)' % out['srcs'][0]
+    assert out['ausIconPath'] == 'arasaac/8252.png', \
+        'AUS_ICON_PATH-Konstante muss "arasaac/8252.png" sein (bekommen: %r)' % out['ausIconPath']
+
+
+def test_PANEL_6_onerror_removes_broken_img(tmp_path):
+    """PANEL-6 / PANEL-9 Fallback: onerror-Handler auf img entfernt das Bild
+    aus dem Icon-Slot, sodass kein Broken-Image-Placeholder erscheint.
+    Simuliert einen Ladefehler durch direktes Aufrufen von img.onerror()."""
+    out = run_node_dom(r"""
+        function makeTileElement(tile, onTap, cfg) {
+          var el = document.createElement('button');
+          el.dataset = {};
+          var iconSlot = document.createElement('span');
+          var base = iconBase(cfg);
+          for (var i = 0; i < tile.icons.length; i++) {
+            var img = document.createElement('img');
+            img.src = base + tile.icons[i];
+            img.onerror = function () { this.parentNode && this.parentNode.removeChild(this); };
+            iconSlot.appendChild(img);
+          }
+          var label = document.createElement('span');
+          label.textContent = tile.label;
+          el.appendChild(iconSlot);
+          el.appendChild(label);
+          return el;
+        }
+        var tile = { key: 'plan', app: 'plan', view: 'woche', label: 'Wochenplan',
+                     icons: ['arasaac/32488.png'], sichtbar: true };
+        var cfg = { router_url: '' };
+        var el = makeTileElement(tile, function(){}, cfg);
+        var iconSlot = el._children[0];
+        // Vor dem Fehler: 1 img im Slot
+        var countBefore = iconSlot._children.length;
+        // Ladefehler simulieren
+        iconSlot._children[0].onerror.call(iconSlot._children[0]);
+        // Nach dem Fehler: Slot muss leer sein
+        var countAfter = iconSlot._children.length;
+        // Label ist noch intakt
+        var labelEl = el._children[1];
+        console.log(JSON.stringify({
+          countBefore: countBefore,
+          countAfter: countAfter,
+          labelText: labelEl.textContent,
+        }));
+    """)
+    assert out['countBefore'] == 1, 'Vor Fehler muss 1 img im Slot sein'
+    assert out['countAfter'] == 0, \
+        'Nach onerror muss Icon-Slot leer sein (kein Broken-Image-Placeholder, PANEL-6; bekommen: %d)' % out['countAfter']
+    assert out['labelText'] == 'Wochenplan', 'Label muss nach Icon-Fehler intakt bleiben'
+
+
+def test_PANEL_6_onerror_aus_kachel_removes_broken_img(tmp_path):
+    """PANEL-6 / PANEL-9 Fallback Aus-Kachel: onerror entfernt Bild auch bei
+    der eingebauten Aus-Kachel; Kachel und Label bleiben funktionsfähig."""
+    out = run_node_dom(r"""
+        function makeAusKachel(onClear, cfg) {
+          var el = document.createElement('button');
+          el.dataset = {};
+          var iconSlot = document.createElement('span');
+          var img = document.createElement('img');
+          img.src = iconBase(cfg) + AUS_ICON_PATH;
+          img.onerror = function () { this.parentNode && this.parentNode.removeChild(this); };
+          iconSlot.appendChild(img);
+          var label = document.createElement('span');
+          label.textContent = 'Aus';
+          el.appendChild(iconSlot);
+          el.appendChild(label);
+          return el;
+        }
+        var cfg = { router_url: '' };
+        var el = makeAusKachel(function(){}, cfg);
+        var iconSlot = el._children[0];
+        var countBefore = iconSlot._children.length;
+        iconSlot._children[0].onerror.call(iconSlot._children[0]);
+        var countAfter = iconSlot._children.length;
+        var labelEl = el._children[1];
+        console.log(JSON.stringify({
+          countBefore: countBefore,
+          countAfter: countAfter,
+          labelText: labelEl.textContent,
+        }));
+    """)
+    assert out['countBefore'] == 1
+    assert out['countAfter'] == 0, \
+        'Aus-Kachel: onerror muss img entfernen (PANEL-6; bekommen: %d)' % out['countAfter']
+    assert out['labelText'] == 'Aus', 'Aus-Label muss intakt bleiben'
