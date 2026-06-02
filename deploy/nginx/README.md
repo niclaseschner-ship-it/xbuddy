@@ -19,6 +19,7 @@ getrennt nach innen.
 
 | Pfad-Prefix | Upstream | Port |
 |---|---|---|
+| `/display/_shared/icons/*` | statisch aus icon-root (`alias`, ICONS-5, #135) | — (Dateisystem) |
 | `/display/plan/*` | Plan-Buddy (`plan/main.py`) | `127.0.0.1:5020` |
 | `/api/v1/plan/*` | Plan-Buddy (`plan/main.py`) | `127.0.0.1:5020` |
 | `/display/*` | Router (`router/main.py`) | `127.0.0.1:5000` |
@@ -32,6 +33,14 @@ Die spezifischen Plan-Prefixe stehen vor den allgemeinen Router-Prefixen;
 nginx wählt bei Prefix-`location` den längsten Treffer, sodass z. B.
 `/display/plan/woche` an den Plan-Buddy und `/display/wohnzimmer` an den
 Router geht.
+
+`/display/_shared/icons/*` ist kein Upstream-Proxy, sondern wird per
+nginx-`alias` direkt aus der **icon-root** ausgeliefert (zentrale
+ARASAAC-Icon-Bibliothek, `specs/platform/icons.md` ICONS-5, #135). Die
+icon-root ist Per-Instanz-Daten außerhalb des Repos (Default
+`/home/buddy/apps/icons/`, ICONS-2) und wird vor dem Serving einmalig
+befüllt — siehe „Icon-Bibliothek seeden" unten. Weicht der icon-root-Pfad
+ab, den `alias` in `xbuddy-origin.conf` entsprechend anpassen.
 
 Die Buddy-Vhosts auf den `:51NN`-Ports und `:5150` sind **Brücken** und
 bewusst **nicht** Teil dieser Origin.
@@ -94,3 +103,18 @@ des Repos.
 
 `nginx -t` braucht Root-Rechte und prüft auch, ob die referenzierten
 Zertifikats-Dateien existieren — daher erst nach Schritt 2 ausführbar.
+
+## Icon-Bibliothek seeden (Ops — durch Nic)
+
+Bevor `/display/_shared/icons/*` Bilder liefert, muss die icon-root
+einmalig befüllt werden (`specs/platform/icons.md` ICONS-4). Das Seed-Skript
+kopiert die ARASAAC-PNGs und das Wort→ID-Mapping aus dem vorhandenen
+KIBuddy-Cache in die icon-root (idempotent, kein Re-Fetch):
+
+```bash
+./deploy/icons/seed-icon-library.sh            # Default-icon-root /home/buddy/apps/icons/
+./deploy/icons/seed-icon-library.sh /pfad/zur/icon-root   # abweichender Ort
+```
+
+Der `alias` in `xbuddy-origin.conf` muss auf denselben icon-root zeigen.
+Die ~176 MB Assets liegen außerhalb des Repos (Per-Instanz-Daten, ICONS-2).
