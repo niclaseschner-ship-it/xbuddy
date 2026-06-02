@@ -499,6 +499,15 @@ Bestandteil eines Standard-Durchlaufs.
   Onboarding-Schritt, der ihn aus der Bot-Konfiguration zieht (Origin
   des HTTPS-Servers, auf dem der Bot läuft), ist offen.
 
+- **OPEN-EC-LOG-STRUCT — LOG-Konvention für strukturierte Event-Nachrichten.**
+  Zwei Stellen in Eltern-Chat schreiben Log-Nachrichten mit `event=… key=value`-
+  Inhalt im `message`-Teil (EC-23-Telemetrie, E-EC-2-Pickup-Latenz). Das
+  LOG-Format (LOG-1) regelt die Zeile; für den internen Aufbau von
+  `message` bei strukturierten Events gibt es noch keine eigene
+  Konvention. Sobald ein dritter strukturierter Event-Logger entsteht,
+  ist eine LOG-Konvention (`event=key=value`) fällig. Heute zwei Vorkommen
+  — kein Vorrat anlegen (CLAUDE.md §6).
+
 ---
 
 ## Entscheidungen
@@ -539,10 +548,11 @@ ist davon getrennt — er steuert, wie lange Telegram auf neue Updates wartet,
 bevor es eine leere Liste zurückgibt; die Backoff-Pause liegt danach und
 betrifft nur den Abstand zum nächsten Poll-Aufruf bei Leerlauf/Fehler.
 
-**Verfeinerung Pickup-Latenz-Logging (#294, LOG-4):** Der `poll_loop` misst
+**Verfeinerung Pickup-Latenz-Logging (#294):** Der `poll_loop` misst
 für jeden empfangenen Update-Batch die Latenz zwischen `getUpdates`-Rückkehr
 (t0) und der Fertigstellung der Petrarbeitung (t1) und schreibt sie pro Batch
-als `INFO`-Eintrag im LOG-4-key=value-Format:
+als `INFO`-Eintrag gemäß LOG-1-Zeilenformat (`%(asctime)s %(levelname)s %(message)s`);
+der `message`-Teil enthält strukturierten Inhalt im `event=… key=value`-Stil:
 `poll event=pickup_latency count=N latency_ms=X`. Das ist die
 **familienseitige Long-Poll-Pickup-Latenz** — von Telegrams Update-Lieferung
 bis zum Ende unserer Petrarbeitung — und ist bewusst von der
