@@ -19,7 +19,12 @@ für Verhalten").
 
 - Eine Konventions-Datei je **wiederkehrender Sache mit eigenem
   Wie-Vertrag** — `conventions/<name>.md` (z. B. `identifiers.md`,
-  `config.md`, `logging.md`).
+  `config.md`, `logging.md`, `module-boundaries.md`).
+
+Eine Konvention darf **maschinell durchgesetzt** werden, wo das geht:
+`module-boundaries.md` (MOD) wird von import-linter (`.importlinter`,
+`make lint`, CI) als Gate geprüft; die Datei beschreibt die Bauregel,
+der Linter erzwingt sie.
 
 Gegliedert wird nach **Sache**, nicht nach Code-Modul. Eine Datei
 entsteht **erst**, wenn dieselbe Sache zum zweiten Mal gebaut wird und
