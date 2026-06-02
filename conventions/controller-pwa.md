@@ -76,8 +76,16 @@ eine Familien-App.
 ### PWA-4 — Config-Lade-Konvention
 Beim Laden der Seite wird `./config.json` per `fetch` geholt und auf
 die Code-Defaults angewendet (Defaults-Merge). URL-Parameter
-überschreiben weiterhin `config.json`. Reihenfolge:
+überschreiben standardmäßig `config.json`. Standard-Reihenfolge:
 **Defaults → config.json → URL-Parameter**.
+
+**Ausnahme App-Panel:** Das App-Panel (`app-panel.md`, PANEL-8)
+verwendet bewusst **kein URL-Parameter-Overlay** — Konfiguration
+ausschließlich über `config.json`. Begründung: V1, feste Tablets,
+kein wechselnder Kontext pro Seitenaufruf. Ein URL-Overlay ist
+nachrüstbar, sobald der Onboarding-Skill es braucht. Die
+Figuren-Erkennung und andere Controller-Typen behalten das
+URL-Overlay unverändert. *(#251)*
 
 Existiert die Datei nicht oder ist sie nicht parsebar, fällt die
 Seite **stumm** auf die Defaults zurück und protokolliert den Fehler

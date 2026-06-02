@@ -227,13 +227,23 @@ Breaking Change):
 | `router_url` | (kein Default — Pflicht)         | `router_url`    | — (offen, OPEN-PANEL-C)            |
 
 `source_id` ist die Identität dieser Panel-Instanz (z. B.
-`app-panel:kueche`). `display_id` ist die IDENT-1-Objekt-ID des Displays,
-das diese Panel-Instanz steuert (Form `<typ>-<slug>-<nn>`, z. B.
-`tablet-wohnzimmer-01` — GER-7). `router_url` ist die
-Origin des Routers (Schema + Host[:Port], **ohne Pfad**, analog FIG-23).
+`app-panel:kueche`). `display_id` erwartet IDENT-1-Form (`<typ>-<slug>-<nn>`,
+z. B. `tablet-wohnzimmer-01`); der Panel-Code validiert die Form in V1
+nicht hart — ein Display, feste Tablets, keine Laufzeit-Prüfung nötig.
+`router_url` ist die Origin des Routers (Schema + Host[:Port], **ohne
+Pfad**, analog FIG-23). *(#305)*
+
+**Kein URL-Parameter-Overlay:** Das App-Panel liest seine Konfiguration
+ausschließlich aus `config.json` — URL-Parameter überschreiben die
+Konfiguration **nicht**. Begründung: V1, feste Tablets, kein wechselnder
+Kontext pro Seitenaufruf. Ein URL-Overlay ist nachrüstbar, sobald der
+Onboarding-Skill (Ticket #183, App-Panel-Onboarding) es braucht.
+Dies ist eine bewusste Ausnahme von PWA-4, die dort für andere
+Controller-Typen (z. B. Figuren-Erkennung) weiterhin gilt. *(#251)*
 
 **Priorität & Fehler-Fallback:** Folgen der Konfigurations-Konvention
-`conventions/config.md` (CONFIG-5: Priorität CLI > ENV > config.json > Defaults;
+`conventions/config.md` (CONFIG-5: Priorität CLI > ENV > config.json > Defaults —
+ohne URL-Parameter-Override für das App-Panel, siehe oben;
 CONFIG-4: fehlende/kaputte Datei → Defaults + Warnung, Prozess startet) — analog FIG-23 / ROU-19. (Decision 4)
 
 **Selbsttragend:** Datei liegt im Panel-Verzeichnis und wird
