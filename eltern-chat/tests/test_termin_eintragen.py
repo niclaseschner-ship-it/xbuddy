@@ -921,6 +921,101 @@ def test_TES7_quittung_eingetragen():
 
 
 # ============================================================
+#  TES-12 — Quittungs-Wortlaut je Termin-Art (T304, #273)
+# ============================================================
+
+def test_TES12_quittung_zeitgebunden():
+    """TES-12 / AC1: nach erfolgreichem PUT eines zeitgebundenen Termins erscheint
+    im Privatchat die Quittung im Zeitgebunden-Format (Titel + Datum + Uhrzeiten)."""
+    tg = FakeTelegram(members={42: {"status": "member"}})
+    plan_client = FakePlanClientV2(put_event_id="evt-tz-1")
+    termin_eintragen(
+        tg=tg, private_chat_id=100, from_user_id=42,
+        family_group_chat_id=200,
+        anstos_text="Zahnarzt Dienstag 10 Uhr bis 11 Uhr",
+        plan_client=plan_client, is_member_fn=_member(42),
+        next_message=_messages("ok"), heute=MONTAG)
+    letzte = tg.sent[-1]["text"]
+    # TES-12: Quittung beginnt mit »Eingetragen ✅«
+    assert letzte.startswith("Eingetragen ✅"), (
+        "Zeitgebunden-Quittung beginnt nicht mit 'Eingetragen ✅': %r" % letzte)
+    # Titel muss enthalten sein
+    assert "Zahnarzt" in letzte, "Titel fehlt in Zeitgebunden-Quittung: %r" % letzte
+    # Start- und Endzeit müssen enthalten sein (TES-12: Zeitgebunden-Format)
+    assert "10:00" in letzte, "Startzeit fehlt in Zeitgebunden-Quittung: %r" % letzte
+    assert "11:00" in letzte, "Endzeit fehlt in Zeitgebunden-Quittung: %r" % letzte
+    # Datum muss enthalten sein (Dienstag = 02.06.2026)
+    assert "02.06.2026" in letzte, "Datum fehlt in Zeitgebunden-Quittung: %r" % letzte
+    # Zeitgebunden-Quittung unterscheidet sich vom Ganztags-Format (enthält Uhrzeiten, nicht nur Datum)
+    assert "Uhr" in letzte, "»Uhr« fehlt in Zeitgebunden-Quittung: %r" % letzte
+
+
+def test_TES12_quittung_mehrtage():
+    """TES-12 / AC2: nach erfolgreichem PUT eines mehrtägigen Termins erscheint
+    im Privatchat die Quittung im Mehrtage-Format (»von … bis …«)."""
+    tg = FakeTelegram(members={42: {"status": "member"}})
+    plan_client = FakePlanClientV2(put_event_id="evt-mt-1")
+    termin_eintragen(
+        tg=tg, private_chat_id=100, from_user_id=42,
+        family_group_chat_id=200,
+        anstos_text="Schulausflug von Dienstag bis Mittwoch",
+        plan_client=plan_client, is_member_fn=_member(42),
+        next_message=_messages("ok"), heute=MONTAG)
+    letzte = tg.sent[-1]["text"]
+    # TES-12: Quittung beginnt mit »Eingetragen ✅«
+    assert letzte.startswith("Eingetragen ✅"), (
+        "Mehrtage-Quittung beginnt nicht mit 'Eingetragen ✅': %r" % letzte)
+    # Titel muss enthalten sein
+    assert "Schulausflug" in letzte, "Titel fehlt in Mehrtage-Quittung: %r" % letzte
+    # Mehrtage-Format: »von … bis …« (TES-12)
+    assert "von" in letzte.lower(), "»von« fehlt in Mehrtage-Quittung: %r" % letzte
+    assert "bis" in letzte.lower(), "»bis« fehlt in Mehrtage-Quittung: %r" % letzte
+    # Beginn- und Enddatum müssen enthalten sein (Dienstag=02.06, Mittwoch=03.06.2026)
+    assert "02.06.2026" in letzte, "Beginn-Datum fehlt in Mehrtage-Quittung: %r" % letzte
+    assert "03.06.2026" in letzte, "Ende-Datum fehlt in Mehrtage-Quittung: %r" % letzte
+
+
+# ============================================================
+#  TES-5 — Live-Pfad PUT-Body: Tanz-Termin + Bitte-um-Geduld (T304, #273)
+# ============================================================
+
+def test_TES5_live_tanz_termin_put_body():
+    """TES-5 / AC3 (#273): »Trag Tanz-Termin am Freitag ein« →
+    PUT-Body-Titel ist »Tanz-Termin« (Inhaltswörter bleiben erhalten,
+    Trigger-Wörter und Datums-Token werden entfernt)."""
+    signal, _, client = _run(
+        anstos_text="Trag Tanz-Termin am Freitag ein",
+        today=MONTAG,
+    )
+    assert signal == SIGNAL_EINGETRAGEN
+    titel_im_put, beginn, _ = client.put_calls[0]
+    assert titel_im_put == "Tanz-Termin", (
+        "PUT-Body-Titel soll 'Tanz-Termin' sein, got %r" % titel_im_put)
+    # Datum muss Freitag = 05.06.2026 sein
+    from datetime import date as _date
+    assert _date.fromisoformat(beginn) == FREITAG, (
+        "PUT-Datum soll Freitag (%s) sein, got %r" % (FREITAG.isoformat(), beginn))
+
+
+def test_TES5_live_bitte_um_geduld_put_body():
+    """TES-5 / AC3 (#273): »Bitte um Geduld am Freitag« →
+    PUT-Body-Titel ist »Bitte um Geduld« (»Bitte«, »um« und »Geduld«
+    sind Inhaltswörter — kein Trigger, kein Datum-Token)."""
+    signal, _, client = _run(
+        anstos_text="Bitte um Geduld am Freitag",
+        today=MONTAG,
+    )
+    assert signal == SIGNAL_EINGETRAGEN
+    titel_im_put, beginn, _ = client.put_calls[0]
+    assert titel_im_put == "Bitte um Geduld", (
+        "PUT-Body-Titel soll 'Bitte um Geduld' sein, got %r" % titel_im_put)
+    # Datum muss Freitag = 05.06.2026 sein
+    from datetime import date as _date
+    assert _date.fromisoformat(beginn) == FREITAG, (
+        "PUT-Datum soll Freitag (%s) sein, got %r" % (FREITAG.isoformat(), beginn))
+
+
+# ============================================================
 #  T280 — typing_fn-Hook vor jeder Send-Phase (EC-14, Issue #280)
 # ============================================================
 
