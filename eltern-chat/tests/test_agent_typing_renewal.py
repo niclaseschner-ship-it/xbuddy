@@ -1,10 +1,16 @@
-"""Tests für den Typing-Renewal-Thread — Issue #165.
+"""Tests für den Typing-Renewal-Thread — Issue #165, #274.
 
-Prüft die drei Akzeptanzkriterien:
+Bestehende Gruppe (Issue #165):
   AC1: Bei einem >5 s dauernden provider.generate liegt mindestens ein zweites
        send_chat_action('typing') zwischen Start und Ende.
   AC2: Thread-Fehler (z. B. TelegramError) brechen den Turn NICHT ab.
   AC3: Thread terminiert nach generate-Return (kein Leak, kein post-Reply-typing).
+
+Neue Gruppe (#274 — E2E-Nachweis über handle_update):
+  AC2 (#274): Typing-Renewal über den vollen Orchestrierungs-Pfad (handle_update
+              mit SlowProvider) weist >=2 chat_actions(typing) nach — die erste
+              kommt vom Typing-vor-Auth (EC-25/AC2/#287), mindestens eine weitere
+              vom Renewal-Thread während des langsamen Provider-Calls (EC-14/#274).
 """
 
 import time
@@ -13,7 +19,10 @@ import threading
 import pytest
 
 import agent
-from fakes import FakeProvider, text_response
+from confirm import PendingStore
+from fakes import FakeProvider, FakeTelegram, make_message, text_response
+from history import History
+from main import Context, handle_update
 from model import Message, TextBlock
 from tasks import Catalog, TurnContext
 from telegram import TelegramError
@@ -205,3 +214,77 @@ def test_no_renewer_run_turn_works_as_before():
     result = agent.run_turn([], _user(), provider, Catalog(), _TURN)
     assert result.reply_text == "Hallo!"
     assert result.proposal is None
+
+
+# ============================================================
+#  #274 — AC2: E2E-Nachweis über handle_update (SlowProvider)
+# ============================================================
+
+
+def _ctx_e2e(tmp_path, tg, provider):
+    """Minimaler Context für E2E-handle_update-Tests."""
+    return Context(
+        tg=tg,
+        bot_username="testbot",
+        family_group_chat_id="-100",
+        context_depth=20,
+        provider=provider,
+        catalog=Catalog(),
+        history=History(str(tmp_path / "renewal_e2e.db")),
+        pending=PendingStore(),
+    )
+
+
+def test_e2e_typing_renewal_via_handle_update(tmp_path):
+    """AC2 (#274, EC-14): Typing-Renewal-Nachweis über den vollen Orchestrierungs-
+    Pfad (handle_update mit SlowProvider).
+
+    Erwartetes Verhalten:
+    - Vor dem Auth-Check kommt ein Typing (EC-25/AC2/#287).
+    - Während des langen Provider-Calls erneuert der Renewal-Thread den
+      Typing-Indikator mindestens einmal (EC-14/#274).
+    - Insgesamt müssen >=2 send_chat_action('typing')-Aufrufe ankommen.
+    - Der Turn liefert trotzdem die korrekte Antwort.
+
+    Mechanismus: SlowProvider schläft länger als das Renewal-Intervall.
+    Das Intervall wird auf 0.1 s verkürzt, damit der Test schnell läuft.
+    """
+    original_interval = agent._TYPING_RENEWAL_INTERVAL
+    agent._TYPING_RENEWAL_INTERVAL = 0.1
+
+    class SlowProvider:
+        """Provider mit einstellbarer Verzögerung — simuliert langen LLM-Call."""
+
+        def __init__(self):
+            self.requests = []
+
+        def generate(self, request):
+            self.requests.append(request)
+            time.sleep(0.35)   # drei Renewal-Zyklen à 0.1 s
+            from model import GenerationResponse
+            return GenerationResponse(text="Fertig.", task_calls=[])
+
+    provider = SlowProvider()
+    tg = FakeTelegram(members={7: {"status": "member"}})
+    ctx = _ctx_e2e(tmp_path, tg, provider)
+
+    try:
+        handle_update(make_message("hallo", chat_id=42, from_user_id=7,
+                                   chat_type="private"), ctx)
+    finally:
+        agent._TYPING_RENEWAL_INTERVAL = original_interval
+
+    # Provider wurde aufgerufen.
+    assert len(provider.requests) == 1
+
+    # Antwort korrekt geliefert.
+    assert len(tg.sent) == 1
+    assert tg.sent[0]["text"] == "Fertig."
+
+    # Mindestens 2 Typing-Aufrufe: einer vor Auth (EC-25/#287), mindestens einer
+    # durch den Renewal-Thread während des langsamen Provider-Calls (EC-14/#274).
+    typing_actions = [a for a in tg.chat_actions if a["action"] == "typing"]
+    assert len(typing_actions) >= 2, (
+        "AC2 (#274): Erwartet >=2 Typing-Aufrufe (1 vor Auth + >=1 Renewal), "
+        "erhalten: %d. chat_actions=%s" % (len(typing_actions), tg.chat_actions)
+    )

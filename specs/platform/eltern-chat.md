@@ -379,7 +379,14 @@ dem Familienmitglied mit einem klaren Hinweis, dass die Anfrage gerade nicht
 bearbeitet werden konnte, und bricht sauber ab. Es entsteht keine halbfertige
 Aufgabe und keine stumme Nicht-Antwort.
 
-*Tickets:* #27
+Dauert ein Provider-Call länger als rund 5 Sekunden — die Sichtbarkeitsdauer
+des Telegram-Typing-Indikators —, erneuert das System den Indikator
+periodisch, solange der Call läuft, damit die Familie nicht vor scheinbarer
+Stille sitzt. Das Renewal ist **Best-Effort**: es läuft in einem
+Hintergrund-Thread; Fehler des Renewal-Calls brechen den Turn nicht ab. Siehe
+auch EC-25 (Typing-Indikator als Komfort-Signal vor Bot-Nachrichten).
+
+*Tickets:* #27 · #274
 
 ## 5. Konfiguration
 
@@ -492,6 +499,15 @@ Bestandteil eines Standard-Durchlaufs.
   Onboarding-Schritt, der ihn aus der Bot-Konfiguration zieht (Origin
   des HTTPS-Servers, auf dem der Bot läuft), ist offen.
 
+- **OPEN-EC-LOG-STRUCT — LOG-Konvention für strukturierte Event-Nachrichten.**
+  Zwei Stellen in Eltern-Chat schreiben Log-Nachrichten mit `event=… key=value`-
+  Inhalt im `message`-Teil (EC-23-Telemetrie, E-EC-2-Pickup-Latenz). Das
+  LOG-Format (LOG-1) regelt die Zeile; für den internen Aufbau von
+  `message` bei strukturierten Events gibt es noch keine eigene
+  Konvention. Sobald ein dritter strukturierter Event-Logger entsteht,
+  ist eine LOG-Konvention (`event=key=value`) fällig. Heute zwei Vorkommen
+  — kein Vorrat anlegen (CLAUDE.md §6).
+
 ---
 
 ## Entscheidungen
@@ -522,6 +538,27 @@ Polling ohne öffentlichen Webhook reicht, und Familien mit Smartphone Telegram
 typischerweise schon haben. Der Kanal liegt hinter einer dünnen Adapter-Grenze
 (siehe E-EC-6-Muster), damit weitere Kanäle später andocken können — ohne sie
 auf Vorrat zu spezifizieren.
+
+**Verfeinerung Polling-Backoff (#294):** Der `poll_loop` verwendet bei
+aufeinanderfolgenden leeren oder fehlgeschlagenen `getUpdates`-Aufrufen
+einen exponentiellen Backoff: Startverzögerung 1 s, Faktor 2, Cap 5 s.
+Nach einem Update wird die Backoff-Pause auf 0 zurückgesetzt. Der
+Long-Poll-`timeout`-Parameter für den Telegram-Server (standardmäßig 30 s)
+ist davon getrennt — er steuert, wie lange Telegram auf neue Updates wartet,
+bevor es eine leere Liste zurückgibt; die Backoff-Pause liegt danach und
+betrifft nur den Abstand zum nächsten Poll-Aufruf bei Leerlauf/Fehler.
+
+**Verfeinerung Pickup-Latenz-Logging (#294):** Der `poll_loop` misst
+für jeden empfangenen Update-Batch die Latenz zwischen `getUpdates`-Rückkehr
+(t0) und der Fertigstellung der Verarbeitung (t1) und schreibt sie pro Batch
+als `INFO`-Eintrag gemäß LOG-1-Zeilenformat (`%(asctime)s %(levelname)s %(message)s`);
+der `message`-Teil enthält strukturierten Inhalt im `event=… key=value`-Stil:
+`poll event=pickup_latency count=N latency_ms=X`. Das ist die
+**familienseitige Long-Poll-Pickup-Latenz** — von Telegrams Update-Lieferung
+bis zum Ende unserer Verarbeitung — und ist bewusst von der
+EC-23-Provider-Latenz (innerhalb eines Turns) abgegrenzt: EC-23 misst, wie
+lange der LLM-Anbieter braucht; diese Metrik misst, wie schnell das System
+auf ein eintreffendes Update reagiert.
 
 ### E-EC-3 — Berechtigung über Gruppen-Mitgliedschaft, live geprüft
 *Datum:* 2026-05-21

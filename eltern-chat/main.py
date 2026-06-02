@@ -433,22 +433,63 @@ def dispatch(update, ctx):
 
 
 def poll_loop(ctx, get_updates_timeout=30):
-    """Liest fortlaufend Updates und verarbeitet sie (E-EC-2: Polling)."""
+    """Liest fortlaufend Updates und verarbeitet sie (E-EC-2: Polling).
+
+    Backoff (E-EC-2, #294): Leere oder fehlgeschlagene Polls werden mit
+    exponentiellem Backoff verlangsamt — Start 1 s, Faktor 2, Cap 5 s.
+    Ein eintreffendes Update setzt den Backoff auf 0 zurück.
+    Der Long-Poll-`timeout`-Parameter (wie lange Telegram auf Updates wartet)
+    ist davon unabhängig — der Backoff betrifft nur den Abstand zwischen
+    aufeinanderfolgenden leeren/fehlgeschlagenen Poll-Aufrufen.
+
+    Latenz (E-EC-2, #294, LOG-4): Pro empfangenem Update-Batch wird die
+    familienseitige Pickup-Latenz geloggt — von getUpdates-Rückkehr (t0) bis
+    Ende der Verarbeitung (t1). Abgegrenzt von EC-23-Provider-Latenz.
+    """
+    _BACKOFF_START = 1      # Sekunden — Startverzögerung bei leerem Poll
+    _BACKOFF_FACTOR = 2     # Multiplikator je aufeinanderfolgendem leeren Poll
+    _BACKOFF_CAP = 5        # Sekunden — maximale Backoff-Pause
+
     offset = None
+    backoff = 0.0           # aktuelle Backoff-Pause (0 = kein Backoff)
     logging.info("Eltern-Chat läuft — warte auf Nachrichten.")
     while True:
         try:
             updates = ctx.tg.get_updates(offset, timeout=get_updates_timeout)
         except TelegramError as e:
-            logging.warning("getUpdates fehlgeschlagen: %s — neuer Versuch in 3 s", e)
-            time.sleep(3)
+            # Fehlgeschlagener Poll: Backoff anwenden (Startwert, falls noch 0).
+            if backoff == 0.0:
+                backoff = _BACKOFF_START
+            logging.warning(
+                "getUpdates fehlgeschlagen: %s — neuer Versuch in %.0f s",
+                e, backoff)
+            time.sleep(backoff)
+            backoff = min(backoff * _BACKOFF_FACTOR, _BACKOFF_CAP)
             continue
+
+        if not updates:
+            # Leerer Poll: Backoff hochzählen.
+            if backoff == 0.0:
+                backoff = _BACKOFF_START
+            else:
+                backoff = min(backoff * _BACKOFF_FACTOR, _BACKOFF_CAP)
+            if backoff > 0:
+                time.sleep(backoff)
+            continue
+
+        # Update(s) eingetroffen — Backoff zurücksetzen, Latenz messen.
+        backoff = 0.0
+        t0 = time.monotonic()
         for update in updates:
             offset = update.get("update_id", 0) + 1
             try:
                 dispatch(update, ctx)
             except Exception:  # noqa: BLE001 — ein Update darf den Loop nie killen
                 logging.exception("Verarbeitung eines Updates fehlgeschlagen")
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        logging.info(
+            "poll event=pickup_latency count=%d latency_ms=%d",
+            len(updates), latency_ms)
 
 
 # ============================================================
