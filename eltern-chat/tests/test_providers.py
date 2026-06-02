@@ -176,3 +176,73 @@ def test_issue_93_token_log_handles_missing_usage(monkeypatch, caplog):
     token_records = [r for r in caplog.records
                      if r.name == "providers.claude" and "tokens" in r.message]
     assert token_records == []
+
+
+# ============================================================
+#  #310 — reloadete History mappt paarig auf gültige Anthropic-Messages
+# ============================================================
+
+class _FakeToolUseBlock:
+    """Doppelung eines Anthropic-`tool_use`-Content-Blocks."""
+
+    def __init__(self, id, name, input):
+        self.type = "tool_use"
+        self.id = id
+        self.name = name
+        self.input = input
+
+
+def test_issue_310_reloaded_pair_maps_to_valid_anthropic_messages(tmp_path):
+    """AC3: eine über die History persistierte + reloadete Tool-Paar-Sequenz
+    mappt der Adapter auf gültige Anthropic-Messages — der tool_use trägt
+    dieselbe id wie das tool_result als tool_use_id (kein 400-Muster)."""
+    from history import History
+    from model import Message, TaskCallBlock, TaskResultBlock, TextBlock
+    from providers.claude import ClaudeProvider
+
+    db = str(tmp_path / "c.db")
+    hist = History(db)
+    hist.append("chat-1", Message("user", [TextBlock("welche Termine?")]))
+    hist.append("chat-1", Message("assistant", [
+        TaskCallBlock(call_id="c-1", task="termine",
+                      arguments={"ab": "heute"})]))
+    hist.append("chat-1", Message("user", [
+        TaskResultBlock(call_id="c-1", content="2 Termine", is_error=False)]))
+    hist.append("chat-1", Message("assistant", [TextBlock("Du hast 2 Termine.")]))
+    loaded = hist.load("chat-1", 20)
+    hist.close()
+
+    mapped = [ClaudeProvider._to_anthropic_message(m) for m in loaded]
+
+    # assistant tool_use
+    tool_use = mapped[1]["content"][-1]
+    assert tool_use["type"] == "tool_use"
+    assert tool_use["id"] == "c-1"
+    assert tool_use["name"] == "termine"
+    assert tool_use["input"] == {"ab": "heute"}
+    # user tool_result — tool_use_id MUSS auf die id des tool_use zeigen.
+    tool_result = mapped[2]["content"][0]
+    assert tool_result["type"] == "tool_result"
+    assert tool_result["tool_use_id"] == tool_use["id"]
+    assert tool_result["content"] == "2 Termine"
+    assert tool_result["is_error"] is False
+
+
+def test_issue_310_from_response_preserves_call_id(monkeypatch):
+    """AC3-Vorbedingung: `_from_anthropic_response` überträgt die Anthropic-
+    tool_use-`id` als `call_id` an den TaskCallBlock — sonst fänden Aufruf und
+    späteres Ergebnis nach Reload nicht zusammen."""
+    from model import TaskCallBlock
+
+    resp = _FakeAnthropicResponse(text="", usage=None)
+    resp.content = [_FakeToolUseBlock(id="c-42", name="termine",
+                                      input={"ab": "morgen"})]
+    provider, _ = _build_provider_with(monkeypatch, resp)
+
+    result = provider.generate(_empty_request())
+    assert len(result.task_calls) == 1
+    call = result.task_calls[0]
+    assert isinstance(call, TaskCallBlock)
+    assert call.call_id == "c-42"
+    assert call.task == "termine"
+    assert call.arguments == {"ab": "morgen"}
