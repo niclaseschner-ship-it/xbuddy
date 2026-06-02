@@ -30,22 +30,19 @@ GENERIC_ACT_FALLBACK = "termin"
 # (OPEN-PLAN-B). Quelle des Katalogs: `plan.aktivitaeten` (Refs #101).
 
 # PLAN-13: Schlüsselwörter im Titel → Termin-Icon-Key (Heuristik).
-TERMIN_ICON_KEYWORDS = [
-    ("zahn", "tooth"),
-    ("klett", "climb"),
-    ("kreat", "brush"),
-    ("schwimm", "wave"),
-    ("spielplatz", "play"),
-    ("musik", "music"),
-    ("ausflug", "pin"),
-    ("geburtstag", "cake"),
-    ("petrabredung", "friends"),
-    ("wald", "trees"),
+# Gemeinsame Aktivitäts-Keywords kommen aus dem Katalog (`aktivitaeten.py`),
+# damit PLAN-12 und PLAN-13 nicht divergieren — ein Keyword wie "klavier"
+# führt in beiden Pfaden konsistent zum richtigen Symbol (#308).
+# Nur View-spezifische Einträge ohne Aktivitäts-Art (Zahnarzt, Ferien,
+# Urlaub, Treffen, Garten) bleiben hier hartcodiert.
+_TERMIN_ICON_EXTRAS = [
+    ("zahn",   "tooth"),
     ("ferien", "holiday"),
     ("urlaub", "holiday"),
-    ("treff", "sparkle"),
+    ("treff",  "sparkle"),
     ("garten", "flower"),
 ]
+TERMIN_ICON_KEYWORDS = aktivitaeten_mod.termin_icon_keywords_aus_katalog() + _TERMIN_ICON_EXTRAS
 
 
 def wochenstart_von(d, wochenstart_wd):
