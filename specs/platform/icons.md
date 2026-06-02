@@ -42,7 +42,7 @@ oder die `config.json` einer Komponente (`conventions/config.md` CONFIG-1).
 
 | Wert | Default | Override | gesetzt durch |
 |---|---|---|---|
-| `icon-root` | `/home/buddy/apps/icons/` | Arg `$1` oder ENV `ICON_ROOT` beim Seed (ICONS-4); nginx-`alias` beim Serving (ICONS-5) | Instanz-Betreiber (Ops) beim Ausrollen |
+| `icon-root` | `/home/buddy/apps/icons/` | Arg `$1` oder ENV `ICON_ROOT` beim Seed (ICONS-4); Router-Config `icon_root` beim Serving (ICONS-5, `router.md` ROU-26) | Instanz-Betreiber (Ops) beim Ausrollen |
 
 ## ICONS-3 — Wort→ID-Mapping wandert mit
 
@@ -90,20 +90,20 @@ Begründung der URL-Wahl:
   einzelnen Buddy gehören, liegen unter `/display/_shared/<sache>/`.
   Die Icon-Bibliothek gehört keiner einzelnen App, daher `_shared` statt
   eines Buddy-Slugs (für buddy-eigene Assets gilt URL-13).
-- URL-16 schreibt read-only-Auslieferung via nginx-`alias` vor — kein
-  Komponenten-Prozess, Per-Instanz-Daten außerhalb des Repos. Genau das
-  ist hier umgesetzt (ICONS-2).
+- Die Auslieferung übernimmt der **Router** als read-only-Asset-Pfad
+  (`router.md` ROU-26) — ein Zwilling zu `/controller/_shared/` (ROU-23).
 
-Anders als `controller/_shared/` (Helper-**Code** im Repo, vom Router
-ausgeliefert) zeigt dieser Pfad auf die Per-Instanz-Icon-Wurzel (ICONS-2)
-außerhalb des Repos. Die Origin (`conventions/urls.md` URL-12, URL-14)
-liefert diesen Prefix direkt per nginx-`alias` aus dem `icon-root` aus —
-read-only, ohne einen Komponenten-Prozess zu durchlaufen, weil es reine
-statische Dateien sind und der `icon-root` außerhalb jedes
-Komponenten-Verzeichnisses liegt. Der Prefix `/display/_shared/icons/` muss
-in der Origin-Routing-Tabelle (URL-14) **vor** dem allgemeinen
-`/display/`→Router-Eintrag stehen (spezifisch vor allgemein). Die konkrete
-Konfiguration liegt in `deploy/nginx/xbuddy-origin.conf`.
+Anders als `controller/_shared/` (Helper-**Code** im Repo) zeigt dieser
+Pfad auf die Per-Instanz-Icon-Wurzel (ICONS-2) außerhalb des Repos. Der
+**Router** liefert diesen Prefix aus dem `icon-root` aus (`router.md`
+ROU-26) — read-only, mit demselben Path-Traversal-Schutz wie ROU-23. Er
+läuft als User `buddy` und liest die icon-root problemlos; ein erster
+Versuch, die Wurzel per statischem nginx-`alias` auszuliefern, scheiterte
+an der `0700`-Home-Permission (nginx = `www-data` ≠ `buddy`) und lieferte
+404 (#135). In der Origin-Routing-Tabelle (URL-14) fällt
+`/display/_shared/icons/` an den allgemeinen `/display/`→Router-Eintrag —
+kein eigener statischer nginx-Block. Die konkrete Origin-Konfiguration
+liegt in `deploy/nginx/xbuddy-origin.conf`.
 
 `<id>` ist eine numerische ARASAAC-ID (ICONS-1). Andere `<source>` als
 `arasaac` gibt es heute nicht; weitere Quellen kämen als

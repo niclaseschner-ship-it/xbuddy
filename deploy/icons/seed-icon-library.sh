@@ -18,8 +18,12 @@
 #                   /home/buddy/apps/kibuddy/static/pictograms/.
 #                   Auch per ENV KIBUDDY_CACHE setzbar; das Arg gewinnt.
 #
-# Das pictogram_cache.json wird relativ zum KIBuddy-Cache erwartet
-# (../pictogram_cache.json), wie im vorhandenen KIBuddy-Layout.
+# Das pictogram_cache.json liegt im KIBuddy-Wurzelverzeichnis, EINE Ebene
+# ueber dem static/-Ordner — also zwei Ebenen ueber dem pictograms/-Cache:
+#   /home/buddy/apps/kibuddy/pictogram_cache.json
+#   /home/buddy/apps/kibuddy/static/pictograms/   (= KIBUDDY_CACHE)
+# Es wird per KIBUDDY_CACHE_JSON / ENV ueberschreibbar gehalten; Default
+# wird aus KIBUDDY_CACHE abgeleitet (dirname/dirname).
 #
 # Fehlende IDs spaeter nachladen (ICONS-4: bewusst NICHT automatisiert):
 # eine einzelne ARASAAC-ID zieht man bei Bedarf manuell, z. B.
@@ -36,7 +40,11 @@ KIBUDDY_CACHE="${2:-${KIBUDDY_CACHE:-/home/buddy/apps/kibuddy/static/pictograms/
 ICON_ROOT="${ICON_ROOT%/}"
 KIBUDDY_CACHE="${KIBUDDY_CACHE%/}"
 ARASAAC_DEST="${ICON_ROOT}/arasaac"
-CACHE_JSON_SRC="$(dirname "${KIBUDDY_CACHE}")/pictogram_cache.json"
+# pictogram_cache.json liegt im KIBuddy-Wurzelverzeichnis, ZWEI Ebenen ueber
+# dem pictograms/-Cache (static/pictograms/ -> static/ -> kibuddy/). Frueher
+# wurde nur eine Ebene hochgegangen und das Mapping deshalb nie geseedet.
+# Per ENV KIBUDDY_CACHE_JSON ueberschreibbar.
+CACHE_JSON_SRC="${KIBUDDY_CACHE_JSON:-$(dirname "$(dirname "${KIBUDDY_CACHE}")")/pictogram_cache.json}"
 CACHE_JSON_DEST="${ICON_ROOT}/pictogram_cache.json"
 
 log() { printf '[seed-icons] %s\n' "$*"; }

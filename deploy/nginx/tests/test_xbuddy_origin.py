@@ -94,47 +94,51 @@ def test_URL_14_familie_location_steht_nach_plan_locations():
 
 
 # ============================================================
-#  Icon-Bibliothek: statisch via alias, VOR /display/ (#135, URL-16)
+#  Icon-Bibliothek: vom Router serviert, KEIN nginx-alias (#135, ROU-26)
 # ============================================================
 #
-# /display/_shared/icons/ wird von nginx direkt per `alias` aus der
-# Per-Instanz-icon-root ausgeliefert (ICONS-5, URL-16) — kein proxy_pass.
-# Kritisch: der Block muss VOR dem allgemeinen /display/-Block stehen
-# (URL-14: spezifisch vor allgemein), sonst landen Icon-Requests beim
-# Router (5000) statt im Dateisystem.
+# Korrektur zu #135: /display/_shared/icons/ wird NICHT mehr per nginx-
+# `alias` ausgeliefert (scheiterte an der 0700-Home-Permission, nginx =
+# www-data). Stattdessen serviert der Router die icon-root (ROU-26,
+# Zwilling zu ROU-23). In der Conf heißt das: KEIN eigener icons-Block,
+# und /display/_shared/icons/ fällt an den allgemeinen /display/->Router-
+# Block (URL-14, ROU-26).
 
 
-def test_URL_14_icons_location_hat_alias():
-    """URL-16 / ICONS-5: location /display/_shared/icons/ mit alias-Direktive
-    muss existieren — read-only, kein proxy_pass."""
+def test_ROU_26_kein_eigener_icons_location_block():
+    """Korrektur #135: es darf KEINE eigene location /display/_shared/icons/
+    mehr geben — die Icons serviert der Router über /display/ (ROU-26)."""
+    text = _conf_text()
+    assert "location /display/_shared/icons/" not in text, (
+        "location /display/_shared/icons/ darf nicht mehr existieren — der "
+        "Router serviert die Icon-Bibliothek (ROU-26, #135). Der alte "
+        "nginx-alias scheiterte an der 0700-Home-Permission."
+    )
+
+
+def test_ROU_26_kein_alias_fuer_icon_root():
+    """Es darf keine `alias`-Direktive auf die icon-root mehr geben — das war
+    der gescheiterte Serving-Weg (ROU-26, #135)."""
+    text = _conf_text()
+    match = re.search(r"alias\s+[^\s;]+;", text)
+    assert match is None, (
+        "Eine `alias`-Direktive ist übrig — die Icon-Bibliothek wird vom "
+        f"Router serviert (ROU-26), kein nginx-alias mehr. Gefunden: {match.group(0) if match else ''}"
+    )
+
+
+def test_ROU_26_icons_faellt_an_display_router_block():
+    """`/display/_shared/icons/` muss vom allgemeinen /display/->Router-Block
+    abgedeckt sein: dieser proxy_pass an den Router existiert (ROU-26)."""
     text = _conf_text()
     match = re.search(
-        r"location\s+/display/_shared/icons/\s*\{[^}]*alias\s+[^\s;]+\s*;[^}]*\}",
+        r"location\s+/display/\s*\{[^}]*proxy_pass\s+http://xbuddy_router\s*;[^}]*\}",
         text,
         re.DOTALL,
     )
     assert match is not None, (
-        "location /display/_shared/icons/ fehlt oder hat kein alias "
-        "(URL-16, ICONS-5, #135 — nginx liefert Icons direkt aus icon-root, kein proxy_pass)"
-    )
-
-
-def test_URL_14_icons_location_steht_vor_allgemeinem_display():
-    """URL-14: spezifisch vor allgemein — /display/_shared/icons/ steht VOR /display/.
-
-    nginx wählt bei Prefix-`location` den längsten Treffer, aber URL-14
-    fordert die Reihenfolge als Vertrag (visuell nachvollziehbar, Reviewer
-    sehen die Tabelle eins zu eins in der Conf). Fehlt diese Reihenfolge,
-    können Icon-Requests je nach nginx-Version zum Router fallen.
-    """
-    text = _conf_text()
-    pos_icons = text.find("location /display/_shared/icons/")
-    pos_display = text.find("location /display/ ")
-    assert pos_icons != -1, "location /display/_shared/icons/ nicht gefunden"
-    assert pos_display != -1, "location /display/ nicht gefunden"
-    assert pos_icons < pos_display, (
-        "URL-14-Verstoß: /display/_shared/icons/ muss VOR /display/ stehen "
-        f"(Positionen: icons={pos_icons}, display={pos_display})"
+        "location /display/ fehlt oder proxypasst nicht an xbuddy_router — "
+        "der Router serviert /display/_shared/icons/ über diesen Block (ROU-26, #135)"
     )
 
 
