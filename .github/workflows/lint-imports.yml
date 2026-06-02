@@ -25,7 +25,7 @@ jobs:
           python-version: "3.13"
 
       - name: import-linter installieren
-        run: pip install import-linter
+        run: pip install "import-linter==2.11.*"
 
       - name: Modul-Grenzen prüfen
         run: lint-imports
