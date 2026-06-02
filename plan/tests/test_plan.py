@@ -904,6 +904,41 @@ def test_PLAN_12_musik_synonyme_klavier_geige_gitarre(demo_config, demo_registry
     assert slot["type"] == "musik"
 
 
+def test_PLAN_13_keyword_konsistenz_gemeinsame_quelle(demo_config, demo_registry):
+    """AC4 (#308): Keywords aus dem Aktivitäts-Katalog wirken in BEIDEN Pfaden
+    konsistent — Aktivitäts-Erkennung (PLAN-12) und Termin-Icon-Zuordnung
+    (PLAN-13) ziehen aus EINER Quelle (aktivitaeten.py, #308).
+
+    Für jede Art im Katalog gilt:
+    - `art_aus_titel(kw)` liefert die Art (PLAN-12-Pfad).
+    - `termin_icon(kw)` liefert NICHT 'sparkle' (den Default für „kein
+      Treffer") — das Keyword ist auch in PLAN-13 bekannt (#308).
+    - `termin_icon(kw)` liefert genau das Icon aus `_ART_ZU_ICON` (#308).
+
+    Dieser Test bricht, wenn ein Keyword nur in EINER der beiden Heuristiken
+    steht — die Divergenz aus dem ursprünglichen Bug (klavier/geige/gitarre
+    in PLAN-12 bekannt, in PLAN-13 fehlend) würde ihn fehlschlagen lassen."""
+    from plan import aktivitaeten as ak
+    from plan import render as render_mod
+    for art, _label, keywords in ak.AKTIVITAETEN:
+        expected_icon = ak.icon_fuer_art(art)
+        if expected_icon is None:
+            # Keine Icon-Zuordnung für diese Art — kein PLAN-13-Anteil.
+            continue
+        for kw in keywords:
+            # PLAN-12-Pfad.
+            assert ak.art_aus_titel(kw) == art, (
+                "PLAN-12: Keyword %r sollte Art %r liefern" % (kw, art))
+            # PLAN-13-Pfad.
+            got_icon = render_mod.termin_icon(kw)
+            assert got_icon != "sparkle", (
+                "PLAN-13: Keyword %r liefert Default-Sparkle — "
+                "nicht in TERMIN_ICON_KEYWORDS?" % kw)
+            assert got_icon == expected_icon, (
+                "PLAN-13: Keyword %r erwartet Icon %r, bekam %r"
+                % (kw, expected_icon, got_icon))
+
+
 def test_PLAN_12_musik_synonyme_entry_path_html(demo_config, demo_registry):
     """AC1-Entry-Path (T302): GET /display/plan/woche rendert einen
     „Klavier Paula"-Event mit activity_icon 'musik' im act1-Schedule-Slot —
