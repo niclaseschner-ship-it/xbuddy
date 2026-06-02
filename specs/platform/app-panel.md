@@ -86,15 +86,33 @@ Verzeichnis wie der Panel-Code (analog FIG-23 und ROU-18). Format: ein
 JSON-Objekt mit dem Feld `tiles`, das eine Liste von Kachel-Einträgen
 enthält. Jeder Eintrag hat folgende Felder:
 
-| Feld     | Typ            | Pflicht | Bedeutung                                                                 |
-|----------|----------------|---------|---------------------------------------------------------------------------|
-| `key`    | string         | ja      | Stabiler Identifier der Kachel, eindeutig innerhalb der `tiles.json`.     |
-| `app`    | string         | ja      | App-Slug (z. B. `plan`, `kalender`) — fließt in den Descriptor (PANEL-7). |
-| `view`   | string         | ja      | View-Name innerhalb der App (z. B. `woche`, `now-playing`).               |
-| `query`  | object (flach) | nein    | Optionale Query-Parameter (Strings/Zahlen) für die Ziel-View.             |
-| `label`  | string         | ja      | Beschriftung der Kachel im UI.                                            |
-| `icon`   | string         | ja      | Verweis auf die Kachel-Grafik (lokales Asset im selben Verzeichnis).      |
-| `sichtbar` | boolean      | ja      | `true` → Kachel wird gerendert; `false` → nicht gerendert (siehe PANEL-4). |
+| Feld       | Typ            | Pflicht | Bedeutung                                                                 |
+|------------|----------------|---------|---------------------------------------------------------------------------|
+| `key`      | string         | ja      | Stabiler Identifier der Kachel, eindeutig innerhalb der `tiles.json`.     |
+| `app`      | string         | ja      | App-Slug (z. B. `plan`, `kalender`) — fließt in den Descriptor (PANEL-7). |
+| `view`     | string         | ja      | View-Name innerhalb der App (z. B. `woche`, `now-playing`).               |
+| `query`    | object (flach) | nein    | Optionale Query-Parameter (Strings/Zahlen) für die Ziel-View.             |
+| `label`    | string         | ja      | Beschriftung der Kachel im UI.                                            |
+| `icons`    | string[]       | ja      | Liste von Icon-Pfaden (≥1, max 3). Pfade relativ zur Icon-Basis (siehe unten). Mehrere Icons werden in einer Reihe nebeneinander gerendert. |
+| `sichtbar` | boolean        | ja      | `true` → Kachel wird gerendert; `false` → nicht gerendert (siehe PANEL-4). |
+
+**Icon-Pfade und Icon-Basis:** Die Default-Icon-Quelle ist die zentrale
+ARASAAC-Bibliothek (ICONS-1, #135). Pfade in `icons[]` werden als
+relativ zur Icon-Basis `/display/_shared/icons/` aufgelöst (ROU-26,
+same-origin). Beispiel: `"arasaac/32488.png"` → URL
+`/display/_shared/icons/arasaac/32488.png`.
+
+**Kinder-Varianten-Pattern (Tile-Set-Konvention):** Eine Kachel, die
+eine **Kinder-Ansicht** einer App darstellt (z. B. `ansicht: klein`),
+trägt als **zweites Icon** einen Kinderkopf aus der zentralen
+Bibliothek (`arasaac/2484.png`) — nebeneinander neben dem primären
+App-Icon, **nicht** als zusammengesetztes Bild. Das Muster gilt für
+alle Kinder-Varianten im Tile-Set dieses Panels; die zweite Stelle in
+`icons[]` fungiert so als visueller Rollen-Marker.
+
+Hinweis: Sobald ein zweiter Buddy oder Controller-Typ dieselbe Kinder-Marker-
+Konvention braucht, gehört das Muster nach `conventions/` — heute ist das
+App-Panel der erste und einzige Ort (nichts auf Vorrat, CLAUDE.md §6).
 
 Die **Listen-Reihenfolge in `tiles.json` ist die Anzeige-Reihenfolge**
 der Kacheln im Panel. `key` ist bewusst stabil: ein späterer
@@ -106,7 +124,7 @@ mitausgeliefert. Pro Panel-Instanz separat verwaltet — `tiles.json` ist
 per `.gitignore` aus dem Repo ausgeschlossen; `tiles.example.json`
 dokumentiert das Format im Repo. (Decision 4)
 
-*Tickets:* #58
+*Tickets:* #58, #136
 
 ### PANEL-4 — `sichtbar`-Flag
 Eine Kachel mit `sichtbar: false` wird **nicht gerendert** und kann
@@ -172,10 +190,12 @@ das Display nie wieder dunkel werden, was der Constitution
   dann die letzte Position, wenn `tiles.json` leer ist.
 - **Visualisierung:** gleiche Kachelgröße und gleiches Gitter-Verhalten
   wie eine reguläre Kachel — sie unterscheidet sich nur durch Inhalt
-  (`label` „Aus" und ein neutrales, dunkles Symbol). Die genauen
-  Design-Tokens (Icon-Datei, exakte Farbe) kommen im Impl-PR; die Spec
-  verlangt nur „gleich groß wie eine reguläre Kachel" und „neutraler
-  dunkler Bildinhalt".
+  (`label` „Aus" und ein neutrales Symbol). Das Icon der Aus-Kachel ist
+  das ARASAAC-Piktogramm `arasaac/8252.png` (ID 8252 = „aus",
+  Wort→ID aus `pictogram_cache.json`, Stand 2026-06-02) aus der
+  zentralen Bibliothek (ICONS-5, ROU-26). Fallback: wenn das Icon
+  nicht geladen werden kann, bleibt die Kachel mit Label „Aus" und
+  leerem Icon-Slot funktionsfähig. (#136)
 - **Tap-Mechanik:** **einfacher Tap** (`tap`/`click`) — symmetrisch zu
   regulären Kacheln. Kein Long-Press, keine Doppel-Bestätigung.
 - **Sichtbarkeit:** **immer sichtbar**, unabhängig vom Display-State.
@@ -341,6 +361,12 @@ Mindest-Abdeckung:
   ohne weiteren Roundtrip kennt.
 - PANEL-3 — `tiles.json` mit gemischten Einträgen wird in der
   Listen-Reihenfolge gerendert; `key` ist eindeutig.
+  **Render-Pfad (Icon-Verhalten):** `makeTileElement` baut für jedes
+  Element in `icons[]` ein `<img>` mit `src = iconBase + icons[i]`
+  — geprüft per DOM-Stub-Test für ein einzelnes Icon und für das
+  Kinder-Marker-Pattern (zwei Icons: `arasaac/32488.png` +
+  `arasaac/2484.png`). Die erzeugten `img.src`-Werte müssen auf
+  `/display/_shared/icons/<pfad>` enden (same-origin-Basis).
 - PANEL-4 — Eintrag mit `sichtbar: false` wird nicht gerendert und
   sendet beim Versuch kein Event (Element existiert nicht).
 - PANEL-5 — Erfolgreicher POST wird gesendet; bei Netzwerk-Fehler
@@ -354,6 +380,14 @@ Mindest-Abdeckung:
   Datei beeinflusst (kein `sichtbar: false`-Effekt); ein Tap auf die
   Aus-Kachel sendet `panel_cleared` mit den drei Pflichtfeldern
   (`source_id`, `ts`, `type`) und ohne Descriptor-Felder.
+  **Render-Pfad (Icon-Verhalten):** `makeAusKachel` baut `img.src` aus
+  `iconBase + AUS_ICON_PATH` (`arasaac/8252.png`) — geprüft per
+  DOM-Stub-Test.
+  **Icon-Fallback (onerror):** alle Tile-Icons und das Aus-Kachel-Icon
+  tragen einen `onerror`-Handler, der das `<img>` aus dem Icon-Slot
+  entfernt. Kein Broken-Image-Placeholder; Kachel und Label bleiben
+  funktionsfähig — geprüft per DOM-Stub-Test (Ladefehler-Simulation
+  durch direktes Aufrufen von `img.onerror`).
 - PANEL-7 — Descriptor ist flach (Strings/Zahlen); ein verschachteltes
   `query` wird als Konfigurations-Fehler abgewiesen.
 - PANEL-8 — Fehlende oder kaputte `config.json` lässt die Seite mit
