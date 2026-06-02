@@ -532,7 +532,7 @@ auf Vorrat zu spezifizieren.
 
 **Verfeinerung Polling-Backoff (#294):** Der `poll_loop` verwendet bei
 aufeinanderfolgenden leeren oder fehlgeschlagenen `getUpdates`-Aufrufen
-einen exponentiellen Backoff: Startverzögerung 1 s, Faktor 2, Cap 30 s.
+einen exponentiellen Backoff: Startverzögerung 1 s, Faktor 2, Cap 5 s.
 Nach einem Update wird die Backoff-Pause auf 0 zurückgesetzt. Der
 Long-Poll-`timeout`-Parameter für den Telegram-Server (standardmäßig 30 s)
 ist davon getrennt — er steuert, wie lange Telegram auf neue Updates wartet,
