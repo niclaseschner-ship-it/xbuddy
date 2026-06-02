@@ -182,13 +182,12 @@ längste Prefix gewinnt, das ist Teil der Spec, nicht nur eine nginx-Marotte):
 
 | # | Pfad-Prefix                     | Upstream-Komponente | Bemerkung                                                                 |
 |---|---------------------------------|---------------------|---------------------------------------------------------------------------|
-| 0 | `/display/_shared/icons/`       | statisch/nginx-alias | Geteilte Display-Assets: ARASAAC-Piktogramme (URL-16, ICONS-5, #135). nginx-`alias` auf icon-root — kein Komponenten-Prozess. VOR `/display/` (spezifisch vor allgemein). |
 | 1 | `/display/plan/`                | Plan-Buddy          | Display-Views des Plan-Buddys (URL-2): `/display/plan/woche` (PLAN-2/3).  |
 | 2 | `/api/v1/plan/`                 | Plan-Buddy          | Plan-Buddy-Backend: `GET\|PUT /api/v1/plan/termine` (PLAN-22), `GET /api/v1/plan/zuteilung` (PLAN-30), `PUT /api/v1/plan/zuteilung` (PLAN-31), `PUT\|DELETE /api/v1/plan/aktivitaet` (PLAN-11). |
 | 3 | `/api/v1/familie/`              | Familie             | Familien-Mit-Host (Personen, Foto).                                       |
 | 4 | `/api/v1/geraete/`              | Geräte              | Geräte-Registry (GER-13/14/15) — Liste, Einzeln, Anlegen.                 |
 | 5 | `/api/v1/displays/<id>/events`  | Router              | SSE-Zustands-Stream (ROU-22); Long-Lived, ohne Proxy-Puffer.              |
-| 6 | `/display/`                     | Router              | Display-Views (außer den oben abgefangenen spezifischen Buddy-Prefixen).  |
+| 6 | `/display/`                     | Router              | Display-Views (außer den oben abgefangenen spezifischen Buddy-Prefixen). Schließt geteilte Display-Assets `/display/_shared/icons/` ein: der Router serviert die ARASAAC-Piktogramme aus der icon-root (URL-16, ICONS-5, `router.md` ROU-26, #135) — kein eigener nginx-Block. |
 | 7 | `/controller/`                  | Router              | Controller-Aktionen (URL-3).                                              |
 | 8 | `/api/v1/`                      | Router              | Hub-Backend (State, Events, Diagnose).                                    |
 | 9 | `/` (alles übrige)              | —                   | 404 (URL-1: andere Top-Level-Pfade sind nicht erlaubt).                   |
@@ -200,14 +199,12 @@ laufen). Konsumenten dieser Tabelle: #85 (nginx-Origin-Conf: Familie-Upstream
 ergänzen), #60 (Familie anlegen agentisch — schreibt Familie in den Routing-Plan
 einer Instanz), #82 (Geräte-Profil im Onboarding — wählt aus dieser Tabelle die
 Prefixe, die auf der Instanz aktiv sind), #135 (Icon-Bibliothek: geteilte
-Display-Assets als nginx-alias, URL-16).
+Display-Assets vom Router serviert, URL-16, ROU-26).
 
 Eine neue Komponente, die einen eigenen Prozess hinter der Origin betreibt,
 muss zuerst hier eine Zeile bekommen — dann nginx, dann Code. Reihenfolge
 spezifisch-vor-allgemein wird beibehalten; spezifischere Prefixe (`/api/v1/plan/`,
-`/api/v1/familie/`) stehen immer vor allgemeineren (`/api/v1/`). Nicht jeder
-URL-14-Eintrag hat einen Upstream-Prozess: statische Pfade (URL-16) liefert
-nginx direkt per `alias` aus — kein Proxy-Pass.
+`/api/v1/familie/`) stehen immer vor allgemeineren (`/api/v1/`).
 
 *Tickets:* #85, #135
 
@@ -244,18 +241,23 @@ Bauregeln:
 - **read-only**: der Namensraum liefert Assets aus; er nimmt keine
   Schreib-Anfragen entgegen. HTTP-Methoden außer `GET`/`HEAD` werden
   abgelehnt.
-- **Per-Instanz-Daten via alias**: die Assets selbst sind
-  Per-Instanz-Daten (nicht im Repo). nginx liefert sie direkt per
-  `alias` aus einem konfigurierbaren Verzeichnis aus — kein
-  Komponenten-Prozess ist beteiligt.
+- **Per-Instanz-Daten, vom Router serviert**: die Assets selbst sind
+  Per-Instanz-Daten (nicht im Repo). Der **Router** liefert sie aus einem
+  konfigurierbaren Verzeichnis aus — ein Zwilling zur Controller-Helper-
+  Auslieferung `/controller/_shared/` (`router.md` ROU-23). Er läuft als
+  User `buddy` und liest die Per-Instanz-Wurzel problemlos, während ein
+  statischer nginx-`alias` (nginx = `www-data`) an `0700`-Home-Permissions
+  scheitern kann (#135).
 - **nicht buddy-gebunden**: ein Asset unter `/display/_shared/` gehört
   keinem einzelnen Buddy (für buddy-eigene Assets gilt URL-13).
-- **Reihenfolge in URL-14**: jeder `/display/_shared/<sache>/`-Eintrag
-  steht in der URL-14-Tabelle VOR dem allgemeinen `/display/`-Block
-  (spezifisch vor allgemein — URL-14).
+- **Routing über `/display/`**: weil der Router die Assets serviert,
+  fällt `/display/_shared/<sache>/` in der URL-14-Tabelle an den
+  allgemeinen `/display/`→Router-Eintrag — kein eigener statischer
+  nginx-Block, keine Reihenfolge-Sonderregel nötig.
 
 Heute einzige Instanz: `/display/_shared/icons/` → ARASAAC-Piktogramme
-(ICONS-5, #135). Weitere geteilte Display-Assets folgen demselben Muster.
+(ICONS-5, `router.md` ROU-26, #135). Weitere geteilte Display-Assets
+folgen demselben Muster.
 
 *Tickets:* #135
 
