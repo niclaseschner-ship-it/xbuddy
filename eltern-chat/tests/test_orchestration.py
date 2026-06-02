@@ -1,14 +1,19 @@
 """Tests für die Orchestrierung — EC-2/EC-3/EC-5/EC-10/EC-14 (Refs #27).
+Enthält auch poll_loop-Tests (#294): Backoff bei leeren/fehlgeschlagenen
+getUpdates-Aufrufen und Latenz-Instrumentierung (LOG-4).
 
-Geprüft wird `handle_update`: das Zusammenspiel der Sicherheits-Gates mit dem
-Agenten. Telegram-Kanal und KI-Anbieter sind kontrollierte Doppelungen (EC-17).
+Geprüft wird `handle_update` und `poll_loop`: das Zusammenspiel der
+Sicherheits-Gates mit dem Agenten. Telegram-Kanal und KI-Anbieter sind
+kontrollierte Doppelungen (EC-17).
 """
+
+import logging
 
 from confirm import PendingStore
 from fakes import (FakeProvider, FakeReadTask, FakeTelegram, FakeWriteTask,
                    make_message, task_call_response, text_response)
 from history import History
-from main import Context, handle_update
+from main import Context, handle_update, poll_loop
 from main import _PROVIDER_DOWN
 from model import ProviderError
 from tasks import Catalog
@@ -216,3 +221,186 @@ def test_typing_action_sent_for_each_provider_call_in_tool_loop(tmp_path):
     ]
     # Antwort ist trotzdem korrekt durchgelaufen.
     assert tg.sent[-1]["text"] == "In Berlin sind es 22 Grad."
+
+
+# ============================================================
+#  #294 — poll_loop: Backoff + Pickup-Latenz-Logging
+# ============================================================
+
+def _poll_ctx(tmp_path, tg, provider=None):
+    """Minimaler Context für poll_loop-Tests."""
+    return Context(
+        tg=tg,
+        bot_username="testbot",
+        family_group_chat_id="-100",
+        context_depth=20,
+        provider=provider or FakeProvider([]),
+        catalog=Catalog(),
+        history=History(str(tmp_path / "poll.db")),
+        pending=PendingStore(),
+    )
+
+
+class _StopAfterN(Exception):
+    """Wird nach N Iterationen geworfen, um den poll_loop zu beenden."""
+
+
+class _FakeTelegramPoll:
+    """Telegram-Doppelung, die eine skriptierte Folge von getUpdates-Ergebnissen
+    liefert und nach Erschöpfung _StopAfterN wirft (zum kontrollierten Beenden
+    von poll_loop in Tests).
+
+    `sleep_calls` zeichnet alle time.sleep-Aufrufe auf, die der poll_loop
+    durch den monkeypatched time.sleep abgesetzt hat.
+    """
+
+    def __init__(self, responses):
+        """responses: Liste von — [] (leer), [update-dict] oder TelegramError."""
+        self._responses = list(responses)
+        self.sleep_calls = []
+
+    def get_updates(self, offset=None, timeout=30):
+        if not self._responses:
+            raise _StopAfterN("Alle Antworten verbraucht")
+        item = self._responses.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    def extract_message(self, update, bot_username):
+        return None
+
+    def extract_migration(self, update):
+        return None
+
+    def extract_bot_added(self, update):
+        return None
+
+    def send_message(self, *a, **kw):
+        return {"message_id": 1}
+
+    def send_chat_action(self, *a, **kw):
+        pass
+
+
+def test_backoff_grows_on_empty_polls(tmp_path, monkeypatch):
+    """AC3 (#294, E-EC-2-Verfeinerung): Aufeinanderfolgende leere getUpdates-
+    Antworten führen zu exponentiell wachsenden sleep-Pausen.
+
+    Erwarteter Ablauf (Start=1, Faktor=2):
+      - Poll 1 → leer → sleep(1)
+      - Poll 2 → leer → sleep(2)
+      - Poll 3 → leer → sleep(4)
+      - Poll 4 → _StopAfterN beendet den Loop
+
+    Der Long-Poll-timeout-Parameter (Sekunden, die Telegram wartet) ist davon
+    unberührt — er bleibt auf dem Default (30 s in get_updates).
+    """
+    sleep_calls = []
+    monkeypatch.setattr("main.time.sleep", lambda s: sleep_calls.append(s))
+
+    responses = [[], [], [], TelegramError("stop")]
+    tg = _FakeTelegramPoll(responses)
+    ctx = _poll_ctx(tmp_path, tg)
+
+    try:
+        poll_loop(ctx, get_updates_timeout=30)
+    except (TelegramError, _StopAfterN):
+        pass
+
+    # Drei leere Polls → Backoff-Pausen 1, 2, dann Fehler mit Backoff 1
+    # (Fehler nach leerem Poll hat kumulierten Backoff, zählt weiter).
+    assert len(sleep_calls) >= 2, (
+        "Erwartet mindestens 2 Backoff-Pausen für 3 leere Polls, erhalten: %s"
+        % sleep_calls)
+    # Erste Pause ist die Startverzögerung (1 s).
+    assert sleep_calls[0] == 1, (
+        "Erste Backoff-Pause soll 1 s sein, erhalten: %s" % sleep_calls[0])
+    # Zweite Pause ist das Doppelte (2 s).
+    assert sleep_calls[1] == 2, (
+        "Zweite Backoff-Pause soll 2 s sein, erhalten: %s" % sleep_calls[1])
+
+
+def test_backoff_resets_after_update(tmp_path, monkeypatch):
+    """AC3 (#294): Nach einem eintreffenden Update wird der Backoff auf 0 gesetzt —
+    der nächste leere Poll startet wieder bei der Startverzögerung (1 s).
+
+    Ablauf: leer → Update → leer → leer → stop
+    Erwartete sleep-Folge: [1, (kein sleep nach Update), 1, 2, ...]
+    """
+    sleep_calls = []
+    monkeypatch.setattr("main.time.sleep", lambda s: sleep_calls.append(s))
+
+    update = {"update_id": 100}
+    responses = [[], [update], [], [], _StopAfterN("stop")]
+    tg = _FakeTelegramPoll(responses)
+    ctx = _poll_ctx(tmp_path, tg)
+
+    try:
+        poll_loop(ctx, get_updates_timeout=30)
+    except (TelegramError, _StopAfterN, Exception):
+        pass
+
+    # Nach dem Update muss der Backoff zurückgesetzt sein — die nächste leere
+    # Poll-Pause startet wieder bei 1 s, nicht bei 4 s (was sie wäre, wenn
+    # kein Reset passiert).
+    post_update_sleeps = sleep_calls[1:]   # die sleep nach dem ersten leeren Poll ausblenden
+    if post_update_sleeps:
+        assert post_update_sleeps[0] == 1, (
+            "Backoff muss nach Update auf 1 s zurückgesetzt sein, "
+            "erhalten: %s (alle sleeps: %s)" % (post_update_sleeps[0], sleep_calls))
+
+
+def test_backoff_caps_at_30s(tmp_path, monkeypatch):
+    """AC3 (#294): Der Backoff wird bei 30 s gedeckelt — kein unbegrenztes
+    Wachstum. Nach genügend leeren Polls darf keine Pause über 30 s gehen.
+    """
+    sleep_calls = []
+    monkeypatch.setattr("main.time.sleep", lambda s: sleep_calls.append(s))
+
+    # 10 leere Polls reichen, damit der Backoff die Cap erreicht (1→2→4→8→16→30).
+    responses = [[] for _ in range(10)] + [_StopAfterN("stop")]
+    tg = _FakeTelegramPoll(responses)
+    ctx = _poll_ctx(tmp_path, tg)
+
+    try:
+        poll_loop(ctx, get_updates_timeout=30)
+    except (TelegramError, _StopAfterN, Exception):
+        pass
+
+    assert sleep_calls, "poll_loop muss bei leeren Polls schlafen"
+    assert max(sleep_calls) <= 30, (
+        "Backoff-Cap ist 30 s — kein Sleep darf darüber liegen. "
+        "Max: %s, alle sleeps: %s" % (max(sleep_calls), sleep_calls))
+
+
+def test_pickup_latency_logged_on_updates(tmp_path, monkeypatch, caplog):
+    """AC4 (#294, LOG-4): Wenn Updates eingetroffen sind, wird die familienseitige
+    Pickup-Latenz als INFO-Eintrag geloggt (event=pickup_latency count=N latency_ms=X).
+
+    Abgrenzung zu EC-23-Provider-Latenz: dieser Log-Eintrag misst die Zeit von
+    getUpdates-Rückkehr bis Ende der Verarbeitung des Batches, NICHT die
+    LLM-Provider-Latenz innerhalb eines Turns.
+    """
+    monkeypatch.setattr("main.time.sleep", lambda s: None)
+
+    update = {"update_id": 200}
+    # Ein Update-Batch, dann stop.
+    responses = [[update], _StopAfterN("stop")]
+    tg = _FakeTelegramPoll(responses)
+    ctx = _poll_ctx(tmp_path, tg)
+
+    with caplog.at_level(logging.INFO, logger="root"):
+        try:
+            poll_loop(ctx, get_updates_timeout=30)
+        except (TelegramError, _StopAfterN, Exception):
+            pass
+
+    info_messages = [r.message for r in caplog.records if r.levelno == logging.INFO]
+    assert any(
+        "pickup_latency" in m and "count=" in m and "latency_ms=" in m
+        for m in info_messages
+    ), (
+        "AC4 (#294): Erwartet INFO-Log mit 'event=pickup_latency count=N latency_ms=X'. "
+        "Gefunden: %s" % info_messages
+    )
