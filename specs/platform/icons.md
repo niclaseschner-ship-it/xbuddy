@@ -85,14 +85,14 @@ Begründung der URL-Wahl:
 
 - Sie sitzt unter dem Top-Level-Prefix `/display/` (`conventions/urls.md`
   URL-1) — kein neuer Top-Level-Pfad.
-- Das Segment `_shared` ist der etablierte Namensraum für
-  app-übergreifende, geteilte Assets (analog `controller/_shared/`,
-  `router.md` ROU-23 und `conventions/controller-pwa.md` PWA-4). Die
-  Icon-Bibliothek gehört keiner einzelnen App, daher `_shared` statt eines
-  Buddy-Slugs.
-- Konsistent mit URL-13 (statische Assets im Display-Namensraum): das
-  Muster ist `/display/.../static-artiges-Asset`, hier petrallgemeinert auf
-  den geteilten `_shared`-Namensraum.
+- Das Segment `_shared` folgt dem in `conventions/urls.md` URL-16
+  definierten Namensraum für geteilte Display-Assets: Assets, die keinem
+  einzelnen Buddy gehören, liegen unter `/display/_shared/<sache>/`.
+  Die Icon-Bibliothek gehört keiner einzelnen App, daher `_shared` statt
+  eines Buddy-Slugs (für buddy-eigene Assets gilt URL-13).
+- URL-16 schreibt read-only-Auslieferung via nginx-`alias` vor — kein
+  Komponenten-Prozess, Per-Instanz-Daten außerhalb des Repos. Genau das
+  ist hier umgesetzt (ICONS-2).
 
 Anders als `controller/_shared/` (Helper-**Code** im Repo, vom Router
 ausgeliefert) zeigt dieser Pfad auf die Per-Instanz-Icon-Wurzel (ICONS-2)

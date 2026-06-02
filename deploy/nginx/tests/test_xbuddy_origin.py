@@ -94,6 +94,51 @@ def test_URL_14_familie_location_steht_nach_plan_locations():
 
 
 # ============================================================
+#  Icon-Bibliothek: statisch via alias, VOR /display/ (#135, URL-16)
+# ============================================================
+#
+# /display/_shared/icons/ wird von nginx direkt per `alias` aus der
+# Per-Instanz-icon-root ausgeliefert (ICONS-5, URL-16) — kein proxy_pass.
+# Kritisch: der Block muss VOR dem allgemeinen /display/-Block stehen
+# (URL-14: spezifisch vor allgemein), sonst landen Icon-Requests beim
+# Router (5000) statt im Dateisystem.
+
+
+def test_URL_14_icons_location_hat_alias():
+    """URL-16 / ICONS-5: location /display/_shared/icons/ mit alias-Direktive
+    muss existieren — read-only, kein proxy_pass."""
+    text = _conf_text()
+    match = re.search(
+        r"location\s+/display/_shared/icons/\s*\{[^}]*alias\s+[^\s;]+\s*;[^}]*\}",
+        text,
+        re.DOTALL,
+    )
+    assert match is not None, (
+        "location /display/_shared/icons/ fehlt oder hat kein alias "
+        "(URL-16, ICONS-5, #135 — nginx liefert Icons direkt aus icon-root, kein proxy_pass)"
+    )
+
+
+def test_URL_14_icons_location_steht_vor_allgemeinem_display():
+    """URL-14: spezifisch vor allgemein — /display/_shared/icons/ steht VOR /display/.
+
+    nginx wählt bei Prefix-`location` den längsten Treffer, aber URL-14
+    fordert die Reihenfolge als Vertrag (visuell nachvollziehbar, Reviewer
+    sehen die Tabelle eins zu eins in der Conf). Fehlt diese Reihenfolge,
+    können Icon-Requests je nach nginx-Version zum Router fallen.
+    """
+    text = _conf_text()
+    pos_icons = text.find("location /display/_shared/icons/")
+    pos_display = text.find("location /display/ ")
+    assert pos_icons != -1, "location /display/_shared/icons/ nicht gefunden"
+    assert pos_display != -1, "location /display/ nicht gefunden"
+    assert pos_icons < pos_display, (
+        "URL-14-Verstoß: /display/_shared/icons/ muss VOR /display/ stehen "
+        f"(Positionen: icons={pos_icons}, display={pos_display})"
+    )
+
+
+# ============================================================
 #  Admin-Endpoints sind nicht vom Netz erreichbar (#140, EC-21)
 # ============================================================
 #

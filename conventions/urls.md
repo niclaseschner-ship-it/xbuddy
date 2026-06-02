@@ -182,6 +182,7 @@ längste Prefix gewinnt, das ist Teil der Spec, nicht nur eine nginx-Marotte):
 
 | # | Pfad-Prefix                     | Upstream-Komponente | Bemerkung                                                                 |
 |---|---------------------------------|---------------------|---------------------------------------------------------------------------|
+| 0 | `/display/_shared/icons/`       | statisch/nginx-alias | Geteilte Display-Assets: ARASAAC-Piktogramme (URL-16, ICONS-5, #135). nginx-`alias` auf icon-root — kein Komponenten-Prozess. VOR `/display/` (spezifisch vor allgemein). |
 | 1 | `/display/plan/`                | Plan-Buddy          | Display-Views des Plan-Buddys (URL-2): `/display/plan/woche` (PLAN-2/3).  |
 | 2 | `/api/v1/plan/`                 | Plan-Buddy          | Plan-Buddy-Backend: `GET\|PUT /api/v1/plan/termine` (PLAN-22), `GET /api/v1/plan/zuteilung` (PLAN-30), `PUT /api/v1/plan/zuteilung` (PLAN-31), `PUT\|DELETE /api/v1/plan/aktivitaet` (PLAN-11). |
 | 3 | `/api/v1/familie/`              | Familie             | Familien-Mit-Host (Personen, Foto).                                       |
@@ -198,14 +199,17 @@ eintragen (z. B. wenn das Geräte-Profil bestimmt, welche Komponenten lokal
 laufen). Konsumenten dieser Tabelle: #85 (nginx-Origin-Conf: Familie-Upstream
 ergänzen), #60 (Familie anlegen agentisch — schreibt Familie in den Routing-Plan
 einer Instanz), #82 (Geräte-Profil im Onboarding — wählt aus dieser Tabelle die
-Prefixe, die auf der Instanz aktiv sind).
+Prefixe, die auf der Instanz aktiv sind), #135 (Icon-Bibliothek: geteilte
+Display-Assets als nginx-alias, URL-16).
 
 Eine neue Komponente, die einen eigenen Prozess hinter der Origin betreibt,
 muss zuerst hier eine Zeile bekommen — dann nginx, dann Code. Reihenfolge
 spezifisch-vor-allgemein wird beibehalten; spezifischere Prefixe (`/api/v1/plan/`,
-`/api/v1/familie/`) stehen immer vor allgemeineren (`/api/v1/`).
+`/api/v1/familie/`) stehen immer vor allgemeineren (`/api/v1/`). Nicht jeder
+URL-14-Eintrag hat einen Upstream-Prozess: statische Pfade (URL-16) liefert
+nginx direkt per `alias` aus — kein Proxy-Pass.
 
-*Tickets:* #85
+*Tickets:* #85, #135
 
 ### URL-15 — Origin im LAN erreichbar, nicht nur lokal
 
@@ -226,6 +230,34 @@ Komponenten-Prozesse hinter der Origin bleiben auf `127.0.0.1` gebunden
 (URL-12, Routing ausschließlich über die Origin).
 
 *Tickets:* #67
+
+### URL-16 — Geteilter Display-Asset-Namensraum `/display/_shared/`
+
+Assets, die keinem einzelnen Buddy gehören, sondern von mehreren
+Komponenten gemeinsam genutzt werden, liegen unter dem reservierten
+Sub-Pfad `/display/_shared/<sache>/`. Damit bleiben sie unter dem
+Top-Level-Prefix `/display/` (URL-1) und hinter der einen Origin
+(URL-12) — ohne einen eigenen Top-Level-Pfad zu belegen.
+
+Bauregeln:
+
+- **read-only**: der Namensraum liefert Assets aus; er nimmt keine
+  Schreib-Anfragen entgegen. HTTP-Methoden außer `GET`/`HEAD` werden
+  abgelehnt.
+- **Per-Instanz-Daten via alias**: die Assets selbst sind
+  Per-Instanz-Daten (nicht im Repo). nginx liefert sie direkt per
+  `alias` aus einem konfigurierbaren Verzeichnis aus — kein
+  Komponenten-Prozess ist beteiligt.
+- **nicht buddy-gebunden**: ein Asset unter `/display/_shared/` gehört
+  keinem einzelnen Buddy (für buddy-eigene Assets gilt URL-13).
+- **Reihenfolge in URL-14**: jeder `/display/_shared/<sache>/`-Eintrag
+  steht in der URL-14-Tabelle VOR dem allgemeinen `/display/`-Block
+  (spezifisch vor allgemein — URL-14).
+
+Heute einzige Instanz: `/display/_shared/icons/` → ARASAAC-Piktogramme
+(ICONS-5, #135). Weitere geteilte Display-Assets folgen demselben Muster.
+
+*Tickets:* #135
 
 ## Beispiele
 
