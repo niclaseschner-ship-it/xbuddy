@@ -1,12 +1,12 @@
 {
-  "_comment": "PANEL-3 — Beispiel-Kachel-Konfiguration. Kopiere als tiles.json (per .gitignore aus dem Repo ausgeschlossen) und passe pro Panel-Instanz an. Listen-Reihenfolge ist Anzeige-Reihenfolge. `key` ist stabil — ein späterer Schreiber (OPEN-PANEL-A) identifiziert eine Kachel daran. Die Aus-Kachel ist NICHT hier konfiguriert; sie wird von der Seite eingefügt (PANEL-6).",
+  "_comment": "PANEL-3 — Beispiel-Kachel-Konfiguration (#136). Kopiere als tiles.json (per .gitignore aus dem Repo ausgeschlossen) und passe pro Panel-Instanz an. Listen-Reihenfolge ist Anzeige-Reihenfolge. `key` ist stabil — ein späterer Schreiber (OPEN-PANEL-A) identifiziert eine Kachel daran. Die Aus-Kachel ist NICHT hier konfiguriert; sie wird von der Seite eingefügt (PANEL-6). icons[]: Pfade relativ zur Icon-Basis /display/_shared/icons/ (ICONS-5, ROU-26). 32488=Kalender-ARASAAC-ID (in KIBuddy-Cache vorhanden, #135-Seed). 2484=Mädchen/Kind (Kinder-Marker-Pattern, PANEL-3).",
   "tiles": [
     {
       "key":      "wochenplan-lese",
       "app":      "plan",
       "view":     "woche",
       "label":    "Wochenplan",
-      "icon":     "icons/plan-lese.svg",
+      "icons":    ["arasaac/32488.png"],
       "sichtbar": true
     },
     {
@@ -15,7 +15,7 @@
       "view":     "woche",
       "query":    { "ansicht": "klein" },
       "label":    "Wochenplan klein",
-      "icon":     "icons/plan-klein.svg",
+      "icons":    ["arasaac/32488.png", "arasaac/2484.png"],
       "sichtbar": true
     }
   ]

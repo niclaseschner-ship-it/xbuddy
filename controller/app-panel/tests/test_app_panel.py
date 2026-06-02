@@ -87,7 +87,7 @@ def test_PANEL_1_tap_sends_event_no_local_routing():
     out = run_node('''
         const ev = panelLib.makeTileSelected(
             'app-panel:test',
-            { key: 'k1', app: 'plan', view: 'woche', label: 'L', icon: 'i', sichtbar: true });
+            { key: 'k1', app: 'plan', view: 'woche', label: 'L', icons: ['arasaac/test.png'], sichtbar: true});
         console.log(JSON.stringify(ev));
     ''')
     assert out['source_id'] == 'app-panel:test'
@@ -134,9 +134,9 @@ def test_PANEL_3_tiles_render_in_list_order():
     """visibleTiles gibt sichtbare Kacheln in Original-Reihenfolge zurück."""
     out = run_node('''
         const tiles = [
-            { key: 'a', app: 'p', view: 'v', label: 'A', icon: 'i', sichtbar: true },
-            { key: 'b', app: 'p', view: 'v', label: 'B', icon: 'i', sichtbar: true },
-            { key: 'c', app: 'p', view: 'v', label: 'C', icon: 'i', sichtbar: true },
+            { key: 'a', app: 'p', view: 'v', label: 'A', icons: ['arasaac/test.png'], sichtbar: true},
+            { key: 'b', app: 'p', view: 'v', label: 'B', icons: ['arasaac/test.png'], sichtbar: true},
+            { key: 'c', app: 'p', view: 'v', label: 'C', icons: ['arasaac/test.png'], sichtbar: true},
         ];
         console.log(JSON.stringify(panelLib.visibleTiles(tiles).map(t => t.key)));
     ''')
@@ -150,12 +150,106 @@ def test_PANEL_3_keys_in_example_are_unique():
 
 
 def test_PANEL_3_tiles_example_format_valid():
+    """PANEL-3 (#136): tiles.example.json nutzt icons[] statt icon."""
     data = json.loads(read(TILES_EXAMPLE))
     for t in data['tiles']:
-        for k in ('key', 'app', 'view', 'label', 'icon'):
+        for k in ('key', 'app', 'view', 'label'):
             assert k in t and isinstance(t[k], str) and t[k], \
                 'Pflichtfeld %s fehlt oder ist kein String: %r' % (k, t)
+        assert 'icons' in t and isinstance(t['icons'], list) and len(t['icons']) >= 1, \
+            'icons muss ein nicht-leeres Array sein: %r' % (t,)
+        for idx, ico in enumerate(t['icons']):
+            assert isinstance(ico, str) and ico, \
+                'icons[%d] muss ein nicht-leerer String sein: %r' % (idx, t)
         assert isinstance(t['sichtbar'], bool)
+
+
+def test_PANEL_3_icons_array_single_validated():
+    """PANEL-3 (#136): validateTile akzeptiert icons[] mit genau einem Eintrag."""
+    out = run_node('''
+        const err = panelLib.validateTile({
+            key: 'k', app: 'plan', view: 'woche', label: 'L',
+            icons: ['arasaac/32488.png'], sichtbar: true,
+        });
+        console.log(JSON.stringify({ err }));
+    ''')
+    assert out['err'] is None, 'icons[] mit einem Eintrag muss valide sein (bekommen: %r)' % out['err']
+
+
+def test_PANEL_3_icons_array_two_entries_validated():
+    """PANEL-3 (#136): validateTile akzeptiert icons[] mit zwei Einträgen (Kinder-Marker-Pattern)."""
+    out = run_node('''
+        const err = panelLib.validateTile({
+            key: 'k', app: 'plan', view: 'woche', label: 'L',
+            icons: ['arasaac/32488.png', 'arasaac/2484.png'], sichtbar: true,
+        });
+        console.log(JSON.stringify({ err }));
+    ''')
+    assert out['err'] is None, 'icons[] mit zwei Einträgen muss valide sein (bekommen: %r)' % out['err']
+
+
+def test_PANEL_3_icons_missing_rejected():
+    """PANEL-3 (#136): validateTile lehnt eine Kachel ohne icons[] ab."""
+    out = run_node('''
+        const err = panelLib.validateTile({
+            key: 'k', app: 'plan', view: 'woche', label: 'L', sichtbar: true,
+        });
+        console.log(JSON.stringify({ err }));
+    ''')
+    assert out['err'] is not None and 'icons' in out['err'].lower(), \
+        'Fehlende icons[] muss als Validierungs-Fehler zurückkommen (bekommen: %r)' % out['err']
+
+
+def test_PANEL_3_icons_empty_array_rejected():
+    """PANEL-3 (#136): validateTile lehnt icons: [] (leer) ab."""
+    out = run_node('''
+        const err = panelLib.validateTile({
+            key: 'k', app: 'plan', view: 'woche', label: 'L',
+            icons: [], sichtbar: true,
+        });
+        console.log(JSON.stringify({ err }));
+    ''')
+    assert out['err'] is not None, 'Leeres icons[] muss abgelehnt werden (bekommen: %r)' % out['err']
+
+
+def test_PANEL_3_resolve_icon_base_empty_router_url():
+    """PANEL-3 (#136): resolveIconBase ohne router_url → same-origin /display/_shared/icons/."""
+    out = run_node('''
+        const base = panelLib.resolveIconBase('');
+        console.log(JSON.stringify({ base }));
+    ''')
+    assert out['base'] == '/display/_shared/icons/', \
+        'Leerer router_url muss same-origin-Basis liefern (bekommen: %r)' % out['base']
+
+
+def test_PANEL_3_resolve_icon_base_with_router_url():
+    """PANEL-3 (#136): resolveIconBase mit router_url → absoluter Prefix."""
+    out = run_node('''
+        const base = panelLib.resolveIconBase('https://hub.local:8443');
+        console.log(JSON.stringify({ base }));
+    ''')
+    assert out['base'] == 'https://hub.local:8443/display/_shared/icons/', \
+        'router_url muss als Prefix vorangestellt werden (bekommen: %r)' % out['base']
+
+
+def test_PANEL_3_resolve_icon_base_trailing_slash_stripped():
+    """PANEL-3 (#136): resolveIconBase entfernt trailing Slash aus router_url."""
+    out = run_node('''
+        const base = panelLib.resolveIconBase('https://hub.local:8443/');
+        console.log(JSON.stringify({ base }));
+    ''')
+    assert out['base'] == 'https://hub.local:8443/display/_shared/icons/', \
+        'Trailing Slash in router_url muss entfernt werden (bekommen: %r)' % out['base']
+
+
+def test_PANEL_3_icon_paths_resolved_in_example():
+    """PANEL-3 (#136): tiles.example.json enthält Kinder-Variante mit zwei Icons
+    (arasaac/32488.png + arasaac/2484.png) — Kinder-Marker-Pattern."""
+    data = json.loads(read(TILES_EXAMPLE))
+    kinder = next((t for t in data['tiles'] if t.get('key') == 'wochenplan-klein'), None)
+    assert kinder is not None, 'wochenplan-klein Tile muss in tiles.example.json vorhanden sein'
+    assert kinder['icons'] == ['arasaac/32488.png', 'arasaac/2484.png'], \
+        'Kinder-Kachel muss Kalender + Kinderkopf als icons[] haben (bekommen: %r)' % kinder['icons']
 
 
 # ============================================================
@@ -165,9 +259,9 @@ def test_PANEL_3_tiles_example_format_valid():
 def test_PANEL_4_invisible_tiles_filtered():
     out = run_node('''
         const tiles = [
-            { key: 'a', app: 'p', view: 'v', label: 'A', icon: 'i', sichtbar: true },
-            { key: 'b', app: 'p', view: 'v', label: 'B', icon: 'i', sichtbar: false },
-            { key: 'c', app: 'p', view: 'v', label: 'C', icon: 'i', sichtbar: true },
+            { key: 'a', app: 'p', view: 'v', label: 'A', icons: ['arasaac/test.png'], sichtbar: true},
+            { key: 'b', app: 'p', view: 'v', label: 'B', icons: ['arasaac/test.png'], sichtbar: false},
+            { key: 'c', app: 'p', view: 'v', label: 'C', icons: ['arasaac/test.png'], sichtbar: true},
         ];
         console.log(JSON.stringify(panelLib.visibleTiles(tiles).map(t => t.key)));
     ''')
@@ -279,7 +373,7 @@ def test_PANEL_6_tile_selected_has_required_fields():
     out = run_node('''
         const ev = panelLib.makeTileSelected(
             'app-panel:k',
-            { key: 'k', app: 'plan', view: 'woche', label: 'L', icon: 'i', sichtbar: true });
+            { key: 'k', app: 'plan', view: 'woche', label: 'L', icons: ['arasaac/test.png'], sichtbar: true});
         console.log(JSON.stringify(ev));
     ''')
     assert out['source_id'] == 'app-panel:k'
@@ -294,7 +388,7 @@ def test_PANEL_6_tile_selected_query_only_when_set():
     out = run_node('''
         const ev = panelLib.makeTileSelected(
             'app-panel:k',
-            { key: 'k', app: 'plan', view: 'woche', label: 'L', icon: 'i', sichtbar: true,
+            { key: 'k', app: 'plan', view: 'woche', label: 'L', icons: ['arasaac/test.png'], sichtbar: true,
               query: { ansicht: 'klein' } });
         console.log(JSON.stringify(ev));
     ''')
@@ -330,8 +424,9 @@ def test_PANEL_6_aus_kachel_is_not_from_tiles_json():
     keys = [t.get('key') for t in data.get('tiles', [])]
     assert '__aus__' not in keys, 'Aus-Kachel darf kein tiles.json-Eintrag sein'
     js = read(APPJS_PATH)
-    # makeAusKachel wird unkonditional aufgerufen — kein Branch über sichtbar.
-    assert re.search(r"makeAusKachel\(onClear\)", js), \
+    # panelLib.makeAusKachel wird unkonditional aufgerufen — kein Branch über sichtbar.
+    # Signatur: panelLib.makeAusKachel(document, onClear, base) (#136 Refactor).
+    assert re.search(r"panelLib\.makeAusKachel\(", js), \
         'Aus-Kachel muss unkonditional gerendert werden'
 
 
@@ -351,7 +446,7 @@ def test_PANEL_6_aus_kachel_sends_panel_cleared():
 def test_PANEL_7_nested_query_rejected_as_config_error():
     out = run_node('''
         const err = panelLib.validateTile({
-            key: 'k', app: 'plan', view: 'woche', label: 'L', icon: 'i',
+            key: 'k', app: 'plan', view: 'woche', label: 'L', icons: ['arasaac/test.png'],
             sichtbar: true,
             query: { nested: { inner: 'x' } },
         });
@@ -363,7 +458,7 @@ def test_PANEL_7_nested_query_rejected_as_config_error():
 def test_PANEL_7_list_query_rejected():
     out = run_node('''
         const err = panelLib.validateTile({
-            key: 'k', app: 'plan', view: 'woche', label: 'L', icon: 'i',
+            key: 'k', app: 'plan', view: 'woche', label: 'L', icons: ['arasaac/test.png'],
             sichtbar: true,
             query: { list: [1, 2] },
         });
@@ -375,7 +470,7 @@ def test_PANEL_7_list_query_rejected():
 def test_PANEL_7_flat_string_or_number_query_ok():
     out = run_node('''
         const err = panelLib.validateTile({
-            key: 'k', app: 'plan', view: 'woche', label: 'L', icon: 'i',
+            key: 'k', app: 'plan', view: 'woche', label: 'L', icons: ['arasaac/test.png'],
             sichtbar: true,
             query: { s: 'abc', n: 42 },
         });
@@ -717,8 +812,8 @@ def test_PANEL_11_active_marker_matches_plain_url():
     """payload.url = /display/plan/woche → Kachel { app: plan, view: woche } aktiv."""
     out = run_node('''
         const tiles = [
-            { key: 'a', app: 'plan', view: 'woche', label: 'L', icon: 'i', sichtbar: true },
-            { key: 'b', app: 'plan', view: 'woche', query: { ansicht: 'klein' }, label: 'L', icon: 'i', sichtbar: true },
+            { key: 'a', app: 'plan', view: 'woche', label: 'L', icons: ['arasaac/test.png'], sichtbar: true},
+            { key: 'b', app: 'plan', view: 'woche', query: { ansicht: 'klein' }, label: 'L', icons: ['arasaac/test.png'], sichtbar: true},
         ];
         const active = panelLib.findActiveTile(tiles, '/display/plan/woche');
         console.log(JSON.stringify({ key: active && active.key }));
@@ -729,8 +824,8 @@ def test_PANEL_11_active_marker_matches_plain_url():
 def test_PANEL_11_active_marker_matches_query_url():
     out = run_node('''
         const tiles = [
-            { key: 'a', app: 'plan', view: 'woche', label: 'L', icon: 'i', sichtbar: true },
-            { key: 'b', app: 'plan', view: 'woche', query: { ansicht: 'klein' }, label: 'L', icon: 'i', sichtbar: true },
+            { key: 'a', app: 'plan', view: 'woche', label: 'L', icons: ['arasaac/test.png'], sichtbar: true},
+            { key: 'b', app: 'plan', view: 'woche', query: { ansicht: 'klein' }, label: 'L', icons: ['arasaac/test.png'], sichtbar: true},
         ];
         const active = panelLib.findActiveTile(tiles, '/display/plan/woche?ansicht=klein');
         console.log(JSON.stringify({ key: active && active.key }));
@@ -742,7 +837,7 @@ def test_PANEL_11_null_stream_no_active_tile():
     """payload.url null / Session-Ende → keine Kachel aktiv."""
     out = run_node('''
         const tiles = [
-            { key: 'a', app: 'plan', view: 'woche', label: 'L', icon: 'i', sichtbar: true },
+            { key: 'a', app: 'plan', view: 'woche', label: 'L', icons: ['arasaac/test.png'], sichtbar: true},
         ];
         const active = panelLib.findActiveTile(tiles, null);
         console.log(JSON.stringify({ active }));
@@ -755,7 +850,7 @@ def test_PANEL_11_mismatch_no_active_tile():
     → keine Kachel aktiv."""
     out = run_node('''
         const tiles = [
-            { key: 'a', app: 'plan', view: 'woche', label: 'L', icon: 'i', sichtbar: true },
+            { key: 'a', app: 'plan', view: 'woche', label: 'L', icons: ['arasaac/test.png'], sichtbar: true},
         ];
         const active = panelLib.findActiveTile(tiles, '/display/figur/szene-x');
         console.log(JSON.stringify({ active }));
@@ -771,7 +866,7 @@ def test_PANEL_11_stream_break_keeps_last_marker():
     onActive-Callback nicht (kein Reset auf null)."""
     out = run_node('''
         const tiles = [
-            { key: 'a', app: 'plan', view: 'woche', label: 'L', icon: 'i', sichtbar: true },
+            { key: 'a', app: 'plan', view: 'woche', label: 'L', icons: ['arasaac/test.png'], sichtbar: true},
         ];
         const calls = [];
         const handlers = panelLib.makeStreamHandlers(
@@ -810,8 +905,8 @@ def test_PANEL_11_duplicate_descriptor_returns_first_match():
     Verhalten explizit abgesichert."""
     out = run_node('''
         const tiles = [
-            { key: 'first',  app: 'plan', view: 'woche', label: 'L', icon: 'i', sichtbar: true },
-            { key: 'second', app: 'plan', view: 'woche', label: 'L', icon: 'i', sichtbar: true },
+            { key: 'first',  app: 'plan', view: 'woche', label: 'L', icons: ['arasaac/test.png'], sichtbar: true},
+            { key: 'second', app: 'plan', view: 'woche', label: 'L', icons: ['arasaac/test.png'], sichtbar: true},
         ];
         const active = panelLib.findActiveTile(tiles, '/display/plan/woche');
         console.log(JSON.stringify({ key: active && active.key }));
@@ -827,3 +922,195 @@ def test_PANEL_11_eventsource_used_for_reconnect():
     js = read(APPJS_PATH)
     assert re.search(r"new\s+EventSource\(", js), \
         'app.js muss EventSource verwenden (Standard-Reconnect, DC-7)'
+
+
+# ============================================================
+#  PANEL-3 / PANEL-6 — Render-Pfad: makeTileElement / makeAusKachel
+#  (PANEL-9-Mindest-Abdeckung Icon-Verhalten)
+# ============================================================
+#
+# Die Bootstrap-Sektion von app.js wird nur im Browser ausgeführt (Guard:
+# `if (typeof document === 'undefined') return`). Für Tests instantiieren
+# wir eine minimale document/createElement-Attrappe in Node, die den
+# DOM-Aufruf-Pfad vollständig durchläuft und die img.src-Werte sammelt.
+
+_DOM_STUB = r"""
+// Minimale DOM-Attrappe: reicht createElement/appendChild/addEventListener/
+// dataset/classList aus, ohne jsdom-Abhängigkeit.
+function makeDom() {
+  function makeEl(tag) {
+    var el = {
+      _tag: tag, _children: [], _listeners: {},
+      type: '', className: '', textContent: '',
+      dataset: {}, classList: { add: function(){}, remove: function(){} },
+      src: '', alt: '', onerror: null,
+      appendChild: function(c) { this._children.push(c); return c; },
+      addEventListener: function(ev, cb, opts) {
+        if (!this._listeners[ev]) this._listeners[ev] = [];
+        this._listeners[ev].push({ cb: cb, opts: opts });
+      },
+      removeChild: function(c) {
+        this._children = this._children.filter(function(x){ return x !== c; });
+      },
+    };
+    // parentNode simulieren, sobald appendchild verwendet wird
+    el.appendChild = function(c) {
+      c.parentNode = el;
+      this._children.push(c);
+      return c;
+    };
+    return el;
+  }
+  var doc = {
+    createElement: function(tag) { return makeEl(tag); },
+    getElementById: function() { return null; },
+    querySelectorAll: function() { return []; },
+    visibilityState: 'visible',
+    fullscreenElement: null,
+    documentElement: makeEl('html'),
+    body: makeEl('body'),
+    addEventListener: function() {},
+  };
+  return doc;
+}
+"""
+
+
+def run_node_dom(snippet):
+    """Lädt panelLib aus der echten app.js, baut eine DOM-Attrappe (makeDom)
+    und führt das Snippet mit Zugriff auf `panelLib` und `makeDom` aus.
+    Der Bootstrap-Block von app.js wird wegen `typeof document === 'undefined'`
+    NICHT ausgeführt — wir rufen panelLib.makeTileElement / panelLib.makeAusKachel
+    direkt auf und übergeben den DOM-Stub als erstes Argument (echte exportierte
+    Library-Funktion, kein Kopie-Muster)."""
+    src = textwrap.dedent('''
+        const panelLib = require(%r);
+        %s
+        %s
+    ''' % (APPJS_PATH, _DOM_STUB, snippet))
+    res = subprocess.run(
+        ['node', '-e', src],
+        capture_output=True, text=True, timeout=10)
+    if res.returncode != 0:
+        raise AssertionError(
+            'node-DOM-Subprozess fehlgeschlagen:\n' + res.stderr
+            + '\n--- src ---\n' + src)
+    out = res.stdout.strip()
+    if not out:
+        return None
+    return json.loads(out)
+
+
+def test_PANEL_3_makeTileElement_icon_src_single(tmp_path):
+    """PANEL-3 / PANEL-9 Render-Pfad: panelLib.makeTileElement (echte exportierte
+    Library-Funktion) baut img.src korrekt für eine Kachel mit einem Icon (same-origin).
+    DOM-Stub wird als erstes Argument übergeben — kein Kopie-Muster."""
+    out = run_node_dom(r"""
+        var doc = makeDom();
+        var tile = { key: 'plan', app: 'plan', view: 'woche', label: 'Wochenplan',
+                     icons: ['arasaac/32488.png'], sichtbar: true };
+        var iconBaseStr = panelLib.resolveIconBase('');
+        var el = panelLib.makeTileElement(doc, tile, function(){}, iconBaseStr);
+        // iconSlot ist erstes Kind, die img-Kinder darin tragen die srcs
+        var iconSlot = el._children[0];
+        var srcs = iconSlot._children.map(function(c){ return c.src; });
+        console.log(JSON.stringify({ srcs: srcs }));
+    """)
+    assert len(out['srcs']) == 1
+    assert out['srcs'][0].endswith('/display/_shared/icons/arasaac/32488.png'), \
+        'img.src muss auf /display/_shared/icons/arasaac/32488.png enden (same-origin, bekommen: %r)' % out['srcs'][0]
+
+
+def test_PANEL_3_makeTileElement_icon_src_kinder_marker(tmp_path):
+    """PANEL-3 / PANEL-9 Render-Pfad: panelLib.makeTileElement (echte exportierte
+    Library-Funktion) baut zwei img-Elemente für das Kinder-Marker-Pattern
+    (icons: ['arasaac/32488.png','arasaac/2484.png'])."""
+    out = run_node_dom(r"""
+        var doc = makeDom();
+        var tile = { key: 'klein', app: 'plan', view: 'woche', label: 'Kids',
+                     icons: ['arasaac/32488.png', 'arasaac/2484.png'], sichtbar: true };
+        var iconBaseStr = panelLib.resolveIconBase('');
+        var el = panelLib.makeTileElement(doc, tile, function(){}, iconBaseStr);
+        var iconSlot = el._children[0];
+        var srcs = iconSlot._children.map(function(c){ return c.src; });
+        console.log(JSON.stringify({ srcs: srcs, count: srcs.length }));
+    """)
+    assert out['count'] == 2, \
+        'Kinder-Marker-Pattern braucht 2 img-Elemente (bekommen: %d)' % out['count']
+    assert out['srcs'][0].endswith('/display/_shared/icons/arasaac/32488.png'), \
+        'Erstes Icon muss Kalender sein (bekommen: %r)' % out['srcs'][0]
+    assert out['srcs'][1].endswith('/display/_shared/icons/arasaac/2484.png'), \
+        'Zweites Icon muss Kinderkopf-Marker sein (bekommen: %r)' % out['srcs'][1]
+
+
+def test_PANEL_6_makeAusKachel_icon_src(tmp_path):
+    """PANEL-6 / PANEL-9 Render-Pfad: panelLib.makeAusKachel (echte exportierte
+    Library-Funktion) baut img.src mit AUS_ICON_PATH (arasaac/8252.png) korrekt."""
+    out = run_node_dom(r"""
+        var doc = makeDom();
+        var iconBaseStr = panelLib.resolveIconBase('');
+        var el = panelLib.makeAusKachel(doc, function(){}, iconBaseStr);
+        var iconSlot = el._children[0];
+        var srcs = iconSlot._children.map(function(c){ return c.src; });
+        console.log(JSON.stringify({ srcs: srcs, ausIconPath: panelLib.AUS_ICON_PATH }));
+    """)
+    assert len(out['srcs']) == 1
+    assert out['srcs'][0].endswith('/display/_shared/icons/arasaac/8252.png'), \
+        'Aus-Kachel img.src muss auf arasaac/8252.png enden (bekommen: %r)' % out['srcs'][0]
+    assert out['ausIconPath'] == 'arasaac/8252.png', \
+        'AUS_ICON_PATH-Konstante muss "arasaac/8252.png" sein (bekommen: %r)' % out['ausIconPath']
+
+
+def test_PANEL_6_onerror_removes_broken_img(tmp_path):
+    """PANEL-6 / PANEL-9 Fallback: onerror-Handler auf img (aus der echten
+    panelLib.makeTileElement-Funktion) entfernt das Bild aus dem Icon-Slot.
+    Simuliert einen Ladefehler durch direktes Aufrufen von img.onerror()."""
+    out = run_node_dom(r"""
+        var doc = makeDom();
+        var tile = { key: 'plan', app: 'plan', view: 'woche', label: 'Wochenplan',
+                     icons: ['arasaac/32488.png'], sichtbar: true };
+        var iconBaseStr = panelLib.resolveIconBase('');
+        var el = panelLib.makeTileElement(doc, tile, function(){}, iconBaseStr);
+        var iconSlot = el._children[0];
+        // Vor dem Fehler: 1 img im Slot
+        var countBefore = iconSlot._children.length;
+        // Ladefehler simulieren
+        iconSlot._children[0].onerror.call(iconSlot._children[0]);
+        // Nach dem Fehler: Slot muss leer sein
+        var countAfter = iconSlot._children.length;
+        // Label ist noch intakt
+        var labelEl = el._children[1];
+        console.log(JSON.stringify({
+          countBefore: countBefore,
+          countAfter: countAfter,
+          labelText: labelEl.textContent,
+        }));
+    """)
+    assert out['countBefore'] == 1, 'Vor Fehler muss 1 img im Slot sein'
+    assert out['countAfter'] == 0, \
+        'Nach onerror muss Icon-Slot leer sein (kein Broken-Image-Placeholder, PANEL-6; bekommen: %d)' % out['countAfter']
+    assert out['labelText'] == 'Wochenplan', 'Label muss nach Icon-Fehler intakt bleiben'
+
+
+def test_PANEL_6_onerror_aus_kachel_removes_broken_img(tmp_path):
+    """PANEL-6 / PANEL-9 Fallback Aus-Kachel: onerror (aus der echten
+    panelLib.makeAusKachel-Funktion) entfernt Bild; Kachel und Label bleiben."""
+    out = run_node_dom(r"""
+        var doc = makeDom();
+        var iconBaseStr = panelLib.resolveIconBase('');
+        var el = panelLib.makeAusKachel(doc, function(){}, iconBaseStr);
+        var iconSlot = el._children[0];
+        var countBefore = iconSlot._children.length;
+        iconSlot._children[0].onerror.call(iconSlot._children[0]);
+        var countAfter = iconSlot._children.length;
+        var labelEl = el._children[1];
+        console.log(JSON.stringify({
+          countBefore: countBefore,
+          countAfter: countAfter,
+          labelText: labelEl.textContent,
+        }));
+    """)
+    assert out['countBefore'] == 1
+    assert out['countAfter'] == 0, \
+        'Aus-Kachel: onerror muss img entfernen (PANEL-6; bekommen: %d)' % out['countAfter']
+    assert out['labelText'] == 'Aus', 'Aus-Label muss intakt bleiben'
