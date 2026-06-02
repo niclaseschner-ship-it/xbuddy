@@ -473,6 +473,94 @@ def test_ROU_23_controller_dir_override_via_runtime_config(tmp_path, client_with
         router_main.runtime_config['controller_dir'] = original
 
 
+# ============================================================
+#  ROU-26 — Geteilte Display-Assets (Icon-Bibliothek)
+# ============================================================
+#
+# Entry-Path-Probe: der ECHTE Pfad /display/_shared/icons/<source>/<id>.png
+# über den Flask-Testclient, gegen ein temporäres icon_root mit ein paar
+# Test-PNGs (NICHT die echten 176 MB — runtime_config-Override wie ROU-23).
+
+# Kleinstes gültiges PNG (1x1, transparent) — reicht für den Content-Type-
+# und Auslieferungs-Beleg, ohne ein Binär-Fixture im Repo zu halten.
+_TINY_PNG = bytes.fromhex(
+    '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489'
+    '0000000b49444154789c6360000200000500017a5eab3f'
+    '0000000049454e44ae426082')
+
+
+@pytest.fixture
+def icon_root_override(tmp_path):
+    """Setzt runtime_config['icon_root'] auf ein temporäres Verzeichnis mit
+    1-2 Test-PNGs unter arasaac/ und stellt den alten Wert danach wieder her."""
+    root = tmp_path / 'icons'
+    (root / 'arasaac').mkdir(parents=True)
+    (root / 'arasaac' / '2239.png').write_bytes(_TINY_PNG)
+    original = router_main.runtime_config.get('icon_root', '')
+    router_main.runtime_config['icon_root'] = str(root)
+    try:
+        yield root
+    finally:
+        router_main.runtime_config['icon_root'] = original
+
+
+def test_ROU_26_icon_served_with_png_content_type(client_with_routing, icon_root_override):
+    """ROU-26: /display/_shared/icons/arasaac/<id>.png → 200, image/png,
+    Inhalt aus der icon-root."""
+    r = client_with_routing.get('/display/_shared/icons/arasaac/2239.png')
+    assert r.status_code == 200
+    assert r.mimetype == 'image/png'
+    assert r.data == _TINY_PNG
+
+
+def test_ROU_26_nonexistent_icon_returns_404(client_with_routing, icon_root_override):
+    r = client_with_routing.get('/display/_shared/icons/arasaac/does-not-exist.png')
+    assert r.status_code == 404
+
+
+def test_ROU_26_path_traversal_returns_404(client_with_routing, icon_root_override):
+    """Ausbruch aus der icon-root → 404 (Defense in Depth wie ROU-23)."""
+    # Kodierter Versuch — Flask leitet ihn meist nicht weiter; falls doch,
+    # muss der realpath-Check zuschlagen.
+    r = client_with_routing.get('/display/_shared/icons/..%2F..%2Frouter%2Fmain.py')
+    assert r.status_code == 404
+    r2 = client_with_routing.get('/display/_shared/icons/../../router/main.py')
+    assert r2.status_code != 200
+
+
+def test_ROU_26_icon_root_override_via_runtime_config(client_with_routing, tmp_path):
+    """runtime_config['icon_root'] schaltet die Wurzel um — der Code liest
+    nicht hartcodiert, sondern aus der Config (ROU-15/CONFIG-1)."""
+    fake_root = tmp_path / 'fake-icons'
+    (fake_root / 'arasaac').mkdir(parents=True)
+    (fake_root / 'arasaac' / '1.png').write_bytes(_TINY_PNG)
+    original = router_main.runtime_config.get('icon_root', '')
+    router_main.runtime_config['icon_root'] = str(fake_root)
+    try:
+        r = client_with_routing.get('/display/_shared/icons/arasaac/1.png')
+        assert r.status_code == 200
+        assert r.data == _TINY_PNG
+    finally:
+        router_main.runtime_config['icon_root'] = original
+
+
+def test_ROU_26_icon_root_env_var_resolves(monkeypatch, tmp_path):
+    monkeypatch.setenv('ROUTER_ICON_ROOT', '/tmp/some-icons')
+    args = router_main.parse_args(['--routing', str(tmp_path / 'missing.json')])
+    cfg = router_main.resolved_config(args)
+    assert cfg['icon_root'] == '/tmp/some-icons'
+
+
+def test_ROU_26_icon_root_cli_overrides_env(monkeypatch, tmp_path):
+    monkeypatch.setenv('ROUTER_ICON_ROOT', '/tmp/from-env')
+    args = router_main.parse_args([
+        '--routing', str(tmp_path / 'missing.json'),
+        '--icon-root', '/tmp/from-cli',
+    ])
+    cfg = router_main.resolved_config(args)
+    assert cfg['icon_root'] == '/tmp/from-cli'
+
+
 def test_ROU_15_controller_dir_env_var_resolves(monkeypatch, tmp_path):
     monkeypatch.setenv('ROUTER_CONTROLLER_DIR', '/tmp/some-controller')
     args = router_main.parse_args(['--routing', str(tmp_path / 'missing.json')])

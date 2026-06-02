@@ -412,6 +412,7 @@ folgt `conventions/config.md` **CONFIG-5**.
 | `listen_port`    | `5000`                                                      | `listen_port`    | — (offen, OPEN-ROU-C)              |
 | `log_level`      | `INFO`                                                      | `log_level`      | — (offen, OPEN-ROU-C)              |
 | `controller_dir` | `../controller/figuren-erkennung` (relativ zum Router-Code) | `controller_dir` | — (offen, OPEN-ROU-C)              |
+| `icon_root`      | `/home/buddy/apps/icons/` (ICONS-2)                         | `icon_root`      | — (offen, OPEN-ROU-C)              |
 
 Werte, die nur als Code-Konstante existieren — ohne Override-Pfad —
 sind Spec-Verletzung (CLAUDE.md §6 Daten vs. Code).
@@ -523,6 +524,43 @@ verweisen darauf, statt eigene Anker zu erfinden.
 
 *Tickets:* #140
 
+### ROU-26 — GET /display/_shared/icons/&lt;asset&gt; — geteilte Display-Assets
+
+`GET /display/_shared/icons/<source>/<id>.<ext>` liefert die zentrale
+Icon-Bibliothek (ARASAAC-Piktogramme, siehe
+[`icons.md`](icons.md) ICONS-1..6) read-only aus der **icon-root** aus —
+ein **Zwilling** zur Controller-Helper-Auslieferung `/controller/_shared/`
+(ROU-23). Das Segment `_shared` ist der in
+[`../../conventions/urls.md`](../../conventions/urls.md) URL-16 definierte
+Namensraum für geteilte Display-Assets, die keinem einzelnen Buddy gehören.
+
+Anders als `/controller/_shared/` (Helper-**Code** im Repo) zeigt dieser
+Pfad auf die **icon-root** — Per-Instanz-Daten außerhalb des Repos
+(ICONS-2, Default `/home/buddy/apps/icons/`). Der Router liefert sie
+selbst aus, statt nginx einen statischen `alias` zu geben: der
+Router-Prozess läuft als User `buddy` und liest die icon-root problemlos,
+während ein nginx-`alias` (nginx = `www-data`) an der `0700`-Home-Permission
+scheiterte und 404 lieferte (#135). Auslieferung wie ROU-23:
+`send_from_directory` mit explizitem Content-Type und Defense-in-Depth-
+Path-Traversal-Schutz (werkzeug `safe_join` + `realpath`-Check gegen die
+aufgelöste Wurzel).
+
+Acceptance-Kriterien:
+
+| Pfad | Antwort |
+|---|---|
+| `GET /display/_shared/icons/arasaac/<id>.png` | 200, `image/png`, Inhalt aus `<icon-root>/arasaac/<id>.png` |
+| Nicht existierendes Asset in der icon-root | 404 |
+| Path-Traversal (z. B. `/display/_shared/icons/../../router/main.py`) | 404 — kein Dateizugriff jenseits der Wurzel |
+
+Die icon-root ist konfigurierbar (`icon_root`, ROU-15); Default zeigt auf
+`/home/buddy/apps/icons/` (ICONS-2). In der Origin-Routing-Tabelle
+([`../../conventions/urls.md`](../../conventions/urls.md) URL-14) fällt
+`/display/_shared/icons/` an den allgemeinen `/display/`→Router-Eintrag —
+kein eigener statischer nginx-Block mehr.
+
+*Tickets:* #135
+
 ## 7. Tests
 
 ### ROU-17 — Automatisierte Tests pro Requirement
@@ -555,6 +593,10 @@ Mindest-Abdeckung:
   setzt State des Displays mit dieser `source_id` auf `null`;
   Panel-`source_id` ohne `panels`-Eintrag wird wie ein unbekannter
   Trigger behandelt (2xx, Warnung, kein State).
+- ROU-26 — `/display/_shared/icons/<source>/<id>.png` liefert ein Asset
+  aus der icon-root mit `image/png`; nicht existierendes Asset und
+  Path-Traversal werden mit 404 abgewiesen; `icon_root` ist per
+  `runtime_config` überschreibbar.
 
 *Tickets:* #5, #24, #58
 
@@ -592,6 +634,7 @@ Konvention:
 | `listen_port`    | `ROUTER_LISTEN_PORT`      | `--port`           |
 | `log_level`      | `ROUTER_LOG_LEVEL`        | `--log-level`      |
 | `controller_dir` | `ROUTER_CONTROLLER_DIR`   | `--controller-dir` |
+| `icon_root`      | `ROUTER_ICON_ROOT`        | `--icon-root`      |
 
 ---
 
