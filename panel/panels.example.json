@@ -1,0 +1,29 @@
+{
+  "_comment": "PREG-4 — Panel-Registry einer Instanz. Kopiere als panels.json (per .gitignore aus dem Repo ausgeschlossen, je Instanz separat gepflegt; Dateirechte 0600). Jeder Eintrag in `panels` trägt die PREG-3-Felder: panel_id (PREG-6-Schema `<slug>-<nn>`), source_id (`app-panel:<panel_id>`, aus panel_id abgeleitet), display_id (display_id aus der Geräte-Registry, gegen GER validiert — PREG-7), router_url (Origin des Routers ohne Pfad; leer = same-origin, PREG-8), config (config.json-Objekt, PANEL-8 — instanz-stabiles Tuning), tiles (tiles.json-Objekt, PANEL-3 — Kachel-Liste). config und tiles sind getrennte Felder mit getrennten Schreib-Rechten (PREG-5). Die hier aufgeführten Panels sind Platzhalter — passe sie pro Familie an.",
+  "panels": [
+    {
+      "panel_id": "kueche-01",
+      "source_id": "app-panel:kueche-01",
+      "display_id": "pi-display-flur-01",
+      "router_url": "",
+      "config": {
+        "source_id": "app-panel:kueche-01",
+        "display_id": "pi-display-flur-01",
+        "router_url": "",
+        "backoffs": [200, 1000, 5000]
+      },
+      "tiles": {
+        "tiles": [
+          {
+            "key": "wochenplan-lese",
+            "app": "plan",
+            "view": "woche",
+            "label": "Wochenplan",
+            "icons": ["arasaac/32488.png"],
+            "sichtbar": true
+          }
+        ]
+      }
+    }
+  ]
+}
