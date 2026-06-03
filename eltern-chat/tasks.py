@@ -256,7 +256,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   cav_call_hook=None, display_url_origin=None,
                   zd_store_getter=None, kav_sessions=None,
                   plan_json_path=None, plan_origin_url=None,
-                  tes_sessions=None):
+                  tes_sessions=None, panel_origin_url=None,
+                  paa_sessions=None, controller_url_origin=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
@@ -376,5 +377,22 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             sessions=_tes_sessions,
             family_group_chat_id_getter=family_group_chat_id_getter,
             is_member_fn=_tes_is_member))
+
+    # PAA-5/PAA-6: »Panel anlegen« als async-schreibende Aufgabe (EC-10).
+    # Guard analog der GAA-Linie: panel_origin_url (PREG-15-Schreiben),
+    # geraete_origin_url (GER-13-Display-Lese), paa_sessions (die Map, die
+    # handle_update für das Routing liest, PAA-6) UND family_group_chat_id_getter
+    # (Live-Berechtigung, PAA-2) müssen gesetzt sein. `paa_sessions` ist die
+    # externe Session-Registry aus main.build_context — DIESELBE Map, die der
+    # PAA-Worker füllt und handle_update für das Routing liest (PAA-6/TASK-7;
+    # die stille Lego-Falle, wenn hier eine andere Map landete).
+    if panel_origin_url is not None and geraete_origin_url is not None \
+            and paa_sessions is not None \
+            and family_group_chat_id_getter is not None:
+        from skills.panel_anlegen_task import PanelAnlegenTask
+        catalog.register(PanelAnlegenTask(
+            tg, panel_origin_url, geraete_origin_url, paa_sessions,
+            family_group_chat_id_getter,
+            controller_url_origin=controller_url_origin))
 
     return catalog

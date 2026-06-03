@@ -56,6 +56,7 @@ class _Cfg:
     # Seit Auftrag #215: Origin-URLs statt Datei-Pfade fuer FAA/GAA.
     familie_origin_url = "http://127.0.0.1:5010"
     geraete_origin_url = "http://127.0.0.1:5040"
+    panel_origin_url = "http://127.0.0.1:5041"   # PAA-5 / #183
     plan_origin_url = "http://127.0.0.1:5020"
     display_url_origin = "https://example.test"
     plan_json_path = "plan.json"
