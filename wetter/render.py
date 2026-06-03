@@ -12,6 +12,12 @@ Drei Verkabelungs-Aufgaben löst dieses Modul:
      steuert die Sonnencreme-Karte. Das View-Modell trägt `uv`/`uvLabel` nicht.
   3. Das Temperatur-Spektrum (WETTER-9) als Prozent-Positionen rechnen, damit
      der Gradient-Balken die heute erwartete Spanne (low–high) hervorhebt.
+
+WETTER-7 (E-WETTER-11): Der Wetter-Zustands-Hero ist die app-eigene Wetter-Szene
+(Haus + Himmel, Inline-SVG im Template) — kein ARASAAC-Hero-Piktogramm.
+Die `kind`-Kategorie wählt die Szenen-Variante direkt im Template. Die
+ARASAAC/ICONS-5-Anbindung gilt für Outfit-Piktogramme (WETTER-13/18), nicht
+für den Zustands-Hero.
 """
 
 import logging
@@ -31,26 +37,14 @@ ICON_BASIS = "/display/_shared/icons/arasaac/"
 SPEKTRUM_MIN = -5.0
 SPEKTRUM_MAX = 35.0
 
-# WETTER-16: Wetter-Kategorie (`kind`) → ARASAAC-Piktogramm-ID für den
-# Wetter-Hero (WETTER-7). Die `kind`-Kategorie bildet auf eine numerische
-# ARASAAC-ID ab (WETTER-18). Bewusst klein gehalten; die Haus-Szene (Inline-SVG
-# aus dem Mockup) ist die Haupt-Darstellung, das Piktogramm der semantische
-# Anker. IDs aus dem ARASAAC-Bestand (sonnig/bewölkt/regen/schnee/gewitter).
-KIND_PIKTO = {
-    meteo_mod.KIND_SONNIG:   "7252",   # Sonne
-    meteo_mod.KIND_BEWOELKT: "7274",   # Wolke
-    meteo_mod.KIND_REGEN:    "7281",   # Regen
-    meteo_mod.KIND_SCHNEE:   "7282",   # Schnee
-    meteo_mod.KIND_GEWITTER: "7280",   # Gewitter
-    meteo_mod.KIND_NEUTRAL:  None,     # WETTER-17: kein Piktogramm
-}
-
 
 def icon_url(pikto_id):
     """Geteilte Icon-Plattform-URL einer ARASAAC-ID (ICONS-5, WETTER-18).
 
-    Liefert None für eine leere ID — die View zeigt dann keinen Piktogramm-Slot
-    (WETTER-17 neutraler Zustand).
+    Wird für Inhalts-Piktogramme genutzt (Kleidung/Outfit, WETTER-13/18).
+    Der Wetter-Zustands-Hero ist die app-eigene Haus-SVG-Szene (WETTER-7,
+    E-WETTER-11) — kein ARASAAC-Piktogramm.
+    Liefert None für eine leere ID — die View zeigt dann keinen Piktogramm-Slot.
     """
     if pikto_id in (None, ""):
         return None
@@ -93,6 +87,10 @@ def _runde(wert):
 def _wetter_view(wetter):
     """View-Modell einer Tageszeit-Wetter-Karte (WETTER-7..11).
 
+    `kind` wird direkt übergeben — das Template wählt daraus die Haus-Wetter-
+    Szene (WETTER-7, E-WETTER-11). Kein hero_pikto: der Wetter-Zustands-Hero
+    ist die app-eigene Inline-SVG, kein ARASAAC-Piktogramm.
+
     Wichtig (WETTER-11, E-WETTER-2): `uv`/`uvLabel` werden NICHT übernommen —
     nur `sunscreen` als Boolean. Das ist die Stelle, an der der UV-Wert vor dem
     Kind verschwindet.
@@ -100,7 +98,6 @@ def _wetter_view(wetter):
     return {
         "desc": wetter.desc,
         "kind": wetter.kind,
-        "hero_pikto": icon_url(KIND_PIKTO.get(wetter.kind)),
         "temp": _runde(wetter.temp),
         "feels": _runde(wetter.feelsLike),
         "feels_label": _gefuehlt_label(wetter.feelsLike),
