@@ -58,6 +58,10 @@ DEFAULTS = {
     # GeraetAnlegenTask Geraete schreibt (`POST /api/v1/geraete/` GER-15).
     # Per-Instanz-Wert; Default passt zum Pi-Setup (PORT-2 Geraete auf 5040).
     "geraete_origin_url": "http://127.0.0.1:5040",
+    # PAA-5 / #183: Origin der Panel-Registry, über die die PanelAnlegenTask
+    # Panel-Instanzen schreibt (`POST /api/v1/panels/` PREG-15). Per-Instanz-
+    # Wert; Default passt zum Pi-Setup (PORT-2 Panel-Registry auf 5041).
+    "panel_origin_url": "http://127.0.0.1:5041",
     # EC-21 / Auftrag #215: Origin der Plan-Buddy-Reload-Schnittstelle
     # (`POST /api/v1/plan/admin/reload`, #151). Per-Instanz-Wert; Default
     # passt zum Pi-Setup (PORT-2 Plan-Buddy auf 5020).
@@ -111,8 +115,8 @@ class Config:
     def __init__(self, bot_token, provider_api_key, provider, provider_model,
                  family_group_chat_id, family_group_locked, context_depth,
                  ca_pem_path, familie_origin_url, geraete_origin_url,
-                 plan_origin_url, display_url_origin, plan_json_path,
-                 log_level):
+                 panel_origin_url, plan_origin_url, display_url_origin,
+                 plan_json_path, log_level):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
         self.provider = provider
@@ -123,6 +127,7 @@ class Config:
         self.ca_pem_path = ca_pem_path             # CAV-3: Pfad zum öffentlichen Root-CA-Zertifikat
         self.familie_origin_url = familie_origin_url   # FAA-12 / #215: Origin der Familien-Komponente
         self.geraete_origin_url = geraete_origin_url   # GAA-5 / #215: Origin der Geraete-Komponente
+        self.panel_origin_url = panel_origin_url       # PAA-5 / #183: Origin der Panel-Registry (PREG-15)
         self.plan_origin_url = plan_origin_url         # EC-21 / #215: Origin der Plan-Buddy-Reload-Schnittstelle
         self.display_url_origin = display_url_origin   # GAA-3.7: HTTPS-Origin für Display-URLs
         self.plan_json_path = plan_json_path       # KAV-X: Pfad zur Per-Instanz-`plan/plan.json`
@@ -218,6 +223,7 @@ def resolve(config_path, store_path=None):
         ca_pem_path=str(values["ca_pem_path"]).strip(),
         familie_origin_url=str(values["familie_origin_url"]).strip().rstrip("/"),
         geraete_origin_url=str(values["geraete_origin_url"]).strip().rstrip("/"),
+        panel_origin_url=str(values["panel_origin_url"]).strip().rstrip("/"),
         plan_origin_url=str(values["plan_origin_url"]).strip().rstrip("/"),
         display_url_origin=str(values["display_url_origin"]).strip().rstrip("/"),
         plan_json_path=str(values["plan_json_path"]).strip(),
