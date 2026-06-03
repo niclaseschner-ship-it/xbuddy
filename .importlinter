@@ -19,6 +19,7 @@ root_packages =
     plan
     router
     tools
+    wetter
 exclude_type_checking_imports = True
 
 [importlinter:contract:layers]
@@ -26,7 +27,7 @@ name = MOD-1 Layer-Modell (eltern-chat -> Services -> tools)
 type = layers
 layers =
     eltern-chat
-    familie | geraete | plan | router
+    familie | geraete | plan | router | wetter
     tools
 containers =
 
@@ -38,6 +39,7 @@ modules =
     geraete
     plan
     router
+    wetter
 
 [importlinter:contract:tools-bottom]
 name = MOD-3 tools importiert keine Komponente darueber
@@ -50,6 +52,7 @@ forbidden_modules =
     geraete
     plan
     router
+    wetter
 
 [importlinter:contract:eltern-chat-top]
 name = MOD-4 eltern-chat wird von keiner Komponente importiert
@@ -60,6 +63,7 @@ source_modules =
     plan
     router
     tools
+    wetter
 forbidden_modules =
     eltern-chat
 
@@ -72,6 +76,7 @@ source_modules =
     geraete
     plan
     router
+    wetter
 forbidden_modules =
     tools.zugangsdaten.store
     tools.zugangsdaten.config
