@@ -15,8 +15,9 @@ in einer Service-Datei oder im Code als wahre Quelle.
 | 5000 | Router | xbuddy-router |
 | 5010 | Familien-Registry | xbuddy-familie |
 | 5020 | Plan-Buddy | xbuddy-plan |
+| 5030 | Wetter-Buddy | xbuddy-wetter |
 | 5040 | Geräte-Registry | xbuddy-geraete |
-| 5030, 5050-5099 | für neue Buddys reserviert | — |
+| 5050-5099 | für neue Buddys reserviert | — |
 
 ### PORT-3 — Komponenten binden nur an 127.0.0.1, nie an 0.0.0.0
 Komponenten binden ihren HTTP-Server an `127.0.0.1`, nicht an `0.0.0.0`.
