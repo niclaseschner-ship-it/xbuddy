@@ -89,6 +89,7 @@ class Context:
     gaa_sessions: dict = None  # GAA-5: laufende »Gerät anlegen«-Sessions (chat_id → GaaSession)
     kav_sessions: dict = None  # KAV-3: laufende »Kalender verbinden«-Sessions (chat_id → KavSession)
     tes_sessions: dict = None  # TES-3: laufende »Termin eintragen«-Sessions (chat_id → TesSession)
+    paa_sessions: dict = None  # PAA-6: laufende »Panel anlegen«-Sessions (chat_id → PaaSession)
 
 
 # ============================================================
@@ -138,6 +139,19 @@ def handle_update(update, ctx):
         if session is not None and not session.is_finished():
             from skills.termin_eintragen_task import make_tes_input
             session.deliver(make_tes_input(msg))
+            return
+
+    # PAA-6 / TASK-7: analog FAA-12 / GAA-5 / KAV-3 / TES-3 für »Panel
+    # anlegen«-Sessions — eine laufende PAA-Session beansprucht den Privatchat
+    # bis zum Ende (Display-Auswahl + Slug + Apps + Bestätigung + POST). Dieser
+    # namentliche Routing-Block ist Bau-Bestandteil der PAA-Spec (PAA-6, die
+    # stille Lego-Falle ohne ihn): handle_update muss EXAKT die Session-Map
+    # lesen, in die der PAA-Worker schreibt (ctx.paa_sessions).
+    if ctx.paa_sessions is not None and msg.chat_type == "private":
+        session = ctx.paa_sessions.get(msg.chat_id)
+        if session is not None and not session.is_finished():
+            from skills.panel_anlegen_task import make_paa_input
+            session.deliver(make_paa_input(msg))
             return
 
     # EC-5: In einer Gruppe reagiert das System nur, wenn es ausdrücklich
@@ -558,6 +572,8 @@ def build_context(cfg, db_path, store_path, zd_cli_path=None):
     kav_sessions = {}
     # TES-3: analog FAA/GAA/KAV, eigene Session-Map für »Termin eintragen«.
     tes_sessions = {}
+    # PAA-6: analog FAA/GAA/KAV/TES, eigene Session-Map für »Panel anlegen«.
+    paa_sessions = {}
 
     # KAV-7: Zugangsdaten-Speicher als Per-Instanz-Datei (ZD-1/ZD-8). Lazy-
     # importiert, damit Tests, die `build_context` nicht aufrufen, keine
@@ -583,6 +599,7 @@ def build_context(cfg, db_path, store_path, zd_cli_path=None):
         gaa_sessions=gaa_sessions,
         kav_sessions=kav_sessions,
         tes_sessions=tes_sessions,
+        paa_sessions=paa_sessions,
     )
     # FAA-12 / GAA-5 / KAV-3: Familien-Gruppen-ID darf nach einer Migration
     # (EC-18) wechseln — der Getter liest sie zur Laufzeit aus dem Context,
@@ -613,7 +630,12 @@ def build_context(cfg, db_path, store_path, zd_cli_path=None):
         kav_sessions=kav_sessions,
         plan_json_path=cfg.plan_json_path,
         plan_origin_url=cfg.plan_origin_url,
-        tes_sessions=tes_sessions)
+        tes_sessions=tes_sessions,
+        panel_origin_url=cfg.panel_origin_url,
+        paa_sessions=paa_sessions,
+        # PAA-3.5: Controller-URL nutzt dieselbe Hub-Origin wie die Display-URL
+        # (GAA-3.7) — beide werden auf demselben Origin ausgeliefert.
+        controller_url_origin=cfg.display_url_origin)
 
     if cfg.provider_api_key:
         # KI-Modus — Anbieter steht; die Familien-Gruppe muss gesetzt sein (EC-2).
