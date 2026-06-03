@@ -76,15 +76,21 @@ def make_transport():
     """
     def _make(tag, code=0, temp=22.0, feels=22.0, rain_prob=10,
               rain_amount=0.0, wind=8.0, uv=6.0, low=14.0, high=24.0):
-        raw = {
-            "hourly": _hourly(tag, code, temp, feels, rain_prob, rain_amount, wind, uv),
-            "daily": {
-                "time": [tag.isoformat()],
-                "temperature_2m_min": [low],
-                "temperature_2m_max": [high],
-            },
-        }
-        return FakeTransport(raw=raw)
+        # tag-agnostischer Factory: liefert dieselben Wetter-Parameter für
+        # jeden angefragten Tag (req_tag).  So bleibt der FakeTransport auch
+        # nach dem Abend-Rollover (17:00) korrekt, wenn _zielTag() „morgen"
+        # zurückgibt und fetch(morgen) aufgerufen wird (WETTER-6 / #137).
+        def _factory(req_tag):
+            return {
+                "hourly": _hourly(req_tag, code, temp, feels,
+                                  rain_prob, rain_amount, wind, uv),
+                "daily": {
+                    "time": [req_tag.isoformat()],
+                    "temperature_2m_min": [low],
+                    "temperature_2m_max": [high],
+                },
+            }
+        return FakeTransport(raw_factory=_factory)
     return _make
 
 
