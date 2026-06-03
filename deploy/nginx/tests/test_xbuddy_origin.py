@@ -82,7 +82,7 @@ def test_URL_14_familie_location_steht_vor_allgemeinem_api_v1():
 
 
 def test_URL_14_familie_location_steht_nach_plan_locations():
-    """URL-14-Tabellenreihenfolge: Familie-Zeile (3) steht nach Plan-Zeilen (1,2)."""
+    """URL-14-Tabellenreihenfolge: Familie-Zeile (4) steht nach Plan-Zeilen (1,3)."""
     text = _conf_text()
     pos_plan_api = text.find("location /api/v1/plan/")
     pos_familie = text.find("location /api/v1/familie/")
@@ -90,6 +90,74 @@ def test_URL_14_familie_location_steht_nach_plan_locations():
     assert pos_familie != -1, "location /api/v1/familie/ nicht gefunden"
     assert pos_plan_api < pos_familie, (
         "URL-14-Tabellenreihenfolge: /api/v1/plan/ kommt vor /api/v1/familie/"
+    )
+
+
+# ============================================================
+#  Wetter-Buddy: Upstream :5030 und /display/wetter/-Location (#137)
+# ============================================================
+
+
+def test_URL_14_wetter_upstream_zeigt_auf_5030():
+    """URL-14 Zeile 2 + PORT-2: Wetter-Upstream lauscht auf Port 5030."""
+    text = _conf_text()
+    match = re.search(
+        r"upstream\s+xbuddy_wetter\s*\{[^}]*server\s+127\.0\.0\.1:5030\s*;[^}]*\}",
+        text,
+        re.DOTALL,
+    )
+    assert match is not None, (
+        "upstream xbuddy_wetter fehlt oder zeigt nicht auf 127.0.0.1:5030 "
+        "(URL-14, wetter/main.py DEFAULTS listen_port=5030, PORT-2)"
+    )
+
+
+def test_URL_14_wetter_location_proxypassed_an_wetter_upstream():
+    """URL-14 Zeile 2: /display/wetter/ wird an xbuddy_wetter geleitet."""
+    text = _conf_text()
+    match = re.search(
+        r"location\s+/display/wetter/\s*\{[^}]*proxy_pass\s+http://xbuddy_wetter\s*;[^}]*\}",
+        text,
+        re.DOTALL,
+    )
+    assert match is not None, (
+        "location /display/wetter/ fehlt oder proxypasst nicht an xbuddy_wetter "
+        "(URL-14, #137)"
+    )
+
+
+def test_URL_14_wetter_location_steht_vor_allgemeinem_display():
+    """URL-14: spezifisch vor allgemein — /display/wetter/ steht VOR /display/."""
+    text = _conf_text()
+    pos_wetter = text.find("location /display/wetter/")
+    pos_display = text.find("location /display/ ")
+    assert pos_wetter != -1, "location /display/wetter/ nicht gefunden"
+    assert pos_display != -1, "location /display/ nicht gefunden"
+    assert pos_wetter < pos_display, (
+        "URL-14-Verstoß: /display/wetter/ muss VOR /display/ stehen "
+        f"(Positionen: wetter={pos_wetter}, display={pos_display})"
+    )
+
+
+def test_URL_14_wetter_location_steht_nach_plan_display_location():
+    """URL-14-Tabellenreihenfolge: Wetter-Zeile (2) steht nach Plan-Zeile (1)."""
+    text = _conf_text()
+    pos_plan_display = text.find("location /display/plan/")
+    pos_wetter = text.find("location /display/wetter/")
+    assert pos_plan_display != -1, "location /display/plan/ nicht gefunden"
+    assert pos_wetter != -1, "location /display/wetter/ nicht gefunden"
+    assert pos_plan_display < pos_wetter, (
+        "URL-14-Tabellenreihenfolge: /display/plan/ kommt vor /display/wetter/"
+    )
+
+
+def test_URL_14_wetter_in_routing_tabelle_dokumentiert():
+    """Die Routing-Tabelle im Conf-Header muss den Wetter-Block listen."""
+    text = _conf_text()
+    header = text.split("server {", 1)[0]
+    assert "/display/wetter/" in header, (
+        "Routing-Tabelle im Conf-Header listet /display/wetter/ nicht — "
+        "Doku und Verhalten dürfen nicht auseinanderlaufen."
     )
 
 
