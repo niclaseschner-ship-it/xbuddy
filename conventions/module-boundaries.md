@@ -37,9 +37,9 @@ Konvention.
 
 **Scan-Reichweite und Ausnahmen:**
 
-- `wetter/` existiert noch nicht im Repo (PR #137, Wetter-Integration,
-  offen) — es gibt nichts zu scannen; der Linter erfasst es daher nicht.
-  Sobald #137 landet, wird `wetter` in `root_packages` aufgenommen.
+- `wetter/` ist ein vollwertiges Buddy-Modul (analog `plan/`); Code liegt auf
+  main (#137 — Wetter-Buddy-Integration). `wetter` wird wie `plan` in
+  `root_packages` erfasst und unterliegt denselben Layer-Contracts (MOD-1..4).
 
 - **Paket-interne Tests** (z. B. `familie/tests/`, `tools/tests/`) liegen
   innerhalb der `root_packages` und werden von grimp mit-gescannt. Sie

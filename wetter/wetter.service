@@ -3,8 +3,7 @@
 # Diese Datei ist eine VORLAGE. Vor `systemctl enable` Platzhalter ersetzen
 # (siehe deploy/systemd/README.md). Per-Instanz-Werte stehen nie im Repo.
 #
-# Port 5030 aus dem PORT-2-Reserveblock für neue Buddys; die feste Eintragung
-# in conventions/ports.md ist Folge-Ticket (OPEN-WETTER-D).
+# Port 5030 (belegt in conventions/ports.md, PORT-2, `xbuddy-wetter`).
 
 [Unit]
 Description=XBuddy Wetter-Buddy-App
