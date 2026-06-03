@@ -234,6 +234,24 @@ def test_PAA3_apps_mehrfachauswahl_in_reihenfolge():
         assert t["sichtbar"] is True
 
 
+def test_PAA33_kleinkind_plan_kachel_traegt_query_ansicht_klein():
+    """PAA-3.3 / PLAN-3: die Kleinkind-Plan-Kachel trägt query={ansicht: klein};
+    die Lese-Kind-Plan-Kachel trägt kein query-Feld (#325-Vorstufe, feste Liste)."""
+    panel = FakePanelClient()
+    geraete = FakeGeraeteDisplayClient(displays=_displays_zwei())
+    panel_anlegen(_member_tg(), 7, 7, 200, panel, geraete,
+                  stream("1", "Küche", "3", "ok"))
+    tiles = panel.calls[0]["tiles"]["tiles"]
+    assert len(tiles) == 1
+    assert tiles[0]["app"] == "plan" and tiles[0]["view"] == "woche"
+    assert tiles[0]["query"] == {"ansicht": "klein"}
+    from skills.panel_anlegen import APP_KANDIDATEN, _tile_aus_kandidat
+    # Lese-Kind-Plan am Merkmal (app=plan, woche, ohne query), nicht am Index:
+    lese = [k for k in APP_KANDIDATEN
+            if k.app == "plan" and k.view == "woche" and not k.query][0]
+    assert "query" not in _tile_aus_kandidat(lese, 0)
+
+
 def test_PAA3_invalide_app_auswahl_wiederholt_frage():
     """PAA-3.3/PAA-7: eine Eingabe ohne gültige Nummer wiederholt die Frage."""
     panel = FakePanelClient()
