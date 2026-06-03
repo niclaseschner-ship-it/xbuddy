@@ -657,6 +657,29 @@ def test_PANEL_10_html_binds_manifest_and_registers_sw():
                      js), 'SW-Registrierung fehlt'
 
 
+def test_PANEL_10_sw_js_static_assets_config_absolute_path():
+    """Regressions-Guard #317: sw.js precacht config.js über den ABSOLUTEN
+    Pfad /controller/_shared/config.js, NICHT über den kaputten Relativpfad
+    ../_shared/config.js.
+
+    Hintergrund: sw.js wird mit scope /controller/app-panel/<panel_id>/
+    registriert. Von dort würde ../_shared/ zu /controller/app-panel/_shared/
+    auflösen — 404. Nur /controller/_shared/config.js ist tiefenrobust
+    und konsistent mit dem absoluten Pfad in index.html (PANEL-10 / PWA-4 /
+    Ticket #317)."""
+    sw = read(SW_PATH)
+    # Absoluter Pfad muss vorhanden sein.
+    assert "'/controller/_shared/config.js'" in sw, (
+        "sw.js STATIC_ASSETS muss config.js über den absoluten Pfad "
+        "'/controller/_shared/config.js' precachen (Ticket #317)"
+    )
+    # Kaputten Relativpfad darf es nicht mehr geben.
+    assert "'../_shared/config.js'" not in sw, (
+        "Kaputten Relativpfad ../_shared/config.js in sw.js STATIC_ASSETS "
+        "gefunden — bricht bei SW-Install ab (Ticket #317)"
+    )
+
+
 def test_PANEL_10_wake_lock_requested_on_load_and_visibility():
     """Verhaltens-Probe (Finding 5, #126): attachWakeLockImpl ruft beim
     Anhaengen sofort wakeLock.request('screen'), registriert einen
