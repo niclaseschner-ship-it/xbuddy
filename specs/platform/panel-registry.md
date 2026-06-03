@@ -278,15 +278,23 @@ Fallback) — kein Crash.
 
 *Tickets:* #58
 
-### PREG-10 — Router-Schreib-API ist loopback-/`/admin/`-geschützt
-Soweit der Router eine **Schreib-Kante** für Panel-Daten bereitstellt (z. B.
-ein Reload-/Invalidierungs-Marker für den Cache aus PREG-9, oder ein
-Cache-Refresh-Trigger), liegt diese Kante unter dem `/admin/`-Pfad und ist
-**loopback-only** — genau wie der Admin-Reload des Routers
+### PREG-10 — Panel-bezogene Router-Schreib-/Reload-Kante ist loopback-/`/admin/`-geschützt
+Jede panel-bezogene Schreib-/Reload-Kante des Routers — etwa eine
+Cache-Invalidierung oder ein Cache-Refresh-Trigger für den PREG-9-Cache — liegt
+unter dem `/admin/`-Pfad und ist **loopback-only** — genau wie der Admin-Reload
+des Routers
 (`POST /api/v1/router/admin/reload`, ROU-18-Body, `router/main.py`). nginx
 blockt `/admin/` von außen (`deploy/nginx/xbuddy-origin.conf`), sodass die Kante
 **nicht** offen im Familien-LAN steht. **Nur der panel-Service** ruft sie über
 Loopback; kein Controller-Gerät und kein Familienmitglied erreicht sie.
+
+Ob V1 überhaupt eine aktive Invalidierungs-Kante exponiert oder der
+Last-Known-Good-Cache (PREG-9) rein upstream-first mit Fallback arbeitet (und
+damit **keine** panel-bezogene Schreib-Kante nötig ist), legt der
+`router.md`-Satellit fest (OPEN-PREG-F). Die hier festgelegte
+loopback-/`/admin/`-Invariante gilt für jede exponierte Kante unabhängig davon;
+PREG-12 prüft sie als **Negativ-Test** (eine externe, nicht-Loopback-Origin
+erreicht die Kante nicht).
 
 Begründung (Muss-Korrektur aus der Ratifizierung): eine Schreib-/Reload-Kante,
 die offen im LAN steht, ließe jedes Gerät im Heim-Netz den Router-Cache
@@ -405,6 +413,16 @@ Mindest-Abdeckung:
   `router_url` ist der gültige Normalfall, kein Wartezustand. **Nic-Frage:**
   bestätigen, dass V1 ausschließlich same-origin-Panels adressiert und der
   cross-origin-Fall erst mit #82 kommt.
+
+- **OPEN-PREG-F — Cache-Invalidierungs-Mechanik des Routers (PREG-9/PREG-10).**
+  Ob der Last-Known-Good-Cache (PREG-9) rein upstream-first arbeitet (jeder
+  erfolgreiche Proxy-Abruf frischt den Snapshot, der Cache dient nur als
+  Ausfall-Fallback — dann ist **keine** aktive Schreib-/Invalidierungs-Kante
+  nötig) oder ob beim `panels.json`-Schreiben eine explizite Invalidierung
+  ausgelöst wird, legt der `router.md`-Satellit fest, wenn dort die
+  Router-Caching-Strategie spezifiziert wird. PREG-10 legt nur die
+  Sicherheits-Invariante fest (jede exponierte Kante loopback-/`/admin/`-only),
+  unabhängig von dieser Wahl.
 
 ---
 
