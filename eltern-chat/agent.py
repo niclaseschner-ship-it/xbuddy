@@ -149,6 +149,65 @@ class _TypingRenewal:
                               exc_info=True)
 
 
+def _call_provider(provider, request, telemetry):
+    """Ruft `provider.generate(request)` auf, misst Wall-Clock, hebt Token-Counts
+    in die Telemetrie und kapselt den `ProviderError`-Stub.
+
+    Gibt die `GenerationResponse` zurück.  Wirft `ProviderError` weiter
+    (nach Anhängen des Stub-Calls und Setzen von `err.telemetry`).
+
+    Wird innerhalb des `_TypingRenewal`-Kontextmanagers von `run_turn`
+    aufgerufen — der Renewal-Thread läuft also bereits, wenn dieser Aufruf
+    startet (#165).
+    """
+    # EC-23 (#268): Wall-Clock-Wrapper um den Provider-Call. Im Fehlerfall
+    # hängen wir einen Stub-Call an die Telemetrie (model_id soweit bekannt,
+    # wall_ms gemessen, tokens=0, est_cost=None) und setzen `err.telemetry`,
+    # bevor wir weiterwerfen — die Orchestrierung persistiert das.
+    _start = time.monotonic()
+    try:
+        response = provider.generate(request)
+    except ProviderError as err:
+        wall_ms = int((time.monotonic() - _start) * 1000)
+        model_id = getattr(provider, "_model", "") or ""
+        telemetry.add(ProviderCall(
+            model_id=model_id,
+            input_tokens=0, output_tokens=0,
+            cache_read_tokens=0, cache_creation_tokens=0,
+            wall_ms=wall_ms,
+            est_cost_usd=None, est_cost_eur=None))
+        err.telemetry = telemetry
+        raise
+    wall_ms = int((time.monotonic() - _start) * 1000)
+
+    # EC-23 (#268): Token-Counts aus der anbieter-neutralen Usage in einen
+    # ProviderCall heben. Liefert der Adapter keine Usage (älterer Test-
+    # Mock ohne Anthropic-Anbindung), entsteht KEIN ProviderCall — sonst
+    # wäre der Suffix bei jedem alten Test ein Format-Bruch, und »tokens=0,
+    # est_cost=None« wäre kein ehrlicher Diagnose-Wert, sondern reine
+    # Geräusche. Der reale ClaudeProvider liefert immer Usage; nur die
+    # Test-Doppelungen ohne Usage produzieren den »kein Telemetrie-Eintrag«-
+    # Fall.
+    usage = getattr(response, "usage", None)
+    if usage is not None:
+        cost_usd, cost_eur = estimate_cost(
+            usage.model_id,
+            usage.input_tokens,
+            usage.cache_read_tokens,
+            usage.output_tokens)
+        telemetry.add(ProviderCall(
+            model_id=usage.model_id,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cache_read_tokens=usage.cache_read_tokens,
+            cache_creation_tokens=usage.cache_creation_tokens,
+            wall_ms=wall_ms,
+            est_cost_usd=cost_usd,
+            est_cost_eur=cost_eur))
+
+    return response
+
+
 def run_turn(history_messages, user_message, provider, catalog, turn_context,
              max_iterations=MAX_ITERATIONS, before_provider_call=None,
              chat_action_renewer=None):
@@ -207,53 +266,14 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
         else:
             _renewal = None
 
+        request = GenerationRequest(
+            system=SYSTEM_PROMPT, messages=messages, task_defs=task_defs)
         with (_renewal if _renewal is not None else _NullContext()):
-            # EC-23 (#268): Wall-Clock-Wrapper um den Provider-Call. Im
-            # Fehlerfall hängen wir einen Stub-Call an die Telemetrie
-            # (model_id soweit bekannt, wall_ms gemessen, tokens=0,
-            # est_cost=None) und setzen `err.telemetry`, bevor wir
-            # weiterwerfen — die Orchestrierung persistiert das.
-            _start = time.monotonic()
-            try:
-                response = provider.generate(GenerationRequest(
-                    system=SYSTEM_PROMPT, messages=messages, task_defs=task_defs))
-            except ProviderError as err:
-                wall_ms = int((time.monotonic() - _start) * 1000)
-                model_id = getattr(provider, "_model", "") or ""
-                telemetry.add(ProviderCall(
-                    model_id=model_id,
-                    input_tokens=0, output_tokens=0,
-                    cache_read_tokens=0, cache_creation_tokens=0,
-                    wall_ms=wall_ms,
-                    est_cost_usd=None, est_cost_eur=None))
-                err.telemetry = telemetry
-                raise
-            wall_ms = int((time.monotonic() - _start) * 1000)
-
-        # EC-23 (#268): Token-Counts aus der anbieter-neutralen Usage in einen
-        # ProviderCall heben. Liefert der Adapter keine Usage (älterer Test-
-        # Mock ohne Anthropic-Anbindung), entsteht KEIN ProviderCall — sonst
-        # wäre der Suffix bei jedem alten Test ein Format-Bruch, und »tokens=0,
-        # est_cost=None« wäre kein ehrlicher Diagnose-Wert, sondern reine
-        # Geräusche. Der reale ClaudeProvider liefert immer Usage; nur die
-        # Test-Doppelungen ohne Usage produzieren den »kein Telemetrie-Eintrag«-
-        # Fall.
-        usage = getattr(response, "usage", None)
-        if usage is not None:
-            cost_usd, cost_eur = estimate_cost(
-                usage.model_id,
-                usage.input_tokens,
-                usage.cache_read_tokens,
-                usage.output_tokens)
-            telemetry.add(ProviderCall(
-                model_id=usage.model_id,
-                input_tokens=usage.input_tokens,
-                output_tokens=usage.output_tokens,
-                cache_read_tokens=usage.cache_read_tokens,
-                cache_creation_tokens=usage.cache_creation_tokens,
-                wall_ms=wall_ms,
-                est_cost_usd=cost_usd,
-                est_cost_eur=cost_eur))
+            # Issue #165: Renewal-Thread hält den Typing-Indikator für die
+            # Dauer des Provider-Calls lebendig; _call_provider kapselt den
+            # generate-Aufruf, Wall-Clock-Messung, Usage-Lift und
+            # ProviderError-Stub (EC-23/#268).
+            response = _call_provider(provider, request, telemetry)
 
         # Keine Aufgaben-Aufrufe → fertige Antwort (EC-4).
         if not response.task_calls:
