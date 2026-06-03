@@ -176,7 +176,7 @@ Kleinkind-Stufe hat keine Termin-Leiste (PLAN-3).
 
 Ein zeitgebundener (nicht-ganztägiger) Einzel-Termin erscheint in der
 Termin-Leiste mit seiner Uhrzeit — auch wenn sein Titel einen Kindernamen
-trägt (PLAN-12) und er deshalb zusätzlich im Aktivitäts-Slot erscheint. Beide
+trägt (PLAN-12, PLAN-24-Ausnahme) und er deshalb zusätzlich im Aktivitäts-Slot erscheint. Beide
 Darstellungen zeigen denselben Kalender-Event (gleiche Event-`id`). Eine
 ganztägige Kind-Aktivität erscheint nur im Aktivitäts-Slot, nicht in der
 Termin-Leiste. Mehrtägige Events folgen PLAN-14 bzw. bleiben bei child-named
@@ -372,7 +372,9 @@ In allen Stufen wird eine Person ausschließlich über ihr Foto im farbigen Ring
 gezeigt (`familie.md` FAM-4) — keine Personennamen im Plan-Buddy-UI. Das ist
 die Voraussetzung dafür, dass auch die Kleinkind-Stufe ohne Lesen funktioniert.
 
-*Tickets:* #40
+Diese Regel betrifft die **vom Plan-Buddy selbst** gesetzte Personen-Identität (Foto-im-Ring statt Namens-Label). Sie strippt **nicht** den wörtlichen, familien-eigenen Kalender-Titel eines Einzel-Termins in der Termin-Leiste (PLAN-13) — dort darf ein vom Kalender gelieferter Titel einen Namen tragen, weil es der unveränderte Eintrag der Familie ist, keine vom Plan-Buddy erzeugte Namens-Beschriftung.
+
+*Tickets:* #40, #303
 
 ### PLAN-25 — Wenig Affordances, alles tippbar
 Die Bedienung ist bewusst karg: leere Slots tragen ein Plus-Icon als einziges
