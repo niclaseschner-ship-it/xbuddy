@@ -197,8 +197,7 @@ logger = logging.getLogger(__name__)
 
 # Runtime-Konfig-Schema (CONFIG-1): nur die Service-Start-Werte — Bind,
 # Log-Level. Ort/Regeln/Tageszeiten leben in wetter.json (WETTER-21).
-# Listen-Port aus dem PORT-2-Reserveblock für neue Buddys (5030; die feste
-# Eintragung in conventions/ports.md ist Folge-Ticket, OPEN-WETTER-D).
+# Listen-Port 5030 (belegt in conventions/ports.md, PORT-2, `xbuddy-wetter`).
 RUNTIME_SCHEMA = {
     "listen_host": "127.0.0.1",
     "listen_port": 5030,

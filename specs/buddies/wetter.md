@@ -213,8 +213,8 @@ Familie ändert, ist Config, nicht Code (E-WETTER-5). Anders als beim Plan-Buddy
 ### WETTER-22 — Eigener Service, fester Port
 Der Wetter-Buddy läuft als eigener Prozess `xbuddy-wetter.service` (SVC-1..4,
 Service-Datei im Repo, `Restart=on-failure`, Logs an stdout/stderr) und bindet nur
-an `127.0.0.1` (PORT-3). Die feste Port-Nummer kommt aus dem PORT-2-Katalog
-(Reserveblock 5030/5050-5099) — **in F4 zu belegen** (OPEN-WETTER-D).
+an `127.0.0.1` (PORT-3). Port **5030** (PORT-2, `xbuddy-wetter`, belegt in
+`conventions/ports.md`).
 
 ### WETTER-23 — Registrierung in der Plattform
 Der Slug `wetter` wird im Origin-Routing (URL-14) registriert, damit
@@ -253,8 +253,7 @@ funktioniert). Läufe gegen den echten Anbieter sind opt-in.
   `/api/v1/wetter/` in V1 (E-WETTER-3).
 - **OPEN-WETTER-C — Mehrtages-Vorhersage & mehrere Orte.** V1 kennt heute/morgen
   (Rollover, WETTER-6) und einen Ort.
-- **OPEN-WETTER-D — Port-Nummer.** Aus dem PORT-2-Reserveblock (5030?) in F4 belegen;
-  ändert `conventions/ports.md` (GETEILT).
+- **OPEN-WETTER-D — Port-Nummer. ERLEDIGT:** Port **5030** ist in `conventions/ports.md` (PORT-2) als `xbuddy-wetter` belegt (#137 — Wetter-Buddy-Integration).
 - **OPEN-WETTER-E — Anbieter-Cache / Offline.** V1 zeigt bei Ausfall einen neutralen
   Zustand (WETTER-17); Last-Known-Good (Qualitätsattribut 4) später.
 - **OPEN-WETTER-F — Lizenz/NC: zentral in ICONS-6 geführt.** Die ARASAAC-NC-Klausel
