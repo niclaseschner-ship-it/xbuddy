@@ -53,6 +53,11 @@ familie/fotos/
 # Format: geraete/geraete.example.json
 geraete/geraete.json
 
+# Panel-Registry: Per-Instanz-Datei (PREG-4) — je Instanz separat gepflegt,
+# nicht im Repo. Trägt 0600-Rechte (familienprivate Display-Bindungen + Tile-Configs).
+# Format: panel/panels.example.json
+panel/panels.json
+
 # Zugangsdaten-Speicher (ZD-3) — Per-Instanz-Geheimnis-Datei. Hält
 # Klartext-Geheimnisse, darf nie ins Repo (CLAUDE.md §8). Format:
 # tools/zugangsdaten/zugangsdaten.example.json
