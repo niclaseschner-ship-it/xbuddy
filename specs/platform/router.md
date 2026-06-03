@@ -561,6 +561,58 @@ kein eigener statischer nginx-Block mehr.
 
 *Tickets:* #135
 
+### ROU-27 — Proxy und Last-Known-Good-Cache für das Panel-Instanz-Serving
+Der Router proxyt die beiden instanz-spezifischen Datendateien an den
+panel-Service (`xbuddy-panel`, PORT-2 :5041), statt sie aus dem
+Auslieferungs-Verzeichnis zu lesen (Spiegel zu PREG-9):
+
+- `GET /controller/app-panel/<id>/config.json`
+  → `GET /api/v1/panels/<id>/config.json` am panel-Service
+- `GET /controller/app-panel/<id>/tiles.json`
+  → `GET /api/v1/panels/<id>/tiles.json` am panel-Service
+
+`<id>` (= `panel_id`) ist dabei load-bearing: er wählt die Instanz
+(PREG-2). Der Panel-Code bleibt unverändert — er lädt weiter
+`./config.json` und `./tiles.json` relativ zu seiner eigenen URL;
+dass der Router diese zwei Pfade weiterreicht, ist für die Seite
+transparent.
+
+**Last-Known-Good-Cache (Härtung Welle 1):** Der Router hält die
+zuletzt erfolgreich vom panel-Service geholte `config.json`/`tiles.json`
+je `panel_id` als Snapshot und serviert diesen Snapshot, wenn der
+panel-Service vorübergehend nicht erreichbar ist oder fehlerhaft
+antwortet — gleicher Geist wie ROU-25 / DCOMP-3 (E-RELOAD-1). Fehlt
+auch der Snapshot (Service war seit Router-Start nie erreichbar), fällt
+die Seite auf ihre Code-Defaults zurück (PANEL-8, stiller Fallback) —
+kein Crash. Die genaue Cache-Invalidierungs-Mechanik (upstream-first mit
+Fallback oder aktive Kante) ist OPEN-PREG-F; PREG-10/ROU-28 legen die
+Sicherheits-Invariante fest.
+
+*Tests:* ROU-17 Mindest-Abdeckung für dieses Requirement: #58
+
+*Tickets:* #58
+
+### ROU-28 — Panel-bezogene Schreib-/Reload-Kante ist loopback-/`/admin/`-geschützt
+Jede panel-bezogene Schreib-/Reload-Kante des Routers — etwa ein
+Cache-Invalidierungs- oder Cache-Refresh-Trigger für den ROU-27-Cache —
+liegt unter dem `/admin/`-Pfad und ist **loopback-only** (Spiegel zu
+PREG-10), genau wie der Admin-Reload des Routers
+(`POST /api/v1/router/admin/reload`, ROU-18). nginx blockt `/admin/`
+von außen (`deploy/nginx/xbuddy-origin.conf`), sodass die Kante
+**nicht** offen im Familien-LAN steht. Nur der panel-Service ruft sie
+über Loopback; kein Controller-Gerät und kein Familienmitglied erreicht
+sie.
+
+Ob V1 überhaupt eine aktive Invalidierungs-Kante exponiert oder der
+Last-Known-Good-Cache (ROU-27) rein upstream-first mit Fallback arbeitet
+(und damit keine panel-bezogene Schreib-Kante nötig ist), legt der
+Impl-PR fest — die hier festgelegte loopback-/`/admin/`-Invariante gilt
+für jede exponierte Kante unabhängig davon (OPEN-PREG-F).
+
+*Tests:* ROU-17 Mindest-Abdeckung für dieses Requirement: #58
+
+*Tickets:* #58
+
 ## 7. Tests
 
 ### ROU-17 — Automatisierte Tests pro Requirement
@@ -597,6 +649,14 @@ Mindest-Abdeckung:
   aus der icon-root mit `image/png`; nicht existierendes Asset und
   Path-Traversal werden mit 404 abgewiesen; `icon_root` ist per
   `runtime_config` überschreibbar.
+- ROU-27 — `GET /controller/app-panel/<id>/config.json|tiles.json`
+  liefert die Instanz-Daten vom panel-Service (proxy); bei simuliertem
+  panel-Service-Ausfall liefert der Router den Last-Known-Good-Snapshot;
+  ohne je erfolgreichen Abruf fällt die Seite auf Code-Defaults zurück
+  (kein Crash).
+- ROU-28 — eine panel-bezogene Schreib-/Reload-Kante unter `/admin/`
+  antwortet auf Loopback; eine Anfrage von einer externen, nicht-Loopback-
+  Origin (ohne `/admin/`-Freigabe durch nginx) erreicht sie nicht.
 
 *Tickets:* #5, #24, #58
 
