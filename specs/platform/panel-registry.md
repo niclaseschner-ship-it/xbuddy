@@ -225,12 +225,34 @@ statt manueller Datei-Pflege).
 - Pflichtfelder: `slug` (Basis der `panel_id`, PREG-6), `display_id`
   (gegen die Geräte-Registry validiert, PREG-7).
 - Optional: `router_url` (Default leer = same-origin, PREG-8); `config`
-  (PANEL-8-Felder; fehlt es, gelten die Panel-Code-Defaults plus die aus
-  `panel_id`/`source_id`/`display_id` abgeleiteten Pflichtwerte); `tiles`
+  (Tuning-Objekt, s. u.); `tiles`
   (PANEL-3; fehlt es, startet die Instanz mit leerer Kachel-Liste —
   die Aus-Kachel rendert die Seite auch dann, PANEL-6).
 - Die `panel_id` vergibt der Server kollisionsfrei nach PREG-6 — der Client
   liefert sie **nicht**, sondern nur den `slug`.
+
+**Server-autoritativer `config`-Aufbau (Nic-Entscheid 2026-06-03):**
+Die `config`-Identitätsfelder (`source_id`, `display_id`, `router_url`) sind
+**server-autoritativ** — der Server leitet sie selbst ab und schreibt sie
+in jedem Fall in die gespeicherte `config`, unabhängig davon, ob der Aufrufer
+eine `config` mitgibt oder nicht:
+
+- `config.source_id` = `app-panel:<panel_id>` (PREG-3, PANEL-6) — aus der
+  server-vergebenen `panel_id` abgeleitet.
+- `config.display_id` = POST-Feld `display_id`.
+- `config.router_url` = POST-Feld `router_url` (leer = same-origin, PREG-8).
+
+Eine vom Aufrufer mitgegebene `config` liefert **nur Tuning** (z. B. `backoffs`,
+künftige PANEL-8-Erweiterungen). Die Merge-Regel ist: `{<Aufrufer-Tuning>,
+<server-Identität>}` — die Identitätsfelder des Servers überschreiben immer,
+auch wenn der Aufrufer sie bereits gesetzt hätte (ein dünner Skill liefert sie
+gar nicht, ein menschlicher Aufruf liefert sie falsch oder inkonsistent).
+
+Ein POST **ohne** `config` liefert eine gespeicherte `config` mit genau den
+drei Identitätsfeldern — nie mehr das leere Objekt `{}`, das PANEL-8 verletzte
+(PANEL-8: `source_id`, `display_id`, `router_url` sind Pflichtfelder der
+`config.json`). Ein POST **mit** `config` (z. B. `{"backoffs": [200]}`) liefert
+`{"backoffs": [200], "source_id": …, "display_id": …, "router_url": …}`.
 
 Validierungsfehler (fehlendes Pflichtfeld, `display_id` in der Geräte-Registry
 unbekannt nach PREG-7, verschachteltes `query` in `tiles` entgegen PANEL-7) sind
@@ -360,7 +382,11 @@ Mindest-Abdeckung:
   persistiert atomar; POST ohne `slug`/`display_id` ist 400; POST mit
   unbekanntem `display_id` ist 400; POST bei nicht erreichbarer Geräte-Registry
   ist 503; parallele POSTs ergeben zwei verschiedene `panel_id`s (beide
-  persistiert).
+  persistiert); POST **ohne** `config` liefert eine `config` mit korrekten
+  Identitätsfeldern (`source_id`, `display_id`, `router_url`) — nie `{}`; POST
+  **mit** Tuning-`config` (z. B. `backoffs`) → Tuning bleibt erhalten + alle
+  drei Identitätsfelder sind server-gesetzt; `config.source_id ==
+  app-panel:<panel_id>` (PANEL-8-Konsistenz).
 
 *Tickets:* #58
 

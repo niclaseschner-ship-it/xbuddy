@@ -189,7 +189,10 @@ def post_panel():
       `panel_id` kollisionsfrei, der Client liefert sie NICHT.
     - `display_id` (Pflicht) — gegen die Geräte-Registry validiert (PREG-7).
     - `router_url` (optional, Default leer = same-origin, PREG-8).
-    - `config` (optional) — PANEL-8-Felder; fehlt es, leeres Objekt.
+    - `config` (optional) — Tuning-Felder (z. B. `backoffs`); die
+      Identitätsfelder (`source_id`, `display_id`, `router_url`) werden vom
+      Server gesetzt und überschreiben alle gleichnamigen Aufrufer-Werte
+      (PREG-15 server-autoritativer `config`-Aufbau, Nic-Entscheid 2026-06-03).
     - `tiles` (optional) — PANEL-3; fehlt es, leere Kachel-Liste.
 
     Antwort 200 mit dem Panel-JSON inkl. vergebener `panel_id` und abgeleitetem
@@ -206,18 +209,18 @@ def post_panel():
     slug = (body.get("slug") or "").strip()
     display_id = (body.get("display_id") or "").strip()
     router_url = (body.get("router_url") or "").strip()
-    config = body.get("config")
+    caller_config = body.get("config")
     tiles = body.get("tiles")
 
     if not slug:
         return _bad_request("slug fehlt")
     if not display_id:
         return _bad_request("display_id fehlt")
-    if config is None:
-        config = {}
+    if caller_config is None:
+        caller_config = {}
     if tiles is None:
         tiles = {}
-    if not isinstance(config, dict):
+    if not isinstance(caller_config, dict):
         return _bad_request("config muss ein Objekt sein (PANEL-8)")
     if not isinstance(tiles, dict):
         return _bad_request("tiles muss ein Objekt sein (PANEL-3)")
@@ -238,6 +241,17 @@ def post_panel():
             panel_id = registry_mod.neue_id(reg, slug)
         except (registry_mod.RegistryError, ValueError) as e:
             return _bad_request(str(e))
+
+        # PREG-15 server-autoritativer config-Aufbau (Nic-Entscheid 2026-06-03):
+        # Merge-Regel: Aufrufer-Tuning zuerst, dann server-Identität überschreibt.
+        # So bleibt Tuning (backoffs, …) erhalten, Identitätsfelder sind immer
+        # server-gesetzt — auch wenn der Aufrufer sie weggelassen oder falsch
+        # gesetzt hätte (PANEL-8: source_id/display_id/router_url sind Pflicht).
+        config = dict(caller_config)
+        config["source_id"] = registry_mod.source_id_for(panel_id)
+        config["display_id"] = display_id
+        config["router_url"] = router_url
+
         try:
             panel = registry_mod.Panel(
                 panel_id=panel_id, display_id=display_id,
