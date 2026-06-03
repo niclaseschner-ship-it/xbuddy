@@ -18,6 +18,7 @@ Komponenten-Prozesse, die durch diese Services am Leben gehalten werden.
 |---|---|---|---|
 | `xbuddy-router.service` | `router/router.service` | Router (Display, Controller, generisches API) | `127.0.0.1:5000` |
 | `xbuddy-plan.service` | `plan/plan.service` | Plan-Buddy (`/display/plan/`, `/api/v1/plan/`) | `127.0.0.1:5020` |
+| `xbuddy-wetter.service` | `wetter/wetter.service` | Wetter-Buddy (`/display/wetter/`) | `127.0.0.1:5030` |
 | `xbuddy-familie.service` | `familie/familie.service` | Familien-Mit-Host (FAM-7/FAM-8, `/api/v1/familie/`) | `127.0.0.1:5010` |
 | `xbuddy-geraete.service` | `geraete/geraete.service` | Geräte-Registry (GER-5/GER-6/GER-15) | `127.0.0.1:5040` |
 | `xbuddy-eltern-chat.service` | `eltern-chat/eltern-chat.service` | Eltern-Chat Telegram-Bot (kein HTTP-Port, geht raus zu Telegram) | — |
@@ -72,6 +73,7 @@ Die übrigen Services haben keine `EnvironmentFile`-Abhängigkeit.
    declare -A SVC_SRC=(
      [xbuddy-router]=router/router.service
      [xbuddy-plan]=plan/plan.service
+     [xbuddy-wetter]=wetter/wetter.service
      [xbuddy-familie]=familie/familie.service
      [xbuddy-geraete]=geraete/geraete.service
      [xbuddy-eltern-chat]=eltern-chat/eltern-chat.service
@@ -97,6 +99,7 @@ Die übrigen Services haben keine `EnvironmentFile`-Abhängigkeit.
    sudo systemctl daemon-reload
    sudo systemctl enable --now xbuddy-router.service
    sudo systemctl enable --now xbuddy-plan.service
+   sudo systemctl enable --now xbuddy-wetter.service
    sudo systemctl enable --now xbuddy-familie.service
    sudo systemctl enable --now xbuddy-geraete.service
    sudo systemctl enable --now xbuddy-eltern-chat.service
@@ -105,7 +108,7 @@ Die übrigen Services haben keine `EnvironmentFile`-Abhängigkeit.
 5. **Status prüfen** — alle Services müssen `active (running)` melden:
 
    ```bash
-   systemctl status xbuddy-router xbuddy-plan xbuddy-familie xbuddy-eltern-chat
+   systemctl status xbuddy-router xbuddy-plan xbuddy-wetter xbuddy-familie xbuddy-eltern-chat
    ```
 
 ## Restart nach Code-Update (Pflicht)
@@ -121,6 +124,7 @@ Zuordnung (analog zur Memory-Notiz `feedback-pi-service-restart`):
 |---|---|
 | `router/` | `sudo systemctl restart xbuddy-router` |
 | `plan/` | `sudo systemctl restart xbuddy-plan` |
+| `wetter/` | `sudo systemctl restart xbuddy-wetter` |
 | `familie/` | `sudo systemctl restart xbuddy-familie` |
 | `geraete/` | `sudo systemctl restart xbuddy-geraete` |
 | `eltern-chat/` | `sudo systemctl restart xbuddy-eltern-chat` |
