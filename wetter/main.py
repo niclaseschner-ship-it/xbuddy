@@ -1,0 +1,266 @@
+#!/usr/bin/env python3
+"""Wetter-Buddy-App — HTTP-Schnittstelle + Entrypoint (WETTER-1 … WETTER-22).
+
+Siehe specs/buddies/wetter.md. Der Wetter-Buddy ist die XBuddy-App mit dem
+Buddy-Slug `wetter` (WETTER-1). Er besitzt seine Daten (Ort + Garderoben-Regeln,
+WETTER-21) und seine Funktion (die Open-Meteo-Anbindung, WETTER-16) und stellt
+das Ergebnis über seine Display-View bereit (WETTER-2).
+
+Endpunkt:
+  GET /display/wetter/heute              — View `heute`, Diptychon (WETTER-2)
+  GET /display/wetter/heute?stage=toddler — Mitwachsen-Stufe (WETTER-4; V1 nur toddler)
+
+Service-Topologie wie plan/main.py: eine schlanke eigenständige Flask-App, ein
+Geschwister von router/, familie/ und plan/.
+"""
+
+import argparse
+import logging
+import os
+import sys
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
+
+from flask import Flask, render_template, request
+
+# Repo-Wurzel auf den Importpfad — die App konsumiert die Library
+# `tools.configloader`/`tools.logsetup` (DCOMP-1-Ausnahme: `tools/` ist
+# gemeinsamer Bibliotheks-Code).
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.dirname(_HERE)
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from tools import configloader, logsetup  # noqa: E402
+
+# Das wetter-Paket wird als Paket importiert, damit die relativen Imports in
+# config/meteo/clothing/render greifen — auch wenn main.py direkt gestartet wird.
+if __package__:
+    from . import config as config_mod
+    from . import meteo as meteo_mod
+    from . import render as render_mod
+else:  # python3 wetter/main.py
+    sys.path.insert(0, _REPO_ROOT)
+    from wetter import config as config_mod
+    from wetter import meteo as meteo_mod
+    from wetter import render as render_mod
+
+
+# ============================================================
+#  Laufzeit-Zustand
+# ============================================================
+#
+# Wie beim Plan-Buddy (DCOMP-2, Reload-on-Read): `config` ist der
+# Last-Known-Good-Snapshot, nicht die Lookup-Wahrheit. Endpoints lesen via
+# `_current_config()` pro Aufruf frisch von Disk; der Snapshot dient nur als
+# Fallback, wenn ein einzelner Read scheitert (DCOMP-3).
+runtime = {
+    "config": None,             # wetter.config.Config — Last-Known-Good-Snapshot
+    "anbindung": None,          # wetter.meteo.WetterAnbindung (oder Fake in Tests)
+    "config_path": None,        # Pfad zur wetter.json — Naht für DCOMP-2
+    "anbindung_factory": None,  # cfg -> WetterAnbindung — neu binden, wenn Ort/Stunden wechseln
+}
+
+
+def configure(cfg, anbindung, config_path=None, anbindung_factory=None):
+    """Setzt Konfiguration und Wetter-Anbindung (Test-Naht, WETTER-24).
+
+    `anbindung` ist die Test-Naht: in Produktion eine WetterAnbindung mit
+    OpenMeteoTransport, in Tests eine mit einem Fake-Transport.
+
+    `config_path` ist die Naht für DCOMP-2 (Reload-on-Read): wird er gesetzt,
+    liest der Wetter-Buddy `wetter.json` pro Aufruf frisch von Disk — eine
+    geänderte Garderoben-Regel oder ein neuer Ort werden ohne Service-Restart
+    sichtbar. Ohne `config_path` bleibt das übergebene `cfg` die Quelle
+    (Test-Modus, kein Disk-IO).
+
+    `anbindung_factory(cfg) -> anbindung` wird im Reload-on-Read-Pfad
+    aufgerufen, sobald sich Ort oder Tageszeit-Stunden gegenüber der zuletzt
+    gebauten Anbindung ändern. In Tests bleibt der Default `None` — die Tests
+    setzen die Anbindung direkt.
+    """
+    runtime["config"] = cfg
+    runtime["anbindung"] = anbindung
+    runtime["config_path"] = config_path
+    runtime["anbindung_factory"] = anbindung_factory
+
+
+def _current_config():
+    """DCOMP-2 Reload-on-Read: liefert die wetter.json-Config pro Aufruf frisch.
+
+    Scheitert Read oder Parse, fällt der Aufruf auf den Last-Known-Good-Snapshot
+    in `runtime["config"]` zurück (DCOMP-3) — der Kiosk kippt bei einem kurzen
+    Race nicht in einen leeren Zustand. Ohne konfigurierten `config_path`
+    (Tests) wird der Snapshot direkt zurückgegeben.
+    """
+    path = runtime.get("config_path")
+    snapshot = runtime["config"]
+    if not path:
+        return snapshot
+    try:
+        new_cfg = config_mod.resolve(path)
+    except (config_mod.ConfigError, OSError) as e:
+        logger.debug(
+            "reload-on-read fiel auf snapshot zurück (%s); "
+            "Lookup nutzt zuletzt erfolgreich geladenen Stand", e)
+        return snapshot
+    runtime["config"] = new_cfg
+    return new_cfg
+
+
+def _anbindung(cfg):
+    """Baut/liefert die Wetter-Anbindung passend zur aktuellen Config (DCOMP-2).
+
+    Wechselt der Ort oder die Tageszeit-Stunden in wetter.json, muss die
+    Anbindung die neuen Werte kennen. Steht eine `anbindung_factory` bereit
+    (Live-Pfad), bauen wir sie bei Bedarf neu; der Snapshot in
+    `runtime["anbindung"]` bleibt als Fallback. Tests ohne Factory behalten die
+    fest gesetzte Test-Anbindung (Test-Naht, WETTER-24).
+    """
+    anbindung = runtime["anbindung"]
+    factory = runtime.get("anbindung_factory")
+    if factory is None:
+        return anbindung
+    # Signatur, die einen Neu-Bau erzwingt: Ort-Koordinaten + Tageszeit-Stunden
+    # + Sonnencreme-Schwelle. Ändert sich eine, ist die alte Anbindung stale.
+    sig = (cfg.ort.lat, cfg.ort.lon, cfg.stunde_morgens,
+           cfg.stunde_mittags, cfg.sunscreen_uv)
+    if getattr(anbindung, "_wetter_sig", None) != sig:
+        anbindung = factory(cfg)
+        anbindung._wetter_sig = sig
+        runtime["anbindung"] = anbindung
+    return anbindung
+
+
+# ============================================================
+#  Flask-App
+# ============================================================
+
+# URL-13: statische Assets des Wetter-Buddys liegen in seinem Display-
+# Namensraum (`/display/wetter/static/...`), damit sie hinter der einen Origin
+# (URL-12) geroutet werden — der Flask-Default `/static` läge außerhalb der
+# URL-1-Prefixe.
+app = Flask(__name__, static_url_path="/display/wetter/static")
+
+
+def _zielTag(cfg, jetzt):
+    """Der angezeigte Tag nach dem Abend-Rollover (WETTER-6).
+
+    Vor der Abend-Rollover-Zeit: heute. Ab der Abend-Zeit: morgen — damit man
+    abends die Kleidung für den nächsten Tag herauslegen kann (E-WETTER-9).
+    Liefert (tag, fuer_morgen).
+    """
+    h, m = cfg.rollover_abend
+    rollover = time(hour=h, minute=m)
+    if jetzt.time() >= rollover:
+        return jetzt.date() + timedelta(days=1), True
+    return jetzt.date(), False
+
+
+def _jetzt(cfg):
+    """Aktuelle Zeit in der Familien-Zeitzone (WETTER-6). Test-Naht über `?_now=`
+    bleibt bewusst aus — Tests rufen `_zielTag`/`baue_view` direkt mit einem
+    festen `jetzt` auf (WETTER-24)."""
+    return datetime.now(ZoneInfo(cfg.zeitzone))
+
+
+@app.route("/display/wetter/heute", methods=["GET"])
+def heute():
+    """View `heute` als Diptychon, Stufe `toddler` (WETTER-2, WETTER-4).
+
+    `?stage=toddler` (Default ohne Parameter). V1 implementiert nur `toddler`
+    (WETTER-4, E-WETTER-4); ein anderer Stage-Wert wird auf `toddler`
+    zurückgesetzt — die View bleibt nutzbar, kein Fehler vor dem Kind.
+
+    DCOMP-2: wetter.json pro Request frisch von Disk (`_current_config()`) —
+    eine geänderte Garderoben-Regel oder ein neuer Ort wirken ohne Restart.
+    """
+    cfg = _current_config()
+    stage = request.args.get("stage", "toddler")
+    if stage != "toddler":
+        logger.info("stage=%r nicht implementiert (V1 nur toddler, WETTER-4) "
+                    "— falle auf toddler zurück", stage)
+        stage = "toddler"
+
+    tag, fuer_morgen = _zielTag(cfg, _jetzt(cfg))
+    morgens, mittags = _anbindung(cfg).fuer_tag(tag)
+    view = render_mod.baue_view(cfg, morgens, mittags, fuer_morgen=fuer_morgen)
+
+    return render_template("wetter_heute.html", stage=stage, view=view)
+
+
+# ============================================================
+#  Entrypoint (WETTER-22)
+# ============================================================
+
+logger = logging.getLogger(__name__)
+
+# Runtime-Konfig-Schema (CONFIG-1): nur die Service-Start-Werte — Bind,
+# Log-Level. Ort/Regeln/Tageszeiten leben in wetter.json (WETTER-21).
+# Listen-Port aus dem PORT-2-Reserveblock für neue Buddys (5030; die feste
+# Eintragung in conventions/ports.md ist Folge-Ticket, OPEN-WETTER-D).
+RUNTIME_SCHEMA = {
+    "listen_host": "127.0.0.1",
+    "listen_port": 5030,
+    "log_level":   "INFO",
+}
+
+
+def parse_args(argv):
+    p = argparse.ArgumentParser(description="XBuddy Wetter-Buddy-App V1")
+    p.add_argument("--config", dest="config_file", default=None,
+                   help="Pfad zur wetter.json (WETTER-21; sonst $WETTER_CONFIG_FILE / Default)")
+    p.add_argument("--host", help="Bind-Host")
+    p.add_argument("--port", type=int, help="Bind-Port")
+    p.add_argument("--log-level", dest="log_level", help="DEBUG | INFO | WARNING | ERROR")
+    p.add_argument("--cert", help="TLS-Cert (optional, für HTTPS-Modus)")
+    p.add_argument("--key", help="TLS-Key (optional, für HTTPS-Modus)")
+    return p.parse_args(argv)
+
+
+def resolved_runtime_config(args):
+    """Host/Port/Log-Level: Datei < ENV < CLI (CONFIG-1/CONFIG-5).
+
+    Datei + ENV kommen vom gemeinsamen `tools.configloader`. CLI-Flags bleiben
+    Test-Werkzeug und überschreiben den Loader-Output.
+    """
+    cfg = configloader.load(component="wetter", schema=RUNTIME_SCHEMA)
+    if args.host:      cfg["listen_host"] = args.host
+    if args.port:      cfg["listen_port"] = args.port
+    if args.log_level: cfg["log_level"]   = args.log_level
+    return cfg
+
+
+def main(argv=None):
+    args = parse_args(argv if argv is not None else sys.argv[1:])
+    rt = resolved_runtime_config(args)
+    logsetup.setup(rt["log_level"])
+
+    config_path = (args.config_file
+                   or os.environ.get(config_mod.ENV_CONFIG_FILE)
+                   or config_mod.DEFAULT_CONFIG_FILE)
+    cfg = config_mod.resolve(config_path)
+
+    def anbindung_factory(cfg):
+        transport = meteo_mod.OpenMeteoTransport(cfg.ort.lat, cfg.ort.lon)
+        return meteo_mod.WetterAnbindung(
+            transport, cfg.stunde_morgens, cfg.stunde_mittags, cfg.sunscreen_uv)
+
+    anbindung = anbindung_factory(cfg)
+    configure(cfg, anbindung, config_path=config_path,
+              anbindung_factory=anbindung_factory)
+
+    ssl_context = None
+    scheme = "http"
+    if args.cert and args.key:
+        ssl_context = (args.cert, args.key)
+        scheme = "https"
+    logger.info("Wetter-Buddy hört auf %s://%s:%s (ort=%s, lat=%s, lon=%s)",
+                scheme, rt["listen_host"], rt["listen_port"],
+                cfg.ort.name or "(ohne Name)", cfg.ort.lat, cfg.ort.lon)
+    app.run(host=rt["listen_host"], port=rt["listen_port"],
+            debug=False, threaded=True, ssl_context=ssl_context)
+
+
+if __name__ == "__main__":
+    main()

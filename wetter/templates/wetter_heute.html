@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WetterBuddy · {{ view.tages_label }}</title>
+
+{# WETTER-20/E-WETTER-6: Stilwerte kommen als Token aus dem Design System.
+   Wetter-lokale Kopie der genutzten Token (Nic-Entscheidung 2026-06-02),
+   relativ über den Display-Namensraum (URL-13) referenziert. #}
+<link rel="stylesheet" href="{{ url_for('static', filename='design/colors_and_type.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='wetter.css') }}">
+</head>
+
+{# WETTER-4: Mitwachsen-Stufe als data-stage; V1 nur toddler. #}
+<body class="xb" data-stage="{{ stage }}">
+
+{% macro szene(kind) %}
+  {# WETTER-7: Haus-Wetter-Szene als Inline-SVG (aus Mockup v4), je kind. #}
+  {% if kind == 'sonnig' %}
+    <svg viewBox="0 0 320 220" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <linearGradient id="sky-grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#B8E0F7"/><stop offset="100%" stop-color="#E0F3FF"/></linearGradient>
+        <linearGradient id="wiese-grad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#C8E6A0"/><stop offset="100%" stop-color="#A8D070"/></linearGradient>
+      </defs>
+      <rect width="320" height="220" fill="url(#sky-grad)"/>
+      <circle cx="268" cy="44" r="28" fill="#FFD84A" stroke="#F5B800" stroke-width="3"/>
+      <line x1="268" y1="6" x2="268" y2="1" stroke="#F5B800" stroke-width="3" stroke-linecap="round"/>
+      <line x1="268" y1="82" x2="268" y2="87" stroke="#F5B800" stroke-width="3" stroke-linecap="round"/>
+      <line x1="230" y1="44" x2="225" y2="44" stroke="#F5B800" stroke-width="3" stroke-linecap="round"/>
+      <line x1="306" y1="44" x2="311" y2="44" stroke="#F5B800" stroke-width="3" stroke-linecap="round"/>
+      <g><ellipse cx="82" cy="68" rx="38" ry="22" fill="white" stroke="#D0E8F5" stroke-width="2"/><ellipse cx="58" cy="74" rx="24" ry="16" fill="white" stroke="#D0E8F5" stroke-width="2"/><ellipse cx="108" cy="74" rx="26" ry="15" fill="white" stroke="#D0E8F5" stroke-width="2"/></g>
+      {{ haus() }}
+    </svg>
+  {% elif kind == 'regen' %}
+    <svg viewBox="0 0 320 220" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+      <rect width="320" height="220" fill="#C0D4E4"/>
+      <ellipse cx="150" cy="44" rx="80" ry="30" fill="#90A8C0" stroke="#708090" stroke-width="2"/>
+      <ellipse cx="92" cy="58" rx="50" ry="26" fill="#90A8C0" stroke="#708090" stroke-width="2"/>
+      <ellipse cx="210" cy="58" rx="54" ry="26" fill="#90A8C0" stroke="#708090" stroke-width="2"/>
+      {% for x in [60, 100, 140, 180, 220, 260] %}<line x1="{{ x }}" y1="92" x2="{{ x - 8 }}" y2="116" stroke="#668EA8" stroke-width="3" stroke-linecap="round"/>{% endfor %}
+      {{ haus() }}
+    </svg>
+  {% elif kind == 'schnee' %}
+    <svg viewBox="0 0 320 220" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+      <rect width="320" height="220" fill="#DDE8F5"/>
+      <ellipse cx="150" cy="44" rx="80" ry="30" fill="#EEF2F8" stroke="#C8D4E4" stroke-width="2"/>
+      {% for x in [60, 110, 160, 210, 260] %}<text x="{{ x }}" y="110" font-size="22" fill="#A8C0D8" text-anchor="middle">✱</text>{% endfor %}
+      {{ haus() }}
+    </svg>
+  {% elif kind == 'gewitter' %}
+    <svg viewBox="0 0 320 220" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+      <rect width="320" height="220" fill="#A8B8C8"/>
+      <ellipse cx="150" cy="44" rx="84" ry="34" fill="#708090" stroke="#506070" stroke-width="2"/>
+      <polygon points="150,76 130,118 144,118 122,162 168,108 152,108 172,76" fill="#FFD840" stroke="#C9913B" stroke-width="2"/>
+      {{ haus() }}
+    </svg>
+  {% elif kind == 'bewoelkt' %}
+    <svg viewBox="0 0 320 220" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+      <rect width="320" height="220" fill="#D8E8F0"/>
+      <ellipse cx="140" cy="50" rx="80" ry="36" fill="#E8EEF5" stroke="#C0D0E0" stroke-width="2"/>
+      <ellipse cx="80" cy="64" rx="48" ry="28" fill="#E8EEF5" stroke="#C0D0E0" stroke-width="2"/>
+      <ellipse cx="210" cy="64" rx="52" ry="28" fill="#E8EEF5" stroke="#C0D0E0" stroke-width="2"/>
+      {{ haus() }}
+    </svg>
+  {% else %}
+    <svg viewBox="0 0 320 220" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+      <rect width="320" height="220" fill="#E8EEF2"/>
+      {{ haus() }}
+    </svg>
+  {% endif %}
+{% endmacro %}
+
+{% macro haus() %}
+  <ellipse cx="160" cy="218" rx="180" ry="30" fill="#A8D070"/>
+  <rect x="0" y="210" width="320" height="20" fill="#A8D070"/>
+  <rect x="88" y="118" width="120" height="90" rx="6" fill="#F5ECD8" stroke="#C9A87A" stroke-width="3"/>
+  <polygon points="80,122 148,62 216,122" fill="#C97A4A" stroke="#A05A2A" stroke-width="3" stroke-linejoin="round"/>
+  <rect x="130" y="158" width="36" height="50" rx="4" fill="#8B6340" stroke="#5A3E20" stroke-width="2"/>
+  <rect x="96" y="132" width="32" height="26" rx="3" fill="#C8E8F5" stroke="#668EA8" stroke-width="2"/>
+  <rect x="170" y="132" width="32" height="26" rx="3" fill="#C8E8F5" stroke="#668EA8" stroke-width="2"/>
+{% endmacro %}
+
+<div class="diptychon">
+
+  {# ════════ KARTE LINKS — WETTER (WETTER-3-Karte) ════════ #}
+  <div class="card card-wetter">
+    <div class="card-label">Wie ist das Wetter?</div>
+
+    {# ── WETTER-HERO (WETTER-7/8) ── #}
+    <div class="wetter-hero">
+      <div class="hero-szene">{{ szene(view.wetter.kind) }}</div>
+      <div class="hero-info">
+        <div class="hero-desc">{{ view.wetter.desc }}</div>
+        {% if not view.wetter.neutral %}
+        <div class="hero-temp-row">
+          <div class="hero-temp">{{ view.wetter.feels if view.wetter.feels is not none else view.wetter.temp }}</div>
+          <div class="hero-temp-unit">°</div>
+        </div>
+        <div class="hero-gefuehlt">{{ view.wetter.feels_label }}</div>
+        {% if view.wetter.low is not none and view.wetter.high is not none %}
+        <div class="hero-minmax">
+          <span class="hero-min">{{ view.wetter.low }}°</span>
+          <span class="hero-max">{{ view.wetter.high }}°</span>
+        </div>
+        {% endif %}
+        {% endif %}
+      </div>
+    </div>
+
+    {# ── TEMPERATUR-SPEKTRUM (WETTER-9) ── #}
+    <div class="spektrum-wrapper">
+      <div class="spektrum-a">
+        <div class="spektrum-a-markers">
+          {# WETTER-9: vier Marker — Schneeflocke / neutrales Gesicht / Sonne / Schweiß #}
+          <div class="s-marker" style="left:12.5%"><div class="marker-icon" style="background:#C8E4F4;border-color:#8ABCD8;">
+            <svg width="36" height="36" viewBox="0 0 28 28" fill="none"><line x1="14" y1="3" x2="14" y2="25" stroke="#4A88B8" stroke-width="2.5" stroke-linecap="round"/><line x1="3" y1="14" x2="25" y2="14" stroke="#4A88B8" stroke-width="2.5" stroke-linecap="round"/><line x1="6.5" y1="6.5" x2="21.5" y2="21.5" stroke="#4A88B8" stroke-width="2.5" stroke-linecap="round"/><line x1="21.5" y1="6.5" x2="6.5" y2="21.5" stroke="#4A88B8" stroke-width="2.5" stroke-linecap="round"/></svg>
+          </div><span class="marker-temp-label">0°</span></div>
+          <div class="s-marker" style="left:37.5%"><div class="marker-icon" style="background:#EEF5E8;border-color:#9ABE88;">
+            <svg width="36" height="36" viewBox="0 0 28 28" fill="none"><ellipse cx="14" cy="14" rx="11" ry="11.5" fill="#FFF0CC" stroke="#8B6340" stroke-width="2"/><ellipse cx="10" cy="12" rx="1.8" ry="2.0" fill="#5A3E20"/><ellipse cx="18" cy="12" rx="1.8" ry="2.0" fill="#5A3E20"/><line x1="10" y1="18.5" x2="18" y2="18.5" stroke="#8B6340" stroke-width="2" stroke-linecap="round"/></svg>
+          </div><span class="marker-temp-label">10°</span></div>
+          <div class="s-marker" style="left:62.5%"><div class="marker-icon" style="background:#FFF5C0;border-color:#F0C94A;">
+            <svg width="36" height="36" viewBox="0 0 28 28" fill="none"><circle cx="14" cy="14" r="6" fill="#FFD840" stroke="#F5B800" stroke-width="1.8"/><line x1="14" y1="2" x2="14" y2="5" stroke="#F5B800" stroke-width="2" stroke-linecap="round"/><line x1="14" y1="23" x2="14" y2="26" stroke="#F5B800" stroke-width="2" stroke-linecap="round"/><line x1="2" y1="14" x2="5" y2="14" stroke="#F5B800" stroke-width="2" stroke-linecap="round"/><line x1="23" y1="14" x2="26" y2="14" stroke="#F5B800" stroke-width="2" stroke-linecap="round"/></svg>
+          </div><span class="marker-temp-label">20°</span></div>
+          <div class="s-marker" style="left:87.5%"><div class="marker-icon" style="background:#FFE8C0;border-color:#FFA040;">
+            <svg width="36" height="36" viewBox="0 0 28 28" fill="none"><rect x="11" y="2" width="6" height="16" rx="3" fill="#FF8040" stroke="#CC5020" stroke-width="1.8"/><circle cx="14" cy="21" r="5.5" fill="#FF6020"/><rect x="12.5" y="8" width="3" height="12" fill="#FF6020" rx="1.5"/></svg>
+          </div><span class="marker-temp-label">30°</span></div>
+        </div>
+        <div class="spektrum-a-bar-wrap">
+          <div class="spektrum-a-gradient"></div>
+          {% if view.wetter.low_pct is not none and view.wetter.high_pct is not none %}
+          {# WETTER-9: heute erwartete Spanne hervorgehoben, aus low/high gerechnet #}
+          <div class="spektrum-a-highlight" style="left: calc({{ view.wetter.low_pct }}% - 2px); width: calc({{ view.wetter.high_pct - view.wetter.low_pct }}% + 4px);"></div>
+          {% endif %}
+        </div>
+        {% if view.wetter.low is not none and view.wetter.high is not none %}
+        <div class="spektrum-a-today-labels">
+          <span class="today-min">Tief {{ view.wetter.low }}°</span>
+          <span class="today-max">Hoch {{ view.wetter.high }}°</span>
+        </div>
+        {% endif %}
+        <div class="spektrum-a-scale"><span>−5°</span><span>10°</span><span>20°</span><span>35°</span></div>
+      </div>
+    </div>
+
+    {# ── METRIK-KARTEN (WETTER-10/11) ── #}
+    <div class="metriken">
+      {# REGEN — Eimer-Skala 0..4, kein nackter Wert #}
+      <div class="metrik-card">
+        <div class="metrik-label">Regen</div>
+        <div class="regen-eimer-wrap">
+          <svg class="eimer-svg" viewBox="0 0 68 68" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M14 22 L10 56 Q10 60 14 60 L54 60 Q58 60 58 56 L54 22 Z" fill="white" stroke="#668EA8" stroke-width="2.5" stroke-linejoin="round"/>
+            <line x1="14" y1="22" x2="54" y2="22" stroke="#668EA8" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+          <div class="eimer-punkte">
+            {% for i in range(4) %}
+            <span class="eimer-punkt {{ 'voll' if i < view.metrik.eimer else 'leer' }}"></span>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {# WIND — Gauge-Balken 0..5, kein nackter Wert #}
+      <div class="metrik-card">
+        <div class="metrik-label">Wind</div>
+        <div class="wind-gauge-wrap">
+          <div class="wind-balken">
+            {% for i in range(5) %}
+            <div class="wind-bar {{ 'aktiv' if i < view.metrik.wind else '' }}" style="height: {{ 20 + i*8 }}px;"></div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {# SONNENCREME — WETTER-11: nur Ja/Nein, KEIN UV-Wert, KEIN UV-Label #}
+      <div class="metrik-card {{ 'sonnencreme-ja' if view.metrik.sunscreen else 'sonnencreme-nein' }}">
+        <div class="metrik-label">Sonnencreme</div>
+        <div class="sonnencreme-wrap">
+          {% if view.metrik.sunscreen %}
+          <div class="sonnencreme-badge ja">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <span class="sonnencreme-text">Ja</span>
+          {% else %}
+          <div class="sonnencreme-badge nein">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+          </div>
+          <span class="sonnencreme-text">Nein</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>{# /card-wetter #}
+
+  {# ════════ KARTE RECHTS — ANZIEHEN (WETTER-12/13) ════════ #}
+  <div class="card card-anziehen">
+    <div class="card-label">Was zieh ich an?</div>
+    <div class="outfit-blocks">
+      {% for block in view.bloecke %}
+      <div class="outfit-block {{ block.tageszeit | lower }}">
+        <div class="outfit-block-header">
+          <div class="outfit-block-tageszeit">
+            <div class="outfit-block-title">{{ block.tageszeit }}</div>
+          </div>
+          {% if block.wetter.feels is not none %}
+          <div class="outfit-block-temp">{{ block.wetter.feels }}° — {{ block.wetter.feels_label | replace('gefühlt ', '') }}</div>
+          {% endif %}
+        </div>
+        <div class="outfit-sections">
+          {# MIT (Pflicht) #}
+          <div class="outfit-section mit-section">
+            <div class="outfit-section-label">MIT</div>
+            <div class="outfit-items">
+              {% for teil in block.outfit.pflicht %}
+              <div class="outfit-item">
+                {% if teil.pikto %}<img class="outfit-pikto" src="{{ teil.pikto }}" alt="{{ teil.name }}">{% endif %}
+                <span class="outfit-item-name">{{ teil.name }}</span>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {# WENN DU MAGST (Optional) #}
+          <div class="outfit-section optional-section">
+            <div class="outfit-section-label optional">Wenn du magst</div>
+            <div class="outfit-items">
+              {% for teil in block.outfit.optional %}
+              <div class="outfit-item">
+                {% if teil.pikto %}<img class="outfit-pikto outfit-pikto-optional" src="{{ teil.pikto }}" alt="{{ teil.name }}">{% endif %}
+                <span class="outfit-item-name">{{ teil.name }}</span>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        {% if block.outfit.hinweis %}<div class="outfit-hinweis">{{ block.outfit.hinweis }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>{# /card-anziehen #}
+
+</div>{# /diptychon #}
+
+{# ── WETTER-19: ARASAAC-Attribution-Footer (Lizenz-/NC-Frage zentral in ICONS-6) ── #}
+<div class="attribution-footer">
+  <span>WetterBuddy · xbuddy</span>
+  <span>Piktogramme: ARASAAC (arasaac.org) · Autor: Sergio Palao · Lizenz: CC BY-NC-SA 4.0 · Wetter-Szene: eigene Illustration im ARASAAC-Stil</span>
+</div>
+
+</body>
+</html>
