@@ -20,12 +20,12 @@ statt der Geräte-Registry als Schreibziel.
 ruft die gelandete Panel-Registry-API (PREG-15) über einen HTTP-Client
 (`panel_client.py`, DCOMP-1) auf — **keine** eigene Anlage-/Validierungs-Logik;
 die `panel_id`-Vergabe (PREG-6), die Display-Validierung gegen die
-Geräte-Registry (PREG-7) und das atomare Schreiben (PREG-15) leistet der
-panel-Service serverseitig. Die `config` (PANEL-8: `source_id` / `display_id` /
-`router_url`) baut **der Skill** aus den Eingaben — der Service liefert sie
-heute leer (PREG-15: „fehlt `config`, gelten die Code-Defaults"), und ein Panel
-ohne gesetztes `source_id`/`display_id` koppelt nicht an den Router (PANEL-8
-„Kopplung zum Router").
+Geräte-Registry (PREG-7), das atomare Schreiben **und der Aufbau der
+`config`-Identität** (PANEL-8: `source_id`/`display_id`/`router_url`) leistet der
+panel-Service serverseitig (PREG-15, server-autoritativ — Nic-Entscheid
+2026-06-03). Der Skill sendet nur `{slug, display_id, tiles}` und liefert
+**keine** `config`-Identität — er kennt die server-vergebene `panel_id` ohnehin
+nicht vor dem POST (PAA-4).
 
 **V1-Scope:** die Anlage **einer** Panel-Instanz je Aufruf · Konversation im
 Privatchat mit dem Aufrufer (analog GAA-3, `eltern-chat-onboarding.md` ONB-3) ·
@@ -98,15 +98,16 @@ Implementierungs-Detail:
    sinngemäß) und weist eine Eingabe ab, die nach Normalisierung leer ist
    (PAA-7). Die laufende Nummer (`-01`, `-02`) vergibt der **Server** (PREG-6);
    der Skill liefert **nur** den `slug`.
-3. **Kacheln / Apps** (Pflicht ≥ 1 — **Nic-Frage**, siehe „Offene Punkte"):
-   die Apps, die als Kacheln (`tiles`, PANEL-3) auf dem Panel erscheinen. Je
-   Kachel erfasst die Funktion die `tiles.json`-Pflichtfelder aus PANEL-3
-   (`key`, `app`, `view`, `label`, `icons`, `sichtbar`; `query` optional). Der
-   genaue Erfassungs-Dialog (feste Liste verfügbarer Apps vs. Freitext;
-   Reihenfolge; Default-Icons) ist **Nic-Entscheidung** (OPEN-PAA-B) — V1 kann
-   hier nur das, wofür eine Quelle der verfügbaren Apps existiert (siehe
-   Befund/Nic-Frage). Die Listen-Reihenfolge der erfassten Kacheln ist die
-   Anzeige-Reihenfolge (PANEL-3).
+3. **Kacheln / Apps** (Pflicht ≥ 1 — **feste Kandidatenliste**, OPEN-PAA-B
+   entschieden): die Apps, die als Kacheln (`tiles`, PANEL-3) auf dem Panel
+   erscheinen. V1 bietet eine **hart-codierte, kuratierte Kandidatenliste**
+   verfügbarer Apps (z. B. Wetter, Plan) zur nummerierten Auswahl an — keine
+   freie Slug-Nennung (Tippfehler → tote Kachel ausgeschlossen). Je gewählter
+   App baut die Funktion die `tiles.json`-Pflichtfelder aus PANEL-3 (`key`,
+   `app`, `view`, `label`, `icons`, `sichtbar`; `query` optional) aus der
+   Kandidaten-Definition. Die Listen-Reihenfolge der erfassten Kacheln ist die
+   Anzeige-Reihenfolge (PANEL-3). Der echte App-Discovery-Mechanismus, der die
+   feste Liste später ablöst, ist als **#325** erfasst (gekoppelt an #296).
 4. **Bestätigung mit Zusammenfassung**: Vor dem Schreiben fasst die Funktion
    alle erfassten Felder zusammen (gewähltes Display, Slug, die Kachel-Liste)
    und fordert eine Bestätigung nach `eltern-chat.md` E-EC-7. Erst eine
@@ -119,12 +120,12 @@ Implementierungs-Detail:
    `panel_client.py` (DCOMP-1) auf:
    - `slug` (PAA-3.2),
    - `display_id` (PAA-3.1),
-   - `router_url` **leer** (same-origin, PREG-8 — V1 setzt ihn nicht, #82),
-   - `config` — **vom Skill gebaut** (PAA-4),
-   - `tiles` — die Kachel-Liste aus PAA-3.3 in PANEL-3-Form.
+   - `tiles` — die Kachel-Liste aus PAA-3.3 in PANEL-3-Form,
+   - **keine** `config`-Identität und **kein** `router_url` — beides leitet der
+     Server ab (PAA-4, PREG-15); optionales config-Tuning ist erlaubt.
 
    Der Server vergibt die `panel_id` (PREG-6) und leitet `source_id`
-   (`app-panel:<panel_id>`, PANEL-6) ab. Die Funktion liefert dem Aufrufer im
+   (`app-panel:<panel_id>`, PANEL-6) sowie die `config`-Identität ab (PREG-15). Die Funktion liefert dem Aufrufer im
    Privatchat die Controller-URL `/controller/app-panel/<panel_id>` (PANEL-2;
    mit Origin, falls der Funktion einer mitgegeben ist, sonst nur den Pfad —
    analog GAA-3.7). Schlägt PREG-15 fehl (400/503), signalisiert die Funktion
@@ -135,38 +136,27 @@ gibt es V1 nicht.
 
 *Tickets:* #183, #138
 
-### PAA-4 — Der Skill baut die `config`, der Service nicht
-Die `config` der Panel-Instanz (PANEL-8: `source_id`, `display_id`,
-`router_url`) baut **der Skill** und liefert sie im PREG-15-Body mit. Grund:
-PREG-15 liefert ein fehlendes `config` als Code-Defaults (heute effektiv leer),
-und PANEL-8 verlangt für die Router-Kopplung gesetzte Werte — ein Panel mit
-leerem `config` koppelt nicht. Die Funktion setzt:
+### PAA-4 — Der Server leitet die `config`-Identität ab (PREG-15), nicht der Skill
+**Ratifiziert (Nic 2026-06-03, OPEN-PAA-C → A).** Die `config`-Identitätsfelder
+der Panel-Instanz (PANEL-8: `source_id`, `display_id`, `router_url`) leitet **der
+panel-Service** beim POST server-autoritativ ab (PREG-15) — der Skill liefert sie
+**nicht**:
 
-- `display_id` = das in PAA-3.1 gewählte `display_id`,
-- `router_url` = leer (same-origin, PREG-8; V1 setzt ihn nicht, #82),
-- `source_id` = `app-panel:<panel_id>` (PANEL-6) — **sofern** dem Skill zum
-  Build-Zeitpunkt schon bekannt.
+- `source_id` = `app-panel:<panel_id>` (PANEL-6) — ableitbar erst, wenn die
+  `panel_id` feststeht, und die vergibt **der Server** (PREG-6); der Skill kennt
+  sie vor dem POST nicht. Genau deshalb liegt die Ableitung serverseitig.
+- `display_id` = das in PAA-3.1 gewählte `display_id` — der Skill sendet es als
+  Top-Level-POST-Feld, der Server spiegelt es in die `config`.
+- `router_url` = leer (same-origin, PREG-8; V1 setzt ihn nicht, #82).
 
-**Verortungs-Schmerz (Befund, Nic-Frage OPEN-PAA-C):** `source_id` leitet sich
-aus der `panel_id` ab, die **erst der Server** in der PREG-15-Antwort vergibt
-(PREG-6). Der Skill kann `source_id` also **nicht** vor dem POST in die `config`
-schreiben — er kennt die `panel_id` erst danach. PANEL-8 führt `source_id`/
-`display_id`/`router_url` aber als config-Pflichtfelder, und PREG-3 listet
-`source_id` als von der Registry **abgeleitetes** Top-Level-Feld. Es gibt zwei
-saubere Auflösungen, und welche gilt, ist eine Schnittstellen-Entscheidung
-zwischen dieser Spec und `panel-registry.md`:
-- **(A) Service leitet `config.source_id` ab.** PREG-15 füllt — wie es
-  `source_id` als Top-Level-Feld schon ableitet (PREG-3) — auch
-  `config.source_id` aus der frisch vergebenen `panel_id`. Dann liefert der
-  Skill `config` **ohne** `source_id` (nur `display_id`), und die
-  „config baut der Skill"-Pflicht reduziert sich auf `display_id`/`router_url`.
-- **(B) Skill schreibt `source_id` in einem zweiten Schritt nach.** Bricht die
-  „dünner WriteTask, ein POST"-Linie und braucht einen Update-Pfad, den PREG
-  V1 nicht hat (OPEN-PREG-A). **Verworfen** als V1-Default.
-
-Diese Spec empfiehlt **(A)** und benennt es als **Nic-/Architektur-Frage**
-(OPEN-PAA-C); ohne Klärung kann der Skill `config.source_id` nicht
-spec-konform setzen.
+Der Skill sendet im PREG-15-Body also `{slug, display_id, tiles}` und **keine**
+`config`-Identität. Optionales config-**Tuning** (z. B. `backoffs`) darf er
+mitgeben; PREG-15 merged es und überschreibt nur die Identitätsfelder. Damit ist
+die PANEL-8-Konsistenz (`config.source_id == app-panel:<panel_id>`) immer
+erfüllt, ohne dass der Skill die `panel_id` vorab kennen muss. (Verworfen war
+Option (B) — der Skill schreibt `source_id` in einem zweiten Schritt nach: bräche
+die „dünner WriteTask, ein POST"-Linie und einen Update-Pfad, den PREG V1 nicht
+hat.)
 
 *Tickets:* #183
 
