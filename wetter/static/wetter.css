@@ -1,0 +1,412 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   Wetter-Buddy — View `heute`, Diptychon, Stufe toddler (WETTER-2 … WETTER-13).
+
+   Stilwerte ausschließlich als Token aus colors_and_type.css (WETTER-20,
+   E-WETTER-6: keine hartcodierten Maße/Farben außerhalb der illustrativen
+   SVG-Szenen). Layout-Basis ist das Mockup diptychon-toddler-v4.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── KIOSK SHELL (WETTER-25: raumfüllend, 1920×1080) ───────────────────────── */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background: var(--kids-bg);
+}
+
+body.xb[data-stage="toddler"] {
+  font-family: var(--font-hand);
+  font-size: var(--fs-28);
+  color: var(--kids-ink);
+  background: var(--kids-bg);
+}
+
+/* ── LAYOUT: Diptychon (WETTER-2) ──────────────────────────────────────────── */
+.diptychon {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
+  width: 1920px;
+  height: 1080px;
+  padding: var(--space-5) var(--space-6);
+  padding-bottom: calc(var(--space-3) + 32px);
+  box-sizing: border-box;
+}
+
+/* ── CARD BASE ─────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--kids-paper);
+  border-radius: var(--radius-3xl);
+  border: 2px solid var(--kids-border-soft);
+  box-shadow: var(--shadow-hand-lg);
+  padding: var(--space-4) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow: hidden;
+  position: relative;
+}
+.card-wetter { transform: rotate(-0.6deg); }
+.card-anziehen { transform: rotate(0.5deg); }
+
+.card-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-32);
+  color: var(--kids-ink-soft);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+  margin-bottom: calc(-1 * var(--space-1));
+  flex-shrink: 0;
+}
+
+/* ── WETTER-HERO (WETTER-7/8) ──────────────────────────────────────────────── */
+.wetter-hero {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-4);
+  background: var(--kids-tint-sky);
+  border-radius: var(--radius-2xl);
+  border: 2px solid var(--kids-border-soft);
+  box-shadow: var(--shadow-hand-sm);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.hero-szene {
+  flex: 1.4;
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-xl) 0 0 var(--radius-xl);
+}
+.hero-szene svg { width: 100%; height: 100%; display: block; }
+.hero-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-4) var(--space-2);
+}
+.hero-desc {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-48);
+  color: var(--kids-ink);
+  line-height: 1.0;
+}
+.hero-temp-row { display: flex; align-items: center; gap: var(--space-3); }
+.hero-temp {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-80);
+  color: var(--primary);
+  line-height: 1.0;
+}
+.hero-temp-unit {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-40);
+  color: var(--primary);
+  align-self: flex-start;
+  margin-top: 8px;
+}
+.hero-gefuehlt {
+  font-family: var(--font-hand);
+  font-size: var(--fs-20);
+  color: var(--kids-ink-soft);
+}
+.hero-minmax {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-28);
+}
+.hero-min { color: var(--lake); }
+.hero-max { color: var(--terracotta); }
+
+/* ── TEMPERATUR-SPEKTRUM (WETTER-9) ────────────────────────────────────────── */
+.spektrum-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: var(--kids-weekend-bg);
+  border-radius: var(--radius-2xl);
+  border: 2px solid var(--kids-border-soft);
+  padding: var(--space-3) var(--space-5);
+  box-shadow: var(--shadow-hand-sm);
+  flex-shrink: 0;
+}
+.spektrum-a { position: relative; display: flex; flex-direction: column; gap: 0; }
+.spektrum-a-markers {
+  position: relative;
+  height: 72px;
+  margin: 0 56px;
+  pointer-events: none;
+}
+.s-marker {
+  position: absolute;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  top: 0;
+}
+.s-marker .marker-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  border: 2.5px solid var(--kids-border-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--kids-paper);
+  box-shadow: var(--shadow-hand-sm);
+}
+.s-marker .marker-temp-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-14);
+  color: var(--kids-ink-soft);
+}
+.spektrum-a-bar-wrap { position: relative; height: 52px; margin: 4px 56px 0; }
+.spektrum-a-gradient {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 0;
+  right: 0;
+  border-radius: var(--radius-full);
+  background: linear-gradient(to right,
+    #A8D0E6 0%, #B8DDE6 12.5%, #D0ECD0 25%, #E6F0C0 40%,
+    #F5E680 55%, #FFD060 65%, #FFA040 80%, #FF6060 100%);
+  border: 2.5px solid var(--kids-border-soft);
+}
+.spektrum-a-highlight {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  border-radius: var(--radius-full);
+  border: 3px solid var(--kids-ink);
+  box-shadow: 2px 3px 0 rgba(43,42,38,.25);
+  pointer-events: none;
+}
+.spektrum-a-today-labels {
+  display: flex;
+  justify-content: space-between;
+  margin: var(--space-2) 56px 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-24);
+  font-weight: 700;
+  color: var(--kids-ink-soft);
+}
+.today-min { color: var(--lake); }
+.today-max { color: var(--terracotta); }
+.spektrum-a-scale {
+  display: flex;
+  justify-content: space-between;
+  margin: 3px 56px 0;
+  font-family: var(--font-hand);
+  font-size: var(--fs-18);
+  color: var(--kids-ink-soft);
+}
+
+/* ── METRIK-KARTEN (WETTER-10/11) ──────────────────────────────────────────── */
+.metriken {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+.metrik-card {
+  background: var(--kids-paper);
+  border: 2px solid var(--kids-border-soft);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-hand-sm);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+}
+.metrik-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-22);
+  color: var(--kids-ink-soft);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-cap);
+}
+.regen-eimer-wrap, .wind-gauge-wrap, .sonnencreme-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+.eimer-svg { width: 88px; height: 88px; flex-shrink: 0; }
+.eimer-punkte { display: flex; gap: 7px; align-items: center; }
+.eimer-punkt {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1.5px solid var(--kids-border-soft);
+}
+.eimer-punkt.voll { background: var(--lake); border-color: var(--lake); }
+.eimer-punkt.leer { background: transparent; }
+
+.wind-balken { display: flex; align-items: flex-end; gap: 6px; height: 52px; }
+.wind-bar {
+  width: 14px;
+  border-radius: 5px 5px 0 0;
+  background: var(--kids-weekend-bg);
+  border: 1.5px solid var(--kids-border-soft);
+}
+.wind-bar.aktiv { background: var(--sky); border-color: var(--lake); }
+
+/* SONNENCREME (WETTER-11): nur Ja/Nein-Badge, kein UV */
+.metrik-card.sonnencreme-ja { background: var(--kids-tint-lemon); border-color: var(--straw); }
+.metrik-card.sonnencreme-nein { background: var(--kids-tint-sky); border-color: var(--lake); }
+.sonnencreme-badge {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-hand-sm);
+}
+.sonnencreme-badge.ja { background: var(--warning); }
+.sonnencreme-badge.nein { background: var(--lake); }
+.sonnencreme-text {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-28);
+  color: var(--kids-ink);
+}
+
+/* ── ANZIEHEN-KARTE (WETTER-12/13) ─────────────────────────────────────────── */
+.outfit-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  flex: 1;
+  min-height: 0;
+}
+.outfit-block {
+  flex: 1;
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-hand-sm);
+  padding: var(--space-4) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+  background: var(--kids-weekend-bg);
+  border: 3px solid var(--kids-border-soft);
+}
+.outfit-block.morgens {
+  border-color: #9ACDE8;
+  box-shadow: 3px 4px 0 rgba(154,205,232,.35), 2px 3px 0 rgba(43,42,38,.12);
+}
+.outfit-block.mittags {
+  border-color: #F0C94A;
+  box-shadow: 3px 4px 0 rgba(240,201,74,.35), 2px 3px 0 rgba(43,42,38,.12);
+}
+.outfit-block-header { display: flex; align-items: center; gap: var(--space-4); flex-shrink: 0; }
+.outfit-block-tageszeit { display: flex; align-items: center; gap: var(--space-3); }
+.outfit-block-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-40);
+  color: var(--kids-ink);
+  line-height: 1.0;
+}
+.outfit-block-temp {
+  font-family: var(--font-hand);
+  font-size: var(--fs-22);
+  color: var(--kids-ink-soft);
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.outfit-sections { display: flex; gap: var(--space-3); flex: 1; min-height: 0; }
+.outfit-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+  border-radius: var(--radius-xl);
+  padding: var(--space-3);
+}
+.outfit-section.mit-section {
+  background: rgba(214,236,199,0.60);
+  border: 1.5px solid rgba(93,143,79,0.30);
+}
+.outfit-section.optional-section {
+  background: rgba(255,242,168,0.65);
+  border: 1.5px solid rgba(231,201,104,0.35);
+}
+.outfit-section-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-20);
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-cap);
+  flex-shrink: 0;
+}
+.outfit-section-label.optional { color: var(--kids-ink-soft); }
+.outfit-items { display: flex; flex-direction: row; gap: var(--space-3); flex-wrap: wrap; }
+.outfit-item { display: flex; flex-direction: column; align-items: center; gap: var(--space-1); }
+.outfit-pikto {
+  width: 104px;
+  height: 104px;
+  object-fit: contain;
+  border-radius: var(--radius-xl);
+  border: 2.5px solid var(--kids-border-soft);
+  background: var(--kids-paper);
+  box-shadow: var(--shadow-hand-sm);
+  padding: 4px;
+}
+.outfit-pikto-optional { opacity: 0.78; border-style: dashed; }
+.outfit-item-name {
+  font-family: var(--font-hand);
+  font-size: var(--fs-16);
+  color: var(--kids-ink);
+  text-align: center;
+  max-width: 112px;
+  line-height: 1.2;
+}
+.outfit-hinweis {
+  font-family: var(--font-hand);
+  font-size: var(--fs-18);
+  color: var(--kids-ink-soft);
+  flex-shrink: 0;
+}
+
+/* ── ATTRIBUTION FOOTER (WETTER-19) ────────────────────────────────────────── */
+.attribution-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(43,42,38,0.08);
+  border-top: 1px solid var(--kids-border-soft);
+  padding: 5px var(--space-7);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-hand);
+  font-size: var(--fs-14);
+  color: var(--kids-ink-soft);
+  z-index: 10;
+}
+
+/* fs-22 ist im Token-Set vorhanden (colors_and_type.css §11). */

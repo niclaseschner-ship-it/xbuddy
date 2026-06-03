@@ -75,23 +75,16 @@ abends die Kleidung für den nächsten Tag herauslegen kann.
 
 ## 3. Wetter-Karte (links)
 
-### WETTER-7 — Wetter-Hero
-Oben in der Wetter-Karte steht ein großes **ARASAAC-Piktogramm** des
-Wetterzustands (aus der neutralen Kategorie `kind`, WETTER-16) mit Kurztext
-(`desc`). Das Piktogramm wird über die geteilte Icon-Plattform bezogen
-(ICONS-5, WETTER-18), nicht buddy-eigen.
+### WETTER-7 — Wetter-Hero als greifbare Wetter-Szene (eigene Bibliothek)
+Oben in der Wetter-Karte steht eine große, kindlich greifbare **Wetter-Szene** — ein Haus mit dem heutigen Himmel/Wetter — aus der **app-eigenen Wetter-Szenen-Bibliothek** (E-WETTER-11), dazu der Kurztext `desc`. Die Szene ist **kein ARASAAC-Piktogramm**: für den Wetter-Zustand bietet ARASAAC keine konsistente, über alle Lagen wiederverwendbare Szenen-Reihe (F3-Recherche). Die neutrale Zustands-Kategorie `kind` (WETTER-16) wählt die Szenen-Variante (sonnig, heiter, bewölkt, Regen, Schnee, Gewitter, Sturm). ARASAAC-Piktogramme über ICONS-5 (WETTER-18) gelten für **Inhalts-Symbole** (Kleidung, Metriken), nicht für den Wetter-Zustands-Hero.
 
-### WETTER-8 — Temperatur mit Gesicht, nach gefühlter Temperatur
-Die Karte zeigt die Temperatur mit einem **Gesichts-Symbol**. Maßgeblich ist die
-**gefühlte Temperatur** (`feelsLike`), nicht die reine Lufttemperatur — weil das
-Kind ganztags draußen ist und Wind kühlt. (Dieselbe gefühlte Temperatur treibt die
-Kleidungs-Empfehlung, WETTER-12/14.)
+### WETTER-8 — Temperatur: eltern-lesbare Zahl + visuell im Spektrum
+Die Karte zeigt die **gefühlte Temperatur** (`feelsLike`) als Zahl — bewusst auch für Eltern lesbar — und ordnet sie visuell im Temperatur-Spektrum ein (WETTER-9). Maßgeblich für Kleidung (WETTER-12/14) und Spektrum ist die **gefühlte** Temperatur, nicht die reine Lufttemperatur (das Kind ist ganztags draußen, Wind kühlt). Ein separates Hero-Gesichts-Symbol gibt es nicht; die temperatur-repräsentierenden Marker sitzen am Spektrum (WETTER-9).
 
 ### WETTER-9 — Temperatur-Spektrum
 Ein Gradient-Balken zeigt das **gesamte mögliche Temperatur-Spektrum** (z. B. üblich
 −5 bis 35°) mit der **heute erwarteten Spanne** (`low`–`high`) **hervorgehoben**.
-Entlang des Balkens repräsentieren **Kinderkopf-Icons** die Temperatur: frierend bei
-Kälte, fröhlich/angenehm in der Mitte, schwitzend bei ~30°, überhitzt bei ~35°. Die
+Entlang des Balkens sitzen **temperatur-repräsentierende Marker** (kein Stimmungs-Rating): Schneeflocke (kalt), ein neutrales Gesicht (mild), Sonne (warm), Schweiß/Hitze (heiß), an ihren Temperaturpositionen. Die
 Skala ist Bild, nicht nackte Zahl (WETTER-10).
 
 ### WETTER-10 — Drei Metrik-Karten, als Bilder statt Zahlen
@@ -166,6 +159,7 @@ die zentrale Icon-Plattform** bezogen — read-only unter der geteilten URL
 Router ROU-26) — **kein buddy-eigener ARASAAC-Bezug** (sonst zweiter Icon-Pfad,
 CLAUDE.md §6 / Lego). Die `kind`-Kategorie (WETTER-16) und die Kleidungsstücke
 bilden auf numerische ARASAAC-IDs ab.
+Diese ICONS-5-Anbindung gilt für **Inhalts-Piktogramme** (Kleidung, Metrik-Symbole). Der **Wetter-Zustands-Hero** ist davon ausgenommen — er ist die app-eigene Wetter-Szene (WETTER-7, E-WETTER-11).
 
 ### WETTER-19 — ARASAAC-Attribution-Footer
 Jede Instanz der View trägt einen **ARASAAC-Attribution-Footer** (ARASAAC / Sergio
@@ -237,14 +231,16 @@ Jede Anforderung mit Code-Verhalten hat einen automatisierten Test (CLAUDE.md §
 reproduzierbar und **ohne Netz** — der Anbieter-Zugriff wird durch eine
 kontrollierte Doppelung ersetzt (analog PLAN-29). Mindest-Abdeckung: WETTER-2 (beide
 Karten auf einer Canvas) · WETTER-4 (`toddler` Default, `reader` V1 nicht
-implementiert) · WETTER-6 (vor Abend-Zeit → heute; danach → morgen) · WETTER-8/14
-(Gesicht und Outfit aus `feelsLike`) · WETTER-11 (UV-Zahl/-Label nicht in der
-Ausgabe; `sunscreen`-Boolean steuert die Karte) · WETTER-12 (beide Tageszeit-Blöcke
-gerendert, unabhängig gerechnet) · WETTER-14/15 (erste passende Regel gewinnt; keine
-Regel → Fallback; Mützen-Logik warm/kalt; Regen-Logik aus `rainAmount`) · WETTER-16
-(Rohantwort → neutrales Modell, je Tageszeit) · WETTER-17 (Anbieter nicht erreichbar
-→ neutraler Zustand, View funktioniert). Läufe gegen den echten Anbieter sind
-opt-in.
+implementiert) · WETTER-6 (vor Abend-Zeit → heute; danach → morgen) · WETTER-7
+(Hero rendert die Wetter-Szene, KEIN ARASAAC-Hero-Piktogramm) · WETTER-8
+(gefühlte Temp erscheint als Zahl in der Ausgabe) · WETTER-8/14 (Outfit aus
+`feelsLike`) · WETTER-9 (temperatur-repräsentierende Marker im Spektrum vorhanden) ·
+WETTER-11 (UV-Zahl/-Label nicht in der Ausgabe; `sunscreen`-Boolean steuert die
+Karte) · WETTER-12 (beide Tageszeit-Blöcke gerendert, unabhängig gerechnet) ·
+WETTER-14/15 (erste passende Regel gewinnt; keine Regel → Fallback; Mützen-Logik
+warm/kalt; Regen-Logik aus `rainAmount`) · WETTER-16 (Rohantwort → neutrales Modell,
+je Tageszeit) · WETTER-17 (Anbieter nicht erreichbar → neutraler Zustand, View
+funktioniert). Läufe gegen den echten Anbieter sind opt-in.
 
 ---
 
@@ -266,8 +262,7 @@ opt-in.
   Punkt ist nur ein Verweis, kein wetter-eigener offener Punkt.
 - **OPEN-WETTER-G — Sonnencreme-Schwelle.** Ab welchem UV-Wert „Ja" — Config
   (`sunscreen_uv`) mit sinnvollem Default; familienspezifisch oder fix ist offen.
-- **OPEN-WETTER-H — Design System.** Visueller Stil bindet ans xbuddy Design System,
-  das separat als Ganzes geliefert wird (WETTER-20); bis dahin keine Stilwerte fix.
+- **OPEN-WETTER-H — Design-System-Reichweite.** Das Design System landet in V1 **wetter-lokal** (`wetter/static/`, Nic 2026-06-02). Ob es repo-weites Fundament für alle Buddys wird (löst `plan/static/design/tokens.css` ab), ist bis zum 2. Buddy vertagt → berater-runde.
 
 ---
 
@@ -308,12 +303,15 @@ nachgeliefert wird (OPEN-WETTER-H) — nicht an den handgezeichneten Plan-Kids-L
 festen Stilwerte; nur die Token-Bauregel gilt. **Verworfen:** jetzt Stilwerte
 festklopfen oder den Plan-Kids-Look kopieren.
 
-### E-WETTER-7 — Zweistufige Iconografie über die geteilte Icon-Plattform
+### E-WETTER-7 — Zweistufige Iconografie über die geteilte Icon-Plattform (Kleidung/Metriken)
 *Datum:* 2026-06-02 · Lucide für UI, ARASAAC für Inhalte, kein Emoji, keine
-Mischung je Komponente (WETTER-18). ARASAAC-Piktogramme werden über die zentrale
-Icon-Plattform bezogen (ICONS-5, geteilte URL), **nicht** buddy-eigen — sonst
-entstünde ein zweiter Icon-Pfad (CLAUDE.md §6, Lego-Prinzip). Der Attribution-Footer
-ist View-Verhalten (WETTER-19); die Lizenz/NC-Frage liegt zentral in ICONS-6, hier
+Mischung je Komponente (WETTER-18). ARASAAC/ICONS-5-Anbindung gilt für
+**Inhalts-Piktogramme** (Kleidung, Metrik-Symbole) — ARASAAC-Piktogramme werden
+über die zentrale Icon-Plattform bezogen (ICONS-5, geteilte URL), **nicht**
+buddy-eigen — sonst entstünde ein zweiter Icon-Pfad (CLAUDE.md §6, Lego-Prinzip).
+**Wetter-Zustand = eigene Szene** (E-WETTER-11): der Wetter-Zustands-Hero ist
+ausdrücklich von dieser ICONS-5-Anbindung ausgenommen. Der Attribution-Footer ist
+View-Verhalten (WETTER-19); die Lizenz/NC-Frage liegt zentral in ICONS-6, hier
 nur referenziert. **Verworfen:** eigener ARASAAC-Bezug und ein eigenes Lizenz-Urteil
 im Wetter-Buddy (wäre Geschwister-Drift gegen die bestehende `icons.md`).
 
@@ -332,3 +330,6 @@ konfigurierbaren Abend-Uhrzeit morgen (WETTER-6) — passend zum Familien-Ablauf
 (WETTER-12), nicht als eine aufeinander aufbauende Schicht-Empfehlung.
 **Verworfen:** Zwiebellook („mittags eine Schicht ausziehen") als ein
 zusammenhängendes Outfit.
+
+### E-WETTER-11 — Eigene Wetter-Szenen-Bibliothek für den Zustands-Hero
+*Datum:* 2026-06-02 · Der Wetter-Zustand wird als greifbare, kindlich vorstellbare Szene (Haus + Himmel) aus einer **app-eigenen Bibliothek** dargestellt, nicht über ARASAAC. Grund: F3-Recherche zeigte, dass ARASAAC nur Einzel-Wettersymbole hat, **keine konsistente Szenen-/Haus-Reihe** über alle Wetterlagen. Eine eigene Szene ist konsistent (gleiche Haus-Silhouette, nur Himmel wechselt) und orientiert das Kind an seinem Zuhause. Die ICONS-5-Anbindung (E-WETTER-7) bleibt für Kleidung/Metriken. **Verworfen:** den Wetter-Zustand über ARASAAC-Einzelsymbole zu zeigen. Abgrenzung zur frühen ICONS-Drift: kein versehentlicher zweiter Icon-Pfad, sondern eine bewusste eigene Asset-Klasse (Szenen ≠ Piktogramme).

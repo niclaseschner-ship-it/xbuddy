@@ -1,0 +1,8 @@
+# WETTER-21 — Per-Instanz-Dateien des Wetter-Buddys, je Instanz separat
+# gepflegt, niemals im Repo. Formate sind in den committeten *.example.json
+# dokumentiert.
+#
+# Daten-Konfig (Ort + Garderoben-Regeln). Format: wetter.example.json
+wetter.json
+# Runtime-Konfig (Bind, Log). Format: config.example.json
+config.json

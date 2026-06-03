@@ -1,0 +1,6 @@
+{
+  "_comment": "WETTER-21/CONFIG-1 — Runtime-Konfig des Wetter-Buddys (Bind, Log). Kopiere als config.json (gitignored). Nicht gesetzte Felder bleiben auf den Code-Defaults (RUNTIME_SCHEMA in wetter/main.py). ENV-Variablen (WETTER_LISTEN_PORT etc.) und CLI-Flags überschreiben diese Datei (CONFIG-5). Die Daten-Konfig (Ort, Garderoben-Regeln) liegt separat in wetter.json (Format: wetter.example.json).",
+  "listen_host": "127.0.0.1",
+  "listen_port": 5030,
+  "log_level":   "INFO"
+}
