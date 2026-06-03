@@ -266,12 +266,15 @@ Controller-Typen (z. B. Figuren-Erkennung) weiterhin gilt. *(#251)*
 ohne URL-Parameter-Override für das App-Panel, siehe oben;
 CONFIG-4: fehlende/kaputte Datei → Defaults + Warnung, Prozess startet) — analog FIG-23 / ROU-19. (Decision 4)
 
-**Selbsttragend:** Datei liegt im Panel-Verzeichnis und wird
-mitausgeliefert. Pro Instanz separat verwaltet — `config.json` ist
-gitignored; `config.example.json` dokumentiert das Format. Mehrere
-Panels = mehrere Instanzen, je Panel **eine eigene `config.json`
-zusammen mit einer eigenen `tiles.json`** im jeweiligen Auslieferungs-
-Verzeichnis.
+**Serving via panel-Service (Welle 1):** `config.json` und `tiles.json`
+kommen **nicht** aus dem Auslieferungs-Verzeichnis, sondern werden vom
+Router aus dem panel-Service proxyt und gecacht (PREG-9, ROU-27). Der
+Panel-Code lädt weiter `./config.json` und `./tiles.json` relativ zu
+seiner eigenen URL — dass der Router diese Pfade an den panel-Service
+weiterreicht, ist für die Seite transparent. Der panel-Service
+(`xbuddy-panel`, :5041, PORT-2) ist die einzige Quelle der Wahrheit für
+diese Instanz-Daten (PREG-4/PREG-14); manuelle Dateien neben dem
+Panel-Code werden von ROU-27 überschattet und nicht mehr gelesen.
 
 **Kopplung zum Router:** `source_id` muss mit dem `source_id`-Wert
 eines `panels`-Eintrags der Routing-Tabelle (ROU-18) übereinstimmen,
@@ -445,15 +448,13 @@ Mindest-Abdeckung:
   `sichtbar: true|false` (PANEL-4). Eine spätere Variante könnte
   Tageszeit-, Wochentag- oder Personen-Filter unterstützen (z. B.
   „Foto-Kachel nur am Wochenende"). Eigenes Ticket, sobald gebraucht.
-- **OPEN-PANEL-C** — Onboarding-Schritt für Panel-Instanz-Setup. Die
-  CONFIG-2-Tabelle in PANEL-8 hat heute drei Pflicht-Felder ohne
-  Default **und** ohne Onboarding-Schritt (`source_id`, `display_id`,
-  `router_url`) — formell eine CONFIG-2-Verletzung. Praktisch werden
-  Panel-Instanzen in V1 manuell beim Deployment befüllt
-  (`config.example.json` als Vorlage). Sobald Panel-Instanzen über den
-  Eltern-Chat eingerichtet werden können (analog der Funktions-Spec
-  `familie-anlegen.md`), bekommt jede Zeile der PANEL-8-Tabelle einen
-  konkreten Schritt-Namen.
+- **OPEN-PANEL-C** — *Durch PREG-15 erfüllt (Welle 1):*
+  `POST /api/v1/panels/` legt eine Panel-Instanz an und setzt
+  `source_id`, `display_id` und `router_url` als Registry-Eintrag im
+  panel-Service (PREG-15). Der manuelle Datei-Eingriff entfällt;
+  Panel-Instanzen entstehen fortan über diese Schnittstelle. Der
+  Eltern-Chat-Skill, der Panels per Telegram anlegt, ist Welle 2
+  (OPEN-PREG-C in `specs/platform/panel-registry.md`).
 - **OPEN-PANEL-D** — *Erfüllt:* Backoff-Werte des Event-Transports in
   PANEL-5 leben jetzt in der Event-Transport-Konvention
   `conventions/event-transport.md` (EVT-1/EVT-2) — eine eigene
