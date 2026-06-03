@@ -152,14 +152,18 @@ def test_PREG_5_tile_change_leaves_config_byte_identical(write_client):
 
 
 def test_PREG_5_create_sets_both_fields(write_client):
-    """Eine Anlage (PREG-15) setzt beide Felder config + tiles."""
+    """Eine Anlage (PREG-15) setzt beide Felder config + tiles.
+    Config enthält Identitätsfelder (server-autoritativ, PREG-15) + Tuning."""
     client, _ = write_client
     r = client.post("/api/v1/panels/", json={
         "slug": "wohnzimmer", "display_id": "tablet-elias-01",
         "config": {"backoffs": [1]}, "tiles": {"tiles": []}})
     assert r.status_code == 200
     body = r.get_json()
-    assert body["config"] == {"backoffs": [1]}
+    # Tuning-Feld bleibt erhalten; Identitätsfelder sind server-gesetzt.
+    assert body["config"]["backoffs"] == [1]
+    assert body["config"]["source_id"] == "app-panel:%s" % body["panel_id"]
+    assert body["config"]["display_id"] == "tablet-elias-01"
     assert body["tiles"] == {"tiles": []}
 
 
@@ -407,3 +411,71 @@ def test_PREG_15_parallel_posts_yield_two_distinct_ids(write_client):
     alle = {p["panel_id"] for p in daten["panels"]}
     assert ergebnisse[0] in alle
     assert ergebnisse[1] in alle
+
+
+# ============================================================
+#  PREG-15 — server-autoritativer config-Aufbau (Nic-Entscheid 2026-06-03)
+#  AC1..3: Identitätsfelder immer server-gesetzt, Tuning bleibt erhalten
+# ============================================================
+
+def test_PREG_15_post_without_config_has_identity_fields(write_client):
+    """AC2/AC3: POST ohne config → config enthält source_id, display_id, router_url.
+    Nie mehr das leere Objekt {} — das verletzte PANEL-8 (Pflichtfelder)."""
+    client, _ = write_client
+    r = client.post("/api/v1/panels/", json={
+        "slug": "identitaet", "display_id": "pi-display-flur-01"})
+    assert r.status_code == 200
+    body = r.get_json()
+    panel_id = body["panel_id"]
+    cfg = body["config"]
+    # Identitätsfelder sind server-gesetzt (PREG-15, PANEL-8).
+    assert cfg["source_id"] == "app-panel:%s" % panel_id
+    assert cfg["display_id"] == "pi-display-flur-01"
+    assert "router_url" in cfg and cfg["router_url"] == ""
+
+
+def test_PREG_15_post_with_router_url_in_config(write_client):
+    """AC3: POST mit router_url → config.router_url == gesetzter router_url."""
+    client, _ = write_client
+    r = client.post("/api/v1/panels/", json={
+        "slug": "crossorigin", "display_id": "tablet-elias-01",
+        "router_url": "https://hub.local:8443"})
+    assert r.status_code == 200
+    cfg = r.get_json()["config"]
+    assert cfg["router_url"] == "https://hub.local:8443"
+
+
+def test_PREG_15_tuning_preserved_identity_server_set(write_client):
+    """AC3: POST mit Tuning-config (backoffs) → Tuning bleibt, Identität
+    server-gesetzt (überschreibt ggf. falsch mitgegebene Identitätsfelder)."""
+    client, _ = write_client
+    r = client.post("/api/v1/panels/", json={
+        "slug": "tuning", "display_id": "tablet-elias-01",
+        "config": {
+            "backoffs": [100, 200, 400],
+            # Aufrufer liefert falsche source_id — Server überschreibt.
+            "source_id": "app-panel:FALSCH",
+        }})
+    assert r.status_code == 200
+    body = r.get_json()
+    panel_id = body["panel_id"]
+    cfg = body["config"]
+    # Tuning bleibt erhalten.
+    assert cfg["backoffs"] == [100, 200, 400]
+    # Identität ist server-gesetzt — Aufrufer-Wert überschrieben.
+    assert cfg["source_id"] == "app-panel:%s" % panel_id
+    assert cfg["display_id"] == "tablet-elias-01"
+
+
+def test_PREG_15_panel8_consistency_source_id_matches_panel_id(write_client):
+    """AC3: PANEL-8-Konsistenz — config.source_id == app-panel:<panel_id>
+    für jede angelegte Panel-Instanz."""
+    client, _ = write_client
+    for slug in ("alpha", "beta"):
+        r = client.post("/api/v1/panels/", json={
+            "slug": slug, "display_id": "pi-display-flur-01"})
+        assert r.status_code == 200
+        body = r.get_json()
+        erwartet = "app-panel:%s" % body["panel_id"]
+        assert body["config"]["source_id"] == erwartet, (
+            "PANEL-8-Konsistenz verletzt für panel_id=%r" % body["panel_id"])
