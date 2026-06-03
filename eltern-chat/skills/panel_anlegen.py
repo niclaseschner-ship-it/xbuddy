@@ -44,10 +44,11 @@ from skills.typing_indicator import fire_typing
 # (OPEN-PAA-B-Entscheid Nic 2026-06-03 — keine freie Slug-Nennung, Tippfehler →
 # tote Kachel ausgeschlossen). Je Eintrag die PANEL-3-Pflichtfelder einer
 # Kachel (`app`, `view`, `label`, `icons`, `sichtbar`; `key` wird beim Bau aus
-# `app` abgeleitet, `query` ist V1 nicht gesetzt). Der echte
+# `app` abgeleitet; `query` wird gesetzt, wo eine Ansicht/Stufe nötig ist,
+# z. B. die Kleinkind-Stufe des Plans über `?ansicht=klein`, PLAN-3). Der echte
 # App-Discovery-Mechanismus, der diese Liste später ablöst, ist als #325
 # erfasst (gekoppelt an #296). Datenstruktur, kein Vorrat-Discovery (CLAUDE.md
-# §6): nur die zwei heute existierenden Apps (Wetter, Plan).
+# §6): nur die heute existierenden Apps (Wetter; Plan in zwei Stufen).
 @dataclass(frozen=True)
 class _AppKandidat:
     """Ein wählbarer App-Kandidat für die PAA-3.3-Kachel-Auswahl."""
@@ -56,14 +57,19 @@ class _AppKandidat:
     label: str
     icons: tuple
     name: str   # Anzeigename in der Auswahl-Liste
+    query: dict = None   # optionale flache Query-Parameter (PANEL-7), z. B. {"ansicht": "klein"}
 
 
 # Reihenfolge = Anzeige-Reihenfolge der nummerierten Auswahl.
+# ARASAAC-IDs: 24721=Wetter/Klima, 32488=Kalender (#135-Seed), 2484=Kind-Marker.
 APP_KANDIDATEN = (
     _AppKandidat(app="wetter", view="heute", label="Wetter",
-                 icons=("arasaac/2493.png",), name="Wetter (heute)"),
+                 icons=("arasaac/24721.png",), name="Wetter (heute)"),
     _AppKandidat(app="plan", view="woche", label="Wochenplan",
-                 icons=("arasaac/2462.png",), name="Plan (Woche)"),
+                 icons=("arasaac/32488.png",), name="Plan (Woche) — Lese-Kind"),
+    _AppKandidat(app="plan", view="woche", label="Wochenplan (klein)",
+                 icons=("arasaac/32488.png", "arasaac/2484.png"),
+                 name="Plan (Woche) — Kleinkind", query={"ansicht": "klein"}),
 )
 
 
@@ -81,6 +87,7 @@ def _tile_aus_kandidat(kandidat, index):
         "label": kandidat.label,
         "icons": list(kandidat.icons),
         "sichtbar": True,
+        **({"query": dict(kandidat.query)} if kandidat.query else {}),
     }
 
 
