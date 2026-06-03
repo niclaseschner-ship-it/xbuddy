@@ -5,7 +5,9 @@ aus WETTER-24:
   WETTER-2   beide Karten auf einer Canvas
   WETTER-4   toddler Default; reader V1 nicht implementiert
   WETTER-6   vor Abend-Zeit → heute; danach → morgen
-  WETTER-8   Gesicht/Temp aus feelsLike (gefühlte Temperatur treibt)
+  WETTER-7   Hero rendert die Wetter-Szene (Haus-SVG), KEIN ARASAAC-Hero-Piktogramm
+  WETTER-8   gefühlte Temp als Zahl in der Ausgabe; Outfit aus feelsLike
+  WETTER-9   temperatur-repräsentierende Marker im Spektrum vorhanden
   WETTER-11  UV-Zahl/-Label nicht in der Ausgabe; sunscreen-Boolean steuert
   WETTER-12  beide Tageszeit-Blöcke gerendert, unabhängig gerechnet
   WETTER-14  erste passende Regel gewinnt; keine Regel → Fallback
@@ -389,6 +391,104 @@ def test_wetter19_attribution_footer(client):
     body = client.get("/display/wetter/heute").get_data(as_text=True)
     assert "ARASAAC" in body
     assert "Sergio Palao" in body
+
+
+# ============================================================
+#  WETTER-7 — Hero rendert Wetter-Szene (Haus-SVG), KEIN ARASAAC-Hero-Piktogramm
+# ============================================================
+
+def test_wetter7_hero_enthaelt_haus_szene(demo_config, make_transport):
+    """WETTER-7/E-WETTER-11: die View zeigt die app-eigene Wetter-Szene als
+    Inline-SVG mit Haus — kein ARASAAC-Piktogramm für den Wetter-Zustands-Hero."""
+    import wetter.main as wm
+    t = make_transport(TAG, code=0, temp=20.0, feels=20.0, uv=2.0)
+    wm.configure(demo_config, _anbindung(t, demo_config))
+    resp = wm.app.test_client().get("/display/wetter/heute")
+    body = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    # Die hero-szene enthält ein Inline-SVG mit dem Haus-Macro (erkennbar an
+    # der Haus-Silhouette: feste Haus-Maße aus haus()-Macro).
+    assert 'class="hero-szene"' in body
+    assert 'viewBox="0 0 320 220"' in body
+    # Das Haus-Macro ist in jeder Szene enthalten (ellipse für den Boden).
+    assert 'cx="160"' in body
+
+
+def test_wetter7_kein_arasaac_hero_piktogramm(demo_config, make_transport):
+    """WETTER-7/E-WETTER-11: im Wetter-Hero sitzt KEIN ARASAAC-Piktogramm
+    für den Wetter-Zustand — hero_pikto ist entfernt, das View-Modell trägt
+    es nicht mehr."""
+    import wetter.main as wm
+    t = make_transport(TAG, code=0, temp=20.0, feels=20.0, uv=2.0)
+    wm.configure(demo_config, _anbindung(t, demo_config))
+    resp = wm.app.test_client().get("/display/wetter/heute")
+    body = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    # hero_pikto darf nicht im Markup erscheinen.
+    assert "hero_pikto" not in body
+    # Im Render-View-Modell ist hero_pikto nicht vorhanden.
+    morgens, mittags = _anbindung(t, demo_config).fuer_tag(TAG)
+    view = render_mod.baue_view(demo_config, morgens, mittags)
+    assert "hero_pikto" not in view["wetter"]
+
+
+# ============================================================
+#  WETTER-8 — gefühlte Temp als Zahl in der Ausgabe
+# ============================================================
+
+def test_wetter8_gefuehlte_temp_als_zahl_im_html(demo_config, make_transport):
+    """WETTER-8: die gefühlte Temperatur erscheint als lesbare Zahl in der
+    View (hero-temp), nicht nur als Bezeichnung."""
+    import wetter.main as wm
+    t = make_transport(TAG, temp=22.0, feels=17.0, uv=2.0)
+    wm.configure(demo_config, _anbindung(t, demo_config))
+    resp = wm.app.test_client().get("/display/wetter/heute")
+    body = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    # Die gefühlte Temp (17) erscheint in der hero-temp div.
+    assert 'class="hero-temp"' in body
+    assert ">17<" in body
+
+
+def test_wetter8_gefuehlte_temp_im_view_modell(demo_config, make_transport):
+    """WETTER-8: das View-Modell trägt `feels` als gerundete Zahl."""
+    t = make_transport(TAG, temp=22.0, feels=17.3, uv=2.0)
+    morgens, mittags = _anbindung(t, demo_config).fuer_tag(TAG)
+    view = render_mod.baue_view(demo_config, morgens, mittags)
+    assert view["wetter"]["feels"] == 17
+
+
+# ============================================================
+#  WETTER-9 — temperatur-repräsentierende Marker im Spektrum
+# ============================================================
+
+def test_wetter9_spektrum_marker_vorhanden(demo_config, make_transport):
+    """WETTER-9: die vier temperatur-repräsentierenden Marker (Schneeflocke,
+    neutrales Gesicht, Sonne, Schweiß/Hitze) sitzen im Spektrum-Balken."""
+    import wetter.main as wm
+    t = make_transport(TAG, code=0, temp=20.0, feels=20.0, uv=2.0)
+    wm.configure(demo_config, _anbindung(t, demo_config))
+    resp = wm.app.test_client().get("/display/wetter/heute")
+    body = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    # Der Spektrum-Marker-Block ist vorhanden.
+    assert 'class="spektrum-a-markers"' in body
+    # Vier s-marker-Elemente sitzen im Balken (Schneeflocke/Gesicht/Sonne/Schweiß).
+    assert body.count('class="s-marker"') >= 4
+
+
+def test_wetter9_spektrum_balken_mit_spanne(demo_config, make_transport):
+    """WETTER-9: der Gradient-Balken hebt die heute erwartete Spanne hervor
+    (low_pct/high_pct als Prozent-Positionen im View-Modell)."""
+    t = make_transport(TAG, low=10.0, high=22.0)
+    morgens, mittags = _anbindung(t, demo_config).fuer_tag(TAG)
+    view = render_mod.baue_view(demo_config, morgens, mittags)
+    # Spektrum-Positionen sind berechnet und im View vorhanden.
+    assert view["wetter"]["low_pct"] is not None
+    assert view["wetter"]["high_pct"] is not None
+    # low=10 → (10 - (-5)) / 40 * 100 = 37.5%; high=22 → 67.5%.
+    assert abs(view["wetter"]["low_pct"] - 37.5) < 0.1
+    assert abs(view["wetter"]["high_pct"] - 67.5) < 0.1
 
 
 # ============================================================
