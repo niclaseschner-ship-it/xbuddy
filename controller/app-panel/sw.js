@@ -11,7 +11,7 @@ const CACHE_NAME = 'app-panel-v1';
 const STATIC_ASSETS = [
   './',
   './index.html',
-  '../_shared/config.js',
+  '/controller/_shared/config.js',
   './app.js',
   './style.css',
   './manifest.json',
