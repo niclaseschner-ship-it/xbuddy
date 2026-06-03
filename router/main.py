@@ -7,7 +7,7 @@ entgegen, mappt Phone-Events 1:1 auf das kanonische Trigger-Modell
 State pro Display in-memory (ROU-10).
 """
 
-from flask import Flask, request, jsonify, send_from_directory, abort, redirect
+from flask import Flask, request, jsonify, send_from_directory, abort, redirect, Response
 from datetime import datetime, timezone
 from urllib.parse import urlencode
 import argparse
@@ -17,6 +17,8 @@ import os
 import queue
 import sys
 import threading
+import urllib.request
+import urllib.error
 
 # Repo-Wurzel auf den Importpfad, damit `tools.configloader` (CONFIG-1, #179)
 # auch beim Direktstart `python3 router/main.py` gefunden wird.
@@ -168,8 +170,29 @@ def display_event_stream(display_id):
 
 # Laufzeit-Konfig wird vom Entrypoint befüllt. Tests setzen direkt.
 runtime_config = {
-    'controller_dir': '',   # ROU-23: leer = Default aus DEFAULT_CONTROLLER_DIR
-    'icon_root':      '',   # ROU-26: leer = Default aus DEFAULT_ICON_ROOT
+    'controller_dir':    '',              # ROU-23: leer = Default aus DEFAULT_CONTROLLER_DIR
+    'icon_root':         '',              # ROU-26: leer = Default aus DEFAULT_ICON_ROOT
+    'panel_service_url': '',             # ROU-27: leer = Default 127.0.0.1:5041
+}
+
+# ROU-27 / PREG-9: Last-Known-Good-Cache für Panel-Instanz-Serving.
+# Schlüssel: (panel_id, sicht) — sicht ist 'config.json' oder 'tiles.json'.
+# Wert: (body_bytes, content_type) — zuletzt erfolgreich vom panel-Service geholt.
+# Zugriff aus Flask-Threads (threaded=True) → Lock.
+_panel_lkg_cache: dict = {}
+_panel_lkg_lock = threading.Lock()
+
+# Sichten, die der Router an den panel-Service proxyt (ROU-27, PREG-9).
+_PANEL_PROXY_VIEWS = frozenset({'config.json', 'tiles.json'})
+
+# panel-Service-Timeout beim Proxy-Abruf (Sekunden).
+_PANEL_PROXY_TIMEOUT = 5
+
+# Code-Default-Fallback für config.json/tiles.json wenn der panel-Service nie
+# erreichbar war und kein LKG-Snapshot vorliegt (PREG-9 / PANEL-8, stiller Fallback).
+_PANEL_CODE_DEFAULTS = {
+    'config.json': b'{}',
+    'tiles.json':  b'[]',
 }
 
 
@@ -758,6 +781,49 @@ def controller_asset(app, asset):
 # `<id>` als Datenattribut in die HTML — die Seite kennt damit ohne weiteren
 # Roundtrip ihre eigene Panel-Identität (PANEL-2 Test).
 
+
+def _panel_service_base():
+    """URL-Basis des panel-Service (ROU-27). Konfigurierbar via runtime_config
+    (panel_service_url) / ENV ROUTER_PANEL_SERVICE_URL / CLI --panel-service-url.
+    Default: http://127.0.0.1:5041 (PORT-2)."""
+    return runtime_config.get('panel_service_url') or 'http://127.0.0.1:5041'
+
+
+def _proxy_panel_view(panel_id, sicht):
+    """ROU-27 / PREG-9: holt config.json oder tiles.json vom panel-Service und
+    liefert (body_bytes, content_type). Bei Erfolg frischt die Funktion den
+    Last-Known-Good-Cache; bei Ausfall (Timeout, 5xx, Connection-Fehler) greift
+    sie auf den LKG-Snapshot zurück. Fehlt auch der Snapshot, kommt der
+    Code-Default-Fallback (PREG-9 / PANEL-8, kein Crash).
+
+    Sicht muss ein Element aus _PANEL_PROXY_VIEWS sein."""
+    url = '%s/api/v1/panels/%s/%s' % (_panel_service_base(), panel_id, sicht)
+    cache_key = (panel_id, sicht)
+    content_type = 'application/json'
+    try:
+        req = urllib.request.Request(url, method='GET')
+        with urllib.request.urlopen(req, timeout=_PANEL_PROXY_TIMEOUT) as resp:
+            if resp.status >= 400:
+                raise urllib.error.HTTPError(
+                    url, resp.status, 'panel-Service Fehler', {}, None)
+            body = resp.read()
+        # Erfolg — LKG-Snapshot frischt
+        with _panel_lkg_lock:
+            _panel_lkg_cache[cache_key] = (body, content_type)
+        return body, content_type
+    except Exception as exc:
+        logging.warning(
+            'ROU-27: panel-Service nicht erreichbar (%s/%s): %s — LKG/Fallback',
+            panel_id, sicht, exc)
+    # LKG-Snapshot
+    with _panel_lkg_lock:
+        cached = _panel_lkg_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    # Code-Default-Fallback (PANEL-8, stiller Fallback — kein Crash)
+    return _PANEL_CODE_DEFAULTS[sicht], content_type
+
+
 def app_panel_dir():
     # Defense in Depth: realpath, damit symbolische Links keine traversierung
     # aus dem Wurzelverzeichnis erlauben.
@@ -818,6 +884,12 @@ def app_panel_index_slash(panel_id):
 
 @app.route('/controller/app-panel/<panel_id>/<path:asset>', methods=['GET'])
 def app_panel_asset(panel_id, asset):
+    # ROU-27 / PREG-9: config.json und tiles.json werden an den panel-Service
+    # geproxt + Last-Known-Good-gecacht. Alle anderen Assets kommen weiter
+    # aus dem Auslieferungs-Verzeichnis (Statik bleibt Verzeichnis-Serving).
+    if asset in _PANEL_PROXY_VIEWS:
+        body, content_type = _proxy_panel_view(panel_id, asset)
+        return Response(body, status=200, mimetype=content_type)
     return _send_app_panel_asset(asset)
 
 
@@ -833,11 +905,12 @@ def app_panel_asset(panel_id, asset):
 # `routing.json` (ROU-18) ist eine ANDERE Sache (Routing-Tabelle, kein
 # Runtime-Wert) und bleibt eigene Mechanik mit Hot-Reload (#140).
 RUNTIME_SCHEMA = {
-    'listen_host':    '127.0.0.1',
-    'listen_port':    5000,
-    'log_level':      'INFO',
-    'controller_dir': '',  # ROU-23: leer = DEFAULT_CONTROLLER_DIR
-    'icon_root':      '',  # ROU-26: leer = DEFAULT_ICON_ROOT
+    'listen_host':       '127.0.0.1',
+    'listen_port':       5000,
+    'log_level':         'INFO',
+    'controller_dir':    '',  # ROU-23: leer = DEFAULT_CONTROLLER_DIR
+    'icon_root':         '',  # ROU-26: leer = DEFAULT_ICON_ROOT
+    'panel_service_url': '',  # ROU-27: leer = http://127.0.0.1:5041 (PORT-2)
 }
 
 
@@ -854,6 +927,8 @@ def parse_args(argv):
                    help='Pfad zur Controller-PWA-Statik (ROU-23)')
     p.add_argument('--icon-root', dest='icon_root',
                    help='Pfad zur Icon-Bibliothek (ROU-26, ICONS-2)')
+    p.add_argument('--panel-service-url', dest='panel_service_url',
+                   help='URL-Basis des panel-Service (ROU-27, Default http://127.0.0.1:5041)')
     p.add_argument('--cert', help='TLS-Cert (optional, für HTTPS-Modus)')
     p.add_argument('--key',  help='TLS-Key (optional, für HTTPS-Modus)')
     return p.parse_args(argv)
@@ -894,11 +969,12 @@ def resolved_config(args):
         component='router',
         schema=RUNTIME_SCHEMA,
         config_path=args.config)
-    if args.host:           cfg['listen_host']    = args.host
-    if args.port:           cfg['listen_port']    = args.port
-    if args.log_level:      cfg['log_level']      = args.log_level
-    if args.controller_dir: cfg['controller_dir'] = args.controller_dir
-    if args.icon_root:      cfg['icon_root']      = args.icon_root
+    if args.host:               cfg['listen_host']       = args.host
+    if args.port:               cfg['listen_port']       = args.port
+    if args.log_level:          cfg['log_level']         = args.log_level
+    if args.controller_dir:     cfg['controller_dir']    = args.controller_dir
+    if args.icon_root:          cfg['icon_root']         = args.icon_root
+    if args.panel_service_url:  cfg['panel_service_url'] = args.panel_service_url
     return cfg
 
 
@@ -908,10 +984,12 @@ def main(argv=None):
     # LOG-4 (#166): zentraler Setup statt eigenem basicConfig. Level kommt
     # aus der Runtime-Config (CONFIG-1/CONFIG-2, RUNTIME_SCHEMA).
     logsetup.setup(cfg['log_level'])
-    runtime_config['controller_dir'] = cfg.get('controller_dir', '')
-    runtime_config['icon_root'] = cfg.get('icon_root', '')
+    runtime_config['controller_dir']    = cfg.get('controller_dir', '')
+    runtime_config['icon_root']         = cfg.get('icon_root', '')
+    runtime_config['panel_service_url'] = cfg.get('panel_service_url', '')
     logging.info('Controller-PWA-Statik: %s', controller_dir())
     logging.info('Icon-Bibliothek (ROU-26): %s', icon_root())
+    logging.info('Panel-Service (ROU-27): %s', _panel_service_base())
     load_routing(args.routing)
     ssl_context = None
     if args.cert and args.key:
