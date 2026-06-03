@@ -48,8 +48,6 @@ body.xb[data-stage="toddler"] {
   overflow: hidden;
   position: relative;
 }
-.card-wetter { transform: rotate(-0.6deg); }
-.card-anziehen { transform: rotate(-0.6deg); }
 
 .card-label {
   font-family: var(--font-display);
