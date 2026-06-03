@@ -190,8 +190,9 @@ längste Prefix gewinnt, das ist Teil der Spec, nicht nur eine nginx-Marotte):
 | 6 | `/api/v1/displays/<id>/events`  | Router              | SSE-Zustands-Stream (ROU-22); Long-Lived, ohne Proxy-Puffer.              |
 | 7 | `/display/`                     | Router              | Display-Views (außer den oben abgefangenen spezifischen Buddy-Prefixen). Schließt geteilte Display-Assets `/display/_shared/icons/` ein: der Router serviert die ARASAAC-Piktogramme aus der icon-root (URL-16, ICONS-5, `router.md` ROU-26, #135) — kein eigener nginx-Block. |
 | 8 | `/controller/`                  | Router              | Controller-Aktionen (URL-3).                                              |
-| 9 | `/api/v1/`                      | Router              | Hub-Backend (State, Events, Diagnose).                                    |
-| 10 | `/` (alles übrige)             | —                   | 404 (URL-1: andere Top-Level-Pfade sind nicht erlaubt).                   |
+| 9 | `/api/v1/panels/`               | Panel-Registry      | Panel-Registry-API (PREG-13/14/15) — Liste, Einzeln, Anlegen. Upstream: xbuddy-panel (:5041, PORT-2). |
+| 10 | `/api/v1/`                     | Router              | Hub-Backend (State, Events, Diagnose).                                    |
+| 11 | `/` (alles übrige)             | —                   | 404 (URL-1: andere Top-Level-Pfade sind nicht erlaubt).                   |
 
 Diese Tabelle ist die Quelle für (a) die nginx-Origin-Konfiguration in
 `deploy/nginx/xbuddy-origin.conf` und (b) Onboarding-Schritte, die Origin-Routing
