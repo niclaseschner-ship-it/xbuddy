@@ -1,0 +1,422 @@
+"""Wetter-Buddy — automatisierte Tests je Anforderung (WETTER-24).
+
+Alle Tests laufen OHNE Netz (FakeTransport, conftest.py). Mindest-Abdeckung
+aus WETTER-24:
+  WETTER-2   beide Karten auf einer Canvas
+  WETTER-4   toddler Default; reader V1 nicht implementiert
+  WETTER-6   vor Abend-Zeit → heute; danach → morgen
+  WETTER-8   Gesicht/Temp aus feelsLike (gefühlte Temperatur treibt)
+  WETTER-11  UV-Zahl/-Label nicht in der Ausgabe; sunscreen-Boolean steuert
+  WETTER-12  beide Tageszeit-Blöcke gerendert, unabhängig gerechnet
+  WETTER-14  erste passende Regel gewinnt; keine Regel → Fallback
+  WETTER-15  Mützen-Logik warm/kalt; Regen-Logik aus rainAmount
+  WETTER-16  Rohantwort → neutrales Modell, je Tageszeit
+  WETTER-17  Anbieter nicht erreichbar → neutraler Zustand, View funktioniert
+"""
+
+import os
+import sys
+from datetime import date, datetime
+
+import pytest
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from wetter import config as config_mod        # noqa: E402
+from wetter import main as main_mod            # noqa: E402
+from wetter import meteo as meteo_mod          # noqa: E402
+from wetter import render as render_mod        # noqa: E402
+
+
+TAG = date(2026, 6, 3)
+
+
+def _anbindung(transport, cfg):
+    return meteo_mod.WetterAnbindung(
+        transport, cfg.stunde_morgens, cfg.stunde_mittags, cfg.sunscreen_uv)
+
+
+# ============================================================
+#  WETTER-16 — Rohantwort → neutrales Modell, je Tageszeit
+# ============================================================
+
+def test_wetter16_rohantwort_zu_neutralem_modell(demo_config, make_transport):
+    """WETTER-16: die Open-Meteo-Rohantwort wird in das anbieter-neutrale
+    Modell übersetzt — mit allen geforderten Feldern, je Tageszeit."""
+    t = make_transport(TAG, code=0, temp=20.0, feels=22.0, wind=8.0,
+                       rain_prob=10, rain_amount=0.0, uv=6.0, low=14.0, high=24.0)
+    morgens, mittags = _anbindung(t, demo_config).fuer_tag(TAG)
+
+    for w in (morgens, mittags):
+        # Alle WETTER-16-Felder vorhanden.
+        d = w.to_dict()
+        for feld in ("desc", "kind", "temp", "feelsLike", "low", "high",
+                     "wind", "rainProb", "rainAmount", "uv", "uvLabel", "sunscreen"):
+            assert feld in d
+        assert w.kind == meteo_mod.KIND_SONNIG
+        assert w.desc == "Sonnig"
+        assert w.temp == 20.0
+        assert w.feelsLike == 22.0
+        assert w.low == 14.0 and w.high == 24.0
+        # sunscreen abgeleitet aus uv=6 >= Schwelle 3 → True (WETTER-11).
+        assert w.sunscreen is True
+
+
+def test_wetter16_weathercode_kategorien(demo_config, make_transport):
+    """WETTER-16: WMO-weathercode wird auf neutrale kind-Kategorien gemappt."""
+    faelle = {
+        0: meteo_mod.KIND_SONNIG,
+        3: meteo_mod.KIND_BEWOELKT,
+        63: meteo_mod.KIND_REGEN,
+        73: meteo_mod.KIND_SCHNEE,
+        95: meteo_mod.KIND_GEWITTER,
+    }
+    for code, erwartet in faelle.items():
+        t = make_transport(TAG, code=code)
+        morgens, _ = _anbindung(t, demo_config).fuer_tag(TAG)
+        assert morgens.kind == erwartet, "code %d → %s" % (code, morgens.kind)
+
+
+# ============================================================
+#  WETTER-8 — Gesicht/Outfit aus feelsLike (gefühlte Temperatur treibt)
+# ============================================================
+
+def test_wetter8_feelslike_treibt_nicht_lufttemperatur(demo_config, make_transport):
+    """WETTER-8/E-WETTER-8: maßgeblich ist die gefühlte Temperatur. Bei
+    temp=20 aber feels=2 zeigt das Modell feels=2 und das Outfit ist die
+    kalte Regel — nicht die milde aus der Lufttemperatur."""
+    t = make_transport(TAG, temp=20.0, feels=2.0, uv=0.0, rain_prob=0, rain_amount=0.0)
+    morgens, _ = _anbindung(t, demo_config).fuer_tag(TAG)
+    assert morgens.feelsLike == 2.0
+
+    outfit = demo_config.garderobe.outfit_fuer(morgens)
+    namen = [k.name for k in outfit.pflicht]
+    assert "Winterjacke" in namen  # kalte Regel (feels_max:4), nicht mild
+
+
+def test_wetter8_feelslike_fallback_auf_lufttemperatur(demo_config, make_transport):
+    """WETTER-8: fehlt apparent_temperature, fällt feelsLike auf temp zurück."""
+    t = make_transport(TAG, temp=18.0, feels=None)
+    morgens, _ = _anbindung(t, demo_config).fuer_tag(TAG)
+    assert morgens.feelsLike == 18.0
+
+
+# ============================================================
+#  WETTER-11 — UV unsichtbar; sunscreen-Boolean steuert
+# ============================================================
+
+def test_wetter11_uv_nicht_in_render_ausgabe(demo_config, make_transport):
+    """WETTER-11/E-WETTER-2: weder UV-Zahl noch UV-Label erscheinen im
+    View-Modell der Render-Schicht — nur der sunscreen-Boolean."""
+    t = make_transport(TAG, uv=8.0)  # hoher UV
+    morgens, mittags = _anbindung(t, demo_config).fuer_tag(TAG)
+    view = render_mod.baue_view(demo_config, morgens, mittags)
+
+    # Das gerenderte Wetter-View-Modell trägt keinen uv/uvLabel-Schlüssel.
+    assert "uv" not in view["wetter"]
+    assert "uvLabel" not in view["wetter"]
+    # Aber der abgeleitete Boolean ist da und steuert die Karte.
+    assert view["metrik"]["sunscreen"] is True
+
+
+def test_wetter11_sunscreen_boolean_aus_schwelle(demo_config, make_transport):
+    """WETTER-11: sunscreen wird aus uv gegen die Schwelle (3) abgeleitet."""
+    t_hoch = make_transport(TAG, uv=4.0)
+    m, _ = _anbindung(t_hoch, demo_config).fuer_tag(TAG)
+    assert m.sunscreen is True
+
+    t_niedrig = make_transport(TAG, uv=1.0)
+    m, _ = _anbindung(t_niedrig, demo_config).fuer_tag(TAG)
+    assert m.sunscreen is False
+
+
+def test_wetter11_kein_uv_im_gerenderten_html(demo_config, make_transport):
+    """WETTER-11: das gerenderte HTML zeigt keine UV-Zahl. Wir prüfen die
+    Sonnencreme-Karte zeigt Ja/Nein, nicht den UV-Wert 8."""
+    import wetter.main as wm
+    t = make_transport(TAG, uv=8.0)
+    wm.configure(demo_config, _anbindung(t, demo_config))
+    client = wm.app.test_client()
+    resp = client.get("/display/wetter/heute")
+    body = resp.get_data(as_text=True)
+    assert resp.status_code == 200
+    assert "Sonnencreme" in body
+    # Die UV-Zahl 8 darf nicht als UV-Anzeige auftauchen. (uvLabel-Texte
+    # ebenfalls nicht.)
+    assert "UV" not in body
+    assert "uvLabel" not in body
+    for label in ("niedrig", "mittel", "hoch", "sehr hoch"):
+        assert label not in body
+
+
+# ============================================================
+#  WETTER-14/15 — Regel-Reihenfolge, Fallback, Mützen-/Regen-Logik
+# ============================================================
+
+def _wetter(feels=None, rain_prob=None, rain_amount=None, wind=None,
+            sunscreen=False, uv=None):
+    return meteo_mod.Tageswetter(
+        desc="x", kind="x", temp=feels, feelsLike=feels, low=10, high=20,
+        wind=wind, rainProb=rain_prob, rainAmount=rain_amount, uv=uv,
+        uvLabel="x", sunscreen=sunscreen)
+
+
+def test_wetter14_erste_passende_regel_gewinnt(demo_config):
+    """WETTER-14: bei feels=25 + sunscreen matchen sowohl die warm-Regel als
+    auch die mild-Regel; die zuerst gelistete warm-Regel gewinnt."""
+    w = _wetter(feels=25.0, sunscreen=True, rain_prob=0, rain_amount=0.0)
+    outfit = demo_config.garderobe.outfit_fuer(w)
+    namen = [k.name for k in outfit.pflicht]
+    assert "Sonnenmütze" in namen  # warm-Regel
+    assert outfit.hinweis == "Warm — Sonnenmütze auf."
+
+
+def test_wetter14_kein_treffer_gibt_fallback(make_transport):
+    """WETTER-14: trifft keine Regel, kommt das Fallback-Set (nie leer)."""
+    # Garderobe mit einer Regel, die nie matcht (feels_min=99).
+    raw = {
+        "ort": {"lat": 1.0, "lon": 1.0},
+        "wardrobe": {
+            "regeln": [{"bedingung": {"feels_min": 99},
+                        "pflicht": [{"name": "Nie", "pikto": "1"}],
+                        "optional": [], "hinweis": "nie"}],
+            "fallback": {"pflicht": [{"name": "Fallback-Jacke", "pikto": "2"}],
+                         "optional": [], "hinweis": "fallback"},
+        },
+    }
+    import json, tempfile
+    f = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+    json.dump(raw, f)
+    f.close()
+    cfg = config_mod.resolve(f.name)
+    w = _wetter(feels=15.0)
+    outfit = cfg.garderobe.outfit_fuer(w)
+    assert [k.name for k in outfit.pflicht] == ["Fallback-Jacke"]
+    assert outfit.hinweis == "fallback"
+
+
+def test_wetter15_muetzen_logik_warm_und_kalt(demo_config):
+    """WETTER-15: warm → Sonnenmütze; kalt → Wintermütze."""
+    warm = _wetter(feels=25.0, sunscreen=True, rain_prob=0, rain_amount=0.0)
+    warm_namen = [k.name for k in demo_config.garderobe.outfit_fuer(warm).pflicht]
+    assert "Sonnenmütze" in warm_namen
+    assert "Wintermütze" not in warm_namen
+
+    kalt = _wetter(feels=1.0, rain_prob=0, rain_amount=0.0)
+    kalt_namen = [k.name for k in demo_config.garderobe.outfit_fuer(kalt).pflicht]
+    assert "Wintermütze" in kalt_namen
+    assert "Sonnenmütze" not in kalt_namen
+
+
+def test_wetter15_regen_logik_aus_rainamount(demo_config):
+    """WETTER-15: viel Regen (rainAmount >= 1.0) → Regenjacke + Gummistiefel,
+    unabhängig von der gefühlten Temperatur (Regen-Regel steht zuerst)."""
+    w = _wetter(feels=20.0, rain_prob=80, rain_amount=2.5)
+    namen = [k.name for k in demo_config.garderobe.outfit_fuer(w).pflicht]
+    assert "Regenjacke" in namen
+    assert "Gummistiefel" in namen
+
+
+def test_wetter15_kein_regen_keine_regenregel(demo_config):
+    """WETTER-15: fehlt die Regenmenge / ist 0, greift die Regen-Regel nicht."""
+    w = _wetter(feels=18.0, rain_prob=10, rain_amount=0.0)
+    namen = [k.name for k in demo_config.garderobe.outfit_fuer(w).pflicht]
+    assert "Regenjacke" not in namen
+
+
+# ============================================================
+#  WETTER-17 — Anbieter nicht erreichbar → neutraler Zustand
+# ============================================================
+
+def test_wetter17_ausfall_gibt_neutralen_zustand(demo_config):
+    """WETTER-17: bei Anbieter-Ausfall kommen zwei neutrale Tageszeiten —
+    kein unbehandelter Fehler."""
+    from wetter.tests.conftest import FakeTransport
+    t = FakeTransport(fail=True)
+    morgens, mittags = _anbindung(t, demo_config).fuer_tag(TAG)
+    for w in (morgens, mittags):
+        assert w.kind == meteo_mod.KIND_NEUTRAL
+        assert w.temp is None
+        assert w.sunscreen is False
+
+
+def test_wetter17_view_funktioniert_bei_ausfall(demo_config):
+    """WETTER-17: die View bleibt nutzbar (HTTP 200), zeigt einen ruhigen
+    Zustand statt eines Fehlers."""
+    import wetter.main as wm
+    from wetter.tests.conftest import FakeTransport
+    t = FakeTransport(fail=True)
+    wm.configure(demo_config, _anbindung(t, demo_config))
+    resp = wm.app.test_client().get("/display/wetter/heute")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    # Neutraler Zustand: das Fallback-Outfit erscheint (nie leer, WETTER-14).
+    assert "Jacke" in body
+
+
+def test_wetter17_neutraler_zustand_nutzt_fallback_outfit(demo_config):
+    """WETTER-17 + WETTER-14: ein neutrales Wetter matcht keine Wetter-Regel
+    (alle brauchen Werte) → Fallback-Outfit."""
+    neutral = meteo_mod.neutrales_tageswetter()
+    outfit = demo_config.garderobe.outfit_fuer(neutral)
+    assert [k.name for k in outfit.pflicht] == ["Jacke"]  # Demo-Fallback
+
+
+# ============================================================
+#  WETTER-6 — Tages-Rollover am Abend
+# ============================================================
+
+def test_wetter6_vor_abend_zeigt_heute(demo_config):
+    """WETTER-6: vor der Rollover-Zeit (17:00) zeigt die View heute."""
+    jetzt = datetime(2026, 6, 3, 9, 0)
+    tag, fuer_morgen = main_mod._zielTag(demo_config, jetzt)
+    assert tag == date(2026, 6, 3)
+    assert fuer_morgen is False
+
+
+def test_wetter6_nach_abend_zeigt_morgen(demo_config):
+    """WETTER-6: ab der Rollover-Zeit springt die View auf morgen."""
+    jetzt = datetime(2026, 6, 3, 18, 0)
+    tag, fuer_morgen = main_mod._zielTag(demo_config, jetzt)
+    assert tag == date(2026, 6, 4)
+    assert fuer_morgen is True
+
+
+def test_wetter6_rollover_view_label(demo_config, make_transport):
+    """WETTER-6: nach Rollover trägt das View-Modell das Label 'Morgen'."""
+    t = make_transport(TAG)
+    morgens, mittags = _anbindung(t, demo_config).fuer_tag(TAG)
+    view = render_mod.baue_view(demo_config, morgens, mittags, fuer_morgen=True)
+    assert view["tages_label"] == "Morgen"
+
+
+# ============================================================
+#  WETTER-12 — beide Tageszeit-Blöcke, unabhängig gerechnet
+# ============================================================
+
+def test_wetter12_zwei_bloecke_unabhaengig(demo_config):
+    """WETTER-12/E-WETTER-10: Morgens und Mittags werden je eigenständig aus
+    dem Wetter ihrer Tageszeit gerechnet — zwei getrennte Outfits."""
+    # Rohantwort, in der 08:00 kalt (2°) und 12:00 warm (25°, sonnig) ist.
+    times = ["%sT%02d:00" % (TAG.isoformat(), h) for h in range(24)]
+    feels = [2.0] * 24
+    feels[12] = 25.0
+    temp = [2.0] * 24
+    temp[12] = 25.0
+    uv = [0.0] * 24
+    uv[12] = 7.0
+    raw = {
+        "hourly": {
+            "time": times,
+            "temperature_2m": temp,
+            "apparent_temperature": feels,
+            "precipitation_probability": [0] * 24,
+            "precipitation": [0.0] * 24,
+            "weathercode": [0] * 24,
+            "windspeed_10m": [5.0] * 24,
+            "uv_index": uv,
+        },
+        "daily": {"time": [TAG.isoformat()],
+                  "temperature_2m_min": [2.0], "temperature_2m_max": [25.0]},
+    }
+    from wetter.tests.conftest import FakeTransport
+    morgens, mittags = _anbindung(FakeTransport(raw=raw), demo_config).fuer_tag(TAG)
+    assert morgens.feelsLike == 2.0
+    assert mittags.feelsLike == 25.0
+
+    view = render_mod.baue_view(demo_config, morgens, mittags)
+    assert len(view["bloecke"]) == 2
+    assert view["bloecke"][0]["tageszeit"] == "Morgens"
+    assert view["bloecke"][1]["tageszeit"] == "Mittags"
+
+    morgens_namen = [t["name"] for t in view["bloecke"][0]["outfit"]["pflicht"]]
+    mittags_namen = [t["name"] for t in view["bloecke"][1]["outfit"]["pflicht"]]
+    assert "Winterjacke" in morgens_namen      # kalt
+    assert "Sonnenmütze" in mittags_namen       # warm + sunscreen
+
+
+# ============================================================
+#  WETTER-2 / WETTER-4 — beide Karten, Stage-Verhalten (HTTP)
+# ============================================================
+
+@pytest.fixture
+def client(demo_config, make_transport):
+    import wetter.main as wm
+    t = make_transport(TAG, code=0, temp=20.0, feels=22.0, uv=6.0)
+    wm.configure(demo_config, _anbindung(t, demo_config))
+    return wm.app.test_client()
+
+
+def test_wetter2_beide_karten_eine_canvas(client):
+    """WETTER-2: die View zeigt beide Karten — Wetter-Karte und Anziehen-Karte
+    — auf einer Canvas (ein Diptychon)."""
+    resp = client.get("/display/wetter/heute")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert 'class="card card-wetter"' in body
+    assert 'class="card card-anziehen"' in body
+    assert "Wie ist das Wetter?" in body
+    assert "Was zieh ich an?" in body
+
+
+def test_wetter4_toddler_default(client):
+    """WETTER-4: ohne ?stage= ist toddler der Default (data-stage="toddler")."""
+    body = client.get("/display/wetter/heute").get_data(as_text=True)
+    assert 'data-stage="toddler"' in body
+
+
+def test_wetter4_reader_nicht_implementiert_faellt_auf_toddler(client):
+    """WETTER-4: ?stage=reader ist V1 nicht implementiert — die View fällt auf
+    toddler zurück und bleibt nutzbar (kein Fehler vor dem Kind)."""
+    resp = client.get("/display/wetter/heute?stage=reader")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert 'data-stage="toddler"' in body
+
+
+def test_wetter18_icons_ueber_geteilte_plattform(client):
+    """WETTER-18/ICONS-5: Outfit-Piktogramme werden über die geteilte
+    Icon-Plattform-URL referenziert, NICHT über den ARASAAC-CDN."""
+    body = client.get("/display/wetter/heute").get_data(as_text=True)
+    assert "/display/_shared/icons/arasaac/" in body
+    assert "static.arasaac.org" not in body
+
+
+def test_wetter19_attribution_footer(client):
+    """WETTER-19: jede Instanz der View trägt den ARASAAC-Attribution-Footer."""
+    body = client.get("/display/wetter/heute").get_data(as_text=True)
+    assert "ARASAAC" in body
+    assert "Sergio Palao" in body
+
+
+# ============================================================
+#  Config (WETTER-21) — Ort Pflicht, Regel-Parsing
+# ============================================================
+
+def test_config_ort_pflicht(tmp_path):
+    """WETTER-21: fehlt der Ort, wirft die Config-Auflösung ConfigError."""
+    p = tmp_path / "wetter.json"
+    p.write_text('{"wardrobe": {"fallback": {"pflicht": [], "optional": [], "hinweis": ""}}}')
+    with pytest.raises(config_mod.ConfigError):
+        config_mod.resolve(str(p))
+
+
+def test_config_fallback_pflicht(tmp_path):
+    """WETTER-14: das Garderoben-Fallback ist Pflicht."""
+    p = tmp_path / "wetter.json"
+    p.write_text('{"ort": {"lat": 1, "lon": 2}, "wardrobe": {"regeln": []}}')
+    with pytest.raises(config_mod.ConfigError):
+        config_mod.resolve(str(p))
+
+
+def test_config_example_ist_gueltig():
+    """Die committete wetter.example.json ist eine gültige Config (WETTER-21)."""
+    example = os.path.join(_REPO_ROOT, "wetter", "wetter.example.json")
+    cfg = config_mod.resolve(example)
+    assert cfg.ort.lat is not None
+    # Beispiel-Regeln und Fallback sind geparst.
+    w = _wetter(feels=25.0, sunscreen=True, rain_prob=0, rain_amount=0.0)
+    outfit = cfg.garderobe.outfit_fuer(w)
+    assert outfit.pflicht  # nie leer
