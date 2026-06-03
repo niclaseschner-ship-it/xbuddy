@@ -49,7 +49,7 @@ body.xb[data-stage="toddler"] {
   position: relative;
 }
 .card-wetter { transform: rotate(-0.6deg); }
-.card-anziehen { transform: rotate(0.5deg); }
+.card-anziehen { transform: rotate(-0.6deg); }
 
 .card-label {
   font-family: var(--font-display);
