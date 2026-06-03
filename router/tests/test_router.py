@@ -1355,3 +1355,251 @@ def test_DCOMP_2_kaputtes_routing_json_faellt_auf_snapshot(reload_client, caplog
     s = router_main.state.get('display-default-01')
     assert s is not None
     assert s['payload']['url'] == 'http://example.test/klein'
+
+
+# ============================================================
+#  ROU-27 — Proxy + Last-Known-Good-Cache für Panel-Instanz-Serving
+# ============================================================
+#
+# panel-Service (Track A) existiert hier nicht — _proxy_panel_view wird per
+# monkeypatch gemockt. Integration (echter HTTP-Call) wird nach A-Deploy separat
+# geprüft (Entry-Path-Probe: lower_level).
+
+@pytest.fixture(autouse=False)
+def reset_panel_lkg_cache():
+    """Leert den LKG-Cache vor und nach jedem ROU-27-Test, damit Tests
+    sich nicht gegenseitig beeinflussen."""
+    with router_main._panel_lkg_lock:
+        router_main._panel_lkg_cache.clear()
+    yield
+    with router_main._panel_lkg_lock:
+        router_main._panel_lkg_cache.clear()
+
+
+def test_ROU_27_config_json_proxied_to_panel_service(
+        client_with_panels, monkeypatch, reset_panel_lkg_cache):
+    """AC1: GET /controller/app-panel/<id>/config.json wird an den
+    panel-Service geproxt. Der panel-Service liefert das Objekt zurück,
+    der Router reicht es 1:1 weiter."""
+    panel_payload = b'{"source_id": "app-panel:kueche", "display_id": "display:wohnzimmer"}'
+
+    def fake_proxy(panel_id, sicht):
+        assert sicht == 'config.json'
+        return panel_payload, 'application/json'
+
+    monkeypatch.setattr(router_main, '_proxy_panel_view', fake_proxy)
+    r = client_with_panels.get('/controller/app-panel/kueche/config.json')
+    assert r.status_code == 200
+    assert r.mimetype == 'application/json'
+    assert r.data == panel_payload
+
+
+def test_ROU_27_tiles_json_proxied_to_panel_service(
+        client_with_panels, monkeypatch, reset_panel_lkg_cache):
+    """AC1: GET /controller/app-panel/<id>/tiles.json wird an den
+    panel-Service geproxt."""
+    tiles_payload = b'[{"key": "plan", "app": "plan", "view": "woche", "label": "Wochenplan"}]'
+
+    def fake_proxy(panel_id, sicht):
+        assert sicht == 'tiles.json'
+        return tiles_payload, 'application/json'
+
+    monkeypatch.setattr(router_main, '_proxy_panel_view', fake_proxy)
+    r = client_with_panels.get('/controller/app-panel/kueche/tiles.json')
+    assert r.status_code == 200
+    assert r.mimetype == 'application/json'
+    assert r.data == tiles_payload
+
+
+def test_ROU_27_panel_id_passed_to_proxy(
+        client_with_panels, monkeypatch, reset_panel_lkg_cache):
+    """AC1: die panel_id aus der URL wird korrekt an den Proxy weitergegeben —
+    /controller/app-panel/flur/config.json ruft _proxy_panel_view('flur', ...) auf."""
+    seen = {}
+
+    def fake_proxy(panel_id, sicht):
+        seen['panel_id'] = panel_id
+        seen['sicht'] = sicht
+        return b'{}', 'application/json'
+
+    monkeypatch.setattr(router_main, '_proxy_panel_view', fake_proxy)
+    client_with_panels.get('/controller/app-panel/flur/config.json')
+    assert seen['panel_id'] == 'flur'
+    assert seen['sicht'] == 'config.json'
+
+
+def test_ROU_27_non_proxy_asset_served_from_directory(
+        client_with_panels, reset_panel_lkg_cache):
+    """AC1: Assets, die NICHT config.json oder tiles.json sind, werden
+    weiterhin aus dem Auslieferungs-Verzeichnis geliefert (Verzeichnis-Serving
+    bleibt unverändert). Wir prüfen app.js als stellvertretenden statischen Asset."""
+    r = client_with_panels.get('/controller/app-panel/kueche/app.js')
+    assert r.status_code == 200
+    assert r.mimetype == 'application/javascript'
+
+
+def test_ROU_27_lkg_snapshot_frischt_bei_erfolg(
+        client_with_panels, monkeypatch, reset_panel_lkg_cache):
+    """AC2: ein erfolgreicher Proxy-Abruf schreibt den Snapshot in den
+    LKG-Cache — der nächste Ausfall kann ihn dann verwenden."""
+    panel_payload = b'{"lkg": true}'
+    call_count = {'n': 0}
+
+    def fake_urlopen(req, timeout=None):
+        call_count['n'] += 1
+
+        class FakeResp:
+            status = 200
+            def read(self): return panel_payload
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+
+        return FakeResp()
+
+    monkeypatch.setattr(router_main.urllib.request, 'urlopen', fake_urlopen)
+
+    r = client_with_panels.get('/controller/app-panel/kueche/config.json')
+    assert r.status_code == 200
+    assert r.data == panel_payload
+    # LKG-Cache wurde befüllt.
+    with router_main._panel_lkg_lock:
+        cached = router_main._panel_lkg_cache.get(('kueche', 'config.json'))
+    assert cached is not None
+    assert cached[0] == panel_payload
+
+
+def test_ROU_27_lkg_snapshot_geliefert_bei_ausfall(
+        client_with_panels, monkeypatch, reset_panel_lkg_cache):
+    """AC2: wenn der panel-Service ausfällt (Exception in urlopen), liefert
+    der Router den Last-Known-Good-Snapshot, sofern er einen hat."""
+    lkg_data = b'{"from_lkg": true}'
+    # LKG-Cache vorbelegen, als ob zuvor ein erfolgreicher Abruf stattfand.
+    with router_main._panel_lkg_lock:
+        router_main._panel_lkg_cache[('kueche', 'config.json')] = (
+            lkg_data, 'application/json')
+
+    def fail_urlopen(req, timeout=None):
+        raise ConnectionRefusedError('panel-Service nicht erreichbar')
+
+    monkeypatch.setattr(router_main.urllib.request, 'urlopen', fail_urlopen)
+
+    r = client_with_panels.get('/controller/app-panel/kueche/config.json')
+    assert r.status_code == 200
+    assert r.data == lkg_data
+    assert r.mimetype == 'application/json'
+
+
+def test_ROU_27_code_default_fallback_ohne_lkg(
+        client_with_panels, monkeypatch, reset_panel_lkg_cache):
+    """AC2 / PREG-9: wenn der panel-Service nie erreichbar war (kein LKG-Snapshot)
+    und der Abruf scheitert, fällt der Router auf den Code-Default-Fallback zurück
+    — kein Crash, kein 500. config.json → {}, tiles.json → []."""
+    def fail_urlopen(req, timeout=None):
+        raise ConnectionRefusedError('panel-Service nicht erreichbar')
+
+    monkeypatch.setattr(router_main.urllib.request, 'urlopen', fail_urlopen)
+
+    r_config = client_with_panels.get('/controller/app-panel/kueche/config.json')
+    assert r_config.status_code == 200
+    assert r_config.data == b'{}'
+
+    r_tiles = client_with_panels.get('/controller/app-panel/kueche/tiles.json')
+    assert r_tiles.status_code == 200
+    assert r_tiles.data == b'[]'
+
+
+def test_ROU_27_lkg_cache_keyed_per_panel_id(
+        client_with_panels, monkeypatch, reset_panel_lkg_cache):
+    """AC2: der LKG-Cache ist je panel_id getrennt — kueche und flur haben
+    verschiedene Snapshots, ein Ausfall bei kueche nutzt den kueche-Snapshot,
+    nicht den flur-Snapshot."""
+    lkg_kueche = b'{"id": "kueche"}'
+    lkg_flur   = b'{"id": "flur"}'
+    with router_main._panel_lkg_lock:
+        router_main._panel_lkg_cache[('kueche', 'config.json')] = (
+            lkg_kueche, 'application/json')
+        router_main._panel_lkg_cache[('flur', 'config.json')] = (
+            lkg_flur, 'application/json')
+
+    def fail_urlopen(req, timeout=None):
+        raise ConnectionRefusedError('panel-Service nicht erreichbar')
+
+    monkeypatch.setattr(router_main.urllib.request, 'urlopen', fail_urlopen)
+
+    r_kueche = client_with_panels.get('/controller/app-panel/kueche/config.json')
+    r_flur   = client_with_panels.get('/controller/app-panel/flur/config.json')
+    assert r_kueche.data == lkg_kueche
+    assert r_flur.data   == lkg_flur
+
+
+def test_ROU_27_panel_service_url_configurable(
+        monkeypatch, tmp_path, reset_panel_lkg_cache):
+    """AC1/ROU-27: die URL des panel-Service ist konfigurierbar über
+    runtime_config['panel_service_url']. Default ist http://127.0.0.1:5041."""
+    seen_url = {}
+
+    def fake_urlopen(req, timeout=None):
+        seen_url['url'] = req.full_url
+
+        class FakeResp:
+            status = 200
+            def read(self): return b'{}'
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+
+        return FakeResp()
+
+    monkeypatch.setattr(router_main.urllib.request, 'urlopen', fake_urlopen)
+
+    original = router_main.runtime_config.get('panel_service_url', '')
+    router_main.runtime_config['panel_service_url'] = 'http://127.0.0.1:9999'
+    try:
+        router_main._proxy_panel_view('test-01', 'config.json')
+        assert '9999' in seen_url['url'], \
+            'panel_service_url in runtime_config muss die URL steuern'
+        assert '/api/v1/panels/test-01/config.json' in seen_url['url']
+    finally:
+        router_main.runtime_config['panel_service_url'] = original
+
+
+def test_ROU_27_default_panel_service_url_is_5041(monkeypatch):
+    """Spec-Konstante: der Default-Port des panel-Service ist 5041 (PORT-2)."""
+    original = router_main.runtime_config.get('panel_service_url', '')
+    router_main.runtime_config['panel_service_url'] = ''
+    try:
+        base = router_main._panel_service_base()
+        assert '5041' in base, \
+            'Default-panel_service_url muss Port 5041 enthalten (PORT-2, PREG-11)'
+    finally:
+        router_main.runtime_config['panel_service_url'] = original
+
+
+# ============================================================
+#  ROU-28 — Panel-bezogene Schreib-/Reload-Kante loopback-/admin/-geschützt
+# ============================================================
+#
+# ROU-28 legt fest, dass jede panel-bezogene Schreib-/Reload-Kante unter
+# /admin/ und loopback-only liegt. V1 exponiert keine aktive Invalidierungs-
+# Kante (OPEN-PREG-F — upstream-first Proxy, keine Push-Kante nötig). Der
+# Test prüft die Invariante am Muster des bestehenden admin/reload-Endpoints:
+# Loopback (127.0.0.1) → erlaubt, nicht-Loopback → 403.
+
+def test_ROU_28_admin_reload_loopback_accepted(reload_client):
+    """ROU-28 Invariante: der Admin-Reload-Endpoint (Beispiel-Kante unter /admin/)
+    antwortet auf Loopback mit 200 — loopback-only-Schutz funktioniert."""
+    client, _ = reload_client
+    r = client.post('/api/v1/router/admin/reload',
+                    environ_overrides={'REMOTE_ADDR': '127.0.0.1'})
+    assert r.status_code == 200
+    assert r.get_json()['reloaded'] is True
+
+
+def test_ROU_28_admin_reload_non_loopback_rejected(reload_client):
+    """ROU-28 Invariante: eine Anfrage von einer nicht-Loopback-Origin
+    wird mit 403 abgelehnt — sie erreicht die /admin/-Kante nicht."""
+    client, _ = reload_client
+    r = client.post('/api/v1/router/admin/reload',
+                    environ_overrides={'REMOTE_ADDR': '192.168.1.42'})
+    assert r.status_code == 403
+    body = r.get_json()
+    assert body['reloaded'] is False
