@@ -39,7 +39,7 @@ Konvention.
 
 - `wetter/` ist ein vollwertiges Buddy-Modul (analog `plan/`); Code liegt auf
   main (#137 — Wetter-Buddy-Integration). `wetter` wird wie `plan` in
-  `root_packages` erfasst und unterliegt denselben Layer-Contracts (MOD-1..4).
+  `root_packages` erfasst und unterliegt denselben Layer-Contracts (MOD-1..5).
 
 - **Paket-interne Tests** (z. B. `familie/tests/`, `tools/tests/`) liegen
   innerhalb der `root_packages` und werden von grimp mit-gescannt. Sie
