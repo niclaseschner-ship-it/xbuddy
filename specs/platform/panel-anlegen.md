@@ -1,6 +1,6 @@
 # Panel anlegen — Spec     (ID-Präfix: PAA)
 
-> Status: ENTWURF (Welle 2, Spec-Halt — landet erst nach Nic-Freigabe) ·
+> Status: RATIFIZIERT (Nic 2026-06-03 — Entscheidungen siehe „Ratifizierte Entscheidungen") ·
 > Refs #183 (PANEL-8-config-Setup), #138 (Apps als Kacheln/`tiles`),
 > #141 (Controller-Setup) · erfüllt `panel-registry.md` OPEN-PREG-C
 
@@ -282,6 +282,31 @@ ersetzt. Mindest-Abdeckung:
 *Tickets:* #183
 
 ---
+
+## Ratifizierte Entscheidungen (Nic, 2026-06-03)
+
+Die „Offene Punkte" / Nic-Fragen unten sind **entschieden** — diese Sektion ist
+maßgeblich (überschreibt die „Nic-Frage"-Markierungen in PAA-3/PAA-4):
+
+- **OPEN-PAA-B (App-Auswahl) → feste Kandidatenliste.** V1 nutzt eine
+  hart-codierte, kuratierte Liste verfügbarer Apps (z. B. Wetter, Plan) zur
+  nummerierten Auswahl in PAA-3.3 — **keine** freie Slug-Nennung (Tippfehler →
+  tote Kachel ausgeschlossen). Der echte App-Discovery-Mechanismus ist als **#325**
+  erfasst (gekoppelt an #296 App-Onboarding/Installation) und löst die
+  Kandidatenliste später ab.
+- **OPEN-PAA-C (`config.source_id`) → (A) Server leitet ab.** PREG-15 wird
+  geschärft (derselbe Freigabe-Schritt, #58): der panel-Service füllt
+  `config.source_id`/`display_id`/`router_url` serverseitig aus der vergebenen
+  `panel_id` + den POST-Eingaben. **Der Skill liefert KEINE `config`-Identität** —
+  er sendet nur `{slug, display_id, tiles}`. PAA-4 ist entsprechend zu lesen
+  (der „Skill baut config"-Teil entfällt; maßgeblich ist Option (A)).
+- **OPEN-PAA-D (Routing-Reconcile) → V1 ohne Auto-Reconcile, bestätigt.** Der
+  Router-`routing.json`-`panels`-Eintrag wird in V1 **nicht** automatisch gezogen
+  (E-PAA-4, `panel-registry.md` OPEN-PREG-B). Eigener Folge-Schritt.
+- **OPEN-PAA-E (Geräte-Anlage-Voraussetzung) → nur nennen, nicht inline aufrufen.**
+  E-PAA-3 bestätigt; verkettetes „erst Gerät, dann Panel"-Onboarding ist ein
+  eigener Flow.
+- **Bestätigungswort (E-EC-7) → ja**, wie im Entwurf (PAA-3.4).
 
 ## Offene Punkte
 
