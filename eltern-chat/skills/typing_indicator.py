@@ -19,6 +19,21 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def make_typing_fn(tg, chat_id, action="typing"):
+    """Gibt eine parameterlose typing_fn zurück, die tg.send_chat_action aufruft.
+
+    Ersetzt die vier lokalen `def typing_fn():` Closures in den Onboarding-Tasks
+    (TES/FAA/GAA/KAV) — alle schließen über tg, private_chat_id und action="typing".
+
+    Beispiel:
+        typing_fn = make_typing_fn(tg, private_chat_id)
+        fire_typing(typing_fn)
+    """
+    def _typing_fn():
+        tg.send_chat_action(chat_id, action)
+    return _typing_fn
+
+
 def fire_typing(typing_fn):
     """Ruft typing_fn auf, wenn gesetzt — Fehler werden geschluckt (EC-25: Best-Effort).
 

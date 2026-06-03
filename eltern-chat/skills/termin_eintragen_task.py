@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from private_chat_session import PrivateChatSession
 from skills import termin_eintragen as tes_mod
 from skills.plan_client import PlanClient
+from skills.typing_indicator import make_typing_fn
 from tasks import Proposal, WriteTask, is_from_private_chat
 
 
@@ -192,8 +193,7 @@ class TermineEintragenTask(WriteTask):
         # EC-25 / Issue #165: Typing-Indikator vor jeder send_message-Phase im
         # Privatchat. Best-Effort: Fehler werden in fire_typing geschluckt.
         # Vgl. skills/typing_indicator.py (EC-25-Helfer, gemeinsam für TES/FAA/GAA/KAV).
-        def typing_fn():
-            tg.send_chat_action(private_chat_id, "typing")
+        typing_fn = make_typing_fn(tg, private_chat_id)
 
         def run_tes():
             try:
