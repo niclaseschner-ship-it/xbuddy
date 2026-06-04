@@ -1,11 +1,11 @@
-"""Tests für die Panel-Registry (PREG-3..15, #58).
+"""Tests für die Panel-Registry (PREG-3..17, #58, #329).
 
 Lauf: python3 -m pytest panel/tests/ -v
 
 Die Suite läuft ohne Netz (PREG-12): die Display-Validierung gegen die
-Geräte-Registry (PREG-7) wird gestubbt — `panel.main.display_existiert` wird
-durch ein Test-Double ersetzt, kein echter HTTP-Aufruf. Der Endpoint wird über
-den Flask-Testclient geprüft (analog geraete/tests/test_main.py).
+Geräte-Registry (PREG-7) und der Router-Forward/Repair (ROU-29, PREG-16/17)
+werden gestubbt — kein echter HTTP-Aufruf. Der Endpoint wird über den
+Flask-Testclient geprüft (analog geraete/tests/test_main.py).
 """
 
 import json
@@ -24,10 +24,11 @@ sys.path.insert(0, _REPO_ROOT)
 from panel import main as panel_main          # noqa: E402
 from panel import registry as registry_mod    # noqa: E402
 
-# Die echte Display-Validierung VOR jedem Stub festhalten — ein Test prüft die
-# URL-Bildung der echten Funktion (PREG-7), während der autouse-Stub sonst
-# `display_existiert` ersetzt.
+# Die echten Funktionen VOR jedem Stub festhalten — ein Test prüft die
+# URL-Bildung der echten Funktion (PREG-7), während die autouse-Stubs sonst
+# `display_existiert` und `router_panels_upsert` ersetzen.
 _ECHTES_display_existiert = panel_main.display_existiert
+_ECHTES_router_panels_upsert = panel_main.router_panels_upsert
 
 
 # ============================================================
@@ -64,15 +65,21 @@ BEKANNTE_DISPLAYS = {"pi-display-flur-01", "tablet-elias-01"}
 
 
 @pytest.fixture(autouse=True)
-def stub_geraete(monkeypatch):
-    """PREG-12: Geräte-Registry stubben — kein Netz.
+def stub_externe_dienste(monkeypatch):
+    """PREG-12: Geräte-Registry + Router stubben — kein Netz.
 
-    Default-Stub: kennt `BEKANNTE_DISPLAYS`, alles andere unbekannt. Einzelne
-    Tests überschreiben das (unbekanntes Display, Registry nicht erreichbar).
+    Default-Stub Geräte: kennt `BEKANNTE_DISPLAYS`, alles andere unbekannt.
+    Default-Stub Router: immer erfolgreich (gibt True zurück).
+    Einzelne Tests überschreiben diese Stubs (Fehlerfall, unbekanntes Display,
+    nicht erreichbar).
     """
-    def fake(display_id):
+    def fake_geraete(display_id):
         return display_id in BEKANNTE_DISPLAYS
-    monkeypatch.setattr(panel_main, "display_existiert", fake)
+    monkeypatch.setattr(panel_main, "display_existiert", fake_geraete)
+
+    def fake_router(source_id, display_id):
+        return True
+    monkeypatch.setattr(panel_main, "router_panels_upsert", fake_router)
 
 
 @pytest.fixture
@@ -479,3 +486,269 @@ def test_PREG_15_panel8_consistency_source_id_matches_panel_id(write_client):
         erwartet = "app-panel:%s" % body["panel_id"]
         assert body["config"]["source_id"] == erwartet, (
             "PANEL-8-Konsistenz verletzt für panel_id=%r" % body["panel_id"])
+
+
+# ============================================================
+#  PREG-16 — Forward-on-Create: Router-Eintrag nach erfolgreichem POST
+# ============================================================
+
+def test_PREG_16_forward_calls_router_after_create(write_client, monkeypatch):
+    """Nach erfolgreicher Anlage ruft der panel-Service ROU-29 (gestubbt)
+    mit {source_id, display_id} der neuen Instanz auf (PREG-16 Forward)."""
+    client, _ = write_client
+    aufrufe = []
+
+    def fake_upsert(source_id, display_id):
+        aufrufe.append({"source_id": source_id, "display_id": display_id})
+        return True
+    monkeypatch.setattr(panel_main, "router_panels_upsert", fake_upsert)
+
+    r = client.post("/api/v1/panels/", json={
+        "slug": "forward-test", "display_id": "pi-display-flur-01"})
+    assert r.status_code == 200
+    body = r.get_json()
+    # ROU-29 wurde genau einmal mit den richtigen Werten aufgerufen.
+    assert len(aufrufe) == 1
+    assert aufrufe[0]["source_id"] == body["source_id"]
+    assert aufrufe[0]["display_id"] == body["display_id"]
+
+
+def test_PREG_16_forward_success_returns_200_no_pending_marker(write_client,
+                                                                 monkeypatch):
+    """Router antwortet mit Erfolg → 200, kein reconcile_pending in der Antwort."""
+    client, _ = write_client
+    monkeypatch.setattr(panel_main, "router_panels_upsert", lambda s, d: True)
+
+    r = client.post("/api/v1/panels/", json={
+        "slug": "success", "display_id": "tablet-elias-01"})
+    assert r.status_code == 200
+    body = r.get_json()
+    assert "reconcile_pending" not in body or body.get("reconcile_pending") is not True
+
+
+def test_PREG_16_forward_router_failure_returns_202_with_pending_marker(
+        write_client, monkeypatch):
+    """Schritt 1 ok, Schritt 2 (ROU-29) scheitert (5xx/Router weg):
+    panels.json-Eintrag bleibt, Antwort ist 202 + reconcile_pending=True (PREG-16
+    Fehler-Semantik — kein stiller Halbzustand, kein 'fertig'-Signal)."""
+    client, path = write_client
+    inhalt_vorher = open(path).read()
+
+    def router_kaputt(source_id, display_id):
+        raise panel_main._RouterUnreachable("connection refused")
+    monkeypatch.setattr(panel_main, "router_panels_upsert", router_kaputt)
+
+    r = client.post("/api/v1/panels/", json={
+        "slug": "pending", "display_id": "pi-display-flur-01"})
+    # 202 = Teilerfolg: panels.json geschrieben, Router-Eintrag fehlt noch.
+    assert r.status_code == 202
+    body = r.get_json()
+    # Aufrufer sieht reconcile_pending=True — kein stilles Verschalten.
+    assert body.get("reconcile_pending") is True
+    # panel_id + source_id sind vorhanden (Instanz ist gültig, nur Router fehlt).
+    assert "panel_id" in body and "source_id" in body
+    # panels.json hat den neuen Eintrag (Schritt 1 war erfolgreich).
+    import json as _json
+    daten = _json.loads(open(path).read())
+    assert any(p["panel_id"] == body["panel_id"] for p in daten["panels"])
+
+
+def test_PREG_16_router_failure_preserves_panels_json(write_client, monkeypatch):
+    """Router-Fehler in Schritt 2: panels.json-Eintrag bleibt bestehen,
+    er ist gültig und servierbar (PREG-16 — kein Rückrollen von Schritt 1)."""
+    client, path = write_client
+
+    def router_kaputt(source_id, display_id):
+        raise panel_main._RouterUnreachable("timeout")
+    monkeypatch.setattr(panel_main, "router_panels_upsert", router_kaputt)
+
+    r = client.post("/api/v1/panels/", json={
+        "slug": "bleibt", "display_id": "tablet-elias-01"})
+    assert r.status_code == 202
+    pid = r.get_json()["panel_id"]
+
+    # GET auf das angelegte Panel muss funktionieren (Reload-on-Read).
+    r_get = client.get("/api/v1/panels/%s" % pid)
+    assert r_get.status_code == 200
+    assert r_get.get_json()["panel_id"] == pid
+
+
+def test_PREG_16_forward_uses_router_url_from_config(write_client, monkeypatch):
+    """ROU-29-Aufruf verwendet ROUTER_URL aus Config (PREG-11):
+    der Stub sieht die source_id aus panels.json (nicht aus dem Config-Router-URL
+    des Panels, das ist etwas anderes)."""
+    client, _ = write_client
+    aufrufe = []
+
+    def fake_upsert(source_id, display_id):
+        aufrufe.append((source_id, display_id))
+        return True
+    monkeypatch.setattr(panel_main, "router_panels_upsert", fake_upsert)
+    # Router-Origin aus runtime setzen (Konfig-Wert, PREG-11).
+    panel_main.runtime["router_url"] = "http://127.0.0.1:5000"
+
+    r = client.post("/api/v1/panels/", json={
+        "slug": "config-test", "display_id": "pi-display-flur-01"})
+    assert r.status_code == 200
+    # source_id kommt aus panels.json, nicht aus dem Panel-router_url-Feld.
+    assert aufrufe[0][0].startswith("app-panel:")
+
+
+# ============================================================
+#  PREG-17 — Repair / Heal-on-Boot
+# ============================================================
+
+def test_PREG_17_heal_on_boot_calls_router_for_all_panels(demo_instanz,
+                                                            monkeypatch):
+    """Heal-on-Boot ruft ROU-29 für jede Panel-Instanz in panels.json auf
+    (blind idempotenter Upsert, kein Zurücklesen des Router-Stands, PREG-17)."""
+    aufrufe = []
+
+    def fake_upsert(source_id, display_id):
+        aufrufe.append({"source_id": source_id, "display_id": display_id})
+        return True
+    monkeypatch.setattr(panel_main, "router_panels_upsert", fake_upsert)
+
+    reg = registry_mod.load(demo_instanz)
+    panel_main.repair_heal_on_boot(reg.list_all())
+
+    # DEMO_PANELS hat zwei Einträge → zwei ROU-29-Aufrufe.
+    assert len(aufrufe) == 2
+    source_ids = {a["source_id"] for a in aufrufe}
+    assert "app-panel:kueche-01" in source_ids
+    assert "app-panel:flur-01" in source_ids
+
+
+def test_PREG_17_heal_on_boot_is_idempotent(demo_instanz, monkeypatch):
+    """Repair ist idempotent: mehrere Läufe schreiben denselben Wert via ROU-29
+    (ohnehin ein Upsert) — kein sichtbarer Nebeneffekt (PREG-17)."""
+    aufrufe = []
+
+    def fake_upsert(source_id, display_id):
+        aufrufe.append((source_id, display_id))
+        return True
+    monkeypatch.setattr(panel_main, "router_panels_upsert", fake_upsert)
+
+    reg = registry_mod.load(demo_instanz)
+    panels = reg.list_all()
+    panel_main.repair_heal_on_boot(panels)
+    panel_main.repair_heal_on_boot(panels)
+
+    # Jeder Lauf schreibt alle Panels — zweimal 2 = 4 Aufrufe.
+    assert len(aufrufe) == 4
+    # Jeder Aufruf trägt dieselbe source_id/display_id-Kombination wie vorher.
+    erster = set((a[0], a[1]) for a in aufrufe[:2])
+    zweiter = set((a[0], a[1]) for a in aufrufe[2:])
+    assert erster == zweiter
+
+
+def test_PREG_17_single_router_failure_does_not_abort_repair(demo_instanz,
+                                                               monkeypatch):
+    """Schlägt ein einzelner ROU-29-Aufruf fehl, macht der Repair-Lauf mit den
+    übrigen Instanzen weiter — kein Abbruch beim ersten Fehler (PREG-17 Robustheit).
+    Die fehlschlagende Instanz bleibt reconcile-pending (Warnung geloggt)."""
+    geheilt = []
+    fehlgeschlagen = []
+
+    def fake_upsert(source_id, display_id):
+        # Nur „kueche-01" scheitert, „flur-01" gelingt.
+        if "kueche" in source_id:
+            fehlgeschlagen.append(source_id)
+            raise panel_main._RouterUnreachable("timeout")
+        geheilt.append(source_id)
+        return True
+    monkeypatch.setattr(panel_main, "router_panels_upsert", fake_upsert)
+
+    reg = registry_mod.load(demo_instanz)
+    # Kein Exception-Durchbruch: Repair ist nicht-fatal (PREG-17 Robustheit).
+    panel_main.repair_heal_on_boot(reg.list_all())
+
+    # „flur-01" wurde geheilt, obwohl „kueche-01" scheiterte.
+    assert "app-panel:flur-01" in geheilt
+    assert "app-panel:kueche-01" in fehlgeschlagen
+
+
+def test_PREG_17_heal_on_boot_repair_is_nonfatal_router_completely_down(
+        demo_instanz, monkeypatch):
+    """Ist der Router komplett unten, bricht Heal-on-Boot nicht den Service-Start
+    ab — alle Instanzen bleiben reconcile-pending, kein Exception-Durchbruch."""
+    def router_kaputt(source_id, display_id):
+        raise panel_main._RouterUnreachable("connection refused")
+    monkeypatch.setattr(panel_main, "router_panels_upsert", router_kaputt)
+
+    reg = registry_mod.load(demo_instanz)
+    # Darf keinen Exception werfen — Service-Start muss weitergehen (PREG-17).
+    panel_main.repair_heal_on_boot(reg.list_all())
+
+
+def test_PREG_17_heal_on_boot_writes_correct_source_and_display(demo_instanz,
+                                                                   monkeypatch):
+    """Repair schreibt für jede Instanz den Soll-Eintrag aus panels.json:
+    source_id und display_id aus panels.json, nicht vom Router zurückgelesen."""
+    aufrufe = {}
+
+    def fake_upsert(source_id, display_id):
+        aufrufe[source_id] = display_id
+        return True
+    monkeypatch.setattr(panel_main, "router_panels_upsert", fake_upsert)
+
+    reg = registry_mod.load(demo_instanz)
+    panel_main.repair_heal_on_boot(reg.list_all())
+
+    # Werte aus DEMO_PANELS prüfen.
+    assert aufrufe.get("app-panel:kueche-01") == "pi-display-flur-01"
+    assert aufrufe.get("app-panel:flur-01") == "tablet-elias-01"
+
+
+def test_PREG_17_heal_on_boot_runs_in_main_before_app_run(demo_instanz,
+                                                            monkeypatch):
+    """Heal-on-Boot wird im echten main()-Startpfad VOR app.run() ausgelöst
+    und ist nicht-fatal auch bei komplett totem Router (PREG-17 Robustheit).
+
+    AC1: main() mit PREG-17-Exit-Probe
+    - Router-Stub wirft immer _RouterUnreachable (toter Router).
+    - app.run wird als No-op gemockt (sonst blockiert main()).
+    - main() darf keine Exception werfen.
+    - router_panels_upsert wurde aufgerufen (Repair-Lauf hat stattgefunden).
+    - app.run wurde erreicht (Service-Start läuft durch — Repair ist nicht-fatal).
+
+    Damit ist verankert: Entfernen oder Verschieben des repair_heal_on_boot()-
+    Aufrufs hinter app.run() oder ganz aus main() würde diesen Test brechen.
+    """
+    from tools import configloader, logsetup
+
+    # configloader.load: gibt Schema-Defaults zurück (keine Datei nötig).
+    monkeypatch.setattr(
+        configloader, "load",
+        lambda component, schema, config_path=None: dict(schema))
+
+    # logsetup.setup: No-op (keine Log-Handler-Seiteneffekte im Test).
+    monkeypatch.setattr(logsetup, "setup", lambda level: None)
+
+    # router_panels_upsert: immer toter Router — alle Panels reconcile-pending.
+    upsert_aufrufe = []
+    def router_kaputt(source_id, display_id):
+        upsert_aufrufe.append(source_id)
+        raise panel_main._RouterUnreachable("test: router komplett down")
+    monkeypatch.setattr(panel_main, "router_panels_upsert", router_kaputt)
+
+    # app.run: No-op — Sentinel setzt, damit wir wissen, dass main() bis hier kam.
+    app_run_erreicht = []
+    def fake_app_run(**kwargs):
+        app_run_erreicht.append(True)
+    monkeypatch.setattr(panel_main.app, "run", fake_app_run)
+
+    # main() mit echtem --panels-Pfad auf die Demo-panels.json aufrufen.
+    # Darf nicht werfen — Heal-on-Boot ist nicht-fatal (PREG-17 Robustheit).
+    panel_main.main(["--panels", demo_instanz])
+
+    # Repair-Lauf hat stattgefunden: router_panels_upsert wurde für beide
+    # Demo-Panels aufgerufen (DEMO_PANELS hat zwei Einträge).
+    assert len(upsert_aufrufe) == 2, (
+        "Heal-on-Boot in main() hat router_panels_upsert nicht für alle Panels "
+        "aufgerufen — Repair-Lauf fehlt oder ist zu früh abgebrochen.")
+
+    # Service-Start ist bis app.run() durchgelaufen (nicht-fatal).
+    assert app_run_erreicht, (
+        "main() hat app.run() nicht erreicht — Heal-on-Boot hat den "
+        "Service-Start blockiert oder abgebrochen (PREG-17 Robustheit verletzt).")

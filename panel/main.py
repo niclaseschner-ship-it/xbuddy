@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Panel-Registry — HTTP-Schnittstelle + Entrypoint.
 
-Siehe specs/platform/panel-registry.md (Refs #58). Diese Datei ist die echte
-Komponente um `panel/registry.py` herum: Flask-App + systemd-Service-
+Siehe specs/platform/panel-registry.md (Refs #58, #329). Diese Datei ist die
+echte Komponente um `panel/registry.py` herum: Flask-App + systemd-Service-
 Entrypoint. Konsumenten reden über HTTP (DCOMP-1), nicht über `import panel`.
 
 Endpunkte:
@@ -17,9 +17,9 @@ eigenständiger Flask-Prozess auf Loopback-Port 5041 (PORT-2), Schwester der
 Geräte-Registry (GER/5040). nginx-Origin matcht `/api/v1/panels/` auf diesen
 Prozess (URL-14, `xbuddy_panel`).
 
-Der EINZIGE Cross-Component-Teil ist die Display-Validierung beim POST: der
-Service prüft `display_id` über HTTP gegen die Geräte-Registry (GER-14,
-PREG-7) — kein Python-Import der Geräte-Komponente (DCOMP-1).
+Cross-Component-HTTP-Aufrufe (DCOMP-1 — kein Python-Import):
+  - Display-Validierung beim POST: GER-14, PREG-7 (Geräte-Registry)
+  - Router-Forward/Repair: ROU-29, PREG-16/PREG-17 (Router)
 """
 
 import argparse
@@ -48,17 +48,20 @@ from tools import configloader, logsetup  # noqa: E402
 #  Laufzeit-Zustand
 # ============================================================
 
-# Die geladene Registry, der Registry-Pfad und die Geräte-Registry-URL.
-# Der Entrypoint befüllt das Dict; Tests setzen es über `configure()`.
+# Die geladene Registry, der Registry-Pfad, die Geräte-Registry-URL und die
+# Router-Origin. Der Entrypoint befüllt das Dict; Tests setzen es über
+# `configure()`.
 runtime = {
     "registry":      registry_mod.Registry(),
     "registry_path": None,
     "geraete_url":   "http://127.0.0.1:5040",
+    "router_url":    "http://127.0.0.1:5000",
 }
 
 
-def configure(reg, registry_path=None, geraete_url=None):
-    """Setzt die laufende Registry, den Registry-Pfad + die Geräte-Registry-URL.
+def configure(reg, registry_path=None, geraete_url=None, router_url=None):
+    """Setzt die laufende Registry, den Registry-Pfad, die Geräte-Registry-URL
+    und die Router-Origin (PREG-11).
 
     Wird `registry_path` nicht übergeben, bleibt das übergebene Registry-Objekt
     die Quelle (Test-Modus, ohne Disk-Schreiben). Mit `registry_path` liest
@@ -69,6 +72,8 @@ def configure(reg, registry_path=None, geraete_url=None):
     runtime["registry_path"] = registry_path
     if geraete_url is not None:
         runtime["geraete_url"] = geraete_url
+    if router_url is not None:
+        runtime["router_url"] = router_url
 
 
 # Schreib-Serialisierung (PREG-15): Read-Modify-Write der Registry-Datei aus
@@ -110,6 +115,71 @@ def display_existiert(display_id):
             "Geräte-Registry antwortet mit %s" % e.code) from e
     except (urllib.error.URLError, OSError, ValueError) as e:
         raise _GeraeteUnreachable(str(e)) from e
+
+
+# ============================================================
+#  Router-Forward / Repair (PREG-16/PREG-17, ROU-29)
+# ============================================================
+
+class _RouterUnreachable(Exception):
+    """Der Router ist nicht erreichbar oder antwortet mit 5xx — PREG-16."""
+
+
+def router_panels_upsert(source_id, display_id):
+    """Schreibt einen `panels`-Eintrag in die Router-routing.json via ROU-29.
+
+    POST <router_url>/api/v1/router/admin/panels/  Body: {source_id, display_id}
+    200 → Eintrag geschrieben (True).
+    400 → Schema-Fehler (nicht wiederhol-bar; wirft _RouterUnreachable mit Kontext).
+    5xx / Netz-Fehler → _RouterUnreachable (temporär, Repair kann es erneut probieren).
+
+    Bewusst über HTTP, KEIN Python-Import des Routers (DCOMP-1). Als Funktion
+    auf Modulebene, damit Tests sie stubben können (PREG-12: ohne Netz).
+    """
+    import json as _json
+    base = runtime["router_url"].rstrip("/")
+    url = "%s/api/v1/router/admin/panels/" % base
+    body = _json.dumps({"source_id": source_id, "display_id": display_id}).encode()
+    req = urllib.request.Request(
+        url, data=body, method="POST",
+        headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status == 200
+    except urllib.error.HTTPError as e:
+        # 4xx sind Konfigurations-Fehler (kein panel), nicht temporär.
+        raise _RouterUnreachable(
+            "Router antwortet mit %s auf ROU-29 für source_id=%r"
+            % (e.code, source_id)) from e
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        raise _RouterUnreachable(str(e)) from e
+
+
+def repair_heal_on_boot(panels):
+    """Repair-Lauf (PREG-17): blind idempotenter Upsert für alle Panels.
+
+    Jede Panel-Instanz in `panels` wird unbedingt via ROU-29 an den Router
+    geschrieben — kein Zurücklesen des Ist-Stands, kein Lese-Endpunkt (Nic-
+    Entscheid 2026-06-04). Schlägt ein einzelner ROU-29-Aufruf fehl, bleibt
+    diese Instanz reconcile-pending (Warnung im Log) und der Lauf macht mit
+    den übrigen WEITER — kein Abbruch beim ersten Fehler (PREG-17 Robustheit).
+    Repair ist nicht-fatal: Fehler blockieren den Service-Start nicht.
+    """
+    ok = 0
+    pending = 0
+    for p in panels:
+        try:
+            router_panels_upsert(p.source_id, p.display_id)
+            ok += 1
+        except _RouterUnreachable as e:
+            logging.warning(
+                "Heal-on-Boot: reconcile-pending für panel_id=%r source_id=%r: %s"
+                " — Panel in panels.json gültig, Router-Eintrag fehlt noch (PREG-17)",
+                p.panel_id, p.source_id, e)
+            pending += 1
+    logging.info(
+        "Heal-on-Boot abgeschlossen: %d geheilt, %d reconcile-pending (PREG-17)",
+        ok, pending)
 
 
 # ============================================================
@@ -264,7 +334,21 @@ def post_panel():
         except registry_mod.RegistryError as e:
             logging.warning("post_panel: Schreiben fehlgeschlagen: %s", e)
             return jsonify({"error": str(e)}), 503
-    return jsonify(panel.to_dict()), 200
+
+    # PREG-16 Forward-on-Create: panels.json-Eintrag geschrieben → Router-Eintrag
+    # nachziehen (ROU-29). Scheitert Step 2, bleibt panels.json-Eintrag gültig,
+    # aber die Instanz ist reconcile-pending (Warnung + Signal an Aufrufer).
+    try:
+        router_panels_upsert(panel.source_id, panel.display_id)
+        return jsonify(panel.to_dict()), 200
+    except _RouterUnreachable as e:
+        logging.warning(
+            "post_panel: reconcile-pending für panel_id=%r source_id=%r: %s"
+            " — panels.json-Eintrag gültig, Router-Eintrag fehlt (PREG-16)",
+            panel.panel_id, panel.source_id, e)
+        result = panel.to_dict()
+        result["reconcile_pending"] = True
+        return jsonify(result), 202
 
 
 # ============================================================
@@ -289,6 +373,8 @@ def parse_args(argv):
                    help="Pfad zur Registry-Datei (PREG-4/11)")
     p.add_argument("--geraete-url", dest="geraete_url",
                    help="Origin der Geräte-Registry (PREG-7/11)")
+    p.add_argument("--router-url", dest="router_url",
+                   help="Origin des Routers für Forward/Repair via ROU-29 (PREG-11/16/17)")
     p.add_argument("--host", help="Bind-Host")
     p.add_argument("--port", type=int, help="Bind-Port")
     p.add_argument("--log-level", dest="log_level",
@@ -302,15 +388,19 @@ def resolved_config(args):
     """Auflösung der RUNTIME-Konfiguration: Datei < ENV < CLI (CONFIG-1).
 
     Host/Port/Log-Level kommen vom gemeinsamen `tools.configloader`. `panels`
-    (Registry-Pfad, PREG-11) und `geraete_url` (Geräte-Registry-Origin, PREG-7/
-    11) bleiben außerhalb des Loader-Schemas — analog geraete/main.py. ENV-
-    Overrides decken den Dev-Override ab (`PANELS_REGISTRY`, `GERAETE_URL`).
+    (Registry-Pfad, PREG-11), `geraete_url` (Geräte-Registry-Origin, PREG-7/11)
+    und `router_url` (Router-Origin, PREG-11/16/17) bleiben außerhalb des
+    Loader-Schemas — analog geraete/main.py. ENV-Overrides decken den Dev-Override
+    ab (`PANELS_REGISTRY`, `GERAETE_URL`, `ROUTER_URL`).
     """
     cfg = configloader.load(component="panel", schema=RUNTIME_SCHEMA)
     cfg["panels"] = os.environ.get("PANELS_REGISTRY", args.panels)
     cfg["geraete_url"] = (
         args.geraete_url
         or os.environ.get("GERAETE_URL", "http://127.0.0.1:5040"))
+    cfg["router_url"] = (
+        args.router_url
+        or os.environ.get("ROUTER_URL", "http://127.0.0.1:5000"))
     if args.host:      cfg["listen_host"] = args.host
     if args.port:      cfg["listen_port"] = args.port
     if args.log_level: cfg["log_level"]   = args.log_level
@@ -323,7 +413,20 @@ def main(argv=None):
     logsetup.setup(cfg["log_level"])
 
     reg = registry_mod.load(cfg["panels"])
-    configure(reg, registry_path=cfg["panels"], geraete_url=cfg["geraete_url"])
+    configure(reg, registry_path=cfg["panels"],
+              geraete_url=cfg["geraete_url"], router_url=cfg["router_url"])
+
+    # PREG-17 Heal-on-Boot: einmaliger Repair-Lauf VOR dem Annehmen von
+    # Anfragen. Schreibt jeden panels.json-Eintrag blind via ROU-29 (idempotenter
+    # Upsert — kein Zurücklesen des Router-Stands, kein Lese-Endpunkt). Fehler
+    # eines einzelnen Aufrufs sind nicht-fatal: Instanz bleibt reconcile-pending,
+    # der Lauf läuft über die übrigen Instanzen weiter. Service-Start darf nicht
+    # an einem unerreichbaren Router hängenbleiben (PREG-17 Robustheit).
+    panels_beim_start = reg.list_all()
+    if panels_beim_start:
+        repair_heal_on_boot(panels_beim_start)
+    else:
+        logging.info("Heal-on-Boot: keine Panels in panels.json — kein Repair nötig")
 
     ssl_context = None
     scheme = "http"
@@ -331,9 +434,9 @@ def main(argv=None):
         ssl_context = (args.cert, args.key)
         scheme = "https"
     logging.info(
-        "Panel-Registry hört auf %s://%s:%s (panels=%s, geraete=%s)",
+        "Panel-Registry hört auf %s://%s:%s (panels=%s, geraete=%s, router=%s)",
         scheme, cfg["listen_host"], cfg["listen_port"],
-        cfg["panels"], cfg["geraete_url"])
+        cfg["panels"], cfg["geraete_url"], cfg["router_url"])
     app.run(host=cfg["listen_host"], port=cfg["listen_port"],
             debug=False, threaded=True, ssl_context=ssl_context)
 
