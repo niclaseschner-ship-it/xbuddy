@@ -33,9 +33,8 @@ Router-Schreib-API (PREG-10).
 
 **Welle 2 (#329):** der Reconcile-/Reparatur-Pfad für die verteilte
 2-Schritt-Anlage (Panel + Routing-Eintrag) — Forward-on-Create (PREG-16) +
-Repair (PREG-17), Schreib-Kante am Router ist ROU-29. Löst OPEN-PREG-B auf; offen
-bleibt nur der Repair-Trigger (Nic-Entscheidung im Spec-Halt, „Offene Punkte"
-`repair_trigger`).
+Repair (PREG-17), Schreib-Kante am Router ist ROU-29. Löst OPEN-PREG-B auf;
+Repair-Trigger ist Heal-on-Boot + Forward-on-Create (Nic-Entscheid 2026-06-04).
 
 **Out-of-Scope V1** (weitere Welle 2, je eigenes Ticket): Kopieren/Löschen einer
 Panel-Instanz und Tile-Editing über die Schnittstelle (V1: Anlegen + Lesen —
@@ -388,26 +387,35 @@ halb angelegte (`reconcile-pending` aus PREG-16) und driftende Panels:
   einer Panel-Instanz (PREG-3); der Router-`panels`-Abschnitt ist die abgeleitete
   Routing-Sicht. Repair schreibt **nur** in Richtung Router (panel-Service →
   ROU-29), nie umgekehrt — kein bidirektionaler Merge.
-- Den Ist-Stand der Router-`panels`-Map liest der panel-Service über HTTP
-  (DCOMP-1). **Befund/offener Punkt:** Eine Lese-Sicht auf den
-  `panels`-Abschnitt der Router-`routing.json` existiert heute **nicht** als
-  eigener Endpunkt (`router.md` exponiert `entries`/`panels` nur über
-  `GET /api/v1/diag` als HTML, ROU-14, nicht maschinenlesbar). Ob Repair eine
-  schmale Router-Lese-Sicht braucht (`GET …/admin/panels/`, loopback) oder
-  ROU-29 idempotent „blind nachschreiben" genügt (jeder Soll-Eintrag wird
-  unbedingt geschrieben, ROU-29 ist ohnehin ein Upsert), ist in „Offene Punkte"
-  als Nic-/Impl-Frage festgehalten — nicht hier final entschieden.
+- **Blind idempotenter Upsert — kein Router-Lese-Endpunkt (Nic-Entscheid
+  2026-06-04).** Repair liest den Ist-Stand der Router-`panels`-Map **nicht**
+  zurück, sondern schreibt jeden Soll-Eintrag aus `panels.json` **unbedingt**
+  über ROU-29 (das ohnehin ein Upsert ist: anlegen-oder-überschreiben). Ein
+  bereits konsistenter Eintrag wird mit demselben Wert überschrieben — ein
+  No-op-Effekt ohne sichtbare Änderung. Damit braucht Repair **keine** schmale
+  Router-Lese-Sicht (`GET …/admin/panels/`) und der Router bekommt **keinen**
+  neuen Lese-Endpunkt — die Router-Fläche bleibt minimal. Begründung: die Zahl
+  der Panel-Instanzen einer Familie ist klein, die paar Upserts beim Heilen sind
+  vernachlässigbar; ein Lese-Endpunkt wäre Fläche auf Vorrat (CLAUDE.md §6).
 
 Repair ist **idempotent**: ein Lauf gegen einen bereits konsistenten Stand
-ändert nichts (ROU-29 schreibt denselben Wert, oder — bei Lese-Sicht — es gibt
-nichts nachzuziehen). Schlägt ein einzelner ROU-29-Aufruf während eines
-Repair-Laufs fehl, bleibt die betroffene Instanz `reconcile-pending` und der
-nächste Repair-Lauf versucht es erneut — Repair darf nicht beim ersten Fehler
-den ganzen Lauf abbrechen und die übrigen Instanzen ungeheilt lassen.
+ändert nichts (ROU-29 schreibt denselben Wert). Schlägt ein einzelner
+ROU-29-Aufruf während eines Repair-Laufs fehl, bleibt die betroffene Instanz
+`reconcile-pending` und der nächste Repair-Lauf versucht es erneut — Repair darf
+nicht beim ersten Fehler den ganzen Lauf abbrechen und die übrigen Instanzen
+ungeheilt lassen.
 
-**Wann Repair läuft (Trigger), entscheidet Nic im Spec-Halt** — siehe
-„Offene Punkte" (`repair_trigger`). Der begründete Vorschlag ist **Heal-on-Boot
-+ Forward-on-Create** (PREG-16).
+**Trigger: Heal-on-Boot (Nic-Entscheid 2026-06-04).** Der panel-Service führt
+**beim Start** (vor dem Annehmen von Anfragen) **einmal** einen vollständigen
+Repair-Lauf über alle `panels.json`-Instanzen aus. Service-Neustarts (Pi-Reboot,
+Deploy, `systemctl restart`) sind im Heim-Server-Betrieb der natürliche
+Heil-Moment ([[feedback-pi-service-restart]]); zusammen mit Forward-on-Create
+(PREG-16) ist damit der Normalfall sofort konsistent und ein zur Anlage-Zeit
+abgerissener Schritt 2 spätestens nach dem nächsten Neustart geheilt — ohne
+Scheduler, ohne neuen Endpunkt, ohne Bedien-Eingriff. Ein expliziter
+`POST …/reconcile`-Endpunkt und periodischer Repair sind **nicht** Teil dieser
+Welle (additiv nachrüstbar, falls „nicht bis zum Neustart warten" je echten
+Schmerz erzeugt — siehe „Offene Punkte" `repair_trigger`).
 
 *Tickets:* #329
 
@@ -512,9 +520,9 @@ Mindest-Abdeckung:
   gleicht Drift/Halbzustände ab (PREG-17). Der ursprüngliche Nic-Vorbehalt („V1
   ohne automatischen Reconcile, manuelles Nachziehen akzeptabel") ist durch den
   Nic-Entscheid 2026-06-04 abgelöst (**„Forward + Repair, gleich richtig"**) — der
-  Reconcile ist jetzt Requirement, nicht Welle-3-Aufschub. Offen bleibt **nur**
-  der Repair-**Trigger** (siehe `repair_trigger` unten) — die eine Entscheidung,
-  die Nic im Spec-Halt trifft.
+  Reconcile ist jetzt Requirement, nicht Welle-3-Aufschub. Der Repair-**Trigger**
+  ist mit **Heal-on-Boot + Forward-on-Create** entschieden (siehe
+  `repair_trigger` unten und PREG-16/PREG-17).
 
 - **OPEN-PREG-C — Eltern-Chat-Skill „Panel anlegen" (Welle 2) braucht einen
   namentlichen `handle_update`-Routing-Block.** Der spätere Skill, der eine
@@ -555,54 +563,32 @@ Mindest-Abdeckung:
   unabhängig von dieser Wahl.
 
 - **`repair_trigger` — WIE wird der Repair-Pfad (PREG-17) ausgelöst?
-  (Nic-Entscheidung im Spec-Halt.)** PREG-16 (Forward) und PREG-17 (Repair)
-  legen fest, **was** Reconcile tut; offen ist **wann** Repair läuft. Das ist
-  bewusst nicht in PREG-17 final entschieden — es ist eine Produkt-/Betriebs-
-  Entscheidung für Nic.
+  → ENTSCHIEDEN: Heal-on-Boot + Forward-on-Create (Nic-Entscheid 2026-06-04,
+  „Forward + Repair, gleich richtig").** Als Requirement in PREG-16/PREG-17
+  verankert; dieser Eintrag hält die Abwägung und die verworfenen Alternativen
+  fest.
 
-  *Problem:* Forward (PREG-16) heilt nur den Normalfall „frisch angelegt, Router
-  war kurz weg" beim nächsten Anlauf nicht von selbst — ein zur Anlage-Zeit
-  abgerissener Schritt 2 bleibt `reconcile-pending`, bis **irgendetwas** Repair
-  anstößt. Ohne definierten Trigger bleibt ein halb angelegtes Panel still
-  liegen.
+  *Problem (gelöst):* Forward (PREG-16) heilt den Normalfall sofort, aber ein zur
+  Anlage-Zeit abgerissener Schritt 2 bleibt `reconcile-pending`, bis
+  **irgendetwas** Repair anstößt. Ohne definierten Trigger bliebe ein halb
+  angelegtes Panel still liegen.
 
-  *Begründeter Vorschlag (Empfehlung): **Heal-on-Boot + Forward-on-Create**.*
-  - **Forward-on-Create** (PREG-16): jeder erfolgreiche Create zieht den
-    Router-Eintrag sofort nach — der Normalfall ist sofort konsistent.
-  - **Heal-on-Boot** (PREG-17): beim Start des panel-Service läuft **einmal** ein
-    Repair-Lauf über alle `panels.json`-Instanzen und zieht fehlende/driftende
-    Router-Einträge nach. Das deckt genau die Lücke, die Forward offen lässt:
-    Ein Panel, dessen Schritt 2 bei der Anlage abriss, ist spätestens nach dem
-    nächsten Service-Neustart (Deploy, Reboot, `systemctl restart`) geheilt — und
-    Service-Neustarts sind im Heim-Server-Betrieb der natürliche „alles wieder
-    in Ordnung bringen"-Moment (Pi-Reboots, Code-Merges → Service-Restart,
-    Memory-Anchor [[feedback-pi-service-restart]]).
+  *Gewählt: **Heal-on-Boot + Forward-on-Create**.* Forward-on-Create (PREG-16)
+  zieht den Router-Eintrag bei jedem erfolgreichen Create sofort nach;
+  Heal-on-Boot (PREG-17) läuft beim Start des panel-Service einmal über alle
+  `panels.json`-Instanzen und heilt fehlende/driftende Einträge. Familie-3-tauglich
+  und simpel: **kein** neuer Endpunkt, **kein** Scheduler, **kein** Cron — nur ein
+  Repair-Aufruf in der Startsequenz; selbstheilend beim ohnehin stattfindenden
+  Neustart (Pi-Reboot, Deploy, `systemctl restart`, [[feedback-pi-service-restart]]).
+  Erfüllt „gleich richtig" ohne Betriebs-Maschinerie auf Vorrat.
 
-    *Warum Familie-3-tauglich und simpel:* Heal-on-Boot braucht **keinen** neuen
-    Endpunkt, **keinen** Scheduler, **keinen** Cron — nur einen einzigen
-    Repair-Aufruf in der Startsequenz des panel-Service (er liest `panels.json`,
-    das er ohnehin besitzt, und ruft ROU-29 je driftender Zeile). Es ist
-    selbstheilend ohne Bedien-Eingriff: eine Familie muss nichts „reparieren
-    lassen", der nächste ohnehin stattfindende Neustart erledigt es. Das ist die
-    YAGNI-arme Variante, die dem Nic-Mandat „gleich richtig" genügt, ohne
-    Betriebs-Maschinerie auf Vorrat zu bauen.
-
-  *Alternativen (für die Abwägung, nicht empfohlen):*
+  *Verworfen, additiv nachrüstbar (nichts auf Vorrat, CLAUDE.md §6):*
   - **Expliziter `POST …/reconcile`-Endpunkt** am panel-Service (loopback/admin),
-    den ein Operator oder ein Eltern-Chat-Skill bewusst auslöst. Vorteil: heilt
-    on-demand ohne Neustart. Nachteil: braucht einen Auslöser (Mensch oder
-    Skill) — das halb angelegte Panel bleibt liegen, bis jemand den Knopf
-    drückt; mehr Oberfläche, mehr Doku. Lässt sich **additiv** zu Heal-on-Boot
-    nachrüsten, wenn der Schmerz „nicht bis zum Neustart warten wollen" belegt
-    ist (nichts auf Vorrat, CLAUDE.md §6).
-  - **Periodischer Repair** (Timer/Watchdog, z. B. alle N Minuten). Vorteil:
-    heilt ohne Neustart und ohne Bedien-Eingriff. Nachteil: ein Hintergrund-Loop
-    mehr, der laufen, geloggt und überwacht werden muss — für ein Datum, das sich
-    nur bei einer Panel-Anlage ändert (selten), ist das überdimensioniert.
-
-  **Empfehlung an Nic: Heal-on-Boot + Forward-on-Create.** Bei Bestätigung wird
-  PREG-17 um den Boot-Trigger als Requirement geschärft; die Alternativen bleiben
-  als additive Folge-Optionen dokumentiert.
+    bewusst ausgelöst. Heilt on-demand ohne Neustart, braucht aber einen Auslöser
+    (Mensch/Skill) und mehr Oberfläche. Nachrüsten, wenn „nicht bis zum Neustart
+    warten" echten Schmerz erzeugt.
+  - **Periodischer Repair** (Timer/Watchdog). Heilt ohne Neustart, ist aber ein
+    Hintergrund-Loop mehr für ein selten änderndes Datum — überdimensioniert.
 
 ---
 
