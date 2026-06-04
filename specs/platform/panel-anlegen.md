@@ -36,12 +36,18 @@ Geräten der Geräte-Registry · `router_url` bleibt leer = same-origin (PREG-8)
 **Out-of-Scope V1** (je eigenes Ticket, sobald gebraucht): Ändern/Löschen/
 Kopieren bestehender Panel-Instanzen (`panel-registry.md` OPEN-PREG-A;
 E-PAA-2) · cross-origin `router_url` über das Geräte-Profil-Onboarding (#82,
-`panel-registry.md` PREG-8 / OPEN-PREG-E) · der automatische Reconcile des
-zweiten Anlage-Schritts (Router-`routing.json`-Eintrag, ROU-18) — V1 zieht den
-Routing-Eintrag **nicht** automatisch nach (`panel-registry.md` OPEN-PREG-B,
-E-PAA-4; **Nic-Frage** in „Offene Punkte") · die „noch ein Panel?"-Schleife
+`panel-registry.md` PREG-8 / OPEN-PREG-E) · die „noch ein Panel?"-Schleife
 (OPEN-PAA-A — V1 legt **eine** Instanz je Aufruf an, anders als GAA-4) ·
 eine LLM-fähige, freier formulierte Trigger-Schicht jenseits der EC-8-Aufgabe.
+
+**Reconcile des zweiten Anlage-Schritts — jetzt im panel-Service, nicht im
+Skill (#329).** Der `routing.json`-`panels`-Eintrag (ROU-18) wird mit Welle 2
+**automatisch** vom panel-Service als Koordinator gezogen
+(`panel-registry.md` PREG-16 Forward-on-Create) — **nicht** vom Skill. Der Skill
+bleibt der dünne WriteTask, der einen PREG-15-POST sendet (PAA-1, PAA-3.5); er
+bekommt **keinen** neuen Schritt. Die ursprüngliche V1-Annahme „kein
+Auto-Reconcile" (E-PAA-4, OPEN-PAA-D) ist durch den Nic-Entscheid 2026-06-04
+(„Forward + Repair, gleich richtig") abgelöst.
 
 ## 1. Die Funktion
 
@@ -125,11 +131,20 @@ Implementierungs-Detail:
      Server ab (PAA-4, PREG-15); optionales config-Tuning ist erlaubt.
 
    Der Server vergibt die `panel_id` (PREG-6) und leitet `source_id`
-   (`app-panel:<panel_id>`, PANEL-6) sowie die `config`-Identität ab (PREG-15). Die Funktion liefert dem Aufrufer im
-   Privatchat die Controller-URL `/controller/app-panel/<panel_id>` (PANEL-2;
-   mit Origin, falls der Funktion einer mitgegeben ist, sonst nur den Pfad —
-   analog GAA-3.7). Schlägt PREG-15 fehl (400/503), signalisiert die Funktion
-   den Misserfolg und schreibt nichts (PAA-7).
+   (`app-panel:<panel_id>`, PANEL-6) sowie die `config`-Identität ab (PREG-15).
+   Den zugehörigen Router-`routing.json`-`panels`-Eintrag (ROU-18) zieht **der
+   panel-Service** als Koordinator selbst nach (`panel-registry.md` PREG-16
+   Forward-on-Create) — **nicht** der Skill; ein Kachel-Tap reagiert nach
+   erfolgreichem Forward direkt auf dem Display (ROU-24). Die Funktion liefert
+   dem Aufrufer im Privatchat die Controller-URL
+   `/controller/app-panel/<panel_id>` (PANEL-2; mit Origin, falls der Funktion
+   einer mitgegeben ist, sonst nur den Pfad — analog GAA-3.7). Schlägt PREG-15
+   fehl (400/503), signalisiert die Funktion den Misserfolg und schreibt nichts
+   (PAA-7). Meldet der panel-Service einen **Teilerfolg** (`panels.json`
+   geschrieben, der Forward-Schritt aber `reconcile-pending`, PREG-16), gibt die
+   Funktion das als Teilerfolg an den Aufrufer weiter (PAA-7) statt „fertig" —
+   das Panel ist angelegt und servier-bar, der Routing-Eintrag wird spätestens
+   beim nächsten Repair-Lauf geheilt (PREG-17).
 
 Pflicht-Schritte ohne gültige Antwort wiederholen die Frage. Optionale Schritte
 gibt es V1 nicht.
@@ -230,6 +245,13 @@ Aufrufer im Stich zu lassen und ohne fehlerhafte Daten zu schreiben:
 - **PREG-15 503** (Geräte-Registry nicht erreichbar oder Disk-Schreibfehler;
   `panels.json` bleibt unverändert): Misserfolg signalisieren, nichts
   geschrieben.
+- **Teilerfolg / `reconcile-pending`** (PREG-15 ok, der vom panel-Service
+  koordinierte Forward auf den Router-`panels`-Eintrag riss ab, PREG-16): die
+  Funktion meldet einen **Teilerfolg** — das Panel ist angelegt und unter seiner
+  Controller-URL servier-bar, aber der Kachel-Tap reagiert noch nicht auf dem
+  Display, bis der Routing-Eintrag geheilt ist (PREG-17). Sie signalisiert das
+  als Teilerfolg, **nicht** als Vollerfolg und **nicht** als Komplett-Misserfolg
+  (`panels.json` ist geschrieben).
 
 Den Wortlaut der Fehler-Nachrichten klopft die Spec **nicht** fest.
 
@@ -291,9 +313,13 @@ maßgeblich (überschreibt die „Nic-Frage"-Markierungen in PAA-3/PAA-4):
   `panel_id` + den POST-Eingaben. **Der Skill liefert KEINE `config`-Identität** —
   er sendet nur `{slug, display_id, tiles}`. PAA-4 ist entsprechend zu lesen
   (der „Skill baut config"-Teil entfällt; maßgeblich ist Option (A)).
-- **OPEN-PAA-D (Routing-Reconcile) → V1 ohne Auto-Reconcile, bestätigt.** Der
-  Router-`routing.json`-`panels`-Eintrag wird in V1 **nicht** automatisch gezogen
-  (E-PAA-4, `panel-registry.md` OPEN-PREG-B). Eigener Folge-Schritt.
+- **OPEN-PAA-D (Routing-Reconcile) → Forward + Repair (Nic 2026-06-04),
+  abgelöst.** Der frühere „V1 ohne Auto-Reconcile"-Entscheid (2026-06-03) ist
+  durch „Forward + Repair, gleich richtig" (2026-06-04) abgelöst: Der
+  Router-`routing.json`-`panels`-Eintrag wird automatisch vom **panel-Service**
+  als Koordinator gezogen (`panel-registry.md` PREG-16 Forward + PREG-17 Repair,
+  Schreib-Kante ROU-29), **nicht** vom Skill. Für diese Spec ändert sich nichts
+  am Skill-Vertrag; siehe E-PAA-4 und OPEN-PAA-D (aufgelöst). #329.
 - **OPEN-PAA-E (Geräte-Anlage-Voraussetzung) → nur nennen, nicht inline aufrufen.**
   E-PAA-3 bestätigt; verkettetes „erst Gerät, dann Panel"-Onboarding ist ein
   eigener Flow.
@@ -325,16 +351,18 @@ maßgeblich (überschreibt die „Nic-Frage"-Markierungen in PAA-3/PAA-4):
   saubere Schärfung von `panel-registry.md` PREG-15 und gehört in **denselben
   Freigabe-Schritt** wie diese Spec. **Nic-/Architektur-Frage.**
 
-- **OPEN-PAA-D — Reconcile des zweiten Anlage-Schritts (Router-`routing.json`).**
-  Eine Panel-Instanz ist erst **vollständig** betriebsbereit, wenn neben dem
-  `panels.json`-Eintrag (PREG-15) auch ein `panels`-Eintrag in der
-  Router-`routing.json` (ROU-18) existiert, über den der Adapter (ROU-24) das
-  `tile_selected`/`panel_cleared` auf die `display_id` setzt
-  (`panel-registry.md` OPEN-PREG-B). V1 zieht diesen zweiten Schritt **nicht**
-  automatisch nach (E-PAA-4) — das Panel ist nach PAA-3.5 angelegt und
-  servier-bar, aber ohne den Routing-Eintrag reagiert ein Kachel-Tap noch nicht
-  auf dem Display. **Nic-Frage** (deckt sich mit `panel-registry.md`
-  OPEN-PREG-B): bestätigen, dass V1 den Routing-Eintrag manuell/separat zieht.
+- **OPEN-PAA-D — Reconcile des zweiten Anlage-Schritts (Router-`routing.json`).
+  → AUFGELÖST (Nic 2026-06-04, #329).** Der zweite Schritt (Router-`panels`-Eintrag,
+  ROU-18) wird **nicht mehr manuell** gezogen und ist **nicht** Aufgabe des
+  Skills: der panel-Service zieht ihn als Koordinator automatisch nach jedem
+  Create (`panel-registry.md` PREG-16 Forward-on-Create, Schreib-Kante ROU-29),
+  Drift/Halbzustände heilt PREG-17 (Repair). Der frühere Nic-Vorbehalt „V1 ohne
+  Auto-Reconcile" ist durch den Entscheid **„Forward + Repair, gleich richtig"**
+  abgelöst. Für den Skill ändert sich **nichts** am Vertrag — er sendet
+  weiterhin nur den PREG-15-POST (PAA-3.5); der Reconcile liegt eine Schicht
+  tiefer im panel-Service. Der Repair-**Trigger** ist mit **Heal-on-Boot +
+  Forward-on-Create** entschieden (`panel-registry.md` PREG-16/PREG-17,
+  Nic-Entscheid 2026-06-04) — er berührt diese Spec nicht.
 
 - **OPEN-PAA-E — Geräte-Anlage als Voraussetzung selbst aufrufen.** V1 ruft bei
   „kein passendes Display" die Geräte-Anlage (`geraet-anlegen.md` GAA)
@@ -366,11 +394,19 @@ nicht (ein Modul = eine Verantwortung, CLAUDE.md §6; Memory-Anchor
 **Verworfen** (vorbehaltlich Nic, OPEN-PAA-E): GAA aus PAA heraus aufzurufen —
 das ist ein Onboarding-Flow-Anliegen, kein Anlage-Anliegen.
 
-### E-PAA-4 — V1 ohne automatischen Routing-Reconcile
-V1 zieht den zweiten Anlage-Schritt (Router-`routing.json`-`panels`-Eintrag,
-ROU-18) **nicht** automatisch nach — vorbehaltlich Nic-Bestätigung
-(OPEN-PAA-D, `panel-registry.md` OPEN-PREG-B, von Nic dort als „für später
-vertretbar" eingeordnet).
+### E-PAA-4 — Routing-Reconcile liegt im panel-Service, nicht im Skill
+**Aktualisiert (Nic 2026-06-04, #329).** Frühe Annahme: V1 zieht den zweiten
+Anlage-Schritt (Router-`routing.json`-`panels`-Eintrag, ROU-18) **nicht**
+automatisch nach. **Abgelöst** durch den Nic-Entscheid „Forward + Repair, gleich
+richtig": Der Reconcile ist jetzt Requirement, aber er liegt **eine Schicht
+tiefer** — der panel-Service ist der Koordinator (`panel-registry.md` PREG-16
+Forward + PREG-17 Repair, Schreib-Kante ROU-29), **nicht** der Skill. Die
+Begründung trägt: der Skill bleibt der dünne WriteTask mit **einem** POST
+(E-PAA-1-Linie, Architektur-Linse oben); die verteilte 2-Schritt-Koordination
+gehört zum Daten-Eigentümer der Panel-Instanzen (panel-Service), nicht zum
+Trigger. Ein Routing-Eintrag aus dem Skill heraus zu schreiben hätte den Skill
+zwei sensitive Schreibziele (Panel-Registry **und** Router) gegeben — genau die
+Doppelpflege, die E-ROU-8 schon für die Kachel-Ebene verworfen hat.
 
 ---
 
@@ -397,5 +433,8 @@ vertretbar" eingeordnet).
   [[feedback-onboarding-flow-prerequisites]].
 - **Erfüllt:** #183 (PANEL-8-config-Setup), #138 (Apps als `tiles`), #141
   (Controller-Setup), `panel-registry.md` OPEN-PREG-C.
+- **Reconcile (eine Schicht tiefer):** `panel-registry.md` PREG-16 (Forward),
+  PREG-17 (Repair); `router.md` ROU-29 (Schreib-Kante) — #329. Der Skill ruft
+  davon nichts direkt; er sendet nur den PREG-15-POST (E-PAA-4).
 - **Nicht hier:** #82 (cross-origin `router_url` via Geräte-Profil, PREG-8 /
-  OPEN-PREG-E); automatischer Routing-Reconcile (OPEN-PREG-B / E-PAA-4).
+  OPEN-PREG-E).
