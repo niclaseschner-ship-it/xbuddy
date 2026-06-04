@@ -1603,3 +1603,287 @@ def test_ROU_28_admin_reload_non_loopback_rejected(reload_client):
     assert r.status_code == 403
     body = r.get_json()
     assert body['reloaded'] is False
+
+
+# ============================================================
+#  ROU-29 — POST /api/v1/router/admin/panels/ — panels-Eintrag schreiben
+# ============================================================
+#
+# Zweite, konkrete Ausprägung der ROU-28-Invariante (loopback-/`/admin/`). Der
+# panel-Service ruft die Kante (PREG-16/PREG-17), um source_id → { display_id }
+# in die routing.json zu schreiben. display_id wird gegen die Geräte-Registry
+# (GER-14) validiert, NICHT gegen known_displays. Die Geräte-Registry wird hier
+# über display_existiert gestubbt (analog panel-Tests: ohne Netz, PREG-12).
+
+PANELS_URL = '/api/v1/router/admin/panels/'
+
+# Routing mit einem entries-Eintrag (muss unberührt bleiben) + einem
+# bestehenden panels-Eintrag (für den Umzug-/Update-Test).
+PANELS_WRITE_ROUTING = {
+    "entries": [
+        {
+            "source_id":  "phone:test-1",
+            "descriptor": {"figure_id": "rotes-a", "bucket": 0},
+            "display_ids": ["display-default-01"],
+            "payload":    {"url": "http://example.test/klein"},
+        },
+    ],
+    "panels": {
+        "app-panel:bestand": {"display_id": "display:alt"},
+    },
+}
+
+
+@pytest.fixture
+def panels_client(tmp_path, monkeypatch):
+    """Frischer Router mit schreibbarer routing.json. display_existiert wird per
+    Default auf „alles bekannt" gestubbt; einzelne Tests überschreiben das."""
+    routing_file = tmp_path / "routing.json"
+    routing_file.write_text(json.dumps(PANELS_WRITE_ROUTING))
+    router_main.state = {}
+    router_main._subscribers.clear()
+    router_main.load_routing(str(routing_file))
+    router_main.app.testing = True
+    # Default-Stub: jedes display_id existiert. So muss kein Netz laufen.
+    monkeypatch.setattr(router_main, 'display_existiert', lambda did: True)
+    client = router_main.app.test_client()
+    return client, routing_file
+
+
+def post_panel(client, body, remote='127.0.0.1'):
+    return client.post(PANELS_URL,
+                       data=json.dumps(body),
+                       content_type='application/json',
+                       environ_overrides={'REMOTE_ADDR': remote})
+
+
+def test_ROU_29_write_new_panel_entry_returns_200(panels_client):
+    """Happy-Path: neuer panels-Eintrag → 200 mit {written, source_id, display_id}.
+    Der Eintrag steht atomar in der routing.json."""
+    client, routing_file = panels_client
+    r = post_panel(client, {
+        'source_id': 'app-panel:kueche', 'display_id': 'display:wohnzimmer'})
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body == {
+        'written': True,
+        'source_id': 'app-panel:kueche',
+        'display_id': 'display:wohnzimmer',
+    }
+    on_disk = json.loads(routing_file.read_text())
+    assert on_disk['panels']['app-panel:kueche'] == {'display_id': 'display:wohnzimmer'}
+
+
+def test_ROU_29_new_entry_visible_to_tile_selected_without_reload(panels_client):
+    """AC6 / DCOMP-2: ein direkt folgender tile_selected-Lookup (ROU-24) sieht
+    das neue display_id OHNE Service-Restart und OHNE Admin-Reload."""
+    client, _ = panels_client
+    r = post_panel(client, {
+        'source_id': 'app-panel:neu', 'display_id': 'display:frisch'})
+    assert r.status_code == 200
+    # Ohne jeden Reload-Aufruf: tile_selected muss das neue Display treffen.
+    r2 = post_event(client, {
+        'source_id': 'app-panel:neu', 'type': 'tile_selected',
+        'app': 'plan', 'view': 'woche'})
+    assert r2.status_code == 204
+    s = router_main.state.get('display:frisch')
+    assert s is not None, 'DCOMP-2: neuer panels-Eintrag ohne Reload sichtbar'
+    assert s['payload'] == {'url': '/display/plan/woche'}
+
+
+def test_ROU_29_update_existing_entry_moves_panel(panels_client):
+    """Update/Umzug: zweiter POST mit gleicher source_id und anderem display_id
+    überschreibt die Zeile (Panel zieht auf ein anderes Display um)."""
+    client, routing_file = panels_client
+    # Bestehend: app-panel:bestand → display:alt. Umzug auf display:neu.
+    r = post_panel(client, {
+        'source_id': 'app-panel:bestand', 'display_id': 'display:neu'})
+    assert r.status_code == 200
+    on_disk = json.loads(routing_file.read_text())
+    assert on_disk['panels']['app-panel:bestand'] == {'display_id': 'display:neu'}
+    # Genau eine Zeile für die source_id — kein Duplikat.
+    assert list(on_disk['panels'].keys()).count('app-panel:bestand') == 1
+
+
+def test_ROU_29_entries_section_untouched(panels_client):
+    """AC1: der entries-Abschnitt (descriptor-Matching, ROU-9) bleibt von der
+    panels-Schreib-Kante unberührt."""
+    client, routing_file = panels_client
+    entries_before = json.loads(routing_file.read_text())['entries']
+    post_panel(client, {
+        'source_id': 'app-panel:kueche', 'display_id': 'display:wohnzimmer'})
+    on_disk = json.loads(routing_file.read_text())
+    assert on_disk['entries'] == entries_before
+
+
+def test_ROU_29_missing_source_id_returns_400(panels_client):
+    """AC4: fehlendes Pflichtfeld source_id → 400 (ROU-5-Form)."""
+    client, routing_file = panels_client
+    before = routing_file.read_text()
+    r = post_panel(client, {'display_id': 'display:wohnzimmer'})
+    assert r.status_code == 400
+    assert r.get_json()['error'] == 'source_id'
+    assert routing_file.read_text() == before  # unverändert
+
+
+def test_ROU_29_missing_display_id_returns_400(panels_client):
+    """AC4: fehlendes Pflichtfeld display_id → 400 (ROU-5-Form)."""
+    client, routing_file = panels_client
+    before = routing_file.read_text()
+    r = post_panel(client, {'source_id': 'app-panel:kueche'})
+    assert r.status_code == 400
+    assert r.get_json()['error'] == 'display_id'
+    assert routing_file.read_text() == before
+
+
+def test_ROU_29_display_ids_plural_returns_400(panels_client):
+    """AC4 / E-PANEL-5: die petraltete Plural-Form display_ids im Body ist eine
+    Schema-Verletzung (400), damit sie gar nicht erst in die Datei gelangt."""
+    client, routing_file = panels_client
+    before = routing_file.read_text()
+    r = post_panel(client, {
+        'source_id': 'app-panel:kueche', 'display_ids': ['display:a', 'display:b']})
+    assert r.status_code == 400
+    assert r.get_json()['error'] == 'display_ids'
+    assert routing_file.read_text() == before
+
+
+def test_ROU_29_invalid_json_body_returns_400(panels_client):
+    """AC4: kein/ungültiger JSON-Body → 400 (ROU-5-Form)."""
+    client, _ = panels_client
+    r = client.post(PANELS_URL, data='not json',
+                    content_type='application/json',
+                    environ_overrides={'REMOTE_ADDR': '127.0.0.1'})
+    assert r.status_code == 400
+    assert 'error' in r.get_json()
+
+
+def test_ROU_29_unknown_display_returns_400(panels_client, monkeypatch):
+    """AC2: display_id in der Geräte-Registry unbekannt (GER-14 → 404) → 400
+    {error: 'display unbekannt'}; routing.json bleibt unverändert."""
+    client, routing_file = panels_client
+    before = routing_file.read_text()
+    monkeypatch.setattr(router_main, 'display_existiert', lambda did: False)
+    r = post_panel(client, {
+        'source_id': 'app-panel:kueche', 'display_id': 'display:gibtsnicht'})
+    assert r.status_code == 400
+    assert r.get_json()['error'] == 'display unbekannt'
+    assert routing_file.read_text() == before
+
+
+def test_ROU_29_geraete_registry_unreachable_returns_503(panels_client, monkeypatch):
+    """AC2: Geräte-Registry nicht erreichbar → 503, routing.json unverändert
+    (kein stilles Durchwinken, symmetrisch zu PREG-7)."""
+    client, routing_file = panels_client
+    before = routing_file.read_text()
+
+    def boom(did):
+        raise router_main._GeraeteUnreachable('connection refused')
+
+    monkeypatch.setattr(router_main, 'display_existiert', boom)
+    r = post_panel(client, {
+        'source_id': 'app-panel:kueche', 'display_id': 'display:wohnzimmer'})
+    assert r.status_code == 503
+    assert 'error' in r.get_json()
+    assert routing_file.read_text() == before
+
+
+def test_ROU_29_validates_against_geraete_registry_not_known_displays(
+        panels_client, monkeypatch):
+    """AC2: die Validierung läuft gegen die Geräte-Registry (display_existiert),
+    NICHT gegen known_displays. Ein Display, das die Geräte-Registry kennt, aber
+    das NOCH in keinem entries-Eintrag der routing.json steht (also nicht in
+    known_displays), muss durchgehen — sonst der Kopplungs-Fehler aus PREG-7."""
+    client, routing_file = panels_client
+    # Sicherstellen: das Ziel-Display ist NICHT in known_displays.
+    assert 'display:nur-in-geraete' not in router_main.known_displays
+    seen = {}
+
+    def stub(did):
+        seen['did'] = did
+        return True  # Geräte-Registry kennt es
+
+    monkeypatch.setattr(router_main, 'display_existiert', stub)
+    r = post_panel(client, {
+        'source_id': 'app-panel:k', 'display_id': 'display:nur-in-geraete'})
+    assert r.status_code == 200
+    assert seen['did'] == 'display:nur-in-geraete'  # genau dieses Display geprüft
+    on_disk = json.loads(routing_file.read_text())
+    assert on_disk['panels']['app-panel:k'] == {'display_id': 'display:nur-in-geraete'}
+
+
+def test_ROU_29_disk_write_error_returns_503(panels_client, monkeypatch):
+    """AC5: IO-/Replace-Fehler beim atomaren Schreiben → 503, routing.json
+    unverändert."""
+    client, routing_file = panels_client
+    before = routing_file.read_text()
+
+    def boom(source_id, display_id):
+        raise router_main._PanelsWriteError('os.replace failed')
+
+    monkeypatch.setattr(router_main, '_write_panels_entry', boom)
+    r = post_panel(client, {
+        'source_id': 'app-panel:kueche', 'display_id': 'display:wohnzimmer'})
+    assert r.status_code == 503
+    assert 'error' in r.get_json()
+    assert routing_file.read_text() == before
+
+
+def test_ROU_29_non_loopback_origin_returns_403(panels_client):
+    """AC3 / ROU-28: Aufruf von nicht-Loopback-Origin → 403 (wie Admin-Reload);
+    routing.json unverändert."""
+    client, routing_file = panels_client
+    before = routing_file.read_text()
+    r = post_panel(client, {
+        'source_id': 'app-panel:kueche', 'display_id': 'display:wohnzimmer'},
+        remote='10.0.0.5')
+    assert r.status_code == 403
+    assert r.get_json()['written'] is False
+    assert routing_file.read_text() == before
+
+
+def test_ROU_29_ipv6_loopback_accepted(panels_client):
+    """AC3: IPv6-Loopback (::1) ist ebenfalls erlaubt (gleicher Guard wie
+    Admin-Reload)."""
+    client, _ = panels_client
+    r = post_panel(client, {
+        'source_id': 'app-panel:kueche', 'display_id': 'display:wohnzimmer'},
+        remote='::1')
+    assert r.status_code == 200
+    assert r.get_json()['written'] is True
+
+
+def test_ROU_29_only_post_allowed(panels_client):
+    """Methoden-Schutz: GET auf die Schreib-Kante ist nicht erlaubt (405)."""
+    client, _ = panels_client
+    r = client.get(PANELS_URL, environ_overrides={'REMOTE_ADDR': '127.0.0.1'})
+    assert r.status_code == 405
+
+
+def test_ROU_29_parallel_posts_no_lost_update(panels_client):
+    """AC5: zwei verschiedene source_ids parallel geschrieben → beide landen
+    (Schreib-Lock serialisiert, kein lost update; symmetrisch zu PREG-15)."""
+    import threading as _threading
+    client, routing_file = panels_client
+
+    sources = ['app-panel:p%02d' % i for i in range(12)]
+    barrier = _threading.Barrier(len(sources))
+    results = {}
+
+    def worker(src):
+        barrier.wait()  # alle gleichzeitig loslassen
+        r = post_panel(client, {'source_id': src, 'display_id': 'display:x'})
+        results[src] = r.status_code
+
+    threads = [_threading.Thread(target=worker, args=(s,)) for s in sources]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert all(code == 200 for code in results.values())
+    on_disk = json.loads(routing_file.read_text())
+    for src in sources:
+        assert on_disk['panels'][src] == {'display_id': 'display:x'}
+    # entries-Eintrag hat keinen der parallelen Writes verloren.
+    assert len(on_disk['entries']) == 1
