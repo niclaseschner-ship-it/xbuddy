@@ -253,10 +253,11 @@ ersetzt. Mindest-Abdeckung:
   Antwort auf einen Pflicht-Schritt wiederholt die Frage; der Skill liefert
   **keine** `panel_id`, übernimmt die Server-`panel_id` aus der PREG-15-Antwort;
   der Aufrufer bekommt `/controller/app-panel/<panel_id>` zurück.
-- **PAA-4** — der an PREG-15 gesendete Body enthält `config` mit gesetztem
-  `display_id` und leerem `router_url`; (gemäß OPEN-PAA-C-Entscheid) entweder
-  enthält `config.source_id` den abgeleiteten Wert oder ist bewusst leer und
-  der Service leitet ab.
+- **PAA-4** — der an PREG-15 gesendete Body enthält **keine** config-Identität
+  (OPEN-PAA-C → A): `display_id` ist Top-Level-Feld, der Service leitet
+  `config.source_id`/`display_id`/`router_url` ab; ein optional mitgegebenes
+  config-Tuning bleibt erhalten. Der Test prüft, dass der Skill keine
+  config-Identität sendet (`config is None`).
 - **PAA-5** — die EC-8-Aufgabe wird vom Katalog gefunden, ist als async
   `WriteTask` (`is_async = True`) registriert und ruft PAA mit den korrekten
   Parametern auf (Privatchat-Chat-ID + User-ID, gebundene Familien-Gruppe,
