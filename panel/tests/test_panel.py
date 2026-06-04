@@ -698,3 +698,57 @@ def test_PREG_17_heal_on_boot_writes_correct_source_and_display(demo_instanz,
     # Werte aus DEMO_PANELS prüfen.
     assert aufrufe.get("app-panel:kueche-01") == "pi-display-flur-01"
     assert aufrufe.get("app-panel:flur-01") == "tablet-elias-01"
+
+
+def test_PREG_17_heal_on_boot_runs_in_main_before_app_run(demo_instanz,
+                                                            monkeypatch):
+    """Heal-on-Boot wird im echten main()-Startpfad VOR app.run() ausgelöst
+    und ist nicht-fatal auch bei komplett totem Router (PREG-17 Robustheit).
+
+    AC1: main() mit PREG-17-Exit-Probe
+    - Router-Stub wirft immer _RouterUnreachable (toter Router).
+    - app.run wird als No-op gemockt (sonst blockiert main()).
+    - main() darf keine Exception werfen.
+    - router_panels_upsert wurde aufgerufen (Repair-Lauf hat stattgefunden).
+    - app.run wurde erreicht (Service-Start läuft durch — Repair ist nicht-fatal).
+
+    Damit ist petrankert: Entfernen oder Verschieben des repair_heal_on_boot()-
+    Aufrufs hinter app.run() oder ganz aus main() würde diesen Test brechen.
+    """
+    from tools import configloader, logsetup
+
+    # configloader.load: gibt Schema-Defaults zurück (keine Datei nötig).
+    monkeypatch.setattr(
+        configloader, "load",
+        lambda component, schema, config_path=None: dict(schema))
+
+    # logsetup.setup: No-op (keine Log-Handler-Seiteneffekte im Test).
+    monkeypatch.setattr(logsetup, "setup", lambda level: None)
+
+    # router_panels_upsert: immer toter Router — alle Panels reconcile-pending.
+    upsert_aufrufe = []
+    def router_kaputt(source_id, display_id):
+        upsert_aufrufe.append(source_id)
+        raise panel_main._RouterUnreachable("test: router komplett down")
+    monkeypatch.setattr(panel_main, "router_panels_upsert", router_kaputt)
+
+    # app.run: No-op — Sentinel setzt, damit wir wissen, dass main() bis hier kam.
+    app_run_erreicht = []
+    def fake_app_run(**kwargs):
+        app_run_erreicht.append(True)
+    monkeypatch.setattr(panel_main.app, "run", fake_app_run)
+
+    # main() mit echtem --panels-Pfad auf die Demo-panels.json aufrufen.
+    # Darf nicht werfen — Heal-on-Boot ist nicht-fatal (PREG-17 Robustheit).
+    panel_main.main(["--panels", demo_instanz])
+
+    # Repair-Lauf hat stattgefunden: router_panels_upsert wurde für beide
+    # Demo-Panels aufgerufen (DEMO_PANELS hat zwei Einträge).
+    assert len(upsert_aufrufe) == 2, (
+        "Heal-on-Boot in main() hat router_panels_upsert nicht für alle Panels "
+        "aufgerufen — Repair-Lauf fehlt oder ist zu früh abgebrochen.")
+
+    # Service-Start ist bis app.run() durchgelaufen (nicht-fatal).
+    assert app_run_erreicht, (
+        "main() hat app.run() nicht erreicht — Heal-on-Boot hat den "
+        "Service-Start blockiert oder abgebrochen (PREG-17 Robustheit verletzt).")
