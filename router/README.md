@@ -28,6 +28,8 @@ python3 router/main.py \
 | `GET /api/v1/displays/<id>/events` | SSE-Zustands-Stream für ein Display | ROU-22 |
 | `GET /api/v1/diag` | Debug-HTML, alle Displays | ROU-14 |
 | `GET /display/<id>` | Display-Client ausliefern (E-DC-3) | ROU-20 |
+| `POST /api/v1/router/admin/reload` | routing.json explizit neu laden (loopback-only) | ROU-18 |
+| `POST /api/v1/router/admin/panels/` | panels-Eintrag schreiben/aktualisieren (loopback-only) | ROU-29 |
 
 ## Dateien
 
