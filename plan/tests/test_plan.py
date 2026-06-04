@@ -1531,6 +1531,66 @@ def test_DCOMP_2_admin_reload_aktualisiert_snapshot(reload_client):
     assert fallback.kalender_id == "neu@group.calendar.google.com"
 
 
+def test_DCOMP_2_db_datei_wechsel_wirksam_ohne_restart(tmp_path, demo_registry):
+    """db_datei-Pfad-Wechsel in plan.json wirkt sofort (Closes #233).
+
+    DCOMP-2 (#210): `_db()` liest den Pfad per `_current_config()` pro
+    Aufruf frisch von Disk. Ändert ein Skill `db_datei` in plan.json, muss
+    der nächste `_db()`-Aufruf die NEUE Datei öffnen — ohne Service-Restart.
+
+    Prüfaufbau: zwei SQLite-Dateien mit je einer unterscheidbaren Zeile
+    (week_start 'alt-db' bzw. 'neu-db'). Vor dem Config-Wechsel antwortet
+    `_db()` auf DB-A, danach auf DB-B — der Inhalt bestätigt jeweils die
+    richtige Datei."""
+    cfg_path = tmp_path / "plan.json"
+    db_a = tmp_path / "plan_a.db"
+    db_b = tmp_path / "plan_b.db"
+
+    # DB-A vorbefüllen: Sentinel-Zeile 'alt-db'.
+    conn_a = db_mod.connect(str(db_a))
+    conn_a.execute(
+        "INSERT INTO week_assignments (week_start, day, slot, person_id) "
+        "VALUES ('alt-db', 0, 'bring', 'niclas')")
+    conn_a.commit()
+    conn_a.close()
+
+    # DB-B vorbefüllen: Sentinel-Zeile 'neu-db'.
+    conn_b = db_mod.connect(str(db_b))
+    conn_b.execute(
+        "INSERT INTO week_assignments (week_start, day, slot, person_id) "
+        "VALUES ('neu-db', 0, 'bring', 'vera')")
+    conn_b.commit()
+    conn_b.close()
+
+    # Plan-Buddy mit DB-A starten (config_path gesetzt → Reload-on-Read aktiv).
+    data = json.loads(json.dumps(DEMO_CONFIG))
+    data["db_datei"] = str(db_a)
+    cfg_path.write_text(json.dumps(data))
+    cfg = config_mod.resolve(str(cfg_path))
+    plan_main.configure(cfg, demo_registry, FakeTransport(),
+                        config_path=str(cfg_path))
+
+    # Vor dem Wechsel: _db() öffnet DB-A → Sentinel 'alt-db' sichtbar.
+    conn_vor = plan_main._db()
+    rows_vor = conn_vor.execute(
+        "SELECT week_start FROM week_assignments").fetchall()
+    week_starts_vor = [r[0] for r in rows_vor]
+    conn_vor.close()
+    assert week_starts_vor == ["alt-db"]
+
+    # Skill schreibt db_datei auf DB-B in plan.json — kein Service-Restart.
+    data["db_datei"] = str(db_b)
+    cfg_path.write_text(json.dumps(data))
+
+    # Nach dem Wechsel: _db() liest plan.json frisch → öffnet DB-B.
+    conn_nach = plan_main._db()
+    rows_nach = conn_nach.execute(
+        "SELECT week_start FROM week_assignments").fetchall()
+    week_starts_nach = [r[0] for r in rows_nach]
+    conn_nach.close()
+    assert week_starts_nach == ["neu-db"]
+
+
 # ============================================================
 #  PLAN-30 — GET /api/v1/plan/zuteilung (Lese-API analog FAM-7)
 # ============================================================
