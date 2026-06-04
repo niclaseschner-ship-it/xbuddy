@@ -609,9 +609,85 @@ Last-Known-Good-Cache (ROU-27) rein upstream-first mit Fallback arbeitet
 Impl-PR fest — die hier festgelegte loopback-/`/admin/`-Invariante gilt
 für jede exponierte Kante unabhängig davon (OPEN-PREG-F).
 
+ROU-29 ist die erste konkrete Ausprägung dieser loopback-/`/admin/`-Kante:
+die panels-Schreib-API.
+
 *Tests:* ROU-17 Mindest-Abdeckung für dieses Requirement: #58
 
 *Tickets:* #58
+
+### ROU-29 — `POST /api/v1/router/admin/panels/` — panels-Eintrag schreiben/aktualisieren
+Der Router exponiert eine **konkrete Schreib-Kante** für den
+`panels`-Abschnitt der `routing.json` (ROU-18). Sie ist die zweite, konkrete
+Ausprägung der loopback-/`/admin/`-Invariante aus ROU-28 (die erste ist der
+Admin-Reload, ROU-18) und der Endpunkt, den der panel-Service für die
+2-Schritt-Anlage und den Reconcile-Pfad ruft (`panel-registry.md` PREG-16/PREG-17).
+
+**Endpunkt-Form.** `POST /api/v1/router/admin/panels/` — konsistent zum
+bestehenden Admin-Reload (`POST /api/v1/router/admin/reload`, ROU-18): unter
+`/api/v1/router/admin/` (URL-4: `/api/v1/`, Komponente `router`, dann das
+`admin/`-Segment), Collection `panels` im Plural.
+
+**Body.** JSON-Objekt `{ "source_id": <string>, "display_id": <string> }`.
+Der Endpunkt schreibt oder aktualisiert genau **einen** `panels`-Eintrag der
+`routing.json` — die Map-Zeile `source_id → { display_id }` (ROU-18). Ist die
+`source_id` schon vorhanden, wird ihr `display_id` überschrieben (Umzug eines
+Panels auf ein anderes Display); ist sie neu, wird die Zeile angelegt. **Genau
+ein Display pro Panel-Instanz** (Singular `display_id`, E-PANEL-5 / ROU-24) —
+ein `display_ids`-Plural im Body ist eine Schema-Verletzung (4xx), damit die
+veraltete Plural-Form (vom `_parse_routing`-Pfad in ROU-18 schon abgelehnt) gar
+nicht erst in die Datei gelangt.
+
+**Loopback-/`/admin/`-geschützt (ROU-28).** Die Kante ist **loopback-only**
+(gleicher `_is_loopback`-Guard wie der Admin-Reload, `127.0.0.1`/`::1`) und
+liegt unter `/admin/`, das nginx von außen blockt
+(`deploy/nginx/xbuddy-origin.conf`). **Nur der panel-Service** ruft sie über
+Loopback (PREG-16/PREG-17); kein Controller-Gerät und kein Familienmitglied
+erreicht sie. Ein Aufruf von einer nicht-Loopback-Origin bekommt 403 (wie der
+Admin-Reload).
+
+**GER-Validierung gegen die Geräte-Registry, nicht gegen `known_displays`.**
+Vor dem Schreiben prüft der Router, dass `display_id` **in der Geräte-Registry
+existiert** — über deren HTTP-Lese-Schnittstelle (`geraete.md` GER-14,
+`GET /api/v1/geraete/<id>`, DCOMP-1), genau wie die Panel-Registry beim Anlegen
+(PREG-7). **Nicht** gegen `known_displays`/die eigene `routing.json` des
+Routers: Validierte man dort, würde ein `panels`-Eintrag für ein frisch
+angelegtes Display abgelehnt, solange noch kein `entries`-Eintrag dieses
+Display referenziert — derselbe zeitliche Kopplungs-Fehler, den PREG-7
+beschreibt (Muss-Korrektur 1 der Ratifizierung). Die Geräte-Registry weiß
+zuerst, dass ein Display existiert.
+
+**Atomar geschrieben, sofort sichtbar.** Der Eintrag wird **atomar** in die
+`routing.json` geschrieben (Temp-Datei + `os.replace`, DCOMP-4) — ein parallel
+laufender Lookup (ROU-9/ROU-24) sieht nie eine halb geschriebene Datei. Weil der
+Router `routing.json` **pro Aufruf frisch von Disk** liest (Reload-on-Read,
+DCOMP-2 / ROU-18), wird der neue `panels`-Eintrag vom nächsten
+`tile_selected`-Lookup (ROU-24) **ohne Service-Restart und ohne expliziten
+Reload-Trigger** gesehen. Ein expliziter Admin-Reload (ROU-18) ist nicht nötig,
+aktualisiert aber wie gehabt den Snapshot-Cache.
+
+**Fehlerverhalten.**
+
+| Fall | Antwort |
+|---|---|
+| Schreiben/Aktualisieren erfolgreich | 200, JSON `{ "written": true, "source_id": <…>, "display_id": <…> }` |
+| Fehlendes Pflichtfeld (`source_id`/`display_id`) oder `display_ids`-Plural im Body | 400, JSON `{ "error": "<Feld>" }` (ROU-5-Form) |
+| `display_id` in der Geräte-Registry unbekannt (GER-14 → 404) | 400, JSON `{ "error": "display unbekannt" }` |
+| Geräte-Registry nicht erreichbar | 503, JSON-Fehler — `routing.json` bleibt unverändert (kein stilles Durchwinken, symmetrisch zu PREG-7) |
+| IO-/Schreibfehler (`routing.json` nicht schreibbar, atomares Replace scheitert) | 503, JSON-Fehler — `routing.json` bleibt unverändert |
+| Aufruf von nicht-Loopback-Origin | 403 (ROU-28, wie Admin-Reload) |
+
+Der Router schreibt **nur** den `panels`-Abschnitt; der `entries`-Abschnitt
+(descriptor-basiertes Matching, ROU-9) bleibt von dieser Kante unberührt — die
+Read-Modify-Write-Operation liest die ganze `routing.json`, ersetzt genau die
+eine `panels`-Zeile und schreibt das Gesamtobjekt atomar zurück. Parallele
+`POST`s werden serialisiert (Schreib-Lock), damit zwei verschiedene
+`source_id`-Einträge beide landen — kein verlorengehendes Update (symmetrisch zu
+PREG-15 / GER-15).
+
+*Tests:* ROU-17 Mindest-Abdeckung für dieses Requirement: #329
+
+*Tickets:* #329
 
 ## 7. Tests
 
@@ -657,8 +733,18 @@ Mindest-Abdeckung:
 - ROU-28 — eine panel-bezogene Schreib-/Reload-Kante unter `/admin/`
   antwortet auf Loopback; eine Anfrage von einer externen, nicht-Loopback-
   Origin (ohne `/admin/`-Freigabe durch nginx) erreicht sie nicht.
+- ROU-29 — `POST /api/v1/router/admin/panels/` mit gültigem
+  `{source_id, display_id}` (Geräte-Registry gestubbt, Display bekannt)
+  schreibt den `panels`-Eintrag atomar und der nächste `tile_selected`-Lookup
+  (ROU-24) sieht ihn ohne Reload; ein zweiter POST mit gleicher `source_id`
+  und anderem `display_id` aktualisiert die Zeile (Umzug); fehlendes
+  Pflichtfeld bzw. `display_ids`-Plural ist 400; `display_id` in der
+  Geräte-Registry unbekannt ist 400; Geräte-Registry nicht erreichbar ist 503
+  (`routing.json` unverändert); Disk-Schreibfehler ist 503 (`routing.json`
+  unverändert); ein Aufruf von nicht-Loopback-Origin bekommt 403; der
+  `entries`-Abschnitt bleibt unberührt.
 
-*Tickets:* #5, #24, #58
+*Tickets:* #5, #24, #58, #329
 
 ---
 
