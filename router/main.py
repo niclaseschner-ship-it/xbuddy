@@ -16,6 +16,7 @@ import logging
 import os
 import queue
 import sys
+import tempfile
 import threading
 import urllib.request
 import urllib.error
@@ -173,6 +174,7 @@ runtime_config = {
     'controller_dir':    '',              # ROU-23: leer = Default aus DEFAULT_CONTROLLER_DIR
     'icon_root':         '',              # ROU-26: leer = Default aus DEFAULT_ICON_ROOT
     'panel_service_url': '',             # ROU-27: leer = Default 127.0.0.1:5041
+    'geraete_url':       '',             # ROU-29: leer = Default aus DEFAULT_GERAETE_URL
 }
 
 # ROU-27 / PREG-9: Last-Known-Good-Cache für Panel-Instanz-Serving.
@@ -449,6 +451,125 @@ def reload_routing():
 
 
 # ============================================================
+#  Geräte-Validierung + panels-Schreib-Kante (ROU-29)
+# ============================================================
+#
+# ROU-29 ist die konkrete panels-Schreib-Kante: der panel-Service ruft sie
+# (PREG-16/PREG-17), um `source_id → { display_id }` in die routing.json zu
+# schreiben. Vor dem Schreiben wird `display_id` gegen die Geräte-Registry
+# validiert (GER-14, DCOMP-1 über HTTP) — NICHT gegen known_displays/die eigene
+# routing.json, sonst würde ein frisch angelegtes Display abgelehnt, solange
+# noch kein entries-Eintrag es referenziert (Muss-Korrektur 1 der Ratifizierung,
+# symmetrisch zu PREG-7).
+
+# Geräte-Registry-Default (GER/5040, PORT-2) — analog panel/main.py.
+DEFAULT_GERAETE_URL = 'http://127.0.0.1:5040'
+
+# ROU-29: parallele POSTs serialisieren, damit zwei verschiedene source_ids
+# beide landen (kein lost update; symmetrisch zu PREG-15 / GER-15).
+_panels_write_lock = threading.Lock()
+
+
+def _geraete_base():
+    """URL-Basis der Geräte-Registry (ROU-29). Konfigurierbar via runtime_config
+    (geraete_url) / ENV ROUTER_GERAETE_URL / CLI --geraete-url.
+    Default: http://127.0.0.1:5040 (GER, PORT-2)."""
+    return runtime_config.get('geraete_url') or DEFAULT_GERAETE_URL
+
+
+class _GeraeteUnreachable(Exception):
+    """Die Geräte-Registry ist nicht erreichbar — ROU-29 → 503."""
+
+
+class _PanelsWriteError(Exception):
+    """Atomares Schreiben der routing.json schlug fehl — ROU-29 → 503.
+    Die alte routing.json bleibt dabei unverändert (Temp + os.replace)."""
+
+
+def display_existiert(display_id):
+    """Prüft per HTTP gegen die Geräte-Registry, ob `display_id` existiert.
+
+    GER-14 / ROU-29: `GET <geraete_url>/api/v1/geraete/<display_id>`. 200 →
+    existiert (True), 404 → unbekannt (False). Jeder Transport- oder sonstige
+    Fehler ist `_GeraeteUnreachable` (ROU-29 → 503): ein panels-Eintrag auf ein
+    nicht validierbares Display zu schreiben ist keine sichere Default-Annahme.
+
+    Bewusst über HTTP, KEIN Python-Import der Geräte-Komponente (DCOMP-1). Auf
+    Modulebene, damit Tests sie stubben können (analog panel/main.py)."""
+    base = _geraete_base().rstrip('/')
+    url = '%s/api/v1/geraete/%s' % (base, display_id)
+    try:
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            return resp.status == 200
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return False
+        # Andere HTTP-Fehler (5xx der Geräte-Registry) sind kein „unbekannt",
+        # sondern ein nicht-validierbarer Zustand → unreachable (503).
+        raise _GeraeteUnreachable(
+            'Geräte-Registry antwortet mit %s' % e.code) from e
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        raise _GeraeteUnreachable(str(e)) from e
+
+
+def _write_panels_entry(source_id, display_id):
+    """ROU-29: schreibt/aktualisiert genau EINEN panels-Eintrag in der
+    routing.json (Read-Modify-Write des ganzen Objekts, entries unberührt) und
+    schreibt atomar zurück (Temp-Datei + os.replace, DCOMP-4).
+
+    Liest die aktuelle routing.json frisch von Disk (existiert sie nicht oder ist
+    sie unparsebar, wird mit leerem Grundgerüst begonnen — der Router läuft auch
+    ohne fertige Tabelle, ROU-18), ersetzt die eine `source_id`-Zeile im
+    `panels`-Abschnitt und schreibt das Gesamtobjekt atomar. Bei IO-/Replace-
+    Fehler bleibt die alte Datei unverändert und es wird `_PanelsWriteError`
+    geworfen (ROU-29 → 503).
+
+    Der Aufrufer hält `_panels_write_lock`, damit parallele POSTs serialisiert
+    sind (kein lost update)."""
+    if not routing_path:
+        raise _PanelsWriteError('kein routing.json-Pfad konfiguriert')
+
+    # Read: ganze Datei laden (Read-Modify-Write). Fehlt/kaputt → leeres
+    # Grundgerüst, damit der erste panels-Eintrag auch ohne Tabelle landet.
+    try:
+        with open(routing_path) as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            data = {}
+    except (FileNotFoundError, OSError, json.JSONDecodeError) as e:
+        logging.warning(
+            'routing.json für panels-Write nicht lesbar (%s) — beginne mit '
+            'leerem Grundgerüst', e)
+        data = {}
+
+    # Modify: nur die eine panels-Zeile; entries bleibt unangetastet.
+    raw_panels = data.get('panels')
+    if not isinstance(raw_panels, dict):
+        raw_panels = {}
+    raw_panels[source_id] = {'display_id': display_id}
+    data['panels'] = raw_panels
+
+    # Write: atomar (Temp-Datei im Zielverzeichnis + os.replace, DCOMP-4) — ein
+    # parallel laufender Lookup (ROU-9/ROU-24) sieht nie eine halb geschriebene
+    # Datei. Bei Fehler wird die Temp-Datei aufgeräumt; die alte Datei bleibt.
+    target_dir = os.path.dirname(os.path.abspath(routing_path)) or '.'
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        prefix='.routing.', suffix='.json.tmp', dir=target_dir)
+    try:
+        with os.fdopen(tmp_fd, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.write('\n')
+        os.replace(tmp_path, routing_path)
+    except OSError as e:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise _PanelsWriteError(
+            'routing.json konnte nicht geschrieben werden: %s' % e) from e
+
+
+# ============================================================
 #  Flask-App
 # ============================================================
 
@@ -570,6 +691,69 @@ def admin_reload():
     return jsonify({
         'reloaded': True,
         'details':  'routing.json reloaded (%d Einträge)' % n,
+    }), 200
+
+
+# ============================================================
+#  Admin: panels-Eintrag schreiben (ROU-29) — POST /api/v1/router/admin/panels/
+# ============================================================
+#
+# Zweite, konkrete Ausprägung der loopback-/`/admin/`-Invariante aus ROU-28
+# (die erste ist der Admin-Reload oben). Der panel-Service ruft diese Kante für
+# die 2-Schritt-Anlage und den Reconcile-Pfad (panel-registry.md PREG-16/PREG-17),
+# um `source_id → { display_id }` in die routing.json zu schreiben. Loopback-only
+# (gleicher _is_loopback-Guard); nginx blockt /admin/ zusätzlich von außen.
+
+@app.route('/api/v1/router/admin/panels/', methods=['POST'])
+def admin_write_panel():
+    # ROU-28: loopback-only, gleicher Guard und gleiche 403-Form wie admin_reload.
+    if not _is_loopback(request.remote_addr or ''):
+        logging.warning('admin/panels abgelehnt: remote_addr=%s', request.remote_addr)
+        return jsonify({
+            'written': False,
+            'error':   'nur 127.0.0.1 darf den Endpoint erreichen',
+        }), 403
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({'error': 'JSON-Body fehlt oder ungültig'}), 400
+
+    # ROU-29 / E-PANEL-5: Singular `display_id` erzwingen. Die veraltete
+    # Plural-Form `display_ids` ist eine Schema-Verletzung (ROU-5-Form, 400),
+    # damit sie gar nicht erst in die Datei gelangt.
+    if 'display_ids' in body:
+        return jsonify({'error': 'display_ids'}), 400
+    source_id = body.get('source_id')
+    if not isinstance(source_id, str) or not source_id:
+        return jsonify({'error': 'source_id'}), 400
+    display_id = body.get('display_id')
+    if not isinstance(display_id, str) or not display_id:
+        return jsonify({'error': 'display_id'}), 400
+
+    # ROU-29: display_id gegen die Geräte-Registry validieren (GER-14, HTTP) —
+    # NICHT gegen known_displays. Unbekannt → 400, Registry nicht erreichbar →
+    # 503 (routing.json bleibt unverändert, kein stilles Durchwinken).
+    try:
+        if not display_existiert(display_id):
+            return jsonify({'error': 'display unbekannt'}), 400
+    except _GeraeteUnreachable as e:
+        logging.warning('admin/panels: Geräte-Registry nicht erreichbar: %s', e)
+        return jsonify({'error': 'Geräte-Registry nicht erreichbar'}), 503
+
+    # ROU-29: parallele POSTs serialisieren (kein lost update); atomar schreiben.
+    # IO-/Replace-Fehler → 503, routing.json bleibt unverändert.
+    try:
+        with _panels_write_lock:
+            _write_panels_entry(source_id, display_id)
+    except _PanelsWriteError as e:
+        logging.warning('admin/panels: Schreiben fehlgeschlagen: %s', e)
+        return jsonify({'error': str(e)}), 503
+
+    logging.info('admin/panels: %s → %s geschrieben', source_id, display_id)
+    return jsonify({
+        'written':    True,
+        'source_id':  source_id,
+        'display_id': display_id,
     }), 200
 
 
@@ -911,6 +1095,7 @@ RUNTIME_SCHEMA = {
     'controller_dir':    '',  # ROU-23: leer = DEFAULT_CONTROLLER_DIR
     'icon_root':         '',  # ROU-26: leer = DEFAULT_ICON_ROOT
     'panel_service_url': '',  # ROU-27: leer = http://127.0.0.1:5041 (PORT-2)
+    'geraete_url':       '',  # ROU-29: leer = http://127.0.0.1:5040 (GER, PORT-2)
 }
 
 
@@ -929,6 +1114,8 @@ def parse_args(argv):
                    help='Pfad zur Icon-Bibliothek (ROU-26, ICONS-2)')
     p.add_argument('--panel-service-url', dest='panel_service_url',
                    help='URL-Basis des panel-Service (ROU-27, Default http://127.0.0.1:5041)')
+    p.add_argument('--geraete-url', dest='geraete_url',
+                   help='URL-Basis der Geräte-Registry (ROU-29, Default http://127.0.0.1:5040)')
     p.add_argument('--cert', help='TLS-Cert (optional, für HTTPS-Modus)')
     p.add_argument('--key',  help='TLS-Key (optional, für HTTPS-Modus)')
     return p.parse_args(argv)
@@ -940,7 +1127,7 @@ def resolved_config(args):
 
     ENV-Konvention: `<COMPONENT>_<KEY>` → `ROUTER_LISTEN_HOST`,
     `ROUTER_LISTEN_PORT`, `ROUTER_LOG_LEVEL`, `ROUTER_CONTROLLER_DIR`,
-    `ROUTER_ICON_ROOT`.
+    `ROUTER_ICON_ROOT`, `ROUTER_GERAETE_URL`.
     """
     # Migrations-Hinweis (#102): die alten CDP-Push-Keys aus dem abgelösten
     # ROU-21 werden ignoriert — eine ältere config.json soll deshalb keinen
@@ -975,6 +1162,7 @@ def resolved_config(args):
     if args.controller_dir:     cfg['controller_dir']    = args.controller_dir
     if args.icon_root:          cfg['icon_root']         = args.icon_root
     if args.panel_service_url:  cfg['panel_service_url'] = args.panel_service_url
+    if args.geraete_url:        cfg['geraete_url']       = args.geraete_url
     return cfg
 
 
@@ -987,9 +1175,11 @@ def main(argv=None):
     runtime_config['controller_dir']    = cfg.get('controller_dir', '')
     runtime_config['icon_root']         = cfg.get('icon_root', '')
     runtime_config['panel_service_url'] = cfg.get('panel_service_url', '')
+    runtime_config['geraete_url']       = cfg.get('geraete_url', '')
     logging.info('Controller-PWA-Statik: %s', controller_dir())
     logging.info('Icon-Bibliothek (ROU-26): %s', icon_root())
     logging.info('Panel-Service (ROU-27): %s', _panel_service_base())
+    logging.info('Geräte-Registry (ROU-29): %s', _geraete_base())
     load_routing(args.routing)
     ssl_context = None
     if args.cert and args.key:
