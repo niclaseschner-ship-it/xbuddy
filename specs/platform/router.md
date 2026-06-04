@@ -609,8 +609,9 @@ Last-Known-Good-Cache (ROU-27) rein upstream-first mit Fallback arbeitet
 Impl-PR fest — die hier festgelegte loopback-/`/admin/`-Invariante gilt
 für jede exponierte Kante unabhängig davon (OPEN-PREG-F).
 
-ROU-29 ist die erste konkrete Ausprägung dieser loopback-/`/admin/`-Kante:
-die panels-Schreib-API.
+ROU-29 ist die konkrete panels-Schreib-Kante unter dieser
+loopback-/`/admin/`-Invariante (die zweite Ausprägung nach dem Admin-Reload,
+ROU-18).
 
 *Tests:* ROU-17 Mindest-Abdeckung für dieses Requirement: #58
 
