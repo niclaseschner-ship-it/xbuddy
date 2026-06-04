@@ -31,12 +31,16 @@ analog GER-13/14/15; das instanz-fähige Serving der `config.json`/`tiles.json`
 gegen die Geräte-Registry (PREG-7); die loopback-/`/admin/`-geschützte
 Router-Schreib-API (PREG-10).
 
-**Out-of-Scope V1** (Welle 2, je eigenes Ticket): Kopieren/Löschen einer
+**Welle 2 (#329):** der Reconcile-/Reparatur-Pfad für die verteilte
+2-Schritt-Anlage (Panel + Routing-Eintrag) — Forward-on-Create (PREG-16) +
+Repair (PREG-17), Schreib-Kante am Router ist ROU-29. Löst OPEN-PREG-B auf;
+Repair-Trigger ist Heal-on-Boot + Forward-on-Create (Nic-Entscheid 2026-06-04).
+
+**Out-of-Scope V1** (weitere Welle 2, je eigenes Ticket): Kopieren/Löschen einer
 Panel-Instanz und Tile-Editing über die Schnittstelle (V1: Anlegen + Lesen —
-OPEN-PREG-A) · Reconcile-/Reparatur-Pfad für die verteilte 2-Schritt-Anlage
-(Panel + Routing-Eintrag) — OPEN-PREG-B · der Eltern-Chat-Skill, der Panels per
-Telegram anlegt (+ `panel_client.py`) — OPEN-PREG-C · benannte Tile-Sets und
-ein optionales `geraet_id`-Metadatum — OPEN-PREG-D.
+OPEN-PREG-A) · der Eltern-Chat-Skill, der Panels per Telegram anlegt
+(+ `panel_client.py`) — OPEN-PREG-C · benannte Tile-Sets und ein optionales
+`geraet_id`-Metadatum — OPEN-PREG-D.
 
 ## 1. Reichweite
 
@@ -325,7 +329,95 @@ loopback-/`/admin/`-Schranke ist das etablierte Schutzmuster (ROU-Admin-Reload).
 
 *Tickets:* #58
 
-## 6. Konfiguration
+## 5a. Reconcile der 2-Schritt-Anlage (panels.json ↔ Router-`routing.json`)
+
+> **Welle 2, löst OPEN-PREG-B auf.** Eine Panel-Instanz ist erst vollständig
+> betriebsbereit, wenn neben dem `panels.json`-Eintrag (PREG-15) auch der
+> `panels`-Eintrag in der Router-`routing.json` (ROU-18) existiert, über den der
+> App-Panel-Adapter (ROU-24) `tile_selected`/`panel_cleared` auf die richtige
+> `display_id` setzt. Diese beiden Schritte leben in **zwei** Komponenten
+> (panel-Service + Router) — der panel-Service ist ihr **Koordinator**
+> (Ratifizierung: „Nur der panel-Service ruft die Router-Schreib-API").
+> Der Router stellt die konkrete Schreib-Kante als ROU-29 bereit; PREG-16
+> (Forward) und PREG-17 (Repair) legen fest, **wann** der panel-Service sie ruft.
+
+### PREG-16 — Forward: panels.json-Anlage zieht den Router-Eintrag nach
+Nach einer erfolgreichen Anlage (PREG-15: `panels.json`-Eintrag geschrieben)
+ruft der panel-Service die Router-Schreib-API (`router.md` ROU-29,
+`POST /api/v1/router/admin/panels/`) über Loopback (DCOMP-1) und legt den
+zugehörigen `panels`-Eintrag der `routing.json` an —
+`source_id → { display_id }` der frisch angelegten Instanz. Erst danach reagiert
+ein Kachel-Tap auf dem Display (ROU-24).
+
+**Fehler-Semantik der 2-Schritt-Anlage (kein stiller Halbzustand).** Die zwei
+Schritte sind verteilt und können einzeln scheitern:
+
+- **Schritt 1 (PREG-15) scheitert:** nichts ist angelegt, PREG-15 antwortet wie
+  gehabt (400/503), Schritt 2 läuft nicht. Kein Halbzustand.
+- **Schritt 1 ok, Schritt 2 (ROU-29) scheitert** (Router kurz nicht erreichbar,
+  ROU-29 antwortet 5xx, GER zwischen Schritt 1 und 2 weg): Der
+  `panels.json`-Eintrag **bleibt** bestehen (er ist gültig und für sich
+  servier-bar, PREG-9), aber die Instanz ist als **`reconcile-pending`
+  erkennbar** — der panel-Service hält fest, dass für diese `panel_id` der
+  Router-Eintrag noch fehlt, statt den Fehler stillschweigend zu verschlucken.
+  „Erkennbar" heißt mindestens: eine Warnung im Log (LOG-1) und ein Signal an
+  den Aufrufer von PREG-15 (z. B. ein Statusfeld in der Antwort oder ein
+  abgegrenzter Fehlercode), damit der Aufrufer (`panel-anlegen.md` PAA) den
+  Teilerfolg melden kann, statt „fertig" zu signalisieren. Die genaue Form des
+  `reconcile-pending`-Markers ist Impl-Detail; **kein** stiller Halbzustand, in
+  dem ein angelegtes Panel ohne Routing dasteht und niemand es weiß, ist die
+  harte Anforderung.
+
+Der panel-Service braucht dafür die **Router-Origin** als Konfigurationswert
+(PREG-11) — analog zur Geräte-Registry-URL. Er ruft den Router nie per
+Python-Import, sondern ausschließlich über die ROU-29-HTTP-Kante (DCOMP-1).
+
+*Tickets:* #329
+
+### PREG-17 — Repair: panels.json gegen die Router-panels-Map abgleichen
+Der panel-Service gleicht seine `panels.json` (Soll) gegen die `panels`-Map der
+Router-`routing.json` (Ist) ab und **zieht fehlende Einträge nach** — er heilt
+halb angelegte (`reconcile-pending` aus PREG-16) und driftende Panels:
+
+- Für jede Panel-Instanz in `panels.json`, deren `source_id` in der
+  Router-`panels`-Map **fehlt** oder dort auf ein **anderes** `display_id`
+  zeigt, ruft der panel-Service ROU-29 und schreibt den Soll-Eintrag
+  (`source_id → { display_id }` aus `panels.json`).
+- `panels.json` ist dabei die **Quelle der Wahrheit** für die Display-Bindung
+  einer Panel-Instanz (PREG-3); der Router-`panels`-Abschnitt ist die abgeleitete
+  Routing-Sicht. Repair schreibt **nur** in Richtung Router (panel-Service →
+  ROU-29), nie umgekehrt — kein bidirektionaler Merge.
+- **Blind idempotenter Upsert — kein Router-Lese-Endpunkt (Nic-Entscheid
+  2026-06-04).** Repair liest den Ist-Stand der Router-`panels`-Map **nicht**
+  zurück, sondern schreibt jeden Soll-Eintrag aus `panels.json` **unbedingt**
+  über ROU-29 (das ohnehin ein Upsert ist: anlegen-oder-überschreiben). Ein
+  bereits konsistenter Eintrag wird mit demselben Wert überschrieben — ein
+  No-op-Effekt ohne sichtbare Änderung. Damit braucht Repair **keine** schmale
+  Router-Lese-Sicht (`GET …/admin/panels/`) und der Router bekommt **keinen**
+  neuen Lese-Endpunkt — die Router-Fläche bleibt minimal. Begründung: die Zahl
+  der Panel-Instanzen einer Familie ist klein, die paar Upserts beim Heilen sind
+  vernachlässigbar; ein Lese-Endpunkt wäre Fläche auf Vorrat (CLAUDE.md §6).
+
+Repair ist **idempotent**: ein Lauf gegen einen bereits konsistenten Stand
+ändert nichts (ROU-29 schreibt denselben Wert). Schlägt ein einzelner
+ROU-29-Aufruf während eines Repair-Laufs fehl, bleibt die betroffene Instanz
+`reconcile-pending` und der nächste Repair-Lauf versucht es erneut — Repair darf
+nicht beim ersten Fehler den ganzen Lauf abbrechen und die übrigen Instanzen
+ungeheilt lassen.
+
+**Trigger: Heal-on-Boot (Nic-Entscheid 2026-06-04).** Der panel-Service führt
+**beim Start** (vor dem Annehmen von Anfragen) **einmal** einen vollständigen
+Repair-Lauf über alle `panels.json`-Instanzen aus. Service-Neustarts (Pi-Reboot,
+Deploy, `systemctl restart`) sind im Heim-Server-Betrieb der natürliche
+Heil-Moment ([[feedback-pi-service-restart]]); zusammen mit Forward-on-Create
+(PREG-16) ist damit der Normalfall sofort konsistent und ein zur Anlage-Zeit
+abgerissener Schritt 2 spätestens nach dem nächsten Neustart geheilt — ohne
+Scheduler, ohne neuen Endpunkt, ohne Bedien-Eingriff. Ein expliziter
+`POST …/reconcile`-Endpunkt und periodischer Repair sind **nicht** Teil dieser
+Welle (additiv nachrüstbar, falls „nicht bis zum Neustart warten" je echten
+Schmerz erzeugt — siehe „Offene Punkte" `repair_trigger`).
+
+*Tickets:* #329
 
 ### PREG-11 — Konfigurationswerte
 Familienspezifische Werte (die Panel-Instanzen selbst) leben in `panels.json`
@@ -338,6 +430,13 @@ CONFIG-2: jeder Wert hat einen Default und eine Quelle.
 |----------------------|----------------------------------|-----------------------------------------------------|
 | Registry-Datei       | `panels.json` neben dem Code     | Env (`PANELS_REGISTRY`) · CLI (`--panels`)          |
 | Geräte-Registry-URL  | `http://127.0.0.1:5040`          | Env (`GERAETE_URL`) · CLI (`--geraete-url`)         |
+| Router-Origin        | `http://127.0.0.1:5000`          | Env (`ROUTER_URL`) · CLI (`--router-url`)           |
+
+Die **Router-Origin** ist die Loopback-Adresse, an die der panel-Service die
+Schreib-Kante ROU-29 ruft (Forward/Repair, PREG-16/PREG-17). Sie kommt mit Welle
+2 (Reconcile) hinzu; Welle 1 (Anlegen + Lesen, ohne Forward) braucht sie noch
+nicht. Default `http://127.0.0.1:5000` ist der Router-Loopback-Port (ROU-15
+`listen_port`).
 
 Der eigene Loopback-Port des Service `xbuddy-panel` ist **kein** Config-Wert in
 dieser Tabelle, sondern fest im Port-Katalog (PORT-2) vergeben — er ist ein
@@ -387,8 +486,21 @@ Mindest-Abdeckung:
   **mit** Tuning-`config` (z. B. `backoffs`) → Tuning bleibt erhalten + alle
   drei Identitätsfelder sind server-gesetzt; `config.source_id ==
   app-panel:<panel_id>` (PANEL-8-Konsistenz).
+- **PREG-16** — nach erfolgreicher Anlage ruft der panel-Service die
+  Router-Schreib-Kante (ROU-29 gestubbt) mit `{source_id, display_id}` der neuen
+  Instanz; antwortet der Router-Stub mit Erfolg, gilt die Instanz als
+  vollständig; antwortet er mit 5xx/nicht erreichbar, ist die Instanz
+  `reconcile-pending` (erkennbar: Warnung geloggt + Teilerfolg an den Aufrufer
+  signalisiert), aber der `panels.json`-Eintrag bleibt bestehen.
+- **PREG-17** — ein Repair-Lauf gegen einen Router-Stub, dem ein
+  `panels`-Eintrag fehlt bzw. der ein abweichendes `display_id` führt, ruft
+  ROU-29 mit dem Soll aus `panels.json` nach; ein Lauf gegen einen bereits
+  konsistenten Stand ist idempotent (keine ändernde Wirkung bzw. nur
+  Upsert-gleicher Wert); scheitert ein einzelner ROU-29-Aufruf, bleibt die
+  betroffene Instanz `reconcile-pending` und die übrigen werden trotzdem geheilt
+  (kein Abbruch beim ersten Fehler).
 
-*Tickets:* #58
+*Tickets:* #58, #329
 
 ---
 
@@ -401,16 +513,16 @@ Mindest-Abdeckung:
   stabile `key`-Felder aus PANEL-3) ist bereits darauf vorbereitet.
 
 - **OPEN-PREG-B — Reconcile-/Reparatur-Pfad für die 2-Schritt-Anlage
-  (Welle 2).** Eine Panel-Instanz vollständig betriebsbereit zu machen heißt
-  heute zwei verteilte Schritte: (1) den `panels.json`-Eintrag (PREG-15) und
-  (2) den zugehörigen `panels`-Eintrag in der Router-`routing.json` (ROU-18),
-  über den der Adapter (ROU-24) das `tile_selected`/`panel_cleared` auf die
-  richtige `display_id` setzt. Reißt einer der beiden Schritte ab, ist die
-  Instanz halb angelegt. Ein Reconcile-/Reparatur-Pfad (Soll-Abgleich + Nachzug
-  des fehlenden Schritts) ist **Welle 2** — von Nic in der Ratifizierung
-  ausdrücklich als „vollkommen vertretbar" für später eingeordnet. **Nic-Frage:**
-  bestätigen, dass V1 ohne automatischen Reconcile ausgeliefert wird (manuelles
-  Nachziehen des Routing-Eintrags akzeptabel).
+  (Welle 2). → AUFGELÖST durch PREG-16 (Forward) + PREG-17 (Repair), #329.** Die
+  2-Schritt-Anlage (1) `panels.json`-Eintrag (PREG-15) + (2) Router-`panels`-Eintrag
+  (ROU-18 über ROU-29) wird jetzt vom panel-Service als **Koordinator**
+  zusammengeführt: Forward zieht Schritt 2 nach jedem Create (PREG-16), Repair
+  gleicht Drift/Halbzustände ab (PREG-17). Der ursprüngliche Nic-Vorbehalt („V1
+  ohne automatischen Reconcile, manuelles Nachziehen akzeptabel") ist durch den
+  Nic-Entscheid 2026-06-04 abgelöst (**„Forward + Repair, gleich richtig"**) — der
+  Reconcile ist jetzt Requirement, nicht Welle-3-Aufschub. Der Repair-**Trigger**
+  ist mit **Heal-on-Boot + Forward-on-Create** entschieden (siehe
+  `repair_trigger` unten und PREG-16/PREG-17).
 
 - **OPEN-PREG-C — Eltern-Chat-Skill „Panel anlegen" (Welle 2) braucht einen
   namentlichen `handle_update`-Routing-Block.** Der spätere Skill, der eine
@@ -450,6 +562,34 @@ Mindest-Abdeckung:
   Sicherheits-Invariante fest (jede exponierte Kante loopback-/`/admin/`-only),
   unabhängig von dieser Wahl.
 
+- **`repair_trigger` — WIE wird der Repair-Pfad (PREG-17) ausgelöst?
+  → ENTSCHIEDEN: Heal-on-Boot + Forward-on-Create (Nic-Entscheid 2026-06-04,
+  „Forward + Repair, gleich richtig").** Als Requirement in PREG-16/PREG-17
+  petrankert; dieser Eintrag hält die Abwägung und die verworfenen Alternativen
+  fest.
+
+  *Problem (gelöst):* Forward (PREG-16) heilt den Normalfall sofort, aber ein zur
+  Anlage-Zeit abgerissener Schritt 2 bleibt `reconcile-pending`, bis
+  **irgendetwas** Repair anstößt. Ohne definierten Trigger bliebe ein halb
+  angelegtes Panel still liegen.
+
+  *Gewählt: **Heal-on-Boot + Forward-on-Create**.* Forward-on-Create (PREG-16)
+  zieht den Router-Eintrag bei jedem erfolgreichen Create sofort nach;
+  Heal-on-Boot (PREG-17) läuft beim Start des panel-Service einmal über alle
+  `panels.json`-Instanzen und heilt fehlende/driftende Einträge. Familie-3-tauglich
+  und simpel: **kein** neuer Endpunkt, **kein** Scheduler, **kein** Cron — nur ein
+  Repair-Aufruf in der Startsequenz; selbstheilend beim ohnehin stattfindenden
+  Neustart (Pi-Reboot, Deploy, `systemctl restart`, [[feedback-pi-service-restart]]).
+  Erfüllt „gleich richtig" ohne Betriebs-Maschinerie auf Vorrat.
+
+  *Verworfen, additiv nachrüstbar (nichts auf Vorrat, CLAUDE.md §6):*
+  - **Expliziter `POST …/reconcile`-Endpunkt** am panel-Service (loopback/admin),
+    bewusst ausgelöst. Heilt on-demand ohne Neustart, braucht aber einen Auslöser
+    (Mensch/Skill) und mehr Oberfläche. Nachrüsten, wenn „nicht bis zum Neustart
+    warten" echten Schmerz erzeugt.
+  - **Periodischer Repair** (Timer/Watchdog). Heilt ohne Neustart, ist aber ein
+    Hintergrund-Loop mehr für ein selten änderndes Datum — überdimensioniert.
+
 ---
 
 ## Bezug
@@ -460,7 +600,9 @@ Mindest-Abdeckung:
 - **Konsument & Serving-Partner:** `router.md` ROU-18 (`panels`-Abschnitt der
   `routing.json`), ROU-24 (App-Panel-Adapter), ROU-25 (E-RELOAD-1) — der Router
   proxyt/cacht das Instanz-Serving (PREG-9) und schützt seine Schreib-Kante
-  (PREG-10).
+  (PREG-10). **Reconcile-Schreib-Kante:** `router.md` ROU-29
+  (`POST /api/v1/router/admin/panels/`) — die konkrete loopback-/GER-validierte
+  Kante, die der panel-Service in PREG-16 (Forward) und PREG-17 (Repair) ruft.
 - **Serving-Seite:** `app-panel.md` PANEL-2 (URL-Verortung), PANEL-3 (`tiles`),
   PANEL-8 (`config`, OPEN-PANEL-C wird durch PREG-15 erfüllt), E-PANEL-3
   (Daten/Tuning-Trennung → PREG-5), E-PANEL-5 (ein Panel = ein Display →
