@@ -200,10 +200,9 @@ def _db():
     """Öffnet die SQLite-Verbindung (PLAN-9). Pro Request frisch (V1).
 
     DCOMP-2 (#210): `db_datei` kommt aus `_current_config()`, das pro Aufruf
-    frisch von Disk liest — damit wäre ein Pfad-Wechsel in plan.json ohne
-    Service-Restart wirksam. Automatisiert abgedeckt ist hier nur, dass pro
-    Request eine neue Connection geöffnet wird (kein Session-Cache); ein
-    Test für den db_datei-Pfad-Wechsel selbst ist Folge-Ticket #233.
+    frisch von Disk liest — damit ist ein Pfad-Wechsel in plan.json ohne
+    Service-Restart wirksam. Abgedeckt durch
+    test_DCOMP_2_db_datei_wechsel_wirksam_ohne_restart (Closes #233).
     """
     return db_mod.connect(_current_config().db_datei)
 
