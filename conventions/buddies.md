@@ -135,14 +135,15 @@ nginx, dann Code** (URL-14: „erst hier eine Zeile, dann nginx, dann Code").
    ([`module-boundaries.md`](module-boundaries.md) MOD-1..4). *(Nur wenn
    eigenes Python-Paket — heute jeder Prozess-Buddy.)*
 
-> **Bekannte offene Reibung (Beleg, dass die Checkliste nötig ist):** Der
-> Wetter-Buddy ist als Modul auf `main`, und
-> [`module-boundaries.md`](module-boundaries.md) beschreibt `wetter/` bereits
-> als vollwertiges Buddy-Modul unter denselben Contracts — aber `wetter` steht
-> noch **nicht** in den `root_packages` von [`../.importlinter`](../.importlinter).
-> Genau dieser Andockpunkt fehlte beim Wetter-Bau; er wird im Schwester-Ticket
-> #326 (import-linter: Wetter als root_package) nachgezogen. Andockpunkt 6
-> hält das künftig fest.
+> **Beleg, dass die Checkliste nötig ist (am Wetter-Bau aufgetreten):** Der
+> Wetter-Buddy war als Modul auf `main` und in
+> [`module-boundaries.md`](module-boundaries.md) bereits als vollwertiges
+> Buddy-Modul unter denselben Contracts beschrieben — stand aber zunächst
+> **nicht** in den `root_packages` von [`../.importlinter`](../.importlinter),
+> das MOD-1-Gate scannte den Buddy also nicht. Genau dieser Andockpunkt fehlte;
+> mit #326 ist er nachgezogen (`wetter` jetzt in `.importlinter` **und**
+> `pytest.ini`). Andockpunkt 6 hält das künftig fest, damit der nächste Buddy
+> die Lücke nicht wiederholt.
 
 ## Skelett-Datei-Topologie
 
