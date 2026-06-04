@@ -360,9 +360,9 @@ maßgeblich (überschreibt die „Nic-Frage"-Markierungen in PAA-3/PAA-4):
   Auto-Reconcile" ist durch den Entscheid **„Forward + Repair, gleich richtig"**
   abgelöst. Für den Skill ändert sich **nichts** am Vertrag — er sendet
   weiterhin nur den PREG-15-POST (PAA-3.5); der Reconcile liegt eine Schicht
-  tiefer im panel-Service. Offen bleibt allein der Repair-**Trigger**
-  (`panel-registry.md` „Offene Punkte" `repair_trigger`, Nic-Entscheidung) — er
-  berührt diese Spec nicht.
+  tiefer im panel-Service. Der Repair-**Trigger** ist mit **Heal-on-Boot +
+  Forward-on-Create** entschieden (`panel-registry.md` PREG-16/PREG-17,
+  Nic-Entscheid 2026-06-04) — er berührt diese Spec nicht.
 
 - **OPEN-PAA-E — Geräte-Anlage als Voraussetzung selbst aufrufen.** V1 ruft bei
   „kein passendes Display" die Geräte-Anlage (`geraet-anlegen.md` GAA)
