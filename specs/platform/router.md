@@ -413,6 +413,12 @@ folgt `conventions/config.md` **CONFIG-5**.
 | `log_level`      | `INFO`                                                      | `log_level`      | — (offen, OPEN-ROU-C)              |
 | `controller_dir` | `../controller/figuren-erkennung` (relativ zum Router-Code) | `controller_dir` | — (offen, OPEN-ROU-C)              |
 | `icon_root`      | `/home/buddy/apps/icons/` (ICONS-2)                         | `icon_root`      | — (offen, OPEN-ROU-C)              |
+| `panel_service_url` | `http://127.0.0.1:5041` (leer = Default, PORT-2; ROU-27) | `panel_service_url` | — (offen, OPEN-ROU-C)           |
+| `geraete_url`    | `http://127.0.0.1:5040` (leer = Default, GER PORT-2; ROU-29) | `geraete_url`    | — (offen, OPEN-ROU-C)              |
+
+Override-Pfade (Dev-Anhang): `panel_service_url` via ENV
+`ROUTER_PANEL_SERVICE_URL` / CLI `--panel-service-url`; `geraete_url` via ENV
+`ROUTER_GERAETE_URL` / CLI `--geraete-url`.
 
 Werte, die nur als Code-Konstante existieren — ohne Override-Pfad —
 sind Spec-Verletzung (CLAUDE.md §6 Daten vs. Code).
