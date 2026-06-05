@@ -3,7 +3,7 @@
   "provider": "claude",
   "provider_model": "",
   "family_group_chat_id": "-1000000000000",
-  "context_depth": 20,
+  "context_depth": 40,
   "_ca_pem_path": "CAV-3 — Pfad zum oeffentlichen Root-CA-Zertifikat (rootCA.pem), das die CA-Verteilung ausliefert. Niemals der CA-Privatschluessel. Default unten ist die Standard-Ausgabe von tools/ca/make-ca.sh (#36).",
   "ca_pem_path": "../tools/ca/out/rootCA.pem",
   "_familie_origin_url": "FAA-12 / Auftrag #215 — Origin der Familien-Komponente (PORT-2 5010). Skill schreibt/liest Personen ueber HTTP statt direkt im Datei-System.",
