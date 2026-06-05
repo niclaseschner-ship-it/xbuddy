@@ -128,7 +128,32 @@ jeder Privatchat ein eigenes — sie teilen keinen Verlauf. Der Verlauf wird
 dauerhaft gespeichert und übersteht einen Neustart der Instanz. Wie weit er
 zurückreicht, ist konfigurierbar (EC-15).
 
-*Tickets:* #27
+**Persistierung von Tool-Turns (#310).** Tool-Turn-Paare — ein
+`tool_use`-Block (Assistant) und das zugehörige `tool_result`
+(User) — werden vollständig und paarweise in der Gesprächs-Datenbank (EC-16)
+gespeichert. Sie überstehen einen Neustart der Instanz: Das Modell sieht nach
+einem Neustart denselben Kontext wie vor dem Abbruch; kein halbes Paar wird beim
+depth-Schnitt in das Modell-Fenster gereicht, da Anthropic solche
+Nachrichten ablehnt. Das depth-Fenster (EC-15) zählt Einzelnachrichten —
+jeder Tool-Turn (Aufruf wie Ergebnis) zählt je 1 (Begründung für den
+erhöhten Default: EC-15).
+
+Abdeckende Tests: `eltern-chat/tests/test_history.py` (Persistenz, Paar-Schutz
+am depth-Schnitt), `eltern-chat/tests/test_main_history_transcript.py`
+(Orchestrierungs-Seite: vollständiges Tool-Transkript im Kontext nach einem
+Durchlauf).
+
+**Wortlaut persistierter tool_result-Quittungen (#331).** Eine persistierte
+`tool_result`-Quittung, die einen vorgelegten Vorschlag bestätigt, darf NICHT
+suggerieren, der Vorgang sei bereits erledigt oder warte nur auf eine externe
+Bestätigung — sonst verdrängt sie bei einem erneuten „ja" den Werkzeug-Aufruf:
+Das Modell hält die Aufgabe schon für in Bearbeitung und wartet statt zu
+handeln. Sie macht stattdessen klar: Das Werkzeug ist erneut aufzurufen. Der
+Wortlaut ist per Aufgaben-Name parametrisiert, damit das Modell erkennt,
+welches Werkzeug gemeint ist (`_proposal_pending`-Quittung, parametrisiert
+mit dem Aufgaben-Namen).
+
+*Tickets:* #27 · #310 · #331
 
 ### EC-7 — Ehrliche Grenze
 Kann das System eine Anfrage nicht erfüllen — sie liegt außerhalb seiner
@@ -429,7 +454,7 @@ nicht — ONB-6) sind Komponenten-spezifisch und liegen daneben.
 | Familien-Gruppen-Chat-ID   | leer (→ ONB-6 bindet)                       | `family_group_chat_id`  | ONB-6 (Onboarding-Speicher; ENV/Datei sperren) |
 | KI-Anbieter                | `claude`                                    | `provider`              | n/a (Default reicht)                           |
 | Anbieter-Modell            | leer (→ Anbieter-Default)                   | `provider_model`        | n/a (Default reicht)                           |
-| Gesprächskontext-Tiefe     | `20`                                        | `context_depth`         | n/a (Default reicht)                           |
+| Gesprächskontext-Tiefe     | `40`                                        | `context_depth`         | n/a (Default reicht)                           |
 | CA-Pfad                    | `../tools/ca/out/rootCA.pem`                | `ca_pem_path`           | n/a (Default reicht beim Standard-Layout)      |
 | Familien-Origin (FAA, #215) | `http://127.0.0.1:5010`                    | `familie_origin_url`    | n/a (Default reicht beim Standard-Layout)      |
 | Geraete-Origin (GAA, #215) | `http://127.0.0.1:5040`                     | `geraete_origin_url`    | n/a (Default reicht beim Standard-Layout)      |
@@ -438,6 +463,14 @@ nicht — ONB-6) sind Komponenten-spezifisch und liegen daneben.
 | Display-URL-Origin (GAA-3.7) | leer (Bot gibt nur `/display/<id>` aus)   | `display_url_origin`    | — (offen, OPEN-EC-Origin)                      |
 | Plan-JSON-Pfad             | `../plan/plan.json`                         | `plan_json_path`        | n/a (Default reicht beim Standard-Layout)      |
 | Log-Level (LOG-1/LOG-4)    | `INFO`                                      | `log_level`             | n/a (Default reicht; Dev-Override per ENV/CLI) |
+
+**Semantik von `context_depth`.** Der Wert zählt **Einzelnachrichten** — jeder
+Tool-Turn (Aufruf und Ergebnis) zählt je 1, kein Gesprächsrunden-Paar. Seit
+#310 (Tool-Turn-Persistenz) sind persistierte Tool-Turns dauerhaft Teil des
+Verlaufs und verdünnen das sichtbare Gesprächsfenster. Der Default 40
+kompensiert das (vorher: 20). Instanz-Betreiber können den Wert über
+`ELTERNCHAT_CONTEXT_DEPTH` oder `context_depth` in der Konfigurationsdatei
+überschreiben.
 
 Werte, die nur als Code-Konstante existieren — ohne Override-Pfad — sind
 Spec-Verletzung (CLAUDE.md §6 Daten vs. Code).
@@ -462,7 +495,7 @@ KAV-Auswahl-Schritt erhalten: die direkte Schreib-Stelle ist ein
 KAV-X); #140 hat den automatischen ReloadHook geschlossen, die saubere
 HTTP-API-Lösung für den Konfig-Schreibzugriff ist ein eigenes Folge-Ticket.
 
-*Tickets:* #27 · #33 · #179 · #215
+*Tickets:* #27 · #33 · #179 · #215 · #312
 
 ### EC-16 — Gesprächs-Datenbank als Per-Instanz-Datei
 Der dauerhafte Gesprächsverlauf (EC-6) liegt als Datei neben dem Code, je
