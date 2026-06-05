@@ -82,6 +82,35 @@ gh issue list --label "status:ready" --state open
 Sobald sie einen Impl-PR mit `Closes #<nr>` öffnen, übernimmt die
 `ticket-status-flow`-Action den Rest automatisch.
 
+### Der Stempel ist die Membran
+
+`status:ready` trennt zwei Prozesse sauber:
+
+- **`/arbeitstag-prep`** reift Tickets (`status:spec` → `status:ready`): Spec
+  schärfen, Substanz prüfen, gegen frische Merges und das Ledger abgleichen,
+  Nic entscheiden lassen, **dann** stempeln. Unreife Tickets sind sein Revier.
+- **`/arbeitstag`** implementiert — und nimmt **ausschließlich `status:ready`**
+  (`gh issue list --label "status:ready" --state open`). Es reift keine Tickets
+  mehr selbst; was nicht gestempelt ist, gehört in den prep, nicht in den
+  arbeitstag.
+
+Damit der Stempel das tragen kann, muss er verlässlich sein:
+
+- **Mensch/Reviewer setzt ihn** nach Verdikt — nicht automatisch aus einem
+  Label-Reflex.
+- Die **`prep-reconcile`-Action** validiert jeden `status:ready`-Stempel
+  mechanisch: ein **geschlossenes** Issue darf ihn nie tragen (Arbeit erledigt
+  oder verworfen) → die Action entfernt ihn wieder und kommentiert. Das fängt
+  den häufigsten Fehler: einem längst gemergten Ticket versehentlich den Stempel
+  zu geben.
+- Inhaltliche Reife (genug Substanz? re-litigiert es eine schon ratifizierte
+  Entscheidung?) bleibt Agent-Urteil (`watchdog-prep`) + Nic — das kann keine
+  Action entscheiden.
+
+Ratifizierte Architektur-/Design-Entscheidungen liegen in
+[`decisions/`](decisions/INDEX.md) — dort prüft der prep, ob eine Frage schon
+entschieden ist, bevor sie neu beraten wird.
+
 ## Branch, Commit, PR
 
 Die Ticket-Nummer ist der rote Faden:
