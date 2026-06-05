@@ -17,8 +17,6 @@ put_termin auf die neue (titel, beginn, ende=None)-Signatur (AC1, TES-8).
 
 from datetime import date, timedelta
 
-import pytest
-
 from fakes import FakePlanClient, FakeTelegram
 from skills.plan_client import PlanClientError
 from skills.termin_eintragen import (
@@ -35,7 +33,6 @@ from skills.termin_eintragen import (
     termin_eintragen,
 )
 from telegram import TelegramError
-
 
 # ============================================================
 #  FakePlanClientV2 — lokale Erweiterung für TES-6/AC1 (Refs #289)

@@ -51,5 +51,5 @@ def fire_typing(typing_fn):
         return
     try:
         typing_fn()
-    except Exception:  # noqa: BLE001 — Typing ist Komfort, kein Gate
+    except Exception:  # Typing ist Komfort, kein Gate
         logger.debug("fire_typing: Aufruf fehlgeschlagen (geschluckt)", exc_info=True)

@@ -9,9 +9,7 @@ Kontrolle über Statuscodes und Bodys.
 import json
 
 import pytest
-
-from skills.plan_client import PlanClient, PlanClientError, PFAD_TERMINE
-
+from skills.plan_client import PFAD_TERMINE, PlanClient, PlanClientError
 
 # ============================================================
 #  Hilfs-Funktionen

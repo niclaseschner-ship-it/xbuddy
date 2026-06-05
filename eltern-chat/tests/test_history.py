@@ -5,8 +5,7 @@ mitpersistiert; das depth-Fenster darf kein halbes Tool-Paar schneiden.
 """
 
 from history import History
-from model import (ImageBlock, Message, TaskCallBlock, TaskResultBlock,
-                   TextBlock)
+from model import ImageBlock, Message, TaskCallBlock, TaskResultBlock, TextBlock
 
 
 def test_EC_16_missing_db_is_created_empty(tmp_path):

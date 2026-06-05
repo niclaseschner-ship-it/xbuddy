@@ -93,7 +93,7 @@ def load(component, schema, config_path=None):
 def _load_file(path):
     """Liest die JSON-Datei. Fehlt sie, gilt sie als leer (CONFIG-1)."""
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
     except FileNotFoundError:
         return {}

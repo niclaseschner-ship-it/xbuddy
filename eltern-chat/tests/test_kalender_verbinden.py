@@ -17,31 +17,46 @@ kontrollierte Doppelungen ersetzt (kein Netz, KAV-10). Die Patterns folgen
 import json
 import os
 import urllib.parse
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-
-from skills import kalender_verbinden as kv
-from skills import kalender_verbinden_task
 from fakes import FakeTelegram
-from skills.kalender_verbinden import (
-    AUFKLAERUNG_TEXT, BESTAETIGT_MIT_EMAIL, BESTAETIGT_OHNE_EMAIL,
-    CalendarListFetchError, CODE_REMINDER, ERGEBNIS_ABGEBROCHEN,
-    ERGEBNIS_ABGELEHNT, ERGEBNIS_VERBUNDEN, ERGEBNIS_VERBUNDEN_OHNE_KALENDER,
-    KALENDER_AUSWAHL_PROMPT, KALENDER_AUSWAHL_REMINDER, KALENDER_LIST_EMPTY,
-    KALENDER_LIST_FETCH_FAILED, KavInput, NOT_AUTHORIZED, OAUTH_CLIENT_MISSING,
-    PLAN_JSON_WRITE_FAILED, PlanJsonWriteError,
-    TOKEN_EXCHANGE_FAILED, TokenExchangeError, ZD_NAME_ACCESS_TOKEN,
-    ZD_NAME_ACCESS_TOKEN_EXPIRES_AT, ZD_NAME_ACCOUNT_EMAIL,
-    ZD_NAME_OAUTH_CLIENT, ZD_NAME_OAUTH_TOKEN, build_auth_url,
-    exchange_code_for_tokens, extract_code, fetch_calendar_list,
-    format_calendar_list, kalender_verbinden, parse_selection,
-    store_tokens_in_zd, write_kalender_id_to_plan_json)
-from skills.kalender_verbinden_task import (KalenderVerbindenTask, KavSession,
-                                      make_kav_input)
 from model import WRITE
+from skills import kalender_verbinden as kv
+from skills.kalender_verbinden import (
+    AUFKLAERUNG_TEXT,
+    CODE_REMINDER,
+    ERGEBNIS_ABGEBROCHEN,
+    ERGEBNIS_ABGELEHNT,
+    ERGEBNIS_VERBUNDEN,
+    ERGEBNIS_VERBUNDEN_OHNE_KALENDER,
+    KALENDER_LIST_EMPTY,
+    KALENDER_LIST_FETCH_FAILED,
+    NOT_AUTHORIZED,
+    OAUTH_CLIENT_MISSING,
+    PLAN_JSON_WRITE_FAILED,
+    TOKEN_EXCHANGE_FAILED,
+    ZD_NAME_ACCESS_TOKEN,
+    ZD_NAME_ACCESS_TOKEN_EXPIRES_AT,
+    ZD_NAME_ACCOUNT_EMAIL,
+    ZD_NAME_OAUTH_CLIENT,
+    ZD_NAME_OAUTH_TOKEN,
+    CalendarListFetchError,
+    KavInput,
+    PlanJsonWriteError,
+    TokenExchangeError,
+    build_auth_url,
+    exchange_code_for_tokens,
+    extract_code,
+    fetch_calendar_list,
+    format_calendar_list,
+    kalender_verbinden,
+    parse_selection,
+    store_tokens_in_zd,
+    write_kalender_id_to_plan_json,
+)
+from skills.kalender_verbinden_task import KalenderVerbindenTask, KavSession, make_kav_input
 from tasks import TurnContext, build_catalog
-
 
 # ============================================================
 #  Test-Doppelungen — In-Memory-ZD, stream, exchange-doubles
@@ -583,7 +598,7 @@ def test_KAV_7_successful_exchange_writes_four_keys_with_correct_schema():
     tg = FakeTelegram(members=_members(user_id))
     zd = _zd_with_client()
     nm = stream("http://localhost:1/?code=GOOD")
-    fixed = datetime(2026, 5, 26, 12, 0, 0, tzinfo=timezone.utc)
+    fixed = datetime(2026, 5, 26, 12, 0, 0, tzinfo=UTC)
     kalender_verbinden(
         tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
         zd=zd, next_message=nm,
@@ -643,7 +658,7 @@ def test_KAV_7_store_tokens_helper_writes_expected_keys():
     Schlüssel mit korrektem Schema und in stabiler Reihenfolge (Refresh-Token
     zuerst, weil das die PLAN-16-load-bearing Wahrheit ist)."""
     zd = FakeZd()
-    fixed = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    fixed = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
     store_tokens_in_zd(zd, refresh_token="RT", access_token="AT",
                        expires_in=120, account_email="x@example.com",
                        clock=_fixed_clock(fixed))

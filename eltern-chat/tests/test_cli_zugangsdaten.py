@@ -7,7 +7,6 @@ weiter — analog zur ZD-CLI-Anbindung der anderen Komponenten (ZD-8).
 
 import main
 
-
 # -- parse_args: das Flag ist da und übersteuert den Default --------
 
 def test_parse_args_default_zugangsdaten_file_is_none():

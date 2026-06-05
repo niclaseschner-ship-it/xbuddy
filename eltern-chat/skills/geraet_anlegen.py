@@ -30,8 +30,8 @@ GER-15 serverseitig.
 
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 import authz
 import confirm
@@ -39,7 +39,6 @@ from telegram import TelegramError
 
 from skills.geraete_client import GeraeteClientError
 from skills.typing_indicator import fire_typing
-
 
 # ============================================================
 #  Konstanten (GER-2/GER-3 spiegelnde Werte fuer die Konversation)
@@ -436,7 +435,7 @@ def _frage_und_rufe_cav(tg, chat_id, user_id, os_wert,
         return
     try:
         cav_call_hook(os_wert, chat_id, user_id)
-    except Exception as e:  # noqa: BLE001 — CAV-Fehler isoliert melden
+    except Exception as e:  # CAV-Fehler isoliert melden
         logging.warning("geraet_anlegen: CAV-Aufruf fehlgeschlagen: %s", e)
         fire_typing(typing_fn)
         _send(tg, chat_id, CAV_FAILED)

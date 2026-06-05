@@ -4,7 +4,6 @@ import sqlite3
 
 from telemetry import ProviderCall, TelemetryStore, TurnTelemetry
 
-
 # ============================================================
 #  TurnTelemetry — Aggregation, has_calls, format_suffix
 # ============================================================

@@ -5,12 +5,10 @@ identisch zur Pre-#140-Welt; mit Hooks wird die Schreib-Aufgabe nicht
 zurueckgerollt, und mehrere Fehler werden zu EINER Warnung zusammengefasst."""
 
 import pytest
-
 from fakes import FakeReadTask, FakeTelegram, FakeWriteTask
 from hooks import HookContext, HookFailure, HookSuccess
 from model import READ, WRITE
-from tasks import (Catalog, TurnContext, WriteTaskResult, build_catalog,
-                   is_from_private_chat)
+from tasks import Catalog, TurnContext, WriteTaskResult, build_catalog, is_from_private_chat
 
 
 def test_EC_8_register_and_get():

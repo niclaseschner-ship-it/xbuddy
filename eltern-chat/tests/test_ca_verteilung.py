@@ -9,20 +9,16 @@ CAV-6). Telegram ist durch die kontrollierte Doppelung `FakeTelegram` ersetzt
 import inspect
 
 import pytest
-
-from skills import ca_verteilung
-from skills.ca_task import CaVerteilungTask
-from skills.ca_verteilung import (CaVerteilungError, CaVerteilungResult,
-                                  SUPPORTED_GERAETE, verteile_ca)
 from confirm import PendingStore
-from fakes import (FakeProvider, FakeTelegram, make_message,
-                   task_call_response, text_response)
+from fakes import FakeProvider, FakeTelegram, make_message, task_call_response, text_response
 from history import History
 from main import Context, handle_update
 from model import READ
+from skills import ca_verteilung
+from skills.ca_task import CaVerteilungTask
+from skills.ca_verteilung import SUPPORTED_GERAETE, CaVerteilungError, CaVerteilungResult, verteile_ca
 from tasks import TurnContext, build_catalog
 from telegram import TelegramError
-
 
 # Ein realistisches öffentliches Root-CA-Zertifikat (Inhalt belanglos — nur die
 # PEM-Hülle zählt für die Auslieferung). KEIN Privatschlüssel.

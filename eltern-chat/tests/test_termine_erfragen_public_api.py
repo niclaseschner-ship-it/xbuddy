@@ -5,7 +5,6 @@ Public-Helfer exportiert und von TES direkt konsumierbar ist, ohne auf
 das modul-private `_WOCHENTAG_NR` zuzugreifen (CLAUDE.md §6).
 """
 
-import pytest
 
 from skills.termine_erfragen import wochentag_nr_dict
 

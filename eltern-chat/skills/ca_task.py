@@ -15,10 +15,10 @@ Quittungstext zurück — den der Agent dem Familienmitglied weiterreicht.
 
 import logging
 
-from skills import ca_verteilung
-from skills.ca_verteilung import SUPPORTED_GERAETE
 from tasks import ReadTask
 
+from skills import ca_verteilung
+from skills.ca_verteilung import SUPPORTED_GERAETE
 
 # Quittung in den Agent-Loop zurück: die Auslieferung ist bereits passiert,
 # der Agent formuliert daraus seine Antwort.

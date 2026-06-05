@@ -20,13 +20,13 @@ Public-API (was Konsumenten importieren):
 """
 
 from .registry import (
-    Geraet,
     OS_WERTE,
-    Registry,
-    RegistryError,
     STATUS_WERTE,
     TYPEN,
     VERWENDUNGEN,
+    Geraet,
+    Registry,
+    RegistryError,
     load,
     neue_id,
     save,
@@ -34,15 +34,15 @@ from .registry import (
 )
 
 __all__ = [
+    "OS_WERTE",
+    "STATUS_WERTE",
+    "TYPEN",
+    "VERWENDUNGEN",
     "Geraet",
     "Registry",
     "RegistryError",
-    "TYPEN",
-    "VERWENDUNGEN",
-    "OS_WERTE",
-    "STATUS_WERTE",
     "load",
-    "save",
     "neue_id",
+    "save",
     "slugify",
 ]

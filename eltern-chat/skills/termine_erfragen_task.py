@@ -16,10 +16,9 @@ selbst.
 
 import logging
 
-from skills import termine_erfragen as ter_mod
-from skills.plan_client import PlanClient
 from tasks import ReadTask
 
+from skills import termine_erfragen as ter_mod
 
 logger = logging.getLogger(__name__)
 

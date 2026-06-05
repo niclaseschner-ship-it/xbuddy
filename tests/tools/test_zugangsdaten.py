@@ -19,7 +19,7 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__f
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from tools.zugangsdaten import (  # noqa: E402
+from tools.zugangsdaten import (
     DEFAULT_STORE_FILE,
     ENV_STORE_FILE,
     FILE_MODE,
@@ -27,8 +27,7 @@ from tools.zugangsdaten import (  # noqa: E402
     is_owner_only,
     resolve_store_path,
 )
-from tools.zugangsdaten import config as zd_config  # noqa: E402
-
+from tools.zugangsdaten import config as zd_config
 
 # ============================================================
 #  Helpers
@@ -288,8 +287,8 @@ def test_ZD_8_cli_argument_is_parseable():
 def test_ZD_9_suite_imports_no_network_modules():
     """Die Suite zieht keine Netz-Bibliothek — der Speicher ist rein lokal (E-ZD-3)."""
     # store.py und config.py importieren nichts Netzhaftes.
-    import tools.zugangsdaten.store as store_mod
     import tools.zugangsdaten.config as config_mod
+    import tools.zugangsdaten.store as store_mod
     for mod in (store_mod, config_mod):
         src = open(mod.__file__, encoding="utf-8").read()
         assert "import socket" not in src
