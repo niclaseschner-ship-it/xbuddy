@@ -98,16 +98,26 @@ klaren, hart-codierten Hinweis samt der Möglichkeit, es erneut zu versuchen.
 *Tickets:* #33
 
 ### ONB-5 — Persistente Speicherung außerhalb des Repos
-Ein validierter Key wird persistent gespeichert: je Instanz, in einer Datei
-neben dem Code, per `.gitignore` aus dem Repo ausgeschlossen und mit
-Dateirechten auf den Eigentümer beschränkt (`0600`). Die Datei wird *mit*
-diesen restriktiven Rechten angelegt, sodass der Inhalt zu keinem Zeitpunkt
-mit offeneren Rechten auf der Platte liegt — auch nicht zwischen Anlage und
-nachträglichem Setzen der Rechte (analog `zugangsdaten.md` ZD-3). Die
-Speicherung übersteht einen Neustart — eine einmal eingerichtete Instanz
-durchläuft das Onboarding nicht erneut.
+Ein validierter Key und die gebundene Familien-Gruppe (ONB-6) werden persistent
+gespeichert: je Instanz, außerhalb des Repos, mit Dateirechten auf den
+Eigentümer beschränkt (`0600`). Seit #84 liegen diese Werte im zentralen
+Zugangsdaten-Speicher der Instanz (`zugangsdaten.md`, ZD-1: ein Speicher je
+Instanz) — als benannte Zugangsdaten (ZD-2). Es gibt damit nicht mehr zwei
+nebeneinanderliegende Geheimnis-Dateien. Die Speicherung übersteht einen
+Neustart — eine einmal eingerichtete Instanz durchläuft das Onboarding nicht
+erneut.
 
-*Tickets:* #33, #100
+Gelesen wird *read-both*: bevorzugt aus dem zentralen Speicher, ersatzweise —
+solange ein Wert dort noch fehlt — aus der alten Per-Instanz-Datei. Beim ersten
+Laden läuft eine einmalige, idempotente Migration der Alt-Datei in den zentralen
+Speicher (lazy-on-load); danach wird die Alt-Datei zur Seite gelegt
+(`<pfad>.migrated`) und nicht mehr beschrieben. Geschrieben wird ausschließlich
+in den zentralen Speicher; dessen `0600`-Rechte und atomares Schreiben gelten
+nach `zugangsdaten.md` ZD-3 / DCOMP-4. Das tatsächliche Entfernen der
+Alt-Klasse/-Datei ist Schritt 2 der Zwei-Schritt-Deprecation (CLAUDE.md §6) und
+folgt in einem eigenen Ticket.
+
+*Tickets:* #33, #100, #84
 
 ### ONB-6 — Bindung der Familien-Gruppe
 Mit dem erfolgreichen Abschluss des Onboardings wird die Gruppe, in der das
@@ -195,7 +205,14 @@ abnehmen soll. Eine vorhandene Env-/Config-Bindung hat dennoch Vorrang (ONB-6),
 damit ein bewusst gesetzter Wert nicht überschrieben wird.
 
 ### E-ONB-4 — Anbieter-Key persistent außerhalb des Repos
-*Datum:* 2026-05-21
+*Datum:* 2026-05-21 · **Abgelöst durch ZD (#84)**
+
+> **Abgelöst:** Der eigene Onboarding-Speicher (Per-Instanz-Datei neben dem
+> Code) ist durch den zentralen Zugangsdaten-Speicher ersetzt — siehe ONB-5 und
+> `zugangsdaten.md` (ZD-1, OPEN-ZD-B). Schritt 1 (read-both / write-ZD,
+> lazy-Migration) ist mit #84 umgesetzt; das Entfernen der Alt-Klasse/-Datei ist
+> Schritt 2 (Folge-Ticket). Die Entscheidung selbst — Key außerhalb des Repos,
+> nicht im Prozess-Speicher, nicht in der Gesprächs-Datenbank — bleibt gültig.
 
 Der per Onboarding eingegebene Key wird in einer gitignorierten Per-Instanz-
 Datei gespeichert, Dateirechte auf den Eigentümer beschränkt.

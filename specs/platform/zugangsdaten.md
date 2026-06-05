@@ -37,9 +37,11 @@ keinen instanzübergreifenden Speicher — konsistent mit dem Per-Familie-Modell
 ### ZD-2 — Benannte Zugangsdaten
 Eine Zugangsdate ist ein Paar aus **stabilem Namen** und **Wert**. Der Name ist
 der Schlüssel, über den eine Komponente ihr Geheimnis findet (z. B. der
-KI-Anbieter-Key, das Google-OAuth-Token einer App). Namen werden nicht neu
-vergeben. Welche Namen es gibt, wächst mit den Komponenten — der Speicher selbst
-kennt keine feste Liste.
+KI-Anbieter-Key, das Google-OAuth-Token einer App). Der Eltern-Chat etwa legt
+seine zwei Onboarding-Werte unter den stabilen Namen
+`eltern-chat-provider-api-key` und `eltern-chat-family-group-chat-id` ab (#84,
+OPEN-ZD-B). Namen werden nicht neu vergeben. Welche Namen es gibt, wächst mit
+den Komponenten — der Speicher selbst kennt keine feste Liste.
 
 *Tickets:* #37
 
@@ -128,13 +130,16 @@ ZD-5 (Setzen und anschließendes Holen je Name) · ZD-6 (kein Wert im Log).
   Speicher verschlüsselt — und woher der Schlüssel käme —, ist ein eigenes
   Ticket. Kein V1-Bedarf belegt.
 
-- **OPEN-ZD-B — Migration des Eltern-Chat-Onboarding-Speichers.** Der
-  Eltern-Chat hat heute seinen eigenen `OnboardingStore`
+- **OPEN-ZD-B — Migration des Eltern-Chat-Onboarding-Speichers** *(in Umsetzung,
+  Schritt 1 mit #84).* Der Eltern-Chat hatte seinen eigenen `OnboardingStore`
   (`eltern-chat/onboarding_store.py`, ONB-5) für KI-Key und Familien-Gruppen-ID.
-  Sobald der Zentral-Speicher steht, soll der Eltern-Chat darauf umgestellt
-  werden, damit es nicht zwei Speicher gibt. Das ist ein **eigenes** Ticket auf
-  dem Eltern-Chat-Track und folgt der Zwei-Schritt-Regel (CLAUDE.md §6:
-  erst deprecieren, dann entfernen) — nicht Teil dieses Pakets.
+  Er ist nun auf den zentralen Speicher umgestellt, damit es nicht zwei Speicher
+  gibt (ZD-1). Die Migration folgt der Zwei-Schritt-Regel (CLAUDE.md §6):
+  **Schritt 1 (#84, umgesetzt)** — read-both (zentraler Speicher bevorzugt,
+  Alt-Datei als Fallback), write nur in den zentralen Speicher, einmalige
+  lazy-Migration der Alt-Datei beim ersten Laden mit Umbenennung zu
+  `<pfad>.migrated`. **Schritt 2 (Folge-Ticket)** — die Alt-Klasse und die
+  Alt-Datei entfernen, sobald keine Instanz mehr darauf zurückfällt.
 
 ---
 
