@@ -6,11 +6,12 @@ Die Suite läuft OHNE Netz: der Google-Kalender wird über den FakeTransport
 (conftest.py) gedoppelt — die Test-Naht aus plan/kalender.py.
 """
 
-import io
 import json
 import os
+from datetime import date, datetime, timedelta
 
 import pytest
+from conftest import DEMO_CONFIG, FakeTransport
 
 from plan import aktivitaeten as aktivitaeten_mod
 from plan import config as config_mod
@@ -19,11 +20,6 @@ from plan import familie_client as familie_client_mod
 from plan import kalender as kalender_mod
 from plan import main as plan_main
 from plan import render as render_mod
-
-from datetime import date, datetime, timedelta
-
-from conftest import DEMO_CONFIG, FakeTransport  # noqa: E402
-
 
 # ============================================================
 #  Helpers
@@ -702,7 +698,7 @@ def test_PLAN_27_kids_tokens_available():
         os.path.dirname(os.path.abspath(__file__))))
     TOKEN_CSS_PATH = os.path.join(
         REPO_ROOT, "display", "_shared", "design", "tokens.css")
-    css = io.open(TOKEN_CSS_PATH, encoding="utf-8").read()
+    css = open(TOKEN_CSS_PATH, encoding="utf-8").read()
     # Token-Liste: entweder der direkte Token-Name ODER sein Alias genügt.
     # Schritt 2 kann --kids-font-body/--kids-font-display als Aliase ergänzen,
     # ohne dass die Liste hier geändert werden muss.
@@ -794,7 +790,7 @@ def test_PLAN_29_calendar_has_test_seam(demo_registry):
 def test_PLAN_29_every_requirement_has_a_test():
     """PLAN-29: jede Anforderung mit Code-Verhalten hat einen Test.
     Belegt anhand der Test-Namen dieses Moduls."""
-    quelle = io.open(os.path.abspath(__file__), encoding="utf-8").read()
+    quelle = open(os.path.abspath(__file__), encoding="utf-8").read()
     # Jede PLAN-ID mit Code-Verhalten hat einen eigenen Test (PLAN-1 .. PLAN-31).
     # PLAN-21 (Display-Views sind die Schnittstelle zur Familie) hat kein
     # eigenes Code-Verhalten über PLAN-2/3 hinaus — dort mit abgedeckt.
@@ -1342,7 +1338,7 @@ def test_140_reload_endpoint_atomar_bei_parse_fehler(reload_client):
     assert r.status_code == 500
     body = r.get_json()
     assert body["reloaded"] is False
-    assert "error" in body and body["error"]
+    assert body.get("error")
 
     # Alter State unverändert — gleiche Objekte, gleiche kalender_id.
     assert plan_main.runtime["config"] is cfg_before

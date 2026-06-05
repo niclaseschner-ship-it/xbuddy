@@ -15,8 +15,7 @@ import pytest
 # main-Modulen anderer Komponenten (#52).
 sys.path.insert(
     0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from router import main as router_main  # noqa: E402
-
+from router import main as router_main
 
 # ============================================================
 #  Helpers
@@ -1180,7 +1179,7 @@ def test_140_reload_endpoint_atomar_bei_parse_fehler(reload_client):
     assert r.status_code == 500
     body = r.get_json()
     assert body['reloaded'] is False
-    assert 'error' in body and body['error']
+    assert body.get('error')
 
     # Alter State unverändert.
     assert router_main.routing_entries == entries_before

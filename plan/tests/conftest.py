@@ -22,10 +22,9 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__f
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from plan import config as config_mod                   # noqa: E402
-from plan import familie_client as familie_client_mod   # noqa: E402
-from plan import kalender as kalender_mod               # noqa: E402
-
+from plan import config as config_mod  # noqa: E402
+from plan import familie_client as familie_client_mod  # noqa: E402
+from plan import kalender as kalender_mod  # noqa: E402
 
 # ============================================================
 #  FakeTransport — die kontrollierte Kalender-Doppelung (PLAN-29)

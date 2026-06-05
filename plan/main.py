@@ -22,7 +22,7 @@ import argparse
 import logging
 import os
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 from flask import Flask, jsonify, render_template, request

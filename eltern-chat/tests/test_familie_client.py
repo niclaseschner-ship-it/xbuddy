@@ -9,9 +9,7 @@ HTTP-Server, mit voller Kontrolle ueber Statuscodes und Bodys.
 import json
 
 import pytest
-
-from skills.familie_client import (FamilieClient, FamilieClientError,
-                            _multipart_form)
+from skills.familie_client import FamilieClient, FamilieClientError, _multipart_form
 
 
 def _fake_transport(responses):
@@ -105,7 +103,6 @@ def test_foto_hochladen_posts_multipart():
 def test_multipart_form_round_trip():
     """Sanity-Check: Multipart-Body laesst sich mit Pythons cgi-Modul
     zurueckparsen — Boundary, Disposition, Content-Type stimmen."""
-    from io import BytesIO
     from email.parser import BytesParser
     from email.policy import default
 

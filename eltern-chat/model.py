@@ -10,7 +10,6 @@ Konfigurations-Änderung.
 
 from dataclasses import dataclass, field
 
-
 # ============================================================
 #  Inhalts-Blöcke einer Nachricht
 # ============================================================

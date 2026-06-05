@@ -14,7 +14,6 @@ import sqlite3
 
 from model import ImageBlock, Message, TaskCallBlock, TaskResultBlock, TextBlock
 
-
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,

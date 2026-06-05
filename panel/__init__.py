@@ -35,8 +35,8 @@ __all__ = [
     "Registry",
     "RegistryError",
     "load",
-    "save",
     "neue_id",
+    "save",
     "slugify",
     "source_id_for",
 ]

@@ -27,7 +27,6 @@ import json
 import logging
 import urllib.parse
 import urllib.request
-from datetime import date, datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -104,8 +103,20 @@ class Tageswetter:
     aber die View zeigt sie nie (E-WETTER-2).
     """
 
-    __slots__ = ("desc", "kind", "temp", "feelsLike", "low", "high", "wind",
-                 "rainProb", "rainAmount", "uv", "uvLabel", "sunscreen")
+    __slots__ = (
+        "desc",
+        "feelsLike",
+        "high",
+        "kind",
+        "low",
+        "rainAmount",
+        "rainProb",
+        "sunscreen",
+        "temp",
+        "uv",
+        "uvLabel",
+        "wind",
+    )
 
     def __init__(self, desc, kind, temp, feelsLike, low, high, wind,
                  rainProb, rainAmount, uv, uvLabel, sunscreen):
@@ -209,7 +220,7 @@ class OpenMeteoTransport:
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
                 raw = resp.read()
             return json.loads(raw)
-        except Exception as e:  # noqa: BLE001 — jeder Netzfehler → WETTER-17
+        except Exception as e:  # jeder Netzfehler → WETTER-17
             raise WetterUnavailable(
                 "Open-Meteo-Abruf fehlgeschlagen: %s" % e) from e
 

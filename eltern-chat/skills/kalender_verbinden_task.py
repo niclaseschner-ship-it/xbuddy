@@ -25,10 +25,10 @@ import logging
 
 from hooks import HookContext, ReloadHook
 from private_chat_session import PrivateChatSession
-from skills import kalender_verbinden
-from skills.typing_indicator import make_typing_fn
 from tasks import Proposal, WriteTask, is_from_private_chat
 
+from skills import kalender_verbinden
+from skills.typing_indicator import make_typing_fn
 
 # EC-21 / #140: nach einer erfolgreichen KAV-Aenderung muss der Plan-Buddy
 # seinen Tokens-Cache neu lesen — er konsumiert das Refresh-Token aus dem

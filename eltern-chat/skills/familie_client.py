@@ -28,7 +28,6 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-
 logger = logging.getLogger(__name__)
 
 

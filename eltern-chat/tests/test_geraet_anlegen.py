@@ -15,12 +15,19 @@ import os
 import re
 
 from fakes import FakeTelegram
-from skills.geraet_anlegen import (CANCELLED, CAV_FAILED, GaaInput,
-                            NOT_AUTHORIZED, REJECT_AUFLOESUNG, REJECT_OS,
-                            REJECT_TYP, REJECT_VERWENDUNG, WRITE_FAILED,
-                            geraet_anlegen)
+from skills.geraet_anlegen import (
+    CANCELLED,
+    CAV_FAILED,
+    NOT_AUTHORIZED,
+    REJECT_AUFLOESUNG,
+    REJECT_OS,
+    REJECT_TYP,
+    REJECT_VERWENDUNG,
+    WRITE_FAILED,
+    GaaInput,
+    geraet_anlegen,
+)
 from skills.geraete_client import GeraeteClientError
-
 
 # ============================================================
 #  Test-Doppelungen — FakeGeraeteClient + Eingabe-Strom

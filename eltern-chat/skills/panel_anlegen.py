@@ -25,8 +25,8 @@ nur `{slug, display_id, tiles}`.
 
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 import authz
 import confirm
@@ -34,7 +34,6 @@ from telegram import TelegramError
 
 from skills.panel_client import GeraeteReadError, PanelClientError
 from skills.typing_indicator import fire_typing
-
 
 # ============================================================
 #  Feste App-Kandidatenliste (PAA-3.3, OPEN-PAA-B → feste Liste)

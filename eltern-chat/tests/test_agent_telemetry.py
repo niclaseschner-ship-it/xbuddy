@@ -10,14 +10,11 @@ Geprüft wird:
 
 import time
 
-import pytest
-
 import agent
+import pytest
 from fakes import FakeProvider, FakeReadTask, task_call_response, text_response
-from model import (GenerationResponse, Message, ProviderError, ProviderUsage,
-                   TextBlock)
+from model import GenerationResponse, Message, ProviderError, ProviderUsage, TextBlock
 from tasks import Catalog, TurnContext
-
 
 _TURN = TurnContext(chat_id=42)
 

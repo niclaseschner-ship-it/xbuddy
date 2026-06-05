@@ -30,8 +30,8 @@ entfallen.
 
 import logging
 import struct
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 import authz
 import confirm
@@ -39,7 +39,6 @@ from telegram import TelegramError
 
 from skills.familie_client import FamilieClientError
 from skills.typing_indicator import fire_typing
-
 
 # ============================================================
 #  Konstanten (FAM-3/FAM-4 spiegelnde Werte fuer die Konversation)

@@ -23,9 +23,8 @@ _FAMILIE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _REPO_ROOT = os.path.dirname(_FAMILIE_DIR)
 sys.path.insert(0, _REPO_ROOT)
 
-from familie import main as familie_main      # noqa: E402
+from familie import main as familie_main  # noqa: E402
 from familie import registry as registry_mod  # noqa: E402
-
 
 # ============================================================
 #  Helpers
@@ -738,7 +737,7 @@ def test_FAM_7_in_memory_mode_unchanged_when_no_registry_path(demo_instanz):
 def test_FAM_10_every_requirement_has_a_test():
     """FAM-10: jede Anforderung mit Code-Verhalten hat einen Test.
     Dieser Test belegt die Abdeckung anhand der Test-Namen dieses Moduls."""
-    quelle = io.open(os.path.abspath(__file__), encoding="utf-8").read()
+    quelle = open(os.path.abspath(__file__), encoding="utf-8").read()
     # FAM-1 .. FAM-9 + FAM-11 + FAM-12 + FAM-13 haben Code-Verhalten;
     # FAM-10 ist dieser Test.
     for fam in list(range(1, 10)) + [11, 12, 13]:

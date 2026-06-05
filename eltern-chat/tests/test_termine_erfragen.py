@@ -5,18 +5,19 @@ Jede Anforderung der Spec mit Code-Verhalten hat einen automatisierten Test
 kontrollierte Doppelungen ersetzt — die Tests laufen ohne Netz (EC-17).
 """
 
-import json
 from datetime import date, timedelta
-
-import pytest
 
 from fakes import FakeTelegram
 from skills.plan_client import PlanClientError
 from skills.termine_erfragen import (
-    SIGNAL_ABGELEHNT, SIGNAL_BEANTWORTET, SIGNAL_LEER, SIGNAL_NICHT_ERREICHBAR,
-    formatiere_termine, parse_zeitraum, termine_erfragen,
+    SIGNAL_ABGELEHNT,
+    SIGNAL_BEANTWORTET,
+    SIGNAL_LEER,
+    SIGNAL_NICHT_ERREICHBAR,
+    formatiere_termine,
+    parse_zeitraum,
+    termine_erfragen,
 )
-
 
 # ============================================================
 #  Hilfs-Klassen / Doppelungen

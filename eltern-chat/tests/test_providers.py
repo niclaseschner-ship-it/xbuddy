@@ -5,7 +5,6 @@
 import logging
 
 import pytest
-
 from providers import get_provider
 
 
@@ -69,8 +68,8 @@ def _build_provider_with(monkeypatch, response):
     Doppelung ersetzt ist. Liefert (provider, fake_client)."""
     # Lazy-Import des Adapters; `providers/claude.py` importiert anthropic auf
     # Modul-Ebene — das SDK ist in requirements.txt, also vorhanden.
-    from providers.claude import ClaudeProvider
     import providers.claude as claude_mod
+    from providers.claude import ClaudeProvider
 
     fake_client = _FakeClient(response)
     monkeypatch.setattr(claude_mod.anthropic, "Anthropic",
@@ -91,7 +90,7 @@ def _empty_request():
 def _request_with_tasks():
     """Eine GenerationRequest mit zwei Aufgaben — prüft das Markieren des
     letzten Aufgaben-Eintrags."""
-    from model import GenerationRequest, Message, TaskDef, TextBlock, READ
+    from model import READ, GenerationRequest, Message, TaskDef, TextBlock
     return GenerationRequest(
         system="Du bist ein Test-Bot.",
         messages=[Message(role="user", blocks=[TextBlock("hallo")])],

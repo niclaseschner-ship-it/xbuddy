@@ -14,7 +14,7 @@ import time
 from datetime import date
 
 from confirm import PendingStore
-from fakes import FakePlanClient, FakeTelegram, FakeProvider, make_message
+from fakes import FakePlanClient, FakeProvider, FakeTelegram, make_message
 from history import History
 from main import Context, handle_update
 from skills.termin_eintragen_task import (
@@ -23,8 +23,7 @@ from skills.termin_eintragen_task import (
     TesSession,
     make_tes_input,
 )
-from tasks import Catalog, Proposal, TurnContext, WriteTask, build_catalog
-
+from tasks import Proposal, TurnContext, WriteTask, build_catalog
 
 # ============================================================
 #  Hilfs-Bausteine

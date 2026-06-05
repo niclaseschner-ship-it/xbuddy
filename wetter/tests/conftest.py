@@ -16,9 +16,8 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__f
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from wetter import config as config_mod   # noqa: E402
-from wetter import meteo as meteo_mod     # noqa: E402
-
+from wetter import config as config_mod  # noqa: E402
+from wetter import meteo as meteo_mod  # noqa: E402
 
 # ============================================================
 #  FakeTransport — die kontrollierte Wetter-Doppelung (WETTER-24)

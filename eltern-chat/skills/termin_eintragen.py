@@ -23,17 +23,15 @@ E-TES-4: geteilte Wahrheit, kein Kopieren).
 
 import logging
 import re
-from datetime import date, datetime, timedelta, timezone
-from typing import Callable
+from collections.abc import Callable
+from datetime import date, datetime, timedelta
 
-import authz
 import confirm
-from skills.plan_client import PlanClient, PlanClientError
-from skills.termine_erfragen import (parse_naechsten_wochentag, parse_wochentag,
-                                      parse_zeitraum, wochentag_nr_dict)
-from skills.typing_indicator import fire_typing
 from telegram import TelegramError
 
+from skills.plan_client import PlanClientError
+from skills.termine_erfragen import parse_naechsten_wochentag, parse_wochentag, parse_zeitraum, wochentag_nr_dict
+from skills.typing_indicator import fire_typing
 
 logger = logging.getLogger(__name__)
 

@@ -30,7 +30,6 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
-
 # Timeout fuer einen einzelnen Hook-Aufruf. Kurz halten — der Aufrufer wartet
 # synchron, bevor die Quittung an die Familie geht. Passend zum
 # Router-/Plan-Reload-Vertrag aus #149/#151.
@@ -124,7 +123,7 @@ class ReloadHook:
                             self._url, self._consumer, e.reason)
             return HookFailure(consumer=self._consumer,
                                error="nicht erreichbar (%s)" % e.reason)
-        except Exception as e:   # noqa: BLE001 — Hook-Fehler isoliert melden
+        except Exception as e:  # Hook-Fehler isoliert melden
             logging.warning("ReloadHook %s: unerwarteter Fehler: %s",
                             self._url, e)
             return HookFailure(consumer=self._consumer,

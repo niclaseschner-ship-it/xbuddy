@@ -10,11 +10,17 @@ kontrollierte Doppelungen (EC-17).
 import logging
 
 from confirm import PendingStore
-from fakes import (FakeProvider, FakeReadTask, FakeTelegram, FakeWriteTask,
-                   make_message, task_call_response, text_response)
+from fakes import (
+    FakeProvider,
+    FakeReadTask,
+    FakeTelegram,
+    FakeWriteTask,
+    make_message,
+    task_call_response,
+    text_response,
+)
 from history import History
-from main import Context, handle_update, poll_loop
-from main import _PROVIDER_DOWN
+from main import _PROVIDER_DOWN, Context, handle_update, poll_loop
 from model import ProviderError
 from tasks import Catalog
 from telegram import TelegramError

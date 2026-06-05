@@ -17,15 +17,22 @@ import os
 import struct
 import zlib
 
-from skills import familie_anlegen as fa
-from skills.familie_anlegen import (CANCELLED, DONE_MULTI, DONE_SINGLE, FaaInput,
-                              NOT_AUTHORIZED, REJECT_FOTO_GROSS,
-                              REJECT_FOTO_MIME, REJECT_KIND, REJECT_NAME,
-                              REJECT_RING, REJECT_TELEGRAM_DUP, WRITE_FAILED,
-                              familie_anlegen)
-from skills.familie_client import FamilieClientError
 from fakes import FakeTelegram
-
+from skills.familie_anlegen import (
+    CANCELLED,
+    DONE_MULTI,
+    NOT_AUTHORIZED,
+    REJECT_FOTO_GROSS,
+    REJECT_FOTO_MIME,
+    REJECT_KIND,
+    REJECT_NAME,
+    REJECT_RING,
+    REJECT_TELEGRAM_DUP,
+    WRITE_FAILED,
+    FaaInput,
+    familie_anlegen,
+)
+from skills.familie_client import FamilieClientError
 
 # ============================================================
 #  Test-Doppelungen — FakeFamilieClient + FakeTelegram + Eingabe-Strom

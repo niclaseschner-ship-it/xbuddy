@@ -21,11 +21,11 @@ zurück, die der Agent dem Aufrufer weiterreicht.
 import logging
 
 from private_chat_session import PrivateChatSession
+from tasks import Proposal, WriteTask, is_from_private_chat
+
 from skills import geraet_anlegen
 from skills.geraete_client import GeraeteClient
 from skills.typing_indicator import make_typing_fn
-from tasks import Proposal, WriteTask, is_from_private_chat
-
 
 # Quittung in den Agent-Loop zurück — die Anlage selbst läuft im Privatchat,
 # der Agent formuliert daraus seine kurze Antwort.

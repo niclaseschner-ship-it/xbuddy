@@ -15,7 +15,6 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -158,7 +157,7 @@ class PlanClient:
                     method, path, body=body, content_type=content_type)
             except PlanClientError:
                 raise
-            except (OSError, IOError) as e:
+            except OSError as e:
                 raise PlanClientError(
                     "Plan-Buddy transport-Fehler (%s)" % e) from e
         url = self._origin + path

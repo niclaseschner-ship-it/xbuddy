@@ -1,0 +1,67 @@
+[tool.ruff]
+target-version = "py313"
+line-length = 120              # Zielbreite; E501 ist NICHT erzwungen (siehe ignore) —
+                               # steuert nur Umbruch-Regeln. ruff hat kein "warn"-Level.
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "RUF", "PIE", "PT"]
+ignore = [
+  "RUF001", "RUF002", "RUF003",  # deutsche Typografie (× – etc.) — xbuddy-Idiom
+  "UP031",                       # printf-%-Format: 289 Funde, große Churn, kein Logik-Signal
+  "E501",                        # line-too-long: nicht erzwungen (line-length=120 = Ziel, nicht Gate)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Altlast-Schuld: nicht-autofixbarer Rest, datei-genau geduldet bis zum Anfassen (STYLE-3).
+# Disziplin: beim Bearbeiten einer Datei wird ihr Eintrag ABGEBAUT, nie ergänzt.
+"controller/app-panel/tests/test_app_panel.py" = ["PT018"]  # TODO PT018: beim Anfassen abbauen
+"eltern-chat/agent.py" = ["RUF005", "SIM105"]  # TODO RUF005,SIM105: beim Anfassen abbauen
+"eltern-chat/config.py" = ["B904", "E402"]  # TODO B904,E402: beim Anfassen abbauen
+"eltern-chat/main.py" = ["E402", "SIM108"]  # TODO E402,SIM108: beim Anfassen abbauen
+"eltern-chat/providers/claude.py" = ["B904", "C408"]  # TODO B904,C408: beim Anfassen abbauen
+"eltern-chat/skills/ca_verteilung.py" = ["B904"]  # TODO B904: beim Anfassen abbauen
+"eltern-chat/skills/familie_anlegen.py" = ["C401"]  # TODO C401: beim Anfassen abbauen
+"eltern-chat/skills/familie_client.py" = ["B904"]  # TODO B904: beim Anfassen abbauen
+"eltern-chat/skills/geraet_anlegen.py" = ["SIM102", "SIM108"]  # TODO SIM102,SIM108: beim Anfassen abbauen
+"eltern-chat/skills/geraete_client.py" = ["B904"]  # TODO B904: beim Anfassen abbauen
+"eltern-chat/skills/kalender_verbinden.py" = ["B904", "SIM105", "SIM108"]  # TODO B904,SIM105,SIM108: beim Anfassen abbauen
+"eltern-chat/skills/panel_client.py" = ["B904"]  # TODO B904: beim Anfassen abbauen
+"eltern-chat/skills/plan_client.py" = ["B904"]  # TODO B904: beim Anfassen abbauen
+"eltern-chat/tasks.py" = ["E731"]  # TODO E731: beim Anfassen abbauen
+"eltern-chat/telegram.py" = ["B904"]  # TODO B904: beim Anfassen abbauen
+"eltern-chat/tests/fakes.py" = ["C408"]  # TODO C408: beim Anfassen abbauen
+"eltern-chat/tests/test_agent.py" = ["RUF005"]  # TODO RUF005: beim Anfassen abbauen
+"eltern-chat/tests/test_ca_verteilung.py" = ["B011", "PT006", "PT011", "PT015", "PT018"]  # TODO B011,PT006,PT011,PT015,PT018: beim Anfassen abbauen
+"eltern-chat/tests/test_familie_anlegen.py" = ["PT018", "SIM115"]  # TODO PT018,SIM115: beim Anfassen abbauen
+"eltern-chat/tests/test_geraet_anlegen.py" = ["PT018", "SIM115"]  # TODO PT018,SIM115: beim Anfassen abbauen
+"eltern-chat/tests/test_orchestration.py" = ["SIM105"]  # TODO SIM105: beim Anfassen abbauen
+"eltern-chat/tests/test_panel_anlegen_task.py" = ["C405", "PT018", "RUF015", "SIM105"]  # TODO C405,PT018,RUF015,SIM105: beim Anfassen abbauen
+"eltern-chat/tests/test_providers.py" = ["PT011"]  # TODO PT011: beim Anfassen abbauen
+"eltern-chat/tests/test_tasks.py" = ["PT011"]  # TODO PT011: beim Anfassen abbauen
+"eltern-chat/tests/test_termin_eintragen.py" = ["F841", "PT018", "RUF059"]  # TODO F841,PT018,RUF059: beim Anfassen abbauen
+"eltern-chat/tests/test_termin_eintragen_task.py" = ["F841", "SIM105"]  # TODO F841,SIM105: beim Anfassen abbauen
+"eltern-chat/tests/test_termine_erfragen.py" = ["E741"]  # TODO E741: beim Anfassen abbauen
+"eltern-chat/tests/test_termine_erfragen_task.py" = ["RUF059"]  # TODO RUF059: beim Anfassen abbauen
+"eltern-chat/tests/test_transport.py" = ["SIM201"]  # TODO SIM201: beim Anfassen abbauen
+"familie/main.py" = ["E701", "SIM105"]  # TODO E701,SIM105: beim Anfassen abbauen
+"familie/registry.py" = ["C401", "SIM105"]  # TODO C401,SIM105: beim Anfassen abbauen
+"familie/tests/test_familie.py" = ["E702", "PT018", "RUF005", "RUF059", "SIM115"]  # TODO E702,PT018,RUF005,RUF059,SIM115: beim Anfassen abbauen
+"geraete/main.py" = ["E701"]  # TODO E701: beim Anfassen abbauen
+"geraete/registry.py" = ["SIM105"]  # TODO SIM105: beim Anfassen abbauen
+"geraete/tests/test_main.py" = ["E702", "PT018", "SIM115"]  # TODO E702,PT018,SIM115: beim Anfassen abbauen
+"geraete/tests/test_registry.py" = ["B905", "PT011", "SIM115"]  # TODO B905,PT011,SIM115: beim Anfassen abbauen
+"panel/main.py" = ["E701"]  # TODO E701: beim Anfassen abbauen
+"panel/registry.py" = ["SIM105"]  # TODO SIM105: beim Anfassen abbauen
+"panel/tests/test_panel.py" = ["C401", "E702", "F841", "PT018", "RUF059", "SIM115"]  # TODO C401,E702,F841,PT018,RUF059,SIM115: beim Anfassen abbauen
+"plan/config.py" = ["B904"]  # TODO B904: beim Anfassen abbauen
+"plan/kalender.py" = ["B904"]  # TODO B904: beim Anfassen abbauen
+"plan/main.py" = ["B904", "E701", "SIM102"]  # TODO B904,E701,SIM102: beim Anfassen abbauen
+"plan/tests/test_plan.py" = ["F841", "PT018", "RUF059", "SIM115"]  # TODO F841,PT018,RUF059,SIM115: beim Anfassen abbauen
+"router/main.py" = ["E701", "SIM105"]  # TODO E701,SIM105: beim Anfassen abbauen
+"tests/tools/test_zugangsdaten.py" = ["E402", "PT011", "SIM115"]  # TODO E402,PT011,SIM115: beim Anfassen abbauen
+"tools/zugangsdaten/store.py" = ["SIM105"]  # TODO SIM105: beim Anfassen abbauen
+"wetter/clothing.py" = ["SIM102"]  # TODO SIM102: beim Anfassen abbauen
+"wetter/config.py" = ["B904"]  # TODO B904: beim Anfassen abbauen
+"wetter/main.py" = ["E701"]  # TODO E701: beim Anfassen abbauen
+"wetter/render.py" = ["RUF046"]  # TODO RUF046: beim Anfassen abbauen
+"wetter/tests/test_wetter.py" = ["PT018", "SIM115"]  # TODO PT018,SIM115: beim Anfassen abbauen
