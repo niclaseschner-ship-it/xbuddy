@@ -261,7 +261,11 @@ funktioniert). Läufe gegen den echten Anbieter sind opt-in.
   Punkt ist nur ein Verweis, kein wetter-eigener offener Punkt.
 - **OPEN-WETTER-G — Sonnencreme-Schwelle.** Ab welchem UV-Wert „Ja" — Config
   (`sunscreen_uv`) mit sinnvollem Default; familienspezifisch oder fix ist offen.
-- **OPEN-WETTER-H — Design-System-Reichweite.** Das Design System landet in V1 **wetter-lokal** (`wetter/static/`, Nic 2026-06-02). Ob es repo-weites Fundament für alle Buddys wird (löst `plan/static/design/tokens.css` ab), ist bis zum 2. Buddy vertagt → berater-runde.
+- **OPEN-WETTER-H — Design-System-Reichweite. ENTSCHIEDEN (#323, Nic 2026-06-03):**
+  `wetter/static/design/colors_and_type.css` (v2.0) ist das repo-weite Fundament
+  für alle Buddys. `plan/static/design/tokens.css` (v1.0) wird abgelöst.
+  Konvention: [`conventions/design-tokens.md`](../../conventions/design-tokens.md).
+  Andockpunkt via `/display/_shared/` (DTOK-2) ist Schritt-2-Arbeit (#323).
 
 ---
 

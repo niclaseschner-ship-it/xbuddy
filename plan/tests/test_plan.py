@@ -691,16 +691,34 @@ def test_PLAN_26_stage_dimensions(demo_config, demo_registry):
 #  PLAN-27 — Wireframe-Look: Tokens, keine Hardcodes
 # ============================================================
 
-def test_PLAN_27_tokens_css_taken_verbatim():
-    """tokens.css wurde 1:1 aus dem Handoff übernommen — die --kids-*-Tokens
-    sind vorhanden."""
-    tokens = os.path.join(
+def test_PLAN_27_kids_tokens_available():
+    """Die --kids-*-Tokens (inkl. Font-Tokens) sind in der vom Template
+    referenzierten Token-Datei definiert — kein Hardcode (DTOK-5,
+    conventions/design-tokens.md). Schritt 2 (#323) verschiebt die Datei
+    nach /display/_shared/; dann nur TOKEN_CSS_PATH anpassen."""
+    # TOKEN_CSS_PATH: Pfad relativ zum plan/-Verzeichnis.
+    # Schritt 2 tauscht diesen Pfad gegen den geteilten Strang.
+    TOKEN_CSS_PATH = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
         "static", "design", "tokens.css")
-    css = io.open(tokens, encoding="utf-8").read()
-    for token in ("--kids-bg", "--kids-ink", "--kids-ring-blue",
-                  "--kids-font-display", "--kids-wd-mo-soft"):
-        assert token in css, "Token %s fehlt in tokens.css" % token
+    css = io.open(TOKEN_CSS_PATH, encoding="utf-8").read()
+    # Token-Liste: entweder der direkte Token-Name ODER sein Alias genügt.
+    # Schritt 2 kann --kids-font-body/--kids-font-display als Aliase ergänzen,
+    # ohne dass die Liste hier geändert werden muss.
+    required_tokens = [
+        ("--kids-bg",),
+        ("--kids-ink",),
+        ("--kids-ring-blue",),
+        ("--kids-wd-mo-soft",),
+        # Font-Tokens: direkter Name ODER Alias akzeptiert.
+        ("--kids-font-display", "--font-display"),
+        ("--kids-font-body", "--font-hand"),
+    ]
+    for alts in required_tokens:
+        assert any(tok in css for tok in alts), (
+            "Keiner der Token %s in der Token-Datei — "
+            "PLAN-27/DTOK-5 verletzt" % " / ".join(alts)
+        )
 
 
 # ============================================================
