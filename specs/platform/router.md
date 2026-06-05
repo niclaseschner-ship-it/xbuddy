@@ -567,6 +567,42 @@ kein eigener statischer nginx-Block mehr.
 
 *Tickets:* #135
 
+### ROU-30 — GET /display/_shared/design/&lt;asset&gt; — geteilter Design-Token-Strang
+
+`GET /display/_shared/design/<asset>` liefert den geteilten Design-Token-Strang
+(`display/_shared/design/tokens.css`, Konvention
+[`../../conventions/design-tokens.md`](../../conventions/design-tokens.md)
+DTOK-1/DTOK-2) read-only aus — ein **Zwilling** zur Controller-Helper-Auslieferung
+`/controller/_shared/` (ROU-23). Das Segment `_shared` ist der in
+[`../../conventions/urls.md`](../../conventions/urls.md) URL-16 definierte
+Namensraum für geteilte Display-Assets, die keinem einzelnen Buddy gehören.
+
+Anders als `/display/_shared/icons/` (ROU-26), das auf die **icon-root** als
+Per-Instanz-Daten **außerhalb** des Repos zeigt, liegt der Token-Strang **im
+Repo**: Design-Tokens sind die Marke — bei allen Familien identisch und mit dem
+Code versioniert, kein manueller Pro-Pi-Schritt, keine Divergenz (Nic-Entscheid
+2026-06-05). Der Router serviert daher aus dem festen In-Repo-Verzeichnis
+`display/_shared/design/` (Pfad relativ zu `router/main.py`), genau wie
+`/controller/_shared/` aus `controller/_shared/` (ROU-23) — keine Config-Wurzel.
+Auslieferung wie ROU-23: `send_from_directory` mit explizitem Content-Type
+(`.css` → `text/css`) und Defense-in-Depth-Path-Traversal-Schutz (werkzeug
+`safe_join` + `realpath`-Check gegen die aufgelöste Wurzel).
+
+Acceptance-Kriterien:
+
+| Pfad | Antwort |
+|---|---|
+| `GET /display/_shared/design/tokens.css` | 200, `text/css`, Inhalt aus `display/_shared/design/tokens.css` |
+| Nicht existierendes Asset im Verzeichnis | 404 |
+| Path-Traversal (z. B. `/display/_shared/design/../../router/main.py`) | 404 — kein Dateizugriff jenseits der Wurzel |
+
+In der Origin-Routing-Tabelle
+([`../../conventions/urls.md`](../../conventions/urls.md) URL-14) fällt
+`/display/_shared/design/` — wie `/display/_shared/icons/` — an den allgemeinen
+`/display/`→Router-Eintrag; kein eigener statischer nginx-Block.
+
+*Tickets:* #323
+
 ### ROU-27 — Proxy und Last-Known-Good-Cache für das Panel-Instanz-Serving
 Der Router proxyt die beiden instanz-spezifischen Datendateien an den
 panel-Service (`xbuddy-panel`, PORT-2 :5041), statt sie aus dem

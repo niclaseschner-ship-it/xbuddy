@@ -28,7 +28,9 @@ holt er von zentralen Komponenten:
 | `render.py`  | View-Modell der View `woche` — Tagesraster, Schedule-Rail, Termin-Leiste, Multi-Day-Spannen (PLAN-3…14). |
 | `main.py`    | Flask-App: Display-Views + HTTP-Schnittstellen (PLAN-21/22/23). |
 
-Das Layout (`templates/plan_kinder.html` + `static/design/tokens.css`) ist
+Das Layout (`templates/plan_kinder.html` + der geteilte Token-Strang
+`display/_shared/design/tokens.css`, via `/display/_shared/design/tokens.css`
+serviert — ROU-30) ist
 **1:1** aus dem Wireframe-Handoff übernommen (E-PLAN-5). Gegenüber dem Handoff
 sind nur die Routen (`url_for`) und die Foto-Pfade auf die XBuddy-Endpunkte
 umgestellt — keine Layout-Änderung, keine hardcodierten Farben/Maße.

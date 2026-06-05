@@ -561,6 +561,37 @@ def test_ROU_26_icon_root_cli_overrides_env(monkeypatch, tmp_path):
     assert cfg['icon_root'] == '/tmp/from-cli'
 
 
+# ============================================================
+#  ROU-30 — Geteilter Design-Token-Strang (display/_shared/design/)
+# ============================================================
+#
+# Entry-Path-Probe: der ECHTE Pfad /display/_shared/design/tokens.css über den
+# Flask-Testclient. Anders als ROU-26 (Per-Instanz-icon-root via tmp_path)
+# serviert ROU-30 aus dem In-Repo-Verzeichnis display/_shared/design/ — wie
+# ROU-23 /controller/_shared/. Die Datei liegt im Repo, also kein Override.
+
+def test_ROU_30_tokens_served_with_css_content_type(client_with_routing):
+    """ROU-30: /display/_shared/design/tokens.css → 200, text/css, Inhalt aus
+    dem In-Repo-Strang (Beleg: ein bekannter Token ist enthalten)."""
+    r = client_with_routing.get('/display/_shared/design/tokens.css')
+    assert r.status_code == 200
+    assert r.mimetype == 'text/css'
+    assert b'--kids-bg' in r.data
+
+
+def test_ROU_30_path_traversal_returns_404(client_with_routing):
+    """Ausbruch aus display/_shared/design/ → 404 (Defense in Depth wie ROU-23)."""
+    r = client_with_routing.get('/display/_shared/design/..%2F..%2Frouter%2Fmain.py')
+    assert r.status_code == 404
+    r2 = client_with_routing.get('/display/_shared/design/../../router/main.py')
+    assert r2.status_code != 200
+
+
+def test_ROU_30_nonexistent_asset_returns_404(client_with_routing):
+    r = client_with_routing.get('/display/_shared/design/does-not-exist.css')
+    assert r.status_code == 404
+
+
 def test_ROU_15_controller_dir_env_var_resolves(monkeypatch, tmp_path):
     monkeypatch.setenv('ROUTER_CONTROLLER_DIR', '/tmp/some-controller')
     args = router_main.parse_args(['--routing', str(tmp_path / 'missing.json')])
