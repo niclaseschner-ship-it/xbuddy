@@ -694,13 +694,14 @@ def test_PLAN_26_stage_dimensions(demo_config, demo_registry):
 def test_PLAN_27_kids_tokens_available():
     """Die --kids-*-Tokens (inkl. Font-Tokens) sind in der vom Template
     referenzierten Token-Datei definiert — kein Hardcode (DTOK-5,
-    conventions/design-tokens.md). Schritt 2 (#323) verschiebt die Datei
-    nach /display/_shared/; dann nur TOKEN_CSS_PATH anpassen."""
-    # TOKEN_CSS_PATH: Pfad relativ zum plan/-Verzeichnis.
-    # Schritt 2 tauscht diesen Pfad gegen den geteilten Strang.
+    conventions/design-tokens.md). Seit Schritt 2 (#323) liegt der geteilte
+    Strang unter display/_shared/design/tokens.css (ROU-30)."""
+    # TOKEN_CSS_PATH: der geteilte Token-Strang relativ zur Repo-Wurzel
+    # (dieser Test liegt in plan/tests/, der Pfad geht aus dem Repo-Root).
+    REPO_ROOT = os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__))))
     TOKEN_CSS_PATH = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "static", "design", "tokens.css")
+        REPO_ROOT, "display", "_shared", "design", "tokens.css")
     css = io.open(TOKEN_CSS_PATH, encoding="utf-8").read()
     # Token-Liste: entweder der direkte Token-Name ODER sein Alias genügt.
     # Schritt 2 kann --kids-font-body/--kids-font-display als Aliase ergänzen,
@@ -722,17 +723,19 @@ def test_PLAN_27_kids_tokens_available():
 
 
 # ============================================================
-#  URL-13 — statische Assets im Display-Namensraum des Buddys
+#  URL-16 / DTOK-2 — Token-CSS aus dem geteilten Display-Namensraum
 # ============================================================
 
-def test_URL_13_css_link_lives_under_display_namespace(demo_config, demo_registry):
-    """Die gerenderte Wochen-Seite referenziert ihr CSS unter
-    /display/plan/ — nicht unter dem Flask-Default /static/, der hinter der
-    einen Origin (URL-12) nicht geroutet würde (#61, URL-13)."""
+def test_URL_16_css_link_lives_under_display_namespace(demo_config, demo_registry):
+    """Die gerenderte Wochen-Seite referenziert ihr Token-CSS unter dem
+    geteilten Strang /display/_shared/design/ (URL-16/DTOK-2, ROU-30) — nicht
+    mehr buddy-lokal unter /display/plan/, und nicht unter dem Flask-Default
+    /static/, der hinter der einen Origin (URL-12) nicht geroutet würde
+    (#323, #61)."""
     client = make_client(demo_config, demo_registry, FakeTransport())
     text = client.get("/display/plan/woche").data.decode("utf-8")
-    # Der Stylesheet-<link> zeigt in den Display-Namensraum des Buddys.
-    assert "/display/plan/static/design/tokens.css" in text
+    # Der Stylesheet-<link> zeigt in den geteilten Display-Namensraum.
+    assert "/display/_shared/design/tokens.css" in text
     # Und NICHT auf einen Top-Level-/static-Pfad außerhalb der URL-1-Prefixe.
     assert 'href="/static/' not in text
 

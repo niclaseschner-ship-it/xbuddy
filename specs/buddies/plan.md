@@ -400,10 +400,9 @@ Rotationen. Die Farb-, Maß- und Schrift-Werte sind Tokens (`--kids-*`).
 
 Die `--kids-*`-Tokens kommen aus dem **geteilten Design-Token-Strang**
 ([`conventions/design-tokens.md`](../../conventions/design-tokens.md), DTOK-1).
-Plan referenziert den Strang — er kopiert ihn nicht (DTOK-3). Heute liegt der
-Strang noch lokal unter `plan/static/design/tokens.css` (v1.0); er wird
-perspektivisch durch v2.0 (`wetter/static/design/colors_and_type.css`) ersetzt
-und via `/display/_shared/` bereitgestellt (Schritt-2-Arbeit, #323).
+Plan referenziert den Strang — er kopiert ihn nicht (DTOK-3). Der Strang liegt
+unter `display/_shared/design/tokens.css` (v2.0) und wird von dort über
+`/display/_shared/design/tokens.css` referenziert (ROU-30, #323).
 
 Font-Werte (Caveat als Display-Font, Patrick Hand als Body-Font) bleiben
 semantisch identisch; künftig ggf. über Aliase (`--kids-font-display`,

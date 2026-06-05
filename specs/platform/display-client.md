@@ -173,7 +173,7 @@ CSS-Transformen die Layout-Größe nicht ändern und die umgebende Flex-
 Zentrierung weiterhin am unskalierten 1920×1080-Element angreift.
 
 Begründung: Plan-Buddy ist für 1920×1080 entworfen
-(`plan/static/design/tokens.css`, „Scale for 1920×1080 kiosk"); auf
+(`display/_shared/design/tokens.css`, „1920×1080 kiosk reading distance"); auf
 einem 1280×800-Tablet erzeugte er ohne Adapter Scrollbalken oder
 Überlauf und bräche „Dashboards füllen das Display, kein Scroll"
 (Constitution). Der Adapter löst das, ohne Plan-Buddy responsiv machen
