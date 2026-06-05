@@ -3,7 +3,6 @@
 import confirm
 from confirm import PendingProposal, PendingStore
 
-
 # -- is_confirmation: deterministischer Wort-Abgleich (E-EC-7) ----
 
 def test_E_EC_7_thumbs_up_is_confirmation():

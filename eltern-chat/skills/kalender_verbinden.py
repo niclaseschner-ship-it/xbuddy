@@ -35,16 +35,14 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Callable
+from datetime import UTC, datetime, timedelta
 
 import authz
-from private_chat_session import SESSION_TIMEOUT_SECONDS  # KAV-6 Re-export (EC-20)
 from telegram import TelegramError
 
 from skills.typing_indicator import fire_typing
-
 
 # ============================================================
 #  Konstanten — Schlüssel-Namen (KAV-7) und Endpunkte
@@ -531,7 +529,7 @@ def write_kalender_id_to_plan_json(plan_json_path, kalender_id):
     `kalender_id` (Cross-Service-FS-Provisorium, sauber gelöst in #140).
     """
     try:
-        with open(plan_json_path, "r", encoding="utf-8") as f:
+        with open(plan_json_path, encoding="utf-8") as f:
             data = json.load(f)
     except (OSError, ValueError) as e:
         raise PlanJsonWriteError(
@@ -585,7 +583,7 @@ def store_tokens_in_zd(zd, refresh_token, access_token, expires_in,
     `datetime` (timezone-aware UTC) liefert — für deterministische Tests.
     """
     if clock is None:
-        clock = lambda: datetime.now(timezone.utc)  # noqa: E731
+        clock = lambda: datetime.now(UTC)  # noqa: E731
 
     expires_at = clock() + timedelta(seconds=max(0, int(expires_in)))
 
@@ -767,7 +765,7 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
     account_email = ""
     try:
         account_email = fetch_email(access_token) or ""
-    except Exception as e:  # noqa: BLE001 — Robustheit: kein Verbindungs-Abbruch
+    except Exception as e:
         logging.info("kalender_verbinden: account-email nicht ermittelbar (%s) "
                      "— Bestätigung ohne E-Mail (KAV-8)", e)
         account_email = ""

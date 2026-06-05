@@ -25,8 +25,7 @@ import logging
 import queue
 import threading
 
-from hooks import HookContext, HookFailure, summarize_failures
-
+from hooks import HookFailure, summarize_failures
 
 # Wie lang der Worker auf eine eingehende Privatchat-Nachricht wartet, bevor
 # er die Session als abgebrochen behandelt. 30 Minuten passt zu einer
@@ -116,7 +115,7 @@ class PrivateChatSession:
             try:
                 target(*args)
                 worker_ok = True
-            except Exception:  # noqa: BLE001 — Session-Fehler isoliert melden
+            except Exception:
                 logging.exception(
                     "%s-Session in Chat %s abgebrochen",
                     self.LOG_PREFIX, self.chat_id)
@@ -144,7 +143,7 @@ class PrivateChatSession:
         for hook in hooks:
             try:
                 result = hook(context)
-            except Exception as e:   # noqa: BLE001 — Hook-Fehler isoliert melden
+            except Exception as e:
                 failures.append(HookFailure(
                     consumer=getattr(hook, "consumer", task_name),
                     error="unerwarteter Fehler (%s)" % e))
@@ -156,7 +155,7 @@ class PrivateChatSession:
             if callable(on_warning) and warning:
                 try:
                     on_warning(warning)
-                except Exception:   # noqa: BLE001 — Warnung-Versand isoliert
+                except Exception:
                     logging.exception(
                         "%s-Session in Chat %s: Versand der Hook-Warnung "
                         "fehlgeschlagen", self.LOG_PREFIX, self.chat_id)

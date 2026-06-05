@@ -7,9 +7,6 @@ entgegen, mappt Phone-Events 1:1 auf das kanonische Trigger-Modell
 State pro Display in-memory (ROU-10).
 """
 
-from flask import Flask, request, jsonify, send_from_directory, abort, redirect, Response
-from datetime import datetime, timezone
-from urllib.parse import urlencode
 import argparse
 import json
 import logging
@@ -18,8 +15,12 @@ import queue
 import sys
 import tempfile
 import threading
-import urllib.request
 import urllib.error
+import urllib.request
+from datetime import UTC, datetime
+from urllib.parse import urlencode
+
+from flask import Flask, Response, abort, jsonify, redirect, request, send_from_directory
 
 # Repo-Wurzel auf den Importpfad, damit `tools.configloader` (CONFIG-1, #179)
 # auch beim Direktstart `python3 router/main.py` gefunden wird.
@@ -47,7 +48,7 @@ routing_path = None       # zuletzt geladener Pfad — Lookup-Quelle (DCOMP-2)
 
 
 def now_iso():
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
 
 
 # ============================================================
@@ -1059,7 +1060,7 @@ def _send_app_panel_asset(rel_path):
     if not os.path.isfile(target):
         abort(404)
     ext = os.path.splitext(target)[1].lower()
-    mime = _CONTROLLER_MIME.get(ext, None)
+    mime = _CONTROLLER_MIME.get(ext)
     # CSS muss als text/css ausgeliefert werden — sonst lehnen Browser das
     # Stylesheet ab. App-Panel hat als einziger Controller heute eine eigene
     # CSS-Datei, daher das Mime-Mapping hier lokal erweitert.

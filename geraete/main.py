@@ -39,7 +39,6 @@ if _REPO_ROOT not in sys.path:
 from geraete import registry as registry_mod  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
 
-
 # ============================================================
 #  Laufzeit-Zustand
 # ============================================================

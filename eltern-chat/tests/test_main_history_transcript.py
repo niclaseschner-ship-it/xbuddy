@@ -13,12 +13,18 @@ Geprüft wird:
 """
 
 from confirm import PendingStore
-from fakes import (FakeProvider, FakeReadTask, FakeTelegram, FakeWriteTask,
-                   make_message, task_call_response, text_response)
+from fakes import (
+    FakeProvider,
+    FakeReadTask,
+    FakeTelegram,
+    FakeWriteTask,
+    make_message,
+    task_call_response,
+    text_response,
+)
 from history import History
 from main import Context, handle_update
-from model import (GenerationResponse, ProviderUsage, TaskCallBlock,
-                   TaskResultBlock, TextBlock)
+from model import GenerationResponse, ProviderUsage, TaskCallBlock, TaskResultBlock, TextBlock
 from tasks import Catalog
 
 

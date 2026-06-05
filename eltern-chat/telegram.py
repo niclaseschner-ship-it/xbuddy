@@ -23,7 +23,6 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 
-
 API_BASE = "https://api.telegram.org"
 _API_HOST = "api.telegram.org"
 

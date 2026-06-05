@@ -48,7 +48,7 @@ class Outfit:
     MAGST). `hinweis` ist der kurze Hinweistext.
     """
 
-    __slots__ = ("pflicht", "optional", "hinweis")
+    __slots__ = ("hinweis", "optional", "pflicht")
 
     def __init__(self, pflicht, optional, hinweis):
         self.pflicht = pflicht
@@ -81,8 +81,17 @@ class Regel:
     Regen-Wahrscheinlichkeit nicht.
     """
 
-    __slots__ = ("feels_min", "feels_max", "rain_prob_min", "rain_amount_min",
-                 "wind_min", "sunscreen", "pflicht", "optional", "hinweis")
+    __slots__ = (
+        "feels_max",
+        "feels_min",
+        "hinweis",
+        "optional",
+        "pflicht",
+        "rain_amount_min",
+        "rain_prob_min",
+        "sunscreen",
+        "wind_min",
+    )
 
     def __init__(self, feels_min=None, feels_max=None, rain_prob_min=None,
                  rain_amount_min=None, wind_min=None, sunscreen=None,

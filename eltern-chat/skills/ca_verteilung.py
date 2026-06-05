@@ -21,7 +21,6 @@ from dataclasses import dataclass
 
 from telegram import TelegramError
 
-
 # CAV-5: OS-spezifische Installations-Anleitung — hart-codiert, kein KI-Anbieter.
 # Für die gängigen Plattformen, adressatengerecht für eine Familie formuliert.
 # Stolpersteine je OS adressiert (Quellen siehe PR #75/#77).

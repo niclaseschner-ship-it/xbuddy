@@ -14,21 +14,23 @@ eines Datei-Pfads entgegen — die Tests reichen einen vorgefertigten
 
 import time
 
-from skills import familie_anlegen
-from confirm import PendingProposal, PendingStore
+from confirm import PendingStore
 from fakes import FakeProvider, FakeTelegram, make_message
-from skills.familie_anlegen import FaaInput
-from skills.familie_anlegen_task import (FamilieAnlegenTask, FaaSession,
-                                  make_faa_input,
-                                  _PROPOSAL_SUMMARY_FROM_GROUP,
-                                  _PROPOSAL_SUMMARY_FROM_PRIVATE)
-from skills.familie_client import FamilieClientError
 from history import History
 from main import Context, handle_update
 from model import WRITE
+from skills import familie_anlegen
+from skills.familie_anlegen import FaaInput
+from skills.familie_anlegen_task import (
+    _PROPOSAL_SUMMARY_FROM_GROUP,
+    _PROPOSAL_SUMMARY_FROM_PRIVATE,
+    FaaSession,
+    FamilieAnlegenTask,
+    make_faa_input,
+)
+from skills.familie_client import FamilieClientError
 from tasks import TurnContext, build_catalog
 from test_familie_anlegen import FakeFamilieClient
-
 
 # ============================================================
 #  Test-Helfer
@@ -185,7 +187,7 @@ def test_EC10_278_one_step_confirmation_summary_includes_confirmation_question()
     Das Schreib-Gate bleibt vollständig erhalten (Ausführung erst nach
     ausdrücklicher Bestätigung, FAA-7 / EC-10).
     """
-    from skills.familie_anlegen import _zusammenfassung, KIND_ERWACHSENE
+    from skills.familie_anlegen import KIND_ERWACHSENE, _zusammenfassung
     summary = _zusammenfassung("Niclas", KIND_ERWACHSENE, "blue", None, None, None)
     # Die Zusammenfassung enthält Bestätigungsfrage als erstes Element.
     assert "ok" in summary.lower() or "ja" in summary.lower()

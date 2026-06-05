@@ -23,13 +23,17 @@ from fakes import FakeProvider, FakeTelegram, make_message
 from history import History
 from main import Context, handle_update
 from skills.panel_anlegen import (
-    CANCELLED, GERAETE_FEHLER, KEINE_DISPLAYS, NOT_AUTHORIZED,
-    PaaInput, normalisiere_slug, panel_anlegen)
+    CANCELLED,
+    GERAETE_FEHLER,
+    KEINE_DISPLAYS,
+    NOT_AUTHORIZED,
+    PaaInput,
+    normalisiere_slug,
+    panel_anlegen,
+)
+from skills.panel_anlegen_task import PaaSession, PanelAnlegenTask, make_paa_input
 from skills.panel_client import GeraeteReadError, PanelClientError
-from skills.panel_anlegen_task import (
-    PaaSession, PanelAnlegenTask, make_paa_input)
 from tasks import Proposal, TurnContext, WriteTask, build_catalog
-
 
 # ============================================================
 #  Test-Doppelungen

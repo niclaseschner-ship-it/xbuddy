@@ -17,17 +17,13 @@ import ssl
 from unittest.mock import MagicMock, call, patch
 
 import pytest
-
 from telegram import (
-    TelegramClient,
-    TelegramError,
-    _IPv4HTTPSConnection,
-    _build_ipv4_opener,
     _API_HOST,
     _CONNECT_TIMEOUT,
     _READ_TIMEOUT_DEFAULT,
+    TelegramClient,
+    _IPv4HTTPSConnection,
 )
-
 
 # ---------------------------------------------------------------------------
 # AC1 — Nur AF_INET-Auflösung
@@ -136,7 +132,7 @@ def test_AC3_tls_server_hostname_and_default_context():
 
 def _make_json_resp(payload: dict):
     """Minimal-Response-Fake für opener.open()."""
-    import io, json as _json
+    import json as _json
     raw = _json.dumps(payload).encode()
     resp = MagicMock()
     resp.__enter__ = lambda s: s
@@ -233,9 +229,8 @@ def test_no_ipv4_address_raises_oserror():
     conn = _IPv4HTTPSConnection(
         "api.telegram.org", connect_timeout=5, read_timeout=35
     )
-    with patch("socket.getaddrinfo", return_value=[]):
-        with pytest.raises(OSError, match="IPv4"):
-            conn.connect()
+    with patch("socket.getaddrinfo", return_value=[]), pytest.raises(OSError, match="IPv4"):
+        conn.connect()
 
 
 # ---------------------------------------------------------------------------

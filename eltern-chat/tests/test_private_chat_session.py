@@ -9,10 +9,8 @@ geht es nur um das Plattform-Verhalten.
 import threading
 import time
 
-import pytest
-
 from hooks import HookContext, HookFailure, HookSuccess
-from private_chat_session import PrivateChatSession, SESSION_TIMEOUT_SECONDS
+from private_chat_session import SESSION_TIMEOUT_SECONDS, PrivateChatSession
 
 
 def test_session_start_and_deliver_round_trip():

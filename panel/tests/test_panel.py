@@ -21,8 +21,8 @@ _PANEL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _REPO_ROOT = os.path.dirname(_PANEL_DIR)
 sys.path.insert(0, _REPO_ROOT)
 
-from panel import main as panel_main          # noqa: E402
-from panel import registry as registry_mod    # noqa: E402
+from panel import main as panel_main  # noqa: E402
+from panel import registry as registry_mod  # noqa: E402
 
 # Die echten Funktionen VOR jedem Stub festhalten — ein Test prüft die
 # URL-Bildung der echten Funktion (PREG-7), während die autouse-Stubs sonst

@@ -18,11 +18,9 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from model import (GenerationRequest, Message, ProviderError, TaskResultBlock,
-                   TextBlock, WRITE)
+from model import WRITE, GenerationRequest, Message, ProviderError, TaskResultBlock, TextBlock
 from providers.pricing import estimate_cost
 from telemetry import ProviderCall, TurnTelemetry
-
 
 SYSTEM_PROMPT = (
     "Du bist der Eltern-Chat von XBuddy — ein freundlicher Assistent in der "
@@ -166,7 +164,7 @@ class _TypingRenewal:
         while not self._stop.wait(self._interval):
             try:
                 self._renewer()
-            except Exception:  # noqa: BLE001 — Renewal ist Komfort, kein Gate
+            except Exception:
                 logging.debug("Typing-Renewal-Aufruf fehlgeschlagen (geschluckt)",
                               exc_info=True)
 
@@ -275,7 +273,7 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
             # Gate: Fehler werden geschluckt.
             try:
                 before_provider_call()
-            except Exception:  # noqa: BLE001 — Indikator darf den Turn nicht abbrechen
+            except Exception:
                 pass
 
         # Issue #165: Renewal-Thread hält den Typing-Indikator für die Dauer
@@ -340,7 +338,7 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
             if task.kind == WRITE:
                 try:
                     proposal = task.propose(call.arguments, turn_context)
-                except Exception as e:  # noqa: BLE001 — Aufgabe isoliert melden
+                except Exception as e:
                     result_blocks.append(TaskResultBlock(
                         call_id=call.call_id,
                         content="Aufgabe nicht möglich: %s" % e, is_error=True))
@@ -369,7 +367,7 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
             # EC-9: lesende Aufgabe — direkt ausführen, Ergebnis zurückspeisen.
             try:
                 content = task.run(call.arguments, turn_context)
-            except Exception as e:  # noqa: BLE001 — Aufgabe isoliert melden
+            except Exception as e:
                 result_blocks.append(TaskResultBlock(
                     call_id=call.call_id,
                     content="Fehler bei der Aufgabe: %s" % e, is_error=True))

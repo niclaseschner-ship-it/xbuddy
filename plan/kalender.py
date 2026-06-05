@@ -136,7 +136,7 @@ class GoogleTransport:
                 headers={"Content-Type": "application/x-www-form-urlencoded"})
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
                 body = json.loads(resp.read())
-        except Exception as e:  # noqa: BLE001 — jeder Netzfehler → PLAN-20
+        except Exception as e:
             raise CalendarUnavailable("OAuth-Token-Refresh fehlgeschlagen: %s" % e)
         if "access_token" not in body:
             raise CalendarUnavailable("OAuth-Antwort ohne access_token")
@@ -158,7 +158,7 @@ class GoogleTransport:
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
                 raw = resp.read()
             return json.loads(raw) if raw else {}
-        except Exception as e:  # noqa: BLE001 — jeder Netzfehler → PLAN-20
+        except Exception as e:
             raise CalendarUnavailable("Calendar-Request %s %s: %s" % (method, path, e))
 
     def list_events(self, time_min, time_max):

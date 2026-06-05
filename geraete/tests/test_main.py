@@ -19,9 +19,8 @@ _GERAETE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _REPO_ROOT = os.path.dirname(_GERAETE_DIR)
 sys.path.insert(0, _REPO_ROOT)
 
-from geraete import main as geraete_main      # noqa: E402
+from geraete import main as geraete_main  # noqa: E402
 from geraete import registry as registry_mod  # noqa: E402
-
 
 # ============================================================
 #  Demo-Daten + Fixtures

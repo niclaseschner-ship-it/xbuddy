@@ -238,7 +238,7 @@ class Catalog:
         for hook in hooks:
             try:
                 result = hook(context)
-            except Exception as e:   # noqa: BLE001 — siehe EC-21-Notiz oben
+            except Exception as e:
                 failures.append(HookFailure(
                     consumer=getattr(hook, "consumer", task.name),
                     error="unerwarteter Fehler (%s)" % e))

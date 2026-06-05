@@ -10,9 +10,8 @@ Lauf: python3 -m pytest eltern-chat/tests/ -v
 
 import json
 
-import pytest
-
 import config as config_mod
+import pytest
 from onboarding_store import OnboardingStore
 
 

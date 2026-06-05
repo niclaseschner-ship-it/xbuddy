@@ -8,7 +8,6 @@ Race-Freiheit (GER-6) wird über (a) den atomaren `os.replace`-Rename und
 (b) das 0600-Anlegen via `os.open` belegt — analog FAM-11 und ONB-5.
 """
 
-import io
 import json
 import os
 import stat
@@ -23,7 +22,6 @@ _REPO_ROOT = os.path.dirname(_GERAETE_DIR)
 sys.path.insert(0, _REPO_ROOT)
 
 from geraete import registry as registry_mod  # noqa: E402
-
 
 # ============================================================
 #  Demo-Daten
@@ -607,6 +605,6 @@ def test_GER_9_load_accepts_arbitrary_path(tmp_path):
 
 def test_GER_10_every_requirement_has_a_test():
     """GER-10: jede GER-ID 1..9 hat mindestens einen Test in diesem Modul."""
-    quelle = io.open(os.path.abspath(__file__), encoding="utf-8").read()
+    quelle = open(os.path.abspath(__file__), encoding="utf-8").read()
     for ger in range(1, 10):
         assert "def test_GER_%d_" % ger in quelle, "GER-%d ungetestet" % ger
