@@ -26,6 +26,12 @@ ruff kann nicht zeilen-scopen). **Niemals `--diff`**: das ist ein Fix-Preview
 und liefert exit 0 auch bei rein nicht-fixbaren Verstößen (empirisch verifiziert,
 ruff 0.15.15). Spec-/Doku-/JSON-Tracks haben kein Gate (`lint_command` leer).
 
+Durchgesetzt wird STYLE-2 vom `/arbeitstag`-Orchestrator-Prozess (Contract-First-Flow,
+`~/.claude/contracts/` + `~/.claude/commands/arbeitstag.md`) — also prozessual außerhalb
+des Repos, nicht durch Repo-CI. Diese Konvention ist die Repo-seitige Festlegung der
+Regel; der Prozess vollzieht sie. Der Andockpunkt liegt damit bewusst außerhalb des Repos
+(der arbeitstag-Skill ist kein Repo-Artefakt) — STYLE-1/2/3 sind deshalb nicht „tot".
+
 ### STYLE-3 — `per-file-ignore` wird beim Anfassen abgebaut, nicht ergänzt
 Die Altlast-Einträge in `[tool.ruff.lint.per-file-ignores]` sind geduldete
 Schuld mit `# TODO <code>`-Marker. Wer eine gelistete Datei aus anderem Grund
