@@ -24,6 +24,8 @@ weil das Muster der Tests `FaaSession(chat_id)` ist und bleiben muss.
 import logging
 import queue
 import threading
+from collections.abc import Callable
+from dataclasses import dataclass
 
 from hooks import HookFailure, summarize_failures
 
@@ -37,6 +39,24 @@ from hooks import HookFailure, summarize_failures
 # Konstanten in `*_anlegen_task.py` / `kalender_verbinden_task.py` —
 # konsolidiert hier (EC-20, Refs #130).
 SESSION_TIMEOUT_SECONDS = 30 * 60
+
+
+@dataclass
+class SessionSortEntry:
+    """Eintrag in der Session-Sorten-Registry (SESS-5).
+
+    Beschreibt eine Privatchat-Session-Sorte so, dass `handle_update` sie
+    generisch routen kann, ohne pro Sorte einen eigenen if-Block zu brauchen.
+
+    ``ctx_attr``     — Name des Session-Dict-Attributs im `Context`-Objekt
+                       (z. B. ``"faa_sessions"``); wird per ``getattr`` gelesen.
+    ``make_input_fn`` — Callable `(IncomingMessage) -> SkillInput`, das die
+                       rohe Telegram-Nachricht in den skill-spezifischen Input
+                       übersetzt (z. B. ``make_faa_input``). Die Funktion ist
+                       skill-spezifisch; der Eintrag hält nur die Referenz.
+    """
+    ctx_attr: str
+    make_input_fn: Callable
 
 
 class PrivateChatSession:
