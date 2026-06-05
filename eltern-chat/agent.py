@@ -164,7 +164,7 @@ class _TypingRenewal:
         while not self._stop.wait(self._interval):
             try:
                 self._renewer()
-            except Exception:
+            except Exception:  # Renewal ist Komfort, kein Gate
                 logging.debug("Typing-Renewal-Aufruf fehlgeschlagen (geschluckt)",
                               exc_info=True)
 
@@ -273,7 +273,7 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
             # Gate: Fehler werden geschluckt.
             try:
                 before_provider_call()
-            except Exception:
+            except Exception:  # Indikator darf den Turn nicht abbrechen
                 pass
 
         # Issue #165: Renewal-Thread hält den Typing-Indikator für die Dauer
@@ -338,7 +338,7 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
             if task.kind == WRITE:
                 try:
                     proposal = task.propose(call.arguments, turn_context)
-                except Exception as e:
+                except Exception as e:  # Aufgabe isoliert melden
                     result_blocks.append(TaskResultBlock(
                         call_id=call.call_id,
                         content="Aufgabe nicht möglich: %s" % e, is_error=True))
@@ -367,7 +367,7 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
             # EC-9: lesende Aufgabe — direkt ausführen, Ergebnis zurückspeisen.
             try:
                 content = task.run(call.arguments, turn_context)
-            except Exception as e:
+            except Exception as e:  # Aufgabe isoliert melden
                 result_blocks.append(TaskResultBlock(
                     call_id=call.call_id,
                     content="Fehler bei der Aufgabe: %s" % e, is_error=True))

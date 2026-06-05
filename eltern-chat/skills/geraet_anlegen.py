@@ -435,7 +435,7 @@ def _frage_und_rufe_cav(tg, chat_id, user_id, os_wert,
         return
     try:
         cav_call_hook(os_wert, chat_id, user_id)
-    except Exception as e:
+    except Exception as e:  # CAV-Fehler isoliert melden
         logging.warning("geraet_anlegen: CAV-Aufruf fehlgeschlagen: %s", e)
         fire_typing(typing_fn)
         _send(tg, chat_id, CAV_FAILED)

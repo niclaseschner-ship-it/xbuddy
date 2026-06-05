@@ -220,7 +220,7 @@ class OpenMeteoTransport:
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
                 raw = resp.read()
             return json.loads(raw)
-        except Exception as e:
+        except Exception as e:  # jeder Netzfehler → WETTER-17
             raise WetterUnavailable(
                 "Open-Meteo-Abruf fehlgeschlagen: %s" % e) from e
 
