@@ -46,3 +46,43 @@ Eingabe ist (Begrüßung, Frage, Foto statt Code, leerer Text), wird
 Funktion mit einer freundlichen Erinnerung an die aktuelle Frage und
 wartet weiter. So bleibt der Bot nie stumm und meldet nie fälschlich
 einen ungültigen Wert.
+
+### SESS-5 — Session-Sorten-Registry und Routing-Form
+Jede Privatchat-Session-Sorte (FAA, GAA, KAV, TES, PAA, …) ist durch
+vier Bausteine beschrieben:
+
+1. **Context-Slot** (`ctx.<sort>_sessions: dict`) — in-memory Map
+   `chat_id → Session`. Der Worker-Thread schreibt seinen Eintrag
+   hinein; `handle_update` liest denselben Zeiger heraus. Nur über
+   denselben Zeiger ist die Routing-Garantie gegeben (Lego-Falle).
+
+2. **handle_update-Block** — `handle_update` iteriert die
+   **Session-Sorten-Registry** (`_SESSION_SORTS` in `main.py`) und
+   routet eine eingehende Privatnachricht an die erste Sorte, deren
+   Session-Map einen nicht-fertigen Eintrag für `msg.chat_id` enthält.
+   Pro Sorte gibt es KEINEN eigenen if-Block mehr — die Registry-
+   Iteration ist die EINE Stelle (CLAUDE.md §6).
+
+3. **make_input-Helfer** (`make_<sort>_input(incoming_message)`) —
+   sortenspezifische Funktion, die eine `IncomingMessage` (Telegram-
+   Nachricht) in den skill-internen Input-Typ übersetzt. Liegt im
+   `<sort>_task.py`-Modul der Sorte, nicht in `main.py`.
+
+4. **Session-Sorten-Registry** (`_SESSION_SORTS`) — modul-weites
+   Tupel von `SessionSortEntry(ctx_attr, make_input_fn)` in `main.py`,
+   gebaut von `_build_session_sorts()` beim Modul-Load. Neue Sorten
+   werden hier additiv ergänzt, nirgendwo sonst.
+
+**Reihenfolge** der Registry-Einträge entspricht der früheren
+if-Kette (FAA→GAA→KAV→TES→PAA) und darf nicht geändert werden, ohne
+das Routing-Verhalten zu prüfen — ein Chat kann gleichzeitig in
+mehreren Maps einen Eintrag haben (Edge-Case bei abgebrochenen
+Sessions), und die erste Übereinstimmung gewinnt.
+
+**Neue Sorte hinzufügen** (Ticket #319):
+- Context-Slot ergänzen (`<sort>_sessions: dict = None`)
+- `make_<sort>_input` im Task-Modul definieren
+- `SessionSortEntry` zu `_SESSION_SORTS` in `_build_session_sorts()` in
+  `main.py` hinzufügen (am Ende der Tuple)
+- Routing-Test für die neue Sorte schreiben (analog
+  `test_handle_update_routes_to_tes_session`)
