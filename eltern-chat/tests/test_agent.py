@@ -388,3 +388,59 @@ def test_issue_310_transcript_does_not_mutate_provider_request():
     assert provider.requests[0].messages == [user]
     # Das Transkript dagegen trägt den Antwort-Block.
     assert result.transcript[-1].blocks[0].text == "ok"
+
+
+# ============================================================
+#  #331 — _proposal_pending ist parametrisiert und frei von
+#          „erst nach Bestätigung"-Framing
+# ============================================================
+
+def test_issue_331_proposal_pending_contains_task_name():
+    """AC1/AC3(i) #331: der erzeugte synthetische tool_result-Text enthält
+    den konkreten Task-Namen — das Modell erkennt in Folge-Turns, WELCHES
+    Werkzeug erneut aufzurufen ist."""
+    text = agent._proposal_pending("panel_anlegen")
+    assert "panel_anlegen" in text
+
+
+def test_issue_331_proposal_pending_directs_to_call_tool():
+    """AC3(ii) #331: der Text trägt die Schlüssel-Direktive, das Werkzeug
+    aufzurufen (nicht den Dialog selbst zu führen)."""
+    text = agent._proposal_pending("mein_werkzeug")
+    # Werkzeug führt den Dialog selbst
+    assert "werkzeug" in text.lower()
+    # Direktive: Werkzeug aufrufen
+    assert "rufe" in text.lower() or "aufrufen" in text.lower() \
+        or "ruf" in text.lower()
+
+
+def test_issue_331_proposal_pending_no_erst_nach_bestaetigung_framing():
+    """AC3(iii) #331: das alte „erst nach Bestätigung"-Framing ist nicht mehr
+    im Text — es hatte das Modell dazu gebracht, auf ein „Ja" zu warten statt
+    das Werkzeug erneut aufzurufen."""
+    text = agent._proposal_pending("irgendeine_aufgabe")
+    assert "erst nach bestätigung" not in text.lower()
+    assert "nach bestätigung" not in text.lower()
+
+
+def test_issue_331_proposal_pending_emitted_with_task_name_in_transcript():
+    """AC1 (entry_path_probe) #331: der tatsächlich in den synthetischen
+    TaskResultBlock eingefügte Text enthält den Task-Namen der aufgerufenen
+    WRITE-Aufgabe (nicht einen fixen String)."""
+    write = FakeWriteTask(name="kalender_verbinden", summary="Kalender verbinden")
+    provider = FakeProvider([task_call_response("kalender_verbinden",
+                                                call_id="c-99")])
+    result = agent.run_turn([], _user("verbinde Kalender"),
+                            provider, _catalog(write), _TURN)
+
+    assert result.proposal is not None
+    # Das Transkript: user → assistant(tool_use) → user(synth. tool_result)
+    t = result.transcript
+    synth_result = t[2].blocks[0]
+    assert isinstance(synth_result, TaskResultBlock)
+    assert synth_result.call_id == "c-99"
+    assert synth_result.is_error is False
+    # Der Text muss den Task-Namen enthalten (AC1)
+    assert "kalender_verbinden" in synth_result.content
+    # Altes Framing darf nicht mehr da sein (AC3(iii))
+    assert "erst nach bestätigung" not in synth_result.content.lower()
