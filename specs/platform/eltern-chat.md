@@ -290,7 +290,7 @@ der Vorgang bereits im Gange oder erledigt, und NICHT als „erst nach
 Bestätigung ausführen" formuliert sein — beides veranlasst das Modell, auf ein
 externes „Ja" zu warten, statt das Werkzeug bei erneutem Anlauf erneut
 aufzurufen. Der Text ist per Aufgaben-Name parametrisiert, damit das Modell
-erkennt, WELCHES Werkzeug erneut aufzurufen ist. Das deterministsiche
+erkennt, WELCHES Werkzeug erneut aufzurufen ist. Das deterministische
 Schreib-Gate (Ausführung erst nach Bestätigung, `confirm.py`) bleibt davon
 unberührt — es wird im Code erzwungen, nicht über diesen Text.
 
