@@ -126,7 +126,7 @@ def test_EC_15_defaults_apply_without_overrides(tmp_path, monkeypatch):
     cfg = config_mod.resolve(_missing(tmp_path))
     assert cfg.provider == "claude"
     assert cfg.provider_model == ""
-    assert cfg.context_depth == 20
+    assert cfg.context_depth == 40
 
 
 def test_EC_15_env_overrides_file(tmp_path, monkeypatch):
