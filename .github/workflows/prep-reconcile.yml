@@ -1,0 +1,56 @@
+name: prep-reconcile
+
+# Validiert jeden status:ready-Stempel — das Handoff-Signal an /arbeitstag.
+#
+# /arbeitstag nimmt NUR status:ready (siehe WORKFLOW.md — Handoff an
+# Implementierer). Damit ist der Stempel die Trennmembran zwischen
+# /arbeitstag-prep (reift Tickets) und /arbeitstag (implementiert) — und muss
+# verlässlich sein. Diese Action fängt die mechanische "schon-erledigt"-Klasse:
+# ein GESCHLOSSENES Issue darf nie status:ready tragen (die Arbeit ist getan
+# oder verworfen). Genau das passierte sonst von Hand — Tickets, deren Arbeit
+# längst gemerged war, bekamen versehentlich den Stempel.
+#
+# GRENZE (bewusst): inhaltliche Reife (genug Substanz? re-litigiert es eine schon
+# ratifizierte Entscheidung in decisions/?) kann eine Action NICHT entscheiden —
+# das bleibt watchdog-prep (Agent-Urteil) + Nic. Hier nur das Mechanische.
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  issues: write
+
+jobs:
+  reconcile:
+    # Nur feuern, wenn genau das Handoff-Label gesetzt wurde.
+    if: github.event.label.name == 'status:ready'
+    runs-on: ubuntu-latest
+    steps:
+      - name: status-ready gegen Issue-State abgleichen
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          STATE: ${{ github.event.issue.state }}
+        run: |
+          set -euo pipefail
+
+          if [ "$STATE" != "closed" ]; then
+            echo "Issue #$ISSUE ist offen — status:ready bleibt."
+            exit 0
+          fi
+
+          echo "Issue #$ISSUE ist geschlossen — status:ready ist falsch, entferne."
+          # Entfernen löst nur 'unlabeled' aus, nie 'labeled' → kein Re-Trigger/Loop.
+          gh issue edit "$ISSUE" --repo "$REPO" --remove-label "status:ready"
+
+          cat > /tmp/prep-reconcile-comment.md <<'EOF'
+          🤖 **prep-reconcile:** `status:ready` wieder entfernt — dieses Issue ist
+          bereits **geschlossen** (Arbeit erledigt oder verworfen). `/arbeitstag` nimmt
+          nur offene, gestempelte Tickets; ein geschlossenes Ticket gehört nicht in die
+          Bereitschaft.
+
+          Falls die Arbeit doch noch offen ist: Issue **wieder öffnen**, dann erneut stempeln.
+          EOF
+          gh issue comment "$ISSUE" --repo "$REPO" --body-file /tmp/prep-reconcile-comment.md

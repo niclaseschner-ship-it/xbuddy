@@ -9,20 +9,40 @@ body:
         Ein Feature setzt Anforderungen aus den `specs/` um. Reihenfolge:
         erst die betroffene Komponenten-Spec schärfen (Requirement-IDs
         vergeben/ändern, reviewen) — dann implementieren.
+
+
+        Die ersten vier Felder sind die **Default-Struktur** jedes Tickets
+        (Treiber · Problem · Lösung · Risiko) — sie machen das Ticket schnell
+        entscheidbar und sind die Grundlage fürs Handoff an `/arbeitstag`.
   - type: textarea
-    id: summary
+    id: treiber
     attributes:
-      label: Worum geht es?
-      description: Ein, zwei Sätze — was soll XBuddy können, das es heute nicht kann?
+      label: Treiber / Schmerz
+      description: >
+        Warum gibt es dieses Ticket? Welcher konkrete Schmerz, für wen
+        (Kind / Elternteil)? North-Star-Bezug: verschiebt es eine Aufgabe vom
+        Elternteil zum Kind, oder lässt es XBuddy mit der Familie mitwachsen?
     validations:
       required: true
   - type: textarea
-    id: why
+    id: problem
     attributes:
-      label: Warum / North-Star-Bezug
-      description: >
-        Verschiebt es eine Aufgabe vom Elternteil zum Kind, oder lässt es
-        XBuddy mit der Familie mitwachsen?
+      label: Problem
+      description: Was kann XBuddy heute nicht, das es können soll? Der Ist-Zustand, der stört.
+    validations:
+      required: true
+  - type: textarea
+    id: loesung
+    attributes:
+      label: Lösung
+      description: Wie soll es gelöst werden? Der angedachte Weg — Grobentwurf genügt, die Spec schärft die Details.
+    validations:
+      required: true
+  - type: textarea
+    id: risiko
+    attributes:
+      label: Risiko / Herausforderung
+      description: Was ist offen, riskant oder schwer? Wo könnte es brechen, was muss geklärt werden?
     validations:
       required: true
   - type: input
@@ -57,6 +77,13 @@ body:
         - Infra / übergreifend
     validations:
       required: true
+  - type: input
+    id: kosten
+    attributes:
+      label: Kosten / Aufwand
+      description: "Optional, soweit absehbar: grobe Größe / Aufwand / laufende Kosten (z. B. API-Calls)."
+    validations:
+      required: false
   - type: checkboxes
     id: spec-checkpoint
     attributes:
