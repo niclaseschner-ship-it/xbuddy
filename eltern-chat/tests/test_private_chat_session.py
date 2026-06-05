@@ -4,13 +4,15 @@ Geprüft wird die zentrale Worker-Thread+Queue+Timeout-Mechanik, die FAA/GAA/
 KAV (und alle zukünftigen Privatchat-Flows) gemeinsam nutzen. FAA/GAA/KAV-
 Subklassen haben eigene Tests in `test_familie_anlegen_task.py` etc.; hier
 geht es nur um das Plattform-Verhalten.
+
+SESS-5 (Ticket #264): SessionSortEntry-Tests am Ende dieser Datei.
 """
 
 import threading
 import time
 
 from hooks import HookContext, HookFailure, HookSuccess
-from private_chat_session import SESSION_TIMEOUT_SECONDS, PrivateChatSession
+from private_chat_session import SESSION_TIMEOUT_SECONDS, PrivateChatSession, SessionSortEntry
 
 
 def test_session_start_and_deliver_round_trip():
@@ -313,3 +315,27 @@ def test_session_next_message_custom_timeout():
     elapsed = time.monotonic() - start
     assert result is None
     assert elapsed < 0.5, "Custom-Timeout muss greifen, nicht das Default"
+
+
+# ============================================================
+#  SESS-5 (Ticket #264) — SessionSortEntry
+# ============================================================
+
+
+def test_SESS5_session_sort_entry_stores_attr_and_fn():
+    """SESS-5: SessionSortEntry ist ein reines Daten-Objekt; es speichert
+    ctx_attr und make_input_fn und gibt sie unverändert zurück.
+
+    Prüft die Konvention, auf die _SESSION_SORTS und handle_update aufsetzen:
+    entry.ctx_attr ist ein String (Name des Context-Attributs), und
+    entry.make_input_fn ist callable.
+    """
+    def _fake_make_input(msg):
+        return ("input", msg)
+
+    entry = SessionSortEntry(ctx_attr="faa_sessions",
+                             make_input_fn=_fake_make_input)
+    assert entry.ctx_attr == "faa_sessions"
+    assert entry.make_input_fn is _fake_make_input
+    # make_input_fn ist callable und liefert das erwartete Ergebnis.
+    assert entry.make_input_fn("msg_obj") == ("input", "msg_obj")

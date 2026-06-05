@@ -5,9 +5,14 @@ getUpdates-Aufrufen und Latenz-Instrumentierung (LOG-4).
 Geprüft wird `handle_update` und `poll_loop`: das Zusammenspiel der
 Sicherheits-Gates mit dem Agenten. Telegram-Kanal und KI-Anbieter sind
 kontrollierte Doppelungen (EC-17).
+
+SESS-5 (Ticket #264): Routing-Test für die Session-Sorten-Registry —
+belegt, dass `handle_update` über `_SESSION_SORTS` an `session.deliver()`
+liefert (Entry-Path-Probe).
 """
 
 import logging
+import time
 
 from confirm import PendingStore
 from fakes import (
@@ -22,6 +27,7 @@ from fakes import (
 from history import History
 from main import _PROVIDER_DOWN, Context, handle_update, poll_loop
 from model import ProviderError
+from private_chat_session import PrivateChatSession
 from tasks import Catalog
 from telegram import TelegramError
 
@@ -410,3 +416,78 @@ def test_pickup_latency_logged_on_updates(tmp_path, monkeypatch, caplog):
         "AC4 (#294): Erwartet INFO-Log mit 'event=pickup_latency count=N latency_ms=X'. "
         "Gefunden: %s" % info_messages
     )
+
+
+# ============================================================
+#  SESS-5 (#264) — Session-Sorten-Registry: Entry-Path-Probe
+# ============================================================
+
+
+def test_SESS5_registry_routes_privatchat_to_session_deliver(tmp_path):
+    """SESS-5 / AC1 (Ticket #264): Entry-Path-Probe — belegt, dass handle_update
+    über die _SESSION_SORTS-Registry eingehende Privatnachrichten an die erste
+    aktive Session-Sorte weiterleitet, statt sie an den Agenten zu schicken.
+
+    Verwendet eine minimal-konkrete Session (PrivateChatSession-Subklasse) und
+    eine echte ctx.*_sessions-Map, damit der getattr-Lookup in handle_update
+    genau so läuft wie in der Produktion. Der FakeProvider bleibt ohne Aufruf —
+    die Nachricht hat den Registry-Pfad genommen.
+    """
+    user_id = 99
+    tg = FakeTelegram(members={user_id: {"status": "member"}})
+    provider = FakeProvider([])
+
+    # Wir nutzen faa_sessions als Stellvertreter für „irgendeine Session-Sorte".
+    faa_sessions = {}
+    ctx = Context(
+        tg=tg,
+        bot_username="mybot",
+        family_group_chat_id="-100",
+        context_depth=20,
+        provider=provider,
+        catalog=Catalog(),
+        history=History(str(tmp_path / "sess5.db")),
+        pending=PendingStore(),
+        faa_sessions=faa_sessions,
+    )
+
+    # Minimalste Subklasse — nur thread-safe Queue+deliver, kein echter Skill.
+    class _MinimalSession(PrivateChatSession):
+        THREAD_NAME_PREFIX = "test"
+        LOG_PREFIX = "TEST"
+
+    session = _MinimalSession(chat_id=user_id)
+    delivered = []
+
+    def _worker():
+        msg = session.next_message(timeout=1.0)
+        if msg is not None:
+            delivered.append(msg)
+
+    session.start(_worker)
+    # Worker wartet jetzt in next_message — kurz pausieren, damit er bereit ist.
+    time.sleep(0.05)
+
+    # Session in die Map eintragen — wie der echte Task-Worker es tut.
+    faa_sessions[user_id] = session
+
+    # handle_update mit einer Privatnachricht aufrufen.
+    msg = make_message("Hallo Registry",
+                       chat_id=user_id, from_user_id=user_id,
+                       chat_type="private", message_id=300)
+    handle_update(msg, ctx)
+
+    # Warten, bis deliver() verarbeitet wurde.
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline and not delivered:
+        time.sleep(0.01)
+
+    assert delivered, (
+        "SESS-5: handle_update hätte die Privatnachricht über _SESSION_SORTS "
+        "an session.deliver() weiterleiten müssen.")
+    # Die Nachricht soll ankommen — make_faa_input übersetzt sie zu FaaInput;
+    # wir prüfen nur, dass etwas in der Queue landete (kein Agent-Aufruf).
+    assert not provider.requests, (
+        "SESS-5: Bei aktiver Session darf der Agent nicht aufgerufen werden.")
+    assert not tg.sent, (
+        "SESS-5: Bei aktiver Session darf keine Bot-Antwort gesendet werden.")

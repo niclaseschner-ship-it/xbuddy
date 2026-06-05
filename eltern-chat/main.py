@@ -50,6 +50,7 @@ from history import History
 from model import ImageBlock, Message, ProviderError, TextBlock
 from onboarding import OnboardingState
 from onboarding_store import OnboardingStore
+from private_chat_session import SessionSortEntry
 from providers import get_provider
 from tasks import TurnContext, build_catalog
 from telegram import ChatMigratedError, TelegramClient, TelegramError
@@ -91,6 +92,32 @@ class Context:
     paa_sessions: dict = None  # PAA-6: laufende »Panel anlegen«-Sessions (chat_id → PaaSession)
 
 
+# SESS-5: Session-Sorten-Registry — modul-weit, einmal definiert.
+# Jede Sorte benennt ihren Context-Slot und ihren make_input-Helfer.
+# handle_update iteriert darüber, statt pro Sorte einen eigenen if-Block
+# zu tragen. Reihenfolge entspricht der früheren if-Kette (FAA→GAA→KAV→
+# TES→PAA) und darf nicht ohne Routing-Check geändert werden.
+#
+# Die make_input-Callables werden einmal beim Modul-Load gebunden —
+# die skills-Module liegen zu diesem Zeitpunkt bereits auf sys.path
+# (conftest.py / systemd-WorkingDirectory).
+def _build_session_sorts():
+    from skills.familie_anlegen_task import make_faa_input
+    from skills.geraet_anlegen_task import make_gaa_input
+    from skills.kalender_verbinden_task import make_kav_input
+    from skills.panel_anlegen_task import make_paa_input
+    from skills.termin_eintragen_task import make_tes_input
+    return (
+        SessionSortEntry("faa_sessions", make_faa_input),   # FAA-12
+        SessionSortEntry("gaa_sessions", make_gaa_input),   # GAA-5
+        SessionSortEntry("kav_sessions", make_kav_input),   # KAV-3
+        SessionSortEntry("tes_sessions", make_tes_input),   # TES-3
+        SessionSortEntry("paa_sessions", make_paa_input),   # PAA-6
+    )
+
+_SESSION_SORTS = _build_session_sorts()
+
+
 # ============================================================
 #  Orchestrierung
 # ============================================================
@@ -101,57 +128,20 @@ def handle_update(update, ctx):
     if msg is None:
         return
 
-    # FAA-12: läuft eine »Familie anlegen«-Session in diesem Privatchat,
-    # gehen Privatchat-Nachrichten an die Session statt zum Agenten —
-    # die Konversation gehört der Funktion, bis sie endet.
-    if ctx.faa_sessions is not None and msg.chat_type == "private":
-        session = ctx.faa_sessions.get(msg.chat_id)
-        if session is not None and not session.is_finished():
-            from skills.familie_anlegen_task import make_faa_input
-            session.deliver(make_faa_input(msg))
-            return
-
-    # GAA-5: analog FAA-12 für »Gerät anlegen«-Sessions — eine laufende
-    # GAA-Session beansprucht den Privatchat bis zum Ende.
-    if ctx.gaa_sessions is not None and msg.chat_type == "private":
-        session = ctx.gaa_sessions.get(msg.chat_id)
-        if session is not None and not session.is_finished():
-            from skills.geraet_anlegen_task import make_gaa_input
-            session.deliver(make_gaa_input(msg))
-            return
-
-    # KAV-3 / KAV-6: analog FAA-12 / GAA-5 für »Kalender verbinden«-Sessions
-    # — eine laufende KAV-Session beansprucht den Privatchat bis zum Ende
-    # (Aufklärungstext + Login-Link + Code-Empfang).
-    if ctx.kav_sessions is not None and msg.chat_type == "private":
-        session = ctx.kav_sessions.get(msg.chat_id)
-        if session is not None and not session.is_finished():
-            from skills.kalender_verbinden_task import make_kav_input
-            session.deliver(make_kav_input(msg))
-            return
-
-    # TES-3: analog FAA-12 / GAA-5 / KAV-3 für »Termin eintragen«-Sessions
-    # — eine laufende TES-Session beansprucht den Privatchat bis zum Ende
-    # (Datum-/Titel-Klärung + Bestätigung + PUT).
-    if ctx.tes_sessions is not None and msg.chat_type == "private":
-        session = ctx.tes_sessions.get(msg.chat_id)
-        if session is not None and not session.is_finished():
-            from skills.termin_eintragen_task import make_tes_input
-            session.deliver(make_tes_input(msg))
-            return
-
-    # PAA-6 / TASK-7: analog FAA-12 / GAA-5 / KAV-3 / TES-3 für »Panel
-    # anlegen«-Sessions — eine laufende PAA-Session beansprucht den Privatchat
-    # bis zum Ende (Display-Auswahl + Slug + Apps + Bestätigung + POST). Dieser
-    # namentliche Routing-Block ist Bau-Bestandteil der PAA-Spec (PAA-6, die
-    # stille Lego-Falle ohne ihn): handle_update muss EXAKT die Session-Map
-    # lesen, in die der PAA-Worker schreibt (ctx.paa_sessions).
-    if ctx.paa_sessions is not None and msg.chat_type == "private":
-        session = ctx.paa_sessions.get(msg.chat_id)
-        if session is not None and not session.is_finished():
-            from skills.panel_anlegen_task import make_paa_input
-            session.deliver(make_paa_input(msg))
-            return
+    # SESS-5: Privatchat-Session-Routing — generische Iteration über _SESSION_SORTS.
+    # Jede registrierte Session-Sorte (FAA-12/GAA-5/KAV-3/TES-3/PAA-6) beansprucht
+    # den Privatchat ihres Inhabers, solange sie läuft. handle_update liest die
+    # Session-Map per getattr(ctx, entry.ctx_attr) — dieselbe Map-Referenz, die der
+    # Worker befüllt (Lego-Falle-Sicherung, PAA-6/TASK-7). Reihenfolge: wie bisher.
+    if msg.chat_type == "private":
+        for entry in _SESSION_SORTS:
+            sessions = getattr(ctx, entry.ctx_attr, None)
+            if sessions is None:
+                continue
+            session = sessions.get(msg.chat_id)
+            if session is not None and not session.is_finished():
+                session.deliver(entry.make_input_fn(msg))
+                return
 
     # EC-5: In einer Gruppe reagiert das System nur, wenn es ausdrücklich
     # angesprochen wird. Im Privatchat bezieht sich jede Nachricht auf den Bot.
