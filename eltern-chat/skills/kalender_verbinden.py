@@ -765,7 +765,7 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
     account_email = ""
     try:
         account_email = fetch_email(access_token) or ""
-    except Exception as e:
+    except Exception as e:  # Robustheit: kein Verbindungs-Abbruch
         logging.info("kalender_verbinden: account-email nicht ermittelbar (%s) "
                      "— Bestätigung ohne E-Mail (KAV-8)", e)
         account_email = ""

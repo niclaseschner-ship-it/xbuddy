@@ -149,7 +149,7 @@ class Zugangsdaten:
         # ZD-6: nie Werte spiegeln. Repr zeigt nur Pfad und Anzahl.
         try:
             count = len(self._load())
-        except Exception:
+        except Exception:  # Diagnose darf nie selbst werfen
             count = "?"
         return "Zugangsdaten(path=%r, eintraege=%s)" % (self.path, count)
 

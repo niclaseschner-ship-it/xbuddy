@@ -238,7 +238,7 @@ class Catalog:
         for hook in hooks:
             try:
                 result = hook(context)
-            except Exception as e:
+            except Exception as e:  # siehe EC-21-Notiz oben
                 failures.append(HookFailure(
                     consumer=getattr(hook, "consumer", task.name),
                     error="unerwarteter Fehler (%s)" % e))

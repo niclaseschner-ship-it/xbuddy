@@ -31,7 +31,7 @@ def is_authorized(tg, family_group_chat_id, user_id):
         # Aufrufer zieht die Gruppen-Bindung nach. Nicht als „nicht berechtigt"
         # verschlucken.
         raise
-    except Exception as e:
+    except Exception as e:  # jeder andere Fehler ⇒ nicht berechtigt
         logging.warning("Mitgliedschaftsprüfung fehlgeschlagen für %s: %s", user_id, e)
         return False
     if not isinstance(member, dict):

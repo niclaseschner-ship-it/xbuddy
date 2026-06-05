@@ -183,7 +183,7 @@ def _validate_key(provider_name, provider_model, key):
         return provider
     except ProviderError:
         return None
-    except Exception as e:
+    except Exception as e:  # z. B. unbekannter Anbieter-Name
         logging.warning("Key-Validierung fehlgeschlagen: %s", e)
         return None
 

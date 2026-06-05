@@ -55,7 +55,7 @@ from tasks import TurnContext, build_catalog
 from telegram import ChatMigratedError, TelegramClient, TelegramError
 from telemetry import TelemetryStore
 
-from tools import logsetup
+from tools import logsetup  # LOG-4 (#166), Repo-Root liegt schon auf sys.path
 
 # Klartext-Antworten.
 _PROVIDER_DOWN = ("Ich kann deine Anfrage gerade nicht bearbeiten — der "
@@ -234,7 +234,7 @@ def _persist_telemetry(ctx, turn_id, chat_id, telemetry):
         return
     try:
         ctx.telemetry_store.persist_turn(turn_id, chat_id, telemetry)
-    except Exception as e:
+    except Exception as e:  # Persistenz ist Komfort, nicht Gate
         logging.warning("Telemetrie-Persistenz fehlgeschlagen (turn=%s): %s",
                         turn_id, e)
 
@@ -346,7 +346,7 @@ def _execute_confirmed(pending, msg, ctx):
     try:
         outcome = ctx.catalog.execute_write_task(
             task, pending.arguments, turn_context)
-    except Exception as e:
+    except Exception as e:  # Aufgabe isoliert melden
         logging.warning("Ausführung von '%s' fehlgeschlagen: %s", pending.task_name, e)
         _send(ctx, msg.chat_id, _TASK_FAILED % e, reply_to_message_id=msg.message_id)
         return
@@ -497,7 +497,7 @@ def poll_loop(ctx, get_updates_timeout=30):
             offset = update.get("update_id", 0) + 1
             try:
                 dispatch(update, ctx)
-            except Exception:
+            except Exception:  # ein Update darf den Loop nie killen
                 logging.exception("Petrarbeitung eines Updates fehlgeschlagen")
         latency_ms = int((time.monotonic() - t0) * 1000)
         logging.info(
