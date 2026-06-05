@@ -73,8 +73,30 @@ _GAVE_UP = ("Ich konnte die Anfrage nicht abschließen. Bitte formuliere sie "
 # #310 (T310-S3): synthetischer tool_result-Inhalt, der das vorgeschlagene
 # WRITE-tool_use im persistierten Verlauf paart (EC-10). EC-7: er sagt ehrlich,
 # dass der Vorschlag NUR vorgelegt wurde — nicht, dass der Write lief.
-_PROPOSAL_PENDING = ("Vorschlag der Familie vorgelegt — Ausführung erst nach "
-                     "Bestätigung.")
+# #331: parametrisiert nach Task-Namen, damit das Modell in Folge-Turns klar
+# erkennt, WELCHES Werkzeug erneut aufzurufen ist (statt den Vorschlag als
+# „läuft schon" zu lesen und den Tool-Call zu überspringen).
+def _proposal_pending(task_name):
+    """Gibt den synthetischen tool_result-Text für einen vorgelegten WRITE-
+    Vorschlag zurück (EC-10, #331).
+
+    Der Text macht drei Dinge klar:
+    (a) Es wurde ein VORSCHLAG vorgelegt — die Aufgabe ist NICHT ausgeführt.
+    (b) Das Werkzeug führt den Schritt-für-Schritt-Dialog selbst (Auswahl aus
+        den Registries/Listen) — das Modell stellt diese Fragen NICHT.
+    (c) Um die Aufgabe auszuführen (jetzt oder später), ist immer das Werkzeug
+        erneut aufzurufen.
+
+    Kein „erst nach Bestätigung"-Framing — das poisoned das Modell dahin,
+    den Dialog als „warte auf Ja" zu lesen statt das Werkzeug neu aufzurufen.
+    """
+    return (
+        "Vorschlag vorgelegt, das Werkzeug «%(name)s» auszuführen. "
+        "Das Werkzeug führt den nötigen Schritt-für-Schritt-Dialog selbst "
+        "(Auswahl aus den jeweiligen Registries/Listen) — du stellst diese "
+        "Fragen NICHT. Um die Aufgabe auszuführen (jetzt oder später), "
+        "rufe immer das Werkzeug «%(name)s» auf." % {"name": task_name}
+    )
 
 
 @dataclass
@@ -336,7 +358,7 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
                 # Ausführung passiert erst nach Bestätigung (EC-10).
                 messages.append(Message(role="user", blocks=[TaskResultBlock(
                     call_id=call.call_id,
-                    content=_PROPOSAL_PENDING,
+                    content=_proposal_pending(task.name),
                     is_error=False)]))
                 # Den reinen Vorschlagstext hängt die Orchestrierung an (via
                 # _format_proposal) — er ist nicht Teil des Loop-Transkripts.
