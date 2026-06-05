@@ -40,8 +40,10 @@ eltern-chat/config.json
 eltern-chat/*.db
 
 # Eltern-Chat: Onboarding-Speicher (ONB-5) — enthält den per Chat gesetzten
-# Anbieter-Key, niemals ins Repo.
+# Anbieter-Key, niemals ins Repo. `.migrated` ist die von der ZD-Migration (#84)
+# umbenannte Alt-Datei — trägt dieselben Klartext-Secrets, ebenfalls nie ins Repo.
 eltern-chat/onboarding-store.json
+eltern-chat/onboarding-store.json.migrated
 
 # Familien-Registry: Per-Instanz-Datei + Profilfotos (FAM-6) — je Instanz
 # separat gepflegt, nicht im Repo. Format: familie/familie.example.json
