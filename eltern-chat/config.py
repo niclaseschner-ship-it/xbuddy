@@ -43,7 +43,7 @@ from tools import configloader
 DEFAULTS = {
     "provider":       "claude",     # KI-Anbieter (EC-11)
     "provider_model": "",           # leer → Anbieter-Default des Adapters
-    "context_depth":  20,           # Gesprächskontext-Tiefe (EC-6)
+    "context_depth":  40,           # Gesprächskontext-Tiefe (EC-6, #312)
     # CAV-3: Pfad zum öffentlichen Root-CA-Zertifikat, das die CA-Verteilung
     # ausliefert. Per-Instanz-Wert; Default = Standard-Ausgabe des CA-Werkzeugs
     # (tools/ca/make-ca.sh, #36). Niemals der CA-Privatschlüssel.
