@@ -279,7 +279,7 @@ Verweis auf Privatchat; bereits im Privatchat gestartet → kein
 Ortswechsel-Hinweis. Der Wortlaut suggeriert keinen Ortswechsel, wenn keiner
 stattfindet.
 
-**[ENTWURF — Spec-Halt, Vorlage an Nic vor Merge] Modell-sichtbare
+**Modell-sichtbare
 Repräsentation eines vorgelegten Vorschlags.** Die dem Modell sichtbare
 Repräsentation eines vorgelegten Schreib-Vorschlags (der synthetische
 `tool_result`-Inhalt, der das `tool_use` im persistierten Verlauf paart, #310)
