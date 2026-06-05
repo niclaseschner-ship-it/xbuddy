@@ -4,15 +4,22 @@
 
 Die Anlage selbst (Privatchat-Konversation, OAuth-Login, Token-Speicherung)
 wird in `test_kalender_verbinden.py` geprueft. Hier geht es um
-Aufgaben-spezifische Aspekte: Reload-Hook + Quittungstext."""
+Aufgaben-spezifische Aspekte: Reload-Hook + Quittungstext.
+
+Seit T264 (SESS-5-Refactor): handle_update-Routing-Test (KAV-3) prüft, dass
+eingehende Privatchat-Nachrichten an eine laufende KAV-Session geleitet werden
+— analog TES-3 (test_termin_eintragen_task.py Z.285-361)."""
 
 import time
 
-from fakes import FakeTelegram
+from confirm import PendingStore
+from fakes import FakeProvider, FakeTelegram, make_message
+from history import History
 from hooks import ReloadHook
+from main import Context, handle_update
 from skills.kalender_verbinden import ZD_NAME_OAUTH_CLIENT
-from skills.kalender_verbinden_task import KalenderVerbindenTask
-from tasks import TurnContext
+from skills.kalender_verbinden_task import KalenderVerbindenTask, KavSession
+from tasks import TurnContext, build_catalog
 
 
 class _FakeZd:
@@ -268,3 +275,86 @@ def test_T285_S1_kav_typing_fn_fires_per_session_step():
 
     # Cleanup: Session aus der Map entfernen, damit kein Worker-Thread haengt.
     sessions.pop(user_id, None)
+
+
+# ============================================================
+#  KAV-3 / T264 — handle_update routet Privatchat-Nachrichten an KAV-Session
+# ============================================================
+
+def _ctx_with_kav_session(tmp_path, tg, kav_sessions,
+                           family_group_chat_id="-100"):
+    """Minimaler Context für den handle_update-Routing-Test (KAV-3, T264).
+
+    Analog `_ctx_with_tes_session` in `test_termin_eintragen_task.py` (Z.285-310):
+    Context hat eine kav_sessions-Map, damit handle_update eingehende
+    Privatchat-Updates an die laufende Session leiten kann.
+    """
+    catalog = build_catalog(
+        tg, "/instanz/rootCA.pem",
+        zd_store_getter=lambda: None,
+        kav_sessions=kav_sessions,
+        family_group_chat_id_getter=lambda: family_group_chat_id,
+    )
+    return Context(
+        tg=tg,
+        bot_username="mybot",
+        family_group_chat_id=family_group_chat_id,
+        context_depth=20,
+        provider=FakeProvider([]),
+        catalog=catalog,
+        history=History(str(tmp_path / "kav_routing.db")),
+        pending=PendingStore(),
+        kav_sessions=kav_sessions,
+    )
+
+
+def test_handle_update_routes_to_kav_session(tmp_path):
+    """KAV-3 / T264 (SESS-5-Entry-Path-Lücke): läuft eine KAV-Session in einem
+    Privatchat, gehen eingehende Privatchat-Updates dorthin (statt zum Agenten)
+    — analog TES-3 (test_termin_eintragen_task.py Z.312-361).
+
+    Prüft: handle_update ruft session.deliver() auf, wenn eine aktive KAV-Session
+    für den eingehenden chat_id existiert. Die Nachricht landet NICHT beim Agenten
+    (FakeProvider bleibt ohne Aufruf).
+    """
+    user_id = 42
+    tg = FakeTelegram(members={user_id: {"status": "member"}})
+    kav_sessions = {}
+    ctx = _ctx_with_kav_session(tmp_path, tg, kav_sessions)
+
+    # Session manuell starten: eine KavSession in die Map eintragen.
+    session = KavSession(chat_id=user_id)
+    kav_sessions[user_id] = session
+
+    # Eingabe aufzeichnen, die via deliver() ankommt.
+    delivered = []
+
+    def _run():
+        msg = session.next_message()
+        if msg is not None:
+            delivered.append(msg)
+
+    session.start(_run, ())
+    # Warten, bis der Worker-Thread auf next_message() blockiert.
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline and not session._queue is not None:
+        time.sleep(0.01)
+    time.sleep(0.05)  # Worker ist nun in next_message() blockiert.
+
+    # handle_update aufrufen — Privatchat-Nachricht von user_id.
+    msg = make_message("Kalender verbinden bitte",
+                       chat_id=user_id, from_user_id=user_id,
+                       chat_type="private", message_id=201)
+    handle_update(msg, ctx)
+
+    # Warten, bis deliver() die Nachricht verarbeitet hat.
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline and not delivered:
+        time.sleep(0.01)
+
+    assert delivered, (
+        "handle_update hätte die Privatchat-Nachricht an kav_sessions[%s].deliver() "
+        "leiten müssen — stattdessen wurde sie nicht an die Session zugestellt" % user_id)
+    assert delivered[0].text == "Kalender verbinden bitte"
+    # Session wird nach _run() aus der Map entfernt — kein Agent-Aufruf.
+    assert not tg.sent, "Der Agent hätte bei laufender KAV-Session nicht antworten dürfen"
