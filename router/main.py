@@ -838,6 +838,15 @@ DEFAULT_APP_PANEL_DIR = os.path.normpath(os.path.join(
 DEFAULT_CONTROLLER_SHARED_DIR = os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), '..', 'controller', '_shared'))
 
+# ROU-30 / DTOK-1 / DTOK-2: der geteilte Design-Token-Strang
+# (display/_shared/design/tokens.css) wird unter /display/_shared/design/
+# read-only aus dem Repo ausgeliefert — Zwilling zu /controller/_shared/
+# (ROU-23, Repo-Inhalt), NICHT zu /display/_shared/icons/ (ROU-26, die als
+# Per-Instanz-Daten außerhalb des Repos liegen). Design-Tokens sind die Marke:
+# bei allen Familien identisch, mit dem Code versioniert (#323).
+DEFAULT_DISPLAY_SHARED_DESIGN_DIR = os.path.normpath(os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), '..', 'display', '_shared', 'design'))
+
 # ROU-26 / ICONS-2: die zentrale Icon-Bibliothek (ARASAAC-Piktogramme) wird
 # unter /display/_shared/icons/ ausgeliefert — Zwilling zu /controller/_shared/
 # (ROU-23). Anders als die Controller-Helper liegt die icon-root als
@@ -854,6 +863,7 @@ _CONTROLLER_MIME = {
     '.js':   'application/javascript',
     '.json': 'application/manifest+json',
     '.png':  'image/png',
+    '.css':  'text/css',
 }
 
 
@@ -922,6 +932,33 @@ def _send_icon_asset(rel_path):
     ext = os.path.splitext(target)[1].lower()
     mime = _CONTROLLER_MIME.get(ext, 'application/octet-stream')
     return send_from_directory(root, rel_path, mimetype=mime)
+
+
+def _send_design_asset(rel_path):
+    # ROU-30: geteilter Design-Token-Strang aus dem In-Repo-Verzeichnis
+    # display/_shared/design/, Zwilling zu _send_shared_asset (ROU-23,
+    # Repo-Inhalt). Anders als _send_icon_asset (ROU-26) liegt die Wurzel im
+    # Repo, nicht in der Per-Instanz-icon-root. Defense in Depth: werkzeug
+    # safe_join (via send_from_directory) + expliziter realpath-Check.
+    root = os.path.realpath(DEFAULT_DISPLAY_SHARED_DESIGN_DIR)
+    target = os.path.realpath(os.path.join(root, rel_path))
+    if target != root and not target.startswith(root + os.sep):
+        abort(404)
+    if not os.path.isfile(target):
+        abort(404)
+    ext = os.path.splitext(target)[1].lower()
+    mime = _CONTROLLER_MIME.get(ext, 'application/octet-stream')
+    return send_from_directory(root, rel_path, mimetype=mime)
+
+
+@app.route('/display/_shared/design/<path:asset>', methods=['GET'])
+def display_shared_design(asset):
+    # ROU-30 / URL-16 / DTOK-1 / DTOK-2: read-only-Auslieferung des geteilten
+    # Design-Token-Strangs unter /display/_shared/design/<asset> aus dem
+    # In-Repo-Verzeichnis display/_shared/design/. Zwilling zu
+    # /controller/_shared/ (ROU-23, Repo-Inhalt) — abzugrenzen von
+    # /display/_shared/icons/ (ROU-26, Per-Instanz-Daten außerhalb des Repos).
+    return _send_design_asset(asset)
 
 
 @app.route('/display/_shared/icons/<path:asset>', methods=['GET'])
