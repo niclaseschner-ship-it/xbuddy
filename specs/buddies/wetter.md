@@ -262,8 +262,8 @@ funktioniert). Läufe gegen den echten Anbieter sind opt-in.
 - **OPEN-WETTER-G — Sonnencreme-Schwelle.** Ab welchem UV-Wert „Ja" — Config
   (`sunscreen_uv`) mit sinnvollem Default; familienspezifisch oder fix ist offen.
 - **OPEN-WETTER-H — Design-System-Reichweite. ENTSCHIEDEN (#323, Nic 2026-06-03):**
-  `wetter/static/design/colors_and_type.css` (v2.0) ist das repo-weite Fundament
-  für alle Buddys. `plan/static/design/tokens.css` (v1.0) wird abgelöst.
+  `display/_shared/design/tokens.css` (v2.0) ist das repo-weite Fundament
+  für alle Buddys. `plan/static/design/tokens.css` (v1.0) ist abgelöst (#323).
   Konvention: [`conventions/design-tokens.md`](../../conventions/design-tokens.md).
   Andockpunkt via `/display/_shared/` (DTOK-2) ist Schritt-2-Arbeit (#323).
 

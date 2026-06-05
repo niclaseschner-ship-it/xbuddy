@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════════════════════════════════════
    Wetter-Buddy — View `heute`, Diptychon, Stufe toddler (WETTER-2 … WETTER-13).
 
-   Stilwerte ausschließlich als Token aus colors_and_type.css (WETTER-20,
+   Stilwerte ausschließlich als Token aus display/_shared/design/tokens.css (WETTER-20,
    E-WETTER-6: keine hartcodierten Maße/Farben außerhalb der illustrativen
    SVG-Szenen). Layout-Basis ist das Mockup diptychon-toddler-v4.
    ══════════════════════════════════════════════════════════════════════════ */
@@ -407,4 +407,4 @@ body.xb[data-stage="toddler"] {
   z-index: 10;
 }
 
-/* fs-22 ist im Token-Set vorhanden (colors_and_type.css §11). */
+/* fs-22 ist im Token-Set vorhanden (display/_shared/design/tokens.css §11). */

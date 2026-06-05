@@ -9,14 +9,17 @@ ankommen.
 
 ### DTOK-1 — Ein geteilter Token-Strang ist die EINE Quelle visueller Werte
 
-Es gibt genau eine Datei, die die system-weiten Design-Token definiert. Aktuell
-ist das `wetter/static/design/colors_and_type.css` — ein Superset, das als
-**XBUDDY DESIGN TOKENS v2.0** kommentiert ist und das Mitwachsen-Stufen-System
-(`data-stage="toddler|reader|parent"`) trägt.
+Es gibt genau eine Datei, die die system-weiten Design-Token definiert:
+`display/_shared/design/tokens.css` — ein Superset, das als **XBUDDY DESIGN
+TOKENS v2.0** kommentiert ist und das Mitwachsen-Stufen-System
+(`data-stage="toddler|reader|parent"`) trägt. Sie liegt im geteilten
+Display-Asset-Verzeichnis `display/_shared/` (DTOK-2) und wird von dort
+referenziert.
 
-Die ältere `plan/static/design/tokens.css` (v1.0, BuddyBoard-Artefakt) wird
-durch den v2.0-Strang abgelöst. Sie bleibt solange im Repo, bis Plan-Buddy auf
-den geteilten Pfad umgestellt ist (Schritt 2, #323 — Design-Tokens-Migration).
+Die ältere `plan/static/design/tokens.css` (v1.0, BuddyBoard-Artefakt) ist mit
+der Design-Tokens-Migration (Schritt 2, #323) abgelöst und entfernt; der
+v2.0-Inhalt lebt nun unter `display/_shared/design/tokens.css`. Es gibt damit
+genau eine Token-Datei im Repo.
 
 *Tickets:* #323
 
@@ -27,11 +30,15 @@ Assets, die keinem einzelnen Buddy gehören, liegen unter `/display/_shared/`
 geteilte Display-Asset — nach den ARASAAC-Piktogrammen (`/display/_shared/icons/`,
 URL-16, ROU-26).
 
-Routing: analog Icons serviert der Router den Token-Strang aus einem
-konfigurierbaren Per-Instanz-Verzeichnis — kein eigener nginx-Block, keine
-Reihenfolge-Sonderregel. Das ist die Schritt-2-Arbeit (#323); hier gilt nur die
-Andock-Regel: sobald der Strang unter `/display/_shared/` erreichbar ist, wird er
-von dort referenziert.
+Routing: der Router serviert den Token-Strang **read-only aus dem In-Repo-
+Verzeichnis** `display/_shared/design/` (ROU-30) — ein Zwilling zu
+`/controller/_shared/` (ROU-23, Repo-Inhalt), **nicht** zu `/display/_shared/icons/`
+(ROU-26/Icons, die als Per-Instanz-Daten außerhalb des Repos liegen). Design-Tokens
+sind die Marke: bei allen Familien identisch, mit dem Code versioniert, kein
+manueller Pro-Pi-Schritt, keine Divergenz (Nic-Entscheid 2026-06-05). Kein eigener
+nginx-Block, keine Reihenfolge-Sonderregel: `/display/_shared/design/` fällt wie
+`/display/_shared/icons/` an den allgemeinen `/display/`→Router-Eintrag. Andock-Regel:
+der Strang ist unter `/display/_shared/` erreichbar und wird von dort referenziert.
 
 *Tickets:* #323, #135 (Icon-Bibliothek als Referenz-Umsetzung von URL-16)
 
