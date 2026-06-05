@@ -188,7 +188,7 @@ längste Prefix gewinnt, das ist Teil der Spec, nicht nur eine nginx-Marotte):
 | 4 | `/api/v1/familie/`              | Familie             | Familien-Mit-Host (Personen, Foto).                                       |
 | 5 | `/api/v1/geraete/`              | Geräte              | Geräte-Registry (GER-13/14/15) — Liste, Einzeln, Anlegen.                 |
 | 6 | `/api/v1/displays/<id>/events`  | Router              | SSE-Zustands-Stream (ROU-22); Long-Lived, ohne Proxy-Puffer.              |
-| 7 | `/display/`                     | Router              | Display-Views (außer den oben abgefangenen spezifischen Buddy-Prefixen). Schließt geteilte Display-Assets `/display/_shared/icons/` ein: der Router serviert die ARASAAC-Piktogramme aus der icon-root (URL-16, ICONS-5, `router.md` ROU-26, #135) — kein eigener nginx-Block. |
+| 7 | `/display/`                     | Router              | Display-Views (außer den oben abgefangenen spezifischen Buddy-Prefixen). Schließt geteilte Display-Assets unter `/display/_shared/` ein (URL-16): Per-Instanz-Assets wie `/display/_shared/icons/` (ARASAAC-Piktogramme, ROU-26, #135) und repo-servierte Assets wie `/display/_shared/design/` (Design-Tokens, ROU-30, #323) — kein eigener nginx-Block. |
 | 8 | `/controller/`                  | Router              | Controller-Aktionen (URL-3).                                              |
 | 9 | `/api/v1/panels/`               | Panel-Registry      | Panel-Registry-API (PREG-13/14/15) — Liste, Einzeln, Anlegen. Upstream: xbuddy-panel (:5041, PORT-2). |
 | 10 | `/api/v1/`                     | Router              | Hub-Backend (State, Events, Diagnose).                                    |
@@ -243,13 +243,21 @@ Bauregeln:
 - **read-only**: der Namensraum liefert Assets aus; er nimmt keine
   Schreib-Anfragen entgegen. HTTP-Methoden außer `GET`/`HEAD` werden
   abgelehnt.
-- **Per-Instanz-Daten, vom Router serviert**: die Assets selbst sind
-  Per-Instanz-Daten (nicht im Repo). Der **Router** liefert sie aus einem
-  konfigurierbaren Verzeichnis aus — ein Zwilling zur Controller-Helper-
-  Auslieferung `/controller/_shared/` (`router.md` ROU-23). Er läuft als
-  User `buddy` und liest die Per-Instanz-Wurzel problemlos, während ein
-  statischer nginx-`alias` (nginx = `www-data`) an `0700`-Home-Permissions
-  scheitern kann (#135).
+- **Zwei legitime Quell-Typen, vom Router serviert**: der **Router**
+  liefert die Assets aus — analog zur Controller-Helper-Auslieferung
+  `/controller/_shared/` (`router.md` ROU-23). Er läuft als User `buddy`
+  und liest sowohl Per-Instanz-Pfade als auch In-Repo-Verzeichnisse,
+  während ein statischer nginx-`alias` (nginx = `www-data`) an
+  `0700`-Home-Permissions scheitern kann (#135). Für die Assets selbst
+  sind zwei Quell-Typen erlaubt:
+  - **Per-Instanz** (außerhalb des Repos, instanzspezifisch): der Router
+    liefert aus einem konfigurierbaren Per-Instanz-Verzeichnis aus.
+    Beispiel: `/display/_shared/icons/` → ARASAAC-Piktogramme
+    (ICONS-5, ROU-26, #135).
+  - **Repo-serviert** (im Repo versioniert, bei allen Instanzen identisch):
+    der Router liefert direkt aus dem In-Repo-Verzeichnis aus — kein
+    manueller Pro-Pi-Schritt, keine Divergenz. Beispiel:
+    `/display/_shared/design/` → Design-Tokens (DTOK-1, ROU-30, #323).
 - **nicht buddy-gebunden**: ein Asset unter `/display/_shared/` gehört
   keinem einzelnen Buddy (für buddy-eigene Assets gilt URL-13).
 - **Routing über `/display/`**: weil der Router die Assets serviert,
@@ -257,11 +265,12 @@ Bauregeln:
   allgemeinen `/display/`→Router-Eintrag — kein eigener statischer
   nginx-Block, keine Reihenfolge-Sonderregel nötig.
 
-Heute einzige Instanz: `/display/_shared/icons/` → ARASAAC-Piktogramme
-(ICONS-5, `router.md` ROU-26, #135). Weitere geteilte Display-Assets
-folgen demselben Muster.
+Instanzen: `/display/_shared/icons/` (ARASAAC-Piktogramme, Per-Instanz,
+ROU-26, #135) und `/display/_shared/design/` (Design-Tokens, repo-serviert,
+ROU-30, #323). Weitere geteilte Display-Assets folgen einem der beiden
+Muster je nachdem, ob sie instanzspezifisch sind oder mit dem Code versioniert.
 
-*Tickets:* #135
+*Tickets:* #135, #323
 
 ## Beispiele
 
