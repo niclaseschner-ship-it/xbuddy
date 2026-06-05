@@ -5,13 +5,11 @@ Der KI-Anbieter ist eine kontrollierte Doppelung (EC-17); geprüft wird das
 Verhalten auch gegen absichtlich abwegige Modell-Ausgaben (EC-12).
 """
 
-import pytest
-
 import agent
+import pytest
 from fakes import FakeProvider, FakeReadTask, FakeWriteTask, task_call_response, text_response
 from model import GenerationResponse, Message, ProviderError, TaskCallBlock, TaskResultBlock, TextBlock
 from tasks import Catalog, TurnContext
-
 
 # Der deterministische Ausführungs-Kontext, den run_turn unverändert an die
 # Aufgaben durchreicht (#63). Für die Agent-Tests ein fester Stellvertreter.

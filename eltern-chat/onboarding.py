@@ -17,7 +17,6 @@ from model import GenerationRequest, Message, ProviderError, TextBlock
 from providers import get_provider
 from telegram import TelegramError
 
-
 # ============================================================
 #  Hart-codierte Nachrichten (E-ONB-1)
 # ============================================================
@@ -184,7 +183,7 @@ def _validate_key(provider_name, provider_model, key):
         return provider
     except ProviderError:
         return None
-    except Exception as e:  # noqa: BLE001 — z. B. unbekannter Anbieter-Name
+    except Exception as e:
         logging.warning("Key-Validierung fehlgeschlagen: %s", e)
         return None
 

@@ -1,9 +1,7 @@
 """Tests für die Pricing-Tabelle — EC-23/E-EC-11 (Refs #268, AC5)."""
 
 import pytest
-
 from providers.pricing import EUR_PER_USD, estimate_cost
-
 
 # AC5: Pricing deckt Opus/Sonnet/Haiku 4.x mit den Preisen aus Anthropic-Pricing
 # (Stand 2026-05-30). Die Berechnung folgt input + output, wobei cached_input

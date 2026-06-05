@@ -28,10 +28,9 @@ _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from tools import configloader  # noqa: E402
-
 from onboarding_store import KEY_FAMILY_GROUP, KEY_PROVIDER_API_KEY, OnboardingStore
 
+from tools import configloader
 
 # EC-15: nicht-geheime Werte mit ihren Defaults — Schema für den gemeinsamen
 # `tools.configloader` (CONFIG-1, #179). Der Loader macht Datei < ENV nach

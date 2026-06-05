@@ -8,8 +8,15 @@ import onboarding
 from fakes import BotAdded, FakeProvider, FakeTelegram, make_message, text_response
 from main import Context, dispatch
 from model import ProviderError
-from onboarding import (ASK_FOR_KEY, DONE_GROUP, ENTRY_MESSAGE, KEY_INVALID,
-                        KEY_OK_PRIVATE, NEED_GROUP_FIRST, OnboardingState)
+from onboarding import (
+    ASK_FOR_KEY,
+    DONE_GROUP,
+    ENTRY_MESSAGE,
+    KEY_INVALID,
+    KEY_OK_PRIVATE,
+    NEED_GROUP_FIRST,
+    OnboardingState,
+)
 from onboarding_store import OnboardingStore
 
 # Ein realistisch geformter Schlüssel: langes Token ohne Leerzeichen (ONB-3).

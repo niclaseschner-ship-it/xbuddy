@@ -4,7 +4,6 @@
 import json
 
 import pytest
-
 from skills.geraete_client import GeraeteClient, GeraeteClientError
 
 

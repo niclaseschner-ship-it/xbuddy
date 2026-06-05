@@ -19,7 +19,6 @@ if _REPO_ROOT not in sys.path:
 
 from tools import configloader  # noqa: E402
 
-
 SCHEMA = {
     "listen_host": "127.0.0.1",
     "listen_port": 5020,

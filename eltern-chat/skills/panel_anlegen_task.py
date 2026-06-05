@@ -19,11 +19,11 @@ Privatchat-Stream als `next_message`-Callable und gibt die Quittung zurück.
 import logging
 
 from private_chat_session import PrivateChatSession
+from tasks import Proposal, WriteTask, is_from_private_chat
+
 from skills import panel_anlegen
 from skills.panel_client import GeraeteDisplayClient, PanelClient
 from skills.typing_indicator import make_typing_fn
-from tasks import Proposal, WriteTask, is_from_private_chat
-
 
 # Quittung in den Agent-Loop zurück — die Anlage selbst läuft im Privatchat
 # (Refs analog GAA): aus der Gruppe ein Wechsel-Hinweis, im Privatchat direkt.

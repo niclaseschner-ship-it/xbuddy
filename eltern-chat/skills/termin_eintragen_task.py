@@ -21,15 +21,13 @@ EC-10: zweistufige Bestätigung ist akzeptierter Aufwand (TES-10-Spec-Begründun
 """
 
 import logging
-
 from dataclasses import dataclass
 
 from private_chat_session import PrivateChatSession
-from skills import termin_eintragen as tes_mod
-from skills.plan_client import PlanClient
-from skills.typing_indicator import make_typing_fn
 from tasks import Proposal, WriteTask, is_from_private_chat
 
+from skills import termin_eintragen as tes_mod
+from skills.typing_indicator import make_typing_fn
 
 logger = logging.getLogger(__name__)
 

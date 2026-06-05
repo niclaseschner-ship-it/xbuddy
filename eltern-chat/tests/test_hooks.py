@@ -18,9 +18,7 @@ import threading
 import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from hooks import (HOOK_HTTP_TIMEOUT_SECONDS, HookContext, HookFailure,
-                   HookSuccess, ReloadHook, summarize_failures)
-
+from hooks import HOOK_HTTP_TIMEOUT_SECONDS, HookContext, HookFailure, HookSuccess, ReloadHook, summarize_failures
 
 # ============================================================
 #  Test-Server: ein winziger HTTP-Server, der je Test eine

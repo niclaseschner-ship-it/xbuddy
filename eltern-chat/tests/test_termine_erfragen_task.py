@@ -8,17 +8,11 @@ Prüft die Aufgabe als EC-8-Katalog-Aufgabe:
 
 from datetime import date
 
-import pytest
-
 from fakes import FakeTelegram
 from model import READ
 from skills.plan_client import PlanClientError
-from skills.termine_erfragen import (
-    SIGNAL_BEANTWORTET, SIGNAL_ABGELEHNT, SIGNAL_LEER, SIGNAL_NICHT_ERREICHBAR,
-)
 from skills.termine_erfragen_task import TermineErfragenTask
-from tasks import TurnContext, build_catalog, ReadTask
-
+from tasks import ReadTask, TurnContext, build_catalog
 
 # ============================================================
 #  Hilfs-Klassen
@@ -93,7 +87,6 @@ def test_TER_10_hat_parameter_schema():
 def test_AC4_catalog_registriert_task_wenn_plan_origin_url_gesetzt(tmp_path):
     """AC4: build_catalog() registriert TermineErfragenTask wenn plan_origin_url
     gesetzt ist."""
-    import os
     # CA-Datei anlegen (für CaVerteilungTask notwendig)
     ca_path = str(tmp_path / "rootCA.pem")
     with open(ca_path, "wb") as f:

@@ -14,15 +14,15 @@ Datei-Pfads entgegen — die Tests reichen einen vorgefertigten
 
 import time
 
-from skills import geraet_anlegen
 from confirm import PendingStore
 from fakes import FakeProvider, FakeTelegram, make_message
-from skills.geraet_anlegen import GaaInput
-from skills.geraet_anlegen_task import GaaSession, GeraetAnlegenTask, make_gaa_input
-from skills.geraete_client import GeraeteClientError
 from history import History
 from main import Context, handle_update
 from model import WRITE
+from skills import geraet_anlegen
+from skills.geraet_anlegen import GaaInput
+from skills.geraet_anlegen_task import GaaSession, GeraetAnlegenTask, make_gaa_input
+from skills.geraete_client import GeraeteClientError
 from tasks import TurnContext, build_catalog
 from test_geraet_anlegen import FakeGeraeteClient
 

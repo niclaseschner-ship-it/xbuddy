@@ -15,7 +15,6 @@ import json
 import logging
 import os
 
-
 # Schlüssel im Speicher.
 KEY_PROVIDER_API_KEY = "provider_api_key"
 KEY_FAMILY_GROUP = "family_group_chat_id"

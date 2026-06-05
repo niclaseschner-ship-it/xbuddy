@@ -17,7 +17,6 @@ import re
 import stat
 import tempfile
 
-
 # GER-2: endliche Liste der Geräte-Typen V1. Ein weiterer Typ ist eine
 # Spec-Änderung, kein Config-Wert.
 TYPEN = ("tablet", "handy", "monitor", "pi-display")
@@ -320,7 +319,7 @@ def load(path):
     Datei-Fehler, kein stiller Default.
     """
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
     except FileNotFoundError:
         logging.warning(

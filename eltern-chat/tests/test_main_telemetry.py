@@ -12,13 +12,10 @@ Geprüft wird:
 
 import sqlite3
 
-import pytest
-
 from confirm import PendingStore
-from fakes import (FakeProvider, FakeTelegram, FakeWriteTask, make_message,
-                   task_call_response)
+from fakes import FakeProvider, FakeTelegram, FakeWriteTask, make_message, task_call_response
 from history import History
-from main import Context, _PROVIDER_DOWN, handle_update
+from main import _PROVIDER_DOWN, Context, handle_update
 from model import GenerationResponse, ProviderError, ProviderUsage
 from tasks import Catalog
 from telemetry import TelemetryStore

@@ -30,7 +30,6 @@ import logging
 import urllib.error
 import urllib.request
 
-
 logger = logging.getLogger(__name__)
 
 # DCOMP-1 / SVC-1: HTTP-Timeout in Sekunden. 2 s ist grosszuegig fuer
@@ -64,7 +63,7 @@ class Person:
     nichts.
     """
 
-    __slots__ = ("id", "name", "ring", "art", "foto", "email")
+    __slots__ = ("art", "email", "foto", "id", "name", "ring")
 
     def __init__(self, id, name, ring, art, foto=None, email=None):
         self.id = id
@@ -132,7 +131,7 @@ class RegistryView:
     Seite).
     """
 
-    __slots__ = ("_personen", "_index")
+    __slots__ = ("_index", "_personen")
 
     def __init__(self, personen):
         self._personen = list(personen)

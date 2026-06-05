@@ -16,9 +16,9 @@ from dataclasses import dataclass
 # eltern-chat/ (eine Ebene über tests/) auf den Importpfad legen.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from model import GenerationResponse, TaskCallBlock          # noqa: E402
-from tasks import Proposal, ReadTask, WriteTask              # noqa: E402
-from telegram import ChatMigratedError, IncomingMessage, TelegramError  # noqa: E402
+from model import GenerationResponse, TaskCallBlock
+from tasks import Proposal, ReadTask, WriteTask
+from telegram import ChatMigratedError, IncomingMessage
 
 
 @dataclass

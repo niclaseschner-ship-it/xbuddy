@@ -160,7 +160,6 @@ def test_ac1_send_chat_action_logs_error(caplog):
 
 def _ctx_full(tmp_path, tg, provider):
     """Context mit echtem Provider-Objekt für Reihenfolge-Tests."""
-    import authz as authz_mod
     return Context(
         tg=tg,
         bot_username="testbot",

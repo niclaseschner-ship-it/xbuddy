@@ -18,7 +18,6 @@ import re
 import stat
 import tempfile
 
-
 # PREG-4: Dateirechte auf den Eigentümer beschränkt — analog GER-4 / ZD-3.
 FILE_MODE = 0o600
 
@@ -267,7 +266,7 @@ def load(path):
     kein stiller Default.
     """
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
     except FileNotFoundError:
         logging.warning(

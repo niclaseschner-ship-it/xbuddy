@@ -13,10 +13,8 @@ Neue Gruppe (#274 — E2E-Nachweis über handle_update):
               vom Renewal-Thread während des langsamen Provider-Calls (EC-14/#274).
 """
 
-import time
 import threading
-
-import pytest
+import time
 
 import agent
 from confirm import PendingStore
@@ -26,7 +24,6 @@ from main import Context, handle_update
 from model import Message, TextBlock
 from tasks import Catalog, TurnContext
 from telegram import TelegramError
-
 
 _TURN = TurnContext(chat_id=42)
 

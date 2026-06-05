@@ -15,7 +15,6 @@ ausgeführt.
 
 from dataclasses import dataclass
 
-
 # E-EC-7: die fest definierte Liste der Bestätigungswörter. Vergleich
 # case-insensitiv, ganzes Wort. 👍 deckt auch die Hautton-Varianten ab.
 CONFIRM_WORDS = frozenset({

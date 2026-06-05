@@ -16,8 +16,7 @@ import logging
 import re
 from datetime import date, timedelta
 
-from skills.plan_client import PlanClient, PlanClientError
-
+from skills.plan_client import PlanClientError
 
 logger = logging.getLogger(__name__)
 

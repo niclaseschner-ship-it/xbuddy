@@ -18,7 +18,6 @@ import os
 import re
 import tempfile
 
-
 # FAM-4: feste Ring-Farb-Palette. Endlich; mehr Personen als Farben ist eine
 # Spec-Änderung, kein Config-Wert. `gray` ist die Farbe für Personen ohne
 # feste Zuordnung.

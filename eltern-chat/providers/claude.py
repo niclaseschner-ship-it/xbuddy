@@ -8,10 +8,15 @@ Antwort zurück. Der Agent-Kern fasst Anthropic-Typen nie an.
 import logging
 
 import anthropic
-
-from model import (GenerationResponse, ImageBlock, ProviderError, ProviderUsage,
-                   TaskCallBlock, TaskResultBlock, TextBlock)
-
+from model import (
+    GenerationResponse,
+    ImageBlock,
+    ProviderError,
+    ProviderUsage,
+    TaskCallBlock,
+    TaskResultBlock,
+    TextBlock,
+)
 
 logger = logging.getLogger(__name__)
 

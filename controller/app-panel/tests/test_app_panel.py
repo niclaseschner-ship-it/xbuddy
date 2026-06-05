@@ -12,11 +12,7 @@ import json
 import os
 import re
 import subprocess
-import sys
 import textwrap
-
-import pytest
-
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HTML_PATH    = os.path.join(ROOT, 'index.html')

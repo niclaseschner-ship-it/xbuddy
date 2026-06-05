@@ -177,7 +177,7 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
 
     # PLAN-6/PLAN-7: Schedule-Raster — je Tag je Slot eine Zelle.
     slot_keys = [s.schluessel for s in cfg.slots]
-    schedule = {t["iso"]: {k: None for k in slot_keys} for t in tage}
+    schedule = {t["iso"]: dict.fromkeys(slot_keys) for t in tage}
 
     # PLAN-7/PLAN-8: Erwachsenen-Zuweisungen aus der DB einsetzen.
     erwachsenen_keys = {s.schluessel for s in cfg.erwachsenen_slots()}

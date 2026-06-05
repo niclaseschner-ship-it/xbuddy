@@ -50,7 +50,7 @@ class Zugangsdaten:
         Liefert ein dict Name -> Wert.
         """
         try:
-            with open(self.path, "r", encoding="utf-8") as f:
+            with open(self.path, encoding="utf-8") as f:
                 data = json.load(f)
         except FileNotFoundError:
             # ZD-4: fehlende Datei ist kein Fehler — leerer Speicher.
@@ -149,7 +149,7 @@ class Zugangsdaten:
         # ZD-6: nie Werte spiegeln. Repr zeigt nur Pfad und Anzahl.
         try:
             count = len(self._load())
-        except Exception:  # noqa: BLE001 — Diagnose darf nie selbst werfen
+        except Exception:
             count = "?"
         return "Zugangsdaten(path=%r, eintraege=%s)" % (self.path, count)
 

@@ -26,11 +26,10 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__f
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from wetter import config as config_mod        # noqa: E402
-from wetter import main as main_mod            # noqa: E402
-from wetter import meteo as meteo_mod          # noqa: E402
-from wetter import render as render_mod        # noqa: E402
-
+from wetter import config as config_mod  # noqa: E402
+from wetter import main as main_mod  # noqa: E402
+from wetter import meteo as meteo_mod  # noqa: E402
+from wetter import render as render_mod  # noqa: E402
 
 TAG = date(2026, 6, 3)
 
@@ -188,7 +187,8 @@ def test_wetter14_kein_treffer_gibt_fallback(make_transport):
                          "optional": [], "hinweis": "fallback"},
         },
     }
-    import json, tempfile
+    import json
+    import tempfile
     f = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
     json.dump(raw, f)
     f.close()
