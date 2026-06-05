@@ -279,7 +279,22 @@ Verweis auf Privatchat; bereits im Privatchat gestartet → kein
 Ortswechsel-Hinweis. Der Wortlaut suggeriert keinen Ortswechsel, wenn keiner
 stattfindet.
 
-*Tickets:* #27 · #266 · #278
+**Modell-sichtbare
+Repräsentation eines vorgelegten Vorschlags.** Die dem Modell sichtbare
+Repräsentation eines vorgelegten Schreib-Vorschlags (der synthetische
+`tool_result`-Inhalt, der das `tool_use` im persistierten Verlauf paart, #310)
+macht klar, dass das WERKZEUG die Aufgabe ausführt — einschließlich des
+Schritt-für-Schritt-Dialogs (Auswahl aus den jeweiligen Registries/Listen) —
+und bei erneutem Wunsch erneut aufzurufen ist. Sie darf NICHT so lesen, als sei
+der Vorgang bereits im Gange oder erledigt, und NICHT als „erst nach
+Bestätigung ausführen" formuliert sein — beides petranlasst das Modell, auf ein
+externes „Ja" zu warten, statt das Werkzeug bei erneutem Anlauf erneut
+aufzurufen. Der Text ist per Aufgaben-Name parametrisiert, damit das Modell
+erkennt, WELCHES Werkzeug erneut aufzurufen ist. Das deterministische
+Schreib-Gate (Ausführung erst nach Bestätigung, `confirm.py`) bleibt davon
+unberührt — es wird im Code erzwungen, nicht über diesen Text.
+
+*Tickets:* #27 · #266 · #278 · #331
 
 ### EC-20 — Mehrstufige Aufgaben überfluten die Familien-Gruppe nicht
 
