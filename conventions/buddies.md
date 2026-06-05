@@ -18,13 +18,15 @@ Buddy zusätzlich **tut**, nicht aus seiner Buddy-Eigenschaft.*
 > die **Display-Seite** eines Buddys vollständig ab. Der familienseitige
 > Beitrag eines Buddys (eine Aufgabe im Eltern-Chat — Skill-Adapter,
 > `build_catalog`, Task-Tests) ist hier **aufgeschoben**, nicht stillschweigend
-> weggelassen: Wohnort und Pflege regelt [`apps.md`](apps.md) APP-4, aber der
-> Installations-/Aktivierungs-Mechanismus existiert noch nicht als
+> weggelassen: Wohnort und Pflege regelt [`apps.md`](apps.md) APP-4, die heutige
+> V1-Heimat der Aktivierung ist `build_catalog` ([`tasks.md`](tasks.md) TASK-7),
+> aber der Installations-/Aktivierungs-Mechanismus existiert noch nicht als
 > spezifizierter Prozess (offenes Problem #296 — App-Installations-Prozess für
 > die Familien-Schnittstelle fehlt). Ein Buddy mit familienseitigem Beitrag
-> muss bis #296 den Eltern-Chat-Mittelpunkt punktuell mit anfassen; sobald
-> #296 entschieden ist, bekommt BUD eine „nur wenn familienseitiger
-> Beitrag"-Regel dafür.
+> muss bis #296 den Eltern-Chat-Mittelpunkt punktuell mit anfassen (konkretes
+> Beispiel: #328 — Ort/Garderobe des Wetter-Buddys über den Eltern-Chat
+> pflegbar machen); sobald #296 entschieden ist, bekommt BUD eine „nur wenn
+> familienseitiger Beitrag"-Regel dafür.
 
 ## Die Regeln — „immer" vs. „nur wenn"
 
@@ -93,11 +95,15 @@ bestätigen insbesondere, dass „nur wenn" wirklich optional ist:
 | BUD-1a (Prozess: Port/Service/URL-14) | Port 5020, `xbuddy-plan.service` | Port 5030, `xbuddy-wetter.service` |
 | BUD-1b (API) | **ja** — `/api/v1/plan/…` (PLAN-22/30/31/11) | **nein** — V1 hat keine API (E-WETTER-3, bestätigt im nginx-Kommentar zu `/display/wetter/`) |
 | BUD-2 (Config) | `plan/config.json` (PLAN-28) | `wetter/wetter.json` (WETTER-21) |
-| BUD-2a (Domänendaten getrennt) | **ja** — `plan.json` ⟂ `config.json` | **nein** — nur eine Config-Datei |
+| BUD-2a (Domänendaten getrennt) | **ja** — `plan.json` ⟂ `config.json` | **ja** — `wetter.json` (Ort + Garderobe) ⟂ `config.json`; bewusst abgetrennt für die spätere Eltern-Chat-Pflege (#328, gated auf #296) |
 
-Der Wetter-Buddy ist damit der lebende Beleg dafür, dass BUD-1b und BUD-2a
-„nur wenn" sind und nicht zur Pflicht erhoben werden dürfen: er ist ein
-vollwertiger Buddy **ohne** API und **ohne** getrennte Domänendaten.
+Der Wetter-Buddy ist der lebende Beleg dafür, dass **BUD-1b** „nur wenn" ist:
+ein vollwertiger Buddy **ohne** API. Bei **BUD-2a** trennen die heutigen zwei
+Buddys dagegen **beide** ihre Domänendaten ab (Plan: `plan.json` ⟂ `config.json`;
+Wetter: `wetter.json` ⟂ `config.json`) — ein Gegenbeispiel „trennt nicht" gibt es
+bei n=2 noch nicht. Die „nur wenn"-Optionalität von BUD-2a ist by-design (ein
+Buddy ohne von Runtime-Tuning verschiedene Domänendaten hätte EINE Datei), nicht
+aus den heutigen Buddys belegt.
 
 ## Andock-Checkliste „neuer Buddy"
 
@@ -116,7 +122,8 @@ nginx, dann Code** (URL-14: „erst hier eine Zeile, dann nginx, dann Code").
 2. **Origin-Routing** — Zeile in [`urls.md`](urls.md) URL-14 für
    `/display/<slug>/` (und ggf. `/api/v1/<slug>/`), spezifisch vor allgemein
    (**längster Prefix gewinnt** — Teil der Spec, nicht nur nginx-Marotte).
-   *(BUD-1a immer für den Display-Prefix; der API-Prefix nur bei BUD-1b.)*
+   *(BUD-1a — für den Display-Prefix, sobald der Buddy ein eigener Prozess
+   hinter der Origin ist (heute jeder); der API-Prefix nur bei BUD-1b.)*
 3. **nginx-Origin-Conf** — `location /display/<slug>/`-Block in
    [`../deploy/nginx/xbuddy-origin.conf`](../deploy/nginx/xbuddy-origin.conf),
    eingeordnet vor den allgemeinen `/display/`- bzw. `/api/v1/`-Blöcken
@@ -132,7 +139,7 @@ nginx, dann Code** (URL-14: „erst hier eine Zeile, dann nginx, dann Code").
 6. **import-linter** — den Buddy als `root_package` in
    [`../.importlinter`](../.importlinter) aufnehmen, damit er denselben
    Layer-Contracts unterliegt wie `plan/`
-   ([`module-boundaries.md`](module-boundaries.md) MOD-1..4). *(Nur wenn
+   ([`module-boundaries.md`](module-boundaries.md) MOD-1..5). *(Nur wenn
    eigenes Python-Paket — heute jeder Prozess-Buddy.)*
 
 > **Beleg, dass die Checkliste nötig ist (am Wetter-Bau aufgetreten):** Der
@@ -174,10 +181,10 @@ importieren über den Paketpfad (`from <slug> import main`), damit gleichnamige
 `main`-Module im repo-weiten Lauf eindeutig bleiben (siehe `pytest.ini`-Kopf,
 #52).
 
-## Prozess: Spec erst nach Gate-B-Design ratifizieren
+## Prozess: Spec erst nach dem Display-Design ratifizieren
 
 Die **Spec** eines Buddys (`specs/buddies/<slug>.md`, Verortung APP-6) wird
-erst **nach** dem zugehörigen Design-Gate (Gate B) ratifiziert — die
-Display-View ist das Herz eines Buddys, und ihr Verhalten folgt aus dem
-Design, nicht umgekehrt. BUD regelt das Bauen; was der Buddy der Familie
-zeigt, bleibt Sache der Buddy-Spec und ihres Design-Fundaments.
+erst ratifiziert, **nachdem das Display-Design steht** — die Display-View ist
+das Herz eines Buddys, und ihr Verhalten folgt aus dem Design, nicht umgekehrt.
+BUD regelt das Bauen; was der Buddy der Familie zeigt, bleibt Sache der
+Buddy-Spec und ihres Design-Fundaments.
