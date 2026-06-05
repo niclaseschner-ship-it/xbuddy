@@ -396,11 +396,22 @@ Scrollen.
 ### PLAN-27 — Wireframe-Look
 Der visuelle Stil ist handgezeichnet: die Schriftarten Caveat und Patrick Hand,
 harte Schatten ohne Weichzeichnung, warmer Cream-Hintergrund, leichte
-Rotationen. Die Farb-, Maß- und Schrift-Werte sind Tokens (`--kids-*`), 1:1 aus
-dem Handoff-Artefakt `tokens-kids.css` übernommen. Hardcodierte Farben/Maße im
-Buddy-CSS sind unzulässig.
+Rotationen. Die Farb-, Maß- und Schrift-Werte sind Tokens (`--kids-*`).
 
-*Tickets:* #40
+Die `--kids-*`-Tokens kommen aus dem **geteilten Design-Token-Strang**
+([`conventions/design-tokens.md`](../../conventions/design-tokens.md), DTOK-1).
+Plan referenziert den Strang — er kopiert ihn nicht (DTOK-3). Heute liegt der
+Strang noch lokal unter `plan/static/design/tokens.css` (v1.0); er wird
+perspektivisch durch v2.0 (`wetter/static/design/colors_and_type.css`) ersetzt
+und via `/display/_shared/` bereitgestellt (Schritt-2-Arbeit, #323).
+
+Font-Werte (Caveat als Display-Font, Patrick Hand als Body-Font) bleiben
+semantisch identisch; künftig ggf. über Aliase (`--kids-font-display`,
+`--kids-font-body`) aus dem geteilten Strang bezogen.
+
+Hardcodierte Farben/Maße im Buddy-CSS sind unzulässig (DTOK-5).
+
+*Tickets:* #40, #323
 
 ## 9. Konfiguration
 
