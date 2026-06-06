@@ -19,8 +19,10 @@ Login-Link · Refresh-Token in den zentralen Zugangsdaten-Speicher
 (`zugangsdaten.md` ZD-5) unter dem von PLAN-16 erwarteten Schlüssel-Namen
 (`plan-google-oauth-refresh-token`, KAV-7) · **die Skill holt nach erfolgreichem
 Token-Tausch die Liste der Kalender des Accounts vom Google-`calendarList`-
-Endpunkt ab, der User wählt einen aus, die Skill schreibt die gewählte
-`kalender_id` in `plan/plan.json` (KAV-X)** · **Plan-Buddy übernimmt die neue
+Endpunkt ab, der User wählt einen aus, die Skill setzt die gewählte
+`kalender_id` im Plan-Buddy über dessen Admin-API
+(`PUT /api/v1/plan/admin/kalender`, PLAN-32) — der Plan-Buddy schreibt seine
+Datei selbst (KAV-X, APP-3)** · **Plan-Buddy übernimmt die neue
 `kalender_id` automatisch — das Skill-Framework triggert nach erfolgreichem
 `execute()` einen `ReloadHook` gegen den Plan-Buddy (EC-21, #140); die
 Erfolgs-Quittung an die Familie ist deshalb frei von manuellen Restart-
@@ -295,14 +297,17 @@ schickt die Funktion eine freundliche Erinnerung und wartet weiter —
 gleiches Privatchat-Session-Muster wie KAV-6 mit demselben **30-Minuten-
 Timeout** (analog FAA-9).
 
-Bei gültiger Auswahl schreibt die Funktion die `id` des gewählten Kalenders
-in `plan/plan.json` unter dem Schlüssel `kalender_id` (PLAN-15-load-bearing
-Wahrheit für Plan-Buddy beim nächsten Start). Schlägt der Schreibvorgang
-fehl (Datei nicht vorhanden, nicht parsebar, Schreibrecht fehlt), liefert
-die Funktion das Ergebnis-Signal „verbunden_ohne_kalender" (KAV-1) — die
-Tokens sind dann zwar gespeichert (KAV-7 ist nicht rückgängig zu machen),
-aber `plan.json` ist nicht aktualisiert; der User bekommt einen klaren
-Hinweis, dass er den Verbinden-Aufruf wiederholen muss.
+Bei gültiger Auswahl ruft die Funktion die Plan-Admin-API
+(`PUT /api/v1/plan/admin/kalender`, Body `{ "kalender_id": "<id>" }`, PLAN-32);
+der Plan-Buddy schreibt die `id` des gewählten Kalenders **selbst** atomar unter
+dem Schlüssel `kalender_id` in seine `plan.json` (PLAN-15-load-bearing Wahrheit
+für Plan-Buddy) und übernimmt sie in-process — KAV schreibt die Datei **nicht**
+direkt (APP-3, der Plan-Buddy ist Eigentümer seiner Datei). Schlägt der
+Admin-Call fehl (Plan-Buddy nicht erreichbar, 4xx/5xx), liefert die Funktion das
+Ergebnis-Signal „verbunden_ohne_kalender" (KAV-1) — die Tokens sind dann zwar
+gespeichert (KAV-7 ist nicht rückgängig zu machen), aber die `kalender_id` im
+Plan-Buddy ist nicht aktualisiert; der User bekommt einen klaren Hinweis, dass
+er den Verbinden-Aufruf wiederholen muss.
 
 Schlägt die `calendarList`-Abfrage selbst fehl (HTTP-Fehler, leere Liste
 ohne writable Kalender, Netz tot), gilt dasselbe: Tokens bleiben
@@ -311,9 +316,9 @@ gespeichert, Ergebnis „verbunden_ohne_kalender", User-Hinweis im Privatchat.
 *Tickets:* #139
 
 ### KAV-Y — Automatische Übernahme durch Plan-Buddy
-Nach erfolgreichem Schreiben der `kalender_id` in `plan/plan.json` (KAV-X)
-soll die neue Kalender-Auswahl **ohne manuellen Eingriff** beim Plan-Buddy
-wirksam werden. Der `kalender_verbinden_task` deklariert dazu einen
+Nach erfolgreicher Übernahme der `kalender_id` durch den Plan-Buddy über die
+Admin-API (KAV-X, PLAN-32) soll die neue Kalender-Auswahl **ohne manuellen
+Eingriff** wirksam werden. Der `kalender_verbinden_task` deklariert dazu einen
 `ReloadHook` gegen den Plan-Buddy-Admin-Reload-Endpoint (EC-21, #140); das
 Skill-Framework triggert ihn nach erfolgreichem `execute()`. Schlägt der
 Hook fehl, hängt EC-21 eine zusammengefasste Warnung an die Erfolgs-
@@ -419,13 +424,14 @@ durch kontrollierte Doppelungen ersetzt. Mindest-Abdeckung:
 - **KAV-X** — die Funktion ruft nach Token-Erfolg `calendarList.list` ab,
   filtert auf schreibbare Kalender (`accessRole` ∈ {`owner`, `writer`}
   plus `primary`-Markierte) und postet eine nummerierte Liste; gültige
-  Nummern-Eingabe wählt den Kalender und löst den `plan.json`-Schreibvorgang
-  aus; der Parser akzeptiert die übliche User-Sprache (»1. bitte«, »die 3«,
-  »2)«, »nimm 2« — Refs #155), wirft Antworten ohne Ziffer oder mit
-  out-of-range-Ziffer mit einer höflichen Erinnerung zurück und wartet weiter;
-  ein erfolgreicher Schreibvorgang ändert nur den `kalender_id`-Schlüssel in
-  `plan/plan.json` und lässt alle anderen Felder byte-gleich; ein Fehler im
-  Schreibvorgang oder in der `calendarList`-Abfrage liefert das Ergebnis-
+  Nummern-Eingabe wählt den Kalender und löst den PLAN-32-Admin-Call aus
+  (`PUT /api/v1/plan/admin/kalender`); der Parser akzeptiert die übliche
+  User-Sprache (»1. bitte«, »die 3«, »2)«, »nimm 2« — Refs #155), wirft
+  Antworten ohne Ziffer oder mit out-of-range-Ziffer mit einer höflichen
+  Erinnerung zurück und wartet weiter; ein erfolgreicher Call lässt den
+  Plan-Buddy nur den `kalender_id`-Schlüssel in seiner `plan.json` ändern und
+  alle anderen Felder byte-gleich (der Plan-Buddy schreibt selbst, APP-3); ein
+  Fehler im Admin-Call oder in der `calendarList`-Abfrage liefert das Ergebnis-
   Signal „verbunden_ohne_kalender".
 - **KAV-Y** — die finale Erfolgs-Nachricht (KAV-8) enthält KEINEN
   manuellen `sudo systemctl restart`-Hinweis und keinen Folge-Ticket-
@@ -451,10 +457,10 @@ durch kontrollierte Doppelungen ersetzt. Mindest-Abdeckung:
   *(Geschlossen mit #140, gemergt 2026-05-26.)* Das Skill-Framework führt
   jetzt einen `post_execute_hook` aus, der gegen den Plan-Buddy-Admin-
   Reload-Endpoint geht (EC-21). KAV-Y wurde entsprechend umformuliert
-  (Erfolgs-Quittung ohne manuellen Restart-Hinweis, Refs #154). Das
-  V1-Provisorium ist beendet — V2-Schritt wäre, die direkte
-  `plan.json`-Schreib-Stelle in KAV-X durch eine echte Plan-Admin-API zu
-  ersetzen (eigener offener Punkt, sobald gebraucht).
+  (Erfolgs-Quittung ohne manuellen Restart-Hinweis, Refs #154). Der dort
+  genannte V2-Schritt — die direkte `plan.json`-Schreib-Stelle in KAV-X durch
+  eine echte Plan-Admin-API zu ersetzen — ist **mit #341 erledigt**: KAV ruft
+  `PUT /api/v1/plan/admin/kalender` (PLAN-32), der Plan-Buddy schreibt selbst.
 
 - **OPEN-KAV-B — Token-Rotation und Self-Healing.** Entzieht ein Elternteil
   bei Google den Zugriff der XBuddy-App (`myaccount.google.com` → Apps mit
