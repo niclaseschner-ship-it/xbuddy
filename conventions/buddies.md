@@ -84,6 +84,36 @@ diese **getrennt** von der Runtime-Config — analog `plan.json` ⟂ `config.jso
 Hat ein Buddy keine vom Eltern-Chat geschriebenen Domänendaten, gibt es EINE
 Config-Datei und keine leere Pflicht-Datendatei.
 
+### BUD-3 — Aufrufbare Views als committetes Manifest deklarieren (immer, sobald der Buddy Display-Views hat)
+Ein Buddy/Controller mit menschen-aufrufbaren View-Einstiegspunkten committet
+ein **`views.json`-Manifest** neben dem Code — **committet, nicht gitignored**
+(anders als die Per-Instanz-Config, BUD-2). Es deklariert je View: `slug`,
+`pfad`, `label`, `synonyme[]`, `zeigt` (1 Satz, was die Seite zeigt), optional
+`varianten[]` (endliche bekannte Query-Varianten, je `slug`/`query`/`label`),
+`zielgruppe` (`kind`/`eltern`, deskriptiv). Das sind genau die manifest-
+gelieferten Felder des SREG-4-Eintragsschemas; `key`/`typ`/`app` leitet der
+Aggregator ab.
+
+**Eigentest bindet das Manifest an den Code** — je nach Komponententyp:
+- **Buddy mit eigenen Flask-Display-Routen:** jede **HTML-rendernde GET-Route**
+  unter `/display/<slug>/…` hat **genau einen** Manifest-Eintrag und umgekehrt.
+  **Ausgenommen:** Redirect-/Alias-Routen (z. B. `/display/routine/` →
+  `/display/routine/morgen` — nur der kanonische Einstieg zählt) sowie
+  Nicht-GET-/Nicht-HTML-Endpunkte (z. B. POST `/display/wetter/regeln/speichern`).
+- **Controller-App ohne eigene Flask-Route** (der Router serviert dynamisch
+  `/controller/<app>/`, es gibt keine komponenten-eigene Route): das Manifest
+  wird gegen die **Existenz des Controller-Slugs** geprüft (Verzeichnis/
+  Registrierung), nicht gegen eine Flask-Route.
+
+So kann eine neue Seite nicht ohne Manifest-Eintrag entstehen (kein stilles
+Fehlen, keine driftende Zweitliste). Freie/unendliche Query-Parameter (z. B.
+`?ab=<datum>`) erzeugen **keinen** Eintrag. Das Manifest ist die **ausfallfeste
+Wahrheitsquelle** der Seiten-Registry (SREG,
+[`../specs/platform/seiten-registry.md`](../specs/platform/seiten-registry.md)):
+es liegt auf der Platte, eine Seite bleibt also gelistet, auch wenn ihr Prozess
+gerade aus ist. (Landet mit dem 2. Manifest-Vorkommen, nicht auf Vorrat —
+konsistent mit der Reifelogik unten.)
+
 ## Bestätigung an der echten Reibung (Plan vs. Wetter)
 
 Die beiden Buddys auf `main` legitimieren die Regeln am zweiten Vorkommen und
