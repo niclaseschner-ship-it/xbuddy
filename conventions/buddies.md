@@ -84,6 +84,23 @@ diese **getrennt** von der Runtime-Config — analog `plan.json` ⟂ `config.jso
 Hat ein Buddy keine vom Eltern-Chat geschriebenen Domänendaten, gibt es EINE
 Config-Datei und keine leere Pflicht-Datendatei.
 
+### BUD-3 — Aufrufbare Views als committetes Manifest deklarieren (immer, sobald der Buddy Display-Views hat)
+Ein Buddy/Controller mit menschen-aufrufbaren View-Einstiegspunkten committet
+ein **`views.json`-Manifest** neben dem Code — **committet, nicht gitignored**
+(anders als die Per-Instanz-Config, BUD-2). Es deklariert je View: `slug`,
+`pfad`, `label`, `synonyme[]`, optional `varianten[]` (endliche bekannte
+Query-Varianten, je `slug`/`query`/`label`), `zielgruppe` (`kind`/`eltern`,
+deskriptiv). Ein **Eigentest bindet das Manifest an den Code**: jede
+HTML-liefernde `@app.route("/display/<slug>/…")`- bzw. Controller-GET-Route hat
+**genau einen** Manifest-Eintrag und umgekehrt — eine neue Route kann nicht ohne
+Manifest-Eintrag entstehen (kein stilles Fehlen, keine driftende Zweitliste).
+Freie/unendliche Query-Parameter (z. B. `?ab=<datum>`) erzeugen **keinen**
+Eintrag. Das Manifest ist die **ausfallfeste Wahrheitsquelle** der Seiten-
+Registry (SREG, [`../specs/platform/seiten-registry.md`](../specs/platform/seiten-registry.md)):
+es liegt auf der Platte, eine Seite bleibt also gelistet, auch wenn ihr Prozess
+gerade aus ist. (Landet mit dem 2. Manifest-Vorkommen, nicht auf Vorrat —
+konsistent mit der Reifelogik unten.)
+
 ## Bestätigung an der echten Reibung (Plan vs. Wetter)
 
 Die beiden Buddys auf `main` legitimieren die Regeln am zweiten Vorkommen und
