@@ -11,11 +11,18 @@ weil ihre Struktur (Items, Zeitwerte) über ein flaches Schema hinausgeht.
 Fehlende Datei → Defaults + Warnung, Prozess startet (CONFIG-4).
 ENV-Overrides: ROUTINE_<KEY> (CONFIG-5, via configloader für Runtime;
   für Daten-Config: ROUTINE_CONFIG_FILE / ROUTINE_DATA_FILE für Pfade).
+
+Schreib-API (ROUTINE-14, #343):
+  write_data(data_path, updates) — validiert Zeiten-Schlüssel und schreibt
+  atomar (DCOMP-4) in routine.json. Einzige Schreibstelle — keine andere
+  Komponente schreibt direkt in routine.json (APP-3).
 """
 
+import contextlib
 import json
 import logging
 import os
+import tempfile
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -254,3 +261,140 @@ def resolve_data(data_path=None, env=None):
         zeitreferenzen=paare,
         zeitzone=zeitzone,
     )
+
+
+# ============================================================
+#  Schreib-API (ROUTINE-14, #343): Validierung + atomares Schreiben
+# ============================================================
+
+# Gültige Wochentags-Keys laut ROUTINE-14 (fester Satz, case-sensitiv).
+GUELTIGE_WOCHENTAGS_KEYS = frozenset({"mo", "di", "mi", "do", "fr", "sa", "so"})
+
+
+class ValidationError(Exception):
+    """Ungültige Eingabe am Schreib-Endpoint (ROUTINE-14, AC2)."""
+
+
+def _validate_zeitwert(schluessel, wert):
+    """Validiert einen Zeitwert: entweder 'HH:MM' (24h) oder Wochentag-Map.
+
+    Ungültiges Format → ValidationError, kein Schreiben (ROUTINE-14, AC2).
+    """
+    if isinstance(wert, str):
+        # Strikt HH:MM (24h)
+        import re
+        if not re.fullmatch(r"[0-2]\d:[0-5]\d", wert):
+            raise ValidationError(
+                "%s: '%s' ist kein gültiges HH:MM-Format (24h, z.B. '08:30')"
+                % (schluessel, wert))
+        # Stunden-Range: 00–23
+        stunden = int(wert[:2])
+        if stunden > 23:
+            raise ValidationError(
+                "%s: Stunden '%s' außerhalb 00–23" % (schluessel, wert))
+    elif isinstance(wert, dict):
+        # Wochentag-Map: nur gültige Keys, Werte entweder '' (kein Schultag) oder HH:MM
+        for key, val in wert.items():
+            if key.lower() not in GUELTIGE_WOCHENTAGS_KEYS:
+                raise ValidationError(
+                    "%s: ungültiger Wochentags-Key '%s' "
+                    "(erlaubt: %s)"
+                    % (schluessel, key,
+                       ", ".join(sorted(GUELTIGE_WOCHENTAGS_KEYS))))
+            if val != "":
+                import re
+                if not re.fullmatch(r"[0-2]\d:[0-5]\d", val):
+                    raise ValidationError(
+                        "%s[%s]: '%s' ist kein gültiges HH:MM-Format "
+                        "(oder '' für kein Schultag)" % (schluessel, key, val))
+                stunden = int(val[:2])
+                if stunden > 23:
+                    raise ValidationError(
+                        "%s[%s]: Stunden '%s' außerhalb 00–23"
+                        % (schluessel, key, val))
+    else:
+        raise ValidationError(
+            "%s: erwartet 'HH:MM'-String oder Wochentag-Map, "
+            "erhalten: %r" % (schluessel, type(wert).__name__))
+
+
+def write_data(data_path, updates):
+    """Schreibt Zeit-Schlüssel der Daten-Konfig atomar in routine.json (ROUTINE-14).
+
+    updates: Dict mit einem oder mehreren der Zeit-Schlüssel:
+      abfahrtszeit  — 'HH:MM' oder Wochentag-Map
+      aufstehzeit   — 'HH:MM' oder Wochentag-Map
+      anzieh_vorlauf_min — int ≥ 0
+
+    Validierung VOR dem Schreiben (ROUTINE-14, AC2): ungültige Eingabe →
+    ValidationError, kein Schreiben, kein Teil-Write.
+
+    Persistenz (DCOMP-4): schreibt erst in eine Temp-Datei im selben
+    Verzeichnis, dann atomares os.replace → kein halb-geschriebener Stand
+    für gleichzeitige Lese-Zugriffe.
+
+    Nur diese Funktion schreibt routine.json (APP-3, ROUTINE-14) — kein
+    anderer Pfad.
+    """
+    SCHREIBBARE_SCHLUESSEL = frozenset(
+        {"abfahrtszeit", "aufstehzeit", "anzieh_vorlauf_min"})
+
+    # Mindestens ein Schlüssel erforderlich (ROUTINE-14)
+    relevante = {k: v for k, v in updates.items() if k in SCHREIBBARE_SCHLUESSEL}
+    if not relevante:
+        raise ValidationError(
+            "Mindestens einer der Schlüssel %s ist erforderlich"
+            % sorted(SCHREIBBARE_SCHLUESSEL))
+
+    # Validierung ALLER Felder vor dem ersten Schreib-Byte (kein Teil-Write)
+    for schluessel, wert in relevante.items():
+        if schluessel in ("abfahrtszeit", "aufstehzeit"):
+            _validate_zeitwert(schluessel, wert)
+        elif schluessel == "anzieh_vorlauf_min":
+            if not isinstance(wert, int) or isinstance(wert, bool):
+                raise ValidationError(
+                    "anzieh_vorlauf_min muss ein Integer sein, erhalten: %r"
+                    % type(wert).__name__)
+            if wert < 0:
+                raise ValidationError(
+                    "anzieh_vorlauf_min muss ≥ 0 sein, erhalten: %d" % wert)
+
+    # Aktuellen Stand lesen (fehlende Datei → leeres Dict → Defaults greifen beim Lesen)
+    try:
+        with open(data_path, encoding="utf-8") as f:
+            aktuell = json.load(f)
+        if not isinstance(aktuell, dict):
+            aktuell = {}
+    except FileNotFoundError:
+        aktuell = {}
+    except (OSError, json.JSONDecodeError) as e:
+        logger.warning(
+            "routine.json nicht lesbar vor dem Schreiben (%s): %s — "
+            "schreibe Updates über leere Basis", data_path, e)
+        aktuell = {}
+
+    # Updates mergen
+    aktuell.update(relevante)
+
+    # Atomar schreiben: Temp-Datei im selben Verzeichnis, dann os.replace (DCOMP-4)
+    verzeichnis = os.path.dirname(os.path.abspath(data_path))
+    try:
+        fd, tmp_path = tempfile.mkstemp(dir=verzeichnis, suffix=".tmp",
+                                        prefix="routine_write_")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(aktuell, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, data_path)
+        except Exception:
+            # Temp-Datei aufräumen, wenn os.replace fehlschlägt
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_path)
+            raise
+    except OSError as e:
+        raise OSError(
+            "routine.json konnte nicht atomar geschrieben werden (%s): %s"
+            % (data_path, e)) from e
+
+    logger.info(
+        "routine.json aktualisiert (ROUTINE-14): %s",
+        ", ".join("%s=%r" % (k, v) for k, v in relevante.items()))
