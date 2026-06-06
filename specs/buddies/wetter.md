@@ -254,7 +254,7 @@ funktioniert). Läufe gegen den echten Anbieter sind opt-in.
 > Wetter-Buddys. Grundlage **RAT-2** (`decisions/RAT-2-328-garderoben-regelmatrix.md`),
 > Keystone #328.
 
-### WETTER-26 — Eltern-seitige Editor-Seite für die Garderoben-Regeln
+### WETTER-26 — Eltern-seitige Editor-Seite für die Garderoben-Regeln *(umgesetzt #328)*
 Die Familie pflegt die Garderoben-Regeln (WETTER-14, `wardrobe` in `wetter.json`)
 selbst über eine eltern-seitige Web-Seite im Wetter-Buddy — der familienseitige
 Beitrag des Buddys (APP-4, löst RAT-2). Die Seite **zeigt UND editiert** die
@@ -267,7 +267,7 @@ WETTER-25 ausgenommen** (Scrollen und Menüführung erlaubt). **Hochkant am Hand
 Default und V1.1-Zielzustand.** Kein Live-Wetter, nicht das Heute-Outfit — nur die
 Regel-Config.
 
-### WETTER-27 — Anzeige der Matrix (Übersicht + Fokus)
+### WETTER-27 — Anzeige der Matrix (Übersicht + Fokus) *(umgesetzt #328)*
 Die View folgt dem Muster **Übersicht + Fokus**: eine kompakte Liste aller Regeln
 **in ihrer Reihenfolge** (erste passende gewinnt, WETTER-14; je Eintrag Bedingung +
 Outfit-Vorschau) und ein **fokussierter Einzel-Regel-Editor** beim Antippen. Im
@@ -277,14 +277,14 @@ Hinweis — plus das `fallback`-Set. Die „Schwelle fest"-Markierung ist ein
 **Lucide-Icon, kein Emoji** (WETTER-18). Kleidungs-Piktogramme über die geteilte
 Icon-Plattform (ICONS-5). Stil/Pixel kommen aus den Tokens.
 
-### WETTER-28 — Bearbeiten: nur die Kleidungs-Sets
+### WETTER-28 — Bearbeiten: nur die Kleidungs-Sets *(umgesetzt #328)*
 Editierbar in V1.1 sind **ausschließlich die Kleidungs-Sets** (Pflicht/Optional) je
 Regel und des Fallbacks: Stücke **hinzufügen / entfernen / tauschen** aus der
 kuratierten Palette (WETTER-29). **Read-only** bleiben: die **Schwellen** der
 Bedingung, der **Hinweistext** sowie **Anzahl und Reihenfolge** der Regeln.
 Speichern sendet die geänderte Matrix an den internen Save-Handler (WETTER-26).
 
-### WETTER-29 — Kuratierte Kleidungs-Palette
+### WETTER-29 — Kuratierte Kleidungs-Palette *(umgesetzt #328)*
 Kleidungsstücke werden **aus einer kuratierten Liste** vorgegebener Stücke
 (`{name, pikto}`) gewählt — die Familie tippt **keine** ARASAAC-ID. Die Palette
 wird mit dem Buddy ausgeliefert (durch einen Entwickler erweiterbar) und zeigt ihre
@@ -296,7 +296,7 @@ Handschuhe `2415` · Schal `2290` · Sonnenbrille `3330` · Sandalen `2556`. Die
 Palette-IDs müssen im Instanz-Icon-Store (`/display/_shared/icons/arasaac/<id>.png`,
 ICONS-5) vorliegen. NC-Lizenzfrage zentral bei `icons.md` ICONS-6.
 
-### WETTER-30 — Schreib-Validierung schützt die Kinder-View
+### WETTER-30 — Schreib-Validierung schützt die Kinder-View *(umgesetzt #328)*
 Eine gespeicherte Matrix ist gültig, wenn **jede Pflicht-Zelle nicht leer** ist
 (jede Regel **und** das Fallback) und **jedes Pikto aus der kuratierten Palette**
 stammt (WETTER-29). **Optional-Sets dürfen leer sein.** Schwellen werden nicht
@@ -305,17 +305,17 @@ Rename), damit ein gleichzeitiger Kiosk-Read nie eine halbe Datei sieht. Ungült
 Speichern → Fehler, `wetter.json` **unverändert**, Kiosk unberührt. Gültiges
 Speichern wird über DCOMP-2 ohne Restart sichtbar.
 
-### WETTER-31 — Zugang: Heimnetz/Tailscale, keine Zusatzsicherung
+### WETTER-31 — Zugang: Heimnetz/Tailscale, keine Zusatzsicherung *(umgesetzt #328)*
 Die Seite braucht **kein Login und kein Token** (RAT-2): Bedrohungsmodell = „Leute
 im Haushalt", das Netz ist die Vertrauensgrenze. Leitplanke: die Edit-Seite/-Handler
 darf **nicht über einen ins Internet exponierten Pfad** erreichbar sein
 (LAN/Tailscale-Interface, kein Port-Forwarding).
 
-### WETTER-32 — Ort in V1.1 nicht editierbar
+### WETTER-32 — Ort in V1.1 nicht editierbar *(umgesetzt #328)*
 Der Editor pflegt **nur die Garderobe**. Der Ort (`ort` in `wetter.json`) bleibt
 Datei-gesetzt und ist ein **eigenes Folge-Ticket** (Nic, 2026-06-06).
 
-### WETTER-33 — Tests je Anforderung (ohne Netz)
+### WETTER-33 — Tests je Anforderung (ohne Netz) *(umgesetzt #328)*
 Automatisierte Tests, reproduzierbar **ohne Netz** (der Editor berührt Open-Meteo
 nicht): Anzeige liefert die Matrix · gültiges Speichern schreibt + wird per Reload
 sichtbar · ungültiges Speichern wird abgelehnt und lässt `wetter.json` unverändert
@@ -346,10 +346,7 @@ atomarer Schreibpfad.
   für alle Buddys. `plan/static/design/tokens.css` (v1.0) ist abgelöst (#323).
   Konvention: [`conventions/design-tokens.md`](../../conventions/design-tokens.md).
   Andockpunkt via `/display/_shared/` (DTOK-2) ist Schritt-2-Arbeit (#323).
-- **OPEN-WETTER-I — Pfad/Bind der Editor-Seite.** Exakter Pfad (Vorschlag
-  `/display/wetter/garderobe`, fällt unter die registrierte `/display/wetter/`-Route)
-  und Bind, solange die „nicht-internet-exponiert"-Leitplanke (WETTER-31) hält —
-  Entscheidung im arbeitstag-Track.
+- **OPEN-WETTER-I — ENTSCHIEDEN** (#328, arbeitstag 2026-06-06): Die Editor-Seite lebt im **eigenen wetter-Display-Namespace** — `GET /display/wetter/regeln`, `POST /display/wetter/regeln/speichern` — auf derselben Origin. Schutz = Netz-Grenze (WETTER-31; Topologie LAN/Tailscale, kein Port-Forwarding); **kein separater Bind**.
 - **OPEN-WETTER-K — `data-stage="parent"`-Token-Block. VERTAGT (RAT-8, Nic
   2026-06-06):** im geteilten Token-Strang noch nicht definiert (nur reader/toddler);
   V1.1 fährt auf Basis-/Reader-Tokens. Der parent-Stufen-Block wird **bei der 2.
