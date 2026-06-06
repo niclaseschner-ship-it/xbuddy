@@ -615,7 +615,6 @@ def build_context(cfg, db_path, zd_cli_path=None):
         display_url_origin=cfg.display_url_origin,
         zd_store_getter=lambda: zd_store,
         kav_sessions=kav_sessions,
-        plan_json_path=cfg.plan_json_path,
         plan_origin_url=cfg.plan_origin_url,
         tes_sessions=tes_sessions,
         panel_origin_url=cfg.panel_origin_url,

@@ -255,7 +255,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   geraete_origin_url=None, gaa_sessions=None,
                   cav_call_hook=None, display_url_origin=None,
                   zd_store_getter=None, kav_sessions=None,
-                  plan_json_path=None, plan_origin_url=None,
+                  plan_origin_url=None,
                   tes_sessions=None, panel_origin_url=None,
                   paa_sessions=None, controller_url_origin=None,
                   routine_origin_url=None):
@@ -279,6 +279,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
     sprechen die Skills ueber HTTP — die Parameter heissen
     `familie_origin_url` und `geraete_origin_url` und tragen die jeweilige
     Origin (z. B. `http://127.0.0.1:5010` und `http://127.0.0.1:5040`).
+    KAV schreibt seit #341 ausschliesslich via HTTP (PLAN-32); `plan_json_path`
+    ist entfernt (#348).
     """
     # Lokale Imports: brechen den Import-Zyklus tasks <-> ca_task/faa_task/
     # gaa_task/kav_task — nicht hochziehen.
@@ -309,7 +311,6 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
         catalog.register(KalenderVerbindenTask(
             tg, zd_store_getter, kav_sessions,
             family_group_chat_id_getter,
-            plan_json_path=plan_json_path,
             plan_origin_url=plan_origin_url))
 
     if plan_origin_url is not None:
