@@ -6,9 +6,10 @@ dem Buddy-Slug `routine` (ROUTINE-1). Er besitzt seine Daten (Routine-Punkte
 und Zeiten, ROUTINE-12), seine Funktion (die ablaufende Uhr, ROUTINE-9) und
 stellt das Ergebnis über seine Display-View bereit (APP-1).
 
-Endpunkt:
+Endpunkte:
   GET  /display/routine/morgen          — View `morgen` (ROUTINE-2)
-  POST /display/routine/toggle/<id>     — Tap → Abhak-Toggle (ROUTINE-7)
+  POST /display/routine/morgen          — Tap → Abhak-Toggle (ROUTINE-7, URL-2)
+                                          item_id im Request-Body (JSON oder Form)
 
 V1 hat keine externe API (ROUTINE-14, E-ROUTINE-5).
 Statische Assets unter /display/routine/static/<asset> (URL-13).
@@ -23,7 +24,7 @@ import sys
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from flask import Flask, jsonify, redirect, render_template, url_for
+from flask import Flask, jsonify, redirect, render_template, request, url_for
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
@@ -145,7 +146,9 @@ def _current_config():
 
 
 def _now(zeitzone):
-    """Aktuelle Zeit in der Familien-Zeitzone. Test-Naht: `?_now=HH:MM` (opt.)."""
+    """Aktuelle Zeit in der Familien-Zeitzone.
+    Now-Injektion für Tests liegt in uhr.py (E-ROUTINE-9, ROUTINE-18).
+    """
     return datetime.now(ZoneInfo(zeitzone))
 
 
@@ -157,14 +160,40 @@ def _now(zeitzone):
 app = Flask(__name__, static_url_path="/display/routine/static")
 
 
-@app.route("/display/routine/morgen", methods=["GET"])
+@app.route("/display/routine/morgen", methods=["GET", "POST"])
 def morgen():
     """View `morgen` — Routine-Checkliste + ablaufende Uhr (ROUTINE-2).
 
-    Eine einzige Canvas: links Checkliste, rechts Uhr. Kein Routing, kein Tab
-    (ROUTINE-2). Rendert heutige Items mit Abhak-Zustand und Uhr-Block.
+    GET:  Eine einzige Canvas: links Checkliste, rechts Uhr. Kein Routing, kein Tab
+          (ROUTINE-2). Rendert heutige Items mit Abhak-Zustand und Uhr-Block.
+
+    POST: Tap → Abhak-Toggle (ROUTINE-7, URL-2: kein Verb im Pfad, HTTP-Methode
+          trägt die Aktion). item_id im Request-Body (JSON: {"item_id": "..."} oder
+          Form: item_id=...). Toggelt den heutigen Abhak-Zustand, persistiert über
+          Reload. Keine externe API (ROUTINE-14: V1 hat keine /api/v1/routine/).
     """
     cfg = _current_config()
+
+    if request.method == "POST":
+        # item_id aus JSON- oder Form-Body lesen
+        if request.is_json:
+            body = request.get_json(silent=True) or {}
+            item_id = body.get("item_id")
+        else:
+            item_id = request.form.get("item_id")
+
+        if not item_id:
+            return jsonify({"error": "item_id fehlt im Request-Body"}), 400
+
+        # Validierung: Item-ID muss in der Config existieren (ROUTINE-5)
+        item_ids = {item.id for item in cfg.items}
+        if item_id not in item_ids:
+            return jsonify({"error": "unbekannte Item-ID"}), 404
+
+        neuer_zustand = _toggle_abhak(item_id, cfg.zeitzone)
+        return jsonify({"id": item_id, "abgehakt": neuer_zustand})
+
+    # GET: View rendern
     zeitzone = cfg.zeitzone
     now = _now(zeitzone)
     tag = now.date()
@@ -182,24 +211,6 @@ def morgen():
     view = render_mod.baue_view(cfg, abhak, uhr_view)
 
     return render_template("morgen.html", view=view)
-
-
-@app.route("/display/routine/toggle/<item_id>", methods=["POST"])
-def toggle(item_id):
-    """Tap → Abhak-Toggle (ROUTINE-7). View-eigene Interaktion (ROUTINE-3).
-
-    Toggelt den heutigen Abhak-Zustand des Items, persistiert über Reload.
-    Keine externe API (ROUTINE-14: V1 hat keine /api/v1/routine/).
-    """
-    cfg = _current_config()
-
-    # Validierung: Item-ID muss in der Config existieren (ROUTINE-5)
-    item_ids = {item.id for item in cfg.items}
-    if item_id not in item_ids:
-        return jsonify({"error": "unbekannte Item-ID"}), 404
-
-    neuer_zustand = _toggle_abhak(item_id, cfg.zeitzone)
-    return jsonify({"id": item_id, "abgehakt": neuer_zustand})
 
 
 @app.route("/display/routine/")

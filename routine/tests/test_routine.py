@@ -126,9 +126,11 @@ def test_routine6_tageswechsel_setzt_abhak_zustand_zurueck(demo_config, tmp_path
     store_path = str(tmp_path / "routine_store.json")
     main_mod.configure(demo_config, store_path=store_path)
 
-    # Punkt heute abhaken
+    # Punkt heute abhaken — POST auf /display/routine/morgen (URL-2)
     with main_mod.app.test_client() as c:
-        r = c.post("/display/routine/toggle/fruehstueck")
+        r = c.post("/display/routine/morgen",
+                   json={"item_id": "fruehstueck"},
+                   content_type="application/json")
         assert r.status_code == 200
         assert json.loads(r.data)["abgehakt"] is True
 
@@ -155,9 +157,13 @@ def test_routine6_tageswechsel_setzt_abhak_zustand_zurueck(demo_config, tmp_path
 # ============================================================
 
 def test_routine7_tap_persistiert_ueber_reload(client):
-    """ROUTINE-7: Tap → Persistenz → erneuter View-Render zeigt abgehakt."""
-    # Punkt abhaken
-    r = client.post("/display/routine/toggle/zaehne")
+    """ROUTINE-7: Tap → Persistenz → erneuter View-Render zeigt abgehakt.
+    POST /display/routine/morgen mit item_id im Body (URL-2, kein Verb im Pfad).
+    """
+    # Punkt abhaken — POST auf /display/routine/morgen mit JSON-Body
+    r = client.post("/display/routine/morgen",
+                    json={"item_id": "zaehne"},
+                    content_type="application/json")
     assert r.status_code == 200
     assert json.loads(r.data)["abgehakt"] is True
 
@@ -174,14 +180,22 @@ def test_routine7_tap_persistiert_ueber_reload(client):
 
 def test_routine7_doppelter_tap_toggled_zurueck(client):
     """ROUTINE-7: zweiter Tap → zurück auf offen."""
-    client.post("/display/routine/toggle/brotdose")
-    r2 = client.post("/display/routine/toggle/brotdose")
+    client.post("/display/routine/morgen",
+                json={"item_id": "brotdose"},
+                content_type="application/json")
+    r2 = client.post("/display/routine/morgen",
+                     json={"item_id": "brotdose"},
+                     content_type="application/json")
     assert json.loads(r2.data)["abgehakt"] is False
 
 
 def test_routine7_unbekannte_id_gibt_404(client):
-    """ROUTINE-7: Tap auf unbekannte Item-ID → 404 (ROUTINE-5)."""
-    r = client.post("/display/routine/toggle/NICHTEXISTENT")
+    """ROUTINE-7: Tap auf unbekannte Item-ID → 404 (ROUTINE-5).
+    POST /display/routine/morgen mit unbekannter item_id.
+    """
+    r = client.post("/display/routine/morgen",
+                    json={"item_id": "NICHTEXISTENT"},
+                    content_type="application/json")
     assert r.status_code == 404
 
 
@@ -298,33 +312,106 @@ def test_routine10_icons_im_html_ueber_geteilte_plattform(client):
 #  ROUTINE-12 — fehlende Datei → Defaults + Warnung, Prozess startet
 # ============================================================
 
-def test_routine12_fehlende_datei_gibt_defaults_und_startet(tmp_path):
+def test_routine12_fehlende_datei_gibt_defaults_und_startet(tmp_path, caplog):
     """ROUTINE-12/CONFIG-4: fehlende routine.json → Defaults, Prozess startet.
 
-    Ausnahme: abfahrtszeit ist Pflicht — ConfigError wenn sie fehlt.
-    Ohne abfahrtszeit können keine sinnvollen Defaults greifen.
+    Nic-Entscheidung (#335): fehlende/kaputte Datei → voll funktionsfähige Defaults
+    + Warnung, kein ConfigError. resolve_data liefert 4 Default-Items + abfahrtszeit 08:30.
+    """
+    import logging
+    nicht_existierend = str(tmp_path / "nicht_vorhanden.json")
+    with caplog.at_level(logging.WARNING):
+        cfg = config_mod.resolve_data(nicht_existierend)
+
+    # Prozess startet — keine Exception
+    assert cfg is not None
+    assert cfg.abfahrtszeit == "08:30"            # Default
+    assert cfg.anzieh_vorlauf_min == 8            # Default
+    assert cfg.zeitzone == "Europe/Berlin"        # Default
+    # 4 Default-Punkte aus routine.example.json
+    assert len(cfg.items) == 4
+    item_ids = {i.id for i in cfg.items}
+    assert item_ids == {"fruehstueck", "zaehne", "brotdose", "rucksack"}
+    # Warnung wurde geloggt
+    assert any("nicht gefunden" in r.message or "Defaults" in r.message
+               for r in caplog.records)
+
+
+def test_routine12_fehlende_datei_view_liefert_200(tmp_path):
+    """ROUTINE-12/CONFIG-4: fehlende routine.json → GET /display/routine/morgen liefert 200
+    mit 4 Default-Items und Uhr 08:30.
     """
     nicht_existierend = str(tmp_path / "nicht_vorhanden.json")
-    # Fehlende Datei → ConfigError wegen fehlender abfahrtszeit (Pflicht)
-    with pytest.raises(config_mod.ConfigError, match="abfahrtszeit"):
-        config_mod.resolve_data(nicht_existierend)
+    cfg = config_mod.resolve_data(nicht_existierend)
+    store_p = tmp_path / "routine_store.json"
+    main_mod.configure(cfg, store_path=str(store_p))
+
+    with main_mod.app.test_client() as c:
+        resp = c.get("/display/routine/morgen")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    # 4 Default-Punkte sichtbar
+    assert "Frühstück" in body
+    assert "Zähne putzen" in body
+    assert "Brotdose" in body
+    assert "Rucksack" in body
+    # Uhr 08:30 sichtbar (abfahrtszeit-Default)
+    assert "08:30" in body
 
 
-def test_routine12_datei_ohne_abfahrtszeit_wirft_error(tmp_path):
-    """ROUTINE-12: routine.json ohne abfahrtszeit → ConfigError (Pflicht-Feld)."""
+def test_routine12_fehlende_datei_post_toggle_persistiert(tmp_path):
+    """ROUTINE-12/CONFIG-4: POST /display/routine/morgen togglet auch ohne Datei (Default-Config)."""
+    nicht_existierend = str(tmp_path / "nicht_vorhanden.json")
+    cfg = config_mod.resolve_data(nicht_existierend)
+    store_p = tmp_path / "routine_store.json"
+    main_mod.configure(cfg, store_path=str(store_p))
+
+    with main_mod.app.test_client() as c:
+        r = c.post("/display/routine/morgen",
+                   json={"item_id": "fruehstueck"},
+                   content_type="application/json")
+    assert r.status_code == 200
+    assert json.loads(r.data)["abgehakt"] is True
+
+
+def test_routine12_datei_ohne_abfahrtszeit_verwendet_default(tmp_path, caplog):
+    """ROUTINE-12: routine.json ohne abfahrtszeit → Default '08:30', kein Fehler.
+
+    Datei existiert, abfahrtszeit fehlt → DATA_DEFAULTS greift still (kein Pflicht-Fehler,
+    CONFIG-4, #335). Warnung kommt nur bei explizit null oder falschem Typ.
+    """
+    import logging
     p = tmp_path / "routine.json"
     p.write_text(json.dumps({"items": [], "zeitzone": "Europe/Berlin"}))
-    with pytest.raises(config_mod.ConfigError, match="abfahrtszeit"):
-        config_mod.resolve_data(str(p))
+    with caplog.at_level(logging.WARNING):
+        cfg = config_mod.resolve_data(str(p))
+    # Default greift — kein ConfigError, kein Absturz
+    assert cfg.abfahrtszeit == "08:30"
+    assert cfg.zeitzone == "Europe/Berlin"
+
+
+def test_routine12_abfahrtszeit_als_null_verwendet_default_mit_warnung(tmp_path, caplog):
+    """ROUTINE-12: abfahrtszeit explizit als null → Warnung + Default '08:30', kein Fehler."""
+    import logging
+    p = tmp_path / "routine.json"
+    p.write_text(json.dumps({"abfahrtszeit": None, "zeitzone": "Europe/Berlin"}))
+    with caplog.at_level(logging.WARNING):
+        cfg = config_mod.resolve_data(str(p))
+    assert cfg.abfahrtszeit == "08:30"
+    # Warnung wurde geloggt (abfahrtszeit=null → ungültiger Typ)
+    assert any("Default" in r.message or "abfahrtszeit" in r.message
+               for r in caplog.records)
 
 
 def test_routine12_kaputte_json_gibt_defaults_und_startet(tmp_path):
     """ROUTINE-12/CONFIG-4: kaputtes JSON → Defaults, Prozess startet (kein Absturz)."""
     p = tmp_path / "routine.json"
     p.write_text("{ ungültiges JSON !!!}")
-    # Kaputtes JSON → leere Config → fehlende abfahrtszeit → ConfigError
-    with pytest.raises(config_mod.ConfigError, match="abfahrtszeit"):
-        config_mod.resolve_data(str(p))
+    # Kaputtes JSON → leere Config → Default abfahrtszeit + Default-Items
+    cfg = config_mod.resolve_data(str(p))
+    assert cfg is not None
+    assert cfg.abfahrtszeit == "08:30"
+    assert len(cfg.items) == 4
 
 
 def test_routine12_gueltige_config_mit_defaults(tmp_path):
@@ -334,7 +421,8 @@ def test_routine12_gueltige_config_mit_defaults(tmp_path):
     cfg = config_mod.resolve_data(str(p))
     assert cfg.anzieh_vorlauf_min == 8           # Default
     assert cfg.zeitzone == "Europe/Berlin"        # Default
-    assert cfg.items == []                        # Default (leere Liste)
+    # Keine items in der Datei → 4 Default-Fallback-Items
+    assert len(cfg.items) == 4
 
 
 def test_routine12_example_ist_gueltig():
@@ -395,4 +483,54 @@ def test_routine9_phasentext_im_view_modell(demo_config):
     view = render_mod.baue_view(demo_config, {}, uhr_view)
     assert view["phasen_text"] is not None
     assert "anziehen" in view["phasen_text"].lower()
+
+
+# ============================================================
+#  ROUTINE-18 — Wochentag-Abfahrtszeit (FIX-4, #335)
+# ============================================================
+
+def test_routine18_wochentag_schultag_liefert_zeiten(tmp_path):
+    """ROUTINE-9/ROUTINE-12: Wochentag-Dict mit Schultag → berechne_zeiten liefert Zeiten.
+
+    Montag (2026-06-08, weekday=0) → Key 'Mo' → '07:30' → Uhr vorhanden.
+    Injiziertes now vor anziehen → Phase vor_anziehen, Restzeiten positiv.
+    """
+    from datetime import date as date_cls
+
+    # Wochentag-Dict: Mo bis Fr mit Abfahrtszeit, Sa/So leer (kein Schultag)
+    wochentag_cfg = {"Mo": "07:30", "Di": "07:30", "Mi": "07:30",
+                     "Do": "07:30", "Fr": "07:30", "Sa": "", "So": ""}
+
+    montag = date_cls(2026, 6, 8)   # Montag
+    zeiten = uhr_mod.berechne_zeiten(wochentag_cfg, 8, ZEITZONE, montag)
+
+    # Schultag → Zeiten vorhanden, keine None
+    assert zeiten is not None
+    assert zeiten.losgehen.hour == 7
+    assert zeiten.losgehen.minute == 30
+
+    # now vor anziehen → Phase vor_anziehen
+    tz = ZoneInfo(ZEITZONE)
+    now = datetime(2026, 6, 8, 7, 0, tzinfo=tz)
+    view = uhr_mod.baue_uhr_view(zeiten, now)
+    assert view.phase == uhr_mod.PHASE_VOR_ANZIEHEN
+    assert view.rest_bis_anziehen_min is not None
+    assert view.rest_bis_losgehen_min is not None
+
+
+def test_routine18_wochentag_wochenende_liefert_none(tmp_path):
+    """ROUTINE-9/ROUTINE-12: Wochentag-Dict mit leerem Wochenend-Tag → berechne_zeiten None.
+
+    Samstag (2026-06-07, weekday=5) → Key 'Sa' → '' → kein Schultag → Uhr ausgeblendet.
+    """
+    from datetime import date as date_cls
+
+    wochentag_cfg = {"Mo": "07:30", "Di": "07:30", "Mi": "07:30",
+                     "Do": "07:30", "Fr": "07:30", "Sa": "", "So": ""}
+
+    samstag = date_cls(2026, 6, 7)   # Samstag
+    zeiten = uhr_mod.berechne_zeiten(wochentag_cfg, 8, ZEITZONE, samstag)
+
+    # Wochenende → None → Uhr ausgeblendet (kein Schultag)
+    assert zeiten is None
 

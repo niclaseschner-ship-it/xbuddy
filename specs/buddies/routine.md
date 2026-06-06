@@ -294,13 +294,13 @@ Eltern-Chat sie später schreibt (OPEN-ROUTINE-B):
 
 **Daten-Konfig (`routine/routine.json`):**
 
-| Name                 | Default                       | Datei-Schlüssel    | Gesetzt durch (Onboarding-Schritt) |
-|----------------------|-------------------------------|--------------------|------------------------------------|
-| Abfahrtszeit         | (Pflicht, je Wochentag mögl.) | `abfahrtszeit`     | Familie (V1 in Datei; später Eltern-Chat, OPEN-ROUTINE-B) |
-| Anzieh-Vorlauf (Min) | `8`                           | `anzieh_vorlauf_min` | n/a (Default reicht) |
-| Routine-Punkte       | Beispiel-Set im Example       | `items`            | Familie (V1 in Datei; `default`-Liste) |
-| Zeit-Referenzen      | aus (`{ "an": false, … }`)    | `zeit_referenzen`  | n/a (Gate-B-Experiment, ROUTINE-13) |
-| Zeitzone             | `Europe/Berlin`               | `zeitzone`         | n/a (Default reicht; für Tages-Reset ROUTINE-6) |
+| Name                 | Default                                                    | Datei-Schlüssel    | Gesetzt durch (Onboarding-Schritt) |
+|----------------------|------------------------------------------------------------|--------------------|-------------------------------------|
+| Abfahrtszeit         | `08:30` (Fallback; je Wochentag mögl.)                    | `abfahrtszeit`     | Familie (V1 in Datei; später Eltern-Chat, OPEN-ROUTINE-B) |
+| Anzieh-Vorlauf (Min) | `8`                                                        | `anzieh_vorlauf_min` | n/a (Default reicht) |
+| Routine-Punkte       | 4 Default-Punkte (Fallback im Code; Wahrheit bleibt Datei, später per Eltern-Chat editierbar OPEN-ROUTINE-B) | `items` | Familie (V1 in Datei; `default`-Liste) |
+| Zeit-Referenzen      | aus (`{ "an": false, … }`)                                | `zeit_referenzen`  | n/a (Gate-B-Experiment, ROUTINE-13) |
+| Zeitzone             | `Europe/Berlin`                                            | `zeitzone`         | n/a (Default reicht; für Tages-Reset ROUTINE-6) |
 
 **Runtime-Konfig (`routine/config.json`):**
 
@@ -313,8 +313,11 @@ Eltern-Chat sie später schreibt (OPEN-ROUTINE-B):
 `abfahrtszeit` je Wochentag: ein Wert oder eine Wochentag→Zeit-Abbildung
 (z. B. Sa/So leer = kein Kindi). Punkte und Zeiten sind der Musterfall der
 **Familie-3-Probe**: was je Familie variiert, ist Config, nicht Code
-(E-ROUTINE-4). Fehlende/kaputte Datei → Defaults + Warnung, Prozess startet
-(CONFIG-4); ENV-Overrides `ROUTINE_<KEY>` (CONFIG-5).
+(E-ROUTINE-4). **Fehlende/kaputte Datei oder fehlende Einzelwerte (inkl.
+`abfahrtszeit`) → Defaults + Warnung, Prozess startet (CONFIG-4, #335).**
+Kein Pflicht-Feld ohne Default — alle Werte sind durch Code-Defaults abgedeckt.
+Die Code-Defaults sind Fallback, nicht Wahrheit: Wahrheit kommt aus der Datei
+und später per Eltern-Chat (OPEN-ROUTINE-B). ENV-Overrides `ROUTINE_<KEY>` (CONFIG-5).
 
 *Tickets:* #335
 
@@ -366,10 +369,12 @@ ersetzt (ROUTINE-9). Mindest-Abdeckung: ROUTINE-2 (View rendert Default-Punkte
 erzeugt nur `default`) · ROUTINE-6 (Tageswechsel → Punkt wieder offen, mit
 injiziertem `now`) · ROUTINE-7 (Tap → persistiert → Reload zeigt abgehakt) ·
 ROUTINE-9 (drei Now-Phasen vor/zwischen/nach den Zeiten liefern die erwarteten
-Restzeiten/Phasen) · ROUTINE-9 (`anzieh_vorlauf_min` aus Config steuert die
-„anziehen"-Zeit, keine Code-Konstante) · ROUTINE-10 (Piktogramm über
-`/display/_shared/`-Pfad, kein buddy-lokaler ARASAAC-Bezug) · ROUTINE-12
-(fehlende Datei → Defaults + Warnung, Prozess startet, CONFIG-4).
+Restzeiten/Phasen; Wochentag-Dict: Schultag → Zeiten vorhanden, Wochenend-Tag →
+None/Uhr ausgeblendet, beide mit injiziertem `now`) · ROUTINE-9
+(`anzieh_vorlauf_min` aus Config steuert die „anziehen"-Zeit, keine
+Code-Konstante) · ROUTINE-10 (Piktogramm über `/display/_shared/`-Pfad, kein
+buddy-lokaler ARASAAC-Bezug) · ROUTINE-12 (fehlende/kaputte Datei und fehlende
+`abfahrtszeit` → Defaults + Warnung, Prozess startet, CONFIG-4, #335).
 
 *Tickets:* #335
 
