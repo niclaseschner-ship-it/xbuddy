@@ -11,7 +11,11 @@ Endpunkte:
   POST /display/routine/morgen          — Tap → Abhak-Toggle (ROUTINE-7, URL-2)
                                           item_id im Request-Body (JSON oder Form)
 
-V1 hat keine externe API (ROUTINE-14, E-ROUTINE-5).
+  PUT  /api/v1/routine/config           — Zeiten setzen (ROUTINE-14, #343)
+
+Reload-on-Read (ROUTINE-14, DCOMP-3): ab #343 liest der Buddy seine
+Daten-Konfig je Request frisch aus routine.json; Last-Known-Good-Snapshot
+bei transient kaputtem Read (kein Fall auf Code-Defaults).
 Statische Assets unter /display/routine/static/<asset> (URL-13).
 Port: 5050 (ROUTINE-15).
 """
@@ -141,8 +145,47 @@ def configure(cfg, data_path=None, store_path=None):
 
 
 def _current_config():
-    """Liefert die aktuelle Config (Last-Known-Good-Snapshot)."""
-    return runtime["config"]
+    """DCOMP-3 Reload-on-Read: liest routine.json je Request frisch (ROUTINE-14, #343).
+
+    Eltern-Chat-Skill schreibt Cross-Service in routine.json (RZS, EC-21).
+    Der lesende Routine-Buddy muss den neuen Stand ohne Service-Restart sehen
+    — neue Zeiten erscheinen beim nächsten Aufruf von /display/routine/morgen.
+
+    Fehlertoleranz (DCOMP-3 Last-Known-Good): scheitert der Read oder Parse
+    (Datei kurz weg, atomares Replace-Race aus DCOMP-4, kaputtes JSON),
+    fällt der Aufruf auf den letzten erfolgreich geladenen Snapshot zurück.
+    KEIN Fall auf Code-Defaults solange ein gültiger Stand existiert.
+    Implementierung: roher JSON-Read zuerst — scheitert er, bleibt der Snapshot.
+    Erst nach erfolgreichem Parse delegiert resolve_data die Vollauflösung.
+
+    Ohne konfigurierten data_path (z.B. Tests, die configure() ohne
+    data_path aufgerufen haben): Snapshot direkt zurückgeben — Test-Naht bleibt.
+    """
+    data_path = runtime.get("data_path")
+    snapshot = runtime["config"]
+    if not data_path:
+        return snapshot
+    try:
+        # Roher JSON-Read: strikter Fail bei Datei weg oder kaputtem JSON (DCOMP-3).
+        # Scheitert dieser Schritt, bleibt der Snapshot unverändert erhalten.
+        with open(data_path, encoding="utf-8") as f:
+            json.load(f)
+    except (OSError, ValueError) as e:
+        logger.debug(
+            "reload-on-read fiel auf snapshot zurück (%s); "
+            "Lookup nutzt zuletzt erfolgreich geladenen Stand", e)
+        return snapshot
+    try:
+        new_cfg = config_mod.resolve_data(data_path)
+    except Exception as e:
+        logger.debug(
+            "reload-on-read resolve fehlgeschlagen (%s); "
+            "Lookup nutzt letzten Stand", e)
+        return snapshot
+    # Snapshot mitführen — nächster fehlgeschlagener Read hat immer den
+    # zuletzt erfolgreichen Stand als Fallback (DCOMP-3).
+    runtime["config"] = new_cfg
+    return new_cfg
 
 
 def _now(zeitzone):
@@ -170,7 +213,7 @@ def morgen():
     POST: Tap → Abhak-Toggle (ROUTINE-7, URL-2: kein Verb im Pfad, HTTP-Methode
           trägt die Aktion). item_id im Request-Body (JSON: {"item_id": "..."} oder
           Form: item_id=...). Toggelt den heutigen Abhak-Zustand, persistiert über
-          Reload. Keine externe API (ROUTINE-14: V1 hat keine /api/v1/routine/).
+          Reload. Daten-Konfig per Reload-on-Read frisch (ROUTINE-14, DCOMP-3).
     """
     cfg = _current_config()
 
@@ -219,6 +262,40 @@ def morgen():
 def index():
     """Weiterleitung zur View `morgen` (BUD-1, ROUTINE-2)."""
     return redirect(url_for("morgen"))
+
+
+@app.route("/api/v1/routine/config", methods=["PUT"])
+def api_config():
+    """Zeiten-Schreib-API (ROUTINE-14, #343, URL-14).
+
+    Setzt die Zeit-Schlüssel der Daten-Konfig (ROUTINE-12):
+      abfahrtszeit      — "HH:MM" oder Wochentag-Map
+      aufstehzeit       — "HH:MM" oder Wochentag-Map
+      anzieh_vorlauf_min — int ≥ 0
+
+    Payload: JSON-Body, alle Felder optional, mindestens eines erforderlich.
+    Validierung (ROUTINE-14): strikt HH:MM (24h), nur gültige Wochentags-Keys,
+    anzieh_vorlauf_min nicht-negativer Integer.
+    Ungültig → 422, kein Schreiben, kein Teil-Write (AC2).
+    Persistenz atomar in routine.json (DCOMP-4) via config_mod.write_data().
+    Reload-on-Read: neue Zeiten sind ohne Neustart beim nächsten Aufruf
+    von /display/routine/morgen sichtbar (DCOMP-3, EC-21).
+    """
+    data_path = runtime.get("data_path")
+    if not data_path:
+        # Kein data_path konfiguriert (z.B. reine In-Memory-Tests) — kein Schreiben möglich.
+        return jsonify({"error": "data_path nicht konfiguriert — kein Schreiben möglich"}), 500
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "JSON-Body erwartet"}), 400
+
+    try:
+        config_mod.write_data(data_path, body)
+    except config_mod.ValidationError as e:
+        return jsonify({"error": str(e)}), 422
+
+    return jsonify({"ok": True})
 
 
 # ============================================================
