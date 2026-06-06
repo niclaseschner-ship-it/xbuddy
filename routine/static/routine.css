@@ -1,0 +1,471 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   Routine-Buddy — View `morgen`, Split-Layout, Stufe toddler (ROUTINE-2 … ROUTINE-13).
+
+   Stilwerte ausschließlich als Token aus display/_shared/design/tokens.css
+   (ROUTINE-11, E-ROUTINE-7, DTOK-5: keine hartcodierten Farben/Maße).
+
+   Box/Card-Optik: 1:1-Spiegel aus wetter/static/wetter.css (.card/.card-label)
+   — damit der Routine-Buddy nicht „neu" aussieht (E-ROUTINE-10, variant-f F1).
+
+   Layout-Basis: Gate-B-Artefakt variant-f (Split: Checkliste links / Uhr rechts).
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── KIOSK SHELL (raumfüllend, ROUTINE-11) ─────────────────────────────────── */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 1280px;
+  height: 800px;
+  overflow: hidden;
+  background: var(--kids-bg);
+}
+
+body.xb[data-stage="toddler"] {
+  font-family: var(--font-hand);
+  font-size: var(--fs-20);
+  color: var(--kids-ink);
+  background: var(--kids-bg);
+}
+
+/* ── KOPFLEISTE ─────────────────────────────────────────────────────────────── */
+.header {
+  height: 56px;
+  padding: 0 var(--space-6);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  background: var(--kids-paper);
+  border-bottom: 3px solid var(--kids-border-soft);
+  box-shadow: var(--shadow-hand-sm);
+  flex-shrink: 0;
+}
+
+.header-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-28);
+  color: var(--kids-ink);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+}
+
+/* ── HAUPT-LAYOUT: Split (variant-f: 1fr / 500px) ──────────────────────────── */
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+.main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 500px;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  min-height: 0;
+}
+
+/* ── CARD BASE — 1:1-Spiegel aus wetter.css .card (E-ROUTINE-10, variant-f F1) ── */
+.card {
+  background: var(--kids-paper);
+  border-radius: var(--radius-3xl);
+  border: 2px solid var(--kids-border-soft);
+  box-shadow: var(--shadow-hand-lg);
+  padding: var(--space-4) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── CARD-LABEL — 1:1-Spiegel aus wetter.css .card-label (E-ROUTINE-10, F1) ── */
+.card-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-32);
+  color: var(--kids-ink-soft);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+  margin-bottom: calc(-1 * var(--space-1));
+  flex-shrink: 0;
+}
+
+/* ── LINKE SPALTE: Checkliste ──────────────────────────────────────────────── */
+.list-col {
+  /* .card gibt background/border/shadow/padding */
+}
+
+.list-col-inner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow: hidden;
+  min-height: 0;
+}
+
+/*
+  ROUTINE-19: Dynamische Liste bis 8 Punkte, ohne Scroll.
+  Kartenhöhe als Funktion der Anzahl — Karten skalieren mit `flex: 1`.
+  Alle 1–8 Karten füllen den Raum gleichmäßig, keine Scroll-Bar.
+*/
+.routine-card {
+  background: var(--kids-paper);
+  border-radius: var(--radius-2xl);
+  border: 2px solid var(--kids-border-soft);
+  box-shadow: var(--shadow-hand-sm);
+  padding: var(--space-2) var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: pointer;
+  flex: 1;         /* ROUTINE-19: flex: 1 skaliert mit Anzahl, kein fester px-Wert */
+  min-height: 72px;
+  position: relative;
+  transition: box-shadow var(--dur-base) var(--ease-out),
+              border-color var(--dur-base) var(--ease-out),
+              background var(--dur-base) var(--ease-out);
+  overflow: hidden;
+}
+
+/* ROUTINE-3: Abgehakt → grün (Häkchen, klares visuelles Feedback) */
+.routine-card.done {
+  background: var(--kids-tint-mint);
+  border-color: var(--success);
+}
+
+/* Piktogramm-Bereich (ROUTINE-10: Bild via geteilter Plattform) */
+.card-pikto {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-xl);
+  border: 2px solid var(--kids-border-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: var(--kids-bg);
+}
+
+.card-pikto img {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  display: block;
+}
+
+/* Beschriftung der Routine-Karten */
+.card-item-label {
+  flex: 1;
+  font-family: var(--font-hand);
+  font-weight: 700;
+  font-size: var(--fs-28);
+  color: var(--kids-ink);
+  line-height: 1.1;
+}
+
+.routine-card.done .card-item-label {
+  color: var(--kids-ink-soft);
+  text-decoration: line-through;
+  text-decoration-color: var(--success);
+  text-decoration-thickness: 3px;
+}
+
+/* ROUTINE-3: Großer Abhak-Knopf — deutliche Tipp-Affordanz, große Trefferfläche */
+.check-btn {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-full);
+  background: var(--kids-paper);
+  border: 5px solid var(--kids-border-soft);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: background var(--dur-base) var(--ease-out),
+              border-color var(--dur-base) var(--ease-out),
+              box-shadow var(--dur-base) var(--ease-out);
+  box-shadow: var(--shadow-hand);
+}
+
+/* Pulsieren als „tipp-mich"-Einladung (ROUTINE-3) */
+@keyframes pulse-invite {
+  0%   { box-shadow: var(--shadow-hand); }
+  50%  { box-shadow: 0 0 0 6px rgba(44, 42, 39, 0.10), var(--shadow-hand); }
+  100% { box-shadow: var(--shadow-hand); }
+}
+
+.routine-card:not(.done) .check-btn {
+  animation: pulse-invite 2.2s ease-in-out infinite;
+}
+
+.routine-card.done .check-btn {
+  background: var(--success);
+  border-color: var(--success);
+  animation: none;
+  box-shadow: var(--shadow-hand-sm);
+}
+
+/* Häkchen-Form im Abhak-Knopf (CSS-only) */
+.check-btn::before {
+  content: "";
+  display: block;
+  width: 30px;
+  height: 17px;
+  border-bottom: 5px solid var(--kids-border-soft);
+  border-left: 5px solid var(--kids-border-soft);
+  transform: rotate(-45deg) translate(3px, -3px);
+  border-radius: 2px;
+}
+
+.routine-card.done .check-btn::before {
+  border-color: var(--kids-paper);
+}
+
+/* ── RECHTE SPALTE: Uhr / Zeitstrahl (ROUTINE-9) ──────────────────────────── */
+.clock-col {
+  /* .card gibt background/border/shadow/padding */
+}
+
+/* Phasen-Hinweis (ROUTINE-9) */
+.phase-now {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+.phase-pill {
+  background: var(--kids-today);
+  color: var(--kids-paper);
+  font-family: var(--font-hand);
+  font-weight: 700;
+  font-size: var(--fs-16);
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-full);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+  box-shadow: var(--shadow-hand-sm);
+  white-space: nowrap;
+}
+
+/*
+  HAUPT-ZEITSTRAHL + REFERENZ-BALKEN: gemeinsames Grid (K1-Maßstab, variant-f).
+  Spalte 0: Piktogramm-Platz (48px)
+  Spalte 1: Balken-Spalte (1fr — identische Breite für alle Tracks)
+*/
+.scale-zone {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  grid-template-rows: auto auto auto;
+  gap: var(--space-3) var(--space-4);
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+/* Hauptstrahl belegt beide Grid-Spalten (variant-f) */
+.timeline-section {
+  grid-column: 1 / -1;
+  position: relative;
+  padding-top: 76px;  /* Platz für die Pins oberhalb des Balkens */
+}
+
+.timeline-track {
+  position: relative;
+  height: 32px;
+  background: var(--kids-weekend-bg);
+  border-radius: var(--radius-full);
+  border: 2px solid var(--kids-border-soft);
+  overflow: visible;
+}
+
+/* Verstrichener Teil des Zeitstrahls */
+.timeline-elapsed {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, var(--kids-today) 0%, var(--terracotta) 100%);
+  border-radius: var(--radius-full) 0 0 var(--radius-full);
+  transition: width 1s linear;
+}
+
+/* JETZT-Marker (senkrechter Stab) */
+.timeline-now {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 18px;
+  height: 44px;
+  background: var(--kids-today);
+  border-radius: var(--radius-full);
+  border: 3px solid var(--kids-paper);
+  box-shadow: var(--shadow-hand);
+  z-index: 2;
+}
+
+/*
+  Meilenstein-Pins oberhalb des Balkens (ROUTINE-9, variant-f E K2):
+  Start:    transform: translateX(0)    — linksb., kein Überlauf
+  Mitte:    transform: translateX(-50%) — zentriert
+  Ende:     transform: translateX(-100%)— rechtsb., kein Überlauf
+*/
+.milestone-pin {
+  position: absolute;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 3;
+}
+
+.milestone-pin-start {
+  left: 0%;
+  transform: translateX(0);
+  align-items: flex-start;
+}
+
+.milestone-pin-anziehen {
+  /* Position via inline style (aus view.uhr.elapsed_pct / anziehen-Zeit) */
+  transform: translateX(-50%);
+}
+
+.milestone-pin-losgehen {
+  left: 100%;
+  transform: translateX(-100%);
+  align-items: flex-end;
+}
+
+/* Pin-Piktogramm-Kachel */
+.pin-pikto {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-lg);
+  border: 3px solid var(--kids-border-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--kids-paper);
+  box-shadow: var(--shadow-hand-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.pin-pikto img {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  display: block;
+}
+
+/* Farbgebung der Pin-Kacheln (analog variant-f) */
+.pin-pikto-start    { background: var(--kids-bg);       border-color: var(--kids-border-soft); }
+.pin-pikto-anziehen { background: var(--kids-today-bg); border-color: var(--kids-today); }
+.pin-pikto-losgehen { background: var(--kids-tint-sky); border-color: var(--lake); }
+
+/* Stiel vom Piktogramm zum Balken */
+.pin-stem {
+  width: 3px;
+  height: 10px;
+  background: var(--kids-border-soft);
+  border-radius: var(--radius-full);
+}
+
+/* Uhrzeit-Label unter dem Stiel (ROUTINE-9, variant-f K4) */
+.pin-time {
+  font-family: var(--font-hand);
+  font-weight: 700;
+  font-size: var(--fs-14);
+  color: var(--kids-ink-soft);
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+/* ── ZEIT-REFERENZEN (ROUTINE-13, variant-f F2: rechtsbündig) ──────────────── */
+.zeitref-divider {
+  grid-column: 1 / -1;
+  height: 2px;
+  background: var(--kids-border-soft);
+  border-radius: var(--radius-full);
+  margin: 0;
+}
+
+/* Piktogramm-Zelle (linke Grid-Spalte) */
+.zeitref-pikto {
+  width: 48px;
+  height: 44px;
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--kids-border-soft);
+  background: var(--kids-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+  align-self: center;
+}
+
+.zeitref-pikto img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  display: block;
+}
+
+/* Balken-Track (rechte Grid-Spalte — gleiche Breite wie Hauptstrahl) */
+.zeitref-bar-track {
+  height: 18px;
+  background: var(--kids-weekend-bg);
+  border-radius: var(--radius-full);
+  border: 2px solid var(--kids-border-soft);
+  position: relative;
+  overflow: hidden;
+  align-self: center;
+}
+
+/*
+  F2: RECHTSBÜNDIG petrankert (variant-f F2).
+  Balken wachsen von rechts (= Losgehen-Ende) nach links.
+  Lese-Semantik: Restzeit, nicht verstrichene Zeit.
+*/
+.zeitref-fill {
+  position: absolute;
+  right: 0;
+  left: auto;
+  top: 0;
+  bottom: 0;
+  background: var(--lavender-earth);
+  opacity: 0.65;
+  border-radius: var(--radius-full);
+}
+
+/* ── KEIN SCHULTAG ──────────────────────────────────────────────────────────── */
+.kein-schultag {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: var(--fs-40);
+  color: var(--kids-ink-soft);
+}
+
+/* ── ATTRIBUTION FOOTER (ROUTINE-10/ICONS-5) ────────────────────────────────── */
+.attribution-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(43, 42, 38, 0.08);
+  border-top: 1px solid var(--kids-border-soft);
+  padding: 4px var(--space-7);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-hand);
+  font-size: var(--fs-14);
+  color: var(--kids-ink-soft);
+  z-index: 10;
+}
