@@ -442,7 +442,12 @@ None/Uhr ausgeblendet, beide mit injiziertem `now`) · ROUTINE-9
 (`anzieh_vorlauf_min` aus Config steuert die „anziehen"-Zeit, keine
 Code-Konstante) · ROUTINE-10 (Piktogramm über `/display/_shared/`-Pfad, kein
 buddy-lokaler ARASAAC-Bezug) · ROUTINE-12 (fehlende/kaputte Datei und fehlende
-`abfahrtszeit` → Defaults + Warnung, Prozess startet, CONFIG-4, #335).
+`abfahrtszeit` → Defaults + Warnung, Prozess startet, CONFIG-4, #335) ·
+**ROUTINE-14** (buddy-seitig, #343: gültiges `PUT /api/v1/routine/config`
+persistiert in `routine.json` und ist per Reload-on-Read ohne Neustart sichtbar;
+ungültiges Zeitformat/ungültiger Wochentags-Key → 4xx, **kein** Teil-Write;
+atomares Schreiben Temp+Rename und Last-Known-Good bei kaputtem Read,
+DCOMP-3/DCOMP-4).
 
 *Tickets:* #335
 
