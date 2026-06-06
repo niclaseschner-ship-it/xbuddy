@@ -1,0 +1,6 @@
+{
+  "_comment": "PHOTO-19/CONFIG-1 — Runtime-Konfig des Photo-Buddys (Bind, Log). Kopiere als config.json (gitignored). Nicht gesetzte Felder bleiben auf den Code-Defaults (RUNTIME_SCHEMA in photo/main.py). ENV-Variablen (PHOTO_LISTEN_PORT etc.) und CLI-Flags überschreiben diese Datei (CONFIG-5). Die Daten-Konfig (Intervall, Sortierung, TTL, Library) liegt separat in photo.json (Format: photo.example.json).",
+  "listen_host": "127.0.0.1",
+  "listen_port": 5051,
+  "log_level":   "INFO"
+}

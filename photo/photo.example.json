@@ -1,0 +1,12 @@
+{
+  "_comment": "PHOTO-19 — Daten-/Verhaltens-Konfig des Photo-Buddys. Kopiere als photo.json (gitignored). Nicht gesetzte Felder bleiben auf den Code-Defaults (DEFAULTS in photo/config.py). ENV-Overrides (PHOTO_INTERVALL_S etc.) gewinnen über die Datei (CONFIG-5). Die Runtime-Konfig (Bind, Log) liegt separat in config.json (Format: config.example.json).",
+  "_sortier_richtung": "neueste-zuerst | aelteste-zuerst (PHOTO-11)",
+  "_stempel_quelle": "hinzugefuegt | aufgenommen (PHOTO-11; aufgenommen fällt ohne EXIF auf hinzugefuegt zurück)",
+  "_auto_delete_tage": "0 = AUS (Default, nie löschen, E-PHOTO-6); >0 = TTL in Tagen am Hinzufüge-Stempel",
+  "intervall_s": 8,
+  "sortier_richtung": "neueste-zuerst",
+  "stempel_quelle": "hinzugefuegt",
+  "auto_delete_tage": 0,
+  "video_max_s": 60,
+  "library_verzeichnis": "medien"
+}
