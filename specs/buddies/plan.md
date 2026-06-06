@@ -428,7 +428,9 @@ Code (CONFIG-1) — beide gitignored:
 - `plan/config.json` — Runtime-Konfig (Bind-Adresse, Log-Level), vom
   gemeinsamen `tools/configloader.py` (#179) nach CONFIG-1 geladen.
 
-**Daten-Konfig (`plan/plan.json`)** — Schreibstelle ist der Eltern-Chat
+**Daten-Konfig (`plan/plan.json`)** — Eigentümer der Datei ist der Plan-Buddy.
+Werte, die im Onboarding entstehen (heute `kalender_id`), setzt der Eltern-Chat
+über die Plan-Admin-API (PLAN-32, APP-3) — nicht durch Direkt-Schreiben
 (CONFIG-1).
 
 | Name                         | Default                          | Datei-Schlüssel                | Gesetzt durch (Onboarding-Schritt) |
@@ -470,6 +472,26 @@ sind Test-Werkzeug.
 
 *Tickets:* #40, #179, #210, #214
 
+### PLAN-32 — Admin-Endpoint: `kalender_id` setzen (Plan-Buddy schreibt selbst)
+Der Plan-Buddy nimmt seine `kalender_id` über einen Admin-Endpoint entgegen,
+statt dass ein fremder Dienst `plan.json` direkt schreibt (APP-3):
+`PUT /api/v1/plan/admin/kalender`, Body `{ "kalender_id": "<id>" }`.
+
+- **Loopback-only** (`127.0.0.1`/`::1`, sonst 403); die nginx-Origin leitet
+  `…/admin/…` nicht weiter — dieselbe Härtung wie `admin/reload` (#140).
+- Der Plan-Buddy **schreibt selbst** nur den `kalender_id`-Schlüssel atomar in
+  `plan/plan.json` (Temp-Datei + `os.replace`; alle anderen Werte byte-gleich)
+  — er ist Eigentümer seiner Datei.
+- Übernahme **in-process** auf demselben atomaren Pfad wie `admin/reload`
+  (Config neu bauen, Transport mit neuer `kalender_id` neu binden; bei Parse-/
+  Schreibfehler bleibt der alte Snapshot unberührt).
+- Antwortet **400** bei fehlendem/leerem `kalender_id`, **200** bei Erfolg.
+
+Damit ist die `kalender_id`-Schreibstelle der Plan-Buddy selbst; der Eltern-Chat
+(KAV) **ruft** diesen Endpoint, statt `plan.json` zu schreiben.
+
+*Tickets:* #341
+
 ## 10. Tests
 
 ### PLAN-29 — Automatisierte Tests je Anforderung
@@ -495,13 +517,16 @@ Mehrtages-Ganztags-Spanne an; PUT mit beginn+ende als Datetimes legt einen
 zeitgebundenen Termin an; datum als Alias für ganztägiges beginn bleibt
 rückwärtskompatibel; fehlende oder widersprüchliche Felder antworten 400;
 nach einem PUT liefert GET das Event mit korrektem beginn/ende/ganztags zurück)
-· PLAN-28 (Reload-on-Read: nach Cross-Service-Schreibvorgang
+· PLAN-28 (Reload-on-Read: nach einem Schreibvorgang
 in plan.json liefern `_current_config()` und `_db()` beim nächsten Request den
 neuen Stand ohne Service-Restart — DCOMP-2) · PLAN-30 (Lese-API liefert
 Defaults bei leerer Woche, spiegelt PUTs, antwortet 400 bei ungültigem
 `week_start`) · PLAN-31 (PUT /api/v1/plan/zuteilung: Pflichtfeld-400, ungültiger
 Slot-400, unbekannte person_id-400, gültiger PUT schreibt und ist per GET
-sichtbar).
+sichtbar) · PLAN-32 (PUT /api/v1/plan/admin/kalender: nicht-Loopback→403;
+fehlendes/leeres kalender_id→400; gültiger PUT schreibt nur den
+kalender_id-Schlüssel atomar, nächster Request liest die neue ID; Schreib-/
+Parse-Fehler lässt den alten Snapshot stehen).
 
 Läufe gegen den **echten** Kalender sind opt-in und nicht Teil des
 Standard-Durchlaufs (analog `eltern-chat.md` EC-17).
