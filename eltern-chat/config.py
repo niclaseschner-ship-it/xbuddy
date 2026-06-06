@@ -65,6 +65,11 @@ DEFAULTS = {
     # (`POST /api/v1/plan/admin/reload`, #151). Per-Instanz-Wert; Default
     # passt zum Pi-Setup (PORT-2 Plan-Buddy auf 5020).
     "plan_origin_url": "http://127.0.0.1:5020",
+    # RZS-6 / #343: Origin des Routine-Buddys, über die die
+    # RoutineZeitenSetzenTask die Zeiten schreibt (`PUT /api/v1/routine/config`
+    # ROUTINE-14). Per-Instanz-Wert; Default passt zum Pi-Setup
+    # (PORT-2 Routine-Buddy auf 5050).
+    "routine_origin_url": "http://127.0.0.1:5050",
     # GAA-3.7: HTTPS-Origin, unter der die ausgelieferten Display-URLs
     # erreichbar sind (z. B. "https://xbuddy-hub.local:8443"). Per-Instanz-
     # Wert. Leer (Default) → Bot gibt nur den Pfad `/display/<id>` aus —
@@ -115,7 +120,7 @@ class Config:
                  family_group_chat_id, family_group_locked, context_depth,
                  ca_pem_path, familie_origin_url, geraete_origin_url,
                  panel_origin_url, plan_origin_url, display_url_origin,
-                 plan_json_path, log_level):
+                 plan_json_path, routine_origin_url, log_level):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
         self.provider = provider
@@ -130,6 +135,7 @@ class Config:
         self.plan_origin_url = plan_origin_url         # EC-21 / #215: Origin der Plan-Buddy-Reload-Schnittstelle
         self.display_url_origin = display_url_origin   # GAA-3.7: HTTPS-Origin für Display-URLs
         self.plan_json_path = plan_json_path       # KAV-X: Pfad zur Per-Instanz-`plan/plan.json`
+        self.routine_origin_url = routine_origin_url   # RZS-6 / #343: Origin des Routine-Buddys (ROUTINE-14)
         self.log_level = log_level                 # LOG-4 (#166): Level-String für tools.logsetup
 
 
@@ -230,5 +236,6 @@ def resolve(config_path, zd=None):
         plan_origin_url=str(values["plan_origin_url"]).strip().rstrip("/"),
         display_url_origin=str(values["display_url_origin"]).strip().rstrip("/"),
         plan_json_path=str(values["plan_json_path"]).strip(),
+        routine_origin_url=str(values["routine_origin_url"]).strip().rstrip("/"),
         log_level=str(values["log_level"]).strip(),
     )

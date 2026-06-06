@@ -217,6 +217,48 @@ def test_URL_14_routine_in_routing_tabelle_dokumentiert():
     )
 
 
+def test_URL_14_routine_api_location_proxypassed():
+    """URL-14 + ROUTINE-14 + #343: /api/v1/routine/ wird an xbuddy_routine geleitet.
+
+    Der Routine-Buddy exponiert ab #343 eine Schreib-API für Zeiten (ROUTINE-14).
+    Ohne diesen Block würden PUT-Anfragen beim Router (5000) landen statt beim
+    Routine-Buddy (5050).
+    """
+    text = _conf_text()
+    match = re.search(
+        r"location\s+/api/v1/routine/\s*\{[^}]*proxy_pass\s+http://xbuddy_routine\s*;[^}]*\}",
+        text,
+        re.DOTALL,
+    )
+    assert match is not None, (
+        "location /api/v1/routine/ fehlt oder proxypasst nicht an xbuddy_routine "
+        "(URL-14, ROUTINE-14, #343)"
+    )
+
+
+def test_URL_14_routine_api_steht_vor_allgemeinem_api_v1():
+    """URL-14: /api/v1/routine/ steht VOR dem allgemeinen /api/v1/-Block (spezifisch vor allgemein)."""
+    text = _conf_text()
+    pos_routine_api = text.find("location /api/v1/routine/")
+    pos_api_v1 = text.find("location /api/v1/ ")
+    assert pos_routine_api != -1, "location /api/v1/routine/ nicht gefunden"
+    assert pos_api_v1 != -1, "location /api/v1/ nicht gefunden"
+    assert pos_routine_api < pos_api_v1, (
+        "URL-14-Verstoß: /api/v1/routine/ muss VOR /api/v1/ stehen "
+        f"(Positionen: routine_api={pos_routine_api}, api_v1={pos_api_v1})"
+    )
+
+
+def test_URL_14_routine_api_in_routing_tabelle_dokumentiert():
+    """Routing-Tabelle im Conf-Header listet /api/v1/routine/ (ROUTINE-14, #343)."""
+    text = _conf_text()
+    header = text.split("server {", 1)[0]
+    assert "/api/v1/routine/" in header, (
+        "Routing-Tabelle im Conf-Header listet /api/v1/routine/ nicht — "
+        "Doku und Verhalten dürfen nicht auseinanderlaufen (ROUTINE-14, #343)."
+    )
+
+
 # ============================================================
 #  Photo-Buddy: Upstream :5051, /display/photo/ + /api/v1/photo/ (#344)
 # ============================================================

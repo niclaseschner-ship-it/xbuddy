@@ -257,7 +257,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   zd_store_getter=None, kav_sessions=None,
                   plan_json_path=None, plan_origin_url=None,
                   tes_sessions=None, panel_origin_url=None,
-                  paa_sessions=None, controller_url_origin=None):
+                  paa_sessions=None, controller_url_origin=None,
+                  routine_origin_url=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
@@ -394,5 +395,29 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             tg, panel_origin_url, geraete_origin_url, paa_sessions,
             family_group_chat_id_getter,
             controller_url_origin=controller_url_origin))
+
+    # RZS-7: »Routine-Zeiten setzen« als synchrone schreibende Aufgabe (EC-10).
+    # AND-Guard: routine_origin_url UND family_group_chat_id_getter müssen gesetzt
+    # sein — analog der TES-Linie. Fehlt eine → Aufgabe nicht im Katalog (RZS-7).
+    # routine_origin_url: Routine-Buddy-Schnittstelle (ROUTINE-14, PUT /api/v1/routine/config).
+    # family_group_chat_id_getter: Live-Berechtigung gegen die Familien-Gruppe (RZS-2).
+    if routine_origin_url is not None and family_group_chat_id_getter is not None:
+        from skills.routine_client import RoutineClient
+        from skills.routine_zeiten_setzen_task import RoutineZeitenSetzenTask
+        _rzs_client = RoutineClient(origin_url=routine_origin_url)
+        _rzs_fgcid_getter = family_group_chat_id_getter
+        _rzs_tg = tg
+        def _rzs_is_member(user_id):
+            fgcid = _rzs_fgcid_getter()
+            if not fgcid:
+                return False
+            member = _rzs_tg.get_chat_member(fgcid, user_id)
+            return member is not None and member.get("status") in (
+                "creator", "administrator", "member")
+        catalog.register(RoutineZeitenSetzenTask(
+            tg=tg,
+            routine_client=_rzs_client,
+            family_group_chat_id_getter=family_group_chat_id_getter,
+            is_member_fn=_rzs_is_member))
 
     return catalog
