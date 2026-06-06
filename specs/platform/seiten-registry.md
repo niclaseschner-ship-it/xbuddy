@@ -112,11 +112,20 @@ kann ein Externer aus einem Manifest deterministisch einen Eintrag erzeugen:
 | `zeigt` | Manifest | 1 Satz, was die Seite zeigt |
 | `zielgruppe` | Manifest | `kind` / `eltern` — **deskriptiv**, KEIN Berechtigungs-Gate (SREG-6) |
 
-Die manifest-gelieferten Felder sind genau die BUD-3-Felder (`conventions/buddies.md`);
-die Snapshot-Sorten (d/e) liefern `pfad`/`label` aus PREG/GER, `varianten`/`zeigt`
-entfallen dort. Die **volle URL wird nicht gespeichert** — sie entsteht erst beim
-Konsumenten aus `display_url_origin + pfad` (URL-12: eine Origin; der Pfad ist die
-Wahrheit, die Origin ist Per-Instanz-Deployment).
+Die manifest-gelieferten Felder sind genau die BUD-3-Felder (`conventions/buddies.md`).
+Die Snapshot-Sorten (d/e) tragen im **heutigen PREG/GER-Schema kein
+menschenlesbares Label** (`panels.json`: `panel_id`/`source_id`/`router_url`,
+PREG-3; Geräte-Modell: `id`/`typ`/`verwendung`/`status` — kein Anzeige-Name):
+ihr `pfad` kommt aus der Instanz-ID (`panel_id` → `/controller/app-panel/<id>`,
+`display_id` → `/display/<id>`), ihr `label` wird **aus der Instanz-ID
+abgeleitet** (z. B. „Panel <panel_id>"); `synonyme`/`varianten`/`zeigt`
+entfallen für (d/e). Ein reicheres Anzeige-Label für Panels/Displays bräuchte
+ein PREG/GER-Namensfeld → **Folge-Aufgabe, nicht V1**: in V1 greift die freie
+Text-Auflösung (SREG-5) voll für die Manifest-Sorten a–c; (d/e) sind auflistbar
+und per ID/abgeleitetem Label adressierbar. Die **volle URL wird nicht
+gespeichert** — sie entsteht erst beim Konsumenten aus `display_url_origin +
+pfad` (URL-12: eine Origin; der Pfad ist die Wahrheit, die Origin ist
+Per-Instanz-Deployment).
 
 ## SREG-5 — Skill `seiten_finden` (lesende Aufgabe)
 Eltern-Chat-READ-Skill — eine **lesende Aufgabe** (EC-9; Muster wie TER-10
