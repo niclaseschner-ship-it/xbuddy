@@ -198,10 +198,11 @@ def morgen():
     now = _now(zeitzone)
     tag = now.date()
 
-    # Uhr (ROUTINE-9): injizierbares now
+    # Uhr (ROUTINE-9): injizierbares now; aufstehzeit aus Config (AC-FIX1, #335)
     try:
         zeiten = uhr_mod.berechne_zeiten(
-            cfg.abfahrtszeit, cfg.anzieh_vorlauf_min, zeitzone, tag)
+            cfg.abfahrtszeit, cfg.anzieh_vorlauf_min, zeitzone, tag,
+            aufstehzeit_cfg=cfg.aufstehzeit)
         uhr_view = uhr_mod.baue_uhr_view(zeiten, now) if zeiten else None
     except Exception as e:
         logger.error("Uhr-Berechnung fehlgeschlagen: %s — Uhr wird ausgeblendet", e)
