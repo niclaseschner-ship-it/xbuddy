@@ -255,12 +255,14 @@ keinen Scroll-Container; die Kartenhöhe ist eine Funktion der Anzahl.
 
 ### ROUTINE-13 — Kindgerechte Zeit-Referenzen (Gate B gewählt)
 Damit ein nicht-uhr-lesendes Kind die Dauer greifen kann, blendet die View
-unter dem Haupt-Zeitstrahl **textlose Referenz-Balken** ein: ein Balken, dessen
-Länge 30 Min repräsentiert, mit dem „Sendung mit der Maus"-Piktogramm daneben,
-und ein Balken für 3 Min mit dem Zähneputzen-Piktogramm. **Maßstabsgetreu zum
-Haupt-Zeitstrahl** (gleiche px/min) und **rechtsbündig** petrankert am
-Losgehen-Ende — so liest das Kind die Referenz als *Restzeit* („noch Zeit wie
-einmal Sendung mit der Maus"). **Kein erklärender Text**, nur Balken + Bild.
+**unterhalb des (vertikalen) Zeitstrahl-Blocks** eine `zeitref-zone` mit
+**textlosen Referenz-Balken** ein: ein Balken, dessen Breite proportional zu
+30 Min skaliert, mit dem „Sendung mit der Maus"-Piktogramm daneben, und ein
+Balken für 3 Min mit dem Zähneputzen-Piktogramm. Die Balken sind horizontale
+`width:%`-Elemente — sie teilen keinen gemeinsamen px/min-Maßstab mit dem
+vertikalen Hauptstrahl. So liest das Kind die Referenz als Dauer-Ankerpunkt
+(„so lange wie einmal Sendung mit der Maus"). **Kein erklärender Text**, nur
+Balken + Bild. (#335)
 
 **Gate B (2026-06-05): gewählt und Teil des V1-Designs** (variant-f). Die
 Referenz bleibt **config-schaltbar** (`zeit_referenzen`, ROUTINE-12: an/aus +
@@ -436,13 +438,14 @@ buddy-lokaler ARASAAC-Bezug) · ROUTINE-12 (fehlende/kaputte Datei und fehlende
 
 - **OPEN-ROUTINE-F — Display-Design (Gate B) — ENTSCHIEDEN 2026-06-05.**
   Gewähltes Artefakt: `mockups/variant-f` — Split-Layout (Checkliste | Zeit),
-  linearer Zeitstrahl mit Bild-Events + Uhrzeiten, rechtsbündige maßstabsgetreue
-  Referenz-Balken, großer grün-werdender Abhak-Knopf, Boxen im WetterBuddy-Card-Stil.
+  linearer Zeitstrahl mit Bild-Events + Uhrzeiten, horizontale Referenz-Balken
+  unterhalb des Zeitstrahl-Blocks, großer grün-werdender Abhak-Knopf, Boxen im
+  WetterBuddy-Card-Stil.
   **Rest-Polish in der Impl:**
   (a) ~~Uhrzeit-Labels am Zeitstrahl dürfen nicht in andere Elemente ragen~~ —
-  **ERLEDIGT 2026-06-06 (#335):** Labels werden bei engem Pin-Abstand gestaffelt
-  (anziehen-Label über dem Pin, losgehen-Label darunter); aufstehzeit kommt aus
-  Config, nicht abgeleitet (AC-FIX1/AC-FIX3).
+  **ERLEDIGT 2026-06-06 (#335):** gelöst durch **Seiten-Alternation** (ROUTINE-9):
+  adjazente Events stehen auf gegenüberliegenden Seiten des vertikalen Balkens;
+  aufstehzeit kommt aus Config, nicht abgeleitet (AC-FIX1).
   (b) 8-Punkte-Layout am echten Display verifizieren (ROUTINE-19);
   (c) die drei Zeitstrahl-Piktogramme (anziehen/aufstehen/losgehen)
   gegen die ARASAAC-Suche treffsicher verifizieren.
