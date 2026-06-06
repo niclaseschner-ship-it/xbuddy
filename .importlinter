@@ -16,6 +16,7 @@ root_packages =
     eltern-chat
     familie
     geraete
+    photo
     plan
     router
     routine
@@ -28,7 +29,7 @@ name = MOD-1 Layer-Modell (eltern-chat -> Services -> tools)
 type = layers
 layers =
     eltern-chat
-    familie | geraete | plan | router | routine | wetter
+    familie | geraete | photo | plan | router | routine | wetter
     tools
 containers =
 
@@ -38,6 +39,7 @@ type = independence
 modules =
     familie
     geraete
+    photo
     plan
     router
     routine
@@ -52,6 +54,7 @@ forbidden_modules =
     eltern-chat
     familie
     geraete
+    photo
     plan
     router
     routine
@@ -63,6 +66,7 @@ type = forbidden
 source_modules =
     familie
     geraete
+    photo
     plan
     router
     routine
@@ -78,6 +82,7 @@ source_modules =
     eltern-chat
     familie
     geraete
+    photo
     plan
     router
     routine

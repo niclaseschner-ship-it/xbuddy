@@ -29,8 +29,10 @@ Anbindung an Open-Meteo · **keine** API für andere Apps · eigener Service ·
 **raumfüllende Darstellung mit einheitlicher Schriftgröße** (Lesbarkeit, WETTER-25).
 
 **Out-of-Scope V1** (je eigenes Ticket): die `reader`-Stufe (OPEN-WETTER-A) · eine
-Lese-API `/api/v1/wetter/` (OPEN-WETTER-B) · Mehrtages-Vorhersage und mehrere Orte
-(OPEN-WETTER-C) · jegliche Interaktion · Anbieter-Cache / Offline-Last-Known-Good
+Lese-API `/api/v1/wetter/` für andere Apps (OPEN-WETTER-B) · Mehrtages-Vorhersage
+und mehrere Orte (OPEN-WETTER-C) · jegliche Interaktion *(V1.1 ergänzt die
+eltern-seitige Garderoben-Editor-Seite, §10 — eine Eltern-Oberfläche, kein
+Kiosk-View)* · Anbieter-Cache / Offline-Last-Known-Good
 (OPEN-WETTER-E) · Controller-Trigger / Erreichbarkeit jenseits Dauer-Kiosk (F4/F5).
 
 ## 1. Die App & ihre View
@@ -220,9 +222,13 @@ an `127.0.0.1` (PORT-3). Port **5030** (PORT-2, `xbuddy-wetter`, belegt in
 Der Slug `wetter` wird im Origin-Routing (URL-14) registriert, damit
 `/display/wetter/heute` über die Origin erreichbar ist. Diese Verkabelung ist
 **Integration**, nicht App-Eigentum — Gegenstand des arbeitstag-Track-Schnitts
-(F4/F5). **Familien-Schnittstelle-Beitrag (APP-4): keiner in V1** — Wetter hat
-keinen Eltern-Chat-Skill; Ort und Regeln werden per Datei gesetzt. Damit berührt
-die Spec den offenen Installations-Mechanismus (#296) **nicht**.
+(F4/F5). **Familien-Schnittstelle-Beitrag (APP-4): die eltern-seitige
+Garderoben-Editor-Seite** (§10, WETTER-26 ff.) — eine im Heimnetz/Tailscale
+erreichbare Web-Seite, über die die Familie die Garderoben-Regeln selbst pflegt
+(**kein** Eltern-Chat-Schreibweg; der Eltern-Chat liefert später nur den Link,
+eigenes Ticket). Der **Ort** wird in V1.1 weiter per Datei gesetzt (WETTER-32).
+**Entkoppelt vom Installations-Mechanismus #296** (Zugang = Netz-Grenze, WETTER-31),
+nicht daran gated.
 
 ## 9. Tests
 
@@ -241,6 +247,80 @@ WETTER-14/15 (erste passende Regel gewinnt; keine Regel → Fallback; Mützen-Lo
 warm/kalt; Regen-Logik aus `rainAmount`) · WETTER-16 (Rohantwort → neutrales Modell,
 je Tageszeit) · WETTER-17 (Anbieter nicht erreichbar → neutraler Zustand, View
 funktioniert). Läufe gegen den echten Anbieter sind opt-in.
+
+## 10. Eltern-Garderoben-Editor (V1.1)
+
+> V1.1-Erweiterung: die erste **eltern-seitige** (parent) Oberfläche des
+> Wetter-Buddys. Grundlage **RAT-2** (`decisions/RAT-2-328-garderoben-regelmatrix.md`),
+> Keystone #328.
+
+### WETTER-26 — Eltern-seitige Editor-Seite für die Garderoben-Regeln
+Die Familie pflegt die Garderoben-Regeln (WETTER-14, `wardrobe` in `wetter.json`)
+selbst über eine eltern-seitige Web-Seite im Wetter-Buddy — der familienseitige
+Beitrag des Buddys (APP-4, löst RAT-2). Die Seite **zeigt UND editiert** die
+Regelmatrix im Handy-Browser; Speichern läuft über einen **internen Save-Handler
+der Seite** (POST innerhalb der Buddy-Grenze, schreibt `wetter.json`) + Reload-on-Read
+(DCOMP-2) — der Kiosk übernimmt **ohne Restart**. **Keine API für andere Apps**
+(BUD-1b: kein Konsument → keine API; WETTER-1/E-WETTER-3 bleiben gültig). Die Seite
+ist **kein Kiosk-View und nicht kindgerichtet** — eine Eltern-Oberfläche, **von
+WETTER-25 ausgenommen** (Scrollen und Menüführung erlaubt). **Hochkant am Handy ist
+Default und V1.1-Zielzustand.** Kein Live-Wetter, nicht das Heute-Outfit — nur die
+Regel-Config.
+
+### WETTER-27 — Anzeige der Matrix (Übersicht + Fokus)
+Die View folgt dem Muster **Übersicht + Fokus**: eine kompakte Liste aller Regeln
+**in ihrer Reihenfolge** (erste passende gewinnt, WETTER-14; je Eintrag Bedingung +
+Outfit-Vorschau) und ein **fokussierter Einzel-Regel-Editor** beim Antippen. Im
+Fokus sichtbar: die Bedingungs-Schwellen **read-only zur Orientierung**
+(gefühlte-Temp-Band, Regen, Wind, Sonne), das Pflicht-Set, das Optional-Set, der
+Hinweis — plus das `fallback`-Set. Die „Schwelle fest"-Markierung ist ein
+**Lucide-Icon, kein Emoji** (WETTER-18). Kleidungs-Piktogramme über die geteilte
+Icon-Plattform (ICONS-5). Stil/Pixel kommen aus den Tokens.
+
+### WETTER-28 — Bearbeiten: nur die Kleidungs-Sets
+Editierbar in V1.1 sind **ausschließlich die Kleidungs-Sets** (Pflicht/Optional) je
+Regel und des Fallbacks: Stücke **hinzufügen / entfernen / tauschen** aus der
+kuratierten Palette (WETTER-29). **Read-only** bleiben: die **Schwellen** der
+Bedingung, der **Hinweistext** sowie **Anzahl und Reihenfolge** der Regeln.
+Speichern sendet die geänderte Matrix an den internen Save-Handler (WETTER-26).
+
+### WETTER-29 — Kuratierte Kleidungs-Palette
+Kleidungsstücke werden **aus einer kuratierten Liste** vorgegebener Stücke
+(`{name, pikto}`) gewählt — die Familie tippt **keine** ARASAAC-ID. Die Palette
+wird mit dem Buddy ausgeliefert (durch einen Entwickler erweiterbar) und zeigt ihre
+Icons über ICONS-5. **V1.1-Palette (17 Stücke, ARASAAC-IDs):** Regenjacke `4927` ·
+Matschhose `24276` · Gummistiefel `2287` · Winterstiefel `2667` · Winterjacke
+`25804` · Jacke `2319` · Pullover `2436` · T-Shirt `2309` · Lange Hose `2565` ·
+Kurze Hose `13638` · Wintermütze `2412` · Cappy `2411` · Sonnenhut `2572` ·
+Handschuhe `2415` · Schal `2290` · Sonnenbrille `3330` · Sandalen `2556`. Die
+Palette-IDs müssen im Instanz-Icon-Store (`/display/_shared/icons/arasaac/<id>.png`,
+ICONS-5) vorliegen. NC-Lizenzfrage zentral bei `icons.md` ICONS-6.
+
+### WETTER-30 — Schreib-Validierung schützt die Kinder-View
+Eine gespeicherte Matrix ist gültig, wenn **jede Pflicht-Zelle nicht leer** ist
+(jede Regel **und** das Fallback) und **jedes Pikto aus der kuratierten Palette**
+stammt (WETTER-29). **Optional-Sets dürfen leer sein.** Schwellen werden nicht
+geprüft (nicht editierbar, WETTER-28). Geschrieben wird **atomar** (Temp-Datei +
+Rename), damit ein gleichzeitiger Kiosk-Read nie eine halbe Datei sieht. Ungültiges
+Speichern → Fehler, `wetter.json` **unverändert**, Kiosk unberührt. Gültiges
+Speichern wird über DCOMP-2 ohne Restart sichtbar.
+
+### WETTER-31 — Zugang: Heimnetz/Tailscale, keine Zusatzsicherung
+Die Seite braucht **kein Login und kein Token** (RAT-2): Bedrohungsmodell = „Leute
+im Haushalt", das Netz ist die Vertrauensgrenze. Leitplanke: die Edit-Seite/-Handler
+darf **nicht über einen ins Internet exponierten Pfad** erreichbar sein
+(LAN/Tailscale-Interface, kein Port-Forwarding).
+
+### WETTER-32 — Ort in V1.1 nicht editierbar
+Der Editor pflegt **nur die Garderobe**. Der Ort (`ort` in `wetter.json`) bleibt
+Datei-gesetzt und ist ein **eigenes Folge-Ticket** (Nic, 2026-06-06).
+
+### WETTER-33 — Tests je Anforderung (ohne Netz)
+Automatisierte Tests, reproduzierbar **ohne Netz** (der Editor berührt Open-Meteo
+nicht): Anzeige liefert die Matrix · gültiges Speichern schreibt + wird per Reload
+sichtbar · ungültiges Speichern wird abgelehnt und lässt `wetter.json` unverändert
+(leeres Pflicht-Set · Pikto außerhalb der Palette · veränderte Anzahl/Reihenfolge) ·
+atomarer Schreibpfad.
 
 ---
 
@@ -266,6 +346,14 @@ funktioniert). Läufe gegen den echten Anbieter sind opt-in.
   für alle Buddys. `plan/static/design/tokens.css` (v1.0) ist abgelöst (#323).
   Konvention: [`conventions/design-tokens.md`](../../conventions/design-tokens.md).
   Andockpunkt via `/display/_shared/` (DTOK-2) ist Schritt-2-Arbeit (#323).
+- **OPEN-WETTER-I — Pfad/Bind der Editor-Seite.** Exakter Pfad (Vorschlag
+  `/display/wetter/garderobe`, fällt unter die registrierte `/display/wetter/`-Route)
+  und Bind, solange die „nicht-internet-exponiert"-Leitplanke (WETTER-31) hält —
+  Entscheidung im arbeitstag-Track.
+- **OPEN-WETTER-K — `data-stage="parent"`-Token-Block. VERTAGT (RAT-8, Nic
+  2026-06-06):** im geteilten Token-Strang noch nicht definiert (nur reader/toddler);
+  V1.1 fährt auf Basis-/Reader-Tokens. Der parent-Stufen-Block wird **bei der 2.
+  Parent-App** definiert (`decisions/RAT-8-parent-stufe-token-defer.md`).
 
 ---
 
@@ -336,3 +424,14 @@ zusammenhängendes Outfit.
 
 ### E-WETTER-11 — Eigene Wetter-Szenen-Bibliothek für den Zustands-Hero
 *Datum:* 2026-06-02 · Der Wetter-Zustand wird als greifbare, kindlich vorstellbare Szene (Haus + Himmel) aus einer **app-eigenen Bibliothek** dargestellt, nicht über ARASAAC. Grund: F3-Recherche zeigte, dass ARASAAC nur Einzel-Wettersymbole hat, **keine konsistente Szenen-/Haus-Reihe** über alle Wetterlagen. Eine eigene Szene ist konsistent (gleiche Haus-Silhouette, nur Himmel wechselt) und orientiert das Kind an seinem Zuhause. Die ICONS-5-Anbindung (E-WETTER-7) bleibt für Kleidung/Metriken. **Verworfen:** den Wetter-Zustand über ARASAAC-Einzelsymbole zu zeigen. Abgrenzung zur frühen ICONS-Drift: kein versehentlicher zweiter Icon-Pfad, sondern eine bewusste eigene Asset-Klasse (Szenen ≠ Piktogramme).
+
+### E-WETTER-12 — Garderoben-Pflege über eine eltern-seitige Editor-Seite (V1.1)
+*Datum:* 2026-06-06 · Werft-Lauf #328, Gates A/B/C (Nic). Grundlage **RAT-2**
+(Link/Editor statt PNG/Chat-Schreibdialog) und **RAT-8** (parent-Token vertagt).
+Die Familie pflegt die Garderoben-Regeln über eine eltern-seitige Web-Seite
+(WETTER-26 ff.), nicht über einen Eltern-Chat-Schreibdialog. **Interner Save-Handler,
+keine API** — kein Fremd-Konsument (BUD-1b; E-WETTER-3 bleibt gültig). V1.1 editiert
+**nur die Kleidungs-Sets** über eine kuratierte Palette (Schwellen/Reihenfolge fest,
+WETTER-28); Zugang = Heimnetz/Tailscale-Grenze ohne Zusatzsicherung (WETTER-31).
+**Verworfen:** PNG-Render via headless chromium, mehrstufiger Chat-Schreibdialog
+(beide in RAT-2 abgelöst), sowie eine REST-API auf Vorrat.

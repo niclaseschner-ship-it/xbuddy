@@ -358,3 +358,133 @@ def test_handle_update_routes_to_kav_session(tmp_path):
     assert delivered[0].text == "Kalender verbinden bitte"
     # Session wird nach _run() aus der Map entfernt — kein Agent-Aufruf.
     assert not tg.sent, "Der Agent hätte bei laufender KAV-Session nicht antworten dürfen"
+
+
+# ============================================================
+#  T341 — KAV ruft plan admin/kalender via HTTP (PLAN-32 / APP-3)
+# ============================================================
+
+def test_T341_kav_kalender_id_via_http_put(monkeypatch):
+    """T341 / AC3: KAV schreibt die gewählte `kalender_id` per HTTP-PUT an
+    `<plan_origin>/api/v1/plan/admin/kalender` — NICHT direkt in plan.json.
+
+    Der HTTP-Call wird gemockt (kein echter Plan-Buddy-Server). Wir prüfen:
+    - Es wird genau ein PUT an die korrekte URL gesendet.
+    - Der Body enthält `{"kalender_id": "<gewählte-id>"}`.
+    - Kein direkter FS-Write (write_kalender_id_to_plan_json wird NICHT aufgerufen).
+    """
+    import json
+    import urllib.request
+
+    from skills import kalender_verbinden as kv_mod
+    from skills.kalender_verbinden import (
+        ERGEBNIS_VERBUNDEN,
+        KavInput,
+        kalender_verbinden,
+    )
+
+    captured_requests = []
+
+    class _FakeResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+        def read(self):
+            return b'{"ok": true}'
+
+    def fake_urlopen(req):
+        captured_requests.append(req)
+        return _FakeResponse()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+    # Sicherstellen, dass der Legacy-FS-Write-Pfad NICHT aufgerufen wird.
+    fs_write_calls = []
+
+    def fail_if_called(path, kalender_id):
+        fs_write_calls.append((path, kalender_id))
+        raise AssertionError(
+            "write_kalender_id_to_plan_json wurde aufgerufen — "
+            "KAV darf plan.json nicht direkt schreiben (PLAN-32 / APP-3)")
+
+    # Fake-Telegram und minimal-ZD.
+    from fakes import FakeTelegram
+
+    user_id = 99
+    tg = FakeTelegram(members={user_id: {"status": "member"}})
+
+    class _MinZd:
+        def __init__(self):
+            self._data = {
+                kv_mod.ZD_NAME_OAUTH_CLIENT: {
+                    "installed": {
+                        "client_id": "CID", "client_secret": "SEC",
+                        "redirect_uris": ["http://localhost:1"],
+                    }
+                }
+            }
+
+        def get(self, name, default=None):
+            return self._data.get(name, default)
+
+        def set(self, name, value):
+            self._data[name] = value
+
+        def has(self, name):
+            return name in self._data
+
+    messages = iter([
+        KavInput(text="http://localhost:1/?code=TESTCODE"),  # OAuth-Code
+        KavInput(text="1"),                                   # Kalender-Auswahl
+    ])
+
+    def next_msg():
+        return next(messages, None)
+
+    plan_origin = "http://127.0.0.1:5020"
+
+    # Fake-Exchange und fake-calendarList — kein Netz.
+    def fake_exchange(code, client_id, client_secret):
+        return {"refresh_token": "RT", "access_token": "AT",
+                "expires_in": 3600}
+
+    def fake_fetch_email(access_token):
+        return "test@example.com"
+
+    def fake_fetch_calendars(access_token):
+        return [{"id": "kalender-abc@group.calendar.google.com",
+                 "summary": "Familienkalender", "accessRole": "owner"}]
+
+    result = kalender_verbinden(
+        tg, chat_id=user_id, user_id=user_id,
+        family_group_chat_id="-100",
+        zd=_MinZd(), next_message=next_msg,
+        plan_origin_url=plan_origin,
+        exchange=fake_exchange,
+        fetch_email=fake_fetch_email,
+        fetch_calendars=fake_fetch_calendars,
+        # write_plan_json NICHT gesetzt → Default-Pfad (HTTP PUT).
+    )
+
+    assert result.ergebnis == ERGEBNIS_VERBUNDEN, (
+        "Ergebnis sollte ERGEBNIS_VERBUNDEN sein, war: %r" % result.ergebnis)
+
+    # Kein direkter FS-Write.
+    assert not fs_write_calls, (
+        "write_kalender_id_to_plan_json wurde aufgerufen — erwartet: kein Aufruf")
+
+    # Genau ein HTTP-PUT an den korrekten Endpoint.
+    assert len(captured_requests) == 1, (
+        "Erwartet: genau 1 HTTP-Anfrage, got: %d" % len(captured_requests))
+    req = captured_requests[0]
+    assert req.get_full_url() == plan_origin + "/api/v1/plan/admin/kalender", (
+        "Falsche URL: %r" % req.get_full_url())
+    assert req.get_method() == "PUT"
+    body = json.loads(req.data)
+    assert body["kalender_id"] == "kalender-abc@group.calendar.google.com", (
+        "Falscher Body: %r" % body)
