@@ -7,7 +7,8 @@
   `specs/buddies/plan.md` (E-PLAN-1, Routine-Module), `specs/buddies/routine.md`,
   `specs/platform/kalender-verbinden.md` (KAV-V1-Provisorium). Keystone **#296**;
   abgeleitete Tickets: **#341** (Kalender-FS-Write→Plan-API), **#343**
-  (OPEN-ROUTINE-B, geblockt), **#340** (tasks.md-Hygiene).
+  (OPEN-ROUTINE-B Teil 1 — Zeiten — entblockt durch RAT-12; Teil 2 Punkte
+  #354), **#340** (tasks.md-Hygiene).
 - **Transkript (Evidenz):** `brainstorm/berater-runde/20260605-231748-RATIFIZIERT-familien-schnittstelle-skalierung.md`
   → Vorschlag `20260605-231209-vorschlag-familien-schnittstelle-skalierung.md`,
   Antiberater `2026-06-05-2313-antiberater-familien-schnittstelle-skalierung.md`.
