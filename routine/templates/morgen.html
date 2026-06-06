@@ -151,11 +151,13 @@
 </div>
 
 <script>
-/* ROUTINE-7: Tap → Toggle — view-eigene Interaktion, kein separates Script-File. */
+/* ROUTINE-7: Tap → Toggle — view-eigene Interaktion, kein separates Script-File.
+   POST /display/routine/morgen mit item_id im Body (URL-2: kein Verb im Pfad). */
 function toggleItem(itemId) {
-  fetch('/display/routine/toggle/' + encodeURIComponent(itemId), {
+  fetch('/display/routine/morgen', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ item_id: itemId })
   })
   .then(function(r) { return r.json(); })
   .then(function(data) {

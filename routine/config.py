@@ -27,11 +27,21 @@ ENV_DATA_FILE = "ROUTINE_DATA_FILE"
 DEFAULT_DATA_FILE = os.path.join(HERE, "routine.json")
 
 # ROUTINE-12: Daten-Konfig-Defaults (alles, was je Familie variiert, CONFIG-4).
-# quelle=default-Items haben keinen sinnvollen Default — sie kommen aus der Datei.
+# Diese Werte sind Fallback-Defaults — die Wahrheit bleibt die Datei/der Eltern-Chat.
+# Keine Familie-1-Einbackung: Defaults ermöglichen Prozessstart ohne Datei,
+# sind aber durch routine.json oder später per Eltern-Chat (OPEN-ROUTINE-B)
+# überschreibbar. (#335)
+_DEFAULT_ITEMS = [
+    {"id": "fruehstueck", "label": "Frühstück",    "piktogramm": "4626",  "quelle": "default"},
+    {"id": "zaehne",      "label": "Zähne putzen", "piktogramm": "2326",  "quelle": "default"},
+    {"id": "brotdose",    "label": "Brotdose",     "piktogramm": "31091", "quelle": "default"},
+    {"id": "rucksack",    "label": "Rucksack",     "piktogramm": "2475",  "quelle": "default"},
+]
+
 DATA_DEFAULTS = {
-    "abfahrtszeit": None,          # Pflicht (je Wochentag mögl.)
+    "abfahrtszeit": "08:30",       # Fallback-Default (CONFIG-4, #335); Wahrheit kommt aus Datei
     "anzieh_vorlauf_min": 8,       # Tuning-Wert, Config-Schlüssel (ROUTINE-9)
-    "items": [],
+    "items": _DEFAULT_ITEMS,       # 4 Fallback-Punkte (aus routine.example.json); Wahrheit aus Datei
     "zeit_referenzen": {"an": False, "paare": []},
     "zeitzone": "Europe/Berlin",
 }
@@ -77,7 +87,7 @@ class ZeitReferenz:
 @dataclass
 class RoutineConfig:
     """Aufgelöste Daten-Konfiguration des Routine-Buddys (ROUTINE-12)."""
-    abfahrtszeit: str              # "HH:MM" (Pflicht)
+    abfahrtszeit: str              # "HH:MM" oder Wochentag-Dict; Default '08:30' (CONFIG-4)
     anzieh_vorlauf_min: int        # Tuning-Wert (ROUTINE-9)
     items: list[RoutineItem]
     zeitreferenzen_an: bool        # zeit_referenzen.an (ROUTINE-13)
@@ -111,14 +121,17 @@ def _load_file(path, datei_art):
 def _parse_abfahrtszeit(roh):
     """Parst abfahrtszeit — entweder 'HH:MM' oder Wochentag-Dict.
 
-    Gibt immer einen String zurück: 'HH:MM' (für einen fixen Wert)
+    Gibt immer einen String/Dict zurück: 'HH:MM' (für einen fixen Wert)
     oder den Roh-Dict für tagesgenaue Auflösung (handled in uhr.py).
-    Ist roh None, wirft ConfigError.
+    Ist roh None oder kein String/Dict → Warnung + Default '08:30' (CONFIG-4, #335).
+    Kein ConfigError mehr — Prozess startet immer (Nic-Entscheidung ROUTINE-12).
     """
-    if roh is None:
-        raise ConfigError(
-            "`abfahrtszeit` fehlt (Pflicht, ROUTINE-12). "
-            "Setze in routine.json: abfahrtszeit: 'HH:MM'")
+    if roh is None or not isinstance(roh, (str, dict)):
+        logger.warning(
+            "`abfahrtszeit` fehlt oder hat ungültigen Typ (%r) — "
+            "Default '08:30' greift (CONFIG-4, #335). "
+            "Setze in routine.json: abfahrtszeit: 'HH:MM'", roh)
+        return DATA_DEFAULTS["abfahrtszeit"]
     return roh  # uhr.py wertet Wochentag-Dict aus
 
 
@@ -180,7 +193,8 @@ def resolve_data(data_path=None, env=None):
 
     data_path: Pfad zu routine.json (Default: ROUTINE_DATA_FILE / Default-Pfad).
     env: überschreibbar für Tests.
-    Wirft ConfigError, wenn abfahrtszeit fehlt.
+    Fehlende/kaputte Datei oder fehlende Werte → Defaults + Warnung,
+    Prozess startet (CONFIG-4, #335). Kein ConfigError für fehlende abfahrtszeit.
     """
     if env is None:
         env = os.environ
