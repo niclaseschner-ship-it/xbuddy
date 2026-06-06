@@ -160,8 +160,13 @@ Diese Regeln sind nicht verhandelbar. Im Zweifel: nachfragen, nicht raten.
 
 ## 8. Git & Safety — verbindlich
 
-- **Kein `push` ohne Freigabe.** Lokal committen ist erlaubt. `git push`
-  erst nach ausdrücklicher Freigabe.
+- **`main` ist geschützt durch Watchdog + Test, nicht durch Push-Vermeidung**
+  (RAT-9 — Standard-Git-Modell, löst „kein Push ohne Freigabe" ab). Arbeit läuft
+  auf Feature-Branches (`feature/<nr>-…` / `fix/<nr>-…`), die nach `origin`
+  gepusht werden. Nach `main` kommt Code **nur über einen gemergten PR**
+  (`Closes #<nr>`), nachdem der Watchdog den Branch-Diff freigegeben hat. `origin`
+  ist die Wahrheit (Session-Start: `git pull --ff-only`). Nics vertikale-Scheibe-
+  Test läuft auf dem deployten, integrierten `main` am Tagesende.
 
 - **Commits sind eindeutig zuzuordnen.** Die Commit-Identity wird per
   `git config` gesetzt. Jeder Akteur — Mensch wie KI-Agent — committet
@@ -169,8 +174,10 @@ Diese Regeln sind nicht verhandelbar. Im Zweifel: nachfragen, nicht raten.
   jederzeit nachvollziehbar bleibt, wer was an einem Ticket gemacht hat.
 
 - **Keine destruktiven Git-Operationen ohne Rückfrage.** Kein
-  `reset --hard`, kein Force-Push, kein History-Rewrite. `git rm` auf
-  Dokumente ist verboten (Abschnitt 6).
+  `reset --hard`, kein History-Rewrite auf `main`. `git rm` auf
+  Dokumente ist verboten (Abschnitt 6). **Ausnahme Force-Push:** `git push
+  --force-with-lease` ist erlaubt auf den **eigenen Feature-Branch** (nach
+  Rebase-Rendezvous, Standard-Git) — **nie** auf `main`, nie plain `--force`.
 
 - **Keine Secrets ins Repo.** Tokens, Keys, Zugangsdaten, `.env`-Dateien
   werden niemals committet.
