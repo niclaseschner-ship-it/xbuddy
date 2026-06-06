@@ -1,0 +1,55 @@
+name: closes-guard
+
+# Required Check (RAT-10): Ein PR nach `main` muss GENAU EINEN von drei Ausgängen
+# erfüllen, sonst rot → nicht mergebar. Schließt die Reconcile-Lücke strukturell:
+# kein Merge ohne Ticket-Bezug oder bewusste, seltene Infra-Ausnahme.
+#
+#   1. Impl-PR:  Closes/Fixes/Resolves #<nr>  → Issue schließt beim Merge automatisch
+#   2. Spec-PR:  Refs #<nr>                    → kein Close erwartet (Spec zuerst)
+#   3. Infra:    Label `no-ticket`             → bewusst ticketlos (selten, dokumentiert)
+#
+# `type:chore` allein zählt NICHT als Ausnahme — ein Chore MIT Ticket nutzt `Closes #`.
+# Siehe WORKFLOW.md (Lebenslauf), decisions/RAT-10.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  closes-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ticket-Bezug oder bewusste Infra-Ausnahme
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          BODY=$(gh pr view "$PR" --repo "$REPO" --json body --jq '.body // ""')
+          LABELS=$(gh pr view "$PR" --repo "$REPO" --json labels --jq '.labels|map(.name)|join(" ")')
+
+          # 3. Bewusste, seltene Infra-Ausnahme (dediziertes Label, nicht type:chore).
+          if printf ' %s ' "$LABELS" | grep -qE ' no-ticket '; then
+            echo "✓ Label no-ticket — bewusst ticketlose Infra/Chore erlaubt."
+            exit 0
+          fi
+
+          # 1. Impl-PR: Closing-Keyword auf eine Issue-Nummer (GitHub-Auto-Close-Trigger).
+          if printf '%s' "$BODY" | grep -qiE '(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]+#[0-9]+'; then
+            echo "✓ Impl-PR — Closing-Keyword gefunden (Issue schließt beim Merge)."
+            exit 0
+          fi
+
+          # 2. Spec-PR: Refs auf eine Issue-Nummer (kein Close).
+          if printf '%s' "$BODY" | grep -qiE 'refs[[:space:]]+#[0-9]+'; then
+            echo "✓ Spec-PR — Refs gefunden (kein Close erwartet)."
+            exit 0
+          fi
+
+          echo "::error::PR-Guard: kein Ticket-Bezug. Genau einen Ausgang erfüllen — 'Closes #<nr>' (Impl-PR), 'Refs #<nr>' (Spec-PR) oder Label 'no-ticket' (bewusst ticketlose Infra)."
+          exit 1

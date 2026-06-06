@@ -122,6 +122,19 @@ Die Ticket-Nummer ist der rote Faden:
 - Spec-Änderung und Implementierung dürfen getrennte PRs sein — die Spec
   zuerst.
 
+### `main` ist verriegelt (RAT-9/RAT-10, conventions/reconcile.md)
+
+- **Direkter Push auf `main` ist physisch unmöglich** (GitHub-Ruleset). Code
+  kommt **nur** über einen gemergten PR — auch Spec-, Doku- und Infra-Änderungen,
+  auch die Werft. Kein lokaler `--ff-only`-Merge mehr.
+- **Der Bot merget selbst** (0 Pflicht-Reviewer): PR auf **Auto-Merge** setzen
+  (`gh pr merge <nr> --auto --merge --delete-branch`) → GitHub merget den Moment,
+  in dem der required Check `closes-guard` grün ist. Kein manueller Merge-Schritt.
+- **`closes-guard`** verlangt genau einen Ausgang: `Closes #` (Impl) ·
+  `Refs #` (Spec) · Label `no-ticket` (bewusste, seltene ticketlose Infra).
+- **Status-Labels fasst nur die Action an**, nie ein Agent per Shell
+  (RECON-3) — `ticket-status-flow.yml` setzt sie fail-loud auf PR-Events.
+
 ## Definition of Done
 
 Ein Issue ist erst `Done`, wenn:

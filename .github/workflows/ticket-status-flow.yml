@@ -99,13 +99,28 @@ jobs:
           for issue in $ISSUES; do
             echo "→ Issue #$issue: status:$TARGET"
 
-            # Erst alle status:*-Label defensiv entfernen (Invariante: max 1).
-            for label in spec ready in-progress in-review; do
-              gh issue edit "$issue" --repo "$REPO" --remove-label "status:$label" 2>/dev/null || true
+            # NUR die tatsächlich vorhandenen status:*-Label entfernen (RAT-10 fail-loud):
+            # ein blindes --remove-label auf ein nicht-vorhandenes Label würde gh-Fehler
+            # erzeugen, die wir mit "|| true" früher verschluckt haben (#315-Klasse). So
+            # bleibt jeder ECHTE Fehler laut (set -e, kein || true).
+            CURRENT=$(gh issue view "$issue" --repo "$REPO" --json labels \
+              --jq '.labels|map(.name)|map(select(startswith("status:")))|.[]' || true)
+            for label in $CURRENT; do
+              gh issue edit "$issue" --repo "$REPO" --remove-label "$label"
             done
 
             # Beim Merge: Issue läuft per "Closes" leer, kein neues Label nötig.
             if [ "$TARGET" != "__clear__" ]; then
               gh issue edit "$issue" --repo "$REPO" --add-label "status:$TARGET"
             fi
+
+            # Verify-statt-vertrauen (RAT-10): Soll-Zustand zurücklesen, sonst rot.
+            AFTER=$(gh issue view "$issue" --repo "$REPO" --json labels \
+              --jq '.labels|map(.name)|map(select(startswith("status:")))|join(",")')
+            if [ "$TARGET" = "__clear__" ]; then
+              [ -z "$AFTER" ] || { echo "::error::#$issue: status-Label hängt nach clear: $AFTER"; exit 1; }
+            else
+              [ "$AFTER" = "status:$TARGET" ] || { echo "::error::#$issue: erwartet status:$TARGET, ist: ${AFTER:-<leer>}"; exit 1; }
+            fi
+            echo "  ✓ #$issue status = ${AFTER:-<leer>}"
           done
