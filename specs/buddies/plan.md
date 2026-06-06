@@ -20,7 +20,8 @@ Das Layout wird **1:1** aus dem Wireframe-Handoff übernommen (E-PLAN-5).
 **Out-of-Scope V1** (je eigenes Ticket, sobald gebraucht): eine Eltern-Ansicht
 mit Namen und freiem Editieren · ein Personen-Picker statt des Klick-Cycles
 (PLAN-8) · eine Sperre/Auth vor dem Editieren am Display · Routine-Module
-(Morgen-/Abendablauf) · weitere Views über `woche` hinaus · mehrere Aktivitäten
+(Morgen-/Abendablauf) — eigene App, der Routine-Buddy (`routine.md`, #335) ·
+weitere Views über `woche` hinaus · mehrere Aktivitäten
 pro Kind pro Tag · mehrere Kalender je Familie (OPEN-PLAN-F) · ein geführtes
 OAuth-Onboarding (geschlossen durch `kalender-verbinden.md`).
 
@@ -647,12 +648,15 @@ Betriebs-Risiko, das das Veröffentlichen einmalig beseitigt.
 *Datum:* 2026-05-23
 
 Der Plan-Buddy ist in V1 auf die Abläufe **einer** Familie zugeschnitten —
-zwei Kinder, abendliche Bringen-und-Ins-Bett-Routine, eine spezifische Liste
+zwei Kinder, abendliche Bringen-und-Ins-Bett-Slots, eine spezifische Liste
 von Kind-Aktivitäten. Diese familienspezifischen Inhalte leben absichtlich
 als Code-Konstanten: der Aktivitäts-Katalog in `plan/aktivitaeten.py`
 (`AKTIVITAETEN`), die Personen-Auflösung über Titel-Treffer in
-`plan/kalender.py` (PLAN-19), die Abend-Routine als feste Slot-Sequenz
-hinter E-PLAN-2.
+`plan/kalender.py` (PLAN-19), die abendliche Slot-Sequenz
+hinter E-PLAN-2. (Echte Morgen-/Abendablauf-*Routinen* — Reihenfolge, Abhaken,
+Zeitlogik — sind **nicht** Plan-Buddy, sondern der Routine-Buddy
+(`routine.md`, #335); der Plan-Buddy trägt nur die Wochenübersicht und ihre
+kleine Variante.)
 
 Familie 2–4 entstehen per **Repo-Fork und Hand-Anpassung mit Claude**,
 nicht über generische Konfiguration. Das ist nicht Bequemlichkeit, sondern
