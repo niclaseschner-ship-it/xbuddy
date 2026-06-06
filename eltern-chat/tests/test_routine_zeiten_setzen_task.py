@@ -115,11 +115,56 @@ def test_RZS7_keine_post_execute_hooks():
 # ============================================================
 
 def test_RZS7_propose_liefert_proposal():
-    """RZS-7: propose() liefert ein Proposal-Objekt mit nicht-leerem summary."""
+    """RZS-7/RZS-5: propose() liefert ein Proposal-Objekt mit nicht-leerem summary."""
     task = _make_task()
     ctx = TurnContext(chat_id=42, from_user_id=42, private_chat_id=42)
     proposal = task.propose({}, ctx)
     assert isinstance(proposal, Proposal)
+    assert proposal.summary
+
+
+def test_RZS5_propose_enthaelt_konkreten_wert():
+    """RZS-5: propose() baut die Summary aus Zeit-Art + konkretem Wert (E-EC-7).
+
+    Das Familienmitglied bestätigt den KONKRETEN Wert — propose() muss ihn
+    nennen (z. B. „Abfahrtszeit auf 08:15 setzen — für alle Tage?"), anders
+    als die statische TES-Summary (RZS-5 ist bewusst strenger als TES).
+    """
+    task = _make_task()
+    ctx = TurnContext(chat_id=42, from_user_id=42, private_chat_id=42)
+    proposal = task.propose({"anstos_text": "abfahrtszeit auf 08:15"}, ctx)
+    assert isinstance(proposal, Proposal)
+    assert "08:15" in proposal.summary, (
+        f"RZS-5: konkreter Wert '08:15' muss im Vorschlag stehen, summary={proposal.summary!r}")
+    assert "Abfahrtszeit" in proposal.summary or "abfahrtszeit" in proposal.summary.lower(), (
+        f"RZS-5: Zeit-Art muss im Vorschlag stehen, summary={proposal.summary!r}")
+
+
+def test_RZS5_propose_aufstehzeit():
+    """RZS-5: propose() nennt aufstehzeit + Wert."""
+    task = _make_task()
+    ctx = TurnContext(chat_id=42, from_user_id=42, private_chat_id=42)
+    proposal = task.propose({"anstos_text": "aufstehzeit auf 07:30"}, ctx)
+    assert "07:30" in proposal.summary, (
+        f"RZS-5: Wert '07:30' muss im Vorschlag stehen, summary={proposal.summary!r}")
+
+
+def test_RZS5_propose_anzieh_vorlauf():
+    """RZS-5: propose() nennt anzieh_vorlauf + Minuten-Wert."""
+    task = _make_task()
+    ctx = TurnContext(chat_id=42, from_user_id=42, private_chat_id=42)
+    proposal = task.propose({"anstos_text": "anzieh vorlauf 12 Minuten"}, ctx)
+    assert "12" in proposal.summary, (
+        f"RZS-5: Wert '12' muss im Vorschlag stehen, summary={proposal.summary!r}")
+
+
+def test_RZS5_propose_fallback_ohne_wert():
+    """RZS-5: propose() fällt auf generische Summary zurück, wenn kein Wert erkennbar."""
+    task = _make_task()
+    ctx = TurnContext(chat_id=42, from_user_id=42, private_chat_id=42)
+    proposal = task.propose({"anstos_text": "irgendwas"}, ctx)
+    assert isinstance(proposal, Proposal)
+    # Generische Summary: kein spezifischer Wert erwartet, aber nicht leer
     assert proposal.summary
 
 
