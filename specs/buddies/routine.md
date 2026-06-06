@@ -176,18 +176,30 @@ positiv; **wenn** `now` zwischen `anziehen` und `losgehen` liegt, **dann** ist
 „anziehen" erreicht (Anzeige „jetzt") und „losgehen" noch positiv; **wenn** `now`
 nach `losgehen` liegt, **dann** sind beide überfällig.
 
-**Darstellung (Gate B entschieden, Artefakt variant-f):** die Uhr ist ein
-**linearer Zeitstrahl** (kein Ring), auf dem die Tagespunkte — aufstehen,
-anziehen, losgehen — als **Piktogramme** an ihrer Zeit-Position sitzen, jeweils
-mit **kleiner Uhrzeit** (z. B. 07:00 / 08:22 / 08:30); ein „jetzt"-Marker zeigt
-die aktuelle Position, der verstrichene Teil ist gefüllt. **Keine** separaten
-Meilenstein-Kästen (verworfen, kein Mehrwert). Die Uhrzeit-Labels dürfen **nicht
-in andere Elemente ragen** (rand-/überlauf-frei layouten) — bei engem Abstand
-zwischen zwei Pins (z. B. anziehen/losgehen nur 8 Min auseinander) werden Labels
-**gestaffelt** (abwechselnd ober-/unterhalb des Pins), nicht verkleinert;
-Kiosk-Lesbarkeit aus Distanz hat Vorrang (AC-FIX3, #335).
+**Darstellung (Design-Evolution aus echtem Display-Test, #335):** die Uhr ist ein
+**linearer Zeitstrahl** (kein Ring) — als **VERTIKALER Balken** orientiert: oben =
+früh (**aufstehen 07:00**), unten = spät (**losgehen 08:30**), Zeit fließt nach
+unten. Der verstrichene Teil füllt **von oben** (`height` ∝ verstrichener Anteil),
+ein „jetzt"-Marker liegt als waagerechter Riegel quer über dem Balken an der
+aktuellen Position. Der Balken nutzt **möglichst viel Panel-Höhe**.
+Die Tagespunkte — aufstehen, anziehen, losgehen — sitzen als **Piktogramme** an
+ihrer **proportionalen Vertikal-Position** (`top:%` nach Zeit) **neben** dem
+Balken, jeweils mit **Uhrzeit** (z. B. 07:00 / 08:22 / 08:30). Die Event-Icons
+stehen **abwechselnd auf gegenüberliegenden Seiten** des Balkens (aufstehen
+**links**, anziehen **rechts**, losgehen **links**). **Keine** separaten
+Meilenstein-Kästen (verworfen, kein Mehrwert).
+Die Uhrzeit-Labels dürfen **nicht in andere Elemente ragen** — bei engem Abstand
+zwischen zwei Punkten (z. B. anziehen/losgehen nur 8 Min auseinander) garantiert
+die **Seiten-Alternation** (adjazente Events nie auf derselben Seite) zusammen mit
+der vertikalen Länge die Überlappungsfreiheit — **nicht** durch Icon-Verkleinerung;
+Kiosk-Lesbarkeit aus Distanz hat Vorrang. (Diese vertikale Achse mit
+alternierenden Event-Seiten löst die ältere horizontale variant-f-Orientierung
+des Zeitstrahls und die Label-Staffelung AC-FIX3 ab — Layout-Rework aus dem
+1920×1080-Display-Test, #335.)
 `aufstehen` kommt direkt aus dem Config-Schlüssel `aufstehzeit` (Default `07:00`)
-— **nicht** von anziehen abgeleitet (AC-FIX1, #335).
+— **nicht** von anziehen abgeleitet (AC-FIX1, #335). Die proportionale
+Vertikal-Position von `anziehen` (`anziehen_pct` = (anziehen−aufstehen)/(losgehen−aufstehen))
+liefert die Uhr-Logik; aufstehen=0 %/losgehen=100 % sind die Fenster-Ränder.
 *Test-Implikation:* mit injiziertem `now` an je einem Punkt vor `anziehen`,
 zwischen den Zeiten und nach `losgehen` liefert die Zeit-Logik die erwarteten
 Restzeiten/Phasen — ohne echte Wall-Clock.
