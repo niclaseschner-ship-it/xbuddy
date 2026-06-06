@@ -59,7 +59,6 @@ class _Cfg:
     plan_origin_url = "http://127.0.0.1:5020"
     routine_origin_url = "http://127.0.0.1:5050"   # RZS-6 / #343
     display_url_origin = "https://example.test"
-    plan_json_path = "plan.json"
     provider_api_key = None
     provider = "anthropic"
     provider_model = "test-model"

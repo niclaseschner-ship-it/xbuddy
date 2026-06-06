@@ -463,7 +463,6 @@ nicht — ONB-6) sind Komponenten-spezifisch und liegen daneben.
 | Routine-Origin (RZS, #343) | `http://127.0.0.1:5050`                     | `routine_origin_url`    | n/a (Default reicht beim Standard-Layout)      |
 | Seiten-Registry-Origin (SREG, #347) | `http://127.0.0.1:5042`            | `seiten_origin_url`     | n/a (Default reicht beim Standard-Layout)      |
 | Display-URL-Origin (GAA-3.7) | leer (Bot gibt nur `/display/<id>` aus)   | `display_url_origin`    | — (offen, OPEN-EC-Origin; **Vorbedingung für SREG-5**) |
-| Plan-JSON-Pfad             | `../plan/plan.json`                         | `plan_json_path`        | n/a (Default reicht beim Standard-Layout)      |
 | Log-Level (LOG-1/LOG-4)    | `INFO`                                      | `log_level`             | n/a (Default reicht; Dev-Override per ENV/CLI) |
 
 **Semantik von `context_depth`.** Der Wert zählt **Einzelnachrichten** — jeder
@@ -491,13 +490,12 @@ Onboarding-Speicher (`onboarding-store.json`, ONB-6).
 Auftrag #215 hat den FAA-/GAA-Schreibweg auf HTTP umgestellt (DCOMP-1):
 statt eines `family_registry_path`/`geraete_registry_path` (Datei-Pfade)
 zeigen `familie_origin_url`/`geraete_origin_url` heute auf die HTTP-API
-der Familien-/Geraete-Komponente. Der `plan_json_path` bleibt für den
-KAV-Auswahl-Schritt erhalten: die direkte Schreib-Stelle ist ein
-**bewusstes V1-Provisorium** gegen die FS-Linie (siehe `kalender-verbinden.md`
-KAV-X); #140 hat den automatischen ReloadHook geschlossen, die saubere
-HTTP-API-Lösung für den Konfig-Schreibzugriff ist ein eigenes Folge-Ticket.
+der Familien-/Geraete-Komponente. Auftrag #348 hat den KAV-Schreibweg
+ebenfalls auf HTTP migriert (PLAN-32): `plan_json_path` ist entfernt,
+KAV schreibt die `kalender_id` ausschließlich via HTTP-PUT an den
+Plan-Buddy (`/api/v1/plan/admin/kalender`).
 
-*Tickets:* #27 · #33 · #179 · #215 · #312
+*Tickets:* #27 · #33 · #179 · #215 · #312 · #348
 
 ### EC-16 — Gesprächs-Datenbank als Per-Instanz-Datei
 Der dauerhafte Gesprächsverlauf (EC-6) liegt als Datei neben dem Code, je
