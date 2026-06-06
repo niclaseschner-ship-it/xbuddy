@@ -4,6 +4,9 @@
   "abfahrtszeit": "07:45",
   "_comment_abfahrtszeit": "Alternativ je Wochentag: { 'Mo': '07:45', 'Di': '07:45', 'Mi': '07:45', 'Do': '07:45', 'Fr': '07:45', 'Sa': '', 'So': '' }",
 
+  "aufstehzeit": "07:00",
+  "_comment_aufstehzeit": "Aufsteh-Zeitpunkt (AC-FIX1, #335): 'HH:MM' (fest) oder Wochentag-Dict. Default '07:00'. Start-Pin des Zeitstrahls — kommt direkt aus Config, NICHT von anziehen abgeleitet.",
+
   "anzieh_vorlauf_min": 8,
 
   "zeitzone": "Europe/Berlin",

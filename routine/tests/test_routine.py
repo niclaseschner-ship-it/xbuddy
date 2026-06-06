@@ -534,3 +534,90 @@ def test_routine18_wochentag_wochenende_liefert_none(tmp_path):
     # Wochenende → None → Uhr ausgeblendet (kein Schultag)
     assert zeiten is None
 
+
+# ============================================================
+#  AC-FIX1 — aufstehzeit aus Config-Schlüssel, nicht abgeleitet
+# ============================================================
+
+def test_acfix1_aufstehzeit_aus_config_schluessel(tmp_path):
+    """AC-FIX1 (#335): aufstehzeit kommt aus Config-Schlüssel 'aufstehzeit', NICHT von anziehen-30.
+
+    Mit aufstehzeit='07:00', abfahrtszeit='08:30', anzieh_vorlauf_min=8:
+      losgehen  = 08:30
+      anziehen  = 08:22
+      aufstehen = 07:00  ← direkt aus Config, nicht 08:22-30=07:52
+    """
+    routine_data = {
+        "abfahrtszeit": "08:30",
+        "aufstehzeit": "07:00",
+        "anzieh_vorlauf_min": 8,
+        "zeitzone": "Europe/Berlin",
+        "items": [],
+        "zeit_referenzen": {"an": False, "paare": []},
+    }
+    p = tmp_path / "routine.json"
+    p.write_text(json.dumps(routine_data))
+    cfg = config_mod.resolve_data(str(p))
+
+    assert cfg.aufstehzeit == "07:00"
+
+    zeiten = uhr_mod.berechne_zeiten(
+        cfg.abfahrtszeit, cfg.anzieh_vorlauf_min, cfg.zeitzone,
+        date(2026, 6, 6), aufstehzeit_cfg=cfg.aufstehzeit)
+
+    # AC-FIX2: Defaults liefern aufstehen 07:00 / anziehen 08:22 / losgehen 08:30
+    assert zeiten is not None
+    assert zeiten.losgehen.hour == 8, "losgehen Stunde muss 8 sein"
+    assert zeiten.losgehen.minute == 30, "losgehen Minute muss 30 sein"
+    assert zeiten.anziehen.hour == 8, "anziehen Stunde muss 8 sein"
+    assert zeiten.anziehen.minute == 22, "anziehen Minute muss 22 sein (08:30 - 8 Min)"
+    assert zeiten.aufstehen.hour == 7, "aufstehen Stunde muss 7 sein — NICHT anziehen-30=07:52"
+    assert zeiten.aufstehen.minute == 0, "aufstehen Minute muss 0 sein (Config-Wert 07:00)"
+
+
+def test_acfix1_aufstehzeit_in_data_defaults():
+    """AC-FIX1 (#335): DATA_DEFAULTS enthält aufstehzeit '07:00' (Config-Schlüssel vorhanden)."""
+    assert "aufstehzeit" in config_mod.DATA_DEFAULTS
+    assert config_mod.DATA_DEFAULTS["aufstehzeit"] == "07:00"
+
+
+def test_acfix1_fehlende_aufstehzeit_verwendet_default(tmp_path):
+    """AC-FIX1 (#335): routine.json ohne aufstehzeit → Default '07:00' greift still."""
+    p = tmp_path / "routine.json"
+    p.write_text(json.dumps({"abfahrtszeit": "08:30"}))
+    cfg = config_mod.resolve_data(str(p))
+    assert cfg.aufstehzeit == "07:00"
+
+
+def test_acfix1_aufstehzeit_label_im_view(client):
+    """AC-FIX1 (#335): gerenderte View zeigt aufstehen_label '07:00' (Default-Config).
+
+    Demo-Config hat abfahrtszeit='07:45', anzieh_vorlauf_min=8, aufstehzeit='07:00'
+    → aufstehen_label='07:00' muss im HTML erscheinen.
+    """
+    body = client.get("/display/routine/morgen").get_data(as_text=True)
+    assert "07:00" in body, \
+        "aufstehen-Label '07:00' muss im HTML erscheinen (AC-FIX1, #335)"
+
+
+def test_acfix1_aufstehzeit_wochentag_dict(tmp_path):
+    """AC-FIX1 (#335): aufstehzeit als Wochentag-Dict — gleiche Parse-Logik wie abfahrtszeit."""
+    from datetime import date as date_cls
+    wochentag_aufsteh = {"Mo": "06:30", "Di": "06:30", "Mi": "06:30",
+                          "Do": "06:30", "Fr": "06:30", "Sa": "", "So": ""}
+    montag = date_cls(2026, 6, 8)  # Montag
+    zeiten = uhr_mod.berechne_zeiten(
+        "08:30", 8, ZEITZONE, montag, aufstehzeit_cfg=wochentag_aufsteh)
+    assert zeiten is not None
+    assert zeiten.aufstehen is not None
+    assert zeiten.aufstehen.hour == 6
+    assert zeiten.aufstehen.minute == 30
+
+
+def test_acfix1_example_json_hat_aufstehzeit():
+    """AC-FIX1 (#335): routine.example.json enthält aufstehzeit-Schlüssel."""
+    example = os.path.join(_REPO_ROOT, "routine", "routine.example.json")
+    cfg = config_mod.resolve_data(example)
+    assert cfg.aufstehzeit is not None
+    assert cfg.aufstehzeit == "07:00"
+
