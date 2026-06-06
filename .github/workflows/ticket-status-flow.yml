@@ -19,7 +19,7 @@ name: ticket-status-flow
 
 on:
   pull_request:
-    types: [opened, reopened, ready_for_review, converted_to_draft, closed]
+    types: [opened, edited, reopened, ready_for_review, converted_to_draft, closed]
 
 permissions:
   issues: write
@@ -44,7 +44,10 @@ jobs:
           # Leerer Wert = nichts tun (Spec-PRs landen hier nie, weil sie keine
           # Closes-Referenz haben — siehe unten).
           case "$EVENT_ACTION" in
-            opened|reopened)
+            opened|reopened|edited)
+              # edited: Status neu berechnen, falls der Body von Refs auf Closes
+              # wechselt (dann erscheint das Issue jetzt in closingIssuesReferences,
+              # unten) — Reconcile-Loch R6.
               if [ "$PR_DRAFT" = "true" ]; then
                 TARGET="in-progress"
               else
