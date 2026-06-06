@@ -17,8 +17,8 @@ durch die Auswahl der Bilder setzen. Als App **besitzt** der Photo-Buddy seine
 **Daten** (die Medien-Library), seine **Funktion** (Ingest, Normalisierung,
 Durchlauf) und stellt das Ergebnis über die **Display-View** bereit (APP-1).
 
-**V1-Scope:** Single-Page-View `rahmen` (schwarze Fokus-Canvas, ein Medium
-bildschirmfüllend) · Auto-Durchlauf mit konfigurierbarem Intervall · **interaktiv**:
+**V1-Scope:** Single-Page-View `rahmen` (helle DS-Linen-Stage, ein Medium als
+gerahmte Karte zentriert) · Auto-Durchlauf mit konfigurierbarem Intervall · **interaktiv**:
 Pfeile prev/next + Pause/Play + Übersichts-Modus (scrollbares Thumbnail-Grid, Tap →
 zurück aufs Medium) · eigene **Familien-Library** auf der Pi · Fotos **und kurze
 Videos** · **volle API interface-first** (Ingest multipart + Liste + Einzelmedium +
@@ -40,11 +40,12 @@ Der Photo-Buddy ist die XBuddy-App mit dem Buddy-Slug `photo`. Er besitzt seine
 Normalisierung Abschnitt 4, Durchlauf Abschnitt 1) und stellt das Ergebnis über
 seine **Display-View** bereit (APP-1).
 
-### PHOTO-2 — Single-Page-View `rahmen`, schwarze Fokus-Canvas
+### PHOTO-2 — Single-Page-View `rahmen`, helle DS-Linen-Stage
 Die View liegt unter `/display/photo/rahmen` (URL-2, URL-7) und ist eine einzige
-Canvas mit **maximalem Fokus auf dem Medium**: schwarzer Hintergrund, ein Medium
-bildschirmfüllend zentriert, minimale Bedien-Elemente (PHOTO-4). Kein Tab, kein
-Settings-Panel.
+Canvas mit **maximalem Fokus auf dem Medium**: heller DS-Linen-Hintergrund (`--bg`),
+das Medium als **gerahmte Karte** (Surface, weiche Rundung + Schatten) zentriert,
+minimale Bedien-Elemente (PHOTO-4). Kein Tab, kein Settings-Panel, **keine
+Bildunterschrift, kein Zähler** (Gate B, E-PHOTO-11).
 
 ### PHOTO-3 — Auto-Durchlauf
 Die Medien wechseln in einem **konfigurierbaren Intervall** (PHOTO-19)
@@ -72,7 +73,7 @@ Slideshow-Zustand bleibt erhalten, E-PHOTO-10).
 Videos laufen in der Slideshow **stumm** (Browser-Autoplay-sicher; Ton ist
 V1-Out-of-Scope, OPEN-PHOTO-K). Ist die Library leer oder ein Medium nicht ladbar,
 zeigt die View einen **neutralen Zustand** (freundlicher Platzhalter „Noch keine
-Fotos") — nie ein roher Fehler oder ein nackt-schwarzer Schirm ohne Hinweis vor dem
+Fotos") — nie ein roher Fehler oder ein leerer Schirm ohne Hinweis vor dem
 Kind (analog WETTER-17/PLAN-20), und bleibt an.
 
 ## 2. Datenhaltung & Library
@@ -155,20 +156,22 @@ exponiert.
 
 ## 5. Iconografie & Gestaltung
 
-### PHOTO-17 — Schlichte Fokus-UI
-Maximaler Fokus auf dem Medium: schwarzer Hintergrund, Medium zentriert,
-Bedien-Elemente (Pfeile, Pause/Play, Übersicht) als **funktionale Symbole**
-(Lucide — UI-Verben über Lucide, analog WETTER-18; **kein ARASAAC**, da reine
-Bedien-Verben, **kein Emoji**). Touch-Targets **kindgerecht groß**. Der exakte
-Look („schwarz, nur Buttons") wird in der Design-Schleife validiert (OPEN-PHOTO-G).
+### PHOTO-17 — Schlichte Fokus-UI, feste Bedien-Anordnung
+Maximaler Fokus auf dem Medium: heller DS-Linen-Hintergrund, gerahmtes Medium
+zentriert. Bedien-Elemente als **funktionale Symbole** (Lucide — UI-Verben über
+Lucide, analog WETTER-18; **kein ARASAAC**, da reine Bedien-Verben, **kein Emoji**),
+**kindgerecht große** Touch-Targets, **feste Anordnung** (Gate B, E-PHOTO-11):
+**Pfeile prev/next mittig an den Seiten**, **Übersicht/Grid oben-rechts**,
+**Pause/Play unten-rechts**. Keine Bildunterschrift.
 
 ### PHOTO-18 — Visueller Stil aus dem geteilten Design System
 Der Stil bindet an das geteilte Design System
 (`display/_shared/design/tokens.css`, `conventions/design-tokens.md` DTOK-1..5):
 **keine hartcodierten Farben** in der View; Stilwerte als Token (Layout-`px` ok).
-Die **dunkle Foto-Stage** (schwarzer Hintergrund, PHOTO-2/17) ist eine bewusste
-Medien-Fläche; ob sie als Token im DS geführt oder als dokumentierte Ausnahme
-gilt, klärt die Design-Schleife (OPEN-PHOTO-G).
+Die View ist **voll DS-konform** — heller Linen-Hintergrund, Medium als Surface-Karte
+mit DS-Radius/Schatten (Gate B, E-PHOTO-11); **kein reines Schwarz/Weiß** (DS-Regel
+tokens.css). Gegen die bestehende Buddy-Card geerdet
+(`wetter/static/wetter.css` `.card`).
 
 ## 6. Konfiguration
 
@@ -257,9 +260,9 @@ echte Telegram-/Geräte-Eingänge sind nicht Teil der automatisierten Suite.
 - **OPEN-PHOTO-F — Geteilter Upload-/Atomic-Write-Helfer.** Der multipart-Ingest +
   atomare Schreiben sind das 2. Vorkommen nach FAM-13 → Beobachtung für die
   Prozess-Werkstatt (conventions/ bei konkretem Schmerz), **kein V1-Blocker**.
-- **OPEN-PHOTO-G — Schlichte UI „schwarz, nur Buttons" & dunkle Foto-Stage.**
-  Design-Schleife (F3) validiert; ob das Schwarz Token oder dokumentierte Ausnahme
-  im DS ist, fällt dort. Prinzip steht (PHOTO-2/17), Pixel offen.
+- **OPEN-PHOTO-G — Foto-Stage-Look. ERLEDIGT (Gate B, Nic 2026-06-06):** gewählt ist
+  die **helle DS-Linen-Stage „Linen Frame"** (Medium als gerahmte Karte), **nicht**
+  Schwarz — voll DS-konform, kein Ausnahme-Vermerk nötig (E-PHOTO-11).
 - **OPEN-PHOTO-H — Library-Kapazität / Pi-Speicher.** Keine harte Grenze in V1;
   Auto-Delete (PHOTO-12) ist das Ventil. Max-Anzahl/-Größe als späterer
   Tuning-Wert, falls Schmerz auftritt.
@@ -336,3 +339,15 @@ annehmen, dass Telegram immer schon normalisiert hat.
 *Datum:* 2026-06-06 (Nic) · Der Übersichts-Modus (PHOTO-5) ist ein clientseitiger
 Zustand derselben View — kein Seiten-Reload, der Slideshow-Zustand bleibt erhalten.
 **Verworfen:** Übersicht als eigene URL-View (verlöre den Durchlauf-Zustand).
+
+### E-PHOTO-11 — Foto-Stage: helle DS-Linen-„Galeriewand", nicht Schwarz
+*Datum:* 2026-06-06 (Nic, Gate B) · Drei Stage-Richtungen wurden als gerenderte
+1920×1080-Mockups verglichen (Warm-Dark, Pure Black, Linen Frame). Gewählt:
+**Linen Frame** — heller DS-Linen-Hintergrund (`--bg`), Medium als **gerahmte
+Surface-Karte** (weiche Rundung + Schatten), Bedien-Elemente fest angeordnet
+(Pfeile mittig seitlich, Grid oben-rechts, Pause unten-rechts), **keine
+Bildunterschrift, kein Zähler**. Grund: voll DS-konform (DS-Regel „never pure
+black", tokens.css) und warm/Montessori-treu für ein Kinderprodukt. **Verworfen:**
+Pure Black (stärkster Fokus, aber DS-Ausnahme und kühl) und Warm-Dark
+(DS-konformer Kompromiss, aber dunkle Stage unnötig, da der Linen-Rahmen das Foto
+ausreichend trägt). Löst OPEN-PHOTO-G.
