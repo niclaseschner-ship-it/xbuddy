@@ -167,6 +167,13 @@ Trust-Anker nicht ständig erneuert werden soll.
   `/xbuddy-ca.crt` zum Browser-Download. Ob XBuddy zusätzlich zum Telegram-Weg
   einen URL-1-konformen Download-Endpunkt führt, ist offen — V1 geht den
   Telegram-Weg.
+- **OPEN-CAV-E — Linux/Controller-OS-Anleitung (geparkte Lücke).** Die
+  Registry kann Linux-Geräte führen (z. B. das Pi-Display, `os: linux`), aber
+  die CA-Verteilung kennt nur vier OS-Blöcke (Windows/Android/iOS/macOS) und
+  weist ein Linux-Ziel mit `ValueError` ab. Kein heutiger Schmerz (der Trust
+  auf dem Pi steht bereits) und kein klarer Lösungsansatz — bewusst geparkt,
+  kein Ticket. Reaktivieren, wenn ein Familien-Mitglied real ein Linux-/
+  Controller-Gerät per CA-Verteilung trusten muss.
 
 ## Entscheidungen
 

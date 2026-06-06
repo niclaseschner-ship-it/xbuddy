@@ -160,9 +160,15 @@ Anbindung in eigenen Tickets nach:
 - **Display-Client** (`display-client.md`): Holt die Auflösung seines
   Geräts aus der Registry (per `display_id`, DC-1) und skaliert
   entsprechend (z. B. der Aspect-Adapter aus #107).
-- **CA-Verteilung** (`ca-verteilung.md`, #82): Liest das `os`-Feld aus
-  der Registry und erzeugt die CA-Installations-Anleitung pro Gerät —
-  ersetzt damit den heute statischen `_INSTALL_GUIDE`.
+- **CA-Verteilung** (`ca-verteilung.md`, #82, geliefert via #95/#150/#106):
+  Das Zielgerät (und sein `os`) kommt **pro Aufgabe vom Eltern-Chat-Agenten** —
+  der Bot fragt „welches Gerät?" (EC-22) und übergibt es an
+  `verteile_ca(…, geraet)`; CAV wählt den passenden OS-Anleitungsblock
+  (CAV-5, hart-codiert). CAV liest die Registry **nicht** direkt (Modul-Grenze:
+  CA-Verteilung wohnt im Eltern-Chat, greift nicht in die Geräte-Komponente).
+  Die Registry bleibt SSoT dafür, *welche* Geräte existieren (GER-4); eine
+  spätere Vorbelegung des Geräts aus der Registry wäre eine Optimierung ohne
+  heutigen Schmerz (geparkt).
 
 *Tickets:* #105
 
