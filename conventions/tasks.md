@@ -9,9 +9,9 @@ liefern kann, indem er die hier **benannten** Andock-Punkte bedient — statt si
 aus sechs Beispielen zusammenzureimen. Sie verspricht **nicht**, dass kein
 gemeinsamer Code angefasst wird: die Aktivierung ist heute zentral
 (`build_catalog`, TASK-7), und eine async-Privatchat-Aufgabe braucht zusätzlich
-einen namentlichen Block in der Agenten-Mitte (`handle_update`, siehe der
-dokumentierte Schmerz am Ende). Die Konvention macht diese Punkte sichtbar; sie
-beseitigt sie nicht.
+einen Eintrag in `_SESSION_SORTS` (`main.py`), damit `handle_update` das
+Privatchat-Routing generisch übernimmt (SESS-5/#264 — gemeinsamer Session-Router
+seit #264). Die Konvention macht diese Punkte sichtbar; sie beseitigt sie nicht.
 
 Verhalten der einzelnen Aufgaben gehört **nicht** hierher, sondern in die
 jeweilige Komponenten-Spec. Heimat der Katalog-Mechanik:
@@ -110,8 +110,9 @@ Ort.
 
 Eine schreibende Aufgabe mit Worker-Thread (TASK-5) **muss** dabei mit der
 **richtigen** Session-Map verkabelt werden — genau der Map, die `handle_update`
-für das Privatchat-Routing liest (`main.py:136-140` für TES, analog
-FAA/GAA/KAV `main.py:107-131`). Wird eine async-Schreib-Aufgabe ohne ihre
+für das Privatchat-Routing liest (via `_SESSION_SORTS`-Eintrag, `main.py` —
+generische Iteration seit SESS-5/#264, FAA/GAA/KAV/TES/PAA). Wird eine
+async-Schreib-Aufgabe ohne ihre
 Session-Map oder mit der falschen Map registriert, fängt ein reiner
 **Registrierungs**-Test das **nicht**: `build_catalog` ersetzt eine fehlende
 Map durch ein leeres `{}` (`tasks.py:365`), und der Katalog-Test prüft nur die
@@ -126,12 +127,12 @@ Session-Map prüft — so wie TES ihn inzwischen hat
 
 ---
 
-**Bekannter, dokumentierter Schmerz (nicht Inhalt dieser Konvention):** Das
-Privatchat-Session-Routing in `handle_update` (`main.py:104-141`) besteht aus
-vier **namentlichen** Blöcken (FAA, GAA, KAV, TES), die je eine eigene
-Session-Map prüfen — kein gemeinsamer Session-Router. Jede neue async-Aufgabe
-fügt heute einen weiteren namentlichen Block hinzu (Verletzung des
-Lego-Prinzips „einheitlicher Dispatch statt namentlicher Sonderfälle"). Diese
-Konvention schreibt hier bewusst **keine** Soll-Regel vor (sie wäre ab Tag 1
-verletzt); der Umbau zu einem gemeinsamen Session-Router gehört in ein
-separates Refactor-Ticket.
+**Hinweis (historisch, jetzt GEBAUT):** Das Privatchat-Session-Routing in
+`handle_update` wurde mit SESS-5/#264 (PR #264 — Eltern-Chat Session-Registry)
+zu einem gemeinsamen Session-Router umgebaut: `_SESSION_SORTS` (`main.py`)
+registriert alle Session-Sorten (FAA/GAA/KAV/TES/PAA), `handle_update`
+iteriert generisch darüber — keine vier namentlichen Blöcke mehr. Eine neue
+async-Aufgabe fügt nur noch einen `SessionSortEntry` in `_build_session_sorts`
+hinzu (Lego-Prinzip erfüllt). Die oben beschriebene Lego-Falle (falsche oder
+fehlende Session-Map) besteht weiterhin; der Routing-Test bleibt Pflicht
+(TASK-7, letzter Absatz).
