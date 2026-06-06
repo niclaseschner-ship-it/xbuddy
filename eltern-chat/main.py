@@ -505,8 +505,6 @@ def parse_args(argv):
                    help="Pfad zur Konfigurationsdatei (EC-15)")
     p.add_argument("--db", default="conversations.db",
                    help="Pfad zur Gesprächs-Datenbank (EC-16)")
-    p.add_argument("--store", default="onboarding-store.json",
-                   help="Pfad zum Onboarding-Speicher (ONB-5)")
     p.add_argument("--log-level", dest="log_level", default=None,
                    help="DEBUG | INFO | WARNING | ERROR "
                         "(überschreibt den Config-Wert, CONFIG-1)")
@@ -539,7 +537,7 @@ def _check_group_reception(tg, family_group_chat_id, me):
             family_group_chat_id)
 
 
-def build_context(cfg, db_path, store_path, zd_cli_path=None):
+def build_context(cfg, db_path, zd_cli_path=None):
     """Verdrahtet aus der Konfiguration einen lauffähigen Context.
 
     Liegt kein Anbieter-Key vor, startet die Instanz im Onboarding-Modus
@@ -582,7 +580,7 @@ def build_context(cfg, db_path, store_path, zd_cli_path=None):
         # EC-23/AC4 (#268): Telemetrie liegt in derselben SQLite-Datei wie der
         # Verlauf — kein zweiter SSoT, kein zweites Backup-Ziel.
         telemetry_store=TelemetryStore(db_path),
-        store=OnboardingStore(store_path),
+        store=OnboardingStore(zd=zd_store),
         family_group_locked=cfg.family_group_locked,
         faa_sessions=faa_sessions,
         gaa_sessions=gaa_sessions,
@@ -653,8 +651,8 @@ def main(argv=None):
     # EC-15-Schema).
     logsetup.setup(args.log_level or "INFO")
     try:
-        cfg = config_mod.resolve(args.config, args.store)
-        ctx = build_context(cfg, args.db, args.store,
+        cfg = config_mod.resolve(args.config)
+        ctx = build_context(cfg, args.db,
                             zd_cli_path=args.zugangsdaten_file)
     except config_mod.ConfigError as e:
         logging.error("Konfigurationsfehler: %s", e)

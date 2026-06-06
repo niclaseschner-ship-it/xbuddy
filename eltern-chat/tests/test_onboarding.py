@@ -19,6 +19,8 @@ from onboarding import (
 )
 from onboarding_store import OnboardingStore
 
+from tools.zugangsdaten import Zugangsdaten
+
 # Ein realistisch geformter Schlüssel: langes Token ohne Leerzeichen (ONB-3).
 _KEY = "sk-ant-api03-0123456789abcdefABCDEFxyz"
 
@@ -29,7 +31,8 @@ def _ctx(tmp_path, tg, family_group="", locked=False):
     return Context(
         tg=tg, bot_username="mybot", family_group_chat_id=family_group,
         context_depth=20, provider=None, catalog=None, history=None,
-        pending=None, store=OnboardingStore(str(tmp_path / "store.json")),
+        pending=None,
+        store=OnboardingStore(zd=Zugangsdaten(str(tmp_path / "zd.json"))),
         family_group_locked=locked, onboarding=state)
 
 

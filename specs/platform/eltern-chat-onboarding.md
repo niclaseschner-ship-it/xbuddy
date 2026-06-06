@@ -107,17 +107,12 @@ nebeneinanderliegende Geheimnis-Dateien. Die Speicherung übersteht einen
 Neustart — eine einmal eingerichtete Instanz durchläuft das Onboarding nicht
 erneut.
 
-Gelesen wird *read-both*: bevorzugt aus dem zentralen Speicher, ersatzweise —
-solange ein Wert dort noch fehlt — aus der alten Per-Instanz-Datei. Beim ersten
-Laden läuft eine einmalige, idempotente Migration der Alt-Datei in den zentralen
-Speicher (lazy-on-load); danach wird die Alt-Datei zur Seite gelegt
-(`<pfad>.migrated`) und nicht mehr beschrieben. Geschrieben wird ausschließlich
-in den zentralen Speicher; dessen `0600`-Rechte und atomares Schreiben gelten
-nach `zugangsdaten.md` ZD-3 / DCOMP-4. Das tatsächliche Entfernen der
-Alt-Klasse/-Datei ist Schritt 2 der Zwei-Schritt-Deprecation (CLAUDE.md §6) und
-folgt in einem eigenen Ticket.
+Gelesen und geschrieben wird ausschließlich im zentralen Speicher; dessen
+`0600`-Rechte und atomares Schreiben gelten nach `zugangsdaten.md` ZD-3 /
+DCOMP-4. Die Zwei-Schritt-Deprecation (CLAUDE.md §6) ist mit #336 (Schritt 2)
+abgeschlossen — die Alt-Klasse und die Alt-Datei sind entfernt.
 
-*Tickets:* #33, #100, #84
+*Tickets:* #33, #100, #84, #336
 
 ### ONB-6 — Bindung der Familien-Gruppe
 Mit dem erfolgreichen Abschluss des Onboardings wird die Gruppe, in der das
@@ -205,14 +200,15 @@ abnehmen soll. Eine vorhandene Env-/Config-Bindung hat dennoch Vorrang (ONB-6),
 damit ein bewusst gesetzter Wert nicht überschrieben wird.
 
 ### E-ONB-4 — Anbieter-Key persistent außerhalb des Repos
-*Datum:* 2026-05-21 · **Abgelöst durch ZD (#84)**
+*Datum:* 2026-05-21 · **Abgelöst durch ZD (#84, abgeschlossen #336)**
 
 > **Abgelöst:** Der eigene Onboarding-Speicher (Per-Instanz-Datei neben dem
 > Code) ist durch den zentralen Zugangsdaten-Speicher ersetzt — siehe ONB-5 und
-> `zugangsdaten.md` (ZD-1, OPEN-ZD-B). Schritt 1 (read-both / write-ZD,
-> lazy-Migration) ist mit #84 umgesetzt; das Entfernen der Alt-Klasse/-Datei ist
-> Schritt 2 (Folge-Ticket). Die Entscheidung selbst — Key außerhalb des Repos,
-> nicht im Prozess-Speicher, nicht in der Gesprächs-Datenbank — bleibt gültig.
+> `zugangsdaten.md` (ZD-1, OPEN-ZD-B). Die Zwei-Schritt-Deprecation ist
+> abgeschlossen: Schritt 1 (#84, read-both / write-ZD, lazy-Migration) und
+> Schritt 2 (#336, Alt-Klasse/-Datei entfernt). Die Entscheidung selbst — Key
+> außerhalb des Repos, nicht im Prozess-Speicher, nicht in der
+> Gesprächs-Datenbank — bleibt gültig.
 
 Der per Onboarding eingegebene Key wird in einer gitignorierten Per-Instanz-
 Datei gespeichert, Dateirechte auf den Eigentümer beschränkt.
