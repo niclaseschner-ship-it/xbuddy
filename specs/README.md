@@ -87,6 +87,11 @@ Maßgeblich ist, *wo* der Eintrag steht:
 - **Für den Prep:** Ein Ticket, das nur ein `OPEN-*` zitiert, ist *nicht*
   automatisch baufertig. Im Zweifel Nic fragen.
 
+`E-*` (Entscheidungs-/Rationale-Eintrag) ist **kein** Skizzen-Präfix wie `OPEN-*`:
+Er hält die *Begründung* hinter einer Requirement fest und folgt der
+Abschnitts-Regel — unter `## Entscheidungen` (oder anderer normaler Überschrift)
+**bindend/ratifiziert**, unter `ENTWURF` vorläufig wie alles dort.
+
 **Erledigte/entschiedene Einträge.** Es gibt kein Pflicht-Schlüsselwort für
 Erledigung; in der Praxis stehen Marker wie `ENTSCHIEDEN <Datum>`, `ERLEDIGT
 (#PR)` oder `abgeschlossen`. Ein erledigter Punkt **kann** beim nächsten Berühren
