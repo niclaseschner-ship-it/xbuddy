@@ -15,7 +15,6 @@ kontrollierte Doppelungen ersetzt (kein Netz, KAV-10). Die Patterns folgen
 """
 
 import json
-import os
 import urllib.parse
 from datetime import UTC, datetime
 
@@ -53,7 +52,6 @@ from skills.kalender_verbinden import (
     kalender_verbinden,
     parse_selection,
     store_tokens_in_zd,
-    write_kalender_id_to_plan_json,
 )
 from skills.kalender_verbinden_task import KalenderVerbindenTask, KavSession, make_kav_input
 from tasks import TurnContext, build_catalog
@@ -196,26 +194,47 @@ def fake_fetch_calendars_fail():
 
 
 def fake_write_plan_json():
-    """KAV-X: Doppelung für `write_kalender_id_to_plan_json` — protokolliert
-    die Aufrufe statt wirklich zu schreiben."""
+    """KAV-X / PLAN-32: Doppelung für den HTTP-Seam (`write_plan_json`) —
+    protokolliert die aufgerufene `kalender_id` statt wirklich zu schreiben."""
     calls = []
 
-    def doubled(plan_json_path, kalender_id):
-        calls.append({"plan_json_path": plan_json_path,
-                      "kalender_id": kalender_id})
+    def doubled(kalender_id):
+        calls.append({"kalender_id": kalender_id})
     doubled.calls = calls
     return doubled
 
 
 def fake_write_plan_json_fail():
-    def doubled(plan_json_path, kalender_id):
-        raise PlanJsonWriteError("simulated FS error")
+    def doubled(kalender_id):
+        raise PlanJsonWriteError("simulated HTTP error")
     return doubled
 
 
-# Hilfs-Konstanten für die häufige Aufruf-Form: Code abgeben, dann „2"
-# wählen (zweiter Kalender aus der Default-Liste = Familie).
-_DEFAULT_PLAN_PATH = "/tmp/plan-for-tests.json"
+def fake_plan_transport_ok(called=None):
+    """HTTP-Transport-Doppelung für PLAN-32 PUT /api/v1/plan/admin/kalender.
+
+    Liefert HTTP 200 mit `{ok: true}`. Protokolliert aufgerufene Methode,
+    Pfad und Body in der Liste `called`, falls übergeben.
+    """
+    if called is None:
+        called = []
+
+    def transport(method, path, body=None, content_type=None):
+        called.append({"method": method, "path": path, "body": body})
+        return 200, b'{"ok": true}'
+    transport.called = called
+    return transport
+
+
+def fake_plan_transport_fail():
+    """HTTP-Transport-Doppelung, die PLAN-32 PUT mit HTTP 500 ablehnt."""
+    def transport(method, path, body=None, content_type=None):
+        return 500, b'{"error": "internal"}'
+    return transport
+
+
+# Hilfs-Konstante für die häufige Aufruf-Form mit HTTP-Seam.
+_DEFAULT_PLAN_ORIGIN = "http://127.0.0.1:5020"
 
 
 def _members(*user_ids):
@@ -510,7 +529,7 @@ def test_KAV_6_implausible_messages_trigger_reminder_then_session_continues():
     nm = stream("hallo!", "http://localhost:1/?code=GOOD", "1")
     result = kalender_verbinden(
         tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
-        zd=zd, next_message=nm, plan_json_path=_DEFAULT_PLAN_PATH,
+        zd=zd, next_message=nm, plan_origin_url=_DEFAULT_PLAN_ORIGIN,
         exchange=exchange,
         fetch_email=fake_fetch_email_empty(),
         fetch_calendars=fake_fetch_calendars(),
@@ -686,7 +705,7 @@ def test_KAV_8_confirmation_contains_account_email_when_available():
     nm = stream("http://localhost:1/?code=GOOD", "1")
     kalender_verbinden(
         tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
-        zd=zd, next_message=nm, plan_json_path=_DEFAULT_PLAN_PATH,
+        zd=zd, next_message=nm, plan_origin_url=_DEFAULT_PLAN_ORIGIN,
         exchange=fake_exchange_ok(refresh="SECRET-RT"),
         fetch_email=fake_fetch_email("mia@example.com"),
         fetch_calendars=fake_fetch_calendars(),
@@ -706,13 +725,13 @@ def test_KAV_8_confirmation_without_email_when_not_available():
     nm = stream("http://localhost:1/?code=GOOD", "1")
     kalender_verbinden(
         tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
-        zd=zd, next_message=nm, plan_json_path=_DEFAULT_PLAN_PATH,
+        zd=zd, next_message=nm, plan_origin_url=_DEFAULT_PLAN_ORIGIN,
         exchange=fake_exchange_ok(),
         fetch_email=fake_fetch_email_empty(),
         fetch_calendars=fake_fetch_calendars(),
         write_plan_json=fake_write_plan_json())
     msgs = [s["text"] for s in tg.sent if s["chat_id"] == user_id]
-    # Die formatierte Bestätigung enthält den Kalender-Namen + Restart-Hinweis.
+    # Die formatierte Bestätigung enthält den Kalender-Namen.
     assert any("ist verbunden" in m and "Persönlich" in m for m in msgs)
 
 
@@ -903,8 +922,8 @@ def test_KAV_X_format_calendar_list_numbers_each_entry():
 
 
 def test_KAV_X_user_selects_calendar_writes_chosen_id():
-    """KAV-X: Bot postet die Liste, User schickt „2", Skill ruft
-    `write_kalender_id_to_plan_json` mit der `id` des **zweiten** Kalenders auf."""
+    """KAV-X / PLAN-32: Bot postet die Liste, User schickt „2", Skill schreibt
+    die `id` des **zweiten** Kalenders via HTTP PUT an den Plan-Buddy."""
     user_id = 7
     tg = FakeTelegram(members=_members(user_id))
     zd = _zd_with_client()
@@ -913,13 +932,12 @@ def test_KAV_X_user_selects_calendar_writes_chosen_id():
     nm = stream("http://localhost:1/?code=GOOD", "2")
     result = kalender_verbinden(
         tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
-        zd=zd, next_message=nm, plan_json_path="/tmp/instance/plan.json",
+        zd=zd, next_message=nm, plan_origin_url=_DEFAULT_PLAN_ORIGIN,
         exchange=fake_exchange_ok(),
         fetch_email=fake_fetch_email("mia@example.com"),
         fetch_calendars=fetch, write_plan_json=write)
     assert result.ergebnis == ERGEBNIS_VERBUNDEN
     assert len(write.calls) == 1
-    assert write.calls[0]["plan_json_path"] == "/tmp/instance/plan.json"
     # Default-Liste: Index 1 (zweiter Kalender) = family@group.calendar.google.com.
     assert write.calls[0]["kalender_id"] == "family@group.calendar.google.com"
     # Liste wurde im Chat angekündigt (KAV-X-Prompt).
@@ -937,7 +955,7 @@ def test_KAV_X_invalid_selection_asks_again_then_continues():
     nm = stream("http://localhost:1/?code=GOOD", "bla", "5", "1")
     result = kalender_verbinden(
         tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
-        zd=zd, next_message=nm, plan_json_path="/tmp/instance/plan.json",
+        zd=zd, next_message=nm, plan_origin_url=_DEFAULT_PLAN_ORIGIN,
         exchange=fake_exchange_ok(),
         fetch_email=fake_fetch_email_empty(),
         fetch_calendars=fake_fetch_calendars(),
@@ -963,7 +981,7 @@ def test_KAV_X_calendar_list_fetch_failure_returns_verbunden_ohne_kalender():
     nm = stream("http://localhost:1/?code=GOOD")
     result = kalender_verbinden(
         tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
-        zd=zd, next_message=nm, plan_json_path="/tmp/instance/plan.json",
+        zd=zd, next_message=nm, plan_origin_url=_DEFAULT_PLAN_ORIGIN,
         exchange=fake_exchange_ok(refresh="RT-1"),
         fetch_email=fake_fetch_email_empty(),
         fetch_calendars=fake_fetch_calendars_fail(),
@@ -971,7 +989,7 @@ def test_KAV_X_calendar_list_fetch_failure_returns_verbunden_ohne_kalender():
     assert result.ergebnis == ERGEBNIS_VERBUNDEN_OHNE_KALENDER
     # Tokens sind dennoch geschrieben (KAV-7 vor KAV-X).
     assert zd.get(ZD_NAME_OAUTH_TOKEN) == {"refresh_token": "RT-1"}
-    # plan.json wurde *nicht* angefasst.
+    # HTTP-Schreibvorgang wurde *nicht* aufgerufen.
     assert write.calls == []
     assert any(KALENDER_LIST_FETCH_FAILED in s["text"] for s in tg.sent)
 
@@ -986,7 +1004,7 @@ def test_KAV_X_empty_calendar_list_returns_verbunden_ohne_kalender():
     nm = stream("http://localhost:1/?code=GOOD")
     result = kalender_verbinden(
         tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
-        zd=zd, next_message=nm, plan_json_path="/tmp/instance/plan.json",
+        zd=zd, next_message=nm, plan_origin_url=_DEFAULT_PLAN_ORIGIN,
         exchange=fake_exchange_ok(),
         fetch_email=fake_fetch_email_empty(),
         fetch_calendars=fake_fetch_calendars(calendars=[]),
@@ -1006,7 +1024,7 @@ def test_KAV_X_plan_json_write_failure_returns_verbunden_ohne_kalender():
     nm = stream("http://localhost:1/?code=GOOD", "1")
     result = kalender_verbinden(
         tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
-        zd=zd, next_message=nm, plan_json_path="/tmp/instance/plan.json",
+        zd=zd, next_message=nm, plan_origin_url=_DEFAULT_PLAN_ORIGIN,
         exchange=fake_exchange_ok(),
         fetch_email=fake_fetch_email_empty(),
         fetch_calendars=fake_fetch_calendars(),
@@ -1015,60 +1033,49 @@ def test_KAV_X_plan_json_write_failure_returns_verbunden_ohne_kalender():
     assert any(PLAN_JSON_WRITE_FAILED in s["text"] for s in tg.sent)
 
 
-def test_KAV_X_plan_json_kalender_id_written_atomically(tmp_path):
-    """KAV-X (Unit-Test des Helpers): bestehende `plan.json` wird gelesen,
-    **nur** `kalender_id` geändert, alle anderen Felder bleiben byte-gleich.
+def test_KAV_X_http_seam_put_sends_kalender_id_to_plan_buddy():
+    """KAV-X / PLAN-32 (AC_ENTRY): der lebende Schreibpfad ist der HTTP PUT
+    an `PUT /api/v1/plan/admin/kalender`. Wenn `plan_origin_url` gesetzt ist,
+    baut `kalender_verbinden` eine HTTP-Anfrage an den Plan-Buddy.
 
-    Atomare Schreibung: nach erfolgreichem Aufruf liegt keine Temp-Datei mehr."""
-    p = tmp_path / "plan.json"
-    original = {
-        "slots": [{"schluessel": "bring", "art": "erwachsenen-slot",
-                   "icon": "sun"}],
-        "default_petrantwortlichkeiten": {"bring": ["a", "b", "c", "d", "e",
-                                                    None, None]},
-        "fenster_lesekind": 7,
-        "wochenstart": 0,
-        "zeitzone": "Europe/Berlin",
-        "kalender_id": "alte-id@group.calendar.google.com",
-    }
-    p.write_text(json.dumps(original, indent=2, ensure_ascii=False) + "\n",
-                 encoding="utf-8")
-
-    write_kalender_id_to_plan_json(
-        str(p), "neue-id@group.calendar.google.com")
-
-    written = json.loads(p.read_text(encoding="utf-8"))
-    # Nur kalender_id ist neu, alles andere identisch.
-    assert written["kalender_id"] == "neue-id@group.calendar.google.com"
-    assert written["slots"] == original["slots"]
-    assert written["default_petrantwortlichkeiten"] == \
-        original["default_petrantwortlichkeiten"]
-    assert written["fenster_lesekind"] == 7
-    assert written["wochenstart"] == 0
-    assert written["zeitzone"] == "Europe/Berlin"
-    # Keine verwaiste Temp-Datei.
-    leftovers = [n for n in os.listdir(str(tmp_path))
-                 if n.startswith(".plan.")]
-    assert leftovers == []
+    Test-Naht: `write_plan_json`-Callable mit Transport-Doppelung; kein
+    direkter FS-Zugriff (PLAN-32, CLAUDE.md §6 »kein toter Code«)."""
+    user_id = 7
+    tg = FakeTelegram(members=_members(user_id))
+    zd = _zd_with_client()
+    write = fake_write_plan_json()
+    # Zweiten Kalender wählen (family@group.calendar.google.com).
+    nm = stream("http://localhost:1/?code=GOOD", "2")
+    result = kalender_verbinden(
+        tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
+        zd=zd, next_message=nm, plan_origin_url=_DEFAULT_PLAN_ORIGIN,
+        exchange=fake_exchange_ok(),
+        fetch_email=fake_fetch_email_empty(),
+        fetch_calendars=fake_fetch_calendars(),
+        write_plan_json=write)
+    assert result.ergebnis == ERGEBNIS_VERBUNDEN
+    assert len(write.calls) == 1
+    # PLAN-32: die `kalender_id` des zweiten Kalenders wird via HTTP geschrieben.
+    assert write.calls[0]["kalender_id"] == "family@group.calendar.google.com"
 
 
-def test_KAV_X_plan_json_write_raises_on_missing_file(tmp_path):
-    """KAV-X: fehlt `plan.json`, wirft die write-Funktion `PlanJsonWriteError`
-    — der Aufrufer schlägt sauber auf »verbunden_ohne_kalender« um."""
-    with pytest.raises(PlanJsonWriteError):
-        write_kalender_id_to_plan_json(
-            str(tmp_path / "nicht-da.json"), "x@group.calendar.google.com")
-
-
-def test_KAV_X_plan_json_write_raises_on_invalid_root(tmp_path):
-    """KAV-X: enthält `plan.json` kein JSON-Objekt am Root (z. B. eine Liste,
-    eine Zahl), schreibt die Funktion **nicht** — `PlanJsonWriteError`."""
-    p = tmp_path / "plan.json"
-    p.write_text("[1, 2, 3]\n", encoding="utf-8")
-    with pytest.raises(PlanJsonWriteError):
-        write_kalender_id_to_plan_json(str(p), "x@group.calendar.google.com")
-    # Bytes der Datei sind unverändert.
-    assert p.read_text(encoding="utf-8") == "[1, 2, 3]\n"
+def test_KAV_X_http_seam_failure_returns_verbunden_ohne_kalender():
+    """KAV-X / PLAN-32: schlägt der HTTP-PUT fehl, liefert die Funktion
+    `verbunden_ohne_kalender` und postet `PLAN_JSON_WRITE_FAILED` — Tokens bleiben."""
+    user_id = 7
+    tg = FakeTelegram(members=_members(user_id))
+    zd = _zd_with_client()
+    nm = stream("http://localhost:1/?code=GOOD", "1")
+    result = kalender_verbinden(
+        tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
+        zd=zd, next_message=nm, plan_origin_url=_DEFAULT_PLAN_ORIGIN,
+        exchange=fake_exchange_ok(refresh="RT-1"),
+        fetch_email=fake_fetch_email_empty(),
+        fetch_calendars=fake_fetch_calendars(),
+        write_plan_json=fake_write_plan_json_fail())
+    assert result.ergebnis == ERGEBNIS_VERBUNDEN_OHNE_KALENDER
+    assert zd.get(ZD_NAME_OAUTH_TOKEN) == {"refresh_token": "RT-1"}
+    assert any(PLAN_JSON_WRITE_FAILED in s["text"] for s in tg.sent)
 
 
 def test_KAV_X_timeout_during_selection_returns_verbunden_ohne_kalender():
@@ -1082,13 +1089,13 @@ def test_KAV_X_timeout_during_selection_returns_verbunden_ohne_kalender():
     nm = stream("http://localhost:1/?code=GOOD")
     result = kalender_verbinden(
         tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
-        zd=zd, next_message=nm, plan_json_path="/tmp/instance/plan.json",
+        zd=zd, next_message=nm, plan_origin_url=_DEFAULT_PLAN_ORIGIN,
         exchange=fake_exchange_ok(refresh="RT-1"),
         fetch_email=fake_fetch_email_empty(),
         fetch_calendars=fake_fetch_calendars(),
         write_plan_json=write)
     assert result.ergebnis == ERGEBNIS_VERBUNDEN_OHNE_KALENDER
-    # Tokens sind gespeichert, plan.json *nicht* angefasst.
+    # Tokens sind gespeichert, HTTP-Schreibvorgang *nicht* aufgerufen.
     assert zd.get(ZD_NAME_OAUTH_TOKEN) == {"refresh_token": "RT-1"}
     assert write.calls == []
 
@@ -1112,7 +1119,7 @@ def test_KAV_Y_bestaetigung_frei_von_manuellem_restart_hint():
     nm = stream("http://localhost:1/?code=GOOD", "1")
     kalender_verbinden(
         tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
-        zd=zd, next_message=nm, plan_json_path="/tmp/instance/plan.json",
+        zd=zd, next_message=nm, plan_origin_url=_DEFAULT_PLAN_ORIGIN,
         exchange=fake_exchange_ok(),
         fetch_email=fake_fetch_email("mia@example.com"),
         fetch_calendars=fake_fetch_calendars(),
@@ -1139,7 +1146,7 @@ def test_KAV_Y_no_restart_hint_when_calendar_selection_failed():
     nm = stream("http://localhost:1/?code=GOOD")
     kalender_verbinden(
         tg, chat_id=user_id, user_id=user_id, family_group_chat_id="-100",
-        zd=zd, next_message=nm, plan_json_path="/tmp/instance/plan.json",
+        zd=zd, next_message=nm, plan_origin_url=_DEFAULT_PLAN_ORIGIN,
         exchange=fake_exchange_ok(),
         fetch_email=fake_fetch_email_empty(),
         fetch_calendars=fake_fetch_calendars_fail(),
