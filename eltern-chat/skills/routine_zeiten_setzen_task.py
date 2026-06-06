@@ -20,9 +20,15 @@ Sammel-Dialog, kein _SESSION_SORTS / Worker-Eintrag. is_async=False.
 import logging
 from dataclasses import dataclass
 
-from tasks import Proposal, WriteTask, is_from_private_chat
+from tasks import Proposal, WriteTask
 
 from skills import routine_zeiten_setzen as rzs_mod
+from skills.routine_zeiten_setzen import (
+    ZEIT_ARTEN,
+    _erkenne_minuten,
+    _erkenne_uhrzeit,
+    _erkenne_zeit_art,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,11 +47,12 @@ _QUITTUNG_NO_PRIVATE = (
 _QUITTUNG_ABGELEHNT = (
     "Routine-Zeiten setzen geht nur für Mitglieder der Familien-Gruppe.")
 
-# EC-10: Vorschlags-Zusammenfassung.
-_PROPOSAL_SUMMARY_FROM_GROUP = (
-    "Eine Routine-Zeit setzen — ich schreibe den Wert nach Bestätigung "
-    "über den Routine-Buddy (für alle Tage gleich, V1).")
-_PROPOSAL_SUMMARY_FROM_PRIVATE = (
+# EC-10 / RZS-5: Vorschlags-Zusammenfassung.
+# RZS-5 verlangt Zeit-Art + Wert im Vorschlag (anders als TES, das eine statische Summary
+# liefert). propose() baut die Summary dynamisch aus arguments, wenn Zeit-Art und Wert
+# erkennbar sind — z. B. „Abfahrtszeit auf 08:15 setzen — für alle Tage?".
+# Fallback auf eine generische Zusammenfassung, wenn der Anstoß-Text unvollständig ist.
+_PROPOSAL_SUMMARY_GENERISCH = (
     "Eine Routine-Zeit setzen — ich schreibe den Wert nach Bestätigung "
     "über den Routine-Buddy (für alle Tage gleich, V1).")
 
@@ -108,10 +115,33 @@ class RoutineZeitenSetzenTask(WriteTask):
         self._is_member_fn = is_member_fn
 
     def propose(self, arguments, turn_context):
-        """EC-10-Vorschlag — beschreibt die geplante Änderung."""
-        if is_from_private_chat(turn_context):
-            return Proposal(_PROPOSAL_SUMMARY_FROM_PRIVATE)
-        return Proposal(_PROPOSAL_SUMMARY_FROM_GROUP)
+        """EC-10-Vorschlag — beschreibt die geplante Änderung (RZS-5).
+
+        RZS-5 verlangt Zeit-Art + konkreten Wert im Vorschlag, z. B.
+        „Abfahrtszeit auf 08:15 setzen — für alle Tage?". Das unterscheidet
+        diesen Task bewusst von der statischen TES-Summary (TES liefert keine
+        Werte im Vorschlag; RZS-5 schreibt dies vor, weil der Nutzer den
+        KONKRETEN Wert im propose-Schritt bestätigt — E-EC-7).
+
+        Wenn Zeit-Art und Wert aus dem anstos_text erkennbar sind, baut propose()
+        eine spezifische Summary. Andernfalls greift der generische Fallback
+        (unvollständiger Anstoß; Rückfragen kommen erst in execute/routine_zeiten_setzen).
+        """
+        anstos_text = (arguments or {}).get("anstos_text", "")
+        zeit_art = _erkenne_zeit_art(anstos_text)
+        if zeit_art is not None:
+            ist_minuten = (zeit_art == "anzieh_vorlauf_min")
+            wert = _erkenne_minuten(anstos_text) if ist_minuten else _erkenne_uhrzeit(anstos_text)
+            if wert is not None:
+                zeit_art_name = ZEIT_ARTEN[zeit_art]
+                if ist_minuten:
+                    summary = (
+                        f"{zeit_art_name} auf {wert} Minuten setzen — für alle Tage?")
+                else:
+                    summary = (
+                        f"{zeit_art_name} auf {wert} setzen — für alle Tage?")
+                return Proposal(summary)
+        return Proposal(_PROPOSAL_SUMMARY_GENERISCH)
 
     def execute(self, arguments, turn_context):
         """Führt die RZS-Funktion synchron aus (RZS-4, is_async=False).
@@ -132,18 +162,11 @@ class RoutineZeitenSetzenTask(WriteTask):
         family_group_chat_id = self._family_group_chat_id_getter()
         tg = self._tg
         routine_client = self._routine_client
+        # is_member_fn wird von build_catalog immer injiziert (_rzs_is_member in tasks.py).
+        # Ein None-Default existiert im __init__ nur für Tests, die eine eigene Funktion
+        # übergeben — der None-Fallback mit eigener get_chat_member-Logik wäre tote
+        # Duplizierung von _rzs_is_member (§6 CLAUDE.md: ein Modul = eine Verantwortung).
         is_member_fn = self._is_member_fn
-
-        # Fallback is_member_fn: Live-Prüfung über die Familien-Gruppe (RZS-2).
-        if is_member_fn is None:
-            _tg = tg
-            _fgcid = family_group_chat_id
-            def is_member_fn(uid):
-                if not _fgcid:
-                    return False
-                member = _tg.get_chat_member(_fgcid, uid)
-                return member is not None and member.get("status") in (
-                    "creator", "administrator", "member")
 
         # V1 synchron: kein Worker-Thread, kein echtes next_message.
         # Bei Rückfragen (unvollständiger Anstoß) liefert die Funktion UNKLAR.
