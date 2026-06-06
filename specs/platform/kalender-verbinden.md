@@ -256,19 +256,17 @@ hart-codierte Fehlermeldung mit der Wahl „erneut versuchen" (zurück zu KAV-4)
 oder „abbrechen". Token wandern nie in Logs oder Klartext-Echo
 (`zugangsdaten.md` ZD-6).
 
-**Zusätzlich** schreibt die Funktion nach erfolgreicher Kalender-Auswahl
-(KAV-X) die gewählte `kalender_id` in `plan/plan.json` (PLAN-28-Datei,
-PLAN-15-Anker, Schlüssel `kalender_id` im JSON-Objekt-Root). Das ist ein
-**bewusstes V1-Provisorium** (Cross-Service-FS-Write, gegen die Memory-Linie
-„API statt direkter FS-Zugriff"): die saubere Lösung ist eine Plan-Admin-
-API, an der Plan-Buddy seine Konfiguration per HTTP entgegennimmt; sie ist
-als Folge-Ticket **#140** geschnitten. V1 schreibt deshalb direkt in die
-Per-Instanz-Datei `plan/plan.json` — gitignored, atomar (Temp-Datei +
-`os.replace` analog `familie/registry.py::save`), nur der `kalender_id`-
-Schlüssel wird modifiziert, alle anderen Werte (`slots`,
-`default_verantwortlichkeiten`, …) bleiben byte-gleich. Das ist ein
-**bewusstes V1-Provisorium**: die saubere Lösung ist eine Plan-Admin-API
-(Folge-Ticket, wenn die API existiert; heute offen ohne Ticket-Nr).
+**Zusätzlich** setzt die Funktion nach erfolgreicher Kalender-Auswahl (KAV-X)
+die gewählte `kalender_id` im Plan-Buddy — über dessen Admin-API
+(`PUT /api/v1/plan/admin/kalender`, PLAN-32), **nicht** durch direktes Schreiben
+in `plan/plan.json` (APP-3: der Plan-Buddy ist Eigentümer seiner Datei und
+schreibt sie selbst). KAV bleibt der OAuth-Privatchat-Trigger; Plan-Buddy
+importiert keine Telegram-Logik.
+
+**Bei Fehler** des Admin-Calls (Plan nicht erreichbar, 4xx/5xx): Tokens sind
+gespeichert und die Kalender-Auswahl getroffen, aber die `kalender_id` im
+Plan-Buddy ist nicht aktualisiert — der Aufrufer bekommt im Privatchat eine
+hart-codierte Meldung (analog KAV-X-Fehlerpfad).
 
 *Tickets:* #57, #139
 
