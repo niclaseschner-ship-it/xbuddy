@@ -5,6 +5,9 @@ Tests setzen ENV-Werte mit `monkeypatch.setenv` (analog plan/router-Tests),
 statt ein `env`-Dict an `resolve` zu übergeben — der `env`-Parameter ist mit
 der Loader-Migration entfallen.
 
+Seit #336: `resolve` akzeptiert anstelle des alten `store_path` einen `zd`-
+Parameter (Zugangsdaten-Instanz) — Tests injizieren einen isolierten Speicher.
+
 Lauf: python3 -m pytest eltern-chat/tests/ -v
 """
 
@@ -13,6 +16,8 @@ import json
 import config as config_mod
 import pytest
 from onboarding_store import OnboardingStore
+
+from tools.zugangsdaten import Zugangsdaten
 
 
 def _set_bot_token(monkeypatch):
@@ -23,6 +28,11 @@ def _set_bot_token(monkeypatch):
 
 def _missing(tmp_path):
     return str(tmp_path / "missing.json")
+
+
+def _zd(tmp_path):
+    """Frischer, isolierter zentraler Speicher für einen Test."""
+    return Zugangsdaten(str(tmp_path / "zd.json"))
 
 
 # -- Bot-Token: Pflicht ------------------------------------------
@@ -52,18 +62,18 @@ def test_EC_15_provider_key_from_env(tmp_path, monkeypatch):
 def test_EC_15_provider_key_from_store_when_no_env(tmp_path, monkeypatch):
     _set_bot_token(monkeypatch)
     monkeypatch.delenv("ELTERNCHAT_PROVIDER_API_KEY", raising=False)
-    store_path = str(tmp_path / "store.json")
-    OnboardingStore(store_path).save(provider_api_key="sk-store")
-    cfg = config_mod.resolve(_missing(tmp_path), store_path)
+    zd = _zd(tmp_path)
+    OnboardingStore(zd=zd).save(provider_api_key="sk-store")
+    cfg = config_mod.resolve(_missing(tmp_path), zd=zd)
     assert cfg.provider_api_key == "sk-store"
 
 
 def test_EC_15_env_provider_key_beats_store(tmp_path, monkeypatch):
     _set_bot_token(monkeypatch)
     monkeypatch.setenv("ELTERNCHAT_PROVIDER_API_KEY", "sk-env")
-    store_path = str(tmp_path / "store.json")
-    OnboardingStore(store_path).save(provider_api_key="sk-store")
-    cfg = config_mod.resolve(_missing(tmp_path), store_path)
+    zd = _zd(tmp_path)
+    OnboardingStore(zd=zd).save(provider_api_key="sk-store")
+    cfg = config_mod.resolve(_missing(tmp_path), zd=zd)
     assert cfg.provider_api_key == "sk-env"
 
 
@@ -99,9 +109,9 @@ def test_ONB_6_family_group_from_store_is_not_locked(tmp_path, monkeypatch):
     """Eine per Onboarding gebundene Gruppe ist nicht gesperrt."""
     _set_bot_token(monkeypatch)
     monkeypatch.delenv("ELTERNCHAT_FAMILY_GROUP_CHAT_ID", raising=False)
-    store_path = str(tmp_path / "store.json")
-    OnboardingStore(store_path).save(family_group_chat_id="-222")
-    cfg = config_mod.resolve(_missing(tmp_path), store_path)
+    zd = _zd(tmp_path)
+    OnboardingStore(zd=zd).save(family_group_chat_id="-222")
+    cfg = config_mod.resolve(_missing(tmp_path), zd=zd)
     assert cfg.family_group_chat_id == "-222"
     assert cfg.family_group_locked is False
 

@@ -87,7 +87,6 @@ def test_build_context_passes_cli_path_to_resolve_store_path(monkeypatch,
     ctx = main.build_context(
         _Cfg(),
         str(tmp_path / "conv.db"),
-        str(tmp_path / "store.json"),
         zd_cli_path=cli_pfad,
     )
 
@@ -115,7 +114,6 @@ def test_build_context_default_zd_cli_path_is_none(monkeypatch, tmp_path):
     main.build_context(
         _Cfg(),
         str(tmp_path / "conv.db"),
-        str(tmp_path / "store.json"),
     )
 
     assert aufrufe[0]["cli_path"] is None

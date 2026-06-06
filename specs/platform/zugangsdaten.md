@@ -130,16 +130,14 @@ ZD-5 (Setzen und anschließendes Holen je Name) · ZD-6 (kein Wert im Log).
   Speicher verschlüsselt — und woher der Schlüssel käme —, ist ein eigenes
   Ticket. Kein V1-Bedarf belegt.
 
-- **OPEN-ZD-B — Migration des Eltern-Chat-Onboarding-Speichers** *(in Umsetzung,
-  Schritt 1 mit #84).* Der Eltern-Chat hatte seinen eigenen `OnboardingStore`
+- **OPEN-ZD-B — Migration des Eltern-Chat-Onboarding-Speichers** *(abgeschlossen
+  mit #84 + #336).* Der Eltern-Chat hatte seinen eigenen `OnboardingStore`
   (`eltern-chat/onboarding_store.py`, ONB-5) für KI-Key und Familien-Gruppen-ID.
-  Er ist nun auf den zentralen Speicher umgestellt, damit es nicht zwei Speicher
-  gibt (ZD-1). Die Migration folgt der Zwei-Schritt-Regel (CLAUDE.md §6):
-  **Schritt 1 (#84, umgesetzt)** — read-both (zentraler Speicher bevorzugt,
-  Alt-Datei als Fallback), write nur in den zentralen Speicher, einmalige
-  lazy-Migration der Alt-Datei beim ersten Laden mit Umbenennung zu
-  `<pfad>.migrated`. **Schritt 2 (Folge-Ticket)** — die Alt-Klasse und die
-  Alt-Datei entfernen, sobald keine Instanz mehr darauf zurückfällt.
+  Er ist auf den zentralen Speicher umgestellt (ZD-1). Die Zwei-Schritt-Regel
+  (CLAUDE.md §6) ist vollständig durchlaufen: **Schritt 1 (#84)** — read-both,
+  write-ZD-only, einmalige lazy-Migration der Alt-Datei. **Schritt 2 (#336)** —
+  Alt-Klasse/-Datei entfernt; `OnboardingStore` liest und schreibt nur noch den
+  ZD-Speicher.
 
 ---
 

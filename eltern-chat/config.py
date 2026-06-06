@@ -149,13 +149,17 @@ def _family_group_in_file(config_path):
     return val is not None and str(val).strip() != ""
 
 
-def resolve(config_path, store_path=None):
+def resolve(config_path, zd=None):
     """Löst die Konfiguration nach EC-15 auf.
 
     Generische Schicht (DEFAULTS-Schema-Werte): geht durch den gemeinsamen
     `tools.configloader` — Datei < ENV (`ELTERNCHAT_<KEY>`) < Default.
     Geheimnisse (Bot-Token, Anbieter-Key) und die Sperr-Logik der Familien-
     Gruppe sitzen darunter — der Loader rührt sie nicht an (CONFIG-3).
+
+    `zd` ist ein optionaler Zugangsdaten-Speicher (Zugangsdaten-Instanz); bleibt
+    er None, wird der reguläre Per-Instanz-Speicher nach ZD-8 aufgelöst. Tests
+    injizieren hier einen isolierten Speicher (#336).
 
     Wirft ConfigError nur, wenn der Bot-Token fehlt oder ein Wert ungültig ist.
     Ein fehlender Anbieter-Key ist kein Fehler — er führt in den Onboarding-
@@ -190,7 +194,7 @@ def resolve(config_path, store_path=None):
         raise ConfigError("%s ist nicht gesetzt (Pflicht, EC-15)" % ENV_BOT_TOKEN)
 
     # Anbieter-Key: Env > Onboarding-Speicher > leer (→ Onboarding-Modus, ONB-1).
-    store = OnboardingStore(store_path).load() if store_path else {}
+    store = OnboardingStore(zd=zd).load()
     provider_api_key = (os.environ.get(ENV_PROVIDER_API_KEY)
                         or store.get(KEY_PROVIDER_API_KEY)
                         or "").strip()

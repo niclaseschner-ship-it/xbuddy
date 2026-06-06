@@ -13,6 +13,13 @@ from main import Context, _check_group_reception, dispatch
 from onboarding import OnboardingState
 from onboarding_store import OnboardingStore
 
+from tools.zugangsdaten import Zugangsdaten
+
+
+def _zd(tmp_path):
+    """Frischer, isolierter zentraler Speicher für einen Test."""
+    return Zugangsdaten(str(tmp_path / "zd.json"))
+
 
 def _ki_ctx(tg, family_group="-100", locked=False, store=None):
     """Context im KI-Modus (onboarding=None) — für die EC-18-Migrationstests."""
@@ -27,7 +34,7 @@ def _ki_ctx(tg, family_group="-100", locked=False, store=None):
 def test_EC_18_family_group_migration_rebinds_and_persists(tmp_path):
     """Migriert die Familien-Gruppe, übernimmt die Instanz die neue ID und
     speichert sie persistent — der Anbieter-Key bleibt dabei erhalten."""
-    store = OnboardingStore(str(tmp_path / "store.json"))
+    store = OnboardingStore(zd=_zd(tmp_path))
     store.save(provider_api_key="sk-ant-test", family_group_chat_id="-100")
     ctx = _ki_ctx(FakeTelegram(), family_group="-100", store=store)
 
@@ -41,7 +48,7 @@ def test_EC_18_family_group_migration_rebinds_and_persists(tmp_path):
 
 def test_EC_18_migration_of_other_group_does_not_rebind(tmp_path):
     """Migriert eine andere Gruppe, bleibt die Familien-Bindung unberührt."""
-    store = OnboardingStore(str(tmp_path / "store.json"))
+    store = OnboardingStore(zd=_zd(tmp_path))
     ctx = _ki_ctx(FakeTelegram(), family_group="-100", store=store)
     dispatch(Migrated(old_chat_id="-555", new_chat_id="-1009999"), ctx)
     assert ctx.family_group_chat_id == "-100"
@@ -50,7 +57,7 @@ def test_EC_18_migration_of_other_group_does_not_rebind(tmp_path):
 def test_EC_18_locked_family_group_is_not_rebound(tmp_path):
     """Eine per Env/Config fest gebundene Gruppe wird bei einer Migration nicht
     überschrieben — der bewusst gesetzte Wert hat Vorrang."""
-    store = OnboardingStore(str(tmp_path / "store.json"))
+    store = OnboardingStore(zd=_zd(tmp_path))
     ctx = _ki_ctx(FakeTelegram(), family_group="-100", locked=True, store=store)
     dispatch(Migrated(old_chat_id="-100", new_chat_id="-1009999"), ctx)
     assert ctx.family_group_chat_id == "-100"
@@ -67,7 +74,7 @@ def test_EC_18_onboarding_pending_group_migration(tmp_path):
     ctx = Context(
         tg=FakeTelegram(), bot_username="mybot", family_group_chat_id="",
         context_depth=20, provider=None, catalog=None, history=None,
-        pending=None, store=OnboardingStore(str(tmp_path / "s.json")),
+        pending=None, store=OnboardingStore(zd=_zd(tmp_path)),
         family_group_locked=False, onboarding=state)
     dispatch(Migrated(old_chat_id=-100, new_chat_id=-1009999), ctx)
     assert ctx.onboarding.pending_group_chat_id == -1009999
@@ -79,7 +86,7 @@ def test_EC_18_membership_check_migration_rebinds(tmp_path):
     """Schlägt die Mitgliedschaftsprüfung mit einem Migrations-Fehler fehl,
     zieht die Instanz die Bindung nach, statt die Nachricht als unberechtigt
     zu verwerfen."""
-    store = OnboardingStore(str(tmp_path / "store.json"))
+    store = OnboardingStore(zd=_zd(tmp_path))
     store.save(family_group_chat_id="-100")
     # getChatMember gegen -100 wirft ChatMigratedError; gegen -1009999 ist
     # niemand Mitglied — die Nachricht wird danach (korrekt) verworfen.

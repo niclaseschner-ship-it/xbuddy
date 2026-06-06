@@ -39,9 +39,11 @@ router/config.json
 eltern-chat/config.json
 eltern-chat/*.db
 
-# Eltern-Chat: Onboarding-Speicher (ONB-5) — enthält den per Chat gesetzten
-# Anbieter-Key, niemals ins Repo. `.migrated` ist die von der ZD-Migration (#84)
-# umbenannte Alt-Datei — trägt dieselben Klartext-Secrets, ebenfalls nie ins Repo.
+# Eltern-Chat: Onboarding-Speicher-Alt-Datei (ONB-5) — die alte Per-Instanz-
+# Datei ist mit #336 abgelöst (Daten liegen jetzt im ZD-Speicher). Instanzen,
+# die noch eine `.migrated`-Datei auf dem Pi haben, löschen sie manuell (Deploy,
+# kein Code). Der Eintrag bleibt, solange Deployments mit einer Altdatei
+# denkbar sind, damit sie nie versehentlich committed wird.
 eltern-chat/onboarding-store.json
 eltern-chat/onboarding-store.json.migrated
 
