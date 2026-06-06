@@ -1,5 +1,5 @@
 {
-  "_comment": "WETTER-21 — Wetter-Buddy-Daten-Konfiguration einer Instanz. Kopiere als wetter.json (per .gitignore aus dem Repo ausgeschlossen, je Instanz separat gepflegt). 'ort' ist Pflicht (kein Default): name + lat/lon (Koordinaten für Open-Meteo, WETTER-16). 'wardrobe' (WETTER-14) ist eine GEORDNETE Regel-Liste plus ein Pflicht-'fallback' — die erste passende Regel gewinnt, trifft keine zu, gilt das Fallback (nie leer, WETTER-14). Eine Regel-'bedingung' kennt: feels_min/feels_max (gefühlte-Temp-Band, WETTER-8), rain_prob_min (%), rain_amount_min (mm), wind_min (km/h), sunscreen (true/false). Eine gesetzte Schwelle muss erfüllt sein (UND). 'pflicht'/'optional' sind Kleidungsstücke {name, pikto} — 'pikto' ist die numerische ARASAAC-ID (WETTER-18, über die geteilte Icon-Plattform bezogen, ICONS-5). Mützen- und Regen-/Matsch-Logik (WETTER-15) sind hier gewöhnliche Regeln, kein Sondercode.",
+  "_comment": "WETTER-21 — Wetter-Buddy-Daten-Konfiguration einer Instanz. Kopiere als wetter.json (per .gitignore aus dem Repo ausgeschlossen, je Instanz separat gepflegt). 'ort' ist Pflicht (kein Default): name + lat/lon (Koordinaten für Open-Meteo, WETTER-16). 'wardrobe' (WETTER-14) ist eine GEORDNETE Regel-Liste plus ein Pflicht-'fallback' — die erste passende Regel gewinnt, trifft keine zu, gilt das Fallback (nie leer, WETTER-14). Eine Regel-'bedingung' kennt: feels_min/feels_max (gefühlte-Temp-Band, WETTER-8), rain_prob_min (%), rain_amount_min (mm), wind_min (km/h), sunscreen (true/false). Eine gesetzte Schwelle muss erfüllt sein (UND). 'pflicht'/'optional' sind Kleidungsstücke {name, pikto} — 'pikto' ist die numerische ARASAAC-ID (WETTER-18, über die geteilte Icon-Plattform bezogen, ICONS-5). Alle Stücke stammen aus der kuratierten Palette (WETTER-29, wetter/palette.json), damit der Garderoben-Editor (WETTER-26 ff.) sie ohne Bruch laden kann. Mützen- und Regen-/Matsch-Logik (WETTER-15) sind hier gewöhnliche Regeln, kein Sondercode.",
 
   "ort": {
     "name": "Beispielstadt",
@@ -14,18 +14,18 @@
   "zeitzone": "Europe/Berlin",
 
   "wardrobe": {
-    "_comment_regeln": "Geordnet von speziell (Regen/Frost) zu allgemein (mild/warm). Die erste passende gewinnt. ARASAAC-IDs sind Beispiel-Werte aus dem ARASAAC-Bestand und je Familie anpassbar.",
+    "_comment_regeln": "Geordnet von speziell (Regen/Frost) zu allgemein (mild/warm). Die erste passende gewinnt. Alle ARASAAC-IDs stammen aus der kuratierten Palette (WETTER-29) und sind je Familie über den Editor anpassbar.",
     "regeln": [
       {
         "_was": "Regen-/Matsch-Logik (WETTER-15): viel Regen → Regenjacke, Matschhose, Gummistiefel pflicht.",
         "bedingung": { "rain_amount_min": 1.0 },
         "pflicht": [
-          { "name": "Regenjacke", "pikto": "2588" },
-          { "name": "Matschhose", "pikto": "7193" },
-          { "name": "Gummistiefel", "pikto": "2417" }
+          { "name": "Regenjacke", "pikto": "4927" },
+          { "name": "Matschhose", "pikto": "24276" },
+          { "name": "Gummistiefel", "pikto": "2287" }
         ],
         "optional": [
-          { "name": "Mütze", "pikto": "39395" }
+          { "name": "Cappy", "pikto": "2411" }
         ],
         "hinweis": "Es regnet — zieh dich gut an!"
       },
@@ -33,10 +33,10 @@
         "_was": "Regen-/Matsch-Logik (WETTER-15): leichter Regen / hohe Wahrscheinlichkeit → Regenjacke pflicht, Gummistiefel optional.",
         "bedingung": { "rain_prob_min": 50 },
         "pflicht": [
-          { "name": "Regenjacke", "pikto": "2588" }
+          { "name": "Regenjacke", "pikto": "4927" }
         ],
         "optional": [
-          { "name": "Gummistiefel", "pikto": "2417" }
+          { "name": "Gummistiefel", "pikto": "2287" }
         ],
         "hinweis": "Es könnte regnen."
       },
@@ -44,12 +44,12 @@
         "_was": "Frost/sehr kalt + Mützen-Logik (WETTER-15): Wintermütze (Bommel) pflicht.",
         "bedingung": { "feels_max": 4 },
         "pflicht": [
-          { "name": "Winterjacke", "pikto": "2319" },
-          { "name": "Lange Hose", "pikto": "7193" },
-          { "name": "Wintermütze", "pikto": "39395" }
+          { "name": "Winterjacke", "pikto": "25804" },
+          { "name": "Lange Hose", "pikto": "2565" },
+          { "name": "Wintermütze", "pikto": "2412" }
         ],
         "optional": [
-          { "name": "Handschuhe", "pikto": "2473" }
+          { "name": "Handschuhe", "pikto": "2415" }
         ],
         "hinweis": "Heute ist es kalt — warm anziehen!"
       },
@@ -58,35 +58,35 @@
         "bedingung": { "feels_min": 4, "feels_max": 14 },
         "pflicht": [
           { "name": "Jacke", "pikto": "2319" },
-          { "name": "Lange Hose", "pikto": "7193" }
+          { "name": "Lange Hose", "pikto": "2565" }
         ],
         "optional": [
-          { "name": "Mütze", "pikto": "39395" }
+          { "name": "Cappy", "pikto": "2411" }
         ],
         "hinweis": "Zieh eine Jacke an."
       },
       {
-        "_was": "Warm + Sonne (Mützen-Logik WETTER-15: Sonnenmütze pflicht; sunscreen-Regel WETTER-11).",
+        "_was": "Warm + Sonne (Mützen-Logik WETTER-15: Sonnenhut pflicht; sunscreen-Regel WETTER-11).",
         "bedingung": { "feels_min": 22, "sunscreen": true },
         "pflicht": [
           { "name": "T-Shirt", "pikto": "2309" },
           { "name": "Kurze Hose", "pikto": "13638" },
-          { "name": "Sonnenmütze", "pikto": "2411" }
+          { "name": "Sonnenhut", "pikto": "2572" }
         ],
         "optional": [
           { "name": "Sonnenbrille", "pikto": "3330" }
         ],
-        "hinweis": "Es wird warm — Sonnenmütze auf!"
+        "hinweis": "Es wird warm — Sonnenhut auf!"
       },
       {
         "_was": "Mild: T-Shirt + lange Hose.",
         "bedingung": { "feels_min": 14 },
         "pflicht": [
           { "name": "T-Shirt", "pikto": "2309" },
-          { "name": "Lange Hose", "pikto": "7193" }
+          { "name": "Lange Hose", "pikto": "2565" }
         ],
         "optional": [
-          { "name": "Sonnenmütze", "pikto": "2411" }
+          { "name": "Sonnenhut", "pikto": "2572" }
         ],
         "hinweis": "Angenehmes Wetter."
       }
@@ -95,7 +95,7 @@
       "_was": "WETTER-14: gilt, wenn keine Regel matcht (z. B. neutraler Zustand bei Anbieter-Ausfall, WETTER-17) — nie leer.",
       "pflicht": [
         { "name": "Jacke", "pikto": "2319" },
-        { "name": "Lange Hose", "pikto": "7193" }
+        { "name": "Lange Hose", "pikto": "2565" }
       ],
       "optional": [],
       "hinweis": "Zieh dich bequem an."

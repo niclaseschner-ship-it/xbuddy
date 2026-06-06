@@ -1,0 +1,22 @@
+{
+  "_comment": "WETTER-29 — kuratierte Kleidungs-Palette des Garderoben-Editors. Die Familie wählt Stücke aus DIESER Liste (kein freies Tippen von ARASAAC-IDs). 'pikto' ist die numerische ARASAAC-ID (WETTER-18); die Icons werden über die geteilte Icon-Plattform bezogen (ICONS-5, /display/_shared/icons/arasaac/<id>.png). Mit dem Buddy ausgeliefert, durch einen Entwickler erweiterbar. 17 Stücke (V1.1).",
+  "stuecke": [
+    { "name": "Regenjacke", "pikto": "4927" },
+    { "name": "Matschhose", "pikto": "24276" },
+    { "name": "Gummistiefel", "pikto": "2287" },
+    { "name": "Winterstiefel", "pikto": "2667" },
+    { "name": "Winterjacke", "pikto": "25804" },
+    { "name": "Jacke", "pikto": "2319" },
+    { "name": "Pullover", "pikto": "2436" },
+    { "name": "T-Shirt", "pikto": "2309" },
+    { "name": "Lange Hose", "pikto": "2565" },
+    { "name": "Kurze Hose", "pikto": "13638" },
+    { "name": "Wintermütze", "pikto": "2412" },
+    { "name": "Cappy", "pikto": "2411" },
+    { "name": "Sonnenhut", "pikto": "2572" },
+    { "name": "Handschuhe", "pikto": "2415" },
+    { "name": "Schal", "pikto": "2290" },
+    { "name": "Sonnenbrille", "pikto": "3330" },
+    { "name": "Sandalen", "pikto": "2556" }
+  ]
+}
