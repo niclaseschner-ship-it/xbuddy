@@ -21,6 +21,13 @@ body.xb {
   color: var(--text);
 }
 
+/* Das `[hidden]`-Attribut MUSS zuverlässig verbergen. Sonst überstimmt jede
+   eigene `display`-Regel (`.leer-zustand`, `.medium-bild`, `.medium-video`) das
+   UA-Default `[hidden]{display:none}`, und die JS-Toggles via `element.hidden`
+   wirken nicht — der Leerzustand (PHOTO-6) bliebe neben dem Foto stehen und
+   schöbe die Karte aus der Mitte (PHOTO-2). */
+[hidden] { display: none !important; }
+
 /* ── STAGE: gerahmtes Medium zentriert (PHOTO-2) ───────────────────────────── */
 .rahmen-stage {
   position: relative;
