@@ -179,10 +179,15 @@ nach `losgehen` liegt, **dann** sind beide überfällig.
 **Darstellung (Gate B entschieden, Artefakt variant-f):** die Uhr ist ein
 **linearer Zeitstrahl** (kein Ring), auf dem die Tagespunkte — aufstehen,
 anziehen, losgehen — als **Piktogramme** an ihrer Zeit-Position sitzen, jeweils
-mit **kleiner Uhrzeit** (z. B. 7:00 / 7:37 / 7:45); ein „jetzt"-Marker zeigt die
-aktuelle Position, der verstrichene Teil ist gefüllt. **Keine** separaten
+mit **kleiner Uhrzeit** (z. B. 07:00 / 08:22 / 08:30); ein „jetzt"-Marker zeigt
+die aktuelle Position, der verstrichene Teil ist gefüllt. **Keine** separaten
 Meilenstein-Kästen (verworfen, kein Mehrwert). Die Uhrzeit-Labels dürfen **nicht
-in andere Elemente ragen** (rand-/überlauf-frei layouten).
+in andere Elemente ragen** (rand-/überlauf-frei layouten) — bei engem Abstand
+zwischen zwei Pins (z. B. anziehen/losgehen nur 8 Min auseinander) werden Labels
+**gestaffelt** (abwechselnd ober-/unterhalb des Pins), nicht verkleinert;
+Kiosk-Lesbarkeit aus Distanz hat Vorrang (AC-FIX3, #335).
+`aufstehen` kommt direkt aus dem Config-Schlüssel `aufstehzeit` (Default `07:00`)
+— **nicht** von anziehen abgeleitet (AC-FIX1, #335).
 *Test-Implikation:* mit injiziertem `now` an je einem Punkt vor `anziehen`,
 zwischen den Zeiten und nach `losgehen` liefert die Zeit-Logik die erwarteten
 Restzeiten/Phasen — ohne echte Wall-Clock.
@@ -297,6 +302,7 @@ Eltern-Chat sie später schreibt (OPEN-ROUTINE-B):
 | Name                 | Default                                                    | Datei-Schlüssel    | Gesetzt durch (Onboarding-Schritt) |
 |----------------------|------------------------------------------------------------|--------------------|-------------------------------------|
 | Abfahrtszeit         | `08:30` (Fallback; je Wochentag mögl.)                    | `abfahrtszeit`     | Familie (V1 in Datei; später Eltern-Chat, OPEN-ROUTINE-B) |
+| Aufsteh-Zeitpunkt    | `07:00` (Fallback; je Wochentag mögl.) · **Direkt aus Config, NICHT von anziehen abgeleitet** (AC-FIX1, #335) | `aufstehzeit` | Familie (V1 in Datei; analog abfahrtszeit) |
 | Anzieh-Vorlauf (Min) | `8`                                                        | `anzieh_vorlauf_min` | n/a (Default reicht) |
 | Routine-Punkte       | 4 Default-Punkte (Fallback im Code; Wahrheit bleibt Datei, später per Eltern-Chat editierbar OPEN-ROUTINE-B) | `items` | Familie (V1 in Datei; `default`-Liste) |
 | Zeit-Referenzen      | aus (`{ "an": false, … }`)                                | `zeit_referenzen`  | n/a (Gate-B-Experiment, ROUTINE-13) |
@@ -420,9 +426,13 @@ buddy-lokaler ARASAAC-Bezug) · ROUTINE-12 (fehlende/kaputte Datei und fehlende
   Gewähltes Artefakt: `mockups/variant-f` — Split-Layout (Checkliste | Zeit),
   linearer Zeitstrahl mit Bild-Events + Uhrzeiten, rechtsbündige maßstabsgetreue
   Referenz-Balken, großer grün-werdender Abhak-Knopf, Boxen im WetterBuddy-Card-Stil.
-  **Rest-Polish in der Impl:** (a) Uhrzeit-Labels am Zeitstrahl dürfen nicht in
-  andere Elemente ragen; (b) 8-Punkte-Layout am echten Display verifizieren
-  (ROUTINE-19); (c) die drei Zeitstrahl-Piktogramme (anziehen/aufstehen/losgehen)
+  **Rest-Polish in der Impl:**
+  (a) ~~Uhrzeit-Labels am Zeitstrahl dürfen nicht in andere Elemente ragen~~ —
+  **ERLEDIGT 2026-06-06 (#335):** Labels werden bei engem Pin-Abstand gestaffelt
+  (anziehen-Label über dem Pin, losgehen-Label darunter); aufstehzeit kommt aus
+  Config, nicht abgeleitet (AC-FIX1/AC-FIX3).
+  (b) 8-Punkte-Layout am echten Display verifizieren (ROUTINE-19);
+  (c) die drei Zeitstrahl-Piktogramme (anziehen/aufstehen/losgehen)
   gegen die ARASAAC-Suche treffsicher verifizieren.
 
 - **OPEN-ROUTINE-G — Design-Token-Strang-Andockpunkt (#323) — ERLEDIGT.** #323 ist
