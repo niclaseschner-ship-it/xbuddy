@@ -25,7 +25,16 @@ keine Verben — sie benennen Views, keine Aktionen. Varianten einer View
 (z. B. Kinder- vs. Eltern-Ansicht, Personen-Bezug) werden als
 Query-Parameter ausgedrückt, nicht im Pfad.
 
-*Tickets:* #24
+Eine Display-View darf zusätzlich zu `GET` auch `POST` auf **denselben
+verbfreien View-Pfad** annehmen, wenn es um ihre **eigene
+View-Interaktion** geht (z. B. einen Routine-Punkt abhaken). Die
+HTTP-Methode trägt die Aktion — der Pfad bleibt verbfrei (kein
+`/toggle`, kein `/aktion`). Davon abzugrenzen ist der
+**Cross-App-Schreibzugriff**, der weiterhin über
+`/api/v1/<slug>/<resource>` läuft (BUD-1b). Erstes Vorkommen:
+Routine-Buddy `POST /display/routine/morgen` (#335, Routine-Integration).
+
+*Tickets:* #24, #335
 
 ### URL-3 — Controller-Pfade
 
