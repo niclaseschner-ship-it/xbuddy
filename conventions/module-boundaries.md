@@ -61,14 +61,16 @@ Abhängigkeiten fließen nur abwärts: `eltern-chat` darf die Services und
 importiert nichts darüber. Keine Schicht greift nach oben.
 
 import-linter-Contract `layers` (Reihenfolge oben→unten;
-`familie | geraete | plan | router` als unabhängige Mittelschicht).
+alle Service-Module als unabhängige Mittelschicht; deren aktuelles
+Verzeichnis unter `root_packages` in `.importlinter` erfasst).
 
 ### MOD-2 — Services sind voneinander unabhängig
-`familie`, `geraete`, `plan` und `router` importieren keinen
-Python-Code voneinander. Wer Daten einer anderen Komponente braucht,
-ruft sie über HTTP (DCOMP-1), nicht per Import.
+Alle Service-Module importieren keinen Python-Code voneinander. Wer Daten
+einer anderen Komponente braucht, ruft sie über HTTP (DCOMP-1), nicht per
+Import. Das aktuelle Verzeichnis aller Service-Module unter `root_packages`
+in `.importlinter` erfasst (s. Linter-Scan-Reichweite oben).
 
-import-linter-Contract `independence` über die vier Service-Module.
+import-linter-Contract `independence` über alle Service-Module.
 
 ### MOD-3 — tools importiert keine Komponente darüber
 `tools/` ist die unterste Schicht und importiert weder `eltern-chat`
