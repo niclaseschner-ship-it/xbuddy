@@ -95,7 +95,7 @@ bestätigen insbesondere, dass „nur wenn" wirklich optional ist:
 | BUD-1a (Prozess: Port/Service/URL-14) | Port 5020, `xbuddy-plan.service` | Port 5030, `xbuddy-wetter.service` |
 | BUD-1b (API) | **ja** — `/api/v1/plan/…` (PLAN-22/30/31/11) | **nein** — V1 hat keine API (E-WETTER-3, bestätigt im nginx-Kommentar zu `/display/wetter/`) |
 | BUD-2 (Config) | `plan/config.json` (PLAN-28) | `wetter/wetter.json` (WETTER-21) |
-| BUD-2a (Domänendaten getrennt) | **ja** — `plan.json` ⟂ `config.json` | **ja** — `wetter.json` (Ort + Garderobe) ⟂ `config.json`; bewusst abgetrennt für die spätere Eltern-Chat-Pflege (#328, gated auf #296) |
+| BUD-2a (Domänendaten getrennt) | **ja** — `plan.json` ⟂ `config.json` | **ja** — `wetter.json` (Ort + Garderobe) ⟂ `config.json`; bewusst abgetrennt für die eltern-seitige Editor-Pflege (#328, WETTER-26 ff.; Zugang = Netz-Grenze, entkoppelt von #296) |
 
 Der Wetter-Buddy ist der lebende Beleg dafür, dass **BUD-1b** „nur wenn" ist:
 ein vollwertiger Buddy **ohne** API. Bei **BUD-2a** trennen die heutigen zwei
