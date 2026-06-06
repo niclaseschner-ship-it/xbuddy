@@ -18,6 +18,7 @@ in einer Service-Datei oder im Code als wahre Quelle.
 | 5030 | Wetter-Buddy | xbuddy-wetter |
 | 5040 | Geräte-Registry | xbuddy-geraete |
 | 5041 | Panel-Registry | xbuddy-panel |
+| 5042 | Seiten-Registry | xbuddy-seiten |
 | 5050 | Routine-Buddy | xbuddy-routine |
 | 5051 | Photo-Buddy | xbuddy-photo |
 | 5052-5099 | für neue Buddys reserviert | — |

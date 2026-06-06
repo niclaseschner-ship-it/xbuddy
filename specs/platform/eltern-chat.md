@@ -461,7 +461,8 @@ nicht — ONB-6) sind Komponenten-spezifisch und liegen daneben.
 | Panel-Origin (PAA, #183)   | `http://127.0.0.1:5041`                     | `panel_origin_url`      | n/a (Default reicht beim Standard-Layout)      |
 | Plan-Origin (EC-21, #215)  | `http://127.0.0.1:5020`                     | `plan_origin_url`       | n/a (Default reicht beim Standard-Layout)      |
 | Routine-Origin (RZS, #343) | `http://127.0.0.1:5050`                     | `routine_origin_url`    | n/a (Default reicht beim Standard-Layout)      |
-| Display-URL-Origin (GAA-3.7) | leer (Bot gibt nur `/display/<id>` aus)   | `display_url_origin`    | — (offen, OPEN-EC-Origin)                      |
+| Seiten-Registry-Origin (SREG, #347) | `http://127.0.0.1:5042`            | `seiten_origin_url`     | n/a (Default reicht beim Standard-Layout)      |
+| Display-URL-Origin (GAA-3.7) | leer (Bot gibt nur `/display/<id>` aus)   | `display_url_origin`    | — (offen, OPEN-EC-Origin; **Vorbedingung für SREG-5**) |
 | Plan-JSON-Pfad             | `../plan/plan.json`                         | `plan_json_path`        | n/a (Default reicht beim Standard-Layout)      |
 | Log-Level (LOG-1/LOG-4)    | `INFO`                                      | `log_level`             | n/a (Default reicht; Dev-Override per ENV/CLI) |
 
