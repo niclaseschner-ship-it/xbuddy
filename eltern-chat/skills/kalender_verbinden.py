@@ -645,7 +645,8 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
                       zd, next_message, plan_json_path=None, clock=None,
                       exchange=None, fetch_email=None,
                       fetch_calendars=None, write_plan_json=None,
-                      typing_fn: Callable[[], None] | None = None):
+                      typing_fn: Callable[[], None] | None = None,
+                      plan_origin_url=None):
     """Verbindet den Familien-Google-Kalender über den Privatchat (KAV-1).
 
     `tg`                    — Telegram-Kanal (mit `send_message`,
@@ -659,21 +660,27 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
     `next_message`          — Callable, das den nächsten `KavInput` aus dem
                               Privatchat liefert. Liefert `None` → die
                               Funktion gilt als abgebrochen (KAV-6 Timeout).
-    `plan_json_path`        — KAV-X: Pfad zur Per-Instanz-`plan/plan.json`.
-                              Ist er `None` (Test/Legacy), überspringt die
-                              Funktion den Auswahl-Schritt und das Ergebnis
-                              ist `verbunden_ohne_kalender`.
+    `plan_json_path`        — Legacy-Gate (für Tests, die den Auswahl-Schritt
+                              aktivieren wollen ohne HTTP-Call). Beide,
+                              `plan_json_path` und `plan_origin_url`, sind
+                              `None` → Auswahl-Schritt übersprungen.
+    `plan_origin_url`       — KAV-X / PLAN-32: Origin des Plan-Buddys
+                              (z. B. `http://127.0.0.1:5020`). Ist er gesetzt,
+                              schreibt die Funktion die `kalender_id` über
+                              `PUT /api/v1/plan/admin/kalender` (APP-3) statt
+                              direkt in `plan.json`. Hat Vorrang vor
+                              `plan_json_path`, wenn beide gesetzt sind.
     `clock`/`exchange`/`fetch_email`/`fetch_calendars`/`write_plan_json` —
-                              Test-Naht: Standardwerte sprechen das echte
-                              Netz/FS; Tests reichen Doppelungen herein.
+                              Test-Naht: Standardwerte sprechen das echte Netz;
+                              Tests reichen Doppelungen herein.
     `typing_fn`             — Optionaler Callable ohne Argumente; wird vor jeder
                               send_message-Phase aufgerufen (EC-25: Typing-Indikator,
                               Best-Effort, Fehler werden geschluckt). Default None →
                               No-op (Backward-Compat). Vgl. skills/typing_indicator.py.
 
     Liefert ein `KalenderVerbindenResult`. Schreibt über `zd.set(...)`
-    (ZD-5) und — bei erfolgreicher Kalender-Auswahl — atomar in
-    `plan/plan.json` (KAV-X, bewusstes V1-Provisorium, #140).
+    (ZD-5) und — bei erfolgreicher Kalender-Auswahl — die `kalender_id` via
+    HTTP PUT an den Plan-Buddy (PLAN-32, APP-3).
     """
     if exchange is None:
         exchange = exchange_code_for_tokens
@@ -682,7 +689,36 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
     if fetch_calendars is None:
         fetch_calendars = fetch_calendar_list
     if write_plan_json is None:
-        write_plan_json = write_kalender_id_to_plan_json
+        if plan_origin_url is not None:
+            # PLAN-32 / APP-3: Plan-Buddy ist Eigentümer — KAV schreibt via HTTP.
+            _kalender_endpoint = (
+                plan_origin_url.rstrip("/") + "/api/v1/plan/admin/kalender")
+
+            def write_plan_json(_path, kalender_id):
+                body = json.dumps({"kalender_id": kalender_id}).encode("utf-8")
+                req = urllib.request.Request(
+                    _kalender_endpoint,
+                    data=body,
+                    method="PUT",
+                    headers={"Content-Type": "application/json"},
+                )
+                try:
+                    with urllib.request.urlopen(req) as resp:
+                        if resp.status != 200:
+                            raise PlanJsonWriteError(
+                                "Plan-Buddy admin/kalender antwortete HTTP %d"
+                                % resp.status)
+                except urllib.error.HTTPError as e:
+                    raise PlanJsonWriteError(
+                        "Plan-Buddy admin/kalender HTTP %d: %s" % (e.code, e))
+                except urllib.error.URLError as e:
+                    raise PlanJsonWriteError(
+                        "Plan-Buddy admin/kalender nicht erreichbar: %s" % e)
+        else:
+            # Legacy-Pfad: direkte FS-Schreibung (Plan-Buddy-Muster vor PLAN-32).
+            # Wird noch von Tests in test_kalender_verbinden.py genutzt, die
+            # `plan_json_path` ohne `plan_origin_url` übergeben.
+            write_plan_json = write_kalender_id_to_plan_json
 
     # KAV-2: Live-Berechtigung. Die Prüfung liegt **bei der Funktion**
     # (nicht beim Aufrufer), damit die Trigger-Agnostik erhalten bleibt.
@@ -777,11 +813,12 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
     # KAV-X: Kalender-Auswahl. Schlägt sie fehl, sind die Tokens trotzdem
     # gespeichert (KAV-7 ist nicht rückgängig zu machen) — Ergebnis ist dann
     # `verbunden_ohne_kalender`.
-    if plan_json_path is None:
-        # Legacy-Aufruf ohne `plan_json_path` — KAV-X übersprungen. Tests, die
-        # die Kalender-Auswahl nicht prüfen wollen, nutzen diesen Pfad.
-        logging.info("kalender_verbinden: kein plan_json_path — Kalender-Auswahl "
-                     "übersprungen (KAV-X, verbunden_ohne_kalender).")
+    if plan_json_path is None and plan_origin_url is None:
+        # Kein Ziel für die kalender_id-Schreibung — KAV-X übersprungen.
+        # Tests, die nur den Token-Schritt prüfen wollen, nutzen diesen Pfad.
+        logging.info("kalender_verbinden: weder plan_json_path noch "
+                     "plan_origin_url — Kalender-Auswahl übersprungen "
+                     "(KAV-X, verbunden_ohne_kalender).")
         return KalenderVerbindenResult(
             ergebnis=ERGEBNIS_VERBUNDEN_OHNE_KALENDER,
             account_email=account_email)
