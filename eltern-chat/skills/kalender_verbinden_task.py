@@ -137,12 +137,13 @@ class KalenderVerbindenTask(WriteTask):
         self._zd_store_getter = zd_store_getter
         self._sessions = sessions   # dict chat_id -> KavSession (in-memory)
         self._family_group_chat_id_getter = family_group_chat_id_getter
-        # KAV-X: Per-Instanz-Pfad zur `plan/plan.json`. Wird vom Bootstrap
-        # heineingegeben (`build_catalog`); `None` heißt: V1-Auswahl-Schritt
-        # übersprungen (Legacy/Test). Bewusstes V1-Provisorium (#140) — die
-        # Cross-Service-FS-Linie bleibt vorerst bestehen; HTTP-Migration des
-        # KAV-Auswahl-Schritts ist ein eigenes Ticket.
-        self._plan_json_path = plan_json_path
+        # KAV-X / PLAN-32: Origin des Plan-Buddys — der Task übergibt sie an
+        # `kalender_verbinden()`, die die `kalender_id` via HTTP PUT an
+        # `PUT /api/v1/plan/admin/kalender` schreibt (APP-3). Ist `None`,
+        # überspringt die Funktion den Auswahl-Schritt (Legacy/Test).
+        # `plan_json_path` wird noch von `build_catalog` übergeben (tasks.py),
+        # aber nicht mehr genutzt — Plan-Buddy schreibt selbst (PLAN-32).
+        self._plan_origin_url = plan_origin_url
         # EC-21 / Auftrag #215 / CONFIG-2: Per-Instanz-Origin der Plan-
         # Buddy-Reload-Schnittstelle. Wenn ein Wert gesetzt ist, ueberschreibt
         # er die Klassen-Hook-Liste fuer diese Instanz — die Klassen-Hooks
@@ -182,7 +183,7 @@ class KalenderVerbindenTask(WriteTask):
         tg = self._tg
         sessions = self._sessions
         zd_store = self._zd_store_getter()
-        plan_json_path = self._plan_json_path
+        plan_origin_url = self._plan_origin_url
 
         # EC-25 / Issue #285: Typing-Indikator vor jeder send_message-Phase im
         # Privatchat. Best-Effort: Fehler werden in fire_typing geschluckt.
@@ -194,7 +195,7 @@ class KalenderVerbindenTask(WriteTask):
                 result = kalender_verbinden.kalender_verbinden(
                     tg, private_chat_id, user_id, family_group_chat_id,
                     zd_store, session.next_message,
-                    plan_json_path=plan_json_path,
+                    plan_origin_url=plan_origin_url,
                     typing_fn=typing_fn)
                 logging.info(
                     "KAV-Session in Chat %s beendet — ergebnis=%s",
