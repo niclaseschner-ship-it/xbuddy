@@ -320,7 +320,6 @@ body {
   Event-Pins (ROUTINE-9): an top:% verankert, vertikal um diese Position
   zentriert. Liegen NEBEN dem Balken auf alternierenden Seiten — adjazente
   Events nie auf derselben Seite, daher kein Overlap selbst bei 8 Min Abstand.
-  Ein Connector-Stem verbindet das Icon mit dem Balken.
 */
 .event-pin {
   position: absolute;
