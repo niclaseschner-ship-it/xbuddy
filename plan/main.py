@@ -13,15 +13,19 @@ Endpunkte:
   PUT /api/v1/plan/zuteilung            — Erwachsenen-Slot zuweisen (PLAN-7/8)
   PUT|DELETE /api/v1/plan/aktivitaet    — Kind-Aktivität setzen/löschen (PLAN-11)
   GET|PUT /api/v1/plan/termine          — Termin-Schnittstelle für Apps (PLAN-22)
+  PUT /api/v1/plan/admin/kalender       — kalender_id setzen (PLAN-32, loopback)
 
 Service-Topologie wie familie/main.py: eine schlanke eigenständige Flask-App,
 ein Geschwister von router/ und familie/.
 """
 
 import argparse
+import contextlib
+import json
 import logging
 import os
 import sys
+import tempfile
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -683,6 +687,110 @@ def admin_reload():
         "details":  ("plan.json reloaded (kalender_id=%s, slots=%d)"
                      % (new_cfg.kalender_id, len(new_cfg.slots))),
     }), 200
+
+
+# ============================================================
+#  Admin: kalender_id setzen (PLAN-32, #341)
+# ============================================================
+#
+# KAV (Kalender-verbinden-Skill) schreibt die gewählte `kalender_id` nicht
+# mehr direkt in `plan/plan.json` (Cross-Service-FS-Write), sondern ruft
+# diesen Endpoint — der Plan-Buddy ist Eigentümer seiner Datei (APP-3).
+#
+# Drei harte Eigenschaften — analog admin/reload (#140):
+#   1. Loopback-only (127.0.0.1/::1, sonst 403). nginx leitet
+#      `/api/v1/<komponente>/admin/...` nicht weiter (gehärtet seit #149).
+#   2. Atomar: Plan-Buddy liest plan.json, setzt nur den `kalender_id`-
+#      Schlüssel (Temp + os.replace; alle anderen Werte byte-gleich) und
+#      übernimmt den neuen Stand in-process (Config + Transport via
+#      reload_plan_config). Bei Fehler bleibt der alte Snapshot unberührt.
+#   3. 400 bei fehlendem/leerem `kalender_id`, 200 bei Erfolg.
+
+def _write_kalender_id(path, kalender_id):
+    """Schreibt nur den `kalender_id`-Schlüssel atomar in plan.json.
+
+    Liest die Datei, setzt den Schlüssel, schreibt über Temp + os.replace.
+    Alle anderen Felder bleiben byte-gleich.
+
+    Wirft OSError oder ValueError bei I/O- oder Parse-Fehlern — der Aufrufer
+    (admin_kalender) fängt sie und gibt einen 500 zurück.
+    """
+    path_str = str(path)
+    with open(path_str, encoding="utf-8") as f:
+        data = f.read()
+    obj = json.loads(data)
+    if not isinstance(obj, dict):
+        raise ValueError("plan.json-Wurzel ist kein JSON-Objekt")
+    obj["kalender_id"] = kalender_id
+    target_dir = os.path.dirname(os.path.abspath(path_str))
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        prefix=".plan.", suffix=".json.tmp", dir=target_dir)
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            json.dump(obj, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+        os.replace(tmp_path, path_str)
+    except OSError:
+        with contextlib.suppress(OSError):
+            os.remove(tmp_path)
+        raise
+
+
+@app.route("/api/v1/plan/admin/kalender", methods=["PUT"])
+def admin_kalender():
+    """PLAN-32: setzt die `kalender_id` im Plan-Buddy (KAV → dieser Endpoint).
+
+    Body: { "kalender_id": "<google-id>" }.
+    Loopback-only (sonst 403). Atomar: nur `kalender_id` in plan.json;
+    in-process-Übernahme über reload_plan_config(). 400/403/200.
+    """
+    if not _is_loopback(request.remote_addr or ""):
+        logger.warning("admin/kalender abgelehnt: remote_addr=%s",
+                       request.remote_addr)
+        return jsonify({
+            "ok":    False,
+            "error": "nur 127.0.0.1 darf den Endpoint erreichen",
+        }), 403
+
+    body = request.get_json(silent=True) or {}
+    kalender_id = body.get("kalender_id")
+    if not kalender_id:
+        return jsonify({
+            "ok":    False,
+            "error": "kalender_id ist Pflicht und darf nicht leer sein",
+        }), 400
+
+    path = runtime.get("config_path")
+    if not path:
+        return jsonify({
+            "ok":    False,
+            "error": "kein plan.json-Pfad konfiguriert",
+        }), 500
+
+    try:
+        _write_kalender_id(path, kalender_id)
+    except (OSError, ValueError) as e:
+        logger.error("admin/kalender: plan.json konnte nicht geschrieben werden: %s", e)
+        return jsonify({
+            "ok":    False,
+            "error": "plan.json nicht schreibbar: %s" % e,
+        }), 500
+
+    # In-process-Übernahme: Config + Transport mit neuer kalender_id neu binden.
+    # Gleicher atomarer Pfad wie admin/reload — bei Parse-Fehler bleibt der
+    # alte Snapshot unberührt. Da wir gerade erst erfolgreich geschrieben haben,
+    # sollte der Parse nicht scheitern; ein Fehler hier gibt 500.
+    try:
+        new_cfg = reload_plan_config()
+    except PlanReloadError as e:
+        logger.error("admin/kalender: plan.json geschrieben, aber Reload fehlgeschlagen: %s", e)
+        return jsonify({
+            "ok":    False,
+            "error": "kalender_id geschrieben, In-Process-Reload fehlgeschlagen: %s" % e,
+        }), 500
+
+    logger.info("admin/kalender: kalender_id=%s gesetzt", new_cfg.kalender_id)
+    return jsonify({"ok": True, "kalender_id": new_cfg.kalender_id}), 200
 
 
 # ============================================================

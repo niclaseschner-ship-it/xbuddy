@@ -1,0 +1,10 @@
+# PHOTO-19 — Per-Instanz-Dateien des Photo-Buddys, je Instanz separat
+# gepflegt, niemals im Repo. Formate sind in den committeten *.example.json
+# dokumentiert.
+#
+# Daten-Konfig (Intervall, Sortierung, TTL, Library). Format: photo.example.json
+photo.json
+# Runtime-Konfig (Bind, Log). Format: config.example.json
+config.json
+# PHOTO-7 — die Medien-Library (Index + Mediendateien), Per-Instanz-Daten.
+medien/

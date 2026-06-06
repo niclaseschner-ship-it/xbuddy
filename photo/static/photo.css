@@ -1,0 +1,170 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   Photo-Buddy — View `rahmen`, helle DS-Linen-Stage (PHOTO-2/17/18, E-PHOTO-11).
+
+   Stilwerte ausschließlich als Token aus display/_shared/design/tokens.css
+   (PHOTO-18, DTOK): keine hartcodierten Farben; Layout-px sind erlaubt. Gegen
+   die bestehende Buddy-Card (wetter/static/wetter.css `.card`) geerdet:
+   Surface + DS-Radius + DS-Schatten.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── KIOSK SHELL (1920×1080, heller Linen-Hintergrund) ─────────────────────── */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background: var(--bg);            /* heller DS-Linen-Hintergrund (E-PHOTO-11) */
+}
+body.xb {
+  font-family: var(--font-hand);
+  color: var(--text);
+}
+
+/* ── STAGE: gerahmtes Medium zentriert (PHOTO-2) ───────────────────────────── */
+.rahmen-stage {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: var(--space-9);
+}
+
+/* Medium als gerahmte Surface-Karte (E-PHOTO-11): weiche Rundung + Schatten. */
+.medium-karte {
+  background: var(--surface);
+  border-radius: var(--radius-3xl);
+  border: 2px solid var(--border-soft);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-4);
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+.medium-bild, .medium-video {
+  max-width: 1560px;
+  max-height: 920px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: var(--radius-2xl);
+  display: block;
+}
+
+/* ── NEUTRALER ZUSTAND (PHOTO-6) ───────────────────────────────────────────── */
+.leer-zustand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-5);
+  color: var(--text-3);
+}
+.leer-icon { color: var(--text-3); }
+.leer-text {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-48);
+  color: var(--text-2);
+}
+
+/* ── BEDIEN-ELEMENTE, feste Anordnung (PHOTO-17, E-PHOTO-11) ───────────────── */
+/* Kindgerecht große Touch-Targets. */
+.bedien-btn, .nav-pfeil, .grid-schliessen {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--text);
+  border: 2px solid var(--border-soft);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  padding: 0;
+}
+
+/* Pfeile prev/next mittig an den Seiten. */
+.nav-pfeil {
+  top: 50%;
+  transform: translateY(-50%);
+  width: 96px;
+  height: 96px;
+}
+.nav-prev { left: var(--space-7); }
+.nav-next { right: var(--space-7); }
+
+/* Übersicht/Grid oben-rechts. */
+.btn-grid {
+  top: var(--space-7);
+  right: var(--space-7);
+  width: 80px;
+  height: 80px;
+}
+
+/* Pause/Play unten-rechts. */
+.btn-pause {
+  bottom: var(--space-7);
+  right: var(--space-7);
+  width: 80px;
+  height: 80px;
+}
+
+/* ── ÜBERSICHTS-GRID (PHOTO-5) ─────────────────────────────────────────────── */
+.grid-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  z-index: 20;
+  overflow: hidden;
+}
+.grid-schliessen {
+  top: var(--space-7);
+  right: var(--space-7);
+  width: 80px;
+  height: 80px;
+  z-index: 21;
+}
+.grid-scroll {
+  position: absolute;
+  inset: 0;
+  padding: var(--space-9) var(--space-8);
+  padding-top: 140px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-5);
+  box-sizing: border-box;
+}
+.grid-kachel {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  background: var(--surface);
+  border: 2px solid var(--border-soft);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  cursor: pointer;
+}
+.grid-kachel img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* PHOTO-5: Video-Thumbnails tragen ein Play-Icon-Overlay. */
+.grid-video-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--surface);
+  filter: drop-shadow(0 2px 6px rgba(43, 42, 38, 0.55));
+  pointer-events: none;
+}

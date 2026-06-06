@@ -791,10 +791,10 @@ def test_PLAN_29_every_requirement_has_a_test():
     """PLAN-29: jede Anforderung mit Code-Verhalten hat einen Test.
     Belegt anhand der Test-Namen dieses Moduls."""
     quelle = open(os.path.abspath(__file__), encoding="utf-8").read()
-    # Jede PLAN-ID mit Code-Verhalten hat einen eigenen Test (PLAN-1 .. PLAN-31).
+    # Jede PLAN-ID mit Code-Verhalten hat einen eigenen Test (PLAN-1 .. PLAN-32).
     # PLAN-21 (Display-Views sind die Schnittstelle zur Familie) hat kein
     # eigenes Code-Verhalten über PLAN-2/3 hinaus — dort mit abgedeckt.
-    for plan in range(1, 32):
+    for plan in range(1, 33):
         if plan == 21:
             continue
         assert "test_PLAN_%d_" % plan in quelle, "PLAN-%d ungetestet" % plan
@@ -1944,3 +1944,95 @@ def test_PLAN_14_put_mehrtages_spanne_roundtrip_via_get(demo_config, demo_regist
     # beginn = 2026-07-01, ende = 2026-07-06 (Google-exklusiv, normalisiert als date)
     assert sommercamp["beginn"] == "2026-07-01"
     assert sommercamp["ende"] == "2026-07-06"
+
+
+# ============================================================
+#  PLAN-32 — Admin-Endpoint: kalender_id setzen (KAV → Plan-Buddy)
+# ============================================================
+
+KALENDER_ADMIN_URL = "/api/v1/plan/admin/kalender"
+
+
+def test_PLAN_32_non_loopback_returns_403(reload_client):
+    """PLAN-32: Anfragen von außerhalb des Loopbacks werden mit 403 abgelehnt
+    — analog admin/reload (#140). nginx leitet /admin/-Pfade nicht weiter;
+    der Guard hier ist die zweite Schicht."""
+    client, _, _ = reload_client
+    r = client.put(KALENDER_ADMIN_URL,
+                   data=json.dumps({"kalender_id": "x@group.calendar.google.com"}),
+                   content_type="application/json",
+                   environ_base={"REMOTE_ADDR": "10.0.0.1"})
+    assert r.status_code == 403
+    body = r.get_json()
+    assert body["ok"] is False
+
+
+def test_PLAN_32_missing_kalender_id_returns_400(reload_client):
+    """PLAN-32: fehlt `kalender_id` im Body oder ist leer, antwortet der
+    Endpoint mit HTTP 400 — kein Schreibvorgang."""
+    client, _, _ = reload_client
+    # Kein kalender_id-Feld.
+    r = client.put(KALENDER_ADMIN_URL,
+                   data=json.dumps({}),
+                   content_type="application/json")
+    assert r.status_code == 400
+    assert r.get_json()["ok"] is False
+
+    # Leerer Wert.
+    r2 = client.put(KALENDER_ADMIN_URL,
+                    data=json.dumps({"kalender_id": ""}),
+                    content_type="application/json")
+    assert r2.status_code == 400
+    assert r2.get_json()["ok"] is False
+
+
+def test_PLAN_32_valid_put_writes_kalender_id_and_reloads(reload_client):
+    """PLAN-32: gültiger PUT schreibt `kalender_id` atomar in plan.json und
+    übernimmt den neuen Wert in-process (Config + Transport). Antwort: 200
+    mit `{"ok": true, "kalender_id": "<neue-id>"}`.
+
+    Entspricht PLAN-29-Test-Pflicht (PLAN-32-Zeile): PUT schreibt + per
+    reload sichtbar."""
+    client, cfg_path, built = reload_client
+    alte_id = plan_main.runtime["config"].kalender_id
+    assert alte_id == "demo@group.calendar.google.com"
+
+    neue_id = "neu@group.calendar.google.com"
+    r = client.put(KALENDER_ADMIN_URL,
+                   data=json.dumps({"kalender_id": neue_id}),
+                   content_type="application/json")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["ok"] is True
+    assert body["kalender_id"] == neue_id
+
+    # plan.json enthält die neue kalender_id.
+    geschrieben = json.loads(cfg_path.read_text(encoding="utf-8"))
+    assert geschrieben["kalender_id"] == neue_id
+
+    # In-process-Übernahme: Runtime-Config + Transport sind aktualisiert.
+    assert plan_main.runtime["config"].kalender_id == neue_id
+    # Transport wurde via factory neu gebaut (ein weiterer Eintrag in built).
+    assert len(built) == 2
+    assert built[-1].kalender_id == neue_id
+
+
+def test_PLAN_32_valid_put_only_changes_kalender_id(reload_client):
+    """PLAN-32: atomar — PUT ändert nur `kalender_id`, alle anderen Felder
+    (slots, default_petrantwortlichkeiten, …) bleiben byte-gleich."""
+    client, cfg_path, _ = reload_client
+    original = json.loads(cfg_path.read_text(encoding="utf-8"))
+
+    r = client.put(KALENDER_ADMIN_URL,
+                   data=json.dumps({"kalender_id": "atomar@group.calendar.google.com"}),
+                   content_type="application/json")
+    assert r.status_code == 200
+
+    geschrieben = json.loads(cfg_path.read_text(encoding="utf-8"))
+    assert geschrieben["kalender_id"] == "atomar@group.calendar.google.com"
+    # Alle anderen Felder unverändert.
+    for key in original:
+        if key == "kalender_id":
+            continue
+        assert geschrieben[key] == original[key], (
+            "Feld %r hat sich geändert — nur kalender_id darf sich ändern" % key)
