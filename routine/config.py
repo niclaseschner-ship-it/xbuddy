@@ -130,36 +130,23 @@ def _load_file(path, datei_art):
     return {k: v for k, v in data.items() if not k.startswith("_")}
 
 
-def _parse_abfahrtszeit(roh):
-    """Parst abfahrtszeit — entweder 'HH:MM' oder Wochentag-Dict.
+def _parse_zeit_cfg(roh, schluessel, default):
+    """Parst einen Zeit-Konfig-Wert — entweder 'HH:MM' oder Wochentag-Dict.
 
     Gibt immer einen String/Dict zurück: 'HH:MM' (für einen fixen Wert)
     oder den Roh-Dict für tagesgenaue Auflösung (handled in uhr.py).
-    Ist roh None oder kein String/Dict → Warnung + Default '08:30' (CONFIG-4, #335).
-    Kein ConfigError mehr — Prozess startet immer (Nic-Entscheidung ROUTINE-12).
+    Ist roh None oder kein String/Dict → Warnung + default (CONFIG-4, #335).
+    Kein ConfigError — Prozess startet immer (Nic-Entscheidung ROUTINE-12).
+
+    schluessel: Config-Schlüssel-Name für Warn-Meldung (z. B. 'abfahrtszeit').
+    default: Fallback-Wert aus DATA_DEFAULTS.
     """
     if roh is None or not isinstance(roh, (str, dict)):
         logger.warning(
-            "`abfahrtszeit` fehlt oder hat ungültigen Typ (%r) — "
-            "Default '08:30' greift (CONFIG-4, #335). "
-            "Setze in routine.json: abfahrtszeit: 'HH:MM'", roh)
-        return DATA_DEFAULTS["abfahrtszeit"]
-    return roh  # uhr.py wertet Wochentag-Dict aus
-
-
-def _parse_aufstehzeit(roh):
-    """Parst aufstehzeit — entweder 'HH:MM' oder Wochentag-Dict (AC-FIX1, #335).
-
-    Gleiche Logik wie _parse_abfahrtszeit: gibt immer einen String/Dict zurück.
-    Ist roh None oder kein String/Dict → Warnung + Default '07:00'.
-    Kein ConfigError — Prozess startet immer (CONFIG-4).
-    """
-    if roh is None or not isinstance(roh, (str, dict)):
-        logger.warning(
-            "`aufstehzeit` fehlt oder hat ungültigen Typ (%r) — "
-            "Default '07:00' greift (CONFIG-4, #335). "
-            "Setze in routine.json: aufstehzeit: 'HH:MM'", roh)
-        return DATA_DEFAULTS["aufstehzeit"]
+            "`%s` fehlt oder hat ungültigen Typ (%r) — "
+            "Default %r greift (CONFIG-4, #335). "
+            "Setze in routine.json: %s: 'HH:MM'", schluessel, roh, default, schluessel)
+        return default
     return roh  # uhr.py wertet Wochentag-Dict aus
 
 
@@ -237,8 +224,10 @@ def resolve_data(data_path=None, env=None):
         if key in raw:
             values[key] = raw[key]
 
-    abfahrtszeit = _parse_abfahrtszeit(values["abfahrtszeit"])
-    aufstehzeit = _parse_aufstehzeit(values["aufstehzeit"])
+    abfahrtszeit = _parse_zeit_cfg(
+        values["abfahrtszeit"], "abfahrtszeit", DATA_DEFAULTS["abfahrtszeit"])
+    aufstehzeit = _parse_zeit_cfg(
+        values["aufstehzeit"], "aufstehzeit", DATA_DEFAULTS["aufstehzeit"])
 
     try:
         vorlauf = int(values["anzieh_vorlauf_min"])
