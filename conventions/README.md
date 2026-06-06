@@ -32,6 +32,11 @@ Drift droht — Trigger ist konkreter Schmerz, nicht Antizipation
 (CLAUDE.md §6, „Vorschlagen, wenn Werte sich vermehren"). Nichts auf
 Vorrat.
 
+Das „zweite Mal" setzt voraus, dass es **dieselbe** Sache ist. Sind die
+Kandidaten heterogen (gleicher Topf, aber unterschiedliche Bau-Verträge),
+ist „dieselbe Sache" noch nicht belegt — dann braucht es weitere, wirklich
+gleichartige Instanzen, bevor eine Konvention entsteht (vgl. RAT-7).
+
 Was *nicht* hierhin gehört:
 
 - **Verhalten** (was die Familie erlebt) → `specs/`
