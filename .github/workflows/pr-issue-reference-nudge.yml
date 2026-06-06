@@ -12,7 +12,7 @@ name: pr-issue-reference-nudge
 
 on:
   pull_request:
-    types: [opened, edited, ready_for_review]
+    types: [opened, edited, ready_for_review, labeled]
 
 permissions:
   pull-requests: write
@@ -30,6 +30,14 @@ jobs:
         run: |
           set -euo pipefail
           MARKER="<!-- issue-reference-nudge -->"
+
+          # Bewusst ticketlose Infra/Chore (no-ticket-Label, RECON-2) → kein Hinweis.
+          # Konsistent mit closes-guard, der no-ticket als gültigen Ausgang akzeptiert.
+          if gh pr view "$PR_NUMBER" --repo "$REPO" --json labels \
+              --jq '.labels[].name' 2>/dev/null | grep -qx 'no-ticket'; then
+            echo "no-ticket-Label — bewusst ticketlos, kein Hinweis."
+            exit 0
+          fi
 
           # Body auf eine Issue-Referenz prüfen: GitHub-Closing-Keywords
           # (close/fix/resolve in allen Beugungen) ODER die xbuddy-Spec-Referenz "Refs #".
