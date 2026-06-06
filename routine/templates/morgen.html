@@ -60,75 +60,73 @@
     </div>
     {% endif %}
 
-    {# ── HAUPT-ZEITSTRAHL (ROUTINE-9, variant-f) ── #}
-    {# Gemeinsames Grid: Piktogramm-Spalte 48px + Balken-Spalte 1fr (K1-Maßstab) #}
+    {# ── HAUPT-ZEITSTRAHL (ROUTINE-9): VERTIKAL, Icons abwechselnd links/rechts ── #}
+    {# Vertikaler Balken: oben = früh (aufstehen 07:00), unten = spät (losgehen 08:30).
+       Event-Icons sitzen NEBEN dem Balken auf alternierenden Seiten an ihrer
+       proportionalen top:%-Position — die Seiten-Alternation löst enge Zeitpunkte
+       (anziehen/losgehen, 8 Min) strukturell auf (#335, MAJOR REWORK). #}
     <div class="scale-zone">
 
-      {# Hauptstrahl belegt beide Grid-Spalten #}
       <div class="timeline-section">
 
-        {# Aufstehen-Pin (Start, linksb.) #}
-        <div class="milestone-pin milestone-pin-start">
+        {# Balken-Track (vertikal, mittig) #}
+        <div class="timeline-track">
+          {# Verstrichener Teil: füllt von OBEN nach unten #}
+          <div class="timeline-elapsed" style="height: {{ view.uhr.elapsed_pct }}%;"></div>
+          {# JETZT-Marker: horizontaler Strich bei jetzt_pct (von oben) #}
+          <div class="timeline-now" style="top: {{ view.uhr.jetzt_pct }}%;"></div>
+        </div>
+
+        {# Aufstehen-Pin — LINKS, oben (top:0%) #}
+        <div class="event-pin event-pin-links" style="top: 0%;">
           <div class="pin-pikto pin-pikto-start">
             {# ARASAAC 8152: aufstehen — über geteilte Icon-Plattform (ROUTINE-10) #}
             <img src="/display/_shared/icons/arasaac/8152.png" alt="Aufstehen">
           </div>
-          <div class="pin-stem"></div>
           {% if view.uhr.aufstehen_label %}
           <span class="pin-time">{{ view.uhr.aufstehen_label }}</span>
           {% endif %}
         </div>
 
-        {# Anziehen-Pin (bei anzieh_vorlauf_min vor losgehen) #}
-        {# Position berechnet aus: (anziehen - aufstehen) / zeitfenster_min #}
-        {% set anziehen_pct = ((view.uhr.zeitfenster_min - (view.uhr.rest_bis_losgehen_min if view.uhr.rest_bis_losgehen_min is not none else 0) - (view.uhr.rest_bis_anziehen_min if view.uhr.rest_bis_anziehen_min is not none else 0)) / view.uhr.zeitfenster_min * 100) if view.uhr.zeitfenster_min else 0 %}
-        {# Einfachere direkte Berechnung aus den Labels — Fallback-Wert aus elapsed_pct #}
-        <div class="milestone-pin milestone-pin-anziehen"
-             style="left: calc({{ 100 - (view.uhr.rest_bis_losgehen_min / view.uhr.zeitfenster_min * 100)|round(1) if view.uhr.rest_bis_losgehen_min is not none else view.uhr.elapsed_pct }}%)">
+        {# Anziehen-Pin — RECHTS, an proportionaler Vertikal-Position (anziehen_pct) #}
+        <div class="event-pin event-pin-rechts" style="top: {{ view.uhr.anziehen_pct }}%;">
           <div class="pin-pikto pin-pikto-anziehen">
             {# ARASAAC 6627: anziehen / bekleiden — über geteilte Icon-Plattform #}
             <img src="/display/_shared/icons/arasaac/6627.png" alt="Anziehen">
           </div>
-          <div class="pin-stem"></div>
           <span class="pin-time">{{ view.uhr.anziehen_label }}</span>
         </div>
 
-        {# Losgehen-Pin (Ende, rechtsb.) #}
-        <div class="milestone-pin milestone-pin-losgehen">
+        {# Losgehen-Pin — LINKS, unten (top:100%) #}
+        <div class="event-pin event-pin-links" style="top: 100%;">
           <div class="pin-pikto pin-pikto-losgehen">
             {# ARASAAC 8142: gehen / losgehen — über geteilte Icon-Plattform #}
             <img src="/display/_shared/icons/arasaac/8142.png" alt="Losgehen">
           </div>
-          <div class="pin-stem"></div>
           <span class="pin-time">{{ view.uhr.losgehen_label }}</span>
-        </div>
-
-        {# Balken-Track #}
-        <div class="timeline-track">
-          {# Verstrichener Teil #}
-          <div class="timeline-elapsed" style="width: {{ view.uhr.elapsed_pct }}%;"></div>
-          {# JETZT-Marker #}
-          <div class="timeline-now" style="left: {{ view.uhr.elapsed_pct }}%;"></div>
         </div>
 
       </div>{# /timeline-section #}
 
-      {# ── ZEIT-REFERENZEN (ROUTINE-13): config-schaltbar, rechtsbündig (F2) ── #}
+      {# ── ZEIT-REFERENZEN (ROUTINE-13): config-schaltbar; an die vertikale Achse ── #}
+      {# Default AUS (ROUTINE-13). Referenz-Balken liegen unter dem Balken-Block,
+         Länge maßstabsgetreu zum Zeitfenster (Restzeit-Lesart). #}
       {% if view.zeitreferenzen_an and view.zeitreferenzen %}
-      <div class="zeitref-divider"></div>
-
-      {% for zr in view.zeitreferenzen %}
-      <div class="zeitref-pikto">
-        {% if zr.pikto_url %}
-        <img src="{{ zr.pikto_url }}" alt="{{ zr.dauer_min }} Min">
-        {% endif %}
+      <div class="zeitref-zone">
+        <div class="zeitref-divider"></div>
+        {% for zr in view.zeitreferenzen %}
+        <div class="zeitref-row">
+          <div class="zeitref-pikto">
+            {% if zr.pikto_url %}
+            <img src="{{ zr.pikto_url }}" alt="{{ zr.dauer_min }} Min">
+            {% endif %}
+          </div>
+          <div class="zeitref-bar-track">
+            <div class="zeitref-fill" style="width: {{ zr.bar_pct }}%;"></div>
+          </div>
+        </div>
+        {% endfor %}
       </div>
-      <div class="zeitref-bar-track">
-        {# F2: Rechtsbündig petrankert — wächst von rechts (Losgehen-Ende) nach links #}
-        <div class="zeitref-fill" style="width: {{ zr.bar_pct }}%;"></div>
-      </div>
-      {% endfor %}
-
       {% endif %}{# /zeitreferenzen #}
 
     </div>{# /scale-zone #}

@@ -47,6 +47,7 @@ class UhrView:
     aufstehen_label: str | None     # "HH:MM", None wenn nicht aus Config
     jetzt_pct: float              # Position des "jetzt"-Markers [0..1]
     elapsed_pct: float            # verstrichener Teil [0..1]
+    anziehen_pct: float           # Vertikal-Position von anziehen im Fenster [0..1] (ROUTINE-9)
     rest_bis_anziehen_min: int | None   # None wenn Phase nicht vor_anziehen
     rest_bis_losgehen_min: int | None   # None wenn nach_losgehen
     zeitfenster_min: int          # Losgehen - Aufstehen in Minuten
@@ -160,6 +161,12 @@ def baue_uhr_view(zeiten, now):
     elapsed_s = (now - aufstehen).total_seconds()
     jetzt_pct = max(0.0, min(1.0, elapsed_s / zeitfenster_total))
 
+    # anziehen_pct: proportionale Vertikal-Position von anziehen im Fenster
+    # aufstehen→losgehen (ROUTINE-9). aufstehen=0%, losgehen=100% sind Konstanten;
+    # anziehen liegt dazwischen. Treibt die top:%-Platzierung des Anziehen-Pins.
+    anziehen_s = (anziehen - aufstehen).total_seconds()
+    anziehen_pct = max(0.0, min(1.0, anziehen_s / zeitfenster_total))
+
     zeitfenster_min = max(1, int(zeitfenster_total / 60))
 
     def _fmt(dt):
@@ -172,6 +179,7 @@ def baue_uhr_view(zeiten, now):
         aufstehen_label=_fmt(aufstehen) if aufstehen else None,
         jetzt_pct=jetzt_pct,
         elapsed_pct=jetzt_pct,  # verstrichene = Position des now-Markers
+        anziehen_pct=anziehen_pct,
         rest_bis_anziehen_min=rest_anziehen,
         rest_bis_losgehen_min=rest_losgehen,
         zeitfenster_min=zeitfenster_min,
