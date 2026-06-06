@@ -15,13 +15,14 @@ Geschwister von router/, familie/ und plan/.
 """
 
 import argparse
+import json
 import logging
 import os
 import sys
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from flask import Flask, render_template, request
+from flask import Flask, jsonify, render_template, request
 
 # Repo-Wurzel auf den Importpfad — die App konsumiert die Library
 # `tools.configloader`/`tools.logsetup` (DCOMP-1-Ausnahme: `tools/` ist
@@ -37,13 +38,19 @@ from tools import configloader, logsetup  # noqa: E402
 # config/meteo/clothing/render greifen — auch wenn main.py direkt gestartet wird.
 if __package__:
     from . import config as config_mod
+    from . import editor as editor_mod
     from . import meteo as meteo_mod
+    from . import palette as palette_mod
     from . import render as render_mod
+    from . import store as store_mod
 else:  # python3 wetter/main.py
     sys.path.insert(0, _REPO_ROOT)
     from wetter import config as config_mod
+    from wetter import editor as editor_mod
     from wetter import meteo as meteo_mod
+    from wetter import palette as palette_mod
     from wetter import render as render_mod
+    from wetter import store as store_mod
 
 
 # ============================================================
@@ -187,6 +194,77 @@ def heute():
     view = render_mod.baue_view(cfg, morgens, mittags, fuer_morgen=fuer_morgen)
 
     return render_template("wetter_heute.html", stage=stage, view=view)
+
+
+# ============================================================
+#  Garderoben-Editor (WETTER-26 … WETTER-30)
+# ============================================================
+#
+# Eltern-seitige Editor-Seite + interner Save-Handler im eigenen wetter-Display-
+# Namespace auf derselben Origin (OPEN-WETTER-I — ENTSCHIEDEN, #328). Schutz =
+# Netz-Grenze (WETTER-31, LAN/Tailscale, kein Port-Forwarding) — kein Login,
+# kein Token, kein separater Bind. Die Seite ist kein Kiosk-View und von
+# WETTER-25 ausgenommen (Scrollen/Menü erlaubt, hochkant am Handy).
+
+
+def _lade_rohstand():
+    """Lädt wetter.json als Roh-dict (read-only Felder + wardrobe), DCOMP-2.
+
+    Der Editor (WETTER-27) und der Save-Handler (WETTER-30) arbeiten auf dem
+    rohen wetter.json — sie tragen Ort/Schwellen/Hinweise unverändert weiter
+    (WETTER-28). Wird pro Request frisch von Disk gelesen (`config_path`, die
+    DCOMP-2-Naht). Fehlt der Pfad (Tests ohne Disk-IO) oder die Datei, liefert
+    der Helfer ein leeres dict — der Editor zeigt dann eine leere Matrix.
+    """
+    path = runtime.get("config_path")
+    if not path:
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        logger.warning("wetter.json nicht lesbar für Editor (%s): %s", path, e)
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+@app.route("/display/wetter/regeln", methods=["GET"])
+def regeln():
+    """Garderoben-Editor-Seite: Übersicht + Fokus der Regelmatrix (WETTER-26/27).
+
+    Zeigt alle Regeln in ihrer Reihenfolge (erste passende gewinnt, WETTER-14)
+    mit read-only Bedingung und editierbaren Kleidungs-Sets aus der kuratierten
+    Palette (WETTER-28/29). Keine Live-Wetter-Daten — nur die Regel-Config.
+    """
+    view = editor_mod.baue_view(_lade_rohstand(), palette_mod)
+    return render_template("wetter_regeln.html", view=view)
+
+
+@app.route("/display/wetter/regeln/speichern", methods=["POST"])
+def regeln_speichern():
+    """Interner Save-Handler: validiert + schreibt die Matrix atomar (WETTER-30).
+
+    Nimmt die editierte Matrix als JSON-Body, validiert gegen die kuratierte
+    Palette und den frisch geladenen Stand (WETTER-28/30) und schreibt
+    `wetter.json` atomar auf `runtime['config_path']` — der Kiosk übernimmt per
+    DCOMP-2 ohne Restart. Ungültig → 422 + Begründung, Datei unverändert. Ohne
+    konfigurierten `config_path` (kein Ziel) → 409.
+    """
+    path = runtime.get("config_path")
+    if not path:
+        return jsonify({"ok": False, "fehler": "Kein wetter.json-Pfad konfiguriert"}), 409
+    matrix = request.get_json(silent=True)
+    if matrix is None:
+        return jsonify({"ok": False, "fehler": "Kein JSON-Body"}), 400
+    try:
+        store_mod.speichere_garderobe(
+            path, matrix, palette_mod, geladener_stand=_lade_rohstand())
+    except store_mod.ValidierungsFehler as e:
+        return jsonify({"ok": False, "fehler": str(e)}), 422
+    except store_mod.StoreError as e:
+        logger.error("Garderobe-Save fehlgeschlagen: %s", e)
+        return jsonify({"ok": False, "fehler": str(e)}), 500
+    return jsonify({"ok": True})
 
 
 # ============================================================

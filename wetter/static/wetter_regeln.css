@@ -1,0 +1,255 @@
+/* Wetter-Buddy — Garderoben-Editor-Seite (WETTER-26/27).
+ *
+ * Eltern-Oberfläche, hochkant am Handy (WETTER-26), von WETTER-25 ausgenommen:
+ * Scrollen und Menüführung sind erlaubt. KEINE hartcodierten Farben/Maße —
+ * jeder Wert kommt als Token aus dem geteilten Design System
+ * (/display/_shared/design/tokens.css, WETTER-20/E-WETTER-6, DTOK-2). */
+
+.editor {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-16);
+  line-height: var(--lh-body);
+}
+
+.wrap {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.kopf h1 {
+  font-family: var(--font-display);
+  font-size: var(--fs-28);
+  margin: 0 0 var(--space-2);
+}
+
+.hint {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: var(--fs-14);
+}
+
+.lock {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.lock svg {
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  stroke: var(--text-soft);
+}
+
+/* --- Übersicht --- */
+.uebersicht {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.regel-zeile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  text-align: left;
+  padding: var(--space-3);
+  background: var(--surface);
+  border: var(--space-0, 1px) solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.fallback-zeile {
+  background: var(--surface-soft);
+}
+
+.bedingung {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.schwelle {
+  background: var(--surface-2);
+  color: var(--text-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--fs-14);
+}
+
+.schwelle.ro {
+  font-weight: var(--font-weight-medium);
+}
+
+.vorschau {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.mini {
+  width: var(--icon-md);
+  height: var(--icon-md);
+}
+
+/* --- Fokus-Editor --- */
+.fokus {
+  background: var(--surface);
+  border: var(--space-0, 1px) solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.fokus-kopf h2 {
+  font-size: var(--fs-20);
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.hinweis.ro {
+  margin: 0;
+  color: var(--text-soft);
+  font-style: italic;
+}
+
+.set h3 {
+  font-size: var(--fs-16);
+  margin: 0 0 var(--space-2);
+}
+
+.stuecke {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-height: var(--space-10);
+  padding: var(--space-2);
+  border: var(--space-0, 1px) dashed var(--border-soft);
+  border-radius: var(--radius-md);
+}
+
+.stueck {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+}
+
+.stueck img {
+  width: var(--pikto-sm);
+  height: var(--pikto-sm);
+}
+
+.stueck .label {
+  font-size: var(--fs-12);
+  color: var(--text-soft);
+}
+
+.entfernen {
+  position: absolute;
+  top: calc(-1 * var(--space-2));
+  right: calc(-1 * var(--space-2));
+  width: var(--icon-md);
+  height: var(--icon-md);
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--danger);
+  color: var(--surface);
+  font-size: var(--fs-16);
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* --- Palette --- */
+.palette {
+  background: var(--surface-soft);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4);
+}
+
+.palette h3 {
+  font-size: var(--fs-16);
+  margin: 0 0 var(--space-3);
+}
+
+.palette-stuecke {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.palette-stueck {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  background: var(--surface);
+  border: var(--space-0, 1px) solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+}
+
+.palette-stueck img {
+  width: var(--pikto-sm);
+  height: var(--pikto-sm);
+}
+
+.palette-stueck .label {
+  font-size: var(--fs-12);
+}
+
+/* --- Speicher-Leiste --- */
+.leiste {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  position: sticky;
+  bottom: 0;
+  padding: var(--space-3) 0;
+  background: var(--bg);
+}
+
+.speichern {
+  padding: var(--space-3) var(--space-5);
+  background: var(--clay-primary);
+  color: var(--clay-primary-ink);
+  border: none;
+  border-radius: var(--radius-full);
+  font-size: var(--fs-18);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.status {
+  font-size: var(--fs-14);
+  color: var(--text-soft);
+}
+
+.status.ok {
+  color: var(--success);
+}
+
+.status.fehler {
+  color: var(--danger);
+}
