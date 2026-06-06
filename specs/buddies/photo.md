@@ -190,7 +190,7 @@ Zwei Per-Instanz-Dateien neben dem Code (CONFIG-1), beide gitignored:
 | Max. Video-Dauer      | `60s` (OPEN-PHOTO-J) | `video_max_s`         | n/a |
 | Library-Verzeichnis   | `medien/` neben Code | `library_verzeichnis` | n/a (Default reicht) |
 | Listen-Host           | `127.0.0.1`          | `listen_host`         | n/a |
-| Listen-Port           | `5050` (PHOTO-20)    | `listen_port`         | n/a |
+| Listen-Port           | `5051` (PHOTO-20)    | `listen_port`         | n/a |
 | Log-Level             | `INFO`               | `log_level`           | n/a |
 
 Sortierung und TTL sind der Familie-3-Fall (Config, nicht Code, E-PHOTO-8). V1
@@ -202,8 +202,9 @@ ist nachgezogen (OPEN-PHOTO-B).
 ### PHOTO-20 — Eigener Service, fester Port
 Der Photo-Buddy läuft als eigener Prozess `xbuddy-photo.service` (SVC-1..4,
 Service-Datei im Repo, `Restart=on-failure`, Logs an stdout/stderr) und bindet nur
-an `127.0.0.1` (PORT-3). Port **5050** (PORT-2, erster freier im Block 5050–5099,
-zu belegen als `xbuddy-photo` in `conventions/ports.md`).
+an `127.0.0.1` (PORT-3). Port **5051** (PORT-2, erster freier im Block 5050–5099 —
+**5050 ist vom Routine-Buddy belegt**, ROUTINE-15/#335; zu belegen als
+`xbuddy-photo` in `conventions/ports.md`).
 
 ### PHOTO-21 — Registrierung in der Plattform
 Der Slug `photo` wird im Origin-Routing (URL-14) registriert: `/display/photo/`
