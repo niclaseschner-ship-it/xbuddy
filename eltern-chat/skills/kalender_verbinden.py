@@ -28,10 +28,8 @@ Privatchat-Session entsteht erst beim **dritten** Vorkommen des Musters
 
 import json
 import logging
-import os
 import re
 import secrets
-import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -512,54 +510,8 @@ def parse_selection(message_text, count):
     return number - 1
 
 
-def write_kalender_id_to_plan_json(plan_json_path, kalender_id):
-    """KAV-X: aktualisiert nur den `kalender_id`-Schlüssel in `plan/plan.json`,
-    alle anderen Felder bleiben byte-gleich.
-
-    Pfad zur Datei kommt vom Aufrufer (Per-Instanz, gitignored). Schreibt
-    atomar (Temp-Datei + `os.replace`, analog `familie/registry.py::save`),
-    Format-Konsistenz: Indent 2, `ensure_ascii=False`, abschließender
-    Zeilenumbruch.
-
-    Wirft `PlanJsonWriteError`, wenn die Datei nicht existiert, nicht parsebar
-    ist, das Wurzel-Element kein JSON-Objekt ist oder der Schreibvorgang
-    fehlschlägt (kein Schreibrecht, Disk voll, …). Bestehende Werte (`slots`,
-    `default_verantwortlichkeiten`, …) bleiben **nur** dann byte-gleich, wenn
-    der Aufrufer sie nicht ändert; KAV-X aktualisiert ausschließlich
-    `kalender_id` (Cross-Service-FS-Provisorium, sauber gelöst in #140).
-    """
-    try:
-        with open(plan_json_path, encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, ValueError) as e:
-        raise PlanJsonWriteError(
-            "plan.json nicht lesbar (%s): %s" % (plan_json_path, e))
-    if not isinstance(data, dict):
-        raise PlanJsonWriteError(
-            "plan.json hat kein JSON-Objekt als Wurzel (%s)" % plan_json_path)
-
-    data["kalender_id"] = kalender_id
-
-    target_dir = os.path.dirname(os.path.abspath(plan_json_path))
-    tmp_fd, tmp_path = tempfile.mkstemp(
-        prefix=".plan.", suffix=".json.tmp", dir=target_dir)
-    try:
-        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-            f.write("\n")
-        os.replace(tmp_path, plan_json_path)
-    except OSError as e:
-        try:
-            os.remove(tmp_path)
-        except OSError:
-            pass
-        raise PlanJsonWriteError(
-            "plan.json konnte nicht geschrieben werden (%s): %s"
-            % (plan_json_path, e))
-
-
 class PlanJsonWriteError(Exception):
-    """`write_kalender_id_to_plan_json` ist gescheitert (KAV-X)."""
+    """Plan-Buddy-`admin/kalender`-Schreibvorgang ist gescheitert (KAV-X, PLAN-32)."""
 
 
 def store_tokens_in_zd(zd, refresh_token, access_token, expires_in,
@@ -642,7 +594,7 @@ def _load_oauth_client(zd):
 # ============================================================
 
 def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
-                      zd, next_message, plan_json_path=None, clock=None,
+                      zd, next_message, clock=None,
                       exchange=None, fetch_email=None,
                       fetch_calendars=None, write_plan_json=None,
                       typing_fn: Callable[[], None] | None = None,
@@ -660,16 +612,11 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
     `next_message`          — Callable, das den nächsten `KavInput` aus dem
                               Privatchat liefert. Liefert `None` → die
                               Funktion gilt als abgebrochen (KAV-6 Timeout).
-    `plan_json_path`        — Legacy-Gate (für Tests, die den Auswahl-Schritt
-                              aktivieren wollen ohne HTTP-Call). Beide,
-                              `plan_json_path` und `plan_origin_url`, sind
-                              `None` → Auswahl-Schritt übersprungen.
     `plan_origin_url`       — KAV-X / PLAN-32: Origin des Plan-Buddys
                               (z. B. `http://127.0.0.1:5020`). Ist er gesetzt,
                               schreibt die Funktion die `kalender_id` über
-                              `PUT /api/v1/plan/admin/kalender` (APP-3) statt
-                              direkt in `plan.json`. Hat Vorrang vor
-                              `plan_json_path`, wenn beide gesetzt sind.
+                              `PUT /api/v1/plan/admin/kalender` (APP-3).
+                              Ist er `None` → Kalender-Auswahl-Schritt übersprungen.
     `clock`/`exchange`/`fetch_email`/`fetch_calendars`/`write_plan_json` —
                               Test-Naht: Standardwerte sprechen das echte Netz;
                               Tests reichen Doppelungen herein.
@@ -688,37 +635,31 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
         fetch_email = fetch_account_email
     if fetch_calendars is None:
         fetch_calendars = fetch_calendar_list
-    if write_plan_json is None:
-        if plan_origin_url is not None:
-            # PLAN-32 / APP-3: Plan-Buddy ist Eigentümer — KAV schreibt via HTTP.
-            _kalender_endpoint = (
-                plan_origin_url.rstrip("/") + "/api/v1/plan/admin/kalender")
+    if write_plan_json is None and plan_origin_url is not None:
+        # PLAN-32 / APP-3: Plan-Buddy ist Eigentümer — KAV schreibt via HTTP.
+        _kalender_endpoint = (
+            plan_origin_url.rstrip("/") + "/api/v1/plan/admin/kalender")
 
-            def write_plan_json(_path, kalender_id):
-                body = json.dumps({"kalender_id": kalender_id}).encode("utf-8")
-                req = urllib.request.Request(
-                    _kalender_endpoint,
-                    data=body,
-                    method="PUT",
-                    headers={"Content-Type": "application/json"},
-                )
-                try:
-                    with urllib.request.urlopen(req) as resp:
-                        if resp.status != 200:
-                            raise PlanJsonWriteError(
-                                "Plan-Buddy admin/kalender antwortete HTTP %d"
-                                % resp.status)
-                except urllib.error.HTTPError as e:
-                    raise PlanJsonWriteError(
-                        "Plan-Buddy admin/kalender HTTP %d: %s" % (e.code, e))
-                except urllib.error.URLError as e:
-                    raise PlanJsonWriteError(
-                        "Plan-Buddy admin/kalender nicht erreichbar: %s" % e)
-        else:
-            # Legacy-Pfad: direkte FS-Schreibung (Plan-Buddy-Muster vor PLAN-32).
-            # Wird noch von Tests in test_kalender_verbinden.py genutzt, die
-            # `plan_json_path` ohne `plan_origin_url` übergeben.
-            write_plan_json = write_kalender_id_to_plan_json
+        def write_plan_json(kalender_id):
+            body = json.dumps({"kalender_id": kalender_id}).encode("utf-8")
+            req = urllib.request.Request(
+                _kalender_endpoint,
+                data=body,
+                method="PUT",
+                headers={"Content-Type": "application/json"},
+            )
+            try:
+                with urllib.request.urlopen(req) as resp:
+                    if resp.status != 200:
+                        raise PlanJsonWriteError(
+                            "Plan-Buddy admin/kalender antwortete HTTP %d"
+                            % resp.status)
+            except urllib.error.HTTPError as e:
+                raise PlanJsonWriteError(
+                    "Plan-Buddy admin/kalender HTTP %d: %s" % (e.code, e))
+            except urllib.error.URLError as e:
+                raise PlanJsonWriteError(
+                    "Plan-Buddy admin/kalender nicht erreichbar: %s" % e)
 
     # KAV-2: Live-Berechtigung. Die Prüfung liegt **bei der Funktion**
     # (nicht beim Aufrufer), damit die Trigger-Agnostik erhalten bleibt.
@@ -813,11 +754,11 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
     # KAV-X: Kalender-Auswahl. Schlägt sie fehl, sind die Tokens trotzdem
     # gespeichert (KAV-7 ist nicht rückgängig zu machen) — Ergebnis ist dann
     # `verbunden_ohne_kalender`.
-    if plan_json_path is None and plan_origin_url is None:
+    if plan_origin_url is None:
         # Kein Ziel für die kalender_id-Schreibung — KAV-X übersprungen.
         # Tests, die nur den Token-Schritt prüfen wollen, nutzen diesen Pfad.
-        logging.info("kalender_verbinden: weder plan_json_path noch "
-                     "plan_origin_url — Kalender-Auswahl übersprungen "
+        logging.info("kalender_verbinden: plan_origin_url nicht gesetzt — "
+                     "Kalender-Auswahl übersprungen "
                      "(KAV-X, verbunden_ohne_kalender).")
         return KalenderVerbindenResult(
             ergebnis=ERGEBNIS_VERBUNDEN_OHNE_KALENDER,
@@ -872,10 +813,9 @@ def kalender_verbinden(tg, chat_id, user_id, family_group_chat_id,
     chosen_id = chosen["id"]
     chosen_name = chosen["summary"]
 
-    # KAV-X: plan.json atomar aktualisieren — nur `kalender_id`, alles andere
-    # bleibt byte-gleich. Cross-Service-FS-Write, V1-Provisorium (#140).
+    # KAV-X / PLAN-32: kalender_id via HTTP PUT an den Plan-Buddy schreiben.
     try:
-        write_plan_json(plan_json_path, chosen_id)
+        write_plan_json(chosen_id)
     except PlanJsonWriteError as e:
         logging.error(
             "kalender_verbinden: plan.json-Schreibvorgang fehlgeschlagen (%s) — "

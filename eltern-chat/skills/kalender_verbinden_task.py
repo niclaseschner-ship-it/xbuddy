@@ -122,8 +122,7 @@ class KalenderVerbindenTask(WriteTask):
     is_async = True
 
     def __init__(self, tg, zd_store_getter, sessions,
-                 family_group_chat_id_getter, plan_json_path=None,
-                 plan_origin_url=None):
+                 family_group_chat_id_getter, plan_origin_url=None):
         super().__init__(
             name="kalender_verbinden",
             description=(
@@ -140,9 +139,7 @@ class KalenderVerbindenTask(WriteTask):
         # KAV-X / PLAN-32: Origin des Plan-Buddys — der Task übergibt sie an
         # `kalender_verbinden()`, die die `kalender_id` via HTTP PUT an
         # `PUT /api/v1/plan/admin/kalender` schreibt (APP-3). Ist `None`,
-        # überspringt die Funktion den Auswahl-Schritt (Legacy/Test).
-        # `plan_json_path` wird noch von `build_catalog` übergeben (tasks.py),
-        # aber nicht mehr genutzt — Plan-Buddy schreibt selbst (PLAN-32).
+        # überspringt die Funktion den Auswahl-Schritt.
         self._plan_origin_url = plan_origin_url
         # EC-21 / Auftrag #215 / CONFIG-2: Per-Instanz-Origin der Plan-
         # Buddy-Reload-Schnittstelle. Wenn ein Wert gesetzt ist, ueberschreibt
