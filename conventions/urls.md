@@ -25,7 +25,16 @@ keine Verben — sie benennen Views, keine Aktionen. Varianten einer View
 (z. B. Kinder- vs. Eltern-Ansicht, Personen-Bezug) werden als
 Query-Parameter ausgedrückt, nicht im Pfad.
 
-*Tickets:* #24
+Eine Display-View darf zusätzlich zu `GET` auch `POST` auf **denselben
+verbfreien View-Pfad** annehmen, wenn es um ihre **eigene
+View-Interaktion** geht (z. B. einen Routine-Punkt abhaken). Die
+HTTP-Methode trägt die Aktion — der Pfad bleibt verbfrei (kein
+`/toggle`, kein `/aktion`). Davon abzugrenzen ist der
+**Cross-App-Schreibzugriff**, der weiterhin über
+`/api/v1/<slug>/<resource>` läuft (BUD-1b). Erstes Vorkommen:
+Routine-Buddy `POST /display/routine/morgen` (#335, Routine-Integration).
+
+*Tickets:* #24, #335
 
 ### URL-3 — Controller-Pfade
 
@@ -184,15 +193,16 @@ längste Prefix gewinnt, das ist Teil der Spec, nicht nur eine nginx-Marotte):
 |---|---------------------------------|---------------------|---------------------------------------------------------------------------|
 | 1 | `/display/plan/`                | Plan-Buddy          | Display-Views des Plan-Buddys (URL-2): `/display/plan/woche` (PLAN-2/3).  |
 | 2 | `/display/wetter/`              | Wetter-Buddy        | Display-View des Wetter-Buddys (WETTER-2): `/display/wetter/heute`.       |
-| 3 | `/api/v1/plan/`                 | Plan-Buddy          | Plan-Buddy-Backend: `GET\|PUT /api/v1/plan/termine` (PLAN-22), `GET /api/v1/plan/zuteilung` (PLAN-30), `PUT /api/v1/plan/zuteilung` (PLAN-31), `PUT\|DELETE /api/v1/plan/aktivitaet` (PLAN-11). |
-| 4 | `/api/v1/familie/`              | Familie             | Familien-Mit-Host (Personen, Foto).                                       |
-| 5 | `/api/v1/geraete/`              | Geräte              | Geräte-Registry (GER-13/14/15) — Liste, Einzeln, Anlegen.                 |
-| 6 | `/api/v1/displays/<id>/events`  | Router              | SSE-Zustands-Stream (ROU-22); Long-Lived, ohne Proxy-Puffer.              |
-| 7 | `/display/`                     | Router              | Display-Views (außer den oben abgefangenen spezifischen Buddy-Prefixen). Schließt geteilte Display-Assets unter `/display/_shared/` ein (URL-16): Per-Instanz-Assets wie `/display/_shared/icons/` (ARASAAC-Piktogramme, ROU-26, #135) und repo-servierte Assets wie `/display/_shared/design/` (Design-Tokens, ROU-30, #323) — kein eigener nginx-Block. |
-| 8 | `/controller/`                  | Router              | Controller-Aktionen (URL-3).                                              |
-| 9 | `/api/v1/panels/`               | Panel-Registry      | Panel-Registry-API (PREG-13/14/15) — Liste, Einzeln, Anlegen. Upstream: xbuddy-panel (:5041, PORT-2). |
-| 10 | `/api/v1/`                     | Router              | Hub-Backend (State, Events, Diagnose).                                    |
-| 11 | `/` (alles übrige)             | —                   | 404 (URL-1: andere Top-Level-Pfade sind nicht erlaubt).                   |
+| 3 | `/display/routine/`             | Routine-Buddy       | Display-View des Routine-Buddys (ROUTINE-2): `/display/routine/morgen`.   |
+| 4 | `/api/v1/plan/`                 | Plan-Buddy          | Plan-Buddy-Backend: `GET\|PUT /api/v1/plan/termine` (PLAN-22), `GET /api/v1/plan/zuteilung` (PLAN-30), `PUT /api/v1/plan/zuteilung` (PLAN-31), `PUT\|DELETE /api/v1/plan/aktivitaet` (PLAN-11). |
+| 5 | `/api/v1/familie/`              | Familie             | Familien-Mit-Host (Personen, Foto).                                       |
+| 6 | `/api/v1/geraete/`              | Geräte              | Geräte-Registry (GER-13/14/15) — Liste, Einzeln, Anlegen.                 |
+| 7 | `/api/v1/displays/<id>/events`  | Router              | SSE-Zustands-Stream (ROU-22); Long-Lived, ohne Proxy-Puffer.              |
+| 8 | `/display/`                     | Router              | Display-Views (außer den oben abgefangenen spezifischen Buddy-Prefixen). Schließt geteilte Display-Assets unter `/display/_shared/` ein (URL-16): Per-Instanz-Assets wie `/display/_shared/icons/` (ARASAAC-Piktogramme, ROU-26, #135) und repo-servierte Assets wie `/display/_shared/design/` (Design-Tokens, ROU-30, #323) — kein eigener nginx-Block. |
+| 9 | `/controller/`                  | Router              | Controller-Aktionen (URL-3).                                              |
+| 10 | `/api/v1/panels/`              | Panel-Registry      | Panel-Registry-API (PREG-13/14/15) — Liste, Einzeln, Anlegen. Upstream: xbuddy-panel (:5041, PORT-2). |
+| 11 | `/api/v1/`                     | Router              | Hub-Backend (State, Events, Diagnose).                                    |
+| 12 | `/` (alles übrige)             | —                   | 404 (URL-1: andere Top-Level-Pfade sind nicht erlaubt).                   |
 
 Diese Tabelle ist die Quelle für (a) die nginx-Origin-Konfiguration in
 `deploy/nginx/xbuddy-origin.conf` und (b) Onboarding-Schritte, die Origin-Routing
