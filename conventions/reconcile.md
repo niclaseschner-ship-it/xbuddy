@@ -1,0 +1,51 @@
+# Reconcile & Merge-Verriegelung — Konvention     (ID-Präfix: RECON)
+
+Wie Code nach `main` kommt und wie der Ticket-Lebenszyklus dabei **automatisch
+und tool-erzwungen** reconcilet wird — nicht „der Agent denkt dran". Diese
+Konvention gibt RAT-9 (Standard-Git) und RAT-10 (Reconcile-Verriegelung) ihre
+Bauregeln. Maschinell durchgesetzt durch GitHub-Branch-Protection + Actions.
+
+## RECON-1 — Nach `main` nur über gemergten PR
+
+`main` ist per GitHub-Ruleset verriegelt: **direkter Push ist physisch unmöglich**
+(„Require a pull request before merging"). Jede Änderung — Code, Spec, Doku, Infra —
+läuft über einen Feature-Branch (`feature/<nr>-…` / `fix/<nr>-…` / sonst sprechend)
+und einen PR. Required approvals = **0**: der arbeitstag-Bot merget seine eigenen
+PRs, sobald die required Checks grün sind — kein Mensch-Reviewer-Engpass. Lokaler
+`--ff-only`-Merge auf `main` und `git push origin main` existieren als Pfad **nicht
+mehr** (sie scheitern am Ruleset). Auch die Werft pusht auf Feature-Branch + PR.
+
+## RECON-2 — Jeder PR erfüllt genau einen Ticket-Ausgang (`closes-guard`)
+
+Der required Check `closes-guard` (`.github/workflows/closes-guard.yml`) lässt einen
+PR nur durch, wenn er **genau einen** von drei Ausgängen erfüllt:
+
+1. **Impl-PR:** `Closes/Fixes/Resolves #<nr>` im Body → das Issue schließt beim Merge
+   automatisch (GitHub-Auto-Close). Das ist der Reconcile-Trigger.
+2. **Spec-PR:** `Refs #<nr>` → kein Close erwartet (Spec zuerst, WORKFLOW.md).
+3. **Bewusste Infra-Ausnahme:** Label `no-ticket` am PR → selten, dokumentiert.
+   `type:chore` allein zählt **nicht** — ein Chore *mit* Ticket nutzt `Closes #`.
+
+Damit kann kein Merge die Ticket-Reconcile überspringen: entweder schließt das Issue
+automatisch, oder der PR ist bewusst als ticketlos markiert.
+
+## RECON-3 — Status-/Label-Übergänge fasst NUR eine Action an, nie ein Agent per Shell
+
+Der `status:*`-Lebenszyklus (`spec → in-progress/in-review → ready → [Merge: leer]`)
+wird ausschließlich von `ticket-status-flow.yml` auf PR-Events gesetzt. **Kein Agent
+ruft `gh issue edit --add/--remove-label` für Status-Übergänge im laufenden Betrieb.**
+Grund: die #315-Klasse — ein `gh`-Shell-Befehl in einem Compound-Kommando brach still
+ab (Quoting), der Erfolg wurde dem Kommentar geglaubt, das Label blieb hängen. Die
+Action arbeitet **fail-loud + verify** (entfernt nur vorhandene Labels, kein
+`|| true`, liest den Soll-Zustand zurück und scheitert rot bei Abweichung).
+
+Geschlossene Issues tragen **kein** `status:*`-Label (`status:done` existiert bewusst
+nicht — „geschlossen" *ist* done). `prep-reconcile.yml` validiert das.
+
+## Warum tool-erzwungen statt Prosa
+
+Die Reconcile-Lücke („Merge ≠ Ticket geschlossen + Label hängt") war als
+Disziplin-Schritt im arbeitstag-Abschluss bekannt und fiel trotzdem wiederholt durch
+(siehe RAT-10, Retro 2026-06-06). Prosa-Disziplin wird unter Last übersprungen; ein
+Ruleset + eine Action nicht. Der gute Zustand ist ein **Nebenprodukt des Merges**,
+kein zu erinnernder Handgriff.
