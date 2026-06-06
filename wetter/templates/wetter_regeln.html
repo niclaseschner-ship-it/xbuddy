@@ -85,6 +85,10 @@
           <button type="button" class="entfernen" aria-label="Entfernen">×</button>
         </span>
         {% endfor %}
+        {# AC1: +Kachel als letztes Element jeder editierbaren Zelle (WETTER-28, UX-Fix #328). #}
+        <button type="button" class="stueck-plus" aria-label="Kleidung hinzufügen">
+          <span class="plus-symbol">+</span>
+        </button>
       </div>
     </div>
 
@@ -97,6 +101,10 @@
           <button type="button" class="entfernen" aria-label="Entfernen">×</button>
         </span>
         {% endfor %}
+        {# AC1: +Kachel für Optional-Set (WETTER-28, UX-Fix #328). #}
+        <button type="button" class="stueck-plus" aria-label="Kleidung hinzufügen">
+          <span class="plus-symbol">+</span>
+        </button>
       </div>
     </div>
   </section>
@@ -107,9 +115,28 @@
   {% endfor %}
   {{ fokus("fallback", [], view.fallback.hinweis, view.fallback.pflicht, view.fallback.optional, true) }}
 
-  {# WETTER-29: kuratierte Palette — antippen fügt ins zuletzt geöffnete Set ein. #}
-  <section class="palette" aria-label="Kleidungs-Palette" hidden>
-    <h3>Kleidung hinzufügen</h3>
+  <footer class="leiste">
+    <button type="button" id="speichern" class="speichern">Speichern</button>
+    <span id="status" class="status" role="status" aria-live="polite"></span>
+  </footer>
+</main>
+
+{# WETTER-29: Palette-Modal — öffnet sich beim Antippen einer +Kachel und fügt
+   das gewählte Stück in genau die auslösende Zelle ein (AC2, UX-Fix #328).
+   Keine immer-sichtbare Palette-Liste mehr — das Modal ersetzt sie (AC3). #}
+<div id="palette-modal" class="palette-modal" hidden aria-modal="true" role="dialog" aria-label="Kleidung wählen">
+  <div class="palette-overlay"></div>
+  <div class="palette-inhalt">
+    <div class="palette-kopf">
+      <h3>Kleidung hinzufügen</h3>
+      <button type="button" class="palette-schliessen" aria-label="Schließen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
     <div class="palette-stuecke">
       {% for p in view.palette %}
       <button type="button" class="palette-stueck" data-pikto="{{ p.pikto }}" data-name="{{ p.name }}">
@@ -117,13 +144,8 @@
       </button>
       {% endfor %}
     </div>
-  </section>
-
-  <footer class="leiste">
-    <button type="button" id="speichern" class="speichern">Speichern</button>
-    <span id="status" class="status" role="status" aria-live="polite"></span>
-  </footer>
-</main>
+  </div>
+</div>
 
 {# WETTER-26/28/30: minimales, ungebündeltes JS (kein Build-Schritt). Sammelt die
    editierte Matrix (nur Pflicht/Optional je Regel + Fallback — Anzahl und
@@ -132,14 +154,28 @@
 <script>
 (function () {
   "use strict";
-  var aktivesSet = null;  // das zuletzt fokussierte .stuecke-Element für Palette-Insert
+
+  // AC2/UX-Fix #328: zielZelle merkt sich die .stuecke-Box, von der das + geöffnet wurde.
+  var zielZelle = null;
+  var modal = document.getElementById("palette-modal");
+
+  function oeffneModal(stueckeBox) {
+    zielZelle = stueckeBox;
+    modal.hidden = false;
+    // Fokus auf erste Palette-Kachel für Keyboard-/Screen-Reader-Nutzung.
+    var erste = modal.querySelector(".palette-stueck");
+  if (erste) { erste.focus(); }
+  }
+
+  function schliesseModal() {
+    modal.hidden = true;
+    zielZelle = null;
+  }
 
   function zeige(id) {
     document.querySelectorAll(".fokus").forEach(function (f) {
       f.hidden = f.id !== id;
     });
-    var pal = document.querySelector(".palette");
-    if (pal) { pal.hidden = false; }
     var ziel = document.getElementById(id);
     if (ziel) { ziel.scrollIntoView({ behavior: "smooth", block: "start" }); }
   }
@@ -148,11 +184,16 @@
     zeile.addEventListener("click", function () { zeige(zeile.dataset.ziel); });
   });
 
-  // Set, in das die Palette einfügt: das zuletzt angetippte .set
-  document.querySelectorAll(".fokus .stuecke").forEach(function (box) {
-    box.addEventListener("click", function () { aktivesSet = box; });
+  // AC1/AC2: +Kacheln öffnen das Modal mit der richtigen Ziel-Zelle.
+  document.addEventListener("click", function (ev) {
+    var plusBtn = ev.target.closest(".stueck-plus");
+    if (plusBtn) {
+      var stueckeBox = plusBtn.closest(".stuecke");
+      if (stueckeBox) { oeffneModal(stueckeBox); }
+    }
   });
 
+  // Entfernen-Button.
   document.querySelector("main").addEventListener("click", function (ev) {
     var btn = ev.target.closest(".entfernen");
     if (btn) {
@@ -161,19 +202,36 @@
     }
   });
 
+  // Palette-Stück gewählt → in zielZelle einfügen (vor dem +Knopf), Modal schließen.
   document.querySelectorAll(".palette-stueck").forEach(function (p) {
     p.addEventListener("click", function () {
-      var box = aktivesSet || document.querySelector(".fokus:not([hidden]) .stuecke[data-rolle='pflicht']");
-      if (!box) { return; }
+      if (!zielZelle) { return; }
       var span = document.createElement("span");
       span.className = "stueck";
       span.dataset.pikto = p.dataset.pikto;
       span.dataset.name = p.dataset.name;
-      span.innerHTML = '<img src="' + p.querySelector("img").src + '" alt="' + p.dataset.name + '">' +
+      span.innerHTML =
+        '<img src="' + p.querySelector("img").src + '" alt="' + p.dataset.name + '">' +
         '<span class="label">' + p.dataset.name + '</span>' +
-        '<button type="button" class="entfernen" aria-label="Entfernen">×</button>';
-      box.appendChild(span);
+        '<button type="button" class="entfernen" aria-label="Entfernen">\xd7</button>';
+      // Einfügen vor dem +Knopf (letztes Kind der .stuecke-Box).
+      var plusKnopf = zielZelle.querySelector(".stueck-plus");
+      if (plusKnopf) {
+        zielZelle.insertBefore(span, plusKnopf);
+      } else {
+        zielZelle.appendChild(span);
+      }
+      schliesseModal();
     });
+  });
+
+  // Modal schließen: ×-Knopf oder Klick auf den Overlay-Bereich.
+  document.querySelector(".palette-schliessen").addEventListener("click", schliesseModal);
+  document.querySelector(".palette-overlay").addEventListener("click", schliesseModal);
+
+  // Modal bei Escape-Taste schließen.
+  document.addEventListener("keydown", function (ev) {
+    if (!modal.hidden && ev.key === "Escape") { schliesseModal(); }
   });
 
   function leseSet(fokus, rolle) {
