@@ -32,6 +32,21 @@ STEMPEL_HINZUGEFUEGT = "hinzugefuegt"
 STEMPEL_AUFGENOMMEN = "aufgenommen"
 STEMPEL_QUELLEN = (STEMPEL_HINZUGEFUEGT, STEMPEL_AUFGENOMMEN)
 
+# Eine Familie schreibt die Werte laut Spec (specs/buddies/photo.md:113-116) —
+# dort mit Diakritika (`älteste-zuerst`, `hinzugefügt`). Code spiegelt die Spec
+# (CLAUDE.md §6): beide Schreibweisen werden akzeptiert und auf die interne
+# ASCII-Form kanonisiert.
+_RICHTUNG_ALIASES = {
+    "neueste-zuerst": RICHTUNG_NEU,
+    "älteste-zuerst": RICHTUNG_ALT,
+    "aelteste-zuerst": RICHTUNG_ALT,
+}
+_STEMPEL_ALIASES = {
+    "hinzugefügt": STEMPEL_HINZUGEFUEGT,
+    "hinzugefuegt": STEMPEL_HINZUGEFUEGT,
+    "aufgenommen": STEMPEL_AUFGENOMMEN,
+}
+
 # PHOTO-19: nicht-geheime Werte mit ihren Defaults (CONFIG-1: Code-Konstante ist
 # nur Fallback-Default, jeder Wert hat einen Override-Pfad). Sortierung und TTL
 # sind der Familie-3-Fall (E-PHOTO-8). Auto-Delete ist Default AUS (E-PHOTO-6):
@@ -143,14 +158,16 @@ def resolve(config_path=None, env=None):
     auto_delete_tage = _als_int(values["auto_delete_tage"], "auto_delete_tage", minimum=0)
     video_max_s = _als_int(values["video_max_s"], "video_max_s", minimum=1)
 
-    richtung = str(values["sortier_richtung"]).strip()
-    if richtung not in RICHTUNGEN:
+    richtung = _RICHTUNG_ALIASES.get(str(values["sortier_richtung"]).strip())
+    if richtung is None:
         raise ConfigError(
-            "sortier_richtung %r unbekannt (erlaubt: %r)" % (richtung, list(RICHTUNGEN)))
-    stempel = str(values["stempel_quelle"]).strip()
-    if stempel not in STEMPEL_QUELLEN:
+            "sortier_richtung %r unbekannt (erlaubt: %r)"
+            % (values["sortier_richtung"], list(_RICHTUNG_ALIASES)))
+    stempel = _STEMPEL_ALIASES.get(str(values["stempel_quelle"]).strip())
+    if stempel is None:
         raise ConfigError(
-            "stempel_quelle %r unbekannt (erlaubt: %r)" % (stempel, list(STEMPEL_QUELLEN)))
+            "stempel_quelle %r unbekannt (erlaubt: %r)"
+            % (values["stempel_quelle"], list(_STEMPEL_ALIASES)))
 
     return Config(
         intervall_s=intervall_s,

@@ -52,7 +52,7 @@ def ingest(library_verzeichnis, cfg, rohbytes, dateiname, now=None):
         raise VideoZuLang(norm.dauer, cfg.video_max_s)
 
     medium_id = _neue_id(library_verzeichnis, norm.typ)
-    return store.add(
+    medium = store.add(
         library_verzeichnis,
         id=medium_id,
         typ=norm.typ,
@@ -63,6 +63,13 @@ def ingest(library_verzeichnis, cfg, rohbytes, dateiname, now=None):
         aufgenommen=norm.aufgenommen,
         dauer=norm.dauer,
         now=now)
+    # PHOTO-12: Auto-Delete-Sweep als laufendes Verhalten an den realen
+    # Ingest-Pfad gehängt (den die POST-Route ruft) — nicht nur als aufrufbarer
+    # Helfer. Default `auto_delete_tage = 0` => No-Op (E-PHOTO-6). `now` wird
+    # mitgereicht (Test-Determinismus, PHOTO-23). Das frisch geschriebene Medium
+    # (Stempel == now, Alter 0) wird nie vom selben Sweep getroffen.
+    store.auto_delete(library_verzeichnis, cfg.auto_delete_tage, now=now)
+    return medium
 
 
 def _neue_id(library_verzeichnis, typ):
