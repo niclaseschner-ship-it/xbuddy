@@ -276,7 +276,7 @@ def api_config():
     Payload: JSON-Body, alle Felder optional, mindestens eines erforderlich.
     Validierung (ROUTINE-14): strikt HH:MM (24h), nur gültige Wochentags-Keys,
     anzieh_vorlauf_min nicht-negativer Integer.
-    Ungültig → 422, kein Schreiben, kein Teil-Write (AC2).
+    Ungültig → 400, kein Schreiben, kein Teil-Write (AC2).
     Persistenz atomar in routine.json (DCOMP-4) via config_mod.write_data().
     Reload-on-Read: neue Zeiten sind ohne Neustart beim nächsten Aufruf
     von /display/routine/morgen sichtbar (DCOMP-3, EC-21).
@@ -293,7 +293,7 @@ def api_config():
     try:
         config_mod.write_data(data_path, body)
     except config_mod.ValidationError as e:
-        return jsonify({"error": str(e)}), 422
+        return jsonify({"error": str(e)}), 400
 
     return jsonify({"ok": True})
 

@@ -267,8 +267,18 @@ def resolve_data(data_path=None, env=None):
 #  Schreib-API (ROUTINE-14, #343): Validierung + atomares Schreiben
 # ============================================================
 
-# Gültige Wochentags-Keys laut ROUTINE-14 (fester Satz, case-sensitiv).
+# Gültige Wochentags-Keys laut ROUTINE-14 (fester Satz, lowercase).
+# API nimmt lowercase entgegen (ROUTINE-14); write_data normalisiert beim
+# Persistieren auf capitalized File-Form (Mo..So), die uhr.py liest (ROUTINE-12).
 GUELTIGE_WOCHENTAGS_KEYS = frozenset({"mo", "di", "mi", "do", "fr", "sa", "so"})
+
+# Normalisierungs-Map: API-lowercase → File-capitalized (ROUTINE-12, ROUTINE-14).
+# Schreib-API nimmt mo/di/... entgegen; routine.json speichert Mo/Di/...;
+# uhr.py._parse_abfahrtszeit sucht die capitalized Form ["Mo","Di",...].
+_WOCHENTAG_LOWERCASE_ZU_CAPITALIZED = {
+    "mo": "Mo", "di": "Di", "mi": "Mi",
+    "do": "Do", "fr": "Fr", "sa": "Sa", "so": "So",
+}
 
 
 class ValidationError(Exception):
@@ -359,6 +369,19 @@ def write_data(data_path, updates):
                 raise ValidationError(
                     "anzieh_vorlauf_min muss ≥ 0 sein, erhalten: %d" % wert)
 
+    # Normalisierung: Wochentag-Maps von lowercase API-Form → capitalized File-Form.
+    # API akzeptiert lowercase (mo/di/..., ROUTINE-14); routine.json und uhr.py
+    # erwarten capitalized Keys (Mo/Di/..., ROUTINE-12).
+    normiert = {}
+    for schluessel, wert in relevante.items():
+        if schluessel in ("abfahrtszeit", "aufstehzeit") and isinstance(wert, dict):
+            normiert[schluessel] = {
+                _WOCHENTAG_LOWERCASE_ZU_CAPITALIZED.get(k.lower(), k): v
+                for k, v in wert.items()
+            }
+        else:
+            normiert[schluessel] = wert
+
     # Aktuellen Stand lesen (fehlende Datei → leeres Dict → Defaults greifen beim Lesen)
     try:
         with open(data_path, encoding="utf-8") as f:
@@ -373,8 +396,8 @@ def write_data(data_path, updates):
             "schreibe Updates über leere Basis", data_path, e)
         aktuell = {}
 
-    # Updates mergen
-    aktuell.update(relevante)
+    # Updates mergen (normierte Form, ROUTINE-12: capitalized Wochentag-Keys)
+    aktuell.update(normiert)
 
     # Atomar schreiben: Temp-Datei im selben Verzeichnis, dann os.replace (DCOMP-4)
     verzeichnis = os.path.dirname(os.path.abspath(data_path))
@@ -397,4 +420,4 @@ def write_data(data_path, updates):
 
     logger.info(
         "routine.json aktualisiert (ROUTINE-14): %s",
-        ", ".join("%s=%r" % (k, v) for k, v in relevante.items()))
+        ", ".join("%s=%r" % (k, v) for k, v in normiert.items()))

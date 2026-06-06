@@ -161,7 +161,11 @@ def test_ac1_put_mehrere_felder_gleichzeitig(data_path_und_client):
 
 
 def test_ac1_put_wochentag_map(data_path_und_client):
-    """AC1: PUT mit Wochentag-Map für abfahrtszeit persistiert korrekt."""
+    """AC1: PUT mit Wochentag-Map (lowercase API-Keys) persistiert als capitalized File-Form.
+
+    API akzeptiert lowercase (mo/di/..., ROUTINE-14); routine.json speichert
+    capitalized (Mo/Di/..., ROUTINE-12) — exakt die Form, die uhr.py liest.
+    """
     data_path, client = data_path_und_client
 
     wochentag_map = {"mo": "07:30", "di": "07:30", "mi": "07:30",
@@ -173,9 +177,49 @@ def test_ac1_put_wochentag_map(data_path_und_client):
 
     with open(data_path, encoding="utf-8") as f:
         gespeichert = json.load(f)
+    # Datei muss capitalized Keys enthalten (ROUTINE-12: File-Format = Mo/Di/...)
     assert isinstance(gespeichert["abfahrtszeit"], dict)
-    assert gespeichert["abfahrtszeit"]["mo"] == "07:30"
-    assert gespeichert["abfahrtszeit"]["sa"] == ""
+    assert gespeichert["abfahrtszeit"]["Mo"] == "07:30", (
+        "write_data muss lowercase 'mo' auf capitalized 'Mo' normalisieren "
+        "(ROUTINE-12/-14: API-lowercase→File-capitalized)"
+    )
+    assert gespeichert["abfahrtszeit"]["Sa"] == "", (
+        "write_data muss lowercase 'sa' auf capitalized 'Sa' normalisieren"
+    )
+    # lowercase-Keys dürfen NICHT mehr in der Datei stehen
+    assert "mo" not in gespeichert["abfahrtszeit"], (
+        "lowercase 'mo' darf nicht in routine.json stehen — uhr.py findet ihn nicht"
+    )
+
+
+def test_acfix2_put_wochentag_map_rendert_auf_display(data_path_und_client):
+    """ACFIX2: PUT Wochentag-Map → GET /display/routine/morgen rendert die gesetzte Zeit.
+
+    Entry-Path-Beleg (ACFIX1+ACFIX2): write_data normalisiert lowercase→capitalized,
+    uhr.py findet den Key und rendert die Zeit auf /display/routine/morgen.
+
+    Alle 7 Wochentage bekommen dieselbe Zeit — Test läuft deterministisch
+    unabhängig vom aktuellen Wochentag (kein now-Mock nötig).
+    """
+    _, client = data_path_und_client
+
+    # Setze für jeden Wochentag dieselbe Zeit (07:42 — leicht erkennbarer Wert)
+    alle_tage = {"mo": "07:42", "di": "07:42", "mi": "07:42",
+                 "do": "07:42", "fr": "07:42", "sa": "07:42", "so": "07:42"}
+    resp = client.put("/api/v1/routine/config",
+                      json={"abfahrtszeit": alle_tage},
+                      content_type="application/json")
+    assert resp.status_code == 200
+
+    # GET /display/routine/morgen: die gesetzte Zeit muss sichtbar sein
+    view_resp = client.get("/display/routine/morgen")
+    assert view_resp.status_code == 200
+    body = view_resp.get_data(as_text=True)
+    assert "07:42" in body, (
+        "Wochentag-Map-Zeit '07:42' muss nach PUT auf /display/routine/morgen "
+        "sichtbar sein — write_data muss lowercase-Keys in capitalized File-Form "
+        "normalisieren, damit uhr.py die Map-Zeit findet (ROUTINE-12/-14)"
+    )
 
 
 def test_ac1_put_bewahrt_nicht_geaenderte_felder(data_path_und_client):
@@ -257,7 +301,7 @@ def test_ac2_ungültiges_zeitformat_gibt_422(data_path_und_client):
     resp = client.put("/api/v1/routine/config",
                       json={"abfahrtszeit": "8:30"},  # fehlendes Nullpadding
                       content_type="application/json")
-    assert resp.status_code == 422
+    assert resp.status_code == 400
 
     # Datei NICHT geändert (kein Teil-Write)
     with open(data_path) as f:
@@ -271,7 +315,7 @@ def test_ac2_stunden_ausserhalb_range(data_path_und_client):
     resp = client.put("/api/v1/routine/config",
                       json={"abfahrtszeit": "25:00"},
                       content_type="application/json")
-    assert resp.status_code == 422
+    assert resp.status_code == 400
 
 
 def test_ac2_ungültiger_wochentags_key(data_path_und_client):
@@ -284,7 +328,7 @@ def test_ac2_ungültiger_wochentags_key(data_path_und_client):
     resp = client.put("/api/v1/routine/config",
                       json={"abfahrtszeit": {"monday": "07:30"}},  # englischer Key → ungültig
                       content_type="application/json")
-    assert resp.status_code == 422
+    assert resp.status_code == 400
 
     with open(data_path) as f:
         neu = json.load(f)["abfahrtszeit"]
@@ -297,7 +341,7 @@ def test_ac2_negativer_vorlauf(data_path_und_client):
     resp = client.put("/api/v1/routine/config",
                       json={"anzieh_vorlauf_min": -5},
                       content_type="application/json")
-    assert resp.status_code == 422
+    assert resp.status_code == 400
 
 
 def test_ac2_vorlauf_als_string(data_path_und_client):
@@ -306,7 +350,7 @@ def test_ac2_vorlauf_als_string(data_path_und_client):
     resp = client.put("/api/v1/routine/config",
                       json={"anzieh_vorlauf_min": "8"},
                       content_type="application/json")
-    assert resp.status_code == 422
+    assert resp.status_code == 400
 
 
 def test_ac2_vorlauf_als_bool(data_path_und_client):
@@ -315,7 +359,7 @@ def test_ac2_vorlauf_als_bool(data_path_und_client):
     resp = client.put("/api/v1/routine/config",
                       json={"anzieh_vorlauf_min": True},
                       content_type="application/json")
-    assert resp.status_code == 422
+    assert resp.status_code == 400
 
 
 def test_ac2_kein_gueltiger_schluessel(data_path_und_client):
@@ -324,7 +368,7 @@ def test_ac2_kein_gueltiger_schluessel(data_path_und_client):
     resp = client.put("/api/v1/routine/config",
                       json={"items": []},  # items ist nicht schreibbar über diesen Endpoint
                       content_type="application/json")
-    assert resp.status_code == 422
+    assert resp.status_code == 400
 
 
 def test_ac2_leerer_body(data_path_und_client):
@@ -333,7 +377,7 @@ def test_ac2_leerer_body(data_path_und_client):
     resp = client.put("/api/v1/routine/config",
                       json={},
                       content_type="application/json")
-    assert resp.status_code == 422
+    assert resp.status_code == 400
 
 
 def test_ac2_kein_teil_write_bei_gemischtem_payload(data_path_und_client):
@@ -350,7 +394,7 @@ def test_ac2_kein_teil_write_bei_gemischtem_payload(data_path_und_client):
                       json={"abfahrtszeit": "08:00",    # gültig
                             "anzieh_vorlauf_min": -3},  # ungültig → kein Write
                       content_type="application/json")
-    assert resp.status_code == 422
+    assert resp.status_code == 400
 
     with open(data_path) as f:
         neu = json.load(f)
@@ -367,7 +411,7 @@ def test_ac2_wochentags_zeitformat_in_map(data_path_und_client):
     resp = client.put("/api/v1/routine/config",
                       json={"abfahrtszeit": {"mo": "7:30"}},  # fehlende Null
                       content_type="application/json")
-    assert resp.status_code == 422
+    assert resp.status_code == 400
 
 
 def test_ac2_kein_json_body(data_path_und_client):
@@ -421,8 +465,7 @@ def test_write_data_gueltige_wochentags_keys():
 def test_write_data_ungueltige_wochentags_keys():
     """write_data lehnt ungültige Wochentags-Keys ab (ValidationError).
 
-    Gültig: mo,di,mi,do,fr,sa,so (case-insensitiv per Implementierung,
-    analog der Lese-Seite in uhr.py, die ebenfalls .lower() normiert).
+    Gültig: mo,di,mi,do,fr,sa,so (lowercase, ROUTINE-14).
     Ungültig: monday, 1 (keine deutschen Kürzel).
     Leerer Key "" ist ungültig (nicht in der Menge).
     """
