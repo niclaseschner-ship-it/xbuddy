@@ -57,3 +57,44 @@ Wenn der angezeigte Tag der heutige ist, hebt das System ihn farblich ab.
 
 IDs werden nie neu vergeben und nie umnummeriert. Ein Ticket nennt die IDs,
 die es umsetzt — das ist der Link zwischen Ticket, Spec und Code.
+
+## Bindend vs. vorläufig
+
+Specs mischen **beschlossene** Requirements mit **noch offenen** Punkten im
+selben Dokument. Diese Regel sagt, was davon Bau-Auftrag ist.
+
+**Default: bindend.** Jedes Requirement (eigene `##`- oder `###`-Überschrift mit
+ID, oder Listen-Eintrag unter einer normalen Überschrift) ist verbindlich — egal
+auf welcher Überschriften-Ebene. Eine Requirement als eigene `## ICONS-1`-
+Überschrift ist genauso bindend wie eine unter `## 1. Die App`.
+
+**Ausnahme: vorläufig — nur wenn markiert.** Ein Punkt ist *nicht* bindend, wenn
+er entweder
+- unter einer Überschrift `## Offene Punkte` steht, **oder**
+- unter einer Überschrift mit dem Wort `ENTWURF` steht.
+
+Nur diese beiden Marker entwerten. Fehlt der Marker, gilt der Default (bindend).
+
+**Abschnittskontext schlägt Präfix.** `OPEN-*` ist die Namens-Konvention für
+einen offenen oder skizzierten Punkt — aber das Präfix allein entscheidet nichts.
+Maßgeblich ist, *wo* der Eintrag steht:
+- `OPEN-*` unter `## Offene Punkte`/`ENTWURF` → vorläufig.
+- `OPEN-*` unter einer ratifizierten oder normalen Überschrift (z. B.
+  `## Ratifizierte Entscheidungen`) → der zugehörige **Beschluss** ist ratifiziert
+  (Provenienz). Das vollständige, bau-bindende Requirement entsteht aber erst,
+  wenn der Inhalt als reguläre Requirement in einen normalen Abschnitt überführt
+  ist.
+- **Für den Prep:** Ein Ticket, das nur ein `OPEN-*` zitiert, ist *nicht*
+  automatisch baufertig. Im Zweifel Nic fragen.
+
+`E-*` (Entscheidungs-/Rationale-Eintrag) ist **kein** Skizzen-Präfix wie `OPEN-*`:
+Er hält die *Begründung* hinter einer Requirement fest und folgt der
+Abschnitts-Regel — unter `## Entscheidungen` (oder anderer normaler Überschrift)
+**bindend/ratifiziert**, unter `ENTWURF` vorläufig wie alles dort.
+
+**Erledigte/entschiedene Einträge.** Es gibt kein Pflicht-Schlüsselwort für
+Erledigung; in der Praxis stehen Marker wie `ENTSCHIEDEN <Datum>`, `ERLEDIGT
+(#PR)` oder `abgeschlossen`. Ein erledigter Punkt **kann** beim nächsten Berühren
+der Spec in eine reguläre Requirement überführt werden; bis dahin bleibt der
+Eintrag mit seinem Erledigt-/Entscheidungs-Marker als Provenienz stehen.
+Überführung ist Empfehlung, kein Automatismus.
