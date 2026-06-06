@@ -30,8 +30,9 @@ den geteilten Design-Token-Strang unter `/display/_shared/design/` (DTOK-1..5;
 seit #323 live).
 
 **Out-of-Scope V1** (je eigenes Ticket, sobald gebraucht): die Slots `einmalig`
-und `bedingt` im Datenmodell **befüllen** (OPEN-ROUTINE-A) · Schreib-API für den
-Eltern-Chat (OPEN-ROUTINE-B) · Sonnencreme-Injektion aus dem Wetter-Buddy
+und `bedingt` im Datenmodell **befüllen** (OPEN-ROUTINE-A) · Schreib-API für
+Routine-PUNKTE (OPEN-ROUTINE-B Teil 2, #354 — die Zeiten-Schreib-API ist mit
+#343 in Scope, ROUTINE-14) · Sonnencreme-Injektion aus dem Wetter-Buddy
 (OPEN-ROUTINE-C) · Mülltonne-Injektion aus dem Plan-Buddy (OPEN-ROUTINE-D) ·
 Mitwachsen-Stufen über `morgen` hinaus · Controller-Trigger / Erreichbarkeit
 jenseits Dauer-Kiosk.
@@ -42,8 +43,11 @@ jenseits Dauer-Kiosk.
 Der Routine-Buddy ist die XBuddy-App mit dem Buddy-Slug `routine`. Er besitzt
 seine **Daten** (die Routine-Punkte und die Zeit-Konfiguration, ROUTINE-12),
 seine **Funktion** (die ablaufende Uhr / Zeitberechnung, Abschnitt 4) und stellt
-das Ergebnis über seine **Display-View** bereit (APP-1). V1 exponiert **keine** API für andere Apps
-(E-ROUTINE-5) und konsumiert keine fremde App-Schnittstelle (E-ROUTINE-6).
+das Ergebnis über seine **Display-View** bereit (APP-1). Die display-only-V1
+(#335) exponierte **keine** API; der Zeiten-Schreibpfad (#343, ROUTINE-14,
+RAT-12) fügt als erste Ausnahme `PUT /api/v1/routine/config` hinzu (bindendes
+Requirement, Implementierung offen, E-ROUTINE-5). Cross-Buddy-Konsum bleibt aus
+(E-ROUTINE-6).
 
 *Tickets:* #335
 
@@ -273,19 +277,59 @@ eine spätere Tuning-Frage, kein V1-Blocker.
 
 ## 5. API-Schnittstellen
 
-### ROUTINE-14 — V1 hat keine API; entworfen, aber pro Konsument gebaut
-**V1 exponiert keine API** und konsumiert keine fremde Schnittstelle
-(E-ROUTINE-5, E-ROUTINE-6) — gleiche „nur wenn"-Logik wie der Wetter-Buddy ohne
-API (BUD-1b; eine API ohne Konsument wäre Heim-Server-Overhead, Anti-Goal). Die
-folgenden Schnittstellen sind **entworfen, aber bewusst nicht gebaut**; jede wird
-erst geliefert, wenn ihr konkreter Konsument bzw. Produzent existiert (analog
-OPEN-WETTER-B):
+### ROUTINE-14 — Schreib-API (Zeiten) als bindendes Requirement; übrige Schnittstellen pro Konsument
+Der Routine-Buddy konsumiert keine fremde Schnittstelle (E-ROUTINE-6) und
+exponiert nur, wofür ein konkreter Konsument existiert (BUD-1b „nur wenn"). Der
+**Eltern-Chat ist der konkrete Konsument** der Schreib-API für die Zeiten
+(OPEN-ROUTINE-B Teil 1, #343, entblockt durch RAT-12) — dieser eine Endpunkt ist
+damit ein **bindendes Requirement** (RAT-11-Überführung Skizze→bindend), nicht
+mehr nur entworfen. **Implementierungsstand: offen** (das Ticket #343 baut ihn;
+„bindend" heißt zu-bauen, nicht „Code existiert"):
 
-- **Schreib-API (Konsument = Eltern-Chat-Skill):** `PUT /api/v1/routine/config`
-  (Abfahrtszeit setzen) und `POST /api/v1/routine/items` (einen `einmalig`-Punkt
-  für heute reinlegen, z. B. „Spielzeug für Kindi"). Hängt am noch fehlenden
-  App-Installations-/Aktivierungs-Mechanismus der Familien-Schnittstelle (APP-4,
-  #296). → OPEN-ROUTINE-B.
+- **`PUT /api/v1/routine/config` — Zeiten setzen (#343, bindend; Implementierung offen).**
+  Eigener API-Pfad `/api/v1/routine/<resource>` (BUD-1b). Die Implementierung
+  ergänzt die URL-14-Routing-Zeile (`/api/v1/routine/`, analog Plan/Photo) und
+  den nginx-Origin-Block — Teil der Andock-Checkliste (ROUTINE-16); der
+  Eltern-Chat erreicht den Endpunkt über `routine_origin_url` (EC-15). Setzt die
+  Zeit-Schlüssel der Daten-Konfig (ROUTINE-12):
+  - **Payload (JSON-Body), alle Felder optional, mindestens eines erforderlich:**
+    - `abfahrtszeit` — `"HH:MM"` **oder** Wochentag→Zeit-Map
+      `{ "mo": "08:30", "di": "08:30", … }` (ROUTINE-12 — je Wochentag möglich;
+      leerer Tag = kein Kindi).
+    - `aufstehzeit` — `"HH:MM"` oder Wochentag→Zeit-Map (gleiche Logik wie
+      `abfahrtszeit`; AC-FIX1: direkt gesetzt, nicht abgeleitet).
+    - `anzieh_vorlauf_min` — Minuten als Integer ≥ 0 (Tuning-Wert, ROUTINE-9).
+  - **Fachliche Validierung im Buddy (vor jedem Schreiben):** Zeitformat strikt
+    `HH:MM` (24h); bei Map nur gültige Wochentags-Keys aus einem festen Satz
+    (`mo,di,mi,do,fr,sa,so`); `anzieh_vorlauf_min` ein nicht-negativer Integer.
+    Ungültige Eingabe → **4xx, kein Schreiben** (kein Teil-Write). Die Prüfung
+    liegt im Buddy, nicht im Skill — der Buddy besitzt seine Daten (BUD-2) und
+    ist die fachliche Wahrheit; der Skill prüft nur konversationell vor.
+  - **Persistenz:** schreibt in `routine/routine.json` (Daten-Konfig, getrennt
+    von der Runtime-Config `routine/config.json`, BUD-2a). **Nur** über diese
+    API — kein Datei-Zugriff von außen (APP-3); der Eltern-Chat schreibt nie
+    direkt in `routine.json`.
+  - **Wirkung sofort (EC-21) — Reload-on-Read:** Nach erfolgreichem Schreiben
+    sind die neuen Zeiten beim nächsten Öffnen von `/display/routine/morgen`
+    sichtbar, ohne Neustart. Dafür liest der Buddy seine Daten-Konfig **je
+    Request frisch** aus `routine.json` (Reload-on-Read), statt sie nur beim
+    Start zu cachen. Hintergrund: V1 las die Daten einmal beim Start; der Code
+    markierte die Lücke selbst (`routine/main.py` „für späteres Reload-on-Read").
+    Reload-on-Read ist der gewählte Weg (winzige JSON-Datei → kein Kiosk-Kosten-
+    Thema), kein Reload-Hook-Protokoll nötig, da der Buddy selbst der Konsument
+    seiner Daten ist. Das Per-Request-Lesen folgt **DCOMP-3** (Last-Known-Good
+    bei transient kaputtem/teilweise geschriebenem Read — fällt NICHT auf
+    Code-Defaults zurück, solange ein gültiger letzter Stand existiert) und
+    **DCOMP-4** (atomares Schreiben Temp-Datei + Rename), damit ein Lese-Fehler
+    nicht den Familienstand verliert.
+
+Die übrigen Schnittstellen bleiben **entworfen, aber bewusst nicht gebaut**;
+jede wird erst geliefert, wenn ihr konkreter Konsument/Produzent existiert
+(analog OPEN-WETTER-B):
+
+- **`POST /api/v1/routine/items` — `einmalig`-Punkt für heute (ENTWORFEN,
+  vertagt → #354).** Routine-Punkte schreiben ist aus #343 abgespalten (Teil 2,
+  OPEN-ROUTINE-A). → OPEN-ROUTINE-B Teil 2 / #354.
 - **Konsum Wetter:** liest `/api/v1/wetter/` (Sonnencreme → `quelle=bedingt`).
   Aktiviert die heute geparkte Wetter-Lese-API **OPEN-WETTER-B**. → OPEN-ROUTINE-C.
 - **Konsum Plan:** liest `/api/v1/plan/` (Mülltonne → `quelle=bedingt`), später.
@@ -304,10 +348,11 @@ Per-Instanz-Config neben dem Code (BUD-2, CONFIG-1, gitignored), kein
 hartcodierter Pfad/Name/keine Familie-1-Annahme (Familie-3-Probe). Die
 Domänendaten (Routine-Punkte, Zeiten) sind **getrennt** von der Runtime-Config
 zu halten (BUD-2a: Domänendaten getrennt von der Runtime-Config), weil der
-Eltern-Chat sie später schreibt (OPEN-ROUTINE-B):
+Eltern-Chat sie schreibt (Zeiten: RZS #343; Punkte: OPEN-ROUTINE-B Teil 2 #354):
 
 - `routine/routine.json` — **Daten-Konfig.** Format: `routine/routine.example.json`
-  (committet, ohne echte Werte, CONFIG-3). Schreibstelle (später): Eltern-Chat.
+  (committet, ohne echte Werte, CONFIG-3). Schreibstelle: Familie (Datei) bzw.
+  Eltern-Chat (Zeiten RZS #343; Punkte #354).
 - `routine/config.json` — **Runtime-Konfig** (Bind, Log), via gemeinsamem
   `tools/configloader.py` (CONFIG-1/CONFIG-5).
 
@@ -315,8 +360,8 @@ Eltern-Chat sie später schreibt (OPEN-ROUTINE-B):
 
 | Name                 | Default                                                    | Datei-Schlüssel    | Gesetzt durch (Onboarding-Schritt) |
 |----------------------|------------------------------------------------------------|--------------------|-------------------------------------|
-| Abfahrtszeit         | `08:30` (Fallback; je Wochentag mögl.)                    | `abfahrtszeit`     | Familie (V1 in Datei; später Eltern-Chat, OPEN-ROUTINE-B) |
-| Aufsteh-Zeitpunkt    | `07:00` (Fallback; je Wochentag mögl.) · **Direkt aus Config, NICHT von anziehen abgeleitet** (AC-FIX1, #335) | `aufstehzeit` | Familie (V1 in Datei; analog abfahrtszeit) |
+| Abfahrtszeit         | `08:30` (Fallback; je Wochentag mögl.)                    | `abfahrtszeit`     | Familie (Datei) oder Eltern-Chat (RZS, #343) |
+| Aufsteh-Zeitpunkt    | `07:00` (Fallback; je Wochentag mögl.) · **Direkt aus Config, NICHT von anziehen abgeleitet** (AC-FIX1, #335) | `aufstehzeit` | Familie (Datei) oder Eltern-Chat (RZS, #343) |
 | Anzieh-Vorlauf (Min) | `8`                                                        | `anzieh_vorlauf_min` | n/a (Default reicht) |
 | Routine-Punkte       | 4 Default-Punkte (Fallback im Code; Wahrheit bleibt Datei, später per Eltern-Chat editierbar OPEN-ROUTINE-B) | `items` | Familie (V1 in Datei; `default`-Liste) |
 | Zeit-Referenzen      | aus (`{ "an": false, … }`)                                | `zeit_referenzen`  | n/a (Gate-B-Experiment, ROUTINE-13) |
@@ -355,16 +400,19 @@ Andockpunkt 1 (OPEN-ROUTINE-H).
 
 ### ROUTINE-16 — Registrierung in der Plattform (Andock-Checkliste)
 Der Slug `routine` durchläuft die **Andock-Checkliste „neuer Buddy"**
-(`conventions/buddies.md`): (1) Port in PORT-2, (2) Origin-Routing-Zeile URL-14
-für `/display/routine/`, (3) nginx-Origin-Conf-Block, (4) systemd in
+(`conventions/buddies.md`): (1) Port in PORT-2, (2) Origin-Routing-Zeilen URL-14
+für `/display/routine/` (+ `/api/v1/routine/` bei der Zeiten-Schreib-API #343),
+(3) nginx-Origin-Conf-Block, (4) systemd in
 `deploy/systemd/README.md`, (5) `routine/tests` in `pytest.ini`, (6) `routine`
 als `root_package` in `.importlinter` (MOD-1-Gate). Diese Verkabelung ist
 **Integration**, nicht App-Eigentum — Gegenstand des Track-Schnitts.
 
-**Familien-Schnittstelle-Beitrag (APP-4): keiner in V1** — der Routine-Buddy hat
-in V1 keinen Eltern-Chat-Skill; Punkte und Zeiten werden per Datei gesetzt.
-Damit berührt die V1-Spec den offenen Installations-Mechanismus (#296)
-**nicht**. Erst der Schreib-Pfad (OPEN-ROUTINE-B) hängt an #296.
+**Familien-Schnittstelle-Beitrag (APP-4):** Der Zeiten-Schreib-Skill (#343)
+wird über den bestehenden **TASK-7-Pfad** aktiviert — `build_catalog`
+registriert ihn, genau wie `panel_anlegen` (PAA) live ohne #296 läuft (RAT-12).
+Er hängt damit **nicht** am offenen App-Installations-Mechanismus (#296); die
+Andock-Punkte für die Aufgabe regelt `conventions/tasks.md` (TASK-7). Die
+Routine-Punkte (Teil 2, #354) folgen später über OPEN-ROUTINE-A.
 
 *Tickets:* #335
 
@@ -394,7 +442,12 @@ None/Uhr ausgeblendet, beide mit injiziertem `now`) · ROUTINE-9
 (`anzieh_vorlauf_min` aus Config steuert die „anziehen"-Zeit, keine
 Code-Konstante) · ROUTINE-10 (Piktogramm über `/display/_shared/`-Pfad, kein
 buddy-lokaler ARASAAC-Bezug) · ROUTINE-12 (fehlende/kaputte Datei und fehlende
-`abfahrtszeit` → Defaults + Warnung, Prozess startet, CONFIG-4, #335).
+`abfahrtszeit` → Defaults + Warnung, Prozess startet, CONFIG-4, #335) ·
+**ROUTINE-14** (buddy-seitig, #343: gültiges `PUT /api/v1/routine/config`
+persistiert in `routine.json` und ist per Reload-on-Read ohne Neustart sichtbar;
+ungültiges Zeitformat/ungültiger Wochentags-Key → 4xx, **kein** Teil-Write;
+atomares Schreiben Temp+Rename und Last-Known-Good bei kaputtem Read,
+DCOMP-3/DCOMP-4).
 
 *Tickets:* #335
 
@@ -415,11 +468,15 @@ buddy-lokaler ARASAAC-Bezug) · ROUTINE-12 (fehlende/kaputte Datei und fehlende
   Offen bleibt die konkrete ID-Form herkunfts-eindeutiger Items (ROUTINE-5), bis
   diese Slots gebaut werden.
 
-- **OPEN-ROUTINE-B — Schreib-API für den Eltern-Chat.** `PUT
-  /api/v1/routine/config` + `POST /api/v1/routine/items` (ROUTINE-14). Kein
-  V1-Konsument → in V1 nicht gebaut (E-ROUTINE-5). Hängt am App-Installations-/
-  Aktivierungs-Mechanismus der Familien-Schnittstelle (APP-4, #296 — App-
-  Installations-Prozess fehlt) und am familienseitigen Skill-Wohnort.
+- **OPEN-ROUTINE-B — Schreib-API für den Eltern-Chat (zweigeteilt).**
+  - **Teil 1 — Zeiten (`PUT /api/v1/routine/config`, #343): bindend, nicht mehr
+    geblockt** (Implementierung offen). Über den TASK-7-Pfad ohne #296 baubar
+    (RAT-12); ROUTINE-14 ist dafür gehärtet, inkl. Reload-on-Read für EC-21.
+    Skill-Verhalten:
+    `specs/platform/routine-zeiten-setzen.md` (RZS).
+  - **Teil 2 — Routine-Punkte (`POST /api/v1/routine/items`, #354):** abgespalten
+    aus #343. Verweist auf OPEN-ROUTINE-A (die `einmalig`/`bedingt`-Slots samt
+    herkunfts-eindeutiger Item-IDs, ROUTINE-5, sind dort noch nicht entschieden).
 
 - **OPEN-ROUTINE-C — Sonnencreme aus dem Wetter-Buddy (`bedingt`).** Routine
   liest `/api/v1/wetter/` und injiziert bei UV-Bedarf einen Sonnencreme-Punkt.
@@ -500,11 +557,15 @@ Anzieh-Vorlauf ist explizit ein **Tuning-Wert in der Config**, keine
 Code-Konstante. **Verworfen:** Punkt-Liste oder Vorlauf als Python-Konstante
 (wäre Familie-1 eingebacken — die Familie-3-Probe würde scheitern).
 
-### E-ROUTINE-5 — V1 ohne eigene API (nur entworfen)
-*Datum:* 2026-06-05 · Kein V1-Konsument → keine `/api/v1/routine/` (BUD-1b „nur
-wenn", wie Wetter-Buddy E-WETTER-3). Schreib-API ist entworfen, aber pro
-Konsument gebaut (OPEN-ROUTINE-B, analog OPEN-WETTER-B). **Verworfen:** API auf
-Vorrat (Heim-Server-Overhead, Anti-Goal).
+### E-ROUTINE-5 — Display-V1 ohne API; Zeiten-Schreib-API ab #343 (bindend)
+*Datum:* 2026-06-05 (Display-V1), erweitert 2026-06-06 (RAT-12) · Die
+display-only-V1 (#335) hatte keine `/api/v1/routine/` — kein Konsument (BUD-1b
+„nur wenn", wie Wetter-Buddy E-WETTER-3). Mit dem Eltern-Chat als konkretem
+Konsument ist der Zeiten-Schreibpfad `PUT /api/v1/routine/config` jetzt ein
+**bindendes Requirement** (#343, RAT-12, ROUTINE-14), aktiviert über TASK-7 statt
+#296. Weiterhin **keine API auf Vorrat** (Heim-Server-Overhead, Anti-Goal): die
+übrigen Endpunkte (Punkte-Schreiben `POST /api/v1/routine/items` → #354;
+Cross-Buddy-Lesen) entstehen erst, wenn ihr Konsument/Produzent existiert.
 
 ### E-ROUTINE-6 — V1 ohne Cross-Buddy-Konsum (Sonnencreme/Mülltonne vertagt)
 *Datum:* 2026-06-05 · V1 konsumiert weder Wetter (`/api/v1/wetter/`) noch Plan
