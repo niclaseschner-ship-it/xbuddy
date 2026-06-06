@@ -20,14 +20,18 @@ mehr** (sie scheitern am Ruleset). Auch die Werft pusht auf Feature-Branch + PR.
 Der required Check `closes-guard` (`.github/workflows/closes-guard.yml`) lässt einen
 PR nur durch, wenn er **genau einen** von drei Ausgängen erfüllt:
 
-1. **Impl-PR:** `Closes/Fixes/Resolves #<nr>` im Body → das Issue schließt beim Merge
-   automatisch (GitHub-Auto-Close). Das ist der Reconcile-Trigger.
-2. **Spec-PR:** `Refs #<nr>` → kein Close erwartet (Spec zuerst, WORKFLOW.md).
+1. **Impl-PR:** schließt ein **offenes, existierendes Issue** — geprüft über GitHubs
+   `closingIssuesReferences` (nicht per Body-Regex). Eine Fantasie-Nummer
+   (`Closes #999999`) oder ein schon geschlossenes Issue taucht dort nicht auf →
+   fällt durch. Das Issue schließt beim Merge automatisch (Reconcile-Trigger).
+2. **Spec-PR:** `Refs #<nr>` **UND** der PR ändert ausschließlich `specs/` (oder
+   trägt `type:docs`). Ein Impl-PR kann sich so **nicht** über `Refs` an der
+   Reconcile vorbeimogeln (schließt R3/R6): wer Code ändert, muss `Closes` nutzen.
 3. **Bewusste Infra-Ausnahme:** Label `no-ticket` am PR → selten, dokumentiert.
    `type:chore` allein zählt **nicht** — ein Chore *mit* Ticket nutzt `Closes #`.
 
-Damit kann kein Merge die Ticket-Reconcile überspringen: entweder schließt das Issue
-automatisch, oder der PR ist bewusst als ticketlos markiert.
+Damit kann kein Merge die Ticket-Reconcile überspringen: entweder schließt der PR ein
+offenes Issue, ist ein echter Spec-PR, oder ist bewusst als ticketlos markiert.
 
 ## RECON-3 — Status-/Label-Übergänge fasst NUR eine Action an, nie ein Agent per Shell
 

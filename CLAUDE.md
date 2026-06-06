@@ -168,6 +168,20 @@ Diese Regeln sind nicht verhandelbar. Im Zweifel: nachfragen, nicht raten.
   ist die Wahrheit (Session-Start: `git pull --ff-only`). Nics vertikale-Scheibe-
   Test läuft auf dem deployten, integrierten `main` am Tagesende.
 
+- **Watchdog ist Prozess-Disziplin, nicht ruleset-erzwungen** (Risiko R8). Das
+  Ruleset erzwingt nur `closes-guard`; Watchdog/Whitelist/Leer-Diff laufen im
+  `/arbeitstag`-Gate VOR dem PR. **Ein Hand-PR auf `main` (außerhalb /arbeitstag)
+  ist nur nach manuellem `/watchdog` erlaubt.** Eskalations-Trigger: sobald zwei
+  parallele arbeitstage ODER Auto-Deploy direkt nach Merge laufen, ist das neu zu
+  bewerten (dann `strict`-Policy + Watchdog-Gate erwägen — RAT-9/RAT-10).
+
+- **Brick-main-Notausgang.** Ist `main` hart blockiert (required check
+  `closes-guard` hängt auf „Expected", z. B. nach Umbenennung): GitHub → Settings →
+  Rules → `main-verriegelung` auf **Disabled**, Fix mergen, wieder **Active**.
+  Admin darf das trotz `current_user_can_bypass: never` (Ruleset-Admin ≠ Per-PR-
+  Bypass). Ein Same-Repo-Fix-PR mit unverändertem Job-Kontext heilt sich meist
+  selbst (GitHub fährt die PR-Head-Version des Workflows).
+
 - **Commits sind eindeutig zuzuordnen.** Die Commit-Identity wird per
   `git config` gesetzt. Jeder Akteur — Mensch wie KI-Agent — committet
   unter einer eigenen, erkennbaren Identität (Name + E-Mail), damit
