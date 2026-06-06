@@ -31,6 +31,9 @@ DEFAULT_DATA_FILE = os.path.join(HERE, "routine.json")
 # Keine Familie-1-Einbackung: Defaults ermöglichen Prozessstart ohne Datei,
 # sind aber durch routine.json oder später per Eltern-Chat (OPEN-ROUTINE-B)
 # überschreibbar. (#335)
+# _DEFAULT_ITEMS: bewusster, eingefrorener Bootstrap-Fallback-Satz (4 Items aus
+# routine.example.json). Änderung des Example-Sets → mitziehen. Wahrheit bleibt
+# die Config-Datei/der Eltern-Chat.
 _DEFAULT_ITEMS = [
     {"id": "fruehstueck", "label": "Frühstück",    "piktogramm": "4626",  "quelle": "default"},
     {"id": "zaehne",      "label": "Zähne putzen", "piktogramm": "2326",  "quelle": "default"},
