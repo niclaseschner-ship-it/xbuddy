@@ -218,6 +218,77 @@ def test_URL_14_routine_in_routing_tabelle_dokumentiert():
 
 
 # ============================================================
+#  Photo-Buddy: Upstream :5051, /display/photo/ + /api/v1/photo/ (#344)
+# ============================================================
+
+
+def test_URL_14_photo_upstream_zeigt_auf_5051():
+    """URL-14 Zeile 4/8 + PORT-2: Photo-Upstream lauscht auf Port 5051."""
+    text = _conf_text()
+    match = re.search(
+        r"upstream\s+xbuddy_photo\s*\{[^}]*server\s+127\.0\.0\.1:5051\s*;[^}]*\}",
+        text,
+        re.DOTALL,
+    )
+    assert match is not None, (
+        "upstream xbuddy_photo fehlt oder zeigt nicht auf 127.0.0.1:5051 "
+        "(URL-14, photo/main.py RUNTIME_SCHEMA listen_port=5051, PORT-2)"
+    )
+
+
+def test_URL_14_photo_display_location_proxypassed():
+    """URL-14 Zeile 4: /display/photo/ wird an xbuddy_photo geleitet."""
+    text = _conf_text()
+    match = re.search(
+        r"location\s+/display/photo/\s*\{[^}]*proxy_pass\s+http://xbuddy_photo\s*;[^}]*\}",
+        text,
+        re.DOTALL,
+    )
+    assert match is not None, (
+        "location /display/photo/ fehlt oder proxypasst nicht an xbuddy_photo "
+        "(URL-14, #344)"
+    )
+
+
+def test_URL_14_photo_api_location_proxypassed():
+    """URL-14 Zeile 8: /api/v1/photo/ wird an xbuddy_photo geleitet."""
+    text = _conf_text()
+    match = re.search(
+        r"location\s+/api/v1/photo/\s*\{[^}]*proxy_pass\s+http://xbuddy_photo\s*;[^}]*\}",
+        text,
+        re.DOTALL,
+    )
+    assert match is not None, (
+        "location /api/v1/photo/ fehlt oder proxypasst nicht an xbuddy_photo "
+        "(URL-14, #344)"
+    )
+
+
+def test_URL_14_photo_locations_stehen_vor_allgemeinem():
+    """URL-14: spezifisch vor allgemein — /display/photo/ vor /display/,
+    /api/v1/photo/ vor /api/v1/."""
+    text = _conf_text()
+    assert text.find("location /display/photo/") < text.find("location /display/ "), (
+        "URL-14-Verstoß: /display/photo/ muss VOR /display/ stehen"
+    )
+    assert text.find("location /api/v1/photo/") < text.find("location /api/v1/ "), (
+        "URL-14-Verstoß: /api/v1/photo/ muss VOR /api/v1/ stehen"
+    )
+
+
+def test_URL_14_photo_in_routing_tabelle_dokumentiert():
+    """Die Routing-Tabelle im Conf-Header muss die Photo-Blöcke listen."""
+    text = _conf_text()
+    header = text.split("server {", 1)[0]
+    assert "/display/photo/" in header, (
+        "Routing-Tabelle im Conf-Header listet /display/photo/ nicht."
+    )
+    assert "/api/v1/photo/" in header, (
+        "Routing-Tabelle im Conf-Header listet /api/v1/photo/ nicht."
+    )
+
+
+# ============================================================
 #  Icon-Bibliothek: vom Router serviert, KEIN nginx-alias (#135, ROU-26)
 # ============================================================
 #
