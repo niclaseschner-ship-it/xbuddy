@@ -622,7 +622,9 @@ def build_context(cfg, db_path, zd_cli_path=None):
         paa_sessions=paa_sessions,
         # PAA-3.5: Controller-URL nutzt dieselbe Hub-Origin wie die Display-URL
         # (GAA-3.7) — beide werden auf demselben Origin ausgeliefert.
-        controller_url_origin=cfg.display_url_origin)
+        controller_url_origin=cfg.display_url_origin,
+        # RZS-6 / #343: Origin des Routine-Buddys (ROUTINE-14).
+        routine_origin_url=cfg.routine_origin_url)
 
     if cfg.provider_api_key:
         # KI-Modus — Anbieter steht; die Familien-Gruppe muss gesetzt sein (EC-2).
