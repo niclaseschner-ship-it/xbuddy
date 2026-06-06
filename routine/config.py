@@ -43,6 +43,7 @@ _DEFAULT_ITEMS = [
 
 DATA_DEFAULTS = {
     "abfahrtszeit": "08:30",       # Fallback-Default (CONFIG-4, #335); Wahrheit kommt aus Datei
+    "aufstehzeit": "07:00",        # Fallback-Default (AC-FIX1, #335); Config-Schlüssel, nicht abgeleitet
     "anzieh_vorlauf_min": 8,       # Tuning-Wert, Config-Schlüssel (ROUTINE-9)
     "items": _DEFAULT_ITEMS,       # 4 Fallback-Punkte (aus routine.example.json); Wahrheit aus Datei
     "zeit_referenzen": {"an": False, "paare": []},
@@ -91,6 +92,7 @@ class ZeitReferenz:
 class RoutineConfig:
     """Aufgelöste Daten-Konfiguration des Routine-Buddys (ROUTINE-12)."""
     abfahrtszeit: str              # "HH:MM" oder Wochentag-Dict; Default '08:30' (CONFIG-4)
+    aufstehzeit: str               # "HH:MM" oder Wochentag-Dict; Default '07:00' (AC-FIX1, #335)
     anzieh_vorlauf_min: int        # Tuning-Wert (ROUTINE-9)
     items: list[RoutineItem]
     zeitreferenzen_an: bool        # zeit_referenzen.an (ROUTINE-13)
@@ -135,6 +137,22 @@ def _parse_abfahrtszeit(roh):
             "Default '08:30' greift (CONFIG-4, #335). "
             "Setze in routine.json: abfahrtszeit: 'HH:MM'", roh)
         return DATA_DEFAULTS["abfahrtszeit"]
+    return roh  # uhr.py wertet Wochentag-Dict aus
+
+
+def _parse_aufstehzeit(roh):
+    """Parst aufstehzeit — entweder 'HH:MM' oder Wochentag-Dict (AC-FIX1, #335).
+
+    Gleiche Logik wie _parse_abfahrtszeit: gibt immer einen String/Dict zurück.
+    Ist roh None oder kein String/Dict → Warnung + Default '07:00'.
+    Kein ConfigError — Prozess startet immer (CONFIG-4).
+    """
+    if roh is None or not isinstance(roh, (str, dict)):
+        logger.warning(
+            "`aufstehzeit` fehlt oder hat ungültigen Typ (%r) — "
+            "Default '07:00' greift (CONFIG-4, #335). "
+            "Setze in routine.json: aufstehzeit: 'HH:MM'", roh)
+        return DATA_DEFAULTS["aufstehzeit"]
     return roh  # uhr.py wertet Wochentag-Dict aus
 
 
@@ -213,6 +231,7 @@ def resolve_data(data_path=None, env=None):
             values[key] = raw[key]
 
     abfahrtszeit = _parse_abfahrtszeit(values["abfahrtszeit"])
+    aufstehzeit = _parse_aufstehzeit(values["aufstehzeit"])
 
     try:
         vorlauf = int(values["anzieh_vorlauf_min"])
@@ -228,6 +247,7 @@ def resolve_data(data_path=None, env=None):
 
     return RoutineConfig(
         abfahrtszeit=abfahrtszeit,
+        aufstehzeit=aufstehzeit,
         anzieh_vorlauf_min=vorlauf,
         items=items,
         zeitreferenzen_an=an,

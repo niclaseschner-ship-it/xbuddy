@@ -269,7 +269,7 @@ body {
 .timeline-section {
   grid-column: 1 / -1;
   position: relative;
-  padding-top: 76px;  /* Platz für die Pins oberhalb des Balkens */
+  padding-top: 100px;  /* Platz für die Pins oberhalb des Balkens (erhöht AC-FIX3, war 76px) */
 }
 
 .timeline-track {
@@ -381,6 +381,27 @@ body {
   color: var(--kids-ink-soft);
   margin-top: 2px;
   white-space: nowrap;
+}
+
+/*
+  Overlap-Fix (AC-FIX3, #335): anziehen-Label ÜBER dem Piktogramm statt darunter.
+  Verhindert Kollision mit losgehen-Label bei engem Abstand (z. B. 8 Min auf 90-Min-Spanne).
+  Strategie: Label-Staffelung — anziehen-Label oben (über dem Pin), losgehen-Label
+  unten (Standard, unter dem Stiel) — statt Icon-Verkleinerung (Kiosk-Lesbarkeit
+  hat Vorrang, Stop-Regel #335).
+  Technisch: CSS `order: -1` verschiebt .pin-time im flex-Fluss an die erste
+  Position (= oberhalb des Piktogramms). Das padding-top auf 100px (war 76px) stellt
+  sicher, dass das Label vollständig im sichtbaren Bereich bleibt.
+*/
+.milestone-pin-anziehen .pin-time {
+  order: -1;     /* Im flex-Column an erste Stelle: Label erscheint über dem Piktogramm */
+  margin-top: 0;
+  margin-bottom: 4px;  /* Abstand unter dem Label, über dem Piktogramm */
+  background: var(--kids-today-bg);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--kids-today);
+  line-height: 1.2;
 }
 
 /* ── ZEIT-REFERENZEN (ROUTINE-13, variant-f F2: rechtsbündig) ──────────────── */

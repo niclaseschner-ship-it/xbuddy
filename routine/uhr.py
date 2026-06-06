@@ -90,10 +90,13 @@ def _parse_hhmm(s):
     return int(teile[0]), int(teile[1])
 
 
-def berechne_zeiten(abfahrtszeit_cfg, anzieh_vorlauf_min, zeitzone, tag=None):
-    """Berechnet die UhrZeiten für den gegebenen Tag (ROUTINE-9).
+def berechne_zeiten(abfahrtszeit_cfg, anzieh_vorlauf_min, zeitzone, tag=None,
+                    aufstehzeit_cfg="07:00"):
+    """Berechnet die UhrZeiten für den gegebenen Tag (ROUTINE-9, AC-FIX1, #335).
 
     anzieh_vorlauf_min kommt aus der Config — keine Code-Konstante (E-ROUTINE-4).
+    aufstehzeit_cfg: 'HH:MM' oder Wochentag-Dict; Default '07:00' (AC-FIX1, #335).
+      Direkt aus Config, NICHT mehr von anziehen abgeleitet.
     tag: date-Objekt; None → heute in der Familien-Zeitzone.
     Gibt None zurück wenn kein Schultag (Wochentag-Dict ohne Eintrag).
     """
@@ -106,10 +109,9 @@ def berechne_zeiten(abfahrtszeit_cfg, anzieh_vorlauf_min, zeitzone, tag=None):
         return None  # kein Schultag
 
     anziehen = losgehen - timedelta(minutes=anzieh_vorlauf_min)
-    # Aufstehen: fixe Stunde vor anziehen — hier als Zeitpunkt ohne Config-Wert.
-    # V1 setzt aufstehen implizit auf anziehen - 30 Min als Anzeige-Startpunkt.
-    # Da es kein eigenes Config-Feld ist, wird es rechnerisch gesetzt.
-    aufstehen = anziehen - timedelta(minutes=30)
+    # Aufstehen: kommt direkt aus Config-Schlüssel aufstehzeit (AC-FIX1, #335).
+    # Gleiche Parse-Funktion wie abfahrtszeit — Wochentag-Dict-fähig.
+    aufstehen = _parse_abfahrtszeit(aufstehzeit_cfg, tag, zeitzone)
 
     return UhrZeiten(aufstehen=aufstehen, anziehen=anziehen, losgehen=losgehen)
 
