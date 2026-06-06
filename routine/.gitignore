@@ -1,0 +1,10 @@
+# ROUTINE-12 — Per-Instanz-Dateien des Routine-Buddys, je Instanz separat
+# gepflegt, niemals im Repo. Formate sind in den committeten *.example.json
+# dokumentiert.
+#
+# Daten-Konfig (Routine-Punkte, Abfahrtszeit). Format: routine.example.json
+routine.json
+# Runtime-Konfig (Bind, Log). Format: config.example.json
+config.json
+# Abhak-Store (ROUTINE-8): flüchtiger Tageszustand, instanzspezifisch
+routine_store.json

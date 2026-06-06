@@ -1,0 +1,6 @@
+{
+  "_comment": "ROUTINE-12/CONFIG-1 — Runtime-Konfig des Routine-Buddys (Bind, Log). Kopiere als config.json (gitignored). Nicht gesetzte Felder bleiben auf den Code-Defaults (RUNTIME_SCHEMA in routine/main.py). ENV-Variablen (ROUTINE_LISTEN_PORT etc.) und CLI-Flags überschreiben diese Datei (CONFIG-5). Die Daten-Konfig (Routine-Punkte, Abfahrtszeit) liegt separat in routine.json (Format: routine.example.json).",
+  "listen_host": "127.0.0.1",
+  "listen_port": 5050,
+  "log_level": "INFO"
+}
