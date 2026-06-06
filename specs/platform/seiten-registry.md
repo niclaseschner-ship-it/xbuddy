@@ -72,39 +72,56 @@ Die Registry läuft als **eigener schlanker Plattform-Service** `xbuddy-seiten`
 gerechtfertigt ist (RAT-1, analog Panel-Registry); der Router bleibt reines
 Routing.
 
-- **Aufbau des Inventars:** Der Service liest beim Start und periodisch (bzw.
-  on-demand mit kurzem TTL) die Manifeste (Platte) + Panel-/Geräte-Snapshots und
-  schreibt `inventar.json` (atomar, DCOMP-4).
+- **Aufbau + Aktualität (TTL):** Der Service hält `inventar.json` und baut es neu,
+  sobald es älter als ein **TTL** ist (Default `30 s`, Config-Wert) — on-demand
+  beim nächsten Request oder periodisch. Daraus folgt eine **beschränkte
+  Staleness**: eine neu angelegte Seite (Panel/Display) erscheint **garantiert
+  binnen TTL** in `GET /api/v1/seiten`. Schreiben atomar (DCOMP-4).
 - **`GET /api/v1/seiten`** (URL-4, eigene URL-14-Zeile) serviert **immer aus
   `inventar.json`** — **keine** Upstream-Calls im Request-Pfad, Laufzeitbudget
   **< 50 ms**. Ein langsamer/defekter Buddy blockiert die Auskunft nie.
-- **Fehlermodell (Last-Known-Good, analog ROU-27):** Manifest-Sorten (a/b/c)
-  sind immer vollständig (Platte). Für (d/e) gilt bei Timeout/500 eines
-  Upstreams: der **letzte erfolgreiche Teil-Snapshot** bleibt erhalten und wird
-  als `stale: true` markiert — **nie** eine leere/falsch-gekürzte Liste,
-  DCOMP-3.
+- **Manifeste = Platte, immer verfügbar (auch Kaltstart):** Die Sorten (a/b/c)
+  kommen aus committeten `views.json`-Manifesten im Deployment — lesbar **auch
+  beim Kaltstart** (frisches Deployment, gelöschtes `inventar.json`, alle
+  Buddy-Prozesse aus). Beim ersten Start baut der Service `inventar.json` sofort
+  aus ihnen. Ein **kaputtes/schema-inkompatibles Einzel-Manifest** wird mit
+  Warnung **übersprungen** (DCOMP-3 — JSON-/Pflichtfeld-Fehler), das übrige
+  Inventar bleibt vollständig; nie fällt das ganze Inventar wegen eines
+  Manifests.
+- **Snapshot-Sorten (d/e) Fehlermodell (Last-Known-Good, ROU-27):** bei
+  Timeout/500/nicht-laufendem Upstream bleibt der **letzte erfolgreiche
+  Teil-Snapshot** erhalten, markiert `stale: true`. **Kaltstart ohne je
+  erfolgreichen Snapshot** (Panel-/Geräte-Service noch nie erreicht): die Sorte
+  fehlt mit explizitem `snapshot_pending: true` in der Antwort — die Antwort ist
+  trotzdem **gültig und nie leer** (die Manifest-Sorten tragen sie) und
+  blockiert nicht. Nie eine leere/falsch-gekürzte Liste.
 
-## SREG-4 — Eintrags-Schema
-Jeder Eintrag in `inventar.json` trägt:
+## SREG-4 — Eintrags-Schema (Manifest-Feld vs. abgeleitet)
+Jeder Eintrag in `inventar.json`. Klar getrennt, was die Quelle (BUD-3-Manifest
+bzw. PREG/GER-Snapshot) **liefert** und was der Aggregator **ableitet** — so
+kann ein Externer aus einem Manifest deterministisch einen Eintrag erzeugen:
 
-| Feld | Pflicht | Bedeutung |
-|------|---------|-----------|
-| `key` | ja | stabiler Slug (IDENT-1), z. B. `wetter-regeln` — für die KI-Auflösung; nie neu vergeben |
-| `quelle` | ja | Sorte `a..e` bzw. `app`/`controller`/`panel`/`display` |
-| `app` / `instanz` | ja | App-Slug (a–c) bzw. Instanz-ID (d/e) |
-| `pfad` | ja | View-Pfad, z. B. `/display/wetter/regeln` — **nicht** die volle URL |
-| `label` + `synonyme[]` | ja | deutsch, für „wo stelle ich X ein" (KI-Auflösung) |
-| `varianten[]` | nein | endliche bekannte Varianten (`slug`, `query`, `label`) |
-| `zeigt` | ja | 1 Satz, was die Seite zeigt |
-| `zielgruppe` | ja | `kind` / `eltern` — **deskriptiv**, KEIN Berechtigungs-Gate (SREG-6) |
+| Feld | Herkunft | Bedeutung |
+|------|----------|-----------|
+| `key` | **abgeleitet** | `<app\|instanz>-<slug>`, stabil (IDENT-1) — für die KI-Auflösung; deterministisch aus app+slug, nie frei vergeben |
+| `typ` | **abgeleitet** | genau EINE Wertemenge: `display` \| `eltern` \| `controller` \| `panel` \| `display-client` (aus Sorte a–e + `zielgruppe` bestimmt) |
+| `app` / `instanz` | **abgeleitet** | App-Slug (a–c, = Manifest-Besitzer) bzw. Instanz-ID (d/e, = Snapshot-Schlüssel) |
+| `pfad` | Manifest/Snapshot | View-Pfad, z. B. `/display/wetter/regeln` — **nicht** die volle URL |
+| `label` + `synonyme[]` | Manifest | deutsch, für „wo stelle ich X ein" (KI-Auflösung) |
+| `varianten[]` | Manifest (opt.) | endliche bekannte Varianten (`slug`, `query`, `label`) |
+| `zeigt` | Manifest | 1 Satz, was die Seite zeigt |
+| `zielgruppe` | Manifest | `kind` / `eltern` — **deskriptiv**, KEIN Berechtigungs-Gate (SREG-6) |
 
-Die **volle URL wird nicht gespeichert** — sie entsteht erst beim Konsumenten
-aus `display_url_origin + pfad` (URL-12: eine Origin; der Pfad ist die Wahrheit,
-die Origin ist Per-Instanz-Deployment).
+Die manifest-gelieferten Felder sind genau die BUD-3-Felder (`conventions/buddies.md`);
+die Snapshot-Sorten (d/e) liefern `pfad`/`label` aus PREG/GER, `varianten`/`zeigt`
+entfallen dort. Die **volle URL wird nicht gespeichert** — sie entsteht erst beim
+Konsumenten aus `display_url_origin + pfad` (URL-12: eine Origin; der Pfad ist die
+Wahrheit, die Origin ist Per-Instanz-Deployment).
 
-## SREG-5 — Skill `seiten_finden` (Lese-Klasse)
-Eltern-Chat-READ-Skill (RAT-6 Lese-Klasse, kein Schreibdialog), trigger-
-agnostische Funktion analog `termine-erfragen.md` (TER). Zwei Modi:
+## SREG-5 — Skill `seiten_finden` (lesende Aufgabe)
+Eltern-Chat-READ-Skill — eine **lesende Aufgabe** (EC-9; Muster wie TER-10
+`termine-erfragen.md`), kein Schreibdialog, trigger-agnostische Funktion. Zwei
+Modi:
 - **„gib mir den Link zu X"** — die KI matcht die Frage gegen `label`/`synonyme`
   der Einträge; bei Mehrdeutigkeit gezielte Rückfrage (EC-22-Muster).
 - **„liste alle Seiten" / „alle Seiten von Buddy Y"** — gefilterte Liste.
@@ -113,17 +130,22 @@ Der Link wird aus `display_url_origin` + `pfad` gebildet (GAA-3.7-Muster, wie
 `panel_anlegen` die Controller-URL bildet). Der Skill liest die Registry über
 `GET /api/v1/seiten` (Origin = ein neues `seiten_origin_url`, EC-15).
 
-## SREG-6 — Auth/Exposure: der Kanal ist das Gate, keine Rolle
-V1 kennt **keine Rollen** (EC-3). Die Berechtigung ist die **Netzgrenze**
-(RAT-2) **plus der Kanal**: `seiten_finden` läuft **nur im Eltern-Chat**, einem
-eltern-seitigen Kanal, zu dem Kinder keinen Zugang haben (Nic-Entscheid
-2026-06-06). Damit kann „liste alle Seiten" einem Kind **nicht** versehentlich
-den schreibenden Eltern-Editor (`/display/wetter/regeln`) zeigen — die
-schützende Grenze ist der Kanal, nicht ein Sichtbarkeits-Flag.
-**Annahme (gültigkeitskritisch):** die Eltern-Chat-/Familien-Gruppe hat **keine
-Kind-Mitglieder**. Kippt das je, ist die Exposure-Frage neu zu stellen (dann
-wäre ein `intern`-Flag oder eine echte Rolle fällig) — bis dahin **kein**
-Flag/Rollen-Vorbau (CLAUDE.md §6). `zielgruppe` bleibt rein deskriptiv.
+## SREG-6 — Auth/Exposure: EC-2-Mitgliedschaft + Netzgrenze, keine Rolle
+V1 kennt **keine Rollen** (EC-3); berechtigt ist jedes **Familien-Gruppen-
+Mitglied** (EC-2), in Gruppe **und** Privatchat gleichwertig. `seiten_finden`
+erbt diese Berechtigung — es gibt **kein** zusätzliches Auth-Gate und **kein**
+`intern`-Flag (kein Rollen-Vorbau, CLAUDE.md §6); `zielgruppe` bleibt rein
+deskriptiv.
+
+Dass „liste alle Seiten" keinem Kind den schreibenden Eltern-Editor
+(`/display/wetter/regeln`) zeigt, ruht damit auf einer **operativen Annahme,
+nicht auf Code**: die Familien-Gruppe besteht aus Eltern, Kinder sind **keine
+Mitglieder** (Nic-Entscheid 2026-06-06 — der Eltern-Chat ist der eltern-seitige
+Kanal). Das ist eine **bewusst akzeptierte V1-Grenze**, kein code-erzwungenes
+Gate: würde ein Kind Mitglied der Familien-Gruppe, wäre es nach EC-2 berechtigt.
+**Reopen-Trigger:** sobald Kinder in der Familien-Gruppe vorgesehen sind (oder
+ein eigener Kinder-Chat entsteht), ist die Exposure-Frage neu zu stellen — dann
+wird ein `intern`-Flag oder eine echte Rolle fällig. Bis dahin nicht auf Vorrat.
 
 ## SREG-7 — Vorbedingung: `display_url_origin` (OPEN-EC-Origin)
 Ohne gesetztes `display_url_origin` (heute leer per Default, `eltern-chat.md`
@@ -143,6 +165,13 @@ aber das `views.json`-Format**: das BUD-3-Manifest ist die Datenquelle, aus der
 ## SREG-9 — Automatisierte Tests je Anforderung
 - **Vollständigkeit-bei-Ausfall:** Buddy-Prozess gestoppt → seine Manifest-Seiten
   bleiben in `GET /api/v1/seiten` gelistet (SREG-2).
+- **Kaltstart:** kein `inventar.json` + Panel-/Geräte-Service aus + Buddy-Prozesse
+  aus → `GET` liefert die Manifest-Sorten (a/b/c) vollständig, (d/e) mit
+  `snapshot_pending: true`; Antwort gültig und **nie leer** (SREG-3).
+- **Kaputtes Manifest:** ein `views.json` mit JSON-/Pflichtfeld-Fehler → wird
+  übersprungen (Warnung), das übrige Inventar bleibt vollständig (SREG-3/DCOMP-3).
+- **Aktualität/TTL:** ein während des Betriebs neu angelegtes Panel erscheint
+  **binnen TTL** in `GET /api/v1/seiten` (SREG-3).
 - **Schnelle, nie-leere Antwort:** `GET /api/v1/seiten` antwortet aus
   `inventar.json` ohne Upstream-Call; bei Panel-/Geräte-Snapshot-Ausfall
   `stale: true` statt leerer/gekürzter Liste (SREG-3).
@@ -150,9 +179,14 @@ aber das `views.json`-Format**: das BUD-3-Manifest ist die Datenquelle, aus der
   Variante auf; `?ab=<datum>` erzeugt keinen Eintrag (SREG-1).
 - **(e)-Filter:** Geräte-Snapshot mit `controller`/`display`/`beides`/`inaktiv`
   → nur `display|beides` & `aktiv` erscheinen (SREG-1).
+- **Manifest⇔Route-Bindung:** je Buddy der BUD-3-Eigentest (kanonische
+  HTML-GET-Route ⇔ Eintrag; Alias-/POST-Routen ausgenommen; Controller gegen
+  Slug-Existenz) — `conventions/buddies.md` BUD-3.
 - **Skill-Auflösung:** „Link zum Garderoben-Editor" → `/display/wetter/regeln`
   mit `display_url_origin` zur vollen URL; Mehrdeutigkeit → Rückfrage (SREG-5).
-- **Kanal-Gate:** `seiten_finden` ist nur im Eltern-Chat registriert (SREG-6).
+- **Auth:** `seiten_finden` erbt EC-2 (Mitglied berechtigt, Gruppe+Privatchat);
+  die „keine Kind-Mitglieder"-Annahme (SREG-6) ist **operativ, nicht
+  automatisiert testbar** — sie ist eine bewusste V1-Grenze, kein Code-Gate.
 
 ---
 
