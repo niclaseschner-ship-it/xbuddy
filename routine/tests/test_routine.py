@@ -472,6 +472,92 @@ def test_routine19_acht_punkte_erzeugen_acht_karten(tmp_path):
 #  ROUTINE-9 / Uhr-Phasen-Text (Render-Integration)
 # ============================================================
 
+def test_acv1_anziehen_pct_proportional(demo_config):
+    """AC-V2/ROUTINE-9 (#335): UhrView liefert anziehen_pct als proportionale
+    Vertikal-Position im Fenster aufstehen→losgehen.
+
+    Demo: aufstehen 07:00, anziehen 07:37, losgehen 07:45 → Fenster 45 Min,
+    anziehen liegt 37 Min nach aufstehen → 37/45 ≈ 0.822.
+    """
+    zeiten = uhr_mod.berechne_zeiten(
+        demo_config.abfahrtszeit, demo_config.anzieh_vorlauf_min,
+        demo_config.zeitzone, TAG, aufstehzeit_cfg=demo_config.aufstehzeit)
+    now = datetime(TAG.year, TAG.month, TAG.day, 7, 20, tzinfo=TZ)
+    view = uhr_mod.baue_uhr_view(zeiten, now)
+
+    # aufstehen 07:00 → losgehen 07:45 = 45 Min; anziehen 07:37 = 37 Min Offset
+    assert 0.80 < view.anziehen_pct < 0.84, \
+        "anziehen_pct muss ~0.82 sein (37/45), war %r" % view.anziehen_pct
+    # In den Fenster-Grenzen [0..1]
+    assert 0.0 <= view.anziehen_pct <= 1.0
+
+
+def test_acv1_anziehen_pct_im_view_dict(demo_config):
+    """AC-V2 (#335): render gibt anziehen_pct als Prozent (0..100) ins Template-Dict."""
+    zeiten = uhr_mod.berechne_zeiten(
+        demo_config.abfahrtszeit, demo_config.anzieh_vorlauf_min,
+        demo_config.zeitzone, TAG, aufstehzeit_cfg=demo_config.aufstehzeit)
+    now = datetime(TAG.year, TAG.month, TAG.day, 7, 20, tzinfo=TZ)
+    uhr_view = uhr_mod.baue_uhr_view(zeiten, now)
+    view = render_mod.baue_view(demo_config, {}, uhr_view)
+    assert 80.0 < view["uhr"]["anziehen_pct"] < 84.0
+
+
+def test_acv1_zeitstrahl_ist_vertikal(client):
+    """AC-V1 (#335): Zeitstrahl ist VERTIKAL — elapsed füllt via height,
+    jetzt-Marker via top (nicht width/left).
+    """
+    body = client.get("/display/routine/morgen").get_data(as_text=True)
+    # Balken-Track vorhanden
+    assert "timeline-track" in body
+    # Verstrichener Teil über height: (vertikal von oben), nicht width:
+    assert "timeline-elapsed" in body
+    assert "height:" in body
+    # JETZT-Marker über top:%, nicht left:%
+    assert 'class="timeline-now"' in body
+    assert "top:" in body
+
+
+def test_acv2_events_alternierende_seiten(client):
+    """AC-V2 (#335): Event-Icons abwechselnd links/rechts — aufstehen links,
+    anziehen rechts, losgehen links; je mit top:% an proportionaler Position.
+    """
+    body = client.get("/display/routine/morgen").get_data(as_text=True)
+    # Beide Seiten-Klassen gesetzt
+    assert "event-pin-links" in body
+    assert "event-pin-rechts" in body
+    # Alternation: genau zwei links (aufstehen, losgehen), eine rechts (anziehen)
+    assert body.count("event-pin-links") == 2
+    assert body.count("event-pin-rechts") == 1
+    # Drei Uhrzeit-Labels vorhanden (07:00 / 07:37 / 07:45 in Demo-Config)
+    assert "07:00" in body   # aufstehen (Default aufstehzeit)
+    assert "07:37" in body   # anziehen (07:45 - 8 Min)
+    assert "07:45" in body   # losgehen
+    # Pins per top:% petrankert (vertikale Achse), nicht left:%
+    assert "top: 0%" in body          # aufstehen oben
+    assert "top: 100%" in body        # losgehen unten
+
+
+def test_acv3_anziehen_losgehen_verschiedene_seiten(client):
+    """AC-V3 (#335): anziehen (rechts) und losgehen (links) liegen strukturell auf
+    verschiedenen Seiten des Balkens → kein Overlap trotz 8 Min Abstand.
+
+    Geprüft am Markup: der Anziehen-Pin trägt event-pin-rechts, der Losgehen-Pin
+    event-pin-links. Beide Piktogramme + Uhrzeiten sind voll vorhanden.
+    """
+    body = client.get("/display/routine/morgen").get_data(as_text=True)
+    # Anziehen-Pin: rechts-Klasse im Abschnitt um das Anziehen-Piktogramm (alt-Text)
+    anziehen_idx = body.index('alt="Anziehen"')
+    fenster = body[anziehen_idx - 300:anziehen_idx + 100]
+    assert "event-pin-rechts" in fenster
+    # Losgehen-Pin: links-Klasse im Abschnitt um das Losgehen-Piktogramm (alt-Text)
+    losgehen_idx = body.index('alt="Losgehen"')
+    fenster_l = body[losgehen_idx - 300:losgehen_idx + 100]
+    assert "event-pin-links" in fenster_l
+    # Kein horizontaler Pin-Code mehr (alte milestone-pin-Klassen entfernt)
+    assert "milestone-pin" not in body
+
+
 def test_routine9_phasentext_im_view_modell(demo_config):
     """ROUTINE-9: das View-Modell enthält einen Phasen-Text (ROUTINE-9)."""
     zeiten = uhr_mod.berechne_zeiten(

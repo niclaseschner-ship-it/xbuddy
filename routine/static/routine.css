@@ -252,53 +252,63 @@ body {
 }
 
 /*
-  HAUPT-ZEITSTRAHL + REFERENZ-BALKEN: gemeinsames Grid (K1-Maßstab, variant-f).
-  Spalte 0: Piktogramm-Platz (48px)
-  Spalte 1: Balken-Spalte (1fr — identische Breite für alle Tracks)
+  ZEITSTRAHL-ZONE (ROUTINE-9): VERTIKALER Balken, Event-Icons abwechselnd
+  links/rechts. MAJOR REWORK (#335) — löst die horizontale variant-f-Orientierung
+  des Zeitstrahls ab. Die Zone füllt die verbleibende Panel-Höhe (flex:1).
 */
 .scale-zone {
-  display: grid;
-  grid-template-columns: 48px 1fr;
-  grid-template-rows: auto auto auto;
-  gap: var(--space-3) var(--space-4);
-  flex-shrink: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   overflow: visible;
 }
 
-/* Hauptstrahl belegt beide Grid-Spalten (variant-f) */
+/*
+  Haupt-Sektion: relativ positionierter Container, in dem der vertikale Balken
+  mittig steht und die Pins per top:% darin petrankert werden. Nutzt möglichst
+  viel Höhe (flex:1), mit Rand oben/unten, damit oberster/unterster Pin (die
+  über/unter ihrem top:% zentriert sind) vollständig sichtbar bleiben.
+*/
 .timeline-section {
-  grid-column: 1 / -1;
   position: relative;
-  padding-top: 100px;  /* Platz für die Pins oberhalb des Balkens (erhöht AC-FIX3, war 76px) */
+  flex: 1;
+  min-height: 0;
+  margin: var(--space-6) 0;
 }
 
+/* Vertikaler Balken-Track — mittig, über die Sektionshöhe */
 .timeline-track {
-  position: relative;
-  height: 32px;
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 32px;
   background: var(--kids-weekend-bg);
   border-radius: var(--radius-full);
   border: 2px solid var(--kids-border-soft);
   overflow: visible;
 }
 
-/* Verstrichener Teil des Zeitstrahls */
+/* Verstrichener Teil: füllt von OBEN nach unten (height) */
 .timeline-elapsed {
   position: absolute;
   left: 0;
+  right: 0;
   top: 0;
-  bottom: 0;
-  background: linear-gradient(90deg, var(--kids-today) 0%, var(--terracotta) 100%);
-  border-radius: var(--radius-full) 0 0 var(--radius-full);
-  transition: width 1s linear;
+  background: linear-gradient(180deg, var(--kids-today) 0%, var(--terracotta) 100%);
+  border-radius: var(--radius-full) var(--radius-full) 0 0;
+  transition: height 1s linear;
 }
 
-/* JETZT-Marker (senkrechter Stab) */
+/* JETZT-Marker (waagerechter Riegel quer über den Balken) */
 .timeline-now {
   position: absolute;
-  top: 50%;
+  left: 50%;
   transform: translate(-50%, -50%);
-  width: 18px;
-  height: 44px;
+  width: 44px;
+  height: 18px;
   background: var(--kids-today);
   border-radius: var(--radius-full);
   border: 3px solid var(--kids-paper);
@@ -307,42 +317,39 @@ body {
 }
 
 /*
-  Meilenstein-Pins oberhalb des Balkens (ROUTINE-9, variant-f E K2):
-  Start:    transform: translateX(0)    — linksb., kein Überlauf
-  Mitte:    transform: translateX(-50%) — zentriert
-  Ende:     transform: translateX(-100%)— rechtsb., kein Überlauf
+  Event-Pins (ROUTINE-9): an top:% petrankert, vertikal um diese Position
+  zentriert. Liegen NEBEN dem Balken auf alternierenden Seiten — adjazente
+  Events nie auf derselben Seite, daher kein Overlap selbst bei 8 Min Abstand.
+  Ein Connector-Stem verbindet das Icon mit dem Balken.
 */
-.milestone-pin {
+.event-pin {
   position: absolute;
-  top: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
+  gap: var(--space-2);
+  transform: translateY(-50%);
   z-index: 3;
 }
 
-.milestone-pin-start {
-  left: 0%;
-  transform: translateX(0);
-  align-items: flex-start;
+/* LINKS vom Balken: Pin endet an der Balken-Mitte, Inhalt rechtsbündig */
+.event-pin-links {
+  right: calc(50% + 16px);   /* 16px = halbe Balkenbreite */
+  flex-direction: row;
+  justify-content: flex-end;
 }
 
-.milestone-pin-anziehen {
-  /* Position via inline style (aus view.uhr.elapsed_pct / anziehen-Zeit) */
-  transform: translateX(-50%);
+/* RECHTS vom Balken: Pin beginnt an der Balken-Mitte */
+.event-pin-rechts {
+  left: calc(50% + 16px);
+  flex-direction: row-reverse;
+  justify-content: flex-end;
 }
 
-.milestone-pin-losgehen {
-  left: 100%;
-  transform: translateX(-100%);
-  align-items: flex-end;
-}
-
-/* Pin-Piktogramm-Kachel */
+/* Pin-Piktogramm-Kachel (groß für Kiosk-Lesbarkeit aus Distanz) */
 .pin-pikto {
-  width: 52px;
-  height: 52px;
-  border-radius: var(--radius-lg);
+  width: 76px;
+  height: 76px;
+  border-radius: var(--radius-xl);
   border: 3px solid var(--kids-border-soft);
   display: flex;
   align-items: center;
@@ -354,66 +361,47 @@ body {
 }
 
 .pin-pikto img {
-  width: 42px;
-  height: 42px;
+  width: 64px;
+  height: 64px;
   object-fit: contain;
   display: block;
 }
 
-/* Farbgebung der Pin-Kacheln (analog variant-f) */
+/* Farbgebung der Pin-Kacheln */
 .pin-pikto-start    { background: var(--kids-bg);       border-color: var(--kids-border-soft); }
 .pin-pikto-anziehen { background: var(--kids-today-bg); border-color: var(--kids-today); }
 .pin-pikto-losgehen { background: var(--kids-tint-sky); border-color: var(--lake); }
 
-/* Stiel vom Piktogramm zum Balken */
-.pin-stem {
-  width: 3px;
-  height: 10px;
-  background: var(--kids-border-soft);
-  border-radius: var(--radius-full);
-}
-
-/* Uhrzeit-Label unter dem Stiel (ROUTINE-9, variant-f K4) */
+/* Uhrzeit-Label neben dem Piktogramm (ROUTINE-9) */
 .pin-time {
   font-family: var(--font-hand);
   font-weight: 700;
-  font-size: var(--fs-14);
+  font-size: var(--fs-28);
   color: var(--kids-ink-soft);
-  margin-top: 2px;
   white-space: nowrap;
 }
 
-/*
-  Overlap-Fix (AC-FIX3, #335): anziehen-Label ÜBER dem Piktogramm statt darunter.
-  Verhindert Kollision mit losgehen-Label bei engem Abstand (z. B. 8 Min auf 90-Min-Spanne).
-  Strategie: Label-Staffelung — anziehen-Label oben (über dem Pin), losgehen-Label
-  unten (Standard, unter dem Stiel) — statt Icon-Verkleinerung (Kiosk-Lesbarkeit
-  hat Vorrang, Stop-Regel #335).
-  Technisch: CSS `order: -1` verschiebt .pin-time im flex-Fluss an die erste
-  Position (= oberhalb des Piktogramms). Das padding-top auf 100px (war 76px) stellt
-  sicher, dass das Label vollständig im sichtbaren Bereich bleibt.
-*/
-.milestone-pin-anziehen .pin-time {
-  order: -1;     /* Im flex-Column an erste Stelle: Label erscheint über dem Piktogramm */
-  margin-top: 0;
-  margin-bottom: 4px;  /* Abstand unter dem Label, über dem Piktogramm */
-  background: var(--kids-today-bg);
-  padding: 1px 5px;
-  border-radius: var(--radius-sm, 4px);
-  border: 1px solid var(--kids-today);
-  line-height: 1.2;
+/* ── ZEIT-REFERENZEN (ROUTINE-13): config-schaltbar, Default AUS ───────────── */
+.zeitref-zone {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
-/* ── ZEIT-REFERENZEN (ROUTINE-13, variant-f F2: rechtsbündig) ──────────────── */
 .zeitref-divider {
-  grid-column: 1 / -1;
   height: 2px;
   background: var(--kids-border-soft);
   border-radius: var(--radius-full);
-  margin: 0;
+  margin: 0 0 var(--space-2) 0;
 }
 
-/* Piktogramm-Zelle (linke Grid-Spalte) */
+.zeitref-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 .zeitref-pikto {
   width: 48px;
   height: 44px;
@@ -425,7 +413,6 @@ body {
   justify-content: center;
   flex-shrink: 0;
   overflow: hidden;
-  align-self: center;
 }
 
 .zeitref-pikto img {
@@ -435,22 +422,17 @@ body {
   display: block;
 }
 
-/* Balken-Track (rechte Grid-Spalte — gleiche Breite wie Hauptstrahl) */
+/* Referenz-Balken — Länge maßstabsgetreu zum Zeitfenster (Restzeit-Lesart) */
 .zeitref-bar-track {
+  flex: 1;
   height: 18px;
   background: var(--kids-weekend-bg);
   border-radius: var(--radius-full);
   border: 2px solid var(--kids-border-soft);
   position: relative;
   overflow: hidden;
-  align-self: center;
 }
 
-/*
-  F2: RECHTSBÜNDIG petrankert (variant-f F2).
-  Balken wachsen von rechts (= Losgehen-Ende) nach links.
-  Lese-Semantik: Restzeit, nicht verstrichene Zeit.
-*/
 .zeitref-fill {
   position: absolute;
   right: 0;
