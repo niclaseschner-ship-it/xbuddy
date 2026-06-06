@@ -270,6 +270,10 @@ def main(argv=None):
     cfg = config_mod.resolve(config_path)
     configure(cfg, config_path=config_path)
 
+    # PHOTO-12: Startup-Sweep, damit eine gesetzte TTL auch ohne neuen Ingest
+    # greift (lang laufende oder selten gefütterte Instanz). Default 0 => No-Op.
+    store.auto_delete(cfg.library_verzeichnis, cfg.auto_delete_tage)
+
     ssl_context = None
     scheme = "http"
     if args.cert and args.key:

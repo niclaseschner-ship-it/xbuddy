@@ -283,6 +283,44 @@ def test_photo12_config_default_ist_aus():
     assert config_mod.resolve(env={}).auto_delete_tage == 0
 
 
+def test_photo12_sweep_beim_ingest(tmp_path, jpeg_bytes):
+    """PHOTO-12: der Auto-Delete-Sweep laeuft am echten ingest()-Pfad (den die
+    POST-Route ruft) — eine gesetzte TTL wirkt im laufenden Betrieb, nicht nur
+    ueber den direkt aufgerufenen Helfer (Entry-Path-Coverage)."""
+    cfg = _cfg(tmp_path, auto_delete_tage=30)
+    lib = cfg.library_verzeichnis
+    tag0 = datetime(2026, 1, 1, tzinfo=UTC)
+    alt = ingest_mod.ingest(lib, cfg, jpeg_bytes(), "alt.jpg", now=tag0)
+    # Zweiter Ingest 40 Tage spaeter triggert den Sweep ueber den ingest-Pfad:
+    neu = ingest_mod.ingest(lib, cfg, jpeg_bytes(), "neu.jpg",
+                            now=tag0 + timedelta(days=40))
+    ids = [m.id for m in store.load(lib)]
+    assert alt.id not in ids   # aelter als TTL -> vom Ingest-Sweep entfernt
+    assert neu.id in ids       # frisch -> bleibt
+
+
+def test_photo12_sweep_beim_ingest_default_aus(tmp_path, jpeg_bytes):
+    """PHOTO-12/E-PHOTO-6: bei Default-TTL 0 loescht der Ingest-Sweep nie."""
+    cfg = _cfg(tmp_path)  # auto_delete_tage default 0
+    lib = cfg.library_verzeichnis
+    tag0 = datetime(2020, 1, 1, tzinfo=UTC)
+    ingest_mod.ingest(lib, cfg, jpeg_bytes(), "a.jpg", now=tag0)
+    ingest_mod.ingest(lib, cfg, jpeg_bytes(), "b.jpg",
+                      now=tag0 + timedelta(days=99999))
+    assert len(store.load(lib)) == 2
+
+
+def test_photo11_config_akzeptiert_spec_schreibweise():
+    """PHOTO-11/CLAUDE.md §6: die Config akzeptiert die Spec-Schreibweise mit
+    Diakritika (specs/buddies/photo.md) und kanonisiert auf die interne Form."""
+    cfg = config_mod.resolve(env={
+        "PHOTO_SORTIER_RICHTUNG": "älteste-zuerst",
+        "PHOTO_STEMPEL_QUELLE": "hinzugefügt",
+    })
+    assert cfg.sortier_richtung == config_mod.RICHTUNG_ALT
+    assert cfg.stempel_quelle == config_mod.STEMPEL_HINZUGEFUEGT
+
+
 # ============================================================
 #  PHOTO-13 — Video ueber Maximaldauer -> Ablehnung
 # ============================================================
