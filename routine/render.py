@@ -98,6 +98,7 @@ def _uhr_to_dict(uhr_view):
         "aufstehen_label": uhr_view.aufstehen_label,
         "jetzt_pct": round(uhr_view.jetzt_pct * 100.0, 1),
         "elapsed_pct": round(uhr_view.elapsed_pct * 100.0, 1),
+        "anziehen_pct": round(uhr_view.anziehen_pct * 100.0, 1),
         "rest_bis_anziehen_min": uhr_view.rest_bis_anziehen_min,
         "rest_bis_losgehen_min": uhr_view.rest_bis_losgehen_min,
         "zeitfenster_min": uhr_view.zeitfenster_min,

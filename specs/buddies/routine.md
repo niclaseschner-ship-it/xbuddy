@@ -176,18 +176,30 @@ positiv; **wenn** `now` zwischen `anziehen` und `losgehen` liegt, **dann** ist
 „anziehen" erreicht (Anzeige „jetzt") und „losgehen" noch positiv; **wenn** `now`
 nach `losgehen` liegt, **dann** sind beide überfällig.
 
-**Darstellung (Gate B entschieden, Artefakt variant-f):** die Uhr ist ein
-**linearer Zeitstrahl** (kein Ring), auf dem die Tagespunkte — aufstehen,
-anziehen, losgehen — als **Piktogramme** an ihrer Zeit-Position sitzen, jeweils
-mit **kleiner Uhrzeit** (z. B. 07:00 / 08:22 / 08:30); ein „jetzt"-Marker zeigt
-die aktuelle Position, der verstrichene Teil ist gefüllt. **Keine** separaten
-Meilenstein-Kästen (verworfen, kein Mehrwert). Die Uhrzeit-Labels dürfen **nicht
-in andere Elemente ragen** (rand-/überlauf-frei layouten) — bei engem Abstand
-zwischen zwei Pins (z. B. anziehen/losgehen nur 8 Min auseinander) werden Labels
-**gestaffelt** (abwechselnd ober-/unterhalb des Pins), nicht verkleinert;
-Kiosk-Lesbarkeit aus Distanz hat Vorrang (AC-FIX3, #335).
+**Darstellung (Design-Evolution aus echtem Display-Test, #335):** die Uhr ist ein
+**linearer Zeitstrahl** (kein Ring) — als **VERTIKALER Balken** orientiert: oben =
+früh (**aufstehen 07:00**), unten = spät (**losgehen 08:30**), Zeit fließt nach
+unten. Der verstrichene Teil füllt **von oben** (`height` ∝ verstrichener Anteil),
+ein „jetzt"-Marker liegt als waagerechter Riegel quer über dem Balken an der
+aktuellen Position. Der Balken nutzt **möglichst viel Panel-Höhe**.
+Die Tagespunkte — aufstehen, anziehen, losgehen — sitzen als **Piktogramme** an
+ihrer **proportionalen Vertikal-Position** (`top:%` nach Zeit) **neben** dem
+Balken, jeweils mit **Uhrzeit** (z. B. 07:00 / 08:22 / 08:30). Die Event-Icons
+stehen **abwechselnd auf gegenüberliegenden Seiten** des Balkens (aufstehen
+**links**, anziehen **rechts**, losgehen **links**). **Keine** separaten
+Meilenstein-Kästen (verworfen, kein Mehrwert).
+Die Uhrzeit-Labels dürfen **nicht in andere Elemente ragen** — bei engem Abstand
+zwischen zwei Punkten (z. B. anziehen/losgehen nur 8 Min auseinander) garantiert
+die **Seiten-Alternation** (adjazente Events nie auf derselben Seite) zusammen mit
+der vertikalen Länge die Überlappungsfreiheit — **nicht** durch Icon-Verkleinerung;
+Kiosk-Lesbarkeit aus Distanz hat Vorrang. (Diese vertikale Achse mit
+alternierenden Event-Seiten löst die ältere horizontale variant-f-Orientierung
+des Zeitstrahls und die Label-Staffelung AC-FIX3 ab — Layout-Rework aus dem
+1920×1080-Display-Test, #335.)
 `aufstehen` kommt direkt aus dem Config-Schlüssel `aufstehzeit` (Default `07:00`)
-— **nicht** von anziehen abgeleitet (AC-FIX1, #335).
+— **nicht** von anziehen abgeleitet (AC-FIX1, #335). Die proportionale
+Vertikal-Position von `anziehen` (`anziehen_pct` = (anziehen−aufstehen)/(losgehen−aufstehen))
+liefert die Uhr-Logik; aufstehen=0 %/losgehen=100 % sind die Fenster-Ränder.
 *Test-Implikation:* mit injiziertem `now` an je einem Punkt vor `anziehen`,
 zwischen den Zeiten und nach `losgehen` liefert die Zeit-Logik die erwarteten
 Restzeiten/Phasen — ohne echte Wall-Clock.
@@ -243,12 +255,14 @@ keinen Scroll-Container; die Kartenhöhe ist eine Funktion der Anzahl.
 
 ### ROUTINE-13 — Kindgerechte Zeit-Referenzen (Gate B gewählt)
 Damit ein nicht-uhr-lesendes Kind die Dauer greifen kann, blendet die View
-unter dem Haupt-Zeitstrahl **textlose Referenz-Balken** ein: ein Balken, dessen
-Länge 30 Min repräsentiert, mit dem „Sendung mit der Maus"-Piktogramm daneben,
-und ein Balken für 3 Min mit dem Zähneputzen-Piktogramm. **Maßstabsgetreu zum
-Haupt-Zeitstrahl** (gleiche px/min) und **rechtsbündig** verankert am
-Losgehen-Ende — so liest das Kind die Referenz als *Restzeit* („noch Zeit wie
-einmal Sendung mit der Maus"). **Kein erklärender Text**, nur Balken + Bild.
+**unterhalb des (vertikalen) Zeitstrahl-Blocks** eine `zeitref-zone` mit
+**textlosen Referenz-Balken** ein: ein Balken, dessen Breite proportional zu
+30 Min skaliert, mit dem „Sendung mit der Maus"-Piktogramm daneben, und ein
+Balken für 3 Min mit dem Zähneputzen-Piktogramm. Die Balken sind horizontale
+`width:%`-Elemente — sie teilen keinen gemeinsamen px/min-Maßstab mit dem
+vertikalen Hauptstrahl. So liest das Kind die Referenz als Dauer-Ankerpunkt
+(„so lange wie einmal Sendung mit der Maus"). **Kein erklärender Text**, nur
+Balken + Bild. (#335)
 
 **Gate B (2026-06-05): gewählt und Teil des V1-Designs** (variant-f). Die
 Referenz bleibt **config-schaltbar** (`zeit_referenzen`, ROUTINE-12: an/aus +
@@ -424,13 +438,14 @@ buddy-lokaler ARASAAC-Bezug) · ROUTINE-12 (fehlende/kaputte Datei und fehlende
 
 - **OPEN-ROUTINE-F — Display-Design (Gate B) — ENTSCHIEDEN 2026-06-05.**
   Gewähltes Artefakt: `mockups/variant-f` — Split-Layout (Checkliste | Zeit),
-  linearer Zeitstrahl mit Bild-Events + Uhrzeiten, rechtsbündige maßstabsgetreue
-  Referenz-Balken, großer grün-werdender Abhak-Knopf, Boxen im WetterBuddy-Card-Stil.
+  linearer Zeitstrahl mit Bild-Events + Uhrzeiten, horizontale Referenz-Balken
+  unterhalb des Zeitstrahl-Blocks, großer grün-werdender Abhak-Knopf, Boxen im
+  WetterBuddy-Card-Stil.
   **Rest-Polish in der Impl:**
   (a) ~~Uhrzeit-Labels am Zeitstrahl dürfen nicht in andere Elemente ragen~~ —
-  **ERLEDIGT 2026-06-06 (#335):** Labels werden bei engem Pin-Abstand gestaffelt
-  (anziehen-Label über dem Pin, losgehen-Label darunter); aufstehzeit kommt aus
-  Config, nicht abgeleitet (AC-FIX1/AC-FIX3).
+  **ERLEDIGT 2026-06-06 (#335):** gelöst durch **Seiten-Alternation** (ROUTINE-9):
+  adjazente Events stehen auf gegenüberliegenden Seiten des vertikalen Balkens;
+  aufstehzeit kommt aus Config, nicht abgeleitet (AC-FIX1).
   (b) 8-Punkte-Layout am echten Display verifizieren (ROUTINE-19);
   (c) die drei Zeitstrahl-Piktogramme (anziehen/aufstehen/losgehen)
   gegen die ARASAAC-Suche treffsicher verifizieren.
