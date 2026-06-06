@@ -77,13 +77,6 @@ DEFAULTS = {
     # sein, damit das ausgeteilte Stück direkt aufs Tablet getippt werden
     # kann.
     "display_url_origin": "",
-    # KAV-X: Pfad zur Per-Instanz-`plan/plan.json` (PLAN-28). Nach
-    # erfolgreicher Kalender-Auswahl schreibt die »Kalender verbinden«-Skill
-    # die gewählte `kalender_id` atomar hier hinein (V1-Provisorium gegen die
-    # FS-Linie, sauber gelöst in Folge-Ticket #140 — bewusst noch nicht auf
-    # HTTP umgezogen, eigenes Ticket). Default zeigt auf das Pi-Layout
-    # (plan/plan.json neben dem Eltern-Chat-Repo).
-    "plan_json_path": "../plan/plan.json",
     # ONB-6 / EC-15: Familien-Gruppen-Chat-ID. Default leer = Onboarding-
     # Bindung. Über ENV oder Datei gesetzt → gesperrt (Vorrang vor
     # Onboarding-Bindung) — die Sperr-Logik sitzt in `resolve`, nicht im
@@ -120,7 +113,7 @@ class Config:
                  family_group_chat_id, family_group_locked, context_depth,
                  ca_pem_path, familie_origin_url, geraete_origin_url,
                  panel_origin_url, plan_origin_url, display_url_origin,
-                 plan_json_path, routine_origin_url, log_level):
+                 routine_origin_url, log_level):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
         self.provider = provider
@@ -134,7 +127,6 @@ class Config:
         self.panel_origin_url = panel_origin_url       # PAA-5 / #183: Origin der Panel-Registry (PREG-15)
         self.plan_origin_url = plan_origin_url         # EC-21 / #215: Origin der Plan-Buddy-Reload-Schnittstelle
         self.display_url_origin = display_url_origin   # GAA-3.7: HTTPS-Origin für Display-URLs
-        self.plan_json_path = plan_json_path       # KAV-X: Pfad zur Per-Instanz-`plan/plan.json`
         self.routine_origin_url = routine_origin_url   # RZS-6 / #343: Origin des Routine-Buddys (ROUTINE-14)
         self.log_level = log_level                 # LOG-4 (#166): Level-String für tools.logsetup
 
@@ -235,7 +227,6 @@ def resolve(config_path, zd=None):
         panel_origin_url=str(values["panel_origin_url"]).strip().rstrip("/"),
         plan_origin_url=str(values["plan_origin_url"]).strip().rstrip("/"),
         display_url_origin=str(values["display_url_origin"]).strip().rstrip("/"),
-        plan_json_path=str(values["plan_json_path"]).strip(),
         routine_origin_url=str(values["routine_origin_url"]).strip().rstrip("/"),
         log_level=str(values["log_level"]).strip(),
     )

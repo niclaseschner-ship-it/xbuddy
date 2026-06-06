@@ -403,15 +403,6 @@ def test_T341_kav_kalender_id_via_http_put(monkeypatch):
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
-    # Sicherstellen, dass der Legacy-FS-Write-Pfad NICHT aufgerufen wird.
-    fs_write_calls = []
-
-    def fail_if_called(path, kalender_id):
-        fs_write_calls.append((path, kalender_id))
-        raise AssertionError(
-            "write_kalender_id_to_plan_json wurde aufgerufen — "
-            "KAV darf plan.json nicht direkt schreiben (PLAN-32 / APP-3)")
-
     # Fake-Telegram und minimal-ZD.
     from fakes import FakeTelegram
 
@@ -473,10 +464,6 @@ def test_T341_kav_kalender_id_via_http_put(monkeypatch):
 
     assert result.ergebnis == ERGEBNIS_VERBUNDEN, (
         "Ergebnis sollte ERGEBNIS_VERBUNDEN sein, war: %r" % result.ergebnis)
-
-    # Kein direkter FS-Write.
-    assert not fs_write_calls, (
-        "write_kalender_id_to_plan_json wurde aufgerufen — erwartet: kein Aufruf")
 
     # Genau ein HTTP-PUT an den korrekten Endpoint.
     assert len(captured_requests) == 1, (

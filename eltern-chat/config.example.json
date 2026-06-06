@@ -15,7 +15,5 @@
   "_panel_origin_url": "PAA-5 / #58 — Origin der Panel-Registry-Komponente (PORT-2 5041). Der »Panel anlegen«-Skill schreibt Panel-Instanzen ueber HTTP (PREG-15) statt direkt im Datei-System.",
   "panel_origin_url": "http://127.0.0.1:5041",
   "_display_url_origin": "GAA-3.7 — HTTPS-Origin der xBuddy-Auslieferung (z. B. https://xbuddy-hub.local:8443). Leer lassen, wenn der Bot nur den Pfad zurueckgeben soll (Tests/CI). Fuer Familien-Tablet-Anlage gesetzt sein, damit die zurueckgelieferte Display-URL direkt geoeffnet werden kann.",
-  "display_url_origin": "",
-  "_plan_json_path": "KAV-X — Pfad zur Per-Instanz-plan/plan.json. Die »Kalender verbinden«-Skill schreibt nach erfolgreicher Kalender-Auswahl die gewaehlte kalender_id atomar hier hinein. V1-Provisorium gegen die FS-Linie, sauber geloest in Folge-Ticket #140 (HTTP-Migration des KAV-Auswahl-Schritts ist eigenes Ticket). Default passt zum Pi-Setup (plan/plan.json neben dem Eltern-Chat-Repo).",
-  "plan_json_path": "../plan/plan.json"
+  "display_url_origin": ""
 }
