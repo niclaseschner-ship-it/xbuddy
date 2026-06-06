@@ -46,7 +46,7 @@ seine **Funktion** (die ablaufende Uhr / Zeitberechnung, Abschnitt 4) und stellt
 das Ergebnis über seine **Display-View** bereit (APP-1). Die display-only-V1
 (#335) exponierte **keine** API; der Zeiten-Schreibpfad (#343, ROUTINE-14,
 RAT-12) fügt als erste Ausnahme `PUT /api/v1/routine/config` hinzu (bindendes
-Requirement, Implementierung offen, E-ROUTINE-5). Cross-Buddy-Konsum bleibt aus
+Requirement, gebaut in #343, E-ROUTINE-5). Cross-Buddy-Konsum bleibt aus
 (E-ROUTINE-6).
 
 *Tickets:* #335
@@ -283,10 +283,9 @@ exponiert nur, wofür ein konkreter Konsument existiert (BUD-1b „nur wenn"). D
 **Eltern-Chat ist der konkrete Konsument** der Schreib-API für die Zeiten
 (OPEN-ROUTINE-B Teil 1, #343, entblockt durch RAT-12) — dieser eine Endpunkt ist
 damit ein **bindendes Requirement** (RAT-11-Überführung Skizze→bindend), nicht
-mehr nur entworfen. **Implementierungsstand: offen** (das Ticket #343 baut ihn;
-„bindend" heißt zu-bauen, nicht „Code existiert"):
+mehr nur entworfen. **Implementierungsstand: gebaut (#343)**:
 
-- **`PUT /api/v1/routine/config` — Zeiten setzen (#343, bindend; Implementierung offen).**
+- **`PUT /api/v1/routine/config` — Zeiten setzen (#343, bindend; gebaut in #343).**
   Eigener API-Pfad `/api/v1/routine/<resource>` (BUD-1b). Die Implementierung
   ergänzt die URL-14-Routing-Zeile (`/api/v1/routine/`, analog Plan/Photo) und
   den nginx-Origin-Block — Teil der Andock-Checkliste (ROUTINE-16); der
@@ -339,7 +338,7 @@ Wenn eine dieser Schnittstellen gebaut wird, folgt sie BUD-1b (eigener API-Pfad
 `/api/v1/routine/<resource>`, eigene URL-14-Zeile, Konsum fremder Apps nur über
 deren Schnittstelle, nie per Datei-Zugriff, APP-3).
 
-*Tickets:* #335
+*Tickets:* #335, #343
 
 ## 6. Konfiguration
 
@@ -469,11 +468,10 @@ DCOMP-3/DCOMP-4).
   diese Slots gebaut werden.
 
 - **OPEN-ROUTINE-B — Schreib-API für den Eltern-Chat (zweigeteilt).**
-  - **Teil 1 — Zeiten (`PUT /api/v1/routine/config`, #343): bindend, nicht mehr
-    geblockt** (Implementierung offen). Über den TASK-7-Pfad ohne #296 baubar
-    (RAT-12); ROUTINE-14 ist dafür gehärtet, inkl. Reload-on-Read für EC-21.
-    Skill-Verhalten:
-    `specs/platform/routine-zeiten-setzen.md` (RZS).
+  - **Teil 1 — Zeiten (`PUT /api/v1/routine/config`, #343): gebaut.** Backbone
+    (`routine/main.py` + `routine/config.py`) fertig, nginx-Routing ergänzt
+    (URL-14). Reload-on-Read (DCOMP-3) + atomares Schreiben (DCOMP-4) umgesetzt.
+    Skill-Verhalten: `specs/platform/routine-zeiten-setzen.md` (RZS, Track B).
   - **Teil 2 — Routine-Punkte (`POST /api/v1/routine/items`, #354):** abgespalten
     aus #343. Verweist auf OPEN-ROUTINE-A (die `einmalig`/`bedingt`-Slots samt
     herkunfts-eindeutiger Item-IDs, ROUTINE-5, sind dort noch nicht entschieden).
