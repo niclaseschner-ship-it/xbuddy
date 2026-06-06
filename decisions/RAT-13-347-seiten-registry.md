@@ -5,7 +5,8 @@
   ratifiziert; Auth über den Kanal gelöst).
 - **Betrifft:** `specs/platform/seiten-registry.md` (neu, SREG),
   `conventions/buddies.md` (neu, BUD-3 — views.json-Manifest), `conventions/ports.md`
-  (PORT-2: xbuddy-seiten :5042), `conventions/urls.md` (URL-14: GET /api/v1/seiten),
+  (PORT-2: xbuddy-seiten :5042), `conventions/urls.md` (neue Zeile in der
+  URL-14-Routing-Tabelle: `/api/v1/seiten`),
   `specs/platform/eltern-chat.md` (EC-15 seiten_origin_url; OPEN-EC-Origin als
   Vorbedingung). Keystone-Ticket **#347**; verwandt #325 (getrennt), #328/#330
   (Konsumenten).
