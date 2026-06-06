@@ -162,6 +162,62 @@ def test_URL_14_wetter_in_routing_tabelle_dokumentiert():
 
 
 # ============================================================
+#  Routine-Buddy: Upstream :5050 und /display/routine/-Location (#335)
+# ============================================================
+
+
+def test_URL_14_routine_upstream_zeigt_auf_5050():
+    """URL-14 Zeile 3 + PORT-2: Routine-Upstream lauscht auf Port 5050."""
+    text = _conf_text()
+    match = re.search(
+        r"upstream\s+xbuddy_routine\s*\{[^}]*server\s+127\.0\.0\.1:5050\s*;[^}]*\}",
+        text,
+        re.DOTALL,
+    )
+    assert match is not None, (
+        "upstream xbuddy_routine fehlt oder zeigt nicht auf 127.0.0.1:5050 "
+        "(URL-14, routine/main.py DEFAULTS listen_port=5050, PORT-2)"
+    )
+
+
+def test_URL_14_routine_location_proxypassed_an_routine_upstream():
+    """URL-14 Zeile 3: /display/routine/ wird an xbuddy_routine geleitet."""
+    text = _conf_text()
+    match = re.search(
+        r"location\s+/display/routine/\s*\{[^}]*proxy_pass\s+http://xbuddy_routine\s*;[^}]*\}",
+        text,
+        re.DOTALL,
+    )
+    assert match is not None, (
+        "location /display/routine/ fehlt oder proxypasst nicht an xbuddy_routine "
+        "(URL-14, #335)"
+    )
+
+
+def test_URL_14_routine_location_steht_vor_allgemeinem_display():
+    """URL-14: spezifisch vor allgemein — /display/routine/ steht VOR /display/."""
+    text = _conf_text()
+    pos_routine = text.find("location /display/routine/")
+    pos_display = text.find("location /display/ ")
+    assert pos_routine != -1, "location /display/routine/ nicht gefunden"
+    assert pos_display != -1, "location /display/ nicht gefunden"
+    assert pos_routine < pos_display, (
+        "URL-14-Verstoß: /display/routine/ muss VOR /display/ stehen "
+        f"(Positionen: routine={pos_routine}, display={pos_display})"
+    )
+
+
+def test_URL_14_routine_in_routing_tabelle_dokumentiert():
+    """Die Routing-Tabelle im Conf-Header muss den Routine-Block listen."""
+    text = _conf_text()
+    header = text.split("server {", 1)[0]
+    assert "/display/routine/" in header, (
+        "Routing-Tabelle im Conf-Header listet /display/routine/ nicht — "
+        "Doku und Verhalten dürfen nicht auseinanderlaufen."
+    )
+
+
+# ============================================================
 #  Icon-Bibliothek: vom Router serviert, KEIN nginx-alias (#135, ROU-26)
 # ============================================================
 #
