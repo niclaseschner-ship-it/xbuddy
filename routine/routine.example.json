@@ -1,0 +1,58 @@
+{
+  "_comment": "ROUTINE-12 — Routine-Buddy-Daten-Konfiguration einer Instanz. Kopiere als routine.json (per .gitignore aus dem Repo ausgeschlossen, je Instanz separat gepflegt). 'abfahrtszeit' ist Pflicht: entweder 'HH:MM' (fixer Wert) oder Wochentag-Dict {Mo: 'HH:MM', Sa: '', So: ''} (leer = kein Schultag). 'anzieh_vorlauf_min' ist ein Tuning-Wert (Default 8, ROUTINE-9); kein Code-Default, sondern Config-Schlüssel. 'items' ist die geordnete Routine-Punkt-Liste; 'quelle' trägt default|einmalig|bedingt — V1 baut nur default. 'piktogramm' ist die numerische ARASAAC-ID (ROUTINE-10), über die geteilte Icon-Plattform bezogen (ICONS-5). 'zeit_referenzen' ist config-schaltbar (ROUTINE-13): an/aus + Paare als Daten.",
+
+  "abfahrtszeit": "07:45",
+  "_comment_abfahrtszeit": "Alternativ je Wochentag: { 'Mo': '07:45', 'Di': '07:45', 'Mi': '07:45', 'Do': '07:45', 'Fr': '07:45', 'Sa': '', 'So': '' }",
+
+  "anzieh_vorlauf_min": 8,
+
+  "zeitzone": "Europe/Berlin",
+
+  "items": [
+    {
+      "_was": "Frühstück — jeden Morgen (ARASAAC 4626: Frühstückstisch)",
+      "id": "fruehstueck",
+      "label": "Frühstück",
+      "piktogramm": "4626",
+      "quelle": "default"
+    },
+    {
+      "_was": "Zähne putzen (ARASAAC 2326: Zähne putzen)",
+      "id": "zaehne",
+      "label": "Zähne putzen",
+      "piktogramm": "2326",
+      "quelle": "default"
+    },
+    {
+      "_was": "Brotdose einpacken (ARASAAC 31091: Tupperbox/Brotdose)",
+      "id": "brotdose",
+      "label": "Brotdose",
+      "piktogramm": "31091",
+      "quelle": "default"
+    },
+    {
+      "_was": "Rucksack packen (ARASAAC 2475: Schulrucksack)",
+      "id": "rucksack",
+      "label": "Rucksack",
+      "piktogramm": "2475",
+      "quelle": "default"
+    }
+  ],
+
+  "zeit_referenzen": {
+    "_comment": "ROUTINE-13: config-schaltbar (an/aus). Paare als Daten — kein Code (E-ROUTINE-4). V1-Default: aus. Referenz-Balken zeigen maßstabsgetreue Zeitspannen rechtsbündig am Losgehen-Ende.",
+    "an": false,
+    "paare": [
+      {
+        "_was": "Sendung mit der Maus — 30 Minuten (ARASAAC 9802: Fernseher einschalten)",
+        "piktogramm": "9802",
+        "dauer_min": 30
+      },
+      {
+        "_was": "Zähneputzen — 3 Minuten (ARASAAC 2694: Zahnbürste)",
+        "piktogramm": "2694",
+        "dauer_min": 3
+      }
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+# XBuddy Routine-Buddy — systemd-Service-Vorlage (SVC-1..4, ROUTINE-15/17).
+#
+# Diese Datei ist eine VORLAGE. Vor `systemctl enable` Platzhalter ersetzen
+# (siehe deploy/systemd/README.md). Per-Instanz-Werte stehen nie im Repo.
+#
+# Port 5050 (ROUTINE-15, OPEN-ROUTINE-H: erster freier Port im Buddy-Block 5050-5099).
+
+[Unit]
+Description=XBuddy Routine-Buddy-App
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__XBUDDY_USER__
+WorkingDirectory=__XBUDDY_REPO__
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=__XBUDDY_HOME__
+ExecStart=__XBUDDY_PYTHON__ -m routine.main --host 127.0.0.1 --port 5050
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

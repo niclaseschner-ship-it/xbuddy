@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="de" data-stage="toddler">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1280, initial-scale=1">
+<title>Routine-Buddy · Morgen</title>
+
+{# ROUTINE-11/DTOK-3: Geteilter Design-Token-Strang via /display/_shared/design/tokens.css —
+   REFERENZIERT, nicht kopiert (E-ROUTINE-7, #323 live). #}
+<link rel="stylesheet" href="/display/_shared/design/tokens.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='routine.css') }}">
+</head>
+
+{# ROUTINE-11: Mitwachsen-Stufe als data-stage; V1 nur toddler. #}
+<body class="xb" data-stage="toddler">
+
+{# ════ KOPFLEISTE ════ #}
+<header class="header">
+  <span class="header-title">Mein Morgen</span>
+</header>
+
+{# ════ HAUPT-LAYOUT: Split — Checkliste links / Uhr rechts (ROUTINE-2, variant-f) ════ #}
+<div class="main">
+
+  {# ════ LINKE SPALTE: Routine-Checkliste (ROUTINE-3, ROUTINE-7) ════ #}
+  <div class="card list-col">
+    <div class="card-label">Was muss ich tun?</div>
+    <div class="list-col-inner">
+
+      {# ROUTINE-19: Dynamische Liste, V1 bis 8 Punkte, ohne Scroll.
+         Kartenhöhe via CSS-Variable (Funktion der Anzahl). #}
+      {% for item in view.punkte %}
+      <div class="routine-card {% if item.abgehakt %}done{% endif %}"
+           data-id="{{ item.id }}"
+           onclick="toggleItem('{{ item.id }}')">
+        {# ROUTINE-10: Piktogramm über geteilte Icon-Plattform — kein ARASAAC-CDN #}
+        <div class="card-pikto">
+          {% if item.pikto_url %}
+          <img src="{{ item.pikto_url }}" alt="{{ item.label }}">
+          {% endif %}
+        </div>
+        <div class="card-item-label">{{ item.label }}</div>
+        {# ROUTINE-3: Großer Abhak-Knopf — deutliche Tipp-Affordanz, große Trefferfläche #}
+        <div class="check-btn" aria-label="Abhaken"></div>
+      </div>
+      {% endfor %}
+
+    </div>
+  </div>{# /list-col #}
+
+  {# ════ RECHTE SPALTE: Ablaufende Uhr / Zeitstrahl (ROUTINE-9, ROUTINE-13) ════ #}
+  <div class="card clock-col">
+    <div class="card-label">Wie viel Zeit bleibt?</div>
+
+    {% if view.uhr %}
+    {# Phasen-Hinweis (ROUTINE-9) #}
+    {% if view.phasen_text %}
+    <div class="phase-now">
+      <span class="phase-pill">{{ view.phasen_text }}</span>
+    </div>
+    {% endif %}
+
+    {# ── HAUPT-ZEITSTRAHL (ROUTINE-9, variant-f) ── #}
+    {# Gemeinsames Grid: Piktogramm-Spalte 48px + Balken-Spalte 1fr (K1-Maßstab) #}
+    <div class="scale-zone">
+
+      {# Hauptstrahl belegt beide Grid-Spalten #}
+      <div class="timeline-section">
+
+        {# Aufstehen-Pin (Start, linksb.) #}
+        <div class="milestone-pin milestone-pin-start">
+          <div class="pin-pikto pin-pikto-start">
+            {# ARASAAC 8152: aufstehen — über geteilte Icon-Plattform (ROUTINE-10) #}
+            <img src="/display/_shared/icons/arasaac/8152.png" alt="Aufstehen">
+          </div>
+          <div class="pin-stem"></div>
+          {% if view.uhr.aufstehen_label %}
+          <span class="pin-time">{{ view.uhr.aufstehen_label }}</span>
+          {% endif %}
+        </div>
+
+        {# Anziehen-Pin (bei anzieh_vorlauf_min vor losgehen) #}
+        {# Position berechnet aus: (anziehen - aufstehen) / zeitfenster_min #}
+        {% set anziehen_pct = ((view.uhr.zeitfenster_min - (view.uhr.rest_bis_losgehen_min if view.uhr.rest_bis_losgehen_min is not none else 0) - (view.uhr.rest_bis_anziehen_min if view.uhr.rest_bis_anziehen_min is not none else 0)) / view.uhr.zeitfenster_min * 100) if view.uhr.zeitfenster_min else 0 %}
+        {# Einfachere direkte Berechnung aus den Labels — Fallback-Wert aus elapsed_pct #}
+        <div class="milestone-pin milestone-pin-anziehen"
+             style="left: calc({{ 100 - (view.uhr.rest_bis_losgehen_min / view.uhr.zeitfenster_min * 100)|round(1) if view.uhr.rest_bis_losgehen_min is not none else view.uhr.elapsed_pct }}%)">
+          <div class="pin-pikto pin-pikto-anziehen">
+            {# ARASAAC 6627: anziehen / bekleiden — über geteilte Icon-Plattform #}
+            <img src="/display/_shared/icons/arasaac/6627.png" alt="Anziehen">
+          </div>
+          <div class="pin-stem"></div>
+          <span class="pin-time">{{ view.uhr.anziehen_label }}</span>
+        </div>
+
+        {# Losgehen-Pin (Ende, rechtsb.) #}
+        <div class="milestone-pin milestone-pin-losgehen">
+          <div class="pin-pikto pin-pikto-losgehen">
+            {# ARASAAC 8142: gehen / losgehen — über geteilte Icon-Plattform #}
+            <img src="/display/_shared/icons/arasaac/8142.png" alt="Losgehen">
+          </div>
+          <div class="pin-stem"></div>
+          <span class="pin-time">{{ view.uhr.losgehen_label }}</span>
+        </div>
+
+        {# Balken-Track #}
+        <div class="timeline-track">
+          {# Verstrichener Teil #}
+          <div class="timeline-elapsed" style="width: {{ view.uhr.elapsed_pct }}%;"></div>
+          {# JETZT-Marker #}
+          <div class="timeline-now" style="left: {{ view.uhr.elapsed_pct }}%;"></div>
+        </div>
+
+      </div>{# /timeline-section #}
+
+      {# ── ZEIT-REFERENZEN (ROUTINE-13): config-schaltbar, rechtsbündig (F2) ── #}
+      {% if view.zeitreferenzen_an and view.zeitreferenzen %}
+      <div class="zeitref-divider"></div>
+
+      {% for zr in view.zeitreferenzen %}
+      <div class="zeitref-pikto">
+        {% if zr.pikto_url %}
+        <img src="{{ zr.pikto_url }}" alt="{{ zr.dauer_min }} Min">
+        {% endif %}
+      </div>
+      <div class="zeitref-bar-track">
+        {# F2: Rechtsbündig verankert — wächst von rechts (Losgehen-Ende) nach links #}
+        <div class="zeitref-fill" style="width: {{ zr.bar_pct }}%;"></div>
+      </div>
+      {% endfor %}
+
+      {% endif %}{# /zeitreferenzen #}
+
+    </div>{# /scale-zone #}
+
+    {% else %}
+    {# Kein Schultag oder keine Config-Abfahrtszeit #}
+    <div class="kein-schultag">
+      <span>Heute kein Schultag 🎉</span>
+    </div>
+    {% endif %}{# /uhr #}
+
+  </div>{# /clock-col #}
+
+</div>{# /main #}
+
+{# ROUTINE-10/ICONS-5: ARASAAC-Attribution — Lizenz-/NC-Frage zentral in icons.md ICONS-6 #}
+<div class="attribution-footer">
+  <span>RoutineBuddy · xbuddy</span>
+  <span>Piktogramme: ARASAAC (arasaac.org) · Autor: Sergio Palao · Lizenz: CC BY-NC-SA 4.0</span>
+</div>
+
+<script>
+/* ROUTINE-7: Tap → Toggle — view-eigene Interaktion, kein separates Script-File. */
+function toggleItem(itemId) {
+  fetch('/display/routine/toggle/' + encodeURIComponent(itemId), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    /* DOM direkt updaten ohne Reload für sofortiges Feedback */
+    var card = document.querySelector('[data-id="' + itemId + '"]');
+    if (card) {
+      if (data.abgehakt) {
+        card.classList.add('done');
+      } else {
+        card.classList.remove('done');
+      }
+    }
+  })
+  .catch(function(e) {
+    /* Bei Netz-Fehler: Seite neu laden — Zustand stimmt immer noch (ROUTINE-7) */
+    console.error('Toggle fehlgeschlagen', e);
+    window.location.reload();
+  });
+}
+</script>
+
+</body>
+</html>
