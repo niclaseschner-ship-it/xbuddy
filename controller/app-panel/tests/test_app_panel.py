@@ -1517,6 +1517,81 @@ def test_PANEL_12_shrink_fallback_ignores_min_width():
          '(bekommen: cols=%d rows=%d capacity=%d)') % (20, out['cols'], out['rows'], out['capacity'])
 
 
+def test_PANEL_12_shrink_fallback_chooses_correct_cols_rows():
+    """AC1 / PANEL-12 Mutations-Kriterium: Bei M=20, vpW=150, vpH=600 wählt
+    der Schrumpf-Fallback-Zweig (app.js if(!best)-Block) cols=2, rows=10.
+
+    Mathematische Herleitung (Mutationsprobe):
+    - innerW = 150 - 2*16 = 118 px; innerH = 600 - 2*16 = 568 px
+    - Hauptschleife: Alle c=1..20 liefern tileW < 160 → kein Kandidat → best=null
+    - Schrumpf-Fallback ohne TILE_MIN_W-Guard:
+        c=2: tileW=(118-12)/2=53 px, tileH=(568-9*12)/10=46 px,
+             ratio=53/46≈1.152, ratioPenalty=|ln(1.152/0.92)|≈0.225,
+             emptyPenalty=0 (2*10=20=M), score≈0.225  ← Minimum
+        c=5: tileW=(118-4*12)/5=14 px, tileH=(568-3*12)/4=133 px,
+             ratio≈0.114, score≈2.168  ← viel schlechter
+    - sqrt-Default (line 485) würde cols=5,rows=4 geben — ignoriert Score
+    - Ohne Schrumpf-Schleife (if(!best)-Block entfernt) fiele das Ergebnis
+      auf den sqrt-Default zurück: cols=5, rows=4 — Assertion schlägt an.
+
+    Kriterium: cols==2 AND rows==10 (nur Schrumpf-Loop kann dieses Ergebnis
+    produzieren; sqrt-Default liefert cols=5, rows=4)."""
+    out = run_node('''
+        var M   = 20;
+        var vpW = 150;   // alle tileW < TILE_MIN_W → Fallback nötig
+        var vpH = 600;
+
+        var geom = panelLib.computeGridGeometry(M, vpW, vpH);
+
+        console.log(JSON.stringify({
+            cols:     geom.cols,
+            rows:     geom.rows,
+            capacity: geom.cols * geom.rows,
+        }));
+    ''')
+    assert out['capacity'] >= 20, \
+        ('PANEL-12: cols*rows muss >= M=20 (bekommen: capacity=%d)') % out['capacity']
+    assert out['cols'] == 2 and out['rows'] == 10, \
+        ('PANEL-12 Schrumpf-Fallback muss cols=2, rows=10 wählen (Score-Minimum) — '
+         'bekommen: cols=%d rows=%d. '
+         'Wenn cols=5/rows=4: Schrumpf-Loop fehlt, sqrt-Default greift.') % (
+             out['cols'], out['rows'])
+
+
+def test_PANEL_12_shrink_not_needed_for_normal_viewport():
+    """AC2 / PANEL-12 Kontroll-Pfad: Bei M=6, vpW=800, vpH=600 findet die
+    Hauptschleife bereits einen gültigen Kandidaten (tileW >= TILE_MIN_W=160),
+    der Schrumpf-Fallback wird NICHT benötigt.
+
+    Erwartetes Ergebnis: cols=3, rows=2, tileW=248 px >= 160 px.
+    Beweist, dass der Schrumpf-Pfad nicht immer aktiv ist."""
+    out = run_node('''
+        var M   = 6;
+        var vpW = 800;
+        var vpH = 600;
+        var TILE_MIN_W = 160;
+        var gap = panelLib.GRID_GAP;
+        var pad = panelLib.GRID_PAD;
+
+        var geom   = panelLib.computeGridGeometry(M, vpW, vpH);
+        var innerW = vpW - 2 * pad;
+        var tileW  = (innerW - (geom.cols - 1) * gap) / geom.cols;
+
+        console.log(JSON.stringify({
+            cols:     geom.cols,
+            rows:     geom.rows,
+            capacity: geom.cols * geom.rows,
+            tileW:    tileW,
+            aboveMin: tileW >= TILE_MIN_W,
+        }));
+    ''')
+    assert out['capacity'] >= 6, \
+        ('PANEL-12 Kontroll-Pfad: capacity muss >= M=6 (bekommen: %d)') % out['capacity']
+    assert out['aboveMin'], \
+        ('PANEL-12 Kontroll-Pfad: normaler Viewport (800x600, M=6) muss tileW >= TILE_MIN_W=160 '
+         'liefern — bekommen: tileW=%.1f. Schrumpf-Fallback darf hier nicht greifen.') % out['tileW']
+
+
 def test_PANEL_9_test_file_covers_panel_12():
     """PANEL-9 Selbst-Probe: PANEL_12-Tests sind in dieser Datei vorhanden."""
     here = read(os.path.abspath(__file__))
