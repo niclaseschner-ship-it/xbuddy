@@ -844,6 +844,7 @@ Konvention:
 | `log_level`      | `ROUTER_LOG_LEVEL`        | `--log-level`      |
 | `controller_dir` | `ROUTER_CONTROLLER_DIR`   | `--controller-dir` |
 | `icon_root`      | `ROUTER_ICON_ROOT`        | `--icon-root`      |
+| `routing_file`   | `ROUTER_ROUTING_FILE`     | `--routing`        |
 
 ---
 

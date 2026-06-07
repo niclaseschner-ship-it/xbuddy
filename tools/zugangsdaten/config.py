@@ -7,6 +7,9 @@ Umgebungsvariable oder CLI überschreibbar (ZD-8).
 Priorität: CLI > Umgebungsvariable > Default — analog der Auflösung in
 router/main.py (ROU-15). Eine Auflösungs-*Reihenfolge der Werte selbst* erzwingt
 der Speicher nicht (ZD-7); diese Datei legt nur fest, *wo* die Datei liegt.
+
+SVC-5 / CONFIG-5: ENV-Var `ZUGANGSDATEN_STORE_FILE` überschreibt den Default-Pfad.
+Per-Instanz-Daten leben außerhalb des Checkouts (/home/buddy/xbuddy-data/zugangsdaten/).
 """
 
 import argparse
@@ -17,8 +20,9 @@ import os
 DEFAULT_STORE_FILE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "zugangsdaten.json")
 
-# Umgebungsvariable, die den Default überschreibt (ZD-8).
-ENV_STORE_FILE = "XBUDDY_ZUGANGSDATEN_FILE"
+# SVC-5 / CONFIG-5: ENV-Var, die den Default-Pfad überschreibt (ZD-8).
+# Naming-Konvention: <KOMP>_<ZWECK>_FILE (CONFIG-5) — analog ROUTINE_STORE_FILE, ROUTER_ROUTING_FILE.
+ENV_STORE_FILE = "ZUGANGSDATEN_STORE_FILE"
 
 
 def resolve_store_path(cli_path=None, env=None):
