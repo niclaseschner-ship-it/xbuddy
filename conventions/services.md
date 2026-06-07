@@ -34,3 +34,26 @@ das in der Komponenten-Spec.
 Service-Code loggt nach stdout/stderr. `journalctl -u <service>` ist die
 Quelle der Wahrheit für Logs — keine Datei-Logs nebenher. Log-Format
 selbst legt `conventions/logging.md` fest (Folge-Konvention).
+
+### SVC-5 — Instanz-Daten leben außerhalb des Checkouts
+Die per-Instanz-Daten eines Service (Registry-/Config-JSON, DB, Profilfotos,
+Medien, `.env`) liegen **nicht** im Code-Checkout, sondern unter
+`/home/buddy/xbuddy-data/<komponente>/`. Der Service zeigt per **absolutem
+Pfad** dorthin — über die schon vorhandene `<KOMPONENTE>_*`-Env-Variable
+(`Environment=` in der Unit, z. B. `PLAN_DB_DATEI`, `WETTER_CONFIG_FILE`,
+`PHOTO_LIBRARY_VERZEICHNIS`, `ROUTINE_DATA_FILE`) oder per CLI-Arg
+(`--registry`/`--geraete`/`--panels`/`--db`). Das ist die in SVC-2 vorgesehene
+„Pfad-Substitution durch den Installer". Code-Defaults (`HERE/…`, CWD) bleiben
+nur Fallback (CLAUDE.md §6), sind aber nie der Live-Ort.
+
+Begründung: Der Checkout ist Dev-Root **und** Service-CWD zugleich; liegen die
+Live-Daten darin, koppeln sie an Branch-Stand und blockieren das Entkoppeln von
+Code und Release (PW-6/RAT-14). Daten außerhalb des Checkouts machen Branch-Flips
+und einen späteren Release-Checkout (Etappe 2) gefahrlos.
+
+Migration ist additiv-rückrollbar: Daten per `cp` (nicht `mv`) nach
+`xbuddy-data/`, Unit umhängen, Service-für-Service am Live-Verhalten verifizieren,
+**dann erst** die Alt-Datei im Checkout entfernen. Komponenten ohne Pfad-Override
+(heute `router`/routing.json, `tools/zugangsdaten`, `routine`/routine_store.json)
+brauchen zuerst einen kleinen Override-Patch — bis dahin bleiben ihre Daten im
+Checkout (Etappe 1b).
