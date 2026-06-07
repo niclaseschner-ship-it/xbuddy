@@ -20,6 +20,7 @@ root_packages =
     plan
     router
     routine
+    seiten
     tools
     wetter
 exclude_type_checking_imports = True
@@ -29,7 +30,7 @@ name = MOD-1 Layer-Modell (eltern-chat -> Services -> tools)
 type = layers
 layers =
     eltern-chat
-    familie | geraete | photo | plan | router | routine | wetter
+    familie | geraete | photo | plan | router | routine | seiten | wetter
     tools
 containers =
 
@@ -43,6 +44,7 @@ modules =
     plan
     router
     routine
+    seiten
     wetter
 
 [importlinter:contract:tools-bottom]
@@ -58,6 +60,7 @@ forbidden_modules =
     plan
     router
     routine
+    seiten
     wetter
 
 [importlinter:contract:eltern-chat-top]
@@ -70,6 +73,7 @@ source_modules =
     plan
     router
     routine
+    seiten
     tools
     wetter
 forbidden_modules =
@@ -86,6 +90,7 @@ source_modules =
     plan
     router
     routine
+    seiten
     wetter
 forbidden_modules =
     tools.zugangsdaten.store
