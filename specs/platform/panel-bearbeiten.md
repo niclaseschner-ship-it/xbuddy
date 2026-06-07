@@ -1,0 +1,215 @@
+# Panel bearbeiten — Spec     (ID-Präfix: PBE)
+
+Die **eltern-seitige Settings-Seite**, mit der Eltern die Kacheln **einer
+Panel-Instanz** verschieben, ausblenden, entfernen und hinzufügen — die
+Home-Screen-Settings-Metapher vom Handy. Der Eltern-Chat liefert auf Nachfrage
+einen **Link** zu dieser Seite (kein mehrstufiger Chat-Dialog). Folgt dem
+Muster RAT-2/#328 (Garderoben-Editor): der **Daten-Eigentümer-Service** (hier
+der panel-Service, :5041) liefert seine eigene Editor-Seite, die **zeigt UND
+editiert**; Auth = Heimnetz/Tailscale-Grenze.
+
+Diese Fähigkeit löst **OPEN-PREG-A** (`panel-registry.md`) auf — den dort
+vorgesehenen „späteren Tile-Schreiber". Sie ändert ausschließlich `tiles`, nie
+`config` (PREG-5, E-PANEL-3).
+
+**Datenmodell-Erdung (Bestand):** Eine Panel-Instanz trägt `tiles` getrennt von
+`config` mit getrennten Schreibrechten (PREG-3, PREG-5). Eine Kachel hat
+`key`/`app`/`view`/`query?`/`label`/`icons[]`/`sichtbar` (PANEL-3); `key` ist
+stabil und identifiziert eine Kachel über Listenpositionen hinweg. Die
+Listen-Reihenfolge in `tiles.json` **ist** die Anzeige-Reihenfolge (PANEL-3).
+
+---
+
+## 1. Editor-Seite & Auslieferung
+
+### PBE-1 — Eine Editor-Seite je Panel-Instanz
+Der panel-Service liefert je Panel-Instanz eine Editor-Seite aus. Die Seite
+zeigt die Kacheln **dieser** Instanz in ihrer aktuellen `tiles.json`-Reihenfolge
+und erlaubt das Bearbeiten (PBE-5..7). Die Seite ist an die `panel_id` gebunden
+(PREG-3) — sie editiert nie eine andere Instanz.
+
+**Mobil-hochkant + Geräte-Safe-Area:** Die Seite ist eine eltern-seitige
+Mobil-Oberfläche (kein Kiosk-View), Scrollen erlaubt. Sie respektiert die
+**Geräte-Safe-Area oben** (iPhone-Notch-/Lautsprecher-tote-Zone): der Kopf liegt
+unterhalb von `env(safe-area-inset-top)` (Seite mit `viewport-fit=cover`,
+Inhalts-Padding `max(<basis>, env(safe-area-inset-top))`), damit Titel/Aktionen
+nie unter dem Notch verschwinden. *Eigentest:* bei gesetztem
+`safe-area-inset-top` beginnt der Seitenkopf unterhalb der Inset-Höhe.
+
+*Wenn* die Seite für `panel_id` X aufgerufen wird, *dann* lädt sie die Kacheln
+aus der `tiles`-Sicht genau dieser Instanz (PREG-14) und zeigt sie in
+Listen-Reihenfolge.
+
+### PBE-2 — Deterministische Editor-URL je Panel-Instanz, auffindbar über #347
+Die Editor-Seite (PBE-1) wird unter einer **deterministisch aus der `panel_id`
+abgeleiteten URL** ausgeliefert: `/controller/app-panel/<panel_id>/bearbeiten`
+(Sub-Pfad der Panel-Display-URL `/controller/app-panel/<panel_id>`, PANEL-2;
+vom Router zum panel-Service proxyt). Die URL ist stabil und direkt aufrufbar.
+
+Sie ist über die System-weite Seiten-Registry (#347, SREG) auffindbar, **je
+Panel-Instanz ein eigener Editor-Link**. Der Eltern-Chat liefert den Link auf
+Nachfrage über den `seiten_finden`-Skill (SREG-6) — er nennt das benannte Panel,
+nicht einen generischen Editor.
+
+*Wenn* eine Familie mehrere Panel-Instanzen hat (PREG-2), *dann* hat **jede**
+Instanz ihre eigene, aus ihrer `panel_id` abgeleitete Editor-URL, und die
+Registry führt **je Instanz** (Sorte d) deren Editor-URL als auffindbaren Eintrag.
+
+> **Registry-seitige Anforderung in #387 (hart, hart verlinkt):** Dass die
+> Seiten-Registry den per-Panel-Editor-Link aus dem Panel-Snapshot (Sorte d)
+> ableitet und ausliefert, ist als **hartes Requirement** im Ticket #387
+> spezifiziert (gemeinsame seiten-registry-/Manifest-Erweiterung, die #330
+> konsumiert). #330 und #387 werden **in einer Session zusammen** gebaut.
+
+### PBE-3 — Auth = Heimnetz/Tailscale-Grenze
+Die Editor-Seite und ihr Schreib-Endpunkt (PBE-4) sind **nicht** öffentlich
+erreichbar; die Grenze ist das Heimnetz/Tailscale (RAT-2). Es gibt **keine**
+zusätzliche Rollen-/Login-Schicht in V1 — Kanal/Netz ist das Gate, wie beim
+Garderoben-Editor (#328).
+
+---
+
+## 2. Schreib-Endpunkt
+
+### PBE-4 — `PUT /api/v1/panels/<panel_id>/tiles`
+Der panel-Service nimmt unter `PUT /api/v1/panels/<panel_id>/tiles` die
+vollständige, neue `tiles`-Liste der Instanz entgegen und schreibt sie.
+
+- **Explizites Speichern, ein PUT der vollen Liste** (Design-Reconcile, Gate B):
+  die Seite sammelt Verschieben/Ausblenden/Entfernen/Hinzufügen **lokal** und
+  schreibt sie als **eine** vollständige `tiles`-Liste beim Tippen auf
+  **Speichern** (ein atomarer Schreibvorgang, ein Reload — PBE-10). **Verwerfen**
+  verwirft die lokalen Änderungen **ohne** Schreibvorgang. Kein Auto-Save je
+  Einzelaktion (kein Flackern, kein PUT-Sturm).
+- **Nur `tiles`, nie `config`** (PREG-5, E-PANEL-3): der Endpunkt berührt das
+  `config`-Feld der Instanz nicht.
+- **Atomar** (DCOMP-4: Temp-Datei + `os.replace`): ein zeitgleicher Lesezugriff
+  (PREG-9-Proxy, Display-Render) sieht nie eine halb geschriebene Liste. Der
+  Display übernimmt den neuen Stand per reload-on-read (DCOMP-2) **plus** das
+  aktive Reload-Signal (PBE-10).
+- **Last-Write-Wins** (Nic 2026-06-07): kein Versions-/ETag-Token. Zwei
+  zeitgleiche Schreiber → der spätere gewinnt, atomar. (Realistisch für eine
+  Familie; optimistic concurrency wäre Vorbau.)
+- **Validierung vor Schreiben** (PBE-11): ungültige Liste → **422** mit
+  Begründung, `tiles.json` **byte-unverändert**. Kein Schreibziel/Instanz
+  unbekannt → **404**. Schreibfehler am Dateisystem → **500** mit JSON-Fehler
+  (Geist von GER-6/DCOMP-4).
+
+*Wenn* der Endpunkt eine gültige `tiles`-Liste für eine existierende Instanz
+erhält, *dann* liegt nach der Antwort `200` der neue Stand atomar in der
+`tiles.json` genau dieser Instanz und das Reload-Signal (PBE-10) ist gesendet.
+
+---
+
+## 3. Bearbeiten-Operationen
+
+### PBE-5 — Verschieben (Reihenfolge)
+Die Seite erlaubt das Umordnen der Kacheln. Die gespeicherte
+Listen-Reihenfolge **ist** die Anzeige-Reihenfolge im Panel (PANEL-3). Das
+Verschieben ändert nur die Reihenfolge, nicht Inhalt oder `key` einer Kachel.
+
+### PBE-6 — Ausblenden und Entfernen (zwei getrennte Aktionen, Nic 2026-06-07)
+Die Seite bietet je Kachel **zwei** Aktionen:
+- **Ausblenden/Einblenden** — setzt das `sichtbar`-Flag (PANEL-4) auf
+  `false`/`true`. Die Kachel bleibt in `tiles.json`, wird im Panel aber nicht
+  gerendert. **Reversibel.**
+- **Entfernen** — löscht den Kachel-Eintrag **hart** aus `tiles.json`. Nicht
+  reversibel (Wiederherstellen = neu hinzufügen, PBE-7).
+
+*Wenn* eine Kachel ausgeblendet wird, *dann* bleibt ihr Eintrag (inkl. `key`,
+`sichtbar:false`) erhalten; *wenn* sie entfernt wird, *dann* verschwindet ihr
+Eintrag vollständig.
+
+### PBE-7 — Hinzufügen aus der Seiten-Registry
+Die Seite erlaubt das Hinzufügen einer Kachel aus einer Auswahl-Liste. Quelle
+der Auswahl ist `GET /api/v1/seiten` (#347), **gefiltert auf Display-Views
+(Sorte a)** — die einzige Sorte, die ein Panel-Tile targeten kann (PANEL-7
+Descriptor `{app, view}`).
+
+- **Varianten als eigene Listeneinträge** (Nic 2026-06-07): eine View mit
+  endlichen Varianten (z. B. „Wochenplan" + „Wochenplan Kleinkind",
+  SREG-1/`varianten[]`) erscheint als **getrennte, direkt wählbare** Einträge,
+  je mit eigenem `icons[]`.
+- **`icons[]` aus dem Manifest-Icon-Contract (#387):** die hinzugefügte Kachel
+  übernimmt `icons[]` (und ggf. die Varianten-`icons[]`) aus dem
+  Registry-Eintrag — **keine** Icon-Wahl/-Ableitung in dieser Seite. Das ist
+  der interface-first-Konsum des in #387 ratifizierten Contracts.
+- **`query` als flaches Objekt** (PANEL-7): die hinzugefügte Varianten-Kachel
+  übernimmt `query` als Objekt aus dem Registry-Eintrag (#387 normalisiert das
+  Manifest auf Objekt-Form).
+- **`key` wird beim Hinzufügen vergeben** — stabil und eindeutig innerhalb der
+  `tiles.json` (PANEL-3), z. B. aus `app` + laufendem Index.
+- **`sichtbar: true`** für neu hinzugefügte Kacheln.
+
+*Wenn* Eltern einen Listeneintrag hinzufügen, *dann* entsteht eine
+PANEL-3-gültige Kachel (`key`/`app`/`view`/`query?`/`label`/`icons[]`/`sichtbar`)
+am Ende der Liste, deren Anzeige-Felder unverändert aus dem Registry-Eintrag
+stammen.
+
+> **Sequenz-Abhängigkeit:** PBE-7 (Hinzufügen) konsumiert den #387-Icon-Contract.
+> Bis #387 die `icons[]` in die Registry-Einträge bringt, ist der Add-Flow nicht
+> vollständig baubar. **Verschieben/Ausblenden/Entfernen (PBE-5/6) hängen NICHT
+> an #387** — sie operieren auf bestehenden Kacheln. Der Track-Schnitt (F4) darf
+> das nutzen.
+
+### PBE-8 — Die Aus-Kachel ist nicht editierbar
+Die „Aus-Kachel" (PANEL-6) wird von der Panel-Seite zur Laufzeit eingefügt und
+ist **kein** `tiles.json`-Eintrag. Der Editor zeigt sie **nicht** als
+editierbare Kachel an und kann sie nicht verschieben/ausblenden/entfernen.
+
+### PBE-9 — Leerer Zustand erlaubt
+Eltern dürfen alle Kacheln entfernen/ausblenden. Eine leere bzw. vollständig
+ausgeblendete `tiles.json` ist gültig — die Panel-Seite rendert dann nur die
+eingefügte Aus-Kachel (PANEL-6: auch bei leerer `tiles.json` letzte Position).
+
+---
+
+## 4. Live-Reload
+
+### PBE-10 — Display übernimmt die Änderung ohne manuellen Reload
+Nach einem erfolgreichen Schreibvorgang (PBE-4) übernimmt das laufende Panel am
+Display die neue Kachel-Liste **ohne manuellen Seiten-Reload**, über den
+**bestehenden Display-Event-Stream** (SSE, `GET /api/v1/displays/<display_id>/events`,
+heute in `controller/app-panel/app.js`).
+
+- Ein neues Stream-Ereignis signalisiert „Kacheln geändert" für die betroffene
+  `display_id` (die Instanz kennt ihr `display_id`, PREG-3). Das Panel re-holt
+  daraufhin `tiles.json` und rendert das Gitter neu (`loadTiles` + Re-Render),
+  ohne Vollreload.
+- **Schranke (testbar):** das Display zeigt die Änderung **binnen 5 Sekunden**
+  nach der `200`-Antwort des Schreibvorgangs.
+- **Ausfall-Toleranz:** bricht der Stream, fällt das Panel auf reload-on-read
+  (DCOMP-2) beim nächsten ohnehin stattfindenden Laden zurück — kein Crash, die
+  Änderung ist nicht verloren (sie liegt persistent in `tiles.json`).
+
+*Wenn* der Schreibvorgang `200` liefert und der Stream der `display_id` aktiv
+ist, *dann* zeigt das Panel die geänderte Kachel-Liste binnen 5 s.
+
+---
+
+## 5. Validierung & Tests
+
+### PBE-11 — Validierung der geschriebenen Liste
+Vor dem Schreiben (PBE-4) prüft der Service die `tiles`-Liste gegen PANEL-3:
+jeder Eintrag hat die Pflichtfelder (`key`/`app`/`view`/`label`/`icons[]`/`sichtbar`),
+`key` ist eindeutig innerhalb der Liste, `icons[]` hat ≥1 und ≤3 Pfade relativ
+zu `/display/_shared/icons/` (PANEL-3/ICONS-5), `query` — falls vorhanden — ist
+ein **flaches Objekt** (PANEL-7, `_validate_query_flat`). Verletzung → 422, Datei
+unverändert (PBE-4).
+
+### PBE-12 — Tests
+Die Fähigkeit ist abgedeckt durch Tests für: Reorder erhält `key`s (PBE-5);
+Ausblenden vs. Entfernen (PBE-6); Add erzeugt PANEL-3-gültige Kachel inkl.
+Varianten-`query`-Objekt (PBE-7/11); Aus-Kachel nicht editierbar (PBE-8); leerer
+Zustand gültig (PBE-9); 422 lässt `tiles.json` byte-unverändert (PBE-4/11);
+404 bei unbekannter Instanz (PBE-4). Der Reload-Pfad (PBE-10) wird gegen ein
+injizierbares Stream-/Zeit-Double getestet, nicht gegen Wall-Clock.
+
+---
+
+## Offene Punkte
+
+- **OPEN-PBE-B — Add-Liste-Übersichtlichkeit / Kategorisierung.** Wird die
+  Add-Auswahl (PBE-7) bei wachsender View-Zahl unübersichtlich, ist eine
+  Kategorisierung zu erwägen — derselbe `OPEN-SREG-Kategorie`-Punkt aus #387.
+  Heute (≤ ~6 Views) flach ausreichend; nicht auf Vorrat bauen.
