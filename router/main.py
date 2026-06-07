@@ -189,6 +189,15 @@ _panel_lkg_lock = threading.Lock()
 # Sichten, die der Router an den panel-Service proxyt (ROU-27, PREG-9).
 _PANEL_PROXY_VIEWS = frozenset({'config.json', 'tiles.json'})
 
+# ROU-31 / ICONS-7: Lazy-Cache für pictogram_cache.json (Wort→ID).
+# Wird beim ersten Zugriff oder bei Wechsel der icon-root befüllt.
+# Zugriff aus Flask-Threads → Lock.
+_pictogram_cache: dict = {}          # {wort: id}
+_pictogram_cache_root: str = ''      # icon-root, bei der der Cache befüllt wurde
+_pictogram_cache_lock = threading.Lock()
+
+_ICONS_SUCHE_MAX_CAP = 50           # obere Klemme für den max-Parameter
+
 # panel-Service-Timeout beim Proxy-Abruf (Sekunden).
 _PANEL_PROXY_TIMEOUT = 5
 
@@ -970,6 +979,79 @@ def display_shared_icon(asset):
     # icon-root. Zwilling zu /controller/_shared/ (ROU-23). Die Assets sind
     # Per-Instanz-Daten außerhalb des Repos (ICONS-2).
     return _send_icon_asset(asset)
+
+
+def _load_pictogram_cache():
+    """ROU-31 / ICONS-7: Liefert den Wort→ID-Cache aus pictogram_cache.json.
+
+    Lazy: wird beim ersten Aufruf oder bei geänderter icon-root geladen.
+    Gibt ein leeres Dict zurück, wenn die Datei fehlt (Icon-root noch nicht
+    geseedet — kein Fehler, Suche liefert dann []). Thread-sicher via Lock.
+    """
+    global _pictogram_cache, _pictogram_cache_root
+    current_root = icon_root()
+    with _pictogram_cache_lock:
+        if _pictogram_cache_root == current_root and _pictogram_cache:
+            return _pictogram_cache
+        cache_path = os.path.join(current_root, 'pictogram_cache.json')
+        try:
+            with open(cache_path, encoding='utf-8') as fh:
+                data = json.load(fh)
+        except (OSError, ValueError):
+            data = {}
+        _pictogram_cache = data
+        _pictogram_cache_root = current_root
+        return _pictogram_cache
+
+
+@app.route('/api/v1/icons/suche', methods=['GET'])
+def icons_suche():
+    """ROU-31 / ICONS-7 / URL-4: Stichwort-Suche über den lokalen Icon-Cache.
+
+    GET /api/v1/icons/suche?q=<stichwort>&max=<n>
+    → 200, JSON [{id: int, url: str}], nur IDs mit lokalem PNG.
+    400 ohne q. Leere Treffer → 200 [].
+    """
+    q = request.args.get('q')
+    if q is None:
+        abort(400)
+
+    try:
+        max_results = int(request.args.get('max', 3))
+    except (ValueError, TypeError):
+        max_results = 3
+    max_results = max(1, min(max_results, _ICONS_SUCHE_MAX_CAP))
+
+    needle = q.lower()
+    cache = _load_pictogram_cache()
+
+    # Teilwort-Suche, case-insensitiv; ID-dedupliziert (mehrere Wörter → eine ID).
+    seen_ids: set = set()
+    candidates: list = []
+    for word, icon_id in cache.items():
+        if needle in word.lower() and icon_id not in seen_ids:
+            seen_ids.add(icon_id)
+            candidates.append(icon_id)
+
+    # Nur IDs mit lokalem PNG (ICONS-7 / AC4); Pfad-/Wurzel-Schutz wie ROU-26.
+    root = os.path.realpath(icon_root())
+    results = []
+    for icon_id in candidates:
+        if len(results) >= max_results:
+            break
+        rel = os.path.join('arasaac', f'{icon_id}.png')
+        target = os.path.realpath(os.path.join(root, rel))
+        # Wurzel-Schutz: target muss innerhalb von root liegen (sollte
+        # immer gelten, da icon_id aus dem Cache stammt — defensiv behalten).
+        if not (target == root or target.startswith(root + os.sep)):
+            continue
+        if os.path.isfile(target):
+            results.append({
+                'id': icon_id,
+                'url': f'/display/_shared/icons/arasaac/{icon_id}.png',
+            })
+
+    return jsonify(results)
 
 
 @app.route('/controller/<app>/', methods=['GET'])
