@@ -15,6 +15,9 @@ const STATIC_ASSETS = [
   './app.js',
   './style.css',
   './manifest.json',
+  // E-PANEL-6: Token-CSS precachen — gecachter Fall bleibt gestylt auch ohne WAN.
+  // CDN-Schrift fällt dann auf System-Font-Stack (--font-sans) zurück.
+  '/display/_shared/design/tokens.css',
 ];
 
 self.addEventListener('install', (event) => {
