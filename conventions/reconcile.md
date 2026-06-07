@@ -33,7 +33,7 @@ PR nur durch, wenn er **genau einen** von drei Ausgängen erfüllt:
 Damit kann kein Merge die Ticket-Reconcile überspringen: entweder schließt der PR ein
 offenes Issue, ist ein echter Spec-PR, oder ist bewusst als ticketlos markiert.
 
-## RECON-3 — Status-/Label-Übergänge fasst NUR eine Action an, nie ein Agent per Shell
+## RECON-3 — Status-Übergänge fasst NUR eine Action an, nie ein Agent per Shell
 
 Der `status:*`-Lebenszyklus (`spec → in-progress/in-review → ready → [Merge: leer]`)
 wird ausschließlich von `ticket-status-flow.yml` auf PR-Events gesetzt. **Kein Agent
@@ -45,6 +45,30 @@ Action arbeitet **fail-loud + verify** (entfernt nur vorhandene Labels, kein
 
 Geschlossene Issues tragen **kein** `status:*`-Label (`status:done` existiert bewusst
 nicht — „geschlossen" *ist* done). `prep-reconcile.yml` validiert das.
+
+**Geltungsbereich (Klarstellung zu RAT-10):** RECON-3 bindet **nur `status:*`**. Die
+Formulierung in RAT-10 („kein Agent fasst je wieder Labels per Shell an") meint den
+`status:*`-Lebenszyklus, nicht *alle* Labels. **Property-Labels** (`blocked`, künftig
+ggf. `needs-nic`) sind **ausgenommen** — sie haben keinen Action-Lebenszyklus und
+dürfen von Agent oder Mensch per Shell gesetzt/entfernt werden (z. B. `blocked` an den
+arbeitstag-Set-Sites). Nur der `status:*`-Lifecycle ist Action-only.
+
+## RECON-4 — Scope-Shrink-Provenienz: verkleinerte AC dürfen keine Restarbeit verschwinden lassen
+
+Wird der Akzeptanz-Scope eines Tickets **vor dem Merge** verkleinert (ein AC gestrichen
+oder in ein Folge-Ticket verschoben), ist der Merge nur zulässig, wenn **alle drei**
+gelten:
+
+1. Das Original-AC bleibt **als `superseded` sichtbar erhalten** (nicht gelöscht) — am
+   Ticket oder im Contract, mit Verweis auf den Grund.
+2. **Nic hat den Verkleinerungs-Grund dokumentiert** (kein Self-Service durch Track oder
+   Orchestrator).
+3. Das **Folge-Ticket für die verschobene Arbeit existiert VOR dem Closes-PR**.
+
+Fehlt eines davon → **kein Closes-PR**; die Restarbeit gilt als offen. Grund: RECON-2
+schließt das Issue beim Merge automatisch — ohne sichtbare Provenienz verschwindet die
+gestrichene Restarbeit spurlos (Belegfall #371/#377: 1 von 10 stale Docstrings gemergt,
+Ticket geschlossen). Ergänzt RECON-2.
 
 ## Warum tool-erzwungen statt Prosa
 
