@@ -108,7 +108,8 @@ kann ein Externer aus einem Manifest deterministisch einen Eintrag erzeugen:
 | `app` / `instanz` | **abgeleitet** | App-Slug (a–c, = Manifest-Besitzer) bzw. Instanz-ID (d/e, = Snapshot-Schlüssel) |
 | `pfad` | Manifest/Snapshot | View-Pfad, z. B. `/display/wetter/regeln` — **nicht** die volle URL |
 | `label` + `synonyme[]` | Manifest | deutsch, für „wo stelle ich X ein" (KI-Auflösung) |
-| `varianten[]` | Manifest (opt.) | endliche bekannte Varianten (`slug`, `query`, `label`) |
+| `icons[]` | Manifest (nur Sorte a) | volle Kachel-Icon-Liste der Display-View (BUD-4); 1:1 durchgereicht (SREG-10). Fehlt bei b/c (keine Kacheln) und bei Snapshot-Sorten d/e. |
+| `varianten[]` | Manifest (opt.) | endliche bekannte Varianten (`slug`, `query` **als flaches Objekt**, `label`, eigenes `icons[]` falls abweichend; BUD-4) |
 | `zeigt` | Manifest | 1 Satz, was die Seite zeigt |
 | `zielgruppe` | Manifest | `kind` / `eltern` — **deskriptiv**, KEIN Berechtigungs-Gate (SREG-6) |
 
@@ -186,6 +187,14 @@ aber das `views.json`-Format**: das BUD-3-Manifest ist die Datenquelle, aus der
   `stale: true` statt leerer/gekürzter Liste (SREG-3).
 - **Varianten:** ein Eintrag mit `varianten[]` löst sowohl Default als auch
   Variante auf; `?ab=<datum>` erzeugt keinen Eintrag (SREG-1).
+- **Icon-Durchreichung + Schalter:** ein Sorte-a-Manifest mit `icons[]`
+  (+ `varianten[].icons[]`) erscheint byte-gleich im Eintrag; bei
+  `icons_erforderlich=false` bleibt eine View ohne `icons[]` gelistet (Warnung),
+  bei `icons_erforderlich=true` wird genau diese View übersprungen (Rest bleibt);
+  Sorten b/c/d/e tragen kein `icons`-Feld (SREG-10).
+- **Editor-Eintrag je Panel:** Snapshot mit N Panel-Instanzen → **2N**
+  Panel-Einträge (N Panel-Seiten + N Editor-Einträge), je distinkter `key`/`pfad`,
+  Editor-`pfad` = `/controller/app-panel/<panel_id>/bearbeiten` (SREG-11).
 - **(e)-Filter:** Geräte-Snapshot mit `controller`/`display`/`beides`/`inaktiv`
   → nur `display|beides` & `aktiv` erscheinen (SREG-1).
 - **Manifest⇔Route-Bindung:** je Buddy der BUD-3-Eigentest (kanonische
@@ -196,6 +205,61 @@ aber das `views.json`-Format**: das BUD-3-Manifest ist die Datenquelle, aus der
 - **Auth:** `seiten_finden` erbt EC-2 (Mitglied berechtigt, Gruppe+Privatchat);
   die „keine Kind-Mitglieder"-Annahme (SREG-6) ist **operativ, nicht
   automatisiert testbar** — sie ist eine bewusste V1-Grenze, kein Code-Gate.
+
+## SREG-10 — Icon-Durchreichung (nur Display-Views, Sorte a) + Durchsetzungs-Schalter
+Der Aggregator übernimmt `icons[]` (BUD-4) und `varianten[].icons[]` **1:1** aus
+dem Manifest in den `inventar.json`-Eintrag — wie er `varianten` durchreicht
+(SREG-2), **ohne** zu komponieren oder abzuleiten. Im SREG-4-Schema ist `icons`
+ein **manifest-geliefertes** Feld (Herkunft = Manifest, analog `label`), getragen
+**nur von Display-Views (Sorte a)** (BUD-4). Die Sorten b/c und die
+Snapshot-Sorten d/e tragen **kein** `icons` — das Feld **fehlt** (nicht `null`).
+
+**Durchsetzung über den Schalter `icons_erforderlich`** (Aggregator-Config,
+Default `false`) — das ist der **maschinenlesbare Phasenwechsel** der gestaffelten
+Einführung, kein vager „nach dem Backfill":
+- `icons_erforderlich = false` (Migration): ein **fehlendes** `icons[]` an einer
+  Sorte-a-View → **Warnung, kein Skip**; der Eintrag bleibt gelistet (ohne
+  `icons`). So reißt die Feld-Einführung keine gültigen Views aus dem Inventar
+  (SREG-3/DCOMP-3).
+- `icons_erforderlich = true` (nach Backfill, vom Härtungs-PR umgelegt): ein
+  fehlendes `icons[]` an einer Sorte-a-View → **per-View-Skip** (nur diese View,
+  nicht das ganze Manifest — hängt an der per-View-Skip-Granularität, Ticket
+  #388); Warnung protokolliert.
+
+*Wenn* `icons_erforderlich=false` und `icons[]` fehlt, *dann* bleibt der Eintrag
+gelistet (Warnung); *wenn* `icons_erforderlich=true` und `icons[]` fehlt, *dann*
+wird genau diese View übersprungen, der Rest des Manifests bleibt. Beide Modi sind
+mit einer Manifest-Fixture testbar.
+
+## SREG-11 — Editor-Eintrag je Panel-Instanz (zusätzlich zur Panel-Seite)
+Für jede Panel-Instanz (Snapshot-Sorte d) erzeugt der Aggregator **einen
+zusätzlichen, abgeleiteten Eintrag** für deren Editor-Seite — **neben** dem
+bestehenden Panel-Seiten-Eintrag (Sorte d), der unverändert bleibt. Felder des
+Editor-Eintrags (alle deterministisch aus der `panel_id`, kein neues PREG-Feld):
+
+| SREG-4-Feld | Wert des Editor-Eintrags |
+|------|------|
+| `pfad` | `/controller/app-panel/<panel_id>/bearbeiten` (PBE-2) |
+| `key` | `<panel_id>-bearbeiten` — **distinkt** vom Panel-Seiten-`key` (`<panel_id>`), keine Kollision |
+| `typ` | `eltern` (eltern-seitige Settings-View) |
+| `label` | abgeleitet, z. B. „Panel `<panel_id>` bearbeiten" |
+| `icons`/`varianten`/`zeigt`/`synonyme` | entfallen (wie bei Sorte d, SREG-4) |
+
+*Wenn* die Registry N Panel-Instanzen kennt, *dann* enthält das Inventar **2N**
+Panel-bezogene Einträge: N Panel-Seiten (Sorte d) **und** N Editor-Einträge, je
+mit distinktem `key` und `pfad`. Der `seiten_finden`-Skill (SREG-5) liefert so je
+Panel einen eigenen Editor-Link, ohne die Panel-Seite zu überschreiben.
+
+Konsument: `specs/platform/panel-bearbeiten.md` PBE-2 (#330).
+
+## Offene Punkte
+
+### OPEN-SREG-Kategorie — Kategorisierung der Seiten-/Add-Liste
+Wird die per `GET /api/v1/seiten` gelieferte Liste (insb. die Panel-Add-Auswahl,
+#330 PBE-7) bei wachsender View-Zahl unübersichtlich, ist ein `kategorie`-Feld am
+Eintrag zu erwägen. Heute (≤ ~6 Views) flach ausreichend — **nicht auf Vorrat**
+(CLAUDE.md §6). Reopen-Trigger: Add-Liste > ~10 Einträge oder Eltern-Feedback
+Unübersichtlichkeit.
 
 ---
 
