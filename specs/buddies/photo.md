@@ -244,9 +244,10 @@ echte Telegram-/Geräte-Eingänge sind nicht Teil der automatisierten Suite.
 - **OPEN-PHOTO-A — Eltern-Chat-Ingest-Skill (DIE NAHT).** Nachgezogenes Ticket:
   ein Eltern-Chat-Skill nimmt ein in der Familien-Gruppe gesendetes Foto/Video
   entgegen und ruft PHOTO-13 über das kanonische HTTP-`tool_use`-Modell (RAT-3).
-  Hängt am App-Installations-Mechanismus (#296). **Werft-Grenze: der erste Buddy
-  mit Eltern-Chat-Schreibpfad — hier bricht der Bau-Prozess am ehesten, nicht als
-  gelöst behandeln.**
+  Hängt am App-Installations-Mechanismus (#296, geschlossen/aufgelöst). **Werft-Grenze:
+  der erste Buddy mit Eltern-Chat-Schreibpfad — hier bricht der Bau-Prozess am
+  ehesten, nicht als gelöst behandeln.** Spec/Ticket: `platform/foto-senden.md`
+  (FSE), #393.
 - **OPEN-PHOTO-B — Eltern-Chat-Konfiguration** (Sortierung/TTL „später
   konfigurierbar"): nachgezogen, voraussichtlich analog RAT-2 (Link zu einer
   eltern-seitigen, mobil-tauglichen Web-Seite). V1 = Config-Datei (PHOTO-19).
