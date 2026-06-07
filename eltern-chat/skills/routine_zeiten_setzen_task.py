@@ -111,7 +111,8 @@ class RoutineZeitenSetzenTask(WriteTask):
         self._tg = tg
         self._routine_client = routine_client
         self._family_group_chat_id_getter = family_group_chat_id_getter
-        # is_member_fn: Callable (user_id) -> bool. None nur für Tests zulässig.
+        # is_member_fn: Callable (user_id) -> bool. None nur noch für Tests zulässig
+        # (None-Fallback wurde in #343 entfernt; Live-Prüfung via Telegram-Group erforderlich).
         self._is_member_fn = is_member_fn
 
     def propose(self, arguments, turn_context):
