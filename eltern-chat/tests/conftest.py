@@ -34,10 +34,12 @@ sys.path.insert(0, _ELTERN_CHAT)
 # tools/ und wird seit #84 vom Onboarding-Speicher importiert.
 sys.path.insert(0, os.path.dirname(_ELTERN_CHAT))
 
+from tools.zugangsdaten.config import ENV_STORE_FILE  # noqa: E402
+
 
 @pytest.fixture(autouse=True)
 def _isolierter_zugangsdaten_speicher(tmp_path, monkeypatch):
     """Lenkt den zentralen Zugangsdaten-Speicher (#84/ZD-8) pro Test auf einen
     frischen tmp-Pfad, sodass kein Test die reale Instanz-Datei beschreibt."""
     monkeypatch.setenv(
-        "XBUDDY_ZUGANGSDATEN_FILE", str(tmp_path / "zugangsdaten-test.json"))
+        ENV_STORE_FILE, str(tmp_path / "zugangsdaten-test.json"))

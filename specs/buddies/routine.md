@@ -415,6 +415,13 @@ Eltern-Chat sie schreibt (Zeiten: RZS #343; Punkte: OPEN-ROUTINE-B Teil 2 #354):
 | Listen-Port | `5050` (ROUTINE-15) | `listen_port` | n/a |
 | Log-Level   | `INFO`        | `log_level`     | n/a |
 
+**Datei-Pfad-Overrides (ENV, CONFIG-5):**
+
+| Wert               | Default                          | ENV                    | CLI |
+|--------------------|----------------------------------|------------------------|-----|
+| Daten-Konfig-Pfad  | `routine/routine.json` (neben dem Code) | `ROUTINE_DATA_FILE` | — |
+| Abhak-Store-Pfad   | `routine/routine_store.json` (neben dem Code) | `ROUTINE_STORE_FILE` | — |
+
 `abfahrtszeit` je Wochentag: ein Wert oder eine Wochentag→Zeit-Abbildung
 (z. B. Sa/So leer = kein Kindi). Punkte und Zeiten sind der Musterfall der
 **Familie-3-Probe**: was je Familie variiert, ist Config, nicht Code
