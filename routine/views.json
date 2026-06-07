@@ -1,0 +1,17 @@
+{
+  "views": [
+    {
+      "slug": "morgen",
+      "pfad": "/display/routine/morgen",
+      "label": "Morgen-Routine",
+      "synonyme": [
+        "routine",
+        "morgenroutine",
+        "checkliste",
+        "morgen"
+      ],
+      "zeigt": "Die tägliche Morgen-Checkliste mit ablaufender Uhr.",
+      "zielgruppe": "kind"
+    }
+  ]
+}
