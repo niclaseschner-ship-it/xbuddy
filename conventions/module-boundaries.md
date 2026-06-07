@@ -68,7 +68,7 @@ Verzeichnis unter `root_packages` in `.importlinter` erfasst).
 Alle Service-Module importieren keinen Python-Code voneinander. Wer Daten
 einer anderen Komponente braucht, ruft sie über HTTP (DCOMP-1), nicht per
 Import. Das aktuelle Verzeichnis aller Service-Module unter `root_packages`
-in `.importlinter` erfasst (s. Linter-Scan-Reichweite oben).
+wird in `.importlinter` erfasst (s. Linter-Scan-Reichweite oben).
 
 import-linter-Contract `independence` über alle Service-Module.
 
