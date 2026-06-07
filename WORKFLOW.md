@@ -33,10 +33,25 @@ Kein Project-Board nötig.
 | Art | Label `type:*` | `feature`, `bug`, `chore`, `docs` |
 | Ökosystem-Baustein | Label `area:*` | `display`, `controller`, `hub`, `buddy`, `infra` |
 | Priorität | Label `priority:*` | `high`, `medium`, `low` |
-| Blockiert | Label `blocked` | wartet auf etwas anderes |
+| Blockiert | Label `blocked` | wartet auf etwas anderes (siehe Blocker-Zeile) |
 
 Faustregel: **alle Eigenschaften und die Workflow-Position sind Labels**.
 Eine Eigenschaft pro Achse — kein Issue trägt zwei `status:*` gleichzeitig.
+
+**Blocker-Zeile (PW-13).** Ein `blocked`-Ticket trägt im Body eine Zeile, die den
+**aktuell nächsten** Blocker klassifiziert:
+
+```
+Blocker: <wer/was> — Auflösung: agent-prüfbar | nic
+```
+
+`agent-prüfbar` = der Agent kann die Auflösung selbst feststellen (PR/Issue gemergt,
+Buddy-V1 live, Zähl-Trigger erreicht). `nic` = braucht eine Nic-Entscheidung/Freigabe/
+externe Handlung. Das ist **Daten** (ändert sich der Blocker, ändert sich die Zeile),
+kein zweites Label — die Achse beschreibt den nächsten Blocker, nicht eine permanente
+Ticket-Eigenschaft. Ein eigenes `needs-nic`-**Label** ist bewusst **vertagt** (heute
+leere Queue); Reopen-Trigger: häufige mid-build Architektur-Halts, die nie durch den
+`/arbeitstag-prep` laufen und so nur per Board-Filter sichtbar wären.
 
 ## Lebenslauf eines Tickets
 
