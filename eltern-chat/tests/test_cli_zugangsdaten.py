@@ -58,6 +58,7 @@ class _Cfg:
     panel_origin_url = "http://127.0.0.1:5041"   # PAA-5 / #183
     plan_origin_url = "http://127.0.0.1:5020"
     routine_origin_url = "http://127.0.0.1:5050"   # RZS-6 / #343
+    photo_origin_url = "http://127.0.0.1:5070"     # FSE-7 / #393
     display_url_origin = "https://example.test"
     provider_api_key = None
     provider = "anthropic"

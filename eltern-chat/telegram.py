@@ -97,6 +97,36 @@ def _build_ipv4_opener(connect_timeout, read_timeout):
     return urllib.request.build_opener(handler)
 
 
+def encode_multipart(boundary, fields, file_field, file_name, file_bytes):
+    """Kodiert Formularfelder und eine Datei als multipart/form-data-Body.
+
+    Public-API (CLAUDE.md §6 — gemeinsamer Code an EINEM Ort): genutzt vom
+    Telegram-Datei-Upload (`TelegramClient._call_multipart`, sendDocument für
+    CAV-4) UND vom Eltern-Chat-PhotoClient (FSE-7, Foto/Video-Ingest an
+    PHOTO-13). FSE-7-Bau-Delta: kein neues Transport-Muster, der bestehende
+    Encoder ist die Vorlage.
+
+    `boundary` ist die multipart-Boundary (z. B. „----xbuddyN"). `fields` ist
+    ein Dict normaler Formularfelder. `file_field`, `file_name`, `file_bytes`
+    tragen die hochgeladene Datei; `Content-Type` ist konstant
+    `application/octet-stream` — den fachlich richtigen MIME-Typ setzt der
+    Server (Telegram) bzw. die HTTP-Schicht via Header.
+    """
+    out = []
+    for name, value in fields.items():
+        out.append(("--%s\r\n" % boundary).encode("utf-8"))
+        out.append(('Content-Disposition: form-data; name="%s"\r\n\r\n'
+                    % name).encode("utf-8"))
+        out.append(("%s\r\n" % value).encode("utf-8"))
+    out.append(("--%s\r\n" % boundary).encode("utf-8"))
+    out.append(('Content-Disposition: form-data; name="%s"; filename="%s"\r\n'
+                % (file_field, file_name)).encode("utf-8"))
+    out.append(b"Content-Type: application/octet-stream\r\n\r\n")
+    out.append(file_bytes)
+    out.append(("\r\n--%s--\r\n" % boundary).encode("utf-8"))
+    return b"".join(out)
+
+
 @dataclass
 class IncomingMessage:
     """Eine eingehende Nachricht, anbieter-/kanal-neutral aufbereitet.
@@ -122,6 +152,12 @@ class IncomingMessage:
     # Max-Kante (FAM-9) nicht überschreitet, oder None (alle zu groß ⇒ oversize).
     photo_file_id: object = None
     photo_oversize: bool = False
+    # FSE-5: nativer Telegram-Video-Typ — file_id des Videos, oder None. Liegt
+    # parallel zu `photo_file_id` und folgt demselben Muster im Parser
+    # (_extract_attachment_refs). Ein Video, das **als Dokument** gesendet wird,
+    # läuft weiter über `document_file_id` (mit `document_mime_type` startend
+    # mit `video/`); der Skill wertet beide Wege gleich (FSE-5).
+    video_file_id: object = None
     # FAA-6: Datei-Anhang.
     document_file_id: object = None
     document_mime_type: str = ""
@@ -272,8 +308,8 @@ class TelegramClient:
         geht. Fehlerbehandlung identisch zu `_call`. Nutzt `_opener` (EC-26).
         """
         boundary = "----xbuddy%d" % id(file_bytes)
-        body = self._encode_multipart(boundary, fields, file_field,
-                                      file_name, file_bytes)
+        body = encode_multipart(boundary, fields, file_field,
+                                file_name, file_bytes)
         url = "%s/%s" % (self._api, method)
         req = urllib.request.Request(
             url, data=body,
@@ -289,23 +325,6 @@ class TelegramClient:
         if not result.get("ok"):
             raise TelegramError("%s: %s" % (method, result.get("description", "unbekannt")))
         return result.get("result")
-
-    @staticmethod
-    def _encode_multipart(boundary, fields, file_field, file_name, file_bytes):
-        """Kodiert Formularfelder und eine Datei als multipart/form-data-Body."""
-        out = []
-        for name, value in fields.items():
-            out.append(("--%s\r\n" % boundary).encode("utf-8"))
-            out.append(('Content-Disposition: form-data; name="%s"\r\n\r\n'
-                        % name).encode("utf-8"))
-            out.append(("%s\r\n" % value).encode("utf-8"))
-        out.append(("--%s\r\n" % boundary).encode("utf-8"))
-        out.append(('Content-Disposition: form-data; name="%s"; filename="%s"\r\n'
-                    % (file_field, file_name)).encode("utf-8"))
-        out.append(b"Content-Type: application/octet-stream\r\n\r\n")
-        out.append(file_bytes)
-        out.append(("\r\n--%s--\r\n" % boundary).encode("utf-8"))
-        return b"".join(out)
 
     def get_chat_member(self, chat_id, user_id):
         """Liefert den Mitglieds-Status eines Nutzers in einem Chat (EC-2)."""
@@ -362,9 +381,9 @@ class TelegramClient:
         for media_type, data_b64 in self._extract_images(msg):
             images.append((media_type, data_b64))
 
-        # FAA-6: Anhang-Felder zusätzlich befüllen (ohne Download).
-        photo_file_id, document_file_id, document_mime_type, document_size_hint \
-            = self._extract_attachment_refs(msg)
+        # FAA-6 / FSE-5: Anhang-Felder zusätzlich befüllen (ohne Download).
+        (photo_file_id, video_file_id, document_file_id,
+         document_mime_type, document_size_hint) = self._extract_attachment_refs(msg)
 
         return IncomingMessage(
             update_id=update.get("update_id"),
@@ -379,6 +398,7 @@ class TelegramClient:
             reply_to_from_bot=reply_to_from_bot,
             mentions_bot=mentions_bot,
             photo_file_id=photo_file_id,
+            video_file_id=video_file_id,
             document_file_id=document_file_id,
             document_mime_type=document_mime_type,
             document_size_hint=document_size_hint,
@@ -386,10 +406,18 @@ class TelegramClient:
 
     @staticmethod
     def _extract_attachment_refs(msg):
-        """Liest die FAA-relevanten Anhang-Referenzen aus einer rohen
-        Telegram-Nachricht — ohne Datei-Download (das macht FAA selbst über
-        `download_file`). FAA-12-Adapter; die Max-Kanten-Prüfung der
-        Foto-Größen liegt in der FAA-Funktion (FAA-6/FAA-10)."""
+        """Liest die Anhang-Referenzen aus einer rohen Telegram-Nachricht — ohne
+        Datei-Download (das macht der Konsument selbst über `download_file`).
+        FAA-12/FSE-5-Adapter; die Max-Kanten-/Größen-Prüfung der Medien liegt
+        bei der jeweiligen Funktion (FAA-6/FAA-10 für FAA, PHOTO-13 für FSE).
+
+        Liefert das 5er-Tuple (photo_file_id, video_file_id, document_file_id,
+        document_mime_type, document_size_hint). `video_file_id` ist FSE-5:
+        nativer Telegram-`video`-Typ — spiegelt die Photo-Logik (größte
+        Auflösung gibt es bei Videos nicht, also schlicht das `file_id`-Feld).
+        Ein Video, das als Dokument gesendet wurde, landet weiter in
+        `document_file_id` mit `document_mime_type` startend mit `video/`.
+        """
         photo_file_id = None
         photo_sizes = msg.get("photo") or []
         if photo_sizes:
@@ -399,6 +427,11 @@ class TelegramClient:
             largest = max(photo_sizes, key=lambda p: p.get("file_size", 0))
             photo_file_id = largest.get("file_id")
 
+        # FSE-5: nativer Telegram-Video-Typ. Telegram sendet `video` als
+        # einzelnes Objekt mit `file_id`, nicht als Größen-Liste.
+        video = msg.get("video") or {}
+        video_file_id = video.get("file_id")
+
         document = msg.get("document") or {}
         document_file_id = document.get("file_id")
         document_mime_type = document.get("mime_type", "") or ""
@@ -406,7 +439,8 @@ class TelegramClient:
         # Telegram-Document liefert keine width/height direkt; thumb.width/height
         # ist ungenau. Wir lassen size_hint leer — die FAA-Funktion fällt auf
         # PNG-Header-Parsing zurück (FAA-6).
-        return photo_file_id, document_file_id, document_mime_type, document_size_hint
+        return (photo_file_id, video_file_id, document_file_id,
+                document_mime_type, document_size_hint)
 
     @staticmethod
     def extract_bot_added(update):
