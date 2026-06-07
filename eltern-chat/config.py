@@ -73,9 +73,9 @@ DEFAULTS = {
     # FSE-7 / #393: Origin des Photo-Buddys, über den der FotoSendenTask
     # Medien hochlädt (`POST /api/v1/photo/medien` PHOTO-13) und widerruft
     # (`DELETE /api/v1/photo/medien/<id>` PHOTO-16). Per-Instanz-Wert; Default
-    # passt zum Pi-Setup (PORT-2 Photo-Buddy auf 5070). Leer ⇒ Aufgabe NICHT
+    # passt zum Pi-Setup (PORT-2 Photo-Buddy auf 5051). Leer ⇒ Aufgabe NICHT
     # im Katalog (FSE-8 AND-Guard mit family_group_chat_id_getter).
-    "photo_origin_url": "http://127.0.0.1:5070",
+    "photo_origin_url": "http://127.0.0.1:5051",
     # GAA-3.7: HTTPS-Origin, unter der die ausgelieferten Display-URLs
     # erreichbar sind (z. B. "https://xbuddy-hub.local:8443"). Per-Instanz-
     # Wert. Leer (Default) → Bot gibt nur den Pfad `/display/<id>` aus —
