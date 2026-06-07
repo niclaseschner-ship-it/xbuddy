@@ -567,6 +567,26 @@ kein eigener statischer nginx-Block mehr.
 
 *Tickets:* #135
 
+### ROU-31 — GET /api/v1/icons/suche — Stichwort-Suche über den lokalen Icon-Cache
+
+`GET /api/v1/icons/suche?q=<stichwort>&max=<n>` durchsucht den lokalen
+`pictogram_cache.json` (Wort→ID) in der icon-root und liefert JSON-Kandidaten —
+das Verhalten (Matching, ID-Dedup, nur lokal vorhandene PNGs, `max`-Grenze, kein
+Re-Fetch) ist in [`icons.md`](icons.md) **ICONS-7** definiert. Der Router ist der
+Host, weil er die icon-root ohnehin besitzt (ROU-26-Zwilling); kein eigener
+Dienst. Lesen mit demselben Path-/Wurzel-Schutz wie ROU-26 (kein Zugriff jenseits
+der icon-root).
+
+Acceptance-Kriterien:
+
+| Pfad | Antwort |
+|---|---|
+| `GET /api/v1/icons/suche?q=hund` | 200, JSON-Liste `[{id,url}]` — nur IDs mit lokalem PNG |
+| `GET /api/v1/icons/suche?q=<ohne-treffer>` | 200, leere Liste `[]` (kein Fehler) |
+| `GET /api/v1/icons/suche` (kein `q`) | 400 |
+
+*Tickets:* #390
+
 ### ROU-30 — GET /display/_shared/design/&lt;asset&gt; — geteilter Design-Token-Strang
 
 `GET /display/_shared/design/<asset>` liefert den geteilten Design-Token-Strang
