@@ -2,7 +2,7 @@
 
 Abdeckung (ROUTINE-18):
   AC1   Gültiges PUT persistiert atomar + per Reload-on-Read sichtbar (DCOMP-3/DCOMP-4)
-  AC2   Ungültiges Format / ungültiger Wochentags-Key / negativer vorlauf → 422, kein Teil-Write
+  AC2   Ungültiges Format / ungültiger Wochentags-Key / negativer vorlauf → 400, kein Teil-Write
   AC_ENTRY  Echter Runtime-Pfad: PUT trifft routine/main.py-Handler (Flask test_client)
 
 Alle Tests laufen OHNE Netz.
@@ -310,7 +310,7 @@ def test_ac2_ungültiges_zeitformat_gibt_400(data_path_und_client):
 
 
 def test_ac2_stunden_ausserhalb_range(data_path_und_client):
-    """AC2: Stunden > 23 → 422."""
+    """AC2: Stunden > 23 → 400."""
     _, client = data_path_und_client
     resp = client.put("/api/v1/routine/config",
                       json={"abfahrtszeit": "25:00"},
@@ -319,7 +319,7 @@ def test_ac2_stunden_ausserhalb_range(data_path_und_client):
 
 
 def test_ac2_ungültiger_wochentags_key(data_path_und_client):
-    """AC2: ungültiger Wochentags-Key in Map → 422, kein Teil-Write (ROUTINE-14)."""
+    """AC2: ungültiger Wochentags-Key in Map → 400, kein Teil-Write (ROUTINE-14)."""
     data_path, client = data_path_und_client
 
     with open(data_path) as f:
@@ -336,7 +336,7 @@ def test_ac2_ungültiger_wochentags_key(data_path_und_client):
 
 
 def test_ac2_negativer_vorlauf(data_path_und_client):
-    """AC2: anzieh_vorlauf_min < 0 → 422 (ROUTINE-14)."""
+    """AC2: anzieh_vorlauf_min < 0 → 400 (ROUTINE-14)."""
     _, client = data_path_und_client
     resp = client.put("/api/v1/routine/config",
                       json={"anzieh_vorlauf_min": -5},
@@ -345,7 +345,7 @@ def test_ac2_negativer_vorlauf(data_path_und_client):
 
 
 def test_ac2_vorlauf_als_string(data_path_und_client):
-    """AC2: anzieh_vorlauf_min als String statt Integer → 422."""
+    """AC2: anzieh_vorlauf_min als String statt Integer → 400."""
     _, client = data_path_und_client
     resp = client.put("/api/v1/routine/config",
                       json={"anzieh_vorlauf_min": "8"},
@@ -354,7 +354,7 @@ def test_ac2_vorlauf_als_string(data_path_und_client):
 
 
 def test_ac2_vorlauf_als_bool(data_path_und_client):
-    """AC2: anzieh_vorlauf_min als bool → 422 (bool ist kein int im fachlichen Sinne)."""
+    """AC2: anzieh_vorlauf_min als bool → 400 (bool ist kein int im fachlichen Sinne)."""
     _, client = data_path_und_client
     resp = client.put("/api/v1/routine/config",
                       json={"anzieh_vorlauf_min": True},
@@ -363,7 +363,7 @@ def test_ac2_vorlauf_als_bool(data_path_und_client):
 
 
 def test_ac2_kein_gueltiger_schluessel(data_path_und_client):
-    """AC2: Payload ohne gültigen Schlüssel → 422, kein Schreiben."""
+    """AC2: Payload ohne gültigen Schlüssel → 400, kein Schreiben."""
     _, client = data_path_und_client
     resp = client.put("/api/v1/routine/config",
                       json={"items": []},  # items ist nicht schreibbar über diesen Endpoint
@@ -372,7 +372,7 @@ def test_ac2_kein_gueltiger_schluessel(data_path_und_client):
 
 
 def test_ac2_leerer_body(data_path_und_client):
-    """AC2: leerer JSON-Body → 422."""
+    """AC2: leerer JSON-Body → 400."""
     _, client = data_path_und_client
     resp = client.put("/api/v1/routine/config",
                       json={},
@@ -381,7 +381,7 @@ def test_ac2_leerer_body(data_path_und_client):
 
 
 def test_ac2_kein_teil_write_bei_gemischtem_payload(data_path_und_client):
-    """AC2: Payload mit einem gültigen und einem ungültigen Feld → 422, KEIN Teil-Write.
+    """AC2: Payload mit einem gültigen und einem ungültigen Feld → 400, KEIN Teil-Write.
 
     Weder der gültige noch der ungültige Wert darf geschrieben werden.
     """
@@ -406,7 +406,7 @@ def test_ac2_kein_teil_write_bei_gemischtem_payload(data_path_und_client):
 
 
 def test_ac2_wochentags_zeitformat_in_map(data_path_und_client):
-    """AC2: ungültiges Zeitformat in einem Wochentags-Map-Wert → 422."""
+    """AC2: ungültiges Zeitformat in einem Wochentags-Map-Wert → 400."""
     _, client = data_path_und_client
     resp = client.put("/api/v1/routine/config",
                       json={"abfahrtszeit": {"mo": "7:30"}},  # fehlende Null
