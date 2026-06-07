@@ -97,24 +97,29 @@ Text), `piktogramm` (ARASAAC-Referenz, ROUTINE-10), Abhak-Zustand **für heute**
 - **`bedingt`** — von einer **anderen App** injiziert (Sonnencreme ← Wetter-Buddy,
   Mülltonne ← Plan-Buddy), abhängig von einer Bedingung des Tages.
 
-**V1 füllt ausschließlich `default`.** Die Slots `einmalig` und `bedingt` sind
-im Modell **vorgesehen, aber in V1 nicht befüllt und nicht gebaut** (E-ROUTINE-2,
-OPEN-ROUTINE-A). Das Modell trägt die `quelle` von Anfang an, damit der spätere
-Schreib- bzw. Injektions-Pfad keine Datenmodell-Migration erzwingt.
+**Display-V1 füllte ausschließlich `default`.** **V1.1 (#354) befüllt zusätzlich
+`einmalig`** über den Eltern-Chat-Schreibpfad (`routine-punkte-setzen.md` RPS,
+`POST /api/v1/routine/items`). Der Slot **`bedingt`** bleibt vorgesehen, aber
+ungebaut (Cross-Buddy-Injektion, OPEN-ROUTINE-C/D). Das Modell trägt die `quelle`
+von Anfang an, damit dieser Schreib- bzw. Injektions-Pfad keine
+Datenmodell-Migration erzwingt.
 
 *Test-Implikation:* das interne Item-Modell akzeptiert alle drei `quelle`-Werte;
-der V1-Builder erzeugt **nur** `quelle=default`-Items aus der Config.
+der V1-Builder erzeugt `quelle=default`-Items aus der Config, der V1.1-Items-Ingest
+zusätzlich `quelle=einmalig`-Items.
 
-*Tickets:* #335
+*Tickets:* #335, #354
 
 ### ROUTINE-5 — Stabile, herkunfts-eindeutige Item-IDs
 Jeder Punkt trägt eine stabile `id` (IDENT-Konvention für stabile IDs). `default`-
-IDs stammen aus der Config; `einmalig`/`bedingt`-IDs müssen so geformt sein, dass
-sie nicht mit `default`-IDs kollidieren (z. B. Quell-Präfix) — Detail offen, bis
-diese Slots gebaut werden (OPEN-ROUTINE-A).
+IDs stammen aus der Config. **`einmalig`-IDs tragen das Quell-Präfix `einmalig:`**
+(z. B. `einmalig:turnbeutel`, #354) — sie kollidieren so nie mit `default`-IDs und
+sind als Tages-Punkt erkennbar. `bedingt`-IDs (ungebaut) folgen demselben
+Präfix-Muster (`bedingt:…`), Detail offen bis OPEN-ROUTINE-C/D.
 
-*Test-Implikation:* zwei `default`-Punkte haben nie dieselbe `id`; der
-Abhak-Zustand (ROUTINE-6) wird je `id` geführt.
+*Test-Implikation:* zwei `default`-Punkte haben nie dieselbe `id`; eine
+`einmalig:`-ID kollidiert nie mit einer `default`-ID; der Abhak-Zustand (ROUTINE-6)
+wird je `id` geführt.
 
 *Tickets:* #335
 
@@ -123,8 +128,15 @@ Der Abgehakt-Zustand eines Punktes gilt **für den heutigen Tag**. Mit dem
 Tageswechsel (lokale Familien-Zeitzone) startet jeder Punkt wieder
 **nicht-abgehakt** — die Morgenroutine ist jeden Morgen neu zu erledigen.
 
+**`einmalig`-Punkte verfallen am Tagesende automatisch** (#354): Ein
+`einmalig`-Punkt (ROUTINE-4, per Eltern-Chat für heute angelegt) ist mit dem
+Tageswechsel **weg** — er liegt im flüchtigen Tages-State (ROUTINE-8), nicht in der
+`default`-Config, und wird beim Tageswechsel mit dem Abhak-Zustand verworfen.
+`default`-Punkte bleiben.
+
 **Wenn** ein Punkt heute abgehakt wurde und der Tag wechselt, **dann** ist er am
-nächsten Tag wieder offen.
+nächsten Tag wieder offen; **wenn** ein `einmalig`-Punkt angelegt wurde und der Tag
+wechselt, **dann** ist er am nächsten Tag **nicht mehr da**.
 *Test-Implikation:* mit injizierter Uhr (ROUTINE-9) über eine Tagesgrenze hinweg
 ist der zuvor abgehakte Punkt im neuen Tag wieder offen.
 
@@ -336,13 +348,28 @@ mehr nur entworfen. **Implementierungsstand: gebaut (#343)**:
     **DCOMP-4** (atomares Schreiben Temp-Datei + Rename), damit ein Lese-Fehler
     nicht den Familienstand verliert.
 
+**Routine-Punkte schreiben (`/api/v1/routine/items`) — bindend (#354).** Der
+**Eltern-Chat ist der konkrete Konsument** (`routine-punkte-setzen.md` RPS,
+OPEN-ROUTINE-B Teil 2) — die Items-Endpunkte sind damit **bindendes Requirement**
+(RAT-11-Überführung Skizze→bindend), nicht mehr nur entworfen. Eigener API-Pfad
+`/api/v1/routine/<resource>` (BUD-1b), eigene URL-14-Zeile, Reload-on-Read +
+DCOMP-3/4 wie `PUT …/config`:
+
+- **`POST /api/v1/routine/items` — Punkt anlegen.** JSON-Body: `quelle`
+  (`default` | `einmalig`), `label`, `piktogramm` (ARASAAC-ID, über ICONS-7
+  gewählt). `default` → in die `items`-Config (ROUTINE-12, persistent); `einmalig`
+  → in den Tages-State (ROUTINE-8, Auto-Verfall ROUTINE-6). Antwort: `{"id": …}`
+  (ID-Form ROUTINE-5). Validierung im Buddy (Label nicht leer, gültige ID, max. 8
+  Punkte ROUTINE-19) → 4xx bei Verstoß, kein Teil-Write.
+- **`DELETE /api/v1/routine/items/<id>` — Punkt entfernen** (`default` aus der
+  Config, `einmalig` aus dem Tages-State), atomar.
+- **`PUT /api/v1/routine/items` — die geordnete `default`-Liste ersetzen**
+  (Reihenfolge ändern / Bulk; idempotent; URL-2 „Methode trägt die Aktion").
+
 Die übrigen Schnittstellen bleiben **entworfen, aber bewusst nicht gebaut**;
 jede wird erst geliefert, wenn ihr konkreter Konsument/Produzent existiert
 (analog OPEN-WETTER-B):
 
-- **`POST /api/v1/routine/items` — `einmalig`-Punkt für heute (ENTWORFEN,
-  vertagt → #354).** Routine-Punkte schreiben ist aus #343 abgespalten (Teil 2,
-  OPEN-ROUTINE-A). → OPEN-ROUTINE-B Teil 2 / #354.
 - **Konsum Wetter:** liest `/api/v1/wetter/` (Sonnencreme → `quelle=bedingt`).
   Aktiviert die heute geparkte Wetter-Lese-API **OPEN-WETTER-B**. → OPEN-ROUTINE-C.
 - **Konsum Plan:** liest `/api/v1/plan/` (Mülltonne → `quelle=bedingt`), später.
@@ -352,7 +379,7 @@ Wenn eine dieser Schnittstellen gebaut wird, folgt sie BUD-1b (eigener API-Pfad
 `/api/v1/routine/<resource>`, eigene URL-14-Zeile, Konsum fremder Apps nur über
 deren Schnittstelle, nie per Datei-Zugriff, APP-3).
 
-*Tickets:* #335, #343
+*Tickets:* #335, #343, #354
 
 ## 6. Konfiguration
 
@@ -425,7 +452,8 @@ wird über den bestehenden **TASK-7-Pfad** aktiviert — `build_catalog`
 registriert ihn, genau wie `panel_anlegen` (PAA) live ohne #296 läuft (RAT-12).
 Er hängt damit **nicht** am offenen App-Installations-Mechanismus (#296); die
 Andock-Punkte für die Aufgabe regelt `conventions/tasks.md` (TASK-7). Die
-Routine-Punkte (Teil 2, #354) folgen später über OPEN-ROUTINE-A.
+Routine-Punkte (Teil 2, #354) sind spezifiziert (`routine-punkte-setzen.md` RPS,
+Items-API bindend in ROUTINE-14) und docken genauso an (TASK-7).
 
 *Tickets:* #335
 
@@ -479,17 +507,20 @@ DCOMP-3/DCOMP-4).
     → OPEN-ROUTINE-B.
   - **V1.2+** = Sonnencreme (Wetter-API, `bedingt`) → OPEN-ROUTINE-C; Mülltonne
     (Plan-API, `bedingt`) → OPEN-ROUTINE-D.
-  Offen bleibt die konkrete ID-Form herkunfts-eindeutiger Items (ROUTINE-5), bis
-  diese Slots gebaut werden.
+  Die ID-Form herkunfts-eindeutiger Items ist **entschieden** (ROUTINE-5,
+  `einmalig:`-Präfix, #354); das `einmalig`-Rendering nutzt das `default`-HTML
+  (ROUTINE-19), Auto-Verfall am Tagesende (ROUTINE-6). Offen bleibt nur noch der
+  `bedingt`-Slot (OPEN-ROUTINE-C/D).
 
 - **OPEN-ROUTINE-B — Schreib-API für den Eltern-Chat (zweigeteilt).**
   - **Teil 1 — Zeiten (`PUT /api/v1/routine/config`, #343): gebaut.** Backbone
     (`routine/main.py` + `routine/config.py`) fertig, nginx-Routing ergänzt
     (URL-14). Reload-on-Read (DCOMP-3) + atomares Schreiben (DCOMP-4) umgesetzt.
     Skill-Verhalten: `specs/platform/routine-zeiten-setzen.md` (RZS, Track B).
-  - **Teil 2 — Routine-Punkte (`POST /api/v1/routine/items`, #354):** abgespalten
-    aus #343. Verweist auf OPEN-ROUTINE-A (die `einmalig`/`bedingt`-Slots samt
-    herkunfts-eindeutiger Item-IDs, ROUTINE-5, sind dort noch nicht entschieden).
+  - **Teil 2 — Routine-Punkte (`/api/v1/routine/items`, #354): spezifiziert,
+    bindend.** Items-Endpunkte (POST/DELETE/PUT) sind in ROUTINE-14 bindend;
+    Skill-Verhalten: `specs/platform/routine-punkte-setzen.md` (RPS). Icon-Wahl über
+    ICONS-7 (#390). ID-Form + Auto-Verfall entschieden (ROUTINE-5/6). Bau offen.
 
 - **OPEN-ROUTINE-C — Sonnencreme aus dem Wetter-Buddy (`bedingt`).** Routine
   liest `/api/v1/wetter/` und injiziert bei UV-Bedarf einen Sonnencreme-Punkt.
@@ -576,9 +607,10 @@ display-only-V1 (#335) hatte keine `/api/v1/routine/` — kein Konsument (BUD-1b
 „nur wenn", wie Wetter-Buddy E-WETTER-3). Mit dem Eltern-Chat als konkretem
 Konsument ist der Zeiten-Schreibpfad `PUT /api/v1/routine/config` jetzt ein
 **bindendes Requirement** (#343, RAT-12, ROUTINE-14), aktiviert über TASK-7 statt
-#296. Weiterhin **keine API auf Vorrat** (Heim-Server-Overhead, Anti-Goal): die
-übrigen Endpunkte (Punkte-Schreiben `POST /api/v1/routine/items` → #354;
-Cross-Buddy-Lesen) entstehen erst, wenn ihr Konsument/Produzent existiert.
+#296. Mit dem RPS-Skill als Konsument sind seit #354 auch die
+**Items-Endpunkte** (`/api/v1/routine/items`, POST/DELETE/PUT) bindend (ROUTINE-14).
+Weiterhin **keine API auf Vorrat** (Heim-Server-Overhead, Anti-Goal): das
+Cross-Buddy-Lesen (`bedingt`) entsteht erst, wenn sein Produzent existiert.
 
 ### E-ROUTINE-6 — V1 ohne Cross-Buddy-Konsum (Sonnencreme/Mülltonne vertagt)
 *Datum:* 2026-06-05 · V1 konsumiert weder Wetter (`/api/v1/wetter/`) noch Plan
