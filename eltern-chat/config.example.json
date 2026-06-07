@@ -15,5 +15,7 @@
   "_panel_origin_url": "PAA-5 / #58 — Origin der Panel-Registry-Komponente (PORT-2 5041). Der »Panel anlegen«-Skill schreibt Panel-Instanzen ueber HTTP (PREG-15) statt direkt im Datei-System.",
   "panel_origin_url": "http://127.0.0.1:5041",
   "_display_url_origin": "GAA-3.7 — HTTPS-Origin der xBuddy-Auslieferung (z. B. https://xbuddy-hub.local:8443). Leer lassen, wenn der Bot nur den Pfad zurueckgeben soll (Tests/CI). Fuer Familien-Tablet-Anlage gesetzt sein, damit die zurueckgelieferte Display-URL direkt geoeffnet werden kann.",
-  "display_url_origin": ""
+  "display_url_origin": "",
+  "_photo_origin_url": "FSE-7 / #393 — Origin des Photo-Buddys (PORT-2 5070). Der FotoSendenTask laedt Medien ueber POST /api/v1/photo/medien (PHOTO-13) hoch und widerruft per DELETE /api/v1/photo/medien/<id> (PHOTO-16).",
+  "photo_origin_url": "http://127.0.0.1:5070"
 }

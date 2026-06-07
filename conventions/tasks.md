@@ -125,6 +125,33 @@ Session-Map prüft — so wie TES ihn inzwischen hat
 (`test_handle_update_routes_to_tes_session`,
 `tests/test_termin_eintragen_task.py:316`), nicht nur die Katalog-Anwesenheit.
 
+### TASK-9 — Sofort-Schreib-Aufgabe (Read-API mit Schreib-Wirkung, Undo statt Confirm)
+Eine **Sofort-Schreib-Aufgabe** ist eine **ReadTask** im Sinne von TASK-3 —
+also über `run`/`execute` im lesenden Pfad des Agent-Loops (`agent.py:367-376`)
+— läuft aber mit **Schreib-Wirkung** in der Buddy-API. Sie verzichtet bewusst
+auf das EC-10-`propose→confirm`-Gate (E-FSE-1), weil das **auslösende
+Ereignis selbst die ausdrückliche Handlung** ist (z. B. ein kommentarlos in
+die Familien-Gruppe gesendetes Foto ist die Ansage „auf den Bilderrahmen").
+
+**Pflicht:** Die Aufgabe liefert eine kurze **Quittung mit Undo-Möglichkeit**
+— einen eigenständig erreichbaren Inverse-Aufruf an der Buddy-API
+(z. B. `DELETE` zur vorher angelegten Ressource). Das Undo ist das
+Sicherheitsnetz statt der Vorab-Bestätigung; ohne erreichbares Undo darf eine
+Aufgabe **nicht** als Sofort-Schreib-Aufgabe gebaut werden, sondern bleibt
+TASK-4 (`WriteTask` mit Confirm-Gate).
+
+**Geeignet** für niedrigschwellige One-Shot-Eingaben, deren Auslöser selbst
+die ausdrückliche Handlung ist (FSE-1: „Foto in Familien-Gruppe →
+Bilderrahmen"). **Nicht geeignet** für mehrstufige Klärungen
+(Privatchat-Session, Sammel-Dialoge, mehrere Eingabe-Werte) — die brauchen
+das Confirm-Gate (TASK-4) bzw. die Privatchat-Session-Form (TASK-5).
+
+Heimat des Patterns: `eltern-chat/skills/foto_senden_task.py` erbt von
+`ReadTask`, `execute()` ruft die trigger-agnostische Funktion direkt; die
+`description` der Aufgabe erklärt dem LLM das Undo-Modell (D6/FSE-4 — der
+Widerruf ist ein **zweiter** `tool_use` mit der `id` aus der ersten Quittung,
+kein neuer State).
+
 ---
 
 **Hinweis (historisch, jetzt GEBAUT):** Das Privatchat-Session-Routing in

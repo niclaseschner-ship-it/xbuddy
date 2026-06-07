@@ -240,11 +240,21 @@ def _run_agent(msg, ctx):
 
     # F2: deterministischer Ausführungs-Kontext, getrennt vom Modell. Der
     # Agent-Loop reicht ihn unverändert an die Aufgaben durch (#63).
+    # FSE-3 / D4 (#393): bei einem mitgesendeten Medium reicht main hier die
+    # Telegram-`file_id` und den `medium_typ` durch — der FotoSendenTask lädt
+    # das Medium über die deterministische Naht, nie aus den Modell-`arguments`
+    # (EC-12-Geist). Video als Dokument (mime startend mit `video/`) gilt als
+    # Video (FSE-5: gleicher Pfad). Foto > Video > Dokument-Video — die erste
+    # Quelle gewinnt; das LLM disambiguiert den eigentlichen Skill-Aufruf
+    # (FSE-3: kommentarloses Medium = foto_senden; mit Prompt = anderer Skill).
+    media_file_id, medium_typ = _media_naht(msg)
     turn_context = TurnContext(
         chat_id=msg.chat_id,
         from_user_id=msg.from_user_id,
         private_chat_id=(msg.chat_id if msg.chat_type == "private"
-                         else msg.from_user_id))
+                         else msg.from_user_id),
+        media_telegram_file_id=media_file_id,
+        medium_typ=medium_typ)
 
     # Issue #93 / #156: Typing-Indikator vor JEDEM Provider-Aufruf — auch in
     # Tool-Loops, in denen der Loop nach einem Tool-Ergebnis erneut den
@@ -343,6 +353,27 @@ def _execute_confirmed(pending, msg, ctx):
     text = outcome.combined_text()
     _send(ctx, msg.chat_id, text, reply_to_message_id=msg.message_id)
     ctx.history.append(msg.chat_id, Message("assistant", [TextBlock(text)]))
+
+
+def _media_naht(msg):
+    """FSE-3 / D4 (#393): bestimmt die deterministische Medien-Naht für den
+    TurnContext aus einer eingehenden Telegram-Nachricht.
+
+    Liefert `(file_id, typ)` mit `typ in ("foto", "video")` oder `(None, None)`,
+    wenn kein Medium anhängt. Reihenfolge: natives Foto > natives Video >
+    Video-als-Dokument (`document_mime_type` startend mit `video/`). Andere
+    Dokument-Typen (PDFs etc.) sind hier kein FSE-Medium und bleiben für
+    foto-fremde Skills (FAA/Schulplan/…) sichtbar — die Disambiguierung
+    übernimmt das LLM beim Tool-Wahl-Schritt (FSE-3).
+    """
+    if msg.photo_file_id:
+        return msg.photo_file_id, "foto"
+    if msg.video_file_id:
+        return msg.video_file_id, "video"
+    mime = (msg.document_mime_type or "").lower()
+    if msg.document_file_id and mime.startswith("video/"):
+        return msg.document_file_id, "video"
+    return None, None
 
 
 def _user_message_from(msg):
@@ -623,7 +654,10 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # (GAA-3.7) — beide werden auf demselben Origin ausgeliefert.
         controller_url_origin=cfg.display_url_origin,
         # RZS-6 / #343: Origin des Routine-Buddys (ROUTINE-14).
-        routine_origin_url=cfg.routine_origin_url)
+        routine_origin_url=cfg.routine_origin_url,
+        # FSE-7 / #393: Origin des Photo-Buddys (PHOTO-13/PHOTO-16). Leer ⇒
+        # FotoSendenTask wird NICHT registriert (FSE-8 AND-Guard).
+        photo_origin_url=cfg.photo_origin_url)
 
     if cfg.provider_api_key:
         # KI-Modus — Anbieter steht; die Familien-Gruppe muss gesetzt sein (EC-2).

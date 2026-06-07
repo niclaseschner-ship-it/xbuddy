@@ -35,10 +35,19 @@ class TurnContext:
     ist die Telegram-User-ID des Aufrufers. Die Aufnahme dieser Felder ist load-
     bearing für FAA-12 (`familie_anlegen_task`): der Anlage-Dialog läuft im
     Privatchat, nicht in der Gruppe (analog ONB-3).
+
+    `media_telegram_file_id` und `medium_typ` sind FSE-3-Felder (Refs #393):
+    bei einem kommentarlos gesendeten Medium reicht die Orchestrierung die
+    Telegram-`file_id` deterministisch durch — der `FotoSendenTask` lädt das
+    Medium darüber, nie aus den Modell-`arguments` (EC-12-Geist). `medium_typ`
+    ist `"foto"` oder `"video"`. Beide leer ⇒ kein Medium im Turn (Modell hat
+    den Skill auf falscher Spur gerufen, EC-7).
     """
     chat_id: object
     from_user_id: object = None
     private_chat_id: object = None
+    media_telegram_file_id: object = None    # FSE-3 / D4 (Refs #393)
+    medium_typ: object = None                # FSE-5 / D4 — "foto" | "video"
 
 
 def is_from_private_chat(turn_context):
@@ -258,7 +267,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   plan_origin_url=None,
                   tes_sessions=None, panel_origin_url=None,
                   paa_sessions=None, controller_url_origin=None,
-                  routine_origin_url=None):
+                  routine_origin_url=None, photo_origin_url=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
@@ -281,6 +290,11 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
     Origin (z. B. `http://127.0.0.1:5010` und `http://127.0.0.1:5040`).
     KAV schreibt seit #341 ausschliesslich via HTTP (PLAN-32); `plan_json_path`
     ist entfernt (#348).
+
+    FSE-8 / #393: Setzt der Aufrufer `photo_origin_url`, registriert
+    build_catalog zusätzlich die »Foto/Video senden«-Aufgabe (TASK-9,
+    Sofort-Schreib-Aufgabe) — wieder hinter dem AND-Guard auf
+    `family_group_chat_id_getter` (FSE-2-Berechtigung).
     """
     # Lokale Imports: brechen den Import-Zyklus tasks <-> ca_task/faa_task/
     # gaa_task/kav_task — nicht hochziehen.
@@ -420,5 +434,29 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             routine_client=_rzs_client,
             family_group_chat_id_getter=family_group_chat_id_getter,
             is_member_fn=_rzs_is_member))
+
+    # FSE-8: »Foto/Video senden« als Sofort-Schreib-Aufgabe (TASK-9,
+    # conventions/tasks.md). AND-Guard: photo_origin_url UND
+    # family_group_chat_id_getter müssen gesetzt sein — fehlt eine, erscheint
+    # die Aufgabe NICHT im Katalog. is_member_fn baut den Live-Check gegen die
+    # Familien-Gruppe analog der RZS-/TES-Linie (FSE-2).
+    if photo_origin_url is not None and family_group_chat_id_getter is not None:
+        from skills.foto_senden_task import FotoSendenTask
+        from skills.photo_client import PhotoClient
+        _fse_client = PhotoClient(origin_url=photo_origin_url)
+        _fse_fgcid_getter = family_group_chat_id_getter
+        _fse_tg = tg
+        def _fse_is_member(user_id):
+            fgcid = _fse_fgcid_getter()
+            if not fgcid:
+                return False
+            member = _fse_tg.get_chat_member(fgcid, user_id)
+            return member is not None and member.get("status") in (
+                "creator", "administrator", "member")
+        catalog.register(FotoSendenTask(
+            tg=tg,
+            photo_client=_fse_client,
+            family_group_chat_id_getter=family_group_chat_id_getter,
+            is_member_fn=_fse_is_member))
 
     return catalog

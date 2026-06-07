@@ -70,6 +70,12 @@ DEFAULTS = {
     # ROUTINE-14). Per-Instanz-Wert; Default passt zum Pi-Setup
     # (PORT-2 Routine-Buddy auf 5050).
     "routine_origin_url": "http://127.0.0.1:5050",
+    # FSE-7 / #393: Origin des Photo-Buddys, über den der FotoSendenTask
+    # Medien hochlädt (`POST /api/v1/photo/medien` PHOTO-13) und widerruft
+    # (`DELETE /api/v1/photo/medien/<id>` PHOTO-16). Per-Instanz-Wert; Default
+    # passt zum Pi-Setup (PORT-2 Photo-Buddy auf 5070). Leer ⇒ Aufgabe NICHT
+    # im Katalog (FSE-8 AND-Guard mit family_group_chat_id_getter).
+    "photo_origin_url": "http://127.0.0.1:5070",
     # GAA-3.7: HTTPS-Origin, unter der die ausgelieferten Display-URLs
     # erreichbar sind (z. B. "https://xbuddy-hub.local:8443"). Per-Instanz-
     # Wert. Leer (Default) → Bot gibt nur den Pfad `/display/<id>` aus —
@@ -113,7 +119,7 @@ class Config:
                  family_group_chat_id, family_group_locked, context_depth,
                  ca_pem_path, familie_origin_url, geraete_origin_url,
                  panel_origin_url, plan_origin_url, display_url_origin,
-                 routine_origin_url, log_level):
+                 routine_origin_url, photo_origin_url, log_level):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
         self.provider = provider
@@ -128,6 +134,7 @@ class Config:
         self.plan_origin_url = plan_origin_url         # EC-21 / #215: Origin der Plan-Buddy-Reload-Schnittstelle
         self.display_url_origin = display_url_origin   # GAA-3.7: HTTPS-Origin für Display-URLs
         self.routine_origin_url = routine_origin_url   # RZS-6 / #343: Origin des Routine-Buddys (ROUTINE-14)
+        self.photo_origin_url = photo_origin_url       # FSE-7 / #393: Origin des Photo-Buddys (PHOTO-13/PHOTO-16)
         self.log_level = log_level                 # LOG-4 (#166): Level-String für tools.logsetup
 
 
@@ -228,5 +235,6 @@ def resolve(config_path, zd=None):
         plan_origin_url=str(values["plan_origin_url"]).strip().rstrip("/"),
         display_url_origin=str(values["display_url_origin"]).strip().rstrip("/"),
         routine_origin_url=str(values["routine_origin_url"]).strip().rstrip("/"),
+        photo_origin_url=str(values["photo_origin_url"]).strip().rstrip("/"),
         log_level=str(values["log_level"]).strip(),
     )
