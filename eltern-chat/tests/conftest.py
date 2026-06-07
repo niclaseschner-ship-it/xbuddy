@@ -34,7 +34,7 @@ sys.path.insert(0, _ELTERN_CHAT)
 # tools/ und wird seit #84 vom Onboarding-Speicher importiert.
 sys.path.insert(0, os.path.dirname(_ELTERN_CHAT))
 
-from tools.zugangsdaten.config import ENV_STORE_FILE  # noqa: E402
+from tools.zugangsdaten import ENV_STORE_FILE  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
