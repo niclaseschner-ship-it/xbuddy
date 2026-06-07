@@ -29,6 +29,7 @@ _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
+from router import config as router_config  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
 
 # ============================================================
@@ -1139,7 +1140,9 @@ RUNTIME_SCHEMA = {
 
 def parse_args(argv):
     p = argparse.ArgumentParser(description='XBuddy Router V1')
-    p.add_argument('--routing', default='routing.json', help='Pfad zur Routing-Tabelle (ROU-18)')
+    p.add_argument('--routing', default=None,
+                   help='Pfad zur Routing-Tabelle (ROU-18); '
+                        'SVC-5/CONFIG-5: CLI > $ROUTER_ROUTING_FILE > Default')
     p.add_argument('--config',  default='config.json',
                    help='Pfad zur Runtime-Konfig (ROU-19); '
                         'CONFIG-1: Datei < ENV < CLI')
@@ -1218,7 +1221,13 @@ def main(argv=None):
     logging.info('Icon-Bibliothek (ROU-26): %s', icon_root())
     logging.info('Panel-Service (ROU-27): %s', _panel_service_base())
     logging.info('Geräte-Registry (ROU-29): %s', _geraete_base())
-    load_routing(args.routing)
+    # SVC-5 / CONFIG-5: CLI-Flag > ENV > Default-Repo-Pfad.
+    routing_file = (
+        args.routing
+        or os.environ.get(router_config.ENV_ROUTING_FILE)
+        or router_config.DEFAULT_ROUTING_FILE
+    )
+    load_routing(routing_file)
     ssl_context = None
     if args.cert and args.key:
         ssl_context = (args.cert, args.key)

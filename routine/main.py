@@ -56,11 +56,17 @@ else:  # python3 routine/main.py
 # Hält nur den flüchtigen Tageszustand (welche Item-IDs heute abgehakt sind).
 # Punkt-Definitionen kommen aus der Config — keine doppelte Wahrheit.
 
-_STORE_FILE = os.path.join(_HERE, "routine_store.json")
-
 
 def _store_path():
-    return runtime.get("store_path") or _STORE_FILE
+    # SVC-5 / CONFIG-5: runtime["store_path"] (Test-Naht) schlägt ENV schlägt Default.
+    # ENV_STORE_FILE / DEFAULT_STORE_FILE kommen aus config_mod (Symmetrie zu
+    # ENV_DATA_FILE / DEFAULT_DATA_FILE — beide Pfade gleich aufgelöst).
+    if runtime.get("store_path"):
+        return runtime["store_path"]
+    return (
+        os.environ.get(config_mod.ENV_STORE_FILE)
+        or config_mod.DEFAULT_STORE_FILE
+    )
 
 
 def _load_store():

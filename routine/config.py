@@ -33,6 +33,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ENV_DATA_FILE = "ROUTINE_DATA_FILE"
 DEFAULT_DATA_FILE = os.path.join(HERE, "routine.json")
 
+# SVC-5 / CONFIG-5: Pfad der Abhak-Store-Datei (routine_store.json),
+# per ENV überschreibbar — parallel zu ENV_DATA_FILE / DEFAULT_DATA_FILE.
+# Naming-Konvention: <KOMP>_<ZWECK>_FILE → ROUTINE_STORE_FILE.
+ENV_STORE_FILE = "ROUTINE_STORE_FILE"
+DEFAULT_STORE_FILE = os.path.join(HERE, "routine_store.json")
+
 # ROUTINE-12: Daten-Konfig-Defaults (alles, was je Familie variiert, CONFIG-4).
 # Diese Werte sind Fallback-Defaults — die Wahrheit bleibt die Datei/der Eltern-Chat.
 # Keine Familie-1-Einbackung: Defaults ermöglichen Prozessstart ohne Datei,
