@@ -116,6 +116,9 @@ für den ausgehenden API-Call nutzt (CLIENT-1).
 Der Skill wird in `build_catalog` registriert (TASK-7), hinter einem Guard auf
 **beide** Abhängigkeiten — `photo_origin_url` **und** `family_group_chat_id_getter`
 — analog der RZS-Linie. Fehlt eine, erscheint die Aufgabe **nicht** im Katalog.
+Die Aufgabe läuft als **Sofort-Schreib-Aufgabe** (TASK-9, `conventions/tasks.md`):
+ReadTask-Pfad im Agent-Loop, kein EC-10-`propose→confirm`, Undo statt Confirm
+(E-FSE-1).
 Pflicht-Tests (EC-17, analog ROUTINE-18/RZS-7):
 - Katalog enthält „Foto/Video senden" **genau dann**, wenn `photo_origin_url`
   **und** `family_group_chat_id_getter` gesetzt sind (Guard).
