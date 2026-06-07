@@ -1349,155 +1349,113 @@ def test_PANEL_12_no_hardcoded_colors_in_style_css():
 
 
 def test_PANEL_12_apply_grid_geometry_dom_path():
-    """PANEL-12 / Watchdog-Befund 1 — Entry-Path-Coverage: applyGridGeometry
-    (app.js Bootstrap-IIFE, nicht exportiert) wird über den echten DOM-Pfad
-    geprobt. Wir setzen global.document + global.window VOR dem require,
-    sodass die Bootstrap-IIFE beim Laden ausgeführt wird; boot() ist async
-    und rendert 10 sichtbare Kacheln + 1 Aus-Kachel = 11 DOM-Kinder ins Grid,
-    danach schreibt applyGridGeometry grid.style.height/cols/rows.
+    """PANEL-12 / Watchdog-Befund 1 — Entry-Path-Coverage: ruft die echte
+    exportierte Funktion panelLib.applyGridGeometry({doc, win}) auf (kein
+    Logik-Reko-Muster). applyGridGeometry ist seit diesem Fix im UMD-Export
+    und akzeptiert ein optionales ctx-Objekt {doc, win} für testbare
+    Dependency-Injection; im Browser wird es ohne Argument aufgerufen und
+    nutzt die globalen document/window.
+
+    Setup: #grid mit 11 echten Kachel-Kindern (10 × makeTileElement +
+    1 × makeAusKachel), Viewport 880×370 (Landscape-Phone), error-Banner
+    als hidden gesetzt (kein vpH-Abzug).
 
     Akzeptanz-Invarianten (specs/platform/app-panel.md:467-469):
       - grid.style.height == vpH (= clientHeight) → scrollHeight <= clientHeight
-      - cols*rows >= 11 (alle 11 Kacheln im DOM)
-      - grid._children.length == 11"""
+      - cols*rows >= 11 (Kapazität nimmt alle Kacheln auf)
+      - grid._children.length == 11 (DOM unverändert nach applyGridGeometry)"""
     out = run_node_dom(r"""
-        // --- DOM-Stubs für den Bootstrap-Pfad ---
-        function makeBootEl(tag) {
-          var el = {
-            _tag: tag, _children: [],
-            type: '', className: '', textContent: '',
-            dataset: {}, style: {},
-            classList: {
-              add: function(){},
-              remove: function(){},
-              contains: function(cls) { return cls === 'hidden'; }
-            },
-            src: '', alt: '', onerror: null,
-            parentNode: null,
-            offsetHeight: 0,
-            appendChild: function(c) {
-              c.parentNode = el;
-              this._children.push(c);
-              return c;
-            },
-            removeChild: function(c) {
-              this._children = this._children.filter(function(x){ return x !== c; });
-            },
-            addEventListener: function() {}
-          };
-          el.children = el._children;
-          return el;
-        }
+        var doc = makeDom();
 
-        var gridEl = makeBootEl('div');
-        var errorEl = makeBootEl('div');
-        // error ist versteckt — kein vpH-Abzug
-        errorEl.classList.contains = function(cls) { return cls === 'hidden'; };
-        var bodyEl = makeBootEl('body');
-        bodyEl.dataset = { panelId: 'test' };
+        // #grid mit style-Objekt und children-Alias (applyGridGeometry liest
+        // grid.children.length und schreibt grid.style.*).
+        var gridEl = {
+          _tag: 'div', _children: [],
+          style: {},
+          classList: { add: function(){}, remove: function(){},
+                       contains: function(){ return false; } },
+          appendChild: function(c) { c.parentNode = this; this._children.push(c); return c; },
+          removeChild: function(c) {
+            this._children = this._children.filter(function(x){ return x !== c; });
+          }
+        };
+        gridEl.children = gridEl._children;
 
-        var VPW = 880;
-        var VPH = 370;
+        // #error-Banner als hidden — kein vpH-Abzug.
+        var errorEl = {
+          style: {},
+          offsetHeight: 0,
+          classList: {
+            add: function(){}, remove: function(){},
+            contains: function(cls) { return cls === 'hidden'; }
+          }
+        };
 
-        global.document = {
-          createElement: function(tag) { return makeBootEl(tag); },
+        // document-Stub: getElementById liefert grid/error; createElement
+        // aus dem Standard-makeDom für makeTileElement/makeAusKachel.
+        var stubDoc = {
+          createElement: doc.createElement,
           getElementById: function(id) {
             if (id === 'grid')  return gridEl;
             if (id === 'error') return errorEl;
             return null;
           },
           querySelectorAll: function() { return []; },
-          body: bodyEl,
+          body: doc.body,
           visibilityState: 'visible',
           fullscreenElement: null,
-          documentElement: makeBootEl('html'),
+          documentElement: doc.documentElement,
           addEventListener: function() {}
         };
-        global.window = {
-          innerWidth:  VPW,
-          innerHeight: VPH,
-          addEventListener: function() {}
-        };
-        global.navigator = {};
-        global.EventSource = function() {
-          this.onerror = null;
-          this.addEventListener = function() {};
-        };
-        // 10 sichtbare Kacheln (tiles.json) + 1 Aus-Kachel = 11 DOM-Kinder
+
+        var VPW = 880;
+        var VPH = 370;
+        var stubWin = { innerWidth: VPW, innerHeight: VPH, addEventListener: function(){} };
+
+        // 10 sichtbare Kacheln + 1 Aus-Kachel = 11 DOM-Kinder ins gridEl hängen.
         var fakeTiles = [];
         for (var i = 0; i < 10; i++) {
           fakeTiles.push({ key: 'k'+i, app: 'plan', view: 'woche',
                            label: 'L'+i, icons: ['arasaac/test.png'], sichtbar: true });
         }
-        global.fetch = function(url) {
-          if (url.indexOf('config.json') >= 0) {
-            return Promise.resolve({ ok: true, json: function() {
-              return Promise.resolve({ source_id: 'app-panel:test', display_id: 'display:test' });
-            }});
-          }
-          if (url.indexOf('tiles.json') >= 0) {
-            return Promise.resolve({ ok: true, json: function() {
-              return Promise.resolve({ tiles: fakeTiles });
-            }});
-          }
-          return Promise.reject(new Error('unbekannter fetch: ' + url));
-        };
-        global.pwaShared = {
-          loadPwaConfig: function(opts) {
-            var cfg = Object.assign({}, opts.defaults,
-              { source_id: 'app-panel:test', display_id: 'display:test' });
-            return Promise.resolve(cfg);
-          }
-        };
-
-        // app.js wurde bereits via panelLib = require(APPJS_PATH) geladen (oben
-        // im run_node_dom-Harness). Da Node require() cached, wird die Bootstrap-
-        // IIFE in diesem Kontext NICHT nochmal ausgeführt. Wir reproduzieren daher
-        // den applyGridGeometry-Aufruf direkt mit den DOM-Stubs — exakt dieselbe
-        // Logik (Z.661-678): M = gridEl._children.length nach renderGrid.
-        //
-        // Schritt 1: renderGrid simulieren — 10 sichtbare Kacheln + Aus-Kachel
         for (var j = 0; j < 10; j++) {
-          var el = panelLib.makeTileElement(
-            global.document, fakeTiles[j], function(){},
-            panelLib.resolveIconBase(''));
-          gridEl.appendChild(el);
+          var tileEl = panelLib.makeTileElement(
+            stubDoc, fakeTiles[j], function(){}, panelLib.resolveIconBase(''));
+          gridEl.appendChild(tileEl);
         }
-        var ausEl = panelLib.makeAusKachel(
-          global.document, function(){}, panelLib.resolveIconBase(''));
-        gridEl.appendChild(ausEl);
+        gridEl.appendChild(
+          panelLib.makeAusKachel(stubDoc, function(){}, panelLib.resolveIconBase('')));
 
-        // Schritt 2: applyGridGeometry-Logik (app.js Z.661-678) nachvollziehen
-        var M   = gridEl._children.length;  // 11
-        var vpW = global.window.innerWidth;
-        var vpH = global.window.innerHeight;
-        var geom = panelLib.computeGridGeometry(M, vpW, vpH);
-        gridEl.style.gridTemplateColumns = 'repeat(' + geom.cols + ', 1fr)';
-        gridEl.style.gridTemplateRows    = 'repeat(' + geom.rows + ', 1fr)';
-        gridEl.style.height = vpH + 'px';
+        // ECHTER Aufruf der exportierten Funktion — keine Logik-Rekonstruktion.
+        panelLib.applyGridGeometry({ doc: stubDoc, win: stubWin });
 
-        var capacity    = geom.cols * geom.rows;
+        // Invarianten-Auswertung.
         var styleHeightPx = parseInt(gridEl.style.height, 10);
+        var colsMatch = gridEl.style.gridTemplateColumns;
+        var rowsMatch = gridEl.style.gridTemplateRows;
+        // cols/rows aus dem gesetzten repeat()-String extrahieren.
+        var colsN = colsMatch ? parseInt(colsMatch.replace('repeat(',''), 10) : 0;
+        var rowsN = rowsMatch ? parseInt(rowsMatch.replace('repeat(',''), 10) : 0;
+        var capacity = colsN * rowsN;
 
         // scrollHeight == gridContentH; clientHeight == vpH (style.height).
-        // Invariante: gridContentH <= vpH (kein Scroll).
         var gap  = panelLib.GRID_GAP;
         var pad  = panelLib.GRID_PAD;
-        var innerH = vpH - 2 * pad;
-        var tileH  = (innerH - (geom.rows - 1) * gap) / geom.rows;
-        var gridContentH = geom.rows * tileH + (geom.rows - 1) * gap + 2 * pad;
+        var innerH = VPH - 2 * pad;
+        var tileH  = (innerH - (rowsN - 1) * gap) / rowsN;
+        var gridContentH = rowsN * tileH + (rowsN - 1) * gap + 2 * pad;
 
         console.log(JSON.stringify({
-          domChildren:     M,
-          cols:            geom.cols,
-          rows:            geom.rows,
+          domChildren:     gridEl._children.length,
+          cols:            colsN,
+          rows:            rowsN,
           capacity:        capacity,
           styleHeightPx:   styleHeightPx,
-          vpH:             vpH,
+          vpH:             VPH,
           gridContentH:    gridContentH,
-          noScroll:        gridContentH <= vpH + 0.5,
-          allTilesFit:     capacity >= M,
-          heightMatchesVp: styleHeightPx === vpH,
+          noScroll:        gridContentH <= VPH + 0.5,
+          allTilesFit:     capacity >= 11,
+          heightMatchesVp: styleHeightPx === VPH,
         }));
     """)
     assert out['domChildren'] == 11, \
