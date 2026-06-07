@@ -1,0 +1,32 @@
+{
+  "views": [
+    {
+      "slug": "heute",
+      "pfad": "/display/wetter/heute",
+      "label": "Wetter heute",
+      "synonyme": [
+        "wetter",
+        "wetter heute",
+        "wetter anzeigen",
+        "kleidung",
+        "was anziehen"
+      ],
+      "zeigt": "Das aktuelle Wetter und die passende Kleidungsempfehlung für den Tag als Diptychon.",
+      "zielgruppe": "kind"
+    },
+    {
+      "slug": "regeln",
+      "pfad": "/display/wetter/regeln",
+      "label": "Wetter-Regeln",
+      "synonyme": [
+        "Garderoben-Editor",
+        "Wetter-Regeln",
+        "garderobe bearbeiten",
+        "kleidungsregeln",
+        "regeln bearbeiten"
+      ],
+      "zeigt": "Die Garderoben-Regelmatrix: Eltern können Kleidungs-Sets je Wetterbedingung einsehen und bearbeiten.",
+      "zielgruppe": "eltern"
+    }
+  ]
+}
