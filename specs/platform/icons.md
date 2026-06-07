@@ -117,6 +117,34 @@ muss vor einer kommerziellen Nutzung geklärt werden (vgl.
 `xbuddy-knowledge/CONTEXT.md` zur Produktrichtung). Diese Spec dokumentiert
 die Lizenz; sie entscheidet die kommerzielle Frage nicht.
 
+## ICONS-7 — Stichwort-Suche über den lokalen Wort→ID-Cache
+
+Konsumenten, die von einem **deutschen Stichwort** zu Piktogramm-Kandidaten
+kommen wollen (z. B. der Routine-Punkte-Skill #354/RPS, ein späterer
+Onboarding-Schritt — der Konsum-Fall, den ICONS-3 schon nennt), suchen über den
+**schon vorhandenen** `pictogram_cache.json` (ICONS-3, Wort→ID): **read-only,
+lokal, kein ARASAAC-Re-Fetch** — konsistent mit ICONS-4 („nichts auf Vorrat",
+CLAUDE.md §6). Der Cache trägt einen breiten deutschen Wortschatz (Größenordnung
+~15 000 Wörter auf ~10 000 IDs), die zugehörigen PNGs liegen lokal (ICONS-1) —
+die Suche kommt damit **ohne Netz** aus und umgeht das Pi-IPv6-Egress-Blackhole.
+
+`GET /api/v1/icons/suche?q=<stichwort>&max=<n>` liefert eine Liste **Kandidaten**
+als JSON — `[{ "id": <arasaac-id>, "url": "/display/_shared/icons/arasaac/<id>.png" }]`:
+
+- Gematcht wird `q` gegen die deutschen Wörter des Cache (Teilwort, case-
+  insensitiv). Mehrere Wörter auf dieselbe ID ergeben **einen** Kandidaten
+  (ID-dedupliziert).
+- Zurückgegeben werden **nur** IDs, deren PNG in der icon-root vorliegt (ICONS-5)
+  — jeder Kandidat rendert garantiert; IDs ohne lokales PNG fallen raus.
+- `max` begrenzt die Trefferzahl (Default klein, z. B. `3` — passend zum
+  „3-Vorschläge"-Muster des RPS-Skills). **Weitere** Vorschläge holt der Konsument
+  durch eine **verfeinerte Anfrage** (anderes Stichwort/Synonym), nicht durch
+  Paginierung — der Endpunkt bleibt zustandslos.
+- Kein Treffer → **leere Liste**, kein Fehler.
+
+Read-only, keine Schreibwirkung, kein externer Call. Ausgeliefert vom Router
+(ROU-31), der die icon-root ohnehin besitzt — **kein** eigener Dienst.
+
 ## Folge-Punkt — KIBuddy-Migration
 
 KIBuddy liest seine Piktogramme heute aus seinem eigenen Cache
