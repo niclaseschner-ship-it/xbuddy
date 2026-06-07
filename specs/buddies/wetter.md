@@ -284,13 +284,13 @@ kuratierten Palette (WETTER-29). **Read-only** bleiben: die **Schwellen** der
 Bedingung, der **Hinweistext** sowie **Anzahl und Reihenfolge** der Regeln.
 Speichern sendet die geänderte Matrix an den internen Save-Handler (WETTER-26).
 
-### WETTER-29 — Kuratierte Kleidungs-Palette *(umgesetzt #328)*
+### WETTER-29 — Kuratierte Kleidungs-Palette *(umgesetzt #328; Palette-Update #361)*
 Kleidungsstücke werden **aus einer kuratierten Liste** vorgegebener Stücke
 (`{name, pikto}`) gewählt — die Familie tippt **keine** ARASAAC-ID. Die Palette
 wird mit dem Buddy ausgeliefert (durch einen Entwickler erweiterbar) und zeigt ihre
-Icons über ICONS-5. **V1.1-Palette (17 Stücke, ARASAAC-IDs):** Regenjacke `4927` ·
-Matschhose `24276` · Gummistiefel `2287` · Winterstiefel `2667` · Winterjacke
-`25804` · Jacke `2319` · Pullover `2436` · T-Shirt `2309` · Lange Hose `2565` ·
+Icons über ICONS-5. **V1.1-Palette (18 Stücke, ARASAAC-IDs):** Regenjacke `4927` ·
+Matschhose `24276` · Gummistiefel `2287` · Wanderschuhe `4580` · Halbschuhe `2621` ·
+Winterjacke `25804` · Jacke `2319` · Pullover `2436` · T-Shirt `2309` · Lange Hose `2565` ·
 Kurze Hose `13638` · Wintermütze `2412` · Cappy `2411` · Sonnenhut `2572` ·
 Handschuhe `2415` · Schal `2290` · Sonnenbrille `3330` · Sandalen `2556`. Die
 Palette-IDs müssen im Instanz-Icon-Store (`/display/_shared/icons/arasaac/<id>.png`,
