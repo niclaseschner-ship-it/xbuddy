@@ -23,6 +23,7 @@ Komponenten-Prozesse, die durch diese Services am Leben gehalten werden.
 | `xbuddy-photo.service` | `photo/photo.service` | Photo-Buddy (`/display/photo/`, `/api/v1/photo/`) | `127.0.0.1:5051` |
 | `xbuddy-familie.service` | `familie/familie.service` | Familien-Mit-Host (FAM-7/FAM-8, `/api/v1/familie/`) | `127.0.0.1:5010` |
 | `xbuddy-geraete.service` | `geraete/geraete.service` | Geräte-Registry (GER-5/GER-6/GER-15) | `127.0.0.1:5040` |
+| `xbuddy-seiten.service` | `seiten/seiten.service` | Seiten-Registry (SREG-3, `GET /api/v1/seiten`) | `127.0.0.1:5042` |
 | `xbuddy-eltern-chat.service` | `eltern-chat/eltern-chat.service` | Eltern-Chat Telegram-Bot (kein HTTP-Port, geht raus zu Telegram) | — |
 
 Jeder HTTP-Service bindet ausschließlich auf `127.0.0.1` (PORT-3) — von
@@ -80,6 +81,7 @@ Die übrigen Services haben keine `EnvironmentFile`-Abhängigkeit.
      [xbuddy-photo]=photo/photo.service
      [xbuddy-familie]=familie/familie.service
      [xbuddy-geraete]=geraete/geraete.service
+     [xbuddy-seiten]=seiten/seiten.service
      [xbuddy-eltern-chat]=eltern-chat/eltern-chat.service
    )
    for svc in "${!SVC_SRC[@]}"; do
@@ -108,13 +110,14 @@ Die übrigen Services haben keine `EnvironmentFile`-Abhängigkeit.
    sudo systemctl enable --now xbuddy-photo.service
    sudo systemctl enable --now xbuddy-familie.service
    sudo systemctl enable --now xbuddy-geraete.service
+   sudo systemctl enable --now xbuddy-seiten.service
    sudo systemctl enable --now xbuddy-eltern-chat.service
    ```
 
 5. **Status prüfen** — alle Services müssen `active (running)` melden:
 
    ```bash
-   systemctl status xbuddy-router xbuddy-plan xbuddy-wetter xbuddy-routine xbuddy-photo xbuddy-familie xbuddy-eltern-chat
+   systemctl status xbuddy-router xbuddy-plan xbuddy-wetter xbuddy-routine xbuddy-photo xbuddy-familie xbuddy-geraete xbuddy-seiten xbuddy-eltern-chat
    ```
 
 ## Restart nach Code-Update (Pflicht)
@@ -135,6 +138,7 @@ Zuordnung (analog zur Memory-Notiz `feedback-pi-service-restart`):
 | `photo/` | `sudo systemctl restart xbuddy-photo` |
 | `familie/` | `sudo systemctl restart xbuddy-familie` |
 | `geraete/` | `sudo systemctl restart xbuddy-geraete` |
+| `seiten/` oder ein `views.json`-Manifest | `sudo systemctl restart xbuddy-seiten` |
 | `eltern-chat/` | `sudo systemctl restart xbuddy-eltern-chat` |
 | `deploy/nginx/xbuddy-origin.conf` | `sudo nginx -t && sudo systemctl reload nginx` |
 
