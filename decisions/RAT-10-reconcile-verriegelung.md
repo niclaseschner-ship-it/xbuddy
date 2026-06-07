@@ -57,3 +57,11 @@ entschieden (Variante 1) gegen Variante 2 (free Halb-Lösung) und Variante 3 (pu
 Dieser Record (RAT-10) + RECON-1 in `conventions/` (Bauregel: „Status-/Reconcile-Übergänge
 fasst nur eine Action an, nie ein Agent per Shell; nach `main` nur über PR"). Mechanik in
 `.github/workflows/` + Ruleset-Config.
+
+## Klarstellung (PW-13, 2026-06-07)
+Der Satz im Beschluss „kein Agent fasst je wieder Labels per Shell an" meint den
+**`status:*`-Lebenszyklus**, nicht *alle* Labels. **Property-Labels** (`blocked`, künftig
+ggf. `needs-nic`) haben keinen Action-Lebenszyklus und dürfen von Agent oder Mensch per
+Shell gesetzt werden — `blocked` wird das an den arbeitstag-Set-Sites bereits. Petrankert
+als Geltungsbereich-Absatz in RECON-3 (`conventions/reconcile.md`). Anlass: xbuddy-prozess#13
+(Label-Taxonomie, Variante b+).
