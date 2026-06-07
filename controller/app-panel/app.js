@@ -486,6 +486,37 @@
   }
 
   // ============================================================
+  //  PANEL-12 — Grid-Geometrie auf das DOM-Grid anwenden
+  // ============================================================
+  //
+  // Liest Anzahl der Kacheln aus dem Grid-Element, berechnet cols/rows
+  // aus dem aktuellen Viewport und setzt grid-template-columns/-rows.
+  // Wird beim Laden und bei resize aufgerufen (Bootstrap-IIFE).
+  // ctx ist optional: {doc, win} für Tests; im Browser entfällt der Parameter
+  // und die globalen document/window werden verwendet.
+
+  function applyGridGeometry(ctx) {
+    var doc = (ctx && ctx.doc) ? ctx.doc : /* istanbul ignore next */ document;
+    var win = (ctx && ctx.win) ? ctx.win : /* istanbul ignore next */ window;
+    var grid = doc.getElementById('grid');
+    if (!grid) return;
+    var M = grid.children.length;
+    if (M < 1) return;
+    var vpW = win.innerWidth;
+    var vpH = win.innerHeight;
+    // #error-Banner abziehen, falls sichtbar
+    var errEl = doc.getElementById('error');
+    if (errEl && !errEl.classList.contains('hidden')) {
+      vpH -= errEl.offsetHeight || 0;
+    }
+    var geom = computeGridGeometry(M, vpW, vpH);
+    grid.style.gridTemplateColumns = 'repeat(' + geom.cols + ', 1fr)';
+    grid.style.gridTemplateRows    = 'repeat(' + geom.rows + ', 1fr)';
+    // PANEL-12: Grid-Höhe = innerHeight minus error-Banner; overflow:hidden verhindert Scroll.
+    grid.style.height = vpH + 'px';
+  }
+
+  // ============================================================
   //  API
   // ============================================================
 
@@ -510,6 +541,7 @@
     attachWakeLockImpl: attachWakeLockImpl,
     attachFullscreenImpl: attachFullscreenImpl,
     computeGridGeometry: computeGridGeometry,
+    applyGridGeometry: applyGridGeometry,
     // Konstanten für Tests (AC3-Invarianten).
     GRID_GAP: GRID_GAP,
     GRID_PAD: GRID_PAD,
@@ -651,33 +683,6 @@
   }
 
   // ============================================================
-  //  PANEL-12 — Grid-Geometrie auf das DOM-Grid anwenden
-  // ============================================================
-  //
-  // Liest Anzahl der Kacheln aus dem Grid-Element, berechnet cols/rows
-  // aus dem aktuellen Viewport und setzt grid-template-columns/-rows.
-  // Wird beim Laden und bei resize aufgerufen.
-
-  function applyGridGeometry() {
-    var grid = document.getElementById('grid');
-    if (!grid) return;
-    var M = grid.children.length;
-    if (M < 1) return;
-    var vpW = window.innerWidth;
-    var vpH = window.innerHeight;
-    // #error-Banner abziehen, falls sichtbar
-    var errEl = document.getElementById('error');
-    if (errEl && !errEl.classList.contains('hidden')) {
-      vpH -= errEl.offsetHeight || 0;
-    }
-    var geom = panelLib.computeGridGeometry(M, vpW, vpH);
-    grid.style.gridTemplateColumns = 'repeat(' + geom.cols + ', 1fr)';
-    grid.style.gridTemplateRows    = 'repeat(' + geom.rows + ', 1fr)';
-    // PANEL-12: Grid-Höhe = innerHeight minus error-Banner; overflow:hidden verhindert Scroll.
-    grid.style.height = vpH + 'px';
-  }
-
-  // ============================================================
   //  PANEL-5 — Tap → POST /api/v1/events mit Retry
   // ============================================================
 
@@ -729,8 +734,8 @@
         sendEvent(cfg, panelLib.makePanelCleared(cfg.source_id));
       });
     // PANEL-12: Geometrie nach Render berechnen, bei resize neu rechnen.
-    applyGridGeometry();
-    window.addEventListener('resize', applyGridGeometry);
+    panelLib.applyGridGeometry();
+    window.addEventListener('resize', function () { panelLib.applyGridGeometry(); });
     attachWakeLock();
     attachFullscreenOnGesture();
     attachStream(cfg.display_id, function () { return tiles; });
