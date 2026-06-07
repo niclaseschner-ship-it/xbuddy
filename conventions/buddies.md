@@ -114,6 +114,45 @@ es liegt auf der Platte, eine Seite bleibt also gelistet, auch wenn ihr Prozess
 gerade aus ist. (Landet mit dem 2. Manifest-Vorkommen, nicht auf Vorrat —
 konsistent mit der Reifelogik unten.)
 
+### BUD-4 — Kachel-Icon(s) je Display-View im Manifest (sobald der Buddy als Panel-Kachel adressierbar ist)
+**Geltungsbereich: Display-Views (SREG-4-Sorte a, `/display/<app>/<view>`)** — die
+einzige Sorte, die ein Panel-Tile targeten kann (PANEL-7 Descriptor `{app, view}`).
+Eltern-Settings-Views (Sorte b, z. B. `/display/wetter/regeln`) und Controller-Apps
+(Sorte c) werden **nie** Panel-Kacheln und tragen **kein** `icons[]` (kein Vorrat,
+CLAUDE.md §6).
+
+Jeder **Display-View**-Eintrag im `views.json`-Manifest (BUD-3) trägt `icons[]` —
+die **vollständige, final anzuzeigende** Liste der Kachel-Icon-Pfade dieser View
+(≥1, max 3), **relativ zur Icon-Basis `/display/_shared/icons/`** (PANEL-3/ICONS-5;
+ARASAAC ist die heutige Default-Quelle, z. B. `arasaac/<id>.png`, aber das Feld
+ist die Pfad-Form, nicht die Quelle).
+
+**Jede `varianten[]`-Zeile (BUD-3) trägt ihr eigenes, vollständiges `icons[]`** —
+explizit, **keine Erbung vom View-Icon, keine Ableitung**. Eine Kleinkind-Variante
+führt z. B. `["…/plan.png", "arasaac/2484.png"]` (Kinder-Marker als zweites Icon),
+die Default-Variante nur `["…/plan.png"]`. `varianten[].query` ist ein **flaches
+Objekt** (`{"ansicht":"klein"}`), kein String — passt direkt ins
+Kachel-/Descriptor-Schema (PANEL-7).
+
+**Warum die volle Liste je Eintrag:** das Manifest ist die **eine Wahrheit** der
+Kachel-Darstellung. Sowohl der Panel-Add (`specs/platform/panel-bearbeiten.md`
+PBE-7) als auch der Panel-Anlege-Skill (`panel_anlegen`) lesen sie, statt jeder die
+`icons[]` selbst zu komponieren. Eine Marker-Ableitung aus `zielgruppe` wäre
+**falsch**: eine `kind`-View **ohne** Variante trägt **keinen** Kinder-Marker — nur
+die Kleinkind-**Variante** tut das.
+
+**Icon-Existenz ist ein Deploy-/Backfill-Gate, kein Aggregator-Test:** ein Pfad in
+`icons[]` muss als PNG im `_shared/icons`-Cache liegen (ICONS-4 seedet nur aus dem
+Cache, lädt nichts nach). Verifiziert wird das beim Backfill per lokalem
+`GET /display/_shared/icons/<pfad>` → `200 image/png` (Verantwortung: der
+Backfill-PR, #387), **nicht** in der Aggregator-Durchreichung (SREG-10). Ein
+Kachel-Icon ist **nie** ein app-eigenes Asset (URL-13) und **nie** das
+View-Hero-Bild.
+
+**Durchsetzungs-Stufe** definiert SREG-10 (Schalter `icons_erforderlich`), nicht
+dieser Text — so bleibt die gestaffelte Einführung (Toleranz → Backfill → Härtung)
+ohne Selbstwiderspruch. Rollout-Detail im Ticket #387.
+
 ## Bestätigung an der echten Reibung (Plan vs. Wetter)
 
 Die beiden Buddys auf `main` legitimieren die Regeln am zweiten Vorkommen und
