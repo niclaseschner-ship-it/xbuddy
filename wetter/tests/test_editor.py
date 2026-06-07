@@ -13,7 +13,7 @@ Abdeckung aus WETTER-33:
   AC3  ungültiges Speichern abgelehnt, wetter.json byte-unverändert
        (leeres Pflicht-Set · Pikto außerhalb Palette · veränderte Anzahl/Reihenfolge).
   WETTER-30  fallback-Pflicht leer abgelehnt; Optional darf leer sein.
-  AC4/WETTER-29  Palette = genau die 17 Stücke; wetter.example.json palette-konform.
+  AC4/WETTER-29  Palette = genau die 18 Stücke (#361); wetter.example.json palette-konform.
 """
 
 import json
@@ -118,7 +118,7 @@ def test_editor_get_zeigt_matrix(editor_setup):
     assert "gefühlt ab 14" in body
     # Palette-Piktos über die geteilte Icon-Plattform (ICONS-5, WETTER-18).
     assert "/display/_shared/icons/arasaac/" in body
-    # Palette ist eingebunden (ein Stück der 17er-Palette).
+    # Palette ist eingebunden (ein Stück der 18er-Palette, #361).
     assert "Sonnenbrille" in body
 
 
@@ -245,17 +245,17 @@ def test_editor_optional_darf_leer(editor_setup):
 #  AC4 / WETTER-29 — Palette + example.json
 # ============================================================
 
-# Die 17 Palette-IDs aus WETTER-29 (specs/buddies/wetter.md §10).
+# Die 18 Palette-IDs aus WETTER-29 (specs/buddies/wetter.md §10, #361).
 ERWARTETE_PALETTE_IDS = {
-    "4927", "24276", "2287", "2667", "25804", "2319", "2436", "2309",
+    "4927", "24276", "2287", "4580", "2621", "25804", "2319", "2436", "2309",
     "2565", "13638", "2412", "2411", "2572", "2415", "2290", "3330", "2556",
 }
 
 
-def test_palette_genau_17_ids():
-    """AC4/WETTER-29: palette.json = exakt die 17 Stücke mit den IDs."""
+def test_palette_genau_18_ids():
+    """AC4/WETTER-29: palette.json = exakt die 18 Stücke mit den IDs (#361)."""
     stuecke = palette_mod.laden()
-    assert len(stuecke) == 17
+    assert len(stuecke) == 18
     assert palette_mod.erlaubte_piktos() == ERWARTETE_PALETTE_IDS
     # Jedes Stück hat name + pikto.
     for s in stuecke:
