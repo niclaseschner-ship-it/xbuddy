@@ -75,9 +75,9 @@ er entweder
 
 Nur diese beiden Marker entwerten. Fehlt der Marker, gilt der Default (bindend).
 
-**Abschnittskontext schlägt Präfix.** `OPEN-*` ist die Namens-Konvention für
-einen offenen oder skizzierten Punkt — aber das Präfix allein entscheidet nichts.
-Maßgeblich ist, *wo* der Eintrag steht:
+**Abschnittskontext schlägt Präfix.** `OPEN-*` ist die ID-Form für einen offenen
+oder skizzierten Punkt (`conventions/identifiers.md` IDENT-3) — aber das Präfix
+allein entscheidet nichts. Maßgeblich ist, *wo* der Eintrag steht:
 - `OPEN-*` unter `## Offene Punkte`/`ENTWURF` → vorläufig.
 - `OPEN-*` unter einer ratifizierten oder normalen Überschrift (z. B.
   `## Ratifizierte Entscheidungen`) → der zugehörige **Beschluss** ist ratifiziert
@@ -87,7 +87,8 @@ Maßgeblich ist, *wo* der Eintrag steht:
 - **Für den Prep:** Ein Ticket, das nur ein `OPEN-*` zitiert, ist *nicht*
   automatisch baufertig. Im Zweifel Nic fragen.
 
-`E-*` (Entscheidungs-/Rationale-Eintrag) ist **kein** Skizzen-Präfix wie `OPEN-*`:
+`E-*` (Entscheidungs-/Rationale-Eintrag, ID-Form `conventions/identifiers.md`
+IDENT-4) ist **kein** Skizzen-Präfix wie `OPEN-*`:
 Er hält die *Begründung* hinter einer Requirement fest und folgt der
 Abschnitts-Regel — unter `## Entscheidungen` (oder anderer normaler Überschrift)
 **bindend/ratifiziert**, unter `ENTWURF` vorläufig wie alles dort.
