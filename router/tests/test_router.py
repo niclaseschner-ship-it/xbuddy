@@ -591,6 +591,93 @@ def test_ROU_30_nonexistent_asset_returns_404(client_with_routing):
     assert r.status_code == 404
 
 
+# ============================================================
+#  ROU-31 — Stichwort-Suche /api/v1/icons/suche
+# ============================================================
+#
+# Entry-Path-Probe: die ECHTE Route /api/v1/icons/suche über den Flask-
+# Testclient, gegen ein temporäres icon_root mit pictogram_cache.json und
+# selektiv vorhandenen PNGs (icon_root_override-Fixture-Stil, ICONS-7).
+
+@pytest.fixture
+def icon_root_suche(tmp_path):
+    """icon-root mit pictogram_cache.json und zwei von drei IDs als PNG.
+
+    Cache: {'hund': 101, 'hunde': 101, 'katze': 202, 'tier': 303}
+    PNGs: 101.png und 202.png vorhanden; 303.png fehlt absichtlich (AC4).
+    """
+    root = tmp_path / 'icons_suche'
+    arasaac = root / 'arasaac'
+    arasaac.mkdir(parents=True)
+    (arasaac / '101.png').write_bytes(_TINY_PNG)
+    (arasaac / '202.png').write_bytes(_TINY_PNG)
+    # 303.png bewusst nicht anlegen
+    cache = {'hund': 101, 'hunde': 101, 'katze': 202, 'tier': 303}
+    (root / 'pictogram_cache.json').write_text(
+        json.dumps(cache), encoding='utf-8'
+    )
+    original = router_main.runtime_config.get('icon_root', '')
+    router_main.runtime_config['icon_root'] = str(root)
+    # pictogram-Cache invalidieren (neues icon_root → stale)
+    router_main._pictogram_cache_root = ''
+    try:
+        yield root
+    finally:
+        router_main.runtime_config['icon_root'] = original
+        router_main._pictogram_cache_root = ''
+
+
+def test_ROU_31_suche_returns_matches(client_with_routing, icon_root_suche):
+    """AC1: q=hund → 200, application/json, [{id, url}] mit korrektem URL-Format."""
+    r = client_with_routing.get('/api/v1/icons/suche?q=hund')
+    assert r.status_code == 200
+    assert r.content_type.startswith('application/json')
+    data = r.get_json()
+    assert isinstance(data, list)
+    assert len(data) >= 1
+    item = data[0]
+    assert item['id'] == 101
+    assert item['url'] == '/display/_shared/icons/arasaac/101.png'
+
+
+def test_ROU_31_suche_no_match_returns_empty(client_with_routing, icon_root_suche):
+    """AC2: q ohne Treffer → 200, leere Liste []."""
+    r = client_with_routing.get('/api/v1/icons/suche?q=xyznotexistent')
+    assert r.status_code == 200
+    assert r.get_json() == []
+
+
+def test_ROU_31_suche_missing_q_returns_400(client_with_routing, icon_root_suche):
+    """AC3: kein q-Parameter → 400."""
+    r = client_with_routing.get('/api/v1/icons/suche')
+    assert r.status_code == 400
+
+
+def test_ROU_31_suche_filters_ids_without_local_png(client_with_routing, icon_root_suche):
+    """AC4: ID 303 (tier) hat kein PNG → darf nicht in der Antwort erscheinen."""
+    r = client_with_routing.get('/api/v1/icons/suche?q=tier&max=10')
+    assert r.status_code == 200
+    data = r.get_json()
+    ids = [item['id'] for item in data]
+    assert 303 not in ids
+
+
+def test_ROU_31_suche_dedupes_and_respects_max(client_with_routing, icon_root_suche):
+    """AC5: 'hund'/'hunde' → beide treffen ID 101; Dedup → ein Kandidat.
+    max=1 begrenzt, max=10 liefert alle vorhandenen."""
+    # Teilwort 'hund' trifft 'hund' (101) und 'hunde' (101) — Dedup → 1 Eintrag
+    r = client_with_routing.get('/api/v1/icons/suche?q=hund&max=10')
+    assert r.status_code == 200
+    data = r.get_json()
+    ids = [item['id'] for item in data]
+    assert ids.count(101) == 1, 'ID 101 muss dedupliziert sein'
+
+    # max=1 klemmt auf einen Treffer
+    r2 = client_with_routing.get('/api/v1/icons/suche?q=a&max=1')
+    assert r2.status_code == 200
+    assert len(r2.get_json()) <= 1
+
+
 def test_ROU_15_controller_dir_env_var_resolves(monkeypatch, tmp_path):
     monkeypatch.setenv('ROUTER_CONTROLLER_DIR', '/tmp/some-controller')
     args = router_main.parse_args(['--routing', str(tmp_path / 'missing.json')])
