@@ -287,11 +287,11 @@ def test_ac1_last_known_good_bei_kaputtem_read(tmp_path):
 
 
 # ============================================================
-#  AC2 — Ungültige Eingaben → 422, kein Teil-Write
+#  AC2 — Ungültige Eingaben → 400, kein Teil-Write
 # ============================================================
 
-def test_ac2_ungültiges_zeitformat_gibt_422(data_path_und_client):
-    """AC2: ungültiges Zeitformat → 422, kein Schreiben."""
+def test_ac2_ungültiges_zeitformat_gibt_400(data_path_und_client):
+    """AC2: ungültiges Zeitformat → 400, kein Schreiben."""
     data_path, client = data_path_und_client
 
     # Originale Abfahrtszeit merken
