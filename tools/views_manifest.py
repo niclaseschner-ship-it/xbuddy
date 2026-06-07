@@ -1,0 +1,223 @@
+"""Gemeinsames `views.json`-Manifest-Rückgrat (BUD-3 / SREG-2/SREG-4).
+
+Dieses Modul ist die EINE Stelle (CLAUDE.md §6), die das BUD-3-Manifest einer
+Komponente lädt, validiert und an die echten Flask-Routen bindet. Plan, Wetter,
+Routine und Photo teilen sich diesen Code — jeder Buddy liefert nur seine
+`views.json` + einen Eigentest, der `assert_routes_match` gegen seine App ruft.
+
+Es ist Bottom-Layer (`tools/`, MOD-1): es importiert KEINE Komponente
+(kein `plan`/`wetter`/`seiten`-Import), nur stdlib. Die Flask-App reicht der
+Aufrufer als Argument herein — der Helfer enumeriert nur `app.url_map`.
+
+## Manifest-Form (`views.json`)
+
+Ein JSON-Objekt mit genau einem Top-Level-Schlüssel `views` (Liste). Diese Form
+ist die Vorlage für alle vier Folge-Manifeste:
+
+    {
+      "views": [
+        {
+          "slug": "woche",
+          "pfad": "/display/plan/woche",
+          "label": "Wochenplan",
+          "synonyme": ["plan", "wochenplan", "kinderplan"],
+          "zeigt": "Den rollierenden Wochenplan der Kinder.",
+          "zielgruppe": "kind",
+          "varianten": [
+            {"slug": "woche-klein", "query": "ansicht=klein",
+             "label": "Wochenplan für Kleinkinder"}
+          ]
+        }
+      ]
+    }
+
+Pflichtfelder je Eintrag (SREG-4 / BUD-3): `slug`, `pfad`, `label`, `synonyme`,
+`zeigt`, `zielgruppe`. Optional: `varianten[]` (je `slug`, `query`, `label`).
+`key`/`typ`/`app` leitet der Aggregator AB — sie stehen NICHT im Manifest.
+
+`zielgruppe` ist deskriptiv `kind` | `eltern` (SREG-4/SREG-6).
+
+## Fehlermodell (DCOMP-3)
+
+`load()` wirft bei JSON-/Pflichtfeld-Fehler eine `ManifestError`. Der Aggregator
+(`xbuddy-seiten`, SREG-3) fängt sie pro Manifest ab und ÜBERSPRINGT das kaputte
+Manifest mit Warnung — nie crasht das ganze Inventar (SREG-3/DCOMP-3). Dieses
+Modul entscheidet NICHT über Skip; es signalisiert nur den Fehler. (Symmetrisch
+zu `panel/registry.py`, das den Fehler ebenfalls als eigene Exception wirft.)
+"""
+
+import json
+
+# Erlaubte `zielgruppe`-Werte (SREG-4/SREG-6: deskriptiv, kein Auth-Gate).
+ERLAUBTE_ZIELGRUPPEN = ("kind", "eltern")
+
+# Pflichtfelder je View-Eintrag (SREG-4 / BUD-3). `varianten` ist optional.
+PFLICHTFELDER = ("slug", "pfad", "label", "synonyme", "zeigt", "zielgruppe")
+
+
+class ManifestError(Exception):
+    """Das `views.json`-Manifest ist inhaltlich ungültig — JSON-Fehler,
+    fehlendes Pflichtfeld oder Schema-Verletzung (DCOMP-3). Der Aggregator
+    fängt sie ab und überspringt das Manifest; sie crasht nie das Inventar."""
+
+
+class RoutenAbweichung(AssertionError):
+    """`assert_routes_match` fand eine Drift zwischen den kanonischen
+    HTML-GET-Routen einer App und den Manifest-Einträgen (BUD-3-Eigentest)."""
+
+
+def load(path):
+    """Liest und validiert ein `views.json` (BUD-3 / SREG-4).
+
+    Liefert die Liste der validierten View-Einträge (Dicts in Manifest-
+    Reihenfolge). Bei JSON-Fehler, fehlendem Top-Level-`views`, fehlendem
+    Pflichtfeld oder Schema-Verletzung wird `ManifestError` geworfen — der
+    Aufrufer (Aggregator) entscheidet über Skip (DCOMP-3), dieses Modul crasht
+    nicht selbst und schluckt den Fehler nicht still.
+
+    Anders als ein gitignoretes Config-File (CONFIG-1) ist ein committetes
+    Manifest KEIN „darf-fehlen": eine fehlende Datei ist hier ein echter
+    `ManifestError` (FileNotFoundError → ManifestError), denn eine deklarierte
+    Komponente OHNE ihr committetes Manifest ist ein Fehler, kein leerer Default.
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError as e:
+        raise ManifestError("views.json fehlt: %s" % path) from e
+    except json.JSONDecodeError as e:
+        raise ManifestError("views.json nicht parsebar (%s): %s" % (path, e)) from e
+
+    if not isinstance(data, dict):
+        raise ManifestError(
+            "views.json muss ein JSON-Objekt sein, ist %s" % type(data).__name__)
+    roh_views = data.get("views")
+    if not isinstance(roh_views, list):
+        raise ManifestError(
+            "views.json: Top-Level `views` muss eine Liste sein, ist %r"
+            % type(roh_views).__name__)
+
+    eintraege = []
+    gesehene_slugs = set()
+    for roh in roh_views:
+        eintrag = _validate_eintrag(roh)
+        slug = eintrag["slug"]
+        if slug in gesehene_slugs:
+            raise ManifestError("views.json: doppelter slug %r" % slug)
+        gesehene_slugs.add(slug)
+        eintraege.append(eintrag)
+    return eintraege
+
+
+def _validate_eintrag(roh):
+    """Validiert einen einzelnen View-Eintrag (SREG-4) und gibt ihn normalisiert
+    zurück. Wirft `ManifestError` bei fehlendem Pflichtfeld oder Schema-Bruch.
+    """
+    if not isinstance(roh, dict):
+        raise ManifestError("views.json: Eintrag ist kein Objekt: %r" % roh)
+    for feld in PFLICHTFELDER:
+        if feld not in roh or roh[feld] in (None, ""):
+            raise ManifestError(
+                "views.json: Eintrag ohne Pflichtfeld %r: %r" % (feld, roh))
+    if not isinstance(roh["synonyme"], list):
+        raise ManifestError(
+            "views.json: `synonyme` muss eine Liste sein (slug %r)" % roh.get("slug"))
+    if roh["zielgruppe"] not in ERLAUBTE_ZIELGRUPPEN:
+        raise ManifestError(
+            "views.json: `zielgruppe` muss %s sein, ist %r (slug %r)"
+            % (ERLAUBTE_ZIELGRUPPEN, roh["zielgruppe"], roh.get("slug")))
+    varianten = roh.get("varianten")
+    if varianten is not None:
+        _validate_varianten(varianten, roh.get("slug"))
+    return roh
+
+
+def _validate_varianten(varianten, slug):
+    """Validiert das optionale `varianten[]` (SREG-1/SREG-4): Liste von Objekten
+    mit je `slug`, `query`, `label`."""
+    if not isinstance(varianten, list):
+        raise ManifestError(
+            "views.json: `varianten` muss eine Liste sein (slug %r)" % slug)
+    for v in varianten:
+        if not isinstance(v, dict):
+            raise ManifestError(
+                "views.json: Variante ist kein Objekt: %r (slug %r)" % (v, slug))
+        for feld in ("slug", "query", "label"):
+            if feld not in v or v[feld] in (None, ""):
+                raise ManifestError(
+                    "views.json: Variante ohne Pflichtfeld %r: %r (slug %r)"
+                    % (feld, v, slug))
+
+
+def kanonische_display_pfade(app, slug, ausgenommene_pfade=None):
+    """Sammelt die kanonischen HTML-GET-Routen-Pfade einer Flask-App unter
+    `/display/<slug>/…` (BUD-3-Eigentest, buddy-agnostisch).
+
+    Eine Route zählt als kanonischer View-Einstiegspunkt, wenn:
+    - sie GET erlaubt (`"GET" in methods`),
+    - ihr Pfad echt tiefer als `/display/<slug>/` liegt (eine View darunter),
+    - sie einen FESTEN Pfad hat (kein URL-Konverter `<…>`): freie/parametrische
+      Routen sind keine kanonischen Einstiegspunkte (Flask-`static` mit
+      `<path:filename>` fällt damit automatisch raus, ebenso `?ab=`-artige
+      Anker liegen ohnehin nicht als eigene Route vor),
+    - ihr Pfad nicht in `ausgenommene_pfade` steht.
+
+    `ausgenommene_pfade` (optionales Set) trägt die buddy-spezifischen
+    Ausnahmen, die NICHT aus der `url_map` ablesbar sind — Alias-/Redirect-
+    Routen und HTML-rendernde Routen, die der Buddy bewusst nicht listet. So
+    bleibt die Ausnahmeliste am Buddy-Eigentest sichtbar (BUD-3), statt im
+    Helfer zu verschwinden. POST-/PUT-only- und `/api/`-Endpunkte sind durch
+    den GET-/Prefix-Filter schon ausgenommen und gehören NICHT in dieses Set.
+    """
+    ausgenommene = set(ausgenommene_pfade or ())
+    prefix = "/display/%s/" % slug
+    pfade = set()
+    for regel in app.url_map.iter_rules():
+        if "GET" not in regel.methods:
+            continue
+        rule = regel.rule
+        if not rule.startswith(prefix) or rule == prefix:
+            continue
+        if "<" in rule:
+            # Parametrische Route (z. B. Flask-`static`) — kein kanonischer
+            # View-Einstiegspunkt.
+            continue
+        if rule in ausgenommene:
+            continue
+        pfade.add(rule)
+    return pfade
+
+
+def assert_routes_match(app, eintraege, slug, ausgenommene_pfade=None):
+    """Bindet das Manifest bidirektional an die echten Flask-Routen (BUD-3).
+
+    Prüft, dass die Menge der kanonischen HTML-GET-Routen unter
+    `/display/<slug>/…` (siehe `kanonische_display_pfade`) GENAU der Menge der
+    `pfad`-Werte der Manifest-Einträge dieses Slugs entspricht:
+    - jede kanonische Route hat genau einen Manifest-Eintrag, und
+    - jeder Manifest-Eintrag eine kanonische Route.
+
+    Schlägt bei Drift mit `RoutenAbweichung` fehl (verständliche Meldung, welche
+    Route/welcher Eintrag fehlt). `ausgenommene_pfade` reicht der Buddy-Eigentest
+    für Alias-/Redirect-Routen durch (BUD-3-Ausnahmen).
+
+    `eintraege` ist die von `load()` gelieferte Liste; nur Einträge mit
+    `pfad`-Prefix `/display/<slug>/` zählen für diese Buddy-Bindung (ein
+    Manifest mit Fremd-Pfaden wäre selbst ein Fehler, aber die Bindung prüft
+    den eigenen Slug).
+    """
+    routen_pfade = kanonische_display_pfade(app, slug, ausgenommene_pfade)
+    manifest_pfade = {e["pfad"] for e in eintraege}
+
+    fehlt_im_manifest = routen_pfade - manifest_pfade
+    fehlt_als_route = manifest_pfade - routen_pfade
+    if fehlt_im_manifest or fehlt_als_route:
+        teile = []
+        if fehlt_im_manifest:
+            teile.append(
+                "Routen ohne Manifest-Eintrag: %s" % sorted(fehlt_im_manifest))
+        if fehlt_als_route:
+            teile.append(
+                "Manifest-Einträge ohne Route: %s" % sorted(fehlt_als_route))
+        raise RoutenAbweichung(
+            "Manifest⇔Route-Drift für slug %r — %s" % (slug, "; ".join(teile)))
