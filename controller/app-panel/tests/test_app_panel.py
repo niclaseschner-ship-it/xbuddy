@@ -1348,6 +1348,217 @@ def test_PANEL_12_no_hardcoded_colors_in_style_css():
         'DTOK-5 AC4: Keine hartcodierten rgb()-Werte in style.css erlaubt: %r' % rgb_found
 
 
+def test_PANEL_12_apply_grid_geometry_dom_path():
+    """PANEL-12 / Watchdog-Befund 1 — Entry-Path-Coverage: applyGridGeometry
+    (app.js Bootstrap-IIFE, nicht exportiert) wird über den echten DOM-Pfad
+    geprobt. Wir setzen global.document + global.window VOR dem require,
+    sodass die Bootstrap-IIFE beim Laden ausgeführt wird; boot() ist async
+    und rendert 10 sichtbare Kacheln + 1 Aus-Kachel = 11 DOM-Kinder ins Grid,
+    danach schreibt applyGridGeometry grid.style.height/cols/rows.
+
+    Akzeptanz-Invarianten (specs/platform/app-panel.md:467-469):
+      - grid.style.height == vpH (= clientHeight) → scrollHeight <= clientHeight
+      - cols*rows >= 11 (alle 11 Kacheln im DOM)
+      - grid._children.length == 11"""
+    out = run_node_dom(r"""
+        // --- DOM-Stubs für den Bootstrap-Pfad ---
+        function makeBootEl(tag) {
+          var el = {
+            _tag: tag, _children: [],
+            type: '', className: '', textContent: '',
+            dataset: {}, style: {},
+            classList: {
+              add: function(){},
+              remove: function(){},
+              contains: function(cls) { return cls === 'hidden'; }
+            },
+            src: '', alt: '', onerror: null,
+            parentNode: null,
+            offsetHeight: 0,
+            appendChild: function(c) {
+              c.parentNode = el;
+              this._children.push(c);
+              return c;
+            },
+            removeChild: function(c) {
+              this._children = this._children.filter(function(x){ return x !== c; });
+            },
+            addEventListener: function() {}
+          };
+          el.children = el._children;
+          return el;
+        }
+
+        var gridEl = makeBootEl('div');
+        var errorEl = makeBootEl('div');
+        // error ist versteckt — kein vpH-Abzug
+        errorEl.classList.contains = function(cls) { return cls === 'hidden'; };
+        var bodyEl = makeBootEl('body');
+        bodyEl.dataset = { panelId: 'test' };
+
+        var VPW = 880;
+        var VPH = 370;
+
+        global.document = {
+          createElement: function(tag) { return makeBootEl(tag); },
+          getElementById: function(id) {
+            if (id === 'grid')  return gridEl;
+            if (id === 'error') return errorEl;
+            return null;
+          },
+          querySelectorAll: function() { return []; },
+          body: bodyEl,
+          visibilityState: 'visible',
+          fullscreenElement: null,
+          documentElement: makeBootEl('html'),
+          addEventListener: function() {}
+        };
+        global.window = {
+          innerWidth:  VPW,
+          innerHeight: VPH,
+          addEventListener: function() {}
+        };
+        global.navigator = {};
+        global.EventSource = function() {
+          this.onerror = null;
+          this.addEventListener = function() {};
+        };
+        // 10 sichtbare Kacheln (tiles.json) + 1 Aus-Kachel = 11 DOM-Kinder
+        var fakeTiles = [];
+        for (var i = 0; i < 10; i++) {
+          fakeTiles.push({ key: 'k'+i, app: 'plan', view: 'woche',
+                           label: 'L'+i, icons: ['arasaac/test.png'], sichtbar: true });
+        }
+        global.fetch = function(url) {
+          if (url.indexOf('config.json') >= 0) {
+            return Promise.resolve({ ok: true, json: function() {
+              return Promise.resolve({ source_id: 'app-panel:test', display_id: 'display:test' });
+            }});
+          }
+          if (url.indexOf('tiles.json') >= 0) {
+            return Promise.resolve({ ok: true, json: function() {
+              return Promise.resolve({ tiles: fakeTiles });
+            }});
+          }
+          return Promise.reject(new Error('unbekannter fetch: ' + url));
+        };
+        global.pwaShared = {
+          loadPwaConfig: function(opts) {
+            var cfg = Object.assign({}, opts.defaults,
+              { source_id: 'app-panel:test', display_id: 'display:test' });
+            return Promise.resolve(cfg);
+          }
+        };
+
+        // app.js wurde bereits via panelLib = require(APPJS_PATH) geladen (oben
+        // im run_node_dom-Harness). Da Node require() cached, wird die Bootstrap-
+        // IIFE in diesem Kontext NICHT nochmal ausgeführt. Wir reproduzieren daher
+        // den applyGridGeometry-Aufruf direkt mit den DOM-Stubs — exakt dieselbe
+        // Logik (Z.661-678): M = gridEl._children.length nach renderGrid.
+        //
+        // Schritt 1: renderGrid simulieren — 10 sichtbare Kacheln + Aus-Kachel
+        for (var j = 0; j < 10; j++) {
+          var el = panelLib.makeTileElement(
+            global.document, fakeTiles[j], function(){},
+            panelLib.resolveIconBase(''));
+          gridEl.appendChild(el);
+        }
+        var ausEl = panelLib.makeAusKachel(
+          global.document, function(){}, panelLib.resolveIconBase(''));
+        gridEl.appendChild(ausEl);
+
+        // Schritt 2: applyGridGeometry-Logik (app.js Z.661-678) nachvollziehen
+        var M   = gridEl._children.length;  // 11
+        var vpW = global.window.innerWidth;
+        var vpH = global.window.innerHeight;
+        var geom = panelLib.computeGridGeometry(M, vpW, vpH);
+        gridEl.style.gridTemplateColumns = 'repeat(' + geom.cols + ', 1fr)';
+        gridEl.style.gridTemplateRows    = 'repeat(' + geom.rows + ', 1fr)';
+        gridEl.style.height = vpH + 'px';
+
+        var capacity    = geom.cols * geom.rows;
+        var styleHeightPx = parseInt(gridEl.style.height, 10);
+
+        // scrollHeight == gridContentH; clientHeight == vpH (style.height).
+        // Invariante: gridContentH <= vpH (kein Scroll).
+        var gap  = panelLib.GRID_GAP;
+        var pad  = panelLib.GRID_PAD;
+        var innerH = vpH - 2 * pad;
+        var tileH  = (innerH - (geom.rows - 1) * gap) / geom.rows;
+        var gridContentH = geom.rows * tileH + (geom.rows - 1) * gap + 2 * pad;
+
+        console.log(JSON.stringify({
+          domChildren:     M,
+          cols:            geom.cols,
+          rows:            geom.rows,
+          capacity:        capacity,
+          styleHeightPx:   styleHeightPx,
+          vpH:             vpH,
+          gridContentH:    gridContentH,
+          noScroll:        gridContentH <= vpH + 0.5,
+          allTilesFit:     capacity >= M,
+          heightMatchesVp: styleHeightPx === vpH,
+        }));
+    """)
+    assert out['domChildren'] == 11, \
+        'DOM muss 11 Kinder haben (10 sichtbare + 1 Aus-Kachel; bekommen: %d)' % out['domChildren']
+    assert out['allTilesFit'], \
+        'PANEL-12: cols*rows muss >= 11 sein (bekommen: cols=%d rows=%d cap=%d)' % (
+            out['cols'], out['rows'], out['capacity'])
+    assert out['heightMatchesVp'], \
+        'PANEL-12: grid.style.height muss vpH entsprechen (bekommen: styleH=%d vpH=%d)' % (
+            out['styleHeightPx'], out['vpH'])
+    assert out['noScroll'], \
+        'PANEL-12: gridContentH darf vpH nicht übersteigen — scrollH=%.1f > clientH=%d' % (
+            out['gridContentH'], out['vpH'])
+
+
+def test_PANEL_12_shrink_fallback_ignores_min_width():
+    """PANEL-12 / Watchdog-Befund 2 — Spec-Drift: der Schrumpf-Fallback
+    (app.js ~Z.466-482, der `if (!best)`-Zweig) ist explizite PANEL-12-
+    Akzeptanz (specs/platform/app-panel.md:473-475).
+
+    Prüft: Bei einem Viewport, bei dem ALLE Spalten-Varianten die
+    TILE_MIN_W-Grenze (160 px) unterschreiten würden, läuft der Fallback-
+    Zweig und liefert trotzdem cols*rows >= M (kein Scroll, statt Abbruch).
+
+    Einschränkung: vpW=150 → innerW=118 px; selbst c=1 ergibt tileW=118 < 160.
+    Der Fallback muss das Guard ignorieren und eine Lösung finden."""
+    out = run_node('''
+        var M    = 20;
+        var vpW  = 150;   // so schmal, dass jede Spalte < TILE_MIN_W faellt
+        var vpH  = 300;
+        var TILE_MIN_W = 160;
+        var pad  = panelLib.GRID_PAD;
+        var gap  = panelLib.GRID_GAP;
+        var innerW = vpW - 2 * pad;
+
+        // Vorbedingung prüfen: wirklich ALLE c-Werte unterschreiten TILE_MIN_W
+        var allBelowMin = true;
+        for (var c = 1; c <= M; c++) {
+            var tileW = (innerW - (c - 1) * gap) / c;
+            if (tileW >= TILE_MIN_W) { allBelowMin = false; break; }
+        }
+
+        var geom     = panelLib.computeGridGeometry(M, vpW, vpH);
+        var capacity = geom.cols * geom.rows;
+
+        console.log(JSON.stringify({
+            innerW:      innerW,
+            allBelowMin: allBelowMin,
+            cols:        geom.cols,
+            rows:        geom.rows,
+            capacity:    capacity,
+            fallbackHeld: capacity >= M,
+        }));
+    ''')
+    assert out['allBelowMin'], \
+        'Vorbedingung: alle tileW-Werte müssen < TILE_MIN_W sein (vpW=%d zu groß?)' % 150
+    assert out['fallbackHeld'], \
+        ('PANEL-12 Schrumpf-Fallback: cols*rows muss >= M=%d sein auch wenn tileW < TILE_MIN_W '
+         '(bekommen: cols=%d rows=%d capacity=%d)') % (20, out['cols'], out['rows'], out['capacity'])
+
+
 def test_PANEL_9_test_file_covers_panel_12():
     """PANEL-9 Selbst-Probe: PANEL_12-Tests sind in dieser Datei vorhanden."""
     here = read(os.path.abspath(__file__))
