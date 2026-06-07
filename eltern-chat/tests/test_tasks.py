@@ -57,6 +57,45 @@ def test_EC_8_build_catalog_registers_the_ca_task():
 
 
 # ============================================================
+#  FSE-8 / TASK-9 — Foto-Senden-Skill als Sofort-Schreib-Aufgabe
+# ============================================================
+
+def test_FSE8_guard_beide_gesetzt_registriert():
+    """FSE-8: `foto_senden` erscheint im Katalog, wenn `photo_origin_url` UND
+    `family_group_chat_id_getter` gesetzt sind (AND-Guard, RZS-/TES-Linie)."""
+    catalog = build_catalog(
+        FakeTelegram(), "/instanz/rootCA.pem",
+        photo_origin_url="http://127.0.0.1:5070",
+        family_group_chat_id_getter=lambda: 200,
+    )
+    defs = {d.name: d for d in catalog.task_defs()}
+    assert "foto_senden" in defs, "FSE-8 Guard verletzt: Aufgabe fehlt im Katalog"
+    # TASK-9: Sofort-Schreib-Aufgabe läuft als ReadTask (E-FSE-1, kein Confirm).
+    assert defs["foto_senden"].kind == READ, (
+        "TASK-9 / E-FSE-1: foto_senden muss als ReadTask laufen")
+
+
+def test_FSE8_guard_ohne_photo_origin_nicht_registriert():
+    """FSE-8 Guard: ohne `photo_origin_url` → Aufgabe NICHT im Katalog."""
+    catalog = build_catalog(
+        FakeTelegram(), "/instanz/rootCA.pem",
+        # photo_origin_url fehlt
+        family_group_chat_id_getter=lambda: 200,
+    )
+    assert catalog.get("foto_senden") is None
+
+
+def test_FSE8_guard_ohne_fgcid_nicht_registriert():
+    """FSE-8 Guard: ohne `family_group_chat_id_getter` → Aufgabe NICHT im Katalog."""
+    catalog = build_catalog(
+        FakeTelegram(), "/instanz/rootCA.pem",
+        photo_origin_url="http://127.0.0.1:5070",
+        # family_group_chat_id_getter fehlt
+    )
+    assert catalog.get("foto_senden") is None
+
+
+# ============================================================
 #  EC-21 / #140 — Post-Execute-Hooks im WriteTask-Lifecycle
 # ============================================================
 
