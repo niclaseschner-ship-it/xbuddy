@@ -344,7 +344,40 @@ spiegeln.
 
 *Tickets:* #58
 
-## 7. Tests
+## 7. Layout (statisch, scroll-frei)
+
+### PANEL-12 — Statisches, scroll-freies Kachel-Layout (Viewport-Fit)
+Das Kachel-Grid füllt den **gesamten Viewport ohne vertikales Scrollen**: alle
+sichtbaren Kacheln (PANEL-3/PANEL-4) plus die Aus-Kachel (PANEL-6) sind
+gleichzeitig sichtbar, ohne dass gescrollt werden muss. Das Panel ist eine
+statische Steuerfläche — eine Fernbedienung, kein Dokument.
+
+**Wenn** das Panel mit M sichtbaren Kacheln (sichtbare `tiles.json`-Einträge
++ 1 Aus-Kachel) geladen wird, **dann** leitet die Seite Spalten- und Zeilenzahl
+**zur Laufzeit aus M und dem Viewport-Seitenverhältnis ab** (kein hartcodierter
+Spaltenwert) und legt das Grid so, dass `document.scrollHeight` den Viewport
+(`clientHeight`) **nicht überschreitet**. Bei `resize` wird neu gerechnet.
+
+**Zielgeräte:** Querformat-Phone **und** Tablet (jeweils Landscape). Das
+erweitert die bisherige reine Tablet-Nennung der Controller-PWA-Konvention; die
+No-Scroll-Garantie gilt zuerst für das kleinere Gerät (Landscape-Phone).
+
+**Kapazität & Fallback:** No-Scroll ist die **harte Invariante** — es wird
+**nie** gescrollt. Die **Mindestbreite** (einzeilige, lesbare Labels, auch für
+deutsche Langwörter wie „Morgenroutine") ist nachgeordnet: reicht der Viewport
+nicht, um alle Kacheln scroll-frei **und** über Mindestbreite zu legen,
+**schrumpfen die Kacheln** (Icon und Label skalieren mit; Labels dürfen
+mehrzeilig brechen) — gescrollt wird nicht. Die komfortable Garantie
+(einzeilige Labels) gilt für **mindestens 10 App-Kacheln + Aus** (= 11) auf
+einem Landscape-Phone-Viewport.
+
+**Reihenfolge bleibt:** Die Geometrie-Berechnung ändert **nur** Spalten- und
+Zeilenzahl, nicht die Kachel-Reihenfolge (PANEL-3: Listen-Reihenfolge =
+Anzeige-Reihenfolge) und nicht die Aus-als-letzte-Position (PANEL-6).
+
+*Tickets:* #58, #375
+
+## 8. Tests
 
 ### PANEL-9 — Automatisierte Tests pro Requirement
 Jede Requirement-ID, die Code-Verhalten beschreibt, hat einen
@@ -431,8 +464,17 @@ Mindest-Abdeckung:
   Markierung sichtbar (analog DC-6); nach erfolgter Reconnect-Phase
   (analog DC-7) richtet sich die Markierung neu nach dem aktuellen
   Stream-Zustand.
+- PANEL-12 — Bei Viewport 880×370 (Landscape-Phone) mit 11 Kacheln (10
+  sichtbare + Aus) gilt `document.scrollHeight <= clientHeight` (kein
+  vertikales Scrollen) und alle 11 Kacheln sind im DOM vorhanden; die Labels
+  bleiben einzeilig. Bei Viewport 1280×800 (Tablet) mit 11 Kacheln ebenso
+  kein Scroll. Die gewählte Spaltenzahl ist **nicht hartcodiert**: bei gleicher
+  Kachelzahl, aber geändertem Viewport-Seitenverhältnis, ändert sich die
+  Spaltenzahl. Übersteigt die Kachelzahl die scroll-freie Kapazität, schrumpfen
+  die Kacheln unter die Mindestbreite, statt zu scrollen (`scrollHeight <=
+  clientHeight` bleibt invariant).
 
-*Tickets:* #58
+*Tickets:* #58, #375
 
 ---
 
@@ -576,3 +618,29 @@ Begründungen:
   Erweiterung möglich (`display_id` → `display_ids[]` in einer
   zukünftigen Spec-Version, mit Migrations-Hinweis) — die Entscheidung
   ist nicht endgültig zubetoniert, nur für V1 die einfachere Form.
+
+### E-PANEL-6 — App-Panel referenziert den Token-Strang (DTOK); Offline-Selbstgenügsamkeit weicht
+*Datum:* 2026-06-07 (Ticket #375, Werft-Design-Upgrade)
+
+Das App-Panel entstand **vor** den XBuddy-Design-Tokens (DTOK, #323) und trug
+ein eigenes dunkles Theme mit hartcodierten Werten. Der Umbau (#375) macht es
+DTOK-konform: die Seite **referenziert** `/display/_shared/design/tokens.css`
+(same-origin, vom Router via ROU-30 serviert) statt eigener Farb-/Schrift-Werte
+(DTOK-1/DTOK-3/DTOK-5).
+
+Das kollidiert mit der Controller-PWA-Selbstgenügsamkeit (PWA-1: „keine externen
+Asset-Quellen, alles im Verzeichnis"): der Token-Strang liegt cross-directory
+und `@import`t Schrift von einem CDN. **Entscheidung (Nic, 2026-06-07):**
+referenzieren ist richtig. Das App-Panel ist eine **inhärent online**
+Steuerfläche — ohne Router-Verbindung kann es weder Kacheln routen (PANEL-1/5)
+noch den Aktiv-Stream halten (PANEL-11); „offline aber gestylt" ist ein Zustand
+ohne Mehrwert. Verloren geht nur Offline-**Styling**-Robustheit, **nicht** die
+PWA-Installierbarkeit (Manifest/sw.js/Fullscreen/HTTPS bleiben erhalten,
+PWA-2/PWA-3). Die `sw.js`-Cache-Liste wird um die Token-CSS erweitert, damit der
+gecachte Fall gestylt bleibt; fehlt die CDN-Schrift (WAN weg), greift der
+System-Font-Fallback aus `--font-sans`.
+
+**Offen für die Konventions-Ebene (an /berater-runde via Retro):** ob DTOK
+formal auf offline-fähige Controller-PWAs ausgedehnt bzw. die PWA-1-
+Selbstgenügsamkeit für referenzierte System-Assets relativiert wird. Diese
+Entscheidung deckt nur das App-Panel ab, nicht die Konvention.
