@@ -410,6 +410,113 @@
   }
 
   // ============================================================
+  //  PANEL-12 — Geometrie-Berechnung: scroll-freies Grid-Layout
+  // ============================================================
+  //
+  // Berechnet Spalten- und Zeilenzahl für M Kacheln, sodass alle ins
+  // Viewport passen (scrollHeight <= clientHeight, PANEL-12).
+  //
+  // Kandidaten-Suche: c = 1..M → rows = ceil(M/c).
+  // Score minimiert Abweichung vom Ideal-Seitenverhältnis (0.92, etwas
+  // weniger als 1:1 wegen Labels unter den Icons) und Grid-Füllgrad-Penalty
+  // (leere Zellen in letzter Reihe).
+  //
+  // Mindestbreite von Kacheln (160px): wenn kein Kandidat passt (extrem
+  // kleiner Viewport), schrumpfen Kacheln ohne Scroll — Mindestbreite
+  // wird in diesem Fall ignoriert (Fallback = ganzer Viewport als eine Reihe).
+  //
+  // Exportiert für node-Tests (AC3: geändertes Seitenverhältnis → andere Spalten).
+
+  var IDEAL_TILE_RATIO = 0.92;  // Breite/Höhe einer Kachel — etwas breiter als quadratisch
+  var TILE_MIN_W = 160;         // Komfort-Mindestbreite; wird fallen gelassen wenn nötig
+  var GRID_GAP = 12;            // px — muss mit #grid gap in style.css übereinstimmen
+  var GRID_PAD = 16;            // px — muss mit #grid padding in style.css übereinstimmen
+
+  function computeGridGeometry(M, vpW, vpH) {
+    // M = Gesamtzahl Kacheln (sichtbare tiles.json + Aus-Kachel).
+    // vpW, vpH = verfügbare Breite/Höhe für das Grid-Element.
+    // Gibt zurück: { cols, rows } — kleinstes Score-Minimum.
+    if (!M || M < 1) return { cols: 1, rows: 1 };
+
+    var innerW = vpW - 2 * GRID_PAD;
+    var innerH = vpH - 2 * GRID_PAD;
+
+    var best = null;
+    var bestScore = Infinity;
+
+    for (var c = 1; c <= M; c++) {
+      var rows = Math.ceil(M / c);
+      // Kachelgröße bei diesem Layout
+      var tileW = (innerW - (c - 1) * GRID_GAP) / c;
+      var tileH = (innerH - (rows - 1) * GRID_GAP) / rows;
+      // Mindestbreiten-Guard (Komfort-Garantie). Wenn kein Kandidat passt,
+      // wird dieses Guard unten nach der Schleife aufgehoben.
+      if (tileW < TILE_MIN_W) continue;
+      // Score: |log(tatsächliches_ratio / ideal)| + Leerfeld-Penalty
+      var actualRatio = tileW / tileH;
+      var ratioPenalty = Math.abs(Math.log(actualRatio / IDEAL_TILE_RATIO));
+      var emptyPenalty = ((c * rows - M) / M) * 1.5;
+      var score = ratioPenalty + emptyPenalty;
+      if (score < bestScore) {
+        bestScore = score;
+        best = { cols: c, rows: rows };
+      }
+    }
+
+    if (!best) {
+      // PANEL-12 Fallback: Mindestbreite ignorieren, kein Scroll.
+      // Wähle c = 1..M, diesmal ohne Mindestbreiten-Guard.
+      bestScore = Infinity;
+      for (var c2 = 1; c2 <= M; c2++) {
+        var rows2 = Math.ceil(M / c2);
+        var tileW2 = (innerW - (c2 - 1) * GRID_GAP) / c2;
+        var tileH2 = (innerH - (rows2 - 1) * GRID_GAP) / rows2;
+        var actualRatio2 = tileW2 / tileH2;
+        var ratioPenalty2 = Math.abs(Math.log(actualRatio2 / IDEAL_TILE_RATIO));
+        var emptyPenalty2 = ((c2 * rows2 - M) / M) * 1.5;
+        var score2 = ratioPenalty2 + emptyPenalty2;
+        if (score2 < bestScore) {
+          bestScore = score2;
+          best = { cols: c2, rows: rows2 };
+        }
+      }
+    }
+
+    return best || { cols: Math.ceil(Math.sqrt(M)), rows: Math.ceil(M / Math.ceil(Math.sqrt(M))) };
+  }
+
+  // ============================================================
+  //  PANEL-12 — Grid-Geometrie auf das DOM-Grid anwenden
+  // ============================================================
+  //
+  // Liest Anzahl der Kacheln aus dem Grid-Element, berechnet cols/rows
+  // aus dem aktuellen Viewport und setzt grid-template-columns/-rows.
+  // Wird beim Laden und bei resize aufgerufen (Bootstrap-IIFE).
+  // ctx ist optional: {doc, win} für Tests; im Browser entfällt der Parameter
+  // und die globalen document/window werden verwendet.
+
+  function applyGridGeometry(ctx) {
+    var doc = (ctx && ctx.doc) ? ctx.doc : /* istanbul ignore next */ document;
+    var win = (ctx && ctx.win) ? ctx.win : /* istanbul ignore next */ window;
+    var grid = doc.getElementById('grid');
+    if (!grid) return;
+    var M = grid.children.length;
+    if (M < 1) return;
+    var vpW = win.innerWidth;
+    var vpH = win.innerHeight;
+    // #error-Banner abziehen, falls sichtbar
+    var errEl = doc.getElementById('error');
+    if (errEl && !errEl.classList.contains('hidden')) {
+      vpH -= errEl.offsetHeight || 0;
+    }
+    var geom = computeGridGeometry(M, vpW, vpH);
+    grid.style.gridTemplateColumns = 'repeat(' + geom.cols + ', 1fr)';
+    grid.style.gridTemplateRows    = 'repeat(' + geom.rows + ', 1fr)';
+    // PANEL-12: Grid-Höhe = innerHeight minus error-Banner; overflow:hidden verhindert Scroll.
+    grid.style.height = vpH + 'px';
+  }
+
+  // ============================================================
   //  API
   // ============================================================
 
@@ -433,6 +540,11 @@
     makeStreamHandlers: makeStreamHandlers,
     attachWakeLockImpl: attachWakeLockImpl,
     attachFullscreenImpl: attachFullscreenImpl,
+    computeGridGeometry: computeGridGeometry,
+    applyGridGeometry: applyGridGeometry,
+    // Konstanten für Tests (AC3-Invarianten).
+    GRID_GAP: GRID_GAP,
+    GRID_PAD: GRID_PAD,
   };
 });
 
@@ -621,6 +733,9 @@
       function onClear() {
         sendEvent(cfg, panelLib.makePanelCleared(cfg.source_id));
       });
+    // PANEL-12: Geometrie nach Render berechnen, bei resize neu rechnen.
+    panelLib.applyGridGeometry();
+    window.addEventListener('resize', function () { panelLib.applyGridGeometry(); });
     attachWakeLock();
     attachFullscreenOnGesture();
     attachStream(cfg.display_id, function () { return tiles; });

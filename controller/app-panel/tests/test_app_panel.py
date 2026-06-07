@@ -629,7 +629,8 @@ def test_PANEL_9_test_file_covers_all_panel_ids():
     der Spec gibt es mindestens einen Test in dieser Datei."""
     here = read(os.path.abspath(__file__))
     for pid in ['PANEL_1', 'PANEL_2', 'PANEL_3', 'PANEL_4', 'PANEL_5',
-                'PANEL_6', 'PANEL_7', 'PANEL_8', 'PANEL_10', 'PANEL_11']:
+                'PANEL_6', 'PANEL_7', 'PANEL_8', 'PANEL_10', 'PANEL_11',
+                'PANEL_12']:
         assert re.search(r'def test_%s_' % pid, here), \
             'kein Test gefunden für %s' % pid
 
@@ -1133,3 +1134,391 @@ def test_PANEL_6_onerror_aus_kachel_removes_broken_img(tmp_path):
     assert out['countAfter'] == 0, \
         'Aus-Kachel: onerror muss img entfernen (PANEL-6; bekommen: %d)' % out['countAfter']
     assert out['labelText'] == 'Aus', 'Aus-Label muss intakt bleiben'
+
+
+# ============================================================
+#  PANEL-11 (AC5) — Aktiv-Marker token-basiert (E-PANEL-6 / #375)
+# ============================================================
+
+def test_PANEL_11_active_marker_uses_primary_token():
+    """AC5 / E-PANEL-6: style.css setzt var(--primary) als Border-Farbe der
+    aktiven Kachel (kein hartcodierter Farbwert, DTOK-5)."""
+    css = read(CSS_PATH)
+    # Aktiv-Markierung muss var(--primary) nutzen
+    active_block = re.search(r'\.tile\.active\s*\{([^}]+)\}', css)
+    assert active_block is not None, '.tile.active-Block muss in style.css vorhanden sein'
+    block_content = active_block.group(1)
+    assert 'var(--primary)' in block_content, \
+        '.tile.active muss var(--primary) als Border-Farbe nutzen (DTOK-5, AC5; bekommen: %r)' % block_content
+
+
+def test_PANEL_11_active_marker_uses_surface_soft_tint():
+    """AC5 / E-PANEL-6: style.css setzt var(--surface-soft) als Hintergrund-Tint
+    der aktiven Kachel (Token, kein hartcodierter rgba-Wert)."""
+    css = read(CSS_PATH)
+    active_block = re.search(r'\.tile\.active\s*\{([^}]+)\}', css)
+    assert active_block is not None
+    block_content = active_block.group(1)
+    assert 'var(--surface' in block_content, \
+        '.tile.active muss einen --surface-*-Token als Hintergrund nutzen (DTOK-5, AC5; bekommen: %r)' % block_content
+
+
+def test_PANEL_11_active_marker_laeuft_badge_present():
+    """AC5: .tile.active::after setzt 'Läuft'-Badge (PANEL-11 Spec)."""
+    css = read(CSS_PATH)
+    assert re.search(r'\.tile\.active::after', css), \
+        '.tile.active::after (Läuft-Badge) muss in style.css definiert sein (AC5)'
+    badge_block = re.search(r'\.tile\.active::after\s*\{([^}]+)\}', css)
+    assert badge_block is not None
+    assert 'Läuft' in badge_block.group(1), \
+        'Läuft-Badge muss content: "Läuft" tragen (AC5; bekommen: %r)' % badge_block.group(1)
+
+
+def test_PANEL_11_no_hardcoded_colors_in_active_marker():
+    """AC4/AC5 / DTOK-5: Keine hartcodierten Hex-Farben in der aktiven Kachel-Markierung."""
+    css = read(CSS_PATH)
+    active_section = re.search(
+        r'(/\*\s*PANEL-11[\s\S]*?)(?=/\*\s*PANEL-6)', css)
+    if active_section:
+        section = active_section.group(1)
+        # Hex-Farben sind verboten (DTOK-5)
+        hex_found = re.findall(r'#[0-9a-fA-F]{3,8}\b', section)
+        assert not hex_found, \
+            'Keine hartcodierten Hex-Farben in PANEL-11-Sektion erlaubt (DTOK-5): gefunden %r' % hex_found
+
+
+# ============================================================
+#  PANEL-12 — Geometrie-Funktion und No-Scroll-Invariante (#375)
+# ============================================================
+
+def test_PANEL_12_geometry_no_scroll_landscape_phone():
+    """AC1 / PANEL-12: computeGridGeometry für 11 Kacheln bei 880x370
+    (Landscape-Phone) liefert cols/rows so, dass cols*rows >= 11
+    und das Grid scrollHeight <= clientHeight (keine Kachel außerhalb
+    des Grids). Verhalten wird über die Geometrie-Funktion geprüft."""
+    out = run_node('''
+        const M = 11;
+        const vpW = 880;
+        const vpH = 370;
+        const geom = panelLib.computeGridGeometry(M, vpW, vpH);
+        // Grid-Kapazität muss >= M sein (keine Kachel wird abgeschnitten)
+        const capacity = geom.cols * geom.rows;
+        // Kachelgröße berechnen (zur Verifikation des No-Scroll)
+        const gap = panelLib.GRID_GAP;
+        const pad = panelLib.GRID_PAD;
+        const innerW = vpW - 2 * pad;
+        const innerH = vpH - 2 * pad;
+        const tileH = (innerH - (geom.rows - 1) * gap) / geom.rows;
+        const totalGridH = geom.rows * tileH + (geom.rows - 1) * gap + 2 * pad;
+        console.log(JSON.stringify({
+            cols: geom.cols,
+            rows: geom.rows,
+            capacity: capacity,
+            totalGridH: totalGridH,
+            vpH: vpH,
+            fitsInViewport: totalGridH <= vpH + 0.5,  // 0.5px Rundungstoleranz
+        }));
+    ''')
+    assert out['capacity'] >= 11, \
+        'Grid muss mindestens 11 Kacheln aufnehmen (bekommen: %d)' % out['capacity']
+    assert out['fitsInViewport'], \
+        'PANEL-12: Grid-Höhe darf Viewport nicht überschreiten — totalGridH=%.1f > vpH=%d' % (
+            out['totalGridH'], out['vpH'])
+
+
+def test_PANEL_12_geometry_no_scroll_tablet():
+    """AC2 / PANEL-12: computeGridGeometry für 11 Kacheln bei 1280x800 (Tablet)
+    liefert ein Grid, das in den Viewport passt."""
+    out = run_node('''
+        const M = 11;
+        const vpW = 1280;
+        const vpH = 800;
+        const geom = panelLib.computeGridGeometry(M, vpW, vpH);
+        const gap = panelLib.GRID_GAP;
+        const pad = panelLib.GRID_PAD;
+        const innerH = vpH - 2 * pad;
+        const tileH = (innerH - (geom.rows - 1) * gap) / geom.rows;
+        const totalGridH = geom.rows * tileH + (geom.rows - 1) * gap + 2 * pad;
+        console.log(JSON.stringify({
+            cols: geom.cols,
+            rows: geom.rows,
+            capacity: geom.cols * geom.rows,
+            fitsInViewport: totalGridH <= vpH + 0.5,
+        }));
+    ''')
+    assert out['capacity'] >= 11, \
+        'Grid muss mindestens 11 Kacheln aufnehmen bei 1280x800 (bekommen: %d)' % out['capacity']
+    assert out['fitsInViewport'], \
+        'PANEL-12: Grid passt bei 1280x800 nicht in Viewport'
+
+
+def test_PANEL_12_geometry_cols_not_hardcoded():
+    """AC3 / PANEL-12: Verschiedene Viewport-Seitenverhältnisse mit gleicher
+    Kachelzahl (11) liefern VERSCHIEDENE Spaltenzahlen — kein hartcodierter Wert."""
+    out = run_node('''
+        const M = 11;
+        // Landscape-Phone (schmal)
+        const geom_phone   = panelLib.computeGridGeometry(M, 880,  370);
+        // Tablet Landscape (breit + hoch)
+        const geom_tablet  = panelLib.computeGridGeometry(M, 1280, 800);
+        // Portrait-ish (quadratisch)
+        const geom_square  = panelLib.computeGridGeometry(M, 600,  600);
+        console.log(JSON.stringify({
+            cols_phone:  geom_phone.cols,
+            cols_tablet: geom_tablet.cols,
+            cols_square: geom_square.cols,
+        }));
+    ''')
+    cols = {out['cols_phone'], out['cols_tablet'], out['cols_square']}
+    assert len(cols) > 1, \
+        'AC3: computeGridGeometry muss bei verschiedenen Seitenverhältnissen VERSCHIEDENE ' \
+        'Spaltenzahlen liefern — alle gleich: %r' % out
+
+
+def test_PANEL_12_all_tiles_fit_in_grid():
+    """PANEL-12: Die berechnete Grid-Kapazität (cols*rows) ist stets >= M."""
+    out = run_node('''
+        const results = [];
+        const vpW = 880; const vpH = 370;
+        for (let M = 1; M <= 15; M++) {
+            const geom = panelLib.computeGridGeometry(M, vpW, vpH);
+            results.push({ M: M, capacity: geom.cols * geom.rows, ok: geom.cols * geom.rows >= M });
+        }
+        console.log(JSON.stringify(results));
+    ''')
+    for entry in out:
+        assert entry['ok'], \
+            'PANEL-12: Grid-Kapazität < M bei M=%d (capacity=%d)' % (entry['M'], entry['capacity'])
+
+
+def test_PANEL_12_geometry_exported():
+    """PANEL-12 / AC3: computeGridGeometry ist aus panelLib exportiert."""
+    out = run_node('''
+        console.log(JSON.stringify({
+            exported: typeof panelLib.computeGridGeometry === 'function',
+        }));
+    ''')
+    assert out['exported'], 'computeGridGeometry muss aus panelLib exportiert sein'
+
+
+def test_PANEL_12_no_scroll_css_invariant():
+    """PANEL-12: style.css setzt overflow:hidden auf #grid (harte Invariante)."""
+    css = read(CSS_PATH)
+    grid_block = re.search(r'#grid\s*\{([^}]+)\}', css)
+    assert grid_block is not None, '#grid-Block muss in style.css vorhanden sein'
+    block_content = grid_block.group(1)
+    assert 'overflow' in block_content and 'hidden' in block_content, \
+        '#grid muss overflow:hidden setzen (PANEL-12 No-Scroll-Invariante; bekommen: %r)' % block_content
+
+
+def test_PANEL_12_tokens_css_in_index_html():
+    """AC4 / E-PANEL-6: index.html verlinkt /display/_shared/design/tokens.css."""
+    html = read(HTML_PATH)
+    assert '/display/_shared/design/tokens.css' in html, \
+        'index.html muss tokens.css referenzieren (E-PANEL-6, AC4)'
+
+
+def test_PANEL_12_body_has_xb_class_and_reader_stage():
+    """AC4 / DTOK-5: body trägt class="xb" und data-stage="reader" (Reader-Stage-Tokens)."""
+    html = read(HTML_PATH)
+    assert re.search(r'<body[^>]+class=["\'][^"\']*\bxb\b', html), \
+        'body muss class="xb" tragen (DTOK-5, AC4)'
+    assert re.search(r'<body[^>]+data-stage=["\']reader["\']', html), \
+        'body muss data-stage="reader" tragen (DTOK-5, AC4)'
+
+
+def test_PANEL_12_tokens_css_in_sw_static_assets():
+    """E-PANEL-6: sw.js-STATIC_ASSETS enthält tokens.css-URL für Offline-Cache."""
+    sw = read(SW_PATH)
+    assert '/display/_shared/design/tokens.css' in sw, \
+        'sw.js STATIC_ASSETS muss tokens.css URL enthalten (E-PANEL-6)'
+
+
+def test_PANEL_12_no_hardcoded_colors_in_style_css():
+    """AC4 / DTOK-5: Keine hartcodierten Hex-Farben oder rgb()-Literale in style.css
+    (ausgenommen Kommentare). Alle Farbwerte müssen Token-Variablen sein."""
+    css = read(CSS_PATH)
+    # Kommentare entfernen bevor wir nach Literals suchen
+    css_no_comments = re.sub(r'/\*.*?\*/', '', css, flags=re.DOTALL)
+    hex_found = re.findall(r'(?<!var\()#[0-9a-fA-F]{3,8}\b', css_no_comments)
+    rgb_found = re.findall(r'rgba?\s*\([0-9]', css_no_comments)
+    assert not hex_found, \
+        'DTOK-5 AC4: Keine hartcodierten Hex-Farben in style.css erlaubt: %r' % hex_found
+    assert not rgb_found, \
+        'DTOK-5 AC4: Keine hartcodierten rgb()-Werte in style.css erlaubt: %r' % rgb_found
+
+
+def test_PANEL_12_apply_grid_geometry_dom_path():
+    """PANEL-12 / Watchdog-Befund 1 — Entry-Path-Coverage: ruft die echte
+    exportierte Funktion panelLib.applyGridGeometry({doc, win}) auf (kein
+    Logik-Reko-Muster). applyGridGeometry ist seit diesem Fix im UMD-Export
+    und akzeptiert ein optionales ctx-Objekt {doc, win} für testbare
+    Dependency-Injection; im Browser wird es ohne Argument aufgerufen und
+    nutzt die globalen document/window.
+
+    Setup: #grid mit 11 echten Kachel-Kindern (10 × makeTileElement +
+    1 × makeAusKachel), Viewport 880×370 (Landscape-Phone), error-Banner
+    als hidden gesetzt (kein vpH-Abzug).
+
+    Akzeptanz-Invarianten (specs/platform/app-panel.md:467-469):
+      - grid.style.height == vpH (= clientHeight) → scrollHeight <= clientHeight
+      - cols*rows >= 11 (Kapazität nimmt alle Kacheln auf)
+      - grid._children.length == 11 (DOM unverändert nach applyGridGeometry)"""
+    out = run_node_dom(r"""
+        var doc = makeDom();
+
+        // #grid mit style-Objekt und children-Alias (applyGridGeometry liest
+        // grid.children.length und schreibt grid.style.*).
+        var gridEl = {
+          _tag: 'div', _children: [],
+          style: {},
+          classList: { add: function(){}, remove: function(){},
+                       contains: function(){ return false; } },
+          appendChild: function(c) { c.parentNode = this; this._children.push(c); return c; },
+          removeChild: function(c) {
+            this._children = this._children.filter(function(x){ return x !== c; });
+          }
+        };
+        gridEl.children = gridEl._children;
+
+        // #error-Banner als hidden — kein vpH-Abzug.
+        var errorEl = {
+          style: {},
+          offsetHeight: 0,
+          classList: {
+            add: function(){}, remove: function(){},
+            contains: function(cls) { return cls === 'hidden'; }
+          }
+        };
+
+        // document-Stub: getElementById liefert grid/error; createElement
+        // aus dem Standard-makeDom für makeTileElement/makeAusKachel.
+        var stubDoc = {
+          createElement: doc.createElement,
+          getElementById: function(id) {
+            if (id === 'grid')  return gridEl;
+            if (id === 'error') return errorEl;
+            return null;
+          },
+          querySelectorAll: function() { return []; },
+          body: doc.body,
+          visibilityState: 'visible',
+          fullscreenElement: null,
+          documentElement: doc.documentElement,
+          addEventListener: function() {}
+        };
+
+        var VPW = 880;
+        var VPH = 370;
+        var stubWin = { innerWidth: VPW, innerHeight: VPH, addEventListener: function(){} };
+
+        // 10 sichtbare Kacheln + 1 Aus-Kachel = 11 DOM-Kinder ins gridEl hängen.
+        var fakeTiles = [];
+        for (var i = 0; i < 10; i++) {
+          fakeTiles.push({ key: 'k'+i, app: 'plan', view: 'woche',
+                           label: 'L'+i, icons: ['arasaac/test.png'], sichtbar: true });
+        }
+        for (var j = 0; j < 10; j++) {
+          var tileEl = panelLib.makeTileElement(
+            stubDoc, fakeTiles[j], function(){}, panelLib.resolveIconBase(''));
+          gridEl.appendChild(tileEl);
+        }
+        gridEl.appendChild(
+          panelLib.makeAusKachel(stubDoc, function(){}, panelLib.resolveIconBase('')));
+
+        // ECHTER Aufruf der exportierten Funktion — keine Logik-Rekonstruktion.
+        panelLib.applyGridGeometry({ doc: stubDoc, win: stubWin });
+
+        // Invarianten-Auswertung.
+        var styleHeightPx = parseInt(gridEl.style.height, 10);
+        var colsMatch = gridEl.style.gridTemplateColumns;
+        var rowsMatch = gridEl.style.gridTemplateRows;
+        // cols/rows aus dem gesetzten repeat()-String extrahieren.
+        var colsN = colsMatch ? parseInt(colsMatch.replace('repeat(',''), 10) : 0;
+        var rowsN = rowsMatch ? parseInt(rowsMatch.replace('repeat(',''), 10) : 0;
+        var capacity = colsN * rowsN;
+
+        // scrollHeight == gridContentH; clientHeight == vpH (style.height).
+        var gap  = panelLib.GRID_GAP;
+        var pad  = panelLib.GRID_PAD;
+        var innerH = VPH - 2 * pad;
+        var tileH  = (innerH - (rowsN - 1) * gap) / rowsN;
+        var gridContentH = rowsN * tileH + (rowsN - 1) * gap + 2 * pad;
+
+        console.log(JSON.stringify({
+          domChildren:     gridEl._children.length,
+          cols:            colsN,
+          rows:            rowsN,
+          capacity:        capacity,
+          styleHeightPx:   styleHeightPx,
+          vpH:             VPH,
+          gridContentH:    gridContentH,
+          noScroll:        gridContentH <= VPH + 0.5,
+          allTilesFit:     capacity >= 11,
+          heightMatchesVp: styleHeightPx === VPH,
+        }));
+    """)
+    assert out['domChildren'] == 11, \
+        'DOM muss 11 Kinder haben (10 sichtbare + 1 Aus-Kachel; bekommen: %d)' % out['domChildren']
+    assert out['allTilesFit'], \
+        'PANEL-12: cols*rows muss >= 11 sein (bekommen: cols=%d rows=%d cap=%d)' % (
+            out['cols'], out['rows'], out['capacity'])
+    assert out['heightMatchesVp'], \
+        'PANEL-12: grid.style.height muss vpH entsprechen (bekommen: styleH=%d vpH=%d)' % (
+            out['styleHeightPx'], out['vpH'])
+    assert out['noScroll'], \
+        'PANEL-12: gridContentH darf vpH nicht übersteigen — scrollH=%.1f > clientH=%d' % (
+            out['gridContentH'], out['vpH'])
+
+
+def test_PANEL_12_shrink_fallback_ignores_min_width():
+    """PANEL-12 / Watchdog-Befund 2 — Spec-Drift: der Schrumpf-Fallback
+    (app.js ~Z.466-482, der `if (!best)`-Zweig) ist explizite PANEL-12-
+    Akzeptanz (specs/platform/app-panel.md:473-475).
+
+    Prüft: Bei einem Viewport, bei dem ALLE Spalten-Varianten die
+    TILE_MIN_W-Grenze (160 px) unterschreiten würden, läuft der Fallback-
+    Zweig und liefert trotzdem cols*rows >= M (kein Scroll, statt Abbruch).
+
+    Einschränkung: vpW=150 → innerW=118 px; selbst c=1 ergibt tileW=118 < 160.
+    Der Fallback muss das Guard ignorieren und eine Lösung finden."""
+    out = run_node('''
+        var M    = 20;
+        var vpW  = 150;   // so schmal, dass jede Spalte < TILE_MIN_W faellt
+        var vpH  = 300;
+        var TILE_MIN_W = 160;
+        var pad  = panelLib.GRID_PAD;
+        var gap  = panelLib.GRID_GAP;
+        var innerW = vpW - 2 * pad;
+
+        // Vorbedingung prüfen: wirklich ALLE c-Werte unterschreiten TILE_MIN_W
+        var allBelowMin = true;
+        for (var c = 1; c <= M; c++) {
+            var tileW = (innerW - (c - 1) * gap) / c;
+            if (tileW >= TILE_MIN_W) { allBelowMin = false; break; }
+        }
+
+        var geom     = panelLib.computeGridGeometry(M, vpW, vpH);
+        var capacity = geom.cols * geom.rows;
+
+        console.log(JSON.stringify({
+            innerW:      innerW,
+            allBelowMin: allBelowMin,
+            cols:        geom.cols,
+            rows:        geom.rows,
+            capacity:    capacity,
+            fallbackHeld: capacity >= M,
+        }));
+    ''')
+    assert out['allBelowMin'], \
+        'Vorbedingung: alle tileW-Werte müssen < TILE_MIN_W sein (vpW=%d zu groß?)' % 150
+    assert out['fallbackHeld'], \
+        ('PANEL-12 Schrumpf-Fallback: cols*rows muss >= M=%d sein auch wenn tileW < TILE_MIN_W '
+         '(bekommen: cols=%d rows=%d capacity=%d)') % (20, out['cols'], out['rows'], out['capacity'])
+
+
+def test_PANEL_9_test_file_covers_panel_12():
+    """PANEL-9 Selbst-Probe: PANEL_12-Tests sind in dieser Datei vorhanden."""
+    here = read(os.path.abspath(__file__))
+    assert re.search(r'def test_PANEL_12_', here), \
+        'kein PANEL_12-Test gefunden — PANEL-9 Mindest-Abdeckung verletzt'
