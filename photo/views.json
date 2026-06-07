@@ -1,0 +1,18 @@
+{
+  "views": [
+    {
+      "slug": "rahmen",
+      "pfad": "/display/photo/rahmen",
+      "label": "Foto-Rahmen",
+      "synonyme": [
+        "foto-rahmen",
+        "bilderrahmen",
+        "fotos",
+        "bilder",
+        "slideshow"
+      ],
+      "zeigt": "Den digitalen Bilderrahmen mit Auto-Durchlauf der Familien-Fotos und Videos.",
+      "zielgruppe": "kind"
+    }
+  ]
+}

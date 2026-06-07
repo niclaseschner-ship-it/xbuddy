@@ -62,6 +62,11 @@ geraete/geraete.json
 # Format: panel/panels.example.json
 panel/panels.json
 
+# Seiten-Registry: gecachtes Inventar (SREG-3) — abgeleiteter Snapshot, kein
+# Stammdatum, trägt 0600-Rechte. Live liegt es außerhalb des Checkouts (SVC-5);
+# diese Regel fängt nur einen Dev-Lauf mit Default-Pfad im Checkout ab.
+seiten/inventar.json
+
 # Zugangsdaten-Speicher (ZD-3) — Per-Instanz-Geheimnis-Datei. Hält
 # Klartext-Geheimnisse, darf nie ins Repo (CLAUDE.md §8). Format:
 # tools/zugangsdaten/zugangsdaten.example.json
