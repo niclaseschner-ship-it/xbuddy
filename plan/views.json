@@ -1,0 +1,24 @@
+{
+  "views": [
+    {
+      "slug": "woche",
+      "pfad": "/display/plan/woche",
+      "label": "Wochenplan",
+      "synonyme": [
+        "wochenplan",
+        "plan",
+        "kinderplan",
+        "wochenansicht"
+      ],
+      "zeigt": "Den rollierenden Wochenplan der Kinder mit Slots und Terminen.",
+      "zielgruppe": "kind",
+      "varianten": [
+        {
+          "slug": "woche-klein",
+          "query": "ansicht=klein",
+          "label": "Wochenplan für Kleinkinder"
+        }
+      ]
+    }
+  ]
+}
