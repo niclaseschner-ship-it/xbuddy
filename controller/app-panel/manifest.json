@@ -6,7 +6,7 @@
   "scope": "./",
   "display": "fullscreen",
   "orientation": "landscape",
-  "background_color": "#0b0b10",
-  "theme_color": "#0b0b10",
+  "background_color": "#F5F1E8",
+  "theme_color": "#47503C",
   "lang": "de"
 }
