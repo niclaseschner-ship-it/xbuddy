@@ -1,6 +1,6 @@
 """Tests für tools/zugangsdaten/config.py — Pfad-Override (SVC-5 / CONFIG-5 / ZD-8).
 
-AC2: ENV-Var ZUGANGSDATEN_STORE überschreibt Default-Pfad; 0600-Permissions
+AC2: ENV-Var ZUGANGSDATEN_STORE_FILE überschreibt Default-Pfad; 0600-Permissions
      beim Erstellen einer neuen Datei bleiben erhalten (CONFIG-3 / ZD-3).
 
 Lauf: pytest tools/zugangsdaten/tests/ -v
@@ -32,7 +32,7 @@ def test_AC2_default_path_is_repo_relative():
 
 
 def test_AC2_env_override_replaces_default(tmp_path):
-    """ZUGANGSDATEN_STORE in ENV → überschreibt Default (SVC-5 / CONFIG-5)."""
+    """ZUGANGSDATEN_STORE_FILE in ENV → überschreibt Default (SVC-5 / CONFIG-5)."""
     override = str(tmp_path / "mein_store.json")
     path = resolve_store_path(cli_path=None, env={ENV_STORE_FILE: override})
     assert path == override
@@ -46,9 +46,9 @@ def test_AC2_cli_flag_beats_env(tmp_path):
     assert path == cli_val
 
 
-def test_AC2_env_var_name_is_ZUGANGSDATEN_STORE():
-    """ENV-Var heißt ZUGANGSDATEN_STORE (CONFIG-5 Naming-Konvention)."""
-    assert ENV_STORE_FILE == "ZUGANGSDATEN_STORE"
+def test_AC2_env_var_name_is_ZUGANGSDATEN_STORE_FILE():
+    """ENV-Var heißt ZUGANGSDATEN_STORE_FILE (CONFIG-5 Naming-Konvention, _FILE-Suffix)."""
+    assert ENV_STORE_FILE == "ZUGANGSDATEN_STORE_FILE"
 
 
 # ============================================================

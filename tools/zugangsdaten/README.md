@@ -55,7 +55,7 @@ bewusst out-of-scope (OPEN-ZD-A, E-ZD-2).
 
 | Wert | Default | Override |
 |---|---|---|
-| Speicher-Datei | `tools/zugangsdaten/zugangsdaten.json` (neben dem Code) | `$XBUDDY_ZUGANGSDATEN_FILE` · CLI `--zugangsdaten-file` |
+| Speicher-Datei | `tools/zugangsdaten/zugangsdaten.json` (neben dem Code) | `$ZUGANGSDATEN_STORE_FILE` · CLI `--zugangsdaten-file` |
 
 Priorität: CLI > Env > Default. Eine Komponente, die den Speicher nutzt, kann
 das Flag über `add_cli_argument(parser)` an ihren eigenen `ArgumentParser`

@@ -100,9 +100,11 @@ Auflösungs-Reihenfolge.
 ## 4. Konfiguration
 
 ### ZD-8 — Konfigurationswerte
-| Wert            | Default                        | Quelle |
-|-----------------|--------------------------------|--------|
-| Speicher-Datei  | feste Datei neben dem Code     | Env · CLI |
+| Wert            | Default                                             | ENV                        | CLI                     |
+|-----------------|-----------------------------------------------------|----------------------------|-------------------------|
+| Speicher-Datei  | `tools/zugangsdaten/zugangsdaten.json` (neben dem Code) | `ZUGANGSDATEN_STORE_FILE`  | `--zugangsdaten-file`   |
+
+Priorität: CLI > ENV > Default (CONFIG-5).
 
 *Tickets:* #37
 
