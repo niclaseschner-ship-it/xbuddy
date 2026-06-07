@@ -1,7 +1,10 @@
 # RAT-10 — Tool-erzwungene Ticket-Reconcile-Verriegelung (gibt RAT-9 Zähne)
 
 **Entschieden:** 2026-06-06 (Nic)
-**Status:** RATIFIZIERT — Variante 1 (GitHub Pro). Umsetzung gated auf Pro-Aktivierung.
+**Status:** RATIFIZIERT + **UMGESETZT** (2026-06-06) — Variante 1 (GitHub Pro). Ruleset
+`main-verriegelung` (id 17352637) live: `enforcement:active`, `bypass_actors:[]`, Regeln
+`pull_request`/`non_fast_forward`/`required_status_checks`(`closes-guard`)/`deletion`.
+Direkt-Push auf `origin/main` ist physisch unmöglich (verifiziert 2026-06-07, RAT-14).
 **Betrifft:** GitHub-Ruleset auf `main`; `.github/workflows/closes-guard.yml` (neu),
 `ticket-status-flow.yml` (fail-loud); `decisions/RAT-9`; `conventions/` (RECON-1); arbeitstag.md/Werft.
 **Deliberation:** `brainstorm/berater-runde/20260606-ENTSCHEID-reconcile-verriegelung.md`
