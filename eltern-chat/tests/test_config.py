@@ -241,7 +241,7 @@ def test_EC15_icon_origin_url_from_env(tmp_path, monkeypatch):
 def test_SREG6_seiten_origin_url_default(tmp_path, monkeypatch):
     """SREG-6 / #453: seiten_origin_url hat den Default http://127.0.0.1:5042
     (Seiten-Registry, SREG-3). Fehlt der Wert in ENV und Datei, wird der Default
-    gesetzt — das ist die Wiring-Bedingung für SeitenFindenTask."""
+    gesetzt — das ist die Wiring-Bedingung für SeitenUebersichtTask."""
     _set_bot_token(monkeypatch)
     monkeypatch.delenv("ELTERNCHAT_SEITEN_ORIGIN_URL", raising=False)
     cfg = config_mod.resolve(_missing(tmp_path))
