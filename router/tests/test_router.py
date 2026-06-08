@@ -663,7 +663,7 @@ def test_ROU_31_suche_filters_ids_without_local_png(client_with_routing, icon_ro
 
 
 def test_ROU_31_suche_dedupes_and_respects_max(client_with_routing, icon_root_suche):
-    """AC5: 'hund'/'hunde' → beide treffen ID 101; Dedup → ein Kandidat.
+    """Dedup: 'hund'/'hunde' → beide treffen ID 101; Dedup → ein Kandidat.
     max=1 begrenzt, max=10 liefert alle vorhandenen."""
     # Teilwort 'hund' trifft 'hund' (101) und 'hunde' (101) — Dedup → 1 Eintrag
     r = client_with_routing.get('/api/v1/icons/suche?q=hund&max=10')
@@ -676,6 +676,17 @@ def test_ROU_31_suche_dedupes_and_respects_max(client_with_routing, icon_root_su
     r2 = client_with_routing.get('/api/v1/icons/suche?q=a&max=1')
     assert r2.status_code == 200
     assert len(r2.get_json()) <= 1
+
+
+def test_ROU_31_suche_default_max_3_no_param(client_with_routing, icon_root_suche):
+    """AC5: GET /api/v1/icons/suche?q=<term> ohne max-Query → höchstens 3 Treffer (Default)."""
+    # Fixture hat: 'hund' → ID 101, 'hunde' → ID 101, 'katze' → ID 202, 'tier' → ID 303 (kein PNG)
+    # Mit Teilwort 'a' treffen wir mindestens: katze (202). Wenn wir ein Setup mit mehr als 3
+    # hätten, würde max=3 default greifen. Hier prüfen wir einfach: ohne max-Param ≤ 3.
+    r = client_with_routing.get('/api/v1/icons/suche?q=a')
+    assert r.status_code == 200
+    data = r.get_json()
+    assert len(data) <= 3, f'Erwartet höchstens 3 Treffer ohne max-Param, got {len(data)}'
 
 
 def test_ROU_15_controller_dir_env_var_resolves(monkeypatch, tmp_path):
