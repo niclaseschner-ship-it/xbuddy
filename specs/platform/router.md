@@ -473,12 +473,11 @@ sich der App-Panel-Adapter wie bei einem nicht-gematchten Trigger
   Router darf nicht crashen, weil die Datei fehlt — das macht ihn auch
   als Entwicklungs-Werkzeug brauchbar, das man ohne fertige Tabelle
   hochfährt.
-- **Selbsttragend:** Pro Instanz separat verwaltet. Der **Live-Ort liegt
-  außerhalb des Checkouts** unter `xbuddy-data/router/routing.json`
-  (SVC-5 / RAT-14); Override via ENV `ROUTER_ROUTING_FILE` oder CLI
-  `--routing` (Priorität CLI > ENV > Default, siehe `router/config.py`).
-  Der Repo-interne Pfad (`router/routing.json`, per `.gitignore`
-  ausgeschlossen) bleibt als Dev-Default zulässig.
+- **Selbsttragend:** Pro Instanz separat verwaltet. Live-Ort liegt nach
+  SVC-5 außerhalb des Checkouts (`xbuddy-data/router/routing.json`),
+  Override-Pfade nach CONFIG-5 (ENV `ROUTER_ROUTING_FILE`, CLI
+  `--routing`). Der Repo-interne `router/routing.json` (per
+  `.gitignore` ausgeschlossen) bleibt Dev-Fallback.
   `routing.example.json` dokumentiert das Format.
 - **Kopplung zur Controller-Instanz:** `source_id` muss mit dem
   `source_id`-Wert in der Controller-Instanz-Konfiguration (FIG-23)
