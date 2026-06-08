@@ -373,7 +373,11 @@
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
     }).then(function (data) {
-      var list = (data && data.seiten) || data || [];
+      // SREG-3: /api/v1/seiten liefert {eintraege: [...], snapshot_pending: [...]}.
+      // Wir lesen genau den eintraege-Schlüssel — kein Fallback aufs ganze
+      // Objekt (truthy-Objekt würde sonst durch buildAddCandidates als []
+      // herausfallen und „Keine Display-Views" anzeigen, obwohl welche da sind).
+      var list = (data && Array.isArray(data.eintraege)) ? data.eintraege : [];
       addCandidates = editorLib.buildAddCandidates(list);
     }).catch(function (err) {
       console.warn('Add-Inventar konnte nicht geladen werden:', err);

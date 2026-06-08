@@ -356,6 +356,32 @@ def _read_editor_html(filename):
         return f.read()
 
 
+# PBE-1 Token-Substitution: das echte <body>-Tag in bearbeiten.html trägt
+# `data-panel-id="__PANEL_ID__"`. Wir ersetzen genau dieses Token — kein
+# Substring-Match auf `<body>` (das stünde sonst auch im HTML-Kommentar und
+# würde dort fälschlich substituiert, sodass das echte Tag leer bliebe).
+_PANEL_ID_TOKEN = "__PANEL_ID__"
+
+
+def _send_editor_static(panel_id, filename, mimetype):
+    """Liefert eine statische Editor-Datei aus (PBE-1, Konsolidierung).
+
+    Gemeinsame Helferfunktion für HTML/JS/CSS-Routen — kein dreifach kopierter
+    Read+404+OSError-Block. Die 404-Probe auf `panel_id` läuft hier zentral:
+    eine unbekannte Identität darf weder HTML noch JS/CSS für diese Instanz
+    bekommen (PBE-1: Seite ist an die `panel_id` gebunden).
+    """
+    if _aktuelle_registry().get(panel_id) is None:
+        return jsonify({"error": "unbekannte panel_id"}), 404
+    try:
+        body = _read_editor_html(filename)
+    except OSError as e:
+        logging.warning("Editor-Statik %r konnte nicht gelesen werden: %s",
+                        filename, e)
+        return jsonify({"error": "%s nicht verfügbar" % filename}), 500
+    return Response(body, status=200, mimetype=mimetype)
+
+
 @app.route("/controller/app-panel/<panel_id>/bearbeiten", methods=["GET"])
 def get_panel_editor(panel_id):
     """PBE-1/PBE-2: Editor-Seite je Panel-Instanz.
@@ -367,21 +393,21 @@ def get_panel_editor(panel_id):
 
     PBE-3: keine zusätzliche Auth-Schicht; das Heimnetz/Tailscale-Gate (RAT-2)
     trägt den Zugriff.
+
+    PBE-1: Panel-Identität wird per Token-Substitution `__PANEL_ID__` im echten
+    `<body>`-Tag durch die `panel_id` ersetzt — die Editor-JS-Schicht liest sie
+    per `document.body.dataset.panelId` und braucht keinen Roundtrip. Token
+    statt Substring-Match auf `<body>`, damit HTML-Kommentare nicht
+    versehentlich gematcht werden.
     """
-    panel = _aktuelle_registry().get(panel_id)
-    if panel is None:
+    if _aktuelle_registry().get(panel_id) is None:
         return jsonify({"error": "unbekannte panel_id"}), 404
     try:
         html = _read_editor_html("bearbeiten.html")
     except OSError as e:
         logging.warning("Editor-HTML konnte nicht gelesen werden: %s", e)
         return jsonify({"error": "Editor-Seite nicht verfügbar"}), 500
-    # PBE-1: Panel-Identität in den <body>-Tag injizieren — die Editor-JS-Schicht
-    # liest sie per document.body.dataset.panelId und braucht keinen Roundtrip.
-    html = html.replace(
-        "<body>",
-        '<body data-panel-id="%s">' % panel_id,
-        1)
+    html = html.replace(_PANEL_ID_TOKEN, panel_id)
     return Response(html, status=200,
                     mimetype="text/html; charset=utf-8")
 
@@ -389,25 +415,13 @@ def get_panel_editor(panel_id):
 @app.route("/controller/app-panel/<panel_id>/bearbeiten.js", methods=["GET"])
 def get_panel_editor_js(panel_id):
     """PBE-1: Editor-JS-Bundle (statisch). 404 bei unbekannter panel_id."""
-    if _aktuelle_registry().get(panel_id) is None:
-        return jsonify({"error": "unbekannte panel_id"}), 404
-    try:
-        body = _read_editor_html("bearbeiten.js")
-    except OSError:
-        return jsonify({"error": "bearbeiten.js nicht verfügbar"}), 500
-    return Response(body, status=200, mimetype="application/javascript")
+    return _send_editor_static(panel_id, "bearbeiten.js", "application/javascript")
 
 
 @app.route("/controller/app-panel/<panel_id>/bearbeiten.css", methods=["GET"])
 def get_panel_editor_css(panel_id):
     """PBE-1: Editor-CSS (statisch). 404 bei unbekannter panel_id."""
-    if _aktuelle_registry().get(panel_id) is None:
-        return jsonify({"error": "unbekannte panel_id"}), 404
-    try:
-        body = _read_editor_html("bearbeiten.css")
-    except OSError:
-        return jsonify({"error": "bearbeiten.css nicht verfügbar"}), 500
-    return Response(body, status=200, mimetype="text/css; charset=utf-8")
+    return _send_editor_static(panel_id, "bearbeiten.css", "text/css; charset=utf-8")
 
 
 @app.route("/api/v1/panels/", methods=["POST"])

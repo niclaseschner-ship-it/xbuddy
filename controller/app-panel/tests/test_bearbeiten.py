@@ -274,6 +274,98 @@ def test_PBE_7_add_candidate_keys_are_unique_within_list():
 
 
 # ============================================================
+#  T452-S2 / AC4 — Add-Pfad gegen ECHTE /api/v1/seiten-Response-Form
+# ============================================================
+#
+# SREG-3: `/api/v1/seiten` liefert `{eintraege: [...], snapshot_pending: [...]}`.
+# Vorher las bearbeiten.js fälschlich `data.seiten` (existiert nicht), fiel auf
+# das ganze Antwort-Objekt zurück (truthy → buildAddCandidates([...]) mit
+# Array.isArray-Guard liefert []) und zeigte „Keine Display-Views" — obwohl
+# Display-Einträge da waren. Diese Tests fixieren den korrekten Schlüssel.
+
+
+def test_AC4_build_add_candidates_on_real_inventar_form():
+    """T452-S2 / AC4: buildAddCandidates muss mit einer realistischen
+    `eintraege`-Liste (Form aus seiten.aggregator.baue_inventar, SREG-3)
+    Display-Kandidaten erzeugen."""
+    out = run_node('''
+        // SREG-4-konforme Einträge: Sorte a (display), Sorte b (eltern),
+        // Sorte c (controller), Sorte d (panel) — analog
+        // seiten/aggregator.py manifest_eintraege + panel_eintraege.
+        const eintraege = [
+          { key: 'plan-woche', typ: 'display', app: 'plan',
+            pfad: '/display/plan/woche', label: 'Wochenplan',
+            icons: ['arasaac/32488.png'],
+            varianten: [
+              { slug: 'klein', query: { ansicht: 'klein' },
+                label: 'Wochenplan klein',
+                icons: ['arasaac/32488.png', 'arasaac/2484.png'] },
+            ],
+          },
+          { key: 'wetter-now', typ: 'display', app: 'wetter',
+            pfad: '/display/wetter/now', label: 'Wetter jetzt',
+            icons: ['arasaac/2517.png'] },
+          { key: 'wetter-regeln-bearbeiten', typ: 'eltern',
+            app: 'wetter', pfad: '/display/wetter/regeln',
+            label: 'Wetter-Regeln' },
+          { key: 'figuren-erkennung', typ: 'controller',
+            app: 'figuren-erkennung',
+            pfad: '/controller/figuren-erkennung/',
+            label: 'Figuren-Erkennung' },
+          { key: 'kueche-01', typ: 'panel', app: 'app-panel',
+            pfad: '/controller/app-panel/kueche-01/',
+            label: 'Panel kueche-01' },
+        ];
+        const cands = editorLib.buildAddCandidates(eintraege);
+        console.log(JSON.stringify(cands.map(c => ({
+          app: c.app, view: c.view, label: c.label,
+          slug: c.slug, query: c.query || null,
+        }))));
+    ''')
+    # Erwartung: 3 Display-Kandidaten — plan/woche (Default), plan/woche
+    # (Variante klein), wetter/now. Andere Sorten (eltern/controller/panel)
+    # werden ausgefiltert.
+    assert len(out) == 3, \
+        'AC4: 3 Display-Kandidaten erwartet (2x plan/woche, 1x wetter/now), bekommen: %r' % out
+    apps_views = [(c['app'], c['view']) for c in out]
+    assert ('plan', 'woche') in apps_views
+    assert ('wetter', 'now') in apps_views
+    # Variante muss als eigener Eintrag erscheinen.
+    variant_q = [c['query'] for c in out if c.get('query')]
+    assert {'ansicht': 'klein'} in variant_q, \
+        'AC4: Variante mit query muss als getrennter Kandidat erscheinen'
+
+
+def test_AC4_load_add_inventar_reads_eintraege_key_not_seiten():
+    """T452-S2 / AC4 (Regress-Anker): die loadAddInventar-Funktion im Bootstrap
+    muss `data.eintraege` lesen — NICHT `data.seiten`.
+
+    Diese statische Probe schützt gegen Re-Regress des T452-S1-Bugs (das
+    `data.seiten`-Fallback brachte „Keine Display-Views" trotz vollem Inventar)."""
+    js = read(JS_PATH)
+    # Positiv: der Bootstrap liest `data.eintraege`.
+    assert 'data.eintraege' in js, (
+        'AC4: bearbeiten.js muss data.eintraege lesen (SREG-3: '
+        '/api/v1/seiten liefert {eintraege: [...], snapshot_pending: [...]})')
+    # Negativ-Probe: kein `data.seiten`-Lesepfad (existiert in der Response
+    # nicht, würde das ganze Objekt durchreichen und „Keine Display-Views"
+    # produzieren).
+    assert 'data.seiten' not in js, (
+        'T452-S2 Regress: bearbeiten.js darf NICHT data.seiten lesen — '
+        '/api/v1/seiten liefert keinen "seiten"-Schlüssel (SREG-3)')
+
+
+def test_AC4_build_add_candidates_returns_empty_for_empty_eintraege():
+    """SREG-3 Kaltstart: wenn `eintraege` leer ist (kein einziges Display-Manifest
+    bisher), liefert buildAddCandidates eine leere Liste — kein Crash."""
+    out = run_node('''
+        const cands = editorLib.buildAddCandidates([]);
+        console.log(JSON.stringify(cands));
+    ''')
+    assert out == []
+
+
+# ============================================================
 #  AC2 / PBE-4 — Speichern: vollständige Liste per PUT
 # ============================================================
 
