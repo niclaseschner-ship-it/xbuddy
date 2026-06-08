@@ -243,15 +243,20 @@ Breaking Change):
 | Name         | Default                          | Datei-Schlüssel | gesetzt durch (Onboarding-Schritt) |
 |--------------|----------------------------------|-----------------|------------------------------------|
 | `source_id`  | (kein Default — Pflicht)         | `source_id`     | — (offen, OPEN-PANEL-C)            |
-| `display_id` | (kein Default — Pflicht)         | `display_id`    | — (offen, OPEN-PANEL-C)            |
 | `router_url` | (kein Default — Pflicht)         | `router_url`    | — (offen, OPEN-PANEL-C)            |
 
 `source_id` ist die Identität dieser Panel-Instanz (z. B.
-`app-panel:kueche`). `display_id` erwartet IDENT-1-Form (`<typ>-<slug>-<nn>`,
-z. B. `tablet-wohnzimmer-01`); der Panel-Code validiert die Form in V1
-nicht hart — ein Display, feste Tablets, keine Laufzeit-Prüfung nötig.
-`router_url` ist die Origin des Routers (Schema + Host[:Port], **ohne
-Pfad**, analog FIG-23). *(#305)*
+`app-panel:kueche`). `router_url` ist die Origin des Routers (Schema +
+Host[:Port], **ohne Pfad**, analog FIG-23). *(#305)*
+
+`display_id` ist **bewusst nicht** mehr in `config.json` (Nic-Entscheid
+2026-06-08 / #414): die für die Aktiv-Kachel-Markierung (PANEL-11)
+maßgebliche `display_id` zieht der Panel-Code beim Bootstrap vom
+Router (ROU-32, `GET /api/v1/router/panels/<source_id>`). Der Router
+ist die EINE Wahrheit für die Panel→Display-Zuordnung
+(`routing.json` `panels`-Eintrag, ROU-18) — Drift zwischen
+„Tile-Tap-Ziel" und „Stream-Subscription" ist damit per Konstruktion
+unmöglich.
 
 **Kein URL-Parameter-Overlay:** Das App-Panel liest seine Konfiguration
 ausschließlich aus `config.json` — URL-Parameter überschreiben die
@@ -278,13 +283,14 @@ Panel-Code werden von ROU-27 überschattet und nicht mehr gelesen.
 
 **Kopplung zum Router:** `source_id` muss mit dem `source_id`-Wert
 eines `panels`-Eintrags der Routing-Tabelle (ROU-18) übereinstimmen,
-sonst greift der Adapter (ROU-24) für diese Panel-Instanz nicht.
-Zusätzlich muss `display_id` mit dem `display_id`-Wert desselben
-`panels`-Eintrags übereinstimmen — der Panel-Code abonniert genau
-diesen Display-Zustands-Stream (ROU-22) für die Aktiv-Kachel-Markierung
-(PANEL-11). Diese load-bearing-Kopplung wird beim Start geprüft
-(analog der `source_id`-Konsistenz-Prüfung); eine Diskrepanz erscheint
-als sichtbarer Fehler.
+sonst greift der Adapter (ROU-24) für diese Panel-Instanz nicht. Diese
+Kopplung wird beim Start geprüft; eine Diskrepanz erscheint als
+sichtbarer Fehler.
+
+Die frühere zweite Konsistenz-Probe gegen `cfg.display_id` ist mit dem
+Entscheid 2026-06-08 (#414) entfallen: der Panel-Code zieht `display_id`
+pro Bootstrap aus ROU-32 und es gibt keinen lokalen Spiegel-Wert mehr,
+gegen den geprüft werden müsste.
 
 *Tickets:* #58
 
@@ -313,11 +319,16 @@ markiert** — sichtbar von der Restmenge unterschieden
 (Hintergrund-Hervorhebung oder Border). Die konkreten Design-Tokens
 kommen im Impl-PR; die Spec verlangt nur „sichtbar unterscheidbar".
 
-**Quelle der Wahrheit der Markierung:** der Panel-Code abonniert beim
-Laden den **SSE-Zustands-Stream seines zugeordneten Displays**
-(ROU-22: `GET /api/v1/displays/<display_id>/events`, `<display_id>`
-aus `config.json`, PANEL-8) und vergleicht die im Stream gelieferte
-`payload.url` mit den `{ app, view, query? }`-Werten seiner Kacheln.
+**Quelle der Wahrheit der Markierung:** der Panel-Code zieht beim
+Laden seine `display_id` vom Router (ROU-32:
+`GET /api/v1/router/panels/<source_id>`, `<source_id>` aus
+`config.json`, PANEL-8) und abonniert dann den **SSE-Zustands-Stream
+genau dieses Displays** (ROU-22: `GET /api/v1/displays/<display_id>/events`).
+Damit ist die für die Markierung genutzte `display_id` per Konstruktion
+identisch mit der, an die der Router Tile-Taps für diese Panel-Instanz
+routet — Drift ist nicht mehr möglich (Nic-Entscheid 2026-06-08 / #414).
+Der Panel-Code vergleicht dann die im Stream gelieferte `payload.url`
+mit den `{ app, view, query? }`-Werten seiner Kacheln.
 Die Kachel, deren Konvention `/display/<app>/<view>[?<query>]` (vgl.
 ROU-24) zur aktuellen Display-`payload.url` passt, ist aktiv markiert
 — maximal eine Kachel gleichzeitig.
@@ -449,22 +460,23 @@ Mindest-Abdeckung:
   `config.json` == Schlüssel im `panels`-Abschnitt der `routing.json`
   des Routers" (siehe PANEL-8 Body, ROU-18) wird beim Start geprüft;
   eine Diskrepanz erscheint als sichtbarer Fehler (Test prüft die
-  sichtbare Fehler-Signalisierung). Zusätzlich wird die Kopplung
-  „`display_id` aus `config.json` == `display_id` desselben
-  `panels`-Eintrags" beim Start geprüft; ein fehlendes oder
-  abweichendes `display_id` erscheint ebenfalls als sichtbarer Fehler.
-  Der stumme Default-Fallback bei fehlender/kaputter `config.json`
-  bleibt erlaubt und ist konsistent zu FIG-23/ROU-19 — geprüft wird,
-  dass beide Wege (sichtbarer Konsistenz-Fehler vs. stummer
-  Datei-Fallback) sich nicht vermischen.
+  sichtbare Fehler-Signalisierung). `display_id` ist seit dem Entscheid
+  2026-06-08 (#414) NICHT mehr in `config.json` — der Panel-Code zieht
+  sie pro Bootstrap vom Router über `GET /api/v1/router/panels/<source_id>`
+  (ROU-32); ein 404 (Router kennt diese `source_id` nicht) erscheint als
+  sichtbarer Fehler. Der stumme Default-Fallback bei fehlender/kaputter
+  `config.json` bleibt erlaubt und ist konsistent zu FIG-23/ROU-19 —
+  geprüft wird, dass beide Wege (sichtbarer Konsistenz-Fehler vs.
+  stummer Datei-Fallback) sich nicht vermischen.
 - PANEL-10 — Das PWA-Manifest deklariert `display: fullscreen`
   (Manifest-Test). `navigator.wakeLock.request('screen')` wird beim
   Laden aufgerufen; bei `visibilitychange` auf `visible` erneut.
   `requestFullscreen()` wird beim ersten Nutzer-Gesture versucht; ein
   Fehler dabei wirft den Code nicht ab.
-- PANEL-11 — Das Panel verbindet sich beim Laden mit
-  `/api/v1/displays/<display_id>/events` (ROU-22), `display_id` aus
-  `config.json` (PANEL-8). Ein Stream-Update mit
+- PANEL-11 — Das Panel zieht beim Laden seine `display_id` vom
+  Router über `GET /api/v1/router/panels/<source_id>` (ROU-32,
+  `<source_id>` aus `config.json`, PANEL-8) und verbindet sich dann
+  mit `/api/v1/displays/<display_id>/events` (ROU-22). Ein Stream-Update mit
   `payload.url = /display/plan/woche` markiert die zugehörige Kachel
   (`app: plan`, `view: woche`); ein folgendes Update mit
   `payload.url = /display/plan/woche?ansicht=klein` verschiebt die
