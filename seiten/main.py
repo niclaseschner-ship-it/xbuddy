@@ -281,7 +281,9 @@ def _aktuelles_inventar():
 #  Flask-App
 # ============================================================
 
-app = Flask(__name__, template_folder="templates")
+app = Flask(__name__, template_folder="templates",
+            static_folder="static",
+            static_url_path="/api/v1/seiten/static")
 
 
 @app.route("/api/v1/seiten", methods=["GET"])

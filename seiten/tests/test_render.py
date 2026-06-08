@@ -300,28 +300,28 @@ def test_icon_aus_eintrag_icons_wird_uebernommen():
 def test_icon_fallback_panel_typ():
     out = render.baue_layout({"eintraege": [_panel("waise")]}, HEIM, TAIL)
     karte = out["buddy_gruppen"][0]["karten"][0]
-    assert karte["icon"] == "/static/icons/panel.png"
+    assert karte["icon"] == "/api/v1/seiten/static/icons/panel.png"
 
 
 def test_icon_fallback_display_client_typ():
     out = render.baue_layout({"eintraege": [_display("solo")]}, HEIM, TAIL)
     # solo ist ohne Panel → nicht im Hero, sondern Buddy-Gruppe "instanz"
     karte = out["buddy_gruppen"][0]["karten"][0]
-    assert karte["icon"] == "/static/icons/display-client.png"
+    assert karte["icon"] == "/api/v1/seiten/static/icons/display-client.png"
 
 
 def test_icon_fallback_eltern_typ():
     e = _eintrag("eltern", "elt-x", "/eltern/x", label="Eltern-X")
     out = render.baue_layout({"eintraege": [e]}, HEIM, TAIL)
     karte = out["buddy_gruppen"][0]["karten"][0]
-    assert karte["icon"] == "/static/icons/eltern.png"
+    assert karte["icon"] == "/api/v1/seiten/static/icons/eltern.png"
 
 
 def test_icon_fallback_controller_typ():
     e = _eintrag("controller", "ctrl-x", "/controller/x", label="C-X")
     out = render.baue_layout({"eintraege": [e]}, HEIM, TAIL)
     karte = out["buddy_gruppen"][0]["karten"][0]
-    assert karte["icon"] == "/static/icons/controller.png"
+    assert karte["icon"] == "/api/v1/seiten/static/icons/controller.png"
 
 
 # ============================================================
