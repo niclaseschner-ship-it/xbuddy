@@ -5,6 +5,7 @@ Lauf: python3 -m pytest router/tests/ -v
 
 import json
 import os
+import re
 import sys
 import urllib.error
 
@@ -1182,13 +1183,46 @@ def test_PANEL_2_index_config_js_uses_absolute_path(client_with_panels):
         'führt zu 404 und schwarzer Seite (Ticket #317)'
     )
     # Alle übrigen Script-/Link-Tags nutzen ./-Relativpfade (kein ../).
-    import re
     cross_tree = re.findall(
         r'(?:src|href)=["\'](\.\./[^"\']+)["\']', html)
     non_config = [p for p in cross_tree if '_shared/config.js' not in p]
     assert non_config == [], (
         'Unerwartete ../  Relativpfade in index.html: %s' % non_config
     )
+
+
+def test_PANEL_2_panel_id_lands_on_real_body_tag(client_with_panels):
+    """T441-S2 / Regress-Anker: die `data-panel-id`-Substitution muss am
+    ECHTEN <body>-Tag landen — nicht in einem HTML-Kommentar.
+
+    Analoger Test zu test_pbe1_editor_route_panel_id_lands_on_real_body_tag
+    aus panel/tests/test_panel_editor_seite.py (T452-S2).
+
+    Vorher war `html.replace('<body>', ...)` anfällig gegen ein <body>-Vorkommen
+    in einem HTML-Kommentar: das erste Match wäre dann der Kommentar, das echte
+    `<body class="xb" data-stage="reader">` bliebe unsubstituiert; im Browser
+    wäre `document.body.dataset.panelId` undefined.
+
+    Anker-Pattern (Regex, kein Substring-Suche im Volltext): das ECHTE
+    body-Tag (das mit `class="xb"` und/oder `data-stage="reader"`) muss
+    `data-panel-id` tragen — nicht ein Kommentar-Artefakt.
+    """
+    r = client_with_panels.get('/controller/app-panel/kueche/')
+    assert r.status_code == 200
+    html = r.data.decode('utf-8')
+    # AC1: Regex-Anker — echtes body-Tag mit class="xb" oder data-stage="reader"
+    # muss data-panel-id="<id>" tragen.
+    anker = re.compile(
+        r'<body\b[^>]*\b(?:class="xb"|data-stage="reader")[^>]*'
+        r'data-panel-id="kueche"[^>]*>',
+        re.IGNORECASE)
+    assert anker.search(html), (
+        'T441-S2: data-panel-id muss am ECHTEN <body>-Tag stehen (class="xb" '
+        'oder data-stage="reader"), nicht im Kommentar. '
+        'HTML (Auszug): %r' % html[:800])
+    # AC2: Negativ-Probe — Token __PANEL_ID__ darf NICHT mehr im Output stehen.
+    assert '__PANEL_ID__' not in html, (
+        'T441-S2: Token __PANEL_ID__ muss durch die echte panel_id ersetzt sein')
 
 
 # ============================================================
