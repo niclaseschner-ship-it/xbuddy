@@ -223,8 +223,8 @@ Einführung, kein vager „nach dem Backfill":
   (SREG-3/DCOMP-3).
 - `icons_erforderlich = true` (nach Backfill, vom Härtungs-PR umgelegt): ein
   fehlendes `icons[]` an einer Sorte-a-View → **per-View-Skip** (nur diese View,
-  nicht das ganze Manifest — hängt an der per-View-Skip-Granularität, Ticket
-  #388); Warnung protokolliert.
+  nicht das ganze Manifest — die per-View-Skip-Granularität wird in SREG-13
+  bindend); Warnung protokolliert.
 
 *Wenn* `icons_erforderlich=false` und `icons[]` fehlt, *dann* bleibt der Eintrag
 gelistet (Warnung); *wenn* `icons_erforderlich=true` und `icons[]` fehlt, *dann*
@@ -251,6 +251,44 @@ mit distinktem `key` und `pfad`. Der `seiten_finden`-Skill (SREG-5) liefert so j
 Panel einen eigenen Editor-Link, ohne die Panel-Seite zu überschreiben.
 
 Konsument: `specs/platform/panel-bearbeiten.md` PBE-2 (#330).
+
+## SREG-13 — Per-View-Skip statt per-Manifest-Skip bei Schema-Fehler
+
+Beim Aggregator-Lauf (SREG-3) gilt: Ein einzelner View-Eintrag, der das
+SREG-4-Schema verletzt, wird **isoliert übersprungen und protokolliert** — die
+übrigen Views desselben Manifests bleiben im Inventar. Dies hebt die
+Skip-Granularität von „Manifest" auf „View" und schützt mehrwertige Manifeste
+(z. B. `wetter/views.json` mit `heute` (kind) und `regeln` (eltern) im selben
+Dokument) davor, dass ein einzelner Schema-Fehler das ganze Manifest aus
+`GET /api/v1/seiten` wirft (CONTEXT.md Zuverlässigkeit: ein Fehler darf nicht
+mehr werfen als nötig).
+
+Greift sowohl bei JSON-Schema-Fehler einer einzelnen View **als auch** beim
+Pflicht-Modus von SREG-10 (`icons_erforderlich=true`, fehlendes `icons[]` an
+einer Sorte-a-View): die Skip-Granularität ist immer per-View.
+
+**Eskalations-Hierarchie:** Eine ganze Manifest-Datei wird weiterhin
+übersprungen, wenn sie nicht lesbar/parsebar ist (SREG-3) — erst wenn das
+Manifest geparst ist, greift die View-Granularität. SREG-3 (Datei/Manifest)
+schlägt vor SREG-13 (View). Damit ist die Reihenfolge eindeutig:
+Datei-Skip > View-Skip > Eintrag-bleibt-gelistet.
+
+*Wenn* `wetter/views.json` `heute` (gültig) + `regeln` (Schema-Fehler) trägt,
+*dann* erscheint `heute` weiterhin in `GET /api/v1/seiten`; `regeln` fehlt
+mit Warnung im Aggregator-Log.
+
+*Test-Implikation:* Manifest mit einer kaputten + einer gültigen View → die
+gültige bleibt im Inventar; eine `icons_erforderlich=true`-Probe mit einer
+Sorte-a-View ohne `icons[]` in einem mehrwertigen Manifest → genau diese View
+wird übersprungen, der Rest bleibt.
+
+**Enabler für #347-Icon-Pflicht-Härtungsstufe:** Solange der Skip
+per-Manifest war, hätte ein einziges noch-nicht-gebackfilltes View-Icon ein
+ganzes Multi-View-Manifest gekippt — der `icons_erforderlich=true`-Schalter
+wäre damit erst sicher umlegbar gewesen, nachdem absolut JEDES Manifest
+backgefillt war. Mit SREG-13 ist der Schalter graduell umlegbar.
+
+*Tickets:* #388
 
 ## Offene Punkte
 
