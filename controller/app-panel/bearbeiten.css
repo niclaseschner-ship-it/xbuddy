@@ -1,0 +1,282 @@
+/* bearbeiten.css — Editor-Seite für Panel-Kacheln (PBE-1, T452).
+   PBE-1: Mobil-hochkant + Geräte-Safe-Area-Inset-Top (iPhone-Notch).
+   DTOK-5: Farb-/Schrift-Tokens aus /display/_shared/design/tokens.css. */
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  min-height: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.xb {
+  background: var(--stage-bg);
+  color: var(--stage-ink);
+  font-family: var(--font-sans);
+  /* PBE-1: Scrollen ist erlaubt — kein Kiosk-View. */
+  overflow-y: auto;
+}
+
+/* PBE-1 — Kopfbereich respektiert env(safe-area-inset-top): bei gesetztem
+   Inset beginnt der Inhalt unterhalb der Notch-Höhe. max() stellt sicher,
+   dass die Mindest-Polsterung nicht unterschritten wird. */
+.editor-head {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding-top: max(12px, env(safe-area-inset-top));
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.editor-title {
+  font-size: var(--fs-20);
+  font-weight: var(--font-weight-semibold);
+  color: var(--stage-ink);
+  font-family: var(--font-sans);
+  line-height: var(--lh-snug);
+}
+
+.editor-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.status {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  color: var(--primary);
+  padding: 10px 16px;
+  font-size: var(--fs-14);
+}
+.status.hidden { display: none; }
+
+.error {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  color: var(--danger);
+  padding: 10px 16px;
+  font-size: var(--fs-14);
+}
+.error.hidden { display: none; }
+
+.editor-main {
+  padding: 16px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section-title {
+  font-size: var(--fs-16);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: 8px;
+  color: var(--text-2);
+}
+
+.tile-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tile-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 8px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--stage-radius);
+  padding: 10px 12px;
+  cursor: move;
+}
+
+.tile-row.dragging {
+  opacity: 0.6;
+  border-color: var(--primary);
+}
+
+.tile-row-hidden {
+  opacity: 0.55;
+  background: var(--bg-soft);
+}
+
+.drag-handle {
+  font-size: var(--fs-18);
+  color: var(--text-2);
+  user-select: none;
+  padding: 4px;
+}
+
+.tile-icons {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.tile-icon-img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
+.tile-label {
+  font-size: var(--fs-14);
+  font-weight: var(--font-weight-semibold);
+  color: var(--stage-ink);
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.tile-state {
+  font-size: var(--fs-12);
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+}
+
+.tile-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+/* Buttons (Token-basiert, DTOK-5). */
+.btn {
+  background: var(--surface);
+  color: var(--stage-ink);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 8px 12px;
+  font-size: var(--fs-14);
+  font-family: var(--font-sans);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: var(--surface);
+  border-color: var(--primary);
+}
+
+.btn-secondary {
+  background: var(--surface);
+  color: var(--stage-ink);
+}
+
+.btn-danger {
+  background: var(--surface);
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+}
+
+.btn-icon {
+  min-width: 36px;
+  padding: 6px 10px;
+}
+
+.btn-add {
+  background: var(--surface-soft);
+  border: 1px dashed var(--border-strong);
+  width: 100%;
+  padding: 14px;
+  font-size: var(--fs-16);
+}
+
+.add-row {
+  margin-top: 8px;
+}
+
+.empty-hint {
+  color: var(--text-2);
+  font-size: var(--fs-14);
+  padding: 16px;
+  text-align: center;
+  background: var(--bg-soft);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-xs);
+}
+.empty-hint.hidden { display: none; }
+
+/* PBE-7 Add-Dialog: Overlay-Picker. */
+.dialog {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: color-mix(in srgb, var(--bg-soft) 75%, transparent);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  padding: max(16px, env(safe-area-inset-top))
+          max(16px, env(safe-area-inset-right))
+          max(16px, env(safe-area-inset-bottom))
+          max(16px, env(safe-area-inset-left));
+}
+.dialog.hidden { display: none; }
+
+.dialog-body {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--stage-radius);
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dialog-title {
+  font-size: var(--fs-18);
+  font-weight: var(--font-weight-semibold);
+}
+
+.add-list {
+  list-style: none;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.add-row-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+}
