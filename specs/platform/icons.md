@@ -136,10 +136,13 @@ als JSON — `[{ "id": <arasaac-id>, "url": "/display/_shared/icons/arasaac/<id>
   (ID-dedupliziert).
 - Zurückgegeben werden **nur** IDs, deren PNG in der icon-root vorliegt (ICONS-5)
   — jeder Kandidat rendert garantiert; IDs ohne lokales PNG fallen raus.
-- `max` begrenzt die Trefferzahl (Default klein, z. B. `3` — passend zum
-  „3-Vorschläge"-Muster des RPS-Skills). **Weitere** Vorschläge holt der Konsument
-  durch eine **verfeinerte Anfrage** (anderes Stichwort/Synonym), nicht durch
-  Paginierung — der Endpunkt bleibt zustandslos.
+- `max` begrenzt die Trefferzahl. Default ist `3` (passend zum
+  „3-Vorschläge"-Muster des RPS-Skills). Werte größer **`50`** werden still auf
+  `50` geklemmt — Familienbot-Resilienz gegen versehentliches `?max=999999`.
+  Nicht-numerische Werte (z. B. `?max=abc`) fallen still auf den Default zurück,
+  kein 400. **Weitere** Vorschläge holt der Konsument durch eine **verfeinerte
+  Anfrage** (anderes Stichwort/Synonym), nicht durch Paginierung — der Endpunkt
+  bleibt zustandslos.
 - Kein Treffer → **leere Liste**, kein Fehler.
 
 Read-only, keine Schreibwirkung, kein externer Call. Ausgeliefert vom Router
