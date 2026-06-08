@@ -60,7 +60,9 @@ Maßgeblich ist, **ob das Medium einen Begleittext trägt**:
 - **Foto/Video mit Prompt** → **nicht** dieser Skill; der Eltern-Chat routet das
   Medium an die im Text genannte Funktion (z. B. Schulplan-Lesen). Generelle
   Annahme für alle anderen foto-basierten Funktionen: das Bild kommt mit einem
-  Prompt, was damit zu tun ist.
+  Prompt, was damit zu tun ist. Medium MIT Signalwort (Termin/Kalender/…) →
+  siehe `termine-aus-bild.md` TAB-4 (Signalwort-Trigger, Disambig zu dieser
+  FSE-3-Klausel).
 
 Die Entscheidung trifft das LLM beim Tool-Wahl-Schritt (EC-`tool_use`), kein
 Vor-Router: ein kommentarloses eingehendes Medium → Aufruf dieser Funktion.
