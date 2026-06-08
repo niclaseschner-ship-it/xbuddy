@@ -47,7 +47,8 @@ class SeitenFindenTask(ReadTask):
     gezeigt (Default-Pfad SREG-6).
     """
 
-    def __init__(self, tg, seiten_client, is_member_fn):
+    def __init__(self, tg, seiten_client, is_member_fn,
+                 display_url_origin=None):
         super().__init__(
             name="seiten_finden",
             description=(
@@ -76,6 +77,7 @@ class SeitenFindenTask(ReadTask):
         self._tg = tg
         self._seiten_client = seiten_client
         self._is_member_fn = is_member_fn
+        self._display_url_origin = display_url_origin
 
     def run(self, arguments, turn_context):
         """Liest Seiten und postet die Antwort in den Zielchat (SREG-6).
@@ -95,6 +97,7 @@ class SeitenFindenTask(ReadTask):
             suchbegriff=suchbegriff,
             seiten_client=self._seiten_client,
             is_member_fn=self._is_member_fn,
+            display_url_origin=self._display_url_origin,
         )
 
         quittung_map = {

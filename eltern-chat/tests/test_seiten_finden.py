@@ -221,6 +221,36 @@ class TestFormatierEintraege:
         zeilen = result.strip().split("\n")
         assert len(zeilen) == 2
 
+    def test_sreg5_voller_link_mit_origin(self):
+        """SREG-5: Bei gesetzter display_url_origin wird volle URL gebaut."""
+        inv = [{"pfad": "/display/plan/woche", "label": "Wochenplan", "typ": "display"}]
+        result = formatiere_eintraege(inv, display_url_origin="https://hub.local")
+        assert "https://hub.local/display/plan/woche" in result
+        # Kein nackter Pfad ohne Origin
+        assert "https://hub.local" in result
+
+    def test_sreg5_origin_trailing_slash_wird_normalisiert(self):
+        """SREG-5: Trailing Slash in Origin wird entfernt (kein Doppel-Slash)."""
+        inv = [{"pfad": "/x/y", "label": "XY", "typ": "display"}]
+        result = formatiere_eintraege(inv, display_url_origin="https://hub.local/")
+        assert "https://hub.local/x/y" in result
+        assert "https://hub.local//x/y" not in result
+
+    def test_sreg7_pfad_fallback_ohne_origin(self):
+        """SREG-7: Ohne display_url_origin → Pfad-Fallback (kein tippbarer Link)."""
+        inv = [{"pfad": "/display/plan/woche", "label": "Wochenplan", "typ": "display"}]
+        result = formatiere_eintraege(inv)
+        assert "/display/plan/woche" in result
+        # Kein http(s)-Schema ohne Origin
+        assert "http" not in result
+
+    def test_sreg7_pfad_fallback_none_origin(self):
+        """SREG-7: Explizit None-Origin → Pfad-Fallback."""
+        inv = [{"pfad": "/x/y", "label": "XY", "typ": "display"}]
+        result = formatiere_eintraege(inv, display_url_origin=None)
+        assert "/x/y" in result
+        assert "http" not in result
+
 
 # ============================================================
 #  Tests: seiten_finden (Haupt-Funktion)
@@ -368,6 +398,39 @@ class TestSeitenFinden:
         antwort = tg.sent[0]["text"]
         assert "bearbeiten" in antwort.lower()
 
+    def test_sreg5_voller_link_mit_origin(self):
+        """SREG-5: display_url_origin → volle URLs in gesendeter Antwort."""
+        tg = FakeTelegram()
+        client = FakeSeitenClient(_inventar_einfach())
+        seiten_finden(
+            tg=tg,
+            chat_id=100,
+            from_user_id=42,
+            suchbegriff="",
+            seiten_client=client,
+            is_member_fn=_immer_mitglied,
+            display_url_origin="https://hub.local",
+        )
+        assert tg.sent
+        antwort = tg.sent[0]["text"]
+        assert "https://hub.local" in antwort
+
+    def test_sreg7_pfad_fallback_ohne_origin(self):
+        """SREG-7: Kein display_url_origin → Pfad-Fallback in Antwort."""
+        tg = FakeTelegram()
+        client = FakeSeitenClient(_inventar_einfach())
+        seiten_finden(
+            tg=tg,
+            chat_id=100,
+            from_user_id=42,
+            suchbegriff="",
+            seiten_client=client,
+            is_member_fn=_immer_mitglied,
+        )
+        assert tg.sent
+        antwort = tg.sent[0]["text"]
+        assert "http" not in antwort
+
 
 # ============================================================
 #  Tests: SeitenFindenTask
@@ -440,6 +503,33 @@ class TestSeitenFindenTask:
         # chat_id=None → abgelehnt
         assert "mitglied" in result.lower() or "abgelehnt" in result.lower() \
             or "Familien" in result
+
+    def test_sreg5_task_mit_origin_baut_volle_url(self):
+        """SREG-5/AC3: Task mit display_url_origin → volle URL in Antwort."""
+        tg = FakeTelegram()
+        client = FakeSeitenClient(_inventar_einfach())
+        task = SeitenFindenTask(tg=tg, seiten_client=client,
+                                is_member_fn=_immer_mitglied,
+                                display_url_origin="https://hub.local")
+        ctx = _make_turn_context()
+        task.run({}, ctx)
+        assert tg.sent
+        antwort = tg.sent[0]["text"]
+        assert "https://hub.local" in antwort
+
+    def test_sreg7_task_ohne_origin_pfad_fallback(self):
+        """SREG-7/AC3: Task ohne display_url_origin → Pfad-Fallback in Antwort."""
+        tg = FakeTelegram()
+        client = FakeSeitenClient(_inventar_einfach())
+        task = SeitenFindenTask(tg=tg, seiten_client=client,
+                                is_member_fn=_immer_mitglied)
+        ctx = _make_turn_context()
+        task.run({}, ctx)
+        assert tg.sent
+        antwort = tg.sent[0]["text"]
+        # Pfade erscheinen, aber kein http-Schema
+        assert "/display/" in antwort or "/" in antwort
+        assert "http" not in antwort
 
 
 # ============================================================

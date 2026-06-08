@@ -520,6 +520,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
         catalog.register(SeitenFindenTask(
             tg=tg,
             seiten_client=_sf_client,
-            is_member_fn=_sf_is_member))
+            is_member_fn=_sf_is_member,
+            display_url_origin=display_url_origin))
 
     return catalog
