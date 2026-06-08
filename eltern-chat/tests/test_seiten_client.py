@@ -22,8 +22,21 @@ from skills.seiten_client import PFAD_SEITEN, SeitenClient, SeitenClientError
 #  Transport-Stubs (CLIENT-1)
 # ============================================================
 
-def _transport_ok(eintraege):
-    """Stub: liefert HTTP 200 + JSON-Array."""
+def _transport_ok(eintraege, snapshot_pending=None):
+    """Stub: liefert HTTP 200 + echte SREG-3-Antwort-Form
+    `{"eintraege": [...], "snapshot_pending": [...]}` (Aggregator-Output)."""
+    payload = {
+        "eintraege": eintraege,
+        "snapshot_pending": list(snapshot_pending or []),
+    }
+    _body = json.dumps(payload).encode("utf-8")
+    def _t(method, path, body=None, content_type=None):
+        return 200, _body
+    return _t
+
+
+def _transport_ok_flat_list(eintraege):
+    """Defensive: hypothetische zukünftige flat-list-Form."""
     _body = json.dumps(eintraege).encode("utf-8")
     def _t(method, path, body=None, content_type=None):
         return 200, _body
@@ -52,7 +65,7 @@ def _transport_bad_json():
 
 
 def _transport_not_list():
-    """Stub: liefert HTTP 200 aber kein Array."""
+    """Stub: liefert HTTP 200 aber weder dict mit `eintraege` noch flach Liste."""
     def _t(method, path, body=None, content_type=None):
         return 200, json.dumps({"falsch": "kein-array"}).encode("utf-8")
     return _t
@@ -96,7 +109,8 @@ def test_transport_wird_aufgerufen():
     """CLIENT-1: der Transport-Stub wird aufgerufen, kein urllib.request."""
     aufrufe = []
     eintraege = [{"pfad": "/x", "label": "X", "typ": "display"}]
-    _body = json.dumps(eintraege).encode("utf-8")
+    payload = {"eintraege": eintraege, "snapshot_pending": []}
+    _body = json.dumps(payload).encode("utf-8")
 
     def _spy(method, path, body=None, content_type=None):
         aufrufe.append((method, path))
@@ -106,6 +120,32 @@ def test_transport_wird_aufgerufen():
     client.inventar()
     assert len(aufrufe) == 1
     assert aufrufe[0] == ("GET", PFAD_SEITEN)
+
+
+def test_inventar_packt_eintraege_aus_aggregator_envelope():
+    """#467 Production-Bug-Regress: SREG-3 liefert dict mit `eintraege` +
+    `snapshot_pending`; inventar() gibt nur die `eintraege`-Liste zurück,
+    ignoriert snapshot_pending."""
+    eintraege = [
+        {"pfad": "/display/plan/woche", "typ": "display"},
+        {"pfad": "/controller/app-panel/p1/bearbeiten", "typ": "eltern"},
+    ]
+    client = SeitenClient(
+        "http://127.0.0.1:5042",
+        transport=_transport_ok(eintraege, snapshot_pending=["pending-ref"]))
+    result = client.inventar()
+    assert result == eintraege  # snapshot_pending nicht im Output
+
+
+def test_inventar_akzeptiert_defensive_flat_list_form():
+    """Defensive: falls die Registry-Form je auf flache Liste wechselt,
+    bleibt der Client kompatibel (siehe inventar-Docstring)."""
+    eintraege = [{"pfad": "/x", "typ": "display"}]
+    client = SeitenClient(
+        "http://127.0.0.1:5042",
+        transport=_transport_ok_flat_list(eintraege))
+    result = client.inventar()
+    assert result == eintraege
 
 
 # ============================================================
@@ -137,7 +177,7 @@ def test_kein_json_wirft_seiten_client_error():
 
 
 def test_antwort_kein_array_wirft_seiten_client_error():
-    """Antwort ist ein Dict statt Array → SeitenClientError."""
+    """Antwort ist Dict OHNE `eintraege`-Schlüssel → SeitenClientError."""
     client = SeitenClient("http://127.0.0.1:5042",
                           transport=_transport_not_list())
     with pytest.raises(SeitenClientError, match="unerwartete Form"):

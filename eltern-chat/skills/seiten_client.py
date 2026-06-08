@@ -65,9 +65,15 @@ class SeitenClient:
         Schema-Verletzung wird `SeitenClientError` geworfen — der Aufrufer
         behandelt das ehrlich (EC-7, SREG-6).
 
+        Echte Antwort-Form von GET /api/v1/seiten (SREG-3 / aggregator.py):
+        `{"eintraege": [...], "snapshot_pending": [...]}`. Diese Methode
+        gibt nur den `eintraege`-Inhalt zurück; `snapshot_pending` ist
+        Debug-Info für den Aggregator-Status und gehört nicht in den
+        Skill-Output. (Production-Bug #467 nach T453-Merge.)
+
         Fehler-Pfade:
           - HTTP ≠ 200  — Registry-Fehler → SeitenClientError.
-          - Antwort kein JSON-Array / nicht parsbar → SeitenClientError.
+          - Antwort nicht parsbar / falsche Form → SeitenClientError.
           - Connection-Fehler / Timeout → SeitenClientError.
         """
         status, resp_bytes = self._call("GET", PFAD_SEITEN)
@@ -79,10 +85,15 @@ class SeitenClient:
         except (UnicodeDecodeError, json.JSONDecodeError) as e:
             raise SeitenClientError(
                 "Seiten-Registry: Antwort nicht parsebar (%s)" % e) from e
-        if not isinstance(data, list):
-            raise SeitenClientError(
-                "Seiten-Registry: Antwort hat unerwartete Form (%r)" % data)
-        return data
+        if isinstance(data, dict):
+            eintraege = data.get("eintraege")
+            if isinstance(eintraege, list):
+                return eintraege
+        if isinstance(data, list):
+            # Defensive: falls die Registry-Form je auf flat-List wechselt.
+            return data
+        raise SeitenClientError(
+            "Seiten-Registry: Antwort hat unerwartete Form (%r)" % data)
 
     # -- HTTP-Innerei -----------------------------------------------------
 
