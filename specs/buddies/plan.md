@@ -157,12 +157,13 @@ passt — ein generisches Fallback-Symbol. Ein Kind-Slot-Eintrag ist nie
 symbol-/typlos.
 
 Die Schlüsselwörter zur Aktivitäts-Erkennung und die zugehörigen Termin-Icons
-(PLAN-13) kommen aus **einer gemeinsamen Quelle**: `plan/aktivitaeten.py`
-(`AKTIVITAETEN` + `_ART_ZU_ICON`). Es gibt keine separate Keyword-Liste in
-`render.py` — beide Heuristiken ziehen aus demselben Katalog, damit sie nicht
-divergieren können.
+(PLAN-13) kommen aus **einer gemeinsamen Quelle**: dem Aktivitäts-Katalog in
+`plan.json` (Sektion `aktivitaeten`, siehe PLAN-28). `plan/aktivitaeten.py`
+trägt den V1-Default als CONFIG-4-Fallback (fehlt die Sektion, läuft die
+Familie-1-Bestückung unverändert). Beide Hälften — Erkennung und Termin-Icon —
+lesen aus derselben Quelle, damit sie nicht divergieren können.
 
-*Tickets:* #40, #308
+*Tickets:* #40, #308, #445
 
 ## 5. Termin-Leiste
 
@@ -438,6 +439,7 @@ Werte, die im Onboarding entstehen (heute `kalender_id`), setzt der Eltern-Chat
 |------------------------------|----------------------------------|--------------------------------|------------------------------------|
 | Slot-Definitionen            | die 7 Slots des Handoffs         | `slots`                        | n/a V1 (familienspezifisch hartcodiert, E-PLAN-8) |
 | Default-Verantwortlichkeiten | leer                             | `defaults`                     | n/a V1 (Familie trägt initial in Datei ein) |
+| Aktivitäts-Katalog           | 9 Einträge (V1-Default)          | `aktivitaeten`                 | n/a V1 (Familie editiert `plan.json` direkt; späterer Eltern-Chat-Skill möglich) |
 | Fenster Lese-Kind            | 7 Tage                           | `fenster_lesekind`             | n/a (Default reicht) |
 | Fenster Kleinkind            | 3 Tage                           | `fenster_kleinkind`            | n/a (Default reicht) |
 | Wochenstart                  | Montag (`0`)                     | `wochenstart`                  | n/a (Default reicht) |
@@ -650,10 +652,9 @@ Betriebs-Risiko, das das Veröffentlichen einmalig beseitigt.
 Der Plan-Buddy ist in V1 auf die Abläufe **einer** Familie zugeschnitten —
 zwei Kinder, abendliche Bringen-und-Ins-Bett-Slots, eine spezifische Liste
 von Kind-Aktivitäten. Diese familienspezifischen Inhalte leben absichtlich
-als Code-Konstanten: der Aktivitäts-Katalog in `plan/aktivitaeten.py`
-(`AKTIVITAETEN`), die Personen-Auflösung über Titel-Treffer in
-`plan/kalender.py` (PLAN-19), die abendliche Slot-Sequenz
-hinter E-PLAN-2. (Echte Morgen-/Abendablauf-*Routinen* — Reihenfolge, Abhaken,
+als Code-Konstanten: die Personen-Auflösung über Titel-Treffer in
+`plan/kalender.py` (PLAN-19) und die abendliche Slot-Sequenz hinter
+E-PLAN-2. (Echte Morgen-/Abendablauf-*Routinen* — Reihenfolge, Abhaken,
 Zeitlogik — sind **nicht** Plan-Buddy, sondern der Routine-Buddy
 (`routine.md`, #335); der Plan-Buddy trägt nur die Wochenübersicht und ihre
 kleine Variante.)
@@ -672,10 +673,29 @@ rechtfertigt.
 - Code-vs-Live-Drift zwischen zwei Familien wird zum wiederkehrenden
   Sync-Problem.
 
+**Korrektur 2026-06-08 — Aktivitäts-Katalog ist Daten, nicht Code.** Der
+Aktivitäts-Katalog (`AKTIVITAETEN` + `_ART_ZU_ICON` in `plan/aktivitaeten.py`)
+war ursprünglich Teil dieser Code-Liste. Er ist nach `plan.json` (Sektion
+`aktivitaeten`, siehe PLAN-12 und PLAN-28) ausgelagert worden, weil die zwei
+gekoppelten Strukturen den Drift-Trigger schon **innerhalb einer einzigen
+Familie** erfüllten: `plan/tests/test_plan.py:940` überspringt fehlende
+Icon-Zuordnungen stillschweigend, ein Familien-Edit nur in `AKTIVITAETEN`
+blieb lautlos inkonsistent zu `_ART_ZU_ICON`. Code-Default in
+`plan/aktivitaeten.py` bleibt als CONFIG-4-Fallback (V1-Familie läuft ohne
+Migration). Hinweis an automatische Reviews: ein Befund „Aktivitäts-Katalog
+ist familienspezifischer Code" bezieht sich auf den Stand vor 2026-06-08;
+nach der Umlagerung ist der Katalog Daten und allein **kein** Trigger für
+weitere Externalisierung. Begründung im Detail:
+`brainstorm/berater-runde/20260608-RATIFIZIERT-wd-e-plan-8-familien-katalog.md`.
+Slot-Sequenz und PLAN-19-Personen-Auflösung bleiben Code.
+
 **Verworfen:** jetzt eine Plan-Engine mit Aktivitäts-Katalog-DSL und
 Ablauf-Templates bauen. Wäre exakt die Vorrats-Generalisierung, die §6
 verbietet — und würde die V1-Liefermenge in eine offene Architektur-Frage
-zurückwerfen.
+zurückwerfen. (Die `plan.json`-Umlagerung des Aktivitäts-Katalogs ist
+**keine** DSL und **keine** Engine: dieselben vier Felder
+`art`/`label`/`keywords`/`icon` wie heute, nur als JSON-Liste statt als zwei
+Python-Konstanten.)
 
 Diese Entscheidung ergänzt E-PLAN-2: dort ist die **Slot-Struktur** Daten
 (sieben Slots als Config), hier sind die **Familien-Routinen** Code. Die
