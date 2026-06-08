@@ -38,7 +38,7 @@ import time
 import urllib.error
 import urllib.request
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template
 
 # Repo-Wurzel auf den Importpfad, damit `tools.configloader` (CONFIG-1),
 # `tools.logsetup` (LOG-4) und `seiten.aggregator` auch beim Direktstart
@@ -49,6 +49,7 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from seiten import aggregator  # noqa: E402
+from seiten import render  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
 
 # DCOMP-4: Dateirechte auf den Eigentümer beschränkt — analog PREG-4 / GER-4.
@@ -69,23 +70,34 @@ HTTP_TIMEOUT = 2.0
 # `configure()`. `inventar` hält das zuletzt gebaute Inventar in-memory als
 # Last-Known-Good-Basis (SREG-3) — die Wahrheit auf der Platte ist `inventar.json`.
 runtime = {
-    "root":          _REPO_ROOT,
-    "inventar_path": None,
-    "panel_url":     "http://127.0.0.1:5041",
-    "geraete_url":   "http://127.0.0.1:5040",
-    "ttl":           30,
-    "inventar":      None,
-    "gebaut_um":     0.0,
+    "root":              _REPO_ROOT,
+    "inventar_path":     None,
+    "panel_url":         "http://127.0.0.1:5041",
+    "geraete_url":       "http://127.0.0.1:5040",
+    "ttl":               30,
+    "inventar":          None,
+    "gebaut_um":         0.0,
+    # SREG-7: zwei Display-URL-Origins (Heim + Tailscale).
+    # Heim ist Pflicht fuer SREG-5-Link und SREG-12-Seite.
+    # Tailscale ist V1-Soll — fehlt, zeigt SREG-12 nur Heim + Banner.
+    "heim_origin":       "",
+    "tailscale_origin":  "",
 }
 
 
 def configure(root=None, inventar_path=None, panel_url=None,
-              geraete_url=None, ttl=None):
-    """Setzt Aufbau-Wurzel, Inventar-Pfad, Upstream-Origins und TTL (SREG-3).
+              geraete_url=None, ttl=None,
+              heim_origin=None, tailscale_origin=None):
+    """Setzt Aufbau-Wurzel, Inventar-Pfad, Upstream-Origins, TTL und
+    Display-URL-Origins (SREG-3, SREG-7).
 
     Wird `inventar_path` gesetzt, persistiert jeder Rebuild atomar dorthin und
     der Request liest von dort. Ohne `inventar_path` (Test-Modus) bleibt das
     in-memory-`inventar` die Quelle, ohne Disk-Schreiben.
+
+    `heim_origin` und `tailscale_origin` werden fuer die SREG-12-Seite
+    benoetigt (render.baue_layout). Leer = Wert bleibt unpetraendert (None
+    ueberschreibt auf leeren String — explizit loeschbar).
     """
     if root is not None:
         runtime["root"] = root
@@ -96,6 +108,10 @@ def configure(root=None, inventar_path=None, panel_url=None,
         runtime["geraete_url"] = geraete_url
     if ttl is not None:
         runtime["ttl"] = ttl
+    if heim_origin is not None:
+        runtime["heim_origin"] = heim_origin
+    if tailscale_origin is not None:
+        runtime["tailscale_origin"] = tailscale_origin
     runtime["inventar"] = None
     runtime["gebaut_um"] = 0.0
 
@@ -266,7 +282,7 @@ def _aktuelles_inventar():
 #  Flask-App
 # ============================================================
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder="templates")
 
 
 @app.route("/api/v1/seiten", methods=["GET"])
@@ -279,6 +295,28 @@ def get_seiten():
     statt als gekürzte Liste.
     """
     return jsonify(_aktuelles_inventar())
+
+
+@app.route("/api/v1/seiten/uebersicht", methods=["GET"])
+def get_seiten_uebersicht():
+    """SREG-12: gerenderte Eltern-Uebersichts-Seite (HTML).
+
+    Baut die V2-Layout-Datenstruktur via render.baue_layout und liefert das
+    gerendertes HTML (Jinja2, Template uebersicht.html). Origins kommen aus dem
+    runtime-Dict (SREG-7): ENV-Overrides SEITEN_HEIM_ORIGIN /
+    SEITEN_TAILSCALE_ORIGIN oder CLI-Flags --seiten-heim-origin /
+    --seiten-tailscale-origin, gesetzt beim Start (resolved_config).
+
+    Fehlende Tailscale-Origin loest einen Banner-Hinweis auf der Seite aus
+    (tailscale_banner=True via render.baue_layout — keine leere Seite).
+    """
+    inventar = _aktuelles_inventar()
+    layout = render.baue_layout(
+        inventar,
+        heim_origin=runtime["heim_origin"],
+        tailscale_origin=runtime["tailscale_origin"],
+    )
+    return render_template("uebersicht.html", **layout)
 
 
 # ============================================================
@@ -313,6 +351,13 @@ def parse_args(argv):
                    help="DEBUG | INFO | WARNING | ERROR")
     p.add_argument("--cert", help="TLS-Cert (optional, für HTTPS-Modus)")
     p.add_argument("--key",  help="TLS-Key (optional, für HTTPS-Modus)")
+    # SREG-7: Display-URL-Origins für die SREG-12-Übersichts-Seite.
+    # Können auch via ENV gesetzt werden (SEITEN_HEIM_ORIGIN /
+    # SEITEN_TAILSCALE_ORIGIN) — CLI-Flag schlägt ENV schlägt Default.
+    p.add_argument("--seiten-heim-origin", dest="seiten_heim_origin",
+                   help="Heimnetz-Origin für SREG-12-Seite (SREG-7, z.B. https://xbuddy-hub.local:8443)")
+    p.add_argument("--seiten-tailscale-origin", dest="seiten_tailscale_origin",
+                   help="Tailscale-Origin für SREG-12-Seite (SREG-7, leer = Banner)")
     return p.parse_args(argv)
 
 
@@ -340,6 +385,15 @@ def resolved_config(args):
         cfg["listen_port"] = args.port
     if args.log_level:
         cfg["log_level"] = args.log_level
+    # SREG-7: Display-URL-Origins für die SREG-12-Seite.
+    # CLI-Flag schlägt ENV schlägt Default (leer). Leerer Tailscale-Origin
+    # ist zulässig → render.baue_layout setzt tailscale_banner=True.
+    cfg["heim_origin"] = (
+        args.seiten_heim_origin
+        or os.environ.get("SEITEN_HEIM_ORIGIN", ""))
+    cfg["tailscale_origin"] = (
+        args.seiten_tailscale_origin
+        or os.environ.get("SEITEN_TAILSCALE_ORIGIN", ""))
     return cfg
 
 
@@ -350,7 +404,15 @@ def main(argv=None):
 
     configure(root=cfg["root"], inventar_path=cfg["inventar"],
               panel_url=cfg["panel_url"], geraete_url=cfg["geraete_url"],
-              ttl=cfg["ttl"])
+              ttl=cfg["ttl"],
+              heim_origin=cfg["heim_origin"],
+              tailscale_origin=cfg["tailscale_origin"])
+    if not cfg["tailscale_origin"]:
+        # SREG-7 V1-Soll: Tailscale leer → SREG-12 zeigt Banner statt
+        # zweiter URL-Spalte. Warnung im Log, damit Deploy-Tracking sieht,
+        # ob die Per-Instanz-Datei den Wert noch ergaenzen muss.
+        logging.warning(
+            "SEITEN_TAILSCALE_ORIGIN leer — SREG-12 zeigt nur Heim-Spalte mit Banner.")
 
     # Kaltstart-Aufbau (SREG-3): das Inventar sofort einmal bauen, damit der
     # erste Request schon eine vollständige Manifest-Sorte aus der Platte sieht.
