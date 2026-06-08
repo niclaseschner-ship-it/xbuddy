@@ -3,10 +3,12 @@
 Die **eltern-seitige Settings-Seite**, mit der Eltern die Kacheln **einer
 Panel-Instanz** verschieben, ausblenden, entfernen und hinzufügen — die
 Home-Screen-Settings-Metapher vom Handy. Der Eltern-Chat liefert auf Nachfrage
-einen **Link** zu dieser Seite (kein mehrstufiger Chat-Dialog). Folgt dem
-Muster RAT-2/#328 (Garderoben-Editor): der **Daten-Eigentümer-Service** (hier
-der panel-Service, :5041) liefert seine eigene Editor-Seite, die **zeigt UND
-editiert**; Auth = Heimnetz/Tailscale-Grenze.
+einen **Link** auf die System-Übersichtsseite (SREG-12), auf der **je Panel
+direkt eine Editor-Karte mit kopierbarem Link** an seinem gepaarten Display
+sichtbar ist — kein mehrstufiger Chat-Dialog. Folgt dem Muster RAT-2/#328
+(Garderoben-Editor): der **Daten-Eigentümer-Service** (hier der panel-Service,
+:5041) liefert seine eigene Editor-Seite, die **zeigt UND editiert**; Auth =
+Heimnetz/Tailscale-Grenze.
 
 Diese Fähigkeit löst **OPEN-PREG-A** (`panel-registry.md`) auf — den dort
 vorgesehenen „späteren Tile-Schreiber". Sie ändert ausschließlich `tiles`, nie
@@ -47,9 +49,14 @@ abgeleiteten URL** ausgeliefert: `/controller/app-panel/<panel_id>/bearbeiten`
 vom Router zum panel-Service proxyt). Die URL ist stabil und direkt aufrufbar.
 
 Sie ist über die System-weite Seiten-Registry (#347, SREG) auffindbar, **je
-Panel-Instanz ein eigener Editor-Link**. Der Eltern-Chat liefert den Link auf
-Nachfrage über den `seiten_finden`-Skill (SREG-6) — er nennt das benannte Panel,
-nicht einen generischen Editor.
+Panel-Instanz ein eigener Editor-Link**. Der Weg zum Link für Eltern: der
+Eltern-Chat-Skill `seiten_uebersicht` (SREG-5, Pivot 2026-06-07) liefert auf
+Nachfrage einen Link zur Übersichtsseite (SREG-12); dort steht je Panel-
+Instanz eine Editor-Karte **direkt neben dem gepaarten Display in der
+Hero-Sektion „Geräte-Paare"** (SREG-12-Layout), mit Copy-Button für die volle
+Editor-URL (Heimnetz/Tailscale). Der Chat selbst macht **kein** Pro-Panel-
+Matching mehr — die Pro-Panel-Auflösung passiert auf der Übersichtsseite
+(Volltextsuche gegen `label`/`synonyme`), nicht im Chat.
 
 *Wenn* eine Familie mehrere Panel-Instanzen hat (PREG-2), *dann* hat **jede**
 Instanz ihre eigene, aus ihrer `panel_id` abgeleitete Editor-URL, und die
