@@ -11,7 +11,8 @@
         "morgen"
       ],
       "zeigt": "Die tägliche Morgen-Checkliste mit ablaufender Uhr.",
-      "zielgruppe": "kind"
+      "zielgruppe": "kind",
+      "icons": ["arasaac/7152.png"]
     }
   ]
 }
