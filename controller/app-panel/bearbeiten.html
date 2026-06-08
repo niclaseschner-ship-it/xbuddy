@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<!-- PBE-1: viewport-fit=cover aktiviert env(safe-area-inset-top) am iPhone-Notch. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#47503C">
+<title>XBuddy · Panel bearbeiten</title>
+<!-- E-PANEL-6 / DTOK-3 — geteilter Token-Strang (same-origin via Router). -->
+<link rel="stylesheet" href="/display/_shared/design/tokens.css">
+<link rel="stylesheet" href="./bearbeiten.css">
+</head>
+<!-- PBE-1: Panel-Identität wird vom panel-Service beim Ausliefern in den
+     <body>-Tag als data-panel-id geschrieben — kein zweiter Roundtrip. -->
+<body class="xb" data-stage="reader">
+  <header class="editor-head">
+    <h1 class="editor-title">Panel bearbeiten</h1>
+    <div class="editor-actions">
+      <button type="button" id="btn-discard" class="btn btn-secondary" disabled>Verwerfen</button>
+      <button type="button" id="btn-save" class="btn btn-primary" disabled>Speichern</button>
+    </div>
+  </header>
+
+  <div id="status" class="status hidden" role="status" aria-live="polite"></div>
+  <div id="error" class="error hidden" role="alert"></div>
+
+  <main class="editor-main">
+    <section class="tiles-section">
+      <h2 class="section-title">Kacheln</h2>
+      <ol id="tile-list" class="tile-list" aria-label="Kachel-Liste in Anzeige-Reihenfolge"></ol>
+      <p id="empty-hint" class="empty-hint hidden">
+        Keine Kacheln. Tippe „Hinzufügen", um eine Kachel aus der Seiten-Registry zu wählen.
+      </p>
+      <div class="add-row">
+        <button type="button" id="btn-add" class="btn btn-add">+ Hinzufügen</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- PBE-7: Add-Dialog — overlay-Picker aus /api/v1/seiten (Sorte a). -->
+  <div id="add-dialog" class="dialog hidden" role="dialog" aria-modal="true" aria-labelledby="add-dialog-title">
+    <div class="dialog-body">
+      <header class="dialog-head">
+        <h2 id="add-dialog-title" class="dialog-title">Kachel hinzufügen</h2>
+        <button type="button" id="btn-add-cancel" class="btn btn-secondary">Abbrechen</button>
+      </header>
+      <ul id="add-list" class="add-list" aria-label="Verfügbare Display-Views"></ul>
+      <p id="add-empty" class="empty-hint hidden">
+        Keine Display-Views in der Seiten-Registry verfügbar.
+      </p>
+    </div>
+  </div>
+
+  <script src="./bearbeiten.js"></script>
+</body>
+</html>
