@@ -601,18 +601,34 @@ def test_ROU_30_nonexistent_asset_returns_404(client_with_routing):
 
 @pytest.fixture
 def icon_root_suche(tmp_path):
-    """icon-root mit pictogram_cache.json und zwei von drei IDs als PNG.
+    """icon-root mit pictogram_cache.json; selektiv vorhandene PNGs.
 
-    Cache: {'hund': 101, 'hunde': 101, 'katze': 202, 'tier': 303}
-    PNGs: 101.png und 202.png vorhanden; 303.png fehlt absichtlich (AC4).
+    Cache:
+      'hund' → 101, 'hunde' → 101     (hund-Gruppe, PNG vorhanden)
+      'katze' → 202                    (eigene Gruppe, PNG vorhanden)
+      'tier303' → 303                  (kein PNG — AC4: Skip; teilt 'tier'-Substring)
+      'tier' → 401, 'tiere' → 402,
+      'haustier' → 403,
+      'lieblingstier' → 404            (alle mit 'tier'-Substring, PNG vorhanden)
+
+    PNGs: 101, 202, 401, 402, 403, 404 vorhanden; 303 fehlt absichtlich (AC4).
     """
     root = tmp_path / 'icons_suche'
     arasaac = root / 'arasaac'
     arasaac.mkdir(parents=True)
-    (arasaac / '101.png').write_bytes(_TINY_PNG)
-    (arasaac / '202.png').write_bytes(_TINY_PNG)
+    for icon_id in (101, 202, 401, 402, 403, 404):
+        (arasaac / f'{icon_id}.png').write_bytes(_TINY_PNG)
     # 303.png bewusst nicht anlegen
-    cache = {'hund': 101, 'hunde': 101, 'katze': 202, 'tier': 303}
+    cache = {
+        'hund': 101,
+        'hunde': 101,
+        'katze': 202,
+        'tier303': 303,
+        'tier': 401,
+        'tiere': 402,
+        'haustier': 403,
+        'lieblingstier': 404,
+    }
     (root / 'pictogram_cache.json').write_text(
         json.dumps(cache), encoding='utf-8'
     )
@@ -654,7 +670,7 @@ def test_ROU_31_suche_missing_q_returns_400(client_with_routing, icon_root_suche
 
 
 def test_ROU_31_suche_filters_ids_without_local_png(client_with_routing, icon_root_suche):
-    """AC4: ID 303 (tier) hat kein PNG → darf nicht in der Antwort erscheinen."""
+    """AC4: ID 303 (tier303) hat kein PNG → darf nicht in der Antwort erscheinen."""
     r = client_with_routing.get('/api/v1/icons/suche?q=tier&max=10')
     assert r.status_code == 200
     data = r.get_json()
@@ -679,14 +695,24 @@ def test_ROU_31_suche_dedupes_and_respects_max(client_with_routing, icon_root_su
 
 
 def test_ROU_31_suche_default_max_3_no_param(client_with_routing, icon_root_suche):
-    """AC5: GET /api/v1/icons/suche?q=<term> ohne max-Query → höchstens 3 Treffer (Default)."""
-    # Fixture hat: 'hund' → ID 101, 'hunde' → ID 101, 'katze' → ID 202, 'tier' → ID 303 (kein PNG)
-    # Mit Teilwort 'a' treffen wir mindestens: katze (202). Wenn wir ein Setup mit mehr als 3
-    # hätten, würde max=3 default greifen. Hier prüfen wir einfach: ohne max-Param ≤ 3.
-    r = client_with_routing.get('/api/v1/icons/suche?q=a')
+    """AC5: GET /api/v1/icons/suche?q=tier ohne max-Query → genau 3 Treffer (Default-Cap).
+
+    Fixture hat 4 IDs mit 'tier'-Substring und PNG (401, 402, 403, 404) plus 303
+    ohne PNG (wird wegen fehlendem PNG geskippt). Ohne max → Default 3 klemmt scharf.
+    Mutation Default 3→10 würde diesen Test brechen.
+    """
+    r = client_with_routing.get('/api/v1/icons/suche?q=tier')
     assert r.status_code == 200
     data = r.get_json()
-    assert len(data) <= 3, f'Erwartet höchstens 3 Treffer ohne max-Param, got {len(data)}'
+    assert len(data) == 3, f'Default-Cap 3 erwartet, bekam {len(data)}: {data}'
+
+
+def test_ROU_31_suche_explicit_max_10_no_cap(client_with_routing, icon_root_suche):
+    """AC5 Gegenprobe: max=10 → kein Default-Cap, alle 4 tier-IDs mit PNG erscheinen."""
+    r = client_with_routing.get('/api/v1/icons/suche?q=tier&max=10')
+    assert r.status_code == 200
+    data = r.get_json()
+    assert len(data) >= 4, f'Erwartet >=4 Treffer mit max=10, bekam {len(data)}: {data}'
 
 
 def test_ROU_15_controller_dir_env_var_resolves(monkeypatch, tmp_path):
