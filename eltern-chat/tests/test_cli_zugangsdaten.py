@@ -63,6 +63,7 @@ def _make_cfg():
     cfg.routine_origin_url = "http://127.0.0.1:5050"   # RZS-6 / #343
     cfg.icon_origin_url = "http://127.0.0.1:5000"      # EC-15 / #443
     cfg.photo_origin_url = "http://127.0.0.1:5070"     # FSE-7 / #393
+    cfg.seiten_origin_url = "http://127.0.0.1:5042"    # SREG-6 / #453
     cfg.display_url_origin = "https://example.test"
     cfg.provider_api_key = None
     cfg.provider = "anthropic"

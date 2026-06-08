@@ -83,6 +83,12 @@ DEFAULTS = {
     # passt zum Pi-Setup (PORT-2 Photo-Buddy auf 5051). Leer ⇒ Aufgabe NICHT
     # im Katalog (FSE-8 AND-Guard mit family_group_chat_id_getter).
     "photo_origin_url": "http://127.0.0.1:5051",
+    # SREG-6 / #453: Origin der Seiten-Registry, über die der SeitenFindenTask
+    # das aggregierte Seiten-Inventar liest (`GET /api/v1/seiten` SREG-3).
+    # Per-Instanz-Wert; Default passt zum Pi-Setup (PORT-2 Seiten-Registry
+    # auf 5042). Leer ⇒ Aufgabe NICHT im Katalog (SREG-6 AND-Guard mit
+    # family_group_chat_id_getter).
+    "seiten_origin_url": "http://127.0.0.1:5042",
     # GAA-3.7: HTTPS-Origin, unter der die ausgelieferten Display-URLs
     # erreichbar sind (z. B. "https://xbuddy-hub.local:8443"). Per-Instanz-
     # Wert. Leer (Default) → Bot gibt nur den Pfad `/display/<id>` aus —
@@ -127,6 +133,7 @@ class Config:
                  ca_pem_path, familie_origin_url, geraete_origin_url,
                  panel_origin_url, plan_origin_url, display_url_origin,
                  routine_origin_url, icon_origin_url, photo_origin_url,
+                 seiten_origin_url,
                  log_level):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
@@ -144,6 +151,7 @@ class Config:
         self.routine_origin_url = routine_origin_url   # RZS-6 / #343: Origin des Routine-Buddys (ROUTINE-14)
         self.icon_origin_url = icon_origin_url         # EC-15 / #443: Origin des Icon-Routers (ICONS-7)
         self.photo_origin_url = photo_origin_url       # FSE-7 / #393: Origin des Photo-Buddys (PHOTO-13/PHOTO-16)
+        self.seiten_origin_url = seiten_origin_url     # SREG-6 / #453: Origin der Seiten-Registry (SREG-3)
         self.log_level = log_level                 # LOG-4 (#166): Level-String für tools.logsetup
 
 
@@ -246,5 +254,6 @@ def resolve(config_path, zd=None):
         routine_origin_url=str(values["routine_origin_url"]).strip().rstrip("/"),
         icon_origin_url=str(values["icon_origin_url"]).strip().rstrip("/"),
         photo_origin_url=str(values["photo_origin_url"]).strip().rstrip("/"),
+        seiten_origin_url=str(values["seiten_origin_url"]).strip().rstrip("/"),
         log_level=str(values["log_level"]).strip(),
     )
