@@ -48,8 +48,7 @@ _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from seiten import aggregator  # noqa: E402
-from seiten import render  # noqa: E402
+from seiten import aggregator, render  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
 
 # DCOMP-4: Dateirechte auf den Eigentümer beschränkt — analog PREG-4 / GER-4.
