@@ -11,8 +11,10 @@
 <link rel="stylesheet" href="./bearbeiten.css">
 </head>
 <!-- PBE-1: Panel-Identität wird vom panel-Service beim Ausliefern in den
-     <body>-Tag als data-panel-id geschrieben — kein zweiter Roundtrip. -->
-<body class="xb" data-stage="reader">
+     body-Tag geschrieben — kein zweiter Roundtrip. Das Token __PANEL_ID__ wird
+     serverseitig durch die echte panel_id ersetzt (Token-Substitution, damit
+     dieser Kommentar nicht versehentlich gematcht wird). -->
+<body class="xb" data-stage="reader" data-panel-id="__PANEL_ID__">
   <header class="editor-head">
     <h1 class="editor-title">Panel bearbeiten</h1>
     <div class="editor-actions">

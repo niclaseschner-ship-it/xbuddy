@@ -3,18 +3,21 @@
 Abgedeckt:
   test_pbe1_editor_route_returns_html             — GET /controller/app-panel/<id>/bearbeiten → 200 + HTML
   test_pbe1_editor_route_embeds_panel_id          — data-panel-id wird in HTML injiziert (analog PANEL-2)
+  test_pbe1_editor_route_panel_id_lands_on_real_body_tag — Anker-Pattern: data-panel-id steht am ECHTEN <body>-Tag, nicht im Kommentar (T452-S2-Regress)
   test_pbe1_editor_route_unknown_panel_returns_404 — 404 bei unbekannter panel_id
   test_pbe1_editor_route_serves_bearbeiten_js     — Bundle-JS wird ausgeliefert
   test_pbe1_editor_route_serves_bearbeiten_css    — Bundle-CSS wird ausgeliefert
   test_pbe1_editor_route_no_auth_layer            — PBE-3: keine zusätzliche Auth-Schicht in der Route
   test_pbe1_html_references_bundle_assets          — HTML lädt bearbeiten.js + bearbeiten.css
   test_pbe1_html_has_safe_area_viewport            — PBE-1 viewport-fit=cover + safe-area-inset-top im CSS
+  test_pbe1_html_carries_panel_id_token            — HTML-Quelle trägt das Token __PANEL_ID__ am echten body-Tag (Substitutions-Anker)
 
 Lauf: python3 -m pytest panel/tests/ -v
 """
 
 import json
 import os
+import re
 import sys
 
 import pytest
@@ -102,6 +105,41 @@ def test_pbe1_editor_route_embeds_panel_id(editor_client):
         "<body> muss data-panel-id='<id>' tragen (bekommen: %r)" % body[:500]
 
 
+def test_pbe1_editor_route_panel_id_lands_on_real_body_tag(editor_client):
+    """T452-S2 / AC2 (Regress-Anker): die `data-panel-id`-Substitution muss am
+    ECHTEN <body>-Tag landen — nicht in einem HTML-Kommentar.
+
+    Vorher matchte `html.replace('<body>', ...)` das erste `<body>`-Vorkommen,
+    das im HTML-Kommentar steht (`bearbeiten.html` Z. 13-14). Das echte
+    `<body class="xb" data-stage="reader">` blieb unsubstituiert; im Browser
+    war `document.body.dataset.panelId` undefined → ALLE Fetches gingen an
+    `/api/v1/panels/undefined/...`.
+
+    Anker-Pattern (Regex, kein Substring-Suche im Volltext): das ECHTE
+    body-Tag (das mit `class=` und/oder `data-stage=`) muss `data-panel-id`
+    tragen.
+    """
+    r = editor_client.get("/controller/app-panel/kueche-01/bearbeiten")
+    assert r.status_code == 200
+    body = r.get_data(as_text=True)
+    # Anker: ein <body>-Tag, das (a) NICHT in einem Kommentar steht (Regex
+    # akzeptiert nur ein body-Tag, das auch `class="xb"` oder `data-stage` trägt
+    # — Klassen/Attribute des echten body-Tags) und (b) `data-panel-id="<id>"`
+    # mitbringt. Das stellt sicher, dass nicht nur ein Kommentar substituiert
+    # wurde.
+    anker = re.compile(
+        r'<body\b[^>]*\b(?:class="xb"|data-stage="reader")[^>]*'
+        r'data-panel-id="kueche-01"[^>]*>',
+        re.IGNORECASE)
+    assert anker.search(body), (
+        "T452-S2: data-panel-id muss am ECHTEN <body>-Tag stehen, nicht im "
+        "Kommentar. Body (Auszug): %r" % body[:800])
+    # Negativ-Probe: Token `__PANEL_ID__` darf NICHT mehr im Output stehen —
+    # sonst hat die Substitution gar nicht gegriffen.
+    assert "__PANEL_ID__" not in body, \
+        "T452-S2: Token __PANEL_ID__ muss durch die echte panel_id ersetzt sein"
+
+
 def test_pbe1_editor_route_unknown_panel_returns_404(editor_client):
     """PBE-1: Eine unbekannte panel_id darf keine Editor-Seite bekommen —
     die Seite ist an die `panel_id` gebunden."""
@@ -158,6 +196,25 @@ def test_pbe1_html_references_bundle_assets():
         html = f.read()
     assert "bearbeiten.js" in html, "HTML muss bearbeiten.js laden"
     assert "bearbeiten.css" in html, "HTML muss bearbeiten.css laden"
+
+
+def test_pbe1_html_carries_panel_id_token_on_real_body():
+    """T452-S2 / AC1+AC2 (Substitutions-Anker): bearbeiten.html muss das
+    Token `__PANEL_ID__` als `data-panel-id`-Wert am ECHTEN <body>-Tag tragen
+    — nicht als Kommentar-Stub. Der panel-Service ersetzt genau dieses Token
+    durch die `panel_id`; ein Substring-Match auf `<body>` würde sonst auch im
+    HTML-Kommentar feuern (siehe T452-S1-Bug)."""
+    with open(os.path.join(_BEARBEITEN_DIR, "bearbeiten.html"),
+              encoding="utf-8") as f:
+        html = f.read()
+    # Anker: echtes body-Tag mit Klassen/data-stage UND data-panel-id-Token.
+    anker = re.compile(
+        r'<body\b[^>]*\b(?:class="xb"|data-stage="reader")[^>]*'
+        r'data-panel-id="__PANEL_ID__"[^>]*>',
+        re.IGNORECASE)
+    assert anker.search(html), (
+        "T452-S2: bearbeiten.html muss `data-panel-id=\"__PANEL_ID__\"` am "
+        "echten body-Tag tragen — als Substitutions-Token. HTML: %r" % html)
 
 
 def test_pbe1_html_has_safe_area_viewport():
