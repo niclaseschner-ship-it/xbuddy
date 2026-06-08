@@ -195,8 +195,8 @@
       color: var(--accent);
       text-decoration: underline;
       overflow-wrap: anywhere;
-      /* SREG-12: Long-Press muss nativen Browser-Kontextmenü "Link kopieren"
-         funktionieren — KEIN pointer-events:none / user-select:none. */
+      /* SREG-12: Long-Press am Handy fuer Browser-Pfad "Link kopieren" muss
+         funktionieren — daher KEINE Klick-/Selektion-Blockaden auf Link-Inhalten. */
     }
     .copy-btn {
       flex: 0 0 auto;
@@ -305,6 +305,40 @@
     <button type="button" class="typ-chip" data-typ="display-client" aria-pressed="false">Displays</button>
   </nav>
 
+  {# Macros für Karten — Jinja2 (vor erster Verwendung definiert) #}
+  {% macro kartensuchtext(k) %}{{ (k.label or "") }} {{ (k.zeigt or "") }} {{ (k.synonyme|join(" ") if k.synonyme else "") }} {{ (k.app or "") }}{% endmacro %}
+
+  {% macro render_karte(k, kompakt=false) %}
+    <div class="karte{% if k.variante %} variante{% endif %}"
+         data-karten-typ="{{ k.typ }}"
+         data-suchtext="{{ kartensuchtext(k) }}">
+      <header>
+        <img class="icon" src="{{ k.icon }}" alt="" loading="lazy">
+        <span class="label">{{ k.label }}{% if k.variante %} <em>(Variante)</em>{% endif %}</span>
+        <span class="typ-badge">{{ k.typ }}</span>
+      </header>
+      {% if k.zeigt and not kompakt %}
+        <p class="zeigt">{{ k.zeigt }}</p>
+      {% endif %}
+      <div class="urls">
+        {% if k.urls.heim %}
+          <div class="url-row">
+            <span class="url-label">Heim:</span>
+            <a class="url-link" href="{{ k.urls.heim }}">{{ k.urls.heim }}</a>
+            <button type="button" class="copy-btn" data-copy="{{ k.urls.heim }}">📋</button>
+          </div>
+        {% endif %}
+        {% if k.urls.tailscale %}
+          <div class="url-row">
+            <span class="url-label">Tailscale:</span>
+            <a class="url-link" href="{{ k.urls.tailscale }}">{{ k.urls.tailscale }}</a>
+            <button type="button" class="copy-btn" data-copy="{{ k.urls.tailscale }}">📋</button>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  {% endmacro %}
+
   <main>
     {# Hero-Sektion „Geräte-Paare" — Box pro Paar #}
     <section class="sektion" data-sektion="hero">
@@ -361,40 +395,6 @@
   </main>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-
-  {# Macros für Karten — Jinja2 inline #}
-  {% macro render_karte(k, kompakt=false) %}
-    <div class="karte{% if k.variante %} variante{% endif %}"
-         data-karten-typ="{{ k.typ }}"
-         data-suchtext="{{ kartensuchtext(k) }}">
-      <header>
-        <img class="icon" src="{{ k.icon }}" alt="" loading="lazy">
-        <span class="label">{{ k.label }}{% if k.variante %} <em>(Variante)</em>{% endif %}</span>
-        <span class="typ-badge">{{ k.typ }}</span>
-      </header>
-      {% if k.zeigt and not kompakt %}
-        <p class="zeigt">{{ k.zeigt }}</p>
-      {% endif %}
-      <div class="urls">
-        {% if k.urls.heim %}
-          <div class="url-row">
-            <span class="url-label">Heim:</span>
-            <a class="url-link" href="{{ k.urls.heim }}">{{ k.urls.heim }}</a>
-            <button type="button" class="copy-btn" data-copy="{{ k.urls.heim }}">📋</button>
-          </div>
-        {% endif %}
-        {% if k.urls.tailscale %}
-          <div class="url-row">
-            <span class="url-label">Tailscale:</span>
-            <a class="url-link" href="{{ k.urls.tailscale }}">{{ k.urls.tailscale }}</a>
-            <button type="button" class="copy-btn" data-copy="{{ k.urls.tailscale }}">📋</button>
-          </div>
-        {% endif %}
-      </div>
-    </div>
-  {% endmacro %}
-
-  {% macro kartensuchtext(k) %}{{ (k.label or "") }} {{ (k.zeigt or "") }} {{ (k.synonyme|join(" ") if k.synonyme else "") }} {{ (k.app or "") }}{% endmacro %}
 
   <script>
     // SREG-12 clientseitige Volltextsuche + Typ-Filter.

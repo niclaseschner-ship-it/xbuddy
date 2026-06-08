@@ -82,10 +82,10 @@ def _karte_basis(eintrag, heim_origin, tailscale_origin):
     icons = eintrag.get("icons") or []
     # SREG-12 Icon-Fallback: nur Sorte a traegt icons[], Sorten b/c/d/e
     # bekommen ein Default-Piktogramm aus /static/icons/<typ>.png.
-    if icons:
-        icon = "/display/_shared/icons/" + icons[0]
-    else:
-        icon = _FALLBACK_ICON.get(typ, _FALLBACK_ICON[TYP_ELTERN])
+    icon = (
+        "/display/_shared/icons/" + icons[0] if icons
+        else _FALLBACK_ICON.get(typ, _FALLBACK_ICON[TYP_ELTERN])
+    )
     return {
         "key": eintrag.get("key", ""),
         "label": eintrag.get("label", ""),
