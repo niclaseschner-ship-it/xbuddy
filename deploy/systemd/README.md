@@ -43,6 +43,7 @@ Die `*.service`-Dateien enthalten Per-Instanz-Werte als Platzhalter im Format
 | `__XBUDDY_HOME__` | Home-Verzeichnis dieses Users (`$HOME`). | `/home/buddy` |
 | `__XBUDDY_REPO__` | Pfad zum gecheckten xbuddy-Repo auf der Instanz. | `/home/buddy/repos/xbuddy` |
 | `__XBUDDY_PYTHON__` | Python-Interpreter mit installierten Repo-Abhängigkeiten. | `/home/buddy/apps/venv/bin/python` |
+| `__XBUDDY_DATA__` | Wurzel der Per-Instanz-Daten außerhalb des Checkouts (SVC-5). | `/home/buddy/xbuddy-data` |
 
 Die `__…__`-Platzhalter erzwingen, dass nichts versehentlich vor dem `cp`
 als „passt schon" durchgeht — wer einen Service-File mit `__XBUDDY_REPO__`
@@ -90,6 +91,7 @@ Die übrigen Services haben keine `EnvironmentFile`-Abhängigkeit.
        -e 's|__XBUDDY_HOME__|/home/buddy|g' \
        -e 's|__XBUDDY_REPO__|/home/buddy/repos/xbuddy|g' \
        -e 's|__XBUDDY_PYTHON__|/home/buddy/apps/venv/bin/python|g' \
+       -e 's|__XBUDDY_DATA__|/home/buddy/xbuddy-data|g' \
        "${SVC_SRC[$svc]}" \
        | sudo tee "/etc/systemd/system/${svc}.service" >/dev/null
    done
