@@ -6,6 +6,7 @@ Lauf: python3 -m pytest router/tests/ -v
 import json
 import os
 import sys
+import urllib.error
 
 import pytest
 
@@ -2158,3 +2159,69 @@ def test_T459_existing_tiles_json_proxy_still_works(client_with_panels, monkeypa
     r = client_with_panels.get('/controller/app-panel/kueche/tiles.json')
     assert r.status_code == 200
     assert r.data == payload
+
+
+# ---------------------------------------------------------------------------
+#  T459-S2 — urllib-Schicht direkt testen (kein Funktions-Stub)
+#  Analog ROU-27-Pattern: monkeypatch auf router_main.urllib.request.urlopen
+# ---------------------------------------------------------------------------
+
+def test_panel_bearbeiten_proxy_via_urllib_happy_path(client_with_panels, monkeypatch):
+    """AC1/T459-S2: urllib.request.urlopen wird gecalled und liefert
+    Editor-HTML — Router antwortet 200 text/html mit dem korrekten Body.
+    Prüft die echte urllib-Naht, nicht den _proxy_panel_bearbeiten-Stub."""
+    html_body = b'<html><body>Editor-Seite</body></html>'
+
+    class FakeResp:
+        status = 200
+        def read(self): return html_body
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+
+    def fake_urlopen(req, timeout=None):
+        assert 'bearbeiten' in req.full_url
+        return FakeResp()
+
+    monkeypatch.setattr(router_main.urllib.request, 'urlopen', fake_urlopen)
+    r = client_with_panels.get('/controller/app-panel/kueche/bearbeiten')
+    assert r.status_code == 200
+    assert r.mimetype == 'text/html'
+    assert r.data == html_body
+
+
+def test_panel_bearbeiten_proxy_via_urllib_404(client_with_panels, monkeypatch):
+    """AC2/T459-S2: urllib.error.HTTPError mit code=404 vom panel-Service
+    wird als 404-Response am Router durchgereicht (kein LKG-Fallback)."""
+
+    def fake_urlopen(req, timeout=None):
+        raise urllib.error.HTTPError(
+            req.full_url, 404, 'Not Found', {}, None)
+
+    monkeypatch.setattr(router_main.urllib.request, 'urlopen', fake_urlopen)
+    r = client_with_panels.get('/controller/app-panel/unbekannt-xyz/bearbeiten')
+    assert r.status_code == 404
+
+
+def test_panel_bearbeiten_proxy_via_urllib_502_url_error(client_with_panels, monkeypatch):
+    """AC3/T459-S2: urllib.error.URLError (Netz-Fehler, panel-Service nicht
+    erreichbar) → Router liefert 502 Bad Gateway."""
+
+    def fake_urlopen(req, timeout=None):
+        raise urllib.error.URLError('panel-Service nicht erreichbar')
+
+    monkeypatch.setattr(router_main.urllib.request, 'urlopen', fake_urlopen)
+    r = client_with_panels.get('/controller/app-panel/kueche/bearbeiten')
+    assert r.status_code == 502
+
+
+def test_panel_bearbeiten_proxy_via_urllib_5xx_returns_502(client_with_panels, monkeypatch):
+    """AC3/T459-S2: panel-Service antwortet mit 5xx (HTTPError code=500) →
+    Router liefert 502 (kein Durchreichen von server-internen Fehlern)."""
+
+    def fake_urlopen(req, timeout=None):
+        raise urllib.error.HTTPError(
+            req.full_url, 500, 'Internal Server Error', {}, None)
+
+    monkeypatch.setattr(router_main.urllib.request, 'urlopen', fake_urlopen)
+    r = client_with_panels.get('/controller/app-panel/kueche/bearbeiten')
+    assert r.status_code == 502
