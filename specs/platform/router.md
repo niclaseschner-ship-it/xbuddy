@@ -415,10 +415,12 @@ folgt `conventions/config.md` **CONFIG-5**.
 | `icon_root`      | `/home/buddy/apps/icons/` (ICONS-2)                         | `icon_root`      | — (offen, OPEN-ROU-C)              |
 | `panel_service_url` | `http://127.0.0.1:5041` (leer = Default, PORT-2; ROU-27) | `panel_service_url` | — (offen, OPEN-ROU-C)           |
 | `geraete_url`    | `http://127.0.0.1:5040` (leer = Default, GER PORT-2; ROU-29) | `geraete_url`    | — (offen, OPEN-ROU-C)              |
+| `routing_datei`  | `router/routing.json` (Code-Fallback; Live-Ort nach SVC-5: `xbuddy-data/router/routing.json`, ROU-18) | — (kein `config.json`-Schlüssel; ein routing-Pfad in der eigenen Datei wäre rekursiv) | Installer / Unit-Datei (SVC-5) |
 
 Override-Pfade (Dev-Anhang): `panel_service_url` via ENV
 `ROUTER_PANEL_SERVICE_URL` / CLI `--panel-service-url`; `geraete_url` via ENV
-`ROUTER_GERAETE_URL` / CLI `--geraete-url`.
+`ROUTER_GERAETE_URL` / CLI `--geraete-url`; `routing_datei` via ENV
+`ROUTER_ROUTING_FILE` / CLI `--routing`.
 
 Werte, die nur als Code-Konstante existieren — ohne Override-Pfad —
 sind Spec-Verletzung (CLAUDE.md §6 Daten vs. Code).
@@ -473,12 +475,10 @@ sich der App-Panel-Adapter wie bei einem nicht-gematchten Trigger
   Router darf nicht crashen, weil die Datei fehlt — das macht ihn auch
   als Entwicklungs-Werkzeug brauchbar, das man ohne fertige Tabelle
   hochfährt.
-- **Selbsttragend:** Pro Instanz separat verwaltet. Live-Ort liegt nach
-  SVC-5 außerhalb des Checkouts (`xbuddy-data/router/routing.json`),
-  Override-Pfade nach CONFIG-5 (ENV `ROUTER_ROUTING_FILE`, CLI
-  `--routing`). Der Repo-interne `router/routing.json` (per
-  `.gitignore` ausgeschlossen) bleibt Dev-Fallback.
-  `routing.example.json` dokumentiert das Format.
+- **Selbsttragend:** Pro Instanz separat verwaltet. Pfad und
+  Override-Wege folgen ROU-15 (Live-Ort nach SVC-5 außerhalb des
+  Checkouts). `router/routing.json` im Repo ist per `.gitignore`
+  ausgeschlossen, `routing.example.json` dokumentiert das Format.
 - **Kopplung zur Controller-Instanz:** `source_id` muss mit dem
   `source_id`-Wert in der Controller-Instanz-Konfiguration (FIG-23)
   übereinstimmen — sonst findet `lookup` (ROU-9) für die Events dieser
