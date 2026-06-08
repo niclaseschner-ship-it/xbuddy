@@ -132,7 +132,7 @@ def _heute_str(zeitzone):
     return datetime.now(ZoneInfo(zeitzone)).date().isoformat()
 
 
-def _load_einmalig_heute(store_path, zeitzone):
+def load_einmalig_heute(store_path, zeitzone):
     """Lädt einmalig-Items für heute. Tageswechsel → leere Liste (ROUTINE-6)."""
     store = _load_store(store_path)
     heute = _heute_str(zeitzone)
@@ -169,7 +169,7 @@ def count_all_items(data_path, store_path, zeitzone):
     if not isinstance(default_items, list):
         default_items = []
     n_default = len(default_items)
-    n_einmalig = len(_load_einmalig_heute(store_path, zeitzone))
+    n_einmalig = len(load_einmalig_heute(store_path, zeitzone))
     return n_default + n_einmalig
 
 
@@ -282,7 +282,7 @@ def _add_einmalig_item(store_path, zeitzone, label, piktogramm):
 
     ID-Präfix einmalig: (ROUTINE-5) — kollidiert nie mit default-IDs.
     """
-    einmalig = _load_einmalig_heute(store_path, zeitzone)
+    einmalig = load_einmalig_heute(store_path, zeitzone)
 
     existing_ids = {item.get("id") for item in einmalig if isinstance(item, dict)}
     base_id = "einmalig:" + _slug(label)
@@ -345,7 +345,7 @@ def _delete_default_item(data_path, item_id):
 
 def _delete_einmalig_item(store_path, zeitzone, item_id):
     """Löscht ein einmalig-Item aus dem Tages-State (atomar, DCOMP-4)."""
-    einmalig = _load_einmalig_heute(store_path, zeitzone)
+    einmalig = load_einmalig_heute(store_path, zeitzone)
 
     vorher = len(einmalig)
     einmalig = [item for item in einmalig

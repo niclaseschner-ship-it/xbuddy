@@ -21,11 +21,13 @@ Port: 5050 (ROUTINE-15).
 """
 
 import argparse
+import contextlib
 import dataclasses
 import json
 import logging
 import os
 import sys
+import tempfile
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -89,11 +91,21 @@ def _load_store():
 
 
 def _save_store(data):
-    """Speichert den Abhak-Store."""
+    """Speichert den Abhak-Store atomar (DCOMP-4: Temp+Replace)."""
     path = _store_path()
+    verzeichnis = os.path.dirname(os.path.abspath(path))
+    os.makedirs(verzeichnis, exist_ok=True)
     try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        fd, tmp_path = tempfile.mkstemp(dir=verzeichnis, suffix=".tmp",
+                                        prefix="store_write_")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, path)
+        except Exception:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_path)
+            raise
     except OSError as e:
         logger.error("Abhak-Store konnte nicht gespeichert werden (%s): %s", path, e)
 
@@ -240,7 +252,7 @@ def morgen():
         # Validierung: Item-ID muss in der Config ODER in den einmalig-Items existieren
         # (ROUTINE-5: einmalig:-Präfix kollidiert nie mit default-IDs)
         item_ids = {item.id for item in cfg.items}
-        einmalig_heute = items_mod._load_einmalig_heute(_store_path(), cfg.zeitzone)
+        einmalig_heute = items_mod.load_einmalig_heute(_store_path(), cfg.zeitzone)
         item_ids.update(e.get("id") for e in einmalig_heute if isinstance(e, dict))
         if item_id not in item_ids:
             return jsonify({"error": "unbekannte Item-ID"}), 404
@@ -264,8 +276,8 @@ def morgen():
         uhr_view = None
 
     # Einmalig-Items für heute laden und zu den default-Items hinzufügen (ROUTINE-6/8)
-    # ROUTINE-6: nach Tageswechsel sind einmalig-Items automatisch weg (_load_einmalig_heute)
-    einmalig_heute = items_mod._load_einmalig_heute(_store_path(), zeitzone)
+    # ROUTINE-6: nach Tageswechsel sind einmalig-Items automatisch weg (load_einmalig_heute)
+    einmalig_heute = items_mod.load_einmalig_heute(_store_path(), zeitzone)
     if einmalig_heute:
         einmalig_item_objs = [
             config_mod.RoutineItem(

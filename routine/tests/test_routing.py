@@ -219,3 +219,43 @@ def test_routing_entry_path_put_trifft_flask_handler(tmp_path):
                       content_type="application/json")
     assert resp.status_code == 200
     assert json.loads(resp.data)["count"] == 1
+
+
+# ============================================================
+#  ROUTINE-6 Live-View — einmalig-Punkt nach Tageswechsel weg
+# ============================================================
+
+def test_routine6_einmalig_nach_tageswechsel_nicht_im_html(tmp_path):
+    """ROUTINE-6: GET /display/routine/morgen nach Tageswechsel — einmalig-Punkt NICHT im HTML.
+
+    Live-View-Pfad: Store enthält einmalig-Item mit gestriger Datum.
+    Nach Tageswechsel darf das Label nicht mehr im HTML auftauchen.
+    """
+    import datetime as dt_mod
+    _data_file, store_path, client = _make_client(tmp_path)
+
+    # Einmalig-Item anlegen (heute)
+    resp = client.post("/api/v1/routine/items",
+                       json={"quelle": "einmalig", "label": "NurHeute", "piktogramm": "5555"},
+                       content_type="application/json")
+    assert resp.status_code == 201
+
+    # View heute: Label muss sichtbar sein
+    view_heute = client.get("/display/routine/morgen")
+    assert view_heute.status_code == 200
+    assert "NurHeute" in view_heute.get_data(as_text=True), \
+        "einmalig-Item 'NurHeute' muss heute auf der View sichtbar sein"
+
+    # Store-Datum auf gestern setzen (Tageswechsel simulieren)
+    gestern = (dt_mod.date.today() - dt_mod.timedelta(days=1)).isoformat()
+    with open(store_path, encoding="utf-8") as f:
+        store = json.load(f)
+    store["tag"]["datum"] = gestern
+    with open(store_path, "w", encoding="utf-8") as f:
+        json.dump(store, f)
+
+    # View nach Tageswechsel: Label darf NICHT mehr sichtbar sein (ROUTINE-6)
+    view_morgen = client.get("/display/routine/morgen")
+    assert view_morgen.status_code == 200
+    assert "NurHeute" not in view_morgen.get_data(as_text=True), \
+        "Nach Tageswechsel darf einmalig-Punkt 'NurHeute' nicht mehr im HTML erscheinen (ROUTINE-6)"
