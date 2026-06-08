@@ -2212,8 +2212,10 @@ def test_panel_bearbeiten_proxy_via_urllib_happy_path(client_with_panels, monkey
         def __enter__(self): return self
         def __exit__(self, *a): pass
 
+    seen = {}
+
     def fake_urlopen(req, timeout=None):
-        assert 'bearbeiten' in req.full_url
+        seen['url'] = req.full_url
         return FakeResp()
 
     monkeypatch.setattr(router_main.urllib.request, 'urlopen', fake_urlopen)
@@ -2221,6 +2223,10 @@ def test_panel_bearbeiten_proxy_via_urllib_happy_path(client_with_panels, monkey
     assert r.status_code == 200
     assert r.mimetype == 'text/html'
     assert r.data == html_body
+    # Hotfix #465: Router muss /controller/app-panel/<id>/<sicht> beim
+    # panel-Service anfragen (T446-Route), NICHT /api/v1/panels/<id>/<sicht>.
+    # Production-Bug-Schutz nach T459-Merge.
+    assert seen['url'].endswith('/controller/app-panel/kueche/bearbeiten')
 
 
 def test_panel_bearbeiten_proxy_via_urllib_404(client_with_panels, monkeypatch):

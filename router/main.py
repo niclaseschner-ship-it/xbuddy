@@ -1148,7 +1148,12 @@ def _proxy_panel_bearbeiten(panel_id, sicht):
     Code-Default-Fallback: ein 404 vom panel-Service wird als (body, ct, 404)
     durchgereicht, damit der Browser das korrekte HTTP-Signal erhält (AC3).
     Netz-Fehler / 5xx liefern 502."""
-    url = '%s/api/v1/panels/%s/%s' % (_panel_service_base(), panel_id, sicht)
+    # Editor-Seite hängt am /controller/app-panel/-Pfad des panel-Service
+    # (T446 PBE-1 baut die Route dort: `panel/main.py` get_panel_editor /
+    # get_panel_editor_js / get_panel_editor_css), NICHT unter /api/v1/panels/.
+    # Production-Bug entdeckt 2026-06-08 nach T459-Merge: urllib-Mock-Tests
+    # haben die URL-Form nicht geprüft → Router gab 404 für Browser-Requests.
+    url = '%s/controller/app-panel/%s/%s' % (_panel_service_base(), panel_id, sicht)
     content_type = _PANEL_BEARBEITEN_CONTENT_TYPES.get(sicht, 'application/octet-stream')
     try:
         req = urllib.request.Request(url, method='GET')
