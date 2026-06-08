@@ -586,8 +586,11 @@ Acceptance-Kriterien:
 | `GET /api/v1/icons/suche?q=hund` | 200, JSON-Liste `[{id,url}]` — nur IDs mit lokalem PNG |
 | `GET /api/v1/icons/suche?q=<ohne-treffer>` | 200, leere Liste `[]` (kein Fehler) |
 | `GET /api/v1/icons/suche` (kein `q`) | 400 |
+| `GET /api/v1/icons/suche?q=hund` (kein `max`) | 200, höchstens 3 Treffer (Default, ICONS-7) |
+| `GET /api/v1/icons/suche?q=hund&max=999999` | 200, höchstens 50 Treffer (Klemme, ICONS-7) |
+| `GET /api/v1/icons/suche?q=hund&max=abc` | 200, höchstens 3 Treffer (Nicht-numerisch → Default, ICONS-7) |
 
-*Tickets:* #390
+*Tickets:* #390, #407, #408
 
 ### ROU-30 — GET /display/_shared/design/&lt;asset&gt; — geteilter Design-Token-Strang
 
