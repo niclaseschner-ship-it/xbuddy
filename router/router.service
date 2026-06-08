@@ -13,6 +13,7 @@ User=__XBUDDY_USER__
 WorkingDirectory=__XBUDDY_REPO__/router
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=__XBUDDY_HOME__
+Environment=ROUTER_ROUTING_FILE=__XBUDDY_DATA__/router/routing.json
 ExecStart=__XBUDDY_PYTHON__ main.py --host 127.0.0.1 --port 5000
 Restart=on-failure
 RestartSec=10

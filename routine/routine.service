@@ -15,6 +15,8 @@ User=__XBUDDY_USER__
 WorkingDirectory=__XBUDDY_REPO__
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=__XBUDDY_HOME__
+Environment=ROUTINE_DATA_FILE=__XBUDDY_DATA__/routine/routine.json
+Environment=ROUTINE_STORE_FILE=__XBUDDY_DATA__/routine/routine_store.json
 ExecStart=__XBUDDY_PYTHON__ -m routine.main --host 127.0.0.1 --port 5050
 Restart=on-failure
 RestartSec=10
