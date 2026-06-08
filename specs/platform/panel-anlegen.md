@@ -104,16 +104,23 @@ Implementierungs-Detail:
    sinngemäß) und weist eine Eingabe ab, die nach Normalisierung leer ist
    (PAA-7). Die laufende Nummer (`-01`, `-02`) vergibt der **Server** (PREG-6);
    der Skill liefert **nur** den `slug`.
-3. **Kacheln / Apps** (Pflicht ≥ 1 — **feste Kandidatenliste**, OPEN-PAA-B
-   entschieden): die Apps, die als Kacheln (`tiles`, PANEL-3) auf dem Panel
-   erscheinen. V1 bietet eine **hart-codierte, kuratierte Kandidatenliste**
-   verfügbarer Apps (z. B. Wetter, Plan) zur nummerierten Auswahl an — keine
-   freie Slug-Nennung (Tippfehler → tote Kachel ausgeschlossen). Je gewählter
-   App baut die Funktion die `tiles.json`-Pflichtfelder aus PANEL-3 (`key`,
-   `app`, `view`, `label`, `icons`, `sichtbar`; `query` optional) aus der
-   Kandidaten-Definition. Die Listen-Reihenfolge der erfassten Kacheln ist die
-   Anzeige-Reihenfolge (PANEL-3). Der echte App-Discovery-Mechanismus, der die
-   feste Liste später ablöst, ist als **#325** erfasst (gekoppelt an #296).
+3. **Kacheln / Apps** (Pflicht ≥ 1 — **Kandidaten aus der Seiten-Registry**,
+   OPEN-PAA-B abgelöst durch Berater-Runde 2026-06-07): die Apps, die als
+   Kacheln (`tiles`, PANEL-3) auf dem Panel erscheinen. V1 zieht die
+   Kandidatenliste aus `GET /api/v1/seiten` (Seiten-Registry, SREG-3), gefiltert
+   auf **Display-Views/Sorte a** (BUD-4) — die im Aggregator als „im Panel
+   wählbar" markierten Manifeste tragen ihre `icons[]` + `query` bereits
+   durch (SREG-10). Die Funktion bietet aus dieser Quelle eine **kuratierte,
+   nummerierte Auswahl** an (keine freie Slug-Nennung — Tippfehler → tote
+   Kachel weiterhin ausgeschlossen). Je gewählter Kandidat baut die Funktion
+   die `tiles.json`-Pflichtfelder aus PANEL-3 (`key`, `app`, `view`, `label`,
+   `icons`, `sichtbar`; `query` optional) aus dem Registry-Eintrag — keine
+   zweite Wahrheit im Skill, kein Hardcode von `icons[]` oder `query`. Die
+   Listen-Reihenfolge der erfassten Kacheln ist die Anzeige-Reihenfolge
+   (PANEL-3). Der frühere V1-Behelf (hart-codierte Kandidaten im Skill,
+   Nic-Entscheid 2026-06-03) ist mit dieser Schärfung abgelöst — Quelle ist
+   jetzt die Registry, kuratierte nummerierte Auswahl bleibt UI-Regel der
+   Funktion (#389).
 4. **Bestätigung mit Zusammenfassung**: Vor dem Schreiben fasst die Funktion
    alle erfassten Felder zusammen (gewähltes Display, Slug, die Kachel-Liste)
    und fordert eine Bestätigung nach `eltern-chat.md` E-EC-7. Erst eine
@@ -301,12 +308,16 @@ ersetzt. Mindest-Abdeckung:
 Die „Offene Punkte" / Nic-Fragen unten sind **entschieden** — diese Sektion ist
 maßgeblich (überschreibt die „Nic-Frage"-Markierungen in PAA-3/PAA-4):
 
-- **OPEN-PAA-B (App-Auswahl) → feste Kandidatenliste.** V1 nutzt eine
-  hart-codierte, kuratierte Liste verfügbarer Apps (z. B. Wetter, Plan) zur
-  nummerierten Auswahl in PAA-3.3 — **keine** freie Slug-Nennung (Tippfehler →
-  tote Kachel ausgeschlossen). Der echte App-Discovery-Mechanismus ist als **#325**
-  erfasst (gekoppelt an #296 App-Onboarding/Installation) und löst die
-  Kandidatenliste später ab.
+- **OPEN-PAA-B (App-Auswahl) → Kandidaten aus der Seiten-Registry.**
+  Abgelöst durch Berater-Runde 2026-06-07 (Gabel-A, #389): V1 zieht die
+  Kandidaten aus `GET /api/v1/seiten` (SREG-3) gefiltert auf Display-Views
+  Sorte a (BUD-4). Die kuratierte, nummerierte Auswahl bleibt UI-Regel der
+  Funktion (keine freie Slug-Nennung). `icons[]`/`query` kommen aus dem
+  Registry-Eintrag — keine zweite Wahrheit im Skill. Der frühere V1-Behelf
+  (hart-codierte Kandidaten, Entscheid 2026-06-03) ist damit überholt.
+  Voraussetzung: Backfill der Manifeste mit `icons[]` (#387) ist abgeschlossen.
+  Der frühere Pfad „#325/#296 löst die feste Liste später ab" ist obsolet —
+  die Quelle existiert bereits in der Seiten-Registry.
 - **OPEN-PAA-C (`config.source_id`) → (A) Server leitet ab.** PREG-15 wird
   geschärft (derselbe Freigabe-Schritt, #58): der panel-Service füllt
   `config.source_id`/`display_id`/`router_url` serverseitig aus der vergebenen
@@ -333,15 +344,20 @@ maßgeblich (überschreibt die „Nic-Frage"-Markierungen in PAA-3/PAA-4):
   (eine Familie hat wenige Display-Panels). Eine spätere Schleife analog GAA-4
   ist additiv, sobald der Schmerz belegt ist — nichts auf Vorrat (CLAUDE.md §6).
 
-- **OPEN-PAA-B — App-/Kachel-Auswahl-Dialog (kein App-Discovery-Mechanismus
-  vorhanden).** *Befund:* Es gibt **keine** Registry/Quelle, aus der der Skill
-  die „verfügbaren Apps" einer Instanz enumerieren könnte — `conventions/apps.md`
-  (APP-1..6) definiert, was eine App ist, aber **keine** Liste/Discovery; die
-  `tiles.json`-Felder `app`/`view` sind freie Strings (PANEL-3). Der Skill kann
-  Apps heute also **nur** über (i) eine hart-codierte Kandidaten-Liste im Skill
-  oder (ii) freie Nennung durch den Elternteil als Kacheln aufnehmen. Das ist
-  eine **Produkt-Entscheidung für Nic** (siehe Nic-Frage). Sie bestimmt
-  PAA-3.3.
+- **OPEN-PAA-B (ERLEDIGT 2026-06-08 via #389) — App-/Kachel-Auswahl-Dialog.**
+  *Befund (2026-06-03, historisch):* Es gab keine Registry/Quelle, aus der
+  der Skill die „verfügbaren Apps" einer Instanz enumerieren konnte —
+  `conventions/apps.md` (APP-1..6) definierte, was eine App ist, aber keine
+  Liste/Discovery; die `tiles.json`-Felder `app`/`view` sind freie Strings
+  (PANEL-3). Der Skill konnte Apps damals nur über (i) eine hart-codierte
+  Kandidaten-Liste im Skill oder (ii) freie Nennung durch den Elternteil
+  aufnehmen.
+  *Auflösung (2026-06-08):* Mit der Seiten-Registry (SREG-3) als
+  authoritativer Quelle und der `icons[]`-Durchreichung (SREG-10, Backfill
+  #387, Berater-Runde 2026-06-07 Gabel-A) existiert die Discovery-Quelle
+  jetzt. PAA-3.3 + Ratifizierungs-Block oben sind entsprechend aktualisiert;
+  der Skill liest die Kandidaten aus `GET /api/v1/seiten`, filtert auf
+  Sorte a, und behält die kuratierte nummerierte Auswahl als UI-Regel.
 
 - **OPEN-PAA-C — `config.source_id`-Verortung (Schnittstelle zu PREG-15).**
   Siehe PAA-4: `source_id` leitet sich aus der erst vom Server vergebenen
