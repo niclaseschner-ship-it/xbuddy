@@ -10,7 +10,7 @@
 # und cacht es in inventar.json (SREG-3, --inventar).
 #
 # SVC-5: der inventar.json-Cache liegt AUSSERHALB des Checkouts unter
-# __XBUDDY_HOME__/xbuddy-data/seiten/ — der Checkout ist Dev-Root + Service-CWD
+# __XBUDDY_DATA__/seiten/ — der Checkout ist Dev-Root + Service-CWD
 # zugleich, abgeleitete Laufzeit-Daten dürfen nicht an den Branch-Stand koppeln.
 # --root zeigt dagegen bewusst IN den Checkout: die committeten Manifeste SIND
 # Repo-Inhalt (SREG-2, committet neben dem Code).
@@ -25,7 +25,7 @@ User=__XBUDDY_USER__
 WorkingDirectory=__XBUDDY_REPO__
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=__XBUDDY_HOME__
-ExecStart=__XBUDDY_PYTHON__ -m seiten.main --host 127.0.0.1 --port 5042 --root __XBUDDY_REPO__ --inventar __XBUDDY_HOME__/xbuddy-data/seiten/inventar.json --panel-url http://127.0.0.1:5041 --geraete-url http://127.0.0.1:5040
+ExecStart=__XBUDDY_PYTHON__ -m seiten.main --host 127.0.0.1 --port 5042 --root __XBUDDY_REPO__ --inventar __XBUDDY_DATA__/seiten/inventar.json --panel-url http://127.0.0.1:5041 --geraete-url http://127.0.0.1:5040
 Restart=on-failure
 RestartSec=10
 
