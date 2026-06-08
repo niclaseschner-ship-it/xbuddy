@@ -10,6 +10,7 @@ Endpunkte:
   GET  /api/v1/panels/<id>                    — ein Panel je `panel_id` (PREG-14)
   GET  /api/v1/panels/<id>/config.json        — config-Sicht (PREG-14)
   GET  /api/v1/panels/<id>/tiles.json         — tiles-Sicht (PREG-14)
+  PUT  /api/v1/panels/<id>/tiles              — tiles schreiben, atomar (PBE-4, #330)
   POST /api/v1/panels/                        — Panel anlegen, atomar (PREG-15)
 
 Service-Topologie (Lego-Prinzip): die Registry läuft als schlanker
@@ -122,6 +123,35 @@ def display_existiert(display_id):
 
 class _RouterUnreachable(Exception):
     """Der Router ist nicht erreichbar oder antwortet mit 5xx — PREG-16."""
+
+
+# ============================================================
+#  Reload-Signal (PBE-10) — Tiles-Changed-Notification an den Router
+# ============================================================
+
+class _ReloadSignalFailed(Exception):
+    """Reload-Signal-Aufruf an den Router ist fehlgeschlagen (nicht fatal)."""
+
+
+def router_tiles_changed(display_id):
+    """Sendet ein Tiles-Changed-Signal an den Router (PBE-10).
+
+    POST <router_url>/api/v1/router/admin/tiles-changed/<display_id>
+    200 → Signal gesendet (True).
+    Alle Fehler → _ReloadSignalFailed (nicht fatal: DCOMP-2 als Fallback).
+
+    Bewusst über HTTP, KEIN Python-Import des Routers (DCOMP-1). Als Funktion
+    auf Modulebene, damit Tests sie stubben können.
+    """
+    base = runtime["router_url"].rstrip("/")
+    url = "%s/api/v1/router/admin/tiles-changed/%s" % (base, display_id)
+    req = urllib.request.Request(url, data=b"", method="POST",
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status == 200
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as e:
+        raise _ReloadSignalFailed(str(e)) from e
 
 
 def router_panels_upsert(source_id, display_id):
@@ -241,6 +271,157 @@ def get_panel_tiles(panel_id):
     if p is None:
         return jsonify({"error": "unbekannte panel_id"}), 404
     return jsonify(p.tiles)
+
+
+def _unprocessable(msg):
+    """PBE-11: 422 mit JSON-Fehler für ungültige tiles-Liste."""
+    return jsonify({"error": msg}), 422
+
+
+def _validate_tiles_list(tiles_obj):
+    """PBE-11: Validiert ein tiles-Objekt gegen PANEL-3.
+
+    Erwartet {"tiles": [...]}.  Wirft ValueError mit Begründung bei:
+    - Kein Objekt / fehlendes "tiles"-Feld / "tiles" kein Array
+    - Kachel ohne Pflichtfelder (key/app/view/label/icons/sichtbar)
+    - icons[] leer oder >3 Einträge (PANEL-3/ICONS-5)
+    - sichtbar kein boolean (PANEL-4)
+    - key-Kollision (PANEL-3: eindeutig innerhalb der Liste)
+    - query — falls vorhanden — kein flaches Objekt (PANEL-7)
+    """
+    if not isinstance(tiles_obj, dict):
+        raise ValueError("tiles muss ein Objekt sein (PANEL-3)")
+    eintraege = tiles_obj.get("tiles")
+    if eintraege is None:
+        raise ValueError("tiles-Objekt hat kein 'tiles'-Feld (PANEL-3)")
+    if not isinstance(eintraege, list):
+        raise ValueError("tiles.tiles muss eine Liste sein (PANEL-3)")
+
+    gesehene_keys = set()
+    for i, tile in enumerate(eintraege):
+        if not isinstance(tile, dict):
+            raise ValueError("Kachel #%d ist kein Objekt (PANEL-3)" % i)
+
+        for feld in ("key", "app", "view", "label"):
+            wert = tile.get(feld)
+            if not isinstance(wert, str) or not wert:
+                raise ValueError(
+                    "Kachel #%d: Pflichtfeld %r fehlt oder leer (PANEL-3)"
+                    % (i, feld))
+
+        # icons[]: Pflicht, ≥1, ≤3 Pfade (PANEL-3/ICONS-5)
+        icons = tile.get("icons")
+        if not isinstance(icons, list) or len(icons) == 0:
+            raise ValueError(
+                "Kachel #%d (key=%r): icons[] fehlt oder leer (PANEL-3)"
+                % (i, tile.get("key")))
+        if len(icons) > 3:
+            raise ValueError(
+                "Kachel #%d (key=%r): icons[] hat %d Einträge, max 3 (PANEL-3)"
+                % (i, tile.get("key"), len(icons)))
+        for j, pfad in enumerate(icons):
+            if not isinstance(pfad, str) or not pfad:
+                raise ValueError(
+                    "Kachel #%d (key=%r): icons[%d] muss ein nicht-leerer "
+                    "String sein (PANEL-3)" % (i, tile.get("key"), j))
+
+        # sichtbar: boolean (PANEL-4)
+        if not isinstance(tile.get("sichtbar"), bool):
+            raise ValueError(
+                "Kachel #%d (key=%r): sichtbar muss ein boolean sein (PANEL-4)"
+                % (i, tile.get("key")))
+
+        # key-Eindeutigkeit (PANEL-3)
+        key = tile["key"]
+        if key in gesehene_keys:
+            raise ValueError(
+                "key %r ist nicht eindeutig in der tiles-Liste (PANEL-3)" % key)
+        gesehene_keys.add(key)
+
+        # query — falls vorhanden — flaches Objekt (PANEL-7)
+        if "query" in tile:
+            query = tile["query"]
+            if not isinstance(query, dict):
+                raise ValueError(
+                    "Kachel #%d (key=%r): query muss ein flaches Objekt sein "
+                    "(PANEL-7)" % (i, key))
+            for qk, qv in query.items():
+                if isinstance(qv, bool) or not isinstance(qv, (str, int, float)):
+                    raise ValueError(
+                        "Kachel #%d (key=%r): query.%s muss String/Zahl sein, "
+                        "kein verschachteltes Objekt (PANEL-7)" % (i, key, qk))
+
+
+@app.route("/api/v1/panels/<panel_id>/tiles", methods=["PUT"])
+def put_panel_tiles(panel_id):
+    """PBE-4: vollständige neue tiles-Liste schreiben.
+
+    Body: ein tiles-Objekt {"tiles": [...]} — die vollständige neue Liste
+    (nicht ein Patch). Last-Write-Wins (Nic 2026-06-07).
+
+    - PBE-11 Validierung VOR dem Schreiben → 422 + JSON-Fehler, Datei unverändert.
+    - Unbekannte panel_id → 404.
+    - Schreibfehler am Dateisystem → 500 + JSON-Fehler (GER-6/DCOMP-4-Geist).
+    - PREG-5: config-Feld der Instanz wird NICHT berührt.
+    - DCOMP-4: atomares Schreiben (Temp + os.replace) über registry_mod.save().
+    - PBE-10: Reload-Signal an den Router nach erfolgreichem Schreiben
+      (nicht fatal — DCOMP-2 reload-on-read ist Fallback).
+    """
+    path = runtime.get("registry_path")
+    if path is None:
+        return jsonify({"error": "kein Registry-Pfad konfiguriert"}), 503
+
+    body = request.get_json(silent=True)
+    if body is None:
+        return _unprocessable("kein gültiges JSON im Request-Body (PBE-11)")
+
+    # PBE-11: Validierung vor dem Schreiben.
+    try:
+        _validate_tiles_list(body)
+    except ValueError as e:
+        return _unprocessable(str(e))
+
+    with _write_lock:
+        # DCOMP-2: frisch von Disk lesen — nie einen veralteten Stand überschreiben.
+        reg = registry_mod.load(path)
+        panel = reg.get(panel_id)
+        if panel is None:
+            return jsonify({"error": "unbekannte panel_id (PBE-4)"}), 404
+
+        # PREG-5: nur tiles ersetzen, config unberührt.
+        geaendertes_panel = registry_mod.Panel(
+            panel_id=panel.panel_id,
+            display_id=panel.display_id,
+            config=panel.config,
+            tiles=body,
+            router_url=panel.router_url,
+            source_id=panel.source_id,
+        )
+        # Registry mit geändertem Panel aufbauen — alle anderen Panels erhalten.
+        neue_panels = []
+        for p in reg.list_all():
+            if p.panel_id == panel_id:
+                neue_panels.append(geaendertes_panel)
+            else:
+                neue_panels.append(p)
+        neue_reg = registry_mod.Registry(neue_panels)
+
+        try:
+            registry_mod.save(neue_reg, path)
+        except registry_mod.RegistryError as e:
+            logging.warning("put_panel_tiles: Schreiben fehlgeschlagen: %s", e)
+            return jsonify({"error": str(e)}), 500
+
+    # PBE-10: Reload-Signal — nicht fatal (DCOMP-2 als Fallback).
+    try:
+        router_tiles_changed(panel.display_id)
+    except _ReloadSignalFailed as e:
+        logging.warning(
+            "put_panel_tiles: Reload-Signal für display_id=%r fehlgeschlagen: %s"
+            " — DCOMP-2 (reload-on-read) ist Fallback (PBE-10)",
+            panel.display_id, e)
+
+    return jsonify({"ok": True, "panel_id": panel_id}), 200
 
 
 def _bad_request(msg):
