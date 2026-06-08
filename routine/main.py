@@ -21,6 +21,7 @@ Port: 5050 (ROUTINE-15).
 """
 
 import argparse
+import dataclasses
 import json
 import logging
 import os
@@ -39,11 +40,13 @@ from tools import configloader, logsetup  # noqa: E402
 
 if __package__:
     from . import config as config_mod
+    from . import items as items_mod
     from . import render as render_mod
     from . import uhr as uhr_mod
 else:  # python3 routine/main.py
     sys.path.insert(0, _REPO_ROOT)
     from routine import config as config_mod
+    from routine import items as items_mod
     from routine import render as render_mod
     from routine import uhr as uhr_mod
 
@@ -234,8 +237,11 @@ def morgen():
         if not item_id:
             return jsonify({"error": "item_id fehlt im Request-Body"}), 400
 
-        # Validierung: Item-ID muss in der Config existieren (ROUTINE-5)
+        # Validierung: Item-ID muss in der Config ODER in den einmalig-Items existieren
+        # (ROUTINE-5: einmalig:-Präfix kollidiert nie mit default-IDs)
         item_ids = {item.id for item in cfg.items}
+        einmalig_heute = items_mod._load_einmalig_heute(_store_path(), cfg.zeitzone)
+        item_ids.update(e.get("id") for e in einmalig_heute if isinstance(e, dict))
         if item_id not in item_ids:
             return jsonify({"error": "unbekannte Item-ID"}), 404
 
@@ -257,8 +263,26 @@ def morgen():
         logger.error("Uhr-Berechnung fehlgeschlagen: %s — Uhr wird ausgeblendet", e)
         uhr_view = None
 
+    # Einmalig-Items für heute laden und zu den default-Items hinzufügen (ROUTINE-6/8)
+    # ROUTINE-6: nach Tageswechsel sind einmalig-Items automatisch weg (_load_einmalig_heute)
+    einmalig_heute = items_mod._load_einmalig_heute(_store_path(), zeitzone)
+    if einmalig_heute:
+        einmalig_item_objs = [
+            config_mod.RoutineItem(
+                id=e["id"],
+                label=e.get("label", ""),
+                piktogramm=str(e.get("piktogramm", "")),
+                quelle="einmalig",
+            )
+            for e in einmalig_heute
+            if isinstance(e, dict) and e.get("id")
+        ]
+        cfg_merged = dataclasses.replace(cfg, items=cfg.items + einmalig_item_objs)
+    else:
+        cfg_merged = cfg
+
     abhak = _abhak_zustand(zeitzone)
-    view = render_mod.baue_view(cfg, abhak, uhr_view)
+    view = render_mod.baue_view(cfg_merged, abhak, uhr_view)
 
     return render_template("morgen.html", view=view)
 
@@ -302,6 +326,107 @@ def api_config():
         return jsonify({"error": str(e)}), 400
 
     return jsonify({"ok": True})
+
+
+# ============================================================
+#  Items-Schreib-API (ROUTINE-14, #354)
+# ============================================================
+
+def _items_paths():
+    """Liefert (data_path, store_path) aus runtime — oder (None, None) wenn nicht gesetzt."""
+    return runtime.get("data_path"), _store_path()
+
+
+def _items_zeitzone():
+    """Aktuelle Zeitzone aus dem aktuellen Config-Snapshot (Reload-on-Read)."""
+    cfg = _current_config()
+    if cfg and cfg.zeitzone:
+        return cfg.zeitzone
+    return "Europe/Berlin"
+
+
+@app.route("/api/v1/routine/items", methods=["POST"])
+def api_items_post():
+    """Punkt anlegen (ROUTINE-14, #354, URL-14).
+
+    JSON-Body: quelle (default | einmalig), label, piktogramm (ARASAAC-ID).
+    quelle=default → in routine.json (persistent, ROUTINE-12).
+    quelle=einmalig → in den Tages-State (heute, Auto-Verfall ROUTINE-6).
+    Antwort: {"id": <neue_id>} (ID-Form ROUTINE-5).
+    ROUTINE-19: ≥8 Items → 400 + ehrlicher Fehler, kein Schreiben.
+    Reload-on-Read: neuer Punkt ohne Neustart auf /display/routine/morgen sichtbar.
+    """
+    data_path, store_path = _items_paths()
+    if not data_path:
+        return jsonify({"error": "data_path nicht konfiguriert — kein Schreiben möglich"}), 500
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "JSON-Body erwartet"}), 400
+
+    quelle = body.get("quelle", "default")
+    label = body.get("label", "")
+    piktogramm = body.get("piktogramm", "")
+    zeitzone = _items_zeitzone()
+
+    try:
+        result = items_mod.add_item(
+            data_path, store_path, quelle, label, piktogramm, zeitzone)
+    except items_mod.ItemsError as e:
+        return jsonify({"error": str(e)}), 400
+
+    return jsonify(result), 201
+
+
+@app.route("/api/v1/routine/items", methods=["PUT"])
+def api_items_put():
+    """Geordnete default-Liste ersetzen (ROUTINE-14, #354, URL-14).
+
+    Idempotent: ersetzt die komplette items-Liste durch die übergebene
+    (Reihenfolge ändern / Bulk, RPS-3). Kein einmalig-Einfluss.
+    JSON-Body: Liste von {id, label, piktogramm}.
+    ROUTINE-19: >8 Einträge → 400, kein Schreiben.
+    """
+    data_path, _ = _items_paths()
+    if not data_path:
+        return jsonify({"error": "data_path nicht konfiguriert — kein Schreiben möglich"}), 500
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, list):
+        return jsonify({"error": "JSON-Array erwartet"}), 400
+
+    try:
+        result = items_mod.replace_default_items(data_path, body)
+    except items_mod.ItemsError as e:
+        return jsonify({"error": str(e)}), 400
+
+    return jsonify(result)
+
+
+@app.route("/api/v1/routine/items/<item_id>", methods=["DELETE"])
+def api_items_delete(item_id):
+    """Punkt entfernen (ROUTINE-14, #354, URL-14).
+
+    default-ID → aus routine.json (atomar, DCOMP-4).
+    einmalig:-ID → aus Tages-State (atomar).
+    Existiert die ID nicht → 404.
+    """
+    data_path, store_path = _items_paths()
+    if not data_path:
+        return jsonify({"error": "data_path nicht konfiguriert — kein Schreiben möglich"}), 500
+
+    zeitzone = _items_zeitzone()
+
+    try:
+        result = items_mod.delete_item(data_path, store_path, item_id, zeitzone)
+    except items_mod.ItemsError as e:
+        # ID nicht gefunden → 404; sonstige Fehler → 400
+        msg = str(e)
+        if "nicht gefunden" in msg:
+            return jsonify({"error": msg}), 404
+        return jsonify({"error": msg}), 400
+
+    return jsonify(result)
 
 
 # ============================================================
