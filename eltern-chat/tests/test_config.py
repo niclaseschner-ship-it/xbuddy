@@ -216,6 +216,26 @@ def test_LOG_4_log_level_from_file(tmp_path, monkeypatch):
     assert cfg.log_level == "WARNING"
 
 
+# -- EC-15 / #443: icon_origin_url (Icon-Router-Naht für RPS-7) -----
+
+def test_EC15_icon_origin_url_default(tmp_path, monkeypatch):
+    """EC-15 / #443: icon_origin_url hat den Default http://127.0.0.1:5000
+    (Icon-Router, ICONS-7). Fehlt der Wert in ENV und Datei, wird der Default
+    gesetzt — das ist die Wiring-Bedingung für RoutinePunkteSetzenTask."""
+    _set_bot_token(monkeypatch)
+    monkeypatch.delenv("ELTERNCHAT_ICON_ORIGIN_URL", raising=False)
+    cfg = config_mod.resolve(_missing(tmp_path))
+    assert cfg.icon_origin_url == "http://127.0.0.1:5000"
+
+
+def test_EC15_icon_origin_url_from_env(tmp_path, monkeypatch):
+    """EC-15 / #443: icon_origin_url aus ENV ELTERNCHAT_ICON_ORIGIN_URL."""
+    _set_bot_token(monkeypatch)
+    monkeypatch.setenv("ELTERNCHAT_ICON_ORIGIN_URL", "http://192.168.1.5:5000")
+    cfg = config_mod.resolve(_missing(tmp_path))
+    assert cfg.icon_origin_url == "http://192.168.1.5:5000"
+
+
 # -- Loader-Integration (#179): Underscore-Keys in der Datei -----
 
 def test_EC_15_underscore_keys_in_file_are_tolerated(tmp_path, monkeypatch, caplog):

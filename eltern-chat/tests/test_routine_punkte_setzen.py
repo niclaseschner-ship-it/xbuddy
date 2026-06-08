@@ -868,6 +868,48 @@ def test_RPS7_register_doppelt_ist_fehler():
 
 
 # ============================================================
+#  Entry-Path-Test: Config-Naht (AC3 / EC-15 / #443)
+# ============================================================
+
+def test_RPS7_entry_path_via_config_naht():
+    """AC3 / EC-15 / #443: routine_punkte_setzen erscheint im Katalog, wenn
+    icon_origin_url über die Config-Naht kommt (cfg.icon_origin_url) statt
+    explizit hardcodiert — prüft das Live-Wiring aus main.py:build_catalog.
+
+    DEFAULTS['icon_origin_url'] = 'http://127.0.0.1:5000' (EC-15 Tabelle Z.
+    465). Der Test simuliert, was main.py tut: er liest icon_origin_url aus
+    einem Config-Objekt, das mit dem Default-Wert gebaut wurde, und reicht
+    es an build_catalog durch — analog zum FSE-Pattern (photo_origin_url).
+    """
+    import config as config_mod
+
+    # Config-Objekt mit Default-Wert für icon_origin_url — analog
+    # cfg.icon_origin_url im echten main.py-Setup.
+    icon_origin = config_mod.DEFAULTS["icon_origin_url"]
+    routine_origin = config_mod.DEFAULTS["routine_origin_url"]
+
+    ca = _ca_pem()
+    try:
+        # Kein hardcodiertes icon_origin_url="..." — der Wert kommt aus
+        # config.DEFAULTS, wie er im Betrieb über cfg.icon_origin_url fließt.
+        catalog = build_catalog(
+            tg=FakeTelegram(),
+            ca_pem_path=ca,
+            routine_origin_url=routine_origin,
+            icon_origin_url=icon_origin,
+            family_group_chat_id_getter=lambda: 200,
+        )
+        task = catalog.get("routine_punkte_setzen")
+        assert task is not None, (
+            "routine_punkte_setzen sollte im Katalog sein, wenn "
+            "icon_origin_url aus Config-DEFAULTS kommt (Live-Wiring EC-15)")
+        assert isinstance(task, RoutinePunkteSetzenTask)
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(ca)
+
+
+# ============================================================
 #  Spec-Drift-Probe (Watchdog-Linse 1): KEIN Umbenennen
 # ============================================================
 

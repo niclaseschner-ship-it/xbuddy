@@ -61,6 +61,7 @@ def _make_cfg():
     cfg.panel_origin_url = "http://127.0.0.1:5041"   # PAA-5 / #183
     cfg.plan_origin_url = "http://127.0.0.1:5020"
     cfg.routine_origin_url = "http://127.0.0.1:5050"   # RZS-6 / #343
+    cfg.icon_origin_url = "http://127.0.0.1:5000"      # EC-15 / #443
     cfg.photo_origin_url = "http://127.0.0.1:5070"     # FSE-7 / #393
     cfg.display_url_origin = "https://example.test"
     cfg.provider_api_key = None

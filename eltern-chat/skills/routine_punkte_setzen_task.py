@@ -294,7 +294,6 @@ class RoutinePunkteSetzenTask(WriteTask):
             item_id=args.get("item_id"),
             items=args.get("items"),
             icon_stichwort=args.get("icon_stichwort"),
-            icon_max=args.get("icon_max", 3),
         )
         return _quittung_fuer(signal, daten, aktion=aktion)
 
