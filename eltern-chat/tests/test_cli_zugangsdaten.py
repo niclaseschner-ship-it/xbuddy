@@ -5,7 +5,10 @@ an, und `build_context` reicht den Wert an `resolve_store_path(cli_path=…)`
 weiter — analog zur ZD-CLI-Anbindung der anderen Komponenten (ZD-8).
 """
 
+from unittest.mock import Mock
+
 import main
+from config import Config
 
 # -- parse_args: das Flag ist da und übersteuert den Default --------
 
@@ -43,26 +46,28 @@ class _FakeTelegramClient:
         return _FakeMe()
 
 
-class _Cfg:
+def _make_cfg():
     """Minimal-Konfiguration, die `build_context` für den Onboarding-Pfad
     braucht (cfg.provider_api_key=None → keine Anbieter-/Familie-Prüfung)."""
-
-    bot_token = "dummy"
-    family_group_chat_id = None
-    context_depth = 20
-    family_group_locked = False
-    ca_pem_path = "ca.pem"
+    cfg = Mock(spec=Config)
+    cfg.bot_token = "dummy"
+    cfg.family_group_chat_id = None
+    cfg.context_depth = 20
+    cfg.family_group_locked = False
+    cfg.ca_pem_path = "ca.pem"
     # Seit Auftrag #215: Origin-URLs statt Datei-Pfade fuer FAA/GAA.
-    familie_origin_url = "http://127.0.0.1:5010"
-    geraete_origin_url = "http://127.0.0.1:5040"
-    panel_origin_url = "http://127.0.0.1:5041"   # PAA-5 / #183
-    plan_origin_url = "http://127.0.0.1:5020"
-    routine_origin_url = "http://127.0.0.1:5050"   # RZS-6 / #343
-    photo_origin_url = "http://127.0.0.1:5070"     # FSE-7 / #393
-    display_url_origin = "https://example.test"
-    provider_api_key = None
-    provider = "anthropic"
-    provider_model = "test-model"
+    cfg.familie_origin_url = "http://127.0.0.1:5010"
+    cfg.geraete_origin_url = "http://127.0.0.1:5040"
+    cfg.panel_origin_url = "http://127.0.0.1:5041"   # PAA-5 / #183
+    cfg.plan_origin_url = "http://127.0.0.1:5020"
+    cfg.routine_origin_url = "http://127.0.0.1:5050"   # RZS-6 / #343
+    cfg.photo_origin_url = "http://127.0.0.1:5070"     # FSE-7 / #393
+    cfg.display_url_origin = "https://example.test"
+    cfg.provider_api_key = None
+    cfg.provider = "anthropic"
+    cfg.provider_model = "test-model"
+    cfg.log_level = "INFO"  # AC2: Config.log_level ist erforderlich, aber _Cfg hatte das nicht
+    return cfg
 
 
 def test_build_context_passes_cli_path_to_resolve_store_path(monkeypatch,
@@ -86,7 +91,7 @@ def test_build_context_passes_cli_path_to_resolve_store_path(monkeypatch,
 
     cli_pfad = str(tmp_path / "instanz-zd.json")
     ctx = main.build_context(
-        _Cfg(),
+        _make_cfg(),
         str(tmp_path / "conv.db"),
         zd_cli_path=cli_pfad,
     )
@@ -113,7 +118,7 @@ def test_build_context_default_zd_cli_path_is_none(monkeypatch, tmp_path):
     monkeypatch.setattr(zd_pkg, "resolve_store_path", _spion_resolve)
 
     main.build_context(
-        _Cfg(),
+        _make_cfg(),
         str(tmp_path / "conv.db"),
     )
 
