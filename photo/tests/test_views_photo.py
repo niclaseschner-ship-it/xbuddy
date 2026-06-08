@@ -24,7 +24,11 @@ _VIEWS_JSON = os.path.join(
 
 def test_photo_views_json_laedt_sauber():
     """photo/views.json ist schema-gültig und deklariert die Rahmen-View
-    mit korrekten Pflichtfeldern (AC-D1)."""
+    mit korrekten Pflichtfeldern (AC-D1).
+
+    BUD-4 (T387-S2-AC3): die Display-View trägt das ARASAAC-Bilderrahmen-Icon
+    3281 (im _shared/icons-Cache). Der Eigentest fixiert die ID am echten
+    Manifest gegen Drift."""
     eintraege = views_manifest.load(_VIEWS_JSON)
     nach_slug = {e["slug"]: e for e in eintraege}
     assert "rahmen" in nach_slug
@@ -35,6 +39,8 @@ def test_photo_views_json_laedt_sauber():
     # Synonyme enthalten mindestens die kanonischen deutschen Begriffe
     synonyme = rahmen["synonyme"]
     assert any(s in synonyme for s in ("foto-rahmen", "bilderrahmen"))
+    # BUD-4: Display-View trägt icons[] (T387-Backfill, ARASAAC-Bilderrahmen).
+    assert rahmen.get("icons") == ["arasaac/3281.png"]
 
 
 def test_photo_routes_match_manifest():

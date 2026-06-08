@@ -12,11 +12,13 @@
       ],
       "zeigt": "Den rollierenden Wochenplan der Kinder mit Slots und Terminen.",
       "zielgruppe": "kind",
+      "icons": ["arasaac/32488.png"],
       "varianten": [
         {
           "slug": "woche-klein",
-          "query": "ansicht=klein",
-          "label": "Wochenplan für Kleinkinder"
+          "query": {"ansicht": "klein"},
+          "label": "Wochenplan für Kleinkinder",
+          "icons": ["arasaac/32488.png", "arasaac/2484.png"]
         }
       ]
     }
