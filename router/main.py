@@ -1204,12 +1204,11 @@ def render_app_panel_index(panel_id):
     index_path = os.path.join(app_panel_dir(), 'index.html')
     with open(index_path, encoding='utf-8') as f:
         html = f.read()
-    # data-source-id ist Spec-neutrales Token (PANEL-2 Test). Wir setzen es
-    # auf der <body>-Wurzel, damit JS es per document.body.dataset lesen kann.
-    return html.replace(
-        '<body>',
-        '<body data-panel-id="%s">' % panel_id,
-        1)
+    # Token-Substitution analog T452-S2: das echte <body>-Tag in index.html
+    # trägt `data-panel-id="__PANEL_ID__"`. Wir ersetzen das Token — kein
+    # Substring-Match auf `<body>`, damit HTML-Kommentare nicht versehentlich
+    # gematcht werden und das echte Tag leer bleibt.
+    return html.replace('__PANEL_ID__', panel_id, 1)
 
 
 @app.route('/controller/app-panel/<panel_id>', methods=['GET'])
