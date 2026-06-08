@@ -10,6 +10,7 @@ Endpunkte:
   GET  /api/v1/panels/<id>                    — ein Panel je `panel_id` (PREG-14)
   GET  /api/v1/panels/<id>/config.json        — config-Sicht (PREG-14)
   GET  /api/v1/panels/<id>/tiles.json         — tiles-Sicht (PREG-14)
+  PUT  /api/v1/panels/<id>/tiles              — tiles schreiben, atomar (PBE-4, #330)
   POST /api/v1/panels/                        — Panel anlegen, atomar (PREG-15)
 
 Service-Topologie (Lego-Prinzip): die Registry läuft als schlanker
@@ -122,6 +123,11 @@ def display_existiert(display_id):
 
 class _RouterUnreachable(Exception):
     """Der Router ist nicht erreichbar oder antwortet mit 5xx — PREG-16."""
+
+
+# TODO #450: PBE-10 SSE-Publish-Form ratifizieren — router_tiles_changed() hier
+# entfernt (verworfener Admin-POST-Pfad, Spec-Halt #450). Bis #450 entschieden,
+# trägt DCOMP-2 reload-on-read alleine (V1-Fallback).
 
 
 def router_panels_upsert(source_id, display_id):
@@ -241,6 +247,74 @@ def get_panel_tiles(panel_id):
     if p is None:
         return jsonify({"error": "unbekannte panel_id"}), 404
     return jsonify(p.tiles)
+
+
+def _unprocessable(msg):
+    """PBE-11: 422 mit JSON-Fehler für ungültige tiles-Liste."""
+    return jsonify({"error": msg}), 422
+
+
+@app.route("/api/v1/panels/<panel_id>/tiles", methods=["PUT"])
+def put_panel_tiles(panel_id):
+    """PBE-4: vollständige neue tiles-Liste schreiben.
+
+    Body: ein tiles-Objekt {"tiles": [...]} — die vollständige neue Liste
+    (nicht ein Patch). Last-Write-Wins (Nic 2026-06-07).
+
+    - PBE-11 Validierung VOR dem Schreiben → 422 + JSON-Fehler, Datei unverändert.
+    - Unbekannte panel_id → 404.
+    - Schreibfehler am Dateisystem → 500 + JSON-Fehler (GER-6/DCOMP-4-Geist).
+    - PREG-5: config-Feld der Instanz wird NICHT berührt.
+    - DCOMP-4: atomares Schreiben (Temp + os.replace) über registry_mod.save().
+    - PBE-10: Reload-Signal-Pfad entfernt (Spec-Halt #450); DCOMP-2 reload-on-read
+      trägt alleine als V1-Fallback.
+    """
+    path = runtime.get("registry_path")
+    if path is None:
+        return jsonify({"error": "kein Registry-Pfad konfiguriert"}), 503
+
+    body = request.get_json(silent=True)
+    if body is None:
+        return _unprocessable("kein gültiges JSON im Request-Body (PBE-11)")
+
+    # PBE-11: Validierung vor dem Schreiben — via registry_mod (konsolidiert).
+    try:
+        registry_mod.validate_tiles_payload(body)
+    except registry_mod.RegistryError as e:
+        return _unprocessable(str(e))
+
+    with _write_lock:
+        # DCOMP-2: frisch von Disk lesen — nie einen petralteten Stand überschreiben.
+        reg = registry_mod.load(path)
+        panel = reg.get(panel_id)
+        if panel is None:
+            return jsonify({"error": "unbekannte panel_id (PBE-4)"}), 404
+
+        # PREG-5: nur tiles ersetzen, config unberührt.
+        geaendertes_panel = registry_mod.Panel(
+            panel_id=panel.panel_id,
+            display_id=panel.display_id,
+            config=panel.config,
+            tiles=body,
+            router_url=panel.router_url,
+            source_id=panel.source_id,
+        )
+        # Registry mit geändertem Panel aufbauen — alle anderen Panels erhalten.
+        neue_panels = []
+        for p in reg.list_all():
+            if p.panel_id == panel_id:
+                neue_panels.append(geaendertes_panel)
+            else:
+                neue_panels.append(p)
+        neue_reg = registry_mod.Registry(neue_panels)
+
+        try:
+            registry_mod.save(neue_reg, path)
+        except registry_mod.RegistryError as e:
+            logging.warning("put_panel_tiles: Schreiben fehlgeschlagen: %s", e)
+            return jsonify({"error": str(e)}), 500
+
+    return jsonify({"ok": True, "panel_id": panel_id}), 200
 
 
 def _bad_request(msg):
