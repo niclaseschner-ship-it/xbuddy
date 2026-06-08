@@ -268,7 +268,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   tes_sessions=None, panel_origin_url=None,
                   paa_sessions=None, controller_url_origin=None,
                   routine_origin_url=None, photo_origin_url=None,
-                  icon_origin_url=None):
+                  icon_origin_url=None, seiten_origin_url=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
@@ -296,6 +296,11 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
     build_catalog zusätzlich die »Foto/Video senden«-Aufgabe (TASK-9,
     Sofort-Schreib-Aufgabe) — wieder hinter dem AND-Guard auf
     `family_group_chat_id_getter` (FSE-2-Berechtigung).
+
+    SREG-6 / #453: Setzt der Aufrufer `seiten_origin_url`, registriert
+    build_catalog zusätzlich die lesende »Seiten finden«-Aufgabe (EC-9)
+    — hinter dem AND-Guard auf `seiten_origin_url` + `family_group_chat_id_getter`
+    (SREG-6-Berechtigung via EC-2-Mitgliedschaft).
     """
     # Lokale Imports: brechen den Import-Zyklus tasks <-> ca_task/faa_task/
     # gaa_task/kav_task — nicht hochziehen.
@@ -492,5 +497,30 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             icon_client=_rps_icon_client,
             family_group_chat_id_getter=family_group_chat_id_getter,
             is_member_fn=_rps_is_member))
+
+    # SREG-6: »Seiten finden« als lesende Aufgabe (EC-9). AND-Guard:
+    # seiten_origin_url UND family_group_chat_id_getter müssen gesetzt sein —
+    # analog der TER-Linie. Fehlt eine → Aufgabe nicht im Katalog (SREG-6).
+    # seiten_origin_url: Seiten-Registry-Schnittstelle (GET /api/v1/seiten,
+    # SREG-3). family_group_chat_id_getter: Live-Berechtigung via EC-2-
+    # Mitgliedschaft (SREG-6).
+    if seiten_origin_url is not None and family_group_chat_id_getter is not None:
+        from skills.seiten_client import SeitenClient
+        from skills.seiten_finden_task import SeitenFindenTask
+        _sf_client = SeitenClient(origin_url=seiten_origin_url)
+        _sf_fgcid_getter = family_group_chat_id_getter
+        _sf_tg = tg
+        def _sf_is_member(user_id):
+            fgcid = _sf_fgcid_getter()
+            if not fgcid:
+                return False
+            member = _sf_tg.get_chat_member(fgcid, user_id)
+            return member is not None and member.get("status") in (
+                "creator", "administrator", "member")
+        catalog.register(SeitenFindenTask(
+            tg=tg,
+            seiten_client=_sf_client,
+            is_member_fn=_sf_is_member,
+            display_url_origin=display_url_origin))
 
     return catalog

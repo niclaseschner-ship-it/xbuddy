@@ -660,7 +660,10 @@ def build_context(cfg, db_path, zd_cli_path=None):
         icon_origin_url=cfg.icon_origin_url,
         # FSE-7 / #393: Origin des Photo-Buddys (PHOTO-13/PHOTO-16). Leer ⇒
         # FotoSendenTask wird NICHT registriert (FSE-8 AND-Guard).
-        photo_origin_url=cfg.photo_origin_url)
+        photo_origin_url=cfg.photo_origin_url,
+        # SREG-6 / #453: Origin der Seiten-Registry (SREG-3). Leer ⇒
+        # SeitenFindenTask wird NICHT registriert (SREG-6 AND-Guard).
+        seiten_origin_url=cfg.seiten_origin_url)
 
     if cfg.provider_api_key:
         # KI-Modus — Anbieter steht; die Familien-Gruppe muss gesetzt sein (EC-2).
