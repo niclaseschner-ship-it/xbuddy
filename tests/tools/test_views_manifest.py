@@ -135,25 +135,137 @@ def test_load_doppelter_slug_ist_manifest_error(tmp_path):
         views_manifest.load(path)
 
 
-# ---- Varianten (optional, SREG-1/SREG-4) ----
+# ---- Varianten (optional, SREG-1/SREG-4 + BUD-4) ----
+
+def gueltige_variante(**overrides):
+    """Eine BUD-4-konforme Display-Variante — flaches `query`-Objekt + volles
+    `icons[]` (keine Erbung). Tests mutieren sie."""
+    v = {
+        "slug": "woche-klein",
+        "query": {"ansicht": "klein"},
+        "label": "Wochenplan klein",
+        "icons": ["arasaac/32488.png", "arasaac/2484.png"],
+    }
+    v.update(overrides)
+    return v
+
+
+def gueltiger_display_eintrag(**overrides):
+    """Eine BUD-4-konforme Display-View — Sorte a, zielgruppe=kind, icons[]
+    Pflicht. Tests mutieren sie."""
+    eintrag = gueltiger_eintrag(icons=["arasaac/32488.png"])
+    eintrag.update(overrides)
+    return eintrag
+
 
 def test_load_gueltige_varianten(tmp_path):
-    """varianten[] mit slug/query/label wird akzeptiert (SREG-1)."""
-    eintrag = gueltiger_eintrag(varianten=[
-        {"slug": "woche-klein", "query": "ansicht=klein",
-         "label": "Wochenplan klein"}])
+    """varianten[] mit slug/query/label + icons[] (BUD-4) wird akzeptiert (SREG-1)."""
+    eintrag = gueltiger_display_eintrag(varianten=[gueltige_variante()])
     path = schreibe_manifest(tmp_path / "views.json", [eintrag])
     eintraege = views_manifest.load(path)
-    assert eintraege[0]["varianten"][0]["query"] == "ansicht=klein"
+    assert eintraege[0]["varianten"][0]["query"] == {"ansicht": "klein"}
+    assert eintraege[0]["varianten"][0]["icons"] == [
+        "arasaac/32488.png", "arasaac/2484.png"]
 
 
 @pytest.mark.parametrize("feld", ["slug", "query", "label"])
 def test_load_variante_ohne_pflichtfeld_ist_manifest_error(tmp_path, feld):
     """Jede Variante braucht slug, query, label (SREG-4)."""
-    variante = {"slug": "x", "query": "a=b", "label": "X"}
+    variante = gueltige_variante()
     del variante[feld]
     path = schreibe_manifest(
-        tmp_path / "views.json", [gueltiger_eintrag(varianten=[variante])])
+        tmp_path / "views.json",
+        [gueltiger_display_eintrag(varianten=[variante])])
+    with pytest.raises(views_manifest.ManifestError):
+        views_manifest.load(path)
+
+
+# ---- BUD-4: icons[] (T387-S2) ----
+
+def test_load_display_view_ohne_icons_ist_ok_ohne_varianten(tmp_path):
+    """Ein Display-Eintrag OHNE icons[] ist (noch) erlaubt — BUD-4-Hartmachen
+    übernimmt SREG-10 (`icons_erforderlich`). Der Validator prüft nur das
+    Schema *wenn* icons[] da ist. So bricht die Migrationsphase nicht."""
+    path = schreibe_manifest(tmp_path / "views.json", [gueltiger_eintrag()])
+    eintraege = views_manifest.load(path)
+    assert "icons" not in eintraege[0]
+
+
+def test_load_display_icons_keine_liste_ist_manifest_error(tmp_path):
+    """`icons` muss eine Liste sein (BUD-4)."""
+    path = schreibe_manifest(
+        tmp_path / "views.json",
+        [gueltiger_display_eintrag(icons="arasaac/32488.png")])
+    with pytest.raises(views_manifest.ManifestError):
+        views_manifest.load(path)
+
+
+def test_load_display_icons_leer_ist_manifest_error(tmp_path):
+    """`icons[]` mit Länge 0 ist Fehler (BUD-4: 1..3)."""
+    path = schreibe_manifest(
+        tmp_path / "views.json", [gueltiger_display_eintrag(icons=[])])
+    with pytest.raises(views_manifest.ManifestError):
+        views_manifest.load(path)
+
+
+def test_load_display_icons_zu_viele_ist_manifest_error(tmp_path):
+    """`icons[]` mit Länge 4 ist Fehler (BUD-4: max 3)."""
+    path = schreibe_manifest(
+        tmp_path / "views.json",
+        [gueltiger_display_eintrag(icons=["a", "b", "c", "d"])])
+    with pytest.raises(views_manifest.ManifestError):
+        views_manifest.load(path)
+
+
+def test_load_display_icons_nicht_string_ist_manifest_error(tmp_path):
+    """Jeder `icons[]`-Eintrag muss ein nicht-leerer String sein (BUD-4)."""
+    path = schreibe_manifest(
+        tmp_path / "views.json",
+        [gueltiger_display_eintrag(icons=["arasaac/32488.png", 42])])
+    with pytest.raises(views_manifest.ManifestError):
+        views_manifest.load(path)
+
+
+def test_load_eltern_view_mit_icons_ist_manifest_error(tmp_path):
+    """Sorten b/c tragen kein icons-Feld — BUD-4 verbietet das im Manifest
+    (Aggregator-Stripping in SREG-10 ist nur die zweite Verteidigungslinie)."""
+    path = schreibe_manifest(
+        tmp_path / "views.json",
+        [gueltiger_eintrag(zielgruppe="eltern",
+                            pfad="/display/wetter/regeln",
+                            slug="regeln",
+                            icons=["arasaac/32488.png"])])
+    with pytest.raises(views_manifest.ManifestError):
+        views_manifest.load(path)
+
+
+def test_load_display_variante_query_string_ist_manifest_error(tmp_path):
+    """BUD-4: `varianten[].query` muss flaches Objekt sein, kein String."""
+    variante = gueltige_variante(query="ansicht=klein")
+    path = schreibe_manifest(
+        tmp_path / "views.json",
+        [gueltiger_display_eintrag(varianten=[variante])])
+    with pytest.raises(views_manifest.ManifestError):
+        views_manifest.load(path)
+
+
+def test_load_display_variante_ohne_icons_ist_manifest_error(tmp_path):
+    """BUD-4: Display-Variante ohne `icons[]` ist Fehler — keine Erbung."""
+    variante = gueltige_variante()
+    del variante["icons"]
+    path = schreibe_manifest(
+        tmp_path / "views.json",
+        [gueltiger_display_eintrag(varianten=[variante])])
+    with pytest.raises(views_manifest.ManifestError):
+        views_manifest.load(path)
+
+
+def test_load_display_variante_icons_zu_viele_ist_manifest_error(tmp_path):
+    """BUD-4: `varianten[].icons[]` 1..3 — 4 ist Fehler."""
+    variante = gueltige_variante(icons=["a", "b", "c", "d"])
+    path = schreibe_manifest(
+        tmp_path / "views.json",
+        [gueltiger_display_eintrag(varianten=[variante])])
     with pytest.raises(views_manifest.ManifestError):
         views_manifest.load(path)
 

@@ -12,7 +12,8 @@
         "was anziehen"
       ],
       "zeigt": "Das aktuelle Wetter und die passende Kleidungsempfehlung für den Tag als Diptychon.",
-      "zielgruppe": "kind"
+      "zielgruppe": "kind",
+      "icons": ["arasaac/24721.png"]
     },
     {
       "slug": "regeln",
