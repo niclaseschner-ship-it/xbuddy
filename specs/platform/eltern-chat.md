@@ -250,6 +250,78 @@ Umsetzung: siehe E-EC-12.
 
 *Tickets:* #287, #294, #299, #300, #301
 
+### EC-27 — Telegram-Formatierung: `parse_mode=HTML` opt-in pro Nachricht
+
+Der Telegram-Transport (`eltern-chat/telegram.py`) sendet Bot-Nachrichten
+**standardmäßig ohne `parse_mode`** — der Bestand bleibt unverändert
+Klartext. Damit bleiben statische Bot-Texte mit syntaktisch HTML-ähnlichen
+Zeichen funktionsfähig (Beispiel: `eltern-chat/skills/geraet_anlegen.py`
+fragt nach „Format: `<breite>x<höhe>`" — im HTML-Modus würde Telegram das
+unbekannte Tag `<breite>` ablehnen und die Nachricht verwerfen).
+
+Ein Skill, der **strukturierte Listen zum Kopieren** vorlegen will (z. B.
+`termine-aus-bild.md` TAB-7 Sammel-Vorschlag und TAB-8.1 Sentinel-Lückenform),
+**aktiviert HTML pro Nachricht** durch ein optionales Argument
+`parse_mode="HTML"` an der `send_message`-API. Diese Wahl ist
+**Skill-Verantwortung**: der Skill muss in dieser Nachricht alle dynamischen
+Werte HTML-escapen (siehe unten) — sonst zerstört er die eigene Nachricht.
+
+**HTML-Escape-Pflicht beim Opt-in:** Sobald ein Skill `parse_mode="HTML"`
+setzt, escaped er jeden dynamischen Wert (Termin-Titel, Personen-Namen,
+LLM-Output, zurückgespiegelte Familien-Eingaben) vor dem Einsetzen in die
+Nachricht — `<` → `&lt;`, `>` → `&gt;`, `&` → `&amp;`. Der konkrete
+Escape-Helper lebt im Code; die Spec normiert das **Soll** (Escape findet
+statt, an EINER Stelle, vor dem Einsetzen — keine doppelte Escape, kein
+vergessenes Escape). Statische, vom Code formulierte Klartext-Wrapper im
+HTML-Pfad bleiben unangetastet, weil sie als Konstanten kontrolliert sind.
+
+Skills, die **nicht** HTML aktivieren (= der heutige Bestand), brauchen
+nichts zu ändern — sie senden weiter Klartext, kein Escape-Risiko, kein
+Bestandsbruch. Eine spätere Migration von Bestands-Texten auf HTML
+(z. B. um konsistent Monospace zu setzen) wäre ein eigenes Ticket mit
+Audit aller heutigen statischen Bot-Texte auf Telegram-relevante Zeichen.
+
+Eingehende Familien-Nachrichten bleiben in allen Fällen **Klartext**.
+
+Diese Regel ergänzt EC-12 (anbieter-unabhängige Regeln): die HTML-Linie
+gilt unabhängig vom konfigurierten KI-Anbieter, weil sie reine
+Telegram-Transport-Schicht ist.
+
+*Tickets:* #475 (TAB Erst-Konsument; opt-in pro Nachricht)
+
+### EC-28 — Skill-seitiges Typing-Indikator-Renewal für synchrone Buddy-Bulk-Calls
+
+Ruft ein Eltern-Chat-Skill synchron einen anderen Buddy (HTTP-Service via
+`conventions/data-components.md` DCOMP-1 / `conventions/apps.md` APP-3)
+auf und dauert dieser Aufruf länger als rund 5 Sekunden — die
+Sichtbarkeitsdauer des Telegram-Typing-Indikators —, erneuert das Skill
+den Indikator **selbst** periodisch, solange der Buddy-Call läuft. Konkret:
+ein **Best-Effort-Hintergrund-Thread** sendet alle 4 Sekunden
+`sendChatAction(typing)` in den jeweiligen Chat (Familien-Gruppe oder
+Privatchat, je nachdem wo die Aufgabe gerade läuft).
+
+Fehler des Renewal-Calls (Netzwerk-Fehler, Telegram-Rate-Limit, beliebiger
+HTTP-Fehler) brechen den Buddy-Call **nicht** ab — kein Abbruch der
+Aufgabe, keine Fehler-Antwort an die Familie. Das Renewal ist
+Komfort-Signal, nicht Sicherheits-Gate.
+
+Begründung der Skill-Seitigkeit: der angerufene Buddy (z. B. Plan-Buddy
+bei `termine-aus-bild.md` TAB-9 PLAN-33 Bulk-PUT) ist ein HTTP-Service
+hinter `conventions/apps.md` APP-3 — er kennt den Telegram-Chat des
+Aufrufers nicht und darf ihn nicht kennen (DCOMP-1 einseitige
+Abhängigkeit). Der Typing-Indikator gehört zum Eltern-Chat-Transport;
+ihn dort zu halten, wo das Wissen um den Chat liegt, ist die einzige
+Option, die die Komponenten-Grenze respektiert.
+
+Diese Regel ist die Bulk-/Buddy-Analogie zu EC-14 Absatz 2 (Renewal für
+Provider-Calls) — derselbe Mechanismus, anderer Konsument: dort der
+KI-Anbieter, hier ein anderer Buddy. Die EC-25-Linie (Typing als
+Komfort-Signal vor Bot-Nachrichten in mehrstufigen Schreib-Aufgaben)
+bleibt unberührt — EC-28 deckt die Lücke **während** eines synchronen
+Buddy-Calls, EC-25 die Lücke **vor** jeder Bot-Sende-Operation.
+
+*Tickets:* #475
+
 ## 3. Aufgaben
 
 ### EC-8 — Aufgaben-Katalog

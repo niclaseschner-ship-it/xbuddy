@@ -52,8 +52,10 @@ und `kalender-verbinden.md` Trigger-Linie).
   Familien-Kalender (`plan.md` PLAN-15). Multi-Kalender-Wahl bleibt
   Plan-Buddy-Sache (`plan.md` OPEN-PLAN-F).
 - **Termin-Erfassung aus einem Foto** (z. B. ein abfotografierter Schulplan)
-  — eigene Funktion (TAB-Spec, separates Ticket); benötigt mehrstufige
-  Bild-Verarbeitung, die nicht zu dieser Funktion gehört.
+  — eigene Funktion: `termine-aus-bild.md` (TAB, Refs #475). TAB schreibt
+  als Bulk über `plan.md` PLAN-33; TES bleibt der Einzel-PUT-Pfad
+  (PLAN-22). Benötigt mehrstufige Bild-Verarbeitung, die nicht zu dieser
+  Funktion gehört.
 - **PrivateChatSession-Refactor** zur SESS-Konvention — verfolgt unter
   einem eigenen Plattform-Ticket (PrivateChatSession-Refactor, Folge-
   Linie). TES verweist auf SESS-1..SESS-4 wie KAV und FAA es tun.
