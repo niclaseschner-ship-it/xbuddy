@@ -25,16 +25,33 @@ _VIEWS_JSON = os.path.join(
 
 def test_plan_views_json_laedt_sauber():
     """plan/views.json ist schema-gültig und deklariert die Wochen-View mit
-    der Kleinkind-Variante (AC-A3)."""
+    der Kleinkind-Variante (AC-A3).
+
+    `varianten[].query` ist seit BUD-4 ein **flaches Objekt**
+    (`{"ansicht":"klein"}`, kein String) — passt direkt ins Kachel-/Descriptor-
+    Schema (PANEL-7). Der Eigentest assertiert das Objekt direkt, statt
+    unhashable-dicts in ein Set zu kippen.
+
+    AC-S2-AC3 (T387): Die Display-View trägt das ARASAAC-Kalender-Icon 32488
+    (BUD-4, im Cache vorhanden), die Kleinkind-Variante trägt zusätzlich das
+    Kinder-Marker-Icon 2484 — beide werden hier am echten Manifest fixiert."""
     eintraege = views_manifest.load(_VIEWS_JSON)
     nach_slug = {e["slug"]: e for e in eintraege}
     assert "woche" in nach_slug
     woche = nach_slug["woche"]
     assert woche["pfad"] == "/display/plan/woche"
     assert woche["zielgruppe"] == "kind"
+    # BUD-4: Display-View trägt icons[] mit ARASAAC-Kalender (T387-Backfill).
+    assert woche.get("icons") == ["arasaac/32488.png"]
     # ?ansicht=klein steht als endliche Variante an EINEM Eintrag (SREG-1).
-    queries = {v["query"] for v in woche.get("varianten", [])}
-    assert "ansicht=klein" in queries
+    # `query` ist flaches Objekt (BUD-4), darum Listen-Vergleich statt Set.
+    varianten = woche.get("varianten", [])
+    queries = [v["query"] for v in varianten]
+    assert {"ansicht": "klein"} in queries
+    # BUD-4: Kleinkind-Variante trägt ihr eigenes vollständiges icons[]
+    # (Kalender + Kinder-Marker 2484) — keine Erbung, keine Ableitung.
+    klein = next(v for v in varianten if v["slug"] == "woche-klein")
+    assert klein["icons"] == ["arasaac/32488.png", "arasaac/2484.png"]
 
 
 def test_plan_routes_match_manifest():

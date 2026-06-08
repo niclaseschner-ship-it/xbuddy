@@ -54,6 +54,12 @@ ERLAUBTE_ZIELGRUPPEN = ("kind", "eltern")
 # Pflichtfelder je View-Eintrag (SREG-4 / BUD-3). `varianten` ist optional.
 PFLICHTFELDER = ("slug", "pfad", "label", "synonyme", "zeigt", "zielgruppe")
 
+# BUD-4: icons[]-Bereich für Display-Views — mindestens ein Kachel-Icon, max 3
+# (Default-Icon + bis zu zwei Markern, ICONS-5/PANEL-3). Sorten b/c tragen kein
+# icons-Feld und werden hier NICHT geprüft (SREG-10: kein icons-Feld bei b/c).
+ICONS_MIN = 1
+ICONS_MAX = 3
+
 
 class ManifestError(Exception):
     """Das `views.json`-Manifest ist inhaltlich ungültig — JSON-Fehler,
@@ -109,9 +115,30 @@ def load(path):
     return eintraege
 
 
+def _ist_display_view(roh):
+    """Eine Display-View (BUD-4 / SREG-4-Sorte a) ist ein Eintrag mit
+    `zielgruppe=kind` UND einem `/display/<app>/<view>`-Pfad. Nur diese Sorte
+    trägt `icons[]` (Eltern-Settings-Sorte b und Controller-Sorte c nicht,
+    PANEL-7 Descriptor `{app, view}` zielt nur auf Display-Views).
+
+    Controller-Apps haben `zielgruppe=kind` möglich, aber ihren Pfad-Prefix
+    `/controller/<app>/` — der Pfad-Prefix entscheidet hier, damit der
+    Validator BUD-4 nicht auf Controller-Views anwendet (die `icons[]`
+    nicht tragen).
+    """
+    pfad = roh.get("pfad") or ""
+    return roh.get("zielgruppe") == "kind" and pfad.startswith("/display/")
+
+
 def _validate_eintrag(roh):
     """Validiert einen einzelnen View-Eintrag (SREG-4) und gibt ihn normalisiert
     zurück. Wirft `ManifestError` bei fehlendem Pflichtfeld oder Schema-Bruch.
+
+    BUD-4-Anteil (T387-S2): für Display-Views (Sorte a) zusätzlich `icons[]`
+    Pflicht (1..3 Pfade als String, relativ zur Icon-Basis
+    `/display/_shared/icons/`) und `varianten[].icons[]` voll Pflicht. Sorten
+    b/c bleiben unverändert — der Aggregator (SREG-10) strippt das icons-Feld
+    dort nicht, das Manifest darf es dort gar nicht erst tragen.
     """
     if not isinstance(roh, dict):
         raise ManifestError("views.json: Eintrag ist kein Objekt: %r" % roh)
@@ -126,15 +153,54 @@ def _validate_eintrag(roh):
         raise ManifestError(
             "views.json: `zielgruppe` muss %s sein, ist %r (slug %r)"
             % (ERLAUBTE_ZIELGRUPPEN, roh["zielgruppe"], roh.get("slug")))
+
+    ist_display = _ist_display_view(roh)
+    # BUD-4: icons[] nur bei Display-Views prüfen — Sorten b/c tragen kein
+    # icons-Feld; ist eines da, wäre das ein Schema-Bruch (kein Vorrat, CLAUDE.md §6).
+    if "icons" in roh:
+        if not ist_display:
+            raise ManifestError(
+                "views.json: `icons[]` nur bei Display-Views (Sorte a) erlaubt"
+                " — Eintrag (slug %r, zielgruppe %r, pfad %r) darf kein"
+                " icons-Feld tragen (BUD-4)"
+                % (roh.get("slug"), roh.get("zielgruppe"), roh.get("pfad")))
+        _validate_icons(roh["icons"], roh.get("slug"), feldname="icons")
+
     varianten = roh.get("varianten")
     if varianten is not None:
-        _validate_varianten(varianten, roh.get("slug"))
+        _validate_varianten(varianten, roh.get("slug"), ist_display=ist_display)
     return roh
 
 
-def _validate_varianten(varianten, slug):
-    """Validiert das optionale `varianten[]` (SREG-1/SREG-4): Liste von Objekten
-    mit je `slug`, `query`, `label`."""
+def _validate_icons(icons, slug, feldname="icons"):
+    """Validiert das BUD-4-`icons[]`-Feld: Liste von 1..3 nicht-leeren Strings.
+
+    Pfade sind relativ zur Icon-Basis `/display/_shared/icons/` (BUD-4) — der
+    Validator prüft nur Schema (Liste, Länge, String-Typ, nicht-leer); der
+    semantische Pfad-Check (existiert das PNG?) ist ein Deploy-/Backfill-Gate
+    (Ticket #387 Backfill, nicht hier — BUD-4 Schluss-Absatz).
+    """
+    if not isinstance(icons, list):
+        raise ManifestError(
+            "views.json: `%s` muss eine Liste sein (slug %r), ist %r"
+            % (feldname, slug, type(icons).__name__))
+    if not ICONS_MIN <= len(icons) <= ICONS_MAX:
+        raise ManifestError(
+            "views.json: `%s` muss %d..%d Pfade enthalten, hat %d (slug %r) — BUD-4"
+            % (feldname, ICONS_MIN, ICONS_MAX, len(icons), slug))
+    for i, pfad in enumerate(icons):
+        if not isinstance(pfad, str) or not pfad:
+            raise ManifestError(
+                "views.json: `%s`[%d] muss nicht-leerer String sein, ist %r"
+                " (slug %r) — BUD-4" % (feldname, i, pfad, slug))
+
+
+def _validate_varianten(varianten, slug, ist_display=False):
+    """Validiert das optionale `varianten[]` (SREG-1/SREG-4 + BUD-4): Liste von
+    Objekten mit je `slug`, `query`, `label`. BUD-4 (T387-S2): bei Display-View
+    ist `varianten[].query` **flaches Objekt** (kein String) und
+    `varianten[].icons[]` Pflicht (1..3 Pfade) — keine Erbung vom View-Icon.
+    """
     if not isinstance(varianten, list):
         raise ManifestError(
             "views.json: `varianten` muss eine Liste sein (slug %r)" % slug)
@@ -147,6 +213,20 @@ def _validate_varianten(varianten, slug):
                 raise ManifestError(
                     "views.json: Variante ohne Pflichtfeld %r: %r (slug %r)"
                     % (feld, v, slug))
+        if ist_display:
+            # BUD-4: query ist flaches Objekt (kein String), passt direkt ins
+            # Kachel-/Descriptor-Schema (PANEL-7).
+            if not isinstance(v["query"], dict):
+                raise ManifestError(
+                    "views.json: Variante `query` muss flaches Objekt sein"
+                    " (BUD-4), ist %r (slug %r, variante %r)"
+                    % (type(v["query"]).__name__, slug, v.get("slug")))
+            # BUD-4: varianten[].icons[] voll Pflicht — keine Ableitung.
+            if "icons" not in v:
+                raise ManifestError(
+                    "views.json: Display-Variante ohne `icons[]` (BUD-4, keine"
+                    " Erbung vom View-Icon): %r (slug %r)" % (v, slug))
+            _validate_icons(v["icons"], slug, feldname="varianten[].icons")
 
 
 def kanonische_display_pfade(app, slug, ausgenommene_pfade=None):

@@ -23,7 +23,12 @@ _VIEWS_JSON = os.path.join(
 
 
 def test_wetter_views_json_laedt_sauber():
-    """wetter/views.json ist schema-gültig und deklariert heute (kind) + regeln (eltern)."""
+    """wetter/views.json ist schema-gültig und deklariert heute (kind) + regeln (eltern).
+
+    BUD-4 (T387-S2-AC3): die Display-View `heute` trägt das ARASAAC-Wetter-Icon
+    24721 (im _shared/icons-Cache). `regeln` ist Sorte b (eltern) und trägt
+    KEIN icons-Feld — kein Vorrat (CLAUDE.md §6). Beide Anker schützen vor
+    stillem Backfill-Drift."""
     eintraege = views_manifest.load(_VIEWS_JSON)
     nach_slug = {e["slug"]: e for e in eintraege}
 
@@ -33,11 +38,15 @@ def test_wetter_views_json_laedt_sauber():
     assert heute["zielgruppe"] == "kind"
     # ?stage=toddler ist kein eigener Eintrag (SREG-1) — keine varianten[].
     assert heute.get("varianten", []) == []
+    # BUD-4: Display-View trägt icons[] (T387-Backfill, ARASAAC-Wetter).
+    assert heute.get("icons") == ["arasaac/24721.png"]
 
     assert "regeln" in nach_slug
     regeln = nach_slug["regeln"]
     assert regeln["pfad"] == "/display/wetter/regeln"
     assert regeln["zielgruppe"] == "eltern"
+    # BUD-4: Sorte b (eltern) trägt kein icons-Feld — kein Vorrat (CLAUDE.md §6).
+    assert "icons" not in regeln
     # Synonyme enthalten KI-freundliche Bezeichnungen (AC-B1).
     synonyme_regeln = {s.lower() for s in regeln["synonyme"]}
     assert any("garderoben" in s or "garderobe" in s for s in synonyme_regeln), (
