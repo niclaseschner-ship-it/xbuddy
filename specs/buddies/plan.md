@@ -319,6 +319,205 @@ Kalender nicht erreichbar: HTTP 502. Ungültige Eingabe: HTTP 400.
 
 *Tickets:* #40, #256
 
+### PLAN-33 — Bulk-Termin-Schnittstelle: mehrere Termine in einem Aufruf anlegen
+Der Plan-Buddy stellt eine **Bulk-Schreib-Schnittstelle** für Termine
+bereit, mit der konsumierende Apps **mehrere** Termine in **einem**
+HTTP-Aufruf anlegen können — Form: `POST /api/v1/plan/termine/bulk`.
+Erst-Konsument ist `specs/platform/termine-aus-bild.md` TAB-9 (Termine
+aus Bild); PLAN-22 (Einzel-PUT) bleibt unverändert daneben für Aufgaben
+mit einem Termin (TES). Eine konsumierende App entscheidet zwischen
+PLAN-22 (Einzel) und PLAN-33 (Bulk) anhand ihres eigenen Vertrags —
+PLAN-33 ist nicht „besser" als PLAN-22, sondern für mengenmäßig anderen
+Konsum.
+
+**Body** (`Content-Type: application/json`):
+`{ "request_id": "<UUIDv4>", "items": [ <PLAN-22-PUT-Body>, … ] }`.
+- `request_id` ist Pflicht (Idempotenz, PLAN-33.5).
+- `items` ist eine nicht-leere Liste; jedes Element folgt der
+  PLAN-22-PUT-Body-Form (`titel`, `beginn`, `ende?`); kein
+  `event_id` (PLAN-33 legt nur an, ändert nicht).
+
+#### PLAN-33.1 — Pre-validate + best-effort write, kein Rollback
+Der Bulk-PUT verarbeitet die Items in zwei Phasen:
+
+1. **Pre-validate** — alle `items` werden vor irgendeinem Google-Schreib-
+   Call gegen die PLAN-22-Validierungs-Regeln geprüft (Pflichtfelder,
+   Typ-Erkennung über `T` in `beginn`, Datums-Bedingung **ganztägig
+   `ende ≥ beginn`** bzw. **zeitgebunden `ende > beginn`** wie in PLAN-22
+   PUT-Vertrag, kein Typ-Mismatch). Schlägt **mindestens eines** der
+   Items in der
+   Pre-Validate-Phase fehl, antwortet der Endpoint mit HTTP 400 und
+   einer `results`-Liste, in der **alle** Items als `{ "ok": false,
+   "error_code": "validation", "error": "<Detail>" }` markiert sind —
+   es wird **nichts** geschrieben. Das schützt die Familie vor
+   inkonsistenten Teil-Listen, in denen einige Termine bereits aus
+   Strukturfehlern verworfen wären.
+
+2. **Best-effort write** — ist die Pre-Validate-Phase sauber, schreibt
+   der Bulk-PUT die Items **einzeln** in den Google-Kalender. Schlägt
+   ein einzelner Google-Schreib-Call fehl (Rate-Limit, Auth-Verlust,
+   anderer Google-Fehler), werden die **anderen** Items **trotzdem**
+   geschrieben — der Endpoint macht **kein** Rollback. Die `results`-
+   Liste meldet je Item den Erfolg oder den `error_code`. Begründung:
+   ein Rollback nach Teil-Erfolg bräuchte Google-DELETE-Calls auf
+   bereits geschriebene Events, die ihrerseits scheitern können — eine
+   Rollback-Schicht, die ihre eigene Rollback-Schicht braucht. Die
+   Familie sieht die N-von-M-Quittung und entscheidet, ob sie die
+   gescheiterten Items per PLAN-22 (Einzel-PUT) nachträgt.
+
+#### PLAN-33.2 — HTTP-Status-Tabelle und per-Item `error_code`
+Antwort-Statuscodes:
+
+- **HTTP 200** mit Body `{ "ok": true, "geschrieben": <N>, "gesamt":
+  <M>, "results": [ … ] }` — der Bulk-Aufruf wurde verarbeitet, einige
+  Items können trotzdem in `results` als `{"ok": false}` markiert sein
+  (best-effort, PLAN-33.1). `geschrieben` ist die Anzahl der erfolgreich
+  geschriebenen Items; `gesamt` = `len(items)`. Reihenfolge in
+  `results` entspricht der Reihenfolge in `items`.
+- **HTTP 400** — Pre-Validate-Fehler (PLAN-33.1) **oder** Body-Struktur
+  ungültig (fehlende `request_id`, `items` leer, `items` nicht Liste,
+  `request_id` keine UUIDv4-Form) **oder** Cap-Überschreitung
+  (PLAN-33.3). Body enthält bei Pre-Validate-Fehler die `results`-
+  Liste; bei Struktur-Fehler einen einfachen `{"error": "…"}`-Body.
+- **HTTP 401/403** — Loopback-/Auth-Verstoß analog PLAN-22 (Bulk-Pfad
+  hat keine zusätzlichen Auth-Regeln gegenüber Einzel-PUT).
+- **HTTP 409** — Idempotenz-Konflikt (PLAN-33.5: derselbe `request_id`
+  mit anderem `items_hash`).
+- **HTTP 502** — Kalender als Ganzes nicht erreichbar (Google-Service
+  tot, OAuth-Token-Refresh schlägt fehl) — analog PLAN-20. Body
+  `{"error": "calendar_unavailable"}`. **Nichts** wurde geschrieben.
+- **HTTP 5xx (übrig)** — Plan-Buddy-interner Fehler. Die Antwort enthält
+  keine `results`-Liste; der Konsument behandelt das wie PLAN-23-
+  Szenario (App nicht erreichbar, TAB-10).
+
+Per-Item `error_code`-Vokabular (in `results[i].error_code`):
+
+- `validation` — Item scheitert an den PLAN-22-Validierungs-Regeln.
+- `calendar_rate_limit` — Google-Calendar-API hat 429 oder 403 mit
+  Rate-Limit-Hinweis zurückgegeben; PLAN-33.6 hat alle Retries
+  aufgebraucht.
+- `calendar_auth` — OAuth-Token-Refresh oder Calendar-Auth scheitert
+  für dieses Item (kann passieren, wenn das Token zwischen Items
+  abläuft).
+- `calendar_other` — anderer Google-Fehler (5xx, malformed response,
+  unbekannter Status), der nicht in `rate_limit`/`auth` fällt.
+
+#### PLAN-33.3 — Server-Cap: maximal 30 Items je Aufruf
+Der Endpoint lehnt Bulk-Aufrufe mit `len(items) > 30` mit HTTP 400 und
+`{"error": "too_many_items", "max": 30}` ab. **Nichts** wird verarbeitet.
+
+Begründung der Zahl 30: Plan-Buddy macht in der heutigen Google-
+Adapter-Form `plan/kalender.py:147` einen **OAuth-Token-Refresh pro
+Insert** — eine Bulk-PUT mit 30 Items entspricht ungefähr 60 Google-
+HTTP-Requests (30 Token-Refresh + 30 Insert), was bei einer
+mittleren Insert-Latenz von ~250 ms und üblicher Quota-Auslastung
+unter der 15-Sekunden-Antwort-Grenze (PLAN-33.4) bleibt. Die Token-
+Cache-Optimierung aus PLAN-33.4 senkt das auf ~31 Requests
+(1 Token-Refresh + 30 Insert) und gibt Reserve nach oben — ein
+späteres Heben des Caps ist möglich, sobald der Token-Cache belegt
+funktioniert (Folge-Ticket, sobald belegter Bedarf > 30 da ist).
+
+Begründung „nicht 100, nicht unbegrenzt": ein Aufrufer, der 100 Termine
+in einem Aufruf schickt, hat fast immer einen Bug (LLM-Halluzination
+einer Tabelle, fehlerhafte Bild-Erkennung); 30 deckt einen vollständigen
+Schul-Wochenplan oder einen typischen Vereins-Saisonplan ab, ohne
+gleichzeitig Loops in die Familien-Daten zu öffnen.
+
+#### PLAN-33.4 — Antwort-Zeit-Budget 15 s, Token-Cache, Client-Timeout
+**Server-seitig:** Der Endpoint hält ein internes Antwort-Zeit-Budget
+von **15 Sekunden** ein. Läuft die Bulk-Verarbeitung in dieses Budget
+(inklusive PLAN-33.6 Backoff-Wartezeiten), antwortet der Endpoint mit
+dem Stand der Verarbeitung — verbleibende Items werden als
+`{"ok": false, "error_code": "calendar_rate_limit"}` markiert (Backoff
+hat 15-s-Cap getroffen). Das Budget schützt den Eltern-Chat-Konsumenten
+vor unbegrenzt langen Buddy-Calls.
+
+**Token-Cache:** Der Plan-Buddy hält den OAuth-Access-Token während
+der Bulk-Verarbeitung **prozess-lokal** zwischen — ein Refresh am
+Anfang, dann dieselbe Bearer-Authorization für alle 30 Inserts. Das
+senkt die Request-Zahl von `2N` (Refresh + Insert je Item) auf
+`N + 1` (ein Refresh + N Inserts). Der Cache läuft nur **innerhalb**
+eines Bulk-Aufrufs (kein persistierter Token-Cache zwischen Aufrufen
+— das wäre eine zweite Token-Wahrheit gegenüber dem
+Zugangsdaten-Speicher und ist Out-of-Scope; siehe CLAUDE.md §6
+„kein Fakt zweimal").
+
+**Client-Timeout (im Konsumenten):** Der Eltern-Chat-Konsument
+(`termine-aus-bild.md` TAB-9) setzt für **diesen** Bulk-Aufruf einen
+HTTP-Client-Timeout von **20 Sekunden** (15 s Server-Budget + 5 s
+Reserve für Transport-Latenz). Andere Eltern-Chat → Plan-Buddy-Calls
+(z. B. PLAN-22 Einzel-PUT in TES-8, PLAN-30 Lese) bleiben beim
+bisherigen 2-Sekunden-Client-Timeout — das ist ein **explizit
+gezielter** Override für den Bulk-Pfad, kein globaler Anstieg.
+
+#### PLAN-33.5 — Idempotenz via `request_id` (UUIDv4-Pflicht in V1)
+Jeder Bulk-Aufruf trägt eine `request_id` (UUIDv4) im Body. Der Endpoint
+hält eine **In-Memory-Map** mit LRU-Verhalten:
+
+- **Größe:** 256 Einträge (LRU-Eviction, wenn voll).
+- **Zeit-Begrenzung:** Einträge verfallen nach **15 Minuten** ab
+  Aufnahme — eine Familie, die einen Aufruf nach mehr als 15 Minuten
+  „nochmal versuchen" lässt, bekommt eine reguläre Neu-Verarbeitung,
+  kein Idempotenz-Treffer.
+
+**Verhalten bei wiederholter `request_id`:**
+
+- Selber `request_id` **mit identischem `items_hash`** (SHA-256 über die
+  kanonisierte `items`-Liste) → der Endpoint antwortet mit der
+  **gespeicherten Antwort** des Erst-Aufrufs (HTTP 200 + dieselbe
+  `results`-Liste). Der Aufruf hat **keinen** Nebeneffekt im
+  Google-Kalender — er wird **nicht** doppelt geschrieben.
+- Selber `request_id` **mit anderem `items_hash`** → HTTP 409 mit
+  `{"error": "request_id_collision"}`. Begründung: ein
+  `request_id`-Konflikt mit unterschiedlichen Items deutet auf einen
+  Aufrufer-Bug (`request_id` wiederverwendet) oder einen Konflikt
+  zwischen zwei Eltern-Chat-Instanzen — ein 409 ist die ehrlichere
+  Antwort als „still überschreiben".
+
+Die `request_id` lebt **nicht** persistent in `plan.db`. Begründung: nach
+einem Prozess-Neustart ist der Schutz weg — das ist akzeptiert, weil ein
+Familien-Neustart-während-Aufruf-Szenario extrem selten ist und der
+Aufrufer in dem Fall ohnehin den ganzen TAB-7-Sammel-Vorschlag neu
+bestätigt (also einen **neuen** `request_id` generiert). UUIDv4-Pflicht in
+V1, weil eine Familien-Skill-Implementierung sonst versucht sein könnte,
+einen integer-Zähler oder einen Hash zu verwenden, der über Instanzen
+hinweg kollidiert (`xbuddy-knowledge/CONTEXT.md` Mehr-Familien-Linie:
+jede Instanz darf nicht in das ID-System einer anderen geraten).
+
+#### PLAN-33.6 — Exponential backoff mit Jitter für 403/429
+Schlägt ein einzelner Google-Insert mit HTTP 403 (Rate-Limit) oder 429
+(zu viele Requests) fehl, wartet der Plan-Buddy **exponential mit
+Jitter** und versucht es erneut — Google-Doku-konforme Retry-Linie
+(`Retry-After`-Header wird respektiert):
+
+- **Versuche je Item:** maximal **3 Retries** (= 4 Versuche insgesamt je
+  Item — der erste Insert plus 3 Retry-Versuche), dann
+  `error_code: calendar_rate_limit`.
+- **Backoff-Wartezeiten:** vor jedem Retry-Versuch wird gewartet. **Drei
+  Wartezeiten** (zwischen den vier Versuchen): **1 s → 2 s → 4 s**,
+  jeweils mit ±25 % Jitter. Initialwert 1 s; je nächster Retry
+  verdoppelt. Hard cap pro Wartezeit: **8 s** (die Sequenz bei 3 Retries
+  übersteigt den Cap ohne `Retry-After` nicht).
+- **`Retry-After`-Header:** Sendet Google einen `Retry-After`-Header,
+  **sticht** der Header-Wert die berechnete Backoff-Zeit — **außer**
+  wenn der Header-Wert das **verbleibende Server-Budget** aus
+  PLAN-33.4 übersteigt: dann wird das Item **ohne** weitere Wartezeit
+  als `calendar_rate_limit` markiert. Das 15-s-Server-Cap ist hart und
+  geht über `Retry-After` — der Server kann auf einen `Retry-After: 60`
+  nicht warten, weil er innerhalb von 15 s antworten muss.
+- **Budget-Anrechnung:** Backoff-Wartezeit zählt **in** das 15-s-Server-
+  Budget aus PLAN-33.4. Frisst der Backoff das Budget auf, werden
+  verbleibende Items mit `calendar_rate_limit` markiert, ohne erneuten
+  Versuch.
+
+Begründung „nicht nur 429 + Retry-After": Google Calendar API gibt bei
+Quota-Überschreitung sowohl 403 (`userRateLimitExceeded`,
+`rateLimitExceeded`) als auch 429 zurück (siehe Google Cloud-Doku zu
+Calendar-API-Quoten). Eine reine 429-Erkennung würde die häufigeren
+403-Rate-Limit-Fälle als `calendar_other` fehlinterpretieren.
+
+*Tickets:* #475 (TAB Erst-Konsument)
+
 ### PLAN-30 — Lese-API für Wochenzuteilungen
 Der Plan-Buddy stellt die persistierten Erwachsenen-Slot-Zuteilungen einer
 Woche unter `GET /api/v1/plan/zuteilung?week_start=<YYYY-MM-DD>` bereit —
@@ -529,7 +728,19 @@ Slot-400, unbekannte person_id-400, gültiger PUT schreibt und ist per GET
 sichtbar) · PLAN-32 (PUT /api/v1/plan/admin/kalender: nicht-Loopback→403;
 fehlendes/leeres kalender_id→400; gültiger PUT schreibt nur den
 kalender_id-Schlüssel atomar, nächster Request liest die neue ID; Schreib-/
-Parse-Fehler lässt den alten Snapshot stehen).
+Parse-Fehler lässt den alten Snapshot stehen) · **PLAN-33** (Bulk-Termin-
+Schnittstelle): Pre-Validate-Fehler bei mindestens einem Item → HTTP 400
+mit kompletter `results`-Liste, **kein** Schreib-Versuch in Google
+(PLAN-33.1); gemischter Erfolg → HTTP 200 mit `geschrieben < gesamt` und
+korrekten `error_code`-Werten je Item (PLAN-33.2); Idempotenz: derselbe
+`request_id` mit identischem `items_hash` liefert die gespeicherte
+Antwort ohne zweiten Google-Call, mit abweichendem `items_hash` →
+HTTP 409 (PLAN-33.5); Cap-Überschreitung (`len(items) > 30`) → HTTP 400
+ohne Schreib-Versuch (PLAN-33.3); 429/403-Rate-Limit-Antworten des
+Google-Stubs lösen den Exponential-Backoff aus (PLAN-33.6) — drei
+Retries je Item, dann `error_code: calendar_rate_limit`, und
+`Retry-After`-Header sticht die berechnete Wartezeit; Token-Cache: ein
+Bulk-Aufruf macht **einen** Token-Refresh, nicht N (PLAN-33.4).
 
 Läufe gegen den **echten** Kalender sind opt-in und nicht Teil des
 Standard-Durchlaufs (analog `eltern-chat.md` EC-17).
