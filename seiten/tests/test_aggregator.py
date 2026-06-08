@@ -1,4 +1,4 @@
-"""Tests für den Seiten-Registry-Aggregator (SREG-1..4, #347, #366).
+"""Tests für den Seiten-Registry-Aggregator (SREG-1..4/SREG-10/SREG-11, #347, #366, #387).
 
 Lauf: python3 -m pytest seiten/tests/ -v
 
@@ -235,3 +235,158 @@ def test_neues_panel_erscheint_im_naechsten_aufbau(manifest_root):
     inv1 = aggregator.baue_inventar(
         manifest_root, panels=[{"panel_id": "neu-01"}], geraete=[])
     assert any(e.get("instanz") == "neu-01" for e in inv1["eintraege"])
+
+
+# ============================================================
+#  SREG-10 — Icon-Durchreichung + Schalter icons_erforderlich
+# ============================================================
+
+@pytest.fixture
+def manifest_root_mit_icons(tmp_path):
+    """Manifest-Welt mit icons[] an Display-Views und einer View ohne icons[]."""
+    root = str(tmp_path)
+    _schreibe_manifest(root, "plan", [
+        _view("woche", "/display/plan/woche",
+              icons=["arasaac/32488.png"],
+              varianten=[{
+                  "slug": "woche-klein",
+                  "query": {"ansicht": "klein"},
+                  "label": "Wochenplan für Kleinkinder",
+                  "icons": ["arasaac/32488.png", "arasaac/2484.png"],
+              }]),
+    ])
+    _schreibe_manifest(root, "wetter", [
+        # Sorte a (kind) mit icons
+        _view("heute", "/display/wetter/heute", icons=["arasaac/24721.png"]),
+        # Sorte b (eltern) — KEIN icons[]
+        _view("regeln", "/display/wetter/regeln", zielgruppe="eltern"),
+    ])
+    # Sorte a OHNE icons[] — für Schalter-Tests
+    _schreibe_manifest(root, "routine", [
+        _view("morgen", "/display/routine/morgen"),
+    ])
+    return root
+
+
+def test_icons_durchgereicht_sreg10(manifest_root_mit_icons):
+    """SREG-10 AC1: icons[] und varianten[].icons[] kommen 1:1 durch."""
+    eintraege = aggregator.manifest_eintraege(manifest_root_mit_icons)
+    by_key = {e["key"]: e for e in eintraege}
+
+    # Sorte a mit icons[] — muss icons[] tragen
+    woche = by_key["plan-woche"]
+    assert woche["icons"] == ["arasaac/32488.png"]
+
+    # varianten[].icons[] — muss 1:1 durchgereicht sein
+    variante = woche["varianten"][0]
+    assert variante["icons"] == ["arasaac/32488.png", "arasaac/2484.png"]
+    assert variante["query"] == {"ansicht": "klein"}
+
+    # Sorte b (eltern) — darf kein icons-Feld tragen
+    regeln = by_key["wetter-regeln"]
+    assert "icons" not in regeln
+
+
+def test_sorte_a_ohne_icons_warnung_gelistet(manifest_root_mit_icons, caplog):
+    """SREG-10 AC2: icons_erforderlich=False (Default) → Warnung, View bleibt im Inventar."""
+    eintraege = aggregator.manifest_eintraege(
+        manifest_root_mit_icons, icons_erforderlich=False)
+    keys = {e["key"] for e in eintraege}
+    # routine-morgen hat kein icons[] → bleibt drin (Warnung)
+    assert "routine-morgen" in keys
+    assert "icons" not in next(e for e in eintraege if e["key"] == "routine-morgen")
+
+
+def test_sorte_a_ohne_icons_skip_bei_erforderlich(manifest_root_mit_icons, caplog):
+    """SREG-10 AC2: icons_erforderlich=True → View ohne icons[] wird übersprungen."""
+    eintraege = aggregator.manifest_eintraege(
+        manifest_root_mit_icons, icons_erforderlich=True)
+    keys = {e["key"] for e in eintraege}
+    # routine-morgen hat kein icons[] → per-View-Skip
+    assert "routine-morgen" not in keys
+    # Andere Views bleiben im Inventar
+    assert "plan-woche" in keys
+    assert "wetter-heute" in keys
+
+
+def test_sorte_b_kein_icons_feld_auch_mit_schalter(manifest_root_mit_icons):
+    """SREG-10 AC1: Sorte b/c trägt kein icons-Feld — unabhängig vom Schalter."""
+    for eri in (False, True):
+        eintraege = aggregator.manifest_eintraege(
+            manifest_root_mit_icons, icons_erforderlich=eri)
+        by_key = {e["key"]: e for e in eintraege}
+        regeln = by_key.get("wetter-regeln")
+        assert regeln is not None, "wetter-regeln muss im Inventar sein"
+        assert "icons" not in regeln, "Sorte-b-Eintrag darf kein icons-Feld tragen"
+
+
+def test_icons_erforderlich_schalter_in_baue_inventar(manifest_root_mit_icons):
+    """SREG-10: baue_inventar reicht icons_erforderlich an manifest_eintraege durch."""
+    inv_false = aggregator.baue_inventar(
+        manifest_root_mit_icons, panels=[], geraete=[],
+        icons_erforderlich=False)
+    inv_true = aggregator.baue_inventar(
+        manifest_root_mit_icons, panels=[], geraete=[],
+        icons_erforderlich=True)
+    keys_false = {e["key"] for e in inv_false["eintraege"]}
+    keys_true = {e["key"] for e in inv_true["eintraege"]}
+    assert "routine-morgen" in keys_false
+    assert "routine-morgen" not in keys_true
+
+
+# ============================================================
+#  SREG-11 — Editor-Eintrag je Panel-Instanz
+# ============================================================
+
+def test_panel_eintraege_2n_eintraege_sreg11():
+    """SREG-11 AC3: N Panel-Instanzen → 2N Einträge (Panel-Seite + Editor je Panel)."""
+    panels = [
+        {"panel_id": "kueche-01"},
+        {"panel_id": "wohnzimmer-01"},
+    ]
+    eintraege = aggregator.panel_eintraege(panels)
+    assert len(eintraege) == 4, "2 Panels → 4 Einträge (2N)"
+
+    by_key = {e["key"]: e for e in eintraege}
+
+    # Panel-Seiten-Eintrag (Sorte d)
+    kueche = by_key["panel-kueche-01"]
+    assert kueche["typ"] == aggregator.TYP_PANEL
+    assert kueche["pfad"] == "/controller/app-panel/kueche-01"
+
+    # Editor-Eintrag (SREG-11)
+    kueche_ed = by_key["kueche-01-bearbeiten"]
+    assert kueche_ed["typ"] == aggregator.TYP_ELTERN
+    assert kueche_ed["pfad"] == "/controller/app-panel/kueche-01/bearbeiten"
+    assert kueche_ed["label"] == "Panel kueche-01 bearbeiten"
+    assert kueche_ed["instanz"] == "kueche-01"
+
+    # Distinkte Keys — keine Kollision
+    assert kueche["key"] != kueche_ed["key"]
+
+
+def test_editor_eintrag_distinkt_vom_panel_eintrag():
+    """SREG-11: Editor-Eintrag hat distinkte key und pfad vom Panel-Seiten-Eintrag."""
+    panels = [{"panel_id": "test-01"}]
+    eintraege = aggregator.panel_eintraege(panels)
+    assert len(eintraege) == 2
+    keys = {e["key"] for e in eintraege}
+    pfade = {e["pfad"] for e in eintraege}
+    assert "panel-test-01" in keys
+    assert "test-01-bearbeiten" in keys
+    assert "/controller/app-panel/test-01" in pfade
+    assert "/controller/app-panel/test-01/bearbeiten" in pfade
+
+
+def test_inventar_2n_panel_eintraege_sreg11(manifest_root):
+    """SREG-11 AC3: inventar enthält 2N Panel-Einträge für N Panel-Instanzen."""
+    panels = [{"panel_id": "kueche-01"}, {"panel_id": "bad-01"}]
+    inv = aggregator.baue_inventar(manifest_root, panels=panels, geraete=[])
+    panel_und_editor = [
+        e for e in inv["eintraege"]
+        if e.get("instanz") in ("kueche-01", "bad-01")
+    ]
+    assert len(panel_und_editor) == 4, "2 Panels → 4 Inventar-Einträge"
+    typen = {e["typ"] for e in panel_und_editor}
+    assert aggregator.TYP_PANEL in typen
+    assert aggregator.TYP_ELTERN in typen

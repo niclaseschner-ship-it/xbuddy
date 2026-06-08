@@ -1,4 +1,4 @@
-"""Seiten-Registry — Aggregator-Kern (SREG-1/SREG-3/SREG-4).
+"""Seiten-Registry — Aggregator-Kern (SREG-1/SREG-3/SREG-4/SREG-10/SREG-11).
 
 Siehe specs/platform/seiten-registry.md (Refs #347, ratifiziert RAT-13). Dieses
 Modul baut das **Inventar aller aufrufbaren View-Einstiegspunkte** aus den schon
@@ -36,6 +36,22 @@ Der Aufrufer reicht je Snapshot-Sorte entweder die geholten Daten (`list`) oder
 und markiert ihn `stale: true`; war die Sorte **nie** da, fehlt sie mit
 `snapshot_pending: true`. Die Antwort ist dadurch **nie leer** und nie
 falsch-gekürzt.
+
+## Icon-Durchreichung (SREG-10)
+
+`icons[]` und `varianten[].icons[]` aus Display-Manifesten (Sorte a) werden 1:1
+durchgereicht — kein Komponieren, kein Ableiten. Sorten b/c/d/e tragen kein
+`icons`-Feld (das Feld fehlt, ist nicht `null`).
+
+Der Schalter `icons_erforderlich` (Default `False`) steuert die Durchsetzung:
+- `False` (Migration): fehlendes `icons[]` → Warnung, Eintrag bleibt gelistet.
+- `True` (nach Backfill): fehlendes `icons[]` → per-View-Skip, Warnung.
+
+## Editor-Eintrag je Panel-Instanz (SREG-11)
+
+Für jede Panel-Instanz (Sorte d) erzeugt `panel_eintraege` zusätzlich einen
+abgeleiteten Editor-Eintrag (`typ=eltern`, `pfad=/controller/app-panel/<id>/bearbeiten`,
+`key=<panel_id>-bearbeiten`). Das Ergebnis sind 2N Einträge für N Panel-Instanzen.
 """
 
 import glob
@@ -106,16 +122,22 @@ def _typ_for_view(ist_controller, zielgruppe):
     return TYP_DISPLAY
 
 
-def _eintrag_aus_manifest(app_slug, ist_controller, view):
-    """Baut EINEN Inventar-Eintrag aus einem Manifest-View (SREG-4).
+def _eintrag_aus_manifest(app_slug, ist_controller, view, icons_erforderlich=False):
+    """Baut EINEN Inventar-Eintrag aus einem Manifest-View (SREG-4/SREG-10).
 
     `key`/`typ`/`app` sind abgeleitet (deterministisch aus app+slug), der Rest
-    kommt 1:1 aus dem Manifest. `varianten` wird durchgereicht, wenn vorhanden.
+    kommt 1:1 aus dem Manifest. `varianten` und `icons[]` werden durchgereicht,
+    wenn vorhanden (SREG-10 — nur Sorte a, kein Komponieren).
+
+    Bei Sorte a (Display-View): fehlendes `icons[]` erzeugt je nach Schalter
+    `icons_erforderlich` eine Warnung (False) oder einen Skip-Signal (True).
+    Liefert `None`, wenn der Eintrag übersprungen werden soll (SREG-10).
     """
     slug = view["slug"]
+    typ = _typ_for_view(ist_controller, view["zielgruppe"])
     eintrag = {
         "key": "%s-%s" % (app_slug, slug),
-        "typ": _typ_for_view(ist_controller, view["zielgruppe"]),
+        "typ": typ,
         "app": app_slug,
         "pfad": view["pfad"],
         "label": view["label"],
@@ -123,18 +145,38 @@ def _eintrag_aus_manifest(app_slug, ist_controller, view):
         "zeigt": view["zeigt"],
         "zielgruppe": view["zielgruppe"],
     }
+
+    # SREG-10: icons[] nur bei Display-Views (Sorte a, zielgruppe=kind).
+    # Sorten b/c tragen kein icons-Feld (kein Feld, nicht null).
+    if typ == TYP_DISPLAY:
+        icons = view.get("icons")
+        if icons is not None:
+            eintrag["icons"] = list(icons)
+        elif icons_erforderlich:
+            logger.warning(
+                "Sorte-a-View ohne icons[] übersprungen (icons_erforderlich=True,"
+                " SREG-10): app=%s slug=%s", app_slug, slug)
+            return None
+        else:
+            logger.warning(
+                "Sorte-a-View ohne icons[] (icons_erforderlich=False, SREG-10,"
+                " Warnung): app=%s slug=%s — Eintrag bleibt gelistet", app_slug, slug)
+
     if view.get("varianten"):
-        eintrag["varianten"] = view["varianten"]
+        eintrag["varianten"] = list(view["varianten"])
     return eintrag
 
 
-def manifest_eintraege(root):
-    """Sammelt die Inventar-Einträge der Manifest-Sorten a/b/c (SREG-2/SREG-4).
+def manifest_eintraege(root, icons_erforderlich=False):
+    """Sammelt die Inventar-Einträge der Manifest-Sorten a/b/c (SREG-2/SREG-4/SREG-10).
 
     Liest jedes per `discover_manifests` gefundene `views.json`. Ein kaputtes
     Manifest (`ManifestError`) wird mit Warnung übersprungen (SREG-3/DCOMP-3) —
     das übrige Inventar bleibt vollständig. Liefert die Liste der Einträge in
     Discovery-Reihenfolge.
+
+    `icons_erforderlich` steuert das SREG-10-Verhalten für fehlende `icons[]`
+    bei Sorte-a-Views: False = Warnung + gelistet, True = per-View-Skip.
     """
     eintraege = []
     for app_slug, ist_controller, pfad in discover_manifests(root):
@@ -146,7 +188,11 @@ def manifest_eintraege(root):
                 " vollständig (SREG-3/DCOMP-3)", pfad, app_slug, e)
             continue
         for view in views:
-            eintraege.append(_eintrag_aus_manifest(app_slug, ist_controller, view))
+            eintrag = _eintrag_aus_manifest(
+                app_slug, ist_controller, view,
+                icons_erforderlich=icons_erforderlich)
+            if eintrag is not None:
+                eintraege.append(eintrag)
     return eintraege
 
 
@@ -155,24 +201,38 @@ def manifest_eintraege(root):
 # ============================================================
 
 def panel_eintraege(panels):
-    """Leitet die Panel-Instanz-Einträge (Sorte d) aus einem PREG-Snapshot ab.
+    """Leitet die Panel-Instanz-Einträge (Sorte d) + Editor-Einträge aus einem PREG-Snapshot ab.
 
     `panels` ist die Liste aus `GET /api/v1/panels/` (je Eintrag mit `panel_id`).
     `pfad` kommt aus der Instanz-ID (`/controller/app-panel/<panel_id>`), `label`
     wird aus ihr abgeleitet (SREG-4: PREG kennt kein Anzeige-Label).
     `synonyme`/`varianten`/`zeigt` entfallen für (d).
+
+    SREG-11: Für jede Panel-Instanz entsteht zusätzlich ein abgeleiteter
+    Editor-Eintrag (`typ=eltern`, `pfad=/controller/app-panel/<panel_id>/bearbeiten`,
+    `key=<panel_id>-bearbeiten`). Das Ergebnis sind 2N Einträge für N Panels.
     """
     eintraege = []
     for p in panels:
         panel_id = p.get("panel_id")
         if not panel_id:
             continue
+        # Panel-Seiten-Eintrag (Sorte d)
         eintraege.append({
             "key": "panel-%s" % panel_id,
             "typ": TYP_PANEL,
             "instanz": panel_id,
             "pfad": "/controller/app-panel/%s" % panel_id,
             "label": "Panel %s" % panel_id,
+            "zielgruppe": "eltern",
+        })
+        # Editor-Eintrag (SREG-11): typ=eltern, distinkt via -bearbeiten-Key
+        eintraege.append({
+            "key": "%s-bearbeiten" % panel_id,
+            "typ": TYP_ELTERN,
+            "instanz": panel_id,
+            "pfad": "/controller/app-panel/%s/bearbeiten" % panel_id,
+            "label": "Panel %s bearbeiten" % panel_id,
             "zielgruppe": "eltern",
         })
     return eintraege
@@ -233,14 +293,17 @@ def _snapshot_sorte(neu, ableiter, vorheriges, typ):
     return [], True
 
 
-def baue_inventar(root, panels=None, geraete=None, vorheriges=None):
-    """Baut das vollständige Inventar (SREG-3/SREG-4) — der Kern-Aufruf.
+def baue_inventar(root, panels=None, geraete=None, vorheriges=None,
+                  icons_erforderlich=False):
+    """Baut das vollständige Inventar (SREG-3/SREG-4/SREG-10/SREG-11) — der Kern-Aufruf.
 
     Args:
         root: Repo-Wurzel, unter der die `views.json`-Manifeste liegen (SREG-2).
         panels: PREG-Snapshot (`list`) oder `None`, wenn der Holer scheiterte.
         geraete: GER-Snapshot (`list`) oder `None`, wenn der Holer scheiterte.
         vorheriges: das vorige `inventar`-Dict (für Last-Known-Good), oder None.
+        icons_erforderlich: SREG-10-Schalter (Default False = Migrationsphase;
+            True = nach Backfill, per-View-Skip bei fehlendem icons[]).
 
     Returns:
         Ein `inventar`-Dict mit:
@@ -256,7 +319,7 @@ def baue_inventar(root, panels=None, geraete=None, vorheriges=None):
     """
     vorherige_eintraege = (vorheriges or {}).get("eintraege", [])
 
-    eintraege = list(manifest_eintraege(root))
+    eintraege = list(manifest_eintraege(root, icons_erforderlich=icons_erforderlich))
 
     pending = []
     panel_e, panel_pending = _snapshot_sorte(
