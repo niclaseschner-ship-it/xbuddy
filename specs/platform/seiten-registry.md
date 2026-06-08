@@ -1,13 +1,20 @@
 # Seiten-Registry — Spec     (ID-Präfix: SREG)
 
 > Status: V1-Entwurf · Refs #347 · ratifiziert RAT-13 (berater-runde 2026-06-06)
+> Pivot + SREG-12-Ratifizierung 2026-06-08 (Werft + Berater-Runde,
+> ENTSCHEID `brainstorm/berater-runde/20260608-RATIFIZIERT-seiten-uebersicht-platform-genre.md`)
 
 Damit ein Elternteil im Eltern-Chat **jede angelegte Seite des XBuddy-Systems
-per Link erreichen** kann („gib mir den Link zum Garderoben-Editor", „welche
-Seiten gibt es?"), definiert diese Spec die **Seiten-Registry**: ein Inventar
-**aller aufrufbaren View-Einstiegspunkte** (Display-Views, Eltern-/Settings-
-Seiten, Controller-Apps, Panel-Instanzen, Display-Clients) und einen
-Lese-Skill, der eine Frage gegen dieses Inventar auflöst.
+per Link erreichen** kann, definiert diese Spec die **Seiten-Registry**: ein
+Inventar **aller aufrufbaren View-Einstiegspunkte** (Display-Views, Eltern-/
+Settings-Seiten, Controller-Apps, Panel-Instanzen, Display-Clients) und eine
+**gerenderte Eltern-Übersichts-Seite**, deren Hauptzweck ist, **welcher
+Panel-Controller welches Display steuert** auf einen Blick zu zeigen
+(Geräte-Paare ganz oben), und je Eintrag zwei kopierbare URLs (Heimnetz +
+Tailscale) bereitzustellen. Der Eltern-Chat liefert nur **einen** Link — auf
+diese Übersichtsseite. Pro-View-Auflösung passiert auf der Seite per
+Volltextsuche, nicht im Chat (Pivot 2026-06-07, ersetzt das ursprüngliche
+KI-Matching gegen `label`/`synonyme`).
 
 Die Registry ist **vollständig per Konstruktion und ausfallfest**: ihre Wahrheit
 sind committete Manifeste auf der Platte (nicht laufende Prozesse), und sie wird
@@ -17,11 +24,18 @@ war schon falsch, bevor sie existierte: #347 nannte den überholten Pfad
 `/display/wetter/garderobe` statt `/display/wetter/regeln`).
 
 **V1-Scope:** das Inventar aller fünf Seiten-Sorten (SREG-1) · Aggregator-
-Service `xbuddy-seiten` mit gecachtem `inventar.json` (SREG-3) · der Lese-/
-Auflist-Skill `seiten_finden` im Eltern-Chat (SREG-6). **Out-of-Scope V1:** das
-Schreiben/Ausblenden einzelner Seiten über die Registry (sie ist rein lesend —
-ein Schreibrecht wäre ein eigener Mechanismus); App-Discovery „was ist
-installierbar" (das ist #325, eigene Linie, SREG-8).
+Service `xbuddy-seiten` mit gecachtem `inventar.json` (SREG-3) · eine
+**gerenderte Eltern-Übersichts-Seite** unter `/api/v1/seiten/uebersicht` mit
+**Geräte-Paaren als Hero-Sektion am Seitenkopf** (Display als Anker, daran
+Panel-Editor-Karten — Verknüpfung aus PREG, SREG-12) und je Eintrag **zwei
+kopierbare URLs** (Heimnetz + Tailscale) · ein **Trigger-Skill
+`seiten_uebersicht`** im Eltern-Chat, der nur diesen einen Link liefert
+(SREG-5 — Pivot). **Out-of-Scope V1:** das Schreiben/Ausblenden einzelner
+Seiten über die Registry (sie ist rein lesend); App-Discovery „was ist
+installierbar" (das ist #325, eigene Linie, SREG-8); KI-Matching gegen
+`label`/`synonyme` im Chat (durch SREG-12-Seite + Volltextsuche abgelöst);
+Co-Lokations-Verknüpfung („Panel und Display laufen auf demselben Hardware-
+Gerät", würde GER-Erweiterung verlangen — Folge-Aufgabe).
 
 ---
 
@@ -41,14 +55,32 @@ Einstiegspunkt mit HTML-Antwort** — nicht „jede mögliche URL". Konkret:
 | Sorte | Beispiel | instanz-spezifisch | Wahrheitsquelle |
 |-------|----------|--------------------|-----------------|
 | (a) Display-View (Kind) | `/display/plan/woche` | nein | Buddy-Manifest (BUD-3) |
-| (b) Eltern-/Settings-View | `/display/wetter/regeln` | nein | Buddy-Manifest (BUD-3) |
+| (b) Eltern-/Settings-View | `/display/wetter/regeln`, `/api/v1/seiten/uebersicht` | nein | Buddy- **oder Platform-Service-Manifest** (BUD-3 analog: `<komponente>/views.json`) |
 | (c) Controller-App | `/controller/figuren-erkennung/` | nein | Controller-Manifest (BUD-3) |
 | (d) Panel-Instanz | `/controller/app-panel/<panel_id>` | **ja** | `panels.json`-Snapshot (PREG) |
 | (e) Display-Client | `/display/<display_id>` | **ja** | Geräte-Registry-Snapshot (GER), gefiltert |
 
+Sorte (b) deckt zwei Eigentümer-Klassen:
+- **Buddy-Eigentümer**: eine Eltern-Settings-View, die zu einem Familien-Buddy
+  gehört, lebt unter `/display/<buddy>/<view>` (URL-2, BUD-1a). Beispiel:
+  `/display/wetter/regeln` (Garderoben-Editor, #328).
+- **Platform-Service-Eigentümer**: eine View, die ein Platform-Service selbst
+  ausliefert (RAT-1-Muster: eigener Prozess, eigener Port), lebt **neben** der
+  API des Service unter `/api/v1/<service>/<view>` (URL-4, ROU-14-Präzedenz:
+  `/api/v1/diag` als HTML im Router). Beispiel: SREG-12 unter
+  `/api/v1/seiten/uebersicht`. Die View ist eine **alternative Darstellung der
+  Registry-Daten** — sie wohnt darum am Service, der die Daten hält.
+
 Filter für (e): nur Geräte mit `verwendung ∈ {display, beides}` **und**
 `status = aktiv` (`geraete.md` GER-Modell) — ein reines Controller-Gerät ist
 keine Display-Seite, ein stillgelegtes Tablet kein nutzbarer Link.
+
+**Verknüpfung Panel ↔ Display** ist bereits in PREG hinterlegt: jeder
+Panel-Eintrag trägt pflichtmäßig `display_id` (PREG-Tabelle, E-PANEL-5: „genau
+eines"). Der Aggregator reicht diese Verknüpfung am SREG-4-Eintrag durch
+(Sorte d: `verknuepft_mit_display`; Sorte e: per Reverse-Lookup
+`verknuepft_mit_panels[]` — mehrere Panels können dasselbe Display steuern,
+PREG-Beispiel „Mama-iPhone" + „Papa-iPhone" auf Wohnzimmer-Display).
 
 ## SREG-2 — Wahrheit aus committeten Manifesten, nicht aus laufenden Prozessen
 Die Sorten (a)(b)(c) kommen aus dem **committeten `views.json`-Manifest** jeder
@@ -61,9 +93,20 @@ die Zuverlässigkeit (CONTEXT.md, oberste Priorität) verletzen. Zusätzlich hat
 der Wetter-Buddy bewusst **keine** API (BUD-1b, E-WETTER-3) — er wäre live gar
 nicht abfragbar; sein Manifest auf der Platte ist die einzige tragfähige Quelle.
 
+**Platform-Services führen ihr eigenes `views.json` analog BUD-3**, wenn sie
+selbst eine HTML-View anbieten (Sorte b mit Platform-Eigentümer, SREG-1). Heute
+ein Vorkommen: `seiten/views.json` listet die Übersichts-Seite SREG-12
+(`/api/v1/seiten/uebersicht`). Der Aggregator unterscheidet beim Einlesen nicht
+zwischen Buddy- und Platform-Manifesten — beide tragen das gleiche BUD-3-
+Schema. Die Selbst-Aufnahme („die Übersicht listet sich selbst") fällt damit
+aus der Manifest-Wahrheit, **kein** handgepflegter Sonderfall im
+Aggregator-Code.
+
 Die instanz-spezifischen Sorten (d)(e) kommen aus den **Snapshots** der schon
 bestehenden Registries (Panel-Registry PREG, Geräte-Registry GER), nicht aus
-einer dritten Wahrheit (CLAUDE.md §6).
+einer dritten Wahrheit (CLAUDE.md §6). Die Panel↔Display-Verknüpfung
+(SREG-1) wird ebenfalls aus PREG geliefert (`panels.json` Pflichtfeld
+`display_id`), nicht aus einer dritten Quelle erfunden.
 
 ## SREG-3 — Aggregator-Service `xbuddy-seiten` mit gecachtem Inventar
 Die Registry läuft als **eigener schlanker Plattform-Service** `xbuddy-seiten`
@@ -112,6 +155,8 @@ kann ein Externer aus einem Manifest deterministisch einen Eintrag erzeugen:
 | `varianten[]` | Manifest (opt.) | endliche bekannte Varianten (`slug`, `query` **als flaches Objekt**, `label`, eigenes `icons[]` falls abweichend; BUD-4) |
 | `zeigt` | Manifest | 1 Satz, was die Seite zeigt |
 | `zielgruppe` | Manifest | `kind` / `eltern` — **deskriptiv**, KEIN Berechtigungs-Gate (SREG-6) |
+| `verknuepft_mit_display` | **abgeleitet** (Sorte d) | `display_id` aus PREG `panels.json` (Pflichtfeld, E-PANEL-5). Trägt **nur** Sorte (d). Leer/fehlend bei (a)(b)(c)(e). |
+| `verknuepft_mit_panels[]` | **abgeleitet** (Sorte e) | Liste der `panel_id`s, die dieses Display steuern (Reverse-Lookup über PREG-Snapshot). Trägt **nur** Sorte (e). Leer (`[]`), wenn kein Panel auf dieses Display zeigt. |
 
 Die manifest-gelieferten Felder sind genau die BUD-3-Felder (`conventions/buddies.md`).
 Die Snapshot-Sorten (d/e) tragen im **heutigen PREG/GER-Schema kein
@@ -128,17 +173,34 @@ gespeichert** — sie entsteht erst beim Konsumenten aus `display_url_origin +
 pfad` (URL-12: eine Origin; der Pfad ist die Wahrheit, die Origin ist
 Per-Instanz-Deployment).
 
-## SREG-5 — Skill `seiten_finden` (lesende Aufgabe)
-Eltern-Chat-READ-Skill — eine **lesende Aufgabe** (EC-9; Muster wie TER-10
-`termine-erfragen.md`), kein Schreibdialog, trigger-agnostische Funktion. Zwei
-Modi:
-- **„gib mir den Link zu X"** — die KI matcht die Frage gegen `label`/`synonyme`
-  der Einträge; bei Mehrdeutigkeit gezielte Rückfrage (EC-22-Muster).
-- **„liste alle Seiten" / „alle Seiten von Buddy Y"** — gefilterte Liste.
+## SREG-5 — Skill `seiten_uebersicht` (Trigger, ein Link)
+Eltern-Chat-Skill — eine **lesende, trigger-agnostische** Funktion (EC-9-Muster).
+**Nur EIN Modus**, kein KI-Matching, keine Rückfrage-Logik: erkennt eine
+Frage-Familie wie „zeig mir alle Seiten", „welche Seiten gibt es", „Link zur
+Garderoben-Seite", „wo stelle ich X ein", „Link zum Küchen-Panel-Editor" →
+antwortet mit **einem** Link auf die gerenderte Übersichtsseite (SREG-12). Die
+Pro-View-Auflösung („welchen genau?") passiert auf der Seite per Volltextsuche
+gegen `label`/`synonyme`/`zeigt` (SREG-12), nicht im Chat — das hält den Chat
+schlank und die Wartung in EINER Seite.
 
-Der Link wird aus `display_url_origin` + `pfad` gebildet (GAA-3.7-Muster, wie
-`panel_anlegen` die Controller-URL bildet). Der Skill liest die Registry über
-`GET /api/v1/seiten` (Origin = ein neues `seiten_origin_url`, EC-15).
+Der Link wird gebildet als `display_url_origin_heim` + `/api/v1/seiten/uebersicht`
+(SREG-12). Heimnetz-Variante ist der Default, weil der Eltern-Chat im
+Heimnetz/Tailscale-Kontext läuft und Eltern „am Familien-Tablet" landen sollen;
+die Tailscale-Variante ist auf der Seite selbst kopierbar (SREG-12).
+
+Der Skill ruft `GET /api/v1/seiten` **nicht** mehr selbst auf — die
+Übersichtsseite ist sein einziger Konsument der Registry.
+
+**Pivot-Begründung (Nic, /arbeitstag-prep 2026-06-07):** Der vorherige Modus
+„gib mir den Link zu X" mit KI-Matching gegen `label`/`synonyme` und
+Mehrdeutigkeits-Rückfrage ist **ersetzt** durch die gerenderte Seite +
+Volltextsuche. Die Komplexität wandert aus dem KI-Skill in eine Seite, die
+einfach zu warten ist. PBE-2 („je Panel direkter Editor-Link aus dem
+Eltern-Chat") wird durch SREG-12 mit-bedient: der Editor-Eintrag erscheint als
+eigene Karte direkt am gepaarten Display (SREG-12 Hero-Sektion „Geräte-Paare"),
+kopierbar — der „direkte Link je Panel" ist weiterhin in einem Tipp
+erreichbar, nur einen Tipp später als ein eigener Chat-Skill und konsistent
+für **alle** Eintrags-Sorten.
 
 ## SREG-6 — Auth/Exposure: EC-2-Mitgliedschaft + Netzgrenze, keine Rolle
 V1 kennt **keine Rollen** (EC-3); berechtigt ist jedes **Familien-Gruppen-
@@ -157,12 +219,32 @@ Gate: würde ein Kind Mitglied der Familien-Gruppe, wäre es nach EC-2 berechtig
 ein eigener Kinder-Chat entsteht), ist die Exposure-Frage neu zu stellen — dann
 wird ein `intern`-Flag oder eine echte Rolle fällig. Bis dahin nicht auf Vorrat.
 
-## SREG-7 — Vorbedingung: `display_url_origin` (OPEN-EC-Origin)
-Ohne gesetztes `display_url_origin` (heute leer per Default, `eltern-chat.md`
-EC-15 / OPEN-EC-Origin) gibt der Bot nur den nackten `pfad` aus — kein
-tippbarer Link, kein Familien-Nutzen. **OPEN-EC-Origin ist damit ein Blocker für
-SREG-5** und muss vor der V1-Implementierung gelöst sein (ein Onboarding-/
-Config-Schritt, der `display_url_origin` aus der Origin des Bot-Hosts zieht).
+## SREG-7 — Vorbedingung: zwei Display-URL-Origins (Heimnetz + Tailscale)
+Familien greifen über **zwei Wege** auf XBuddy zu: lokales Heimnetz (z. B.
+`https://xbuddy-hub.local:8443`) und Tailscale (z. B.
+`https://xbuddy-hub.tailnet-xxxx.ts.net`). Damit eine angebotene URL **wirklich
+am Handy funktioniert**, müssen beide Origins als Config-Werte gesetzt sein:
+
+| Config-Schlüssel | Bedeutung | Default |
+|---|---|---|
+| `display_url_origin_heim` | Heimnetz-Origin (Bot-Default für SREG-5; tritt an die Stelle des bestehenden `display_url_origin`, GAA-3.7) | leer |
+| `display_url_origin_tailscale` | Tailscale-Origin (zusätzlich auf SREG-12-Seite kopierbar) | leer |
+
+**V1-Pflicht:** `display_url_origin_heim` muss gesetzt sein, sonst kann der
+SREG-5-Skill keinen tippbaren Link liefern und die SREG-12-Seite hat keine
+„Heim"-Spalte. **`display_url_origin_tailscale` ist V1-Soll** — fehlt sie,
+zeigt SREG-12 nur die Heim-Spalte mit explizitem Banner-Hinweis statt zweier
+Spalten, die Seite bleibt nutzbar. Kein Auto-Fallback auf Heim als Tailscale
+(falsche Origin = nicht-erreichbarer Link).
+
+**Migration des existierenden `display_url_origin`** (`eltern-chat/config.py:85`,
+GAA-3.7): wird in einem **eigenen Folge-Ticket der Implementierung** zu
+`display_url_origin_heim` umbenannt — **nicht** im Spec-PR. Tests in
+eltern-chat akzeptieren während der Migration beide Namen.
+
+**OPEN-EC-Origin** (eltern-chat.md EC-15) bleibt der Auflöse-Track für den
+Onboarding-/Config-Schritt, der diese Werte aus der Hub-Auslieferung zieht;
+SREG-7-V1 erweitert ihn um die zweite Origin.
 
 ## SREG-8 — Verhältnis zu #325 (App-Discovery): getrennt, teilt das Format
 #325 enumeriert **anlegbare Apps** (was *kann* in eine Panel-Kachel — schreibend,
@@ -200,9 +282,41 @@ aber das `views.json`-Format**: das BUD-3-Manifest ist die Datenquelle, aus der
 - **Manifest⇔Route-Bindung:** je Buddy der BUD-3-Eigentest (kanonische
   HTML-GET-Route ⇔ Eintrag; Alias-/POST-Routen ausgenommen; Controller gegen
   Slug-Existenz) — `conventions/buddies.md` BUD-3.
-- **Skill-Auflösung:** „Link zum Garderoben-Editor" → `/display/wetter/regeln`
-  mit `display_url_origin` zur vollen URL; Mehrdeutigkeit → Rückfrage (SREG-5).
-- **Auth:** `seiten_finden` erbt EC-2 (Mitglied berechtigt, Gruppe+Privatchat);
+- **Trigger-Skill:** Frage-Familien-Treffer („zeig mir alle Seiten" / „Link zur
+  Garderoben-Seite" / „Link zum Küchen-Panel-Editor") → Skill antwortet mit
+  **genau einer URL** = `display_url_origin_heim` + `/api/v1/seiten/uebersicht`
+  (SREG-5). Kein KI-Matching gegen Pro-View-Labels; der Skill ruft
+  `GET /api/v1/seiten` nicht selbst auf.
+- **Übersichts-Seite rendert:** `GET /api/v1/seiten/uebersicht` antwortet mit
+  HTML (`Content-Type: text/html`); `GET /api/v1/seiten` (ohne Sub-Pfad) bleibt
+  JSON-only. Hero-Sektion „Geräte-Paare" am Seitenkopf, darunter die übrigen
+  Sorten (SREG-12).
+- **Geräte-Paar Aggregator:** Im Inventar trägt eine Panel-Sorte-(d)-Eintrag
+  `verknuepft_mit_display: <display_id>` (Wert kommt aus `panels.json`), eine
+  Sorte-(e)-Eintrag `verknuepft_mit_panels: [<panel_id>, …]` (Reverse-Lookup).
+  Zwei Panels auf demselben Display → eines (e)-Eintrag mit zwei `panel_id`
+  in `verknuepft_mit_panels[]` (SREG-1).
+- **Paar-Hero rendert:** Ein Display mit `verknuepft_mit_panels: [p1]` erscheint
+  in der Hero-Sektion als Display-Anker mit Editor-Karte für `p1` daneben; ein
+  Display mit `[p1, p2]` als Anker mit zwei Editor-Karten; ein Display mit
+  `[]` (kein steuerndes Panel) erscheint nicht in der Hero-Sektion, sondern
+  unten unter „Displays" (SREG-12).
+- **Übersicht-Selbstbezug:** die Übersichts-Seite selbst erscheint als
+  Sorte-(b)-Eintrag mit Platform-Eigentümer (`app: seiten`, `pfad:
+  /api/v1/seiten/uebersicht`, `zielgruppe: eltern`) im Inventar — Quelle
+  `seiten/views.json` (SREG-12 / BUD-3-analog).
+- **Copy & Long-Press:** Copy-Button schreibt die volle URL in die
+  Zwischenablage; eine Smoketest-Assertion sichert, dass die `<a>`-Elemente
+  natives Text-Selektieren erlauben (kein `user-select: none` auf Link-Text)
+  (SREG-12).
+- **Volltextsuche:** Eingabe „garderobe" filtert sowohl Paar-Hero als auch
+  sekundäre Karten auf passende Einträge (Match gegen `label`/`synonyme`/
+  `zeigt`) — clientseitig, keine Server-Roundtrip (SREG-12).
+- **Manifest⇔Route-Bindung für Platform-Service:** Eigentest in
+  `seiten/views.json` ⇔ `seiten/main.py` analog BUD-3 — der `pfad`
+  `/api/v1/seiten/uebersicht` muss eine echte Flask-Route mit HTML-Antwort
+  haben (SREG-12).
+- **Auth:** SREG-5-Skill erbt EC-2 (Mitglied berechtigt, Gruppe+Privatchat);
   die „keine Kind-Mitglieder"-Annahme (SREG-6) ist **operativ, nicht
   automatisiert testbar** — sie ist eine bewusste V1-Grenze, kein Code-Gate.
 
@@ -247,10 +361,125 @@ Editor-Eintrags (alle deterministisch aus der `panel_id`, kein neues PREG-Feld):
 
 *Wenn* die Registry N Panel-Instanzen kennt, *dann* enthält das Inventar **2N**
 Panel-bezogene Einträge: N Panel-Seiten (Sorte d) **und** N Editor-Einträge, je
-mit distinktem `key` und `pfad`. Der `seiten_finden`-Skill (SREG-5) liefert so je
-Panel einen eigenen Editor-Link, ohne die Panel-Seite zu überschreiben.
+mit distinktem `key` und `pfad`. Beide tragen `verknuepft_mit_display`
+(SREG-4) — die SREG-12-Hero-Sektion gruppiert sie am gemeinsamen Display-Anker.
 
-Konsument: `specs/platform/panel-bearbeiten.md` PBE-2 (#330).
+Konsument: `specs/platform/panel-bearbeiten.md` PBE-2 (#330). Der frühere
+Konsumenten-Pfad „Eltern-Chat liefert je Panel direkt den Editor-Link" wird
+durch SREG-12 mit-bedient: der Editor-Eintrag liegt auf der Übersichtsseite
+direkt neben dem gepaarten Display, kopierbar — ein Tipp mehr als der
+ehemalige Direkt-Link aus dem Chat, dafür konsistent für alle Eintrags-Sorten
+und ohne KI-Matching im Skill.
+
+## SREG-12 — Gerenderte Eltern-Übersichts-Seite (HTML, neben der Registry-API)
+Die V1-Antwort auf „wo finde ich die Seiten" ist **eine eigene HTML-Seite** im
+seiten-Service. Sie listet das gesamte Inventar aus `inventar.json` (SREG-3)
+auf, und ist für **Eltern am Handy** gebaut (Tablet/Phone, Daumen-bedienbar).
+Sie ist die **alternative Darstellung** der Registry — Daten liegen in
+`/api/v1/seiten` (JSON), Rendering unter `/api/v1/seiten/uebersicht` (HTML).
+Eine Datenquelle, zwei Darstellungen.
+
+**Hauptzweck = Geräte-Paare auf einen Blick.** Eltern öffnen die Seite primär,
+um zu sehen, **welcher Panel-Controller welches Display steuert** — z. B. „mit
+welchem Panel bediene ich gerade das Wohnzimmer-Display?". Das Paar steht
+deshalb in einer **Hero-Sektion am Seitenkopf**, prominent und ohne Suche
+auffindbar; die übrigen Sorten kommen darunter als sekundäre Liste.
+
+**Route / Manifest / Sorte:**
+- Pfad: **`/api/v1/seiten/uebersicht`** — neben der Registry-API unter URL-4
+  (`/api/v1/<resource>/<aggregat>`), Konsistenz mit ROU-14 (`/api/v1/diag` als
+  HTML-Aggregat im Router). Ausgeliefert vom selben Service `xbuddy-seiten`,
+  der auch `GET /api/v1/seiten` antwortet — kein neuer Port; der nginx-Eintrag
+  für `/api/v1/seiten` muss die Sub-Pfade mit abdecken (Deploy-Detail).
+- Eintrag (SREG-1 Sorte b mit Platform-Eigentümer): Quelle ist ein neues
+  **`seiten/views.json`** (BUD-3-Schema), das die Übersichts-Seite mit
+  `pfad: /api/v1/seiten/uebersicht`, `app: seiten`, `slug: uebersicht`,
+  `label: "Alle Seiten"`, `zielgruppe: "eltern"` listet. Die Übersicht listet
+  sich darüber **selbst** — kein handgepflegter Sonderfall im Aggregator.
+
+**Layout (V1, von oben nach unten):**
+
+1. **Suchfeld** (Volltextsuche, clientseitig, filtert beide Sektionen live).
+2. **Hero-Sektion „Geräte-Paare"** (Hauptzweck):
+   - Für jeden Display-Client mit `verknuepft_mit_panels: [<panel_id>, …]`
+     (mindestens ein Eintrag) wird eine Paar-Gruppe gerendert:
+     - **Display-Anker** (links/oben): Display-Karte mit Label + kopierbaren
+       URLs (Heim/Tailscale) + Default-Piktogramm.
+     - **Panel-Editor-Karte(n) daneben** (rechts/darunter): je gekoppelter
+       `panel_id` eine Karte für den Editor-Pfad
+       `/controller/app-panel/<panel_id>/bearbeiten` (PBE-2, SREG-11),
+       Label „Panel <panel_id> bearbeiten", kopierbare URLs.
+     - Die Verbindung wird **visuell deutlich** als zusammengehörig dargestellt
+       (z. B. gemeinsame Karten-Gruppe mit Rahmen/Hintergrund, Verbinder-Linie
+       oder „steuert ↔ Display"-Chip) — die Lösung bestätigt Gate B (Design).
+   - Reihenfolge: Displays alphabetisch nach `display_id`.
+   - *Wenn* kein Display ein gekoppeltes Panel hat (Kaltstart, oder keine
+     Panels angelegt), *dann* fehlt der Hero-Block; ein Hinweis „Noch keine
+     Geräte-Paare angelegt" reicht — keine leere Box.
+3. **Sekundäre Karten-Liste**, nach Typ-Chips filterbar:
+   - Display-Views (Sorte a), Eltern-/Settings-Views (Sorte b inkl. Übersicht
+     selbst), Controller-Apps (Sorte c), **unverknüpfte** Panel-Instanzen
+     (Sorte d ohne gekoppeltes Display oder mit fehlendem Display), **un-
+     verknüpfte** Display-Clients (Sorte e ohne `verknuepft_mit_panels`).
+   - Typ-Filter-Chips: „Alle · Anzeigen · Eltern · Controller · Panels ·
+     Displays". Default „Alle".
+
+**Inhalt je Karte (Pflicht):** `label` · `zeigt` (1 Satz) · `icons[]` (oder
+Fallback, s. u.) · `typ`-Badge · **zwei kopierbare URLs** mit Copy-Button:
+- **„Heim"** = `display_url_origin_heim` + `pfad` (SREG-7)
+- **„Tailscale"** = `display_url_origin_tailscale` + `pfad` (SREG-7)
+
+*Wenn* `display_url_origin_tailscale` leer ist, *dann* wird die Tailscale-Spalte
+**weggelassen** und ein einmaliger Banner-Hinweis am Seitenkopf erklärt, dass
+nur die Heim-Variante verfügbar ist.
+
+**Varianten:** ein Eintrag mit `varianten[]` (SREG-1) rendert **je Variante eine
+eigene Karte** mit der vollständigen `query`-Anhängung am Pfad (z. B.
+`/display/plan/woche?ansicht=klein`); die Default-View bleibt ihre eigene Karte.
+
+**Kopier-Mechanik:** Copy-Button je URL (Click → Zwischenablage, kurzer
+Erfolgs-Toast). Langes-Drücken am Handy auf den Link-Text muss zusätzlich
+**funktionieren** (nativer Browser-Kontextmenüpfad „Link kopieren") — das
+verbietet `pointer-events: none`/`user-select: none` auf den `<a>`-Inhalten.
+Beide Pfade (Copy-Button **und** Long-Press) sind explizite V1-Anforderung,
+damit Eltern die für sie gewohnte Geste nutzen können.
+
+**Suche:** Volltextsuche (clientseitig) gegen `label`, `synonyme[]`, `zeigt` —
+ein Eingabefeld am Seitenkopf, Live-Filter. Suche wirkt auf **beide**
+Sektionen (Hero und sekundär). Ein Treffer in einer Panel-Editor-Karte hält
+das gepaarte Display im Hero sichtbar (Kontext-Erhalt — sonst verliert man die
+Paar-Information beim Filtern).
+
+**Icon-Fallback** (SREG-4-Lücke: Sorten b/c/d/e tragen meist kein `icons[]`):
+- Sorte b/c (Eltern-Settings, Controller): generisches Default-Piktogramm aus
+  `seiten/static/icons/<typ>.png` (kleine B-Liste in der Implementierung).
+- Sorte d/e (Panel-Instanz, Display-Client): Default-Piktogramm + die `key`
+  als Untertitel der Karte (Panel-/Display-ID).
+- *Nicht* den `icons_erforderlich`-Schalter (SREG-10) bemühen — der gehört zum
+  Aggregator-Manifest-Bau, nicht zur Anzeige-Schicht.
+
+**Datenquelle:** ausschließlich `GET /api/v1/seiten` aus dem **eigenen Service**
+(in-process oder localhost-Loop, kein externes Netz). Die Seite ist eine
+**Templating-Schicht über `inventar.json`** — keine eigenen Daten, keine zweite
+Wahrheit (CLAUDE.md §6). Aktualität folgt SREG-3 (TTL ≤ 30 s).
+
+**Auth/Exposure:** erbt SREG-6 — EC-2-Mitgliedschaft + Netzgrenze, kein
+zusätzliches Auth-Gate, kein `intern`-Flag.
+
+**Vertikale Scheibe (Abend-Test):**
+1. Eltern öffnen `<heim-origin>/api/v1/seiten/uebersicht` am Handy.
+2. **Ohne Suche/Filter** sehen sie sofort: „Wohnzimmer-Display ist mit
+   Mama-iPhone-Panel und Papa-iPhone-Panel gepaart" — Display-Karte links,
+   beide Panel-Editor-Karten rechts, visuell als zusammengehörige Gruppe.
+3. Klick auf Copy-Button „Tailscale" am Mama-iPhone-Editor → URL in
+   Zwischenablage → in einen anderen Browser-Tab am Laptop einfügen → die
+   `/controller/app-panel/<mama-panel-id>/bearbeiten`-Seite öffnet sich.
+4. Suche „garderobe" filtert auf die WETTER-Regeln-Karte in der sekundären
+   Liste; gepaarte Geräte im Hero bleiben sichtbar, wenn sie nicht zum
+   Suchbegriff passen (Kontext-Erhalt).
+
+**Pfad-Stabilität:** `/api/v1/seiten/uebersicht` ist mit der Ratifizierung
+2026-06-08 nach URL-8 dauerhaft.
 
 ## SREG-13 — Per-View-Skip statt per-Manifest-Skip bei Schema-Fehler
 
@@ -318,3 +547,43 @@ Unübersichtlichkeit.
   (Eltern-Chat, parent-only) ist das Gate (SREG-6); ein Flag wäre Vorbau.
 - **Mit #325 zu EINEM App-/Seiten-Katalog zusammenlegen** — verworfen: koppelt
   Lese-Skill an das vertagte #296-Installations-Thema (SREG-8).
+
+### E-SREG-1.b — Verworfene URL-Genres für SREG-12 (Berater-Runde 2026-06-08)
+Die Frage „wo wohnt die Übersichtsseite" lief durch eine Berater-Runde mit
+Codex-Antiberater. ENTSCHEID:
+`brainstorm/berater-runde/20260608-RATIFIZIERT-seiten-uebersicht-platform-genre.md`.
+Verworfen:
+- **A — `/display/_shared/eltern/seiten/uebersicht`**: mischt Adressat (Eltern)
+  mit Eigentümer (Platform-Service); URL-16 ist read-only Asset-Genre.
+- **A' — `/display/_shared/_ui/seiten`**: bricht URL-6 (Underscore-Verbot
+  außer für den bestehenden Sonderfall `_shared`); vergiftet URL-16
+  (read-only Asset-Genre); braucht ohnehin nginx-Block, weil `xbuddy-seiten`
+  separater Prozess.
+- **B / B' — neues Top-Level `/platform/<service>/<view>`**: würde URL-1
+  (drei Top-Level: `/display/`, `/controller/`, `/api/v1/`) bei n=1 erweitern
+  und eine neue Konvention auf Vorrat anlegen (CLAUDE.md §6 verbietet das).
+- **C — „Platform-Buddy"-Klasse PBUD-* mit eigenem Manifest-Genre**: Manifest-
+  Schicht analog BUD-3 für eine einzige Seite ist Architecture Astronaut.
+- **D-pur — `/api/v1/seiten` mit Content-Negotiation (HTML/JSON je Accept-Header)**:
+  Tools/Telegram-Vorschau/curl sehen je nach Accept-Header anderes, UX-Reibung
+  bei Eltern. Außerdem versteckt es den Sortenunterschied „HTML-Schwesterview"
+  unter einer Identitäts-URL.
+- **E — `/controller/seiten/uebersicht`**: `/controller/` ist URL-11
+  „Controller-Aktion", nicht „Platform-Admin"; bricht das Genre-Versprechen.
+
+Ratifiziert: **D' — `/api/v1/seiten/uebersicht` als HTML-Schwester** zu
+`/api/v1/seiten` (JSON). Begründung Nic: „view ist eine alternative Darstellung
+der Registry, also sollte neben der Registry wohnen". Präzedenz ROU-14
+(`/api/v1/diag` HTML im Router unter URL-4 als „Diagnose zählt zum
+Hub-Backend"), analog: „Übersicht zählt zum Seiten-Registry-Backend".
+
+Verworfene Verknüpfungs-Mechaniken:
+- **Co-Lokations-Verknüpfung als V1** („Panel + Display laufen auf demselben
+  Hardware-Gerät"): heute kein Schema-Halt — GER trägt keine `panel_id`-Rück-
+  Referenz. **Folge-Aufgabe**, nicht V1; bis dahin trägt die logische
+  Verknüpfung (PREG `display_id`, SREG-4 `verknuepft_mit_display`) den
+  Eltern-Nutzen voll.
+- **Hardcoden statischer Paare** (statische Paar-Liste neben `seiten/`):
+  verworfen, weil unnötig — PREG-Pflichtfeld `display_id` trägt die
+  Information bereits. Hardcoden wäre eine handgepflegte Zweitliste
+  (CLAUDE.md §6 verboten).
