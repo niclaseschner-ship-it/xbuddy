@@ -234,8 +234,8 @@ def test_ac2_einmalig_tageswechsel_automatisch_weg(items_client):
     with open(store_path, "w", encoding="utf-8") as f:
         json.dump(store, f)
 
-    # Nach Tageswechsel: _load_einmalig_heute muss leere Liste liefern
-    einmalig_nach_wechsel = items_mod._load_einmalig_heute(store_path, "Europe/Berlin")
+    # Nach Tageswechsel: load_einmalig_heute muss leere Liste liefern
+    einmalig_nach_wechsel = items_mod.load_einmalig_heute(store_path, "Europe/Berlin")
     assert einmalig_nach_wechsel == [], \
         "Nach Tageswechsel müssen einmalig-Items automatisch weg sein (ROUTINE-6)"
 
@@ -290,7 +290,7 @@ def test_ac3_delete_einmalig_item(items_client):
     assert json.loads(del_resp.data)["id"] == new_id
 
     # Aus Store verschwunden
-    einmalig = items_mod._load_einmalig_heute(store_path, "Europe/Berlin")
+    einmalig = items_mod.load_einmalig_heute(store_path, "Europe/Berlin")
     ids_im_store = [e.get("id") for e in einmalig]
     assert new_id not in ids_im_store, \
         "einmalig-ID %r muss nach DELETE aus Store entfernt sein" % new_id
@@ -425,6 +425,69 @@ def test_ac4_put_mit_mehr_als_8_gibt_400(items_client):
     assert resp.status_code == 400
 
 
+def test_ac4_grenzfall_post_bei_sieben_items_gibt_201_und_datei_hat_acht(tmp_path):
+    """AC4 Happy-Path-Grenzfall: POST mit 7 vorhandenen Items → 201 + Datei hat danach 8 Items."""
+    items_7 = [
+        {"id": "item%d" % i, "label": "Item %d" % i, "piktogramm": str(1000 + i), "quelle": "default"}
+        for i in range(7)
+    ]
+    data_file = tmp_path / "routine.json"
+    data_file.write_text(json.dumps({
+        "abfahrtszeit": "07:45",
+        "anzieh_vorlauf_min": 8,
+        "aufstehzeit": "07:00",
+        "zeitzone": "Europe/Berlin",
+        "items": items_7,
+        "zeit_referenzen": {"an": False, "paare": []},
+    }))
+    store_path = str(tmp_path / "routine_store.json")
+    import routine.config as _cfg
+    import routine.main as _main
+    cfg = _cfg.resolve_data(str(data_file))
+    _main.configure(cfg, data_path=str(data_file), store_path=store_path)
+    client = _main.app.test_client()
+
+    resp = client.post("/api/v1/routine/items",
+                       json={"quelle": "default", "label": "Achter Punkt", "piktogramm": "9999"},
+                       content_type="application/json")
+    assert resp.status_code == 201, \
+        "POST bei 7 Items muss 201 liefern — Grenzfall noch unter Klemme (ROUTINE-19)"
+
+    with open(str(data_file), encoding="utf-8") as f:
+        gespeichert = json.load(f)
+    assert len(gespeichert["items"]) == 8, \
+        "Nach POST mit 7 vorhandenen Items muss die Datei genau 8 Items enthalten"
+
+
+def test_ac4_grenzfall_put_mit_acht_items_gibt_200(tmp_path):
+    """AC4 Happy-Path-Grenzfall: PUT mit Liste der Länge 8 → 200 (genau an der Grenze)."""
+    data_file = tmp_path / "routine.json"
+    data_file.write_text(json.dumps({
+        "abfahrtszeit": "07:45",
+        "anzieh_vorlauf_min": 8,
+        "aufstehzeit": "07:00",
+        "zeitzone": "Europe/Berlin",
+        "items": [],
+        "zeit_referenzen": {"an": False, "paare": []},
+    }))
+    store_path = str(tmp_path / "routine_store.json")
+    import routine.config as _cfg
+    import routine.main as _main
+    cfg = _cfg.resolve_data(str(data_file))
+    _main.configure(cfg, data_path=str(data_file), store_path=store_path)
+    client = _main.app.test_client()
+
+    genau_acht = [
+        {"id": "item%d" % i, "label": "Item %d" % i, "piktogramm": str(1000 + i)}
+        for i in range(8)
+    ]
+    resp = client.put("/api/v1/routine/items",
+                      json=genau_acht,
+                      content_type="application/json")
+    assert resp.status_code == 200, \
+        "PUT mit genau 8 Items muss 200 liefern — Grenzfall erlaubt (ROUTINE-19)"
+
+
 # ============================================================
 #  Validierungs-Einheit (items_mod direkt)
 # ============================================================
@@ -476,6 +539,17 @@ def test_items_add_default_atomares_schreiben(tmp_path):
     with open(data_path, encoding="utf-8") as f:
         inhalt = json.load(f)
     assert any(i.get("label") == "AtomTest" for i in inhalt["items"])
+
+
+def test_load_einmalig_heute_ist_public(tmp_path):
+    """AC2-Public: load_einmalig_heute ist ohne Underscore-Präfix aufrufbar (Befund 3)."""
+    store_path = str(tmp_path / "store.json")
+    # Funktion direkt ohne Underscore aufrufen — kein AttributeError erlaubt
+    result = items_mod.load_einmalig_heute(store_path, "Europe/Berlin")
+    assert result == [], "load_einmalig_heute ohne Store → leere Liste (kein Fehler)"
+    # Altes privates API darf nicht mehr existieren
+    assert not hasattr(items_mod, "_load_einmalig_heute"), \
+        "_load_einmalig_heute darf nicht mehr als privates Attribut existieren (Befund 3)"
 
 
 def test_items_einmalig_prafix_kollidiert_nie_mit_default(tmp_path):
