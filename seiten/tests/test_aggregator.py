@@ -464,3 +464,134 @@ def test_inventar_2n_panel_eintraege_sreg11(manifest_root):
     typen = {e["typ"] for e in panel_und_editor}
     assert aggregator.TYP_PANEL in typen
     assert aggregator.TYP_ELTERN in typen
+
+
+# ============================================================
+#  SREG-4 — Verknüpfungs-Felder (T467 AC1)
+#  Mengen-AC: alle DREI Felder (verknuepft_mit_display, verknuepft_mit_panels[],
+#  verknuepft_mit_panel) + Null-Träger-Tests für alle Sorten.
+# ============================================================
+
+def test_sreg4_verknuepft_mit_display_an_panel_eintrag():
+    """SREG-4: Panel-Instanz (Sorte d) trägt `verknuepft_mit_display` aus PREG-display_id."""
+    panels = [
+        {"panel_id": "kueche-01", "display_id": "pi-display-kueche-01"},
+        {"panel_id": "bad-01",    "display_id": "pi-display-bad-01"},
+    ]
+    eintraege = aggregator.panel_eintraege(panels)
+    by_key = {e["key"]: e for e in eintraege}
+    assert by_key["panel-kueche-01"]["verknuepft_mit_display"] == "pi-display-kueche-01"
+    assert by_key["panel-bad-01"]["verknuepft_mit_display"] == "pi-display-bad-01"
+
+
+def test_sreg4_verknuepft_mit_panel_an_editor_eintrag():
+    """SREG-4: Editor-Eintrag (Sorte b, SREG-11) trägt `verknuepft_mit_panel`."""
+    panels = [{"panel_id": "kueche-01", "display_id": "pi-display-01"}]
+    eintraege = aggregator.panel_eintraege(panels)
+    by_key = {e["key"]: e for e in eintraege}
+    editor = by_key["kueche-01-bearbeiten"]
+    assert editor["verknuepft_mit_panel"] == "kueche-01"
+
+
+def test_sreg4_verknuepft_mit_panels_an_display_client():
+    """SREG-4: Display-Client (Sorte e) trägt `verknuepft_mit_panels[]` per Reverse-Lookup."""
+    panels = [
+        {"panel_id": "mama-iphone", "display_id": "pi-display-wohnzimmer"},
+        {"panel_id": "papa-iphone", "display_id": "pi-display-wohnzimmer"},
+        {"panel_id": "kueche-tab",  "display_id": "pi-display-kueche"},
+    ]
+    geraete = [
+        {"id": "pi-display-wohnzimmer", "verwendung": "display", "status": "aktiv"},
+        {"id": "pi-display-kueche",     "verwendung": "display", "status": "aktiv"},
+        {"id": "pi-display-flur",       "verwendung": "display", "status": "aktiv"},
+    ]
+    eintraege = aggregator.display_client_eintraege(geraete, panels=panels)
+    by_key = {e["key"]: e for e in eintraege}
+    # Wohnzimmer-Display: zwei Panels (Mengen-AC: mehrere möglich)
+    assert by_key["display-pi-display-wohnzimmer"]["verknuepft_mit_panels"] == [
+        "mama-iphone", "papa-iphone"]
+    # Küchen-Display: genau ein Panel
+    assert by_key["display-pi-display-kueche"]["verknuepft_mit_panels"] == ["kueche-tab"]
+
+
+# --- Null-Träger: das Feld FEHLT (kein null, kein "") bei Nicht-Trägern ----
+
+def test_sreg4_kein_verknuepft_mit_display_bei_nicht_panel():
+    """SREG-4 Null-Träger: Manifest-Sorten (a/b/c) tragen KEIN `verknuepft_mit_display`."""
+    geraete = [{"id": "pi-01", "verwendung": "display", "status": "aktiv"}]
+    panels_e = aggregator.panel_eintraege([{"panel_id": "k-01"}])
+    display_e = aggregator.display_client_eintraege(geraete)
+    # Editor-Eintrag (b) — kein verknuepft_mit_display
+    editor = next(e for e in panels_e if e["key"] == "k-01-bearbeiten")
+    assert "verknuepft_mit_display" not in editor
+    # Display-Client (e) — kein verknuepft_mit_display
+    for e in display_e:
+        assert "verknuepft_mit_display" not in e
+
+
+def test_sreg4_kein_verknuepft_mit_panel_an_panel_seite():
+    """SREG-4 Null-Träger: die Panel-SEITE (Sorte d) trägt KEIN `verknuepft_mit_panel` —
+    nur der abgeleitete Editor-Eintrag (b/SREG-11) hat dieses Feld."""
+    panels = [{"panel_id": "k-01", "display_id": "d-01"}]
+    eintraege = aggregator.panel_eintraege(panels)
+    panel_seite = next(e for e in eintraege if e["key"] == "panel-k-01")
+    assert "verknuepft_mit_panel" not in panel_seite
+
+
+def test_sreg4_kein_verknuepft_mit_panels_bei_nicht_display():
+    """SREG-4 Null-Träger: Panel/Editor tragen KEIN `verknuepft_mit_panels[]`."""
+    panels = [{"panel_id": "k-01", "display_id": "d-01"}]
+    eintraege = aggregator.panel_eintraege(panels)
+    for e in eintraege:
+        assert "verknuepft_mit_panels" not in e
+
+
+def test_sreg4_panel_ohne_display_id_traegt_kein_feld():
+    """SREG-4: fehlt `display_id` im PREG-Snapshot (defensiv), FEHLT
+    `verknuepft_mit_display` am Eintrag (kein null, kein leerer String)."""
+    panels = [{"panel_id": "ohne-display-01"}]
+    eintraege = aggregator.panel_eintraege(panels)
+    panel_seite = next(e for e in eintraege if e["key"] == "panel-ohne-display-01")
+    assert "verknuepft_mit_display" not in panel_seite
+
+
+def test_sreg4_display_ohne_panels_traegt_kein_feld():
+    """SREG-4: Display ohne gekoppeltes Panel → Feld FEHLT (kein `[]`)."""
+    panels = [{"panel_id": "k-01", "display_id": "pi-display-A"}]
+    geraete = [
+        {"id": "pi-display-A", "verwendung": "display", "status": "aktiv"},
+        {"id": "pi-display-B", "verwendung": "display", "status": "aktiv"},
+    ]
+    eintraege = aggregator.display_client_eintraege(geraete, panels=panels)
+    by_key = {e["key"]: e for e in eintraege}
+    assert by_key["display-pi-display-A"]["verknuepft_mit_panels"] == ["k-01"]
+    # B ist ungepaart → Feld FEHLT, ist NICHT `[]`
+    assert "verknuepft_mit_panels" not in by_key["display-pi-display-B"]
+
+
+def test_sreg4_display_panels_none_traegt_kein_feld():
+    """SREG-4: PREG-Snapshot aus (panels=None) → kein Reverse-Lookup,
+    Feld FEHLT (würde sonst falsche `[]`-Aussage am Display erzeugen)."""
+    geraete = [{"id": "pi-display-01", "verwendung": "display", "status": "aktiv"}]
+    eintraege = aggregator.display_client_eintraege(geraete, panels=None)
+    assert "verknuepft_mit_panels" not in eintraege[0]
+
+
+def test_sreg4_manifest_sorten_tragen_keines_der_drei_felder(manifest_root):
+    """SREG-4 Null-Träger erschöpfend: Sorten a/b/c (Manifest) tragen KEINES
+    der drei Verknüpfungs-Felder."""
+    eintraege = aggregator.manifest_eintraege(manifest_root)
+    for e in eintraege:
+        assert "verknuepft_mit_display" not in e
+        assert "verknuepft_mit_panels" not in e
+        assert "verknuepft_mit_panel" not in e
+
+
+def test_sreg4_baue_inventar_durchreicht_panels_an_display_lookup(manifest_root):
+    """SREG-4: baue_inventar reicht `panels` an die display_client_eintraege-Ableitung
+    durch — Reverse-Lookup funktioniert auch über den orchestrierenden Aufruf."""
+    panels = [{"panel_id": "k-01", "display_id": "pi-A"}]
+    geraete = [{"id": "pi-A", "verwendung": "display", "status": "aktiv"}]
+    inv = aggregator.baue_inventar(manifest_root, panels=panels, geraete=geraete)
+    display = next(e for e in inv["eintraege"] if e["key"] == "display-pi-A")
+    assert display["verknuepft_mit_panels"] == ["k-01"]

@@ -52,6 +52,23 @@ Der Schalter `icons_erforderlich` (Default `False`) steuert die Durchsetzung:
 Für jede Panel-Instanz (Sorte d) erzeugt `panel_eintraege` zusätzlich einen
 abgeleiteten Editor-Eintrag (`typ=eltern`, `pfad=/controller/app-panel/<id>/bearbeiten`,
 `key=<panel_id>-bearbeiten`). Das Ergebnis sind 2N Einträge für N Panel-Instanzen.
+
+## Verknüpfungs-Felder (SREG-4)
+
+Drei abgeleitete Felder verknüpfen die Snapshot-Sorten d/e und den
+Editor-Eintrag (b/SREG-11), damit die Übersichtsseite (SREG-12) die
+Hero-Paar-Boxen Display↔Panel↔Editor zeichnen kann:
+
+- `verknuepft_mit_display` (Sorte d): `display_id` aus `panels.json`
+  (PREG-Pflichtfeld E-PANEL-5). Trägt **nur** die Panel-Instanz.
+- `verknuepft_mit_panels[]` (Sorte e): Reverse-Lookup über den
+  PREG-Snapshot — Liste aller `panel_id`s, die dieses Display steuern.
+  Trägt **nur** der Display-Client; mehrere Panels pro Display möglich.
+- `verknuepft_mit_panel` (Sorte b, Editor-Eintrag SREG-11): die
+  `panel_id` aus dem Editor-Pfad-Segment. Trägt **nur** der Editor-Eintrag.
+
+Alle drei Felder **fehlen** bei Nicht-Trägern (analog `icons` — kein
+`null`, kein leerer String; das Feld ist schlicht nicht da).
 """
 
 import glob
@@ -208,9 +225,17 @@ def panel_eintraege(panels):
     wird aus ihr abgeleitet (SREG-4: PREG kennt kein Anzeige-Label).
     `synonyme`/`varianten`/`zeigt` entfallen für (d).
 
+    SREG-4-Verknüpfung: Trägt das PREG-Panel `display_id` (Pflichtfeld
+    E-PANEL-5), erhält der Panel-Eintrag `verknuepft_mit_display: <display_id>`.
+    Das Feld fehlt, wenn `display_id` im Snapshot leer/fehlt (defensiv —
+    PREG-Pflichtfeld, sollte immer da sein).
+
     SREG-11: Für jede Panel-Instanz entsteht zusätzlich ein abgeleiteter
     Editor-Eintrag (`typ=eltern`, `pfad=/controller/app-panel/<panel_id>/bearbeiten`,
     `key=<panel_id>-bearbeiten`). Das Ergebnis sind 2N Einträge für N Panels.
+    Der Editor-Eintrag trägt `verknuepft_mit_panel: <panel_id>` (SREG-4),
+    damit die Übersichtsseite (SREG-12) ihn als Anhang an seine Panel-Karte
+    rendern kann.
     """
     eintraege = []
     for p in panels:
@@ -218,14 +243,21 @@ def panel_eintraege(panels):
         if not panel_id:
             continue
         # Panel-Seiten-Eintrag (Sorte d)
-        eintraege.append({
+        panel_e = {
             "key": "panel-%s" % panel_id,
             "typ": TYP_PANEL,
             "instanz": panel_id,
             "pfad": "/controller/app-panel/%s" % panel_id,
             "label": "Panel %s" % panel_id,
             "zielgruppe": "eltern",
-        })
+        }
+        # SREG-4: verknuepft_mit_display — nur wenn PREG das Feld trägt
+        # (E-PANEL-5 Pflichtfeld; defensiv, falls Snapshot/Migration). Das
+        # Feld FEHLT bei leerem display_id — kein null/leerer String.
+        display_id = p.get("display_id")
+        if display_id:
+            panel_e["verknuepft_mit_display"] = display_id
+        eintraege.append(panel_e)
         # Editor-Eintrag (SREG-11): typ=eltern, distinkt via -bearbeiten-Key
         eintraege.append({
             "key": "%s-bearbeiten" % panel_id,
@@ -234,18 +266,43 @@ def panel_eintraege(panels):
             "pfad": "/controller/app-panel/%s/bearbeiten" % panel_id,
             "label": "Panel %s bearbeiten" % panel_id,
             "zielgruppe": "eltern",
+            # SREG-4: verknuepft_mit_panel — abgeleitet aus dem Pfad-Segment,
+            # verbindet den Editor mit seiner Panel-Instanz (Display ↔ Panel
+            # ↔ Editor-Kette in SREG-12).
+            "verknuepft_mit_panel": panel_id,
         })
     return eintraege
 
 
-def display_client_eintraege(geraete):
+def display_client_eintraege(geraete, panels=None):
     """Leitet die Display-Client-Einträge (Sorte e) aus einem GER-Snapshot ab.
 
     `geraete` ist die Liste aus `GET /api/v1/geraete/`. (e)-Filter (SREG-1):
     nur Geräte mit `verwendung ∈ {display, beides}` UND `status = aktiv` —
     ein reines Controller-Gerät ist keine Display-Seite, ein stillgelegtes
     Tablet kein nutzbarer Link. `pfad`/`label` aus der Instanz-ID (`display_id`).
+
+    SREG-4-Verknüpfung: Ist `panels` gegeben, wird je Display ein Reverse-
+    Lookup über die PREG-Panel-Liste gemacht — alle `panel_id`s, deren
+    `display_id` auf dieses Display zeigt, landen als `verknuepft_mit_panels[]`
+    am Eintrag. Mehrere Panels pro Display sind möglich (PREG-Beispiel
+    Mama+Papa-iPhone auf Wohnzimmer-Display). Das Feld FEHLT, wenn `panels=None`
+    (Snapshot-Ausfall, soll die Verknüpfung nicht mit `[]` täuschen);
+    `panels=[]` liefert dagegen einen leeren Reverse-Lookup → das Feld fehlt
+    bei ungepaarten Displays, ist `[panel_id, …]` bei gepaarten.
     """
+    if panels is not None:
+        # Reverse-Lookup einmalig vorberechnen (display_id → [panel_id, …]).
+        # PREG-Pflichtfeld E-PANEL-5: jedes Panel trägt genau eine display_id.
+        # Reihenfolge in der Liste folgt der Snapshot-Reihenfolge — deterministisch.
+        reverse = {}
+        for p in panels:
+            pid = p.get("panel_id")
+            did = p.get("display_id")
+            if pid and did:
+                reverse.setdefault(did, []).append(pid)
+    else:
+        reverse = None
     eintraege = []
     for g in geraete:
         display_id = g.get("id")
@@ -255,14 +312,21 @@ def display_client_eintraege(geraete):
             continue
         if g.get("status") != "aktiv":
             continue
-        eintraege.append({
+        e = {
             "key": "display-%s" % display_id,
             "typ": TYP_DISPLAY_CLIENT,
             "instanz": display_id,
             "pfad": "/display/%s" % display_id,
             "label": "Display %s" % display_id,
             "zielgruppe": "kind",
-        })
+        }
+        # SREG-4: verknuepft_mit_panels — nur setzen, wenn PREG-Snapshot vorlag.
+        # Bei panels=None (Snapshot-Ausfall) keine Verknüpfung suggerieren.
+        if reverse is not None:
+            verbundene = reverse.get(display_id, [])
+            if verbundene:
+                e["verknuepft_mit_panels"] = verbundene
+        eintraege.append(e)
     return eintraege
 
 
@@ -274,7 +338,8 @@ def _snapshot_sorte(neu, ableiter, vorheriges, typ):
     """Wendet das Last-Known-Good-Fehlermodell auf eine Snapshot-Sorte an (SREG-3).
 
     `neu` ist der frisch geholte Snapshot (`list`) oder `None` (Holer scheiterte).
-    - frische Daten → abgeleitete Einträge, kein Stale-/Pending-Marker.
+    - frische Daten → abgeleitete Einträge (ableiter ist eine 0-arg-Closure
+      über `neu` + ggf. weitere Snapshots), kein Stale-/Pending-Marker.
     - `None` + im `vorheriges`-Inventar lag schon mal ein erfolgreicher
       Teil-Snapshot dieser Sorte → diese Einträge erhalten, `stale: true`.
     - `None` + nie da gewesen → leere Liste + `pending=True`-Signal, sodass der
@@ -328,8 +393,16 @@ def baue_inventar(root, panels=None, geraete=None, vorheriges=None,
         pending.append(TYP_PANEL)
     eintraege.extend(panel_e)
 
+    # SREG-4: Display-Client braucht den PREG-Snapshot für den
+    # `verknuepft_mit_panels[]`-Reverse-Lookup. Wenn PREG ausfällt
+    # (panels=None), kommt None durch — die Verknüpfung fehlt dann (keine
+    # falsche `[]`-Aussage). Wenn nur GER ausfällt, läuft LKG für Sorte e und
+    # `panels` ist trotzdem da — die Verknüpfung bleibt korrekt am LKG-Eintrag,
+    # weil _snapshot_sorte den vorigen Eintrag inklusive `verknuepft_mit_panels`
+    # 1:1 übernimmt (dict-Copy).
     display_e, display_pending = _snapshot_sorte(
-        geraete, display_client_eintraege, vorherige_eintraege, TYP_DISPLAY_CLIENT)
+        geraete, lambda g: display_client_eintraege(g, panels=panels),
+        vorherige_eintraege, TYP_DISPLAY_CLIENT)
     if display_pending:
         pending.append(TYP_DISPLAY_CLIENT)
     eintraege.extend(display_e)

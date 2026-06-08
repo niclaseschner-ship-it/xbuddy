@@ -25,6 +25,13 @@ User=__XBUDDY_USER__
 WorkingDirectory=__XBUDDY_REPO__
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=__XBUDDY_HOME__
+# SREG-7: Display-URL-Origins für die SREG-12-Übersichts-Seite.
+# Heim-Origin ist Pflicht (sonst keine kopierbaren Heim-URLs); Tailscale-Origin
+# ist V1-Soll (leer = SREG-12 zeigt Banner statt zweiter URL-Spalte).
+# Beide Werte sind PER-INSTANZ — Platzhalter werden beim systemctl enable
+# durch die echten Origins ersetzt (deploy/systemd/README.md).
+Environment=SEITEN_HEIM_ORIGIN=__XBUDDY_DISPLAY_ORIGIN_HEIM__
+Environment=SEITEN_TAILSCALE_ORIGIN=__XBUDDY_DISPLAY_ORIGIN_TAILSCALE__
 ExecStart=__XBUDDY_PYTHON__ -m seiten.main --host 127.0.0.1 --port 5042 --root __XBUDDY_REPO__ --inventar __XBUDDY_DATA__/seiten/inventar.json --panel-url http://127.0.0.1:5041 --geraete-url http://127.0.0.1:5040
 Restart=on-failure
 RestartSec=10
