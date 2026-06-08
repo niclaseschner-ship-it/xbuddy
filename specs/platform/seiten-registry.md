@@ -205,6 +205,37 @@ kopierbar — der „direkte Link je Panel" ist weiterhin in einem Tipp
 erreichbar, nur einen Tipp später als ein eigener Chat-Skill und konsistent
 für **alle** Eintrags-Sorten.
 
+## SREG-5b — Opt-in-Direktantwort (Sekundärpfad nach SREG-5)
+Nach der Default-Antwort (SREG-5 Übersichtslink) **bietet der Bot in derselben
+Nachricht** an, die spezifisch angefragte Seite **direkt im Chat** zu schicken:
+
+> Hier ist die Übersicht aller Seiten: `<heim-origin>/api/v1/seiten/uebersicht`
+> Soll ich dir die passende Seite stattdessen direkt hier schicken?
+
+*Wenn* der Elternteil in der Folgeantwort opt-in bestätigt („ja", „direkt",
+„bitte", o. ä.), *dann* führt der Skill **dann erst** Pro-View-KI-Matching aus
+(gegen `label`/`synonyme`/`zeigt` der Registry-Einträge — also genau das, was
+SREG-5 ursprünglich als Primärverhalten hatte und durch den Pivot 2026-06-07
+verworfen wurde) und antwortet mit der vollen URL der passendsten View. Bei
+Mehrdeutigkeit: eine gezielte Rückfrage im EC-22-Muster („Meintest du die
+Wetter-heute-Anzeige oder den Garderoben-Editor?"), dann Auflösung.
+
+*Wenn* der Elternteil opt-out signalisiert (z. B. „nein", „passt", „nichts")
+oder keine Folgeantwort innerhalb des EC-15-Depth-Fensters kommt, *dann*
+endet der Dialog still — kein wiederholtes Nachfragen.
+
+**Begründung der zweistufigen Architektur (Nic, 2026-06-08):** der
+KI-Matching-Aufwand entfällt im Default-Fall — die Übersicht trägt den
+Selbstbedienungs-Pfad. Eltern, die schnell **eine** Antwort im Chat wollen,
+ohne den Browser-Tab zu wechseln, bekommen sie auf einen Folge-Tipp — der
+Bot ist im Opt-in-Pfad „Familien-Assistent" und im Default-Pfad nur „URL-
+Lieferant". So bleibt die Architektur sparsam (Komplexität nur dort, wo der
+Elternteil sie aktiv anfordert), gleichzeitig wird PBE-2-Eltern-UX nicht
+geschwächt.
+
+**Implementiert in:** eltern-chat-Code (siehe #476 — eigenes Ticket, mit
+#467 (SREG-12) in einem /arbeitstag-Lauf gemeinsam gebaut).
+
 ## SREG-6 — Auth/Exposure: EC-2-Mitgliedschaft + Netzgrenze, keine Rolle
 V1 kennt **keine Rollen** (EC-3); berechtigt ist jedes **Familien-Gruppen-
 Mitglied** (EC-2), in Gruppe **und** Privatchat gleichwertig. `seiten_finden`
