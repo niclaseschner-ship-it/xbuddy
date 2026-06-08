@@ -189,6 +189,17 @@ _panel_lkg_lock = threading.Lock()
 # Sichten, die der Router an den panel-Service proxyt (ROU-27, PREG-9).
 _PANEL_PROXY_VIEWS = frozenset({'config.json', 'tiles.json'})
 
+# Editor-Seite + Assets, die der Router an den panel-Service proxyt (PBE-1/PBE-2, T459).
+# Kein LKG-Cache, kein Code-Default: 404 vom panel-Service wird durchgereicht.
+_PANEL_BEARBEITEN_VIEWS = frozenset({'bearbeiten', 'bearbeiten.js', 'bearbeiten.css'})
+
+# Content-Type-Mapping für die Bearbeiten-Views (PBE-2 / T459).
+_PANEL_BEARBEITEN_CONTENT_TYPES = {
+    'bearbeiten':     'text/html; charset=utf-8',
+    'bearbeiten.js':  'application/javascript; charset=utf-8',
+    'bearbeiten.css': 'text/css; charset=utf-8',
+}
+
 # ROU-31 / ICONS-7: Lazy-Cache für pictogram_cache.json (Wort→ID).
 # Wird beim ersten Zugriff oder bei Wechsel der icon-root befüllt.
 # Zugriff aus Flask-Threads → Lock.
@@ -1129,6 +1140,36 @@ def _proxy_panel_view(panel_id, sicht):
     return _PANEL_CODE_DEFAULTS[sicht], content_type
 
 
+def _proxy_panel_bearbeiten(panel_id, sicht):
+    """PBE-1/PBE-2 / T459: holt bearbeiten / bearbeiten.js / bearbeiten.css
+    vom panel-Service und liefert (body_bytes, content_type, status_code).
+
+    Anders als _proxy_panel_view gibt es hier KEINEN LKG-Cache und keinen
+    Code-Default-Fallback: ein 404 vom panel-Service wird als (body, ct, 404)
+    durchgereicht, damit der Browser das korrekte HTTP-Signal erhält (AC3).
+    Netz-Fehler / 5xx liefern 502."""
+    url = '%s/api/v1/panels/%s/%s' % (_panel_service_base(), panel_id, sicht)
+    content_type = _PANEL_BEARBEITEN_CONTENT_TYPES.get(sicht, 'application/octet-stream')
+    try:
+        req = urllib.request.Request(url, method='GET')
+        with urllib.request.urlopen(req, timeout=_PANEL_PROXY_TIMEOUT) as resp:
+            body = resp.read()
+        return body, content_type, 200
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            body = exc.read() if hasattr(exc, 'read') else b''
+            return body, 'application/json', 404
+        logging.warning(
+            'PBE proxy: panel-Service antwortet mit %s für %s/%s',
+            exc.code, panel_id, sicht)
+        return b'', 'application/json', 502
+    except Exception as exc:
+        logging.warning(
+            'PBE proxy: panel-Service nicht erreichbar (%s/%s): %s',
+            panel_id, sicht, exc)
+        return b'', 'application/json', 502
+
+
 def app_panel_dir():
     # Defense in Depth: realpath, damit symbolische Links keine traversierung
     # aus dem Wurzelverzeichnis erlauben.
@@ -1195,6 +1236,11 @@ def app_panel_asset(panel_id, asset):
     if asset in _PANEL_PROXY_VIEWS:
         body, content_type = _proxy_panel_view(panel_id, asset)
         return Response(body, status=200, mimetype=content_type)
+    # PBE-1/PBE-2 / T459: bearbeiten / bearbeiten.js / bearbeiten.css werden
+    # 1:1 an den panel-Service proxyt — kein LKG, 404 wird durchgereicht (AC3).
+    if asset in _PANEL_BEARBEITEN_VIEWS:
+        body, content_type, status = _proxy_panel_bearbeiten(panel_id, asset)
+        return Response(body, status=status, mimetype=content_type)
     return _send_app_panel_asset(asset)
 
 

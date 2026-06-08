@@ -2041,3 +2041,120 @@ def test_ROU_29_parallel_posts_no_lost_update(panels_client):
         assert on_disk['panels'][src] == {'display_id': 'display:x'}
     # entries-Eintrag hat keinen der parallelen Writes verloren.
     assert len(on_disk['entries']) == 1
+
+
+# ============================================================
+#  T459 / PBE-1 / PBE-2 — Router-Proxy für /bearbeiten Editor-Seite
+# ============================================================
+#
+# AC1: GET /controller/app-panel/<id>/bearbeiten → 200 HTML vom panel-Service
+# AC2: GET /controller/app-panel/<id>/bearbeiten.js + .css → 200
+# AC3: Unbekannte panel_id → 404 vom panel-Service wird durchgereicht
+# AC4: Bestehende Proxy-Routen für tiles.json + config.json unverändert
+# AC5: Happy-Path je .html/.js/.css + 404. Self-Gate Ruff + lint-imports.
+
+
+def test_T459_bearbeiten_html_proxied_200(client_with_panels, monkeypatch):
+    """AC1: GET /controller/app-panel/<id>/bearbeiten liefert 200 HTML
+    vom panel-Service durch — text/html Content-Type."""
+    html_body = b'<html><body>Editor</body></html>'
+
+    def fake_proxy(panel_id, sicht):
+        assert panel_id == 'kueche'
+        assert sicht == 'bearbeiten'
+        return html_body, 'text/html; charset=utf-8', 200
+
+    monkeypatch.setattr(router_main, '_proxy_panel_bearbeiten', fake_proxy)
+    r = client_with_panels.get('/controller/app-panel/kueche/bearbeiten')
+    assert r.status_code == 200
+    assert r.mimetype == 'text/html'
+    assert r.data == html_body
+
+
+def test_T459_bearbeiten_js_proxied_200(client_with_panels, monkeypatch):
+    """AC2: GET /controller/app-panel/<id>/bearbeiten.js liefert 200
+    application/javascript."""
+    js_body = b'console.log("bearbeiten");'
+
+    def fake_proxy(panel_id, sicht):
+        assert sicht == 'bearbeiten.js'
+        return js_body, 'application/javascript; charset=utf-8', 200
+
+    monkeypatch.setattr(router_main, '_proxy_panel_bearbeiten', fake_proxy)
+    r = client_with_panels.get('/controller/app-panel/kueche/bearbeiten.js')
+    assert r.status_code == 200
+    assert r.mimetype == 'application/javascript'
+    assert r.data == js_body
+
+
+def test_T459_bearbeiten_css_proxied_200(client_with_panels, monkeypatch):
+    """AC2: GET /controller/app-panel/<id>/bearbeiten.css liefert 200
+    text/css."""
+    css_body = b'body { margin: 0; }'
+
+    def fake_proxy(panel_id, sicht):
+        assert sicht == 'bearbeiten.css'
+        return css_body, 'text/css; charset=utf-8', 200
+
+    monkeypatch.setattr(router_main, '_proxy_panel_bearbeiten', fake_proxy)
+    r = client_with_panels.get('/controller/app-panel/kueche/bearbeiten.css')
+    assert r.status_code == 200
+    assert r.mimetype == 'text/css'
+    assert r.data == css_body
+
+
+def test_T459_bearbeiten_unknown_panel_id_returns_404(client_with_panels, monkeypatch):
+    """AC3: Unbekannte panel_id → 404 vom panel-Service wird durchgereicht.
+    Kein LKG-Fallback, kein Code-Default."""
+    def fake_proxy(panel_id, sicht):
+        assert panel_id == 'unbekannt-xyz'
+        return b'{"error": "unbekannte panel_id"}', 'application/json', 404
+
+    monkeypatch.setattr(router_main, '_proxy_panel_bearbeiten', fake_proxy)
+    r = client_with_panels.get('/controller/app-panel/unbekannt-xyz/bearbeiten')
+    assert r.status_code == 404
+
+
+def test_T459_bearbeiten_panel_id_forwarded_correctly(client_with_panels, monkeypatch):
+    """AC1: die panel_id aus der URL wird korrekt an den Proxy weitergegeben."""
+    seen = {}
+
+    def fake_proxy(panel_id, sicht):
+        seen['panel_id'] = panel_id
+        seen['sicht'] = sicht
+        return b'<html></html>', 'text/html; charset=utf-8', 200
+
+    monkeypatch.setattr(router_main, '_proxy_panel_bearbeiten', fake_proxy)
+    client_with_panels.get('/controller/app-panel/flur/bearbeiten')
+    assert seen['panel_id'] == 'flur'
+    assert seen['sicht'] == 'bearbeiten'
+
+
+def test_T459_existing_config_json_proxy_still_works(client_with_panels, monkeypatch,
+                                                     reset_panel_lkg_cache):
+    """AC4: bestehende Proxy-Route für config.json unverändert — T459 bricht
+    die ROU-27-Logik nicht."""
+    payload = b'{"source_id": "app-panel:kueche"}'
+
+    def fake_proxy(panel_id, sicht):
+        return payload, 'application/json'
+
+    monkeypatch.setattr(router_main, '_proxy_panel_view', fake_proxy)
+    r = client_with_panels.get('/controller/app-panel/kueche/config.json')
+    assert r.status_code == 200
+    assert r.data == payload
+
+
+def test_T459_existing_tiles_json_proxy_still_works(client_with_panels, monkeypatch,
+                                                    reset_panel_lkg_cache):
+    """AC4: bestehende Proxy-Route für tiles.json unverändert — T459 bricht
+    die ROU-27-Logik nicht."""
+    payload = b'[{"key": "plan"}]'
+
+    def fake_proxy(panel_id, sicht):
+        return payload, 'application/json'
+
+    monkeypatch.setattr(router_main, '_proxy_panel_view', fake_proxy)
+    r = client_with_panels.get('/controller/app-panel/kueche/tiles.json')
+    assert r.status_code == 200
+    assert r.data == payload
