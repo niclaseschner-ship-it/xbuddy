@@ -592,6 +592,36 @@ Acceptance-Kriterien:
 
 *Tickets:* #390, #407, #408
 
+### ROU-32 — GET /api/v1/router/panels/&lt;source_id&gt; — Panel→Display-Lookup
+
+`GET /api/v1/router/panels/<source_id>` liefert die `display_id`-Zuordnung einer
+Panel-Instanz aus dem `panels`-Abschnitt der `routing.json` (ROU-18). Antwort:
+JSON `{"display_id": "<id>"}`. Unbekannte `source_id` → 404.
+
+Der Router ist die **EINE Wahrheit** für die Panel→Display-Zuordnung — die
+`display_id` darf NICHT in der Panel-`config.json` gespiegelt werden (Nic-Entscheid
+2026-06-08 / #414; PANEL-8 entsprechend geschärft). Der Panel-Code zieht
+`display_id` per Bootstrap-Lookup und abonniert genau diesen Display-Stream
+(PANEL-11 → ROU-22) — Drift zwischen „Tile-Tap-Ziel" (ROU-24-Adapter) und
+„Stream-Subscription" ist damit per Konstruktion unmöglich.
+
+Endpoint-Naht zum panel-Service: `/api/v1/router/panels/` (Router-Namespace) ist
+bewusst getrennt von `/api/v1/panels/` (panel-Service / PREG-13/PREG-15) —
+Router zeigt nur die `routing.json`-Sicht, panel-Service zeigt die
+Panel-Registry-Sicht. Keine Verwechslung möglich.
+
+Acceptance-Kriterien:
+
+| Pfad | Antwort |
+|---|---|
+| `GET /api/v1/router/panels/app-panel:kueche` (eingetragen in `panels`) | 200, `{"display_id": "<id>"}` |
+| `GET /api/v1/router/panels/app-panel:unbekannt` (nicht eingetragen) | 404 |
+| `GET /api/v1/router/panels/` (kein `<source_id>`) | 404 (kein List-Endpoint) |
+
+Read-only, keine Schreibwirkung. Auth wie ROU-22 (Heimnetz-Grenze).
+
+*Tickets:* #414
+
 ### ROU-30 — GET /display/_shared/design/&lt;asset&gt; — geteilter Design-Token-Strang
 
 `GET /display/_shared/design/<asset>` liefert den geteilten Design-Token-Strang
