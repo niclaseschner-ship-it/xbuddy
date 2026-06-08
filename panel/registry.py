@@ -180,6 +180,83 @@ def neue_id(registry, slug):
 #  Validierung & Parsen
 # ============================================================
 
+def validate_tiles_payload(tiles_obj):
+    """PBE-11/PANEL-7: Validiert ein tiles-Objekt gegen PANEL-3.
+
+    Erwartet {"tiles": [...]}.  Wirft RegistryError mit Begründung bei:
+    - Kein Objekt / fehlendes "tiles"-Feld / "tiles" kein Array
+    - Kachel ohne Pflichtfelder (key/app/view/label/icons/sichtbar)
+    - icons[] leer oder >3 Einträge (PANEL-3/ICONS-5)
+    - sichtbar kein boolean (PANEL-4)
+    - key-Kollision (PANEL-3: eindeutig innerhalb der Liste)
+    - query — falls vorhanden — kein flaches Objekt (PANEL-7)
+
+    Konsolidiert die Validierungslogik an einem Ort (PANEL-7/PBE-11).
+    Nutzt intern `_validate_query_flat` für die query-Flatness-Prüfung.
+    """
+    if not isinstance(tiles_obj, dict):
+        raise RegistryError("tiles muss ein Objekt sein (PANEL-3)")
+    eintraege = tiles_obj.get("tiles")
+    if eintraege is None:
+        raise RegistryError("tiles-Objekt hat kein 'tiles'-Feld (PANEL-3)")
+    if not isinstance(eintraege, list):
+        raise RegistryError("tiles.tiles muss eine Liste sein (PANEL-3)")
+
+    gesehene_keys = set()
+    for i, tile in enumerate(eintraege):
+        if not isinstance(tile, dict):
+            raise RegistryError("Kachel #%d ist kein Objekt (PANEL-3)" % i)
+
+        for feld in ("key", "app", "view", "label"):
+            wert = tile.get(feld)
+            if not isinstance(wert, str) or not wert:
+                raise RegistryError(
+                    "Kachel #%d: Pflichtfeld %r fehlt oder leer (PANEL-3)"
+                    % (i, feld))
+
+        # icons[]: Pflicht, ≥1, ≤3 Pfade (PANEL-3/ICONS-5)
+        icons = tile.get("icons")
+        if not isinstance(icons, list) or len(icons) == 0:
+            raise RegistryError(
+                "Kachel #%d (key=%r): icons[] fehlt oder leer (PANEL-3)"
+                % (i, tile.get("key")))
+        if len(icons) > 3:
+            raise RegistryError(
+                "Kachel #%d (key=%r): icons[] hat %d Einträge, max 3 (PANEL-3)"
+                % (i, tile.get("key"), len(icons)))
+        for j, pfad in enumerate(icons):
+            if not isinstance(pfad, str) or not pfad:
+                raise RegistryError(
+                    "Kachel #%d (key=%r): icons[%d] muss ein nicht-leerer "
+                    "String sein (PANEL-3)" % (i, tile.get("key"), j))
+
+        # sichtbar: boolean (PANEL-4)
+        if not isinstance(tile.get("sichtbar"), bool):
+            raise RegistryError(
+                "Kachel #%d (key=%r): sichtbar muss ein boolean sein (PANEL-4)"
+                % (i, tile.get("key")))
+
+        # key-Eindeutigkeit (PANEL-3)
+        key = tile["key"]
+        if key in gesehene_keys:
+            raise RegistryError(
+                "key %r ist nicht eindeutig in der tiles-Liste (PANEL-3)" % key)
+        gesehene_keys.add(key)
+
+        # query — falls vorhanden — flaches Objekt (PANEL-7) über _validate_query_flat
+        if "query" in tile:
+            query = tile["query"]
+            if not isinstance(query, dict):
+                raise RegistryError(
+                    "Kachel #%d (key=%r): query muss ein flaches Objekt sein "
+                    "(PANEL-7)" % (i, key))
+            for qk, qv in query.items():
+                if isinstance(qv, bool) or not isinstance(qv, (str, int, float)):
+                    raise RegistryError(
+                        "Kachel #%d (key=%r): query.%s muss String/Zahl sein, "
+                        "kein verschachteltes Objekt (PANEL-7)" % (i, key, qk))
+
+
 def _validate_query_flat(tiles, panel_id):
     """PANEL-7: `query` einer Kachel ist flach (Strings/Zahlen), kein
     verschachteltes Objekt oder Liste. PREG-15 weist verschachteltes `query`
