@@ -45,15 +45,17 @@ TYP_CONTROLLER = "controller"
 TYP_PANEL = "panel"
 TYP_DISPLAY_CLIENT = "display-client"
 
-# SREG-12 Icon-Fallback je Sorte. Die Pfade sind relativ zur statisch
-# servierten Icon-Basis (Flask-static unter /static/icons/ in dieser
-# Komponente, NICHT die /display/_shared/icons/-Bibliothek der Display-Views).
+# SREG-12 Icon-Fallback je Sorte. Pfade unter /api/v1/seiten/static/icons/
+# (Flask static_url_path, SREG-12 #467) — passt zum nginx-Sub-Pfad-Block
+# `location ^~ /api/v1/seiten/` und braucht keine eigene nginx-Route.
+# NICHT zu verwechseln mit /display/_shared/icons/ (Router-Origin, Display-View-
+# Bibliothek; Sorte a tragt icons[] und nutzt diesen Pfad).
 _FALLBACK_ICON = {
-    TYP_DISPLAY: "/static/icons/eltern.png",        # Sorte a Default (haben aber icons[])
-    TYP_ELTERN: "/static/icons/eltern.png",         # Sorte b
-    TYP_CONTROLLER: "/static/icons/controller.png", # Sorte c
-    TYP_PANEL: "/static/icons/panel.png",           # Sorte d
-    TYP_DISPLAY_CLIENT: "/static/icons/display-client.png",  # Sorte e
+    TYP_DISPLAY: "/api/v1/seiten/static/icons/eltern.png",        # Sorte a Default (haben aber icons[])
+    TYP_ELTERN: "/api/v1/seiten/static/icons/eltern.png",         # Sorte b
+    TYP_CONTROLLER: "/api/v1/seiten/static/icons/controller.png", # Sorte c
+    TYP_PANEL: "/api/v1/seiten/static/icons/panel.png",           # Sorte d
+    TYP_DISPLAY_CLIENT: "/api/v1/seiten/static/icons/display-client.png",  # Sorte e
 }
 
 
