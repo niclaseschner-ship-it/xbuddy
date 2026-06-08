@@ -16,6 +16,7 @@ root_packages =
     eltern-chat
     familie
     geraete
+    panel
     photo
     plan
     router
