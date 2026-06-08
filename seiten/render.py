@@ -1,0 +1,272 @@
+"""Seiten-Registry — Renderer-Datenaufbereitung fuer SREG-12 V2-Layout (#467).
+
+Reine, testbare Daten-Vorbereitung: aus dem `inventar`-Dict (SREG-3-Output des
+Aggregators) wird die V2-Layout-Struktur gebaut, die das Jinja2-Template
+`uebersicht.html` braucht. Hier wohnt NICHTS, was Flask oder HTTP braucht — der
+Render-Aufruf in `seiten/main.py` ruft `baue_layout(inventar, heim_origin,
+tailscale_origin)` und reicht das Ergebnis an `render_template` durch.
+
+Begruendung der Trennung (Spec-konform, SREG-12 V2):
+- Die Hero-Sektion „Geraete-Paare" gruppiert Eintraege ueber DREI Sorten
+  (Display-Client e + Panel-Instanz d + Editor b), gebunden ueber die SREG-4-
+  Verknuepfungs-Felder. Diese Gruppierung ist genuine Daten-Logik, nicht
+  Praesentation — sie gehoert in den Renderer, nicht ins Template (wo sie nur
+  noch ausgegeben wird).
+- Die sekundaere Sektion gruppiert nach `app` (Buddy/Service-Slug). Auch das
+  ist Daten-Logik (Sortierung nach Karten-Anzahl absteigend, dann
+  alphabetisch — SREG-12).
+- Die zwei Origin-URLs (Heim/Tailscale) je Eintrag werden hier vorgerechnet,
+  damit das Template nur noch eine Liste von URL-Paaren rendert.
+
+Das Template bleibt damit eine reine Praesentations-Schicht ohne If-Else-
+Logik gegen die Sorten — das macht es wartbar und macht den Renderer
+testbar OHNE Flask/Jinja2.
+
+SREG-12-Anker:
+- V2-Layout (Hero + Buddy-Gruppen): SREG-12 Abschnitt „Layout (V1, von oben
+  nach unten — nach Gate B Wahl 2026-06-08 ‚gemeinsame Box pro Geraete-Paar')".
+- Hero-Paar-Box (Display + Panels + Editor-Anhang): SREG-12 Punkt 2.
+- Buddy-Gruppen-Reihenfolge (Anzahl Karten absteigend, dann alphabetisch):
+  SREG-12 Punkt 3 Schlusssatz.
+- Icon-Fallback (Sorten b/c/d/e ohne icons[]): SREG-12 Abschnitt
+  „Icon-Fallback" — Default-Piktogramm aus `seiten/static/icons/<typ>.png`.
+"""
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+# SREG-4 Sorten-typen (Spiegel zu seiten.aggregator) — der Renderer haengt
+# nicht am Aggregator-Modul, damit Render-Tests den Aggregator nicht importieren
+# muessen; die Werte sind durch SREG-4 fixiert.
+TYP_DISPLAY = "display"
+TYP_ELTERN = "eltern"
+TYP_CONTROLLER = "controller"
+TYP_PANEL = "panel"
+TYP_DISPLAY_CLIENT = "display-client"
+
+# SREG-12 Icon-Fallback je Sorte. Die Pfade sind relativ zur statisch
+# servierten Icon-Basis (Flask-static unter /static/icons/ in dieser
+# Komponente, NICHT die /display/_shared/icons/-Bibliothek der Display-Views).
+_FALLBACK_ICON = {
+    TYP_DISPLAY: "/static/icons/eltern.png",        # Sorte a Default (haben aber icons[])
+    TYP_ELTERN: "/static/icons/eltern.png",         # Sorte b
+    TYP_CONTROLLER: "/static/icons/controller.png", # Sorte c
+    TYP_PANEL: "/static/icons/panel.png",           # Sorte d
+    TYP_DISPLAY_CLIENT: "/static/icons/display-client.png",  # Sorte e
+}
+
+
+def _urls(eintrag, heim_origin, tailscale_origin):
+    """Bildet die zwei Origin-URLs (Heim/Tailscale) je Eintrag (SREG-12).
+
+    Pfad-Anhaengung an die Origin — Origins ohne trailing Slash, Pfade mit
+    fuehrendem Slash. Tailscale-URL ist None, wenn `tailscale_origin` leer
+    (SREG-7 V1-Soll: dann Banner-Hinweis statt zwei Spalten).
+    """
+    pfad = eintrag.get("pfad", "")
+    heim = (heim_origin.rstrip("/") + pfad) if heim_origin else None
+    tail = (tailscale_origin.rstrip("/") + pfad) if tailscale_origin else None
+    return {"heim": heim, "tailscale": tail}
+
+
+def _karte_basis(eintrag, heim_origin, tailscale_origin):
+    """Baut eine Karten-Datenstruktur fuer das Template (SREG-12 Inhalt je Karte).
+
+    Pflichtfelder am Template-Modell: `label`, `zeigt`, `pfad`, `typ`, `icon`,
+    `urls.heim`, `urls.tailscale`, plus `synonyme[]` (fuer die clientseitige
+    Volltextsuche in SREG-12). `key` und `instanz` sind als data-attribute
+    nuetzlich (Suche, Hero-Anker), wandern als `key`/`instanz` mit.
+    """
+    typ = eintrag.get("typ", "")
+    icons = eintrag.get("icons") or []
+    # SREG-12 Icon-Fallback: nur Sorte a traegt icons[], Sorten b/c/d/e
+    # bekommen ein Default-Piktogramm aus /static/icons/<typ>.png.
+    if icons:
+        icon = "/display/_shared/icons/" + icons[0]
+    else:
+        icon = _FALLBACK_ICON.get(typ, _FALLBACK_ICON[TYP_ELTERN])
+    return {
+        "key": eintrag.get("key", ""),
+        "label": eintrag.get("label", ""),
+        "zeigt": eintrag.get("zeigt", ""),
+        "pfad": eintrag.get("pfad", ""),
+        "typ": typ,
+        "icon": icon,
+        "icons": list(icons),  # fuer Varianten-Karten, bewahrt SREG-10 1:1
+        "synonyme": list(eintrag.get("synonyme") or []),
+        "instanz": eintrag.get("instanz", ""),
+        "app": eintrag.get("app", ""),
+        "stale": bool(eintrag.get("stale", False)),
+        "urls": _urls(eintrag, heim_origin, tailscale_origin),
+    }
+
+
+def _varianten_karten(eintrag, heim_origin, tailscale_origin):
+    """SREG-12 Varianten: je Variante eine eigene Karte mit voller query-Anhaengung.
+
+    Pfad-Bildung: `<eintrag.pfad>?<k>=<v>&…` (flaches Query-Objekt, BUD-4).
+    Icon-Vorrang: Varianten-`icons[]` wenn vorhanden, sonst Eintrags-`icons[]`.
+    Variant-Marker: `variante=True` am Render-Modell, damit das Template das
+    Variant-Markup (gestrichelter Rand + „Variante"-Tag) anwenden kann.
+    """
+    karten = []
+    for v in eintrag.get("varianten") or []:
+        # Flat Query-Objekt -> Query-String, sortiert fuer Deterministik.
+        query = v.get("query") or {}
+        qs = "&".join("%s=%s" % (k, query[k]) for k in sorted(query))
+        pfad = eintrag.get("pfad", "")
+        v_pfad = pfad + "?" + qs if qs else pfad
+        v_icons = v.get("icons") or eintrag.get("icons") or []
+        karte = {
+            "key": "%s/%s" % (eintrag.get("key", ""), v.get("slug", "")),
+            "label": v.get("label", eintrag.get("label", "")),
+            "zeigt": eintrag.get("zeigt", ""),
+            "pfad": v_pfad,
+            "typ": eintrag.get("typ", ""),
+            "icon": ("/display/_shared/icons/" + v_icons[0]) if v_icons
+                    else _FALLBACK_ICON.get(eintrag.get("typ"), _FALLBACK_ICON[TYP_ELTERN]),
+            "icons": list(v_icons),
+            "synonyme": list(eintrag.get("synonyme") or []),
+            "instanz": "",
+            "app": eintrag.get("app", ""),
+            "stale": bool(eintrag.get("stale", False)),
+            "urls": {
+                "heim": (heim_origin.rstrip("/") + v_pfad) if heim_origin else None,
+                "tailscale": (tailscale_origin.rstrip("/") + v_pfad) if tailscale_origin else None,
+            },
+            "variante": True,
+        }
+        karten.append(karte)
+    return karten
+
+
+# ============================================================
+#  Hero-Sektion „Geraete-Paare" (SREG-12 Punkt 2)
+# ============================================================
+
+def _hero_paare(eintraege, heim_origin, tailscale_origin):
+    """Baut die Hero-Paar-Boxen (Display + Panels + Editor-Anhang).
+
+    Ein Paar entsteht, sobald ein Display-Client `verknuepft_mit_panels` traegt
+    (≥1 Panel). Reihenfolge: Displays alphabetisch nach `instanz` (display_id).
+    Innerhalb eines Paars: Panels in der Reihenfolge von `verknuepft_mit_panels`,
+    je Panel der Editor angedockt (verknuepft_mit_panel = panel_id Lookup).
+
+    *Wenn* kein Display ein gekoppeltes Panel hat → leere Liste; das Template
+    rendert dann den „Noch keine Geraete-Paare angelegt"-Hinweis.
+    """
+    by_panel_id = {e["instanz"]: e for e in eintraege
+                   if e.get("typ") == TYP_PANEL and e.get("instanz")}
+    editor_by_panel_id = {e.get("verknuepft_mit_panel"): e for e in eintraege
+                          if e.get("typ") == TYP_ELTERN
+                          and e.get("verknuepft_mit_panel")}
+    paare = []
+    displays = [e for e in eintraege
+                if e.get("typ") == TYP_DISPLAY_CLIENT
+                and e.get("verknuepft_mit_panels")]
+    for display in sorted(displays, key=lambda e: e.get("instanz") or ""):
+        panel_karten = []
+        for pid in display["verknuepft_mit_panels"]:
+            panel = by_panel_id.get(pid)
+            if panel is None:
+                # Defensiv: PREG-Inkonsistenz, Display sagt Panel da, Panel-Sorte
+                # fehlt im Inventar. SREG-3-Last-Known-Good kann sowas erzeugen.
+                logger.warning(
+                    "Hero-Paar: Panel %r am Display %r nicht im Inventar — uebersprungen",
+                    pid, display.get("instanz"))
+                continue
+            editor = editor_by_panel_id.get(pid)
+            panel_karten.append({
+                "panel": _karte_basis(panel, heim_origin, tailscale_origin),
+                "editor": (_karte_basis(editor, heim_origin, tailscale_origin)
+                           if editor else None),
+            })
+        paare.append({
+            "display": _karte_basis(display, heim_origin, tailscale_origin),
+            "panel_anzahl": len(panel_karten),
+            "panels": panel_karten,
+        })
+    return paare
+
+
+# ============================================================
+#  Sekundaere Sektion „Andere Seiten" (SREG-12 Punkt 3)
+# ============================================================
+
+def _ist_im_hero(eintrag, hero_paare):
+    """True, wenn dieser Eintrag in einer Hero-Paar-Box steckt (Display, Panel
+    oder Editor). Sorten a/c sind nie im Hero."""
+    typ = eintrag.get("typ")
+    if typ not in (TYP_DISPLAY_CLIENT, TYP_PANEL, TYP_ELTERN):
+        return False
+    key = eintrag.get("key")
+    for paar in hero_paare:
+        if paar["display"]["key"] == key:
+            return True
+        for pk in paar["panels"]:
+            if pk["panel"]["key"] == key:
+                return True
+            if pk["editor"] and pk["editor"]["key"] == key:
+                return True
+    return False
+
+
+def _buddy_gruppen(eintraege, hero_paare, heim_origin, tailscale_origin):
+    """Gruppiert die uebrigen Eintraege nach `app` (Buddy/Service-Slug).
+
+    Eintraege in Hero-Paar-Boxen werden ausgeschlossen (sie haengen dort). Sorten
+    d/e ohne `app` fallen in eine Sammel-Gruppe `instanz` (SREG-12 Punkt 3).
+
+    Reihenfolge SREG-12: Anzahl Karten absteigend, dann alphabetisch.
+    Variant-Karten haengen als eigene Geschwister-Karten in derselben Gruppe
+    (SREG-12 Punkt 3).
+    """
+    gruppen = {}  # app_slug -> [karten]
+    for e in eintraege:
+        if _ist_im_hero(e, hero_paare):
+            continue
+        app = e.get("app")
+        if not app:
+            # Sorten d/e ohne app — Sammelgruppe „instanz"
+            app = "instanz"
+        gruppe = gruppen.setdefault(app, [])
+        gruppe.append(_karte_basis(e, heim_origin, tailscale_origin))
+        gruppe.extend(_varianten_karten(e, heim_origin, tailscale_origin))
+    # SREG-12 Reihenfolge: Anzahl absteigend, dann alphabetisch
+    return [
+        {"app": app, "karten": karten, "anzahl": len(karten)}
+        for app, karten in sorted(
+            gruppen.items(), key=lambda it: (-len(it[1]), it[0]))
+    ]
+
+
+# ============================================================
+#  Layout-Aufbau (V2)
+# ============================================================
+
+def baue_layout(inventar, heim_origin, tailscale_origin):
+    """Bereitet die V2-Layout-Datenstruktur fuer das Template auf (SREG-12).
+
+    Args:
+        inventar: das Aggregator-Ergebnis ({"eintraege": […], "snapshot_pending": […]}).
+        heim_origin: `display_url_origin_heim` (Pflicht, SREG-7).
+        tailscale_origin: `display_url_origin_tailscale` (V1-Soll, SREG-7) — leer
+            string oder None loest den Tailscale-Banner aus.
+
+    Returns:
+        Dict mit `hero_paare`, `buddy_gruppen`, `tailscale_banner` (bool),
+        `snapshot_pending` (Liste), `heim_origin`, `tailscale_origin`. Direkt
+        an `render_template("uebersicht.html", **layout)` reichbar.
+    """
+    eintraege = (inventar or {}).get("eintraege", []) or []
+    hero = _hero_paare(eintraege, heim_origin, tailscale_origin)
+    buddies = _buddy_gruppen(eintraege, hero, heim_origin, tailscale_origin)
+    return {
+        "hero_paare": hero,
+        "buddy_gruppen": buddies,
+        "tailscale_banner": not bool(tailscale_origin),
+        "snapshot_pending": list((inventar or {}).get("snapshot_pending", []) or []),
+        "heim_origin": heim_origin or "",
+        "tailscale_origin": tailscale_origin or "",
+    }
