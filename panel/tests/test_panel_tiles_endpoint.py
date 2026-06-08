@@ -1,20 +1,21 @@
 """Tests für PBE-4: PUT /api/v1/panels/<panel_id>/tiles (#330).
 
 Abgedeckt:
-  test_pbe4_valid_put_writes_atomically       — Happy-Path + Hash-Check vor/nach
-  test_pbe4_invalid_list_returns_422_unchanged — Byte-Unverändert bei Validierungsfehler
-  test_pbe4_unknown_panel_id_returns_404      — 404 für unbekannte panel_id
-  test_pbe4_config_field_not_touched          — PREG-5: config unberührt
-  test_pbe4_reload_signal_sent                — PBE-10: Reload-Signal gesendet
-  test_pbe4_reload_signal_failure_is_nonfatal — PBE-10: Ausfall ist nicht fatal
-  test_pbe4_empty_tiles_list_is_valid         — PBE-9: leere Liste erlaubt
-  test_pbe4_key_collision_returns_422         — PANEL-3: doppelter key → 422
-  test_pbe4_icons_empty_returns_422           — PANEL-3: leere icons[] → 422
-  test_pbe4_icons_too_many_returns_422        — PANEL-3: icons[] > 3 → 422
-  test_pbe4_sichtbar_not_bool_returns_422     — PANEL-4: sichtbar kein boolean → 422
-  test_pbe4_nested_query_returns_422          — PANEL-7: verschachteltes query → 422
-  test_pbe4_no_registry_path_returns_503      — Test-Modus ohne registry_path → 503
-  test_pbe4_other_panels_preserved            — andere Panels bleiben erhalten
+  test_pbe4_valid_put_writes_atomically            — Happy-Path + Hash-Check vor/nach
+  test_pbe4_invalid_list_returns_422_unchanged     — Byte-Unverändert bei Validierungsfehler
+  test_pbe4_unknown_panel_id_returns_404           — 404 für unbekannte panel_id
+  test_pbe4_config_field_not_touched               — PREG-5: config unberührt
+  test_pbe4_empty_tiles_list_is_valid              — PBE-9: leere Liste erlaubt
+  test_pbe4_key_collision_returns_422              — PANEL-3: doppelter key → 422
+  test_pbe4_icons_empty_returns_422                — PANEL-3: leere icons[] → 422
+  test_pbe4_icons_too_many_returns_422             — PANEL-3: icons[] > 3 → 422
+  test_pbe4_sichtbar_not_bool_returns_422          — PANEL-4: sichtbar kein boolean → 422
+  test_pbe4_nested_query_returns_422               — PANEL-7: verschachteltes query → 422
+  test_pbe4_no_registry_path_returns_503           — Test-Modus ohne registry_path → 503
+  test_pbe4_other_panels_preserved                 — andere Panels bleiben erhalten
+  test_pbe4_last_write_wins_zwei_sequentielle_puts — PBE-4: zweiter PUT gewinnt vollständig
+
+AC5 (PBE-10 Reload-Signal) NICHT in T446 — folgt #450 (Spec-Halt SSE-Publish-Form).
 
 Lauf: python3 -m pytest panel/tests/ -v
 """
@@ -103,8 +104,6 @@ def stub_externe_dienste(monkeypatch):
                         lambda d: True)
     monkeypatch.setattr(panel_main, "router_panels_upsert",
                         lambda s, d: True)
-    monkeypatch.setattr(panel_main, "router_tiles_changed",
-                        lambda d: True)
 
 
 @pytest.fixture
@@ -272,45 +271,7 @@ def test_pbe4_config_field_not_touched(write_client):
         "config wurde durch PUT /tiles verändert (PREG-5 verletzt)")
 
 
-# ============================================================
-#  AC5 — PBE-10: Reload-Signal gesendet / Ausfall nicht fatal
-# ============================================================
-
-def test_pbe4_reload_signal_sent(write_client, monkeypatch):
-    """Nach erfolgreichem Schreiben wird router_tiles_changed für die display_id
-    der betroffenen Instanz aufgerufen (PBE-10)."""
-    client, _ = write_client
-    aufrufe = []
-
-    def fake_tiles_changed(display_id):
-        aufrufe.append(display_id)
-        return True
-    monkeypatch.setattr(panel_main, "router_tiles_changed", fake_tiles_changed)
-
-    r = client.put("/api/v1/panels/kueche-01/tiles",
-                   json=GUELTIGE_TILES,
-                   content_type="application/json")
-    assert r.status_code == 200
-    # Signal wurde mit der display_id des Panels gesendet.
-    assert aufrufe == ["pi-display-flur-01"], (
-        "Reload-Signal nicht oder mit falscher display_id gesendet (PBE-10)")
-
-
-def test_pbe4_reload_signal_failure_is_nonfatal(write_client, monkeypatch):
-    """Schlägt das Reload-Signal fehl, liefert der Endpoint trotzdem 200 —
-    DCOMP-2 reload-on-read ist der Fallback (PBE-10 Ausfall-Toleranz)."""
-    client, _ = write_client
-
-    def signal_kaputt(display_id):
-        raise panel_main._ReloadSignalFailed("connection refused")
-    monkeypatch.setattr(panel_main, "router_tiles_changed", signal_kaputt)
-
-    r = client.put("/api/v1/panels/kueche-01/tiles",
-                   json=GUELTIGE_TILES,
-                   content_type="application/json")
-    assert r.status_code == 200, (
-        "PUT /tiles schlug mit 5xx fehl obwohl nur das Reload-Signal fehlschlug "
-        "(PBE-10: Reload-Ausfall darf nicht fatal sein)")
+# AC5 (PBE-10 Reload-Signal) NICHT in T446 — folgt #450 (Spec-Halt SSE-Publish-Form).
 
 
 # ============================================================
@@ -443,3 +404,58 @@ def test_pbe4_other_panels_preserved(write_client):
     flur_tiles_nachher = json.dumps(reg_nachher.get("flur-01").tiles, sort_keys=True)
     assert flur_tiles_vorher == flur_tiles_nachher, (
         "tiles von flur-01 wurden durch PUT auf kueche-01 verändert")
+
+
+# ============================================================
+#  AC5-Ersatz — PBE-4: Last-Write-Wins (zwei sequentielle PUTs)
+# ============================================================
+
+ZWEITE_TILES = {
+    "tiles": [
+        {
+            "key": "kalender",
+            "app": "kalender",
+            "view": "monat",
+            "label": "Kalender",
+            "icons": ["arasaac/9999.png"],
+            "sichtbar": True,
+        }
+    ]
+}
+
+
+def test_pbe4_last_write_wins_zwei_sequentielle_puts(write_client):
+    """PBE-4 Last-Write-Wins: zwei sequentielle PUTs auf dieselbe panel_id mit
+    verschiedenen tiles-Listen — der zweite gewinnt vollständig, kein Misch-Stand.
+    Atomarität bleibt (Hash nach zweitem PUT == Hash der zweiten gespeicherten Liste).
+    """
+    client, path = write_client
+
+    # Erster PUT mit GUELTIGE_TILES (wetter + plan).
+    r1 = client.put("/api/v1/panels/kueche-01/tiles",
+                    json=GUELTIGE_TILES,
+                    content_type="application/json")
+    assert r1.status_code == 200, r1.get_data(as_text=True)
+
+    hash_nach_erstem = _sha256(path)
+
+    # Zweiter PUT mit ZWEITE_TILES (kalender).
+    r2 = client.put("/api/v1/panels/kueche-01/tiles",
+                    json=ZWEITE_TILES,
+                    content_type="application/json")
+    assert r2.status_code == 200, r2.get_data(as_text=True)
+
+    hash_nach_zweitem = _sha256(path)
+    assert hash_nach_erstem != hash_nach_zweitem, (
+        "panels.json nach zweitem PUT unverändert — zweiter PUT hat nicht geschrieben")
+
+    # panels.json enthält genau die Liste des zweiten PUTs — kein Misch-Stand.
+    daten = _read_json(path)
+    panel = next(p for p in daten["panels"] if p["panel_id"] == "kueche-01")
+    keys = {t["key"] for t in panel["tiles"]["tiles"]}
+    assert keys == {"kalender"}, (
+        "Misch-Stand nach zweitem PUT: erwartet {kalender}, gefunden %r" % keys)
+
+    # Erster-PUT-Kacheln dürfen nicht mehr vorhanden sein.
+    assert "wetter" not in keys, "wetter aus erstem PUT noch im Ergebnis (Misch-Stand)"
+    assert "plan" not in keys, "plan aus erstem PUT noch im Ergebnis (Misch-Stand)"
