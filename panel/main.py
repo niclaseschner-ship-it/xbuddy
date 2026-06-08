@@ -31,7 +31,7 @@ import threading
 import urllib.error
 import urllib.request
 
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request
 
 # Repo-Wurzel auf den Importpfad, damit `tools.configloader` (CONFIG-1) und
 # `tools.logsetup` (LOG-4) auch beim Direktstart `python3 panel/main.py`
@@ -320,6 +320,108 @@ def put_panel_tiles(panel_id):
 def _bad_request(msg):
     """PREG-15: 4xx mit JSON-Fehler, keine Stack-Traces (analog GER-15)."""
     return jsonify({"error": msg}), 400
+
+
+# ============================================================
+#  PBE-1/PBE-2 — Editor-Seite je Panel-Instanz (Frontend-Auslieferung)
+# ============================================================
+#
+# Der panel-Service liefert je Panel-Instanz die Editor-Seite (PBE-1) unter
+# der deterministisch aus der `panel_id` abgeleiteten URL
+# `/controller/app-panel/<panel_id>/bearbeiten` (PBE-2) aus. Der Daten-Eigentümer
+# (panel-Service) liefert seine eigene Editor-Seite, die zeigt UND editiert —
+# Muster RAT-2 / #328 (Garderoben-Editor). Auth = Heimnetz/Tailscale-Grenze
+# (PBE-3 / RAT-2); keine Rolle in V1.
+#
+# Die Statik liegt in `controller/app-panel/bearbeiten.{html,js,css}` neben der
+# bestehenden Display-Seite. Wir lesen die HTML-Datei einmalig pro Request und
+# substituieren die Panel-Identität in den <body>-Tag (analog zu router/main.py
+# render_app_panel_index, PANEL-2-Muster), damit die JS-Schicht ohne weiteren
+# Roundtrip ihre Panel-ID kennt.
+
+# controller/app-panel/ liegt parallel zum panel-Service-Verzeichnis im Repo.
+_BEARBEITEN_STATIC_DIR = os.path.normpath(os.path.join(
+    _HERE, "..", "controller", "app-panel"))
+
+
+def _editor_static_dir():
+    """Erlaubt Tests, das Auslieferungs-Verzeichnis zu überschreiben."""
+    return runtime.get("editor_static_dir") or _BEARBEITEN_STATIC_DIR
+
+
+def _read_editor_html(filename):
+    """Liest die Editor-HTML-Datei aus dem Auslieferungs-Verzeichnis (PBE-1)."""
+    path = os.path.join(_editor_static_dir(), filename)
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
+# PBE-1 Token-Substitution: das echte <body>-Tag in bearbeiten.html trägt
+# `data-panel-id="__PANEL_ID__"`. Wir ersetzen genau dieses Token — kein
+# Substring-Match auf `<body>` (das stünde sonst auch im HTML-Kommentar und
+# würde dort fälschlich substituiert, sodass das echte Tag leer bliebe).
+_PANEL_ID_TOKEN = "__PANEL_ID__"
+
+
+def _send_editor_static(panel_id, filename, mimetype):
+    """Liefert eine statische Editor-Datei aus (PBE-1, Konsolidierung).
+
+    Gemeinsame Helferfunktion für HTML/JS/CSS-Routen — kein dreifach kopierter
+    Read+404+OSError-Block. Die 404-Probe auf `panel_id` läuft hier zentral:
+    eine unbekannte Identität darf weder HTML noch JS/CSS für diese Instanz
+    bekommen (PBE-1: Seite ist an die `panel_id` gebunden).
+    """
+    if _aktuelle_registry().get(panel_id) is None:
+        return jsonify({"error": "unbekannte panel_id"}), 404
+    try:
+        body = _read_editor_html(filename)
+    except OSError as e:
+        logging.warning("Editor-Statik %r konnte nicht gelesen werden: %s",
+                        filename, e)
+        return jsonify({"error": "%s nicht verfügbar" % filename}), 500
+    return Response(body, status=200, mimetype=mimetype)
+
+
+@app.route("/controller/app-panel/<panel_id>/bearbeiten", methods=["GET"])
+def get_panel_editor(panel_id):
+    """PBE-1/PBE-2: Editor-Seite je Panel-Instanz.
+
+    Liefert `bearbeiten.html` mit der Panel-Identität als `data-panel-id` am
+    <body> (analog PANEL-2-Muster im Router). 404 bei unbekannter `panel_id`
+    (PBE-1: die Seite ist an die `panel_id` gebunden — sie editiert nie eine
+    andere Instanz; eine unbekannte Identität darf keine Editor-Seite bekommen).
+
+    PBE-3: keine zusätzliche Auth-Schicht; das Heimnetz/Tailscale-Gate (RAT-2)
+    trägt den Zugriff.
+
+    PBE-1: Panel-Identität wird per Token-Substitution `__PANEL_ID__` im echten
+    `<body>`-Tag durch die `panel_id` ersetzt — die Editor-JS-Schicht liest sie
+    per `document.body.dataset.panelId` und braucht keinen Roundtrip. Token
+    statt Substring-Match auf `<body>`, damit HTML-Kommentare nicht
+    versehentlich gematcht werden.
+    """
+    if _aktuelle_registry().get(panel_id) is None:
+        return jsonify({"error": "unbekannte panel_id"}), 404
+    try:
+        html = _read_editor_html("bearbeiten.html")
+    except OSError as e:
+        logging.warning("Editor-HTML konnte nicht gelesen werden: %s", e)
+        return jsonify({"error": "Editor-Seite nicht verfügbar"}), 500
+    html = html.replace(_PANEL_ID_TOKEN, panel_id)
+    return Response(html, status=200,
+                    mimetype="text/html; charset=utf-8")
+
+
+@app.route("/controller/app-panel/<panel_id>/bearbeiten.js", methods=["GET"])
+def get_panel_editor_js(panel_id):
+    """PBE-1: Editor-JS-Bundle (statisch). 404 bei unbekannter panel_id."""
+    return _send_editor_static(panel_id, "bearbeiten.js", "application/javascript")
+
+
+@app.route("/controller/app-panel/<panel_id>/bearbeiten.css", methods=["GET"])
+def get_panel_editor_css(panel_id):
+    """PBE-1: Editor-CSS (statisch). 404 bei unbekannter panel_id."""
+    return _send_editor_static(panel_id, "bearbeiten.css", "text/css; charset=utf-8")
 
 
 @app.route("/api/v1/panels/", methods=["POST"])
