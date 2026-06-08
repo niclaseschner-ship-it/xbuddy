@@ -358,6 +358,18 @@ statische Steuerfläche — eine Fernbedienung, kein Dokument.
 Spaltenwert) und legt das Grid so, dass `document.scrollHeight` den Viewport
 (`clientHeight`) **nicht überschreitet**. Bei `resize` wird neu gerechnet.
 
+**Safe-Area-Insets als Teil der Höhen-Invariante:** Auf Geräten mit Notch /
+Home-Indicator (iPhone, neuere Android-Telefone) trägt `index.html` ein
+`viewport-fit=cover`-Meta; die zur Grid-Höhe verwendete Größe ist deshalb
+nicht das nackte `innerHeight`, sondern
+
+    vpH = innerHeight − env(safe-area-inset-top) − env(safe-area-inset-bottom)
+
+Dasselbe für `vpW` mit `left`/`right`-Insets, falls Landscape-Notch im Spiel.
+Insets werden **abgezogen, nicht additiv padded** — sonst kehrt das Scrollen
+zurück und PANEL-12 bricht. Auf Geräten ohne Notch sind alle Insets 0; die
+Geometrie ist unverändert.
+
 **Zielgeräte:** Querformat-Phone **und** Tablet (jeweils Landscape). Das
 erweitert die bisherige reine Tablet-Nennung der Controller-PWA-Konvention; die
 No-Scroll-Garantie gilt zuerst für das kleinere Gerät (Landscape-Phone).
@@ -473,6 +485,10 @@ Mindest-Abdeckung:
   Spaltenzahl. Übersteigt die Kachelzahl die scroll-freie Kapazität, schrumpfen
   die Kacheln unter die Mindestbreite, statt zu scrollen (`scrollHeight <=
   clientHeight` bleibt invariant).
+  **Safe-Area-Probe:** mit simulierten Safe-Area-Insets (z. B. iPhone-Notch
+  `safe-area-inset-top: 44px`, Home-Indicator `safe-area-inset-bottom: 34px`)
+  bleibt `document.scrollHeight <= clientHeight` invariant — die Geometrie zieht
+  die Insets von `vpH`/`vpW` ab statt sie additiv als Padding zu ergänzen.
 
 *Tickets:* #58, #375
 
