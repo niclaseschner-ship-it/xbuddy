@@ -125,33 +125,9 @@ class _RouterUnreachable(Exception):
     """Der Router ist nicht erreichbar oder antwortet mit 5xx — PREG-16."""
 
 
-# ============================================================
-#  Reload-Signal (PBE-10) — Tiles-Changed-Notification an den Router
-# ============================================================
-
-class _ReloadSignalFailed(Exception):
-    """Reload-Signal-Aufruf an den Router ist fehlgeschlagen (nicht fatal)."""
-
-
-def router_tiles_changed(display_id):
-    """Sendet ein Tiles-Changed-Signal an den Router (PBE-10).
-
-    POST <router_url>/api/v1/router/admin/tiles-changed/<display_id>
-    200 → Signal gesendet (True).
-    Alle Fehler → _ReloadSignalFailed (nicht fatal: DCOMP-2 als Fallback).
-
-    Bewusst über HTTP, KEIN Python-Import des Routers (DCOMP-1). Als Funktion
-    auf Modulebene, damit Tests sie stubben können.
-    """
-    base = runtime["router_url"].rstrip("/")
-    url = "%s/api/v1/router/admin/tiles-changed/%s" % (base, display_id)
-    req = urllib.request.Request(url, data=b"", method="POST",
-                                 headers={"Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            return resp.status == 200
-    except (urllib.error.HTTPError, urllib.error.URLError, OSError, ValueError) as e:
-        raise _ReloadSignalFailed(str(e)) from e
+# TODO #450: PBE-10 SSE-Publish-Form ratifizieren — router_tiles_changed() hier
+# entfernt (verworfener Admin-POST-Pfad, Spec-Halt #450). Bis #450 entschieden,
+# trägt DCOMP-2 reload-on-read alleine (V1-Fallback).
 
 
 def router_panels_upsert(source_id, display_id):
@@ -278,80 +254,6 @@ def _unprocessable(msg):
     return jsonify({"error": msg}), 422
 
 
-def _validate_tiles_list(tiles_obj):
-    """PBE-11: Validiert ein tiles-Objekt gegen PANEL-3.
-
-    Erwartet {"tiles": [...]}.  Wirft ValueError mit Begründung bei:
-    - Kein Objekt / fehlendes "tiles"-Feld / "tiles" kein Array
-    - Kachel ohne Pflichtfelder (key/app/view/label/icons/sichtbar)
-    - icons[] leer oder >3 Einträge (PANEL-3/ICONS-5)
-    - sichtbar kein boolean (PANEL-4)
-    - key-Kollision (PANEL-3: eindeutig innerhalb der Liste)
-    - query — falls vorhanden — kein flaches Objekt (PANEL-7)
-    """
-    if not isinstance(tiles_obj, dict):
-        raise ValueError("tiles muss ein Objekt sein (PANEL-3)")
-    eintraege = tiles_obj.get("tiles")
-    if eintraege is None:
-        raise ValueError("tiles-Objekt hat kein 'tiles'-Feld (PANEL-3)")
-    if not isinstance(eintraege, list):
-        raise ValueError("tiles.tiles muss eine Liste sein (PANEL-3)")
-
-    gesehene_keys = set()
-    for i, tile in enumerate(eintraege):
-        if not isinstance(tile, dict):
-            raise ValueError("Kachel #%d ist kein Objekt (PANEL-3)" % i)
-
-        for feld in ("key", "app", "view", "label"):
-            wert = tile.get(feld)
-            if not isinstance(wert, str) or not wert:
-                raise ValueError(
-                    "Kachel #%d: Pflichtfeld %r fehlt oder leer (PANEL-3)"
-                    % (i, feld))
-
-        # icons[]: Pflicht, ≥1, ≤3 Pfade (PANEL-3/ICONS-5)
-        icons = tile.get("icons")
-        if not isinstance(icons, list) or len(icons) == 0:
-            raise ValueError(
-                "Kachel #%d (key=%r): icons[] fehlt oder leer (PANEL-3)"
-                % (i, tile.get("key")))
-        if len(icons) > 3:
-            raise ValueError(
-                "Kachel #%d (key=%r): icons[] hat %d Einträge, max 3 (PANEL-3)"
-                % (i, tile.get("key"), len(icons)))
-        for j, pfad in enumerate(icons):
-            if not isinstance(pfad, str) or not pfad:
-                raise ValueError(
-                    "Kachel #%d (key=%r): icons[%d] muss ein nicht-leerer "
-                    "String sein (PANEL-3)" % (i, tile.get("key"), j))
-
-        # sichtbar: boolean (PANEL-4)
-        if not isinstance(tile.get("sichtbar"), bool):
-            raise ValueError(
-                "Kachel #%d (key=%r): sichtbar muss ein boolean sein (PANEL-4)"
-                % (i, tile.get("key")))
-
-        # key-Eindeutigkeit (PANEL-3)
-        key = tile["key"]
-        if key in gesehene_keys:
-            raise ValueError(
-                "key %r ist nicht eindeutig in der tiles-Liste (PANEL-3)" % key)
-        gesehene_keys.add(key)
-
-        # query — falls vorhanden — flaches Objekt (PANEL-7)
-        if "query" in tile:
-            query = tile["query"]
-            if not isinstance(query, dict):
-                raise ValueError(
-                    "Kachel #%d (key=%r): query muss ein flaches Objekt sein "
-                    "(PANEL-7)" % (i, key))
-            for qk, qv in query.items():
-                if isinstance(qv, bool) or not isinstance(qv, (str, int, float)):
-                    raise ValueError(
-                        "Kachel #%d (key=%r): query.%s muss String/Zahl sein, "
-                        "kein verschachteltes Objekt (PANEL-7)" % (i, key, qk))
-
-
 @app.route("/api/v1/panels/<panel_id>/tiles", methods=["PUT"])
 def put_panel_tiles(panel_id):
     """PBE-4: vollständige neue tiles-Liste schreiben.
@@ -364,8 +266,8 @@ def put_panel_tiles(panel_id):
     - Schreibfehler am Dateisystem → 500 + JSON-Fehler (GER-6/DCOMP-4-Geist).
     - PREG-5: config-Feld der Instanz wird NICHT berührt.
     - DCOMP-4: atomares Schreiben (Temp + os.replace) über registry_mod.save().
-    - PBE-10: Reload-Signal an den Router nach erfolgreichem Schreiben
-      (nicht fatal — DCOMP-2 reload-on-read ist Fallback).
+    - PBE-10: Reload-Signal-Pfad entfernt (Spec-Halt #450); DCOMP-2 reload-on-read
+      trägt alleine als V1-Fallback.
     """
     path = runtime.get("registry_path")
     if path is None:
@@ -375,10 +277,10 @@ def put_panel_tiles(panel_id):
     if body is None:
         return _unprocessable("kein gültiges JSON im Request-Body (PBE-11)")
 
-    # PBE-11: Validierung vor dem Schreiben.
+    # PBE-11: Validierung vor dem Schreiben — via registry_mod (konsolidiert).
     try:
-        _validate_tiles_list(body)
-    except ValueError as e:
+        registry_mod.validate_tiles_payload(body)
+    except registry_mod.RegistryError as e:
         return _unprocessable(str(e))
 
     with _write_lock:
@@ -411,15 +313,6 @@ def put_panel_tiles(panel_id):
         except registry_mod.RegistryError as e:
             logging.warning("put_panel_tiles: Schreiben fehlgeschlagen: %s", e)
             return jsonify({"error": str(e)}), 500
-
-    # PBE-10: Reload-Signal — nicht fatal (DCOMP-2 als Fallback).
-    try:
-        router_tiles_changed(panel.display_id)
-    except _ReloadSignalFailed as e:
-        logging.warning(
-            "put_panel_tiles: Reload-Signal für display_id=%r fehlgeschlagen: %s"
-            " — DCOMP-2 (reload-on-read) ist Fallback (PBE-10)",
-            panel.display_id, e)
 
     return jsonify({"ok": True, "panel_id": panel_id}), 200
 
