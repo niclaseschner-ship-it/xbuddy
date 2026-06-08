@@ -1,0 +1,19 @@
+{
+  "views": [
+    {
+      "slug": "uebersicht",
+      "pfad": "/api/v1/seiten/uebersicht",
+      "label": "Alle Seiten",
+      "synonyme": [
+        "alle seiten",
+        "übersicht",
+        "links",
+        "verzeichnis",
+        "seitenübersicht",
+        "geräte-paare"
+      ],
+      "zeigt": "Alle aufrufbaren XBuddy-Seiten mit Geräte-Paaren oben und Buddy-Gruppen darunter.",
+      "zielgruppe": "eltern"
+    }
+  ]
+}
