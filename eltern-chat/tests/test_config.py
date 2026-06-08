@@ -236,6 +236,34 @@ def test_EC15_icon_origin_url_from_env(tmp_path, monkeypatch):
     assert cfg.icon_origin_url == "http://192.168.1.5:5000"
 
 
+# -- SREG-6 / #453: seiten_origin_url (Seiten-Registry-Naht) -----
+
+def test_SREG6_seiten_origin_url_default(tmp_path, monkeypatch):
+    """SREG-6 / #453: seiten_origin_url hat den Default http://127.0.0.1:5042
+    (Seiten-Registry, SREG-3). Fehlt der Wert in ENV und Datei, wird der Default
+    gesetzt — das ist die Wiring-Bedingung für SeitenFindenTask."""
+    _set_bot_token(monkeypatch)
+    monkeypatch.delenv("ELTERNCHAT_SEITEN_ORIGIN_URL", raising=False)
+    cfg = config_mod.resolve(_missing(tmp_path))
+    assert cfg.seiten_origin_url == "http://127.0.0.1:5042"
+
+
+def test_SREG6_seiten_origin_url_from_env(tmp_path, monkeypatch):
+    """SREG-6 / #453: seiten_origin_url aus ENV ELTERNCHAT_SEITEN_ORIGIN_URL."""
+    _set_bot_token(monkeypatch)
+    monkeypatch.setenv("ELTERNCHAT_SEITEN_ORIGIN_URL", "http://192.168.1.5:5042")
+    cfg = config_mod.resolve(_missing(tmp_path))
+    assert cfg.seiten_origin_url == "http://192.168.1.5:5042"
+
+
+def test_SREG6_seiten_origin_url_strips_trailing_slash(tmp_path, monkeypatch):
+    """SREG-6 / #453: Trailing-Slash wird gestripped (analog andere Origin-URLs)."""
+    _set_bot_token(monkeypatch)
+    monkeypatch.setenv("ELTERNCHAT_SEITEN_ORIGIN_URL", "http://127.0.0.1:5042/")
+    cfg = config_mod.resolve(_missing(tmp_path))
+    assert cfg.seiten_origin_url == "http://127.0.0.1:5042"
+
+
 # -- Loader-Integration (#179): Underscore-Keys in der Datei -----
 
 def test_EC_15_underscore_keys_in_file_are_tolerated(tmp_path, monkeypatch, caplog):
