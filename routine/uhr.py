@@ -112,7 +112,14 @@ def berechne_zeiten(abfahrtszeit_cfg, anzieh_vorlauf_min, zeitzone, tag=None,
     anziehen = losgehen - timedelta(minutes=anzieh_vorlauf_min)
     # Aufstehen: kommt direkt aus Config-Schlüssel aufstehzeit (AC-FIX1, #335).
     # Gleiche Parse-Funktion wie abfahrtszeit — Wochentag-Dict-fähig.
+    # AC-FIX4 (#364, ROUTINE-9): fehlt der heutige Tag in einer Map, fällt
+    # aufstehen auf Default "07:00" zurück — nie None (vermeidet TypeError
+    # in baue_uhr_view bei leeren Wochenend-Maps + Fixwert-abfahrtszeit).
     aufstehen = _parse_abfahrtszeit(aufstehzeit_cfg, tag, zeitzone)
+    if aufstehen is None:
+        h, m = _parse_hhmm("07:00")
+        tz = ZoneInfo(zeitzone)
+        aufstehen = datetime(tag.year, tag.month, tag.day, h, m, tzinfo=tz)
 
     return UhrZeiten(aufstehen=aufstehen, anziehen=anziehen, losgehen=losgehen)
 
