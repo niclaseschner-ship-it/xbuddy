@@ -30,7 +30,11 @@ _AUSGENOMMENE = {"/display/routine/", "/display/routine"}
 
 def test_routine_views_json_laedt_sauber():
     """routine/views.json ist schema-gültig und deklariert die morgen-View
-    mit zielgruppe kind und deutschen label/synonyme (AC-C1)."""
+    mit zielgruppe kind und deutschen label/synonyme (AC-C1).
+
+    BUD-4 (T387-S2-AC3): die Display-View trägt das ARASAAC-Routinen-Icon 7152
+    (im _shared/icons-Cache vorhanden). Der Eigentest fixiert die ID am echten
+    Manifest, damit der Backfill nicht stillschweigend driftet."""
     eintraege = views_manifest.load(_VIEWS_JSON)
     nach_slug = {e["slug"]: e for e in eintraege}
     assert "morgen" in nach_slug
@@ -41,6 +45,8 @@ def test_routine_views_json_laedt_sauber():
     assert morgen["label"]
     assert isinstance(morgen["synonyme"], list)
     assert morgen["synonyme"]
+    # BUD-4: Display-View trägt icons[] (T387-Backfill, ARASAAC-Routine).
+    assert morgen.get("icons") == ["arasaac/7152.png"]
 
 
 def test_routine_routes_match_manifest():

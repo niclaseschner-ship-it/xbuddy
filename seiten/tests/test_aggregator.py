@@ -53,12 +53,19 @@ def _view(slug, pfad, zielgruppe="kind", **extra):
 
 @pytest.fixture
 def manifest_root(tmp_path):
-    """Eine synthetische Repo-Wurzel mit Buddy- + Controller-Manifesten."""
+    """Eine synthetische Repo-Wurzel mit Buddy- + Controller-Manifesten.
+
+    BUD-4 (T387-S2): die Display-Variante `woche-klein` führt `query` als
+    flaches Objekt (`{"ansicht": "klein"}`, kein String) und trägt ihr eigenes
+    volles `icons[]` — sonst lehnt der Manifest-Validator das Manifest ab und
+    der Aggregator überspringt es (SREG-3/DCOMP-3), und die Kern-Aggregator-
+    Tests verlieren ihre plan-woche-Anker."""
     root = str(tmp_path)
     _schreibe_manifest(root, "plan", [
         _view("woche", "/display/plan/woche", varianten=[
-            {"slug": "woche-klein", "query": "ansicht=klein",
-             "label": "Wochenplan für Kleinkinder"}]),
+            {"slug": "woche-klein", "query": {"ansicht": "klein"},
+             "label": "Wochenplan für Kleinkinder",
+             "icons": ["arasaac/32488.png", "arasaac/2484.png"]}]),
     ])
     _schreibe_manifest(root, "wetter", [
         _view("heute", "/display/wetter/heute"),
@@ -285,6 +292,73 @@ def test_icons_durchgereicht_sreg10(manifest_root_mit_icons):
     # Sorte b (eltern) — darf kein icons-Feld tragen
     regeln = by_key["wetter-regeln"]
     assert "icons" not in regeln
+
+
+# T387-S2 AC4: AC1-Mengen-AC vollständig — auch Sorte c (Controller), d (Panel)
+# und e (Display-Client) tragen KEIN icons-Feld (kein Vorrat, CLAUDE.md §6 /
+# BUD-4: nur Display-Views Sorte a). Die Aggregator-Ableitung darf das Feld
+# bei diesen Sorten gar nicht erst setzen — der Test deckt jede Nicht-a-Sorte
+# explizit ab, nicht nur Sorte b.
+
+def test_sorte_c_controller_kein_icons_feld(manifest_root_mit_icons):
+    """SREG-10/BUD-4: Sorte c (Controller) trägt kein icons-Feld."""
+    # Fixture um Controller-Manifest ergänzen — analog zum Buddy-Manifest mit
+    # icons, aber als Controller-App (Sorte c, /controller/<app>/<view>). Die
+    # icons[] sind hier nicht im Manifest, weil der BUD-4-Validator Sorte c
+    # kein icons-Feld erlaubt (kein Vorrat). Der Aggregator-Test prüft: auch
+    # ohne Manifest-icons existiert das Feld NICHT im Inventar-Eintrag.
+    _schreibe_manifest(manifest_root_mit_icons, "figuren-erkennung", [
+        _view("figuren-erkennung", "/controller/figuren-erkennung/"),
+    ], ist_controller=True)
+    eintraege = aggregator.manifest_eintraege(manifest_root_mit_icons)
+    controller_eintrag = next(
+        e for e in eintraege if e["key"] == "figuren-erkennung-figuren-erkennung")
+    assert controller_eintrag["typ"] == aggregator.TYP_CONTROLLER
+    assert "icons" not in controller_eintrag, (
+        "Sorte c (Controller) trägt kein icons-Feld (BUD-4 / CLAUDE.md §6)")
+
+
+def test_sorte_d_panel_kein_icons_feld():
+    """SREG-10/BUD-4: Sorte d (Panel) trägt kein icons-Feld — weder am
+    Panel-Seiten-Eintrag noch am abgeleiteten Editor-Eintrag (SREG-11)."""
+    panels = [{"panel_id": "kueche-01"}, {"panel_id": "bad-01"}]
+    eintraege = aggregator.panel_eintraege(panels)
+    assert len(eintraege) == 4  # 2N: Panel + Editor je Instanz
+    for e in eintraege:
+        assert "icons" not in e, (
+            "Sorte d (Panel/Editor) trägt kein icons-Feld (BUD-4): %r" % e)
+
+
+def test_sorte_e_display_client_kein_icons_feld():
+    """SREG-10/BUD-4: Sorte e (Display-Client) trägt kein icons-Feld."""
+    geraete = [
+        {"id": "pi-display-kueche-01", "verwendung": "display", "status": "aktiv"},
+        {"id": "tablet-bad-01", "verwendung": "beides", "status": "aktiv"},
+    ]
+    eintraege = aggregator.display_client_eintraege(geraete)
+    assert eintraege  # mindestens ein Eintrag
+    for e in eintraege:
+        assert "icons" not in e, (
+            "Sorte e (Display-Client) trägt kein icons-Feld (BUD-4): %r" % e)
+
+
+def test_inventar_nur_sorte_a_traegt_icons_feld(manifest_root_mit_icons):
+    """SREG-10/BUD-4 zusammenfassend: im vollständigen Inventar trägt NUR
+    Sorte a (Display, mit Manifest-icons) das icons-Feld — b/c/d/e nie."""
+    # Controller-Manifest in die Fixture ergänzen, damit Sorte c auch im
+    # Vollinventar liegt (die Default-Fixture hat nur a/b).
+    _schreibe_manifest(manifest_root_mit_icons, "figuren-erkennung", [
+        _view("figuren-erkennung", "/controller/figuren-erkennung/"),
+    ], ist_controller=True)
+    panels = [{"panel_id": "kueche-01"}]
+    geraete = [{"id": "pi-01", "verwendung": "display", "status": "aktiv"}]
+    inv = aggregator.baue_inventar(
+        manifest_root_mit_icons, panels=panels, geraete=geraete)
+    for e in inv["eintraege"]:
+        if "icons" in e:
+            assert e["typ"] == aggregator.TYP_DISPLAY, (
+                "icons-Feld nur an Sorte a erlaubt — typ %r trägt icons (BUD-4): %r"
+                % (e["typ"], e))
 
 
 def test_sorte_a_ohne_icons_warnung_gelistet(manifest_root_mit_icons, caplog):
