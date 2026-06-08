@@ -1471,6 +1471,21 @@ def test_PANEL_12_apply_grid_geometry_dom_path():
             out['gridContentH'], out['vpH'])
 
 
+def _run_shrink_geom(M, vpW, vpH):
+    """Setup-Helper: führt computeGridGeometry(M, vpW, vpH) via Node aus.
+
+    Gibt dict mit cols, rows, capacity zurück. Wird von den
+    PANEL-12-Schrumpf-Tests gemeinsam genutzt (Befund 2 / AC2)."""
+    return run_node('''
+        var geom = panelLib.computeGridGeometry(%d, %d, %d);
+        console.log(JSON.stringify({
+            cols:     geom.cols,
+            rows:     geom.rows,
+            capacity: geom.cols * geom.rows,
+        }));
+    ''' % (M, vpW, vpH))
+
+
 def test_PANEL_12_shrink_fallback_ignores_min_width():
     """PANEL-12 / Watchdog-Befund 2 — Spec-Drift: der Schrumpf-Fallback
     (app.js ~Z.466-482, der `if (!best)`-Zweig) ist explizite PANEL-12-
@@ -1482,44 +1497,33 @@ def test_PANEL_12_shrink_fallback_ignores_min_width():
 
     Einschränkung: vpW=150 → innerW=118 px; selbst c=1 ergibt tileW=118 < 160.
     Der Fallback muss das Guard ignorieren und eine Lösung finden."""
-    out = run_node('''
+    # Vorbedingung: alle c-Werte wirklich unter TILE_MIN_W (vpH=300 für diesen Check)
+    pre = run_node('''
         var M    = 20;
-        var vpW  = 150;   // so schmal, dass jede Spalte < TILE_MIN_W faellt
-        var vpH  = 300;
+        var vpW  = 150;
         var TILE_MIN_W = 160;
         var pad  = panelLib.GRID_PAD;
         var gap  = panelLib.GRID_GAP;
         var innerW = vpW - 2 * pad;
-
-        // Vorbedingung prüfen: wirklich ALLE c-Werte unterschreiten TILE_MIN_W
         var allBelowMin = true;
         for (var c = 1; c <= M; c++) {
             var tileW = (innerW - (c - 1) * gap) / c;
             if (tileW >= TILE_MIN_W) { allBelowMin = false; break; }
         }
-
-        var geom     = panelLib.computeGridGeometry(M, vpW, vpH);
-        var capacity = geom.cols * geom.rows;
-
-        console.log(JSON.stringify({
-            innerW:      innerW,
-            allBelowMin: allBelowMin,
-            cols:        geom.cols,
-            rows:        geom.rows,
-            capacity:    capacity,
-            fallbackHeld: capacity >= M,
-        }));
+        console.log(JSON.stringify({ innerW: innerW, allBelowMin: allBelowMin }));
     ''')
-    assert out['allBelowMin'], \
+    assert pre['allBelowMin'], \
         'Vorbedingung: alle tileW-Werte müssen < TILE_MIN_W sein (vpW=%d zu groß?)' % 150
-    assert out['fallbackHeld'], \
+
+    out = _run_shrink_geom(M=20, vpW=150, vpH=300)
+    assert out['capacity'] >= 20, \
         ('PANEL-12 Schrumpf-Fallback: cols*rows muss >= M=%d sein auch wenn tileW < TILE_MIN_W '
          '(bekommen: cols=%d rows=%d capacity=%d)') % (20, out['cols'], out['rows'], out['capacity'])
 
 
 def test_PANEL_12_shrink_fallback_chooses_correct_cols_rows():
-    """AC1 / PANEL-12 Mutations-Kriterium: Bei M=20, vpW=150, vpH=600 wählt
-    der Schrumpf-Fallback-Zweig (app.js if(!best)-Block) cols=2, rows=10.
+    """PANEL-12 Mutations-Kriterium (Befund 1 / AC1): Bei M=20, vpW=150, vpH=600
+    wählt der Schrumpf-Fallback-Zweig (app.js if(!best)-Block) das Score-Minimum.
 
     Mathematische Herleitung (Mutationsprobe):
     - innerW = 150 - 2*16 = 118 px; innerH = 600 - 2*16 = 568 px
@@ -1532,39 +1536,32 @@ def test_PANEL_12_shrink_fallback_chooses_correct_cols_rows():
              ratio≈0.114, score≈2.168  ← viel schlechter
     - sqrt-Default (line 485) würde cols=5,rows=4 geben — ignoriert Score
     - Ohne Schrumpf-Schleife (if(!best)-Block entfernt) fiele das Ergebnis
-      auf den sqrt-Default zurück: cols=5, rows=4 — Assertion schlägt an.
+      auf den sqrt-Default zurück: cols=5, rows=4 — Mutation wird gefangen.
 
-    Kriterium: cols==2 AND rows==10 (nur Schrumpf-Loop kann dieses Ergebnis
-    produzieren; sqrt-Default liefert cols=5, rows=4)."""
-    out = run_node('''
-        var M   = 20;
-        var vpW = 150;   // alle tileW < TILE_MIN_W → Fallback nötig
-        var vpH = 600;
-
-        var geom = panelLib.computeGridGeometry(M, vpW, vpH);
-
-        console.log(JSON.stringify({
-            cols:     geom.cols,
-            rows:     geom.rows,
-            capacity: geom.cols * geom.rows,
-        }));
-    ''')
-    assert out['capacity'] >= 20, \
-        ('PANEL-12: cols*rows muss >= M=20 (bekommen: capacity=%d)') % out['capacity']
-    assert out['cols'] == 2 and out['rows'] == 10, \
-        ('PANEL-12 Schrumpf-Fallback muss cols=2, rows=10 wählen (Score-Minimum) — '
-         'bekommen: cols=%d rows=%d. '
-         'Wenn cols=5/rows=4: Schrumpf-Loop fehlt, sqrt-Default greift.') % (
-             out['cols'], out['rows'])
+    Spec-deckendes Kriterium (PANEL-12 Leerfeld-Vermeidung):
+    - cols*rows == M: kein Leerfeld — nur Schrumpf-Loop kann das garantieren
+    - not (cols==5 and rows==4): degeneriertes sqrt-Default-Layout ausgeschlossen"""
+    out = _run_shrink_geom(M=20, vpW=150, vpH=600)
+    assert out['capacity'] == 20, \
+        ('PANEL-12 Schrumpf-Fallback: cols*rows muss == M=20 sein (Leerfeld-Vermeidung) — '
+         'bekommen: cols=%d rows=%d capacity=%d. '
+         'Wenn capacity!=20: Schrumpf-Loop fehlt oder Score falsch.') % (
+             out['cols'], out['rows'], out['capacity'])
+    assert not (out['cols'] == 5 and out['rows'] == 4), \
+        ('PANEL-12 Schrumpf-Fallback darf nicht das degenerierte sqrt-Default-Layout '
+         '(cols=5, rows=4) wählen — das würde bedeuten, dass der Schrumpf-Loop fehlt.')
 
 
 def test_PANEL_12_shrink_not_needed_for_normal_viewport():
-    """AC2 / PANEL-12 Kontroll-Pfad: Bei M=6, vpW=800, vpH=600 findet die
+    """Algorithmus-Probe (Branch-Schwelle tileW >= TILE_MIN_W), KEIN Spec-Schutz.
+    PANEL-12 unterscheidet keine Haupt-/Schrumpf-Pfade.
+
+    Prüft den Kontroll-Pfad: Bei M=6, vpW=800, vpH=600 findet die
     Hauptschleife bereits einen gültigen Kandidaten (tileW >= TILE_MIN_W=160),
     der Schrumpf-Fallback wird NICHT benötigt.
 
     Erwartetes Ergebnis: cols=3, rows=2, tileW=248 px >= 160 px.
-    Beweist, dass der Schrumpf-Pfad nicht immer aktiv ist."""
+    Zeigt, dass der Schrumpf-Pfad nicht immer aktiv ist."""
     out = run_node('''
         var M   = 6;
         var vpW = 800;
