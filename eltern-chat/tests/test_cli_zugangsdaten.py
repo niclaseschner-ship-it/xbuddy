@@ -65,6 +65,8 @@ def _make_cfg():
     cfg.photo_origin_url = "http://127.0.0.1:5070"     # FSE-7 / #393
     cfg.seiten_origin_url = "http://127.0.0.1:5042"    # SREG-6 / #453
     cfg.display_url_origin = "https://example.test"
+    cfg.display_url_origin_heim = "https://example.test"        # SREG-7 / #476
+    cfg.display_url_origin_tailscale = ""                        # SREG-7 / #476
     cfg.provider_api_key = None
     cfg.provider = "anthropic"
     cfg.provider_model = "test-model"

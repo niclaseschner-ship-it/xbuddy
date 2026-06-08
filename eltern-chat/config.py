@@ -83,19 +83,28 @@ DEFAULTS = {
     # passt zum Pi-Setup (PORT-2 Photo-Buddy auf 5051). Leer ⇒ Aufgabe NICHT
     # im Katalog (FSE-8 AND-Guard mit family_group_chat_id_getter).
     "photo_origin_url": "http://127.0.0.1:5051",
-    # SREG-6 / #453: Origin der Seiten-Registry, über die der SeitenFindenTask
-    # das aggregierte Seiten-Inventar liest (`GET /api/v1/seiten` SREG-3).
-    # Per-Instanz-Wert; Default passt zum Pi-Setup (PORT-2 Seiten-Registry
-    # auf 5042). Leer ⇒ Aufgabe NICHT im Katalog (SREG-6 AND-Guard mit
-    # family_group_chat_id_getter).
+    # SREG-6 / #453: Origin der Seiten-Registry, über die der
+    # SeitenUebersichtTask das aggregierte Seiten-Inventar liest
+    # (`GET /api/v1/seiten` SREG-3). Per-Instanz-Wert; Default passt zum
+    # Pi-Setup (PORT-2 Seiten-Registry auf 5042). Leer ⇒ Aufgabe NICHT im
+    # Katalog (SREG-6 AND-Guard mit family_group_chat_id_getter).
     "seiten_origin_url": "http://127.0.0.1:5042",
     # GAA-3.7: HTTPS-Origin, unter der die ausgelieferten Display-URLs
     # erreichbar sind (z. B. "https://xbuddy-hub.local:8443"). Per-Instanz-
-    # Wert. Leer (Default) → Bot gibt nur den Pfad `/display/<id>` aus —
-    # ausreichend für Tests/CI, für Familien-Anlage muss der Origin gesetzt
-    # sein, damit das ausgeteilte Stück direkt aufs Tablet getippt werden
-    # kann.
+    # Wert. Leer (Default) → Bot gibt nur den Pfad `/display/<id>` aus.
+    # DEPRECATED (SREG-7 Migration): wird zu display_url_origin_heim;
+    # Doppel-Akzeptanz während Migration — `display_url_origin_heim` hat
+    # Vorrang wenn beide gesetzt.
     "display_url_origin": "",
+    # SREG-7 / #476: Heimnetz-Origin (tritt an die Stelle von display_url_origin).
+    # Pflicht für SREG-5-Skill (seiten_uebersicht): ohne diese Origin kann
+    # kein tippbarer Übersichts-Link geliefert werden. Leer (Default) →
+    # resolve() fällt auf display_url_origin zurück (Migration).
+    "display_url_origin_heim": "",
+    # SREG-7 / #476: Tailscale-Origin (zusätzlich auf SREG-12-Seite kopierbar).
+    # V1-Soll: fehlt sie, zeigt SREG-12 nur die Heim-Spalte. Kein Auto-
+    # Fallback auf Heim (falsche Origin = nicht-erreichbarer Link, SREG-7).
+    "display_url_origin_tailscale": "",
     # ONB-6 / EC-15: Familien-Gruppen-Chat-ID. Default leer = Onboarding-
     # Bindung. Über ENV oder Datei gesetzt → gesperrt (Vorrang vor
     # Onboarding-Bindung) — die Sperr-Logik sitzt in `resolve`, nicht im
@@ -133,7 +142,8 @@ class Config:
                  ca_pem_path, familie_origin_url, geraete_origin_url,
                  panel_origin_url, plan_origin_url, display_url_origin,
                  routine_origin_url, icon_origin_url, photo_origin_url,
-                 seiten_origin_url,
+                 seiten_origin_url, display_url_origin_heim,
+                 display_url_origin_tailscale,
                  log_level):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
@@ -147,11 +157,13 @@ class Config:
         self.geraete_origin_url = geraete_origin_url   # GAA-5 / #215: Origin der Geraete-Komponente
         self.panel_origin_url = panel_origin_url       # PAA-5 / #183: Origin der Panel-Registry (PREG-15)
         self.plan_origin_url = plan_origin_url         # EC-21 / #215: Origin der Plan-Buddy-Reload-Schnittstelle
-        self.display_url_origin = display_url_origin   # GAA-3.7: HTTPS-Origin für Display-URLs
+        self.display_url_origin = display_url_origin   # GAA-3.7 (deprecated → display_url_origin_heim, SREG-7)
         self.routine_origin_url = routine_origin_url   # RZS-6 / #343: Origin des Routine-Buddys (ROUTINE-14)
         self.icon_origin_url = icon_origin_url         # EC-15 / #443: Origin des Icon-Routers (ICONS-7)
         self.photo_origin_url = photo_origin_url       # FSE-7 / #393: Origin des Photo-Buddys (PHOTO-13/PHOTO-16)
         self.seiten_origin_url = seiten_origin_url     # SREG-6 / #453: Origin der Seiten-Registry (SREG-3)
+        self.display_url_origin_heim = display_url_origin_heim         # SREG-7 / #476: Heimnetz-Origin
+        self.display_url_origin_tailscale = display_url_origin_tailscale  # SREG-7 / #476: Tailscale-Origin
         self.log_level = log_level                 # LOG-4 (#166): Level-String für tools.logsetup
 
 
@@ -255,5 +267,15 @@ def resolve(config_path, zd=None):
         icon_origin_url=str(values["icon_origin_url"]).strip().rstrip("/"),
         photo_origin_url=str(values["photo_origin_url"]).strip().rstrip("/"),
         seiten_origin_url=str(values["seiten_origin_url"]).strip().rstrip("/"),
+        # SREG-7 Migration: display_url_origin_heim hat Vorrang; fällt auf
+        # display_url_origin zurück, wenn display_url_origin_heim leer ist
+        # (Doppel-Akzeptanz während Migration). display_url_origin_tailscale
+        # hat keinen Fallback (falsche Origin = nicht-erreichbarer Link, SREG-7).
+        display_url_origin_heim=(
+            str(values["display_url_origin_heim"]).strip().rstrip("/")
+            or str(values["display_url_origin"]).strip().rstrip("/")
+        ),
+        display_url_origin_tailscale=str(
+            values["display_url_origin_tailscale"]).strip().rstrip("/"),
         log_level=str(values["log_level"]).strip(),
     )

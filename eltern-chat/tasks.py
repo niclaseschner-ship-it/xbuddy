@@ -268,7 +268,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   tes_sessions=None, panel_origin_url=None,
                   paa_sessions=None, controller_url_origin=None,
                   routine_origin_url=None, photo_origin_url=None,
-                  icon_origin_url=None, seiten_origin_url=None):
+                  icon_origin_url=None, seiten_origin_url=None,
+                  display_url_origin_heim=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
@@ -297,10 +298,11 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
     Sofort-Schreib-Aufgabe) — wieder hinter dem AND-Guard auf
     `family_group_chat_id_getter` (FSE-2-Berechtigung).
 
-    SREG-6 / #453: Setzt der Aufrufer `seiten_origin_url`, registriert
-    build_catalog zusätzlich die lesende »Seiten finden«-Aufgabe (EC-9)
-    — hinter dem AND-Guard auf `seiten_origin_url` + `family_group_chat_id_getter`
-    (SREG-6-Berechtigung via EC-2-Mitgliedschaft).
+    SREG-6 / #476: Setzt der Aufrufer `seiten_origin_url`, registriert
+    build_catalog zusätzlich die lesende »Seiten-Übersicht«-Aufgabe (EC-9,
+    SREG-5/5b) — hinter dem AND-Guard auf `seiten_origin_url` +
+    `family_group_chat_id_getter` (SREG-6-Berechtigung via EC-2-Mitgliedschaft).
+    `display_url_origin_heim` ist die Heim-Origin (SREG-7) für den Übersichts-Link.
     """
     # Lokale Imports: brechen den Import-Zyklus tasks <-> ca_task/faa_task/
     # gaa_task/kav_task — nicht hochziehen.
@@ -498,29 +500,29 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             family_group_chat_id_getter=family_group_chat_id_getter,
             is_member_fn=_rps_is_member))
 
-    # SREG-6: »Seiten finden« als lesende Aufgabe (EC-9). AND-Guard:
-    # seiten_origin_url UND family_group_chat_id_getter müssen gesetzt sein —
-    # analog der TER-Linie. Fehlt eine → Aufgabe nicht im Katalog (SREG-6).
-    # seiten_origin_url: Seiten-Registry-Schnittstelle (GET /api/v1/seiten,
-    # SREG-3). family_group_chat_id_getter: Live-Berechtigung via EC-2-
-    # Mitgliedschaft (SREG-6).
+    # SREG-5/SREG-6 / #476: »Seiten-Übersicht« als lesende Aufgabe (EC-9).
+    # AND-Guard: seiten_origin_url UND family_group_chat_id_getter müssen
+    # gesetzt sein — analog der TER-Linie. Fehlt eine → Aufgabe nicht im
+    # Katalog (SREG-6). seiten_origin_url: Seiten-Registry-Schnittstelle
+    # (GET /api/v1/seiten, SREG-3, nur im Opt-in-Pfad genutzt).
+    # display_url_origin_heim: Heim-Origin für den Übersichts-Link (SREG-7).
     if seiten_origin_url is not None and family_group_chat_id_getter is not None:
         from skills.seiten_client import SeitenClient
-        from skills.seiten_finden_task import SeitenFindenTask
-        _sf_client = SeitenClient(origin_url=seiten_origin_url)
-        _sf_fgcid_getter = family_group_chat_id_getter
-        _sf_tg = tg
-        def _sf_is_member(user_id):
-            fgcid = _sf_fgcid_getter()
+        from skills.seiten_uebersicht_task import SeitenUebersichtTask
+        _su_client = SeitenClient(origin_url=seiten_origin_url)
+        _su_fgcid_getter = family_group_chat_id_getter
+        _su_tg = tg
+        def _su_is_member(user_id):
+            fgcid = _su_fgcid_getter()
             if not fgcid:
                 return False
-            member = _sf_tg.get_chat_member(fgcid, user_id)
+            member = _su_tg.get_chat_member(fgcid, user_id)
             return member is not None and member.get("status") in (
                 "creator", "administrator", "member")
-        catalog.register(SeitenFindenTask(
+        catalog.register(SeitenUebersichtTask(
             tg=tg,
-            seiten_client=_sf_client,
-            is_member_fn=_sf_is_member,
-            display_url_origin=display_url_origin))
+            seiten_client=_su_client,
+            is_member_fn=_su_is_member,
+            display_url_origin_heim=display_url_origin_heim))
 
     return catalog
