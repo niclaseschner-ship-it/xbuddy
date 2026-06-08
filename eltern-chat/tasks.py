@@ -267,7 +267,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   plan_origin_url=None,
                   tes_sessions=None, panel_origin_url=None,
                   paa_sessions=None, controller_url_origin=None,
-                  routine_origin_url=None, photo_origin_url=None):
+                  routine_origin_url=None, photo_origin_url=None,
+                  icon_origin_url=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
@@ -458,5 +459,38 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             photo_client=_fse_client,
             family_group_chat_id_getter=family_group_chat_id_getter,
             is_member_fn=_fse_is_member))
+
+    # RPS-7: »Routine-Punkte setzen« als synchrone schreibende Aufgabe (EC-10,
+    # E-RPS-1 propose→confirm). AND-Guard: routine_origin_url UND icon_origin_url
+    # UND family_group_chat_id_getter müssen ALLE gesetzt sein — fehlt eine,
+    # erscheint die Aufgabe NICHT im Katalog (RPS-7 Spec Z. 99-105). Hintergrund:
+    # - routine_origin_url: Schreib-Naht für die Items-API (RPS-6, ROUTINE-14).
+    # - icon_origin_url: Lese-Naht für die ICONS-7-Stichwort-Suche (RPS-4).
+    #   Konsumenten-Origin ist der Router (z. B. http://127.0.0.1:5000); RPS hat
+    #   per E-RPS-2 KEINEN eigenen ARASAAC-Bezug — die Suche läuft zentral.
+    # - family_group_chat_id_getter: Live-Berechtigung gegen die Familien-Gruppe
+    #   (RPS-2). is_member_fn baut den Live-Check analog zur RZS-/TES-/FSE-Linie.
+    if routine_origin_url is not None and icon_origin_url is not None \
+            and family_group_chat_id_getter is not None:
+        from skills.icon_client import IconClient
+        from skills.routine_client import RoutineClient as _RpsRoutineClient
+        from skills.routine_punkte_setzen_task import RoutinePunkteSetzenTask
+        _rps_routine_client = _RpsRoutineClient(origin_url=routine_origin_url)
+        _rps_icon_client = IconClient(origin_url=icon_origin_url)
+        _rps_fgcid_getter = family_group_chat_id_getter
+        _rps_tg = tg
+        def _rps_is_member(user_id):
+            fgcid = _rps_fgcid_getter()
+            if not fgcid:
+                return False
+            member = _rps_tg.get_chat_member(fgcid, user_id)
+            return member is not None and member.get("status") in (
+                "creator", "administrator", "member")
+        catalog.register(RoutinePunkteSetzenTask(
+            tg=tg,
+            routine_client=_rps_routine_client,
+            icon_client=_rps_icon_client,
+            family_group_chat_id_getter=family_group_chat_id_getter,
+            is_member_fn=_rps_is_member))
 
     return catalog

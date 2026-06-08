@@ -655,6 +655,9 @@ def build_context(cfg, db_path, zd_cli_path=None):
         controller_url_origin=cfg.display_url_origin,
         # RZS-6 / #343: Origin des Routine-Buddys (ROUTINE-14).
         routine_origin_url=cfg.routine_origin_url,
+        # EC-15 / #443: Origin des Icon-Routers (ICONS-7). Leer ⇒
+        # RoutinePunkteSetzenTask wird NICHT registriert (RPS-7 AND-Guard).
+        icon_origin_url=cfg.icon_origin_url,
         # FSE-7 / #393: Origin des Photo-Buddys (PHOTO-13/PHOTO-16). Leer ⇒
         # FotoSendenTask wird NICHT registriert (FSE-8 AND-Guard).
         photo_origin_url=cfg.photo_origin_url)
