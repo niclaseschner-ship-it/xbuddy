@@ -73,23 +73,26 @@ def filtere_eintraege(eintraege, suchbegriff=None):
     return treffer
 
 
-def formatiere_eintraege(eintraege):
+def formatiere_eintraege(eintraege, *, display_url_origin=None):
     """Formatiert eine Inventar-Liste als lesbaren Antwort-Text (SREG-6).
 
     Liefert einen deterministischen Text (EC-12), kein LLM. Jeder Eintrag
-    erscheint als eine Zeile: `[typ] label — pfad`.
+    erscheint als eine Zeile: `[typ] label — url`.
 
-    PBE-2: Editor-Einträge (typ=eltern, pfad =.../bearbeiten) erscheinen
-    mit einem Editor-Marker, damit das Elternteil sie gezielt erkennt.
+    SREG-5: Bei gesetzter `display_url_origin` wird jeder Link als volle URL
+    gebildet (`origin.rstrip("/") + pfad`, GAA-3.7-Muster). Bei leerer oder
+    None-Origin wird der Pfad als Fallback verwendet (SREG-7).
     """
     if not eintraege:
         return ""
+    origin = (display_url_origin or "").rstrip("/")
     zeilen = []
     for e in eintraege:
         label = e.get("label") or e.get("pfad") or "(unbekannt)"
         pfad  = e.get("pfad") or ""
         typ   = e.get("typ") or "?"
-        zeilen.append("• [%s] %s — %s" % (typ, label, pfad))
+        link  = (origin + pfad) if origin else pfad
+        zeilen.append("• [%s] %s — %s" % (typ, label, link))
     return "\n".join(zeilen)
 
 
@@ -98,18 +101,22 @@ def formatiere_eintraege(eintraege):
 # ============================================================
 
 def seiten_finden(tg, chat_id, from_user_id, suchbegriff,
-                  seiten_client, is_member_fn):
+                  seiten_client, is_member_fn,
+                  display_url_origin=None):
     """Seiten finden — aufrufbare Funktion (SREG-6).
 
     Liest das Inventar aus der Seiten-Registry, filtert es nach `suchbegriff`
     und postet das Ergebnis in `chat_id`. Ergebnis-Signal als String (SREG-6).
 
-    `tg`             — Telegram-Kanal (send_message).
-    `chat_id`        — Zielchat (Gruppe oder Privatchat).
-    `from_user_id`   — Telegram-User-ID des Aufrufers (Berechtigung SREG-6).
-    `suchbegriff`    — Optionaler Filter-/Such-Text, leer = alle Seiten zeigen.
-    `seiten_client`  — SeitenClient-Instanz (oder Doppelung).
-    `is_member_fn`   — Callable `(user_id) -> bool` (Live-Prüfung SREG-6).
+    `tg`                 — Telegram-Kanal (send_message).
+    `chat_id`            — Zielchat (Gruppe oder Privatchat).
+    `from_user_id`       — Telegram-User-ID des Aufrufers (Berechtigung SREG-6).
+    `suchbegriff`        — Optionaler Filter-/Such-Text, leer = alle Seiten zeigen.
+    `seiten_client`      — SeitenClient-Instanz (oder Doppelung).
+    `is_member_fn`       — Callable `(user_id) -> bool` (Live-Prüfung SREG-6).
+    `display_url_origin` — Optionale Origin-URL (SREG-5/GAA-3.7). Bei gesetzter
+                           Origin werden volle Links gebildet; ohne Origin
+                           Pfad-Fallback (SREG-7).
 
     Ergebnis-Signal:
       „beantwortet"      — Antwort wurde in chat_id gepostet.
@@ -145,7 +152,7 @@ def seiten_finden(tg, chat_id, from_user_id, suchbegriff,
         tg.send_message(chat_id, _ANTWORT_KEINE_TREFFER)
         return SIGNAL_BEANTWORTET
 
-    antwort = formatiere_eintraege(treffer)
+    antwort = formatiere_eintraege(treffer, display_url_origin=display_url_origin)
     if not antwort.strip():
         tg.send_message(chat_id, _ANTWORT_KEINE_TREFFER)
         return SIGNAL_BEANTWORTET
