@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+{# SREG-12 V2-Layout: Hero-Paar-Boxen + Buddy-Gruppen, beide kopierbare URLs.
+   Reine Präsentations-Schicht; Daten kommen aus render.baue_layout(). #}
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Alle Seiten · XBuddy</title>
+  <style>
+    /* SREG-12: Eltern am Handy. Daumen-bedienbar, hoher Kontrast,
+       großzügige Tap-Targets (min 44px). */
+    :root {
+      --bg: #f4f5f7;
+      --card: #ffffff;
+      --ink: #1a1a1a;
+      --ink-soft: #555;
+      --rule: #d8d8d8;
+      --hero-bg: #eef3ff;
+      --hero-rule: #b6c7e8;
+      --accent: #2d62d8;
+      --warn-bg: #fff4d6;
+      --warn-rule: #e0b900;
+      --editor-rule: #8a8a8a;
+      --variante-rule: #b07cd6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.45;
+    }
+    header.page {
+      padding: 16px 14px 8px;
+      background: var(--card);
+      border-bottom: 1px solid var(--rule);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    h1 { font-size: 1.3rem; margin: 0 0 10px; }
+    .banner-tailscale {
+      background: var(--warn-bg);
+      border: 1px solid var(--warn-rule);
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin: 0 14px 10px;
+      font-size: 0.9rem;
+    }
+    .banner-snapshot {
+      background: var(--warn-bg);
+      border: 1px solid var(--warn-rule);
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin: 0 14px 10px;
+      font-size: 0.9rem;
+    }
+    input.suche {
+      width: 100%;
+      padding: 10px 12px;
+      font-size: 1rem;
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      min-height: 44px;
+    }
+    .typ-chips {
+      display: flex;
+      gap: 6px;
+      padding: 8px 14px 12px;
+      overflow-x: auto;
+      background: var(--card);
+      border-bottom: 1px solid var(--rule);
+      -webkit-overflow-scrolling: touch;
+    }
+    .typ-chip {
+      flex: 0 0 auto;
+      padding: 6px 12px;
+      border: 1px solid var(--rule);
+      background: var(--card);
+      border-radius: 999px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      min-height: 36px;
+    }
+    .typ-chip[aria-pressed="true"] {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+    main { padding: 12px 14px 80px; }
+    section.sektion { margin: 18px 0; }
+    section.sektion > h2 {
+      font-size: 1.05rem;
+      margin: 0 0 10px;
+      color: var(--ink-soft);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-weight: 600;
+    }
+    .hero-paar {
+      background: var(--hero-bg);
+      border: 2px solid var(--hero-rule);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 16px;
+    }
+    .hero-paar > header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 4px 12px;
+      margin-bottom: 10px;
+    }
+    .hero-paar > header .display-id {
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+    .hero-paar > header .panel-anzahl {
+      font-size: 0.85rem;
+      color: var(--ink-soft);
+    }
+    .hierarchie-marker {
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--ink-soft);
+      padding: 6px 0;
+    }
+    .panel-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    @media (min-width: 720px) {
+      .panel-grid { grid-template-columns: 1fr 1fr; }
+    }
+    .karte {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .karte.variante {
+      border-style: dashed;
+      border-color: var(--variante-rule);
+    }
+    .karte > header {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .karte .icon {
+      width: 32px;
+      height: 32px;
+      object-fit: contain;
+      flex: 0 0 32px;
+    }
+    .karte .label { font-weight: 600; font-size: 1rem; }
+    .karte .typ-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--rule);
+      color: var(--ink-soft);
+      margin-left: auto;
+      text-transform: uppercase;
+    }
+    .karte .zeigt {
+      color: var(--ink-soft);
+      font-size: 0.9rem;
+      margin: 0 0 8px;
+    }
+    .urls {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .url-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .url-label {
+      flex: 0 0 70px;
+      font-size: 0.8rem;
+      color: var(--ink-soft);
+    }
+    .url-link {
+      flex: 1;
+      font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+      font-size: 0.82rem;
+      color: var(--accent);
+      text-decoration: underline;
+      overflow-wrap: anywhere;
+      /* SREG-12: Long-Press muss nativen Browser-Kontextmenü "Link kopieren"
+         funktionieren — KEIN pointer-events:none / user-select:none. */
+    }
+    .copy-btn {
+      flex: 0 0 auto;
+      padding: 6px 10px;
+      border: 1px solid var(--rule);
+      background: var(--card);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      min-height: 32px;
+      min-width: 44px;
+    }
+    .copy-btn[data-copied="1"] { background: #d4f4dd; border-color: #6abf83; }
+    .editor-anhang {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px dashed var(--editor-rule);
+      border-left: 3px dotted var(--editor-rule);
+      padding-left: 8px;
+    }
+    .editor-anhang .editor-titel {
+      font-size: 0.85rem;
+      color: var(--ink-soft);
+      margin-bottom: 4px;
+    }
+    .buddy-gruppe {
+      background: var(--card);
+      border: 1px solid var(--rule);
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    .buddy-gruppe > header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 10px;
+    }
+    .buddy-gruppe > header .app-slug {
+      font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+      font-weight: 600;
+    }
+    .buddy-gruppe > header .anzahl {
+      font-size: 0.85rem;
+      color: var(--ink-soft);
+    }
+    .karten-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+    @media (min-width: 720px) {
+      .karten-grid { grid-template-columns: 1fr 1fr; }
+    }
+    .leer-hinweis {
+      text-align: center;
+      padding: 20px;
+      color: var(--ink-soft);
+      font-style: italic;
+    }
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--ink);
+      color: white;
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+      z-index: 20;
+    }
+    .toast.visible { opacity: 0.95; }
+    /* SREG-12 Filter: "hidden" Karten/Gruppen */
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <header class="page">
+    <h1>Alle Seiten</h1>
+    <input type="search" class="suche" placeholder="Suche (Label, Synonym, Beschreibung) …" aria-label="Volltextsuche">
+  </header>
+
+  {% if tailscale_banner %}
+    <p class="banner-tailscale" role="status">
+      Nur Heim-URL verfügbar (kein Tailscale-Origin konfiguriert).
+    </p>
+  {% endif %}
+
+  {% if snapshot_pending %}
+    <p class="banner-snapshot" role="status">
+      Snapshot-Sorten derzeit nicht erreichbar: {{ snapshot_pending|join(", ") }}.
+      Anzeige aus Last-Known-Good (SREG-3).
+    </p>
+  {% endif %}
+
+  <nav class="typ-chips" aria-label="Typ-Filter">
+    <button type="button" class="typ-chip" data-typ="alle" aria-pressed="true">Alle</button>
+    <button type="button" class="typ-chip" data-typ="display" aria-pressed="false">Anzeigen</button>
+    <button type="button" class="typ-chip" data-typ="eltern" aria-pressed="false">Eltern</button>
+    <button type="button" class="typ-chip" data-typ="controller" aria-pressed="false">Controller</button>
+    <button type="button" class="typ-chip" data-typ="panel" aria-pressed="false">Panels</button>
+    <button type="button" class="typ-chip" data-typ="display-client" aria-pressed="false">Displays</button>
+  </nav>
+
+  <main>
+    {# Hero-Sektion „Geräte-Paare" — Box pro Paar #}
+    <section class="sektion" data-sektion="hero">
+      <h2>Geräte-Paare</h2>
+      {% if hero_paare %}
+        {% for paar in hero_paare %}
+          <article class="hero-paar" data-paar-key="{{ paar.display.key }}">
+            <header>
+              <span class="display-id">📺 {{ paar.display.instanz }}</span>
+              <span class="panel-anzahl">wird gesteuert von {{ paar.panel_anzahl }} Panel{% if paar.panel_anzahl != 1 %}s{% endif %}</span>
+            </header>
+
+            {{ render_karte(paar.display) }}
+
+            <div class="hierarchie-marker">↑ Display · Panel-Controller ↓</div>
+
+            <div class="panel-grid">
+              {% for pk in paar.panels %}
+                <div class="panel-karte-wrap">
+                  {{ render_karte(pk.panel) }}
+                  {% if pk.editor %}
+                    <div class="editor-anhang" data-karten-typ="{{ pk.editor.typ }}" data-suchtext="{{ kartensuchtext(pk.editor) }}">
+                      <div class="editor-titel">✏ Bearbeiten</div>
+                      {{ render_karte(pk.editor, kompakt=true) }}
+                    </div>
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+          </article>
+        {% endfor %}
+      {% else %}
+        <p class="leer-hinweis">Noch keine Geräte-Paare angelegt.</p>
+      {% endif %}
+    </section>
+
+    {# Sekundäre Sektion „Andere Seiten" — Buddy-Gruppen #}
+    <section class="sektion" data-sektion="buddy">
+      <h2>Andere Seiten</h2>
+      {% for gruppe in buddy_gruppen %}
+        <article class="buddy-gruppe" data-app="{{ gruppe.app }}">
+          <header>
+            <span class="app-slug">/{{ gruppe.app }}</span>
+            <span class="anzahl">{{ gruppe.anzahl }} View{% if gruppe.anzahl != 1 %}s{% endif %}</span>
+          </header>
+          <div class="karten-grid">
+            {% for karte in gruppe.karten %}
+              {{ render_karte(karte) }}
+            {% endfor %}
+          </div>
+        </article>
+      {% endfor %}
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  {# Macros für Karten — Jinja2 inline #}
+  {% macro render_karte(k, kompakt=false) %}
+    <div class="karte{% if k.variante %} variante{% endif %}"
+         data-karten-typ="{{ k.typ }}"
+         data-suchtext="{{ kartensuchtext(k) }}">
+      <header>
+        <img class="icon" src="{{ k.icon }}" alt="" loading="lazy">
+        <span class="label">{{ k.label }}{% if k.variante %} <em>(Variante)</em>{% endif %}</span>
+        <span class="typ-badge">{{ k.typ }}</span>
+      </header>
+      {% if k.zeigt and not kompakt %}
+        <p class="zeigt">{{ k.zeigt }}</p>
+      {% endif %}
+      <div class="urls">
+        {% if k.urls.heim %}
+          <div class="url-row">
+            <span class="url-label">Heim:</span>
+            <a class="url-link" href="{{ k.urls.heim }}">{{ k.urls.heim }}</a>
+            <button type="button" class="copy-btn" data-copy="{{ k.urls.heim }}">📋</button>
+          </div>
+        {% endif %}
+        {% if k.urls.tailscale %}
+          <div class="url-row">
+            <span class="url-label">Tailscale:</span>
+            <a class="url-link" href="{{ k.urls.tailscale }}">{{ k.urls.tailscale }}</a>
+            <button type="button" class="copy-btn" data-copy="{{ k.urls.tailscale }}">📋</button>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  {% endmacro %}
+
+  {% macro kartensuchtext(k) %}{{ (k.label or "") }} {{ (k.zeigt or "") }} {{ (k.synonyme|join(" ") if k.synonyme else "") }} {{ (k.app or "") }}{% endmacro %}
+
+  <script>
+    // SREG-12 clientseitige Volltextsuche + Typ-Filter.
+    // Karten tragen data-karten-typ und data-suchtext; Buddy-Gruppen data-app.
+    // Hero-Paar-Boxen bleiben sichtbar, wenn IRGENDEINE Karte in ihnen trifft.
+    // Buddy-Gruppe expandiert komplett, wenn data-app dem Suchterm matched.
+
+    const sucheInput = document.querySelector(".suche");
+    const typChips = document.querySelectorAll(".typ-chip");
+    const toast = document.getElementById("toast");
+    let aktiverTyp = "alle";
+
+    function normalize(s) {
+      return (s || "").toString().toLowerCase().trim();
+    }
+
+    function filter() {
+      const q = normalize(sucheInput.value);
+      // Karten einzeln
+      const karten = document.querySelectorAll(".karte, .editor-anhang");
+      karten.forEach(k => {
+        const typMatch = aktiverTyp === "alle" || k.dataset.kartenTyp === aktiverTyp;
+        const textMatch = !q || normalize(k.dataset.suchtext).includes(q);
+        const visible = typMatch && textMatch;
+        k.hidden = !visible;
+      });
+
+      // Hero-Paar-Boxen: sichtbar wenn ≥1 Karte/Editor in ihnen sichtbar ist
+      document.querySelectorAll(".hero-paar").forEach(p => {
+        const hat = p.querySelectorAll(".karte:not([hidden]), .editor-anhang:not([hidden])").length;
+        p.hidden = hat === 0;
+      });
+
+      // Buddy-Gruppen: app-Slug-Match → alle Karten sichtbar machen; sonst per-Karten-Filter
+      document.querySelectorAll(".buddy-gruppe").forEach(g => {
+        const app = normalize(g.dataset.app);
+        const appMatch = q && app && app.includes(q);
+        if (appMatch) {
+          g.querySelectorAll(".karte").forEach(k => {
+            const typMatch = aktiverTyp === "alle" || k.dataset.kartenTyp === aktiverTyp;
+            k.hidden = !typMatch;
+          });
+        }
+        const hat = g.querySelectorAll(".karte:not([hidden])").length;
+        g.hidden = hat === 0;
+      });
+    }
+
+    sucheInput.addEventListener("input", filter);
+    typChips.forEach(c => {
+      c.addEventListener("click", () => {
+        typChips.forEach(o => o.setAttribute("aria-pressed", "false"));
+        c.setAttribute("aria-pressed", "true");
+        aktiverTyp = c.dataset.typ;
+        filter();
+      });
+    });
+
+    // Copy-Buttons mit Toast + Long-Press bleibt funktional (native Browser-Pfad
+    // greift weiterhin auf <a>-Inhalt, da kein pointer-events:none gesetzt ist).
+    document.querySelectorAll(".copy-btn").forEach(b => {
+      b.addEventListener("click", async () => {
+        const url = b.dataset.copy;
+        let ok = false;
+        try {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(url);
+            ok = true;
+          }
+        } catch (e) { /* fallthrough zu execCommand */ }
+        if (!ok) {
+          // Fallback fuer aeltere Browser
+          const ta = document.createElement("textarea");
+          ta.value = url; ta.style.position = "fixed"; ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+          document.body.removeChild(ta);
+        }
+        if (ok) {
+          b.dataset.copied = "1";
+          toast.textContent = "Link kopiert";
+          toast.classList.add("visible");
+          setTimeout(() => {
+            b.removeAttribute("data-copied");
+            toast.classList.remove("visible");
+          }, 1600);
+        }
+      });
+    });
+  </script>
+</body>
+</html>
