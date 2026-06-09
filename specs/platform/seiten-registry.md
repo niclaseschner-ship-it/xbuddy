@@ -413,6 +413,21 @@ gelistet (Warnung); *wenn* `icons_erforderlich=true` und `icons[]` fehlt, *dann*
 wird genau diese View übersprungen, der Rest des Manifests bleibt. Beide Modi sind
 mit einer Manifest-Fixture testbar.
 
+**Varianten-Härte ist sofort total (verbindlich, #440).** Eine Variante
+(`varianten[]`-Eintrag) ist ein **vollständiger Sub-Manifest-Eintrag** —
+ihre `icons[]` und ihre `query`-Form sind unbedingt Pflicht, sobald die
+View Sorte a ist. Der Migrations-Schalter `icons_erforderlich` greift
+**nicht** auf Varianten-Ebene; eine Variante ohne `icons[]` fällt **mit
+dem ganzen Manifest** durch (`ManifestError` → Aggregator skippt das
+Manifest, nicht die einzelne Variante). Begründung: Varianten kommen erst
+ins Repo, wenn sie bewusst angelegt werden (keine implizite Existenz wie
+ein noch-nicht-backfilled-`icons[]` an einer alten View); ein nachträglich
+gestaffeltes Einführen für Varianten würde Vorrats-Mechanik bedeuten
+(CLAUDE.md §6 „nichts auf Vorrat"), die heute keinen konkreten Schmerz
+löst — alle bestehenden Varianten (plan/woche-klein) sind vollständig
+gebackfillt. **Verworfen:** Variante folgt demselben `icons_erforderlich`-
+Schalter (Weg B aus #440) — Vorrats-Mechanik ohne Trigger.
+
 ## SREG-11 — Editor-Eintrag je Panel-Instanz (zusätzlich zur Panel-Seite)
 Für jede Panel-Instanz (Snapshot-Sorte d) erzeugt der Aggregator **einen
 zusätzlichen, abgeleiteten Eintrag** für deren Editor-Seite — **neben** dem
