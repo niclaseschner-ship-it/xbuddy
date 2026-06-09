@@ -657,6 +657,25 @@ def display_events(display_id):
 
 
 # ============================================================
+#  ROU-32 — GET /api/v1/router/panels/<source_id> — Panel→Display-Lookup
+# ============================================================
+#
+# Liefert die display_id aus dem panels-Abschnitt der routing.json (ROU-18)
+# für eine gegebene source_id. Der Panel-Code zieht damit beim Bootstrap
+# die display_id vom Router — kein Spiegel in config.json, kein Drift
+# möglich (Nic-Entscheid 2026-06-08 / #414, PANEL-8/PANEL-11).
+
+@app.route('/api/v1/router/panels/<source_id>', methods=['GET'])
+def get_panel_display(source_id):
+    # DCOMP-2: frisch von Disk lesen, damit skill-seitige Änderungen sofort sichtbar.
+    _entries, current_panels, _known = _current_routing()
+    panel_entry = current_panels.get(source_id)
+    if panel_entry is None:
+        return jsonify({'error': 'unknown source_id'}), 404
+    return jsonify({'display_id': panel_entry['display_id']})
+
+
+# ============================================================
 #  Admin: Reload (#140, EC-21)
 # ============================================================
 #

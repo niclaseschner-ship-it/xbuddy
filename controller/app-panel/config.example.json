@@ -1,11 +1,10 @@
 {
   "_comment": "PANEL-8 — Beispiel-Instanz-Konfiguration. Kopiere als config.json (per .gitignore aus dem Repo ausgeschlossen) und passe pro Panel-Instanz an.",
   "_source_id_comment": "PANEL-8: muss mit einem Schlüssel im `panels`-Abschnitt der routing.json des Routers übereinstimmen (ROU-18).",
-  "_display_id_comment": "PANEL-8: muss mit dem `display_id`-Wert desselben `panels`-Eintrags übereinstimmen — der Panel-Code abonniert genau diesen Stream (ROU-22, PANEL-11).",
-  "_router_url_comment": "Origin des Routers (Schema + Host[:Port], ohne Pfad).",
+  "_display_id_comment": "PANEL-8 / ROU-32 (Nic-Entscheid 2026-06-08 / #414): display_id ist bewusst NICHT in config.json. Der Panel-Code zieht display_id beim Bootstrap via GET <router_url>/api/v1/router/panels/<source_id> vom Router (ROU-32). Der Router (routing.json panels-Abschnitt) ist die eine Wahrheit für die Panel→Display-Zuordnung — kein Drift möglich.",
+  "_router_url_comment": "PANEL-8: Origin des Routers (Schema + Host[:Port], ohne Pfad). Pflichtfeld.",
   "_backoffs_comment": "PANEL-5 — Retry-Delays in ms (FIG-12-Pattern). Default = [200, 1000, 5000]; weglassen, um den Code-Default zu nutzen. Liste Länge bestimmt Anzahl der Wiederholungen vor Drop.",
   "source_id":  "app-panel:demo",
-  "display_id": "display:demo",
   "router_url": "https://hub.local:8443",
   "backoffs":   [200, 1000, 5000]
 }
