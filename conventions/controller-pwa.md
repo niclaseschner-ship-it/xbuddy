@@ -10,11 +10,14 @@ ein Browser-Tab.
 Heimat in den Komponenten: `figuren-erkennung.md` FIG-24/FIG-26,
 `app-panel.md` PANEL-10.
 
-Der Display-Client (`specs/platform/display-client.md` DC-11) ist eine
-eigene PWA-Anwendung mit reduziertem Pflichten-Set — er teilt das
+Der Display-Client (`specs/platform/display-client.md` DC-11/DC-16) ist
+eine eigene PWA-Anwendung mit reduziertem Pflichten-Set — er teilt das
 Manifest-`display: fullscreen` und das Wake-Lock+Fullscreen-Gesture-
-Muster aus PWA-2/PWA-3, kennt aber kein `sw.js` und keine
-`config.json`. Er ist daher **nicht** durch diese Konvention gedeckt.
+Muster aus PWA-2/PWA-3, hat aber **keine** `config.json` (PWA-4 gilt
+nicht) und **kein** PWA-1-konformes Asset-Pre-Caching. Einen
+**minimalen** `sw.js` bringt er selbst mit — nur für den
+WebAPK-Install-Trigger, ohne Asset-Liste; Form siehe `display-client.md`
+DC-16. Er ist daher **nicht** durch diese Konvention gedeckt.
 
 ### PWA-1 — Pflicht-Dateien neben dem Seiten-Code
 Eine Controller-PWA liefert im selben Verzeichnis wie `index.html`
