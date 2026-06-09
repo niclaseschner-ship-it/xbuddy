@@ -1,0 +1,8 @@
+# PREG-4 — Per-Instanz-Dateien des Panel-Buddys, je Instanz separat
+# gepflegt, niemals im Repo. Formate sind in den committeten *.example.json
+# dokumentiert.
+#
+# Panel-Registry (PREG-4) — je Instanz separat, trägt 0600-Rechte
+# (familienprivate Display-Bindungen + Tile-Configs).
+# Format: panel/panels.example.json
+panels.json

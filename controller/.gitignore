@@ -1,0 +1,7 @@
+# FIG-23 — Per-Instanz-Dateien des Controller-Buddys, je Instanz separat
+# gepflegt, niemals im Repo. Formate sind in den committeten *.example.json
+# dokumentiert.
+#
+# Controller-Instanz-Config (FIG-23) — pro Instanz separat verwaltet.
+# Format: controller/**/config.example.json
+**/config.json

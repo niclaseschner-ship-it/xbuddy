@@ -1,0 +1,9 @@
+# PLAN-9/PLAN-28 — Per-Instanz-Dateien des Plan-Buddys, je Instanz separat
+# gepflegt, niemals im Repo. Formate sind in den committeten *.example.json
+# dokumentiert.
+#
+# Per-Instanz-Konfig + Petrantwortlichkeiten-DB (PLAN-9/PLAN-28) — je Instanz separat.
+# Format: plan/plan.example.json
+plan.json
+plan.db
+plan.db-journal
