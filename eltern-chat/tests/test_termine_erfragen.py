@@ -12,13 +12,13 @@ Berechtigungs-Bruch (TER-2) wirft BerechtigungError.
 from datetime import date, timedelta
 
 import pytest
+from skills._errors import BerechtigungError
 from skills.plan_client import PlanClientError
 from skills.termine_erfragen import (
     _ANTWORT_LEER,
     _ANTWORT_NICHT_ERREICHBAR,
     _RUECKFRAGE_NAECHSTES_JAHR,
     _RUECKFRAGE_ZEITRAUM,
-    BerechtigungError,
     formatiere_termine,
     parse_zeitraum,
     termine_erfragen,

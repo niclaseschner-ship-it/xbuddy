@@ -25,17 +25,10 @@ import logging
 import re
 from datetime import date, timedelta
 
+from skills._errors import BerechtigungError
 from skills.plan_client import PlanClientError
 
 logger = logging.getLogger(__name__)
-
-
-class BerechtigungError(Exception):
-    """Aufrufer ist kein autorisiertes Familienmitglied (TER-2, EC-29).
-
-    Der Agent-Loop fängt diese Exception und schreibt einen
-    Fehler-Tool-Result-Block; das LLM schweigt in der Antwort.
-    """
 
 
 # Interner Sentinel: parse_zeitraum gibt ihn zurück, wenn ein jahrloses
