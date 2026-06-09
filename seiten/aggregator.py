@@ -71,9 +71,12 @@ Alle drei Felder **fehlen** bei Nicht-Trägern (analog `icons` — kein
 `null`, kein leerer String; das Feld ist schlicht nicht da).
 """
 
+import contextlib
 import glob
+import json
 import logging
 import os
+import tempfile
 
 from tools import views_manifest
 
@@ -184,12 +187,71 @@ def _eintrag_aus_manifest(app_slug, ist_controller, view, icons_erforderlich=Fal
     return eintrag
 
 
+def _views_mit_per_view_resilienz(pfad, app_slug):
+    """Lädt die Views eines Manifests mit per-View-Skip-Granularität (SREG-3/DCOMP-3).
+
+    Schneller Pfad: `views_manifest.load(pfad)` — wenn das ganze Manifest valide
+    ist, kein Overhead. Kaputt-Pfad: schlägt `load()` mit `ManifestError` fehl
+    (z. B. wegen eines einzelnen defekten View-Eintrags), wird das JSON selbst
+    geparst. Datei-/Parse-/Struktur-Fehler (kein JSON, kein `views`-Schlüssel)
+    führen zum Überspringen des ganzen Manifests — dort ist keine sinnvolle
+    View-Teilmenge rettbar. Bei einer validen `views`-Liste wird jede View einzeln
+    geprüft (je ein temporäres Einzel-View-Manifest → `views_manifest.load()`):
+    defekte Views werden übersprungen (Warnung), valide Views bleiben im Inventar.
+
+    Liefert `(gültige_views, ganzes_manifest_kaputt)`. Wenn `ganzes_manifest_kaputt`
+    True, ist `gültige_views` leer und der Aufrufer soll das Manifest vollständig
+    überspringen (Warnung wurde hier noch NICHT geloggt — liegt beim Aufrufer).
+    """
+    try:
+        views = views_manifest.load(pfad)
+        return views, False  # Schneller Pfad: alles valide
+    except views_manifest.ManifestError:
+        pass  # Kaputt-Pfad: per-View-Fallback versuchen
+
+    # Kaputt-Pfad: JSON selbst einlesen; Datei-/Struktur-Fehler → ganzes Manifest kaputt
+    try:
+        with open(pfad, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return [], True
+    if not isinstance(data, dict):
+        return [], True
+    roh_views = data.get("views")
+    if not isinstance(roh_views, list):
+        return [], True
+
+    # Pro View: Einzel-Manifest in tmp schreiben und validieren
+    gueltige = []
+    for roh in roh_views:
+        slug_hint = roh.get("slug") if isinstance(roh, dict) else None
+        try:
+            with tempfile.NamedTemporaryFile(
+                    mode="w", suffix=".json", encoding="utf-8", delete=False) as tmp:
+                tmp_pfad = tmp.name
+                json.dump({"views": [roh]}, tmp)
+            validated = views_manifest.load(tmp_pfad)
+            gueltige.extend(validated)
+        except views_manifest.ManifestError as e:
+            logger.warning(
+                "View übersprungen (app=%s, slug=%r, %s): %s"
+                " — übriges Manifest bleibt vollständig (SREG-3/DCOMP-3)",
+                app_slug, slug_hint, pfad, e)
+        finally:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_pfad)
+    return gueltige, False
+
+
 def manifest_eintraege(root, icons_erforderlich=False):
     """Sammelt die Inventar-Einträge der Manifest-Sorten a/b/c (SREG-2/SREG-4/SREG-10).
 
     Liest jedes per `discover_manifests` gefundene `views.json`. Ein kaputtes
     Manifest (`ManifestError`) wird mit Warnung übersprungen (SREG-3/DCOMP-3) —
-    das übrige Inventar bleibt vollständig. Liefert die Liste der Einträge in
+    das übrige Inventar bleibt vollständig. Innerhalb eines Manifests wird jede
+    View einzeln bewertet: nur defekte Views werden übersprungen, gültige Views
+    desselben Manifests bleiben im Inventar (SREG-3/DCOMP-3 — feinste
+    Skip-Granularität ist die View). Liefert die Liste der Einträge in
     Discovery-Reihenfolge.
 
     `icons_erforderlich` steuert das SREG-10-Verhalten für fehlende `icons[]`
@@ -197,12 +259,12 @@ def manifest_eintraege(root, icons_erforderlich=False):
     """
     eintraege = []
     for app_slug, ist_controller, pfad in discover_manifests(root):
-        try:
-            views = views_manifest.load(pfad)
-        except views_manifest.ManifestError as e:
+        views, ganzes_manifest_kaputt = _views_mit_per_view_resilienz(pfad, app_slug)
+        if ganzes_manifest_kaputt:
             logger.warning(
-                "Manifest übersprungen (%s, app=%s): %s — übriges Inventar bleibt"
-                " vollständig (SREG-3/DCOMP-3)", pfad, app_slug, e)
+                "Manifest übersprungen (%s, app=%s): JSON-/Struktur-Fehler —"
+                " übriges Inventar bleibt vollständig (SREG-3/DCOMP-3)",
+                pfad, app_slug)
             continue
         for view in views:
             eintrag = _eintrag_aus_manifest(
