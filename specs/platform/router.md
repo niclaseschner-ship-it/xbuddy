@@ -718,6 +718,39 @@ Sicherheits-Invariante fest.
 
 *Tickets:* #58
 
+### ROU-33 — Proxy für die Panel-Editor-Seite (statische Assets, ohne LKG/Default)
+Der Router proxyt zusätzlich die **Editor-Seite einer Panel-Instanz** und
+ihre statischen Assets an den panel-Service:
+
+- `GET /controller/app-panel/<id>/bearbeiten` → panel-Service
+- `GET /controller/app-panel/<id>/bearbeiten.js` → panel-Service
+- `GET /controller/app-panel/<id>/bearbeiten.css` → panel-Service
+
+Dieses Verhalten ist **bewusst anders** als ROU-27 (Daten-Proxy für
+`config.json`/`tiles.json`):
+
+- **Kein Last-Known-Good-Cache.** Statische HTML-/JS-/CSS-Assets sind
+  Code, der bei Service-Ausfall nicht aus einem Snapshot rekonstruiert
+  werden soll — eine petraltete Editor-Seite würde die Eltern in falsche
+  Annahmen über den aktuellen Editor-Stand führen.
+- **Kein Code-Default-Fallback.** Fehlt der panel-Service, liefert der
+  Router den vom Upstream gekommenen Status (404/5xx) **direkt durch**
+  — die Editor-Seite ist Eltern-Tool (PBE-3), kein Display-Render-Pfad,
+  und Eltern erkennen einen Service-Ausfall lieber direkt als hinter
+  einem Cache versteckt.
+- **Cache-Invalidierungs-Naht** existiert für diesen Pfad nicht — es
+  gibt keinen Cache, der invalidiert werden müsste.
+
+Begründung der Trennung von ROU-27: die zwei Pfade haben unterschiedliche
+Verfügbarkeits-Erwartungen. ROU-27 dient dem Display-Render (das soll
+selbst bei Service-Ausfall etwas zeigen, daher LKG); ROU-33 dient der
+Eltern-Editor-Bedienung (die soll bei Service-Ausfall den Ausfall
+zeigen, daher direkt-durchgereicht).
+
+*Tests:* ROU-17 Mindest-Abdeckung für dieses Requirement: #459
+
+*Tickets:* #459, #462
+
 ### ROU-28 — Panel-bezogene Schreib-/Reload-Kante ist loopback-/`/admin/`-geschützt
 Jede panel-bezogene Schreib-/Reload-Kante des Routers — etwa ein
 Cache-Invalidierungs- oder Cache-Refresh-Trigger für den ROU-27-Cache —
