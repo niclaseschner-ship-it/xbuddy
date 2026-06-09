@@ -791,10 +791,10 @@ def test_PLAN_29_every_requirement_has_a_test():
     """PLAN-29: jede Anforderung mit Code-Verhalten hat einen Test.
     Belegt anhand der Test-Namen dieses Moduls."""
     quelle = open(os.path.abspath(__file__), encoding="utf-8").read()
-    # Jede PLAN-ID mit Code-Verhalten hat einen eigenen Test (PLAN-1 .. PLAN-32).
+    # Jede PLAN-ID mit Code-Verhalten hat einen eigenen Test (PLAN-1 .. PLAN-33).
     # PLAN-21 (Display-Views sind die Schnittstelle zur Familie) hat kein
     # eigenes Code-Verhalten über PLAN-2/3 hinaus — dort mit abgedeckt.
-    for plan in range(1, 33):
+    for plan in range(1, 34):
         if plan == 21:
             continue
         assert "test_PLAN_%d_" % plan in quelle, "PLAN-%d ungetestet" % plan
@@ -2036,3 +2036,211 @@ def test_PLAN_32_valid_put_only_changes_kalender_id(reload_client):
             continue
         assert geschrieben[key] == original[key], (
             "Feld %r hat sich geändert — nur kalender_id darf sich ändern" % key)
+
+
+# ============================================================
+#  PLAN-33 — Bulk-Termin-Schnittstelle (POST /api/v1/plan/termine/bulk)
+# ============================================================
+#
+# Spec-Refs: PLAN-33, PLAN-33.1 … PLAN-33.6 (specs/buddies/plan.md Z. 322+)
+# Konsument: TAB-9 (specs/platform/termine-aus-bild.md).
+#
+# Acceptance Criteria:
+#   AC1 — Erfolgs-Pfad: HTTP 200, results, geschrieben:N, gesamt:M.
+#   AC2 — Pre-validate-Fehler: HTTP 400, alle Items als validation, 0 Inserts.
+#   AC3 — Cap >30: HTTP 400 {error: too_many_items, max: 30}.
+#   AC4 — Idempotenz: gleicher request_id+hash → Cache-Antwort, 0 Re-Inserts;
+#          gleicher request_id, anderer hash → HTTP 409.
+#   AC5 — Exponential Backoff: bei Google-429 max 3 Retries; nach 3 Retries
+#          Item als calendar_rate_limit markiert.
+
+BULK_URL = "/api/v1/plan/termine/bulk"
+_UUID4_SAMPLE = "a1b2c3d4-e5f6-4aaa-89ab-c0d1e2f3a4b5"
+_UUID4_SAMPLE_B = "b2c3d4e5-f6a7-4bbb-9abc-d1e2f3a4b5c6"
+
+
+def test_PLAN_33_success_path_returns_200_with_results(demo_config, demo_registry):
+    """AC1: POST mit validen Items + FakeTransport-Erfolg → HTTP 200,
+    results-Liste, geschrieben:N, gesamt:M (PLAN-33.2, TAB-9-Antwort-Form).
+
+    Prüft außerdem, dass der Token-Cache aktiv ist: nur EIN access_token()-
+    Aufruf pro Bulk-Anfrage (PLAN-33.4) — in FakeTransport nicht separat
+    zählbar, aber insert_with_bearer-Calls in calls belegt Token-Weitergabe."""
+    transport = FakeTransport()
+    client = make_client(demo_config, demo_registry, transport)
+    # Idempotenz-Cache leeren (prozess-globaler State zwischen Tests).
+    plan_main._idem_cache.clear()
+
+    items = [
+        {"titel": "Zahnarzt", "beginn": "2026-07-01"},
+        {"titel": "Elternabend", "beginn": "2026-09-10T19:00:00+02:00",
+         "ende": "2026-09-10T21:00:00+02:00"},
+    ]
+    r = client.post(BULK_URL, data=json.dumps({
+        "request_id": _UUID4_SAMPLE, "items": items,
+    }), content_type="application/json")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["ok"] is True
+    assert body["gesamt"] == 2
+    assert body["geschrieben"] == 2
+    assert len(body["results"]) == 2
+    assert all(res["ok"] is True for res in body["results"])
+    assert all("event_id" in res for res in body["results"])
+    # Token-Cache: alle Inserts über insert_with_bearer, nicht insert_event.
+    bearer_calls = [c for c in transport.calls if c[0] == "insert_with_bearer"]
+    assert len(bearer_calls) == 2, (
+        "Erwartet 2 insert_with_bearer-Aufrufe (Token-Cache, PLAN-33.4), "
+        "bekam: %r" % [c[0] for c in transport.calls])
+
+
+def test_PLAN_33_prevalidate_fehler_bei_item_fehler(demo_config, demo_registry):
+    """AC2: Pre-validate-Fehler bei ≥1 Item → HTTP 400, results-Liste mit
+    ALLEN Items als {ok:false, error_code:validation}, FakeTransport 0 Inserts
+    (PLAN-33.1 — vor dem ersten Google-Aufruf)."""
+    transport = FakeTransport()
+    client = make_client(demo_config, demo_registry, transport)
+    plan_main._idem_cache.clear()
+
+    items = [
+        {"titel": "Zahnarzt", "beginn": "2026-07-01"},        # valide
+        {"titel": "", "beginn": "2026-07-02"},                 # fehlt titel
+        {"titel": "Kino", "beginn": "kein-datum"},             # ungültiges beginn
+    ]
+    r = client.post(BULK_URL, data=json.dumps({
+        "request_id": _UUID4_SAMPLE, "items": items,
+    }), content_type="application/json")
+    assert r.status_code == 400
+    body = r.get_json()
+    # ok:false auf Envelope-Ebene.
+    assert body.get("ok") is False
+    assert body["gesamt"] == 3
+    assert body["geschrieben"] == 0
+    results = body["results"]
+    assert len(results) == 3
+    # Alle Items als validation markiert (PLAN-33.1: "alle Items").
+    assert all(res["error_code"] == "validation" for res in results), (
+        "Alle results sollen error_code=validation haben, bekam: %r" % results)
+    # 0 Inserts in Google (Pre-validate verhindert jeden Schreibvorgang).
+    insert_calls = [c for c in transport.calls if "insert" in c[0]]
+    assert len(insert_calls) == 0, "Pre-validate hat trotzdem Inserts ausgelöst"
+
+
+def test_PLAN_33_cap_zu_viele_items_400(demo_config, demo_registry):
+    """AC3: Cap >30 → HTTP 400 {error: too_many_items, max: 30},
+    0 Petrarbeitung (PLAN-33.3)."""
+    transport = FakeTransport()
+    client = make_client(demo_config, demo_registry, transport)
+    plan_main._idem_cache.clear()
+
+    items = [{"titel": "T%d" % i, "beginn": "2026-07-01"} for i in range(31)]
+    r = client.post(BULK_URL, data=json.dumps({
+        "request_id": _UUID4_SAMPLE, "items": items,
+    }), content_type="application/json")
+    assert r.status_code == 400
+    body = r.get_json()
+    assert body.get("error") == "too_many_items"
+    assert body.get("max") == 30
+    # 0 Inserts — Cap wird vor jeder Petrarbeitung geprüft.
+    insert_calls = [c for c in transport.calls if "insert" in c[0]]
+    assert len(insert_calls) == 0
+
+
+def test_PLAN_33_idempotenz_gleicher_hash_keine_reimports(demo_config, demo_registry):
+    """AC4a: gleicher request_id + items_hash innerhalb 15min → identische
+    Antwort, 0 Re-Inserts (PLAN-33.5 — kein zweiter Google-Call)."""
+    transport = FakeTransport()
+    client = make_client(demo_config, demo_registry, transport)
+    plan_main._idem_cache.clear()
+
+    items = [{"titel": "Zahnarzt", "beginn": "2026-07-01"}]
+    payload = json.dumps({"request_id": _UUID4_SAMPLE, "items": items})
+
+    # Erst-Aufruf.
+    r1 = client.post(BULK_URL, data=payload, content_type="application/json")
+    assert r1.status_code == 200
+    body1 = r1.get_json()
+    assert body1["geschrieben"] == 1
+    inserts_nach_erst = [c for c in transport.calls if "insert" in c[0]]
+    assert len(inserts_nach_erst) == 1
+
+    # Zweiter Aufruf — identischer request_id + identische items.
+    r2 = client.post(BULK_URL, data=payload, content_type="application/json")
+    assert r2.status_code == 200
+    body2 = r2.get_json()
+    # Identische Antwort wie Erst-Aufruf.
+    assert body2 == body1, (
+        "Idempotenz: Antwort soll identisch sein, "
+        "Erst=%r, Zweiter=%r" % (body1, body2))
+    # 0 Re-Inserts: kein zweiter Google-Call.
+    inserts_nach_zweitem = [c for c in transport.calls if "insert" in c[0]]
+    assert len(inserts_nach_zweitem) == 1, (
+        "Idempotenz: kein zweiter Insert erwartet, "
+        "calls: %r" % transport.calls)
+
+
+def test_PLAN_33_idempotenz_anderer_hash_gibt_409(demo_config, demo_registry):
+    """AC4b: gleicher request_id, anderer items_hash → HTTP 409
+    {error: request_id_collision} (PLAN-33.5)."""
+    transport = FakeTransport()
+    client = make_client(demo_config, demo_registry, transport)
+    plan_main._idem_cache.clear()
+
+    items_a = [{"titel": "Zahnarzt", "beginn": "2026-07-01"}]
+    items_b = [{"titel": "Elternabend", "beginn": "2026-08-15"}]
+
+    # Erst-Aufruf mit items_a.
+    r1 = client.post(BULK_URL, data=json.dumps({
+        "request_id": _UUID4_SAMPLE, "items": items_a,
+    }), content_type="application/json")
+    assert r1.status_code == 200
+
+    # Zweiter Aufruf: gleiche request_id, andere items.
+    r2 = client.post(BULK_URL, data=json.dumps({
+        "request_id": _UUID4_SAMPLE, "items": items_b,
+    }), content_type="application/json")
+    assert r2.status_code == 409
+    body = r2.get_json()
+    assert body.get("error") == "request_id_collision"
+
+
+def test_PLAN_33_backoff_bei_rate_limit(demo_config, demo_registry, monkeypatch):
+    """AC5: bei Google-429 max 3 Retries (1s/2s/4s ±25% Jitter);
+    nach 3 Retries Item als calendar_rate_limit markiert (PLAN-33.6).
+
+    time.sleep wird gemonkeypatcht, um die Backoff-Wartezeit nicht real
+    abzuwarten — der Test prüft, dass sleep aufgerufen wurde und die
+    korrekte Fehlerklasse am Ende gesetzt ist."""
+    import time as time_mod
+
+    sleep_calls = []
+    monkeypatch.setattr(time_mod, "sleep", lambda s: sleep_calls.append(s))
+    # monotonic muss real laufen (Budget-Prüfung), aber wir halten das Budget groß.
+
+    # FakeTransport: alle Inserts mit Rate-Limit (immer 429).
+    transport = FakeTransport(rate_limit_on_calls={0, 1, 2, 3, 4, 5, 6, 7, 8, 9})
+    client = make_client(demo_config, demo_registry, transport)
+    plan_main._idem_cache.clear()
+
+    items = [{"titel": "Zahnarzt", "beginn": "2026-07-01"}]
+    r = client.post(BULK_URL, data=json.dumps({
+        "request_id": _UUID4_SAMPLE_B, "items": items,
+    }), content_type="application/json")
+
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["geschrieben"] == 0
+    assert len(body["results"]) == 1
+    result = body["results"][0]
+    assert result["ok"] is False
+    assert result["error_code"] == "calendar_rate_limit", (
+        "Erwartet calendar_rate_limit, bekam: %r" % result)
+    # 3 Retries → 3 sleep-Aufrufe (Backoff zwischen Versuch 1/2/3/4).
+    assert len(sleep_calls) == 3, (
+        "Erwartet 3 sleep-Aufrufe (3 Retries), bekam: %d — %r"
+        % (len(sleep_calls), sleep_calls))
+    # Backoff-Reihenfolge: erster sleep ≈ 1s, zweiter ≈ 2s, dritter ≈ 4s
+    # (±25% Jitter); wir prüfen nur die Größenordnung.
+    assert 0.75 <= sleep_calls[0] <= 1.25, "Erster Backoff soll ~1s sein"
+    assert 1.5 <= sleep_calls[1] <= 2.5, "Zweiter Backoff soll ~2s sein"
+    assert 3.0 <= sleep_calls[2] <= 5.0, "Dritter Backoff soll ~4s sein"
