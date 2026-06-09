@@ -298,10 +298,11 @@ gegen den geprüft werden müsste.
 
 ### PANEL-10 — Vollbild & Bildschirm wach halten
 Das Panel ist eine Controller-PWA und erfüllt damit die Pflichten aus
-`conventions/controller-pwa.md` (PWA-1 Pflicht-Dateien, PWA-2
-Manifest-Pflichtfelder inkl. `display: fullscreen`, PWA-3 Wake-Lock +
-Fullscreen-API beim ersten User-Gesture, PWA-4 Config-Lade-Konvention)
-— analog DC-11 und FIG-24/FIG-26.
+`conventions/pwa.md` (PWA-1 Pflicht-Dateien, PWA-2 Manifest-
+Pflichtfelder inkl. `display: fullscreen`, PWA-3 Wake-Lock +
+Fullscreen-API beim ersten User-Gesture, PWA-4 Selbstgenügsamkeit +
+Controller-Config-Lade-Konvention) — analog DC-11/DC-16 (Display-
+Client als zweiter PWA-Konsument) und FIG-24/FIG-26.
 
 **Hinweis:** **App-Pinning** ist Familien-Onboarding-Aufgabe und kein
 Code-Verhalten — wird in einem entsprechenden Onboarding-Schritt für
@@ -382,7 +383,7 @@ zurück und PANEL-12 bricht. Auf Geräten ohne Notch sind alle Insets 0; die
 Geometrie ist unverändert.
 
 **Zielgeräte:** Querformat-Phone **und** Tablet (jeweils Landscape). Das
-erweitert die bisherige reine Tablet-Nennung der Controller-PWA-Konvention; die
+erweitert die bisherige reine Tablet-Nennung der PWA-Konvention; die
 No-Scroll-Garantie gilt zuerst für das kleinere Gerät (Landscape-Phone).
 
 **Kapazität & Fallback:** No-Scroll ist die **harte Invariante** — es wird
@@ -656,7 +657,7 @@ DTOK-konform: die Seite **referenziert** `/display/_shared/design/tokens.css`
 (same-origin, vom Router via ROU-30 serviert) statt eigener Farb-/Schrift-Werte
 (DTOK-1/DTOK-3/DTOK-5).
 
-Das kollidiert mit der Controller-PWA-Selbstgenügsamkeit (PWA-1: „keine externen
+Das kollidiert mit der PWA-Selbstgenügsamkeit (PWA-1/PWA-4: „keine externen
 Asset-Quellen, alles im Verzeichnis"): der Token-Strang liegt cross-directory
 und `@import`t Schrift von einem CDN. **Entscheidung (Nic, 2026-06-07):**
 referenzieren ist richtig. Das App-Panel ist eine **inhärent online**
