@@ -1,0 +1,283 @@
+/*
+ * Essens-Buddy — Buddy-eigenes CSS (URL-13, ESSEN-10).
+ *
+ * Bindet an den Design-Token-Strang /display/_shared/design/tokens.css
+ * (DTOK-1/2/3). Keine hartcodierten Farben/Maße (DTOK-5) — alle Stilwerte
+ * als Token. Boxen/Karten übernehmen die Buddy-Card-Optik des WetterBuddys
+ * (E-ESSEN-9: .card / .card-label-Strang für gleiche Optik).
+ *
+ * Kiosk-Fläche: 1920×1080, overflow hidden (ESSEN-10).
+ */
+
+/* ── Reset / Shell ──────────────────────────────────────────────────────── */
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background: var(--kids-bg);
+}
+
+body.essen-shell {
+  font-family: var(--font-hand);
+  font-size: var(--fs-28);
+  color: var(--kids-ink);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-5) var(--space-6);
+  box-sizing: border-box;
+  gap: var(--space-4);
+}
+
+/* ── Kopfzeile: Titel + Tabs ────────────────────────────────────────────── */
+
+.kopfzeile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  flex-shrink: 0;
+}
+
+.buddy-titel {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-64);
+  color: var(--primary);
+  line-height: 1;
+}
+
+/* ── Tabs (ESSEN-9) ────────────────────────────────────────────────────── */
+
+.tabs {
+  display: flex;
+  gap: var(--space-3);
+  flex: 1;
+}
+
+.tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  min-height: 120px;
+  background: var(--kids-paper);
+  border: 3px solid var(--kids-border-soft);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-hand-sm);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-32);
+  color: var(--kids-ink);
+}
+
+.tab:active {
+  transform: translateY(2px);
+  box-shadow: var(--shadow-hand-sm);
+}
+
+.tab.aktiv {
+  background: var(--kids-tint-peach);
+  border-color: var(--clay);
+  box-shadow: var(--shadow-hand);
+}
+
+.tab img {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+
+.tab .name {
+  /* Wortlaut ist Implementierungs-Detail (xbuddy-Prinzip) */
+}
+
+/* ── Hauptbereich ───────────────────────────────────────────────────────── */
+
+.haupt {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: var(--space-5);
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Item-Grid Card (ESSEN-8/11) ─────────────────────────────────────── */
+
+.grid-card {
+  background: var(--kids-paper);
+  border: 2px solid var(--kids-border-soft);
+  border-radius: var(--radius-3xl);
+  box-shadow: var(--shadow-hand-lg);
+  padding: var(--space-5) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  overflow: hidden;
+}
+
+.grid-titel {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-40);
+  color: var(--kids-ink-soft);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-cap);
+}
+
+.item-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+  flex: 1;
+  align-content: start;
+}
+
+/* Item-Kachel — Tap-Affordanz (ESSEN-3) */
+.item-kachel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--kids-paper);
+  border: 2.5px solid var(--kids-border-soft);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-hand-sm);
+  cursor: pointer;
+  font-family: var(--font-hand);
+  font-size: var(--fs-28);
+  color: var(--kids-ink);
+}
+
+.item-kachel:active {
+  transform: translateY(2px);
+  box-shadow: none;
+}
+
+.item-kachel img {
+  width: 140px;
+  height: 140px;
+  object-fit: contain;
+}
+
+.leer-meldung {
+  grid-column: 1 / -1;
+  font-family: var(--font-hand);
+  font-size: var(--fs-28);
+  color: var(--text-3);
+  padding: var(--space-7);
+  text-align: center;
+}
+
+/* ── Wunsch-Liste Card (ESSEN-8) ────────────────────────────────────────── */
+
+.liste-card {
+  background: var(--kids-paper);
+  border: 2px solid var(--kids-border-soft);
+  border-radius: var(--radius-3xl);
+  box-shadow: var(--shadow-hand-lg);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  overflow: hidden;
+}
+
+.liste-titel {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-40);
+  color: var(--kids-ink-soft);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-cap);
+}
+
+.liste-eintraege {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  flex: 1;
+  overflow-y: auto;
+}
+
+.liste-gruppe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.liste-gruppe .gruppe-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-20);
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-cap);
+}
+
+/* Wunsch-Eintrag — Farb-Tints je Kategorie (aus Mockup) */
+.liste-eintrag {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--kids-tint-mint);
+  border-radius: var(--radius-xl);
+  border: 1.5px solid rgba(93, 143, 79, 0.30);
+}
+
+.liste-eintrag.kat-gericht {
+  background: var(--kids-tint-peach);
+  border-color: var(--clay);
+}
+
+.liste-eintrag.kat-brotbelag {
+  background: var(--kids-tint-lilac);
+  border-color: rgba(155, 109, 199, 0.30);
+}
+
+.liste-eintrag.kat-sonstiges {
+  background: var(--kids-tint-sky);
+  border-color: var(--lake);
+}
+
+.liste-eintrag img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.liste-eintrag .text {
+  font-family: var(--font-hand);
+  font-size: var(--fs-24);
+  color: var(--kids-ink);
+}
+
+.liste-leer {
+  font-family: var(--font-hand);
+  font-size: var(--fs-24);
+  color: var(--text-3);
+  padding: var(--space-4);
+  text-align: center;
+}
+
+/* ── Attribution ─────────────────────────────────────────────────────────── */
+
+.attribution {
+  font-family: var(--font-sans);
+  font-size: var(--fs-14);
+  color: var(--text-3);
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.attribution a {
+  color: var(--text-2);
+}

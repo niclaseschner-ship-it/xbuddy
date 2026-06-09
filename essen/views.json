@@ -1,0 +1,20 @@
+{
+  "views": [
+    {
+      "slug": "wunsch",
+      "pfad": "/display/essen/wunsch",
+      "label": "Essens-Wünsche",
+      "synonyme": [
+        "essen",
+        "wünsche",
+        "was wünsche ich mir",
+        "einkaufsliste",
+        "lebensmittel wünschen",
+        "was essen"
+      ],
+      "zeigt": "Tabbed Single-Canvas: Kind wählt Lebensmittel und Gerichte per Touch-Tap aus dem Katalog und legt Wünsche auf die Liste.",
+      "zielgruppe": "kind",
+      "icons": ["arasaac/28339.png"]
+    }
+  ]
+}

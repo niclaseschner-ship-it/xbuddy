@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920, initial-scale=1">
+  <title>Wünsche</title>
+  {# Design-Tokens aus der geteilten Plattform (DTOK-1/2/3, ESSEN-10) #}
+  <link rel="stylesheet" href="/display/_shared/design/tokens.css">
+  {# Buddy-eigenes CSS (URL-13) #}
+  <link rel="stylesheet" href="/display/essen/static/essen.css">
+</head>
+<body class="essen-shell">
+
+  {# ── Kopfzeile: Buddy-Titel + Kategorien-Tabs (ESSEN-8/9) ──────────── #}
+  <div class="kopfzeile">
+    <div class="buddy-titel">Wünsche</div>
+    <div class="tabs" id="tabs">
+      {% for tab in view.tabs %}
+      <button
+        class="tab{% if tab.aktiv %} aktiv{% endif %}"
+        data-tab="{{ tab.slug }}"
+        aria-pressed="{{ 'true' if tab.aktiv else 'false' }}"
+        type="button"
+      >
+        {% if tab.icon_url %}
+        <img src="{{ tab.icon_url }}" alt="{{ tab.label }}">
+        {% endif %}
+        <span class="name">{{ tab.label }}</span>
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ── Hauptbereich: Item-Grid + Wunsch-Liste (ESSEN-8) ──────────────── #}
+  <div class="haupt">
+
+    {# ── Item-Grid der aktiven Kategorie (ESSEN-8/9/11) ─────────────── #}
+    <div class="grid-card" id="grid-card">
+      <div class="grid-titel">Was wünschst du dir?</div>
+      <div class="item-grid" id="item-grid">
+        {% if view.item_grid.leer %}
+        <div class="leer-meldung">
+          {# ESSEN-9: leere Gerichte-Kategorie zeigt ehrliche Leer-Meldung #}
+          Noch keine Gerichte — die Eltern tragen sie ein.
+        </div>
+        {% else %}
+        {% for item in view.item_grid.kacheln %}
+        <button
+          class="item-kachel"
+          data-item-id="{{ item.id }}"
+          data-label="{{ item.label }}"
+          data-bild-ref="{{ item.bild_ref }}"
+          data-kategorie="{{ item.kategorie }}"
+          type="button"
+          aria-label="{{ item.label }} wünschen"
+        >
+          {% if item.icon_url %}
+          <img src="{{ item.icon_url }}" alt="{{ item.label }}">
+          {% endif %}
+          <div class="label">{{ item.label }}</div>
+        </button>
+        {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+
+    {# ── Wunsch-Liste (ESSEN-8/15) ─────────────────────────────────── #}
+    <div class="liste-card" id="liste-card">
+      <div class="liste-titel">Auf der Liste</div>
+      <div class="liste-eintraege" id="liste-eintraege">
+        {% if view.wunsch_liste %}
+        {% for gruppe in view.wunsch_liste %}
+        <div class="liste-gruppe">
+          <div class="gruppe-label">{{ gruppe.kat_label }}</div>
+          {% for eintrag in gruppe.eintraege %}
+          <div class="liste-eintrag kat-{{ eintrag.kategorie }}">
+            {% if eintrag.icon_url %}
+            <img src="{{ eintrag.icon_url }}" alt="{{ eintrag.label }}">
+            {% endif %}
+            <div class="text">{{ eintrag.label }}</div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="liste-leer">Noch keine Wünsche.</div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>{# .haupt #}
+
+  {# ARASAAC-Attribution (ICONS-6) #}
+  <div class="attribution">
+    Piktogramme: <a href="https://arasaac.org">ARASAAC</a>,
+    Autor: Sergio Palao, Lizenz: CC BY-NC-SA 4.0.
+  </div>
+
+  {# Buddy-eigenes JS (URL-13) #}
+  <script src="/display/essen/static/essen.js"></script>
+</body>
+</html>
