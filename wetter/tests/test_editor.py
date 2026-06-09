@@ -2,8 +2,8 @@
 
 Alle Tests laufen OHNE Netz (der Editor berührt Open-Meteo nicht, WETTER-33).
 Sie treffen die ECHTEN Flask-Routen über den Test-Client (entry_path_probe):
-  GET  /display/wetter/regeln            — Übersicht + Fokus (WETTER-27)
-  POST /display/wetter/regeln/speichern  — validieren + atomar schreiben (WETTER-30)
+  GET  /display/wetter/regeln  — Übersicht + Fokus (WETTER-27)
+  POST /display/wetter/regeln  — validieren + atomar schreiben (WETTER-30)
 
 Abdeckung aus WETTER-33:
   AC1/WETTER-27  Anzeige liefert die Matrix in Reihenfolge, Schwellen read-only,
@@ -134,7 +134,7 @@ def test_editor_post_gueltig_schreibt_und_dcomp2(editor_setup):
     matrix = _matrix_aus(DEMO)
     # Dritte Regel (mild, matcht das Test-Wetter): Pullover ergänzen.
     matrix["regeln"][2]["pflicht"].append({"name": "Pullover", "pikto": "2436"})
-    resp = client.post("/display/wetter/regeln/speichern", json=matrix)
+    resp = client.post("/display/wetter/regeln", json=matrix)
     assert resp.status_code == 200
     assert resp.get_json()["ok"] is True
 
@@ -159,7 +159,7 @@ def test_editor_post_atomar(editor_setup):
     """WETTER-30/DCOMP-4: nach dem Save keine verwaiste Temp-Datei, Zieldatei
     valides JSON."""
     client, cfg_path = editor_setup
-    resp = client.post("/display/wetter/regeln/speichern", json=_matrix_aus(DEMO))
+    resp = client.post("/display/wetter/regeln", json=_matrix_aus(DEMO))
     assert resp.status_code == 200
     rest = [n for n in os.listdir(cfg_path.parent)
             if n.startswith(".wetter.") and n.endswith(".tmp")]
@@ -177,7 +177,7 @@ def test_editor_post_leeres_pflichtset_abgelehnt(editor_setup):
     vorher = cfg_path.read_bytes()
     matrix = _matrix_aus(DEMO)
     matrix["regeln"][0]["pflicht"] = []
-    resp = client.post("/display/wetter/regeln/speichern", json=matrix)
+    resp = client.post("/display/wetter/regeln", json=matrix)
     assert resp.status_code == 422
     assert resp.get_json()["ok"] is False
     assert cfg_path.read_bytes() == vorher
@@ -189,7 +189,7 @@ def test_editor_post_pikto_ausserhalb_palette_abgelehnt(editor_setup):
     vorher = cfg_path.read_bytes()
     matrix = _matrix_aus(DEMO)
     matrix["regeln"][0]["pflicht"] = [{"name": "Fantasie", "pikto": "999999"}]
-    resp = client.post("/display/wetter/regeln/speichern", json=matrix)
+    resp = client.post("/display/wetter/regeln", json=matrix)
     assert resp.status_code == 422
     assert resp.get_json()["ok"] is False
     assert cfg_path.read_bytes() == vorher
@@ -204,7 +204,7 @@ def test_editor_post_anzahl_reihenfolge_veraendert_abgelehnt(editor_setup):
     # Anzahl verändert: eine Regel weglassen.
     weniger = _matrix_aus(DEMO)
     weniger["regeln"] = weniger["regeln"][:-1]
-    r1 = client.post("/display/wetter/regeln/speichern", json=weniger)
+    r1 = client.post("/display/wetter/regeln", json=weniger)
     assert r1.status_code == 422
     assert cfg_path.read_bytes() == vorher
 
@@ -212,7 +212,7 @@ def test_editor_post_anzahl_reihenfolge_veraendert_abgelehnt(editor_setup):
     getauscht = _matrix_aus(DEMO)
     getauscht["regeln"][0]["bedingung"] = {"feels_max": 4}
     getauscht["regeln"][1]["bedingung"] = {"rain_amount_min": 1.0}
-    r2 = client.post("/display/wetter/regeln/speichern", json=getauscht)
+    r2 = client.post("/display/wetter/regeln", json=getauscht)
     assert r2.status_code == 422
     assert cfg_path.read_bytes() == vorher
 
@@ -223,7 +223,7 @@ def test_editor_post_fallback_pflicht_leer_abgelehnt(editor_setup):
     vorher = cfg_path.read_bytes()
     matrix = _matrix_aus(DEMO)
     matrix["fallback"]["pflicht"] = []
-    resp = client.post("/display/wetter/regeln/speichern", json=matrix)
+    resp = client.post("/display/wetter/regeln", json=matrix)
     assert resp.status_code == 422
     assert resp.get_json()["ok"] is False
     assert cfg_path.read_bytes() == vorher
@@ -236,7 +236,7 @@ def test_editor_optional_darf_leer(editor_setup):
     for r in matrix["regeln"]:
         r["optional"] = []
     matrix["fallback"]["optional"] = []
-    resp = client.post("/display/wetter/regeln/speichern", json=matrix)
+    resp = client.post("/display/wetter/regeln", json=matrix)
     assert resp.status_code == 200
     assert resp.get_json()["ok"] is True
 
