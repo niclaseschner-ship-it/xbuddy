@@ -151,16 +151,49 @@ Familien-App.
 
 Der Display-Client teilt das Manifest-`display: fullscreen`- und das
 Wake-Lock+Fullscreen-Gesture-Muster aus PWA-2/PWA-3, kennt aber kein
-`sw.js` und keine `config.json` (PWA-1 / PWA-4) — er ist daher **nicht**
-durch die Controller-PWA-Konvention gedeckt (vgl. Hinweis in
-`conventions/controller-pwa.md` vor PWA-1). Die Icon-Pflicht steht daher
-hier in DC-11 direkt; PWA-2 selbst gilt nicht als bindende Konvention
-für den Display-Client, dient nur als Form-Muster.
+PWA-1-konformes Pflichten-Set (kein `config.json` (PWA-4), keine
+Asset-Liste/Pre-Cache) — er ist daher **nicht** durch die
+Controller-PWA-Konvention gedeckt (vgl. Hinweis in
+`conventions/controller-pwa.md` vor PWA-1). Die Icon-Pflicht steht hier
+in DC-11 direkt; einen **minimalen** `sw.js` zusammen mit `start_url`
+für den WebAPK-Install-Pfad nennt DC-16. PWA-2 selbst gilt nicht als
+bindende Konvention für den Display-Client, dient nur als Form-Muster.
 
 Begründung: Tablet-Browser zeigen sonst URL-Leiste, der Bildschirm geht
 nach ~30 s aus — das Display wirkt nicht wie ein Display.
 
 *Tickets:* #107
+
+### DC-16 — Minimaler Service-Worker für WebAPK-Install
+Damit der Display-Client auf Android-Chrome installierbar ist (echter
+„App installieren"-Pfad statt nur Homescreen-Verknüpfung), liefert er
+zusätzlich zu DC-11 zwei Bausteine:
+
+- **`sw.js`** — minimaler Service-Worker, beim Laden im Document
+  registriert. Cache-Strategie: **cache-first** für Manifest und Icons
+  (damit der Install-Trigger und ein kurzer Netz-Aussetzer den
+  White-Screen vermeiden), **pass-through** (network only) für alles
+  andere. **Kein** Pre-Caching der Display-Inhalte — die kommen aus
+  dem iframe-Routing (DC-3) und gehören nicht in den SW-Cache.
+- **`start_url`** im Manifest auf `./` — relativ zur Display-ID-URL,
+  damit der installierte WebAPK vom Vollbild-Einstieg startet und
+  nicht aus einem verkürzten Pfad.
+
+Das ist **nicht** das vollständige PWA-1-Set aus
+`conventions/controller-pwa.md` — Selbsttragend-Asset-Liste,
+`config.json`-Lade-Konvention (PWA-4) und Asset-Pre-Cache gelten
+nicht für den Display-Client. Er bleibt eine eigene PWA-Form mit
+reduziertem Pflichten-Set; DC-16 nennt genau die Mindestmenge, die
+Chrome für den WebAPK-Trigger fordert, und nicht mehr.
+
+Begründung: Familien-Test 2026-06-09 (nach #415-Deploy) hat gezeigt,
+dass die DC-11-Icon-Pflicht zwar das Manifest gültig macht, aber den
+echten Install-Pfad nicht freischaltet (kein „App installieren"-Button,
+nur „Zum Startbildschirm hinzufügen"). Ohne installierten WebAPK wirkt
+das Tablet wie ein Browser-Tab, nicht wie eine eigenständige
+Display-App.
+
+*Tickets:* #516
 
 ### DC-12 — Skalierungs-Adapter für den gerouteten Inhalt
 Der Display-Client lädt den gerouteten Inhalt (DC-3) nicht direkt in sein
