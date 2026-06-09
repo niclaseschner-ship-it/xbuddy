@@ -139,25 +139,24 @@ Der Display-Client läuft im Vollbild und hält den Bildschirm wach,
 solange er sichtbar ist — analog dem Controller (FIG-24/FIG-26).
 
 Das Manifest deklariert `display: fullscreen` (PWA-2); Wake-Lock und
-Fullscreen-Gesture folgen der Konvention `conventions/controller-pwa.md`
+Fullscreen-Gesture folgen der Konvention `conventions/pwa.md`
 **PWA-3**.
 
 Manifest-Icons (`icons[]`) sind Pflicht — Form folgt PWA-2
-(`conventions/controller-pwa.md`): mindestens je ein PNG in 192×192 und
+(`conventions/pwa.md`): mindestens je ein PNG in 192×192 und
 512×512, mindestens eins mit `purpose: "maskable"`. Sonst bietet
 Android-Chrome nur die Startbildschirm-Verknüpfung statt einen echten
 Install-Pfad (WebAPK), und das Display wirkt nicht wie eine eigenständige
 Familien-App.
 
-Der Display-Client teilt das Manifest-`display: fullscreen`- und das
-Wake-Lock+Fullscreen-Gesture-Muster aus PWA-2/PWA-3, kennt aber kein
-PWA-1-konformes Pflichten-Set (kein `config.json` (PWA-4), keine
-Asset-Liste/Pre-Cache) — er ist daher **nicht** durch die
-Controller-PWA-Konvention gedeckt (vgl. Hinweis in
-`conventions/controller-pwa.md` vor PWA-1). Die Icon-Pflicht steht hier
-in DC-11 direkt; einen **minimalen** `sw.js` zusammen mit `start_url`
-für den WebAPK-Install-Pfad nennt DC-16. PWA-2 selbst gilt nicht als
-bindende Konvention für den Display-Client, dient nur als Form-Muster.
+Der Display-Client ist Konsument der PWA-Konvention `conventions/pwa.md`
+(zweiter Konsument neben den Controller-PWAs) und erfüllt PWA-1, PWA-2
+und PWA-3. Bei PWA-4 greift der dort dokumentierte Klausel-Split:
+Selbstgenügsamkeit gilt strikt, eine `config.json` führt der
+Display-Client bewusst **nicht** — seinen Inhalt zieht er über den
+Router-Stream (DC-3/DC-4). Form des PWA-1-`sw.js` (cache-first für
+Manifest+Icons, pass-through für alles andere, kein Pre-Caching
+gerouteter Inhalte) und der `start_url`-Konvention nennt DC-16.
 
 Begründung: Tablet-Browser zeigen sonst URL-Leiste, der Bildschirm geht
 nach ~30 s aus — das Display wirkt nicht wie ein Display.
@@ -179,12 +178,14 @@ zusätzlich zu DC-11 zwei Bausteine:
   damit der installierte WebAPK vom Vollbild-Einstieg startet und
   nicht aus einem verkürzten Pfad.
 
-Das ist **nicht** das vollständige PWA-1-Set aus
-`conventions/controller-pwa.md` — Selbsttragend-Asset-Liste,
-`config.json`-Lade-Konvention (PWA-4) und Asset-Pre-Cache gelten
-nicht für den Display-Client. Er bleibt eine eigene PWA-Form mit
-reduziertem Pflichten-Set; DC-16 nennt genau die Mindestmenge, die
-Chrome für den WebAPK-Trigger fordert, und nicht mehr.
+DC-16 konkretisiert die PWA-1-`sw.js`-Pflicht aus `conventions/pwa.md`
+für den Display-Client: er übernimmt die generelle PWA-1-Form (sw.js +
+manifest + Icons im Verzeichnis), aber mit der konsumenten-spezifischen
+Cache-Strategie (cache-first nur für Manifest+Icons, pass-through für
+den Rest, **kein** Pre-Caching gerouteter Inhalte — die kommen aus
+DC-3). Der PWA-4-Klausel-Split (keine `config.json`, strikte
+Selbstgenügsamkeit) gilt; eine Controller-Config-Lade-Konvention
+braucht der Display-Client nicht.
 
 Begründung: Familien-Test 2026-06-09 (nach #415-Deploy) hat gezeigt,
 dass die DC-11-Icon-Pflicht zwar das Manifest gültig macht, aber den
