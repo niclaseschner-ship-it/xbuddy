@@ -644,9 +644,9 @@ Router/Plan, vgl. `conventions/logging.md`).
 
 Bot-Token (`ELTERNCHAT_BOT_TOKEN`) und Anbieter-API-Key
 (`ELTERNCHAT_PROVIDER_API_KEY`, optional) sind Geheimnisse und stehen
-in der EnvironmentFile des systemd-Service (`eltern-chat/.env`), nicht
-in `config.json` — der Loader berührt sie nie (CONFIG-3). Die Familien-
-Gruppen-Chat-ID darf in `config.json` stehen (kein Geheimnis) oder im
+in der EnvironmentFile des systemd-Service (`__XBUDDY_DATA__/eltern-chat/.env`,
+SVC-5), nicht in `config.json` — der Loader berührt sie nie (CONFIG-3). Die
+Familien-Gruppen-Chat-ID darf in `config.json` stehen (kein Geheimnis) oder im
 Onboarding-Speicher (`onboarding-store.json`, ONB-6).
 
 Auftrag #215 hat den FAA-/GAA-Schreibweg auf HTTP umgestellt (DCOMP-1):
