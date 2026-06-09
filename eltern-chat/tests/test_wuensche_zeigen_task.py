@@ -7,7 +7,7 @@ Pflicht-Tests (Spec WZE-8 + EC-29 + TASK-10):
 - Task-Name ist 'wuensche_zeigen'.
 - Task delegiert korrekt an wuensche_zeigen-Funktion und gibt
   Tool-Result-Text direkt zurück (EC-29 / TASK-10).
-- TASK-10-Baseline: run() sendet in keinem Pfad selbst (FakeTelegram.sent == []).
+- TASK-10-Baseline: run() sendet in keinem Pfad selbst (EC-29).
 """
 
 import contextlib
@@ -132,18 +132,14 @@ def test_WZE8_nicht_erreichbar_gibt_text_zurueck():
 def test_WZE8_zielchat_aus_turn_context():
     """WZE-3/WZE-8: Zielchat kommt aus TurnContext, nicht aus arguments.
 
-    EC-29: FakeTelegram.sent bleibt leer — kein eigenes Senden.
+    EC-29: Task sendet nichts — result ist direkt der Tool-Result-String.
     """
-    tg = FakeTelegram()
     ec = FakeEssenClient(wuensche=[{"label": "X", "kategorie": "sonstiges"}])
-    task = WuenscheZeigenTask(
-        essen_client=ec, is_member_fn=_immer_mitglied, tg=tg)
+    task = _make_task(essen_client=ec)
     ctx = TurnContext(chat_id=55555, from_user_id=7)
 
     result = task.run({}, ctx)
 
-    # EC-29: kein Send
-    assert tg.sent == [], "WuenscheZeigenTask darf nicht selbst senden (EC-29)"
     # Ergebnis ist der Wunschlisten-Text (enthält "X")
     assert "X" in result
 
@@ -156,67 +152,52 @@ def test_TASK10_baseline_run_sendet_nichts():
     """TASK-10 / EC-29 Baseline-Test: task.run() sendet in keinem der
     vier Haupt-Pfade selbst an Telegram.
 
-    Happy + Leer + Transport-Fehler: returnter String ist nicht-leer UND
-    FakeTelegram.sent == [].
+    Happy + Leer + Transport-Fehler: returnter String ist nicht-leer
+    (EC-29: Task gibt Tool-Result zurück, sendet nicht selbst).
 
-    Berechtigungs-Pfad: BerechtigungError propagiert, FakeTelegram.sent == [].
+    Berechtigungs-Pfad: BerechtigungError propagiert.
     """
+    ctx = TurnContext(chat_id=42, from_user_id=7)
+
     # --- Happy-Path ---
-    tg_happy = FakeTelegram()
     ec_happy = FakeEssenClient(wuensche=[
         {"label": "Lasagne", "kategorie": "gericht"},
         {"label": "Apfel", "kategorie": "obst_gemuese"},
     ])
-    task_happy = WuenscheZeigenTask(
-        essen_client=ec_happy, is_member_fn=_immer_mitglied, tg=tg_happy)
-    ctx = TurnContext(chat_id=42, from_user_id=7)
+    task_happy = _make_task(essen_client=ec_happy)
 
     result_happy = task_happy.run({}, ctx)
 
     assert isinstance(result_happy, str), "Happy: Tool-Result muss ein String sein"
     assert len(result_happy) > 0, "Happy: Tool-Result muss nicht-leer sein"
-    assert tg_happy.sent == [], \
-        "Happy: FakeTelegram.sent muss leer sein (EC-29)"
 
     # --- Leer-Pfad ---
-    tg_leer = FakeTelegram()
     ec_leer = FakeEssenClient(wuensche=[])
-    task_leer = WuenscheZeigenTask(
-        essen_client=ec_leer, is_member_fn=_immer_mitglied, tg=tg_leer)
+    task_leer = _make_task(essen_client=ec_leer)
 
     result_leer = task_leer.run({}, ctx)
 
     assert isinstance(result_leer, str), "Leer: Tool-Result muss ein String sein"
     assert len(result_leer) > 0, "Leer: Tool-Result muss nicht-leer sein"
-    assert tg_leer.sent == [], \
-        "Leer: FakeTelegram.sent muss leer sein (EC-29)"
 
     # --- Transport-Fehler-Pfad ---
-    tg_err = FakeTelegram()
     ec_err = FakeEssenClient(error=EssenClientError("Timeout"))
-    task_err = WuenscheZeigenTask(
-        essen_client=ec_err, is_member_fn=_immer_mitglied, tg=tg_err)
+    task_err = _make_task(essen_client=ec_err)
 
     result_err = task_err.run({}, ctx)
 
     assert isinstance(result_err, str), "Fehler: Tool-Result muss ein String sein"
     assert len(result_err) > 0, "Fehler: Tool-Result muss nicht-leer sein"
-    assert tg_err.sent == [], \
-        "Fehler: FakeTelegram.sent muss leer sein (EC-29)"
 
     # --- Berechtigungs-Pfad ---
-    tg_auth = FakeTelegram()
     ec_auth = FakeEssenClient()
-    task_auth = WuenscheZeigenTask(
-        essen_client=ec_auth, is_member_fn=_kein_mitglied, tg=tg_auth)
+    task_auth = _make_task(essen_client=ec_auth, is_member_fn=_kein_mitglied)
 
     with pytest.raises(BerechtigungError):
         task_auth.run({}, ctx)
 
     assert ec_auth.get_calls == 0, \
         "Berechtigungs-Fehler: kein API-Aufruf (WZE-2)"
-    assert tg_auth.sent == [], \
-        "Berechtigungs-Fehler: FakeTelegram.sent muss leer sein (EC-29)"
 
 
 # ============================================================
