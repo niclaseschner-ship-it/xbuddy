@@ -1,0 +1,25 @@
+{
+  "_comment": "Beispiel-Wunschliste (CONFIG-3, ESSEN-25). Die echte wuensche.json liegt neben dem Code und ist gitignored.",
+  "wuensche": [
+    {
+      "id": "kind:1",
+      "label": "Apfel",
+      "bild_ref": "2462",
+      "quelle": "kind",
+      "kategorie": "obst_gemuese",
+      "erstellt_am": "2026-06-09T10:00:00+02:00"
+    },
+    {
+      "id": "kind:2",
+      "label": "Milch",
+      "bild_ref": "2445",
+      "quelle": "kind",
+      "kategorie": "sonstiges",
+      "erstellt_am": "2026-06-09T10:05:00+02:00"
+    }
+  ],
+  "zaehler": {
+    "kind": 2,
+    "eltern": 0
+  }
+}

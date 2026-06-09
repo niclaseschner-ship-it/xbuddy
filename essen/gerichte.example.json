@@ -1,0 +1,12 @@
+{
+  "_comment": "Beispiel-Gerichte-Katalog (CONFIG-3, ESSEN-14/25). Die echte gerichte.json liegt neben dem Code und ist gitignored. Initialzustand: leer.",
+  "gerichte": [
+    {
+      "id": "1",
+      "label": "Pizza",
+      "bild_ref": "2527",
+      "kategorie": "gericht"
+    }
+  ],
+  "zaehler": 1
+}

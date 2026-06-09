@@ -1,0 +1,31 @@
+{
+  "_comment": "Repo-Default des Lebensmittel-Katalogs (ESSEN-12, CONFIG-3-analog). Committet. 20 Items: 8 obst_gemuese + 6 brotbelag + 6 sonstiges. ARASAAC-IDs verifiziert (OPEN-ESSEN-F).",
+  "kategorien": {
+    "obst_gemuese": [
+      { "id": "apfel",       "label": "Apfel",       "bild_ref": "2462"  },
+      { "id": "banane",      "label": "Banane",       "bild_ref": "2530"  },
+      { "id": "karotte",     "label": "Karotte",      "bild_ref": "2619"  },
+      { "id": "tomate",      "label": "Tomate",       "bild_ref": "2594"  },
+      { "id": "gurke",       "label": "Gurke",        "bild_ref": "2847"  },
+      { "id": "erdbeere",    "label": "Erdbeere",     "bild_ref": "2400"  },
+      { "id": "brokkoli",    "label": "Brokkoli",     "bild_ref": "23853" },
+      { "id": "birne",       "label": "Birne",        "bild_ref": "2561"  }
+    ],
+    "brotbelag": [
+      { "id": "brot",        "label": "Brot",         "bild_ref": "2494"  },
+      { "id": "kaese",       "label": "Käse",         "bild_ref": "2541"  },
+      { "id": "wurst",       "label": "Wurst",        "bild_ref": "3280"  },
+      { "id": "marmelade",   "label": "Marmelade",    "bild_ref": "2470"  },
+      { "id": "honig",       "label": "Honig",        "bild_ref": "2911"  },
+      { "id": "butter",      "label": "Butter",       "bild_ref": "2461"  }
+    ],
+    "sonstiges": [
+      { "id": "milch",       "label": "Milch",        "bild_ref": "2445"  },
+      { "id": "joghurt",     "label": "Joghurt",      "bild_ref": "2618"  },
+      { "id": "kakao",       "label": "Kakao",        "bild_ref": "4940"  },
+      { "id": "saft",        "label": "Saft",         "bild_ref": "11461" },
+      { "id": "keks",        "label": "Keks",         "bild_ref": "8312"  },
+      { "id": "pfannkuchen", "label": "Pfannkuchen",  "bild_ref": "37849" }
+    ]
+  }
+}
