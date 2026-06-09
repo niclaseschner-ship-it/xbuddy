@@ -16,7 +16,12 @@ import tempfile
 import time
 
 from confirm import PendingStore
-from fakes import FakeProvider, FakeTelegram, make_message
+from fakes import (
+    FakeProvider,
+    FakeTelegram,
+    make_message,
+    task_call_response,
+)
 from history import History
 from main import Context, handle_update
 from skills._multimodal import ExtractedTermin
@@ -447,3 +452,256 @@ def test_TAB12_worker_smoke_eingetragen():
     # PlanClient wurde mit den Items aufgerufen.
     assert len(plan.bulk_calls) == 1
     assert plan.bulk_calls[0][1] == [{"titel": "Sportfest", "beginn": "2026-09-15"}]
+
+
+# ============================================================
+#  #514 — propose→confirm: file_id persistiert bis zum execute-Turn
+# ============================================================
+
+def _ctx_with_real_tab_task(tmp_path, tg, provider, tab_sessions,
+                            family_group_chat_id="-100"):
+    """Context für den vollen propose→confirm-Pfad (#514).
+
+    Im Gegensatz zu `_ctx_with_tab_session` wird hier der echte
+    `TermineAusBildTask` im Catalog registriert (über `build_catalog` mit
+    allen AND-Guards), damit `handle_update` über den Provider den Task
+    aufruft und main.py die Proposal-Persistenz fährt.
+    """
+    catalog = build_catalog(
+        tg, "/instanz/rootCA.pem",
+        plan_origin_url="http://test-plan",
+        family_group_chat_id_getter=lambda: family_group_chat_id,
+        tab_sessions=tab_sessions,
+        provider_api_key="fake-key",
+        provider_name="claude",
+        provider_model="",
+    )
+    return Context(
+        tg=tg,
+        bot_username="mybot",
+        family_group_chat_id=family_group_chat_id,
+        context_depth=20,
+        provider=provider,
+        catalog=catalog,
+        history=History(str(tmp_path / "tab_propose_confirm.db")),
+        pending=PendingStore(),
+        tab_sessions=tab_sessions,
+    )
+
+
+def test_TAB12_propose_then_confirm_persists_file_id(tmp_path):
+    """#514 (Live-Bug 2026-06-09): User schickt Foto + Caption »termine«,
+    Bot bietet TAB-Proposal an, User antwortet »ja« — der Bot MUSS das Foto
+    herunterladen und die Multimodal-Pipeline starten, NICHT die »kein Bild«-
+    Quittung schicken.
+
+    Wurzel: `_execute_confirmed()` baute einen frischen TurnContext aus der
+    »ja«-Nachricht, die kein Foto trägt — `media_telegram_file_id` war None.
+    Fix: die Naht (file_id + medium_typ) wird beim Proposal in PendingProposal
+    festgehalten und beim execute zurückgespielt.
+    """
+    user_id = 42
+    tab_sessions = {}
+    tg = FakeTelegram(members={user_id: {"status": "member"}})
+
+    # Worker-Pfad: das Bild wird im Worker geladen — wir patchen download_file.
+    downloaded_file_ids = []
+
+    def _download(file_id):
+        downloaded_file_ids.append(file_id)
+        return b"fake-image-bytes"
+
+    tg.download_file = _download
+
+    # Stub den Multimodal-Provider und Plan-Client, damit der Worker NICHT auf
+    # den echten Anthropic-Anbieter geht. Wir holen den vom Catalog
+    # registrierten Task und tauschen seine internen Abhängigkeiten — sauberer
+    # als tief in build_catalog zu patchen.
+    provider = FakeProvider([
+        task_call_response("termine_aus_bild",
+                           arguments={"caption": "termine"},
+                           call_id="call-tab-1"),
+    ])
+    ctx = _ctx_with_real_tab_task(tmp_path, tg, provider, tab_sessions)
+    real_task = ctx.catalog.get("termine_aus_bild")
+    assert real_task is not None
+    # Multimodal/Plan durch Stubs ersetzen — der Worker ruft sie sonst echt an.
+    real_task._multimodal_provider = _StubMultimodal()
+    real_task._plan_client = _StubBulkPlan()
+    # is_member_fn vereinfacht — die Familien-Gruppen-ID des Tests deckt das ab.
+    real_task._is_member_fn = lambda uid: True
+
+    # SCHRITT 1 — propose-Turn: Foto + Caption »termine« kommen rein.
+    msg_propose = make_message(
+        "termine", chat_id=user_id, from_user_id=user_id,
+        chat_type="private", message_id=100,
+        photo_file_id="photo-file-id-xyz")
+    handle_update(msg_propose, ctx)
+
+    # Der Bot hat den Vorschlag vorgelegt — noch KEINE Session gestartet.
+    assert ctx.pending.open_count(user_id) == 1, (
+        "Nach dem propose-Turn muss genau 1 offener Vorschlag im Chat liegen")
+    assert tab_sessions == {}, (
+        "propose darf KEINEN Side-Effect haben (TASK-4): Worker erst nach »ja«")
+    # Der erste Bot-Text ist die Vorschlags-Nachricht.
+    proposal_text = tg.sent[0]["text"]
+    assert "Vorschlag" in proposal_text or "vorschlag" in proposal_text.lower()
+    proposal_msg_id = tg.sent[0]["message_id"]
+
+    # SCHRITT 2 — confirm-Turn: »ja« als Antwort auf die Vorschlags-Nachricht.
+    msg_confirm = make_message(
+        "ja", chat_id=user_id, from_user_id=user_id,
+        chat_type="private", message_id=101,
+        reply_to_message_id=proposal_msg_id)
+    handle_update(msg_confirm, ctx)
+
+    # AC1 (Bug-Fix): execute() MUSS den Worker gestartet haben — sessions
+    # enthält den TAB-Eintrag. Der Worker lädt asynchron; settle kurz.
+    deadline = time.monotonic() + 2.0
+    while time.monotonic() < deadline and user_id not in tab_sessions \
+            and not downloaded_file_ids:
+        time.sleep(0.01)
+
+    assert downloaded_file_ids == ["photo-file-id-xyz"], (
+        "Der Worker hätte das Foto mit der propose-Turn-file_id laden müssen "
+        "— stattdessen wurde download_file aufgerufen mit: %r" % downloaded_file_ids)
+
+    # AC1 (Negativ-Probe): die »kein Bild«-Quittung darf NICHT im Bot-Text sein.
+    bot_texts = [s["text"] for s in tg.sent]
+    for text in bot_texts:
+        assert "brauche ein Foto" not in text, (
+            "Bot hat fälschlich »kein Bild«-Quittung geschickt: %r — "
+            "die file_id wurde NICHT zum execute-Turn persistiert" % text)
+
+    # AC5 (Cleanup): nach confirm ist der Pending verbraucht.
+    assert ctx.pending.open_count(user_id) == 0, (
+        "Nach Bestätigung muss der Pending-Eintrag (mit der file_id) verbraucht sein"
+        " — sonst Memory-Leak / Re-Use bei nächster TAB-Session")
+
+    # Worker abräumen (er blockiert in next_message()). Settle und deliver.
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline and user_id not in tab_sessions:
+        time.sleep(0.01)
+    if user_id in tab_sessions:
+        session = tab_sessions[user_id]
+        session.deliver(TabInput(text="ok"))
+        session._finished.wait(timeout=3.0)
+
+
+def test_TAB12_propose_keine_session_kein_download(tmp_path):
+    """#514 / AC3 (TASK-4-Disziplin): propose() darf KEINEN Side-Effect haben.
+
+    Nach dem propose-Turn (Foto + Caption »termine«) darf KEIN Foto
+    heruntergeladen, KEIN Worker gestartet und KEIN Bulk-PUT gemacht worden
+    sein. Die Persistenz der file_id ist interner State-Halt im PendingProposal,
+    nicht Schreib-Effekt.
+    """
+    user_id = 42
+    tab_sessions = {}
+    tg = FakeTelegram(members={user_id: {"status": "member"}})
+
+    downloads = []
+    tg.download_file = lambda fid: downloads.append(fid) or b"x"
+
+    provider = FakeProvider([
+        task_call_response("termine_aus_bild",
+                           arguments={"caption": "termine"},
+                           call_id="call-tab-propose-only"),
+    ])
+    ctx = _ctx_with_real_tab_task(tmp_path, tg, provider, tab_sessions)
+    real_task = ctx.catalog.get("termine_aus_bild")
+    real_task._multimodal_provider = _StubMultimodal()
+    real_task._plan_client = _StubBulkPlan()
+    real_task._is_member_fn = lambda uid: True
+
+    msg_propose = make_message(
+        "termine", chat_id=user_id, from_user_id=user_id,
+        chat_type="private", message_id=100,
+        photo_file_id="photo-file-id-propose")
+    handle_update(msg_propose, ctx)
+
+    # AC3: kein Worker, kein Download, kein Bulk-PUT — nur Vorschlag.
+    assert tab_sessions == {}
+    assert downloads == []
+    assert real_task._plan_client.bulk_calls == []
+    # … aber der PendingProposal hält die file_id (sonst kann confirm sie
+    # nicht zurückspielen — AC4 / Lego-Falle TASK-7).
+    assert ctx.pending.open_count(user_id) == 1
+
+
+def test_TAB12_pending_proposal_traegt_file_id_und_medium_typ(tmp_path):
+    """#514: der gespeicherte PendingProposal trägt explizit die Naht-Felder.
+
+    Direkter Whitebox-Test der Persistenz-Schnittstelle (`confirm.PendingProposal`
+    + `main._run_agent`): die für TAB-12 load-bearing-Felder werden gesetzt.
+    """
+    user_id = 42
+    tab_sessions = {}
+    tg = FakeTelegram(members={user_id: {"status": "member"}})
+    provider = FakeProvider([
+        task_call_response("termine_aus_bild",
+                           arguments={"caption": "termine"},
+                           call_id="call-tab-x"),
+    ])
+    ctx = _ctx_with_real_tab_task(tmp_path, tg, provider, tab_sessions)
+    real_task = ctx.catalog.get("termine_aus_bild")
+    real_task._multimodal_provider = _StubMultimodal()
+    real_task._plan_client = _StubBulkPlan()
+    real_task._is_member_fn = lambda uid: True
+
+    msg = make_message(
+        "termine", chat_id=user_id, from_user_id=user_id,
+        chat_type="private", message_id=100,
+        photo_file_id="photo-naht-id")
+    handle_update(msg, ctx)
+
+    # Genau ein offener Pending — diese Naht-Felder müssen gesetzt sein.
+    pending = ctx.pending.take(user_id, reply_to_message_id=None)
+    assert pending is not None
+    assert pending.task_name == "termine_aus_bild"
+    assert pending.media_telegram_file_id == "photo-naht-id"
+    assert pending.medium_typ == "foto"
+
+
+def test_TAB12_confirm_ohne_propose_naht_keine_session(tmp_path):
+    """#514 / AC2 (Negativtest erhalten): Hätte irgendwie ein Pending OHNE Naht
+    den execute-Pfad erreicht (z. B. eine andere WriteTask, die kein Medium
+    erwartet), liefert TAB-12 die »kein Bild«-Quittung — kein Crash, keine
+    Phantom-Session.
+
+    Wir testen das, indem wir manuell ein Pending OHNE Naht-Felder einsetzen
+    und »ja« senden.
+    """
+    from confirm import PendingProposal
+    user_id = 42
+    tab_sessions = {}
+    tg = FakeTelegram(members={user_id: {"status": "member"}})
+    tg.download_file = lambda fid: b"should-not-happen"
+    provider = FakeProvider([])  # darf nicht aufgerufen werden
+    ctx = _ctx_with_real_tab_task(tmp_path, tg, provider, tab_sessions)
+    real_task = ctx.catalog.get("termine_aus_bild")
+    real_task._multimodal_provider = _StubMultimodal()
+    real_task._plan_client = _StubBulkPlan()
+    real_task._is_member_fn = lambda uid: True
+
+    # Pending ohne Naht-Felder (Default = None) — Simulation eines TAB-Pending,
+    # das aus einem propose-Turn ohne Foto stammt (sollte real nicht vorkommen,
+    # aber die Quittungs-Disziplin muss greifen).
+    ctx.pending.add(PendingProposal(
+        chat_id=user_id, proposal_message_id=999,
+        task_name="termine_aus_bild",
+        arguments={"caption": "termine"},
+        # media_telegram_file_id und medium_typ Default None
+    ))
+
+    msg_confirm = make_message(
+        "ja", chat_id=user_id, from_user_id=user_id,
+        chat_type="private", message_id=200,
+        reply_to_message_id=999)
+    handle_update(msg_confirm, ctx)
+
+    # Keine Session, kein Download — execute hat _QUITTUNG_KEIN_BILD geliefert.
+    assert tab_sessions == {}
+    assert any("brauche ein Foto" in s["text"] for s in tg.sent)
+    # Provider wurde NICHT angerufen — confirm-Pfad geht NICHT durch den Agenten.
+    assert provider.requests == []
