@@ -1,6 +1,6 @@
 // controller/_shared/config.js — PWA-4-konformer Config-Lader.
 // Wird von Controller-PWAs eingebunden, bevor der PWA-spezifische Code läuft.
-// Refs: conventions/controller-pwa.md PWA-4.
+// Refs: conventions/pwa.md PWA-4.
 //
 // Lade-Reihenfolge (PWA-4):
 //   Code-Defaults → config.json → URL-Parameter
