@@ -2,14 +2,23 @@
 
 Aufrufbare, trigger-agnostische Funktion (TER-1, E-TER-1): liest die Termine
 eines Zeitraums aus dem Familien-Kalender über die Plan-Buddy-Termin-
-Schnittstelle (PLAN-22, TER-5) und antwortet dem Familienmitglied im Chat.
+Schnittstelle (PLAN-22, TER-5) und returnt eine lesbare Zusammenfassung als
+Tool-Result-String (EC-29).
 
-Eingang: Telegram-Chat-ID (Zielchat), User-ID (Berechtigung TER-2), freier
-Anfragetext (Datums-Parsing TER-4). Ausgang: Ergebnis-Signal als String
-(„beantwortet", „abgelehnt", „leer", „nicht_erreichbar").
+**Eingang:**
+  - `chat_id`       — Telegram-Chat, in dem die Antwort landen wird (TER-3).
+  - `from_user_id`  — Telegram-User-ID des Aufrufers (Berechtigung TER-2).
+  - `anfrage_text`  — Natürlichsprachiger Anfragetext (Datums-Parsing TER-4).
+  - `plan_client`   — PlanClient-Instanz (TER-5, CLIENT-1-Naht).
+  - `is_member_fn`  — Callable `(user_id) -> bool` (TER-2, EC-2).
+  - `heute`         — Injektierbar für Tests (Default: date.today()).
 
-Die Funktion kennt ihren Aufrufer nicht (E-TER-1); der V1-Trigger ist die
-Eltern-Chat-Aufgabe `TermineErfragenTask` (TER-10, termine_erfragen_task.py).
+**Ergebnis (TER-1, EC-29):**
+  Die Funktion returnt in jedem Pfad einen User-tauglichen Antwort-Text
+  als String (Tool-Result). Das LLM postet — die Funktion sendet selbst
+  keine Telegram-Nachricht (EC-29).
+  Berechtigungs-Bruch (TER-2): wirft `BerechtigungError` — der Agent-Loop
+  schreibt den Fehler-Tool-Result-Block (agent.py Fehlerpfad).
 """
 
 import logging
@@ -21,11 +30,13 @@ from skills.plan_client import PlanClientError
 logger = logging.getLogger(__name__)
 
 
-# TER-1: Ergebnis-Signale der Funktion.
-SIGNAL_BEANTWORTET   = "beantwortet"
-SIGNAL_ABGELEHNT     = "abgelehnt"
-SIGNAL_LEER          = "leer"
-SIGNAL_NICHT_ERREICHBAR = "nicht_erreichbar"
+class BerechtigungError(Exception):
+    """Aufrufer ist kein autorisiertes Familienmitglied (TER-2, EC-29).
+
+    Der Agent-Loop fängt diese Exception und schreibt einen
+    Fehler-Tool-Result-Block; das LLM schweigt in der Antwort.
+    """
+
 
 # Interner Sentinel: parse_zeitraum gibt ihn zurück, wenn ein jahrloses
 # explizites Datum in der Vergangenheit liegt → gezielte Rückfrage nächstes Jahr.
@@ -41,6 +52,12 @@ _ANTWORT_NICHT_ERREICHBAR = (
 
 # TER-8: Antwort bei leerem Zeitraum.
 _ANTWORT_LEER = "Im angefragten Zeitraum stehen keine Termine an."
+
+# TER-4 EC-22: Rückfrage-Texte (returnt, nie gesendet — EC-29).
+_RUECKFRAGE_NAECHSTES_JAHR = "Du meinst nächstes Jahr, oder?"
+_RUECKFRAGE_ZEITRAUM = (
+    "Ich bin mir nicht sicher, welchen Zeitraum du meinst — meinst du "
+    "diese Woche, nächste Woche, oder die nächsten N Tage?")
 
 # TER-9: Tages-Kopf-Format (URL-7: deutsche Wochentage).
 _WOCHENTAGE = [
@@ -402,15 +419,15 @@ def _formatiere_event(ev):
 #  TER-1 — Haupt-Funktion
 # ============================================================
 
-def termine_erfragen(tg, chat_id, from_user_id, anfrage_text,
+def termine_erfragen(chat_id, from_user_id, anfrage_text,
                      plan_client, is_member_fn, heute=None):
-    """Termine erfragen — aufrufbare Funktion (TER-1).
+    """Termine erfragen — aufrufbare Funktion (TER-1, EC-29).
 
     Liest die Termine des aus `anfrage_text` ermittelten Zeitraums aus der
-    Plan-Buddy-Termin-Schnittstelle und postet eine lesbare Zusammenfassung
-    in `chat_id` (TER-3, TER-9). Ergebnis-Signal als String (TER-1).
+    Plan-Buddy-Termin-Schnittstelle und returnt eine lesbare Zusammenfassung
+    als Tool-Result-String (TER-3, TER-9). Die Funktion sendet selbst keine
+    Telegram-Nachricht — das LLM postet (EC-29).
 
-    `tg`             — Telegram-Kanal (send_message).
     `chat_id`        — Zielchat (Gruppe oder Privatchat, TER-3).
     `from_user_id`   — Telegram-User-ID des Aufrufers (Berechtigung TER-2).
     `anfrage_text`   — Natürlichsprachiger Anfragetext (Datums-Parsing TER-4).
@@ -418,37 +435,27 @@ def termine_erfragen(tg, chat_id, from_user_id, anfrage_text,
     `is_member_fn`   — Callable `(user_id) -> bool` (Live-Prüfung TER-2).
     `heute`          — Injektierbar für Tests (Default: date.today()).
 
-    Ergebnis-Signal:
-      „beantwortet"      — Antwort wurde in chat_id gepostet.
-      „abgelehnt"        — Aufrufer kein Familienmitglied (TER-2).
-      „leer"             — Keine Termine im Zeitraum (TER-8).
-      „nicht_erreichbar" — Plan-Buddy nicht da oder Fehler (TER-7).
+    Returnt User-tauglichen Antwort-Text als String (EC-29).
+    Wirft `BerechtigungError` bei TER-2-Verletzung.
     """
-    if chat_id is None:
-        # TER-1: kein Zielchat → Abbruch ohne Wirkung
-        logger.warning("termine_erfragen: chat_id fehlt — Abbruch ohne Wirkung")
-        return SIGNAL_ABGELEHNT
-
-    # TER-2: Live-Berechtigungsprüfung
+    # TER-2: Berechtigung — live geprüft, analog EC-2 / WZE-2.
     if from_user_id is None or not is_member_fn(from_user_id):
-        logger.info("termine_erfragen: User %s ist kein Familienmitglied — abgelehnt",
-                    from_user_id)
-        return SIGNAL_ABGELEHNT
+        logger.info("termine_erfragen: User %s ist kein Familienmitglied "
+                    "— abgelehnt (TER-2)", from_user_id)
+        raise BerechtigungError(
+            "Du bist kein Mitglied der Familien-Gruppe.")
 
     # TER-4: Datums-Vokabular auflösen
     zeitraum = parse_zeitraum(anfrage_text, heute=heute)
     if zeitraum is _RUECKFRAGE_VERGANGEN:
         # TER-4 EC-22: jahrloses Datum liegt in der Vergangenheit → gezielte
         # Rückfrage statt blind Folgejahr annehmen (#309).
-        tg.send_message(chat_id, "Du meinst nächstes Jahr, oder?")
-        return SIGNAL_BEANTWORTET
+        logger.info("termine_erfragen: Rückfrage Vergangenheit (TER-4, #309)")
+        return _RUECKFRAGE_NAECHSTES_JAHR
     if zeitraum is None:
         # TER-4 EC-22: mehrdeutig → Rückfrage
-        tg.send_message(
-            chat_id,
-            "Ich bin mir nicht sicher, welchen Zeitraum du meinst — meinst du "
-            "diese Woche, nächste Woche, oder die nächsten N Tage?")
-        return SIGNAL_BEANTWORTET
+        logger.info("termine_erfragen: Rückfrage mehrdeutig (TER-4, EC-22)")
+        return _RUECKFRAGE_ZEITRAUM
 
     start, tage = zeitraum
 
@@ -457,22 +464,19 @@ def termine_erfragen(tg, chat_id, from_user_id, anfrage_text,
         events = plan_client.termine(start.isoformat(), tage)
     except PlanClientError as e:
         logger.warning("termine_erfragen: Plan-Buddy nicht erreichbar — %s", e)
-        tg.send_message(chat_id, _ANTWORT_NICHT_ERREICHBAR)
-        return SIGNAL_NICHT_ERREICHBAR
+        return _ANTWORT_NICHT_ERREICHBAR
 
     # TER-8: leerer Zeitraum
     if not events:
-        tg.send_message(chat_id, _ANTWORT_LEER)
-        return SIGNAL_LEER
+        logger.info("termine_erfragen: leerer Zeitraum — TER-8")
+        return _ANTWORT_LEER
 
     # TER-9: tagesgruppierte Antwort aufbauen
     antwort = formatiere_termine(events, start, tage)
     if not antwort.strip():
         # Alle Events lagen außerhalb des Zeitraums (Randfall)
-        tg.send_message(chat_id, _ANTWORT_LEER)
-        return SIGNAL_LEER
+        return _ANTWORT_LEER
 
-    tg.send_message(chat_id, antwort)
-    logger.info("termine_erfragen: %d Events ab %s (%d Tage) an Chat %s",
+    logger.info("termine_erfragen: %d Events ab %s (%d Tage) für Chat %s",
                 len(events), start.isoformat(), tage, chat_id)
-    return SIGNAL_BEANTWORTET
+    return antwort
