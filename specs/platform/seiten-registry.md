@@ -220,6 +220,18 @@ verworfen wurde) und antwortet mit der vollen URL der passendsten View. Bei
 Mehrdeutigkeit: eine gezielte Rückfrage im EC-22-Muster („Meintest du die
 Wetter-heute-Anzeige oder den Garderoben-Editor?"), dann Auflösung.
 
+**Mechanik des Pro-View-KI-Matchings (verbindlich):** Der Skill ruft das LLM
+ein zweites Mal auf und übergibt als Inventar die Liste der Registry-Einträge
+mit `view_id` + `label` + `synonyme` + `zeigt` zusammen mit der ursprünglichen
+Eltern-Anfrage. Das LLM gibt **eine** `view_id` (oder eine Mehrdeutigkeits-
+Auswahl) zurück; der Skill bildet die URL daraus über `display_url_origin_heim`
++ `pfad` (SREG-4). **Kein lokales Substring-/Wortlisten-Match** auf
+`label`/`synonyme`/`zeigt` — das hatte in einer früheren Implementierung Verben
+der Anfrage („zeig") fehl-priorisiert (#488) und ist der explizite Bug, gegen
+den dieses Requirement gerichtet ist. Das LLM ist der einzige Ranker, weil
+`label`/`synonyme`/`zeigt` natürlichsprachliche Begriffsfelder sind, deren
+Bedeutung nur kontextuell zur Anfrage aufgelöst werden kann.
+
 *Wenn* der Elternteil opt-out signalisiert (z. B. „nein", „passt", „nichts")
 oder keine Folgeantwort innerhalb des EC-15-Depth-Fensters kommt, *dann*
 endet der Dialog still — kein wiederholtes Nachfragen.
