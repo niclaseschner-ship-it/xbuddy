@@ -50,7 +50,12 @@ class TermineErfragenTask(ReadTask):
                 "\"was steht diese Woche an?\", \"welche Termine haben wir "
                 "morgen?\", \"was ist nächste Woche?\", \"zeig mir unsere "
                 "Termine\" oder Ähnliches. Der Zeitraum wird als Text "
-                "übergeben (anfrage_text)."),
+                "übergeben (anfrage_text). "
+                "Den Termin-Listen-Block aus dem Tool-Result wortwörtlich in "
+                "deine Antwort übernehmen, keine Umsortierung, keine "
+                "ausgelassenen oder hinzugefügten Termine, keine Umformulierung "
+                "der Liste; kurze Einleitungs- oder Schluss-Bemerkungen sind "
+                "erlaubt."),
             parameters={
                 "type": "object",
                 "properties": {

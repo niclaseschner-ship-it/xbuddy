@@ -282,3 +282,86 @@ def test_TER10_guard_ohne_plan_origin_nicht_registriert():
     finally:
         with contextlib.suppress(OSError):
             os.unlink(ca)
+
+
+# ============================================================
+#  TER-9 / TASK-10 — Wortwörtlich-Klausel (EC-29, EC-12 Trust-Sicherheit)
+# ============================================================
+
+def test_TER9_description_traegt_wortwoertlich_klausel():
+    """TER-9 / TASK-10: Die description der TermineErfragenTask trägt die
+    Wortwörtlich-Klausel — damit das LLM den Termin-Listen-Block 1:1
+    übernimmt (keine Umsortierung, keine ausgelassenen Termine, EC-12).
+    """
+    task, _ = _make_task()
+    desc = task.description
+    assert "wortwörtlich" in desc.lower(), (
+        "description enthält nicht 'wortwörtlich' (TER-9/TASK-10)")
+    assert "tool-result" in desc.lower(), (
+        "description enthält nicht 'aus dem Tool-Result' (TER-9/TASK-10)")
+
+
+def test_TER9_e2e_listen_block_im_tool_result():
+    """TER-9 E2E: task.run() liefert den tagesgruppiert-formatierten
+    Listen-Block mit Wochentag-Köpfen und einer Zeile je Termin — 1:1
+    aus formatiere_termine(), kein LLM (EC-12 Anbieter-Sicherheit).
+
+    Die Ereignisse starten ab heute + 1 Tag, damit sie unabhängig vom
+    Wochentag des Testtags ins Default-7-Tage-Fenster fallen. `expected`
+    wird aus derselben `formatiere_termine`-Funktion berechnet, die auch
+    `task.run()` intern nutzt — so ist der Test date-unabhängig.
+    """
+    from datetime import date, timedelta
+
+    from skills.termine_erfragen import formatiere_termine
+
+    heute = date.today()
+    tag0 = heute                          # Default-Pfad: start = heute, tage = 7
+    tag1 = heute + timedelta(days=1)      # zweiter Tag im Fenster
+    tag2 = heute + timedelta(days=2)      # dritter Tag im Fenster
+
+    events = [
+        # Ganztägiger Termin am ersten Tag
+        {"id": "e1", "titel": "Zahnarzt",
+         "beginn": tag0.isoformat(), "ende": (tag0 + timedelta(days=1)).isoformat(),
+         "ganztags": True, "person": None},
+        # Termin mit Uhrzeit am zweiten Tag
+        {"id": "e2", "titel": "Sport",
+         "beginn": tag1.isoformat() + "T15:00:00",
+         "ende": tag1.isoformat() + "T16:00:00",
+         "ganztags": False, "person": None},
+        # Mehrtages-Spanne ab drittem Tag (id="e3", darf nur einmal erscheinen)
+        {"id": "e3", "titel": "Urlaub",
+         "beginn": tag2.isoformat(), "ende": (tag2 + timedelta(days=2)).isoformat(),
+         "ganztags": True, "person": None},
+    ]
+
+    pc = FakePlanClient(events=events)
+    task = TermineErfragenTask(plan_client=pc, is_member_fn=_immer_mitglied)
+    ctx = TurnContext(chat_id=42, from_user_id=7)
+
+    result = task.run({"anfrage_text": ""}, ctx)
+
+    # Das Ergebnis muss exakt dem aus formatiere_termine entsprechen
+    expected = formatiere_termine(events, tag0, 7)
+    assert result == expected, (
+        "Tool-Result weicht vom erwarteten Listen-Block ab — "
+        "TER-9 verlangt 1:1-Übernahme (keine Umsortierung, EC-12)")
+
+    # Wochentag-Köpfe im korrekten Format (*Wochentag, DD.MM.*)
+    # Wochentagnamen sind deterministisch aus expected ableitbar (TER-9/URL-7)
+    assert "*" in result, "Kein Tages-Kopf im Format *Wochentag, DD.MM.* gefunden"
+    assert "," in result, "Kein Komma in Tages-Kopf (Format *Wochentag, DD.MM.*)"
+    # Datum-Marker je Tag stehen im Kopf
+    assert "%02d.%02d." % (tag0.day, tag0.month) in result
+    assert "%02d.%02d." % (tag1.day, tag1.month) in result
+    assert "%02d.%02d." % (tag2.day, tag2.month) in result
+
+    # Termin-Titel stehen drin
+    assert "Zahnarzt" in result
+    assert "Sport" in result
+    assert "Urlaub" in result
+
+    # Mehrtages-Spanne erscheint genau einmal
+    assert result.count("Urlaub") == 1, (
+        "Mehrtages-Spanne darf nur einmal im Listen-Block erscheinen (TER-9/PLAN-14)")
