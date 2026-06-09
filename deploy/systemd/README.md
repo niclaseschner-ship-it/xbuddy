@@ -54,9 +54,10 @@ in `/etc/systemd/system/` ablegt, sieht sofort, was fehlt.
 ## Geheimnisse / `EnvironmentFile`
 
 `eltern-chat/eltern-chat.service` verweist auf eine `EnvironmentFile=`-
-Datei (`__XBUDDY_REPO__/eltern-chat/.env`), die der Bot beim Start einliest.
-Diese Datei **liegt nicht im Repo** — sie enthält Per-Instanz-Geheimnisse
-(mindestens den Telegram-Bot-Token, ggf. weitere Eltern-Chat-Konfiguration).
+Datei (`__XBUDDY_DATA__/eltern-chat/.env`), die der Bot beim Start einliest.
+Diese Datei **liegt nicht im Repo**, sondern unter der Per-Instanz-Datenwurzel
+(SVC-5) — sie enthält Per-Instanz-Geheimnisse (mindestens den Telegram-Bot-Token,
+ggf. weitere Eltern-Chat-Konfiguration).
 
 Beim Aufsetzen einer Instanz: die `.env` am genannten Pfad neu erzeugen, mit
 mindestens dem Telegram-Bot-Token (`TELEGRAM_BOT_TOKEN=…`). Das exakte Schema
@@ -70,7 +71,7 @@ Die übrigen Services haben keine `EnvironmentFile`-Abhängigkeit.
    Python-Abhängigkeiten in das Venv installieren, das `__XBUDDY_PYTHON__`
    nutzt.
 
-2. **`.env` für den Eltern-Chat-Bot** an `__XBUDDY_REPO__/eltern-chat/.env`
+2. **`.env` für den Eltern-Chat-Bot** an `__XBUDDY_DATA__/eltern-chat/.env`
    anlegen (siehe „Geheimnisse").
 
 3. **Vorlagen kopieren und Platzhalter ersetzen.** Beispiel mit `sed`:
