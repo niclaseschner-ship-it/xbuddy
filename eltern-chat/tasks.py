@@ -272,7 +272,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   display_url_origin_heim=None,
                   tab_sessions=None,
                   provider_name=None, provider_api_key=None,
-                  provider_model=None):
+                  provider_model=None,
+                  essen_origin_url=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
@@ -570,5 +571,59 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             seiten_client=_su_client,
             is_member_fn=_su_is_member,
             display_url_origin_heim=display_url_origin_heim))
+
+    # WZE-8 / #503: »Wünsche zeigen« als lesende Aufgabe (EC-9).
+    # AND-Guard: essen_origin_url UND family_group_chat_id_getter müssen
+    # gesetzt sein — fehlt eine, erscheint die Aufgabe NICHT im Katalog
+    # (WZE-8). essen_origin_url: Essens-Buddy-Schnittstelle für die
+    # Wunschliste (GET /api/v1/essen/wuensche, ESSEN-15).
+    if essen_origin_url is not None and family_group_chat_id_getter is not None:
+        from skills.essen_client import EssenClient
+        from skills.wuensche_zeigen_task import WuenscheZeigenTask
+        _wze_essen_client = EssenClient(origin_url=essen_origin_url)
+        _wze_fgcid_getter = family_group_chat_id_getter
+        _wze_tg = tg
+        def _wze_is_member(user_id):
+            fgcid = _wze_fgcid_getter()
+            if not fgcid:
+                return False
+            member = _wze_tg.get_chat_member(fgcid, user_id)
+            return member is not None and member.get("status") in (
+                "creator", "administrator", "member")
+        catalog.register(WuenscheZeigenTask(
+            tg=tg,
+            essen_client=_wze_essen_client,
+            is_member_fn=_wze_is_member))
+
+    # GAN-7 / #503: »Gericht anlegen« als synchrone schreibende Aufgabe
+    # (EC-10, E-GAN-2 propose→confirm). AND-Guard: essen_origin_url UND
+    # icon_origin_url UND family_group_chat_id_getter müssen ALLE gesetzt
+    # sein — fehlt eine, erscheint die Aufgabe NICHT im Katalog (GAN-7):
+    # - essen_origin_url: Schreib-Naht für die Gerichte-API (ESSEN-19).
+    # - icon_origin_url:  Lese-Naht für die ICONS-7-Stichwort-Suche (GAN-4).
+    #   Kein eigener ARASAAC-Bezug (E-GAN-3) — die Suche läuft zentral.
+    # - family_group_chat_id_getter: Live-Berechtigung (GAN-2, EC-2).
+    if essen_origin_url is not None and icon_origin_url is not None \
+            and family_group_chat_id_getter is not None:
+        from skills.essen_client import EssenClient as _GanEssenClient
+        from skills.gericht_anlegen_task import GerichtAnlegenTask
+        from skills.icon_client import IconClient as _GanIconClient
+        _gan_essen_client = _GanEssenClient(origin_url=essen_origin_url)
+        _gan_icon_client = _GanIconClient(origin_url=icon_origin_url)
+        _gan_fgcid_getter = family_group_chat_id_getter
+        _gan_tg = tg
+        def _gan_is_member(user_id):
+            fgcid = _gan_fgcid_getter()
+            if not fgcid:
+                return False
+            member = _gan_tg.get_chat_member(fgcid, user_id)
+            return member is not None and member.get("status") in (
+                "creator", "administrator", "member")
+        catalog.register(GerichtAnlegenTask(
+            tg=tg,
+            essen_client=_gan_essen_client,
+            icon_client=_gan_icon_client,
+            family_group_chat_id_getter=family_group_chat_id_getter,
+            is_member_fn=_gan_is_member))
 
     return catalog
