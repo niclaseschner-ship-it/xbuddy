@@ -3,5 +3,8 @@
 # dokumentiert.
 #
 # Controller-Instanz-Config (FIG-23) — pro Instanz separat verwaltet.
+# Der `**/`-Glob deckt auch Per-Instanz-Configs der Controller-Apps mit
+# (z. B. `controller/app-panel/config.json`) — gewollt, weil das
+# Controller-Skelett mehrere App-Slots in einem Verzeichnis hält.
 # Format: controller/**/config.example.json
 **/config.json
