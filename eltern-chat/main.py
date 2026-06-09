@@ -96,8 +96,9 @@ class Context:
 # SESS-5: Session-Sorten-Registry — modul-weit, einmal definiert.
 # Jede Sorte benennt ihren Context-Slot und ihren make_input-Helfer.
 # handle_update iteriert darüber, statt pro Sorte einen eigenen if-Block
-# zu tragen. Reihenfolge entspricht der früheren if-Kette (FAA→GAA→KAV→
-# TES→PAA) und darf nicht ohne Routing-Check geändert werden.
+# zu tragen. Reihenfolge entspricht der früheren if-Kette und darf nicht
+# ohne Routing-Check geändert werden (alle in _SESSION_SORTS registrierten
+# Sorten — aktuell FAA→GAA→KAV→TES→PAA→TAB).
 #
 # Die make_input-Callables werden einmal beim Modul-Load gebunden —
 # die skills-Module liegen zu diesem Zeitpunkt bereits auf sys.path
@@ -132,10 +133,10 @@ def handle_update(update, ctx):
         return
 
     # SESS-5: Privatchat-Session-Routing — generische Iteration über _SESSION_SORTS.
-    # Jede registrierte Session-Sorte (FAA-12/GAA-5/KAV-3/TES-3/PAA-6) beansprucht
-    # den Privatchat ihres Inhabers, solange sie läuft. handle_update liest die
-    # Session-Map per getattr(ctx, entry.ctx_attr) — dieselbe Map-Referenz, die der
-    # Worker befüllt (Lego-Falle-Sicherung, PAA-6/TASK-7). Reihenfolge: wie bisher.
+    # Alle in _SESSION_SORTS registrierten Sorten beanspruchen den Privatchat
+    # ihres Inhabers, solange sie laufen. handle_update liest die Session-Map
+    # per getattr(ctx, entry.ctx_attr) — dieselbe Map-Referenz, die der Worker
+    # befüllt (Lego-Falle-Sicherung, TASK-7). Reihenfolge: wie bisher.
     if msg.chat_type == "private":
         for entry in _SESSION_SORTS:
             sessions = getattr(ctx, entry.ctx_attr, None)
