@@ -57,3 +57,18 @@ Migration ist additiv-rückrollbar: Daten per `cp` (nicht `mv`) nach
 (heute `router`/routing.json, `tools/zugangsdaten`, `routine`/routine_store.json)
 brauchen zuerst einen kleinen Override-Patch — bis dahin bleiben ihre Daten im
 Checkout (Etappe 1b).
+
+**Repo-Form des Datenpfads ist der Platzhalter `__XBUDDY_DATA__`** (verbindlich,
+#429). In Service-Vorlagen unter `<komponente>/<komponente>.service` und in der
+Installer-Doku unter `deploy/systemd/README.md` steht für den SVC-5-Datenpfad
+**dieser Platzhalter**, nicht der absolute Wert; der Installer ersetzt ihn beim
+Ausrollen auf die kanonische Auflösung `/home/buddy/xbuddy-data`
+(`deploy/systemd/README.md` Platzhalter-Tabelle bleibt die Quelle der Wert-
+Auflösung). So hat eine neue Service-Vorlage einen klar benannten Anker: jede
+Stelle, die SVC-5-Daten anspricht, schreibt `__XBUDDY_DATA__/<komponente>/…` —
+**nicht** den absoluten Pfad direkt. **Verworfen:** eine eigene Sub-ID „SVC-6
+Platzhalter-Konvention" für alle `__XBUDDY_*__`-Platzhalter — Vorrats-Konvention
+(CLAUDE.md §6), die anderen Platzhalter (User/Home/Repo/Python) tragen ihre
+Bedeutung bereits in der Installer-README ohne dass eine Convention-ID nötig
+ist; nur die SVC-5-Datenwurzel braucht einen eigenen Convention-Anker, weil sie
+das Spec-Verhalten („Daten außerhalb des Checkouts") trägt.
