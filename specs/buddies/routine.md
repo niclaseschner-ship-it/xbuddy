@@ -212,15 +212,16 @@ Kiosk-Lesbarkeit aus Distanz hat Vorrang. (Diese vertikale Achse mit
 alternierenden Event-Seiten löst die ältere horizontale variant-f-Orientierung
 des Zeitstrahls und die Label-Staffelung AC-FIX3 ab — Layout-Rework aus dem
 1920×1080-Display-Test, #335.)
-`aufstehen` kommt direkt aus dem Config-Schlüssel `aufstehzeit` (Default `07:00`)
-— **nicht** von anziehen abgeleitet (AC-FIX1, #335). Die proportionale
+`aufstehen` kommt direkt aus dem Config-Schlüssel `aufstehzeit` (Default-Schlüssel
+`DATA_DEFAULTS['aufstehzeit']`, aktuell `'07:00'`) — **nicht** von anziehen
+abgeleitet (AC-FIX1, #335). Die proportionale
 Vertikal-Position von `anziehen` (`anziehen_pct` = (anziehen−aufstehen)/(losgehen−aufstehen))
 liefert die Uhr-Logik; aufstehen=0 %/losgehen=100 % sind die Fenster-Ränder.
 
-**Fehlender Tag in der `aufstehzeit`-Map → Default `07:00` (AC-FIX4, #364):**
+**Fehlender Tag in der `aufstehzeit`-Map → Default `DATA_DEFAULTS['aufstehzeit']` (aktuell `'07:00'`) (AC-FIX4, #364):**
 Ist `aufstehzeit` als Wochentag→Zeit-Map gegeben (ROUTINE-12) und der **heutige
 Tag fehlt** (z. B. leeres Wochenende), fällt `aufstehen` auf den
-Pro-Schlüssel-**Default `07:00`** zurück — man steht immer auf, die Map liefert
+Pro-Schlüssel-**Default `DATA_DEFAULTS['aufstehzeit']`** zurück — man steht immer auf, die Map liefert
 für `aufstehen` nie `None`. Die View rendert dann **wie an einem normalen
 Wochentag** (am Wochenende ruft ohnehin niemand die Routine auf; tut es doch
 jemand, ist ein Wochentag-Bild harmlos). Das vermeidet den `TypeError` aus

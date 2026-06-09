@@ -94,15 +94,19 @@ def _parse_hhmm(s):
 
 
 def berechne_zeiten(abfahrtszeit_cfg, anzieh_vorlauf_min, zeitzone, tag=None,
-                    aufstehzeit_cfg="07:00"):
+                    aufstehzeit_cfg=None):
     """Berechnet die UhrZeiten für den gegebenen Tag (ROUTINE-9, AC-FIX1, #335).
 
     anzieh_vorlauf_min kommt aus der Config — keine Code-Konstante (E-ROUTINE-4).
-    aufstehzeit_cfg: 'HH:MM' oder Wochentag-Dict; Default '07:00' (AC-FIX1, #335).
-      Direkt aus Config, NICHT mehr von anziehen abgeleitet.
+    aufstehzeit_cfg: 'HH:MM' oder Wochentag-Dict; None → DATA_DEFAULTS['aufstehzeit']
+      (AC-FIX1, #335). Direkt aus Config, NICHT mehr von anziehen abgeleitet.
     tag: date-Objekt; None → heute in der Familien-Zeitzone.
     Gibt None zurück wenn kein Schultag (Wochentag-Dict ohne Eintrag).
     """
+    # Sentinel: None → DATA_DEFAULTS['aufstehzeit'] (CLAUDE.md §6, keine Code-Konstante)
+    if aufstehzeit_cfg is None:
+        aufstehzeit_cfg = config_mod.DATA_DEFAULTS["aufstehzeit"]
+
     tz = ZoneInfo(zeitzone)
     if tag is None:
         tag = datetime.now(tz).date()
@@ -115,8 +119,8 @@ def berechne_zeiten(abfahrtszeit_cfg, anzieh_vorlauf_min, zeitzone, tag=None,
     # Aufstehen: kommt direkt aus Config-Schlüssel aufstehzeit (AC-FIX1, #335).
     # Gleiche Parse-Funktion wie abfahrtszeit — Wochentag-Dict-fähig.
     # AC-FIX4 (#364, ROUTINE-9): fehlt der heutige Tag in einer Map, fällt
-    # aufstehen auf Default "07:00" zurück — nie None (vermeidet TypeError
-    # in baue_uhr_view bei leeren Wochenend-Maps + Fixwert-abfahrtszeit).
+    # aufstehen auf DATA_DEFAULTS['aufstehzeit'] zurück — nie None (vermeidet
+    # TypeError in baue_uhr_view bei leeren Wochenend-Maps + Fixwert-abfahrtszeit).
     aufstehen = _parse_abfahrtszeit(aufstehzeit_cfg, tag, zeitzone)
     if aufstehen is None:
         h, m = _parse_hhmm(config_mod.DATA_DEFAULTS["aufstehzeit"])
