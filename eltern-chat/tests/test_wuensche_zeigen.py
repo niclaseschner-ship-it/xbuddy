@@ -23,10 +23,10 @@ Pflicht-Tests (Spec WZE-8):
 import unittest.mock as mock
 
 import pytest
+from skills._errors import BerechtigungError
 from skills.essen_client import EssenClientError
 from skills.wuensche_zeigen import (
     KATEGORIEN_REIHENFOLGE,
-    BerechtigungError,
     formatiere_wuensche,
     wuensche_zeigen,
 )

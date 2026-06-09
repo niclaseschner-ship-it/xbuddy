@@ -212,7 +212,16 @@ konkrete Lint-/Test-Implementierung ist nicht Bestandteil dieser Konvention
 — sie wandert mit der Migration in PR-1 (`wuensche_zeigen`) ein und wird
 dort als Baseline für alle Folge-Migrationen festgehalten.
 
-*Tickets:* #551
+**Berechtigungs-Bruch im Agent-Loop.** Stellt eine Katalog-Aufgabe fest,
+dass der Aufrufer kein Familien-Mitglied ist (EC-2, EC-29), wirft sie eine
+`BerechtigungError` aus dem geteilten Modul `eltern-chat/skills/_errors.py`
+— nicht aus einer eigenen Klasse pro Skill. Der Agent-Loop fängt die
+Exception als `is_error=True`-Tool-Result-Block; das LLM formuliert daraus
+eine ehrliche Antwort. Eine geteilte Klasse statt mehrerer lokaler vermeidet
+Code-Duplikation (CLAUDE.md §6) und hält das Pattern für Folge-Migrationen
+klar verankert.
+
+*Tickets:* #551, #564
 
 ---
 

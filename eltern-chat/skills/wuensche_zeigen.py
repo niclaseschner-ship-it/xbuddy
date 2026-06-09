@@ -20,17 +20,10 @@ kategorie-gruppierte Zusammenfassung als Tool-Result-String zurück (EC-29).
 
 import logging
 
+from skills._errors import BerechtigungError
 from skills.essen_client import EssenClientError
 
 logger = logging.getLogger(__name__)
-
-
-class BerechtigungError(Exception):
-    """Aufrufer ist kein autorisiertes Familienmitglied (WZE-2, EC-29).
-
-    Der Agent-Loop fängt diese Exception und schreibt einen
-    Fehler-Tool-Result-Block; das LLM schweigt in der Antwort.
-    """
 
 
 # E-WZE-2: feste Kategorie-Reihenfolge (Gerichte zuerst — zentrale

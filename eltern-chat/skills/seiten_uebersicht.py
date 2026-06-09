@@ -42,17 +42,10 @@ Eingang: optionaler `suchbegriff` (für Opt-in-Pfad), optionale `aktion`.
 
 import logging
 
+from skills._errors import BerechtigungError
 from skills.seiten_client import SeitenClientError
 
 logger = logging.getLogger(__name__)
-
-
-class BerechtigungError(Exception):
-    """Aufrufer ist kein autorisiertes Familienmitglied (SREG-6, EC-29).
-
-    Der Agent-Loop fängt diese Exception und schreibt einen
-    Fehler-Tool-Result-Block; das LLM schweigt in der Antwort.
-    """
 
 
 # Aktions-Werte für den Opt-in-Pfad (SREG-5b Weg 2, #488).
