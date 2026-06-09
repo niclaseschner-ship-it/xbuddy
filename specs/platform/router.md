@@ -569,6 +569,35 @@ kein eigener statischer nginx-Block mehr.
 
 *Tickets:* #135
 
+### ROU-33 — GET /display/&lt;id&gt;/&lt;asset&gt; — Auslieferung der Display-Client-Assets
+
+`GET /display/<display_id>/<asset>` liefert statische Assets des Display-Clients
+(PWA-Manifest und Icons) aus dem `display-client/`-Verzeichnis aus. Nötig, weil
+`index.html` (ROU-20) relative Pfade enthält (`./manifest.json`, `./icon-*.png`),
+die der Browser relativ zur id-URL auflöst — ohne diese Route laufen alle
+Asset-Anfragen auf 404 und DC-11 (installierbare PWA) ist nicht erfüllbar.
+
+Auslieferung analog ROU-23 und ROU-26: `send_from_directory` mit explizitem
+Content-Type (`image/png` für `*.png`, `application/manifest+json` für
+`manifest.json`) und Defense-in-Depth-Path-Traversal-Schutz (`realpath`-Check
+gegen das Wurzelverzeichnis `display-client/`).
+
+Acceptance-Kriterien:
+
+| Pfad | Antwort |
+|---|---|
+| `GET /display/<id>/manifest.json` | 200, `application/manifest+json`, `icons[]` ≥ 3 Einträge, ≥ 1 mit `purpose: maskable` |
+| `GET /display/<id>/icon-192.png` | 200, `image/png` |
+| `GET /display/<id>/icon-512.png` | 200, `image/png` |
+| `GET /display/<id>/icon-maskable-512.png` | 200, `image/png` |
+| Path-Traversal (z. B. `/display/<id>/../../router/main.py`) | 404 — kein Dateizugriff jenseits `display-client/` |
+| Nicht existierendes Asset | 404 |
+
+Die Eltern-Route `GET /display/<id>` (ROU-20) bleibt unverändert — Flask
+differenziert beide Routen anhand des zweiten Pfadsegments.
+
+*Tickets:* #415
+
 ### ROU-31 — GET /api/v1/icons/suche — Stichwort-Suche über den lokalen Icon-Cache
 
 `GET /api/v1/icons/suche?q=<stichwort>&max=<n>` durchsucht den lokalen
