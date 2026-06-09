@@ -71,12 +71,10 @@ Alle drei Felder **fehlen** bei Nicht-Trägern (analog `icons` — kein
 `null`, kein leerer String; das Feld ist schlicht nicht da).
 """
 
-import contextlib
 import glob
 import json
 import logging
 import os
-import tempfile
 
 from tools import views_manifest
 
@@ -195,8 +193,13 @@ def _views_mit_per_view_resilienz(pfad, app_slug):
     (z. B. wegen eines einzelnen defekten View-Eintrags), wird das JSON selbst
     geparst. Datei-/Parse-/Struktur-Fehler (kein JSON, kein `views`-Schlüssel)
     führen zum Überspringen des ganzen Manifests — dort ist keine sinnvolle
-    View-Teilmenge rettbar. Bei einer validen `views`-Liste wird jede View einzeln
-    geprüft (je ein temporäres Einzel-View-Manifest → `views_manifest.load()`):
+    View-Teilmenge rettbar.
+
+    Bei einer validen `views`-Liste gilt zuerst Doppel-Slug-Schutz (SREG-13):
+    enthält das Manifest doppelte Slugs, ist das Manifest als Ganzes kaputt
+    (Datei-Skip > View-Skip, SREG-13 Eskalations-Hierarchie) — kein View-
+    Teilrettungs-Versuch. Dann wird jede View einzeln per
+    `views_manifest.validate_eintrag()` in-memory geprüft (kein Tempfile):
     defekte Views werden übersprungen (Warnung), valide Views bleiben im Inventar.
 
     Liefert `(gültige_views, ganzes_manifest_kaputt)`. Wenn `ganzes_manifest_kaputt`
@@ -221,25 +224,35 @@ def _views_mit_per_view_resilienz(pfad, app_slug):
     if not isinstance(roh_views, list):
         return [], True
 
-    # Pro View: Einzel-Manifest in tmp schreiben und validieren
+    # Doppel-Slug-Schutz (SREG-13 Eskalations-Hierarchie: Datei-Skip > View-Skip).
+    # Zwei Views mit gleichem Slug im selben Manifest sind ein Manifest-Inhaltsfehler
+    # (Autor-Fehler, kein per-View-rettbarer Einzel-Defekt) — ganzes Manifest kaputt.
+    slugs = [roh.get("slug") for roh in roh_views if isinstance(roh, dict)]
+    gesehene = set()
+    for slug in slugs:
+        if slug is not None and slug in gesehene:
+            logger.warning(
+                "Manifest übersprungen (%s, app=%s): doppelter slug %r —"
+                " Doppel-Slug ist Manifest-Inhaltsfehler, kein per-View-Skip"
+                " (SREG-13/DCOMP-3)", pfad, app_slug, slug)
+            return [], True
+        if slug is not None:
+            gesehene.add(slug)
+
+    # Pro View: in-memory-Validierung via views_manifest.validate_eintrag (T388-S2,
+    # kein Tempfile). views_manifest ist die EINE Stelle für Manifest-Validierung
+    # (CLAUDE.md §6); der Aggregator macht kein eigenes JSON-Schema.
     gueltige = []
     for roh in roh_views:
         slug_hint = roh.get("slug") if isinstance(roh, dict) else None
         try:
-            with tempfile.NamedTemporaryFile(
-                    mode="w", suffix=".json", encoding="utf-8", delete=False) as tmp:
-                tmp_pfad = tmp.name
-                json.dump({"views": [roh]}, tmp)
-            validated = views_manifest.load(tmp_pfad)
-            gueltige.extend(validated)
+            eintrag = views_manifest.validate_eintrag(roh)
+            gueltige.append(eintrag)
         except views_manifest.ManifestError as e:
             logger.warning(
                 "View übersprungen (app=%s, slug=%r, %s): %s"
                 " — übriges Manifest bleibt vollständig (SREG-3/DCOMP-3)",
                 app_slug, slug_hint, pfad, e)
-        finally:
-            with contextlib.suppress(OSError):
-                os.unlink(tmp_pfad)
     return gueltige, False
 
 

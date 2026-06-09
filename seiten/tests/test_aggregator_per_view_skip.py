@@ -219,3 +219,55 @@ def test_gueltige_view_erzeugt_keine_warning(tmp_path, caplog):
     ]
     assert not skip_warnings, (
         "Valides Manifest darf keine Überspringen-Warnung erzeugen: %r" % skip_warnings)
+
+
+# ============================================================
+#  AC4 — Doppel-Slug-Schutz: ganzes Manifest fällt aus
+# ============================================================
+
+def test_doppel_slug_ueberspringt_ganzes_manifest(tmp_path, caplog):
+    """AC4 (T388-S2): Manifest mit doppeltem Slug → ganzes Manifest wird übersprungen.
+
+    Doppel-Slug ist ein Manifest-Inhaltsfehler (zwei Views im selben Dokument
+    tragen denselben Identifier). Nach SREG-13 Eskalations-Hierarchie gilt
+    Datei-Skip > View-Skip: das ganze Manifest fällt aus, nicht nur eine der
+    doppelten Views. Das verhindert, dass der Kaputt-Pfad stille Duplikate ins
+    Inventar bringt (Watchdog T388-S1-W Befund).
+    """
+    root = str(tmp_path)
+    # Manifest mit zwei Views, gleichem Slug — einer ist kaputt (pfad fehlt),
+    # was load() scheitern lässt und den Kaputt-Pfad auslöst.
+    # Im Kaputt-Pfad entdeckt der Aggregator den Doppel-Slug vor View-Iteration.
+    view_kaputt = {
+        "slug": "woche",
+        # pfad fehlt → ManifestError in _validate_eintrag → load() schlägt fehl
+        "label": "Wochenplan kaputt",
+        "synonyme": ["woche"],
+        "zeigt": "Kaputt.",
+        "zielgruppe": "kind",
+    }
+    _schreibe_manifest(root, "plan", [
+        _view("woche", "/display/plan/woche"),  # gültig, aber Doppel-Slug
+        view_kaputt,                            # kaputt + gleicher Slug
+    ])
+    # Zweites Manifest bleibt intakt — Doppel-Slug darf kein globales Inventar-Problem sein
+    _schreibe_manifest(root, "wetter", [
+        _view("heute", "/display/wetter/heute"),
+    ])
+
+    with caplog.at_level(logging.WARNING, logger="seiten.aggregator"):
+        eintraege = aggregator.manifest_eintraege(root)
+
+    keys = {e["key"] for e in eintraege}
+
+    # plan-Manifest komplett weg (Doppel-Slug → Datei-Skip, SREG-13)
+    assert "plan-woche" not in keys, (
+        "Doppel-Slug muss das ganze Manifest überspringen (T388-S2/SREG-13)")
+    # Anderes Manifest unberührt
+    assert "wetter-heute" in keys, (
+        "Doppel-Slug in plan-Manifest darf wetter-Manifest nicht beeinflussen")
+
+    # Warnung muss geloggt worden sein
+    warn_messages = [r.message for r in caplog.records if r.levelname == "WARNING"]
+    assert any("plan" in m for m in warn_messages), (
+        "Doppel-Slug-Skip muss eine WARNING-Meldung mit app-Slug erzeugen")
