@@ -1,9 +1,15 @@
-"""Tests für die CA-Verteilung — CAV-1 … CAV-7 (Refs #39, #63, #95).
+"""Tests für die CA-Verteilung — CAV-1 … CAV-7, EC-29 (Refs #39, #63, #95, #551).
 
 Geprüft wird das Code-Verhalten der CA-Verteilung: die aufrufbare Funktion
 selbst (ca_verteilung) und ihr Trigger als EC-8-Aufgabe (`ca_task`,
 CAV-6). Telegram ist durch die kontrollierte Doppelung `FakeTelegram` ersetzt
 — die Tests laufen reproduzierbar und ohne Netz (CAV-7, analog EC-17/ONB-9).
+
+EC-29 / TASK-10 (CAV-4): Datei-Anhang-Sonderfall.
+- tg.send_document: bleibt (Datei sendet der Skill — technische Notwendigkeit).
+- tg.send_message / tg.sent: leer in allen Pfaden — Text-Teil ist Tool-Result.
+- verteile_ca() returnt CaVerteilungResult.tool_result_text mit OS-Anleitung.
+- CaVerteilungTask.run() gibt tool_result_text direkt zurück (kein _QUITTUNG).
 """
 
 import inspect
@@ -60,14 +66,20 @@ def _ctx(tmp_path, tg, ca_pem_path, provider=None):
 # ============================================================
 
 def test_CAV_1_is_a_callable_function_returning_a_result(tmp_path):
-    """verteile_ca ist eine aufrufbare Funktion und liefert ein Ergebnis."""
+    """verteile_ca ist eine aufrufbare Funktion und liefert ein Ergebnis.
+
+    EC-29: result.tool_result_text enthält den Text-Teil (OS-Anleitung);
+    guide_message_id existiert nicht mehr — der Text geht nicht via send_message.
+    """
     tg = FakeTelegram()
     result = verteile_ca(tg, chat_id=42,
                          ca_pem_path=_write_ca(tmp_path), geraet="android")
     assert isinstance(result, CaVerteilungResult)
     assert result.chat_id == 42
     assert result.document_message_id is not None
-    assert result.guide_message_id is not None
+    # EC-29: Text-Teil ist Tool-Result, nicht message_id
+    assert isinstance(result.tool_result_text, str)
+    assert len(result.tool_result_text) > 0
 
 
 def test_CAV_1_function_does_not_know_its_caller(tmp_path):
@@ -231,13 +243,21 @@ def test_CAV_5_install_guide_addresses_known_stumbling_blocks(tmp_path):
 
 def test_CAV_5_install_guide_needs_no_ai_provider(tmp_path):
     """Die Anleitung ist hart-codiert: derselbe Aufruf liefert deterministisch
-    denselben Text — kein KI-Anbieter im Spiel."""
+    denselben Text — kein KI-Anbieter im Spiel.
+
+    EC-29: Der Text ist jetzt im Tool-Result (result.tool_result_text), nicht
+    in tg.sent — kein send_message-Aufruf.
+    """
     tg1, tg2 = FakeTelegram(), FakeTelegram()
-    verteile_ca(tg1, chat_id=1, ca_pem_path=_write_ca(tmp_path), geraet="ios")
-    verteile_ca(tg2, chat_id=2, ca_pem_path=_write_ca(tmp_path), geraet="ios")
-    assert tg1.sent[0]["text"] == tg2.sent[0]["text"]
+    r1 = verteile_ca(tg1, chat_id=1, ca_pem_path=_write_ca(tmp_path), geraet="ios")
+    r2 = verteile_ca(tg2, chat_id=2, ca_pem_path=_write_ca(tmp_path), geraet="ios")
+    # EC-29: kein send_message
+    assert tg1.sent == []
+    assert tg2.sent == []
+    # Deterministisch und providerfrei
+    assert r1.tool_result_text == r2.tool_result_text
     # Die Anleitung ist eine feste Modul-Konstante, kein generierter Text.
-    assert tg1.sent[0]["text"] == ca_verteilung._GUIDE_IOS
+    assert r1.tool_result_text == ca_verteilung._GUIDE_IOS
 
 
 # ------------------------------------------------------------
@@ -286,11 +306,17 @@ def test_CAV_5_unknown_geraet_is_rejected(tmp_path):
 def test_CAV_5_only_the_matching_block_is_delivered(
         tmp_path, geraet, foreign_markers, own_marker):
     """#95: pro Aufruf bekommt die Familie nur den passenden OS-Block,
-    nicht alle vier auf einmal."""
+    nicht alle vier auf einmal.
+
+    EC-29: Die Anleitung ist im Tool-Result (result.tool_result_text),
+    kein send_message — tg.sent bleibt leer.
+    """
     tg = FakeTelegram()
-    verteile_ca(tg, chat_id=42, ca_pem_path=_write_ca(tmp_path), geraet=geraet)
-    assert len(tg.sent) == 1
-    guide = tg.sent[0]["text"]
+    result = verteile_ca(tg, chat_id=42, ca_pem_path=_write_ca(tmp_path), geraet=geraet)
+    # EC-29: kein send_message
+    assert tg.sent == [], "CAV-5: verteile_ca sendet keine Nachricht (EC-29)"
+    # Anleitungstext ist im Tool-Result
+    guide = result.tool_result_text
     assert own_marker in guide, (
         "%s-Anleitung enthält den eigenen Marker nicht" % geraet)
     for foreign in foreign_markers:
@@ -332,28 +358,38 @@ def test_CAV_6_task_requires_geraet_as_parameter():
 
 
 def test_CAV_6_task_delivers_certificate_and_guide_itself(tmp_path):
-    """F3: die Aufgabe liefert Zertifikat und Anleitung selbst über das
-    injizierte tg aus und gibt nur eine kurze Quittung zurück."""
+    """F3: die Aufgabe liefert das Zertifikat als Datei und gibt die
+    OS-Anleitung als Tool-Result-String zurück (EC-29).
+
+    EC-29: kein send_message — tg.sent leer. Anleitungstext im return-Wert.
+    """
     tg = FakeTelegram()
     task = CaVerteilungTask(tg, _write_ca(tmp_path))
-    receipt = task.run(arguments={"geraet": "android"},
-                       turn_context=TurnContext(chat_id=42))
+    tool_result = task.run(arguments={"geraet": "android"},
+                           turn_context=TurnContext(chat_id=42))
     assert len(tg.documents) == 1
     assert tg.documents[0]["file_name"] == "xbuddy-rootCA.crt"
-    assert "Android" in tg.sent[0]["text"]
-    assert "Zertifikat" in receipt
+    # EC-29: kein send_message
+    assert tg.sent == [], "CAV-6-Task sendet keine Nachricht (EC-29)"
+    # Anleitungstext ist im Tool-Result
+    assert "Android" in tool_result
+    assert isinstance(tool_result, str) and len(tool_result) > 0
 
 
 def test_CAV_6_task_uses_chat_id_from_turn_context_not_arguments(tmp_path):
     """F3: der Zielchat kommt aus dem turn_context — nie aus den vom Modell
-    gelieferten arguments. Das Modell bestimmt nicht, an wen ausgeliefert wird."""
+    gelieferten arguments. Das Modell bestimmt nicht, an wen ausgeliefert wird.
+
+    EC-29: nur das Dokument geht via Telegram; kein send_message.
+    """
     tg = FakeTelegram()
     task = CaVerteilungTask(tg, _write_ca(tmp_path))
     # Das Modell „schlägt" einen abweichenden chat_id vor — er wird ignoriert.
     task.run(arguments={"chat_id": 999, "geraet": "android"},
              turn_context=TurnContext(chat_id=42))
     assert tg.documents[0]["chat_id"] == 42
-    assert tg.sent[0]["chat_id"] == 42
+    # EC-29: kein send_message — nur das Dokument geht an Telegram
+    assert tg.sent == [], "CAV-6-Task sendet keine Nachricht (EC-29)"
 
 
 def test_CAV_6_task_without_geraet_raises_and_delivers_nothing(tmp_path):
@@ -385,7 +421,11 @@ def test_CAV_6_task_failure_propagates_to_the_agent_loop(tmp_path):
 def test_CAV_6_natural_language_request_delivers_via_the_agent(tmp_path):
     """End-to-End: eine natürlichsprachige Bitte mit angegebenem Gerät
     erreicht den Agenten, der die Katalog-Aufgabe aufruft — Auslieferung
-    ohne Tippbefehl (#63), nur der iOS-Abschnitt geht raus (#95)."""
+    ohne Tippbefehl (#63), nur der iOS-Abschnitt geht raus (#95).
+
+    EC-29: Das Dokument sendet die Aufgabe selbst; der Anleitungstext geht
+    als Tool-Result ans LLM, das ihn als Bot-Nachricht postet.
+    """
     tg = FakeTelegram(members=_members(7))
     provider = FakeProvider([
         task_call_response("ca_verteilen", arguments={"geraet": "ios"}),
@@ -394,13 +434,15 @@ def test_CAV_6_natural_language_request_delivers_via_the_agent(tmp_path):
     ctx = _ctx(tmp_path, tg, _write_ca(tmp_path), provider=provider)
     handle_update(make_message("schick mir bitte das Zertifikat für mein iPhone",
                                from_user_id=7, chat_id=42), ctx)
-    # Die Aufgabe hat selbst ausgeliefert ...
+    # Die Aufgabe hat das Dokument direkt ausgeliefert ...
     assert len(tg.documents) == 1
     assert tg.documents[0]["chat_id"] == 42
-    # ... mit nur dem iOS-Abschnitt (nicht alle vier OS).
-    delivered_guides = [s for s in tg.sent
-                        if s.get("text") == ca_verteilung._GUIDE_IOS]
-    assert len(delivered_guides) == 1
+    # ... EC-29: keine direkte send_message-Auslieferung der Anleitung
+    # (die Anleitung kommt als Tool-Result zum LLM, das sie als Antwort postet)
+    guide_via_send_message = [s for s in tg.sent
+                              if s.get("text") == ca_verteilung._GUIDE_IOS]
+    assert len(guide_via_send_message) == 0, (
+        "EC-29: Anleitung darf nicht direkt via send_message gehen")
     # ... und der Agent hat zum Schluss geantwortet.
     assert tg.sent[-1]["text"] == "Ich habe dir das Zertifikat geschickt."
 
@@ -411,9 +453,75 @@ def test_CAV_6_natural_language_request_delivers_via_the_agent(tmp_path):
 
 def test_CAV_7_delivery_runs_without_network(tmp_path):
     """CAV-7: die CA-Verteilung ist mit der Telegram-Doppelung vollständig
-    ohne Netz prüfbar — dieser Lauf belegt es, kein Socket wird geöffnet."""
+    ohne Netz prüfbar — dieser Lauf belegt es, kein Socket wird geöffnet.
+
+    EC-29: tg.sent leer — kein send_message. Dokument + Tool-Result-Text
+    sind das vollständige Ergebnis.
+    """
     tg = FakeTelegram()
     result = verteile_ca(tg, chat_id=42, ca_pem_path=_write_ca(tmp_path),
                          geraet="android")
     assert isinstance(result, CaVerteilungResult)
-    assert len(tg.documents) == 1 and len(tg.sent) == 1
+    assert len(tg.documents) == 1
+    assert tg.sent == [], "CAV-7: kein send_message (EC-29)"
+    assert isinstance(result.tool_result_text, str) and len(result.tool_result_text) > 0
+
+
+# ============================================================
+#  EC-29 / TASK-10 — Datei-Anhang-Sonderfall: Datei vom Skill, Text vom LLM
+# ============================================================
+
+def test_EC29_verteile_ca_sendet_keine_message(tmp_path):
+    """EC-29 / CAV-4: verteile_ca ruft in keinem Pfad tg.send_message auf.
+
+    Datei-Anhang-Sonderfall: tg.send_document BLEIBT (technische Notwendigkeit),
+    tg.send_message ist raus. Text-Teil ist Tool-Result.
+    """
+    tg = FakeTelegram()
+    verteile_ca(tg, chat_id=42, ca_pem_path=_write_ca(tmp_path), geraet="windows")
+    assert tg.sent == [], "EC-29: verteile_ca darf kein send_message aufrufen"
+    assert len(tg.documents) == 1, "CAV-4: send_document muss aufgerufen werden"
+
+
+@pytest.mark.parametrize("geraet", ["windows", "android", "ios", "macos"])
+def test_EC29_tool_result_text_enthaelt_os_anleitung(tmp_path, geraet):
+    """EC-29 / CAV-5: tool_result_text enthält den gerätespezifischen
+    Anleitungstext — für jedes OS.
+
+    CAV-5 Trust: LLM übernimmt diesen Text wortwörtlich in seine Antwort.
+    """
+    tg = FakeTelegram()
+    result = verteile_ca(tg, chat_id=42, ca_pem_path=_write_ca(tmp_path), geraet=geraet)
+    assert isinstance(result.tool_result_text, str), (
+        "EC-29: tool_result_text muss ein String sein")
+    assert len(result.tool_result_text) > 0, (
+        "EC-29: tool_result_text darf nicht leer sein")
+    # CAV-5: der gerätespezifische Guide muss im Tool-Result stehen
+    expected_guide = ca_verteilung._GUIDES_BY_GERAET[geraet]
+    assert result.tool_result_text == expected_guide, (
+        "EC-29/CAV-5: tool_result_text muss exakt der %s-Guide sein" % geraet)
+
+
+def test_TASK10_baseline_run_sendet_keine_message(tmp_path):
+    """TASK-10 / EC-29 Baseline-Test (Datei-Anhang-Sonderfall):
+    CaVerteilungTask.run() sendet in keinem Pfad eine Telegram-Nachricht.
+
+    Datei-Send ist erlaubt (tg.documents darf Einträge haben).
+    tg.sent muss leer bleiben — das LLM postet den Text.
+    Tool-Result ist nicht-leer (Anleitungstext).
+    """
+    tg = FakeTelegram()
+    task = CaVerteilungTask(tg, _write_ca(tmp_path))
+    ctx = TurnContext(chat_id=42)
+
+    tool_result = task.run(arguments={"geraet": "ios"}, turn_context=ctx)
+
+    # Datei-Send bleibt (CAV-4)
+    assert len(tg.documents) == 1, "TASK-10: send_document muss aufgerufen werden"
+    # Kein send_message (EC-29)
+    assert tg.sent == [], "TASK-10: run() darf kein send_message aufrufen"
+    # Tool-Result enthält OS-Anleitung (CAV-5)
+    assert isinstance(tool_result, str) and len(tool_result) > 0, (
+        "TASK-10: run() muss nicht-leeren Tool-Result-Text zurückgeben")
+    assert "iOS" in tool_result or "iPadOS" in tool_result, (
+        "TASK-10: Tool-Result muss iOS-Anleitungstext enthalten")
