@@ -503,7 +503,12 @@ AC-FIX1 (fehlende `aufstehzeit` → Default `07:00` + Warnung, Prozess startet; 
 persistiert in `routine.json` und ist per Reload-on-Read ohne Neustart sichtbar;
 ungültiges Zeitformat/ungültiger Wochentags-Key → 4xx, **kein** Teil-Write;
 atomares Schreiben Temp+Rename und Last-Known-Good bei kaputtem Read,
-DCOMP-3/DCOMP-4).
+DCOMP-3/DCOMP-4) · **ROUTINE-14 Items** (#354: `POST /api/v1/routine/items`
+persistiert `default` in `routine.json` und `einmalig` im Tages-State,
+Reload-on-Read sichtbar; `DELETE /api/v1/routine/items/<id>` entfernt
+atomar; `PUT /api/v1/routine/items` ersetzt die geordnete `default`-Liste
+idempotent; ROUTINE-19 max-8-Klemme + Label/Piktogramm-Validierung → 4xx;
+`einmalig`-Auto-Verfall am Tageswechsel ROUTINE-6).
 
 *Tickets:* #335
 
