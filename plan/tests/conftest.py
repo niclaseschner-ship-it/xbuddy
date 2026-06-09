@@ -37,17 +37,38 @@ class FakeTransport:
     Google-v3-Format). `creds` schaltet die Credentials-Verfügbarkeit
     (PLAN-20). Schreibvorgänge werden in `calls` protokolliert, sodass Tests
     prüfen können, welche Operation ausgelöst wurde (PLAN-18).
+
+    Für PLAN-33-Tests (Bulk-Endpoint):
+    `rate_limit_on_calls` — Menge von Insert-Call-Indizes (0-basiert bezogen
+    auf insert_event / insert_event_with_bearer), für die CalendarRateLimited
+    geworfen wird. `rate_limit_retry_after` — optionaler Retry-After-Wert.
+    `auth_fail_on_calls` — Menge von Insert-Call-Indizes, für die
+    CalendarAuthFailed geworfen wird.
+    `fail_all_inserts` — wenn True, wirft jeder Insert CalendarUnavailable.
     """
 
-    def __init__(self, raw_events=None, creds=True, fail=False):
+    def __init__(self, raw_events=None, creds=True, fail=False,
+                 rate_limit_on_calls=None, rate_limit_retry_after=None,
+                 auth_fail_on_calls=None, fail_all_inserts=False):
         self.raw_events = raw_events or []
         self.creds = creds
         self.fail = fail
+        self.fail_all_inserts = fail_all_inserts
+        self.rate_limit_on_calls = set(rate_limit_on_calls or [])
+        self.rate_limit_retry_after = rate_limit_retry_after
+        self.auth_fail_on_calls = set(auth_fail_on_calls or [])
         self.calls = []
         self._next_id = 1
+        self._insert_call_count = 0  # zählt nur insert-Aufrufe (inkl. with_bearer)
 
     def credentials_available(self):
         return self.creds
+
+    def access_token(self):
+        """Liefert einen Fake-Bearer-Token (PLAN-33.4 Token-Cache-Naht)."""
+        if not self.creds:
+            raise kalender_mod.CalendarUnavailable("FakeTransport: keine Credentials")
+        return "fake-bearer-token"
 
     def list_events(self, time_min, time_max):
         self.calls.append(("list", time_min, time_max))
@@ -55,10 +76,19 @@ class FakeTransport:
             raise kalender_mod.CalendarUnavailable("FakeTransport: simulierter Ausfall")
         return list(self.raw_events)
 
-    def insert_event(self, raw_event):
-        self.calls.append(("insert", raw_event))
-        if self.fail:
+    def _do_insert(self, raw_event):
+        """Gemeinsame Insert-Logik für insert_event und insert_event_with_bearer."""
+        idx = self._insert_call_count
+        self._insert_call_count += 1
+        if self.fail or self.fail_all_inserts:
             raise kalender_mod.CalendarUnavailable("FakeTransport: simulierter Ausfall")
+        if idx in self.rate_limit_on_calls:
+            raise kalender_mod.CalendarRateLimited(
+                "FakeTransport: Rate-Limit simuliert",
+                retry_after=self.rate_limit_retry_after)
+        if idx in self.auth_fail_on_calls:
+            raise kalender_mod.CalendarAuthFailed(
+                "FakeTransport: Auth-Fehler simuliert")
         eid = "neu-%d" % self._next_id
         self._next_id += 1
         stored = {"id": eid, **raw_event}
@@ -66,6 +96,15 @@ class FakeTransport:
         # So ist ein echter PUT→GET-Round-Trip ohne pre-seeded Fixture möglich (AC5).
         self.raw_events.append(stored)
         return stored
+
+    def insert_event(self, raw_event):
+        self.calls.append(("insert", raw_event))
+        return self._do_insert(raw_event)
+
+    def insert_event_with_bearer(self, raw_event, bearer):
+        """Insert mit vorher geeholtem Bearer-Token (PLAN-33.4 Token-Cache)."""
+        self.calls.append(("insert_with_bearer", raw_event, bearer))
+        return self._do_insert(raw_event)
 
     def patch_event(self, event_id, raw_patch):
         self.calls.append(("patch", event_id, raw_patch))

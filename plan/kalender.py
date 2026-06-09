@@ -47,6 +47,29 @@ class CalendarUnavailable(Exception):
     """
 
 
+class CalendarRateLimited(CalendarUnavailable):
+    """Google hat 429 oder 403 (Rate-Limit) geliefert (PLAN-33.6).
+
+    Ist eine Unterklasse von CalendarUnavailable, damit bestehende
+    `except CalendarUnavailable`-Blöcke (PLAN-20/PLAN-22) sich nicht ändern.
+    Erweiterter Kontext: `retry_after` trägt den Wert des Retry-After-Headers
+    in Sekunden (float) oder None wenn kein Header gesetzt war.
+    """
+
+    def __init__(self, msg, retry_after=None):
+        super().__init__(msg)
+        self.retry_after = retry_after  # float | None
+
+
+class CalendarAuthFailed(CalendarUnavailable):
+    """OAuth-Token-Refresh oder Calendar-Auth ist fehlgeschlagen (PLAN-33.2,
+    error_code: calendar_auth).
+
+    Ist eine Unterklasse von CalendarUnavailable — bestehende Handler
+    fangen sie automatisch mit.
+    """
+
+
 # ============================================================
 #  Normalisiertes Event-Modell (PLAN-17)
 # ============================================================
@@ -142,9 +165,13 @@ class GoogleTransport:
             raise CalendarUnavailable("OAuth-Antwort ohne access_token")
         return body["access_token"]
 
-    def _request(self, method, path, query=None, body=None):
-        """Authentifizierter Calendar-v3-Request gegen den konfigurierten Kalender."""
-        token = self._access_token()
+    def _request(self, method, path, query=None, body=None, bearer=None):
+        """Authentifizierter Calendar-v3-Request gegen den konfigurierten Kalender.
+
+        `bearer` ist ein vorher geholter Access-Token — wird er übergeben,
+        wird kein neues OAuth-Refresh gemacht (Token-Cache, PLAN-33.4).
+        """
+        token = bearer if bearer is not None else self._access_token()
         url = "%s/%s%s" % (_GOOGLE_CAL_BASE,
                            urllib.parse.quote(self._kalender_id), path)
         if query:
@@ -158,6 +185,25 @@ class GoogleTransport:
             with urllib.request.urlopen(req, timeout=self._timeout) as resp:
                 raw = resp.read()
             return json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as e:
+            # 429 und 403 (Rate-Limit) → CalendarRateLimited (PLAN-33.6)
+            if e.code in (429, 403):
+                retry_after = None
+                try:
+                    ra = e.headers.get("Retry-After")
+                    if ra is not None:
+                        retry_after = float(ra)
+                except (TypeError, ValueError):
+                    pass
+                raise CalendarRateLimited(
+                    "Calendar-Request %s %s: HTTP %s" % (method, path, e.code),
+                    retry_after=retry_after)
+            # 401 → CalendarAuthFailed (PLAN-33.2, error_code: calendar_auth)
+            if e.code == 401:
+                raise CalendarAuthFailed(
+                    "Calendar-Request %s %s: HTTP 401 Unauthorized" % (method, path))
+            raise CalendarUnavailable(
+                "Calendar-Request %s %s: HTTP %s" % (method, path, e.code))
         except Exception as e:  # jeder Netzfehler → PLAN-20
             raise CalendarUnavailable("Calendar-Request %s %s: %s" % (method, path, e))
 
@@ -180,6 +226,23 @@ class GoogleTransport:
     def insert_event(self, raw_event):
         """Legt ein Event an (PLAN-18). Liefert das Google-Roh-Item."""
         return self._request("POST", "/events", body=raw_event)
+
+    def insert_event_with_bearer(self, raw_event, bearer):
+        """Legt ein Event an mit einem vorher geholten Bearer-Token (PLAN-33.4
+        Token-Cache: ein Refresh für alle N Bulk-Inserts).
+
+        Wirft CalendarRateLimited, CalendarAuthFailed oder CalendarUnavailable.
+        """
+        return self._request("POST", "/events", body=raw_event, bearer=bearer)
+
+    def access_token(self):
+        """Öffentliche Schnittstelle zum OAuth-Token-Refresh (PLAN-33.4).
+
+        Der Bulk-Endpoint holt einmal einen Token und reicht ihn an alle
+        Inserts weiter — `2N → N+1` Google-Requests.
+        Wirft CalendarUnavailable (oder CalendarAuthFailed) bei Fehler.
+        """
+        return self._access_token()
 
     def patch_event(self, event_id, raw_patch):
         """Ändert ein Event über seine `id` (PLAN-18). Liefert das Roh-Item."""

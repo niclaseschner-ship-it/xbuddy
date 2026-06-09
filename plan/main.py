@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Plan-Buddy-App — HTTP-Schnittstellen + Entrypoint (PLAN-1 … PLAN-29).
+"""Plan-Buddy-App — HTTP-Schnittstellen + Entrypoint (PLAN-1 … PLAN-33).
 
 Siehe specs/buddies/plan.md. Der Plan-Buddy ist die XBuddy-App mit dem
 Buddy-Slug `plan` (PLAN-1). Er besitzt seine Daten (Verantwortlichkeiten,
 plan.db) und seine Funktion (Kalender-Anbindung) und stellt beides über
-Schnittstellen bereit (PLAN-21/22/23).
+Schnittstellen bereit (PLAN-21/22/23/33).
 
 Endpunkte:
   GET /display/plan/woche               — View `woche`, Lese-Kind (PLAN-2/3/21)
@@ -13,6 +13,7 @@ Endpunkte:
   PUT /api/v1/plan/zuteilung            — Erwachsenen-Slot zuweisen (PLAN-7/8)
   PUT|DELETE /api/v1/plan/aktivitaet    — Kind-Aktivität setzen/löschen (PLAN-11)
   GET|PUT /api/v1/plan/termine          — Termin-Schnittstelle für Apps (PLAN-22)
+  POST /api/v1/plan/termine/bulk        — Bulk-Termin-Schnittstelle (PLAN-33)
   PUT /api/v1/plan/admin/kalender       — kalender_id setzen (PLAN-32, loopback)
 
 Service-Topologie wie familie/main.py: eine schlanke eigenständige Flask-App,
@@ -20,12 +21,16 @@ ein Geschwister von router/ und familie/.
 """
 
 import argparse
+import collections
 import contextlib
+import hashlib
 import json
 import logging
 import os
+import random
 import sys
 import tempfile
+import time
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -209,6 +214,80 @@ def _db():
     test_DCOMP_2_db_datei_wechsel_wirksam_ohne_restart (Closes #233).
     """
     return db_mod.connect(_current_config().db_datei)
+
+
+# ============================================================
+#  Idempotenz-Cache für Bulk-Endpoint (PLAN-33.5)
+# ============================================================
+#
+# In-Memory-LRU-Map: bis zu 256 Einträge, TTL 15 Minuten.
+# Schlüssel: (request_id, items_hash). Wert: gespeichertes Antwort-Dict.
+# Gespeicherter Eintrag: {"result": <antwort>, "ts": <monotonic-timestamp>}.
+#
+# PLAN-33.5: gleicher request_id + gleicher items_hash → gespeicherte Antwort
+# zurück; gleicher request_id + anderer hash → HTTP 409.
+
+_IDEM_MAX = 256
+_IDEM_TTL = 15 * 60  # 15 Minuten in Sekunden
+
+# OrderedDict als LRU-Backing: ältester Eintrag steht zuerst.
+_idem_cache: "collections.OrderedDict[str, dict]" = collections.OrderedDict()
+
+
+def _idem_set(request_id: str, items_hash: str, result: dict) -> None:
+    """Speichert ein Ergebnis unter (request_id, items_hash)."""
+    key = request_id + ":" + items_hash
+    _idem_cache[key] = {"result": result, "ts": time.monotonic()}
+    _idem_cache.move_to_end(key)
+    while len(_idem_cache) > _IDEM_MAX:
+        _idem_cache.popitem(last=False)
+
+
+def _idem_get(request_id: str, items_hash: str):
+    """Liefert das gespeicherte Ergebnis oder None (abgelaufene Einträge gelten
+    als nicht vorhanden). Gibt das Ergebnis-Dict zurück oder None."""
+    key = request_id + ":" + items_hash
+    entry = _idem_cache.get(key)
+    if entry is None:
+        return None
+    if time.monotonic() - entry["ts"] > _IDEM_TTL:
+        # TTL abgelaufen: wie nicht vorhanden.
+        _idem_cache.pop(key, None)
+        return None
+    # Hit: nach LRU ans Ende.
+    _idem_cache.move_to_end(key)
+    return entry["result"]
+
+
+def _idem_has_collision(request_id: str, items_hash: str) -> bool:
+    """True, wenn request_id bekannt ist aber mit anderem items_hash (409)."""
+    for key, entry in list(_idem_cache.items()):
+        if time.monotonic() - entry["ts"] > _IDEM_TTL:
+            continue
+        stored_rid, stored_hash = key.split(":", 1)
+        if stored_rid == request_id and stored_hash != items_hash:
+            return True
+    return False
+
+
+def _items_hash(items: list) -> str:
+    """SHA-256 über die kanonisierte (JSON-sorted-keys) items-Liste (PLAN-33.5)."""
+    canonical = json.dumps(items, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+_UUID4_RE = None
+
+
+def _is_uuid4(value: str) -> bool:
+    """Prüft, ob `value` die UUIDv4-Form hat (PLAN-33.5, 8-4-4-4-12 hex)."""
+    global _UUID4_RE
+    if _UUID4_RE is None:
+        import re
+        _UUID4_RE = re.compile(
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            re.IGNORECASE)
+    return bool(_UUID4_RE.match(value))
 
 
 # ============================================================
@@ -555,6 +634,200 @@ def api_termine():
         return jsonify({"error": "Kalender nicht erreichbar"}), 502
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/v1/plan/termine/bulk", methods=["POST"])
+def api_termine_bulk():
+    """Bulk-Termin-Schnittstelle: mehrere Termine in einem Aufruf anlegen
+    (PLAN-33).
+
+    Body: { "request_id": "<UUIDv4>", "items": [ <PLAN-22-PUT-Body>, … ] }
+
+    Zwei-Phasen-Verarbeitung (PLAN-33.1):
+      1. Pre-validate: alle Items gegen PLAN-22-Regeln.
+         Mindestens ein Fehler → HTTP 400, results-Liste, 0 Schreibvorgänge.
+      2. Best-effort write: saubere Items einzeln in Google schreiben,
+         kein Rollback bei Teil-Misserfolg.
+
+    Cap: len(items) > 30 → HTTP 400 {error: too_many_items, max: 30} (PLAN-33.3).
+    Idempotenz LRU 256/15min via request_id + items_hash (PLAN-33.5).
+    Token-Cache: ein Token-Refresh für alle N Inserts (PLAN-33.4).
+    Exponential Backoff: 1s/2s/4s ±25% Jitter bei 403/429 (PLAN-33.6).
+    Server-Budget: 15s (PLAN-33.4).
+    """
+    # ── Struktur-Validierung ──────────────────────────────────────────────
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "JSON-Body fehlt oder ungültig"}), 400
+
+    request_id = body.get("request_id")
+    if not request_id or not isinstance(request_id, str):
+        return jsonify({"error": "request_id ist Pflicht"}), 400
+    if not _is_uuid4(request_id):
+        return jsonify({"error": "request_id muss eine UUIDv4 sein"}), 400
+
+    items = body.get("items")
+    if not isinstance(items, list) or len(items) == 0:
+        return jsonify({"error": "items ist Pflicht und muss eine nicht-leere Liste sein"}), 400
+
+    # ── Cap-Prüfung (PLAN-33.3) ───────────────────────────────────────────
+    if len(items) > 30:
+        return jsonify({"error": "too_many_items", "max": 30}), 400
+
+    # ── Idempotenz-Check (PLAN-33.5) ──────────────────────────────────────
+    ihash = _items_hash(items)
+    cached = _idem_get(request_id, ihash)
+    if cached is not None:
+        # Gleicher request_id + gleicher items_hash → gespeicherte Antwort.
+        return jsonify(cached), 200
+
+    if _idem_has_collision(request_id, ihash):
+        # Gleicher request_id, anderer hash → Konflikt.
+        return jsonify({"error": "request_id_collision"}), 409
+
+    # ── Pre-validate (PLAN-33.1) ──────────────────────────────────────────
+    validation_errors = []
+    for i, item in enumerate(items):
+        if not isinstance(item, dict):
+            validation_errors.append((i, "Item ist kein JSON-Objekt"))
+            continue
+        if not item.get("titel"):
+            validation_errors.append((i, "titel ist Pflicht"))
+            continue
+        if item.get("event_id"):
+            validation_errors.append((i, "event_id ist im Bulk-Endpoint nicht erlaubt"))
+            continue
+        try:
+            _parse_beginn_ende(item)
+        except ValueError as e:
+            validation_errors.append((i, str(e)))
+
+    if validation_errors:
+        # Mindestens ein Fehler → alle Items als validation-Fehler markieren
+        # (PLAN-33.1: "alle Items" im Fehlerfall).
+        results = []
+        for i, _item in enumerate(items):
+            fehler = next((msg for idx, msg in validation_errors if idx == i), None)
+            results.append({
+                "ok": False,
+                "error_code": "validation",
+                "error": fehler if fehler else "validation",
+            })
+        return jsonify({
+            "ok": False,
+            "geschrieben": 0,
+            "gesamt": len(items),
+            "results": results,
+        }), 400
+
+    # ── Best-effort write (PLAN-33.1/33.4/33.6) ──────────────────────────
+    budget_start = time.monotonic()
+    _BUDGET_SECS = 15.0
+    _BACKOFF_BASE = 1.0      # s
+    _BACKOFF_CAP = 8.0       # s
+    _BACKOFF_JITTER = 0.25   # ±25 %
+    _MAX_RETRIES = 3
+
+    transport = _kalender()._transport  # roher Transport für Token-Cache
+
+    # Token-Cache: ein Refresh für alle N Inserts (PLAN-33.4).
+    # Bei CalendarUnavailable → HTTP 502 (Kalender komplett tot).
+    try:
+        bearer = transport.access_token()
+    except kalender_mod.CalendarUnavailable as e:
+        logger.error("Bulk-Termin: Token-Refresh fehlgeschlagen: %s", e)
+        return jsonify({"error": "calendar_unavailable"}), 502
+
+    results = []
+    geschrieben = 0
+
+    for item in items:
+        # Budget-Check: verbleibendes Budget prüfen (PLAN-33.4).
+        elapsed = time.monotonic() - budget_start
+        if elapsed >= _BUDGET_SECS:
+            results.append({"ok": False, "error_code": "calendar_rate_limit",
+                             "error": "server-budget überschritten"})
+            continue
+
+        titel = item.get("titel")
+        try:
+            beginn, ende = _parse_beginn_ende(item)
+        except ValueError as e:
+            # Sollte nach Pre-validate nicht mehr auftreten.
+            results.append({"ok": False, "error_code": "validation", "error": str(e)})
+            continue
+
+        # Baue das Google-Roh-Event (analog Kalender.event_anlegen).
+        if isinstance(beginn, datetime):
+            raw = {
+                "summary": titel,
+                "start": {"dateTime": beginn.isoformat()},
+                "end": {"dateTime": ende.isoformat()},
+            }
+        else:
+            from datetime import timedelta as _timedelta
+            end_exklusiv = (ende if ende is not None else beginn) + _timedelta(days=1)
+            raw = {
+                "summary": titel,
+                "start": {"date": beginn.isoformat()},
+                "end": {"date": end_exklusiv.isoformat()},
+            }
+
+        # Backoff-Retry-Schleife (PLAN-33.6).
+        item_result = None
+        backoff = _BACKOFF_BASE
+        for attempt in range(_MAX_RETRIES + 1):  # 1 Versuch + 3 Retries = 4 total
+            try:
+                res = transport.insert_event_with_bearer(raw, bearer)
+                event_id = res.get("id")
+                item_result = {"ok": True, "event_id": event_id}
+                geschrieben += 1
+                break
+            except kalender_mod.CalendarRateLimited as e:
+                if attempt >= _MAX_RETRIES:
+                    item_result = {"ok": False, "error_code": "calendar_rate_limit",
+                                   "error": str(e)}
+                    break
+                # Wartezeit berechnen (PLAN-33.6).
+                wait = backoff * (1 + random.uniform(-_BACKOFF_JITTER, _BACKOFF_JITTER))
+                wait = min(wait, _BACKOFF_CAP)
+                # Retry-After-Header sticht, AUSSER wenn Budget überschritten.
+                if e.retry_after is not None:
+                    remaining = _BUDGET_SECS - (time.monotonic() - budget_start)
+                    if e.retry_after >= remaining:
+                        # Retry-After sprengt Budget → sofort als rate_limit markieren.
+                        item_result = {"ok": False, "error_code": "calendar_rate_limit",
+                                       "error": "Retry-After sprengt Server-Budget"}
+                        break
+                    wait = e.retry_after
+                # Budget-Check vor Warten.
+                remaining = _BUDGET_SECS - (time.monotonic() - budget_start)
+                if wait >= remaining:
+                    item_result = {"ok": False, "error_code": "calendar_rate_limit",
+                                   "error": "server-budget überschritten vor Retry"}
+                    break
+                logger.debug(
+                    "Bulk-Termin: Backoff %.2fs (Versuch %d/%d): %s",
+                    wait, attempt + 1, _MAX_RETRIES, e)
+                time.sleep(wait)
+                backoff = min(backoff * 2, _BACKOFF_CAP)
+            except kalender_mod.CalendarAuthFailed as e:
+                item_result = {"ok": False, "error_code": "calendar_auth", "error": str(e)}
+                break
+            except kalender_mod.CalendarUnavailable as e:
+                item_result = {"ok": False, "error_code": "calendar_other", "error": str(e)}
+                break
+
+        results.append(item_result)
+
+    response_body = {
+        "ok": True,
+        "geschrieben": geschrieben,
+        "gesamt": len(items),
+        "results": results,
+    }
+    _idem_set(request_id, ihash, response_body)
+    return jsonify(response_body), 200
 
 
 def _aktivitaet_label(art):
