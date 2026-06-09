@@ -1,16 +1,20 @@
-"""Tests für die Funktion wuensche_zeigen — WZE-1 … WZE-8, E-WZE-1/2
-(Refs #503).
+"""Tests für die Funktion wuensche_zeigen — WZE-1 … WZE-8, E-WZE-1/2, EC-29
+(Refs #503, #551).
 
 Jede Anforderung der Spec mit Code-Verhalten hat einen automatisierten Test
-(WZE-8, CLAUDE.md §6). Essens-Buddy und Telegram sind durch kontrollierte
-Doppelungen ersetzt — die Tests laufen ohne Netz (EC-17).
+(WZE-8, CLAUDE.md §6). Essens-Buddy ist durch eine kontrollierte Doppelung
+ersetzt — die Tests laufen ohne Netz (EC-17).
+
+EC-29 / TASK-10: Die Funktion sendet selbst keine Telegram-Nachricht mehr.
+Sie returnt in jedem Pfad einen User-tauglichen Antwort-Text als String.
+Berechtigungs-Bruch (WZE-2) wirft BerechtigungError.
 
 Pflicht-Tests (Spec WZE-8):
-- Nicht-Mitglied → abgelehnt, kein API-Aufruf (WZE-2).
+- Nicht-Mitglied → BerechtigungError, kein API-Aufruf (WZE-2).
 - Happy-Path: drei Wünsche aus zwei Kategorien → get_wuensche → kategorie-
-  gruppierte Zusammenfassung (WZE-3/WZE-5, E-WZE-2).
-- Leere Liste → WZE-6-Meldung, Signal 'leer'.
-- Transport-Fehler → WZE-7-Meldung, Signal 'nicht_erreichbar', kein Retry.
+  gruppierte Zusammenfassung als String (WZE-3/WZE-5, E-WZE-2).
+- Leere Liste → WZE-6-Meldungs-String.
+- Transport-Fehler → WZE-7-Meldungs-String, kein Retry.
 - APP-3: Skill ruft die API, nicht die Datei.
 - E-WZE-2: Kategorie-Reihenfolge fest (Gerichte → Obst&Gemüse → Brotbelag
   → Sonstiges), unabhängig von der Ankunfts-Reihenfolge.
@@ -18,13 +22,11 @@ Pflicht-Tests (Spec WZE-8):
 
 import unittest.mock as mock
 
+import pytest
 from skills.essen_client import EssenClientError
 from skills.wuensche_zeigen import (
     KATEGORIEN_REIHENFOLGE,
-    SIGNAL_ABGELEHNT,
-    SIGNAL_BEANTWORTET,
-    SIGNAL_LEER,
-    SIGNAL_NICHT_ERREICHBAR,
+    BerechtigungError,
     formatiere_wuensche,
     wuensche_zeigen,
 )
@@ -34,7 +36,11 @@ from skills.wuensche_zeigen import (
 # ============================================================
 
 class FakeTelegram:
-    """Telegram-Doppelung: zeichnet send_message-Aufrufe auf."""
+    """Telegram-Doppelung: zeichnet send_message-Aufrufe auf.
+
+    EC-29: In jedem Test-Pfad muss messages == [] bleiben — die Funktion
+    sendet nicht mehr selbst.
+    """
 
     def __init__(self):
         self.messages = []
@@ -70,42 +76,57 @@ def _kein_mitglied(uid):
 
 
 # ============================================================
-#  WZE-2: Berechtigung — Nicht-Mitglied → Ablehnung, kein API-Aufruf
+#  WZE-2: Berechtigung — Nicht-Mitglied → Exception, kein API-Aufruf
 # ============================================================
 
-def test_WZE2_nicht_mitglied_abgelehnt_kein_api():
-    """WZE-2: Nicht-Mitglied → SIGNAL_ABGELEHNT, kein get_wuensche-Aufruf."""
-    tg = FakeTelegram()
+def test_WZE2_nicht_mitglied_wirft_berechtigung_error():
+    """WZE-2 / EC-29: Nicht-Mitglied → BerechtigungError, kein get_wuensche-Aufruf."""
     ec = FakeEssenClient(wuensche=[{"label": "Apfel"}])
 
-    signal = wuensche_zeigen(
-        tg=tg,
-        chat_id=42,
-        from_user_id=99,
-        essen_client=ec,
-        is_member_fn=_kein_mitglied,
-    )
+    with pytest.raises(BerechtigungError):
+        wuensche_zeigen(
+            chat_id=42,
+            from_user_id=99,
+            essen_client=ec,
+            is_member_fn=_kein_mitglied,
+        )
 
-    assert signal == SIGNAL_ABGELEHNT
     assert ec.get_calls == 0, "Kein API-Aufruf bei Nicht-Mitglied (WZE-2)"
-    assert tg.messages == [], "Keine Nachricht bei Ablehnung"
 
 
-def test_WZE2_kein_user_id_abgelehnt():
-    """WZE-2: from_user_id=None → SIGNAL_ABGELEHNT."""
+def test_WZE2_kein_user_id_wirft_berechtigung_error():
+    """WZE-2 / EC-29: from_user_id=None → BerechtigungError."""
+    ec = FakeEssenClient()
+
+    with pytest.raises(BerechtigungError):
+        wuensche_zeigen(
+            chat_id=42,
+            from_user_id=None,
+            essen_client=ec,
+            is_member_fn=_immer_mitglied,
+        )
+
+    assert ec.get_calls == 0
+
+
+def test_WZE2_keine_telegram_nachricht_bei_ablehnung():
+    """WZE-2 / EC-29: Bei BerechtigungError wird kein tg.send_message aufgerufen.
+
+    Die Funktion sendet nicht selbst — der Agent-Loop schreibt den
+    Fehler-Tool-Result-Block (agent.py Fehlerpfad).
+    """
     tg = FakeTelegram()
     ec = FakeEssenClient()
 
-    signal = wuensche_zeigen(
-        tg=tg,
-        chat_id=42,
-        from_user_id=None,
-        essen_client=ec,
-        is_member_fn=_immer_mitglied,
-    )
+    with pytest.raises(BerechtigungError):
+        wuensche_zeigen(
+            chat_id=42,
+            from_user_id=99,
+            essen_client=ec,
+            is_member_fn=_kein_mitglied,
+        )
 
-    assert signal == SIGNAL_ABGELEHNT
-    assert ec.get_calls == 0
+    assert tg.messages == [], "Keine Telegram-Nachricht bei Berechtigungs-Fehler (EC-29)"
 
 
 # ============================================================
@@ -113,8 +134,9 @@ def test_WZE2_kein_user_id_abgelehnt():
 # ============================================================
 
 def test_WZE5_happy_path_zwei_kategorien():
-    """WZE-5: drei Wünsche aus zwei Kategorien → Skill ruft get_wuensche
-    und postet kategorie-gruppierte Zusammenfassung (Transport-Stub, CLIENT-1).
+    """WZE-5 / EC-29: drei Wünsche aus zwei Kategorien → Skill ruft
+    get_wuensche und returnt kategorie-gruppierte Zusammenfassung (Transport-
+    Stub, CLIENT-1). Kein tg.send_message-Aufruf (EC-29).
     """
     tg = FakeTelegram()
     wuensche = [
@@ -127,21 +149,19 @@ def test_WZE5_happy_path_zwei_kategorien():
     ]
     ec = FakeEssenClient(wuensche=wuensche)
 
-    signal = wuensche_zeigen(
-        tg=tg,
+    antwort = wuensche_zeigen(
         chat_id=42,
         from_user_id=7,
         essen_client=ec,
         is_member_fn=_immer_mitglied,
     )
 
-    assert signal == SIGNAL_BEANTWORTET
+    assert isinstance(antwort, str)
+    assert len(antwort) > 0
     assert ec.get_calls == 1
-    assert len(tg.messages) == 1
-    antwort = tg.messages[0]["text"]
 
-    # Antwort geht an den richtigen Chat (WZE-3)
-    assert tg.messages[0]["chat_id"] == 42
+    # EC-29: Funktion sendet nicht selbst
+    assert tg.messages == [], "Funktion darf kein tg.send_message aufrufen (EC-29)"
 
     # WZE-5: alle Wünsche erscheinen in der Antwort
     assert "Lasagne" in antwort
@@ -213,66 +233,67 @@ def test_WZE5_unbekannte_kategorie_wird_sonstiges():
 
 
 # ============================================================
-#  WZE-6: Leere Liste — ehrliche Meldung, Signal 'leer'
+#  WZE-6: Leere Liste — ehrliche Meldung als Tool-Result-String
 # ============================================================
 
-def test_WZE6_leere_liste_ehrliche_meldung():
-    """WZE-6: Buddy liefert leere Liste → Skill postet ehrliche Meldung,
-    kein Kategorie-Schema."""
+def test_WZE6_leere_liste_returnt_meldung():
+    """WZE-6 / EC-29: Buddy liefert leere Liste → Skill returnt ehrliche
+    Meldung als String, kein Kategorie-Schema. Kein tg.send_message (EC-29).
+    """
     tg = FakeTelegram()
     ec = FakeEssenClient(wuensche=[])
 
-    signal = wuensche_zeigen(
-        tg=tg,
+    antwort = wuensche_zeigen(
         chat_id=42,
         from_user_id=7,
         essen_client=ec,
         is_member_fn=_immer_mitglied,
     )
 
-    assert signal == SIGNAL_LEER
-    assert len(tg.messages) == 1
-    text = tg.messages[0]["text"]
+    assert isinstance(antwort, str)
+    assert len(antwort) > 0
     # WZE-6: ehrliche Leer-Meldung — kein Kategorie-Schema
-    assert "keine" in text.lower() or "leer" in text.lower()
+    assert "keine" in antwort.lower() or "leer" in antwort.lower()
     # WZE-6: kein Kategorie-Format (keine Überschriften)
-    assert "Gerichte:" not in text
-    assert "Obst & Gemüse:" not in text
+    assert "Gerichte:" not in antwort
+    assert "Obst & Gemüse:" not in antwort
+    # EC-29: keine Telegram-Nachricht
+    assert tg.messages == [], "Funktion darf kein tg.send_message aufrufen (EC-29)"
 
 
 # ============================================================
-#  WZE-7: Buddy nicht erreichbar — ehrliche Grenze
+#  WZE-7: Buddy nicht erreichbar — ehrliche Grenze als Tool-Result-String
 # ============================================================
 
-def test_WZE7_transport_fehler_nicht_erreichbar():
-    """WZE-7: Transport-Fehler → Signal 'nicht_erreichbar', ehrliche
-    Grenze, kein Cache, kein Retry (EC-7)."""
+def test_WZE7_transport_fehler_returnt_meldung():
+    """WZE-7 / EC-29: Transport-Fehler → ehrliche Grenze als String,
+    kein Cache, kein Retry (EC-7). Kein tg.send_message (EC-29).
+    """
     tg = FakeTelegram()
     ec = FakeEssenClient(
         error=EssenClientError("Connection refused"))
 
-    signal = wuensche_zeigen(
-        tg=tg,
+    antwort = wuensche_zeigen(
         chat_id=42,
         from_user_id=7,
         essen_client=ec,
         is_member_fn=_immer_mitglied,
     )
 
-    assert signal == SIGNAL_NICHT_ERREICHBAR
+    assert isinstance(antwort, str)
+    assert len(antwort) > 0
     assert ec.get_calls == 1, "Kein Retry (WZE-7)"
-    assert len(tg.messages) == 1
     # WZE-7: ehrliche Grenze-Meldung
-    assert "nicht erreichbar" in tg.messages[0]["text"].lower()
+    assert "nicht erreichbar" in antwort.lower()
+    # EC-29: keine Telegram-Nachricht
+    assert tg.messages == [], "Funktion darf kein tg.send_message aufrufen (EC-29)"
 
 
 def test_WZE7_kein_retry():
     """WZE-7: bei Transport-Fehler KEIN zweiter Aufruf."""
-    tg = FakeTelegram()
     ec = FakeEssenClient(error=EssenClientError("Timeout"))
 
     wuensche_zeigen(
-        tg=tg,
         chat_id=42,
         from_user_id=7,
         essen_client=ec,
@@ -283,24 +304,55 @@ def test_WZE7_kein_retry():
 
 
 # ============================================================
-#  WZE-3: Antwort landet im richtigen Chat
+#  EC-29 / TASK-10: Kein tg.send in irgendinem Pfad (Grundsatz-Test)
 # ============================================================
 
-def test_WZE3_antwort_im_anfrage_chat():
-    """WZE-3: die Antwort geht in den Chat, in dem die Frage kam."""
+def test_EC29_happy_path_sendet_nicht():
+    """EC-29 / TASK-10: Happy-Path — FakeTelegram.messages == [].
+
+    Belegt: die Funktion ruft in keinem Pfad tg.send_* auf.
+    """
     tg = FakeTelegram()
     ec = FakeEssenClient(wuensche=[{"label": "Apfel", "kategorie": "obst_gemuese"}])
 
-    zielchat = 99999
     wuensche_zeigen(
-        tg=tg,
-        chat_id=zielchat,
+        chat_id=42,
         from_user_id=7,
         essen_client=ec,
         is_member_fn=_immer_mitglied,
     )
 
-    assert tg.messages[0]["chat_id"] == zielchat
+    assert tg.messages == []
+
+
+def test_EC29_leer_sendet_nicht():
+    """EC-29 / TASK-10: Leer-Pfad — FakeTelegram.messages == []."""
+    tg = FakeTelegram()
+    ec = FakeEssenClient(wuensche=[])
+
+    wuensche_zeigen(
+        chat_id=42,
+        from_user_id=7,
+        essen_client=ec,
+        is_member_fn=_immer_mitglied,
+    )
+
+    assert tg.messages == []
+
+
+def test_EC29_fehler_sendet_nicht():
+    """EC-29 / TASK-10: Transport-Fehler-Pfad — FakeTelegram.messages == []."""
+    tg = FakeTelegram()
+    ec = FakeEssenClient(error=EssenClientError("Fehler"))
+
+    wuensche_zeigen(
+        chat_id=42,
+        from_user_id=7,
+        essen_client=ec,
+        is_member_fn=_immer_mitglied,
+    )
+
+    assert tg.messages == []
 
 
 # ============================================================
@@ -314,20 +366,19 @@ def test_APP3_keine_datei_zugriffe():
     injiziert ist und gleichzeitig open() blockiert wird, müssen die
     Tests durchlaufen — ein FS-Bypass würde die open-Blockade auslösen.
     """
-    tg = FakeTelegram()
     ec = FakeEssenClient(wuensche=[{"label": "Apfel", "kategorie": "obst_gemuese"}])
 
     with mock.patch("builtins.open",
                     side_effect=AssertionError("FS-Bypass verboten")):
-        signal = wuensche_zeigen(
-            tg=tg,
+        antwort = wuensche_zeigen(
             chat_id=42,
             from_user_id=7,
             essen_client=ec,
             is_member_fn=_immer_mitglied,
         )
 
-    assert signal == SIGNAL_BEANTWORTET
+    assert isinstance(antwort, str)
+    assert len(antwort) > 0
     assert ec.get_calls == 1
 
 
