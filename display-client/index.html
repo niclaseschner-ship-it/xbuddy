@@ -62,6 +62,17 @@
     <p id="setup-msg"></p>
   </div>
 
+  <!-- DC-16 — Service-Worker-Registrierung für WebAPK-Install-Pfad.
+       Registrierung am Seiten-Load; scope './' damit der SW den
+       Display-Client-Pfad (/display/<id>/) abdeckt. -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js', { scope: './' })
+        .catch(function (err) {
+          console.warn('SW-Registrierung fehlgeschlagen (DC-16):', err);
+        });
+    }
+  </script>
   <script src="displib.js"></script>
   <script>
     (function () {
