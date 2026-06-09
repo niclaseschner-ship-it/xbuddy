@@ -31,6 +31,11 @@ import tempfile
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+if __package__:
+    from ._jsonio import read_json_or_empty
+else:
+    from routine._jsonio import read_json_or_empty
+
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -76,18 +81,7 @@ def _store_path():
 
 def _load_store():
     """Lädt den Abhak-Store. Fehlt die Datei → leerer Zustand (ROUTINE-8)."""
-    path = _store_path()
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict):
-            return {}
-        return data
-    except FileNotFoundError:
-        return {}
-    except (OSError, json.JSONDecodeError) as e:
-        logger.warning("Abhak-Store nicht lesbar (%s): %s — starte leer", path, e)
-        return {}
+    return read_json_or_empty(_store_path())
 
 
 def _save_store(data):
