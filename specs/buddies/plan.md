@@ -163,6 +163,18 @@ trägt den V1-Default als CONFIG-4-Fallback (fehlt die Sektion, läuft die
 Familie-1-Bestückung unverändert). Beide Hälften — Erkennung und Termin-Icon —
 lesen aus derselben Quelle, damit sie nicht divergieren können.
 
+**Piktogramm-Form über die zentrale Bibliothek (ICONS-4/ICONS-7-Konsum,
+verbindlich, V1.1 #471):** Das Feld `piktogramm` eines `aktivitaeten`-
+Eintrags ist eine **ARASAAC-`id`** (Integer-String, identisch zur Form in
+ROUTINE-10). Der Plan-Buddy konsumiert das Bild über den geteilten
+Icon-Pfad `/display/_shared/icons/arasaac/<id>.png` (analog ROUTINE-10
+und CLAUDE.md §6: ein Icon-Pfad). **Verworfen:** Plan-eigene
+Bilder/Datei-Namen unter `plan/static/icons/` oder ähnlichem — das wäre
+ein zweiter Icon-Pfad und damit Wildwuchs. Bei einer fehlenden ARASAAC-ID
+(weder im Eintrag noch im Default) rendert der Plan-Buddy das generische
+Fallback-Symbol (gleicher Mechanismus wie ROUTINE-Punkt-Render bei
+fehlendem PNG, ICONS-7-Garantie auf lokal vorliegendes PNG).
+
 *Tickets:* #40, #308, #445
 
 ## 5. Termin-Leiste
