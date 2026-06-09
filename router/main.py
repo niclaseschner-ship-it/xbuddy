@@ -1397,11 +1397,7 @@ def main(argv=None):
     logging.info('Panel-Service (ROU-27): %s', _panel_service_base())
     logging.info('Geräte-Registry (ROU-29): %s', _geraete_base())
     # SVC-5 / CONFIG-5: CLI-Flag > ENV > Default-Repo-Pfad.
-    routing_file = (
-        args.routing
-        or os.environ.get(router_config.ENV_ROUTING_FILE)
-        or router_config.DEFAULT_ROUTING_FILE
-    )
+    routing_file = router_config.resolve_routing_file(args.routing)
     load_routing(routing_file)
     ssl_context = None
     if args.cert and args.key:
