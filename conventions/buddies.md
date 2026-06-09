@@ -83,6 +83,17 @@ diese **getrennt** von der Runtime-Config — analog `plan.json` ⟂ `config.jso
 Hat ein Buddy keine vom Eltern-Chat geschriebenen Domänendaten, gibt es EINE
 Config-Datei und keine leere Pflicht-Datendatei.
 
+### BUD-2b — Per-Instanz-Daten-Ausschluss lebt beim Buddy (immer dort, wo BUD-2 oder BUD-2a existiert)
+Der Ausschluss der Per-Instanz-Dateien (BUD-2 Runtime-Config; BUD-2a
+Domänendaten) lebt als **`<slug>/.gitignore`** **neben dem Code**, nicht in
+einem zentralen Top-Level-`.gitignore`. Ein Buddy bringt seinen eigenen
+Ausschluss mit — analog zur Service-Datei (SVC-2) und zum Manifest (BUD-3).
+So bleibt jeder Buddy **standalone übertragbar** (Familie-3-Probe): wer einen
+Buddy kopiert oder entfernt, fasst genau ein Verzeichnis an, nicht zwei
+Orte. Ein bewusst gewollter repo-weiter Ausschluss (`__pycache__`, `*.pyc`,
+generische Artefakte) bleibt im Top-Level-`.gitignore` — der ist nicht
+buddy-spezifisch.
+
 ### BUD-3 — Aufrufbare Views als committetes Manifest deklarieren (immer, sobald der Buddy Display-Views hat)
 Ein Buddy/Controller mit menschen-aufrufbaren View-Einstiegspunkten committet
 ein **`views.json`-Manifest** neben dem Code — **committet, nicht gitignored**
@@ -215,6 +226,7 @@ keine Code-Duplikation (jede Datei hat eine eigene Petrantwortung, CLAUDE.md
 | `<slug>/static/` | buddy-eigene Assets (URL-13) |
 | `<slug>/config.example.json` | dokumentiertes **Runtime-Config**-Format (BUD-2, committet ohne echte Werte; CONFIG-3) |
 | `<slug>/<domäne>.example.json` | dokumentiertes **Domänendaten**-Format pro Domäne (BUD-2a, eine oder mehrere; nur wenn der Eltern-Chat Domänendaten schreibt) |
+| `<slug>/.gitignore` | Per-Instanz-Daten-Ausschluss neben dem Code (BUD-2b) |
 | `<slug>/<slug>.service` | systemd-Vorlage (SVC-2; Andockpunkt 4) |
 | `<slug>/tests/` | Buddy-Tests (Andockpunkt 5) |
 | `<slug>/__init__.py` | macht den Buddy zum importierbaren Paket (Andockpunkt 6) |
