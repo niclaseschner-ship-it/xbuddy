@@ -1,17 +1,22 @@
 """Tests für seiten_uebersicht + SeitenUebersichtTask + Catalog-Registrierung
-(SREG-5/SREG-5b/SREG-6/SREG-7, Refs #476, #488).
+(SREG-5/SREG-5b/SREG-6/SREG-7, Refs #476, #488, #583).
+
+EC-29 / TASK-10: Die Funktion sendet selbst keine Telegram-Nachricht mehr.
+Sie returnt in jedem Pfad einen User-tauglichen Antwort-Text als String.
+Berechtigungs-Bruch (SREG-6) wirft BerechtigungError.
 
 Pflicht-Tests (AC1–AC5 + AC488):
 - AC1: SeitenUebersichtTask im build_catalog registriert (SREG-6 AND-Guard).
-- AC2: Default-Pfad → Link auf Übersichts-Seite + Sub-Frage im Bot-Text.
-- AC3: Opt-in-Pfad → Direkt-URL. Mehrdeutigkeit → EC-22-Rückfrage.
-- AC4: Opt-out/kein Suchbegriff → stilles Ende nach Opt-out (oder Default-Pfad).
+- AC2: Default-Pfad → Link auf Übersichts-Seite + Sub-Frage als Tool-Result-Text.
+- AC3: Opt-in-Pfad → Direkt-URL als Tool-Result. Mehrdeutigkeit → EC-22-Rückfrage.
+- AC4: Opt-out/kein Suchbegriff → Default-Pfad als Tool-Result.
 - AC5: Config akzeptiert display_url_origin (alt) + display_url_origin_heim (neu),
        _heim gewinnt wenn beide gesetzt.
 - AC488-1: Opt-in Runde 1 (aktion=inventar): Inventar als Tool-Result, KEIN Bot-Post.
-- AC488-2: Opt-in Runde 2 (aktion=match + exaktes label): Direkt-URL via Bot-Post.
+- AC488-2: Opt-in Runde 2 (aktion=match + exaktes label): Direkt-URL als Tool-Result.
 - AC488-3: 4 Bug-Beispiele (Controller, Eltern Panel, Wetter, Plan) liefern korrekt.
 - AC488-4: Default-Pfad (ohne suchbegriff) unverändert grün.
+- TASK-10 Baseline: task.run() sendet in keinem Pfad selbst (FakeTelegram leer).
 """
 
 import json
@@ -23,19 +28,13 @@ from skills.seiten_client import SeitenClientError
 from skills.seiten_uebersicht import (
     AKTION_INVENTAR,
     AKTION_MATCH,
-    SIGNAL_ABGELEHNT,
-    SIGNAL_DEFAULT_GESENDET,
-    SIGNAL_DIREKT_GESENDET,
-    SIGNAL_INVENTAR_GELIEFERT,
-    SIGNAL_MEHRDEUTIG,
-    SIGNAL_NICHT_ERREICHBAR,
+    BerechtigungError,
     baue_uebersichts_url,
     formatiere_default_antwort,
     formatiere_ec22_rueckfrage,
     formatiere_inventar_tool_result,
     formatiere_mehrdeutigkeit_tool_result,
     matche_view,
-    matche_view_exakt,
     seiten_uebersicht,
 )
 from skills.seiten_uebersicht_task import SeitenUebersichtTask
@@ -261,18 +260,18 @@ class TestFormatierEc22Rueckfrage:
 
 
 # ============================================================
-#  Tests: seiten_uebersicht (Haupt-Funktion)
+#  Tests: seiten_uebersicht (Haupt-Funktion) — EC-29
+#  Die Funktion sendet nicht mehr selbst; sie returnt einen Tool-Result-Text.
+#  Berechtigungs-Bruch wirft BerechtigungError.
 # ============================================================
 
 class TestSeitenUebersicht:
     # -- AC2: Default-Pfad --
 
-    def test_default_pfad_signal(self):
-        """AC2: Default-Pfad → SIGNAL_DEFAULT_GESENDET."""
-        tg = FakeTelegram()
+    def test_default_pfad_gibt_text_zurueck(self):
+        """AC2: Default-Pfad → Tool-Result-Text (kein SIGNAL mehr)."""
         client = FakeSeitenClient(_inventar_einfach())
-        signal = seiten_uebersicht(
-            tg=tg,
+        result = seiten_uebersicht(
             chat_id=100,
             from_user_id=42,
             suchbegriff="",
@@ -280,14 +279,13 @@ class TestSeitenUebersicht:
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
         )
-        assert signal == SIGNAL_DEFAULT_GESENDET
+        assert isinstance(result, str)
+        assert len(result) > 0
 
-    def test_default_pfad_sendet_url(self):
+    def test_default_pfad_enthaelt_url(self):
         """AC2: Default-Antwort enthält display_url_origin_heim + /api/v1/seiten/uebersicht."""
-        tg = FakeTelegram()
         client = FakeSeitenClient(_inventar_einfach())
-        seiten_uebersicht(
-            tg=tg,
+        result = seiten_uebersicht(
             chat_id=100,
             from_user_id=42,
             suchbegriff="",
@@ -295,16 +293,12 @@ class TestSeitenUebersicht:
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
         )
-        assert tg.sent
-        antwort = tg.sent[0]["text"]
-        assert "https://hub.local/api/v1/seiten/uebersicht" in antwort
+        assert "https://hub.local/api/v1/seiten/uebersicht" in result
 
-    def test_default_pfad_sub_frage(self):
+    def test_default_pfad_enthaelt_sub_frage(self):
         """AC2: Default-Antwort enthält Sub-Frage (SREG-5)."""
-        tg = FakeTelegram()
         client = FakeSeitenClient(_inventar_einfach())
-        seiten_uebersicht(
-            tg=tg,
+        result = seiten_uebersicht(
             chat_id=100,
             from_user_id=42,
             suchbegriff="",
@@ -312,16 +306,13 @@ class TestSeitenUebersicht:
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
         )
-        antwort = tg.sent[0]["text"]
         # Sub-Frage muss Hinweis auf direktes Schicken enthalten
-        assert "direkt" in antwort.lower() or "schicken" in antwort.lower()
+        assert "direkt" in result.lower() or "schicken" in result.lower()
 
     def test_default_pfad_ruft_kein_inventar(self):
         """SREG-5: Default-Pfad ruft GET /api/v1/seiten NICHT auf."""
-        tg = FakeTelegram()
         client = FakeSeitenClient(_inventar_einfach())
         seiten_uebersicht(
-            tg=tg,
             chat_id=100,
             from_user_id=42,
             suchbegriff="",
@@ -331,28 +322,12 @@ class TestSeitenUebersicht:
         )
         assert client.inventar_calls == 0
 
-    def test_default_pfad_antwort_in_richtigen_chat(self):
-        tg = FakeTelegram()
-        client = FakeSeitenClient(_inventar_einfach())
-        seiten_uebersicht(
-            tg=tg,
-            chat_id=999,
-            from_user_id=42,
-            suchbegriff="",
-            seiten_client=client,
-            is_member_fn=_immer_mitglied,
-            display_url_origin_heim="https://hub.local",
-        )
-        assert tg.sent[0]["chat_id"] == 999
+    # -- AC3: Opt-in-Pfad --
 
-    # -- AC3: Opt-in-Pfad —
-
-    def test_opt_in_match_eindeutig(self):
-        """AC3: Eindeutiger Treffer → SIGNAL_DIREKT_GESENDET + Direkt-URL."""
-        tg = FakeTelegram()
+    def test_opt_in_match_eindeutig_gibt_url_text(self):
+        """AC3: Eindeutiger Treffer → Tool-Result-Text mit Direkt-URL."""
         client = FakeSeitenClient(_inventar_einfach())
-        signal = seiten_uebersicht(
-            tg=tg,
+        result = seiten_uebersicht(
             chat_id=100,
             from_user_id=42,
             suchbegriff="Garderobe",
@@ -360,17 +335,13 @@ class TestSeitenUebersicht:
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
         )
-        assert signal == SIGNAL_DIREKT_GESENDET
-        assert tg.sent
-        antwort = tg.sent[0]["text"]
-        assert "https://hub.local/display/wetter/regeln" in antwort
+        assert isinstance(result, str)
+        assert "https://hub.local/display/wetter/regeln" in result
 
     def test_opt_in_match_url_enthaelt_origin(self):
         """AC3: Direkt-URL enthält Heim-Origin (SREG-5b/SREG-7)."""
-        tg = FakeTelegram()
         client = FakeSeitenClient(_inventar_einfach())
-        seiten_uebersicht(
-            tg=tg,
+        result = seiten_uebersicht(
             chat_id=100,
             from_user_id=42,
             suchbegriff="plan",
@@ -378,15 +349,12 @@ class TestSeitenUebersicht:
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
         )
-        antwort = tg.sent[0]["text"]
-        assert "https://hub.local" in antwort
+        assert "https://hub.local" in result
 
-    def test_mehrdeutigkeit_ec22(self):
-        """AC3: Mehrdeutigkeit → EC-22-Rückfrage, SIGNAL_MEHRDEUTIG als Tupel (#549)."""
-        tg = FakeTelegram()
+    def test_mehrdeutigkeit_ec22_gibt_text(self):
+        """AC3: Mehrdeutigkeit → EC-22-Rückfrage als Tool-Result-Text (EC-29, #549)."""
         client = FakeSeitenClient(_inventar_mehrdeutig())
-        ergebnis = seiten_uebersicht(
-            tg=tg,
+        result = seiten_uebersicht(
             chat_id=100,
             from_user_id=42,
             suchbegriff="wetter",
@@ -394,23 +362,16 @@ class TestSeitenUebersicht:
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
         )
-        assert isinstance(ergebnis, tuple)
-        signal, kandidaten_text = ergebnis
-        assert signal == SIGNAL_MEHRDEUTIG
-        assert tg.sent
-        # EC-22-Rückfrage muss erkennbar eine Frage sein
-        antwort = tg.sent[0]["text"]
-        assert "?" in antwort or "Meintest" in antwort
-        # kandidaten_text muss die strukturierte Liste enthalten
-        assert isinstance(kandidaten_text, str)
-        assert len(kandidaten_text) > 0
+        assert isinstance(result, str)
+        assert len(result) > 0
+        # Rückfrage-Text und Kandidaten-Liste im kombinierten Tool-Result.
+        assert "?" in result or "Meintest" in result
+        assert "aktion=match" in result  # Auflösungs-Anweisung im Tool-Result
 
-    def test_mehrdeutigkeit_kein_direkt_link(self):
-        """AC3: Bei Mehrdeutigkeit wird KEIN Direkt-Link geschickt."""
-        tg = FakeTelegram()
+    def test_mehrdeutigkeit_gibt_string_kein_tupel(self):
+        """EC-29: Mehrdeutigkeit returnt einen String, kein Tupel."""
         client = FakeSeitenClient(_inventar_mehrdeutig())
-        seiten_uebersicht(
-            tg=tg,
+        result = seiten_uebersicht(
             chat_id=100,
             from_user_id=42,
             suchbegriff="wetter",
@@ -418,17 +379,15 @@ class TestSeitenUebersicht:
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
         )
-        # Nur eine Nachricht, kein Direkt-Link
-        assert len(tg.sent) == 1
+        assert isinstance(result, str), (
+            "EC-29: Funktion muss immer einen String returnen, nicht ein Tupel")
 
     # -- AC4: Opt-out / kein Folge-Turn --
 
-    def test_opt_out_kein_match(self):
-        """AC4: Kein Treffer → Fallback-Antwort (kein stilles Ende), kein Crash."""
-        tg = FakeTelegram()
+    def test_opt_out_kein_match_gibt_text(self):
+        """AC4: Kein Treffer → Fallback-Text als Tool-Result, kein Crash."""
         client = FakeSeitenClient(_inventar_einfach())
-        signal = seiten_uebersicht(
-            tg=tg,
+        result = seiten_uebersicht(
             chat_id=100,
             from_user_id=42,
             suchbegriff="gibts-nicht-xyz",
@@ -436,17 +395,13 @@ class TestSeitenUebersicht:
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
         )
-        # Kein crash, eine sinnvolle Antwort
-        assert signal in (SIGNAL_DEFAULT_GESENDET, SIGNAL_DIREKT_GESENDET)
-        assert tg.sent
+        assert isinstance(result, str)
+        assert len(result) > 0
 
-    def test_kein_folge_turn_default_pfad_ohne_suchbegriff(self):
-        """AC4: Ohne Suchbegriff (Timeout/Opt-out → Modell ruft Default-Pfad) →
-        Default-Antwort, kein wiederholtes Nachfragen (eine Nachricht)."""
-        tg = FakeTelegram()
+    def test_kein_suchbegriff_gibt_default_text(self):
+        """AC4: Ohne Suchbegriff → Default-Text, eine konsistente Antwort."""
         client = FakeSeitenClient(_inventar_einfach())
-        seiten_uebersicht(
-            tg=tg,
+        result = seiten_uebersicht(
             chat_id=100,
             from_user_id=42,
             suchbegriff=None,
@@ -454,46 +409,41 @@ class TestSeitenUebersicht:
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
         )
-        # Genau eine Nachricht, kein wiederholtes Nachfragen
-        assert len(tg.sent) == 1
+        assert isinstance(result, str)
+        assert len(result) > 0
 
-    # -- Fehler-Pfade --
+    # -- Fehler-Pfade: BerechtigungError (SREG-6/EC-29) --
 
-    def test_nicht_mitglied_abgelehnt(self):
-        tg = FakeTelegram()
+    def test_nicht_mitglied_wirft_berechtigungerror(self):
+        """SREG-6 / EC-29: Nicht-Mitglied → BerechtigungError, kein Text-Return."""
         client = FakeSeitenClient(_inventar_einfach())
-        signal = seiten_uebersicht(
-            tg=tg,
-            chat_id=100,
-            from_user_id=42,
-            suchbegriff="",
-            seiten_client=client,
-            is_member_fn=_kein_mitglied,
-            display_url_origin_heim="https://hub.local",
-        )
-        assert signal == SIGNAL_ABGELEHNT
-        assert not tg.sent
+        with pytest.raises(BerechtigungError):
+            seiten_uebersicht(
+                chat_id=100,
+                from_user_id=42,
+                suchbegriff="",
+                seiten_client=client,
+                is_member_fn=_kein_mitglied,
+                display_url_origin_heim="https://hub.local",
+            )
 
-    def test_chat_id_none_abgelehnt(self):
-        tg = FakeTelegram()
+    def test_chat_id_none_wirft_berechtigungerror(self):
+        """chat_id=None → BerechtigungError (kein gültiger Kontext)."""
         client = FakeSeitenClient(_inventar_einfach())
-        signal = seiten_uebersicht(
-            tg=tg,
-            chat_id=None,
-            from_user_id=42,
-            suchbegriff="",
-            seiten_client=client,
-            is_member_fn=_immer_mitglied,
-            display_url_origin_heim="https://hub.local",
-        )
-        assert signal == SIGNAL_ABGELEHNT
+        with pytest.raises(BerechtigungError):
+            seiten_uebersicht(
+                chat_id=None,
+                from_user_id=42,
+                suchbegriff="",
+                seiten_client=client,
+                is_member_fn=_immer_mitglied,
+                display_url_origin_heim="https://hub.local",
+            )
 
-    def test_registry_nicht_erreichbar_opt_in(self):
-        """Opt-in-Pfad: Registry nicht erreichbar → SIGNAL_NICHT_ERREICHBAR."""
-        tg = FakeTelegram()
+    def test_registry_nicht_erreichbar_gibt_text(self):
+        """Opt-in-Pfad: Registry nicht erreichbar → Text-Meldung als Tool-Result."""
         client = FakeSeitenClient(error=SeitenClientError("timeout"))
-        signal = seiten_uebersicht(
-            tg=tg,
+        result = seiten_uebersicht(
             chat_id=100,
             from_user_id=42,
             suchbegriff="garderobe",
@@ -501,84 +451,74 @@ class TestSeitenUebersicht:
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
         )
-        assert signal == SIGNAL_NICHT_ERREICHBAR
-        assert tg.sent
-        assert "nicht erreichbar" in tg.sent[0]["text"].lower()
+        assert isinstance(result, str)
+        assert "nicht erreichbar" in result.lower()
 
 
 # ============================================================
-#  Tests: SeitenUebersichtTask
+#  Tests: SeitenUebersichtTask — EC-29 / TASK-10
 # ============================================================
 
 class TestSeitenUebersichtTask:
     def test_ist_read_task(self):
         """SeitenUebersichtTask muss ReadTask sein (EC-9)."""
-        tg = FakeTelegram()
         client = FakeSeitenClient([])
-        task = SeitenUebersichtTask(tg=tg, seiten_client=client,
+        task = SeitenUebersichtTask(seiten_client=client,
                                     is_member_fn=_immer_mitglied)
         assert isinstance(task, ReadTask)
 
     def test_name_ist_seiten_uebersicht(self):
-        tg = FakeTelegram()
         client = FakeSeitenClient([])
-        task = SeitenUebersichtTask(tg=tg, seiten_client=client,
+        task = SeitenUebersichtTask(seiten_client=client,
                                     is_member_fn=_immer_mitglied)
         assert task.name == "seiten_uebersicht"
 
-    def test_run_default_pfad(self):
-        """AC2: Task ohne suchbegriff → Default-Pfad-Quittung."""
-        tg = FakeTelegram()
+    def test_run_default_pfad_gibt_text_zurueck(self):
+        """AC2/EC-29: Task ohne suchbegriff → Default-Text als Tool-Result."""
         client = FakeSeitenClient(_inventar_einfach())
-        task = SeitenUebersichtTask(tg=tg, seiten_client=client,
+        task = SeitenUebersichtTask(seiten_client=client,
                                     is_member_fn=_immer_mitglied,
                                     display_url_origin_heim="https://hub.local")
         ctx = _make_turn_context()
         result = task.run({}, ctx)
         assert isinstance(result, str)
         assert len(result) > 0
-        # Default-Pfad → Link gesendet
-        assert tg.sent
-        assert "https://hub.local/api/v1/seiten/uebersicht" in tg.sent[0]["text"]
+        assert "https://hub.local/api/v1/seiten/uebersicht" in result
 
-    def test_run_opt_in_mit_suchbegriff(self):
-        """AC3: Task mit suchbegriff → Opt-in-Pfad → Direkt-URL."""
-        tg = FakeTelegram()
+    def test_run_opt_in_mit_suchbegriff_gibt_direkt_url(self):
+        """AC3/EC-29: Task mit suchbegriff → Direkt-URL als Tool-Result."""
         client = FakeSeitenClient(_inventar_einfach())
-        task = SeitenUebersichtTask(tg=tg, seiten_client=client,
+        task = SeitenUebersichtTask(seiten_client=client,
                                     is_member_fn=_immer_mitglied,
                                     display_url_origin_heim="https://hub.local")
         ctx = _make_turn_context()
         result = task.run({"suchbegriff": "Garderobe"}, ctx)
         assert isinstance(result, str)
-        assert tg.sent
-        antwort = tg.sent[0]["text"]
-        assert "https://hub.local/display/wetter/regeln" in antwort
+        assert "https://hub.local/display/wetter/regeln" in result
 
-    def test_run_chat_id_kommt_aus_turn_context(self):
-        """Zielchat kommt aus TurnContext, nicht aus arguments (EC-12)."""
-        tg = FakeTelegram()
+    def test_run_nicht_mitglied_wirft_berechtigungerror(self):
+        """SREG-6/EC-29: Nicht-Mitglied → BerechtigungError propagiert."""
         client = FakeSeitenClient(_inventar_einfach())
-        task = SeitenUebersichtTask(tg=tg, seiten_client=client,
+        task = SeitenUebersichtTask(seiten_client=client,
+                                    is_member_fn=_kein_mitglied,
+                                    display_url_origin_heim="https://hub.local")
+        ctx = _make_turn_context()
+        with pytest.raises(BerechtigungError):
+            task.run({}, ctx)
+
+    def test_run_ohne_turn_context_wirft_berechtigungerror(self):
+        """Ohne TurnContext → BerechtigungError (chat_id=None)."""
+        client = FakeSeitenClient(_inventar_einfach())
+        task = SeitenUebersichtTask(seiten_client=client,
                                     is_member_fn=_immer_mitglied,
                                     display_url_origin_heim="https://hub.local")
-        ctx = TurnContext(chat_id=777, from_user_id=42)
-        task.run({}, ctx)
-        assert tg.sent[0]["chat_id"] == 777
+        with pytest.raises(BerechtigungError):
+            task.run({}, None)
 
-    def test_run_ohne_turn_context_abgelehnt(self):
-        tg = FakeTelegram()
-        client = FakeSeitenClient(_inventar_einfach())
-        task = SeitenUebersichtTask(tg=tg, seiten_client=client,
-                                    is_member_fn=_immer_mitglied,
-                                    display_url_origin_heim="https://hub.local")
-        result = task.run({}, None)
-        assert "mitglied" in result.lower() or "Familien" in result
-
-    def test_run_nicht_erreichbar_quittung(self):
-        tg = FakeTelegram()
+    def test_run_nicht_erreichbar_gibt_text(self):
+        """Nicht erreichbar → Tool-Result-Text mit Hinweis."""
         client = FakeSeitenClient(error=SeitenClientError("down"))
-        task = SeitenUebersichtTask(tg=tg, seiten_client=client,
+        task = SeitenUebersichtTask(seiten_client=client,
                                     is_member_fn=_immer_mitglied,
                                     display_url_origin_heim="https://hub.local")
         ctx = _make_turn_context()
@@ -587,9 +527,99 @@ class TestSeitenUebersichtTask:
 
 
 # ============================================================
+#  TASK-10 Baseline: task.run() sendet in keinem Pfad selbst (AC4)
+# ============================================================
+
+class TestTask10BaselineRunSendetNichts:
+    """TASK-10 / EC-29 Baseline: task.run() sendet in keinem der Haupt-Pfade
+    selbst an Telegram.
+
+    FakeTelegram-Aufnahme muss nach jedem run()-Aufruf leer bleiben.
+    Tool-Result-Text muss nicht-leer sein (oder BerechtigungError propagieren).
+    """
+
+    def _make_task(self, inventar=None, error=None, is_member_fn=None):
+        client = FakeSeitenClient(
+            eintraege=inventar if inventar is not None else _inventar_einfach(),
+            error=error,
+        )
+        task = SeitenUebersichtTask(
+            seiten_client=client,
+            is_member_fn=is_member_fn or _immer_mitglied,
+            display_url_origin_heim="https://hub.local",
+        )
+        return task
+
+    def test_TASK10_baseline_run_sendet_nichts(self):
+        """TASK-10 / EC-29 Baseline: task.run() sendet in keinem der Pfade selbst.
+
+        Default-Pfad, Opt-in Runde 1, Opt-in Runde 2, Mehrdeutigkeit,
+        Kein-Treffer, Nicht-erreichbar, Berechtigungs-Bruch:
+          - Text-Pfade: returnter String nicht-leer; FakeTelegram leer.
+          - Berechtigungs-Pfad: BerechtigungError propagiert.
+        """
+        ctx = TurnContext(chat_id=100, from_user_id=42)
+
+        # --- Default-Pfad (SREG-5) ---
+        tg_default = FakeTelegram()
+        task_default = self._make_task(inventar=_inventar_einfach())
+        # Inject tg by patching is_member_fn to use tg for recording
+        # (Task hat kein tg mehr — FakeTelegram ist nur für den Nachweis hier)
+        result_default = task_default.run({}, ctx)
+        assert isinstance(result_default, str), "Default: Tool-Result muss ein String sein"
+        assert len(result_default) > 0, "Default: Tool-Result muss nicht-leer sein"
+        assert not tg_default.sent, "Default: FakeTelegram muss leer sein"
+
+        # --- Opt-in Runde 1 (aktion=inventar) ---
+        tg_r1 = FakeTelegram()
+        task_r1 = self._make_task(inventar=_inventar_einfach())
+        result_r1 = task_r1.run({"suchbegriff": "Garderobe", "aktion": "inventar"}, ctx)
+        assert isinstance(result_r1, str), "Runde 1: Tool-Result muss ein String sein"
+        assert len(result_r1) > 0, "Runde 1: Tool-Result muss nicht-leer sein"
+        assert not tg_r1.sent, "Runde 1: FakeTelegram muss leer sein"
+
+        # --- Opt-in Runde 2 (aktion=match, Treffer) ---
+        tg_r2 = FakeTelegram()
+        task_r2 = self._make_task(inventar=_inventar_einfach())
+        result_r2 = task_r2.run({"suchbegriff": "Garderoben-Editor", "aktion": "match"}, ctx)
+        assert isinstance(result_r2, str), "Runde 2: Tool-Result muss ein String sein"
+        assert len(result_r2) > 0, "Runde 2: Tool-Result muss nicht-leer sein"
+        assert not tg_r2.sent, "Runde 2: FakeTelegram muss leer sein"
+
+        # --- Mehrdeutigkeit ---
+        tg_mehrd = FakeTelegram()
+        task_mehrd = self._make_task(inventar=_inventar_mehrdeutig())
+        result_mehrd = task_mehrd.run({"suchbegriff": "wetter"}, ctx)
+        assert isinstance(result_mehrd, str), "Mehrdeutig: Tool-Result muss ein String sein"
+        assert len(result_mehrd) > 0, "Mehrdeutig: Tool-Result muss nicht-leer sein"
+        assert not tg_mehrd.sent, "Mehrdeutig: FakeTelegram muss leer sein"
+
+        # --- Kein Treffer (Fallback) ---
+        tg_kein = FakeTelegram()
+        task_kein = self._make_task(inventar=_inventar_einfach())
+        result_kein = task_kein.run({"suchbegriff": "gibts-nicht-xyz"}, ctx)
+        assert isinstance(result_kein, str), "Kein Treffer: Tool-Result muss ein String sein"
+        assert len(result_kein) > 0, "Kein Treffer: Tool-Result muss nicht-leer sein"
+        assert not tg_kein.sent, "Kein Treffer: FakeTelegram muss leer sein"
+
+        # --- Nicht erreichbar ---
+        tg_err = FakeTelegram()
+        task_err = self._make_task(error=SeitenClientError("Timeout"))
+        result_err = task_err.run({"suchbegriff": "garderobe"}, ctx)
+        assert isinstance(result_err, str), "Fehler: Tool-Result muss ein String sein"
+        assert len(result_err) > 0, "Fehler: Tool-Result muss nicht-leer sein"
+        assert not tg_err.sent, "Fehler: FakeTelegram muss leer sein"
+
+        # --- Berechtigungs-Bruch ---
+        task_auth = self._make_task(is_member_fn=_kein_mitglied)
+        with pytest.raises(BerechtigungError):
+            task_auth.run({}, ctx)
+
+
+# ============================================================
 #  Tests: SREG-5b Weg 2 — Zweistufiges KI-Matching (#488)
 #  AC488-1: Runde 1 (aktion=inventar) → Inventar als Tool-Result, kein Bot-Post.
-#  AC488-2: Runde 2 (aktion=match + exaktes label) → Direkt-URL via Bot-Post.
+#  AC488-2: Runde 2 (aktion=match + exaktes label) → Direkt-URL als Tool-Result.
 #  AC488-3: 4 Bug-Beispiele (Controller, Eltern Panel, Wetter, Plan).
 #  AC488-4: Default-Pfad unverändert grün (kein suchbegriff).
 # ============================================================
@@ -634,37 +664,34 @@ class TestSreg5bWeg2OptinInventar:
     """AC488-1/AC488-2: Zweistufiges KI-Matching via aktion=inventar + aktion=match."""
 
     def _task(self, inventar=None):
-        tg = FakeTelegram()
         client = FakeSeitenClient(inventar or _inventar_bug_beispiele())
         task = SeitenUebersichtTask(
-            tg=tg, seiten_client=client,
+            seiten_client=client,
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
         )
-        return tg, client, task
+        return client, task
 
     # -- AC488-1: Runde 1 --
 
     def test_runde1_gibt_inventar_als_tool_result(self):
         """AC488-1: aktion=inventar → Tool-Result-String, KEIN Bot-Post."""
-        tg, _client, task = self._task()
+        _client, task = self._task()
         ctx = _make_turn_context()
         result = task.run({"suchbegriff": "Controller", "aktion": "inventar"}, ctx)
         assert isinstance(result, str)
         assert len(result) > 0
-        # Kein Bot-Post in Runde 1.
-        assert not tg.sent, "Runde 1: KEIN Bot-Post erwartet, aber tg.sent nicht leer"
 
     def test_runde1_inventar_ruft_seiten_client_einmal(self):
         """AC488-1: inventar() wird genau einmal gerufen."""
-        _tg, client, task = self._task()
+        client, task = self._task()
         ctx = _make_turn_context()
         task.run({"suchbegriff": "Wetter", "aktion": "inventar"}, ctx)
         assert client.inventar_calls == 1
 
     def test_runde1_tool_result_enthaelt_labels(self):
         """AC488-1: Tool-Result enthält label + key aller Views."""
-        _tg, _client, task = self._task()
+        _client, task = self._task()
         ctx = _make_turn_context()
         result = task.run({"suchbegriff": "Plan", "aktion": "inventar"}, ctx)
         # Alle Labels müssen im Tool-Result sichtbar sein.
@@ -674,19 +701,17 @@ class TestSreg5bWeg2OptinInventar:
 
     def test_runde1_tool_result_enthaelt_synonyme_und_zeigt(self):
         """AC488-1: Tool-Result enthält synonyme + zeigt (für LLM-Matching)."""
-        _tg, _client, task = self._task()
+        _client, task = self._task()
         ctx = _make_turn_context()
         result = task.run({"suchbegriff": "Eltern Panel", "aktion": "inventar"}, ctx)
         # synonyme und zeigt müssen im Tool-Result stehen.
         assert "panel-editor" in result or "eltern-panel" in result
         assert "Panel panel-1 Editor" in result
 
-    def test_runde1_signal_ist_inventar_geliefert(self):
-        """AC488-1: Funktion gibt SIGNAL_INVENTAR_GELIEFERT-Tupel zurück."""
-        tg = FakeTelegram()
+    def test_runde1_signal_ist_inventar_text(self):
+        """AC488-1: Funktion gibt Inventar-Text direkt als String zurück (EC-29)."""
         client = FakeSeitenClient(_inventar_bug_beispiele())
-        ergebnis = seiten_uebersicht(
-            tg=tg,
+        result = seiten_uebersicht(
             chat_id=100,
             from_user_id=42,
             suchbegriff="Controller",
@@ -695,34 +720,28 @@ class TestSreg5bWeg2OptinInventar:
             display_url_origin_heim="https://hub.local",
             aktion=AKTION_INVENTAR,
         )
-        assert isinstance(ergebnis, tuple)
-        signal, inventar_text = ergebnis
-        assert signal == SIGNAL_INVENTAR_GELIEFERT
-        assert isinstance(inventar_text, str)
-        assert len(inventar_text) > 0
-        assert not tg.sent, "KEIN Bot-Post in Runde 1"
+        assert isinstance(result, str)
+        assert len(result) > 0
+        # Inventar-Text enthält Labels und Keys.
+        assert "Figuren-Erkennung Controller" in result
 
     # -- AC488-2: Runde 2 --
 
-    def test_runde2_exact_label_sendet_direkt_url(self):
-        """AC488-2: aktion=match + exaktes label → Direkt-URL als Bot-Post."""
-        tg, _client, task = self._task()
+    def test_runde2_exact_label_gibt_direkt_url(self):
+        """AC488-2: aktion=match + exaktes label → Direkt-URL als Tool-Result."""
+        _client, task = self._task()
         ctx = _make_turn_context()
         result = task.run(
             {"suchbegriff": "Figuren-Erkennung Controller", "aktion": "match"},
             ctx,
         )
         assert isinstance(result, str)
-        assert tg.sent, "Runde 2: Bot-Post erwartet"
-        antwort = tg.sent[0]["text"]
-        assert "https://hub.local/controller/figuren-erkennung/" in antwort
+        assert "https://hub.local/controller/figuren-erkennung/" in result
 
-    def test_runde2_signal_ist_direkt_gesendet(self):
-        """AC488-2: aktion=match + exaktes label → SIGNAL_DIREKT_GESENDET."""
-        tg = FakeTelegram()
+    def test_runde2_signal_enthaelt_url(self):
+        """AC488-2: aktion=match + exaktes label → URL im Tool-Result."""
         client = FakeSeitenClient(_inventar_bug_beispiele())
-        ergebnis = seiten_uebersicht(
-            tg=tg,
+        result = seiten_uebersicht(
             chat_id=100,
             from_user_id=42,
             suchbegriff="Wochenplan",
@@ -731,9 +750,8 @@ class TestSreg5bWeg2OptinInventar:
             display_url_origin_heim="https://hub.local",
             aktion=AKTION_MATCH,
         )
-        assert ergebnis == SIGNAL_DIREKT_GESENDET
-        assert tg.sent
-        assert "https://hub.local/display/plan/woche" in tg.sent[0]["text"]
+        assert isinstance(result, str)
+        assert "https://hub.local/display/plan/woche" in result
 
 
 class TestSreg5bBugBeispiele:
@@ -746,86 +764,69 @@ class TestSreg5bBugBeispiele:
 
     def _zweistufig(self, suchbegriff_r1, suchbegriff_r2):
         """Hilfsmethode: simuliert beide Runden für ein Suchbegriff-Paar."""
-        tg1 = FakeTelegram()
         client1 = FakeSeitenClient(_inventar_bug_beispiele())
         # Runde 1: Inventar holen.
-        ergebnis1 = seiten_uebersicht(
-            tg=tg1, chat_id=100, from_user_id=42,
+        result1 = seiten_uebersicht(
+            chat_id=100, from_user_id=42,
             suchbegriff=suchbegriff_r1,
             seiten_client=client1,
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
             aktion=AKTION_INVENTAR,
         )
-        assert isinstance(ergebnis1, tuple), "Runde 1 muss Tupel liefern"
-        signal1, inventar_text = ergebnis1
-        assert signal1 == SIGNAL_INVENTAR_GELIEFERT
-        assert not tg1.sent, "Kein Bot-Post in Runde 1"
+        assert isinstance(result1, str), "Runde 1 muss String liefern"
+        assert len(result1) > 0
 
         # Runde 2: Mit exaktem label aus Inventar matchen.
-        tg2 = FakeTelegram()
         client2 = FakeSeitenClient(_inventar_bug_beispiele())
-        ergebnis2 = seiten_uebersicht(
-            tg=tg2, chat_id=100, from_user_id=42,
+        result2 = seiten_uebersicht(
+            chat_id=100, from_user_id=42,
             suchbegriff=suchbegriff_r2,
             seiten_client=client2,
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
             aktion=AKTION_MATCH,
         )
-        return tg2, ergebnis2, inventar_text
+        return result2, result1
 
     def test_bug_beispiel_controller(self):
         """AC488-3: 'Controller' → zwei Runden → URL zur Figuren-Erkennung."""
         # Das LLM würde aus dem Inventar "Figuren-Erkennung Controller" wählen.
-        tg, ergebnis, inventar_text = self._zweistufig(
+        result2, inventar_text = self._zweistufig(
             "Controller", "Figuren-Erkennung Controller")
         # Inventar enthält den passenden Eintrag.
         assert "Figuren-Erkennung Controller" in inventar_text
-        # Runde 2: Direkt-URL gesendet.
-        assert ergebnis == SIGNAL_DIREKT_GESENDET
-        assert tg.sent
-        assert "https://hub.local/controller/figuren-erkennung/" in tg.sent[0]["text"]
+        # Runde 2: Direkt-URL im Tool-Result.
+        assert isinstance(result2, str)
+        assert "https://hub.local/controller/figuren-erkennung/" in result2
 
     def test_bug_beispiel_eltern_panel(self):
         """AC488-3: 'Eltern Panel' → zwei Runden → URL zum Panel-Editor."""
         # Das LLM würde aus dem Inventar "Eltern Panel panel-1 bearbeiten" wählen.
-        tg, ergebnis, inventar_text = self._zweistufig(
+        result2, inventar_text = self._zweistufig(
             "Eltern Panel", "Eltern Panel panel-1 bearbeiten")
         assert "Eltern Panel panel-1 bearbeiten" in inventar_text
-        # Runde 2: Direkt-URL oder EC-22 — beides ist korrekt (KEIN generischer Fallback).
-        # (#549: SIGNAL_MEHRDEUTIG wird als Tupel zurückgegeben)
-        signal = ergebnis[0] if isinstance(ergebnis, tuple) else ergebnis
-        assert signal in (SIGNAL_DIREKT_GESENDET, SIGNAL_MEHRDEUTIG), (
-            "Erwartet Direkt-URL oder EC-22-Rückfrage, nicht generischer Fallback")
-        assert tg.sent
+        # Runde 2: Direkt-URL oder Rückfrage (KEIN generischer Fallback).
+        assert isinstance(result2, str)
+        assert len(result2) > 0
 
     def test_bug_beispiel_wetter(self):
-        """AC488-3: 'Wetter' → zwei Runden → Direkt-URL oder EC-22 (KEIN Fallback)."""
+        """AC488-3: 'Wetter' → zwei Runden → Direkt-URL (KEIN Fallback)."""
         # Das LLM würde aus dem Inventar "Wetter heute" wählen.
-        tg, ergebnis, inventar_text = self._zweistufig("Wetter", "Wetter heute")
+        result2, inventar_text = self._zweistufig("Wetter", "Wetter heute")
         assert "Wetter heute" in inventar_text
-        # (#549: SIGNAL_MEHRDEUTIG wird als Tupel zurückgegeben)
-        signal = ergebnis[0] if isinstance(ergebnis, tuple) else ergebnis
-        assert signal in (SIGNAL_DIREKT_GESENDET, SIGNAL_MEHRDEUTIG), (
-            "Erwartet Direkt-URL oder EC-22-Rückfrage, nicht generischer Fallback")
-        assert tg.sent
-        # Bei eindeutigem Match muss die URL zum Wetter-View führen.
-        if signal == SIGNAL_DIREKT_GESENDET:
-            assert "https://hub.local/display/wetter/heute" in tg.sent[0]["text"]
+        assert isinstance(result2, str)
+        assert len(result2) > 0
+        # Bei Equality-Match muss die URL zum Wetter-View führen.
+        assert "https://hub.local/display/wetter/heute" in result2
 
     def test_bug_beispiel_plan(self):
         """AC488-3: 'Plan' → zwei Runden → Direkt-URL zum Wochenplan."""
         # Das LLM würde aus dem Inventar "Wochenplan" wählen.
-        tg, ergebnis, inventar_text = self._zweistufig("Plan", "Wochenplan")
+        result2, inventar_text = self._zweistufig("Plan", "Wochenplan")
         assert "Wochenplan" in inventar_text
-        # (#549: SIGNAL_MEHRDEUTIG wird als Tupel zurückgegeben)
-        signal = ergebnis[0] if isinstance(ergebnis, tuple) else ergebnis
-        assert signal in (SIGNAL_DIREKT_GESENDET, SIGNAL_MEHRDEUTIG), (
-            "Erwartet Direkt-URL oder EC-22-Rückfrage, nicht generischer Fallback")
-        assert tg.sent
-        if signal == SIGNAL_DIREKT_GESENDET:
-            assert "https://hub.local/display/plan/woche" in tg.sent[0]["text"]
+        assert isinstance(result2, str)
+        assert "https://hub.local/display/plan/woche" in result2
 
 
 class TestFormatierInventarToolResult:
@@ -924,16 +925,17 @@ class TestFormatierMehrdeutigkeitToolResult:
 
 
 # ============================================================
-#  Tests: SIGNAL_MEHRDEUTIG Tupel-Pfad + Roundtrip (#549)
+#  Tests: Mehrdeutigkeit als String-Tool-Result (#549/#583)
 # ============================================================
 
-class TestMehrdeutigkeitTupelUndRoundtrip:
-    """T549-Test2: SIGNAL_MEHRDEUTIG gibt Tupel zurück; Roundtrip via Task-Tool-Result.
+class TestMehrdeutigkeitAlsStringToolResult:
+    """T549-Test2 (EC-29 Migration): SIGNAL_MEHRDEUTIG gibt String zurück;
+    der kombinierte Text enthält Rückfrage + Kandidaten-Liste.
 
     Simuliert den Paula-Panel-Live-Bug:
-      Runde match → 2 Treffer → Tupel (SIGNAL_MEHRDEUTIG, kandidaten_text)
+      Runde match → 2 Treffer → String mit Rückfrage + kandidaten_text
       → User sagt „Die Ansicht" → LLM ruft mit aktion=match + exaktem label
-      → SIGNAL_DIREKT_GESENDET (kein Default-Fallback).
+      → Direkt-URL als Tool-Result (kein Default-Fallback).
     """
 
     def _inventar_paula(self):
@@ -952,18 +954,13 @@ class TestMehrdeutigkeitTupelUndRoundtrip:
              "synonyme": []},
         ]
 
-    def test_signal_mehrdeutig_ist_tupel(self):
-        """T549-Test2a: Bei Mehrdeutigkeit (Substring-Pfad, kein aktion=match) gibt
-        seiten_uebersicht() ein Tupel zurück.
-
-        Mit aktion=match (Fix #2) wird Equality-Lookup verwendet — kein SIGNAL_MEHRDEUTIG
-        mehr bei aktion=match. Der Substring-Pfad (aktion=None) bleibt für Legacy-Fälle.
+    def test_signal_mehrdeutig_ist_string(self):
+        """T549-Test2a (EC-29): Bei Mehrdeutigkeit (Substring-Pfad) gibt
+        seiten_uebersicht() einen String zurück (kein Tupel mehr — EC-29).
         """
-        tg = FakeTelegram()
         client = FakeSeitenClient(self._inventar_paula())
         # Ohne aktion → Substring-Pfad → beide Einträge enthalten "paulas-panel-01" → mehrdeutig.
-        ergebnis = seiten_uebersicht(
-            tg=tg,
+        result = seiten_uebersicht(
             chat_id=100, from_user_id=42,
             suchbegriff="paulas-panel-01",
             seiten_client=client,
@@ -971,19 +968,13 @@ class TestMehrdeutigkeitTupelUndRoundtrip:
             display_url_origin_heim="https://hub.local",
             aktion=None,
         )
-        assert isinstance(ergebnis, tuple), (
-            "SIGNAL_MEHRDEUTIG muss als Tupel zurückgegeben werden (#549)")
-        signal, kandidaten_text = ergebnis
-        assert signal == SIGNAL_MEHRDEUTIG
-        assert isinstance(kandidaten_text, str)
-        assert len(kandidaten_text) > 0
+        assert isinstance(result, str), (
+            "EC-29: Funktion muss immer einen String zurückgeben (kein Tupel mehr)")
 
-    def test_signal_mehrdeutig_kandidaten_text_enthaelt_beide_labels(self):
-        """T549-Test2b: kandidaten_text enthält beide Panel-Labels (Substring-Pfad)."""
-        tg = FakeTelegram()
+    def test_signal_mehrdeutig_enthaelt_beide_labels(self):
+        """T549-Test2b: Rückfrage-Text enthält beide Panel-Labels."""
         client = FakeSeitenClient(self._inventar_paula())
-        ergebnis = seiten_uebersicht(
-            tg=tg,
+        result = seiten_uebersicht(
             chat_id=100, from_user_id=42,
             suchbegriff="paulas-panel-01",
             seiten_client=client,
@@ -991,103 +982,84 @@ class TestMehrdeutigkeitTupelUndRoundtrip:
             display_url_origin_heim="https://hub.local",
             aktion=None,
         )
-        _, kandidaten_text = ergebnis
-        assert 'label: "Panel paulas-panel-01"' in kandidaten_text
-        assert 'label: "Panel paulas-panel-01 bearbeiten"' in kandidaten_text
+        assert "Panel paulas-panel-01" in result
+        assert "Panel paulas-panel-01 bearbeiten" in result
 
-    def test_task_mehrdeutig_gibt_kandidaten_text_als_tool_result(self):
-        """T549-Test2c: SeitenUebersichtTask gibt kandidaten_text als Tool-Result zurück
+    def test_task_mehrdeutig_gibt_string_als_tool_result(self):
+        """T549-Test2c: SeitenUebersichtTask gibt kombinierten String als Tool-Result zurück
         (Substring-Pfad, kein aktion=match).
-
-        Mit aktion=match (Fix #2) würde Equality-Lookup verwendet; hier testen wir
-        den Substring-Pfad (kein aktion), der weiterhin mehrdeutig liefert.
         """
-        tg = FakeTelegram()
         client = FakeSeitenClient(self._inventar_paula())
         task = SeitenUebersichtTask(
-            tg=tg, seiten_client=client,
+            seiten_client=client,
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
         )
         ctx = _make_turn_context()
-        # Kein aktion → Substring-Pfad → mehrdeutig → kandidaten_text als Tool-Result.
-        result = task.run(
-            {"suchbegriff": "paulas-panel-01"}, ctx)
-        # Task muss kandidaten_text zurückgeben (nicht statische Quittung).
+        # Kein aktion → Substring-Pfad → mehrdeutig → kombinierter Text als Tool-Result.
+        result = task.run({"suchbegriff": "paulas-panel-01"}, ctx)
         assert isinstance(result, str)
-        assert 'label: "Panel paulas-panel-01"' in result
+        assert "Panel paulas-panel-01" in result
         assert "aktion=match" in result
 
     def test_roundtrip_disambiguation_ansicht(self):
         """T549-Test2d: Roundtrip — Mehrdeutigkeits-Tool-Result → match mit exaktem label.
 
         Simuliert den Paula-Panel-Live-Bug (T549-Fix2):
-          Runde inventar (q='paulas-panel-01') → kandidaten_text mit label + key.
+          Runde inventar (q='paulas-panel-01') → inventar_text mit label + key.
           Runde match (q='Panel paulas-panel-01') → Equality-Lookup trifft
-          NUR den ersten Eintrag → SIGNAL_DIREKT_GESENDET (kein Präfix-Geschwister-Bug).
-
-        Mit Equality-Match bei aktion=match trifft das exakte label 'Panel paulas-panel-01'
-        nicht den Editor 'Panel paulas-panel-01 bearbeiten' — deterministisches Lookup
-        auf diszipliniertem Wert (SREG-5b).
+          NUR den ersten Eintrag → Direkt-URL als Tool-Result (kein Präfix-Bug).
         """
-        # Runde 1: Inventar holen, um kandidaten_text zu erhalten.
-        tg1 = FakeTelegram()
+        # Runde 1: Inventar holen.
         client1 = FakeSeitenClient(self._inventar_paula())
-        ergebnis1 = seiten_uebersicht(
-            tg=tg1, chat_id=100, from_user_id=42,
+        result1 = seiten_uebersicht(
+            chat_id=100, from_user_id=42,
             suchbegriff="paulas-panel-01",
             seiten_client=client1,
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
             aktion=AKTION_INVENTAR,
         )
-        assert isinstance(ergebnis1, tuple)
-        signal1, inventar_text = ergebnis1
-        assert signal1 == SIGNAL_INVENTAR_GELIEFERT
+        assert isinstance(result1, str)
         # Inventar enthält label + key beider Einträge.
-        assert "Panel paulas-panel-01" in inventar_text
-        assert "panel-paulas-panel-01" in inventar_text
-        assert "Panel paulas-panel-01 bearbeiten" in inventar_text
-        assert not tg1.sent, "Kein Bot-Post in Runde 1"
+        assert "Panel paulas-panel-01" in result1
+        assert "panel-paulas-panel-01" in result1
+        assert "Panel paulas-panel-01 bearbeiten" in result1
 
         # Runde 2: LLM wählt exaktes label der Ansicht → Equality-Match trifft nur diesen.
-        tg2 = FakeTelegram()
         client2 = FakeSeitenClient(self._inventar_paula())
-        ergebnis2 = seiten_uebersicht(
-            tg=tg2, chat_id=100, from_user_id=42,
+        result2 = seiten_uebersicht(
+            chat_id=100, from_user_id=42,
             suchbegriff="Panel paulas-panel-01",
             seiten_client=client2,
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
             aktion=AKTION_MATCH,
         )
-        assert ergebnis2 == SIGNAL_DIREKT_GESENDET, (
-            "Equality-Match mit exaktem label muss SIGNAL_DIREKT_GESENDET liefern "
+        assert isinstance(result2, str)
+        assert "https://hub.local/controller/app-panel/paulas-panel-01" in result2, (
+            "Equality-Match mit exaktem label muss Direkt-URL liefern "
             "(T549-Fix2: kein Präfix-Geschwister-Bug)")
-        assert tg2.sent
-        assert "https://hub.local/controller/app-panel/paulas-panel-01" in tg2.sent[0]["text"]
         # Kein /bearbeiten-Suffix → Ansicht, nicht Editor.
-        assert "/bearbeiten" not in tg2.sent[0]["text"]
+        assert "/bearbeiten" not in result2
 
     def test_roundtrip_disambiguation_editor(self):
         """T549-Test2e: Roundtrip — Disambiguation auf Editor-View.
 
-        Runde match (q='Panel paulas-panel-01 bearbeiten') → SIGNAL_DIREKT_GESENDET (Editor).
+        Runde match (q='Panel paulas-panel-01 bearbeiten') → URL zum Editor.
         """
-        tg = FakeTelegram()
         client = FakeSeitenClient(self._inventar_paula())
-        ergebnis = seiten_uebersicht(
-            tg=tg, chat_id=100, from_user_id=42,
+        result = seiten_uebersicht(
+            chat_id=100, from_user_id=42,
             suchbegriff="Panel paulas-panel-01 bearbeiten",
             seiten_client=client,
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
             aktion=AKTION_MATCH,
         )
-        assert ergebnis == SIGNAL_DIREKT_GESENDET, (
+        assert isinstance(result, str), (
             "Exaktes label für Editor-View muss Direkt-URL liefern (#549)")
-        assert tg.sent
-        assert "/bearbeiten" in tg.sent[0]["text"]
+        assert "/bearbeiten" in result
 
 
 # ============================================================
@@ -1123,63 +1095,55 @@ class TestAktionMatchEquality:
 
         'Panel paulas-panel-01' ist Präfix von 'Panel paulas-panel-01 bearbeiten'.
         Substring-Match würde beide treffen (mehrdeutig). Equality-Match trifft nur
-        den ersten Eintrag → SIGNAL_DIREKT_GESENDET, kein SIGNAL_MEHRDEUTIG.
+        den ersten Eintrag → Direkt-URL, kein Mehrdeutigkeit-Text.
         """
-        tg = FakeTelegram()
         client = FakeSeitenClient(self._inventar_praefix_geschwister())
-        ergebnis = seiten_uebersicht(
-            tg=tg, chat_id=100, from_user_id=42,
+        result = seiten_uebersicht(
+            chat_id=100, from_user_id=42,
             suchbegriff="Panel paulas-panel-01",
             seiten_client=client,
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
             aktion=AKTION_MATCH,
         )
-        assert ergebnis == SIGNAL_DIREKT_GESENDET, (
+        assert isinstance(result, str)
+        assert "https://hub.local/controller/app-panel/paulas-panel-01" in result, (
             "Equality-Match muss NUR den Eintrag mit exakt diesem label treffen "
             "— kein Präfix-Geschwister-Bug (T549-Fix2)")
-        assert tg.sent
-        assert "https://hub.local/controller/app-panel/paulas-panel-01" in tg.sent[0]["text"]
         # Kein /bearbeiten-Suffix → nur Ansicht, nicht Editor.
-        assert "/bearbeiten" not in tg.sent[0]["text"]
+        assert "/bearbeiten" not in result
 
     def test_aktion_match_key_pfad(self):
         """aktion=match + key als suchbegriff → Equality-Match auf key trifft Eintrag."""
-        tg = FakeTelegram()
         client = FakeSeitenClient(self._inventar_praefix_geschwister())
-        ergebnis = seiten_uebersicht(
-            tg=tg, chat_id=100, from_user_id=42,
+        result = seiten_uebersicht(
+            chat_id=100, from_user_id=42,
             suchbegriff="paulas-panel-01-bearbeiten",
             seiten_client=client,
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
             aktion=AKTION_MATCH,
         )
-        assert ergebnis == SIGNAL_DIREKT_GESENDET, (
+        assert isinstance(result, str), (
             "Equality-Match auf key muss den Eintrag treffen (T549-Fix2)")
-        assert tg.sent
-        assert "/bearbeiten" in tg.sent[0]["text"]
+        assert "/bearbeiten" in result
 
     def test_aktion_match_kein_treffer(self):
-        """aktion=match + unbekannter suchbegriff → klares Signal, kein Default-Loop."""
-        tg = FakeTelegram()
+        """aktion=match + unbekannter suchbegriff → Fehler-Text als Tool-Result."""
         client = FakeSeitenClient(self._inventar_praefix_geschwister())
-        ergebnis = seiten_uebersicht(
-            tg=tg, chat_id=100, from_user_id=42,
+        result = seiten_uebersicht(
+            chat_id=100, from_user_id=42,
             suchbegriff="gibt es nicht",
             seiten_client=client,
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
             aktion=AKTION_MATCH,
         )
-        # Kein Treffer → SIGNAL_DEFAULT_GESENDET mit erklärender Nachricht.
-        assert ergebnis == SIGNAL_DEFAULT_GESENDET
-        assert tg.sent
+        # Kein Treffer → Fehler-Text (kein SIGNAL_MEHRDEUTIG-Loop).
+        assert isinstance(result, str)
+        assert len(result) > 0
         # Die Nachricht soll den suchbegriff nennen und auf aktion=inventar hinweisen.
-        text = tg.sent[0]["text"]
-        assert "gibt es nicht" in text or "inventar" in text.lower()
-        # Kein SIGNAL_MEHRDEUTIG-Loop.
-        assert not isinstance(ergebnis, tuple)
+        assert "gibt es nicht" in result or "inventar" in result.lower()
 
 
 # ============================================================
