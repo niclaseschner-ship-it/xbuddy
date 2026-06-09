@@ -76,6 +76,21 @@ ICONS-7, `GET /api/v1/icons/suche?q=<label>&max=3`) und legt dem Elternteil die
 - Liefert ICONS-7 **keine** Treffer, meldet der Skill das ehrlich (EC-7) und fragt
   nach einem anderen Wort; er erfindet **keine** ID.
 
+**Mechanik der Kandidaten-Anzeige (verbindlich):** Die „Bilder vor"-Klausel
+ist als **inline Telegram-Bild-Block** umzusetzen, nicht als URL-Liste. Der
+Skill ruft `sendMediaGroup` (Telegram-API) mit den bis zu drei Kandidaten als
+Album auf; jeder Kandidat hat als Caption seine ARASAAC-`id`. Der Elternteil
+antwortet mit der `id` (oder einer Album-Position 1/2/3, die der Skill auf die
+`id` zurückbildet). **Bildquelle:** der Skill lädt das Bild über
+`icon_origin_url` per HTTP (RPS-6-Konsistenz — derselbe Router-Origin, der
+auch die Suche bedient), nicht aus dem Dateisystem direkt (DCOMP-1: keine
+Pfad-Kopplung zwischen Services). Eine URL-Liste als minimale Variante ist
+**verworfen** — der Live-Befund 2026-06-08 hat gezeigt, dass Eltern eine
+nackte ID („2326") oder einen Klick auf eine URL nicht akzeptieren; inline
+Bild ist die einzige tragfähige UX. Telegram-Client `eltern-chat/telegram.py`
+braucht dazu eine `send_media_group`-Methode (analog der existierenden
+`send_document`-Multipart-Naht).
+
 Die gewählte ARASAAC-`id` geht als `piktogramm` in den Punkt (ROUTINE-10). Der
 Icon-Such-Endpunkt liefert nur IDs mit lokal vorliegendem PNG (ICONS-7) — der
 gewählte Punkt rendert garantiert.
