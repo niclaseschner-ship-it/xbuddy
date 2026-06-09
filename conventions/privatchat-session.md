@@ -33,6 +33,17 @@ Stürzt der Prozess während einer Session ab oder wird neu gestartet,
 ist die Session verloren — kein Wiederaufnahme-Pfad. Bereits durch den
 endgültigen Commit geschriebene Daten bleiben unberührt.
 
+**Test-Pflicht konventionsweit.** SESS-2 (kein halber persistenter
+Zustand nach Restart) wird durch **einen** automatisierten Test gegen
+die `PrivateChatSession`-Basis abgedeckt — der Test gilt für alle
+Sorten, weil sie dieselbe Basis erben. Die Konsumenten-Specs
+(`specs/platform/termin-eintragen.md` TES-11/TES-3,
+`specs/platform/termine-aus-bild.md` TAB-13/TAB-3, künftige Sorten)
+verweisen auf diese Klausel und dürfen den Test **nicht** sortenweise
+duplizieren (Verweis-Pattern analog TES-11). Implementierungs-Naht:
+`eltern-chat/tests/test_privatechat_session_base.py` (gegen Basis-
+Klasse, ohne Netz, CLAUDE.md §6).
+
 ### SESS-3 — 30-Minuten-Timeout
 Eine Session, die **30 Minuten** keine passende eingehende Nachricht
 sieht, läuft automatisch ab und liefert das Ergebnis-Signal
