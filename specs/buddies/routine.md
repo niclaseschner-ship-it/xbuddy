@@ -365,6 +365,13 @@ DCOMP-3/4 wie `PUT …/config`:
   Config, `einmalig` aus dem Tages-State), atomar.
 - **`PUT /api/v1/routine/items` — die geordnete `default`-Liste ersetzen**
   (Reihenfolge ändern / Bulk; idempotent; URL-2 „Methode trägt die Aktion").
+- **`GET /api/v1/routine/items` — die aktuelle Liste lesen** (V1.2, #469).
+  Antwort: `{"default": [{id, label, piktogramm}, …], "einmalig_heute": [{id, label, piktogramm}, …]}`.
+  Quellen: `cfg.items` (default-Liste, persistent) + Tages-State `einmalig_heute`
+  (ROUTINE-8). Die Trennung im JSON ist bindend, weil `default` und `einmalig`
+  fachlich unterschiedliche Persistenz/Lebensdauer haben (RPS-3) — ein Konsument
+  muss den Unterschied erkennen können, ohne erneut zu fragen. Reload-on-Read
+  (DCOMP-2): die Antwort spiegelt den aktuellen Stand bei jedem Aufruf.
 
 Die übrigen Schnittstellen bleiben **entworfen, aber bewusst nicht gebaut**;
 jede wird erst geliefert, wenn ihr konkreter Konsument/Produzent existiert
