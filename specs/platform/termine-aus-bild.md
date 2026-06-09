@@ -538,8 +538,11 @@ kontrollierte Doppelungen ersetzt, analog `eltern-chat.md` EC-17,
 - **TAB-3** — Trigger aus der Familien-Gruppe startet die Konversation
   im Privatchat des `from_user_id` (Privatchat-Pflicht); ein Privatchat-
   Trigger startet direkt dort; ein 30-Minuten-Timeout in der laufenden
-  Session beendet sie und liefert „abgebrochen" (SESS-3); ein Prozess-
-  Neustart während der Session beendet sie ohne Bulk-PUT (SESS-2).
+  Session beendet sie und liefert „abgebrochen" (SESS-3); der
+  Prozess-Neustart-Pfad (SESS-2 — kein halber persistenter Zustand,
+  kein Bulk-PUT nach Restart) wird konventionsweit über die
+  `conventions/privatchat-session.md` SESS-2-Test-Pflicht abgedeckt
+  und hier nicht dupliziert (Verweis-Pattern analog TES-11).
 - **TAB-4** — Bild **ohne** Begleittext → die Funktion greift **nicht**
   (FSE übernimmt); Bild **mit** Signalwort → TAB greift; Bild mit
   Begleittext ohne Signalwort → TAB greift **nicht**.
