@@ -37,7 +37,7 @@ class WuenscheZeigenTask(ReadTask):
     sendet selbst nichts an Telegram.
     """
 
-    def __init__(self, essen_client, is_member_fn, tg=None):
+    def __init__(self, essen_client, is_member_fn):
         super().__init__(
             name="wuensche_zeigen",
             description=(
@@ -55,9 +55,6 @@ class WuenscheZeigenTask(ReadTask):
             })
         self._essen_client = essen_client
         self._is_member_fn = is_member_fn
-        # tg wird nicht zum Senden genutzt (EC-29); Parameter bleibt für
-        # Rückwärtskompatibilität des build_catalog-Aufrufers in tasks.py.
-        self._tg = tg
 
     def run(self, arguments, turn_context):
         """Führt die Wünsche-zeigen-Aufgabe aus (WZE-1/EC-29/TASK-10).
