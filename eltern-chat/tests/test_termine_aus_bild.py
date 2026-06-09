@@ -225,14 +225,15 @@ def test_TAB5_provider_fehler_signal_und_keine_bulk():
 # ============================================================
 
 def test_TAB6_termin_ausserhalb_plausi_wird_verworfen():
-    """TAB-6: ein `beginn` außerhalb [heute-30d, heute+2J] wird verworfen."""
+    """TAB-6: ein `beginn` außerhalb [heute-400d, heute+2J] wird verworfen."""
     heute = date(2026, 6, 1)
     items = [
-        ExtractedTermin(titel="Zu früh", beginn="2025-01-01", ganztags=True),
+        # 2024-01-01 liegt mehr als 400 Tage vor 2026-06-01 → verworfen.
+        ExtractedTermin(titel="Zu früh", beginn="2024-01-01", ganztags=True),
         ExtractedTermin(titel="Zu spät", beginn="2029-01-01", ganztags=True),
         ExtractedTermin(titel="Im Fenster", beginn="2026-09-15", ganztags=True),
     ]
-    gefiltert, verworfen, cap = validiere_und_filtere(items, heute=heute)
+    gefiltert, verworfen, cap, _vg = validiere_und_filtere(items, heute=heute)
     assert verworfen == 2
     assert cap == 0
     assert len(gefiltert) == 1
@@ -264,7 +265,7 @@ def test_TAB6_termin_ohne_titel_kommt_in_luecken_sammler():
     TAB-8.1), wird aber nicht im Plausi-Schritt verworfen."""
     heute = date(2026, 6, 1)
     items = [ExtractedTermin(titel="", beginn="2026-09-15", ganztags=True)]
-    gefiltert, _verworfen, _cap = validiere_und_filtere(items, heute=heute)
+    gefiltert, _verworfen, _cap, _vg = validiere_und_filtere(items, heute=heute)
     assert len(gefiltert) == 1
     assert "titel" in gefiltert[0].fehlende_felder
 
@@ -279,7 +280,7 @@ def test_TAB6_cap_30_mit_hinweis():
                         ganztags=True)
         for i in range(35)
     ]
-    gefiltert, _verworfen, cap_hinweis_n = validiere_und_filtere(
+    gefiltert, _verworfen, cap_hinweis_n, _vg = validiere_und_filtere(
         items, heute=heute)
     assert len(gefiltert) == MAX_ITEMS == 30
     assert cap_hinweis_n == 5
@@ -393,7 +394,7 @@ def test_TAB82_personen_hinweise_loesen_keine_rueckfrage_aus():
     items = [ExtractedTermin(
         titel="Klettern", beginn="2026-09-15", ganztags=True,
         personen_hinweise="für Mila")]
-    gefiltert, _v, _c = validiere_und_filtere(items, heute=heute)
+    gefiltert, _v, _c, _vg = validiere_und_filtere(items, heute=heute)
     assert gefiltert[0].fehlende_felder == []
     # Titel bleibt unverändert.
     assert gefiltert[0].titel == "Klettern"
@@ -578,3 +579,60 @@ def test_session_timeout_liefert_abgebrochen():
         heute=date(2026, 6, 1))
     assert result == SIGNAL_ABGEBROCHEN
     assert plan_client.bulk_calls == []
+
+
+# ============================================================
+#  TAB-6 — Plausi-Fenster 400 Tage rückwärts (Refs #524)
+# ============================================================
+
+def test_TAB6_vergangenheit_innerhalb_400d_durchgelassen():
+    """TAB-6: ein Termin mit beginn = heute-200d liegt im neuen Fenster
+    [heute-400d, heute+2J] und wird NICHT verworfen (Refs #524)."""
+    heute = date(2026, 6, 1)
+    from datetime import timedelta
+    beginn_200_tage_zurueck = (heute - timedelta(days=200)).isoformat()
+    items = [
+        ExtractedTermin(titel="Alter Plan", beginn=beginn_200_tage_zurueck,
+                        ganztags=True),
+    ]
+    gefiltert, verworfen, _cap, vergangenheits_n = validiere_und_filtere(
+        items, heute=heute)
+    assert verworfen == 0
+    assert len(gefiltert) == 1
+    assert gefiltert[0].titel == "Alter Plan"
+    assert vergangenheits_n == 1
+
+
+# ============================================================
+#  TAB-7 — Vergangenheits-Hinweis (Refs #524)
+# ============================================================
+
+def test_TAB7_sammel_vorschlag_zeigt_vergangenheits_hinweis():
+    """TAB-7: Items mit beginn vor heute → Vorschlag enthält den Hinweis-
+    String mit Anzahl (Refs #524)."""
+    from datetime import timedelta
+    heute = date(2026, 6, 1)
+    items = [
+        ExtractedTermin(titel="Vergangener Termin",
+                        beginn=(heute - timedelta(days=10)).isoformat(),
+                        ganztags=True),
+        ExtractedTermin(titel="Zukünftiger Termin",
+                        beginn="2026-09-15", ganztags=True),
+    ]
+    vorschlag = baue_sammel_vorschlag(items, vergangenheits_n=1)
+    assert "Hinweis" in vorschlag
+    assert "1" in vorschlag
+    assert "2" in vorschlag
+    assert "vor heute" in vorschlag
+
+
+def test_TAB7_keine_vergangenheit_kein_hinweis():
+    """TAB-7: alle Items in der Zukunft → kein Vergangenheits-Hinweis
+    im Sammel-Vorschlag (Refs #524)."""
+    items = [
+        ExtractedTermin(titel="A", beginn="2026-09-15", ganztags=True),
+        ExtractedTermin(titel="B", beginn="2026-10-01", ganztags=True),
+    ]
+    vorschlag = baue_sammel_vorschlag(items, vergangenheits_n=0)
+    assert "vor heute" not in vorschlag
+    assert "ℹ️" not in vorschlag

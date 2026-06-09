@@ -1,6 +1,6 @@
 # Termine aus Bild — Spec     (ID-Präfix: TAB)
 
-> Status: V1 · Refs #475
+> Status: V1 · Refs #475, #524
 
 Damit ein Elternteil im Eltern-Chat **mehrere Termine** aus einem
 abfotografierten Plan (Schulplan, Kursplan, Vereins-Saisonübersicht) in den
@@ -208,13 +208,17 @@ Vorschlag deterministisch validiert (außerhalb des Agent-Loops,
 `eltern-chat.md` E-EC-4):
 
 - **Plausi-Fenster:** Jeder Termin-Tag muss im Intervall
-  `[heute - 30 Tage, heute + 2 Jahre]` liegen. Termine außerhalb des
+  `[heute - 400 Tage, heute + 2 Jahre]` liegen. Termine außerhalb des
   Fensters werden verworfen — sie sind mit überwiegender Wahrscheinlichkeit
   LLM-Fehlausgaben (Modell-Halluzination einer Jahreszahl, fehlinterpretierte
-  Tabellen-Kopfzeile). Begründung 30 Tage rückwärts: gestern/letzte Woche
-  ist plausibel (vergessenen Termin nachpflegen); Quartal-zurück ist Plan-
-  Lese-Fehler. Begründung 2 Jahre vorwärts: Schul-/Vereins-Saisonpläne
-  reichen bis zu einem Schuljahr, ein zweites als Reserve.
+  Tabellen-Kopfzeile). Begründung 400 Tage (~13 Monate) rückwärts:
+  Kita-/Schulpläne werden saisonsweise wiederverwendet — ein „Juni 2025"-
+  Wochenplan wird im Juni 2026 erneut ausgehängt; das bisherige 30-Tage-
+  Fenster hat solche Pläne als „unklar" abgelehnt (Live-Bug, Refs #524).
+  400 Tage decken eine volle Saison plus Reserve ab; Termine älter als
+  ~13 Monate sind auch bei Wiederverwendung keine plausiblen Einträge mehr.
+  Begründung 2 Jahre vorwärts: Schul-/Vereins-Saisonpläne reichen bis zu
+  einem Schuljahr, ein zweites als Reserve.
 - **Schema-Vollständigkeit:** Jeder Termin muss `titel` (nicht leer) und
   `beginn` (gültiges ISO-Datum oder ISO-Datetime) enthalten — sonst
   wandert er in den Lücken-Sammler (TAB-8.1).
@@ -232,10 +236,10 @@ Vorschlag deterministisch validiert (außerhalb des Agent-Loops,
   Zeile ist welcher Termin) Teil der Extraktion ist.
 
 Der konkrete Validierungs-Code lebt im Eltern-Chat; die Spec normiert das
-**Soll** (Existenz der Validierung, Plausi-Fenster-Grenzen, Verhalten bei
-leerer Liste).
+**Soll** (Existenz der Validierung, Plausi-Fenster-Grenzen `heute-400d`
+bis `heute+2J`, Verhalten bei leerer Liste).
 
-*Tickets:* #475
+*Tickets:* #475, #524
 
 ## 4. Konversation
 
@@ -276,7 +280,22 @@ codierter String; die Spec normiert das **Soll** (nummerierte Liste mit
 Datum + Titel + ggf. Uhrzeit-Spanne, im `<pre>`-Block, **ein** E-EC-7-
 Wort bestätigt alles).
 
-*Tickets:* #475
+**Vergangenheits-Hinweis-Klausel (Refs #524):** Liegen **mindestens ein**
+der gefilterten Termine vor dem heutigen Datum (beginn_date < heute, aber
+innerhalb des Plausi-Fensters — also nicht verworfen), **stellt die
+Funktion dem Sammel-Vorschlag einen Hinweis-Header voran**. Wortlaut
+(hart-codiert, V1):
+
+```
+ℹ️ Hinweis: N der M Termine liegen vor heute. Mit ja eintragen, mit nein verwerfen.
+```
+
+Begründung: die Familie soll sofort sehen, dass der Plan vergangenheitliche
+Termine enthält (typisch bei saisonsweise wiederverwendeten Kita-/Schulplänen,
+Live-Bug Refs #524) — und bewusst bestätigen oder verwerfen. Der KI-
+formulierte Hinweis (angepasster Wortlaut je Kontext) ist V2 (Refs #525).
+
+*Tickets:* #475, #524
 
 ### TAB-8 — Lücken-Sammel-Rückfrage bei unvollständigen Pflichtfeldern
 
@@ -529,16 +548,19 @@ kontrollierte Doppelungen ersetzt, analog `eltern-chat.md` EC-17,
   der Extraktion **nicht** persistiert (kein Photo-Buddy-Aufruf); ein
   Anbieter-Fehler (Timeout, ungültige JSON-Antwort) liefert
   „provider_fehler" mit hart-codierter ehrlicher Antwort, ohne Bulk-PUT.
-- **TAB-6** — ein Termin mit `beginn` außerhalb von `[heute-30d,
-  heute+2J]` wird verworfen; bleibt nach der Filterung eine leere
-  Liste, endet die Funktion mit „unklar" und ohne Bulk-PUT; ein Termin
+- **TAB-6** — ein Termin mit `beginn` außerhalb von `[heute-400d,
+  heute+2J]` wird verworfen; ein Termin mit `beginn = heute-200d` liegt im
+  Fenster und bleibt erhalten (Refs #524); bleibt nach der Filterung eine
+  leere Liste, endet die Funktion mit „unklar" und ohne Bulk-PUT; ein Termin
   ohne `titel`/`beginn`/Pflicht-`ende` wandert in den Lücken-Sammler
   (TAB-8.1).
 - **TAB-7** — vor dem Bulk-PUT wird **eine** Vorschlags-Nachricht im
   Privatchat gepostet, im HTML-`<pre>`-Block, mit allen Termin-
   Vorschlägen nummeriert; **ein** E-EC-7-Wort als Antwort löst den
   Bulk-PUT für **alle** Items aus; eine nicht-bestätigende Antwort
-  liefert „verworfen", **ohne** Bulk-PUT.
+  liefert „verworfen", **ohne** Bulk-PUT; liegt **mindestens ein** Termin
+  vor heute, wird dem Vorschlag der Vergangenheits-Hinweis vorangestellt
+  (Refs #524); sind alle Termine in der Zukunft, entfällt der Hinweis.
 - **TAB-8.1** — bei einer Pflicht-Lücke wird die Sentinel-Nachricht
   gepostet (alle Lücken auf einmal, `[?…?]`-Form, eckig); eine korrekt
   ersetzte Antwort wird deterministisch geparst und die Liste
