@@ -106,7 +106,7 @@ def load(path):
     eintraege = []
     gesehene_slugs = set()
     for roh in roh_views:
-        eintrag = _validate_eintrag(roh)
+        eintrag = validate_eintrag(roh)
         slug = eintrag["slug"]
         if slug in gesehene_slugs:
             raise ManifestError("views.json: doppelter slug %r" % slug)
@@ -130,9 +130,13 @@ def _ist_display_view(roh):
     return roh.get("zielgruppe") == "kind" and pfad.startswith("/display/")
 
 
-def _validate_eintrag(roh):
+def validate_eintrag(roh):
     """Validiert einen einzelnen View-Eintrag (SREG-4) und gibt ihn normalisiert
     zurück. Wirft `ManifestError` bei fehlendem Pflichtfeld oder Schema-Bruch.
+
+    Public API (T388-S2): ermöglicht dem Aggregator per-View-Iteration in-memory,
+    ohne für jede View ein Tempfile anzulegen. `load()` ruft diese Funktion intern
+    weiterhin auf — die Validierungslogik lebt an EINER Stelle (CLAUDE.md §6).
 
     BUD-4-Anteil (T387-S2): für Display-Views (Sorte a) zusätzlich `icons[]`
     Pflicht (1..3 Pfade als String, relativ zur Icon-Basis
@@ -153,6 +157,7 @@ def _validate_eintrag(roh):
         raise ManifestError(
             "views.json: `zielgruppe` muss %s sein, ist %r (slug %r)"
             % (ERLAUBTE_ZIELGRUPPEN, roh["zielgruppe"], roh.get("slug")))
+
 
     ist_display = _ist_display_view(roh)
     # BUD-4: icons[] nur bei Display-Views prüfen — Sorten b/c tragen kein
