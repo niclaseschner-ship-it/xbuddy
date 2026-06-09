@@ -15,12 +15,18 @@ Anlage nötigen Dinge entgegen: den Telegram-Kanal, den Privatchat (Chat-ID +
 User-ID), die ID der gebundenen Familien-Gruppe (für die Live-Prüfung der
 Mitgliedschaft, PAA-2 analog EC-2), den `PanelClient` (HTTP-Schreib-Naht zur
 Panel-Registry, PREG-15), den `GeraeteDisplayClient` (HTTP-Lese-Naht für die
-Display-Auswahl, GER-13) und eine `next_message()`-Funktion, über die sie die
-nächste eingehende Privatchat-Nachricht des Aufrufers abholt.
+Display-Auswahl, GER-13), den `SeitenClient` (HTTP-Lese-Naht für die
+Kandidaten-Liste, SREG-3, PAA-3.3) und eine `next_message()`-Funktion, über
+die sie die nächste eingehende Privatchat-Nachricht des Aufrufers abholt.
 
 PAA-4: Der Skill sendet **keine** `config`-Identität — der Server leitet
 `source_id`/`display_id`/`router_url` beim POST ab (PREG-15). Der Skill liefert
 nur `{slug, display_id, tiles}`.
+
+PAA-3.3 (OPEN-PAA-B → abgelöst #389): Kandidaten kommen aus
+`GET /api/v1/seiten` (SeitenClient), gefiltert auf Display-Views / Sorte a.
+`icons[]` + `query` je Kandidat stammen aus den Manifest-Einträgen (SREG-10).
+Die nummerierte, kuratierte Auswahl (OPEN-PAA-B) bleibt UI-Regel dieser Funktion.
 """
 
 import logging
@@ -33,62 +39,8 @@ import confirm
 from telegram import TelegramError
 
 from skills.panel_client import GeraeteReadError, PanelClientError
+from skills.seiten_client import SeitenClientError
 from skills.typing_indicator import fire_typing
-
-# ============================================================
-#  Feste App-Kandidatenliste (PAA-3.3, OPEN-PAA-B → feste Liste)
-# ============================================================
-
-# V1: hart-codierte, kuratierte Liste verfügbarer Apps zur nummerierten Auswahl
-# (OPEN-PAA-B-Entscheid Nic 2026-06-03 — keine freie Slug-Nennung, Tippfehler →
-# tote Kachel ausgeschlossen). Je Eintrag die PANEL-3-Pflichtfelder einer
-# Kachel (`app`, `view`, `label`, `icons`, `sichtbar`; `key` wird beim Bau aus
-# `app` abgeleitet; `query` wird gesetzt, wo eine Ansicht/Stufe nötig ist,
-# z. B. die Kleinkind-Stufe des Plans über `?ansicht=klein`, PLAN-3). Der echte
-# App-Discovery-Mechanismus, der diese Liste später ablöst, ist als #325
-# erfasst (gekoppelt an #296). Datenstruktur, kein Vorrat-Discovery (CLAUDE.md
-# §6): nur die heute existierenden Apps (Wetter; Plan in zwei Stufen).
-@dataclass(frozen=True)
-class _AppKandidat:
-    """Ein wählbarer App-Kandidat für die PAA-3.3-Kachel-Auswahl."""
-    app: str
-    view: str
-    label: str
-    icons: tuple
-    name: str   # Anzeigename in der Auswahl-Liste
-    query: dict = None   # optionale flache Query-Parameter (PANEL-7), z. B. {"ansicht": "klein"}
-
-
-# Reihenfolge = Anzeige-Reihenfolge der nummerierten Auswahl.
-# ARASAAC-IDs: 24721=Wetter/Klima, 32488=Kalender (#135-Seed), 2484=Kind-Marker.
-APP_KANDIDATEN = (
-    _AppKandidat(app="wetter", view="heute", label="Wetter",
-                 icons=("arasaac/24721.png",), name="Wetter (heute)"),
-    _AppKandidat(app="plan", view="woche", label="Wochenplan",
-                 icons=("arasaac/32488.png",), name="Plan (Woche) — Lese-Kind"),
-    _AppKandidat(app="plan", view="woche", label="Wochenplan (klein)",
-                 icons=("arasaac/32488.png", "arasaac/2484.png"),
-                 name="Plan (Woche) — Kleinkind", query={"ansicht": "klein"}),
-)
-
-
-def _tile_aus_kandidat(kandidat, index):
-    """Baut aus einem `_AppKandidat` ein PANEL-3-Kachel-Dict (PAA-3.3).
-
-    `key` ist stabil und eindeutig innerhalb der `tiles.json` (PANEL-3) —
-    wir leiten ihn aus `app` + laufendem Index ab, damit dieselbe App
-    mehrfach (verschiedene Views) kollisionsfrei bliebe.
-    """
-    return {
-        "key": "%s-%d" % (kandidat.app, index),
-        "app": kandidat.app,
-        "view": kandidat.view,
-        "label": kandidat.label,
-        "icons": list(kandidat.icons),
-        "sichtbar": True,
-        **({"query": dict(kandidat.query)} if kandidat.query else {}),
-    }
-
 
 # ============================================================
 #  Hart-codierte Nachrichten — Wortlaut ist Implementierungs-Detail
@@ -115,6 +67,10 @@ KEINE_DISPLAYS = ("Es ist noch kein Display-Gerät angelegt. Ein Panel steuert "
                   "an (Geräte-Anlage), dann können wir das Panel bauen.")
 GERAETE_FEHLER = ("Ich komme gerade nicht an die Geräte-Liste — ohne sie kann "
                   "ich kein Panel anlegen. Bitte später noch einmal.")
+SEITEN_FEHLER = ("Ich komme gerade nicht an die App-Liste — ohne sie kann "
+                 "ich kein Panel anlegen. Bitte später noch einmal.")
+KEINE_KANDIDATEN = ("Die App-Liste ist gerade leer — noch keine Display-Views "
+                    "konfiguriert. Bitte später noch einmal.")
 NOT_AUTHORIZED = ("Panels anlegen geht nur für Mitglieder der Familien-Gruppe. "
                   "Wende dich bitte an jemanden aus der Gruppe.")
 WRITE_FAILED = ("Konnte das Panel nicht speichern — bitte später noch einmal. "
@@ -190,6 +146,7 @@ class PanelAnlegenResult:
 
 def panel_anlegen(tg, chat_id, user_id, family_group_chat_id,
                   panel_client, geraete_client, next_message,
+                  seiten_client=None,
                   controller_url_origin=None,
                   typing_fn: Callable[[], None] | None = None):
     """Legt **eine** Panel-Instanz an (PAA-1).
@@ -205,6 +162,10 @@ def panel_anlegen(tg, chat_id, user_id, family_group_chat_id,
                                Privatchat-Nachricht des Aufrufers liefert
                                (PaaInput). Liefert `None`, gilt der Vorgang als
                                abgebrochen.
+    `seiten_client`          — `SeitenClient` (HTTP-Lese-Naht, SREG-3) für die
+                               Kandidaten-Liste (PAA-3.3, #389). Pflicht für
+                               Produktions-Einsatz; None → leere Kandidatenliste
+                               (Fehlerfall, analog KEINE_KANDIDATEN).
     `controller_url_origin`  — optional, Origin-URL (z. B. „https://hub.local")
                                für die Controller-URL-Rückgabe (PAA-3.5). Ohne
                                Wert liefert die Funktion nur den Pfad
@@ -247,8 +208,25 @@ def panel_anlegen(tg, chat_id, user_id, family_group_chat_id,
     if slug is None:
         return PanelAnlegenResult()
 
-    # PAA-3.3: Apps/Kacheln aus der festen Kandidatenliste.
-    tiles = _frage_apps(tg, chat_id, next_message, typing_fn)
+    # PAA-3.3: Kandidaten aus der Seiten-Registry (SREG-3, #389 OPEN-PAA-B).
+    # Unreachable → ehrliche Meldung (AC4). Leere Liste → Hinweis und Abbruch.
+    if seiten_client is None:
+        fire_typing(typing_fn)
+        _send(tg, chat_id, KEINE_KANDIDATEN)
+        return PanelAnlegenResult()
+    try:
+        kandidaten = seiten_client.get_kandidaten()
+    except SeitenClientError as e:
+        logging.warning("panel_anlegen: Seiten-Registry nicht erreichbar: %s", e)
+        fire_typing(typing_fn)
+        _send(tg, chat_id, SEITEN_FEHLER)
+        return PanelAnlegenResult()
+    if not kandidaten:
+        fire_typing(typing_fn)
+        _send(tg, chat_id, KEINE_KANDIDATEN)
+        return PanelAnlegenResult()
+
+    tiles = _frage_apps(tg, chat_id, kandidaten, next_message, typing_fn)
     if tiles is None:
         return PanelAnlegenResult()
 
@@ -338,41 +316,62 @@ def _frage_slug(tg, chat_id, next_message, typing_fn=None):
         _send(tg, chat_id, REJECT_SLUG)
 
 
-def _frage_apps(tg, chat_id, next_message, typing_fn=None):
-    """PAA-3.3: Apps aus der festen Kandidatenliste (≥1). Liefert die
+def _frage_apps(tg, chat_id, kandidaten, next_message, typing_fn=None):
+    """PAA-3.3: Apps aus der Registry-Kandidatenliste (≥1). Liefert die
     Kachel-Liste in PANEL-3-Form (Reihenfolge = Anzeige-Reihenfolge) oder
     None (Abbruch). Eine Eingabe ohne gültige Nummer wiederholt die Frage
-    (PAA-7)."""
+    (PAA-7). `kandidaten` ist die Rückgabe von SeitenClient.get_kandidaten()."""
     katalog = "\n".join(
-        "%d. %s" % (i, k.name)
-        for i, k in enumerate(APP_KANDIDATEN, start=1))
+        "%d. %s" % (i, k["name"])
+        for i, k in enumerate(kandidaten, start=1))
     while True:
         fire_typing(typing_fn)
         _send(tg, chat_id, "%s\n%s" % (ASK_APPS, katalog))
         msg = next_message()
         if msg is None:
             return None
-        gewaehlt = _parse_app_auswahl(msg.text)
+        gewaehlt = _parse_app_auswahl(msg.text, len(kandidaten))
         if gewaehlt:
-            return [_tile_aus_kandidat(APP_KANDIDATEN[i], pos)
+            return [_tile_aus_kandidat(kandidaten[i], pos)
                     for pos, i in enumerate(gewaehlt)]
         fire_typing(typing_fn)
         _send(tg, chat_id, REJECT_APPS)
 
 
-def _parse_app_auswahl(text):
+def _parse_app_auswahl(text, anzahl):
     """Parst »1,2« / »1 2« zu einer Liste von Kandidaten-Indizes (0-basiert),
     in Eingabe-Reihenfolge, ohne Duplikate. Liefert [] bei keiner gültigen
-    Nummer."""
+    Nummer. `anzahl` ist die Länge der Kandidatenliste (dynamisch, nicht mehr
+    len(APP_KANDIDATEN))."""
     roh = re.split(r"[,\s]+", (text or "").strip())
     indizes = []
     for token in roh:
         if not token.isdigit():
             continue
         n = int(token)
-        if 1 <= n <= len(APP_KANDIDATEN) and (n - 1) not in indizes:
+        if 1 <= n <= anzahl and (n - 1) not in indizes:
             indizes.append(n - 1)
     return indizes
+
+
+def _tile_aus_kandidat(kandidat, index):
+    """Baut aus einem Registry-Kandidaten-Dict ein PANEL-3-Kachel-Dict (PAA-3.3).
+
+    `key` ist stabil und eindeutig innerhalb der `tiles.json` (PANEL-3) —
+    wir leiten ihn aus `app` + laufendem Index ab, damit dieselbe App
+    mehrfach (verschiedene Views) kollisionsfrei bliebe. `icons[]` + `query`
+    kommen aus dem Registry-Eintrag (SREG-10, AC1/AC2 — keine zweite Wahrheit
+    im Skill).
+    """
+    return {
+        "key": "%s-%d" % (kandidat["app"], index),
+        "app": kandidat["app"],
+        "view": kandidat["view"],
+        "label": kandidat["label"],
+        "icons": list(kandidat["icons"]),
+        "sichtbar": True,
+        **({"query": dict(kandidat["query"])} if kandidat.get("query") else {}),
+    }
 
 
 # ============================================================

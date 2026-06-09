@@ -205,3 +205,127 @@ def test_origin_trailing_slash_wird_entfernt():
     client.inventar()
     # Der Transport wird mit dem stabilen Pfad aufgerufen, kein Doppelslash.
     assert aufrufe[0][1] == PFAD_SEITEN
+
+
+# ============================================================
+#  Tests: get_kandidaten() — PAA-3.3, #389
+# ============================================================
+
+def _transport_inventar(eintraege):
+    """Stub: liefert ein Inventar mit den angegebenen Einträgen."""
+    payload = {"eintraege": eintraege, "snapshot_pending": []}
+    _resp = json.dumps(payload).encode("utf-8")
+    def _t(method, path, body=None, content_type=None):
+        return 200, _resp
+    return _t
+
+
+def test_get_kandidaten_filtert_nur_display_typ():
+    """get_kandidaten() gibt nur Einträge mit typ=display zurück (Sorte a)."""
+    eintraege = [
+        {"typ": "display", "app": "wetter", "pfad": "/display/wetter/heute",
+         "label": "Wetter heute", "icons": ["arasaac/24721.png"]},
+        {"typ": "eltern", "app": "wetter", "pfad": "/display/wetter/regeln",
+         "label": "Wetter-Regeln"},   # kein icons, kein display
+        {"typ": "panel", "app": "app-panel", "pfad": "/controller/app-panel/p1",
+         "label": "Panel"},
+    ]
+    client = SeitenClient("http://test", transport=_transport_inventar(eintraege))
+    kandidaten = client.get_kandidaten()
+    assert len(kandidaten) == 1
+    assert kandidaten[0]["app"] == "wetter"
+    assert kandidaten[0]["label"] == "Wetter heute"
+
+
+def test_get_kandidaten_traegt_icons_aus_manifest():
+    """get_kandidaten(): icons[] kommen aus dem Manifest-Eintrag (AC1/AC2)."""
+    eintraege = [
+        {"typ": "display", "app": "wetter", "pfad": "/display/wetter/heute",
+         "label": "Wetter heute", "icons": ["arasaac/24721.png"]},
+    ]
+    client = SeitenClient("http://test", transport=_transport_inventar(eintraege))
+    kandidaten = client.get_kandidaten()
+    assert kandidaten[0]["icons"] == ["arasaac/24721.png"]
+
+
+def test_get_kandidaten_varianten_werden_aufgeflacht():
+    """AC2: Varianten werden als eigene Kandidaten aufgeflacht, mit icons[]/query."""
+    eintraege = [
+        {"typ": "display", "app": "plan", "pfad": "/display/plan/woche",
+         "label": "Wochenplan", "icons": ["arasaac/32488.png"],
+         "varianten": [
+             {"slug": "woche-klein", "query": {"ansicht": "klein"},
+              "label": "Wochenplan für Kleinkinder",
+              "icons": ["arasaac/32488.png", "arasaac/2484.png"]},
+         ]},
+    ]
+    client = SeitenClient("http://test", transport=_transport_inventar(eintraege))
+    kandidaten = client.get_kandidaten()
+    # Basis + 1 Variante
+    assert len(kandidaten) == 2
+    basis = kandidaten[0]
+    assert basis["app"] == "plan"
+    assert basis["icons"] == ["arasaac/32488.png"]
+    assert "query" not in basis
+
+    variante = kandidaten[1]
+    assert variante["app"] == "plan"
+    assert variante["label"] == "Wochenplan für Kleinkinder"
+    assert variante["icons"] == ["arasaac/32488.png", "arasaac/2484.png"]
+    assert variante["query"] == {"ansicht": "klein"}
+
+
+def test_get_kandidaten_variante_erbt_eltern_icons_wenn_keine_eigenen():
+    """AC2: hat eine Variante kein eigenes icons[], erbt sie die icons[] des Eltern."""
+    eintraege = [
+        {"typ": "display", "app": "plan", "pfad": "/display/plan/woche",
+         "label": "Wochenplan", "icons": ["arasaac/32488.png"],
+         "varianten": [
+             {"slug": "v", "query": {"x": "y"}, "label": "Variante ohne Icons"},
+         ]},
+    ]
+    client = SeitenClient("http://test", transport=_transport_inventar(eintraege))
+    kandidaten = client.get_kandidaten()
+    assert len(kandidaten) == 2
+    variante = kandidaten[1]
+    assert variante["icons"] == ["arasaac/32488.png"]  # geerbt
+
+
+def test_get_kandidaten_leeres_inventar():
+    """get_kandidaten() auf leerem Inventar liefert [] — gültiges Ergebnis."""
+    client = SeitenClient("http://test", transport=_transport_ok([]))
+    kandidaten = client.get_kandidaten()
+    assert kandidaten == []
+
+
+def test_get_kandidaten_wirft_bei_registry_fehler():
+    """get_kandidaten() wirft SeitenClientError bei Registry-Fehler (AC4)."""
+    client = SeitenClient("http://test", transport=_transport_status(503))
+    with pytest.raises(SeitenClientError):
+        client.get_kandidaten()
+
+
+def test_get_kandidaten_view_aus_pfad_abgeleitet():
+    """get_kandidaten(): view wird aus pfad abgeleitet wenn kein slug-Feld
+    (letztes Segment von /display/app/view → view)."""
+    eintraege = [
+        {"typ": "display", "app": "wetter", "pfad": "/display/wetter/heute",
+         "label": "Wetter", "icons": ["icon.png"]},
+    ]
+    client = SeitenClient("http://test", transport=_transport_inventar(eintraege))
+    kandidaten = client.get_kandidaten()
+    assert kandidaten[0]["view"] == "heute"
+    assert kandidaten[0]["app"] == "wetter"
+
+
+def test_get_kandidaten_reihenfolge_ist_inventar_reihenfolge():
+    """AC3: Inventar-Reihenfolge bleibt erhalten (deterministisch, OPEN-PAA-B)."""
+    eintraege = [
+        {"typ": "display", "app": "wetter", "pfad": "/display/wetter/heute",
+         "label": "Wetter", "icons": ["w.png"]},
+        {"typ": "display", "app": "plan", "pfad": "/display/plan/woche",
+         "label": "Plan", "icons": ["p.png"]},
+    ]
+    client = SeitenClient("http://test", transport=_transport_inventar(eintraege))
+    kandidaten = client.get_kandidaten()
+    assert [k["app"] for k in kandidaten] == ["wetter", "plan"]

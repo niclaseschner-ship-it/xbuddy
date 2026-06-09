@@ -23,6 +23,7 @@ from tasks import Proposal, WriteTask, is_from_private_chat
 
 from skills import panel_anlegen
 from skills.panel_client import GeraeteDisplayClient, PanelClient
+from skills.seiten_client import SeitenClient
 from skills.typing_indicator import make_typing_fn
 
 # Quittung in den Agent-Loop zurück — die Anlage selbst läuft im Privatchat
@@ -70,14 +71,17 @@ class PanelAnlegenTask(WriteTask):
 
     def __init__(self, tg, panel_origin_url, geraete_origin_url, sessions,
                  family_group_chat_id_getter, controller_url_origin=None,
-                 panel_client=None, geraete_client=None):
+                 panel_client=None, geraete_client=None,
+                 seiten_client=None, seiten_origin_url=None):
         """`panel_origin_url` ist die Origin der Panel-Registry (z. B.
         `http://127.0.0.1:5041`), `geraete_origin_url` die der Geräte-Registry
-        (für die GER-13-Display-Lese). `panel_client`/`geraete_client` sind die
-        Test-Nähte: liegt ein vorgefertigter Client vor (mit `transport=`),
-        nutzt der Task diesen statt einer neuen Instanz — symmetrisch zur
-        GAA-Aufgabe. `controller_url_origin` ist die Hub-Origin für die
-        zurückgegebene Controller-URL (analog GAA `display_url_origin`)."""
+        (für die GER-13-Display-Lese). `seiten_origin_url` ist die Origin der
+        Seiten-Registry (für die PAA-3.3-Kandidaten-Liste, SREG-3, #389).
+        `panel_client`/`geraete_client`/`seiten_client` sind die Test-Nähte:
+        liegt ein vorgefertigter Client vor (mit `transport=`), nutzt der Task
+        diesen statt einer neuen Instanz — symmetrisch zur GAA-Aufgabe.
+        `controller_url_origin` ist die Hub-Origin für die zurückgegebene
+        Controller-URL (analog GAA `display_url_origin`)."""
         super().__init__(
             name="panel_anlegen",
             description=(
@@ -93,6 +97,8 @@ class PanelAnlegenTask(WriteTask):
             else PanelClient(panel_origin_url)
         self._geraete_client = geraete_client if geraete_client is not None \
             else GeraeteDisplayClient(geraete_origin_url)
+        self._seiten_client = seiten_client if seiten_client is not None \
+            else (SeitenClient(seiten_origin_url) if seiten_origin_url else None)
         self._sessions = sessions   # dict chat_id -> PaaSession (in-memory)
         self._family_group_chat_id_getter = family_group_chat_id_getter
         self._controller_url_origin = controller_url_origin
@@ -126,6 +132,7 @@ class PanelAnlegenTask(WriteTask):
         family_group_chat_id = self._family_group_chat_id_getter()
         panel_client = self._panel_client
         geraete_client = self._geraete_client
+        seiten_client = self._seiten_client
         tg = self._tg
         sessions = self._sessions
         controller_url_origin = self._controller_url_origin
@@ -138,6 +145,7 @@ class PanelAnlegenTask(WriteTask):
                 result = panel_anlegen.panel_anlegen(
                     tg, private_chat_id, user_id, family_group_chat_id,
                     panel_client, geraete_client, session.next_message,
+                    seiten_client=seiten_client,
                     controller_url_origin=controller_url_origin,
                     typing_fn=typing_fn)
                 logging.info(
