@@ -1,13 +1,17 @@
 """Tests für seiten_uebersicht + SeitenUebersichtTask + Catalog-Registrierung
-(SREG-5/SREG-5b/SREG-6/SREG-7, Refs #476).
+(SREG-5/SREG-5b/SREG-6/SREG-7, Refs #476, #488).
 
-Pflicht-Tests (AC1–AC5):
+Pflicht-Tests (AC1–AC5 + AC488):
 - AC1: SeitenUebersichtTask im build_catalog registriert (SREG-6 AND-Guard).
 - AC2: Default-Pfad → Link auf Übersichts-Seite + Sub-Frage im Bot-Text.
 - AC3: Opt-in-Pfad → Direkt-URL. Mehrdeutigkeit → EC-22-Rückfrage.
 - AC4: Opt-out/kein Suchbegriff → stilles Ende nach Opt-out (oder Default-Pfad).
 - AC5: Config akzeptiert display_url_origin (alt) + display_url_origin_heim (neu),
        _heim gewinnt wenn beide gesetzt.
+- AC488-1: Opt-in Runde 1 (aktion=inventar): Inventar als Tool-Result, KEIN Bot-Post.
+- AC488-2: Opt-in Runde 2 (aktion=match + exaktes label): Direkt-URL via Bot-Post.
+- AC488-3: 4 Bug-Beispiele (Controller, Eltern Panel, Wetter, Plan) liefern korrekt.
+- AC488-4: Default-Pfad (ohne suchbegriff) unverändert grün.
 """
 
 import json
@@ -17,14 +21,18 @@ import pytest
 from fakes import FakeTelegram
 from skills.seiten_client import SeitenClientError
 from skills.seiten_uebersicht import (
+    AKTION_INVENTAR,
+    AKTION_MATCH,
     SIGNAL_ABGELEHNT,
     SIGNAL_DEFAULT_GESENDET,
     SIGNAL_DIREKT_GESENDET,
+    SIGNAL_INVENTAR_GELIEFERT,
     SIGNAL_MEHRDEUTIG,
     SIGNAL_NICHT_ERREICHBAR,
     baue_uebersichts_url,
     formatiere_default_antwort,
     formatiere_ec22_rueckfrage,
+    formatiere_inventar_tool_result,
     matche_view,
     seiten_uebersicht,
 )
@@ -569,6 +577,279 @@ class TestSeitenUebersichtTask:
         ctx = _make_turn_context()
         result = task.run({"suchbegriff": "garderobe"}, ctx)
         assert "nicht erreichbar" in result.lower()
+
+
+# ============================================================
+#  Tests: SREG-5b Weg 2 — Zweistufiges KI-Matching (#488)
+#  AC488-1: Runde 1 (aktion=inventar) → Inventar als Tool-Result, kein Bot-Post.
+#  AC488-2: Runde 2 (aktion=match + exaktes label) → Direkt-URL via Bot-Post.
+#  AC488-3: 4 Bug-Beispiele (Controller, Eltern Panel, Wetter, Plan).
+#  AC488-4: Default-Pfad unverändert grün (kein suchbegriff).
+# ============================================================
+
+def _inventar_bug_beispiele():
+    """Inventar mit den 4 Bug-Beispielen aus dem Bug-Befund (#488)."""
+    return [
+        {"key": "figuren-erkennung-controller",
+         "pfad": "/controller/figuren-erkennung/",
+         "label": "Figuren-Erkennung Controller",
+         "typ": "controller",
+         "zeigt": "Figuren-Erkennung Controller-App",
+         "synonyme": ["figuren", "controller"]},
+        {"key": "panel-1",
+         "pfad": "/controller/app-panel/panel-1",
+         "label": "Panel panel-1",
+         "typ": "panel",
+         "zeigt": "Panel-Steuerung panel-1",
+         "synonyme": []},
+        {"key": "panel-1-bearbeiten",
+         "pfad": "/controller/app-panel/panel-1/bearbeiten",
+         "label": "Eltern Panel panel-1 bearbeiten",
+         "typ": "eltern",
+         "zeigt": "Panel panel-1 Editor",
+         "synonyme": ["panel-editor", "eltern-panel"]},
+        {"key": "wetter-heute",
+         "pfad": "/display/wetter/heute",
+         "label": "Wetter heute",
+         "typ": "display",
+         "zeigt": "Heutiges Wetter anzeigen",
+         "synonyme": ["wetter"]},
+        {"key": "plan-woche",
+         "pfad": "/display/plan/woche",
+         "label": "Wochenplan",
+         "typ": "display",
+         "zeigt": "Der Wochenplan der Familie",
+         "synonyme": ["woche", "plan"]},
+    ]
+
+
+class TestSreg5bWeg2OptinInventar:
+    """AC488-1/AC488-2: Zweistufiges KI-Matching via aktion=inventar + aktion=match."""
+
+    def _task(self, inventar=None):
+        tg = FakeTelegram()
+        client = FakeSeitenClient(inventar or _inventar_bug_beispiele())
+        task = SeitenUebersichtTask(
+            tg=tg, seiten_client=client,
+            is_member_fn=_immer_mitglied,
+            display_url_origin_heim="https://hub.local",
+        )
+        return tg, client, task
+
+    # -- AC488-1: Runde 1 --
+
+    def test_runde1_gibt_inventar_als_tool_result(self):
+        """AC488-1: aktion=inventar → Tool-Result-String, KEIN Bot-Post."""
+        tg, _client, task = self._task()
+        ctx = _make_turn_context()
+        result = task.run({"suchbegriff": "Controller", "aktion": "inventar"}, ctx)
+        assert isinstance(result, str)
+        assert len(result) > 0
+        # Kein Bot-Post in Runde 1.
+        assert not tg.sent, "Runde 1: KEIN Bot-Post erwartet, aber tg.sent nicht leer"
+
+    def test_runde1_inventar_ruft_seiten_client_einmal(self):
+        """AC488-1: inventar() wird genau einmal gerufen."""
+        _tg, client, task = self._task()
+        ctx = _make_turn_context()
+        task.run({"suchbegriff": "Wetter", "aktion": "inventar"}, ctx)
+        assert client.inventar_calls == 1
+
+    def test_runde1_tool_result_enthaelt_labels(self):
+        """AC488-1: Tool-Result enthält label + key aller Views."""
+        _tg, _client, task = self._task()
+        ctx = _make_turn_context()
+        result = task.run({"suchbegriff": "Plan", "aktion": "inventar"}, ctx)
+        # Alle Labels müssen im Tool-Result sichtbar sein.
+        assert "Wochenplan" in result
+        assert "Figuren-Erkennung Controller" in result
+        assert "Wetter heute" in result
+
+    def test_runde1_tool_result_enthaelt_synonyme_und_zeigt(self):
+        """AC488-1: Tool-Result enthält synonyme + zeigt (für LLM-Matching)."""
+        _tg, _client, task = self._task()
+        ctx = _make_turn_context()
+        result = task.run({"suchbegriff": "Eltern Panel", "aktion": "inventar"}, ctx)
+        # synonyme und zeigt müssen im Tool-Result stehen.
+        assert "panel-editor" in result or "eltern-panel" in result
+        assert "Panel panel-1 Editor" in result
+
+    def test_runde1_signal_ist_inventar_geliefert(self):
+        """AC488-1: Funktion gibt SIGNAL_INVENTAR_GELIEFERT-Tupel zurück."""
+        tg = FakeTelegram()
+        client = FakeSeitenClient(_inventar_bug_beispiele())
+        ergebnis = seiten_uebersicht(
+            tg=tg,
+            chat_id=100,
+            from_user_id=42,
+            suchbegriff="Controller",
+            seiten_client=client,
+            is_member_fn=_immer_mitglied,
+            display_url_origin_heim="https://hub.local",
+            aktion=AKTION_INVENTAR,
+        )
+        assert isinstance(ergebnis, tuple)
+        signal, inventar_text = ergebnis
+        assert signal == SIGNAL_INVENTAR_GELIEFERT
+        assert isinstance(inventar_text, str)
+        assert len(inventar_text) > 0
+        assert not tg.sent, "KEIN Bot-Post in Runde 1"
+
+    # -- AC488-2: Runde 2 --
+
+    def test_runde2_exact_label_sendet_direkt_url(self):
+        """AC488-2: aktion=match + exaktes label → Direkt-URL als Bot-Post."""
+        tg, _client, task = self._task()
+        ctx = _make_turn_context()
+        result = task.run(
+            {"suchbegriff": "Figuren-Erkennung Controller", "aktion": "match"},
+            ctx,
+        )
+        assert isinstance(result, str)
+        assert tg.sent, "Runde 2: Bot-Post erwartet"
+        antwort = tg.sent[0]["text"]
+        assert "https://hub.local/controller/figuren-erkennung/" in antwort
+
+    def test_runde2_signal_ist_direkt_gesendet(self):
+        """AC488-2: aktion=match + exaktes label → SIGNAL_DIREKT_GESENDET."""
+        tg = FakeTelegram()
+        client = FakeSeitenClient(_inventar_bug_beispiele())
+        ergebnis = seiten_uebersicht(
+            tg=tg,
+            chat_id=100,
+            from_user_id=42,
+            suchbegriff="Wochenplan",
+            seiten_client=client,
+            is_member_fn=_immer_mitglied,
+            display_url_origin_heim="https://hub.local",
+            aktion=AKTION_MATCH,
+        )
+        assert ergebnis == SIGNAL_DIREKT_GESENDET
+        assert tg.sent
+        assert "https://hub.local/display/plan/woche" in tg.sent[0]["text"]
+
+
+class TestSreg5bBugBeispiele:
+    """AC488-3: 4 Bug-Beispiele aus dem Bug-Befund liefern sinnvolle Direkt-URL
+    oder echte EC-22-Rückfrage — KEIN generischer 'keine Seite gefunden'-Fallback.
+
+    Simuliert beide Runden: Runde 1 (aktion=inventar) gibt Inventar zurück,
+    Runde 2 (aktion=match + exaktes label aus Inventar) findet den View.
+    """
+
+    def _zweistufig(self, suchbegriff_r1, suchbegriff_r2):
+        """Hilfsmethode: simuliert beide Runden für ein Suchbegriff-Paar."""
+        tg1 = FakeTelegram()
+        client1 = FakeSeitenClient(_inventar_bug_beispiele())
+        # Runde 1: Inventar holen.
+        ergebnis1 = seiten_uebersicht(
+            tg=tg1, chat_id=100, from_user_id=42,
+            suchbegriff=suchbegriff_r1,
+            seiten_client=client1,
+            is_member_fn=_immer_mitglied,
+            display_url_origin_heim="https://hub.local",
+            aktion=AKTION_INVENTAR,
+        )
+        assert isinstance(ergebnis1, tuple), "Runde 1 muss Tupel liefern"
+        signal1, inventar_text = ergebnis1
+        assert signal1 == SIGNAL_INVENTAR_GELIEFERT
+        assert not tg1.sent, "Kein Bot-Post in Runde 1"
+
+        # Runde 2: Mit exaktem label aus Inventar matchen.
+        tg2 = FakeTelegram()
+        client2 = FakeSeitenClient(_inventar_bug_beispiele())
+        ergebnis2 = seiten_uebersicht(
+            tg=tg2, chat_id=100, from_user_id=42,
+            suchbegriff=suchbegriff_r2,
+            seiten_client=client2,
+            is_member_fn=_immer_mitglied,
+            display_url_origin_heim="https://hub.local",
+            aktion=AKTION_MATCH,
+        )
+        return tg2, ergebnis2, inventar_text
+
+    def test_bug_beispiel_controller(self):
+        """AC488-3: 'Controller' → zwei Runden → URL zur Figuren-Erkennung."""
+        # Das LLM würde aus dem Inventar "Figuren-Erkennung Controller" wählen.
+        tg, ergebnis, inventar_text = self._zweistufig(
+            "Controller", "Figuren-Erkennung Controller")
+        # Inventar enthält den passenden Eintrag.
+        assert "Figuren-Erkennung Controller" in inventar_text
+        # Runde 2: Direkt-URL gesendet.
+        assert ergebnis == SIGNAL_DIREKT_GESENDET
+        assert tg.sent
+        assert "https://hub.local/controller/figuren-erkennung/" in tg.sent[0]["text"]
+
+    def test_bug_beispiel_eltern_panel(self):
+        """AC488-3: 'Eltern Panel' → zwei Runden → URL zum Panel-Editor."""
+        # Das LLM würde aus dem Inventar "Eltern Panel panel-1 bearbeiten" wählen.
+        tg, ergebnis, inventar_text = self._zweistufig(
+            "Eltern Panel", "Eltern Panel panel-1 bearbeiten")
+        assert "Eltern Panel panel-1 bearbeiten" in inventar_text
+        # Runde 2: Direkt-URL oder EC-22 — beides ist korrekt (KEIN generischer Fallback).
+        assert ergebnis in (SIGNAL_DIREKT_GESENDET, SIGNAL_MEHRDEUTIG), (
+            "Erwartet Direkt-URL oder EC-22-Rückfrage, nicht generischer Fallback")
+        assert tg.sent
+
+    def test_bug_beispiel_wetter(self):
+        """AC488-3: 'Wetter' → zwei Runden → Direkt-URL oder EC-22 (KEIN Fallback)."""
+        # Das LLM würde aus dem Inventar "Wetter heute" wählen.
+        tg, ergebnis, inventar_text = self._zweistufig("Wetter", "Wetter heute")
+        assert "Wetter heute" in inventar_text
+        assert ergebnis in (SIGNAL_DIREKT_GESENDET, SIGNAL_MEHRDEUTIG), (
+            "Erwartet Direkt-URL oder EC-22-Rückfrage, nicht generischer Fallback")
+        assert tg.sent
+        # Bei eindeutigem Match muss die URL zum Wetter-View führen.
+        if ergebnis == SIGNAL_DIREKT_GESENDET:
+            assert "https://hub.local/display/wetter/heute" in tg.sent[0]["text"]
+
+    def test_bug_beispiel_plan(self):
+        """AC488-3: 'Plan' → zwei Runden → Direkt-URL zum Wochenplan."""
+        # Das LLM würde aus dem Inventar "Wochenplan" wählen.
+        tg, ergebnis, inventar_text = self._zweistufig("Plan", "Wochenplan")
+        assert "Wochenplan" in inventar_text
+        assert ergebnis in (SIGNAL_DIREKT_GESENDET, SIGNAL_MEHRDEUTIG), (
+            "Erwartet Direkt-URL oder EC-22-Rückfrage, nicht generischer Fallback")
+        assert tg.sent
+        if ergebnis == SIGNAL_DIREKT_GESENDET:
+            assert "https://hub.local/display/plan/woche" in tg.sent[0]["text"]
+
+
+class TestFormatierInventarToolResult:
+    """Unit-Tests für formatiere_inventar_tool_result()."""
+
+    def test_enthaelt_alle_labels(self):
+        inv = _inventar_bug_beispiele()
+        result = formatiere_inventar_tool_result(inv)
+        assert "Figuren-Erkennung Controller" in result
+        assert "Wochenplan" in result
+        assert "Wetter heute" in result
+
+    def test_enthaelt_keys(self):
+        inv = _inventar_bug_beispiele()
+        result = formatiere_inventar_tool_result(inv)
+        assert "figuren-erkennung-controller" in result
+        assert "plan-woche" in result
+
+    def test_enthaelt_synonyme(self):
+        inv = _inventar_bug_beispiele()
+        result = formatiere_inventar_tool_result(inv)
+        assert "wetter" in result
+        assert "plan" in result
+
+    def test_enthaelt_zeigt(self):
+        inv = _inventar_bug_beispiele()
+        result = formatiere_inventar_tool_result(inv)
+        assert "Heutiges Wetter anzeigen" in result
+
+    def test_leeres_inventar_gibt_hinweis(self):
+        result = formatiere_inventar_tool_result([])
+        assert "leer" in result.lower() or "keine" in result.lower()
+
+    def test_inventar_anzahl_im_header(self):
+        inv = _inventar_bug_beispiele()
+        result = formatiere_inventar_tool_result(inv)
+        assert str(len(inv)) in result
 
 
 # ============================================================
