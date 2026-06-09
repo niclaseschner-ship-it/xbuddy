@@ -6,16 +6,20 @@ versteht der Agent eine Frage nach Seiten/Links des XBuddy-Systems, ruft er
 sie auf. Sie ist ein dünner Aufrufer der trigger-agnostischen Funktion
 `seiten_uebersicht` (EC-9-Muster) — keine eigene Matching-Logik.
 
-**Zwei Pfade, eine Task (SREG-5/SREG-5b):**
+**Drei Pfade, eine Task (SREG-5/SREG-5b Weg 2, #488):**
   - Ohne `suchbegriff`: Default-Pfad → Link auf Übersichts-Seite + Sub-Frage.
-  - Mit `suchbegriff` (nach opt-in „ja"/"direkt"/"bitte" des Elternteils):
-    Opt-in-Pfad → Pro-View-Matching, direkte URL oder EC-22-Rückfrage.
+  - Mit `suchbegriff` + `aktion="inventar"` (Runde 1): Inventar als
+    Tool-Result an den Agent-Loop. KEIN Bot-Post. Das LLM wählt die passende
+    View und ruft erneut mit aktion="match" + exaktem label/key auf.
+  - Mit `suchbegriff` + `aktion="match"` (Runde 2): Substring-Match trifft
+    auf exaktes label → direkte URL als Bot-Post. Mehrdeutig → EC-22.
 
 Das Modell entscheidet per Gesprächsverlauf, welcher Modus gilt — die Task
 trägt keine eigene Multi-Turn-Statemachine. Die description leitet das Modell
 an, den Opt-in-Pfad zu verwenden, sobald das Elternteil opt-in signalisiert hat
 („falls die letzte Bot-Antwort eine Sub-Frage enthielt und der User opt-in
-signalisiert, rufe die Task erneut mit dem ursprünglichen Suchbegriff auf").
+signalisiert, diese Task zuerst mit aktion=inventar aufrufen, um die View-Liste
+zu bekommen, dann mit aktion=match + dem exakten label aus der Liste").
 
 Eine **lesende** Aufgabe (EC-9, kein Bestätigungs-Gate): keine Familien-Daten
 werden verändert.
@@ -37,6 +41,8 @@ logger = logging.getLogger(__name__)
 _QUITTUNG_DEFAULT          = (
     "Ich habe den Link zur Seiten-Übersicht geschickt und gefragt, ob ein "
     "direkter View-Link gewünscht wird.")
+# Kein statischer Text für SIGNAL_INVENTAR_GELIEFERT — der inventar_text kommt
+# direkt aus der Funktion und wird unverändert als Tool-Result zurückgegeben.
 _QUITTUNG_DIREKT           = "Ich habe den direkten View-Link geschickt."
 _QUITTUNG_MEHRDEUTIG       = (
     "Ich habe eine Rückfrage gestellt, weil mehrere Seiten passen könnten.")
@@ -77,12 +83,12 @@ class SeitenUebersichtTask(ReadTask):
                 "\"welche URLs kennt das System?\" oder Ähnliches. "
                 "OHNE suchbegriff: schickt den Übersichts-Link + fragt, ob ein "
                 "direkter View-Link gewünscht wird. "
-                "MIT suchbegriff: schickt den direkten Link zur passendsten View "
-                "(Opt-in-Pfad, nur wenn der Elternteil zuvor bestätigt hat). "
-                "Falls die letzte Bot-Antwort eine Sub-Frage zur direkten Ausgabe "
-                "enthielt und der Elternteil jetzt opt-in signalisiert (\"ja\", "
-                "\"direkt\", \"bitte\" o.ä.), diese Task mit dem ursprünglichen "
-                "Suchbegriff erneut aufrufen."),
+                "MIT suchbegriff: Opt-in-Pfad (nur nach Bestätigung durch den Elternteil). "
+                "Ablauf Opt-in: (1) Erst mit suchbegriff + aktion=\"inventar\" aufrufen — "
+                "du bekommst die vollständige View-Liste als Tool-Result zurück. "
+                "(2) Passenden Eintrag aus der Liste wählen und Task erneut aufrufen mit "
+                "aktion=\"match\" + dem exakten label aus der Liste als suchbegriff. "
+                "KEIN Bot-Post in Runde 1; der direkte Link wird erst in Runde 2 geschickt."),
             parameters={
                 "type": "object",
                 "properties": {
@@ -91,11 +97,21 @@ class SeitenUebersichtTask(ReadTask):
                         "description": (
                             "Optionaler Suchbegriff für den Opt-in-Pfad "
                             "(SREG-5b): der Begriff aus der ursprünglichen "
-                            "Anfrage des Elternteils, z. B. \"Garderobe\", "
-                            "\"Wetter\", \"Panel\", \"Küche\". "
+                            "Anfrage des Elternteils (Runde 1), oder das exakte "
+                            "label/key aus dem Inventar (Runde 2). "
                             "Leer lassen für den Default-Pfad (Übersichts-Link "
                             "mit Sub-Frage). Nur setzen, wenn der Elternteil "
                             "opt-in für einen direkten View-Link signalisiert hat."),
+                    },
+                    "aktion": {
+                        "type": "string",
+                        "enum": ["inventar", "match"],
+                        "description": (
+                            "Steuert den Opt-in-Pfad (SREG-5b Weg 2): "
+                            "\"inventar\" — Runde 1: gibt die vollständige "
+                            "View-Liste als Tool-Result zurück, kein Bot-Post. "
+                            "\"match\" — Runde 2: Substring-Match + Bot-Post "
+                            "mit direkter URL. Nur relevant wenn suchbegriff gesetzt."),
                     },
                 },
                 "required": [],
@@ -110,13 +126,18 @@ class SeitenUebersichtTask(ReadTask):
 
         Zielchat kommt aus `turn_context.chat_id`, User-ID aus
         `turn_context.from_user_id` (Berechtigung SREG-6/EC-2). Das Modell
-        kann nur `suchbegriff` liefern.
+        kann `suchbegriff` und `aktion` liefern.
+
+        Bei SIGNAL_INVENTAR_GELIEFERT (aktion="inventar"): der inventar_text
+        wird direkt als Tool-Result zurückgegeben — KEIN Bot-Post.
         """
-        suchbegriff = (arguments or {}).get("suchbegriff", "")
+        args = arguments or {}
+        suchbegriff = args.get("suchbegriff", "")
+        aktion      = args.get("aktion", "")
         chat_id = turn_context.chat_id if turn_context else None
         from_user_id = turn_context.from_user_id if turn_context else None
 
-        signal = su_mod.seiten_uebersicht(
+        ergebnis = su_mod.seiten_uebersicht(
             tg=self._tg,
             chat_id=chat_id,
             from_user_id=from_user_id,
@@ -124,8 +145,17 @@ class SeitenUebersichtTask(ReadTask):
             seiten_client=self._seiten_client,
             is_member_fn=self._is_member_fn,
             display_url_origin_heim=self._display_url_origin_heim,
+            aktion=aktion,
         )
 
+        # Runde 1: Funktion liefert (signal, inventar_text) — direkt als Tool-Result.
+        if isinstance(ergebnis, tuple):
+            signal, inventar_text = ergebnis
+            logger.info("SeitenUebersichtTask: signal=%s (Inventar-Runde), chat=%s",
+                        signal, chat_id)
+            return inventar_text
+
+        signal = ergebnis
         quittung_map = {
             su_mod.SIGNAL_DEFAULT_GESENDET:  _QUITTUNG_DEFAULT,
             su_mod.SIGNAL_DIREKT_GESENDET:   _QUITTUNG_DIREKT,
