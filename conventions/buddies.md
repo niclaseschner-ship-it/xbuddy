@@ -33,9 +33,8 @@ Buddy zusätzlich **tut**, nicht aus seiner Buddy-Eigenschaft.*
 Die mit **immer** markierten Regeln gelten für jeden Buddy. Die mit
 **nur wenn** markierten hängen daran, was der Buddy zusätzlich tut — eine
 nicht zutreffende Regel wird nicht zur leeren Pflicht (sonst Heim-Server-
-Overhead, Anti-Goal). Die heutigen zwei Buddys zeigen beide Fälle live:
-Plan-Buddy trifft alle Regeln, Wetter-Buddy trifft BUD-1b **nicht** (siehe
-„Bestätigung an der echten Reibung").
+Overhead, Anti-Goal). Beispiele für „nur wenn" leben in den Buddy-Specs
+unter [`../specs/buddies/`](../specs/buddies/), nicht hier.
 
 ### BUD-1 — Slug + Display-Pfad (immer)
 Ein Buddy hat einen stabilen **Slug** und rendert unter genau einem
@@ -152,27 +151,6 @@ View-Hero-Bild.
 **Durchsetzungs-Stufe** definiert SREG-10 (Schalter `icons_erforderlich`), nicht
 dieser Text — so bleibt die gestaffelte Einführung (Toleranz → Backfill → Härtung)
 ohne Selbstwiderspruch. Rollout-Detail im Ticket #387.
-
-## Bestätigung an der echten Reibung (Plan vs. Wetter)
-
-Die beiden Buddys auf `main` legitimieren die Regeln am zweiten Vorkommen und
-bestätigen insbesondere, dass „nur wenn" wirklich optional ist:
-
-| Regel | Plan-Buddy | Wetter-Buddy |
-|---|---|---|
-| BUD-1 (Slug + Display-Pfad) | `/display/plan/woche` (PLAN-2/3) | `/display/wetter/heute` (WETTER-2) |
-| BUD-1a (Prozess: Port/Service/URL-14) | Port 5020, `xbuddy-plan.service` | Port 5030, `xbuddy-wetter.service` |
-| BUD-1b (API) | **ja** — `/api/v1/plan/…` (PLAN-22/30/31/11) | **nein** — V1 hat keine API (E-WETTER-3, bestätigt im nginx-Kommentar zu `/display/wetter/`) |
-| BUD-2 (Config) | `plan/config.json` (PLAN-28) | `wetter/wetter.json` (WETTER-21) |
-| BUD-2a (Domänendaten getrennt) | **ja** — `plan.json` ⟂ `config.json` | **ja** — `wetter.json` (Ort + Garderobe) ⟂ `config.json`; bewusst abgetrennt für die eltern-seitige Editor-Pflege (#328, WETTER-26 ff.; Zugang = Netz-Grenze, entkoppelt von #296) |
-
-Der Wetter-Buddy ist der lebende Beleg dafür, dass **BUD-1b** „nur wenn" ist:
-ein vollwertiger Buddy **ohne** API. Bei **BUD-2a** trennen die heutigen zwei
-Buddys dagegen **beide** ihre Domänendaten ab (Plan: `plan.json` ⟂ `config.json`;
-Wetter: `wetter.json` ⟂ `config.json`) — ein Gegenbeispiel „trennt nicht" gibt es
-bei n=2 noch nicht. Die „nur wenn"-Optionalität von BUD-2a ist by-design (ein
-Buddy ohne von Runtime-Tuning verschiedene Domänendaten hätte EINE Datei), nicht
-aus den heutigen Buddys belegt.
 
 ## Andock-Checkliste „neuer Buddy"
 
