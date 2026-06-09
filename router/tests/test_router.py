@@ -1086,6 +1086,26 @@ def test_ROU_24_two_panels_route_to_two_displays(client_with_panels):
         == '/display/kalender/heute'
 
 
+# ============================================================
+#  ROU-32 — GET /api/v1/router/panels/<source_id> — Panel→Display-Lookup
+# ============================================================
+
+def test_ROU_32_known_source_id_returns_display_id(client_with_panels):
+    """AC2a: bekannte source_id → 200, {"display_id": "<id>"}.
+    Quelle: routing.json panels-Abschnitt (PANEL_ROUTING, ROU-18)."""
+    r = client_with_panels.get('/api/v1/router/panels/app-panel:kueche')
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body == {'display_id': 'display:wohnzimmer'}
+
+
+def test_ROU_32_unknown_source_id_returns_404(client_with_panels):
+    """AC2b: unbekannte source_id → 404."""
+    r = client_with_panels.get('/api/v1/router/panels/app-panel:unbekannt')
+    assert r.status_code == 404
+    assert 'error' in r.get_json()
+
+
 def test_ROU_18_panels_singular_display_id_form(tmp_path):
     """E-PANEL-5 / ROU-18: Singular `display_id`. Eine versehentlich
     wiederbelebte Plural-Form `display_ids` im `panels`-Abschnitt muss
