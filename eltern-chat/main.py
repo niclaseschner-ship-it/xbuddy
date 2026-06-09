@@ -683,6 +683,9 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # SREG-6 / #453: Origin der Seiten-Registry (SREG-3). Leer ⇒
         # SeitenUebersichtTask wird NICHT registriert (SREG-6 AND-Guard).
         seiten_origin_url=cfg.seiten_origin_url,
+        # WZE-8 / GAN-7 / #503: Origin des Essens-Buddys (ESSEN-15/ESSEN-19). Leer ⇒
+        # WuenscheZeigenTask + GerichtAnlegenTask werden NICHT registriert.
+        essen_origin_url=cfg.essen_origin_url,
         # SREG-7 / #476: Heim-Origin für den Übersichts-Link (SREG-5/SREG-5b).
         display_url_origin_heim=cfg.display_url_origin_heim,
         # TAB-12 / #475: Session-Map für »Termine aus Bild«.
