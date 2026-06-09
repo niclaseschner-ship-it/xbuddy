@@ -343,3 +343,53 @@ def test_assert_routes_match_fremder_slug_unberuehrt():
     """Routen eines anderen Slugs zählen nicht zur Bindung dieses Slugs."""
     app = _app_mit_routen(["/display/plan/woche", "/display/wetter/heute"])
     views_manifest.assert_routes_match(app, [gueltiger_eintrag()], "plan")
+
+
+# ============================================================
+#  AC-A3 — validate_eintrag(): public per-View-Validator (T388-S2)
+# ============================================================
+
+def test_validate_eintrag_gueltig_gibt_eintrag_zurueck():
+    """validate_eintrag() mit vollständigem Eintrag gibt den Eintrag zurück (AC-A3)."""
+    roh = gueltiger_eintrag()
+    eintrag = views_manifest.validate_eintrag(roh)
+    assert eintrag["slug"] == "woche"
+    assert eintrag["pfad"] == "/display/plan/woche"
+
+
+def test_validate_eintrag_fehlendes_pflichtfeld_wirft_manifest_error():
+    """validate_eintrag() mit fehlendem Pflichtfeld wirft ManifestError (AC-A3/DCOMP-3)."""
+    roh = gueltiger_eintrag()
+    del roh["pfad"]
+    with pytest.raises(views_manifest.ManifestError):
+        views_manifest.validate_eintrag(roh)
+
+
+def test_validate_eintrag_unbekannte_zielgruppe_wirft_manifest_error():
+    """validate_eintrag() mit ungültiger zielgruppe wirft ManifestError (AC-A3)."""
+    roh = gueltiger_eintrag(zielgruppe="admin")
+    with pytest.raises(views_manifest.ManifestError):
+        views_manifest.validate_eintrag(roh)
+
+
+def test_validate_eintrag_kein_dict_wirft_manifest_error():
+    """validate_eintrag() mit Nicht-Dict-Eingabe wirft ManifestError (AC-A3)."""
+    with pytest.raises(views_manifest.ManifestError):
+        views_manifest.validate_eintrag("kein dict")
+
+
+def test_validate_eintrag_gleiche_logik_wie_load(tmp_path):
+    """validate_eintrag() und load() verwenden dieselbe Validierungslogik.
+
+    Ein Eintrag, der via validate_eintrag() akzeptiert wird, muss auch via
+    load() durchkommen — und umgekehrt. Sichert, dass die Refaktorisierung
+    (T388-S2: private → public) keine Logik-Divergenz eingeführt hat.
+    """
+    roh = gueltiger_eintrag()
+    # validate_eintrag direkt
+    eintrag_direkt = views_manifest.validate_eintrag(roh)
+    # load() über Datei
+    path = schreibe_manifest(tmp_path / "views.json", [roh])
+    eintraege_via_load = views_manifest.load(path)
+    # Beide Wege liefern denselben Eintrag
+    assert eintrag_direkt == eintraege_via_load[0]
