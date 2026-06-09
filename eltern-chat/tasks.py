@@ -557,7 +557,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
         from skills.seiten_uebersicht_task import SeitenUebersichtTask
         _su_client = SeitenClient(origin_url=seiten_origin_url)
         _su_fgcid_getter = family_group_chat_id_getter
-        _su_tg = tg
+        _su_tg = tg  # tg still needed for get_chat_member in is_member_fn
         def _su_is_member(user_id):
             fgcid = _su_fgcid_getter()
             if not fgcid:
@@ -566,7 +566,6 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             return member is not None and member.get("status") in (
                 "creator", "administrator", "member")
         catalog.register(SeitenUebersichtTask(
-            tg=tg,
             seiten_client=_su_client,
             is_member_fn=_su_is_member,
             display_url_origin_heim=display_url_origin_heim))

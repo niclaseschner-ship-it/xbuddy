@@ -16,7 +16,7 @@ eine Sub-Frage ob der Elternteil einen direkten View-Link will.
   erneut mit dem exakten label oder key als `suchbegriff` auf.
 
   Runde 2 (`aktion="match"`): Equality-Lookup auf label ODER key (SREG-5b).
-  Eindeutiger Treffer → direkte URL als Bot-Post. Kein Treffer → klare
+  Eindeutiger Treffer → direkte URL als Tool-Result. Kein Treffer → klare
   Fehler-Antwort (kein Default-Loop). Substring-basiertes matche_view()
   bleibt für aktion=inventar (Runde 1) reserviert.
 
@@ -30,16 +30,14 @@ eine Sub-Frage ob der Elternteil einen direkten View-Link will.
 Eingang: optionaler `suchbegriff` (für Opt-in-Pfad), optionale `aktion`.
   Ohne Suchbegriff/aktion → Default-Pfad.
   Suchbegriff + aktion="inventar" → Runde 1: Inventar als Tool-Result.
-  Suchbegriff + aktion="match"   → Runde 2: Equality-Lookup label/key + Bot-Post.
+  Suchbegriff + aktion="match"   → Runde 2: Equality-Lookup label/key.
 
-Ergebnis-Signal:
-  „default_gesendet"    — Default-Link + Sub-Frage gepostet (SREG-5).
-  „inventar_geliefert"  — Inventar als Tool-Result zurückgegeben, kein Bot-Post.
-  „direkt_gesendet"     — Direkt-URL einer View gepostet (SREG-5b).
-  „mehrdeutig"          — EC-22-Rückfrage gepostet + Tupel (signal, kandidaten_text)
-                          mit strukturierter Kandidaten-Liste zurückgegeben (SREG-5b).
-  „abgelehnt"           — Aufrufer kein Familienmitglied (SREG-6/EC-2).
-  „nicht_erreichbar"    — Registry nicht erreichbar (SREG-5b-Opt-in-Pfad).
+**Ergebnis (EC-29):**
+  Die Funktion returnt in jedem Pfad einen User-tauglichen Antwort-Text
+  als String (Tool-Result). Das LLM postet — die Funktion sendet selbst
+  keine Telegram-Nachricht (EC-29).
+  Berechtigungs-Bruch (SREG-6): wirft `BerechtigungError` — der Agent-Loop
+  schreibt den Fehler-Tool-Result-Block (agent.py Fehlerpfad).
 """
 
 import logging
@@ -49,7 +47,15 @@ from skills.seiten_client import SeitenClientError
 logger = logging.getLogger(__name__)
 
 
-# Ergebnis-Signale der Funktion (SREG-5/SREG-5b).
+class BerechtigungError(Exception):
+    """Aufrufer ist kein autorisiertes Familienmitglied (SREG-6, EC-29).
+
+    Der Agent-Loop fängt diese Exception und schreibt einen
+    Fehler-Tool-Result-Block; das LLM schweigt in der Antwort.
+    """
+
+
+# Ergebnis-Signale der Funktion (SREG-5/SREG-5b) — nur noch intern/compat.
 SIGNAL_DEFAULT_GESENDET  = "default_gesendet"
 SIGNAL_INVENTAR_GELIEFERT = "inventar_geliefert"  # Runde 1 Opt-in: Inventar an LLM, kein Bot-Post.
 SIGNAL_DIREKT_GESENDET   = "direkt_gesendet"
@@ -258,29 +264,28 @@ def formatiere_ec22_rueckfrage(treffer):
 #  Haupt-Funktion
 # ============================================================
 
-def seiten_uebersicht(tg, chat_id, from_user_id, suchbegriff,
+def seiten_uebersicht(chat_id, from_user_id, suchbegriff,
                       seiten_client, is_member_fn,
                       display_url_origin_heim=None,
                       aktion=None):
-    """Seiten-Übersicht — aufrufbare Funktion (SREG-5/SREG-5b/SREG-6).
+    """Seiten-Übersicht — aufrufbare Funktion (SREG-5/SREG-5b/SREG-6, EC-29).
 
     **Ohne Suchbegriff (Default-Pfad, SREG-5):**
-      Postet EINEN Link auf die Übersichts-Seite + Sub-Frage in `chat_id`.
+      Returnt EINEN Link auf die Übersichts-Seite + Sub-Frage als Text.
       Ruft GET /api/v1/seiten NICHT auf.
 
     **Mit Suchbegriff + aktion="inventar" (Opt-in Runde 1, SREG-5b):**
       Ruft seiten_client.inventar() EINMAL.
-      Gibt kompaktes Tool-Result zurück (label + key + synonyme + zeigt je View).
+      Returnt kompaktes Tool-Result (label + key + synonyme + zeigt je View).
       KEIN Bot-Post. Das LLM wählt die passende View und ruft erneut mit
       aktion="match" und dem exakten label/key auf (Weg 2, #488).
 
     **Mit Suchbegriff + aktion="match" (Opt-in Runde 2, SREG-5b):**
       Equality-Lookup auf label ODER key (case-sensitiv, exakt).
-      Treffer → direkte URL (Bot-Post).
+      Treffer → direkte URL als Tool-Result-Text.
       Kein Treffer → klare Fehler-Antwort (kein Default-Loop).
 
-    `tg`                       — Telegram-Kanal (send_message).
-    `chat_id`                  — Zielchat (Gruppe oder Privatchat).
+    `chat_id`                  — Zielchat (Gruppe oder Privatchat, nur für Logging).
     `from_user_id`             — Telegram-User-ID des Aufrufers (EC-2).
     `suchbegriff`              — Leer/None → Default-Pfad; gesetzt → Opt-in-Pfad.
     `seiten_client`            — SeitenClient-Instanz (nur im Opt-in-Pfad genutzt).
@@ -289,24 +294,14 @@ def seiten_uebersicht(tg, chat_id, from_user_id, suchbegriff,
     `aktion`                   — "inventar" (Runde 1) oder "match" (Runde 2).
                                   Nur im Opt-in-Pfad relevant. None/leer → Default.
 
-    Ergebnis-Signal (s. Modul-Docstring).
-    Bei SIGNAL_INVENTAR_GELIEFERT: Tupel (signal, inventar_text) — der
-    inventar_text ist als Tool-Result an den Agent-Loop zurückzugeben,
-    KEIN Bot-Post.
-    Bei SIGNAL_MEHRDEUTIG: Tupel (signal, kandidaten_text) — der
-    kandidaten_text enthält die strukturierte Kandidaten-Liste mit
-    Auflösungs-Anweisung ans LLM (analog SIGNAL_INVENTAR_GELIEFERT).
-    In allen anderen Fällen: signal (str).
+    Returnt User-tauglichen Antwort-Text als String (EC-29).
+    Wirft `BerechtigungError` bei SREG-6-Verletzung.
     """
-    if chat_id is None:
-        logger.warning("seiten_uebersicht: chat_id fehlt — Abbruch ohne Wirkung")
-        return SIGNAL_ABGELEHNT
-
-    # SREG-6: Berechtigung — EC-2-Mitgliedschaft (analog seiten_finden).
-    if from_user_id is None or not is_member_fn(from_user_id):
-        logger.info("seiten_uebersicht: User %s ist kein Familienmitglied — abgelehnt",
-                    from_user_id)
-        return SIGNAL_ABGELEHNT
+    # SREG-6: Berechtigung — EC-2-Mitgliedschaft.
+    if chat_id is None or from_user_id is None or not is_member_fn(from_user_id):
+        logger.info("seiten_uebersicht: User %s ist kein Familienmitglied oder chat_id fehlt"
+                    " — abgelehnt (SREG-6)", from_user_id)
+        raise BerechtigungError("Du bist kein Mitglied der Familien-Gruppe.")
 
     q = str(suchbegriff or "").strip()
 
@@ -316,51 +311,44 @@ def seiten_uebersicht(tg, chat_id, from_user_id, suchbegriff,
             antwort = formatiere_default_antwort(display_url_origin_heim)
         except ValueError as e:
             logger.warning("seiten_uebersicht: Origin nicht konfiguriert — %s", e)
-            tg.send_message(
-                chat_id,
+            return (
                 "Die Seiten-Übersicht ist noch nicht konfiguriert "
                 "(display_url_origin_heim fehlt, SREG-7).")
-            return SIGNAL_NICHT_ERREICHBAR
-        tg.send_message(chat_id, antwort)
         logger.info("seiten_uebersicht: Default-Pfad an Chat %s", chat_id)
-        return SIGNAL_DEFAULT_GESENDET
+        return antwort
 
     # Opt-in-Pfad (SREG-5b): Runde 1 oder Runde 2.
     try:
         eintraege = seiten_client.inventar()
     except SeitenClientError as e:
         logger.warning("seiten_uebersicht: Registry nicht erreichbar — %s", e)
-        tg.send_message(
-            chat_id,
+        return (
             "Die Seiten-Registry ist gerade nicht erreichbar — "
             "bitte gleich nochmal probieren.")
-        return SIGNAL_NICHT_ERREICHBAR
 
     # Runde 1 (aktion="inventar"): Inventar als Tool-Result → kein Bot-Post.
     # Das LLM wählt die passende View und ruft mit aktion="match" + exaktem
-    # label/key erneut auf (SREG-5b Weg 2, #488; AC1).
+    # label/key erneut auf (SREG-5b Weg 2, #488; EC-29).
     if str(aktion or "").strip() == AKTION_INVENTAR:
         inventar_text = formatiere_inventar_tool_result(eintraege)
         logger.info("seiten_uebersicht: Inventar an LLM geliefert (%d Eintraege, q=%r)",
                     len(eintraege), q)
-        return (SIGNAL_INVENTAR_GELIEFERT, inventar_text)
+        return inventar_text
 
-    # Runde 2 (aktion="match"): Equality-Lookup auf label ODER key → Bot-Post
-    # (SREG-5b/T549-Fix2; AC2). Verhindert Präfix-Geschwister-Mehrdeutigkeit.
+    # Runde 2 (aktion="match"): Equality-Lookup auf label ODER key
+    # (SREG-5b/T549-Fix2). Verhindert Präfix-Geschwister-Mehrdeutigkeit.
     if str(aktion or "").strip() == AKTION_MATCH:
         eintrag = matche_view_exakt(eintraege, q)
         if eintrag is None:
             # Kein Treffer → klare Fehler-Antwort (kein Default-Loop).
-            tg.send_message(
-                chat_id,
+            logger.info("seiten_uebersicht: aktion=match kein Treffer (q=%r) in Chat %s",
+                        q, chat_id)
+            return (
                 "Ich habe keinen Eintrag mit dem label oder key \"%s\" gefunden. "
                 "Bitte mit aktion=inventar das aktuelle Inventar abrufen und "
                 "einen exakten label oder key aus der Liste verwenden." % q)
-            logger.info("seiten_uebersicht: aktion=match kein Treffer (q=%r) in Chat %s",
-                        q, chat_id)
-            return SIGNAL_DEFAULT_GESENDET
 
-        # Equality-Treffer → direkte URL (SREG-5b).
+        # Equality-Treffer → direkte URL als Tool-Result-Text (SREG-5b).
         pfad = eintrag.get("pfad") or ""
         varianten_query = eintrag.get("query") if isinstance(eintrag.get("query"), dict) else None
         try:
@@ -368,10 +356,9 @@ def seiten_uebersicht(tg, chat_id, from_user_id, suchbegriff,
         except Exception:
             url = pfad
         label = eintrag.get("label") or pfad
-        tg.send_message(chat_id, "Hier ist der direkte Link: %s (%s)" % (url, label))
         logger.info("seiten_uebersicht: Direkt-URL via Equality (q=%r, pfad=%s) an Chat %s",
                     q, pfad, chat_id)
-        return SIGNAL_DIREKT_GESENDET
+        return "Hier ist der direkte Link: %s (%s)" % (url, label)
 
     # Fallback: Substring-Match (aktion=None/unbekannt) — für direkte Anfragen
     # ohne zweistufiges KI-Matching (SREG-5b Legacy-Pfad).
@@ -381,24 +368,24 @@ def seiten_uebersicht(tg, chat_id, from_user_id, suchbegriff,
         # Kein Treffer → Fallback auf Default-Link (SREG-5b: kein stilles Ende).
         try:
             url = baue_uebersichts_url(display_url_origin_heim)
-            tg.send_message(
-                chat_id,
+            return (
                 "Ich habe keine passende Seite gefunden. "
                 "Die vollständige Übersicht: %s" % url)
         except ValueError:
-            tg.send_message(chat_id, "Ich habe keine passende Seite gefunden.")
-        return SIGNAL_DEFAULT_GESENDET
+            return "Ich habe keine passende Seite gefunden."
 
     if mehrdeutig:
-        # Mehrere Treffer → EC-22-Rückfrage (SREG-5b/EC-22).
+        # Mehrere Treffer → EC-22-Rückfrage als Tool-Result (SREG-5b/EC-22/EC-29).
+        # Das Tool-Result enthält sowohl die User-taugliche Rückfrage als auch die
+        # strukturierte Kandidaten-Liste (EC-29 Tool-Result-Vertrag: Agent-Steuer-Hinweise
+        # und User-Text dürfen im selben Tool-Result stehen).
         rueckfrage = formatiere_ec22_rueckfrage(treffer)
-        tg.send_message(chat_id, rueckfrage)
+        kandidaten_text = formatiere_mehrdeutigkeit_tool_result(treffer)
         logger.info("seiten_uebersicht: EC-22-Rückfrage (%d Treffer, q=%r) an Chat %s",
                     len(treffer), q, chat_id)
-        kandidaten_text = formatiere_mehrdeutigkeit_tool_result(treffer)
-        return (SIGNAL_MEHRDEUTIG, kandidaten_text)
+        return "%s\n\n%s" % (rueckfrage, kandidaten_text)
 
-    # Eindeutiger Treffer → direkte URL (SREG-5b).
+    # Eindeutiger Treffer → direkte URL als Tool-Result-Text (SREG-5b).
     eintrag = treffer[0]
     pfad = eintrag.get("pfad") or ""
     # Variant-Query: wenn der Eintrag selbst ein Varianten-Eintrag ist (SREG-1).
@@ -411,7 +398,6 @@ def seiten_uebersicht(tg, chat_id, from_user_id, suchbegriff,
         url = pfad
 
     label = eintrag.get("label") or pfad
-    tg.send_message(chat_id, "Hier ist der direkte Link: %s (%s)" % (url, label))
     logger.info("seiten_uebersicht: Direkt-URL (q=%r, pfad=%s) an Chat %s",
                 q, pfad, chat_id)
-    return SIGNAL_DIREKT_GESENDET
+    return "Hier ist der direkte Link: %s (%s)" % (url, label)
