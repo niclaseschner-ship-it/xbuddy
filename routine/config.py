@@ -18,12 +18,15 @@ Schreib-API (ROUTINE-14, #343):
   Komponente schreibt direkt in routine.json (APP-3).
 """
 
-import contextlib
 import json
 import logging
 import os
-import tempfile
 from dataclasses import dataclass
+
+if __package__:
+    from ._jsonio import atomic_write_json, read_json_or_empty
+else:
+    from routine._jsonio import atomic_write_json, read_json_or_empty
 
 logger = logging.getLogger(__name__)
 
@@ -378,40 +381,13 @@ def write_data(data_path, updates):
             normiert[schluessel] = wert
 
     # Aktuellen Stand lesen (fehlende Datei → leeres Dict → Defaults greifen beim Lesen)
-    try:
-        with open(data_path, encoding="utf-8") as f:
-            aktuell = json.load(f)
-        if not isinstance(aktuell, dict):
-            aktuell = {}
-    except FileNotFoundError:
-        aktuell = {}
-    except (OSError, json.JSONDecodeError) as e:
-        logger.warning(
-            "routine.json nicht lesbar vor dem Schreiben (%s): %s — "
-            "schreibe Updates über leere Basis", data_path, e)
-        aktuell = {}
+    aktuell = read_json_or_empty(data_path)
 
     # Updates mergen (normierte Form, ROUTINE-12: capitalized Wochentag-Keys)
     aktuell.update(normiert)
 
-    # Atomar schreiben: Temp-Datei im selben Verzeichnis, dann os.replace (DCOMP-4)
-    verzeichnis = os.path.dirname(os.path.abspath(data_path))
-    try:
-        fd, tmp_path = tempfile.mkstemp(dir=verzeichnis, suffix=".tmp",
-                                        prefix="routine_write_")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(aktuell, f, ensure_ascii=False, indent=2)
-            os.replace(tmp_path, data_path)
-        except Exception:
-            # Temp-Datei aufräumen, wenn os.replace fehlschlägt
-            with contextlib.suppress(OSError):
-                os.unlink(tmp_path)
-            raise
-    except OSError as e:
-        raise OSError(
-            "routine.json konnte nicht atomar geschrieben werden (%s): %s"
-            % (data_path, e)) from e
+    # Atomar schreiben (DCOMP-4)
+    atomic_write_json(data_path, aktuell)
 
     logger.info(
         "routine.json aktualisiert (ROUTINE-14): %s",
