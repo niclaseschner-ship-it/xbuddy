@@ -388,8 +388,8 @@ Die Seite wird zusätzlich zur reinen URL-Nutzung als installierbare
 Web-App ausgeliefert. PWA ist **eine** Auslieferungsform unter mehreren
 denkbaren (z. B. eingebettet in eine künftige Buddy-Runtime) — die
 aktuell verfolgte. Pflicht-Dateien, Manifest-Pflichtfelder und die
-Config-Lade-Reihenfolge folgen der Controller-PWA-Konvention
-`conventions/controller-pwa.md` (PWA-1 bis PWA-4).
+Config-Lade-Reihenfolge folgen der PWA-Konvention
+`conventions/pwa.md` (PWA-1 bis PWA-4) — Controller-Klauseln.
 
 Komponentenspezifische Ergänzungen über die Konvention hinaus:
 
@@ -424,8 +424,8 @@ interpretiert.
 
 ### FIG-26 — Vollbild + Wach-Halten per Tap
 Wake-Lock-Anforderung und Fullscreen-API beim ersten User-Gesture
-folgen der Controller-PWA-Konvention `conventions/controller-pwa.md`
-PWA-3 (best-effort, kein Blockieren bei fehlender API).
+folgen der PWA-Konvention `conventions/pwa.md` PWA-3 (best-effort,
+kein Blockieren bei fehlender API).
 
 FIG-26 ergänzt FIG-24/25: die PWA-Auslieferung bleibt für den
 Eigengeräte-Fall gültig, FIG-26 macht Vollbild und Display-an aber
