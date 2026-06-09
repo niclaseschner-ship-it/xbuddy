@@ -2,7 +2,7 @@
   "name": "XBuddy Display",
   "short_name": "Display",
   "description": "XBuddy-Display-Client: zeigt vollflächig den vom Router zugeordneten Inhalt — ohne Browser-Chrome, ohne Scroll.",
-  "start_url": "./",
+  "start_url": "index.html",
   "scope": "./",
   "display": "fullscreen",
   "orientation": "landscape",
