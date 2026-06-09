@@ -15,18 +15,22 @@ eine Sub-Frage ob der Elternteil einen direkten View-Link will.
   wählt die passende View anhand label/key/synonyme/zeigt und ruft die Task
   erneut mit dem exakten label oder key als `suchbegriff` auf.
 
-  Runde 2 (`aktion="match"`): Substring-Match gegen label/synonyme/zeigt
-  trifft bei exaktem Begriff → direkte URL als Bot-Post. Mehrdeutig →
-  EC-22-Rückfrage. Kein Treffer → Fallback auf Default-Link.
+  Runde 2 (`aktion="match"`): Equality-Lookup auf label ODER key (SREG-5b).
+  Eindeutiger Treffer → direkte URL als Bot-Post. Kein Treffer → klare
+  Fehler-Antwort (kein Default-Loop). Substring-basiertes matche_view()
+  bleibt für aktion=inventar (Runde 1) reserviert.
 
   Dieser Zwei-Runden-Ansatz ersetzt lokales Substring-Matching gegen vage
   Suchbegriffe: das LLM ist der einzige Ranker (SREG-5b: kein lokales
   Substring-/Wortlisten-Match auf natürlichsprachliche Begriffe, #488).
+  Equality bei aktion=match verhindert Präfix-Geschwister-Mehrdeutigkeit
+  (T549-Fix2: „Panel paulas-panel-01" trifft nicht mehr „Panel paulas-panel-01
+  bearbeiten" — deterministisches Lookup auf diszipliniertem Wert, SREG-5b).
 
 Eingang: optionaler `suchbegriff` (für Opt-in-Pfad), optionale `aktion`.
   Ohne Suchbegriff/aktion → Default-Pfad.
   Suchbegriff + aktion="inventar" → Runde 1: Inventar als Tool-Result.
-  Suchbegriff + aktion="match"   → Runde 2: Substring-Match + Bot-Post.
+  Suchbegriff + aktion="match"   → Runde 2: Equality-Lookup label/key + Bot-Post.
 
 Ergebnis-Signal:
   „default_gesendet"    — Default-Link + Sub-Frage gepostet (SREG-5).
@@ -179,7 +183,9 @@ def formatiere_mehrdeutigkeit_tool_result(treffer):
     zeilen.append(
         "Wenn der Eltern in der nächsten Antwort wählt (z.B. \"Die Ansicht\", "
         "\"Die zweite\", \"den Editor\"), rufe diese Task erneut auf mit "
-        "aktion=match + dem exakten label aus dieser Liste — "
+        "aktion=match + dem exakten label aus dieser Liste oder dem key aus "
+        "dieser Liste — Equality wird geprüft, kein Substring-Match. "
+        "Der key ist eindeutig, falls Labels Präfix-Geschwister sind. "
         "NICHT ohne suchbegriff (das löst Default-Fallback aus).")
     return "\n".join(zeilen)
 
@@ -205,6 +211,29 @@ def matche_view(eintraege, suchbegriff):
     # Mehrdeutigkeit: mind. 2 Treffer im Direkt-Match → EC-22-Rückfrage.
     mehrdeutig = len(treffer) >= _MEHRDEUTIGKEIT_MINDEST_TREFFER
     return treffer, mehrdeutig
+
+
+def matche_view_exakt(eintraege, suchbegriff):
+    """Equality-Lookup für aktion=match (SREG-5b/T549-Fix2).
+
+    Prüft `eintrag["label"] == suchbegriff` ODER `eintrag["key"] == suchbegriff`
+    (case-sensitiv, exakte Übereinstimmung). Erster Treffer gewinnt — label und
+    key sind eindeutige Identifier, kein Substring-Match (verhindert
+    Präfix-Geschwister-Mehrdeutigkeit bei aktion=match, T549).
+
+    Liefert den ersten passenden Eintrag oder None.
+    """
+    if not eintraege or not suchbegriff:
+        return None
+    q = str(suchbegriff).strip()
+    if not q:
+        return None
+    for e in eintraege:
+        if not isinstance(e, dict):
+            continue
+        if str(e.get("label") or "") == q or str(e.get("key") or "") == q:
+            return e
+    return None
 
 
 def formatiere_ec22_rueckfrage(treffer):
@@ -246,9 +275,9 @@ def seiten_uebersicht(tg, chat_id, from_user_id, suchbegriff,
       aktion="match" und dem exakten label/key auf (Weg 2, #488).
 
     **Mit Suchbegriff + aktion="match" (Opt-in Runde 2, SREG-5b):**
-      Substring-Match gegen label/synonyme/zeigt.
-      Eindeutig → direkte URL (Bot-Post). Mehrdeutig → EC-22-Rückfrage.
-      Kein Treffer → Fallback auf Default-Link.
+      Equality-Lookup auf label ODER key (case-sensitiv, exakt).
+      Treffer → direkte URL (Bot-Post).
+      Kein Treffer → klare Fehler-Antwort (kein Default-Loop).
 
     `tg`                       — Telegram-Kanal (send_message).
     `chat_id`                  — Zielchat (Gruppe oder Privatchat).
@@ -316,7 +345,36 @@ def seiten_uebersicht(tg, chat_id, from_user_id, suchbegriff,
                     len(eintraege), q)
         return (SIGNAL_INVENTAR_GELIEFERT, inventar_text)
 
-    # Runde 2 (aktion="match"): Substring-Match → Bot-Post (SREG-5b; AC2).
+    # Runde 2 (aktion="match"): Equality-Lookup auf label ODER key → Bot-Post
+    # (SREG-5b/T549-Fix2; AC2). Verhindert Präfix-Geschwister-Mehrdeutigkeit.
+    if str(aktion or "").strip() == AKTION_MATCH:
+        eintrag = matche_view_exakt(eintraege, q)
+        if eintrag is None:
+            # Kein Treffer → klare Fehler-Antwort (kein Default-Loop).
+            tg.send_message(
+                chat_id,
+                "Ich habe keinen Eintrag mit dem label oder key \"%s\" gefunden. "
+                "Bitte mit aktion=inventar das aktuelle Inventar abrufen und "
+                "einen exakten label oder key aus der Liste verwenden." % q)
+            logger.info("seiten_uebersicht: aktion=match kein Treffer (q=%r) in Chat %s",
+                        q, chat_id)
+            return SIGNAL_DEFAULT_GESENDET
+
+        # Equality-Treffer → direkte URL (SREG-5b).
+        pfad = eintrag.get("pfad") or ""
+        varianten_query = eintrag.get("query") if isinstance(eintrag.get("query"), dict) else None
+        try:
+            url = formatiere_direkt_url(display_url_origin_heim, pfad, varianten_query)
+        except Exception:
+            url = pfad
+        label = eintrag.get("label") or pfad
+        tg.send_message(chat_id, "Hier ist der direkte Link: %s (%s)" % (url, label))
+        logger.info("seiten_uebersicht: Direkt-URL via Equality (q=%r, pfad=%s) an Chat %s",
+                    q, pfad, chat_id)
+        return SIGNAL_DIREKT_GESENDET
+
+    # Fallback: Substring-Match (aktion=None/unbekannt) — für direkte Anfragen
+    # ohne zweistufiges KI-Matching (SREG-5b Legacy-Pfad).
     treffer, mehrdeutig = matche_view(eintraege, q)
 
     if not treffer:
@@ -333,8 +391,6 @@ def seiten_uebersicht(tg, chat_id, from_user_id, suchbegriff,
 
     if mehrdeutig:
         # Mehrere Treffer → EC-22-Rückfrage (SREG-5b/EC-22).
-        # Bot-Post: kurze Rückfrage mit sichtbaren Labels für den Nutzer.
-        # Tool-Result: strukturierte Kandidaten-Liste für das LLM (#549).
         rueckfrage = formatiere_ec22_rueckfrage(treffer)
         tg.send_message(chat_id, rueckfrage)
         logger.info("seiten_uebersicht: EC-22-Rückfrage (%d Treffer, q=%r) an Chat %s",
