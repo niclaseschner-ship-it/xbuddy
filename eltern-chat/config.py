@@ -105,6 +105,13 @@ DEFAULTS = {
     # V1-Soll: fehlt sie, zeigt SREG-12 nur die Heim-Spalte. Kein Auto-
     # Fallback auf Heim (falsche Origin = nicht-erreichbarer Link, SREG-7).
     "display_url_origin_tailscale": "",
+    # EC-15 / #503: Origin des Essens-Buddys, über die die
+    # WuenscheZeigenTask die Wunschliste liest (`GET /api/v1/essen/wuensche`
+    # ESSEN-15) und die GerichtAnlegenTask Gerichte anlegt
+    # (`POST /api/v1/essen/katalog/gerichte` ESSEN-19). Per-Instanz-Wert;
+    # Default passt zum Pi-Setup (PORT-2 Essens-Buddy auf 5052). Leer ⇒
+    # beide Aufgaben NICHT im Katalog (WZE-8 / GAN-7 AND-Guard).
+    "essen_origin_url": "http://127.0.0.1:5052",
     # ONB-6 / EC-15: Familien-Gruppen-Chat-ID. Default leer = Onboarding-
     # Bindung. Über ENV oder Datei gesetzt → gesperrt (Vorrang vor
     # Onboarding-Bindung) — die Sperr-Logik sitzt in `resolve`, nicht im
@@ -144,6 +151,7 @@ class Config:
                  routine_origin_url, icon_origin_url, photo_origin_url,
                  seiten_origin_url, display_url_origin_heim,
                  display_url_origin_tailscale,
+                 essen_origin_url,
                  log_level):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
@@ -164,6 +172,7 @@ class Config:
         self.seiten_origin_url = seiten_origin_url     # SREG-6 / #453: Origin der Seiten-Registry (SREG-3)
         self.display_url_origin_heim = display_url_origin_heim         # SREG-7 / #476: Heimnetz-Origin
         self.display_url_origin_tailscale = display_url_origin_tailscale  # SREG-7 / #476: Tailscale-Origin
+        self.essen_origin_url = essen_origin_url       # EC-15 / #503: Origin des Essens-Buddys (ESSEN-15/ESSEN-19)
         self.log_level = log_level                 # LOG-4 (#166): Level-String für tools.logsetup
 
 
@@ -277,5 +286,6 @@ def resolve(config_path, zd=None):
         ),
         display_url_origin_tailscale=str(
             values["display_url_origin_tailscale"]).strip().rstrip("/"),
+        essen_origin_url=str(values["essen_origin_url"]).strip().rstrip("/"),
         log_level=str(values["log_level"]).strip(),
     )
