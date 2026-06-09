@@ -67,8 +67,9 @@ Skill-Modul: `eltern-chat/skills/wuensche_zeigen.py` (Funktion) +
 Die Funktion prüft selbst, ob der Telegram-User des Aufrufs Mitglied der
 gebundenen Familien-Gruppe ist — live über die Telegram-Gruppen-Mitgliedschaft,
 analog `eltern-chat.md` EC-2 und `termine-erfragen.md` TER-2. Ist er es nicht,
-bricht die Funktion mit „abgelehnt" ab und postet keine Antwort. Die Prüfung
-liegt **bei der Funktion**, nicht beim Aufrufer — sonst hinge die
+wirft die Funktion eine Berechtigungs-Exception (`BerechtigungError`, siehe #564,
+`eltern-chat/skills/_errors.py`) und postet keine Antwort. Die Prüfung liegt
+**bei der Funktion**, nicht beim Aufrufer — sonst hinge die
 Berechtigungslogik am Trigger und die Funktion verlöre ihre Trigger-Agnostik
 (E-WZE-1).
 

@@ -72,10 +72,12 @@ keinem Pfad selbst.
 Die Funktion prüft selbst, ob der Telegram-User des Aufrufs Mitglied der
 gebundenen Familien-Gruppe ist — live über die Telegram-Gruppen-
 Mitgliedschaft, analog `eltern-chat.md` EC-2, `familie-anlegen.md` FAA-2 und
-`kalender-verbinden.md` KAV-2. Ist er es nicht, bricht die Funktion mit
-„abgelehnt" ab und postet keine Antwort. Die Prüfung liegt **bei der
-Funktion**, nicht beim Aufrufer — sonst hinge die Berechtigungslogik am
-Trigger und die Funktion verlöre ihre Trigger-Agnostik (E-TER-1).
+`kalender-verbinden.md` KAV-2. Ist er es nicht, wirft die Funktion eine
+Berechtigungs-Exception (`BerechtigungError`, siehe #564,
+`eltern-chat/skills/_errors.py`) und postet keine Antwort. Die Prüfung liegt
+**bei der Funktion**, nicht beim Aufrufer — sonst hinge die
+Berechtigungslogik am Trigger und die Funktion verlöre ihre Trigger-Agnostik
+(E-TER-1).
 
 *Tickets:* #143
 
@@ -177,8 +179,7 @@ die Funktion fingiert keinen.
 Erreicht die Funktion die Plan-Buddy-Termin-Schnittstelle nicht
 (Verbindung schlägt fehl, HTTP-Status ≠ 200, Antwort nicht parsbar) oder
 ist der Plan-Buddy gar nicht installiert (`plan.md` PLAN-23,
-`conventions/apps.md` APP-2), liefert die Funktion das Ergebnis-Signal
-„nicht_erreichbar" zurück und **returnt einen hart-codierten, ehrlichen
+`conventions/apps.md` APP-2), **returnt einen hart-codierten, ehrlichen
 Antwort-Text als Tool-Result** — sie erfindet keine Termine
 (`eltern-chat.md` EC-7, EC-22). Der Tool-Result-Text benennt die fehlende
 Fähigkeit in der Sprache der Familie („Der Wochenplan ist gerade nicht
@@ -193,10 +194,10 @@ Funktion sendet auch im Fehlerpfad nicht selbst.
 ### TER-8 — Leerer Zeitraum
 Liefert die Plan-Buddy-Schnittstelle für den ermittelten Zeitraum eine
 leere Liste, returnt die Funktion einen **hart-codierten Tool-Result-Text**
-(„keine Termine in diesem Zeitraum") und liefert das Ergebnis-Signal
-„leer" zurück. Ein leerer Kalender ist kein Fehler — der Tool-Result
-macht das explizit, damit das LLM (EC-29) eine ehrliche Bot-Antwort
-formuliert und das Familienmitglied nicht „der Bot schweigt" interpretiert.
+(„keine Termine in diesem Zeitraum"). Ein leerer Kalender ist kein Fehler —
+der Tool-Result macht das explizit, damit das LLM (EC-29) eine ehrliche
+Bot-Antwort formuliert und das Familienmitglied nicht „der Bot schweigt"
+interpretiert.
 
 *Tickets:* #143, #551
 
@@ -260,11 +261,10 @@ ersetzt, analog `eltern-chat.md` EC-17, `kalender-verbinden.md` KAV-10,
 `plan.md` PLAN-29. Mindest-Abdeckung:
 
 - **TER-1** — Aufruf mit minimalem Eingang (Chat-ID, User-ID,
-  Anfrage-Text) returnt einen User-tauglichen Tool-Result-Text und
-  liefert „beantwortet".
+  Anfrage-Text) returnt einen User-tauglichen Tool-Result-Text.
 - **TER-2** — ein Nicht-Familien-Mitglied löst einen Berechtigungs-Bruch
-  aus (Funktion sendet nichts und liefert kein Result); das Ergebnis-
-  Signal ist „abgelehnt".
+  aus: die Funktion wirft `BerechtigungError` (Funktion sendet nichts und
+  liefert kein Result).
 - **TER-3** — die Bot-Nachricht landet im selben Chat-Typ wie die Frage
   (Gruppen-Anfrage → Gruppen-Antwort, Privatchat-Anfrage → Privatchat-
   Antwort); die Funktion selbst sendet keine Telegram-Nachricht
@@ -284,12 +284,11 @@ ersetzt, analog `eltern-chat.md` EC-17, `kalender-verbinden.md` KAV-10,
   führt zu einem Termin ohne Personen-Bezug, nicht zu einer fingierten
   Zuordnung.
 - **TER-7** — eine fehlschlagende Plan-Buddy-Antwort (Verbindung tot,
-  HTTP 5xx, nicht-parsbare Antwort) liefert „nicht_erreichbar" und
-  returnt die hart-codierte Ehrlich-Antwort als Tool-Result; ein
-  „Plan-Buddy nicht installiert"-Szenario verhält sich identisch
-  (PLAN-23, APP-2).
-- **TER-8** — eine leere PLAN-22-Antwort liefert „leer" und returnt die
-  hart-codierte „keine Termine"-Antwort als Tool-Result.
+  HTTP 5xx, nicht-parsbare Antwort) returnt die hart-codierte Ehrlich-Antwort
+  als Tool-Result; ein „Plan-Buddy nicht installiert"-Szenario verhält sich
+  identisch (PLAN-23, APP-2).
+- **TER-8** — eine leere PLAN-22-Antwort returnt die hart-codierte
+  „keine Termine"-Antwort als Tool-Result.
 - **TER-9** — der Tool-Result-Listen-Block gruppiert nach Tag in
   chronologischer Reihenfolge; eine Mehrtages-Spanne (gleiche `id` über
   mehrere Tage, PLAN-14) erscheint genau einmal mit Spannen-Hinweis;
