@@ -450,6 +450,10 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
     # externe Session-Registry aus main.build_context — DIESELBE Map, die der
     # PAA-Worker füllt und handle_update für das Routing liest (PAA-6/TASK-7;
     # die stille Lego-Falle, wenn hier eine andere Map landete).
+    # Additiv (#389): seiten_origin_url für die PAA-3.3-Kandidaten-Liste
+    # (SREG-3) wird, wenn vorhanden, als SeitenClient durchgereicht — ohne
+    # seiten_origin_url läuft die Aufgabe mit seiten_client=None (leere Liste,
+    # AC4-Meldung). Bestehende Guards unverändert (AC5).
     if panel_origin_url is not None and geraete_origin_url is not None \
             and paa_sessions is not None \
             and family_group_chat_id_getter is not None:
@@ -457,7 +461,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
         catalog.register(PanelAnlegenTask(
             tg, panel_origin_url, geraete_origin_url, paa_sessions,
             family_group_chat_id_getter,
-            controller_url_origin=controller_url_origin))
+            controller_url_origin=controller_url_origin,
+            seiten_origin_url=seiten_origin_url))
 
     # RZS-7: »Routine-Zeiten setzen« als synchrone schreibende Aufgabe (EC-10).
     # AND-Guard: routine_origin_url UND family_group_chat_id_getter müssen gesetzt
