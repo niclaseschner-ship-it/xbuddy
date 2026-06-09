@@ -288,6 +288,47 @@ Muster je nachdem, ob sie instanzspezifisch sind oder mit dem Code versioniert.
 
 *Tickets:* #135, #323
 
+### URL-17 — Admin-Sub-Pfad pro Komponente: `/api/v1/<komponente>/admin/`
+
+**Ausschließlich host-intern aufgerufene, nicht familienseitige
+Admin-Endpunkte** einer Komponente (Reload-, Wartungs- und interne
+Schreib-Kanten zwischen Diensten) liegen unter einem reservierten
+Sub-Pfad ihres `/api/v1/<komponente>/`-Namensraums:
+`/api/v1/<komponente>/admin/<aktion>`. Davon abzugrenzen sind
+**familienseitige Schreib-APIs** (z. B. `POST /api/v1/familie/personen`,
+`PUT /api/v1/routine/config`, `PUT /api/v1/panels/<panel_id>/tiles`),
+die bewusst **außerhalb** `/admin/` leben und vom LAN aus erreichbar
+bleiben.
+
+Damit hat jede Komponente, die Admin-Endpunkte braucht, *eine*
+vorhersagbare Stelle dafür — und die Origin kann die gesamte Form an
+*einer* Stelle gegen den LAN-Zugriff abriegeln.
+
+Bauregeln:
+
+- **Loopback-only**: Admin-Endpunkte akzeptieren ausschließlich Requests
+  mit Quelladresse `127.0.0.1` **oder** `::1` (IPv4- und IPv6-Loopback)
+  und antworten sonst mit `403`. Der Guard lebt im Code der Komponente
+  (Defense in Depth gegenüber der Origin-Sperre).
+- **Origin-seitig mit `404` geblockt**: die Origin **soll** jeden Pfad,
+  der auf `^/api/v1/[^/]+/admin/` matcht, mit `404` abweisen — vor allen
+  `/api/v1/<komponente>/`-Prefixen (URL-14, spezifisch-vor-allgemein).
+  `404` statt `403`, damit die Existenz von Admin-Endpunkten von außen
+  nicht sichtbar wird. Die operative Umsetzung in `deploy/nginx/`
+  trägt diesen Vertrag und wird durch Verhaltenstests (Stub-Upstream)
+  verriegelt — der Code-Guard (oben) ist die zweite Linie.
+- **Keine Pflicht zur Admin-API**: Komponenten ohne Reload-/Wartungs-/
+  internen-Schreib-Bedarf brauchen keinen Admin-Sub-Pfad. URL-17
+  reserviert die Form, ohne sie vorzuschreiben.
+
+Spec-Heimat der Verhaltens-Begründung pro Endpunkt: die Komponenten-
+Spec (z. B. ROU-18 für Router-Admin-Reload, ROU-28 für panel-bezogene
+Admin-Kanten, ROU-29 für die `panels`-Schreib-Kante, PBE-10 für die
+`tiles-changed`-Naht, PLAN-34 für die Plan-Admin-Aktivitäten).
+`urls.md` trägt nur die Pfadform und den Origin-Vertrag.
+
+*Tickets:* —
+
 ## Beispiele
 
 ```
