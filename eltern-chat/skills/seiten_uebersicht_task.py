@@ -41,11 +41,10 @@ logger = logging.getLogger(__name__)
 _QUITTUNG_DEFAULT          = (
     "Ich habe den Link zur Seiten-Übersicht geschickt und gefragt, ob ein "
     "direkter View-Link gewünscht wird.")
-# Kein statischer Text für SIGNAL_INVENTAR_GELIEFERT — der inventar_text kommt
-# direkt aus der Funktion und wird unverändert als Tool-Result zurückgegeben.
+# Kein statischer Text für SIGNAL_INVENTAR_GELIEFERT und SIGNAL_MEHRDEUTIG —
+# der text kommt jeweils direkt aus der Funktion und wird unverändert als
+# Tool-Result zurückgegeben.
 _QUITTUNG_DIREKT           = "Ich habe den direkten View-Link geschickt."
-_QUITTUNG_MEHRDEUTIG       = (
-    "Ich habe eine Rückfrage gestellt, weil mehrere Seiten passen könnten.")
 _QUITTUNG_ABGELEHNT        = "Tut mir leid, du bist kein Mitglied der Familien-Gruppe."
 _QUITTUNG_NICHT_ERREICHBAR = (
     "Die Seiten-Registry ist gerade nicht erreichbar — bitte später nochmal versuchen.")
@@ -88,7 +87,14 @@ class SeitenUebersichtTask(ReadTask):
                 "du bekommst die vollständige View-Liste als Tool-Result zurück. "
                 "(2) Passenden Eintrag aus der Liste wählen und Task erneut aufrufen mit "
                 "aktion=\"match\" + dem exakten label aus der Liste als suchbegriff. "
-                "KEIN Bot-Post in Runde 1; der direkte Link wird erst in Runde 2 geschickt."),
+                "KEIN Bot-Post in Runde 1; der direkte Link wird erst in Runde 2 geschickt. "
+                "Sonderfall Mehrdeutigkeit: Wenn die vorige Task-Antwort signal=mehrdeutig "
+                "war (Kandidaten-Liste in der Quittung) und der Eltern eine Disambiguation "
+                "antwortet (z.B. \"Die Ansicht\", \"Die zweite\", \"die mit Bearbeiten\"), "
+                "wähle den passenden Kandidaten aus der Quittung und rufe die Task mit "
+                "aktion=\"match\" + dem exakten label des gewählten Kandidaten auf. "
+                "Niemals auf eine Disambiguation-Antwort ohne suchbegriff aufrufen — "
+                "das löst den Default-Fallback aus statt der gewünschten View."),
             parameters={
                 "type": "object",
                 "properties": {
@@ -130,6 +136,10 @@ class SeitenUebersichtTask(ReadTask):
 
         Bei SIGNAL_INVENTAR_GELIEFERT (aktion="inventar"): der inventar_text
         wird direkt als Tool-Result zurückgegeben — KEIN Bot-Post.
+        Bei SIGNAL_MEHRDEUTIG: der kandidaten_text (strukturierte Kandidaten-
+        Liste + Auflösungs-Anweisung) wird direkt als Tool-Result zurückgegeben
+        — der Bot-Post (EC-22-Rückfrage) wurde bereits in der Skill-Funktion
+        gesendet (#549).
         """
         args = arguments or {}
         suchbegriff = args.get("suchbegriff", "")
@@ -148,18 +158,20 @@ class SeitenUebersichtTask(ReadTask):
             aktion=aktion,
         )
 
-        # Runde 1: Funktion liefert (signal, inventar_text) — direkt als Tool-Result.
+        # Funktion liefert Tupel (signal, text) für:
+        #   SIGNAL_INVENTAR_GELIEFERT — inventar_text als Tool-Result (Runde 1)
+        #   SIGNAL_MEHRDEUTIG         — kandidaten_text als Tool-Result (#549)
+        # In beiden Fällen wird der text direkt als Tool-Result zurückgegeben.
         if isinstance(ergebnis, tuple):
-            signal, inventar_text = ergebnis
-            logger.info("SeitenUebersichtTask: signal=%s (Inventar-Runde), chat=%s",
+            signal, tool_result_text = ergebnis
+            logger.info("SeitenUebersichtTask: signal=%s (Tupel-Pfad), chat=%s",
                         signal, chat_id)
-            return inventar_text
+            return tool_result_text
 
         signal = ergebnis
         quittung_map = {
             su_mod.SIGNAL_DEFAULT_GESENDET:  _QUITTUNG_DEFAULT,
             su_mod.SIGNAL_DIREKT_GESENDET:   _QUITTUNG_DIREKT,
-            su_mod.SIGNAL_MEHRDEUTIG:        _QUITTUNG_MEHRDEUTIG,
             su_mod.SIGNAL_ABGELEHNT:         _QUITTUNG_ABGELEHNT,
             su_mod.SIGNAL_NICHT_ERREICHBAR:  _QUITTUNG_NICHT_ERREICHBAR,
         }
