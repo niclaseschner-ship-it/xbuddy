@@ -611,12 +611,14 @@ def _with_ca_pem(fn):
 
 def test_PAA5_registriert_wenn_alle_abhaengigkeiten():
     """PAA-5: PanelAnlegenTask erscheint im Katalog, wenn panel_origin_url,
-    geraete_origin_url, paa_sessions UND family_group_chat_id_getter da sind."""
+    geraete_origin_url, seiten_origin_url, paa_sessions UND
+    family_group_chat_id_getter da sind."""
     def _check(ca_pem):
         catalog = build_catalog(
             FakeTelegram(), ca_pem,
             geraete_origin_url="http://127.0.0.1:5040",
             panel_origin_url="http://127.0.0.1:5041",
+            seiten_origin_url="http://127.0.0.1:5042",
             paa_sessions={},
             family_group_chat_id_getter=lambda: 200)
         task = catalog.get("panel_anlegen")
@@ -659,22 +661,44 @@ def test_PAA5_nicht_registriert_ohne_fgcid():
 
 
 def test_AC5_bestehende_guards_unpetraendert():
-    """AC5: bestehende Guards (panel_origin_url, geraete_origin_url, paa_sessions,
-    family_group_chat_id_getter) bleiben erhalten — tasks.py-Änderung ist additiv.
-    seiten_origin_url ist NICHT Teil des Guards (fehlt → seiten_client=None)."""
+    """AC5 (aktualisiert per Watchdog-Befund-1): bestehende Guards
+    (panel_origin_url, geraete_origin_url, paa_sessions, family_group_chat_id_getter)
+    bleiben erhalten. seiten_origin_url ist nun EBENFALLS Guard-Pflicht (Dialog-
+    Falle ohne es — symmetrisch zur SUE-Form). Alle sechs Guards in einem Aufruf."""
     def _check(ca_pem):
-        # Ohne seiten_origin_url ABER mit allen anderen Guards → trotzdem registriert
+        # Alle Guards gesetzt → registriert.
         catalog = build_catalog(
             FakeTelegram(), ca_pem,
             geraete_origin_url="http://127.0.0.1:5040",
             panel_origin_url="http://127.0.0.1:5041",
+            seiten_origin_url="http://127.0.0.1:5042",
             paa_sessions={},
             family_group_chat_id_getter=lambda: 200)
-            # kein seiten_origin_url
         task = catalog.get("panel_anlegen")
         assert task is not None, (
-            "PanelAnlegenTask muss auch ohne seiten_origin_url registriert werden "
-            "(AC5 — Additiv-Anforderung)")
+            "PanelAnlegenTask muss mit allen Guards registriert werden (AC5)")
+        # Jeder der fünf Guards kann die Registrierung verhindern (bestehende Guards).
+        for fehlendes_arg, kwargs in [
+            ("panel_origin_url",
+             dict(geraete_origin_url="http://x", seiten_origin_url="http://x",
+                  paa_sessions={}, family_group_chat_id_getter=lambda: 200)),
+            ("geraete_origin_url",
+             dict(panel_origin_url="http://x", seiten_origin_url="http://x",
+                  paa_sessions={}, family_group_chat_id_getter=lambda: 200)),
+            ("seiten_origin_url",
+             dict(panel_origin_url="http://x", geraete_origin_url="http://x",
+                  paa_sessions={}, family_group_chat_id_getter=lambda: 200)),
+            ("paa_sessions",
+             dict(panel_origin_url="http://x", geraete_origin_url="http://x",
+                  seiten_origin_url="http://x",
+                  family_group_chat_id_getter=lambda: 200)),
+            ("family_group_chat_id_getter",
+             dict(panel_origin_url="http://x", geraete_origin_url="http://x",
+                  seiten_origin_url="http://x", paa_sessions={})),
+        ]:
+            c = build_catalog(FakeTelegram(), ca_pem, **kwargs)
+            assert c.get("panel_anlegen") is None, (
+                "Fehlendes %s hätte PAA aus dem Katalog ausschließen müssen" % fehlendes_arg)
     _with_ca_pem(_check)
 
 
@@ -693,6 +717,7 @@ def _ctx_with_paa_session(tmp_path, tg, paa_sessions, family_group_chat_id="-100
         tg, "/instanz/rootCA.pem",
         geraete_origin_url="http://test-geraete",
         panel_origin_url="http://test-panel",
+        seiten_origin_url="http://test-seiten",
         paa_sessions=paa_sessions,
         family_group_chat_id_getter=lambda: family_group_chat_id)
     return Context(

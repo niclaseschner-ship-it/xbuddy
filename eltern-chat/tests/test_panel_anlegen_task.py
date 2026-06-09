@@ -484,6 +484,75 @@ def test_PaaSession_prefix():
 
 
 # ============================================================
+#  Befund-2-Integrations-Test — Entry-Path handle_update → SeitenClient
+# ============================================================
+
+def test_ENTRY_PATH_execute_durchreicht_seiten_client_bis_panel_anlegen():
+    """Entry-Path-Integration: PanelAnlegenTask.execute() → PaaSession →
+    panel_anlegen → SeitenClient.get_kandidaten() (Befund 2, #389).
+
+    Prüft, dass der seiten_client vom Worker korrekt durchgereicht wird:
+    - FakeSeitenClient.calls == 1 nach einem vollständigen Durchlauf.
+    - FakePanelClient.calls[0].tiles enthält App/View aus den Stub-Kandidaten
+      der Registry (AC1: nicht aus einem lokalen APP_KANDIDATEN).
+
+    Ablauf: Display 1, Slug „Küche", App 1 (Wetter, aus _kandidaten_standard),
+    Bestätigungswort → panel_anlegen schreibt eine Panel-Instanz.
+    """
+    fake_seiten = FakeSeitenClient()
+    fake_panel = FakePanelClient()
+    fake_geraete = FakeGeraeteDisplayClient(displays=_displays_zwei())
+    sessions = {}
+    tg = _member_tg(42)
+
+    task = PanelAnlegenTask(
+        tg, "http://test-panel", "http://test-geraete", sessions,
+        family_group_chat_id_getter=lambda: 200,
+        panel_client=fake_panel,
+        geraete_client=fake_geraete,
+        seiten_client=fake_seiten)
+
+    # execute() startet den Worker-Thread und gibt sofort eine Quittung zurück.
+    quittung = task.execute({}, TurnContext(chat_id=200, from_user_id=42,
+                                            private_chat_id=42))
+    assert quittung and isinstance(quittung, str)
+
+    # Worker ist jetzt gestartet; Session wartet in next_message() auf Eingaben.
+    deadline = time.monotonic() + 1.0
+    while 42 not in sessions and time.monotonic() < deadline:
+        time.sleep(0.005)
+    assert 42 in sessions, "PaaSession wurde nicht in sessions eingetragen"
+    session = sessions[42]
+
+    # Antwort-Folge aus _vollanlage() als PaaInput delivern.
+    for antwort in _vollanlage():
+        # Warten bis Worker auf next_message() blockiert, dann liefern.
+        time.sleep(0.02)
+        session.deliver(PaaInput(text=antwort))
+
+    # Warten bis Worker fertig ist (Session beendet sich nach panel_anlegen).
+    fertig_deadline = time.monotonic() + 3.0
+    while not session.is_finished() and time.monotonic() < fertig_deadline:
+        time.sleep(0.01)
+
+    assert session.is_finished(), "PaaSession wurde nicht beendet — Worker hängt?"
+
+    # Kern-Assertion: SeitenClient wurde genau einmal aufgerufen (Durchreichung).
+    assert fake_seiten.calls == 1, (
+        "SeitenClient.get_kandidaten() hätte genau einmal aufgerufen werden "
+        "müssen — tatsächlich: %d" % fake_seiten.calls)
+
+    # PanelClient wurde aufgerufen — tiles kommen aus den Registry-Kandidaten.
+    assert len(fake_panel.calls) == 1, "PanelClient wurde nicht aufgerufen"
+    tiles = fake_panel.calls[0]["tiles"]["tiles"]
+    assert len(tiles) == 1
+    assert tiles[0]["app"] == "wetter", (
+        "Erster Kandidat aus _kandidaten_standard ist Wetter — tiles[0].app: %s"
+        % tiles[0]["app"])
+    assert tiles[0]["view"] == "heute"
+
+
+# ============================================================
 #  PAA-5 — Katalog-Registrierung (AND-Guard)
 # ============================================================
 
@@ -504,7 +573,25 @@ def _with_ca_pem(fn):
 
 def test_PAA5_registriert_wenn_alle_abhaengigkeiten():
     """PAA-5: PanelAnlegenTask erscheint im Katalog, wenn panel_origin_url,
-    geraete_origin_url, paa_sessions UND family_group_chat_id_getter da sind."""
+    geraete_origin_url, seiten_origin_url, paa_sessions UND
+    family_group_chat_id_getter da sind."""
+    def _check(ca_pem):
+        catalog = build_catalog(
+            FakeTelegram(), ca_pem,
+            geraete_origin_url="http://127.0.0.1:5040",
+            panel_origin_url="http://127.0.0.1:5041",
+            seiten_origin_url="http://127.0.0.1:5042",
+            paa_sessions={},
+            family_group_chat_id_getter=lambda: 200)
+        task = catalog.get("panel_anlegen")
+        assert task is not None and isinstance(task, WriteTask)
+    _with_ca_pem(_check)
+
+
+def test_PAA5_nicht_registriert_ohne_seiten_origin_url():
+    """PAA-5 / Watchdog-Befund 1: PanelAnlegenTask ist NICHT im Katalog, wenn
+    seiten_origin_url fehlt — Dialog-Falle vermeiden (leere Kandidaten-Liste
+    würde erst im Dialog scheitern, nicht beim Guard). Symmetrisch zur SUE-Form."""
     def _check(ca_pem):
         catalog = build_catalog(
             FakeTelegram(), ca_pem,
@@ -512,8 +599,7 @@ def test_PAA5_registriert_wenn_alle_abhaengigkeiten():
             panel_origin_url="http://127.0.0.1:5041",
             paa_sessions={},
             family_group_chat_id_getter=lambda: 200)
-        task = catalog.get("panel_anlegen")
-        assert task is not None and isinstance(task, WriteTask)
+        assert catalog.get("panel_anlegen") is None
     _with_ca_pem(_check)
 
 
@@ -565,6 +651,7 @@ def _ctx_with_paa_session(tmp_path, tg, paa_sessions, family_group_chat_id="-100
         tg, "/instanz/rootCA.pem",
         geraete_origin_url="http://test-geraete",
         panel_origin_url="http://test-panel",
+        seiten_origin_url="http://test-seiten",
         paa_sessions=paa_sessions,
         family_group_chat_id_getter=lambda: family_group_chat_id)
     return Context(
