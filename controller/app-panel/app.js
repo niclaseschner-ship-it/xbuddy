@@ -19,7 +19,8 @@
   function configDefaults() {
     return {
       source_id:  'app-panel:demo',
-      display_id: 'display:demo',
+      // display_id ist bewusst nicht mehr hier (PANEL-8, Nic-Entscheid 2026-06-08 / #414):
+      // der Panel-Code zieht display_id beim Bootstrap per ROU-32 vom Router.
       router_url: '',
       // PANEL-5: Retry-Backoffs als Daten (CLAUDE.md §6 — Tuning extern).
       // Default = FIG-12-Pattern; config.json darf überschreiben.
@@ -343,13 +344,14 @@
   function checkConfigConsistency(cfg, panelIdFromHtml) {
     // PANEL-8: source_id im config.json muss zur data-panel-id im HTML passen
     // (Form `app-panel:<panelIdFromHtml>`). Diskrepanz = sichtbarer Fehler.
+    // Die frühere zweite Probe gegen cfg.display_id entfällt (PANEL-8, #414):
+    // display_id kommt nicht mehr aus config.json, sondern per ROU-32 vom Router.
     if (!cfg || !cfg.source_id) return 'source_id fehlt in config.json';
     var expected = 'app-panel:' + panelIdFromHtml;
     if (cfg.source_id !== expected) {
       return 'source_id "' + cfg.source_id + '" passt nicht zur Panel-Identität "'
         + expected + '" (data-panel-id aus dem HTML)';
     }
-    if (!cfg.display_id) return 'display_id fehlt in config.json';
     return null;
   }
 
@@ -517,6 +519,37 @@
   }
 
   // ============================================================
+  //  PANEL-11 / ROU-32 — display_id beim Bootstrap vom Router laden
+  // ============================================================
+  //
+  // PANEL-8 (Nic-Entscheid 2026-06-08 / #414): display_id ist bewusst nicht
+  // mehr in config.json. Der Panel-Code holt sie einmalig beim Laden vom
+  // Router per ROU-32: GET <router_url>/api/v1/router/panels/<source_id>.
+  // 404 → sichtbarer Fehler — Panel startet nicht weiter (analog PANEL-8).
+  //
+  // fetchImpl ist parametrisierbar (Tests übergeben Mock; Browser nutzt global
+  // fetch), damit die Funktion ohne Browser testbar ist.
+
+  function fetchDisplayId(cfg, fetchImpl) {
+    var fetchFn = fetchImpl || /* istanbul ignore next */ fetch;
+    var base = cfg.router_url ? cfg.router_url.replace(/\/+$/, '') : '';
+    var url = base + '/api/v1/router/panels/' + encodeURIComponent(cfg.source_id);
+    return fetchFn(url, { cache: 'no-store' }).then(function (res) {
+      if (!res.ok) {
+        return Promise.reject(new Error(
+          'display_id-Lookup via ROU-32 fehlgeschlagen (HTTP ' + res.status + '): '
+          + 'source_id "' + cfg.source_id + '" ist dem Router unbekannt. '
+          + 'routing.json panels-Eintrag fehlt?'));
+      }
+      return res.json().then(function (data) { return data.display_id; });
+    }, function (err) {
+      return Promise.reject(new Error(
+        'Router nicht erreichbar beim display_id-Lookup: '
+        + (err && err.message || err)));
+    });
+  }
+
+  // ============================================================
   //  API
   // ============================================================
 
@@ -537,6 +570,7 @@
     BACKOFFS: BACKOFFS,
     postWithRetry: postWithRetry,
     checkConfigConsistency: checkConfigConsistency,
+    fetchDisplayId: fetchDisplayId,
     makeStreamHandlers: makeStreamHandlers,
     attachWakeLockImpl: attachWakeLockImpl,
     attachFullscreenImpl: attachFullscreenImpl,
@@ -725,6 +759,15 @@
 
   (async function boot() {
     var cfg = await loadConfig();
+    // PANEL-11 / ROU-32: display_id einmalig beim Laden vom Router holen.
+    // Fehler (404 oder Netz) → sichtbarer Fehler, Panel startet nicht weiter.
+    var displayId;
+    try {
+      displayId = await panelLib.fetchDisplayId(cfg);
+    } catch (err) {
+      showError('Konfigurationsfehler: ' + (err && err.message || err));
+      return;
+    }
     var tiles = await loadTiles();
     renderGrid(tiles, cfg,
       function onTap(tile) {
@@ -738,7 +781,7 @@
     window.addEventListener('resize', function () { panelLib.applyGridGeometry(); });
     attachWakeLock();
     attachFullscreenOnGesture();
-    attachStream(cfg.display_id, function () { return tiles; });
+    attachStream(displayId, function () { return tiles; });
   })();
 
   // Service Worker (PANEL-10 PWA-Begleitdatei). Fehler still ignorieren.
