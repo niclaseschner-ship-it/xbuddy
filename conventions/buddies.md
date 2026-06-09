@@ -182,7 +182,7 @@ nginx, dann Code** (URL-14: „erst hier eine Zeile, dann nginx, dann Code").
    `/display/<slug>/` (und ggf. `/api/v1/<slug>/`), spezifisch vor allgemein
    (**längster Prefix gewinnt** — Teil der Spec, nicht nur nginx-Marotte).
    *(BUD-1a — für den Display-Prefix, sobald der Buddy ein eigener Prozess
-   hinter der Origin ist (heute jeder); der API-Prefix nur bei BUD-1b.)*
+   hinter der Origin ist (in der Regel jeder); der API-Prefix nur bei BUD-1b.)*
 3. **nginx-Origin-Conf** — `location /display/<slug>/`-Block in
    [`../deploy/nginx/xbuddy-origin.conf`](../deploy/nginx/xbuddy-origin.conf),
    eingeordnet vor den allgemeinen `/display/`- bzw. `/api/v1/`-Blöcken
@@ -199,22 +199,12 @@ nginx, dann Code** (URL-14: „erst hier eine Zeile, dann nginx, dann Code").
    [`../.importlinter`](../.importlinter) aufnehmen, damit er denselben
    Layer-Contracts unterliegt wie `plan/`
    ([`module-boundaries.md`](module-boundaries.md) MOD-1..5). *(Nur wenn
-   eigenes Python-Paket — heute jeder Prozess-Buddy.)*
-
-> **Beleg, dass die Checkliste nötig ist (am Wetter-Bau aufgetreten):** Der
-> Wetter-Buddy war als Modul auf `main` und in
-> [`module-boundaries.md`](module-boundaries.md) bereits als vollwertiges
-> Buddy-Modul unter denselben Contracts beschrieben — stand aber zunächst
-> **nicht** in den `root_packages` von [`../.importlinter`](../.importlinter),
-> das MOD-1-Gate scannte den Buddy also nicht. Genau dieser Andockpunkt fehlte;
-> mit #326 ist er nachgezogen (`wetter` jetzt in `.importlinter` **und**
-> `pytest.ini`). Andockpunkt 6 hält das künftig fest, damit der nächste Buddy
-> die Lücke nicht wiederholt.
+   eigenes Python-Paket — typischerweise jeder Prozess-Buddy.)*
 
 ## Skelett-Datei-Topologie
 
-Buddys **teilen die Topologie, nicht den Inhalt**: Plan und Wetter spiegeln
-dieselben Datei-Namen und -Rollen, gefüllt mit ihrer eigenen Domäne. Das ist
+Buddys **teilen die Topologie, nicht den Inhalt**: jeder Buddy spiegelt
+dieselben Datei-Namen und -Rollen, gefüllt mit seiner eigenen Domäne. Das ist
 keine Code-Duplikation (jede Datei hat eine eigene Verantwortung, CLAUDE.md
 §6), sondern ein wiedererkennbares Skelett.
 
