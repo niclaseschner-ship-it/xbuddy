@@ -1,0 +1,6 @@
+{
+  "_comment": "PLAN-9/CONFIG-1 — Runtime-Konfig des Plan-Buddys (Bind, Log). Kopiere als config.json (gitignored). Nicht gesetzte Felder bleiben auf den Code-Defaults (RUNTIME_SCHEMA in plan/main.py). ENV-Variablen (PLAN_LISTEN_PORT etc.) und CLI-Flags überschreiben diese Datei (CONFIG-5). Die Daten-Konfig (Kalender, Aktivitäten) liegt separat in plan.json (Format: plan.example.json).",
+  "listen_host": "127.0.0.1",
+  "listen_port": 5020,
+  "log_level": "INFO"
+}
