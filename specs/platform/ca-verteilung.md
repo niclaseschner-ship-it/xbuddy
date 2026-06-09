@@ -55,14 +55,37 @@ Nenner über Windows, Android, iOS/iPadOS und macOS.
 
 *Tickets:* #39, #75
 
-### CAV-4 — Auslieferung über den Eltern-Chat-Bot
+### CAV-4 — Auslieferung über den Eltern-Chat-Bot (Datei vom Skill, Text vom LLM)
 Die Funktion liefert das Zertifikat als Datei (Telegram-Dokument) an ein
 Mitglied der Familien-Gruppe aus. Die Berechtigung wird live über die
-Gruppen-Mitgliedschaft geprüft (analog `eltern-chat.md` EC-2). Die Auslieferung
-läuft über den bestehenden Bot-Kanal — keine eigene Verteil-Infrastruktur
-(E-CAV-2).
+Gruppen-Mitgliedschaft geprüft (analog `eltern-chat.md` EC-2). Die
+Auslieferung läuft über den bestehenden Bot-Kanal — keine eigene
+Verteil-Infrastruktur (E-CAV-2).
 
-*Tickets:* #39
+**Aufgabenteilung mit dem Agent-Loop (EC-29).** Der Skill **sendet die
+Zertifikatsdatei direkt** über `tg.send_document` — Telegram hat keine
+LLM-Datei-Sende-Mechanik, das ist technische Notwendigkeit. Den
+**gesamten Text-Teil** (kurze Caption an der Datei, OS-spezifische
+Installations-Anleitung CAV-5, Schluss-Hinweise) liefert der Skill als
+**Tool-Result-Text** an den Agent-Loop; das LLM postet ihn als seine
+Bot-Nachricht im selben Turn (EC-29 — eine Stimme). Die Familie sieht
+zwei Artefakte: die Datei und eine zusammenhängende Bot-Nachricht mit der
+Anleitung.
+
+**Trust-Sicherheit: Wortwörtlich-Disziplin (EC-29).** Der OS-Anleitungstext
+(CAV-5) ist providerfrei hart-codiert, weil ein vom LLM nachformulierter
+Trust-Schritt ausgelassen werden kann und Eltern dann das Zertifikat
+falsch installieren. Das LLM bekommt diesen Anleitungstext im Tool-Result
+und postet ihn **wortwörtlich** in seiner Antwort — die Aufgaben-
+`description` trägt die Wortwörtlich-Klausel (`conventions/tasks.md`
+TASK-10): „Den Anleitungstext aus dem Tool-Result wortwörtlich in deine
+Antwort übernehmen, nicht umformulieren, nicht kürzen, keine Schritte
+auslassen oder hinzufügen; kurze Einleitungs- oder Schluss-Bemerkungen
+sind erlaubt." Damit ist die Trust-Eigenschaft erhalten und das LLM kennt
+die ausgelieferte Anleitung — es kann bei Folge-Fragen gezielt darauf
+verweisen, statt zu raten.
+
+*Tickets:* #39, #551
 
 ### CAV-5 — OS-spezifische Installations-Anleitung
 Zur Zertifikatsdatei liefert die Funktion eine Anleitung, wie das Zertifikat auf
@@ -104,20 +127,26 @@ Gerät fragt (Eltern-Chat EC-22).
 ## 3. Aufruf
 
 ### CAV-6 — Aufruf durch den Onboarding-Flow; Eltern-Chat-Aufgabe in V1
-Die CA-Verteilung wird vom Geräte-Onboarding-Flow aufgerufen, wenn ein Gerät der
-Familie eingerichtet wird. Solange dieser Flow noch nicht spezifiziert ist
-(OPEN-CAV-A), ist der Trigger in V1 eine **Aufgabe im Aufgaben-Katalog des
-Eltern-Chats** (`eltern-chat.md` EC-8): versteht der Agent die
-natürlichsprachige Bitte eines Familienmitglieds („schick mir das Zertifikat"),
-ruft er die Funktion auf — ohne dass die Familie einen Tippbefehl lernen muss.
-Es ist eine **lesende** Aufgabe (EC-9): die Funktion verändert keine
-Familien-Daten, daher kein Bestätigungs-Gate. Die Berechtigung läuft über die
-reguläre Eltern-Chat-Ansprache- und Mitgliedschaftsprüfung (EC-2, EC-5). So ist
-die Funktion eigenständig nutzbar und testbar und ein bereits eingerichtetes
-Setup kann ein weiteres Gerät nachrüsten. Aufgabe wie Onboarding-Flow sind nur
-Aufrufer derselben Funktion (CAV-1); der Funktions-Vertrag ändert sich nicht.
+Die CA-Verteilung wird vom Geräte-Onboarding-Flow aufgerufen, wenn ein
+Gerät der Familie eingerichtet wird. Solange dieser Flow noch nicht
+spezifiziert ist (OPEN-CAV-A), ist der Trigger in V1 eine **Aufgabe im
+Aufgaben-Katalog des Eltern-Chats** (`eltern-chat.md` EC-8): versteht der
+Agent die natürlichsprachige Bitte eines Familienmitglieds („schick mir
+das Zertifikat"), ruft er die Funktion auf — ohne dass die Familie einen
+Tippbefehl lernen muss. Es ist eine **lesende** Aufgabe (EC-9): die
+Funktion verändert keine Familien-Daten, daher kein Bestätigungs-Gate. Die
+Berechtigung läuft über die reguläre Eltern-Chat-Ansprache- und
+Mitgliedschaftsprüfung (EC-2, EC-5). Im Agent-Loop teilt sich die
+Auslieferung auf: Datei via Skill, Text via LLM (CAV-4 — EC-29
+Datei-Anhang-Klausel).
 
-*Tickets:* #39, #63
+So ist die Funktion eigenständig nutzbar und testbar und ein bereits
+eingerichtetes Setup kann ein weiteres Gerät nachrüsten. Für Aufrufer
+außerhalb des Agent-Loops (Onboarding-Flow, andere Trigger) ändert sich
+der Funktions-Vertrag nicht — sie nutzen die Funktion direkt; die
+LLM-Aufgabenteilung greift nur für den Eltern-Chat-Pfad.
+
+*Tickets:* #39, #63, #551
 
 ## 4. Tests
 

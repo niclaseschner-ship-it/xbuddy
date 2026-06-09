@@ -181,9 +181,12 @@ Eltern-Chat-Skill — eine **lesende, trigger-agnostische** Funktion (EC-9-Muste
 **Nur EIN Modus**, kein KI-Matching, keine Rückfrage-Logik: erkennt eine
 Frage-Familie wie „zeig mir alle Seiten", „welche Seiten gibt es", „Link zur
 Garderoben-Seite", „wo stelle ich X ein", „Link zum Küchen-Panel-Editor" →
-antwortet mit **einem** Link auf die gerenderte Übersichtsseite (SREG-12). Die
-Pro-View-Auflösung („welchen genau?") passiert auf der Seite per Volltextsuche
-gegen `label`/`synonyme`/`zeigt` (SREG-12), nicht im Chat — das hält den Chat
+returnt **einen** Tool-Result-Text, der den Link auf die gerenderte
+Übersichtsseite (SREG-12) trägt. Das LLM formuliert daraus die
+Bot-Nachricht und postet sie als einzigen Schreibakt des Turns
+(EC-29 — eine Stimme im Agent-Turn). Die Pro-View-Auflösung („welchen
+genau?") passiert auf der Seite per Volltextsuche gegen
+`label`/`synonyme`/`zeigt` (SREG-12), nicht im Chat — das hält den Chat
 schlank und die Wartung in EINER Seite.
 
 Der Link wird gebildet als `display_url_origin_heim` + `/api/v1/seiten/uebersicht`
@@ -204,6 +207,8 @@ eigene Karte direkt am gepaarten Display (SREG-12 Hero-Sektion „Geräte-Paare"
 kopierbar — der „direkte Link je Panel" ist weiterhin in einem Tipp
 erreichbar, nur einen Tipp später als ein eigener Chat-Skill und konsistent
 für **alle** Eintrags-Sorten.
+
+*Tickets:* #467, #551
 
 ## SREG-5b — Opt-in-Direktantwort (Sekundärpfad nach SREG-5)
 Nach der Default-Antwort (SREG-5 Übersichtslink) **bietet der Bot in derselben

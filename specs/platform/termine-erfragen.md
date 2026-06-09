@@ -49,18 +49,24 @@ oder Privatchat) · der Trigger als Eltern-Chat-Aufgabe (EC-8, analog
 ### TER-1 — Termine erfragen ist eine aufrufbare Funktion
 Termine erfragen ist eine klar abgegrenzte, **aufrufbare Funktion** mit
 definierter Schnittstelle. **Eingang:** die Telegram-Chat-Identität, in der
-die Antwort landet (Gruppen-Chat-ID oder Privatchat-ID des Aufrufers), die
-Telegram-User-ID des Aufrufers (für die Berechtigung TER-2), sowie ein
-Zeitraum als Start-Tag (ISO-Datum) und Tagesanzahl (TER-4). **Wirkung:** die
-Funktion verändert **keine** Familien-Daten; sie liest aus der
-Plan-Buddy-Termin-Schnittstelle (TER-5). **Ausgang:** ein Ergebnis-Signal an
-den Aufrufer — „beantwortet" (die Antwort wurde im genannten Chat gepostet),
-„abgelehnt" (Berechtigung fehlt, TER-2), „leer" (keine Termine im Zeitraum —
-Antwort wurde dennoch gepostet, mit klarem Hinweis) oder „nicht_erreichbar"
-(Plan-Buddy nicht da oder Schnittstelle scheitert, TER-7). Die Funktion
-kennt ihren Aufrufer nicht (E-TER-1).
+der Aufruf entstand (Gruppen-Chat-ID oder Privatchat-ID des Aufrufers —
+Berechtigungs-Verortung, nicht Sende-Ziel), die Telegram-User-ID des
+Aufrufers (für die Berechtigung TER-2), sowie ein Zeitraum als Start-Tag
+(ISO-Datum) und Tagesanzahl (TER-4). **Wirkung:** die Funktion verändert
+**keine** Familien-Daten; sie liest aus der Plan-Buddy-Termin-Schnittstelle
+(TER-5). **Ausgang:** ein **User-tauglicher Antwort-Text** als
+Tool-Result-String an den Aufrufer (EC-29). Der Aufrufer — im V1-Trigger
+die Eltern-Chat-Aufgabe — gibt diesen Text als Tool-Result an den
+Agent-Loop zurück, das LLM formuliert die Bot-Nachricht und postet sie als
+einzigen Schreibakt des Turns (EC-29). Der Tool-Result-Text trägt je nach
+Fall die tagesgruppierte Termin-Liste (TER-9), die „leerer Zeitraum"-
+Meldung (TER-8) oder die Nicht-erreichbar-Meldung (TER-7); der
+**Berechtigungs-Bruch** (TER-2) löst eine Berechtigungs-Exception aus,
+sodass der Agent-Loop den Fehler-Tool-Result-Block schreibt (`agent.py`
+Fehlerpfad) und das LLM in der Antwort schweigt — die Funktion postet in
+keinem Pfad selbst.
 
-*Tickets:* #143
+*Tickets:* #143, #551
 
 ### TER-2 — Berechtigung live geprüft
 Die Funktion prüft selbst, ob der Telegram-User des Aufrufs Mitglied der
@@ -75,18 +81,21 @@ Trigger und die Funktion verlöre ihre Trigger-Agnostik (E-TER-1).
 
 ## 2. Eingabe-Verstehen
 
-### TER-3 — Antwort dort, wo die Frage kam
-Die Antwort wird in **demselben** Telegram-Chat gepostet, aus dem die Frage
-kam. In der Familien-Gruppe (`eltern-chat.md` EC-3, EC-5) antwortet die
-Funktion in der Gruppe; im Privatchat antwortet sie im Privatchat. Eine
-Termin-Frage ist **lesend** (EC-9) und die Antwort enthält nur Termine, die
-der Familien-Kalender ohnehin allen Familienmitgliedern zeigt — eine
-Privatchat-Pflicht analog `kalender-verbinden.md` KAV-3 ist deshalb
-**nicht** nötig. Eine Privatchat-Session-Mechanik (`conventions/privatchat-
-session.md` SESS-1..SESS-4) entfällt aus demselben Grund: die Funktion
-führt keinen mehrstufigen Dialog, sie beantwortet eine einzelne Frage.
+### TER-3 — Antwort dort, wo die Frage kam (über das LLM)
+Die Bot-Nachricht erscheint im selben Telegram-Chat, aus dem die Frage
+kam. In der Familien-Gruppe (`eltern-chat.md` EC-3, EC-5) erscheint sie in
+der Gruppe; im Privatchat erscheint sie im Privatchat. Das Senden übernimmt
+der Agent-Loop: die Funktion returnt den Antwort-Text als Tool-Result, das
+LLM trägt ihn in die Bot-Nachricht und postet ihn im laufenden Chat
+(EC-29). Eine Termin-Frage ist **lesend** (EC-9) und die Antwort enthält
+nur Termine, die der Familien-Kalender ohnehin allen Familienmitgliedern
+zeigt — eine Privatchat-Pflicht analog `kalender-verbinden.md` KAV-3 ist
+deshalb **nicht** nötig. Eine Privatchat-Session-Mechanik
+(`conventions/privatchat-session.md` SESS-1..SESS-4) entfällt aus
+demselben Grund: die Funktion führt keinen mehrstufigen Dialog, sie
+beantwortet eine einzelne Frage.
 
-*Tickets:* #143
+*Tickets:* #143, #551
 
 ### TER-4 — Datums-Vokabular und Default
 Die Funktion erkennt einen Zeitraum aus dem Anfrage-Text. Welcher
@@ -169,48 +178,57 @@ Erreicht die Funktion die Plan-Buddy-Termin-Schnittstelle nicht
 (Verbindung schlägt fehl, HTTP-Status ≠ 200, Antwort nicht parsbar) oder
 ist der Plan-Buddy gar nicht installiert (`plan.md` PLAN-23,
 `conventions/apps.md` APP-2), liefert die Funktion das Ergebnis-Signal
-„nicht_erreichbar" zurück und postet eine hart-codierte, ehrliche
-Antwort im genannten Chat — sie erfindet keine Termine
-(`eltern-chat.md` EC-7, EC-22). Die Antwort benennt die fehlende Fähigkeit
-in der Sprache der Familie („Der Wochenplan ist gerade nicht erreichbar —
-ich kann gerade keine Termine zeigen, bitte gleich nochmal probieren");
-der konkrete Wortlaut lebt im Code, die Spec normiert das Soll (Existenz
-einer Antwort + keine Halluzination + kein stiller Abbruch).
+„nicht_erreichbar" zurück und **returnt einen hart-codierten, ehrlichen
+Antwort-Text als Tool-Result** — sie erfindet keine Termine
+(`eltern-chat.md` EC-7, EC-22). Der Tool-Result-Text benennt die fehlende
+Fähigkeit in der Sprache der Familie („Der Wochenplan ist gerade nicht
+erreichbar — ich kann gerade keine Termine zeigen, bitte gleich nochmal
+probieren"); der konkrete Wortlaut lebt im Code, die Spec normiert das
+Soll (Existenz einer Antwort + keine Halluzination + kein stiller Abbruch).
+Das Posten der Bot-Nachricht erfolgt über den Agent-Loop (EC-29) — die
+Funktion sendet auch im Fehlerpfad nicht selbst.
 
-*Tickets:* #143
+*Tickets:* #143, #551
 
 ### TER-8 — Leerer Zeitraum
 Liefert die Plan-Buddy-Schnittstelle für den ermittelten Zeitraum eine
-leere Liste, postet die Funktion eine hart-codierte „keine Termine in
-diesem Zeitraum"-Antwort im genannten Chat und liefert das Ergebnis-Signal
-„leer" zurück. Ein leerer Kalender ist kein Fehler — die Antwort macht
-das explizit, damit das Familienmitglied nicht „der Bot schweigt"
-interpretiert.
+leere Liste, returnt die Funktion einen **hart-codierten Tool-Result-Text**
+(„keine Termine in diesem Zeitraum") und liefert das Ergebnis-Signal
+„leer" zurück. Ein leerer Kalender ist kein Fehler — der Tool-Result
+macht das explizit, damit das LLM (EC-29) eine ehrliche Bot-Antwort
+formuliert und das Familienmitglied nicht „der Bot schweigt" interpretiert.
 
-*Tickets:* #143
+*Tickets:* #143, #551
 
 ## 5. Ausgabe
 
 ### TER-9 — Tagesgruppierte, lesbare Antwort
-Die Antwort listet die Termine **nach Tagen gruppiert** in chronologischer
-Reihenfolge. Pro Tag erscheint ein Tages-Kopf (Wochentag + Datum, Sprache
-deutsch analog `conventions/urls.md` URL-7) und darunter je Termin **eine
-Zeile** mit — falls vorhanden — Beginn-Uhrzeit, Titel und Personen-Bezug
-(aus `person`, TER-6); ganztägige Termine tragen den Hinweis „ganztägig"
-statt einer Uhrzeit. Mehrtages-Termine (`plan.md` PLAN-14) erscheinen
-**genau einmal** unter dem Tages-Kopf ihres ersten Tages im erfragten
-Zeitraum, mit Hinweis auf die Spanne — nicht je Tag wiederholt; die
-Mehrtages-Gruppierung erkennt die Funktion an der stabilen `id`
-(PLAN-17/PLAN-14).
+Die Funktion **baut** die Termin-Liste hart-codiert: **nach Tagen
+gruppiert** in chronologischer Reihenfolge. Pro Tag erscheint ein
+Tages-Kopf (Wochentag + Datum, Sprache deutsch analog
+`conventions/urls.md` URL-7) und darunter je Termin **eine Zeile** mit —
+falls vorhanden — Beginn-Uhrzeit, Titel und Personen-Bezug (aus `person`,
+TER-6); ganztägige Termine tragen den Hinweis „ganztägig" statt einer
+Uhrzeit. Mehrtages-Termine (`plan.md` PLAN-14) erscheinen **genau einmal**
+unter dem Tages-Kopf ihres ersten Tages im erfragten Zeitraum, mit Hinweis
+auf die Spanne — nicht je Tag wiederholt; die Mehrtages-Gruppierung
+erkennt die Funktion an der stabilen `id` (PLAN-17/PLAN-14).
 
 Der konkrete Wortlaut (Tages-Kopf-Format, Trennzeichen, Zeit-Format) lebt
 im Code als hart-codierter String; die Spec normiert das **Soll** (welche
 Felder, welche Reihenfolge, eine Zeile je Termin, keine Wiederholung von
-Mehrtages-Spannen). Der Ausgabetext ist hart-codiert und kommt **nicht**
-vom LLM-Anbieter — `eltern-chat.md` EC-12 (anbieter-unabhängige Regeln);
-die Anbieter-Wahl darf das Erscheinungsbild der Termin-Liste nicht ändern.
+Mehrtages-Spannen). **Dieser hart-codierte Listen-Block ist
+trust-/anbieter-kritisch** — `eltern-chat.md` EC-12 (anbieter-unabhängige
+Regeln); die Anbieter-Wahl darf das Erscheinungsbild der Termin-Liste
+nicht ändern. Die Funktion liefert den Block als Tool-Result an den
+Agent-Loop; die `description` der Aufgabe trägt die Wortwörtlich-Klausel
+(EC-29 / `conventions/tasks.md` TASK-10), sodass das LLM den Listen-Block
+**wortwörtlich** in seine Bot-Antwort übernimmt (keine Umsortierung, keine
+Umformulierung, keine ausgelassenen Termine). Kurze Einleitungs- oder
+Schluss-Bemerkungen vom LLM sind erlaubt; der Block selbst ist
+unveränderlich.
 
-*Tickets:* #143
+*Tickets:* #143, #551
 
 ## 6. Trigger
 
@@ -223,13 +241,14 @@ Versteht der Eltern-Chat-Agent die natürlichsprachige Bitte eines
 Familienmitglieds („was steht diese Woche an?", „welche Termine haben wir
 morgen?"), ruft er die Funktion auf — die Familie muss keinen Tippbefehl
 lernen. Es ist eine **lesende** Aufgabe (EC-9): die Funktion läuft ohne
-Bestätigungs-Zwischenschritt und antwortet selbst über den Bot-Kanal mit
-dem Ergebnis (TER-9). Die Berechtigung läuft über die reguläre Eltern-
-Chat-Ansprache- und Mitgliedschaftsprüfung (`eltern-chat.md` EC-2, EC-5).
-Aufgabe wie ein späterer anderer Aufrufer sind nur Nutzer derselben
-Funktion (TER-1); der Funktions-Vertrag ändert sich nicht (E-TER-1).
+Bestätigungs-Zwischenschritt und **returnt das Ergebnis (TER-9) als
+Tool-Result an den Agent-Loop** — das LLM postet die Bot-Nachricht
+(EC-29). Die Berechtigung läuft über die reguläre Eltern-Chat-Ansprache-
+und Mitgliedschaftsprüfung (`eltern-chat.md` EC-2, EC-5). Aufgabe wie ein
+späterer anderer Aufrufer sind nur Nutzer derselben Funktion (TER-1); der
+Funktions-Vertrag ändert sich nicht (E-TER-1).
 
-*Tickets:* #143
+*Tickets:* #143, #551
 
 ## 7. Tests
 
@@ -240,47 +259,56 @@ Plan-Buddy-Termin-Schnittstelle werden durch kontrollierte Doppelungen
 ersetzt, analog `eltern-chat.md` EC-17, `kalender-verbinden.md` KAV-10,
 `plan.md` PLAN-29. Mindest-Abdeckung:
 
-- **TER-1** — Aufruf mit minimalem Eingang (Chat-ID, User-ID, Anfrage-Text)
-  postet eine Antwort im genannten Chat und liefert „beantwortet"; ein
-  Aufruf ohne Chat-ID bricht ohne Wirkung ab.
-- **TER-2** — ein Nicht-Familien-Mitglied wird abgelehnt; im Chat
-  erscheint **keine** Antwort, das Ergebnis-Signal ist „abgelehnt".
-- **TER-3** — die Antwort landet im selben Chat-Typ wie die Frage
+- **TER-1** — Aufruf mit minimalem Eingang (Chat-ID, User-ID,
+  Anfrage-Text) returnt einen User-tauglichen Tool-Result-Text und
+  liefert „beantwortet"; ein Aufruf ohne Chat-ID bricht ohne Wirkung
+  ab.
+- **TER-2** — ein Nicht-Familien-Mitglied löst einen Berechtigungs-Bruch
+  aus (Funktion sendet nichts und liefert kein Result); das Ergebnis-
+  Signal ist „abgelehnt".
+- **TER-3** — die Bot-Nachricht landet im selben Chat-Typ wie die Frage
   (Gruppen-Anfrage → Gruppen-Antwort, Privatchat-Anfrage → Privatchat-
-  Antwort); es wird kein Privatchat eröffnet, wenn die Frage in der
-  Gruppe kam.
+  Antwort); die Funktion selbst sendet keine Telegram-Nachricht
+  (`FakeTelegram.sent == []` für den Funktions-Frame), das LLM-Reply
+  trägt sie (EC-29).
 - **TER-4** — jeder Eintrag des Mindest-Vokabulars („heute", „morgen",
   „diese Woche", „nächste Woche", „die nächsten N Tage" für drei
-  Beispiel-N, Default-Pfad) löst den dokumentierten `(start, tage)`-Aufruf
-  an PLAN-22 aus; ein mehrdeutiger Datums-Ausdruck löst eine Rückfrage aus
-  statt eines blinden Aufrufs (EC-22-Verweis-Test).
+  Beispiel-N, Default-Pfad) löst den dokumentierten `(start, tage)`-
+  Aufruf an PLAN-22 aus; ein mehrdeutiger Datums-Ausdruck löst eine
+  Rückfrage aus statt eines blinden Aufrufs (EC-22-Verweis-Test).
 - **TER-5** — der HTTP-Aufruf an die Plan-Buddy-Schnittstelle nutzt
   Methode `GET`, Pfad `/api/v1/plan/termine` und die Query-Parameter
-  `ab=<iso>&tage=<n>`; die Funktion hält keinen Cache (zweiter Aufruf mit
-  geänderter Doppelung sieht den neuen Stand).
+  `ab=<iso>&tage=<n>`; die Funktion hält keinen Cache (zweiter Aufruf
+  mit geänderter Doppelung sieht den neuen Stand).
 - **TER-6** — das `person`-Feld der PLAN-22-Antwort wird übernommen,
   nicht durch eine zweite Auflösung ersetzt; ein leeres `person`-Feld
   führt zu einem Termin ohne Personen-Bezug, nicht zu einer fingierten
   Zuordnung.
 - **TER-7** — eine fehlschlagende Plan-Buddy-Antwort (Verbindung tot,
   HTTP 5xx, nicht-parsbare Antwort) liefert „nicht_erreichbar" und
-  postet die hart-codierte Ehrlich-Antwort; ein „Plan-Buddy nicht
-  installiert"-Szenario verhält sich identisch (PLAN-23, APP-2).
-- **TER-8** — eine leere PLAN-22-Antwort liefert „leer" und postet die
-  hart-codierte „keine Termine"-Antwort.
-- **TER-9** — die Antwort gruppiert nach Tag in chronologischer
-  Reihenfolge; eine Mehrtages-Spanne (gleiche `id` über mehrere Tage,
-  PLAN-14) erscheint genau einmal mit Spannen-Hinweis; ganztägige Termine
-  tragen „ganztägig" statt einer Uhrzeit; der Antwort-Text ist
-  deterministisch und enthält keine LLM-generierten Anteile (EC-12).
+  returnt die hart-codierte Ehrlich-Antwort als Tool-Result; ein
+  „Plan-Buddy nicht installiert"-Szenario verhält sich identisch
+  (PLAN-23, APP-2).
+- **TER-8** — eine leere PLAN-22-Antwort liefert „leer" und returnt die
+  hart-codierte „keine Termine"-Antwort als Tool-Result.
+- **TER-9** — der Tool-Result-Listen-Block gruppiert nach Tag in
+  chronologischer Reihenfolge; eine Mehrtages-Spanne (gleiche `id` über
+  mehrere Tage, PLAN-14) erscheint genau einmal mit Spannen-Hinweis;
+  ganztägige Termine tragen „ganztägig" statt einer Uhrzeit; der
+  Listen-Block ist deterministisch hart-codiert (EC-12); zusätzlich:
+  die `description` der Aufgabe trägt die Wortwörtlich-Klausel
+  (EC-29 / TASK-10), und ein End-to-End-Test belegt, dass die finale
+  Bot-Nachricht den Listen-Block 1:1 enthält.
 - **TER-10** — die EC-8-Aufgabe wird vom Aufgaben-Katalog gefunden und
   ist als **lesende** Aufgabe markiert (EC-9, kein Bestätigungs-Gate).
+- **TASK-10/EC-29** — kein `tg.send_*`-Aufruf im Funktions-Frame
+  (Aufruf-Graph oder positiver Routing-Test über die Helper-Grenze).
 
 Läufe gegen den **echten** Plan-Buddy bzw. den echten Google-Kalender
 sind opt-in und nicht Teil des Standard-Durchlaufs (analog
 `eltern-chat.md` EC-17, `plan.md` PLAN-29).
 
-*Tickets:* #143
+*Tickets:* #143, #551
 
 ---
 
