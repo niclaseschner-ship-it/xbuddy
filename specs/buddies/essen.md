@@ -51,37 +51,40 @@ HTTP-API bereit (APP-1, ESSEN-15..ESSEN-19).
 
 *Tickets:* #474
 
-### ESSEN-2 — Mehrstufige Display-View `wunsch`
+### ESSEN-2 — Single-Canvas-View `wunsch` mit Kategorien-Tabs
 Die View liegt unter `/display/essen/wunsch` (BUD-1, URL-2:
-`/display/<slug>/<view>`, kein Verb im Pfad). Sie ist **mehrstufig** — anders
-als die Single-Page-View des Routine-Buddys (ROUTINE-2) führt sie das Kind durch
-einen kurzen Auswahl-Pfad: Kategorie → Item → Bestätigung mit Sicht auf die
-heutige Wunsch-Liste. Diese mehrstufige Menü-Führung ist die **erste** in der
-Buddy-Familie (E-ESSEN-7); sie ist eine bewusste Entscheidung dieser Spec, kein
-geteiltes Pattern. Statische Assets liegen unter `/display/essen/static/<asset>`
-(URL-13).
+`/display/<slug>/<view>`, kein Verb im Pfad). Sie ist eine **einzige Canvas**
+(wie die Routine-View `morgen`, ROUTINE-2) und enthält drei stets sichtbare
+Bereiche: eine **Tab-Zeile** mit den vier Kategorien oben, das **Item-Grid** der
+aktiven Kategorie links/Mitte, und die **Wunsch-Liste** rechts (Gate-B-Wahl
+2026-06-09, Variante A „Tabbed Single-Canvas"). Kein Drill-Down, keine separate
+Step-2-Ansicht, keine Settings-Seite. Statische Assets liegen unter
+`/display/essen/static/<asset>` (URL-13).
 
-**Wenn** die View aufgerufen wird, **dann** rendert sie die Kategorien-Auswahl
-(ESSEN-9) als Einstieg und blendet die aktuelle Wunsch-Liste sichtbar daneben/
-darunter ein.
-*Test-Implikation:* GET `/display/essen/wunsch` rendert die Kategorien-Kacheln
-und einen Liste-Block; ein Tap auf eine Kategorie führt in die Item-Auswahl
-derselben View.
+**Wenn** die View aufgerufen wird, **dann** rendert sie die vier Kategorien-Tabs
+mit einem voreingestellten aktiven Tab, das zugehörige Item-Grid und die
+aktuelle Wunsch-Liste — alle drei Bereiche gleichzeitig.
+*Test-Implikation:* GET `/display/essen/wunsch` rendert vier Tabs, ein
+Item-Grid (= Items der aktiven Kategorie) und einen Liste-Block in einer
+einzigen Canvas; ein Tap auf einen anderen Tab tauscht nur das Item-Grid aus.
 
 *Tickets:* #474
 
-### ESSEN-3 — Touch-Display, einzige Interaktion: Tippen
-Die View ist für ein Touch-/Kiosk-Display gebaut. Die **einzige**
-Bedien-Affordanz ist das Tippen einer Kachel (Kategorie oder Item). Kein Hover,
-kein Wischen, kein Aufklappen, keine weiteren Bedien-Elemente. Das Tippen einer
-Item-Kachel legt einen Wunsch mit `quelle=kind` ab (ESSEN-16) und führt zurück
-zur Kategorien-Auswahl mit aktualisierter Liste-Anzeige.
+### ESSEN-3 — Touch-Display, zwei Tap-Affordanzen
+Die View ist für ein Touch-/Kiosk-Display gebaut. Es gibt **zwei**
+Bedien-Affordanzen, beide als Tap: (a) ein **Kategorien-Tab** tippen — wechselt
+das aktive Tab und damit das gerenderte Item-Grid, ohne den Liste-Bereich zu
+verändern; (b) eine **Item-Kachel** tippen — legt einen Wunsch mit `quelle=kind`
+ab (ESSEN-16) und aktualisiert sichtbar den Liste-Bereich. Kein Hover, kein
+Wischen, kein Aufklappen, keine weiteren Bedien-Elemente.
 
 **Wenn** das Kind eine Item-Kachel tippt, **dann** wird ein neuer Wunsch
-angelegt und die Liste aktualisiert sichtbar; **wenn** es irgendwo sonst tippt,
-**dann** passiert nichts (außer der definierten Kategorien-/Zurück-Navigation).
-*Test-Implikation:* nur Kategorie- und Item-Kacheln tragen einen Tap-Handler;
-Hintergrund, Liste-Block und Wunsch-Einträge sind nicht interaktiv.
+angelegt und die Liste-Anzeige aktualisiert sich; **wenn** es einen anderen Tab
+tippt, **dann** wechselt nur das Item-Grid; **wenn** es irgendwo sonst tippt,
+**dann** passiert nichts.
+*Test-Implikation:* nur Kategorien-Tabs und Item-Kacheln tragen einen
+Tap-Handler; Hintergrund, Liste-Block und Wunsch-Einträge sind nicht
+interaktiv.
 
 *Tickets:* #474
 
@@ -146,51 +149,57 @@ entscheidend ist die Reload-Persistenz (ESSEN-6) und der atomare Schreibpfad
 
 *Tickets:* #474
 
-## 3. Display-Menüführung
+## 3. Display-Bereiche
 
-### ESSEN-8 — Drei Schritte: Kategorie → Item → Liste-Sicht
-Die View führt das Kind durch drei sichtbare Schritte in derselben Canvas:
+### ESSEN-8 — Drei stets sichtbare Bereiche: Tabs, Item-Grid, Wunsch-Liste
+Die View rendert drei Bereiche gleichzeitig auf einer Canvas (Gate-B-Wahl
+2026-06-09, Variante A „Tabbed Single-Canvas"):
 
-1. **Kategorien-Auswahl** (Einstieg): vier Kacheln, eine je Kategorie (ESSEN-9),
-   mit Piktogramm und Kategorie-Label. Tap einer Kategorie öffnet Schritt 2.
-2. **Item-Auswahl** (innerhalb einer Kategorie): Grid von Item-Kacheln aus dem
-   Katalog dieser Kategorie (ESSEN-12..ESSEN-14). Jede Kachel zeigt Piktogramm
-   + Label. Tap legt einen Wunsch ab (ESSEN-3).
-3. **Liste-Sicht** (immer mit-rendert): die aktuelle Wunsch-Liste ist als
-   eigener Bereich sichtbar (rechts oder unten — Layout-Wahl ist Gate-B-
-   Artefakt, OPEN-ESSEN-E). Sie aktualisiert sich nach jedem Tap ohne
-   Vollreload (frischer GET `/api/v1/essen/wuensche` reicht).
+1. **Kategorien-Tabs** (oben, horizontal): vier Tabs nebeneinander, je
+   Kategorie ein Tab mit Piktogramm und Kategorie-Label (ESSEN-9). Genau ein
+   Tab ist **aktiv** (visuell hervorgehoben — gewählter Hintergrundton);
+   anfangs Default-Tab nach ESSEN-9.
+2. **Item-Grid der aktiven Kategorie** (links/Mitte): Grid von Item-Kacheln
+   aus dem Katalog dieser Kategorie (ESSEN-12..ESSEN-14). Jede Kachel zeigt
+   Piktogramm + Label. Tap legt einen Wunsch ab (ESSEN-3).
+3. **Wunsch-Liste** (rechts): die aktuelle Wunsch-Liste, gruppiert nach
+   Kategorie (Gerichte → Obst & Gemüse → Brotbelag → Sonstiges, gleiche feste
+   Reihenfolge wie WZE-5), je Gruppe mit Sub-Überschrift und Einträgen
+   (Piktogramm + Label). Aktualisiert sich nach jedem Tap einer Item-Kachel
+   sichtbar (frischer GET `/api/v1/essen/wuensche` reicht, kein Vollreload
+   nötig).
 
-Es gibt **eine Zurück-Affordanz** von Schritt 2 zurück zu Schritt 1 (große
-Touch-Trefferfläche, kindgerecht). Kein anderes Routing.
+Es gibt **keinen Drill-Down, kein Zurück, keine zweite Seite** — alles auf
+einer Canvas.
 
-**Wenn** das Kind in Schritt 2 eine Item-Kachel tippt, **dann** erscheint der
-Wunsch in der Liste-Sicht; **wenn** es die Zurück-Affordanz tippt, **dann**
-landet es wieder in Schritt 1.
-*Test-Implikation:* die Render-Funktion erzeugt für Schritt 1 vier
-Kategorie-Kacheln + Liste-Block; für Schritt 2 (z. B. `obst_gemuese`) das
-Item-Grid dieser Kategorie + Liste-Block + Zurück-Element.
+**Wenn** das Kind eine Item-Kachel tippt, **dann** erscheint der Wunsch in der
+Wunsch-Liste (Bereich rechts); **wenn** es einen anderen Tab tippt, **dann**
+tauscht sich nur das Item-Grid aus, Tabs und Liste bleiben unverändert.
+*Test-Implikation:* die Render-Funktion erzeugt in einem Aufruf vier Tabs +
+ein Item-Grid (der aktiven Kategorie) + den kategorie-gruppierten Liste-Block;
+ein Tab-Wechsel-Render tauscht nur das Item-Grid aus.
 
 *Tickets:* #474
 
-### ESSEN-9 — Vier Kategorien, drei aus Repo-Basis + eine dynamisch
-V1 kennt genau vier Kategorien: `gericht`, `obst_gemuese`, `brotbelag`,
-`sonstiges`. Die drei Lebensmittel-Kategorien (`obst_gemuese`, `brotbelag`,
-`sonstiges`) tragen Items aus dem Repo-Basis-Katalog (ESSEN-12), optional
-per-Instanz überschrieben (ESSEN-13). Die Gerichte-Kategorie (`gericht`) ist
-in V1 **dynamisch** und initial **leer**: sie wird ausschließlich über den
+### ESSEN-9 — Vier Tabs, drei aus Repo-Basis + einer dynamisch
+V1 kennt genau vier Tabs in fester Reihenfolge: `gericht`, `obst_gemuese`,
+`brotbelag`, `sonstiges`. Die drei Lebensmittel-Tabs (`obst_gemuese`,
+`brotbelag`, `sonstiges`) zeigen Items aus dem Repo-Basis-Katalog (ESSEN-12),
+optional per-Instanz überschrieben (ESSEN-13). Der Gerichte-Tab (`gericht`) ist
+in V1 **dynamisch** und initial **leer**: er wird ausschließlich über den
 Eltern-Chat-Skill `gericht-anlegen` (GAN) befüllt (ESSEN-14, ESSEN-19).
 
-Wenn die Gerichte-Kategorie leer ist, rendert ihre Kachel in Schritt 1
-trotzdem (mit einem stillen Hinweis-Label „noch keine Gerichte"); ihr
-Item-Grid in Schritt 2 ist dann ein leerer Bereich mit demselben Hinweis. So
-ist der spätere Schreibpfad immer sichtbar, ohne dass ein leerer Tab die UI
-bricht.
+**Default-aktiver Tab:** `obst_gemuese` (deckt den häufigsten Wunschfall ab
+und ist die für ein Kind direkt sichtbarste Kategorie). Auch wenn der
+Gerichte-Tab leer ist, rendert er sichtbar in der Tab-Zeile; wird er aktiv
+getippt, zeigt das Item-Grid eine ehrliche Leer-Meldung („noch keine
+Gerichte"). So ist der spätere Schreibpfad immer sichtbar, ohne dass ein
+leerer Tab die UI bricht.
 
-*Test-Implikation:* der Kategorien-Render zeigt vier Kacheln; mit einem leeren
-Gerichte-Katalog ist die Gerichte-Kachel da, der Item-Grid leer mit Hinweis;
-nach einem POST auf `/api/v1/essen/katalog/gerichte` erscheint das neue Gericht
-im Item-Grid ohne Neustart (ESSEN-20).
+*Test-Implikation:* der Render zeigt vier Tabs; mit leerem Gerichte-Katalog
+ist der Gerichte-Tab sichtbar, sein Item-Grid (wenn aktiv) trägt eine
+Leer-Meldung; nach einem POST auf `/api/v1/essen/katalog/gerichte` erscheint
+das neue Gericht im Item-Grid des Gerichte-Tabs ohne Neustart (ESSEN-20).
 
 *Tickets:* #474
 
@@ -554,18 +563,21 @@ startet).
   deutsche Familien-Gerichte. Wahrscheinlich besser via LLM (Eltern-Chat-
   Anbieter) on-the-fly. Eigenes Ticket, eigene Architektur-Runde.
 
-- **OPEN-ESSEN-E — Display-Design (Gate B).** Die mehrstufige Menü-Führung
-  (ESSEN-8) ist die erste in der Buddy-Familie; die konkrete Layout-Wahl
-  (Kategorie-Grid-Form, Item-Grid-Form, Liste-Sicht-Position) wird in der
-  Design-Schleife dieser Werft entschieden und vor Code in die Spec
-  reconcilet.
+- **OPEN-ESSEN-E — Display-Design (Gate B).** ERLEDIGT 2026-06-09 (Werft-Lauf
+  #474, Gate B): Variante A „Tabbed Single-Canvas" gewählt — drei stets
+  sichtbare Bereiche (Tabs oben · Item-Grid Mitte · Wunsch-Liste rechts), kein
+  Drill-Down. Mockup-Artefakt:
+  `brainstorm/idee-mvp/essen/mockups/variante-A-tabbed.html`. Spec ESSEN-2 /
+  ESSEN-3 / ESSEN-8 / ESSEN-9 / E-ESSEN-7 entsprechend reconcilet.
 
-- **OPEN-ESSEN-F — ARASAAC-Abdeckungsprüfung Lebensmittel-Domäne.** Für die
-  drei Lebensmittel-Kategorien des Repo-Defaults (ESSEN-12) muss vor dem
-  Implementierungs-Ticket geprüft werden, dass jede Default-Item-`bild_ref`
-  ein lokales ARASAAC-PNG hat. Probe in der Design-Schleife dieser Werft
-  (Existenz-Check + Render-Probe), Befund landet vor Gate C im Übergabe-
-  Ticket.
+- **OPEN-ESSEN-F — ARASAAC-Abdeckungsprüfung Lebensmittel-Domäne.** ERLEDIGT
+  2026-06-09 (Werft-Lauf #474, vor Gate B): alle 20 Repo-Default-Items in den
+  drei Lebensmittel-Kategorien (8 Obst&Gemüse · 6 Brotbelag · 6 Sonstiges)
+  haben verifizierte ARASAAC-IDs mit CDN-Render-Beleg. Befund-Artefakt:
+  `brainstorm/idee-mvp/essen/arasaac-probe/befund.md`. Repo-Default-Vorschlag:
+  `brainstorm/idee-mvp/essen/mockups/katalog.default.json`. Spec ESSEN-12
+  bleibt unverändert; die konkreten Items werden im Implementierungs-Ticket
+  (#474-Impl) ins Repo als `essen/katalog.default.json` aufgenommen.
 
 ---
 
@@ -623,16 +635,24 @@ einen eigenen Werft-Lauf (OPEN-ESSEN-B). **Verworfen:** OpenFoodFacts schon
 in V1 dazuholen (würde die zweite-Asset-Pfad-Architektur-Entscheidung im
 Vorbeigehen treffen, ohne Berater-Runde / Cross-Engine-Probe).
 
-### E-ESSEN-7 — Mehrstufige Display-Menüführung (neu in der Buddy-Familie)
-*Datum:* 2026-06-09 · Das Display führt das Kind in drei Schritten
-(Kategorie → Item → Liste-Sicht, ESSEN-8) — anders als die Single-Page-View
-des Routine-Buddys (ROUTINE-2). Begründung Nic 2026-06-09: „kleine
-Menü-Führung", um die zwei Wunsch-Klassen (Gerichte + Lebensmittel) und die
-weiteren Lebensmittel-Untergruppen sauber zu trennen. Konsequenz: Gate B
-dieser Werft hat mehr Layout-Arbeit als Routine (OPEN-ESSEN-E). **Verworfen:**
-Single-View mit allen Items flach nebeneinander (würde die Kategorien-
-Strukturierung unsichtbar machen und das Kind mit zu vielen Optionen
-gleichzeitig konfrontieren).
+### E-ESSEN-7 — Tabbed Single-Canvas (Gate-B-Wahl, kein Drill-Down)
+*Datum:* 2026-06-09 (Gate B, Werft-Lauf #474, Variante A) · Das Display ist
+**eine** Canvas mit drei sichtbaren Bereichen — Kategorien-Tabs oben,
+Item-Grid der aktiven Kategorie links/Mitte, Wunsch-Liste rechts (ESSEN-2,
+ESSEN-8). Kein Drill-Down, kein „Schritt 1 → Schritt 2", kein Zurück-Button.
+Begründung Gate B: Nic wählte Variante A („Tabbed") nach Vergleich mit
+Variante B („Drill-Down") und C („Sidebar") — Vorteile: alles in einem Blick,
+keine Klick-Verluste, das Kind sieht beim Auswählen sofort, was schon auf der
+Liste steht; die Kategorien-Strukturierung trägt der Tab-Wechsel, nicht ein
+mehrstufiger Auswahl-Pfad. Frühere Spec-Form (drei Schritte mit
+Drill-Down/Zurück) verworfen mit Gate B. **Verworfen:** Drill-Down (Variante
+B) — sauberer Spec-mehrstufig, aber zusätzlicher Tap-Aufwand ohne Mehrwert,
+weil Schritt 1 keinen Item-Inhalt mitbringt. **Verworfen:** Sidebar-Layout
+(Variante C) — gleiches „alles sichtbar"-Versprechen, wirkt am Kiosk-Format
+aber „App-artig" (Information-Density) statt kindgerecht-plakativ.
+**Verworfen:** Single-View mit allen Items flach nebeneinander (würde die
+Kategorien-Strukturierung unsichtbar machen). **Artefakt:** Variante-A-Mockup
+unter `brainstorm/idee-mvp/essen/mockups/variante-A-tabbed.html`.
 
 ### E-ESSEN-8 — Personen-Schicht minimal: `quelle ∈ {kind, eltern}`
 *Datum:* 2026-06-09 (Nic) · V1 unterscheidet nur, **woher** ein Wunsch kommt
