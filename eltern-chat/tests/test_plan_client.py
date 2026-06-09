@@ -9,7 +9,13 @@ Kontrolle über Statuscodes und Bodys.
 import json
 
 import pytest
-from skills.plan_client import PFAD_TERMINE, PlanClient, PlanClientError
+from skills.plan_client import (
+    PFAD_TERMINE,
+    PlanBulkNotReached,
+    PlanBulkUnknown,
+    PlanClient,
+    PlanClientError,
+)
 
 # ============================================================
 #  Hilfs-Funktionen
@@ -338,3 +344,51 @@ def test_PUT_termin_backward_compat_positional():
     assert body == {"titel": "Termin", "beginn": "2026-06-01"}
     assert "ende" not in body
     assert event_id == "evt-bc"
+
+
+# ============================================================
+#  AC1 / TAB-13 — POST /api/v1/plan/termine/bulk — HTTP-Lagen
+# ============================================================
+
+def test_PUT_bulk_502_calendar_unavailable_wirft_PlanBulkNotReached():
+    """TAB-13 / TAB-10: HTTP 502 mit calendar_unavailable-Body →
+    PlanBulkNotReached (Plan-Buddy hat vor Item 1 aufgegeben, 0 geschrieben)."""
+    transport, _ = _fake_transport([
+        (502, json.dumps({"error": "calendar_unavailable"}).encode("utf-8")),
+    ])
+    client = PlanClient("http://x", transport=transport)
+    with pytest.raises(PlanBulkNotReached):
+        client.put_termine_bulk("req-id-1", [{"titel": "A", "beginn": "2026-06-01"}])
+
+
+def test_PUT_bulk_5xx_ohne_body_wirft_PlanBulkUnknown():
+    """TAB-13 / TAB-10: HTTP 5xx ohne parsbaren Body → PlanBulkUnknown
+    (Server-Zustand unklar — Lage vier)."""
+    transport, _ = _fake_transport([
+        (503, b"Service Unavailable (not JSON)"),
+    ])
+    client = PlanClient("http://x", transport=transport)
+    with pytest.raises(PlanBulkUnknown):
+        client.put_termine_bulk("req-id-2", [{"titel": "B", "beginn": "2026-06-02"}])
+
+
+def test_PUT_bulk_200_kaputtes_json_wirft_PlanBulkUnknown():
+    """TAB-13 / TAB-10: HTTP 200 mit kaputtem JSON-Body → PlanBulkUnknown
+    (Server-Zustand unklar — konservativ „unbekannt")."""
+    transport, _ = _fake_transport([
+        (200, b"kein json"),
+    ])
+    client = PlanClient("http://x", transport=transport)
+    with pytest.raises(PlanBulkUnknown):
+        client.put_termine_bulk("req-id-3", [{"titel": "C", "beginn": "2026-06-03"}])
+
+
+def test_PUT_bulk_4xx_wirft_PlanClientError():
+    """TAB-13 / TAB-10: HTTP 4xx (Validation, Idempotenz-Konflikt) →
+    PlanClientError (logischer Fehler, kein Netz-Problem)."""
+    transport, _ = _fake_transport([
+        (400, b'{"error": "request_id fehlt"}'),
+    ])
+    client = PlanClient("http://x", transport=transport)
+    with pytest.raises(PlanClientError):
+        client.put_termine_bulk("req-id-4", [{"titel": "D", "beginn": "2026-06-04"}])

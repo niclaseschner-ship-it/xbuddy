@@ -427,6 +427,50 @@ def test_TAB83_zwei_runden_ohne_klaerung_liefert_unklar():
     assert plan_client.bulk_calls == []
 
 
+def test_TAB83_ratchet_zwei_luecken_erste_in_runde1_zweite_in_runde2():
+    """TAB-8.3-Ratchet: zwei Lücken, eine in Runde 1 geklärt, zweite in Runde 2 →
+    keine dritte Runde, Ergebnis „eingetragen".
+
+    Spec (TAB-8.3 Z. 575-577): „eine erfolgreiche Erstklärung einer Lücke in
+    Runde 1 zählt nicht gegen Runde 2" — der Ratchet zählt
+    Rückfrage-Nachrichten, nicht Lücken-Felder.
+    """
+    tg = FakeTelegram(members={42: {"status": "member"}})
+    # Zwei Items, beide ohne Titel → je eine Pflicht-Lücke.
+    items = [
+        ExtractedTermin(titel="", beginn="2026-09-15", ganztags=True),
+        ExtractedTermin(titel="", beginn="2026-09-22", ganztags=True),
+    ]
+    provider = StubMultimodalProvider(items=items)
+    plan_client = StubBulkPlanClient()
+    # Runde 1: Item 1 geklärt ("Sportfest"), Item 2 Sentinel bleibt stehen.
+    # Runde 2: Item 2 geklärt ("Schulausflug") — keine dritte Runde.
+    # Anschließend kommt die Sammel-Bestätigung ("ok").
+    result = termine_aus_bild(
+        tg=tg, private_chat_id=42, from_user_id=42,
+        family_group_chat_id=200,
+        image_bytes=b"fake", image_media_type="image/jpeg",
+        caption="termine",
+        multimodal_provider=provider, plan_client=plan_client,
+        is_member_fn=lambda uid: True,
+        next_message=_Queue([
+            # Runde 1 — Item 1 geklärt, Item 2 Sentinel bleibt.
+            _msg("1) 15.09.2026 — Sportfest\n2) 22.09.2026 — [?titel?]"),
+            # Runde 2 — Item 2 (noch offen, Nummer 2 in gefiltert) wird geklärt.
+            _msg("2) 22.09.2026 — Schulausflug"),
+            # Sammel-Bestätigung.
+            _msg("ok"),
+        ]),
+        heute=date(2026, 6, 1))
+    assert result == SIGNAL_EINGETRAGEN, (
+        "Nach zwei Lücken-Runden (eine Lücke je Runde geklärt) darf NICHT"
+        " 'unklar' folgen — TAB-8.3-Ratchet-Garantie")
+    assert len(plan_client.bulk_calls) == 1, "Bulk-PUT muss genau einmal aufgerufen werden"
+    _request_id, body_items = plan_client.bulk_calls[0]
+    titels = {item["titel"] for item in body_items}
+    assert titels == {"Sportfest", "Schulausflug"}
+
+
 # ============================================================
 #  TAB-9 — Bulk-PUT-Form
 # ============================================================
