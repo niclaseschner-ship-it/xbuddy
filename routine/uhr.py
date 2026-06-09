@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
+from routine import config as config_mod
+
 logger = logging.getLogger(__name__)
 
 PHASE_VOR_ANZIEHEN = "vor_anziehen"
@@ -117,7 +119,7 @@ def berechne_zeiten(abfahrtszeit_cfg, anzieh_vorlauf_min, zeitzone, tag=None,
     # in baue_uhr_view bei leeren Wochenend-Maps + Fixwert-abfahrtszeit).
     aufstehen = _parse_abfahrtszeit(aufstehzeit_cfg, tag, zeitzone)
     if aufstehen is None:
-        h, m = _parse_hhmm("07:00")
+        h, m = _parse_hhmm(config_mod.DATA_DEFAULTS["aufstehzeit"])
         tz = ZoneInfo(zeitzone)
         aufstehen = datetime(tag.year, tag.month, tag.day, h, m, tzinfo=tz)
 

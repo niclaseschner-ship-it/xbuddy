@@ -16,6 +16,7 @@ if _REPO_ROOT not in sys.path:
 
 from zoneinfo import ZoneInfo  # noqa: E402
 
+from routine import config as config_mod  # noqa: E402  # isort:skip
 from routine import uhr as uhr_mod  # noqa: E402  # isort:skip
 
 
@@ -193,3 +194,28 @@ class TestAbfahrtszeitKeinKindi:
         assert zeiten is None, (
             "abfahrtszeit-Map ohne Sa muss None liefern ('kein Kindi'-Semantik unverändert)"
         )
+
+
+# ---- AC2 (T442): DATA_DEFAULTS['aufstehzeit'] steuert den Fallback -----------------------
+
+class TestFallbackAusDataDefaults:
+    """T442-S1 AC2: Änderung an DATA_DEFAULTS['aufstehzeit'] kommt im Fallback an.
+
+    Beweist, dass uhr.py das Literal entfernt hat und stattdessen
+    config_mod.DATA_DEFAULTS["aufstehzeit"] nutzt — eine Quelle, ein Import.
+    """
+
+    def test_data_defaults_aufstehzeit_steuert_fallback(self, monkeypatch):
+        """Monkey-patch DATA_DEFAULTS['aufstehzeit'] auf '08:00' → Fallback liefert 08:00."""
+        monkeypatch.setitem(config_mod.DATA_DEFAULTS, "aufstehzeit", "08:00")
+        zeiten = uhr_mod.berechne_zeiten(
+            ABFAHRTSZEIT_FIX, ANZIEH_VORLAUF, ZEITZONE,
+            tag=SAMSTAG, aufstehzeit_cfg=AUFSTEHZEIT_MO_FR,
+        )
+        assert zeiten is not None, "Uhr muss Zeiten liefern (Fixwert-abfahrtszeit)"
+        assert zeiten.aufstehen is not None, "aufstehen darf nicht None sein"
+        assert zeiten.aufstehen.hour == 8, (
+            f"Fallback sollte 08:00 aus DATA_DEFAULTS liefern, "
+            f"war: {zeiten.aufstehen.hour:02d}:{zeiten.aufstehen.minute:02d}"
+        )
+        assert zeiten.aufstehen.minute == 0
