@@ -72,3 +72,14 @@ Platzhalter-Konvention" für alle `__XBUDDY_*__`-Platzhalter — Vorrats-Konvent
 Bedeutung bereits in der Installer-README ohne dass eine Convention-ID nötig
 ist; nur die SVC-5-Datenwurzel braucht einen eigenen Convention-Anker, weil sie
 das Spec-Verhalten („Daten außerhalb des Checkouts") trägt.
+
+### SVC-5a — Per-Instanz-Verzeichnis gehört dem Service-User
+`xbuddy-data/<komponente>/` und alle darin enthaltenen Dateien **gehören dem
+Service-User** (auf dem Pi: `buddy:buddy`). Root-Ownership auf diesem
+Verzeichnis ist ein Fehler — Schreib-Services schlagen dann mit Fehler 500
+fehl (Live-Beleg 2026-06-09: 8 von 10 data-dirs root:root nach Migration,
+sqlite „readonly database").
+
+Wie die korrekte Ownership hergestellt wird (ExecStartPre, Migrations-Skript,
+Reset-Runbook …) bleibt Implementierungs-Spielraum und wird nicht hier
+festgelegt.
