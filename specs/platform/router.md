@@ -158,6 +158,20 @@ Phone-Descriptor, mit den App-Panel-Feldern statt
 ROU-1 bleibt gewahrt: das Panel entscheidet nichts, der Adapter
 übersetzt und übergibt; der Routing-Kern setzt State.
 
+**Trailing-Slash und 301-Redirect** (analog Display-Pattern, Refs #516):
+
+| Pfad | Antwort |
+|---|---|
+| `GET /controller/app-panel/<panel_id>/` | 200, `text/html`, Panel-PWA mit inline gezogenem `panellib.js` |
+| `GET /controller/app-panel/<panel_id>` (no-slash) | 301 → `GET /controller/app-panel/<panel_id>/` |
+
+Der 301-Redirect auf die Slash-Form ist notwendig, weil die Panel-PWA relative
+Pfade enthält (`./manifest.json`, `./icon-*.png`). Ohne Trailing-Slash resolvt
+der Browser `./` auf den Parent-Pfad (`/controller/app-panel/`) statt auf
+`/controller/app-panel/<panel_id>/` — alle Asset-Requests landen auf 404. Der
+Redirect entspricht dem HTTP-Standard für Directory-vs-File-Disambiguation und
+ist identisch zum Display-Client-Pattern (ROU-20).
+
 *Tickets:* #58
 
 ## 4. Routing-Kern
