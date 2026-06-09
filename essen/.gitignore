@@ -1,0 +1,10 @@
+# ESSEN-7/ESSEN-21 — Per-Instanz-Dateien des Essens-Buddys, je Instanz separat
+# gepflegt, niemals im Repo. Formate sind in den committeten *.example.json
+# dokumentiert.
+#
+# Daten-State-Dateien (ESSEN-7/ESSEN-21) — Per-Instanz, Wunsch-Liste,
+# Gerichte-Katalog und Lebensmittel-Override landen ohne ENV-Override neben
+# dem Code; alle drei ausgeschlossen.
+wuensche.json
+gerichte.json
+katalog.json
