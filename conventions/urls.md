@@ -288,6 +288,38 @@ Muster je nachdem, ob sie instanzspezifisch sind oder mit dem Code versioniert.
 
 *Tickets:* #135, #323
 
+### URL-17 — Admin-Sub-Pfad pro Komponente: `/api/v1/<komponente>/admin/`
+
+Schreib-, Reload- und Wartungs-Endpunkte einer Komponente liegen unter
+einem reservierten Sub-Pfad ihres `/api/v1/<komponente>/`-Namensraums:
+`/api/v1/<komponente>/admin/<aktion>`. Damit hat jede Komponente, die
+Admin-Endpunkte braucht, *eine* vorhersagbare Stelle dafür — und die
+Origin kann die gesamte Form an *einer* Stelle gegen den LAN-Zugriff
+abriegeln.
+
+Bauregeln:
+
+- **Loopback-only**: Admin-Endpunkte akzeptieren ausschließlich Requests
+  mit `REMOTE_ADDR == 127.0.0.1` und antworten sonst mit `403`. Der Guard
+  lebt im Code der Komponente (Defense in Depth gegenüber der
+  Origin-Sperre).
+- **Origin-seitig mit `404` geblockt**: die Origin lehnt jeden Pfad,
+  der auf `^/api/v1/[^/]+/admin/` matcht, mit `404` ab — vor allen
+  `/api/v1/<komponente>/`-Prefixen (URL-14, spezifisch-vor-allgemein).
+  `404` statt `403`, damit die Existenz von Admin-Endpunkten von außen
+  nicht sichtbar wird.
+- **Keine Pflicht zur Admin-API**: Komponenten ohne Schreib-/Reload-/
+  Wartungs-Bedarf brauchen keinen Admin-Sub-Pfad. URL-17 reserviert die
+  Form, ohne sie vorzuschreiben.
+
+Spec-Heimat der Verhaltens-Begründung pro Endpunkt: die Komponenten-
+Spec (z. B. ROU-28 für Router-Admin-Reload und panel-bezogene Schreib-
+Kanten, ROU-29 für die `panels`-Schreib-Kante, PBE-5 für die
+`tiles-changed`-Naht, PLAN-34 für die Plan-Admin-Aktivitäten). `urls.md`
+trägt nur die Pfadform und den Origin-Vertrag.
+
+*Tickets:* —
+
 ## Beispiele
 
 ```
