@@ -322,6 +322,74 @@ Buddy-Calls, EC-25 die Lücke **vor** jeder Bot-Sende-Operation.
 
 *Tickets:* #475
 
+### EC-29 — Eine Stimme im Agent-Turn
+
+Im Agent-Loop des Eltern-Chats hat ein Turn **eine einzige Stimme**: das LLM
+formuliert die Bot-Nachricht und postet sie als einzigen Schreibakt in den
+Telegram-Chat. Eine Katalog-Aufgabe (EC-8), die das LLM während der
+Tool-Use-Phase aufruft, **postet während ihrer Ausführung nicht selbst** —
+weder direkt über die Telegram-API noch über eine von ihr gerufene
+trigger-agnostische Funktion. Sie returnt stattdessen einen
+**User-tauglichen Antwort-Text als Tool-Result**; das LLM petrarbeitet
+diesen Text in seiner nachfolgenden Antwort-Generierung zur Bot-Nachricht.
+Ziel ist eine flüssige, nach echtem Mensch klingende Antwort: das LLM
+**kennt** das Ergebnis (aus dem Tool-Result) und **formuliert** es —
+statt dass zwei Sprecher (Skill-Stimme + LLM-Stimme) im selben Turn in
+denselben Chat schreiben.
+
+**Geltungsbereich.** Diese Regel gilt für jede Aufgabe, deren Code im
+Rahmen eines Agent-Tool-Calls läuft — `ReadTask.run()` (TASK-3) ebenso wie
+die `propose()`-Hälfte einer `WriteTask` (TASK-4) und die
+trigger-agnostischen Funktionen, die von dort gerufen werden. Sie gilt
+**nicht** für `WriteTask.execute()` nach erfolgter Bestätigung (EC-10) und
+nicht für Privatchat-Worker-Threads asynchroner schreibender Aufgaben
+(TASK-5/SESS) — diese laufen außerhalb des Agent-Loops und sind nicht im
+selben Turn-Frame wie das LLM.
+
+**Tool-Result-Vertrag.** Das Tool-Result ist ein einzelnes Feld, das nur
+den Agent-Loop erreicht; die Familie sieht es nie direkt. Die Aufgabe darf
+darin neben dem User-tauglichen Antwort-Text auch Agent-Steuer-Hinweise
+unterbringen (z. B. die Inventar-Liste in `seiten-registry.md` SREG-5b
+Runde 1) — Trennung in „User-sichtbar" vs. „nur Agent" ist nicht Teil des
+V1-Vertrags. Solange das LLM den Antwort-Text in seiner Bot-Nachricht
+trägt, ist die Eine-Stimme-Eigenschaft erfüllt.
+
+**Provider-Down.** Was bei Ausfall des KI-Anbieters mit dem Tool-Result
+geschieht, regelt EC-14 (ehrlicher Abbruch). Ein Framework-Fallback, der
+den Tool-Result-Text bei Provider-Fehler direkt sendet, ist **nicht** V1
+und wird erst angegangen, wenn die Provider-Down-Frequenz das rechtfertigt
+(OPEN-EC-A-Anker, Backlog).
+
+**Datei-Anhänge — Skill sendet die Datei, LLM postet den Text.** Wo eine
+Aufgabe ein Nicht-Text-Artefakt ausliefert (Datei via
+`tg.send_document`, Bild via `tg.send_photo`), bleibt der **Anhangs-
+Versand** Skill-Petrantwortung — das LLM hat keine Datei-Sende-Mechanik.
+Der **gesamte Text-Teil** (Caption, Anleitung, Begleittext) wandert in den
+Tool-Result; das LLM formuliert daraus die Bot-Nachricht und postet sie.
+Heute betrifft das `ca-verteilung.md` (CAV) — Zertifikatsdatei vom Skill,
+hart-codierte OS-Anleitung im Tool-Result.
+
+**Trust-kritische Texte — Wortwörtlich-Disziplin.** Wenn ein Tool-Result
+einen Text enthält, der **wortwörtlich** an die Familie gehen muss
+(Sicherheits-Eigenschaft, nicht Stil — z. B. CAV-5 OS-Installations-
+Schritte: eine vom LLM nachformulierte Schritt-Folge kann einen
+Trust-Schritt auslassen und das Zertifikat unbrauchbar machen), trägt die
+Aufgaben-`description` eine **Wortwörtlich-Klausel** für das LLM: „Diesen
+Text wortwörtlich in deine Antwort übernehmen, nicht umformulieren oder
+kürzen; kurze Einleitungs-/Schluss-Bemerkungen sind erlaubt." Die
+Wortwörtlich-Disziplin gehört in den Skill-Bauplan (`conventions/tasks.md`
+TASK-10), nicht in eine namentliche EC-29-Ausnahme — sie ist Mechanik,
+keine Ausnahme.
+
+**Helper-Grenzen.** Eine Aufgabe, die ihre Telegram-Sendung in einen Helper
+auslagert (z. B. `WuenscheZeigenTask.run()` ruft `wuensche_zeigen()`), darf
+diesen Helper aus dem Agent-Loop heraus nicht senden lassen. Die
+Aufruf-Phase entscheidet, nicht die Modul-Grenze. Wie das in Code und Tests
+gesichert wird (Watchdog-Lint mit Aufruf-Graph oder verbindlicher Test),
+regelt `conventions/tasks.md` TASK-10 — nicht diese Spec.
+
+*Tickets:* #551
+
 ## 3. Aufgaben
 
 ### EC-8 — Aufgaben-Katalog
@@ -336,13 +404,15 @@ bestehende Katalog bleibt unberührt.
 *Tickets:* #27
 
 ### EC-9 — Lesende Aufgaben laufen direkt
-Eine Aufgabe, die nur Information liefert und keine Familien-Daten verändert,
-führt das System ohne Zwischenschritt aus und antwortet mit dem Ergebnis. Eine
-solche Aufgabe darf ihr Ergebnis auch selbst über den Bot-Kanal ausliefern
-(z. B. als Datei) und nur eine kurze Quittung zurückgeben (Beispiel:
-`ca-verteilung.md` CAV-6).
+Eine Aufgabe, die nur Information liefert und keine Familien-Daten
+verändert, führt das System ohne Zwischenschritt aus. Sie returnt das
+Ergebnis als User-tauglichen Antwort-Text an den Agent-Loop, der daraus
+die Bot-Nachricht formuliert (EC-29 — eine Stimme im Agent-Turn). Liefert
+die Aufgabe ein Nicht-Text-Artefakt (Datei, Bild), sendet der Skill den
+Anhang technisch direkt (EC-29 Datei-Anhang-Klausel); der gesamte
+Text-Teil wandert in den Tool-Result und kommt aus der LLM-Stimme.
 
-*Tickets:* #27, #63
+*Tickets:* #27, #63, #551
 
 ### EC-10 — Schreibende Aufgaben nur nach Bestätigung
 Bevor eine Aufgabe ausgeführt wird, die Familien-Daten verändert, legt das
@@ -477,13 +547,31 @@ Formulierung der Antworten verändern — nicht aber diese Regeln.
 
 ### EC-13 — Datenübermittlung an den KI-Anbieter
 Zur Bearbeitung einer Anfrage übermittelt das System dem konfigurierten
-KI-Anbieter ausschließlich, was dafür nötig ist: den Anfrage-Inhalt (Text,
-geteilte Bilder) und den Gesprächskontext (EC-6). Darüber hinausgehende
-Familien-Daten werden nicht übermittelt. Diese Daten verlassen die
-Geräte-Ebene der Familie; V1 übermittelt sie ohne Anonymisierung — siehe
-Entscheidung E-EC-9 und Offener Punkt OPEN-EC-A.
+KI-Anbieter ausschließlich, was dafür nötig ist:
 
-*Tickets:* #27
+1. den Anfrage-Inhalt (Text, geteilte Bilder),
+2. den Gesprächskontext (EC-6) und
+3. die **Tool-Result-Texte** der im Turn ausgeführten Katalog-Aufgaben —
+   weil das LLM die Bot-Antwort daraus formuliert (EC-29 — eine Stimme im
+   Agent-Turn). Diese Tool-Result-Texte enthalten je nach Aufgabe
+   Wunschlisten-Einträge (`wuensche-zeigen.md`), Termin-Titel und
+   Personen-Bezüge (`termine-erfragen.md`), Seiten-Inventar-Labels und
+   Synonyme (`seiten-registry.md`) und vergleichbare Familien-Daten der
+   anrufenden Buddy-App.
+
+Darüber hinausgehende Familien-Daten werden nicht übermittelt. Alle drei
+Kategorien verlassen die Geräte-Ebene der Familie; V1 übermittelt sie ohne
+Anonymisierung — siehe Entscheidung E-EC-9 und Offener Punkt OPEN-EC-A.
+
+Die Erweiterung um Kategorie 3 (Tool-Result-Texte) folgt aus dem
+Eine-Stimme-Pattern (EC-29) und ist eine **ehrliche V1-Linie**, kein
+Sicherheits-Versprechen für die Familien-Beta: V1 läuft mit Nic und
+Testfeld; vor einer Familien-Beta ist die Privacy-Lage neu zu bewerten.
+Die langfristige Sicherung liegt im **Anonymisierungs-Layer** und in der
+**Datenpetrarbeitung in Deutschland** (OPEN-EC-A, Backlog) — beide bleiben
+verbindliche Ziele, nicht V1-Bestandteil.
+
+*Tickets:* #27, #551
 
 ### EC-14 — Anbieter nicht erreichbar
 Schlägt der Aufruf des KI-Anbieters fehl oder bleibt aus, antwortet das System
