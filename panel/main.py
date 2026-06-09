@@ -360,6 +360,7 @@ def _read_editor_html(filename):
 # `data-panel-id="__PANEL_ID__"`. Wir ersetzen genau dieses Token — kein
 # Substring-Match auf `<body>` (das stünde sonst auch im HTML-Kommentar und
 # würde dort fälschlich substituiert, sodass das echte Tag leer bliebe).
+# IDENT-5 — Server-side-Identitäts-Token in HTML-Templates.
 _PANEL_ID_TOKEN = "__PANEL_ID__"
 
 

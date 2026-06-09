@@ -1266,6 +1266,7 @@ def render_app_panel_index(panel_id):
     # trägt `data-panel-id="__PANEL_ID__"`. Wir ersetzen das Token — kein
     # Substring-Match auf `<body>`, damit HTML-Kommentare nicht versehentlich
     # gematcht werden und das echte Tag leer bleibt.
+    # IDENT-5 — Server-side-Identitäts-Token in HTML-Templates.
     return html.replace('__PANEL_ID__', panel_id, 1)
 
 
