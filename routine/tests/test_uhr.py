@@ -165,8 +165,8 @@ class TestAufstehzeitString:
         assert zeiten.aufstehen.hour == 8
         assert zeiten.aufstehen.minute == 0
 
-    def test_default_parameter_07_00(self):
-        """Default-Parameter aufstehzeit_cfg='07:00' liefert 07:00."""
+    def test_sentinel_none_uses_data_defaults(self):
+        """aufstehzeit_cfg=None (Sentinel) triggert Lookup in DATA_DEFAULTS['aufstehzeit'] → 07:00."""
         zeiten = uhr_mod.berechne_zeiten(
             ABFAHRTSZEIT_FIX, ANZIEH_VORLAUF, ZEITZONE,
             tag=SAMSTAG,
