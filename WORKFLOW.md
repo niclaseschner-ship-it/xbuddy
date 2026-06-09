@@ -34,7 +34,7 @@ Kein Project-Board nötig.
 |---|---|---|
 | Soll-Verhalten | `specs/` | Anforderungen mit IDs (`DISP-1` …) |
 | Lebenszyklus | Issue-State | `open` / `closed` (closed ≙ Done) |
-| Workflow-Position | Label `status:*` | `spec`, `ready`, `in-progress`, `in-review` |
+| Workflow-Position | Label `status:*` | `spec`, `spec-in-progress`, `ready`, `in-progress`, `in-review` |
 | Art | Label `type:*` | `feature`, `bug`, `chore`, `docs` |
 | Ökosystem-Baustein | Label `area:*` | `display`, `controller`, `hub`, `buddy`, `infra` |
 | Priorität | Label `priority:*` | `high`, `medium`, `low` |
@@ -62,15 +62,20 @@ leere Queue); Reopen-Trigger: häufige mid-build Architektur-Halts, die nie durc
 <a id="lifecycle"></a>
 
 ```
-status:spec        Ticket angelegt; Spec-PR offen oder ausstehend
-  │                ──── Checkpoint: kein Code, bevor Spec gemerged ist ────
-status:ready       Spec reviewt und gemerged; Implementation darf starten
-  │                (einziger MANUELLER Übergang — das Handoff-Signal)
-status:in-progress Implementierungs-PR offen (Closes #nr)
-  │                automatisch gesetzt durch ticket-status-flow Action
-status:in-review   PR markiert ready-for-review
-  │                automatisch gesetzt durch ticket-status-flow Action
-closed             PR gemerged → Issue auto-closed durch "Closes #nr"
+status:spec               Ticket angelegt; Spec-PR offen oder ausstehend
+  │                       ──── Checkpoint: kein Code, bevor Spec gemerged ist ────
+status:spec-in-progress   /arbeitstag-prep claimt das Ticket (Lock-Semantik —
+  │                       jemand prept gerade, niemand anders anfassen). Setzt
+  │                       der prep-Skill per Skip-Marker vor Watchdog-Dispatch.
+  │                       Bei „zurück"/„parken" → zurück auf status:spec. Bei
+  │                       Nics Stempel → weiter auf status:ready. (PW-33, 2026-06-09)
+status:ready              Spec reviewt und gemerged; Implementation darf starten
+  │                       (einziger MANUELLER Übergang — das Handoff-Signal)
+status:in-progress        Implementierungs-PR offen (Closes #nr)
+  │                       automatisch gesetzt durch ticket-status-flow Action
+status:in-review          PR markiert ready-for-review
+  │                       automatisch gesetzt durch ticket-status-flow Action
+closed                    PR gemerged → Issue auto-closed durch "Closes #nr"
 ```
 
 Bei Ticket-Erstellung wird `status:spec` automatisch durch die
