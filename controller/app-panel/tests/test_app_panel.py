@@ -14,6 +14,8 @@ import re
 import subprocess
 import textwrap
 
+import pytest
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HTML_PATH    = os.path.join(ROOT, 'index.html')
 APPJS_PATH   = os.path.join(ROOT, 'app.js')
@@ -1587,6 +1589,113 @@ def test_PANEL_12_shrink_not_needed_for_normal_viewport():
     assert out['aboveMin'], \
         ('PANEL-12 Kontroll-Pfad: normaler Viewport (800x600, M=6) muss tileW >= TILE_MIN_W=160 '
          'liefern — bekommen: tileW=%.1f. Schrumpf-Fallback darf hier nicht greifen.') % out['tileW']
+
+
+# ============================================================
+#  PANEL-10 / PWA-2 — Manifest icons[] + PNG-Validität (AC4)
+# ============================================================
+
+ICON_192_PATH      = os.path.join(ROOT, 'icon-192.png')
+ICON_512_PATH      = os.path.join(ROOT, 'icon-512.png')
+ICON_MASKABLE_PATH = os.path.join(ROOT, 'icon-maskable-512.png')
+
+
+def test_PWA_2_manifest_icons_present_and_count():
+    """PWA-2 / AC2: manifest.json enthält icons[]; mindestens 2 Einträge."""
+    manifest = json.loads(read(MANIFEST_PATH))
+    assert 'icons' in manifest, 'manifest.json: icons[] fehlt'
+    assert len(manifest['icons']) >= 2, \
+        'manifest.json: icons[] braucht mind. 2 Einträge (bekommen: %d)' % len(manifest['icons'])
+
+
+def test_PWA_2_manifest_icons_at_least_one_maskable():
+    """PWA-2 / AC2: mind. ein Icon-Eintrag trägt purpose:maskable."""
+    manifest = json.loads(read(MANIFEST_PATH))
+    purposes = [e.get('purpose', '') for e in manifest.get('icons', [])]
+    assert any('maskable' in p for p in purposes), \
+        'manifest.json: kein Eintrag mit purpose:maskable gefunden (vorhanden: %r)' % purposes
+
+
+def test_PWA_2_manifest_icons_192_entry():
+    """PWA-2 / AC2: icons[] hat Eintrag mit sizes=192x192."""
+    manifest = json.loads(read(MANIFEST_PATH))
+    sizes = [e.get('sizes', '') for e in manifest.get('icons', [])]
+    assert '192x192' in sizes, \
+        'manifest.json: kein 192x192-Icon-Eintrag (vorhanden: %r)' % sizes
+
+
+def test_PWA_2_manifest_icons_512_entry():
+    """PWA-2 / AC2: icons[] hat Eintrag mit sizes=512x512."""
+    manifest = json.loads(read(MANIFEST_PATH))
+    sizes = [e.get('sizes', '') for e in manifest.get('icons', [])]
+    assert '512x512' in sizes, \
+        'manifest.json: kein 512x512-Icon-Eintrag (vorhanden: %r)' % sizes
+
+
+def test_PWA_2_icon_192_exists_and_valid():
+    """PWA-2 / AC1: icon-192.png existiert, ist 192×192, gültiges PNG, RGBA."""
+    try:
+        from PIL import Image
+    except ImportError:
+        pytest.skip('Pillow nicht installiert')
+    assert os.path.exists(ICON_192_PATH), 'icon-192.png fehlt in controller/app-panel/'
+    img = Image.open(ICON_192_PATH)
+    assert img.size == (192, 192), \
+        'icon-192.png: erwarte 192×192, bekommen %s' % str(img.size)
+    assert img.mode == 'RGBA', \
+        'icon-192.png: erwarte mode=RGBA, bekommen %s' % img.mode
+
+
+def test_PWA_2_icon_512_exists_and_valid():
+    """PWA-2 / AC1: icon-512.png existiert, ist 512×512, gültiges PNG, RGBA."""
+    try:
+        from PIL import Image
+    except ImportError:
+        pytest.skip('Pillow nicht installiert')
+    assert os.path.exists(ICON_512_PATH), 'icon-512.png fehlt in controller/app-panel/'
+    img = Image.open(ICON_512_PATH)
+    assert img.size == (512, 512), \
+        'icon-512.png: erwarte 512×512, bekommen %s' % str(img.size)
+    assert img.mode == 'RGBA', \
+        'icon-512.png: erwarte mode=RGBA, bekommen %s' % img.mode
+
+
+def test_PWA_2_icon_maskable_512_exists_and_valid():
+    """PWA-2 / AC1: icon-maskable-512.png existiert, ist 512×512, RGBA."""
+    try:
+        from PIL import Image
+    except ImportError:
+        pytest.skip('Pillow nicht installiert')
+    assert os.path.exists(ICON_MASKABLE_PATH), \
+        'icon-maskable-512.png fehlt in controller/app-panel/'
+    img = Image.open(ICON_MASKABLE_PATH)
+    assert img.size == (512, 512), \
+        'icon-maskable-512.png: erwarte 512×512, bekommen %s' % str(img.size)
+    assert img.mode == 'RGBA', \
+        'icon-maskable-512.png: erwarte mode=RGBA, bekommen %s' % img.mode
+
+
+def test_PWA_2_html_link_icon_192():
+    """PWA-2 / AC3: index.html enthält <link rel=icon sizes=192x192>."""
+    html = read(HTML_PATH)
+    assert re.search(r'<link[^>]+rel=["\']icon["\'][^>]+sizes=["\']192x192["\']', html) or \
+           re.search(r'<link[^>]+sizes=["\']192x192["\'][^>]+rel=["\']icon["\']', html), \
+        'index.html: kein <link rel=icon sizes=192x192> gefunden'
+
+
+def test_PWA_2_html_link_icon_512():
+    """PWA-2 / AC3: index.html enthält <link rel=icon sizes=512x512>."""
+    html = read(HTML_PATH)
+    assert re.search(r'<link[^>]+rel=["\']icon["\'][^>]+sizes=["\']512x512["\']', html) or \
+           re.search(r'<link[^>]+sizes=["\']512x512["\'][^>]+rel=["\']icon["\']', html), \
+        'index.html: kein <link rel=icon sizes=512x512> gefunden'
+
+
+def test_PWA_2_html_apple_touch_icon():
+    """PWA-2 / AC3: index.html enthält <link rel=apple-touch-icon>."""
+    html = read(HTML_PATH)
+    assert re.search(r'<link[^>]+rel=["\']apple-touch-icon["\']', html), \
+        'index.html: kein <link rel=apple-touch-icon> gefunden'
 
 
 def test_PANEL_9_test_file_covers_panel_12():
