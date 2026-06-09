@@ -2244,3 +2244,399 @@ def test_PLAN_33_backoff_bei_rate_limit(demo_config, demo_registry, monkeypatch)
     assert 0.75 <= sleep_calls[0] <= 1.25, "Erster Backoff soll ~1s sein"
     assert 1.5 <= sleep_calls[1] <= 2.5, "Zweiter Backoff soll ~2s sein"
     assert 3.0 <= sleep_calls[2] <= 5.0, "Dritter Backoff soll ~4s sein"
+
+
+# ============================================================
+#  PLAN-33 — Watchdog-Fix-Tests T487-S2
+# ============================================================
+#
+# Diese Tests schließen die strukturellen Lücken aus dem Watchdog-Befund:
+#   PLAN-33.1 Mix-Pfad, PLAN-33.2 Fehler-Vokabular,
+#   PLAN-33.4 Budget-Abbruch, PLAN-33.5 TTL+LRU, PLAN-33.6 Retry-After.
+
+_UUID4_SAMPLE_C = "c3d4e5f6-a7b8-4ccc-abcd-e2f3a4b5c6d7"
+_UUID4_SAMPLE_D = "d4e5f6a7-b8c9-4ddd-bcde-f3a4b5c6d7e8"
+_UUID4_SAMPLE_E = "e5f6a7b8-c9d0-4eee-89ab-a4b5c6d7e8f9"
+
+
+def test_PLAN_33_1_mix_pfad_item1_rate_limit_andere_erfolg(demo_config, demo_registry, monkeypatch):
+    """PLAN-33.1 Mix-Pfad: Item 0 erfolg, Item 1 calendar_rate_limit (nach 3
+    Retries), Item 2 erfolg → HTTP 200, geschrieben:2, gesamt:3, Reihenfolge
+    erhalten (AC1 laut Watchdog-Befund T487-S2).
+
+    FakeTransport(rate_limit_on_calls={1,2,3,4}) — call-Index 1 entspricht
+    Item 1 (call-Index 0 ist Item 0). Da _MAX_RETRIES=3, werden für Item 1
+    die Indizes 1,2,3,4 ausgelöst (1 Versuch + 3 Retries = 4 Aufrufe).
+    """
+    import time as time_mod
+    monkeypatch.setattr(time_mod, "sleep", lambda s: None)
+
+    # call-Indizes 1,2,3,4 → Item 1 (4 Aufrufe bis Abbruch nach 3 Retries).
+    transport = FakeTransport(rate_limit_on_calls={1, 2, 3, 4})
+    client = make_client(demo_config, demo_registry, transport)
+    plan_main._idem_cache.clear()
+
+    items = [
+        {"titel": "Zahnarzt", "beginn": "2026-07-01"},           # Item 0: call 0 → erfolg
+        {"titel": "Elternabend", "beginn": "2026-07-02"},        # Item 1: calls 1-4 → rate_limit
+        {"titel": "Kinoabend", "beginn": "2026-07-03"},          # Item 2: call 5 → erfolg
+    ]
+    r = client.post(BULK_URL, data=json.dumps({
+        "request_id": _UUID4_SAMPLE_C, "items": items,
+    }), content_type="application/json")
+
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["ok"] is True
+    assert body["gesamt"] == 3
+    assert body["geschrieben"] == 2, (
+        "Erwartet geschrieben:2 (Item 0+2 ok, Item 1 rate_limit), "
+        "bekam: %d" % body["geschrieben"])
+    results = body["results"]
+    assert len(results) == 3
+    assert results[0]["ok"] is True, "Item 0 soll ok sein"
+    assert results[1]["ok"] is False
+    assert results[1]["error_code"] == "calendar_rate_limit", (
+        "Item 1 soll calendar_rate_limit sein, bekam: %r" % results[1])
+    assert results[2]["ok"] is True, "Item 2 soll ok sein"
+
+
+def test_PLAN_33_2_creds_false_gibt_502(demo_config, demo_registry):
+    """PLAN-33.2: Token-Refresh schlägt fehl (creds=False) → HTTP 502 +
+    body {error: calendar_unavailable} (AC2a laut Watchdog-Befund T487-S2)."""
+    transport = FakeTransport(creds=False)
+    client = make_client(demo_config, demo_registry, transport)
+    plan_main._idem_cache.clear()
+
+    items = [{"titel": "Zahnarzt", "beginn": "2026-07-01"}]
+    r = client.post(BULK_URL, data=json.dumps({
+        "request_id": _UUID4_SAMPLE_C, "items": items,
+    }), content_type="application/json")
+
+    assert r.status_code == 502
+    body = r.get_json()
+    assert body.get("error") == "calendar_unavailable", (
+        "HTTP 502 soll {error: calendar_unavailable} liefern, bekam: %r" % body)
+
+
+def test_PLAN_33_2_auth_fail_on_item_gibt_calendar_auth(demo_config, demo_registry):
+    """PLAN-33.2: per-Item Auth-Fehler → HTTP 200, results[0].ok=false +
+    error_code:calendar_auth (AC2b laut Watchdog-Befund T487-S2)."""
+    transport = FakeTransport(auth_fail_on_calls={0})
+    client = make_client(demo_config, demo_registry, transport)
+    plan_main._idem_cache.clear()
+
+    items = [{"titel": "Zahnarzt", "beginn": "2026-07-01"}]
+    r = client.post(BULK_URL, data=json.dumps({
+        "request_id": _UUID4_SAMPLE_D, "items": items,
+    }), content_type="application/json")
+
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["geschrieben"] == 0
+    results = body["results"]
+    assert len(results) == 1
+    assert results[0]["ok"] is False
+    assert results[0]["error_code"] == "calendar_auth", (
+        "Erwartet calendar_auth, bekam: %r" % results[0])
+
+
+def test_PLAN_33_2_generic_unavailable_gibt_calendar_other(demo_config, demo_registry):
+    """PLAN-33.2: per-Item CalendarUnavailable (non-auth) → HTTP 200,
+    results[0].ok=false + error_code:calendar_other
+    (AC2c laut Watchdog-Befund T487-S2).
+
+    FakeTransport(fail_all_inserts=True) wirft CalendarUnavailable, was
+    in plan/main.py als calendar_other abgefangen wird."""
+    transport = FakeTransport(fail_all_inserts=True)
+    client = make_client(demo_config, demo_registry, transport)
+    plan_main._idem_cache.clear()
+
+    items = [{"titel": "Zahnarzt", "beginn": "2026-07-01"}]
+    r = client.post(BULK_URL, data=json.dumps({
+        "request_id": _UUID4_SAMPLE_E, "items": items,
+    }), content_type="application/json")
+
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["geschrieben"] == 0
+    results = body["results"]
+    assert len(results) == 1
+    assert results[0]["ok"] is False
+    assert results[0]["error_code"] == "calendar_other", (
+        "Erwartet calendar_other, bekam: %r" % results[0])
+
+
+def test_PLAN_33_4_budget_abbruch_markiert_verbleibende_als_rate_limit(
+        demo_config, demo_registry, monkeypatch):
+    """PLAN-33.4 Budget-Test: Server-Budget 15s läuft nach Item 0 ab →
+    verbleibende Items werden als calendar_rate_limit markiert, ohne Google
+    aufzurufen (AC3 laut Watchdog-Befund T487-S2).
+
+    time.monotonic wird so gesteuert, dass:
+      - budget_start = 100.0
+      - Item 0 Budget-Check: elapsed = 0.0 (ok)
+      - Item 0 Insert: ok
+      - Item 1 Budget-Check: elapsed = 20.0 >= 15.0 → Budget erschöpft
+      - Item 2 Budget-Check: elapsed = 20.0 >= 15.0 → Budget erschöpft
+    """
+    import time as time_mod
+    monkeypatch.setattr(time_mod, "sleep", lambda s: None)
+
+    monotonic_calls = [0]
+    # Aufruf-Sequenz:
+    #   0: budget_start = 100.0
+    #   1: Item-0 Budget-Check elapsed = 100.0 - 100.0 = 0.0 → ok
+    #   2: Item-1 Budget-Check elapsed = 120.0 - 100.0 = 20.0 → abbruch
+    #   3: Item-2 Budget-Check elapsed = 120.0 - 100.0 = 20.0 → abbruch
+    values = [100.0, 100.0, 120.0, 120.0]
+
+    def fake_monotonic():
+        idx = monotonic_calls[0]
+        v = values[idx] if idx < len(values) else 120.0
+        monotonic_calls[0] += 1
+        return v
+
+    monkeypatch.setattr(time_mod, "monotonic", fake_monotonic)
+
+    transport = FakeTransport()
+    client = make_client(demo_config, demo_registry, transport)
+    plan_main._idem_cache.clear()
+
+    items = [
+        {"titel": "A", "beginn": "2026-07-01"},  # Item 0: im Budget
+        {"titel": "B", "beginn": "2026-07-02"},  # Item 1: Budget erschöpft
+        {"titel": "C", "beginn": "2026-07-03"},  # Item 2: Budget erschöpft
+    ]
+    r = client.post(BULK_URL, data=json.dumps({
+        "request_id": _UUID4_SAMPLE_C, "items": items,
+    }), content_type="application/json")
+
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["geschrieben"] < body["gesamt"], (
+        "Budget-Abbruch erwartet: geschrieben soll < gesamt sein")
+    assert body["gesamt"] == 3
+    results = body["results"]
+    # Verbleibende Items (Index 1 und 2) sollen calendar_rate_limit sein.
+    assert results[1]["ok"] is False
+    assert results[1]["error_code"] == "calendar_rate_limit", (
+        "Item 1 soll calendar_rate_limit (Budget) sein, bekam: %r" % results[1])
+    assert results[2]["ok"] is False
+    assert results[2]["error_code"] == "calendar_rate_limit", (
+        "Item 2 soll calendar_rate_limit (Budget) sein, bekam: %r" % results[2])
+    # Nur 1 Insert in Google (Item 0), Items 1+2 nie aufgerufen.
+    insert_calls = [c for c in transport.calls if "insert" in c[0]]
+    assert len(insert_calls) == 1, (
+        "Nur Item 0 soll in Google geschrieben werden, "
+        "bekam %d Insert-Calls: %r" % (len(insert_calls), transport.calls))
+
+
+def test_PLAN_33_5_ttl_treffer_und_ablauf(demo_config, demo_registry, monkeypatch):
+    """PLAN-33.5 TTL-Test: Cache-Treffer nach 14min → identische Antwort,
+    0 Re-Inserts; nach 16min → Neu-Verarbeitung (AC4a laut Watchdog-Befund
+    T487-S2).
+
+    time.monotonic wird zur Kontrolle von _idem_set/get verwendet:
+      - Erst-Aufruf: ts = 100.0
+      - 14-min-Hit: jetzt = 940.0  (940 - 100 = 840s < 900s TTL) → Cache-Treffer
+      - 16-min-Check: jetzt = 1060.0 (1060 - 100 = 960s > 900s TTL) → Cache-Miss
+    """
+    import time as time_mod
+    monkeypatch.setattr(time_mod, "sleep", lambda s: None)
+
+    call_counter = [0]
+    time_sequence = []  # Wird vor jedem Schritt befüllt.
+
+    def fake_monotonic():
+        idx = call_counter[0]
+        call_counter[0] += 1
+        if idx < len(time_sequence):
+            return time_sequence[idx]
+        return 100.0  # Fallback
+
+    monkeypatch.setattr(time_mod, "monotonic", fake_monotonic)
+
+    transport = FakeTransport()
+    client = make_client(demo_config, demo_registry, transport)
+    plan_main._idem_cache.clear()
+
+    items = [{"titel": "Zahnarzt", "beginn": "2026-08-01"}]
+    payload = json.dumps({"request_id": _UUID4_SAMPLE_C, "items": items})
+
+    # Phase 1: Erst-Aufruf. Alle monotonic-Werte = 100.0 → ts = 100.0.
+    # Der Endpoint ruft monotonic() mehrfach auf (budget_start, Budget-Check,
+    # _idem_set): wir geben 100.0 für alle.
+    time_sequence.clear()
+    time_sequence.extend([100.0] * 20)
+    call_counter[0] = 0
+
+    r1 = client.post(BULK_URL, data=payload, content_type="application/json")
+    assert r1.status_code == 200
+    body1 = r1.get_json()
+    assert body1["geschrieben"] == 1
+    inserts_nach_erst = [c for c in transport.calls if "insert" in c[0]]
+    assert len(inserts_nach_erst) == 1
+
+    # Phase 2: 14-min-Check (840s seit ts=100.0 → noch im TTL-Fenster).
+    # _idem_get prüft: time.monotonic() - entry["ts"] > 900 → 940.0 - 100.0 = 840 ≤ 900 → Hit.
+    time_sequence.clear()
+    time_sequence.extend([940.0] * 20)
+    call_counter[0] = 0
+
+    r2 = client.post(BULK_URL, data=payload, content_type="application/json")
+    assert r2.status_code == 200
+    body2 = r2.get_json()
+    assert body2 == body1, (
+        "14-min-Hit: Antwort soll identisch sein, "
+        "Erst=%r, Zweiter=%r" % (body1, body2))
+    inserts_nach_zweitem = [c for c in transport.calls if "insert" in c[0]]
+    assert len(inserts_nach_zweitem) == 1, "14-min-Hit: kein Re-Insert erwartet"
+
+    # Phase 3: 16-min-Check (960s > 900s → Cache-Miss, Neu-Verarbeitung).
+    # _idem_get: 1060.0 - 100.0 = 960 > 900 → Miss → neuer Insert.
+    time_sequence.clear()
+    time_sequence.extend([1060.0] * 20)
+    call_counter[0] = 0
+
+    r3 = client.post(BULK_URL, data=payload, content_type="application/json")
+    assert r3.status_code == 200
+    body3 = r3.get_json()
+    assert body3["geschrieben"] == 1, "Nach TTL-Ablauf soll neu verarbeitet werden"
+    inserts_nach_drittem = [c for c in transport.calls if "insert" in c[0]]
+    assert len(inserts_nach_drittem) == 2, (
+        "16-min-Miss: zweiter Insert erwartet, "
+        "bekam %d Insert-Calls" % len(inserts_nach_drittem))
+
+
+def test_PLAN_33_5_lru_eviction_bei_257_eintraegen(demo_config, demo_registry, monkeypatch):
+    """PLAN-33.5 LRU-Eviction: 257 verschiedene request_ids → ältester Eintrag
+    evicted; der 1. request_id ist nicht mehr im Cache, der 257. ist da
+    (AC4b laut Watchdog-Befund T487-S2)."""
+    import time as time_mod
+    monkeypatch.setattr(time_mod, "sleep", lambda s: None)
+    monkeypatch.setattr(time_mod, "monotonic", lambda: 100.0)
+
+    transport = FakeTransport()
+    client = make_client(demo_config, demo_registry, transport)
+    plan_main._idem_cache.clear()
+
+    # 257 verschiedene UUIDv4s (strukturell valide, 8-4-4-4-12).
+    base = "a0b1c2d{i:01x}-e5f6-4aaa-89ab-c0d1e2f3a{j:03x}"
+
+    def make_uuid(n):
+        # Erzeuge strukturell valide UUIDv4 mit variierendem letzten Segment.
+        hi = n // 256
+        lo = n % 256
+        return "a0b1c2d%x-e5f6-4aaa-89ab-%012x" % (hi % 16, lo + 1)
+
+    first_uuid = make_uuid(0)
+    # 257 Einträge einfügen (request_id 0 bis 256).
+    for n in range(257):
+        uid = make_uuid(n)
+        items = [{"titel": "T%d" % n, "beginn": "2026-07-01"}]
+        r = client.post(BULK_URL, data=json.dumps({
+            "request_id": uid, "items": items,
+        }), content_type="application/json")
+        assert r.status_code == 200, "Eintrag %d soll 200 liefern" % n
+
+    # Cache hat max 256 Einträge → der 1. (Index 0) wurde evicted.
+    assert len(plan_main._idem_cache) == 256, (
+        "Cache soll 256 Einträge haben, hat %d" % len(plan_main._idem_cache))
+    # Der 1. request_id (make_uuid(0)) ist nicht mehr im Cache.
+    first_key_present = any(
+        k.startswith(first_uuid + ":") for k in plan_main._idem_cache
+    )
+    assert not first_key_present, (
+        "Ältester Eintrag (request_id=%s) soll evicted sein, "
+        "aber er ist noch im Cache" % first_uuid)
+    # Der 257. request_id (make_uuid(256)) ist im Cache.
+    last_uuid = make_uuid(256)
+    last_key_present = any(
+        k.startswith(last_uuid + ":") for k in plan_main._idem_cache
+    )
+    assert last_key_present, (
+        "Neuester Eintrag (request_id=%s) soll im Cache sein" % last_uuid)
+
+
+def test_PLAN_33_6_retry_after_sticht_backoff(demo_config, demo_registry, monkeypatch):
+    """PLAN-33.6: Retry-After-Header sticht Backoff-Zeit → sleep(0.5) statt
+    sleep(~1s); Item dann erfolg nach Retry
+    (AC5a laut Watchdog-Befund T487-S2)."""
+    import time as time_mod
+
+    sleep_calls = []
+    monkeypatch.setattr(time_mod, "sleep", lambda s: sleep_calls.append(s))
+    # Budget groß halten: monotonic immer 100.0 (kein Budget-Ablauf).
+    monkeypatch.setattr(time_mod, "monotonic", lambda: 100.0)
+
+    # Nur call 0 rate_limited mit retry_after=0.5; call 1 (Retry) erfolgreich.
+    transport = FakeTransport(rate_limit_on_calls={0}, rate_limit_retry_after=0.5)
+    client = make_client(demo_config, demo_registry, transport)
+    plan_main._idem_cache.clear()
+
+    items = [{"titel": "Zahnarzt", "beginn": "2026-07-01"}]
+    r = client.post(BULK_URL, data=json.dumps({
+        "request_id": _UUID4_SAMPLE_C, "items": items,
+    }), content_type="application/json")
+
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["geschrieben"] == 1, (
+        "Nach Retry soll Item erfolgreich sein, geschrieben=%d" % body["geschrieben"])
+    assert body["results"][0]["ok"] is True
+
+    # sleep soll mit 0.5 aufgerufen worden sein (Retry-After sticht Backoff ~1s).
+    assert len(sleep_calls) == 1, (
+        "Genau 1 sleep-Aufruf erwartet (1 Retry), bekam: %r" % sleep_calls)
+    assert sleep_calls[0] == 0.5, (
+        "sleep soll 0.5s (Retry-After) sein, nicht Backoff ~1s, "
+        "bekam: %.3f" % sleep_calls[0])
+
+
+def test_PLAN_33_6_retry_after_groesser_als_budget_kein_sleep(
+        demo_config, demo_registry, monkeypatch):
+    """PLAN-33.6: Retry-After > verbleibendes Budget → sofort calendar_rate_limit
+    ohne sleep (AC5b laut Watchdog-Befund T487-S2).
+
+    Budget = 15s. monotonic liefert 100.0 für budget_start,
+    dann 110.0 für alle weiteren Aufrufe → remaining = 15.0 - 10.0 = 5.0s.
+    Retry-After = 30.0 > 5.0 → sofort calendar_rate_limit, kein sleep.
+    """
+    import time as time_mod
+
+    sleep_calls = []
+    monkeypatch.setattr(time_mod, "sleep", lambda s: sleep_calls.append(s))
+
+    # budget_start erhält den ersten Aufruf; alle weiteren geben 110.0
+    # (elapsed = 10.0, remaining = 5.0).
+    mono_counter = [0]
+
+    def fake_monotonic():
+        c = mono_counter[0]
+        mono_counter[0] += 1
+        return 100.0 if c == 0 else 110.0
+
+    monkeypatch.setattr(time_mod, "monotonic", fake_monotonic)
+
+    # call 0 rate_limited mit retry_after=30.0 (> remaining 5.0).
+    transport = FakeTransport(rate_limit_on_calls={0}, rate_limit_retry_after=30.0)
+    client = make_client(demo_config, demo_registry, transport)
+    plan_main._idem_cache.clear()
+
+    items = [{"titel": "Zahnarzt", "beginn": "2026-07-01"}]
+    r = client.post(BULK_URL, data=json.dumps({
+        "request_id": _UUID4_SAMPLE_D, "items": items,
+    }), content_type="application/json")
+
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["geschrieben"] == 0
+    results = body["results"]
+    assert results[0]["ok"] is False
+    assert results[0]["error_code"] == "calendar_rate_limit", (
+        "Retry-After > Budget soll sofort calendar_rate_limit sein, "
+        "bekam: %r" % results[0])
+    # Kein sleep: Retry-After sprengt Budget.
+    assert len(sleep_calls) == 0, (
+        "Kein sleep erwartet (Retry-After > Budget), bekam: %r" % sleep_calls)
