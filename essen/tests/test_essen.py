@@ -495,21 +495,26 @@ def test_essen20_atomares_schreiben_wuensche(demo_paths, tmp_path):
 #  ESSEN-21 — Config: fehlende/kaputte Datei → Defaults + Warnung
 # ============================================================
 
-def test_essen21_config_startet_ohne_config_datei():
+def test_essen21_config_startet_ohne_config_datei(tmp_path):
     """ESSEN-21/CONFIG-4: fehlende config.json → Defaults gelten, Prozess startet."""
-    from essen import config as config_mod
-    rt = config_mod.resolve_runtime(config_path="/pfad/existiert/nicht")
-    assert rt["listen_port"] == 5052
-    assert rt["listen_host"] == "127.0.0.1"
+    from tools import configloader
+    _schema = {"listen_host": "127.0.0.1", "listen_port": 5052, "log_level": "INFO"}
+    cfg = configloader.load(
+        component="essen", schema=_schema,
+        config_path=str(tmp_path / "existiert_nicht.json"))
+    assert cfg["listen_port"] == 5052
+    assert cfg["listen_host"] == "127.0.0.1"
 
 
-def test_essen21_env_override_port(monkeypatch):
+def test_essen21_env_override_port(monkeypatch, tmp_path):
     """ESSEN-21/CONFIG-5: ENV-Override ESSEN_LISTEN_PORT überschreibt Default."""
-    from essen import config as config_mod
+    from tools import configloader
+    _schema = {"listen_host": "127.0.0.1", "listen_port": 5052, "log_level": "INFO"}
     monkeypatch.setenv("ESSEN_LISTEN_PORT", "9999")
-    env = {"ESSEN_LISTEN_PORT": "9999"}
-    rt = config_mod.resolve_runtime(env=env)
-    assert rt["listen_port"] == 9999
+    cfg = configloader.load(
+        component="essen", schema=_schema,
+        config_path=str(tmp_path / "existiert_nicht.json"))
+    assert cfg["listen_port"] == 9999
 
 
 # ============================================================
