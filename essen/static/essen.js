@@ -1,0 +1,138 @@
+/**
+ * Essens-Buddy — Client-Logik (ESSEN-3/8/9).
+ *
+ * Zwei Tap-Affordanzen (ESSEN-3):
+ *   (a) Kategorien-Tab tippen — wechselt das Item-Grid ohne Full-Reload.
+ *   (b) Item-Kachel tippen — POST Wunsch, aktualisiert sichtbar die Liste.
+ *
+ * Kein Hover, kein Wischen, kein Aufklappen (ESSEN-3).
+ * Tab-Wechsel und Wunsch-Ablage ohne Full-Reload (ESSEN-2/3, AC3).
+ */
+
+(function () {
+  "use strict";
+
+  // ── Tab-Wechsel (ESSEN-3a) ──────────────────────────────────────────────
+
+  /**
+   * Lädt das Item-Grid der gewählten Kategorie via GET ?tab=<slug> und
+   * tauscht nur den Grid-Bereich aus (kein Full-Reload, ESSEN-8).
+   */
+  async function wechsleTab(slug) {
+    // Aktiv-Markierung sofort visuell setzen (ESSEN-3: Tab-Wechsel wirkt ohne Reload).
+    document.querySelectorAll(".tab").forEach(function (btn) {
+      var aktiv = btn.dataset.tab === slug;
+      btn.classList.toggle("aktiv", aktiv);
+      btn.setAttribute("aria-pressed", aktiv ? "true" : "false");
+    });
+
+    try {
+      var resp = await fetch("/display/essen/wunsch?tab=" + encodeURIComponent(slug), {
+        headers: { "Accept": "text/html" }
+      });
+      if (!resp.ok) return;
+      var html = await resp.text();
+      // Aus der neuen Antwort nur den Grid-Bereich extrahieren.
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(html, "text/html");
+      var neuesGrid = doc.getElementById("item-grid");
+      if (neuesGrid) {
+        var altes = document.getElementById("item-grid");
+        if (altes) {
+          altes.innerHTML = neuesGrid.innerHTML;
+          // Neue Kacheln brauchen Event-Handler.
+          bindKacheln();
+        }
+      }
+    } catch (_) {
+      // Netz-Fehler still ignorieren — Kiosk bleibt funktional (ESSEN-3).
+    }
+  }
+
+  // ── Item-Tap: Wunsch ablegen (ESSEN-3b/ESSEN-16) ──────────────────────
+
+  /**
+   * POSTet einen neuen Wunsch und aktualisiert die Wunsch-Liste (ESSEN-8).
+   * quelle ist immer "kind" für Display-Taps (ESSEN-16).
+   */
+  async function legeWunschAb(itemId, label, bildRef, kategorie) {
+    try {
+      var resp = await fetch("/api/v1/essen/wuensche", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label: label,
+          bild_ref: bildRef,
+          quelle: "kind",
+          kategorie: kategorie
+        })
+      });
+      if (!resp.ok) return;  // Validierungsfehler still, Kiosk stabil (ESSEN-3).
+      await aktualisiereWunschListe();
+    } catch (_) {
+      // Netz-Fehler: Kiosk bleibt stabil.
+    }
+  }
+
+  // ── Wunsch-Liste aktualisieren (ESSEN-8) ─────────────────────────────
+
+  /**
+   * Holt die aktuelle Liste via GET /display/essen/wunsch und ersetzt nur
+   * den Liste-Bereich (kein Full-Reload, ESSEN-3/8).
+   */
+  async function aktualisiereWunschListe() {
+    var aktivTab = document.querySelector(".tab.aktiv");
+    var slug = aktivTab ? aktivTab.dataset.tab : "obst_gemuese";
+    try {
+      var resp = await fetch("/display/essen/wunsch?tab=" + encodeURIComponent(slug), {
+        headers: { "Accept": "text/html" }
+      });
+      if (!resp.ok) return;
+      var html = await resp.text();
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(html, "text/html");
+      var neueEintraege = doc.getElementById("liste-eintraege");
+      if (neueEintraege) {
+        var altes = document.getElementById("liste-eintraege");
+        if (altes) {
+          altes.innerHTML = neueEintraege.innerHTML;
+        }
+      }
+    } catch (_) {}
+  }
+
+  // ── Event-Handler binden ─────────────────────────────────────────────
+
+  function bindTabs() {
+    document.querySelectorAll(".tab").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        wechsleTab(btn.dataset.tab);
+      });
+    });
+  }
+
+  function bindKacheln() {
+    document.querySelectorAll(".item-kachel").forEach(function (btn) {
+      // Vorhandene Handler entfernen, um Doppel-Bindungen bei Grid-Refresh zu vermeiden.
+      btn.replaceWith(btn.cloneNode(true));
+    });
+    // Neu binden nach Clone.
+    document.querySelectorAll(".item-kachel").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        legeWunschAb(
+          btn.dataset.itemId,
+          btn.dataset.label,
+          btn.dataset.bildRef,
+          btn.dataset.kategorie
+        );
+      });
+    });
+  }
+
+  // ── Init ─────────────────────────────────────────────────────────────
+
+  document.addEventListener("DOMContentLoaded", function () {
+    bindTabs();
+    bindKacheln();
+  });
+})();
