@@ -16,65 +16,69 @@ import threading
 from private_chat_session import PrivateChatSession
 
 
-class _StubBulkTarget:
-    """Minimale Aufzeichnung eines Bulk-PUT-Versuchs — simuliert den Schreib-
-    Effekt, den eine Session bei ordentlichem Abschluss auslösen würde."""
+def test_SESS2_basis_klasse_hat_keine_persistenz_api():
+    """SESS-2: Die Basis-Klasse bietet KEINE Persistenz-API an.
 
-    def __init__(self):
-        self.calls = []
+    SESS-2 besagt: Zustand liegt ausschließlich im Prozess-Speicher. Kein
+    halber Zustand auf Disk — kein Wiederaufnahme-Pfad nach Neustart.
 
-    def put_termine_bulk(self, request_id, items):
-        self.calls.append((request_id, list(items)))
-        return {"ok": True, "geschrieben": len(items), "gesamt": len(items),
-                "results": []}
-
-
-def test_SESS2_prozess_neustart_kein_bulk_put():
-    """SESS-2: Prozess-Neustart während einer laufenden Session beendet sie
-    ohne Bulk-PUT.
-
-    Modell des Neustart-Pfads: eine neue Session-Instanz wird erzeugt (der
-    vorherige Zustand liegt nur im Prozess-Speicher — SESS-2 — und ist weg);
-    die neue Session hat keinen Worker-Thread und startet keinen Bulk-PUT.
-    Der Test belegt, dass die Basis-Klasse KEINEN automatischen Schreib-Effekt
-    beim Erstellen hat.
-
-    Vehikel: PrivateChatSession direkt (keine Subklasse nötig — die Klasse hat
-    keine abstrakten Methoden; TAB-Subklasse wäre äquivalent, aber hier reicht
-    die Basis).
+    Substanz: PrivateChatSession (und damit alle Subklassen) dürfen keine
+    Persistenz-Methoden haben. Würde eine spätere Änderung save/restore/load
+    oder einen State-Schreib-Pfad einführen, bricht dieser Test und erzwingt
+    eine bewusste Konventions-Anpassung.
     """
-    bulk = _StubBulkTarget()
-    # Neustart-Modell: frische Instanz, kein start()-Aufruf (kein Worker-Thread).
-    session = PrivateChatSession(chat_id=42, timeout_seconds=1)
+    # Kein save/restore/persist/load/write_state-Pfad erlaubt — Spec SESS-2.
+    assert not hasattr(PrivateChatSession, "save"), (
+        "SESS-2: Basis-Klasse darf keine save()-Methode haben — "
+        "Zustand liegt nur im Prozess-Speicher")
+    assert not hasattr(PrivateChatSession, "restore"), (
+        "SESS-2: Basis-Klasse darf keine restore()-Methode haben — "
+        "kein Wiederaufnahme-Pfad nach Neustart")
+    assert not hasattr(PrivateChatSession, "persist"), (
+        "SESS-2: Basis-Klasse darf keine persist()-Methode haben")
+    assert not hasattr(PrivateChatSession, "load"), (
+        "SESS-2: Basis-Klasse darf keine load()-Methode haben")
+    assert not hasattr(PrivateChatSession, "write_state"), (
+        "SESS-2: Basis-Klasse darf keine write_state()-Methode haben")
+    assert not hasattr(PrivateChatSession, "read_state"), (
+        "SESS-2: Basis-Klasse darf keine read_state()-Methode haben")
 
-    # Nach dem Neustart — frisch angelegte Session ist sofort „unfertig", aber
-    # KEIN Worker läuft, KEIN Bulk-PUT ist passiert.
-    assert not session.is_finished(), (
-        "Eine frisch angelegte Session ist noch nicht finished — "
-        "der Neustart hat sie nicht künstlich abgeschlossen")
-    assert bulk.calls == [], (
-        "Kein Bulk-PUT beim Anlegen der Session (Neustart-Pfad: "
-        "SESS-2 — kein halber persistenter Zustand)")
+
+def test_SESS2_instanz_schreibt_keine_disk_datei_bei_konstruktion(tmp_path, monkeypatch):
+    """SESS-2: Konstruktion einer Session erzeugt keine State-Datei auf Disk.
+
+    Disk-IO zur Konstruktionszeit wäre ein halber persistenter Zustand —
+    genau das verbietet SESS-2. Der Test überwacht das Arbeitsverzeichnis:
+    nach PrivateChatSession(chat_id=42) darf keine neue Datei entstanden sein.
+    """
+    monkeypatch.chdir(tmp_path)
+    before = set(tmp_path.iterdir())
+
+    PrivateChatSession(chat_id=42, timeout_seconds=1)
+
+    after = set(tmp_path.iterdir())
+    neue_dateien = after - before
+    assert neue_dateien == set(), (
+        "SESS-2: Konstruktion darf keine Dateien anlegen — "
+        "Zustand nur im Speicher. Neu entstandene Dateien: %s" % neue_dateien)
 
 
-def test_SESS2_kein_thread_nach_neustart():
-    """SESS-2 (ergänzend): nach dem Neustart gibt es keinen laufenden Worker-Thread.
+def test_basis_klasse_thread_initial_none():
+    """Basis-Klassen-Invariante: _thread ist None direkt nach Konstruktion.
 
-    Ein Thread würde vorherige Session-Zustands-Naht im Speicher halten; das
-    passt nicht zu SESS-2 (kein halber Zustand nach Restart).
+    Ohne start()-Aufruf läuft kein Worker-Thread. Das ist eine strukturelle
+    Invariante der Klasse (kein automatischer Hintergrund-Thread beim Anlegen).
     """
     session = PrivateChatSession(chat_id=99, timeout_seconds=1)
-    # Kein start()-Aufruf → _thread ist None.
     assert session._thread is None, (
-        "Nach Neustart (kein start()) darf kein Worker-Thread laufen")
+        "Nach Konstruktion (kein start()) darf kein Worker-Thread laufen")
 
 
-def test_SESS2_finished_erst_nach_worker_ende():
-    """SESS-2 / SESS-1: is_finished() wird erst True, nachdem der Worker-Thread
-    beendet ist — nicht vorher.
+def test_basis_klasse_finished_erst_nach_worker_ende():
+    """Basis-Klassen-Invariante (SESS-1): is_finished() wird erst True,
+    nachdem der Worker-Thread beendet ist — nicht vorher.
 
-    Das belegt, dass die Session NICHT beim bloßen Anlegen als „fertig" gilt
-    (was sonst ein Neustart-Seiteneffekt sein könnte).
+    Das belegt, dass die Session NICHT beim bloßen Anlegen als „fertig" gilt.
     """
     session = PrivateChatSession(chat_id=7, timeout_seconds=1)
 
