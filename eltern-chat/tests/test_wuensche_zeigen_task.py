@@ -1,19 +1,23 @@
-"""Tests für WuenscheZeigenTask — WZE-8, AC1/AC5 (Refs #503).
+"""Tests für WuenscheZeigenTask — WZE-8, EC-29, TASK-10 (Refs #503, #551).
 
-Pflicht-Tests (Spec WZE-8 + AC aus Contract T503-S1):
+Pflicht-Tests (Spec WZE-8 + EC-29 + TASK-10):
 - Katalog enthält 'wuensche_zeigen' genau dann, wenn essen_origin_url
   UND family_group_chat_id_getter gesetzt sind (Guard, AC5/WZE-8).
 - WuenscheZeigenTask ist ein ReadTask (EC-9).
 - Task-Name ist 'wuensche_zeigen'.
-- Task delegiert korrekt an wuensche_zeigen-Funktion.
+- Task delegiert korrekt an wuensche_zeigen-Funktion und gibt
+  Tool-Result-Text direkt zurück (EC-29 / TASK-10).
+- TASK-10-Baseline: run() sendet in keinem Pfad selbst (FakeTelegram.sent == []).
 """
 
 import contextlib
 import os
 import tempfile
 
+import pytest
 from fakes import FakeTelegram
 from skills.essen_client import EssenClientError
+from skills.wuensche_zeigen import BerechtigungError
 from skills.wuensche_zeigen_task import WuenscheZeigenTask
 from tasks import ReadTask, TurnContext, build_catalog
 
@@ -44,7 +48,6 @@ def _kein_mitglied(uid):
 
 def _make_task(essen_client=None, is_member_fn=None):
     return WuenscheZeigenTask(
-        tg=FakeTelegram(),
         essen_client=essen_client or FakeEssenClient(),
         is_member_fn=is_member_fn or _immer_mitglied,
     )
@@ -65,72 +68,155 @@ def test_WZE8_name():
 
 
 # ============================================================
-#  Task delegiert korrekt an Funktion
+#  Task delegiert korrekt an Funktion — EC-29: Text direkt als Tool-Result
 # ============================================================
 
-def test_WZE8_happy_path_quittung():
-    """WZE-8 Happy-Path: run() liefert BEANTWORTET-Quittung."""
+def test_WZE8_happy_path_gibt_text_zurueck():
+    """WZE-8 / EC-29: run() liefert kategorie-gruppierten Wunschlisten-Text."""
     ec = FakeEssenClient(wuensche=[
         {"label": "Apfel", "kategorie": "obst_gemuese"},
     ])
     task = _make_task(essen_client=ec)
     ctx = TurnContext(chat_id=42, from_user_id=7)
 
-    quittung = task.run({}, ctx)
+    result = task.run({}, ctx)
 
     assert ec.get_calls == 1
-    assert isinstance(quittung, str)
-    assert len(quittung) > 0
+    assert isinstance(result, str)
+    assert len(result) > 0
+    # WZE-5: Wunsch-Text erscheint direkt im Tool-Result
+    assert "Apfel" in result
 
 
-def test_WZE8_nicht_mitglied_quittung():
-    """WZE-2/WZE-8: run() mit Nicht-Mitglied liefert Ablehnung-Quittung."""
+def test_WZE8_nicht_mitglied_wirft_exception():
+    """WZE-2 / EC-29: run() mit Nicht-Mitglied → BerechtigungError
+    propagiert zum Agent-Loop (is_error-Pfad)."""
     ec = FakeEssenClient()
     task = _make_task(essen_client=ec, is_member_fn=_kein_mitglied)
     ctx = TurnContext(chat_id=42, from_user_id=99)
 
-    quittung = task.run({}, ctx)
+    with pytest.raises(BerechtigungError):
+        task.run({}, ctx)
 
     assert ec.get_calls == 0
-    assert "Mitglied" in quittung or "Familien" in quittung
 
 
-def test_WZE8_leere_liste_quittung():
-    """WZE-6/WZE-8: leere Wunschliste → Quittung nennt das."""
+def test_WZE8_leere_liste_gibt_text_zurueck():
+    """WZE-6 / EC-29: leere Wunschliste → Text-Meldung direkt als Tool-Result."""
     ec = FakeEssenClient(wuensche=[])
     task = _make_task(essen_client=ec)
     ctx = TurnContext(chat_id=42, from_user_id=7)
 
-    quittung = task.run({}, ctx)
+    result = task.run({}, ctx)
 
     assert ec.get_calls == 1
-    # Quittung sollte erkennbar leer sein
-    assert "leer" in quittung.lower() or "keine Wünsche" in quittung.lower()
+    assert isinstance(result, str)
+    assert len(result) > 0
+    # WZE-6: Leer-Meldung erkennbar
+    assert "keine" in result.lower() or "leer" in result.lower()
 
 
-def test_WZE8_nicht_erreichbar_quittung():
-    """WZE-7/WZE-8: Nicht-erreichbar → Quittung nennt das."""
+def test_WZE8_nicht_erreichbar_gibt_text_zurueck():
+    """WZE-7 / EC-29: Nicht-erreichbar → Text-Meldung direkt als Tool-Result."""
     ec = FakeEssenClient(error=EssenClientError("Connection refused"))
     task = _make_task(essen_client=ec)
     ctx = TurnContext(chat_id=42, from_user_id=7)
 
-    quittung = task.run({}, ctx)
+    result = task.run({}, ctx)
 
-    assert "erreichbar" in quittung.lower() or "versuchen" in quittung.lower()
+    assert isinstance(result, str)
+    assert len(result) > 0
+    assert "erreichbar" in result.lower() or "versuchen" in result.lower()
 
 
 def test_WZE8_zielchat_aus_turn_context():
-    """WZE-3/WZE-8: Zielchat kommt aus TurnContext, nicht aus arguments."""
+    """WZE-3/WZE-8: Zielchat kommt aus TurnContext, nicht aus arguments.
+
+    EC-29: FakeTelegram.sent bleibt leer — kein eigenes Senden.
+    """
     tg = FakeTelegram()
     ec = FakeEssenClient(wuensche=[{"label": "X", "kategorie": "sonstiges"}])
     task = WuenscheZeigenTask(
-        tg=tg, essen_client=ec, is_member_fn=_immer_mitglied)
+        essen_client=ec, is_member_fn=_immer_mitglied, tg=tg)
     ctx = TurnContext(chat_id=55555, from_user_id=7)
 
-    task.run({}, ctx)
+    result = task.run({}, ctx)
 
-    # FakeTelegram aus fakes.py speichert Nachrichten in .sent
-    assert tg.sent[0]["chat_id"] == 55555
+    # EC-29: kein Send
+    assert tg.sent == [], "WuenscheZeigenTask darf nicht selbst senden (EC-29)"
+    # Ergebnis ist der Wunschlisten-Text (enthält "X")
+    assert "X" in result
+
+
+# ============================================================
+#  TASK-10-Baseline: run() sendet in keinem Pfad selbst
+# ============================================================
+
+def test_TASK10_baseline_run_sendet_nichts():
+    """TASK-10 / EC-29 Baseline-Test: task.run() sendet in keinem der
+    vier Haupt-Pfade selbst an Telegram.
+
+    Happy + Leer + Transport-Fehler: returnter String ist nicht-leer UND
+    FakeTelegram.sent == [].
+
+    Berechtigungs-Pfad: BerechtigungError propagiert, FakeTelegram.sent == [].
+    """
+    # --- Happy-Path ---
+    tg_happy = FakeTelegram()
+    ec_happy = FakeEssenClient(wuensche=[
+        {"label": "Lasagne", "kategorie": "gericht"},
+        {"label": "Apfel", "kategorie": "obst_gemuese"},
+    ])
+    task_happy = WuenscheZeigenTask(
+        essen_client=ec_happy, is_member_fn=_immer_mitglied, tg=tg_happy)
+    ctx = TurnContext(chat_id=42, from_user_id=7)
+
+    result_happy = task_happy.run({}, ctx)
+
+    assert isinstance(result_happy, str), "Happy: Tool-Result muss ein String sein"
+    assert len(result_happy) > 0, "Happy: Tool-Result muss nicht-leer sein"
+    assert tg_happy.sent == [], \
+        "Happy: FakeTelegram.sent muss leer sein (EC-29)"
+
+    # --- Leer-Pfad ---
+    tg_leer = FakeTelegram()
+    ec_leer = FakeEssenClient(wuensche=[])
+    task_leer = WuenscheZeigenTask(
+        essen_client=ec_leer, is_member_fn=_immer_mitglied, tg=tg_leer)
+
+    result_leer = task_leer.run({}, ctx)
+
+    assert isinstance(result_leer, str), "Leer: Tool-Result muss ein String sein"
+    assert len(result_leer) > 0, "Leer: Tool-Result muss nicht-leer sein"
+    assert tg_leer.sent == [], \
+        "Leer: FakeTelegram.sent muss leer sein (EC-29)"
+
+    # --- Transport-Fehler-Pfad ---
+    tg_err = FakeTelegram()
+    ec_err = FakeEssenClient(error=EssenClientError("Timeout"))
+    task_err = WuenscheZeigenTask(
+        essen_client=ec_err, is_member_fn=_immer_mitglied, tg=tg_err)
+
+    result_err = task_err.run({}, ctx)
+
+    assert isinstance(result_err, str), "Fehler: Tool-Result muss ein String sein"
+    assert len(result_err) > 0, "Fehler: Tool-Result muss nicht-leer sein"
+    assert tg_err.sent == [], \
+        "Fehler: FakeTelegram.sent muss leer sein (EC-29)"
+
+    # --- Berechtigungs-Pfad ---
+    tg_auth = FakeTelegram()
+    ec_auth = FakeEssenClient()
+    task_auth = WuenscheZeigenTask(
+        essen_client=ec_auth, is_member_fn=_kein_mitglied, tg=tg_auth)
+
+    with pytest.raises(BerechtigungError):
+        task_auth.run({}, ctx)
+
+    assert ec_auth.get_calls == 0, \
+        "Berechtigungs-Fehler: kein API-Aufruf (WZE-2)"
+    assert tg_auth.sent == [], \
+        "Berechtigungs-Fehler: FakeTelegram.sent muss leer sein (EC-29)"
 
 
 # ============================================================
