@@ -92,7 +92,19 @@ Icon und — bei Aktivitäts-Slots — das zugehörige Kind. Die Beispiel-Konfig
 bildet die sieben Slots des Wireframe-Handoffs 1:1 ab: `bring`, `pick`, `act1`
 (Kind A), `act2` (Kind B), `cook`, `bed1` (Kind A), `bed2` (Kind B).
 
-*Tickets:* #40
+**Icon-Form (V1.2, #578):** Das `icon`-Feld eines Slots ist eine **ARASAAC-`id`**
+(Integer-String, identisch zur Form in PLAN-12). Der Plan-Buddy konsumiert das
+Bild über den geteilten Icon-Pfad `/display/_shared/icons/arasaac/<id>.png`
+(ICONS-5, analog ROUTINE-10) — **ein Icon-Pfad** (CLAUDE.md §6). Verworfen:
+interne Icon-Keys (`sun`/`clock`/`fork`/`moon`/`star`) — das wären zwei
+Icon-Quellen (Schedule-Rail vs. Aktivitäts-Katalog), Stilbruch innerhalb der
+View. Die V1.2-Defaults in `plan/plan.example.json`: bring → `37807`
+(verabschieden), pick → `39520` (wiedersehen), act1/act2 → `2752` (stern,
+generisches Aktivitäts-Label), cook → `2342` (kochen), bed1/bed2 → `2933`
+(mond). Diese Werte sind Werft-Befund 2026-06-09 (#578) und können je Familie
+über `plan.json` überschrieben werden (CONFIG-1).
+
+*Tickets:* #40, #578
 
 ### PLAN-7 — Erwachsenen-Slots: Zuweisung per Klick-Cycle
 Eine Zelle eines Erwachsenen-Slots zeigt entweder das Foto-im-Ring (FAM-4)
@@ -197,11 +209,23 @@ Termin-Leiste. Mehrtägige Events folgen PLAN-14 bzw. bleiben bei child-named
 mehrtägig im Kind-Slot.
 
 Die Keyword-Heuristik für Termin-Icons bezieht ihre Aktivitäts-Keywords aus
-`plan/aktivitaeten.py` (gemeinsame Quelle mit PLAN-12, #308). View-spezifische
-Einträge ohne Aktivitäts-Art (Zahnarzt `zahn`, Ferien `ferien`/`urlaub`,
-Treff `treff`, Garten `garten`) leben weiterhin lokal in `render.py`.
+dem Aktivitäts-Katalog (PLAN-12, gemeinsame Quelle mit `plan/aktivitaeten.py`,
+#308). Termin-spezifische Einträge ohne eigene Aktivitäts-Art (Zahnarzt,
+Ferien/Urlaub, Treff, Garten, Schule) **wandern in V1.2 in den Aktivitäts-
+Katalog** (`plan.json`-Sektion `aktivitaeten`) — als reguläre Einträge mit
+`art`/`label`/`keywords`/`piktogramm`. Die V1.2-Werft-Migration (#578) wählt
+ARASAAC-IDs: zahn → `11229`, ferien/urlaub → `3166`, treff → `6487`,
+garten → `2434`, schule → `3082`. **Verworfen:** zweite Quelle in
+`render.py` `_TERMIN_ICON_EXTRAS` — eine Quelle (CLAUDE.md §6: kein Fakt
+zweimal), Familie kann jeden Eintrag über den PAS-Skill (PAS-3) oder
+direkten `plan.json`-Edit anpassen.
 
-*Tickets:* #40, #308
+**Termin-Fallback (V1.2):** Trägt ein Termin kein passendes Keyword, rendert
+die Pille das generische Termin-Icon `kalender` (ARASAAC `3071`) statt des
+heutigen Wireframe-`icon_sparkle`. Auch das ist eine ARASAAC-`id`, nicht ein
+interner Key — eine Icon-Quelle, eine Form (PLAN-12 / PLAN-6).
+
+*Tickets:* #40, #308, #578
 
 ### PLAN-14 — Mehrtages-Termine als Spanne
 Ein Termin über mehrere Tage des Fensters wird **einmal** als durchgehender
@@ -278,14 +302,36 @@ Liste (Single-Person-Events sind eine Ein-Element-Liste). Bestehende
 plan.json-Daten ohne `personen`-Feld bleiben kompatibel — der Parser
 ergänzt die Liste leer oder aus PLAN-19-Auflösung.
 
-**Display (V1.1):** zwei Personen zeigt die Termin-Leiste / der
-Aktivitäts-Slot zwei Avatare nebeneinander im PLAN-13-Foto-im-Ring-Stil,
-geteilt auf den verfügbaren Slot. Ein Einzel-Person-Event bleibt
-unverändert ein Avatar. Ein „Familie"-Sammel-Icon bei N>1 ist
-**verworfen** (zu generisch — die Familie sieht nicht, wen es betrifft,
-der UX-Wert geht verloren).
+**Display (V1.2-Korrektur, #578):** Das Display zeigt Multi-Person-Events
+**je nach Stelle** unterschiedlich — die Personen-Identität wird so getragen,
+dass kein Slot zerfällt:
 
-*Tickets:* #40, #473
+- **Aktivitäts-Slot-Zeile (PLAN-12):** Ein Event mit zwei Personen-IDs
+  landet in **jeder** der zugeordneten Personen-Slot-Zeilen als regulärer
+  Aktivitäts-Chip — die Personen-Identität ist durch die Zeile gegeben,
+  nicht durch eine Avatar-Doppelung im Chip. Beide Zeilen zeigen denselben
+  Kalender-Event (gleiche Event-`id`), mit demselben Aktivitäts-Icon und
+  Label. Eine Änderung über den Klick (Picker, PLAN-11) wirkt auf den
+  einen Kalender-Event und ist beim nächsten Render in beiden Zeilen
+  sichtbar.
+- **Termin-Leiste (PLAN-13):** Eine Termin-Pille zeigt **zwei Avatare
+  nebeneinander** vor dem Termin-Label im Foto-im-Ring-Stil — ein Termin,
+  mehrere Personen, eine Pille. Die Termin-Leiste behält die Zwei-Avatar-
+  Form, weil die Pillen pro Tag-Spalte stehen (nicht pro Person), und die
+  Personen-Zuordnung dort sonst unsichtbar wäre.
+
+Ein Einzel-Person-Event bleibt unverändert: ein Avatar in der Termin-Pille
+bzw. ein Chip in der Personen-Zeile. Ein „Familie"-Sammel-Icon bei N>1 ist
+**verworfen** (zu generisch — die Familie sieht nicht, wen es betrifft).
+
+**Verworfen 2026-06-09 (#578, Werft-Korrektur):** die ursprüngliche V1.1-
+Form „zwei Avatare nebeneinander geteilt auf den Aktivitäts-Slot" — der
+Slot ist zu eng (chip-Form mit Icon + Label), zwei 24px-Avatare brechen die
+Pillenform; die Personen-Identität ist über die Zeile bereits gegeben (das
+ist der eigentliche Zweck der Aktivitäts-Slot-Zeilen pro Kind). Termin-
+Leiste behält die Doppel-Avatar-Form (s. o.).
+
+*Tickets:* #40, #473, #578
 
 ### PLAN-20 — Kalender nicht erreichbar oder ohne Credentials
 Fehlen die OAuth-Daten oder ist Google nicht erreichbar, wirft die App keinen
@@ -932,15 +978,39 @@ zu halten ist einfach. Aktivitäten und Termine *sind* Kalender-Einträge; sie
 dort zu halten heißt, dass eine Änderung im Google-Kalender und eine am Display
 dasselbe Ergebnis haben — keine zweite Wahrheit, kein Sync.
 
-### E-PLAN-5 — Layout 1:1 aus dem Wireframe-Handoff
-*Datum:* 2026-05-22
+### E-PLAN-5 — Layout-Struktur 1:1 aus dem Wireframe-Handoff; Icon-Quelle wechselt in V1.2 auf ARASAAC
+*Datum:* 2026-05-22 · Präzisierung 2026-06-09 (Werft #578)
 
-Das Layout beider Stufen wird unverändert aus dem Wireframe-Handoff „PlanBuddy
-Kids" übernommen — in XBuddy **nicht** neu gestaltet. Das Handoff-Paket liefert
-Template (`plan_kinder.html`) und Tokens (`tokens-kids.css`) als Artefakte. Was
-in XBuddy neu entsteht, ist die Anbindung an Registry, Zugangsdaten-Speicher,
-Kalender und URL-Konvention — nicht das Aussehen. Das Layout ist bereits gegen
-den Design-Handoff abgenommen; eine Neugestaltung wäre verworfene Arbeit.
+Die **Layout-Struktur** beider Stufen wird unverändert aus dem Wireframe-Handoff
+„PlanBuddy Kids" übernommen — in XBuddy **nicht** neu gestaltet. Das Handoff-Paket
+liefert Template (`plan_kinder.html`) und Tokens (`tokens-kids.css`) als Artefakte.
+Was in XBuddy neu entsteht, ist die Anbindung an Registry, Zugangsdaten-Speicher,
+Kalender und URL-Konvention — nicht die Layout-Aufteilung. Die Struktur ist
+bereits gegen den Design-Handoff abgenommen; eine Neugestaltung wäre verworfene
+Arbeit.
+
+**Präzisierung 2026-06-09 (Werft #578, Gate B):** „1:1" meint die **Layout-
+Struktur** (Schedule-Rail-Aufteilung, Day-Chips, Activity-Chip-Pille, Termin-
+Leiste, Toddler-Stempel-Geometrie, Font-Strang Caveat/Patrick Hand, Cream-
+Hintergrund, harte Tinten-Schatten). **Die Icon-Quelle** wechselt in V1.2 von
+handgezeichneten Wireframe-SVG-Macros auf **ARASAAC-Piktogramme** — sowohl im
+Aktivitäts-Katalog (PLAN-12) als auch in der Schedule-Rail (PLAN-6) als auch in
+der Termin-Leiste (PLAN-13, Fallback `kalender` 3071). Das ist **eine** Icon-
+Quelle, nicht zwei (CLAUDE.md §6: kein Fakt zweimal).
+
+Der **Stilbruch** zwischen Wireframe-Cards (monochrome Tinte, handgezeichnet)
+und bunten ARASAAC-Piktogrammen ist **akzeptiert**: Kinder erkennen bunte
+Piktogramme schneller, Aktivitäts-Identität wird durch Farbe getragen, Familie
+nutzt den PAS-Skill (`plan-aktivitaeten-setzen.md`) zum Erweitern. PLAN-27
+(Wireframe-Look) gilt nach V1.2 nur noch für das **Drumherum** (Cards,
+Pille-Rahmen, Day-Chips, Fonts, Schatten) — nicht mehr für die Icons selbst.
+
+**Verworfen 2026-06-09:** Wireframe-SVG-Macros für die Icons beizubehalten
+(Stil-Konsistenz mit dem Drumherum). Hätte zwei Folgen: (1) PAS-Skill wäre
+nutzlos für visuelles Hinzufügen — Familie müsste die Spec ändern, nicht
+nur den Katalog; (2) ICONS-7-Pfad wäre nicht der eine Pfad, sondern ein
+Spezial-Pfad nur für „Aktivitäten" — Stilbruch innerhalb der View
+(Aktivitäts-Chip vs. Schedule-Rail) wäre ohnehin da.
 
 ### E-PLAN-6 — Kalender-Anbindung gehört der App
 *Datum:* 2026-05-22
