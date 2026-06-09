@@ -261,8 +261,7 @@ ersetzt, analog `eltern-chat.md` EC-17, `kalender-verbinden.md` KAV-10,
 
 - **TER-1** — Aufruf mit minimalem Eingang (Chat-ID, User-ID,
   Anfrage-Text) returnt einen User-tauglichen Tool-Result-Text und
-  liefert „beantwortet"; ein Aufruf ohne Chat-ID bricht ohne Wirkung
-  ab.
+  liefert „beantwortet".
 - **TER-2** — ein Nicht-Familien-Mitglied löst einen Berechtigungs-Bruch
   aus (Funktion sendet nichts und liefert kein Result); das Ergebnis-
   Signal ist „abgelehnt".
