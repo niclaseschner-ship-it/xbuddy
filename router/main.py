@@ -833,6 +833,30 @@ def display(display_id):
     return render_display_client()
 
 
+def _send_display_asset(rel_path):
+    # ROU-33: analog _send_controller_asset — Defense-in-Depth-Path-Traversal-
+    # Schutz (werkzeug safe_join + realpath-Check gegen das Wurzelverzeichnis).
+    root = os.path.realpath(DISPLAY_CLIENT_DIR)
+    target = os.path.realpath(os.path.join(root, rel_path))
+    if target != root and not target.startswith(root + os.sep):
+        abort(404)
+    if not os.path.isfile(target):
+        abort(404)
+    ext = os.path.splitext(target)[1].lower()
+    mime = _CONTROLLER_MIME.get(ext, 'application/octet-stream')
+    return send_from_directory(root, rel_path, mimetype=mime)
+
+
+@app.route('/display/<display_id>/<path:asset>', methods=['GET'])
+def display_asset(display_id, asset):
+    # ROU-33: Auslieferung von Display-Client-Assets (manifest.json, Icons)
+    # unter /display/<display_id>/<asset>. Die <display_id> im Pfad-Präfix
+    # entspricht dem Pattern der Eltern-Route (ROU-20) — der Browser löst
+    # relative Pfade (./manifest.json, ./icon-*.png) relativ zur id-URL auf.
+    # Path-Traversal-Schutz via _send_display_asset (realpath-Check).
+    return _send_display_asset(asset)
+
+
 # ============================================================
 #  Controller-PWA-Auslieferung (ROU-23)
 # ============================================================
