@@ -48,18 +48,32 @@ Telegram-Task ist ein dünner Trigger (TASK-1). Skill-Modul:
 Berechtigt ist, wer Mitglied der Familien-Gruppe ist (EC-2), live geprüft über
 `is_member_fn`, identisch zum RZS-Muster. Kein Admin-Gate in V1 (OPEN-EC-B).
 
-## RPS-3 — Operationen: dauerhaft + temporär
-Setzbar sind drei dauerhafte und eine temporäre Operation:
+## RPS-3 — Operationen: dauerhaft + temporär + lesen
+Setzbar sind drei dauerhafte, eine temporäre und eine lesende Operation:
 - **dauerhaft — hinzufügen:** ein neuer `default`-Punkt (Label + Piktogramm,
   RPS-4) kommt in die `items`-Liste der Daten-Konfig (ROUTINE-12).
 - **dauerhaft — löschen:** ein `default`-Punkt wird aus der Liste entfernt.
 - **dauerhaft — Reihenfolge ändern:** die `default`-Liste wird in neuer
   Reihenfolge gesetzt (die Punkt-Reihenfolge ist die Anzeige-Reihenfolge).
+  Die Eltern-UX ist **Einzel-Verschieben** im Konversations-Stil
+  („Zähne putzen nach Position 1"), nicht eine Position-Liste „3,1,2" —
+  Einzel-Verschieben ist konversational, Position-Listen sind Programmierer-UX
+  (V1.2-Klausel, #469). Der Skill löst den Item-Namen über die zuvor
+  gelesene Liste (RPS-3 Lesen) intern auf seine `id` auf; Eltern sehen nie
+  IDs.
 - **temporär — einmalig:** ein `einmalig`-Punkt **nur für heute** (z. B.
   „Turnbeutel mit"); er rendert wie ein `default`-Punkt (kein Sonder-HTML,
   ROUTINE-19/8-Slots) und **verfällt am Tagesende automatisch** (ROUTINE-6).
+- **lesen — aktuelle Liste** (V1.2, #469): der Skill liest die aktuelle
+  `default`-Liste **und** die `einmalig_heute`-Liste über
+  `GET /api/v1/routine/items` (ROUTINE-14) und antwortet im Chat in
+  nummerierter Form, getrennt nach `default` und `einmalig heute`. Beispiel:
+  „**Dauerhaft:** 1. Anziehen 👕 · 2. Frühstücken 🍞 · 3. Zähne putzen 🪥
+   · **Heute zusätzlich:** 1. Turnbeutel 🎒." Lesen folgt NICHT dem
+  propose→confirm-Muster (E-RPS-1 betrifft nur Schreiben) — es ist eine
+  reine Lese-Antwort, trigger-agnostisch wie EC-9.
 
-**Umbenennen ist nicht Teil von V1.1** (Out-of-Scope oben). Die fachliche
+**Umbenennen ist nicht Teil von V1.1/V1.2** (Out-of-Scope oben). Die fachliche
 Validierung (Label nicht leer, gültige Piktogramm-ID, max. 8 Punkte ROUTINE-19)
 liegt im Buddy (ROUTINE-14), nicht im Skill (BUD-2).
 
