@@ -23,6 +23,18 @@ logger = logging.getLogger(__name__)
 # CLIENT-2: HTTP-Timeout in Sekunden für Loopback-Aufrufe.
 HTTP_TIMEOUT_SECONDS = 2.0
 
+
+def _pfad_to_view(pfad):
+    """Leitet den View-Slug aus einem Display-Pfad ab (`/display/app/view`).
+
+    Hilfsfunktion für `get_kandidaten()`: Der Aggregator schreibt kein
+    `slug`-Feld in SREG-4-Einträge — der Eintrag enthält nur `pfad`.
+    Das letzte Pfad-Segment ist daher der Normalweg zum View-Slug.
+    Leerer Pfad → leerer String.
+    """
+    segments = (pfad or "").rstrip("/").split("/")
+    return segments[-1] if segments else ""
+
 # SREG-3 / CLIENT-4: stabiler Pfad des Inventar-Endpunkts.
 PFAD_SEITEN = "/api/v1/seiten"
 
@@ -94,6 +106,57 @@ class SeitenClient:
             return data
         raise SeitenClientError(
             "Seiten-Registry: Antwort hat unerwartete Form (%r)" % data)
+
+    def get_kandidaten(self):
+        """PAA-3.3: liefert die wählbaren App-Kandidaten aus der Seiten-Registry.
+
+        Filtert das Inventar auf **Display-Views / Sorte a** (SREG-4:
+        `typ == "display"`) und flacht Varianten (`varianten[]`) als eigene
+        Kandidaten auf (AC2: Varianten-`icons[]` + `query` werden mitgenommen).
+
+        Liefert eine Liste von Dicts mit den Feldern:
+          - `app`   — App-Slug (z. B. `plan`, `wetter`)
+          - `view`  — View-Slug (z. B. `woche`, `heute`)
+          - `label` — Anzeige-Label aus dem Manifest
+          - `name`  — Anzeigename für die nummerierte Auswahl-Liste
+          - `icons` — Liste von Icon-Pfaden (SREG-10, mindestens eines)
+          - `query` — optionales flaches Query-Dict (nur wenn vorhanden)
+
+        Reihenfolge: Inventar-Reihenfolge (Discovery-Reihenfolge des Aggregators,
+        SREG-2/`aggregator.discover_manifests` — sortiert nach Pfad),
+        Varianten folgen unmittelbar auf ihren Eltern-Eintrag — deterministisch
+        und stabil (keine weitere Sortierung).
+
+        Wirft `SeitenClientError` bei Registry-Fehler (AC4 — ehrliche Meldung).
+        """
+        eintraege = self.inventar()
+        kandidaten = []
+        for eintrag in eintraege:
+            if not isinstance(eintrag, dict):
+                continue
+            if eintrag.get("typ") != "display":
+                continue
+            app = eintrag.get("app") or ""
+            view = _pfad_to_view(eintrag.get("pfad") or "")
+            label = eintrag.get("label") or app
+            icons = list(eintrag.get("icons") or [])
+            # Basis-Eintrag (Sorte a, kein query).
+            k = {"app": app, "view": view, "label": label,
+                 "name": label, "icons": icons}
+            kandidaten.append(k)
+            # Varianten als eigene Kandidaten (AC2 — Varianten-icons[] + query).
+            for v in eintrag.get("varianten") or []:
+                if not isinstance(v, dict):
+                    continue
+                v_label = v.get("label") or label
+                v_icons = list(v.get("icons") or icons)
+                v_query = v.get("query")
+                vk = {"app": app, "view": view, "label": v_label,
+                      "name": v_label, "icons": v_icons}
+                if v_query:
+                    vk["query"] = dict(v_query)
+                kandidaten.append(vk)
+        return kandidaten
 
     # -- HTTP-Innerei -----------------------------------------------------
 
