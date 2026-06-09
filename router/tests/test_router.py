@@ -563,6 +563,57 @@ def test_ROU_26_icon_root_cli_overrides_env(monkeypatch, tmp_path):
 
 
 # ============================================================
+#  ROU-33 — Display-Client-Asset-Auslieferung (/display/<id>/<asset>)
+# ============================================================
+#
+# Entry-Path-Probe: die ECHTEN Pfade /display/<id>/manifest.json und
+# /display/<id>/icon-*.png über den Flask-Testclient gegen das echte
+# display-client/-Verzeichnis im Repo (analog ROU-23 /controller/<app>/).
+
+def test_ROU_33_manifest_json_served_with_manifest_content_type(client_with_routing):
+    """ROU-33 / DC-11: /display/<id>/manifest.json → 200, application/manifest+json,
+    JSON parsbar, icons[] ≥ 3 Einträge, ≥ 1 mit purpose:maskable."""
+    r = client_with_routing.get('/display/test-display/manifest.json')
+    assert r.status_code == 200
+    assert r.mimetype == 'application/manifest+json'
+    data = json.loads(r.data)
+    icons = data.get('icons', [])
+    assert len(icons) >= 3, f'icons[] enthält nur {len(icons)} Einträge'
+    maskable = [i for i in icons if 'maskable' in i.get('purpose', '')]
+    assert len(maskable) >= 1, 'kein Icon mit purpose:maskable'
+
+
+@pytest.mark.parametrize('icon', [
+    'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'])
+def test_ROU_33_icons_served_with_png_content_type(client_with_routing, icon):
+    """ROU-33 / DC-11: /display/<id>/icon-*.png → 200, image/png."""
+    r = client_with_routing.get('/display/test-display/' + icon)
+    assert r.status_code == 200
+    assert r.mimetype == 'image/png'
+
+
+def test_ROU_33_path_traversal_returns_404(client_with_routing):
+    """ROU-33: Ausbruch aus display-client/ → 404 (Defense in Depth)."""
+    r = client_with_routing.get('/display/test-display/..%2F..%2Frouter%2Fmain.py')
+    assert r.status_code == 404
+    r2 = client_with_routing.get('/display/test-display/../../router/main.py')
+    assert r2.status_code != 200
+
+
+def test_ROU_33_nonexistent_asset_returns_404(client_with_routing):
+    r = client_with_routing.get('/display/test-display/does-not-exist.txt')
+    assert r.status_code == 404
+
+
+def test_ROU_33_parent_route_still_works(client_with_routing):
+    """ROU-33 darf die Eltern-Route /display/<id> (ROU-20) nicht brechen —
+    Flask-Route-Kollision-Regression."""
+    r = client_with_routing.get('/display/test-display')
+    assert r.status_code == 200
+    assert b'<!DOCTYPE html>' in r.data or b'<!doctype html>' in r.data
+
+
+# ============================================================
 #  ROU-30 — Geteilter Design-Token-Strang (display/_shared/design/)
 # ============================================================
 #
