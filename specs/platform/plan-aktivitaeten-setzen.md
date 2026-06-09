@@ -136,15 +136,29 @@ ist; die transparente Form ist die belegte Familien-UX.
 **Form der Seed-Liste** (im Skill-Modul, nicht in `plan.json`):
 
 ```python
+# (art, label, keywords[], icon_suchworte[])
+# icon_suchworte: Reihenfolge der Stichworte, die der Skill an ICONS-7
+# (PAS-4) schickt — er probiert Wort für Wort, bis ein Kandidat zurückkommt.
+# Bei `capueira` finden weder „capueira" noch „capoeira" einen ARASAAC-
+# Treffer (Werft-Befund 2026-06-09 #578); „tanz" liefert 2652 als passendes
+# Bewegungs-Piktogramm.
 SEED = [
-    ("capueira", "Capueira",        ["capueira", "capoeira"]),
-    ("klettern", "Klettern",        ["klettern", "kletter"]),
-    ("fahrrad",  "Fahrradfahren",   ["fahrrad", "rad"]),
-    ("freunde",  "Freunde treffen", ["freunde", "spielen mit"]),
-    ("schwimmen","Schwimmen",       ["schwimm"]),
-    ("ausflug",  "Ausflug",         ["ausflug"]),
+    ("capueira", "Capueira",        ["capueira", "capoeira"], ["capueira", "capoeira", "tanz", "tanzen"]),
+    ("klettern", "Klettern",        ["klettern", "kletter"],  ["klettern"]),
+    ("fahrrad",  "Fahrradfahren",   ["fahrrad", "rad"],       ["fahrrad", "rad"]),
+    ("freunde",  "Freunde treffen", ["freunde", "spielen mit"], ["freunde", "treffen"]),
+    ("schwimmen","Schwimmen",       ["schwimm"],              ["schwimmen"]),
+    ("ausflug",  "Ausflug",         ["ausflug"],              ["ausflug"]),
 ]
 ```
+
+**Synonym-Spalte (V1.2, Werft #578):** Die vierte Spalte `icon_suchworte`
+ist die **Reihenfolge der Stichworte für ICONS-7** — fällt der Familien-
+Begriff (z. B. „capueira") durch ICONS-7 ohne Treffer, probiert der Skill
+mit dem nächsten Wort. Erst wenn **alle** Worte erschöpft sind, meldet er
+„kein Piktogramm gefunden — anderes Wort?" (PAS-4). So findet Capueira via
+„tanz" das Piktogramm 2652, ohne die Familien-Nominierung „Capueira" zu
+verlieren.
 
 `piktogramm` ist **nicht** Teil der Seed-Liste — die ARASAAC-Wahl läuft
 immer durch ICONS-7 (PAS-4) gegen das Label. Damit ist die Seed-Liste
