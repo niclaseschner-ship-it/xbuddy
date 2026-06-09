@@ -1,0 +1,8 @@
+# FAM-6 — Per-Instanz-Dateien des Familien-Buddys, je Instanz separat
+# gepflegt, niemals im Repo. Formate sind in den committeten *.example.json
+# dokumentiert.
+#
+# Familien-Registry (FAM-6) — je Instanz separat. Format: familie/familie.example.json
+familie.json
+# Profilfotos — Per-Instanz-Mediendaten.
+fotos/

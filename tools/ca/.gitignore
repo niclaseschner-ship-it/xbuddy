@@ -1,0 +1,8 @@
+# CA-Werkzeug — erzeugte CA-Artefakte (#36), je Instanz separat,
+# niemals im Repo. Nur das Skript tools/ca/make-ca.sh ist versioniert.
+#
+# Default-Ausgabe-Verzeichnis (tools/ca/out/) — Per-Komponente-Ausschluss.
+# Die **/rootCA-*.pem- und **/server-*.pem-Globs bleiben zusätzlich im
+# Top-Level .gitignore als Defense-in-Depth für CA-Artefakte, die per
+# --out in einen anderen Repo-Pfad geschrieben werden.
+out/

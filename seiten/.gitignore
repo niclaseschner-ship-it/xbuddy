@@ -1,0 +1,8 @@
+# SREG-3 — Per-Instanz-Dateien des Seiten-Buddys, je Instanz separat
+# gepflegt, niemals im Repo. Formate sind in den committeten *.example.json
+# dokumentiert.
+#
+# Seiten-Registry-Snapshot (SREG-3) — abgeleiteter Snapshot, kein Stammdatum,
+# trägt 0600-Rechte. Live liegt es außerhalb des Checkouts (SVC-5); diese
+# Regel fängt nur einen Dev-Lauf mit Default-Pfad im Checkout ab.
+inventar.json
