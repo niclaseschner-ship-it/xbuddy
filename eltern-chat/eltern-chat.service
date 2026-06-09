@@ -15,7 +15,7 @@ Wants=network-online.target
 [Service]
 User=__XBUDDY_USER__
 WorkingDirectory=__XBUDDY_REPO__/eltern-chat
-EnvironmentFile=__XBUDDY_REPO__/eltern-chat/.env
+EnvironmentFile=__XBUDDY_DATA__/eltern-chat/.env
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=__XBUDDY_HOME__
 ExecStart=__XBUDDY_PYTHON__ main.py
