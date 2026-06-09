@@ -32,7 +32,8 @@ Ergebnis-Signal:
   „default_gesendet"    — Default-Link + Sub-Frage gepostet (SREG-5).
   „inventar_geliefert"  — Inventar als Tool-Result zurückgegeben, kein Bot-Post.
   „direkt_gesendet"     — Direkt-URL einer View gepostet (SREG-5b).
-  „mehrdeutig"          — EC-22-Rückfrage gepostet (SREG-5b).
+  „mehrdeutig"          — EC-22-Rückfrage gepostet + Tupel (signal, kandidaten_text)
+                          mit strukturierter Kandidaten-Liste zurückgegeben (SREG-5b).
   „abgelehnt"           — Aufrufer kein Familienmitglied (SREG-6/EC-2).
   „nicht_erreichbar"    — Registry nicht erreichbar (SREG-5b-Opt-in-Pfad).
 """
@@ -153,6 +154,36 @@ def formatiere_inventar_tool_result(eintraege):
     return "\n".join(zeilen)
 
 
+def formatiere_mehrdeutigkeit_tool_result(treffer):
+    """Strukturiertes Tool-Result für das LLM bei EC-22-Mehrdeutigkeit (#549).
+
+    Listet alle Kandidaten mit label, key und pfad auf — so kann das LLM
+    nach der Disambiguation-Antwort des Elternteils den passenden Kandidaten
+    per exaktem label identifizieren und die Task mit aktion="match" aufrufen.
+
+    Format pro Kandidat: `N. label: "..."; key: ...; pfad: ...`
+    Plus Auflösungs-Anweisung: LLM soll beim nächsten User-Turn mit
+    aktion="match" + dem exakten label aufrufen, NICHT ohne suchbegriff
+    (das würde den Default-Fallback auslösen statt des gewünschten Views).
+    """
+    zeilen = [
+        "Ich habe eine Rückfrage gestellt — der Eltern muss zwischen diesen "
+        "Views wählen:",
+    ]
+    for i, e in enumerate(treffer, 1):
+        label = str(e.get("label") or e.get("pfad") or "?")
+        key   = str(e.get("key")   or "")
+        pfad  = str(e.get("pfad")  or "")
+        zeilen.append('%d. label: "%s"; key: %s; pfad: %s' % (i, label, key, pfad))
+    zeilen.append("")
+    zeilen.append(
+        "Wenn der Eltern in der nächsten Antwort wählt (z.B. \"Die Ansicht\", "
+        "\"Die zweite\", \"den Editor\"), rufe diese Task erneut auf mit "
+        "aktion=match + dem exakten label aus dieser Liste — "
+        "NICHT ohne suchbegriff (das löst Default-Fallback aus).")
+    return "\n".join(zeilen)
+
+
 def matche_view(eintraege, suchbegriff):
     """Pro-View-Matching für den Opt-in-Pfad (SREG-5b).
 
@@ -232,7 +263,11 @@ def seiten_uebersicht(tg, chat_id, from_user_id, suchbegriff,
     Ergebnis-Signal (s. Modul-Docstring).
     Bei SIGNAL_INVENTAR_GELIEFERT: Tupel (signal, inventar_text) — der
     inventar_text ist als Tool-Result an den Agent-Loop zurückzugeben,
-    KEIN Bot-Post. In allen anderen Fällen: signal (str).
+    KEIN Bot-Post.
+    Bei SIGNAL_MEHRDEUTIG: Tupel (signal, kandidaten_text) — der
+    kandidaten_text enthält die strukturierte Kandidaten-Liste mit
+    Auflösungs-Anweisung ans LLM (analog SIGNAL_INVENTAR_GELIEFERT).
+    In allen anderen Fällen: signal (str).
     """
     if chat_id is None:
         logger.warning("seiten_uebersicht: chat_id fehlt — Abbruch ohne Wirkung")
@@ -298,11 +333,14 @@ def seiten_uebersicht(tg, chat_id, from_user_id, suchbegriff,
 
     if mehrdeutig:
         # Mehrere Treffer → EC-22-Rückfrage (SREG-5b/EC-22).
+        # Bot-Post: kurze Rückfrage mit sichtbaren Labels für den Nutzer.
+        # Tool-Result: strukturierte Kandidaten-Liste für das LLM (#549).
         rueckfrage = formatiere_ec22_rueckfrage(treffer)
         tg.send_message(chat_id, rueckfrage)
         logger.info("seiten_uebersicht: EC-22-Rückfrage (%d Treffer, q=%r) an Chat %s",
                     len(treffer), q, chat_id)
-        return SIGNAL_MEHRDEUTIG
+        kandidaten_text = formatiere_mehrdeutigkeit_tool_result(treffer)
+        return (SIGNAL_MEHRDEUTIG, kandidaten_text)
 
     # Eindeutiger Treffer → direkte URL (SREG-5b).
     eintrag = treffer[0]

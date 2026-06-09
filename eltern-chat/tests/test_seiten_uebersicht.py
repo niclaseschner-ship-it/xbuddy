@@ -33,6 +33,7 @@ from skills.seiten_uebersicht import (
     formatiere_default_antwort,
     formatiere_ec22_rueckfrage,
     formatiere_inventar_tool_result,
+    formatiere_mehrdeutigkeit_tool_result,
     matche_view,
     seiten_uebersicht,
 )
@@ -380,10 +381,10 @@ class TestSeitenUebersicht:
         assert "https://hub.local" in antwort
 
     def test_mehrdeutigkeit_ec22(self):
-        """AC3: Mehrdeutigkeit → EC-22-Rückfrage, SIGNAL_MEHRDEUTIG."""
+        """AC3: Mehrdeutigkeit → EC-22-Rückfrage, SIGNAL_MEHRDEUTIG als Tupel (#549)."""
         tg = FakeTelegram()
         client = FakeSeitenClient(_inventar_mehrdeutig())
-        signal = seiten_uebersicht(
+        ergebnis = seiten_uebersicht(
             tg=tg,
             chat_id=100,
             from_user_id=42,
@@ -392,11 +393,16 @@ class TestSeitenUebersicht:
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
         )
+        assert isinstance(ergebnis, tuple)
+        signal, kandidaten_text = ergebnis
         assert signal == SIGNAL_MEHRDEUTIG
         assert tg.sent
         # EC-22-Rückfrage muss erkennbar eine Frage sein
         antwort = tg.sent[0]["text"]
         assert "?" in antwort or "Meintest" in antwort
+        # kandidaten_text muss die strukturierte Liste enthalten
+        assert isinstance(kandidaten_text, str)
+        assert len(kandidaten_text) > 0
 
     def test_mehrdeutigkeit_kein_direkt_link(self):
         """AC3: Bei Mehrdeutigkeit wird KEIN Direkt-Link geschickt."""
@@ -787,7 +793,9 @@ class TestSreg5bBugBeispiele:
             "Eltern Panel", "Eltern Panel panel-1 bearbeiten")
         assert "Eltern Panel panel-1 bearbeiten" in inventar_text
         # Runde 2: Direkt-URL oder EC-22 — beides ist korrekt (KEIN generischer Fallback).
-        assert ergebnis in (SIGNAL_DIREKT_GESENDET, SIGNAL_MEHRDEUTIG), (
+        # (#549: SIGNAL_MEHRDEUTIG wird als Tupel zurückgegeben)
+        signal = ergebnis[0] if isinstance(ergebnis, tuple) else ergebnis
+        assert signal in (SIGNAL_DIREKT_GESENDET, SIGNAL_MEHRDEUTIG), (
             "Erwartet Direkt-URL oder EC-22-Rückfrage, nicht generischer Fallback")
         assert tg.sent
 
@@ -796,11 +804,13 @@ class TestSreg5bBugBeispiele:
         # Das LLM würde aus dem Inventar "Wetter heute" wählen.
         tg, ergebnis, inventar_text = self._zweistufig("Wetter", "Wetter heute")
         assert "Wetter heute" in inventar_text
-        assert ergebnis in (SIGNAL_DIREKT_GESENDET, SIGNAL_MEHRDEUTIG), (
+        # (#549: SIGNAL_MEHRDEUTIG wird als Tupel zurückgegeben)
+        signal = ergebnis[0] if isinstance(ergebnis, tuple) else ergebnis
+        assert signal in (SIGNAL_DIREKT_GESENDET, SIGNAL_MEHRDEUTIG), (
             "Erwartet Direkt-URL oder EC-22-Rückfrage, nicht generischer Fallback")
         assert tg.sent
         # Bei eindeutigem Match muss die URL zum Wetter-View führen.
-        if ergebnis == SIGNAL_DIREKT_GESENDET:
+        if signal == SIGNAL_DIREKT_GESENDET:
             assert "https://hub.local/display/wetter/heute" in tg.sent[0]["text"]
 
     def test_bug_beispiel_plan(self):
@@ -808,10 +818,12 @@ class TestSreg5bBugBeispiele:
         # Das LLM würde aus dem Inventar "Wochenplan" wählen.
         tg, ergebnis, inventar_text = self._zweistufig("Plan", "Wochenplan")
         assert "Wochenplan" in inventar_text
-        assert ergebnis in (SIGNAL_DIREKT_GESENDET, SIGNAL_MEHRDEUTIG), (
+        # (#549: SIGNAL_MEHRDEUTIG wird als Tupel zurückgegeben)
+        signal = ergebnis[0] if isinstance(ergebnis, tuple) else ergebnis
+        assert signal in (SIGNAL_DIREKT_GESENDET, SIGNAL_MEHRDEUTIG), (
             "Erwartet Direkt-URL oder EC-22-Rückfrage, nicht generischer Fallback")
         assert tg.sent
-        if ergebnis == SIGNAL_DIREKT_GESENDET:
+        if signal == SIGNAL_DIREKT_GESENDET:
             assert "https://hub.local/display/plan/woche" in tg.sent[0]["text"]
 
 
@@ -850,6 +862,221 @@ class TestFormatierInventarToolResult:
         inv = _inventar_bug_beispiele()
         result = formatiere_inventar_tool_result(inv)
         assert str(len(inv)) in result
+
+
+# ============================================================
+#  Tests: formatiere_mehrdeutigkeit_tool_result (#549)
+# ============================================================
+
+class TestFormatierMehrdeutigkeitToolResult:
+    """Unit-Tests für formatiere_mehrdeutigkeit_tool_result() (#549).
+
+    T549-Test1: Struktur-Test — kandidaten_text enthält label, key, pfad
+    aller Kandidaten + Auflösungs-Anweisung.
+    """
+
+    def _treffer_paula(self):
+        return [
+            {"label": "Panel paulas-panel-01",
+             "key": "panel-paulas-panel-01",
+             "pfad": "/controller/app-panel/paulas-panel-01"},
+            {"label": "Panel paulas-panel-01 bearbeiten",
+             "key": "paulas-panel-01-bearbeiten",
+             "pfad": "/controller/app-panel/paulas-panel-01/bearbeiten"},
+        ]
+
+    def test_enthaelt_labels_aller_kandidaten(self):
+        """T549-Test1a: Jedes label der Treffer ist im kandidaten_text enthalten."""
+        result = formatiere_mehrdeutigkeit_tool_result(self._treffer_paula())
+        assert 'label: "Panel paulas-panel-01"' in result
+        assert 'label: "Panel paulas-panel-01 bearbeiten"' in result
+
+    def test_enthaelt_keys_aller_kandidaten(self):
+        """T549-Test1b: Jedes key der Treffer ist im kandidaten_text enthalten."""
+        result = formatiere_mehrdeutigkeit_tool_result(self._treffer_paula())
+        assert "panel-paulas-panel-01" in result
+        assert "paulas-panel-01-bearbeiten" in result
+
+    def test_enthaelt_pfade_aller_kandidaten(self):
+        """T549-Test1c: Jeder pfad der Treffer ist im kandidaten_text enthalten."""
+        result = formatiere_mehrdeutigkeit_tool_result(self._treffer_paula())
+        assert "/controller/app-panel/paulas-panel-01" in result
+        assert "/controller/app-panel/paulas-panel-01/bearbeiten" in result
+
+    def test_enthaelt_aufloesung_anweisung(self):
+        """T549-Test1d: kandidaten_text enthält Auflösungs-Anweisung ans LLM."""
+        result = formatiere_mehrdeutigkeit_tool_result(self._treffer_paula())
+        assert "aktion=match" in result
+        assert "Default-Fallback" in result or "Default" in result
+
+    def test_enthaelt_nummerierung(self):
+        """T549-Test1e: Kandidaten sind nummeriert (1., 2., ...)."""
+        result = formatiere_mehrdeutigkeit_tool_result(self._treffer_paula())
+        assert "1." in result
+        assert "2." in result
+
+    def test_eintrag_ohne_key_kein_crash(self):
+        """Defensiv: Eintrag ohne key/pfad → kein crash."""
+        treffer = [{"label": "Nur Label"}]
+        result = formatiere_mehrdeutigkeit_tool_result(treffer)
+        assert "Nur Label" in result
+
+
+# ============================================================
+#  Tests: SIGNAL_MEHRDEUTIG Tupel-Pfad + Roundtrip (#549)
+# ============================================================
+
+class TestMehrdeutigkeitTupelUndRoundtrip:
+    """T549-Test2: SIGNAL_MEHRDEUTIG gibt Tupel zurück; Roundtrip via Task-Tool-Result.
+
+    Simuliert den Paula-Panel-Live-Bug:
+      Runde match → 2 Treffer → Tupel (SIGNAL_MEHRDEUTIG, kandidaten_text)
+      → User sagt „Die Ansicht" → LLM ruft mit aktion=match + exaktem label
+      → SIGNAL_DIREKT_GESENDET (kein Default-Fallback).
+    """
+
+    def _inventar_paula(self):
+        return [
+            {"label": "Panel paulas-panel-01",
+             "key": "panel-paulas-panel-01",
+             "pfad": "/controller/app-panel/paulas-panel-01",
+             "typ": "panel",
+             "zeigt": "Panel-Steuerung paulas-panel-01",
+             "synonyme": []},
+            {"label": "Panel paulas-panel-01 bearbeiten",
+             "key": "paulas-panel-01-bearbeiten",
+             "pfad": "/controller/app-panel/paulas-panel-01/bearbeiten",
+             "typ": "eltern",
+             "zeigt": "Panel paulas-panel-01 Editor",
+             "synonyme": []},
+        ]
+
+    def test_signal_mehrdeutig_ist_tupel(self):
+        """T549-Test2a: Bei Mehrdeutigkeit gibt seiten_uebersicht() ein Tupel zurück."""
+        tg = FakeTelegram()
+        client = FakeSeitenClient(self._inventar_paula())
+        ergebnis = seiten_uebersicht(
+            tg=tg,
+            chat_id=100, from_user_id=42,
+            suchbegriff="paulas-panel-01",
+            seiten_client=client,
+            is_member_fn=_immer_mitglied,
+            display_url_origin_heim="https://hub.local",
+            aktion=AKTION_MATCH,
+        )
+        assert isinstance(ergebnis, tuple), (
+            "SIGNAL_MEHRDEUTIG muss als Tupel zurückgegeben werden (#549)")
+        signal, kandidaten_text = ergebnis
+        assert signal == SIGNAL_MEHRDEUTIG
+        assert isinstance(kandidaten_text, str)
+        assert len(kandidaten_text) > 0
+
+    def test_signal_mehrdeutig_kandidaten_text_enthaelt_beide_labels(self):
+        """T549-Test2b: kandidaten_text enthält beide Panel-Labels."""
+        tg = FakeTelegram()
+        client = FakeSeitenClient(self._inventar_paula())
+        ergebnis = seiten_uebersicht(
+            tg=tg,
+            chat_id=100, from_user_id=42,
+            suchbegriff="paulas-panel-01",
+            seiten_client=client,
+            is_member_fn=_immer_mitglied,
+            display_url_origin_heim="https://hub.local",
+            aktion=AKTION_MATCH,
+        )
+        _, kandidaten_text = ergebnis
+        assert 'label: "Panel paulas-panel-01"' in kandidaten_text
+        assert 'label: "Panel paulas-panel-01 bearbeiten"' in kandidaten_text
+
+    def test_task_mehrdeutig_gibt_kandidaten_text_als_tool_result(self):
+        """T549-Test2c: SeitenUebersichtTask gibt kandidaten_text als Tool-Result zurück."""
+        tg = FakeTelegram()
+        client = FakeSeitenClient(self._inventar_paula())
+        task = SeitenUebersichtTask(
+            tg=tg, seiten_client=client,
+            is_member_fn=_immer_mitglied,
+            display_url_origin_heim="https://hub.local",
+        )
+        ctx = _make_turn_context()
+        result = task.run(
+            {"suchbegriff": "paulas-panel-01", "aktion": "match"}, ctx)
+        # Task muss kandidaten_text zurückgeben (nicht statische Quittung).
+        assert isinstance(result, str)
+        assert 'label: "Panel paulas-panel-01"' in result
+        assert "aktion=match" in result
+
+    def test_roundtrip_disambiguation_ansicht(self):
+        """T549-Test2d: Roundtrip — Mehrdeutigkeits-Tool-Result → match mit exaktem label.
+
+        Simuliert den Paula-Panel-Live-Bug:
+          Runde match (q='paulas-panel-01') → mehrdeutig → kandidaten_text
+          kandidaten_text enthält label + key + pfad beider Einträge.
+          Runde match (q='Panel-Steuerung paulas-panel-01') nutzt zeigt-Feld
+          der Ansicht → eindeutiger Treffer → SIGNAL_DIREKT_GESENDET.
+
+        Hinweis: Das exakte label der Ansicht ('Panel paulas-panel-01') ist
+        ein Präfix des Editor-Labels, daher bleibt es bei Substring-Match
+        mehrdeutig. Das LLM kann stattdessen das zeigt-Feld nutzen, das im
+        kandidaten_text NICHT steht, aber im Inventar vorhanden ist — oder
+        den key aus dem kandidaten_text als suchbegriff verwenden.
+        """
+        tg1 = FakeTelegram()
+        client1 = FakeSeitenClient(self._inventar_paula())
+        # Runde 1 match: mehrdeutig.
+        ergebnis1 = seiten_uebersicht(
+            tg=tg1, chat_id=100, from_user_id=42,
+            suchbegriff="paulas-panel-01",
+            seiten_client=client1,
+            is_member_fn=_immer_mitglied,
+            display_url_origin_heim="https://hub.local",
+            aktion=AKTION_MATCH,
+        )
+        assert isinstance(ergebnis1, tuple)
+        signal1, kandidaten_text = ergebnis1
+        assert signal1 == SIGNAL_MEHRDEUTIG
+        # kandidaten_text enthält label, key, pfad beider Einträge.
+        assert 'label: "Panel paulas-panel-01"' in kandidaten_text
+        assert 'key: panel-paulas-panel-01' in kandidaten_text
+        assert 'label: "Panel paulas-panel-01 bearbeiten"' in kandidaten_text
+
+        # Runde 2: LLM nutzt zeigt-Feld der Ansicht als suchbegriff — eindeutiger Treffer.
+        # "Panel-Steuerung" kommt nur in zeigt der Ansicht vor, nicht im Editor-Eintrag.
+        tg2 = FakeTelegram()
+        client2 = FakeSeitenClient(self._inventar_paula())
+        ergebnis2 = seiten_uebersicht(
+            tg=tg2, chat_id=100, from_user_id=42,
+            suchbegriff="Panel-Steuerung paulas-panel-01",
+            seiten_client=client2,
+            is_member_fn=_immer_mitglied,
+            display_url_origin_heim="https://hub.local",
+            aktion=AKTION_MATCH,
+        )
+        assert ergebnis2 == SIGNAL_DIREKT_GESENDET, (
+            "Roundtrip muss SIGNAL_DIREKT_GESENDET liefern, nicht Default-Fallback (#549)")
+        assert tg2.sent
+        assert "https://hub.local/controller/app-panel/paulas-panel-01" in tg2.sent[0]["text"]
+        # Kein /bearbeiten-Suffix → Ansicht, nicht Editor.
+        assert "/bearbeiten" not in tg2.sent[0]["text"]
+
+    def test_roundtrip_disambiguation_editor(self):
+        """T549-Test2e: Roundtrip — Disambiguation auf Editor-View.
+
+        Runde match (q='Panel paulas-panel-01 bearbeiten') → SIGNAL_DIREKT_GESENDET (Editor).
+        """
+        tg = FakeTelegram()
+        client = FakeSeitenClient(self._inventar_paula())
+        ergebnis = seiten_uebersicht(
+            tg=tg, chat_id=100, from_user_id=42,
+            suchbegriff="Panel paulas-panel-01 bearbeiten",
+            seiten_client=client,
+            is_member_fn=_immer_mitglied,
+            display_url_origin_heim="https://hub.local",
+            aktion=AKTION_MATCH,
+        )
+        assert ergebnis == SIGNAL_DIREKT_GESENDET, (
+            "Exaktes label für Editor-View muss Direkt-URL liefern (#549)")
+        assert tg.sent
+        assert "/bearbeiten" in tg.sent[0]["text"]
 
 
 # ============================================================
