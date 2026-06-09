@@ -21,7 +21,8 @@ in einer Service-Datei oder im Code als wahre Quelle.
 | 5042 | Seiten-Registry | xbuddy-seiten |
 | 5050 | Routine-Buddy | xbuddy-routine |
 | 5051 | Photo-Buddy | xbuddy-photo |
-| 5052-5099 | für neue Buddys reserviert | — |
+| 5052 | Essens-Buddy | xbuddy-essen |
+| 5053-5099 | für neue Buddys reserviert | — |
 
 ### PORT-3 — Komponenten binden nur an 127.0.0.1, nie an 0.0.0.0
 Komponenten binden ihren HTTP-Server an `127.0.0.1`, nicht an `0.0.0.0`.
