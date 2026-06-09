@@ -22,14 +22,15 @@ Atomar schreiben (DCOMP-4): default-Pfad wie config.write_data (Temp+Replace);
 Nur diese Funktionen schreiben die Items (APP-3, ROUTINE-14).
 """
 
-import contextlib
-import json
 import logging
-import os
 import re
-import tempfile
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+if __package__:
+    from ._jsonio import atomic_write_json, read_json_or_empty
+else:
+    from routine._jsonio import atomic_write_json, read_json_or_empty
 
 logger = logging.getLogger(__name__)
 
@@ -77,55 +78,6 @@ def _make_default_id(label, existing_ids):
     return candidate
 
 
-def _atomic_write_json(path, data):
-    """Schreibt data atomar als JSON in path (DCOMP-4: Temp+Replace)."""
-    verzeichnis = os.path.dirname(os.path.abspath(path))
-    os.makedirs(verzeichnis, exist_ok=True)
-    try:
-        fd, tmp_path = tempfile.mkstemp(dir=verzeichnis, suffix=".tmp",
-                                        prefix="items_write_")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            os.replace(tmp_path, path)
-        except Exception:
-            with contextlib.suppress(OSError):
-                os.unlink(tmp_path)
-            raise
-    except OSError as e:
-        raise OSError(
-            "Datei konnte nicht atomar geschrieben werden (%s): %s" % (path, e)) from e
-
-
-def _load_routine_json(data_path):
-    """Lädt routine.json. Fehlt sie → leeres Dict (CONFIG-4)."""
-    try:
-        with open(data_path, encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict):
-            return {}
-        return data
-    except FileNotFoundError:
-        return {}
-    except (OSError, json.JSONDecodeError) as e:
-        logger.warning("routine.json nicht lesbar (%s): %s", data_path, e)
-        return {}
-
-
-def _load_store(store_path):
-    """Lädt routine_store.json. Fehlt sie → leeres Dict (ROUTINE-8)."""
-    try:
-        with open(store_path, encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict):
-            return {}
-        return data
-    except FileNotFoundError:
-        return {}
-    except (OSError, json.JSONDecodeError) as e:
-        logger.warning("routine_store.json nicht lesbar (%s): %s", store_path, e)
-        return {}
-
 
 def _heute_str(zeitzone):
     """Heutiges Datum als 'YYYY-MM-DD' in der Familien-Zeitzone."""
@@ -134,7 +86,7 @@ def _heute_str(zeitzone):
 
 def load_einmalig_heute(store_path, zeitzone):
     """Lädt einmalig-Items für heute. Tageswechsel → leere Liste (ROUTINE-6)."""
-    store = _load_store(store_path)
+    store = read_json_or_empty(store_path)
     heute = _heute_str(zeitzone)
     tag = store.get("tag", {})
     if tag.get("datum") != heute:
@@ -144,7 +96,7 @@ def load_einmalig_heute(store_path, zeitzone):
 
 def _save_einmalig_heute(store_path, zeitzone, einmalig_items):
     """Speichert einmalig-Items für heute, bewahrt bestehenden Abhak-Zustand (ROUTINE-6/8)."""
-    store = _load_store(store_path)
+    store = read_json_or_empty(store_path)
     heute = _heute_str(zeitzone)
     tag = store.get("tag", {})
     if tag.get("datum") != heute:
@@ -152,7 +104,7 @@ def _save_einmalig_heute(store_path, zeitzone, einmalig_items):
         tag = {"datum": heute, "abgehakt": {}}
     tag["einmalig"] = einmalig_items
     store["tag"] = tag
-    _atomic_write_json(store_path, store)
+    atomic_write_json(store_path, store)
 
 
 # ============================================================
@@ -164,7 +116,7 @@ def count_all_items(data_path, store_path, zeitzone):
 
     Wird für die max-8-Klemme beim POST verwendet.
     """
-    routine = _load_routine_json(data_path)
+    routine = read_json_or_empty(data_path)
     default_items = routine.get("items", [])
     if not isinstance(default_items, list):
         default_items = []
@@ -255,7 +207,7 @@ def add_item(data_path, store_path, quelle, label, piktogramm, zeitzone="Europe/
 
 def _add_default_item(data_path, label, piktogramm):
     """Fügt ein default-Item in routine.json ein (atomar, DCOMP-4)."""
-    routine = _load_routine_json(data_path)
+    routine = read_json_or_empty(data_path)
     items = routine.get("items", [])
     if not isinstance(items, list):
         items = []
@@ -271,7 +223,7 @@ def _add_default_item(data_path, label, piktogramm):
     }
     items.append(new_item)
     routine["items"] = items
-    _atomic_write_json(data_path, routine)
+    atomic_write_json(data_path, routine)
 
     logger.info("default-Item hinzugefügt: %r (ROUTINE-14, #354)", new_id)
     return {"id": new_id}
@@ -324,7 +276,7 @@ def delete_item(data_path, store_path, item_id, zeitzone="Europe/Berlin"):
 
 def _delete_default_item(data_path, item_id):
     """Löscht ein default-Item aus routine.json (atomar, DCOMP-4)."""
-    routine = _load_routine_json(data_path)
+    routine = read_json_or_empty(data_path)
     items = routine.get("items", [])
     if not isinstance(items, list):
         items = []
@@ -337,7 +289,7 @@ def _delete_default_item(data_path, item_id):
         raise ItemsError("Item-ID nicht gefunden: %r" % item_id)
 
     routine["items"] = items
-    _atomic_write_json(data_path, routine)
+    atomic_write_json(data_path, routine)
 
     logger.info("default-Item gelöscht: %r (ROUTINE-14, #354)", item_id)
     return {"id": item_id}
@@ -373,7 +325,7 @@ def replace_default_items(data_path, items):
     # Validierung VOR dem Schreiben
     _validate_replace_items(items)
 
-    routine = _load_routine_json(data_path)
+    routine = read_json_or_empty(data_path)
 
     # Canonical-Form: quelle immer 'default' setzen, _comment-Keys droppen
     normalized = []
@@ -386,7 +338,7 @@ def replace_default_items(data_path, items):
         })
 
     routine["items"] = normalized
-    _atomic_write_json(data_path, routine)
+    atomic_write_json(data_path, routine)
 
     logger.info("default-Items ersetzt: %d Einträge (ROUTINE-14, #354)", len(normalized))
     return {"count": len(normalized)}
