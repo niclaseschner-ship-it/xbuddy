@@ -520,9 +520,13 @@ def test_PANEL_8_missing_config_falls_back_silently_to_defaults():
     ''')
     assert len(out['warns']) == 1, 'Genau ein console.warn-aequivalenter Aufruf erwartet'
     assert 'fallback' in out['warns'][0].lower()
-    # Defaults intakt: source_id startet mit "app-panel:", display_id mit "display:".
+    # Defaults intakt: source_id startet mit "app-panel:".
+    # display_id ist bewusst nicht mehr in configDefaults() (PANEL-8, #414).
     assert out['cfg']['source_id'].startswith('app-panel:')
-    assert out['cfg']['display_id'].startswith('display:')
+    assert 'display_id' not in out['cfg'], (
+        'display_id darf nicht in configDefaults() sein (PANEL-8 / #414): '
+        'wird per ROU-32 vom Router gezogen, nicht aus config.json'
+    )
 
 
 def test_PANEL_8_http_error_also_falls_back_to_defaults():
@@ -592,21 +596,26 @@ def test_PANEL_8_source_id_consistency_error_visible():
     assert 'source_id' in out['err']
 
 
-def test_PANEL_8_display_id_required_in_config_consistency():
+def test_PANEL_8_display_id_not_checked_in_config_consistency():
+    """PANEL-8 (#414): die frühere Konsistenz-Probe gegen cfg.display_id entfällt.
+    checkConfigConsistency prüft NUR noch source_id ↔ panelId —
+    display_id kommt via ROU-32 vom Router, nicht aus config.json."""
     out = run_node('''
+        // Kein display_id in cfg — früher Fehler, jetzt kein Fehler mehr.
         const err = panelLib.checkConfigConsistency(
             { source_id: 'app-panel:k' },
             'k');
         console.log(JSON.stringify({ err }));
     ''')
-    assert out['err'] is not None
-    assert 'display_id' in out['err']
+    assert out['err'] is None, (
+        'checkConfigConsistency darf display_id nicht mehr prüfen (PANEL-8 / #414): '
+        'bekommen: %r' % out['err'])
 
 
 def test_PANEL_8_matching_config_no_error():
     out = run_node('''
         const err = panelLib.checkConfigConsistency(
-            { source_id: 'app-panel:k', display_id: 'display:x' },
+            { source_id: 'app-panel:k' },
             'k');
         console.log(JSON.stringify({ err }));
     ''')
@@ -615,11 +624,24 @@ def test_PANEL_8_matching_config_no_error():
 
 def test_PANEL_8_config_example_format_valid():
     data = json.loads(read(CONFIG_EXAMPLE))
-    # Pflichtfelder (siehe PANEL-8 Body) — plus Kommentar-Keys.
-    for k in ('source_id', 'display_id', 'router_url'):
+    # Pflichtfelder laut PANEL-8 (Stand nach Nic-Entscheid 2026-06-08 / #414):
+    # source_id + router_url. display_id ist bewusst NICHT in config.json —
+    # kommt per ROU-32 vom Router.
+    for k in ('source_id', 'router_url'):
         assert k in data, 'Pflicht-Feld %s fehlt in config.example.json' % k
     assert data['source_id'].startswith('app-panel:')
-    assert data['display_id'].startswith('display:')
+    assert 'display_id' not in data, (
+        'display_id darf NICHT in config.example.json stehen (PANEL-8 / #414): '
+        'kommt per ROU-32 vom Router'
+    )
+    # Der Kommentar erklärt, woher display_id kommt (AC4).
+    assert '_display_id_comment' in data, (
+        'config.example.json muss _display_id_comment enthalten, der erklärt, '
+        'dass display_id per ROU-32 vom Router kommt (AC4)'
+    )
+    assert 'ROU-32' in data['_display_id_comment'], (
+        '_display_id_comment muss ROU-32 erwähnen'
+    )
 
 
 # ============================================================
@@ -944,6 +966,96 @@ def test_PANEL_11_eventsource_used_for_reconnect():
     js = read(APPJS_PATH)
     assert re.search(r"new\s+EventSource\(", js), \
         'app.js muss EventSource verwenden (Standard-Reconnect, DC-7)'
+
+
+def test_PANEL_11_fetch_display_id_known_source_returns_display_id():
+    """PANEL-11 / ROU-32: fetchDisplayId liefert display_id bei bekannter
+    source_id (Mock auf <router_url>/api/v1/router/panels/<source_id> → 200)."""
+    out = run_node('''
+        const fakeFetch = (url, init) => {
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({ display_id: 'display:wohnzimmer' }),
+            });
+        };
+        const cfg = { source_id: 'app-panel:kueche', router_url: 'https://hub.local:8443' };
+        panelLib.fetchDisplayId(cfg, fakeFetch).then((displayId) => {
+            console.log(JSON.stringify({ displayId }));
+        });
+    ''')
+    assert out['displayId'] == 'display:wohnzimmer', (
+        'fetchDisplayId muss display_id aus der ROU-32-Antwort liefern '
+        '(bekommen: %r)' % out.get('displayId'))
+
+
+def test_PANEL_11_fetch_display_id_builds_correct_url():
+    """PANEL-11 / ROU-32: fetchDisplayId baut die URL korrekt aus router_url
+    und source_id: <router_url>/api/v1/router/panels/<encoded_source_id>."""
+    out = run_node('''
+        const calls = [];
+        const fakeFetch = (url, init) => {
+            calls.push({ url, init });
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({ display_id: 'display:x' }),
+            });
+        };
+        const cfg = { source_id: 'app-panel:kueche', router_url: 'https://hub.local:8443' };
+        panelLib.fetchDisplayId(cfg, fakeFetch).then(() => {
+            console.log(JSON.stringify({ calls }));
+        });
+    ''')
+    assert len(out['calls']) == 1
+    url = out['calls'][0]['url']
+    assert 'api/v1/router/panels/' in url, (
+        'URL muss /api/v1/router/panels/ enthalten (bekommen: %r)' % url)
+    assert 'hub.local' in url, 'router_url muss als Basis verwendet werden'
+    assert 'app-panel' in url, 'source_id muss im Pfad erscheinen'
+    assert out['calls'][0]['init']['cache'] == 'no-store', (
+        'Fetch muss cache: no-store setzen')
+
+
+def test_PANEL_11_fetch_display_id_unknown_source_rejects():
+    """PANEL-11 / ROU-32: fetchDisplayId wirft bei 404-Antwort (unbekannte
+    source_id) — damit wird im Bootstrap ein sichtbarer Fehler ausgelöst."""
+    out = run_node('''
+        const fakeFetch = (url, init) => {
+            return Promise.resolve({ ok: false, status: 404 });
+        };
+        const cfg = { source_id: 'app-panel:unbekannt', router_url: 'https://hub.local:8443' };
+        let rejected = false;
+        let errMsg = null;
+        panelLib.fetchDisplayId(cfg, fakeFetch).then(
+            () => { console.log(JSON.stringify({ rejected: false })); },
+            (err) => { console.log(JSON.stringify({ rejected: true, errMsg: err.message })); }
+        );
+    ''')
+    assert out['rejected'] is True, (
+        'fetchDisplayId muss bei 404 ablehnen (Promise.reject) — Panel darf nicht starten')
+    assert out['errMsg'] is not None, 'Fehler-Nachricht muss gesetzt sein'
+
+
+def test_PANEL_11_fetch_display_id_network_error_rejects():
+    """PANEL-11 / ROU-32: fetchDisplayId wirft bei Netzfehler (Router nicht
+    erreichbar) — damit wird im Bootstrap ein sichtbarer Fehler ausgelöst."""
+    out = run_node('''
+        const fakeFetch = () => Promise.reject(new Error('network error'));
+        const cfg = { source_id: 'app-panel:kueche', router_url: 'https://hub.local:8443' };
+        panelLib.fetchDisplayId(cfg, fakeFetch).then(
+            () => { console.log(JSON.stringify({ rejected: false })); },
+            (err) => { console.log(JSON.stringify({ rejected: true, errMsg: err.message })); }
+        );
+    ''')
+    assert out['rejected'] is True, (
+        'fetchDisplayId muss bei Netzfehler ablehnen')
+
+
+def test_PANEL_11_fetch_display_id_exported():
+    """AC5: fetchDisplayId muss im panelLib-Export vorhanden sein (testbar aus Node)."""
+    out = run_node('''
+        console.log(JSON.stringify({ exported: typeof panelLib.fetchDisplayId === 'function' }));
+    ''')
+    assert out['exported'] is True, 'fetchDisplayId muss aus panelLib exportiert sein'
 
 
 # ============================================================
