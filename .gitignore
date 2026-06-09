@@ -78,6 +78,13 @@ plan/plan.json
 plan/plan.db
 plan/plan.db-journal
 
+# Essens-Buddy: Daten-State-Dateien (ESSEN-7/ESSEN-21) — Per-Instanz,
+# nicht im Repo. Wunsch-Liste, Gerichte-Katalog und Lebensmittel-Override
+# landen ohne ENV-Override neben dem Code; alle drei ausgeschlossen.
+essen/wuensche.json
+essen/gerichte.json
+essen/katalog.json
+
 # CA-Werkzeug: erzeugte Root-CA + Server-Zertifikat (#36) — die *-key.pem
 # sind Per-Instanz-Geheimnisse (CLAUDE.md §8), niemals ins Repo. Nur das
 # Skript tools/ca/make-ca.sh ist versioniert. Default-Ausgabe: tools/ca/out/.
