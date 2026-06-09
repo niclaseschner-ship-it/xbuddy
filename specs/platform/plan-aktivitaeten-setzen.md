@@ -67,8 +67,13 @@ Setzbar sind zwei dauerhafte Operationen:
   gibt es schon — anderen Schlüssel wählen?").
 - **dauerhaft — löschen:** eine Aktivität wird über ihre `art` aus dem
   Katalog entfernt (DELETE PLAN-34). Der Skill bietet die Auswahl aus der
-  **aktuellen** Liste (GET PLAN-34), Eltern sehen **Label**, nicht `art`
-  (der Skill löst Label → `art` intern auf).
+  **aktuellen** Liste (GET PLAN-34) als **nummerierte Text-Liste der
+  Labels** (Form: „1. Capueira · 2. Klettern · 3. Kreativ · …"), ohne
+  Emoji-Krücken und ohne Piktogramm-Album — die visuelle Identität der
+  Aktivität ist im Plan-Display, der Lösch-Dialog identifiziert über das
+  Label, das die Familie selbst beim Hinzufügen gewählt hat. Eltern
+  antworten mit der Nummer oder dem Label; der Skill löst Label → `art`
+  intern auf. Eltern sehen nie `art`-Schlüssel.
 
 **Umbenennen / Reihenfolge ändern sind nicht Teil von V1.** Die fachliche
 Validierung (Pflichtfelder, ARASAAC-ID-Form) liegt im Plan-Buddy
@@ -95,18 +100,38 @@ Die gewählte ARASAAC-`id` geht als `piktogramm` in den POST-PLAN-34-Body
 (PLAN-12-Form). Der Icon-Such-Endpunkt liefert nur IDs mit lokal
 vorliegendem PNG (ICONS-7) — die gewählte Aktivität rendert garantiert.
 
+**Wahl-Bestätigung im propose-Bubble:** Nach der ID-Wahl schickt der
+Skill das **gewählte** Piktogramm als Einzel-Foto im propose-Schritt
+(PAS-6) mit, sodass der Vorschlags-Bubble das endgültige Bild zeigt — die
+Familie sieht visuell, welches Piktogramm gleich gespeichert wird, ohne
+Emoji-Krücke im Text (E-PAS-4). Die ID selbst erscheint im Text nicht
+mehr; sie ist beim Album in der Caption gefallen und ist jetzt
+petrarbeitet.
+
 ## PAS-5 — Seed-Liste typischer Familien-Aktivitäten als Konversations-Anker
 Der Skill kennt eine **Seed-Liste** typischer Familien-Aktivitäten und
 bietet sie der Familie als Vorschläge an, wenn der Auslöser keinen
-expliziten Aktivitäts-Namen trägt:
+expliziten Aktivitäts-Namen trägt. Die Seed-Liste wird **ungefiltert
+gezeigt, mit einem Hinweis, was schon im Katalog liegt** — Eltern sehen
+auf einen Blick, welche der typischen Aktivitäten verfügbar wären und
+welche bereits konfiguriert sind (transparente Form, gewählt in der
+Werft Gate B 2026-06-09).
 
-> „Was möchtest du hinzufügen? Vorschläge: **Capueira**, **Klettern**,
-> **Fahrradfahren**, **Freunde treffen**, **Schwimmen**, **Ausflug**. Oder
-> ein eigenes Wort?"
+Form (Beispiel, mit Capueira/Fahrradfahren/Freunde treffen als neue
+Vorschläge, Klettern/Schwimmen/Ausflug als bereits vorhanden):
 
-Vor dem Vorschlag liest der Skill die aktuelle Katalog-Liste (GET PLAN-34)
-und entfernt Seed-Einträge, deren `label` schon im Katalog steht — die
-Familie bekommt nur Vorschläge, die mehrwertig sind.
+> „Was möchtest du hinzufügen? Vorschläge:
+> **Capueira** · **Fahrradfahren** · **Freunde treffen**
+> Schon im Katalog: Klettern · Schwimmen · Ausflug
+> Oder ein eigenes Wort?"
+
+Der Skill liest dafür vor dem Vorschlag die aktuelle Katalog-Liste
+(GET PLAN-34) und kennzeichnet den Bestand getrennt vom Vorschlag — die
+Familie kann einen vorhandenen Eintrag nicht versehentlich doppelt
+anlegen (PLAN-34 wirft 409, der Skill fängt das vorher konversational
+ab, PAS-3). **Verworfen:** stille Filterung der Seed-Liste (Bestand
+unsichtbar) — Eltern hätten dann keinen Überblick, was schon konfiguriert
+ist; die transparente Form ist die belegte Familien-UX.
 
 **Form der Seed-Liste** (im Skill-Modul, nicht in `plan.json`):
 
@@ -128,6 +153,12 @@ Seed-Eintrag, übernimmt der Skill `art`/`label`/`keywords` aus der
 Seed-Zeile und führt **nur** den ICONS-7-Schritt (PAS-4) zur Piktogramm-
 Wahl durch.
 
+Wählt die Familie einen Eintrag, der laut GET PLAN-34 schon im Katalog
+ist (möglich, wenn die Familie über die Bestands-Anzeige eingibt),
+antwortet der Skill konversational („Klettern gibt es schon — anderen
+Namen wählen?") und schlägt **keinen** anderen Namen aktiv vor (statische
+Form, kein LLM, V1-Disziplin analog RPS).
+
 **Verworfen:** die Seed-Liste in den Plan-Code-Default
 (`plan/aktivitaeten.py` `AKTIVITAETEN_V1`) zu schreiben. Der Code-Default
 ist der CONFIG-4-Fallback **einer Familie** (PLAN-12: läuft ohne
@@ -137,14 +168,30 @@ analog zu „Familie editiert `plan.json` direkt" vs. „Skill schreibt über
 PLAN-34" — siehe PLAN-28-Tabellen-Zeile.)
 
 ## PAS-6 — Vorschlag, Bestätigung, Quittung, Wirkung
-Synchrone schreibende Aufgabe (EC-10, TASK-4 `propose`+`execute`): Der
-Skill zeigt einen Ein-Schritt-Vorschlag (z. B. „Aktivität **Capueira** 🤸
-mit Keyword ‚capueira' hinzufügen?") und schreibt **erst** nach dem
-Bestätigungswort (E-EC-7). Nach erfolgreichem Schreiben quittiert er
-(„hinzugefügt — beim nächsten Plan-Display-Aufruf wirkt das", EC-21 via
-Reload-on-Read, PLAN-34 / DCOMP-2). Eine 4xx-Antwort der Plan-Validierung
-(z. B. doppelte `art` → 409, leeres Feld → 400) wird als ehrliche Grenze
-gemeldet (EC-7), ohne Schreiben.
+Synchrone schreibende Aufgabe (EC-10, TASK-4 `propose`+`execute`):
+
+**propose-Form (hinzufügen):** Der Skill schickt das **gewählte
+Piktogramm als Einzel-Foto** (PAS-4) mit dem Vorschlag als Caption oder
+Folge-Bubble — Form: „Soll ich **Capueira** mit Keyword *capueira*
+dauerhaft hinzufügen?". **Keine Emojis** im Text (E-PAS-4) — das Bild
+zeigt das Piktogramm, das Wort *Capueira* steht fett für die Identität.
+
+**propose-Form (löschen):** Der Skill schickt eine Text-Bubble: „Soll
+ich **Capueira** dauerhaft löschen?" — keine Bild-Mitlieferung beim
+Löschen (PAS-3: nummerierte Text-Liste, kein Album).
+
+**Bestätigung:** Der Skill schreibt **erst** nach dem Bestätigungswort
+(E-EC-7) — Form-Standard wie alle Schreib-Skills.
+
+**Quittung:** Nach erfolgreichem Schreiben quittiert er kurz:
+„Hinzugefügt — beim nächsten Plan-Display-Aufruf sichtbar." bzw.
+„Gelöscht — beim nächsten Plan-Display-Aufruf weg." (EC-21 via
+Reload-on-Read, PLAN-34 / DCOMP-2). Form analog RPS-5 / RZS-5
+(„… — beim nächsten Öffnen des … sichtbar").
+
+**Plan-API-Grenze:** Eine 4xx-Antwort (z. B. doppelte `art` → 409,
+leeres Feld → 400, DELETE auf unbekannte `art` → 404) wird als ehrliche
+Grenze gemeldet (EC-7), ohne Schreiben.
 
 ## PAS-7 — Schreiben nur über die Plan-API (APP-3)
 Der Skill ruft die Plan-Admin-API (PLAN-34) über den Plan-HTTP-Client
@@ -229,3 +276,20 @@ binden, statt an `plan.json`.
 
 **Verworfen:** die Seed-Liste in den Code-Default kopieren oder die
 Default-Liste „auf Vorrat" auf z. B. 15 Einträge vergrößern.
+
+## E-PAS-4 — Icon im propose-Bubble, keine Emoji-Krücke im Text
+*Datum:* 2026-06-09 (Werft Gate B — Nic-Entscheid)
+
+Der Vorschlags-Bubble beim Hinzufügen zeigt das **gewählte ARASAAC-
+Piktogramm** als Foto (PAS-4/PAS-6); der Text trägt **keine** Emoji-
+Darstellung der Aktivität. Begründung: das echte Piktogramm ist die
+visuelle Identität der Aktivität (PLAN-12, ICONS-5); ein Emoji im Text
+wäre eine zweite, ungenaue Repräsentation und würde die Wahl-Bestätigung
+verwässern. Beim Löschen entfällt das Bild — die nummerierte Text-Liste
+(PAS-3) ist die Eltern-UX, und nur Label-basierte Identifikation passt
+zum Auswahl-Schritt.
+
+**Verworfen:** Emoji-Repräsentation im propose-Text (z. B. „**Capueira**
+🤸 hinzufügen?") — visuell uneinheitlich (Emoji ≠ ARASAAC-Piktogramm),
+und Eltern haben das Piktogramm gerade beim Album bzw. propose-Foto
+gesehen, brauchen also keine zweite Krücke.
