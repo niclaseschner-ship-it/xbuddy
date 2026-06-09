@@ -4,6 +4,11 @@ Wie in diesem Repo Features und Bugs erfasst, bearbeitet und dokumentiert
 werden. XBuddy arbeitet **spec-driven**: die `specs/` sind die Quelle der
 Wahrheit, ein Ticket ist ein Inkrement dagegen.
 
+> **Anker statt Zeile (PW-23, 2026-06-09):** Wo Skills, Hooks oder Memories auf
+> diese Datei verweisen, nutzen sie `WORKFLOW.md#<anchor-id>` statt
+> `WORKFLOW.md:<zeile>`. Anker sind explizite `<a id="..."></a>`-Marker unter
+> Headings — standard Markdown, per `grep` findbar. Wer verweist, setzt den Anker.
+
 ## Grundprinzip
 
 `specs/` beschreibt, wie XBuddy sich verhalten *soll* — lebende Specs mit
@@ -54,6 +59,7 @@ leere Queue); Reopen-Trigger: häufige mid-build Architektur-Halts, die nie durc
 `/arbeitstag-prep` laufen und so nur per Board-Filter sichtbar wären.
 
 ## Lebenslauf eines Tickets
+<a id="lifecycle"></a>
 
 ```
 status:spec        Ticket angelegt; Spec-PR offen oder ausstehend
@@ -79,6 +85,7 @@ der betroffenen Spec-Datei und den Requirement-IDs. Nach dem Anlegen:
 vergeben.
 
 ## Handoff an Implementierer
+<a id="handoff"></a>
 
 Sobald der Spec-PR gemerged ist, setzt der Spec-Autor (oder Reviewer) das
 Label um:
@@ -98,6 +105,7 @@ Sobald sie einen Impl-PR mit `Closes #<nr>` öffnen, übernimmt die
 `ticket-status-flow`-Action den Rest automatisch.
 
 ### Der Stempel ist die Membran
+<a id="stempel-membran"></a>
 
 `status:ready` trennt zwei Prozesse sauber:
 

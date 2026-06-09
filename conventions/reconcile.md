@@ -34,6 +34,7 @@ Damit kann kein Merge die Ticket-Reconcile überspringen: entweder schließt der
 offenes Issue, ist ein echter Spec-PR, oder ist bewusst als ticketlos markiert.
 
 ## RECON-3 — Status-Übergänge fasst NUR eine Action an, nie ein Agent per Shell
+<a id="recon-3"></a>
 
 Der `status:*`-Lebenszyklus (`spec → in-progress/in-review → ready → [Merge: leer]`)
 wird ausschließlich von `ticket-status-flow.yml` auf PR-Events gesetzt. **Kein Agent
