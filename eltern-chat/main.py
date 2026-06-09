@@ -310,11 +310,18 @@ def _run_agent(msg, ctx):
                      _maybe_append_telemetry(text, result.telemetry),
                      reply_to_message_id=msg.message_id)
         if sent is not None:
+            # #514 (TAB-12): die deterministische Medien-Naht (FSE-3 / D4) des
+            # propose-Turns mit am PendingProposal festhalten — der confirm-Turn
+            # trägt nur das Bestätigungs-Wort, nicht das Foto. Ohne diese
+            # Persistenz sähe `execute()` einen leeren TurnContext und müsste
+            # fälschlich »kein Bild«-Quittung schicken (Live-Bug 2026-06-09).
             ctx.pending.add(PendingProposal(
                 chat_id=msg.chat_id,
                 proposal_message_id=sent.get("message_id"),
                 task_name=result.pending_call.task,
-                arguments=result.pending_call.arguments))
+                arguments=result.pending_call.arguments,
+                media_telegram_file_id=turn_context.media_telegram_file_id,
+                medium_typ=turn_context.medium_typ))
         # #310: das Transkript endet auf dem proposal-Pfad mit dem letzten
         # Tool-Turn; der reine Vorschlagstext (OHNE Suffix, R7) kommt als
         # finaler Assistant-TextBlock zusätzlich in die History.
@@ -341,11 +348,17 @@ def _execute_confirmed(pending, msg, ctx):
     if task is None:
         _send(ctx, msg.chat_id, _TASK_GONE, reply_to_message_id=msg.message_id)
         return
+    # #514 (TAB-12): die im propose-Turn festgehaltene Medien-Naht (FSE-3 / D4)
+    # in den TurnContext des execute-Turns zurückspielen — der confirm-Turn
+    # selbst trägt nur das Bestätigungs-Wort, kein Medium. Bei Schreib-Aufgaben
+    # ohne Medium (TES/FAA/…) bleiben beide Felder None — alter Code-Pfad.
     turn_context = TurnContext(
         chat_id=msg.chat_id,
         from_user_id=msg.from_user_id,
         private_chat_id=(msg.chat_id if msg.chat_type == "private"
-                         else msg.from_user_id))
+                         else msg.from_user_id),
+        media_telegram_file_id=pending.media_telegram_file_id,
+        medium_typ=pending.medium_typ)
     try:
         outcome = ctx.catalog.execute_write_task(
             task, pending.arguments, turn_context)

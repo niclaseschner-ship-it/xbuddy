@@ -60,6 +60,18 @@ Hälften des Bestätigungs-Gates: `propose(self, arguments, turn_context)` legt
 einen `Proposal` vor und führt **nichts** aus; `execute(self, arguments,
 turn_context)` führt erst **nach** Bestätigung aus (`tasks.py:163-169`).
 
+**TurnContext-Persistenz zwischen propose und execute (Medien-Naht).** Das
+Bestätigungs-Gate (EC-10, `confirm.py`) überführt die deterministischen
+`TurnContext`-Felder des propose-Turns **transparent** in den execute-Turn:
+`media_telegram_file_id` und `medium_typ` werden im `PendingProposal`
+(`confirm.py`) festgehalten und in `_execute_confirmed` (`main.py`) in den
+neuen `TurnContext` zurückgespielt. Der confirm-Turn trägt nur das
+Bestätigungswort — keine Medien-Naht. So sieht `execute()` denselben
+deterministischen Kontext wie `propose()`, auch wenn dazwischen keine
+Mediendaten ankamen. Bei Schreib-Aufgaben ohne Medium (TES/FAA/GAA/KAV/…)
+bleiben beide Felder `None` — kein Verhaltensunterschied zum bisherigen Pfad.
+(Refs #514)
+
 Vom Typsystem erzwungen ist nur die **Basisklasse**: `Catalog.register` wirft
 `TypeError`, wenn eine Aufgabe weder `ReadTask` noch `WriteTask` ist
 (`tasks.py:185-186`). Die **Methoden** selbst sind nicht abstrakt, sondern
