@@ -90,6 +90,7 @@ class Context:
     kav_sessions: dict = None  # KAV-3: laufende »Kalender verbinden«-Sessions (chat_id → KavSession)
     tes_sessions: dict = None  # TES-3: laufende »Termin eintragen«-Sessions (chat_id → TesSession)
     paa_sessions: dict = None  # PAA-6: laufende »Panel anlegen«-Sessions (chat_id → PaaSession)
+    tab_sessions: dict = None  # TAB-12: laufende »Termine aus Bild«-Sessions (chat_id → TabSession)
 
 
 # SESS-5: Session-Sorten-Registry — modul-weit, einmal definiert.
@@ -107,12 +108,14 @@ def _build_session_sorts():
     from skills.kalender_verbinden_task import make_kav_input
     from skills.panel_anlegen_task import make_paa_input
     from skills.termin_eintragen_task import make_tes_input
+    from skills.termine_aus_bild_task import make_tab_input
     return (
         SessionSortEntry("faa_sessions", make_faa_input),   # FAA-12
         SessionSortEntry("gaa_sessions", make_gaa_input),   # GAA-5
         SessionSortEntry("kav_sessions", make_kav_input),   # KAV-3
         SessionSortEntry("tes_sessions", make_tes_input),   # TES-3
         SessionSortEntry("paa_sessions", make_paa_input),   # PAA-6
+        SessionSortEntry("tab_sessions", make_tab_input),   # TAB-12
     )
 
 _SESSION_SORTS = _build_session_sorts()
@@ -592,6 +595,8 @@ def build_context(cfg, db_path, zd_cli_path=None):
     tes_sessions = {}
     # PAA-6: analog FAA/GAA/KAV/TES, eigene Session-Map für »Panel anlegen«.
     paa_sessions = {}
+    # TAB-12: analog TES, eigene Session-Map für »Termine aus Bild«.
+    tab_sessions = {}
 
     # KAV-7: Zugangsdaten-Speicher als Per-Instanz-Datei (ZD-1/ZD-8). Lazy-
     # importiert, damit Tests, die `build_context` nicht aufrufen, keine
@@ -618,6 +623,7 @@ def build_context(cfg, db_path, zd_cli_path=None):
         kav_sessions=kav_sessions,
         tes_sessions=tes_sessions,
         paa_sessions=paa_sessions,
+        tab_sessions=tab_sessions,
     )
     # FAA-12 / GAA-5 / KAV-3: Familien-Gruppen-ID darf nach einer Migration
     # (EC-18) wechseln — der Getter liest sie zur Laufzeit aus dem Context,
@@ -665,7 +671,16 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # SeitenUebersichtTask wird NICHT registriert (SREG-6 AND-Guard).
         seiten_origin_url=cfg.seiten_origin_url,
         # SREG-7 / #476: Heim-Origin für den Übersichts-Link (SREG-5/SREG-5b).
-        display_url_origin_heim=cfg.display_url_origin_heim)
+        display_url_origin_heim=cfg.display_url_origin_heim,
+        # TAB-12 / #475: Session-Map für »Termine aus Bild«.
+        tab_sessions=tab_sessions,
+        # TAB-5 / E-TAB-6: V1 nutzt denselben Anbieter wie der Text-Pfad
+        # (cfg.provider). build_catalog baut den multimodalen Adapter lazy
+        # über `_multimodal.get_multimodal_provider`, wenn provider_api_key
+        # gesetzt ist (Onboarding-Modus ⇒ kein Adapter, AND-Guard greift).
+        provider_name=cfg.provider,
+        provider_api_key=cfg.provider_api_key,
+        provider_model=cfg.provider_model)
 
     if cfg.provider_api_key:
         # KI-Modus — Anbieter steht; die Familien-Gruppe muss gesetzt sein (EC-2).
