@@ -24,11 +24,11 @@ import json
 import config as config_mod
 import pytest
 from fakes import FakeTelegram
+from skills._errors import BerechtigungError
 from skills.seiten_client import SeitenClientError
 from skills.seiten_uebersicht import (
     AKTION_INVENTAR,
     AKTION_MATCH,
-    BerechtigungError,
     baue_uebersichts_url,
     formatiere_default_antwort,
     formatiere_ec22_rueckfrage,
