@@ -553,6 +553,20 @@ def test_essen9_leere_gerichte_kachel_hat_hinweis(client):
     assert "noch keine" in body.lower() or "keine gerichte" in body.lower()
 
 
+def test_essen8_brotbelag_tab_endpoint_smoke(client):
+    """ESSEN-8/ESSEN-9: GET /display/essen/wunsch?tab=brotbelag liefert 200 und
+    enthält Default-Brotbelag-Items im HTML (Käse als Anker-Label, ESSEN-12).
+
+    Smoke-Test des echten Flask-Pfads: Tab-Slug-Routing bricht hier auf, bevor
+    render.baue_view gerufen wird — ein reiner Helper-Test würde das nicht fangen.
+    """
+    resp = client.get("/display/essen/wunsch?tab=brotbelag")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    # Brotbelag-Default enthält 'Käse' (katalog.default.json, ESSEN-12).
+    assert "Käse" in body, "Brotbelag-Default-Item 'Käse' fehlt im gerenderten HTML"
+
+
 # ============================================================
 #  ESSEN-11 — Piktogramme über geteilte Icon-Plattform
 # ============================================================
