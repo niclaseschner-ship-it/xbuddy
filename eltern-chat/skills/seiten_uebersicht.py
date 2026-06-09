@@ -17,12 +17,11 @@ eine Sub-Frage ob der Elternteil einen direkten View-Link will.
 
   Runde 2 (`aktion="match"`): Equality-Lookup auf label ODER key (SREG-5b).
   Eindeutiger Treffer → direkte URL als Tool-Result. Kein Treffer → klare
-  Fehler-Antwort (kein Default-Loop). Substring-basiertes matche_view()
-  bleibt für aktion=inventar (Runde 1) reserviert.
+  Fehler-Antwort (kein Default-Loop).
 
-  Dieser Zwei-Runden-Ansatz ersetzt lokales Substring-Matching gegen vage
-  Suchbegriffe: das LLM ist der einzige Ranker (SREG-5b: kein lokales
-  Substring-/Wortlisten-Match auf natürlichsprachliche Begriffe, #488).
+  Dieser Zwei-Runden-Ansatz setzt SREG-5b durch: kein lokales
+  Substring-/Wortlisten-Match auf natürlichsprachliche Begriffe (#488).
+  Das LLM ist der einzige Ranker für die User-Anfrage (SREG-5b Weg-2-Pivot).
   Equality bei aktion=match verhindert Präfix-Geschwister-Mehrdeutigkeit
   (T549-Fix2: „Panel paulas-panel-01" trifft nicht mehr „Panel paulas-panel-01
   bearbeiten" — deterministisches Lookup auf diszipliniertem Wert, SREG-5b).
@@ -31,6 +30,8 @@ Eingang: optionaler `suchbegriff` (für Opt-in-Pfad), optionale `aktion`.
   Ohne Suchbegriff/aktion → Default-Pfad.
   Suchbegriff + aktion="inventar" → Runde 1: Inventar als Tool-Result.
   Suchbegriff + aktion="match"   → Runde 2: Equality-Lookup label/key.
+  Suchbegriff + aktion unbekannt → Fehler-Tool-Result (SREG-5b: kein stilles
+  Substring-Match — das LLM muss explizit inventar oder match waehlen).
 
 **Ergebnis (EC-29):**
   Die Funktion returnt in jedem Pfad einen User-tauglichen Antwort-Text
@@ -50,16 +51,10 @@ logger = logging.getLogger(__name__)
 
 # Aktions-Werte für den Opt-in-Pfad (SREG-5b Weg 2, #488).
 AKTION_INVENTAR = "inventar"   # Runde 1: Inventar an LLM zurückgeben.
-AKTION_MATCH    = "match"      # Runde 2: Substring-Match + Bot-Post.
+AKTION_MATCH    = "match"      # Runde 2: Equality-Lookup label/key.
 
 # SREG-12: Pfad der gerenderten Übersichts-Seite (stabil per URL-8, 2026-06-08).
 PFAD_UEBERSICHT = "/api/v1/seiten/uebersicht"
-
-# SREG-5b-Mehrdeutigkeit-Heuristik: Wenn der zweitbeste Treffer den
-# Suchbegriff ebenfalls direkt in label, synonyme oder zeigt enthält,
-# gilt das Match als mehrdeutig → EC-22-Rückfrage statt Direkt-Antwort.
-# Konservativ: lieber Rückfrage als falsche Direkt-Antwort (SREG-5b).
-_MEHRDEUTIGKEIT_MINDEST_TREFFER = 2
 
 
 def baue_uebersichts_url(display_url_origin_heim):
@@ -109,20 +104,6 @@ def formatiere_direkt_url(display_url_origin_heim, pfad, varianten_query=None):
     return url
 
 
-def _enthalt_suchbegriff(eintrag, q):
-    """Prüft ob ein Inventar-Eintrag den Suchbegriff direkt enthält.
-
-    Sucht in label, synonyme und zeigt (case-insensitiv). Pfad und typ
-    werden NICHT gesucht — nur die inhaltsbeschreibenden Felder (SREG-5b).
-    """
-    label = str(eintrag.get("label") or "").lower()
-    synonyme_text = " ".join(
-        str(s) for s in (eintrag.get("synonyme") or [])
-    ).lower()
-    zeigt = str(eintrag.get("zeigt") or "").lower()
-    return q in label or q in synonyme_text or q in zeigt
-
-
 def formatiere_inventar_tool_result(eintraege):
     """Kompaktes Tool-Result-Format für das Inventar (SREG-5b Runde 1, #488).
 
@@ -149,61 +130,6 @@ def formatiere_inventar_tool_result(eintraege):
     return "\n".join(zeilen)
 
 
-def formatiere_mehrdeutigkeit_tool_result(treffer):
-    """Strukturiertes Tool-Result für das LLM bei EC-22-Mehrdeutigkeit (#549).
-
-    Listet alle Kandidaten mit label, key und pfad auf — so kann das LLM
-    nach der Disambiguation-Antwort des Elternteils den passenden Kandidaten
-    per exaktem label identifizieren und die Task mit aktion="match" aufrufen.
-
-    Format pro Kandidat: `N. label: "..."; key: ...; pfad: ...`
-    Plus Auflösungs-Anweisung: LLM soll beim nächsten User-Turn mit
-    aktion="match" + dem exakten label aufrufen, NICHT ohne suchbegriff
-    (das würde den Default-Fallback auslösen statt des gewünschten Views).
-    """
-    zeilen = [
-        "Ich habe eine Rückfrage gestellt — der Eltern muss zwischen diesen "
-        "Views wählen:",
-    ]
-    for i, e in enumerate(treffer, 1):
-        label = str(e.get("label") or e.get("pfad") or "?")
-        key   = str(e.get("key")   or "")
-        pfad  = str(e.get("pfad")  or "")
-        zeilen.append('%d. label: "%s"; key: %s; pfad: %s' % (i, label, key, pfad))
-    zeilen.append("")
-    zeilen.append(
-        "Wenn der Eltern in der nächsten Antwort wählt (z.B. \"Die Ansicht\", "
-        "\"Die zweite\", \"den Editor\"), rufe diese Task erneut auf mit "
-        "aktion=match + dem exakten label aus dieser Liste oder dem key aus "
-        "dieser Liste — Equality wird geprüft, kein Substring-Match. "
-        "Der key ist eindeutig, falls Labels Präfix-Geschwister sind. "
-        "NICHT ohne suchbegriff (das löst Default-Fallback aus).")
-    return "\n".join(zeilen)
-
-
-def matche_view(eintraege, suchbegriff):
-    """Pro-View-Matching für den Opt-in-Pfad (SREG-5b).
-
-    Filtert Inventar-Einträge nach dem Suchbegriff gegen label/synonyme/zeigt.
-    Liefert `(treffer_liste, mehrdeutig)`:
-      - `treffer_liste`: alle matchenden Einträge
-      - `mehrdeutig`: True, wenn mindestens zwei Treffer den Begriff direkt
-        tragen (SREG-5b-Heuristik — konservativ: lieber Rückfrage).
-    """
-    if not eintraege or not suchbegriff:
-        return [], False
-
-    q = str(suchbegriff).strip().lower()
-    if not q:
-        return [], False
-
-    treffer = [e for e in eintraege if isinstance(e, dict) and _enthalt_suchbegriff(e, q)]
-
-    # Mehrdeutigkeit: mind. 2 Treffer im Direkt-Match → EC-22-Rückfrage.
-    mehrdeutig = len(treffer) >= _MEHRDEUTIGKEIT_MINDEST_TREFFER
-    return treffer, mehrdeutig
-
-
 def matche_view_exakt(eintraege, suchbegriff):
     """Equality-Lookup für aktion=match (SREG-5b/T549-Fix2).
 
@@ -225,24 +151,6 @@ def matche_view_exakt(eintraege, suchbegriff):
         if str(e.get("label") or "") == q or str(e.get("key") or "") == q:
             return e
     return None
-
-
-def formatiere_ec22_rueckfrage(treffer):
-    """Formatiert die EC-22-Rückfrage bei mehrdeutigen Treffern (SREG-5b/EC-22).
-
-    Listet die ersten Treffer namentlich auf. EC-22: einmal kurz nachfragen,
-    dann gezielt liefern.
-    """
-    # Maximal 4 Optionen benennen, damit die Nachricht kurz bleibt.
-    max_optionen = 4
-    labels = [
-        e.get("label") or e.get("pfad") or "?"
-        for e in treffer[:max_optionen]
-    ]
-    optionen_text = " oder ".join('„%s"' % lb for lb in labels)
-    if len(treffer) > max_optionen:
-        optionen_text += " (oder eine weitere Seite)"
-    return "Meintest du %s?" % optionen_text
 
 
 # ============================================================
@@ -277,7 +185,7 @@ def seiten_uebersicht(chat_id, from_user_id, suchbegriff,
     `is_member_fn`             — Callable `(user_id) -> bool` (SREG-6/EC-2).
     `display_url_origin_heim`  — Heim-Origin (SREG-7). Pflicht für Default-Pfad.
     `aktion`                   — "inventar" (Runde 1) oder "match" (Runde 2).
-                                  Nur im Opt-in-Pfad relevant. None/leer → Default.
+                                  Pflicht wenn suchbegriff gesetzt. Sonst Fehler-Tool-Result.
 
     Returnt User-tauglichen Antwort-Text als String (EC-29).
     Wirft `BerechtigungError` bei SREG-6-Verletzung.
@@ -345,44 +253,16 @@ def seiten_uebersicht(chat_id, from_user_id, suchbegriff,
                     q, pfad, chat_id)
         return "Hier ist der direkte Link: %s (%s)" % (url, label)
 
-    # Fallback: Substring-Match (aktion=None/unbekannt) — für direkte Anfragen
-    # ohne zweistufiges KI-Matching (SREG-5b Legacy-Pfad).
-    treffer, mehrdeutig = matche_view(eintraege, q)
-
-    if not treffer:
-        # Kein Treffer → Fallback auf Default-Link (SREG-5b: kein stilles Ende).
-        try:
-            url = baue_uebersichts_url(display_url_origin_heim)
-            return (
-                "Ich habe keine passende Seite gefunden. "
-                "Die vollständige Übersicht: %s" % url)
-        except ValueError:
-            return "Ich habe keine passende Seite gefunden."
-
-    if mehrdeutig:
-        # Mehrere Treffer → EC-22-Rückfrage als Tool-Result (SREG-5b/EC-22/EC-29).
-        # Das Tool-Result enthält sowohl die User-taugliche Rückfrage als auch die
-        # strukturierte Kandidaten-Liste (EC-29 Tool-Result-Vertrag: Agent-Steuer-Hinweise
-        # und User-Text dürfen im selben Tool-Result stehen).
-        rueckfrage = formatiere_ec22_rueckfrage(treffer)
-        kandidaten_text = formatiere_mehrdeutigkeit_tool_result(treffer)
-        logger.info("seiten_uebersicht: EC-22-Rückfrage (%d Treffer, q=%r) an Chat %s",
-                    len(treffer), q, chat_id)
-        return "%s\n\n%s" % (rueckfrage, kandidaten_text)
-
-    # Eindeutiger Treffer → direkte URL als Tool-Result-Text (SREG-5b).
-    eintrag = treffer[0]
-    pfad = eintrag.get("pfad") or ""
-    # Variant-Query: wenn der Eintrag selbst ein Varianten-Eintrag ist (SREG-1).
-    varianten_query = eintrag.get("query") if isinstance(eintrag.get("query"), dict) else None
-
-    try:
-        url = formatiere_direkt_url(display_url_origin_heim, pfad, varianten_query)
-    except Exception:
-        # Defensiv: Origin fehlt → Pfad als Fallback.
-        url = pfad
-
-    label = eintrag.get("label") or pfad
-    logger.info("seiten_uebersicht: Direkt-URL (q=%r, pfad=%s) an Chat %s",
-                q, pfad, chat_id)
-    return "Hier ist der direkte Link: %s (%s)" % (url, label)
+    # Weder aktion=inventar noch aktion=match: das LLM muss eine der beiden
+    # Runden anstoßen (SREG-5b Weg-2-Pivot). Kein stiller Substring-Match auf
+    # den User-Begriff (#488).
+    logger.info(
+        "seiten_uebersicht: aktion=%r mit suchbegriff=%r — kein gueltiger "
+        "aktion-Wert (erwartet: 'inventar' oder 'match')",
+        aktion, q,
+    )
+    return (
+        "Der aktion-Parameter fehlt oder ist unbekannt. "
+        "Bitte aktion='inventar' (Runde 1: Inventar an LLM) oder "
+        "aktion='match' (Runde 2: exaktes label/key-Lookup) waehlen."
+    )

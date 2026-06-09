@@ -8,7 +8,7 @@ Berechtigungs-Bruch (SREG-6) wirft BerechtigungError.
 Pflicht-Tests (AC1–AC5 + AC488):
 - AC1: SeitenUebersichtTask im build_catalog registriert (SREG-6 AND-Guard).
 - AC2: Default-Pfad → Link auf Übersichts-Seite + Sub-Frage als Tool-Result-Text.
-- AC3: Opt-in-Pfad → Direkt-URL als Tool-Result. Mehrdeutigkeit → EC-22-Rückfrage.
+- AC3: Opt-in-Pfad → Direkt-URL als Tool-Result. aktion fehlt/unbekannt → Fehler-Tool-Result (SREG-5b).
 - AC4: Opt-out/kein Suchbegriff → Default-Pfad als Tool-Result.
 - AC5: Config akzeptiert display_url_origin (alt) + display_url_origin_heim (neu),
        _heim gewinnt wenn beide gesetzt.
@@ -31,10 +31,7 @@ from skills.seiten_uebersicht import (
     AKTION_MATCH,
     baue_uebersichts_url,
     formatiere_default_antwort,
-    formatiere_ec22_rueckfrage,
     formatiere_inventar_tool_result,
-    formatiere_mehrdeutigkeit_tool_result,
-    matche_view,
     seiten_uebersicht,
 )
 from skills.seiten_uebersicht_task import SeitenUebersichtTask
@@ -180,84 +177,6 @@ class TestFormatierDefaultAntwort:
             formatiere_default_antwort("")
 
 
-# ============================================================
-#  Tests: matche_view (Pro-View-Matching, SREG-5b)
-# ============================================================
-
-class TestMatcheView:
-    def test_kein_suchbegriff_leer(self):
-        treffer, mehrdeutig = matche_view(_inventar_einfach(), "")
-        assert treffer == []
-        assert not mehrdeutig
-
-    def test_none_suchbegriff_leer(self):
-        treffer, _mehrdeutig = matche_view(_inventar_einfach(), None)
-        assert treffer == []
-
-    def test_eindeutiger_treffer(self):
-        treffer, mehrdeutig = matche_view(_inventar_einfach(), "Garderobe")
-        assert len(treffer) == 1
-        assert not mehrdeutig
-        assert treffer[0]["pfad"] == "/display/wetter/regeln"
-
-    def test_case_insensitiv(self):
-        treffer, mehrdeutig = matche_view(_inventar_einfach(), "garderobe")
-        assert len(treffer) == 1
-        assert not mehrdeutig
-
-    def test_suche_in_zeigt(self):
-        """SREG-5b: Suche auch in zeigt-Feld."""
-        treffer, mehrdeutig = matche_view(_inventar_einfach(), "wochenplan")
-        # "wochenplan" ist im label von Wochenplan
-        assert len(treffer) == 1
-        assert not mehrdeutig
-
-    def test_mehrdeutig_bei_mehreren_treffern(self):
-        """SREG-5b: Mehrdeutigkeit wenn mind. 2 Einträge matchen."""
-        treffer, mehrdeutig = matche_view(_inventar_mehrdeutig(), "wetter")
-        assert len(treffer) >= 2
-        assert mehrdeutig
-
-    def test_keine_treffer(self):
-        treffer, mehrdeutig = matche_view(_inventar_einfach(), "gibts-nicht-xyz")
-        assert treffer == []
-        assert not mehrdeutig
-
-    def test_leeres_inventar(self):
-        treffer, mehrdeutig = matche_view([], "garderobe")
-        assert treffer == []
-        assert not mehrdeutig
-
-    def test_pfad_wird_nicht_gesucht(self):
-        """SREG-5b: Suche nur in label/synonyme/zeigt, nicht in pfad/typ."""
-        inv = [{"pfad": "/controller/spezial/seite",
-                "label": "Normalseite",
-                "zeigt": "Zeigt Normales",
-                "synonyme": [],
-                "typ": "eltern"}]
-        # "spezial" ist nur im Pfad, nicht in label/synonyme/zeigt
-        treffer, _ = matche_view(inv, "spezial")
-        assert treffer == []
-
-
-class TestFormatierEc22Rueckfrage:
-    def test_enthaelt_label_der_treffer(self):
-        treffer = [
-            {"label": "Wetter heute", "pfad": "/display/wetter/heute"},
-            {"label": "Wetter Regeln", "pfad": "/display/wetter/regeln"},
-        ]
-        text = formatiere_ec22_rueckfrage(treffer)
-        assert "Wetter heute" in text
-        assert "Wetter Regeln" in text
-
-    def test_frageformat(self):
-        treffer = [
-            {"label": "Option A", "pfad": "/a"},
-            {"label": "Option B", "pfad": "/b"},
-        ]
-        text = formatiere_ec22_rueckfrage(treffer)
-        assert "?" in text or "Meintest" in text
-
 
 # ============================================================
 #  Tests: seiten_uebersicht (Haupt-Funktion) — EC-29
@@ -325,15 +244,16 @@ class TestSeitenUebersicht:
     # -- AC3: Opt-in-Pfad --
 
     def test_opt_in_match_eindeutig_gibt_url_text(self):
-        """AC3: Eindeutiger Treffer → Tool-Result-Text mit Direkt-URL."""
+        """AC3: Runde 2 (aktion=match) + exaktes label → Direkt-URL als Tool-Result."""
         client = FakeSeitenClient(_inventar_einfach())
         result = seiten_uebersicht(
             chat_id=100,
             from_user_id=42,
-            suchbegriff="Garderobe",
+            suchbegriff="Garderoben-Editor",
             seiten_client=client,
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
+            aktion=AKTION_MATCH,
         )
         assert isinstance(result, str)
         assert "https://hub.local/display/wetter/regeln" in result
@@ -344,59 +264,15 @@ class TestSeitenUebersicht:
         result = seiten_uebersicht(
             chat_id=100,
             from_user_id=42,
-            suchbegriff="plan",
+            suchbegriff="Wochenplan",
             seiten_client=client,
             is_member_fn=_immer_mitglied,
             display_url_origin_heim="https://hub.local",
+            aktion=AKTION_MATCH,
         )
         assert "https://hub.local" in result
 
-    def test_mehrdeutigkeit_ec22_gibt_text(self):
-        """AC3: Mehrdeutigkeit → EC-22-Rückfrage als Tool-Result-Text (EC-29, #549)."""
-        client = FakeSeitenClient(_inventar_mehrdeutig())
-        result = seiten_uebersicht(
-            chat_id=100,
-            from_user_id=42,
-            suchbegriff="wetter",
-            seiten_client=client,
-            is_member_fn=_immer_mitglied,
-            display_url_origin_heim="https://hub.local",
-        )
-        assert isinstance(result, str)
-        assert len(result) > 0
-        # Rückfrage-Text und Kandidaten-Liste im kombinierten Tool-Result.
-        assert "?" in result or "Meintest" in result
-        assert "aktion=match" in result  # Auflösungs-Anweisung im Tool-Result
-
-    def test_mehrdeutigkeit_gibt_string_kein_tupel(self):
-        """EC-29: Mehrdeutigkeit returnt einen String, kein Tupel."""
-        client = FakeSeitenClient(_inventar_mehrdeutig())
-        result = seiten_uebersicht(
-            chat_id=100,
-            from_user_id=42,
-            suchbegriff="wetter",
-            seiten_client=client,
-            is_member_fn=_immer_mitglied,
-            display_url_origin_heim="https://hub.local",
-        )
-        assert isinstance(result, str), (
-            "EC-29: Funktion muss immer einen String returnen, nicht ein Tupel")
-
-    # -- AC4: Opt-out / kein Folge-Turn --
-
-    def test_opt_out_kein_match_gibt_text(self):
-        """AC4: Kein Treffer → Fallback-Text als Tool-Result, kein Crash."""
-        client = FakeSeitenClient(_inventar_einfach())
-        result = seiten_uebersicht(
-            chat_id=100,
-            from_user_id=42,
-            suchbegriff="gibts-nicht-xyz",
-            seiten_client=client,
-            is_member_fn=_immer_mitglied,
-            display_url_origin_heim="https://hub.local",
-        )
-        assert isinstance(result, str)
-        assert len(result) > 0
+    # -- AC4: kein Suchbegriff --
 
     def test_kein_suchbegriff_gibt_default_text(self):
         """AC4: Ohne Suchbegriff → Default-Text, eine konsistente Antwort."""
@@ -454,6 +330,53 @@ class TestSeitenUebersicht:
         assert isinstance(result, str)
         assert "nicht erreichbar" in result.lower()
 
+    # -- AC3 (SREG-5b): Fehler-Pfad bei aktion=None/unbekannt --
+
+    def test_aktion_none_mit_suchbegriff_gibt_fehler_text(self):
+        """AC3/SREG-5b: suchbegriff + aktion=None → Fehler-Tool-Result, kein Substring-Match.
+
+        SREG-5b Weg-2-Pivot: kein stilles Substring-Match — das LLM muss
+        explizit inventar oder match waehlen (#488).
+        """
+        client = FakeSeitenClient(_inventar_einfach())
+        result = seiten_uebersicht(
+            chat_id=1,
+            from_user_id=99,
+            suchbegriff="wetter",
+            seiten_client=client,
+            is_member_fn=lambda _: True,
+            display_url_origin_heim="http://heim:8443",
+            aktion=None,
+        )
+        assert isinstance(result, str), "Fehler-Pfad muss String liefern, kein Crash"
+        assert "aktion" in result.lower(), "Fehler-Text muss 'aktion' nennen"
+        # Kein URL aus dem Inventar — kein stilles Substring-Match.
+        assert "/display/wetter" not in result
+
+    def test_aktion_unbekannt_mit_suchbegriff_gibt_fehler_text(self):
+        """AC3/SREG-5b: suchbegriff + unbekannter aktion-Wert → Fehler-Tool-Result.
+
+        Unbekannter aktion-Wert darf keinen Subset-Match auslösen (SREG-5b).
+        """
+        client = FakeSeitenClient(_inventar_einfach())
+        for ungueltig in ("foo", "unbekannt"):
+            result = seiten_uebersicht(
+                chat_id=1,
+                from_user_id=99,
+                suchbegriff="garderobe",
+                seiten_client=client,
+                is_member_fn=lambda _: True,
+                display_url_origin_heim="http://heim:8443",
+                aktion=ungueltig,
+            )
+            assert isinstance(result, str), (
+                "aktion=%r: Fehler-Pfad muss String liefern" % ungueltig)
+            assert "aktion" in result.lower(), (
+                "aktion=%r: Fehler-Text muss 'aktion' nennen" % ungueltig)
+            # Kein URL aus dem Inventar — kein stilles Substring-Match.
+            assert "/display/" not in result, (
+                "aktion=%r: kein Substring-Match auf Inventar" % ungueltig)
+
 
 # ============================================================
 #  Tests: SeitenUebersichtTask — EC-29 / TASK-10
@@ -485,14 +408,14 @@ class TestSeitenUebersichtTask:
         assert len(result) > 0
         assert "https://hub.local/api/v1/seiten/uebersicht" in result
 
-    def test_run_opt_in_mit_suchbegriff_gibt_direkt_url(self):
-        """AC3/EC-29: Task mit suchbegriff → Direkt-URL als Tool-Result."""
+    def test_run_opt_in_runde2_gibt_direkt_url(self):
+        """AC3/EC-29: Task mit suchbegriff + aktion=match → Direkt-URL als Tool-Result."""
         client = FakeSeitenClient(_inventar_einfach())
         task = SeitenUebersichtTask(seiten_client=client,
                                     is_member_fn=_immer_mitglied,
                                     display_url_origin_heim="https://hub.local")
         ctx = _make_turn_context()
-        result = task.run({"suchbegriff": "Garderobe"}, ctx)
+        result = task.run({"suchbegriff": "Garderoben-Editor", "aktion": "match"}, ctx)
         assert isinstance(result, str)
         assert "https://hub.local/display/wetter/regeln" in result
 
@@ -586,21 +509,13 @@ class TestTask10BaselineRunSendetNichts:
         assert len(result_r2) > 0, "Runde 2: Tool-Result muss nicht-leer sein"
         assert not tg_r2.sent, "Runde 2: FakeTelegram muss leer sein"
 
-        # --- Mehrdeutigkeit ---
-        tg_mehrd = FakeTelegram()
-        task_mehrd = self._make_task(inventar=_inventar_mehrdeutig())
-        result_mehrd = task_mehrd.run({"suchbegriff": "wetter"}, ctx)
-        assert isinstance(result_mehrd, str), "Mehrdeutig: Tool-Result muss ein String sein"
-        assert len(result_mehrd) > 0, "Mehrdeutig: Tool-Result muss nicht-leer sein"
-        assert not tg_mehrd.sent, "Mehrdeutig: FakeTelegram muss leer sein"
-
-        # --- Kein Treffer (Fallback) ---
-        tg_kein = FakeTelegram()
-        task_kein = self._make_task(inventar=_inventar_einfach())
-        result_kein = task_kein.run({"suchbegriff": "gibts-nicht-xyz"}, ctx)
-        assert isinstance(result_kein, str), "Kein Treffer: Tool-Result muss ein String sein"
-        assert len(result_kein) > 0, "Kein Treffer: Tool-Result muss nicht-leer sein"
-        assert not tg_kein.sent, "Kein Treffer: FakeTelegram muss leer sein"
+        # --- aktion fehlt (SREG-5b Fehler-Pfad) ---
+        tg_aktion = FakeTelegram()
+        task_aktion = self._make_task(inventar=_inventar_einfach())
+        result_aktion = task_aktion.run({"suchbegriff": "wetter"}, ctx)
+        assert isinstance(result_aktion, str), "aktion fehlt: Tool-Result muss ein String sein"
+        assert "aktion" in result_aktion.lower(), "aktion fehlt: Fehler-Text muss 'aktion' nennen"
+        assert not tg_aktion.sent, "aktion fehlt: FakeTelegram muss leer sein"
 
         # --- Nicht erreichbar ---
         tg_err = FakeTelegram()
@@ -865,201 +780,6 @@ class TestFormatierInventarToolResult:
         result = formatiere_inventar_tool_result(inv)
         assert str(len(inv)) in result
 
-
-# ============================================================
-#  Tests: formatiere_mehrdeutigkeit_tool_result (#549)
-# ============================================================
-
-class TestFormatierMehrdeutigkeitToolResult:
-    """Unit-Tests für formatiere_mehrdeutigkeit_tool_result() (#549).
-
-    T549-Test1: Struktur-Test — kandidaten_text enthält label, key, pfad
-    aller Kandidaten + Auflösungs-Anweisung.
-    """
-
-    def _treffer_paula(self):
-        return [
-            {"label": "Panel paulas-panel-01",
-             "key": "panel-paulas-panel-01",
-             "pfad": "/controller/app-panel/paulas-panel-01"},
-            {"label": "Panel paulas-panel-01 bearbeiten",
-             "key": "paulas-panel-01-bearbeiten",
-             "pfad": "/controller/app-panel/paulas-panel-01/bearbeiten"},
-        ]
-
-    def test_enthaelt_labels_aller_kandidaten(self):
-        """T549-Test1a: Jedes label der Treffer ist im kandidaten_text enthalten."""
-        result = formatiere_mehrdeutigkeit_tool_result(self._treffer_paula())
-        assert 'label: "Panel paulas-panel-01"' in result
-        assert 'label: "Panel paulas-panel-01 bearbeiten"' in result
-
-    def test_enthaelt_keys_aller_kandidaten(self):
-        """T549-Test1b: Jedes key der Treffer ist im kandidaten_text enthalten."""
-        result = formatiere_mehrdeutigkeit_tool_result(self._treffer_paula())
-        assert "panel-paulas-panel-01" in result
-        assert "paulas-panel-01-bearbeiten" in result
-
-    def test_enthaelt_pfade_aller_kandidaten(self):
-        """T549-Test1c: Jeder pfad der Treffer ist im kandidaten_text enthalten."""
-        result = formatiere_mehrdeutigkeit_tool_result(self._treffer_paula())
-        assert "/controller/app-panel/paulas-panel-01" in result
-        assert "/controller/app-panel/paulas-panel-01/bearbeiten" in result
-
-    def test_enthaelt_aufloesung_anweisung(self):
-        """T549-Test1d: kandidaten_text enthält Auflösungs-Anweisung ans LLM."""
-        result = formatiere_mehrdeutigkeit_tool_result(self._treffer_paula())
-        assert "aktion=match" in result
-        assert "Default-Fallback" in result or "Default" in result
-
-    def test_enthaelt_nummerierung(self):
-        """T549-Test1e: Kandidaten sind nummeriert (1., 2., ...)."""
-        result = formatiere_mehrdeutigkeit_tool_result(self._treffer_paula())
-        assert "1." in result
-        assert "2." in result
-
-    def test_eintrag_ohne_key_kein_crash(self):
-        """Defensiv: Eintrag ohne key/pfad → kein crash."""
-        treffer = [{"label": "Nur Label"}]
-        result = formatiere_mehrdeutigkeit_tool_result(treffer)
-        assert "Nur Label" in result
-
-
-# ============================================================
-#  Tests: Mehrdeutigkeit als String-Tool-Result (#549/#583)
-# ============================================================
-
-class TestMehrdeutigkeitAlsStringToolResult:
-    """T549-Test2 (EC-29 Migration): Mehrdeutigkeit liefert String-Tool-Result zurück;
-    der kombinierte Text enthält Rückfrage + Kandidaten-Liste.
-
-    Simuliert den Paula-Panel-Live-Bug:
-      Runde match → 2 Treffer → String mit Rückfrage + kandidaten_text
-      → User sagt „Die Ansicht" → LLM ruft mit aktion=match + exaktem label
-      → Direkt-URL als Tool-Result (kein Default-Fallback).
-    """
-
-    def _inventar_paula(self):
-        return [
-            {"label": "Panel paulas-panel-01",
-             "key": "panel-paulas-panel-01",
-             "pfad": "/controller/app-panel/paulas-panel-01",
-             "typ": "panel",
-             "zeigt": "Panel-Steuerung paulas-panel-01",
-             "synonyme": []},
-            {"label": "Panel paulas-panel-01 bearbeiten",
-             "key": "paulas-panel-01-bearbeiten",
-             "pfad": "/controller/app-panel/paulas-panel-01/bearbeiten",
-             "typ": "eltern",
-             "zeigt": "Panel paulas-panel-01 Editor",
-             "synonyme": []},
-        ]
-
-    def test_signal_mehrdeutig_ist_string(self):
-        """T549-Test2a (EC-29): Bei Mehrdeutigkeit (Substring-Pfad) gibt
-        seiten_uebersicht() einen String zurück (kein Tupel mehr — EC-29).
-        """
-        client = FakeSeitenClient(self._inventar_paula())
-        # Ohne aktion → Substring-Pfad → beide Einträge enthalten "paulas-panel-01" → mehrdeutig.
-        result = seiten_uebersicht(
-            chat_id=100, from_user_id=42,
-            suchbegriff="paulas-panel-01",
-            seiten_client=client,
-            is_member_fn=_immer_mitglied,
-            display_url_origin_heim="https://hub.local",
-            aktion=None,
-        )
-        assert isinstance(result, str), (
-            "EC-29: Funktion muss immer einen String zurückgeben (kein Tupel mehr)")
-
-    def test_signal_mehrdeutig_enthaelt_beide_labels(self):
-        """T549-Test2b: Rückfrage-Text enthält beide Panel-Labels."""
-        client = FakeSeitenClient(self._inventar_paula())
-        result = seiten_uebersicht(
-            chat_id=100, from_user_id=42,
-            suchbegriff="paulas-panel-01",
-            seiten_client=client,
-            is_member_fn=_immer_mitglied,
-            display_url_origin_heim="https://hub.local",
-            aktion=None,
-        )
-        assert "Panel paulas-panel-01" in result
-        assert "Panel paulas-panel-01 bearbeiten" in result
-
-    def test_task_mehrdeutig_gibt_string_als_tool_result(self):
-        """T549-Test2c: SeitenUebersichtTask gibt kombinierten String als Tool-Result zurück
-        (Substring-Pfad, kein aktion=match).
-        """
-        client = FakeSeitenClient(self._inventar_paula())
-        task = SeitenUebersichtTask(
-            seiten_client=client,
-            is_member_fn=_immer_mitglied,
-            display_url_origin_heim="https://hub.local",
-        )
-        ctx = _make_turn_context()
-        # Kein aktion → Substring-Pfad → mehrdeutig → kombinierter Text als Tool-Result.
-        result = task.run({"suchbegriff": "paulas-panel-01"}, ctx)
-        assert isinstance(result, str)
-        assert "Panel paulas-panel-01" in result
-        assert "aktion=match" in result
-
-    def test_roundtrip_disambiguation_ansicht(self):
-        """T549-Test2d: Roundtrip — Mehrdeutigkeits-Tool-Result → match mit exaktem label.
-
-        Simuliert den Paula-Panel-Live-Bug (T549-Fix2):
-          Runde inventar (q='paulas-panel-01') → inventar_text mit label + key.
-          Runde match (q='Panel paulas-panel-01') → Equality-Lookup trifft
-          NUR den ersten Eintrag → Direkt-URL als Tool-Result (kein Präfix-Bug).
-        """
-        # Runde 1: Inventar holen.
-        client1 = FakeSeitenClient(self._inventar_paula())
-        result1 = seiten_uebersicht(
-            chat_id=100, from_user_id=42,
-            suchbegriff="paulas-panel-01",
-            seiten_client=client1,
-            is_member_fn=_immer_mitglied,
-            display_url_origin_heim="https://hub.local",
-            aktion=AKTION_INVENTAR,
-        )
-        assert isinstance(result1, str)
-        # Inventar enthält label + key beider Einträge.
-        assert "Panel paulas-panel-01" in result1
-        assert "panel-paulas-panel-01" in result1
-        assert "Panel paulas-panel-01 bearbeiten" in result1
-
-        # Runde 2: LLM wählt exaktes label der Ansicht → Equality-Match trifft nur diesen.
-        client2 = FakeSeitenClient(self._inventar_paula())
-        result2 = seiten_uebersicht(
-            chat_id=100, from_user_id=42,
-            suchbegriff="Panel paulas-panel-01",
-            seiten_client=client2,
-            is_member_fn=_immer_mitglied,
-            display_url_origin_heim="https://hub.local",
-            aktion=AKTION_MATCH,
-        )
-        assert isinstance(result2, str)
-        assert "https://hub.local/controller/app-panel/paulas-panel-01" in result2, (
-            "Equality-Match mit exaktem label muss Direkt-URL liefern "
-            "(T549-Fix2: kein Präfix-Geschwister-Bug)")
-        # Kein /bearbeiten-Suffix → Ansicht, nicht Editor.
-        assert "/bearbeiten" not in result2
-
-    def test_roundtrip_disambiguation_editor(self):
-        """T549-Test2e: Roundtrip — Disambiguation auf Editor-View.
-
-        Runde match (q='Panel paulas-panel-01 bearbeiten') → URL zum Editor.
-        """
-        client = FakeSeitenClient(self._inventar_paula())
-        result = seiten_uebersicht(
-            chat_id=100, from_user_id=42,
-            suchbegriff="Panel paulas-panel-01 bearbeiten",
-            seiten_client=client,
-            is_member_fn=_immer_mitglied,
-            display_url_origin_heim="https://hub.local",
-            aktion=AKTION_MATCH,
-        )
-        assert isinstance(result, str), (
-            "Exaktes label für Editor-View muss Direkt-URL liefern (#549)")
-        assert "/bearbeiten" in result
 
 
 # ============================================================
