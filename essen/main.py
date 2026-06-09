@@ -31,7 +31,7 @@ _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from tools import logsetup  # noqa: E402
+from tools import configloader, logsetup  # noqa: E402
 
 if __package__:
     from . import config as config_mod
@@ -343,6 +343,14 @@ def gericht_anlegen():
 #  Entrypoint (ESSEN-23)
 # ============================================================
 
+# Runtime-Konfig-Schema (CONFIG-1): nur die Service-Start-Werte — Bind,
+# Log-Level. Listen-Port 5052 (ESSEN-21, PORT-2 `xbuddy-essen`).
+RUNTIME_SCHEMA = {
+    "listen_host": "127.0.0.1",
+    "listen_port": 5052,
+    "log_level":   "INFO",
+}
+
 logger = logging.getLogger(__name__)
 
 
@@ -359,7 +367,7 @@ def main(argv=None):
     args = parse_args(argv if argv is not None else sys.argv[1:])
 
     # Runtime-Config (CONFIG-1/CONFIG-5): config.json < ENV < CLI.
-    rt = config_mod.resolve_runtime()
+    rt = configloader.load(component="essen", schema=RUNTIME_SCHEMA)
     if args.host:
         rt["listen_host"] = args.host
     if args.port:
