@@ -46,6 +46,8 @@ Die `*.service`-Dateien enthalten Per-Instanz-Werte als Platzhalter im Format
 | `__XBUDDY_REPO__` | Pfad zum gecheckten xbuddy-Repo auf der Instanz. | `/home/buddy/repos/xbuddy` |
 | `__XBUDDY_PYTHON__` | Python-Interpreter mit installierten Repo-Abhängigkeiten. | `/home/buddy/apps/venv/bin/python` |
 | `__XBUDDY_DATA__` | Wurzel der Per-Instanz-Daten außerhalb des Checkouts (SVC-5). | `/home/buddy/xbuddy-data` |
+| `__XBUDDY_DISPLAY_ORIGIN_HEIM__` | Heimnetz-Origin für Display-URLs (SREG-7: eine Origin, Routing im Router). | `https://xbuddy-hub.local:8443` |
+| `__XBUDDY_DISPLAY_ORIGIN_TAILSCALE__` | Tailscale-Origin für Display-URLs (SREG-7: 4-Segment-Form, tauscht Platzhalter in Tailnet-Slug). | `https://xbuddy-hub.tailnet-xxxx.ts.net:8443` |
 
 Die `__…__`-Platzhalter erzwingen, dass nichts versehentlich vor dem `cp`
 als „passt schon" durchgeht — wer einen Service-File mit `__XBUDDY_REPO__`
@@ -98,7 +100,7 @@ Die übrigen Services haben keine `EnvironmentFile`-Abhängigkeit.
        -e 's|__XBUDDY_PYTHON__|/home/buddy/apps/venv/bin/python|g' \
        -e 's|__XBUDDY_DATA__|/home/buddy/xbuddy-data|g' \
        -e 's|__XBUDDY_DISPLAY_ORIGIN_HEIM__|https://xbuddy-hub.local:8443|g' \
-       -e 's|__XBUDDY_DISPLAY_ORIGIN_TAILSCALE__|https://xbuddy-hub.ts.net:8443|g' \
+       -e 's|__XBUDDY_DISPLAY_ORIGIN_TAILSCALE__|https://xbuddy-hub.tailnet-xxxx.ts.net:8443|g' \
        "${SVC_SRC[$svc]}" \
        | sudo tee "/etc/systemd/system/${svc}.service" >/dev/null
    done
