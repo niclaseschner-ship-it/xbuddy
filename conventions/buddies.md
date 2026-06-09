@@ -235,7 +235,8 @@ keine Code-Duplikation (jede Datei hat eine eigene Petrantwortung, CLAUDE.md
 | `<slug>/render.py` | View-Rendering (Domänen-Daten → Template-Kontext) |
 | `<slug>/templates/<view>.html` | Display-View (BUD-1) |
 | `<slug>/static/` | buddy-eigene Assets (URL-13) |
-| `<slug>/<slug>.example.json` | dokumentiertes Config-Format (committet, ohne echte Werte; CONFIG-3) |
+| `<slug>/config.example.json` | dokumentiertes **Runtime-Config**-Format (BUD-2, committet ohne echte Werte; CONFIG-3) |
+| `<slug>/<domäne>.example.json` | dokumentiertes **Domänendaten**-Format pro Domäne (BUD-2a, eine oder mehrere; nur wenn der Eltern-Chat Domänendaten schreibt) |
 | `<slug>/<slug>.service` | systemd-Vorlage (SVC-2; Andockpunkt 4) |
 | `<slug>/tests/` | Buddy-Tests (Andockpunkt 5) |
 | `<slug>/__init__.py` | macht den Buddy zum importierbaren Paket (Andockpunkt 6) |
