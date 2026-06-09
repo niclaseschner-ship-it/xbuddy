@@ -21,82 +21,15 @@ desktop.ini
 # Logs
 *.log
 
-# Controller-Instanz-Configs (FIG-23) — pro Instanz separat verwaltet,
-# nicht im Repo. Format ist in config.example.json dokumentiert.
-controller/**/config.json
+# Test-Caches
+.pytest_cache/
+__pycache__/
 
-# App-Panel-Kachel-Konfig (PANEL-3) — pro Panel-Instanz separat, nicht im Repo.
-# Format: controller/app-panel/tiles.example.json
-controller/app-panel/tiles.json
-
-# Router-Instanz-Konfig + Routing-Tabelle (ROU-18/19) — analog
-# pro Deployment, nicht im Repo. Format: router/*.example.json
-router/routing.json
-router/config.json
-
-# Eltern-Chat: Instanz-Konfig + Gesprächs-Datenbank (EC-15/EC-16) —
-# pro Instanz separat, nicht im Repo. Format: eltern-chat/config.example.json
-eltern-chat/config.json
-eltern-chat/*.db
-
-# Eltern-Chat: Onboarding-Speicher-Alt-Datei (ONB-5) — die alte Per-Instanz-
-# Datei ist mit #336 abgelöst (Daten liegen jetzt im ZD-Speicher). Instanzen,
-# die noch eine `.migrated`-Datei auf dem Pi haben, löschen sie manuell (Deploy,
-# kein Code). Der Eintrag bleibt, solange Deployments mit einer Altdatei
-# denkbar sind, damit sie nie versehentlich committed wird.
-eltern-chat/onboarding-store.json
-eltern-chat/onboarding-store.json.migrated
-
-# Familien-Registry: Per-Instanz-Datei + Profilfotos (FAM-6) — je Instanz
-# separat gepflegt, nicht im Repo. Format: familie/familie.example.json
-familie/familie.json
-familie/fotos/
-
-# Geräte-Registry: Per-Instanz-Datei (GER-4) — je Instanz separat gepflegt,
-# nicht im Repo. Trägt 0600-Rechte (analog zugangsdaten.json/onboarding-store).
-# Format: geraete/geraete.example.json
-geraete/geraete.json
-
-# Panel-Registry: Per-Instanz-Datei (PREG-4) — je Instanz separat gepflegt,
-# nicht im Repo. Trägt 0600-Rechte (familienprivate Display-Bindungen + Tile-Configs).
-# Format: panel/panels.example.json
-panel/panels.json
-
-# Seiten-Registry: gecachtes Inventar (SREG-3) — abgeleiteter Snapshot, kein
-# Stammdatum, trägt 0600-Rechte. Live liegt es außerhalb des Checkouts (SVC-5);
-# diese Regel fängt nur einen Dev-Lauf mit Default-Pfad im Checkout ab.
-seiten/inventar.json
-
-# Zugangsdaten-Speicher (ZD-3) — Per-Instanz-Geheimnis-Datei. Hält
-# Klartext-Geheimnisse, darf nie ins Repo (CLAUDE.md §8). Format:
-# tools/zugangsdaten/zugangsdaten.example.json
-tools/zugangsdaten/zugangsdaten.json
-
-# Plan-Buddy: Per-Instanz-Konfig + Verantwortlichkeiten-DB (PLAN-9/PLAN-28) —
-# je Instanz separat, nicht im Repo. Format: plan/plan.example.json
-plan/plan.json
-plan/plan.db
-plan/plan.db-journal
-
-# Essens-Buddy: Daten-State-Dateien (ESSEN-7/ESSEN-21) — Per-Instanz,
-# nicht im Repo. Wunsch-Liste, Gerichte-Katalog und Lebensmittel-Override
-# landen ohne ENV-Override neben dem Code; alle drei ausgeschlossen.
-essen/wuensche.json
-essen/gerichte.json
-essen/katalog.json
-
-# CA-Werkzeug: erzeugte Root-CA + Server-Zertifikat (#36) — die *-key.pem
-# sind Per-Instanz-Geheimnisse (CLAUDE.md §8), niemals ins Repo. Nur das
-# Skript tools/ca/make-ca.sh ist versioniert. Default-Ausgabe: tools/ca/out/.
-tools/ca/out/
 # Defense-in-depth: CA-Artefakte bleiben ausgeschlossen, auch wenn make-ca.sh
-# per --out in einen anderen Repo-Pfad schreibt.
+# per --out in einen anderen Repo-Pfad schreibt. Das spezifische
+# tools/ca/out/-Verzeichnis lebt in tools/ca/.gitignore (BUD-2b).
 **/rootCA-key.pem
 **/rootCA.pem
 **/server-key.pem
 **/server-cert.pem
 **/server.csr
-
-# Test-Caches
-.pytest_cache/
-__pycache__/

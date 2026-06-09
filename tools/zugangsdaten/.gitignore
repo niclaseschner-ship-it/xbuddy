@@ -1,0 +1,8 @@
+# ZD-3 — Per-Instanz-Dateien des Zugangsdaten-Buddys, je Instanz separat
+# gepflegt, niemals im Repo. Formate sind in den committeten *.example.json
+# dokumentiert.
+#
+# Zugangsdaten-Speicher (ZD-3) — Per-Instanz-Geheimnis-Datei, hält
+# Klartext-Geheimnisse, darf nie ins Repo (CLAUDE.md §8).
+# Format: tools/zugangsdaten/zugangsdaten.example.json
+zugangsdaten.json

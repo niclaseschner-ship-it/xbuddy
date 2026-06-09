@@ -1,0 +1,7 @@
+# PANEL-3 — Per-Instanz-Dateien des App-Panel-Controllers, je Instanz separat
+# gepflegt, niemals im Repo. Formate sind in den committeten *.example.json
+# dokumentiert.
+#
+# App-Panel-Kachel-Konfig (PANEL-3) — pro Panel-Instanz separat.
+# Format: controller/app-panel/tiles.example.json
+tiles.json

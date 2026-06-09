@@ -1,0 +1,14 @@
+# EC-15/EC-16/ONB-5 — Per-Instanz-Dateien des Eltern-Chat-Buddys, je Instanz
+# separat gepflegt, niemals im Repo. Formate sind in den committeten
+# *.example.json dokumentiert.
+#
+# Instanz-Konfig (EC-15). Format: eltern-chat/config.example.json
+config.json
+# Gesprächs-Datenbank (EC-16) — Per-Instanz-Daten.
+*.db
+# Onboarding-Speicher-Alt-Datei (ONB-5) — mit #336 (Onboarding-Migration auf
+# ZD-Speicher) abgelöst. Instanzen, die noch eine .migrated-Datei auf dem Pi
+# haben, löschen sie manuell (Deploy, kein Code). Eintrag bleibt, solange
+# Deployments mit Altdatei denkbar sind.
+onboarding-store.json
+onboarding-store.json.migrated
