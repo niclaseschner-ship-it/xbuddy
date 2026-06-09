@@ -228,43 +228,41 @@ def _lade_rohstand():
     return data if isinstance(data, dict) else {}
 
 
-@app.route("/display/wetter/regeln", methods=["GET"])
+@app.route("/display/wetter/regeln", methods=["GET", "POST"])
 def regeln():
-    """Garderoben-Editor-Seite: Übersicht + Fokus der Regelmatrix (WETTER-26/27).
+    """Garderoben-Editor-Seite: GET liefert Übersicht + Fokus (WETTER-26/27);
+    POST validiert + schreibt die Matrix atomar (WETTER-30).
 
-    Zeigt alle Regeln in ihrer Reihenfolge (erste passende gewinnt, WETTER-14)
-    mit read-only Bedingung und editierbaren Kleidungs-Sets aus der kuratierten
-    Palette (WETTER-28/29). Keine Live-Wetter-Daten — nur die Regel-Config.
+    GET: Zeigt alle Regeln in ihrer Reihenfolge (erste passende gewinnt,
+    WETTER-14) mit read-only Bedingung und editierbaren Kleidungs-Sets aus der
+    kuratierten Palette (WETTER-28/29). Keine Live-Wetter-Daten — nur Config.
+
+    POST: Nimmt die editierte Matrix als JSON-Body, validiert gegen die
+    kuratierte Palette und den frisch geladenen Stand (WETTER-28/30) und
+    schreibt `wetter.json` atomar auf `runtime['config_path']` — der Kiosk
+    übernimmt per DCOMP-2 ohne Restart. Ungültig → 422 + Begründung, Datei
+    unverändert. Ohne konfigurierten `config_path` (kein Ziel) → 409.
+
+    GET + POST auf verbfreiem Pfad (URL-2).
     """
+    if request.method == "POST":
+        path = runtime.get("config_path")
+        if not path:
+            return jsonify({"ok": False, "fehler": "Kein wetter.json-Pfad konfiguriert"}), 409
+        matrix = request.get_json(silent=True)
+        if matrix is None:
+            return jsonify({"ok": False, "fehler": "Kein JSON-Body"}), 400
+        try:
+            store_mod.speichere_garderobe(
+                path, matrix, palette_mod, geladener_stand=_lade_rohstand())
+        except store_mod.ValidierungsFehler as e:
+            return jsonify({"ok": False, "fehler": str(e)}), 422
+        except store_mod.StoreError as e:
+            logger.error("Garderobe-Save fehlgeschlagen: %s", e)
+            return jsonify({"ok": False, "fehler": str(e)}), 500
+        return jsonify({"ok": True})
     view = editor_mod.baue_view(_lade_rohstand(), palette_mod)
     return render_template("wetter_regeln.html", view=view)
-
-
-@app.route("/display/wetter/regeln/speichern", methods=["POST"])
-def regeln_speichern():
-    """Interner Save-Handler: validiert + schreibt die Matrix atomar (WETTER-30).
-
-    Nimmt die editierte Matrix als JSON-Body, validiert gegen die kuratierte
-    Palette und den frisch geladenen Stand (WETTER-28/30) und schreibt
-    `wetter.json` atomar auf `runtime['config_path']` — der Kiosk übernimmt per
-    DCOMP-2 ohne Restart. Ungültig → 422 + Begründung, Datei unverändert. Ohne
-    konfigurierten `config_path` (kein Ziel) → 409.
-    """
-    path = runtime.get("config_path")
-    if not path:
-        return jsonify({"ok": False, "fehler": "Kein wetter.json-Pfad konfiguriert"}), 409
-    matrix = request.get_json(silent=True)
-    if matrix is None:
-        return jsonify({"ok": False, "fehler": "Kein JSON-Body"}), 400
-    try:
-        store_mod.speichere_garderobe(
-            path, matrix, palette_mod, geladener_stand=_lade_rohstand())
-    except store_mod.ValidierungsFehler as e:
-        return jsonify({"ok": False, "fehler": str(e)}), 422
-    except store_mod.StoreError as e:
-        logger.error("Garderobe-Save fehlgeschlagen: %s", e)
-        return jsonify({"ok": False, "fehler": str(e)}), 500
-    return jsonify({"ok": True})
 
 
 # ============================================================

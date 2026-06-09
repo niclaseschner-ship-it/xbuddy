@@ -9,8 +9,8 @@ entstehen (BUD-3 / SREG-2).
 Der Wetter-Buddy hat genau ZWEI kanonische HTML-GET-Routen unter /display/wetter/:
 `/display/wetter/heute` (WETTER-2) und `/display/wetter/regeln` (WETTER-26).
 `?stage=toddler` ist eine Query-Option (WETTER-4), erzeugt keine eigene Route —
-kein Manifest-Eintrag (SREG-1). POST `/display/wetter/regeln/speichern` (WETTER-30)
-ist kein GET-Endpunkt und damit automatisch ausgenommen.
+kein Manifest-Eintrag (SREG-1). POST `/display/wetter/regeln` (WETTER-30)
+ist kein reiner GET-Endpunkt und damit automatisch ausgenommen.
 """
 
 import os
@@ -58,7 +58,7 @@ def test_wetter_routes_match_manifest():
     """Bidirektionale BUD-3-Bindung: jede kanonische /display/wetter/-GET-Route
     hat genau einen Eintrag und umgekehrt (AC-B2 / SREG-9).
 
-    POST /display/wetter/regeln/speichern ist kein GET-Endpunkt — der Helfer
+    POST /display/wetter/regeln ist kein reiner GET-Endpunkt — der Helfer
     schließt ihn durch den GET-Filter automatisch aus; kein ausgenommene_pfade
     nötig (BUD-3).
     """
