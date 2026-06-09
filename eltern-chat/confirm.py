@@ -37,11 +37,23 @@ def is_confirmation(text):
 
 @dataclass
 class PendingProposal:
-    """Ein vorgelegter, noch unbestätigter schreibender Vorschlag (EC-10)."""
+    """Ein vorgelegter, noch unbestätigter schreibender Vorschlag (EC-10).
+
+    `media_telegram_file_id` und `medium_typ` halten die deterministische
+    Medien-Naht (FSE-3 / D4) des propose-Turns fest — sie werden im
+    execute-Turn (Bestätigung) in den TurnContext zurückgespielt (#514).
+    Hintergrund: bei TAB-12 (»Termine aus Bild«) trägt der propose-Turn das
+    Foto, der confirm-Turn nur das Bestätigungs-Wort. Ohne diese Persistenz
+    sähe execute() einen leeren TurnContext und müsste fälschlich eine
+    »kein Bild«-Quittung schicken. Beide Felder bleiben optional — bestehende
+    Schreib-Aufgaben (TES/FAA/…), die kein Medium nutzen, lassen sie leer.
+    """
     chat_id: object
     proposal_message_id: int     # die vom Bot gesendete Vorschlags-Nachricht
     task_name: str
     arguments: dict
+    media_telegram_file_id: object = None   # #514 (TAB-12 / FSE-3-Spiegel)
+    medium_typ: object = None               # #514 — "foto" | "video" | None
 
 
 class PendingStore:
