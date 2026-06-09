@@ -1,0 +1,6 @@
+{
+  "_comment": "ESSEN-21/CONFIG-1 — Runtime-Konfig des Essens-Buddys (Bind, Log). Kopiere als config.json (gitignored). Nicht gesetzte Felder bleiben auf den Code-Defaults (RUNTIME_SCHEMA in essen/main.py). ENV-Variablen (ESSEN_LISTEN_PORT etc.) und CLI-Flags überschreiben diese Datei (CONFIG-5). Die Daten-Konfig (Wunschliste, Gerichte) liegt separat in wuensche.json, gerichte.json, katalog.json (Formate: wuensche.example.json, gerichte.example.json).",
+  "listen_host": "127.0.0.1",
+  "listen_port": 5052,
+  "log_level": "INFO"
+}
