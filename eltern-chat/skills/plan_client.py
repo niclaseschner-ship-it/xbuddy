@@ -22,8 +22,16 @@ logger = logging.getLogger(__name__)
 # 2 s ist grosszügig; im unhealthy-Fall fällt die Antwort schnell zurück.
 HTTP_TIMEOUT_SECONDS = 2.0
 
+# TAB-9 / PLAN-33.4: Bulk-Aufrufe brauchen mehr Budget — der Server-Pfad
+# durchläuft N Google-Inserts mit Exponential Backoff (15 s Server-Budget,
+# `plan/main.py:725`). Client-Timeout 20 s deckt das + Netz-Latenz.
+HTTP_BULK_TIMEOUT_SECONDS = 20.0
+
 # PLAN-22: stabiler Pfad der Termin-Schnittstelle (URL-4).
 PFAD_TERMINE = "/api/v1/plan/termine"
+
+# TAB-9 / PLAN-33: stabiler Pfad der Bulk-Termin-Schnittstelle (URL-4).
+PFAD_TERMINE_BULK = "/api/v1/plan/termine/bulk"
 
 
 class PlanClientError(Exception):
@@ -31,6 +39,24 @@ class PlanClientError(Exception):
 
     Die Funktionen `termine_erfragen` (TER-7) und `termin_eintragen` (TES-9)
     fangen das ab und liefern das Ergebnis-Signal „nicht_erreichbar".
+    """
+
+
+class PlanBulkNotReached(PlanClientError):
+    """TAB-10: Plan-Buddy hat den Bulk-Schreibvorgang **nicht** begonnen
+    (Connection refused vor Item 1 ODER HTTP 502 mit `calendar_unavailable`).
+
+    Konsumenten-Vertrag: 0 Termine im Familien-Kalender → Ergebnis-Signal
+    `nicht_erreichbar` (TAB-10 erste/dritte Lage).
+    """
+
+
+class PlanBulkUnknown(PlanClientError):
+    """TAB-10: Verbindung mitten im Bulk-Aufruf abgerissen ODER HTTP 5xx ohne
+    parsbaren Body. Der Server **könnte** schon Items geschrieben haben —
+    die Funktion weiß nicht, welche.
+
+    Konsumenten-Vertrag: Ergebnis-Signal `unbekannt` (TAB-10 zweite/vierte Lage).
     """
 
 
@@ -142,20 +168,122 @@ class PlanClient:
                 "Plan-Buddy: PUT-Antwort ohne event_id (%r)" % data)
         return str(event_id)
 
+    def put_termine_bulk(self, request_id, items):
+        """TAB-9: schreibt mehrere Termine über die Bulk-Schnittstelle
+        (PLAN-33, `POST /api/v1/plan/termine/bulk`).
+
+        `request_id` — UUIDv4-String (PLAN-33.5, Idempotenz). Pflicht; der
+                       Aufrufer (TAB-Funktion) erzeugt die ID einmal je
+                       Session und reicht sie wieder, falls ein manueller
+                       Retry passiert (TAB-10).
+        `items`      — Liste von Termin-Bodies in PLAN-22-PUT-Form
+                       (`{titel, beginn[, ende]}`); Cap 30 (PLAN-33.3) —
+                       der TAB-Skill cap't bereits im Plausi-Filter
+                       (TAB-6), aber Server erzwingt es ebenfalls.
+
+        Erfolg (HTTP 200): liefert das vollständige Antwort-Dict
+        `{ok, geschrieben, gesamt, results}` zur Weiterverarbeitung
+        (TAB-11 N-von-M-Quittung mit Fehler-Codes).
+
+        Fehler-Lagen (TAB-10): drei spezialisierte Exceptions, damit der
+        Aufrufer „nicht_erreichbar" und „unbekannt" deterministisch
+        unterscheidet:
+          - `PlanBulkNotReached` — Connection refused vor Item 1, ODER
+                                   HTTP 502 mit `error: calendar_unavailable`
+                                   (PLAN-33.2 — Server hat **vor** dem
+                                   ersten Insert aufgegeben, 0 geschrieben).
+          - `PlanBulkUnknown`    — Verbindung mitten im Bulk-Aufruf
+                                   abgerissen (Timeout, Socket-Error nach
+                                   Sende-Bestätigung) ODER HTTP 5xx ohne
+                                   parsbaren Body (Server-Zustand unklar).
+          - `PlanClientError`    — HTTP 4xx (Validation, Idempotenz-Konflikt),
+                                   Server-Antwort form-unerwartet. Dies ist
+                                   ein **logischer** Fehler, kein Netz-Problem.
+
+        Kein eigener Retry (E-TAB-2, analog TES-9). Bei `PlanBulkUnknown`
+        ist eine erneute Anfrage mit DERSELBEN `request_id` idempotent
+        (PLAN-33.5, 15-min-TTL) — der **manuelle** Wiederversuch ist
+        Aufrufer-Sache (TAB-10).
+        """
+        body = {"request_id": request_id, "items": items}
+        body_bytes = json.dumps(body).encode("utf-8")
+        try:
+            status, resp_bytes = self._call(
+                "POST", PFAD_TERMINE_BULK,
+                body=body_bytes,
+                content_type="application/json",
+                timeout=HTTP_BULK_TIMEOUT_SECONDS)
+        except PlanBulkNotReached:
+            raise
+        except PlanBulkUnknown:
+            raise
+        except PlanClientError:
+            # `_call` kann nur „nicht erreichbar"-Fehler werfen (Connection
+            # refused, DNS, URLError). Diese passieren VOR dem ersten Byte
+            # — Server hat nichts geschrieben (TAB-10 erste Lage).
+            raise PlanBulkNotReached(
+                "Plan-Buddy nicht erreichbar (POST %s)" % PFAD_TERMINE_BULK)
+
+        # HTTP 200 → erwartete Bulk-Antwort {ok, geschrieben, gesamt, results}.
+        if status == 200:
+            try:
+                data = json.loads(resp_bytes.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as e:
+                # 200 mit kaputtem Body — Server-Zustand unklar (TAB-10 vierte
+                # Lage). Konservativ: „unbekannt", nicht „nicht erreichbar".
+                raise PlanBulkUnknown(
+                    "Plan-Buddy: 200-Antwort nicht parsebar (%s)" % e) from e
+            if not isinstance(data, dict) or "results" not in data:
+                raise PlanClientError(
+                    "Plan-Buddy: Bulk-Antwort hat unerwartete Form (%r)" % data)
+            return data
+
+        # HTTP 502: Server-Komplett-Fehler unterscheiden (TAB-10 dritte Lage).
+        if status == 502:
+            try:
+                data = json.loads(resp_bytes.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                data = {}
+            # PLAN-33.2: {error: "calendar_unavailable"} → Server hat VOR Item 1
+            # aufgegeben, 0 Termine geschrieben → `nicht_erreichbar`.
+            if isinstance(data, dict) and data.get("error") == "calendar_unavailable":
+                raise PlanBulkNotReached(
+                    "Plan-Buddy: calendar_unavailable (PLAN-33.2)")
+            # Anderes 502 ohne klare Aussage → konservativ „unbekannt".
+            raise PlanBulkUnknown(
+                "Plan-Buddy: HTTP 502 ohne calendar_unavailable-Marker")
+
+        # HTTP 4xx → logischer Fehler (Validation, Idempotenz). PlanClientError.
+        if 400 <= status < 500:
+            raise PlanClientError(
+                "Plan-Buddy: HTTP %s bei POST %s" % (status, PFAD_TERMINE_BULK))
+
+        # HTTP 5xx (außer 502 oben) → Server-Zustand unklar → „unbekannt".
+        if 500 <= status < 600:
+            raise PlanBulkUnknown(
+                "Plan-Buddy: HTTP %s ohne parsbaren Body (POST %s)"
+                % (status, PFAD_TERMINE_BULK))
+
+        # Alles andere ist Form-Fehler.
+        raise PlanClientError(
+            "Plan-Buddy: HTTP %s bei POST %s" % (status, PFAD_TERMINE_BULK))
+
     # -- HTTP-Innerei -----------------------------------------------------
 
-    def _call(self, method, path, body=None, content_type=None):
+    def _call(self, method, path, body=None, content_type=None, timeout=None):
         """Führt einen HTTP-Aufruf aus oder delegiert an `transport`.
 
         Liefert `(status_code, response_bytes)`. Connection-refused,
         Timeout, DNS-Fehler werden als `PlanClientError` neu geworfen —
         `termine_erfragen` hat genau eine Fehler-Klasse zu fangen (TER-7).
         """
+        # TAB-9 / PLAN-33.4: optionales `timeout` für Bulk-Aufrufe (20 s) — kein
+        # Override → fällt auf `self._timeout` (2 s) für reguläre PLAN-22-Aufrufe.
         if self._transport is not None:
             try:
                 return self._transport(
                     method, path, body=body, content_type=content_type)
-            except PlanClientError:
+            except (PlanBulkNotReached, PlanBulkUnknown, PlanClientError):
                 raise
             except OSError as e:
                 raise PlanClientError(
@@ -166,8 +294,9 @@ class PlanClient:
             headers["Content-Type"] = content_type
         request = urllib.request.Request(
             url, data=body, method=method, headers=headers)
+        effective_timeout = timeout if timeout is not None else self._timeout
         try:
-            with urllib.request.urlopen(request, timeout=self._timeout) as resp:
+            with urllib.request.urlopen(request, timeout=effective_timeout) as resp:
                 return resp.status, resp.read()
         except urllib.error.HTTPError as e:
             # 4xx/5xx werden als gültige Antworten gelesen — der Aufrufer
