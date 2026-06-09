@@ -269,7 +269,7 @@ Pfad unter `/api/v1/` (URL-4) — Diagnose zählt zum Hub-Backend.
 *Tickets:* #5, #24
 
 ### ROU-20 — GET /display/&lt;id&gt; — Auslieferung des Display-Clients
-`GET /display/<id>` liefert den Display-Client (siehe
+`GET /display/<id>/` (Trailing-Slash-Form) liefert den Display-Client (siehe
 [`display-client.md`](display-client.md)). Der Router ist hier nur
 Auslieferungsstelle (E-DC-3); Verhalten und Eigenschaften des Clients
 legt `display-client.md` fest. Die `<id>` aus dem Pfad ist die
@@ -289,7 +289,22 @@ Dokumentierte Abweichung — zentral als Teil der Übersicht aller
 URL-3a-Abweichungen in
 [`../../conventions/urls.md`](../../conventions/urls.md) (URL-3a) aufgelistet.
 
-*Tickets:* #5, #24, #30
+**Trailing-Slash und 301-Redirect** (analog app-panel-Pattern, Refs #516):
+
+| Pfad | Antwort |
+|---|---|
+| `GET /display/<id>/` | 200, `text/html`, Display-Client mit inline gezogenem `displib.js` |
+| `GET /display/<id>` (no-slash) | 301 → `GET /display/<id>/` |
+
+Der 301-Redirect auf die Slash-Form ist notwendig, weil `index.html` relative
+Pfade enthält (`./manifest.json`, `./icon-*.png`). Ohne Trailing-Slash resolvt
+der Browser `./ ` auf den Parent-Pfad (`/display/`) statt auf
+`/display/<id>/` — alle Asset-Requests landen auf 404 und die PWA-Installation
+(DC-11) schlägt fehl. Der Redirect entspricht dem HTTP-Standard für
+Directory-vs-File-Disambiguation und ist identisch zum app-panel-Pattern
+(Refs #128).
+
+*Tickets:* #5, #24, #30, #516
 
 ### ROU-21 — Direkt-Push an Display via CDP
 
@@ -593,8 +608,9 @@ Acceptance-Kriterien:
 | Path-Traversal (z. B. `/display/<id>/../../router/main.py`) | 404 — kein Dateizugriff jenseits `display-client/` |
 | Nicht existierendes Asset | 404 |
 
-Die Eltern-Route `GET /display/<id>` (ROU-20) bleibt unverändert — Flask
-differenziert beide Routen anhand des zweiten Pfadsegments.
+Die Eltern-Route `GET /display/<id>/` (ROU-20) bleibt funktional — Flask
+differenziert beide Routen anhand des zweiten Pfadsegments. `GET /display/<id>`
+(no-slash) gibt 301 → `/display/<id>/` (ROU-20-Erweiterung, Refs #516).
 
 *Tickets:* #415
 
