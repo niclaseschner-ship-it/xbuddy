@@ -777,9 +777,13 @@ für die Familie spürbar störender als ein verlorener Display-State; die
 Persistenz ist mit SQLite günstig genug, um sie nicht zu vertagen.
 
 ### E-EC-9 — V1 ohne Anonymisierung
-*Datum:* 2026-05-21
+*Datum:* 2026-05-21 · *Schärfung 2026-06-09 (#485):* Bilder explizit eingeschlossen
 
-V1 übermittelt Anfrage-Inhalte ohne Anonymisierung an den KI-Anbieter (EC-13).
+V1 übermittelt **Anfrage-Inhalte einschließlich Bildern** (Text, Foto-Anhänge,
+mitgesendete Aushang-Bilder im TAB-Skill, `termine-aus-bild.md`) ohne
+Anonymisierung an den KI-Anbieter (EC-13). Die Klausel deckt damit auch
+Bild-Daten ab — die 2026-06-09-Schärfung (#485) macht explizit, was vorher
+nur als „Anfrage-Inhalte" textuell offen war.
 
 Dies ist eine **bewusste, dokumentierte Abweichung** vom Qualitätsattribut
 Privacy der Constitution (§3, »Anonymisierungs-Layer vor Verlassen der
@@ -789,6 +793,16 @@ Zuerst muss sich zeigen, welcher Anbieter taugt und wie der Datenfluss
 tatsächlich aussieht — ein Anonymisierungs-Layer davor wäre Bau ohne belegte
 Grundlage. Die Aktivierung ist als OPEN-EC-A festgehalten und bleibt eine
 Voraussetzung für den Regelbetrieb über die Testphase hinaus.
+
+**Ende der Bewertungsphase (Trigger):** Nic schließt OPEN-EC-A bewusst — das
+ist der einzige Trigger. Ein messbarer Auto-Trigger (z. B. „nach N Monaten"
+oder „bei erster Nicht-Test-Familie") ist **bewusst verworfen**: der
+Anonymisierungs-Pfad steht und fällt mit der Anbieter-Wahl (OPEN-EC-A
+abhängig vom getroffenen Multimodal-Anbieter — siehe `termine-aus-bild.md`
+E-TAB-6 und #486 zu TAB-V2-Privacy), und ein Zeit-/Familien-Trigger ohne
+gelöste Anbieter-Frage würde die Bewertungsphase abbrechen, bevor die
+Grundlage für den Anonymisierungs-Layer da ist. Der Halt-Punkt für eine
+Re-Bewertung dieses Triggers ist deshalb der OPEN-EC-A-Schluss durch Nic.
 
 ### E-EC-10 — Supergruppen-Migration wird automatisch nachgezogen
 *Datum:* 2026-05-22
