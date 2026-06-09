@@ -187,6 +187,18 @@ Instanz konfigurierten KI-Anbieter** (`eltern-chat.md` EC-11, EC-13), nicht
   parallel laufbare Adapter-Slot „multimodal" — etwa weil der Text-
   Anbieter keine Bilder kann oder ein anderer DSGVO-konformer Anbieter
   belastbarer ist — ist V2 und additiv (E-TAB-6).
+- **Begleittext (Telegram-Caption) als Verfeinerungs-Hinweis (#528).**
+  Trägt die Nachricht einen Begleittext, ist dieser ein **User-Hinweis
+  an die Extraktion** — Beispiele: „Jahr 2026 verwenden", „nur die
+  Geburtstage", „ohne die Wochenenden". Der Anbieter-Adapter wendet
+  den Hinweis auf das aus dem Bild Extrahierte an (Jahres-Override,
+  Filter-Auswahl, …), er erfindet **keine** Termine, die nicht im Bild
+  stehen. Fehlt eine Information im Bild (z. B. die Jahreszahl in
+  einem Saison-Plan), ist der Begleittext die zulässige Quelle, die
+  Lücke zu schließen; sonst bleibt das Feld leer (E-TAB-5-Disziplin
+  „Erfinde nicht"). Wortlaut von System-Prompt und Tool-Schema-
+  Description leben im Code — die Spec normiert das **Soll**: Caption
+  ist Steuer-Kontext, nicht Erfinden-Auftrag.
 
 Datenlinie (was an den Anbieter geht): das Bild selbst, der Begleittext
 und das Tool-Schema. Darüber hinausgehende Familien-Daten gehen nicht an
