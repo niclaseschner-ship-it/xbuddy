@@ -45,8 +45,8 @@ URL-8). Statische Assets liegen im Display-Namensraum des Buddys
 Top-Level-Pfad.
 
 ### BUD-1a — Eigener Prozess (nur wenn der Buddy einen eigenen Service braucht)
-Läuft der Buddy als eigener Prozess (heute: jeder Buddy ist ein eigener
-Flask-Service), dann braucht er
+Läuft der Buddy als eigener Prozess (typischerweise als Flask-Service),
+dann braucht er
 - eine **feste Port-Nummer** aus dem Loopback-Block, eingetragen im Katalog
   [`ports.md`](ports.md) PORT-2 (Bindung nur an `127.0.0.1`, PORT-3);
 - eine **systemd-Service-Vorlage** `xbuddy-<slug>.service` neben dem Code
@@ -67,7 +67,7 @@ Buddy nur über diese Schnittstelle an, nie über Datei-Zugriff
 ([`apps.md`](apps.md) APP-3).
 
 Gibt es keinen Konsumenten, gibt es **keine** API — eine API auf Vorrat ist
-Heim-Server-Overhead (Anti-Goal; siehe Wetter-Buddy unten).
+Heim-Server-Overhead (Anti-Goal).
 
 ### BUD-2 — Per-Instanz-Config (immer)
 Ein Buddy hat eine **Per-Instanz-Config-Datei** neben dem Code
