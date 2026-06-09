@@ -1,9 +1,14 @@
 """CA-Verteilung — siehe specs/platform/ca-verteilung.md (CAV-1 … CAV-7, Refs #39).
 
 Die CA-Verteilung ist eine **aufrufbare, trigger-agnostische Funktion** (CAV-1,
-E-CAV-1): Aufgerufen, liefert sie einem Familienmitglied das öffentliche
-Root-CA-Zertifikat als Telegram-Dokument plus eine OS-spezifische
-Installations-Anleitung über den Eltern-Chat-Bot aus.
+E-CAV-1): Aufgerufen, sendet sie das öffentliche Root-CA-Zertifikat als
+Telegram-Dokument und liefert den gesamten Text-Teil (Caption + OS-spezifische
+Installations-Anleitung CAV-5) als Tool-Result-String zurück (EC-29).
+
+Aufgabenteilung (CAV-4, EC-29): Die Datei sendet der Skill direkt via
+tg.send_document — Telegram hat keine LLM-Datei-Sende-Mechanik. Den Text-Teil
+postet das LLM wortwörtlich als Bot-Nachricht. Kein tg.send_message aus dieser
+Funktion.
 
 Die Funktion kennt ihren Aufrufer NICHT. Wer sie aufruft — die
 Eltern-Chat-Aufgabe aus CAV-6 (ca_task.py) oder ein künftiger
@@ -89,7 +94,7 @@ SUPPORTED_GERAETE = tuple(_GUIDES_BY_GERAET.keys())
 
 _CAPTION = ("XBuddy Root-Zertifikat (xbuddy-rootCA.crt). Installiere es auf "
             "diesem Gerät, damit die XBuddy-Seiten ohne Browser-Warnung "
-            "öffnen — Anleitung folgt in der nächsten Nachricht.")
+            "öffnen — Anleitung folgt gleich.")
 
 # CAV-3: Ein PEM-Privatschlüssel trägt diese Markierung. Wird der konfigurierte
 # Pfad versehentlich auf eine Schlüsseldatei gesetzt, bricht die Funktion ab,
@@ -103,19 +108,23 @@ class CaVerteilungError(Exception):
 
 @dataclass
 class CaVerteilungResult:
-    """Ergebnis eines Funktions-Aufrufs — was wurde an wen ausgeliefert."""
+    """Ergebnis eines Funktions-Aufrufs — was wurde an wen ausgeliefert.
+
+    EC-29: guide_message_id entfällt — der Text-Teil wird als Tool-Result-String
+    zurückgegeben, nicht mehr via tg.send_message gesendet.
+    """
     chat_id: object
     document_message_id: object
-    guide_message_id: object
+    tool_result_text: str
 
 
 def verteile_ca(tg, chat_id, ca_pem_path, geraet):
-    """Liefert das öffentliche Root-CA-Zertifikat samt Installations-Anleitung
-    an `chat_id` aus (CAV-1).
+    """Sendet das öffentliche Root-CA-Zertifikat und gibt den Text-Teil zurück
+    (CAV-1, EC-29).
 
-    `tg`           — Kanal mit `send_document` und `send_message` (TelegramClient
-                     oder Doppelung). Auslieferung läuft über diesen bestehenden
-                     Bot-Kanal (CAV-4).
+    `tg`           — Kanal mit `send_document` (TelegramClient oder Doppelung).
+                     Auslieferung läuft über diesen bestehenden Bot-Kanal (CAV-4).
+                     Kein `send_message` — der Text-Teil ist Tool-Result (EC-29).
     `chat_id`      — Zielchat eines Familien-Gruppen-Mitglieds.
     `ca_pem_path`  — Pfad zum öffentlichen `rootCA.pem` (CAV-3, Per-Instanz-
                      Konfiguration).
@@ -125,11 +134,14 @@ def verteile_ca(tg, chat_id, ca_pem_path, geraet):
                      Gerät passende Abschnitt der Anleitung; die Familie
                      bekommt nie alle vier OS auf einmal.
 
-    Liefert ein `CaVerteilungResult`. Wirft `CaVerteilungError`, wenn das
-    Zertifikat nicht gelesen oder nicht gesendet werden konnte — der Aufrufer
-    entscheidet, wie er darauf reagiert. Ein fehlendes oder ungültiges
-    `geraet` ist ein Aufruf-Fehler (`ValueError`) — keine stille Auslieferung
-    eines Default-Geräts.
+    Liefert ein `CaVerteilungResult` — enthält `tool_result_text` mit dem
+    gesamten Text-Teil (Caption-Hinweis + OS-spezifische Anleitung CAV-5).
+    Das LLM postet diesen Text wortwörtlich als Bot-Nachricht (EC-29).
+
+    Wirft `CaVerteilungError`, wenn das Zertifikat nicht gelesen oder nicht
+    gesendet werden konnte — der Aufrufer entscheidet, wie er darauf reagiert.
+    Ein fehlendes oder ungültiges `geraet` ist ein Aufruf-Fehler (`ValueError`)
+    — keine stille Auslieferung eines Default-Geräts.
     """
     guide = _guide_for(geraet)
     pem = _load_public_ca(ca_pem_path)
@@ -142,17 +154,19 @@ def verteile_ca(tg, chat_id, ca_pem_path, geraet):
         # erkennen ihn alle als Zertifikat, der Inhalt bleibt PEM-kodiertes
         # X.509. Quelldatei auf der Platte (ca_pem_path) bleibt `rootCA.pem`.
         sent_doc = tg.send_document(chat_id, "xbuddy-rootCA.crt", pem, caption=_CAPTION)
-        # CAV-5: gerätespezifischer Anleitungs-Abschnitt hinterher.
-        sent_guide = tg.send_message(chat_id, guide)
     except TelegramError as e:
         raise CaVerteilungError("CA-Zertifikat konnte nicht gesendet werden: %s" % e)
+
+    # EC-29: der Text-Teil (Anleitung) wird als Tool-Result zurückgegeben —
+    # kein tg.send_message. Das LLM postet ihn wortwörtlich (CAV-4, CAV-5).
+    tool_result_text = guide
 
     logging.info("CA-Verteilung: Root-CA an Chat %s ausgeliefert (CAV-1, geraet=%s)",
                  chat_id, geraet)
     return CaVerteilungResult(
         chat_id=chat_id,
         document_message_id=(sent_doc or {}).get("message_id"),
-        guide_message_id=(sent_guide or {}).get("message_id"))
+        tool_result_text=tool_result_text)
 
 
 def _guide_for(geraet):
