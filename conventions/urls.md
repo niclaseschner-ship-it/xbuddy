@@ -201,13 +201,14 @@ längste Prefix gewinnt, das ist Teil der Spec, nicht nur eine nginx-Marotte):
 | 8 | `/api/v1/geraete/`              | Geräte              | Geräte-Registry (GER-13/14/15) — Liste, Einzeln, Anlegen.                 |
 | 9 | `/api/v1/photo/`                | Photo-Buddy         | Photo-Buddy-Backend: Medien-Library + interface-first Ingest (PHOTO-13..16): `POST\|GET /api/v1/photo/medien`, `GET /api/v1/photo/medien/<id>[/thumbnail]`, `DELETE /api/v1/photo/medien/<id>`. |
 | 10 | `/api/v1/essen/`               | Essens-Buddy        | Essens-Buddy-Backend: Wunsch-Liste (ESSEN-15..17) + Katalog (ESSEN-18..19). Upstream: xbuddy-essen (:5052, PORT-2). |
-| 11 | `/api/v1/displays/<id>/events` | Router              | SSE-Zustands-Stream (ROU-22); Long-Lived, ohne Proxy-Puffer.              |
-| 12 | `/display/`                    | Router              | Display-Views (außer den oben abgefangenen spezifischen Buddy-Prefixen). Schließt geteilte Display-Assets unter `/display/_shared/` ein (URL-16): Per-Instanz-Assets wie `/display/_shared/icons/` (ARASAAC-Piktogramme, ROU-26, #135) und repo-servierte Assets wie `/display/_shared/design/` (Design-Tokens, ROU-30, #323) — kein eigener nginx-Block. |
-| 13 | `/controller/`                 | Router              | Controller-Aktionen (URL-3).                                              |
-| 14 | `/api/v1/panels/`              | Panel-Registry      | Panel-Registry-API (PREG-13/14/15) — Liste, Einzeln, Anlegen. Upstream: xbuddy-panel (:5041, PORT-2). |
-| 15 | `/api/v1/seiten`               | Seiten-Registry     | Seiten-/Adress-Registry (SREG): `GET /api/v1/seiten` = Inventar aller aufrufbaren Views. Upstream: xbuddy-seiten (:5042, PORT-2). |
-| 16 | `/api/v1/`                     | Router              | Hub-Backend (State, Events, Diagnose).                                    |
-| 17 | `/` (alles übrige)             | —                   | 404 (URL-1: andere Top-Level-Pfade sind nicht erlaubt).                   |
+| 11 | `/api/v1/routine/`             | Routine-Buddy       | Routine-Buddy-Backend: Schreib-API für Zeiten/Items (ROUTINE-14). Upstream: xbuddy-routine (:5050, PORT-2). |
+| 12 | `/api/v1/displays/<id>/events` | Router              | SSE-Zustands-Stream (ROU-22); Long-Lived, ohne Proxy-Puffer.              |
+| 13 | `/display/`                    | Router              | Display-Views (außer den oben abgefangenen spezifischen Buddy-Prefixen). Schließt geteilte Display-Assets unter `/display/_shared/` ein (URL-16): Per-Instanz-Assets wie `/display/_shared/icons/` (ARASAAC-Piktogramme, ROU-26, #135) und repo-servierte Assets wie `/display/_shared/design/` (Design-Tokens, ROU-30, #323) — kein eigener nginx-Block. |
+| 14 | `/controller/`                 | Router              | Controller-Aktionen (URL-3).                                              |
+| 15 | `/api/v1/panels/`              | Panel-Registry      | Panel-Registry-API (PREG-13/14/15) — Liste, Einzeln, Anlegen. Upstream: xbuddy-panel (:5041, PORT-2). |
+| 16 | `/api/v1/seiten`               | Seiten-Registry     | Seiten-/Adress-Registry (SREG): `GET /api/v1/seiten` = Inventar aller aufrufbaren Views. Upstream: xbuddy-seiten (:5042, PORT-2). |
+| 17 | `/api/v1/`                     | Router              | Hub-Backend (State, Events, Diagnose).                                    |
+| 18 | `/` (alles übrige)             | —                   | 404 (URL-1: andere Top-Level-Pfade sind nicht erlaubt).                   |
 
 Diese Tabelle ist die Quelle für (a) die nginx-Origin-Konfiguration in
 `deploy/nginx/xbuddy-origin.conf` und (b) Onboarding-Schritte, die Origin-Routing
