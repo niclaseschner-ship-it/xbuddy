@@ -844,6 +844,16 @@ def render_display_client():
 
 
 @app.route('/display/<display_id>', methods=['GET'])
+def display_no_slash(display_id):
+    # Relative Asset-Pfade in index.html (./manifest.json, ./icon-*.png)
+    # brauchen einen Trailing-Slash, sonst resolvt der Browser ./ auf den
+    # Parent und holt /display/manifest.json (HTML-Fallback) statt
+    # /display/<id>/manifest.json. 301 → /<id>/ ist HTTP-Standard für
+    # Directory-vs-File-Disambiguation. Analog app-panel-Pattern. Refs #516.
+    return redirect('/display/' + display_id + '/', code=301)
+
+
+@app.route('/display/<display_id>/', methods=['GET'])
 def display(display_id):
     # ROU-20: liefert den Display-Client unabhängig davon, ob <display_id>
     # bekannt ist. Ob das Display existiert, klärt der Client beim Verbinden

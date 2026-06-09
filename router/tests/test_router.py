@@ -234,20 +234,31 @@ def test_ROU_14_diag_serves_html(client_with_routing):
     assert b'/api/v1/diag' in r.data
 
 
-def test_ROU_20_display_serves_display_client(client_with_routing):
-    """ROU-20 / E-DC-3: /display/<id> liefert den Display-Client mit
-    inline gezogenem displib.js (eine same-origin-Antwort)."""
-    r = client_with_routing.get('/display/default')
+def test_ROU_20_display_slash_serves_display_client(client_with_routing):
+    """ROU-20 / E-DC-3: /display/<id>/ (Trailing-Slash) liefert den
+    Display-Client mit inline gezogenem displib.js (eine same-origin-Antwort).
+    Refs #516."""
+    r = client_with_routing.get('/display/default/')
     assert r.status_code == 200
+    assert r.content_type.startswith('text/html')
     assert b'createClient' in r.data                   # index.html-Bootstrap
     assert b'function parseDisplayId' in r.data         # displib.js inline gezogen
     assert b'<script src="displib.js">' not in r.data   # Tag wurde ersetzt
 
 
+def test_ROU_20_display_no_slash_redirects_to_slash(client_with_routing):
+    """ROU-20: ohne Trailing-Slash kommt 301 zur Slash-Variante — sonst
+    brechen die relativen Asset-Pfade (./manifest.json → /display/manifest.json
+    statt /display/<id>/manifest.json). Analog app-panel-Pattern. Refs #516."""
+    r = client_with_routing.get('/display/default')
+    assert r.status_code == 301
+    assert r.headers['Location'].endswith('/display/default/')
+
+
 def test_ROU_20_display_serves_client_for_unknown_id(client_with_routing):
     """ROU-20: der Client wird auch für eine unbekannte <id> ausgeliefert —
     fehlerhafte Einrichtung wird am Gerät sichtbar (DC-8), nicht als 404."""
-    r = client_with_routing.get('/display/nonexistent')
+    r = client_with_routing.get('/display/nonexistent/')
     assert r.status_code == 200
     assert b'createClient' in r.data
 
@@ -606,9 +617,10 @@ def test_ROU_33_nonexistent_asset_returns_404(client_with_routing):
 
 
 def test_ROU_33_parent_route_still_works(client_with_routing):
-    """ROU-33 darf die Eltern-Route /display/<id> (ROU-20) nicht brechen —
-    Flask-Route-Kollision-Regression."""
-    r = client_with_routing.get('/display/test-display')
+    """ROU-33 darf die Eltern-Route /display/<id>/ (ROU-20) nicht brechen —
+    Flask-Route-Kollision-Regression. Slash-Form liefert HTML; No-Slash-Form
+    gibt 301 (kein Asset-Route-Clash)."""
+    r = client_with_routing.get('/display/test-display/')
     assert r.status_code == 200
     assert b'<!DOCTYPE html>' in r.data or b'<!doctype html>' in r.data
 
