@@ -220,17 +220,34 @@ verworfen wurde) und antwortet mit der vollen URL der passendsten View. Bei
 Mehrdeutigkeit: eine gezielte Rückfrage im EC-22-Muster („Meintest du die
 Wetter-heute-Anzeige oder den Garderoben-Editor?"), dann Auflösung.
 
-**Mechanik des Pro-View-KI-Matchings (verbindlich):** Der Skill ruft das LLM
-ein zweites Mal auf und übergibt als Inventar die Liste der Registry-Einträge
-mit `view_id` + `label` + `synonyme` + `zeigt` zusammen mit der ursprünglichen
-Eltern-Anfrage. Das LLM gibt **eine** `view_id` (oder eine Mehrdeutigkeits-
-Auswahl) zurück; der Skill bildet die URL daraus über `display_url_origin_heim`
-+ `pfad` (SREG-4). **Kein lokales Substring-/Wortlisten-Match** auf
-`label`/`synonyme`/`zeigt` — das hatte in einer früheren Implementierung Verben
-der Anfrage („zeig") fehl-priorisiert (#488) und ist der explizite Bug, gegen
-den dieses Requirement gerichtet ist. Das LLM ist der einzige Ranker, weil
-`label`/`synonyme`/`zeigt` natürlichsprachliche Begriffsfelder sind, deren
-Bedeutung nur kontextuell zur Anfrage aufgelöst werden kann.
+**Mechanik des Pro-View-KI-Matchings (verbindlich, Weg-2-Pivot 2026-06-09):**
+Der Skill arbeitet in zwei Runden mit dem LLM:
+
+1. **Runde 1 (Inventar-Übergabe):** Der Skill ruft `seiten_client.inventar()`
+   und gibt die Liste der Registry-Einträge (pro Eintrag: `label` + `key` +
+   `synonyme` + `zeigt`) als **Tool-Result** an den Agent-Loop zurück. **Kein
+   Bot-Post in dieser Runde** — die Antwort wird im Agent-Kontext verarbeitet.
+
+2. **Runde 2 (LLM-Wahl):** Das LLM wählt aus dem in Runde 1 übergebenen
+   Inventar das passende Element und ruft den Skill erneut mit
+   `aktion=match` und dem **exakten `label` oder `key` aus dem Inventar**
+   auf. Bei Mehrdeutigkeit formuliert das LLM eine EC-22-Rückfrage selbst
+   („Meintest du die Wetter-heute-Anzeige oder den Garderoben-Editor?"),
+   oder nutzt einen separaten `mehrdeutig`-Eingang.
+
+3. **URL-Build:** Der Skill macht ein **deterministisches Lookup** auf das
+   vom LLM übergebene `label`/`key` gegen die Registry-Einträge und bildet
+   die URL über `display_url_origin_heim` + `pfad` (SREG-4).
+
+**Kein lokales Substring-Match auf User-Begriffe.** Das war der frühere
+Bug #488: User-Verben wie „zeig" wurden fehl-priorisiert, weil der Skill
+direkt auf die User-Anfrage Substring-Match machte. Mit dem Weg-2-Pivot ist
+das LLM der einzige Ranker **für die User-Anfrage** (es sieht das Inventar
+und wählt sinngebend); der anschließende lokale Lookup arbeitet auf einem
+**vom LLM disziplinierten Wert** (exaktes `label` oder `key` aus dem
+übergebenen Inventar) und ist deshalb deterministisch sicher — Substring-
+oder Identitäts-Match auf einem bekannten Inventar-Wert kann keine
+User-Verben mehr fehl-priorisieren.
 
 *Wenn* der Elternteil opt-out signalisiert (z. B. „nein", „passt", „nichts")
 oder keine Folgeantwort innerhalb des EC-15-Depth-Fensters kommt, *dann*
