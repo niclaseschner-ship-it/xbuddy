@@ -591,7 +591,6 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             return member is not None and member.get("status") in (
                 "creator", "administrator", "member")
         catalog.register(WuenscheZeigenTask(
-            tg=tg,
             essen_client=_wze_essen_client,
             is_member_fn=_wze_is_member))
 
