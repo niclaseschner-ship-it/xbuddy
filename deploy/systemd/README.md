@@ -24,6 +24,7 @@ Komponenten-Prozesse, die durch diese Services am Leben gehalten werden.
 | `xbuddy-familie.service` | `familie/familie.service` | Familien-Mit-Host (FAM-7/FAM-8, `/api/v1/familie/`) | `127.0.0.1:5010` |
 | `xbuddy-geraete.service` | `geraete/geraete.service` | Geräte-Registry (GER-5/GER-6/GER-15) | `127.0.0.1:5040` |
 | `xbuddy-seiten.service` | `seiten/seiten.service` | Seiten-Registry (SREG-3, `GET /api/v1/seiten`) | `127.0.0.1:5042` |
+| `xbuddy-panel.service` | `panel/panel.service` | Panel-Registry (PREG-13/PREG-14/PREG-15, `GET /api/v1/panels`) | `127.0.0.1:5041` |
 | `xbuddy-essen.service` | `essen/essen.service` | Essens-Buddy (`/display/essen/`, `/api/v1/essen/`, ESSEN-23) | `127.0.0.1:5052` |
 | `xbuddy-eltern-chat.service` | `eltern-chat/eltern-chat.service` | Eltern-Chat Telegram-Bot (kein HTTP-Port, geht raus zu Telegram) | — |
 
@@ -84,6 +85,7 @@ Die übrigen Services haben keine `EnvironmentFile`-Abhängigkeit.
      [xbuddy-familie]=familie/familie.service
      [xbuddy-geraete]=geraete/geraete.service
      [xbuddy-seiten]=seiten/seiten.service
+     [xbuddy-panel]=panel/panel.service
      [xbuddy-essen]=essen/essen.service
      [xbuddy-eltern-chat]=eltern-chat/eltern-chat.service
    )
@@ -94,6 +96,8 @@ Die übrigen Services haben keine `EnvironmentFile`-Abhängigkeit.
        -e 's|__XBUDDY_REPO__|/home/buddy/repos/xbuddy|g' \
        -e 's|__XBUDDY_PYTHON__|/home/buddy/apps/venv/bin/python|g' \
        -e 's|__XBUDDY_DATA__|/home/buddy/xbuddy-data|g' \
+       -e 's|__XBUDDY_DISPLAY_ORIGIN_HEIM__|https://xbuddy-hub.local:8443|g' \
+       -e 's|__XBUDDY_DISPLAY_ORIGIN_TAILSCALE__|https://xbuddy-hub.ts.net:8443|g' \
        "${SVC_SRC[$svc]}" \
        | sudo tee "/etc/systemd/system/${svc}.service" >/dev/null
    done
@@ -115,6 +119,7 @@ Die übrigen Services haben keine `EnvironmentFile`-Abhängigkeit.
    sudo systemctl enable --now xbuddy-familie.service
    sudo systemctl enable --now xbuddy-geraete.service
    sudo systemctl enable --now xbuddy-seiten.service
+   sudo systemctl enable --now xbuddy-panel.service
    sudo systemctl enable --now xbuddy-essen.service
    sudo systemctl enable --now xbuddy-eltern-chat.service
    ```
@@ -122,7 +127,7 @@ Die übrigen Services haben keine `EnvironmentFile`-Abhängigkeit.
 5. **Status prüfen** — alle Services müssen `active (running)` melden:
 
    ```bash
-   systemctl status xbuddy-router xbuddy-plan xbuddy-wetter xbuddy-routine xbuddy-photo xbuddy-familie xbuddy-geraete xbuddy-seiten xbuddy-essen xbuddy-eltern-chat
+   systemctl status xbuddy-router xbuddy-plan xbuddy-wetter xbuddy-routine xbuddy-photo xbuddy-familie xbuddy-geraete xbuddy-seiten xbuddy-panel xbuddy-essen xbuddy-eltern-chat
    ```
 
 ## Restart nach Code-Update (Pflicht)
@@ -144,6 +149,7 @@ Zuordnung (analog zur Memory-Notiz `feedback-pi-service-restart`):
 | `familie/` | `sudo systemctl restart xbuddy-familie` |
 | `geraete/` | `sudo systemctl restart xbuddy-geraete` |
 | `seiten/` oder ein `views.json`-Manifest | `sudo systemctl restart xbuddy-seiten` |
+| `panel/` oder ein `panels.json`-Manifest | `sudo systemctl restart xbuddy-panel` |
 | `essen/` | `sudo systemctl restart xbuddy-essen` |
 | `eltern-chat/` | `sudo systemctl restart xbuddy-eltern-chat` |
 | `deploy/nginx/xbuddy-origin.conf` | `sudo nginx -t && sudo systemctl reload nginx` |
