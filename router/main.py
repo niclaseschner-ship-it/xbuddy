@@ -898,7 +898,7 @@ DEFAULT_APP_PANEL_DIR = os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), '..', 'controller', 'app-panel'))
 
 # ROU-23: controller/_shared/ liefert PWA-übergreifende Helper (z.B. config.js,
-# `conventions/controller-pwa.md` PWA-4 Implementierungs-Naht). Wird von
+# `conventions/pwa.md` PWA-4 Implementierungs-Naht). Wird von
 # /controller/_shared/<asset> ausgeliefert, parallel zu /controller/<app>/.
 DEFAULT_CONTROLLER_SHARED_DIR = os.path.normpath(os.path.join(
     os.path.dirname(os.path.abspath(__file__)), '..', 'controller', '_shared'))
@@ -980,7 +980,7 @@ def _send_shared_asset(rel_path):
 @app.route('/controller/_shared/<path:asset>', methods=['GET'])
 def controller_shared_asset(asset):
     # ROU-23: /controller/_shared/<asset> aus controller/_shared/.
-    # conventions/controller-pwa.md PWA-4-Implementierungs-Naht.
+    # conventions/pwa.md PWA-4-Implementierungs-Naht.
     return _send_shared_asset(asset)
 
 

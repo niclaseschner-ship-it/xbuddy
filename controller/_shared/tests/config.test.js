@@ -1,6 +1,6 @@
 // Tests für controller/_shared/config.js — pwaShared.loadPwaConfig.
 // Lauf: node --test tests/ (von controller/_shared/ aus)
-// Refs: conventions/controller-pwa.md PWA-4, CONFIG-4 (stiller Fallback).
+// Refs: conventions/pwa.md PWA-4, CONFIG-4 (stiller Fallback).
 
 'use strict';
 
