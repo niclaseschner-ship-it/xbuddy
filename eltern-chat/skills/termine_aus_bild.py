@@ -83,8 +83,10 @@ SIGNAL_WORDS = (
 #  TAB-6 — Plausi-Filter und Validierung
 # ============================================================
 
-# Plausi-Fenster: 30 Tage rückwärts, 2 Jahre vorwärts (TAB-6).
-PLAUSI_ZURUECK_TAGE = 30
+# Plausi-Fenster: 400 Tage rückwärts, 2 Jahre vorwärts (TAB-6).
+# 400 Tage (~13 Monate) erlaubt Kita-/Schulpläne, die saisonsweise
+# wiederverwendet werden (Familien-Plan-Wiederverwendung, Refs #524).
+PLAUSI_ZURUECK_TAGE = 400
 PLAUSI_VORWAERTS_TAGE = 2 * 365
 
 # TAB-9 / PLAN-33.3: harter Server-Cap bei 30 Items. Variante A (Risk 7):
@@ -133,12 +135,16 @@ def _ist_zeitgebunden(item):
 def validiere_und_filtere(items, heute=None):
     """TAB-6: Plausi-Filter + Schema-Vollständigkeit + Cap 30 (Risk 7).
 
-    Liefert `(gefilterte_items, anzahl_verworfen_plausi, cap_hinweis_n)`:
+    Liefert `(gefilterte_items, anzahl_verworfen_plausi, cap_hinweis_n,
+              vergangenheits_n)`:
       - `gefilterte_items`         — Liste der überlebenden Termine (max 30).
       - `anzahl_verworfen_plausi`  — Anzahl außerhalb des Plausi-Fensters.
       - `cap_hinweis_n`            — Anzahl der durch Cap abgeschnittenen
                                      Items (für TAB-7-Hinweis); 0 wenn kein
                                      Cap nötig.
+      - `vergangenheits_n`         — Anzahl der Items mit beginn_date < heute
+                                     (aber innerhalb Plausi-Fenster — also
+                                     nicht verworfen); für TAB-7-Hinweis.
 
     Items mit Pflicht-Lücken (titel leer / beginn fehlt / zeitgebunden ohne
     `ende`) bleiben **drin**, bekommen aber `fehlende_felder` gesetzt — der
@@ -150,6 +156,7 @@ def validiere_und_filtere(items, heute=None):
     fenster_ende = heute + timedelta(days=PLAUSI_VORWAERTS_TAGE)
     out = []
     verworfen_plausi = 0
+    vergangenheits_n = 0
     for item in items:
         # Plausi-Fenster — beginn muss parsbar sein UND im Fenster.
         beginn_date = _parse_beginn(item.beginn)
@@ -161,6 +168,10 @@ def validiere_und_filtere(items, heute=None):
         elif not (fenster_start <= beginn_date <= fenster_ende):
             verworfen_plausi += 1
             continue
+        else:
+            # Termin liegt im Plausi-Fenster — zählen ob Vergangenheit.
+            if beginn_date < heute:
+                vergangenheits_n += 1
 
         # Schema-Vollständigkeit (TAB-6 / TAB-8.1).
         if not (item.titel or "").strip():
@@ -180,8 +191,14 @@ def validiere_und_filtere(items, heute=None):
     if len(out) > MAX_ITEMS:
         cap_hinweis_n = len(out) - MAX_ITEMS
         out = out[:MAX_ITEMS]
+        # Vergangenheits-Zähler auf die gecappte Liste begrenzen.
+        vergangenheits_n = sum(
+            1 for item in out
+            if _parse_beginn(item.beginn) is not None
+            and _parse_beginn(item.beginn) < heute
+        )
 
-    return out, verworfen_plausi, cap_hinweis_n
+    return out, verworfen_plausi, cap_hinweis_n, vergangenheits_n
 
 
 # ============================================================
@@ -196,6 +213,10 @@ _VORSCHLAG_FUSS = "Bestätige mit »ok« / »ja« oder einem anderen Bestätigun
 _VORSCHLAG_CAP_HINWEIS = (
     "Hinweis: Die ersten %d Termine sind angezeigt. "
     "Sende das Bild erneut, um die weiteren %d zu erfassen.")
+# TAB-7 Vergangenheits-Hinweis (Refs #524): N der M Termine liegen vor heute.
+_VORSCHLAG_VERGANGENHEITS_HINWEIS = (
+    "ℹ️ Hinweis: %d der %d Termine liegen vor heute. "
+    "Mit ja eintragen, mit nein verwerfen.")
 
 
 def _formatiere_datum_kurz(beginn_str):
@@ -222,14 +243,21 @@ def _formatiere_uhrzeit_spanne(item):
     return ""
 
 
-def baue_sammel_vorschlag(items, cap_hinweis_n=0):
+def baue_sammel_vorschlag(items, cap_hinweis_n=0, vergangenheits_n=0):
     """Baut den TAB-7-Sammel-Vorschlag als HTML-<pre>-Block. Titel werden
     HTML-escaped, damit `<`/`>`/`&` die `<pre>`-Klammer nicht zerstören
     (TAB-7-Spec).
 
+    `vergangenheits_n` > 0 fügt einen Hinweis-Header ein (TAB-7, Refs #524):
+    Anzahl der Items, die vor heute liegen (Familien-Plan-Wiederverwendung).
+
     Liefert den fertigen HTML-String. EC-27: HTML-Modus aktiviert der
     Aufrufer (telegram.send_message mit parse_mode='HTML').
     """
+    gesamt = len(items)
+    text = ""
+    if vergangenheits_n > 0:
+        text = (_VORSCHLAG_VERGANGENHEITS_HINWEIS % (vergangenheits_n, gesamt)) + "\n\n"
     zeilen = []
     for i, item in enumerate(items, start=1):
         datum = _formatiere_datum_kurz(item.beginn)
@@ -239,7 +267,7 @@ def baue_sammel_vorschlag(items, cap_hinweis_n=0):
             zeilen.append("%d) %s — %s — %s" % (i, datum, titel, zeit))
         else:
             zeilen.append("%d) %s — %s" % (i, datum, titel))
-    text = _VORSCHLAG_KOPF + "\n\n<pre>" + "\n".join(zeilen) + "</pre>\n\n" + _VORSCHLAG_FUSS
+    text = text + _VORSCHLAG_KOPF + "\n\n<pre>" + "\n".join(zeilen) + "</pre>\n\n" + _VORSCHLAG_FUSS
     if cap_hinweis_n > 0:
         text = text + "\n\n" + (_VORSCHLAG_CAP_HINWEIS % (MAX_ITEMS, cap_hinweis_n))
     return text
@@ -497,7 +525,7 @@ def termine_aus_bild(*,
         return SIGNAL_PROVIDER_FEHLER
 
     # TAB-6: Plausi-Filter + Schema-Vollständigkeit + Cap 30 (Risk 7).
-    gefiltert, _verworfen, cap_hinweis_n = validiere_und_filtere(
+    gefiltert, _verworfen, cap_hinweis_n, vergangenheits_n = validiere_und_filtere(
         extrahiert, heute=heute)
     if not gefiltert:
         # Leere Liste nach Filter → „unklar" (TAB-6).
@@ -513,7 +541,8 @@ def termine_aus_bild(*,
             return result  # SIGNAL_UNKLAR oder SIGNAL_ABGEBROCHEN
 
     # TAB-7: Sammel-Vorschlag im HTML-<pre>-Block.
-    vorschlag = baue_sammel_vorschlag(gefiltert, cap_hinweis_n=cap_hinweis_n)
+    vorschlag = baue_sammel_vorschlag(
+        gefiltert, cap_hinweis_n=cap_hinweis_n, vergangenheits_n=vergangenheits_n)
     fire_typing(typing_fn)
     _send(tg, private_chat_id, vorschlag, parse_mode="HTML")
 
