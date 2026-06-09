@@ -44,6 +44,22 @@ duplizieren (Verweis-Pattern analog TES-11). Implementierungs-Naht:
 `eltern-chat/tests/test_privatechat_session_base.py` (gegen Basis-
 Klasse, ohne Netz, CLAUDE.md §6).
 
+**Subklassen-Disziplin (Voraussetzung der konventionsweiten Test-Pflicht).**
+Damit der Basis-Test für alle Sorten trägt, dürfen Subklassen von
+`PrivateChatSession` **keine eigene Persistenz-Naht** einführen. Konkret
+verboten als Methode auf einer Subklasse: `save` / `load` / `persist` /
+`restore` / `write_state` / `read_state` / `serialize` / `deserialize` /
+`dump` / `from_dict` / `to_dict` / `snapshot` / `flush` / `commit` /
+`to_json` / `from_json` / `pickle`. Sortenspezifische Sessions erben
+ausschließlich die im-Speicher arbeitende Basis-API; halbe Zwischenzustände
+werden nirgends in der Klassenhierarchie auf Disk geschrieben (FAM-11/ZD-5
+bleiben die einzige Commit-Naht).
+
+Der SESS-2-Basistest deckt diese Klausel mit über alle aktuellen und
+künftigen Subklassen ab (`PrivateChatSession.__subclasses__()`-Reflection),
+zusätzlich zur Basis selbst. Erweitert eine neue Sorte die Klasse, fällt
+sie automatisch in die Test-Abdeckung.
+
 ### SESS-3 — 30-Minuten-Timeout
 Eine Session, die **30 Minuten** keine passende eingehende Nachricht
 sieht, läuft automatisch ab und liefert das Ergebnis-Signal
