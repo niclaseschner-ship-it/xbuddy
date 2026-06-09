@@ -192,6 +192,22 @@ heute in `controller/app-panel/app.js`).
 *Wenn* der Schreibvorgang `200` liefert und der Stream der `display_id` aktiv
 ist, *dann* zeigt das Panel die geänderte Kachel-Liste binnen 5 s.
 
+**Mechanik des Stream-Ereignisses (verbindlich):** Nach einem erfolgreichen
+Tile-Schreibvorgang (PBE-4) sendet der Panel-Editor an den Router
+`POST /api/v1/router/admin/panels/<display_id>/tiles-changed` (leerer Body).
+Der Router-Endpoint ruft daraufhin in seinem Prozess `publish(display_id, …)`
+(`router/main.py`) auf, was das Stream-Ereignis an alle SSE-Abonnenten dieses
+Displays verteilt. Begründung der Lego-Wahl: das Panel hat keinen eigenen
+SSE-Kanal — Displays abonnieren beim Router (ROU-22). Der Router ist die
+einzige Stream-Naht. Das Signal „Tiles geändert" entsteht am Panel-Editor (er
+schreibt `tiles.json`), die SSE-Veröffentlichung gehört zum Router. Der mit
+T446 gebaute Sender (`panel/main.py`) bleibt; der bisher fehlende
+Empfänger-Endpoint wird im Router gebaut — ersetzt das verworfene #448
+(`router/admin/tiles-changed`-Sackgasse ohne `publish`-Aufruf). Ein
+Beobachtungs-Pfad „Router watcht `panels.json`-Snapshot" ist bewusst verworfen
+(neuer Watcher-Mechanismus ohne bestehende Naht; CLAUDE.md §6 — keine Vorrats-
+Mechanik).
+
 ---
 
 ## 5. Validierung & Tests
