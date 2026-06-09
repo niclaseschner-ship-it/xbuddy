@@ -55,14 +55,6 @@ class BerechtigungError(Exception):
     """
 
 
-# Ergebnis-Signale der Funktion (SREG-5/SREG-5b) — nur noch intern/compat.
-SIGNAL_DEFAULT_GESENDET  = "default_gesendet"
-SIGNAL_INVENTAR_GELIEFERT = "inventar_geliefert"  # Runde 1 Opt-in: Inventar an LLM, kein Bot-Post.
-SIGNAL_DIREKT_GESENDET   = "direkt_gesendet"
-SIGNAL_MEHRDEUTIG        = "mehrdeutig"
-SIGNAL_ABGELEHNT         = "abgelehnt"
-SIGNAL_NICHT_ERREICHBAR  = "nicht_erreichbar"
-
 # Aktions-Werte für den Opt-in-Pfad (SREG-5b Weg 2, #488).
 AKTION_INVENTAR = "inventar"   # Runde 1: Inventar an LLM zurückgeben.
 AKTION_MATCH    = "match"      # Runde 2: Substring-Match + Bot-Post.

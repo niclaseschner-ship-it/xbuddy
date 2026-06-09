@@ -929,7 +929,7 @@ class TestFormatierMehrdeutigkeitToolResult:
 # ============================================================
 
 class TestMehrdeutigkeitAlsStringToolResult:
-    """T549-Test2 (EC-29 Migration): SIGNAL_MEHRDEUTIG gibt String zurück;
+    """T549-Test2 (EC-29 Migration): Mehrdeutigkeit liefert String-Tool-Result zurück;
     der kombinierte Text enthält Rückfrage + Kandidaten-Liste.
 
     Simuliert den Paula-Panel-Live-Bug:
@@ -1139,7 +1139,7 @@ class TestAktionMatchEquality:
             display_url_origin_heim="https://hub.local",
             aktion=AKTION_MATCH,
         )
-        # Kein Treffer → Fehler-Text (kein SIGNAL_MEHRDEUTIG-Loop).
+        # Kein Treffer → Fehler-Text (kein Mehrdeutigkeit-Loop).
         assert isinstance(result, str)
         assert len(result) > 0
         # Die Nachricht soll den suchbegriff nennen und auf aktion=inventar hinweisen.
