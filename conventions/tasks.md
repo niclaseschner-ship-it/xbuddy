@@ -164,6 +164,56 @@ Heimat des Patterns: `eltern-chat/skills/foto_senden_task.py` erbt von
 Widerruf ist ein **zweiter** `tool_use` mit der `id` aus der ersten Quittung,
 kein neuer State).
 
+### TASK-10 — Lesende Aufgabe ist sprachlos im Agent-Loop
+Eine Katalog-Aufgabe, die im Agent-Loop des Eltern-Chats läuft, **sendet
+in dieser Aufruf-Phase nicht selbst** über den Telegram-Kanal. Das gilt für
+`ReadTask.run()` (TASK-3), für die `propose()`-Hälfte einer `WriteTask`
+(TASK-4) und für jede trigger-agnostische Funktion, die von dort aus
+gerufen wird — sie returnen einen User-tauglichen Antwort-Text als
+Tool-Result-String, das Senden übernimmt das Framework via LLM (Heimat:
+`specs/platform/eltern-chat.md` EC-29).
+
+**Marker ist die Aufruf-Phase, nicht `is_async`.** Maßgeblich ist, ob der
+Code-Frame unter `task.run()` bzw. `task.propose()` im Agent-Loop liegt.
+`is_async` (TASK-5) entscheidet, **wann** die Post-Execute-Hooks einer
+schreibenden Aufgabe feuern — nicht, wer im selben Turn sprechen darf. Eine
+synchrone schreibende Aufgabe, deren `execute()` **nach** dem
+Bestätigungs-Gate (EC-10) läuft, ist außerhalb des Agent-Tool-Frames und
+sendet weiterhin selbst (TES-Bestätigungs-Quittung,
+RoutineZeitenSetzen-Confirm-Pfad und Vergleichbares).
+
+**Datei-Anhänge: Skill sendet die Datei, LLM postet den Text.** Liefert
+eine Aufgabe ein Nicht-Text-Artefakt (Datei via `tg.send_document`, Bild
+via `tg.send_photo`), darf der Skill diesen Anhang technisch direkt senden
+— das LLM hat keinen Datei-Sende-Vertrag. Der **gesamte Text-Teil**
+(Caption, Anleitung, Begleittext) gehört in den Tool-Result; das LLM
+postet ihn als seine Bot-Nachricht. Heutiger Konsument: `ca-verteilung.md`
+(CAV-4) — Zertifikatsdatei vom Skill, hart-codierte OS-Anleitung vom LLM
+aus dem Tool-Result.
+
+**Wortwörtlich-Disziplin für Trust-kritische Texte.** Enthält der
+Tool-Result einen Text, der wortwörtlich an die Familie gehen muss
+(Sicherheits-Eigenschaft, nicht Stil — heute CAV-5 OS-Installations-
+Anleitung), trägt die Aufgaben-`description` eine Klausel an das LLM:
+„Diesen Text wortwörtlich übernehmen, nicht umformulieren oder kürzen;
+kurze Einleitungs-/Schluss-Bemerkungen sind erlaubt." Das hält die
+Sicherheits-Eigenschaft bei voller LLM-Stimme. Ohne Wortwörtlich-Disziplin
+darf eine Aufgabe Tool-Result-Texte nicht als trust-kritisch deklarieren.
+
+**Helper-Grenzen.** Ein Body-Lint, der nur auf `tg.send_*`-Aufrufe **im
+`run()`/`propose()`-Body** prüft, **reicht nicht**: die heutige Wuensche-
+Zeigen-Linie ruft den Send über einen Helper (`wuensche_zeigen.py`-
+Funktion), und dieselbe Falle besteht für jede `_task.py`-Trigger-Datei.
+Die Absicherung muss über die Aufruf-Grenze hinaus greifen — entweder per
+Aufruf-Graph-Analyse vom `run()`/`propose()`-Frame aus, oder per
+verbindlichem Routing-Test, der für jede neue Read- bzw. Propose-Aufgabe
+**positiv** belegt, dass im Agent-Loop kein Telegram-Send erfolgt. Die
+konkrete Lint-/Test-Implementierung ist nicht Bestandteil dieser Konvention
+— sie wandert mit der Migration in PR-1 (`wuensche_zeigen`) ein und wird
+dort als Baseline für alle Folge-Migrationen festgehalten.
+
+*Tickets:* #551
+
 ---
 
 **Hinweis (historisch, jetzt GEBAUT):** Das Privatchat-Session-Routing in
