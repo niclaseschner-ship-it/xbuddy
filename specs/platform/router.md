@@ -718,7 +718,7 @@ Sicherheits-Invariante fest.
 
 *Tickets:* #58
 
-### ROU-33 — Proxy für die Panel-Editor-Seite (statische Assets, ohne LKG/Default)
+### ROU-34 — Proxy für die Panel-Editor-Seite (statische Assets, ohne LKG/Default)
 Der Router proxyt zusätzlich die **Editor-Seite einer Panel-Instanz** und
 ihre statischen Assets an den panel-Service:
 
@@ -743,7 +743,7 @@ Dieses Verhalten ist **bewusst anders** als ROU-27 (Daten-Proxy für
 
 Begründung der Trennung von ROU-27: die zwei Pfade haben unterschiedliche
 Verfügbarkeits-Erwartungen. ROU-27 dient dem Display-Render (das soll
-selbst bei Service-Ausfall etwas zeigen, daher LKG); ROU-33 dient der
+selbst bei Service-Ausfall etwas zeigen, daher LKG); ROU-34 dient der
 Eltern-Editor-Bedienung (die soll bei Service-Ausfall den Ausfall
 zeigen, daher direkt-durchgereicht).
 
