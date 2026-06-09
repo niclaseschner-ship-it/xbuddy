@@ -588,6 +588,14 @@ kontrollierte Doppelungen ersetzt, analog `eltern-chat.md` EC-17,
   ein Test mit Stub-Telegram und Stub-Anbieter belegt, dass der Worker
   die Familien-Antwort (z. B. das E-EC-7-Bestätigungswort) **innerhalb**
   derselben Session sieht und nicht in eine zweite Session-Map fällt.
+- **TAB-12/Medien-Naht** — propose→confirm-Persistenz der Medien-Naht
+  (TASK-4 `TurnContext`-Persistenz, Refs #514): der propose-Turn enthält
+  ein Foto (`media_telegram_file_id` gesetzt, `medium_typ="foto"`); der
+  confirm-Turn enthält nur ein Bestätigungswort (kein Medium). Ein Test
+  belegt, dass der TAB-Worker in `execute()` die `media_telegram_file_id`
+  des propose-Turns erhält — identisch mit dem, was `propose()` sah —
+  und das Foto damit korrekt nachlädt; ein leerer `medium_typ` im
+  confirm-Turn führt **nicht** zu einer »kein Bild«-Quittung.
 
 Läufe gegen den **echten** Anbieter bzw. den **echten** Plan-Buddy sind
 opt-in und nicht Teil des Standard-Durchlaufs (analog `eltern-chat.md`
