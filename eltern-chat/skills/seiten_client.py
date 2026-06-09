@@ -27,9 +27,9 @@ HTTP_TIMEOUT_SECONDS = 2.0
 def _pfad_to_view(pfad):
     """Leitet den View-Slug aus einem Display-Pfad ab (`/display/app/view`).
 
-    Hilfsfunktion für `get_kandidaten()`: falls ein Inventar-Eintrag kein
-    `slug`-Feld trägt (aggregator.py gibt `slug` nicht durch — der Eintrag
-    enthält `pfad`), wird das letzte Pfad-Segment als View-Slug verwendet.
+    Hilfsfunktion für `get_kandidaten()`: Der Aggregator schreibt kein
+    `slug`-Feld in SREG-4-Einträge — der Eintrag enthält nur `pfad`.
+    Das letzte Pfad-Segment ist daher der Normalweg zum View-Slug.
     Leerer Pfad → leerer String.
     """
     segments = (pfad or "").rstrip("/").split("/")
@@ -122,10 +122,10 @@ class SeitenClient:
           - `icons` — Liste von Icon-Pfaden (SREG-10, mindestens eines)
           - `query` — optionales flaches Query-Dict (nur wenn vorhanden)
 
-        Reihenfolge: Inventar-Reihenfolge (Discovery-Reihenfolge des Aggregators),
+        Reihenfolge: Inventar-Reihenfolge (Discovery-Reihenfolge des Aggregators,
+        SREG-2/`aggregator.discover_manifests` — sortiert nach Pfad),
         Varianten folgen unmittelbar auf ihren Eltern-Eintrag — deterministisch
-        und stabil (keine weitere Sortierung, da Inventar-Reihenfolge bereits
-        alphabetisch nach App-Slug geordnet ist, SREG-2).
+        und stabil (keine weitere Sortierung).
 
         Wirft `SeitenClientError` bei Registry-Fehler (AC4 — ehrliche Meldung).
         """
@@ -137,7 +137,7 @@ class SeitenClient:
             if eintrag.get("typ") != "display":
                 continue
             app = eintrag.get("app") or ""
-            view = eintrag.get("slug") or _pfad_to_view(eintrag.get("pfad") or "")
+            view = _pfad_to_view(eintrag.get("pfad") or "")
             label = eintrag.get("label") or app
             icons = list(eintrag.get("icons") or [])
             # Basis-Eintrag (Sorte a, kein query).

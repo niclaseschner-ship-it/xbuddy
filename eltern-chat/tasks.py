@@ -443,18 +443,19 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             is_member_fn=_tab_is_member))
 
     # PAA-5/PAA-6: »Panel anlegen« als async-schreibende Aufgabe (EC-10).
-    # Guard analog der GAA-Linie: panel_origin_url (PREG-15-Schreiben),
-    # geraete_origin_url (GER-13-Display-Lese), paa_sessions (die Map, die
-    # handle_update für das Routing liest, PAA-6) UND family_group_chat_id_getter
-    # (Live-Berechtigung, PAA-2) müssen gesetzt sein. `paa_sessions` ist die
-    # externe Session-Registry aus main.build_context — DIESELBE Map, die der
-    # PAA-Worker füllt und handle_update für das Routing liest (PAA-6/TASK-7;
-    # die stille Lego-Falle, wenn hier eine andere Map landete).
-    # Additiv (#389): seiten_origin_url für die PAA-3.3-Kandidaten-Liste
-    # (SREG-3) wird, wenn vorhanden, als SeitenClient durchgereicht — ohne
-    # seiten_origin_url läuft die Aufgabe mit seiten_client=None (leere Liste,
-    # AC4-Meldung). Bestehende Guards unverändert (AC5).
+    # Guard analog der SUE-Linie: panel_origin_url (PREG-15-Schreiben),
+    # geraete_origin_url (GER-13-Display-Lese), seiten_origin_url (SREG-3-Lesen,
+    # PAA-3.3-Kandidaten-Liste), paa_sessions (die Map, die handle_update für
+    # das Routing liest, PAA-6) UND family_group_chat_id_getter (Live-Berechtigung,
+    # PAA-2) müssen gesetzt sein. `paa_sessions` ist die externe Session-Registry
+    # aus main.build_context — DIESELBE Map, die der PAA-Worker füllt und
+    # handle_update für das Routing liest (PAA-6/TASK-7; die stille Lego-Falle,
+    # wenn hier eine andere Map landete).
+    # seiten_origin_url ist Pflicht im Guard (nicht optional): ohne sie liefert
+    # get_kandidaten() eine leere Liste → Dialog-Falle (AC4 nennt es, aber das
+    # Scheitern käme zu spät, erst im Dialog — besser nicht im Katalog erscheinen).
     if panel_origin_url is not None and geraete_origin_url is not None \
+            and seiten_origin_url is not None \
             and paa_sessions is not None \
             and family_group_chat_id_getter is not None:
         from skills.panel_anlegen_task import PanelAnlegenTask

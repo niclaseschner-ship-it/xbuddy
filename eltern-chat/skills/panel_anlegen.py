@@ -341,8 +341,7 @@ def _frage_apps(tg, chat_id, kandidaten, next_message, typing_fn=None):
 def _parse_app_auswahl(text, anzahl):
     """Parst »1,2« / »1 2« zu einer Liste von Kandidaten-Indizes (0-basiert),
     in Eingabe-Reihenfolge, ohne Duplikate. Liefert [] bei keiner gültigen
-    Nummer. `anzahl` ist die Länge der Kandidatenliste (dynamisch, nicht mehr
-    len(APP_KANDIDATEN))."""
+    Nummer. `anzahl` ist die aktuelle Länge der Registry-Kandidatenliste."""
     roh = re.split(r"[,\s]+", (text or "").strip())
     indizes = []
     for token in roh:
