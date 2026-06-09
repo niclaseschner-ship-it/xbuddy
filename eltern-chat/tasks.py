@@ -269,7 +269,10 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   paa_sessions=None, controller_url_origin=None,
                   routine_origin_url=None, photo_origin_url=None,
                   icon_origin_url=None, seiten_origin_url=None,
-                  display_url_origin_heim=None):
+                  display_url_origin_heim=None,
+                  tab_sessions=None,
+                  provider_name=None, provider_api_key=None,
+                  provider_model=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
@@ -401,6 +404,43 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             sessions=_tes_sessions,
             family_group_chat_id_getter=family_group_chat_id_getter,
             is_member_fn=_tes_is_member))
+
+    # TAB-12 / #475: »Termine aus Bild« als async-schreibende Aufgabe (EC-10,
+    # TASK-4 propose+execute, TASK-5 is_async=True). AND-Guard analog TES:
+    # plan_origin_url (PLAN-33 Bulk-PUT), family_group_chat_id_getter (TAB-2
+    # Live-Berechtigung), tab_sessions (Lego-Falle TASK-7 — geteilte Map)
+    # UND provider_api_key (TAB-5 multimodaler Anbieter; ohne Key kein
+    # Adapter → Aufgabe NICHT im Katalog, EC-15-Schema). Im Onboarding-Modus
+    # (kein API-Key) ist der Skill abgeschaltet, der bestehende Katalog bleibt
+    # unberührt.
+    if plan_origin_url is not None \
+            and family_group_chat_id_getter is not None \
+            and tab_sessions is not None \
+            and provider_api_key:
+        from skills._multimodal import get_multimodal_provider
+        from skills.plan_client import PlanClient as _TabPlanClient
+        from skills.termine_aus_bild_task import TermineAusBildTask
+        _tab_plan_client = _TabPlanClient(origin_url=plan_origin_url)
+        _tab_multimodal = get_multimodal_provider(
+            provider_name or "claude",
+            provider_api_key,
+            provider_model or "")
+        _tab_fgcid_getter = family_group_chat_id_getter
+        _tab_tg = tg
+        def _tab_is_member(user_id):
+            fgcid = _tab_fgcid_getter()
+            if not fgcid:
+                return False
+            member = _tab_tg.get_chat_member(fgcid, user_id)
+            return member is not None and member.get("status") in (
+                "creator", "administrator", "member")
+        catalog.register(TermineAusBildTask(
+            tg=tg,
+            multimodal_provider=_tab_multimodal,
+            plan_client=_tab_plan_client,
+            sessions=tab_sessions,
+            family_group_chat_id_getter=family_group_chat_id_getter,
+            is_member_fn=_tab_is_member))
 
     # PAA-5/PAA-6: »Panel anlegen« als async-schreibende Aufgabe (EC-10).
     # Guard analog der GAA-Linie: panel_origin_url (PREG-15-Schreiben),
