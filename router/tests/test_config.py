@@ -40,7 +40,7 @@ def test_AC1_default_routing_file_is_repo_relative():
 def test_AC1_env_override_sets_routing_path(monkeypatch, tmp_path):
     """ROUTER_ROUTING_FILE in ENV → routing_path wird auf diesen Pfad gesetzt.
 
-    Simuliert den Start via main() ohne Flask-Server: ENV-Auflösung + load_routing.
+    Ruft resolve_routing_file() direkt auf (Live-Pfad-Probe statt inline-Rekonstruktion).
     """
     routing_file = tmp_path / "custom_routing.json"
     routing_file.write_text(json.dumps({"entries": [], "panels": {}}))
@@ -49,17 +49,13 @@ def test_AC1_env_override_sets_routing_path(monkeypatch, tmp_path):
     router_main.state = {}
     router_main._subscribers.clear()
 
-    # Routing-Pfad-Auflösung wie in main():
-    resolved = (
-        None  # kein CLI-Flag
-        or os.environ.get(router_config.ENV_ROUTING_FILE)
-        or router_config.DEFAULT_ROUTING_FILE
-    )
-    assert resolved == str(routing_file)
+    # Live-Pfad: echte Funktion aufrufen statt or-Kette inline rekonstruieren
+    resolved = router_config.resolve_routing_file(None)  # kein CLI-Flag
+    assert resolved == routing_file  # Path == Path
 
     # Vollständiger Lade-Pfad — routing_path wird gesetzt
     router_main.load_routing(resolved)
-    assert router_main.routing_path == str(routing_file)
+    assert router_main.routing_path == routing_file  # Path == Path
 
 
 def test_AC1_cli_flag_beats_env(monkeypatch, tmp_path):
@@ -68,19 +64,16 @@ def test_AC1_cli_flag_beats_env(monkeypatch, tmp_path):
     env_val = str(tmp_path / "env_routing.json")
     monkeypatch.setenv(router_config.ENV_ROUTING_FILE, env_val)
 
-    resolved = cli_val or os.environ.get(router_config.ENV_ROUTING_FILE) or router_config.DEFAULT_ROUTING_FILE
-    assert resolved == cli_val
+    resolved = router_config.resolve_routing_file(cli_val)
+    assert resolved == Path(cli_val)
 
 
 def test_AC1_default_used_when_no_env(monkeypatch):
     """Kein CLI, kein ENV → DEFAULT_ROUTING_FILE."""
     monkeypatch.delenv(router_config.ENV_ROUTING_FILE, raising=False)
-    resolved = (
-        None  # kein CLI-Flag
-        or os.environ.get(router_config.ENV_ROUTING_FILE)
-        or router_config.DEFAULT_ROUTING_FILE
-    )
-    assert resolved == router_config.DEFAULT_ROUTING_FILE
+
+    resolved = router_config.resolve_routing_file(None)
+    assert resolved == Path(router_config.DEFAULT_ROUTING_FILE)
 
 
 # ============================================================
