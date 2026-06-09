@@ -673,7 +673,7 @@ Werte, die im Onboarding entstehen (heute `kalender_id`), setzt der Eltern-Chat
 |------------------------------|----------------------------------|--------------------------------|------------------------------------|
 | Slot-Definitionen            | die 7 Slots des Handoffs         | `slots`                        | n/a V1 (familienspezifisch hartcodiert, E-PLAN-8) |
 | Default-Petrantwortlichkeiten | leer                             | `defaults`                     | n/a V1 (Familie trägt initial in Datei ein) |
-| Aktivitäts-Katalog           | 9 Einträge (V1-Default)          | `aktivitaeten`                 | n/a V1 (Familie editiert `plan.json` direkt; späterer Eltern-Chat-Skill möglich) |
+| Aktivitäts-Katalog           | 9 Einträge (V1-Default)          | `aktivitaeten`                 | Skill „Plan-Aktivitäten setzen" (`plan-aktivitaeten-setzen.md` PAS) ruft PLAN-34; Familie kann `plan.json` zusätzlich direkt editieren |
 | Fenster Lese-Kind            | 7 Tage                           | `fenster_lesekind`             | n/a (Default reicht) |
 | Fenster Kleinkind            | 3 Tage                           | `fenster_kleinkind`            | n/a (Default reicht) |
 | Wochenstart                  | Montag (`0`)                     | `wochenstart`                  | n/a (Default reicht) |
@@ -729,6 +729,67 @@ Damit ist die `kalender_id`-Schreibstelle der Plan-Buddy selbst; der Eltern-Chat
 
 *Tickets:* #341
 
+### PLAN-34 — Admin-API für den Aktivitäts-Katalog (lesen, hinzufügen, löschen)
+Der Plan-Buddy stellt seinen Aktivitäts-Katalog (PLAN-12, `plan.json`-Sektion
+`aktivitaeten`) anderen XBuddy-Apps über drei Endpoints zur Verfügung — der
+Plan-Buddy schreibt seine `plan.json` selbst (APP-3, analog PLAN-32), ein
+konsumierender Skill ruft die Endpoints, statt die Datei direkt zu öffnen.
+Ein Lese-Endpoint ergänzt die Schreibseite, damit ein Skill den Bestand
+vor einem Vorschlag prüfen kann.
+
+**GET-Vertrag** — `GET /api/v1/plan/aktivitaeten` (öffentlich, kein Loopback-Gate):
+
+Antwort: JSON-Array der aktuellen Katalog-Einträge — je Eintrag
+`{ "art": "<schlüssel>", "label": "<text>", "keywords": ["…", …],
+"piktogramm": "<arasaac-id>" }`. Reload-on-Read (DCOMP-2): pro Aufruf
+frisch aus `plan.json`. Fehlt die Sektion in `plan.json`, antwortet der
+Endpoint mit dem Code-Default (CONFIG-4-Fallback, PLAN-12).
+
+**POST-Vertrag** — `POST /api/v1/plan/admin/aktivitaeten` (loopback-only):
+
+Body: `{ "art": "<schlüssel>", "label": "<text>", "keywords": ["…", …],
+"piktogramm": "<arasaac-id>" }`. Alle vier Felder Pflicht, alle nicht-leer.
+`art` muss neu sein (keine doppelte `art`) — sonst HTTP 409
+`{"error": "art_existiert"}`. `keywords` ist eine nicht-leere Liste
+nicht-leerer Strings (Aktivitäts-Erkennung PLAN-12). `piktogramm` ist
+eine ARASAAC-`id` als String (PLAN-12, ICONS-1) — die Existenz des PNG in
+der Icon-Wurzel wird vom Plan-Buddy **nicht** geprüft (ein Icon-Pfad,
+CLAUDE.md §6: ICONS-7 garantiert lokales PNG nur, wenn der Wert über die
+Suche kam; bringt ein Aufrufer eine ID „aus der Hand", trägt er das
+Risiko des Fallback-Symbols). Wirkung: der Eintrag wird der Sektion
+`aktivitaeten` in `plan.json` atomar hinzugefügt (Temp-Datei +
+`os.replace`, alle anderen Werte byte-gleich — derselbe Schreib-Pfad wie
+PLAN-32). Existiert die Sektion noch nicht, wird sie aus dem CONFIG-4-
+Fallback (PLAN-12) als Startpunkt materialisiert und der neue Eintrag
+angehängt. Antwort: `{ "ok": true, "art": "<schlüssel>" }`.
+
+**DELETE-Vertrag** — `DELETE /api/v1/plan/admin/aktivitaeten/<art>` (loopback-only):
+
+Wirkung: der Eintrag mit der gegebenen `art` wird aus der `aktivitaeten`-
+Sektion entfernt — atomar wie POST. Existiert die Sektion in `plan.json`
+noch nicht, wird sie aus dem CONFIG-4-Fallback (PLAN-12) materialisiert
+und der Eintrag daraus gelöscht. Antwort: `{ "ok": true, "art": "<schlüssel>" }`.
+
+**Fehler-Semantik:** `400` bei fehlendem/leerem Pflichtfeld oder
+ungültigem Body, `403` bei nicht-Loopback-Aufruf der Admin-Endpoints
+(analog PLAN-32, nginx leitet `…/admin/…` nicht weiter), `404` beim
+DELETE auf eine unbekannte `art`, `409` bei doppelter `art` im POST. Bei
+Parse-/Schreibfehler im POST/DELETE bleibt der alte Snapshot atomar
+unberührt (analog PLAN-32 / `admin/reload`).
+
+**Wirkung im Display:** Reload-on-Read greift automatisch (DCOMP-2): der
+nächste Plan-Display-Aufruf oder GET sieht den neuen Stand ohne Service-
+Restart. Ein bestehender Kalender-Event, dessen Titel das neue Keyword
+trägt, wird ab dann mit dem zugehörigen ARASAAC-Piktogramm gerendert
+(PLAN-12 Heuristik).
+
+Damit ist die Schreibstelle für den Aktivitäts-Katalog der Plan-Buddy
+selbst; der Eltern-Chat-Skill „Plan-Aktivitäten setzen"
+(`plan-aktivitaeten-setzen.md` PAS) **ruft** diese Endpoints, statt
+`plan.json` zu schreiben (APP-3).
+
+*Tickets:* #445, #471, #578
+
 ## 10. Tests
 
 ### PLAN-29 — Automatisierte Tests je Anforderung
@@ -775,7 +836,16 @@ ohne Schreib-Versuch (PLAN-33.3); 429/403-Rate-Limit-Antworten des
 Google-Stubs lösen den Exponential-Backoff aus (PLAN-33.6) — drei
 Retries je Item, dann `error_code: calendar_rate_limit`, und
 `Retry-After`-Header sticht die berechnete Wartezeit; Token-Cache: ein
-Bulk-Aufruf macht **einen** Token-Refresh, nicht N (PLAN-33.4).
+Bulk-Aufruf macht **einen** Token-Refresh, nicht N (PLAN-33.4)
+· **PLAN-34** (Admin-API Aktivitäts-Katalog): GET liefert den
+CONFIG-4-Fallback bei fehlender `aktivitaeten`-Sektion in `plan.json`;
+GET spiegelt POST-Zustand nach dem nächsten Aufruf (Reload-on-Read);
+POST mit doppelter `art` → 409, POST mit fehlendem/leerem Pflichtfeld
+→ 400, POST aus nicht-Loopback → 403; DELETE auf unbekannte `art` →
+404; atomares Schreiben — bei Schreib-/Parse-Fehler bleibt der alte
+Snapshot byte-gleich; ein Test belegt: ein neuer Eintrag (Keyword
++ ARASAAC-`id`) wird beim nächsten Render eines Kalender-Events mit
+diesem Keyword im Titel zum Aktivitäts-Slot mit ARASAAC-Piktogramm.
 
 Läufe gegen den **echten** Kalender sind opt-in und nicht Teil des
 Standard-Durchlaufs (analog `eltern-chat.md` EC-17).
