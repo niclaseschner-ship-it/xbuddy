@@ -251,18 +251,41 @@ aus PLAN-22).
 
 *Tickets:* #40
 
-### PLAN-19 — Titel-Konvention & Personen-Auflösung
-Ein Event, das eine Person betrifft, trägt deren **Namen im Titel** — Form
-`<Titel> <Name>` (z. B. „Klettern Finn", „Shibari Jonas"). Die Anbindung ordnet
-jedes Event höchstens einer Person der Familien-Registry zu, in dieser
-Reihenfolge: (1) **Titel-Treffer** — kommt ein Personenname (FAM-3) im Titel
-vor, ist das die Person; bei mehreren gewinnt der früheste; (2) **Creator-E-Mail**
-— sonst, ist die Creator-Adresse die E-Mail eines Erwachsenen, ist das die
-Person; (3) sonst keine Zuordnung. Diese Konvention ist die tragende
-Entscheidung der Anbindung — Personen-Zuordnung und das Aktivitäts-Routing
-(PLAN-12) fallen aus ihr heraus.
+### PLAN-19 — Titel-Konvention & Personen-Auflösung (V1.1 Multi-Person)
+Ein Event, das Personen betrifft, trägt deren **Namen im Titel** — Form
+`<Titel> <Name1>` für eine Person (z. B. „Klettern Finn", „Shibari Jonas")
+oder `<Titel> <Name1> <Name2>` für zwei (z. B. „Mia Finn Schwimmkurs",
+„Sandra Jonas Eltern-Abend"). Die Anbindung ordnet jedes Event **einer
+oder zwei Personen** der Familien-Registry zu, in dieser Reihenfolge:
+(1) **Titel-Treffer** — kommen ein oder mehrere Personennamen (FAM-3) im
+Titel vor, sind das die Personen (bis maximal zwei, in Reihenfolge der
+ersten Erwähnung; weitere Erwähnungen werden ignoriert); (2) **Creator-
+E-Mail** — sonst, ist die Creator-Adresse die E-Mail eines Erwachsenen,
+ist das die einzige Person; (3) sonst keine Zuordnung. Diese Konvention
+ist die tragende Entscheidung der Anbindung — Personen-Zuordnung und
+das Aktivitäts-Routing (PLAN-12) fallen aus ihr heraus.
 
-*Tickets:* #40
+**Maximal zwei Personen** in V1.1 (#473) — pragmatische Obergrenze, weil
+ein zeitgleicher Drei-Personen-Termin in der Praxis seltener ist und das
+Layout der Termin-Leiste/des Aktivitäts-Slots bei 3+ Avataren zerfällt
+(eine Werft-Frage, die V1.1 bewusst nicht aufmacht). Ein drittes
+Vorkommen im Titel wird verworfen, nicht abgelehnt — das Event landet
+mit den ersten zwei aufgelösten Personen. **Verworfen:** unbeschränkte
+Personenliste (Layout-Risiko).
+
+**Datenmodell-Form:** das Feld heißt `personen` und ist immer eine
+Liste (Single-Person-Events sind eine Ein-Element-Liste). Bestehende
+plan.json-Daten ohne `personen`-Feld bleiben kompatibel — der Parser
+ergänzt die Liste leer oder aus PLAN-19-Auflösung.
+
+**Display (V1.1):** zwei Personen zeigt die Termin-Leiste / der
+Aktivitäts-Slot zwei Avatare nebeneinander im PLAN-13-Foto-im-Ring-Stil,
+geteilt auf den verfügbaren Slot. Ein Einzel-Person-Event bleibt
+unverändert ein Avatar. Ein „Familie"-Sammel-Icon bei N>1 ist
+**verworfen** (zu generisch — die Familie sieht nicht, wen es betrifft,
+der UX-Wert geht verloren).
+
+*Tickets:* #40, #473
 
 ### PLAN-20 — Kalender nicht erreichbar oder ohne Credentials
 Fehlen die OAuth-Daten oder ist Google nicht erreichbar, wirft die App keinen
