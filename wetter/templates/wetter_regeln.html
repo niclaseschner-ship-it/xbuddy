@@ -258,7 +258,7 @@
   document.getElementById("speichern").addEventListener("click", function () {
     statusEl.textContent = "Speichere …";
     statusEl.className = "status";
-    fetch("/display/wetter/regeln/speichern", {
+    fetch("/display/wetter/regeln", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(sammleMatrix())

@@ -109,7 +109,8 @@ Aggregator ab.
   unter `/display/<slug>/…` hat **genau einen** Manifest-Eintrag und umgekehrt.
   **Ausgenommen:** Redirect-/Alias-Routen (z. B. `/display/routine/` →
   `/display/routine/morgen` — nur der kanonische Einstieg zählt) sowie
-  Nicht-GET-/Nicht-HTML-Endpunkte (z. B. POST `/display/wetter/regeln/speichern`).
+  Nicht-GET-/Nicht-HTML-Endpunkte (z. B. POST auf demselben verbfreien
+  View-Pfad gemäß URL-2, oder JSON-Statik-Sub-Pfade einer Komponente).
 - **Controller-App ohne eigene Flask-Route** (der Router serviert dynamisch
   `/controller/<app>/`, es gibt keine komponenten-eigene Route): das Manifest
   wird gegen die **Existenz des Controller-Slugs** geprüft (Verzeichnis/
