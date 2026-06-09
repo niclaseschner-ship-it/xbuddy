@@ -371,7 +371,6 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             # Kein Getter → Immer-true (authz.py hat die Prüfung bereits gemacht)
             _is_member = lambda uid: True
         catalog.register(TermineErfragenTask(
-            tg=tg,
             plan_client=plan_client,
             is_member_fn=_is_member))
 

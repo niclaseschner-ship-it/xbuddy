@@ -1,27 +1,49 @@
-"""Tests für die Funktion termine_erfragen — TER-1 … TER-10 (Refs #143).
+"""Tests für die Funktion termine_erfragen — TER-1 … TER-11, EC-29 (Refs #143, #569).
 
 Jede Anforderung der Spec mit Code-Verhalten hat einen automatisierten Test
-(TER-11, CLAUDE.md §6). Telegram und die Plan-Buddy-Schnittstelle werden durch
-kontrollierte Doppelungen ersetzt — die Tests laufen ohne Netz (EC-17).
+(TER-11, CLAUDE.md §6). Plan-Buddy und Telegram werden durch kontrollierte
+Doppelungen ersetzt — die Tests laufen ohne Netz (EC-17).
+
+EC-29 / TASK-10: Die Funktion sendet selbst keine Telegram-Nachricht mehr.
+Sie returnt in jedem Pfad einen User-tauglichen Antwort-Text als String.
+Berechtigungs-Bruch (TER-2) wirft BerechtigungError.
 """
 
 from datetime import date, timedelta
 
-from fakes import FakeTelegram
+import pytest
 from skills.plan_client import PlanClientError
 from skills.termine_erfragen import (
-    SIGNAL_ABGELEHNT,
-    SIGNAL_BEANTWORTET,
-    SIGNAL_LEER,
-    SIGNAL_NICHT_ERREICHBAR,
+    _ANTWORT_LEER,
+    _ANTWORT_NICHT_ERREICHBAR,
+    _RUECKFRAGE_NAECHSTES_JAHR,
+    _RUECKFRAGE_ZEITRAUM,
+    BerechtigungError,
     formatiere_termine,
     parse_zeitraum,
     termine_erfragen,
 )
 
 # ============================================================
-#  Hilfs-Klassen / Doppelungen
+#  Doppelungen — CLIENT-1 Transport-Stub-Naht
 # ============================================================
+
+class FakeTelegram:
+    """Telegram-Doppelung: zeichnet send_message-Aufrufe auf.
+
+    EC-29: In jedem Test-Pfad muss messages == [] bleiben — die Funktion
+    sendet nicht mehr selbst.
+    """
+
+    def __init__(self):
+        self.messages = []
+
+    def send_message(self, chat_id, text):
+        self.messages.append({"chat_id": chat_id, "text": text})
+
+    def get_chat_member(self, group_id, user_id):
+        return None
+
 
 class FakePlanClient:
     """Kontrollierte Doppelung des PlanClients (TER-11, EC-17).
@@ -42,14 +64,18 @@ class FakePlanClient:
         return list(self._events)
 
 
+def _immer_mitglied(uid):
+    return True
+
+
+def _kein_mitglied(uid):
+    return False
+
+
 def _member(user_ids):
     """Erstellt eine is_member_fn, die nur die angegebenen IDs akzeptiert."""
     ids = set(user_ids)
     return lambda uid: uid in ids
-
-
-def _kein_mitglied():
-    return lambda uid: False
 
 
 def _event(titel="Arzttermin", beginn="2026-06-01", ende="2026-06-02",
@@ -186,358 +212,177 @@ def test_TER_4_naechste_woche_hat_vorrang_vor_mehrdeutig():
 
 
 # ============================================================
-#  TER-1 — Aufruf-Schnittstelle und Ergebnis-Signale
+#  TER-2: Berechtigung — Nicht-Mitglied → BerechtigungError, kein API-Aufruf
 # ============================================================
 
-def test_TER_1_minimaler_aufruf_mit_gueltigem_mitglied():
-    """TER-1: ein Aufruf mit Chat-ID, User-ID und Mitglied postet eine
-    Antwort und liefert 'beantwortet'."""
-    tg = FakeTelegram(members={7: {"status": "member"}})
+def test_TER2_nicht_mitglied_wirft_berechtigung_error():
+    """TER-2 / EC-29: Nicht-Mitglied → BerechtigungError, kein plan_client-Aufruf."""
     pc = FakePlanClient(events=[_event()])
-    signal = termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=7, anfrage_text="",
-        plan_client=pc, is_member_fn=_member([7]),
-        heute=MONTAG,
-    )
-    assert signal == SIGNAL_BEANTWORTET
-    assert len(tg.sent) == 1
+
+    with pytest.raises(BerechtigungError):
+        termine_erfragen(
+            chat_id=42,
+            from_user_id=99,
+            anfrage_text="",
+            plan_client=pc,
+            is_member_fn=_kein_mitglied,
+            heute=MONTAG,
+        )
+
+    assert pc.calls == [], "Kein API-Aufruf bei Nicht-Mitglied (TER-2)"
 
 
-def test_TER_1_kein_chat_id_bricht_ohne_wirkung_ab():
-    """TER-1: ein Aufruf ohne chat_id bricht ohne Wirkung ab."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(events=[_event()])
-    signal = termine_erfragen(
-        tg=tg, chat_id=None, from_user_id=7, anfrage_text="",
-        plan_client=pc, is_member_fn=_member([7]),
-        heute=MONTAG,
-    )
-    assert signal == SIGNAL_ABGELEHNT
-    assert tg.sent == []
+def test_TER2_kein_user_id_wirft_berechtigung_error():
+    """TER-2 / EC-29: from_user_id=None → BerechtigungError."""
+    pc = FakePlanClient()
 
+    with pytest.raises(BerechtigungError):
+        termine_erfragen(
+            chat_id=42,
+            from_user_id=None,
+            anfrage_text="",
+            plan_client=pc,
+            is_member_fn=_immer_mitglied,
+            heute=MONTAG,
+        )
 
-# ============================================================
-#  TER-2 — Berechtigung live geprüft
-# ============================================================
-
-def test_TER_2_nicht_mitglied_wird_abgelehnt():
-    """TER-2: ein Nicht-Familienmitglied bekommt das Signal 'abgelehnt';
-    im Chat erscheint keine Antwort."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(events=[_event()])
-    signal = termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=99, anfrage_text="",
-        plan_client=pc, is_member_fn=_kein_mitglied(),
-        heute=MONTAG,
-    )
-    assert signal == SIGNAL_ABGELEHNT
-    assert tg.sent == []   # keine Antwort im Chat
-
-
-def test_TER_2_plan_client_wird_nicht_aufgerufen_bei_ablehnung():
-    """TER-2: bei Ablehnung wird die Plan-Buddy-Schnittstelle nicht aufgerufen."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(events=[_event()])
-    termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=99, anfrage_text="",
-        plan_client=pc, is_member_fn=_kein_mitglied(),
-        heute=MONTAG,
-    )
     assert pc.calls == []
 
 
-def test_TER_2_none_user_id_wird_abgelehnt():
-    """TER-2: eine fehlende user_id (None) führt zur Ablehnung."""
+def test_TER2_keine_telegram_nachricht_bei_ablehnung():
+    """TER-2 / EC-29: Bei BerechtigungError wird kein tg.send_message aufgerufen.
+
+    Die Funktion sendet nicht selbst — der Agent-Loop schreibt den
+    Fehler-Tool-Result-Block (agent.py Fehlerpfad).
+    """
     tg = FakeTelegram()
-    pc = FakePlanClient(events=[_event()])
-    signal = termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=None, anfrage_text="",
-        plan_client=pc, is_member_fn=_member([7]),
-        heute=MONTAG,
-    )
-    assert signal == SIGNAL_ABGELEHNT
+    pc = FakePlanClient()
+
+    with pytest.raises(BerechtigungError):
+        termine_erfragen(
+            chat_id=42,
+            from_user_id=99,
+            anfrage_text="",
+            plan_client=pc,
+            is_member_fn=_kein_mitglied,
+            heute=MONTAG,
+        )
+
+    assert tg.messages == [], "Keine Telegram-Nachricht bei Berechtigungs-Fehler (EC-29)"
 
 
 # ============================================================
-#  TER-3 — Antwort im selben Chat
+#  TER-7: Plan-Buddy nicht erreichbar — ehrliche Grenze als Tool-Result-String
 # ============================================================
 
-def test_TER_3_antwort_landet_in_demselben_chat_gruppe():
-    """TER-3: Gruppen-Anfrage → Antwort in der Gruppe, kein Privatchat."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(events=[_event()])
-    gruppen_chat_id = -100123
-    termine_erfragen(
-        tg=tg, chat_id=gruppen_chat_id, from_user_id=7, anfrage_text="",
-        plan_client=pc, is_member_fn=_member([7]),
-        heute=MONTAG,
-    )
-    assert tg.sent[0]["chat_id"] == gruppen_chat_id
-
-
-def test_TER_3_antwort_landet_in_demselben_chat_privat():
-    """TER-3: Privatchat-Anfrage → Antwort im Privatchat."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(events=[_event()])
-    privat_chat_id = 7
-    termine_erfragen(
-        tg=tg, chat_id=privat_chat_id, from_user_id=7, anfrage_text="",
-        plan_client=pc, is_member_fn=_member([7]),
-        heute=MONTAG,
-    )
-    assert tg.sent[0]["chat_id"] == privat_chat_id
-
-
-def test_TER_3_kein_privatchat_bei_gruppen_anfrage():
-    """TER-3: kein Privatchat-Eröffnung bei einer Gruppen-Frage (E-TER-3)."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(events=[_event()])
-    gruppen_chat_id = -100456
-    privat_chat_id = 7
-    termine_erfragen(
-        tg=tg, chat_id=gruppen_chat_id, from_user_id=7, anfrage_text="",
-        plan_client=pc, is_member_fn=_member([7]),
-        heute=MONTAG,
-    )
-    # Alle Nachrichten gehen in die Gruppe, nicht in den Privatchat
-    for msg in tg.sent:
-        assert msg["chat_id"] != privat_chat_id
-
-
-# ============================================================
-#  TER-5 — HTTP-Aufruf an PLAN-22
-# ============================================================
-
-def test_TER_5_http_aufruf_mit_richtigen_parametern():
-    """TER-5: der HTTP-Aufruf nutzt ab=<iso>&tage=<n>."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(events=[_event()])
-    termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=7, anfrage_text="heute",
-        plan_client=pc, is_member_fn=_member([7]),
-        heute=MONTAG,
-    )
-    assert len(pc.calls) == 1
-    ab, tage = pc.calls[0]
-    assert ab == MONTAG.isoformat()
-    assert tage == 1
-
-
-def test_TER_5_kein_cache_zweiter_aufruf_sieht_neue_dopplung():
-    """TER-5: kein Cache — ein zweiter Aufruf geht frisch an den Server."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(events=[_event()])
-    termine_erfragen(tg=tg, chat_id=42, from_user_id=7, anfrage_text="",
-                     plan_client=pc, is_member_fn=_member([7]), heute=MONTAG)
-    termine_erfragen(tg=tg, chat_id=42, from_user_id=7, anfrage_text="",
-                     plan_client=pc, is_member_fn=_member([7]), heute=MONTAG)
-    assert len(pc.calls) == 2
-
-
-def test_TER_5_datums_vokabular_loest_richtigen_aufruf_aus_morgen():
-    """TER-4/TER-5: 'morgen' → start=heute+1, tage=1."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(events=[_event("Zahnarzt", beginn="2026-06-02",
-                                       ende="2026-06-03")])
-    termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=7, anfrage_text="morgen",
-        plan_client=pc, is_member_fn=_member([7]),
-        heute=MONTAG,
-    )
-    assert pc.calls[0] == (DIENSTAG.isoformat(), 1)
-
-
-def test_TER_5_datums_vokabular_diese_woche():
-    """TER-4/TER-5: 'diese Woche' (ab Montag) → start=heute, tage=7."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(events=[])
-    termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=7, anfrage_text="diese Woche",
-        plan_client=pc, is_member_fn=_member([7]),
-        heute=MONTAG,
-    )
-    assert pc.calls[0] == (MONTAG.isoformat(), 7)
-
-
-def test_TER_5_datums_vokabular_naechste_woche():
-    """TER-4/TER-5: 'nächste Woche' → start=nächster Montag, tage=7."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(events=[])
-    termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=7, anfrage_text="nächste Woche",
-        plan_client=pc, is_member_fn=_member([7]),
-        heute=MONTAG,
-    )
-    naechster_montag = MONTAG + timedelta(7)
-    assert pc.calls[0] == (naechster_montag.isoformat(), 7)
-
-
-def test_TER_5_datums_vokabular_naechsten_5_tage():
-    """TER-4/TER-5: 'die nächsten 5 Tage' → start=heute, tage=5."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(events=[])
-    termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=7, anfrage_text="die nächsten 5 Tage",
-        plan_client=pc, is_member_fn=_member([7]),
-        heute=MONTAG,
-    )
-    assert pc.calls[0] == (MONTAG.isoformat(), 5)
-
-
-def test_TER_5_datums_vokabular_default():
-    """TER-4/TER-5: kein Datums-Ausdruck → start=heute, tage=7 (Default)."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(events=[])
-    termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=7, anfrage_text="was steht an?",
-        plan_client=pc, is_member_fn=_member([7]),
-        heute=MONTAG,
-    )
-    assert pc.calls[0] == (MONTAG.isoformat(), 7)
-
-
-# ============================================================
-#  TER-6 — Personen-Auflösung bleibt beim Plan-Buddy
-# ============================================================
-
-def test_TER_6_person_feld_wird_uebernommen():
-    """TER-6: das person-Feld aus der PLAN-22-Antwort wird direkt übernommen."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(events=[
-        _event("Klettern", person="person-mia-01"),
-    ])
-    termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=7, anfrage_text="",
-        plan_client=pc, is_member_fn=_member([7]),
-        heute=MONTAG,
-    )
-    assert tg.sent
-    assert "person-mia-01" in tg.sent[0]["text"]
-
-
-def test_TER_6_leeres_person_feld_wird_nicht_fingiert():
-    """TER-6: ein leeres person-Feld führt zu einem Termin ohne Personen-Bezug —
-    keine fingierte Zuordnung."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(events=[
-        _event("Termin ohne Person", person=None),
-    ])
-    termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=7, anfrage_text="",
-        plan_client=pc, is_member_fn=_member([7]),
-        heute=MONTAG,
-    )
-    assert tg.sent
-    # Kein "—" (Personen-Separator) in der Termin-Zeile
-    termin_text = tg.sent[0]["text"]
-    assert "Termin ohne Person" in termin_text
-    # Person-Separator " — " darf nicht vorkommen (TER-6)
-    lines = [l for l in termin_text.splitlines() if "Termin ohne Person" in l]
-    assert lines
-    assert " — " not in lines[0]
-
-
-# ============================================================
-#  TER-7 — Plan-Buddy nicht erreichbar
-# ============================================================
-
-def test_TER_7_verbindung_tot_liefert_nicht_erreichbar():
-    """TER-7: ein Verbindungsfehler liefert 'nicht_erreichbar' und postet
-    die hart-codierte Ehrlich-Antwort."""
+def test_TER7_verbindung_tot_returnt_meldung():
+    """TER-7 / EC-29: Transport-Fehler → ehrliche Grenze als String,
+    kein Cache, kein Retry. Kein tg.send_message (EC-29).
+    """
     tg = FakeTelegram()
     pc = FakePlanClient(error=PlanClientError("Verbindung tot"))
-    signal = termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=7, anfrage_text="",
-        plan_client=pc, is_member_fn=_member([7]),
+
+    antwort = termine_erfragen(
+        chat_id=42,
+        from_user_id=7,
+        anfrage_text="",
+        plan_client=pc,
+        is_member_fn=_immer_mitglied,
         heute=MONTAG,
     )
-    assert signal == SIGNAL_NICHT_ERREICHBAR
-    assert len(tg.sent) == 1   # ehrliche Antwort gepostet
-    assert "Wochenplan" in tg.sent[0]["text"]
+
+    assert isinstance(antwort, str)
+    assert len(antwort) > 0
+    assert pc.calls == [("2026-06-01", 7)], "Genau ein Aufruf, kein Retry (TER-7)"
+    assert "Wochenplan" in antwort or "nicht erreichbar" in antwort.lower()
+    assert antwort == _ANTWORT_NICHT_ERREICHBAR
+    # EC-29: keine Telegram-Nachricht
+    assert tg.messages == [], "Funktion darf kein tg.send_message aufrufen (EC-29)"
 
 
-def test_TER_7_http_fehler_liefert_nicht_erreichbar():
-    """TER-7: HTTP 5xx wird als 'nicht_erreichbar' gemeldet."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(error=PlanClientError("HTTP 503"))
-    signal = termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=7, anfrage_text="",
-        plan_client=pc, is_member_fn=_member([7]),
-        heute=MONTAG,
-    )
-    assert signal == SIGNAL_NICHT_ERREICHBAR
-    # keine Halluzination: nur EINE Nachricht, die ehrliche Fehlermeldung
-    assert len(tg.sent) == 1
-    assert "nicht erreichbar" in tg.sent[0]["text"].lower() or \
-           "Wochenplan" in tg.sent[0]["text"]
+def test_TER7_kein_retry():
+    """TER-7: bei Transport-Fehler KEIN zweiter Aufruf."""
+    pc = FakePlanClient(error=PlanClientError("Timeout"))
 
-
-def test_TER_7_plan_buddy_nicht_installiert_selbes_verhalten():
-    """TER-7 APP-2: ein nicht installierter Plan-Buddy verhält sich identisch
-    zu einem Verbindungsfehler — PlanClientError ist die gemeinsame Klasse."""
-    tg = FakeTelegram()
-    # APP-2: Plan-Buddy nicht installiert → Verbindung schlägt fehl
-    pc = FakePlanClient(error=PlanClientError("Plan-Buddy nicht installiert"))
-    signal = termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=7, anfrage_text="",
-        plan_client=pc, is_member_fn=_member([7]),
-        heute=MONTAG,
-    )
-    assert signal == SIGNAL_NICHT_ERREICHBAR
-
-
-def test_TER_7_kein_stack_trace_keine_halluzination():
-    """TER-7 EC-7: bei einem Fehler werden keine Termine erfunden — nur die
-    hart-codierte Antwort, kein generierter Text."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(error=PlanClientError("weg"))
     termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=7, anfrage_text="",
-        plan_client=pc, is_member_fn=_member([7]),
+        chat_id=42,
+        from_user_id=7,
+        anfrage_text="",
+        plan_client=pc,
+        is_member_fn=_immer_mitglied,
         heute=MONTAG,
     )
-    # Die Antwort enthält kein LLM-generiertes Material — sie ist deterministisch.
-    from skills.termine_erfragen import _ANTWORT_NICHT_ERREICHBAR
-    assert tg.sent[0]["text"] == _ANTWORT_NICHT_ERREICHBAR
+
+    assert len(pc.calls) == 1
 
 
 # ============================================================
-#  TER-8 — Leerer Zeitraum
+#  TER-8: Leerer Zeitraum — ehrliche Meldung als Tool-Result-String
 # ============================================================
 
-def test_TER_8_leere_liste_liefert_leer():
-    """TER-8: eine leere PLAN-22-Antwort liefert 'leer' und postet die
-    hart-codierte 'keine Termine'-Antwort."""
+def test_TER8_leere_liste_returnt_meldung():
+    """TER-8 / EC-29: Plan-Buddy liefert leere Liste → Skill returnt ehrliche
+    Meldung als String. Kein tg.send_message (EC-29).
+    """
     tg = FakeTelegram()
     pc = FakePlanClient(events=[])
-    signal = termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=7, anfrage_text="",
-        plan_client=pc, is_member_fn=_member([7]),
+
+    antwort = termine_erfragen(
+        chat_id=42,
+        from_user_id=7,
+        anfrage_text="",
+        plan_client=pc,
+        is_member_fn=_immer_mitglied,
         heute=MONTAG,
     )
-    assert signal == SIGNAL_LEER
-    assert len(tg.sent) == 1
-    from skills.termine_erfragen import _ANTWORT_LEER
-    assert tg.sent[0]["text"] == _ANTWORT_LEER
+
+    assert isinstance(antwort, str)
+    assert len(antwort) > 0
+    assert antwort == _ANTWORT_LEER
+    assert "keine" in antwort.lower() or "stehen" in antwort.lower()
+    # EC-29: keine Telegram-Nachricht
+    assert tg.messages == [], "Funktion darf kein tg.send_message aufrufen (EC-29)"
 
 
-def test_TER_8_leer_ist_kein_stiller_abbruch():
-    """TER-8: ein leerer Kalender führt zu einer Antwort — kein Schweigen."""
+# ============================================================
+#  TER-9: Happy-Path — tagesgruppierte Antwort als Tool-Result-String
+# ============================================================
+
+def test_TER9_happy_path_gibt_text_zurueck():
+    """TER-9 / EC-29: Termine vorhanden → tagesgruppierte Antwort als String.
+    Kein tg.send_message (EC-29).
+    """
     tg = FakeTelegram()
-    pc = FakePlanClient(events=[])
-    termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=7, anfrage_text="",
-        plan_client=pc, is_member_fn=_member([7]),
+    events = [
+        _event("Zahnarzt", beginn="2026-06-01", ende="2026-06-02",
+               ganztags=True, id="e1"),
+        _event("Sport", beginn="2026-06-03T15:00:00",
+               ende="2026-06-03T16:00:00",
+               ganztags=False, id="e2"),
+    ]
+    pc = FakePlanClient(events=events)
+
+    antwort = termine_erfragen(
+        chat_id=42,
+        from_user_id=7,
+        anfrage_text="diese Woche",
+        plan_client=pc,
+        is_member_fn=_immer_mitglied,
         heute=MONTAG,
     )
-    assert len(tg.sent) == 1   # eine Antwort, kein Schweigen
+
+    assert isinstance(antwort, str)
+    assert len(antwort) > 0
+    assert "Montag" in antwort
+    assert "Zahnarzt" in antwort
+    assert "Mittwoch" in antwort
+    assert "Sport" in antwort
+    assert "15:00" in antwort
+    # EC-29: keine Telegram-Nachricht
+    assert tg.messages == [], "Funktion darf kein tg.send_message aufrufen (EC-29)"
 
 
-# ============================================================
-#  TER-9 — Tagesgruppierte Antwort
-# ============================================================
-
-def test_TER_9_tagesgruppierung_chronologisch():
+def test_TER9_tagesgruppierung_chronologisch():
     """TER-9: Termine werden nach Tagen gruppiert, chronologisch."""
     events = [
         _event("Arzt Montag", beginn="2026-06-01", ende="2026-06-02",
@@ -552,38 +397,25 @@ def test_TER_9_tagesgruppierung_chronologisch():
     assert pos_mo < pos_di
 
 
-def test_TER_9_mehrtages_spanne_erscheint_genau_einmal():
+def test_TER9_mehrtages_spanne_erscheint_genau_einmal():
     """TER-9 PLAN-14: eine Mehrtages-Spanne (gleiche id) erscheint genau
     einmal — nicht je Tag wiederholt."""
-    # Ein Event, das zwei Tage umfasst (id="evt-mehr")
     events = [
         _event("Urlaub", beginn="2026-06-01", ende="2026-06-04",
                ganztags=True, id="evt-mehr"),
     ]
     antwort = formatiere_termine(events, MONTAG, 7)
-    # "Urlaub" darf nur einmal vorkommen
     assert antwort.count("Urlaub") == 1
 
 
-def test_TER_9_mehrtages_spanne_mit_hinweis():
-    """TER-9: eine Mehrtages-Spanne trägt einen Spannen-Hinweis."""
-    events = [
-        _event("Urlaub", beginn="2026-06-01", ende="2026-06-05",
-               ganztags=True, id="evt-mehr"),
-    ]
-    antwort = formatiere_termine(events, MONTAG, 7)
-    # Spannen-Hinweis im Format "(bis TT.MM.)"
-    assert "bis" in antwort
-
-
-def test_TER_9_ganztaegiger_termin_traegt_ganztaetig():
+def test_TER9_ganztaegiger_termin_traegt_ganztaetig():
     """TER-9: ganztägige Termine tragen 'ganztägig' statt einer Uhrzeit."""
     events = [_event("Familientag", ganztags=True)]
     antwort = formatiere_termine(events, MONTAG, 7)
     assert "ganztägig" in antwort
 
 
-def test_TER_9_timed_termin_traegt_uhrzeit():
+def test_TER9_timed_termin_traegt_uhrzeit():
     """TER-9: Termine mit Uhrzeit zeigen HH:MM."""
     events = [{
         "id": "evt-t", "titel": "Meeting",
@@ -596,7 +428,21 @@ def test_TER_9_timed_termin_traegt_uhrzeit():
     assert "Meeting" in antwort
 
 
-def test_TER_9_antwort_ist_deterministisch(monkeypatch):
+def test_TER9_deutsche_wochentage():
+    """TER-9 URL-7: Tages-Köpfe sind deutsche Wochentage."""
+    events = [_event("Test", beginn="2026-06-01", id="e")]
+    antwort = formatiere_termine(events, MONTAG, 7)
+    assert "Montag" in antwort
+
+
+def test_TER9_person_feld_in_antwort():
+    """TER-9: das person-Feld erscheint in der Termin-Zeile."""
+    events = [_event("Sport", person="person-mia-01", id="e")]
+    antwort = formatiere_termine(events, MONTAG, 7)
+    assert "person-mia-01" in antwort
+
+
+def test_TER9_antwort_ist_deterministisch():
     """TER-9 EC-12: gleiche Eingabe liefert immer denselben Text — kein LLM."""
     events = [_event("Termin A", id="a")]
     r1 = formatiere_termine(events, MONTAG, 7)
@@ -604,167 +450,239 @@ def test_TER_9_antwort_ist_deterministisch(monkeypatch):
     assert r1 == r2
 
 
-def test_TER_9_deutsche_wochentage():
-    """TER-9 URL-7: Tages-Köpfe sind deutsche Wochentage."""
-    events = [_event("Test", beginn="2026-06-01", id="e")]
-    antwort = formatiere_termine(events, MONTAG, 7)
-    assert "Montag" in antwort
-
-
-def test_TER_9_person_feld_in_antwort():
-    """TER-9: das person-Feld erscheint in der Termin-Zeile."""
-    events = [_event("Sport", person="person-mia-01", id="e")]
-    antwort = formatiere_termine(events, MONTAG, 7)
-    assert "person-mia-01" in antwort
-
-
-def test_TER_9_full_flow_antwort_im_chat():
-    """TER-9 End-to-End: der vollständige Aufruf postet eine tagesgruppierte
-    Antwort, die keine LLM-generierten Anteile enthält."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(events=[
-        _event("Zahnarzt", beginn="2026-06-01", ende="2026-06-02",
-               ganztags=True, id="e1"),
-        _event("Sport", beginn="2026-06-03T15:00:00",
-               ende="2026-06-03T16:00:00",
-               ganztags=False, id="e2"),
-    ])
-    signal = termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=7, anfrage_text="diese Woche",
-        plan_client=pc, is_member_fn=_member([7]),
-        heute=MONTAG,
-    )
-    assert signal == SIGNAL_BEANTWORTET
-    assert len(tg.sent) == 1
-    text = tg.sent[0]["text"]
-    assert "Montag" in text
-    assert "Zahnarzt" in text
-    assert "Mittwoch" in text
-    assert "Sport" in text
-    assert "15:00" in text
-
-
 # ============================================================
-#  TER-4 EC-22 — mehrdeutiger Ausdruck → Rückfrage
+#  TER-4 EC-22: Rückfrage-Pfade returnen Text (kein Senden)
 # ============================================================
 
-def test_TER_4_mehrdeutig_loest_rueckfrage_aus():
-    """TER-4 EC-22: ein mehrdeutiger Ausdruck ('nächsten Freitag') löst eine
-    Rückfrage aus statt eines blinden Aufrufs."""
+def test_TER4_mehrdeutig_returnt_rueckfrage_text():
+    """TER-4 EC-22 / EC-29: mehrdeutiger Ausdruck ('nächsten Freitag') →
+    Rückfrage-Text als Tool-Result, kein tg.send_message, kein Plan-Buddy-Aufruf.
+    """
     tg = FakeTelegram()
     pc = FakePlanClient(events=[_event()])
-    signal = termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=7,
+
+    antwort = termine_erfragen(
+        chat_id=42,
+        from_user_id=7,
         anfrage_text="nächsten Freitag",
-        plan_client=pc, is_member_fn=_member([7]),
+        plan_client=pc,
+        is_member_fn=_immer_mitglied,
         heute=MONTAG,
     )
-    assert signal == SIGNAL_BEANTWORTET
-    assert len(tg.sent) == 1
-    assert "?" in tg.sent[0]["text"]  # eine Rückfrage
-    assert pc.calls == []   # kein blinder Plan-Buddy-Aufruf
+
+    assert isinstance(antwort, str)
+    assert len(antwort) > 0
+    assert antwort == _RUECKFRAGE_ZEITRAUM
+    assert "?" in antwort  # eine Rückfrage
+    assert pc.calls == [], "Kein blinder Plan-Buddy-Aufruf (TER-4, EC-22)"
+    assert tg.messages == [], "Funktion darf kein tg.send_message aufrufen (EC-29)"
+
+
+def test_TER4_vergangenes_datum_returnt_naechstes_jahr_rueckfrage():
+    """TER-4 #309 EC-22 / EC-29: vergangenes jahrloses Datum → gezielte
+    'nächstes Jahr'-Rückfrage als Tool-Result, kein tg.send_message,
+    kein Plan-Buddy-Aufruf.
+    """
+    tg = FakeTelegram()
+    pc = FakePlanClient(events=[_event()])
+
+    antwort = termine_erfragen(
+        chat_id=42,
+        from_user_id=7,
+        anfrage_text="15.5.",
+        plan_client=pc,
+        is_member_fn=_immer_mitglied,
+        heute=MONTAG,
+    )
+
+    assert isinstance(antwort, str)
+    assert len(antwort) > 0
+    assert antwort == _RUECKFRAGE_NAECHSTES_JAHR
+    assert "nächstes Jahr" in antwort
+    assert pc.calls == [], "Kein blinder Plan-Buddy-Aufruf (TER-4, #309)"
+    assert tg.messages == [], "Funktion darf kein tg.send_message aufrufen (EC-29)"
+
+
+# ============================================================
+#  EC-29 / TASK-10: Kein tg.send in irgendeinem Pfad (Grundsatz-Test)
+# ============================================================
+
+def test_EC29_happy_path_sendet_nicht():
+    """EC-29 / TASK-10: Happy-Path — FakeTelegram.messages == [].
+
+    Belegt: die Funktion ruft in keinem Pfad tg.send_* auf.
+    """
+    tg = FakeTelegram()
+    pc = FakePlanClient(events=[_event()])
+
+    termine_erfragen(
+        chat_id=42,
+        from_user_id=7,
+        anfrage_text="",
+        plan_client=pc,
+        is_member_fn=_immer_mitglied,
+        heute=MONTAG,
+    )
+
+    assert tg.messages == []
+
+
+def test_EC29_leer_sendet_nicht():
+    """EC-29 / TASK-10: Leer-Pfad — FakeTelegram.messages == []."""
+    tg = FakeTelegram()
+    pc = FakePlanClient(events=[])
+
+    termine_erfragen(
+        chat_id=42,
+        from_user_id=7,
+        anfrage_text="",
+        plan_client=pc,
+        is_member_fn=_immer_mitglied,
+        heute=MONTAG,
+    )
+
+    assert tg.messages == []
+
+
+def test_EC29_fehler_sendet_nicht():
+    """EC-29 / TASK-10: Transport-Fehler-Pfad — FakeTelegram.messages == []."""
+    tg = FakeTelegram()
+    pc = FakePlanClient(error=PlanClientError("Fehler"))
+
+    termine_erfragen(
+        chat_id=42,
+        from_user_id=7,
+        anfrage_text="",
+        plan_client=pc,
+        is_member_fn=_immer_mitglied,
+        heute=MONTAG,
+    )
+
+    assert tg.messages == []
+
+
+def test_EC29_rueckfrage_mehrdeutig_sendet_nicht():
+    """EC-29 / TASK-10: Rückfrage-mehrdeutig-Pfad — FakeTelegram.messages == []."""
+    tg = FakeTelegram()
+    pc = FakePlanClient()
+
+    termine_erfragen(
+        chat_id=42,
+        from_user_id=7,
+        anfrage_text="nächsten Montag",
+        plan_client=pc,
+        is_member_fn=_immer_mitglied,
+        heute=MONTAG,
+    )
+
+    assert tg.messages == []
+
+
+def test_EC29_rueckfrage_vergangen_sendet_nicht():
+    """EC-29 / TASK-10: Rückfrage-vergangen-Pfad — FakeTelegram.messages == []."""
+    tg = FakeTelegram()
+    pc = FakePlanClient()
+
+    termine_erfragen(
+        chat_id=42,
+        from_user_id=7,
+        anfrage_text="15.5.",
+        plan_client=pc,
+        is_member_fn=_immer_mitglied,
+        heute=MONTAG,
+    )
+
+    assert tg.messages == []
+
+
+# ============================================================
+#  TER-3 — Zielchat-Routing via chat_id (kein Senden mehr, aber Parameter-Naht)
+# ============================================================
+
+def test_TER3_chat_id_wird_an_funktion_uebergeben():
+    """TER-3: chat_id wird als Kontext übergeben — Funktion bricht nicht ab,
+    wenn chat_id eine Gruppen-ID ist. EC-29: keine Sende-Prüfung nötig."""
+    pc = FakePlanClient(events=[_event()])
+
+    antwort = termine_erfragen(
+        chat_id=-100123,
+        from_user_id=7,
+        anfrage_text="",
+        plan_client=pc,
+        is_member_fn=_immer_mitglied,
+        heute=MONTAG,
+    )
+
+    assert isinstance(antwort, str)
+    assert len(antwort) > 0
+
+
+# ============================================================
+#  TER-5 — HTTP-Aufruf an PLAN-22
+# ============================================================
+
+def test_TER5_http_aufruf_mit_richtigen_parametern():
+    """TER-5: der HTTP-Aufruf nutzt ab=<iso>&tage=<n>."""
+    pc = FakePlanClient(events=[_event()])
+
+    termine_erfragen(
+        chat_id=42,
+        from_user_id=7,
+        anfrage_text="heute",
+        plan_client=pc,
+        is_member_fn=_immer_mitglied,
+        heute=MONTAG,
+    )
+
+    assert len(pc.calls) == 1
+    ab, tage = pc.calls[0]
+    assert ab == MONTAG.isoformat()
+    assert tage == 1
+
+
+def test_TER5_datums_vokabular_morgen():
+    """TER-4/TER-5: 'morgen' → start=heute+1, tage=1."""
+    pc = FakePlanClient(events=[_event("Zahnarzt", beginn="2026-06-02",
+                                       ende="2026-06-03")])
+
+    termine_erfragen(
+        chat_id=42,
+        from_user_id=7,
+        anfrage_text="morgen",
+        plan_client=pc,
+        is_member_fn=_immer_mitglied,
+        heute=MONTAG,
+    )
+
+    assert pc.calls[0] == (DIENSTAG.isoformat(), 1)
 
 
 # ============================================================
 #  TER-4 — explizite Kalenderdaten (#309)
 # ============================================================
 
-# MITTWOCH ist 2026-06-03 → liegt nach MONTAG 2026-06-01
 MITTWOCH_DATUM = date(2026, 6, 3)
-# Ein Datum in der Vergangenheit (relativ zu MONTAG = 2026-06-01)
-VERGANGEN = date(2026, 5, 15)
 
 
-def test_TER_4_explizit_dd_mm_punkt_punkt():
+def test_TER4_explizit_dd_mm_punkt_punkt():
     """TER-4 #309: '3.6.' → start=2026-06-03, tage=1."""
     assert parse_zeitraum("3.6.", MONTAG) == (MITTWOCH_DATUM, 1)
 
 
-def test_TER_4_explizit_dd_mm_fuehrende_null():
-    """TER-4 #309: '03.06.' → start=2026-06-03, tage=1."""
-    assert parse_zeitraum("03.06.", MONTAG) == (MITTWOCH_DATUM, 1)
-
-
-def test_TER_4_explizit_dd_mm_jjjj():
+def test_TER4_explizit_dd_mm_jjjj():
     """TER-4 #309: '03.06.2026' → start=2026-06-03, tage=1."""
     assert parse_zeitraum("03.06.2026", MONTAG) == (MITTWOCH_DATUM, 1)
 
 
-def test_TER_4_explizit_den_dd_mm():
-    """TER-4 #309: 'den 3.6.' → start=2026-06-03, tage=1."""
-    assert parse_zeitraum("den 3.6.", MONTAG) == (MITTWOCH_DATUM, 1)
-
-
-def test_TER_4_explizit_am_dd_monat():
+def test_TER4_explizit_am_dd_monat():
     """TER-4 #309: 'am 3. Juni' → start=2026-06-03, tage=1."""
     assert parse_zeitraum("am 3. Juni", MONTAG) == (MITTWOCH_DATUM, 1)
 
 
-def test_TER_4_explizit_am_dd_monat_kleinschreibung():
-    """TER-4 #309: 'am 3. juni' → start=2026-06-03, tage=1 (Kleinschreibung)."""
-    assert parse_zeitraum("am 3. juni", MONTAG) == (MITTWOCH_DATUM, 1)
-
-
-def test_TER_4_explizit_im_satz():
-    """TER-4 #309: Datum eingebettet in Satz → korrekt geparst."""
-    assert parse_zeitraum("gib mir die Termine für den 3.6. bitte", MONTAG) == (MITTWOCH_DATUM, 1)
-
-
-def test_TER_4_explizit_heute_ist_explizites_datum():
-    """TER-4 #309: explizites Datum = heute → start=heute, tage=1."""
-    assert parse_zeitraum("1.6.", MONTAG) == (MONTAG, 1)
-
-
-def test_TER_4_explizit_vergangen_ohne_jahr_gibt_rueckfrage():
+def test_TER4_explizit_vergangen_ohne_jahr_gibt_rueckfrage():
     """TER-4 #309 EC-22: jahrloses Datum in der Vergangenheit → Rückfrage-Signal,
     kein Default, kein Folgejahr."""
     result = parse_zeitraum("15.5.", MONTAG)
     # Ergebnis darf weder (MONTAG, 7) noch ein Tupel mit date sein
     assert result is not None
     assert not isinstance(result, tuple)
-
-
-def test_TER_4_explizit_vergangen_sendet_naechstes_jahr_rueckfrage():
-    """TER-4 #309 EC-22: vergangenes jahrloses Datum → gezielte 'nächstes Jahr'-
-    Rückfrage im Chat, kein blinder Plan-Buddy-Aufruf."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(events=[_event()])
-    signal = termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=7,
-        anfrage_text="15.5.",
-        plan_client=pc, is_member_fn=_member([7]),
-        heute=MONTAG,
-    )
-    assert signal == SIGNAL_BEANTWORTET
-    assert len(tg.sent) == 1
-    assert "nächstes Jahr" in tg.sent[0]["text"]
-    assert pc.calls == []   # kein blinder Plan-Buddy-Aufruf
-
-
-def test_TER_4_explizit_default_bleibt_default():
-    """TER-4 #309: 'was steht an' ohne Datum → Default (heute, 7) unverändert."""
-    assert parse_zeitraum("was steht an", MONTAG) == (MONTAG, 7)
-
-
-def test_TER_4_explizit_heute_bleibt_heute():
-    """TER-4 #309: 'heute' bleibt bei (heute, 1) — kein Kurzschluss zum Datum-Parser."""
-    assert parse_zeitraum("heute", MONTAG) == (MONTAG, 1)
-
-
-def test_TER_4_explizit_e2e_plan_client_erhaelt_korrekten_zeitraum():
-    """TER-4 #309 AC3: Plan-Buddy wird mit dem tatsächlichen (start, tage=1) aufgerufen,
-    nicht mit Default-7-Tage — ehrliche Grenze (EC-7)."""
-    tg = FakeTelegram()
-    pc = FakePlanClient(events=[
-        _event("Geburtstag", beginn="2026-06-03", ende="2026-06-04", ganztags=True),
-    ])
-    termine_erfragen(
-        tg=tg, chat_id=42, from_user_id=7,
-        anfrage_text="3.6.",
-        plan_client=pc, is_member_fn=_member([7]),
-        heute=MONTAG,
-    )
-    assert len(pc.calls) == 1
-    ab, tage = pc.calls[0]
-    assert ab == "2026-06-03"
-    assert tage == 1
