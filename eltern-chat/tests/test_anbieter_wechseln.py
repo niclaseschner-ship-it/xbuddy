@@ -7,13 +7,17 @@ Geprüft werden:
   * Validierungs-Fehler → byte-gleicher Erhalt des alten Eintrags (ONB-12).
   * Schreib-Fehler → byte-gleicher Erhalt, Instanz nicht unterbrochen (ONB-12).
   * ONB-8-Schutz: kein Klartext-Key in Bestätigungen, Fehlermeldungen, Logs.
+  * ONB-12 V1-Race-Fenster: partieller ZD-Zustand bei zweitem set()-Versagen.
+  * ONB-13 caplog-Schutz: keine Keys im Log (Befund 4).
 
 Telegram, Zugangsdaten-Speicher und Validierungs-Ping sind durch kontrollierte
 Doppelungen ersetzt (kein Netz, ONB-13).
 """
 
 import json
+import logging
 
+import pytest
 from fakes import FakeTelegram
 from skills.anbieter_wechseln import (
     DONE_PRIVAT,
@@ -44,12 +48,16 @@ class FakeZd:
     `writes` protokolliert die Schreib-Reihenfolge (Tupel name/value).
     `fail_on_write` lässt `set()` einen StoreError werfen — für ONB-12-
     Schreib-Fehler-Tests.
+    `fail_on_nth_write` (int, 1-basiert) — wirft StoreError nur beim N-ten
+    set()-Aufruf; alle anderen Aufrufe landen im Speicher. Für Race-Fenster-
+    Tests (ONB-12 V1-Lücke).
     """
 
-    def __init__(self, initial=None, fail_on_write=False):
+    def __init__(self, initial=None, fail_on_write=False, fail_on_nth_write=None):
         self._data = dict(initial or {})
         self.writes = []
         self.fail_on_write = fail_on_write
+        self._fail_on_nth_write = fail_on_nth_write
 
     def get(self, name, default=None):
         return self._data.get(name, default)
@@ -58,6 +66,8 @@ class FakeZd:
         self.writes.append((name, value))
         if self.fail_on_write:
             raise StoreError("simulierter Schreib-Fehler")
+        if self._fail_on_nth_write is not None and len(self.writes) == self._fail_on_nth_write:
+            raise StoreError("simulierter Schreib-Fehler beim %d. set()" % self._fail_on_nth_write)
         self._data[name] = value
 
     def has(self, name):
@@ -458,3 +468,127 @@ def test_gruppen_bestaetigung_nennt_anbieter():
     assert gruppe_texte, "Keine Nachricht an die Familien-Gruppe"
     # Die Bestätigung nennt den Anzeige-Namen (enthält „Mistral").
     assert any("Mistral" in t for t in gruppe_texte)
+
+
+# ============================================================
+#  11. ONB-12 V1-Race-Fenster (Befund 3 — Teilfix, Spec-Halt)
+# ============================================================
+
+@pytest.mark.xfail(
+    reason=(
+        "ONB-12 V1-bekannte Lücke: kein Multi-Key-Atomic in ZD-Schicht. "
+        "Wenn der zweite set() (provider_name) scheitert, ist der Speicher im "
+        "Zustand 'neuer api_key, alter provider_name' — NICHT byte-gleich. "
+        "Spec ONB-12 verspricht byte-gleich; vollständige Spec-Konformität "
+        "erfordert Multi-Key-Atomic in tools/zugangsdaten/store.py. "
+        "Folge-Ticket erforderlich. Spec-Halt für Nic. #639"
+    ),
+    strict=True,
+)
+def test_race_zweiter_set_scheitert_dokumentiert_V1_lucke():
+    """ONB-12 V1-Race-Fenster: zweiter set() (provider_name) scheitert →
+    Speicher im partiellen Zustand (neuer api_key, alter provider_name).
+
+    Dieser Test dokumentiert den bekannten V1-Schwachpunkt: der Speicher ist
+    NICHT byte-gleich zum Zustand vor dem Wechsel. Er ist als xfail markiert,
+    weil er genau das aktuelle (fehlerhafte) Verhalten festklopft — der Test
+    wird PASS wenn die V1-Lücke durch Multi-Key-Atomic geschlossen wird.
+    """
+    tg = FakeTelegram(members=_members(42))
+    initial = {
+        ZD_NAME_PROVIDER_API_KEY: "existing-claude-key",
+        ZD_NAME_PROVIDER_NAME: "claude",
+    }
+    # Zweiter set()-Aufruf (provider_name) schlägt fehl — erster (api_key) ok.
+    zd = FakeZd(initial=initial, fail_on_nth_write=2)
+    snapshot_vorher = zd.snapshot()
+
+    # Die Funktion muss den Fehler abfangen und ERGEBNIS_UNVERAENDERT zurückgeben.
+    result = anbieter_wechseln(
+        tg=tg, chat_id=11, user_id=42,
+        family_group_chat_id=99,
+        zd=zd,
+        next_message=_stream("mistral", "valid-new-key-xxxxxxxxxxxx"),
+        current_provider_name="claude",
+        _validate=_validate_ok)
+
+    # Skill meldet Fehler an User.
+    assert result.ergebnis == ERGEBNIS_UNVERAENDERT
+    privat_texte = [m["text"] for m in tg.sent if m["chat_id"] == 11]
+    assert any(WRITE_FAILED in t for t in privat_texte)
+
+    # V1-Lücke: Speicher ist NICHT byte-gleich — api_key wurde bereits
+    # überschrieben. Dieser assert schlägt (xfail) bis Multi-Key-Atomic
+    # implementiert ist.
+    assert zd.snapshot() == snapshot_vorher, (
+        "ONB-12 V1-Race-Fenster: partieller Zustand — "
+        "api_key ist bereits 'valid-new-key', provider_name noch 'claude'. "
+        "Multi-Key-Atomic in ZD-Schicht erforderlich."
+    )
+
+
+# ============================================================
+#  12. ONB-13 caplog-Schutz: keine Keys in Logs (Befund 4)
+# ============================================================
+
+def test_caplog_kein_key_bei_validierungsfehler(caplog):
+    """ONB-13 / ONB-8: bei Validierungs-Fehlschlag landet kein Key im Log."""
+    tg = FakeTelegram(members=_members(42))
+    evil_key = "caplog-leak-val-key-xxxxxxxxxxxx"
+    zd = FakeZd()
+    msgs = iter([AvbInput("mistral"), AvbInput(evil_key), None])
+
+    with caplog.at_level(logging.DEBUG):
+        anbieter_wechseln(
+            tg=tg, chat_id=11, user_id=42,
+            family_group_chat_id=99,
+            zd=zd, next_message=lambda: next(msgs),
+            current_provider_name="claude",
+            _validate=_validate_fail)
+
+    assert evil_key not in caplog.text, (
+        "ONB-8 caplog-Leck: Key in Log-Ausgabe nach Validierungs-Fehler")
+
+
+def test_caplog_kein_key_bei_schreibfehler(caplog):
+    """ONB-13 / ONB-8: bei Schreib-Fehlschlag landet kein Key im Log."""
+    tg = FakeTelegram(members=_members(42))
+    evil_key = "caplog-leak-write-key-xxxxxxxxxxxx"
+    zd = FakeZd(fail_on_write=True)
+
+    with caplog.at_level(logging.DEBUG):
+        anbieter_wechseln(
+            tg=tg, chat_id=11, user_id=42,
+            family_group_chat_id=99,
+            zd=zd,
+            next_message=_stream("mistral", evil_key),
+            current_provider_name="claude",
+            _validate=_validate_ok)
+
+    assert evil_key not in caplog.text, (
+        "ONB-8 caplog-Leck: Key in Log-Ausgabe nach Schreib-Fehler")
+
+
+def test_caplog_kein_key_bei_happy_path(caplog):
+    """ONB-13 / ONB-8: auch beim erfolgreichen Wechsel landet kein Key im Log."""
+    tg = FakeTelegram(members=_members(42))
+    new_key = "caplog-happy-path-key-xxxxxxxxxxxx"
+    old_key = "caplog-old-key-xxxxxxxxxxxx"
+    zd = FakeZd(initial={
+        ZD_NAME_PROVIDER_API_KEY: old_key,
+        ZD_NAME_PROVIDER_NAME: "claude",
+    })
+
+    with caplog.at_level(logging.DEBUG):
+        anbieter_wechseln(
+            tg=tg, chat_id=11, user_id=42,
+            family_group_chat_id=99,
+            zd=zd,
+            next_message=_stream("mistral", new_key),
+            current_provider_name="claude",
+            _validate=_validate_ok)
+
+    assert new_key not in caplog.text, (
+        "ONB-8 caplog-Leck: neuer Key in Log-Ausgabe beim Happy-Path")
+    assert old_key not in caplog.text, (
+        "ONB-8 caplog-Leck: alter Key in Log-Ausgabe beim Happy-Path")

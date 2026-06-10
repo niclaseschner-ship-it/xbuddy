@@ -91,6 +91,7 @@ class Context:
     tes_sessions: dict = None  # TES-3: laufende »Termin eintragen«-Sessions (chat_id → TesSession)
     paa_sessions: dict = None  # PAA-6: laufende »Panel anlegen«-Sessions (chat_id → PaaSession)
     tab_sessions: dict = None  # TAB-12: laufende »Termine aus Bild«-Sessions (chat_id → TabSession)
+    avb_sessions: dict = None  # AVB/ONB-11: laufende »Anbieter wechseln«-Sessions (chat_id → AvbSession)
 
 
 # SESS-5: Session-Sorten-Registry — modul-weit, einmal definiert.
@@ -98,11 +99,14 @@ class Context:
 # handle_update iteriert darüber, statt pro Sorte einen eigenen if-Block
 # zu tragen. Reihenfolge entspricht der früheren if-Kette und darf nicht
 # ohne Routing-Check geändert werden (alle in _SESSION_SORTS registrierten
-# Sorten — aktuell FAA→GAA→KAV→TES→PAA→TAB).
+# Sorten — aktuell FAA→GAA→KAV→TES→PAA→TAB→AVB).
 #
 # Die make_input-Callables werden einmal beim Modul-Load gebunden —
 # die skills-Module liegen zu diesem Zeitpunkt bereits auf sys.path
 # (conftest.py / systemd-WorkingDirectory).
+#
+# Invariante (Lego-Sanity, Befund 5): jeder Context-Slot der Form `*_sessions`
+# MUSS hier eingetragen sein — test_main_bootstrap.py prüft das mechanisch.
 def _build_session_sorts():
     from skills.familie_anlegen_task import make_faa_input
     from skills.geraet_anlegen_task import make_gaa_input
@@ -110,6 +114,7 @@ def _build_session_sorts():
     from skills.panel_anlegen_task import make_paa_input
     from skills.termin_eintragen_task import make_tes_input
     from skills.termine_aus_bild_task import make_tab_input
+    from skills.anbieter_wechseln_task import make_avb_input
     return (
         SessionSortEntry("faa_sessions", make_faa_input),   # FAA-12
         SessionSortEntry("gaa_sessions", make_gaa_input),   # GAA-5
@@ -117,6 +122,7 @@ def _build_session_sorts():
         SessionSortEntry("tes_sessions", make_tes_input),   # TES-3
         SessionSortEntry("paa_sessions", make_paa_input),   # PAA-6
         SessionSortEntry("tab_sessions", make_tab_input),   # TAB-12
+        SessionSortEntry("avb_sessions", make_avb_input),   # AVB/ONB-11
     )
 
 _SESSION_SORTS = _build_session_sorts()
@@ -611,6 +617,8 @@ def build_context(cfg, db_path, zd_cli_path=None):
     paa_sessions = {}
     # TAB-12: analog TES, eigene Session-Map für »Termine aus Bild«.
     tab_sessions = {}
+    # AVB/ONB-11: analog den anderen Sorten, eigene Session-Map für »Anbieter wechseln«.
+    avb_sessions = {}
 
     # KAV-7: Zugangsdaten-Speicher als Per-Instanz-Datei (ZD-1/ZD-8). Lazy-
     # importiert, damit Tests, die `build_context` nicht aufrufen, keine
@@ -638,6 +646,7 @@ def build_context(cfg, db_path, zd_cli_path=None):
         tes_sessions=tes_sessions,
         paa_sessions=paa_sessions,
         tab_sessions=tab_sessions,
+        avb_sessions=avb_sessions,
     )
     # FAA-12 / GAA-5 / KAV-3: Familien-Gruppen-ID darf nach einer Migration
     # (EC-18) wechseln — der Getter liest sie zur Laufzeit aus dem Context,
@@ -691,6 +700,14 @@ def build_context(cfg, db_path, zd_cli_path=None):
         display_url_origin_heim=cfg.display_url_origin_heim,
         # TAB-12 / #475: Session-Map für »Termine aus Bild«.
         tab_sessions=tab_sessions,
+        # AVB / ONB-11 / #639: Session-Map + Getter für den aktuellen Anbieter.
+        # Ohne beide erscheint »Anbieter wechseln« nicht im Katalog (AND-Guard
+        # in tasks.py). `current_provider_getter` liest cfg.provider — gleicher
+        # Pattern wie `provider_name=cfg.provider` weiter oben (TAB-5-Kommentar).
+        # V1: cfg.provider ist der Start-Wert; nach einem Wechsel-Akt ohne
+        # Neustart kann er veraltet sein (zukünftiger Verbesserungspunkt).
+        avb_sessions=avb_sessions,
+        current_provider_getter=lambda: cfg.provider,
         # TAB-5 / E-TAB-6: V1 nutzt denselben Anbieter wie der Text-Pfad
         # (cfg.provider). V2 (E-TAB-6): multimodal_* können unabhängig
         # gesetzt werden — leere Werte fallen auf den Text-Pfad zurück.
