@@ -79,11 +79,27 @@ Elternteil die **bis zu drei Kandidaten** als Bilder vor.
 - Liefert ICONS-7 **keine** Treffer, meldet der Skill das ehrlich (EC-7) und
   fragt nach einem anderen Wort; er erfindet **keine** ID.
 
+**Mechanik der Kandidaten-Anzeige (verbindlich):** Identisch zu RPS-4 — der
+Skill ruft den **ID-Wahl-Album-Helper** (TASK-10b,
+`eltern-chat/skills/icon_album.py:zeige_kandidaten`) mit den ICONS-7-Treffern
+als `{id, url}`-Liste plus der `icon_origin_url` auf; der Helper übernimmt
+den Telegram-Pfad (`send_photo` bei 1 Treffer, `send_media_group` bei 2–3
+Treffern), **ohne** Captions an den Bildern. Die Mapping-Information liefert
+der Skill als Teil seines Tool-Result-Strings an das LLM („1 = `<id_1>`,
+2 = `<id_2>`, 3 = `<id_3>`. Welcher passt? Antworte mit der ID, dann lege
+ich das Gericht an."); das LLM postet diesen Text als Begleit-Nachricht im
+selben Turn (EC-29: eine Stimme — Skill sendet das Bild, LLM sendet den
+Text; TASK-10/TASK-10b). Der Elternteil antwortet mit der `id`; eine
+Antwort per Album-Position (1/2/3) bildet der Skill über die zuvor
+gesendete Mapping-Liste zurück auf die `id`. Der Helper lädt das PNG über
+`<icon_origin_url> + <url-aus-ICONS-7>` per HTTP (GAN-6-Konsistenz), nicht
+aus dem Dateisystem direkt (DCOMP-1).
+
 Die gewählte ARASAAC-`id` geht als `bild_ref` in das Gericht (ESSEN-19,
 ESSEN-11). Der Icon-Such-Endpunkt liefert nur IDs mit lokal vorliegendem PNG
 (ICONS-7) — die Display-Kachel rendert garantiert.
 
-*Tickets:* #474
+*Tickets:* #474, #470 (Welle 11 — Bilder-Lego)
 
 ## GAN-5 — Vorschlag, Bestätigung, Quittung, Wirkung
 Synchrone schreibende Aufgabe (EC-10, TASK-4 `propose`+`execute`): Der Skill
