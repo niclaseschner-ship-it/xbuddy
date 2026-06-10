@@ -39,6 +39,11 @@ def get_multimodal_provider(name, api_key, model=""):
         # tatsächlich verwendet wird (Tests laufen ohne SDK).
         from skills._multimodal.claude import ClaudeMultimodalProvider
         return ClaudeMultimodalProvider(api_key=api_key, model=model)
+    if name == "mistral":
+        # Lazy-Import: `httpx` wird nur geladen, wenn der Mistral-Adapter
+        # tatsächlich verwendet wird (E-TAB-6 V2, #508).
+        from skills._multimodal.mistral import MistralMultimodalProvider
+        return MistralMultimodalProvider(api_key=api_key, model=model)
     raise ValueError("unbekannter multimodaler KI-Anbieter: %r" % name)
 
 
