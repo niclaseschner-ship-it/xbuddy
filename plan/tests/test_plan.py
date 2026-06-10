@@ -3557,3 +3557,45 @@ def test_PLAN_19_render_probe_multi_person_event_zwei_avatare(demo_registry, dem
         "Erwartet >= 2 size-24-Avatar-Divs für 'Schwimmkurs Paula Neko', "
         "gefunden: %d\nHTML-Ausschnitt (erste 3000 Zeichen):\n%s" % (len(face_24), html[:3000])
     )
+
+
+# ============================================================
+#  PLAN-19 V1.2 — AC5 Entry-Path-Probe: Aktivitäts-Slot-Replikation
+# ============================================================
+
+def test_PLAN_19_render_probe_multi_person_event_in_beiden_slot_zeilen(demo_registry, demo_config):
+    """AC-FIX-1 / AC-FIX-2 (T473-S2): PLAN-19 V1.2 Aktivitäts-Slot-Replikation.
+
+    Ein zeitgebundenes 'Schwimmkurs Paula Neko'-Event landet in BEIDEN
+    Kind-Aktivitäts-Slots (act1 für Paula, act2 für Neko) mit derselben
+    event_id — die Personen-Identität ist durch die Zeile gegeben.
+    """
+    heute = date(2026, 5, 20)
+    raw = [gcal_timed("schwimm1", "Schwimmkurs Paula Neko",
+                      "2026-05-20T10:00:00+02:00", "2026-05-20T11:00:00+02:00")]
+    transport = FakeTransport(raw)
+    conn = db_mod.connect(demo_config.db_datei)
+    try:
+        view = render_mod.baue_view(
+            demo_config, conn,
+            kalender_mod.Kalender(transport, demo_registry.alle()),
+            demo_registry, heute, 7, True, heute=heute)
+    finally:
+        conn.close()
+
+    heute_iso = heute.isoformat()
+    slot_paula = view["schedule"][heute_iso].get("act1")
+    slot_neko = view["schedule"][heute_iso].get("act2")
+
+    assert slot_paula is not None, (
+        "act1 (Paula) ist leer — Multi-Person-Event nicht in Paula-Slot repliziert")
+    assert slot_neko is not None, (
+        "act2 (Neko) ist leer — Multi-Person-Event nicht in Neko-Slot repliziert")
+    assert slot_paula["event_id"] == "schwimm1", (
+        "act1-Slot trägt falsche event_id: %r" % slot_paula["event_id"])
+    assert slot_neko["event_id"] == "schwimm1", (
+        "act2-Slot trägt falsche event_id: %r" % slot_neko["event_id"])
+    # Beide Slots tragen denselben Chip (gleiche event_id, gleicher Typ).
+    assert slot_paula["event_id"] == slot_neko["event_id"], (
+        "act1 und act2 tragen unterschiedliche event_ids: %r vs %r"
+        % (slot_paula["event_id"], slot_neko["event_id"]))
