@@ -339,3 +339,50 @@ def test_AC3_pricing_claude_modelle_unberührt():
                                 cached_input_tokens=0,
                                 output_tokens=1_000_000)
     assert cost_usd == pytest.approx(5.0 + 25.0)
+
+
+# ============================================================
+#  Befund 2 — mehrere TaskResultBlocks in einer User-Message
+# ============================================================
+
+def test_mehrere_task_result_blocks_werden_als_eigene_tool_nachrichten_serialisiert(
+        monkeypatch):
+    """Befund 2 / AC3: Bei mehreren TaskResultBlocks in einer User-Message liefert
+    _to_mistral_message eine Liste mit je einer `role=tool`-Nachricht pro Block.
+    Mistral erwartet pro tool_call_id eine eigene Nachricht — wird nur der erste
+    Block serialisiert, kommt ein 400-Fehler oder eine Halluzination.
+
+    Probe: zwei TaskResultBlocks → Payload enthält genau zwei `role=tool`-
+    Nachrichten mit den richtigen tool_call_ids.
+    """
+    from model import GenerationRequest, Message, TaskResultBlock, TextBlock
+
+    provider, fake = _build_provider_with(
+        monkeypatch, _mistral_response(text="ok"))
+
+    request = GenerationRequest(
+        system="Test.",
+        messages=[
+            Message(role="assistant", blocks=[TextBlock("Ich rufe zwei Tools auf.")]),
+            Message(role="user", blocks=[
+                TaskResultBlock(call_id="call-a", content="Ergebnis A"),
+                TaskResultBlock(call_id="call-b", content="Ergebnis B"),
+            ]),
+        ],
+        task_defs=[],
+    )
+    provider.generate(request)
+
+    messages = fake.calls[0]["payload"]["messages"]
+    tool_messages = [m for m in messages if m.get("role") == "tool"]
+    assert len(tool_messages) == 2, (
+        "Befund 2: beide TaskResultBlocks müssen als eigene tool-Nachrichten "
+        "im Payload erscheinen — gefunden: %d" % len(tool_messages)
+    )
+    ids = {m["tool_call_id"] for m in tool_messages}
+    assert ids == {"call-a", "call-b"}, (
+        "Befund 2: tool_call_ids müssen call-a und call-b sein — gefunden: %r" % ids
+    )
+    contents = {m["tool_call_id"]: m["content"] for m in tool_messages}
+    assert contents["call-a"] == "Ergebnis A"
+    assert contents["call-b"] == "Ergebnis B"

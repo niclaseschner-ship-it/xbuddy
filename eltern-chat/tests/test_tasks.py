@@ -10,6 +10,7 @@ from hooks import HookContext, HookFailure, HookSuccess
 from model import READ, WRITE
 from tasks import (
     Catalog,
+    ReadTask,
     TurnContext,
     WriteTaskResult,
     _make_is_member_fn,
@@ -392,4 +393,113 @@ def test_TASK7_make_is_member_fn_late_evaluation_of_fgcid():
     assert is_member_fn(user_id=7) is False, (
         "Späte Evaluierung: nach Änderung von fgcid_getter muss is_member_fn "
         "den neuen fgcid-Wert nutzen und False liefern."
+    )
+
+
+# ============================================================
+#  E-TAB-6 V2 — multimodal_provider im build_catalog-Live-Pfad
+# ============================================================
+
+def test_ETAB6_V2_multimodal_provider_mistral_eingesteckt():
+    """E-TAB-6 V2 / Linse 7 — Live-Pfad-Probe:
+    Wenn provider='claude' aber multimodal_provider='mistral' gesetzt ist,
+    baut build_catalog den TermineAusBildTask mit einem MistralMultimodalProvider,
+    NICHT mit ClaudeMultimodalProvider.
+
+    Verifiziert AC1+AC2 aus T508: build_catalog-Signatur trägt multimodal_*;
+    der TAB-Guard greift korrekt und reicht den separaten Multimodal-Adapter durch.
+    """
+    from skills._multimodal.mistral import MistralMultimodalProvider
+
+    # Wir brauchen eine funktionierende plan_origin_url, tab_sessions und
+    # family_group_chat_id_getter, damit der TAB-Guard greift.
+    captured = []
+
+    class _CapturingTermineAusBildTask(ReadTask):
+        """Ersetzt TermineAusBildTask — zeichnet den übergebenen Adapter auf."""
+        name = "termine_aus_bild"
+
+        def __init__(self, tg, multimodal_provider, plan_client,
+                     sessions, family_group_chat_id_getter, is_member_fn):
+            captured.append(multimodal_provider)
+
+        def execute(self, args, turn_context):
+            return ""
+
+    import tasks as tasks_mod
+    import skills.termine_aus_bild_task as tab_mod
+    import importlib
+
+    # Patch TermineAusBildTask in tasks-Modul-Namespace über den Import-Pfad.
+    # build_catalog importiert lazy: `from skills.termine_aus_bild_task import
+    # TermineAusBildTask` — wir patchen das Modul, bevor build_catalog lädt.
+    original_cls = tab_mod.TermineAusBildTask
+    tab_mod.TermineAusBildTask = _CapturingTermineAusBildTask
+    try:
+        catalog = build_catalog(
+            FakeTelegram(),
+            "/instanz/rootCA.pem",
+            plan_origin_url="http://127.0.0.1:5000",
+            tab_sessions={},
+            family_group_chat_id_getter=lambda: 200,
+            provider_name="claude",
+            provider_api_key="claude-key",
+            provider_model="",
+            multimodal_provider="mistral",
+            multimodal_api_key="mistral-key",
+            multimodal_model="mistral-medium-3504",
+        )
+    finally:
+        tab_mod.TermineAusBildTask = original_cls
+
+    assert len(captured) == 1, "TermineAusBildTask wurde nicht gebaut"
+    adapter = captured[0]
+    assert isinstance(adapter, MistralMultimodalProvider), (
+        "E-TAB-6 V2: multimodal_provider='mistral' muss MistralMultimodalProvider "
+        "liefern, nicht %r" % type(adapter).__name__
+    )
+
+
+def test_ETAB6_V1_default_kein_multimodal_gesetzt_nutzt_text_provider():
+    """E-TAB-6 V1 / AC5 — Rückwärts-Kompatibilität:
+    Ist kein multimodal_provider gesetzt, fällt build_catalog auf provider_name
+    zurück — V1-Default unverändert (kein multimodal_* gesetzt → wie heute).
+    """
+    from skills._multimodal.claude import ClaudeMultimodalProvider
+
+    captured = []
+
+    class _CapturingTermineAusBildTask(ReadTask):
+        name = "termine_aus_bild"
+
+        def __init__(self, tg, multimodal_provider, plan_client,
+                     sessions, family_group_chat_id_getter, is_member_fn):
+            captured.append(multimodal_provider)
+
+        def execute(self, args, turn_context):
+            return ""
+
+    import skills.termine_aus_bild_task as tab_mod
+    original_cls = tab_mod.TermineAusBildTask
+    tab_mod.TermineAusBildTask = _CapturingTermineAusBildTask
+    try:
+        catalog = build_catalog(
+            FakeTelegram(),
+            "/instanz/rootCA.pem",
+            plan_origin_url="http://127.0.0.1:5000",
+            tab_sessions={},
+            family_group_chat_id_getter=lambda: 200,
+            provider_name="claude",
+            provider_api_key="claude-key",
+            provider_model="",
+            # multimodal_* absichtlich nicht gesetzt → V1-Default
+        )
+    finally:
+        tab_mod.TermineAusBildTask = original_cls
+
+    assert len(captured) == 1, "TermineAusBildTask wurde nicht gebaut"
+    adapter = captured[0]
+    assert isinstance(adapter, ClaudeMultimodalProvider), (
+        "V1-Default: ohne multimodal_provider muss ClaudeMultimodalProvider "
+        "gebaut werden, nicht %r" % type(adapter).__name__
     )

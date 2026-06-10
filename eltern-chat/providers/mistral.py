@@ -50,7 +50,7 @@ class MistralProvider:
         if request.system:
             mistral_messages.append({"role": "system", "content": request.system})
         for m in request.messages:
-            mistral_messages.append(self._to_mistral_message(m))
+            mistral_messages.extend(self._to_mistral_message(m))
 
         tools = [self._to_mistral_tool(t) for t in request.task_defs]
 
@@ -62,14 +62,7 @@ class MistralProvider:
         if tools:
             payload["tools"] = tools
 
-        try:
-            response_data = self._call_api(payload)
-        except ProviderError:
-            raise
-        except Exception as e:
-            logger.warning("Mistral-Anbieter nicht erreichbar: %s", e)
-            raise ProviderError(str(e)) from e
-
+        response_data = self._call_api(payload)
         self._log_token_usage(response_data)
         result = self._from_mistral_response(response_data)
         # EC-23 (#268): Token-Counts in das anbieter-neutrale Modell heben.
@@ -128,38 +121,13 @@ class MistralProvider:
 
     @staticmethod
     def _to_mistral_message(message):
-        content = []
-        for block in message.blocks:
-            if isinstance(block, TextBlock):
-                content.append({"type": "text", "text": block.text})
-            elif isinstance(block, ImageBlock):
-                # Mistral erwartet image_url mit data-URL (base64-kodiert).
-                data_url = "data:%s;base64,%s" % (block.media_type, block.data_b64)
-                content.append({
-                    "type": "image_url",
-                    "image_url": {"url": data_url},
-                })
-            elif isinstance(block, TaskCallBlock):
-                # Assistenten-Nachrichten mit Tool-Aufrufen.
-                content.append({
-                    "type": "tool_call",
-                    "id": block.call_id,
-                    "function": {
-                        "name": block.task,
-                        "arguments": json.dumps(block.arguments),
-                    },
-                })
-            elif isinstance(block, TaskResultBlock):
-                # Tool-Ergebnisse kommen als eigene Rolle `tool`.
-                content.append({
-                    "type": "tool_result",
-                    "tool_call_id": block.call_id,
-                    "content": block.content,
-                })
-        # Mistral: bei Tool-Ergebnissen muss die Rolle `tool` sein.
-        role = message.role
-        if any(isinstance(b, TaskResultBlock) for b in message.blocks):
-            role = "tool"
+        """Übersetzt eine kanonische Message in eine Liste von Mistral-Nachrichten.
+
+        Gibt immer eine Liste zurück (im Regelfall genau ein Element), damit der
+        Aufrufer `.extend()` nutzen kann. Ausnahme: TaskResultBlocks — jedes
+        Ergebnis wird als eigene `{"role": "tool", ...}`-Nachricht serialisiert
+        (Mistral erwartet pro tool_call_id eine eigene Nachricht).
+        """
         # Mistral: Tool-Calls gehören in die `assistant`-Nachricht als `tool_calls`.
         if any(isinstance(b, TaskCallBlock) for b in message.blocks):
             tool_calls = []
@@ -179,20 +147,35 @@ class MistralProvider:
             msg = {"role": "assistant", "tool_calls": tool_calls}
             if text_parts:
                 msg["content"] = "\n".join(text_parts).strip()
-            return msg
-        if any(isinstance(b, TaskResultBlock) for b in message.blocks):
-            # Jedes Tool-Ergebnis wird als eigene Nachricht serialisiert.
-            # Mistral erwartet pro tool_call_id eine eigene Nachricht.
-            block = next(b for b in message.blocks if isinstance(b, TaskResultBlock))
-            return {
-                "role": "tool",
-                "tool_call_id": block.call_id,
-                "content": str(block.content),
-            }
+            return [msg]
+
+        # Mistral: jedes Tool-Ergebnis als eigene `tool`-Nachricht.
+        result_blocks = [b for b in message.blocks if isinstance(b, TaskResultBlock)]
+        if result_blocks:
+            return [
+                {
+                    "role": "tool",
+                    "tool_call_id": block.call_id,
+                    "content": str(block.content),
+                }
+                for block in result_blocks
+            ]
+
         # Normale Text-/Bild-Nachricht.
+        content = []
+        for block in message.blocks:
+            if isinstance(block, TextBlock):
+                content.append({"type": "text", "text": block.text})
+            elif isinstance(block, ImageBlock):
+                # Mistral erwartet image_url mit data-URL (base64-kodiert).
+                data_url = "data:%s;base64,%s" % (block.media_type, block.data_b64)
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": data_url},
+                })
         if len(content) == 1 and content[0].get("type") == "text":
-            return {"role": role, "content": content[0]["text"]}
-        return {"role": role, "content": content}
+            return [{"role": message.role, "content": content[0]["text"]}]
+        return [{"role": message.role, "content": content}]
 
     @staticmethod
     def _to_mistral_tool(task_def):
