@@ -99,12 +99,15 @@ Bild über den geteilten Icon-Pfad `/display/_shared/icons/arasaac/<id>.png`
 interne Icon-Keys (`sun`/`clock`/`fork`/`moon`/`star`) — das wären zwei
 Icon-Quellen (Schedule-Rail vs. Aktivitäts-Katalog), Stilbruch innerhalb der
 View. Die V1.2-Defaults in `plan/plan.example.json`: bring → `37807`
-(petrabschieden), pick → `39520` (wiedersehen), act1/act2 → `2752` (stern,
-generisches Aktivitäts-Label), cook → `2342` (kochen), bed1/bed2 → `2933`
-(mond). Diese Werte sind Werft-Befund 2026-06-09 (#578) und können je Familie
-über `plan.json` überschrieben werden (CONFIG-1).
+(petrabschieden), pick → `39520` (wiedersehen), act1/act2 → `3071` (kalender,
+generisches Aktivitäts-Slot-Icon), cook → `2342` (kochen), bed1/bed2 → `2933`
+(mond). **Revision 2026-06-10 (Nic, Werft #578):** act1/act2 wurden von `2752`
+(Stern) auf `3071` (Kalender) revidiert — der Stern-Icon wäre eine zweite
+Darstellung des Kalender-Slots neben dem Termin-Piktogramm, der Kalender-Icon
+ist konsistenter (Befund Pi-Deploy). Diese Werte sind Werft-Befunde und können
+je Familie über `plan.json` überschrieben werden (CONFIG-1).
 
-*Tickets:* #40, #578
+*Tickets:* #40, #578, #642
 
 ### PLAN-7 — Erwachsenen-Slots: Zuweisung per Klick-Cycle
 Eine Zelle eines Erwachsenen-Slots zeigt entweder das Foto-im-Ring (FAM-4)
@@ -175,6 +178,21 @@ trägt den V1-Default als CONFIG-4-Fallback (fehlt die Sektion, läuft die
 Familie-1-Bestückung unverändert). Beide Hälften — Erkennung und Termin-Icon —
 lesen aus derselben Quelle, damit sie nicht divergieren können.
 
+**Picker (V1.1, #642):** Der Aktivitäts-Picker zeigt alle Einträge aus
+`Config.aktivitaeten` (AKTIVITAETEN_V1 als CONFIG-4-Fallback). Die
+`picker_options`-Liste wird von `render.py:baue_view` als Teil des View-
+Modells gebaut — keine zweite hartcodierte Aktivitäts-Liste im Template
+(CLAUDE.md §6). Tint-Farben pro Aktivität optional: V1-Familien-Einträge
+haben feste Tints, unbekannte arts bekommen den Default `#eeeeee`. Reihenfolge:
+die konfigurierte Katalog-Reihenfolge (V1: Familien-Aktivitäten zuerst, dann
+Termin-spezifische Einträge).
+
+**Leere Kinder-Aktivitäts-Slots (V1.1, #642):** Ein leerer Aktivitäts-Slot
+eines Kindes (kein Kalender-Event für diesen Slot) zeigt ein **Plus-Symbol**
+als Anlege-Indikator — Inline-SVG, gedimmt (opacity 0.4, ~30 px). Erwachsenen-
+Slots zeigen weiterhin `empty-face`; volle Kinder-Slots zeigen den Aktivitäts-
+Chip. Nur leere Kinder-Aktivitäts-Slots tragen das Plus, nicht Erwachsenen-Slots.
+
 **Piktogramm-Form über die zentrale Bibliothek (ICONS-4/ICONS-7-Konsum,
 verbindlich, V1.1 #471):** Das Feld `piktogramm` eines `aktivitaeten`-
 Eintrags ist eine **ARASAAC-`id`** (Integer-String, identisch zur Form in
@@ -187,7 +205,7 @@ ein zweiter Icon-Pfad und damit Wildwuchs. Bei einer fehlenden ARASAAC-ID
 Fallback-Symbol (gleicher Mechanismus wie ROUTINE-Punkt-Render bei
 fehlendem PNG, ICONS-7-Garantie auf lokal vorliegendes PNG).
 
-*Tickets:* #40, #308, #445
+*Tickets:* #40, #308, #445, #642
 
 ## 5. Termin-Leiste
 
