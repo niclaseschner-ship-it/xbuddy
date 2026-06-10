@@ -525,7 +525,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             routine_client=_rps_routine_client,
             icon_client=_rps_icon_client,
             family_group_chat_id_getter=family_group_chat_id_getter,
-            is_member_fn=_rps_is_member))
+            is_member_fn=_rps_is_member,
+            icon_origin_url=icon_origin_url))
 
     # SREG-5/SREG-6 / #476: »Seiten-Übersicht« als lesende Aufgabe (EC-9).
     # AND-Guard: seiten_origin_url UND family_group_chat_id_getter müssen
