@@ -661,20 +661,26 @@ def test_VS_neu_ordnen_execute_ruft_put():
 
 
 def test_VS_icon_suchen_execute_ruft_router_und_nennt_ids():
-    """RPS-4: execute(icon_suchen) → ICONS-7-Aufruf; Quittung enthält die
-    Vorschlags-IDs (D6 — zweiter tool_use nutzt sie als piktogramm)."""
+    """RPS-4 / TASK-10b: execute(icon_suchen) → ICONS-7-Aufruf; Quittung
+    enthält die Vorschlags-IDs als Mapping-Form (D6 — zweiter tool_use nutzt
+    sie als piktogramm)."""
+    import unittest.mock as mock
     ic = FakeIconClient(response=[
         {"id": 2349, "url": "/x"},
         {"id": 8800, "url": "/y"},
     ])
     task = _make_task(icon_client=ic)
     ctx = TurnContext(chat_id=42, from_user_id=7, private_chat_id=42)
-    quittung = task.execute({
-        "aktion": AKTION_ICON_SUCHEN,
-        "icon_stichwort": "Zähne",
-    }, ctx)
+    # icon_album.zeige_kandidaten mocken: Bilder werden in echt nicht geholt
+    # (kein Netz in Tests), aber der Mapping-Text in der Quittung muss da sein.
+    with mock.patch("skills.routine_punkte_setzen_task.icon_album"
+                    ".zeige_kandidaten"):
+        quittung = task.execute({
+            "aktion": AKTION_ICON_SUCHEN,
+            "icon_stichwort": "Zähne",
+        }, ctx)
     assert ic.suche_calls == [{"stichwort": "Zähne", "max_treffer": 3}]
-    # IDs müssen in der Quittung stehen (D6)
+    # IDs müssen als Mapping in der Quittung stehen (TASK-10b, D6)
     assert "2349" in quittung
     assert "8800" in quittung
 
