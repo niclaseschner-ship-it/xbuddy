@@ -26,5 +26,18 @@
   "kalender_id": "deine-familie@group.calendar.google.com",
 
   "_familie_origin_url_comment": "DCOMP-1: Loopback-Origin der Familie-Komponente (PORT-2). Default ueblicherweise korrekt; nur setzen, wenn das Pi-Setup abweicht.",
-  "familie_origin_url": "http://127.0.0.1:5010"
+  "familie_origin_url": "http://127.0.0.1:5010",
+
+  "_aktivitaeten_comment": "PLAN-12/PLAN-28/PLAN-34 — Aktivitaets-Katalog dieser Familie. Fehlt die Sektion, greift der Code-Default AKTIVITAETEN_V1 (CONFIG-4). Je Eintrag: art (stabiler Schluessel), label (Anzeige-Text), keywords (Substring-Treffer im Kalender-Titel), piktogramm (ARASAAC-id als String, ICONS-4). Wird vom Skill 'Plan-Aktivitaeten setzen' (PAS) via POST /api/v1/plan/admin/aktivitaeten verwaltet; direktes Editieren ist ebenfalls moeglich (CONFIG-2).",
+  "aktivitaeten": [
+    {"art": "klettern",    "label": "Klettern",    "keywords": ["klettern"],                          "piktogramm": "6591"},
+    {"art": "kreativ",     "label": "Kreativ",     "keywords": ["kreativ"],                            "piktogramm": "7069"},
+    {"art": "schwimmen",   "label": "Schwimmen",   "keywords": ["schwimm"],                            "piktogramm": "5522"},
+    {"art": "spielplatz",  "label": "Spielplatz",  "keywords": ["spielplatz"],                         "piktogramm": "6546"},
+    {"art": "musik",       "label": "Musik",       "keywords": ["musik", "klavier", "geige", "gitarre"], "piktogramm": "5497"},
+    {"art": "ausflug",     "label": "Ausflug",     "keywords": ["ausflug"],                            "piktogramm": "6532"},
+    {"art": "geburtstag",  "label": "Geburtstag",  "keywords": ["geburtstag", "geburts"],              "piktogramm": "5486"},
+    {"art": "verabredung", "label": "Verabredung", "keywords": ["verabredung"],                        "piktogramm": "6556"},
+    {"art": "waldgang",    "label": "Waldgang",    "keywords": ["wald"],                               "piktogramm": "6542"}
+  ]
 }

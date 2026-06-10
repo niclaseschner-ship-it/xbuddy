@@ -1067,6 +1067,209 @@ def admin_kalender():
 
 
 # ============================================================
+#  Admin + Public: Aktivitäts-Katalog (PLAN-34, #445/#578)
+# ============================================================
+#
+# Drei Endpoints — analog der Schreib-Struktur aus PLAN-32 (admin/kalender):
+#   GET  /api/v1/plan/aktivitaeten              — öffentlich, Reload-on-Read
+#   POST /api/v1/plan/admin/aktivitaeten        — loopback, 4 Pflichtfelder, 409, atomar
+#   DELETE /api/v1/plan/admin/aktivitaeten/<art>— loopback, 404, atomar
+#
+# Schreib-Endpoints materialisieren die aktivitaeten-Section in plan.json
+# aus dem CONFIG-4-Fallback AKTIVITAETEN_V1, wenn sie noch nicht existiert.
+# Atomarität: Temp-Datei + os.replace (analog _write_kalender_id).
+
+def _read_plan_json_obj(path):
+    """Liest plan.json und liefert das Objekt. Wirft OSError/ValueError."""
+    with open(str(path), encoding="utf-8") as f:
+        data = f.read()
+    obj = json.loads(data)
+    if not isinstance(obj, dict):
+        raise ValueError("plan.json-Wurzel ist kein JSON-Objekt")
+    return obj
+
+
+def _write_plan_json_obj(path, obj):
+    """Schreibt obj atomar via Temp-Datei + os.replace nach path."""
+    path_str = str(path)
+    target_dir = os.path.dirname(os.path.abspath(path_str))
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        prefix=".plan.", suffix=".json.tmp", dir=target_dir)
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+            json.dump(obj, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+        os.replace(tmp_path, path_str)
+    except OSError:
+        with contextlib.suppress(OSError):
+            os.remove(tmp_path)
+        raise
+
+
+def _current_aktivitaeten_list():
+    """Liefert die aktive Aktivitäts-Liste als Dicts (Reload-on-Read DCOMP-2).
+
+    Greift auf _current_config().aktivitaeten; ist None, wird AKTIVITAETEN_V1
+    zurückgegeben (CONFIG-4-Fallback, PLAN-12).
+    """
+    cfg = _current_config()
+    if cfg.aktivitaeten is not None:
+        return [a.to_dict() for a in cfg.aktivitaeten]
+    return list(aktivitaeten_mod.AKTIVITAETEN_V1)
+
+
+@app.route("/api/v1/plan/aktivitaeten", methods=["GET"])
+def api_aktivitaeten_lesen():
+    """PLAN-34: öffentlicher GET — liefert den aktiven Aktivitäts-Katalog.
+
+    Reload-on-Read (DCOMP-2): pro Aufruf frisch aus plan.json. Fehlt die
+    Sektion, antwortet der Endpoint mit AKTIVITAETEN_V1 (CONFIG-4-Fallback).
+    """
+    return jsonify(_current_aktivitaeten_list()), 200
+
+
+@app.route("/api/v1/plan/admin/aktivitaeten", methods=["POST"])
+def api_aktivitaeten_hinzufuegen():
+    """PLAN-34: loopback POST — fügt einen Eintrag zum Aktivitäts-Katalog hinzu.
+
+    Body: { art, label, keywords, piktogramm } — alle vier Pflichtfelder.
+    409, wenn art bereits existiert. Atomar: plan.json via Temp + os.replace.
+    Existiert die aktivitaeten-Sektion noch nicht, wird sie aus AKTIVITAETEN_V1
+    materialisiert.
+    """
+    if not _is_loopback(request.remote_addr or ""):
+        logger.warning("admin/aktivitaeten POST abgelehnt: remote_addr=%s",
+                       request.remote_addr)
+        return jsonify({
+            "ok": False,
+            "error": "nur 127.0.0.1 darf den Endpoint erreichen",
+        }), 403
+
+    body = request.get_json(silent=True) or {}
+    # Pflichtfelder.
+    for feld in ("art", "label", "piktogramm"):
+        val = body.get(feld)
+        if not val or not isinstance(val, str) or not val.strip():
+            return jsonify({
+                "ok": False,
+                "error": "%s ist Pflicht und darf nicht leer sein" % feld,
+            }), 400
+    keywords = body.get("keywords")
+    if not isinstance(keywords, list) or not keywords:
+        return jsonify({
+            "ok": False,
+            "error": "keywords ist Pflicht und muss eine nicht-leere Liste sein",
+        }), 400
+    for kw in keywords:
+        if not isinstance(kw, str) or not kw:
+            return jsonify({
+                "ok": False,
+                "error": "jedes keywords-Element muss ein nicht-leerer String sein",
+            }), 400
+
+    art = body["art"].strip()
+    label = body["label"].strip()
+    piktogramm = body["piktogramm"].strip()
+
+    path = runtime.get("config_path")
+    if not path:
+        return jsonify({"ok": False, "error": "kein plan.json-Pfad konfiguriert"}), 500
+
+    try:
+        obj = _read_plan_json_obj(path)
+    except (OSError, ValueError) as e:
+        logger.error("admin/aktivitaeten POST: plan.json nicht lesbar: %s", e)
+        return jsonify({"ok": False, "error": "plan.json nicht lesbar: %s" % e}), 500
+
+    # Sektion materialisieren, falls noch nicht vorhanden (CONFIG-4).
+    if "aktivitaeten" not in obj or obj["aktivitaeten"] is None:
+        obj["aktivitaeten"] = [dict(e) for e in aktivitaeten_mod.AKTIVITAETEN_V1]
+
+    # 409, wenn art bereits existiert.
+    existing_arts = {e["art"] for e in obj["aktivitaeten"]}
+    if art in existing_arts:
+        return jsonify({"ok": False, "error": "art_existiert"}), 409
+
+    obj["aktivitaeten"].append({
+        "art": art,
+        "label": label,
+        "keywords": list(keywords),
+        "piktogramm": piktogramm,
+    })
+
+    try:
+        _write_plan_json_obj(path, obj)
+    except OSError as e:
+        logger.error("admin/aktivitaeten POST: plan.json nicht schreibbar: %s", e)
+        return jsonify({"ok": False, "error": "plan.json nicht schreibbar: %s" % e}), 500
+
+    # In-process-Übernahme — gleicher Pfad wie admin/kalender.
+    try:
+        reload_plan_config()
+    except PlanReloadError as e:
+        logger.error("admin/aktivitaeten POST: Reload fehlgeschlagen: %s", e)
+        # Datei ist korrekt geschrieben; Reload-on-Read greift beim nächsten Aufruf.
+
+    logger.info("admin/aktivitaeten POST: art=%r hinzugefügt", art)
+    return jsonify({"ok": True, "art": art}), 200
+
+
+@app.route("/api/v1/plan/admin/aktivitaeten/<art>", methods=["DELETE"])
+def api_aktivitaeten_loeschen(art):
+    """PLAN-34: loopback DELETE — entfernt einen Eintrag aus dem Katalog.
+
+    404, wenn art unbekannt. Atomar: plan.json via Temp + os.replace.
+    Existiert die aktivitaeten-Sektion noch nicht, wird sie aus AKTIVITAETEN_V1
+    materialisiert und der Eintrag daraus gelöscht (wie spec).
+    """
+    if not _is_loopback(request.remote_addr or ""):
+        logger.warning("admin/aktivitaeten DELETE abgelehnt: remote_addr=%s",
+                       request.remote_addr)
+        return jsonify({
+            "ok": False,
+            "error": "nur 127.0.0.1 darf den Endpoint erreichen",
+        }), 403
+
+    path = runtime.get("config_path")
+    if not path:
+        return jsonify({"ok": False, "error": "kein plan.json-Pfad konfiguriert"}), 500
+
+    try:
+        obj = _read_plan_json_obj(path)
+    except (OSError, ValueError) as e:
+        logger.error("admin/aktivitaeten DELETE: plan.json nicht lesbar: %s", e)
+        return jsonify({"ok": False, "error": "plan.json nicht lesbar: %s" % e}), 500
+
+    # Sektion materialisieren, falls noch nicht vorhanden (CONFIG-4).
+    if "aktivitaeten" not in obj or obj["aktivitaeten"] is None:
+        obj["aktivitaeten"] = [dict(e) for e in aktivitaeten_mod.AKTIVITAETEN_V1]
+
+    # 404, wenn art unbekannt.
+    before = obj["aktivitaeten"]
+    after = [e for e in before if e["art"] != art]
+    if len(after) == len(before):
+        return jsonify({"ok": False, "error": "art unbekannt: %r" % art}), 404
+
+    obj["aktivitaeten"] = after
+
+    try:
+        _write_plan_json_obj(path, obj)
+    except OSError as e:
+        logger.error("admin/aktivitaeten DELETE: plan.json nicht schreibbar: %s", e)
+        return jsonify({"ok": False, "error": "plan.json nicht schreibbar: %s" % e}), 500
+
+    # In-process-Übernahme.
+    try:
+        reload_plan_config()
+    except PlanReloadError as e:
+        logger.error("admin/aktivitaeten DELETE: Reload fehlgeschlagen: %s", e)
+        # Datei ist korrekt geschrieben; Reload-on-Read greift beim nächsten Aufruf.
+
+    logger.info("admin/aktivitaeten DELETE: art=%r entfernt", art)
+    return jsonify({"ok": True, "art": art}), 200
+
+
+# ============================================================
 #  Entrypoint (PLAN-28)
 # ============================================================
 
