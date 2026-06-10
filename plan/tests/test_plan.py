@@ -920,6 +920,54 @@ def test_PLAN_29_arasaac_migration_aktivitaeten_v1_ids():
             % (art, expected_id, got))
 
 
+def test_PLAN_29_plan_example_json_haelt_aktivitaeten_v1_mapping():
+    """AC1 — plan.example.json spiegelt AKTIVITAETEN_V1 vollständig (Wächter).
+
+    Familie-1-Realdatei (plan.example.json) darf nicht silent driften:
+    - jeder aktivitaeten-Eintrag hat Pflichtfelder (art, label, keywords, piktogramm)
+    - jedes piktogramm ist ein nicht-leerer String
+    - alle ARASAAC-IDs aus AKTIVITAETEN_V1 sind auch in plan.example.json präsent.
+    """
+    import json
+    import os
+
+    # Lade plan.example.json (nebenan im selben Verzeichnis wie aktivitaeten.py).
+    plan_dir = os.path.dirname(os.path.dirname(__file__))
+    plan_example_path = os.path.join(plan_dir, "plan.example.json")
+    assert os.path.exists(plan_example_path), (
+        "plan.example.json nicht gefunden: %s" % plan_example_path)
+
+    with open(plan_example_path) as f:
+        plan_data = json.load(f)
+
+    assert "aktivitaeten" in plan_data, "plan.example.json hat keine aktivitaeten-Section"
+    aktivitaeten_json = plan_data["aktivitaeten"]
+    assert isinstance(aktivitaeten_json, list), "aktivitaeten soll Array sein"
+
+    # Pflichtfelder prüfen.
+    for eintrag in aktivitaeten_json:
+        for feld in ("art", "label", "keywords", "piktogramm"):
+            assert feld in eintrag, (
+                "plan.example.json-Eintrag fehlt %r: %r" % (feld, eintrag))
+        # piktogramm muss String und nicht leer sein.
+        piktogramm = eintrag["piktogramm"]
+        assert isinstance(piktogramm, str) and piktogramm, (
+            "plan.example.json piktogramm darf nicht leer sein: %r" % eintrag)
+
+    # Deckungsgleichheit: alle ARASAAC-IDs aus AKTIVITAETEN_V1 sind in
+    # plan.example.json präsent (Familie-1-Vollständigkeit).
+    v1_arts = {e["art"]: e["piktogramm"] for e in aktivitaeten_mod.AKTIVITAETEN_V1}
+    json_arts = {e["art"]: e["piktogramm"] for e in aktivitaeten_json}
+
+    for art, expected_pid in v1_arts.items():
+        assert art in json_arts, (
+            "plan.example.json fehlt art=%r aus AKTIVITAETEN_V1" % art)
+        got_pid = json_arts[art]
+        assert got_pid == expected_pid, (
+            "plan.example.json art=%r: piktogramm erwartet %r, bekam %r"
+            % (art, expected_pid, got_pid))
+
+
 def test_PLAN_29_arasaac_migration_icon_fuer_art_liest_piktogramm():
     """AC1 — icon_fuer_art() liest piktogramm aus Katalog, nicht _ICON_V1.
 
@@ -3007,16 +3055,16 @@ def test_PLAN_34_aktivitaeten_termin_icon_keywords_ohne_config():
 # ── AC3: plan.example.json aktivitaeten-Section ───────────────────────────
 
 def test_PLAN_34_example_json_hat_aktivitaeten_section():
-    """AC3: plan.example.json trägt eine aktivitaeten-Beispiel-Section mit 9
-    Einträgen (V1-Default, PLAN-28-Tabelle)."""
+    """AC3: plan.example.json trägt eine aktivitaeten-Beispiel-Section mit 14
+    Einträgen (V1-Default + 5 Termin-Einträge, PLAN-28-Tabelle, #471)."""
     import pathlib
     example = pathlib.Path(__file__).parent.parent / "plan.example.json"
     with open(str(example), encoding="utf-8") as f:
         data = json.load(f)
     assert "aktivitaeten" in data, "plan.example.json muss aktivitaeten-Section haben"
     akt = data["aktivitaeten"]
-    assert len(akt) == 9, (
-        "plan.example.json soll 9 aktivitaeten-Einträge haben (V1-Default), hat %d"
+    assert len(akt) == 14, (
+        "plan.example.json soll 14 aktivitaeten-Einträge haben (V1-Default + 5 Termin), hat %d"
         % len(akt))
     for eintrag in akt:
         for feld in ("art", "label", "keywords", "piktogramm"):
@@ -3042,8 +3090,9 @@ def test_PLAN_34_familie1_ohne_aktivitaeten_section_laeuft(tmp_path, demo_regist
     assert "klettern" in arts, "AKTIVITAETEN_V1-Fallback soll klettern enthalten"
     assert "musik" in arts, "AKTIVITAETEN_V1-Fallback soll musik enthalten"
     # V1.2 (#471): AKTIVITAETEN_V1 hat 9 Aktivitäten + 5 Termin-Einträge = 14.
-    assert len(body) >= 9, (
-        "CONFIG-4-Fallback soll mindestens 9 Einträge haben, hat %d" % len(body))
+    assert len(body) == len(aktivitaeten_mod.AKTIVITAETEN_V1), (
+        "CONFIG-4-Fallback soll %d Einträge haben (exakt AKTIVITAETEN_V1), hat %d"
+        % (len(aktivitaeten_mod.AKTIVITAETEN_V1), len(body)))
 
 
 # ── AC4: drei PLAN-34-Endpoints ───────────────────────────────────────────
