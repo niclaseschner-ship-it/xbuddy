@@ -75,21 +75,37 @@ class CalendarAuthFailed(CalendarUnavailable):
 # ============================================================
 
 class Event:
-    """Ein anbieter-neutrales Kalender-Event (PLAN-17).
+    """Ein anbieter-neutrales Kalender-Event (PLAN-17 V1.1).
 
     Felder: stabile `id` (trägt die Multi-Day-Gruppierung, PLAN-14), `titel`,
-    `beginn` und `ende` (date oder datetime), `ganztags` (bool), `person`
-    (aufgelöste Personen-`id` oder None, PLAN-19). Google-Rohfelder, die V1
+    `beginn` und `ende` (date oder datetime), `ganztags` (bool), `personen`
+    (Liste aufgelöster Personen-`id`, PLAN-19 V1.1 Multi-Person — immer eine
+    Liste, max 2 Einträge, leer wenn keine Zuordnung). Google-Rohfelder, die V1
     nicht braucht, werden nicht durchgereicht (CLAUDE.md §6).
+
+    Backward-Compat: `person`-Property liefert `personen[0]` oder None —
+    bestehende Konsumenten, die nur eine Person brauchen, bleiben kompatibel.
     """
 
-    def __init__(self, id, titel, beginn, ende, ganztags, person=None):
+    def __init__(self, id, titel, beginn, ende, ganztags, personen=None, person=None):
         self.id = id
         self.titel = titel
         self.beginn = beginn
         self.ende = ende
         self.ganztags = ganztags
-        self.person = person
+        # PLAN-17 V1.1: personen ist immer eine Liste.
+        # Backward-Compat: wenn nur `person` übergeben wird, als 1-Element-Liste tragen.
+        if personen is not None:
+            self.personen = list(personen)
+        elif person is not None:
+            self.personen = [person]
+        else:
+            self.personen = []
+
+    @property
+    def person(self):
+        """Backward-Compat: erste Person oder None (PLAN-19 V1.1)."""
+        return self.personen[0] if self.personen else None
 
     def to_dict(self):
         """Serialisierbare Form — für die Termin-Schnittstelle (PLAN-22)."""
@@ -99,7 +115,8 @@ class Event:
             "beginn": self.beginn.isoformat() if self.beginn else None,
             "ende": self.ende.isoformat() if self.ende else None,
             "ganztags": self.ganztags,
-            "person": self.person,
+            "personen": self.personen,
+            "person": self.person,  # Backward-Compat für bestehende Konsumenten
         }
 
 
@@ -258,33 +275,48 @@ class GoogleTransport:
 #  Personen-Auflösung (PLAN-19)
 # ============================================================
 
-def resolve_person(titel, creator_email, personen):
-    """Ordnet ein Event höchstens einer Person zu (PLAN-19).
+def resolve_personen(titel, creator_email, personen):
+    """Ordnet ein Event maximal zwei Personen zu (PLAN-19 V1.1 Multi-Person).
 
     `personen` ist eine Liste von familie.Person. Reihenfolge:
-      1. Titel-Treffer — kommt ein Personenname im Titel vor, gewinnt der
-         früheste (kleinster Fundindex).
+      1. Titel-Treffer — alle Namen, die im Titel vorkommen, werden gesammelt
+         und nach Position der ersten Erwähnung sortiert; maximal zwei gewinnen.
       2. Creator-E-Mail — sonst, ist die Creator-Adresse die E-Mail eines
-         Erwachsenen, ist das die Person.
-      3. sonst None.
+         Erwachsenen, ist das die einzige Person (1-Element-Liste).
+      3. sonst leere Liste.
 
-    Liefert die Personen-`id` oder None.
+    Liefert eine Liste mit 0, 1 oder 2 Personen-`id`-Strings, in
+    Erwähnungs-Reihenfolge.
     """
     titel_lo = (titel or "").lower()
-    bester = None  # (fundindex, person_id)
+    treffer = []  # (fundindex, person_id)
     for p in personen:
-        pos = titel_lo.find((p.name or "").lower()) if p.name else -1
-        if pos >= 0 and (bester is None or pos < bester[0]):
-            bester = (pos, p.id)
-    if bester is not None:
-        return bester[1]
+        if not p.name:
+            continue
+        pos = titel_lo.find(p.name.lower())
+        if pos >= 0:
+            treffer.append((pos, p.id))
+    if treffer:
+        # Sortieren nach Fundindex (Erwähnungs-Reihenfolge), dann auf 2 kappen.
+        treffer.sort(key=lambda t: t[0])
+        return [pid for _, pid in treffer[:2]]
     # 2. Creator-E-Mail.
     if creator_email:
         ce = creator_email.lower()
         for p in personen:
             if p.email and p.email.lower() == ce:
-                return p.id
-    return None
+                return [p.id]
+    return []
+
+
+def resolve_person(titel, creator_email, personen):
+    """Backward-Compat-Wrapper: liefert die erste aufgelöste Person oder None.
+
+    Delegiert an resolve_personen (PLAN-19 V1.1). Bestehende Aufrufer, die
+    nur eine Person brauchen, bleiben ohne Änderung kompatibel.
+    """
+    result = resolve_personen(titel, creator_email, personen)
+    return result[0] if result else None
 
 
 # ============================================================
@@ -356,21 +388,21 @@ class Kalender:
         return events
 
     def _normalise(self, raw):
-        """Übersetzt ein Google-Roh-Item in das neutrale Modell (PLAN-17/PLAN-19)."""
+        """Übersetzt ein Google-Roh-Item in das neutrale Modell (PLAN-17/PLAN-19 V1.1)."""
         beginn, ganztags = _parse_when(raw.get("start"))
         if beginn is None:
             return None
         ende, _ = _parse_when(raw.get("end"))
         titel = raw.get("summary") or "(ohne Titel)"
         creator_email = (raw.get("creator") or {}).get("email")
-        person = resolve_person(titel, creator_email, self._personen)
+        personen = resolve_personen(titel, creator_email, self._personen)
         return Event(
             id=raw.get("id"),
             titel=titel,
             beginn=beginn,
             ende=ende,
             ganztags=ganztags,
-            person=person,
+            personen=personen,
         )
 
     # -- Schreiben (PLAN-18) ---------------------------------------------
