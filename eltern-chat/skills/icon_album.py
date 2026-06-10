@@ -42,7 +42,11 @@ def zeige_kandidaten(tg, chat_id, kandidaten, icon_origin_url, *, opener=None):
     Trefferzahl-Fallback:
       - 0 Treffer → no-op (Sicherheitsnetz; Skill sollte vorher abfangen)
       - 1 Treffer → tg.send_photo
-      - 2-3 Treffer → tg.send_media_group
+      - ≥2 Treffer → tg.send_media_group (Transport erlaubt 2-10 Items)
+
+    TASK-10b nennt ICONS-7 als Begrenzung auf 3 Treffer; die Disziplin
+    liegt im Skill (RPS-4 / GAN-4 / PAS-4 setzen max=3 in der ICONS-7-
+    Suche), nicht im Helper. send_media_group wirft ValueError ab >10.
 
     Captions werden NICHT gesetzt (TASK-10b: das Mapping liefert der
     Skill im Tool-Result an das LLM).
