@@ -218,20 +218,28 @@ garantieren keine gleiche Optik. Konkrete Maße folgen dem Gate-B-Artefakt
 
 *Tickets:* #474
 
-### ESSEN-11 — Piktogramm je Kachel über die geteilte Icon-Plattform
-Jede Item-Kachel und jede Kategorie-Kachel trägt ein **ARASAAC-Piktogramm**,
-bezogen **über die zentrale Icon-Plattform** — read-only unter der geteilten
-URL `/display/_shared/icons/arasaac/<id>.png` (`icons.md` ICONS-5) —, **kein**
-buddy-eigener ARASAAC-Bezug (sonst zweiter Icon-Pfad, CLAUDE.md §6 / Lego,
-gleiche Regel wie ROUTINE-10 / WETTER-18). **Kein Emoji.** Die Katalog-Items
-und die Kategorie-Definitionen bilden auf numerische ARASAAC-IDs ab. Die
-Lizenz-/NC-Frage liegt zentral in `icons.md` ICONS-6 und wird hier nur
-referenziert, nicht erneut entschieden.
+### ESSEN-11 — Piktogramm je Kachel über die geteilte Icon-Plattform (Default; Familien-Foto-Override siehe ESSEN-22)
+Jede Item-Kachel und jede Kategorie-Kachel trägt **per Default** ein
+**ARASAAC-Piktogramm**, bezogen **über die zentrale Icon-Plattform** —
+read-only unter der geteilten URL `/display/_shared/icons/arasaac/<id>.png`
+(`icons.md` ICONS-5) —, **kein** buddy-eigener ARASAAC-Bezug (sonst zweiter
+Icon-Pfad, CLAUDE.md §6 / Lego, gleiche Regel wie ROUTINE-10 / WETTER-18).
+**Kein Emoji.** Die Katalog-Items und die Kategorie-Definitionen bilden auf
+numerische ARASAAC-IDs ab. Die Lizenz-/NC-Frage liegt zentral in `icons.md`
+ICONS-6 und wird hier nur referenziert, nicht erneut entschieden.
 
-*Test-Implikation:* ein Item rendert sein Piktogramm über den
-`/display/_shared/`-Pfad; kein buddy-lokaler ARASAAC-Download im Essen-Code.
+**Familien-Foto-Override (V1.1, ESSEN-22):** Trägt ein Item ein Familien-Foto
+über den Photo-Buddy, ersetzt dieses Foto den ARASAAC-Default für genau
+dieses Item. Items ohne Familien-Foto behalten den ARASAAC-Default. Die
+Übergangs-Logik ist deterministisch (Foto vorhanden → Foto rendert; sonst
+ARASAAC).
 
-*Tickets:* #474
+*Test-Implikation:* ein Item ohne Familien-Foto rendert sein Piktogramm über
+den `/display/_shared/`-Pfad (kein buddy-lokaler ARASAAC-Download); ein Item
+mit Familien-Foto rendert das Foto über die Photo-Buddy-Schnittstelle
+(PHOTO-15) statt des Piktogramms.
+
+*Tickets:* #474, #531
 
 ## 4. Katalog (Daten-Quellen)
 
@@ -451,6 +459,58 @@ Wahrheit kommt aus den Dateien. ENV-Overrides `ESSEN_<KEY>` (CONFIG-5).
 
 *Tickets:* #474
 
+## 6a. Familien-Foto-Override (V1.1)
+
+### ESSEN-22 — Familien-Foto je Item via Photo-Buddy (Eltern-Chat-Skill `essen_foto_setzen`)
+Die Familie kann je Katalog-Item ein **eigenes Foto** hinterlegen, das den
+ARASAAC-Default am Display ersetzt (ESSEN-11). Der Pfad lebt über bestehende
+Naht: Eltern-Chat-Skill (analog FSE-Pattern `foto_senden_task`) +
+**Photo-Buddy** als Familien-Foto-Speicher (PHOTO-15).
+
+**Skill-Form (analog FSE, im Eltern-Chat-Katalog EC-8):**
+
+- Trigger: Eltern schicken ein Foto im Privatchat oder in der Familien-Gruppe.
+  Der Skill `essen_foto_setzen` fragt, zu welchem Katalog-Item das Foto gehört
+  (Auswahl aus dem aktuellen Essens-Katalog, propose→confirm analog
+  `routine_punkte_setzen`).
+- Confirm: Mit einem Bestätigungswort (E-EC-7) speichert der Skill das Foto
+  im Photo-Buddy mit einem **essen-spezifischen Tag** (Form: `essen:<item_id>`,
+  analog PHOTO-15-Tag-Schema). Existiert für das Item bereits ein Familien-
+  Foto, wird es ersetzt (genau ein Foto je Item, V1).
+
+**Display-Konsum (ESSEN-11-Override):**
+
+- Pro Render-Cycle prüft der Essens-Buddy je Katalog-Item: liegt ein
+  Photo-Buddy-Foto mit Tag `essen:<item_id>` vor? Wenn ja → Foto-URL aus
+  Photo-Buddy (PHOTO-15) rendern statt des ARASAAC-Default-Pfads. Wenn
+  nein → ARASAAC-Default (ESSEN-11).
+- Der Essens-Buddy hält **keine eigene Foto-Kopie**. Photo-Buddy bleibt die
+  einzige Speicher-Stelle (APP-3: Photo-Buddy besitzt seine Daten).
+
+**Lösch-Pfad (V1.1):**
+
+- Wer das Familien-Foto eines Items entfernen will, nutzt den Photo-Buddy-
+  Lösch-Pfad (PHOTO-Spec) — das Tag wird entfernt, das Display fällt
+  automatisch beim nächsten Reload-on-Read (DCOMP-2) auf den ARASAAC-Default
+  zurück. Ein eigener Essens-Foto-Lösch-Skill ist V1.1 nicht nötig (siehe
+  *Out-of-Scope V1.1* unten).
+
+**Out-of-Scope V1.1** (jeweils eigenes Ticket, sobald gebraucht):
+
+- **Automatisches Freistellen** des Tellers / Hintergrund-Entfernung: V2-
+  Ausbaustufe (E-ESSEN-10). V1.1 nimmt das Foto 1:1 wie hochgeladen.
+- **Mehrere Fotos pro Item** (Karussell). V1.1 trägt genau eins.
+- **OpenFoodFacts oder externe Foto-Datenbank**: OPEN-ESSEN-B bleibt
+  vertagt, eigener Werft-Lauf (E-ESSEN-6).
+
+*Test-Implikation:* Ein Skill-Test legt ein Foto für Item X an, ein Render-
+Test belegt, dass Item X danach das Foto statt des ARASAAC-Pfads rendert.
+Negativ-Test: Items ohne Familien-Foto rendern weiter den ARASAAC-Default
+unverändert. Lösch-Test: nach Photo-Buddy-Tag-Entfernung rendert Item X
+wieder ARASAAC.
+
+*Tickets:* #531
+
 ## 7. Service & Registrierung (BUD-Andock)
 
 ### ESSEN-23 — Eigener Service, fester Port
@@ -626,14 +686,38 @@ hat Wert auch ohne die Übersetzung (Eltern liest die Wünsche wörtlich und
 weiß meist, was sie braucht). **Verworfen:** Chefkoch-Web-Scrape in V1 (Lizenz
 + Fragilität).
 
-### E-ESSEN-6 — ARASAAC via ICONS-7 als V1-Bildquelle; OpenFoodFacts vertagt
-*Datum:* 2026-06-09 · Alle Piktogramme kommen über die zentrale
-Icon-Plattform (ICONS-5/ICONS-7), gleicher Pfad wie Routine (ROUTINE-10) und
-Wetter (WETTER-18) — **ein Asset-Pfad**, kein zweiter. OpenFoodFacts (echte
-Produktfotos) wäre eine **zweite** Bild-Plattform neben ARASAAC und braucht
-einen eigenen Werft-Lauf (OPEN-ESSEN-B). **Verworfen:** OpenFoodFacts schon
-in V1 dazuholen (würde die zweite-Asset-Pfad-Architektur-Entscheidung im
-Vorbeigehen treffen, ohne Berater-Runde / Cross-Engine-Probe).
+### E-ESSEN-6 — ARASAAC via ICONS-7 als Default; Familien-Foto als interne zweite Bild-Quelle (V1.1); OpenFoodFacts weiter vertagt
+*Datum:* 2026-06-09 (V1) · Schärfung 2026-06-10 (V1.1, Refs #531)
+
+**Default-Bildquelle** für Item-Kacheln (ESSEN-11) ist ARASAAC über die
+zentrale Icon-Plattform (ICONS-5/ICONS-7), gleicher Pfad wie Routine
+(ROUTINE-10) und Wetter (WETTER-18). Für andere Buddys gilt weiterhin: **ein
+Asset-Pfad**, kein zweiter (RAT-13-Geist, Lego).
+
+**Schärfung 2026-06-10 (V1.1, Familien-Setup #531):** Essens-Buddy bekommt
+als erster Buddy eine **interne** zweite Bild-Quelle — **Familien-Fotos via
+Photo-Buddy** (PHOTO-15, FSE-Pattern als Vorbild). Familien-Foto ersetzt den
+ARASAAC-Default je Item (ESSEN-22). Begründung: bei Gerichten und Produkten
+ist ein Familien-eigenes Foto („unsere Lasagne", „der Joghurt-Becher den die
+Kinder kennen") für die Familien-Wiedererkennung deutlich aussagekräftiger
+als ein generisches ARASAAC-Piktogramm. Der Transport bleibt ratifizierter
+Pfad: Photo-Buddy als Familien-Foto-Speicher (PHOTO-Spec), nicht ein neuer
+Asset-Pfad.
+
+**Begriffsklärung:** „zweite Bild-Plattform" im V1-Wortlaut meinte
+**externe Plattformen** wie ARASAAC oder OpenFoodFacts — diese tragen ihre
+eigenen Lizenz-/Lebenszyklus-/CDN-Fragen und bleiben weiterhin Werft-/
+Berater-Runden-pflichtig. Familien-Foto ist **kein externer Asset-Pfad**,
+sondern Familien-eigener Inhalt im bereits ratifizierten Photo-Buddy.
+
+**OpenFoodFacts (echte Produktfotos) bleibt vertagt** als OPEN-ESSEN-B —
+eine **externe** zweite Bild-Plattform neben ARASAAC bräuchte weiterhin
+Werft-Lauf + Berater-Runde / Cross-Engine-Probe.
+
+**Verworfen:** den Familien-Foto-Pfad als „zweite Asset-Plattform" zu
+behandeln und damit gleich-blockiert wie OpenFoodFacts. Der Asset-Pfad-
+Schutz richtet sich gegen externe Lieferungen mit unkontrolliertem
+Lebenszyklus — er trifft Familien-Foto-Inhalt nicht.
 
 ### E-ESSEN-7 — Tabbed Single-Canvas (Gate-B-Wahl, kein Drill-Down)
 *Datum:* 2026-06-09 (Gate B, Werft-Lauf #474, Variante A) · Das Display ist
@@ -668,3 +752,21 @@ Buddy-Card-Optik des WetterBuddys (`wetter/static/wetter.css`
 `.card`/`.card-label`) statt eines neuen Stils — gleiche Tokens allein
 garantieren keine gleiche Optik (Pattern E-ROUTINE-10). **Verworfen:** einen
 eigenen Box-Stil nur aus Tokens neu bauen (sieht „neu"/inkonsistent aus).
+
+### E-ESSEN-10 — Familien-Foto V1.1: 1:1-Übernahme; automatisches Freistellen V2-Ausbaustufe
+*Datum:* 2026-06-10 · ESSEN-22 nimmt das hochgeladene Familien-Foto **1:1**
+wie geliefert und rendert es statt des ARASAAC-Defaults. Automatisches
+Freistellen des Tellers / Hintergrund-Entfernung ist als **V2-Ausbaustufe**
+explizit benannt — kein V1.1-Blocker.
+
+**Verworfen:** V1.1 mit serverseitigem Bild-Filter (Hintergrund-Entfernung,
+Teller-Detection) zu liefern. Begründung: (a) Komplexitäts-Falle (Modell-
+Auswahl, GPU-Last, Edge-Cases bei diffusen Hintergründen — Familien-Küche ist
+nicht Studio), (b) Familien-3-Probe — selbst-gemachtes Foto ohne
+Bildbearbeitung ist die kleinste, robusteste Form, (c) wer das vermisst, weiß
+sofort „V2 kommt" und hat den richtigen Erwartungs-Horizont.
+
+**V2-Trigger** (für das Folge-Ticket bei Bedarf): Wenn die Familien-Tests
+zeigen, dass nicht-freigestellte Fotos die Erkennbarkeit/Optik im Item-Grid
+spürbar mindern (mehrere Familien-Rückmeldungen ODER Werft-Befund am
+Tablet-Probe). Bis dahin nichts auf Vorrat.
