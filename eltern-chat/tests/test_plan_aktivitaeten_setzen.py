@@ -31,6 +31,7 @@ import json
 import os
 import sys
 import tempfile
+import unittest.mock as mock
 
 from fakes import FakeTelegram
 from skills.icon_client import IconClientError
@@ -576,13 +577,15 @@ def test_APP3_keine_datei_zugriffe():
 #  WriteTask-Klassifikation + propose()
 # ============================================================
 
-def _make_task(plan_client=None, icon_client=None, is_member_fn=None):
+def _make_task(plan_client=None, icon_client=None, is_member_fn=None,
+               tg=None, icon_origin_url=None):
     return PlanAktivitaetenSetzenTask(
-        tg=FakeTelegram(),
+        tg=tg or FakeTelegram(),
         plan_client=plan_client or FakePlanClient(),
         icon_client=icon_client or FakeIconClient(),
         family_group_chat_id_getter=lambda: 200,
         is_member_fn=is_member_fn or _immer_mitglied,
+        icon_origin_url=icon_origin_url,
     )
 
 
@@ -703,10 +706,15 @@ def test_VS_icon_suchen_execute_ruft_router_und_nennt_ids():
     ])
     task = _make_task(icon_client=ic)
     ctx = TurnContext(chat_id=42, from_user_id=7, private_chat_id=42)
-    quittung = task.execute({
-        "aktion": AKTION_ICON_SUCHEN,
-        "icon_stichwort": "tanz",
-    }, ctx)
+    # PAS-4 / TASK-10b: zeige_kandidaten wird jetzt aufgerufen — kein Netz
+    # in Unit-Tests, daher Stub (kein Inhalt nötig, Rückgabe irrelevant).
+    with mock.patch(
+        "skills.plan_aktivitaeten_setzen_task.icon_album.zeige_kandidaten"
+    ):
+        quittung = task.execute({
+            "aktion": AKTION_ICON_SUCHEN,
+            "icon_stichwort": "tanz",
+        }, ctx)
     assert ic.suche_calls == [{"stichwort": "tanz", "max_treffer": 3}]
     # IDs müssen in der Quittung stehen (D6)
     assert "2652" in quittung
@@ -1066,3 +1074,53 @@ def test_AC5_live_probe_pas_skill_post_plan_json_persistent(tmp_path):
         # Reload-on-Read funktioniert noch nicht für diesen Edge-Case;
         # die Datei-Probe ist die maßgebliche PW-16-Bestätigung.
         pass  # Datei-Probe oben hat bereits bestanden.
+
+
+# ============================================================
+#  PAS-4 / TASK-10b: icon_album.zeige_kandidaten (AC3)
+# ============================================================
+
+def test_PAS_4_icon_kandidaten_sendet_album():
+    """AC3 / PAS-4 / TASK-10b: execute(icon_suchen) ruft icon_album.zeige_kandidaten
+    mit (tg, chat_id, kandidaten, icon_origin_url) — Stub prüft Aufruf-Argumente."""
+    kandidaten = [
+        {"id": 2652, "url": "/icons/2652.png"},
+        {"id": 6591, "url": "/icons/6591.png"},
+    ]
+    ic = FakeIconClient(response=kandidaten)
+    tg = FakeTelegram()
+    task = _make_task(icon_client=ic, tg=tg,
+                      icon_origin_url="http://icons.example:5000")
+
+    received = {}
+
+    def spy(tg_arg, chat_id_arg, kand_arg, origin_arg):
+        received["tg"] = tg_arg
+        received["chat_id"] = chat_id_arg
+        received["kandidaten"] = kand_arg
+        received["origin"] = origin_arg
+
+    ctx = TurnContext(chat_id=42, from_user_id=7, private_chat_id=42)
+
+    with mock.patch(
+        "skills.plan_aktivitaeten_setzen_task.icon_album.zeige_kandidaten",
+        side_effect=spy,
+    ):
+        quittung = task.execute({
+            "aktion": AKTION_ICON_SUCHEN,
+            "icon_stichwort": "capueira",
+        }, ctx)
+
+    # Stub wurde aufgerufen
+    assert "tg" in received, "zeige_kandidaten muss aufgerufen worden sein"
+    # tg-Argument ist das Task-eigene tg-Objekt
+    assert received["tg"] is tg
+    # chat_id aus dem TurnContext
+    assert received["chat_id"] == 42
+    # Kandidaten-Liste wie vom Skill geliefert
+    assert received["kandidaten"] == kandidaten
+    # icon_origin_url wie bei Task-Bau gesetzt
+    assert received["origin"] == "http://icons.example:5000"
+    # Quittung enthält die IDs (D6-Mapping)
+    assert "2652" in quittung
+    assert "6591" in quittung
