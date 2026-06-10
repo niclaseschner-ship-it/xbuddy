@@ -117,6 +117,20 @@ def _ring_fuer_person(person_id, registry):
     return p.ring if p is not None else "gray"
 
 
+def _personen_rings(personen_ids, registry):
+    """Liste von {person, ring}-Dicts für eine Personen-ID-Liste (PLAN-19 V1.1).
+
+    Für die Termin-Leiste (PLAN-13): bis zu zwei Avatare nebeneinander.
+    Liefert eine Liste mit 0, 1 oder 2 Einträgen.
+    """
+    result = []
+    for pid in (personen_ids or []):
+        ring = _ring_fuer_person(pid, registry)
+        if ring is not None:
+            result.append({"person": pid, "ring": ring})
+    return result
+
+
 def baue_tage(anker, anzahl_tage, wochenstart_wd, heute):
     """Baut die Tages-Spalten des rollierenden Fensters (PLAN-4, PLAN-5).
 
@@ -229,7 +243,7 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
             # der Termin-Leiste mit seiner Uhrzeit — derselbe Event (gleiche id).
             # Ganztägig/mehrtägig bleibt nur im Kind-Slot.
             if len(tag_isos) == 1 and not ev.ganztags and ev.beginn is not None:
-                appointments[tag_isos[0]].append(_einzel_termin(ev, ring, cfg))
+                appointments[tag_isos[0]].append(_einzel_termin(ev, ring, cfg, registry))
             continue
 
         # PLAN-13/PLAN-14: Termin. Mehrtägig → eine Spanne, sonst je Tag.
@@ -241,11 +255,12 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
                 "label": ev.titel,
                 "ring": ring,
                 "person": ev.person,
+                "personen": _personen_rings(ev.personen, registry),
                 "icon": termin_icon(ev.titel, cfg),
                 "event_id": ev.id,
             })
         else:
-            appointments[tag_isos[0]].append(_einzel_termin(ev, ring, cfg))
+            appointments[tag_isos[0]].append(_einzel_termin(ev, ring, cfg, registry))
 
     return {
         "tage": tage,
@@ -256,22 +271,30 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
     }
 
 
-def _einzel_termin(ev, ring, config=None):
+def _einzel_termin(ev, ring, config=None, registry=None):
     """Ein Einzel-Termin-Eintrag der Termin-Leiste (PLAN-13).
 
     Der gemeinsame Append-Pfad für Kind-Termine und Nicht-Kind-Termine —
     beide bauen ihren Termin-Leisten-Eintrag identisch (CLAUDE.md §6, keine
     duplizierte Logik). Uhrzeit nur bei zeitgebundenen Events.
     `icon` ist nun eine ARASAAC-ID (E-PLAN-5 V1.2).
+
+    PLAN-19 V1.1: `personen` ist eine Liste von {person, ring}-Dicts für
+    bis zu zwei Avatare in der Termin-Leiste. `ring`/`person` bleiben für
+    Backward-Compat (Single-Person-Pfad, Aktivitäts-Slot-Kind-Termine).
     """
     uhrzeit = None
     if not ev.ganztags and ev.beginn is not None:
         uhrzeit = ev.beginn.strftime("%H:%M")
+    # PLAN-19 V1.1: Personen-Liste für zwei Avatare in der Termin-Leiste.
+    personen_rings = (_personen_rings(ev.personen, registry)
+                      if registry is not None else [])
     return {
         "time": uhrzeit,
         "label": ev.titel,
         "ring": ring,
         "person": ev.person,
+        "personen": personen_rings,
         "icon": termin_icon(ev.titel, config),
         "allday": ev.ganztags,
         "event_id": ev.id,
