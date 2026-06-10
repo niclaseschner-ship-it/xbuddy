@@ -1034,9 +1034,10 @@ def test_PLAN_29_arasaac_migration_template_kein_svg_icon_macro(
             "Template-Migration unvollständig?" % artefakt
         )
     # ARASAAC-URLs sind vorhanden (Schedule-Rail, Slot-Icons).
+    # act1/act2: Werft #578 Revision (Nic 2026-06-10) → Kalender 3071 statt Stern 2752.
     assert b"arasaac/37807.png" in html, "Schedule-Rail bring-Icon (37807) fehlt"
     assert b"arasaac/39520.png" in html, "Schedule-Rail pick-Icon (39520) fehlt"
-    assert b"arasaac/2752.png"  in html, "Schedule-Rail act-Icon (2752) fehlt"
+    assert b"arasaac/3071.png"  in html, "Schedule-Rail act-Icon (3071) fehlt — Revision Nic 2026-06-10"
     assert b"arasaac/2342.png"  in html, "Schedule-Rail cook-Icon (2342) fehlt"
     assert b"arasaac/2933.png"  in html, "Schedule-Rail bed-Icon (2933) fehlt"
 
@@ -3599,3 +3600,158 @@ def test_PLAN_19_render_probe_multi_person_event_in_beiden_slot_zeilen(demo_regi
     assert slot_paula["event_id"] == slot_neko["event_id"], (
         "act1 und act2 tragen unterschiedliche event_ids: %r vs %r"
         % (slot_paula["event_id"], slot_neko["event_id"]))
+
+
+# ============================================================
+#  AC5 — T642: Live-Befunde (Befund 1–3)
+# ============================================================
+
+def test_PLAN_6_schedule_rail_act_slots_zeigen_kalender_3071(
+        demo_config, demo_registry):
+    """AC5/AC1 — Schedule-Rail act1/act2 trägt Kalender-Icon 3071 (nicht Stern 2752).
+
+    Werft #578 Revision (Nic 2026-06-10): SLOT_ICON_ID['star'] = '3071'.
+    Das HTML der Wochen-View muss arasaac/3071.png für die act-Slots enthalten.
+    """
+    client = make_client(demo_config, demo_registry, FakeTransport())
+    r = client.get("/display/plan/woche")
+    assert r.status_code == 200
+    html = r.data
+    assert b"arasaac/3071.png" in html, (
+        "Schedule-Rail act-Icon: erwartet arasaac/3071.png (Kalender), "
+        "Werft #578 Revision Nic 2026-06-10 — Stern 2752 nicht mehr korrekt"
+    )
+    # Und der alte Stern-Icon darf im Rail-Kontext nicht mehr auftauchen
+    # (er könnte noch im Picker für einen anderen Eintrag sein, aber der
+    # Demo-Config-Katalog hat keinen Eintrag mit piktogramm=2752).
+    assert b"arasaac/2752.png" not in html, (
+        "Alter Stern-Icon (2752) noch im HTML — SLOT_ICON_ID-Revision unvollständig?"
+    )
+
+
+def test_PLAN_12_picker_zeigt_alle_aktivitaeten_aus_config(tmp_path, demo_registry):
+    """AC5/AC3 — Picker iteriert dynamisch über Config.aktivitaeten.
+
+    Eine Config mit 14 Einträgen (AKTIVITAETEN_V1-Form) → das gerenderte HTML
+    enthält 14 picker-tile-Buttons — keine hartcodierte 9er-Liste mehr.
+    """
+    cfg_path = tmp_path / "plan.json"
+    data = json.loads(json.dumps(DEMO_CONFIG))
+    data["db_datei"] = str(tmp_path / "plan.db")
+    # 14-einträger Katalog (AKTIVITAETEN_V1-Struktur).
+    data["aktivitaeten"] = [
+        {"art": "klettern",    "label": "Klettern",    "keywords": ["klettern"],  "piktogramm": "8226"},
+        {"art": "kreativ",     "label": "Kreativ",     "keywords": ["kreativ"],   "piktogramm": "11690"},
+        {"art": "schwimmen",   "label": "Schwimmen",   "keywords": ["schwimm"],   "piktogramm": "6568"},
+        {"art": "spielplatz",  "label": "Spielplatz",  "keywords": ["spielplatz"],"piktogramm": "2859"},
+        {"art": "musik",       "label": "Musik",       "keywords": ["musik"],     "piktogramm": "2746"},
+        {"art": "ausflug",     "label": "Ausflug",     "keywords": ["ausflug"],   "piktogramm": "4670"},
+        {"art": "geburtstag",  "label": "Geburtstag",  "keywords": ["geburts"],   "piktogramm": "3087"},
+        {"art": "verabredung", "label": "Verabredung", "keywords": ["verabredung"],"piktogramm": "2255"},
+        {"art": "waldgang",    "label": "Waldgang",    "keywords": ["wald"],      "piktogramm": "2666"},
+        {"art": "zahn",        "label": "Zahnarzt",    "keywords": ["zahn"],      "piktogramm": "11229"},
+        {"art": "ferien",      "label": "Ferien",      "keywords": ["ferien"],    "piktogramm": "3166"},
+        {"art": "treff",       "label": "Treffen",     "keywords": ["treff"],     "piktogramm": "6487"},
+        {"art": "garten",      "label": "Garten",      "keywords": ["garten"],    "piktogramm": "2434"},
+        {"art": "schule",      "label": "Schule",      "keywords": ["schule"],    "piktogramm": "3082"},
+    ]
+    cfg_path.write_text(json.dumps(data))
+    cfg = config_mod.resolve(str(cfg_path))
+    plan_main.configure(cfg, demo_registry, FakeTransport(),
+                        config_path=str(cfg_path))
+    plan_main.app.testing = True
+    client = plan_main.app.test_client()
+
+    r = client.get("/display/plan/woche")
+    assert r.status_code == 200
+    html = r.data.decode("utf-8")
+    # 14 picker-tile-Buttons — dynamisch aus Config.aktivitaeten, nicht hartcodiert.
+    anzahl = html.count('class="picker-tile"')
+    assert anzahl == 14, (
+        "Picker-Tiles erwartet 14 (alle Config.aktivitaeten), gefunden: %d — "
+        "Picker ist nicht dynamisch aus Config.aktivitaeten?" % anzahl
+    )
+
+
+def test_PLAN_12_picker_tint_fallback_fuer_unbekannte_art(tmp_path, demo_registry):
+    """AC5/AC3 — Picker-Tint-Fallback '#eeeeee' für unbekannte arts.
+
+    Ein Config-Eintrag 'yoga' (keine V1-art) → Picker-Kachel erscheint im HTML
+    mit dem Fallback-Tint '#eeeeee'. Bekannte V1-arts (z.B. 'klettern') erhalten
+    ihren definierten Tint '#d6ecc7'.
+    """
+    cfg_path = tmp_path / "plan.json"
+    data = json.loads(json.dumps(DEMO_CONFIG))
+    data["db_datei"] = str(tmp_path / "plan.db")
+    data["aktivitaeten"] = [
+        {"art": "klettern", "label": "Klettern", "keywords": ["klettern"], "piktogramm": "8226"},
+        {"art": "yoga",     "label": "Yoga",     "keywords": ["yoga"],     "piktogramm": "5301"},
+    ]
+    cfg_path.write_text(json.dumps(data))
+    cfg = config_mod.resolve(str(cfg_path))
+    plan_main.configure(cfg, demo_registry, FakeTransport(),
+                        config_path=str(cfg_path))
+    plan_main.app.testing = True
+    client = plan_main.app.test_client()
+
+    r = client.get("/display/plan/woche")
+    assert r.status_code == 200
+    html = r.data.decode("utf-8")
+    # yoga (unbekannte art) → Fallback-Tint '#eeeeee'.
+    assert "#eeeeee" in html, (
+        "Tint-Fallback '#eeeeee' fehlt im HTML — unbekannte art 'yoga' hat keinen Fallback?"
+    )
+    # klettern (V1-art) → V1-Tint '#d6ecc7'.
+    assert "#d6ecc7" in html, (
+        "V1-Tint '#d6ecc7' (klettern) fehlt im HTML"
+    )
+    # yoga-Piktogramm (5301) im Picker sichtbar.
+    assert "arasaac/5301.png" in html, (
+        "yoga-Piktogramm (5301) nicht im Picker-HTML"
+    )
+
+
+def test_PLAN_12_leerer_kinder_aktivitaets_slot_plus_symbol(
+        demo_config, demo_registry):
+    """AC5/AC2 — Leerer Kinder-Aktivitäts-Slot zeigt Plus-Symbol; voller Slot zeigt Chip.
+
+    Ohne Kalender-Event → act1-Slot ist leer → Plus-SVG im HTML.
+    Mit Klettern-Paula → act1-Slot ist gefüllt → activity-chip im HTML, kein Plus mehr.
+    """
+    # ── Leerer Kinder-Slot: Plus-Symbol erwartet ──────────────
+    client_leer = make_client(demo_config, demo_registry, FakeTransport())
+    r_leer = client_leer.get("/display/plan/woche")
+    assert r_leer.status_code == 200
+    html_leer = r_leer.data.decode("utf-8")
+    # Leere act1/act2 (Kinder-Slots) → Plus-SVG vorhanden.
+    assert "slot-plus" in html_leer, (
+        "Plus-Symbol (class='slot-plus') fehlt bei leerem Kinder-Aktivitäts-Slot"
+    )
+    # ── Voller Kinder-Slot: activity-chip statt Plus ───────────
+    heute = date(2026, 5, 20)
+    raw = [gcal_allday("k1", "Klettern Paula", heute.isoformat())]
+    client_voll = make_client(demo_config, demo_registry, FakeTransport(raw))
+    r_voll = client_voll.get("/display/plan/woche?ab=%s" % heute.isoformat())
+    assert r_voll.status_code == 200
+    html_voll = r_voll.data.decode("utf-8")
+    # Voller act1-Slot: activity-chip vorhanden.
+    assert "activity-chip" in html_voll, (
+        "activity-chip fehlt bei gefülltem Kinder-Aktivitäts-Slot"
+    )
+
+
+def test_PLAN_12_erwachsenen_slot_unveraendert(demo_config, demo_registry):
+    """AC5/AC2 — Backward-Compat: Erwachsenen-Slots bleiben unverändert.
+
+    Leere Erwachsenen-Slots tragen 'empty-face' (kein Plus-Symbol aus dem
+    Kinder-Slot-Pfad). Belegte Erwachsenen-Slots tragen das face-Div.
+    Das Plus-Symbol darf nicht in Erwachsenen-Slots auftauchen.
+    """
+    client = make_client(demo_config, demo_registry, FakeTransport())
+    r = client.get("/display/plan/woche")
+    assert r.status_code == 200
+    html = r.data.decode("utf-8")
+    # Leere Erwachsenen-Slots → empty-face (PLAN-7).
+    assert "empty-face" in html, (
+        "empty-face fehlt — Erwachsenen-Slots sollten empty-face tragen"
+    )
