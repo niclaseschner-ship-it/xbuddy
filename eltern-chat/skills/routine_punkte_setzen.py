@@ -31,6 +31,8 @@ Ausgang: Ergebnis-Tuple `(signal, daten)`:
   („hinzugefuegt",  {"id": <str>, "quelle": <str>})  — POST erfolgreich.
   („geloescht",     {"id": <str>})                   — DELETE erfolgreich.
   („neugeordnet",   {"count": <int>})                — PUT erfolgreich.
+  („gelesen",       {"default": […], "einmalig_heute": […],
+                    "text": <str>})                  — Lese-Antwort (V1.2).
   („icon_kandidaten", {"label": <str>, "kandidaten":  — ICONS-7 lieferte
                       [{id, url}, …]})                 Treffer; Skill legt
                                                        sie zur Wahl vor (RPS-4).
@@ -57,6 +59,7 @@ logger = logging.getLogger(__name__)
 SIGNAL_HINZUGEFUEGT      = "hinzugefuegt"
 SIGNAL_GELOESCHT         = "geloescht"
 SIGNAL_NEUGEORDNET       = "neugeordnet"
+SIGNAL_GELESEN           = "gelesen"          # V1.2: Lese-Antwort
 SIGNAL_ICON_KANDIDATEN   = "icon_kandidaten"
 SIGNAL_KEINE_ICONS       = "keine_icons"
 SIGNAL_ABGELEHNT         = "abgelehnt"
@@ -64,11 +67,12 @@ SIGNAL_GRENZE            = "grenze"
 SIGNAL_NICHT_ERREICHBAR  = "nicht_erreichbar"
 SIGNAL_NICHTS_ZU_TUN     = "nichts_zu_tun"
 
-# RPS-3: Operationen — V1.1, KEIN Umbenennen (Spec Z. 31-32).
+# RPS-3: Operationen — V1.2, KEIN Umbenennen (Spec Z. 31-32).
 AKTION_HINZUFUEGEN     = "hinzufuegen"      # dauerhaft (default)
 AKTION_EINMALIG        = "einmalig"          # nur für heute (ROUTINE-6)
 AKTION_LOESCHEN        = "loeschen"
 AKTION_NEU_ORDNEN      = "neu_ordnen"
+AKTION_LISTE           = "liste"             # V1.2: Lesen (EC-9: trigger-agnostisch)
 AKTION_ICON_SUCHEN     = "icon_suchen"       # RPS-4: ICONS-7-Suche ohne Schreiben
 
 # RPS-3 / RPS-4: Quellen, in die der Buddy schreibt.
@@ -80,6 +84,7 @@ def routine_punkte_setzen(*, aktion, routine_client, icon_client,
                           is_member_fn, from_user_id,
                           label=None, piktogramm=None,
                           item_id=None, items=None,
+                          item_name=None, ziel_position=None,
                           icon_stichwort=None, icon_max=3):
     """Routine-Punkte setzen — aufrufbare Funktion (RPS-1).
 
@@ -97,16 +102,24 @@ def routine_punkte_setzen(*, aktion, routine_client, icon_client,
       hinzufuegen / einmalig — `label`, `piktogramm` (ARASAAC-ID).
       loeschen               — `item_id`.
       neu_ordnen             — `items` (Liste {id, label, piktogramm}).
+      liste                  — (keine Parameter) Lesen, trigger-agnostisch (EC-9).
+      neu_ordnen mit Einzel-Verschieben — `item_name` + `ziel_position` (V1.2).
       icon_suchen            — `icon_stichwort`, optional `icon_max` (≤3).
 
     Ergebnis: (signal, daten) — siehe Modul-Docstring.
     """
     # RPS-2: Berechtigung — live geprüft, identisch zum RZS-/FSE-Muster.
     # Die Prüfung liegt **bei der Funktion** (E-RZS-1), nicht beim Trigger.
+    # Ausnahme: aktion=liste ist lesend (EC-9), aber wir prüfen dennoch
+    # Mitgliedschaft analog den anderen Aktionen (RPS-2 gilt für alle).
     if from_user_id is None or not is_member_fn(from_user_id):
         logger.info("routine_punkte_setzen: User %s nicht in Familien-Gruppe "
                     "— abgelehnt (RPS-2)", from_user_id)
         return SIGNAL_ABGELEHNT, {}
+
+    if aktion == AKTION_LISTE:
+        # V1.2: Lesen ist trigger-agnostisch (EC-9), kein propose→confirm.
+        return _lesen(routine_client)
 
     if aktion == AKTION_ICON_SUCHEN:
         return _icon_suchen(icon_client, icon_stichwort, icon_max)
@@ -121,6 +134,9 @@ def routine_punkte_setzen(*, aktion, routine_client, icon_client,
         return _loeschen(routine_client, item_id)
 
     if aktion == AKTION_NEU_ORDNEN:
+        # V1.2: Einzel-Verschieben via item_name + ziel_position (RPS-3).
+        if item_name is not None and ziel_position is not None:
+            return _einzel_verschieben(routine_client, item_name, ziel_position)
         return _neu_ordnen(routine_client, items)
 
     logger.warning("routine_punkte_setzen: unbekannte Aktion %r — nichts zu tun",
@@ -162,6 +178,129 @@ def _icon_suchen(icon_client, stichwort, max_treffer):
 
     return SIGNAL_ICON_KANDIDATEN, {"label": stichwort,
                                     "kandidaten": list(kandidaten)}
+
+
+# ============================================================
+#  RPS-3 V1.2 — GET /api/v1/routine/items (Lesen, EC-9)
+# ============================================================
+
+def _lesen(routine_client):
+    """RPS-3 V1.2: Aktuelle Items-Liste lesen (EC-9 — trigger-agnostisch).
+
+    Kein propose→confirm (E-RPS-1 betrifft nur Schreiben). Die Antwort
+    ist ein formatierter Text im Format aus RPS-3 V1.2:
+      „Dauerhaft: 1. Anziehen 👕 · 2. Frühstücken 🍞 · 3. Zähne putzen 🪥
+       · Heute zusätzlich: 1. Turnbeutel 🎒."
+
+    Liefert SIGNAL_GELESEN mit den Rohdaten (default/einmalig_heute) und
+    dem formatierten Text.
+    """
+    try:
+        daten = routine_client.get_items()
+    except RoutineClientError as e:
+        return _routine_fehler("GET", e)
+
+    default_items = daten.get("default") or []
+    einmalig_items = daten.get("einmalig_heute") or []
+
+    # Format: „Dauerhaft: 1. Label 🔣 · 2. … · Heute zusätzlich: 1. …"
+    teile = []
+    if default_items:
+        einzel = " · ".join(
+            "%d. %s %s" % (i + 1, item.get("label", ""),
+                           item.get("piktogramm", ""))
+            for i, item in enumerate(default_items)
+        )
+        teile.append("**Dauerhaft:** " + einzel)
+    else:
+        teile.append("**Dauerhaft:** (keine Punkte)")
+
+    if einmalig_items:
+        einzel = " · ".join(
+            "%d. %s %s" % (i + 1, item.get("label", ""),
+                           item.get("piktogramm", ""))
+            for i, item in enumerate(einmalig_items)
+        )
+        teile.append("**Heute zusätzlich:** " + einzel)
+
+    text = " · ".join(teile) + "."
+
+    logger.info("routine_punkte_setzen: Liste gelesen — %d default, %d einmalig",
+                len(default_items), len(einmalig_items))
+    return SIGNAL_GELESEN, {
+        "default": default_items,
+        "einmalig_heute": einmalig_items,
+        "text": text,
+    }
+
+
+# ============================================================
+#  RPS-3 V1.2 — Einzel-Verschieben (item_name → id intern auflösen)
+# ============================================================
+
+def _einzel_verschieben(routine_client, item_name, ziel_position):
+    """RPS-3 V1.2: Einzel-Verschieben — löst item_name→id intern auf.
+
+    Holt über GET /api/v1/routine/items die aktuelle default-Liste,
+    findet das Item per case-insensitivem Best-Match auf dem Label,
+    baut die neue geordnete Liste und schickt PUT.
+
+    Eltern sehen keine IDs (RPS-3 V1.2-Klausel). Bug-#553-Regression:
+    nicht die ID-Position wird neu gesetzt, sondern das Item mit dem
+    passenden Namen wird auf ziel_position (1-basiert) verschoben.
+    """
+    if not item_name or not str(item_name).strip():
+        return SIGNAL_NICHTS_ZU_TUN, {"reason": "kein item_name"}
+    try:
+        ziel_pos_int = int(ziel_position)
+    except (TypeError, ValueError):
+        return SIGNAL_NICHTS_ZU_TUN, {"reason": "ziel_position muss eine Ganzzahl sein"}
+
+    # GET aktuelle Liste (intern — Eltern sehen keine IDs)
+    try:
+        liste_daten = routine_client.get_items()
+    except RoutineClientError as e:
+        return _routine_fehler("GET", e)
+
+    default_items = list(liste_daten.get("default") or [])
+    if not default_items:
+        return SIGNAL_NICHTS_ZU_TUN, {"reason": "keine default-Items vorhanden"}
+
+    # item_name→id: case-insensitiver Best-Match auf label
+    name_lower = str(item_name).strip().lower()
+    gefundenes = None
+    for item in default_items:
+        if str(item.get("label", "")).strip().lower() == name_lower:
+            gefundenes = item
+            break
+    # Fallback: enthaltener Teilstring
+    if gefundenes is None:
+        for item in default_items:
+            if name_lower in str(item.get("label", "")).strip().lower():
+                gefundenes = item
+                break
+
+    if gefundenes is None:
+        return SIGNAL_NICHTS_ZU_TUN, {
+            "reason": "Item mit Name %r nicht in der Liste gefunden" % item_name}
+
+    # Einzel-Verschieben: gefundenes Item aus der Liste nehmen,
+    # an ziel_position (1-basiert) einsetzen.
+    # ziel_pos_int klemmen auf [1, len(default_items)]
+    neue_pos_0 = max(0, min(ziel_pos_int - 1, len(default_items) - 1))
+    neue_liste = [x for x in default_items if x.get("id") != gefundenes.get("id")]
+    neue_liste.insert(neue_pos_0, gefundenes)
+
+    try:
+        response = routine_client.replace_default_items(neue_liste)
+    except RoutineClientError as e:
+        return _routine_fehler("PUT", e)
+
+    count = response.get("count", len(neue_liste))
+    logger.info("routine_punkte_setzen: Einzel-Verschieben %r → Position %d "
+                "(id=%s, count=%d)",
+                item_name, ziel_pos_int, gefundenes.get("id"), count)
+    return SIGNAL_NEUGEORDNET, {"count": count}
 
 
 # ============================================================

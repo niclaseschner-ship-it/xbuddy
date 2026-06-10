@@ -32,8 +32,10 @@ from skills.routine_punkte_setzen import (
     AKTION_EINMALIG,
     AKTION_HINZUFUEGEN,
     AKTION_ICON_SUCHEN,
+    AKTION_LISTE,
     AKTION_LOESCHEN,
     AKTION_NEU_ORDNEN,
+    SIGNAL_GELESEN,
 )
 
 logger = logging.getLogger(__name__)
@@ -113,13 +115,13 @@ class RoutinePunkteSetzenTask(WriteTask):
             name="routine_punkte_setzen",
             description=(
                 "Setzt Punkte der Morgen-Routine: einen Punkt dauerhaft "
-                "hinzufügen, nur für heute hinzufügen, entfernen oder die "
-                "Reihenfolge ändern. Aufrufen, wenn jemand sagt »füg "
-                "‹Zähne putzen› als Routine-Punkt hinzu«, »nimm den Punkt "
-                "‹Mütze› raus«, »tausch Reihenfolge von Mütze und Jacke«, "
-                "»Turnbeutel mitnehmen für heute« oder Ähnliches. "
-                "Umbenennen wird in V1.1 NICHT unterstützt — stattdessen "
-                "den alten Punkt löschen und einen neuen anlegen.\n\n"
+                "hinzufügen, nur für heute hinzufügen, entfernen, die "
+                "aktuelle Liste lesen oder einen Punkt verschieben. "
+                "Aufrufen, wenn jemand sagt »füg ‹Zähne putzen› als "
+                "Routine-Punkt hinzu«, »nimm den Punkt ‹Mütze› raus«, "
+                "»zeig mir die Routine-Punkte«, »Zähne putzen nach "
+                "Position 1«, »Turnbeutel mitnehmen für heute« oder "
+                "Ähnliches. Umbenennen wird in V1.2 NICHT unterstützt.\n\n"
                 "Vor einem ‹hinzufuegen›/‹einmalig›-Aufruf muss ein "
                 "Piktogramm gewählt sein. Dafür den Task ZUERST mit "
                 "{aktion: 'icon_suchen', icon_stichwort: '<wort>'} aufrufen "
@@ -127,7 +129,10 @@ class RoutinePunkteSetzenTask(WriteTask):
                 "Mapping der Kandidaten-Bilder (1 = <id>, 2 = <id>, …). "
                 "Dann den Task ein zweites Mal aufrufen mit "
                 "{aktion: 'hinzufuegen', label: '<text>', "
-                "piktogramm: '<id-aus-vorschlag>'}."),
+                "piktogramm: '<id-aus-vorschlag>'}.\n\n"
+                "Für Einzel-Verschieben: {aktion: 'neu_ordnen', "
+                "item_name: '<Name>', ziel_position: <1-basiert>}. "
+                "IDs werden intern aufgelöst — Eltern nennen nur den Namen."),
             parameters={
                 "type": "object",
                 "properties": {
@@ -138,6 +143,7 @@ class RoutinePunkteSetzenTask(WriteTask):
                             AKTION_EINMALIG,
                             AKTION_LOESCHEN,
                             AKTION_NEU_ORDNEN,
+                            AKTION_LISTE,
                             AKTION_ICON_SUCHEN,
                         ],
                         "description": (
@@ -145,7 +151,10 @@ class RoutinePunkteSetzenTask(WriteTask):
                             "in die Punkt-Liste; 'einmalig' = nur für "
                             "heute (morgen wieder weg); 'loeschen' = aus "
                             "der Liste nehmen; 'neu_ordnen' = die Punkt-"
-                            "Reihenfolge setzen; 'icon_suchen' = "
+                            "Reihenfolge setzen (mit item_name+ziel_position "
+                            "für Einzel-Verschieben oder mit items-Liste); "
+                            "'liste' = aktuelle Liste lesen (direkte Antwort, "
+                            "kein propose→confirm); 'icon_suchen' = "
                             "Piktogramm-Kandidaten zu einem Wort suchen "
                             "(lesend, ohne Schreiben)."),
                     },
@@ -175,10 +184,25 @@ class RoutinePunkteSetzenTask(WriteTask):
                         "type": "array",
                         "description": (
                             "Die neue geordnete Liste der dauerhaften "
-                            "Punkte bei 'neu_ordnen'. Jeder Eintrag ist "
-                            "{id, label, piktogramm}. Reihenfolge = "
-                            "Anzeige-Reihenfolge."),
+                            "Punkte bei 'neu_ordnen' (Bulk-Form). Jeder "
+                            "Eintrag ist {id, label, piktogramm}. "
+                            "Für Einzel-Verschieben stattdessen "
+                            "item_name + ziel_position verwenden."),
                         "items": {"type": "object"},
+                    },
+                    "item_name": {
+                        "type": "string",
+                        "description": (
+                            "Name des zu verschiebenden Punktes bei "
+                            "'neu_ordnen' (Einzel-Verschieben, V1.2). "
+                            "Z. B. 'Zähne putzen'. Wird intern zur id "
+                            "aufgelöst — Eltern nennen nur den Namen."),
+                    },
+                    "ziel_position": {
+                        "type": "integer",
+                        "description": (
+                            "Ziel-Position (1-basiert) für 'neu_ordnen' "
+                            "Einzel-Verschieben. 1 = ganz oben."),
                     },
                     "icon_stichwort": {
                         "type": "string",
@@ -253,12 +277,25 @@ class RoutinePunkteSetzenTask(WriteTask):
             return Proposal(summary)
 
         if aktion == AKTION_NEU_ORDNEN:
-            items = args.get("items") or []
-            n = len(items) if isinstance(items, list) else 0
-            summary = (
-                f"Die Routine-Punkt-Reihenfolge neu setzen "
-                f"({n} Einträge) — beim nächsten Öffnen in der neuen "
-                "Reihenfolge sichtbar?")
+            item_name = (args.get("item_name") or "").strip()
+            ziel_pos = args.get("ziel_position")
+            if item_name and ziel_pos is not None:
+                summary = (
+                    f"»{item_name}« auf Position {ziel_pos} verschieben "
+                    "— beim nächsten Öffnen in der neuen Reihenfolge sichtbar?")
+            else:
+                items = args.get("items") or []
+                n = len(items) if isinstance(items, list) else 0
+                summary = (
+                    f"Die Routine-Punkt-Reihenfolge neu setzen "
+                    f"({n} Einträge) — beim nächsten Öffnen in der neuen "
+                    "Reihenfolge sichtbar?")
+            return Proposal(summary)
+
+        if aktion == AKTION_LISTE:
+            # V1.2: liste ist lesend (EC-9) — läuft NICHT über propose→confirm.
+            # Das propose-Gate nennt es ehrlich; execute liefert direkte Antwort.
+            summary = "Aktuelle Routine-Punkte lesen (nur lesend, kein Schreiben)."
             return Proposal(summary)
 
         if aktion == AKTION_ICON_SUCHEN:
@@ -300,6 +337,8 @@ class RoutinePunkteSetzenTask(WriteTask):
             piktogramm=args.get("piktogramm"),
             item_id=args.get("item_id"),
             items=args.get("items"),
+            item_name=args.get("item_name"),
+            ziel_position=args.get("ziel_position"),
             icon_stichwort=args.get("icon_stichwort"),
         )
 
@@ -348,6 +387,10 @@ def _quittung_fuer(signal, daten, aktion=""):
     if signal == rps_mod.SIGNAL_NEUGEORDNET:
         return _QUITTUNG_NEUGEORDNET.format(count=daten.get("count", 0))
 
+    if signal == SIGNAL_GELESEN:
+        # V1.2 (RPS-3): Lese-Antwort ist der formatierte Text.
+        return daten.get("text", "Routine-Punkte gelesen.")
+
     if signal == rps_mod.SIGNAL_ICON_KANDIDATEN:
         # RPS-4 / TASK-10b: die Quittung trägt das Mapping — das LLM sieht
         # die Positionen und IDs und postet das an die Familie. Die Bilder
@@ -393,5 +436,7 @@ def _quittung_fuer(signal, daten, aktion=""):
         return _QUITTUNG_NICHTS_ZU_TUN_ITEMS
     if aktion == AKTION_ICON_SUCHEN:
         return _QUITTUNG_NICHTS_ZU_TUN_STICHWORT
+    if aktion == AKTION_LISTE:
+        return "Die Routine-Punkte konnten nicht gelesen werden — Buddy nicht erreichbar."
     return ("Ich brauche eine Aktion (»hinzufuegen«, »einmalig«, "
-            "»loeschen«, »neu_ordnen« oder »icon_suchen«).")
+            "»loeschen«, »neu_ordnen«, »liste« oder »icon_suchen«).")

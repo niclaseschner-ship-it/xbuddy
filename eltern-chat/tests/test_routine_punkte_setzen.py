@@ -17,6 +17,11 @@ Pflicht-Tests (Spec RPS-7 Z. 103-117, AC2/AC3/AC4 des Contracts):
   (RPS-4 / E-RPS-2).
 - Buddy-4xx → kein Schreiben, ehrliche Grenze (RPS-5, EC-7).
 - APP-3: Skill ruft die API, nicht die Datei.
+
+V1.2-Tests (AC2/AC3/AC4, #469):
+- AC2: aktion=liste formatiert korrekt (Dauerhaft/Heute zusätzlich).
+- AC3: Einzel-Verschieben löst item_name→id auf, #553-Regression.
+- AC4: aktion=liste ist trigger-agnostisch (kein propose→confirm).
 """
 
 import contextlib
@@ -31,9 +36,11 @@ from skills.routine_punkte_setzen import (
     AKTION_EINMALIG,
     AKTION_HINZUFUEGEN,
     AKTION_ICON_SUCHEN,
+    AKTION_LISTE,
     AKTION_LOESCHEN,
     AKTION_NEU_ORDNEN,
     SIGNAL_ABGELEHNT,
+    SIGNAL_GELESEN,
     SIGNAL_GELOESCHT,
     SIGNAL_GRENZE,
     SIGNAL_HINZUGEFUEGT,
@@ -56,16 +63,21 @@ class FakeRoutineClient:
 
     def __init__(self, add_response=None, add_error=None,
                  delete_response=None, delete_error=None,
-                 replace_response=None, replace_error=None):
+                 replace_response=None, replace_error=None,
+                 get_items_response=None, get_items_error=None):
         self.add_calls = []
         self.delete_calls = []
         self.replace_calls = []
+        self.get_items_calls = []
         self._add_response = add_response or {"id": "neu-id"}
         self._add_error = add_error
         self._delete_response = delete_response or {"id": "geloescht-id"}
         self._delete_error = delete_error
         self._replace_response = replace_response or {"count": 0}
         self._replace_error = replace_error
+        self._get_items_response = get_items_response or {
+            "default": [], "einmalig_heute": []}
+        self._get_items_error = get_items_error
 
     def add_item(self, quelle, label, piktogramm):
         self.add_calls.append({
@@ -85,6 +97,12 @@ class FakeRoutineClient:
         if self._replace_error is not None:
             raise self._replace_error
         return dict(self._replace_response)
+
+    def get_items(self):
+        self.get_items_calls.append(True)
+        if self._get_items_error is not None:
+            raise self._get_items_error
+        return dict(self._get_items_response)
 
 
 class FakeIconClient:
@@ -343,6 +361,425 @@ def test_RPS3_neu_ordnen_ohne_items_nichts_zu_tun():
     )
     assert signal == SIGNAL_NICHTS_ZU_TUN
     assert rc.replace_calls == []
+
+
+# ============================================================
+#  RPS-3 V1.2 — AC2: aktion=liste formatiert korrekte Antwort
+# ============================================================
+
+def test_AC2_liste_signal_gelesen():
+    """AC2: aktion=liste liefert SIGNAL_GELESEN (V1.2, RPS-3)."""
+    rc = FakeRoutineClient(get_items_response={
+        "default": [
+            {"id": "anziehen", "label": "Anziehen", "piktogramm": "👕"},
+            {"id": "fruehstueck", "label": "Frühstücken", "piktogramm": "🍞"},
+            {"id": "zaehne-putzen", "label": "Zähne putzen", "piktogramm": "🪥"},
+        ],
+        "einmalig_heute": [],
+    })
+
+    signal, daten = routine_punkte_setzen(
+        aktion=AKTION_LISTE,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+    )
+
+    assert signal == SIGNAL_GELESEN
+    assert len(daten["default"]) == 3
+    assert daten["einmalig_heute"] == []
+
+
+def test_AC2_liste_format_dauerhaft():
+    """AC2: Lese-Antwort enthält 'Dauerhaft:' mit nummerierten Punkten +
+    Piktogramm (RPS-3 V1.2 Beispiel)."""
+    rc = FakeRoutineClient(get_items_response={
+        "default": [
+            {"id": "anziehen", "label": "Anziehen", "piktogramm": "👕"},
+            {"id": "fruehstueck", "label": "Frühstücken", "piktogramm": "🍞"},
+            {"id": "zaehne-putzen", "label": "Zähne putzen", "piktogramm": "🪥"},
+        ],
+        "einmalig_heute": [],
+    })
+
+    _signal, daten = routine_punkte_setzen(
+        aktion=AKTION_LISTE,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+    )
+
+    text = daten["text"]
+    assert "Dauerhaft" in text
+    assert "1. Anziehen" in text
+    assert "2. Frühstücken" in text
+    assert "3. Zähne putzen" in text
+    assert "👕" in text
+    assert "🍞" in text
+    assert "🪥" in text
+
+
+def test_AC2_liste_format_mit_einmalig():
+    """AC2: Lese-Antwort enthält 'Heute zusätzlich' wenn einmalig_heute nicht leer."""
+    rc = FakeRoutineClient(get_items_response={
+        "default": [
+            {"id": "anziehen", "label": "Anziehen", "piktogramm": "👕"},
+        ],
+        "einmalig_heute": [
+            {"id": "einmalig:turnbeutel-mit", "label": "Turnbeutel", "piktogramm": "🎒"},
+        ],
+    })
+
+    _signal, daten = routine_punkte_setzen(
+        aktion=AKTION_LISTE,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+    )
+
+    text = daten["text"]
+    assert "Heute zusätzlich" in text
+    assert "1. Turnbeutel" in text
+    assert "🎒" in text
+
+
+def test_AC2_liste_keine_einmalig_kein_heute_zusaetzlich():
+    """AC2: 'Heute zusätzlich' erscheint NICHT wenn einmalig_heute leer."""
+    rc = FakeRoutineClient(get_items_response={
+        "default": [{"id": "a", "label": "A", "piktogramm": "1"}],
+        "einmalig_heute": [],
+    })
+
+    _signal, daten = routine_punkte_setzen(
+        aktion=AKTION_LISTE,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+    )
+
+    assert "Heute zusätzlich" not in daten["text"]
+
+
+def test_AC2_liste_ruft_get_items_auf():
+    """AC2: aktion=liste ruft routine_client.get_items() auf."""
+    rc = FakeRoutineClient(get_items_response={"default": [], "einmalig_heute": []})
+    routine_punkte_setzen(
+        aktion=AKTION_LISTE,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+    )
+    assert len(rc.get_items_calls) == 1, "get_items() muss genau einmal aufgerufen werden"
+
+
+def test_AC2_liste_buddy_nicht_erreichbar():
+    """AC2: get_items() wirft RoutineClientError → SIGNAL_NICHT_ERREICHBAR."""
+    rc = FakeRoutineClient(get_items_error=RoutineClientError(
+        "Routine-Buddy nicht erreichbar"))
+
+    signal, _ = routine_punkte_setzen(
+        aktion=AKTION_LISTE,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+    )
+    assert signal == SIGNAL_NICHT_ERREICHBAR
+
+
+# ============================================================
+#  RPS-3 V1.2 — AC3: Einzel-Verschieben + #553-Regression
+# ============================================================
+
+_MOCK_LISTE_553 = [
+    {"id": "apfel", "label": "Apfel", "piktogramm": "🍎"},
+    {"id": "fruehstueck", "label": "Frühstück", "piktogramm": "🍞"},
+    {"id": "zaehne-putzen", "label": "Zähne putzen", "piktogramm": "🪥"},
+]
+"""#553-Regressions-Liste: ['Apfel', 'Frühstück', 'Zähne putzen']
+Reorder 'Zähne putzen nach Position 1' muss → ['Zähne putzen', 'Apfel', 'Frühstück']
+(NICHT ['Zähne putzen', 'Frühstück', 'Apfel'] — das wäre der alte Bug).
+"""
+
+
+def test_AC3_553_regression_zaehne_nach_position_1():
+    """AC3 / #553-Regression: 'Zähne putzen nach Position 1' —
+    MUSS 'Zähne putzen' auf Position 1 setzen, NICHT das Item das vorher
+    auf Position 1 stand (Apfel) an falscher Stelle landen lassen.
+
+    Erwartete Reihenfolge: ['Zähne putzen', 'Apfel', 'Frühstück']
+    Bug-553-Reihenfolge: ['Zähne putzen', 'Frühstück', 'Apfel'] — strukturell falsch.
+    """
+    replace_calls = []
+
+    class FakeRCMitCapture(FakeRoutineClient):
+        def replace_default_items(self, items):
+            replace_calls.append(list(items))
+            return {"count": len(items)}
+
+    rc = FakeRCMitCapture(get_items_response={
+        "default": list(_MOCK_LISTE_553),
+        "einmalig_heute": [],
+    })
+
+    signal, _daten = routine_punkte_setzen(
+        aktion=AKTION_NEU_ORDNEN,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        item_name="Zähne putzen",
+        ziel_position=1,
+    )
+
+    assert signal == SIGNAL_NEUGEORDNET
+    assert len(replace_calls) == 1
+
+    neue_liste = replace_calls[0]
+    assert len(neue_liste) == 3
+
+    # Kritische Prüfung: Zähne putzen MUSS auf Position 1 sein
+    assert neue_liste[0]["id"] == "zaehne-putzen", (
+        "Zähne putzen muss auf Position 1 sein — #553-Regression")
+
+    # Und NICHT der alte Bug: Position 1 war 'Apfel', nicht 'Frühstück' danach
+    assert neue_liste[1]["id"] == "apfel", (
+        "Apfel muss auf Position 2 stehen — #553-Regression (war vorher Position 1)")
+    assert neue_liste[2]["id"] == "fruehstueck", (
+        "Frühstück muss auf Position 3 stehen — #553-Regression")
+
+
+def test_AC3_einzel_verschieben_mitte_nach_hinten():
+    """AC3: Einzel-Verschieben von Position 1 nach Position 3."""
+    rc = FakeRoutineClient(
+        get_items_response={
+            "default": [
+                {"id": "a", "label": "A", "piktogramm": "1"},
+                {"id": "b", "label": "B", "piktogramm": "2"},
+                {"id": "c", "label": "C", "piktogramm": "3"},
+            ],
+            "einmalig_heute": [],
+        },
+        replace_response={"count": 3},
+    )
+
+    signal, _ = routine_punkte_setzen(
+        aktion=AKTION_NEU_ORDNEN,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        item_name="A",
+        ziel_position=3,
+    )
+
+    assert signal == SIGNAL_NEUGEORDNET
+    assert len(rc.replace_calls) == 1
+    neue_liste = rc.replace_calls[0]
+    assert neue_liste[0]["id"] == "b"
+    assert neue_liste[1]["id"] == "c"
+    assert neue_liste[2]["id"] == "a"
+
+
+def test_AC3_einzel_verschieben_case_insensitive():
+    """AC3: item_name-Matching ist case-insensitiv."""
+    rc = FakeRoutineClient(
+        get_items_response={
+            "default": [
+                {"id": "zaehne-putzen", "label": "Zähne putzen", "piktogramm": "🪥"},
+                {"id": "anziehen", "label": "Anziehen", "piktogramm": "👕"},
+            ],
+            "einmalig_heute": [],
+        },
+        replace_response={"count": 2},
+    )
+
+    signal, _ = routine_punkte_setzen(
+        aktion=AKTION_NEU_ORDNEN,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        item_name="ZÄHNE PUTZEN",  # Großbuchstaben
+        ziel_position=2,
+    )
+
+    assert signal == SIGNAL_NEUGEORDNET
+    neue_liste = rc.replace_calls[0]
+    assert neue_liste[1]["id"] == "zaehne-putzen"
+
+
+def test_AC3_einzel_verschieben_item_nicht_gefunden():
+    """AC3: item_name nicht in der Liste → SIGNAL_NICHTS_ZU_TUN."""
+    rc = FakeRoutineClient(
+        get_items_response={
+            "default": [
+                {"id": "anziehen", "label": "Anziehen", "piktogramm": "👕"},
+            ],
+            "einmalig_heute": [],
+        },
+    )
+
+    signal, _daten = routine_punkte_setzen(
+        aktion=AKTION_NEU_ORDNEN,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        item_name="Nicht vorhanden",
+        ziel_position=1,
+    )
+
+    assert signal == SIGNAL_NICHTS_ZU_TUN
+    assert rc.replace_calls == [], "Kein PUT wenn Item nicht gefunden"
+
+
+def test_AC3_einzel_verschieben_ids_nicht_sichtbar_fuer_eltern():
+    """AC3: Eltern sehen keine IDs — der Skill löst item_name intern auf.
+
+    Smoke-Test: die Funktion bekommt item_name (kein item_id),
+    und schickt PUT mit der aufgelösten id — Eltern mussten nie eine ID nennen.
+    """
+    rc = FakeRoutineClient(
+        get_items_response={
+            "default": [
+                {"id": "intern-id-xyz", "label": "Mütze", "piktogramm": "🧢"},
+            ],
+            "einmalig_heute": [],
+        },
+        replace_response={"count": 1},
+    )
+
+    signal, _ = routine_punkte_setzen(
+        aktion=AKTION_NEU_ORDNEN,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        item_name="Mütze",  # kein item_id — der Skill löst intern auf
+        ziel_position=1,
+    )
+
+    assert signal == SIGNAL_NEUGEORDNET
+    # Der PUT enthält die aufgelöste id, nicht den Namen
+    assert rc.replace_calls[0][0]["id"] == "intern-id-xyz"
+
+
+def test_AC3_einzel_verschieben_get_items_aufgerufen():
+    """AC3: Einzel-Verschieben holt die Liste intern über get_items()."""
+    rc = FakeRoutineClient(
+        get_items_response={
+            "default": [
+                {"id": "a", "label": "A", "piktogramm": "1"},
+                {"id": "b", "label": "B", "piktogramm": "2"},
+            ],
+            "einmalig_heute": [],
+        },
+        replace_response={"count": 2},
+    )
+
+    routine_punkte_setzen(
+        aktion=AKTION_NEU_ORDNEN,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        item_name="B",
+        ziel_position=1,
+    )
+
+    assert len(rc.get_items_calls) == 1, (
+        "get_items() muss für Einzel-Verschieben intern aufgerufen werden")
+
+
+# ============================================================
+#  RPS-3 V1.2 — AC4: aktion=liste ist trigger-agnostisch (kein propose→confirm)
+# ============================================================
+
+def test_AC4_liste_ist_trigger_agnostisch_direkte_antwort():
+    """AC4: aktion=liste antwortet direkt, ruft keinen confirm-Tool-Call.
+
+    Die Funktion routine_punkte_setzen mit aktion=liste gibt SIGNAL_GELESEN
+    zurück — kein Proposal, kein propose-Schritt. Lesen folgt NICHT dem
+    propose→confirm-Muster (E-RPS-1 betrifft nur Schreiben, EC-9).
+    """
+    rc = FakeRoutineClient(get_items_response={
+        "default": [{"id": "a", "label": "A", "piktogramm": "1"}],
+        "einmalig_heute": [],
+    })
+
+    signal, _daten = routine_punkte_setzen(
+        aktion=AKTION_LISTE,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+    )
+
+    # Signal ist GELESEN, kein Proposal-Objekt
+    assert signal == SIGNAL_GELESEN
+    # Kein Schreiben
+    assert rc.add_calls == []
+    assert rc.replace_calls == []
+    assert rc.delete_calls == []
+
+
+def test_AC4_task_execute_liste_gibt_text_direkt_zurueck():
+    """AC4: Task.execute(aktion=liste) gibt den formatierten Text direkt zurück —
+    KEIN Proposal, kein separater confirm-Schritt (E-RPS-1/EC-9)."""
+    rc = FakeRoutineClient(get_items_response={
+        "default": [
+            {"id": "anziehen", "label": "Anziehen", "piktogramm": "👕"},
+            {"id": "zaehne-putzen", "label": "Zähne putzen", "piktogramm": "🪥"},
+        ],
+        "einmalig_heute": [],
+    })
+    task = RoutinePunkteSetzenTask(
+        tg=FakeTelegram(),
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        family_group_chat_id_getter=lambda: 200,
+        is_member_fn=_immer_mitglied,
+    )
+    ctx = TurnContext(chat_id=42, from_user_id=7, private_chat_id=42)
+
+    quittung = task.execute({"aktion": AKTION_LISTE}, ctx)
+
+    # Keine Proposal-Instanz — String-Quittung mit dem formatierten Text
+    assert isinstance(quittung, str), "execute(liste) muss String zurückgeben"
+    assert "Dauerhaft" in quittung
+    assert "Anziehen" in quittung
+    assert "Zähne putzen" in quittung
+    # Kein Schreiben
+    assert rc.add_calls == []
+
+
+def test_AC4_liste_kein_propose_confirm_durch_signal():
+    """AC4 struktureller Nachweis: aktion=liste kommt NICHT über den
+    propose→confirm-Pfad — die Funktion dispatcht direkt zu _lesen(),
+    das SIGNAL_GELESEN zurückgibt (kein SIGNAL_HINZUGEFUEGT, kein Schreiben).
+    """
+    rc = FakeRoutineClient(get_items_response={
+        "default": [], "einmalig_heute": []})
+
+    signal, _ = routine_punkte_setzen(
+        aktion=AKTION_LISTE,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+    )
+
+    # SIGNAL_GELESEN ist das Lese-Signal — kein Schreib-Signal
+    assert signal == SIGNAL_GELESEN
+    assert signal != SIGNAL_HINZUGEFUEGT
+    assert signal != SIGNAL_NEUGEORDNET
+    assert signal != SIGNAL_GELOESCHT
 
 
 # ============================================================
@@ -919,8 +1356,8 @@ def test_RPS7_entry_path_via_config_naht():
 #  Spec-Drift-Probe (Watchdog-Linse 1): KEIN Umbenennen
 # ============================================================
 
-def test_SPEC_kein_umbenennen_in_v11():
-    """Spec RPS Z. 31-32 / Z. 62: Umbenennen ist V1.1 explizit out-of-scope.
+def test_SPEC_kein_umbenennen_in_v12():
+    """Spec RPS Z. 31-32 / Z. 62: Umbenennen ist V1.2 explizit out-of-scope.
 
     Die Aktions-Konstanten dürfen kein 'umbenennen' enthalten (E-RPS-1 — die
     Spec ist die Wahrheit; Contract-Drift wurde bei Implementation
@@ -929,7 +1366,19 @@ def test_SPEC_kein_umbenennen_in_v11():
     from skills import routine_punkte_setzen as rps
     aktionen = {
         rps.AKTION_HINZUFUEGEN, rps.AKTION_EINMALIG,
-        rps.AKTION_LOESCHEN, rps.AKTION_NEU_ORDNEN, rps.AKTION_ICON_SUCHEN,
+        rps.AKTION_LOESCHEN, rps.AKTION_NEU_ORDNEN,
+        rps.AKTION_LISTE, rps.AKTION_ICON_SUCHEN,
     }
     assert "umbenennen" not in aktionen
     assert "rename" not in aktionen
+
+
+# ============================================================
+#  V1.2: Neue Konstanten sind vorhanden
+# ============================================================
+
+def test_V12_konstanten_vorhanden():
+    """V1.2: AKTION_LISTE und SIGNAL_GELESEN sind exportiert."""
+    from skills import routine_punkte_setzen as rps
+    assert rps.AKTION_LISTE == "liste"
+    assert rps.SIGNAL_GELESEN == "gelesen"
