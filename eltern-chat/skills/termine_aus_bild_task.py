@@ -20,6 +20,7 @@ import contextlib
 import logging
 from dataclasses import dataclass
 
+from authz import MEMBER_STATUSES
 from private_chat_session import PrivateChatSession
 from tasks import Proposal, WriteTask, is_from_private_chat
 
@@ -195,8 +196,7 @@ class TermineAusBildTask(WriteTask):
                 if not _fgcid:
                     return False
                 member = _tg.get_chat_member(_fgcid, uid)
-                return member is not None and member.get("status") in (
-                    "creator", "administrator", "member")
+                return member is not None and member.get("status") in MEMBER_STATUSES
 
         typing_fn = make_typing_fn(tg, private_chat_id)
 

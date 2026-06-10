@@ -15,14 +15,9 @@ Bestätigung selbst liegt außerhalb dieses Moduls und außerhalb des Agent-Loop
 
 from dataclasses import dataclass
 
+from authz import MEMBER_STATUSES
 from hooks import HookContext, HookFailure, summarize_failures
 from model import READ, WRITE, TaskDef
-
-# TASK-7 / Closure-Helper: Gruppen-Berechtigung live prüfen
-# _make_is_member_fn erzeugt eine is_member_fn-Closure, die Telegram-Gruppen-
-# Mitgliedschaft prüft. fgcid_getter MUSS eine Funktion sein (z.B.
-# lambda: cfg.get("...")), damit der Wert SPÄT evaluiert wird — Reload-Safety.
-_GROUP_MEMBER_STATES = ("creator", "administrator", "member")
 
 
 def _make_is_member_fn(tg, fgcid_getter):
@@ -44,7 +39,7 @@ def _make_is_member_fn(tg, fgcid_getter):
         if not fgcid:
             return False
         member = tg.get_chat_member(fgcid, user_id)
-        return member is not None and member.get("status") in _GROUP_MEMBER_STATES
+        return member is not None and member.get("status") in MEMBER_STATUSES
     return _is_member
 
 
