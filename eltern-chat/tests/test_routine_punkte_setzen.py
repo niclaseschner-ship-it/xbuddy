@@ -5,7 +5,7 @@ Jede Anforderung der Spec mit Code-Verhalten hat einen automatisierten Test
 (RPS-7, CLAUDE.md §6). Routine-Buddy, Router-Icon-Suche und Telegram sind
 durch kontrollierte Doppelungen ersetzt — die Tests laufen ohne Netz (EC-17).
 
-Pflicht-Tests (Spec RPS-7 Z. 103-117, AC2/AC3/AC4 des Contracts):
+Pflicht-Tests (Spec RPS-7 Z. 103-117):
 - Katalog enthält RPS genau dann, wenn alle DREI Abhängigkeiten gesetzt sind
   (routine_origin_url, icon_origin_url, family_group_chat_id_getter).
 - Nicht-Mitglied → Ablehnung, kein Schreiben (RPS-2).
@@ -18,10 +18,12 @@ Pflicht-Tests (Spec RPS-7 Z. 103-117, AC2/AC3/AC4 des Contracts):
 - Buddy-4xx → kein Schreiben, ehrliche Grenze (RPS-5, EC-7).
 - APP-3: Skill ruft die API, nicht die Datei.
 
-V1.2-Tests (AC2/AC3/AC4, #469):
-- AC2: aktion=liste formatiert korrekt (Dauerhaft/Heute zusätzlich).
+V1.2-Tests (AC3, #469, #553-Regression):
 - AC3: Einzel-Verschieben löst item_name→id auf, #553-Regression.
-- AC4: aktion=liste ist trigger-agnostisch (kein propose→confirm).
+
+Lese-Tests (AC1/AC2/AC4) sind in test_routine_punkte_lesen.py und
+test_routine_punkte_lesen_task.py ausgegliedert (Lego-Trennung nach Genre,
+EC-9 vs. EC-10).
 """
 
 import contextlib
@@ -36,11 +38,9 @@ from skills.routine_punkte_setzen import (
     AKTION_EINMALIG,
     AKTION_HINZUFUEGEN,
     AKTION_ICON_SUCHEN,
-    AKTION_LISTE,
     AKTION_LOESCHEN,
     AKTION_NEU_ORDNEN,
     SIGNAL_ABGELEHNT,
-    SIGNAL_GELESEN,
     SIGNAL_GELOESCHT,
     SIGNAL_GRENZE,
     SIGNAL_HINZUGEFUEGT,
@@ -364,135 +364,6 @@ def test_RPS3_neu_ordnen_ohne_items_nichts_zu_tun():
 
 
 # ============================================================
-#  RPS-3 V1.2 — AC2: aktion=liste formatiert korrekte Antwort
-# ============================================================
-
-def test_AC2_liste_signal_gelesen():
-    """AC2: aktion=liste liefert SIGNAL_GELESEN (V1.2, RPS-3)."""
-    rc = FakeRoutineClient(get_items_response={
-        "default": [
-            {"id": "anziehen", "label": "Anziehen", "piktogramm": "👕"},
-            {"id": "fruehstueck", "label": "Frühstücken", "piktogramm": "🍞"},
-            {"id": "zaehne-putzen", "label": "Zähne putzen", "piktogramm": "🪥"},
-        ],
-        "einmalig_heute": [],
-    })
-
-    signal, daten = routine_punkte_setzen(
-        aktion=AKTION_LISTE,
-        routine_client=rc,
-        icon_client=FakeIconClient(),
-        is_member_fn=_immer_mitglied,
-        from_user_id=7,
-    )
-
-    assert signal == SIGNAL_GELESEN
-    assert len(daten["default"]) == 3
-    assert daten["einmalig_heute"] == []
-
-
-def test_AC2_liste_format_dauerhaft():
-    """AC2: Lese-Antwort enthält 'Dauerhaft:' mit nummerierten Punkten +
-    Piktogramm (RPS-3 V1.2 Beispiel)."""
-    rc = FakeRoutineClient(get_items_response={
-        "default": [
-            {"id": "anziehen", "label": "Anziehen", "piktogramm": "👕"},
-            {"id": "fruehstueck", "label": "Frühstücken", "piktogramm": "🍞"},
-            {"id": "zaehne-putzen", "label": "Zähne putzen", "piktogramm": "🪥"},
-        ],
-        "einmalig_heute": [],
-    })
-
-    _signal, daten = routine_punkte_setzen(
-        aktion=AKTION_LISTE,
-        routine_client=rc,
-        icon_client=FakeIconClient(),
-        is_member_fn=_immer_mitglied,
-        from_user_id=7,
-    )
-
-    text = daten["text"]
-    assert "Dauerhaft" in text
-    assert "1. Anziehen" in text
-    assert "2. Frühstücken" in text
-    assert "3. Zähne putzen" in text
-    assert "👕" in text
-    assert "🍞" in text
-    assert "🪥" in text
-
-
-def test_AC2_liste_format_mit_einmalig():
-    """AC2: Lese-Antwort enthält 'Heute zusätzlich' wenn einmalig_heute nicht leer."""
-    rc = FakeRoutineClient(get_items_response={
-        "default": [
-            {"id": "anziehen", "label": "Anziehen", "piktogramm": "👕"},
-        ],
-        "einmalig_heute": [
-            {"id": "einmalig:turnbeutel-mit", "label": "Turnbeutel", "piktogramm": "🎒"},
-        ],
-    })
-
-    _signal, daten = routine_punkte_setzen(
-        aktion=AKTION_LISTE,
-        routine_client=rc,
-        icon_client=FakeIconClient(),
-        is_member_fn=_immer_mitglied,
-        from_user_id=7,
-    )
-
-    text = daten["text"]
-    assert "Heute zusätzlich" in text
-    assert "1. Turnbeutel" in text
-    assert "🎒" in text
-
-
-def test_AC2_liste_keine_einmalig_kein_heute_zusaetzlich():
-    """AC2: 'Heute zusätzlich' erscheint NICHT wenn einmalig_heute leer."""
-    rc = FakeRoutineClient(get_items_response={
-        "default": [{"id": "a", "label": "A", "piktogramm": "1"}],
-        "einmalig_heute": [],
-    })
-
-    _signal, daten = routine_punkte_setzen(
-        aktion=AKTION_LISTE,
-        routine_client=rc,
-        icon_client=FakeIconClient(),
-        is_member_fn=_immer_mitglied,
-        from_user_id=7,
-    )
-
-    assert "Heute zusätzlich" not in daten["text"]
-
-
-def test_AC2_liste_ruft_get_items_auf():
-    """AC2: aktion=liste ruft routine_client.get_items() auf."""
-    rc = FakeRoutineClient(get_items_response={"default": [], "einmalig_heute": []})
-    routine_punkte_setzen(
-        aktion=AKTION_LISTE,
-        routine_client=rc,
-        icon_client=FakeIconClient(),
-        is_member_fn=_immer_mitglied,
-        from_user_id=7,
-    )
-    assert len(rc.get_items_calls) == 1, "get_items() muss genau einmal aufgerufen werden"
-
-
-def test_AC2_liste_buddy_nicht_erreichbar():
-    """AC2: get_items() wirft RoutineClientError → SIGNAL_NICHT_ERREICHBAR."""
-    rc = FakeRoutineClient(get_items_error=RoutineClientError(
-        "Routine-Buddy nicht erreichbar"))
-
-    signal, _ = routine_punkte_setzen(
-        aktion=AKTION_LISTE,
-        routine_client=rc,
-        icon_client=FakeIconClient(),
-        is_member_fn=_immer_mitglied,
-        from_user_id=7,
-    )
-    assert signal == SIGNAL_NICHT_ERREICHBAR
-
-
-# ============================================================
 #  RPS-3 V1.2 — AC3: Einzel-Verschieben + #553-Regression
 # ============================================================
 
@@ -695,91 +566,6 @@ def test_AC3_einzel_verschieben_get_items_aufgerufen():
 
     assert len(rc.get_items_calls) == 1, (
         "get_items() muss für Einzel-Verschieben intern aufgerufen werden")
-
-
-# ============================================================
-#  RPS-3 V1.2 — AC4: aktion=liste ist trigger-agnostisch (kein propose→confirm)
-# ============================================================
-
-def test_AC4_liste_ist_trigger_agnostisch_direkte_antwort():
-    """AC4: aktion=liste antwortet direkt, ruft keinen confirm-Tool-Call.
-
-    Die Funktion routine_punkte_setzen mit aktion=liste gibt SIGNAL_GELESEN
-    zurück — kein Proposal, kein propose-Schritt. Lesen folgt NICHT dem
-    propose→confirm-Muster (E-RPS-1 betrifft nur Schreiben, EC-9).
-    """
-    rc = FakeRoutineClient(get_items_response={
-        "default": [{"id": "a", "label": "A", "piktogramm": "1"}],
-        "einmalig_heute": [],
-    })
-
-    signal, _daten = routine_punkte_setzen(
-        aktion=AKTION_LISTE,
-        routine_client=rc,
-        icon_client=FakeIconClient(),
-        is_member_fn=_immer_mitglied,
-        from_user_id=7,
-    )
-
-    # Signal ist GELESEN, kein Proposal-Objekt
-    assert signal == SIGNAL_GELESEN
-    # Kein Schreiben
-    assert rc.add_calls == []
-    assert rc.replace_calls == []
-    assert rc.delete_calls == []
-
-
-def test_AC4_task_execute_liste_gibt_text_direkt_zurueck():
-    """AC4: Task.execute(aktion=liste) gibt den formatierten Text direkt zurück —
-    KEIN Proposal, kein separater confirm-Schritt (E-RPS-1/EC-9)."""
-    rc = FakeRoutineClient(get_items_response={
-        "default": [
-            {"id": "anziehen", "label": "Anziehen", "piktogramm": "👕"},
-            {"id": "zaehne-putzen", "label": "Zähne putzen", "piktogramm": "🪥"},
-        ],
-        "einmalig_heute": [],
-    })
-    task = RoutinePunkteSetzenTask(
-        tg=FakeTelegram(),
-        routine_client=rc,
-        icon_client=FakeIconClient(),
-        family_group_chat_id_getter=lambda: 200,
-        is_member_fn=_immer_mitglied,
-    )
-    ctx = TurnContext(chat_id=42, from_user_id=7, private_chat_id=42)
-
-    quittung = task.execute({"aktion": AKTION_LISTE}, ctx)
-
-    # Keine Proposal-Instanz — String-Quittung mit dem formatierten Text
-    assert isinstance(quittung, str), "execute(liste) muss String zurückgeben"
-    assert "Dauerhaft" in quittung
-    assert "Anziehen" in quittung
-    assert "Zähne putzen" in quittung
-    # Kein Schreiben
-    assert rc.add_calls == []
-
-
-def test_AC4_liste_kein_propose_confirm_durch_signal():
-    """AC4 struktureller Nachweis: aktion=liste kommt NICHT über den
-    propose→confirm-Pfad — die Funktion dispatcht direkt zu _lesen(),
-    das SIGNAL_GELESEN zurückgibt (kein SIGNAL_HINZUGEFUEGT, kein Schreiben).
-    """
-    rc = FakeRoutineClient(get_items_response={
-        "default": [], "einmalig_heute": []})
-
-    signal, _ = routine_punkte_setzen(
-        aktion=AKTION_LISTE,
-        routine_client=rc,
-        icon_client=FakeIconClient(),
-        is_member_fn=_immer_mitglied,
-        from_user_id=7,
-    )
-
-    # SIGNAL_GELESEN ist das Lese-Signal — kein Schreib-Signal
-    assert signal == SIGNAL_GELESEN
-    assert signal != SIGNAL_HINZUGEFUEGT
-    assert signal != SIGNAL_NEUGEORDNET
-    assert signal != SIGNAL_GELOESCHT
 
 
 # ============================================================
@@ -1367,18 +1153,23 @@ def test_SPEC_kein_umbenennen_in_v12():
     aktionen = {
         rps.AKTION_HINZUFUEGEN, rps.AKTION_EINMALIG,
         rps.AKTION_LOESCHEN, rps.AKTION_NEU_ORDNEN,
-        rps.AKTION_LISTE, rps.AKTION_ICON_SUCHEN,
+        rps.AKTION_ICON_SUCHEN,
     }
     assert "umbenennen" not in aktionen
     assert "rename" not in aktionen
 
 
 # ============================================================
-#  V1.2: Neue Konstanten sind vorhanden
+#  V1.2: Legen-Trennung — AKTION_LISTE ist NICHT in routine_punkte_setzen
 # ============================================================
 
-def test_V12_konstanten_vorhanden():
-    """V1.2: AKTION_LISTE und SIGNAL_GELESEN sind exportiert."""
-    from skills import routine_punkte_setzen as rps
-    assert rps.AKTION_LISTE == "liste"
-    assert rps.SIGNAL_GELESEN == "gelesen"
+def test_V12_legen_trennung_aktion_liste_nicht_in_setzen():
+    """V1.2 Lego-Trennung: AKTION_LISTE existiert NICHT in routine_punkte_setzen —
+    Lesen ist in routine_punkte_lesen ausgegliedert (EC-9 vs. EC-10)."""
+    import skills.routine_punkte_setzen as rps
+    assert not hasattr(rps, "AKTION_LISTE"), (
+        "AKTION_LISTE darf NICHT in routine_punkte_setzen sein — "
+        "Lesen ist in routine_punkte_lesen ausgegliedert")
+    assert not hasattr(rps, "SIGNAL_GELESEN"), (
+        "SIGNAL_GELESEN darf NICHT in routine_punkte_setzen sein — "
+        "Lesen ist in routine_punkte_lesen ausgegliedert")

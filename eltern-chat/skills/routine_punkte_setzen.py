@@ -7,13 +7,16 @@ sowie die ICONS-7-Stichwort-Suche (RPS-4). Die Funktion ist eine bewusste
 Copy der RZS-/TES-Linie (RAT-6/RAT-12 — keine gemeinsame Schreib-Skill-
 Abstraktion, bis sie nach dem 2.-3. *gebauten* Skill ehrlich entsteht).
 
-Operationen (RPS-3, V1.1):
+**Nur Schreib-Operationen** (RPS-3 V1.2 Lego-Trennung): Lesen ist in
+`routine_punkte_lesen.py` (EC-9, ReadTask) ausgegliedert.
+
+Operationen (RPS-3, V1.2):
   - dauerhaft hinzufügen  → POST  /api/v1/routine/items {quelle: default}
   - dauerhaft löschen     → DELETE /api/v1/routine/items/<id>
   - dauerhaft Reihenfolge → PUT   /api/v1/routine/items (geordnete Liste)
   - einmalig hinzufügen   → POST  /api/v1/routine/items {quelle: einmalig}
 
-**Umbenennen ist NICHT Teil von V1.1** (Spec Z. 31-32, 62 — Nic-Entscheid
+**Umbenennen ist NICHT Teil von V1.2** (Spec Z. 31-32, 62 — Nic-Entscheid
 2026-06-07): hinzufügen + löschen decken den Bedarf. Der Skill bietet
 das Verb deshalb gar nicht erst an.
 
@@ -31,8 +34,6 @@ Ausgang: Ergebnis-Tuple `(signal, daten)`:
   („hinzugefuegt",  {"id": <str>, "quelle": <str>})  — POST erfolgreich.
   („geloescht",     {"id": <str>})                   — DELETE erfolgreich.
   („neugeordnet",   {"count": <int>})                — PUT erfolgreich.
-  („gelesen",       {"default": […], "einmalig_heute": […],
-                    "text": <str>})                  — Lese-Antwort (V1.2).
   („icon_kandidaten", {"label": <str>, "kandidaten":  — ICONS-7 lieferte
                       [{id, url}, …]})                 Treffer; Skill legt
                                                        sie zur Wahl vor (RPS-4).
@@ -55,11 +56,10 @@ from skills.routine_client import RoutineClientError
 logger = logging.getLogger(__name__)
 
 
-# RPS-1: Ergebnis-Signale der Funktion.
+# RPS-1: Ergebnis-Signale der Funktion (nur Schreib-Signale).
 SIGNAL_HINZUGEFUEGT      = "hinzugefuegt"
 SIGNAL_GELOESCHT         = "geloescht"
 SIGNAL_NEUGEORDNET       = "neugeordnet"
-SIGNAL_GELESEN           = "gelesen"          # V1.2: Lese-Antwort
 SIGNAL_ICON_KANDIDATEN   = "icon_kandidaten"
 SIGNAL_KEINE_ICONS       = "keine_icons"
 SIGNAL_ABGELEHNT         = "abgelehnt"
@@ -67,12 +67,12 @@ SIGNAL_GRENZE            = "grenze"
 SIGNAL_NICHT_ERREICHBAR  = "nicht_erreichbar"
 SIGNAL_NICHTS_ZU_TUN     = "nichts_zu_tun"
 
-# RPS-3: Operationen — V1.2, KEIN Umbenennen (Spec Z. 31-32).
+# RPS-3: Schreib-Operationen — V1.2, KEIN Umbenennen (Spec Z. 31-32).
+# AKTION_LISTE (Lesen) ist in routine_punkte_lesen.py ausgegliedert (EC-9).
 AKTION_HINZUFUEGEN     = "hinzufuegen"      # dauerhaft (default)
 AKTION_EINMALIG        = "einmalig"          # nur für heute (ROUTINE-6)
 AKTION_LOESCHEN        = "loeschen"
 AKTION_NEU_ORDNEN      = "neu_ordnen"
-AKTION_LISTE           = "liste"             # V1.2: Lesen (EC-9: trigger-agnostisch)
 AKTION_ICON_SUCHEN     = "icon_suchen"       # RPS-4: ICONS-7-Suche ohne Schreiben
 
 # RPS-3 / RPS-4: Quellen, in die der Buddy schreibt.
@@ -92,6 +92,9 @@ def routine_punkte_setzen(*, aktion, routine_client, icon_client,
     (E-RPS-1): die Funktion schreibt direkt im execute()-Pfad — die
     Vorab-Bestätigung sitzt eine Ebene höher (RoutinePunkteSetzenTask.propose).
 
+    Lesen (aktion=liste) ist in `routine_punkte_lesen.py` ausgegliedert
+    (EC-9, ReadTask — Lego-Trennung nach Genre).
+
     `aktion`        — Eine der AKTION_*-Konstanten (RPS-3).
     `routine_client`— RoutineClient-Instanz mit Items-Methoden (RPS-6).
     `icon_client`   — IconClient-Instanz für ICONS-7 (RPS-4).
@@ -102,7 +105,6 @@ def routine_punkte_setzen(*, aktion, routine_client, icon_client,
       hinzufuegen / einmalig — `label`, `piktogramm` (ARASAAC-ID).
       loeschen               — `item_id`.
       neu_ordnen             — `items` (Liste {id, label, piktogramm}).
-      liste                  — (keine Parameter) Lesen, trigger-agnostisch (EC-9).
       neu_ordnen mit Einzel-Verschieben — `item_name` + `ziel_position` (V1.2).
       icon_suchen            — `icon_stichwort`, optional `icon_max` (≤3).
 
@@ -110,16 +112,10 @@ def routine_punkte_setzen(*, aktion, routine_client, icon_client,
     """
     # RPS-2: Berechtigung — live geprüft, identisch zum RZS-/FSE-Muster.
     # Die Prüfung liegt **bei der Funktion** (E-RZS-1), nicht beim Trigger.
-    # Ausnahme: aktion=liste ist lesend (EC-9), aber wir prüfen dennoch
-    # Mitgliedschaft analog den anderen Aktionen (RPS-2 gilt für alle).
     if from_user_id is None or not is_member_fn(from_user_id):
         logger.info("routine_punkte_setzen: User %s nicht in Familien-Gruppe "
                     "— abgelehnt (RPS-2)", from_user_id)
         return SIGNAL_ABGELEHNT, {}
-
-    if aktion == AKTION_LISTE:
-        # V1.2: Lesen ist trigger-agnostisch (EC-9), kein propose→confirm.
-        return _lesen(routine_client)
 
     if aktion == AKTION_ICON_SUCHEN:
         return _icon_suchen(icon_client, icon_stichwort, icon_max)
@@ -178,60 +174,6 @@ def _icon_suchen(icon_client, stichwort, max_treffer):
 
     return SIGNAL_ICON_KANDIDATEN, {"label": stichwort,
                                     "kandidaten": list(kandidaten)}
-
-
-# ============================================================
-#  RPS-3 V1.2 — GET /api/v1/routine/items (Lesen, EC-9)
-# ============================================================
-
-def _lesen(routine_client):
-    """RPS-3 V1.2: Aktuelle Items-Liste lesen (EC-9 — trigger-agnostisch).
-
-    Kein propose→confirm (E-RPS-1 betrifft nur Schreiben). Die Antwort
-    ist ein formatierter Text im Format aus RPS-3 V1.2:
-      „Dauerhaft: 1. Anziehen 👕 · 2. Frühstücken 🍞 · 3. Zähne putzen 🪥
-       · Heute zusätzlich: 1. Turnbeutel 🎒."
-
-    Liefert SIGNAL_GELESEN mit den Rohdaten (default/einmalig_heute) und
-    dem formatierten Text.
-    """
-    try:
-        daten = routine_client.get_items()
-    except RoutineClientError as e:
-        return _routine_fehler("GET", e)
-
-    default_items = daten.get("default") or []
-    einmalig_items = daten.get("einmalig_heute") or []
-
-    # Format: „Dauerhaft: 1. Label 🔣 · 2. … · Heute zusätzlich: 1. …"
-    teile = []
-    if default_items:
-        einzel = " · ".join(
-            "%d. %s %s" % (i + 1, item.get("label", ""),
-                           item.get("piktogramm", ""))
-            for i, item in enumerate(default_items)
-        )
-        teile.append("**Dauerhaft:** " + einzel)
-    else:
-        teile.append("**Dauerhaft:** (keine Punkte)")
-
-    if einmalig_items:
-        einzel = " · ".join(
-            "%d. %s %s" % (i + 1, item.get("label", ""),
-                           item.get("piktogramm", ""))
-            for i, item in enumerate(einmalig_items)
-        )
-        teile.append("**Heute zusätzlich:** " + einzel)
-
-    text = " · ".join(teile) + "."
-
-    logger.info("routine_punkte_setzen: Liste gelesen — %d default, %d einmalig",
-                len(default_items), len(einmalig_items))
-    return SIGNAL_GELESEN, {
-        "default": default_items,
-        "einmalig_heute": einmalig_items,
-        "text": text,
-    }
 
 
 # ============================================================

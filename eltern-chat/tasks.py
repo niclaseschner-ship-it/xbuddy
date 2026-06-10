@@ -499,6 +499,19 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             family_group_chat_id_getter=family_group_chat_id_getter,
             is_member_fn=_fse_is_member))
 
+    # RPS-3 V1.2 / EC-9: »Routine-Punkte lesen« als lesende Aufgabe (ReadTask).
+    # Guard: routine_origin_url UND family_group_chat_id_getter müssen gesetzt sein.
+    # Lego-Trennung nach Genre (ReadTask): läuft direkt EC-9-konform, kein
+    # propose→confirm-Gate (im Gegensatz zu RoutinePunkteSetzenTask/WriteTask).
+    if routine_origin_url is not None and family_group_chat_id_getter is not None:
+        from skills.routine_client import RoutineClient as _RplRoutineClient
+        from skills.routine_punkte_lesen_task import RoutinePunkteLesenTask
+        _rpl_routine_client = _RplRoutineClient(origin_url=routine_origin_url)
+        _rpl_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
+        catalog.register(RoutinePunkteLesenTask(
+            routine_client=_rpl_routine_client,
+            is_member_fn=_rpl_is_member))
+
     # RPS-7: »Routine-Punkte setzen« als synchrone schreibende Aufgabe (EC-10,
     # E-RPS-1 propose→confirm). AND-Guard: routine_origin_url UND icon_origin_url
     # UND family_group_chat_id_getter müssen ALLE gesetzt sein — fehlt eine,

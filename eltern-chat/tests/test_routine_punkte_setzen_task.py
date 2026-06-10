@@ -18,7 +18,6 @@ import unittest.mock as mock
 from fakes import FakeTelegram
 from skills.routine_punkte_setzen import (
     AKTION_ICON_SUCHEN,
-    AKTION_LISTE,
     AKTION_NEU_ORDNEN,
     SIGNAL_ICON_KANDIDATEN,
 )
@@ -394,7 +393,7 @@ def test_mapping_fallback_bei_leer_kandidaten():
 
 
 # ============================================================
-#  V1.2 Task-Tests: aktion=liste + Einzel-Verschieben propose/schema
+#  V1.2 Task-Tests: Einzel-Verschieben propose/schema
 # ============================================================
 
 class FakeRoutineClientMitListe(FakeRoutineClient):
@@ -423,43 +422,6 @@ def _make_task_v12(icon_client=None, tg=None, routine_client=None,
     )
 
 
-def test_V12_propose_liste_liefert_proposal():
-    """V1.2: propose(aktion=liste) liefert einen Proposal (WriteTask-Konvention).
-    Der Text nennt »nur lesend«."""
-    task = _make_task_v12()
-    ctx = TurnContext(chat_id=42, from_user_id=7, private_chat_id=42)
-    proposal = task.propose({"aktion": AKTION_LISTE}, ctx)
-    assert isinstance(proposal, Proposal)
-    assert "lesen" in proposal.summary.lower() or "lesend" in proposal.summary.lower()
-
-
-def test_V12_execute_liste_ruft_get_items():
-    """V1.2: task.execute(aktion=liste) ruft get_items() auf."""
-    rc = FakeRoutineClientMitListe(get_items_response={
-        "default": [{"id": "a", "label": "A", "piktogramm": "1"}],
-        "einmalig_heute": [],
-    })
-    task = _make_task_v12(routine_client=rc)
-    ctx = TurnContext(chat_id=42, from_user_id=7, private_chat_id=42)
-    task.execute({"aktion": AKTION_LISTE}, ctx)
-    assert len(rc.get_items_calls) == 1
-
-
-def test_V12_execute_liste_quittung_enthaelt_dauerhaft():
-    """V1.2 AC2: execute(liste) Quittung enthält 'Dauerhaft' + Item-Namen."""
-    rc = FakeRoutineClientMitListe(get_items_response={
-        "default": [
-            {"id": "zaehne-putzen", "label": "Zähne putzen", "piktogramm": "🪥"},
-        ],
-        "einmalig_heute": [],
-    })
-    task = _make_task_v12(routine_client=rc)
-    ctx = TurnContext(chat_id=42, from_user_id=7, private_chat_id=42)
-    quittung = task.execute({"aktion": AKTION_LISTE}, ctx)
-    assert "Dauerhaft" in quittung
-    assert "Zähne putzen" in quittung
-
-
 def test_V12_propose_einzel_verschieben_nennt_name_und_position():
     """V1.2: propose(neu_ordnen, item_name, ziel_position) nennt den Namen
     und die Ziel-Position (Konversations-UX, Eltern sehen keine IDs)."""
@@ -475,11 +437,14 @@ def test_V12_propose_einzel_verschieben_nennt_name_und_position():
     assert "1" in proposal.summary
 
 
-def test_V12_schema_enthaelt_liste():
-    """V1.2: Task-Schema enthält 'liste' als erlaubte Aktion."""
+def test_V12_schema_enthaelt_kein_liste():
+    """V1.2 Lego-Trennung: Task-Schema enthält 'liste' NICHT —
+    Lesen ist in RoutinePunkteLesenTask ausgegliedert (EC-9)."""
     task = _make_task_v12()
     enum = task.parameters["properties"]["aktion"]["enum"]
-    assert AKTION_LISTE in enum, "Schema muss 'liste' in aktion-enum enthalten"
+    assert "liste" not in enum, (
+        "Schema darf 'liste' NICHT enthalten — Lesen ist in "
+        "RoutinePunkteLesenTask ausgegliedert (EC-9)")
 
 
 def test_V12_schema_enthaelt_item_name_und_ziel_position():
