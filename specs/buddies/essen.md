@@ -587,16 +587,17 @@ ESSEN-20 (Reload-on-Read sichtbar nach POST ohne Restart; partiell
 geschriebene Datei → Last-Known-Good, DCOMP-3/4) ·
 ESSEN-21 (CONFIG-4: fehlende/kaputte Datei → Defaults + Warnung, Prozess
 startet) ·
-ESSEN-27 (Display-Lösch-Geste: Mülltonnen-Symbol sichtbar an jeder
-`liste-eintrag`; Tap löst DELETE auf die richtige ID aus; Liste rendert
-neu gemäß ESSEN-20).
+ESSEN-27 (Display-Lösch-Geste: Entfernen-Symbol ARASAAC 11751 sichtbar an
+jeder `liste-eintrag`; Tap löst DELETE auf die richtige ID aus; Liste
+rendert neu gemäß ESSEN-20).
 
 *Tickets:* #474
 
 ### ESSEN-27 — Display-Lösch-Geste am Wunsch-Listen-Eintrag
 Jede `liste-eintrag`-Kachel auf `/display/essen/wunsch` trägt **sichtbar
-auf der Kachel** ein Mülltonnen-Symbol (ARASAAC ID **2355**, geliefert über
-die geteilte Icon-Plattform ICONS-5: `/display/_shared/icons/arasaac/2355.png`).
+auf der Kachel** ein Entfernen-Symbol (ARASAAC ID **11751** — „entfernen /
+herausnehmen", Gate-B-Wahl 2026-06-10; geliefert über die geteilte Icon-
+Plattform ICONS-5: `/display/_shared/icons/arasaac/11751.png`).
 Position: kinder-tappbar im sichtbaren Kachel-Bereich, nicht in eine Eck-Ecke
 gedrückt. **Genau ein Tap** auf das Symbol löst `DELETE /api/v1/essen/wuensche/<id>`
 (ESSEN-17) aus; die Liste rendert unmittelbar danach neu und zeigt den
@@ -610,10 +611,10 @@ fehlt das Attribut, neu in V1.x-Render).
 aufgefangen (Einkaufslisten-Modell, Reibung gering, kein Datenverlust mit
 Bedeutung).
 
-*Test-Implikation:* der Render zeigt das Mülltonnen-Symbol an jeder
-`liste-eintrag`; eine Klick-Simulation auf das Symbol triggert genau einen
-DELETE-Request mit der korrekten `data-wunsch-id`; nachfolgender GET liefert
-die ID nicht mehr (Reload-on-Read).
+*Test-Implikation:* der Render zeigt das Entfernen-Symbol (ARASAAC 11751) an
+jeder `liste-eintrag`; eine Klick-Simulation auf das Symbol triggert genau
+einen DELETE-Request mit der korrekten `data-wunsch-id`; nachfolgender GET
+liefert die ID nicht mehr (Reload-on-Read).
 
 *Tickets:* #532
 
