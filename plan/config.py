@@ -1,4 +1,4 @@
-"""Plan-Buddy — Konfigurations-Auflösung (PLAN-6, PLAN-10, PLAN-28).
+"""Plan-Buddy — Konfigurations-Auflösung (PLAN-6, PLAN-10, PLAN-28, PLAN-34).
 
 Siehe specs/buddies/plan.md §9. Slot-Definitionen und Default-Verantwort-
 lichkeiten sind **Daten**, keine Code-Konstanten (E-PLAN-2): sie stehen in
@@ -12,6 +12,11 @@ fehlen.
 Die Slot-Liste ist die zentrale Datei-getriebene Struktur: jeder Slot hat
 einen stabilen Schlüssel, eine Art (`erwachsenen-slot` | `aktivitaets-slot`),
 ein Icon und — bei Aktivitäts-Slots — das zugehörige Kind (PLAN-6).
+
+Der Aktivitäts-Katalog (`aktivitaeten`-Section in plan.json) ist die zweite
+Datei-getriebene Struktur: jeder Eintrag hat art, label, keywords und
+piktogramm (PLAN-12, PLAN-28, PLAN-34). Fehlt die Sektion, greift der
+Code-Default AKTIVITAETEN_V1 aus `plan/aktivitaeten.py` (CONFIG-4).
 """
 
 import json
@@ -94,12 +99,36 @@ class Slot:
         return d
 
 
+class Aktivitaet:
+    """Ein Aktivitäts-Katalog-Eintrag (PLAN-12, PLAN-28, PLAN-34).
+
+    `art` ist der stabile Schlüssel, `label` der Anzeigetext für den Event-
+    Titel (Schreib-Seite, PLAN-11), `keywords` sind die Substring-Treffer im
+    Titel zur Erkennung (Lese-Seite, PLAN-12). `piktogramm` ist eine
+    ARASAAC-id als String (PLAN-12 V1.1, ICONS-4/ICONS-7).
+    """
+
+    def __init__(self, art, label, keywords, piktogramm):
+        self.art = art
+        self.label = label
+        self.keywords = keywords
+        self.piktogramm = piktogramm
+
+    def to_dict(self):
+        return {
+            "art": self.art,
+            "label": self.label,
+            "keywords": list(self.keywords),
+            "piktogramm": self.piktogramm,
+        }
+
+
 class Config:
     """Aufgelöste Plan-Buddy-Instanz-Konfiguration (PLAN-28)."""
 
     def __init__(self, slots, default_verantwortlichkeiten, fenster_lesekind,
                  fenster_kleinkind, wochenstart, zeitzone, db_datei, kalender_id,
-                 familie_origin_url):
+                 familie_origin_url, aktivitaeten=None):
         # PLAN-6: Slot-Liste (Reihenfolge = Rail-Reihenfolge).
         self.slots = slots
         # PLAN-10: Default-Zuweisungen je Slot-Schlüssel und Wochentag.
@@ -113,6 +142,10 @@ class Config:
         self.kalender_id = kalender_id
         # DCOMP-1: Loopback-Origin der Familie-Komponente — HTTP statt Import.
         self.familie_origin_url = familie_origin_url
+        # PLAN-12/PLAN-28/PLAN-34: Aktivitäts-Katalog — Liste von Aktivitaet-
+        # Objekten. None bedeutet: Sektion fehlte in plan.json → CONFIG-4-
+        # Fallback AKTIVITAETEN_V1 greift in aktivitaeten.py.
+        self.aktivitaeten = aktivitaeten  # None | list[Aktivitaet]
 
     def slot(self, schluessel):
         """Slot-Definition je Schlüssel, oder None."""
@@ -185,6 +218,41 @@ def _parse_slots(raw_slots):
     return slots
 
 
+def _parse_aktivitaeten(raw_aktivitaeten):
+    """Baut Aktivitaet-Objekte aus dem `aktivitaeten`-Abschnitt der Config (PLAN-12).
+
+    Wirft ConfigError, wenn ein Eintrag ein Pflichtfeld vermisst, einen leeren
+    Wert trägt oder `keywords` keine nicht-leere Liste nicht-leerer Strings ist.
+    Doppelte `art`-Schlüssel sind ein Fehler (analog doppelter Slot-Schlüssel).
+    """
+    aktivitaeten = []
+    seen = set()
+    for raw in raw_aktivitaeten:
+        if not isinstance(raw, dict):
+            raise ConfigError(
+                "aktivitaeten-Eintrag ist kein Objekt: %r" % (raw,))
+        for feld in ("art", "label", "piktogramm"):
+            if not raw.get(feld):
+                raise ConfigError(
+                    "aktivitaeten-Eintrag ohne Pflichtfeld %r: %r" % (feld, raw))
+        art = raw["art"]
+        if art in seen:
+            raise ConfigError("doppelter aktivitaeten-Schlüssel %r" % art)
+        seen.add(art)
+        keywords = raw.get("keywords")
+        if not isinstance(keywords, list) or not keywords:
+            raise ConfigError(
+                "aktivitaeten-Eintrag %r: keywords muss eine nicht-leere Liste sein"
+                % art)
+        for kw in keywords:
+            if not isinstance(kw, str) or not kw:
+                raise ConfigError(
+                    "aktivitaeten-Eintrag %r: jedes keyword muss ein nicht-leerer "
+                    "String sein, gefunden: %r" % (art, kw))
+        aktivitaeten.append(Aktivitaet(art, raw["label"], keywords, raw["piktogramm"]))
+    return aktivitaeten
+
+
 def _parse_defaults(raw_defaults, slots):
     """Baut die Default-Verantwortlichkeiten aus der Config (PLAN-10).
 
@@ -227,6 +295,10 @@ def resolve(config_path=None, env=None):
     slots = _parse_slots(file_cfg.get("slots") or [])
     # PLAN-10: Defaults — Datei oder leer.
     defaults = _parse_defaults(file_cfg.get("default_verantwortlichkeiten") or {}, slots)
+    # PLAN-12/PLAN-28: Aktivitäts-Katalog — Datei oder None (→ CONFIG-4-Fallback
+    # AKTIVITAETEN_V1 in aktivitaeten.py; None signalisiert: Sektion fehlt).
+    raw_akt = file_cfg.get("aktivitaeten")
+    aktivitaeten = _parse_aktivitaeten(raw_akt) if raw_akt is not None else None
 
     # PLAN-28: Skalar-Werte, Env > Datei > Default.
     values = dict(DEFAULTS)
@@ -267,4 +339,5 @@ def resolve(config_path=None, env=None):
         db_datei=str(values["db_datei"]),
         kalender_id=kalender_id,
         familie_origin_url=familie_origin_url,
+        aktivitaeten=aktivitaeten,
     )
