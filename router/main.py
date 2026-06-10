@@ -798,6 +798,37 @@ def admin_write_panel():
     }), 200
 
 
+# ============================================================
+#  Admin: tiles-changed (PBE-10 / #450)
+# ============================================================
+#
+# Empfänger-Endpoint für das SSE-Publish-Signal des Panel-Editors.
+# Der Panel-Editor ruft nach einem erfolgreichen PBE-4-Schreibvorgang
+# POST .../tiles-changed (leerer Body) auf. Dieser Endpoint ruft intern
+# publish(display_id, state.get(display_id)) auf, was das SSE-Ereignis
+# an alle offenen Stream-Abonnenten des Displays verteilt.
+# Loopback-only (ROU-28-Invariante, gleicher Guard wie admin_reload /
+# admin_write_panel). Latenz lokaler Round-Trip << 5 s (PBE-10-Schranke).
+
+@app.route('/api/v1/router/admin/panels/<display_id>/tiles-changed', methods=['POST'])
+def admin_tiles_changed(display_id):
+    # ROU-28: loopback-only, gleicher Guard wie admin_reload und admin_write_panel.
+    if not _is_loopback(request.remote_addr or ''):
+        logging.warning('admin/tiles-changed abgelehnt: remote_addr=%s', request.remote_addr)
+        return jsonify({
+            'error': 'nur 127.0.0.1 darf den Endpoint erreichen',
+        }), 403
+
+    # DCOMP-2: frisch von Disk lesen — damit neu angelegte Displays sofort bekannt sind.
+    _entries, _panels, current_known = _current_routing()
+    if display_id not in current_known:
+        return jsonify({'error': 'unknown display'}), 404
+
+    publish(display_id, state.get(display_id))
+    logging.info('admin/tiles-changed: publish für display_id=%r ausgeführt', display_id)
+    return '', 204
+
+
 @app.route('/api/v1/diag', methods=['GET'])
 def diag():
     # DCOMP-2: Diag spiegelt den aktuellen Lese-Stand — frisch von Disk.
