@@ -38,6 +38,11 @@
     {"art": "ausflug",     "label": "Ausflug",     "keywords": ["ausflug"],                                    "piktogramm": "4670"},
     {"art": "geburtstag",  "label": "Geburtstag",  "keywords": ["geburtstag", "geburts"],                      "piktogramm": "3087"},
     {"art": "verabredung", "label": "Verabredung", "keywords": ["verabredung"],                                "piktogramm": "2255"},
-    {"art": "waldgang",    "label": "Waldgang",    "keywords": ["wald"],                                       "piktogramm": "2666"}
+    {"art": "waldgang",    "label": "Waldgang",    "keywords": ["wald"],                                       "piktogramm": "2666"},
+    {"art": "zahn",        "label": "Zahnarzt",    "keywords": ["zahn"],                                        "piktogramm": "11229"},
+    {"art": "ferien",      "label": "Ferien",      "keywords": ["ferien", "urlaub"],                           "piktogramm": "3166"},
+    {"art": "treff",       "label": "Treffen",     "keywords": ["treff"],                                       "piktogramm": "6487"},
+    {"art": "garten",      "label": "Garten",      "keywords": ["garten"],                                      "piktogramm": "2434"},
+    {"art": "schule",      "label": "Schule",      "keywords": ["schule"],                                      "piktogramm": "3082"}
   ]
 }
