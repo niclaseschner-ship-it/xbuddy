@@ -358,29 +358,38 @@ def test_TASK7_make_is_member_fn_returns_false_for_non_member():
 
 def test_TASK7_make_is_member_fn_late_evaluation_of_fgcid():
     """TASK-7 Kern-Anforderung: fgcid_getter wird SPÄT evaluiert, nicht
-    beim Bau dieser Factory. Sonst würde eine Config-Reload (z.B. mit neuer
-    FGCID) keine Wirkung haben."""
+    beim Bau dieser Factory — und die Closure nutzt den jeweils aktuellen
+    Wert des Getters, nicht einen eingefrorenen Snapshot.
+
+    Zweiphasige Probe:
+    - Phase A: fgcid=100 → Fake gibt Member-Dict → True.
+    - Phase B: fgcid=-1  → Fake gibt None (unbekannte Gruppe) → False.
+    Damit ist bewiesen, dass die fgcid_getter-Rückgabe das Member-Ergebnis
+    steuert — echte Späte-Evaluierung End-to-End (TASK-7)."""
     tg = FakeTelegram()
 
+    # Fake get_chat_member: gibt Member-Dict nur für die bekannte Gruppe 100;
+    # bei anderen chat_ids (z.B. -1) gibt es None zurück.
     def _fake_get_chat_member(fgcid, user_id):
-        return {"status": "member"}
+        if fgcid == 100:
+            return {"status": "member"}
+        return None
 
     tg.get_chat_member = _fake_get_chat_member
 
-    # Getter gibt zunächst 200, später 300
-    fgcid_values = [200]
+    fgcid_values = [100]
 
     def _fgcid_getter():
         return fgcid_values[0]
 
     is_member_fn = _make_is_member_fn(tg, _fgcid_getter)
 
-    # Erste Prüfung mit FGCID 200
+    # Phase A: fgcid=100 → user ist Mitglied der Gruppe 100 → True
     assert is_member_fn(user_id=7) is True
 
-    # Änder die FGCID-Getter
-    fgcid_values[0] = 300
-
-    # Zweite Prüfung nutzt die neue FGCID 300 — beweist SPÄTE Evaluierung
-    # (immer noch True, da get_chat_member immer "member" gibt)
-    assert is_member_fn(user_id=7) is True
+    # Phase B: fgcid auf -1 ändern — nachfolgender Call nutzt neuen Wert
+    fgcid_values[0] = -1
+    assert is_member_fn(user_id=7) is False, (
+        "Späte Evaluierung: nach Änderung von fgcid_getter muss is_member_fn "
+        "den neuen fgcid-Wert nutzen und False liefern."
+    )

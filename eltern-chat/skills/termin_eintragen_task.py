@@ -23,6 +23,7 @@ EC-10: zweistufige Bestätigung ist akzeptierter Aufwand (TES-10-Spec-Begründun
 import logging
 from dataclasses import dataclass
 
+from authz import MEMBER_STATUSES
 from private_chat_session import PrivateChatSession
 from tasks import Proposal, WriteTask, is_from_private_chat
 
@@ -185,8 +186,7 @@ class TermineEintragenTask(WriteTask):
                 if not _fgcid:
                     return False
                 member = _tg.get_chat_member(_fgcid, uid)
-                return member is not None and member.get("status") in (
-                    "creator", "administrator", "member")
+                return member is not None and member.get("status") in MEMBER_STATUSES
 
         # EC-25 / Issue #165: Typing-Indikator vor jeder send_message-Phase im
         # Privatchat. Best-Effort: Fehler werden in fire_typing geschluckt.
