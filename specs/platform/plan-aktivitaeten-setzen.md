@@ -86,9 +86,13 @@ CLAUDE.md §6 / E-PAS-2 / PLAN-12 / ROUTINE-10): Er ruft die
 **Icon-Stichwort-Suche** (`icons.md` ICONS-7,
 `GET /api/v1/icons/suche?q=<label>&max=3`) und legt dem Elternteil die
 **bis zu drei Kandidaten** als Bilder vor — Mechanik identisch zu RPS-4
-(`sendMediaGroup`, Caption = ARASAAC-`id`, Elternteil antwortet mit `id`
-oder Album-Position 1/2/3). Bildquelle: HTTP über `icon_origin_url`
-(DCOMP-1: kein Dateisystem-Direktzugriff zwischen Komponenten).
+(TASK-10b: Skill ruft den ID-Wahl-Album-Helper,
+**keine** Captions an Bildern, Skill liefert Mapping „1 = `<id_1>`, 2 =
+`<id_2>`, 3 = `<id_3>`" im Tool-Result-Text, LLM postet den Text). Der
+Elternteil antwortet mit der `id` (oder einer Album-Position 1/2/3, die der
+Skill auf die `id` zurückbildet). Bildquelle: HTTP über `icon_origin_url`
++ `<url-aus-ICONS-7>` (DCOMP-1: kein Dateisystem-Direktzugriff zwischen
+Komponenten; TASK-10b URL-Konsum).
 
 Passt kein Kandidat, sucht der Skill mit einem **verfeinerten Stichwort**
 (Synonym aus dem Gespräch) erneut drei Kandidaten — iterativ, bis einer
@@ -105,8 +109,11 @@ Skill das **gewählte** Piktogramm als Einzel-Foto im propose-Schritt
 (PAS-6) mit, sodass der Vorschlags-Bubble das endgültige Bild zeigt — die
 Familie sieht visuell, welches Piktogramm gleich gespeichert wird, ohne
 Emoji-Krücke im Text (E-PAS-4). Die ID selbst erscheint im Text nicht
-mehr; sie ist beim Album in der Caption gefallen und ist jetzt
-petrarbeitet.
+mehr; sie ist beim Wahl-Album (PAS-4 /
+TASK-10b) als Mapping im LLM-Begleittext petrarbeitet, und der `propose`-
+Bubble zeigt das gewählte Piktogramm via `tg.send_photo` (analog Album-
+Helper, ohne Caption — der Vorschlags-Text mit der Aktivität samt
+Piktogramm-Hinweis kommt aus dem LLM).
 
 ## PAS-5 — Seed-Liste typischer Familien-Aktivitäten als Konversations-Anker
 Der Skill kennt eine **Seed-Liste** typischer Familien-Aktivitäten und
@@ -185,8 +192,9 @@ PLAN-34" — siehe PLAN-28-Tabellen-Zeile.)
 Synchrone schreibende Aufgabe (EC-10, TASK-4 `propose`+`execute`):
 
 **propose-Form (hinzufügen):** Der Skill schickt das **gewählte
-Piktogramm als Einzel-Foto** (PAS-4) mit dem Vorschlag als Caption oder
-Folge-Bubble — Form: „Soll ich **Capueira** mit Keyword *capueira*
+Piktogramm als Einzel-Foto** via `tg.send_photo` (TASK-10b: analog
+Album-Helper, **ohne Caption** am Foto) gefolgt von einer Folge-Bubble
+des LLM — Form: „Soll ich **Capueira** mit Keyword *capueira*
 dauerhaft hinzufügen?". **Keine Emojis** im Text (E-PAS-4) — das Bild
 zeigt das Piktogramm, das Wort *Capueira* steht fett für die Identität.
 
