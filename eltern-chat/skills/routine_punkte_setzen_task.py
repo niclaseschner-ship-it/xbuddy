@@ -32,10 +32,8 @@ from skills.routine_punkte_setzen import (
     AKTION_EINMALIG,
     AKTION_HINZUFUEGEN,
     AKTION_ICON_SUCHEN,
-    AKTION_LISTE,
     AKTION_LOESCHEN,
     AKTION_NEU_ORDNEN,
-    SIGNAL_GELESEN,
 )
 
 logger = logging.getLogger(__name__)
@@ -115,13 +113,14 @@ class RoutinePunkteSetzenTask(WriteTask):
             name="routine_punkte_setzen",
             description=(
                 "Setzt Punkte der Morgen-Routine: einen Punkt dauerhaft "
-                "hinzufügen, nur für heute hinzufügen, entfernen, die "
-                "aktuelle Liste lesen oder einen Punkt verschieben. "
+                "hinzufügen, nur für heute hinzufügen, entfernen oder "
+                "einen Punkt verschieben. "
                 "Aufrufen, wenn jemand sagt »füg ‹Zähne putzen› als "
                 "Routine-Punkt hinzu«, »nimm den Punkt ‹Mütze› raus«, "
-                "»zeig mir die Routine-Punkte«, »Zähne putzen nach "
-                "Position 1«, »Turnbeutel mitnehmen für heute« oder "
-                "Ähnliches. Umbenennen wird in V1.2 NICHT unterstützt.\n\n"
+                "»Zähne putzen nach Position 1«, »Turnbeutel mitnehmen "
+                "für heute« oder Ähnliches. Umbenennen wird in V1.2 NICHT "
+                "unterstützt. Zum Lesen der aktuellen Punkte den Task "
+                "‹routine_punkte_lesen› verwenden.\n\n"
                 "Vor einem ‹hinzufuegen›/‹einmalig›-Aufruf muss ein "
                 "Piktogramm gewählt sein. Dafür den Task ZUERST mit "
                 "{aktion: 'icon_suchen', icon_stichwort: '<wort>'} aufrufen "
@@ -143,7 +142,6 @@ class RoutinePunkteSetzenTask(WriteTask):
                             AKTION_EINMALIG,
                             AKTION_LOESCHEN,
                             AKTION_NEU_ORDNEN,
-                            AKTION_LISTE,
                             AKTION_ICON_SUCHEN,
                         ],
                         "description": (
@@ -153,10 +151,10 @@ class RoutinePunkteSetzenTask(WriteTask):
                             "der Liste nehmen; 'neu_ordnen' = die Punkt-"
                             "Reihenfolge setzen (mit item_name+ziel_position "
                             "für Einzel-Verschieben oder mit items-Liste); "
-                            "'liste' = aktuelle Liste lesen (direkte Antwort, "
-                            "kein propose→confirm); 'icon_suchen' = "
-                            "Piktogramm-Kandidaten zu einem Wort suchen "
-                            "(lesend, ohne Schreiben)."),
+                            "'icon_suchen' = Piktogramm-Kandidaten zu einem "
+                            "Wort suchen (lesend, ohne Schreiben). Zum Lesen "
+                            "der Punkt-Liste den Task 'routine_punkte_lesen' "
+                            "verwenden."),
                     },
                     "label": {
                         "type": "string",
@@ -292,12 +290,6 @@ class RoutinePunkteSetzenTask(WriteTask):
                     "Reihenfolge sichtbar?")
             return Proposal(summary)
 
-        if aktion == AKTION_LISTE:
-            # V1.2: liste ist lesend (EC-9) — läuft NICHT über propose→confirm.
-            # Das propose-Gate nennt es ehrlich; execute liefert direkte Antwort.
-            summary = "Aktuelle Routine-Punkte lesen (nur lesend, kein Schreiben)."
-            return Proposal(summary)
-
         if aktion == AKTION_ICON_SUCHEN:
             stichwort = (args.get("icon_stichwort") or "").strip()
             if stichwort:
@@ -387,10 +379,6 @@ def _quittung_fuer(signal, daten, aktion=""):
     if signal == rps_mod.SIGNAL_NEUGEORDNET:
         return _QUITTUNG_NEUGEORDNET.format(count=daten.get("count", 0))
 
-    if signal == SIGNAL_GELESEN:
-        # V1.2 (RPS-3): Lese-Antwort ist der formatierte Text.
-        return daten.get("text", "Routine-Punkte gelesen.")
-
     if signal == rps_mod.SIGNAL_ICON_KANDIDATEN:
         # RPS-4 / TASK-10b: die Quittung trägt das Mapping — das LLM sieht
         # die Positionen und IDs und postet das an die Familie. Die Bilder
@@ -436,7 +424,5 @@ def _quittung_fuer(signal, daten, aktion=""):
         return _QUITTUNG_NICHTS_ZU_TUN_ITEMS
     if aktion == AKTION_ICON_SUCHEN:
         return _QUITTUNG_NICHTS_ZU_TUN_STICHWORT
-    if aktion == AKTION_LISTE:
-        return "Die Routine-Punkte konnten nicht gelesen werden — Buddy nicht erreichbar."
     return ("Ich brauche eine Aktion (»hinzufuegen«, »einmalig«, "
-            "»loeschen«, »neu_ordnen«, »liste« oder »icon_suchen«).")
+            "»loeschen«, »neu_ordnen« oder »icon_suchen«).")
