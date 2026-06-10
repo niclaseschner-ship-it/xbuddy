@@ -100,8 +100,8 @@ interne Icon-Keys (`sun`/`clock`/`fork`/`moon`/`star`) — das wären zwei
 Icon-Quellen (Schedule-Rail vs. Aktivitäts-Katalog), Stilbruch innerhalb der
 View. Die V1.2-Defaults in `plan/plan.example.json`: bring → `37807`
 (verabschieden), pick → `39520` (wiedersehen), act1/act2 → `3071` (kalender,
-generisches Aktivitäts-Slot-Icon), cook → `2342` (kochen), bed1/bed2 → `2933`
-(mond). **Revision 2026-06-10 (Nic, Werft #578):** act1/act2 wurden von `2752`
+generisches Aktivitäts-Slot-Icon), cook → `2342` (kochen), bed1/bed2 → `6027`
+(bett — Werft #578 Revision Nic 2026-06-10 #647, ersetzt Mond 2933). **Revision 2026-06-10 (Nic, Werft #578):** act1/act2 wurden von `2752`
 (Stern) auf `3071` (Kalender) revidiert — der Stern-Icon wäre eine zweite
 Darstellung des Kalender-Slots neben dem Termin-Piktogramm, der Kalender-Icon
 ist konsistenter (Befund Pi-Deploy). Diese Werte sind Werft-Befunde und können
