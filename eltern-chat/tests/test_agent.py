@@ -442,3 +442,66 @@ def test_issue_331_proposal_pending_emitted_with_task_name_in_transcript():
     assert "kalender_verbinden" in synth_result.content
     # Altes Framing darf nicht mehr da sein (AC3(iii))
     assert "erst nach bestätigung" not in synth_result.content.lower()
+
+
+# ============================================================
+#  EC-30 — Welt-Wissen für allgemeine Anfragen, XBuddy-Zustand bleibt Katalog-only
+# ============================================================
+
+def test_welt_wissen_pfad_ohne_tool():
+    """AC2 (EC-30): Eine allgemeine Wissensfrage ohne XBuddy-Bezug führt zu einer
+    direkten Antwort ohne Tool-Aufruf. Das Modell muss kein Werkzeug aufrufen,
+    um z. B. eine technische Anleitung zu liefern."""
+    provider = FakeProvider([
+        text_response(
+            "Um ein CA-Zertifikat auf iOS 12 zu installieren: "
+            "Einstellungen → Allgemein → Über → Zertifikat-Vertrauens-Einstellungen."
+        )
+    ])
+    result = agent.run_turn(
+        [], _user("Wie installiere ich ein CA-Zertifikat auf einem alten iPhone?"),
+        provider, Catalog(), _TURN)
+    # Direkte Antwort, kein Proposal, kein Tool-Aufruf.
+    assert result.reply_text is not None
+    assert "Zertifikat" in result.reply_text
+    assert result.proposal is None
+    # Genau ein Provider-Call, kein Werkzeug wurde aufgerufen.
+    assert len(provider.requests) == 1
+
+
+def test_xbuddy_zustand_bleibt_katalog():
+    """AC3 (EC-30): Eine Anfrage nach XBuddy-Zustand (z. B. Geburtstag eines
+    Familien-Mitglieds) wird über eine Katalog-Aufgabe abgewickelt, nicht aus
+    Welt-Wissen. Welt-Wissen kennt keine familienspezifischen Daten."""
+    geburtstag_task = FakeReadTask(
+        name="geburtstage_lesen",
+        result="Morgen hat Paul Geburtstag.")
+    provider = FakeProvider([
+        task_call_response("geburtstage_lesen", arguments={}),
+        text_response("Morgen hat Paul Geburtstag."),
+    ])
+    result = agent.run_turn(
+        [], _user("Wer hat morgen Geburtstag?"),
+        provider, _catalog(geburtstag_task), _TURN)
+    # Die Aufgabe wurde aufgerufen (Katalog-Pfad, nicht Welt-Wissen).
+    assert geburtstag_task.run_calls == [{}]
+    # Antwort basiert auf dem Katalog-Ergebnis.
+    assert result.reply_text == "Morgen hat Paul Geburtstag."
+    assert result.proposal is None
+
+
+def test_EC_30_system_prompt_enthält_trennlinie():
+    """AC1 (EC-30): Der System-Prompt enthält die explizite Trennlinie zwischen
+    XBuddy-Zustand (Katalog) und Welt-Wissen (direkt), damit das LLM die
+    richtige Pfad-Wahl trifft."""
+    prompt = agent.SYSTEM_PROMPT
+    # Trennlinie muss explizit benannt sein.
+    assert "XBuddy-Zustand" in prompt
+    assert "Katalog" in prompt or "Katalog-Aufgabe" in prompt
+    # Welt-Wissen-Pfad ist explizit erlaubt.
+    assert "Wissen" in prompt
+    # XBuddy-Zustands-Beispiele müssen als Katalog-Pflicht markiert sein.
+    assert "Kalender" in prompt or "Familien-Mitglieder" in prompt
+    # EC-22-Geist (gezielte Rückfrage, keine Varianten) bleibt erhalten.
+    assert "fehlenden Kontext" in prompt
+    assert "Niemals mehrere Varianten" in prompt or "niemals mehrere varianten" in prompt.lower()
