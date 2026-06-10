@@ -306,10 +306,23 @@ vorhersagbare Stelle dafür — und die Origin kann die gesamte Form an
 
 Bauregeln:
 
-- **Loopback-only**: Admin-Endpunkte akzeptieren ausschließlich Requests
-  mit Quelladresse `127.0.0.1` **oder** `::1` (IPv4- und IPv6-Loopback)
-  und antworten sonst mit `403`. Der Guard lebt im Code der Komponente
-  (Defense in Depth gegenüber der Origin-Sperre).
+- **Loopback-only**: Admin-Endpunkte akzeptieren ausschließlich Requests,
+  deren **ursprüngliche Caller-IP** `127.0.0.1` **oder** `::1` ist
+  (IPv4- und IPv6-Loopback), und antworten sonst mit `403`. Der Guard
+  lebt im Code der Komponente (Defense in Depth gegenüber der
+  Origin-Sperre).
+
+  **Wichtig — Reverse-Proxy-Kontext:** Da jede Komponente hinter dem
+  nginx-Reverse-Proxy auf `127.0.0.1` lauscht (PORT-3), ist die direkte
+  TCP-Quelle eines durch nginx kommenden Requests **immer** `127.0.0.1`
+  — auch wenn der ursprüngliche Caller im Internet sitzt. Der Code-Guard
+  muss deshalb die **echte Caller-IP** prüfen, nicht `request.remote_addr`
+  unpetrarbeitet. Konkrete Form: `werkzeug.middleware.proxy_fix.ProxyFix`
+  (oder äquivalent) mit `x_for=1` aufsetzen — das setzt `REMOTE_ADDR` aus
+  dem `X-Forwarded-For`-Header, **trusted** auf genau eine Proxy-Hop
+  (den eigenen nginx). Der Code-Guard prüft danach den ursprünglichen
+  Caller. Ohne diese Verkettung ist der Code-Guard wirkungslos gegen
+  externe Bypass-Versuche.
 - **Origin-seitig mit `404` geblockt**: die Origin **soll** jeden Pfad,
   der auf `^/api/v1/[^/]+/admin/` matcht, mit `404` abweisen — vor allen
   `/api/v1/<komponente>/`-Prefixen (URL-14, spezifisch-vor-allgemein).
