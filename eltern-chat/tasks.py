@@ -568,7 +568,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             plan_client=_pas_plan_client,
             icon_client=_pas_icon_client,
             family_group_chat_id_getter=family_group_chat_id_getter,
-            is_member_fn=_pas_is_member))
+            is_member_fn=_pas_is_member,
+            icon_origin_url=icon_origin_url))
 
     # WZE-8 / #503: »Wünsche zeigen« als lesende Aufgabe (EC-9).
     # AND-Guard: essen_origin_url UND family_group_chat_id_getter müssen
