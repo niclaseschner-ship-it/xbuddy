@@ -92,18 +92,30 @@ ICONS-7, `GET /api/v1/icons/suche?q=<label>&max=3`) und legt dem Elternteil die
 
 **Mechanik der Kandidaten-Anzeige (verbindlich):** Die „Bilder vor"-Klausel
 ist als **inline Telegram-Bild-Block** umzusetzen, nicht als URL-Liste. Der
-Skill ruft `sendMediaGroup` (Telegram-API) mit den bis zu drei Kandidaten als
-Album auf; jeder Kandidat hat als Caption seine ARASAAC-`id`. Der Elternteil
-antwortet mit der `id` (oder einer Album-Position 1/2/3, die der Skill auf die
-`id` zurückbildet). **Bildquelle:** der Skill lädt das Bild über
-`icon_origin_url` per HTTP (RPS-6-Konsistenz — derselbe Router-Origin, der
-auch die Suche bedient), nicht aus dem Dateisystem direkt (DCOMP-1: keine
-Pfad-Kopplung zwischen Services). Eine URL-Liste als minimale Variante ist
-**verworfen** — der Live-Befund 2026-06-08 hat gezeigt, dass Eltern eine
-nackte ID („2326") oder einen Klick auf eine URL nicht akzeptieren; inline
-Bild ist die einzige tragfähige UX. Telegram-Client `eltern-chat/telegram.py`
-braucht dazu eine `send_media_group`-Methode (analog der existierenden
-`send_document`-Multipart-Naht).
+Skill ruft den **ID-Wahl-Album-Helper** (TASK-10b,
+`eltern-chat/skills/icon_album.py:zeige_kandidaten`) mit den ICONS-7-Treffern
+als `{id, url}`-Liste plus der `icon_origin_url` auf; der Helper übernimmt
+den Telegram-Pfad — `send_photo` bei 1 Treffer, `send_media_group` bei 2–3
+Treffern, **ohne** Captions an den Bildern. **Die Mapping-Information**
+(„welche Album-Position trägt welche ARASAAC-ID") liefert der Skill als Teil
+seines Tool-Result-Strings an das LLM in der Form *„1 = `<id_1>`, 2 =
+`<id_2>`, 3 = `<id_3>`. Welcher passt? Antworte mit der ID, dann lege ich
+den Punkt an."*; das LLM postet diesen Text als Begleit-Nachricht im selben
+Turn (EC-29: eine Stimme — Skill sendet das Bild, LLM sendet den Text;
+TASK-10/TASK-10b). Der Elternteil antwortet mit der `id`; eine Antwort per
+Album-Position (1/2/3) bildet der Skill über die zuvor gesendete
+Mapping-Liste zurück auf die `id`. **Bildquelle:** der Helper lädt das PNG
+über `<icon_origin_url> + <url-aus-ICONS-7>` per HTTP (RPS-6-Konsistenz —
+derselbe Router-Origin, der auch die Suche bedient), nicht aus dem
+Dateisystem direkt (DCOMP-1: keine Pfad-Kopplung zwischen Services). Eine
+URL-Liste als minimale Variante ist **verworfen** — der Live-Befund
+2026-06-08 hat gezeigt, dass Eltern eine nackte ID („2326") oder einen Klick
+auf eine URL nicht akzeptieren; inline Bild ist die einzige tragfähige UX.
+Telegram-Client `eltern-chat/telegram.py` braucht für den Helper eine
+`send_media_group`- und eine `send_photo`-Methode (analog der existierenden
+`send_document`-Multipart-Naht); beide Methoden + der Helper sind
+Transport-Schicht und gehören in #470 (Welle 11 — Bilder-Lego), nicht in
+den Skill.
 
 Die gewählte ARASAAC-`id` geht als `piktogramm` in den Punkt (ROUTINE-10). Der
 Icon-Such-Endpunkt liefert nur IDs mit lokal vorliegendem PNG (ICONS-7) — der

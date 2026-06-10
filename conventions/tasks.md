@@ -223,6 +223,74 @@ klar verankert.
 
 *Tickets:* #551, #564
 
+### TASK-10b — ID-Wahl-Album per ICONS-7-Helper
+
+Eine Katalog-Aufgabe, die dem Elternteil **mehrere ICONS-7-Treffer zur Wahl
+per ID** vorlegt (heutige Konsumenten: RPS — Routine-Punkt-Piktogramm, GAN —
+Gericht-Piktogramm, PAS — Aktivitäts-Piktogramm), benutzt den geteilten Helper
+`eltern-chat/skills/icon_album.py` mit der Signatur
+
+    zeige_kandidaten(tg, chat_id, kandidaten: List[{id, url}], icon_origin_url) -> None
+
+— statt eigenen Multipart-/Album-Code. Der Helper ist die einzige Heimat des
+Telegram-Album-Sendepfades für ID-Wahl-Bilder; ein Skill, der ein zweites Mal
+`sendMediaGroup` oder `send_photo` für ID-Kandidaten direkt aufruft, ist
+Spec-Verletzung (CLAUDE.md §6 „dieselbe Logik zweimal zu schreiben ist
+verboten").
+
+**Trefferzahl-Fallback (verbindlich, im Helper, nicht im Skill).** Der Helper
+verzweigt anhand der Listen-Länge: 1 Treffer → `tg.send_photo`; 2–3 Treffer →
+`tg.send_media_group` (Telegram-API erlaubt erst ab 2 Items ein Album); 0
+Treffer → **no-op** (`zeige_kandidaten` macht nichts). Der Skill fängt
+**vorher** ab: liefert ICONS-7 keine Treffer, meldet der Skill das selbst
+ehrlich (EC-7, vgl. RPS-4 / GAN-4) und ruft den Helper gar nicht. Der no-op-
+Zweig ist Sicherheitsnetz, kein normaler Pfad.
+
+**Caption-Klausel: Helper setzt keine Captions.** Das Album bzw. das Einzel-
+Foto trägt **keine** Caption an den Bildern. Die Mapping-Information
+(„welche Album-Position ist welche ARASAAC-ID") liefert der Skill als Teil
+seines Tool-Result-Strings an das LLM in Form
+
+> *„1 = `<id_1>`, 2 = `<id_2>`, 3 = `<id_3>`. Welcher passt? Antworte mit der ID."*
+
+(bzw. der zur jeweiligen Trefferzahl passenden, gekürzten Liste). Das LLM
+postet diesen Text als Begleit-Nachricht im selben Turn — das ist genau der
+EC-29-Vertrag aus dem Eltern-Chat (eine Stimme: Skill sendet den Anhang, LLM
+sendet den Text). EC-29 bleibt von TASK-10b unberührt; die Sub-ID nennt nur
+explizit, dass der Skill **keine** Captions ans Album hängt — die
+Bilder-und-Text-Trennung des Datei-Anhang-Patterns (TASK-10, „Datei-Anhänge:
+Skill sendet die Datei, LLM postet den Text") gilt hier wörtlich.
+
+**URL-Konsum aus ICONS-7.** Die Such-API liefert je Kandidat einen
+`{id, url}`-Datensatz (`specs/platform/icons.md` ICONS-7,
+`specs/platform/icons.md:131-146`). Der Helper holt das PNG ausschließlich
+über `<icon_origin_url> + <url>` per HTTP — er kennt **kein**
+ARASAAC-Pfadschema, baut **keinen** Pfad selbst aus der `id`. Damit bleibt
+die Konvention austauschbar gegen einen ICONS-Nachfolger, der die URL-Form
+ändert; der Skill und der Helper folgen ICONS-7, nicht der Datei-Struktur
+(DCOMP-1: keine Pfad-Kopplung zwischen Services). Der Aufrufer (Skill)
+muss die `icon_origin_url` als expliziten Parameter mitgeben (Tasks erhalten
+sie heute über die `build_catalog`-Injektion, nicht über den IconClient).
+
+**Reihenfolge-/Identitäts-Klausel.** Der Helper sendet die Bilder in genau
+der vom Aufrufer übergebenen Reihenfolge der `kandidaten`-Liste und filtert
+keine Einträge — der Mapping-Text, den der Skill an das LLM zurückgibt,
+bleibt damit verbindlich. Position 1 im Album entspricht `kandidaten[0]`,
+Position 2 entspricht `kandidaten[1]`, usw.; eine Position-zu-`id`-
+Rückbildung im Skill ist deterministisch sicher.
+
+**Geltungsbereich.** TASK-10b ist die Bauregel für **alle** ID-Wahl-Skills,
+die ICONS-7 konsumieren — gebaute Konsumenten heute: RPS-4
+(`specs/platform/routine-punkte-setzen.md`), GAN-4
+(`specs/platform/gericht-anlegen.md`); spec-aligned und noch nicht gebaut:
+PAS-4 (`specs/platform/plan-aktivitaeten-setzen.md`). Spätere Konsumenten
+docken an, ohne TASK-10b zu erweitern; der Helper bleibt die eine Heimat.
+Die Konvention entsteht jetzt mit zwei *gebauten* + einem spec-aligned
+Konsumenten — kein Vorratsbau (CLAUDE.md §6 „Lege nichts auf Vorrat an").
+
+*Tickets:* #470 (Welle 11 — Bilder-Lego, Berater-Runde 2026-06-10
+ratifiziert)
+
 ---
 
 **Hinweis (historisch, jetzt GEBAUT):** Das Privatchat-Session-Routing in
