@@ -692,12 +692,17 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # TAB-12 / #475: Session-Map für »Termine aus Bild«.
         tab_sessions=tab_sessions,
         # TAB-5 / E-TAB-6: V1 nutzt denselben Anbieter wie der Text-Pfad
-        # (cfg.provider). build_catalog baut den multimodalen Adapter lazy
-        # über `_multimodal.get_multimodal_provider`, wenn provider_api_key
+        # (cfg.provider). V2 (E-TAB-6): multimodal_* können unabhängig
+        # gesetzt werden — leere Werte fallen auf den Text-Pfad zurück.
+        # build_catalog baut den multimodalen Adapter lazy über
+        # `_multimodal.get_multimodal_provider`, wenn provider_api_key
         # gesetzt ist (Onboarding-Modus ⇒ kein Adapter, AND-Guard greift).
         provider_name=cfg.provider,
         provider_api_key=cfg.provider_api_key,
-        provider_model=cfg.provider_model)
+        provider_model=cfg.provider_model,
+        multimodal_provider=getattr(cfg, "multimodal_provider", "") or "",
+        multimodal_api_key=getattr(cfg, "multimodal_api_key", "") or "",
+        multimodal_model=getattr(cfg, "multimodal_model", "") or "")
 
     if cfg.provider_api_key:
         # KI-Modus — Anbieter steht; die Familien-Gruppe muss gesetzt sein (EC-2).

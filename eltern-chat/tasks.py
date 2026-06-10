@@ -297,6 +297,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   tab_sessions=None,
                   provider_name=None, provider_api_key=None,
                   provider_model=None,
+                  multimodal_provider=None, multimodal_api_key=None,
+                  multimodal_model=None,
                   essen_origin_url=None):
     """Baut den Katalog für eine laufende Instanz.
 
@@ -430,9 +432,9 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
         from skills.termine_aus_bild_task import TermineAusBildTask
         _tab_plan_client = _TabPlanClient(origin_url=plan_origin_url)
         _tab_multimodal = get_multimodal_provider(
-            provider_name or "claude",
-            provider_api_key,
-            provider_model or "")
+            multimodal_provider or provider_name or "claude",
+            multimodal_api_key or provider_api_key,
+            multimodal_model or "")
         _tab_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
         catalog.register(TermineAusBildTask(
             tg=tg,
