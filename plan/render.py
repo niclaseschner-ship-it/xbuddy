@@ -75,6 +75,27 @@ def aktivitaets_art(titel, config=None):
     return aktivitaeten_mod.art_aus_titel(titel, config)
 
 
+def klassifiziere_event_multi(titel, kinder, config=None):
+    """PLAN-19 V1.2: liefert alle Kind-IDs in Erwähnungs-Reihenfolge (max 2),
+    plus art. Wenn kein Kind getroffen, None.
+
+    Backward-Compat: `klassifiziere_event` bleibt als Wrapper (kind_id = first).
+    """
+    s = (titel or "").lower()
+    treffer = []  # [(fundindex, kind_id), ...]
+    for k in kinder:
+        if not k.name:
+            continue
+        pos = s.find(k.name.lower())
+        if pos >= 0:
+            treffer.append((pos, k.id))
+    if not treffer:
+        return None
+    treffer.sort(key=lambda t: t[0])
+    kind_ids = [kid_id for _, kid_id in treffer[:2]]
+    return kind_ids, aktivitaets_art(titel, config)
+
+
 def klassifiziere_event(titel, kinder, config=None):
     """Ordnet ein Event genau dann einer Kind-Aktivität zu, wenn sein Titel
     den Namen eines Kindes trägt (PLAN-12).
@@ -82,18 +103,15 @@ def klassifiziere_event(titel, kinder, config=None):
     `kinder` ist eine Liste von familie.Person (Art Kind). Liefert
     (kind_id, art) bei Treffer, sonst None — dann ist es ein Termin (PLAN-13).
     Mit `config` greift der Live-Katalog (Config-Durchstich, AC2).
+
+    Backward-Compat-Wrapper um klassifiziere_event_multi — liefert nur
+    die erste Kind-ID. Interner Code nutzt klassifiziere_event_multi.
     """
-    s = (titel or "").lower()
-    treffer = None  # (fundindex, kind_id)
-    for k in kinder:
-        if not k.name:
-            continue
-        pos = s.find(k.name.lower())
-        if pos >= 0 and (treffer is None or pos < treffer[0]):
-            treffer = (pos, k.id)
-    if treffer is None:
+    result = klassifiziere_event_multi(titel, kinder, config)
+    if result is None:
         return None
-    return treffer[1], aktivitaets_art(titel, config)
+    kind_ids, art = result
+    return kind_ids[0], art
 
 
 def strip_kind_name(titel, kinder):
@@ -221,24 +239,27 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
 
         ring = _ring_fuer_person(ev.person, registry) if ev.person else None
 
-        kid_act = klassifiziere_event(ev.titel, kinder, cfg)
+        kid_act = klassifiziere_event_multi(ev.titel, kinder, cfg)
         if kid_act is not None:
-            # PLAN-12: Kind-Aktivität → Aktivitäts-Slot. Ein Kind-Slot-Eintrag
-            # trägt immer ein Symbol: die erkannte Art oder ein generisches
+            # PLAN-12 / PLAN-19 V1.2: Kind-Aktivität → Aktivitäts-Slot.
+            # Ein Multi-Person-Event landet in JEDER betroffenen Kind-Slot-Zeile
+            # als regulärer Aktivitäts-Chip (gleiche event_id). Ein Kind-Slot-
+            # Eintrag trägt immer ein Symbol: die erkannte Art oder ein generisches
             # Fallback-Symbol — nie symbol-/typlos.
-            kind_id, art = kid_act
-            slot_key = kind_zu_slot.get(kind_id)
-            if slot_key is not None:
-                # ARASAAC-Piktogramm für den Aktivitäts-Chip (E-PLAN-5 V1.2).
-                piktogramm = (aktivitaeten_mod.icon_fuer_art(art, cfg)
-                              if art else None) or aktivitaeten_mod.FALLBACK_PIKTOGRAMM
-                for iso in tag_isos:
-                    schedule[iso][slot_key] = {
-                        "type": art or GENERIC_ACT_FALLBACK,
-                        "piktogramm": piktogramm,
-                        "label": strip_kind_name(ev.titel, kinder),
-                        "event_id": ev.id,
-                    }
+            kind_ids, art = kid_act
+            piktogramm = (aktivitaeten_mod.icon_fuer_art(art, cfg)
+                          if art else None) or aktivitaeten_mod.FALLBACK_PIKTOGRAMM
+            chip = {
+                "type": art or GENERIC_ACT_FALLBACK,
+                "piktogramm": piktogramm,
+                "label": strip_kind_name(ev.titel, kinder),
+                "event_id": ev.id,
+            }
+            for kind_id in kind_ids:
+                slot_key = kind_zu_slot.get(kind_id)
+                if slot_key is not None:
+                    for iso in tag_isos:
+                        schedule[iso][slot_key] = chip
             # PLAN-13: Ein zeitgebundener Einzel-Termin erscheint zusätzlich in
             # der Termin-Leiste mit seiner Uhrzeit — derselbe Event (gleiche id).
             # Ganztägig/mehrtägig bleibt nur im Kind-Slot.
@@ -271,7 +292,7 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
     }
 
 
-def _einzel_termin(ev, ring, config=None, registry=None):
+def _einzel_termin(ev, ring, config, registry):
     """Ein Einzel-Termin-Eintrag der Termin-Leiste (PLAN-13).
 
     Der gemeinsame Append-Pfad für Kind-Termine und Nicht-Kind-Termine —
@@ -282,13 +303,14 @@ def _einzel_termin(ev, ring, config=None, registry=None):
     PLAN-19 V1.1: `personen` ist eine Liste von {person, ring}-Dicts für
     bis zu zwei Avatare in der Termin-Leiste. `ring`/`person` bleiben für
     Backward-Compat (Single-Person-Pfad, Aktivitäts-Slot-Kind-Termine).
+    `registry` ist Pflicht-Parameter — der `registry is None`-Zweig ist
+    entfernt (Befund 3, T473-S2).
     """
     uhrzeit = None
     if not ev.ganztags and ev.beginn is not None:
         uhrzeit = ev.beginn.strftime("%H:%M")
     # PLAN-19 V1.1: Personen-Liste für zwei Avatare in der Termin-Leiste.
-    personen_rings = (_personen_rings(ev.personen, registry)
-                      if registry is not None else [])
+    personen_rings = _personen_rings(ev.personen, registry)
     return {
         "time": uhrzeit,
         "label": ev.titel,
