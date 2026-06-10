@@ -257,9 +257,9 @@ def _quittung_fuer(signal, daten, aktion=""):
             "%d = %s" % (i + 1, k.get("id"))
             for i, k in enumerate(kandidaten)
         )
-        return ("Piktogramm-Kandidaten für »%s« als Bilder geschickt: "
-                "%s. Welcher passt? Antworte mit der ID, dann lege ich "
-                "das Gericht an." % (label, mapping))
+        return ("Für »%s« habe ich diese Piktogramm-Kandidaten als Bilder "
+                "geschickt: %s. Welcher passt? Antworte mit der ID, dann "
+                "lege ich das Gericht an." % (label, mapping))
 
     if signal == gan_mod.SIGNAL_KEINE_ICONS:
         return _QUITTUNG_KEINE_ICONS.format(label=daten.get("label", "?"))
