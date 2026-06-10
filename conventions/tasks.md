@@ -272,14 +272,21 @@ die Konvention austauschbar gegen einen ICONS-Nachfolger, der die URL-Form
 muss die `icon_origin_url` als expliziten Parameter mitgeben (Tasks erhalten
 sie heute über die `build_catalog`-Injektion, nicht über den IconClient).
 
+**Reihenfolge-/Identitäts-Klausel.** Der Helper sendet die Bilder in genau
+der vom Aufrufer übergebenen Reihenfolge der `kandidaten`-Liste und filtert
+keine Einträge — der Mapping-Text, den der Skill an das LLM zurückgibt,
+bleibt damit verbindlich. Position 1 im Album entspricht `kandidaten[0]`,
+Position 2 entspricht `kandidaten[1]`, usw.; eine Position-zu-`id`-
+Rückbildung im Skill ist deterministisch sicher.
+
 **Geltungsbereich.** TASK-10b ist die Bauregel für **alle** ID-Wahl-Skills,
 die ICONS-7 konsumieren — gebaute Konsumenten heute: RPS-4
 (`specs/platform/routine-punkte-setzen.md`), GAN-4
 (`specs/platform/gericht-anlegen.md`); spec-aligned und noch nicht gebaut:
 PAS-4 (`specs/platform/plan-aktivitaeten-setzen.md`). Spätere Konsumenten
-docken an, ohne TASK-10b zu erweitern; der Helper bleibt die eine Heimat
-(RAT-12-Geist: die Konvention entsteht mit zwei *gebauten* + einem
-spec-aligned Konsumenten, nicht vorsorglich).
+docken an, ohne TASK-10b zu erweitern; der Helper bleibt die eine Heimat.
+Die Konvention entsteht jetzt mit zwei *gebauten* + einem spec-aligned
+Konsumenten — kein Vorratsbau (CLAUDE.md §6 „Lege nichts auf Vorrat an").
 
 *Tickets:* #470 (Welle 11 — Bilder-Lego, Berater-Runde 2026-06-10
 ratifiziert)
