@@ -1704,6 +1704,190 @@ def test_PANEL_12_shrink_not_needed_for_normal_viewport():
 
 
 # ============================================================
+#  PANEL-12 — Safe-Area-Insets (T384)
+# ============================================================
+
+
+def test_PANEL_12_viewport_fit_cover_in_meta():
+    """AC1 / PANEL-12: index.html Meta-Tag enthält viewport-fit=cover."""
+    html = read(HTML_PATH)
+    assert 'viewport-fit=cover' in html, \
+        'index.html: viewport-Meta muss viewport-fit=cover enthalten (AC1 / PANEL-12 Safe-Area)'
+
+
+def test_PANEL_12_safe_area_css_vars_in_style_css():
+    """AC2 / PANEL-12: style.css setzt alle vier --safe-area-inset-* CSS-Variablen
+    via env() auf :root (Lesbarkeit durch JS via getComputedStyle)."""
+    css = read(CSS_PATH)
+    for name in ('top', 'bottom', 'left', 'right'):
+        var_name = '--safe-area-inset-' + name
+        assert var_name in css, \
+            'style.css: %s muss als CSS-Variable auf :root gesetzt sein (AC2)' % var_name
+        assert 'env(safe-area-inset-' + name in css, \
+            'style.css: %s muss env(safe-area-inset-%s) referenzieren (AC2)' % (var_name, name)
+
+
+def test_PANEL_12_get_viewport_dimensions_exported():
+    """AC2 / PANEL-12: getViewportDimensions ist aus panelLib exportiert."""
+    out = run_node('''
+        console.log(JSON.stringify({
+            exported: typeof panelLib.getViewportDimensions === 'function',
+        }));
+    ''')
+    assert out['exported'], \
+        'getViewportDimensions muss aus panelLib exportiert sein (AC2 / PANEL-12)'
+
+
+def test_PANEL_12_safe_area_zero_insets_unchanged():
+    """AC3 / PANEL-12: Bei Insets 0 liefert getViewportDimensions identische Werte
+    zu innerWidth/innerHeight — V1-Regression (Geräte ohne Notch)."""
+    out = run_node('''
+        // Stub: documentElement ohne CSS-Variablen → readVar gibt 0 zurück.
+        var stubDoc = {
+            documentElement: { style: {} },
+        };
+        var stubWin = { innerWidth: 880, innerHeight: 370 };
+        var dims = panelLib.getViewportDimensions({ doc: stubDoc, win: stubWin });
+        console.log(JSON.stringify({
+            vpW: dims.vpW,
+            vpH: dims.vpH,
+            expectedW: 880,
+            expectedH: 370,
+        }));
+    ''')
+    assert out['vpW'] == out['expectedW'], \
+        'AC3: vpW bei Insets=0 muss == innerWidth (880) sein; bekommen: %d' % out['vpW']
+    assert out['vpH'] == out['expectedH'], \
+        'AC3: vpH bei Insets=0 muss == innerHeight (370) sein; bekommen: %d' % out['vpH']
+
+
+def test_PANEL_12_safe_area_insets_subtracted():
+    """AC2+AC4 / PANEL-12: getViewportDimensions zieht Insets korrekt ab.
+    Simuliert iPhone-Notch (top=44px, bottom=34px) und Landscape-Notch (left=44px, right=0).
+    vpH = innerHeight - top - bottom; vpW = innerWidth - left - right."""
+    out = run_node('''
+        // Stub: documentElement mit expliziten CSS-Variablen (wie style.css sie setzt).
+        var stubDoc = {
+            documentElement: {
+                style: {},
+                computedStyle: {
+                    getPropertyValue: function(name) {
+                        var vars = {
+                            "--safe-area-inset-top":    "44px",
+                            "--safe-area-inset-bottom": "34px",
+                            "--safe-area-inset-left":   "44px",
+                            "--safe-area-inset-right":  "0px",
+                        };
+                        return vars[name] !== undefined ? vars[name] : "0px";
+                    }
+                }
+            },
+        };
+        var stubWin = { innerWidth: 812, innerHeight: 375 };
+        var dims = panelLib.getViewportDimensions({ doc: stubDoc, win: stubWin });
+        console.log(JSON.stringify({
+            vpW: dims.vpW,
+            vpH: dims.vpH,
+            expectedW: 812 - 44 - 0,
+            expectedH: 375 - 44 - 34,
+        }));
+    ''')
+    assert out['vpW'] == out['expectedW'], \
+        ('AC2: vpW = innerWidth - left - right erwartet %d; bekommen: %d'
+         % (out['expectedW'], out['vpW']))
+    assert out['vpH'] == out['expectedH'], \
+        ('AC2: vpH = innerHeight - top - bottom erwartet %d; bekommen: %d'
+         % (out['expectedH'], out['vpH']))
+
+
+def test_PANEL_12_apply_grid_geometry_uses_safe_area():
+    """AC4 / PANEL-12: applyGridGeometry setzt grid.style.height auf vpH (Safe-Area-bereinigt),
+    nicht auf nackes innerHeight. Simuliert top=44px + bottom=34px → vpH = 375 - 78 = 297."""
+    out = run_node_dom(r"""
+        var INNER_H = 375;
+        var INNER_W = 812;
+        var INSET_TOP    = 44;
+        var INSET_BOTTOM = 34;
+        var INSET_LEFT   = 0;
+        var INSET_RIGHT  = 0;
+        var EXPECTED_VPH = INNER_H - INSET_TOP - INSET_BOTTOM;  // 297
+
+        var doc = makeDom();
+
+        // documentElement mit CSS-Variable-Stub.
+        doc.documentElement.computedStyle = {
+            getPropertyValue: function(name) {
+                var m = {
+                    "--safe-area-inset-top":    INSET_TOP    + "px",
+                    "--safe-area-inset-bottom": INSET_BOTTOM + "px",
+                    "--safe-area-inset-left":   INSET_LEFT   + "px",
+                    "--safe-area-inset-right":  INSET_RIGHT  + "px",
+                };
+                return m[name] !== undefined ? m[name] : "0px";
+            }
+        };
+
+        // #grid mit 11 Kacheln.
+        var gridEl = {
+            _tag: 'div', _children: [],
+            style: {},
+            classList: { add: function(){}, remove: function(){},
+                         contains: function(){ return false; } },
+            appendChild: function(c) { c.parentNode = this; this._children.push(c); return c; },
+        };
+        gridEl.children = gridEl._children;
+
+        var errorEl = {
+            style: {}, offsetHeight: 0,
+            classList: { add: function(){}, remove: function(){},
+                         contains: function(cls) { return cls === 'hidden'; } }
+        };
+
+        var stubDoc = {
+            createElement: doc.createElement,
+            getElementById: function(id) {
+                if (id === 'grid')  return gridEl;
+                if (id === 'error') return errorEl;
+                return null;
+            },
+            querySelectorAll: function() { return []; },
+            body: doc.body,
+            visibilityState: 'visible',
+            fullscreenElement: null,
+            documentElement: doc.documentElement,
+            addEventListener: function() {}
+        };
+
+        var stubWin = { innerWidth: INNER_W, innerHeight: INNER_H, addEventListener: function(){} };
+
+        // 11 Kacheln einhängen.
+        for (var i = 0; i < 10; i++) {
+            var t = { key: 'k'+i, app: 'plan', view: 'woche',
+                      label: 'L'+i, icons: ['arasaac/test.png'], sichtbar: true };
+            gridEl.appendChild(panelLib.makeTileElement(stubDoc, t, function(){}, ''));
+        }
+        gridEl.appendChild(panelLib.makeAusKachel(stubDoc, function(){}, ''));
+
+        panelLib.applyGridGeometry({ doc: stubDoc, win: stubWin });
+
+        var styleHeightPx = parseInt(gridEl.style.height, 10);
+        console.log(JSON.stringify({
+            styleHeightPx: styleHeightPx,
+            expectedVpH:   EXPECTED_VPH,
+            heightMatchesVpH: styleHeightPx === EXPECTED_VPH,
+            heightBelowInnerH: styleHeightPx < INNER_H,
+        }));
+    """)
+    assert out['heightMatchesVpH'], \
+        ('AC4: grid.style.height muss vpH=%d (Safe-Area-bereinigt) sein, '
+         'nicht nackes innerHeight; bekommen: %d'
+         % (out['expectedVpH'], out['styleHeightPx']))
+    assert out['heightBelowInnerH'], \
+        ('AC4: grid.style.height=%d muss < innerHeight=%d sein (Insets wurden abgezogen)'
+         % (out['styleHeightPx'], 375))
+
+
+# ============================================================
 #  PANEL-10 / PWA-2 — Manifest icons[] + PNG-Validität (AC4)
 # ============================================================
 
