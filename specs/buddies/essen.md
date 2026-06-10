@@ -347,16 +347,17 @@ im nächsten GET sichtbar; ungültiger POST (leeres Label / unbekannte
 
 ### ESSEN-17 — `DELETE /api/v1/essen/wuensche/<id>` — Wunsch entfernen
 Entfernt einen Wunsch aus der Liste. **In V1 exposed** (vollständige API,
-interface-first), **Konsument erst V1.x** (Eltern-Chat-Pflege-Skill,
-OPEN-ESSEN-A). Idempotent: ein DELETE auf eine bereits entfernte ID liefert
-200 mit leerer Antwort (kein 404), damit der spätere Skill nicht zwischen
-„war nie da" und „schon weg" unterscheiden muss.
+interface-first). **Konsumenten:** (a) Display-Lösch-Geste am Wunsch-Listen-
+Eintrag (ESSEN-27, V1); (b) Eltern-Chat-Pflege-Skill (OPEN-ESSEN-A, V1.x).
+Idempotent: ein DELETE auf eine bereits entfernte ID liefert 200 mit leerer
+Antwort (kein 404), damit der spätere Skill nicht zwischen „war nie da" und
+„schon weg" unterscheiden muss.
 
 *Test-Implikation:* DELETE auf eine vorhandene ID → 200; nachfolgendes GET
 enthält die ID nicht mehr; zweites DELETE auf dieselbe ID → 200, GET weiter
 unverändert.
 
-*Tickets:* #474
+*Tickets:* #474, #532
 
 ### ESSEN-18 — `GET /api/v1/essen/katalog` — Katalog lesen
 Liefert den vollständigen Katalog gruppiert nach Kategorie: die drei
@@ -585,9 +586,36 @@ ESSEN-19 (gültiger POST persistiert; doppeltes `label` → 409) ·
 ESSEN-20 (Reload-on-Read sichtbar nach POST ohne Restart; partiell
 geschriebene Datei → Last-Known-Good, DCOMP-3/4) ·
 ESSEN-21 (CONFIG-4: fehlende/kaputte Datei → Defaults + Warnung, Prozess
-startet).
+startet) ·
+ESSEN-27 (Display-Lösch-Geste: Mülltonnen-Symbol sichtbar an jeder
+`liste-eintrag`; Tap löst DELETE auf die richtige ID aus; Liste rendert
+neu gemäß ESSEN-20).
 
 *Tickets:* #474
+
+### ESSEN-27 — Display-Lösch-Geste am Wunsch-Listen-Eintrag
+Jede `liste-eintrag`-Kachel auf `/display/essen/wunsch` trägt **sichtbar
+auf der Kachel** ein Mülltonnen-Symbol (ARASAAC ID **2355**, geliefert über
+die geteilte Icon-Plattform ICONS-5: `/display/_shared/icons/arasaac/2355.png`).
+Position: kinder-tappbar im sichtbaren Kachel-Bereich, nicht in eine Eck-Ecke
+gedrückt. **Genau ein Tap** auf das Symbol löst `DELETE /api/v1/essen/wuensche/<id>`
+(ESSEN-17) aus; die Liste rendert unmittelbar danach neu und zeigt den
+Eintrag nicht mehr (Reload-on-Read, ESSEN-20).
+
+**Render-Vertrag:** Jede `liste-eintrag` trägt `data-wunsch-id="<id>"` (heute
+fehlt das Attribut, neu in V1.x-Render).
+
+**Bewusst NICHT in V1:** Bestätigungs-Dialog / Long-Press / Bulk-Lösch
+(„Liste leeren"). Versehentliches Löschen wird über das erneute Eintragen
+aufgefangen (Einkaufslisten-Modell, Reibung gering, kein Datenverlust mit
+Bedeutung).
+
+*Test-Implikation:* der Render zeigt das Mülltonnen-Symbol an jeder
+`liste-eintrag`; eine Klick-Simulation auf das Symbol triggert genau einen
+DELETE-Request mit der korrekten `data-wunsch-id`; nachfolgender GET liefert
+die ID nicht mehr (Reload-on-Read).
+
+*Tickets:* #532
 
 ---
 
