@@ -579,6 +579,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             essen_client=_gan_essen_client,
             icon_client=_gan_icon_client,
             family_group_chat_id_getter=family_group_chat_id_getter,
-            is_member_fn=_gan_is_member))
+            is_member_fn=_gan_is_member,
+            icon_origin_url=icon_origin_url))
 
     return catalog

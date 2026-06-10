@@ -26,10 +26,12 @@ import logging
 from tasks import Proposal, WriteTask
 
 from skills import gericht_anlegen as gan_mod
+from skills import icon_album
 from skills.gericht_anlegen import (
     AKTION_HINZUFUEGEN,
     AKTION_ICON_SUCHEN,
 )
+from skills.icon_album import IconAlbumError
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +81,8 @@ class GerichtAnlegenTask(WriteTask):
     post_execute_hooks = ()
 
     def __init__(self, tg, essen_client, icon_client,
-                 family_group_chat_id_getter, is_member_fn=None):
+                 family_group_chat_id_getter, is_member_fn=None,
+                 icon_origin_url=None):
         super().__init__(
             name="gericht_anlegen",
             description=(
@@ -90,9 +93,10 @@ class GerichtAnlegenTask(WriteTask):
                 "Vor einem ‹hinzufuegen›-Aufruf muss ein Piktogramm gewählt "
                 "sein. Dafür den Task ZUERST mit "
                 "{aktion: 'icon_suchen', icon_stichwort: '<wort>'} aufrufen "
-                "(lesend, keine Bestätigung) — die Quittung enthält bis "
-                "zu drei Vorschlags-IDs. Dann den Task ein zweites Mal "
-                "aufrufen mit {aktion: 'hinzufuegen', label: '<name>', "
+                "(lesend, keine Bestätigung) — die Quittung enthält das "
+                "Mapping der Kandidaten-Bilder (1 = <id>, 2 = <id>, …). "
+                "Dann den Task ein zweites Mal aufrufen mit "
+                "{aktion: 'hinzufuegen', label: '<name>', "
                 "icon_id: '<id-aus-vorschlag>'}."),
             parameters={
                 "type": "object",
@@ -137,6 +141,9 @@ class GerichtAnlegenTask(WriteTask):
         self._icon_client = icon_client
         self._family_group_chat_id_getter = family_group_chat_id_getter
         self._is_member_fn = is_member_fn
+        # icon_origin_url: Basis-Origin des Routers für die Album-Bilder
+        # (TASK-10b). Wird von build_catalog durchgereicht (icon_origin_url).
+        self._icon_origin_url = icon_origin_url or ""
 
     def propose(self, arguments, turn_context):
         """EC-10-Vorschlag — beschreibt die geplante Änderung (GAN-5, E-GAN-2).
@@ -198,6 +205,26 @@ class GerichtAnlegenTask(WriteTask):
             icon_id=args.get("icon_id"),
             icon_stichwort=args.get("icon_stichwort"),
         )
+
+        # GAN-4 / TASK-10b: bei SIGNAL_ICON_KANDIDATEN schickt der Task die
+        # Kandidaten-Bilder VOR der Quittung — der Elternteil sieht die Bilder
+        # direkt im Chat, die Quittung trägt das Mapping für das LLM.
+        if signal == gan_mod.SIGNAL_ICON_KANDIDATEN:
+            kandidaten = daten.get("kandidaten") or []
+            if kandidaten:
+                try:
+                    icon_album.zeige_kandidaten(
+                        self._tg,
+                        turn_context.chat_id,
+                        kandidaten,
+                        self._icon_origin_url,
+                    )
+                except IconAlbumError as e:
+                    logger.warning(
+                        "gericht_anlegen: Album-Senden fehlgeschlagen "
+                        "— %s", e)
+                    return _QUITTUNG_NICHT_ERREICHBAR
+
         return _quittung_fuer(signal, daten, aktion=aktion)
 
 
@@ -215,15 +242,24 @@ def _quittung_fuer(signal, daten, aktion=""):
         return _QUITTUNG_ANGELEGT.format(id=daten.get("id", "?"))
 
     if signal == gan_mod.SIGNAL_ICON_KANDIDATEN:
-        # GAN-4: die Quittung enthält die Kandidaten — das Modell sieht
-        # die IDs und legt sie zur Wahl vor. Nur die IDs sind relevant
-        # für den zweiten tool_use (D6-Muster analog RPS-4).
+        # GAN-4 / TASK-10b: die Quittung trägt das Mapping — das LLM sieht
+        # die Positionen und IDs und postet das an die Familie. Die Bilder
+        # wurden vorher vom execute()-Pfad per icon_album.zeige_kandidaten
+        # gesendet (TASK-10b). URL-Felder gehören nicht in den Text.
         kandidaten = daten.get("kandidaten", [])
         label = daten.get("label", "")
-        ids = ", ".join(str(k.get("id")) for k in kandidaten)
-        return ("Für »%s« habe ich diese Piktogramm-Kandidaten (ICONS-7): "
-                "%s. Welcher passt? (Antworte mit der ID, dann lege ich "
-                "das Gericht an.)" % (label, ids))
+        if not kandidaten:
+            # Defensiver Fallback — sollte nicht passieren (SIGNAL_KEINE_ICONS
+            # fängt den Leer-Fall ab), aber besser als einen leeren String.
+            return ("Für »%s« habe ich Piktogramm-Kandidaten gesucht — "
+                    "bitte wähle eine ID." % label)
+        mapping = ", ".join(
+            "%d = %s" % (i + 1, k.get("id"))
+            for i, k in enumerate(kandidaten)
+        )
+        return ("Piktogramm-Kandidaten für »%s« als Bilder geschickt: "
+                "%s. Welcher passt? Antworte mit der ID, dann lege ich "
+                "das Gericht an." % (label, mapping))
 
     if signal == gan_mod.SIGNAL_KEINE_ICONS:
         return _QUITTUNG_KEINE_ICONS.format(label=daten.get("label", "?"))
