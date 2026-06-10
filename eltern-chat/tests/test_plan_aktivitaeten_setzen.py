@@ -1069,11 +1069,9 @@ def test_AC5_live_probe_pas_skill_post_plan_json_persistent(tmp_path):
     get_proof_ok  = "capueira" in arts_via_get
     assert file_proof_ok, (
         "PW-16: nach POST muss 'capueira' in plan.json stehen (Datei-Probe).")
-    # GET ist ein Bonus-Check: wenn er klappt, ist DCOMP-2 auch belegt.
-    if not get_proof_ok:
-        # Reload-on-Read funktioniert noch nicht für diesen Edge-Case;
-        # die Datei-Probe ist die maßgebliche PW-16-Bestätigung.
-        pass  # Datei-Probe oben hat bereits bestanden.
+    # GET-Bonus-Check: DCOMP-2 (Reload-on-Read) muss nach POST sofort greifen.
+    assert get_proof_ok, (
+        "GET-Roundtrip nach POST muss Aktivität in Liste haben (Reload-on-Read)")
 
 
 # ============================================================
