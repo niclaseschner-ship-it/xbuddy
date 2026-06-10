@@ -87,20 +87,16 @@ class Event:
     bestehende Konsumenten, die nur eine Person brauchen, bleiben kompatibel.
     """
 
-    def __init__(self, id, titel, beginn, ende, ganztags, personen=None, person=None):
+    def __init__(self, id, titel, beginn, ende, ganztags, personen=None):
         self.id = id
         self.titel = titel
         self.beginn = beginn
         self.ende = ende
         self.ganztags = ganztags
         # PLAN-17 V1.1: personen ist immer eine Liste.
-        # Backward-Compat: wenn nur `person` übergeben wird, als 1-Element-Liste tragen.
-        if personen is not None:
-            self.personen = list(personen)
-        elif person is not None:
-            self.personen = [person]
-        else:
-            self.personen = []
+        # Befund 4 (T473-S2): person-Kwarg entfernt — kein Aufrufer nutzte ihn;
+        # personen ist der einzige Eingang.
+        self.personen = list(personen) if personen is not None else []
 
     @property
     def person(self):
