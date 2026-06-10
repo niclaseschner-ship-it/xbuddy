@@ -365,7 +365,8 @@ def test_PLAN_12_aktivitaeten_katalog_round_trip():
     Art. Vergisst jemand eine Aktivität auf nur einer Seite zu ergänzen,
     bricht dieser Test — die zwei alten Listen können nicht mehr
     auseinanderlaufen."""
-    for art, _label, _keywords in aktivitaeten_mod.AKTIVITAETEN:
+    for entry in aktivitaeten_mod.AKTIVITAETEN_V1:
+        art = entry["art"]
         titel = "%s Mia" % aktivitaeten_mod.label_fuer_art(art)
         zurueck_gelesen = aktivitaeten_mod.art_aus_titel(titel)
         assert zurueck_gelesen == art, (
@@ -384,7 +385,10 @@ def test_PLAN_12_aktivitaeten_katalog_single_source():
     delegieren an `plan.aktivitaeten`. Dieser Test belegt das strukturell:
     `render.aktivitaets_art` und `plan_main._aktivitaet_label` liefern für
     jede Art exakt das, was der gemeinsame Katalog sagt."""
-    for art, label, keywords in aktivitaeten_mod.AKTIVITAETEN:
+    for entry in aktivitaeten_mod.AKTIVITAETEN_V1:
+        art = entry["art"]
+        label = entry["label"]
+        keywords = entry["keywords"]
         assert plan_main._aktivitaet_label(art) == label
         for kw in keywords:
             assert render_mod.aktivitaets_art("Test " + kw + " Mia") == art
@@ -937,7 +941,9 @@ def test_PLAN_13_keyword_konsistenz_gemeinsame_quelle(demo_config, demo_registry
     in PLAN-12 bekannt, in PLAN-13 fehlend) würde ihn fehlschlagen lassen."""
     from plan import aktivitaeten as ak
     from plan import render as render_mod
-    for art, _label, keywords in ak.AKTIVITAETEN:
+    for entry in ak.AKTIVITAETEN_V1:
+        art = entry["art"]
+        keywords = entry["keywords"]
         expected_icon = ak.icon_fuer_art(art)
         if expected_icon is None:
             # Keine Icon-Zuordnung für diese Art — kein PLAN-13-Anteil.
@@ -2640,3 +2646,463 @@ def test_PLAN_33_6_retry_after_groesser_als_budget_kein_sleep(
     # Kein sleep: Retry-After sprengt Budget.
     assert len(sleep_calls) == 0, (
         "Kein sleep erwartet (Retry-After > Budget), bekam: %r" % sleep_calls)
+
+
+# ============================================================
+#  PLAN-34 — Admin-API Aktivitäts-Katalog (AC1…AC5)
+# ============================================================
+#
+# GET  /api/v1/plan/aktivitaeten            — öffentlich, Reload-on-Read
+# POST /api/v1/plan/admin/aktivitaeten      — loopback, 4 Pflichtfelder, 409
+# DELETE /api/v1/plan/admin/aktivitaeten/<art> — loopback, 404, atomar
+#
+# Test-Setup: analog reload_client-Fixture — config_path gesetzt, damit
+# die Admin-Endpoints plan.json lesen und schreiben können (PW-16).
+
+AKT_GET_URL    = "/api/v1/plan/aktivitaeten"
+AKT_POST_URL   = "/api/v1/plan/admin/aktivitaeten"
+AKT_DELETE_URL = "/api/v1/plan/admin/aktivitaeten/"
+
+
+def _make_plan_json(tmp_path, include_aktivitaeten=True):
+    """Schreibt eine valide plan.json in tmp_path und gibt (cfg, cfg_path) zurück."""
+    cfg_path = tmp_path / "plan.json"
+    data = json.loads(json.dumps(DEMO_CONFIG))
+    data["db_datei"] = str(tmp_path / "plan.db")
+    if include_aktivitaeten:
+        data["aktivitaeten"] = [
+            {"art": "klettern", "label": "Klettern",
+             "keywords": ["klettern"], "piktogramm": "6591"},
+            {"art": "schwimmen", "label": "Schwimmen",
+             "keywords": ["schwimm"], "piktogramm": "5522"},
+        ]
+    with open(str(cfg_path), "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    cfg = config_mod.resolve(str(cfg_path))
+    return cfg, cfg_path
+
+
+@pytest.fixture
+def akt_client(tmp_path, demo_registry):
+    """Plan-Buddy mit schreibbarer plan.json (aktivitaeten-Section vorhanden).
+    config_path gesetzt → Admin-Endpoints können plan.json schreiben."""
+    cfg, cfg_path = _make_plan_json(tmp_path, include_aktivitaeten=True)
+    transport = FakeTransport()
+    plan_main.configure(cfg, demo_registry, transport, config_path=str(cfg_path))
+    plan_main.app.testing = True
+    return plan_main.app.test_client(), cfg_path
+
+
+@pytest.fixture
+def akt_client_no_section(tmp_path, demo_registry):
+    """Plan-Buddy mit plan.json OHNE aktivitaeten-Section → CONFIG-4-Fallback."""
+    cfg, cfg_path = _make_plan_json(tmp_path, include_aktivitaeten=False)
+    transport = FakeTransport()
+    plan_main.configure(cfg, demo_registry, transport, config_path=str(cfg_path))
+    plan_main.app.testing = True
+    return plan_main.app.test_client(), cfg_path
+
+
+# ── AC1: config.py _parse_aktivitaeten ────────────────────────────────────
+
+def test_PLAN_34_config_parse_aktivitaeten_gueltig(tmp_path):
+    """AC1: resolve() parst die aktivitaeten-Section; Config.aktivitaeten
+    enthält Aktivitaet-Objekte mit art/label/keywords/piktogramm."""
+    cfg, _ = _make_plan_json(tmp_path, include_aktivitaeten=True)
+    assert cfg.aktivitaeten is not None, (
+        "aktivitaeten darf nicht None sein wenn Section in plan.json steht")
+    arts = [a.art for a in cfg.aktivitaeten]
+    assert "klettern" in arts, "klettern soll im geparsten Katalog stehen"
+    assert "schwimmen" in arts, "schwimmen soll im geparsten Katalog stehen"
+    a = next(a for a in cfg.aktivitaeten if a.art == "klettern")
+    assert a.label == "Klettern"
+    assert a.keywords == ["klettern"]
+    assert a.piktogramm == "6591"
+
+
+def test_PLAN_34_config_parse_aktivitaeten_fehlt_sektion(tmp_path):
+    """AC1: fehlt die aktivitaeten-Section, ist Config.aktivitaeten None
+    (CONFIG-4-Fallback greift in aktivitaeten.py)."""
+    cfg, _ = _make_plan_json(tmp_path, include_aktivitaeten=False)
+    assert cfg.aktivitaeten is None, (
+        "aktivitaeten soll None sein wenn Section fehlt, bekam: %r"
+        % cfg.aktivitaeten)
+
+
+def test_PLAN_34_config_parse_aktivitaeten_ungueltig_kein_art(tmp_path):
+    """AC1: ConfigError bei fehlendem Pflichtfeld 'art'."""
+    cfg_path = tmp_path / "plan.json"
+    data = json.loads(json.dumps(DEMO_CONFIG))
+    data["db_datei"] = str(tmp_path / "plan.db")
+    data["aktivitaeten"] = [
+        {"label": "Klettern", "keywords": ["klettern"], "piktogramm": "6591"},
+    ]
+    with open(str(cfg_path), "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    with pytest.raises(config_mod.ConfigError, match="art"):
+        config_mod.resolve(str(cfg_path))
+
+
+def test_PLAN_34_config_parse_aktivitaeten_doppelter_schluessel(tmp_path):
+    """AC1: ConfigError bei doppeltem art-Schlüssel."""
+    cfg_path = tmp_path / "plan.json"
+    data = json.loads(json.dumps(DEMO_CONFIG))
+    data["db_datei"] = str(tmp_path / "plan.db")
+    data["aktivitaeten"] = [
+        {"art": "klettern", "label": "Klettern",
+         "keywords": ["klettern"], "piktogramm": "6591"},
+        {"art": "klettern", "label": "Klettern2",
+         "keywords": ["klettern2"], "piktogramm": "0"},
+    ]
+    with open(str(cfg_path), "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    with pytest.raises(config_mod.ConfigError, match="doppelter"):
+        config_mod.resolve(str(cfg_path))
+
+
+def test_PLAN_34_config_parse_aktivitaeten_keywords_leer(tmp_path):
+    """AC1: ConfigError wenn keywords eine leere Liste ist."""
+    cfg_path = tmp_path / "plan.json"
+    data = json.loads(json.dumps(DEMO_CONFIG))
+    data["db_datei"] = str(tmp_path / "plan.db")
+    data["aktivitaeten"] = [
+        {"art": "klettern", "label": "Klettern", "keywords": [],
+         "piktogramm": "6591"},
+    ]
+    with open(str(cfg_path), "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    with pytest.raises(config_mod.ConfigError, match="keywords"):
+        config_mod.resolve(str(cfg_path))
+
+
+# ── AC2: aktivitaeten.py liest Config.aktivitaeten ────────────────────────
+
+def test_PLAN_34_aktivitaeten_art_aus_titel_nutzt_config(tmp_path):
+    """AC2: art_aus_titel() nutzt Config.aktivitaeten statt hartcodierter Liste."""
+    cfg, _ = _make_plan_json(tmp_path, include_aktivitaeten=True)
+    # klettern ist in der Config, Treffer erwartet.
+    assert aktivitaeten_mod.art_aus_titel("klettern heute", cfg) == "klettern"
+    # musik ist NICHT in der Mini-Config (nur klettern+schwimmen).
+    assert aktivitaeten_mod.art_aus_titel("musikstunde", cfg) is None, (
+        "musik darf nicht matchen wenn es nicht in der Fixture-Config steht")
+
+
+def test_PLAN_34_aktivitaeten_label_fuer_art_nutzt_config(tmp_path):
+    """AC2: label_fuer_art() nutzt Config.aktivitaeten."""
+    cfg, _ = _make_plan_json(tmp_path, include_aktivitaeten=True)
+    assert aktivitaeten_mod.label_fuer_art("klettern", cfg) == "Klettern"
+    # Unbekannte Art → capitalize-Fallback.
+    assert aktivitaeten_mod.label_fuer_art("xyz", cfg) == "Xyz"
+
+
+def test_PLAN_34_aktivitaeten_fallback_ohne_config():
+    """AC2 (CONFIG-4): ohne Config liefern die Funktionen V1-Default-Ergebnisse."""
+    # art_aus_titel ohne Config → AKTIVITAETEN_V1.
+    assert aktivitaeten_mod.art_aus_titel("klettern heute") == "klettern"
+    assert aktivitaeten_mod.art_aus_titel("musikstunde") == "musik"
+    # label_fuer_art ohne Config → V1.
+    assert aktivitaeten_mod.label_fuer_art("musik") == "Musik"
+
+
+def test_PLAN_34_aktivitaeten_termin_icon_keywords_ohne_config():
+    """AC2: termin_icon_keywords_aus_katalog() ohne Config liefert V1-Pairs
+    (render.py ruft die Funktion beim Modul-Import ohne Config)."""
+    pairs = aktivitaeten_mod.termin_icon_keywords_aus_katalog()
+    kws = [kw for kw, _ in pairs]
+    assert "klettern" in kws, "klettern soll in V1-Pairs stehen"
+    assert "schwimm" in kws, "schwimm soll in V1-Pairs stehen"
+    # Jedes Pair hat einen Icon-Key.
+    for kw, icon in pairs:
+        assert icon, "icon_key darf nicht leer sein, kw=%r" % kw
+
+
+# ── AC3: plan.example.json aktivitaeten-Section ───────────────────────────
+
+def test_PLAN_34_example_json_hat_aktivitaeten_section():
+    """AC3: plan.example.json trägt eine aktivitaeten-Beispiel-Section mit 9
+    Einträgen (V1-Default, PLAN-28-Tabelle)."""
+    import pathlib
+    example = pathlib.Path(__file__).parent.parent / "plan.example.json"
+    with open(str(example), encoding="utf-8") as f:
+        data = json.load(f)
+    assert "aktivitaeten" in data, "plan.example.json muss aktivitaeten-Section haben"
+    akt = data["aktivitaeten"]
+    assert len(akt) == 9, (
+        "plan.example.json soll 9 aktivitaeten-Einträge haben (V1-Default), hat %d"
+        % len(akt))
+    for eintrag in akt:
+        for feld in ("art", "label", "keywords", "piktogramm"):
+            assert feld in eintrag, (
+                "aktivitaeten-Eintrag fehlt Feld %r: %r" % (feld, eintrag))
+
+
+def test_PLAN_34_familie1_ohne_aktivitaeten_section_laeuft(tmp_path, demo_registry):
+    """AC3: Familie-1-plan.json (ohne aktivitaeten-Section) läuft mit Default-
+    Fallback — GET /api/v1/plan/aktivitaeten liefert AKTIVITAETEN_V1."""
+    _, cfg_path = _make_plan_json(tmp_path, include_aktivitaeten=False)
+    cfg = config_mod.resolve(str(cfg_path))
+    transport = FakeTransport()
+    plan_main.configure(cfg, demo_registry, transport, config_path=str(cfg_path))
+    plan_main.app.testing = True
+    client = plan_main.app.test_client()
+
+    r = client.get(AKT_GET_URL)
+    assert r.status_code == 200, "GET soll 200 liefern, bekam %d" % r.status_code
+    body = r.get_json()
+    assert isinstance(body, list), "Body soll eine Liste sein"
+    arts = [e["art"] for e in body]
+    assert "klettern" in arts, "AKTIVITAETEN_V1-Fallback soll klettern enthalten"
+    assert "musik" in arts, "AKTIVITAETEN_V1-Fallback soll musik enthalten"
+    assert len(body) == 9, (
+        "CONFIG-4-Fallback soll 9 Einträge haben, hat %d" % len(body))
+
+
+# ── AC4: drei PLAN-34-Endpoints ───────────────────────────────────────────
+
+def test_PLAN_34_get_oeffentlich_liefert_katalog(akt_client):
+    """AC4: GET /api/v1/plan/aktivitaeten ist öffentlich (kein Loopback-Gate)
+    und liefert die aktive katalog-Liste als JSON-Array."""
+    client, _ = akt_client
+    r = client.get(AKT_GET_URL)
+    assert r.status_code == 200, "GET soll 200 liefern, bekam %d" % r.status_code
+    body = r.get_json()
+    assert isinstance(body, list), "Body soll Liste sein"
+    arts = [e["art"] for e in body]
+    assert "klettern" in arts, "klettern soll im Katalog stehen"
+    # Jeder Eintrag hat art/label/keywords/piktogramm.
+    for eintrag in body:
+        for feld in ("art", "label", "keywords", "piktogramm"):
+            assert feld in eintrag, (
+                "Katalog-Eintrag fehlt Feld %r: %r" % (feld, eintrag))
+
+
+def test_PLAN_34_get_reload_on_read(akt_client):
+    """AC4 (DCOMP-2): GET liest plan.json pro Aufruf frisch — nach direktem
+    Schreiben in die Datei zeigt der nächste GET den neuen Stand."""
+    client, cfg_path = akt_client
+    # Neuen Eintrag direkt in plan.json schreiben (simuliert externen Schreibvorgang).
+    with open(str(cfg_path), encoding="utf-8") as f:
+        obj = json.load(f)
+    obj["aktivitaeten"].append({
+        "art": "turnen", "label": "Turnen",
+        "keywords": ["turnen"], "piktogramm": "9999",
+    })
+    with open(str(cfg_path), "w", encoding="utf-8") as f:
+        json.dump(obj, f)
+
+    r = client.get(AKT_GET_URL)
+    assert r.status_code == 200
+    arts = [e["art"] for e in r.get_json()]
+    assert "turnen" in arts, (
+        "Reload-on-Read: neuer Eintrag muss sichtbar sein ohne Service-Restart")
+
+
+def test_PLAN_34_post_pflichtfelder_ok(akt_client):
+    """AC4: POST mit allen 4 Pflichtfeldern → 200, art im Body."""
+    client, _ = akt_client
+    r = client.post(AKT_POST_URL, data=json.dumps({
+        "art": "turnen", "label": "Turnen",
+        "keywords": ["turnen"], "piktogramm": "9999",
+    }), content_type="application/json")
+    assert r.status_code == 200, (
+        "POST mit gültigem Body soll 200 liefern, bekam %d: %s"
+        % (r.status_code, r.data))
+    body = r.get_json()
+    assert body["ok"] is True
+    assert body["art"] == "turnen"
+
+
+def test_PLAN_34_post_pflichtfeld_fehlt_400(akt_client):
+    """AC4: POST ohne Pflichtfeld → 400."""
+    client, _ = akt_client
+    # Kein 'label'.
+    r = client.post(AKT_POST_URL, data=json.dumps({
+        "art": "turnen", "keywords": ["turnen"], "piktogramm": "9999",
+    }), content_type="application/json")
+    assert r.status_code == 400, (
+        "POST ohne label soll 400 liefern, bekam %d" % r.status_code)
+    # Kein 'keywords'.
+    r = client.post(AKT_POST_URL, data=json.dumps({
+        "art": "turnen", "label": "Turnen", "piktogramm": "9999",
+    }), content_type="application/json")
+    assert r.status_code == 400, (
+        "POST ohne keywords soll 400 liefern, bekam %d" % r.status_code)
+
+
+def test_PLAN_34_post_409_bei_doppelter_art(akt_client):
+    """AC4: POST mit bereits existierender art → 409 art_existiert."""
+    client, _ = akt_client
+    r = client.post(AKT_POST_URL, data=json.dumps({
+        "art": "klettern", "label": "Klettern Neu",
+        "keywords": ["klettern"], "piktogramm": "0",
+    }), content_type="application/json")
+    assert r.status_code == 409, (
+        "POST mit doppelter art soll 409 liefern, bekam %d: %s"
+        % (r.status_code, r.data))
+    body = r.get_json()
+    assert body["error"] == "art_existiert", (
+        "error-Feld soll 'art_existiert' sein, bekam: %r" % body)
+
+
+def test_PLAN_34_post_atomar_persistiert(akt_client):
+    """AC4: POST persistiert den neuen Eintrag in plan.json atomar —
+    nach POST ist der Eintrag in der Datei sichtbar."""
+    client, cfg_path = akt_client
+    r = client.post(AKT_POST_URL, data=json.dumps({
+        "art": "tanzen", "label": "Tanzen",
+        "keywords": ["tanz"], "piktogramm": "1234",
+    }), content_type="application/json")
+    assert r.status_code == 200
+
+    # plan.json direkt lesen — Eintrag muss dort stehen.
+    with open(str(cfg_path), encoding="utf-8") as f:
+        obj = json.load(f)
+    arts_in_file = [e["art"] for e in obj.get("aktivitaeten", [])]
+    assert "tanzen" in arts_in_file, (
+        "Nach POST muss 'tanzen' in plan.json stehen, hat: %r" % arts_in_file)
+
+
+def test_PLAN_34_delete_bekannte_art_ok(akt_client):
+    """AC4: DELETE einer bekannten art → 200, art im Body."""
+    client, _ = akt_client
+    r = client.delete(AKT_DELETE_URL + "klettern")
+    assert r.status_code == 200, (
+        "DELETE bekannter art soll 200 liefern, bekam %d: %s"
+        % (r.status_code, r.data))
+    body = r.get_json()
+    assert body["ok"] is True
+    assert body["art"] == "klettern"
+
+
+def test_PLAN_34_delete_404_bei_unbekannter_art(akt_client):
+    """AC4: DELETE einer unbekannten art → 404."""
+    client, _ = akt_client
+    r = client.delete(AKT_DELETE_URL + "nichtda")
+    assert r.status_code == 404, (
+        "DELETE unbekannter art soll 404 liefern, bekam %d" % r.status_code)
+
+
+def test_PLAN_34_delete_atomar_persistiert(akt_client):
+    """AC4: DELETE persistiert die Entfernung in plan.json atomar —
+    nach DELETE ist der Eintrag nicht mehr in der Datei."""
+    client, cfg_path = akt_client
+    r = client.delete(AKT_DELETE_URL + "schwimmen")
+    assert r.status_code == 200
+
+    with open(str(cfg_path), encoding="utf-8") as f:
+        obj = json.load(f)
+    arts_in_file = [e["art"] for e in obj.get("aktivitaeten", [])]
+    assert "schwimmen" not in arts_in_file, (
+        "Nach DELETE darf 'schwimmen' nicht mehr in plan.json stehen, "
+        "hat: %r" % arts_in_file)
+
+
+def test_PLAN_34_post_loopback_only_403(akt_client):
+    """AC4: POST von nicht-Loopback → 403."""
+    client, _ = akt_client
+    # Flask-Testclient simuliert 127.0.0.1 per Default — wir müssen remote_addr
+    # auf eine externe IP setzen.
+    with plan_main.app.test_request_context():
+        pass
+    r = client.post(AKT_POST_URL, data=json.dumps({
+        "art": "turnen", "label": "Turnen",
+        "keywords": ["turnen"], "piktogramm": "9",
+    }), content_type="application/json",
+        environ_base={"REMOTE_ADDR": "192.168.1.1"})
+    assert r.status_code == 403, (
+        "POST von externer IP soll 403 liefern, bekam %d" % r.status_code)
+
+
+def test_PLAN_34_delete_loopback_only_403(akt_client):
+    """AC4: DELETE von nicht-Loopback → 403."""
+    client, _ = akt_client
+    r = client.delete(AKT_DELETE_URL + "klettern",
+                      environ_base={"REMOTE_ADDR": "10.0.0.1"})
+    assert r.status_code == 403, (
+        "DELETE von externer IP soll 403 liefern, bekam %d" % r.status_code)
+
+
+def test_PLAN_34_post_materialisiert_v1_wenn_keine_sektion(akt_client_no_section):
+    """AC4: POST materialisiert AKTIVITAETEN_V1 als Startpunkt, wenn plan.json
+    noch keine aktivitaeten-Section hat — und hängt den neuen Eintrag an."""
+    client, cfg_path = akt_client_no_section
+    r = client.post(AKT_POST_URL, data=json.dumps({
+        "art": "turnen", "label": "Turnen",
+        "keywords": ["turnen"], "piktogramm": "9",
+    }), content_type="application/json")
+    assert r.status_code == 200, (
+        "POST auf Datei ohne aktivitaeten-Section soll 200 liefern, "
+        "bekam %d: %s" % (r.status_code, r.data))
+
+    with open(str(cfg_path), encoding="utf-8") as f:
+        obj = json.load(f)
+    arts = [e["art"] for e in obj["aktivitaeten"]]
+    assert "turnen" in arts, "neuer Eintrag soll nach Materialisierung in Datei stehen"
+    # V1-Einträge wurden materialisiert.
+    assert "klettern" in arts, "V1-Eintrag klettern soll materialisiert sein"
+
+
+# ── AC5: POST → GET → DELETE Round-Trip mit write_proofs ──────────────────
+
+def test_PLAN_34_round_trip_post_get_delete(tmp_path, demo_registry):
+    """AC5 (PW-16): POST → GET → DELETE Round-Trip.
+
+    write_proofs: before/after aus plan.json-Inhalt belegen Atomarität und
+    Persistenz (AC5-Anforderung). Drei Phasen:
+    1. POST 'radfahren' → plan.json enthält den neuen Eintrag (before=fehlt, after=vorhanden).
+    2. GET liefert 'radfahren' im Array.
+    3. DELETE 'radfahren' → plan.json enthält den Eintrag nicht mehr (before=vorhanden, after=fehlt).
+    """
+    cfg, cfg_path = _make_plan_json(tmp_path, include_aktivitaeten=True)
+    transport = FakeTransport()
+    plan_main.configure(cfg, demo_registry, transport, config_path=str(cfg_path))
+    plan_main.app.testing = True
+    client = plan_main.app.test_client()
+
+    # write_proof Phase 1: before — 'radfahren' ist noch nicht in plan.json.
+    with open(str(cfg_path), encoding="utf-8") as f:
+        before_post = json.load(f)
+    arts_before_post = [e["art"] for e in before_post.get("aktivitaeten", [])]
+    assert "radfahren" not in arts_before_post, (
+        "write_proof: 'radfahren' darf vor POST nicht in plan.json stehen")
+
+    # Phase 1: POST.
+    r = client.post(AKT_POST_URL, data=json.dumps({
+        "art": "radfahren", "label": "Radfahren",
+        "keywords": ["rad", "fahrrad"], "piktogramm": "4242",
+    }), content_type="application/json")
+    assert r.status_code == 200, "POST soll 200 liefern, bekam %d" % r.status_code
+
+    # write_proof Phase 1: after — 'radfahren' ist jetzt in plan.json.
+    with open(str(cfg_path), encoding="utf-8") as f:
+        after_post = json.load(f)
+    arts_after_post = [e["art"] for e in after_post.get("aktivitaeten", [])]
+    assert "radfahren" in arts_after_post, (
+        "write_proof POST: 'radfahren' muss nach POST in plan.json stehen, "
+        "hat: %r" % arts_after_post)
+
+    # Phase 2: GET liefert 'radfahren'.
+    r = client.get(AKT_GET_URL)
+    assert r.status_code == 200
+    get_arts = [e["art"] for e in r.get_json()]
+    assert "radfahren" in get_arts, (
+        "GET soll 'radfahren' nach POST enthalten, lieferte: %r" % get_arts)
+
+    # write_proof Phase 3: before — 'radfahren' ist in plan.json (vor DELETE).
+    with open(str(cfg_path), encoding="utf-8") as f:
+        before_delete = json.load(f)
+    arts_before_delete = [e["art"] for e in before_delete.get("aktivitaeten", [])]
+    assert "radfahren" in arts_before_delete, (
+        "write_proof: 'radfahren' muss vor DELETE in plan.json stehen")
+
+    # Phase 3: DELETE.
+    r = client.delete(AKT_DELETE_URL + "radfahren")
+    assert r.status_code == 200, "DELETE soll 200 liefern, bekam %d" % r.status_code
+
+    # write_proof Phase 3: after — 'radfahren' ist weg aus plan.json.
+    with open(str(cfg_path), encoding="utf-8") as f:
+        after_delete = json.load(f)
+    arts_after_delete = [e["art"] for e in after_delete.get("aktivitaeten", [])]
+    assert "radfahren" not in arts_after_delete, (
+        "write_proof DELETE: 'radfahren' darf nach DELETE nicht mehr in "
+        "plan.json stehen, hat: %r" % arts_after_delete)
