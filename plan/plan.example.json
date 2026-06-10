@@ -30,14 +30,19 @@
 
   "_aktivitaeten_comment": "PLAN-12/PLAN-28/PLAN-34 — Aktivitaets-Katalog dieser Familie. Fehlt die Sektion, greift der Code-Default AKTIVITAETEN_V1 (CONFIG-4). Je Eintrag: art (stabiler Schluessel), label (Anzeige-Text), keywords (Substring-Treffer im Kalender-Titel), piktogramm (ARASAAC-id als String, ICONS-4). Wird vom Skill 'Plan-Aktivitaeten setzen' (PAS) via POST /api/v1/plan/admin/aktivitaeten verwaltet; direktes Editieren ist ebenfalls moeglich (CONFIG-2).",
   "aktivitaeten": [
-    {"art": "klettern",    "label": "Klettern",    "keywords": ["klettern"],                          "piktogramm": "6591"},
-    {"art": "kreativ",     "label": "Kreativ",     "keywords": ["kreativ"],                            "piktogramm": "7069"},
-    {"art": "schwimmen",   "label": "Schwimmen",   "keywords": ["schwimm"],                            "piktogramm": "5522"},
-    {"art": "spielplatz",  "label": "Spielplatz",  "keywords": ["spielplatz"],                         "piktogramm": "6546"},
-    {"art": "musik",       "label": "Musik",       "keywords": ["musik", "klavier", "geige", "gitarre"], "piktogramm": "5497"},
-    {"art": "ausflug",     "label": "Ausflug",     "keywords": ["ausflug"],                            "piktogramm": "6532"},
-    {"art": "geburtstag",  "label": "Geburtstag",  "keywords": ["geburtstag", "geburts"],              "piktogramm": "5486"},
-    {"art": "verabredung", "label": "Verabredung", "keywords": ["verabredung"],                        "piktogramm": "6556"},
-    {"art": "waldgang",    "label": "Waldgang",    "keywords": ["wald"],                               "piktogramm": "6542"}
+    {"art": "klettern",    "label": "Klettern",    "keywords": ["klettern", "klett"],                          "piktogramm": "8226"},
+    {"art": "kreativ",     "label": "Kreativ",     "keywords": ["kreativ", "kreat"],                           "piktogramm": "11690"},
+    {"art": "schwimmen",   "label": "Schwimmen",   "keywords": ["schwimm"],                                    "piktogramm": "6568"},
+    {"art": "spielplatz",  "label": "Spielplatz",  "keywords": ["spielplatz"],                                 "piktogramm": "2859"},
+    {"art": "musik",       "label": "Musik",       "keywords": ["musik", "klavier", "geige", "gitarre"],       "piktogramm": "2746"},
+    {"art": "ausflug",     "label": "Ausflug",     "keywords": ["ausflug"],                                    "piktogramm": "4670"},
+    {"art": "geburtstag",  "label": "Geburtstag",  "keywords": ["geburtstag", "geburts"],                      "piktogramm": "3087"},
+    {"art": "verabredung", "label": "Verabredung", "keywords": ["verabredung"],                                "piktogramm": "2255"},
+    {"art": "waldgang",    "label": "Waldgang",    "keywords": ["wald"],                                       "piktogramm": "2666"},
+    {"art": "zahn",        "label": "Zahnarzt",    "keywords": ["zahn"],                                        "piktogramm": "11229"},
+    {"art": "ferien",      "label": "Ferien",      "keywords": ["ferien", "urlaub"],                           "piktogramm": "3166"},
+    {"art": "treff",       "label": "Treffen",     "keywords": ["treff"],                                       "piktogramm": "6487"},
+    {"art": "garten",      "label": "Garten",      "keywords": ["garten"],                                      "piktogramm": "2434"},
+    {"art": "schule",      "label": "Schule",      "keywords": ["schule"],                                      "piktogramm": "3082"}
   ]
 }

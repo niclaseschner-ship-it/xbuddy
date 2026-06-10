@@ -804,6 +804,243 @@ def test_PLAN_29_every_requirement_has_a_test():
         assert "test_PLAN_%d_" % plan in quelle, "PLAN-%d ungetestet" % plan
 
 
+def test_PLAN_29_render_probe_neuer_eintrag_arasaac_icon(tmp_path, demo_registry):
+    """AC5 — PLAN-29 Render-Probe-Stolperdraht (#471):
+
+    POST eine neue Aktivität yoga (ARASAAC 5301) in plan.json,
+    dann baue_view mit einem Kalender-Event 'Yoga Freitag' für Paula →
+    das gerenderte HTML enthält /display/_shared/icons/arasaac/5301.png.
+
+    Dieser Test fängt die T1-Befunde 1+2: Render-Pfad konsumiert Config nicht
+    (Befund 1) und piktogramm-Feld wird nicht gelesen (Befund 2).
+    """
+    from plan import config as config_mod
+
+    # Plan-JSON mit aktivitaeten-Section aufbauen.
+    cfg_path = tmp_path / "plan.json"
+    data = json.loads(json.dumps(DEMO_CONFIG))
+    data["db_datei"] = str(tmp_path / "plan.db")
+    data["aktivitaeten"] = [
+        {"art": "yoga", "label": "Yoga", "keywords": ["yoga"], "piktogramm": "5301"},
+    ]
+    with open(str(cfg_path), "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+    cfg = config_mod.resolve(str(cfg_path))
+    transport = FakeTransport()
+    plan_main.configure(cfg, demo_registry, transport, config_path=str(cfg_path))
+    plan_main.app.testing = True
+    client = plan_main.app.test_client()
+
+    # Freitag im Fenster.
+    freitag = date(2026, 5, 22)
+
+    # Kalender-Event 'Yoga Freitag Paula' (kein Kind-Name — wird zu Termin;
+    # aber wir wollen auch den Aktivitäts-Pfad prüfen, daher Kindname rein).
+    raw = [gcal_allday("yoga1", "Yoga Paula", freitag.isoformat())]
+    transport.raw_events = raw
+
+    r = client.get("/display/plan/woche?ab=%s" % freitag.isoformat())
+    assert r.status_code == 200
+    html = r.data.decode("utf-8")
+    # Das HTML muss die ARASAAC-URL für yoga (5301) enthalten.
+    assert "arasaac/5301.png" in html, (
+        "PLAN-29 Render-Probe: HTML soll arasaac/5301.png enthalten — "
+        "Live-Render-Pfad konsumiert plan.json-aktivitaeten-Section nicht "
+        "(T1-Befund 1+2)."
+    )
+
+
+def test_PLAN_29_render_probe_termin_icon_aus_katalog(tmp_path, demo_registry):
+    """AC5 — Config-Durchstich für Termin-Icons: POST eine Aktivität mit
+    ARASAAC-ID in plan.json, erstelle einen Nicht-Kind-Termin mit passendem
+    Keyword → die Termin-Leiste enthält die korrekte ARASAAC-URL."""
+    from plan import config as config_mod
+
+    cfg_path = tmp_path / "plan.json"
+    data = json.loads(json.dumps(DEMO_CONFIG))
+    data["db_datei"] = str(tmp_path / "plan.db")
+    # Eigene Aktivität: 'yoga' mit ARASAAC-ID 5301.
+    data["aktivitaeten"] = [
+        {"art": "yoga", "label": "Yoga", "keywords": ["yoga"], "piktogramm": "5301"},
+    ]
+    with open(str(cfg_path), "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+    cfg = config_mod.resolve(str(cfg_path))
+    transport = FakeTransport()
+    heute = date(2026, 5, 20)
+    # Nicht-Kind-Termin "Yoga Freitag" → kein Kindname → Termin-Leiste.
+    raw = [gcal_timed("yg2", "Yoga Freitag",
+                      heute.isoformat() + "T09:00:00+02:00",
+                      heute.isoformat() + "T10:00:00+02:00")]
+    transport.raw_events = raw
+    plan_main.configure(cfg, demo_registry, transport, config_path=str(cfg_path))
+    plan_main.app.testing = True
+    client = plan_main.app.test_client()
+
+    r = client.get("/display/plan/woche?ab=%s" % heute.isoformat())
+    assert r.status_code == 200
+    html = r.data.decode("utf-8")
+    assert "arasaac/5301.png" in html, (
+        "Termin-Icon-Durchstich: HTML soll arasaac/5301.png enthalten — "
+        "Config-Durchstich im Termin-Pfad fehlt?"
+    )
+
+
+def test_PLAN_29_arasaac_migration_aktivitaeten_v1_ids():
+    """AC1 — ARASAAC-IDs in AKTIVITAETEN_V1 (Werft #578 Mapping-Tabelle).
+
+    Prüft, dass die 9 Familien-Aktivitäten ihre ARASAAC-IDs tragen und die
+    5 Termin-Einträge (PLAN-13 V1.2) vorhanden sind."""
+    # Mapping-Tabelle: art → erwartete ARASAAC-ID (Werft #578 / E-PLAN-5 V1.2).
+    mapping = {
+        "klettern":    "8226",
+        "kreativ":     "11690",
+        "schwimmen":   "6568",
+        "spielplatz":  "2859",
+        "musik":       "2746",
+        "ausflug":     "4670",
+        "geburtstag":  "3087",
+        "verabredung": "2255",
+        "waldgang":    "2666",
+        # Termin-Einträge (PLAN-13 V1.2, #471).
+        "zahn":        "11229",
+        "ferien":      "3166",
+        "treff":       "6487",
+        "garten":      "2434",
+        "schule":      "3082",
+    }
+    katalog = {e["art"]: e for e in aktivitaeten_mod.AKTIVITAETEN_V1}
+    for art, expected_id in mapping.items():
+        assert art in katalog, "AKTIVITAETEN_V1 fehlt art=%r" % art
+        got = katalog[art]["piktogramm"]
+        assert got == expected_id, (
+            "AKTIVITAETEN_V1 art=%r: piktogramm erwartet %r, bekam %r"
+            % (art, expected_id, got))
+
+
+def test_PLAN_29_plan_example_json_haelt_aktivitaeten_v1_mapping():
+    """AC1 — plan.example.json spiegelt AKTIVITAETEN_V1 vollständig (Wächter).
+
+    Familie-1-Realdatei (plan.example.json) darf nicht silent driften:
+    - jeder aktivitaeten-Eintrag hat Pflichtfelder (art, label, keywords, piktogramm)
+    - jedes piktogramm ist ein nicht-leerer String
+    - alle ARASAAC-IDs aus AKTIVITAETEN_V1 sind auch in plan.example.json präsent.
+    """
+    import json
+    import os
+
+    # Lade plan.example.json (nebenan im selben Verzeichnis wie aktivitaeten.py).
+    plan_dir = os.path.dirname(os.path.dirname(__file__))
+    plan_example_path = os.path.join(plan_dir, "plan.example.json")
+    assert os.path.exists(plan_example_path), (
+        "plan.example.json nicht gefunden: %s" % plan_example_path)
+
+    with open(plan_example_path) as f:
+        plan_data = json.load(f)
+
+    assert "aktivitaeten" in plan_data, "plan.example.json hat keine aktivitaeten-Section"
+    aktivitaeten_json = plan_data["aktivitaeten"]
+    assert isinstance(aktivitaeten_json, list), "aktivitaeten soll Array sein"
+
+    # Pflichtfelder prüfen.
+    for eintrag in aktivitaeten_json:
+        for feld in ("art", "label", "keywords", "piktogramm"):
+            assert feld in eintrag, (
+                "plan.example.json-Eintrag fehlt %r: %r" % (feld, eintrag))
+        # piktogramm muss String und nicht leer sein.
+        piktogramm = eintrag["piktogramm"]
+        assert isinstance(piktogramm, str) and piktogramm, (
+            "plan.example.json piktogramm darf nicht leer sein: %r" % eintrag)
+
+    # Deckungsgleichheit: alle ARASAAC-IDs aus AKTIVITAETEN_V1 sind in
+    # plan.example.json präsent (Familie-1-Vollständigkeit).
+    v1_arts = {e["art"]: e["piktogramm"] for e in aktivitaeten_mod.AKTIVITAETEN_V1}
+    json_arts = {e["art"]: e["piktogramm"] for e in aktivitaeten_json}
+
+    for art, expected_pid in v1_arts.items():
+        assert art in json_arts, (
+            "plan.example.json fehlt art=%r aus AKTIVITAETEN_V1" % art)
+        got_pid = json_arts[art]
+        assert got_pid == expected_pid, (
+            "plan.example.json art=%r: piktogramm erwartet %r, bekam %r"
+            % (art, expected_pid, got_pid))
+
+
+def test_PLAN_29_arasaac_migration_icon_fuer_art_liest_piktogramm():
+    """AC1 — icon_fuer_art() liest piktogramm aus Katalog, nicht _ICON_V1.
+
+    Nach E-PLAN-5 V1.2 gibt icon_fuer_art eine ARASAAC-ID zurück,
+    keine String-Keys mehr ('climb', 'brush', …)."""
+    assert aktivitaeten_mod.icon_fuer_art("klettern") == "8226"
+    assert aktivitaeten_mod.icon_fuer_art("kreativ")  == "11690"
+    assert aktivitaeten_mod.icon_fuer_art("musik")    == "2746"
+    assert aktivitaeten_mod.icon_fuer_art("zahn")     == "11229"
+    assert aktivitaeten_mod.icon_fuer_art("ferien")   == "3166"
+    # Unbekannte Art → None.
+    assert aktivitaeten_mod.icon_fuer_art("unbekannt") is None
+
+
+def test_PLAN_29_arasaac_migration_termin_fallback_3071():
+    """AC3/AC4 — termin_icon() gibt '3071' zurück, wenn kein Keyword trifft.
+
+    PLAN-13 V1.2: Fallback ist ARASAAC 3071 (Kalender-Icon) statt 'sparkle'.
+    """
+    result = render_mod.termin_icon("Vollkommen Unbekanntes Event XYZ")
+    assert result == "3071", (
+        "termin_icon Fallback erwartet '3071' (Kalender-ARASAAC), bekam %r"
+        % result
+    )
+
+
+def test_PLAN_29_arasaac_migration_termin_keywords_aus_katalog_ids():
+    """AC2 — termin_icon_keywords_aus_katalog() liefert ARASAAC-IDs.
+
+    Jedes (keyword, id)-Paar aus dem V1-Katalog hat eine gültige ID,
+    keine leere Zeichenkette und keinen alten Icon-Key wie 'climb'.
+    """
+    pairs = aktivitaeten_mod.termin_icon_keywords_aus_katalog()
+    assert len(pairs) > 0, "Keine Pairs aus Katalog"
+    for kw, pid in pairs:
+        assert pid, "Piktogramm-ID darf nicht leer sein, kw=%r" % kw
+        # ARASAAC-IDs sind numerisch.
+        assert pid.isdigit(), (
+            "Piktogramm-ID soll numerisch sein, kw=%r, id=%r — "
+            "alter Icon-Key noch drin?" % (kw, pid))
+
+
+def test_PLAN_29_arasaac_migration_template_kein_svg_icon_macro(
+        demo_config, demo_registry):
+    """AC4 — gerenderte HTML enthält keine alten SVG-Macro-Artefakte.
+
+    Nach E-PLAN-5 V1.2 sind die Wireframe-SVG-Macros entfernt. Das gerenderte
+    HTML darf keinen der alten SVG-Pfade enthalten, die den Macros eindeutig
+    zugeordnet waren."""
+    client = make_client(demo_config, demo_registry, FakeTransport())
+    r = client.get("/display/plan/woche")
+    assert r.status_code == 200
+    html = r.data
+    # Alte Macro-Artefakte, die nicht mehr im Template sein dürfen.
+    for artefakt in [
+        b"M32 18 L32 14 M44 24",    # icon_sun path
+        b"M32 20 L32 32 L42 36",    # icon_clock path
+        b"M32 12 L38 26 L52 27",    # icon_star path
+        b"M22 50 L22 18 L48 14",    # icon_music path
+        b"M22 12 L22 30 M18 12",    # icon_fork path
+    ]:
+        assert artefakt not in html, (
+            "Altes SVG-Macro-Artefakt %r noch im HTML — "
+            "Template-Migration unvollständig?" % artefakt
+        )
+    # ARASAAC-URLs sind vorhanden (Schedule-Rail, Slot-Icons).
+    assert b"arasaac/37807.png" in html, "Schedule-Rail bring-Icon (37807) fehlt"
+    assert b"arasaac/39520.png" in html, "Schedule-Rail pick-Icon (39520) fehlt"
+    assert b"arasaac/2752.png"  in html, "Schedule-Rail act-Icon (2752) fehlt"
+    assert b"arasaac/2342.png"  in html, "Schedule-Rail cook-Icon (2342) fehlt"
+    assert b"arasaac/2933.png"  in html, "Schedule-Rail bed-Icon (2933) fehlt"
+
+
 # ============================================================
 #  PLAN-11 — Aktivitäts-Slots im Kalender (Picker → anlegen/ändern/löschen)
 # ============================================================
@@ -963,9 +1200,10 @@ def test_PLAN_13_keyword_konsistenz_gemeinsame_quelle(demo_config, demo_registry
 
 
 def test_PLAN_13_nicht_kind_termin_icon_via_baue_view(demo_config, demo_registry):
-    """FIX1 — Entry-Pfad-Test (AC4-Ergänzung, #308-fix): ein Nicht-Kind-Termin
-    „Klaviertermin" ohne Kindernamen durchläuft den ECHTEN Render-Pfad
-    `baue_view(...)` und landet mit icon=='music' in appointments[...].
+    """FIX1 — Entry-Pfad-Test (AC4-Ergänzung, #308-fix, #471): ein Nicht-Kind-
+    Termin „Klaviertermin" ohne Kindernamen durchläuft den ECHTEN Render-Pfad
+    `baue_view(...)` und landet mit der ARASAAC-ID für Musik (2746) in
+    appointments[...] (E-PLAN-5 V1.2: Icon-Quelle wechselt auf ARASAAC).
 
     Schliesst die #310-artige Lücke: der AC4-Test prüft nur den Helper
     `render_mod.termin_icon(kw)` direkt. Dieser Test benutzt den echten
@@ -982,39 +1220,40 @@ def test_PLAN_13_nicht_kind_termin_icon_via_baue_view(demo_config, demo_registry
     conn.close()
     termine = view["appointments"][heute.isoformat()]
     assert len(termine) == 1
-    # Icon muss "music" sein — "klavier" ist im Katalog als Musik-Keyword (#308).
-    assert termine[0]["icon"] == "music", (
-        "Termin 'Klaviertermin' erwartet icon=='music', bekam %r — "
-        "PLAN-13/PLAN-12-Konsistenz via baue_view nicht gegeben?" % termine[0]["icon"]
+    # ARASAAC-ID für Musik (2746) — "klavier" ist im Katalog als Musik-Keyword (#308).
+    # E-PLAN-5 V1.2: icon-Feld trägt jetzt ARASAAC-IDs statt String-Keys.
+    assert termine[0]["icon"] == "2746", (
+        "Termin 'Klaviertermin' erwartet icon=='2746' (Musik-ARASAAC, E-PLAN-5 V1.2), "
+        "bekam %r — PLAN-13/PLAN-12-Konsistenz via baue_view nicht gegeben?" % termine[0]["icon"]
     )
 
 
 def test_PLAN_13_praefix_termin_icon_kletterhalle_kreativworkshop(
         demo_config, demo_registry):
-    """FIX2 — Präfix-Regression (#308-fix): 'Kletterhalle' → climb,
-    'Kreativ-Workshop' → brush. Vor #308 matchte das Termin-Icon per Präfix
-    'klett'/'kreat'; der Katalog trägt nur 'klettern'/'kreativ' (volle Wörter).
-    Die Präfix-Einträge in _TERMIN_ICON_EXTRAS stellen das alte Verhalten
-    wieder her, ohne die Aktivitäts-Erkennung (PLAN-12, katalog-basiert)
-    zu berühren.
+    """FIX2 — Präfix-Regression (#308-fix, #471): 'Kletterhalle' → ARASAAC 8226
+    (klettern), 'Kreativ-Workshop' → ARASAAC 11690 (kreativ). In V1.2 (#471)
+    sind die Präfix-Keywords 'klett'/'kreat' in den Aktivitäts-Katalog gewandert
+    (AKTIVITAETEN_V1 klettern/kreativ) — eine Quelle statt _TERMIN_ICON_EXTRAS
+    (CLAUDE.md §6, E-PLAN-5 V1.2).
 
     Zwei Stufen:
-    a) Helper `render_mod.termin_icon` direkt.
+    a) Helper `render_mod.termin_icon` direkt → ARASAAC-ID.
     b) Entry-Path `baue_view(...)`: Nicht-Kind-Event „Kletterhalle" landet
-       mit icon=='climb' in appointments."""
-    # a) Helper-Ebene.
-    assert render_mod.termin_icon("Kletterhalle") == "climb", (
-        "render_mod.termin_icon('Kletterhalle') erwartet 'climb' — "
-        "Präfix-Regression in _TERMIN_ICON_EXTRAS?"
+       mit icon=='8226' in appointments."""
+    # a) Helper-Ebene — ARASAAC-IDs statt String-Keys (E-PLAN-5 V1.2).
+    assert render_mod.termin_icon("Kletterhalle") == "8226", (
+        "render_mod.termin_icon('Kletterhalle') erwartet '8226' (klettern-ARASAAC) — "
+        "Präfix 'klett' in AKTIVITAETEN_V1 klettern-Eintrag (#471)?"
     )
-    assert render_mod.termin_icon("Kreativ-Workshop") == "brush", (
-        "render_mod.termin_icon('Kreativ-Workshop') erwartet 'brush' — "
-        "Präfix-Regression in _TERMIN_ICON_EXTRAS?"
+    assert render_mod.termin_icon("Kreativ-Workshop") == "11690", (
+        "render_mod.termin_icon('Kreativ-Workshop') erwartet '11690' (kreativ-ARASAAC) — "
+        "Präfix 'kreat' in AKTIVITAETEN_V1 kreativ-Eintrag (#471)?"
     )
-    # Aktivitäts-Erkennung bleibt UNANGETASTET — kein Kindname, kein art-Treffer.
-    assert aktivitaeten_mod.art_aus_titel("Kletterhalle") is None, (
-        "art_aus_titel('Kletterhalle') soll None liefern (kein Kindname, "
-        "kein volles Katalog-Keyword) — Aktivitäts-Erkennung wurde versehentlich verbreitert?"
+    # In V1.2 greifen klett/kreat auch in der Aktivitäts-Erkennung (PLAN-12) —
+    # 'klett' ist Keywords-Eintrag in klettern → art_aus_titel liefert 'klettern'.
+    assert aktivitaeten_mod.art_aus_titel("Kletterhalle") == "klettern", (
+        "art_aus_titel('Kletterhalle') soll 'klettern' liefern — "
+        "'klett' ist ab #471 Katalog-Keyword in AKTIVITAETEN_V1 klettern-Eintrag."
     )
     # b) Entry-Path via baue_view.
     heute = date(2026, 5, 20)
@@ -1026,53 +1265,50 @@ def test_PLAN_13_praefix_termin_icon_kletterhalle_kreativworkshop(
     conn.close()
     termine = view["appointments"][heute.isoformat()]
     assert len(termine) == 1
-    assert termine[0]["icon"] == "climb", (
-        "Termin 'Kletterhalle' erwartet icon=='climb' via baue_view, bekam %r"
-        % termine[0]["icon"]
+    assert termine[0]["icon"] == "8226", (
+        "Termin 'Kletterhalle' erwartet icon=='8226' (klettern-ARASAAC) via baue_view, "
+        "bekam %r" % termine[0]["icon"]
     )
 
 
 def test_PLAN_12_musik_synonyme_entry_path_html(demo_config, demo_registry):
-    """AC1-Entry-Path (T302): GET /display/plan/woche rendert einen
-    „Klavier Paula"-Event mit activity_icon 'musik' im act1-Schedule-Slot —
+    """AC1-Entry-Path (T302, #471): GET /display/plan/woche rendert einen
+    „Klavier Paula"-Event mit ARASAAC-Piktogramm 2746 (Musik) im act1-Slot —
     der Render-Pfad plan/render.py → template ist durchgängig geprüft.
 
-    Erkennungs-Artefakt: Der icon_music-SVG trägt den eindeutigen Pfad
-    `M22 50 L22 18 L48 14 L48 44`. Dieser Pfad erscheint im HTML ZWEIMAL,
-    wenn die Aktivität als 'musik' klassifiziert wurde — einmal im
-    act1-Activity-Chip (size=28) und einmal in der statischen Picker-Kachel
-    (size=38). Ist die Klassifizierung defekt und ein anderes Icon landet im
-    Chip, erscheint der Pfad nur EINMAL (nur Picker, nicht Chip).
+    E-PLAN-5 V1.2: Icon-Quelle wechselt auf ARASAAC. Erkennungs-Artefakt ist
+    jetzt die ARASAAC-URL `/display/_shared/icons/arasaac/2746.png`. Sie
+    erscheint im HTML ZWEIMAL, wenn die Aktivität als 'musik' klassifiziert
+    wurde — einmal im act1-Activity-Chip und einmal in der Picker-Kachel.
+    Ist die Klassifizierung defekt, erscheint die URL nur einmal (nur Picker).
 
-    Negativ-Kontrolle: mit „Turnen Paula" (kein Katalog-Keyword → Fallback-
-    Icon) landet der Musik-Pfad nur einmal (Picker) — der Test würde FEHL-
-    schlagen, wenn die Klassifizierung bräche und Klavier als Fallback
-    behandelt würde."""
-    # ── Positiv-Probe: Klavier Paula → musik-Icon im Chip ──────────────
-    MUSIK_SVG_PFAD = b"M22 50 L22 18 L48 14 L48 44"
+    Negativ-Kontrolle: mit „Turnen Paula" (kein Katalog-Keyword → Fallback
+    3071) erscheint die Musik-URL nur einmal (Picker) — nicht im Chip."""
+    # ── Positiv-Probe: Klavier Paula → Musik-ARASAAC im Chip ───────────
+    MUSIK_ARASAAC_URL = b"arasaac/2746.png"
     raw = [gcal_allday("mu2", "Klavier Paula", "2026-05-20")]
     client = make_client(demo_config, demo_registry, FakeTransport(raw))
     r = client.get("/display/plan/woche?ab=2026-05-20")
     assert r.status_code == 200
-    # Der Musik-SVG-Pfad kommt ZWEIMAL vor: einmal im act1-Chip, einmal im Picker.
-    # Wäre die Klassifizierung defekt, käme er nur einmal (nur Picker).
-    anzahl_positiv = r.data.count(MUSIK_SVG_PFAD)
+    # Die Musik-ARASAAC-URL kommt ZWEIMAL vor: Chip + Picker.
+    # Wäre die Klassifizierung defekt, käme sie nur einmal (nur Picker).
+    anzahl_positiv = r.data.count(MUSIK_ARASAAC_URL)
     assert anzahl_positiv == 2, (
-        "Musik-Icon erwartet 2× im HTML (Chip + Picker), gefunden: %d — "
+        "Musik-ARASAAC (2746) erwartet 2× im HTML (Chip + Picker), gefunden: %d — "
         "act1-Slot hat 'Klavier Paula' nicht als 'musik' klassifiziert?"
         % anzahl_positiv
     )
 
-    # ── Negativ-Kontrolle: Turnen Paula → Fallback-Icon, kein Musik-Chip ─
+    # ── Negativ-Kontrolle: Turnen Paula → Fallback-Piktogramm, kein Musik ─
     raw_negativ = [gcal_allday("tu1", "Turnen Paula", "2026-05-20")]
     client_neg = make_client(demo_config, demo_registry, FakeTransport(raw_negativ))
     r_neg = client_neg.get("/display/plan/woche?ab=2026-05-20")
     assert r_neg.status_code == 200
     # Nur 1× — allein aus dem Picker; kein Musik-Chip.
-    anzahl_negativ = r_neg.data.count(MUSIK_SVG_PFAD)
+    anzahl_negativ = r_neg.data.count(MUSIK_ARASAAC_URL)
     assert anzahl_negativ == 1, (
-        "Negativ-Kontrolle: mit 'Turnen Paula' (kein musik) Musik-Pfad nur "
-        "1× erwartet (Picker), gefunden: %d" % anzahl_negativ
+        "Negativ-Kontrolle: mit 'Turnen Paula' (kein musik) Musik-ARASAAC (2746) "
+        "nur 1× erwartet (Picker), gefunden: %d" % anzahl_negativ
     )
 
 
@@ -2819,16 +3055,16 @@ def test_PLAN_34_aktivitaeten_termin_icon_keywords_ohne_config():
 # ── AC3: plan.example.json aktivitaeten-Section ───────────────────────────
 
 def test_PLAN_34_example_json_hat_aktivitaeten_section():
-    """AC3: plan.example.json trägt eine aktivitaeten-Beispiel-Section mit 9
-    Einträgen (V1-Default, PLAN-28-Tabelle)."""
+    """AC3: plan.example.json trägt eine aktivitaeten-Beispiel-Section mit 14
+    Einträgen (V1-Default + 5 Termin-Einträge, PLAN-28-Tabelle, #471)."""
     import pathlib
     example = pathlib.Path(__file__).parent.parent / "plan.example.json"
     with open(str(example), encoding="utf-8") as f:
         data = json.load(f)
     assert "aktivitaeten" in data, "plan.example.json muss aktivitaeten-Section haben"
     akt = data["aktivitaeten"]
-    assert len(akt) == 9, (
-        "plan.example.json soll 9 aktivitaeten-Einträge haben (V1-Default), hat %d"
+    assert len(akt) == 14, (
+        "plan.example.json soll 14 aktivitaeten-Einträge haben (V1-Default + 5 Termin), hat %d"
         % len(akt))
     for eintrag in akt:
         for feld in ("art", "label", "keywords", "piktogramm"):
@@ -2853,8 +3089,10 @@ def test_PLAN_34_familie1_ohne_aktivitaeten_section_laeuft(tmp_path, demo_regist
     arts = [e["art"] for e in body]
     assert "klettern" in arts, "AKTIVITAETEN_V1-Fallback soll klettern enthalten"
     assert "musik" in arts, "AKTIVITAETEN_V1-Fallback soll musik enthalten"
-    assert len(body) == 9, (
-        "CONFIG-4-Fallback soll 9 Einträge haben, hat %d" % len(body))
+    # V1.2 (#471): AKTIVITAETEN_V1 hat 9 Aktivitäten + 5 Termin-Einträge = 14.
+    assert len(body) == len(aktivitaeten_mod.AKTIVITAETEN_V1), (
+        "CONFIG-4-Fallback soll %d Einträge haben (exakt AKTIVITAETEN_V1), hat %d"
+        % (len(aktivitaeten_mod.AKTIVITAETEN_V1), len(body)))
 
 
 # ── AC4: drei PLAN-34-Endpoints ───────────────────────────────────────────

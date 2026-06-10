@@ -256,7 +256,7 @@
     font-size: 22px; font-weight: 700;
     color: var(--kids-ink);
   }
-  .activity-chip svg { display: block; }
+  .activity-chip img { display: block; }
 
   /* ─── Appointments-Bar ─────────────────────────────────────── */
   .appts {
@@ -323,7 +323,7 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
 
-  /* SVG-Icons — generelle Defaults */
+  /* Löschen-Icon (UI-Control, kein ARASAAC) */
   svg.icon { display: block; }
 
   /* ═══ Toddler-Variante (A2) ════════════════════════════════════
@@ -344,7 +344,7 @@
     min-height: 116px;
   }
   .frame--toddler .rail-cell { gap: 16px; padding: 0 12px; }
-  .frame--toddler .rail-cell > svg.icon { width: 68px !important; height: 68px !important; }
+  .frame--toddler .rail-cell > img { width: 68px !important; height: 68px !important; }
 
   /* Adult-Face in der Cell: ~96×96 statt 76×76, dickerer Ring. */
   .frame--toddler .cell .face.size-76 {
@@ -371,7 +371,7 @@
     transform: rotate(-2deg);
     justify-content: center;
   }
-  .frame--toddler .activity-chip > svg.icon {
+  .frame--toddler .activity-chip > img {
     width: 56px !important; height: 56px !important;
   }
   .frame--toddler .activity-chip > span { display: none; }
@@ -438,160 +438,28 @@
 </head>
 <body>
 
-{# ─── Inline SVG Icons (Schedule + Aktivitäten + Termine) ─── #}
-{% macro icon_sun(size=52) %}
-<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="32" cy="36" r="9"/>
-  <path d="M32 18 L32 14 M44 24 L47 21 M50 36 L54 36 M20 24 L17 21 M14 36 L10 36"/>
-  <path d="M10 50 L54 50"/>
-</svg>
-{% endmacro %}
+{# ─── ARASAAC-Icon-Helfer (E-PLAN-5 V1.2) ─────────────────────── #}
+{# Eine Icon-Quelle: /display/_shared/icons/arasaac/<id>.png (ICONS-4/ICONS-7).
+   Verworfen: Inline-SVG-Macros — wären ein zweiter Icon-Pfad (CLAUDE.md §6).  #}
 
-{% macro icon_clock(size=52) %}
-<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="32" cy="32" r="20"/>
-  <path d="M32 20 L32 32 L42 36"/>
-</svg>
-{% endmacro %}
+{# Slot-Icon → ARASAAC-ID (Schedule-Rail, PLAN-6, Werft #578) #}
+{% set SLOT_ICON_ID = {
+  'sun':   '37807',
+  'clock': '39520',
+  'star':  '2752',
+  'fork':  '2342',
+  'moon':  '2933',
+} %}
 
-{% macro icon_star(size=52) %}
-<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M32 12 L38 26 L52 27 L41 36 L45 50 L32 42 L19 50 L23 36 L12 27 L26 26 Z"/>
-</svg>
-{% endmacro %}
-
-{% macro icon_fork(size=52) %}
-<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M22 12 L22 30 M18 12 L18 22 Q18 28 22 28 M26 12 L26 22 Q26 28 22 28 M22 30 L22 54"/>
-  <path d="M42 12 Q38 16 38 24 Q38 30 42 30 L42 54"/>
-</svg>
-{% endmacro %}
-
-{% macro icon_moon(size=52) %}
-<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M44 18 Q30 18 26 32 Q26 46 40 50 Q28 48 22 38 Q18 22 32 14 Q40 14 44 18 Z"/>
-</svg>
-{% endmacro %}
-
-{% macro icon_sparkle(size=42) %}
-<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M32 10 L34 28 L52 32 L34 36 L32 54 L30 36 L12 32 L30 28 Z"/>
-  <path d="M50 16 L51 22 L57 23 L51 24 L50 30 L49 24 L43 23 L49 22 Z"/>
-</svg>
-{% endmacro %}
-
-{# Aktivitäts-Icons (für Activity-Chip in act1/act2) #}
-{% macro icon_climb(size=28) %}
-<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M8 52 L24 24 L34 40 L44 18 L56 52 Z"/>
-  <circle cx="44" cy="22" r="2" fill="var(--kids-ink)"/>
-</svg>
-{% endmacro %}
-
-{% macro icon_brush(size=28) %}
-<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M14 50 Q14 56 20 56 Q26 56 26 50 L26 44 L14 44 Z"/>
-  <path d="M14 44 L40 18 L46 24 L20 50"/>
-</svg>
-{% endmacro %}
-
-{% macro icon_wave(size=28) %}
-<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M6 28 Q14 22 22 28 Q30 34 38 28 Q46 22 54 28 Q58 30 60 28"/>
-  <path d="M6 40 Q14 34 22 40 Q30 46 38 40 Q46 34 54 40 Q58 42 60 40"/>
-  <path d="M6 52 Q14 46 22 52 Q30 58 38 52 Q46 46 54 52 Q58 54 60 52"/>
-</svg>
-{% endmacro %}
-
-{% macro icon_play(size=28) %}
-<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="20" cy="44" r="10"/>
-  <path d="M10 44 Q20 38 30 44 M20 34 Q14 44 20 54 M20 34 Q26 44 20 54"/>
-  <path d="M40 18 L40 50 M40 18 L54 18 M40 30 L52 26 M40 50 Q48 42 56 48"/>
-</svg>
-{% endmacro %}
-
-{% macro icon_music(size=28) %}
-<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M22 50 L22 18 L48 14 L48 44"/>
-  <ellipse cx="18" cy="50" rx="6" ry="4"/>
-  <ellipse cx="44" cy="44" rx="6" ry="4"/>
-</svg>
-{% endmacro %}
-
-{% macro icon_pin(size=28) %}
-<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M32 8 Q18 8 18 22 Q18 34 32 56 Q46 34 46 22 Q46 8 32 8 Z"/>
-  <circle cx="32" cy="22" r="6"/>
-</svg>
-{% endmacro %}
-
-{% macro icon_cake(size=28) %}
-<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <rect x="10" y="34" width="44" height="18" rx="2"/>
-  <path d="M10 42 Q14 38 18 42 Q22 46 26 42 Q30 38 34 42 Q38 46 42 42 Q46 38 50 42 Q52 44 54 42"/>
-  <path d="M20 34 L20 24 M32 34 L32 22 M44 34 L44 24"/>
-</svg>
-{% endmacro %}
-
-{% macro icon_friends(size=28) %}
-<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="22" cy="20" r="6"/>
-  <path d="M12 50 Q12 34 22 32 Q32 34 32 50"/>
-  <circle cx="44" cy="22" r="5"/>
-  <path d="M34 50 Q34 38 44 36 Q54 38 54 50"/>
-</svg>
-{% endmacro %}
-
-{% macro icon_trees(size=28) %}
-<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M20 10 L10 28 L16 28 L8 42 L18 42 L18 52"/>
-  <path d="M16 42 L24 42"/>
-  <path d="M44 14 L34 30 L40 30 L32 44 L42 44 L42 54"/>
-  <path d="M40 44 L48 44"/>
-  <path d="M42 30 L48 30 L40 16"/>
-</svg>
-{% endmacro %}
-
-{% macro icon_tooth(size=22) %}
-<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M22 14 Q14 14 14 24 Q14 32 18 38 Q20 50 26 52 Q30 52 30 44 Q30 38 32 38 Q34 38 34 44 Q34 52 38 52 Q44 50 46 38 Q50 32 50 24 Q50 14 42 14 Q36 14 32 18 Q28 14 22 14 Z"/>
-</svg>
-{% endmacro %}
-
-{% macro icon_house(size=22) %}
-<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M10 32 L32 14 L54 32 L54 54 L10 54 Z"/>
-  <path d="M26 54 L26 38 L38 38 L38 54"/>
-</svg>
-{% endmacro %}
-
-{% macro icon_holiday(size=22) %}
-<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="32" cy="28" r="10"/>
-  <path d="M32 12 L32 8 M48 28 L52 28 M16 28 L12 28 M44 16 L47 13 M20 16 L17 13"/>
-  <path d="M8 50 Q20 42 32 50 Q44 58 56 50"/>
-  <path d="M8 54 Q20 46 32 54 Q44 62 56 54"/>
-</svg>
-{% endmacro %}
-
+{# Löschen-Icon (x-close) bleibt als Inline-SVG — kein ARASAAC für UI-Controls #}
 {% macro icon_x_close(size=22) %}
 <svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
   <path d="M14 14 L50 50 M50 14 L14 50"/>
 </svg>
 {% endmacro %}
 
-{% macro icon_flower(size=22) %}
-<svg class="icon" viewBox="0 0 64 64" width="{{size}}" height="{{size}}" fill="none" stroke="var(--kids-ink)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="32" cy="22" r="5"/>
-  <circle cx="22" cy="28" r="5"/>
-  <circle cx="42" cy="28" r="5"/>
-  <circle cx="26" cy="38" r="5"/>
-  <circle cx="38" cy="38" r="5"/>
-  <path d="M32 42 L32 56"/>
-  <path d="M32 50 Q26 46 22 50 M32 50 Q38 46 42 50"/>
-</svg>
-{% endmacro %}
+{# Macro: ARASAAC-Bild nach ID. Fallback: Kalender-Piktogramm 3071. #}
+{% macro arasaac_img(id, size=28) %}<img src="/display/_shared/icons/arasaac/{{ id or '3071' }}.png" width="{{ size }}" height="{{ size }}" alt="" style="display:block;object-fit:contain;">{% endmacro %}
 
 {# Macro: Face mit Foto im Ring #}
 {% macro face(ring, photo_url, size_class='size-76') %}
@@ -599,33 +467,6 @@
   {% if photo_url %}<img src="{{photo_url}}" alt="">{% endif %}
 </div>
 {% endmacro %}
-
-{# Helper: Activity-/Termin-Icon nach Key. Akzeptiert sowohl Activity-Types
-   (klettern/kreativ/…) als auch Termin-Icon-Keys (tooth/sparkle/house/…). #}
-{% macro activity_icon(key, size=28) %}
-  {% if key == 'klettern' or key == 'climb' %}{{ icon_climb(size) }}
-  {% elif key == 'kreativ' or key == 'brush'  %}{{ icon_brush(size) }}
-  {% elif key == 'schwimmen' or key == 'wave' %}{{ icon_wave(size) }}
-  {% elif key == 'spielplatz' or key == 'play'%}{{ icon_play(size) }}
-  {% elif key == 'musik' or key == 'music'    %}{{ icon_music(size) }}
-  {% elif key == 'ausflug' or key == 'pin'    %}{{ icon_pin(size) }}
-  {% elif key == 'geburtstag' or key == 'cake'%}{{ icon_cake(size) }}
-  {% elif key == 'verabredung' or key == 'friends' %}{{ icon_friends(size) }}
-  {% elif key == 'waldgang' or key == 'trees' %}{{ icon_trees(size) }}
-  {% elif key == 'tooth'   %}{{ icon_tooth(size) }}
-  {% elif key == 'house'   %}{{ icon_house(size) }}
-  {% elif key == 'holiday' %}{{ icon_holiday(size) }}
-  {% elif key == 'flower'  %}{{ icon_flower(size) }}
-  {% elif key == 'sparkle' %}{{ icon_sparkle(size) }}
-  {% else %}{{ icon_star(size) }}{% endif %}
-{% endmacro %}
-
-{# Label-Lookup pro Activity-Type #}
-{% set ACT_LABEL = {
-  'klettern': 'Klettern', 'kreativ': 'Kreativ', 'schwimmen': 'Schwimmen',
-  'spielplatz': 'Spielplatz', 'musik': 'Musik', 'ausflug': 'Ausflug',
-  'geburtstag': 'Geburtstag', 'verabredung': 'Verabredung', 'waldgang': 'Waldgang'
-} %}
 
 {# ── XBuddy-Datenanbindung ──────────────────────────────────────────────
    `personen` kommt aus der Familien-Registry (FAM-7), `slots` aus der
@@ -682,11 +523,8 @@
         {% set is_first_row = loop.first %}
         <div class="row">
           <div class="rail-cell">
-            {% if slot.icon == 'sun'   %}{{ icon_sun(52)  }}{% endif %}
-            {% if slot.icon == 'clock' %}{{ icon_clock(52)}}{% endif %}
-            {% if slot.icon == 'star'  %}{{ icon_star(52) }}{% endif %}
-            {% if slot.icon == 'fork'  %}{{ icon_fork(52) }}{% endif %}
-            {% if slot.icon == 'moon'  %}{{ icon_moon(52) }}{% endif %}
+            {% set rail_id = SLOT_ICON_ID.get(slot.icon) %}
+            {% if rail_id %}{{ arasaac_img(rail_id, 52) }}{% endif %}
             {% if slot.kind %}
               {% set kid_ring = person_ring.get(slot.kind) %}
               {% set kid_photo = person_photo_url.get(slot.kind) %}
@@ -714,8 +552,8 @@
                    {% if cell and cell is mapping and cell.event_id %}data-event-id="{{ cell.event_id }}"{% endif %}>
                 {% if slot.art == 'aktivitaets-slot' and cell and cell is mapping %}
                   <div class="activity-chip">
-                    {{ activity_icon(cell.type, 28) }}
-                    <span>{{ cell.label or ACT_LABEL.get(cell.type, '') }}</span>
+                    {{ arasaac_img(cell.piktogramm or '3071', 28) }}
+                    <span>{{ cell.label or '' }}</span>
                   </div>
                 {% elif slot.art == 'erwachsenen-slot' and cell and cell is mapping %}
                   {% set photo = person_photo_url.get(cell.person) %}
@@ -734,14 +572,14 @@
     {% if show_appointments %}
     <div class="appts">
       <div class="appts-grid">
-        <div class="appts-rail">{{ icon_sparkle(42) }}</div>
+        <div class="appts-rail">{{ arasaac_img('3071', 42) }}</div>
         <div class="appts-stack">
           {# Mehrtages-Termine oben als Span über mehrere Spalten (PLAN-14) #}
           <div class="appts-spans">
             {% for s in span_appointments %}
               <div class="pill span"
                    style="grid-column: {{ s.start_day + 1 }} / {{ s.end_day + 2 }};">
-                {{ activity_icon(s.icon, 22) }}
+                {{ arasaac_img(s.icon, 22) }}
                 <div class="pill-body">
                   <div class="pill-label">{{ s.label }}</div>
                 </div>
@@ -758,7 +596,7 @@
             <div class="appts-col">
               {% for a in appointments[d.iso] %}
                 <div class="pill">
-                  {{ activity_icon(a.icon, 22) }}
+                  {{ arasaac_img(a.icon, 22) }}
                   <div class="pill-body">
                     {% if a.time %}<div class="pill-time">{{ a.time }}</div>{% endif %}
                     <div class="pill-label">{{ a.label }}</div>
@@ -788,22 +626,24 @@
       <span>Event löschen</span>
     </button>
     <div class="picker-grid">
+      {# Picker-Optionen: (art, label, hintergrundfarbe, arasaac-id)
+         IDs aus AKTIVITAETEN_V1 / Werft #578 — E-PLAN-5 V1.2. #}
       {% set picker_options = [
-        ('klettern',   'Klettern',   '#d6ecc7'),
-        ('kreativ',    'Kreativ',    '#dcd0f0'),
-        ('schwimmen',  'Schwimmen',  '#cfe6f5'),
-        ('spielplatz', 'Spielplatz', '#d6ecc7'),
-        ('musik',      'Musik',      '#dcd0f0'),
-        ('ausflug',    'Ausflug',    '#ffe1c2'),
-        ('geburtstag', 'Geburtstag', '#ffe1c2'),
-        ('verabredung','Verabredung','#f9c8c8'),
-        ('waldgang',   'Waldgang',   '#cfe6f5'),
+        ('klettern',   'Klettern',    '#d6ecc7', '8226'),
+        ('kreativ',    'Kreativ',     '#dcd0f0', '11690'),
+        ('schwimmen',  'Schwimmen',   '#cfe6f5', '6568'),
+        ('spielplatz', 'Spielplatz',  '#d6ecc7', '2859'),
+        ('musik',      'Musik',       '#dcd0f0', '2746'),
+        ('ausflug',    'Ausflug',     '#ffe1c2', '4670'),
+        ('geburtstag', 'Geburtstag',  '#ffe1c2', '3087'),
+        ('verabredung','Verabredung', '#f9c8c8', '2255'),
+        ('waldgang',   'Waldgang',    '#cfe6f5', '2666'),
       ] %}
-      {% for atype, label, tint in picker_options %}
+      {% for atype, label, tint, pid in picker_options %}
         <button class="picker-tile" type="button"
                 data-action="set" data-type="{{ atype }}"
                 style="background: {{ tint }};">
-          {{ activity_icon(atype, 38) }}
+          {{ arasaac_img(pid, 38) }}
           <div class="picker-tile-label">{{ label }}</div>
         </button>
       {% endfor %}
