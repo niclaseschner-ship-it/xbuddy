@@ -14,7 +14,7 @@ import logging
 from telegram import ChatMigratedError
 
 # Telegram-Mitglieds-Status, die als „in der Gruppe" gelten.
-_MEMBER_STATUSES = frozenset({"creator", "administrator", "member"})
+MEMBER_STATUSES = frozenset({"creator", "administrator", "member"})
 
 
 def is_authorized(tg, family_group_chat_id, user_id):
@@ -37,7 +37,7 @@ def is_authorized(tg, family_group_chat_id, user_id):
     if not isinstance(member, dict):
         return False
     status = member.get("status")
-    if status in _MEMBER_STATUSES:
+    if status in MEMBER_STATUSES:
         return True
     # 'restricted' zählt nur, solange der Nutzer die Gruppe nicht verlassen hat.
     if status == "restricted":
