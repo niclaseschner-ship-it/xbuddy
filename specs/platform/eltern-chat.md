@@ -194,6 +194,45 @@ ohne Geräte-Detail.
 
 *Tickets:* #95
 
+### EC-30 — Welt-Wissen für allgemeine Hilfs-Anfragen, XBuddy-Zustand bleibt Katalog-only
+Für **allgemeine Wissensfragen** ohne XBuddy-Bezug — technische Anleitungen,
+Sach-Fragen, Erklärungen — nutzt das System das trainierte Welt-Wissen des
+KI-Anbieters und antwortet direkt. Beispiele: „Wie installiere ich ein CA-
+Zertifikat auf einem alten iPhone?", „Was bedeutet HTTPS?", „Wie funktioniert
+Tailscale?". Solche Antworten erfordern keinen Tool-Aufruf.
+
+**Trennlinie**: Aussagen über **XBuddy-Zustand** — Familien-Mitglieder,
+Kalender-Inhalte, Berechtigungen, Buddy-Daten (Routinen, Plan-Aktivitäten,
+Wünsche, Termine, Fotos, Seiten-Übersicht) — gehen *immer* durch eine
+Katalog-Aufgabe (EC-8) und niemals aus dem Welt-Wissen des Modells. Eine
+Anfrage „wer hat morgen Geburtstag?" oder „wann ist Pauls nächster Termin?"
+wird durch eine Katalog-Aufgabe beantwortet, nicht aus Welt-Wissen. Eine
+Anfrage „wie installiere ich ein Zertifikat?" darf direkt aus Welt-Wissen.
+
+EC-7 (Ehrliche Grenze) bleibt für **System-Fähigkeiten** in Kraft: das System
+spielt keine XBuddy-Aufgaben vor, die es nicht hat. Welt-Wissens-Antworten
+sind **keine** erfundenen Fähigkeiten — sie sind Hilfs-Information aus dem
+Anbieter-Modell, das nach EC-11/EC-12 ohnehin Teil des Systems ist. Der
+Unterschied ist hart: erfunden ist eine *behauptete eigene Operation*
+(„Ich habe für dich Termin X angelegt") ohne tatsächlichen Schreibakt;
+Welt-Wissen ist *geteiltes Hilfs-Wissen* aus dem Modell — keine Behauptung
+einer eigenen Operation.
+
+EC-22 (Gezielt fragen statt Varianten ausbreiten) bleibt unberührt: auch bei
+Welt-Wissens-Antworten mit Geräte-Varianten fragt das System einmal nach dem
+fehlenden Kontext und liefert dann gezielt — keine Varianten-Schauspiele.
+
+**Was sich für die Familie ändert** — Beispiel: CA-Zertifikat-Installation
+auf einem alten iPhone (iOS 12 statt iOS 14).
+
+- Ohne EC-30: Mama fragt „und für altes iPhone?". Bot antwortet „ich habe
+  nur die Anleitung für neuere iPhones vor mir" — obwohl der KI-Anbieter
+  die Antwort kennt. Mama muss extern nachfragen.
+- Mit EC-30: Bot antwortet direkt aus Welt-Wissen mit den iOS-12-Schritten,
+  nachdem er ggf. einmal nach Geräte-Details gefragt hat (EC-22).
+
+*Tickets:* #624
+
 ### EC-23 — Telemetrie an Bot-Antworten
 
 Wenn eine Bot-Antwort durch mindestens einen Provider-Call entstanden ist,
