@@ -592,3 +592,30 @@ def test_caplog_kein_key_bei_happy_path(caplog):
         "ONB-8 caplog-Leck: neuer Key in Log-Ausgabe beim Happy-Path")
     assert old_key not in caplog.text, (
         "ONB-8 caplog-Leck: alter Key in Log-Ausgabe beim Happy-Path")
+
+
+# ============================================================
+#  Hotfix-Regression: _do_validate baut GenerationRequest korrekt
+# ============================================================
+
+def test_do_validate_baut_GenerationRequest_mit_task_defs(monkeypatch):
+    """Regression #639-Hotfix: _do_validate baute GenerationRequest mit
+    ungültigem Keyword `tasks=` statt `task_defs=` — TypeError im Live-Pfad,
+    der von den Test-Doppelungen (`_validate=_validate_ok`) verdeckt wurde.
+    Validierungs-Ping schlug deshalb in Produktion immer fehl."""
+    from skills import anbieter_wechseln as aw_mod
+
+    captured = {}
+
+    class _FakeProvider:
+        def generate(self, request):
+            captured["task_defs"] = request.task_defs
+            return None
+
+    monkeypatch.setattr(aw_mod, "get_provider",
+                        lambda name, api_key: _FakeProvider())
+
+    result = aw_mod._do_validate("mistral", "dummy-key")
+
+    assert result is True
+    assert captured["task_defs"] == []
