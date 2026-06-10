@@ -1039,7 +1039,7 @@ def test_PLAN_29_arasaac_migration_template_kein_svg_icon_macro(
     assert b"arasaac/39520.png" in html, "Schedule-Rail pick-Icon (39520) fehlt"
     assert b"arasaac/3071.png"  in html, "Schedule-Rail act-Icon (3071) fehlt — Revision Nic 2026-06-10"
     assert b"arasaac/2342.png"  in html, "Schedule-Rail cook-Icon (2342) fehlt"
-    assert b"arasaac/2933.png"  in html, "Schedule-Rail bed-Icon (2933) fehlt"
+    assert b"arasaac/6027.png" in html, "Schedule-Rail bed-Icon (6027) fehlt"
 
 
 # ============================================================
