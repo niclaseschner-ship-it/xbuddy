@@ -1,6 +1,6 @@
 # Eltern-Chat Onboarding — Spec     (ID-Präfix: ONB)
 
-> Status: V1-MVP · Refs #33
+> Status: V1 + V2 · Refs #33, #639
 
 Das KI-Anbieter-Onboarding bringt eine frische Eltern-Chat-Instanz vom Zustand
 »kein KI-Zugang« in den Zustand »KI aktiv«. Es läuft, solange noch kein
@@ -10,19 +10,29 @@ Verfügung. Geführt wird im Chat: Einstieg in der Gruppe, Key-Eingabe im
 Privatchat, Validierung, Speicherung. Mit dem Abschluss wird die Instanz
 KI-aktiv und die Familien-Gruppe gebunden.
 
+V2 (Refs #639) öffnet die Anbieter-Wahl: Die Einstiegs- und Privatchat-Texte
+listen die verfügbaren KI-Anbieter (heute Claude + Mistral) statt einer hart-
+codierten Anbieter-Festlegung; eine bereits eingerichtete Instanz kann den
+Anbieter über einen eigenen Eltern-Chat-Skill wechseln, ohne den Pi anfassen
+zu müssen. Das Pattern bleibt deterministisch hart-codiert (E-ONB-7).
+
 Diese Spec gehört zur Komponente `eltern-chat/` und baut auf
 [`eltern-chat.md`](eltern-chat.md) auf — insbesondere EC-2 (Familien-Gruppe als
-Berechtigung), EC-11 (KI-Anbieter je Instanz wählbar) und EC-15
-(Konfigurationswerte).
+Berechtigung), EC-8 (Aufgaben-Katalog — Heimat des Wechsel-Skills), EC-11
+(KI-Anbieter je Instanz wählbar) und EC-15 (Konfigurationswerte).
 
 **V1-Scope:** der Weg von »kein Anbieter-Key« zu »KI aktiv« — Onboarding-Modus,
-Einstieg, Anbieter-Wahl, Key-Entgegennahme im Privatchat, Validierung,
+Einstieg, Anbieter-Wahl (V2), Key-Entgegennahme im Privatchat, Validierung,
 persistente Speicherung, Bindung der Familien-Gruppe, Moduswechsel.
 
-**Out-of-Scope V1** (jeweils eigenes Ticket, sobald gebraucht): weiteres
-Onboarding (Familienmitglieder, Buddys, Geräte) · Wechsel oder Rotation eines
-bereits eingerichteten Keys · eine Auswahl-Oberfläche für mehrere Anbieter über
-den ersten hinaus.
+**V2-Scope (Refs #639):** Anbieter-Wahl-Dialog im Initial-Onboarding (ONB-10)
++ Anbieter-Wechsel-Skill nach dem Onboarding (ONB-11..ONB-12). Schließt
+OPEN-ONB-B (alter Out-of-Scope-Punkt).
+
+**Weiter Out-of-Scope** (jeweils eigenes Ticket, sobald gebraucht): weiteres
+Onboarding (Familienmitglieder, Buddys, Geräte) · Rotation eines Keys ohne
+Anbieterwechsel · Anbieter-Hinzufügen/-Entfernen aus der zentralen Liste
+durch die Familie (heute Repo-Edit).
 
 ## 1. Modus
 
@@ -137,7 +147,88 @@ zurück — weder in Bestätigungen noch in Fehlermeldungen noch in Logs.
 
 *Tickets:* #33
 
-## 4. Tests
+### ONB-10 — Anbieter-Wahl-Dialog im Initial-Onboarding (V2)
+Statt einer hart-codierten Anbieter-Festlegung listet die Einstiegs-Nachricht
+(ONB-2) die verfügbaren KI-Anbieter auf — heute Claude und Mistral. Im
+Privatchat-Dialog (ONB-3) fragt der Bot **zuerst** nach dem gewünschten
+Anbieter, dann nach dem Key.
+
+Die Anbieter-Liste lebt als zentrale Konstante im Code (Schwester der
+Provider-Factory in `eltern-chat/providers/`); je Anbieter trägt sie: Name,
+Anzeige-Beschreibung, Account-/Console-URL, Key-Format-Hinweis (z. B. „beginnt
+mit `sk-ant-`"), und den zugehörigen Validierungs-Adapter (ONB-4). Eine
+zusätzliche Anbieter-Aufnahme ist heute Repo-Edit; eine Familien-seitige
+Aufnahme/Entfernung ist Out-of-Scope.
+
+Die Privatchat-Konversation folgt weiterhin dem Session-Muster aus
+`conventions/privatchat-session.md` (SESS-1..4); eine Antwort, die keine der
+verfügbaren Optionen trifft, wird per SESS-4 re-prompted (analog ONB-3).
+
+**Verworfen:** eine LLM-gestützte Anbieter-Beratung (z. B. „welcher Anbieter
+passt zu eurer Privacy-Linie?"). Der Onboarding-Modus bleibt deterministisch
+hart-codiert (E-ONB-1) — die Anbieter-Wahl ist genau zwei Eingabe-Schritte,
+ohne LLM-Beteiligung möglich und so robust gegen Fehl-Deutung.
+
+*Tickets:* #639
+
+## 4. Anbieter-Wechsel
+
+### ONB-11 — Anbieter-Wechsel-Skill `anbieter_wechseln` (V2)
+Eine bereits eingerichtete Instanz bietet im Eltern-Chat-Katalog (EC-8) den
+Skill `anbieter_wechseln` an. Trigger ist eine natürliche User-Aufforderung
+in Familien-Gruppe oder Privatchat (z. B. „LLM wechseln", „Anbieter ändern",
+„auf Mistral umstellen"). Berechtigt ist jedes Familien-Mitglied (EC-2).
+
+Der Skill führt im **Privatchat** (E-ONB-2 / ONB-3) durch:
+
+1. Wahl des neuen Anbieters aus der zentralen Liste (ONB-10) — wer den
+   gleichen Anbieter erneut wählt, bekommt eine harte Quittung („Du nutzt
+   diesen Anbieter bereits — nichts geändert."); kein versehentlicher Re-Key.
+2. Eingabe des neuen Keys (analog ONB-3 — Privatchat, Schutz vor Gruppen-
+   Sichtbarkeit).
+3. Validierungs-Ping gegen den neuen Anbieter (ONB-4) mit dessen Adapter.
+4. Atomares Ersetzen im Zugangsdaten-Speicher (ONB-12).
+5. Bestätigung in der Familien-Gruppe analog ONB-7 („KI-Anbieter ist jetzt
+   X.") — der alte Key wird nicht zurückgespiegelt (ONB-8).
+
+Der Skill nutzt das Schreib-Aufgaben-Pattern aus EC-10 (propose→confirm) nicht
+zwingend — die deterministische Privatchat-Sequenz mit Validierungs-Ping als
+Schluss-Gate ist sicherer als ein konversationaler Bestätigungs-Schritt (analog
+E-ONB-1-Gedanke: kein LLM im Wechsel-Akt).
+
+**Verworfen:** Anbieter-Wechsel direkt in der Familien-Gruppe oder mit
+Sichtbarkeit für andere Mitglieder. Der neue Key wäre kurzzeitig öffentlich
+sichtbar — derselbe Grund wie E-ONB-2 für das Initial-Onboarding.
+
+*Tickets:* #639
+
+### ONB-12 — Atomares Ersetzen beim Anbieter-Wechsel
+Bei einem Anbieter-Wechsel (ONB-11) ersetzt das System den Eintrag im
+zentralen Zugangsdaten-Speicher (`zugangsdaten.md` ZD-1..3) **atomar**
+(Temp-Datei + `os.replace`, DCOMP-4). Der alte Eintrag wird erst dann
+überschrieben, wenn:
+
+(a) der Validierungs-Ping (ONB-4) gegen den neuen Anbieter erfolgreich war,
+    UND
+(b) der atomare Schreibvorgang vollständig durchgelaufen ist.
+
+Bricht (a) ab — ungültiger Key oder neuer Anbieter nicht erreichbar —, bleibt
+der alte Anbieter aktiv und der alte Eintrag byte-gleich; der Skill antwortet
+mit einem klaren, hart-codierten Hinweis samt Möglichkeit, es erneut zu
+versuchen (analog ONB-4 im Initial-Onboarding).
+
+Bricht (b) ab — Datei-Permissions, Plattenplatz —, bleibt der alte Eintrag
+byte-gleich; der Skill meldet einen klaren System-Fehler, die laufende
+Instanz wird **nicht** unterbrochen.
+
+Race-Schutz: parallele Skill-Aufrufe (zwei Familien-Mitglieder wechseln
+gleichzeitig) sind über die atomare `os.replace`-Naht der ZD-Schicht
+geschützt; das letzte erfolgreich validierte Schreiben gewinnt, die andere
+Sitzung erhält einen Versuch-erneut-Hinweis.
+
+*Tickets:* #639
+
+## 5. Tests
 
 ### ONB-9 — Automatisierte Tests je Anforderung
 Jede Anforderung dieser Spec, die Code-Verhalten beschreibt, hat einen
@@ -146,6 +237,28 @@ eine kontrollierte Doppelung ersetzt — insbesondere der Validierungs-Aufruf
 (ONB-4) läuft so reproduzierbar und ohne Netz.
 
 *Tickets:* #33
+
+### ONB-13 — Tests für ONB-10..ONB-12 (V2)
+Analog ONB-9, mit kontrollierter Doppelung **beider** Anbieter-Adapter
+(Claude + Mistral als V2-Bestand). Pflicht-Pfade:
+
+- ONB-10: der Wahl-Dialog im Initial-Onboarding bietet alle in der zentralen
+  Liste eingetragenen Anbieter an, re-prompt bei nicht-passender Antwort
+  (SESS-4).
+- ONB-11 Happy-Path je Anbieter: Wechsel von Claude → Mistral und Mistral →
+  Claude in beide Richtungen, mit Validierungs-Ping-Erfolg, atomarem
+  Ersetzen, Bestätigung in der Familien-Gruppe.
+- ONB-11 Same-Provider-Quittung: wer den aktuell aktiven Anbieter erneut
+  wählt, bekommt eine deterministische Quittung; nichts wird geändert.
+- ONB-12 Validierungs-Fehler: Wechsel-Versuch mit ungültigem Key → alter
+  Eintrag bleibt byte-gleich, alter Anbieter weiter aktiv.
+- ONB-12 Schreib-Fehler: provozierter Schreibfehler beim Ersetzen
+  (z. B. simulierter `os.replace`-Bruch) → alter Eintrag bleibt byte-gleich,
+  laufende Instanz nicht unterbrochen.
+- ONB-8-Schutz im Wechsel-Skill: weder alter noch neuer Key im Klartext in
+  Bestätigungen, Fehlermeldungen oder Logs.
+
+*Tickets:* #639
 
 ---
 
@@ -156,9 +269,11 @@ eine kontrollierte Doppelung ersetzt — insbesondere der Validierungs-Aufruf
   mehrdeutig. V1: die zuletzt hinzugefügte Gruppe gilt als Onboarding-Gruppe;
   eine robustere Regel ist bei Bedarf nachzuziehen.
 
-- **OPEN-ONB-B — Key-Wechsel & Anbieterwechsel nach dem Onboarding.** Wie ein
-  bereits eingerichteter Key ersetzt oder der Anbieter gewechselt wird, ist
-  nicht Teil von V1 — eigenes Ticket.
+- ~~**OPEN-ONB-B** — Key-Wechsel & Anbieterwechsel nach dem Onboarding.~~
+  **Geschlossen 2026-06-10 durch ONB-11/ONB-12 (V2, Refs #639).** Der
+  Anbieter-Wechsel ist als Skill `anbieter_wechseln` im Eltern-Chat-Katalog
+  spezifiziert; ein reiner Key-Rotations-Pfad ohne Anbieterwechsel ist
+  weiterhin Out-of-Scope (eigenes Ticket bei Bedarf).
 
 - **OPEN-ONB-C — Löschen der Key-Nachricht.** Ob der Bot die Privatchat-
   Nachricht mit dem Key nach dem Lesen löscht (Telegram-Verlauf), ist offen.
@@ -244,3 +359,27 @@ das Onboarding nicht in Gang kommt. Da der Bot im Onboarding-Modus ohnehin nur
 eine einzige, feste Nachricht kennt, ist »immer antworten« hier unkritisch und
 macht den Einstieg robust. Mit dem Abschluss (ONB-7) endet dieser Modus, und
 EC-5 greift wieder.
+
+### E-ONB-7 — Anbieter-Wechsel bleibt hart-codiert wie der Initial-Modus
+*Datum:* 2026-06-10
+
+Der Anbieter-Wechsel-Skill (ONB-11) führt deterministisch und ohne LLM-
+Beteiligung an der Wechsel-Entscheidung — analog E-ONB-1 für den Initial-
+Onboarding-Modus.
+
+**Verworfen:** das laufende LLM (also den Anbieter, den die Familie gerade
+verlässt) den Wechsel-Dialog formulieren zu lassen. Zwei Gründe:
+
+1. **Anbieter-Unabhängigkeit der Wechsel-Naht** — der Wechsel-Akt darf nicht
+   davon abhängen, wie gesprächsfähig oder gewillt der scheidende Anbieter
+   gerade ist. Wenn die Familie wechselt, weil der alte Anbieter Probleme
+   macht (Latenz, Erreichbarkeit, Rechnungsstreit), darf der Wechsel-Skill
+   genau diesen alten Anbieter nicht als Gespräch-Voraussetzung tragen.
+2. **Sicherheits-Gates deterministisch** (E-EC-4-Geist) — die kritische
+   Schreib-Operation auf den Zugangsdaten-Speicher (ONB-12) bleibt
+   maschinell prüfbar; eine LLM-formulierte Bestätigungssequenz wäre eine
+   schwächere Form als ein Validierungs-Ping mit anschließendem atomarem
+   Ersetzen.
+
+Hart-codierte Nachrichten + Validierungs-Ping reichen, sind kleiner und
+robuster.
