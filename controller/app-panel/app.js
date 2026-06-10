@@ -488,11 +488,62 @@
   }
 
   // ============================================================
+  //  PANEL-12 — Safe-Area-Insets lesen (CSS-Variable-Form)
+  // ============================================================
+  //
+  // Liest die vier Safe-Area-Insets aus den CSS-Variablen, die style.css
+  // via env() auf :root setzt. Fallback 0 wenn die Variable fehlt oder
+  // nicht parsebar ist (Geräte ohne Notch, Node-Tests ohne CSS).
+  // ctx ist optional: { doc } für Tests; im Browser entfällt der Parameter.
+
+  function _parseInsetPx(str) {
+    if (!str) return 0;
+    var n = parseFloat(str);
+    return isNaN(n) ? 0 : n;
+  }
+
+  function getViewportDimensions(ctx) {
+    // ctx ist optional: { doc, win } für Tests; im Browser werden globale
+    // document/window verwendet.
+    var doc = (ctx && ctx.doc) ? ctx.doc : /* istanbul ignore next */ document;
+    var win = (ctx && ctx.win) ? ctx.win : /* istanbul ignore next */ window;
+    var style = doc.documentElement
+      ? (doc.documentElement.computedStyle ||
+         (typeof getComputedStyle !== 'undefined'
+           ? getComputedStyle(doc.documentElement)
+           : null))
+      : null;
+    // Falls kein echtes getComputedStyle vorhanden (Node-Test mit Stub),
+    // lesen wir die CSS-Variable direkt aus dem documentElement.style
+    // (das setzen Test-Stubs, falls sie Insets simulieren wollen).
+    function readVar(name) {
+      if (style && style.getPropertyValue) {
+        return _parseInsetPx(style.getPropertyValue(name));
+      }
+      // Stub-Fallback: --safe-area-inset-* direkt am documentElement.style
+      if (doc.documentElement && doc.documentElement.style
+          && doc.documentElement.style[name] !== undefined) {
+        return _parseInsetPx(doc.documentElement.style[name]);
+      }
+      return 0;
+    }
+    var insetTop    = readVar('--safe-area-inset-top');
+    var insetBottom = readVar('--safe-area-inset-bottom');
+    var insetLeft   = readVar('--safe-area-inset-left');
+    var insetRight  = readVar('--safe-area-inset-right');
+    return {
+      vpW: win.innerWidth  - insetLeft  - insetRight,
+      vpH: win.innerHeight - insetTop   - insetBottom,
+    };
+  }
+
+  // ============================================================
   //  PANEL-12 — Grid-Geometrie auf das DOM-Grid anwenden
   // ============================================================
   //
   // Liest Anzahl der Kacheln aus dem Grid-Element, berechnet cols/rows
-  // aus dem aktuellen Viewport und setzt grid-template-columns/-rows.
+  // aus dem aktuellen Viewport (abzüglich Safe-Area-Insets) und setzt
+  // grid-template-columns/-rows.
   // Wird beim Laden und bei resize aufgerufen (Bootstrap-IIFE).
   // ctx ist optional: {doc, win} für Tests; im Browser entfällt der Parameter
   // und die globalen document/window werden verwendet.
@@ -504,8 +555,10 @@
     if (!grid) return;
     var M = grid.children.length;
     if (M < 1) return;
-    var vpW = win.innerWidth;
-    var vpH = win.innerHeight;
+    // PANEL-12 Safe-Area: Insets abziehen, nicht padden.
+    var dims = getViewportDimensions({ doc: doc, win: win });
+    var vpW = dims.vpW;
+    var vpH = dims.vpH;
     // #error-Banner abziehen, falls sichtbar
     var errEl = doc.getElementById('error');
     if (errEl && !errEl.classList.contains('hidden')) {
@@ -514,7 +567,8 @@
     var geom = computeGridGeometry(M, vpW, vpH);
     grid.style.gridTemplateColumns = 'repeat(' + geom.cols + ', 1fr)';
     grid.style.gridTemplateRows    = 'repeat(' + geom.rows + ', 1fr)';
-    // PANEL-12: Grid-Höhe = innerHeight minus error-Banner; overflow:hidden verhindert Scroll.
+    // PANEL-12: Grid-Höhe = vpH (Safe-Area-bereinigt) minus error-Banner;
+    // overflow:hidden verhindert Scroll.
     grid.style.height = vpH + 'px';
   }
 
@@ -576,6 +630,7 @@
     attachFullscreenImpl: attachFullscreenImpl,
     computeGridGeometry: computeGridGeometry,
     applyGridGeometry: applyGridGeometry,
+    getViewportDimensions: getViewportDimensions,
     // Konstanten für Tests (AC3-Invarianten).
     GRID_GAP: GRID_GAP,
     GRID_PAD: GRID_PAD,

@@ -2,6 +2,16 @@
    DTOK-5 / E-PANEL-6: Alle Farb- und Schriftwerte über Token aus tokens.css
    (Reader-Stage, body.xb[data-stage="reader"]). Layout-px erlaubt (DTOK-5). */
 
+/* PANEL-12 Safe-Area-Insets — CSS-Variablen für env()-Zugriff via JS.
+   Fallback 0px → Geräte ohne Notch verhalten sich identisch zu vorher.
+   JS liest diese per getComputedStyle(document.documentElement).getPropertyValue(...). */
+:root {
+  --safe-area-inset-top:    env(safe-area-inset-top,    0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left:   env(safe-area-inset-left,   0px);
+  --safe-area-inset-right:  env(safe-area-inset-right,  0px);
+}
+
 /* Basis-Reset. body.xb setzt font+color+bg via tokens.css (DTOK-5 / E-PANEL-6). */
 *, *::before, *::after {
   margin: 0;
