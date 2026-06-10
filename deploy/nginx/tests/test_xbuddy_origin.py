@@ -432,3 +432,76 @@ def test_140_admin_block_in_routing_tabelle_dokumentiert():
         "Routing-Tabelle im Conf-Header listet den /admin/-Block nicht — "
         "Doku und Verhalten dürfen nicht auseinanderlaufen."
     )
+
+
+# ============================================================
+#  URL-17 — Admin-Block greift auch bei ^~-Locations (#616)
+# ============================================================
+#
+# nginx-Auswertungsreihenfolge: = > ^~ > regex (~) > Prefix.
+# `^~ /api/v1/seiten/` (Prefix-Stop-Modifier) hat Vorrang vor der
+# Regex-Location `~ ^/api/v1/[^/]+/admin/`. Das bedeutet:
+# ohne eigene ^~-Admin-Block landet /api/v1/seiten/admin/x beim
+# Seiten-Upstream statt mit 404 geblockt zu werden (URL-17-Verstoß).
+# Fix: ein `^~ /api/v1/seiten/admin/`-Block mit `return 404` steht
+# VOR `^~ /api/v1/seiten/` — der spezifischere ^~-Prefix gewinnt.
+
+
+def test_URL_17_seiten_admin_block_existiert():
+    """AC1 — URL-17: `^~ /api/v1/seiten/admin/` mit `return 404` muss existieren.
+
+    Der allgemeine Regex-Admin-Block `~ ^/api/v1/[^/]+/admin/` verliert gegen
+    `^~ /api/v1/seiten/` (nginx: ^~ schlägt Regex). Nur ein eigener
+    ^~-Block für den Admin-Pfad stellt sicher, dass /api/v1/seiten/admin/*
+    mit 404 geblockt wird und nicht beim Seiten-Upstream ankommt (#616).
+    """
+    text = _conf_text()
+    match = re.search(
+        r"location\s+\^~\s+/api/v1/seiten/admin/\s*\{[^}]*return\s+404\s*;[^}]*\}",
+        text,
+        re.DOTALL,
+    )
+    assert match is not None, (
+        "location ^~ /api/v1/seiten/admin/ mit return 404 fehlt — "
+        "ohne diesen Block landet /api/v1/seiten/admin/x beim Seiten-Upstream "
+        "statt mit 404 geblockt zu werden (URL-17, #616)"
+    )
+
+
+def test_URL_17_seiten_admin_block_steht_vor_seiten_prefix():
+    """AC1 — URL-17: ^~/api/v1/seiten/admin/ muss VOR ^~/api/v1/seiten/ stehen.
+
+    Nur wenn der spezifischere Prefix (/admin/) zuerst kommt, gewinnt er
+    auch in der ^~-Kategorie gegen den allgemeineren (/api/v1/seiten/).
+    """
+    text = _conf_text()
+    # Suche nach dem Admin-Block (endet mit 404) und dem Seiten-Block (endet mit proxy_pass).
+    # text.find("location ^~ /api/v1/seiten/") würde beide Blöcke auf dieselbe Position
+    # auflösen, da der Admin-Block-String ein Präfix des anderen ist. Deshalb regex.
+    m_admin = re.search(r"location\s+\^~\s+/api/v1/seiten/admin/", text)
+    m_seiten = re.search(r"location\s+\^~\s+/api/v1/seiten/\s*\{[^}]*proxy_pass", text, re.DOTALL)
+    assert m_admin is not None, "location ^~ /api/v1/seiten/admin/ nicht gefunden"
+    assert m_seiten is not None, "location ^~ /api/v1/seiten/ (mit proxy_pass) nicht gefunden"
+    assert m_admin.start() < m_seiten.start(), (
+        "URL-17-Verstoß: ^~/api/v1/seiten/admin/ muss VOR ^~/api/v1/seiten/ stehen — "
+        f"(Positionen: seiten/admin={m_admin.start()}, seiten={m_seiten.start()})"
+    )
+
+
+def test_URL_17_seiten_sub_pfad_routing_bleibt_intakt():
+    """AC2 — URL-17: /api/v1/seiten/<sub-pfad> ohne /admin/ bleibt beim Seiten-Upstream.
+
+    Der ^~-Admin-Block darf nur den /admin/-Sub-Pfad betreffen; alle anderen
+    Sub-Pfade (z. B. /api/v1/seiten/uebersicht) bleiben beim xbuddy_seiten-Upstream.
+    """
+    text = _conf_text()
+    # ^~ /api/v1/seiten/ muss weiterhin auf xbuddy_seiten zeigen
+    match = re.search(
+        r"location\s+\^~\s+/api/v1/seiten/\s*\{[^}]*proxy_pass\s+http://xbuddy_seiten\s*;[^}]*\}",
+        text,
+        re.DOTALL,
+    )
+    assert match is not None, (
+        "location ^~ /api/v1/seiten/ zeigt nicht mehr auf xbuddy_seiten — "
+        "Routing für /api/v1/seiten/<sub-pfad> ist kaputt (URL-14, SREG-12, #616)"
+    )
