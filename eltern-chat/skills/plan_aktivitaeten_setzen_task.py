@@ -28,7 +28,9 @@ import logging
 
 from tasks import Proposal, WriteTask
 
+from skills import icon_album
 from skills import plan_aktivitaeten_setzen as pas_mod
+from skills.icon_album import IconAlbumError
 from skills.plan_aktivitaeten_setzen import (
     AKTION_HINZUFUEGEN,
     AKTION_ICON_SUCHEN,
@@ -105,7 +107,8 @@ class PlanAktivitaetenSetzenTask(WriteTask):
     post_execute_hooks = ()
 
     def __init__(self, tg, plan_client, icon_client,
-                 family_group_chat_id_getter, is_member_fn=None):
+                 family_group_chat_id_getter, is_member_fn=None,
+                 icon_origin_url=None):
         super().__init__(
             name="plan_aktivitaeten_setzen",
             description=(
@@ -199,6 +202,9 @@ class PlanAktivitaetenSetzenTask(WriteTask):
         # injiziert; None nur für Tests, die eine eigene Funktion übergeben
         # (analog RoutinePunkteSetzenTask).
         self._is_member_fn = is_member_fn
+        # icon_origin_url: Basis-Origin des Routers für die Album-Bilder
+        # (TASK-10b). Wird von build_catalog durchgereicht (icon_origin_url).
+        self._icon_origin_url = icon_origin_url or ""
 
     def propose(self, arguments, turn_context):
         """EC-10-Vorschlag — beschreibt die geplante Änderung (PAS-6, E-PAS-1).
@@ -285,6 +291,26 @@ class PlanAktivitaetenSetzenTask(WriteTask):
             art_loeschen=args.get("art_loeschen"),
             icon_stichwort=args.get("icon_stichwort"),
         )
+
+        # PAS-4 / TASK-10b: bei SIGNAL_ICON_KANDIDATEN schickt der Task die
+        # Kandidaten-Bilder VOR der Quittung — der Elternteil sieht die Bilder
+        # direkt im Chat, die Quittung trägt das Mapping für das LLM.
+        if signal == pas_mod.SIGNAL_ICON_KANDIDATEN:
+            kandidaten = daten.get("kandidaten") or []
+            if kandidaten:
+                try:
+                    icon_album.zeige_kandidaten(
+                        self._tg,
+                        turn_context.chat_id,
+                        kandidaten,
+                        self._icon_origin_url,
+                    )
+                except IconAlbumError as e:
+                    logger.warning(
+                        "plan_aktivitaeten_setzen: Album-Senden fehlgeschlagen "
+                        "— %s", e)
+                    return _QUITTUNG_NICHT_ERREICHBAR
+
         return _quittung_fuer(signal, daten, aktion=aktion)
 
 
