@@ -125,9 +125,29 @@ class _RouterUnreachable(Exception):
     """Der Router ist nicht erreichbar oder antwortet mit 5xx — PREG-16."""
 
 
-# TODO #450: PBE-10 SSE-Publish-Form ratifizieren — router_tiles_changed() hier
-# entfernt (verworfener Admin-POST-Pfad, Spec-Halt #450). Bis #450 entschieden,
-# trägt DCOMP-2 reload-on-read alleine (V1-Fallback).
+def router_tiles_changed(display_id):
+    """Signalisiert dem Router, dass Tiles für display_id geändert wurden (PBE-10).
+
+    POST <router_url>/api/v1/router/admin/panels/<display_id>/tiles-changed
+    Leerer Body. 204 → Router hat publish() aufgerufen, SSE-Event unterwegs.
+    5xx / Netz-Fehler → _RouterUnreachable (graceful: DCOMP-2 trägt als Fallback).
+
+    Bewusst über HTTP, KEIN Python-Import des Routers (DCOMP-1). Als Funktion
+    auf Modulebene, damit Tests sie stubben können (PREG-12: ohne Netz).
+    Latenz lokaler Round-Trip << 5 s (PBE-10-Schranke erfüllt).
+    """
+    base = runtime["router_url"].rstrip("/")
+    url = "%s/api/v1/router/admin/panels/%s/tiles-changed" % (base, display_id)
+    req = urllib.request.Request(url, data=b"", method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status == 204
+    except urllib.error.HTTPError as e:
+        raise _RouterUnreachable(
+            "Router antwortet mit %s auf PBE-10 tiles-changed für display_id=%r"
+            % (e.code, display_id)) from e
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        raise _RouterUnreachable(str(e)) from e
 
 
 def router_panels_upsert(source_id, display_id):
@@ -266,8 +286,9 @@ def put_panel_tiles(panel_id):
     - Schreibfehler am Dateisystem → 500 + JSON-Fehler (GER-6/DCOMP-4-Geist).
     - PREG-5: config-Feld der Instanz wird NICHT berührt.
     - DCOMP-4: atomares Schreiben (Temp + os.replace) über registry_mod.save().
-    - PBE-10: Reload-Signal-Pfad entfernt (Spec-Halt #450); DCOMP-2 reload-on-read
-      trägt alleine als V1-Fallback.
+    - PBE-10: nach erfolgreichem Schreiben wird router_tiles_changed(display_id)
+      aufgerufen (SSE-Publish). Bei Router-Unreachable graceful (kein Crash, kein
+      5xx) — DCOMP-2 reload-on-read bleibt Fallback (V1-Ausfall-Toleranz).
     """
     path = runtime.get("registry_path")
     if path is None:
@@ -283,12 +304,15 @@ def put_panel_tiles(panel_id):
     except registry_mod.RegistryError as e:
         return _unprocessable(str(e))
 
+    display_id = None
     with _write_lock:
         # DCOMP-2: frisch von Disk lesen — nie einen petralteten Stand überschreiben.
         reg = registry_mod.load(path)
         panel = reg.get(panel_id)
         if panel is None:
             return jsonify({"error": "unbekannte panel_id (PBE-4)"}), 404
+
+        display_id = panel.display_id
 
         # PREG-5: nur tiles ersetzen, config unberührt.
         geaendertes_panel = registry_mod.Panel(
@@ -313,6 +337,16 @@ def put_panel_tiles(panel_id):
         except registry_mod.RegistryError as e:
             logging.warning("put_panel_tiles: Schreiben fehlgeschlagen: %s", e)
             return jsonify({"error": str(e)}), 500
+
+    # PBE-10: SSE-Publish-Signal an den Router (AC1). Graceful bei Ausfall —
+    # DCOMP-2 reload-on-read bleibt Fallback, kein Crash, kein 5xx.
+    try:
+        router_tiles_changed(display_id)
+    except _RouterUnreachable as e:
+        logging.warning(
+            "put_panel_tiles: router_tiles_changed fehlgeschlagen für display_id=%r: %s"
+            " — DCOMP-2 reload-on-read trägt als Fallback (PBE-10)",
+            display_id, e)
 
     return jsonify({"ok": True, "panel_id": panel_id}), 200
 
