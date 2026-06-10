@@ -544,6 +544,32 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             is_member_fn=_su_is_member,
             display_url_origin_heim=display_url_origin_heim))
 
+    # PAS-8 / #578: »Plan-Aktivitäten setzen« als synchrone schreibende Aufgabe
+    # (EC-10, E-PAS-1 propose→confirm). AND-Guard: plan_origin_url UND
+    # icon_origin_url UND family_group_chat_id_getter müssen ALLE gesetzt sein —
+    # fehlt eine, erscheint die Aufgabe NICHT im Katalog (PAS-8). Hintergrund:
+    # - plan_origin_url:              Schreib-Naht für die Admin-API (PAS-7,
+    #                                 PLAN-34 POST/DELETE).
+    # - icon_origin_url:              Lese-Naht für die ICONS-7-Stichwort-Suche
+    #                                 (PAS-4). Kein eigener ARASAAC-Bezug (E-PAS-2).
+    # - family_group_chat_id_getter:  Live-Berechtigung gegen die Familien-Gruppe
+    #                                 (PAS-2). is_member_fn baut den Live-Check
+    #                                 analog zur RPS-/GAN-Linie.
+    if plan_origin_url is not None and icon_origin_url is not None \
+            and family_group_chat_id_getter is not None:
+        from skills.icon_client import IconClient as _PasIconClient
+        from skills.plan_aktivitaeten_setzen_task import PlanAktivitaetenSetzenTask
+        from skills.plan_client import PlanClient as _PasPlanClient
+        _pas_plan_client = _PasPlanClient(origin_url=plan_origin_url)
+        _pas_icon_client = _PasIconClient(origin_url=icon_origin_url)
+        _pas_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
+        catalog.register(PlanAktivitaetenSetzenTask(
+            tg=tg,
+            plan_client=_pas_plan_client,
+            icon_client=_pas_icon_client,
+            family_group_chat_id_getter=family_group_chat_id_getter,
+            is_member_fn=_pas_is_member))
+
     # WZE-8 / #503: »Wünsche zeigen« als lesende Aufgabe (EC-9).
     # AND-Guard: essen_origin_url UND family_group_chat_id_getter müssen
     # gesetzt sein — fehlt eine, erscheint die Aufgabe NICHT im Katalog

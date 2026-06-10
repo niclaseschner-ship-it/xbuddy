@@ -1,5 +1,5 @@
 """Eltern-Chat — HTTP-Client zur Plan-Buddy-Termin-Schnittstelle (PLAN-22,
-TER-5, TES-8).
+TER-5, TES-8) und zur Plan-Admin-API Aktivitäts-Katalog (PLAN-34, PAS-7).
 
 Folgt der HTTP-Client-Form aus `famille_client.py` (DCOMP-1, APP-3):
 transport=Callable als Test-Naht, 2-s-Timeout, eigene Fehler-Klasse.
@@ -7,6 +7,11 @@ transport=Callable als Test-Naht, 2-s-Timeout, eigene Fehler-Klasse.
 Der Eltern-Chat ist Konsument der Plan-Buddy-Termin-Schnittstelle; der
 Google-Kalender wird nicht direkt angesprochen (E-TER-2, E-TES-2). Jeder
 Aufruf geht frisch an PLAN-22 — kein eigener Cache (TER-5, TES-8, CLAUDE.md §6).
+
+PLAN-34 / PAS-7: die Plan-Admin-API für den Aktivitäts-Katalog liegt
+ebenfalls in diesem Modul — kein separater Client, bewusste additive
+Erweiterung (PlanClient bleibt kompatibel, neue Methoden sind ergänzt).
+Der Eltern-Chat schreibt nie direkt in plan.json (APP-3).
 """
 
 import json
@@ -32,6 +37,10 @@ PFAD_TERMINE = "/api/v1/plan/termine"
 
 # TAB-9 / PLAN-33: stabiler Pfad der Bulk-Termin-Schnittstelle (URL-4).
 PFAD_TERMINE_BULK = "/api/v1/plan/termine/bulk"
+
+# PLAN-34 / PAS-7: stabile Pfade der Admin-API für den Aktivitäts-Katalog.
+PFAD_AKTIVITAETEN        = "/api/v1/plan/aktivitaeten"        # GET (lesend)
+PFAD_AKTIVITAETEN_ADMIN  = "/api/v1/plan/admin/aktivitaeten"  # POST / DELETE
 
 
 class PlanClientError(Exception):
@@ -267,6 +276,118 @@ class PlanClient:
         # Alles andere ist Form-Fehler.
         raise PlanClientError(
             "Plan-Buddy: HTTP %s bei POST %s" % (status, PFAD_TERMINE_BULK))
+
+    # -- PLAN-34 Admin-API: Aktivitäts-Katalog (PAS-7) --------------------
+
+    def aktivitaeten_lesen(self):
+        """PLAN-34 GET /api/v1/plan/aktivitaeten — Aktivitäts-Katalog lesen.
+
+        Reload-on-Read (DCOMP-2): frisch aus plan.json. Fehlt die Sektion,
+        liefert der Plan-Buddy den CONFIG-4-Fallback (PLAN-12).
+
+        Liefert eine Liste von Dicts `{art, label, keywords, piktogramm}`.
+        Fehler → PlanClientError.
+        """
+        status, body = self._call("GET", PFAD_AKTIVITAETEN)
+        if status != 200:
+            raise PlanClientError(
+                "Plan-Buddy: HTTP %s bei GET %s" % (status, PFAD_AKTIVITAETEN))
+        try:
+            data = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise PlanClientError(
+                "Plan-Buddy: GET-Aktivitaeten-Antwort nicht parsebar (%s)" % e)
+        if not isinstance(data, list):
+            raise PlanClientError(
+                "Plan-Buddy: GET-Aktivitaeten-Antwort hat unerwartete Form (%r)"
+                % type(data).__name__)
+        return data
+
+    def aktivitaet_hinzufuegen(self, art, label, keywords, piktogramm):
+        """PLAN-34 POST /api/v1/plan/admin/aktivitaeten — Aktivität hinzufügen.
+
+        `art`        — stabiler Schlüssel (muss neu sein, sonst 409, PLAN-34).
+        `label`      — menschenlesbare Bezeichnung (str, Pflicht, nicht-leer).
+        `keywords`   — Liste nicht-leerer Strings (PLAN-12 Aktivitäts-Erkennung).
+        `piktogramm` — ARASAAC-`id` als String (PLAN-12).
+
+        Alle vier Felder Pflicht (PLAN-34-Vertrag); fachliche Validierung
+        liegt beim Plan-Buddy (BUD-2).
+
+        Liefert `{"ok": true, "art": <schlüssel>}` bei Erfolg (PLAN-34).
+        Fehler → PlanClientError (4xx als ehrliche Grenze: 409 doppelte art,
+        400 fehlendes/leeres Feld, 403 nicht-Loopback — PAS-6/EC-7).
+        """
+        payload = {
+            "art":        art,
+            "label":      label,
+            "keywords":   keywords,
+            "piktogramm": piktogramm,
+        }
+        body_bytes = json.dumps(payload).encode("utf-8")
+        status, resp_bytes = self._call(
+            "POST", PFAD_AKTIVITAETEN_ADMIN,
+            body=body_bytes,
+            content_type="application/json")
+        # PLAN-34: 200 bei Erfolg (Antwort {ok: true, art: ...}).
+        if status != 200:
+            raise self._aktivitaeten_error(
+                "POST", PFAD_AKTIVITAETEN_ADMIN, status, resp_bytes)
+        try:
+            data = json.loads(resp_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise PlanClientError(
+                "Plan-Buddy: POST-Aktivitaet-Antwort nicht parsebar (%s)" % e)
+        if not isinstance(data, dict) or not data.get("ok"):
+            raise PlanClientError(
+                "Plan-Buddy: POST-Aktivitaet-Antwort hat unerwartete Form (%r)"
+                % data)
+        return data
+
+    def aktivitaet_loeschen(self, art):
+        """PLAN-34 DELETE /api/v1/plan/admin/aktivitaeten/<art> — löschen.
+
+        `art` ist der stabile Schlüssel (PLAN-12). Existiert er nicht → 404
+        → PlanClientError (ehrliche Grenze, EC-7).
+
+        Liefert `{"ok": true, "art": <schlüssel>}` bei Erfolg (PLAN-34).
+        """
+        if not art:
+            raise PlanClientError(
+                "Plan-Buddy: DELETE ohne art-Schlüssel ist sinnlos")
+        import urllib.parse as _up
+        pfad = PFAD_AKTIVITAETEN_ADMIN + "/" + _up.quote(str(art), safe="")
+        status, resp_bytes = self._call("DELETE", pfad)
+        if status != 200:
+            raise self._aktivitaeten_error("DELETE", pfad, status, resp_bytes)
+        try:
+            data = json.loads(resp_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise PlanClientError(
+                "Plan-Buddy: DELETE-Aktivitaet-Antwort nicht parsebar (%s)" % e)
+        if not isinstance(data, dict):
+            raise PlanClientError(
+                "Plan-Buddy: DELETE-Aktivitaet-Antwort hat unerwartete Form (%r)"
+                % data)
+        return data
+
+    def _aktivitaeten_error(self, method, path, status, resp_bytes):
+        """PLAN-34/EC-7: erzeugt einen PlanClientError mit Plan-Buddy-Fehlertext.
+
+        Reicht die Buddy-Meldung durch — wichtig für ehrliche Grenzen
+        (409 doppelte art, 404 nicht gefunden, 400 leeres Feld, 403 Loopback).
+        """
+        detail = ""
+        try:
+            data = json.loads(resp_bytes.decode("utf-8"))
+            if isinstance(data, dict):
+                detail = data.get("error") or data.get("message") or ""
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            pass
+        msg = "Plan-Buddy: HTTP %s bei %s %s" % (status, method, path)
+        if detail:
+            msg = "%s — %s" % (msg, detail)
+        return PlanClientError(msg)
 
     # -- HTTP-Innerei -----------------------------------------------------
 
