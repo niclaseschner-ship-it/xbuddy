@@ -1,6 +1,6 @@
-"""Tests für GerichtAnlegenTask — GAN-7, AC3/AC4/AC5 (Refs #503).
+"""Tests für GerichtAnlegenTask — GAN-7, AC1–AC5 des T627-Contracts.
 
-Pflicht-Tests (Spec GAN-7 + AC aus Contract T503-S1):
+Pflicht-Tests (Spec GAN-7 + AC aus Contract T627-S1):
 - Katalog enthält 'gericht_anlegen' genau dann, wenn essen_origin_url
   UND icon_origin_url UND family_group_chat_id_getter gesetzt sind (Guard, AC5).
 - GerichtAnlegenTask ist ein WriteTask (EC-10).
@@ -8,7 +8,8 @@ Pflicht-Tests (Spec GAN-7 + AC aus Contract T503-S1):
 - propose() liefert Proposal mit Label + Icon-ID.
 - execute() ruft POST nach Bestätigung.
 - propose() schreibt NICHT (E-GAN-2).
-- Icon-Suche → Kandidaten → execute mit icon_id (GAN-4/D6-Muster).
+- Icon-Suche → Album-Senden + Mapping-Quittung (GAN-4/TASK-10b).
+- IconAlbumError → NICHT_ERREICHBAR-Quittung.
 - Nicht-Mitglied → kein Schreiben (GAN-2).
 - Buddy-409 → ehrliche Grenze-Quittung (GAN-5).
 """
@@ -17,6 +18,7 @@ import contextlib
 import json
 import os
 import tempfile
+import unittest.mock as mock
 
 from fakes import FakeTelegram
 from skills.essen_client import EssenClientError
@@ -30,6 +32,33 @@ from tasks import Proposal, TurnContext, WriteTask, build_catalog
 # ============================================================
 #  Doppelungen
 # ============================================================
+
+class FakeTelegramMitAlbum(FakeTelegram):
+    """FakeTelegram mit send_photo + send_media_group für icon_album-Tests.
+
+    send_photo-Aufrufe landen in `photos`, send_media_group-Aufrufe
+    in `media_groups` — jeweils mit allen Argumenten, damit Tests die
+    Reihenfolge und Anzahl prüfen können.
+    """
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.photos = []          # [{chat_id, file_name, file_bytes, caption}]
+        self.media_groups = []    # [{chat_id, items}]
+
+    def send_photo(self, chat_id, file_name, file_bytes, caption=None):
+        self.photos.append({
+            "chat_id": chat_id,
+            "file_name": file_name,
+            "file_bytes": file_bytes,
+            "caption": caption,
+        })
+        return {"message_id": 9000 + len(self.photos)}
+
+    def send_media_group(self, chat_id, items):
+        self.media_groups.append({"chat_id": chat_id, "items": list(items)})
+        return [{"message_id": 9100 + i} for i in range(len(items))]
+
 
 class FakeEssenClient:
     def __init__(self, post_response=None, post_error=None):
@@ -66,14 +95,20 @@ def _kein_mitglied(uid):
     return False
 
 
-def _make_task(essen_client=None, icon_client=None, is_member_fn=None):
+def _make_task(essen_client=None, icon_client=None, is_member_fn=None,
+               tg=None, icon_origin_url="http://icons.test"):
     return GerichtAnlegenTask(
-        tg=FakeTelegram(),
+        tg=tg or FakeTelegramMitAlbum(),
         essen_client=essen_client or FakeEssenClient(),
         icon_client=icon_client or FakeIconClient(),
         family_group_chat_id_getter=lambda: 200,
         is_member_fn=is_member_fn or _immer_mitglied,
+        icon_origin_url=icon_origin_url,
     )
+
+
+def _ctx(chat_id=42):
+    return TurnContext(chat_id=chat_id, from_user_id=7, private_chat_id=42)
 
 
 # ============================================================
@@ -169,26 +204,6 @@ def test_VS_execute_ruft_post():
     assert "42" in quittung
 
 
-def test_VS_icon_suchen_execute_liefert_kandidaten_ids():
-    """GAN-4: execute(icon_suchen) → ICONS-7-Aufruf; Quittung enthält
-    die Vorschlags-IDs (D6 — zweiter tool_use nutzt sie als icon_id)."""
-    ic = FakeIconClient(response=[
-        {"id": 1111, "url": "/x"},
-        {"id": 2222, "url": "/y"},
-    ])
-    task = _make_task(icon_client=ic)
-    ctx = TurnContext(chat_id=42, from_user_id=7)
-
-    quittung = task.execute({
-        "aktion": AKTION_ICON_SUCHEN,
-        "icon_stichwort": "Lasagne",
-    }, ctx)
-
-    assert ic.suche_calls == [{"stichwort": "Lasagne", "max_treffer": 3}]
-    assert "1111" in quittung
-    assert "2222" in quittung
-
-
 def test_VS_nicht_mitglied_execute_kein_post():
     """GAN-2: Nicht-Mitglied → execute schreibt NICHT."""
     ec = FakeEssenClient()
@@ -240,8 +255,219 @@ def test_VS_keine_icons_quittung():
 
 
 # ============================================================
-#  Catalog-Registrierung (AND-Guard, GAN-7) — DREI Origins
+#  AC1 + AC2: Mapping-Quittung + Album-Senden (TASK-10b)
 # ============================================================
+
+def test_AC1_quittung_traegt_mapping_form_drei_kandidaten():
+    """AC1: Quittung trägt Mapping-Form '1 = <id>, 2 = <id>, 3 = <id>'
+    für drei Kandidaten (TASK-10b, GAN-4)."""
+    kandidaten = [
+        {"id": 2349, "url": "/icons/2349.png"},
+        {"id": 8800, "url": "/icons/8800.png"},
+        {"id": 7777, "url": "/icons/7777.png"},
+    ]
+    ic = FakeIconClient(response=kandidaten)
+    tg = FakeTelegramMitAlbum()
+    task = _make_task(icon_client=ic, tg=tg, icon_origin_url="http://icons.test")
+
+    # icon_album._holen mocken, damit kein Netz nötig.
+    with mock.patch("skills.icon_album._holen",
+                    side_effect=lambda url, opener=None: b"fakepng"):
+        quittung = task.execute({
+            "aktion": AKTION_ICON_SUCHEN,
+            "icon_stichwort": "Lasagne",
+        }, _ctx())
+
+    # Mapping-Form: 1 = 2349, 2 = 8800, 3 = 7777
+    assert "1 = 2349" in quittung
+    assert "2 = 8800" in quittung
+    assert "3 = 7777" in quittung
+    assert "Piktogramm-Kandidaten" in quittung
+    assert "als Bilder geschickt" in quittung
+    assert "Antworte mit der ID" in quittung
+
+
+def test_AC2_album_helper_wird_vor_quittung_aufgerufen():
+    """AC2: icon_album.zeige_kandidaten wird aufgerufen (TASK-10b); die
+    Quittung trägt das Mapping. Mock/Spy auf zeige_kandidaten."""
+    kandidaten = [
+        {"id": 2349, "url": "/icons/2349.png"},
+        {"id": 8800, "url": "/icons/8800.png"},
+    ]
+    ic = FakeIconClient(response=kandidaten)
+    tg = FakeTelegramMitAlbum()
+    task = _make_task(icon_client=ic, tg=tg, icon_origin_url="http://icons.test")
+
+    call_args = []
+
+    def fake_zeige(tg_arg, chat_id_arg, kand_arg, origin_arg):
+        call_args.append({
+            "chat_id": chat_id_arg,
+            "kandidaten": kand_arg,
+            "origin": origin_arg,
+        })
+
+    with mock.patch("skills.gericht_anlegen_task.icon_album"
+                    ".zeige_kandidaten", side_effect=fake_zeige):
+        quittung = task.execute({
+            "aktion": AKTION_ICON_SUCHEN,
+            "icon_stichwort": "Pizza",
+        }, _ctx(chat_id=42))
+
+    assert len(call_args) == 1, "zeige_kandidaten genau einmal aufgerufen"
+    assert call_args[0]["chat_id"] == 42
+    assert call_args[0]["origin"] == "http://icons.test"
+    assert len(call_args[0]["kandidaten"]) == 2
+
+    # Quittung trägt Mapping
+    assert "1 = 2349" in quittung
+    assert "2 = 8800" in quittung
+
+
+def test_AC2_album_helper_argumente_korrekt():
+    """AC2: zeige_kandidaten erhält tg, chat_id, kandidaten UND icon_origin_url
+    in der richtigen Reihenfolge (TASK-10b Signatur-Prüfung)."""
+    kandidaten = [{"id": 111, "url": "/a.png"}, {"id": 222, "url": "/b.png"}]
+    ic = FakeIconClient(response=kandidaten)
+    tg = FakeTelegramMitAlbum()
+    task = _make_task(icon_client=ic, tg=tg,
+                      icon_origin_url="http://origin.test:5000")
+
+    received = {}
+
+    def spy(tg_arg, chat_id_arg, kand_arg, origin_arg):
+        received["tg"] = tg_arg
+        received["chat_id"] = chat_id_arg
+        received["kandidaten"] = kand_arg
+        received["origin"] = origin_arg
+
+    with mock.patch("skills.gericht_anlegen_task.icon_album"
+                    ".zeige_kandidaten", side_effect=spy):
+        task.execute({
+            "aktion": AKTION_ICON_SUCHEN,
+            "icon_stichwort": "Suppe",
+        }, _ctx(chat_id=99))
+
+    assert received["tg"] is tg
+    assert received["chat_id"] == 99
+    assert received["kandidaten"] == kandidaten
+    assert received["origin"] == "http://origin.test:5000"
+
+
+# ============================================================
+#  AC1: Ein Kandidat → send_photo; drei → send_media_group
+# ============================================================
+
+def test_AC1_ein_kandidat_mapping_und_send_photo():
+    """AC1 + AC2: 1 Kandidat → Mapping '1 = <id>', send_photo wird aufgerufen.
+
+    end-to-end durch den echten Helper mit FakeTelegramMitAlbum +
+    _holen-Mock (kein Netz).
+    """
+    kandidaten = [{"id": 5555, "url": "/icons/5555.png"}]
+    ic = FakeIconClient(response=kandidaten)
+    tg = FakeTelegramMitAlbum()
+    task = _make_task(icon_client=ic, tg=tg, icon_origin_url="http://ico.test")
+
+    with mock.patch("skills.icon_album._holen",
+                    return_value=b"fakepng"):
+        quittung = task.execute({
+            "aktion": AKTION_ICON_SUCHEN,
+            "icon_stichwort": "Kuchen",
+        }, _ctx())
+
+    # Genau ein send_photo, kein send_media_group
+    assert len(tg.photos) == 1
+    assert tg.media_groups == []
+    assert tg.photos[0]["chat_id"] == 42
+    assert tg.photos[0]["caption"] is None  # TASK-10b: keine Caption
+    assert "1 = 5555" in quittung
+
+
+def test_AC1_drei_kandidaten_send_media_group():
+    """AC1 + AC2: 3 Kandidaten → send_media_group (end-to-end, FakeTG +
+    _holen-Mock)."""
+    kandidaten = [
+        {"id": 1, "url": "/a.png"},
+        {"id": 2, "url": "/b.png"},
+        {"id": 3, "url": "/c.png"},
+    ]
+    ic = FakeIconClient(response=kandidaten)
+    tg = FakeTelegramMitAlbum()
+    task = _make_task(icon_client=ic, tg=tg, icon_origin_url="http://ico.test")
+
+    with mock.patch("skills.icon_album._holen",
+                    return_value=b"fakepng"):
+        quittung = task.execute({
+            "aktion": AKTION_ICON_SUCHEN,
+            "icon_stichwort": "Pasta",
+        }, _ctx())
+
+    # send_media_group mit 3 Items
+    assert tg.photos == []
+    assert len(tg.media_groups) == 1
+    grp = tg.media_groups[0]
+    assert grp["chat_id"] == 42
+    assert len(grp["items"]) == 3
+    # Captions sind alle None (TASK-10b)
+    for _fname, _fbytes, fcaption in grp["items"]:
+        assert fcaption is None
+
+    # Mapping in Quittung
+    assert "1 = 1" in quittung
+    assert "2 = 2" in quittung
+    assert "3 = 3" in quittung
+
+
+# ============================================================
+#  Fehlerfall: IconAlbumError → QUITTUNG_NICHT_ERREICHBAR
+# ============================================================
+
+def test_album_fehler_liefert_nicht_erreichbar_quittung():
+    """GAN-4 / TASK-10b: wenn zeige_kandidaten IconAlbumError wirft,
+    gibt execute() die NICHT_ERREICHBAR-Quittung zurück (kein Crash)."""
+    from skills.icon_album import IconAlbumError
+
+    kandidaten = [
+        {"id": 100, "url": "/x.png"},
+        {"id": 200, "url": "/y.png"},
+    ]
+    ic = FakeIconClient(response=kandidaten)
+    tg = FakeTelegramMitAlbum()
+    task = _make_task(icon_client=ic, tg=tg)
+
+    with mock.patch("skills.gericht_anlegen_task.icon_album"
+                    ".zeige_kandidaten",
+                    side_effect=IconAlbumError("Netz weg")):
+        quittung = task.execute({
+            "aktion": AKTION_ICON_SUCHEN,
+            "icon_stichwort": "Salat",
+        }, _ctx())
+
+    assert "nicht erreichbar" in quittung.lower()
+
+
+# ============================================================
+#  AC3: Konstruktor nimmt icon_origin_url; tasks.py reicht durch
+# ============================================================
+
+def test_AC3_konstruktor_speichert_icon_origin_url():
+    """AC3: GerichtAnlegenTask-Konstruktor nimmt icon_origin_url
+    und macht ihn als _icon_origin_url verfügbar."""
+    task = _make_task(icon_origin_url="http://test-origin:5001")
+    assert task._icon_origin_url == "http://test-origin:5001"
+
+
+def test_AC3_konstruktor_ohne_icon_origin_url_ist_leer():
+    """AC3: ohne icon_origin_url (Rückwärtskompatibilität) → leerer String."""
+    task = GerichtAnlegenTask(
+        tg=FakeTelegramMitAlbum(),
+        essen_client=FakeEssenClient(),
+        icon_client=FakeIconClient(),
+        family_group_chat_id_getter=lambda: 200,
+    )
+    assert task._icon_origin_url == ""
+
 
 def _ca_pem():
     fd, path = tempfile.mkstemp(suffix=".pem")
@@ -249,6 +475,29 @@ def _ca_pem():
     os.close(fd)
     return path
 
+
+def test_AC3_build_catalog_reicht_icon_origin_url_durch():
+    """AC3: tasks.build_catalog reicht icon_origin_url an GerichtAnlegenTask durch."""
+    ca = _ca_pem()
+    try:
+        catalog = build_catalog(
+            tg=FakeTelegramMitAlbum(),
+            ca_pem_path=ca,
+            essen_origin_url="http://127.0.0.1:5052",
+            icon_origin_url="http://127.0.0.1:5000",
+            family_group_chat_id_getter=lambda: 200,
+        )
+        task = catalog.get("gericht_anlegen")
+        assert task is not None
+        assert task._icon_origin_url == "http://127.0.0.1:5000"
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(ca)
+
+
+# ============================================================
+#  Catalog-Registrierung (AND-Guard, GAN-7)
+# ============================================================
 
 def test_GAN7_guard_alle_drei_gesetzt_registriert():
     """GAN-7 / AC5: Task erscheint im Katalog genau dann, wenn
@@ -334,13 +583,51 @@ def test_GAN7_guard_build_catalog_signatur_kompatibel():
 
 
 # ============================================================
+#  AC5: Andere Pfade — unangetastet (Smoke-Tests)
+# ============================================================
+
+def test_AC5_hinzufuegen_unberuehrt():
+    """AC5: HINZUFUEGEN-Pfad bleibt unangetastet — kein Album-Aufruf."""
+    tg = FakeTelegramMitAlbum()
+    task = _make_task(tg=tg)
+    quittung = task.execute({
+        "aktion": "hinzufuegen",
+        "label": "Lasagne",
+        "icon_id": "9999",
+    }, _ctx())
+    assert tg.photos == []
+    assert tg.media_groups == []
+    # Quittung gehört zum Hinzufügen-Pfad
+    assert "aufgenommen" in quittung.lower() or "sichtbar" in quittung.lower()
+
+
+# ============================================================
+#  Mapping-Quittung bei leerem kandidaten-Fall (defensiver Fallback)
+# ============================================================
+
+def test_mapping_fallback_bei_leer_kandidaten():
+    """Defensiver Fallback: wenn das Signal ICON_KANDIDATEN mit leerer Liste
+    käme (sollte nicht passieren), liefert die Quittung einen brauchbaren
+    Text statt eines leeren Strings."""
+    from skills.gericht_anlegen import SIGNAL_ICON_KANDIDATEN
+    from skills.gericht_anlegen_task import _quittung_fuer
+
+    quittung = _quittung_fuer(
+        SIGNAL_ICON_KANDIDATEN,
+        {"label": "Test", "kandidaten": []},
+        aktion=AKTION_ICON_SUCHEN,
+    )
+    assert "Test" in quittung
+    assert quittung  # nicht leer
+
+
+# ============================================================
 #  Entry-Path-Test: Catalog → Task → Transport-Stub (AC3)
 # ============================================================
 
 def test_VS_entry_path_catalog_to_post_via_transport_stub():
-    """Entry-Path-Probe (AC_ENTRY): build_catalog → Task → POST über den
-    echten EssenClient mit Transport-Stub (CLIENT-1) — die Kette aus
-    Routing + Skill + Client + Transport ist hookbar (GAN-7)."""
+    """Entry-Path-Probe: build_catalog → Task → POST über den
+    echten EssenClient mit Transport-Stub (CLIENT-1)."""
     ca = _ca_pem()
     try:
         catalog = build_catalog(
