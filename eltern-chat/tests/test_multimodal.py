@@ -18,6 +18,7 @@ from skills._multimodal import (
     get_multimodal_provider,
 )
 from skills._multimodal.claude import (
+    SYSTEM_PROMPT,
     TOOL_DESCRIPTION,
     TOOL_NAME,
     TOOL_SCHEMA,
@@ -128,3 +129,60 @@ def test_claude_adapter_ohne_bild_wirft():
     with pytest.raises(MultimodalError):
         adapter.extract_termine(
             image_bytes=b"", image_media_type="image/jpeg", caption="termine")
+
+
+# --- TAB-5 Caption-Steuerung (#528) -----------------------------------------
+
+def test_TAB5_caption_jahr_hinweis_fliesst_durch(monkeypatch):
+    """AC1: Caption 'Jahr 2026 verwenden' erreicht den Transport und der
+    Adapter liefert den Termin mit 2026 zurück — TAB-5 Z. 190-201."""
+    received_captions = []
+
+    def fake_transport(*, image_bytes, image_media_type, caption):
+        received_captions.append(caption)
+        # Transport simuliert LLM, das den Jahr-Hinweis aus der Caption anwendet.
+        return [{"titel": "Sportfest", "beginn": "2026-05-10", "ganztags": True}]
+
+    adapter = ClaudeMultimodalProvider(
+        api_key="fake-key", transport=fake_transport)
+    out = adapter.extract_termine(
+        image_bytes=b"img",
+        image_media_type="image/jpeg",
+        caption="Jahr 2026 verwenden")
+
+    assert len(received_captions) == 1
+    assert "2026" in received_captions[0]
+    assert len(out) == 1
+    assert out[0].beginn.startswith("2026")
+
+
+def test_TAB5_caption_leer_default_unverändert():
+    """AC2: Kein Caption-Hinweis → Default-Verhalten: Transport liefert
+    Plan-Datum 1:1, kein Jahr-Override — TAB-5 Z. 190-201."""
+    def fake_transport(*, image_bytes, image_media_type, caption):
+        # Caption ist leer; der Transport liefert das Datum aus dem Bild.
+        assert caption == ""
+        return [{"titel": "Elternabend", "beginn": "2025-11-03", "ganztags": True}]
+
+    adapter = ClaudeMultimodalProvider(
+        api_key="fake-key", transport=fake_transport)
+    out = adapter.extract_termine(
+        image_bytes=b"img",
+        image_media_type="image/jpeg",
+        caption="")
+
+    assert len(out) == 1
+    assert out[0].beginn == "2025-11-03"
+
+
+def test_TAB5_system_prompt_enthaelt_verfeinerungs_klausel():
+    """AC3: SYSTEM_PROMPT trägt die E-TAB-5-konforme Caption-Steuerungs-Klausel
+    (Verfeinerungs-Hinweis, kein Erfinden) — TAB-5 Z. 190-201."""
+    assert "Begleittext" in SYSTEM_PROMPT
+    assert "Verfeinerungs-Hinweis" in SYSTEM_PROMPT
+    assert "erfindet" in SYSTEM_PROMPT or "erfinde" in SYSTEM_PROMPT.lower()
+    # Schema: beginn-Beschreibung trägt Jahr-Ableitungs-Klausel.
+    beginn_desc = TOOL_SCHEMA["properties"]["termine"]["items"][
+        "properties"]["beginn"]["description"]
+    assert "Begleittext" in beginn_desc
+    assert "Jahreszahl" in beginn_desc or "Jahr" in beginn_desc

@@ -56,7 +56,10 @@ _TOOL_SCHEMA = {
                         "description": (
                             "ISO-Datum (YYYY-MM-DD) für ganztägige Termine "
                             "ODER ISO-Datetime (YYYY-MM-DDTHH:MM:SS+HH:MM) "
-                            "für zeitgebundene Termine."),
+                            "für zeitgebundene Termine. "
+                            "Fehlt die Jahreszahl im Bild, leite sie aus dem "
+                            "Begleittext ab (z. B. 'Jahr 2026 verwenden') — "
+                            "erfinde das Jahr nicht, wenn kein Hinweis vorliegt."),
                     },
                     "ende": {
                         "type": "string",
@@ -85,12 +88,19 @@ _TOOL_SCHEMA = {
 
 # TAB-5: System-Prompt der multimodalen Extraktion. Bewusst knapp — Tabelle
 # UND Fließtext (TAB-6 normiert das Soll: keine reine OCR-Schicht).
+# TAB-5 Z. 190-201: Caption ist Steuer-Kontext (Jahres-Override, Filter),
+# kein Erfinden-Auftrag — E-TAB-5-Disziplin.
 _SYSTEM_PROMPT = (
     "Du bist ein präziser Termin-Extraktor. Aus einem Foto eines Plans "
     "(Schulplan, Kursplan, Vereins-Saisonübersicht) liest du ALLE Termine "
     "und gibst sie ausschließlich über das `extract_termine`-Tool zurück. "
     "Erfinde keine Termine — wenn etwas unklar ist, lass das Feld leer "
-    "(der Aufrufer fragt nach).")
+    "(der Aufrufer fragt nach). "
+    "Beachte den Begleittext der Nachricht als Verfeinerungs-Hinweis "
+    "(z. B. 'Jahr 2026 verwenden', 'nur die Geburtstage'): wende ihn auf "
+    "die im Bild enthaltenen Termine an. Fehlt eine Information im Bild "
+    "(z. B. Jahreszahl), ist der Begleittext die zulässige Quelle, die "
+    "Lücke zu schließen — er erfindet aber keine Termine.")
 
 
 class ClaudeMultimodalProvider(MultimodalProvider):
@@ -223,8 +233,9 @@ class ClaudeMultimodalProvider(MultimodalProvider):
             "Antwort enthält keinen erwarteten `tool_use`-Block")
 
 
-# Öffentlich für Tests/Skill: das Tool-Schema und die Tool-Beschreibung
-# (TAB-5-Test prüft, dass die Schnittstelle stabil ist).
+# Öffentlich für Tests/Skill: Tool-Schema, Beschreibung und System-Prompt
+# (TAB-5-Tests prüfen Schnittstellen-Stabilität und Caption-Steuerung).
 TOOL_NAME = _TOOL_NAME
 TOOL_DESCRIPTION = _TOOL_DESCRIPTION
 TOOL_SCHEMA = _TOOL_SCHEMA
+SYSTEM_PROMPT = _SYSTEM_PROMPT
