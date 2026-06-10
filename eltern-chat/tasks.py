@@ -18,6 +18,35 @@ from dataclasses import dataclass
 from hooks import HookContext, HookFailure, summarize_failures
 from model import READ, WRITE, TaskDef
 
+# TASK-7 / Closure-Helper: Gruppen-Berechtigung live prüfen
+# _make_is_member_fn erzeugt eine is_member_fn-Closure, die Telegram-Gruppen-
+# Mitgliedschaft prüft. fgcid_getter MUSS eine Funktion sein (z.B.
+# lambda: cfg.get("...")), damit der Wert SPÄT evaluiert wird — Reload-Safety.
+_GROUP_MEMBER_STATES = ("creator", "administrator", "member")
+
+
+def _make_is_member_fn(tg, fgcid_getter):
+    """Factory für is_member_fn-Closures — prüft Live-Telegram-Mitgliedschaft.
+
+    Args:
+        tg: Telegram-Interface (mit get_chat_member).
+        fgcid_getter: Funktion, die die Familien-Gruppen-Chat-ID zurückgibt
+            (z.B. lambda: cfg.get("fgcid")). MUSS eine Funktion sein, nicht
+            der Wert selbst — sonst wird der Wert beim Bau dieser Factory
+            eingefroren und Reload-Operationen haben keine Wirkung (TASK-7).
+
+    Returns:
+        Eine Closure is_member(user_id), die gegen die Familien-Gruppe
+        (via fgcid_getter) live prüft. Gibt False zurück, wenn fgcid None ist.
+    """
+    def _is_member(user_id):
+        fgcid = fgcid_getter()
+        if not fgcid:
+            return False
+        member = tg.get_chat_member(fgcid, user_id)
+        return member is not None and member.get("status") in _GROUP_MEMBER_STATES
+    return _is_member
+
 
 @dataclass
 class TurnContext:
@@ -358,15 +387,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
         # TER-2: is_member_fn nutzt family_group_chat_id_getter, wenn vorhanden;
         # sonst wird die Prüfung ans Task-run delegiert (authz.py vor dem Loop).
         if family_group_chat_id_getter is not None:
-            _fgcid_getter = family_group_chat_id_getter
-            _tg = tg
-            def _is_member(user_id):
-                fgcid = _fgcid_getter()
-                if not fgcid:
-                    return False
-                member = _tg.get_chat_member(fgcid, user_id)
-                return member is not None and member.get("status") in (
-                    "creator", "administrator", "member")
+            _is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
         else:
             # Kein Getter → Immer-true (authz.py hat die Prüfung bereits gemacht)
             _is_member = lambda uid: True
@@ -388,16 +409,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
         from skills.plan_client import PlanClient as _PlanClient
         from skills.termin_eintragen_task import TermineEintragenTask
         _tes_plan_client = _PlanClient(origin_url=plan_origin_url)
-        _tes_fgcid_getter = family_group_chat_id_getter
-        _tes_tg = tg
         _tes_sessions = tes_sessions if tes_sessions is not None else {}
-        def _tes_is_member(user_id):
-            fgcid = _tes_fgcid_getter()
-            if not fgcid:
-                return False
-            member = _tes_tg.get_chat_member(fgcid, user_id)
-            return member is not None and member.get("status") in (
-                "creator", "administrator", "member")
+        _tes_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
         catalog.register(TermineEintragenTask(
             tg=tg,
             plan_client=_tes_plan_client,
@@ -425,15 +438,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             provider_name or "claude",
             provider_api_key,
             provider_model or "")
-        _tab_fgcid_getter = family_group_chat_id_getter
-        _tab_tg = tg
-        def _tab_is_member(user_id):
-            fgcid = _tab_fgcid_getter()
-            if not fgcid:
-                return False
-            member = _tab_tg.get_chat_member(fgcid, user_id)
-            return member is not None and member.get("status") in (
-                "creator", "administrator", "member")
+        _tab_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
         catalog.register(TermineAusBildTask(
             tg=tg,
             multimodal_provider=_tab_multimodal,
@@ -474,15 +479,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
         from skills.routine_client import RoutineClient
         from skills.routine_zeiten_setzen_task import RoutineZeitenSetzenTask
         _rzs_client = RoutineClient(origin_url=routine_origin_url)
-        _rzs_fgcid_getter = family_group_chat_id_getter
-        _rzs_tg = tg
-        def _rzs_is_member(user_id):
-            fgcid = _rzs_fgcid_getter()
-            if not fgcid:
-                return False
-            member = _rzs_tg.get_chat_member(fgcid, user_id)
-            return member is not None and member.get("status") in (
-                "creator", "administrator", "member")
+        _rzs_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
         catalog.register(RoutineZeitenSetzenTask(
             tg=tg,
             routine_client=_rzs_client,
@@ -498,15 +495,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
         from skills.foto_senden_task import FotoSendenTask
         from skills.photo_client import PhotoClient
         _fse_client = PhotoClient(origin_url=photo_origin_url)
-        _fse_fgcid_getter = family_group_chat_id_getter
-        _fse_tg = tg
-        def _fse_is_member(user_id):
-            fgcid = _fse_fgcid_getter()
-            if not fgcid:
-                return False
-            member = _fse_tg.get_chat_member(fgcid, user_id)
-            return member is not None and member.get("status") in (
-                "creator", "administrator", "member")
+        _fse_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
         catalog.register(FotoSendenTask(
             tg=tg,
             photo_client=_fse_client,
@@ -530,15 +519,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
         from skills.routine_punkte_setzen_task import RoutinePunkteSetzenTask
         _rps_routine_client = _RpsRoutineClient(origin_url=routine_origin_url)
         _rps_icon_client = IconClient(origin_url=icon_origin_url)
-        _rps_fgcid_getter = family_group_chat_id_getter
-        _rps_tg = tg
-        def _rps_is_member(user_id):
-            fgcid = _rps_fgcid_getter()
-            if not fgcid:
-                return False
-            member = _rps_tg.get_chat_member(fgcid, user_id)
-            return member is not None and member.get("status") in (
-                "creator", "administrator", "member")
+        _rps_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
         catalog.register(RoutinePunkteSetzenTask(
             tg=tg,
             routine_client=_rps_routine_client,
@@ -556,15 +537,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
         from skills.seiten_client import SeitenClient
         from skills.seiten_uebersicht_task import SeitenUebersichtTask
         _su_client = SeitenClient(origin_url=seiten_origin_url)
-        _su_fgcid_getter = family_group_chat_id_getter
-        _su_tg = tg  # tg still needed for get_chat_member in is_member_fn
-        def _su_is_member(user_id):
-            fgcid = _su_fgcid_getter()
-            if not fgcid:
-                return False
-            member = _su_tg.get_chat_member(fgcid, user_id)
-            return member is not None and member.get("status") in (
-                "creator", "administrator", "member")
+        _su_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
         catalog.register(SeitenUebersichtTask(
             seiten_client=_su_client,
             is_member_fn=_su_is_member,
@@ -579,15 +552,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
         from skills.essen_client import EssenClient
         from skills.wuensche_zeigen_task import WuenscheZeigenTask
         _wze_essen_client = EssenClient(origin_url=essen_origin_url)
-        _wze_fgcid_getter = family_group_chat_id_getter
-        _wze_tg = tg
-        def _wze_is_member(user_id):
-            fgcid = _wze_fgcid_getter()
-            if not fgcid:
-                return False
-            member = _wze_tg.get_chat_member(fgcid, user_id)
-            return member is not None and member.get("status") in (
-                "creator", "administrator", "member")
+        _wze_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
         catalog.register(WuenscheZeigenTask(
             essen_client=_wze_essen_client,
             is_member_fn=_wze_is_member))
@@ -607,15 +572,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
         from skills.icon_client import IconClient as _GanIconClient
         _gan_essen_client = _GanEssenClient(origin_url=essen_origin_url)
         _gan_icon_client = _GanIconClient(origin_url=icon_origin_url)
-        _gan_fgcid_getter = family_group_chat_id_getter
-        _gan_tg = tg
-        def _gan_is_member(user_id):
-            fgcid = _gan_fgcid_getter()
-            if not fgcid:
-                return False
-            member = _gan_tg.get_chat_member(fgcid, user_id)
-            return member is not None and member.get("status") in (
-                "creator", "administrator", "member")
+        _gan_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
         catalog.register(GerichtAnlegenTask(
             tg=tg,
             essen_client=_gan_essen_client,
