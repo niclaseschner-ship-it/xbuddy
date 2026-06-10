@@ -22,6 +22,13 @@ _PRICES_USD_PER_MILLION = {
     "claude-sonnet-4-6": (3.00,  0.30, 15.00),
     # claude-haiku-4-5: Stand Anthropic-Pricing 2026-05-31
     "claude-haiku-4-5":  (1.00,  0.10, 5.00),
+    # mistral-medium-2508: Mistral Medium 3.1 — Konversations-Adapter (#508).
+    # Stand Mistral-Pricing 2026-06-10 (docs.mistral.ai/pricing).
+    # Mistral hat kein Prompt-Caching → cached_input-Slot auf Input-Preis gesetzt.
+    "mistral-medium-2508": (1.50, 1.50, 7.50),
+    # mistral-medium-3504: Mistral Medium 3.5 — Multimodal-Adapter (#508).
+    # Stand Mistral-Pricing 2026-06-10 (docs.mistral.ai/pricing).
+    "mistral-medium-3504": (1.50, 1.50, 7.50),
 }
 
 

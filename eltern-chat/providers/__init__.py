@@ -21,4 +21,9 @@ def get_provider(name, api_key, model=""):
         # Claude-Adapter tatsächlich verwendet wird (Tests laufen ohne SDK).
         from .claude import ClaudeProvider
         return ClaudeProvider(api_key=api_key, model=model)
+    if name == "mistral":
+        # Lazy-Import: httpx wird nur geladen, wenn der Mistral-Adapter
+        # tatsächlich verwendet wird (EC-11, #508).
+        from .mistral import MistralProvider
+        return MistralProvider(api_key=api_key, model=model)
     raise ValueError("unbekannter KI-Anbieter: %r" % name)
