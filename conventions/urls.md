@@ -330,6 +330,12 @@ Bauregeln:
   nicht sichtbar wird. Die operative Umsetzung in `deploy/nginx/`
   trägt diesen Vertrag und wird durch Verhaltenstests (Stub-Upstream)
   verriegelt — der Code-Guard (oben) ist die zweite Linie.
+- **`^~`-Sonderfall**: Nutzt eine Komponente einen `^~`-Prefix-Block
+  (wie `^~ /api/v1/seiten/`), muss ihr Admin-Block
+  `^~ /api/v1/<komponente>/admin/` **davor** stehen — nginx wertet `^~`
+  vor Regex aus, sodass ein allgemeiner Regex-Admin-Block sonst nicht
+  greift. Vorbild: `^~ /api/v1/seiten/admin/` vor `^~ /api/v1/seiten/`
+  in `deploy/nginx/xbuddy-origin.conf`.
 - **Keine Pflicht zur Admin-API**: Komponenten ohne Reload-/Wartungs-/
   internen-Schreib-Bedarf brauchen keinen Admin-Sub-Pfad. URL-17
   reserviert die Form, ohne sie vorzuschreiben.
