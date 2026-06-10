@@ -21,37 +21,23 @@ DAY_SHORT = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 
 # PLAN-12: Fallback-Typ für einen Kind-Aktivitäts-Slot, dessen Titel kein
 # Katalog-Schlüsselwort trägt — ein Kind-Slot-Eintrag ist nie symbol-/typlos.
-# Bewusst NICHT im aktivitaeten-Katalog (das ist die Familien-Aktivitätsliste,
-# E-PLAN-8); `activity_icon('termin', …)` fällt im Template auf icon_star
-# (akzeptierter generischer Visual-Fallback).
+# Das generische Fallback-Piktogramm ist FALLBACK_PIKTOGRAMM (3071, Kalender).
 GENERIC_ACT_FALLBACK = "termin"
 
 # PLAN-12: Schlüsselwörter im Titel → Aktivitäts-Art. Eine Heuristik
 # (OPEN-PLAN-B). Quelle des Katalogs: `plan.aktivitaeten` (Refs #101).
 
-# PLAN-13: Schlüsselwörter im Titel → Termin-Icon-Key (Heuristik).
+# PLAN-13: Schlüsselwörter im Titel → ARASAAC-Piktogramm-ID (Heuristik).
 # Gemeinsame Aktivitäts-Keywords kommen aus dem Katalog (`aktivitaeten.py`),
 # damit PLAN-12 und PLAN-13 nicht divergieren — ein Keyword wie "klavier"
-# führt in beiden Pfaden konsistent zum richtigen Symbol (#308).
-# Nur View-spezifische Einträge bleiben hier hartcodiert:
-#   - Aktivitäten ohne Aktivitäts-Art (Zahnarzt, Ferien, Urlaub, Treffen, Garten).
-#   - Präfix-Varianten für Aktivitäten, deren Katalog-Keyword im Termin-Titel
-#     oft als Teil eines längeren Worts auftritt: "Kletterhalle" (klett),
-#     "Kreativ-Workshop" (kreat). Die Aktivitäts-Erkennung (PLAN-12) bleibt
-#     katalog-basiert — nur die Termin-Icon-Heuristik (PLAN-13) bekommt hier
-#     die breiteren Präfixe als zweiten Treffer-Anker (#308-fix).
-_TERMIN_ICON_EXTRAS = [
-    ("zahn",   "tooth"),
-    ("ferien", "holiday"),
-    ("urlaub", "holiday"),
-    ("treff",  "sparkle"),
-    ("garten", "flower"),
-    # Präfix-Varianten — greifen für zusammengesetzte Wörter wie "Kletterhalle"
-    # und "Kreativ-Workshop", die den vollen Katalog-Keyword nicht tragen.
-    ("klett",  "climb"),
-    ("kreat",  "brush"),
-]
-TERMIN_ICON_KEYWORDS = aktivitaeten_mod.termin_icon_keywords_aus_katalog() + _TERMIN_ICON_EXTRAS
+# führt in beiden Pfaden konsistent zur richtigen ARASAAC-ID (#308, #471).
+# Termin-spezifische Einträge (zahn, ferien, treff, garten, schule) und
+# Präfix-Varianten (klett, kreat) sind in #471 in den Aktivitäts-Katalog
+# gewandert — _TERMIN_ICON_EXTRAS ist entfernt (PLAN-13 V1.2, CLAUDE.md §6).
+#
+# Modul-Import-Default: ohne Config → AKTIVITAETEN_V1 als Fallback.
+# render.py läuft auch ohne Config weiter (CONFIG-4-Garantie).
+TERMIN_ICON_KEYWORDS = aktivitaeten_mod.termin_icon_keywords_aus_katalog()
 
 
 def wochenstart_von(d, wochenstart_wd):
@@ -63,30 +49,39 @@ def wochenstart_von(d, wochenstart_wd):
     return d - timedelta(days=delta)
 
 
-def termin_icon(titel):
-    """Termin-Icon-Key aus dem Titel (PLAN-13). Default: 'sparkle'."""
+def termin_icon(titel, config=None):
+    """ARASAAC-Piktogramm-ID aus dem Termin-Titel (PLAN-13, E-PLAN-5 V1.2).
+
+    Sucht das erste passende Keyword im Aktivitäts-Katalog und liefert dessen
+    ARASAAC-ID. Fallback: FALLBACK_PIKTOGRAMM ('3071', Kalender-Icon). Mit
+    `config` greift der Live-Katalog statt AKTIVITAETEN_V1 (Config-Durchstich,
+    AC2 — AC5-Stolperdraht).
+    """
     s = (titel or "").lower()
-    for needle, icon in TERMIN_ICON_KEYWORDS:
+    keywords = (aktivitaeten_mod.termin_icon_keywords_aus_katalog(config)
+                if config is not None else TERMIN_ICON_KEYWORDS)
+    for needle, piktogramm in keywords:
         if needle in s:
-            return icon
-    return "sparkle"
+            return piktogramm
+    return aktivitaeten_mod.FALLBACK_PIKTOGRAMM
 
 
-def aktivitaets_art(titel):
+def aktivitaets_art(titel, config=None):
     """Aktivitäts-Art aus einem Titel-Schlüsselwort (PLAN-12). None, wenn keins passt.
 
     Delegiert an `plan.aktivitaeten` — den gemeinsamen Aktivitäts-Katalog
-    (Refs #101).
+    (Refs #101). Mit `config` greift der Live-Katalog (Config-Durchstich, AC2).
     """
-    return aktivitaeten_mod.art_aus_titel(titel)
+    return aktivitaeten_mod.art_aus_titel(titel, config)
 
 
-def klassifiziere_event(titel, kinder):
+def klassifiziere_event(titel, kinder, config=None):
     """Ordnet ein Event genau dann einer Kind-Aktivität zu, wenn sein Titel
     den Namen eines Kindes trägt (PLAN-12).
 
     `kinder` ist eine Liste von familie.Person (Art Kind). Liefert
     (kind_id, art) bei Treffer, sonst None — dann ist es ein Termin (PLAN-13).
+    Mit `config` greift der Live-Katalog (Config-Durchstich, AC2).
     """
     s = (titel or "").lower()
     treffer = None  # (fundindex, kind_id)
@@ -98,7 +93,7 @@ def klassifiziere_event(titel, kinder):
             treffer = (pos, k.id)
     if treffer is None:
         return None
-    return treffer[1], aktivitaets_art(titel)
+    return treffer[1], aktivitaets_art(titel, config)
 
 
 def strip_kind_name(titel, kinder):
@@ -212,7 +207,7 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
 
         ring = _ring_fuer_person(ev.person, registry) if ev.person else None
 
-        kid_act = klassifiziere_event(ev.titel, kinder)
+        kid_act = klassifiziere_event(ev.titel, kinder, cfg)
         if kid_act is not None:
             # PLAN-12: Kind-Aktivität → Aktivitäts-Slot. Ein Kind-Slot-Eintrag
             # trägt immer ein Symbol: die erkannte Art oder ein generisches
@@ -220,9 +215,13 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
             kind_id, art = kid_act
             slot_key = kind_zu_slot.get(kind_id)
             if slot_key is not None:
+                # ARASAAC-Piktogramm für den Aktivitäts-Chip (E-PLAN-5 V1.2).
+                piktogramm = (aktivitaeten_mod.icon_fuer_art(art, cfg)
+                              if art else None) or aktivitaeten_mod.FALLBACK_PIKTOGRAMM
                 for iso in tag_isos:
                     schedule[iso][slot_key] = {
                         "type": art or GENERIC_ACT_FALLBACK,
+                        "piktogramm": piktogramm,
                         "label": strip_kind_name(ev.titel, kinder),
                         "event_id": ev.id,
                     }
@@ -230,7 +229,7 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
             # der Termin-Leiste mit seiner Uhrzeit — derselbe Event (gleiche id).
             # Ganztägig/mehrtägig bleibt nur im Kind-Slot.
             if len(tag_isos) == 1 and not ev.ganztags and ev.beginn is not None:
-                appointments[tag_isos[0]].append(_einzel_termin(ev, ring))
+                appointments[tag_isos[0]].append(_einzel_termin(ev, ring, cfg))
             continue
 
         # PLAN-13/PLAN-14: Termin. Mehrtägig → eine Spanne, sonst je Tag.
@@ -242,11 +241,11 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
                 "label": ev.titel,
                 "ring": ring,
                 "person": ev.person,
-                "icon": termin_icon(ev.titel),
+                "icon": termin_icon(ev.titel, cfg),
                 "event_id": ev.id,
             })
         else:
-            appointments[tag_isos[0]].append(_einzel_termin(ev, ring))
+            appointments[tag_isos[0]].append(_einzel_termin(ev, ring, cfg))
 
     return {
         "tage": tage,
@@ -257,12 +256,13 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
     }
 
 
-def _einzel_termin(ev, ring):
+def _einzel_termin(ev, ring, config=None):
     """Ein Einzel-Termin-Eintrag der Termin-Leiste (PLAN-13).
 
     Der gemeinsame Append-Pfad für Kind-Termine und Nicht-Kind-Termine —
     beide bauen ihren Termin-Leisten-Eintrag identisch (CLAUDE.md §6, keine
     duplizierte Logik). Uhrzeit nur bei zeitgebundenen Events.
+    `icon` ist nun eine ARASAAC-ID (E-PLAN-5 V1.2).
     """
     uhrzeit = None
     if not ev.ganztags and ev.beginn is not None:
@@ -272,7 +272,7 @@ def _einzel_termin(ev, ring):
         "label": ev.titel,
         "ring": ring,
         "person": ev.person,
-        "icon": termin_icon(ev.titel),
+        "icon": termin_icon(ev.titel, config),
         "allday": ev.ganztags,
         "event_id": ev.id,
     }
