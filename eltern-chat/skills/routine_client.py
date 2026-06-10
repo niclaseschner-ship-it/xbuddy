@@ -113,6 +113,32 @@ class RoutineClient:
 
     # -- Items-API (ROUTINE-14, #354, RPS-3/RPS-6) ------------------------
 
+    def get_items(self):
+        """RPS-3 V1.2: Aktuelle Items-Liste lesen (GET /api/v1/routine/items).
+
+        Liefert das Antwort-Dict:
+          {"default": [{id, label, piktogramm}, …],
+           "einmalig_heute": [{id, label, piktogramm}, …]}.
+
+        Per-Request frisch (DCOMP-3): kein Client-seitiger Cache.
+
+        Fehler-Pfade:
+          - HTTP != 200 → RoutineClientError.
+          - Antwort nicht parsbar / Connection-Fehler → RoutineClientError.
+        """
+        status, resp_bytes = self._call("GET", PFAD_ITEMS)
+        if status != 200:
+            raise self._items_error("GET", PFAD_ITEMS, status, resp_bytes)
+        try:
+            data = json.loads(resp_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise RoutineClientError(
+                "Routine-Buddy: GET-Antwort nicht parsebar (%s)" % e) from e
+        if not isinstance(data, dict):
+            raise RoutineClientError(
+                "Routine-Buddy: GET-Antwort hat unerwartete Form (%r)" % data)
+        return data
+
     def add_item(self, quelle, label, piktogramm):
         """RPS-3: Routine-Punkt anlegen (POST /api/v1/routine/items).
 
