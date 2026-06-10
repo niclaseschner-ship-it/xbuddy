@@ -5,9 +5,10 @@ die Lese-Seite (Titel → Art, `render.py`) als auch die Schreib-Seite (Art →
 Titel-Label, `main.py`) beziehen sich auf diesen Katalog.
 
 Seit #308 speist dieser Katalog zusätzlich PLAN-13: `icon_fuer_art()` liefert
-den Termin-Icon-Key für eine Art, `termin_icon_keywords_aus_katalog()` erzeugt
-die zugehörigen (keyword, icon)-Paare für `render.py`. Damit sind
-Aktivitäts-Erkennung (PLAN-12) und Termin-Icon-Zuordnung (PLAN-13) konsistent.
+die ARASAAC-Piktogramm-ID für eine Art, `termin_icon_keywords_aus_katalog()`
+erzeugt die zugehörigen (keyword, piktogramm_id)-Paare für `render.py`. Damit
+sind Aktivitäts-Erkennung (PLAN-12) und Termin-Icon-Zuordnung (PLAN-13)
+konsistent — eine Quelle, eine Icon-Form (E-PLAN-5 V1.2, ICONS-4).
 
 Seit #445/#578 (PLAN-28/PLAN-34) ist der Katalog dateigetrieben: die Quelle
 ist die `aktivitaeten`-Section in `plan.json` (via `Config.aktivitaeten`).
@@ -17,56 +18,68 @@ Alle Funktionen nehmen einen optionalen `config`-Parameter (plan.config.Config).
 Ist er None oder hat er kein `aktivitaeten`-Feld (== None), greift
 AKTIVITAETEN_V1. So bleibt render.py — das termin_icon_keywords_aus_katalog()
 ohne Config beim Modul-Import aufruft — unverändert lauffähig.
+
+ARASAAC-Icon-Pfad (E-PLAN-5 V1.2): /display/_shared/icons/arasaac/<id>.png.
+Fallback-Piktogramm: 3071 (Kalender-Icon), wenn kein Keyword trifft (PLAN-13).
 """
+
+# PLAN-13: Generisches Termin-Fallback-Piktogramm (ARASAAC id, E-PLAN-5 V1.2).
+# Trifft kein Keyword im Termin-Titel, rendert die Pille dieses Kalender-Icon.
+FALLBACK_PIKTOGRAMM = "3071"
 
 # PLAN-12/PLAN-28: V1-Default-Katalog — CONFIG-4-Fallback, wenn plan.json keine
 # `aktivitaeten`-Section hat (E-PLAN-8 V1.2). Format je Eintrag:
 # { "art": <schlüssel>, "label": <text>, "keywords": [<str>, …],
 #   "piktogramm": <arasaac-id-string> }
 #
-# `piktogramm` hier als leerer String — ARASAAC-Ids werden in V1 per
-# Direkt-Edit oder PAS-Skill gesetzt (PLAN-28). Der Fallback rendert das
-# generische Symbol (ICONS-7-Garantie greift nur bei IDs aus der Suche).
+# ARASAAC-IDs: Werft #578/E-PLAN-5 V1.2 — ICONS-4-Konsum über den geteilten
+# Icon-Pfad /display/_shared/icons/arasaac/<id>.png (analog ROUTINE-10).
 #
 # Reihenfolge zählt: bei der Lese-Heuristik gewinnt der erste Treffer in
 # der flachen keyword-Liste. Die hiesige Reihenfolge bewahrt das alte
 # Verhalten aus `render.AKTIVITAETS_KEYWORDS` 1:1 (Refs #101).
+#
+# Termin-spezifische Einträge (PLAN-13 V1.2): zahn, ferien, treff, garten,
+# schule wandern hierher aus `render._TERMIN_ICON_EXTRAS` (#471). Ferien und
+# Urlaub teilen denselben art-Schlüssel und dieselbe ARASAAC-ID. Die
+# Präfix-Varianten "klett" und "kreat" sind als zusätzliche Keywords in den
+# bestehenden klettern/kreativ-Einträgen untergebracht (PLAN-13 #308-fix).
 AKTIVITAETEN_V1 = [
-    {"art": "klettern",    "label": "Klettern",    "keywords": ["klettern"],
-     "piktogramm": ""},
-    {"art": "kreativ",     "label": "Kreativ",     "keywords": ["kreativ"],
-     "piktogramm": ""},
+    # ── Familien-Aktivitäten (9 Einträge) ────────────────────────
+    {"art": "klettern",    "label": "Klettern",    "keywords": ["klettern", "klett"],
+     "piktogramm": "8226"},
+    {"art": "kreativ",     "label": "Kreativ",     "keywords": ["kreativ", "kreat"],
+     "piktogramm": "11690"},
     {"art": "schwimmen",   "label": "Schwimmen",   "keywords": ["schwimm"],
-     "piktogramm": ""},
+     "piktogramm": "6568"},
     {"art": "spielplatz",  "label": "Spielplatz",  "keywords": ["spielplatz"],
-     "piktogramm": ""},
+     "piktogramm": "2859"},
     {"art": "musik",       "label": "Musik",
      "keywords": ["musik", "klavier", "geige", "gitarre"],
-     "piktogramm": ""},
+     "piktogramm": "2746"},
     {"art": "ausflug",     "label": "Ausflug",     "keywords": ["ausflug"],
-     "piktogramm": ""},
+     "piktogramm": "4670"},
     {"art": "geburtstag",  "label": "Geburtstag",
      "keywords": ["geburtstag", "geburts"],
-     "piktogramm": ""},
+     "piktogramm": "3087"},
     {"art": "verabredung", "label": "Verabredung", "keywords": ["verabredung"],
-     "piktogramm": ""},
+     "piktogramm": "2255"},
     {"art": "waldgang",    "label": "Waldgang",    "keywords": ["wald"],
-     "piktogramm": ""},
+     "piktogramm": "2666"},
+    # ── Termin-spezifische Einträge (PLAN-13 V1.2, #471) ─────────
+    # Wandern aus render._TERMIN_ICON_EXTRAS hierher — eine Quelle (CLAUDE.md §6).
+    # Keine Kind-Aktivität (tauchen in Termin-Leiste auf, nicht im Aktivitäts-Slot).
+    {"art": "zahn",    "label": "Zahnarzt",  "keywords": ["zahn"],
+     "piktogramm": "11229"},
+    {"art": "ferien",  "label": "Ferien",    "keywords": ["ferien", "urlaub"],
+     "piktogramm": "3166"},
+    {"art": "treff",   "label": "Treffen",   "keywords": ["treff"],
+     "piktogramm": "6487"},
+    {"art": "garten",  "label": "Garten",    "keywords": ["garten"],
+     "piktogramm": "2434"},
+    {"art": "schule",  "label": "Schule",    "keywords": ["schule"],
+     "piktogramm": "3082"},
 ]
-
-# PLAN-13: Art → Termin-Icon-Key (V1-Default; spiegelt _ART_ZU_ICON aus #308).
-# Bleibt als Konstante, da render.py keinen Config-Zugriff hat.
-_ICON_V1 = {
-    "klettern":    "climb",
-    "kreativ":     "brush",
-    "schwimmen":   "wave",
-    "spielplatz":  "play",
-    "musik":       "music",
-    "ausflug":     "pin",
-    "geburtstag":  "cake",
-    "verabredung": "friends",
-    "waldgang":    "trees",
-}
 
 
 def _katalog(config=None):
@@ -111,39 +124,37 @@ def label_fuer_art(art, config=None):
 
 
 def icon_fuer_art(art, config=None):
-    """Termin-Icon-Key für eine Aktivitäts-Art (PLAN-13).
+    """ARASAAC-Piktogramm-ID für eine Aktivitäts-Art (PLAN-12, E-PLAN-5 V1.2).
 
-    Liest aus dem aktiven Katalog; unbekannte Art → None. Fällt für
-    Icon-Keys, die nicht im Katalog stehen, auf _ICON_V1 zurück (render.py
-    erwartet immer einen Key für die bekannten V1-Arten). Wird von
-    `render.py` über `termin_icon_keywords_aus_katalog()` genutzt (#308).
+    Liest das `piktogramm`-Feld direkt aus dem aktiven Katalog-Eintrag —
+    eine Icon-Quelle (CLAUDE.md §6). Gibt die ID als String zurück (z. B.
+    '8226') oder None, wenn die Art unbekannt ist oder kein piktogramm trägt.
+
+    Verworfen: _ICON_V1-Map (bisherige String-Keys wie 'climb', 'brush') —
+    die Icon-Quelle wechselt in V1.2 vollständig auf ARASAAC (E-PLAN-5 V1.2).
     """
-    # Zuerst V1-Map — render.py kennt nur diese Icon-Keys.
-    v1_icon = _ICON_V1.get(art)
-    if v1_icon is not None:
-        return v1_icon
-    # Falls eine neue Art via PLAN-34-POST hinzugekommen ist und einen
-    # "piktogramm"-Wert hat, ist kein Icon-Key im V1-Schema vorhanden —
-    # render.py fällt auf den generischen Fallback zurück. None ist korrekt.
+    for entry in _katalog(config):
+        if entry["art"] == art:
+            piktogramm = entry.get("piktogramm") or ""
+            return piktogramm if piktogramm else None
     return None
 
 
 def termin_icon_keywords_aus_katalog(config=None):
-    """Flache Liste `(keyword, icon_key)` aus dem Aktivitäts-Katalog (PLAN-13).
+    """Flache Liste `(keyword, piktogramm_id)` aus dem Aktivitäts-Katalog (PLAN-13).
 
-    Liefert für jedes Keyword jeder Aktivitäts-Art den zugehörigen Icon-Key.
-    Arten ohne Icon-Eintrag in _ICON_V1 werden übersprungen (render.py kennt
-    nur die V1-Icon-Keys). Wird von `render.py` als Teil von
-    TERMIN_ICON_KEYWORDS verwendet (#308).
+    Liefert für jedes Keyword jeder Aktivitäts-Art die zugehörige ARASAAC-ID.
+    Einträge ohne piktogramm werden übersprungen. Wird von `render.py` als
+    Teil von TERMIN_ICON_KEYWORDS verwendet (#308, #471).
 
     `render.py` ruft diese Funktion beim Modul-Import ohne Config auf —
-    dann greift CONFIG-4-Fallback AKTIVITAETEN_V1 + _ICON_V1.
+    dann greift CONFIG-4-Fallback AKTIVITAETEN_V1.
     """
     pairs = []
     for entry in _katalog(config):
-        icon = _ICON_V1.get(entry["art"])
-        if icon is None:
+        piktogramm = entry.get("piktogramm") or ""
+        if not piktogramm:
             continue
         for kw in entry["keywords"]:
-            pairs.append((kw, icon))
+            pairs.append((kw, piktogramm))
     return pairs
