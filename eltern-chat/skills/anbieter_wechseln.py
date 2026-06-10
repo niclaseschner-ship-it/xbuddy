@@ -315,7 +315,7 @@ def _do_validate(provider_name, api_key):
             system=_VALIDATION_SYSTEM,
             messages=[Message(role="user",
                               blocks=[TextBlock(text=_VALIDATION_PING)])],
-            tasks=[]))
+            task_defs=[]))
         return True
     except ProviderError as e:
         logging.info("anbieter_wechseln: Validierungs-Ping fehlgeschlagen (%s)", e)
