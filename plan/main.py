@@ -834,9 +834,10 @@ def _aktivitaet_label(art):
     """Anzeige-Label einer Aktivitäts-Art für den Event-Titel (PLAN-11).
 
     Delegiert an `plan.aktivitaeten` — den gemeinsamen Aktivitäts-Katalog
-    (Refs #101).
+    (Refs #101). Liest den Live-Katalog via `_current_config()` (AC2,
+    Config-Durchstich: POST-hinzugefügte Aktivitäten haben sofort ihr Label).
     """
-    return aktivitaeten_mod.label_fuer_art(art)
+    return aktivitaeten_mod.label_fuer_art(art, _current_config())
 
 
 # ============================================================
