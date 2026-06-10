@@ -44,6 +44,12 @@ DEFAULTS = {
     "provider":       "claude",     # KI-Anbieter (EC-11)
     "provider_model": "",           # leer → Anbieter-Default des Adapters
     "context_depth":  40,           # Gesprächskontext-Tiefe (EC-6, #312)
+    # E-TAB-6 V2 / #508: Multimodal-Anbieter-Slot (additiv). Default leer →
+    # Fallback auf `provider` (V1-Kompatibilität: Claude übernimmt auch den
+    # TAB-Pfad). Gesetzt → eigener Anbieter für Termin-Extraktion (DSGVO-Brücke).
+    "multimodal_provider": "",      # leer → Fallback auf provider (V1)
+    # E-TAB-6 V2 / #508: Multimodal-Modell-Override. leer → Anbieter-Default.
+    "multimodal_model": "",         # leer → Anbieter-Default des Adapters
     # CAV-3: Pfad zum öffentlichen Root-CA-Zertifikat, das die CA-Verteilung
     # ausliefert. Per-Instanz-Wert; Default = Standard-Ausgabe des CA-Werkzeugs
     # (tools/ca/make-ca.sh, #36). Niemals der CA-Privatschlüssel.
@@ -126,9 +132,10 @@ DEFAULTS = {
 
 # Umgebungsvariablen-Namen der Geheimnisse / Pflicht-Werte. Diese gehen am
 # Loader vorbei (CONFIG-3) — Geheimnisse berührt der Loader nicht.
-ENV_BOT_TOKEN        = "ELTERNCHAT_BOT_TOKEN"          # Geheimnis, Pflicht
-ENV_PROVIDER_API_KEY = "ELTERNCHAT_PROVIDER_API_KEY"   # Geheimnis, optional
-ENV_FAMILY_GROUP     = "ELTERNCHAT_FAMILY_GROUP_CHAT_ID"
+ENV_BOT_TOKEN             = "ELTERNCHAT_BOT_TOKEN"               # Geheimnis, Pflicht
+ENV_PROVIDER_API_KEY      = "ELTERNCHAT_PROVIDER_API_KEY"        # Geheimnis, optional
+ENV_MULTIMODAL_API_KEY    = "ELTERNCHAT_MULTIMODAL_API_KEY"      # Geheimnis, optional (#508)
+ENV_FAMILY_GROUP          = "ELTERNCHAT_FAMILY_GROUP_CHAT_ID"
 
 
 class ConfigError(Exception):
@@ -152,7 +159,10 @@ class Config:
                  seiten_origin_url, display_url_origin_heim,
                  display_url_origin_tailscale,
                  essen_origin_url,
-                 log_level):
+                 log_level,
+                 multimodal_provider="",
+                 multimodal_api_key="",
+                 multimodal_model=""):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
         self.provider = provider
@@ -174,6 +184,10 @@ class Config:
         self.display_url_origin_tailscale = display_url_origin_tailscale  # SREG-7 / #476: Tailscale-Origin
         self.essen_origin_url = essen_origin_url       # EC-15 / #503: Origin des Essens-Buddys (ESSEN-15/ESSEN-19)
         self.log_level = log_level                 # LOG-4 (#166): Level-String für tools.logsetup
+        # E-TAB-6 V2 / #508: Multimodal-Anbieter-Konfiguration (additiver Slot).
+        self.multimodal_provider = multimodal_provider  # leer → Fallback auf provider
+        self.multimodal_api_key = multimodal_api_key    # leer → Fallback auf provider_api_key
+        self.multimodal_model = multimodal_model        # leer → Anbieter-Default
 
 
 def _family_group_in_file(config_path):
@@ -242,6 +256,10 @@ def resolve(config_path, zd=None):
                         or store.get(KEY_PROVIDER_API_KEY)
                         or "").strip()
 
+    # Multimodal-API-Key: nur Env (Geheimnis, CONFIG-3). Leer → Fallback auf
+    # provider_api_key beim Aufbau des Adapters (Aufrufer-Verantwortung).
+    multimodal_api_key = os.environ.get(ENV_MULTIMODAL_API_KEY, "").strip()
+
     # Familien-Gruppe: Env > Datei > Onboarding-Speicher > leer.
     # Per Env/Datei gesetzt → gesperrt, hat Vorrang vor Onboarding-Bindung (ONB-6).
     # Der Loader-Output liefert den ENV-/Datei-/Default-Wert; das Sperr-Bit
@@ -288,4 +306,8 @@ def resolve(config_path, zd=None):
             values["display_url_origin_tailscale"]).strip().rstrip("/"),
         essen_origin_url=str(values["essen_origin_url"]).strip().rstrip("/"),
         log_level=str(values["log_level"]).strip(),
+        # E-TAB-6 V2 / #508: Multimodal-Adapter-Konfiguration.
+        multimodal_provider=str(values["multimodal_provider"]).strip(),
+        multimodal_api_key=multimodal_api_key,
+        multimodal_model=str(values["multimodal_model"]).strip(),
     )
