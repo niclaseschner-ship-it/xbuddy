@@ -442,11 +442,13 @@
 {# Eine Icon-Quelle: /display/_shared/icons/arasaac/<id>.png (ICONS-4/ICONS-7).
    Verworfen: Inline-SVG-Macros — wären ein zweiter Icon-Pfad (CLAUDE.md §6).  #}
 
-{# Slot-Icon → ARASAAC-ID (Schedule-Rail, PLAN-6, Werft #578) #}
+{# Slot-Icon → ARASAAC-ID (Schedule-Rail, PLAN-6, Werft #578).
+   'star' → '3071' (Kalender): Werft #578 Revision (Nic 2026-06-10) —
+   Kinder-Aktivitäts-Slot-Spalten tragen Kalender statt Stern (2752). #}
 {% set SLOT_ICON_ID = {
   'sun':   '37807',
   'clock': '39520',
-  'star':  '2752',
+  'star':  '3071',
   'fork':  '2342',
   'moon':  '2933',
 } %}
@@ -555,6 +557,11 @@
                     {{ arasaac_img(cell.piktogramm or '3071', 28) }}
                     <span>{{ cell.label or '' }}</span>
                   </div>
+                {% elif slot.art == 'aktivitaets-slot' and slot.kind %}
+                  {# Leerer Kinder-Aktivitäts-Slot: Plus als Anlege-Indikator (PLAN-12) #}
+                  <svg class="slot-plus" viewBox="0 0 64 64" width="30" height="30" fill="none" stroke="var(--kids-ink)" stroke-width="3.5" stroke-linecap="round" style="opacity:0.4;">
+                    <path d="M32 14 L32 50 M14 32 L50 32"/>
+                  </svg>
                 {% elif slot.art == 'erwachsenen-slot' and cell and cell is mapping %}
                   {% set photo = person_photo_url.get(cell.person) %}
                   {{ face(cell.ring, photo, 'size-76') }}
@@ -640,19 +647,9 @@
       <span>Event löschen</span>
     </button>
     <div class="picker-grid">
-      {# Picker-Optionen: (art, label, hintergrundfarbe, arasaac-id)
-         IDs aus AKTIVITAETEN_V1 / Werft #578 — E-PLAN-5 V1.2. #}
-      {% set picker_options = [
-        ('klettern',   'Klettern',    '#d6ecc7', '8226'),
-        ('kreativ',    'Kreativ',     '#dcd0f0', '11690'),
-        ('schwimmen',  'Schwimmen',   '#cfe6f5', '6568'),
-        ('spielplatz', 'Spielplatz',  '#d6ecc7', '2859'),
-        ('musik',      'Musik',       '#dcd0f0', '2746'),
-        ('ausflug',    'Ausflug',     '#ffe1c2', '4670'),
-        ('geburtstag', 'Geburtstag',  '#ffe1c2', '3087'),
-        ('verabredung','Verabredung', '#f9c8c8', '2255'),
-        ('waldgang',   'Waldgang',    '#cfe6f5', '2666'),
-      ] %}
+      {# Picker-Optionen: (art, label, tint, piktogramm) — dynamisch aus
+         Config.aktivitaeten via baue_view (PLAN-12, CLAUDE.md §6: keine
+         zweite hartcodierte Aktivitäts-Liste). Tint-Fallback '#eeeeee'. #}
       {% for atype, label, tint, pid in picker_options %}
         <button class="picker-tile" type="button"
                 data-action="set" data-type="{{ atype }}"

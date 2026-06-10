@@ -39,6 +39,44 @@ GENERIC_ACT_FALLBACK = "termin"
 # render.py läuft auch ohne Config weiter (CONFIG-4-Garantie).
 TERMIN_ICON_KEYWORDS = aktivitaeten_mod.termin_icon_keywords_aus_katalog()
 
+# PLAN-12/PLAN-11: Picker-Tint-Map — Hintergrundfarben der V1-Familien-
+# Aktivitäten als Orientierung für den Aktivitäts-Picker. Reihenfolge und
+# Tints sind V1-Defaults; Config-Einträge ohne Eintrag hier bekommen den
+# neutralen Fallback '#eeeeee'. Der Picker zeigt ALLE Config.aktivitaeten —
+# Familien-Einträge (in AKTIVITAETEN_V1-Reihenfolge) zuerst, dann weitere.
+_PICKER_TINT = {
+    "klettern":    "#d6ecc7",
+    "kreativ":     "#dcd0f0",
+    "schwimmen":   "#cfe6f5",
+    "spielplatz":  "#d6ecc7",
+    "musik":       "#dcd0f0",
+    "ausflug":     "#ffe1c2",
+    "geburtstag":  "#ffe1c2",
+    "verabredung": "#f9c8c8",
+    "waldgang":    "#cfe6f5",
+}
+_PICKER_TINT_FALLBACK = "#eeeeee"
+
+
+def baue_picker_options(cfg):
+    """Baut die Picker-Optionen aus dem aktiven Aktivitäts-Katalog (PLAN-12).
+
+    Liefert eine Liste von `(art, label, tint, piktogramm)`-Tupeln für alle
+    Einträge in `cfg.aktivitaeten` (oder AKTIVITAETEN_V1 als Fallback).
+    Reihenfolge: alle Config.aktivitaeten in ihrer konfigurierten Reihenfolge
+    (V1: Familien-Aktivitäten zuerst, dann Termin-Einträge). Tint-Fallback
+    `_PICKER_TINT_FALLBACK` für unbekannte arts (PLAN-12, CLAUDE.md §6:
+    eine Quelle statt hartcodierter Liste im Template).
+    """
+    result = []
+    for entry in aktivitaeten_mod._katalog(cfg):
+        art = entry["art"]
+        label = entry["label"]
+        tint = _PICKER_TINT.get(art, _PICKER_TINT_FALLBACK)
+        pid = entry.get("piktogramm") or aktivitaeten_mod.FALLBACK_PIKTOGRAMM
+        result.append((art, label, tint, pid))
+    return result
+
 
 def wochenstart_von(d, wochenstart_wd):
     """Der Wochenstart-Tag der Woche, in der `d` liegt (PLAN-10).
@@ -289,6 +327,7 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
         "appointments": appointments,
         "span_appointments": span_appointments if mit_terminen else [],
         "show_appointments": mit_terminen,
+        "picker_options": baue_picker_options(cfg),
     }
 
 

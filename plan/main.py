@@ -367,6 +367,7 @@ def woche():
         appointments=view["appointments"],
         span_appointments=view["span_appointments"],
         show_appointments=view["show_appointments"],
+        picker_options=view["picker_options"],
         variant=variant,
         anchor=anker.isoformat(),
     )
