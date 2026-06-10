@@ -6,13 +6,19 @@ Schwerpunkt:
 - Mischfall: Foto + Video gleichzeitig wäre untypisch, aber wir prüfen die
   Reihenfolge im Parser.
 - `encode_multipart`: deprivatisiert (FSE-7 — gemeinsamer Code an EINEM Ort).
+- `encode_multipart_multi`: Multi-File-Variante (TASK-10b).
 - `IncomingMessage.video_file_id`-Feld existiert mit Default None.
+- `send_photo` + `send_media_group` (TASK-10b): HTTP-Stub, Multipart-Body-Sanity.
 """
 
+import json
+
+import pytest
 from telegram import (
     IncomingMessage,
     TelegramClient,
     encode_multipart,
+    encode_multipart_multi,
 )
 
 # ============================================================
@@ -165,3 +171,197 @@ def test_incoming_message_video_file_id_default():
         update_id=1, chat_id=42, chat_type="private", message_id=10,
         from_user_id=7, from_user_name="x", text="")
     assert msg.video_file_id is None
+
+
+# ============================================================
+#  encode_multipart_multi — Public-API (TASK-10b)
+# ============================================================
+
+def test_TASK10b_encode_multipart_multi_felder_und_zwei_dateien():
+    """encode_multipart_multi kodiert Felder + mehrere Dateien (TASK-10b)."""
+    out = encode_multipart_multi(
+        boundary="bnd",
+        fields={"chat_id": "99", "media": "[]"},
+        file_blobs=[
+            ("photo0", "a.png", b"PNG1"),
+            ("photo1", "b.png", b"PNG2"),
+        ],
+    )
+    assert isinstance(out, bytes)
+    assert b"--bnd" in out
+    assert b'name="chat_id"' in out
+    assert b"99" in out
+    assert b'name="photo0"' in out
+    assert b'filename="a.png"' in out
+    assert b"PNG1" in out
+    assert b'name="photo1"' in out
+    assert b'filename="b.png"' in out
+    assert b"PNG2" in out
+    assert out.endswith(b"--bnd--\r\n")
+
+
+def test_TASK10b_encode_multipart_multi_reihenfolge_erhalten():
+    """encode_multipart_multi liefert file_blobs in der übergebenen Reihenfolge."""
+    out = encode_multipart_multi(
+        boundary="b",
+        fields={},
+        file_blobs=[
+            ("first", "f.png", b"FIRST"),
+            ("second", "s.png", b"SECOND"),
+        ],
+    )
+    pos_first = out.index(b"FIRST")
+    pos_second = out.index(b"SECOND")
+    assert pos_first < pos_second, "Reihenfolge der Dateien muss 1:1 erhalten bleiben"
+
+
+# ============================================================
+#  Hilfs-Stub: TelegramClient mit Fake-HTTP-Opener
+# ============================================================
+
+class _FakeResponse:
+    """Minimale Datei-ähnliche HTTP-Response für urllib-Opener-Stub."""
+
+    def __init__(self, body_bytes):
+        self._body = body_bytes
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        pass
+
+
+class _CapturingOpener:
+    """Zeichnet alle Request-Aufrufe auf und liefert skriptierte Antworten."""
+
+    def __init__(self, response_bytes):
+        self._response_bytes = response_bytes
+        self.requests = []
+
+    def open(self, req):
+        self.requests.append(req)
+        return _FakeResponse(self._response_bytes)
+
+
+def _ok_response(result=None):
+    """Gibt eine serialisierte Telegram-ok-Antwort zurück."""
+    return json.dumps({"ok": True, "result": result or {}}).encode("utf-8")
+
+
+def _make_tc_with_opener(opener):
+    """TelegramClient mit ausgetauschtem _opener für Tests."""
+    tc = TelegramClient(token="test:fake")
+    tc._opener = opener
+    return tc
+
+
+# ============================================================
+#  send_photo (TASK-10b) — HTTP-Stub, Multipart-Body-Sanity
+# ============================================================
+
+def test_TASK10b_send_photo_ruft_sendPhoto_endpunkt():
+    """send_photo schickt den Request an die sendPhoto-URL (TASK-10b)."""
+    opener = _CapturingOpener(_ok_response({"message_id": 1}))
+    tc = _make_tc_with_opener(opener)
+
+    tc.send_photo(chat_id=42, file_name="icon.png", file_bytes=b"PNGDATA")
+
+    assert len(opener.requests) == 1
+    req = opener.requests[0]
+    assert req.full_url.endswith("/sendPhoto"), (
+        "URL muss auf sendPhoto enden, war: %s" % req.full_url)
+
+
+def test_TASK10b_send_photo_body_enthaelt_photo_feld():
+    """send_photo-Body enthält das photo-Feld mit Datei-Bytes (TASK-10b)."""
+    opener = _CapturingOpener(_ok_response({"message_id": 1}))
+    tc = _make_tc_with_opener(opener)
+
+    tc.send_photo(chat_id=42, file_name="icon.png", file_bytes=b"PNGDATA")
+
+    req = opener.requests[0]
+    body = req.data
+    assert b'name="photo"' in body
+    assert b'filename="icon.png"' in body
+    assert b"PNGDATA" in body
+    assert b'name="chat_id"' in body
+    assert b"42" in body
+
+
+def test_TASK10b_send_photo_ohne_caption_kein_caption_feld():
+    """send_photo ohne caption schickt kein caption-Feld (TASK-10b)."""
+    opener = _CapturingOpener(_ok_response({"message_id": 1}))
+    tc = _make_tc_with_opener(opener)
+
+    tc.send_photo(chat_id=1, file_name="x.png", file_bytes=b"X", caption=None)
+
+    body = opener.requests[0].data
+    assert b"caption" not in body
+
+
+def test_TASK10b_send_photo_mit_caption():
+    """send_photo mit caption schickt das caption-Feld (TASK-10b)."""
+    opener = _CapturingOpener(_ok_response({"message_id": 1}))
+    tc = _make_tc_with_opener(opener)
+
+    tc.send_photo(chat_id=1, file_name="x.png", file_bytes=b"X", caption="Text")
+
+    body = opener.requests[0].data
+    assert b"caption" in body
+    assert b"Text" in body
+
+
+# ============================================================
+#  send_media_group (TASK-10b) — HTTP-Stub, Multipart-Body-Sanity
+# ============================================================
+
+def test_TASK10b_send_media_group_ruft_sendMediaGroup_endpunkt():
+    """send_media_group schickt den Request an sendMediaGroup (TASK-10b)."""
+    opener = _CapturingOpener(_ok_response([{"message_id": 1}]))
+    tc = _make_tc_with_opener(opener)
+
+    tc.send_media_group(chat_id=42, items=[
+        ("a.png", b"PNG_A", None),
+        ("b.png", b"PNG_B", None),
+    ])
+
+    assert len(opener.requests) == 1
+    req = opener.requests[0]
+    assert req.full_url.endswith("/sendMediaGroup"), (
+        "URL muss auf sendMediaGroup enden, war: %s" % req.full_url)
+
+
+def test_TASK10b_send_media_group_body_enthaelt_alle_dateien():
+    """send_media_group-Body enthält alle Bild-Dateien und media-JSON (TASK-10b)."""
+    opener = _CapturingOpener(_ok_response([{"message_id": 1}]))
+    tc = _make_tc_with_opener(opener)
+
+    tc.send_media_group(chat_id=99, items=[
+        ("x.png", b"BYTES_X", None),
+        ("y.png", b"BYTES_Y", None),
+    ])
+
+    body = opener.requests[0].data
+    assert b"BYTES_X" in body
+    assert b"BYTES_Y" in body
+    assert b"media" in body
+    assert b"attach://" in body
+
+
+def test_TASK10b_send_media_group_lehnt_ein_item_ab():
+    """send_media_group mit 1 Item → ValueError (Telegram-API, TASK-10b)."""
+    tc = TelegramClient(token="test:fake")
+    with pytest.raises(ValueError, match=r"mind\. 2"):
+        tc.send_media_group(chat_id=1, items=[("a.png", b"X", None)])
+
+
+def test_TASK10b_send_media_group_lehnt_elf_items_ab():
+    """send_media_group mit 11 Items → ValueError (Telegram-API, TASK-10b)."""
+    tc = TelegramClient(token="test:fake")
+    items = [("i%d.png" % i, b"X", None) for i in range(11)]
+    with pytest.raises(ValueError, match=r"max\. 10"):
+        tc.send_media_group(chat_id=1, items=items)

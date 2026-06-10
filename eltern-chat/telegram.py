@@ -127,6 +127,31 @@ def encode_multipart(boundary, fields, file_field, file_name, file_bytes):
     return b"".join(out)
 
 
+def encode_multipart_multi(boundary, fields, file_blobs):
+    """Wie encode_multipart, aber für mehrere Datei-Felder gleichzeitig.
+
+    Public-API (CLAUDE.md §6 — gemeinsamer Code an EINEM Ort):
+    `file_blobs` ist eine Liste von (field_name, file_name, file_bytes).
+    Genutzt von sendMediaGroup (TASK-10b — mehrere Bilder im Album).
+    """
+    out = []
+    for name, value in fields.items():
+        out.append(("--%s\r\n" % boundary).encode("utf-8"))
+        out.append(('Content-Disposition: form-data; name="%s"\r\n\r\n'
+                    % name).encode("utf-8"))
+        out.append(("%s\r\n" % value).encode("utf-8"))
+    for field_name, file_name, file_bytes in file_blobs:
+        out.append(("--%s\r\n" % boundary).encode("utf-8"))
+        out.append(('Content-Disposition: form-data; name="%s"; '
+                    'filename="%s"\r\n' % (field_name, file_name)
+                    ).encode("utf-8"))
+        out.append(b"Content-Type: application/octet-stream\r\n\r\n")
+        out.append(file_bytes)
+        out.append(b"\r\n")
+    out.append(("--%s--\r\n" % boundary).encode("utf-8"))
+    return b"".join(out)
+
+
 @dataclass
 class IncomingMessage:
     """Eine eingehende Nachricht, anbieter-/kanal-neutral aufbereitet.
@@ -301,6 +326,49 @@ class TelegramClient:
             "sendDocument", fields,
             file_field="document", file_name=file_name, file_bytes=file_bytes)
 
+    def send_photo(self, chat_id, file_name, file_bytes, caption=None):
+        """Sendet ein Bild als Telegram-Foto (sendPhoto, TASK-10b).
+
+        Genutzt vom ID-Wahl-Album-Helper (icon_album.zeige_kandidaten) bei
+        Einzel-Treffer; analog send_document, aber sendPhoto + photo-Feld.
+        """
+        fields = {"chat_id": str(chat_id)}
+        if caption is not None:
+            fields["caption"] = caption
+        return self._call_multipart(
+            "sendPhoto", fields,
+            file_field="photo", file_name=file_name, file_bytes=file_bytes)
+
+    def send_media_group(self, chat_id, items):
+        """Sendet 2-10 Bilder als Telegram-Album (sendMediaGroup, TASK-10b).
+
+        `items` ist eine Liste von (file_name, file_bytes, caption). caption
+        darf None sein — der ID-Wahl-Album-Helper setzt KEINE Captions
+        (TASK-10b).
+
+        Telegram-API erlaubt 2-10 Album-Items; <2 → ValueError.
+        """
+        if len(items) < 2:
+            raise ValueError("send_media_group benötigt mind. 2 Items "
+                             "(Telegram-API); für 1 Item: send_photo.")
+        if len(items) > 10:
+            raise ValueError("send_media_group erlaubt max. 10 Items.")
+        media = []
+        file_blobs = []
+        for i, (fname, fbytes, fcaption) in enumerate(items):
+            attach_name = "photo%d" % i
+            m = {"type": "photo", "media": "attach://%s" % attach_name}
+            if fcaption is not None:
+                m["caption"] = fcaption
+            media.append(m)
+            file_blobs.append((attach_name, fname, fbytes))
+
+        fields = {
+            "chat_id": str(chat_id),
+            "media": json.dumps(media),
+        }
+        return self._call_multipart_multi("sendMediaGroup", fields, file_blobs)
+
     def _call_multipart(self, method, fields, file_field, file_name, file_bytes):
         """Ruft eine Bot-API-Methode mit multipart/form-data auf (Datei-Upload).
 
@@ -324,6 +392,31 @@ class TelegramClient:
             raise TelegramError("%s: %s" % (method, e))
         if not result.get("ok"):
             raise TelegramError("%s: %s" % (method, result.get("description", "unbekannt")))
+        return result.get("result")
+
+    def _call_multipart_multi(self, method, fields, file_blobs):
+        """Multi-File-Variante von _call_multipart (TASK-10b sendMediaGroup).
+
+        `file_blobs` ist eine Liste von (field_name, file_name, file_bytes).
+        Fehlerbehandlung identisch zu `_call_multipart`. Nutzt `_opener` (EC-26).
+        """
+        boundary = "----xbuddy%d" % id(fields)
+        body = encode_multipart_multi(boundary, fields, file_blobs)
+        url = "%s/%s" % (self._api, method)
+        req = urllib.request.Request(
+            url, data=body,
+            headers={"Content-Type": "multipart/form-data; boundary=%s" % boundary})
+        try:
+            with self._opener.open(req) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode("utf-8", "replace")
+            raise TelegramError("%s: HTTP %s %s" % (method, e.code, detail))
+        except (urllib.error.URLError, OSError, json.JSONDecodeError) as e:
+            raise TelegramError("%s: %s" % (method, e))
+        if not result.get("ok"):
+            raise TelegramError(
+                "%s: %s" % (method, result.get("description", "unbekannt")))
         return result.get("result")
 
     def get_chat_member(self, chat_id, user_id):
