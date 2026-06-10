@@ -18,10 +18,11 @@ import unittest.mock as mock
 from fakes import FakeTelegram
 from skills.routine_punkte_setzen import (
     AKTION_ICON_SUCHEN,
+    AKTION_NEU_ORDNEN,
     SIGNAL_ICON_KANDIDATEN,
 )
 from skills.routine_punkte_setzen_task import RoutinePunkteSetzenTask
-from tasks import TurnContext, build_catalog
+from tasks import Proposal, TurnContext, build_catalog
 
 # ============================================================
 #  Test-Helfer
@@ -389,3 +390,104 @@ def test_mapping_fallback_bei_leer_kandidaten():
     )
     assert "Test" in quittung
     assert quittung  # nicht leer
+
+
+# ============================================================
+#  V1.2 Task-Tests: Einzel-Verschieben propose/schema
+# ============================================================
+
+class FakeRoutineClientMitListe(FakeRoutineClient):
+    """FakeRoutineClient mit get_items()-Unterstützung für V1.2."""
+
+    def __init__(self, get_items_response=None, **kw):
+        super().__init__(**kw)
+        self._get_items_response = get_items_response or {
+            "default": [], "einmalig_heute": []}
+        self.get_items_calls = []
+
+    def get_items(self):
+        self.get_items_calls.append(True)
+        return dict(self._get_items_response)
+
+
+def _make_task_v12(icon_client=None, tg=None, routine_client=None,
+                   icon_origin_url="http://icons.test"):
+    return RoutinePunkteSetzenTask(
+        tg=tg or FakeTelegramMitAlbum(),
+        routine_client=routine_client or FakeRoutineClientMitListe(),
+        icon_client=icon_client or FakeIconClient(),
+        family_group_chat_id_getter=lambda: 200,
+        is_member_fn=lambda uid: True,
+        icon_origin_url=icon_origin_url,
+    )
+
+
+def test_V12_propose_einzel_verschieben_nennt_name_und_position():
+    """V1.2: propose(neu_ordnen, item_name, ziel_position) nennt den Namen
+    und die Ziel-Position (Konversations-UX, Eltern sehen keine IDs)."""
+    task = _make_task_v12()
+    ctx = TurnContext(chat_id=42, from_user_id=7, private_chat_id=42)
+    proposal = task.propose({
+        "aktion": AKTION_NEU_ORDNEN,
+        "item_name": "Zähne putzen",
+        "ziel_position": 1,
+    }, ctx)
+    assert isinstance(proposal, Proposal)
+    assert "Zähne putzen" in proposal.summary
+    assert "1" in proposal.summary
+
+
+def test_V12_schema_enthaelt_kein_liste():
+    """V1.2 Lego-Trennung: Task-Schema enthält 'liste' NICHT —
+    Lesen ist in RoutinePunkteLesenTask ausgegliedert (EC-9)."""
+    task = _make_task_v12()
+    enum = task.parameters["properties"]["aktion"]["enum"]
+    assert "liste" not in enum, (
+        "Schema darf 'liste' NICHT enthalten — Lesen ist in "
+        "RoutinePunkteLesenTask ausgegliedert (EC-9)")
+
+
+def test_V12_schema_enthaelt_item_name_und_ziel_position():
+    """V1.2: Task-Schema enthält item_name und ziel_position als Properties."""
+    task = _make_task_v12()
+    props = task.parameters["properties"]
+    assert "item_name" in props, "Schema braucht 'item_name'"
+    assert "ziel_position" in props, "Schema braucht 'ziel_position'"
+    assert props["ziel_position"]["type"] == "integer"
+
+
+def test_V12_execute_einzel_verschieben_ruft_replace():
+    """V1.2 AC3: execute(neu_ordnen, item_name, ziel_position) löst Name auf
+    und ruft replace_default_items mit der korrekten Reihenfolge."""
+    rc = FakeRoutineClientMitListe(
+        get_items_response={
+            "default": [
+                {"id": "a", "label": "A", "piktogramm": "1"},
+                {"id": "b", "label": "B", "piktogramm": "2"},
+                {"id": "c", "label": "C", "piktogramm": "3"},
+            ],
+            "einmalig_heute": [],
+        },
+    )
+    replace_calls = []
+
+    def capture_replace(items):
+        replace_calls.append(list(items))
+        return {"count": len(items)}
+
+    rc.replace_default_items = capture_replace
+
+    task = _make_task_v12(routine_client=rc)
+    ctx = TurnContext(chat_id=42, from_user_id=7, private_chat_id=42)
+
+    task.execute({
+        "aktion": AKTION_NEU_ORDNEN,
+        "item_name": "C",
+        "ziel_position": 1,
+    }, ctx)
+
+    assert len(replace_calls) == 1
+    neue_liste = replace_calls[0]
+    assert neue_liste[0]["id"] == "c", "C muss auf Position 1 stehen"
+    assert neue_liste[1]["id"] == "a"
+    assert neue_liste[2]["id"] == "b"

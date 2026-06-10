@@ -113,13 +113,14 @@ class RoutinePunkteSetzenTask(WriteTask):
             name="routine_punkte_setzen",
             description=(
                 "Setzt Punkte der Morgen-Routine: einen Punkt dauerhaft "
-                "hinzufügen, nur für heute hinzufügen, entfernen oder die "
-                "Reihenfolge ändern. Aufrufen, wenn jemand sagt »füg "
-                "‹Zähne putzen› als Routine-Punkt hinzu«, »nimm den Punkt "
-                "‹Mütze› raus«, »tausch Reihenfolge von Mütze und Jacke«, "
-                "»Turnbeutel mitnehmen für heute« oder Ähnliches. "
-                "Umbenennen wird in V1.1 NICHT unterstützt — stattdessen "
-                "den alten Punkt löschen und einen neuen anlegen.\n\n"
+                "hinzufügen, nur für heute hinzufügen, entfernen oder "
+                "einen Punkt verschieben. "
+                "Aufrufen, wenn jemand sagt »füg ‹Zähne putzen› als "
+                "Routine-Punkt hinzu«, »nimm den Punkt ‹Mütze› raus«, "
+                "»Zähne putzen nach Position 1«, »Turnbeutel mitnehmen "
+                "für heute« oder Ähnliches. Umbenennen wird in V1.2 NICHT "
+                "unterstützt. Zum Lesen der aktuellen Punkte den Task "
+                "‹routine_punkte_lesen› verwenden.\n\n"
                 "Vor einem ‹hinzufuegen›/‹einmalig›-Aufruf muss ein "
                 "Piktogramm gewählt sein. Dafür den Task ZUERST mit "
                 "{aktion: 'icon_suchen', icon_stichwort: '<wort>'} aufrufen "
@@ -127,7 +128,10 @@ class RoutinePunkteSetzenTask(WriteTask):
                 "Mapping der Kandidaten-Bilder (1 = <id>, 2 = <id>, …). "
                 "Dann den Task ein zweites Mal aufrufen mit "
                 "{aktion: 'hinzufuegen', label: '<text>', "
-                "piktogramm: '<id-aus-vorschlag>'}."),
+                "piktogramm: '<id-aus-vorschlag>'}.\n\n"
+                "Für Einzel-Verschieben: {aktion: 'neu_ordnen', "
+                "item_name: '<Name>', ziel_position: <1-basiert>}. "
+                "IDs werden intern aufgelöst — Eltern nennen nur den Namen."),
             parameters={
                 "type": "object",
                 "properties": {
@@ -145,9 +149,12 @@ class RoutinePunkteSetzenTask(WriteTask):
                             "in die Punkt-Liste; 'einmalig' = nur für "
                             "heute (morgen wieder weg); 'loeschen' = aus "
                             "der Liste nehmen; 'neu_ordnen' = die Punkt-"
-                            "Reihenfolge setzen; 'icon_suchen' = "
-                            "Piktogramm-Kandidaten zu einem Wort suchen "
-                            "(lesend, ohne Schreiben)."),
+                            "Reihenfolge setzen (mit item_name+ziel_position "
+                            "für Einzel-Verschieben oder mit items-Liste); "
+                            "'icon_suchen' = Piktogramm-Kandidaten zu einem "
+                            "Wort suchen (lesend, ohne Schreiben). Zum Lesen "
+                            "der Punkt-Liste den Task 'routine_punkte_lesen' "
+                            "verwenden."),
                     },
                     "label": {
                         "type": "string",
@@ -175,10 +182,25 @@ class RoutinePunkteSetzenTask(WriteTask):
                         "type": "array",
                         "description": (
                             "Die neue geordnete Liste der dauerhaften "
-                            "Punkte bei 'neu_ordnen'. Jeder Eintrag ist "
-                            "{id, label, piktogramm}. Reihenfolge = "
-                            "Anzeige-Reihenfolge."),
+                            "Punkte bei 'neu_ordnen' (Bulk-Form). Jeder "
+                            "Eintrag ist {id, label, piktogramm}. "
+                            "Für Einzel-Verschieben stattdessen "
+                            "item_name + ziel_position verwenden."),
                         "items": {"type": "object"},
+                    },
+                    "item_name": {
+                        "type": "string",
+                        "description": (
+                            "Name des zu verschiebenden Punktes bei "
+                            "'neu_ordnen' (Einzel-Verschieben, V1.2). "
+                            "Z. B. 'Zähne putzen'. Wird intern zur id "
+                            "aufgelöst — Eltern nennen nur den Namen."),
+                    },
+                    "ziel_position": {
+                        "type": "integer",
+                        "description": (
+                            "Ziel-Position (1-basiert) für 'neu_ordnen' "
+                            "Einzel-Verschieben. 1 = ganz oben."),
                     },
                     "icon_stichwort": {
                         "type": "string",
@@ -253,12 +275,19 @@ class RoutinePunkteSetzenTask(WriteTask):
             return Proposal(summary)
 
         if aktion == AKTION_NEU_ORDNEN:
-            items = args.get("items") or []
-            n = len(items) if isinstance(items, list) else 0
-            summary = (
-                f"Die Routine-Punkt-Reihenfolge neu setzen "
-                f"({n} Einträge) — beim nächsten Öffnen in der neuen "
-                "Reihenfolge sichtbar?")
+            item_name = (args.get("item_name") or "").strip()
+            ziel_pos = args.get("ziel_position")
+            if item_name and ziel_pos is not None:
+                summary = (
+                    f"»{item_name}« auf Position {ziel_pos} verschieben "
+                    "— beim nächsten Öffnen in der neuen Reihenfolge sichtbar?")
+            else:
+                items = args.get("items") or []
+                n = len(items) if isinstance(items, list) else 0
+                summary = (
+                    f"Die Routine-Punkt-Reihenfolge neu setzen "
+                    f"({n} Einträge) — beim nächsten Öffnen in der neuen "
+                    "Reihenfolge sichtbar?")
             return Proposal(summary)
 
         if aktion == AKTION_ICON_SUCHEN:
@@ -300,6 +329,8 @@ class RoutinePunkteSetzenTask(WriteTask):
             piktogramm=args.get("piktogramm"),
             item_id=args.get("item_id"),
             items=args.get("items"),
+            item_name=args.get("item_name"),
+            ziel_position=args.get("ziel_position"),
             icon_stichwort=args.get("icon_stichwort"),
         )
 

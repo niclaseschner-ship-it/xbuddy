@@ -5,7 +5,7 @@ Jede Anforderung der Spec mit Code-Verhalten hat einen automatisierten Test
 (RPS-7, CLAUDE.md §6). Routine-Buddy, Router-Icon-Suche und Telegram sind
 durch kontrollierte Doppelungen ersetzt — die Tests laufen ohne Netz (EC-17).
 
-Pflicht-Tests (Spec RPS-7 Z. 103-117, AC2/AC3/AC4 des Contracts):
+Pflicht-Tests (Spec RPS-7 Z. 103-117):
 - Katalog enthält RPS genau dann, wenn alle DREI Abhängigkeiten gesetzt sind
   (routine_origin_url, icon_origin_url, family_group_chat_id_getter).
 - Nicht-Mitglied → Ablehnung, kein Schreiben (RPS-2).
@@ -17,6 +17,13 @@ Pflicht-Tests (Spec RPS-7 Z. 103-117, AC2/AC3/AC4 des Contracts):
   (RPS-4 / E-RPS-2).
 - Buddy-4xx → kein Schreiben, ehrliche Grenze (RPS-5, EC-7).
 - APP-3: Skill ruft die API, nicht die Datei.
+
+V1.2-Tests (AC3, #469, #553-Regression):
+- AC3: Einzel-Verschieben löst item_name→id auf, #553-Regression.
+
+Lese-Tests (AC1/AC2/AC4) sind in test_routine_punkte_lesen.py und
+test_routine_punkte_lesen_task.py ausgegliedert (Lego-Trennung nach Genre,
+EC-9 vs. EC-10).
 """
 
 import contextlib
@@ -56,16 +63,21 @@ class FakeRoutineClient:
 
     def __init__(self, add_response=None, add_error=None,
                  delete_response=None, delete_error=None,
-                 replace_response=None, replace_error=None):
+                 replace_response=None, replace_error=None,
+                 get_items_response=None, get_items_error=None):
         self.add_calls = []
         self.delete_calls = []
         self.replace_calls = []
+        self.get_items_calls = []
         self._add_response = add_response or {"id": "neu-id"}
         self._add_error = add_error
         self._delete_response = delete_response or {"id": "geloescht-id"}
         self._delete_error = delete_error
         self._replace_response = replace_response or {"count": 0}
         self._replace_error = replace_error
+        self._get_items_response = get_items_response or {
+            "default": [], "einmalig_heute": []}
+        self._get_items_error = get_items_error
 
     def add_item(self, quelle, label, piktogramm):
         self.add_calls.append({
@@ -85,6 +97,12 @@ class FakeRoutineClient:
         if self._replace_error is not None:
             raise self._replace_error
         return dict(self._replace_response)
+
+    def get_items(self):
+        self.get_items_calls.append(True)
+        if self._get_items_error is not None:
+            raise self._get_items_error
+        return dict(self._get_items_response)
 
 
 class FakeIconClient:
@@ -343,6 +361,211 @@ def test_RPS3_neu_ordnen_ohne_items_nichts_zu_tun():
     )
     assert signal == SIGNAL_NICHTS_ZU_TUN
     assert rc.replace_calls == []
+
+
+# ============================================================
+#  RPS-3 V1.2 — AC3: Einzel-Verschieben + #553-Regression
+# ============================================================
+
+_MOCK_LISTE_553 = [
+    {"id": "apfel", "label": "Apfel", "piktogramm": "🍎"},
+    {"id": "fruehstueck", "label": "Frühstück", "piktogramm": "🍞"},
+    {"id": "zaehne-putzen", "label": "Zähne putzen", "piktogramm": "🪥"},
+]
+"""#553-Regressions-Liste: ['Apfel', 'Frühstück', 'Zähne putzen']
+Reorder 'Zähne putzen nach Position 1' muss → ['Zähne putzen', 'Apfel', 'Frühstück']
+(NICHT ['Zähne putzen', 'Frühstück', 'Apfel'] — das wäre der alte Bug).
+"""
+
+
+def test_AC3_553_regression_zaehne_nach_position_1():
+    """AC3 / #553-Regression: 'Zähne putzen nach Position 1' —
+    MUSS 'Zähne putzen' auf Position 1 setzen, NICHT das Item das vorher
+    auf Position 1 stand (Apfel) an falscher Stelle landen lassen.
+
+    Erwartete Reihenfolge: ['Zähne putzen', 'Apfel', 'Frühstück']
+    Bug-553-Reihenfolge: ['Zähne putzen', 'Frühstück', 'Apfel'] — strukturell falsch.
+    """
+    replace_calls = []
+
+    class FakeRCMitCapture(FakeRoutineClient):
+        def replace_default_items(self, items):
+            replace_calls.append(list(items))
+            return {"count": len(items)}
+
+    rc = FakeRCMitCapture(get_items_response={
+        "default": list(_MOCK_LISTE_553),
+        "einmalig_heute": [],
+    })
+
+    signal, _daten = routine_punkte_setzen(
+        aktion=AKTION_NEU_ORDNEN,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        item_name="Zähne putzen",
+        ziel_position=1,
+    )
+
+    assert signal == SIGNAL_NEUGEORDNET
+    assert len(replace_calls) == 1
+
+    neue_liste = replace_calls[0]
+    assert len(neue_liste) == 3
+
+    # Kritische Prüfung: Zähne putzen MUSS auf Position 1 sein
+    assert neue_liste[0]["id"] == "zaehne-putzen", (
+        "Zähne putzen muss auf Position 1 sein — #553-Regression")
+
+    # Und NICHT der alte Bug: Position 1 war 'Apfel', nicht 'Frühstück' danach
+    assert neue_liste[1]["id"] == "apfel", (
+        "Apfel muss auf Position 2 stehen — #553-Regression (war vorher Position 1)")
+    assert neue_liste[2]["id"] == "fruehstueck", (
+        "Frühstück muss auf Position 3 stehen — #553-Regression")
+
+
+def test_AC3_einzel_verschieben_mitte_nach_hinten():
+    """AC3: Einzel-Verschieben von Position 1 nach Position 3."""
+    rc = FakeRoutineClient(
+        get_items_response={
+            "default": [
+                {"id": "a", "label": "A", "piktogramm": "1"},
+                {"id": "b", "label": "B", "piktogramm": "2"},
+                {"id": "c", "label": "C", "piktogramm": "3"},
+            ],
+            "einmalig_heute": [],
+        },
+        replace_response={"count": 3},
+    )
+
+    signal, _ = routine_punkte_setzen(
+        aktion=AKTION_NEU_ORDNEN,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        item_name="A",
+        ziel_position=3,
+    )
+
+    assert signal == SIGNAL_NEUGEORDNET
+    assert len(rc.replace_calls) == 1
+    neue_liste = rc.replace_calls[0]
+    assert neue_liste[0]["id"] == "b"
+    assert neue_liste[1]["id"] == "c"
+    assert neue_liste[2]["id"] == "a"
+
+
+def test_AC3_einzel_verschieben_case_insensitive():
+    """AC3: item_name-Matching ist case-insensitiv."""
+    rc = FakeRoutineClient(
+        get_items_response={
+            "default": [
+                {"id": "zaehne-putzen", "label": "Zähne putzen", "piktogramm": "🪥"},
+                {"id": "anziehen", "label": "Anziehen", "piktogramm": "👕"},
+            ],
+            "einmalig_heute": [],
+        },
+        replace_response={"count": 2},
+    )
+
+    signal, _ = routine_punkte_setzen(
+        aktion=AKTION_NEU_ORDNEN,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        item_name="ZÄHNE PUTZEN",  # Großbuchstaben
+        ziel_position=2,
+    )
+
+    assert signal == SIGNAL_NEUGEORDNET
+    neue_liste = rc.replace_calls[0]
+    assert neue_liste[1]["id"] == "zaehne-putzen"
+
+
+def test_AC3_einzel_verschieben_item_nicht_gefunden():
+    """AC3: item_name nicht in der Liste → SIGNAL_NICHTS_ZU_TUN."""
+    rc = FakeRoutineClient(
+        get_items_response={
+            "default": [
+                {"id": "anziehen", "label": "Anziehen", "piktogramm": "👕"},
+            ],
+            "einmalig_heute": [],
+        },
+    )
+
+    signal, _daten = routine_punkte_setzen(
+        aktion=AKTION_NEU_ORDNEN,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        item_name="Nicht vorhanden",
+        ziel_position=1,
+    )
+
+    assert signal == SIGNAL_NICHTS_ZU_TUN
+    assert rc.replace_calls == [], "Kein PUT wenn Item nicht gefunden"
+
+
+def test_AC3_einzel_verschieben_ids_nicht_sichtbar_fuer_eltern():
+    """AC3: Eltern sehen keine IDs — der Skill löst item_name intern auf.
+
+    Smoke-Test: die Funktion bekommt item_name (kein item_id),
+    und schickt PUT mit der aufgelösten id — Eltern mussten nie eine ID nennen.
+    """
+    rc = FakeRoutineClient(
+        get_items_response={
+            "default": [
+                {"id": "intern-id-xyz", "label": "Mütze", "piktogramm": "🧢"},
+            ],
+            "einmalig_heute": [],
+        },
+        replace_response={"count": 1},
+    )
+
+    signal, _ = routine_punkte_setzen(
+        aktion=AKTION_NEU_ORDNEN,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        item_name="Mütze",  # kein item_id — der Skill löst intern auf
+        ziel_position=1,
+    )
+
+    assert signal == SIGNAL_NEUGEORDNET
+    # Der PUT enthält die aufgelöste id, nicht den Namen
+    assert rc.replace_calls[0][0]["id"] == "intern-id-xyz"
+
+
+def test_AC3_einzel_verschieben_get_items_aufgerufen():
+    """AC3: Einzel-Verschieben holt die Liste intern über get_items()."""
+    rc = FakeRoutineClient(
+        get_items_response={
+            "default": [
+                {"id": "a", "label": "A", "piktogramm": "1"},
+                {"id": "b", "label": "B", "piktogramm": "2"},
+            ],
+            "einmalig_heute": [],
+        },
+        replace_response={"count": 2},
+    )
+
+    routine_punkte_setzen(
+        aktion=AKTION_NEU_ORDNEN,
+        routine_client=rc,
+        icon_client=FakeIconClient(),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        item_name="B",
+        ziel_position=1,
+    )
+
+    assert len(rc.get_items_calls) == 1, (
+        "get_items() muss für Einzel-Verschieben intern aufgerufen werden")
 
 
 # ============================================================
@@ -919,8 +1142,8 @@ def test_RPS7_entry_path_via_config_naht():
 #  Spec-Drift-Probe (Watchdog-Linse 1): KEIN Umbenennen
 # ============================================================
 
-def test_SPEC_kein_umbenennen_in_v11():
-    """Spec RPS Z. 31-32 / Z. 62: Umbenennen ist V1.1 explizit out-of-scope.
+def test_SPEC_kein_umbenennen_in_v12():
+    """Spec RPS Z. 31-32 / Z. 62: Umbenennen ist V1.2 explizit out-of-scope.
 
     Die Aktions-Konstanten dürfen kein 'umbenennen' enthalten (E-RPS-1 — die
     Spec ist die Wahrheit; Contract-Drift wurde bei Implementation
@@ -929,7 +1152,24 @@ def test_SPEC_kein_umbenennen_in_v11():
     from skills import routine_punkte_setzen as rps
     aktionen = {
         rps.AKTION_HINZUFUEGEN, rps.AKTION_EINMALIG,
-        rps.AKTION_LOESCHEN, rps.AKTION_NEU_ORDNEN, rps.AKTION_ICON_SUCHEN,
+        rps.AKTION_LOESCHEN, rps.AKTION_NEU_ORDNEN,
+        rps.AKTION_ICON_SUCHEN,
     }
     assert "umbenennen" not in aktionen
     assert "rename" not in aktionen
+
+
+# ============================================================
+#  V1.2: Legen-Trennung — AKTION_LISTE ist NICHT in routine_punkte_setzen
+# ============================================================
+
+def test_V12_legen_trennung_aktion_liste_nicht_in_setzen():
+    """V1.2 Lego-Trennung: AKTION_LISTE existiert NICHT in routine_punkte_setzen —
+    Lesen ist in routine_punkte_lesen ausgegliedert (EC-9 vs. EC-10)."""
+    import skills.routine_punkte_setzen as rps
+    assert not hasattr(rps, "AKTION_LISTE"), (
+        "AKTION_LISTE darf NICHT in routine_punkte_setzen sein — "
+        "Lesen ist in routine_punkte_lesen ausgegliedert")
+    assert not hasattr(rps, "SIGNAL_GELESEN"), (
+        "SIGNAL_GELESEN darf NICHT in routine_punkte_setzen sein — "
+        "Lesen ist in routine_punkte_lesen ausgegliedert")
