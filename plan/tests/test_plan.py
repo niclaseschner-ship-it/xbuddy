@@ -3344,3 +3344,258 @@ def test_PLAN_34_round_trip_post_get_delete(tmp_path, demo_registry):
     assert "radfahren" not in arts_after_delete, (
         "write_proof DELETE: 'radfahren' darf nach DELETE nicht mehr in "
         "plan.json stehen, hat: %r" % arts_after_delete)
+
+
+# ============================================================
+#  PLAN-19 V1.1 — resolve_personen (Multi-Person, AC1)
+# ============================================================
+
+def test_PLAN_19_resolve_personen_max_zwei_treffer(demo_registry):
+    """3 Personen im Titel → nur die ersten 2 (in Erwähnungs-Reihenfolge) werden geliefert.
+
+    AC1: resolve_personen liefert max 2 Treffer; weitere werden ignoriert.
+    """
+    # Demo-Registry: Niclas, Petra (Erwachsene), Mia, Finn (Kinder)
+    # Titel nennt drei: Petra, Mia, Finn — nur Petra + Mia (erste zwei).
+    result = kalender_mod.resolve_personen(
+        "Petra Mia Finn Ausflug", None, demo_registry.alle())
+    assert len(result) == 2, "Mehr als 2 Personen zurückgegeben: %r" % result
+    assert result[0] == "petra"
+    assert result[1] == "mia"
+
+
+def test_PLAN_19_resolve_personen_reihenfolge(demo_registry):
+    """Personen werden in Reihenfolge der ersten Erwähnung im Titel geliefert.
+
+    AC1: Auflöse-Reihenfolge nach Erwähnung im Titel.
+    """
+    # Finn steht vor Mia im Titel → [finn, mia]
+    result = kalender_mod.resolve_personen(
+        "Finn und Mia Schwimmkurs", None, demo_registry.alle())
+    assert result == ["finn", "mia"], (
+        "Falsche Reihenfolge: erwartet ['finn', 'mia'], bekam %r" % result)
+
+
+def test_PLAN_19_resolve_personen_single_kompatibel(demo_registry):
+    """Ein einzelner Name im Titel → 1-Element-Liste.
+
+    AC1 + AC4: Single-Person → 1-Element-Liste, Backward-Compat.
+    """
+    result = kalender_mod.resolve_personen(
+        "Klettern Mia", None, demo_registry.alle())
+    assert result == ["mia"], "Erwartet ['mia'], bekam %r" % result
+
+
+def test_PLAN_19_resolve_personen_empty(demo_registry):
+    """Kein Name im Titel, keine bekannte Creator-E-Mail → leere Liste.
+
+    AC1: Empty → leere Liste.
+    """
+    result = kalender_mod.resolve_personen(
+        "Müllabfuhr", "fremd@example.org", demo_registry.alle())
+    assert result == [], "Erwartet [], bekam %r" % result
+
+
+def test_PLAN_19_resolve_personen_creator_fallback(demo_registry):
+    """Kein Titel-Treffer + bekannte Creator-E-Mail → 1-Element-Liste (Creator).
+
+    AC1: Creator-E-Mail-Fallback liefert 1-Element-Liste.
+    """
+    result = kalender_mod.resolve_personen(
+        "Großeinkauf", "emil@example.org", demo_registry.alle())
+    assert result == ["emil"], "Erwartet ['emil'], bekam %r" % result
+
+
+# ============================================================
+#  PLAN-17 V1.1 — Event-Modell personen: list[str] (AC2)
+# ============================================================
+
+def test_PLAN_17_event_modell_personen_liste(demo_registry):
+    """Event-Modell trägt personen: list[str] statt person_id (PLAN-17 V1.1).
+
+    AC2: Single-Person-Event → 1-Element-Liste; leeres Event → leere Liste.
+    """
+    # Single-Person-Event.
+    raw_single = [gcal_allday("g1", "Klettern Mia", "2026-05-20")]
+    kalender = kalender_mod.Kalender(FakeTransport(raw_single), demo_registry.alle())
+    events = kalender.events(date(2026, 5, 20), 1)
+    assert len(events) == 1
+    ev = events[0]
+    assert hasattr(ev, "personen"), "Event hat kein 'personen'-Attribut"
+    assert isinstance(ev.personen, list), "personen muss eine Liste sein"
+    assert ev.personen == ["mia"], "Single-Person → ['mia'], bekam %r" % ev.personen
+    # Backward-Compat: person-Property liefert ersten Eintrag.
+    assert ev.person == "mia"
+
+    # Event ohne Personenzuordnung → leere Liste.
+    raw_empty = [gcal_allday("g2", "Müllabfuhr", "2026-05-20")]
+    kalender2 = kalender_mod.Kalender(FakeTransport(raw_empty), demo_registry.alle())
+    events2 = kalender2.events(date(2026, 5, 20), 1)
+    assert len(events2) == 1
+    ev2 = events2[0]
+    assert ev2.personen == [], "Kein Treffer → [], bekam %r" % ev2.personen
+    assert ev2.person is None, "Backward-Compat: person ist None bei leerer Liste"
+
+
+def test_PLAN_17_event_modell_multi_person(demo_registry):
+    """Multi-Person-Event: personen ist 2-Element-Liste in Erwähnungs-Reihenfolge.
+
+    AC2: Translator (Google-Roh → neutral) liefert korrekte personen-Liste.
+    """
+    raw = [gcal_allday("g1", "Mia Finn Schwimmkurs", "2026-05-20")]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    events = kalender.events(date(2026, 5, 20), 1)
+    ev = events[0]
+    assert ev.personen == ["mia", "finn"], (
+        "Multi-Person-Reihenfolge falsch: %r" % ev.personen)
+
+
+def test_PLAN_17_event_to_dict_enthaelt_personen():
+    """to_dict() enthält 'personen'-Feld (PLAN-17 V1.1, PLAN-22-Schnittstelle).
+
+    AC2: Serialisierbare Form trägt personen.
+    """
+    ev = kalender_mod.Event(
+        id="x1", titel="Test", beginn=date(2026, 5, 20), ende=None,
+        ganztags=True, personen=["mia", "finn"])
+    d = ev.to_dict()
+    assert "personen" in d, "to_dict() hat kein 'personen'-Feld"
+    assert d["personen"] == ["mia", "finn"]
+    # Backward-Compat: person-Feld bleibt erhalten.
+    assert "person" in d
+    assert d["person"] == "mia"
+
+
+# ============================================================
+#  PLAN-19 V1.1 — Render: zwei Avatare im Termin-Slot (AC3 / AC4)
+# ============================================================
+
+def test_PLAN_19_render_zwei_avatare(demo_registry, demo_config):
+    """HTML enthält zwei Avatar-Elements bei 2-Element-personen-Liste (AC3).
+
+    Termin-Leiste rendert zwei face-Divs für Multi-Person-Event.
+    """
+    heute = date(2026, 5, 20)
+    raw = [gcal_timed("g1", "Mia Finn Schwimmkurs",
+                      "2026-05-20T09:00:00+02:00", "2026-05-20T10:00:00+02:00")]
+    transport = FakeTransport(raw)
+    conn = db_mod.connect(demo_config.db_datei)
+    try:
+        view = render_mod.baue_view(
+            demo_config, conn,
+            kalender_mod.Kalender(transport, demo_registry.alle()),
+            demo_registry, heute, 7, True, heute=heute)
+    finally:
+        conn.close()
+
+    # Prüfen: appointments[heute] hat einen Eintrag mit 2 Einträgen in personen.
+    heute_iso = heute.isoformat()
+    appts = view["appointments"][heute_iso]
+    assert len(appts) == 1, "Erwartet 1 Termin, bekam %d" % len(appts)
+    a = appts[0]
+    assert "personen" in a, "Termin-Eintrag hat kein 'personen'-Feld"
+    assert len(a["personen"]) == 2, (
+        "Erwartet 2 Personen im Termin-Eintrag, bekam %d: %r" % (len(a["personen"]), a["personen"]))
+    person_ids = [pr["person"] for pr in a["personen"]]
+    assert "mia" in person_ids and "finn" in person_ids
+
+
+def test_PLAN_19_render_single_person_bleibt_kompatibel(demo_registry, demo_config):
+    """Single-Person-Event: personen ist 1-Element-Liste → 1 Avatar-Eintrag (AC4).
+
+    Backward-Compat: 1-Element-Liste verhält sich wie der bisherige Single-
+    Person-Pfad.
+    """
+    heute = date(2026, 5, 20)
+    raw = [gcal_timed("g1", "Klettern Mia",
+                      "2026-05-20T09:00:00+02:00", "2026-05-20T10:00:00+02:00")]
+    conn = db_mod.connect(demo_config.db_datei)
+    try:
+        view = render_mod.baue_view(
+            demo_config, conn,
+            kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle()),
+            demo_registry, heute, 7, True, heute=heute)
+    finally:
+        conn.close()
+
+    heute_iso = heute.isoformat()
+    # Mia ist ein Kind → Aktivitäts-Slot + Termin-Leiste (zeitgebunden)
+    appts = view["appointments"][heute_iso]
+    assert len(appts) == 1
+    a = appts[0]
+    assert "personen" in a
+    assert len(a["personen"]) == 1, (
+        "Single-Person → 1 Eintrag in personen, bekam %d" % len(a["personen"]))
+    assert a["personen"][0]["person"] == "mia"
+
+
+# ============================================================
+#  PLAN-19 V1.1 — AC5 Entry-Path-Probe: Schwimmkurs Mia Finn
+# ============================================================
+
+def test_PLAN_19_render_probe_multi_person_event_zwei_avatare(demo_registry, demo_config):
+    """AC5: baue_view mit 'Schwimmkurs Mia Finn' → zwei Avatar-Elements im HTML.
+
+    Full entry-path-Probe: Google-Roh → normalise → baue_view → Template →
+    HTML mit zwei face-Divs in der Termin-Leiste.
+    """
+    heute = date(2026, 5, 20)
+    raw = [gcal_timed("schwimm1", "Schwimmkurs Mia Finn",
+                      "2026-05-20T10:00:00+02:00", "2026-05-20T11:00:00+02:00")]
+    transport = FakeTransport(raw)
+    client = make_client(demo_config, demo_registry, transport)
+
+    r = client.get("/display/plan/woche?ab=2026-05-20")
+    assert r.status_code == 200, "View gab %d zurück" % r.status_code
+    html = r.data.decode("utf-8")
+
+    # Zähle face-Divs in der Termin-Leiste — zwei Avatare für Mia + Finn.
+    # Ein face-Div der Termin-Leiste hat class="face size-24 ring-..."
+    import re
+    face_24 = re.findall(r'class="face size-24 ring-\w+"', html)
+    assert len(face_24) >= 2, (
+        "Erwartet >= 2 size-24-Avatar-Divs für 'Schwimmkurs Mia Finn', "
+        "gefunden: %d\nHTML-Ausschnitt (erste 3000 Zeichen):\n%s" % (len(face_24), html[:3000])
+    )
+
+
+# ============================================================
+#  PLAN-19 V1.2 — AC5 Entry-Path-Probe: Aktivitäts-Slot-Replikation
+# ============================================================
+
+def test_PLAN_19_render_probe_multi_person_event_in_beiden_slot_zeilen(demo_registry, demo_config):
+    """AC-FIX-1 / AC-FIX-2 (T473-S2): PLAN-19 V1.2 Aktivitäts-Slot-Replikation.
+
+    Ein zeitgebundenes 'Schwimmkurs Mia Finn'-Event landet in BEIDEN
+    Kind-Aktivitäts-Slots (act1 für Mia, act2 für Finn) mit derselben
+    event_id — die Personen-Identität ist durch die Zeile gegeben.
+    """
+    heute = date(2026, 5, 20)
+    raw = [gcal_timed("schwimm1", "Schwimmkurs Mia Finn",
+                      "2026-05-20T10:00:00+02:00", "2026-05-20T11:00:00+02:00")]
+    transport = FakeTransport(raw)
+    conn = db_mod.connect(demo_config.db_datei)
+    try:
+        view = render_mod.baue_view(
+            demo_config, conn,
+            kalender_mod.Kalender(transport, demo_registry.alle()),
+            demo_registry, heute, 7, True, heute=heute)
+    finally:
+        conn.close()
+
+    heute_iso = heute.isoformat()
+    slot_mia = view["schedule"][heute_iso].get("act1")
+    slot_finn = view["schedule"][heute_iso].get("act2")
+
+    assert slot_mia is not None, (
+        "act1 (Mia) ist leer — Multi-Person-Event nicht in Mia-Slot repliziert")
+    assert slot_finn is not None, (
+        "act2 (Finn) ist leer — Multi-Person-Event nicht in Finn-Slot repliziert")
+    assert slot_mia["event_id"] == "schwimm1", (
+        "act1-Slot trägt falsche event_id: %r" % slot_mia["event_id"])
+    assert slot_finn["event_id"] == "schwimm1", (
+        "act2-Slot trägt falsche event_id: %r" % slot_finn["event_id"])
+    # Beide Slots tragen denselben Chip (gleiche event_id, gleicher Typ).
+    assert slot_mia["event_id"] == slot_finn["event_id"], (
+        "act1 und act2 tragen unterschiedliche event_ids: %r vs %r"
+        % (slot_mia["event_id"], slot_finn["event_id"]))

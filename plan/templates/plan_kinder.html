@@ -583,7 +583,14 @@
                 <div class="pill-body">
                   <div class="pill-label">{{ s.label }}</div>
                 </div>
-                {% if s.ring %}
+                {# PLAN-19 V1.1: bis zu zwei Avatare nebeneinander (Foto-im-Ring-Stil) #}
+                {% if s.personen %}
+                  {% for pr in s.personen %}
+                    {% set p = person_photo_url.get(pr.person) %}
+                    {{ face(pr.ring, p, 'size-24') }}
+                  {% endfor %}
+                {% elif s.ring %}
+                  {# Backward-Compat: altes Termin-Modell ohne personen-Liste #}
                   {% set p = person_photo_url.get(s.person) %}
                   {{ face(s.ring, p, 'size-24') }}
                 {% endif %}
@@ -601,7 +608,14 @@
                     {% if a.time %}<div class="pill-time">{{ a.time }}</div>{% endif %}
                     <div class="pill-label">{{ a.label }}</div>
                   </div>
-                  {% if a.ring %}
+                  {# PLAN-19 V1.1: bis zu zwei Avatare nebeneinander (Foto-im-Ring-Stil) #}
+                  {% if a.personen %}
+                    {% for pr in a.personen %}
+                      {% set p = person_photo_url.get(pr.person) %}
+                      {{ face(pr.ring, p, 'size-24') }}
+                    {% endfor %}
+                  {% elif a.ring %}
+                    {# Backward-Compat: altes Termin-Modell ohne personen-Liste #}
                     {% set p = person_photo_url.get(a.person) %}
                     {{ face(a.ring, p, 'size-24') }}
                   {% endif %}
