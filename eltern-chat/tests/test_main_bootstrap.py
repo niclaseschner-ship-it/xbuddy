@@ -8,9 +8,15 @@ Geprüft wird Option B (Black-Box): cfg.essen_origin_url → build_catalog-Aufru
 → WuenscheZeigenTask + GerichtAnlegenTask im Catalog registriert.
 
 Ref: EC-15 / #503, WZE-8, GAN-7.
+
+Befund 5 (T639-S2): Lego-Sanity-Test — _SESSION_SORTS muss alle Context-Slots
+der Form `*_sessions` abdecken (Vollständigkeitsprüfung gegen Context-Dataclass).
 """
 
+import dataclasses
+
 import config as config_mod
+import main as main_mod
 from fakes import FakeTelegram
 from tasks import build_catalog
 
@@ -73,3 +79,83 @@ def test_bootstrap_cfg_essen_origin_url_is_per_instance_config_value():
     """EC-15 / #503: essen_origin_url ist ein Per-Instanz-Konfigurationswert
     mit Default und Override-Pfad — keine Code-Konstante (Spiegel zu FAA-12)."""
     assert "essen_origin_url" in config_mod.DEFAULTS
+
+
+# ============================================================
+#  Lego-Sanity: _SESSION_SORTS vs. Context-Dataclass (Befund 5 / T639)
+# ============================================================
+
+def test_session_sorts_covers_all_context_sessions_slots():
+    """Befund 5 (T639): _SESSION_SORTS muss alle `*_sessions`-Felder der
+    Context-Dataclass abdecken.
+
+    Diese Schranke fängt zukünftige Lego-Drift mechanisch ab: wer einen neuen
+    `*_sessions`-Slot in Context ergänzt, muss auch einen SessionSortEntry in
+    _SESSION_SORTS hinzufügen — sonst schlägt dieser Test fehl.
+
+    Invariante: `{entry.ctx_attr for entry in _SESSION_SORTS}` ==
+    `{field.name for field in Context-Felder if name.endswith('_sessions')}`.
+    """
+    context_sessions_fields = {
+        field.name
+        for field in dataclasses.fields(main_mod.Context)
+        if field.name.endswith("_sessions")
+    }
+    registered_ctx_attrs = {
+        entry.ctx_attr
+        for entry in main_mod._SESSION_SORTS
+    }
+    missing_in_sorts = context_sessions_fields - registered_ctx_attrs
+    extra_in_sorts = registered_ctx_attrs - context_sessions_fields
+
+    assert not missing_in_sorts, (
+        "Lego-Drift: folgende Context-`*_sessions`-Felder fehlen in "
+        "_SESSION_SORTS (Befund 5, T639): %s — SessionSortEntry ergänzen!" %
+        sorted(missing_in_sorts)
+    )
+    assert not extra_in_sorts, (
+        "Lego-Drift: _SESSION_SORTS enthält ctx_attr-Namen, die kein "
+        "Context-Feld sind: %s — Context-Dataclass oder _SESSION_SORTS prüfen!" %
+        sorted(extra_in_sorts)
+    )
+
+
+def test_avb_in_session_sorts():
+    """AVB-Entry (ONB-11, Befund 2/5 T639) ist in _SESSION_SORTS registriert."""
+    ctx_attrs = {entry.ctx_attr for entry in main_mod._SESSION_SORTS}
+    assert "avb_sessions" in ctx_attrs, (
+        "avb_sessions fehlt in _SESSION_SORTS — "
+        "AVB-Session-Routing ist defekt (Befund 2, T639)"
+    )
+
+
+def test_bootstrap_avb_catalog_guard_with_all_params():
+    """AC3: build_catalog mit avb_sessions + current_provider_getter + zd_store_getter
+    + family_group_chat_id_getter → 'anbieter_wechseln' im Katalog.
+
+    Prüft den AND-Guard aus tasks.py (Befund 1, T639).
+    """
+    tg = FakeTelegram()
+
+    class _FakeZd:
+        def get(self, name, default=None):
+            return default
+
+        def set(self, name, value):
+            pass
+
+        def has(self, name):
+            return False
+
+    catalog = build_catalog(
+        tg, "/instanz/rootCA.pem",
+        zd_store_getter=lambda: _FakeZd(),
+        family_group_chat_id_getter=lambda: "-100",
+        avb_sessions={},
+        current_provider_getter=lambda: "claude",
+    )
+    assert catalog.get("anbieter_wechseln") is not None, (
+        "anbieter_wechseln fehlt im Katalog — AND-Guard in tasks.py "
+        "hat nicht gegriffen. avb_sessions + current_provider_getter "
+        "korrekt an build_catalog übergeben? (Befund 1, T639)"
+    )

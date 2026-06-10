@@ -16,10 +16,23 @@ aktuell konfigurierten Anbieter.
 deterministisch — hart-codierte Nachrichten, Validierungs-Ping als
 Abschluss-Gate, kein propose→confirm-Pattern (ONB-11-Spec).
 
-**Atomares Ersetzen (ONB-12):** der alte Eintrag im ZD-Speicher wird erst
-überschrieben, wenn (a) der Validierungs-Ping erfolgreich war UND (b) der
-atomare Schreibvorgang vollständig durchgelaufen ist. Die `os.replace`-Naht
-der `Zugangsdaten`-Klasse (DCOMP-4) trägt den Race-Schutz.
+**Atomares Ersetzen (ONB-12) — V1-Einschränkung:** jedes einzelne `zd.set()`
+ist atomar (DCOMP-4, `os.replace`). Zwischen den *zwei* separaten Aufrufen
+(api_key, dann provider_name) existiert jedoch ein Race-Fenster: scheitert der
+zweite `set()`, bleibt der Speicher im Zustand „neuer api_key, alter
+provider_name" — **nicht** byte-gleich.  Die Doku-Behauptung „byte-gleich" in
+einem früheren Kommentar war daher ungenau.
+
+**V1-bekannter Schwachpunkt (ONB-12-Race-Fenster):** die ZD-Schicht bietet
+heute kein Multi-Key-Atomic (`store.set_multi()`). Das Race-Fenster ist klein
+(zwei sequentielle Disk-Writes), aber vorhanden.  Spec-konforme Auflösung
+erfordert Multi-Key-Atomic in `tools/zugangsdaten/store.py` — Folge-Ticket
+erforderlich.  Spec-Halt für Nic (nicht im Scope von #639).
+
+Reihenfolge der Schreibvorgänge (api_key zuerst, dann provider_name): wenn der
+zweite `set()` (provider_name) scheitert, nutzt die laufende Instanz den
+claude-Adapter mit dem neuen mistral-Key.  Das schlägt sofort sichtbar fehl —
+schneller Fehler statt stiller Fehlleitung.  Beste V1-Wahl.
 
 **ONB-8-Schutz:** Keys werden zu keinem Zeitpunkt im Klartext in
 Bestätigungen, Fehlermeldungen oder Logs gespiegelt (ZD-6).
@@ -251,9 +264,15 @@ def anbieter_wechseln(tg, chat_id, user_id, family_group_chat_id,
             _send(tg, chat_id, KEY_INVALID % anzeige)
             continue
 
-        # ONB-11 Schritt 4: atomares Ersetzen im ZD-Speicher (ONB-12).
-        # Der alte Eintrag bleibt byte-gleich, wenn (a) der Ping fehlschlug
-        # (schon oben geprüft) ODER (b) der Schreibvorgang fehlschlägt.
+        # ONB-11 Schritt 4: Schreiben in den ZD-Speicher (ONB-12).
+        # Jedes `zd.set()` ist einzeln atomar (DCOMP-4). Zwischen den zwei
+        # Aufrufen besteht ein Race-Fenster (V1-bekannter Schwachpunkt,
+        # ONB-12-Race-Fenster): scheitert der zweite `set()` (provider_name),
+        # ist der Speicher im Zustand „neuer api_key, alter provider_name".
+        # Reihenfolge: api_key zuerst — bei provider_name-Versagen schlägt
+        # der alte Adapter mit dem neuen Key sofort sichtbar fehl (schneller
+        # Fehler statt stiller Fehlleitung). Vollständige Atomarität erfordert
+        # Multi-Key-Atomic in ZD-Schicht — Folge-Ticket (nicht #639).
         try:
             zd.set(ZD_NAME_PROVIDER_API_KEY, key)
             zd.set(ZD_NAME_PROVIDER_NAME, neuer_name)
