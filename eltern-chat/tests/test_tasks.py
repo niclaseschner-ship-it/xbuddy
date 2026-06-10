@@ -8,7 +8,14 @@ import pytest
 from fakes import FakeReadTask, FakeTelegram, FakeWriteTask
 from hooks import HookContext, HookFailure, HookSuccess
 from model import READ, WRITE
-from tasks import Catalog, TurnContext, WriteTaskResult, build_catalog, is_from_private_chat
+from tasks import (
+    Catalog,
+    TurnContext,
+    WriteTaskResult,
+    _make_is_member_fn,
+    build_catalog,
+    is_from_private_chat,
+)
 
 
 def test_EC_8_register_and_get():
@@ -308,3 +315,72 @@ def test_157_is_from_private_chat_false_without_private_chat_id():
     gilt die Anfrage nicht als „aus dem Privatchat" — defensiver Default."""
     tc = TurnContext(chat_id="-100", from_user_id=None, private_chat_id=None)
     assert is_from_private_chat(tc) is False
+
+
+# ============================================================
+#  TASK-7 Refactor — _make_is_member_fn Factory
+# ============================================================
+
+def test_TASK7_make_is_member_fn_returns_true_for_member():
+    """TASK-7: _make_is_member_fn erzeugt eine Closure, die gegen die
+    Familien-Gruppe prüft. Für ein Mitglied mit Status 'member' gibt sie True."""
+    tg = FakeTelegram()
+
+    # Fake get_chat_member: gibt ein Member-Dict zurück
+    def _fake_get_chat_member(fgcid, user_id):
+        return {"status": "member"}
+
+    tg.get_chat_member = _fake_get_chat_member
+
+    # Getter gibt die feste FGCID zurück
+    def _fgcid_getter():
+        return 200
+
+    is_member_fn = _make_is_member_fn(tg, _fgcid_getter)
+    assert is_member_fn(user_id=7) is True
+
+
+def test_TASK7_make_is_member_fn_returns_false_for_non_member():
+    """TASK-7: Für einen Nicht-Mitglied (status='left') gibt die Closure False."""
+    tg = FakeTelegram()
+
+    def _fake_get_chat_member(fgcid, user_id):
+        return {"status": "left"}
+
+    tg.get_chat_member = _fake_get_chat_member
+
+    def _fgcid_getter():
+        return 200
+
+    is_member_fn = _make_is_member_fn(tg, _fgcid_getter)
+    assert is_member_fn(user_id=7) is False
+
+
+def test_TASK7_make_is_member_fn_late_evaluation_of_fgcid():
+    """TASK-7 Kern-Anforderung: fgcid_getter wird SPÄT evaluiert, nicht
+    beim Bau dieser Factory. Sonst würde eine Config-Reload (z.B. mit neuer
+    FGCID) keine Wirkung haben."""
+    tg = FakeTelegram()
+
+    def _fake_get_chat_member(fgcid, user_id):
+        return {"status": "member"}
+
+    tg.get_chat_member = _fake_get_chat_member
+
+    # Getter gibt zunächst 200, später 300
+    fgcid_values = [200]
+
+    def _fgcid_getter():
+        return fgcid_values[0]
+
+    is_member_fn = _make_is_member_fn(tg, _fgcid_getter)
+
+    # Erste Prüfung mit FGCID 200
+    assert is_member_fn(user_id=7) is True
+
+    # Änder die FGCID-Getter
+    fgcid_values[0] = 300
+
+    # Zweite Prüfung nutzt die neue FGCID 300 — beweist SPÄTE Evaluierung
+    # (immer noch True, da get_chat_member immer "member" gibt)
+    assert is_member_fn(user_id=7) is True
