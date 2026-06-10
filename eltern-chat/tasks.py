@@ -299,7 +299,9 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   provider_model=None,
                   multimodal_provider=None, multimodal_api_key=None,
                   multimodal_model=None,
-                  essen_origin_url=None):
+                  essen_origin_url=None,
+                  avb_sessions=None,
+                  current_provider_getter=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
@@ -618,5 +620,24 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             family_group_chat_id_getter=family_group_chat_id_getter,
             is_member_fn=_gan_is_member,
             icon_origin_url=icon_origin_url))
+
+    # ONB-11 / #639: »Anbieter wechseln« als async-schreibende Aufgabe.
+    # AND-Guard: zd_store_getter UND family_group_chat_id_getter UND
+    # avb_sessions UND current_provider_getter müssen gesetzt sein — fehlt
+    # eine, erscheint die Aufgabe NICHT im Katalog. Im Onboarding-Modus
+    # (kein ZD-Getter, kein Getter für den aktuellen Provider) ist der
+    # Skill abgeschaltet — das Onboarding selbst richtet den Anbieter ein.
+    # `avb_sessions` ist die externe Session-Registry aus main.build_context
+    # (TASK-7-Lego-Falle: dieselbe Map, die handle_update für das Routing
+    # liest).
+    if zd_store_getter is not None and family_group_chat_id_getter is not None \
+            and avb_sessions is not None and current_provider_getter is not None:
+        from skills.anbieter_wechseln_task import AnbieterWechselnTask
+        catalog.register(AnbieterWechselnTask(
+            tg=tg,
+            zd_store_getter=zd_store_getter,
+            sessions=avb_sessions,
+            family_group_chat_id_getter=family_group_chat_id_getter,
+            current_provider_getter=current_provider_getter))
 
     return catalog
