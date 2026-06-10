@@ -351,6 +351,34 @@ def _items_zeitzone():
     return "Europe/Berlin"
 
 
+@app.route("/api/v1/routine/items", methods=["GET"])
+def api_items_get():
+    """Aktuelle Items-Liste lesen (ROUTINE-14, V1.2, #469).
+
+    Antwort: {"default": [{id, label, piktogramm}, …],
+              "einmalig_heute": [{id, label, piktogramm}, …]}.
+    Reload-on-Read (DCOMP-3): per Request frisch aus routine.json + Store lesen.
+    Trennung bindend: default und einmalig haben unterschiedliche Persistenz (RPS-3).
+    """
+    cfg = _current_config()
+    zeitzone = cfg.zeitzone if cfg and cfg.zeitzone else "Europe/Berlin"
+
+    default_items = [
+        {"id": item.id, "label": item.label, "piktogramm": item.piktogramm}
+        for item in (cfg.items if cfg else [])
+    ]
+
+    einmalig_raw = items_mod.load_einmalig_heute(_store_path(), zeitzone)
+    einmalig_items = [
+        {"id": e["id"], "label": e.get("label", ""),
+         "piktogramm": str(e.get("piktogramm", ""))}
+        for e in einmalig_raw
+        if isinstance(e, dict) and e.get("id")
+    ]
+
+    return jsonify({"default": default_items, "einmalig_heute": einmalig_items})
+
+
 @app.route("/api/v1/routine/items", methods=["POST"])
 def api_items_post():
     """Punkt anlegen (ROUTINE-14, #354, URL-14).

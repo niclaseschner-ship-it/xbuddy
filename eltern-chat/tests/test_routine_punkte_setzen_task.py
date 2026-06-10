@@ -18,10 +18,12 @@ import unittest.mock as mock
 from fakes import FakeTelegram
 from skills.routine_punkte_setzen import (
     AKTION_ICON_SUCHEN,
+    AKTION_LISTE,
+    AKTION_NEU_ORDNEN,
     SIGNAL_ICON_KANDIDATEN,
 )
 from skills.routine_punkte_setzen_task import RoutinePunkteSetzenTask
-from tasks import TurnContext, build_catalog
+from tasks import Proposal, TurnContext, build_catalog
 
 # ============================================================
 #  Test-Helfer
@@ -389,3 +391,138 @@ def test_mapping_fallback_bei_leer_kandidaten():
     )
     assert "Test" in quittung
     assert quittung  # nicht leer
+
+
+# ============================================================
+#  V1.2 Task-Tests: aktion=liste + Einzel-Verschieben propose/schema
+# ============================================================
+
+class FakeRoutineClientMitListe(FakeRoutineClient):
+    """FakeRoutineClient mit get_items()-Unterstützung für V1.2."""
+
+    def __init__(self, get_items_response=None, **kw):
+        super().__init__(**kw)
+        self._get_items_response = get_items_response or {
+            "default": [], "einmalig_heute": []}
+        self.get_items_calls = []
+
+    def get_items(self):
+        self.get_items_calls.append(True)
+        return dict(self._get_items_response)
+
+
+def _make_task_v12(icon_client=None, tg=None, routine_client=None,
+                   icon_origin_url="http://icons.test"):
+    return RoutinePunkteSetzenTask(
+        tg=tg or FakeTelegramMitAlbum(),
+        routine_client=routine_client or FakeRoutineClientMitListe(),
+        icon_client=icon_client or FakeIconClient(),
+        family_group_chat_id_getter=lambda: 200,
+        is_member_fn=lambda uid: True,
+        icon_origin_url=icon_origin_url,
+    )
+
+
+def test_V12_propose_liste_liefert_proposal():
+    """V1.2: propose(aktion=liste) liefert einen Proposal (WriteTask-Konvention).
+    Der Text nennt »nur lesend«."""
+    task = _make_task_v12()
+    ctx = TurnContext(chat_id=42, from_user_id=7, private_chat_id=42)
+    proposal = task.propose({"aktion": AKTION_LISTE}, ctx)
+    assert isinstance(proposal, Proposal)
+    assert "lesen" in proposal.summary.lower() or "lesend" in proposal.summary.lower()
+
+
+def test_V12_execute_liste_ruft_get_items():
+    """V1.2: task.execute(aktion=liste) ruft get_items() auf."""
+    rc = FakeRoutineClientMitListe(get_items_response={
+        "default": [{"id": "a", "label": "A", "piktogramm": "1"}],
+        "einmalig_heute": [],
+    })
+    task = _make_task_v12(routine_client=rc)
+    ctx = TurnContext(chat_id=42, from_user_id=7, private_chat_id=42)
+    task.execute({"aktion": AKTION_LISTE}, ctx)
+    assert len(rc.get_items_calls) == 1
+
+
+def test_V12_execute_liste_quittung_enthaelt_dauerhaft():
+    """V1.2 AC2: execute(liste) Quittung enthält 'Dauerhaft' + Item-Namen."""
+    rc = FakeRoutineClientMitListe(get_items_response={
+        "default": [
+            {"id": "zaehne-putzen", "label": "Zähne putzen", "piktogramm": "🪥"},
+        ],
+        "einmalig_heute": [],
+    })
+    task = _make_task_v12(routine_client=rc)
+    ctx = TurnContext(chat_id=42, from_user_id=7, private_chat_id=42)
+    quittung = task.execute({"aktion": AKTION_LISTE}, ctx)
+    assert "Dauerhaft" in quittung
+    assert "Zähne putzen" in quittung
+
+
+def test_V12_propose_einzel_verschieben_nennt_name_und_position():
+    """V1.2: propose(neu_ordnen, item_name, ziel_position) nennt den Namen
+    und die Ziel-Position (Konversations-UX, Eltern sehen keine IDs)."""
+    task = _make_task_v12()
+    ctx = TurnContext(chat_id=42, from_user_id=7, private_chat_id=42)
+    proposal = task.propose({
+        "aktion": AKTION_NEU_ORDNEN,
+        "item_name": "Zähne putzen",
+        "ziel_position": 1,
+    }, ctx)
+    assert isinstance(proposal, Proposal)
+    assert "Zähne putzen" in proposal.summary
+    assert "1" in proposal.summary
+
+
+def test_V12_schema_enthaelt_liste():
+    """V1.2: Task-Schema enthält 'liste' als erlaubte Aktion."""
+    task = _make_task_v12()
+    enum = task.parameters["properties"]["aktion"]["enum"]
+    assert AKTION_LISTE in enum, "Schema muss 'liste' in aktion-enum enthalten"
+
+
+def test_V12_schema_enthaelt_item_name_und_ziel_position():
+    """V1.2: Task-Schema enthält item_name und ziel_position als Properties."""
+    task = _make_task_v12()
+    props = task.parameters["properties"]
+    assert "item_name" in props, "Schema braucht 'item_name'"
+    assert "ziel_position" in props, "Schema braucht 'ziel_position'"
+    assert props["ziel_position"]["type"] == "integer"
+
+
+def test_V12_execute_einzel_verschieben_ruft_replace():
+    """V1.2 AC3: execute(neu_ordnen, item_name, ziel_position) löst Name auf
+    und ruft replace_default_items mit der korrekten Reihenfolge."""
+    rc = FakeRoutineClientMitListe(
+        get_items_response={
+            "default": [
+                {"id": "a", "label": "A", "piktogramm": "1"},
+                {"id": "b", "label": "B", "piktogramm": "2"},
+                {"id": "c", "label": "C", "piktogramm": "3"},
+            ],
+            "einmalig_heute": [],
+        },
+    )
+    replace_calls = []
+
+    def capture_replace(items):
+        replace_calls.append(list(items))
+        return {"count": len(items)}
+
+    rc.replace_default_items = capture_replace
+
+    task = _make_task_v12(routine_client=rc)
+    ctx = TurnContext(chat_id=42, from_user_id=7, private_chat_id=42)
+
+    task.execute({
+        "aktion": AKTION_NEU_ORDNEN,
+        "item_name": "C",
+        "ziel_position": 1,
+    }, ctx)
+
+    assert len(replace_calls) == 1
+    neue_liste = replace_calls[0]
+    assert neue_liste[0]["id"] == "c", "C muss auf Position 1 stehen"
+    assert neue_liste[1]["id"] == "a"
+    assert neue_liste[2]["id"] == "b"
