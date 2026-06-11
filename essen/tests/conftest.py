@@ -34,6 +34,8 @@ def demo_paths(tmp_path):
     )
     return {
         "wuensche_file":        str(tmp_path / "wuensche.json"),
+        "einkaufsliste_file":   str(tmp_path / "einkaufsliste.json"),
+        "zaehler_file":         str(tmp_path / "zaehler.json"),
         "gerichte_file":        str(tmp_path / "gerichte.json"),
         "katalog_file":         str(tmp_path / "katalog.json"),   # Override — fehlt = kein Override
         "katalog_default_file": real_default,
@@ -43,6 +45,8 @@ def demo_paths(tmp_path):
 def _reset_runtime(demo_paths):
     """Setzt den gesamten module-level runtime-State zurück (Test-Isolation)."""
     main_mod.runtime["wuensche_snapshot"] = None
+    main_mod.runtime["einkauf_snapshot"]  = None
+    main_mod.runtime["zaehler_snapshot"]  = None
     main_mod.runtime["gerichte_snapshot"] = None
     main_mod.runtime["katalog_snapshot"]  = None
     main_mod.configure(demo_paths)
