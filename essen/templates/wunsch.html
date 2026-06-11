@@ -73,11 +73,21 @@
         <div class="liste-gruppe">
           <div class="gruppe-label">{{ gruppe.kat_label }}</div>
           {% for eintrag in gruppe.eintraege %}
-          <div class="liste-eintrag kat-{{ eintrag.kategorie }}">
+          <div class="liste-eintrag kat-{{ eintrag.kategorie }}" data-wunsch-id="{{ eintrag.id }}">
             {% if eintrag.icon_url %}
             <img src="{{ eintrag.icon_url }}" alt="{{ eintrag.label }}">
             {% endif %}
             <div class="text">{{ eintrag.label }}</div>
+            {# ESSEN-27: Entfernen-Symbol — kinder-tappbar, sichtbar auf der Kachel #}
+            <button
+              class="loeschen-btn"
+              type="button"
+              aria-label="{{ eintrag.label }} entfernen"
+            >
+              {% if eintrag.entfernen_url %}
+              <img src="{{ eintrag.entfernen_url }}" alt="entfernen">
+              {% endif %}
+            </button>
           </div>
           {% endfor %}
         </div>

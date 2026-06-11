@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 # ICONS-5: geteilte Icon-Plattform-URL — kein buddy-eigener ARASAAC-Bezug (ESSEN-11).
 ICON_BASIS = "/display/_shared/icons/arasaac/"
 
+# ESSEN-27: Entfernen-Symbol ARASAAC ID 11751 — sichtbar auf jeder liste-eintrag-Kachel.
+ENTFERNEN_ICON_REF = "11751"
+
 # ESSEN-9: feste Tab-Reihenfolge + Kategorie-Metadaten.
 # bild_ref: ARASAAC-IDs aus dem Mockup (variante-A-tabbed.html):
 #   gericht=6456, obst_gemuese=28339, brotbelag=2494, sonstiges=2445
@@ -95,23 +98,30 @@ def baue_item_grid(katalog_kategorien, aktiv_slug):
 
 
 def baue_wunsch_liste(wuensche):
-    """Baut den kategorie-gruppierten Wunsch-Listen-Block (ESSEN-8/15, WZE-5).
+    """Baut den kategorie-gruppierten Wunsch-Listen-Block (ESSEN-8/15/27, WZE-5).
 
     Gibt list of { kat_slug, kat_label, eintraege: [{id, label, icon_url,
-    bild_ref, kategorie, quelle, erstellt_am}] } — nur nicht-leere Gruppen.
+    bild_ref, kategorie, quelle, erstellt_am, entfernen_url}] } —
+    nur nicht-leere Gruppen.
+
+    ESSEN-27: jeder Eintrag trägt `entfernen_url` (ARASAAC 11751) für das
+    Display-Lösch-Symbol. Das Attribut `data-wunsch-id` im Template greift
+    auf `eintrag.id`.
     """
+    entfernen_url = icon_url(ENTFERNEN_ICON_REF)
     gruppen = {k: [] for k in GRUPPEN_REIHENFOLGE}
     for w in wuensche:
         kat = w.get("kategorie")
         if kat in gruppen:
             gruppen[kat].append({
-                "id":          w.get("id", ""),
-                "label":       w.get("label", ""),
-                "icon_url":    icon_url(w.get("bild_ref", "")),
-                "bild_ref":    w.get("bild_ref", ""),
-                "kategorie":   kat,
-                "quelle":      w.get("quelle", ""),
-                "erstellt_am": w.get("erstellt_am", ""),
+                "id":            w.get("id", ""),
+                "label":         w.get("label", ""),
+                "icon_url":      icon_url(w.get("bild_ref", "")),
+                "bild_ref":      w.get("bild_ref", ""),
+                "kategorie":     kat,
+                "quelle":        w.get("quelle", ""),
+                "erstellt_am":   w.get("erstellt_am", ""),
+                "entfernen_url": entfernen_url,   # ESSEN-27
             })
     # Reihenfolge: gericht → obst_gemuese → brotbelag → sonstiges; nur nicht-leer.
     return [
