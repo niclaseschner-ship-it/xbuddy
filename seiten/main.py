@@ -38,7 +38,7 @@ import time
 import urllib.error
 import urllib.request
 
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
 
 # Repo-Wurzel auf den Importpfad, damit `tools.configloader` (CONFIG-1),
 # `tools.logsetup` (LOG-4) und `seiten.aggregator` auch beim Direktstart
@@ -50,6 +50,15 @@ if _REPO_ROOT not in sys.path:
 
 from seiten import aggregator, render  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
+
+# EZG-6 / ESSEN-31: Init-Data-Validierung aus dem Lego-Basis-Modul.
+# Vendor-neutrale HMAC-SHA256-Validierung (eltern-chat/init_data.py).
+# Der Pfad liegt neben dem Repo-Root im eltern-chat/-Verzeichnis.
+_ELTERN_CHAT_DIR = os.path.join(_REPO_ROOT, "eltern-chat")
+if _ELTERN_CHAT_DIR not in sys.path:
+    sys.path.insert(0, _ELTERN_CHAT_DIR)
+
+import init_data as _init_data_mod  # noqa: E402
 
 # DCOMP-4: Dateirechte auf den Eigentümer beschränkt — analog PREG-4 / GER-4.
 FILE_MODE = 0o600
@@ -81,12 +90,18 @@ runtime = {
     # Tailscale ist V1-Soll — fehlt, zeigt SREG-12 nur Heim + Banner.
     "heim_origin":       "",
     "tailscale_origin":  "",
+    # EZG-6 / ESSEN-31: Init-Data-Auth fuer Mini-App-Route.
+    # bot_token: aus ENV TELEGRAM_BOT_TOKEN (gesetzt durch systemd EnvironmentFile).
+    # init_data_config: dict aus init_data.load_config() — cached nach erstem Lauf.
+    "bot_token":         None,
+    "init_data_config":  None,
 }
 
 
 def configure(root=None, inventar_path=None, panel_url=None,
               geraete_url=None, ttl=None,
-              heim_origin=None, tailscale_origin=None):
+              heim_origin=None, tailscale_origin=None,
+              bot_token=None, init_data_config=None):
     """Setzt Aufbau-Wurzel, Inventar-Pfad, Upstream-Origins, TTL und
     Display-URL-Origins (SREG-3, SREG-7).
 
@@ -97,6 +112,10 @@ def configure(root=None, inventar_path=None, panel_url=None,
     `heim_origin` und `tailscale_origin` werden fuer die SREG-12-Seite
     benoetigt (render.baue_layout). Leer = Wert bleibt unveraendert (None
     ueberschreibt auf leeren String — explizit loeschbar).
+
+    `bot_token` und `init_data_config` werden fuer die ESSEN-31-Mini-App-Route
+    benoetigt (EZG-6 Init-Data-Auth). Im Test-Modus werden sie direkt gesetzt;
+    im Produktiv-Betrieb kommen sie aus ENV / init_data.load_config().
     """
     if root is not None:
         runtime["root"] = root
@@ -111,6 +130,10 @@ def configure(root=None, inventar_path=None, panel_url=None,
         runtime["heim_origin"] = heim_origin
     if tailscale_origin is not None:
         runtime["tailscale_origin"] = tailscale_origin
+    if bot_token is not None:
+        runtime["bot_token"] = bot_token
+    if init_data_config is not None:
+        runtime["init_data_config"] = init_data_config
     runtime["inventar"] = None
     runtime["gebaut_um"] = 0.0
 
@@ -318,6 +341,56 @@ def get_seiten_uebersicht():
         tailscale_origin=runtime["tailscale_origin"],
     )
     return render_template("uebersicht.html", **layout)
+
+
+@app.route("/seiten/essen/einkauf", methods=["GET"])
+def essen_einkauf_view():
+    """EZG-6 / ESSEN-31: Eltern-Mini-App-View fuer die Einkaufsliste.
+
+    Init-Data-Auth (AC2): Request ohne ?initData= oder mit ungueltiger
+    Signatur → 401. Request mit gueltiger Signatur (HMAC-SHA256 ueber
+    Bot-Token, eltern-chat/init_data.py validate) → 200 HTML.
+
+    Bot-Token kommt aus ENV TELEGRAM_BOT_TOKEN (systemd EnvironmentFile
+    aus eltern-chat/.env). Fehlt das Token im ENV → 500 (Konfig-Fehler).
+
+    V1-Vereinfachung (bekannte Luecke): der essen-Buddy (Port 5052) ist nur
+    auf 127.0.0.1 gebunden und hat selbst keine initData-Pruefung. Schutz
+    liegt allein auf dieser seiten-Route (EZG-6). Nachfolgende API-Calls
+    vom JS an /api/v1/essen/... laufen ueber nginx-Routing (Same-Host),
+    der essen-Buddy prueft initData in V1.x nach (Handoff-Befund).
+    """
+    # --- Token aus ENV oder runtime-Dict ---
+    bot_token = runtime.get("bot_token") or os.environ.get("TELEGRAM_BOT_TOKEN")
+    if not bot_token:
+        logging.error(
+            "ESSEN-31: TELEGRAM_BOT_TOKEN nicht gesetzt — Mini-App-Route nicht nutzbar.")
+        return jsonify({"error": "Serverkonfiguration unvollständig (Bot-Token fehlt)"}), 500
+
+    # --- initData aus Query-String (Telegram haengt es als ?tgWebAppData= oder ?initData= an) ---
+    init_data_str = (
+        request.args.get("initData")
+        or request.args.get("tgWebAppData")
+    )
+    if not init_data_str:
+        return jsonify({"error": "initData fehlt"}), 401
+
+    # --- Konfig laden (gecacht im runtime-Dict) ---
+    cfg = runtime.get("init_data_config")
+    if cfg is None:
+        cfg = _init_data_mod.load_config()
+        runtime["init_data_config"] = cfg
+
+    # --- Validierung (HMAC-SHA256, eltern-chat/init_data.py) ---
+    parsed = _init_data_mod.validate(
+        init_data_str,
+        bot_token,
+        cfg["max_age_seconds"],
+    )
+    if parsed is None:
+        return jsonify({"error": "initData ungültig oder abgelaufen"}), 401
+
+    return render_template("essen-einkauf.html", user_id=parsed.user_id)
 
 
 # ============================================================

@@ -108,13 +108,13 @@ class Context:
 # Invariante (Lego-Sanity, Befund 5): jeder Context-Slot der Form `*_sessions`
 # MUSS hier eingetragen sein — test_main_bootstrap.py prüft das mechanisch.
 def _build_session_sorts():
+    from skills.anbieter_wechseln_task import make_avb_input
     from skills.familie_anlegen_task import make_faa_input
     from skills.geraet_anlegen_task import make_gaa_input
     from skills.kalender_verbinden_task import make_kav_input
     from skills.panel_anlegen_task import make_paa_input
     from skills.termin_eintragen_task import make_tes_input
     from skills.termine_aus_bild_task import make_tab_input
-    from skills.anbieter_wechseln_task import make_avb_input
     return (
         SessionSortEntry("faa_sessions", make_faa_input),   # FAA-12
         SessionSortEntry("gaa_sessions", make_gaa_input),   # GAA-5
@@ -696,6 +696,9 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # WZE-8 / GAN-7 / #503: Origin des Essens-Buddys (ESSEN-15/ESSEN-19). Leer ⇒
         # WuenscheZeigenTask + GerichtAnlegenTask werden NICHT registriert.
         essen_origin_url=cfg.essen_origin_url,
+        # EZG-6 / EIN-8 / #653: Mini-App-URL für die Einkaufsliste (EZG-6).
+        # Leer/None → EinkaufZeigenTask nutzt ENV-Fallback MINI_APP_EINKAUF_URL.
+        mini_app_einkauf_url=cfg.mini_app_einkauf_url or None,
         # SREG-7 / #476: Heim-Origin für den Übersichts-Link (SREG-5/SREG-5b).
         display_url_origin_heim=cfg.display_url_origin_heim,
         # TAB-12 / #475: Session-Map für »Termine aus Bild«.
