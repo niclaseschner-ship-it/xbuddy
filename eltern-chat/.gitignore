@@ -4,6 +4,8 @@
 #
 # Instanz-Konfig (EC-15). Format: eltern-chat/config.example.json
 config.json
+# Per-Instanz-Init-Data-Lib-Konfig (Vorlage: init_data.example.json)
+init_data.json
 # Gesprächs-Datenbank (EC-16) — Per-Instanz-Daten.
 *.db
 # Onboarding-Speicher-Alt-Datei (ONB-5) — mit #336 (Onboarding-Migration auf
