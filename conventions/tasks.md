@@ -139,7 +139,7 @@ Session-Map prüft — so wie TES ihn inzwischen hat
 
 ### TASK-9 — Sofort-Schreib-Aufgabe (Read-API mit Schreib-Wirkung, Undo statt Confirm)
 Eine **Sofort-Schreib-Aufgabe** ist eine **ReadTask** im Sinne von TASK-3 —
-also über `run`/`execute` im lesenden Pfad des Agent-Loops (`agent.py:367-376`)
+also über `run`/`execute` im lesenden Pfad des Agent-Loops (`agent.py:run_turn()`)
 — läuft aber mit **Schreib-Wirkung** in der Buddy-API. Sie verzichtet bewusst
 auf das EC-10-`propose→confirm`-Gate (E-FSE-1), weil das **auslösende
 Ereignis selbst die ausdrückliche Handlung** ist (z. B. ein kommentarlos in
