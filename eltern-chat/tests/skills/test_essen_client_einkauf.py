@@ -268,16 +268,18 @@ def test_patche_eintrag_sendet_richtiges_payload():
 
 
 def test_patche_eintrag_nur_aus_gericht():
-    """AC7: patche_eintrag(aus_gericht=True) → nur aus_gericht im Payload."""
+    """AC2 / ESSEN-32: patche_eintrag(aus_gericht=...) → aus_gericht im Payload als str.
+    aus_gericht ist ein Gericht-Label (string), kein Bool."""
     stub = _stub_capture()
     stub.add_response(200, {"id": "1"})
     client = EssenClient(origin_url="http://example", transport=stub)
 
-    client.patche_eintrag("1", aus_gericht=True)
+    client.patche_eintrag("1", aus_gericht="Lasagne")
 
     payload = json.loads(stub.calls[0]["body"].decode("utf-8"))
     assert "abgehakt" not in payload
-    assert payload.get("aus_gericht") is True
+    # ESSEN-32: aus_gericht ist string mit Gericht-Label.
+    assert payload.get("aus_gericht") == "Lasagne"
 
 
 def test_patche_eintrag_404_fehler():
