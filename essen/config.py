@@ -18,6 +18,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_WUENSCHE_FILE    = os.path.join(HERE, "wuensche.json")
 ENV_WUENSCHE_FILE        = "ESSEN_WUENSCHE_FILE"
 
+# Einkaufsliste (Daten-State, V1 #653, ESSEN-7) — ENV-Override: ESSEN_EINKAUFSLISTE_FILE
+DEFAULT_EINKAUFSLISTE_FILE = os.path.join(HERE, "einkaufsliste.json")
+ENV_EINKAUFSLISTE_FILE     = "ESSEN_EINKAUFSLISTE_FILE"
+
+# Globaler Quellen-Zähler (V1 #653, ESSEN-5/ESSEN-7), klasse-übergreifend.
+# ENV-Override: ESSEN_ZAEHLER_FILE
+DEFAULT_ZAEHLER_FILE = os.path.join(HERE, "zaehler.json")
+ENV_ZAEHLER_FILE     = "ESSEN_ZAEHLER_FILE"
+
 # Gerichte-Katalog (Daten-State, ESSEN-14/21) — ENV-Override: ESSEN_GERICHTE_FILE
 DEFAULT_GERICHTE_FILE    = os.path.join(HERE, "gerichte.json")
 ENV_GERICHTE_FILE        = "ESSEN_GERICHTE_FILE"
@@ -33,15 +42,18 @@ ENV_KATALOG_DEFAULT_FILE     = "ESSEN_KATALOG_DEFAULT_FILE"
 
 
 def data_paths(env=None):
-    """Liefert die vier Datei-Pfade für Domänendaten (ENV-Overrides, ESSEN-21/CONFIG-5).
+    """Liefert die Datei-Pfade für Domänendaten (ENV-Overrides, ESSEN-21/CONFIG-5).
 
     Gibt ein dict mit Schlüsseln:
-      wuensche_file, gerichte_file, katalog_file, katalog_default_file
+      wuensche_file, einkaufsliste_file, zaehler_file,
+      gerichte_file, katalog_file, katalog_default_file
     """
     if env is None:
         env = os.environ
     return {
         "wuensche_file":         env.get(ENV_WUENSCHE_FILE,          DEFAULT_WUENSCHE_FILE),
+        "einkaufsliste_file":    env.get(ENV_EINKAUFSLISTE_FILE,     DEFAULT_EINKAUFSLISTE_FILE),
+        "zaehler_file":          env.get(ENV_ZAEHLER_FILE,           DEFAULT_ZAEHLER_FILE),
         "gerichte_file":         env.get(ENV_GERICHTE_FILE,          DEFAULT_GERICHTE_FILE),
         "katalog_file":          env.get(ENV_KATALOG_FILE,           DEFAULT_KATALOG_FILE),
         "katalog_default_file":  env.get(ENV_KATALOG_DEFAULT_FILE,   DEFAULT_KATALOG_DEFAULT_FILE),
