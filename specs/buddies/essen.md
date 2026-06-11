@@ -589,7 +589,11 @@ ESSEN-21 (CONFIG-4: fehlende/kaputte Datei → Defaults + Warnung, Prozess
 startet) ·
 ESSEN-27 (Display-Lösch-Geste: Entfernen-Symbol ARASAAC 11751 sichtbar an
 jeder `liste-eintrag`; Tap löst DELETE auf die richtige ID aus; Liste
-rendert neu gemäß ESSEN-20).
+rendert neu gemäß ESSEN-20) ·
+ESSEN-28 (Render zeigt aktive Optik + disabled-Marker für Items, deren ID
+in der Wunschliste vorkommt; Klick auf gesperrte Kachel löst KEINEN POST
+aus; nach DELETE auf der Liste wird die Kachel beim nächsten Render wieder
+aktivierbar).
 
 *Tickets:* #474
 
@@ -617,6 +621,41 @@ einen DELETE-Request mit der korrekten `data-wunsch-id`; nachfolgender GET
 liefert die ID nicht mehr (Reload-on-Read).
 
 *Tickets:* #532
+
+### ESSEN-28 — Wunsch-Kachel-Sperre auf Liste-Lebenszyklus
+
+Eine geklickte Quelle-Kachel auf `/display/essen/wunsch` (die Auswahl-Kacheln,
+nicht der Liste-Bereich rechts) erhält sofort eine „aktiv"-Optik (grün-getoned,
+Pattern analog `routine-card.done` aus `routine/static/routine.css:135-140`,
+vgl. ESSEN-3 Zwei-Tap-Affordanzen). **Solange das Produkt/Gericht (per Item-ID)
+auf der aktiven Wunschliste steht**, ist die Quelle-Kachel funktional und
+visuell deaktiviert: kein weiterer POST auslösbar, kein doppelter Listeneintrag
+möglich. Sobald die Eltern den Eintrag von der Liste nehmen (ESSEN-17 DELETE
+oder ESSEN-27 ×-Geste), kehrt die Kachel beim nächsten Render in den
+Normal-Zustand zurück.
+
+**Render-Vertrag:** Der Server schreibt an jede Quelle-Kachel, deren Item-ID in
+der aktiven Wunschliste vorkommt, das Attribut `data-wunsch-aktiv="true"` sowie
+die CSS-Klasse `.kachel-gesperrt`. Die Klasse `.kachel-gesperrt` deaktiviert den
+Klick-Handler und setzt die grün-getoned-Optik (wiederverwendet aus
+`.routine-card.done`, ESSEN-3-Anker). Kacheln ohne Treffer in der Liste tragen
+kein `data-wunsch-aktiv`-Attribut und keine `.kachel-gesperrt`-Klasse.
+
+**Quelle der Wahrheit:** Liste-Stand aus ESSEN-15 (`GET /api/v1/essen/wuensche`),
+nicht clientseitig persistiert. Reload-on-Read (ESSEN-20) trägt den Zustand
+über Reloads.
+
+**Bewusst NICHT in V1:** Tageswechsel-Reset, Pro-Session-Sperre,
+Bestätigungs-Dialog. Diese Optionen B/C aus #666 wurden zugunsten von Wahl A
+(Liste-Lebenszyklus-Sperre) verworfen.
+
+*Test-Implikation:* Render zeigt aktive Optik + `.kachel-gesperrt`-Marker für
+Items, deren ID in der Wunschliste vorkommt; Klick auf gesperrte Kachel löst
+KEINEN POST aus; nach DELETE auf der Liste (`DELETE /api/v1/essen/wuensche/<id>`,
+ESSEN-17) wird die Kachel beim nächsten Render wieder aktivierbar (kein
+`data-wunsch-aktiv`, keine `.kachel-gesperrt`-Klasse).
+
+*Tickets:* #666
 
 ---
 
