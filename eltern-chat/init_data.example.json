@@ -1,0 +1,4 @@
+{
+  "_comment": "Vorlage fuer per-Instanz-Datei eltern-chat/init_data.json (gitignored). Konsumenten: seiten-Service (Mini-App-Middleware), essen-Buddy. Wert ueberschreibbar per ENV XBUDDY_INIT_DATA_MAX_AGE_SECONDS.",
+  "max_age_seconds": 86400
+}
