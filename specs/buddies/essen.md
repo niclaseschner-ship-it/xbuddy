@@ -95,18 +95,43 @@ Ein **Wunsch** (Item in der Liste) hat die Felder: stabile `id` (ESSEN-5),
 `label` (kurzer Text, aus dem Katalog), `bild_ref` (ARASAAC-`id` über
 ICONS-5/ICONS-7, ESSEN-11), `quelle ∈ {kind, eltern}` (Display vs. Eltern-Chat
 als Schreibpfad, E-ESSEN-8), `kategorie ∈ {gericht, obst_gemuese, brotbelag,
-sonstiges}` (ESSEN-9), `erstellt_am` (ISO-Zeitstempel mit Familien-Zeitzone).
+sonstiges}` (ESSEN-9), `erstellt_am` (ISO-Zeitstempel mit Familien-Zeitzone),
+sowie für die Eltern-Einkaufsliste (V1, #653) **vier orthogonale Felder**:
+
+- `klasse ∈ {wunsch, einkauf}` (Default `wunsch`) — `wunsch` ist eine
+  Kind-/Eltern-Wunsch-Eintragung („das hätten wir gern"), `einkauf` ist
+  eine reine Eltern-Einkaufsliste-Eintragung („das müssen wir holen").
+  Orthogonal zu `quelle`: ein Eltern-Schreibpfad kann beide Klassen setzen.
+- `abgehakt ∈ bool` (Default `false`) — abgehakt = erledigt (eingekauft /
+  gekocht / aus der Sicht der Eltern erledigt). Lebenszyklus orthogonal zu
+  ESSEN-6/E-ESSEN-3 (Wünsche leben dauerhaft, bis Eltern sie löscht):
+  `abgehakt=true` löscht den Eintrag NICHT, er bleibt als „erledigt" sichtbar
+  bis explizit gelöscht (ESSEN-17).
+- `abgehakt_von` (string, optional, nur wenn `abgehakt=true`) — Telegram-User-
+  Name / Eltern-Identifier des abhakenden Familienmitglieds.
+- `abgehakt_am` (ISO-Zeitstempel, optional, nur wenn `abgehakt=true`).
+- `aus_gericht` (string, optional) — Label des Wunsch-Gerichts, aus dessen
+  Übernahme-Dialog (ESSEN-30) dieser Eintrag stammt. Trägt den
+  📖-Quellen-Marker in der Eltern-Mini-App (ESSEN-31).
 
 `gericht` und die drei Lebensmittel-Kategorien sind im Modell **gleichwertig**
 (E-ESSEN-2): ein Wunsch trägt seine Herkunfts-Kategorie als Datum, das die
 Liste-Anzeige gruppieren kann; der Schreibpfad ist immer derselbe (ESSEN-16).
 
+**Migrations-Regel V1:** Alt-Einträge (vor #653) ohne `klasse`/`abgehakt`-Felder
+werden vom Buddy beim Lesen implizit als `klasse='wunsch'`, `abgehakt=false`
+behandelt — kein Datei-Migrations-Skript nötig, der Reader füllt Defaults.
+Beim nächsten Schreiben durch ESSEN-16 werden die Felder explizit persistiert.
+
 *Test-Implikation:* das interne Wunsch-Modell akzeptiert alle vier
 `kategorie`-Werte und beide `quelle`-Werte; der Display-POST setzt
-`quelle=kind`, der spätere Eltern-Chat-Schreibpfad setzt `quelle=eltern`
-(V1.x, OPEN-ESSEN-A).
+`quelle=kind`, `klasse=wunsch`; der Eltern-Chat-Schreibpfad setzt `quelle=eltern`
+mit `klasse` nach Skill (`wunsch-hinzufuegen` → `wunsch`; `einkauf-hinzufuegen`
+→ `einkauf`). Ein gelesener Alt-Eintrag ohne `klasse` ist äquivalent zu einem
+mit `klasse='wunsch'`, `abgehakt=false`. `aus_gericht` ist NUR auf
+`klasse='einkauf'`-Einträgen zulässig (Buddy lehnt anders ab).
 
-*Tickets:* #474
+*Tickets:* #474, #653
 
 ### ESSEN-5 — Stabile, herkunfts-eindeutige Wunsch-IDs
 Jeder Wunsch trägt eine stabile `id` (IDENT-1 für stabile IDs) mit
@@ -305,32 +330,57 @@ Display-Item-Grid-Antwort dieser Kategorie auf.
 ## 5. API-Schnittstellen
 
 ### ESSEN-15 — `GET /api/v1/essen/wuensche` — Liste lesen
-Liest die vollständige Wunsch-Liste. **Konsument in V1: der Eltern-Chat-Skill
-`wuensche-zeigen`** (`wuensche-zeigen.md`, WZE) — die einzige Lese-Schnittstelle.
+Liest die vollständige Wunsch-Liste. **Konsumenten in V1:**
+- der Eltern-Chat-Skill `wuensche-zeigen` (`wuensche-zeigen.md`, WZE) — Lese-Pfad.
+- der Eltern-Chat-Skill `einkauf-zeigen` (`einkauf-zeigen.md`, EZG, #653) —
+  Übersichts-Render + Mini-App-Öffnen-Button (lese-Pfad mit Filter).
+- die Eltern-Mini-App `einkauf` (#653) — voller Liste-Render auf Phone.
+
 Eigener API-Pfad `/api/v1/essen/<resource>` (BUD-1b).
 
 **Antwort (JSON-Body):** `{ "wuensche": [ { "id": …, "label": …, "bild_ref":
-…, "quelle": …, "kategorie": …, "item_id": …, "erstellt_am": … }, … ] }`.
+…, "quelle": …, "klasse": …, "abgehakt": …, "abgehakt_von": …, "abgehakt_am":
+…, "aus_gericht": …, "kategorie": …, "item_id": …, "erstellt_am": … }, … ] }`.
 `item_id` (string) ist der eindeutige Katalog-Identifier des Lebensmittels oder
-Gerichts (z. B. der Schlüssel in `katalog.json` / `gerichte.json`). Reihenfolge:
-`erstellt_am` aufsteigend (älteste zuerst).
+Gerichts (z. B. der Schlüssel in `katalog.json` / `gerichte.json`).
+`klasse`/`abgehakt`/`abgehakt_von`/`abgehakt_am`/`aus_gericht` sind die V1-#653-
+Felder aus ESSEN-4 — der Server liefert sie **immer** mit (Default-aufgefüllt
+für Alt-Einträge gemäß ESSEN-4-Migrations-Regel).
+Reihenfolge: `erstellt_am` aufsteigend (älteste zuerst).
+
+**Query-Filter (V1, #653):**
+- `?klasse=<wunsch|einkauf>` — filtert auf eine Klasse.
+- `?abgehakt=<true|false>` — filtert auf abgehakt-Status.
+- Mehrere Filter sind UND-verknüpft.
+- Fehlt der Filter → keine Filterung (heutiges Verhalten unverändert).
 
 *Test-Implikation:* mit drei persistierten Wünschen liefert der Endpunkt
 genau diese drei in chronologischer Reihenfolge; mit leerer Liste liefert er
-`{ "wuensche": [] }` (200, nicht 404 — leer ist kein Fehler).
+`{ "wuensche": [] }` (200, nicht 404 — leer ist kein Fehler). Filter
+`?klasse=einkauf` liefert nur die Einkauf-Einträge; `?klasse=wunsch&abgehakt=false`
+liefert nur offene Wünsche. Unbekannter Filter-Wert → 400.
 
-*Tickets:* #474
+*Tickets:* #474, #653
 
-### ESSEN-16 — `POST /api/v1/essen/wuensche` — Wunsch hinzufügen
-Legt einen neuen Wunsch an. **Konsument in V1: die Display-View** (Kind-Tap im
-Item-Grid, ESSEN-3, setzt `quelle=kind`). **V1.x-Konsument:** ein
-Eltern-Chat-Schreib-Skill (`quelle=eltern`, OPEN-ESSEN-A).
+### ESSEN-16 — `POST /api/v1/essen/wuensche` — Wunsch / Einkauf-Item hinzufügen
+Legt einen neuen Eintrag an. **Konsumenten in V1:**
+- die Display-View (Kind-Tap im Item-Grid, ESSEN-3, setzt `quelle=kind`,
+  `klasse=wunsch`).
+- der Eltern-Chat-Skill `einkauf-hinzufuegen` (`einkauf-hinzufuegen.md`, EIN,
+  #653) — setzt `quelle=eltern`, `klasse=einkauf`, optional `aus_gericht` für
+  die Übernahme-Geste (ESSEN-30).
+- der Eltern-Mini-App-Quick-Add (#653) — setzt `quelle=eltern`,
+  `klasse=einkauf`.
 
 **Payload (JSON-Body):** `label` (string, nicht leer), `bild_ref` (ARASAAC-`id`,
 string), `quelle` (`"kind"` oder `"eltern"`), `kategorie` (einer der vier Werte
 aus ESSEN-9), `item_id` (string, nicht leer — eindeutiger Katalog-Identifier des
 Lebensmittels oder Gerichts, z. B. der Schlüssel in `katalog.json` /
 `gerichte.json`).
+**V1 #653:** `klasse` (`"wunsch"` oder `"einkauf"`, Default `"wunsch"` wenn
+fehlend — Rückwärtskompatibilität); `aus_gericht` (string, optional, nur
+zulässig bei `klasse="einkauf"`) — Label des Wunsch-Gerichts, aus dem dieser
+Eintrag via ESSEN-30 stammt.
 
 **Fachliche Validierung im Buddy (vor jedem Schreiben):** alle Felder
 erforderlich; `label` nicht leer; `quelle` und `kategorie` aus dem definierten
@@ -341,26 +391,40 @@ Eingabe → **4xx, kein Schreiben** (kein Teil-Write). Die Prüfung liegt im
 Buddy, nicht im Skill (BUD-2: der Buddy besitzt seine Daten).
 
 **Duplikat-Schutz (BUD-2):** POST mit `item_id`, das bereits auf der aktiven
-Wunschliste steht (Match über `item_id`), wird mit **409 Conflict** abgelehnt —
-kein doppelter Eintrag. Das garantiert die ESSEN-28-Sperre Server-seitig, auch
-wenn ein Schreib-Pfad den Client-Guard umgeht (programmatischer Call, künftiger
-Eltern-Chat-Schreib-Skill aus OPEN-ESSEN-A). Der Konsument darf 409 als „Item
-ist bereits auf der Liste" interpretieren und entsprechend benutzerfreundlich
-melden.
+Wunschliste steht (Match über `item_id` UND derselbe `klasse`-Wert),
+wird mit **409 Conflict** abgelehnt — kein doppelter Eintrag. Das garantiert
+die ESSEN-28-Sperre Server-seitig, auch wenn ein Schreib-Pfad den Client-Guard
+umgeht. Der Konsument darf 409 als „Item ist bereits auf der Liste"
+interpretieren und benutzerfreundlich melden.
+
+**V1 #653 — `klasse`-Achse beim Duplikat:** Klassen sind orthogonal — derselbe
+`item_id` darf einmal als `klasse=wunsch` UND einmal als `klasse=einkauf` auf
+der Liste stehen (Kind wünscht sich Mango, Eltern schreibt Mango als Einkauf —
+beides ist gültig, kein 409). Match-Regel: `(item_id, klasse)`-Tupel.
+
+**V1 #653 — Listen-Grenze (ESSEN-29):** Vor jedem Schreiben prüft der Buddy
+die Listen-Grenze. Bei Überschreitung lehnt er **vollständig** ab (kein
+Teil-Schreiben) — siehe ESSEN-29.
 
 **Antwort:** `{ "id": "<quelle>:<n>" }` (ESSEN-5).
 
 **Persistenz:** schreibt atomar in `essen/wuensche.json` (DCOMP-4), die neue
 ID wird vom Quellen-Zähler vergeben. `item_id` wird mit-geschrieben als
-Bestandteil jedes Wunsch-Eintrags.
+Bestandteil jedes Wunsch-Eintrags. **V1 #653:** auch `klasse`, `abgehakt=false`,
+optional `aus_gericht` werden persistiert; `abgehakt_von`/`abgehakt_am` bleiben
+beim Schreiben über ESSEN-16 immer leer (gesetzt durch ESSEN-32 PATCH).
 
 *Test-Implikation:* gültiger POST liefert eine neue `id` und macht den Wunsch
 im nächsten GET sichtbar; ungültiger POST (leeres Label / unbekannte
 `kategorie` / fehlende `bild_ref` / unbekannte `item_id`) → 4xx, GET
-unverändert; zwei POSTs mit identischer `item_id` → erster liefert 201, zweiter
-liefert 409 Conflict, nachfolgendes GET zeigt nur einen Eintrag.
+unverändert; zwei POSTs mit identischer `item_id` UND derselbe `klasse` →
+erster liefert 201, zweiter liefert 409 Conflict; zwei POSTs mit identischer
+`item_id` und unterschiedlicher `klasse` → beide 201 (orthogonale Klassen).
+POST mit `klasse=einkauf` + `aus_gericht="Lasagne"` → persistiert beide
+Felder. POST mit `klasse=wunsch` + `aus_gericht="…"` → 400 (Kombination
+unzulässig).
 
-*Tickets:* #474
+*Tickets:* #474, #653
 
 ### ESSEN-17 — `DELETE /api/v1/essen/wuensche/<id>` — Wunsch entfernen
 Entfernt einen Wunsch aus der Liste. **In V1 exposed** (vollständige API,
@@ -408,16 +472,28 @@ implizit `gericht` und wird nicht gesendet.
 `bild_ref` muss eine ARASAAC-`id` mit lokal vorliegendem PNG sein (ICONS-5).
 Ungültig → 4xx, kein Schreiben.
 
+**V1 #653 — Zutaten-Feld:** Der Payload trägt **zusätzlich Pflichtfeld**
+`zutaten` (Array): jede Zutat hat `label` (string, nicht leer), `kategorie`
+(einer der drei Lebensmittel-Kategorien aus ESSEN-9: `obst_gemuese`, `brotbelag`,
+`sonstiges` — `gericht` ist hier unzulässig), `bild_ref` (ARASAAC-`id`, vom GAN-
+Skill via ICONS-7 aufgelöst). Reihenfolge der Zutaten wird beibehalten. Leeres
+Array ist zulässig (Gericht ohne Zutaten — Eltern-Wahl, ESSEN-30 fängt das mit
+Klartext-Hinweis statt Übernahme-Dialog ab).
+
 **Antwort:** `{ "id": "<n>" }` (laufende Nummer im Gerichte-Katalog,
 quellen-eindeutig analog ESSEN-5).
 
-**Persistenz:** schreibt atomar in `essen/gerichte.json` (DCOMP-4).
+**Persistenz:** schreibt atomar in `essen/gerichte.json` (DCOMP-4). `zutaten`
+wird mit-geschrieben.
 
 *Test-Implikation:* gültiger POST liefert eine neue `id` und macht das Gericht
 in `GET /api/v1/essen/katalog` (Kategorie `gericht`) sichtbar; doppeltes
-Anlegen mit demselben `label` → 409.
+Anlegen mit demselben `label` → 409. POST mit `zutaten: [{label: "Mozzarella",
+kategorie: "brotbelag", bild_ref: "27136"}]` persistiert das Feld; das
+nachfolgende GET zeigt es. POST mit `zutaten: [{kategorie: "gericht", …}]` →
+400 (Kategorie für Zutat unzulässig).
 
-*Tickets:* #474
+*Tickets:* #474, #653
 
 ### ESSEN-20 — Reload-on-Read, atomares Schreiben, Last-Known-Good
 Der Buddy liest seine persistenten Dateien (`wuensche.json`, `gerichte.json`,
@@ -681,6 +757,202 @@ ESSEN-17) wird die Kachel beim nächsten Render wieder aktivierbar (kein
 
 *Tickets:* #666
 
+## 9. Eltern-Einkaufsliste (V1, #653)
+
+Die Eltern-Einkaufsliste (Mama im Supermarkt) lebt **auf demselben Wunsch-
+Datenmodell** wie die Display-Wunsch-Liste, getrennt nur über `klasse`
+(ESSEN-4): `klasse=wunsch` für Display-/Kind-Pfad, `klasse=einkauf` für den
+Eltern-Schreibpfad. Werkzeug-Wahl ist **Telegram Mini App** (kein pinned
+Inline-Keyboard — Nic 2026-06-11, E-ESSEN-11).
+
+### ESSEN-29 — Listen-Grenze und Komplett-Ablehnung beim Hinzufügen
+
+Vor jedem `POST /api/v1/essen/wuensche` (ESSEN-16) prüft der Buddy die
+Anzahl der **offenen** Einträge (`abgehakt=false`) gegen die Listen-
+Grenze. Default: **100** offene Einträge je Liste (über `klasse` summiert,
+weil sie sich denselben Storage teilen). Override per `essen/config.json::
+listen_grenze`.
+
+**Wenn** ein POST die Summe `offene_jetzt + 1` (oder `+N` bei
+Batch-Eingabe via ESSEN-30 Übernahme) die Grenze **überschreiten** würde,
+**dann** lehnt der Buddy den **gesamten** Vorgang mit **413 Payload Too Large**
+ab (kein partielles Anlegen). Antwort-Body: `{ "error": "listen_grenze",
+"offen_jetzt": <N>, "grenze": <N> }`. Der konsumierende Skill darf das in
+eine Klartext-Antwort an Eltern übersetzen („Liste hat schon <N> offene
+Items, mehr passt nicht — erst aufräumen").
+
+**Begründung:** UI-Lesbarkeit (Mini App + Bot-Übersichts-Nachricht), nicht
+Storage. Default 100 ist mit Reserve gewählt — der konsumierende Skill kann
+früher warnen (z. B. ab 80) ohne Server-Änderung.
+
+**Bewusst NICHT in V1:** Soft-Warnung im Server, Soft-Limit pro `klasse`,
+Soft-Limit pro `quelle`. Eine harte Decke je Liste, keine differenzierte
+Limit-Verwaltung.
+
+*Test-Implikation:* `POST` mit `offene_jetzt = 99` und Batch-Size 1 → 201;
+Batch-Size 2 → 413 mit Body wie oben; keine Persistenz. Override
+`listen_grenze = 5` und Versuch eines POST über 5 offene Items → 413. Ein
+abgehakter Eintrag zählt nicht zur Grenze (`abgehakt=true` ist ausgenommen).
+
+*Tickets:* #653
+
+### ESSEN-30 — Wunsch-Gericht-Übernahme mit Pro-Zutat-Auswahl
+
+**Auslöser:** Eltern öffnet die Mini-App-View (ESSEN-31) und tippt einen
+Eintrag mit `klasse=wunsch` UND `kategorie=gericht` (z. B. Lasagne) UND das
+Gericht hat im Katalog mindestens eine Zutat (ESSEN-19 `zutaten`-Feld).
+
+Statt direktem Abhaken öffnet die Mini App ein **Übernahme-Sheet** (Bottom-
+Sheet) mit folgendem Inhalt:
+
+- Titel: „🧒 Kinder wünschen sich <Gericht>"
+- Pro Zutat eine Zeile mit Piktogramm, Label und Auswahl-Häkchen.
+- **Smart-Default Auswahl:** alle Zutaten ausgewählt, **außer** die Zutat
+  ist schon **offen** auf der Liste (Match `label`-case-insensitiv,
+  unabhängig von `klasse`). Solche Zutaten sind initial ausgeschlossen mit
+  Hinweis-Text „· schon drauf".
+- Tap auf eine Zutat-Zeile toggelt die Auswahl (Eltern kann eine schon-
+  drauf-Zutat wieder reinholen oder eine vorgewählte rausnehmen).
+- Counter im Confirm-Button live: „✓ N Zutaten auf die Liste" / „Nichts
+  dazunehmen" (disabled, wenn Auswahl leer UND keine schon-drauf-Zutaten).
+- Drei-Wege-Wahl unten:
+  - **„✓ N Zutaten auf die Liste"** → wandert in den Bestätigungs-Pfad
+    (siehe unten).
+  - **„Nur abhaken"** → kein Zutaten-Hinzufügen; das Wunsch-Gericht selbst
+    wird auf `abgehakt=true` gesetzt (PATCH).
+  - **„Abbrechen"** → Sheet schließt, nichts ändert sich.
+
+**Bestätigungs-Pfad „Zutaten übernehmen":**
+
+1. Für jede ausgewählte Zutat ein `POST /api/v1/essen/wuensche` mit
+   `klasse=einkauf`, `quelle=eltern`, `aus_gericht=<Gericht-Label>`,
+   `label`/`kategorie`/`bild_ref`/`item_id` aus dem Zutaten-Eintrag des
+   Gerichts.
+2. **Dedupe-Regel:** Wenn eine Zutat schon offen auf der Liste ist
+   (`label`-Match) UND `aus_gericht` noch leer, wird KEIN neuer Eintrag
+   angelegt, sondern der bestehende Eintrag um das `aus_gericht`-Feld
+   ergänzt (PATCH `/api/v1/essen/wuensche/<id>`, ESSEN-32). Ist
+   `aus_gericht` schon gesetzt: gar kein Effekt (Idempotent).
+3. Das Wunsch-Gericht selbst wird `abgehakt=true` (PATCH).
+4. Listen-Grenze ESSEN-29 greift auf die Gesamt-Übernahme: wenn die N
+   Zutaten die Grenze sprengen würden, lehnt der Buddy den **gesamten**
+   Übernahme-Vorgang ab (kein partielles Anlegen). Das Wunsch-Gericht
+   bleibt offen, das Sheet schließt mit Klartext-Hinweis.
+
+**Edge-Case „Gericht ohne Zutaten":** wenn `GET /api/v1/essen/katalog
+/gerichte/<id>` ein leeres `zutaten`-Array liefert, öffnet die Mini App
+**kein** Übernahme-Sheet — stattdessen Klartext-Hinweis „Lasagne hat
+keine Zutaten im Katalog hinterlegt. Tap nochmal, um den Wunsch
+abzuhaken." Zweiter Tap setzt `abgehakt=true`.
+
+**Wenn** Eltern tippt 🧒-Gericht „Lasagne" (5 Zutaten, keine schon drauf),
+wählt 4 aus, tippt „Auf die Liste", **dann** entstehen 4 neue Einträge
+`klasse=einkauf`, `aus_gericht="Lasagne"`, Lasagne selbst hat
+`abgehakt=true`. Die ausgelassene Zutat bleibt unberührt.
+
+*Test-Implikation:* Mini-App-Tap auf 🧒-Gericht mit `zutaten=[a,b,c]` →
+Sheet öffnet, alle drei vorausgewählt. UI-Test des Auswahl-Toggles.
+Confirm-Pfad mit 2 ausgewählten Zutaten → 2 POSTs, Wunsch-Gericht PATCH
+`abgehakt=true`. Dedupe-Test: Zutat „Mozzarella" ist schon offen → vorbe-
+legter Toggle aus, bei Confirm PATCH auf bestehende ID statt POST. Limit-
+Test: Übernahme würde Grenze sprengen → 413 für den Übernahme-Vorgang
+(kein Zutaten-Eintrag, Wunsch-Gericht bleibt offen).
+
+*Tickets:* #653
+
+### ESSEN-31 — Eltern-Mini-App-View (Layout + Bild-Pfad)
+
+Die Eltern-Mini-App-View für die Einkaufsliste rendert eine Liste aller
+Einträge (egal welche `klasse`/`quelle`) als **Bring!-typische Card-Liste**
+gruppiert nach `kategorie`, mit drei sichtbaren Quellen-Markern:
+
+- **🧒** für `klasse=wunsch` (Kinder-/Display-Quelle).
+- **📖** für `klasse=einkauf` mit gesetztem `aus_gericht` (Rezept-Zutat).
+- **(kein Marker)** für `klasse=einkauf` ohne `aus_gericht` (Eltern
+  explizit aufgeschrieben).
+
+**Reihenfolge innerhalb einer Kategorie:**
+Wunsch zuerst → Rezept-Zutaten → Eltern-explizit. Erledigte (`abgehakt=
+true`) rutschen ans Ende der Kategorie mit reduzierter Optik (ausgegraut,
+Häkchen grün gefüllt). Erledigt-Block ist nicht eingeklappt — Eltern
+sehen, was schon erledigt ist.
+
+**Reihenfolge der Kategorien:**
+1. **Wunsch-Gerichte** (Kategorie `gericht`, nur 🧒-Marker — Eltern-
+   Einkauf-Items in `gericht` sind in V1 unzulässig, weil Gerichte
+   gekocht und nicht eingekauft werden).
+2. **Obst & Gemüse**.
+3. **Brotbelag**.
+4. **Sonstiges**.
+
+**Sektion-Header je Kategorie** zeigt die Aufteilung: `Obst & Gemüse · N`
+mit `+ 📖 R + 🧒 W`, wenn Rezept-Zutaten R bzw. Wunsch-Items W vorhanden
+sind (Format-Beispiel `Sonstiges · 11 + 📖 3 + 🧒 1`).
+
+**Bild-Pfad:** Mini App fordert die ARASAAC-PNGs **vom selben Host** unter
+`/_shared/icons/arasaac/<bild_ref>.png` an (ICONS-5, Same-Origin-Lego, kein
+CORS). Lade-Fehler einzelner Bilder rendern Placeholder (Bring!-Default-
+Stoff/Cart-Symbol), kein UI-Bruch.
+
+**Tap-Routing pro Card:**
+- `klasse=wunsch` + `kategorie=gericht` + Gericht hat Zutaten → ESSEN-30
+  Übernahme-Sheet.
+- `klasse=wunsch` + Gericht ohne Zutaten → Klartext-Sheet (siehe ESSEN-30).
+- Alle anderen Karten → direkter `abgehakt`-Toggle (PATCH).
+
+**Quick-Add direkt in der Mini App:** ➕-Button (Floating Action Button)
+öffnet ein Bottom-Sheet mit Text-Input. Komma-/Semikolon-getrennt
+mehrere Items in einem Rutsch. Per Default `kategorie=sonstiges`. Auto-
+Match auf bekannte Items aus dem Katalog (ICONS-7-Such-API + Katalog-
+Lookup über `label` case-insensitiv) setzt `kategorie` automatisch korrekt,
+wenn ein eindeutiges Match existiert. Sonst bleibt `sonstiges`. Buddy-
+seitig per ESSEN-16 angelegt mit `klasse=einkauf`.
+
+**Auth:** Die Mini App lädt nur auf gültige Telegram-`initData`-Signatur
+(HMAC mit Bot-Token, geprüft durch den `seiten`-Service / Buddy-Service —
+Architektur-Frage in der Lego-Basis, MVP-Sammler-Ticket #678).
+
+*Test-Implikation:* Render-Test mit gemischter Liste (1 Wunsch-Gericht +
+2 Rezept-Zutaten + 3 Eltern-Items + 1 erledigtes) → Mini App zeigt vier
+Kategorien (oder die nicht-leeren) in fester Reihenfolge, Sektion-Header
+mit Aufteilung, Erledigtes am Ende der Kategorie. Tap auf 🧒-Gericht-Card
+öffnet Übernahme-Sheet. Tap auf Wunsch-Lebensmittel-Card toggelt
+`abgehakt` direkt. Bilder werden über `/_shared/icons/arasaac/<id>.png`
+angefordert.
+
+*Tickets:* #653
+
+### ESSEN-32 — `PATCH /api/v1/essen/wuensche/<id>` — Eintrag aktualisieren
+
+Aktualisiert ein bestehendes Wunsch-/Einkaufs-Item. **In V1 exposed**
+(interface-first). **Konsumenten:**
+- die Eltern-Mini-App (Tap-Toggle → `abgehakt`).
+- der Skill `einkauf-hinzufuegen` (ESSEN-30 Dedupe-Pfad → setzt `aus_gericht`
+  auf bestehende Einträge).
+
+**Payload (JSON-Body, alle Felder optional, sparse update):**
+- `abgehakt` (bool) — neue Markierung. Wenn `true`, setzt der Buddy automatisch
+  `abgehakt_von` (aus dem Eltern-/Familien-Auth) und `abgehakt_am` (jetzt-ISO).
+  Wenn `false`, leert er beide.
+- `aus_gericht` (string) — Quellen-Vermerk (nur wenn `klasse=einkauf`, sonst
+  400).
+
+**Fachliche Validierung:** ID muss existieren (sonst 404). Klassen-Felder
+(`klasse`/`quelle`/`label`/`kategorie`/`item_id`/`bild_ref`) sind **nicht** per
+PATCH änderbar — nur die Lebenszyklus-Felder. Unbekannte Felder im Payload →
+ignorieren (nicht 400 — Vorwärtskompatibilität).
+
+**Antwort:** 200 mit dem aktualisierten Eintrag (volle Form wie GET-Element).
+
+*Test-Implikation:* PATCH `{abgehakt: true}` → 200, GET zeigt
+`abgehakt=true`, `abgehakt_von`/`abgehakt_am` gesetzt. PATCH
+`{abgehakt: false}` auf denselben Eintrag → leert `abgehakt_von`/
+`abgehakt_am`. PATCH `{label: "X"}` → ignoriert (Antwort hat `label`
+unverändert). PATCH auf unbekannte ID → 404. PATCH
+`{aus_gericht: "Lasagne"}` auf Eintrag mit `klasse=wunsch` → 400.
+
+*Tickets:* #653
+
 ---
 
 ## Offene Punkte
@@ -693,6 +965,11 @@ ESSEN-17) wird die Kachel beim nächsten Render wieder aktivierbar (kein
   Skill-Schnitt: `wunsch-hinzufuegen` (WHZ, propose→confirm, Pattern RPS),
   `wunsch-loeschen` (WLO, propose→confirm), `wuensche-leeren` (WLE,
   propose→confirm mit harter Bestätigung).
+  - **TEIL-ERLEDIGT 2026-06-11 durch #653:** die zwei Einkaufs-Skills
+    `einkauf-hinzufuegen` (EIN) und `einkauf-zeigen` (EZG) sind in
+    `specs/platform/einkauf-hinzufuegen.md` und `specs/platform/einkauf-zeigen.md`
+    spezifiziert. Sie tragen `klasse=einkauf`. Die drei Wunsch-Pflege-Skills
+    (WHZ/WLO/WLE) bleiben offen, da sie `klasse=wunsch` pflegen.
 
 - **OPEN-ESSEN-B — Echte Produktfotos statt ARASAAC-Piktogramme.** Für
   Lebensmittel wie spezifische Marken-Produkte (z. B. „der gelbe Joghurt") wäre
@@ -862,3 +1139,32 @@ sofort „V2 kommt" und hat den richtigen Erwartungs-Horizont.
 zeigen, dass nicht-freigestellte Fotos die Erkennbarkeit/Optik im Item-Grid
 spürbar mindern (mehrere Familien-Rückmeldungen ODER Werft-Befund am
 Tablet-Probe). Bis dahin nichts auf Vorrat.
+
+### E-ESSEN-11 — Eltern-Einkaufsliste ist Mini App, nicht pinned Inline-Keyboard
+
+*Datum:* 2026-06-11 · Die Eltern-Einkaufsliste in Telegram wird als
+**Mini App** ausgeliefert (HTML/CSS/JS-Frontend mit Init-Data-Auth,
+gehostet am selben Pi wie der Display-Service). **Verworfen:** pinned
+Inline-Keyboard in der Familien-Gruppe als Lösungs-Form (Werft-Iteration
+V1–V6 in `brainstorm/idee-mvp/essen-einkauf/mockups/` — Mockup-
+Konvergenz, aber durch Nic-Tiebreaker 2026-06-11 verworfen, weil
+Werkzeug-Wahl die Lego-Konsistenz mit Routine-/Übersicht-Funktionen
+bricht und ARASAAC-Bilder mit pinned Inline-Keyboard nicht möglich
+sind — Telegram-API-Limit).
+
+**Verworfene Form-Erkenntnisse leben weiter:**
+
+- Drei Quellen-Marker 🧒 / 📖 / plain als visuelle Trennung (ESSEN-31).
+- Hybrid-Layout (Wunsch-Lebensmittel in Kategorie, Wunsch-Gerichte oben,
+  ESSEN-31).
+- Wunsch-Gericht-Übernahme-Geste mit Zutaten-Dialog (ESSEN-30).
+- Listen-Grenze als Robustheits-Klausel (ESSEN-29).
+
+**Plattform-Ebene:** Telegram als MVP-Plattform, Matrix vertagt mit Trigger
+(RAT-16, MVP-Sammler #678).
+
+**Werft-Trail:** F1-Rahmung in `brainstorm/idee-mvp/essen-einkauf/gate-a-
+vorbereitung.md`, Mockup V7 als Gate-B-Wahl `brainstorm/idee-mvp/essen-
+einkauf/mockups/telegram-mini-app-v7-chat-flow.html`, Berater-Runde
+2026-06-11 (Schärfungs-Ergebnis in `brainstorm/berater-runde/
+20260611-160500-RATIFIZIERT-mvp-678-plan-schaerfung.md`).
