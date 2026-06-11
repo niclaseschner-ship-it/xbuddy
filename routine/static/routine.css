@@ -291,6 +291,10 @@ body {
   flex: 1;
   min-height: 0;
   margin: var(--space-6) 0;
+  /* Padding oben/unten: Atem-Zone, damit der erste/letzte Pin (top:0% / top:100%
+     mit translateY(-50%)) nicht über die Section-Ränder ragt und am Header-/
+     Footer-Bereich klebt. */
+  padding: var(--space-7) 0;
   container-type: size;
   container-name: timeline-section;
 }
@@ -343,21 +347,23 @@ body {
   position: absolute;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-4);   /* 16px: lesbarer Abstand Pikto ↔ Time */
   transform: translateY(-50%);
   z-index: 3;
 }
 
-/* LINKS vom Balken: Pin endet an der Balken-Mitte, Inhalt rechtsbündig */
+/* LINKS vom Balken: Pin endet vor der Balken-Mitte, Inhalt rechtsbündig.
+   48px Abstand zum Mittelpunkt (16px halbe Balkenbreite + 32px Atem-Spalte):
+   damit Pin-Time NICHT am Balken klebt, auch bei großem Viewport. */
 .event-pin-links {
-  right: calc(50% + 16px);   /* 16px = halbe Balkenbreite */
+  right: calc(50% + 48px);
   flex-direction: row;
   justify-content: flex-end;
 }
 
-/* RECHTS vom Balken: Pin beginnt an der Balken-Mitte */
+/* RECHTS vom Balken: Pin beginnt 48px rechts vom Mittelpunkt (s. links). */
 .event-pin-rechts {
-  left: calc(50% + 16px);
+  left: calc(50% + 48px);
   flex-direction: row-reverse;
   justify-content: flex-end;
 }
@@ -367,13 +373,12 @@ body {
    (container: .timeline-section). max-width 80%: lockerer Beschriftungs-Schutz —
    Pin-Time-Label kann sich daneben halten (Spec Z. 289-291). */
 .pin-pikto {
-  /* Obergrenze 92px: schützt vor Kollision bei nahe beieinander liegenden Pins
-     (Pin-Mitte-Abstand bei dichter Zeitleiste kann < 100px sein); Untergrenze
-     48px für Tap-Trefferfläche. cqh-Faktor 14: sichtbare Skalierung von kleinen
-     bis großen Sections, ohne Kollision in beide Richtungen. */
-  height: clamp(48px, 14cqh, 92px);
+  /* Obergrenze 64px + max-width 72px: kompakt für Familien-Layout. Untergrenze
+     48px für Tap-Trefferfläche. cqh-Faktor 10: sichtbare Skalierung über
+     die Section-Höhe ohne Kollision in dichter Zeitleiste. */
+  height: clamp(48px, 10cqh, 64px);
   aspect-ratio: 1;
-  max-width: 100px;
+  max-width: 72px;
   border-radius: var(--radius-xl);
   border: 3px solid var(--kids-border-soft);
   display: flex;
@@ -399,11 +404,12 @@ body {
 .pin-pikto-anziehen { background: var(--kids-today-bg); border-color: var(--kids-today); }
 .pin-pikto-losgehen { background: var(--kids-tint-sky); border-color: var(--lake); }
 
-/* Uhrzeit-Label neben dem Piktogramm (ROUTINE-9) */
+/* Uhrzeit-Label neben dem Piktogramm (ROUTINE-9) — fs-24 statt fs-28,
+   damit zwei Pins in dichter Zeitleiste vertikal nicht kollidieren. */
 .pin-time {
   font-family: var(--font-hand);
   font-weight: 700;
-  font-size: var(--fs-28);
+  font-size: var(--fs-24);
   color: var(--kids-ink-soft);
   white-space: nowrap;
 }
