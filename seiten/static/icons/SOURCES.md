@@ -21,7 +21,7 @@ Form je Eintrag:
 | Datei | Quelle | Cache-Wort | Lizenz | Hinzugefügt | Anmerkung |
 |---|---|---|---|---|---|
 | `controller.png` | `arasaac:11299` | „fernbedienung" | CC BY-NC-SA | 2026-06-11 | Symbol Fernbedienung — passt zur Sorte b/c (Controller). Initial-Bild war bereits aus ARASAAC, ID rekonstruiert. |
-| `panel.png` | `arasaac:9165` | „tablet" | CC BY-NC-SA | 2026-06-11 | **Korrektur-Pflicht (#585)**: heutige `panel.png` ist byte-identisch mit `controller.png` (Initial-Setup-Fehler). Korrigiertes Bild aus ARASAAC-Cache holen + ersetzen. |
+| `panel.png` | `arasaac:9165` | „tablet" | CC BY-NC-SA | 2026-06-11 | 2026-06-11 #585: ersetzt — alte Datei war byte-identisch zu controller.png (md5 bf92fa01b25aaaed49971153f44df5e1, Initial-Setup-Fehler). Neues Bild ist ARASAAC ID 9165 (md5 1a2ae639d3c8801e32bd7e70c06886c6, 500×500). |
 | `eltern.png` | `arasaac:35060` | „eltern" | CC BY-NC-SA | 2026-06-11 | Symbol Eltern — passt zur Sorte b (Eltern-Settings). Initial-Bild aus ARASAAC, ID rekonstruiert. |
 | `display-client.png` | `eigen` | — | siehe Anmerkung | 2026-06-11 | 8 KB-PNG, deutlich kleiner als die ARASAAC-Standardform (12-14 KB) → vermutlich custom/anders sourced. **Quelle bei Gelegenheit recherchieren oder durch eine ARASAAC-ID ersetzen** (z. B. `bildschirm:2910` für die generische Display-Variante). Heute mit Hinweis dokumentiert, keine Lizenz-Klärung blockiert. |
 
