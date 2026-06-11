@@ -18,8 +18,9 @@ kein `telegram`-Import; kein Telegram-SDK-Vokabular. Konsumenten: seiten-Service
 (Mini-App-Middleware) und essen-Buddy.
 
 Konfig-Lader (AC3): max_age_seconds aus eltern-chat/init_data.json
-(Default 86400). Override per ENV XBUDDY_INIT_DATA_MAX_AGE_SECONDS.
-Hartkodierung von 1 h verstößt gegen BRICHT-5 → daher kein hardcoded 3600.
+(Default 86400). Override per ENV ELTERNCHAT_INIT_DATA_MAX_AGE_SECONDS.
+Telegram-Doku definiert keinen festen Ablauf — Default 86400 (24h),
+konfigurierbar per JSON-Datei und ENV-Variable; kein hardcoded 3600.
 """
 
 from __future__ import annotations
@@ -41,10 +42,11 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 
 _DEFAULT_CONFIG_PATH = os.path.join(_HERE, "init_data.json")
 
-# ENV-Variable für Override (AC3, BRICHT-5: kein Hardcode von 1h)
-_ENV_MAX_AGE = "XBUDDY_INIT_DATA_MAX_AGE_SECONDS"
+# ENV-Variable für Override (AC3, CONFIG-5: ENV-Overrides folgen <COMPONENT>_<KEY>-Schema.
+# Lib lebt in eltern-chat/, daher ELTERNCHAT_-Präfix.)
+_ENV_MAX_AGE = "ELTERNCHAT_INIT_DATA_MAX_AGE_SECONDS"
 
-_DEFAULT_MAX_AGE_SECONDS = 86400  # 24 h — kein Hardcode von 3600 (BRICHT-5)
+_DEFAULT_MAX_AGE_SECONDS = 86400  # 24 h — Telegram-Doku definiert keinen festen Ablauf
 
 
 # ---------------------------------------------------------------------------
@@ -74,9 +76,9 @@ class InitData:
 def load_config(path: str | None = None) -> dict:
     """Lädt init_data.json. Default-Pfad: eltern-chat/init_data.json relativ zur Lib.
 
-    ENV XBUDDY_INIT_DATA_MAX_AGE_SECONDS überschreibt max_age_seconds (AC3).
+    ENV ELTERNCHAT_INIT_DATA_MAX_AGE_SECONDS überschreibt max_age_seconds (AC3).
     Fehlt die Datei: nur Defaults + ENV.
-    Defaults: max_age_seconds=86400 (BRICHT-5: kein Hardcode von 1h=3600).
+    Defaults: max_age_seconds=86400 (Praxis-Empfehlung 24h; kein hardcoded 3600).
     """
     effective_path = path or _DEFAULT_CONFIG_PATH
 
