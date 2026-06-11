@@ -130,6 +130,9 @@ body {
               border-color var(--dur-base) var(--ease-out),
               background var(--dur-base) var(--ease-out);
   overflow: hidden;
+  /* ROUTINE-19: Container-Query — Kinder können via cqh/cqw relativ zur Karten-Höhe skalieren */
+  container-type: size;
+  container-name: routine-card;
 }
 
 /* ROUTINE-3: Abgehakt → grün (Häkchen, klares visuelles Feedback) */
@@ -139,9 +142,13 @@ body {
 }
 
 /* Piktogramm-Bereich (ROUTINE-10: Bild via geteilter Plattform) */
+/* ROUTINE-19: cqh = Container-Query-Height → skaliert echt mit Karten-Höhe,
+   nicht mit Viewport (vmin war Viewport-Einheit = Konstante auf Kiosk-Display).
+   max-width 22%: Beschriftungs-Schutz — Label-Spalte nie verdrängt (Spec Z. 285). */
 .card-pikto {
-  width: 72px;
-  height: 72px;
+  height: clamp(60px, 70cqh, 140px);
+  aspect-ratio: 1;
+  max-width: 22%;
   border-radius: var(--radius-xl);
   border: 2px solid var(--kids-border-soft);
   display: flex;
@@ -156,9 +163,8 @@ body {
    Untergrenze ~60px bei 8 Punkten (volle Besetzung), Obergrenze respektiert
    Beschriftungs-Schutz (Label bleibt einzeilig lesbar). */
 .card-pikto img {
-  width: clamp(60px, 100%, 100px);
-  height: auto;
-  aspect-ratio: 1;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   display: block;
 }
@@ -277,12 +283,16 @@ body {
   mittig steht und die Pins per top:% darin verankert werden. Nutzt möglichst
   viel Höhe (flex:1), mit Rand oben/unten, damit oberster/unterster Pin (die
   über/unter ihrem top:% zentriert sind) vollständig sichtbar bleiben.
+  ROUTINE-19: container-type: size → .pin-pikto-Kinder skalieren via cqh
+  mit der Zeitstrahl-Section-Höhe (analog .routine-card für .card-pikto).
 */
 .timeline-section {
   position: relative;
   flex: 1;
   min-height: 0;
   margin: var(--space-6) 0;
+  container-type: size;
+  container-name: timeline-section;
 }
 
 /* Vertikaler Balken-Track — mittig, über die Sektionshöhe */
@@ -353,9 +363,13 @@ body {
 }
 
 /* Pin-Piktogramm-Kachel (groß für Kiosk-Lesbarkeit aus Distanz) */
+/* ROUTINE-19: cqh = Container-Query-Height → skaliert mit Zeitstrahl-Section-Höhe
+   (container: .timeline-section). max-width 80%: lockerer Beschriftungs-Schutz —
+   Pin-Time-Label kann sich daneben halten (Spec Z. 289-291). */
 .pin-pikto {
-  width: 76px;
-  height: 76px;
+  height: clamp(64px, 70cqh, 140px);
+  aspect-ratio: 1;
+  max-width: 80%;
   border-radius: var(--radius-xl);
   border: 3px solid var(--kids-border-soft);
   display: flex;
@@ -370,9 +384,8 @@ body {
 /* ROUTINE-19: Pin-Piktogramm skaliert mit Zeitstrahl-Section-Höhe analog Routine-Karten.
    Beschriftungs-Schutz: Uhrzeit-Label bleibt lesbar, keine Kollision der Pin-Time. */
 .pin-pikto img {
-  width: clamp(64px, 100%, 100px);
-  height: auto;
-  aspect-ratio: 1;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   display: block;
 }
