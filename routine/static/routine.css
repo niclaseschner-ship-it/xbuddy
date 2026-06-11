@@ -367,9 +367,13 @@ body {
    (container: .timeline-section). max-width 80%: lockerer Beschriftungs-Schutz —
    Pin-Time-Label kann sich daneben halten (Spec Z. 289-291). */
 .pin-pikto {
-  height: clamp(64px, 70cqh, 140px);
+  /* Obergrenze 92px: schützt vor Kollision bei nahe beieinander liegenden Pins
+     (Pin-Mitte-Abstand bei dichter Zeitleiste kann < 100px sein); Untergrenze
+     48px für Tap-Trefferfläche. cqh-Faktor 14: sichtbare Skalierung von kleinen
+     bis großen Sections, ohne Kollision in beide Richtungen. */
+  height: clamp(48px, 14cqh, 92px);
   aspect-ratio: 1;
-  max-width: 80%;
+  max-width: 100px;
   border-radius: var(--radius-xl);
   border: 3px solid var(--kids-border-soft);
   display: flex;
