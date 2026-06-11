@@ -649,6 +649,60 @@ def test_essen8_render_tab_wechsel(demo_paths):
 
 
 # ============================================================
+#  ESSEN-27 — Display-Lösch-Geste am Wunsch-Listen-Eintrag
+# ============================================================
+
+def test_essen27_entfernen_symbol_sichtbar(client_mit_wuenschen):
+    """ESSEN-27: jede liste-eintrag-Kachel trägt das Entfernen-Symbol ARASAAC 11751
+    über die geteilte Plattform und data-wunsch-id."""
+    resp = client_mit_wuenschen.get("/display/essen/wunsch")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    # Entfernen-Icon ARASAAC 11751 über geteilte Plattform (ICONS-5).
+    assert "/display/_shared/icons/arasaac/11751.png" in body
+    # Jeder Eintrag trägt data-wunsch-id (Render-Vertrag ESSEN-27).
+    assert 'data-wunsch-id="kind:1"' in body
+    assert 'data-wunsch-id="kind:2"' in body
+    # Lösch-Button sichtbar.
+    assert 'class="loeschen-btn"' in body
+
+
+def test_essen27_delete_entfernt_wunsch(client_mit_wuenschen):
+    """ESSEN-27/ESSEN-17: DELETE auf eine vorhandene Wunsch-ID entfernt den Eintrag;
+    nachfolgender GET liefert die ID nicht mehr (Reload-on-Read, ESSEN-20)."""
+    # Sicherstellen, dass kind:1 initial vorhanden.
+    daten_vor = client_mit_wuenschen.get("/api/v1/essen/wuensche").get_json()
+    ids_vor = [w["id"] for w in daten_vor["wuensche"]]
+    assert "kind:1" in ids_vor
+
+    # DELETE auslösen (entspricht einem Tap auf das Entfernen-Symbol).
+    resp_del = client_mit_wuenschen.delete("/api/v1/essen/wuensche/kind:1")
+    assert resp_del.status_code == 200
+
+    # Reload-on-Read: GET zeigt kind:1 nicht mehr.
+    daten_nach = client_mit_wuenschen.get("/api/v1/essen/wuensche").get_json()
+    ids_nach = [w["id"] for w in daten_nach["wuensche"]]
+    assert "kind:1" not in ids_nach
+    # kind:2 ist noch da.
+    assert "kind:2" in ids_nach
+
+
+def test_essen27_render_entfernen_url_in_view_modell(demo_paths):
+    """ESSEN-27: render.baue_wunsch_liste gibt für jeden Eintrag entfernen_url
+    mit ARASAAC 11751 zurück."""
+    wuensche = [
+        {"id": "kind:1", "label": "Apfel", "bild_ref": "2462",
+         "quelle": "kind", "kategorie": "obst_gemuese",
+         "erstellt_am": "2026-06-09T08:00:00+02:00"},
+    ]
+    liste = render_mod.baue_wunsch_liste(wuensche)
+    assert len(liste) == 1
+    eintrag = liste[0]["eintraege"][0]
+    assert eintrag["entfernen_url"] == "/display/_shared/icons/arasaac/11751.png"
+    assert eintrag["id"] == "kind:1"
+
+
+# ============================================================
 #  SVC-1 — Health-Check
 # ============================================================
 
