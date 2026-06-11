@@ -109,6 +109,35 @@ und **Mittags**, beide gleichzeitig sichtbar. Jeder Block wird **eigenständig**
 der gefühlten Temperatur und dem Wetter *seiner* Tageszeit gerechnet — zwei
 getrennte Outfits, nicht aufeinander aufbauend (E-WETTER-10).
 
+Die zwei Blöcke beantworten **zwei unterschiedliche Fragen** des Familien-Alltags:
+
+- **Morgens = Pack-Sicht — „Was nehmen die Kinder mit?"** Wenn die Tür zugeht,
+  muss alles dabei sein, was über den Tag nötig wird: Regenjacke auch wenn es
+  jetzt trocken ist, T-Shirt auch wenn es jetzt 8 °C hat, Sonnencreme/Cappy auch
+  wenn die Sonne erst nachmittags durchkommt. Der Morgens-Block rechnet daher
+  gegen ein **Tages-Worst-Case-Wetter**: die Schwellen jeder Garderoben-Regel
+  sehen das ungünstigste Tagesmaß je Achse (max für Regen/UV/Wind, min UND max
+  für die gefühlte Temperatur — siehe WETTER-16).
+- **Mittags = Trage-Sicht — „Was passt jetzt zur Lage?"** Bis Mittag wissen die
+  Eltern, was die Kinder draußen ausgezogen oder draußen gelassen haben, und
+  die Mittags-Sicht hilft bei der zweiten Anpassung. Der Mittags-Block rechnet
+  daher gegen den **Slot-Wert** seiner Tageszeit (Open-Meteo-Stunden-Wert ≈ 13
+  Uhr, WETTER-5).
+
+Der Regel-Mechanismus (WETTER-14) bleibt identisch — gleiche Schwellen-Form,
+gleiches „erste passende gewinnt"; nur die **Wetter-Daten**, die in die Regel
+einlaufen, sind je Tageszeit semantisch andere Sichten. Die Konsequenz für die
+Empfehlung: Der Morgens-Block kann mehr empfehlen als der Mittags-Block (z. B.
+Regenjacke morgens, kein Regen mittags) — das ist Feature, nicht Inkonsistenz.
+
+*Test-Implikation:* an einem Tag mit trockenem Morgen (rainProb morgens-Slot
+≈ 0 %) und Regen am Nachmittag (rainProb 17-Uhr ≈ 80 %, Tages-Max 80 %)
+liefert der Morgens-Block die Regenjacke (über eine Regel mit
+`rain_prob_min ≥ 60 %`, gegen das Tages-Max), der Mittags-Block (Slot 13 Uhr
+trocken) tut es nicht.
+
+*Tickets:* #335 · #667 (Pack-/Trage-Sicht für Morgens vs. Mittags)
+
 ### WETTER-13 — Aufbau eines Outfit-Blocks
 Jeder Block zeigt ein **Pflicht-Set** („MIT"), ein **Optional-Set** („WENN DU
 MAGST") und einen kurzen **Hinweistext**. Die Kleidungsstücke sind
@@ -129,6 +158,12 @@ Zwei für den Waldkindergarten zentrale Regel-Familien sind Teil von WETTER-14:
 - **Regen-/Matsch-Logik:** aus `rainProb`/`rainAmount` → Regenjacke, Matschhose,
   Gummistiefel (pflicht/optional je nach Regenmenge).
 
+Beide Familien profitieren vom **Pack-/Trage-Spalt** (WETTER-12): morgens werden
+sie gegen das Tages-Worst-Case-Wetter ausgewertet (Regenjacke mitnehmen, obwohl
+es morgens trocken ist; Sonnencreme dabei, weil mittags UV ≥ 3 wird), mittags
+gegen die Slot-Lage. Es braucht **keine** „ganztägig-Regen"-Sonderregel und
+keinen zweiten Match-Modus — die Sicht selbst trägt die Aggregation.
+
 ## 5. Wetter-Anbindung (App-eigene Funktion)
 
 > Die Anbindung ist eine Funktion **dieser App** — keine Plattform-Fähigkeit. V1
@@ -143,6 +178,32 @@ Felder mindestens: `desc`, `kind` (neutrale Zustands-Kategorie für WETTER-7), `
 werden nicht durchgereicht (CLAUDE.md §6). V1-Anbieter ist Open-Meteo (kein
 API-Key); der Anbieter ist hinter dem Modell austauschbar. *(In der Quell-Vorarbeit
 heißen die View-Daten `WB_WEATHER`/`WB_OUTFITS` — Implementierungsdetail, nicht Spec.)*
+
+**Befüllung je Tageszeit (Pack-/Trage-Sicht, WETTER-12):**
+
+- **Mittags-Tageswetter** wird mit dem **Slot-Wert** befüllt — die Anbieter-Antwort
+  zur Mittags-Probestunde (Open-Meteo ≈ 13 Uhr, WETTER-5). Felder spiegeln den
+  Stunden-Stand 1:1.
+- **Morgens-Tageswetter** wird mit **Tages-Worst-Case-Aggregaten** befüllt — der
+  ungünstigste Stunden-Wert je Achse, gerechnet über den gesamten Tag. Konkret:
+  - `rainProb` ← `max` über alle Stunden des Tages (ungünstigste Regen-Wahrscheinlichkeit)
+  - `rainAmount` ← `max` über alle Stunden (größte stündliche Regenmenge)
+  - `wind` ← `max` über alle Stunden
+  - `uv` ← `max` über alle Stunden (höchster UV-Index → `sunscreen` per
+    WETTER-11-Schwelle gegen das Tages-Maximum)
+  - `feelsLike` trägt im Morgens-Tageswetter **zwei Werte**: `feelsLike` selbst
+    = `min` über den Tag (kältester Moment, für „Pulli mitnehmen"-Schwellen wie
+    `feels_min`); zusätzlich ein zweites Feld `feelsLike_max` = `max` über den
+    Tag (heißester Moment, für „T-Shirt mitnehmen"-Schwellen wie `feels_max`).
+    Die Garderoben-Regel-Auswertung wertet `feels_min` der Regel gegen
+    `feelsLike` (= Tages-Min) und `feels_max` der Regel gegen `feelsLike_max`
+    (= Tages-Max) aus. Im Mittags-Tageswetter ist `feelsLike_max` gleich
+    `feelsLike` (der Slot-Wert) — eine Regel sieht denselben Wert.
+  - `temp`, `low`, `high` bleiben Tages-Spanne wie bisher (sie sind Anzeige-Daten
+    für WETTER-9, nicht Regel-Schwellen — keine Verhaltensänderung).
+
+Die Befüllungsregel ist die **einzige** semantische Differenz der zwei
+Tageszeiten — die `Tageswetter`-Form und die Regel-Auswertung sind identisch.
 
 ### WETTER-17 — Anbieter nicht erreichbar → neutraler Zustand
 Ist der Anbieter nicht erreichbar oder fehlt der Ort, wirft die App keinen
