@@ -632,16 +632,23 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
     # - family_group_chat_id_getter: Live-Berechtigung (EIN-2, EC-2).
     if essen_origin_url is not None and icon_origin_url is not None \
             and family_group_chat_id_getter is not None:
-        from skills.essen_client import EssenClient as _EinEssenClient
         from skills.einkauf_hinzufuegen_task import EinkaufHinzufuegenTask
+        from skills.essen_client import EssenClient as _EinEssenClient
         from skills.icon_client import IconClient as _EinIconClient
         _ein_essen_client = _EinEssenClient(origin_url=essen_origin_url)
         _ein_icon_client = _EinIconClient(origin_url=icon_origin_url)
         _ein_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
+        # katalog_getter: Closure, die den Essen-Buddy-Katalog frisch abruft
+        # (EIN-4 Schritt 1: Katalog-Match vor Icon-Suche). Analoges Muster wie
+        # WZE-8 (_wze_essen_client.get_wuensche für den Lese-Pfad). Bei Ausfall
+        # des Buddys fällt der Skill auf ICONS-7 / Icon-Suche zurück (EIN-4).
+        def _ein_katalog_getter(_client=_ein_essen_client):
+            return _client.lese_katalog()
         catalog.register(EinkaufHinzufuegenTask(
             essen_client=_ein_essen_client,
             icon_client=_ein_icon_client,
-            is_member_fn=_ein_is_member))
+            is_member_fn=_ein_is_member,
+            katalog_getter=_ein_katalog_getter))
 
     # EZG-8 / #653: »Einkauf zeigen« als lesende Aufgabe (EC-9).
     # AND-Guard: essen_origin_url UND family_group_chat_id_getter müssen
@@ -650,8 +657,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
     # (EZG-6: MINI_APP_EINKAUF_URL). Leer/None → Skill zeigt Fehler-Text
     # ohne Button (EZG-7).
     if essen_origin_url is not None and family_group_chat_id_getter is not None:
-        from skills.essen_client import EssenClient as _EzgEssenClient
         from skills.einkauf_zeigen_task import EinkaufZeigenTask
+        from skills.essen_client import EssenClient as _EzgEssenClient
         _ezg_essen_client = _EzgEssenClient(origin_url=essen_origin_url)
         _ezg_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
         catalog.register(EinkaufZeigenTask(

@@ -450,17 +450,21 @@ def wunsch_hinzufuegen():
         return jsonify({"fehler": fehler}), 400
 
     # item_id muss im Katalog existieren (ESSEN-16, ESSEN-13/14).
-    alle_kategorien = _lade_alle_kategorien()
-    alle_item_ids = {
-        item["id"]
-        for items in alle_kategorien.values()
-        for item in items
-    }
-    if str(item_id).strip() not in alle_item_ids:
-        return jsonify({"fehler": "item_id unbekannt — nicht im Lebensmittel- oder Gerichte-Katalog"}), 400
+    # Ausnahme: frei:-Präfix ist ohne Katalog-Match zulässig (ESSEN-16-Ausnahme,
+    # EIN-4/ESSEN-31 — freie Eingabe-Pfad aus Mini-App und Quick-Add).
+    item_id_raw = str(item_id).strip()
+    if not item_id_raw.lower().startswith("frei:"):
+        alle_kategorien = _lade_alle_kategorien()
+        alle_item_ids = {
+            item["id"]
+            for items in alle_kategorien.values()
+            for item in items
+        }
+        if item_id_raw not in alle_item_ids:
+            return jsonify({"fehler": "item_id unbekannt — nicht im Lebensmittel- oder Gerichte-Katalog"}), 400
 
     p = _paths()
-    item_id_str = str(item_id).strip()
+    item_id_str = item_id_raw
 
     # Ziel-File je klasse laden (ESSEN-7).
     if klasse == "wunsch":
