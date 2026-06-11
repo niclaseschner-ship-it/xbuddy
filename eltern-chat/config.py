@@ -118,6 +118,10 @@ DEFAULTS = {
     # Default passt zum Pi-Setup (PORT-2 Essens-Buddy auf 5052). Leer ⇒
     # beide Aufgaben NICHT im Katalog (WZE-8 / GAN-7 AND-Guard).
     "essen_origin_url": "http://127.0.0.1:5052",
+    # EZG-6 / EIN-8 / #653: HTTPS-URL der Einkauf-Mini-App (Telegram-WebApp-
+    # Ansicht). Leer (Default) → EinkaufZeigenTask nutzt ENV-Fallback
+    # MINI_APP_EINKAUF_URL (EZG-6) oder zeigt Fehler-Text ohne Button (EZG-7).
+    "mini_app_einkauf_url": "",
     # ONB-6 / EC-15: Familien-Gruppen-Chat-ID. Default leer = Onboarding-
     # Bindung. Über ENV oder Datei gesetzt → gesperrt (Vorrang vor
     # Onboarding-Bindung) — die Sperr-Logik sitzt in `resolve`, nicht im
@@ -162,7 +166,8 @@ class Config:
                  log_level,
                  multimodal_provider="",
                  multimodal_api_key="",
-                 multimodal_model=""):
+                 multimodal_model="",
+                 mini_app_einkauf_url=""):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
         self.provider = provider
@@ -188,6 +193,8 @@ class Config:
         self.multimodal_provider = multimodal_provider  # leer → Fallback auf provider
         self.multimodal_api_key = multimodal_api_key    # leer → Fallback auf provider_api_key
         self.multimodal_model = multimodal_model        # leer → Anbieter-Default
+        # EZG-6 / EIN-8 / #653: Mini-App-URL für die Einkaufsliste (EZG-6).
+        self.mini_app_einkauf_url = mini_app_einkauf_url  # leer → ENV-Fallback MINI_APP_EINKAUF_URL
 
 
 def _family_group_in_file(config_path):
@@ -310,4 +317,6 @@ def resolve(config_path, zd=None):
         multimodal_provider=str(values["multimodal_provider"]).strip(),
         multimodal_api_key=multimodal_api_key,
         multimodal_model=str(values["multimodal_model"]).strip(),
+        # EZG-6 / EIN-8 / #653: Mini-App-URL für die Einkaufsliste.
+        mini_app_einkauf_url=str(values["mini_app_einkauf_url"]).strip(),
     )
