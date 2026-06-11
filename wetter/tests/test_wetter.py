@@ -300,8 +300,30 @@ def test_wetter6_rollover_view_label(demo_config, make_transport):
 
 def test_wetter12_zwei_bloecke_unabhaengig(demo_config):
     """WETTER-12/E-WETTER-10: Morgens und Mittags werden je eigenständig aus
-    dem Wetter ihrer Tageszeit gerechnet — zwei getrennte Outfits."""
-    # Rohantwort, in der 08:00 kalt (2°) und 12:00 warm (25°, sonnig) ist.
+    dem Wetter ihrer Tageszeit gerechnet — zwei getrennte Outfits.
+
+    WETTER-16 (Pack-/Trage-Sicht): Morgens nutzt Tages-Worst-Case-Aggregate
+    (feelsLike = Tages-Min, feelsLike_max = Tages-Max); Mittags den Slot-Wert.
+    Im Szenario kalt-ganztags/sonnig-mittags:
+      - Morgens: feelsLike=2 (Tages-Min), feelsLike_max=2 (alle Stunden kalt)
+        → Winterjacke feuert (feels_max:4 gegen feelsLike_max=2 < 4).
+      - Mittags: Slot 12:00 warm (25°, UV 7) → Sonnenmütze.
+    Die Unabhängigkeit der Blöcke wird durch unterschiedliche Outfits belegt.
+    """
+    # Rohantwort: alle Stunden kalt (2°), nur 12:00 warm (25°, sonnig).
+    # Morgens-Aggregat: feelsLike_min=2, feelsLike_max=25 (Stunde 12 zieht max).
+    # Damit Winterjacke (feels_max:4) greift, muss auch feelsLike_max < 4 sein
+    # → wir halten alle Stunden kalt AUSSER den Mittags-Slot (12:00), der
+    # jedoch für den Mittags-Block, nicht für den Morgens-Aggregat bestimmend
+    # sein soll.
+    #
+    # Um die Unabhängigkeit klar zu zeigen, nutzen wir ein Szenario, in dem
+    # alle Stunden kalt sind (2°) ausser 12:00 (25°). Im Morgens-Worst-Case
+    # dominiert feelsLike_max=25 (der warme Mittags-Slot). Die Winterjacke-
+    # Regel (feels_max:4) feuert daher NICHT im Morgens-Block (Tages-Max=25).
+    # Stattdessen greift das Fallback (Jacke). Im Mittags-Block (Slot 12:00,
+    # warm+sunscreen) greift die warm+sonnig-Regel (Sonnenmütze).
+    # → zwei verschiedene Outfits = Unabhängigkeit bewiesen.
     times = ["%sT%02d:00" % (TAG.isoformat(), h) for h in range(24)]
     feels = [2.0] * 24
     feels[12] = 25.0
@@ -325,8 +347,12 @@ def test_wetter12_zwei_bloecke_unabhaengig(demo_config):
     }
     from wetter.tests.conftest import FakeTransport
     morgens, mittags = _anbindung(FakeTransport(raw=raw), demo_config).fuer_tag(TAG)
+    # Morgens: feelsLike = Tages-Min = 2, feelsLike_max = Tages-Max = 25.
     assert morgens.feelsLike == 2.0
+    assert morgens.feelsLike_max == 25.0
+    # Mittags: Slot-Wert 25°, feelsLike_max = feelsLike = 25.
     assert mittags.feelsLike == 25.0
+    assert mittags.feelsLike_max == 25.0
 
     view = render_mod.baue_view(demo_config, morgens, mittags)
     assert len(view["bloecke"]) == 2
@@ -335,8 +361,83 @@ def test_wetter12_zwei_bloecke_unabhaengig(demo_config):
 
     morgens_namen = [t["name"] for t in view["bloecke"][0]["outfit"]["pflicht"]]
     mittags_namen = [t["name"] for t in view["bloecke"][1]["outfit"]["pflicht"]]
-    assert "Winterjacke" in morgens_namen      # kalt
-    assert "Sonnenmütze" in mittags_namen       # warm + sunscreen
+    # Morgens (Pack-Sicht): feelsLike_max=25 → Winterjacke-Regel (feels_max:4)
+    # feuert NICHT (Tages-Max=25 ≥ 4). Keine Regel matcht → Fallback "Jacke".
+    assert "Jacke" in morgens_namen
+    assert "Winterjacke" not in morgens_namen
+    # Mittags (Trage-Sicht): Slot 25°, UV 7 → Sonnenmütze.
+    assert "Sonnenmütze" in mittags_namen
+    # Die Blöcke sind unabhängig: Mittags-Outfit unterscheidet sich von Morgens.
+    assert morgens_namen != mittags_namen
+
+
+# ============================================================
+#  WETTER-12/15/16 — Pack-Sicht: Tages-Regen-Spanne ohne Probe-Stunden-Treffer
+# ============================================================
+
+def test_wetter12_pack_sicht_ganztaegiger_regen_ohne_probe_treffer(demo_config):
+    """WETTER-12/15/16 (#667): Ganztägige Regen-Spanne löst Regenjacke aus,
+    auch wenn die Probe-Stunden 08:00 und 13:00 selbst trocken sind.
+
+    Szenario (Test-Implikation aus WETTER-12):
+      - Morgens-Slot (08:00): rainProb=0, rainAmount=0 → kein Regen.
+      - Mittags-Slot (13:00): rainProb=0, rainAmount=0 → kein Regen.
+      - Nachmittags (17:00): rainProb=80, rainAmount=2.5 → starker Regen.
+
+    Erwartetes Verhalten (Pack-Sicht WETTER-16):
+      - Morgens-Tageswetter: rainProb=max(tagesWerte)=80, rainAmount=max=2.5
+        → Regen-Regel (rain_amount_min:1.0) feuert → Regenjacke im Outfit.
+      - Mittags-Tageswetter: Slot-Wert (trocken) → keine Regen-Regel → kein Regen.
+
+    Dies ist der Kern-Bug aus #667: vorher wurden beide Tageszeiten mit
+    Slot-Werten berechnet; da 08:00 und 13:00 trocken waren, feuerte keine
+    Regen-Regel — die Regenjacke blieb aus.
+    """
+    from wetter.tests.conftest import FakeTransport
+
+    times = ["%sT%02d:00" % (TAG.isoformat(), h) for h in range(24)]
+    feels = [15.0] * 24
+    temp = [15.0] * 24
+    rain_prob = [0] * 24
+    rain_amount = [0.0] * 24
+    # Nachmittags-Regen ab 15:00 bis 20:00.
+    for h in range(15, 21):
+        rain_prob[h] = 80
+        rain_amount[h] = 2.5
+    raw = {
+        "hourly": {
+            "time": times,
+            "temperature_2m": temp,
+            "apparent_temperature": feels,
+            "precipitation_probability": rain_prob,
+            "precipitation": rain_amount,
+            "weathercode": [3] * 24,
+            "windspeed_10m": [5.0] * 24,
+            "uv_index": [1.0] * 24,
+        },
+        "daily": {"time": [TAG.isoformat()],
+                  "temperature_2m_min": [15.0], "temperature_2m_max": [18.0]},
+    }
+    morgens, mittags = _anbindung(FakeTransport(raw=raw), demo_config).fuer_tag(TAG)
+
+    # Pack-Sicht (Morgens): Tages-Worst-Case → rainAmount=2.5, rainProb=80.
+    assert morgens.rainAmount == 2.5
+    assert morgens.rainProb == 80
+    # Trage-Sicht (Mittags): Slot 13:00 → trocken.
+    assert mittags.rainAmount == 0.0
+    assert mittags.rainProb == 0
+
+    # Morgens-Outfit: Regen-Regel feuert → Regenjacke (WETTER-15).
+    morgens_outfit = demo_config.garderobe.outfit_fuer(morgens)
+    morgens_namen = [k.name for k in morgens_outfit.pflicht]
+    assert "Regenjacke" in morgens_namen, (
+        "Pack-Sicht: Regenjacke erwartet bei Tages-Regen (WETTER-12/15/16 #667)")
+
+    # Mittags-Outfit: Slot trocken → keine Regen-Regel.
+    mittags_outfit = demo_config.garderobe.outfit_fuer(mittags)
+    mittags_namen = [k.name for k in mittags_outfit.pflicht]
+    assert "Regenjacke" not in mittags_namen, (
+        "Trage-Sicht: Mittags-Slot trocken → keine Regenjacke")
 
 
 # ============================================================
