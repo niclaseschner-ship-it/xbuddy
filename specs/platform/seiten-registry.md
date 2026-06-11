@@ -594,6 +594,55 @@ ein Eingabefeld am Seitenkopf, Live-Filter. Suche wirkt auf alle Sektionen.
 - *Nicht* den `icons_erforderlich`-Schalter (SREG-10) bemühen — der gehört zum
   Aggregator-Manifest-Bau, nicht zur Anzeige-Schicht.
 
+**SREG-12 V1.1 — Sourcing-Regel für `seiten/static/icons/<typ>.png`-Fallback-
+Piktogramme** (Refs #585, ratifiziert 2026-06-11 nach Berater-/Antiberater-
+Runde):
+
+Die Fallback-Piktogramme in `seiten/static/icons/<typ>.png` werden nach
+folgender Regel beschafft und dokumentiert:
+
+- **Primäre Quelle (a)**: eine konkrete **ARASAAC-ID**, die zur gemeinten
+  Typ-Semantik passt (z. B. `9165` „tablet" für `panel`, `11299`
+  „fernbedienung" für `controller`). Die ID wird in
+  `seiten/static/icons/SOURCES.md` notiert (Datei-Name, ARASAAC-ID,
+  Cache-Wort, Datum). Das Bild wird **einmalig** aus der ARASAAC-Cache-Wurzel
+  kopiert und committet — anders als bei der ICONS-Plattform (Per-Instanz-
+  Cache, ICONS-2) ist der Asset hier **Repo-Static**. Es gibt **keine**
+  „ICONS-Pipeline analog" — die zwei Klassen teilen nichts strukturell außer
+  dem Wort „PNG".
+- **Sekundäre Quelle (b)**: eine eigene Datei (gezeichnet, gekauft, gefunden)
+  mit dokumentierter Lizenz. Die Lizenz wird in
+  `seiten/static/icons/SOURCES.md` mit Quell-URL, Lizenz-Typ und Datum
+  notiert. **Bilder ohne SOURCES.md-Eintrag dürfen nicht committet werden**
+  (Pre-Merge-Probe).
+
+**Verworfen:**
+
+- Verzeichnis als PWA-Manifest-Icon-Heimat nutzen — siehe PWA-1
+  (`conventions/pwa.md:21-51`): PWA-Manifest-Icons (PWA-2: 192/512/maskable)
+  liegen pro PWA-Verzeichnis, nicht zentral. SREG-12-Fallbacks und PWA-Install-
+  Icons sind zwei verschiedene Asset-Klassen (Berater-Runde 2026-06-10,
+  Antiberater-Hash-Probe: alle Bytes verschieden).
+- Eine zweite **externe Bild-Plattform** als systematische Hauptquelle
+  (z. B. Noun Project, FontAwesome) — würde einen eigenen Werft-Lauf
+  brauchen (E-ESSEN-6-Analog: extern = Werft-Pflicht).
+- Lizenz-Information nur im PR-Body — read-only Geschichte, kein Fakt am
+  Ort. Quelle/Lizenz/Datum lebt in `SOURCES.md` neben den Bildern selbst
+  (CLAUDE.md §6: „Kein Fakt ohne Quellennachweis", am Ort des Fakts).
+
+**Offen (Per-Instanz-Override für Familien-Branding):** Heute kein Override-
+Pfad — alle Familien bekommen dieselben Repo-statischen Fallback-Bilder. Wenn
+eine Familie eigenes Branding für ihre Seiten-Übersicht-Karten will, ist das
+V2 (eigenes Ticket). Heute Vorrat-frei verworfen (CLAUDE.md §6 / RAT-7).
+
+**NC-Klausel-Frage** (ARASAAC-CC-BY-NC-SA, ICONS-6): Für Repo-statische
+Auslieferung an Familien-Tablets ist die Frage „nicht-kommerziell" anders
+geschnitten als für Per-Familie-Cache (ICONS-Plattform). Die Frage bleibt
+offen wie ICONS-6 sie für die Plattform offen lässt — vor kommerzieller
+Nutzung beider Klassen muss sie geklärt werden. Hier kein zusätzlicher Schnitt.
+
+*Tickets:* #585
+
 **Datenquelle:** ausschließlich `GET /api/v1/seiten` aus dem **eigenen Service**
 (in-process oder localhost-Loop, kein externes Netz). Die Seite ist eine
 **Templating-Schicht über `inventar.json`** — keine eigenen Daten, keine zweite
