@@ -5,6 +5,7 @@
       "id": "kind:1",
       "label": "Apfel",
       "bild_ref": "2462",
+      "item_id": "apfel",
       "quelle": "kind",
       "kategorie": "obst_gemuese",
       "erstellt_am": "2026-06-09T10:00:00+02:00"
@@ -13,6 +14,7 @@
       "id": "kind:2",
       "label": "Milch",
       "bild_ref": "2445",
+      "item_id": "milch",
       "quelle": "kind",
       "kategorie": "sonstiges",
       "erstellt_am": "2026-06-09T10:05:00+02:00"
