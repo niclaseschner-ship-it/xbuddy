@@ -27,9 +27,12 @@ Form je Eintrag:
 
 ## ARASAAC-Cache-Verweis
 
-Wer eine ARASAAC-ID nachschlagen oder ersetzen will, nutzt den lokalen Cache
-unter `/home/buddy/apps/icons/arasaac/<id>.png` + `pictogram_cache.json`
-(Wort → ID-Lookup). Die ID ist eine Integer-Zahl (kein Padding) — siehe
+Wer eine ARASAAC-ID nachschlagen oder ersetzen will, nutzt den lokalen Cache:
+
+- ID-Dateien: `/home/buddy/apps/icons/arasaac/<id>.png`
+- Wort→ID-Lookup-JSON: `/home/buddy/apps/icons/pictogram_cache.json`
+
+Die ID ist eine Integer-Zahl (kein Padding) — siehe
 `specs/platform/icons.md` ICONS-5 für die Cache-Wurzel-Form.
 
 ## Pflege
