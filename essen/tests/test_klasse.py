@@ -699,3 +699,50 @@ def test_delete_findet_eintrag_in_einkaufsliste(client, demo_paths):
     with open(demo_paths["einkaufsliste_file"], encoding="utf-8") as f:
         daten = json.load(f)
     assert daten["wuensche"] == []
+
+
+# ============================================================
+#  ESSEN-16-Ausnahme: frei:-Präfix ohne Katalog-Match (AC1_code)
+# ============================================================
+
+def test_essen_16_frei_praefix_zulaessig(client):
+    """AC1_code / ESSEN-16-Ausnahme: item_id mit Präfix 'frei:' ist OHNE
+    Katalog-Match zulässig (EIN-4/ESSEN-31-Konsistenz). Erwartet 201."""
+    resp = client.post(
+        "/api/v1/essen/wuensche",
+        json={
+            "label": "Spritzkuchen",
+            "bild_ref": "2462",          # numerische ARASAAC-ID (valide)
+            "item_id": "frei:spritzkuchen",
+            "quelle": "eltern",
+            "kategorie": "sonstiges",
+            "klasse": "einkauf",
+        },
+    )
+    assert resp.status_code == 201, (
+        "frei:-Präfix-item_id muss ohne Katalog-Match akzeptiert werden "
+        "(ESSEN-16-Ausnahme, EIN-4/ESSEN-31)"
+    )
+    data = resp.get_json()
+    assert "id" in data
+
+
+def test_essen_16_unbekannt_item_id_400(client):
+    """AC1_code / ESSEN-16: item_id ohne 'frei:'-Präfix, die nicht im Katalog
+    existiert, wird mit 400 abgelehnt — Katalog-Match-Pflicht bleibt erhalten."""
+    resp = client.post(
+        "/api/v1/essen/wuensche",
+        json={
+            "label": "Unbekannt",
+            "bild_ref": "2462",
+            "item_id": "unbekannt:xyz",   # kein frei:-Präfix, kein Katalog-Eintrag
+            "quelle": "eltern",
+            "kategorie": "sonstiges",
+            "klasse": "einkauf",
+        },
+    )
+    assert resp.status_code == 400, (
+        "item_id ohne frei:-Präfix und ohne Katalog-Eintrag muss 400 liefern"
+    )
+    body = resp.get_json()
+    assert "fehler" in body
