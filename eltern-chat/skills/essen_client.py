@@ -28,6 +28,7 @@ HTTP_TIMEOUT_SECONDS = 2.0
 # ESSEN-15 / CLIENT-4: stabile Pfade der Buddy-Schnittstellen.
 PFAD_WUENSCHE = "/api/v1/essen/wuensche"
 PFAD_KATALOG_GERICHTE = "/api/v1/essen/katalog/gerichte"
+PFAD_KATALOG = "/api/v1/essen/katalog"
 
 # Fehler-Marker im EssenClientError.message (ESSEN-29 / ESSEN-16).
 FEHLER_DUPLIKAT = "duplikat"   # 409 — gleicher item_id+klasse schon offen
@@ -65,6 +66,7 @@ class EssenClient:
       - GET   /api/v1/essen/wuensche[?klasse&abgehakt] — Wunschliste lesen (ESSEN-15)
       - POST  /api/v1/essen/wuensche                   — Einkaufs-Item hinzufügen (ESSEN-16)
       - PATCH /api/v1/essen/wuensche/<id>              — Eintrag patchen (ESSEN-32)
+      - GET   /api/v1/essen/katalog                    — Katalog lesen (ESSEN-18)
       - POST  /api/v1/essen/katalog/gerichte           — Gericht anlegen (ESSEN-19)
     """
 
@@ -238,6 +240,45 @@ class EssenClient:
         marker = FEHLER_5XX if status >= 500 else FEHLER_4XX
         raise EssenClientError(msg, marker=marker)
 
+    def lese_katalog(self):
+        """ESSEN-18: liest den vollständigen Lebensmittel- und Gerichte-Katalog.
+
+        GET /api/v1/essen/katalog
+
+        Liefert eine flache Liste von Katalog-Items
+        `[{id, label, bild_ref, kategorie}, ...]` — alle Kategorien zusammen.
+
+        Wird von `einkauf_hinzufuegen` als `katalog_getter`-Closure genutzt
+        (EIN-4 Schritt 1: Katalog-Match vor Icon-Suche).
+
+        Fehler-Pfade:
+          - HTTP ≠ 200 → EssenClientError.
+          - Antwort nicht parsbar / Connection-Fehler → EssenClientError.
+        """
+        status, resp_bytes = self._call("GET", PFAD_KATALOG)
+        if status != 200:
+            raise EssenClientError(
+                "Essens-Buddy: HTTP %s bei GET %s" % (status, PFAD_KATALOG),
+                marker=FEHLER_5XX if status >= 500 else FEHLER_4XX)
+        try:
+            data = json.loads(resp_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise EssenClientError(
+                "Essens-Buddy: Katalog-Antwort nicht parsebar (%s)" % e) from e
+        if not isinstance(data, dict) or "kategorien" not in data:
+            raise EssenClientError(
+                "Essens-Buddy: Katalog-Antwort hat unerwartete Form (%r)" % data)
+        kategorien = data["kategorien"]
+        if not isinstance(kategorien, dict):
+            raise EssenClientError(
+                "Essens-Buddy: 'kategorien' ist kein Dict (%r)" % kategorien)
+        # Flach in eine Item-Liste auflösen — analog _lade_alle_kategorien im Buddy.
+        items = []
+        for kat_items in kategorien.values():
+            if isinstance(kat_items, list):
+                items.extend(kat_items)
+        return items
+
     def patche_eintrag(self, eintrag_id, abgehakt=None, aus_gericht=None):
         """ESSEN-32: patcht einen Wunsch-/Einkaufs-Eintrag (sparse update).
 
@@ -254,7 +295,7 @@ class EssenClient:
         if abgehakt is not None:
             payload["abgehakt"] = bool(abgehakt)
         if aus_gericht is not None:
-            payload["aus_gericht"] = bool(aus_gericht)
+            payload["aus_gericht"] = str(aus_gericht)  # ESSEN-32: aus_gericht ist string mit Gericht-Label
         body_bytes = json.dumps(payload).encode("utf-8")
         pfad = "%s/%s" % (PFAD_WUENSCHE, eintrag_id)
         status, resp_bytes = self._call(

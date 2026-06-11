@@ -72,6 +72,7 @@ def _make_cfg():
     cfg.provider = "anthropic"
     cfg.provider_model = "test-model"
     cfg.log_level = "INFO"  # AC2: Config.log_level ist erforderlich, aber _Cfg hatte das nicht
+    cfg.mini_app_einkauf_url = ""  # EZG-6 / #653: Mini-App-URL (leer = ENV-Fallback)
     return cfg
 
 

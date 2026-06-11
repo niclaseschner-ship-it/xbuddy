@@ -461,6 +461,16 @@ Kataloge existieren (ESSEN-13 Lebensmittel ODER ESSEN-14 Gerichte). Ungültige
 Eingabe → **4xx, kein Schreiben** (kein Teil-Write). Die Prüfung liegt im
 Buddy, nicht im Skill (BUD-2: der Buddy besitzt seine Daten).
 
+**Ausnahme `frei:`-Präfix (Spec-Konsistenz mit EIN-4/ESSEN-31):** Eine `item_id`
+mit Präfix `frei:` (case-insensitiv) ist OHNE Katalog-Match zulässig — das ist
+der explizite Fallback-Pfad aus `einkauf-hinzufuegen.md` EIN-4 Schritt 3 und
+aus dem Quick-Add der Mini App (ESSEN-31). Diese Items kollidieren per
+Konstruktion nie mit Katalog-IDs (Präfix-Reservierung).
+
+*Test-Implikation:* POST mit `item_id="frei:spritzkuchen"`, `kategorie=sonstiges`,
+gültiger `bild_ref` → 201. POST mit `item_id="unbekannt:xyz"` (Präfix nicht
+`frei:`, item_id nicht im Katalog) → 400 wie bisher.
+
 **Duplikat-Schutz (BUD-2):** POST mit `item_id`, das bereits auf der aktiven
 Wunschliste steht (Match über `item_id` UND derselbe `klasse`-Wert),
 wird mit **409 Conflict** abgelehnt — kein doppelter Eintrag. Das garantiert
@@ -487,7 +497,7 @@ beim Schreiben über ESSEN-16 immer leer (gesetzt durch ESSEN-32 PATCH).
 
 *Test-Implikation:* gültiger POST liefert eine neue `id` und macht den Wunsch
 im nächsten GET sichtbar; ungültiger POST (leeres Label / unbekannte
-`kategorie` / fehlende `bild_ref` / unbekannte `item_id`) → 4xx, GET
+`kategorie` / fehlende `bild_ref` / `item_id` unbekannt und kein `frei:`-Präfix) → 4xx, GET
 unverändert; zwei POSTs mit identischer `item_id` UND derselbe `klasse` →
 erster liefert 201, zweiter liefert 409 Conflict; zwei POSTs mit identischer
 `item_id` und unterschiedlicher `klasse` → beide 201 (orthogonale Klassen).
