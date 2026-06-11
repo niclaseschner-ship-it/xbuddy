@@ -273,13 +273,34 @@ dem Display darstellen: die Karten skalieren in der Höhe mit der Anzahl, bleibe
 dabei aber groß genug für eine sichere Touch-Trefferfläche des Abhak-Knopfs
 (ROUTINE-3).
 
+**Das Piktogramm einer Routine-Karte skaliert mit der Karten-Höhe** und nutzt
+den vorhandenen Platz (ROUTINE-11): wenn die Karten bei wenigen Punkten höher
+werden, wächst das Piktogramm sichtbar mit; bei 8 Punkten bleibt es bei der
+Untergrenze. CSS-mechanisch über `clamp()` mit `aspect-ratio: 1` auf
+`.card-pikto` (Untergrenze ≈ 60 px für die 8-Punkte-Vollbesetzung, Obergrenze
+so, dass die Anforderung des Beschriftungs-Schutzes (s. u.) gewahrt bleibt).
+**Die Beschriftung (`.card-item-label`) darf vom Piktogramm nicht über den Rand
+der Karte gedrückt werden**: bei typischen 1–2-Wort-Labels in `fs-28` bleibt die
+Beschriftung einzeilig, ohne Umbruch und ohne den Card-Innenabstand zur Karte
+rechts (Check-Knopf) zu unterschreiten. Implementiert wird diese Grenze als
+`max-width` des Piktogramms relativ zur Karten-Breite **oder** als
+`min-width` der Label-Spalte — das CSS wählt die Variante, die mit Typografie
+und Card-Breite zusammenpasst. Die Skalierungsregel gilt **analog** für die
+Zeitstrahl-Pin-Piktogramme (`.pin-pikto`) gegenüber der vertikalen
+Section-Höhe (ROUTINE-9), mit dem entsprechenden Schutz vor Kollision der
+Pin-Time-Beschriftung.
+
 **Wenn** die Config 8 Punkte enthält, **dann** sind alle 8 gleichzeitig sichtbar
-(kein Scroll); **wenn** sie 3 enthält, **dann** füllen 3 größere Karten den Raum.
+(kein Scroll) und die Piktogramme zeigen die Untergrenze; **wenn** sie 3
+enthält, **dann** füllen 3 größere Karten den Raum und die Piktogramme wachsen
+sichtbar, ohne dass die Beschriftung umbricht oder den Rand berührt.
 *Test-Implikation:* der View-Render mit 8 `default`-Punkten erzeugt 8 Karten und
-keinen Scroll-Container; die Kartenhöhe ist eine Funktion der Anzahl.
+keinen Scroll-Container; die Kartenhöhe ist eine Funktion der Anzahl. Eine
+visuelle Sichtprobe bei 3 Punkten + langem Label (≥ 12 Zeichen) zeigt das
+Piktogramm größer als bei 8 Punkten, ohne dass das Label umbricht.
 *(Layout-Probe für 8 am echten Display ist Impl-Feinschliff.)*
 
-*Tickets:* #335
+*Tickets:* #335 · #665 (Piktogramm-Skalierung + Beschriftungs-Schutz)
 
 ## 4. Zeit-Referenzen (Gate B gewählt, config-schaltbar)
 
