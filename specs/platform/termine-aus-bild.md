@@ -672,26 +672,18 @@ Familie nach „URL statt Foto" fragt.
 
 ## Offene Punkte
 
-- **OPEN-TAB-Privacy — KI-Anbieter mit DSGVO-Belegen für Bild-Petrarbeitung.**
-  V1 nutzt den **konfigurierten** Anbieter (`eltern-chat.md` EC-11). Welcher
-  Anbieter geeignet ist, hängt an Kriterien, die nicht in dieser Spec
-  entschieden werden: DE-Hosting (`xbuddy-knowledge/CONTEXT.md` §3
-  „Privacy"), belegte ZDR (Zero Data Retention) im DPA, aktiver Lifecycle
-  (Modell wird gepflegt). Pi-lokales Self-Hosting wurde für V1 verworfen
-  — der Pi hat nicht die Inferenz-Leistung für multimodale Modelle dieser
-  Klasse in akzeptabler Latenz (Beleg-Quelle bei der V2-Anbieter-Wahl
-  nachzutragen). Konkrete **ausgeschlossene** Kandidaten zum Stichtag
-  2026-06-08 dokumentiert E-TAB-6 (Pixtral 12B und Pixtral Large — beide
-  von Mistral deprecated, daher aktiver Lifecycle nicht erfüllt). Die
-  konkrete Anbieter-Festlegung passiert in einem Folge-Ticket „TAB-V2-
-  Privacy: Anbieter-Auswahl mit Kriterien-Katalog" (prio:medium).
+- ~~**OPEN-TAB-Privacy — KI-Anbieter mit DSGVO-Belegen für Bild-Petrarbeitung.**~~
+  **ERLEDIGT 2026-06-11 durch E-TAB-7 (Refs #486)** — V2-Anbieter Mistral
+  Medium 3.5 ratifiziert mit bewusster DE→EU-Aufweichung; konkrete
+  Festlegung + Begründung siehe E-TAB-7 unten.
 
   Die **generelle** Frage „Wann endet die Bewertungsphase und deckt die
   Familien-Einwilligung Bilder?" wird **eltern-chat-weit** gelöst, nicht
   TAB-spezifisch — siehe Folge-Ticket „Eltern-Chat Privacy-Linie
-  generalisieren" (prio:medium). Bewertungsphase-Ende heute = wenn Nic
-  `OPEN-EC-A` (`eltern-chat.md` Z. 533ff.) schließt. Das Wortlaut von
-  `eltern-chat.md` E-EC-9 wird **nicht** in dieser TAB-Spec geändert.
+  generalisieren" (#485, geparkt mit Trigger „erste Nicht-Test-Familie").
+  Bewertungsphase-Ende heute = wenn Nic `OPEN-EC-A` (`eltern-chat.md`
+  Z. 533ff.) schließt. Das Wortlaut von `eltern-chat.md` E-EC-9 wird
+  **nicht** in dieser TAB-Spec geändert.
 
 - **OPEN-TAB-Queue — Mehrere Bilder hintereinander.** V1 petrarbeitet ein
   Bild je Aufruf. Schickt eine Familie zwei Bilder kurz hintereinander
@@ -900,6 +892,84 @@ haben. Das Wortlaut von `eltern-chat.md` E-EC-9 wird in dieser TAB-Spec
 ohne belegten Bedarf. CLAUDE.md §6 „Lege nichts auf Vorrat an" — die
 Erweiterung kommt erst, wenn V1 belegt zeigt, dass der bestehende
 Adapter nicht reicht.
+
+### E-TAB-7 — V2-Anbieter Mistral Medium 3.5; DE→EU-Aufweichung des Hosting-Kriteriums bewusst ratifiziert
+*Datum:* 2026-06-11 · Refs #486
+
+Der V2-Multimodal-Adapter-Slot (E-TAB-6 V2-Pfad) wird ratifiziert mit
+**Mistral Medium 3.5** (`mistral-medium-3504`, Frontier-class, multimodal-
+optimiert) als gewählter Anbieter. Code-Naht ist durch #508 deployed
+(`eltern-chat/skills/_multimodal/mistral.py`, EU-gehostet via Mistral La
+Plateforme, Paris/Frankreich).
+
+**Bewusst aufgeweicht:** das in E-TAB-6 (Z.868) genannte Hosting-Kriterium
+„DE-Hosting" wird in V2 zu **EU-Hosting**. Begründung im Wortlaut:
+
+- **Pi-Inferenz unrealistisch**: E-TAB-6 hat „Pi-lokal verworfen" schon
+  belegt (Multimodal-Modelle dieser Klasse erreichen am Pi nicht die
+  Latenz für Familien-tauglichen Bot-Pfad).
+- **DE-Anbieter-Lage heute begrenzt**: Aleph Alpha Vision ist Stand
+  2026-06 limitiert in multimodaler Stärke gegen die Familien-Aushang-
+  Erkennung (Plan-Aushänge mit handschriftlichen Terminen); andere
+  DE-Multimodal-Anbieter mit Frontier-Qualität sind nicht etabliert.
+  Hartes Warten auf DE-Hosting würde TAB-V2 unbestimmt blockieren.
+- **Pixtral-Familie (Mistral) ist deprecated** — sowohl Pixtral 12B als
+  auch Pixtral Large (E-TAB-6 Z.876-884); aktive Mistral-Wahl ist
+  ausschließlich `mistral-medium-3504` (Frontier-Klasse) und
+  `mistral-medium-2508` (Premier, Konversation).
+- **Mistral DPA trägt Zero Data Retention**: kein Training-Use der
+  übermittelten Bilder, kein langfristiges Logging — das ist der harte
+  Privacy-Hebel, der DE-Hosting funktional **ersetzt** für unseren
+  Use-Case.
+- **AVV EU-DSGVO-konform**: Mistral hat EU-Sitz (Paris), keine CLOUD-
+  Act-Exponierung, keine US-Mutterkonzern-Hintertür. Schrems-II-Linie
+  des EuGH ist nicht relevant.
+- **EU statt DE als V2-Hosting-Bodenlinie** ist ein konservativer
+  Schritt: Constitution §3 („Petrarbeitung in Deutschland") bleibt für
+  alle Per-Familie-Datenspeicher (Hub, Photo-Buddy, Zugangsdaten,
+  Routine-Store) **unverändert harte Linie**. Nur die KI-Anbieter-
+  Petrarbeitung weicht auf EU auf — und auch das ist eine Bewertungs-
+  phasen-Aufweichung (E-EC-9 läuft), keine dauerhafte Senkung.
+
+**Folgen für andere Anbieter-Slots:**
+
+- **Konversations-Slot** (heute Mistral Medium 3.1, FR/EU): folgt
+  derselben Aufweichung — DE-Anbieter mit Frontier-Konversation sind
+  Stand 2026-06 nicht verfügbar. Wenn künftig ein DE-Anbieter mit
+  ausreichender Qualität verfügbar wird (Aleph Alpha Konversations-
+  Modell, deutsche Hyperscaler-LLM-Initiative), wird ein Wechsel
+  evaluiert (Folge-Ticket bei konkretem Bedarf).
+- **Andere Buddys** (Routine, Wetter, …) ohne KI-Anbieter-Aufrufe
+  bleiben von dieser Aufweichung unberührt.
+
+**Wiederaufnahme-Trigger für strengere Linie** (V3 oder Folge-
+Ratifikation):
+
+- Belegter DE-Multimodal-Anbieter mit Frontier-Qualität verfügbar
+  (Cross-Engine-Vergleich gegen Mistral Medium 3.5 zeigt Gleichstand
+  oder besser).
+- Kommerzielle Phase erreicht (E-EC-9 + OPEN-EC-A geschlossen,
+  Anonymisierungs-Layer aktiv) — dann ist die Bewertungsphasen-
+  Aufweichung nicht mehr gerechtfertigt und Hosting-Linie wird neu
+  ratifiziert.
+- Mistral-Lifecycle bricht (DPA-Verschlechterung, AVV-Bruch, US-
+  Mutterkonzern-Übernahme, ZDR-Aufhebung).
+
+**Verworfen:**
+
+- **Variante B**: #486 schließen mit „Slot fertig, Anbieter-Wahl wartet
+  auf DE-Hosting". Hätte Mistral in einem Spec-Limbo gelassen, während
+  Mistral live im Familien-Hub deployed ist — ehrliches Ratifizieren ist
+  sauberer als stille Live-Praxis.
+- **Variante C**: nur Kriterien-Katalog ergänzen ohne Festlegung. Doppelter
+  Schritt; Festlegung muss sowieso passieren, und die Verzögerung schafft
+  keine Klarheit, sondern mehr Doku-Schuld.
+- **Aleph Alpha Vision als Alternative**: heute (2026-06) nicht in
+  Multimodal-Stärke gegen Frontier-Klasse belegt. Beleg wäre Voraussetzung,
+  und der existiert nicht.
+
+*Tickets:* #486 (Ratifikation), #508 (Code-Naht), #485 (eltern-chat-weite
+Privacy-Schärfung — parallel, getrennt).
 
 ---
 
