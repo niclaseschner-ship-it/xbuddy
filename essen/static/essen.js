@@ -1,10 +1,14 @@
 /**
- * Essens-Buddy — Client-Logik (ESSEN-3/8/9/27).
+ * Essens-Buddy — Client-Logik (ESSEN-3/8/9/27/28).
  *
  * Drei Tap-Affordanzen (ESSEN-3/27):
  *   (a) Kategorien-Tab tippen — wechselt das Item-Grid ohne Full-Reload.
  *   (b) Item-Kachel tippen — POST Wunsch, aktualisiert sichtbar die Liste.
  *   (c) Entfernen-Symbol tippen — DELETE Wunsch, Liste rendert neu (ESSEN-27).
+ *
+ * ESSEN-28: Kacheln mit .kachel-gesperrt lösen KEINEN POST aus (disabled +
+ * Click-Handler-Guard). Nach POST/DELETE wird auch das Item-Grid neu gerendert,
+ * damit Aktiv-Markierungen aktuell bleiben (Reload-on-Read, ESSEN-20).
  *
  * Kein Hover, kein Wischen, kein Aufklappen (ESSEN-3).
  * Tab-Wechsel und Wunsch-Ablage ohne Full-Reload (ESSEN-2/3, AC3).
@@ -53,8 +57,10 @@
   // ── Item-Tap: Wunsch ablegen (ESSEN-3b/ESSEN-16) ──────────────────────
 
   /**
-   * POSTet einen neuen Wunsch und aktualisiert die Wunsch-Liste (ESSEN-8).
-   * quelle ist immer "kind" für Display-Taps (ESSEN-16).
+   * POSTet einen neuen Wunsch und aktualisiert die Wunsch-Liste und das
+   * Item-Grid (ESSEN-8/28). quelle ist immer "kind" für Display-Taps (ESSEN-16).
+   * item_id wird mitgesendet, damit der Server Kacheln als .kachel-gesperrt
+   * rendern kann (ESSEN-28, Render-Vertrag).
    */
   async function legeWunschAb(itemId, label, bildRef, kategorie) {
     try {
@@ -62,6 +68,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          item_id: itemId,
           label: label,
           bild_ref: bildRef,
           quelle: "kind",
@@ -69,7 +76,7 @@
         })
       });
       if (!resp.ok) return;  // Validierungsfehler still, Kiosk stabil (ESSEN-3).
-      await aktualisiereWunschListe();
+      await aktualisiereGridUndListe();  // ESSEN-28: Grid-Refresh nötig für Sperr-Zustand.
     } catch (_) {
       // Netz-Fehler: Kiosk bleibt stabil.
     }
@@ -88,19 +95,23 @@
         method: "DELETE"
       });
       if (!resp.ok) return;  // Kiosk bleibt stabil bei Netz-Fehler.
-      await aktualisiereWunschListe();
+      await aktualisiereGridUndListe();  // ESSEN-28: Grid-Refresh gibt Kachel frei.
     } catch (_) {
       // Netz-Fehler: Kiosk bleibt stabil.
     }
   }
 
-  // ── Wunsch-Liste aktualisieren (ESSEN-8) ─────────────────────────────
+  // ── Grid + Liste aktualisieren (ESSEN-8/28) ──────────────────────────
 
   /**
-   * Holt die aktuelle Liste via GET /display/essen/wunsch und ersetzt nur
-   * den Liste-Bereich (kein Full-Reload, ESSEN-3/8).
+   * Holt den aktuellen Stand via GET /display/essen/wunsch und ersetzt
+   * den Liste-Bereich UND das Item-Grid (kein Full-Reload, ESSEN-3/8).
+   *
+   * ESSEN-28: Nach jedem POST/DELETE müssen auch die Kachel-Sperr-Zustände
+   * aktualisiert werden. Ein einziger Fetch reicht — beide Bereiche werden
+   * aus derselben Antwort extrahiert.
    */
-  async function aktualisiereWunschListe() {
+  async function aktualisiereGridUndListe() {
     var aktivTab = document.querySelector(".tab.aktiv");
     var slug = aktivTab ? aktivTab.dataset.tab : "obst_gemuese";
     try {
@@ -111,13 +122,26 @@
       var html = await resp.text();
       var parser = new DOMParser();
       var doc = parser.parseFromString(html, "text/html");
+
+      // Liste-Bereich tauschen (ESSEN-8).
       var neueEintraege = doc.getElementById("liste-eintraege");
       if (neueEintraege) {
-        var altes = document.getElementById("liste-eintraege");
-        if (altes) {
-          altes.innerHTML = neueEintraege.innerHTML;
+        var alteListe = document.getElementById("liste-eintraege");
+        if (alteListe) {
+          alteListe.innerHTML = neueEintraege.innerHTML;
           // Neue Einträge brauchen Lösch-Handler (ESSEN-27).
           bindLoeschButtons();
+        }
+      }
+
+      // Item-Grid tauschen — Kachel-Sperr-Zustand (ESSEN-28).
+      var neuesGrid = doc.getElementById("item-grid");
+      if (neuesGrid) {
+        var altesGrid = document.getElementById("item-grid");
+        if (altesGrid) {
+          altesGrid.innerHTML = neuesGrid.innerHTML;
+          // Neue Kacheln brauchen Event-Handler.
+          bindKacheln();
         }
       }
     } catch (_) {}
@@ -141,6 +165,9 @@
     // Neu binden nach Clone.
     document.querySelectorAll(".item-kachel").forEach(function (btn) {
       btn.addEventListener("click", function () {
+        // ESSEN-28: gesperrte Kacheln lösen KEINEN POST aus (Click-Handler-Guard,
+        // zusätzlich zum disabled-Attribut im HTML).
+        if (btn.classList.contains("kachel-gesperrt")) return;
         legeWunschAb(
           btn.dataset.itemId,
           btn.dataset.label,

@@ -46,13 +46,15 @@
         {% else %}
         {% for item in view.item_grid.kacheln %}
         <button
-          class="item-kachel"
+          class="item-kachel{% if item.gesperrt %} kachel-gesperrt{% endif %}"
           data-item-id="{{ item.id }}"
           data-label="{{ item.label }}"
           data-bild-ref="{{ item.bild_ref }}"
           data-kategorie="{{ item.kategorie }}"
+          {% if item.gesperrt %}data-wunsch-aktiv="true"{% endif %}
           type="button"
           aria-label="{{ item.label }} wünschen"
+          {% if item.gesperrt %}disabled{% endif %}
         >
           {% if item.icon_url %}
           <img src="{{ item.icon_url }}" alt="{{ item.label }}">
