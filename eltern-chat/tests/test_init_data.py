@@ -215,7 +215,7 @@ def test_load_config_datei_wert_wird_genutzt(monkeypatch, tmp_path):
 
 
 def test_load_config_env_ueberschreibt_datei_wert(monkeypatch, tmp_path):
-    """ENV XBUDDY_INIT_DATA_MAX_AGE_SECONDS überschreibt Datei-Wert (AC3)."""
+    """ENV ELTERNCHAT_INIT_DATA_MAX_AGE_SECONDS überschreibt Datei-Wert (AC3)."""
     cfg_file = tmp_path / "init_data.json"
     cfg_file.write_text(json.dumps({"max_age_seconds": 1800}), encoding="utf-8")
     monkeypatch.setenv(lib._ENV_MAX_AGE, "7200")
