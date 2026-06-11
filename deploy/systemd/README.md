@@ -65,7 +65,22 @@ Beim Aufsetzen einer Instanz: die `.env` am genannten Pfad neu erzeugen, mit
 mindestens dem Telegram-Bot-Token (`TELEGRAM_BOT_TOKEN=…`). Das exakte Schema
 und die optionalen Variablen ergeben sich aus dem `eltern-chat`-Code.
 
-Die übrigen Services haben keine `EnvironmentFile`-Abhängigkeit.
+Die übrigen Services ohne Bot-Token-Bedarf haben keine `EnvironmentFile`-Abhängigkeit.
+`seiten` und `essen` lesen die Token-Datei über Token-Sharing (siehe unten).
+
+## Token-Sharing (Mini-App-Auth, RAT-16 / #684)
+
+Der Telegram-Bot-Token liegt physisch in `__XBUDDY_DATA__/eltern-chat/.env` —
+Eigentümer ist der **eltern-chat**-Service. Damit `seiten` und `essen` die
+Telegram-`initData`-Signatur prüfen können (Mini-App-Auth), lesen sie dieselbe
+Datei über `EnvironmentFile=`:
+
+```ini
+EnvironmentFile=__XBUDDY_DATA__/eltern-chat/.env
+```
+
+Token NICHT in zusätzliche Per-Service-`.env`-Dateien duplizieren — Eigentum
+bleibt klar.
 
 ## Ausrollen — einmal pro Instanz
 
