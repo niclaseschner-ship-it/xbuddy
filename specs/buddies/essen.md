@@ -137,14 +137,32 @@ mit `klasse='wunsch'`, `abgehakt=false`. `aus_gericht` ist NUR auf
 Jeder Wunsch trägt eine stabile `id` (IDENT-1 für stabile IDs) mit
 **Quell-Präfix** entsprechend `quelle`: `kind:<n>` (Display-Wunsch) oder
 `eltern:<n>` (Eltern-Chat-Wunsch, V1.x). So kollidieren sie nie und der Quell-
-Pfad ist aus der ID lesbar. Die laufende Nummer `<n>` ist je Quelle monoton
-steigend und wird im persistenten Store gehalten (ESSEN-7).
+Pfad ist aus der ID lesbar.
+
+**V1 #653 — globaler Zähler je `quelle`, klasse-übergreifend:** Die
+laufende Nummer `<n>` ist je `quelle` monoton steigend und **klasse-
+übergreifend eindeutig** — auch wenn die Persistenz nach `klasse` getrennt
+ist (ESSEN-7), bleibt die ID global eindeutig. Beispiel: nach einem
+Display-Wunsch `kind:1`, einem Eltern-Wunsch `eltern:2` und einem Eltern-
+Einkauf-Item `eltern:3` hat der Eltern-Zähler den Stand `3`, unabhängig in
+welchem File die Einträge liegen. Damit kollidieren IDs nie zwischen den
+zwei Klasse-Files (ESSEN-7).
+
+**Persistenz des Zählers:** zentrale Datei `essen/zaehler.json`
+(`{"kind": <n>, "eltern": <n>}`), atomar geschrieben (DCOMP-4). Wird sie
+beim Start nicht gefunden, leitet der Buddy die Stand-Werte aus dem
+Maximum der existierenden IDs in beiden Klasse-Files ab (Migration ohne
+Daten-Verlust).
 
 *Test-Implikation:* zwei Display-Wünsche haben nie dieselbe `id`; eine
 `kind:`-ID kollidiert nie mit einer `eltern:`-ID; Reihenfolge in der Liste
-folgt `erstellt_am`, nicht der ID-Nummer.
+folgt `erstellt_am`, nicht der ID-Nummer. Ein Eltern-Wunsch `eltern:5`
+und ein Eltern-Einkauf-Item kann nie denselben Zählerstand erhalten —
+der Zähler ist quellen-globaler Zustand, **nicht** per-File. Crash-Test:
+Zähler-Datei gelöscht → Buddy startet, leitet Stände aus Max-ID je File
+ab; neu vergebene IDs kollidieren nicht mit Bestand.
 
-*Tickets:* #474
+*Tickets:* #474, #653
 
 ### ESSEN-6 — Wünsche leben dauerhaft, bis Eltern sie löscht
 Ein Wunsch bleibt in der Liste, bis der Eltern-Chat ihn explizit entfernt (über
@@ -163,16 +181,51 @@ unverändert.
 
 *Tickets:* #474
 
-### ESSEN-7 — App-eigene Datenhaltung der Wunsch-Liste
-Die Wunsch-Liste liegt in der App-eigenen Datenhaltung neben dem Code, je
-Instanz separat, per `.gitignore` ausgeschlossen (BUD-2a: Domänendaten
-getrennt von der Runtime-Config). Fehlt sie beim Start, wird sie leer angelegt.
-Sie hält die persistierten Wünsche und den Quellen-Zähler für die ID-Vergabe
-(ESSEN-5). Form (schlanke JSON-Datei oder SQLite) ist Implementierungswahl;
-entscheidend ist die Reload-Persistenz (ESSEN-6) und der atomare Schreibpfad
-(ESSEN-20).
+### ESSEN-7 — App-eigene Datenhaltung der Wunsch-Liste, getrennt nach `klasse`
 
-*Tickets:* #474
+Die Datenhaltung liegt in der App-eigenen Datenhaltung neben dem Code, je
+Instanz separat, per `.gitignore` ausgeschlossen (BUD-2a: Domänendaten
+getrennt von der Runtime-Config). Form: **schlanke JSON-Dateien**; die
+Implementierungswahl SQLite ist explizit verworfen (E-ESSEN-12).
+
+**V1 #653 — Trennung nach `klasse`:** Zwei getrennte Files je `klasse`:
+
+- **`essen/wuensche.json`** — `klasse=wunsch`-Einträge. Wahrheits-Quelle für
+  die Display-Wunsch-Liste (ESSEN-8). Konsumenten: Display-View, Mini-App-
+  View (mit Filter `?klasse=wunsch`).
+- **`essen/einkaufsliste.json`** — `klasse=einkauf`-Einträge. Wahrheits-
+  Quelle für die Eltern-Einkaufsliste (ESSEN-31). Konsumenten: Mini-App-
+  View (Default-Filter `?klasse=einkauf` oder unfiltered für Übersicht
+  über beide), Eltern-Chat-Skill `einkauf-zeigen` (EZG).
+- **`essen/zaehler.json`** — globaler Quellen-Zähler (ESSEN-5),
+  klasse-übergreifend, garantiert ID-Eindeutigkeit über beide Files.
+
+**Migration (Alt-Stand vor #653):** existierende `wuensche.json` mit alten
+Einträgen ohne `klasse`-Feld bleibt die `klasse=wunsch`-Datei. Der Reader
+füllt für Alt-Einträge `klasse='wunsch'`, `abgehakt=false` als Default
+(ESSEN-4-Migrations-Regel). `einkaufsliste.json` wird beim ersten
+Eltern-Einkauf-POST angelegt, sonst existiert sie nicht.
+
+**Robustheits-Eigenschaft:** Jede Datei lebt unabhängig — wenn
+`einkaufsliste.json` korrumpiert wird, läuft die Display-Wunsch-Liste
+weiter; wenn `wuensche.json` korrumpiert wird, läuft die Einkauf-Mini-App
+weiter. Reload-on-Read (ESSEN-20) gilt je File, atomares Schreiben
+(DCOMP-4) ebenso je File, Last-Known-Good (DCOMP-3) je File.
+
+**Schreibpfad-Routing:** POST mit `klasse=wunsch` schreibt nach
+`wuensche.json`, POST mit `klasse=einkauf` schreibt nach
+`einkaufsliste.json`. PATCH/DELETE suchen in **beiden** Files (ID ist
+global eindeutig, kein Konflikt).
+
+*Test-Implikation:* `POST /api/v1/essen/wuensche` mit `klasse=wunsch`
+landet in `wuensche.json`; mit `klasse=einkauf` in `einkaufsliste.json`.
+`GET /api/v1/essen/wuensche` ohne Filter liefert beide Files merge-sortiert
+nach `erstellt_am`. Korruptions-Test: `einkaufsliste.json` als Müll
+überschreiben → Display-View liefert weiter Wünsche aus `wuensche.json`,
+`GET /api/v1/essen/wuensche?klasse=einkauf` greift Last-Known-Good oder
+liefert leer mit Warnung.
+
+*Tickets:* #474, #653
 
 ## 3. Display-Bereiche
 
@@ -191,8 +244,19 @@ Die View rendert drei Bereiche gleichzeitig auf einer Canvas (Gate-B-Wahl
    Kategorie (Gerichte → Obst & Gemüse → Brotbelag → Sonstiges, gleiche feste
    Reihenfolge wie WZE-5), je Gruppe mit Sub-Überschrift und Einträgen
    (Piktogramm + Label). Aktualisiert sich nach jedem Tap einer Item-Kachel
-   sichtbar (frischer GET `/api/v1/essen/wuensche` reicht, kein Vollreload
-   nötig).
+   sichtbar (frischer GET `/api/v1/essen/wuensche?klasse=wunsch` reicht,
+   kein Vollreload nötig).
+
+**V1 #653 — Display-Wunsch-Liste rendert ausschließlich `klasse=wunsch`:**
+Der Display-View nutzt **immer** den Filter `?klasse=wunsch` beim Lesen.
+Eltern-Einkauf-Items (`klasse=einkauf` aus `einkaufsliste.json`,
+ESSEN-7) sind im Kinder-Display **nie sichtbar** — der Display ist
+strukturell vom Einkaufs-Schreibpfad getrennt durch die Datei-Trennung
+(ESSEN-7) UND zusätzlich durch den expliziten Filter im View-Render.
+Doppel-Robustheit: selbst wenn ein versehentlicher Eintrag mit
+`klasse=einkauf` in `wuensche.json` landet (Bug), filtert der Display ihn
+heraus. Selbst wenn der Display den Filter im Code-Pfad weglässt (Bug),
+liest er nur `wuensche.json` und sieht keine Eltern-Einkauf-Items.
 
 Es gibt **keinen Drill-Down, kein Zurück, keine zweite Seite** — alles auf
 einer Canvas.
@@ -349,10 +413,17 @@ für Alt-Einträge gemäß ESSEN-4-Migrations-Regel).
 Reihenfolge: `erstellt_am` aufsteigend (älteste zuerst).
 
 **Query-Filter (V1, #653):**
-- `?klasse=<wunsch|einkauf>` — filtert auf eine Klasse.
-- `?abgehakt=<true|false>` — filtert auf abgehakt-Status.
+- `?klasse=<wunsch|einkauf>` — filtert auf eine Klasse. **Implementation:**
+  liest gezielt nur das passende File aus ESSEN-7 (`wuensche.json` für
+  `klasse=wunsch`, `einkaufsliste.json` für `klasse=einkauf`) — kein
+  Filter-Schritt nach dem Lesen, sondern Routing zum richtigen File.
+- `?abgehakt=<true|false>` — filtert auf abgehakt-Status nach dem Lesen.
 - Mehrere Filter sind UND-verknüpft.
-- Fehlt der Filter → keine Filterung (heutiges Verhalten unverändert).
+- **Ohne `?klasse=`-Filter:** der Buddy liest **beide** Files (ESSEN-7),
+  mergt sie und sortiert nach `erstellt_am` aufsteigend. Konsumenten,
+  die nur eine Klasse brauchen (Display: `?klasse=wunsch`, Einkauf-
+  Mini-App-Default: `?klasse=einkauf`), nutzen den Filter explizit für
+  Effizienz und Klasse-Robustheit.
 
 *Test-Implikation:* mit drei persistierten Wünschen liefert der Endpunkt
 genau diese drei in chronologischer Reihenfolge; mit leerer Liste liefert er
@@ -769,9 +840,12 @@ Inline-Keyboard — Nic 2026-06-11, E-ESSEN-11).
 
 Vor jedem `POST /api/v1/essen/wuensche` (ESSEN-16) prüft der Buddy die
 Anzahl der **offenen** Einträge (`abgehakt=false`) gegen die Listen-
-Grenze. Default: **100** offene Einträge je Liste (über `klasse` summiert,
-weil sie sich denselben Storage teilen). Override per `essen/config.json::
-listen_grenze`.
+Grenze. Default: **100** offene Einträge **je File** (= je `klasse`,
+ESSEN-7) — getrennte Grenzen pro Liste, weil Wunsch-Liste und Einkaufs-
+Liste unterschiedliche UI-Belastung erzeugen. Override per
+`essen/config.json::listen_grenze_wunsch` und `listen_grenze_einkauf`
+(beide Default 100). Übergangs-Schlüssel `listen_grenze` (V1-Schärfung)
+greift für beide Listen, wenn die spezifischen Overrides fehlen.
 
 **Wenn** ein POST die Summe `offene_jetzt + 1` (oder `+N` bei
 Batch-Eingabe via ESSEN-30 Übernahme) die Grenze **überschreiten** würde,
@@ -1168,3 +1242,45 @@ vorbereitung.md`, Mockup V7 als Gate-B-Wahl `brainstorm/idee-mvp/essen-
 einkauf/mockups/telegram-mini-app-v7-chat-flow.html`, Berater-Runde
 2026-06-11 (Schärfungs-Ergebnis in `brainstorm/berater-runde/
 20260611-160500-RATIFIZIERT-mvp-678-plan-schaerfung.md`).
+
+### E-ESSEN-12 — DB nach `klasse` aufbohren (zwei Files), nicht View-Filter
+
+*Datum:* 2026-06-11 (Nic, Robustheits-Schärfung nach Werft-Abschluss) ·
+Die Persistenz trennt strukturell nach `klasse`: `essen/wuensche.json`
+für `klasse=wunsch`, `essen/einkaufsliste.json` für `klasse=einkauf`
+(ESSEN-7). Der Display-View liest **nur** die Wunsch-Datei, die Einkauf-
+Mini-App liest standardmäßig **nur** die Einkauf-Datei. Damit ist die
+Korrektheit „Display rendert keine Eltern-Einkauf-Items" durch das
+**DB-Schema** garantiert, nicht durch korrekte Filter-Anwendung im
+Render-Code.
+
+**Verworfen:**
+- **Ein File `wuensche.json` mit `klasse`-Feld**, View filtert beim Read.
+  Bricht bei Filter-Code-Drift (Bug-Risiko: ein vergessener
+  `?klasse=wunsch`-Query, ein nicht-fingerprint-validierter Code-Pfad).
+  Robustheit lebt im Anwendungs-Code, nicht im Datenmodell.
+- **SQLite mit `klasse`-Column und Index.** Komplexitäts-Falle für eine
+  Familien-3-Liste; JSON-Files + Last-Known-Good + atomares Schreiben
+  reichen vollkommen. SQLite würde Migrations-, Backup-, und Korruptions-
+  Strategien dazustellen, die wir heute nicht brauchen (Familien-3-Probe).
+
+**Was die Trennung kostet:** GET ohne Klasse-Filter muss zwei Files
+lesen und mergen — pro Request zwei Reload-on-Read-Operationen statt
+einer. Bei Familien-3-Listen kein messbarer Performance-Effekt.
+
+**ID-Eindeutigkeit:** der Quellen-Zähler (ESSEN-5) bleibt **global** über
+beide Files (`essen/zaehler.json`), damit IDs nie zwischen den Files
+kollidieren. PATCH/DELETE auf `<id>` suchen den Eintrag in beiden Files;
+genau ein File enthält die ID, der Buddy weiß ohne expliziten Klasse-
+Hinweis welches File zu modifizieren ist.
+
+**Robustheits-Gewinn (Familien-3-Realität):** wenn eine der zwei Dateien
+korrumpiert wird (Reboot mitten im atomaren Write, Disk-Voll, manuelles
+Editieren), läuft der andere Pfad ungestört weiter. Last-Known-Good
+(DCOMP-3) je File. Crash-Resilienz pro Klasse statt globaler Single-
+Point-of-Failure.
+
+**Werft-Trail:** Schärfung als Folge-Frage Nic 2026-06-11 nach dem ersten
+Werft-Abschluss (Spec-PR #683 merged). Ratifizierung als Spec-Nachzug-PR
+ohne weitere Berater-Runde — Robustheits-Klausel, kein Architektur-
+Konflikt mit RAT-16 oder E-ESSEN-11.
