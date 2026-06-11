@@ -107,13 +107,22 @@ class Regel:
         self.hinweis = hinweis
 
     def matcht(self, wetter):
-        """True, wenn alle gesetzten Schwellen vom `wetter` (Tageswetter) erfüllt sind."""
+        """True, wenn alle gesetzten Schwellen vom `wetter` (Tageswetter) erfüllt sind.
+
+        WETTER-16 (Pack-/Trage-Sicht): `feels_min` wird gegen `feelsLike`
+        geprüft (= Tages-Min im Morgens-Wetter, Slot-Wert im Mittags-Wetter);
+        `feels_max` wird gegen `feelsLike_max` geprüft (= Tages-Max im
+        Morgens-Wetter, ebenfalls Slot-Wert im Mittags-Wetter). So feuern
+        Regen-/Kälte-Regeln im Morgens-Block auch wenn der Morgens-Slot selbst
+        trocken/warm ist (Pack-Sicht nimmt den Tages-Worst-Case).
+        """
         feels = wetter.feelsLike
+        feels_max = getattr(wetter, "feelsLike_max", feels)
         if self.feels_min is not None:
             if feels is None or feels < self.feels_min:
                 return False
         if self.feels_max is not None:
-            if feels is None or feels >= self.feels_max:
+            if feels_max is None or feels_max >= self.feels_max:
                 return False
         if self.rain_prob_min is not None:
             if wetter.rainProb is None or wetter.rainProb < self.rain_prob_min:

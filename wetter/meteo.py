@@ -94,18 +94,26 @@ class Tageswetter:
     """Anbieter-neutrales Wetter einer Tageszeit (WETTER-16).
 
     Felder (WETTER-16): `desc`, `kind` (neutrale Zustands-Kategorie für
-    WETTER-7), `temp`, `feelsLike`, `low`, `high`, `wind`, `rainProb`,
-    `rainAmount`, `uv`, `uvLabel`, `sunscreen` (abgeleiteter Boolean, WETTER-11).
+    WETTER-7), `temp`, `feelsLike`, `feelsLike_max`, `low`, `high`, `wind`,
+    `rainProb`, `rainAmount`, `uv`, `uvLabel`, `sunscreen` (abgeleiteter
+    Boolean, WETTER-11).
 
     `low`/`high` sind die Tages-Spanne (gilt für beide Tageszeiten gleich —
     WETTER-9 zeigt eine Tagesspanne). `sunscreen` ist Backend-entschieden;
     `uv`/`uvLabel` tragen wir mit, damit die Ableitung nachvollziehbar bleibt,
     aber die View zeigt sie nie (E-WETTER-2).
+
+    `feelsLike_max` (WETTER-16 Pack-/Trage-Sicht): im Morgens-Tageswetter ist
+    dies das Tages-Maximum der gefühlten Temperatur; im Mittags-Tageswetter
+    ist es gleich `feelsLike` (Slot-Wert). Die Regel-Auswertung in
+    clothing.py prüft `feels_min` gegen `feelsLike` und `feels_max` gegen
+    `feelsLike_max` (WETTER-16).
     """
 
     __slots__ = (
         "desc",
         "feelsLike",
+        "feelsLike_max",
         "high",
         "kind",
         "low",
@@ -119,11 +127,15 @@ class Tageswetter:
     )
 
     def __init__(self, desc, kind, temp, feelsLike, low, high, wind,
-                 rainProb, rainAmount, uv, uvLabel, sunscreen):
+                 rainProb, rainAmount, uv, uvLabel, sunscreen,
+                 feelsLike_max=None):
         self.desc = desc
         self.kind = kind
         self.temp = temp
         self.feelsLike = feelsLike
+        # WETTER-16: feelsLike_max = Tages-Max im Morgens-Wetter;
+        # im Mittags-Wetter fällt es auf feelsLike (Slot-Wert) zurück.
+        self.feelsLike_max = feelsLike_max if feelsLike_max is not None else feelsLike
         self.low = low
         self.high = high
         self.wind = wind
@@ -146,6 +158,7 @@ class Tageswetter:
             "kind": self.kind,
             "temp": self.temp,
             "feelsLike": self.feelsLike,
+            "feelsLike_max": self.feelsLike_max,
             "low": self.low,
             "high": self.high,
             "wind": self.wind,
@@ -275,10 +288,10 @@ class WetterAnbindung:
     def fuer_tag(self, tag):
         """Liefert (morgens, mittags) als zwei `Tageswetter` für `tag` (date).
 
-        Beide werden je Tageszeit eigenständig aus der Anbieter-Antwort
-        normalisiert (WETTER-5/WETTER-16). Ist der Anbieter nicht erreichbar
-        oder die Antwort unbrauchbar, kommen zwei neutrale Zustände zurück
-        (WETTER-17) — kein unbehandelter Fehler.
+        Morgens verwendet Tages-Worst-Case-Aggregate (WETTER-12/16 Pack-Sicht);
+        Mittags den Slot-Wert seiner Tageszeit (Trage-Sicht). Ist der Anbieter
+        nicht erreichbar oder die Antwort unbrauchbar, kommen zwei neutrale
+        Zustände zurück (WETTER-17) — kein unbehandelter Fehler.
         """
         try:
             raw = self._transport.fetch(tag)
@@ -297,16 +310,111 @@ class WetterAnbindung:
         low = _at(daily.get("temperature_2m_min"), 0)
         high = _at(daily.get("temperature_2m_max"), 0)
 
-        morgens = self._normalise(hourly, self._stunde_morgens, tag, low, high)
+        # WETTER-12/16: Morgens = Pack-Sicht → Tages-Worst-Case-Aggregate;
+        # Mittags = Trage-Sicht → Slot-Wert.
+        tages_aggregate = self._tages_aggregate(hourly, tag)
+        morgens = self._normalise_pack(
+            hourly, self._stunde_morgens, tag, low, high, tages_aggregate)
         mittags = self._normalise(hourly, self._stunde_mittags, tag, low, high)
         return morgens, mittags
 
+    def _tages_indizes(self, hourly, tag):
+        """Alle Stunden-Indizes des Tages `tag` in der `hourly`-Struktur."""
+        times = (hourly or {}).get("time") or []
+        prefix = tag.isoformat() + "T"
+        return [i for i, t in enumerate(times) if isinstance(t, str) and t.startswith(prefix)]
+
+    def _tages_aggregate(self, hourly, tag):
+        """Tages-Worst-Case-Aggregate für die Pack-Sicht (WETTER-16).
+
+        Liefert ein dict mit den ungünstigsten Stunden-Werten über den
+        gesamten Tag:
+          rain_prob    max Niederschlags-Wahrscheinlichkeit
+          rain_amount  max stündliche Niederschlagsmenge
+          wind         max Windgeschwindigkeit
+          uv           max UV-Index
+          feels_min    min gefühlte Temperatur (kältester Moment)
+          feels_max    max gefühlte Temperatur (heißester Moment)
+
+        Fehlt ein Wert komplett, bleibt er None.
+        """
+        idxs = self._tages_indizes(hourly, tag)
+        if not idxs:
+            return {}
+
+        def _vals(key):
+            return [v for i in idxs
+                    for v in (_at(hourly.get(key), i),)
+                    if v is not None]
+
+        feels_vals = _vals("apparent_temperature")
+        temp_vals = _vals("temperature_2m")
+        # WETTER-8/E-WETTER-8: feelsLike fällt auf temp zurück, wenn nicht vorhanden.
+        if not feels_vals:
+            feels_vals = temp_vals
+
+        rain_prob_vals = _vals("precipitation_probability")
+        rain_amount_vals = _vals("precipitation")
+        wind_vals = _vals("windspeed_10m")
+        uv_vals = _vals("uv_index")
+
+        return {
+            "feels_min": min(feels_vals) if feels_vals else None,
+            "feels_max": max(feels_vals) if feels_vals else None,
+            "rain_prob": max(rain_prob_vals) if rain_prob_vals else None,
+            "rain_amount": max(rain_amount_vals) if rain_amount_vals else None,
+            "wind": max(wind_vals) if wind_vals else None,
+            "uv": max(uv_vals) if uv_vals else None,
+        }
+
+    def _normalise_pack(self, hourly, ziel_stunde, tag, low, high, aggregate):
+        """Morgens-Tageswetter als Pack-Sicht (WETTER-12/16).
+
+        Regen/Wind/UV aus Tages-Worst-Case (aggregate); feelsLike = Tages-Min,
+        feelsLike_max = Tages-Max; kind/desc aus dem Slot der Morgens-Stunde
+        (für die Szene). Fehlt die Stunde, kommt ein neutraler Zustand.
+        """
+        i = _stunde_index(hourly, ziel_stunde, tag)
+        if i is None:
+            return neutrales_tageswetter()
+
+        # kind/desc aus dem Morgens-Slot (für die Wetter-Szene WETTER-7).
+        code = _at(hourly.get("weathercode"), i)
+        kind = _kind_aus_weathercode(code)
+
+        feels_min = aggregate.get("feels_min")
+        feels_max = aggregate.get("feels_max")
+        # WETTER-8: fehlt feelsLike, fällt es auf temp des Slots zurück.
+        if feels_min is None:
+            feels_min = _at(hourly.get("temperature_2m"), i)
+        if feels_max is None:
+            feels_max = feels_min
+
+        uv = aggregate.get("uv")
+        sunscreen = uv is not None and uv >= self._sunscreen_uv
+
+        return Tageswetter(
+            desc=KIND_DESC.get(kind, KIND_DESC[KIND_NEUTRAL]),
+            kind=kind,
+            temp=_at(hourly.get("temperature_2m"), i),
+            feelsLike=feels_min,
+            feelsLike_max=feels_max,
+            low=low,
+            high=high,
+            wind=aggregate.get("wind"),
+            rainProb=aggregate.get("rain_prob"),
+            rainAmount=aggregate.get("rain_amount"),
+            uv=uv,
+            uvLabel=_uv_label(uv),
+            sunscreen=sunscreen,
+        )
+
     def _normalise(self, hourly, ziel_stunde, tag, low, high):
-        """Übersetzt die Anbieter-Stundenwerte in das neutrale Modell (WETTER-16).
+        """Mittags-Tageswetter als Trage-Sicht: Slot-Wert (WETTER-12/16).
 
         Fehlt die Stunde komplett, liefert die Methode einen neutralen Zustand
         (WETTER-17) — eine Tageszeit ohne Daten darf den anderen Block nicht
-        kippen.
+        kippen. feelsLike_max = feelsLike (Slot-Wert, WETTER-16).
         """
         i = _stunde_index(hourly, ziel_stunde, tag)
         if i is None:
@@ -334,6 +442,7 @@ class WetterAnbindung:
             kind=kind,
             temp=temp,
             feelsLike=feels,
+            feelsLike_max=feels,
             low=low,
             high=high,
             wind=wind,
