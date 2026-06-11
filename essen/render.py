@@ -81,6 +81,7 @@ def baue_item_grid(katalog_kategorien, aktiv_slug, gesperrte_item_ids=None):
 
     ESSEN-28: `gesperrte_item_ids` ist ein set von Item-IDs, die bereits auf
     der aktiven Wunschliste stehen. Kacheln mit Treffer tragen gesperrt=True.
+    Matching strikt über item_id — kein bild_ref-Fallback (ESSEN-28).
     """
     items_roh = katalog_kategorien.get(aktiv_slug, [])
     tab_meta = next((t for t in TABS if t["slug"] == aktiv_slug), None)
@@ -91,12 +92,8 @@ def baue_item_grid(katalog_kategorien, aktiv_slug, gesperrte_item_ids=None):
     for item in items_roh:
         item_id = item["id"]
         bild_ref = item.get("bild_ref", "")
-        # ESSEN-28: Kachel ist gesperrt, wenn item_id direkt oder über bild_ref
-        # in der Wunschliste vorkommt.
-        gesperrt = (
-            item_id in gesperrt_set
-            or ("bild:" + str(bild_ref)) in gesperrt_set
-        )
+        # ESSEN-28: Matching strikt über item_id (kein bild_ref-Fallback, ESSEN-28).
+        gesperrt = item_id in gesperrt_set
         items.append({
             "id":        item_id,
             "label":     item.get("label", ""),
@@ -153,21 +150,11 @@ def baue_wunsch_liste(wuensche):
 def baue_gesperrte_item_ids(wuensche):
     """Gibt ein set der Katalog-Item-IDs zurück, die auf der aktiven Wunschliste stehen.
 
-    ESSEN-28: Quelle der Wahrheit ist die Wunschliste (ESSEN-15). Matching
-    erfolgt primär über `item_id` (wenn im Wunsch gesetzt) und als Fallback
-    über `bild_ref` (ARASAAC-ID ist eindeutig im V1-Katalog, ESSEN-11).
-
-    Das set enthält sowohl item_ids als auch bild_refs (mit Präfix "bild:"),
-    damit `baue_item_grid` ohne Schema-Änderung am Wunsch-Store auskommt.
+    ESSEN-28: Matching strikt über `item_id` (Pflichtfeld, ESSEN-16).
+    Kein bild_ref-Fallback — bild_ref kann über Katalog-Grenzen kollidieren (ESSEN-28).
+    `item_id` ist seit ESSEN-16-Schärfung Pflichtfeld in jedem Wunsch-Eintrag.
     """
-    ids = set()
-    for w in wuensche:
-        if w.get("item_id"):
-            ids.add(w["item_id"])
-        elif w.get("bild_ref"):
-            # Fallback: bild_ref eindeutig im V1-Katalog — markiert als bild:-Referenz.
-            ids.add("bild:" + str(w["bild_ref"]))
-    return ids
+    return {w["item_id"] for w in wuensche if w.get("item_id")}
 
 
 def baue_view(katalog_kategorien, wuensche, aktiv_tab=DEFAULT_TAB):
