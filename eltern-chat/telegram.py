@@ -153,6 +153,26 @@ def encode_multipart_multi(boundary, fields, file_blobs):
 
 
 @dataclass
+class IncomingTap:
+    """Ein eingehender Tap (Knopfdruck/Reaktion), anbieter-/kanal-neutral (RAT-16).
+
+    Die Felder tragen ausschliesslich fachliche Identifier — kein Telegram-
+    Vokabular. `button_id` ist der vom Skill vergebene Identifier, den der
+    Adapter beim Senden URL-encoded ins Telegram-`callback_data` schreibt und
+    beim Extrahieren URL-decoded wieder herauszieht; das 64-Byte-Limit von
+    `callback_data` bleibt damit Adapter-Detail.
+
+    `payload` ist eine optionale, normalisierte Extra-Form fuer kuenftige
+    Erweiterungen (V1 leer); auch sie darf nur fachliche Felder enthalten.
+    """
+    actor_id: int          # User-ID des Tappers (Telegram: callback_query.from.id)
+    conversation_id: int   # Chat-ID, in der der Tap entstand
+    target_id: int         # ID der getappten Bot-Nachricht (message_id)
+    button_id: str         # fachlicher Identifier (URL-decoded aus callback_data)
+    payload: dict = field(default_factory=dict)
+
+
+@dataclass
 class IncomingMessage:
     """Eine eingehende Nachricht, anbieter-/kanal-neutral aufbereitet.
 
@@ -290,6 +310,62 @@ class TelegramClient:
         if reply_to_message_id is not None:
             params["reply_to_message_id"] = reply_to_message_id
         return self._call("sendMessage", params)
+
+    def send_inline_keyboard(self, chat_id, text, buttons):
+        """Sendet eine Nachricht mit Inline-Knopfreihe (RAT-16, #684).
+
+        `buttons` ist vendor-neutral als Liste von Dicts uebergeben:
+          * `{"label": "...", "web_app_url": "https://..."}` — oeffnet eine
+            Mini App; im Telegram-Payload wird `web_app: {url: ...}` gesetzt.
+          * `{"label": "...", "button_id": "fachlich"}` — sendet einen Tap
+            zurueck; im Telegram-Payload wird `callback_data` aus dem
+            URL-encodeten `button_id` gebildet.
+
+        Adapter-Detail: Telegram begrenzt `callback_data` auf 64 Bytes
+        (UTF-8). Ein URL-encodetes `button_id`, das diese Grenze
+        ueberschreitet, fuehrt zu `ValueError` — der Skill bekommt damit
+        einen klaren Fehler, kennt aber das 64-Byte-Limit nicht.
+
+        Jede Reihe enthaelt einen Button (vertikale Liste); reicht fuer die
+        V1-Faelle (Pin-Liste-Update, Mini-App-Knopf). Mehrere Knoepfe in
+        einer Reihe werden V1 nicht gebraucht — kommt mit einer kuenftigen
+        Erweiterung, dann als `list[list[dict]]`.
+        """
+        rows = []
+        for btn in buttons:
+            label = btn.get("label")
+            if label is None:
+                raise ValueError("Button braucht ein label-Feld.")
+            tg_btn = {"text": label}
+            if "web_app_url" in btn:
+                tg_btn["web_app"] = {"url": btn["web_app_url"]}
+            elif "button_id" in btn:
+                encoded = urllib.parse.quote(btn["button_id"], safe="")
+                # Adapter-Detail: Telegram-callback_data hat ein 64-Byte-Limit.
+                if len(encoded.encode("utf-8")) > 64:
+                    raise ValueError(
+                        "button_id zu lang fuer Telegram-callback_data "
+                        "(URL-encoded > 64 Bytes): %r" % btn["button_id"])
+                tg_btn["callback_data"] = encoded
+            else:
+                raise ValueError(
+                    "Button braucht entweder web_app_url oder button_id.")
+            rows.append([tg_btn])
+        params = {
+            "chat_id": chat_id,
+            "text": text,
+            "reply_markup": {"inline_keyboard": rows},
+        }
+        return self._call("sendMessage", params)
+
+    def pin_chat_message(self, chat_id, message_id):
+        """Heftet eine Nachricht im Chat an (pinChatMessage, #684).
+
+        Schmaler Wrapper analog `send_message` — Telegram-API-Call ohne
+        weitere Aufbereitung. Liefert das API-Result (V1 normalerweise
+        `True`)."""
+        return self._call("pinChatMessage",
+                          {"chat_id": chat_id, "message_id": message_id})
 
     def send_chat_action(self, chat_id, action):
         """Zeigt im Telegram-Chat einen Aktivitäts-Indikator (z. B. „Bot tippt …",
@@ -495,6 +571,40 @@ class TelegramClient:
             document_file_id=document_file_id,
             document_mime_type=document_mime_type,
             document_size_hint=document_size_hint,
+        )
+
+    def extract_tap(self, update, bot_username):
+        """Uebersetzt ein rohes Telegram-Update in ein `IncomingTap` (RAT-16).
+
+        Liefert None, wenn das Update kein Tap (kein `callback_query`) ist.
+        `button_id` wird URL-decoded aus `callback_data` gelesen — der Skill
+        sieht damit nur den fachlichen Identifier, nicht das Telegram-Feld.
+
+        `bot_username` ist Signaturparameter zur Symmetrie mit
+        `extract_message`; V1 wird er nicht ausgewertet (callback_queries
+        gehen immer an den Empfaenger-Bot — Telegram filtert das auf der
+        Empfangsseite).
+        """
+        del bot_username  # V1 nicht ausgewertet; Symmetrie mit extract_message
+        cq = update.get("callback_query")
+        if not isinstance(cq, dict):
+            return None
+        sender = cq.get("from") or {}
+        message = cq.get("message") or {}
+        chat = message.get("chat") or {}
+        actor_id = sender.get("id")
+        conversation_id = chat.get("id")
+        target_id = message.get("message_id")
+        if actor_id is None or conversation_id is None or target_id is None:
+            return None
+        raw_data = cq.get("data") or ""
+        button_id = urllib.parse.unquote(raw_data)
+        return IncomingTap(
+            actor_id=actor_id,
+            conversation_id=conversation_id,
+            target_id=target_id,
+            button_id=button_id,
+            payload={},
         )
 
     @staticmethod
