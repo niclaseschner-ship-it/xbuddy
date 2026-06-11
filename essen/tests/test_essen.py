@@ -179,10 +179,10 @@ def test_essen15_chronologische_reihenfolge(client):
     """ESSEN-15: Reihenfolge folgt erstellt_am aufsteigend (älteste zuerst)."""
     # Zwei Wünsche in umgekehrter Reihenfolge anlegen.
     client.post("/api/v1/essen/wuensche",
-                json={"label": "Banane", "bild_ref": "2530",
+                json={"label": "Banane", "bild_ref": "2530", "item_id": "banane",
                       "quelle": "kind", "kategorie": "obst_gemuese"})
     client.post("/api/v1/essen/wuensche",
-                json={"label": "Apfel", "bild_ref": "2462",
+                json={"label": "Apfel", "bild_ref": "2462", "item_id": "apfel",
                       "quelle": "kind", "kategorie": "obst_gemuese"})
     data = client.get("/api/v1/essen/wuensche").get_json()
     labels = [w["label"] for w in data["wuensche"]]
@@ -202,10 +202,11 @@ def test_essen15_mit_persistierten_wuenschen(client_mit_wuenschen):
 # ============================================================
 
 def test_essen16_gueltiger_post_persistiert(client):
-    """ESSEN-16: gültiger POST liefert ID und macht Wunsch im GET sichtbar."""
+    """ESSEN-16: gültiger POST liefert ID und macht Wunsch im GET sichtbar.
+    Antwort enthält item_id (ESSEN-15-Schärfung)."""
     resp = client.post(
         "/api/v1/essen/wuensche",
-        json={"label": "Karotte", "bild_ref": "2619",
+        json={"label": "Karotte", "bild_ref": "2619", "item_id": "karotte",
               "quelle": "kind", "kategorie": "obst_gemuese"},
     )
     assert resp.status_code == 201
@@ -215,13 +216,16 @@ def test_essen16_gueltiger_post_persistiert(client):
     data = client.get("/api/v1/essen/wuensche").get_json()
     ids = [w["id"] for w in data["wuensche"]]
     assert wunsch_id in ids
+    # item_id wird mit-persistiert (ESSEN-15-Schärfung).
+    wunsch = next(w for w in data["wuensche"] if w["id"] == wunsch_id)
+    assert wunsch["item_id"] == "karotte"
 
 
 def test_essen16_leeres_label_gibt_400(client):
     """ESSEN-16: leeres label → 400, kein Schreiben (fachliche Validierung)."""
     resp = client.post(
         "/api/v1/essen/wuensche",
-        json={"label": "", "bild_ref": "2462",
+        json={"label": "", "bild_ref": "2462", "item_id": "apfel",
               "quelle": "kind", "kategorie": "obst_gemuese"},
     )
     assert resp.status_code == 400
@@ -233,7 +237,7 @@ def test_essen16_unbekannte_kategorie_gibt_400(client):
     """ESSEN-16: unbekannte Kategorie → 400."""
     resp = client.post(
         "/api/v1/essen/wuensche",
-        json={"label": "Test", "bild_ref": "2462",
+        json={"label": "Test", "bild_ref": "2462", "item_id": "apfel",
               "quelle": "kind", "kategorie": "UNBEKANNT"},
     )
     assert resp.status_code == 400
@@ -243,7 +247,7 @@ def test_essen16_unbekannte_quelle_gibt_400(client):
     """ESSEN-16: ungültige quelle → 400."""
     resp = client.post(
         "/api/v1/essen/wuensche",
-        json={"label": "Test", "bild_ref": "2462",
+        json={"label": "Test", "bild_ref": "2462", "item_id": "apfel",
               "quelle": "maschine", "kategorie": "obst_gemuese"},
     )
     assert resp.status_code == 400
@@ -253,10 +257,59 @@ def test_essen16_nicht_numerische_bild_ref_gibt_400(client):
     """ESSEN-16: bild_ref keine numerische ARASAAC-ID → 400."""
     resp = client.post(
         "/api/v1/essen/wuensche",
-        json={"label": "Test", "bild_ref": "abc-keine-id",
+        json={"label": "Test", "bild_ref": "abc-keine-id", "item_id": "apfel",
               "quelle": "kind", "kategorie": "obst_gemuese"},
     )
     assert resp.status_code == 400
+
+
+def test_essen16_fehlende_item_id_gibt_400(client):
+    """ESSEN-16 (Watchdog-Befund): POST ohne item_id → 400 (Pflichtfeld)."""
+    resp = client.post(
+        "/api/v1/essen/wuensche",
+        json={"label": "Apfel", "bild_ref": "2462",
+              "quelle": "kind", "kategorie": "obst_gemuese"},
+    )
+    assert resp.status_code == 400
+    assert client.get("/api/v1/essen/wuensche").get_json() == {"wuensche": []}
+
+
+def test_essen16_unbekannte_item_id_gibt_400(client):
+    """ESSEN-16 (Watchdog-Befund): POST mit item_id, die nicht im Katalog
+    existiert → 400 (Katalog-Validierung, BUD-2)."""
+    resp = client.post(
+        "/api/v1/essen/wuensche",
+        json={"label": "Unbekannt", "bild_ref": "2462", "item_id": "gibts-nicht",
+              "quelle": "kind", "kategorie": "obst_gemuese"},
+    )
+    assert resp.status_code == 400
+    assert client.get("/api/v1/essen/wuensche").get_json() == {"wuensche": []}
+
+
+def test_essen16_duplikat_item_id_gibt_409(client):
+    """ESSEN-16 (Watchdog-Befund): zwei POSTs mit gleicher item_id →
+    erster 201, zweiter 409 Conflict; GET zeigt nur einen Eintrag (BUD-2, ESSEN-28)."""
+    resp1 = client.post(
+        "/api/v1/essen/wuensche",
+        json={"label": "Apfel", "bild_ref": "2462", "item_id": "apfel",
+              "quelle": "kind", "kategorie": "obst_gemuese"},
+    )
+    assert resp1.status_code == 201
+
+    resp2 = client.post(
+        "/api/v1/essen/wuensche",
+        json={"label": "Apfel", "bild_ref": "2462", "item_id": "apfel",
+              "quelle": "kind", "kategorie": "obst_gemuese"},
+    )
+    assert resp2.status_code == 409
+    body2 = resp2.get_json()
+    assert body2.get("error") == "item_already_on_list"
+    assert body2.get("item_id") == "apfel"
+
+    # GET zeigt genau einen Apfel-Eintrag.
+    data = client.get("/api/v1/essen/wuensche").get_json()
+    apfel_eintraege = [w for w in data["wuensche"] if w.get("item_id") == "apfel"]
+    assert len(apfel_eintraege) == 1
 
 
 # ============================================================
@@ -265,17 +318,22 @@ def test_essen16_nicht_numerische_bild_ref_gibt_400(client):
 
 def test_essen4_alle_kategorien_und_quellen(client):
     """ESSEN-4: das Wunsch-Modell akzeptiert alle vier kategorie-Werte und
-    beide quelle-Werte."""
+    beide quelle-Werte. item_id ist Pflichtfeld (ESSEN-16-Schärfung).
+    Für gericht: erst Gericht anlegen, damit item_id im Katalog existiert."""
+    # Gericht anlegen, damit item_id "pizza" im Gerichte-Katalog vorhanden ist.
+    client.post("/api/v1/essen/katalog/gerichte",
+                json={"label": "Pizza", "bild_ref": "2527"})
+
     kombinationen = [
-        ("kind",   "gericht",      "Pizza",     "2527"),
-        ("kind",   "obst_gemuese", "Apfel",     "2462"),
-        ("eltern", "brotbelag",    "Käse",      "2541"),
-        ("eltern", "sonstiges",    "Milch",     "2445"),
+        ("kind",   "gericht",      "Pizza",     "2527", "1"),
+        ("kind",   "obst_gemuese", "Apfel",     "2462", "apfel"),
+        ("eltern", "brotbelag",    "Käse",      "2541", "kaese"),
+        ("eltern", "sonstiges",    "Milch",     "2445", "milch"),
     ]
-    for quelle, kategorie, label, bild_ref in kombinationen:
+    for quelle, kategorie, label, bild_ref, item_id in kombinationen:
         resp = client.post(
             "/api/v1/essen/wuensche",
-            json={"label": label, "bild_ref": bild_ref,
+            json={"label": label, "bild_ref": bild_ref, "item_id": item_id,
                   "quelle": quelle, "kategorie": kategorie},
         )
         assert resp.status_code == 201, \
@@ -292,13 +350,13 @@ def test_essen4_alle_kategorien_und_quellen(client):
 def test_essen5_ids_quelleneindeutig_und_kollisionsfrei(client):
     """ESSEN-5: kind:-IDs und eltern:-IDs kollidieren nie; je Quelle monoton."""
     resp1 = client.post("/api/v1/essen/wuensche",
-                        json={"label": "Apfel", "bild_ref": "2462",
+                        json={"label": "Apfel", "bild_ref": "2462", "item_id": "apfel",
                               "quelle": "kind", "kategorie": "obst_gemuese"})
     resp2 = client.post("/api/v1/essen/wuensche",
-                        json={"label": "Banane", "bild_ref": "2530",
+                        json={"label": "Banane", "bild_ref": "2530", "item_id": "banane",
                               "quelle": "kind", "kategorie": "obst_gemuese"})
     resp3 = client.post("/api/v1/essen/wuensche",
-                        json={"label": "Milch", "bild_ref": "2445",
+                        json={"label": "Milch", "bild_ref": "2445", "item_id": "milch",
                               "quelle": "eltern", "kategorie": "sonstiges"})
 
     id1 = resp1.get_json()["id"]
@@ -325,7 +383,7 @@ def test_essen6_wunsch_bleibt_nach_neuladen(client, demo_paths):
     """
     # Wunsch anlegen.
     client.post("/api/v1/essen/wuensche",
-                json={"label": "Erdbeere", "bild_ref": "2400",
+                json={"label": "Erdbeere", "bild_ref": "2400", "item_id": "erdbeere",
                       "quelle": "kind", "kategorie": "obst_gemuese"})
 
     # Simuliere Neustart: Snapshots zurücksetzen.
@@ -345,7 +403,7 @@ def test_essen6_wunsch_bleibt_nach_neuladen(client, demo_paths):
 def test_essen17_delete_entfernt_wunsch(client):
     """ESSEN-17: DELETE auf vorhandene ID → 200, GET ohne diesen Wunsch."""
     resp = client.post("/api/v1/essen/wuensche",
-                       json={"label": "Gurke", "bild_ref": "2847",
+                       json={"label": "Gurke", "bild_ref": "2847", "item_id": "gurke",
                              "quelle": "kind", "kategorie": "obst_gemuese"})
     wunsch_id = resp.get_json()["id"]
 
@@ -360,7 +418,7 @@ def test_essen17_delete_entfernt_wunsch(client):
 def test_essen17_zweites_delete_idempotent(client):
     """ESSEN-17: zweites DELETE auf bereits entfernte ID → 200 (idempotent)."""
     resp = client.post("/api/v1/essen/wuensche",
-                       json={"label": "Birne", "bild_ref": "2561",
+                       json={"label": "Birne", "bild_ref": "2561", "item_id": "birne",
                              "quelle": "kind", "kategorie": "obst_gemuese"})
     wunsch_id = resp.get_json()["id"]
 
@@ -452,7 +510,7 @@ def test_essen19_ungueltige_bild_ref_gibt_400(client):
 def test_essen20_reload_on_read_nach_post(client, demo_paths):
     """ESSEN-20: Wunsch nach POST sofort im GET sichtbar (kein Restart)."""
     client.post("/api/v1/essen/wuensche",
-                json={"label": "Joghurt", "bild_ref": "2618",
+                json={"label": "Joghurt", "bild_ref": "2618", "item_id": "joghurt",
                       "quelle": "kind", "kategorie": "sonstiges"})
     data = client.get("/api/v1/essen/wuensche").get_json()
     labels = [w["label"] for w in data["wuensche"]]
@@ -707,19 +765,20 @@ def test_essen27_render_entfernen_url_in_view_modell(demo_paths):
 # ============================================================
 
 def test_essen28_render_kachel_gesperrt_fuer_item_auf_liste(demo_paths):
-    """ESSEN-28(a): render.baue_view markiert Kacheln als gesperrt, wenn ihr
-    bild_ref in der aktiven Wunschliste vorkommt (server-seitige Sperre)."""
+    """ESSEN-28(a): render.baue_view markiert Kacheln als gesperrt, wenn ihre
+    item_id in der aktiven Wunschliste vorkommt (strikt item_id-Match, ESSEN-28)."""
     lebensmittel = katalog_mod.lade_lebensmittel(
         demo_paths["katalog_file"],
         demo_paths["katalog_default_file"],
     )
     alle_kategorien = dict(lebensmittel, gericht=[])
-    # Apfel (bild_ref "2462") ist auf der Wunschliste.
+    # Apfel (item_id "apfel") ist auf der Wunschliste.
     wuensche = [
         {
             "id": "kind:1",
             "label": "Apfel",
             "bild_ref": "2462",
+            "item_id": "apfel",
             "quelle": "kind",
             "kategorie": "obst_gemuese",
             "erstellt_am": "2026-06-09T08:00:00+02:00",
@@ -729,7 +788,7 @@ def test_essen28_render_kachel_gesperrt_fuer_item_auf_liste(demo_paths):
     view = render_mod.baue_view(alle_kategorien, wuensche, aktiv_tab="obst_gemuese")
     kacheln = view["item_grid"]["kacheln"]
 
-    # Apfel-Kachel ist gesperrt (bild_ref "2462" in der Liste).
+    # Apfel-Kachel ist gesperrt (item_id "apfel" in der Liste).
     apfel = next((k for k in kacheln if k["id"] == "apfel"), None)
     assert apfel is not None, "Apfel-Kachel fehlt im Grid"
     assert apfel["gesperrt"] is True, "Apfel-Kachel muss gesperrt sein (auf der Liste)"
@@ -765,7 +824,7 @@ def test_essen28_kachel_wieder_frei_nach_delete(client_mit_wuenschen):
     body_vor = resp_vor.get_data(as_text=True)
     assert "kachel-gesperrt" in body_vor, "Vortest: Kachel muss gesperrt sein"
 
-    # kind:1 (Apfel, bild_ref 2462) löschen.
+    # kind:1 (Apfel, item_id apfel) löschen.
     del_resp = client_mit_wuenschen.delete("/api/v1/essen/wuensche/kind:1")
     assert del_resp.status_code == 200
 
@@ -779,6 +838,46 @@ def test_essen28_kachel_wieder_frei_nach_delete(client_mit_wuenschen):
         "Nach DELETE darf obst_gemuese-Tab keine gesperrten Kacheln mehr zeigen"
     assert 'data-wunsch-aktiv="true"' not in body_nach, \
         "Nach DELETE darf data-wunsch-aktiv nicht mehr im obst_gemuese-Tab erscheinen"
+
+
+def test_essen28_roundtrip_post_get_zeigt_kachel_gesperrt(client):
+    """ESSEN-28 Roundtrip (Watchdog-Befund 3): POST /api/v1/essen/wuensche →
+    GET /display/essen/wunsch zeigt kachel-gesperrt auf der geposteten Item-Kachel.
+
+    Prüft den echten Flask-Pfad: POST schreibt item_id in die Liste,
+    GET rendert die View mit item_id-basierter Sperre."""
+    # POST: Apfel auf die Liste.
+    resp_post = client.post(
+        "/api/v1/essen/wuensche",
+        json={
+            "label": "Apfel",
+            "bild_ref": "2462",
+            "item_id": "apfel",
+            "quelle": "kind",
+            "kategorie": "obst_gemuese",
+        },
+    )
+    assert resp_post.status_code == 201
+    wunsch_id = resp_post.get_json()["id"]
+
+    # GET Display-View im obst_gemuese-Tab.
+    resp_get = client.get("/display/essen/wunsch?tab=obst_gemuese")
+    assert resp_get.status_code == 200
+    body = resp_get.get_data(as_text=True)
+
+    # Apfel-Kachel (data-item-id="apfel") muss kachel-gesperrt tragen.
+    assert "kachel-gesperrt" in body, \
+        "kachel-gesperrt fehlt nach POST mit item_id='apfel'"
+    assert 'data-wunsch-aktiv="true"' in body, \
+        "data-wunsch-aktiv fehlt nach POST"
+    assert 'data-item-id="apfel"' in body, \
+        "data-item-id='apfel' fehlt im Grid"
+
+    # GET API liefert item_id im Wunsch-Eintrag (ESSEN-15-Schärfung).
+    api_data = client.get("/api/v1/essen/wuensche").get_json()
+    wunsch = next(w for w in api_data["wuensche"] if w["id"] == wunsch_id)
+    assert wunsch["item_id"] == "apfel", \
+        "item_id fehlt im GET /api/v1/essen/wuensche Antwort"
 
 
 # ============================================================

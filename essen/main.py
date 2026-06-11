@@ -205,18 +205,20 @@ def wuensche_lesen():
 def wunsch_hinzufuegen():
     """POST /api/v1/essen/wuensche — Wunsch hinzufügen (ESSEN-16).
 
-    Payload: { label, bild_ref, quelle, kategorie }
+    Payload: { label, bild_ref, quelle, kategorie, item_id }
     Antwort: { "id": "<quelle>:<n>" }
     Ungültige Eingabe → 400, kein Schreiben (ESSEN-16).
+    Duplikat (gleiche item_id bereits auf Liste) → 409 Conflict (ESSEN-16, BUD-2).
     """
     body = request.get_json(silent=True)
     if not body:
         return jsonify({"fehler": "Kein JSON-Body"}), 400
 
-    label    = body.get("label", "")
-    bild_ref = body.get("bild_ref", "")
-    quelle   = body.get("quelle", "")
+    label     = body.get("label", "")
+    bild_ref  = body.get("bild_ref", "")
+    quelle    = body.get("quelle", "")
     kategorie = body.get("kategorie", "")
+    item_id   = body.get("item_id", "")
 
     # Fachliche Validierung im Buddy (ESSEN-16, BUD-2: Buddy besitzt seine Daten).
     fehler = []
@@ -228,13 +230,32 @@ def wunsch_hinzufuegen():
         fehler.append("kategorie muss gericht, obst_gemuese, brotbelag oder sonstiges sein")
     if not bild_ref or not _valide_bild_ref(bild_ref):
         fehler.append("bild_ref muss eine numerische ARASAAC-ID sein")
+    if not item_id or not str(item_id).strip():
+        fehler.append("item_id darf nicht leer sein")
     if fehler:
         return jsonify({"fehler": fehler}), 400
+
+    # item_id muss in einem der konsultierten Kataloge existieren (ESSEN-16, ESSEN-13/14).
+    alle_kategorien = _lade_alle_kategorien()
+    alle_item_ids = {
+        item["id"]
+        for items in alle_kategorien.values()
+        for item in items
+    }
+    if str(item_id).strip() not in alle_item_ids:
+        return jsonify({"fehler": "item_id unbekannt — nicht im Lebensmittel- oder Gerichte-Katalog"}), 400
 
     # Atomar schreiben (DCOMP-4, ESSEN-20) — Wunsch-Liste frisch laden,
     # dann ergänzen, dann atomar zurückschreiben.
     p = _paths()
     daten = store_mod.lade_wuensche(p["wuensche_file"], runtime["wuensche_snapshot"])
+
+    # Duplikat-Schutz (ESSEN-16, BUD-2): item_id bereits auf Liste → 409 Conflict.
+    item_id_str = str(item_id).strip()
+    for w in daten.get("wuensche", []):
+        if w.get("item_id") == item_id_str:
+            return jsonify({"error": "item_already_on_list", "item_id": item_id_str}), 409
+
     zaehler = daten.get("zaehler", {"kind": 0, "eltern": 0})
     n = zaehler.get(quelle, 0) + 1
     neue_id = "%s:%d" % (quelle, n)
@@ -246,6 +267,7 @@ def wunsch_hinzufuegen():
         "bild_ref":    str(bild_ref),
         "quelle":      quelle,
         "kategorie":   kategorie,
+        "item_id":     item_id_str,
         "erstellt_am": _jetzt(),
     }
     wuensche = list(daten.get("wuensche", []))
@@ -255,8 +277,8 @@ def wunsch_hinzufuegen():
     store_mod.speichere_wuensche(p["wuensche_file"], neu_daten)
     runtime["wuensche_snapshot"] = neu_daten
 
-    logger.info("Wunsch angelegt id=%s label=%r quelle=%s kategorie=%s",
-                neue_id, label, quelle, kategorie)
+    logger.info("Wunsch angelegt id=%s item_id=%s label=%r quelle=%s kategorie=%s",
+                neue_id, item_id_str, label, quelle, kategorie)
     return jsonify({"id": neue_id}), 201
 
 
