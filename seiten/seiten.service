@@ -23,6 +23,10 @@ Wants=network-online.target
 [Service]
 User=__XBUDDY_USER__
 WorkingDirectory=__XBUDDY_REPO__
+# Bot-Token-Sharing fuer Mini-App-Init-Data-Auth (RAT-16, #684 Baustein 6) —
+# Eigentuemer der Token-Datei ist eltern-chat; seiten und essen lesen sie
+# nur, nicht duplizieren. Der Pfad muss read-only fuer den seiten-User sein.
+EnvironmentFile=__XBUDDY_DATA__/eltern-chat/.env
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=__XBUDDY_HOME__
 # SREG-7: Display-URL-Origins für die SREG-12-Übersichts-Seite.
