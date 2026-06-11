@@ -310,7 +310,9 @@ Liest die vollständige Wunsch-Liste. **Konsument in V1: der Eltern-Chat-Skill
 Eigener API-Pfad `/api/v1/essen/<resource>` (BUD-1b).
 
 **Antwort (JSON-Body):** `{ "wuensche": [ { "id": …, "label": …, "bild_ref":
-…, "quelle": …, "kategorie": …, "erstellt_am": … }, … ] }`. Reihenfolge:
+…, "quelle": …, "kategorie": …, "item_id": …, "erstellt_am": … }, … ] }`.
+`item_id` (string) ist der eindeutige Katalog-Identifier des Lebensmittels oder
+Gerichts (z. B. der Schlüssel in `katalog.json` / `gerichte.json`). Reihenfolge:
 `erstellt_am` aufsteigend (älteste zuerst).
 
 *Test-Implikation:* mit drei persistierten Wünschen liefert der Endpunkt
@@ -326,22 +328,37 @@ Eltern-Chat-Schreib-Skill (`quelle=eltern`, OPEN-ESSEN-A).
 
 **Payload (JSON-Body):** `label` (string, nicht leer), `bild_ref` (ARASAAC-`id`,
 string), `quelle` (`"kind"` oder `"eltern"`), `kategorie` (einer der vier Werte
-aus ESSEN-9).
+aus ESSEN-9), `item_id` (string, nicht leer — eindeutiger Katalog-Identifier des
+Lebensmittels oder Gerichts, z. B. der Schlüssel in `katalog.json` /
+`gerichte.json`).
 
 **Fachliche Validierung im Buddy (vor jedem Schreiben):** alle Felder
 erforderlich; `label` nicht leer; `quelle` und `kategorie` aus dem definierten
 Satz; `bild_ref` muss eine ARASAAC-`id` sein, für die ein lokales PNG vorliegt
-(ICONS-5). Ungültige Eingabe → **4xx, kein Schreiben** (kein Teil-Write). Die
-Prüfung liegt im Buddy, nicht im Skill (BUD-2: der Buddy besitzt seine Daten).
+(ICONS-5); `item_id` Pflichtfeld, nicht leer, muss in einem der konsultierten
+Kataloge existieren (ESSEN-13 Lebensmittel ODER ESSEN-14 Gerichte). Ungültige
+Eingabe → **4xx, kein Schreiben** (kein Teil-Write). Die Prüfung liegt im
+Buddy, nicht im Skill (BUD-2: der Buddy besitzt seine Daten).
+
+**Duplikat-Schutz (BUD-2):** POST mit `item_id`, das bereits auf der aktiven
+Wunschliste steht (Match über `item_id`), wird mit **409 Conflict** abgelehnt —
+kein doppelter Eintrag. Das garantiert die ESSEN-28-Sperre Server-seitig, auch
+wenn ein Schreib-Pfad den Client-Guard umgeht (programmatischer Call, künftiger
+Eltern-Chat-Schreib-Skill aus OPEN-ESSEN-A). Der Konsument darf 409 als „Item
+ist bereits auf der Liste" interpretieren und entsprechend benutzerfreundlich
+melden.
 
 **Antwort:** `{ "id": "<quelle>:<n>" }` (ESSEN-5).
 
 **Persistenz:** schreibt atomar in `essen/wuensche.json` (DCOMP-4), die neue
-ID wird vom Quellen-Zähler vergeben.
+ID wird vom Quellen-Zähler vergeben. `item_id` wird mit-geschrieben als
+Bestandteil jedes Wunsch-Eintrags.
 
 *Test-Implikation:* gültiger POST liefert eine neue `id` und macht den Wunsch
 im nächsten GET sichtbar; ungültiger POST (leeres Label / unbekannte
-`kategorie` / fehlende `bild_ref`) → 4xx, GET unverändert.
+`kategorie` / fehlende `bild_ref` / unbekannte `item_id`) → 4xx, GET
+unverändert; zwei POSTs mit identischer `item_id` → erster liefert 201, zweiter
+liefert 409 Conflict, nachfolgendes GET zeigt nur einen Eintrag.
 
 *Tickets:* #474
 
@@ -627,23 +644,30 @@ liefert die ID nicht mehr (Reload-on-Read).
 Eine geklickte Quelle-Kachel auf `/display/essen/wunsch` (die Auswahl-Kacheln,
 nicht der Liste-Bereich rechts) erhält sofort eine „aktiv"-Optik (grün-getoned,
 Pattern analog `routine-card.done` aus `routine/static/routine.css:135-140`,
-vgl. ESSEN-3 Zwei-Tap-Affordanzen). **Solange das Produkt/Gericht (per Item-ID)
-auf der aktiven Wunschliste steht**, ist die Quelle-Kachel funktional und
-visuell deaktiviert: kein weiterer POST auslösbar, kein doppelter Listeneintrag
-möglich. Sobald die Eltern den Eintrag von der Liste nehmen (ESSEN-17 DELETE
+vgl. ESSEN-3 Zwei-Tap-Affordanzen). **Solange das Produkt/Gericht (strikt per `item_id`-Match gegen ESSEN-15 —
+nicht per `bild_ref`, weil dieser über Katalog-Grenzen kollidieren kann, z. B.
+zwei Lebensmittel mit gleichem Piktogramm) auf der aktiven Wunschliste steht**,
+ist die Quelle-Kachel funktional und visuell deaktiviert: kein weiterer POST
+auslösbar, kein doppelter Listeneintrag möglich. Sobald die Eltern den Eintrag von der Liste nehmen (ESSEN-17 DELETE
 oder ESSEN-27 ×-Geste), kehrt die Kachel beim nächsten Render in den
 Normal-Zustand zurück.
 
-**Render-Vertrag:** Der Server schreibt an jede Quelle-Kachel, deren Item-ID in
-der aktiven Wunschliste vorkommt, das Attribut `data-wunsch-aktiv="true"` sowie
-die CSS-Klasse `.kachel-gesperrt`. Die Klasse `.kachel-gesperrt` deaktiviert den
-Klick-Handler und setzt die grün-getoned-Optik (wiederverwendet aus
-`.routine-card.done`, ESSEN-3-Anker). Kacheln ohne Treffer in der Liste tragen
-kein `data-wunsch-aktiv`-Attribut und keine `.kachel-gesperrt`-Klasse.
+**Render-Vertrag:** Der Server schreibt an jede Quelle-Kachel, deren `item_id`
+in der aktiven Wunschliste vorkommt, das Attribut `data-wunsch-aktiv="true"`
+sowie die CSS-Klasse `.kachel-gesperrt`. Die Klasse `.kachel-gesperrt`
+deaktiviert den Klick-Handler und setzt die grün-getoned-Optik (wiederverwendet
+aus `.routine-card.done`, ESSEN-3-Anker). Kacheln ohne Treffer in der Liste
+tragen kein `data-wunsch-aktiv`-Attribut und keine `.kachel-gesperrt`-Klasse.
 
 **Quelle der Wahrheit:** Liste-Stand aus ESSEN-15 (`GET /api/v1/essen/wuensche`),
 nicht clientseitig persistiert. Reload-on-Read (ESSEN-20) trägt den Zustand
 über Reloads.
+
+**Server-side Duplikat-Schutz:** Die „kein weiterer POST"-Garantie ist
+*zusätzlich* server-seitig getragen (ESSEN-16 Duplikat-Schutz, 409 Conflict
+bei wiederholter `item_id`). Damit hängt der Vertrag nicht am Client-Guard
+allein — künftige Schreib-Pfade (Eltern-Chat-Schreib-Skill, OPEN-ESSEN-A)
+erben die Garantie automatisch.
 
 **Bewusst NICHT in V1:** Tageswechsel-Reset, Pro-Session-Sperre,
 Bestätigungs-Dialog. Diese Optionen B/C aus #666 wurden zugunsten von Wahl A
