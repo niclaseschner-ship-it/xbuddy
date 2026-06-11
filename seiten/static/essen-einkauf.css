@@ -1,0 +1,395 @@
+/* essen-einkauf.css — Bring!-Optik für die Eltern-Mini-App-View.
+   ESSEN-31: Card-Liste, Sektion-Header, Touch-Targets (min 44px), erledigt-Optik.
+   Kein Telegram-spezifisches CSS — vendor-neutral (RAT-16). */
+
+:root {
+  --bg:            #f4f5f7;
+  --card:          #ffffff;
+  --ink:           #1a1a1a;
+  --ink-soft:      #6b7280;
+  --rule:          #e5e7eb;
+  --accent:        #2d62d8;
+  --done-ink:      #9ca3af;
+  --done-check:    #22c55e;
+  --marker-wunsch: #f59e0b;   /* 🧒 Kinder-Wunsch */
+  --marker-rezept: #6366f1;   /* 📖 Rezept-Zutat  */
+  --sheet-overlay: rgba(0, 0, 0, 0.45);
+  --sheet-radius:  16px;
+  --fab-size:      56px;
+  --fab-bg:        #2d62d8;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.4;
+  overscroll-behavior: contain;
+}
+
+/* ── App-Header ─────────────────────────────────────────── */
+
+.app-header {
+  position: sticky;
+  top: 0;
+  background: var(--card);
+  border-bottom: 1px solid var(--rule);
+  padding: 14px 16px 10px;
+  z-index: 10;
+}
+
+.app-header h1 {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+/* ── Lade-Hinweis ───────────────────────────────────────── */
+
+.lade-hinweis {
+  text-align: center;
+  padding: 40px 16px;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+/* ── Haupt-Liste ────────────────────────────────────────── */
+
+#liste {
+  padding: 12px 14px 100px;   /* Platz für FAB */
+}
+
+/* ── Sektion-Header (ESSEN-31) ──────────────────────────── */
+
+.sektion-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 16px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.sektion-titel {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+}
+
+.sektion-counter {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+/* ── Item-Card (ESSEN-31 Bring!-Optik) ─────────────────── */
+
+.item-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  min-height: 60px;        /* großzügiges Touch-Target */
+  cursor: pointer;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.06);
+  user-select: none;
+  transition: background 0.1s;
+}
+
+.item-card:active {
+  background: #f0f4ff;
+}
+
+/* Erledigt-Optik (ESSEN-31): ausgegraut, ans Ende der Kategorie */
+.item-card.erledigt {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.item-card.erledigt .item-label {
+  text-decoration: line-through;
+  color: var(--done-ink);
+}
+
+/* ── Card-Bild ───────────────────────────────────────────── */
+
+.item-bild {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+/* Placeholder bei Bild-Ladefehler (ESSEN-31) */
+.item-bild-placeholder {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  background: var(--rule);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+}
+
+/* ── Card-Text ───────────────────────────────────────────── */
+
+.item-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.item-label {
+  font-size: 1rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Quellen-Marker (ESSEN-31) ───────────────────────────── */
+
+.item-marker {
+  flex: 0 0 auto;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+/* ── Abhak-Check ──────────────────────────────────────────── */
+
+.item-check {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--rule);
+  border-radius: 50%;
+  background: var(--card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.item-card.erledigt .item-check {
+  background: var(--done-check);
+  border-color: var(--done-check);
+  color: #fff;
+}
+
+/* ── FAB (Quick-Add, ESSEN-31) ────────────────────────────── */
+
+.fab {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: var(--fab-size);
+  height: var(--fab-size);
+  border-radius: 50%;
+  background: var(--fab-bg);
+  color: #fff;
+  border: none;
+  font-size: 1.7rem;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(45, 98, 216, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.fab:active { transform: scale(0.93); }
+
+/* ── Bottom-Sheet (ESSEN-30 + Quick-Add) ─────────────────── */
+
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--sheet-overlay);
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+}
+
+.sheet-overlay[hidden] { display: none; }
+
+.sheet {
+  width: 100%;
+  background: var(--card);
+  border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
+  max-height: 80vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sheet-inhalt {
+  padding: 20px 16px 32px;
+}
+
+/* ── Sheet-Titel ─────────────────────────────────────────── */
+
+.sheet-titel {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+
+/* ── Zutat-Zeile (ESSEN-30) ──────────────────────────────── */
+
+.zutat-zeile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+  min-height: 50px;
+  user-select: none;
+}
+
+.zutat-zeile:last-of-type { border-bottom: none; }
+
+.zutat-bild {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  border-radius: 4px;
+  background: var(--bg);
+}
+
+.zutat-label {
+  flex: 1;
+  font-size: 0.95rem;
+}
+
+.zutat-hinweis {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.zutat-check {
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--rule);
+  border-radius: 6px;
+  background: var(--card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.zutat-zeile.ausgewaehlt .zutat-check {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ── Sheet-Buttons ───────────────────────────────────────── */
+
+.sheet-btn-gruppe {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sheet-btn {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 8px;
+  border: none;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+  transition: opacity 0.1s;
+}
+
+.sheet-btn:active { opacity: 0.8; }
+.sheet-btn:disabled { opacity: 0.4; cursor: default; }
+
+.sheet-btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.sheet-btn-secondary {
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+}
+
+.sheet-btn-ghost {
+  background: transparent;
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+/* ── Quick-Add Text-Input ────────────────────────────────── */
+
+.quick-add-input {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 1rem;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  min-height: 44px;
+  margin-bottom: 8px;
+}
+
+.quick-add-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(45, 98, 216, 0.18);
+}
+
+.quick-add-hinweis {
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  margin-bottom: 12px;
+}
+
+/* ── Toast ───────────────────────────────────────────────── */
+
+.toast {
+  position: fixed;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  z-index: 40;
+  white-space: nowrap;
+}
+
+.toast.visible { opacity: 0.92; }
+
+/* ── Leer-Meldung ────────────────────────────────────────── */
+
+.leer-hinweis {
+  text-align: center;
+  padding: 48px 16px;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
