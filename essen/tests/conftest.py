@@ -57,13 +57,19 @@ def client(demo_paths):
 
 @pytest.fixture
 def client_mit_wuenschen(demo_paths):
-    """Client mit zwei vorbereiteten Wünschen in wuensche.json."""
+    """Client mit zwei vorbereiteten Wünschen in wuensche.json.
+
+    Apfel (item_id 'apfel', bild_ref '2462', obst_gemuese) und
+    Milch (item_id 'milch', bild_ref '2445', sonstiges).
+    item_id ist Pflichtfeld (ESSEN-16-Schärfung).
+    """
     daten = {
         "wuensche": [
             {
                 "id": "kind:1",
                 "label": "Apfel",
                 "bild_ref": "2462",
+                "item_id": "apfel",
                 "quelle": "kind",
                 "kategorie": "obst_gemuese",
                 "erstellt_am": "2026-06-09T08:00:00+02:00",
@@ -72,6 +78,7 @@ def client_mit_wuenschen(demo_paths):
                 "id": "kind:2",
                 "label": "Milch",
                 "bild_ref": "2445",
+                "item_id": "milch",
                 "quelle": "kind",
                 "kategorie": "sonstiges",
                 "erstellt_am": "2026-06-09T09:00:00+02:00",

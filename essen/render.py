@@ -1,15 +1,17 @@
-"""Essens-Buddy — Render-Logik der View `wunsch` (ESSEN-2/3/8/9/11).
+"""Essens-Buddy — Render-Logik der View `wunsch` (ESSEN-2/3/8/9/11/28).
 
 Baut aus dem Katalog und der Wunsch-Liste das View-Modell für
 `templates/wunsch.html` (Tabbed Single-Canvas, Gate-B-Wahl 2026-06-09,
 E-ESSEN-7).
 
-Drei Petrantwortungen:
+Vier Petrantwortungen:
   1. ARASAAC-Piktogramme über die geteilte Icon-Plattform referenzieren
      (ICONS-5, ESSEN-11) — nicht buddy-eigener ARASAAC-Bezug.
   2. Vier Kategorien-Tabs in fester Reihenfolge (ESSEN-9).
   3. Wunsch-Liste nach Kategorie in fester Reihenfolge gruppieren (ESSEN-8,
      gleiche Reihenfolge wie WZE-5: gericht → obst_gemuese → brotbelag → sonstiges).
+  4. Quelle-Kacheln als gesperrt markieren, wenn ihr Item auf der aktiven
+     Wunschliste steht (ESSEN-28): data-wunsch-aktiv="true" + .kachel-gesperrt.
 """
 
 import logging
@@ -69,27 +71,37 @@ def baue_tabs(aktiv_slug):
     ]
 
 
-def baue_item_grid(katalog_kategorien, aktiv_slug):
-    """Baut das Item-Grid für die aktive Kategorie (ESSEN-8/9/12/14).
+def baue_item_grid(katalog_kategorien, aktiv_slug, gesperrte_item_ids=None):
+    """Baut das Item-Grid für die aktive Kategorie (ESSEN-8/9/12/14/28).
 
     Für die Gerichte-Kategorie kommt `katalog_kategorien["gericht"]`
     (leere Liste wenn noch keine Gerichte, ESSEN-9).
-    Gibt dict { titel, kacheln: [{id, label, icon_url, bild_ref, kategorie}], leer }.
+    Gibt dict { titel, kacheln: [{id, label, icon_url, bild_ref, kategorie,
+    gesperrt}], leer }.
+
+    ESSEN-28: `gesperrte_item_ids` ist ein set von Item-IDs, die bereits auf
+    der aktiven Wunschliste stehen. Kacheln mit Treffer tragen gesperrt=True.
+    Matching strikt über item_id — kein bild_ref-Fallback (ESSEN-28).
     """
     items_roh = katalog_kategorien.get(aktiv_slug, [])
     tab_meta = next((t for t in TABS if t["slug"] == aktiv_slug), None)
     titel = tab_meta["label"] if tab_meta else aktiv_slug
+    gesperrt_set = gesperrte_item_ids or set()
 
-    items = [
-        {
-            "id":        item["id"],
+    items = []
+    for item in items_roh:
+        item_id = item["id"]
+        bild_ref = item.get("bild_ref", "")
+        # ESSEN-28: Matching strikt über item_id (kein bild_ref-Fallback, ESSEN-28).
+        gesperrt = item_id in gesperrt_set
+        items.append({
+            "id":        item_id,
             "label":     item.get("label", ""),
-            "icon_url":  icon_url(item.get("bild_ref", "")),
-            "bild_ref":  item.get("bild_ref", ""),
+            "icon_url":  icon_url(bild_ref),
+            "bild_ref":  bild_ref,
             "kategorie": aktiv_slug,
-        }
-        for item in items_roh
-    ]
+            "gesperrt":  gesperrt,
+        })
     return {
         "titel":   titel,
         "kacheln": items,
@@ -135,22 +147,37 @@ def baue_wunsch_liste(wuensche):
     ]
 
 
+def baue_gesperrte_item_ids(wuensche):
+    """Gibt ein set der Katalog-Item-IDs zurück, die auf der aktiven Wunschliste stehen.
+
+    ESSEN-28: Matching strikt über `item_id` (Pflichtfeld, ESSEN-16).
+    Kein bild_ref-Fallback — bild_ref kann über Katalog-Grenzen kollidieren (ESSEN-28).
+    `item_id` ist seit ESSEN-16-Schärfung Pflichtfeld in jedem Wunsch-Eintrag.
+    """
+    return {w["item_id"] for w in wuensche if w.get("item_id")}
+
+
 def baue_view(katalog_kategorien, wuensche, aktiv_tab=DEFAULT_TAB):
-    """Baut das vollständige View-Modell der View `wunsch` (ESSEN-2/8).
+    """Baut das vollständige View-Modell der View `wunsch` (ESSEN-2/8/28).
 
     katalog_kategorien  dict mit Schlüsseln gericht, obst_gemuese, brotbelag, sonstiges
     wuensche            Liste der Wunsch-Dicts
     aktiv_tab           slug des aktiven Tabs (Default: obst_gemuese, ESSEN-9)
 
     Liefert ein dict für `templates/wunsch.html`.
+
+    ESSEN-28: übergibt gesperrte_item_ids an baue_item_grid, damit Kacheln
+    mit Items auf der aktiven Wunschliste als .kachel-gesperrt gerendert werden.
     """
     if aktiv_tab not in {t["slug"] for t in TABS}:
         logger.info("Unbekannter Tab-Slug %r — Default %r", aktiv_tab, DEFAULT_TAB)
         aktiv_tab = DEFAULT_TAB
 
+    gesperrte_ids = baue_gesperrte_item_ids(wuensche)
+
     return {
         "tabs":        baue_tabs(aktiv_tab),
         "aktiv_tab":   aktiv_tab,
-        "item_grid":   baue_item_grid(katalog_kategorien, aktiv_tab),
+        "item_grid":   baue_item_grid(katalog_kategorien, aktiv_tab, gesperrte_ids),
         "wunsch_liste": baue_wunsch_liste(wuensche),
     }

@@ -161,6 +161,19 @@ body.essen-shell {
   box-shadow: none;
 }
 
+/* ESSEN-28/ESSEN-3: Aktiv-Kachel — Item auf Wunschliste (analog .routine-card.done) */
+.item-kachel.kachel-gesperrt {
+  background: var(--kids-tint-mint);
+  border-color: var(--success);
+  cursor: default;
+  opacity: 0.85;
+}
+
+.item-kachel.kachel-gesperrt:active {
+  transform: none;
+  box-shadow: var(--shadow-hand-sm);
+}
+
 .item-kachel img {
   width: 140px;
   height: 140px;
