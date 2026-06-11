@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<!-- ESSEN-31: Eltern-Mini-App-View — Bring!-Card-Liste, ARASAAC-Bilder, Init-Data-Auth.
+     Statisches Skelett; JS-Hydration rendert die Liste und alle Sheets. EZG-6. -->
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Einkaufsliste · XBuddy</title>
+  <link rel="stylesheet" href="/seiten/static/essen-einkauf.css">
+  <!-- platform.js (RAT-16) muss vor essen-einkauf.js geladen sein -->
+  <script src="/seiten/static/platform.js"></script>
+  <script src="/seiten/static/essen-einkauf.js" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <h1>Einkaufsliste</h1>
+  </header>
+
+  <!-- Haupt-Liste — JS rendert Sektionen + Cards -->
+  <main id="liste" aria-label="Einkaufsliste" aria-live="polite">
+    <p class="lade-hinweis">Liste wird geladen …</p>
+  </main>
+
+  <!-- Floating Action Button: Quick-Add (ESSEN-31) -->
+  <button id="quick-add" class="fab" aria-label="Item hinzufügen" type="button">+</button>
+
+  <!-- Bottom-Sheet-Overlay (ESSEN-30 Übernahme + Quick-Add) — JS befüllt -->
+  <div id="sheet-overlay" class="sheet-overlay" hidden aria-modal="true" role="dialog">
+    <div id="sheet" class="sheet">
+      <div id="sheet-inhalt" class="sheet-inhalt"></div>
+    </div>
+  </div>
+
+  <!-- Toast-Hinweis für Transient-Meldungen -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
