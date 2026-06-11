@@ -696,6 +696,9 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # WZE-8 / GAN-7 / #503: Origin des Essens-Buddys (ESSEN-15/ESSEN-19). Leer ⇒
         # WuenscheZeigenTask + GerichtAnlegenTask werden NICHT registriert.
         essen_origin_url=cfg.essen_origin_url,
+        # EZG-6 / EIN-8 / #653: Mini-App-URL für die Einkaufsliste (EZG-6).
+        # Leer/None → EinkaufZeigenTask nutzt ENV-Fallback MINI_APP_EINKAUF_URL.
+        mini_app_einkauf_url=getattr(cfg, 'mini_app_einkauf_url', None),
         # SREG-7 / #476: Heim-Origin für den Übersichts-Link (SREG-5/SREG-5b).
         display_url_origin_heim=cfg.display_url_origin_heim,
         # TAB-12 / #475: Session-Map für »Termine aus Bild«.
