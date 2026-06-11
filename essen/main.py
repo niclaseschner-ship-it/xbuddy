@@ -254,7 +254,7 @@ def wunsch_hinzufuegen():
     item_id_str = str(item_id).strip()
     for w in daten.get("wuensche", []):
         if w.get("item_id") == item_id_str:
-            return jsonify({"error": "item_already_on_list", "item_id": item_id_str}), 409
+            return jsonify({"fehler": "item_already_on_list", "item_id": item_id_str}), 409
 
     zaehler = daten.get("zaehler", {"kind": 0, "eltern": 0})
     n = zaehler.get(quelle, 0) + 1

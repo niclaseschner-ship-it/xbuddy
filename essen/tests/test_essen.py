@@ -303,7 +303,7 @@ def test_essen16_duplikat_item_id_gibt_409(client):
     )
     assert resp2.status_code == 409
     body2 = resp2.get_json()
-    assert body2.get("error") == "item_already_on_list"
+    assert body2.get("fehler") == "item_already_on_list"
     assert body2.get("item_id") == "apfel"
 
     # GET zeigt genau einen Apfel-Eintrag.
@@ -758,6 +758,33 @@ def test_essen27_render_entfernen_url_in_view_modell(demo_paths):
     eintrag = liste[0]["eintraege"][0]
     assert eintrag["entfernen_url"] == "/display/_shared/icons/arasaac/11751.png"
     assert eintrag["id"] == "kind:1"
+
+
+def test_essen27_data_wunsch_id_traegt_korrekte_id(client_mit_wuenschen):
+    """ESSEN-27 (Refs #532): data-wunsch-id im gerendertem HTML trägt exakt den
+    Wert von wunsch.id aus dem View-Modell — nicht nur einen per Test-Konstante
+    identischen Substring.
+
+    Der Test extrahiert die data-wunsch-id-Werte via Regex aus dem HTML und
+    vergleicht sie gegen die IDs aus dem API-View-Modell (GET /api/v1/essen/wuensche).
+    """
+    import re
+
+    # View-Modell-IDs aus der API.
+    api_resp = client_mit_wuenschen.get("/api/v1/essen/wuensche")
+    assert api_resp.status_code == 200
+    wunsch_ids_aus_api = {w["id"] for w in api_resp.get_json()["wuensche"]}
+
+    # HTML-Render.
+    resp = client_mit_wuenschen.get("/display/essen/wunsch")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+
+    # Alle data-wunsch-id-Werte aus dem HTML extrahieren.
+    ids_im_html = set(re.findall(r'data-wunsch-id="([^"]+)"', body))
+
+    # Jede API-ID muss exakt so im HTML stehen (keine Substring-Übereinstimmung).
+    assert ids_im_html == wunsch_ids_aus_api
 
 
 # ============================================================
