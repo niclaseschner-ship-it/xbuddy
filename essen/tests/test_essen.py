@@ -703,6 +703,85 @@ def test_essen27_render_entfernen_url_in_view_modell(demo_paths):
 
 
 # ============================================================
+#  ESSEN-28 — Wunsch-Kachel-Sperre auf Liste-Lebenszyklus
+# ============================================================
+
+def test_essen28_render_kachel_gesperrt_fuer_item_auf_liste(demo_paths):
+    """ESSEN-28(a): render.baue_view markiert Kacheln als gesperrt, wenn ihr
+    bild_ref in der aktiven Wunschliste vorkommt (server-seitige Sperre)."""
+    lebensmittel = katalog_mod.lade_lebensmittel(
+        demo_paths["katalog_file"],
+        demo_paths["katalog_default_file"],
+    )
+    alle_kategorien = dict(lebensmittel, gericht=[])
+    # Apfel (bild_ref "2462") ist auf der Wunschliste.
+    wuensche = [
+        {
+            "id": "kind:1",
+            "label": "Apfel",
+            "bild_ref": "2462",
+            "quelle": "kind",
+            "kategorie": "obst_gemuese",
+            "erstellt_am": "2026-06-09T08:00:00+02:00",
+        }
+    ]
+
+    view = render_mod.baue_view(alle_kategorien, wuensche, aktiv_tab="obst_gemuese")
+    kacheln = view["item_grid"]["kacheln"]
+
+    # Apfel-Kachel ist gesperrt (bild_ref "2462" in der Liste).
+    apfel = next((k for k in kacheln if k["id"] == "apfel"), None)
+    assert apfel is not None, "Apfel-Kachel fehlt im Grid"
+    assert apfel["gesperrt"] is True, "Apfel-Kachel muss gesperrt sein (auf der Liste)"
+
+    # Banane-Kachel ist NICHT gesperrt (nicht auf der Liste).
+    banane = next((k for k in kacheln if k["id"] == "banane"), None)
+    assert banane is not None, "Banane-Kachel fehlt im Grid"
+    assert banane["gesperrt"] is False, "Banane-Kachel darf nicht gesperrt sein"
+
+
+def test_essen28_view_html_zeigt_kachel_gesperrt_klasse(client_mit_wuenschen):
+    """ESSEN-28(a): GET /display/essen/wunsch rendert .kachel-gesperrt und
+    data-wunsch-aktiv='true' für Items auf der aktiven Wunschliste.
+
+    client_mit_wuenschen hat Apfel (bild_ref 2462, obst_gemuese) und
+    Milch (bild_ref 2445, sonstiges) auf der Liste."""
+    # Obst-Tab: Apfel ist auf der Liste → kachel-gesperrt erwartet.
+    resp = client_mit_wuenschen.get("/display/essen/wunsch?tab=obst_gemuese")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    # Render-Vertrag: .kachel-gesperrt und data-wunsch-aktiv="true" vorhanden.
+    assert "kachel-gesperrt" in body, ".kachel-gesperrt-Klasse fehlt im HTML"
+    assert 'data-wunsch-aktiv="true"' in body, "data-wunsch-aktiv fehlt im HTML"
+    # disabled-Attribut auf gesperrter Kachel.
+    assert "disabled" in body, "disabled-Attribut fehlt auf gesperrter Kachel"
+
+
+def test_essen28_kachel_wieder_frei_nach_delete(client_mit_wuenschen):
+    """ESSEN-28(c): nach DELETE /api/v1/essen/wuensche/<id> rendert die
+    Kachel beim nächsten GET ohne .kachel-gesperrt (Reload-on-Read, ESSEN-20)."""
+    # Zustand vorher: Apfel auf der Liste → Kachel gesperrt.
+    resp_vor = client_mit_wuenschen.get("/display/essen/wunsch?tab=obst_gemuese")
+    body_vor = resp_vor.get_data(as_text=True)
+    assert "kachel-gesperrt" in body_vor, "Vortest: Kachel muss gesperrt sein"
+
+    # kind:1 (Apfel, bild_ref 2462) löschen.
+    del_resp = client_mit_wuenschen.delete("/api/v1/essen/wuensche/kind:1")
+    assert del_resp.status_code == 200
+
+    # Nach DELETE: Reload-on-Read → kein kachel-gesperrt mehr für Apfel.
+    resp_nach = client_mit_wuenschen.get("/display/essen/wunsch?tab=obst_gemuese")
+    body_nach = resp_nach.get_data(as_text=True)
+
+    # kind:2 (Milch, sonstiges) ist noch auf der Liste — aber Milch ist im
+    # sonstiges-Tab, nicht im obst_gemuese-Tab. Im obst_gemuese-Tab keine Sperre mehr.
+    assert "kachel-gesperrt" not in body_nach, \
+        "Nach DELETE darf obst_gemuese-Tab keine gesperrten Kacheln mehr zeigen"
+    assert 'data-wunsch-aktiv="true"' not in body_nach, \
+        "Nach DELETE darf data-wunsch-aktiv nicht mehr im obst_gemuese-Tab erscheinen"
+
+
+# ============================================================
 #  SVC-1 — Health-Check
 # ============================================================
 
