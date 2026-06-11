@@ -1,9 +1,10 @@
 /**
- * Essens-Buddy — Client-Logik (ESSEN-3/8/9).
+ * Essens-Buddy — Client-Logik (ESSEN-3/8/9/27).
  *
- * Zwei Tap-Affordanzen (ESSEN-3):
+ * Drei Tap-Affordanzen (ESSEN-3/27):
  *   (a) Kategorien-Tab tippen — wechselt das Item-Grid ohne Full-Reload.
  *   (b) Item-Kachel tippen — POST Wunsch, aktualisiert sichtbar die Liste.
+ *   (c) Entfernen-Symbol tippen — DELETE Wunsch, Liste rendert neu (ESSEN-27).
  *
  * Kein Hover, kein Wischen, kein Aufklappen (ESSEN-3).
  * Tab-Wechsel und Wunsch-Ablage ohne Full-Reload (ESSEN-2/3, AC3).
@@ -74,6 +75,25 @@
     }
   }
 
+  // ── Wunsch löschen (ESSEN-27) ─────────────────────────────────────────
+
+  /**
+   * Sendet DELETE /api/v1/essen/wuensche/<id> und rendert die Liste neu
+   * (Reload-on-Read, ESSEN-20). Genau ein Tap auf das Entfernen-Symbol
+   * löst genau einen DELETE-Request aus (ESSEN-27).
+   */
+  async function loescheWunsch(wunschId) {
+    try {
+      var resp = await fetch("/api/v1/essen/wuensche/" + encodeURIComponent(wunschId), {
+        method: "DELETE"
+      });
+      if (!resp.ok) return;  // Kiosk bleibt stabil bei Netz-Fehler.
+      await aktualisiereWunschListe();
+    } catch (_) {
+      // Netz-Fehler: Kiosk bleibt stabil.
+    }
+  }
+
   // ── Wunsch-Liste aktualisieren (ESSEN-8) ─────────────────────────────
 
   /**
@@ -96,6 +116,8 @@
         var altes = document.getElementById("liste-eintraege");
         if (altes) {
           altes.innerHTML = neueEintraege.innerHTML;
+          // Neue Einträge brauchen Lösch-Handler (ESSEN-27).
+          bindLoeschButtons();
         }
       }
     } catch (_) {}
@@ -129,10 +151,34 @@
     });
   }
 
+  // ── Lösch-Buttons binden (ESSEN-27) ─────────────────────────────────
+
+  /**
+   * Bindet Click-Handler an alle .loeschen-btn-Elemente.
+   * Die ID wird vom Eltern-Element .liste-eintrag[data-wunsch-id] gelesen.
+   */
+  function bindLoeschButtons() {
+    document.querySelectorAll(".loeschen-btn").forEach(function (btn) {
+      // Vorhandene Handler entfernen (Clone-Trick gegen Doppel-Bindungen).
+      btn.replaceWith(btn.cloneNode(true));
+    });
+    document.querySelectorAll(".loeschen-btn").forEach(function (btn) {
+      btn.addEventListener("click", function (evt) {
+        evt.stopPropagation();  // Kein Bubble zum Eltern-Div.
+        var eintrag = btn.closest(".liste-eintrag");
+        var wunschId = eintrag ? eintrag.dataset.wunschId : null;
+        if (wunschId) {
+          loescheWunsch(wunschId);
+        }
+      });
+    });
+  }
+
   // ── Init ─────────────────────────────────────────────────────────────
 
   document.addEventListener("DOMContentLoaded", function () {
     bindTabs();
     bindKacheln();
+    bindLoeschButtons();
   });
 })();

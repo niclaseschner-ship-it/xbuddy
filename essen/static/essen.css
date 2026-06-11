@@ -258,6 +258,33 @@ body.essen-shell {
   font-family: var(--font-hand);
   font-size: var(--fs-24);
   color: var(--kids-ink);
+  flex: 1;
+}
+
+/* ESSEN-27: Entfernen-Symbol — kinder-tappbar, rechts auf der Kachel */
+.loeschen-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  padding: var(--space-1);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-xl);
+  cursor: pointer;
+}
+
+.loeschen-btn:active {
+  background: rgba(0, 0, 0, 0.08);
+  transform: scale(0.92);
+}
+
+.loeschen-btn img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
 }
 
 .liste-leer {
