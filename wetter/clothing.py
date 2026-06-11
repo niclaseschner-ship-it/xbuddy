@@ -117,7 +117,7 @@ class Regel:
         trocken/warm ist (Pack-Sicht nimmt den Tages-Worst-Case).
         """
         feels = wetter.feelsLike
-        feels_max = getattr(wetter, "feelsLike_max", feels)
+        feels_max = wetter.feelsLike_max
         if self.feels_min is not None:
             if feels is None or feels < self.feels_min:
                 return False
