@@ -585,8 +585,13 @@ def test_t728_iter6_bug16_safe_area_inset_top():
     )
 
 
-def test_t728_iter6_bug16_galerie_overflow_auto():
-    """T728 Bug-16 / AC-Bug16-2: .picker-galerie hat overflow-y:auto — Galerie scrollt eigenstaendig."""
+def test_t728_iter6_bug16_galerie_kein_eigenes_scroll():
+    """T728 Bug-17 Iter-7 (Rückbau Bug-16-Scroll): .picker-galerie hat KEIN overflow-y:auto mehr.
+
+    Bug-16 hatte Galerie als eigenständige Scroll-Zone (flex:1 + overflow-y:auto).
+    Bug-17 revidiert das: .sheet-inhalt scrollt komplett — eine einzige Scroll-Achse.
+    Galerie ist normaler Block ohne internes overflow.
+    """
     css_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.css")
     with open(css_path, encoding="utf-8") as f:
         css_inhalt = f.read()
@@ -596,8 +601,137 @@ def test_t728_iter6_bug16_galerie_overflow_auto():
     assert galerie_pos != -1, ".picker-galerie { fehlt in routine-anpassen.css"
     block_end = css_inhalt.find("}", galerie_pos)
     galerie_block = css_inhalt[galerie_pos:block_end + 1]
-    assert "overflow-y: auto" in galerie_block or "overflow-y:auto" in galerie_block, (
-        "overflow-y:auto fehlt in .picker-galerie — Bug-16 Galerie scrollt nicht eigenstaendig"
+    assert "overflow-y: auto" not in galerie_block, (
+        "overflow-y: auto noch in .picker-galerie — Bug-17 Galerie darf kein eigenes Scroll haben "
+        "(AC-Bug17-2: gesamtes Sheet scrollt, nicht nur Galerie)"
+    )
+    assert "overflow-y:auto" not in galerie_block, (
+        "overflow-y:auto noch in .picker-galerie — Bug-17 Galerie darf kein eigenes Scroll haben "
+        "(AC-Bug17-2: gesamtes Sheet scrollt, nicht nur Galerie)"
+    )
+    assert "flex: 1" not in galerie_block, (
+        "flex: 1 noch in .picker-galerie — Bug-17 Rückbau unvollstaendig (AC-Bug17-2)"
+    )
+    assert "flex:1" not in galerie_block, (
+        "flex:1 noch in .picker-galerie — Bug-17 Rückbau unvollstaendig (AC-Bug17-2)"
+    )
+
+
+def test_t728_iter7_bug17_sheet_kein_display_flex():
+    """T728 Bug-17 / AC-Bug17-1: .sheet hat KEIN display:flex mehr — normaler Block-Container.
+
+    Bug-16 hatte display:flex; flex-direction:column auf .sheet eingeführt.
+    Bug-17 revidiert: Sheet ist normaler Block, Inhalt scrollt vertikal als Ganzes.
+    """
+    css_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.css")
+    with open(css_path, encoding="utf-8") as f:
+        css_inhalt = f.read()
+
+    sheet_pos = css_inhalt.find(".sheet {")
+    assert sheet_pos != -1, ".sheet { fehlt in routine-anpassen.css"
+    block_end = css_inhalt.find("}", sheet_pos)
+    sheet_block = css_inhalt[sheet_pos:block_end + 1]
+    assert "display: flex" not in sheet_block, (
+        "display: flex noch in .sheet — Bug-17 Rückbau unvollstaendig (AC-Bug17-1: kein Flex-Layout)"
+    )
+    assert "display:flex" not in sheet_block, (
+        "display:flex noch in .sheet — Bug-17 Rückbau unvollstaendig (AC-Bug17-1: kein Flex-Layout)"
+    )
+    assert "flex-direction: column" not in sheet_block, (
+        "flex-direction: column noch in .sheet — Bug-17 Rückbau unvollstaendig (AC-Bug17-1)"
+    )
+    assert "flex-direction:column" not in sheet_block, (
+        "flex-direction:column noch in .sheet — Bug-17 Rückbau unvollstaendig (AC-Bug17-1)"
+    )
+
+
+def test_t728_iter7_bug17_sheet_inhalt_scrollt():
+    """T728 Bug-17 / AC-Bug17-1+2: .sheet-inhalt scrollt komplett (overflow-y:auto), kein flex:1."""
+    css_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.css")
+    with open(css_path, encoding="utf-8") as f:
+        css_inhalt = f.read()
+
+    inhalt_pos = css_inhalt.find(".sheet-inhalt {")
+    assert inhalt_pos != -1, ".sheet-inhalt { fehlt in routine-anpassen.css"
+    block_end = css_inhalt.find("}", inhalt_pos)
+    inhalt_block = css_inhalt[inhalt_pos:block_end + 1]
+    assert "overflow-y: auto" in inhalt_block or "overflow-y:auto" in inhalt_block, (
+        "overflow-y:auto fehlt in .sheet-inhalt — Bug-17 Sheet-Inhalt scrollt nicht als Ganzes"
+    )
+    assert "flex: 1" not in inhalt_block, (
+        "flex: 1 noch in .sheet-inhalt — Bug-17 Rückbau: .sheet-inhalt darf kein flex:1 haben"
+    )
+    assert "flex:1" not in inhalt_block, (
+        "flex:1 noch in .sheet-inhalt — Bug-17 Rückbau: .sheet-inhalt darf kein flex:1 haben"
+    )
+
+
+def test_t728_iter7_bug18_sheet_btn_gruppe_sticky():
+    """T728 Bug-18 / AC-Bug18-1+2: .sheet-btn-gruppe ist position:sticky; bottom:0 mit opakem BG und z-index>=10."""
+    css_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.css")
+    with open(css_path, encoding="utf-8") as f:
+        css_inhalt = f.read()
+
+    btn_pos = css_inhalt.find(".sheet-btn-gruppe {")
+    assert btn_pos != -1, ".sheet-btn-gruppe { fehlt in routine-anpassen.css"
+    block_end = css_inhalt.find("}", btn_pos)
+    btn_block = css_inhalt[btn_pos:block_end + 1]
+    assert "position: sticky" in btn_block or "position:sticky" in btn_block, (
+        "position:sticky fehlt in .sheet-btn-gruppe — Bug-18 Action-Row klebt nicht unten (AC-Bug18-1)"
+    )
+    assert "bottom: 0" in btn_block or "bottom:0" in btn_block, (
+        "bottom:0 fehlt in .sheet-btn-gruppe — Bug-18 sticky nicht an unterer Kante (AC-Bug18-1)"
+    )
+    assert "background: white" in btn_block or "background:white" in btn_block or \
+           "background: #fff" in btn_block or "background:#fff" in btn_block or \
+           "background: var(--card)" in btn_block or "background:var(--card)" in btn_block, (
+        "opaques Background fehlt in .sheet-btn-gruppe — Bug-18 Buttons transparent (AC-Bug18-2)"
+    )
+    # z-index >= 10
+    assert "z-index: 10" in btn_block or "z-index:10" in btn_block or \
+           "z-index: 11" in btn_block or "z-index: 20" in btn_block, (
+        "z-index>=10 fehlt in .sheet-btn-gruppe — Bug-18 Action-Row liegt unter Galerie (AC-Bug18-1)"
+    )
+    # Keine halb-transparenten rgba-Hintergründe
+    assert "rgba" not in btn_block or "box-shadow" in btn_block, (
+        "rgba in .sheet-btn-gruppe — wenn rgba, dann nur fuer box-shadow, nicht fuer background (AC-Bug18-2)"
+    )
+
+
+def test_t728_iter7_bug19_enter_blur_label_input():
+    """T728 Bug-19 / AC-Bug19-1: Label-Input hat keydown-Handler mit Enter-Check + blur()."""
+    js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js_inhalt = f.read()
+
+    # keydown mit Enter-Check muss im JS sichtbar sein
+    assert 'e.key === "Enter"' in js_inhalt or "e.key === 'Enter'" in js_inhalt, (
+        "Enter-Check (e.key === \"Enter\") fehlt in routine-anpassen.js — Bug-19 (AC-Bug19-1)"
+    )
+    # blur() muss vorhanden sein
+    assert ".blur()" in js_inhalt, (
+        ".blur() fehlt in routine-anpassen.js — Bug-19 Tastatur-Schließen nicht implementiert (AC-Bug19-1)"
+    )
+    # keydown muss gelistet sein (nicht nur "input")
+    assert '"keydown"' in js_inhalt or "'keydown'" in js_inhalt, (
+        "keydown-Event fehlt in routine-anpassen.js — Bug-19 Enter-Handler nicht gebunden (AC-Bug19-1)"
+    )
+
+
+def test_t728_iter7_bug19_enter_blur_manual_search():
+    """T728 Bug-19 / AC-Bug19-2: manuelle Suchleiste hat keydown-Handler: Enter triggert Suche + blur()."""
+    js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js_inhalt = f.read()
+
+    # pickerSuche.blur() muss sichtbar sein (speziell für manuelle Suchleiste)
+    assert "pickerSuche.blur" in js_inhalt, (
+        "pickerSuche.blur() fehlt in routine-anpassen.js — Bug-19 manuelle Suche schließt Tastatur nicht (AC-Bug19-2)"
+    )
+    # _sucheUndRendereIcons muss im keydown-Pfad erreichbar sein (Suche triggern)
+    # Prüft indirekt: manuelle Suche + Enter → Suche auslösen
+    assert "_sucheUndRendereIcons" in js_inhalt, (
+        "_sucheUndRendereIcons fehlt in routine-anpassen.js — Suche kann nicht getriggert werden (AC-Bug19-2)"
     )
 
 
