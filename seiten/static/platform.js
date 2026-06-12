@@ -11,7 +11,10 @@
  *   const platform = getPlatform();
  *   await platform.ready();
  *   const user = platform.getCurrentUser();      // {id, first_name} oder null
- *   platform.setMainButton(label, onClick);      // Telegram MainButton oder DOM-Fallback
+ *   platform.setMainButton(label, onClick, opts);// Telegram MainButton oder DOM-Fallback
+ *                                                // opts: {enabled: bool} (default: true)
+ *   platform.hideMainButton();                   // Button vollständig verstecken
+ *   platform.showMainButton();                   // Button wieder anzeigen (Label + State bleiben)
  *   platform.enableClosingConfirmation();        // Dirty-Guard aktivieren
  *   platform.setDirty(bool);                    // Änderungs-Signal
  *   platform.onSave(callback);                  // Speicher-Handler registrieren
@@ -34,8 +37,9 @@ class TelegramPlatform {
     return this._wa.initDataUnsafe?.user ?? null;
   }
 
-  setMainButton(label, onClick) {
+  setMainButton(label, onClick, opts) {
     const btn = this._wa.MainButton;
+    const enabled = !opts || opts.enabled !== false;
     btn.setText(label);
     // Bestehenden Listener austauschen, um Doppelung zu vermeiden.
     btn.offClick(this._mainButtonHandler);
@@ -44,7 +48,25 @@ class TelegramPlatform {
       if (onClick) onClick();
     };
     btn.onClick(this._mainButtonHandler);
+    if (enabled) {
+      btn.enable();
+    } else {
+      btn.disable();
+    }
     btn.show();
+    // Handler + Label merken für show/hide-Restore
+    this._mainButtonLabel = label;
+    this._mainButtonOnClick = onClick;
+    this._mainButtonEnabled = enabled;
+  }
+
+  hideMainButton() {
+    this._wa.MainButton.hide();
+  }
+
+  showMainButton() {
+    // Setzt den Button sichtbar; Label/enabled-State bleiben erhalten.
+    this._wa.MainButton.show();
   }
 
   enableClosingConfirmation() {
@@ -80,7 +102,8 @@ class BrowserPlatform {
     return null;
   }
 
-  setMainButton(label, onClick) {
+  setMainButton(label, onClick, opts) {
+    const enabled = !opts || opts.enabled !== false;
     if (!this._btn) {
       this._btn = document.createElement("button");
       // Browser-Fallback, keine Design-Token-Bindung in V1.
@@ -106,6 +129,7 @@ class BrowserPlatform {
     }
 
     this._btn.textContent = label;
+    this._btn.disabled = !enabled;
 
     // Handler tauschen (kein doppelter Listener).
     if (this._clickHandler) {
@@ -117,6 +141,19 @@ class BrowserPlatform {
     };
     this._btn.addEventListener("click", this._clickHandler);
     this._btn.style.display = "block";
+  }
+
+  hideMainButton() {
+    if (this._btn) {
+      this._btn.style.display = "none";
+    }
+  }
+
+  showMainButton() {
+    // Setzt den Button sichtbar; Label/disabled-State bleiben erhalten.
+    if (this._btn) {
+      this._btn.style.display = "block";
+    }
   }
 
   enableClosingConfirmation() {

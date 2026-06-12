@@ -537,13 +537,17 @@ async function onSpeichern() {
   platform.setMainButton("Speichern", onSpeichern, { enabled: false });
 
   try {
-    // Schritt 1: Gelöschte default-Items (DELETE je ID)
+    // Schritt 1: Gelöschte IDs sammeln + DELETE je ID
+    // Bug-8-Fix: gelöschte IDs explizit sammeln, damit PUT-Schritt sie sicher ausschließt.
     const editDefaultIds = new Set(
       _editItems.filter(i => i.quelle === "default").map(i => i.id)
     );
     const editEinmaligIds = new Set(
       _editItems.filter(i => i.quelle === "einmalig").map(i => i.id)
     );
+
+    // Bug-8-Fix: Set der in diesem Save-Lauf gelöschten IDs (für PUT-Filter).
+    const geloeschteIds = new Set();
 
     for (const item of _serverItemsDefault) {
       if (!editDefaultIds.has(item.id)) {
@@ -553,6 +557,7 @@ async function onSpeichern() {
           zeigeToast(msg);
           return;
         }
+        geloeschteIds.add(item.id);
       }
     }
     for (const item of _serverItemsEinmalig) {
@@ -563,12 +568,15 @@ async function onSpeichern() {
           zeigeToast(msg);
           return;
         }
+        geloeschteIds.add(item.id);
       }
     }
 
     // Schritt 2: Reihenfolge / neue default-Items (PUT /api/v1/routine/items)
+    // Bug-8-Fix: PUT-Array explizit ohne gelöschte IDs bauen.
+    // Server validiert: alle PUT-IDs müssen nach dem DELETE-Schritt existieren.
     const neueDefaultIds = _editItems
-      .filter(i => i.quelle === "default")
+      .filter(i => i.quelle === "default" && !geloeschteIds.has(i.id))
       .map(i => i.id);
 
     const reihenfolgeGeaendert = (
@@ -857,19 +865,18 @@ async function _legeItemAn(label, quelle, piktogramm) {
 // ── Sheet-Overlay ─────────────────────────────────────────────────────────────
 
 /**
- * T728 Bug-6: Beim Öffnen des Bottom-Sheets MainButton deaktivieren,
+ * T728 Bug-7: Beim Öffnen des Bottom-Sheets MainButton vollständig verstecken,
  * damit er die Sheet-Buttons nicht überdeckt.
- * platform.js hat kein hideMainButton() — V1-Fix: setMainButton mit enabled:false
- * deaktiviert den Button (grau, nicht klickbar). CSS margin-bottom auf .sheet-btn-gruppe
- * als Sicherung gegen Überlappung. TODO: platform.js um hideMainButton() erweitern.
+ * platform.hideMainButton() ruft Telegram-WebApp btn.hide() bzw. DOM display:none.
+ * setMainButton(enabled:false) allein reicht nicht — Button bleibt sichtbar (Bug-7).
  */
 function oeffneSheetOverlay() {
   const overlay = document.getElementById("sheet-overlay");
   overlay.hidden = false;
 
-  // T728 Bug-6: MainButton während Sheet deaktivieren (MAD-5-konform via platform)
+  // T728 Bug-7: MainButton während Sheet vollständig verstecken (MAD-5-konform via platform)
   const platform = getPlatform();
-  platform.setMainButton("Speichern", onSpeichern, { enabled: false });
+  platform.hideMainButton();
 
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) schliesseSheet();
@@ -877,8 +884,8 @@ function oeffneSheetOverlay() {
 }
 
 /**
- * T728 Bug-6: Beim Schließen des Sheets MainButton restaurieren.
- * Nur wenn Diff vorhanden aktiv schalten (ROUTINE-20 Diff-Logik).
+ * T728 Bug-7: Beim Schließen des Sheets MainButton wieder anzeigen und
+ * Diff-State aktualisieren (aktiv wenn Diff vorhanden, ROUTINE-20).
  */
 function schliesseSheet() {
   const overlay = document.getElementById("sheet-overlay");
@@ -887,7 +894,9 @@ function schliesseSheet() {
   _pickerSelectedId = null;
   clearTimeout(_debounceTimer);
 
-  // T728 Bug-6: MainButton restaurieren (aktiv wenn Diff vorhanden)
+  // T728 Bug-7: MainButton wieder anzeigen, dann Diff-State aktualisieren
+  const platform = getPlatform();
+  platform.showMainButton();
   _aktualisiereMainButton();
 }
 
