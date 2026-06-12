@@ -782,4 +782,18 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             is_member_fn=_efs_is_member,
             overrides_pfad=_efs_overrides_pfad))
 
+    # T777 / ESSEN-22 V1.1 Vor-Routing: »Essens-Katalog lesen« als
+    # Item-Lookup-ReadTask (EC-9). LLM ruft ihn VOR essen_foto_setzen,
+    # um gericht_id/item_id aus der Caption zu bestimmen.
+    # AND-Guard: essen_origin_url UND family_group_chat_id_getter müssen
+    # gesetzt sein — fehlt eine, erscheint die Aufgabe NICHT im Katalog.
+    if essen_origin_url is not None and family_group_chat_id_getter is not None:
+        from skills.essen_client import EssenClient as _EklEssenClient
+        from skills.essen_katalog_lesen_task import EssenKatalogLesenTask
+        _ekl_essen_client = _EklEssenClient(origin_url=essen_origin_url)
+        _ekl_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
+        catalog.register(EssenKatalogLesenTask(
+            essen_client=_ekl_essen_client,
+            is_member_fn=_ekl_is_member))
+
     return catalog

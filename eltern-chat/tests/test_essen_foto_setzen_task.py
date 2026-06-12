@@ -158,6 +158,42 @@ def test_task_name():
     assert task.name == "essen_foto_setzen"
 
 
+# ============================================================
+#  T777 / ESSEN-22 V1.1: Description-Schärfung
+# ============================================================
+
+def test_description_verlangt_vorab_katalog_lesen():
+    """T777/AC4: EssenFotoSetzenTask.description verlangt ausdrücklich,
+    ZUERST essen_katalog_lesen aufzurufen (ESSEN-22 V1.1 Vor-Routing)."""
+    task = _make_task()
+    desc = task.description
+    assert "essen_katalog_lesen" in desc, (
+        "Description muss 'essen_katalog_lesen' enthalten — Vor-Routing-Hinweis "
+        "(T777/AC4)")
+    assert "ZUERST" in desc or "zuerst" in desc.lower(), (
+        "Description muss 'ZUERST' enthalten — LLM-Anweisung für Vor-Routing")
+
+
+def test_description_gericht_id_aus_katalog():
+    """T777/AC4: gericht_id-Property-Description verlangt essen_katalog_lesen-Quelle."""
+    task = _make_task()
+    gericht_id_desc = task.parameters["properties"]["gericht_id"]["description"]
+    assert "essen_katalog_lesen" in gericht_id_desc, (
+        "gericht_id-Description muss 'essen_katalog_lesen' als Quelle nennen")
+    assert "erfundenen" in gericht_id_desc or "keine erfundenen" in gericht_id_desc, (
+        "gericht_id-Description muss warnen: keine erfundenen IDs")
+
+
+def test_description_item_id_aus_katalog():
+    """T777/AC4: item_id-Property-Description verlangt essen_katalog_lesen-Quelle."""
+    task = _make_task()
+    item_id_desc = task.parameters["properties"]["item_id"]["description"]
+    assert "essen_katalog_lesen" in item_id_desc, (
+        "item_id-Description muss 'essen_katalog_lesen' als Quelle nennen")
+    assert "erfundenen" in item_id_desc or "keine erfundenen" in item_id_desc, (
+        "item_id-Description muss warnen: keine erfundenen IDs")
+
+
 def test_task_hat_propose_und_execute():
     """EC-10: WriteTask hat propose() und execute()."""
     task = _make_task()
