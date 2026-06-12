@@ -57,7 +57,11 @@
           {% if item.gesperrt %}disabled{% endif %}
         >
           {% if item.icon_url %}
-          <img src="{{ item.icon_url }}" alt="{{ item.label }}">
+          <img
+            class="{% if item.ist_foto %}kachel-foto{% else %}kachel-pikto{% endif %}"
+            src="{{ item.icon_url }}"
+            alt="{{ item.label }}"
+          >
           {% endif %}
           <div class="label">{{ item.label }}</div>
         </button>
@@ -77,7 +81,11 @@
           {% for eintrag in gruppe.eintraege %}
           <div class="liste-eintrag kat-{{ eintrag.kategorie }}" data-wunsch-id="{{ eintrag.id }}">
             {% if eintrag.icon_url %}
-            <img src="{{ eintrag.icon_url }}" alt="{{ eintrag.label }}">
+            <img
+              class="{% if eintrag.ist_foto %}kachel-foto{% else %}kachel-pikto{% endif %}"
+              src="{{ eintrag.icon_url }}"
+              alt="{{ eintrag.label }}"
+            >
             {% endif %}
             <div class="text">{{ eintrag.label }}</div>
             {# ESSEN-27: Entfernen-Symbol — kinder-tappbar, sichtbar auf der Kachel #}

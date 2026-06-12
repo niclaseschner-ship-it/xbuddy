@@ -37,8 +37,9 @@ def demo_paths(tmp_path):
         "einkaufsliste_file":   str(tmp_path / "einkaufsliste.json"),
         "zaehler_file":         str(tmp_path / "zaehler.json"),
         "gerichte_file":        str(tmp_path / "gerichte.json"),
-        "katalog_file":         str(tmp_path / "katalog.json"),   # Override — fehlt = kein Override
+        "katalog_file":         str(tmp_path / "katalog.json"),           # Override — fehlt = kein Override
         "katalog_default_file": real_default,
+        "foto_overrides_file":  str(tmp_path / "foto_overrides.json"),    # fehlt = keine Overrides
     }
 
 

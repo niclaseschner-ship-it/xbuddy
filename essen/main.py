@@ -22,6 +22,7 @@ Endpunkte:
   DELETE /api/v1/essen/wuensche/<id>       — Wunsch/Einkauf entfernen (ESSEN-17)
   GET    /api/v1/essen/katalog             — Katalog lesen (ESSEN-18)
   POST   /api/v1/essen/katalog/gerichte    — Gericht anlegen (ESSEN-19)
+  PATCH  /api/v1/essen/katalog/gerichte/<id> — Gericht-Bild ändern (ESSEN-19a)
 """
 
 import argparse
@@ -45,12 +46,14 @@ if __package__:
     from . import katalog as katalog_mod
     from . import render as render_mod
     from . import store as store_mod
+    from .photo_client import EssenPhotoClient, EssenPhotoClientError
 else:
     sys.path.insert(0, _REPO_ROOT)
     from essen import config as config_mod
     from essen import katalog as katalog_mod
     from essen import render as render_mod
     from essen import store as store_mod
+    from essen.photo_client import EssenPhotoClient, EssenPhotoClientError
 
 
 # ============================================================
@@ -241,12 +244,17 @@ def _lade_alle_kategorien():
     gerichte_daten = _lade_gerichte_frisch()
     gerichte_items = []
     for g in gerichte_daten.get("gerichte", []):
-        gerichte_items.append({
+        item = {
             "id":        str(g.get("id", "")),
             "label":     g.get("label", ""),
-            "bild_ref":  g.get("bild_ref", ""),
             "kategorie": "gericht",
-        })
+        }
+        # ESSEN-22: Gericht trägt entweder bild_ref ODER foto_ref (ESSEN-19/19a).
+        if "foto_ref" in g:
+            item["foto_ref"] = g["foto_ref"]
+        else:
+            item["bild_ref"] = g.get("bild_ref", "")
+        gerichte_items.append(item)
     return dict(lebensmittel, gericht=gerichte_items)
 
 
@@ -295,6 +303,20 @@ def _valide_bild_ref(bild_ref):
         int(bild_ref)
         return True
     except (TypeError, ValueError):
+        return False
+
+
+def _foto_ref_existiert(foto_ref):
+    """Prüft, ob foto_ref im Photo-Buddy existiert (ESSEN-19/19a, ESSEN-22).
+
+    Baut einen EssenPhotoClient und ruft medium_existiert() auf (CLIENT-1).
+    Test-Naht: `EssenPhotoClient` im Modul-Namespace per monkeypatch ersetzbar.
+    Bei Netzwerkfehler → False (kein Exception-Durchbruch an Endpoint).
+    """
+    client = EssenPhotoClient(config_mod.photo_buddy_url())
+    try:
+        return client.medium_existiert(foto_ref)
+    except EssenPhotoClientError:
         return False
 
 
@@ -348,6 +370,7 @@ def wunsch_view():
         kategorien,
         wuensche_daten.get("wuensche", []),
         aktiv_tab=aktiv_tab,
+        foto_overrides_pfad=_paths()["foto_overrides_file"],
     )
     return render_template("wunsch.html", view=view)
 
@@ -680,7 +703,9 @@ def katalog_lesen():
 def gericht_anlegen():
     """POST /api/v1/essen/katalog/gerichte — Gericht anlegen (ESSEN-19).
 
-    Payload: { label, bild_ref }  (kategorie ist implizit 'gericht')
+    Payload: { label, bild_ref | foto_ref }  (kategorie ist implizit 'gericht')
+    Genau eines von bild_ref / foto_ref ist Pflicht. Beide → 400, keines → 400.
+    Bei foto_ref: Photo-Buddy-Validierung (GET /api/v1/photo/medien/<id>, ESSEN-22).
     Antwort: { "id": "<n>" }
     Duplikates label → 409 (ESSEN-19).
     """
@@ -689,15 +714,29 @@ def gericht_anlegen():
         return jsonify({"fehler": "Kein JSON-Body"}), 400
 
     label    = body.get("label", "")
-    bild_ref = body.get("bild_ref", "")
+    bild_ref = body.get("bild_ref")
+    foto_ref = body.get("foto_ref")
 
     fehler = []
     if not label or not str(label).strip():
         fehler.append("label darf nicht leer sein")
-    if not bild_ref or not _valide_bild_ref(bild_ref):
+
+    # ESSEN-19: genau eines von bild_ref / foto_ref ist Pflicht.
+    hat_bild_ref = bild_ref is not None and str(bild_ref).strip() != ""
+    hat_foto_ref = foto_ref is not None and str(foto_ref).strip() != ""
+    if hat_bild_ref and hat_foto_ref:
+        fehler.append("bild_ref und foto_ref schließen sich gegenseitig aus — genau eines angeben")
+    elif not hat_bild_ref and not hat_foto_ref:
+        fehler.append("eines von bild_ref (ARASAAC-ID) oder foto_ref (Photo-Buddy-Medien-ID) ist Pflicht")
+    elif hat_bild_ref and not _valide_bild_ref(bild_ref):
         fehler.append("bild_ref muss eine numerische ARASAAC-ID sein")
+
     if fehler:
         return jsonify({"fehler": fehler}), 400
+
+    # Photo-Buddy-Validierung (ESSEN-19, ESSEN-22): foto_ref muss existieren.
+    if hat_foto_ref and not _foto_ref_existiert(str(foto_ref).strip()):
+        return jsonify({"fehler": "foto_ref: Medien-ID im Photo-Buddy nicht gefunden"}), 400
 
     p = _paths()
     daten = store_mod.lade_gerichte(p["gerichte_file"], runtime["gerichte_snapshot"])
@@ -714,17 +753,79 @@ def gericht_anlegen():
     neues_gericht = {
         "id":        neue_id,
         "label":     str(label).strip(),
-        "bild_ref":  str(bild_ref),
         "kategorie": "gericht",
     }
+    # ESSEN-22: entweder bild_ref ODER foto_ref — nie beides im Eintrag.
+    if hat_foto_ref:
+        neues_gericht["foto_ref"] = str(foto_ref).strip()
+    else:
+        neues_gericht["bild_ref"] = str(bild_ref)
+
     gerichte = list(gerichte)
     gerichte.append(neues_gericht)
     neu_daten = {"gerichte": gerichte, "zaehler": zaehler}
     store_mod.speichere_gerichte(p["gerichte_file"], neu_daten)
     runtime["gerichte_snapshot"] = neu_daten
 
-    logger.info("Gericht angelegt id=%s label=%r", neue_id, label)
+    logger.info("Gericht angelegt id=%s label=%r foto_ref=%s bild_ref=%s",
+                neue_id, label, foto_ref, bild_ref)
     return jsonify({"id": neue_id}), 201
+
+
+@app.route("/api/v1/essen/katalog/gerichte/<gericht_id>", methods=["PATCH"])
+def gericht_bild_patchen(gericht_id):
+    """PATCH /api/v1/essen/katalog/gerichte/<id> — Gericht-Bild ändern (ESSEN-19a).
+
+    Payload (sparse update analog ESSEN-32, alle Felder optional):
+      foto_ref (string) — neues Familien-Foto (Photo-Buddy-Medien-ID).
+      bild_ref (string) — zurück zum Pikto-Default (ARASAAC-ID).
+    Genau eines (oder keines). Beide → 400. Unbekannte Felder → ignoriert.
+    Antwort: 200 mit dem aktualisierten Gericht-Eintrag.
+    404 bei unbekannter id (ESSEN-19a).
+    """
+    body = request.get_json(silent=True)
+    if body is None:
+        body = {}
+
+    # ESSEN-19a: foto_ref + bild_ref gleichzeitig → 400.
+    hat_bild_ref = "bild_ref" in body and body["bild_ref"] is not None and str(body["bild_ref"]).strip() != ""
+    hat_foto_ref = "foto_ref" in body and body["foto_ref"] is not None and str(body["foto_ref"]).strip() != ""
+    if hat_bild_ref and hat_foto_ref:
+        return jsonify({"fehler": "bild_ref und foto_ref schließen sich gegenseitig aus — genau eines angeben"}), 400
+
+    # Gericht suchen (ESSEN-19a: 404 bei unbekannter ID).
+    p = _paths()
+    daten = store_mod.lade_gerichte(p["gerichte_file"], runtime["gerichte_snapshot"])
+    gerichte = daten.get("gerichte", [])
+    ziel = next((g for g in gerichte if str(g.get("id", "")) == gericht_id), None)
+    if ziel is None:
+        return jsonify({"fehler": "Gericht nicht gefunden", "id": gericht_id}), 404
+
+    # Validierungen.
+    if hat_bild_ref and not _valide_bild_ref(body["bild_ref"]):
+        return jsonify({"fehler": "bild_ref muss eine numerische ARASAAC-ID sein"}), 400
+    if hat_foto_ref and not _foto_ref_existiert(str(body["foto_ref"]).strip()):
+        return jsonify({"fehler": "foto_ref: Medien-ID im Photo-Buddy nicht gefunden"}), 400
+
+    # Sparse update: nur Bild-Felder änderbar (ESSEN-19a).
+    # Unbekannte/Label/Zutaten-Felder werden ignoriert (Vorwärtskompatibilität).
+    aktualisiert = dict(ziel)
+    if hat_foto_ref:
+        aktualisiert["foto_ref"] = str(body["foto_ref"]).strip()
+        aktualisiert.pop("bild_ref", None)   # ESSEN-19a: ersetzt bild_ref
+    elif hat_bild_ref:
+        aktualisiert["bild_ref"] = str(body["bild_ref"])
+        aktualisiert.pop("foto_ref", None)   # ESSEN-19a: ersetzt foto_ref
+
+    # Atomar schreiben (DCOMP-4, analog ESSEN-19).
+    gerichte_neu = [aktualisiert if str(g.get("id", "")) == gericht_id else g for g in gerichte]
+    neu_daten = {"gerichte": gerichte_neu, "zaehler": daten.get("zaehler", 0)}
+    store_mod.speichere_gerichte(p["gerichte_file"], neu_daten)
+    runtime["gerichte_snapshot"] = neu_daten
+
+    logger.info("PATCH Gericht id=%s foto_ref=%s bild_ref=%s",
+                gericht_id, body.get("foto_ref"), body.get("bild_ref"))
+    return jsonify(aktualisiert), 200
 
 
 # ============================================================

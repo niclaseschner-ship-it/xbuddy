@@ -279,6 +279,60 @@ class EssenClient:
                 items.extend(kat_items)
         return items
 
+    def patch_gericht_bild(self, gericht_id, *, foto_ref=None, bild_ref=None):
+        """ESSEN-19a: setzt oder wechselt das Bild eines bestehenden Gerichts.
+
+        PATCH /api/v1/essen/katalog/gerichte/<id> mit {foto_ref} oder {bild_ref}.
+
+        Genau eines der beiden Felder muss gesetzt sein (ESSEN-19a: `foto_ref`
+        UND `bild_ref` gleichzeitig → 400). Beide None → nichts zu senden;
+        die Methode wirft in dem Fall EssenClientError.
+
+        Liefert das Antwort-Dict bei HTTP 200.
+
+        Fehler-Pfade (ESSEN-19a):
+          - HTTP 400 — Validierung (beide Felder gesetzt, leerer Wert …)
+            → EssenClientError mit marker=FEHLER_4XX.
+          - HTTP 404 — Gericht-ID unbekannt
+            → EssenClientError mit marker=FEHLER_4XX.
+          - HTTP sonstige 4xx / 5xx / Connection-Fehler
+            → EssenClientError.
+        """
+        if foto_ref is None and bild_ref is None:
+            raise EssenClientError(
+                "patch_gericht_bild: foto_ref oder bild_ref muss gesetzt sein",
+                marker=FEHLER_4XX)
+        payload = {}
+        if foto_ref is not None:
+            payload["foto_ref"] = str(foto_ref)
+        if bild_ref is not None:
+            payload["bild_ref"] = str(bild_ref)
+        body_bytes = json.dumps(payload).encode("utf-8")
+        pfad = "%s/%s" % (PFAD_KATALOG_GERICHTE, gericht_id)
+        status, resp_bytes = self._call(
+            "PATCH", pfad,
+            body=body_bytes,
+            content_type="application/json")
+        if status == 200:
+            try:
+                data = json.loads(resp_bytes.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as e:
+                raise EssenClientError(
+                    "Essens-Buddy: PATCH-Antwort nicht parsebar (%s)" % e) from e
+            return data
+        detail = ""
+        try:
+            data = json.loads(resp_bytes.decode("utf-8"))
+            if isinstance(data, dict):
+                detail = data.get("error") or data.get("message") or ""
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            pass
+        msg = "Essens-Buddy: HTTP %s bei PATCH %s" % (status, pfad)
+        if detail:
+            msg = "%s — %s" % (msg, detail)
+        marker = FEHLER_5XX if status >= 500 else FEHLER_4XX
+        raise EssenClientError(msg, marker=marker)
+
     def patche_eintrag(self, eintrag_id, abgehakt=None, aus_gericht=None):
         """ESSEN-32: patcht einen Wunsch-/Einkaufs-Eintrag (sparse update).
 
