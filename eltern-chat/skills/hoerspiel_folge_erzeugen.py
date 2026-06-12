@@ -96,7 +96,8 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
     if tg is not None and chat_id is not None:
         _sende(tg, chat_id,
                "Klar, ich überlege mir gerade eine Folge. "
-               "Das dauert 1–2 Minuten — bis gleich!")
+               "Das dauert 1–2 Minuten — bitte solange nicht stören, "
+               "ich melde mich, sobald der Vorschlag steht.")
     logger.info("hoerspiel_folge_erzeugen.propose: rufe POST %s (HFE-3)",
                 "/api/v1/hoerspiel/folgen-vorschlag")
     data = hoerspiel_client.folgen_vorschlag(idee_bereinigt)
@@ -173,8 +174,8 @@ def execute(*, hoerspiel_client, tg, chat_id,
     # andere Fragen stellen (V1: andere Skill-Turns laufen unabhängig).
     _sende(tg, chat_id,
            "Alles klar — ich schreibe und vertone die Folge gerade. "
-           "Das dauert etwa 1–3 Minuten. Bis dahin melde ich mich kurz.\n"
-           "(Andere Fragen kannst du in der Zwischenzeit weiter stellen.)")
+           "Das dauert etwa 1–3 Minuten — bitte solange nicht stören, "
+           "ich melde mich, sobald die Folge in der App ist.")
     try:
         data = hoerspiel_client.album_bauen(
             titel=titel, text=text, voice=voice, idee=idee)
