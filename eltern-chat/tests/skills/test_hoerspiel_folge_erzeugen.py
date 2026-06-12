@@ -412,10 +412,15 @@ def test_HFE5_http_503_fehler_bubble():
 # ============================================================
 
 
-def test_HFE7_kein_tg_send_in_propose():
-    """HFE-7: propose() darf KEIN tg.send_*-Aufruf ausführen (Routing-Test)."""
-    # propose() nimmt kein tg-Argument — diese Funktion hat keinen Zugang zu tg.
-    # Test prüft über Task-Ebene: propose() tg-Objekt ist nicht angeschlossen.
+def test_HFE7_propose_sendet_quittungen_direkt():
+    """HFE-7-Lockerung 2026-06-12: propose() sendet zwei Direkt-Bubbles —
+    den Start-Bubble (vor dem LLM-Call, Stille von 1-2 min sonst) und ggf.
+    multipart-Vorschau-Stücke (Telegram-Limit 4096 Zeichen).
+
+    Strict EC-29 (eine Stimme im Turn) gilt für den Normalfall (1 Bot-
+    Nachricht aus dem Tool-Result). Bei langen Folgen + langer LLM-
+    Latenz wird das gelockert; Tool-Result-Text trägt dann den Confirm-
+    Block. Memory: feedback_hfe_synchron_blockt_chat_turn.md."""
     tg = FakeTelegram()
     task = _make_task(tg=tg)
     ctx = _ctx()
@@ -424,7 +429,10 @@ def test_HFE7_kein_tg_send_in_propose():
         ctx,
     )
     assert isinstance(proposal, Proposal)
-    assert tg.sent == [], "propose() darf kein tg.send_message aufrufen (HFE-7)"
+    # Mindestens der Start-Bubble muss gesendet worden sein.
+    assert len(tg.sent) >= 1
+    assert "überlege" in tg.sent[0]["text"].lower() or \
+        "nicht stören" in tg.sent[0]["text"].lower()
 
 
 # ============================================================
