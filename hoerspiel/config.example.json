@@ -1,0 +1,8 @@
+{
+  "_comment": "HSP-26/HSP-27/CONFIG-1 — Runtime-Konfig des Hörspiel-Buddys (Bind, Log, Provider, Modell). Kopiere als config.json (gitignored). Nicht gesetzte Felder bleiben auf den Code-Defaults (DEFAULT_LLM_MODEL etc. in hoerspiel/config.py). ENV-Variablen (HOERSPIEL_LISTEN_PORT etc.) überschreiben diese Datei (CONFIG-5). V1 akzeptiert nur llm_provider='claude' (HSP-10); andere Werte (etwa 'mistral', OPEN-HSP-N) lehnen Loader und PATCH /config mit HTTP 422 ab. Secrets gehören NICHT hierher (CONFIG-3) — Anthropic-/Azure-Keys kommen aus ENV (HOERSPIEL_ANTHROPIC_KEY, HOERSPIEL_AZURE_OPENAI_KEY).",
+  "listen_host": "127.0.0.1",
+  "listen_port": 5053,
+  "log_level":   "INFO",
+  "llm_provider": "claude",
+  "llm_model": "claude-opus-4-7"
+}
