@@ -620,26 +620,33 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             essen_client=_wze_essen_client,
             is_member_fn=_wze_is_member))
 
-    # GAN-7 / #503: »Gericht anlegen« als synchrone schreibende Aufgabe
-    # (EC-10, E-GAN-2 propose→confirm). AND-Guard: essen_origin_url UND
-    # icon_origin_url UND family_group_chat_id_getter müssen ALLE gesetzt
-    # sein — fehlt eine, erscheint die Aufgabe NICHT im Katalog (GAN-7):
-    # - essen_origin_url: Schreib-Naht für die Gerichte-API (ESSEN-19).
-    # - icon_origin_url:  Lese-Naht für die ICONS-7-Stichwort-Suche (GAN-4).
+    # GAN-7 / #503 / ESSEN-22 Pfad 1: »Gericht anlegen« als synchrone schreibende
+    # Aufgabe (EC-10, E-GAN-2 propose→confirm). AND-Guard: essen_origin_url UND
+    # icon_origin_url UND photo_origin_url UND family_group_chat_id_getter müssen
+    # ALLE gesetzt sein — fehlt eine, erscheint die Aufgabe NICHT im Katalog
+    # (GAN-7):
+    # - essen_origin_url:  Schreib-Naht für die Gerichte-API (ESSEN-19).
+    # - icon_origin_url:   Lese-Naht für die ICONS-7-Stichwort-Suche (GAN-4).
     #   Kein eigener ARASAAC-Bezug (E-GAN-3) — die Suche läuft zentral.
+    # - photo_origin_url:  POST /api/v1/photo/medien (PHOTO-13) für Foto-Pfad
+    #   (ESSEN-22 Pfad 1).
     # - family_group_chat_id_getter: Live-Berechtigung (GAN-2, EC-2).
     if essen_origin_url is not None and icon_origin_url is not None \
+            and photo_origin_url is not None \
             and family_group_chat_id_getter is not None:
         from skills.essen_client import EssenClient as _GanEssenClient
         from skills.gericht_anlegen_task import GerichtAnlegenTask
         from skills.icon_client import IconClient as _GanIconClient
+        from skills.photo_client import PhotoClient as _GanPhotoClient
         _gan_essen_client = _GanEssenClient(origin_url=essen_origin_url)
         _gan_icon_client = _GanIconClient(origin_url=icon_origin_url)
+        _gan_photo_client = _GanPhotoClient(origin_url=photo_origin_url)
         _gan_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
         catalog.register(GerichtAnlegenTask(
             tg=tg,
             essen_client=_gan_essen_client,
             icon_client=_gan_icon_client,
+            photo_client=_gan_photo_client,
             family_group_chat_id_getter=family_group_chat_id_getter,
             is_member_fn=_gan_is_member,
             icon_origin_url=icon_origin_url))

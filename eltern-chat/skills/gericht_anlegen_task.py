@@ -28,6 +28,7 @@ from tasks import Proposal, WriteTask
 from skills import gericht_anlegen as gan_mod
 from skills import icon_album
 from skills.gericht_anlegen import (
+    AKTION_FOTO_HINZUFUEGEN,
     AKTION_HINZUFUEGEN,
     AKTION_ICON_SUCHEN,
 )
@@ -80,7 +81,7 @@ class GerichtAnlegenTask(WriteTask):
     is_async = False
     post_execute_hooks = ()
 
-    def __init__(self, tg, essen_client, icon_client,
+    def __init__(self, tg, essen_client, icon_client, photo_client,
                  family_group_chat_id_getter, is_member_fn=None,
                  icon_origin_url=None):
         super().__init__(
@@ -90,8 +91,12 @@ class GerichtAnlegenTask(WriteTask):
                 "Aufrufen, wenn jemand sagt »füg ‹Lasagne› als Gericht hinzu«, "
                 "»neues Gericht ‹Pancakes› anlegen«, »Gericht ‹Pizza› in den "
                 "Katalog aufnehmen« oder Ähnliches. "
-                "Vor einem ‹hinzufuegen›-Aufruf muss ein Piktogramm gewählt "
-                "sein. Dafür den Task ZUERST mit "
+                "Foto-Pfad (ESSEN-22 Pfad 1): wenn jemand ein Foto MIT "
+                "Gericht-Name schickt (z. B. »Lasagne« als Caption), den Task "
+                "mit {aktion: 'foto_hinzufuegen', label: '<name>'} aufrufen "
+                "— das Foto wird aus dem TurnContext gelesen (EC-12-Geist). "
+                "Icon-Pfad: Vor einem ‹hinzufuegen›-Aufruf muss ein Piktogramm "
+                "gewählt sein. Dafür den Task ZUERST mit "
                 "{aktion: 'icon_suchen', icon_stichwort: '<wort>'} aufrufen "
                 "(lesend, keine Bestätigung) — die Quittung enthält das "
                 "Mapping der Kandidaten-Bilder (1 = <id>, 2 = <id>, …). "
@@ -106,18 +111,22 @@ class GerichtAnlegenTask(WriteTask):
                         "enum": [
                             AKTION_HINZUFUEGEN,
                             AKTION_ICON_SUCHEN,
+                            AKTION_FOTO_HINZUFUEGEN,
                         ],
                         "description": (
-                            "Welche Operation. 'hinzufuegen' = Gericht "
-                            "dauerhaft in den Katalog aufnehmen; "
+                            "Welche Operation. "
+                            "'hinzufuegen' = Gericht mit Piktogramm in den "
+                            "Katalog aufnehmen (Icon-Pfad). "
+                            "'foto_hinzufuegen' = Gericht mit Foto anlegen "
+                            "(ESSEN-22 Pfad 1 — Foto aus TurnContext). "
                             "'icon_suchen' = Piktogramm-Kandidaten zu "
                             "einem Wort suchen (lesend, ohne Schreiben)."),
                     },
                     "label": {
                         "type": "string",
                         "description": (
-                            "Der Gericht-Name bei 'hinzufuegen', "
-                            "z. B. 'Lasagne' oder 'Pancakes'."),
+                            "Der Gericht-Name bei 'hinzufuegen' und "
+                            "'foto_hinzufuegen', z. B. 'Lasagne'."),
                     },
                     "icon_id": {
                         "type": "string",
@@ -139,6 +148,7 @@ class GerichtAnlegenTask(WriteTask):
         self._tg = tg
         self._essen_client = essen_client
         self._icon_client = icon_client
+        self._photo_client = photo_client
         self._family_group_chat_id_getter = family_group_chat_id_getter
         self._is_member_fn = is_member_fn
         # icon_origin_url: Basis-Origin des Routers für die Album-Bilder
@@ -169,6 +179,17 @@ class GerichtAnlegenTask(WriteTask):
                 summary = "Ein neues Gericht in den Gerichte-Katalog aufnehmen."
             return Proposal(summary)
 
+        if aktion == AKTION_FOTO_HINZUFUEGEN:
+            label = (args.get("label") or "").strip()
+            if label:
+                summary = (
+                    f"Gericht »{label}« mit Foto in den Katalog aufnehmen "
+                    "(ESSEN-22 Pfad 1) — beim nächsten Öffnen der "
+                    "Essens-View sichtbar?")
+            else:
+                summary = "Ein neues Gericht mit Foto in den Gerichte-Katalog aufnehmen."
+            return Proposal(summary)
+
         if aktion == AKTION_ICON_SUCHEN:
             stichwort = (args.get("icon_stichwort") or "").strip()
             if stichwort:
@@ -194,6 +215,11 @@ class GerichtAnlegenTask(WriteTask):
         # is_member_fn: von build_catalog immer injiziert; None nur für Tests.
         is_member_fn = self._is_member_fn or (lambda uid: True)
         from_user_id = getattr(turn_context, "from_user_id", None)
+
+        # ESSEN-22 Pfad 1: Foto aus TurnContext holen (EC-12-Geist).
+        if aktion == AKTION_FOTO_HINZUFUEGEN:
+            return self._execute_foto_hinzufuegen(
+                args, is_member_fn, from_user_id, turn_context)
 
         signal, daten = gan_mod.gericht_anlegen(
             aktion=aktion,
@@ -226,6 +252,43 @@ class GerichtAnlegenTask(WriteTask):
                     return _QUITTUNG_NICHT_ERREICHBAR
 
         return _quittung_fuer(signal, daten, aktion=aktion)
+
+    def _execute_foto_hinzufuegen(self, args, is_member_fn, from_user_id,
+                                  turn_context):
+        """ESSEN-22 Pfad 1: Foto aus TurnContext holen und Gericht anlegen.
+
+        EC-12-Geist: nicht das Modell bestimmt welches Foto — das Foto kommt
+        aus `turn_context.media_telegram_file_id`.
+        """
+        file_id = getattr(turn_context, "media_telegram_file_id", None)
+        medium_typ = getattr(turn_context, "medium_typ", None)
+
+        if not file_id:
+            return _QUITTUNG_NICHTS_ZU_TUN_LABEL
+
+        try:
+            medium_bytes = self._tg.download_file(file_id)
+        except Exception as e:
+            logger.warning(
+                "gericht_anlegen foto_hinzufuegen: Download fehlgeschlagen "
+                "file_id=%s: %s", file_id, e)
+            return _QUITTUNG_NICHT_ERREICHBAR
+
+        filename, content_type = _filename_und_mime(medium_typ)
+
+        signal, daten = gan_mod.gericht_anlegen(
+            aktion=gan_mod.AKTION_FOTO_HINZUFUEGEN,
+            essen_client=self._essen_client,
+            icon_client=self._icon_client,
+            photo_client=self._photo_client,
+            is_member_fn=is_member_fn,
+            from_user_id=from_user_id,
+            label=args.get("label"),
+            medium_bytes=medium_bytes,
+            filename=filename,
+            content_type=content_type,
+        )
+        return _quittung_fuer(signal, daten, aktion=gan_mod.AKTION_FOTO_HINZUFUEGEN)
 
 
 # ============================================================
@@ -281,4 +344,14 @@ def _quittung_fuer(signal, daten, aktion=""):
         return _QUITTUNG_NICHTS_ZU_TUN_LABEL
     if aktion == AKTION_ICON_SUCHEN:
         return _QUITTUNG_NICHTS_ZU_TUN_STICHWORT
-    return ("Ich brauche eine Aktion (»hinzufuegen« oder »icon_suchen«).")
+    if aktion == AKTION_FOTO_HINZUFUEGEN:
+        return _QUITTUNG_NICHTS_ZU_TUN_LABEL
+    return ("Ich brauche eine Aktion (»hinzufuegen«, »foto_hinzufuegen« "
+            "oder »icon_suchen«).")
+
+
+def _filename_und_mime(medium_typ):
+    """Liefert (filename, content_type) passend zum `medium_typ` (analog EFS)."""
+    if medium_typ == "video":
+        return "video.mp4", "video/mp4"
+    return "foto.jpg", "image/jpeg"
