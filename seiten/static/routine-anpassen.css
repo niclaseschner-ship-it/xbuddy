@@ -205,16 +205,8 @@ body {
   cursor: default;
 }
 
-/* Schloss-Symbol bleibt für Zeit-Anker (ROUTINE-20: Aufstehen + Losgehen) */
-.drag-handle.schloss {
-  color: var(--ink-soft);
-  font-size: 14px;
-  text-align: center;
-  cursor: default;
-  opacity: 0.35;
-  line-height: 1;
-  user-select: none;
-}
+/* T728 Bug-13: .drag-handle.schloss entfernt — kein Konsument mehr.
+   Zeit-Cards nutzen dieselbe .pfeil-gruppe wie Item-Cards (V1: alle Pfeile disabled). */
 
 /* ── Card-Bild ───────────────────────────────────────────── */
 
