@@ -15,11 +15,14 @@ Vier Verantwortungen:
   5. Familien-Foto-Override (ESSEN-22): Gericht mit foto_ref ODER Item mit
      Eintrag in foto_overrides.json → Foto-URL aus Photo-Buddy statt ARASAAC.
      Kreisförmig via CSS-Klasse kachel-foto.
+
+SVC-5-Konformität: Dieses Modul kennt keinen eigenen Default-Pfad für
+foto_overrides.json. Der Aufrufer (config.py/data_paths() via main.py) liefert
+den Pfad als `foto_overrides_pfad`-Parameter. None → keine Overrides geladen.
 """
 
 import json
 import logging
-import os
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +31,6 @@ ICON_BASIS = "/display/_shared/icons/arasaac/"
 
 # ESSEN-22: Photo-Buddy-Pfad für Familien-Fotos (relative URL, nginx-geroutet).
 PHOTO_BUDDY_MEDIEN_PFAD = "/api/v1/photo/medien/"
-
-# ESSEN-22 / SVC-5: Default-Pfad für foto_overrides.json (Per-Instanz, xbuddy-data).
-DEFAULT_FOTO_OVERRIDES_PFAD = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "..", "xbuddy-data", "essen", "foto_overrides.json",
-)
 
 # ESSEN-27: Entfernen-Symbol ARASAAC ID 11751 — sichtbar auf jeder liste-eintrag-Kachel.
 ENTFERNEN_ICON_REF = "11751"
@@ -87,11 +84,12 @@ def lade_foto_overrides(pfad=None):
     aktiv). Andere Ausnahmen (z. B. JSON-Syntaxfehler) werden geloggt und
     ebenfalls als leeres Dict behandelt (Defense in Depth).
 
-    pfad: Dateipfad zu foto_overrides.json. Default: DEFAULT_FOTO_OVERRIDES_PFAD.
+    pfad: Expliziter Dateipfad zu foto_overrides.json (SVC-5: Pfad kommt vom
+    Aufrufer via config.py/data_paths). None → kein Lade-Versuch, leeres Dict.
     Schema: { "<item_id>": "<photo_buddy_medien_id>" }
     """
     if pfad is None:
-        pfad = DEFAULT_FOTO_OVERRIDES_PFAD
+        return {}
     try:
         with open(pfad, encoding="utf-8") as f:
             return json.load(f)
@@ -255,8 +253,8 @@ def baue_view(katalog_kategorien, wuensche, aktiv_tab=DEFAULT_TAB,
     katalog_kategorien  dict mit Schlüsseln gericht, obst_gemuese, brotbelag, sonstiges
     wuensche            Liste der Wunsch-Dicts
     aktiv_tab           slug des aktiven Tabs (Default: obst_gemuese, ESSEN-9)
-    foto_overrides_pfad optionaler Pfad zu foto_overrides.json (ESSEN-22/SVC-5);
-                        None → DEFAULT_FOTO_OVERRIDES_PFAD
+    foto_overrides_pfad Pfad zu foto_overrides.json (ESSEN-22/SVC-5), geliefert
+                        vom Aufrufer (config.py/data_paths); None → keine Overrides
 
     Liefert ein dict für `templates/wunsch.html`.
 

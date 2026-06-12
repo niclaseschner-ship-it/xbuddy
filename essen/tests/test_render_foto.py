@@ -207,6 +207,27 @@ def test_lade_foto_overrides_fehlend_gibt_leer():
     assert result == {}
 
 
+def test_lade_foto_overrides_none_gibt_leer():
+    """AC4 / SVC-5: lade_foto_overrides(None) → {} ohne Datei-Zugriff (SVC-5-konform)."""
+    result = render_mod.lade_foto_overrides(None)
+    assert result == {}
+
+
+def test_baue_view_ohne_foto_overrides_pfad():
+    """AC2 / SVC-5: baue_view mit foto_overrides_pfad=None → kein Crash, Items bleiben ARASAAC."""
+    item = _basis_item(item_id="apfel", bild_ref="2462")
+    kat = _katalog_mit(obst_items=[item])
+
+    # Kein Crash erwartet, kein Pfad übergeben (SVC-5: Aufrufer liefert Pfad).
+    view = render_mod.baue_view(kat, [], aktiv_tab="obst_gemuese",
+                                foto_overrides_pfad=None)
+    kachel = view["item_grid"]["kacheln"][0]
+
+    assert kachel["ist_foto"] is False
+    assert "arasaac" in kachel["icon_url"]
+    assert "2462" in kachel["icon_url"]
+
+
 # ============================================================
 #  AC5 — CSS-Klasse kachel-foto / kachel-pikto im HTML
 # ============================================================
