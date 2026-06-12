@@ -122,6 +122,11 @@ DEFAULTS = {
     # Ansicht). Leer (Default) → EinkaufZeigenTask nutzt ENV-Fallback
     # MINI_APP_EINKAUF_URL (EZG-6) oder zeigt Fehler-Text ohne Button (EZG-7).
     "mini_app_einkauf_url": "",
+    # RAO-6 / T728-C: HTTPS-Basis-URL aller Mini-Apps (Funnel-Domain). Leer
+    # (Default) → RoutineAnpassenOeffnenTask wird NICHT im Katalog registriert
+    # (RAO-8 dreifacher Guard). Selbe Domain wie mini_app_einkauf_url-Basis,
+    # aber als separater Slot — kein String-Parsing der Einkauf-URL.
+    "mini_app_base_url": "",
     # ONB-6 / EC-15: Familien-Gruppen-Chat-ID. Default leer = Onboarding-
     # Bindung. Über ENV oder Datei gesetzt → gesperrt (Vorrang vor
     # Onboarding-Bindung) — die Sperr-Logik sitzt in `resolve`, nicht im
@@ -167,7 +172,8 @@ class Config:
                  multimodal_provider="",
                  multimodal_api_key="",
                  multimodal_model="",
-                 mini_app_einkauf_url=""):
+                 mini_app_einkauf_url="",
+                 mini_app_base_url=""):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
         self.provider = provider
@@ -195,6 +201,8 @@ class Config:
         self.multimodal_model = multimodal_model        # leer → Anbieter-Default
         # EZG-6 / EIN-8 / #653: Mini-App-URL für die Einkaufsliste (EZG-6).
         self.mini_app_einkauf_url = mini_app_einkauf_url  # leer → ENV-Fallback MINI_APP_EINKAUF_URL
+        # RAO-6 / T728-C: Basis-URL aller Mini-Apps (Funnel-Domain).
+        self.mini_app_base_url = mini_app_base_url  # leer → RAO NICHT im Katalog
 
 
 def _family_group_in_file(config_path):
@@ -319,4 +327,6 @@ def resolve(config_path, zd=None):
         multimodal_model=str(values["multimodal_model"]).strip(),
         # EZG-6 / EIN-8 / #653: Mini-App-URL für die Einkaufsliste.
         mini_app_einkauf_url=str(values["mini_app_einkauf_url"]).strip(),
+        # RAO-6 / T728-C: Basis-URL aller Mini-Apps (Funnel-Domain).
+        mini_app_base_url=str(values["mini_app_base_url"]).strip().rstrip("/"),
     )
