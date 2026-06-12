@@ -386,9 +386,7 @@ body {
   min-height: 90vh;
   /* T728 Bug-16: iPhone-Notch / Dynamic-Island — Inhalt unter Notch sichtbar */
   padding-top: max(env(safe-area-inset-top, 0px), 8px);
-  /* T728 Bug-16: Flex-Layout — Label-Input oben, Galerie scrollbar, Action-Row unten */
-  display: flex;
-  flex-direction: column;
+  /* T728 Bug-17: Rückbau — kein Flex-Layout, normaler Block-Container */
   overflow-x: hidden;
   overscroll-behavior: contain;
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15);
@@ -407,11 +405,9 @@ body {
   max-width: 100%;
   box-sizing: border-box;
   overflow-x: hidden;
-  /* T728 Bug-16: Sheet-Inhalt füllt verfügbare Flex-Höhe */
-  flex: 1;
+  /* T728 Bug-17: gesamtes Sheet-Inhalt-Scroll — eine einzige Scroll-Achse */
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
+  max-height: calc(100vh - max(env(safe-area-inset-top, 0px), 8px));
 }
 
 /* ── Sheet-Inhalt ─────────────────────────────────────────── */
@@ -424,12 +420,9 @@ body {
 
 .sheet-field { margin-bottom: 12px; }
 
-/* T728 Bug-16: Icon-Picker-Feld wächst in der Flex-Spalte — Galerie scrollt eigenständig */
+/* T728 Bug-17: Kein Flex-Trick mehr — Galerie ist normaler Block, kein eigenes Scroll */
 .sheet-field:has(.picker-galerie) {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
+  /* normaler Block — kein flex:1 und kein overflow — gesamtes Sheet scrollt */
 }
 
 .sheet-field label {
@@ -527,9 +520,7 @@ body {
 .picker-galerie {
   min-height: 60px;
   margin-bottom: 10px;
-  /* T728 Bug-16: Galerie scrollt eigenständig — Label-Input bleibt oben sichtbar */
-  flex: 1;
-  overflow-y: auto;
+  /* T728 Bug-17: Galerie wächst natürlich — kein eigenes overflow, kein flex-Anteil */
 }
 
 .icon-grid {
@@ -580,11 +571,17 @@ body {
 
 /* ── Sheet-Buttons ───────────────────────────────────────── */
 
-/* T728 Bug-6: margin-bottom als Sicherung gegen Telegram-MainButton-Überlappung */
+/* T728 Bug-18: Action-Row sticky — bleibt unten sichtbar, volldeckend, über Galerie */
 .sheet-btn-gruppe {
-  margin-top: 14px;
-  margin-bottom: env(safe-area-inset-bottom, 16px);
-  padding-bottom: 8px;
+  position: sticky;
+  bottom: 0;
+  background: white;  /* opakes weißes BG — kein halb-transparenter Hintergrund */
+  z-index: 10;        /* über Galerie-Bildern */
+  padding: 12px 16px;
+  padding-bottom: max(env(safe-area-inset-bottom, 12px), 12px);
+  border-top: 1px solid #e5e5e5;
+  margin: 0;
+  box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.05);
   display: grid;
   grid-template-columns: 1fr 2fr;
   gap: 8px;
