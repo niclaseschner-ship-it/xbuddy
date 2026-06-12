@@ -43,7 +43,7 @@ ENV_KATALOG_DEFAULT_FILE     = "ESSEN_KATALOG_DEFAULT_FILE"
 
 # Photo-Buddy-Basis-URL für Medien-Validierung (ESSEN-19/ESSEN-19a, ESSEN-22).
 # ENV-Override: PHOTO_BUDDY_URL
-DEFAULT_PHOTO_BUDDY_URL = "http://127.0.0.1:5051"
+DEFAULT_PHOTO_BUDDY_URL = "http://127.0.0.1:5051"  # Port 5051 = Photo-Buddy laut PORT-2 (conventions/ports.md)
 ENV_PHOTO_BUDDY_URL     = "PHOTO_BUDDY_URL"
 
 
