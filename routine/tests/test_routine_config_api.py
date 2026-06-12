@@ -475,3 +475,116 @@ def test_write_data_ungueltige_wochentags_keys():
             with pytest.raises(config_mod.ValidationError):
                 config_mod.write_data(data_file,
                                       {"abfahrtszeit": {ungueltig: "07:30"}})
+
+
+# ============================================================
+#  GET /api/v1/routine/config — AC1, AC2, AC_ENTRY (ROUTINE-14, #728)
+# ============================================================
+
+def test_ac_entry_get_trifft_flask_handler(data_path_und_client):
+    """AC_ENTRY: GET /api/v1/routine/config trifft routine/main.py-Handler.
+
+    Beleg: Flask test_client GET → HTTP 200, ruft _current_config() (Reload-on-Read).
+    Ohne Netz.
+    """
+    _, client = data_path_und_client
+    resp = client.get("/api/v1/routine/config")
+    assert resp.status_code == 200
+    body = json.loads(resp.data)
+    # Schema-Symmetrie: alle drei PUT-akzeptierten Schlüssel im Response
+    assert "abfahrtszeit" in body
+    assert "aufstehzeit" in body
+    assert "anzieh_vorlauf_min" in body
+
+
+def test_ac1_get_liefert_aktuelle_config(data_path_und_client):
+    """AC1: GET liefert 200 mit den aktuellen Zeitwerten (ROUTINE-14, #728).
+
+    Werte im Response müssen dem Fixture-Grundzustand entsprechen.
+    """
+    _, client = data_path_und_client
+    resp = client.get("/api/v1/routine/config")
+    assert resp.status_code == 200
+    body = json.loads(resp.data)
+    assert body["abfahrtszeit"] == "07:45"
+    assert body["aufstehzeit"] == "07:00"
+    assert body["anzieh_vorlauf_min"] == 8
+
+
+def test_ac1_get_spiegelt_put_schema(data_path_und_client):
+    """AC1: GET-Antwort spiegelt PUT-akzeptiertes Schema (Schema-Symmetrie, ROUTINE-14).
+
+    PUT setzt neue Werte → GET liefert exakt dieselben Werte zurück.
+    Reload-on-Read (DCOMP-3): kein Service-Restart nötig.
+    """
+    _, client = data_path_und_client
+
+    # PUT setzt neue Zeiten
+    put_resp = client.put("/api/v1/routine/config",
+                          json={"abfahrtszeit": "09:00", "aufstehzeit": "07:30",
+                                "anzieh_vorlauf_min": 12},
+                          content_type="application/json")
+    assert put_resp.status_code == 200
+
+    # GET muss exakt die gesetzten Werte zurückgeben
+    get_resp = client.get("/api/v1/routine/config")
+    assert get_resp.status_code == 200
+    body = json.loads(get_resp.data)
+    assert body["abfahrtszeit"] == "09:00"
+    assert body["aufstehzeit"] == "07:30"
+    assert body["anzieh_vorlauf_min"] == 12
+
+
+def test_ac1_get_reload_on_read_via_current_config(data_path_und_client):
+    """AC1: GET ruft _current_config() (Reload-on-Read, DCOMP-3).
+
+    Zeigt: neuer Stand in routine.json ist ohne Neustart per GET sichtbar.
+    """
+    data_path, client = data_path_und_client
+
+    # Datei direkt manipulieren (simuliert externen Schreiber, z.B. Eltern-Chat)
+    with open(data_path, encoding="utf-8") as f:
+        inhalt = json.load(f)
+    inhalt["abfahrtszeit"] = "06:55"
+    data_dir = os.path.dirname(data_path)
+    with tempfile.NamedTemporaryFile(
+            mode="w", dir=data_dir, suffix=".tmp", delete=False,
+            encoding="utf-8") as tmp:
+        json.dump(inhalt, tmp)
+        tmp_name = tmp.name
+    os.replace(tmp_name, data_path)
+
+    # GET muss neuen Stand sehen (Reload-on-Read, DCOMP-3)
+    resp = client.get("/api/v1/routine/config")
+    assert resp.status_code == 200
+    body = json.loads(resp.data)
+    assert body["abfahrtszeit"] == "06:55", (
+        "DCOMP-3: GET muss nach direktem Schreiben in routine.json "
+        "den neuen Stand liefern (Reload-on-Read ohne Service-Restart)"
+    )
+
+
+def test_ac2_get_kein_data_path_liefert_500(tmp_path):
+    """AC2: kein konfigurierter data_path → 500 mit ehrlichem Fehler (KEINE leeren Defaults).
+
+    Explizit: configure() ohne data_path → GET → 500.
+    """
+    data_file = tmp_path / "routine.json"
+    data_file.write_text(json.dumps({
+        "abfahrtszeit": "07:00",
+        "aufstehzeit": "06:30",
+        "anzieh_vorlauf_min": 5,
+        "items": [],
+        "zeitzone": "Europe/Berlin",
+        "zeit_referenzen": {"an": False, "paare": []},
+    }))
+    cfg = config_mod.resolve_data(str(data_file))
+    # data_path bewusst NICHT übergeben
+    main_mod.configure(cfg, data_path=None, store_path=None)
+    client = main_mod.app.test_client()
+
+    resp = client.get("/api/v1/routine/config")
+    assert resp.status_code == 500
+    body = json.loads(resp.data)
+    assert "error" in body
+    assert body["error"]  # ehrlicher Fehler — kein leerer String
