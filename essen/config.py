@@ -41,6 +41,19 @@ DEFAULT_KATALOG_DEFAULT_FILE = os.path.join(HERE, "katalog.default.json")
 ENV_KATALOG_DEFAULT_FILE     = "ESSEN_KATALOG_DEFAULT_FILE"
 
 
+# Photo-Buddy-Basis-URL für Medien-Validierung (ESSEN-19/ESSEN-19a, ESSEN-22).
+# ENV-Override: PHOTO_BUDDY_URL
+DEFAULT_PHOTO_BUDDY_URL = "http://127.0.0.1:5051"  # Port 5051 = Photo-Buddy laut PORT-2 (conventions/ports.md)
+ENV_PHOTO_BUDDY_URL     = "PHOTO_BUDDY_URL"
+
+
+def photo_buddy_url(env=None):
+    """Liefert die Basis-URL des Photo-Buddys (ENV-Override PHOTO_BUDDY_URL)."""
+    if env is None:
+        env = os.environ
+    return env.get(ENV_PHOTO_BUDDY_URL, DEFAULT_PHOTO_BUDDY_URL)
+
+
 def data_paths(env=None):
     """Liefert die Datei-Pfade für Domänendaten (ENV-Overrides, ESSEN-21/CONFIG-5).
 
