@@ -242,7 +242,7 @@ def test_t728_fix6_js_main_button_toggle_on_sheet():
     js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
     with open(js_path, encoding="utf-8") as f:
         js_inhalt = f.read()
-    # oeffneSheetOverlay muss setMainButton aufrufen (deaktivieren)
+    # oeffneSheetOverlay muss definiert sein
     assert "oeffneSheetOverlay" in js_inhalt, \
         "oeffneSheetOverlay fehlt in routine-anpassen.js"
     assert "setMainButton" in js_inhalt, \
@@ -253,3 +253,50 @@ def test_t728_fix6_js_main_button_toggle_on_sheet():
     # Sicherheitscheck: kein direkter Telegram.WebApp-Aufruf (MAD-5)
     assert "Telegram.WebApp" not in js_inhalt, \
         "Telegram.WebApp direkt aufgerufen — MAD-5-Verletzung in Bug-6-Fix"
+
+
+# ── T728 Live-Fix-2 — 3 neue Klauseln (Bug-7 + Bug-8) ────────────────────────
+
+def test_t728_fix7_platform_js_hat_hide_show_main_button():
+    """T728 Bug-7 / AC-Fix7-1: platform.js hat hideMainButton() und showMainButton() fuer Telegram + DOM-Fallback."""
+    js_path = os.path.join(_SEITEN_DIR, "static", "platform.js")
+    with open(js_path, encoding="utf-8") as f:
+        js_inhalt = f.read()
+    assert "hideMainButton" in js_inhalt, \
+        "hideMainButton fehlt in platform.js — Bug-7 (Button bleibt sichtbar) nicht gefixt"
+    assert "showMainButton" in js_inhalt, \
+        "showMainButton fehlt in platform.js — Bug-7 (Button nach Sheet-Schluss nicht sichtbar) nicht gefixt"
+    # Beide Implementierungen (Telegram-Pfad: MainButton.hide/show, DOM-Pfad: display)
+    assert "MainButton.hide" in js_inhalt, \
+        "Telegram-Pfad MainButton.hide fehlt in platform.js — hideMainButton unvollständig"
+    assert "MainButton.show" in js_inhalt, \
+        "Telegram-Pfad MainButton.show fehlt in platform.js — showMainButton unvollständig"
+    assert 'display = "none"' in js_inhalt or "display='none'" in js_inhalt or '"none"' in js_inhalt, \
+        "DOM-Fallback display:none fehlt in platform.js — hideMainButton für Browser nicht implementiert"
+
+
+def test_t728_fix7_js_sheet_ruft_hide_show_main_button():
+    """T728 Bug-7 / AC-Fix7-2: routine-anpassen.js ruft hideMainButton() beim Sheet-Open und showMainButton() beim Sheet-Close."""
+    js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js_inhalt = f.read()
+    assert "hideMainButton" in js_inhalt, \
+        "hideMainButton fehlt in routine-anpassen.js — Bug-7 oeffneSheetOverlay versteckt Button nicht"
+    assert "showMainButton" in js_inhalt, \
+        "showMainButton fehlt in routine-anpassen.js — Bug-7 schliesseSheet zeigt Button nicht wieder an"
+
+
+def test_t728_fix8_js_save_sequenz_filtert_geloeschte_ids():
+    """T728 Bug-8 / AC-Fix8-3: onSpeichern() baut PUT-Array explizit ohne geloeschte IDs (geloeschteIds-Filter)."""
+    js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js_inhalt = f.read()
+    # geloeschteIds muss als Set verwendet werden (expliziter Filter)
+    assert "geloeschteIds" in js_inhalt, \
+        "geloeschteIds-Set fehlt in routine-anpassen.js — Bug-8 (Save 400) nicht gefixt"
+    # PUT-Array darf gelöschte IDs nicht enthalten: Filter-Ausdruck muss vorhanden sein
+    assert "geloeschteIds.has" in js_inhalt, \
+        "geloeschteIds.has-Filter fehlt — PUT-Array wird nicht von gelöschten IDs bereinigt (Bug-8)"
+    # geloeschteIds.add muss im DELETE-Schritt gerufen werden
+    assert "geloeschteIds.add" in js_inhalt, \
+        "geloeschteIds.add fehlt — gelöschte IDs werden nicht gesammelt (Bug-8)"
