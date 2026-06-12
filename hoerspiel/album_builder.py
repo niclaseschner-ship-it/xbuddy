@@ -26,6 +26,7 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 from collections.abc import Callable
 from datetime import datetime
@@ -41,6 +42,13 @@ BUNDLE_THRESHOLD_WORDS = 450
 
 # HSP-7/HSP-14: durchschnittlich 150 Wörter/Minute als grobe Track-Dauer.
 WORDS_PER_SECOND = 2.5
+
+# HSP-14 Pausen (aus Brainstorm-Demo `generate_structured.py`):
+# - 0.55s Stille hinten an jedem Inhalts-Bündel (zwischen Bündeln + vor Outro).
+# - 1.8s nach Titel-Absatz und 0.7s nach Intro-Reim werden in V1 nicht
+#   umgesetzt — die laufen über separate Track-Schnitte, die wir später
+#   einbauen, wenn der Bündel-Schnitt feiner wird.
+BUNDLE_TAIL_SILENCE_SEK = 0.55
 
 DEFAULT_INDEX_FILENAME = ".index.json"
 
@@ -101,13 +109,58 @@ def _save_index(alben_root: str, idx: dict[str, str]) -> None:
 
 
 def _naechste_nummer(historie: str) -> int:
-    """Liest die höchste `Folge <N>:`-Nummer aus der Historie + 1."""
-    nummern = [int(m.group(1)) for m in re.finditer(r"Folge\s+(\d+)\s*:", historie)]
+    """Liest die höchste `Folge <N>`-Nummer aus der Historie + 1.
+
+    Akzeptiert mehrere Markdown-Konventionen: `Folge 23: Titel`,
+    `Folge 23 — Titel` (Emdash), `Folge 23 – Titel` (Endash),
+    `Folge 23 - Titel` (Bindestrich). Die Brainstorm-Bibel-Historie
+    nutzt den Emdash; ältere Demos den Doppelpunkt.
+    """
+    nummern = [int(m.group(1))
+               for m in re.finditer(r"Folge\s+(\d+)\s*[:—–-]", historie)]
     return (max(nummern) + 1) if nummern else 1
 
 
 def _shaped_track_dauer(text: str) -> int:
     return max(1, round(_woerter(text) / WORDS_PER_SECOND))
+
+
+def _pad_silence(mp3_bytes: bytes, silence_sek: float) -> bytes:
+    """Hängt `silence_sek` Stille hinter eine MP3-Spur (HSP-14).
+
+    Nutzt ffmpeg: einmal mp3 + lavfi-anullsrc per concat zu einer Datei.
+    Fehlt ffmpeg → die Original-MP3 bleibt unverändert (degrades gracefully,
+    Pause fehlt dann nur akustisch).
+    """
+    if silence_sek <= 0:
+        return mp3_bytes
+    try:
+        with tempfile.TemporaryDirectory(prefix="hsp_pad_") as tmp:
+            src = os.path.join(tmp, "src.mp3")
+            sil = os.path.join(tmp, "sil.mp3")
+            out = os.path.join(tmp, "out.mp3")
+            list_path = os.path.join(tmp, "list.txt")
+            with open(src, "wb") as f:
+                f.write(mp3_bytes)
+            subprocess.run(
+                ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                 "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono",
+                 "-t", str(silence_sek), "-c:a", "libmp3lame", "-b:a", "96k",
+                 sil],
+                check=True)
+            with open(list_path, "w") as f:
+                f.write("file '%s'\nfile '%s'\n" % (src, sil))
+            subprocess.run(
+                ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                 "-f", "concat", "-safe", "0", "-i", list_path,
+                 "-c", "copy", out],
+                check=True)
+            with open(out, "rb") as f:
+                return f.read()
+    except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+        logger.warning(
+            "ffmpeg-Stille-Padding fehlgeschlagen (%s) — Track ohne Pause", exc)
+        return mp3_bytes
 
 
 def _alben_root(data_root: str) -> str:
@@ -196,13 +249,19 @@ def baue_album(*, titel: str, text: str, voice: str, idee: str,
     try:
         audio_tmp = os.path.join(tmp_root, "audio")
         os.makedirs(audio_tmp, exist_ok=True)
+        n_bundles = len(bundles)
         for position, bundle in enumerate(bundles, start=2):
             mp3 = tts_engine.synthese(text=bundle, voice=voice)
+            # HSP-14: zwischen Inhalts-Tracks 0.55s Stille hinten dranhängen,
+            # vor Outro-Track 0.55s — beide Werte aus dem Brainstorm-Demo
+            # (generate_structured.py PARA_SILENCE/PRE_OUTRO_SILENCE).
+            # Letzter Inhalts-Bündel bekommt damit auch eine Pre-Outro-Pause.
+            mp3 = _pad_silence(mp3, BUNDLE_TAIL_SILENCE_SEK)
             track_filename = "track-%02d.mp3" % position
             data_io.atomic_write_bytes(os.path.join(audio_tmp, track_filename), mp3)
-            album_manifest.add_inhalt_track(manifest, position=position,
-                                            album_id=album_id,
-                                            dauer_sek=_shaped_track_dauer(bundle))
+            album_manifest.add_inhalt_track(
+                manifest, position=position, album_id=album_id,
+                dauer_sek=_shaped_track_dauer(bundle) + BUNDLE_TAIL_SILENCE_SEK)
         album_manifest.add_outro_track(manifest)
 
         manifest = album_manifest.manifest_to_dict(manifest)
