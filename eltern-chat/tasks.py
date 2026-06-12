@@ -321,7 +321,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   essen_origin_url=None,
                   avb_sessions=None,
                   current_provider_getter=None,
-                  mini_app_einkauf_url=None):
+                  mini_app_einkauf_url=None,
+                  mini_app_base_url=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
@@ -685,6 +686,26 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             essen_client=_ezg_essen_client,
             is_member_fn=_ezg_is_member,
             mini_app_url=mini_app_einkauf_url or ""))
+
+    # RAO-8 / T728-C: »Routine-Anpassen öffnen« als lesende Aufgabe (EC-9).
+    # Dreifacher AND-Guard: routine_origin_url UND mini_app_base_url UND
+    # family_group_chat_id_getter müssen ALLE gesetzt sein — fehlt eine,
+    # erscheint die Aufgabe NICHT im Katalog (RAO-8).
+    # - routine_origin_url: Lese-Naht für GET /api/v1/routine/items (RAO-4).
+    # - mini_app_base_url: Funnel-Domain für web_app.url (RAO-6, EZG-6-Naht).
+    # - family_group_chat_id_getter: Live-Berechtigung gegen die Familien-Gruppe
+    #   (RAO-2). is_member_fn analog der RZS-/EZG-Linie.
+    if routine_origin_url is not None and mini_app_base_url is not None \
+            and family_group_chat_id_getter is not None:
+        from skills.routine_anpassen_oeffnen_task import RoutineAnpassenOeffnenTask
+        from skills.routine_client import RoutineClient as _RaoRoutineClient
+        _rao_routine_client = _RaoRoutineClient(origin_url=routine_origin_url)
+        _rao_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
+        catalog.register(RoutineAnpassenOeffnenTask(
+            tg=tg,
+            routine_client=_rao_routine_client,
+            is_member_fn=_rao_is_member,
+            mini_app_url=mini_app_base_url))
 
     # ONB-11 / #639: »Anbieter wechseln« als async-schreibende Aufgabe.
     # AND-Guard: zd_store_getter UND family_group_chat_id_getter UND
