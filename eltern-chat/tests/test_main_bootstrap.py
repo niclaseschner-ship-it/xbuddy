@@ -27,17 +27,20 @@ from tasks import build_catalog
 
 def test_bootstrap_essen_origin_url_registers_wze_and_gan():
     """WZE+GAN landen im Live-Katalog, wenn essen_origin_url + icon_origin_url
-    + family_group_chat_id_getter gesetzt sind.
+    + photo_origin_url + family_group_chat_id_getter gesetzt sind.
 
     Dieser Test fängt den Watchdog-Befund: essen_origin_url fehlte im
     main.py-build_catalog-Aufruf (AND-Guard fiel auf Default-None → WZE/GAN
     nie im Katalog, obwohl cfg-Wert vorhanden).
+
+    ESSEN-22 Pfad 1: GAN-Guard braucht jetzt zusätzlich photo_origin_url.
     """
     tg = FakeTelegram()
     catalog = build_catalog(
         tg, "/instanz/rootCA.pem",
         essen_origin_url="http://test-essen",
         icon_origin_url="http://test-icons",
+        photo_origin_url="http://test-photo",
         family_group_chat_id_getter=lambda: "-100",
     )
     task_names = list(catalog._tasks.keys())
@@ -47,7 +50,7 @@ def test_bootstrap_essen_origin_url_registers_wze_and_gan():
     )
     assert "gericht_anlegen" in task_names, (
         "GerichtAnlegenTask fehlt im Catalog — AND-Guard für essen_origin_url/"
-        "icon_origin_url hat nicht gegriffen."
+        "icon_origin_url/photo_origin_url hat nicht gegriffen."
     )
 
 
@@ -70,6 +73,21 @@ def test_bootstrap_gan_absent_without_icon_origin_url():
         tg, "/instanz/rootCA.pem",
         essen_origin_url="http://test-essen",
         icon_origin_url=None,
+        photo_origin_url="http://test-photo",
+        family_group_chat_id_getter=lambda: "-100",
+    )
+    assert "gericht_anlegen" not in catalog._tasks
+
+
+def test_bootstrap_gan_absent_without_photo_origin_url():
+    """GAN erscheint NICHT im Katalog, wenn photo_origin_url=None
+    (ESSEN-22 Pfad 1 AND-Guard)."""
+    tg = FakeTelegram()
+    catalog = build_catalog(
+        tg, "/instanz/rootCA.pem",
+        essen_origin_url="http://test-essen",
+        icon_origin_url="http://test-icons",
+        photo_origin_url=None,
         family_group_chat_id_getter=lambda: "-100",
     )
     assert "gericht_anlegen" not in catalog._tasks

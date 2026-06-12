@@ -76,23 +76,36 @@ class EssenClient:
         self._transport = transport
         self._timeout = timeout
 
-    def post_gericht(self, name, icon_id):
+    def post_gericht(self, name, icon_id=None, foto_ref=None):
         """ESSEN-19: legt ein neues Gericht im Gerichte-Katalog an.
 
         POST /api/v1/essen/katalog/gerichte mit:
-          `{"label": name, "bild_ref": icon_id}`
+          `{"label": name, "bild_ref": icon_id}` (Icon-Pfad, ESSEN-19)
+          ODER
+          `{"label": name, "foto_ref": foto_ref}` (Foto-Pfad, ESSEN-22 Pfad 1)
+
+        Genau eines der beiden Felder `icon_id` und `foto_ref` muss gesetzt sein
+        (XOR-Bed.: beide gesetzt → Buddy-Validierungsfehler). Beide None →
+        EssenClientError (kein Request).
 
         Liefert das Antwort-Dict `{"id": <n>}` (ESSEN-19, laufende Nummer).
 
         Fehler-Pfade (GAN-5):
           - HTTP 4xx — Buddy-Validierung (leeres Label, doppeltes Label →
-                       409, ungültige bild_ref) → EssenClientError mit
+                       409, ungültige bild_ref/foto_ref) → EssenClientError mit
                        HTTP-Status im Fehlertext (ehrliche Grenze, EC-7).
           - HTTP 5xx — Buddy-Fehler → EssenClientError.
           - alle anderen Stati ≠ 201 → EssenClientError.
           - Antwort nicht parsbar / Connection-Fehler → EssenClientError.
         """
-        payload = {"label": name, "bild_ref": icon_id}
+        if icon_id is None and foto_ref is None:
+            raise EssenClientError(
+                "post_gericht: icon_id oder foto_ref muss gesetzt sein")
+        payload = {"label": name}
+        if foto_ref is not None:
+            payload["foto_ref"] = str(foto_ref)
+        else:
+            payload["bild_ref"] = str(icon_id)
         body_bytes = json.dumps(payload).encode("utf-8")
         status, resp_bytes = self._call(
             "POST", PFAD_KATALOG_GERICHTE,

@@ -9,16 +9,20 @@ Schreib-Skill-Abstraktion, bis sie nach dem 2.–3. *gebauten* Skill
 ehrlich entsteht).
 
 Operationen (GAN-3):
-  - gericht_hinzufuegen → POST /api/v1/essen/katalog/gerichte {label, bild_ref}
-  - icon_suchen         → ICONS-7: GET /api/v1/icons/suche?q=<label>&max=3
+  - gericht_hinzufuegen      → POST /api/v1/essen/katalog/gerichte
+                                {label, bild_ref}      (Icon-Pfad)
+  - foto_hinzufuegen         → POST /api/v1/essen/katalog/gerichte
+                                {label, foto_ref}      (ESSEN-22 Pfad 1)
+  - icon_suchen              → ICONS-7: GET /api/v1/icons/suche?q=<label>&max=3
 
 Pattern (E-GAN-2): **propose→confirm**, NICHT Sofort-Wirkung. Ein neues
 Gericht im Familien-Katalog prägt zukünftige Wunsch-Eingaben — die
 Vorab-Bestätigung ist die richtige Reibung (RPS-5-analog).
 
-Eingang: Aktion + Gericht-Daten (label/icon_id/icon_stichwort je nach Aktion),
-ein EssenClient (GAN-6), ein IconClient (GAN-4, ICONS-7),
-`is_member_fn` (GAN-2), `from_user_id` (GAN-2).
+Eingang: Aktion + Gericht-Daten (label/icon_id/foto_ref/icon_stichwort
+je nach Aktion), ein EssenClient (GAN-6), ein IconClient (GAN-4,
+ICONS-7), ein PhotoClient (ESSEN-22 Pfad 1, optional — nur bei
+foto_hinzufuegen genutzt), `is_member_fn` (GAN-2), `from_user_id` (GAN-2).
 
 Ausgang: Ergebnis-Tuple `(signal, daten)`:
   („angelegt",       {"id": <str>})          — POST erfolgreich.
@@ -36,6 +40,7 @@ import logging
 
 from skills.essen_client import EssenClientError
 from skills.icon_client import IconClientError
+from skills.photo_client import PhotoClientError
 
 logger = logging.getLogger(__name__)
 
@@ -49,30 +54,39 @@ SIGNAL_GRENZE            = "grenze"
 SIGNAL_NICHT_ERREICHBAR  = "nicht_erreichbar"
 SIGNAL_NICHTS_ZU_TUN     = "nichts_zu_tun"
 
-# GAN-3: Operationen (V1).
-AKTION_HINZUFUEGEN  = "hinzufuegen"
-AKTION_ICON_SUCHEN  = "icon_suchen"
+# GAN-3: Operationen (V1) + ESSEN-22 Pfad 1.
+AKTION_HINZUFUEGEN       = "hinzufuegen"
+AKTION_ICON_SUCHEN       = "icon_suchen"
+AKTION_FOTO_HINZUFUEGEN  = "foto_hinzufuegen"   # ESSEN-22 Pfad 1
 
 
 def gericht_anlegen(*, aktion, essen_client, icon_client,
                     is_member_fn, from_user_id,
                     label=None, icon_id=None,
-                    icon_stichwort=None, icon_max=3):
+                    icon_stichwort=None, icon_max=3,
+                    photo_client=None, medium_bytes=None,
+                    filename=None, content_type=None):
     """Gericht anlegen — aufrufbare Funktion (GAN-1).
 
     Eine **schreibende** Aufgabe (EC-10, GAN-5) mit **propose→confirm**
     (E-GAN-2): die Funktion schreibt direkt im execute()-Pfad — die
     Vorab-Bestätigung sitzt eine Ebene höher (GerichtAnlegenTask.propose).
 
-    `aktion`       — AKTION_HINZUFUEGEN oder AKTION_ICON_SUCHEN (GAN-3/GAN-4).
-    `essen_client` — EssenClient-Instanz mit post_gericht() (GAN-6).
-    `icon_client`  — IconClient-Instanz für ICONS-7 (GAN-4).
-    `is_member_fn` — Callable `(user_id) -> bool` (GAN-2).
-    `from_user_id` — Telegram-User-ID des Aufrufers (GAN-2).
+    `aktion`        — AKTION_HINZUFUEGEN, AKTION_ICON_SUCHEN oder
+                      AKTION_FOTO_HINZUFUEGEN (GAN-3/GAN-4/ESSEN-22 Pfad 1).
+    `essen_client`  — EssenClient-Instanz mit post_gericht() (GAN-6).
+    `icon_client`   — IconClient-Instanz für ICONS-7 (GAN-4).
+    `is_member_fn`  — Callable `(user_id) -> bool` (GAN-2).
+    `from_user_id`  — Telegram-User-ID des Aufrufers (GAN-2).
+    `photo_client`  — PhotoClient-Instanz (ESSEN-22 Pfad 1, nur bei
+                      AKTION_FOTO_HINZUFUEGEN benötigt).
 
     Parameter je Aktion:
-      hinzufuegen — `label`, `icon_id` (ARASAAC-ID aus vorheriger icon_suchen-Antwort).
-      icon_suchen — `icon_stichwort`, optional `icon_max` (≤3).
+      hinzufuegen      — `label`, `icon_id` (ARASAAC-ID aus vorheriger
+                         icon_suchen-Antwort).
+      icon_suchen      — `icon_stichwort`, optional `icon_max` (≤3).
+      foto_hinzufuegen — `label`, `medium_bytes`, optional `filename`,
+                         `content_type` (ESSEN-22 Pfad 1).
 
     Ergebnis: (signal, daten) — siehe Modul-Docstring.
     """
@@ -87,6 +101,11 @@ def gericht_anlegen(*, aktion, essen_client, icon_client,
 
     if aktion == AKTION_HINZUFUEGEN:
         return _hinzufuegen(essen_client, label, icon_id)
+
+    if aktion == AKTION_FOTO_HINZUFUEGEN:
+        return _foto_hinzufuegen(
+            photo_client, essen_client, label,
+            medium_bytes, filename, content_type)
 
     logger.warning("gericht_anlegen: unbekannte Aktion %r — nichts zu tun",
                    aktion)
@@ -132,7 +151,7 @@ def _icon_suchen(icon_client, stichwort, max_treffer):
 # ============================================================
 
 def _hinzufuegen(essen_client, label, icon_id):
-    """GAN-3: ein neues Gericht anlegen.
+    """GAN-3: ein neues Gericht anlegen (Icon-Pfad).
 
     Erwartet ein nicht-leeres `label` und eine gewählte `icon_id`
     (ARASAAC-ID aus einer ICONS-7-Suche; der Skill rät nichts, GAN-4/E-GAN-3).
@@ -156,6 +175,60 @@ def _hinzufuegen(essen_client, label, icon_id):
     new_id = response.get("id")
     logger.info("gericht_anlegen: angelegt label=%r id=%s (ESSEN-19)",
                 label, new_id)
+    return SIGNAL_ANGELEGT, {"id": new_id}
+
+
+def _foto_hinzufuegen(photo_client, essen_client, label,
+                      medium_bytes, filename, content_type):
+    """ESSEN-22 Pfad 1: Gericht mit Foto anlegen.
+
+    Erwartet ein nicht-leeres `label` und `medium_bytes` (Foto-Bytes).
+    Kein `photo_client` → SIGNAL_NICHTS_ZU_TUN.
+
+    Ablauf:
+      1. Foto an Photo-Buddy hochladen (PHOTO-13) → foto_ref.
+      2. POST /api/v1/essen/katalog/gerichte {label, foto_ref} → Gericht-ID.
+
+    4xx vom Photo-Buddy oder Essen-Buddy → SIGNAL_GRENZE (EC-7).
+    Verbindungsfehler → SIGNAL_NICHT_ERREICHBAR.
+    """
+    if not label or not str(label).strip():
+        return SIGNAL_NICHTS_ZU_TUN, {"reason": "kein Label"}
+    if not medium_bytes:
+        return SIGNAL_NICHTS_ZU_TUN, {"reason": "kein Foto"}
+    if photo_client is None:
+        return SIGNAL_NICHTS_ZU_TUN, {"reason": "kein Photo-Client"}
+
+    # Schritt 1: Foto hochladen.
+    try:
+        photo_response = photo_client.upload_medium(
+            medium_bytes=medium_bytes,
+            filename=filename or "foto.jpg",
+            content_type=content_type or "image/jpeg",
+        )
+    except PhotoClientError as e:
+        fehler_str = str(e)
+        if "HTTP 4" in fehler_str:
+            logger.info("gericht_anlegen: Photo-Buddy hat Foto abgelehnt — %s", e)
+            return SIGNAL_GRENZE, {"detail": fehler_str}
+        logger.warning("gericht_anlegen: Photo-Buddy nicht erreichbar — %s", e)
+        return SIGNAL_NICHT_ERREICHBAR, {"detail": fehler_str}
+
+    foto_ref = photo_response.get("id")
+    logger.info("gericht_anlegen: Foto hochgeladen foto_ref=%s", foto_ref)
+
+    # Schritt 2: Gericht mit foto_ref anlegen.
+    try:
+        response = essen_client.post_gericht(
+            name=str(label).strip(),
+            foto_ref=str(foto_ref),
+        )
+    except EssenClientError as e:
+        return _essen_fehler("POST", e)
+
+    new_id = response.get("id")
+    logger.info("gericht_anlegen: angelegt mit Foto label=%r id=%s foto_ref=%s "
+                "(ESSEN-22 Pfad 1)", label, new_id, foto_ref)
     return SIGNAL_ANGELEGT, {"id": new_id}
 
 
