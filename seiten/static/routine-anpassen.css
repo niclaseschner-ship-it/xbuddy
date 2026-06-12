@@ -637,24 +637,33 @@ body {
 
 /* ── Toast ───────────────────────────────────────────────── */
 
+/* T728 Iter-10 Bug-23: Toast prominent oben statt unten (wurde vom MainButton
+   verdeckt, Nic sah Quittung nicht). safe-area-inset-top für iPhone-Notch.
+   z-index 200 über MainButton (z-index 100) und Sheet (z-index 30). */
 .toast {
   position: fixed;
-  bottom: 90px;
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
   left: 50%;
-  transform: translateX(-50%);
-  background: var(--ink);
+  transform: translateX(-50%) translateY(-120%);
+  background: var(--accent);
   color: #fff;
-  padding: 10px 18px;
-  border-radius: 8px;
-  font-size: 0.9rem;
+  padding: 14px 22px;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
   opacity: 0;
-  transition: opacity 0.2s;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  transition: opacity 0.25s ease-out, transform 0.25s ease-out;
   pointer-events: none;
-  z-index: 40;
-  white-space: nowrap;
+  z-index: 200;
+  max-width: calc(100vw - 32px);
+  text-align: center;
 }
 
-.toast.visible { opacity: 0.92; }
+.toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
 
 /* ── Leer-Meldung ────────────────────────────────────────── */
 
