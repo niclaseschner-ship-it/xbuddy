@@ -48,8 +48,10 @@ ID-Präfix HFE).
 
 **Out-of-Scope V1** (je eigenes Ticket, sobald gebraucht):
 
-- **OPEN-HSP-A** — Folgen-spezifisches Cover-Bild (V1: festes Serien-Cover,
-  optional Folgentitel-Text auf Default-Hintergrund).
+- **OPEN-HSP-A** — Folgen-spezifisches Cover-Bild (V1: **einheitliches
+  Serien-Cover** im 1:1-Format, von den Eltern austauschbar — der V2-Pfad
+  ist ein Eltern-Chat-Skill „Cover austauschen" + per-Folge-Cover, der
+  über das gleiche 1:1-Format-Schema landet, E-HSP-10).
 - **OPEN-HSP-B** — Mia äußert per Sprache ihren Folgen-Wunsch im Eltern-
   Chat („Ich möchte eine Folge über Schnee"). Würde denselben V1-Endpoint
   `POST /folgen-vorschlag` bedienen — Trigger-Agnostik.
@@ -92,30 +94,69 @@ Erzeugung, TTS-Pipeline, Album-Sequencing, Resume-Verwaltung) und stellt
 das Ergebnis über seine **Display-View** bereit (APP-1). Er stellt eine
 API für den Eltern-Chat-Skill bereit (BUD-1b, HSP-17).
 
-### HSP-2 — Single-Page-View `alben`, Kacheln + Player auf einer Canvas
+### HSP-2 — Single-Page-View `alben`, Splitscreen aus Kacheln + Player
 Die Hör-View liegt unter `/display/hoerspiel/alben` (BUD-1, URL-2) und ist
-**eine Canvas**: oben Album-Kacheln, unten der Player wenn ein Album
-spielt. Kein Routing zu Sub-Seiten. Statische Assets unter
+**eine Canvas**: links das Album-Kachel-Raster, rechts der Player als
+**immer sichtbare vertikale Säule**. Kein Routing zu Sub-Seiten, keine
+Menüführung — statisches Dashboard (HSP-3). Statische Assets unter
 `/display/hoerspiel/static/<asset>` (URL-13); Audio- und Cover-Assets je
 Album werden aus dem Daten-Bereich über Router-Pfade in derselben
-Display-Origin ausgeliefert (HSP-21).
+Display-Origin ausgeliefert (HSP-21, HSP-26).
 
-**Wenn** die View aufgerufen wird, **dann** rendert sie alle freigegebenen
-Alben als Kachel-Raster und — falls Mia ein Album zuletzt unterbrochen
-hatte — einen prominenten „Weiter hören"-Hinweis auf dieses Album.
+**Kachel-Raster (linke Spalte, ca. 65% Breite):**
+- Bis zu **10 Folgen ohne Scrollen** sichtbar als 5×2-Raster (E-HSP-8).
+- Sind mehr Folgen freigegeben, ersetzt die **letzte Kachel** das nächste
+  Album durch eine **„Ältere Folgen"-Kachel** als Funktions-Slot
+  (sichtbar als gestrichelte Border, ARASAAC-„mehr"-Pikto, Klick öffnet
+  eine Archiv-Sicht — Archiv-View ist OPEN-HSP-J).
+- Alle Cover-Slots in den Kacheln nutzen **dasselbe 1:1-Cover-Format**
+  wie der Player-Cover (HSP-NEU Layout-Robustheit) — austauschbares Asset
+  je Folge (V1: pro Serie einheitliches Default-Cover, OPEN-HSP-A).
 
-*Test-Implikation:* GET `/display/hoerspiel/alben` rendert mindestens ein
-Album-Kachel-Element pro freigegebenem Album; bei vorhandenem Resume-State
-zusätzlich einen Hinweis-Block für das unterbrochene Album.
+**Player (rechte Spalte, ca. 35% Breite, immer sichtbar):**
+- Cover groß oben (1:1, identisches Format zum Kachel-Cover).
+- Album-Header (Nr + Voice + Titel).
+- Track-Liste mittig (skaliert auf bis zu 10 Tracks via
+  `grid-auto-rows: minmax(0, 1fr)` ohne Scroll).
+- Now-Playing-Zeile (aktueller Track-Name mit Pikto-im-Text-Wortblock,
+  HSP-NEU `pikto-hauptbegriff`).
+- Controls am Boden (Prev / Play / Next).
+
+**Player-Default-Zustand — „letzter Stand vor Pause":**
+**Wenn** für ein Album ein Resume-State besteht (HSP-23) und die View neu
+geladen wird, **dann** zeigt der Player diesen Stand: Album-Cover + Titel
++ Track-Position + ein **orange markierter „Weiter hören"-Play-Button**
+(visuell vom grünen Standard-Play unterscheidbar). Klick startet die
+Wiedergabe an genau dieser Stelle (HSP-23). **Wenn** kein Resume-State
+existiert, **dann** zeigt der Player das zuletzt gespielte Album in
+seinem Default-Anfang (Track 1).
+
+**Resume-Sichtbarkeit auf der Kachel:** zusätzlich zeigt die zugehörige
+Album-Kachel ein orange „Weiter"-Badge oben rechts und einen orangen
+Resume-Rand. Ein eigener „Weiter hören"-Banner über dem Kachel-Raster
+ist V1 **nicht** vorgesehen — der Resume-Stand lebt im Player rechts
+(E-HSP-9, zieht E-HSP-4 nach).
+
+*Test-Implikation:* GET `/display/hoerspiel/alben` rendert
+(a) mindestens eine Album-Kachel pro freigegebenem Album, oder genau 10
+sichtbare Kachel-Slots inkl. „Ältere Folgen"-Slot bei mehr als 10
+freigegebenen Alben, (b) den Player-Bereich mit dem letzten Stand
+(Resume-Album bzw. Default-Anfang des zuletzt gespielten Albums) und
+(c) bei vorhandenem Resume-State ein Resume-Badge auf der zugehörigen
+Kachel + den orangen „Weiter hören"-Play-Button im Player.
 
 ### HSP-3 — Touch-Display, Mia-taugliche Bedienung (Kiosk)
-Die View ist für ein Touch-/Kiosk-Display gebaut. Maximale Bedien-
+Die View ist für ein Touch-/Kiosk-Display gebaut. **Statisches Dashboard,
+keine Menüführung** — oberste Priorität für Kinder-Frontends (Nic-Standard
+Werft 2026-06-12). Modus-Wechsel ist kein Navigationsakt; Kacheln und
+Player leben gemeinsam auf einer Canvas (HSP-2). Maximale Bedien-
 Affordanzen für eine Vierjährige:
 
-- Album-Kachel tippen → Wiedergabe startet (siehe HSP-13)
+- Album-Kachel tippen → Player rechts wechselt auf dieses Album und
+  Wiedergabe startet (siehe HSP-13).
 - Player: großer Play/Pause-Knopf in der Mitte, große Vor/Zurück-Knöpfe
-  links/rechts pro Track
-- Kein Wisch, kein Long-Press, kein Multi-Touch, kein Tastatur-Fokus
+  links/rechts pro Track.
+- Kein Wisch, kein Long-Press, kein Multi-Touch, kein Tastatur-Fokus.
 
 Lautstärke wird **nicht** in der App geregelt — System-Lautstärke des
 Gerätes reicht.
@@ -123,8 +164,58 @@ Gerätes reicht.
 ### HSP-4 — Visueller Stil aus dem geteilten Design-Token-Strang
 Der visuelle Stil bindet an `display/_shared/design/tokens.css` (DTOK-1..5,
 `conventions/design-tokens.md`); keine hartcodierten Farben/Maße im Buddy-
-CSS. Komponenten erden an die bestehende Buddy-Card-Optik (Anker:
-`wetter/static/wetter.css` `.card`/`.card-label`).
+CSS. Stage `toddler` (Mia 4 J, `font-hand` Patrick Hand für Body,
+`font-display` Caveat für Headlines) — Schrift-Disziplin konsistent zu
+Routine-/Wetter-/Plan-Buddy. Komponenten erden an die bestehende
+Buddy-Card-Optik (Anker: `wetter/static/wetter.css` `.card`/`.card-label`)
+und für **Pikto-im-Text-Wortblöcke** an das Routine-`.card-pikto`-Pattern
+(`routine/static/routine.css` `.card-pikto`, kompakte Inline-Variante als
+`.word-pikto`, HSP-4a).
+
+### HSP-4a — Pikto-im-Text-Wortblock als geteiltes Komponenten-Muster
+Wo Text einen ARASAAC-tragbaren Schlüsselbegriff enthält (Folgen-Titel
+auf der Kachel, Track-Name im Player), rendert die View den Begriff als
+**Inline-Wortblock** mit Pikto + Wort: kleine Pikto-Kachel (ARASAAC-PNG
+über ICONS-5, geteilte Icon-Plattform) + Begriff in `font-display`,
+gerahmt analog Routine `.card-pikto`. Mehrere Wortblöcke je Satz sind
+zulässig; Folgen ohne tragbaren Begriff rendern ihren Titel pur (kein
+Pikto-Zwang). Datenquelle: HSP-5a (Album-Manifest) und HSP-6a
+(Track-Manifest).
+
+### HSP-4b — Layout-Robustheit: raumfüllend, skaliert, kein Clipping
+Das Dashboard ist **statisch und skaliert robust** mit dem verfügbaren
+Platz (analog WETTER-25 für den Wetter-Buddy). Verbindliche Bauregeln
+für die Implementierung — sonst zerbricht das Layout bei Modus- oder
+Viewport-Wechseln:
+
+- **Einheitliches 1:1 Cover-Format** in jedem Cover-Slot (Album-Kachel,
+  Player-Cover, „Ältere Folgen"-Pikto-Slot): `aspect-ratio: 1`, gleicher
+  Sky-Tint-Hintergrund, gleiches `object-fit: cover` — derselbe Asset-Pfad
+  rendert in jedem Slot identisch.
+- **Tile-Grid-Disziplin:** `grid-auto-rows: auto` (nicht `1fr`, sonst
+  kollidiert die Reihe mit dem aspect-ratio des Covers); `min-width: 0` +
+  `min-height: 0` auf jeder Grid-Zelle gegen Inhalts-Push.
+- **Titel-Truncate:** Folgen-Titel zwei Zeilen mit `-webkit-line-clamp: 2`
+  + `text-overflow: ellipsis` — bei langem Titel kürzt die View, das
+  Layout bricht nicht.
+- **Skalierende Schriftgrößen:** `clamp(min, vh-basiert, max)` für
+  Titel- und Track-Schriftgrößen — anders als feste px-Werte überleben
+  Schriftgrößen verschiedene Tablet-Auflösungen (Familien-Tablet, künftig
+  Mia-eigenes Gerät, OPEN-HSP-G).
+- **Player-Track-Liste skaliert auf bis zu 10 Tracks:**
+  `grid-auto-rows: minmax(0, 1fr)` im Player-Tracks-Container, sodass die
+  Liste **ohne Scroll** zwischen 6 (Standard) und 10 Tracks (Maximum)
+  trägt.
+- **Kein Layout-Bruch beim Modus-Wechsel:** Tap auf eine Kachel ändert
+  nur den Player-Inhalt, nicht das Kachel-Raster — Resume-Zustand,
+  Player-Default und aktive Wiedergabe leben in einem stabilen Grid.
+
+*Test-Implikation:* die Render-Tests prüfen die View bei zwei
+Viewport-Größen (1920×1080 Familien-Tablet und z. B. 1280×800
+Mini-Tablet) sowie mit 6 vs. 10 Tracks im aktiven Album — in beiden
+Fällen müssen alle Cover-Slots quadratisch sein (gleicher visueller
+Format-Schnitt), alle Folgen-Titel lesbar (kein Clip-Bruch), alle
+Tracks ohne Scroll sichtbar.
 
 ---
 
@@ -138,6 +229,26 @@ Pflichtfelder im Manifest: stabile `id` (`folge-<nummer>`), `nummer` (int),
 (Pfad innerhalb des Display-Statik-Namensraums), `tracks` (geordnete Liste).
 Format-Skizze: HSP-21.
 
+### HSP-5a — Pikto-Hauptbegriffe im Folgen-Titel (optional)
+Ein Album-Manifest **kann** ein Feld `pikto-hauptbegriffe` tragen — eine
+geordnete Liste von Schlüsselwort-Pikto-Mappings für den Folgen-Titel:
+
+```json
+"pikto-hauptbegriffe": [
+  {"wort": "Trübsee", "arasaac-id": 6022}
+]
+```
+
+**Wenn** das Feld vorhanden ist, **dann** rendert die Album-Kachel den
+Folgen-Titel mit Inline-Wortblöcken nach HSP-4a — die genannten Wörter
+werden im Titel-Fließtext durch Pikto-Wortblöcke ersetzt. **Wenn** das
+Feld fehlt oder leer ist, **dann** rendert die Kachel den Titel pur.
+
+Der Album-Builder befüllt das Feld beim Erzeugen aus dem Folgentitel
+(GeschichtenBuddy-Output) per Heuristik oder durch eine kurze LLM-
+Klassifikation; der genaue Befüllungs-Pfad ist Implementations-Detail,
+nicht Spec.
+
 ### HSP-6 — Ein Album besteht aus geordneten Tracks
 Ein Album hat eine geordnete Liste von Tracks. Der Track ist die
 Wiedergabe-Einheit unter dem Album. Pflichtfelder je Track: stabile `id`,
@@ -147,6 +258,14 @@ zwingend in der View angezeigt.
 
 **Wenn** ein Album geladen wird, **dann** sind seine Tracks deterministisch
 in `position`-Reihenfolge sortiert.
+
+### HSP-6a — Pikto-Hauptbegriffe im Track-Namen (optional)
+Ein Track **kann** ein Feld `pikto-hauptbegriffe` tragen — analoge Form
+wie HSP-5a (Liste von Schlüsselwort-Pikto-Mappings). Die Player-View
+rendert die Track-Liste und den Now-Playing-Bereich mit Inline-Wortblöcken
+nach HSP-4a. Fehlt das Feld, rendert die View den Track-Namen (oder die
+Track-Position bei fehlendem `titel`) pur. Datenquelle und Befüllung
+identisch zu HSP-5a.
 
 ### HSP-7 — Zielgröße eines Inhalts-Tracks: 3–4 Minuten
 Inhalts-Tracks (`art = inhalt`) enthalten **3–4 Minuten** Audio. Die
@@ -675,6 +794,58 @@ die Vertonung läuft erst nach „Ja". Audio-Probehören ist offen für V2,
 ist aber vermutlich nicht nötig. **Verworfen:** Audio-Probehör-Gate im
 V1-Workflow (Synthese-Kosten und Wartezeit für ungenutzte Vorschau-
 Audios).
+
+### E-HSP-8 — Splitscreen-Layout, statisches Dashboard, 5×2-Raster mit Mehr-Slot
+*Datum:* 2026-06-12 (Werft-Lauf F3, Gate B Nic) · Drei Architektur-
+Achsen in einer Entscheidung:
+
+- **Splitscreen Links/Rechts:** Kacheln links, Player rechts immer
+  sichtbar als vertikale Säule. **Verworfen:** Bottom-Drawer
+  (verdrängt das Kachel-Raster bei Wiedergabe, erfordert Modus-Wechsel,
+  bricht das statische Dashboard).
+- **Statisches Dashboard, keine Menüführung:** oberste Priorität für
+  Kinder-Frontends. Tap auf Kachel ändert nur den Player-Inhalt, nicht
+  die Navigation. **Verworfen:** Sub-Routes für Player oder Album-
+  Details (wäre Navigations-Akt, gegen HSP-3-Statisch).
+- **5×2-Raster mit Mehr-Kachel auf Position 10:** 10 Folgen ohne
+  Scrollen sichtbar; bei mehr als 9 freigegebenen Alben übernimmt die
+  10. Kachel die „Ältere Folgen"-Funktion. **Verworfen:** 4×3=12
+  (sprengt Kachel-Größe in Splitscreen-Breite), Scrollen (Werft-Befund
+  Nic „statisches Dashboard, keine Menüführung").
+
+### E-HSP-9 — Resume-Stand lebt im Player rechts, kein eigener Banner
+*Datum:* 2026-06-12 (Werft-Lauf F3, Gate B Nic) · Da der Player rechts
+**immer sichtbar** ist (E-HSP-8), zeigt sein Default-Zustand bereits den
+Resume-Stand mit orangem „Weiter hören"-Play-Button (HSP-2). Zusätzlich
+trägt die Resume-Kachel ein orange „Weiter"-Badge. Ein eigener Resume-
+Banner über dem Kachel-Raster wäre **Doppel-Information** und würde
+Vertikal-Raum für eine Kachel-Reihe kosten. **Verworfen:** prominenter
+„Weiter hören"-Banner als eigene Sektion (war iter-1/iter-2-Variante,
+in F3 abgelöst).
+
+### E-HSP-10 — Einheitliches 1:1 Cover-Format in allen Slots
+*Datum:* 2026-06-12 (Werft-Lauf F3, Gate B Nic) · Album-Kachel-Cover,
+Player-Cover und „Ältere Folgen"-Pikto-Slot nutzen **identisches
+1:1-Format**: derselbe Asset-Pfad rendert in jedem Slot visuell gleich
+(Aspect-Ratio, Hintergrund-Tint, Rahmen). Damit ist die Erzeugung von
+Cover-Assets (V1 ein Default-Cover, V2 pro Folge OPEN-HSP-A) auf **ein
+einziges Format-Ziel** standardisiert: quadratisch, mindestens
+~1000×1000 px. **Verworfen:** unterschiedliche Aspect-Ratios je Slot
+(würde verlangen, dass jedes Cover-Asset in mehreren Format-Varianten
+existiert).
+
+### E-HSP-11 — Pikto-im-Text-Wortblock als geteiltes Komponenten-Muster
+*Datum:* 2026-06-12 (Werft-Lauf F3, Gate B Nic) · Der Inline-Pikto-
+Wortblock (HSP-4a) ist eine kompakte Schwester-Variante zum Routine-
+Buddy-`.card-pikto`-Pattern (Routine-Karten zeigen großen Pikto neben
+Karte; HSP zeigt kleinen Pikto im Fließtext). Das Muster vereinheitlicht
+die kindgerechte Verbindung von Wort und Pikto über Buddies hinweg und
+ist datenseitig **optional pro Album/Track** (HSP-5a, HSP-6a) — Titel
+ohne tragbaren Schlüsselbegriff rendern pur. **Verworfen:**
+buddy-eigenes Komponenten-Muster ohne Routine-Erdung (würde
+Geschwister-Drift produzieren). Eine plattformweite Konvention für die
+Komponente entsteht — wenn überhaupt — beim 2.–3. Vorkommen
+(Berater-Memory n=2-Regel).
 
 ---
 
