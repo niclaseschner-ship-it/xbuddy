@@ -96,12 +96,17 @@ class EssenFotoSetzenTask(WriteTask):
                 "am Display (ESSEN-22 Pfad 2). "
                 "Aufrufen, wenn jemand ein Foto MIT Essens-Caption schickt "
                 "(z. B. »Lasagne« oder »essen-foto«). "
+                "WICHTIG: Bevor du diesen Skill aufrufst, rufe ZUERST "
+                "essen_katalog_lesen auf, um den Essens-Katalog zu lesen. "
+                "Suche das Item aus der Caption (z. B. »Lasagne«) in den "
+                "Gerichten oder Items. Wenn Match: rufe diesen Skill mit "
+                "aktion='hochladen' + gericht_id (für Gericht-Match) ODER "
+                "item_id (für Basis-Item-Match) auf. Wenn KEIN Match: schlage "
+                "stattdessen gericht_anlegen vor (Pfad 1 ESSEN-22). "
                 "Zweistufig: erst {aktion: 'hochladen'} mit den Ziel-Infos; "
                 "nach Bestätigung {aktion: 'patch_gericht', gericht_id: '...'} "
                 "für ein Gericht ODER {aktion: 'schreibe_override', "
-                "item_id: '...'} für ein Lebensmittel-Basis-Item. "
-                "Kein Match im Katalog → Anweisung ausgeben, zuerst "
-                "»gericht_anlegen« zu nutzen (Pfad 1)."),
+                "item_id: '...'} für ein Lebensmittel-Basis-Item."),
             parameters={
                 "type": "object",
                 "properties": {
@@ -123,13 +128,17 @@ class EssenFotoSetzenTask(WriteTask):
                         "type": "string",
                         "description": (
                             "ID des Gerichts bei 'hochladen' (Ziel-Angabe) "
-                            "und 'patch_gericht'. Aus vorherigem Katalog-Lookup."),
+                            "und 'patch_gericht'. "
+                            "MUSS aus essen_katalog_lesen-Output stammen — "
+                            "keine erfundenen IDs."),
                     },
                     "item_id": {
                         "type": "string",
                         "description": (
                             "ID des Basis-Items bei 'hochladen' (Ziel-Angabe) "
-                            "und 'schreibe_override'. Aus vorherigem Katalog-Lookup."),
+                            "und 'schreibe_override'. "
+                            "MUSS aus essen_katalog_lesen-Output stammen — "
+                            "keine erfundenen IDs."),
                     },
                     "medien_id": {
                         "type": "string",
