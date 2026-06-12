@@ -205,8 +205,21 @@ body {
   cursor: default;
 }
 
-/* T728 Bug-13: .drag-handle.schloss entfernt — kein Konsument mehr.
-   Zeit-Cards nutzen dieselbe .pfeil-gruppe wie Item-Cards (V1: alle Pfeile disabled). */
+/* T728 Bug-13 Iter-5: Schloss-Symbol für feste Anker (Aufstehen/Losgehen).
+   .anker-schloss ist die erste Spalte der Zeit-Card (wie .pfeil-gruppe). */
+.anker-schloss {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+}
+
+.schloss-symbol {
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0.65;
+  user-select: none;
+}
 
 /* ── Card-Bild ───────────────────────────────────────────── */
 
@@ -610,4 +623,16 @@ body {
   padding: 48px 16px;
   color: var(--ink-soft);
   font-size: 0.95rem;
+}
+
+/* ── T728 Bug-11 Härt-Sicherung ─────────────────────────────── */
+/* BrowserPlatform._btn hat keine ID — es ist der einzige dynamisch
+   erzeugte fixed-Button mit zIndex:100 den platform.js an body anhängt.
+   CSS-Override: wenn Sheet-Overlay sichtbar, BrowserPlatform-Fallback-Button verstecken.
+   Hinweis: #mainbutton-fallback existiert im Template NICHT — _btn hat keine ID.
+   Selector zielt auf dynamisch erzeugten button[style*="zIndex"] (BrowserPlatform.setMainButton).
+   Dreifaches JS-Hide (sofort + Microtask + 50ms) in oeffneSheetOverlay() ist die primäre Sicherung.
+   CSS ist Belt-Sicherung 4 — greift auch wenn JS-Hide in Render-Race verfehlt. */
+body:has(#sheet-overlay:not([hidden])) button[style*="zIndex"] {
+  display: none !important;
 }

@@ -89,6 +89,46 @@ let _sheetOffen = false;
   // MainButton initial deaktiviert (ROUTINE-20: nur aktiv bei Diff)
   platform.setMainButton("Speichern", onSpeichern, { enabled: false });
 
+  // T728 Bug-12: Listener NUR EINMAL binden (Event-Delegation — rendereInhalt darf
+  // KEINE addEventListener-Calls mehr enthalten, sonst kumulativer Listener-Leak).
+  const container = document.getElementById("routine-inhalt");
+
+  // Klick-Delegation: Pfeile + Lösch-Buttons + Add-Button
+  container.addEventListener("click", (e) => {
+    // Pfeil-Buttons (▲/▼) — T728 Bug-10
+    const pfeil = e.target.closest(".pfeil-hoch[data-pfeil-id], .pfeil-runter[data-pfeil-id]");
+    if (pfeil) {
+      const id       = pfeil.dataset.pfeilId;
+      const richtung = pfeil.classList.contains("pfeil-hoch") ? "hoch" : "runter";
+      _bewegeItemPerPfeil(id, richtung);
+      return;
+    }
+    // Lösch-Buttons
+    const del = e.target.closest(".del-btn[data-item-id]");
+    if (del) {
+      _loescheItemLokal(del.dataset.itemId);
+      return;
+    }
+    // Inline-Add-Button (ROUTINE-23)
+    const add = e.target.closest("#items-add-btn");
+    if (add) {
+      oeffneHinzufuegenSheet();
+      return;
+    }
+  });
+
+  // Input-Delegation: Zeit-Inputs
+  container.addEventListener("input", (e) => {
+    const zeitInput = e.target.closest(".zeit-input");
+    if (!zeitInput) return;
+    // Anker-ID aus dem Input-Element-ID "zeitinput-<ankerId>" lesen
+    const ankerId = zeitInput.id.replace(/^zeitinput-/, "");
+    const anker   = ZEIT_ANKER.find(a => a.id === ankerId);
+    if (!anker) return;
+    _editConfig[anker.schreibKey] = _parseZeitInput(zeitInput, anker);
+    _aktualisiereMainButton();
+  });
+
   await ladeUndRendere();
 })();
 
@@ -259,39 +299,8 @@ function rendereInhalt() {
     '<p class="v2-hinweis">V1.1: Aufstehen und Losgehen sind fest · V2 macht das Dazwischen dynamisch</p>'
   );
 
+  // T728 Bug-12: Nur innerHTML-Reset hier — alle Listener-Bindungen sitzen einmalig im IIFE-Block.
   container.innerHTML = fragmente.join("");
-
-  // Event-Handler anbinden
-  document.getElementById("items-add-btn")
-    .addEventListener("click", () => oeffneHinzufuegenSheet());
-
-  // T728 Bug-10: Pfeil-Buttons für Reihenfolge (Drag-and-Drop entfernt — Telegram-Touch-Konflikt).
-  container.addEventListener("click", (e) => {
-    const btn = e.target.closest(".pfeil-hoch[data-pfeil-id], .pfeil-runter[data-pfeil-id]");
-    if (!btn) return;
-    const id = btn.dataset.pfeilId;
-    const richtung = btn.classList.contains("pfeil-hoch") ? "hoch" : "runter";
-    _bewegeItemPerPfeil(id, richtung);
-  });
-
-  // Zeit-Inputs: oninput → Dirty-State
-  for (const anker of ZEIT_ANKER) {
-    const inputEl = document.getElementById("zeitinput-" + anker.id);
-    if (inputEl) {
-      inputEl.addEventListener("input", () => {
-        _editConfig[anker.schreibKey] = _parseZeitInput(inputEl, anker);
-        _aktualisiereMainButton();
-      });
-    }
-  }
-
-  // Lösch-Buttons für Items
-  container.addEventListener("click", (e) => {
-    const btn = e.target.closest(".del-btn[data-item-id]");
-    if (!btn) return;
-    const id = btn.dataset.itemId;
-    _loescheItemLokal(id);
-  });
 }
 
 /**
@@ -347,23 +356,29 @@ function rendereItemCard(item, istErste, istLetzte) {
 }
 
 /**
- * Rendert eine Zeit-Anker-Card (ROUTINE-20 / T728 Bug-13: pfeil-gruppe wie Item-Cards).
- * V1: alle Pfeile disabled (drei feste Anker, unverrückbar).
- * V2 (#726): Pfeile aktiv schalten.
+ * Rendert eine Zeit-Anker-Card (ROUTINE-20 / T728 Bug-13: Schloss für feste Anker).
+ * locked=true (Aufstehen, Losgehen): 🔒-Schloss-Symbol — klar kein Sortier-Ziel.
+ * locked=false (Anziehen): leerer Platzhalter — kein Pfeil, kein Schloss in V1.
+ * V2 (#726): Zwischen-Anker dynamisch → Pfeile dann aktivieren.
  */
 function rendereZeitCard(anker) {
   const bildSrc = "/display/_shared/icons/arasaac/" + encodeURIComponent(anker.piktogramm) + ".png";
 
-  // T728 Bug-13: gleiche pfeil-gruppe wie rendereItemCard — Pfeil-Konsistenz.
-  // V1: alle Zeit-Card-Pfeile disabled (feste Anker, ROUTINE-20).
-  // V2-Hint: data-v2-hint="#726" als Marker für späteres Aktivieren.
-  const pfeilHtml =
-    '<div class="pfeil-gruppe" data-v2-hint="#726">' +
-      '<button type="button" class="pfeil-hoch" disabled ' +
-        'aria-label="Hoch (V1 nicht verfügbar)">▲</button>' +
-      '<button type="button" class="pfeil-runter" disabled ' +
-        'aria-label="Runter (V1 nicht verfügbar)">▼</button>' +
-    '</div>';
+  // T728 Bug-13: Schloss für locked (Aufstehen/Losgehen), leerer Platzhalter für nicht-locked (Anziehen).
+  // KEIN Pfeil in Zeit-Cards in V1 — V2 (#726) spezifiziert den Pfeil-Pfad.
+  // data-v2-hint="#726" und aria-label "Hoch (V1 nicht verfügbar)" bleiben als Marker für V2-Aktivierung.
+  let pfeilHtml;
+  if (anker.locked) {
+    // Schloss-Symbol kommuniziert klar: dieser Anker ist fix, nicht verschiebbar.
+    pfeilHtml =
+      '<div class="pfeil-gruppe anker-schloss" data-v2-hint="#726" ' +
+           'aria-label="Hoch (V1 nicht verfügbar)">' +
+        '<span class="schloss-symbol" aria-hidden="true">🔒</span>' +
+      '</div>';
+  } else {
+    // Anziehen (vorlauf): kein Pfeil, kein Schloss in V1 — leerer Platzhalter.
+    pfeilHtml = '<div class="pfeil-gruppe pfeil-leer" aria-hidden="true"></div>';
+  }
 
   // Zeit-Input je nach Einheit
   const serverWert = _editConfig[anker.schreibKey];
@@ -864,8 +879,10 @@ function oeffneSheetOverlay() {
   const platform = getPlatform();
   platform.hideMainButton();
 
-  // T728 Bug-11 (Belt-and-Suspender): zweiter Hide nach 50ms als Race-Case-Absicherung.
-  // Falls ein gecachter JS-Pfad zwischen den 50ms ein show() triggert, wird es erneut versteckt.
+  // T728 Bug-11 (Belt-Belt-Suspender): dreifaches Hide — sofort (oben) + Microtask + 50ms.
+  // BrowserPlatform: setMainButton() setzt display:block — ein gecachter/verzögerter JS-Aufruf
+  // kann den hide-Zustand überschreiben. Drei Ebenen absichern das.
+  Promise.resolve().then(() => { if (_sheetOffen) platform.hideMainButton(); });
   setTimeout(() => { if (_sheetOffen) platform.hideMainButton(); }, 50);
 
   overlay.addEventListener("click", (e) => {
