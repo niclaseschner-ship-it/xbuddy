@@ -491,6 +491,19 @@ im selben Chat-Faden**. Die **nächste inhaltlich folgende Anfrage
 versiegelt** den vorherigen Schreibakt — nur ein dazwischengeschobenes
 explizites Undo greift noch.
 
+**Undo-Wort + Quittungs-Anleitung — eindeutig statt breit.** Das
+Undo-Wort ist konstant **`falsch`** — ein einziges, nicht polysemes
+Wort. Alltags-Ablehnungen wie `nein` sind **ausgeschlossen**, damit
+kein beiläufiges Nein einen Schreibakt kippt. Die A2-Quittung
+**enthält das Undo-Wort explizit und nennt den Effekt** in einem
+Satz, z. B.: „Ich habe X eingetragen. Wenn das ein Missverständnis
+war, sag einfach `falsch`, ich mach es dann rückgängig." Die Familie
+erlernt das Undo-Wort durch den ersten Schreibakt; eine separate
+Bedienungs-Doku ist nicht nötig. Die konkrete Formulierung der
+Anleitung darf der Skill wählen (Stimme passt zum Skill), das
+Undo-Wort selbst und seine sichtbare Nennung in derselben Quittung
+sind verbindlich.
+
 **Quittung trägt geparste Schlüssel-Werte prominent zuerst** —
 nicht den Roh-Text des Anstoßes. Welche Werte prominent sind, hängt
 vom Skill ab (Termin: Datum + Uhrzeit; Einkauf: Item-Name; Foto: was
