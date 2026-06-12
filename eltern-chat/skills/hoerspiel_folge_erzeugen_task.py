@@ -112,7 +112,7 @@ class HoerspielFolgeErzeugenTask(WriteTask):
 
         # Wirft BerechtigungError, ValueError oder HoerspielClientError —
         # alle propagieren zu agent.py.
-        result_text = hfe_mod.propose(
+        propose_result = hfe_mod.propose(
             hoerspiel_client=self._hoerspiel_client,
             is_member_fn=is_member_fn,
             from_user_id=from_user_id,
@@ -121,11 +121,19 @@ class HoerspielFolgeErzeugenTask(WriteTask):
             tg=self._tg,
             chat_id=chat_id,
         )
+        # propose() returnt seit Multipart-Refactor (result_text, fields-dict).
+        # Backward-Compat: alte Form (nur String) wird via Text-Parser
+        # geparst — wird mit dem nächsten Release entfernt.
+        if isinstance(propose_result, tuple):
+            result_text, fields = propose_result
+            titel = fields.get("titel", "")
+            text = fields.get("text", "")
+            voice = fields.get("voice", "")
+        else:
+            result_text = propose_result
+            titel, text, voice = _extrahiere_vorschlag_felder(
+                result_text, voice_hint, self._hoerspiel_client)
 
-        # Felder aus dem strukturierten Vorschlag-Text extrahieren und
-        # in Session-State schreiben — execute() liest daraus (HFE-5).
-        titel, text, voice = _extrahiere_vorschlag_felder(result_text, voice_hint,
-                                                           self._hoerspiel_client)
         self._pending_vorschlaege[chat_id] = {
             "titel": titel,
             "text": text,
