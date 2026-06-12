@@ -132,7 +132,12 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
     logger.info(
         "hoerspiel_folge_erzeugen.propose: Vorschlag bereit "
         "(folge_nr=%s, voice=%s)", folge_nr, voice)
-    return result
+    return result, {
+        "titel": titel,
+        "text": text,
+        "voice": voice,
+        "folge_nr": folge_nr,
+    }
 
 
 def execute(*, hoerspiel_client, tg, chat_id,
