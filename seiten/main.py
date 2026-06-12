@@ -417,8 +417,10 @@ def routine_anpassen_view():
     """ROUTINE-20 / ROUTINE-23: Eltern-Anpassen-Mini-App-View.
 
     Auth (V1): Route laedt ohne initData-Validierung (MAD-7 V1-Pattern,
-    analog essen-einkauf-Route V1-Vereinfachung). Der seiten-Service ist
-    an 127.0.0.1 gebunden; Schutz liegt im Tailscale-Funnel (Per-Node-Cert).
+    brainstorm-Vorlage NICHT ratifiziert — Ratifizierung folgt nach Live,
+    ROUTINE-23; analog essen-einkauf-Route V1-Vereinfachung). Der
+    seiten-Service ist an 127.0.0.1 gebunden; Schutz liegt im
+    Tailscale-Funnel (Per-Node-Cert).
     Eine initData-Haertung folgt als gemeinsames Mini-App-Auth-Ticket (MAD-7
     Folge-Ticket, kein V1-Blocker).
 

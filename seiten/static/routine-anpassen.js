@@ -6,9 +6,12 @@
  *             Inline-Add je Sektion (kein FAB, ROUTINE-23 Abweichung von MAD-3).
  * ROUTINE-21: Bottom-Sheet mit Label-Input, dauerhaft/nur-heute-Toggle,
  *             Icon-Picker (ICONS-7 debounced 250ms).
- * MAD-5: kein direkter WebApp-Aufruf — alles ueber getPlatform() (platform.js).
- * MAD-6: ARASAAC-Pfad /display/_shared/icons/arasaac/<id>.png.
- * MAD-7: HTML-Route lädt ohne Auth in V1 (127.0.0.1-bound, Tailscale-Funnel).
+ * MAD-5 (brainstorm-Vorlage, NICHT ratifiziert): kein direkter WebApp-Aufruf —
+ *        alles ueber getPlatform() (platform.js).
+ * MAD-6 (brainstorm-Vorlage, NICHT ratifiziert): ARASAAC-Pfad
+ *        /display/_shared/icons/arasaac/<id>.png.
+ * MAD-7 (brainstorm-Vorlage, NICHT ratifiziert): HTML-Route lädt ohne Auth in V1
+ *        (127.0.0.1-bound, Tailscale-Funnel).
  */
 
 /* global getPlatform */
@@ -75,7 +78,7 @@ let _debounceTimer = null;        // für 250ms-Debounce (ROUTINE-21a)
 // ── Einstiegspunkt ────────────────────────────────────────────────────────────
 
 (async function main() {
-  // AC7/RAT-16/MAD-5: keine direkten WebApp-Aufrufe — nur platform.* erlaubt
+  // AC7/RAT-16/MAD-5 (brainstorm-Vorlage, NICHT ratifiziert): keine direkten WebApp-Aufrufe — nur platform.* erlaubt
   const platform = getPlatform();
   await platform.ready();
 
@@ -554,16 +557,8 @@ async function onSpeichern() {
       neueDefaultIds.some((id, idx) => id !== (_serverItemsDefault[idx] || {}).id)
     );
 
-    // Neue items (POST), die noch nicht auf dem Server existieren
-    const serverDefaultIds = new Set(_serverItemsDefault.map(i => i.id));
-    const neueItems = _editItems.filter(
-      i => i.quelle === "default" && !serverDefaultIds.has(i.id)
-    );
-
-    // Neue Items anlegen (tauchen nach POST mit echter ID aus Server auf)
-    // Hier sind wir nur für Items zuständig die im Edit-State schon liegen
-    // (aus dem Bottom-Sheet POST kamen sie schon an den Server — dieser Pfad
-    // ist nur für Reihenfolge-Updates nötig).
+    // Reihenfolge-Update: neue Items kommen bereits via Bottom-Sheet-POST an
+    // den Server — dieser Pfad ist nur für Reihenfolge-Updates zuständig.
     if (reihenfolgeGeaendert && neueDefaultIds.length > 0) {
       const resp = await putItems(neueDefaultIds);
       if (!resp.ok) {
