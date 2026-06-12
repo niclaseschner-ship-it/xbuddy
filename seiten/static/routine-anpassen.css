@@ -125,9 +125,10 @@ body {
 
 /* ── Item-Card (MAD-2 Bring!-Pattern, ROUTINE-20) ───────── */
 
+/* T728 Bug-10: Pfeil-Gruppe (28px) statt Drag-Handle (22px) als erste Spalte */
 .item-card {
   display: grid;
-  grid-template-columns: 22px var(--item-bild-size) 1fr auto auto;
+  grid-template-columns: 28px var(--item-bild-size) 1fr auto auto;
   align-items: center;
   gap: var(--item-gap);
   background: var(--card);
@@ -151,27 +152,68 @@ body {
   background: var(--surface-soft);
 }
 
-/* ── Drag-Handle ────────────────────────────────────────── */
+/* ── Pfeil-Buttons (T728 Bug-10: Drag → ▲/▼ Telegram-Touch-konflikt-frei) ── */
 
-/* T728 Bug-2: touch-action: none damit Pointer-Events auf Mobile nicht durch Scroll blockiert werden */
-.drag-handle {
+/* Container für ▲/▼ Pfeil-Buttons — erste Spalte der Item-Card */
+.pfeil-gruppe {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 28px;
+}
+
+/* Platzhalter für einmalig-Items (nicht sortierbar) */
+.pfeil-gruppe.pfeil-leer {
+  width: 28px;
+}
+
+/* Pfeil-Buttons: kompakt, 32×15px Tap-Target pro Pfeil, barrierefrei */
+.pfeil-hoch,
+.pfeil-runter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
   color: var(--ink-soft);
-  font-size: 18px;
-  text-align: center;
-  cursor: grab;
-  opacity: 0.6;
+  font-size: 11px;
   line-height: 1;
-  touch-action: none;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.1s, color 0.1s;
   user-select: none;
 }
 
-.drag-handle:active { cursor: grabbing; }
+.pfeil-hoch:hover:not(:disabled),
+.pfeil-runter:hover:not(:disabled) {
+  background: var(--surface-soft);
+  color: var(--ink);
+}
 
-/* Schloss-Symbol für gesperrte Anker (ROUTINE-20: Aufstehen + Losgehen) */
-.drag-handle.schloss {
+.pfeil-hoch:active:not(:disabled),
+.pfeil-runter:active:not(:disabled) {
+  background: #e0dcd3;
+}
+
+.pfeil-hoch:disabled,
+.pfeil-runter:disabled {
+  opacity: 0.25;
   cursor: default;
+}
+
+/* Schloss-Symbol bleibt für Zeit-Anker (ROUTINE-20: Aufstehen + Losgehen) */
+.drag-handle.schloss {
+  color: var(--ink-soft);
   font-size: 14px;
+  text-align: center;
+  cursor: default;
   opacity: 0.35;
+  line-height: 1;
+  user-select: none;
 }
 
 /* ── Card-Bild ───────────────────────────────────────────── */
