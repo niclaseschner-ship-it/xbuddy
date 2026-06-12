@@ -367,13 +367,23 @@ def essen_einkauf_view():
             "ESSEN-31: TELEGRAM_BOT_TOKEN nicht gesetzt — Mini-App-Route nicht nutzbar.")
         return jsonify({"error": "Serverkonfiguration unvollständig (Bot-Token fehlt)"}), 500
 
-    # --- initData aus Query-String (Telegram haengt es als ?tgWebAppData= oder ?initData= an) ---
+    # --- initData aus Query-String (optional, wenn JS sie aktiv weiterleitet) ---
+    # Architektur-Hinweis: Telegram fuegt initData NICHT automatisch in die URL ein,
+    # sondern stellt sie nur als window.Telegram.WebApp.initData (JS-Property)
+    # bereit. Der Frontend-JS muss sie aktiv an den Server senden (z.B. via
+    # Authorization-Header oder Query). Bis das umgesetzt ist (Folge-Ticket
+    # T653-Auth-Header), laedt die Route HTML ohne Auth (V1-Vereinfachung).
+    # Schutz heute: essen-Buddy ist 127.0.0.1-bound, nginx Same-Host-Routing
+    # ueber Tailscale-Funnel mit Per-Node-Cert.
     init_data_str = (
         request.args.get("initData")
         or request.args.get("tgWebAppData")
     )
     if not init_data_str:
-        return jsonify({"error": "initData fehlt"}), 401
+        logging.warning(
+            "ESSEN-31 V1: Mini-App ohne initData geladen — V1-Vereinfachung. "
+            "Folge-Ticket: JS sendet initData aktiv via Header an Server.")
+        return render_template("essen-einkauf.html", user_id=None)
 
     # --- Konfig laden (gecacht im runtime-Dict) ---
     cfg = runtime.get("init_data_config")
@@ -388,6 +398,7 @@ def essen_einkauf_view():
         cfg["max_age_seconds"],
     )
     if parsed is None:
+        # initData wurde mitgegeben, aber ist ungueltig — strenger Ablehnungsfall.
         return jsonify({"error": "initData ungültig oder abgelaufen"}), 401
 
     return render_template("essen-einkauf.html", user_id=parsed.user_id)
