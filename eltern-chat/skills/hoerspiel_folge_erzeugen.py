@@ -42,7 +42,8 @@ _IDEE_MIN_ZEICHEN = 5
 
 
 def propose(*, hoerspiel_client, is_member_fn, from_user_id,
-            idee: str, voice_hint: str | None = None) -> str:
+            idee: str, voice_hint: str | None = None,
+            tg=None, chat_id=None) -> str:
     """Folgen-Vorschlag holen und als strukturierten Text zurückgeben (HFE-3/4).
 
     Trigger-agnostisch (E-HFE-1): wer diese Funktion aufruft, ist nicht
@@ -99,19 +100,34 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
     folge_nr = data.get("folgen-nr-vorschlag", "?")
 
     # HFE-4: strukturierter Tool-Result-Text (Reihenfolge: Titel, Vorschau,
-    # Bestätigungs-Block). Intro/Outro-Reime sind geteilte Serien-Assets (HSP-8)
-    # und gehören NICHT in die Vorschau (HFE-4 letzter Absatz).
+    # Bestätigungs-Block). Intro/Outro-Reime sind geteilte Serien-Assets
+    # (HSP-8) und gehören NICHT in die Vorschau.
+    #
     # Telegram-Limit ist 4096 Zeichen/Nachricht — eine vollständige Folge
-    # liegt bei ~25 000 Zeichen und wird sonst von Telegram abgelehnt
-    # (Bug Live-Befund 2026-06-12). V1: Vorschau auf erste Absätze
-    # kürzen + Hinweis. OPEN-HSP: Datei-Anhang-Variante in V2.
-    vorschau = _kuerze_vorschau_fuer_telegram(text)
-    result = (
-        "**Folge %s: %s**\n\n"
-        "%s\n\n"
-        "Voice: %s (oder schreib »shimmer« / »onyx«)\n"
-        "Soll ich vertonen? Das dauert 1–5 Minuten."
-    ) % (folge_nr, titel, vorschau, voice)
+    # liegt bei ~25 000 Zeichen. Lange Folgen werden in mehrere Direkt-
+    # Nachrichten gesplittet (Eltern-Kuratierung, Nic-Entscheid 2026-06-12),
+    # der Tool-Result-Text dient dann nur dem Confirm-Block.
+    splits = _splitte_vorschau(text)
+    if tg is not None and chat_id is not None and len(splits) > 1:
+        for i, teil in enumerate(splits, start=1):
+            header = "**Folge %s: %s** (%d/%d)\n\n" % (
+                folge_nr, titel, i, len(splits)) if i == 1 else \
+                "**Folge %s** (%d/%d)\n\n" % (folge_nr, i, len(splits))
+            _sende(tg, chat_id, header + teil)
+        result = (
+            "Vollständiger Vorschlag oben in %d Nachrichten.\n\n"
+            "Voice: %s (oder schreib »shimmer« / »onyx«)\n"
+            "Soll ich vertonen? Das dauert 1–5 Minuten."
+        ) % (len(splits), voice)
+    else:
+        # Kurze Folge (≤ 1 Split) oder kein tg verfügbar: alles in den
+        # Tool-Result-Block, das LLM postet eine Bot-Nachricht.
+        result = (
+            "**Folge %s: %s**\n\n"
+            "%s\n\n"
+            "Voice: %s (oder schreib »shimmer« / »onyx«)\n"
+            "Soll ich vertonen? Das dauert 1–5 Minuten."
+        ) % (folge_nr, titel, splits[0] if splits else text, voice)
 
     logger.info(
         "hoerspiel_folge_erzeugen.propose: Vorschlag bereit "
@@ -225,31 +241,44 @@ def _sende(tg, chat_id, text: str) -> None:
             "hoerspiel_folge_erzeugen: send_message fehlgeschlagen: %s", exc)
 
 
-# Telegram-Limit ist 4096 Zeichen je Nachricht. Eine vollständige Folge
-# liegt bei ~25 000 Zeichen, sprengt das Limit weit. V1: Vorschau auf
-# erste Absätze + Mittel-/End-Stichworte + Hinweis.
-TELEGRAM_PREVIEW_BUDGET = 2400
+# Telegram-Limit ist 4096 Zeichen/Nachricht. Wir zielen pro Split auf
+# einen lockeren Puffer (Header + Markdown nimmt auch Platz).
+TELEGRAM_SPLIT_BUDGET = 3200
 
 
-def _kuerze_vorschau_fuer_telegram(text: str) -> str:
-    """Vorschau für den Eltern-Bestätigungs-Bubble unter dem Telegram-Limit.
+def _splitte_vorschau(text: str) -> list[str]:
+    """Teilt den Folgentext in mehrere Telegram-taugliche Stücke.
 
-    Behält den Titel-Absatz + die ersten zwei Story-Absätze (ergibt etwa
-    250-400 Wörter), fügt ggf. ein "(…)"-Marker dazu. Volltext wird beim
-    Album-Bau (execute → POST /alben) ohnehin durchgereicht.
+    Schnitt-Kandidaten sind Absatz-Grenzen (`\\n\\n`); Absätze werden nur
+    dann zerlegt, wenn ein einzelner Absatz bereits über dem Budget liegt
+    (sehr selten). Eltern lesen die Stücke nacheinander und bestätigen
+    danach im Confirm-Block.
     """
     if not text:
-        return ""
+        return [""]
     absaetze = [a for a in text.strip().split("\n\n") if a.strip()]
-    if len(absaetze) <= 3 and len(text) <= TELEGRAM_PREVIEW_BUDGET:
-        return text.strip()
-    head = absaetze[:3]
-    rest_count = max(0, len(absaetze) - 3)
-    vorschau = "\n\n".join(head)
-    if rest_count > 0:
-        vorschau += (
-            "\n\n(…)\n\nDie vollständige Folge hat %d Absätze. "
-            "Mit »ja« geht's in die Vertonung." % len(absaetze))
-    if len(vorschau) > TELEGRAM_PREVIEW_BUDGET:
-        vorschau = vorschau[:TELEGRAM_PREVIEW_BUDGET - 4].rstrip() + "\n(…)"
-    return vorschau
+    if not absaetze:
+        return [text.strip()]
+    splits: list[str] = []
+    cur: list[str] = []
+    cur_len = 0
+    for absatz in absaetze:
+        addl = len(absatz) + (2 if cur else 0)
+        if cur and cur_len + addl > TELEGRAM_SPLIT_BUDGET:
+            splits.append("\n\n".join(cur))
+            cur = [absatz]
+            cur_len = len(absatz)
+        else:
+            cur.append(absatz)
+            cur_len += addl
+    if cur:
+        splits.append("\n\n".join(cur))
+    # Sicherheits-Cap: falls ein einzelner Absatz das Budget sprengt
+    out: list[str] = []
+    for s in splits:
+        if len(s) <= TELEGRAM_SPLIT_BUDGET:
+            out.append(s)
+        else:
+            for j in range(0, len(s), TELEGRAM_SPLIT_BUDGET):
+                out.append(s[j:j + TELEGRAM_SPLIT_BUDGET])
+    return out

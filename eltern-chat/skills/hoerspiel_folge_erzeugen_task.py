@@ -118,6 +118,8 @@ class HoerspielFolgeErzeugenTask(WriteTask):
             from_user_id=from_user_id,
             idee=idee,
             voice_hint=voice_hint,
+            tg=self._tg,
+            chat_id=chat_id,
         )
 
         # Felder aus dem strukturierten Vorschlag-Text extrahieren und
