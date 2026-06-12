@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 # CLIENT-2: HTTP-Timeout in Sekunden für Loopback-Aufrufe.
 HTTP_TIMEOUT_SECONDS = 2.0
 
+# Folgen-Vorschlag triggert LLM-Call (Claude-Opus, 20–90 s laut HFE-3).
+HTTP_TIMEOUT_VORSCHLAG_SEKUNDEN = 180.0
+
 # Album-Bau blockiert 1–5 min (V1 synchron, OPEN-HSP-L) — eigener Timeout.
 HTTP_TIMEOUT_ALBUM_SEKUNDEN = 600.0
 
@@ -56,10 +59,12 @@ class HoerspielClient:
 
     def __init__(self, origin_url: str, transport=None,
                  timeout: float = HTTP_TIMEOUT_SECONDS,
+                 vorschlag_timeout: float = HTTP_TIMEOUT_VORSCHLAG_SEKUNDEN,
                  album_timeout: float = HTTP_TIMEOUT_ALBUM_SEKUNDEN):
         self._origin = (origin_url or "").rstrip("/")
         self._transport = transport
         self._timeout = timeout
+        self._vorschlag_timeout = vorschlag_timeout
         self._album_timeout = album_timeout
 
     def folgen_vorschlag(self, idee: str) -> dict:
@@ -75,7 +80,8 @@ class HoerspielClient:
         payload = json.dumps({"idee": idee}).encode("utf-8")
         status, resp_bytes = self._call(
             "POST", PFAD_FOLGEN_VORSCHLAG,
-            body=payload, content_type="application/json")
+            body=payload, content_type="application/json",
+            timeout=self._vorschlag_timeout)
         if status != 200:
             raise HoerspielClientError(
                 "Hörspiel-Buddy: HTTP %s bei POST %s" % (
