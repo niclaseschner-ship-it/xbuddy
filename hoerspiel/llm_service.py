@@ -11,10 +11,8 @@ Beide Funktionen lassen den Provider als Argument hineinreichen. Der Caller
 (main.py / album_builder) hält den Provider; hier kein Modell-Pin.
 """
 
-import json
 import logging
 import os
-import re
 from typing import Any
 
 from .providers.base import LLMProvider
@@ -23,6 +21,39 @@ logger = logging.getLogger(__name__)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROMPT_GESCHICHTENBUDDY = os.path.join(HERE, "prompts", "geschichtenbuddy.md")
+
+
+# Strukturiertes Antwort-Schema für HSP-11. Anthropic tool_use erzwingt
+# wohlgeformte Felder — vermeidet Quoting-Bugs in `text` (wörtliche Rede).
+FOLGEN_TOOL_NAME = "folgen_vorschlag"
+FOLGEN_TOOL_DESCRIPTION = (
+    "Übergibt den fertig geschriebenen Folgen-Vorschlag an den "
+    "Hörspiel-Buddy. Wird vom Buddy parsebar gemacht — antworte "
+    "ausschließlich über diesen Tool-Call."
+)
+FOLGEN_INPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "titel": {
+            "type": "string",
+            "description": "Der Folgen-Titel ohne 'Folge <N>: '-Präfix",
+        },
+        "folgen-nr-vorschlag": {
+            "type": "integer",
+            "description": "Vorgeschlagene fortlaufende Nummer (>0)",
+        },
+        "text": {
+            "type": "string",
+            "description": (
+                "Vollständiger Folgentext als Markdown, Absätze durch "
+                "doppelten Zeilenumbruch getrennt. Erster Absatz ist "
+                "der Titel-Absatz 'Folge <N>: <Titel>.'. Danach die "
+                "Story-Absätze."
+            ),
+        },
+    },
+    "required": ["titel", "folgen-nr-vorschlag", "text"],
+}
 
 
 class LLMServiceError(Exception):
@@ -52,31 +83,6 @@ def _build_user_context(idee: str, bible: str, historie: str,
     return "\n".join(parts)
 
 
-def _extract_json(text: str) -> dict[str, Any]:
-    """Pickt das erste JSON-Objekt aus der LLM-Antwort.
-
-    Akzeptiert mit/ohne Code-Fences. Tolerant gegen kleinere Drift im LLM-
-    Output — wirft `LLMServiceError`, wenn kein parsebares Objekt findbar
-    ist.
-    """
-    raw = text.strip()
-    if raw.startswith("```"):
-        raw = re.sub(r"^```[a-zA-Z]*\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw)
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        pass
-    # Fallback: erstes { ... } finden
-    m = re.search(r"\{.*\}", raw, re.DOTALL)
-    if not m:
-        raise LLMServiceError("LLM-Antwort enthält kein JSON-Objekt")
-    try:
-        return json.loads(m.group(0))
-    except json.JSONDecodeError as e:
-        raise LLMServiceError("LLM-JSON nicht parsebar: %s" % e) from e
-
-
 def erzeuge_folgen_vorschlag(*, idee: str, bible: str, historie: str,
                              naechste_nummer: int,
                              llm: LLMProvider) -> dict[str, Any]:
@@ -88,8 +94,12 @@ def erzeuge_folgen_vorschlag(*, idee: str, bible: str, historie: str,
     """
     system = _load_system_prompt()
     user = _build_user_context(idee, bible, historie, naechste_nummer)
-    raw = llm.complete(system, user)
-    data = _extract_json(raw)
+    data = llm.complete_structured(
+        system, user,
+        tool_name=FOLGEN_TOOL_NAME,
+        tool_description=FOLGEN_TOOL_DESCRIPTION,
+        input_schema=FOLGEN_INPUT_SCHEMA,
+    )
 
     titel = data.get("titel")
     text = data.get("text")
