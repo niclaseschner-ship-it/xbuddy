@@ -749,4 +749,29 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             family_group_chat_id_getter=family_group_chat_id_getter,
             is_member_fn=_hfe_is_member))
 
+    # T531 / ESSEN-22 Pfad 2: »Foto für Essens-Item setzen« als Klasse-C-Skill
+    # (propose→confirm, EC-10 zweistufige Variante).
+    # AND-Guard: essen_origin_url UND photo_origin_url UND
+    # family_group_chat_id_getter müssen ALLE gesetzt sein — fehlt eine,
+    # erscheint die Aufgabe NICHT im Katalog.
+    # - essen_origin_url:             PATCH /api/v1/essen/katalog/gerichte/<id>
+    #                                 (ESSEN-19a) für Gericht-Ziel.
+    # - photo_origin_url:             POST /api/v1/photo/medien (PHOTO-13)
+    #                                 zum Hochladen des Fotos.
+    # - family_group_chat_id_getter:  Live-Berechtigung (EC-2).
+    if essen_origin_url is not None and photo_origin_url is not None \
+            and family_group_chat_id_getter is not None:
+        from skills.essen_client import EssenClient as _EfsEssenClient
+        from skills.essen_foto_setzen_task import EssenFotoSetzenTask
+        from skills.photo_client import PhotoClient as _EfsPhotoClient
+        _efs_essen_client = _EfsEssenClient(origin_url=essen_origin_url)
+        _efs_photo_client = _EfsPhotoClient(origin_url=photo_origin_url)
+        _efs_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
+        catalog.register(EssenFotoSetzenTask(
+            tg=tg,
+            essen_client=_efs_essen_client,
+            photo_client=_efs_photo_client,
+            family_group_chat_id_getter=family_group_chat_id_getter,
+            is_member_fn=_efs_is_member))
+
     return catalog
