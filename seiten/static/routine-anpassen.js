@@ -347,14 +347,23 @@ function rendereItemCard(item, istErste, istLetzte) {
 }
 
 /**
- * Rendert eine Zeit-Anker-Card (ROUTINE-20: Schloss für Aufstehen + Losgehen).
+ * Rendert eine Zeit-Anker-Card (ROUTINE-20 / T728 Bug-13: pfeil-gruppe wie Item-Cards).
+ * V1: alle Pfeile disabled (drei feste Anker, unverrückbar).
+ * V2 (#726): Pfeile aktiv schalten.
  */
 function rendereZeitCard(anker) {
   const bildSrc = "/display/_shared/icons/arasaac/" + encodeURIComponent(anker.piktogramm) + ".png";
 
-  const dragHtml = anker.locked
-    ? '<div class="drag-handle schloss" title="Fester Anker — unverrückbar" aria-hidden="true">🔒</div>'
-    : '<div class="drag-handle schloss" title="Zeiten nicht sortierbar in V1" aria-hidden="true">≡</div>';
+  // T728 Bug-13: gleiche pfeil-gruppe wie rendereItemCard — Pfeil-Konsistenz.
+  // V1: alle Zeit-Card-Pfeile disabled (feste Anker, ROUTINE-20).
+  // V2-Hint: data-v2-hint="#726" als Marker für späteres Aktivieren.
+  const pfeilHtml =
+    '<div class="pfeil-gruppe" data-v2-hint="#726">' +
+      '<button type="button" class="pfeil-hoch" disabled ' +
+        'aria-label="Hoch (V1 nicht verfügbar)">▲</button>' +
+      '<button type="button" class="pfeil-runter" disabled ' +
+        'aria-label="Runter (V1 nicht verfügbar)">▼</button>' +
+    '</div>';
 
   // Zeit-Input je nach Einheit
   const serverWert = _editConfig[anker.schreibKey];
@@ -388,7 +397,7 @@ function rendereZeitCard(anker) {
   return (
     '<div class="item-card' + (anker.locked ? " gesperrt" : "") + '" ' +
          'data-anker-id="' + esc(anker.id) + '">' +
-      dragHtml +
+      pfeilHtml +
       '<img class="item-bild" src="' + esc(bildSrc) + '" alt="" loading="lazy">' +
       '<span class="item-label">' + esc(anker.label) + '</span>' +
       inputHtml +
@@ -854,6 +863,10 @@ function oeffneSheetOverlay() {
   // T728 Bug-7: MainButton während Sheet vollständig verstecken (MAD-5-konform via platform)
   const platform = getPlatform();
   platform.hideMainButton();
+
+  // T728 Bug-11 (Belt-and-Suspender): zweiter Hide nach 50ms als Race-Case-Absicherung.
+  // Falls ein gecachter JS-Pfad zwischen den 50ms ein show() triggert, wird es erneut versteckt.
+  setTimeout(() => { if (_sheetOffen) platform.hideMainButton(); }, 50);
 
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) schliesseSheet();
