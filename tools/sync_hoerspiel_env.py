@@ -20,7 +20,7 @@ OUT_PATH = "/home/buddy/xbuddy-data/zugangsdaten/hoerspiel-env"
 KEY_MAP = {
     "hoerspiel-llm-provider-name":       "HOERSPIEL_LLM_PROVIDER",
     "hoerspiel-llm-provider-api-key":    "HOERSPIEL_ANTHROPIC_KEY",
-    "hoerspiel-azure-openai-key":        "HOERSPIEL_AZURE_OPENAI_KEY",
+    "hoerspiel-azure-openai-api-key":    "HOERSPIEL_AZURE_OPENAI_KEY",
     "hoerspiel-azure-openai-endpoint":   "HOERSPIEL_AZURE_OPENAI_ENDPOINT",
     "hoerspiel-azure-openai-deployment": "HOERSPIEL_AZURE_OPENAI_DEPLOYMENT",
 }

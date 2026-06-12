@@ -28,7 +28,7 @@ import sys
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, render_template, request, send_from_directory
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
@@ -132,6 +132,13 @@ def _now() -> datetime:
 # ============================================================
 
 app = Flask(__name__, static_url_path="/display/hoerspiel/static")
+
+
+# ---- Display-View (HSP-2, HSP-3 — Single-Page-Splitscreen Paula-View) ----
+
+@app.route("/display/hoerspiel/alben", methods=["GET"])
+def display_alben():
+    return render_template("alben.html")
 
 
 # ---- Lese-Endpoints (HSP-17, Side-Effekt-frei) ----
