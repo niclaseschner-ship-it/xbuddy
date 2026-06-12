@@ -461,23 +461,83 @@ bestätigt hat. Ohne Bestätigung geschieht keine Veränderung. Die Bestätigung
 ist eindeutig einem konkreten Vorschlag zugeordnet, auch wenn dazwischen andere
 Nachrichten eingehen.
 
-**Ein-Schritt-Bestätigung bei vollständigem Anstoß.** Liefert der Anstoß
-bereits alle für die Schreib-Aufgabe nötigen Felder (d. h. keine Rückfrage
-nach Pflicht-Feldern mehr nötig), kombiniert der Bot Daten-Übersicht und
-Bestätigungs-Frage zu **einer** Nachricht: er legt den strukturierten Vorschlag
-(„was genau geschehen würde") direkt vor und fordert in derselben Nachricht
-das Bestätigungswort (E-EC-7). Laufen keine Rückfragen zum Auflösen der Pflicht-
-Felder, entfällt eine zusätzliche Zwischennachricht. Das Schreib-Gate selbst
-(Ausführung erst nach ausdrücklicher Bestätigung) bleibt vollständig erhalten —
-keine Änderung an der Sicherheits-Garantie.
+**A2-Klausel — Sofort-Write + Quittung + Undo-Wort (enger Default).**
+Für eine eng umrissene Klasse schreibender Aufgaben tritt der Default
+**Sofort-Write + Quittung + Undo-Wort** an die Stelle des Vorab-Confirm-
+Pfads. Die Klausel gilt **nur** für Schreibakte, die alle drei
+folgenden Bedingungen erfüllen:
 
-**Zweistufige Variante als Fallback.** Ist der Anstoß unvollständig (mindestens
-ein Pflicht-Feld fehlt oder ist mehrdeutig), fragt der Bot erst gezielt nach
-(EC-22) und legt den strukturierten Vorschlag erst vor, sobald alle Pflicht-
-Felder geklärt sind. Das ist der bisherige Pfad.
+1. Der Schreibakt **legt eine Ressource mit stabiler ID an** (nicht:
+   ändert einen vorhandenen Wert, nicht: löscht eine Reihe).
+2. Der **Inverse** des Schreibakts ist ein **idempotentes `DELETE`**
+   auf genau diese ID — der Skill hat einen erreichbaren Inverse-
+   Aufruf an der Buddy-API (vgl. TASK-9).
+3. Der Skill **weist den Inverse-Aufruf vor erstem Live-Einsatz** im
+   Test nach (**Pre-Flight-Check**): ein Test legt eine Ressource an,
+   ruft das Inverse-`DELETE` auf, prüft die Bestätigung der API. Ohne
+   diesen Test darf der Skill nicht im Sofort-Write-Default laufen.
 
-Diese Verfeinerung gilt global für alle schreibenden Aufgaben (TES, FAA, GAA,
-KAV und künftige Aufgaben desselben Musters).
+**Konkret freigegeben unter A2:** `termin_eintragen`,
+`einkauf_hinzufuegen`, `foto_senden`. Alle anderen schreibenden
+Aufgaben bleiben **bei der zweistufigen Variante** (Vorab-Confirm,
+unten). **Explizit ausgenommen vom A2-Default** bleiben die
+Klasse-E-Auth-Loops `anbieter_wechseln` und `kalender_verbinden` —
+ihr eigener Abschluss-Gate-Pfad ist gewollt und wird durch A2 nicht
+ersetzt.
+
+**Undo-Wort-Disziplin — letzter Schreibakt, Versiegelung durch
+Folge-Anfrage.** Das Undo-Wort gilt **nur auf den letzten Schreibakt
+im selben Chat-Faden**. Die **nächste inhaltlich folgende Anfrage
+versiegelt** den vorherigen Schreibakt — nur ein dazwischengeschobenes
+explizites Undo greift noch.
+
+**Quittung trägt geparste Schlüssel-Werte prominent zuerst** —
+nicht den Roh-Text des Anstoßes. Welche Werte prominent sind, hängt
+vom Skill ab (Termin: Datum + Uhrzeit; Einkauf: Item-Name; Foto: was
+gespeichert wurde) — die einzelne Skill-Spec kann ihre Form
+schärfen. Die Quittung ist die Wahrheit für die Familie; ein
+dahinterliegender Schreibakt, der nicht in der Quittung steht,
+existiert für sie nicht.
+
+**Undo-Bindung ist deterministisch, nicht LLM-gewählt.** Das
+Undo-Wort wird **vor dem Agenten** an einen persistenten Datensatz in
+EC-35 (`task_events`) gebunden — das LLM entscheidet **nicht** über
+Ziel oder Ressource des Undo. Der konkrete Vor-Agent-Hook ist
+Code-Track-Sache und nicht Teil dieser Spec; die Spec normiert nur
+das Soll (Undo bindet auf den persistierten letzten erfolgreichen
+Schreibakt der A2-Klasse, nicht auf eine LLM-Interpretation des
+Verlaufs).
+
+**Zweistufige Variante als Default für alles andere.** Liefert der
+Anstoß einer **nicht-A2**-Schreibaufgabe alle Pflicht-Felder, kombiniert
+der Bot Daten-Übersicht und Bestätigungs-Frage zu **einer** Nachricht
+und fordert in derselben Nachricht das Bestätigungswort (E-EC-7) —
+das ist die bisherige Ein-Schritt-Bestätigung, aber nun für die
+zweistufige Variante reserviert. Ist der Anstoß unvollständig
+(mindestens ein Pflicht-Feld fehlt oder ist mehrdeutig), fragt der
+Bot erst gezielt nach (EC-22) und legt den strukturierten Vorschlag
+erst vor, sobald alle Pflicht-Felder geklärt sind. Das Schreib-Gate
+selbst (Ausführung erst nach ausdrücklicher Bestätigung) bleibt
+vollständig erhalten — keine Änderung an der Sicherheits-Garantie für
+nicht-A2-Aufgaben.
+
+Die zweistufige Variante gilt für alle schreibenden Aufgaben außerhalb
+der A2-Klasse (FAA, GAA, KAV — Klasse E mit eigenem Abschluss-Gate —,
+TES außerhalb des A2-Falls und künftige Aufgaben desselben Musters).
+
+*Was sich für die Familie ändert.* Bei A2-Aufgaben antwortet der Bot
+auf einen vollständigen Anstoß („Mittwoch 19 Uhr Pauls
+Geburtstagsfeier") direkt mit der Quittung — der Termin steht. Ein
+nachgeschobenes „doch nicht" innerhalb desselben Fadens kippt ihn.
+Die nächste inhaltlich folgende Anfrage versiegelt die Quittung; danach
+greift „doch nicht" nicht mehr. Bei allen anderen Schreibakten bleibt
+die Vorab-Bestätigung wie bisher.
+
+**Begründung — Trade-off.** Vorab-Confirm ist konservativ sicher, fühlt
+sich bei vollständigem Anstoß aber wie ein unnötiger Zwischenschritt
+an. Die enge A2-Klausel (One-Shot + stabile ID + idempotentes DELETE +
+Pre-Flight) macht den Sofort-Write riskoarm, weil das Rückgängigmachen
+durch Konstruktion möglich ist — und auf genau diese Klasse begrenzt.
 
 Die Vor-Bestätigung mehrstufiger schreibender Aufgaben (EC-20) benennt den Ort
 der nächsten Schritte kontextabhängig: in der Familien-Gruppe gestartet →
@@ -500,7 +560,10 @@ erkennt, WELCHES Werkzeug erneut aufzurufen ist. Das deterministische
 Schreib-Gate (Ausführung erst nach Bestätigung, `confirm.py`) bleibt davon
 unberührt — es wird im Code erzwungen, nicht über diesen Text.
 
-*Tickets:* #27 · #266 · #278 · #331
+*Tickets:* #27 · #266 · #278 · #331 · #TBD-A2 (Deterministischer
+Undo-Hook + `task_events`-Bindung), #TBD-A2-Pre-Flight (Pre-Flight-Test
+des Inverse-Aufrufs für `termin_eintragen`, `einkauf_hinzufuegen`,
+`foto_senden`)
 
 ### EC-20 — Mehrstufige Aufgaben überfluten die Familien-Gruppe nicht
 
@@ -510,8 +573,36 @@ führt der Bot im **Privatchat** mit dem anfragenden Familienmitglied weiter.
 Die Familien-Gruppe sieht nur den Anstoß und das Ergebnis — nicht
 Foto-Uploads, Eingaben, Zwischennachfragen. Der Bot behält den Gesprächsfaden
 dieses Privatchats, auch wenn dazwischen andere Anfragen aus der Gruppe
-kommen. Antwortet die Familie 30 Minuten lang nicht, beendet der Bot die
-Aufgabe stumm; sie kann jederzeit neu gestartet werden.
+kommen.
+
+**Phasen-Klausel — Timeout-Reaktion hängt von der Phase ab.** Das
+Session-Timeout (~30 Minuten ohne Familien-Antwort, technisch
+`next_message() is None`) reagiert phasenabhängig:
+
+- **In den Vor-Schreib-Phasen** — Pflichtfeld-Klärung, propose-Phase,
+  Confirm-Phase: der Bot **sendet eine User-Quittung** an die Familie:
+  „Hab dich aus den Augen verloren — wenn du noch willst, sag's
+  nochmal." Keine stillen Aborts mehr. Die Familie weiß, dass der
+  Faden hier endet, und kann ihn neu anstoßen.
+- **Nach erfolgreichem Schreibakt** — die Aufräum-Phase ab dem
+  Quittungs-Send (auch wenn Post-Execute-Hooks noch laufen, siehe
+  TASK-6): der Bot **schweigt**. Die A2-Quittung (oder die
+  Abschluss-Quittung des Confirm-Pfads) ist die User-sichtbare
+  Wahrheit; eine zusätzliche „aus den Augen verloren"-Nachricht
+  nach erfolgreicher Schreibung wäre irreführend.
+
+**Umsetzungs-Anker.** `PrivateChatSession` bekommt einen
+**phasenbewussten** Timeout-Helper, der dem Skill je nach Phase die
+richtige Reaktion auf das Timeout liefert. Der konkrete Helper-Name,
+seine Signatur und die Migrations-Welle der heute existierenden
+Skills (FAA, GAA, KAV, TES, PAA, künftig Controller) sind
+**Code-Track-Sache** — die Spec spezifiziert das Soll (Quittung vor
+Schreibakt, Schweigen nach Schreibakt), nicht die Mechanik.
+
+Die Aufgabe kann jederzeit neu gestartet werden — sowohl nach einer
+Vor-Schreib-Quittung als auch nach einer Aufräum-Phase, in der die
+Schreibung bereits erfolgreich war (für eine zweite Anlage gilt
+EC-10 erneut).
 
 **Was sich für die Familie ändert** — Beispiel: Schul-Termine erfassen.
 
@@ -532,7 +623,8 @@ Beobachtung der Kinder Token oder Foto hochladen müssen, noch sich ihren
 Gesprächsfaden vom nächsten Gruppen-Wortbeitrag zerreißen lassen.
 
 *Tickets:* #130 (PrivateChatSession-Refactor) — Umsetzung als gemeinsame
-Session-Klasse statt drei kopierter Worker-Loops.
+Session-Klasse statt drei kopierter Worker-Loops; #TBD-A6 (Phasen-Helper
+in `PrivateChatSession` + Migration der sechs Skills).
 
 ### EC-21 — Änderungen wirken sofort und ehrlich
 
@@ -724,6 +816,156 @@ brauchen einen API-Schlüssel und sind opt-in — sie sind kein verpflichtender
 Bestandteil eines Standard-Durchlaufs.
 
 *Tickets:* #27
+
+## 7. UI-Pattern (Chat ↔ WebApp)
+
+Diese drei Punkte (EC-33, EC-34, EC-35) entstehen aus der ratifizierten
+Berater-Runde vom 2026-06-12 (Eltern-Chat UI-Pattern). Sie regeln, wann
+eine Aufgabe als WebApp statt als Chat-Dialog läuft (EC-33), wie
+Chat-Skills auf WebApp-Pendants anderer Skills hinweisen (EC-34) und
+welche Telemetrie das stützt (EC-35). Ohne diese Linie driften die
+heute 24 Eltern-Chat-Skills UI-uneinheitlich weiter (Confirm-Form,
+Tool-Result-Vertrag, Medien-Wahl).
+
+### EC-33 — UI-Medien-Schwelle: Chat oder WebApp
+
+Ob eine Aufgabe als **Chat-Dialog** oder als **WebApp** (Mini-App im
+Telegram-Sinne, siehe `conventions/mini-app-design.md`) läuft,
+entscheidet eine **deterministische Schwelle pro Anstoß**:
+
+- **Pro Anstoß ≥5 Einzelwerte** ODER **≥2 Spalten/Achsen** in einer
+  Bearbeitung → **WebApp**.
+- Sonst → **Chat**.
+
+Die Schwelle ist ablesbar am Anstoß selbst (Anzahl Werte, Anzahl
+Achsen) — sie braucht keine Telemetrie und keine Modell-Interpretation.
+
+**Häufigkeit ist KEIN Schwellen-Kriterium.** Sie ist ausschließlich
+Bau-Priorisierungs-Signal: was die Familie wöchentlich anfasst, wird
+zuerst gebaut. Welche Aufgabe heute als WebApp existiert, sagt nichts
+über die Schwelle für eine andere Aufgabe.
+
+**Sonderfall Geheimnis/Identität.** Wo eine Aufgabe ein Geheimnis
+verteilt oder eine Identität nachweist (heute: CA-Verteilung,
+`specs/platform/ca-verteilung.md` CAV-4) bleibt sie **Skill-direkt** —
+kein LLM-Pass über den Tool-Result, kein WebApp-Pendant. Der
+Sonderfall geht der EC-33-Schwelle vor.
+
+**Anwendungs-Liste (Stand heute):**
+
+- **WebApp-Kandidaten** (≥5 Werte oder ≥2 Achsen pro Anstoß):
+  `routine_punkte_setzen` (Voll-Liste), `plan_aktivitaeten_setzen`,
+  `wuensche_zeigen` + Edit, `seiten_uebersicht` (Geräte-Review),
+  `termine_aus_bild` (Bulk-Review).
+- **Chat-Aufgaben** (unter der Schwelle):
+  `einkauf_hinzufuegen` (1 Item pro Anstoß), `termin_eintragen`
+  (1 Termin pro Anstoß), `familie_anlegen`, `geraet_anlegen`,
+  `kalender_verbinden`, `anbieter_wechseln`, `panel_anlegen`.
+
+**Was sich für die Familie ändert.** Eine zwölfteilige Morgenroutine
+gleichzeitig anzupassen ist im Chat zäh (zwölf Rückfragen oder ein
+unleserlicher Sammel-Block); in einer WebApp mit Cards steht alles
+auf einmal vor der Familie. Einen einzelnen Termin im Chat
+eintragen — Vollständig-Anstoß, Quittung, fertig — ist umgekehrt
+schneller als jedes UI-Öffnen.
+
+**Begründung — Trade-off.** Eine Häufigkeits-Schwelle (z. B. ≥1×/Woche
+in den letzten drei Wochen) wurde verworfen: sie schließt seltene,
+aber dichte Pflege aus (Routine zum Schuljahreswechsel) und braucht
+mindestens drei Wochen Telemetrie, bevor sie überhaupt anwendbar ist.
+Die Komplexitäts-Schwelle ist sofort und für jeden Anstoß ablesbar.
+
+*Tickets:* #TBD-A1 (Routine-Mockup-Probe A7.1 als
+Werft-Track-Ergebnis in `idee-mvp/routine-anpassen/`)
+
+### EC-34 — Cross-Skill-Empfehlung als Text-Footer
+
+Wenn ein **Chat-Skill** seine Quittung schickt und es einen **anderen
+Skill** mit WebApp-Pendant gibt, der die Aufgabe (oder eine
+naheliegende Folge-Aufgabe) besser kann, hängt das LLM eine **schmale
+Footer-Zeile mit Text-URL** an. Das LLM **formuliert** den Footer
+selbst — keine feste Suffix-Konstante, keine Skill-direkte Sende-Form.
+
+**Trigger** für den Footer (mindestens einer muss zutreffen):
+
+1. **Plural-Hinweise im Anstoß** — explizite Mengen-Hinweise wie „und
+   gleich noch …", „die ganze Liste", „alle Termine".
+2. **≥3 Aufrufe desselben Skills** in derselben Familie in der
+   laufenden Woche — Quelle ist die `task_events`-Tabelle (EC-35).
+
+**Cross-Skill, nicht Eigen-App.** EC-34 ist die Footer-Form für eine
+**WebApp eines anderen Skills**. Ein Skill, dessen **eigene**
+Mini-App geöffnet werden soll (z. B. `einkauf_zeigen` → seine eigene
+Einkaufs-Mini-App), nutzt **nicht** den EC-34-Footer, sondern den
+**MAD-Launcher** (`conventions/mini-app-design.md` MAD-7 + MAD-10).
+Damit bleibt die Auth-Linie (`initData`) sauber an Telegrams
+Launch-Pfad gebunden, und EC-34 hat keine Sonderfälle für eigene
+Apps.
+
+**Was sich für die Familie ändert.** Mama trägt einen einzelnen
+Einkauf nach („Brot und Tomaten für morgen"); der Bot quittiert, und
+darunter steht eine Zeile: „Wenn du gleich die ganze Woche planen
+willst — hier ist die Einkaufs-App: <URL>." Sie tippt, oder sie
+ignoriert. Keine zusätzliche Bot-Nachricht, kein Modus-Wechsel.
+
+**Begründung — Trade-off.** Ein fester Suffix („Tipp: WebApp …") wäre
+maschinell zuverlässig, klingt aber bei jeder Wiederholung wie
+Werbung. Die LLM-Formulierung passt den Footer an Anstoß und Frequenz
+an — der Preis ist, dass das LLM ihn auch weglassen kann, wenn es
+ihn als unpassend liest. Das ist gewollt: ein nicht gesendeter Footer
+ist besser als ein nervender.
+
+*Tickets:* #TBD-A4a (Footer-Formulierungs-Klausel in den
+betroffenen Skill-Descriptions; Frequenz-Trigger gegen EC-35 lesen)
+
+### EC-35 — Skill-Nutzungs-Telemetrie via `task_events`-Tabelle
+
+Die Skill-Aufrufzählung läuft über eine **eigene `task_events`-
+Tabelle** in derselben Eltern-Chat-SQLite (EC-16) — **nicht** über
+EC-23 (Provider-Calls). EC-23 zählt Provider-Calls für Telemetrie an
+der Bot-Antwort; EC-35 zählt erfolgreiche Nutzer-Turns pro Skill für
+Bau-Priorisierung und EC-34-Frequenz-Trigger. Beide Tabellen
+existieren parallel, jede mit ihrem eigenen Zweck.
+
+**Gezählt werden erfolgreiche Nutzer-Turns**, nicht Tool-Loops. Ein
+Turn, in dem das LLM `seiten_uebersicht` zweimal aufruft (z. B. zur
+Filterung und dann zur Detail-Sicht), zählt als **ein** Event. Der
+Anker ist „die Familie hat einmal diesen Skill genutzt", nicht „das
+LLM hat einmal getoolt".
+
+**Felder mindestens:**
+
+- `task_name` — der Name der Katalog-Aufgabe (z. B.
+  `einkauf_hinzufuegen`, `seiten_uebersicht`).
+- `chat_id` — der Telegram-Chat, in dem der Turn lief (Familien-Gruppe
+  oder Privatchat).
+- `created_at` — Zeitstempel des Turn-Endes.
+- `outcome` — `success`, `abort` oder `error` (Skill ist
+  durchgelaufen / Familie hat abgebrochen / Skill hat einen Fehler
+  geliefert).
+
+**Verwendungs-Anker:**
+
+- **EC-34 Frequenz-Trigger** — „≥3 Aufrufe diese Woche" liest
+  `task_events` per `task_name` + `chat_id` + `created_at`.
+- **Bau-Priorisierung A7.2** — die Werft entscheidet anhand der
+  rollenden Aufruf-Häufigkeit pro Familie, welche WebApp zuerst
+  gebaut wird (nicht: welche überhaupt eine WebApp bekommt — das ist
+  EC-33).
+
+**Nicht für EC-33 verwendet.** Die EC-33-Schwelle (Komplexität pro
+Anstoß) ist deterministisch und braucht **keine** Telemetrie. Bricht
+EC-35, bricht EC-33 nicht.
+
+**Begründung — Trade-off.** Die Aufrufzählung über EC-23 wäre
+Mit-Nutzung eines bestehenden Persistenz-Pfads, würde aber zwei
+unterschiedliche Konzepte (Provider-Calls vs. Nutzer-Turns)
+vermischen — EC-23 hat keinen `task_name`, und ein Tool-Loop mit
+zwei Provider-Calls für eine Nutzer-Aktion würde doppelt zählen. Die
+eigene Tabelle ist ein bewusst kleiner Aufpreis.
+
+*Tickets:* #TBD-Q1 (Code-Track `task_events`-Tabelle in
+`conversations.db`)
 
 ---
 
