@@ -300,6 +300,37 @@ def index():
     return redirect(url_for("morgen"))
 
 
+@app.route("/api/v1/routine/config", methods=["GET"])
+def api_config_get():
+    """Zeiten-Lese-API (ROUTINE-14, #728, URL-14).
+
+    Liefert die aktuell aktive RoutineConfig als JSON-Body — Schema spiegelt
+    exakt das, was PUT akzeptiert (Schema-Symmetrie, ROUTINE-14):
+      abfahrtszeit       — "HH:MM" oder Wochentag-Map
+      aufstehzeit        — "HH:MM" oder Wochentag-Map
+      anzieh_vorlauf_min — int ≥ 0
+
+    Reload-on-Read (DCOMP-3): ruft _current_config() — liest je Request
+    frisch aus routine.json, fällt bei Fehler auf Last-Known-Good zurück.
+    Kein konfigurierter data_path → 500 mit ehrlichem Fehler (KEINE leeren Defaults).
+    """
+    data_path = runtime.get("data_path")
+    if not data_path:
+        return jsonify({"error": "data_path nicht konfiguriert — kein Lesen möglich"}), 500
+
+    cfg = _current_config()
+    if cfg is None:
+        return jsonify({"error": "Keine Konfiguration geladen"}), 500
+
+    body = {
+        "abfahrtszeit": cfg.abfahrtszeit,
+        "aufstehzeit": cfg.aufstehzeit,
+        "anzieh_vorlauf_min": cfg.anzieh_vorlauf_min,
+    }
+    logger.info("GET /api/v1/routine/config (ROUTINE-14, #728)")
+    return jsonify(body)
+
+
 @app.route("/api/v1/routine/config", methods=["PUT"])
 def api_config():
     """Zeiten-Schreib-API (ROUTINE-14, #343, URL-14).
