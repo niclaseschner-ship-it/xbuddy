@@ -52,7 +52,7 @@ def client():
 # ── AC1 — Route vorhanden und liefert 200 HTML ───────────────────────────────
 
 def test_ac1_route_liefert_200(client):
-    """AC1: GET /seiten/routine/anpassen -> 200 HTML (V1 ohne Auth, MAD-7)."""
+    """AC1: GET /seiten/routine/anpassen -> 200 HTML (V1 ohne Auth, MAD-7 brainstorm-Vorlage NICHT ratifiziert)."""
     resp = client.get("/seiten/routine/anpassen")
     assert resp.status_code == 200
     assert "text/html" in resp.mimetype
@@ -77,14 +77,14 @@ def test_ac_entry_html_enthaelt_hauptcontainer(client):
 
 
 def test_ac_entry_html_enthaelt_sheet_overlay(client):
-    """AC_ENTRY: HTML traegt #sheet-overlay (MAD-4 Bottom-Sheet-Pattern)."""
+    """AC_ENTRY: HTML traegt #sheet-overlay (MAD-4 Bottom-Sheet-Pattern, brainstorm-Vorlage NICHT ratifiziert)."""
     body = client.get("/seiten/routine/anpassen").get_data(as_text=True)
     assert 'id="sheet-overlay"' in body, \
         "#sheet-overlay fehlt — Bottom-Sheet (ROUTINE-21 / MAD-4) nicht vorhanden"
 
 
 def test_ac_entry_html_laedt_platform_js(client):
-    """AC_ENTRY / MAD-5: HTML laedt platform.js vor routine-anpassen.js."""
+    """AC_ENTRY / MAD-5 (brainstorm-Vorlage NICHT ratifiziert): HTML laedt platform.js vor routine-anpassen.js."""
     body = client.get("/seiten/routine/anpassen").get_data(as_text=True)
     assert "platform.js" in body, "platform.js fehlt im Template (MAD-5)"
     assert "routine-anpassen.js" in body, "routine-anpassen.js fehlt im Template"
@@ -95,7 +95,7 @@ def test_ac_entry_html_laedt_platform_js(client):
 
 
 def test_ac_entry_html_laedt_css(client):
-    """AC_ENTRY: HTML laedt routine-anpassen.css (MAD-6 Asset-Pfad)."""
+    """AC_ENTRY: HTML laedt routine-anpassen.css (MAD-6 Asset-Pfad, brainstorm-Vorlage NICHT ratifiziert)."""
     body = client.get("/seiten/routine/anpassen").get_data(as_text=True)
     assert "routine-anpassen.css" in body, "routine-anpassen.css fehlt im Template"
 
@@ -123,7 +123,7 @@ def test_ac_entry_anker_pikto_pfade_in_js():
 
 
 def test_ac_entry_anker_pfad_format_in_js():
-    """AC_ENTRY / MAD-6: routine-anpassen.js nutzt /display/_shared/icons/arasaac/-Pfad."""
+    """AC_ENTRY / MAD-6 (brainstorm-Vorlage NICHT ratifiziert): routine-anpassen.js nutzt /display/_shared/icons/arasaac/-Pfad."""
     js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
     with open(js_path, encoding="utf-8") as f:
         js_inhalt = f.read()
@@ -135,7 +135,7 @@ def test_ac_entry_anker_pfad_format_in_js():
 # ── AC2-Stub — JS-Struktur ─────────────────────────────────────────────────────
 
 def test_ac2_stub_kein_telegram_webapp_in_js():
-    """AC2-Stub / MAD-5: routine-anpassen.js enthaelt keinen direkten Telegram.WebApp-Aufruf."""
+    """AC2-Stub / MAD-5 (brainstorm-Vorlage NICHT ratifiziert): routine-anpassen.js enthaelt keinen direkten Telegram.WebApp-Aufruf."""
     js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
     with open(js_path, encoding="utf-8") as f:
         js_inhalt = f.read()
