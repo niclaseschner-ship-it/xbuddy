@@ -142,6 +142,30 @@ lädt mit gültiger initData.
 | Mini-App-URL ist nicht konfiguriert (Funnel down / Config fehlt) | Klartext: „Die Mini-App-URL fehlt in meiner Konfig — frag Nic." Skill loggt. Fallback: WZE-Volltext-Antwort als Notlösung (falls implementiert). |
 | Berechtigung fehlt | Klartext: „Das geht nur für Eltern." |
 
+## EZG-8a — Konfiguration (Mini-App-URL + Init-Data-Frische)
+
+Konsumenten-Sicht für die einkauf-zeigen-Funktion. Werte sind Per-Instanz; die
+Repo-Defaults stehen in `eltern-chat/config.example.json` bzw.
+`eltern-chat/init_data.example.json` (#713).
+
+| Wert | Default | Datei-Schlüssel | ENV-Override | Gesetzt durch |
+|---|---|---|---|---|
+| `mini_app_einkauf_url` | leer | `eltern-chat/config.json::mini_app_einkauf_url` | `ELTERNCHAT_MINI_APP_EINKAUF_URL` | Onboarding-Schritt „Mini-App-Domain" (Funnel-Setup) |
+| `max_age_seconds` | `86400` (24h) | `eltern-chat/init_data.json::max_age_seconds` | `ELTERNCHAT_INIT_DATA_MAX_AGE_SECONDS` | Default-Wert; Override per Familie wenn kürzere Mini-App-Session gewünscht |
+
+**Frische-Grenze 24h** ist eine pragmatische Default-Wahl ohne formellen
+Telegram-Doku-Anker — Telegram definiert keinen festen Ablauf, die Lib lässt
+ihn konfigurierbar (`eltern-chat/init_data.py`-Header). Kürzere Werte
+(z. B. 3600 = 1h) sind sinnvoll, wenn die Mini App nur kurz pro Einkauf
+genutzt wird. Längere Werte (z. B. mehrere Tage) sind tendenziell unnötig,
+weil Telegram die Init-Data ohnehin neu signiert, wenn der `web_app`-Button
+neu getappt wird.
+
+CONFIG-2-konform: jeder Wert hat Name, Default, Datei-Schlüssel und gesetzt
+durch — keine Code-only-Konstanten.
+
+*Tickets:* #713
+
 ## EZG-8 — Skelett-Anker
 
 Der Skill folgt der Konvention für Eltern-Chat-Aufgaben (EC-8): Aufgaben-

@@ -361,7 +361,15 @@ def essen_einkauf_view():
     der essen-Buddy prueft initData in V1.x nach (Handoff-Befund).
     """
     # --- Token aus ENV oder runtime-Dict ---
-    bot_token = runtime.get("bot_token") or os.environ.get("TELEGRAM_BOT_TOKEN")
+    # Token-Quelle: runtime-Dict (Test-Naht) → TELEGRAM_BOT_TOKEN (Standard-ENV-Name) →
+    # ELTERNCHAT_BOT_TOKEN (Fallback, weil eltern-chat/.env das Token unter
+    # CONFIG-5-Schema <COMPONENT>_<KEY> hält und seiten via EnvironmentFile-Sharing
+    # an dieselbe Datei kommt — #684 Token-Sharing, #710).
+    bot_token = (
+        runtime.get("bot_token")
+        or os.environ.get("TELEGRAM_BOT_TOKEN")
+        or os.environ.get("ELTERNCHAT_BOT_TOKEN")
+    )
     if not bot_token:
         logging.error(
             "ESSEN-31: TELEGRAM_BOT_TOKEN nicht gesetzt — Mini-App-Route nicht nutzbar.")
