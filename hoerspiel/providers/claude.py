@@ -12,7 +12,8 @@ from .base import LLMProvider, ProviderError
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "claude-opus-4-7"
-MAX_TOKENS = 4096
+# 2700-Wörter-Folge ≈ ~3500 Tokens; Sicherheits-Puffer für JSON-Schale.
+MAX_TOKENS = 8192
 
 
 class ClaudeProvider(LLMProvider):
