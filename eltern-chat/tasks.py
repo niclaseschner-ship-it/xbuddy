@@ -322,7 +322,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   avb_sessions=None,
                   current_provider_getter=None,
                   mini_app_einkauf_url=None,
-                  mini_app_base_url=None):
+                  mini_app_base_url=None,
+                  hoerspiel_url_origin=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
@@ -725,5 +726,27 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             sessions=avb_sessions,
             family_group_chat_id_getter=family_group_chat_id_getter,
             current_provider_getter=current_provider_getter))
+
+    # HFE-9 / #729: »Hörspiel-Folge erzeugen« als schreibende Aufgabe (EC-10,
+    # E-HFE-5 propose→confirm). AND-Guard: hoerspiel_url_origin UND
+    # family_group_chat_id_getter müssen gesetzt sein — fehlt eine, erscheint
+    # die Aufgabe NICHT im Katalog.
+    # hoerspiel_url_origin: Hörspiel-Buddy-Schnittstelle (HSP-17,
+    #   POST /api/v1/hoerspiel/folgen-vorschlag HFE-3,
+    #   POST /api/v1/hoerspiel/alben HFE-5).
+    # family_group_chat_id_getter: Live-Berechtigung (HFE-2, EC-2).
+    # display_url_origin: Heim-Origin für den Album-Display-Link (HFE-5-Bubble);
+    #   analog display_url_origin in GeraetAnlegenTask (GAA-3.7). Leer → kein Link.
+    if hoerspiel_url_origin is not None and family_group_chat_id_getter is not None:
+        from skills.hoerspiel_client import HoerspielClient
+        from skills.hoerspiel_folge_erzeugen_task import HoerspielFolgeErzeugenTask
+        _hfe_client = HoerspielClient(origin_url=hoerspiel_url_origin)
+        _hfe_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
+        catalog.register(HoerspielFolgeErzeugenTask(
+            tg=tg,
+            hoerspiel_client=_hfe_client,
+            display_url_origin=display_url_origin or "",
+            family_group_chat_id_getter=family_group_chat_id_getter,
+            is_member_fn=_hfe_is_member))
 
     return catalog
