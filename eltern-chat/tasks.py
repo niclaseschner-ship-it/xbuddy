@@ -193,6 +193,15 @@ class WriteTask(Task):
     # Worker-Thread-Ende (async).
     is_async = False
 
+    # Klassenattribut — Direkt-Modus (E-EIN-1): Skill schreibt sofort,
+    # ohne EC-10-propose→confirm-Gate. Default False (Standard EC-10).
+    # Wenn True, ruft `agent.py` die Aufgabe wie eine ReadTask direkt
+    # via `Catalog.execute_write_task` auf — `propose()` wird übersprungen.
+    # Anwendung: Aufgaben, deren Wirkung "schmerzlos rückgängig" ist
+    # (E-EIN-1 Begründung: Einkaufsliste-Items per Mini-App-Geste
+    # entfernbar; Bestätigungs-Reibung ohne Sicherheits-Gewinn).
+    auto_confirm = False
+
     def propose(self, arguments, turn_context):
         """Legt einen `Proposal` vor — führt NICHTS aus."""
         raise NotImplementedError
