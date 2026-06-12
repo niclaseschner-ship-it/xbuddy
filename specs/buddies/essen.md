@@ -317,11 +317,13 @@ Icon-Pfad, CLAUDE.md §6 / Lego, gleiche Regel wie ROUTINE-10 / WETTER-18).
 numerische ARASAAC-IDs ab. Die Lizenz-/NC-Frage liegt zentral in `icons.md`
 ICONS-6 und wird hier nur referenziert, nicht erneut entschieden.
 
-**Familien-Foto-Override (V1.1, ESSEN-22):** Trägt ein Item ein Familien-Foto
-über den Photo-Buddy, ersetzt dieses Foto den ARASAAC-Default für genau
-dieses Item. Items ohne Familien-Foto behalten den ARASAAC-Default. Die
-Übergangs-Logik ist deterministisch (Foto vorhanden → Foto rendert; sonst
-ARASAAC).
+**Familien-Foto-Override (V1.1, ESSEN-22):** Trägt ein Gericht ein
+`foto_ref`-Feld, oder gibt es für ein Lebensmittel-Item einen Eintrag in
+`essen/foto_overrides.json`, rendert das Display das Foto aus dem
+Photo-Buddy statt des ARASAAC-Defaults — **kreisförmig ausgeschnitten** via
+CSS, damit der Stil zu den Piktos passt. Items ohne Familien-Foto behalten
+den ARASAAC-Default unverändert. Die Übergangs-Logik ist deterministisch
+(`foto_ref` / Override-Eintrag vorhanden → Foto rendert; sonst ARASAAC).
 
 *Test-Implikation:* ein Item ohne Familien-Foto rendert sein Piktogramm über
 den `/display/_shared/`-Pfad (kein buddy-lokaler ARASAAC-Download); ein Item
@@ -544,14 +546,24 @@ Legt ein neues Gericht in den dynamischen Gerichte-Katalog (ESSEN-14).
 (`gericht-anlegen.md`, GAN). Andere Schreibpfade gibt es nicht (APP-3: der
 Buddy besitzt seine Daten, der Skill schreibt nie direkt in `gerichte.json`).
 
-**Payload (JSON-Body):** `label` (string, nicht leer), `bild_ref` (ARASAAC-`id`
-über die Icon-Such-API ICONS-7, vom Skill bereits aufgelöst). `kategorie` ist
-implizit `gericht` und wird nicht gesendet.
+**Payload (JSON-Body):** `label` (string, nicht leer) plus **genau eines**
+der folgenden zwei Felder als Bild-Referenz:
+
+- `bild_ref` (ARASAAC-`id` über die Icon-Such-API ICONS-7, vom GAN-Skill
+  bereits aufgelöst) — Default-Pfad mit Pikto.
+- `foto_ref` (Photo-Buddy-Medien-`id`) — Familien-Foto-Pfad (ESSEN-22 Pfad 1).
+  Der GAN-Skill hat das Foto vorab über `POST /api/v1/photo/medien`
+  hochgeladen und schickt die zurückgegebene Medien-ID hier mit.
+
+Sind beide Felder gesetzt → 400 (eindeutig wählen). Keines gesetzt → 400.
+`kategorie` ist implizit `gericht` und wird nicht gesendet.
 
 **Fachliche Validierung im Buddy:** `label` nicht leer, kein Duplikat
-(gleiches `label` existiert bereits → 409 Conflict, kein zweiter Eintrag);
-`bild_ref` muss eine ARASAAC-`id` mit lokal vorliegendem PNG sein (ICONS-5).
-Ungültig → 4xx, kein Schreiben.
+(gleiches `label` existiert bereits → 409 Conflict, kein zweiter Eintrag).
+Bei `bild_ref`: muss eine ARASAAC-`id` mit lokal vorliegendem PNG sein
+(ICONS-5). Bei `foto_ref`: muss eine im Photo-Buddy existierende Medien-ID
+sein (Buddy ruft `GET /api/v1/photo/medien/<id>` und prüft 200). Ungültig
+in beiden Fällen → 4xx, kein Schreiben.
 
 **V1 #653 — Zutaten-Feld:** Der Payload trägt **zusätzlich Pflichtfeld**
 `zutaten` (Array): jede Zutat hat `label` (string, nicht leer), `kategorie`
@@ -567,9 +579,13 @@ quellen-eindeutig analog ESSEN-5).
 **Persistenz:** schreibt atomar in `essen/gerichte.json` (DCOMP-4). `zutaten`
 wird mit-geschrieben.
 
-*Test-Implikation:* gültiger POST liefert eine neue `id` und macht das Gericht
-in `GET /api/v1/essen/katalog` (Kategorie `gericht`) sichtbar; doppeltes
-Anlegen mit demselben `label` → 409. POST mit `zutaten: [{label: "Mozzarella",
+*Test-Implikation:* gültiger POST mit `bild_ref` liefert eine neue `id` und
+macht das Gericht in `GET /api/v1/essen/katalog` (Kategorie `gericht`)
+sichtbar; doppeltes Anlegen mit demselben `label` → 409. **POST mit
+`foto_ref` (Photo-Buddy-Medien-ID) statt `bild_ref` legt das Gericht mit
+Foto-Pfad an — `GET /api/v1/essen/katalog` zeigt es mit `foto_ref` statt
+`bild_ref`** (ESSEN-22 Pfad 1). **POST mit beiden Feldern → 400, POST mit
+keinem → 400.** POST mit `zutaten: [{label: "Mozzarella",
 kategorie: "brotbelag", bild_ref: "27136"}]` persistiert das Feld; das
 nachfolgende GET zeigt es. POST mit `zutaten: [{kategorie: "gericht", …}]` →
 400 (Kategorie für Zutat unzulässig).
@@ -636,53 +652,132 @@ Wahrheit kommt aus den Dateien. ENV-Overrides `ESSEN_<KEY>` (CONFIG-5).
 
 ## 6a. Familien-Foto-Override (V1.1)
 
-### ESSEN-22 — Familien-Foto je Item via Photo-Buddy (Eltern-Chat-Skill `essen_foto_setzen`)
+### ESSEN-22 — Familien-Foto je Item (Anlegen-mit-Foto ODER nachträglich setzen)
+
 Die Familie kann je Katalog-Item ein **eigenes Foto** hinterlegen, das den
-ARASAAC-Default am Display ersetzt (ESSEN-11). Der Pfad lebt über bestehende
-Naht: Eltern-Chat-Skill (analog FSE-Pattern `foto_senden_task`) +
-**Photo-Buddy** als Familien-Foto-Speicher (PHOTO-15).
+ARASAAC-Default am Display ersetzt (ESSEN-11). Es gibt **zwei Pfade** zum
+selben Ziel — sie unterscheiden sich nur darin, ob das Foto schon beim
+Anlegen des Items vorliegt oder erst später nachgereicht wird.
 
-**Skill-Form (analog FSE, im Eltern-Chat-Katalog EC-8):**
+**Pfad 1 — Beim Anlegen mit Foto statt Pikto (GAN-Erweiterung).** Wenn Eltern
+über `gericht-anlegen` (GAN) ein neues Gericht anlegen, können sie statt
+eines ARASAAC-Piktos ein Foto mitschicken. Der GAN-Skill lädt das Foto vorab
+über die bestehende Photo-Buddy-API (`POST /api/v1/photo/medien`) hoch und
+ruft `POST /api/v1/essen/katalog/gerichte` (ESSEN-19) mit `foto_ref` statt
+`bild_ref` auf. Das Gericht trägt damit von Beginn an die Foto-Referenz im
+Katalog-Eintrag.
 
-- Trigger: Eltern schicken ein Foto im Privatchat oder in der Familien-Gruppe.
-  Der Skill `essen_foto_setzen` fragt, zu welchem Katalog-Item das Foto gehört
-  (Auswahl aus dem aktuellen Essens-Katalog, propose→confirm analog
-  `routine_punkte_setzen`).
-- Confirm: Mit einem Bestätigungswort (E-EC-7) speichert der Skill das Foto
-  im Photo-Buddy mit einem **essen-spezifischen Tag** (Form: `essen:<item_id>`,
-  analog PHOTO-15-Tag-Schema). Existiert für das Item bereits ein Familien-
-  Foto, wird es ersetzt (genau ein Foto je Item, V1).
+**Pfad 2 — Nachträglich für existierende Items (Skill `essen_foto_setzen`).**
+Trägt ein Item heute schon einen ARASAAC-Default (oder wurde ohne Foto
+angelegt), kann das Foto über den neuen Skill `essen_foto_setzen` nachgereicht
+werden. Pattern analog FSE (`foto_senden_task`): Trigger ist ein Foto im
+Privatchat oder Familien-Gruppe, der Skill ermittelt das Ziel-Item (siehe
+Vor-Routing unten), schreibt die Foto-Referenz an die richtige Datenstelle
+(Gericht vs. Basis-Item, siehe Datenmodell-Trennung), Confirm mit E-EC-7.
+Existiert für das Item bereits ein Familien-Foto, wird es ersetzt (genau
+ein Foto je Item).
 
-**Display-Konsum (ESSEN-11-Override):**
+**Vor-Routing am Bot-Eingang (LLM-Klassifikation auf Foto+Caption).** Schickt
+die Familie ein Foto mit Caption in den Chat, klassifiziert das Eingangs-LLM
+den Foto-Anstoß analog EC-22 (Anstoß-Vollständigkeit). Vier Fälle, alle
+zweistufig (propose→confirm, EC-10 zweistufige Variante):
 
-- Pro Render-Cycle prüft der Essens-Buddy je Katalog-Item: liegt ein
-  Photo-Buddy-Foto mit Tag `essen:<item_id>` vor? Wenn ja → Foto-URL aus
-  Photo-Buddy (PHOTO-15) rendern statt des ARASAAC-Default-Pfads. Wenn
-  nein → ARASAAC-Default (ESSEN-11).
-- Der Essens-Buddy hält **keine eigene Foto-Kopie**. Photo-Buddy bleibt die
-  einzige Speicher-Stelle (APP-3: Photo-Buddy besitzt seine Daten).
+- **Item-Name in Caption + Match im Katalog** → `essen_foto_setzen`-Vorschlag
+  („Foto für `<X>` setzen?").
+- **Item-Name in Caption + KEIN Match im Katalog** (Name sieht nach Gericht
+  aus, z. B. „Lasagne", existiert aber noch nicht) → Vorschlag „Willst du
+  `<X>` als neues Gericht mit diesem Foto anlegen?" → Confirm leitet in den
+  GAN-Pfad mit `foto_ref`.
+- **Explizite Tag-Anweisung in Caption** (z. B. „hinterleg es bei
+  essen/gerichte" oder „essen-foto") → expliziter `essen_foto_setzen`-Pfad,
+  das Ziel-Item wird im nächsten Schritt geklärt.
+- **Foto ohne erkennbaren Essens-Bezug** → kein Auto-Routing zu Essen,
+  bestehender FSE-Pfad bleibt unverändert.
 
-**Lösch-Pfad (V1.1):**
+Das Vor-Routing ist deterministisch nur bei expliziter Tag-Anweisung; bei
+Name-Match/Nicht-Match ist es LLM-vermittelte Klassifikation mit Vorschlag —
+die Familie bestätigt immer, bevor geschrieben wird.
 
-- Wer das Familien-Foto eines Items entfernen will, nutzt den Photo-Buddy-
-  Lösch-Pfad (PHOTO-Spec) — das Tag wird entfernt, das Display fällt
-  automatisch beim nächsten Reload-on-Read (DCOMP-2) auf den ARASAAC-Default
-  zurück. Ein eigener Essens-Foto-Lösch-Skill ist V1.1 nicht nötig (siehe
-  *Out-of-Scope V1.1* unten).
+**Datenmodell-Trennung (Gerichte dynamisch, Basis-Items statisch).** Wo das
+Foto-Verzeichnis lebt, hängt vom Item-Typ ab:
+
+- **Gerichte** (dynamisch, `essen/gerichte.json`, ESSEN-14): `foto_ref` lebt
+  direkt im Gericht-Eintrag. ESSEN-19 trägt das Feld als Alternative zu
+  `bild_ref` (genau eines der beiden Pflicht).
+- **Lebensmittel-Basis-Items** (statisch im Repo, ESSEN-12/ESSEN-13): die
+  Repo-Datei `essen/katalog.default.json` wird NICHT mutiert — Override lebt
+  per-Instanz in `essen/foto_overrides.json` (Schema:
+  `{ "<item_id>": "<photo_buddy_medien_id>" }`). Die Datei folgt SVC-5
+  (Per-Instanz-Daten unter `xbuddy-data/essen/foto_overrides.json`).
+
+**Display-Stil — Foto kreisförmig, Pikto-Konsistenz.** Familien-Fotos werden
+im Display **kreisförmig ausgeschnitten** (CSS `border-radius: 50%` +
+`object-fit: cover` auf der `<img>`-Element-Stelle, die heute den Pikto-Pfad
+rendert). Damit fügen sich Fotos optisch in den Icon-Stil ein, ohne dass
+serverseitig am Foto geschnitten oder freigestellt wird. Kein
+Image-Processing, kein Cache-Bust am Backend — reiner CSS-Effekt.
+
+**Display-Konsum (ESSEN-11-Override).** Pro Render-Cycle prüft
+`essen/render.py` je Item in dieser Reihenfolge:
+
+1. Gericht mit `foto_ref`-Feld gesetzt → Foto-URL aus Photo-Buddy
+   (`/api/v1/photo/medien/<medien-id>`), kreisförmig stylen.
+2. Lebensmittel-Item mit Eintrag in `foto_overrides.json` → Foto-URL aus
+   Photo-Buddy (gleiche Mechanik), kreisförmig stylen.
+3. Sonst → ARASAAC-Default-Pfad (ESSEN-11), quadratisch wie heute.
+
+Der Essens-Buddy hält **keine eigene Foto-Kopie**. Photo-Buddy bleibt die
+einzige Speicher-Stelle (APP-3: Photo-Buddy besitzt seine Daten).
+
+**Lösch-Pfad.**
+
+- **Gericht-Foto entfernen:** `foto_ref` aus dem Gericht-Eintrag entfernen
+  (DELETE/Update-Pfad). Foto im Photo-Buddy bleibt bestehen (separater
+  Lösch-Pfad), Display fällt beim nächsten Reload-on-Read auf den
+  ARASAAC-Default zurück, sobald das Gericht wieder ein `bild_ref` bekommt
+  oder gar nichts trägt.
+- **Basis-Item-Override entfernen:** Eintrag aus `essen/foto_overrides.json`
+  raus. Display fällt zurück auf ARASAAC.
+- Ein eigener Essens-Foto-Lösch-Skill ist V1.1 nicht nötig — die zwei Pfade
+  oben sind über die bestehende Eltern-Chat-Skills (`gericht-loeschen` für
+  Gerichte, händische `foto_overrides.json`-Pflege für Basis-Items)
+  ausreichend.
 
 **Out-of-Scope V1.1** (jeweils eigenes Ticket, sobald gebraucht):
 
-- **Automatisches Freistellen** des Tellers / Hintergrund-Entfernung: V2-
-  Ausbaustufe (E-ESSEN-10). V1.1 nimmt das Foto 1:1 wie hochgeladen.
+- **Echtes Freistellen** des Tellers (Hintergrund-Entfernung via ML-Modell
+  wie `rembg`/`BackgroundMattingV2`) → V1.2-Welle, eigener Werft-Lauf
+  (E-ESSEN-10). Modell-Bibliothek, CPU/GPU-Last und Latenz sind nicht
+  triviale Trade-offs. Bis dahin macht der Kreis-Ausschnitt den visuellen
+  Job: Fotos passen optisch zu den ARASAAC-Piktos.
 - **Mehrere Fotos pro Item** (Karussell). V1.1 trägt genau eins.
-- **OpenFoodFacts oder externe Foto-Datenbank**: OPEN-ESSEN-B bleibt
-  vertagt, eigener Werft-Lauf (E-ESSEN-6).
+- **OpenFoodFacts oder externe Foto-Datenbank** → bleibt OPEN-ESSEN-B,
+  eigener Werft-Lauf (E-ESSEN-6).
+- **Generisches Photo-Buddy-Tag-Schema** (Cross-Buddy-Konsum für Routine,
+  HSP etc.) → vertagt bis n=2 (Berater-Regel: zwei gebaute Konsumenten,
+  dann Konvention).
+- **Eltern-Chat-Skill für Override-Lösch auf Basis-Items** → solange die
+  Pflege selten ist, reicht händische `foto_overrides.json`-Edit.
 
-*Test-Implikation:* Ein Skill-Test legt ein Foto für Item X an, ein Render-
-Test belegt, dass Item X danach das Foto statt des ARASAAC-Pfads rendert.
-Negativ-Test: Items ohne Familien-Foto rendern weiter den ARASAAC-Default
-unverändert. Lösch-Test: nach Photo-Buddy-Tag-Entfernung rendert Item X
-wieder ARASAAC.
+*Test-Implikationen:*
+
+- **GAN-Pfad-Test:** Anlegen eines Gerichts „Lasagne" mit Foto-Anhang im
+  Chat → Photo-Buddy hat ein Medium, `gerichte.json` trägt für „Lasagne"
+  `foto_ref` (kein `bild_ref`).
+- **essen_foto_setzen-Test (Gericht):** Foto für existierendes Gericht
+  setzen → `foto_ref` im Gericht-Eintrag, alter `bild_ref` weg.
+- **essen_foto_setzen-Test (Basis-Item):** Foto für „Apfel" setzen →
+  Eintrag in `foto_overrides.json`, `katalog.default.json` unverändert.
+- **Render-Test (Override):** Item mit `foto_ref` / Override rendert Foto
+  kreisförmig statt ARASAAC.
+- **Render-Test (Negativ):** Item ohne Familien-Foto rendert ARASAAC
+  quadratisch wie heute.
+- **Vor-Routing-Test (Match):** Foto-Anstoß „das ist eine Lasagne" mit
+  „Lasagne" im Katalog → `essen_foto_setzen`-Vorschlag.
+- **Vor-Routing-Test (Anlegen):** Foto-Anstoß „das ist eine Lasagne" ohne
+  „Lasagne" im Katalog → GAN-mit-Foto-Vorschlag.
+- **Lösch-Test:** `foto_ref` raus / Override raus → Render fällt auf
+  ARASAAC zurück.
 
 *Tickets:* #531
 
