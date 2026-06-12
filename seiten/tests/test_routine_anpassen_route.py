@@ -179,3 +179,77 @@ def test_ac2_stub_js_enthaelt_schloss():
         js_inhalt = f.read()
     assert "schloss" in js_inhalt.lower(), \
         "Schloss-Klasse/Symbol fehlt in routine-anpassen.js (ROUTINE-20: Aufstehen+Losgehen gesperrt)"
+
+
+# ── T728 Live-Fix — 5 neue Klauseln (eine pro Bug-Fix) ────────────────────────
+
+def test_t728_fix1_css_overflow_x_hidden():
+    """T728 Bug-1 / AC-Fix-1: CSS enthaelt overflow-x: hidden auf html und body — kein horizontaler Scroll."""
+    css_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.css")
+    with open(css_path, encoding="utf-8") as f:
+        css_inhalt = f.read()
+    assert "overflow-x: hidden" in css_inhalt, \
+        "overflow-x: hidden fehlt in routine-anpassen.css — Bug-1 (Viewport-Breite) nicht gefixt"
+    # html-Selektor und body-Selektor muessen beide enthalten sein
+    html_idx = css_inhalt.find("html")
+    body_idx = css_inhalt.find("body")
+    assert html_idx != -1, "html-Regel fehlt in routine-anpassen.css"
+    assert body_idx != -1, "body-Regel fehlt in routine-anpassen.css"
+
+
+def test_t728_fix2_js_pointer_events_set_pointer_capture():
+    """T728 Bug-2 / AC-Fix-2: JS nutzt setPointerCapture + pointermove statt pointerover fuer Drag."""
+    js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js_inhalt = f.read()
+    assert "setPointerCapture" in js_inhalt, \
+        "setPointerCapture fehlt in routine-anpassen.js — Bug-2 (Drag Pointer-Events) nicht gefixt"
+    assert "pointermove" in js_inhalt, \
+        "pointermove-Event fehlt in routine-anpassen.js — Bug-2 (Drag bewegt sich nicht) nicht gefixt"
+    assert "pointerdown" in js_inhalt, \
+        "pointerdown-Event fehlt in routine-anpassen.js — Bug-2 Drag-Start nicht implementiert"
+
+
+def test_t728_fix3_js_sheet_kein_rendersheet_rerender():
+    """T728 Bug-3 / AC-Fix-3: JS-Sheet rendert Label-Input nur einmal — kein _renderSheet()-Aufruf innerhalb Toggle-Handler."""
+    js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js_inhalt = f.read()
+    # sheet-label muss als <input type=text> gerendert werden (einzeilig, ROUTINE-21)
+    assert 'type="text"' in js_inhalt, \
+        'type="text" fehlt in routine-anpassen.js — Bug-3 (einzeiliger Label-Input) nicht gefixt'
+    assert 'sheet-label' in js_inhalt, \
+        "sheet-label fehlt in routine-anpassen.js — Bug-3 Label-Input nicht implementiert"
+    # Toggle darf kein _renderSheet() aufrufen (was Focus-Loss verursacht hatte)
+    # Proxy-Check: classList.add("active") muss im Toggle-Handler vorhanden sein
+    assert 'classList.add("active")' in js_inhalt, \
+        'classList.add("active") fehlt — Toggle-Handler muss Klasse setzen statt ganzes Sheet neu zu rendern (Bug-3)'
+
+
+def test_t728_fix5_css_sheet_max_width_100vw():
+    """T728 Bug-5 / AC-Fix-5: CSS enthaelt max-width: 100vw auf Sheet-Overlay und Sheet — kein rechter Abschnitt."""
+    css_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.css")
+    with open(css_path, encoding="utf-8") as f:
+        css_inhalt = f.read()
+    assert "100vw" in css_inhalt, \
+        "max-width: 100vw fehlt in routine-anpassen.css — Bug-5 (Bottom-Sheet abgeschnitten) nicht gefixt"
+    assert "overflow-x: hidden" in css_inhalt, \
+        "overflow-x: hidden fehlt im Sheet-Bereich — Bug-5 Inhalte duerfen nicht ueberlaufen"
+
+
+def test_t728_fix6_js_main_button_toggle_on_sheet():
+    """T728 Bug-6 / AC-Fix-6: JS deaktiviert MainButton beim Oeffnen des Sheets (setMainButton disabled) und restauriert beim Schliessen (_aktualisiereMainButton)."""
+    js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js_inhalt = f.read()
+    # oeffneSheetOverlay muss setMainButton aufrufen (deaktivieren)
+    assert "oeffneSheetOverlay" in js_inhalt, \
+        "oeffneSheetOverlay fehlt in routine-anpassen.js"
+    assert "setMainButton" in js_inhalt, \
+        "setMainButton fehlt — Bug-6 MainButton-Toggle nicht implementiert"
+    # schliesseSheet muss _aktualisiereMainButton() aufrufen (restaurieren)
+    assert "_aktualisiereMainButton" in js_inhalt, \
+        "_aktualisiereMainButton fehlt in schliesseSheet — Bug-6 MainButton wird nicht restauriert"
+    # Sicherheitscheck: kein direkter Telegram.WebApp-Aufruf (MAD-5)
+    assert "Telegram.WebApp" not in js_inhalt, \
+        "Telegram.WebApp direkt aufgerufen — MAD-5-Verletzung in Bug-6-Fix"
