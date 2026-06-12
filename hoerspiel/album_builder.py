@@ -44,11 +44,12 @@ BUNDLE_THRESHOLD_WORDS = 450
 WORDS_PER_SECOND = 2.5
 
 # HSP-14 Pausen (aus Brainstorm-Demo `generate_structured.py`):
-# - 0.55s Stille hinten an jedem Inhalts-Bündel (zwischen Bündeln + vor Outro).
-# - 1.8s nach Titel-Absatz und 0.7s nach Intro-Reim werden in V1 nicht
-#   umgesetzt — die laufen über separate Track-Schnitte, die wir später
-#   einbauen, wenn der Bündel-Schnitt feiner wird.
+# - 0.55s Stille zwischen normalen Inhalts-Absätzen + am Track-Ende
+# - 1.8s nach Titel-Absatz (`Folge N: <Titel>`, erster Absatz)
+# - vor Outro-Track 0.55s — als Tail des letzten Inhalts-Bündels
 BUNDLE_TAIL_SILENCE_SEK = 0.55
+PARAGRAPH_SILENCE_SEK = 0.55
+TITLE_SILENCE_SEK = 1.8
 
 DEFAULT_INDEX_FILENAME = ".index.json"
 
@@ -128,9 +129,11 @@ def _shaped_track_dauer(text: str) -> int:
 def _pad_silence(mp3_bytes: bytes, silence_sek: float) -> bytes:
     """Hängt `silence_sek` Stille hinter eine MP3-Spur (HSP-14).
 
-    Nutzt ffmpeg: einmal mp3 + lavfi-anullsrc per concat zu einer Datei.
-    Fehlt ffmpeg → die Original-MP3 bleibt unverändert (degrades gracefully,
-    Pause fehlt dann nur akustisch).
+    Re-encode statt `-c copy` — Demuxer-DTS-Probleme bei nativer Konkat
+    von zwei MP3-Streams (Live-Befund 2026-06-12). Nutzt libmp3lame mit
+    96 kbps mono 24 kHz wie der Brainstorm-Demo `generate_structured.py`.
+
+    Fehlt ffmpeg → Original-MP3 (degrades gracefully).
     """
     if silence_sek <= 0:
         return mp3_bytes
@@ -153,7 +156,7 @@ def _pad_silence(mp3_bytes: bytes, silence_sek: float) -> bytes:
             subprocess.run(
                 ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
                  "-f", "concat", "-safe", "0", "-i", list_path,
-                 "-c", "copy", out],
+                 "-c:a", "libmp3lame", "-b:a", "96k", out],
                 check=True)
             with open(out, "rb") as f:
                 return f.read()
@@ -161,6 +164,95 @@ def _pad_silence(mp3_bytes: bytes, silence_sek: float) -> bytes:
         logger.warning(
             "ffmpeg-Stille-Padding fehlgeschlagen (%s) — Track ohne Pause", exc)
         return mp3_bytes
+
+
+def _synthese_bundle_mit_pausen(bundle: str, voice: str, *, tts_engine,
+                                ist_erster_bundle: bool,
+                                ist_letzter_bundle: bool) -> tuple[bytes, int]:
+    """Synthetisiert ein Bündel als pro-Absatz-TTS-Calls + Pausen (HSP-14).
+
+    Brainstorm-Demo `generate_structured.py`-Architektur:
+      - jeder Absatz wird einzeln synthetisiert
+      - nach Titel-Absatz (erster Absatz im ersten Bündel,
+        `Folge N: <Titel>`) wird 1.8 s Stille angehängt
+      - zwischen normalen Inhalts-Absätzen 0.55 s
+      - vor dem Outro-Track (Ende des letzten Bündels) 0.55 s
+    Re-encode mit libmp3lame bei jedem Concat-Schritt — sonst DTS-Müll.
+
+    Returns (mp3_bytes, dauer_sek) — Dauer als Wort-basierte Schätzung
+    plus Anzahl Pausen.
+    """
+    parts = [p.strip() for p in bundle.split("\n\n") if p.strip()]
+    if not parts:
+        raise ValueError("Bündel enthält keine Absätze")
+
+    chunks: list[tuple[bytes, float]] = []  # (mp3, pause_nach)
+    for i, absatz in enumerate(parts):
+        mp3 = tts_engine.synthese(text=absatz, voice=voice)
+        ist_letzter_absatz_im_bundle = (i == len(parts) - 1)
+        ist_titel_absatz = (
+            ist_erster_bundle and i == 0
+            and re.match(r"^Folge\s+\d+", absatz)
+        )
+        if ist_letzter_absatz_im_bundle:
+            # Letzter Absatz im letzten Bündel: Pre-Outro-Pause.
+            # Sonst zwischen-Bündel-Pause am Track-Ende.
+            pause = BUNDLE_TAIL_SILENCE_SEK if ist_letzter_bundle else BUNDLE_TAIL_SILENCE_SEK
+        elif ist_titel_absatz:
+            pause = TITLE_SILENCE_SEK
+        else:
+            pause = PARAGRAPH_SILENCE_SEK
+        chunks.append((mp3, pause))
+
+    track_mp3 = _concat_chunks_mit_pausen(chunks)
+    pausen_sek = sum(p for _, p in chunks)
+    inhalt_sek = _shaped_track_dauer(bundle)
+    return track_mp3, inhalt_sek + round(pausen_sek)
+
+
+def _concat_chunks_mit_pausen(chunks: list[tuple[bytes, float]]) -> bytes:
+    """Concatiniert pro-Absatz-Chunks mit Stille dazwischen (HSP-14).
+
+    Ein einziger ffmpeg-Call schreibt alle Chunks + lavfi-Stille-Files
+    in eine concat-Liste und re-encodet mit libmp3lame.
+    """
+    try:
+        with tempfile.TemporaryDirectory(prefix="hsp_concat_") as tmp:
+            list_path = os.path.join(tmp, "list.txt")
+            chunk_paths: list[str] = []
+            for j, (mp3, _) in enumerate(chunks):
+                p = os.path.join(tmp, "c%02d.mp3" % j)
+                with open(p, "wb") as f:
+                    f.write(mp3)
+                chunk_paths.append(p)
+            silence_paths: dict[float, str] = {}
+            for _, pause in chunks:
+                if pause > 0 and pause not in silence_paths:
+                    sp = os.path.join(tmp, "sil_%.2f.mp3" % pause)
+                    subprocess.run(
+                        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                         "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono",
+                         "-t", str(pause), "-c:a", "libmp3lame",
+                         "-b:a", "96k", sp],
+                        check=True)
+                    silence_paths[pause] = sp
+            with open(list_path, "w") as f:
+                for j, (_, pause) in enumerate(chunks):
+                    f.write("file '%s'\n" % chunk_paths[j])
+                    if pause > 0:
+                        f.write("file '%s'\n" % silence_paths[pause])
+            out = os.path.join(tmp, "track.mp3")
+            subprocess.run(
+                ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+                 "-f", "concat", "-safe", "0", "-i", list_path,
+                 "-c:a", "libmp3lame", "-b:a", "96k", out],
+                check=True)
+            with open(out, "rb") as f:
+                return f.read()
+    except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+        logger.warning(
+            "ffmpeg-Concat fehlgeschlagen (%s) — Chunks ohne Pausen", exc)
+        return b"".join(mp3 for mp3, _ in chunks)
 
 
 def _alben_root(data_root: str) -> str:
@@ -250,18 +342,17 @@ def baue_album(*, titel: str, text: str, voice: str, idee: str,
         audio_tmp = os.path.join(tmp_root, "audio")
         os.makedirs(audio_tmp, exist_ok=True)
         n_bundles = len(bundles)
-        for position, bundle in enumerate(bundles, start=2):
-            mp3 = tts_engine.synthese(text=bundle, voice=voice)
-            # HSP-14: zwischen Inhalts-Tracks 0.55s Stille hinten dranhängen,
-            # vor Outro-Track 0.55s — beide Werte aus dem Brainstorm-Demo
-            # (generate_structured.py PARA_SILENCE/PRE_OUTRO_SILENCE).
-            # Letzter Inhalts-Bündel bekommt damit auch eine Pre-Outro-Pause.
-            mp3 = _pad_silence(mp3, BUNDLE_TAIL_SILENCE_SEK)
+        for idx, bundle in enumerate(bundles):
+            position = idx + 2
+            mp3, dauer = _synthese_bundle_mit_pausen(
+                bundle, voice, tts_engine=tts_engine,
+                ist_erster_bundle=(idx == 0),
+                ist_letzter_bundle=(idx == n_bundles - 1))
             track_filename = "track-%02d.mp3" % position
             data_io.atomic_write_bytes(os.path.join(audio_tmp, track_filename), mp3)
             album_manifest.add_inhalt_track(
                 manifest, position=position, album_id=album_id,
-                dauer_sek=_shaped_track_dauer(bundle) + BUNDLE_TAIL_SILENCE_SEK)
+                dauer_sek=dauer)
         album_manifest.add_outro_track(manifest)
 
         manifest = album_manifest.manifest_to_dict(manifest)
