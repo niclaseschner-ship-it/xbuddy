@@ -25,7 +25,7 @@ jobs:
   reconcile:
     # Nur feuern, wenn genau das Handoff-Label gesetzt wurde.
     if: github.event.label.name == 'status:ready'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ARM64]
     steps:
       - name: status-ready gegen Issue-State abgleichen
         env:

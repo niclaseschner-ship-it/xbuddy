@@ -26,7 +26,7 @@ permissions:
 
 jobs:
   closes-guard:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ARM64]
     steps:
       - name: Ticket-Bezug validieren (offenes Issue / Spec / no-ticket)
         env:
