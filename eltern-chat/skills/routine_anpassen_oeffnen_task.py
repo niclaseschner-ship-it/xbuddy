@@ -27,6 +27,13 @@ kurze Quittung zurück.
 Mini-App-URL-Konfig: kommt aus `mini_app_base_url`-Konstruktor-Parameter
 (von build_catalog befüllt) + Pfad `/seiten/routine/anpassen` (RAO-6).
 Leer → Skill zeigt Fehler-Text ohne Button (RAO-7).
+
+**TASK-10c Form-(a)-Ausnahme (RAO-9 / Bauschuld):** Dieser Adapter baut
+TASK-10c Form (a) — Selbst-Send via `tg.send_inline_keyboard` + Quittung
+als Tool-Result — analog EZG, weil das presentation-Framework (TASK-10c
+Form (b): strukturiertes `{text, presentation}`-Ergebnis) zum Bau-Zeitpunkt
+noch nicht ratifiziert war. Migrationsschuld wandert mit EZG mit (Folge-Ticket
+separat); kein Code-Change nötig bis zur EZG-Migration.
 """
 
 import logging
