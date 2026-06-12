@@ -6,7 +6,10 @@
 
 'use strict';
 
-/* ── MOCK-MANIFEST (Entry-Path-Probe: Browser-Verifizierung ohne Backend) ── */
+/* ── MOCK-DATEN (Entry-Path-Probe: Browser-Verifizierung ohne Backend) ──────
+   MOCK_ALBEN: Listen-Form (Summary, ohne tracks) — wie GET /alben liefert.
+   MOCK_MANIFESTE: id → Manifest mit tracks — wie GET /alben/<id>/manifest.
+   HSP-17: Liste und Manifest sind bewusst getrennt (Befund 2+3).            */
 const MOCK_ALBEN = [
   {
     id: 'folge-22',
@@ -14,11 +17,40 @@ const MOCK_ALBEN = [
     titel: 'Schmuggli erzählt vom Trübsee',
     voice: 'shimmer',
     'erstellt-am': '2026-06-12',
-    freigegeben: true,
     'cover-asset': '/display/hoerspiel/static/cover-default.png',
     'pikto-hauptbegriffe': [
       { wort: 'Trübsee', 'arasaac-id': 6022 }
-    ],
+    ]
+  },
+  {
+    id: 'folge-21',
+    nummer: 21,
+    titel: 'Stigi und der Regenbogen',
+    voice: 'onyx',
+    'erstellt-am': '2026-06-01',
+    'cover-asset': '/display/hoerspiel/static/cover-default.png',
+    'pikto-hauptbegriffe': []
+  },
+  {
+    id: 'folge-20',
+    nummer: 20,
+    titel: 'Vögelchen lernt fliegen',
+    voice: 'shimmer',
+    'erstellt-am': '2026-05-20',
+    'cover-asset': '/display/hoerspiel/static/cover-default.png',
+    'pikto-hauptbegriffe': [
+      { wort: 'fliegen', 'arasaac-id': 2887 }
+    ]
+  }
+];
+
+const MOCK_MANIFESTE = {
+  'folge-22': {
+    id: 'folge-22', nummer: 22,
+    titel: 'Schmuggli erzählt vom Trübsee',
+    voice: 'shimmer', 'erstellt-am': '2026-06-12',
+    'cover-asset': '/display/hoerspiel/static/cover-default.png',
+    'pikto-hauptbegriffe': [{ wort: 'Trübsee', 'arasaac-id': 6022 }],
     tracks: [
       { id: 'intro-shimmer', position: 1, art: 'intro',
         'audio-asset': '/display/hoerspiel/data/shared-assets/intro_shimmer.mp3',
@@ -35,13 +67,10 @@ const MOCK_ALBEN = [
         'dauer-sek': 20, titel: 'Outro' }
     ]
   },
-  {
-    id: 'folge-21',
-    nummer: 21,
+  'folge-21': {
+    id: 'folge-21', nummer: 21,
     titel: 'Stigi und der Regenbogen',
-    voice: 'onyx',
-    'erstellt-am': '2026-06-01',
-    freigegeben: true,
+    voice: 'onyx', 'erstellt-am': '2026-06-01',
     'cover-asset': '/display/hoerspiel/static/cover-default.png',
     'pikto-hauptbegriffe': [],
     tracks: [
@@ -59,17 +88,12 @@ const MOCK_ALBEN = [
         'dauer-sek': 20, titel: 'Outro' }
     ]
   },
-  {
-    id: 'folge-20',
-    nummer: 20,
+  'folge-20': {
+    id: 'folge-20', nummer: 20,
     titel: 'Vögelchen lernt fliegen',
-    voice: 'shimmer',
-    'erstellt-am': '2026-05-20',
-    freigegeben: true,
+    voice: 'shimmer', 'erstellt-am': '2026-05-20',
     'cover-asset': '/display/hoerspiel/static/cover-default.png',
-    'pikto-hauptbegriffe': [
-      { wort: 'fliegen', 'arasaac-id': 2887 }
-    ],
+    'pikto-hauptbegriffe': [{ wort: 'fliegen', 'arasaac-id': 2887 }],
     tracks: [
       { id: 'intro-shimmer', position: 1, art: 'intro',
         'audio-asset': '/display/hoerspiel/data/shared-assets/intro_shimmer.mp3',
@@ -85,7 +109,7 @@ const MOCK_ALBEN = [
         'dauer-sek': 20, titel: 'Outro' }
     ]
   }
-];
+};
 
 /* ARASAAC-Icon-Basis (ICONS-5, DTOK-1) */
 const ICON_BASE = '/display/_shared/icons/';
@@ -100,12 +124,13 @@ const LAST_ALBUM_KEY = 'hoerspiel-last-album';
 /* ── APP-STATE ────────────────────────────────────────────────────────────── */
 let state = {
   alben: [],            /* alle freigegebenen Alben, sortiert nach nummer desc */
-  aktiv: null,          /* aktives Album-Objekt */
+  aktiv: null,          /* aktives Album-Objekt (mit tracks nach Manifest-Laden) */
   aktiv_track: 0,       /* Track-Index (0-basiert) im aktiven Album */
   playing: false,
   is_resume: false,     /* orange Play-Button */
   audio: null,          /* HTMLAudioElement */
-  prev_tap_ts: 0        /* für Doppel-Prev-Erkennung (HSP-21) */
+  prev_tap_ts: 0,       /* für Doppel-Prev-Erkennung (HSP-21) */
+  manifestCache: {}     /* id → Manifest-Objekt mit tracks (Befund 3, HSP-17) */
 };
 
 /* ── DOM-REFS ────────────────────────────────────────────────────────────── */
@@ -381,30 +406,34 @@ function sortedTracks(album) {
 }
 
 /* ── KACHEL-TAP (HSP-20) ─────────────────────────────────────────────────── */
-function tapKachel(album) {
+async function tapKachel(album) {
   /* aktive Kachel markieren */
   document.querySelectorAll('.kachel').forEach(k =>
     k.classList.toggle('active', k.dataset.albumId === album.id)
   );
 
+  /* HSP-17 / Befund 3: tracks kommen aus dem Manifest-Endpoint, nicht der Liste. */
+  const manifest = await loadAlbumManifest(album.id);
+  const albumMitTracks = manifest ? { ...album, tracks: manifest.tracks } : album;
+
   const resume = resumeGet(album.id);
   if (resume && resume.track != null) {
     /* HSP-20: Resume-State → starte am Track-Anfang des gemerkten Tracks */
-    const tracks = sortedTracks(album);
+    const tracks = sortedTracks(albumMitTracks);
     const idx = tracks.findIndex(t => t.position === resume.track);
     const trackIdx = idx >= 0 ? idx : 0;
-    state.aktiv = album;
+    state.aktiv = albumMitTracks;
     state.aktiv_track = trackIdx;
     state.is_resume = true;
-    renderPlayer(album, trackIdx, true);
-    playTrack(album, trackIdx);
+    renderPlayer(albumMitTracks, trackIdx, true);
+    playTrack(albumMitTracks, trackIdx);
   } else {
     /* HSP-20: kein Resume → Track 1 ab Sekunde 0 */
-    state.aktiv = album;
+    state.aktiv = albumMitTracks;
     state.aktiv_track = 0;
     state.is_resume = false;
-    renderPlayer(album, 0, false);
-    playTrack(album, 0);
+    renderPlayer(albumMitTracks, 0, false);
+    playTrack(albumMitTracks, 0);
   }
   lastAlbumSet(album.id);
 }
@@ -575,8 +604,9 @@ function updateMediaSession(album, track) {
 /**
  * Beim Start: prüfe auf Resume-State → orange Play + Kachel-Badge.
  * Wenn kein Resume → zuletzt gespieltes Album laden; wenn gar nichts → erstes Album.
+ * HSP-17 / Befund 3: Manifest (mit tracks) vor renderPlayer nachladen.
  */
-function initPlayerDefault(alben) {
+async function initPlayerDefault(alben) {
   if (alben.length === 0) return;
 
   /* Suche Album mit Resume-State */
@@ -586,18 +616,23 @@ function initPlayerDefault(alben) {
     const r = resumeGet(album.id);
     if (r && r.track != null) {
       resumeAlbum = album;
-      const tracks = sortedTracks(album);
-      const idx = tracks.findIndex(t => t.position === r.track);
-      resumeTrackIdx = idx >= 0 ? idx : 0;
       break;
     }
   }
 
   if (resumeAlbum) {
-    state.aktiv = resumeAlbum;
+    /* Manifest nachladen, damit tracks verfügbar sind */
+    const manifest = await loadAlbumManifest(resumeAlbum.id);
+    const albumMitTracks = manifest ? { ...resumeAlbum, tracks: manifest.tracks } : resumeAlbum;
+    const tracks = sortedTracks(albumMitTracks);
+    const r = resumeGet(resumeAlbum.id);
+    const idx = r ? tracks.findIndex(t => t.position === r.track) : -1;
+    resumeTrackIdx = idx >= 0 ? idx : 0;
+
+    state.aktiv = albumMitTracks;
     state.aktiv_track = resumeTrackIdx;
     state.is_resume = true;
-    renderPlayer(resumeAlbum, resumeTrackIdx, true);
+    renderPlayer(albumMitTracks, resumeTrackIdx, true);
     renderKacheln(alben, resumeAlbum.id);
     /* Aktive Kachel markieren */
     setTimeout(() => {
@@ -610,10 +645,15 @@ function initPlayerDefault(alben) {
   /* Kein Resume: zuletzt gespieltes Album oder erstes Album */
   const lastId = lastAlbumGet();
   const defaultAlbum = (lastId && alben.find(a => a.id === lastId)) || alben[0];
-  state.aktiv = defaultAlbum;
+
+  /* Manifest nachladen, damit tracks verfügbar sind */
+  const manifest = await loadAlbumManifest(defaultAlbum.id);
+  const defaultMitTracks = manifest ? { ...defaultAlbum, tracks: manifest.tracks } : defaultAlbum;
+
+  state.aktiv = defaultMitTracks;
   state.aktiv_track = 0;
   state.is_resume = false;
-  renderPlayer(defaultAlbum, 0, false);
+  renderPlayer(defaultMitTracks, 0, false);
   renderKacheln(alben, null);
   setTimeout(() => {
     const kachel = document.querySelector(`.kachel[data-album-id="${defaultAlbum.id}"]`);
@@ -629,8 +669,26 @@ async function loadAlben() {
     const data = await res.json();
     return Array.isArray(data) ? data : [];
   } catch {
-    /* Fallback auf Mock-Manifest (Entry-Path-Probe) */
+    /* Fallback auf Mock-Listen-Daten (Entry-Path-Probe) */
     return MOCK_ALBEN;
+  }
+}
+
+/* HSP-17 / Befund 3: Manifest mit tracks nachladen (Liste hat keine tracks).
+   Ergebnis wird per Album-ID gecacht — pro Session nur ein Fetch pro Album. */
+async function loadAlbumManifest(albumId) {
+  if (state.manifestCache[albumId]) return state.manifestCache[albumId];
+  try {
+    const res = await fetch('/api/v1/hoerspiel/alben/' + albumId + '/manifest');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const manifest = await res.json();
+    state.manifestCache[albumId] = manifest;
+    return manifest;
+  } catch {
+    /* Fallback auf Mock-Manifest (Entry-Path-Probe) */
+    const mock = MOCK_MANIFESTE[albumId] || null;
+    if (mock) state.manifestCache[albumId] = mock;
+    return mock;
   }
 }
 
@@ -647,12 +705,12 @@ async function init() {
   bindControls();
 
   const raw = await loadAlben();
-  /* Nur freigegebene Alben (HSP-5), absteigend nach nummer */
-  state.alben = raw
-    .filter(a => a.freigegeben)
-    .sort((a, b) => b.nummer - a.nummer);
+  /* Backend filtert bereits auf freigegebene Alben (HSP-5) — kein JS-Filter
+     nötig. a.freigegeben wäre undefined in der Listen-Form → falsy → leere
+     Liste (Befund 2). Absteigend nach nummer sortieren. */
+  state.alben = [...raw].sort((a, b) => b.nummer - a.nummer);
 
-  initPlayerDefault(state.alben);
+  await initPlayerDefault(state.alben);
 }
 
 document.addEventListener('DOMContentLoaded', init);
