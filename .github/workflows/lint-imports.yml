@@ -16,16 +16,14 @@ permissions:
 
 jobs:
   lint-imports:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ARM64]
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-
-      - name: import-linter installieren
-        run: pip install "import-linter==2.11.*"
+      - name: venv + import-linter installieren
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet "import-linter==2.11.*"
 
       - name: Modul-Grenzen prüfen
-        run: lint-imports
+        run: .venv/bin/lint-imports
