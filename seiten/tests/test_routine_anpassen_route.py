@@ -172,13 +172,17 @@ def test_ac2_stub_js_enthaelt_icons7_suche():
         "ICONS-7-Endpunkt /api/v1/icons/suche fehlt in routine-anpassen.js (ROUTINE-21a)"
 
 
-def test_ac2_stub_js_enthaelt_schloss():
-    """AC2-Stub / ROUTINE-20: JS rendert Schloss-Symbol fuer gesperrte Anker."""
+def test_ac2_stub_js_enthaelt_gesperrt():
+    """AC2-Stub / ROUTINE-20 (T728 Bug-13 angepasst): JS rendert gesperrt-Klasse fuer gesperrte Zeit-Anker.
+
+    Bug-13 hat Schloss/drag-handle durch pfeil-gruppe ersetzt. Die gesperrt-Klasse
+    bleibt erhalten (item-card.gesperrt) und signalisiert den gesperrten Zustand.
+    """
     js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
     with open(js_path, encoding="utf-8") as f:
         js_inhalt = f.read()
-    assert "schloss" in js_inhalt.lower(), \
-        "Schloss-Klasse/Symbol fehlt in routine-anpassen.js (ROUTINE-20: Aufstehen+Losgehen gesperrt)"
+    assert "gesperrt" in js_inhalt, \
+        "gesperrt-Klasse fehlt in routine-anpassen.js (ROUTINE-20: Aufstehen+Losgehen gesperrt)"
 
 
 # ── T728 Live-Fix — 5 neue Klauseln (eine pro Bug-Fix) ────────────────────────
@@ -372,3 +376,45 @@ def test_t728_fix9_js_sheet_offen_flag():
     # Guard in _aktualisiereMainButton
     assert "if (_sheetOffen) return" in js_inhalt, \
         "if (_sheetOffen) return fehlt in _aktualisiereMainButton — Bug-9 Guard nicht implementiert"
+
+
+# ── T728 Live-Fix-4 — 2 neue Klauseln (Bug-13 + Bug-11) ──────────────────────
+
+def test_t728_fix13_zeit_card_pfeil_gruppe():
+    """T728 Bug-13 / AC-Bug13-1+2: rendereZeitCard() nutzt pfeil-gruppe statt Schloss/drag-handle.
+
+    AC-Bug13-1: pfeil-gruppe im JS sichtbar (Zeit-Cards konsistent mit Item-Cards).
+    AC-Bug13-2: Alle Zeit-Card-Pfeile disabled in V1 — kein Click-Handler aktiv.
+    """
+    js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js_inhalt = f.read()
+    # pfeil-gruppe muss in rendereZeitCard sichtbar sein
+    assert "pfeil-gruppe" in js_inhalt, \
+        "pfeil-gruppe fehlt in routine-anpassen.js — Bug-13 Zeit-Card-Pfeil-Konsistenz nicht implementiert"
+    # Schloss/drag-handle-Varianten duerfen nicht mehr als rendered HTML vorkommen
+    assert 'class="drag-handle schloss"' not in js_inhalt, \
+        'drag-handle schloss noch in routine-anpassen.js — Bug-13 Schloss/drag-handle nicht entfernt'
+    # V1-disabled-Marker: Zeit-Card-Pfeile sind alle disabled
+    assert 'aria-label="Hoch (V1 nicht verfügbar)"' in js_inhalt or \
+           "V1 nicht verfügbar" in js_inhalt, \
+        "V1-disabled-Marker fehlt in rendereZeitCard — Bug-13 Zeit-Card-Pfeile nicht korrekt disabled"
+
+
+def test_t728_fix11_belt_and_suspender_settimeout():
+    """T728 Bug-11 / AC-Bug11-1: oeffneSheetOverlay() ruft hideMainButton() zweimal (sofort + setTimeout 50ms).
+
+    Belt-and-Suspender-Sicherung gegen Race-Cases / Telegram-Cache-Effekte.
+    """
+    js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js_inhalt = f.read()
+    # setTimeout muss im JS vorhanden sein
+    assert "setTimeout" in js_inhalt, \
+        "setTimeout fehlt in routine-anpassen.js — Bug-11 Belt-Sicherung nicht implementiert"
+    # hideMainButton muss zusammen mit setTimeout (Re-Hide) sichtbar sein
+    assert "hideMainButton" in js_inhalt, \
+        "hideMainButton fehlt in routine-anpassen.js — Bug-11 Re-Hide nicht implementiert"
+    # Der setTimeout-Block muss den _sheetOffen-Guard enthalten
+    assert "if (_sheetOffen) platform.hideMainButton" in js_inhalt, \
+        "setTimeout-Re-Hide mit _sheetOffen-Guard fehlt — Bug-11 Belt-Sicherung unvollstaendig"
