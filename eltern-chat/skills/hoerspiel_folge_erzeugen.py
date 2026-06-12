@@ -101,12 +101,17 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
     # HFE-4: strukturierter Tool-Result-Text (Reihenfolge: Titel, Vorschau,
     # Bestätigungs-Block). Intro/Outro-Reime sind geteilte Serien-Assets (HSP-8)
     # und gehören NICHT in die Vorschau (HFE-4 letzter Absatz).
+    # Telegram-Limit ist 4096 Zeichen/Nachricht — eine vollständige Folge
+    # liegt bei ~25 000 Zeichen und wird sonst von Telegram abgelehnt
+    # (Bug Live-Befund 2026-06-12). V1: Vorschau auf erste Absätze
+    # kürzen + Hinweis. OPEN-HSP: Datei-Anhang-Variante in V2.
+    vorschau = _kuerze_vorschau_fuer_telegram(text)
     result = (
         "**Folge %s: %s**\n\n"
         "%s\n\n"
         "Voice: %s (oder schreib »shimmer« / »onyx«)\n"
         "Soll ich vertonen? Das dauert 1–5 Minuten."
-    ) % (folge_nr, titel, text, voice)
+    ) % (folge_nr, titel, vorschau, voice)
 
     logger.info(
         "hoerspiel_folge_erzeugen.propose: Vorschlag bereit "
@@ -218,3 +223,33 @@ def _sende(tg, chat_id, text: str) -> None:
     except Exception as exc:  # TelegramError u. ä.
         logger.warning(
             "hoerspiel_folge_erzeugen: send_message fehlgeschlagen: %s", exc)
+
+
+# Telegram-Limit ist 4096 Zeichen je Nachricht. Eine vollständige Folge
+# liegt bei ~25 000 Zeichen, sprengt das Limit weit. V1: Vorschau auf
+# erste Absätze + Mittel-/End-Stichworte + Hinweis.
+TELEGRAM_PREVIEW_BUDGET = 2400
+
+
+def _kuerze_vorschau_fuer_telegram(text: str) -> str:
+    """Vorschau für den Eltern-Bestätigungs-Bubble unter dem Telegram-Limit.
+
+    Behält den Titel-Absatz + die ersten zwei Story-Absätze (ergibt etwa
+    250-400 Wörter), fügt ggf. ein "(…)"-Marker dazu. Volltext wird beim
+    Album-Bau (execute → POST /alben) ohnehin durchgereicht.
+    """
+    if not text:
+        return ""
+    absaetze = [a for a in text.strip().split("\n\n") if a.strip()]
+    if len(absaetze) <= 3 and len(text) <= TELEGRAM_PREVIEW_BUDGET:
+        return text.strip()
+    head = absaetze[:3]
+    rest_count = max(0, len(absaetze) - 3)
+    vorschau = "\n\n".join(head)
+    if rest_count > 0:
+        vorschau += (
+            "\n\n(…)\n\nDie vollständige Folge hat %d Absätze. "
+            "Mit »ja« geht's in die Vertonung." % len(absaetze))
+    if len(vorschau) > TELEGRAM_PREVIEW_BUDGET:
+        vorschau = vorschau[:TELEGRAM_PREVIEW_BUDGET - 4].rstrip() + "\n(…)"
+    return vorschau
