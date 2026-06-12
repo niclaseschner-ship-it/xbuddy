@@ -1,0 +1,29 @@
+# XBuddy Hörspiel-Buddy — systemd-Service-Vorlage (SVC-1..4, HSP-28).
+#
+# Diese Datei ist eine VORLAGE. Vor `systemctl enable` Platzhalter ersetzen
+# (siehe deploy/systemd/README.md). Per-Instanz-Werte stehen nie im Repo.
+#
+# Port 5053 (PORT-2, `xbuddy-hoerspiel`, HSP-28).
+# Daten-Bereich liegt außerhalb des Checkouts (SVC-5): __XBUDDY_DATA__/hoerspiel.
+# Geheimnisse (Anthropic-/Azure-Keys) kommen aus einer ENV-Datei außerhalb
+# des Repos (CONFIG-3, HSP-27); die EnvironmentFile-Zeile zeigt den
+# Standard-Pfad — der Installer ersetzt __XBUDDY_HOME__.
+
+[Unit]
+Description=XBuddy Hörspiel-Buddy-App
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__XBUDDY_USER__
+WorkingDirectory=__XBUDDY_REPO__
+Environment=PYTHONUNBUFFERED=1
+Environment=HOME=__XBUDDY_HOME__
+Environment=HOERSPIEL_DATA_ROOT=__XBUDDY_DATA__/hoerspiel
+EnvironmentFile=-__XBUDDY_HOME__/xbuddy-hoerspiel.env
+ExecStart=__XBUDDY_PYTHON__ -m hoerspiel.main --host 127.0.0.1 --port 5053
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
