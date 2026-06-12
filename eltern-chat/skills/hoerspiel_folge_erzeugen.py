@@ -90,7 +90,13 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
         voice = _voice_default_lesen(hoerspiel_client)
 
     # HFE-3: Folgen-Vorschlag vom Hörspiel-Buddy holen.
-    # Fehler werden als HoerspielClientError weitergegeben — der Task entscheidet.
+    # Live-UX: der LLM-Call dauert 1-2 min, propose() bleibt sonst stumm.
+    # Nic-Befund 2026-06-12: Eltern denken in der Stille, der Bot sei
+    # eingefroren. Start-Bubble vor dem Aufruf — analog execute().
+    if tg is not None and chat_id is not None:
+        _sende(tg, chat_id,
+               "Klar, ich überlege mir gerade eine Folge. "
+               "Das dauert 1–2 Minuten — bis gleich!")
     logger.info("hoerspiel_folge_erzeugen.propose: rufe POST %s (HFE-3)",
                 "/api/v1/hoerspiel/folgen-vorschlag")
     data = hoerspiel_client.folgen_vorschlag(idee_bereinigt)
