@@ -476,14 +476,67 @@ def test_task_propose_berechtigung_fehler():
 
 
 def test_task_execute_ruft_album_und_sendet():
-    """HFE-5/TASK-10: Task.execute() baut Album und sendet Bubble."""
+    """HFE-5/TASK-10: Task.execute() baut Album und sendet Bubble (über Session-State)."""
     client = FakeHoerspielClient(album_response={"album-id": "alb-3"})
     tg = FakeTelegram()
     task = _make_task(hoerspiel_client=client, tg=tg)
     ctx = _ctx(chat_id=55)
-    task.execute(
-        {"titel": "Folge X", "text": "T.", "voice": "shimmer", "idee": "i"},
-        ctx,
-    )
+    # Erst propose aufrufen um Session-State zu befüllen
+    task.propose({"idee": "Stigi und der Drachenturm"}, ctx)
+    task.execute({}, ctx)
     assert len(client.album_calls) == 1
     assert tg.sent[0]["chat_id"] == 55
+
+
+# ============================================================
+#  HFE-5 Session-State: propose→execute Brücke (Befund 1)
+# ============================================================
+
+
+def test_task_propose_execute_end_to_end_session_state():
+    """HFE-5/Befund1/ENTRY-PATH: propose→execute mit Session-State überbrückt
+    korrekt: album_bauen bekommt titel/text/voice/idee aus dem Buddy-Vorschlag."""
+    client = FakeHoerspielClient(
+        vorschlag_response={
+            "titel": "Der Schneesturm",
+            "text": "Stigi entdeckt eine verschneite Höhle.",
+            "folgen-nr-vorschlag": 42,
+        },
+        config_response={"default_voice": "shimmer"},
+        album_response={"album-id": "alb-42"},
+    )
+    tg = FakeTelegram()
+    task = _make_task(hoerspiel_client=client, tg=tg)
+    ctx = _ctx(chat_id=77, from_user_id=7)
+
+    proposal = task.propose({"idee": "Stigi und der Schneesturm"}, ctx)
+    assert isinstance(proposal, Proposal)
+
+    # execute() ohne titel/text im arguments-Dict — Session-State trägt sie.
+    task.execute({"idee": "Stigi und der Schneesturm"}, ctx)
+
+    assert len(client.album_calls) == 1
+    call = client.album_calls[0]
+    # titel muss aus dem Buddy-Vorschlag stammen, nicht leer sein
+    assert call["titel"] == "Der Schneesturm", (
+        "titel muss aus Session-State kommen, nicht aus arguments (Befund 1)")
+    assert call["text"] != "", "text darf nicht leer sein (Befund 1)"
+    assert call["voice"] in ("shimmer", "onyx")
+    assert call["idee"] == "Stigi und der Schneesturm"
+
+
+def test_task_execute_ohne_vorherigen_propose_meldet_klar():
+    """Befund1: execute() ohne vorherigen propose → klare Fehler-Bubble,
+    kein album_bauen-Aufruf."""
+    client = FakeHoerspielClient()
+    tg = FakeTelegram()
+    task = _make_task(hoerspiel_client=client, tg=tg)
+    ctx = _ctx(chat_id=99)
+
+    result = task.execute({}, ctx)
+
+    assert client.album_calls == [], "kein album_bauen ohne Session-State"
+    assert len(tg.sent) == 1, "Fehler-Bubble muss gesendet werden"
+    bubble = tg.sent[0]["text"]
+    assert "verloren" in bubble.lower() or "starten" in bubble.lower(), (
+        "Fehler-Bubble soll klar auf Problem hinweisen")
