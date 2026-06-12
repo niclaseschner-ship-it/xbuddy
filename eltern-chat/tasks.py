@@ -23,6 +23,7 @@ Bauen eines neuen schreibenden Skills: „Wirkung schmerzlos rückgängig?" → 
 `auto_confirm = True`. Nein: Standard EC-10. Spec-Anker: E-EIN-1, EIN-5.
 """
 
+import os
 from dataclasses import dataclass
 
 from authz import MEMBER_STATUSES
@@ -767,11 +768,18 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
         _efs_essen_client = _EfsEssenClient(origin_url=essen_origin_url)
         _efs_photo_client = _EfsPhotoClient(origin_url=photo_origin_url)
         _efs_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
+        # SVC-5: foto_overrides.json lebt per-Instanz unter xbuddy-data/essen/.
+        # ESSEN_FOTO_OVERRIDES_FILE teilt den gleichen Wert wie das Essen-Buddy-Service-Template;
+        # Default ist der SVC-5-Pfad, falls die ENV nicht gesetzt ist.
+        _efs_overrides_pfad = os.environ.get(
+            "ESSEN_FOTO_OVERRIDES_FILE",
+            "/home/buddy/xbuddy-data/essen/foto_overrides.json")
         catalog.register(EssenFotoSetzenTask(
             tg=tg,
             essen_client=_efs_essen_client,
             photo_client=_efs_photo_client,
             family_group_chat_id_getter=family_group_chat_id_getter,
-            is_member_fn=_efs_is_member))
+            is_member_fn=_efs_is_member,
+            overrides_pfad=_efs_overrides_pfad))
 
     return catalog

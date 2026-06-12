@@ -443,3 +443,73 @@ def test_propose_schreibe_override_nennt_item_und_medien():
     assert isinstance(p, Proposal)
     assert "obst:apfel" in p.summary
     assert "m-99" in p.summary
+
+
+# ============================================================
+#  AC3 — Live-Pfad-Test: build_catalog reicht overrides_pfad durch (ESSEN-22)
+# ============================================================
+
+def test_live_pfad_basis_item_override_funktioniert(tmp_path, monkeypatch):
+    """AC3: build_catalog übergibt ESSEN_FOTO_OVERRIDES_FILE an EssenFotoSetzenTask;
+    execute('schreibe_override') schreibt tatsächlich an tmp_path — kein stilles NICHTS_ZU_TUN.
+
+    Live-Naht: simuliert den echten build_catalog-Pfad mit allen AND-Guard-Argumenten
+    + ESSEN_FOTO_OVERRIDES_FILE=<tmp_path>; greift den registrierten Task,
+    ruft schreibe_override aus und prüft, dass die Datei existiert.
+    """
+    overrides_datei = tmp_path / "foto_overrides.json"
+    monkeypatch.setenv(
+        "ESSEN_FOTO_OVERRIDES_FILE", str(overrides_datei))
+
+    ca = _ca_pem()
+    try:
+        catalog = build_catalog(
+            tg=FakeTelegramMitDownload(members=_members(42)),
+            ca_pem_path=ca,
+            essen_origin_url="http://127.0.0.1:5052",
+            photo_origin_url="http://127.0.0.1:5070",
+            family_group_chat_id_getter=_family_getter(),
+        )
+    finally:
+        import contextlib
+        with contextlib.suppress(OSError):
+            os.unlink(ca)
+
+    task = catalog.get("essen_foto_setzen")
+    assert task is not None, "EssenFotoSetzenTask muss im Catalog sein"
+
+    # Prüfe via Reflection, dass overrides_pfad korrekt durchgereicht wurde.
+    assert task._overrides_pfad == str(overrides_datei), (
+        "build_catalog muss ESSEN_FOTO_OVERRIDES_FILE als overrides_pfad übergeben; "
+        "war None → Live-NO-OP (Watchdog-Befund T531-S3b-FIX1/AC3)")
+
+    # Führe schreibe_override aus und prüfe, dass die Datei am tmp_path erscheint.
+    from skills.essen_client import EssenClient
+    from skills.photo_client import PhotoClient
+    photo_transport, _ = _transport_stub_photo()
+    essen_transport, _ = _transport_stub_essen()
+
+    # Ersetze Clients im Task durch Stubs (Reflection) — der Task ist schon
+    # aus dem Catalog, wir wollen nur den Live-Pfad durch execute testen.
+    task._photo_client = PhotoClient(
+        origin_url="http://127.0.0.1:5070", transport=photo_transport)
+    task._essen_client = EssenClient(
+        origin_url="http://127.0.0.1:5052", transport=essen_transport)
+    task._is_member_fn = _immer_mitglied
+
+    quittung = task.execute(
+        {"aktion": "schreibe_override",
+         "item_id": "gemuese:karotte",
+         "medien_id": "m-karotte"},
+        _ctx())
+
+    assert overrides_datei.exists(), (
+        "foto_overrides.json muss am ENV-Pfad geschrieben sein — "
+        "kein stilles NICHTS_ZU_TUN (ESSEN-22 Pfad 2 Basis-Item)")
+    with open(overrides_datei, encoding="utf-8") as fh:
+        import json as _json
+        data = _json.load(fh)
+    assert data.get("gemuese:karotte") == "m-karotte", (
+        "Override-Eintrag muss item_id → medien_id enthalten")
+    assert "gemuese:karotte" in quittung, "Quittung muss item_id nennen"
+    assert "m-karotte" in quittung, "Quittung muss medien_id nennen"
