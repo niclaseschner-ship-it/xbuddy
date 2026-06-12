@@ -1,6 +1,15 @@
 # Routine-Punkte setzen — Spec     (ID-Präfix: RPS)
 
-> Status: V1 · Refs #354 · setzt OPEN-ROUTINE-B Teil 2 um · entblockt durch #390 (ICONS-7)
+> **Status: V1 deprecated 2026-06-12 (#678).** Der RPS-Chat-Skill wird durch die
+> **Anpassen-Mini-App** (`routine.md` ROUTINE-20) ersetzt — Nic-Wahl 2026-06-12:
+> die Mehrfeld-Punkt-Bearbeitung (Reihenfolge, hinzufügen, löschen, Icon-Picker)
+> gehört in eine Mini-App-UI, nicht in propose→confirm-pro-Eintrag-Chat-Bubbles.
+> Der RPS-Code bleibt vorerst im Repo; die Registrierung als Eltern-Chat-Aufgabe
+> (`build_catalog`-Guard, RPS-7) **liefert in V1.1 nicht** — die Aufgabe steht
+> Eltern nicht mehr im Chat-Katalog. Endgültige Code-Entfernung als
+> Cleanup-Folge-Ticket sobald die Mini-App live ist. Siehe **E-RPS-3**.
+>
+> Ursprünglich: V1 · Refs #354 · setzt OPEN-ROUTINE-B Teil 2 um · entblockt durch #390 (ICONS-7)
 
 Damit ein Elternteil im Eltern-Chat die **Punkte der Morgen-Routine** seines
 Kindes anpassen kann, ohne die Datei `routine.json` zu bearbeiten, definiert diese
@@ -174,3 +183,18 @@ dauerhafte Liste).
 (ein Icon-Pfad, CLAUDE.md §6 / ROUTINE-10 / WETTER-18). **Verworfen:** Live-Aufruf
 des Skills gegen `api.arasaac.org` (zweiter Icon-Pfad; zudem Pi-IPv6-Egress-Risiko,
 das ICONS-7 bewusst meidet).
+
+## E-RPS-3 — RPS durch Anpassen-Mini-App ersetzt
+*Datum:* 2026-06-12 (Nic-Entscheid Routine-Anpassen-Werft #678) · Der
+RPS-Chat-Skill wird durch die **Anpassen-Mini-App** (`routine.md` ROUTINE-20)
+ersetzt. Begründung: die Reihenfolgen-Geste („Zähne putzen nach Position 1") war
+konversational von Anfang an als Notlösung markiert (RPS-3-V1.2-Klausel, #469);
+die Mehrfeld-Bearbeitung mit Drag&Drop, Icon-Picker und Mehrwert-Save passt nicht
+zu propose→confirm-pro-Eintrag-Bubbles. Eltern-Chat-Skill als Eingabe-UI bricht
+genau dort, wo die Mini-App schlank glänzt — der Skill war konsistent gebaut,
+aber UX-untragbar an der Bulk-Edit-Kante. **Verworfen:** zwei parallele
+Pflegepfade (Mini-App + RPS) — doppelte Wartung ohne Mehrwert; Eltern müsste sich
+merken, welcher Weg welche Operation kann (Variante A der Werft-Wahl,
+2026-06-12). Der RZS-Schnellsatz für **Zeiten** koexistiert hingegen mit der
+Mini-App (siehe `routine-zeiten-setzen.md` Status-Block) — Single-Value-Trigger
+ist konversational ehrlich. Code-Cleanup als Folge-Ticket nach Live-Lauf.
