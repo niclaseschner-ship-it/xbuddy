@@ -59,6 +59,13 @@ class FakeLLM(LLMProvider):
             return json.dumps(self.vorschlag_payload, ensure_ascii=False)
         return self.synopse_text
 
+    def complete_structured(self, system, user, *, tool_name,
+                            tool_description, input_schema):
+        self.calls.append((system, user))
+        if self.fail:
+            raise ProviderError("FakeLLM: simulierter Ausfall")
+        return dict(self.vorschlag_payload)
+
 
 # ============================================================
 #  FakeTTSEngine — die kontrollierte TTS-Doppelung (HSP-32)

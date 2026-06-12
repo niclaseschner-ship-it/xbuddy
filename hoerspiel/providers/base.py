@@ -1,13 +1,15 @@
 """Hörspiel-Buddy — LLM-Provider Basis-Schnittstelle (HSP-10).
 
-Ein konkreter Provider erbt von `LLMProvider` und implementiert `complete`.
-Der `llm_service` ruft nur diese eine Methode — keine Provider-spezifischen
-Typen verlassen das Provider-Modul.
+Ein konkreter Provider erbt von `LLMProvider` und implementiert
+`complete` (freier Text-Output, Synopse-Pfad HSP-16) sowie
+`complete_structured` (Schema-gebundener Output, Folgen-Vorschlag HSP-11).
 
 V2-Anker: ein zweiter Provider (`mistral.py`, OPEN-HSP-N) tritt hinter
 dieselbe Schnittstelle, ohne dass `llm_service` oder `album_builder`
 geändert werden müssen.
 """
+
+from typing import Any
 
 
 class ProviderError(Exception):
@@ -15,15 +17,24 @@ class ProviderError(Exception):
 
 
 class LLMProvider:
-    """Provider-Basis. Konkrete Implementierungen liefern `complete`.
+    """Provider-Basis. Konkrete Implementierungen liefern `complete`
+    (freier Text) und `complete_structured` (strukturierte Tool-Antwort).
 
-    `complete(system, user)` schickt einen einzelnen User-Turn an das Modell
-    und gibt den Antwort-Text zurück. Mehrturn-Verläufe sind in V1 nicht
-    nötig — Folgen-Vorschlag und Synopse sind Einzel-Calls (HSP-11/HSP-16).
+    Die strukturierte Form ist wichtig für den Folgen-Vorschlag (HSP-11):
+    der Folgentext enthält wörtliche Rede mit Anführungszeichen, ein
+    json-stringifiziertes Format-Beispiel im System-Prompt produziert
+    daher unzuverlässig parsebares JSON. Anthropics tool_use erzwingt
+    wohlgeformte Antworten.
     """
 
     name: str = ""
     model: str = ""
 
     def complete(self, system: str, user: str) -> str:
+        raise NotImplementedError
+
+    def complete_structured(self, system: str, user: str, *,
+                            tool_name: str,
+                            tool_description: str,
+                            input_schema: dict) -> dict[str, Any]:
         raise NotImplementedError

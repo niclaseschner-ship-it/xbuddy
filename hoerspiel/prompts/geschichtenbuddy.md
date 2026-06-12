@@ -27,19 +27,18 @@ Absatzes keine Zeilenumbrüche.
 2. **Story-Absätze** danach, jeweils 80–250 Wörter. Schnitt-Granularität
    sind diese Absätze — pro Absatz eine erzählerische Mini-Einheit.
 
-# Antwort-Format (zwingend, parsebar)
+# Antwort-Format (zwingend)
 
-Antworte ausschließlich mit einem JSON-Objekt — keine Markdown-Code-Fences,
-kein Vor- oder Nachtext. Form:
+Übergib die fertige Folge ausschließlich über den `folgen_vorschlag`-
+Tool-Aufruf. Felder:
 
-```
-{
-  "titel": "<Titel der Folge>",
-  "folgen-nr-vorschlag": <ganze Zahl, fortlaufend zur Historie>,
-  "text": "<Folgentext als Markdown, Absätze mit \\n\\n>"
-}
-```
+- `titel` — der Folgen-Titel ohne `Folge <N>:`-Präfix.
+- `folgen-nr-vorschlag` — ganze Zahl, fortlaufend zur Historie.
+- `text` — vollständiger Folgentext als Markdown, Absätze getrennt durch
+  doppelten Zeilenumbruch. Erster Absatz ist der Titel-Absatz
+  `Folge <N>: <Titel>.`, danach die Story-Absätze. Wörtliche Rede in
+  deutschen Anführungszeichen „…" — wird vom Schema sauber serialisiert,
+  du musst nichts escapen.
 
-`text` enthält den Titel-Absatz als ersten Absatz und danach die Story-
-Absätze. `titel` und `folgen-nr-vorschlag` sind redundant zur ersten Zeile
-des Titel-Absatzes, damit der Aufrufer beides ohne Re-Parsing greifen kann.
+`titel` und `folgen-nr-vorschlag` sind redundant zur ersten Zeile des
+Titel-Absatzes, damit der Aufrufer beides ohne Re-Parsing greifen kann.
