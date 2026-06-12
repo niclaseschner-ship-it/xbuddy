@@ -308,6 +308,20 @@ body.essen-shell {
   text-align: center;
 }
 
+/* ── Foto-Override (ESSEN-22) ────────────────────────────────────────────── */
+
+/* ARASAAC-Piktogramme: quadratisch, unverändert (ESSEN-11). */
+.kachel-pikto {
+  border-radius: 0;
+  object-fit: contain;
+}
+
+/* Familien-Fotos: kreisförmig ausgeschnitten (ESSEN-22). */
+.kachel-foto {
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 /* ── Attribution ─────────────────────────────────────────────────────────── */
 
 .attribution {
