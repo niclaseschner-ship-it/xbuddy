@@ -445,12 +445,16 @@ body {
   border-radius: 8px;
   background: var(--surface-soft);
   color: var(--ink);
+  /* T728 Bug-20: Cursor sichtbar machen (Live-Befund Nic — caret-color war default,
+     in Telegram-WebView teilweise unsichtbar). Accent-Farbe spiegelt Focus-Border. */
+  caret-color: var(--accent);
 }
 
 .sheet-input:focus {
   outline: none;
   border-color: var(--accent);
   background: #fff;
+  caret-color: var(--accent);
 }
 
 /* Toggle dauerhaft / nur heute */
