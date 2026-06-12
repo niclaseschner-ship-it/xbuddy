@@ -407,7 +407,15 @@ Wenn eine dieser Schnittstellen gebaut wird, folgt sie BUD-1b (eigener API-Pfad
 `/api/v1/routine/<resource>`, eigene URL-14-Zeile, Konsum fremder Apps nur über
 deren Schnittstelle, nie per Datei-Zugriff, APP-3).
 
-*Tickets:* #335, #343, #354
+**Zweiter Konsument der Schreib-API (zusätzlich zum Eltern-Chat-Skill):** die
+**Anpassen-Mini-App** (ROUTINE-20). Sie ruft `GET /api/v1/routine/items`, `POST
+/api/v1/routine/items`, `DELETE /api/v1/routine/items/<id>`, `PUT
+/api/v1/routine/items` und `PUT /api/v1/routine/config` über denselben Pfad —
+keine Sonder-Endpunkte für die Mini-App, kein eigener Such-Pfad. Eltern-Chat-Skill
+RZS und Mini-App sind **gleichwertige** Konsumenten der API; der Buddy
+unterscheidet sie nicht.
+
+*Tickets:* #335, #343, #354, #678 (Mini-App-Konsument)
 
 ## 6. Konfiguration
 
@@ -529,9 +537,188 @@ persistiert `default` in `routine.json` und `einmalig` im Tages-State,
 Reload-on-Read sichtbar; `DELETE /api/v1/routine/items/<id>` entfernt
 atomar; `PUT /api/v1/routine/items` ersetzt die geordnete `default`-Liste
 idempotent; ROUTINE-19 max-8-Klemme + Label/Piktogramm-Validierung → 4xx;
-`einmalig`-Auto-Verfall am Tageswechsel ROUTINE-6).
+`einmalig`-Auto-Verfall am Tageswechsel ROUTINE-6) ·
+**ROUTINE-20** (Mini-App-View-Render-Test: gemischte Liste rendert in
+korrekter Reihenfolge mit `🌅`-Marker für `einmalig`-heute; Drag-Bewegung
+eines `default`-Items erzeugt `PUT /api/v1/routine/items`-Call mit dem neuen
+ID-Array; Save mit Zeit-Änderung erzeugt `PUT …/config` mit nur dem
+geänderten Schlüssel; 4xx vom Buddy bricht den Save mit ehrlicher Meldung
+ab) · **ROUTINE-21** (Bottom-Sheet: Label-Tippen führt zu
+ICONS-7-Stub-Call mit `q=<label>`, ohne Wort-Split-Magie;
+manuelle Suchleiste löst zweiten ICONS-7-Call aus; Null-Treffer zeigt
+Klartext + Fokus auf Such-Feld; Save disabled ohne Pikto-Wahl).
 
 *Tickets:* #335
+
+## 9. Anpassen-Mini-App (Eltern-Chat-Konsument der Schreib-API)
+
+### ROUTINE-20 — Eltern-Anpassen-Mini-App-View (Layout + Bild-Pfad)
+
+Die Eltern-Anpassen-Mini-App ist eine Telegram-Mini-App-View (RAT-16) unter
+`<funnel-domain>/seiten/routine/anpassen`, gehostet vom geteilten
+`seiten`-Service (analog ESSEN-31). Sie ist der **UI-Heimat-Konsument** der
+Schreib-API ROUTINE-14; alle Schreib-Wirkungen laufen über die dort
+spezifizierten Endpunkte, **nicht** über Buddy-eigene Sonder-Routen oder
+Telegram-`sendData` mit Buddy-Schreibwirkung.
+
+Die View rendert **eine einzige Bedien-Fläche** mit zwei Sektionen:
+
+- **Sektion „Routine-Punkte"** — eine sortierbare Liste der heutigen
+  Routine-Punkte (Quellen `default` + `einmalig_heute`, Daten aus `GET
+  /api/v1/routine/items`). Jeder Eintrag rendert als Card im
+  **Bring!-/Mini-App-Card-Pattern** (analog ESSEN-31): links das ARASAAC-
+  Piktogramm, Mitte das Label, rechts ein Quellen-Marker (`🌅` für
+  `einmalig`-heute, kein Marker für `default`) und eine **Lösch-Affordanz**.
+  Die Cards sind per **Drag-Handle** sortierbar (nur `default`-Items sind
+  bewegbar — `einmalig_heute` rutscht ans Ende, wird beim Save nicht in `PUT
+  …/items` mitgegeben). **Floating Action Button (FAB)** unten rechts (analog
+  MAD-3) öffnet das **Hinzufügen-Bottom-Sheet** (ROUTINE-21).
+- **Sektion „Zeiten"** — drei Felder: Abfahrtszeit, Aufstehzeit,
+  Anzieh-Vorlauf (Daten aus `GET /api/v1/routine/config`). Felder sind direkt
+  editierbar. **V1: Globalwert je Feld** (keine Per-Wochentag-UI; die API
+  trägt die Map, die V1-UI nicht — Begrenzung wie RZS V1-Scope). Eingaben
+  werden im Frontend strikt gegen `HH:MM` / nicht-negativen Integer
+  validiert (vor `PUT …/config`).
+
+**Bild-Pfad:** Mini-App fordert die ARASAAC-PNGs **same-origin** unter
+`/display/_shared/icons/arasaac/<id>.png` (ICONS-5, MAD-6) — kein
+Telegram-Asset-Bezug, kein CORS.
+
+**Save-Pfad:** Telegram-Hauptbutton `Speichern` (`platform.setMainButton`,
+MAD-5) — nur aktiv, wenn der lokale Stand vom Server-Stand abweicht. Drückt
+Eltern „Speichern", sendet das Frontend **bis zu drei sequentielle Requests**
+gegen die ROUTINE-14-API:
+
+1. Falls Items entfernt: je `DELETE /api/v1/routine/items/<id>`.
+2. Falls neue Items oder Reihenfolge geändert: ein `PUT /api/v1/routine/items`
+   mit der **vollständigen geordneten** `default`-Liste **als ID-Array**
+   (`{"items": ["id1", "id2", …]}` — Reihenfolge implizit aus Array-Position,
+   kein `position`-Feld, ROUTINE-14-Schema).
+3. Falls Zeiten geändert: ein `PUT /api/v1/routine/config` mit den
+   abweichenden Schlüsseln.
+
+Schlägt ein Schritt fehl (4xx vom Buddy), bricht der Save mit ehrlicher
+Fehlermeldung ab — vorhergehende Schritte werden **nicht** zurückgerollt
+(die Mini-App ist optimistisch; eine 4xx-Antwort heißt: Eltern hatte
+inkonsistente Eingabe, sie sieht den Teil-Stand und kann korrigieren). Ein
+500/Netzfehler wird als „Buddy nicht erreichbar — versuch's gleich
+nochmal" angezeigt.
+
+**Auth (V1):** Die HTML-Route lädt **ohne** Auth (MAD-7 V1-Pattern,
+`seiten`-Service bound an `127.0.0.1`, Tailscale-Funnel mit Per-Node-Cert);
+API-Calls gegen `127.0.0.1`-bound Routine-Buddy laufen same-host. Eine
+spätere `Authorization: tma <initData>`-Härtung (V1.x) ist gemeinsame
+Mini-App-Aufgabe (siehe `~/brainstorm/conventions-vorab/mini-app-design-erstes-vorkommen.md`
+MAD-7-Folge-Ticket „Mini-App-Auth-Header"), kein V1-Blocker hier.
+
+*Test-Implikation:* Render-Test mit gemischter Liste (3 `default` + 1
+`einmalig`-heute, Config mit Zeiten) → die View zeigt 4 Cards in der richtigen
+Reihenfolge, `einmalig` mit `🌅`-Marker am Listen-Ende, drei Zeit-Felder
+vorbelegt. Drag eines `default`-Items → Save sendet `PUT
+/api/v1/routine/items` mit dem neuen Array. Tap Lösch-Affordanz → `DELETE`
+mit korrekter ID. FAB → öffnet Bottom-Sheet (ROUTINE-21). Zeit-Feld geändert
+→ Save sendet `PUT …/config` mit nur dem geänderten Schlüssel.
+
+*Tickets:* #678 (MVP-Sammler-Naht), Folge-Implementierungs-Ticket
+
+### ROUTINE-21 — Hinzufügen-Bottom-Sheet mit Icon-Picker
+
+Das Hinzufügen-Bottom-Sheet (MAD-4-Pattern, `role="dialog"`,
+`aria-modal="true"`) lebt im Mini-App-Frontend und legt **einen** neuen
+Routine-Punkt an. Es enthält:
+
+- **Label-Input** (Text-Feld, Pflicht, max. 40 Zeichen).
+- **Quelle-Wahl:** Toggle `dauerhaft` (Default, → `quelle=default`) ·
+  `nur heute` (→ `quelle=einmalig`). Default „dauerhaft", weil das die
+  häufigere Wahl ist; „nur heute" ist die Ausnahme („Turnbeutel mit").
+- **Icon-Picker** (Pflicht — kein Anlegen ohne Pikto-Wahl, ROUTINE-21d):
+
+**ROUTINE-21a — Auto-Suche auf das Label.** Nach Tippen ins Label-Feld
+(debounced ~250ms) ruft das Frontend `GET
+/api/v1/icons/suche?q=<label>&max=12` (ICONS-7). Antwort-IDs werden als
+**Grid-Galerie** (3 Spalten, MAD-2-Card-Pattern) angezeigt — Bilder aus
+`/display/_shared/icons/arasaac/<id>.png`. Tap auf ein Bild = Auswahl,
+Bottom-Sheet bleibt offen (Eltern kann Label nachschärfen und neu suchen).
+**Kein heimlicher Fallback** auf einzelne Wörter aus dem Label — die Suche
+nimmt den ganzen Eingabe-Text wie er ist (UX-Ehrlichkeit, RPS-4-Konsistenz:
+keine ID erfinden, keine UX-Magie).
+
+**ROUTINE-21b — Manuelle Suchleiste, immer sichtbar.** Über/unter der
+Galerie sitzt ein eigenes Such-Feld („Anderes Wort suchen"). Eingabe dort
+ersetzt die Auto-Suche und ruft ICONS-7 mit dem manuellen Term. Die manuelle
+Suche ist **immer** verfügbar, nicht nur bei Null-Treffern — Eltern muss
+nicht erst „etwas Falsches probieren", bevor sie selbst suchen darf.
+
+**ROUTINE-21c — Null-Treffer-Zustand.** Liefert ICONS-7 eine leere Liste,
+zeigt die Galerie-Sektion Klartext: „Nichts gefunden für *X* — versuch ein
+anderes Wort" mit Fokus auf der manuellen Suchleiste. **Kein
+Default-„Fragezeichen"-Piktogramm**, kein implizites Hilfs-Icon (würde
+generische Routine-Karten am Display erzeugen, ROUTINE-10-Konsistenz).
+
+**ROUTINE-21d — Save disabled ohne Pikto-Wahl.** Der Bottom-Sheet-Save-Button
+ist disabled, solange weder Label noch Pikto-Wahl vorliegen. Drückt Eltern
+Save, sendet das Frontend `POST /api/v1/routine/items` mit `{label,
+piktogramm, quelle}` (ROUTINE-14-Schema). Erfolg → Bottom-Sheet schließt,
+neuer Punkt erscheint in der Liste. 4xx-Antwort (z. B. >8 Punkte, ROUTINE-19)
+→ ehrliche Fehlermeldung im Bottom-Sheet, kein Schließen.
+
+*Test-Implikation:* Label-Tippen → ICONS-7-Stub liefert 3 Treffer → Grid
+rendert 3 Bilder; Tap eines Bildes → ausgewählt-Markierung. Manuelle Suche
+mit anderem Term → neuer ICONS-7-Call mit dem manuellen Wort. Null-Treffer
+→ Klartext + Fokus auf Such-Feld. Save ohne Pikto-Wahl → Button disabled.
+
+*Tickets:* #678, Folge-Implementierungs-Ticket
+
+### ROUTINE-22 — Folge-Punkt: Familien-Lexikon (ICONS-8) defer
+
+Die V1-Mini-App **schreibt keine Wort→Pikto-Wahl zurück** ins
+Icon-Lexikon. Wenn Eltern „Capoeira" sucht, ARASAAC keinen direkten Treffer
+hat und sie per manueller Suche einen Pikto wählt, ist diese Wahl in V1
+**nur in den Routine-Daten** persistiert, nicht im plattform-weiten Lexikon.
+Ein zweiter Mini-App-Lauf für ein anderes Kind oder eine andere App muss
+die Suche erneut führen.
+
+Der **Familien-Lexikon-Layer** (Schreib-Pfad zurück in den Wort→ID-Cache,
+ICONS-7-Erweiterung, Plan-Buddy-Migration) ist ein **eigenes Folge-Ticket**
+gegen `icons.md` (vorgesehener ICONS-8). Begründung: das ist eine
+Plattform-Klausel über mehrere Konsumenten hinweg (mindestens Mini-App,
+Plan-Buddys `aktivitaeten`-Katalog, künftige Mini-Apps), keine
+Mini-App-eigene Logik — und es soll erst angegangen werden, wenn ein
+zweiter realer Mini-App-Konsument Schmerz belegt (Berater-Disziplin: n=2
+gebaut). V1 trägt die manuelle Such-Reibung bewusst.
+
+*Tickets:* Folge-Ticket „ICONS-8 Familien-Lexikon" (separat eröffnet)
+
+### ROUTINE-23 — Mini-App folgt der Mini-App-Design-Vorlage (MAD)
+
+Die Anpassen-Mini-App ist der **zweite Mini-App-Konsument** der Plattform
+nach essen-einkauf (#653). Sie folgt bewusst dem
+First-Occurrence-Pattern aus
+`~/brainstorm/conventions-vorab/mini-app-design-erstes-vorkommen.md` (MAD-1
+bis MAD-9 + Anti-Patterns) — gleicher DTOK-Andock, gleiches Card-Pattern
+(MAD-2), gleicher FAB (MAD-3), gleiches Bottom-Sheet (MAD-4),
+`platform.js`-Wrapper (MAD-5), Asset-Pfade (MAD-6), V1-Auth-Modell (MAD-7).
+
+**Erwartete Abweichungen** (zur Beobachtung im Impl-Lauf, nicht als Veto):
+
+- **Drag-Handle** als sortierender Card-Modifier ist in essen-einkauf nicht
+  vorgekommen — neue Erweiterung des MAD-2-Card-Pattern.
+- **Mehr-Feld-Save** (Items + Config in einem Save-Vorgang) statt
+  Per-Tap-Toggle wie ESSEN-32 — anderer Konsistenz-Anker, weil die
+  Anpassen-Mini-App eine Editor-Sitzung modelliert, keine inkrementelle
+  Liste.
+- **Pikto-Picker im Bottom-Sheet** (ROUTINE-21a/b) statt
+  Kategorie-Auto-Match — die essen-einkauf-Quick-Add-Heuristik trifft hier
+  nicht, weil Routine-Punkte semantisch einzeln gewählt sind, nicht aus
+  einer Brot-Milch-Liste.
+
+**MAD-Ratifizierung erfolgt NICHT im Spec-PR dieser Mini-App.** Stattdessen
+läuft nach Live-Implementation eine eigene `/berater-runde` mit beiden
+gebauten Konsumenten (essen-einkauf + Routine-Anpassen) als Belege; die
+Berater entscheiden, ob MAD nach `conventions/mini-app-design.md` gehoben
+oder restrukturiert wird.
+
+*Tickets:* #678 (Sammler), MAD-Ratifizierungs-Berater-Runde (nach Live)
 
 ---
 
@@ -561,6 +748,12 @@ idempotent; ROUTINE-19 max-8-Klemme + Label/Piktogramm-Validierung → 4xx;
     bindend.** Items-Endpunkte (POST/DELETE/PUT) sind in ROUTINE-14 bindend;
     Skill-Verhalten: `specs/platform/routine-punkte-setzen.md` (RPS). Icon-Wahl über
     ICONS-7 (#390). ID-Form + Auto-Verfall entschieden (ROUTINE-5/6). Bau offen.
+    **Update 2026-06-12 (Routine-Anpassen-Werft, #678):** RPS-Chat-Skill ist
+    durch die Anpassen-Mini-App ersetzt (Nic-Wahl: Variante B —
+    Mini-App-Bearbeitung statt propose→confirm-pro-Eintrag). Die Items-API
+    bleibt bindend; ihr V1.1-Konsument ist die Mini-App (ROUTINE-20), nicht
+    der Chat-Skill. RZS (Zeiten-Schnellsatz) bleibt aktiv (Mini-App + Chat
+    co-existieren bei Zeiten — sieh dort).
 
 - **OPEN-ROUTINE-C — Sonnencreme aus dem Wetter-Buddy (`bedingt`).** Routine
   liest `/api/v1/wetter/` und injiziert bei UV-Bedarf einen Sonnencreme-Punkt.
