@@ -15,6 +15,7 @@ Die Aufgabe ist ein dünner Aufrufer der trigger-agnostischen Funktion
 """
 
 import logging
+import re
 
 from tasks import Proposal, WriteTask
 
@@ -83,12 +84,19 @@ class HoerspielFolgeErzeugenTask(WriteTask):
         self._display_url_origin = display_url_origin or ""
         self._family_group_chat_id_getter = family_group_chat_id_getter
         self._is_member_fn = is_member_fn
+        # HFE-5: Session-State überbrückt propose→execute (Befund 1).
+        # chat_id → {titel, text, voice, idee} aus dem Buddy-Vorschlag.
+        # Nur eine offene Vorschlag-Session pro Chat — älter wird überschrieben.
+        self._pending_vorschlaege: dict[object, dict] = {}
 
     def propose(self, arguments, turn_context):
         """EC-10-Vorschlag — holt Folgen-Vorschlag vom Hörspiel-Buddy (HFE-3/4).
 
         Ruft hfe_mod.propose() auf. Bei Erfolg wird ein Proposal mit dem
         strukturierten Vorschlag-Text zurückgegeben (EC-10-Gate feuert).
+        Speichert titel/text/voice/idee im Session-State, damit execute()
+        sie ohne Modell-Kanal-Vertrauen bekommt (HFE-5, Befund 1).
+
         Bei Fehler wird die Exception weitergereicht — agent.py fängt sie
         als is_error=True-Tool-Result; das LLM antwortet entsprechend.
 
@@ -100,6 +108,7 @@ class HoerspielFolgeErzeugenTask(WriteTask):
 
         is_member_fn = self._is_member_fn or (lambda uid: True)
         from_user_id = getattr(turn_context, "from_user_id", None)
+        chat_id = turn_context.chat_id
 
         # Wirft BerechtigungError, ValueError oder HoerspielClientError —
         # alle propagieren zu agent.py.
@@ -111,37 +120,106 @@ class HoerspielFolgeErzeugenTask(WriteTask):
             voice_hint=voice_hint,
         )
 
+        # Felder aus dem strukturierten Vorschlag-Text extrahieren und
+        # in Session-State schreiben — execute() liest daraus (HFE-5).
+        titel, text, voice = _extrahiere_vorschlag_felder(result_text, voice_hint,
+                                                           self._hoerspiel_client)
+        self._pending_vorschlaege[chat_id] = {
+            "titel": titel,
+            "text": text,
+            "voice": voice,
+            "idee": idee,
+        }
+        logger.debug("HFE-Vorschlag im Session-State gespeichert chat_id=%s titel=%r",
+                     chat_id, titel)
+
         # Nur bei Erfolg: Proposal zurückgeben → EC-10-Gate feuert (HFE-1/3).
         return Proposal(result_text)
 
     def execute(self, arguments, turn_context):
         """Baut das Album nach EC-10-Bestätigung (HFE-5, TASK-10).
 
-        Argumente aus dem bestätigten Vorschlag: titel, text, voice, idee
-        kommen aus `arguments` (Modell-Kanal); chat_id aus TurnContext
-        (EC-12-Geist — nicht aus arguments).
+        Liest titel/text/voice/idee aus dem Session-State (Befund 1) —
+        nicht aus dem Modell-Kanal `arguments`, da das Framework nur die
+        ursprünglichen Tool-Call-arguments persistiert ({idee, voice?}).
 
         TASK-10: execute() ist außerhalb des Agent-Loops und sendet selbst.
         """
-        args = arguments or {}
-        titel = (args.get("titel") or "").strip()
-        text  = (args.get("text") or "").strip()
-        voice = (args.get("voice") or hfe_mod.VOICE_DEFAULT).strip()
-        idee  = (args.get("idee") or "").strip()
         chat_id = turn_context.chat_id
+        pending = self._pending_vorschlaege.pop(chat_id, None)
+        if pending is None:
+            logger.warning(
+                "HFE-execute: kein Session-State für chat_id=%s — "
+                "Vorschlag verloren oder nie gemacht", chat_id)
+            # Fehler-Bubble direkt senden (TASK-10-Kontext, analog HFE-5-Fehler).
+            try:
+                self._tg.send_message(
+                    chat_id,
+                    "Der Hörspiel-Vorschlag ist nicht mehr verfügbar — "
+                    "bitte erneut starten.")
+            except Exception:
+                pass
+            return "Vorschlag verloren — erneut starten."
 
         hfe_mod.execute(
             hoerspiel_client=self._hoerspiel_client,
             tg=self._tg,
             chat_id=chat_id,
             display_url_origin=self._display_url_origin,
-            titel=titel,
-            text=text,
-            voice=voice,
-            idee=idee,
+            titel=pending["titel"],
+            text=pending["text"],
+            voice=pending["voice"],
+            idee=pending["idee"],
         )
 
         # execute() sendet selbst (TASK-10); der Rückgabe-String ist die
         # interne Quittung an den Agent-Loop (wird nach dem EC-10-Gate nicht
         # mehr an den Nutzer gepostet — er hat die Telegram-Bubble bekommen).
         return "Folge erzeugt und Bubble gesendet."
+
+
+def _extrahiere_vorschlag_felder(
+        result_text: str,
+        voice_hint: str | None,
+        hoerspiel_client,
+) -> tuple[str, str, str]:
+    """Extrahiert titel/text/voice aus dem strukturierten propose-Result-Text.
+
+    Der Buddy-Vorschlag-Text hat das Format (HFE-4):
+      **Folge <nr>: <titel>**\n\n<text>\n\nVoice: <voice> ...
+
+    Wir parsen daraus Titel, Text und Voice — damit execute() die Felder
+    ohne einen zweiten Buddy-Aufruf hat (Befund 1, HFE-5).
+    """
+    titel = ""
+    text = ""
+    voice = hfe_mod.VOICE_DEFAULT
+
+    # Titel aus erster Markdown-Überschrift: **Folge N: <titel>**
+    m_titel = re.search(r"\*\*Folge\s+\S+\s*:\s*(.+?)\*\*", result_text)
+    if m_titel:
+        titel = m_titel.group(1).strip()
+
+    # Voice aus "Voice: <voice>" Zeile
+    m_voice = re.search(r"\bVoice:\s*(shimmer|onyx)\b", result_text, re.IGNORECASE)
+    if m_voice:
+        voice = m_voice.group(1).lower()
+
+    # Text: Zeilen zwischen der Überschrift und dem Voice-Block.
+    # Strategie: alles nach der ersten Leerzeile bis zur "Voice:"-Zeile.
+    lines = result_text.split("\n")
+    text_lines: list[str] = []
+    in_text = False
+    for line in lines:
+        if not in_text:
+            # Header-Zeile überspringen, dann in_text=True nach erster Leerzeile
+            if line.strip().startswith("**Folge"):
+                in_text = True
+                continue
+        else:
+            if re.match(r"\s*Voice:", line, re.IGNORECASE):
+                break
+            text_lines.append(line)
+    text = "\n".join(text_lines).strip()
+
+    return titel, text, voice
