@@ -699,6 +699,9 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # EZG-6 / EIN-8 / #653: Mini-App-URL für die Einkaufsliste (EZG-6).
         # Leer/None → EinkaufZeigenTask nutzt ENV-Fallback MINI_APP_EINKAUF_URL.
         mini_app_einkauf_url=cfg.mini_app_einkauf_url or None,
+        # RAO-6 / T728-C: Basis-URL aller Mini-Apps (Funnel-Domain).
+        # Leer/None → RoutineAnpassenOeffnenTask NICHT im Katalog (RAO-8 Guard).
+        mini_app_base_url=cfg.mini_app_base_url or None,
         # SREG-7 / #476: Heim-Origin für den Übersichts-Link (SREG-5/SREG-5b).
         display_url_origin_heim=cfg.display_url_origin_heim,
         # TAB-12 / #475: Session-Map für »Termine aus Bild«.
