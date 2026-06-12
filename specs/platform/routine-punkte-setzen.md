@@ -187,14 +187,16 @@ das ICONS-7 bewusst meidet).
 ## E-RPS-3 — RPS durch Anpassen-Mini-App ersetzt
 *Datum:* 2026-06-12 (Nic-Entscheid Routine-Anpassen-Werft #678) · Der
 RPS-Chat-Skill wird durch die **Anpassen-Mini-App** (`routine.md` ROUTINE-20)
-ersetzt. Begründung: die Reihenfolgen-Geste („Zähne putzen nach Position 1") war
-konversational von Anfang an als Notlösung markiert (RPS-3-V1.2-Klausel, #469);
-die Mehrfeld-Bearbeitung mit Drag&Drop, Icon-Picker und Mehrwert-Save passt nicht
-zu propose→confirm-pro-Eintrag-Bubbles. Eltern-Chat-Skill als Eingabe-UI bricht
-genau dort, wo die Mini-App schlank glänzt — der Skill war konsistent gebaut,
-aber UX-untragbar an der Bulk-Edit-Kante. **Verworfen:** zwei parallele
-Pflegepfade (Mini-App + RPS) — doppelte Wartung ohne Mehrwert; Eltern müsste sich
-merken, welcher Weg welche Operation kann (Variante A der Werft-Wahl,
-2026-06-12). Der RZS-Schnellsatz für **Zeiten** koexistiert hingegen mit der
-Mini-App (siehe `routine-zeiten-setzen.md` Status-Block) — Single-Value-Trigger
-ist konversational ehrlich. Code-Cleanup als Folge-Ticket nach Live-Lauf.
+ersetzt. **Formaler Anker (nach #719 RATIFIZIERT):** `specs/platform/eltern-chat.md`
+**EC-33** (UI-Medien-Schwelle) — Routine-Punkte-Voll-Bearbeitung erfüllt die
+WebApp-Schwelle (≥5 Werte oder ≥2 Achsen pro Anstoß) und ist in der
+EC-33-Anwendungs-Liste explizit als **WebApp-Kandidat** geführt. Die alte
+Begründung (Reihenfolgen-Geste konversational schmerzhaft, Notlösung
+RPS-3-V1.2-Klausel #469) bleibt richtig, aber EC-33 ist der neue strukturelle
+Grund: ≥5 Werte + ≥2 Achsen = nicht in einen Chat-propose→confirm-Bubble.
+**Verworfen:** zwei parallele Pflegepfade (Mini-App + RPS) — doppelte Wartung
+ohne Mehrwert; Eltern müsste sich merken, welcher Weg welche Operation kann
+(Variante A der Werft-Wahl, 2026-06-12). Der RZS-Schnellsatz für **Zeiten**
+koexistiert hingegen mit der Mini-App (siehe `routine-zeiten-setzen.md`
+Status-Block) — Single-Value-Trigger bleibt unter der EC-33-Schwelle und ist
+konversational ehrlich. Code-Cleanup als Folge-Ticket nach Live-Lauf.
