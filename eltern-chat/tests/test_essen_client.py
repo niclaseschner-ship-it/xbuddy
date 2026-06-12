@@ -252,3 +252,50 @@ def test_post_gericht_fehler_detail_in_meldung():
         client.post_gericht(name="Lasagne", icon_id="9999")
 
     assert "Gericht existiert bereits" in str(exc_info.value)
+
+
+# ============================================================
+#  EssenClient.post_gericht — ESSEN-22 Pfad 1: foto_ref
+# ============================================================
+
+def test_post_gericht_foto_ref_sendet_richtiges_payload():
+    """ESSEN-22 Pfad 1: post_gericht mit foto_ref sendet {label, foto_ref}."""
+    stub = _stub_capture()
+    stub.add_response(201, {"id": "7"})
+    client = EssenClient(origin_url="http://example", transport=stub)
+
+    result = client.post_gericht(name="Lasagne", foto_ref="foto-42")
+
+    assert result == {"id": "7"}
+    call = stub.calls[0]
+    payload = json.loads(call["body"].decode("utf-8"))
+    assert payload == {"label": "Lasagne", "foto_ref": "foto-42"}
+    # bild_ref darf NICHT im Payload sein
+    assert "bild_ref" not in payload
+
+
+def test_post_gericht_icon_id_xor_foto_ref_icon_gewinnt():
+    """ESSEN-19: post_gericht mit icon_id sendet bild_ref (kein foto_ref)."""
+    stub = _stub_capture()
+    stub.add_response(201, {"id": "8"})
+    client = EssenClient(origin_url="http://example", transport=stub)
+
+    client.post_gericht(name="Pizza", icon_id="1234")
+
+    call = stub.calls[0]
+    payload = json.loads(call["body"].decode("utf-8"))
+    assert "bild_ref" in payload
+    assert "foto_ref" not in payload
+
+
+def test_post_gericht_ohne_icon_und_foto_ref_fehler():
+    """post_gericht ohne icon_id UND foto_ref → EssenClientError (kein Request)."""
+    stub = _stub_capture()
+    client = EssenClient(origin_url="http://example", transport=stub)
+
+    with pytest.raises(EssenClientError) as exc_info:
+        client.post_gericht(name="Lasagne")
+
+    assert "icon_id oder foto_ref" in str(exc_info.value)
+    # Kein HTTP-Aufruf gemacht
+    assert stub.calls == []

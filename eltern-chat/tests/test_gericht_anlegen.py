@@ -1,5 +1,5 @@
 """Tests für die Funktion gericht_anlegen — GAN-1 … GAN-7, E-GAN-1 … E-GAN-3
-(Refs #503).
+(Refs #503). ESSEN-22 Pfad 1: foto_hinzufuegen.
 
 Jede Anforderung der Spec mit Code-Verhalten hat einen automatisierten Test
 (GAN-7, CLAUDE.md §6). Essens-Buddy, Router-Icon-Suche und Telegram sind
@@ -13,12 +13,21 @@ Pflicht-Tests (Spec GAN-7):
 - Buddy-409 (doppeltes Label) → kein Schreiben, ehrliche Grenze (GAN-5).
 - Buddy-4xx (leeres Label) → kein Schreiben, ehrliche Grenze (GAN-5).
 - APP-3: der Skill ruft die API, nicht die Datei.
+
+ESSEN-22 Pfad 1 (foto_hinzufuegen):
+- Happy-Path: foto_hinzufuegen → upload_medium → post_gericht(foto_ref) → angelegt.
+- Photo-Buddy-4xx → SIGNAL_GRENZE.
+- Photo-Buddy nicht erreichbar → SIGNAL_NICHT_ERREICHBAR.
+- Kein Foto → SIGNAL_NICHTS_ZU_TUN.
+- Kein Label → SIGNAL_NICHTS_ZU_TUN.
+- Kein photo_client → SIGNAL_NICHTS_ZU_TUN.
 """
 
 import unittest.mock as mock
 
 from skills.essen_client import EssenClientError
 from skills.gericht_anlegen import (
+    AKTION_FOTO_HINZUFUEGEN,
     AKTION_HINZUFUEGEN,
     AKTION_ICON_SUCHEN,
     SIGNAL_ABGELEHNT,
@@ -31,6 +40,7 @@ from skills.gericht_anlegen import (
     gericht_anlegen,
 )
 from skills.icon_client import IconClientError
+from skills.photo_client import PhotoClientError
 
 # ============================================================
 #  Doppelungen — CLIENT-1 Transport-Stub-Naht
@@ -44,11 +54,31 @@ class FakeEssenClient:
         self._post_response = post_response or {"id": "1"}
         self._post_error = post_error
 
-    def post_gericht(self, name, icon_id):
-        self.post_calls.append({"name": name, "icon_id": icon_id})
+    def post_gericht(self, name, icon_id=None, foto_ref=None):
+        self.post_calls.append({"name": name, "icon_id": icon_id,
+                                "foto_ref": foto_ref})
         if self._post_error is not None:
             raise self._post_error
         return dict(self._post_response)
+
+
+class FakePhotoClient:
+    """PhotoClient-Doppelung für ESSEN-22 Pfad 1 (GAN-foto)."""
+
+    def __init__(self, upload_response=None, upload_error=None):
+        self.upload_calls = []
+        self._upload_response = upload_response or {"id": "foto-1", "typ": "image"}
+        self._upload_error = upload_error
+
+    def upload_medium(self, medium_bytes, filename, content_type):
+        self.upload_calls.append({
+            "medium_bytes": medium_bytes,
+            "filename": filename,
+            "content_type": content_type,
+        })
+        if self._upload_error is not None:
+            raise self._upload_error
+        return dict(self._upload_response)
 
 
 class FakeIconClient:
@@ -235,7 +265,7 @@ def test_GAN3_hinzufuegen_happy_path():
 
     assert signal == SIGNAL_ANGELEGT
     assert daten == {"id": "42"}
-    assert ec.post_calls == [{"name": "Lasagne", "icon_id": "9999"}]
+    assert ec.post_calls == [{"name": "Lasagne", "icon_id": "9999", "foto_ref": None}]
 
 
 def test_GAN3_hinzufuegen_ohne_label_nichts_zu_tun():
@@ -369,3 +399,188 @@ def test_APP3_keine_datei_zugriffe():
 
     assert signal == SIGNAL_ANGELEGT
     assert len(ec.post_calls) == 1
+
+
+# ============================================================
+#  ESSEN-22 Pfad 1: foto_hinzufuegen
+# ============================================================
+
+def test_GAN_FOTO_happy_path_upload_und_post():
+    """ESSEN-22 Pfad 1: foto_hinzufuegen → upload_medium → post_gericht(foto_ref)
+    → SIGNAL_ANGELEGT."""
+    foto_bytes = b"\xff\xd8\xff" + b"\x00" * 10  # minimal JPEG-Header
+    pc = FakePhotoClient(upload_response={"id": "foto-42", "typ": "image"})
+    ec = FakeEssenClient(post_response={"id": "7"})
+
+    signal, daten = gericht_anlegen(
+        aktion=AKTION_FOTO_HINZUFUEGEN,
+        essen_client=ec,
+        icon_client=FakeIconClient(),
+        photo_client=pc,
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        label="Lasagne",
+        medium_bytes=foto_bytes,
+        filename="foto.jpg",
+        content_type="image/jpeg",
+    )
+
+    assert signal == SIGNAL_ANGELEGT
+    assert daten == {"id": "7"}
+    # Photo-Upload wurde gemacht
+    assert len(pc.upload_calls) == 1
+    assert pc.upload_calls[0]["medium_bytes"] == foto_bytes
+    # Essen-POST mit foto_ref (nicht icon_id)
+    assert len(ec.post_calls) == 1
+    assert ec.post_calls[0]["foto_ref"] == "foto-42"
+    assert ec.post_calls[0]["icon_id"] is None
+
+
+def test_GAN_FOTO_kein_label_nichts_zu_tun():
+    """ESSEN-22 Pfad 1: foto_hinzufuegen ohne label → SIGNAL_NICHTS_ZU_TUN."""
+    pc = FakePhotoClient()
+    ec = FakeEssenClient()
+
+    signal, daten = gericht_anlegen(
+        aktion=AKTION_FOTO_HINZUFUEGEN,
+        essen_client=ec,
+        icon_client=FakeIconClient(),
+        photo_client=pc,
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        label="",
+        medium_bytes=b"bytes",
+    )
+
+    assert signal == SIGNAL_NICHTS_ZU_TUN
+    assert daten["reason"] == "kein Label"
+    assert pc.upload_calls == []
+    assert ec.post_calls == []
+
+
+def test_GAN_FOTO_kein_medium_nichts_zu_tun():
+    """ESSEN-22 Pfad 1: foto_hinzufuegen ohne medium_bytes → SIGNAL_NICHTS_ZU_TUN."""
+    pc = FakePhotoClient()
+    ec = FakeEssenClient()
+
+    signal, daten = gericht_anlegen(
+        aktion=AKTION_FOTO_HINZUFUEGEN,
+        essen_client=ec,
+        icon_client=FakeIconClient(),
+        photo_client=pc,
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        label="Lasagne",
+        medium_bytes=None,
+    )
+
+    assert signal == SIGNAL_NICHTS_ZU_TUN
+    assert daten["reason"] == "kein Foto"
+    assert pc.upload_calls == []
+
+
+def test_GAN_FOTO_kein_photo_client_nichts_zu_tun():
+    """ESSEN-22 Pfad 1: foto_hinzufuegen ohne photo_client → SIGNAL_NICHTS_ZU_TUN."""
+    ec = FakeEssenClient()
+
+    signal, daten = gericht_anlegen(
+        aktion=AKTION_FOTO_HINZUFUEGEN,
+        essen_client=ec,
+        icon_client=FakeIconClient(),
+        photo_client=None,
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        label="Lasagne",
+        medium_bytes=b"bytes",
+    )
+
+    assert signal == SIGNAL_NICHTS_ZU_TUN
+    assert daten["reason"] == "kein Photo-Client"
+    assert ec.post_calls == []
+
+
+def test_GAN_FOTO_photo_buddy_4xx_grenze():
+    """ESSEN-22 Pfad 1: Photo-Buddy-4xx bei Upload → SIGNAL_GRENZE."""
+    pc = FakePhotoClient(
+        upload_error=PhotoClientError(
+            "Photo-Buddy: HTTP 413 bei POST /api/v1/photo/medien — zu groß"))
+    ec = FakeEssenClient()
+
+    signal, daten = gericht_anlegen(
+        aktion=AKTION_FOTO_HINZUFUEGEN,
+        essen_client=ec,
+        icon_client=FakeIconClient(),
+        photo_client=pc,
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        label="Lasagne",
+        medium_bytes=b"bytes",
+    )
+
+    assert signal == SIGNAL_GRENZE
+    assert "413" in daten["detail"]
+    assert ec.post_calls == []  # Kein Essen-POST nach gescheitertem Upload
+
+
+def test_GAN_FOTO_photo_buddy_nicht_erreichbar():
+    """ESSEN-22 Pfad 1: Photo-Buddy nicht erreichbar → SIGNAL_NICHT_ERREICHBAR."""
+    pc = FakePhotoClient(
+        upload_error=PhotoClientError(
+            "Photo-Buddy http://127.0.0.1:5070 nicht erreichbar"))
+    ec = FakeEssenClient()
+
+    signal, _daten = gericht_anlegen(
+        aktion=AKTION_FOTO_HINZUFUEGEN,
+        essen_client=ec,
+        icon_client=FakeIconClient(),
+        photo_client=pc,
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        label="Lasagne",
+        medium_bytes=b"bytes",
+    )
+
+    assert signal == SIGNAL_NICHT_ERREICHBAR
+    assert ec.post_calls == []
+
+
+def test_GAN_FOTO_essen_buddy_fehler_nach_upload():
+    """ESSEN-22 Pfad 1: Essen-Buddy-4xx nach erfolgreichem Upload → SIGNAL_GRENZE."""
+    pc = FakePhotoClient(upload_response={"id": "foto-99"})
+    ec = FakeEssenClient(
+        post_error=EssenClientError(
+            "Essens-Buddy: HTTP 409 bei POST /api/v1/essen/katalog/gerichte"))
+
+    signal, daten = gericht_anlegen(
+        aktion=AKTION_FOTO_HINZUFUEGEN,
+        essen_client=ec,
+        icon_client=FakeIconClient(),
+        photo_client=pc,
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        label="Lasagne",
+        medium_bytes=b"bytes",
+    )
+
+    assert signal == SIGNAL_GRENZE
+    assert "409" in daten["detail"]
+    assert len(pc.upload_calls) == 1  # Upload wurde gemacht
+
+
+def test_GAN_FOTO_nicht_mitglied_kein_upload():
+    """GAN-2 / ESSEN-22 Pfad 1: Nicht-Mitglied → SIGNAL_ABGELEHNT, kein Upload."""
+    pc = FakePhotoClient()
+
+    signal, _ = gericht_anlegen(
+        aktion=AKTION_FOTO_HINZUFUEGEN,
+        essen_client=FakeEssenClient(),
+        icon_client=FakeIconClient(),
+        photo_client=pc,
+        is_member_fn=_kein_mitglied,
+        from_user_id=99,
+        label="Lasagne",
+        medium_bytes=b"bytes",
+    )
+
+    assert signal == SIGNAL_ABGELEHNT
+    assert pc.upload_calls == []
