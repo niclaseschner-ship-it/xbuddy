@@ -17,6 +17,25 @@
   --sheet-radius:  16px;
   --fab-size:      56px;
   --fab-bg:        #2d62d8;
+
+  /* ── Item-Card Skalierung (Tuning-Parameter) ─────────────
+     --item-scale: zentraler Multiplikator für Item-Card-Größen
+     (Höhe, Bild, Check, Padding, Gap, Schrift). 1.0 = Original,
+     <1 = kompakter, >1 = größer. Alle abgeleiteten Maße nutzen
+     calc(... * var(--item-scale)) — Tunen heißt nur diese Zahl ändern.
+     Default 0.67 (≈ 1/3 kleiner als Original, Nic-Feedback 2026-06-12). */
+  --item-scale:        0.67;
+  --item-min-height:   calc(60px  * var(--item-scale));
+  --item-bild-size:    calc(44px  * var(--item-scale));
+  --item-check-size:   calc(28px  * var(--item-scale));
+  --item-padding-y:    calc(10px  * var(--item-scale));
+  --item-padding-x:    calc(12px  * var(--item-scale));
+  --item-gap:          calc(12px  * var(--item-scale));
+  --item-margin-y:     calc(8px   * var(--item-scale));
+  --item-label-size:   calc(1rem  * var(--item-scale));
+  --item-marker-size:  calc(1rem  * var(--item-scale));
+  --item-check-font:   calc(0.95rem * var(--item-scale));
+  --item-check-border: calc(2px   * var(--item-scale));
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -89,13 +108,13 @@ body {
 .item-card {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--item-gap);
   background: var(--card);
   border: 1px solid var(--rule);
   border-radius: 10px;
-  padding: 10px 12px;
-  margin-bottom: 8px;
-  min-height: 60px;        /* großzügiges Touch-Target */
+  padding: var(--item-padding-y) var(--item-padding-x);
+  margin-bottom: var(--item-margin-y);
+  min-height: var(--item-min-height);
   cursor: pointer;
   -webkit-tap-highlight-color: rgba(0, 0, 0, 0.06);
   user-select: none;
@@ -120,9 +139,9 @@ body {
 /* ── Card-Bild ───────────────────────────────────────────── */
 
 .item-bild {
-  flex: 0 0 44px;
-  width: 44px;
-  height: 44px;
+  flex: 0 0 var(--item-bild-size);
+  width: var(--item-bild-size);
+  height: var(--item-bild-size);
   object-fit: contain;
   border-radius: 6px;
   background: var(--bg);
@@ -130,15 +149,15 @@ body {
 
 /* Placeholder bei Bild-Ladefehler (ESSEN-31) */
 .item-bild-placeholder {
-  flex: 0 0 44px;
-  width: 44px;
-  height: 44px;
+  flex: 0 0 var(--item-bild-size);
+  width: var(--item-bild-size);
+  height: var(--item-bild-size);
   border-radius: 6px;
   background: var(--rule);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.3rem;
+  font-size: calc(1.3rem * var(--item-scale));
 }
 
 /* ── Card-Text ───────────────────────────────────────────── */
@@ -149,7 +168,7 @@ body {
 }
 
 .item-label {
-  font-size: 1rem;
+  font-size: var(--item-label-size);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -160,23 +179,23 @@ body {
 
 .item-marker {
   flex: 0 0 auto;
-  font-size: 1rem;
+  font-size: var(--item-marker-size);
   line-height: 1;
 }
 
 /* ── Abhak-Check ──────────────────────────────────────────── */
 
 .item-check {
-  flex: 0 0 28px;
-  width: 28px;
-  height: 28px;
-  border: 2px solid var(--rule);
+  flex: 0 0 var(--item-check-size);
+  width: var(--item-check-size);
+  height: var(--item-check-size);
+  border: var(--item-check-border) solid var(--rule);
   border-radius: 50%;
   background: var(--card);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.95rem;
+  font-size: var(--item-check-font);
   transition: background 0.15s, border-color 0.15s;
 }
 
