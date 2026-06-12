@@ -27,6 +27,11 @@ logger = logging.getLogger(__name__)
 
 
 class EinkaufHinzufuegenTask(WriteTask):
+    # E-EIN-1: Skill schreibt direkt, kein propose→confirm-Gate.
+    # Framework liest das Klassen-Attribut in agent.py vor dem propose-Pfad
+    # und ruft execute() direkt auf (Catalog.execute_write_task).
+    auto_confirm = True
+
     """Schreibende Katalog-Aufgabe im Direkt-Modus (E-EIN-1, EIN-8).
 
     Im Unterschied zu anderen WriteTask-Subklassen (z. B. GerichtAnlegenTask)

@@ -341,6 +341,28 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
             # EC-10: schreibende Aufgabe — NICHT ausführen. Der Loop endet hier
             # mit einem Vorschlag; die Ausführung passiert erst nach
             # Bestätigung, außerhalb dieses Moduls (E-EC-4).
+            #
+            # Ausnahme: auto_confirm=True (E-EIN-1 Direkt-Modus). Skill schreibt
+            # sofort ohne Bestätigungs-Gate, weil die Wirkung schmerzlos
+            # rückgängig zu machen ist (z. B. Einkaufs-Item per Mini-App-Geste
+            # entfernbar). Frame ruft execute() direkt via Catalog.
+            if task.kind == WRITE and getattr(task, "auto_confirm", False):
+                try:
+                    write_result = catalog.execute_write_task(
+                        task, call.arguments, turn_context)
+                except Exception as e:
+                    result_blocks.append(TaskResultBlock(
+                        call_id=call.call_id,
+                        content="Aufgabe fehlgeschlagen: %s" % e,
+                        is_error=True))
+                    continue
+                reply = write_result.reply if write_result else ""
+                result_blocks.append(TaskResultBlock(
+                    call_id=call.call_id,
+                    content=reply or "OK",
+                    is_error=False))
+                continue
+
             if task.kind == WRITE:
                 try:
                     proposal = task.propose(call.arguments, turn_context)
