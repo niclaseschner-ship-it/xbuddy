@@ -592,6 +592,48 @@ nachfolgende GET zeigt es. POST mit `zutaten: [{kategorie: "gericht", …}]` →
 
 *Tickets:* #474, #653
 
+### ESSEN-19a — `PATCH /api/v1/essen/katalog/gerichte/<id>` — Gericht-Bild ändern
+
+Aktualisiert die Bild-Referenz eines bestehenden Gerichts — Pendant zu
+ESSEN-19 für das nachträgliche Setzen oder Wechseln des Familien-Fotos
+(ESSEN-22 Pfad 2, Gericht-Ziel). **In V1.1 exposed** (interface-first).
+
+**Konsument in V1.1:** der Eltern-Chat-Skill `essen_foto_setzen` (ESSEN-22
+Pfad 2). Andere Schreibpfade auf bestehende Gerichte gibt es nicht.
+
+**Payload (JSON-Body, alle Felder optional, sparse update analog ESSEN-32):**
+
+- `foto_ref` (string, Photo-Buddy-Medien-`id`) — neues Familien-Foto. Wenn
+  gesetzt, ersetzt der Buddy den bisherigen `bild_ref` / `foto_ref`. Buddy
+  validiert die Medien-ID gegen Photo-Buddy
+  (`GET /api/v1/photo/medien/<id>` → 200 erforderlich, sonst 400).
+- `bild_ref` (string, ARASAAC-`id`) — zurück zum Pikto-Default. Wenn gesetzt,
+  ersetzt der Buddy den bisherigen `foto_ref` / `bild_ref`. Validierung wie
+  in ESSEN-19 (lokales PNG via ICONS-5).
+
+**Fachliche Validierung:** ID muss existieren (sonst 404). `foto_ref` und
+`bild_ref` gleichzeitig im Payload → 400 (eindeutig wählen, analog ESSEN-19).
+Andere Felder (`label`, `zutaten`) sind **nicht** per PATCH änderbar — V1.1
+beschränkt sich auf den Bild-Wechsel; Label/Zutaten ändern braucht eigene
+Spec (offen). Unbekannte Felder im Payload → ignorieren
+(Vorwärtskompatibilität, analog ESSEN-32).
+
+**Antwort:** 200 mit dem aktualisierten Gericht-Eintrag (volle Form wie
+GET-Element aus `/api/v1/essen/katalog`).
+
+**Persistenz:** schreibt atomar in `essen/gerichte.json` (DCOMP-4, analog
+ESSEN-19). Reload-on-Read greift automatisch (ESSEN-20).
+
+*Test-Implikation:* PATCH `{foto_ref: "<medien-id>"}` auf bestehendes Gericht
+→ 200, GET zeigt `foto_ref` gesetzt und `bild_ref` weg. PATCH
+`{bild_ref: "<arasaac-id>"}` auf Foto-Gericht → 200, GET zeigt `bild_ref`
+gesetzt und `foto_ref` weg. PATCH `{foto_ref: "X", bild_ref: "Y"}` → 400.
+PATCH auf unbekannte Gericht-ID → 404. PATCH `{label: "Neu"}` → ignoriert
+(Antwort hat `label` unverändert). PATCH mit `foto_ref`, dessen Medien-ID
+im Photo-Buddy nicht existiert → 400.
+
+*Tickets:* #531
+
 ### ESSEN-20 — Reload-on-Read, atomares Schreiben, Last-Known-Good
 Der Buddy liest seine persistenten Dateien (`wuensche.json`, `gerichte.json`,
 Override-`katalog.json`) **je Request frisch** (Reload-on-Read, ROUTINE-14-
