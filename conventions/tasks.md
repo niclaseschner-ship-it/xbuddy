@@ -164,6 +164,22 @@ Heimat des Patterns: `eltern-chat/skills/foto_senden_task.py` erbt von
 Widerruf ist ein **zweiter** `tool_use` mit der `id` aus der ersten Quittung,
 kein neuer State).
 
+**Verweis-Klausel (EC-10 A2-Klausel).** Skills, die unter die EC-10
+A2-Klausel fallen (Sofort-Write + Quittung + Undo-Wort als Default —
+heute `termin_eintragen`, `einkauf_hinzufuegen`, `foto_senden`),
+**verschärfen** TASK-9 auf die enge Form: One-Shot-Ressource mit
+**stabiler ID**, **idempotentes `DELETE`** als Inverse, **Pre-Flight-
+Check** des Inverse-Aufrufs **vor erstem Live-Einsatz** (Test legt
+an, ruft Inverse, prüft Bestätigung — siehe EC-10 A2-Klausel
+Bedingung 3). TASK-9 ist die **Obermenge** (jede Sofort-Schreib-
+Aufgabe braucht einen erreichbaren Inverse-Aufruf); EC-10 A2 ist die
+**engere Form** für den Eltern-Chat-Default. Eine A2-Aufgabe darf
+nicht im Sofort-Write-Default laufen, bevor der Pre-Flight-Check
+grün ist.
+
+*Tickets:* #TBD-A2-Pre-Flight (Pre-Flight-Tests für die drei
+A2-Skills).
+
 ### TASK-10 — Lesende Aufgabe ist sprachlos im Agent-Loop
 Eine Katalog-Aufgabe, die im Agent-Loop des Eltern-Chats läuft, **sendet
 in dieser Aufruf-Phase nicht selbst** über den Telegram-Kanal. Das gilt für
@@ -290,6 +306,73 @@ Konsumenten — kein Vorratsbau (CLAUDE.md §6 „Lege nichts auf Vorrat an").
 
 *Tickets:* #470 (Welle 11 — Bilder-Lego, Berater-Runde 2026-06-10
 ratifiziert)
+
+### TASK-10c — Strukturiertes Präsentations-Ergebnis (drei zulässige Formen)
+
+Eine Katalog-Aufgabe gibt an das Framework eine von **drei zulässigen
+Formen** zurück. Das Framework — nicht der Skill — übersetzt die Form
+beim finalen Versand in **eine** Bot-Nachricht (EC-29 „Eine Stimme im
+Agent-Turn"). Andere Formen sind verboten.
+
+**Form (a) — reiner String.** Der bisherige Default (EC-29): die
+Aufgabe returnt einen User-tauglichen Antwort-Text als
+Tool-Result-String; das LLM formuliert daraus die Bot-Nachricht und
+postet sie. Heutige Konsumenten: alle Read-Skills ohne Anhang oder
+Button.
+
+**Form (b) — `{text, presentation}`-Objekt.** Die Aufgabe returnt
+einen Text-Teil **plus maschinenlesbare Präsentations-Hinweise**
+(`presentation`). Das Framework übersetzt `presentation` beim finalen
+Versand in **eine** Bot-Nachricht, in der Text und der von
+`presentation` beschriebene Aufsatz (z. B. `webapp_link`,
+`inline_button`) gemeinsam erscheinen. Der Skill sendet **nichts**
+selbst.
+
+Diese Form ist der Pfad für strukturierten Button- und WebApp-
+Aufsatz: der Skill bleibt sprachlos (EC-29), liefert aber dem
+Framework die maschinenlesbare Information, was es an die LLM-
+Bot-Nachricht anhängen soll. Das Vokabular der `presentation`-
+Hinweise (welche Schlüssel zulässig sind, welche Felder sie tragen)
+wird im **Framework-Code** geführt und in einem separaten
+Code-Track erweitert — nicht in dieser Konvention.
+
+**Form (c) — Datei-Anhang + Caption-String.** Liefert die Aufgabe
+ein Nicht-Text-Artefakt (Datei, Bild), sendet der Skill den Anhang
+**direkt** (`tg.send_document`, `tg.send_photo`) und returnt den
+Text-Teil (Caption, Anleitung, Begleittext) als Tool-Result-String;
+das LLM formuliert daraus die Bot-Nachricht. Das ist die in TASK-10
+geregelte Datei-Anhang-Klausel — hier nur als **Querverweis**, damit
+die drei zulässigen Formen vollständig nebeneinanderstehen. Heutiger
+Konsument: `ca-verteilung.md` CAV-4.
+
+**Verboten:**
+
+1. **`(text, buttons)`-Tuple-Return** als Eigen-Form (ohne
+   `presentation`-Schlüssel).
+2. **Skill-direktes Senden von Text + Button** in derselben
+   Tool-Use-Phase — das ist ein zweiter Sprecher und verletzt EC-29
+   („Eine Stimme im Agent-Turn"). Der heutige `einkauf_zeigen`-Pfad
+   (`einkauf_zeigen.py:101` — Tuple-Return; `einkauf_zeigen_task.py`
+   — Selbst-Send) ist die dokumentierte EC-29-Ausnahme und
+   **migriert auf Form (b)**.
+
+**Was sich für die Familie ändert.** Heute schickt `einkauf_zeigen`
+zwei sichtbar getrennte Bot-Akte — die Übersicht (Skill-Stimme) und
+gleich darauf eine LLM-Nachricht. Mit Form (b) entsteht **eine**
+Nachricht: Text und WebApp-Button stehen zusammen, formuliert in
+einer Stimme. Kein Doppelversand, keine sichtbare Naht zwischen
+Skill und LLM.
+
+**Begründung — Trade-off.** Form (a) als einziger Default ließe
+keinen sauberen Pfad für Aufsätze (Button, WebApp-Link); ein Skill,
+der einen Button setzen will, müsste selbst senden — und damit die
+EC-29-Eine-Stimme-Linie verletzen. Form (b) lagert die
+Aufsatz-Mechanik ins Framework aus, sodass der Skill weiterhin
+sprachlos bleibt. Form (c) bleibt für echte Datei-Anhänge bestehen,
+weil das LLM keinen Datei-Sende-Vertrag hat.
+
+*Tickets:* #TBD-A3 (Framework-`presentation`-Übersetzung in
+`run_turn`, Migration von `einkauf_zeigen` auf Form (b))
 
 ---
 
