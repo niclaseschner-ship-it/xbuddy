@@ -770,9 +770,10 @@ async function _sucheUndRendereIcons(q) {
         '<div class="picker-leer">Nichts gefunden für <strong>' + esc(q) +
         '</strong>.<br>Versuch ein anderes Wort.</div>';
 
-      // Fokus auf manuelle Suchleiste (ROUTINE-21c)
-      const pickerSuche = document.getElementById("picker-suche");
-      if (pickerSuche) setTimeout(() => pickerSuche.focus(), 60);
+      // T728 Live-Befund: Focus-Wechsel weggelassen (ROUTINE-21c sagte: Focus auf manuelle Suche).
+      // ICONS-7 backend kann heute kein Mehrwort (Folge-Ticket #741) → bei jedem Tipp nach
+      // Whitespace = Null-Treffer = ungewollter Focus-Steal. Cursor bleibt im Label-Input.
+      // Manuelle Suchleiste bleibt per Tap erreichbar. Spec ROUTINE-21c sollte nachgezogen werden.
 
       _pickerSelectedId = null;
       _aktualisiereAnlegenBtn();
