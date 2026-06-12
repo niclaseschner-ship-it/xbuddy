@@ -11,6 +11,16 @@ Lesende Aufgaben (EC-9) laufen direkt: `ReadTask.run()`. Schreibende Aufgaben
 Vorschlag vor, `WriteTask.execute()` führt ihn erst nach Bestätigung aus. Die
 Bestätigung selbst liegt außerhalb dieses Moduls und außerhalb des Agent-Loops
 (confirm.py, E-EC-4).
+
+**Direkt-Modus (E-EIN-1, #714):** Schreibende Aufgaben mit `auto_confirm = True`
+übergehen das EC-10-Bestätigungs-Gate — agent.py erkennt das Attribut und ruft
+`execute()` direkt via `Catalog.execute_write_task` auf (Hooks + Async-Pfad bleiben
+intakt). Anwendung: Aufgaben, deren Wirkung **schmerzlos rückgängig** ist
+(z. B. Einkauf-Item hinzufügen — per Mini-App-Geste entfernbar). Standard ist
+`auto_confirm = False` — Verlust-Risiko-Aufgaben (Familie anlegen, Plan-Punkte
+setzen, Routine ändern) bleiben beim propose→confirm. Entscheidungsfrage beim
+Bauen eines neuen schreibenden Skills: „Wirkung schmerzlos rückgängig?" → ja:
+`auto_confirm = True`. Nein: Standard EC-10. Spec-Anker: E-EIN-1, EIN-5.
 """
 
 from dataclasses import dataclass
