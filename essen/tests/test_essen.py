@@ -577,6 +577,54 @@ def test_essen21_env_override_port(monkeypatch, tmp_path):
 
 
 # ============================================================
+#  ESSEN-22 / SVC-5 — data_paths: foto_overrides_file
+# ============================================================
+
+def test_data_paths_foto_overrides_file_default(monkeypatch):
+    """SVC-5/ESSEN-22: ohne ENV-Override liefert data_paths() den Repo-Default
+    (DEFAULT_FOTO_OVERRIDES_FILE = essen/foto_overrides.json im Modul-Verzeichnis)."""
+    from essen import config as config_mod
+    env = {k: v for k, v in os.environ.items()
+           if k != config_mod.ENV_FOTO_OVERRIDES_FILE}
+    paths = config_mod.data_paths(env=env)
+    assert "foto_overrides_file" in paths
+    assert paths["foto_overrides_file"] == config_mod.DEFAULT_FOTO_OVERRIDES_FILE
+
+
+def test_data_paths_foto_overrides_file_env_override(monkeypatch, tmp_path):
+    """SVC-5/ESSEN-22: ESSEN_FOTO_OVERRIDES_FILE überschreibt den Default-Pfad."""
+    from essen import config as config_mod
+    override_pfad = str(tmp_path / "mein_foto_overrides.json")
+    env = dict(os.environ)
+    env[config_mod.ENV_FOTO_OVERRIDES_FILE] = override_pfad
+    paths = config_mod.data_paths(env=env)
+    assert paths["foto_overrides_file"] == override_pfad
+
+
+def test_wunsch_view_uebergibt_foto_overrides_pfad(client, monkeypatch, demo_paths):
+    """ESSEN-22/SVC-5: GET /display/essen/wunsch ruft baue_view mit
+    foto_overrides_pfad aus _paths() auf (Render-Aufruf-Wiring, AC2)."""
+    from essen import render as render_mod_local
+
+    captured = {}
+
+    _orig_baue_view = render_mod_local.baue_view
+
+    def _fake_baue_view(kategorien, wuensche, aktiv_tab=None, foto_overrides_pfad=None):
+        captured["foto_overrides_pfad"] = foto_overrides_pfad
+        return _orig_baue_view(kategorien, wuensche,
+                               aktiv_tab=aktiv_tab,
+                               foto_overrides_pfad=foto_overrides_pfad)
+
+    monkeypatch.setattr(main_mod.render_mod, "baue_view", _fake_baue_view)
+
+    resp = client.get("/display/essen/wunsch")
+    assert resp.status_code == 200
+    assert "foto_overrides_pfad" in captured
+    assert captured["foto_overrides_pfad"] == demo_paths["foto_overrides_file"]
+
+
+# ============================================================
 #  ESSEN-2/8/9 — Display-View: Tabbed Single-Canvas
 # ============================================================
 
