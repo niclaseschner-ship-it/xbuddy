@@ -20,6 +20,7 @@ from essen import katalog as katalog_mod  # noqa: E402, I001
 from essen import main as main_mod  # noqa: E402
 from essen import render as render_mod  # noqa: E402
 from essen import store as store_mod  # noqa: E402
+from essen.photo_client import EssenPhotoClient  # noqa: E402
 
 
 # ============================================================
@@ -916,3 +917,237 @@ def test_healthz_gibt_200(client):
     resp = client.get("/healthz")
     assert resp.status_code == 200
     assert resp.get_json()["ok"] is True
+
+
+# ============================================================
+#  ESSEN-19 (T531) — POST mit foto_ref (Photo-Buddy-Medien-ID)
+# ============================================================
+
+# Helfer: setzt den Photo-Buddy-Check-Stub für die Dauer eines Tests.
+# Alle ESSEN-19/19a-Tests verwenden diesen Stub (kein echtes Netz).
+# Test-Naht über transport=-Injection (CLIENT-1): FakeTransport liefert
+# (status, bytes) je nach bekannter ID-Menge.
+
+class _FakeTransport:
+    """In-Process-Stub für EssenPhotoClient._call (CLIENT-1-Signatur)."""
+
+    def __init__(self, known_ids=None):
+        self._known_ids = known_ids  # None = alle IDs gültig
+
+    def __call__(self, method, path, *, body=None, content_type=None):
+        # Pfad-Format: /api/v1/photo/medien/<id>
+        medien_id = path.rsplit("/", 1)[-1]
+        if self._known_ids is None or medien_id in self._known_ids:
+            return (200, b'{"id": "%s"}' % medien_id.encode())
+        return (404, b'{"error": "nicht gefunden"}')
+
+
+def _set_photo_stub(monkeypatch, known_ids=None):
+    """Monkeypatcht EssenPhotoClient im main-Modul für netzfreie Tests.
+
+    known_ids: Menge gültiger Medien-IDs. Alle anderen → 404.
+    None = alle IDs gültig.
+
+    Test-Naht über transport=-Injection: EssenPhotoClient wird durch eine
+    Klasse ersetzt, deren Konstruktor einen FakeTransport nutzt (CLIENT-1).
+    """
+    transport = _FakeTransport(known_ids)
+
+    class _FakeClient(EssenPhotoClient):
+        def __init__(self, base_url, **kwargs):
+            super().__init__(base_url, transport=transport)
+
+    monkeypatch.setattr(main_mod, "EssenPhotoClient", _FakeClient)
+
+
+def test_essen19_foto_ref_legt_gericht_an(client, monkeypatch):
+    """ESSEN-19 (AC1): POST mit foto_ref legt Gericht an; GET zeigt foto_ref ohne bild_ref."""
+    _set_photo_stub(monkeypatch, known_ids={"med-42"})
+
+    resp = client.post(
+        "/api/v1/essen/katalog/gerichte",
+        json={"label": "Spaghetti", "foto_ref": "med-42"},
+    )
+    assert resp.status_code == 201
+    gericht_id = resp.get_json()["id"]
+
+    data = client.get("/api/v1/essen/katalog").get_json()
+    gerichte = data["kategorien"]["gericht"]
+    g = next((x for x in gerichte if x["id"] == gericht_id), None)
+    assert g is not None, "Gericht nicht im Katalog"
+    assert g.get("foto_ref") == "med-42", "foto_ref fehlt im Katalog-Eintrag"
+    assert "bild_ref" not in g, "bild_ref darf bei foto_ref-Gericht nicht im Eintrag stehen"
+
+
+def test_essen19_beide_felder_gibt_400(client, monkeypatch):
+    """ESSEN-19 (AC1): POST mit foto_ref + bild_ref → 400."""
+    _set_photo_stub(monkeypatch)
+
+    resp = client.post(
+        "/api/v1/essen/katalog/gerichte",
+        json={"label": "Lasagne", "bild_ref": "2527", "foto_ref": "med-1"},
+    )
+    assert resp.status_code == 400
+
+
+def test_essen19_kein_bildfeld_gibt_400(client):
+    """ESSEN-19 (AC1): POST ohne bild_ref und ohne foto_ref → 400."""
+    resp = client.post(
+        "/api/v1/essen/katalog/gerichte",
+        json={"label": "Suppe"},
+    )
+    assert resp.status_code == 400
+
+
+def test_essen19_unbekannte_foto_ref_gibt_400(client, monkeypatch):
+    """ESSEN-19 (AC3): POST mit foto_ref, die im Photo-Buddy nicht existiert → 400."""
+    _set_photo_stub(monkeypatch, known_ids={"med-bekannt"})
+
+    resp = client.post(
+        "/api/v1/essen/katalog/gerichte",
+        json={"label": "Pizza", "foto_ref": "med-unbekannt"},
+    )
+    assert resp.status_code == 400
+    # Kein Schreiben erfolgt.
+    data = client.get("/api/v1/essen/katalog").get_json()
+    assert data["kategorien"]["gericht"] == []
+
+
+# ============================================================
+#  ESSEN-19a (T531) — PATCH /api/v1/essen/katalog/gerichte/<id>
+# ============================================================
+
+def test_essen19a_patch_foto_ref_setzt_foto(client, monkeypatch):
+    """ESSEN-19a (AC2): PATCH {foto_ref} → 200, GET zeigt foto_ref, kein bild_ref."""
+    _set_photo_stub(monkeypatch, known_ids={"med-99"})
+
+    # Erst Gericht mit bild_ref anlegen.
+    resp_post = client.post(
+        "/api/v1/essen/katalog/gerichte",
+        json={"label": "Rührei", "bild_ref": "2527"},
+    )
+    assert resp_post.status_code == 201
+    gericht_id = resp_post.get_json()["id"]
+
+    # PATCH: foto_ref setzen.
+    resp_patch = client.patch(
+        "/api/v1/essen/katalog/gerichte/" + gericht_id,
+        json={"foto_ref": "med-99"},
+    )
+    assert resp_patch.status_code == 200
+    body = resp_patch.get_json()
+    assert body.get("foto_ref") == "med-99"
+    assert "bild_ref" not in body, "bild_ref muss durch foto_ref ersetzt worden sein"
+
+    # GET-Spiegel.
+    data = client.get("/api/v1/essen/katalog").get_json()
+    g = next((x for x in data["kategorien"]["gericht"] if x["id"] == gericht_id), None)
+    assert g is not None
+    assert g.get("foto_ref") == "med-99"
+    assert "bild_ref" not in g
+
+
+def test_essen19a_patch_bild_ref_setzt_pikto(client, monkeypatch):
+    """ESSEN-19a (AC2): PATCH {bild_ref} auf Foto-Gericht → 200, bild_ref gesetzt, foto_ref weg."""
+    _set_photo_stub(monkeypatch, known_ids={"med-55"})
+
+    # Gericht mit foto_ref anlegen.
+    resp_post = client.post(
+        "/api/v1/essen/katalog/gerichte",
+        json={"label": "Quiche", "foto_ref": "med-55"},
+    )
+    assert resp_post.status_code == 201
+    gericht_id = resp_post.get_json()["id"]
+
+    # PATCH: zurück zu bild_ref.
+    resp_patch = client.patch(
+        "/api/v1/essen/katalog/gerichte/" + gericht_id,
+        json={"bild_ref": "2527"},
+    )
+    assert resp_patch.status_code == 200
+    body = resp_patch.get_json()
+    assert body.get("bild_ref") == "2527"
+    assert "foto_ref" not in body, "foto_ref muss durch bild_ref ersetzt worden sein"
+
+    # GET-Spiegel.
+    data = client.get("/api/v1/essen/katalog").get_json()
+    g = next((x for x in data["kategorien"]["gericht"] if x["id"] == gericht_id), None)
+    assert g is not None
+    assert g.get("bild_ref") == "2527"
+    assert "foto_ref" not in g
+
+
+def test_essen19a_patch_beide_felder_gibt_400(client):
+    """ESSEN-19a (AC2): PATCH {foto_ref, bild_ref} → 400."""
+    resp = client.patch(
+        "/api/v1/essen/katalog/gerichte/1",
+        json={"foto_ref": "med-1", "bild_ref": "2527"},
+    )
+    assert resp.status_code == 400
+
+
+def test_essen19a_patch_unbekannte_id_gibt_404(client):
+    """ESSEN-19a (AC2): PATCH auf unbekannte Gericht-ID → 404."""
+    resp = client.patch(
+        "/api/v1/essen/katalog/gerichte/gibts-nicht",
+        json={"bild_ref": "2527"},
+    )
+    assert resp.status_code == 404
+
+
+def test_essen19a_patch_unbekannte_foto_ref_gibt_400(client, monkeypatch):
+    """ESSEN-19a (AC3): PATCH mit foto_ref, die im Photo-Buddy nicht existiert → 400."""
+    _set_photo_stub(monkeypatch, known_ids={"med-bekannt"})
+
+    # Gericht anlegen.
+    resp_post = client.post(
+        "/api/v1/essen/katalog/gerichte",
+        json={"label": "Steak", "bild_ref": "2527"},
+    )
+    gericht_id = resp_post.get_json()["id"]
+
+    resp_patch = client.patch(
+        "/api/v1/essen/katalog/gerichte/" + gericht_id,
+        json={"foto_ref": "med-unbekannt"},
+    )
+    assert resp_patch.status_code == 400
+
+    # bild_ref muss unverändert sein.
+    data = client.get("/api/v1/essen/katalog").get_json()
+    g = next((x for x in data["kategorien"]["gericht"] if x["id"] == gericht_id), None)
+    assert g.get("bild_ref") == "2527"
+    assert "foto_ref" not in g
+
+
+def test_essen19a_patch_label_wird_ignoriert(client, monkeypatch):
+    """ESSEN-19a (Watchdog-Befund AC2): PATCH {label, bild_ref} → 200;
+    label bleibt unverändert (Ignorier-Klausel), bild_ref wird gewechselt.
+
+    Spec-Klausel: 'Unbekannte/Label/Zutaten-Felder werden ignoriert
+    (Vorwärtskompatibilität).' — ESSEN-19a {label:'Neu'} → ignoriert.
+    """
+    _set_photo_stub(monkeypatch, known_ids={"foto-X"})
+
+    # Gericht mit label="Original" und bild_ref="X" anlegen.
+    resp_post = client.post(
+        "/api/v1/essen/katalog/gerichte",
+        json={"label": "Original", "bild_ref": "2527"},
+    )
+    assert resp_post.status_code == 201
+    gericht_id = resp_post.get_json()["id"]
+
+    # PATCH: label="Neu" (ignoriert) + bild_ref="Y" (gewechselt).
+    resp_patch = client.patch(
+        "/api/v1/essen/katalog/gerichte/" + gericht_id,
+        json={"label": "Neu", "bild_ref": "9999"},
+    )
+    assert resp_patch.status_code == 200
+
+    # GET: label muss "Original" sein (unverändert), bild_ref muss "9999" sein.
+    data = client.get("/api/v1/essen/katalog").get_json()
+    g = next((x for x in data["kategorien"]["gericht"] if x["id"] == gericht_id), None)
+    assert g is not None, "Gericht nicht im Katalog nach PATCH"
+    assert g.get("label") == "Original", (
+        "label muss unverändert 'Original' sein — ESSEN-19a ignoriert label-Felder"
+    )
+    assert g.get("bild_ref") == "9999", "bild_ref muss auf '9999' gewechselt haben"
