@@ -1,0 +1,20 @@
+{
+  "views": [
+    {
+      "slug": "alben",
+      "pfad": "/display/hoerspiel/alben",
+      "label": "Hörspiel",
+      "synonyme": [
+        "hoerspiel",
+        "hörspiel",
+        "stigi",
+        "folgen",
+        "alben",
+        "mia"
+      ],
+      "zeigt": "Album-Kacheln und Player für Mias Hörspiel-Serie Stigi & Co.",
+      "zielgruppe": "kind",
+      "icons": ["arasaac/5915.png"]
+    }
+  ]
+}
