@@ -33,3 +33,4 @@ __pycache__/
 **/server-key.pem
 **/server-cert.pem
 **/server.csr
+uv.lock
