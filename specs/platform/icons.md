@@ -134,6 +134,16 @@ als JSON — `[{ "id": <arasaac-id>, "url": "/display/_shared/icons/arasaac/<id>
 - Gematcht wird `q` gegen die deutschen Wörter des Cache (Teilwort, case-
   insensitiv). Mehrere Wörter auf dieselbe ID ergeben **einen** Kandidaten
   (ID-dedupliziert).
+- **Mehrwort-Eingabe (Whitespace in `q`):** der Cache-Match läuft pro Wort
+  einzeln (Whitespace-Split, Tokens werden getrimmt, leere Tokens fallen raus).
+  Treffer werden mit **OR-Logik** vereint und nach einem **Score** sortiert:
+  `score(id) = Anzahl der Eingabe-Tokens, deren Teilwort-Match die ID liefert`.
+  Beispiel: `q=Brot schmieren` listet IDs, die sowohl auf „Brot" als auch auf
+  „schmieren" matchen (Score 2), VOR IDs, die nur eines der beiden matchen
+  (Score 1). Bei gleichem Score bleibt die heutige Reihenfolge (Cache-Reihenfolge).
+  Begründung: Eltern tippt 2–3-Wort-Routine-Punkte („Rucksack packen",
+  „Brot schmieren") — Single-Wort-Substring-Match liefert systematisch null
+  Treffer, weil die Kombinationen so im Cache nicht stehen.
 - Zurückgegeben werden **nur** IDs, deren PNG in der icon-root vorliegt (ICONS-5)
   — jeder Kandidat rendert garantiert; IDs ohne lokales PNG fallen raus.
 - `max` begrenzt die Trefferzahl. Default ist `3` (passend zum
@@ -147,6 +157,14 @@ als JSON — `[{ "id": <arasaac-id>, "url": "/display/_shared/icons/arasaac/<id>
 
 Read-only, keine Schreibwirkung, kein externer Call. Ausgeliefert vom Router
 (ROU-31), der die icon-root ohnehin besitzt — **kein** eigener Dienst.
+
+**Konsumenten-Konsequenz (Mehrwort).** Frontend-Konsumenten, die heute einen
+JS-Wort-Split-Workaround tragen (z. B. `seiten/static/routine-anpassen.js`
+Iter-8-Pragma vor dieser Spec-Schärfung), **bauen den Workaround zurück**, sobald
+das Backend liefert — der ehrliche-Ganzwort-Aufruf reicht dann (ROUTINE-21a:
+„Frontend schickt ganzen Eingabe-Text"). Skill-Konsumenten (PAS, GAN) und
+künftige Mini-Apps konsumieren das Mehrwort-Verhalten automatisch, ohne
+eigene Klausel.
 
 ## Folge-Punkt — KIBuddy-Migration
 
