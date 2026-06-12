@@ -1,6 +1,16 @@
 # Routine-Zeiten setzen — Spec     (ID-Präfix: RZS)
 
 > Status: V1 · Refs #343 · entblockt durch RAT-12
+>
+> **Co-existiert mit der Anpassen-Mini-App (2026-06-12, #678).** Die Mini-App
+> (`routine.md` ROUTINE-20) ist die UI-Heimat für die **Mehrfeld-Bearbeitung**
+> der Routine (Punkte + Zeiten in einer Editor-Sitzung). RZS **bleibt aktiv**
+> als **Single-Value-Schnellsatz** für konversationelle Ein-Wert-Trigger („setz
+> die Abfahrtszeit auf 8:15") — Eltern muss nicht erst eine Mini-App öffnen, um
+> einen einzigen Zeitwert zu ändern. Beide Konsumenten schreiben über denselben
+> `PUT /api/v1/routine/config` (ROUTINE-14); der Buddy unterscheidet sie nicht.
+> Anders als RPS (deprecated, weil Mehrfeld-untauglich) ist RZS schlank genug,
+> um zu bleiben.
 
 Damit ein Elternteil im Eltern-Chat die **Zeiten der Morgen-Routine** seines
 Kindes anpassen kann, ohne die Datei `routine.json` zu bearbeiten oder am
