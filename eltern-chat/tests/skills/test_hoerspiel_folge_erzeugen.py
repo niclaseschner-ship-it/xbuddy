@@ -231,13 +231,12 @@ def test_HFE4_propose_happy_path_struktur():
         },
         config_response={"default_voice": "shimmer"},
     )
-    result = propose(
+    result, _fields = propose(
         hoerspiel_client=client,
         is_member_fn=_immer_mitglied,
         from_user_id=7,
         idee="Stigi und der Schneesturm",
     )
-    assert isinstance(result, str)
     assert "Der Schneesturm" in result
     assert "Stigi entdeckt eine verschneite Höhle." in result
     assert "shimmer" in result or "onyx" in result
@@ -256,7 +255,7 @@ def test_HFE4_intro_outro_nicht_in_vorschau():
             "folgen-nr-vorschlag": 1,
         }
     )
-    result = propose(
+    result, _fields = propose(
         hoerspiel_client=client,
         is_member_fn=_immer_mitglied,
         from_user_id=7,
@@ -275,7 +274,7 @@ def test_HFE4_voice_default_aus_config_wenn_kein_hint():
     client = FakeHoerspielClient(
         config_response={"default_voice": "onyx"},
     )
-    result = propose(
+    result, _fields = propose(
         hoerspiel_client=client,
         is_member_fn=_immer_mitglied,
         from_user_id=7,
@@ -289,7 +288,7 @@ def test_HFE4_voice_default_aus_config_wenn_kein_hint():
 def test_HFE4_voice_hint_im_text_nutzt_hint():
     """HFE-4: Voice-Hint im Aufrufer-Text → diese Voice, KEIN GET /config."""
     client = FakeHoerspielClient()
-    result = propose(
+    result, _fields = propose(
         hoerspiel_client=client,
         is_member_fn=_immer_mitglied,
         from_user_id=7,
@@ -303,7 +302,7 @@ def test_HFE4_voice_hint_im_text_nutzt_hint():
 def test_HFE4_voice_shimmer_hint():
     """HFE-4: voice_hint='shimmer' → shimmer in Result, kein Config-Aufruf."""
     client = FakeHoerspielClient()
-    result = propose(
+    result, _fields = propose(
         hoerspiel_client=client,
         is_member_fn=_immer_mitglied,
         from_user_id=7,
