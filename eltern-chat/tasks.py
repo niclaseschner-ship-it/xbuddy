@@ -340,14 +340,6 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
     bleibt unverändert kompatibel zu den CAV-Tests). Weitere Aufgaben werden
     additiv ergänzt (EC-8).
 
-    FAA-/GAA-Pfade waren bis Auftrag #215 Datei-Pfade
-    (`family_registry_path`/`geraete_registry_path`); seit Auftrag #215
-    sprechen die Skills ueber HTTP — die Parameter heissen
-    `familie_origin_url` und `geraete_origin_url` und tragen die jeweilige
-    Origin (z. B. `http://127.0.0.1:5010` und `http://127.0.0.1:5040`).
-    KAV schreibt seit #341 ausschliesslich via HTTP (PLAN-32); `plan_json_path`
-    ist entfernt (#348).
-
     FSE-8 / #393: Setzt der Aufrufer `photo_origin_url`, registriert
     build_catalog zusätzlich die »Foto/Video senden«-Aufgabe (TASK-9,
     Sofort-Schreib-Aufgabe) — wieder hinter dem AND-Guard auf
