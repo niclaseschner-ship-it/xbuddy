@@ -81,6 +81,11 @@ ID-Präfix HFE).
   (Inline-Befehl „wechsele mal auf mistral für hörbücher" patcht den
   Provider via `PATCH /api/v1/hoerspiel/config`, HSP-19). V1 exposed den
   Endpoint, der Skill zieht in V2 nach.
+- **OPEN-HSP-P** — Automatische `pikto-hauptbegriffe`-Befüllung beim
+  Album-Bau per Heuristik oder LLM-Klassifikation (HSP-5a-V1 lässt das
+  Feld leer; Migration über `pikto-mapping.json` ist V1-Pfad). V2.
+- **OPEN-HSP-Q** — Setup-Skript für die Erst-Bestückung des
+  Daten-Bereichs (V1 manuelle Copy-Paste-Migration, HSP-25a). V2.
 
 ---
 
@@ -570,16 +575,63 @@ hoerspiel/data/
     outro_onyx.mp3
     intro.txt                  # Quell-Text für Re-Build
     outro.txt
-    cover-default.png          # Default-Serien-Cover (OPEN-HSP-A)
+    cover-default.jpg          # Default-Serien-Cover, 1:1, mind. 1000×1000
+  pikto-mapping.json           # Migration-Mappings für HSP-5a/HSP-6a
 ```
 
 Die Welt-Bible ist der Musterfall der **Familie-3-Probe**: was sich je
 Familie ändert, ist Daten, nicht Code (E-HSP-5). Eine andere Familie hätte
 eine andere Bible (andere Charaktere, andere Welt) — dieselbe App.
 
+**Datei-Format-Disziplin:**
+- `bible.md` und `folgen-historie.md` sind **freie Markdown-Strings**
+  ohne Schema — Buddy gibt sie 1:1 über `GET /bible` und
+  `GET /folgen-historie` zurück. Der Skill nutzt sie als LLM-Kontext.
+- `pikto-mapping.json` ist eine flache Tabelle für die Migration der
+  Folgen 14–22 (HSP-5a-V1-Befüllung):
+  ```json
+  {
+    "folge-22": {
+      "album": [{"wort": "Trübsee", "arasaac-id": 6022}],
+      "track-3": [{"wort": "Rucksack", "arasaac-id": 2475}],
+      "track-4": [{"wort": "Bahnhof", "arasaac-id": 3099}]
+    }
+  }
+  ```
+  Der Album-Builder konsultiert sie beim Manifest-Schreiben für die
+  jeweilige Folgen-ID und überträgt die Mappings als
+  `pikto-hauptbegriffe` ins Manifest.
+- `cover-default.jpg` ist das einheitliche Serien-Cover (HSP-4b
+  Layout-Robustheit, E-HSP-10) — 1:1-Format ist verbindlich.
+
 **Datei-Inhalte sind Domänendaten, kein Konfig** (BUD-2a, getrennt von
 Runtime-Config HSP-27). Direkter Datei-Zugriff durch andere Apps ist
 verboten (HSP-18, APP-3).
+
+### HSP-25a — Erst-Bestückung der Domänen-Daten (V1, manuell)
+Die Domänen-Daten (`bible.md`, `folgen-historie.md`, `pikto-mapping.json`,
+`shared-assets/cover-default.jpg`, `shared-assets/intro.txt`,
+`shared-assets/outro.txt`) werden in V1 **manuell** beim Einrichten der
+Familien-Instanz ins `data/`-Verzeichnis gelegt — **kein automatisches
+Migration-Skript V1**. Quell-Pfade für die Paula-Instanz:
+
+- `bible.md` ← Inhalt aus
+  `brainstorm/ideas/paula-hoerspiel-app/welt_und_charaktere.md`
+- `folgen-historie.md` ← Inhalt aus
+  `brainstorm/ideas/paula-hoerspiel-app/folgen_historie.md`
+- `pikto-mapping.json` ← per Hand für die historischen Folgen 14–22
+  (HSP-5a-V1)
+- `shared-assets/cover-default.jpg` ← produziertes ChatGPT-Aquarell
+  (Stigi-Stieglitz + Igel + Schmuggli-Amsel), aktuell als
+  `xbuddy-data/photo/medien/foto-01.jpg` (1254×1254 px)
+- `shared-assets/intro.txt`, `shared-assets/outro.txt` ← der Intro-Reim
+  und Outro-Reim aus der Welt-Bible (sie sind in
+  `welt_und_charaktere.md` als wortgleich markiert) — einmaliger
+  Copy-Paste-Schritt durch den Hub-Owner als Quell-Text für die
+  Vorsynthese (HSP-29)
+
+Ein automatisches Migrations-Werkzeug (Setup-Skript) ist V2-Material
+(OPEN-HSP-Q).
 
 ### HSP-26 — Album-Manifest-Format (JSON)
 Jedes Album hat ein Manifest `data/alben/<album-id>/manifest.json`:
@@ -671,7 +723,9 @@ Assets (Intro/Outro je Voice) erzeugt werden. Trigger: ein einmaliger
 Aufruf `POST /api/v1/hoerspiel/shared-assets/rebuild` (HSP-17) oder ein
 Setup-Script, das denselben Endpoint ruft. Kosten: 4 × ~50 Zeichen × Azure
 tts-hd ≈ 1 Cent, einmalig. Die Quell-Texte (`intro.txt`, `outro.txt`)
-liegen im Daten-Bereich.
+liegen im Daten-Bereich — sie werden beim Setup aus der Welt-Bible
+übernommen (HSP-25a), wo Intro- und Outro-Reim wortgleich markiert
+vorliegen.
 
 **Wenn** ein Album-Bau angefordert wird (HSP-15) und die für die gewählte
 Voice nötigen Shared-Assets fehlen, **dann** lehnt der Endpoint mit
@@ -692,11 +746,13 @@ dünner Telegram-Adapter, der `/folgen-vorschlag` und `/alben` ruft, ohne
 eigenen LLM-Zugriff.
 
 ### HSP-31 — Kachel-Icon der Display-View
-Der `views.json`-Eintrag der View `alben` trägt `icons[]` mit ein bis drei
-Pfaden relativ zur Icon-Basis `/display/_shared/icons/` (BUD-4, PANEL-3,
-ICONS-5). V1 nutzt ein passendes ARASAAC-Piktogramm aus dem Instanz-Icon-
-Store; das Kachel-Icon ist **kein** app-eigenes Asset (URL-13) und **kein**
-buddy-eigener ARASAAC-Bezug.
+Der `views.json`-Eintrag der View `alben` trägt `icons[]` mit dem Pfad
+**`arasaac/5915.png`** (Kopfhörer-Piktogramm) relativ zur Icon-Basis
+`/display/_shared/icons/` (BUD-4, PANEL-3, ICONS-5). Das Kachel-Icon ist
+**kein** app-eigenes Asset (URL-13) und **kein** buddy-eigener
+ARASAAC-Bezug. Die ARASAAC-ID 5915 ist im Werft-F3-Lauf 2026-06-12 als
+Wortmarke-Pikto ratifiziert (passt zum Hörspiel-Begriff: Kopfhörer-
+affordance ist für Paula sofort lesbar).
 
 ---
 
