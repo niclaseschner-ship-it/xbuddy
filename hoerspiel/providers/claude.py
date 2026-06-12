@@ -46,3 +46,29 @@ class ClaudeProvider(LLMProvider):
             if getattr(block, "type", None) == "text":
                 text_parts.append(block.text)
         return "\n".join(text_parts).strip()
+
+    def complete_structured(self, system, user, *, tool_name,
+                            tool_description, input_schema):
+        tools = [{
+            "name": tool_name,
+            "description": tool_description,
+            "input_schema": input_schema,
+        }]
+        try:
+            response = self._client.messages.create(
+                model=self.model,
+                max_tokens=MAX_TOKENS,
+                system=system,
+                tools=tools,
+                tool_choice={"type": "tool", "name": tool_name},
+                messages=[{"role": "user", "content": user}],
+            )
+        except self._anthropic.APIError as e:
+            logger.warning("Claude-Anbieter nicht erreichbar: %s", e)
+            raise ProviderError(str(e)) from e
+
+        for block in response.content:
+            if getattr(block, "type", None) == "tool_use" and getattr(block, "name", None) == tool_name:
+                return dict(block.input)
+        raise ProviderError(
+            "Claude-Antwort enthält keinen tool_use-Block für %r" % tool_name)
