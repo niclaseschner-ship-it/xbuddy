@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 
 from model import WRITE, GenerationRequest, Message, ProviderError, TaskResultBlock, TextBlock
 from providers.pricing import estimate_cost
+from tasks import render_form_b
 from telemetry import ProviderCall, TurnTelemetry
 
 SYSTEM_PROMPT = (
@@ -251,7 +252,7 @@ def _call_provider(provider, request, telemetry):
 
 def run_turn(history_messages, user_message, provider, catalog, turn_context,
              max_iterations=MAX_ITERATIONS, before_provider_call=None,
-             chat_action_renewer=None, task_events_store=None):
+             chat_action_renewer=None, tg=None, task_events_store=None):
     """Petrarbeitet eine Anfrage und liefert ein `AgentResult`.
 
     `history_messages` ist der geladene Gesprächskontext (EC-6), `user_message`
@@ -276,6 +277,12 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
     Renewer ist Komfort, kein Gate. Der Thread terminiert garantiert nach dem
     Provider-Return — kein Leak. `chat_action_renewer` ist UNABHÄNGIG von
     `before_provider_call`; beide können gleichzeitig gesetzt sein.
+
+    `tg` (TASK-10c Form (b)): optionaler Telegram-Client für den Form-(b)-
+    Übersetzer (`render_form_b`). Gibt ein Skill ein `{text, presentation}`-
+    Dict zurück, sendet das Framework über diesen Client die Bot-Nachricht
+    und legt eine Quittungs-Zeichenkette als `content` in den TaskResultBlock.
+    Ist `tg=None`, fällt der Übersetzer auf den reinen `text`-Teil zurück.
 
     `task_events_store` (EC-35): optionale `TaskEventsStore`-Instanz. Ist sie
     gesetzt, schreibt `run_turn` am Ende des Turns für jeden eindeutig gerufenen
@@ -449,6 +456,15 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
                 continue
             # EC-35: lesender Skill erfolgreich abgeschlossen.
             _called_skills.add(call.task)
+            # TASK-10c Form (b): dict mit text+presentation → Framework übersetzt.
+            # Der Skill sendet nichts selbst; render_form_b sendet via tg und gibt
+            # eine Quittungs-Zeichenkette zurück, die als content gesetzt wird.
+            if (isinstance(content, dict)
+                    and "text" in content
+                    and "presentation" in content):
+                _chat_id = turn_context.chat_id if turn_context else None
+                content = (render_form_b(content, tg, _chat_id)
+                           if tg is not None else content.get("text", ""))
             result_blocks.append(TaskResultBlock(
                 call_id=call.call_id, content=content, is_error=False))
 
