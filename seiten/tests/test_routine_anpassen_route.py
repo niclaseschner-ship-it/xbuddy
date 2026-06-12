@@ -418,3 +418,101 @@ def test_t728_fix11_belt_and_suspender_settimeout():
     # Der setTimeout-Block muss den _sheetOffen-Guard enthalten
     assert "if (_sheetOffen) platform.hideMainButton" in js_inhalt, \
         "setTimeout-Re-Hide mit _sheetOffen-Guard fehlt — Bug-11 Belt-Sicherung unvollstaendig"
+
+
+# ── T728 Iter-5 — 4 neue Klauseln (Bug-12 + Bug-13-neu + Bug-11-neu) ─────────
+
+def test_t728_iter5_bug12_no_addeventlistener_in_rendere_inhalt():
+    """T728 Bug-12 / AC-Bug12-1: rendereInhalt() darf KEINE addEventListener-Aufrufe mehr enthalten.
+
+    Listener-Leak: jeder rendereInhalt-Aufruf hat fruehner N neue Listener angehaengt.
+    Fix: Delegation sitzt NUR EINMAL im window.onload-Block (IIFE).
+    """
+    js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js_inhalt = f.read()
+
+    # Extrahiere den Inhalt von rendereInhalt (zwischen function-Anfang und naechster Top-Level-Function)
+    start = js_inhalt.find("function rendereInhalt()")
+    assert start != -1, "rendereInhalt() fehlt in routine-anpassen.js"
+    # Suche naechsten Funktionsanfang nach rendereInhalt
+    naechste_fn = js_inhalt.find("\nfunction ", start + 1)
+    rendere_block = js_inhalt[start:naechste_fn] if naechste_fn != -1 else js_inhalt[start:]
+
+    assert "addEventListener" not in rendere_block, (
+        "rendereInhalt() enthaelt noch addEventListener — Bug-12 Listener-Leak nicht behoben. "
+        "Delegation muss im IIFE/window.onload-Block sitzen (einmalig)."
+    )
+
+
+def test_t728_iter5_bug12_delegation_im_iife():
+    """T728 Bug-12 / AC-Bug12-2: Klick-Delegation (.pfeil-hoch, .del-btn, #items-add-btn) sitzt im IIFE-Block.
+
+    Der IIFE-Block (async function main()) bindet die container.addEventListener genau einmal.
+    """
+    js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js_inhalt = f.read()
+
+    # IIFE-Block
+    iife_start = js_inhalt.find("(async function main()")
+    assert iife_start != -1, "IIFE async function main() fehlt in routine-anpassen.js"
+    iife_end = js_inhalt.find("})();", iife_start)
+    assert iife_end != -1, "IIFE-Ende })(); nicht gefunden"
+    iife_block = js_inhalt[iife_start:iife_end + 5]
+
+    assert "addEventListener" in iife_block, (
+        "container.addEventListener fehlt im IIFE-Block — Bug-12 Delegation nicht in main() verschoben"
+    )
+    assert ".pfeil-hoch" in iife_block or "pfeil-hoch" in iife_block, (
+        "Pfeil-Delegation (.pfeil-hoch) fehlt im IIFE-Block — Bug-12 Klick-Delegation unvollstaendig"
+    )
+    assert ".del-btn" in iife_block or "del-btn" in iife_block, (
+        "Loeschbutton-Delegation (.del-btn) fehlt im IIFE-Block — Bug-12 Klick-Delegation unvollstaendig"
+    )
+
+
+def test_t728_iter5_bug13_schloss_fuer_locked_anker():
+    """T728 Bug-13 Iter-5 / AC-Bug13-1: rendereZeitCard() gibt 🔒-Schloss fuer locked-Anker,
+    leeren Platzhalter fuer nicht-locked. KEIN Pfeil in Zeit-Cards in V1.
+    """
+    js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js_inhalt = f.read()
+
+    # Schloss-Symbol fuer locked-Anker vorhanden
+    assert "🔒" in js_inhalt, \
+        "Schloss-Symbol 🔒 fehlt in routine-anpassen.js — Bug-13 locked-Anker ohne Schloss"
+    assert "anker-schloss" in js_inhalt, \
+        "anker-schloss-Klasse fehlt — Bug-13 Schloss-Symbol nicht implementiert"
+
+    # rendereZeitCard darf KEINE Pfeil-Button-Elemente (<button ... pfeil-hoch) mehr rendern
+    start = js_inhalt.find("function rendereZeitCard(")
+    assert start != -1, "rendereZeitCard() fehlt in routine-anpassen.js"
+    naechste_fn = js_inhalt.find("\nfunction ", start + 1)
+    zeit_block = js_inhalt[start:naechste_fn] if naechste_fn != -1 else js_inhalt[start:]
+    # Kein <button>-Element mit pfeil-hoch/pfeil-runter in Zeit-Cards
+    assert "<button" not in zeit_block, (
+        "<button>-Element in rendereZeitCard — Bug-13 Zeit-Cards duerfen keine Pfeil-Buttons enthalten. "
+        "Schloss (locked) oder leerer Platzhalter (nicht-locked)."
+    )
+
+
+def test_t728_iter5_bug11_css_body_has_override():
+    """T728 Bug-11 Iter-5 / AC-Bug11-1: CSS hat body:has(#sheet-overlay:not([hidden]))-Override
+    fuer BrowserPlatform-Fallback-Button.
+
+    Hinweis: BrowserPlatform._btn hat keine ID (platform.js ist read-only).
+    CSS-Selector zielt auf button[style*='zIndex'] (einziger fixed-styled Button den platform.js erzeugt).
+    """
+    css_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.css")
+    with open(css_path, encoding="utf-8") as f:
+        css_inhalt = f.read()
+
+    assert "body:has(#sheet-overlay:not([hidden]))" in css_inhalt, (
+        "body:has(#sheet-overlay:not([hidden])) fehlt in routine-anpassen.css — "
+        "Bug-11 CSS-Haertsicherung nicht implementiert"
+    )
+    assert "display: none !important" in css_inhalt or "display:none !important" in css_inhalt, (
+        "display: none !important fehlt — Bug-11 CSS-Override nicht scharf genug"
+    )
