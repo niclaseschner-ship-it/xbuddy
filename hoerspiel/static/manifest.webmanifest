@@ -1,0 +1,18 @@
+{
+  "name": "Hörspiel",
+  "short_name": "Hörspiel",
+  "description": "Stigi & Co. — Hörspiele für Paula",
+  "start_url": "/display/hoerspiel/alben",
+  "display": "standalone",
+  "background_color": "#FBF2D4",
+  "theme_color": "#FBF2D4",
+  "lang": "de",
+  "icons": [
+    {
+      "src": "/display/_shared/icons/arasaac/5915.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    }
+  ]
+}
