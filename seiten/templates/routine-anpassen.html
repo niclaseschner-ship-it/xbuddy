@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<!-- ROUTINE-20: Eltern-Anpassen-Mini-App-View — Items-fokussiert (Variante A).
+     Statisches Skelett; JS-Hydration rendert die Sektionen und alle Sheets.
+     ROUTINE-23: zweiter Mini-App-Konsument, folgt MAD-1..7+MAD-10
+     (brainstorm-Vorlage, NICHT ratifiziert — Ratifizierung folgt nach Live, ROUTINE-23).
+     Abweichung von MAD-3: kein FAB — Inline-Add je Sektion (ROUTINE-23). -->
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Morgenroutine anpassen · XBuddy</title>
+  <link rel="stylesheet" href="/api/v1/seiten/static/routine-anpassen.css">
+  <!-- platform.js (RAT-16) muss vor routine-anpassen.js geladen sein -->
+  <script src="/api/v1/seiten/static/platform.js"></script>
+  <script src="/api/v1/seiten/static/routine-anpassen.js" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <h1>Morgenroutine anpassen</h1>
+  </header>
+
+  <!-- Haupt-Inhalt — JS rendert Sektionen + Cards -->
+  <main id="routine-inhalt" aria-label="Routine anpassen" aria-live="polite">
+    <p class="lade-hinweis">Routine wird geladen …</p>
+  </main>
+
+  <!-- Bottom-Sheet-Overlay (ROUTINE-21) — JS befüllt -->
+  <div id="sheet-overlay" class="sheet-overlay" hidden aria-modal="true" role="dialog">
+    <div id="sheet" class="sheet">
+      <div class="sheet-handle"></div>
+      <div id="sheet-inhalt" class="sheet-inhalt"></div>
+    </div>
+  </div>
+
+  <!-- Toast-Hinweis für Transient-Meldungen -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
