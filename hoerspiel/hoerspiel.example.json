@@ -1,0 +1,5 @@
+{
+  "_comment": "HSP-27 — Hörspiel-Buddy-Daten-Konfiguration einer Instanz. Kopiere als hoerspiel.json (per .gitignore aus dem Repo ausgeschlossen, je Instanz separat gepflegt). 'default_voice' steuert den Voice-Default im Skill-Vorschlag (HFE-4); zulässig sind 'shimmer' und 'onyx' (HSP-13). 'serien_name' ist familien-spezifisch und in V1 nur für die UI/Logs relevant.",
+  "default_voice": "shimmer",
+  "serien_name": "Stigi & Co."
+}
