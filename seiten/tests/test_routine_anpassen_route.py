@@ -498,6 +498,109 @@ def test_t728_iter5_bug13_schloss_fuer_locked_anker():
     )
 
 
+# ── T728 Iter-6 — 4 neue Klauseln (Bug-14 + Bug-15 + Bug-16) ─────────────────
+
+def test_t728_iter6_bug14_kein_focus_steal_bei_null_treffer():
+    """T728 Bug-14 / AC-Bug14-1: Im Null-Treffer-Zweig steht KEIN .focus()-Aufruf auf manueller Suchleiste.
+
+    ICONS-7 kann heute kein Mehrwort (Folge-Ticket #741) -> Null-Treffer bei
+    jedem Leerzeichen. Focus-Steal war Spec-konform (ROUTINE-21c) aber UX-Killer.
+    T728 Live-Befund: Focus-Wechsel weggelassen, Spec ROUTINE-21c sollte nachgezogen
+    werden (Folge-Ticket).
+    """
+    js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js_inhalt = f.read()
+
+    # Null-Treffer-Block finden (zwischen "treffer.length === 0" und naechstem "return;")
+    null_start = js_inhalt.find("treffer.length === 0")
+    assert null_start != -1, "Null-Treffer-Block fehlt in routine-anpassen.js"
+    null_end = js_inhalt.find("return;", null_start)
+    assert null_end != -1, "return; nach Null-Treffer-Block fehlt"
+    null_block = js_inhalt[null_start:null_end + 7]
+
+    assert "pickerSuche.focus" not in null_block, (
+        "pickerSuche.focus()-Aufruf im Null-Treffer-Block — Bug-14 Focus-Steal nicht entfernt. "
+        "Cursor soll im Label-Input bleiben."
+    )
+    assert ".focus()" not in null_block, (
+        ".focus()-Aufruf im Null-Treffer-Block — Bug-14 Focus-Steal nicht entfernt. "
+        "Cursor soll im Label-Input bleiben."
+    )
+
+
+def test_t728_iter6_bug14_klartext_hinweis_vorhanden():
+    """T728 Bug-14 / AC-Bug14-2: Klartext-Hinweis 'Nichts gefunden' bleibt im Null-Treffer-Zweig sichtbar."""
+    js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js_inhalt = f.read()
+    assert "Nichts gefunden" in js_inhalt, (
+        "'Nichts gefunden' fehlt in routine-anpassen.js — "
+        "Bug-14 Null-Treffer-Klartext nicht implementiert"
+    )
+
+
+def test_t728_iter6_bug15_sheet_handle_display_none():
+    """T728 Bug-15 / AC-Bug15-1: CSS hat .sheet-handle { display: none; } — Drag-Handle versteckt."""
+    css_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.css")
+    with open(css_path, encoding="utf-8") as f:
+        css_inhalt = f.read()
+
+    handle_pos = css_inhalt.find(".sheet-handle")
+    assert handle_pos != -1, ".sheet-handle fehlt in routine-anpassen.css"
+    # Nächsten Block nach .sheet-handle suchen
+    block_end = css_inhalt.find("}", handle_pos)
+    handle_block = css_inhalt[handle_pos:block_end + 1]
+    assert "display: none" in handle_block or "display:none" in handle_block, (
+        ".sheet-handle hat kein display:none — Bug-15 Drag-Handle nicht versteckt"
+    )
+
+
+def test_t728_iter6_bug15_sheet_vollhoehe():
+    """T728 Bug-15 / AC-Bug15-2: .sheet hat max-height:100vh und min-height:90vh fuer Vollhöhe."""
+    css_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.css")
+    with open(css_path, encoding="utf-8") as f:
+        css_inhalt = f.read()
+
+    sheet_pos = css_inhalt.find(".sheet {")
+    assert sheet_pos != -1, ".sheet { fehlt in routine-anpassen.css"
+    block_end = css_inhalt.find("}", sheet_pos)
+    sheet_block = css_inhalt[sheet_pos:block_end + 1]
+    assert "100vh" in sheet_block, (
+        "100vh fehlt in .sheet — Bug-15 Sheet hat keine Vollhöhe"
+    )
+    assert "90vh" in sheet_block, (
+        "90vh fehlt in .sheet — Bug-15 Sheet hat kein min-height:90vh"
+    )
+
+
+def test_t728_iter6_bug16_safe_area_inset_top():
+    """T728 Bug-16 / AC-Bug16-1: CSS nutzt env(safe-area-inset-top) fuer Sheet-Padding — iPhone-Notch-safe."""
+    css_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.css")
+    with open(css_path, encoding="utf-8") as f:
+        css_inhalt = f.read()
+    assert "env(safe-area-inset-top" in css_inhalt, (
+        "env(safe-area-inset-top) fehlt in routine-anpassen.css — "
+        "Bug-16 iPhone-Notch-Padding nicht implementiert"
+    )
+
+
+def test_t728_iter6_bug16_galerie_overflow_auto():
+    """T728 Bug-16 / AC-Bug16-2: .picker-galerie hat overflow-y:auto — Galerie scrollt eigenstaendig."""
+    css_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.css")
+    with open(css_path, encoding="utf-8") as f:
+        css_inhalt = f.read()
+
+    # Suche den direkten Selektor ".picker-galerie {" (nicht den :has()-Kontext-Selektor)
+    galerie_pos = css_inhalt.find(".picker-galerie {")
+    assert galerie_pos != -1, ".picker-galerie { fehlt in routine-anpassen.css"
+    block_end = css_inhalt.find("}", galerie_pos)
+    galerie_block = css_inhalt[galerie_pos:block_end + 1]
+    assert "overflow-y: auto" in galerie_block or "overflow-y:auto" in galerie_block, (
+        "overflow-y:auto fehlt in .picker-galerie — Bug-16 Galerie scrollt nicht eigenstaendig"
+    )
+
+
 def test_t728_iter5_bug11_css_body_has_override():
     """T728 Bug-11 Iter-5 / AC-Bug11-1: CSS hat body:has(#sheet-overlay:not([hidden]))-Override
     fuer BrowserPlatform-Fallback-Button.
