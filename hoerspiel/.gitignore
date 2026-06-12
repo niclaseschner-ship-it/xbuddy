@@ -1,0 +1,10 @@
+# HSP-25/HSP-27 — Per-Instanz-Dateien des Hörspiel-Buddys, je Instanz separat
+# gepflegt, niemals im Repo. Formate sind in den committeten *.example.json
+# dokumentiert.
+#
+# Runtime-Konfig (Bind, Log, Provider, Modell). Format: config.example.json
+config.json
+# Daten-Konfig (Default-Voice, Serien-Name). Format: hoerspiel.example.json
+hoerspiel.json
+# Domänen-Daten (HSP-25, BUD-2a): Bible, Historie, Alben, Shared-Assets
+data/
