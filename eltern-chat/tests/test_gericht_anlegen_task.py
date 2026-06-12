@@ -66,8 +66,9 @@ class FakeEssenClient:
         self._post_response = post_response or {"id": "1"}
         self._post_error = post_error
 
-    def post_gericht(self, name, icon_id):
-        self.post_calls.append({"name": name, "icon_id": icon_id})
+    def post_gericht(self, name, icon_id=None, foto_ref=None):
+        self.post_calls.append({"name": name, "icon_id": icon_id,
+                                "foto_ref": foto_ref})
         if self._post_error is not None:
             raise self._post_error
         return dict(self._post_response)
@@ -95,12 +96,32 @@ def _kein_mitglied(uid):
     return False
 
 
-def _make_task(essen_client=None, icon_client=None, is_member_fn=None,
-               tg=None, icon_origin_url="http://icons.test"):
+class FakePhotoClient:
+    """PhotoClient-Doppelung für GAN-Tests (ESSEN-22 Pfad 1)."""
+
+    def __init__(self, upload_response=None, upload_error=None):
+        self.upload_calls = []
+        self._upload_response = upload_response or {"id": "foto-42", "typ": "image"}
+        self._upload_error = upload_error
+
+    def upload_medium(self, medium_bytes, filename, content_type):
+        self.upload_calls.append({
+            "medium_bytes": medium_bytes,
+            "filename": filename,
+            "content_type": content_type,
+        })
+        if self._upload_error is not None:
+            raise self._upload_error
+        return dict(self._upload_response)
+
+
+def _make_task(essen_client=None, icon_client=None, photo_client=None,
+               is_member_fn=None, tg=None, icon_origin_url="http://icons.test"):
     return GerichtAnlegenTask(
         tg=tg or FakeTelegramMitAlbum(),
         essen_client=essen_client or FakeEssenClient(),
         icon_client=icon_client or FakeIconClient(),
+        photo_client=photo_client or FakePhotoClient(),
         family_group_chat_id_getter=lambda: 200,
         is_member_fn=is_member_fn or _immer_mitglied,
         icon_origin_url=icon_origin_url,
@@ -199,7 +220,7 @@ def test_VS_execute_ruft_post():
 
     quittung = task.execute(args, ctx)
 
-    assert ec.post_calls == [{"name": "Lasagne", "icon_id": "9999"}]
+    assert ec.post_calls == [{"name": "Lasagne", "icon_id": "9999", "foto_ref": None}]
     # Quittung enthält die ID (D6-Muster)
     assert "42" in quittung
 
@@ -464,9 +485,112 @@ def test_AC3_konstruktor_ohne_icon_origin_url_ist_leer():
         tg=FakeTelegramMitAlbum(),
         essen_client=FakeEssenClient(),
         icon_client=FakeIconClient(),
+        photo_client=FakePhotoClient(),
         family_group_chat_id_getter=lambda: 200,
     )
     assert task._icon_origin_url == ""
+
+
+def test_AC_foto_konstruktor_speichert_photo_client():
+    """ESSEN-22 Pfad 1: Konstruktor speichert photo_client als _photo_client."""
+    pc = FakePhotoClient()
+    task = _make_task(photo_client=pc)
+    assert task._photo_client is pc
+
+
+# ============================================================
+#  ESSEN-22 Pfad 1: foto_hinzufuegen Task-Tests
+# ============================================================
+
+class FakeTelegramMitDownload(FakeTelegramMitAlbum):
+    """FakeTelegram mit download_file für foto_hinzufuegen-Tests."""
+
+    def __init__(self, file_bytes=None, download_error=None, **kw):
+        super().__init__(**kw)
+        self._file_bytes = file_bytes or b"\xff\xd8\xff\x00" * 10
+        self._download_error = download_error
+        self.download_calls = []
+
+    def download_file(self, file_id):
+        self.download_calls.append(file_id)
+        if self._download_error is not None:
+            raise self._download_error
+        return self._file_bytes
+
+
+def _ctx_foto(chat_id=42, file_id="tg-file-123", medium_typ="photo"):
+    ctx = TurnContext(chat_id=chat_id, from_user_id=7, private_chat_id=42)
+    ctx.media_telegram_file_id = file_id
+    ctx.medium_typ = medium_typ
+    return ctx
+
+
+def test_FOTO_happy_path_execute_angelegt():
+    """ESSEN-22 Pfad 1: execute(foto_hinzufuegen) → Upload + POST → Quittung mit ID."""
+    foto_bytes = b"\xff\xd8\xff\x00" * 5
+    tg = FakeTelegramMitDownload(file_bytes=foto_bytes)
+    pc = FakePhotoClient(upload_response={"id": "foto-7"})
+    ec = FakeEssenClient(post_response={"id": "42"})
+    task = _make_task(tg=tg, photo_client=pc, essen_client=ec)
+
+    quittung = task.execute({"aktion": "foto_hinzufuegen", "label": "Lasagne"},
+                            _ctx_foto(file_id="tg-123"))
+
+    assert "42" in quittung
+    assert len(tg.download_calls) == 1
+    assert tg.download_calls[0] == "tg-123"
+    assert len(pc.upload_calls) == 1
+    assert pc.upload_calls[0]["medium_bytes"] == foto_bytes
+    assert len(ec.post_calls) == 1
+    assert ec.post_calls[0]["foto_ref"] == "foto-7"
+
+
+def test_FOTO_kein_file_id_nichts_zu_tun():
+    """ESSEN-22 Pfad 1: kein file_id im TurnContext → Quittung kein Label/Foto."""
+    tg = FakeTelegramMitDownload()
+    task = _make_task(tg=tg)
+
+    ctx = TurnContext(chat_id=42, from_user_id=7)
+    # media_telegram_file_id nicht gesetzt
+    quittung = task.execute({"aktion": "foto_hinzufuegen", "label": "Lasagne"}, ctx)
+
+    assert tg.download_calls == []
+    # Quittung fragt nach Inhalt
+    assert quittung
+
+
+def test_FOTO_download_fehler_nicht_erreichbar():
+    """ESSEN-22 Pfad 1: Download-Fehler → NICHT_ERREICHBAR-Quittung."""
+    tg = FakeTelegramMitDownload(download_error=OSError("Timeout"))
+    task = _make_task(tg=tg)
+
+    quittung = task.execute({"aktion": "foto_hinzufuegen", "label": "Lasagne"},
+                            _ctx_foto())
+
+    assert "nicht erreichbar" in quittung.lower()
+
+
+def test_FOTO_propose_nennt_label():
+    """ESSEN-22 Pfad 1: propose(foto_hinzufuegen) nennt Label."""
+    task = _make_task()
+    proposal = task.propose({"aktion": "foto_hinzufuegen", "label": "Lasagne"},
+                            _ctx())
+    assert isinstance(proposal, Proposal)
+    assert "Lasagne" in proposal.summary
+
+
+def test_FOTO_nicht_mitglied_kein_upload():
+    """GAN-2 / ESSEN-22 Pfad 1: Nicht-Mitglied → kein Upload, Ablehnung."""
+    foto_bytes = b"\xff\xd8" * 5
+    tg = FakeTelegramMitDownload(file_bytes=foto_bytes)
+    pc = FakePhotoClient()
+    task = _make_task(tg=tg, photo_client=pc, is_member_fn=_kein_mitglied)
+
+    quittung = task.execute({"aktion": "foto_hinzufuegen", "label": "Lasagne"},
+                            _ctx_foto())
+
+    assert pc.upload_calls == []
+    assert "Familien-Gruppe" in quittung or "Mitglied" in quittung
 
 
 def _ca_pem():
@@ -485,6 +609,7 @@ def test_AC3_build_catalog_reicht_icon_origin_url_durch():
             ca_pem_path=ca,
             essen_origin_url="http://127.0.0.1:5052",
             icon_origin_url="http://127.0.0.1:5000",
+            photo_origin_url="http://127.0.0.1:5070",
             family_group_chat_id_getter=lambda: 200,
         )
         task = catalog.get("gericht_anlegen")
@@ -495,14 +620,36 @@ def test_AC3_build_catalog_reicht_icon_origin_url_durch():
             os.unlink(ca)
 
 
+def test_AC_build_catalog_injiziert_photo_client():
+    """ESSEN-22 Pfad 1: tasks.build_catalog injiziert photo_client in GerichtAnlegenTask."""
+    from skills.photo_client import PhotoClient
+    ca = _ca_pem()
+    try:
+        catalog = build_catalog(
+            tg=FakeTelegramMitAlbum(),
+            ca_pem_path=ca,
+            essen_origin_url="http://127.0.0.1:5052",
+            icon_origin_url="http://127.0.0.1:5000",
+            photo_origin_url="http://127.0.0.1:5070",
+            family_group_chat_id_getter=lambda: 200,
+        )
+        task = catalog.get("gericht_anlegen")
+        assert task is not None
+        assert isinstance(task._photo_client, PhotoClient)
+        assert task._photo_client._origin == "http://127.0.0.1:5070"
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(ca)
+
+
 # ============================================================
 #  Catalog-Registrierung (AND-Guard, GAN-7)
 # ============================================================
 
-def test_GAN7_guard_alle_drei_gesetzt_registriert():
-    """GAN-7 / AC5: Task erscheint im Katalog genau dann, wenn
-    essen_origin_url UND icon_origin_url UND family_group_chat_id_getter
-    gesetzt sind."""
+def test_GAN7_guard_alle_vier_gesetzt_registriert():
+    """GAN-7 / AC5 (ESSEN-22 Pfad 1): Task erscheint im Katalog genau dann, wenn
+    essen_origin_url UND icon_origin_url UND photo_origin_url UND
+    family_group_chat_id_getter ALLE gesetzt sind."""
     ca = _ca_pem()
     try:
         catalog = build_catalog(
@@ -510,6 +657,7 @@ def test_GAN7_guard_alle_drei_gesetzt_registriert():
             ca_pem_path=ca,
             essen_origin_url="http://127.0.0.1:5052",
             icon_origin_url="http://127.0.0.1:5000",
+            photo_origin_url="http://127.0.0.1:5070",
             family_group_chat_id_getter=lambda: 200,
         )
         task = catalog.get("gericht_anlegen")
@@ -528,6 +676,7 @@ def test_GAN7_guard_ohne_essen_origin_nicht_registriert():
             tg=FakeTelegram(),
             ca_pem_path=ca,
             icon_origin_url="http://127.0.0.1:5000",
+            photo_origin_url="http://127.0.0.1:5070",
             family_group_chat_id_getter=lambda: 200,
         )
         assert catalog.get("gericht_anlegen") is None
@@ -545,6 +694,24 @@ def test_GAN7_guard_ohne_icon_origin_nicht_registriert():
             tg=FakeTelegram(),
             ca_pem_path=ca,
             essen_origin_url="http://127.0.0.1:5052",
+            photo_origin_url="http://127.0.0.1:5070",
+            family_group_chat_id_getter=lambda: 200,
+        )
+        assert catalog.get("gericht_anlegen") is None
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(ca)
+
+
+def test_GAN7_guard_ohne_photo_origin_nicht_registriert():
+    """GAN-7 Guard (ESSEN-22 Pfad 1): ohne photo_origin_url → keine Registrierung."""
+    ca = _ca_pem()
+    try:
+        catalog = build_catalog(
+            tg=FakeTelegram(),
+            ca_pem_path=ca,
+            essen_origin_url="http://127.0.0.1:5052",
+            icon_origin_url="http://127.0.0.1:5000",
             family_group_chat_id_getter=lambda: 200,
         )
         assert catalog.get("gericht_anlegen") is None
@@ -562,6 +729,7 @@ def test_GAN7_guard_ohne_fgcid_nicht_registriert():
             ca_pem_path=ca,
             essen_origin_url="http://127.0.0.1:5052",
             icon_origin_url="http://127.0.0.1:5000",
+            photo_origin_url="http://127.0.0.1:5070",
         )
         assert catalog.get("gericht_anlegen") is None
     finally:
@@ -635,6 +803,7 @@ def test_VS_entry_path_catalog_to_post_via_transport_stub():
             ca_pem_path=ca,
             essen_origin_url="http://example",
             icon_origin_url="http://example",
+            photo_origin_url="http://example",
             family_group_chat_id_getter=lambda: 200,
         )
         task = catalog.get("gericht_anlegen")
