@@ -355,8 +355,11 @@ def test_HFE5_erfolgreicher_build_sendet_erfolgs_bubble():
         voice="shimmer",
         idee="Eine Idee",
     )
-    assert len(tg.sent) == 1
-    msg = tg.sent[0]["text"]
+    # HFE-5: Start-Bubble (vor langem Album-Bau) + Erfolgs-Bubble (danach) = 2 sends.
+    assert len(tg.sent) == 2
+    start_msg = tg.sent[0]["text"].lower()
+    assert "schreibe" in start_msg or "vertonen" in start_msg or "minuten" in start_msg
+    msg = tg.sent[1]["text"]
     assert "alb-77" in msg or "✅" in msg
     assert "app.example.com" in msg or "/display/hoerspiel" in msg
 
@@ -377,8 +380,9 @@ def test_HFE5_http_412_shared_asset_hinweis():
         idee="Idee",
     )
     assert len(client.album_calls) == 1, "Nur ein Versuch, kein Retry"
-    assert len(tg.sent) == 1
-    msg = tg.sent[0]["text"].lower()
+    # Start-Bubble + Fehler-Bubble = 2 sends.
+    assert len(tg.sent) == 2
+    msg = tg.sent[1]["text"].lower()
     assert "intro" in msg or "outro" in msg or "vorsynthetis" in msg or "asset" in msg
 
 
@@ -398,8 +402,9 @@ def test_HFE5_http_503_fehler_bubble():
         idee="Idee",
     )
     assert len(client.album_calls) == 1
-    assert len(tg.sent) == 1
-    msg = tg.sent[0]["text"].lower()
+    # Start-Bubble + Fehler-Bubble = 2 sends.
+    assert len(tg.sent) == 2
+    msg = tg.sent[1]["text"].lower()
     assert "erreichbar" in msg or "schiefgegangen" in msg or "engine" in msg
 
 
