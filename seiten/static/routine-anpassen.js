@@ -75,6 +75,10 @@ let _editConfig = {};             // Kopie von _serverConfig, mutierbarer Stand
 let _pickerSelectedId = null;     // aktuell gewählte ARASAAC-ID im Bottom-Sheet
 let _debounceTimer = null;        // für 250ms-Debounce (ROUTINE-21a)
 
+// T728 Bug-9: Sheet-Offen-Flag — _aktualisiereMainButton() macht nichts wenn Sheet offen ist,
+// damit platform.hideMainButton() nicht durch indirekte setMainButton-Aufrufe überschrieben wird.
+let _sheetOffen = false;
+
 // ── Einstiegspunkt ────────────────────────────────────────────────────────────
 
 (async function main() {
@@ -212,12 +216,20 @@ function rendereInhalt() {
   fragmente.push(
     '<div class="sektion-header">' +
       '<span class="sektion-titel">Routine-Punkte</span>' +
-      '<span class="sektion-subtitel">Halten &amp; ziehen zum Sortieren</span>' +
+      '<span class="sektion-subtitel">▲ ▼ zum Sortieren</span>' +
     '</div>'
   );
 
-  for (const item of _editItems) {
-    fragmente.push(rendereItemCard(item));
+  // T728 Bug-10: Pfeil-Buttons statt Drag-Handle — Telegram-Touch-konflikt-frei.
+  // Einmalig-Items sind nicht sortierbar und bekommen keine Pfeile.
+  const defaultItems = _editItems.filter(i => i.quelle === "default");
+  for (let i = 0; i < _editItems.length; i++) {
+    const item = _editItems[i];
+    const istDefault = item.quelle === "default";
+    const defaultIndex = istDefault ? defaultItems.indexOf(item) : -1;
+    const istErste = istDefault && defaultIndex === 0;
+    const istLetzte = istDefault && defaultIndex === defaultItems.length - 1;
+    fragmente.push(rendereItemCard(item, istErste, istLetzte));
   }
 
   // Inline-Add am Ende der Items-Sektion (ROUTINE-23: kein FAB)
@@ -253,8 +265,14 @@ function rendereInhalt() {
   document.getElementById("items-add-btn")
     .addEventListener("click", () => oeffneHinzufuegenSheet());
 
-  // Drag-and-Drop für default-Items vorbereiten
-  _bindeDragAndDrop();
+  // T728 Bug-10: Pfeil-Buttons für Reihenfolge (Drag-and-Drop entfernt — Telegram-Touch-Konflikt).
+  container.addEventListener("click", (e) => {
+    const btn = e.target.closest(".pfeil-hoch[data-pfeil-id], .pfeil-runter[data-pfeil-id]");
+    if (!btn) return;
+    const id = btn.dataset.pfeilId;
+    const richtung = btn.classList.contains("pfeil-hoch") ? "hoch" : "runter";
+    _bewegeItemPerPfeil(id, richtung);
+  });
 
   // Zeit-Inputs: oninput → Dirty-State
   for (const anker of ZEIT_ANKER) {
@@ -278,15 +296,35 @@ function rendereInhalt() {
 
 /**
  * Rendert eine Item-Card (MAD-2-Pattern, ROUTINE-20).
- * Drag-Handle links, Bild, Label Mitte, 🌅-Marker für einmalig, Lösch-Knopf.
+ * T728 Bug-10: Drag-Handle ersetzt durch ▲/▼ Pfeil-Buttons (Telegram-Touch-konflikt-frei).
+ * Bild, Label Mitte, 🌅-Marker für einmalig, Lösch-Knopf.
+ *
+ * @param {object} item        - Item-Objekt {id, label, piktogramm, quelle}
+ * @param {boolean} istErste   - true wenn erste default-Card (▲ disabled)
+ * @param {boolean} istLetzte  - true wenn letzte default-Card (▼ disabled)
  */
-function rendereItemCard(item) {
+function rendereItemCard(item, istErste, istLetzte) {
   const istEinmalig = item.quelle === "einmalig";
   const bildSrc = "/display/_shared/icons/arasaac/" + encodeURIComponent(item.piktogramm) + ".png";
 
-  const dragHtml = istEinmalig
-    ? '<div class="drag-handle schloss" title="Einmalig-Punkte sind nicht sortierbar" aria-hidden="true">≡</div>'
-    : '<div class="drag-handle" data-drag-id="' + esc(item.id) + '" title="Halten &amp; ziehen zum Sortieren" aria-hidden="true">≡</div>';
+  // T728 Bug-10: Pfeil-Buttons statt Drag-Handle.
+  // Einmalig-Items sind nicht sortierbar → kein Pfeil, nur Platzhalter.
+  let pfeilHtml;
+  if (istEinmalig) {
+    pfeilHtml = '<div class="pfeil-gruppe pfeil-leer" aria-hidden="true"></div>';
+  } else {
+    const hochDisabled = istErste ? " disabled" : "";
+    const runterDisabled = istLetzte ? " disabled" : "";
+    pfeilHtml =
+      '<div class="pfeil-gruppe">' +
+        '<button type="button" class="pfeil-hoch" data-pfeil-id="' + esc(item.id) + '"' +
+          hochDisabled +
+          ' aria-label="' + esc(item.label) + ' nach oben">▲</button>' +
+        '<button type="button" class="pfeil-runter" data-pfeil-id="' + esc(item.id) + '"' +
+          runterDisabled +
+          ' aria-label="' + esc(item.label) + ' nach unten">▼</button>' +
+      '</div>';
+  }
 
   const markerHtml = istEinmalig
     ? '<span class="item-marker" aria-label="Einmalig (nur heute)" title="Einmalig (nur heute)">🌅</span>'
@@ -299,7 +337,7 @@ function rendereItemCard(item) {
     '<div class="item-card' + (istEinmalig ? " einmalig" : "") + '" ' +
          'data-item-id="' + esc(item.id) + '" ' +
          'data-quelle="' + esc(item.quelle) + '">' +
-      dragHtml +
+      pfeilHtml +
       '<img class="item-bild" src="' + esc(bildSrc) + '" alt="" loading="lazy">' +
       '<span class="item-label">' + esc(item.label) + '</span>' +
       markerHtml +
@@ -382,101 +420,31 @@ function _parseZeitInput(inputEl, anker) {
   return isNaN(n) || n < 0 ? 10 : n;
 }
 
-// ── Drag-and-Drop (default-Items) ─────────────────────────────────────────────
+// ── Pfeil-Sortierung (default-Items) ─────────────────────────────────────────
 
 /**
- * T728 Bug-2: Pointer-Events Drag-and-Drop für default-Items.
- * Nutzt setPointerCapture + pointermove + elementFromPoint statt pointerover,
- * damit Drag in Telegram-Mini-App (wo touch events durch scroll blockiert werden)
- * zuverlässig funktioniert. touch-action: none auf dem Handle (CSS).
- * Nur default-Items sind bewegbar (einmalig rutscht ans Ende, ROUTINE-20).
+ * T728 Bug-10: Tauscht ein default-Item per ▲/▼ Pfeil-Button.
+ * Einmalig-Items am Ende bleiben unberührt (keine Pfeile, nie sortierbar).
+ *
+ * @param {string} id        - ID des zu verschiebenden Items
+ * @param {string} richtung  - "hoch" oder "runter"
  */
-function _bindeDragAndDrop() {
-  const container = document.getElementById("routine-inhalt");
-
-  container.querySelectorAll(".drag-handle[data-drag-id]").forEach(handle => {
-    const card = handle.closest(".item-card");
-    if (!card) return;
-
-    let draggingId = null;
-    let dragOverId = null;
-
-    handle.addEventListener("pointerdown", (e) => {
-      draggingId = card.dataset.itemId;
-      dragOverId = null;
-      card.style.opacity = "0.5";
-      // setPointerCapture: handle bekommt alle pointer-Events auch wenn Finger wandert
-      handle.setPointerCapture(e.pointerId);
-      e.preventDefault();
-    });
-
-    handle.addEventListener("pointermove", (e) => {
-      if (!draggingId) return;
-      // Pointer-Capture bedeutet, handle bekommt die Events — wir müssen elementFromPoint nutzen
-      // um zu sehen, über welcher Card wir uns befinden
-      const el = document.elementFromPoint(e.clientX, e.clientY);
-      if (!el) return;
-      const overCard = el.closest(".item-card[data-item-id]");
-      if (!overCard) return;
-      const overId = overCard.dataset.itemId;
-      const overItem = _editItems.find(i => i.id === overId);
-      if (!overItem || overItem.quelle !== "default") return;
-      if (overId !== draggingId) {
-        dragOverId = overId;
-        // Visuelles Feedback: alle Cards zurücksetzen, dann Target markieren
-        container.querySelectorAll(".item-card[data-item-id]").forEach(c => {
-          c.style.outline = "";
-        });
-        overCard.style.outline = "2px solid var(--accent)";
-      }
-    });
-
-    handle.addEventListener("pointerup", () => {
-      if (!draggingId) return;
-      if (dragOverId && dragOverId !== draggingId) {
-        _bewegeItem(draggingId, dragOverId);
-      } else {
-        // Kein gültiges Drop-Ziel: nur Opacity zurücksetzen
-        card.style.opacity = "";
-        container.querySelectorAll(".item-card[data-item-id]").forEach(c => {
-          c.style.outline = "";
-        });
-      }
-      draggingId = null;
-      dragOverId = null;
-    });
-
-    handle.addEventListener("pointercancel", () => {
-      card.style.opacity = "";
-      container.querySelectorAll(".item-card[data-item-id]").forEach(c => {
-        c.style.outline = "";
-      });
-      draggingId = null;
-      dragOverId = null;
-    });
-  });
-}
-
-/**
- * Verschiebt draggingId vor/nach targetId in der default-Liste.
- */
-function _bewegeItem(draggingId, targetId) {
-  const draggingItem = _editItems.find(i => i.id === draggingId);
-  if (!draggingItem || draggingItem.quelle !== "default") return;
-
-  const targetItem = _editItems.find(i => i.id === targetId);
-  if (!targetItem || targetItem.quelle !== "default") return;
-
+function _bewegeItemPerPfeil(id, richtung) {
   const defaultItems = _editItems.filter(i => i.quelle === "default");
   const restItems    = _editItems.filter(i => i.quelle !== "default");
 
-  const fromIdx = defaultItems.findIndex(i => i.id === draggingId);
-  const toIdx   = defaultItems.findIndex(i => i.id === targetId);
+  const idx = defaultItems.findIndex(i => i.id === id);
+  if (idx === -1) return;
 
-  if (fromIdx === -1 || toIdx === -1) return;
-
-  defaultItems.splice(fromIdx, 1);
-  defaultItems.splice(toIdx, 0, draggingItem);
+  if (richtung === "hoch") {
+    if (idx === 0) return; // bereits oben
+    // Tausch mit Vorgänger
+    [defaultItems[idx - 1], defaultItems[idx]] = [defaultItems[idx], defaultItems[idx - 1]];
+  } else {
+    if (idx === defaultItems.length - 1) return; // bereits unten
+    // Tausch mit Nachfolger
+    [defaultItems[idx], defaultItems[idx + 1]] = [defaultItems[idx + 1], defaultItems[idx]];
+  }
 
   _editItems = [...defaultItems, ...restItems];
   rendereInhalt();
@@ -488,8 +456,11 @@ function _bewegeItem(draggingId, targetId) {
 /**
  * Vergleicht Editor-Stand mit Server-Stand; aktiviert MainButton bei Diff.
  * ROUTINE-20: "Speichern" nur aktiv wenn diff.
+ * T728 Bug-9: Guard — macht nichts wenn Sheet offen ist, damit platform.hideMainButton()
+ * nicht durch indirekte setMainButton()-Aufrufe (z.B. aus Pikto-Picker) überschrieben wird.
  */
 function _aktualisiereMainButton() {
+  if (_sheetOffen) return; // T728 Bug-9: Sheet-Offen-Guard
   const platform = getPlatform();
   const hatDiff = _hatDiff();
   platform.setMainButton("Speichern", onSpeichern, { enabled: hatDiff });
@@ -869,10 +840,16 @@ async function _legeItemAn(label, quelle, piktogramm) {
  * damit er die Sheet-Buttons nicht überdeckt.
  * platform.hideMainButton() ruft Telegram-WebApp btn.hide() bzw. DOM display:none.
  * setMainButton(enabled:false) allein reicht nicht — Button bleibt sichtbar (Bug-7).
+ * T728 Bug-9: _sheetOffen=true VOR hideMainButton() setzen, damit kein paralleler
+ * _aktualisiereMainButton()-Aufruf den hide-Zustand sofort wieder überschreibt.
  */
 function oeffneSheetOverlay() {
   const overlay = document.getElementById("sheet-overlay");
   overlay.hidden = false;
+
+  // T728 Bug-9: Flag setzen bevor hideMainButton() — verhindert Override durch
+  // indirekte _aktualisiereMainButton()-Aufrufe (z.B. aus Pikto-Picker).
+  _sheetOffen = true;
 
   // T728 Bug-7: MainButton während Sheet vollständig verstecken (MAD-5-konform via platform)
   const platform = getPlatform();
@@ -886,6 +863,8 @@ function oeffneSheetOverlay() {
 /**
  * T728 Bug-7: Beim Schließen des Sheets MainButton wieder anzeigen und
  * Diff-State aktualisieren (aktiv wenn Diff vorhanden, ROUTINE-20).
+ * T728 Bug-9: _sheetOffen=false VOR _aktualisiereMainButton() setzen, damit
+ * der Guard-Check in _aktualisiereMainButton() nicht greift.
  */
 function schliesseSheet() {
   const overlay = document.getElementById("sheet-overlay");
@@ -893,6 +872,9 @@ function schliesseSheet() {
   document.getElementById("sheet-inhalt").innerHTML = "";
   _pickerSelectedId = null;
   clearTimeout(_debounceTimer);
+
+  // T728 Bug-9: Flag zurücksetzen bevor _aktualisiereMainButton() — damit Guard nicht greift.
+  _sheetOffen = false;
 
   // T728 Bug-7: MainButton wieder anzeigen, dann Diff-State aktualisieren
   const platform = getPlatform();

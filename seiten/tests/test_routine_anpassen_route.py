@@ -197,17 +197,24 @@ def test_t728_fix1_css_overflow_x_hidden():
     assert body_idx != -1, "body-Regel fehlt in routine-anpassen.css"
 
 
-def test_t728_fix2_js_pointer_events_set_pointer_capture():
-    """T728 Bug-2 / AC-Fix-2: JS nutzt setPointerCapture + pointermove statt pointerover fuer Drag."""
+def test_t728_fix2_drag_durch_pfeile_ersetzt():
+    """T728 Bug-2 → Bug-10: Drag-Code durch Pfeil-Buttons ersetzt (Bug-10 supersedes Bug-2).
+
+    Bug-2 hatte setPointerCapture-basierten Drag implementiert, der in Telegram
+    aufgrund des Long-Press-Konflikts (Mini-App-Minimize) nicht zuverlaessig funktionierte.
+    Bug-10 entfernt den Drag komplett — Pfeil-Buttons sind Touch-robust und konflikt-frei.
+    """
     js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
     with open(js_path, encoding="utf-8") as f:
         js_inhalt = f.read()
-    assert "setPointerCapture" in js_inhalt, \
-        "setPointerCapture fehlt in routine-anpassen.js — Bug-2 (Drag Pointer-Events) nicht gefixt"
-    assert "pointermove" in js_inhalt, \
-        "pointermove-Event fehlt in routine-anpassen.js — Bug-2 (Drag bewegt sich nicht) nicht gefixt"
-    assert "pointerdown" in js_inhalt, \
-        "pointerdown-Event fehlt in routine-anpassen.js — Bug-2 Drag-Start nicht implementiert"
+    # Drag-Code vollstaendig entfernt (Bug-10 Anforderung)
+    assert "setPointerCapture" not in js_inhalt, \
+        "setPointerCapture noch vorhanden — Bug-10 Drag-Code muss komplett raus"
+    assert "pointermove" not in js_inhalt, \
+        "pointermove noch vorhanden — Bug-10 Drag-Code muss komplett raus"
+    # Pfeil-Sortierung als Ersatz vorhanden
+    assert "_bewegeItemPerPfeil" in js_inhalt, \
+        "_bewegeItemPerPfeil fehlt — Bug-10 Pfeil-Sortierung nicht implementiert"
 
 
 def test_t728_fix3_js_sheet_kein_rendersheet_rerender():
@@ -300,3 +307,68 @@ def test_t728_fix8_js_save_sequenz_filtert_geloeschte_ids():
     # geloeschteIds.add muss im DELETE-Schritt gerufen werden
     assert "geloeschteIds.add" in js_inhalt, \
         "geloeschteIds.add fehlt — gelöschte IDs werden nicht gesammelt (Bug-8)"
+
+
+# ── T728 Live-Fix-3 — 3 neue Klauseln (Bug-9 + Bug-10) ───────────────────────
+
+def test_t728_fix10_js_pfeil_buttons_statt_drag():
+    """T728 Bug-10 / AC-Bug10-1+2: Drag-Code raus, Pfeil-Buttons (pfeil-hoch / pfeil-runter) drin.
+
+    AC-Bug10-1: _bindeDragAndDrop und setPointerCapture / pointermove fehlen (Drag-Code entfernt).
+    AC-Bug10-2: pfeil-hoch und pfeil-runter als CSS-Klassen + aria-label im JS vorhanden.
+    """
+    js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js_inhalt = f.read()
+    # Drag-Code komplett raus
+    assert "_bindeDragAndDrop" not in js_inhalt, \
+        "_bindeDragAndDrop noch vorhanden — Bug-10 Drag-Code nicht entfernt"
+    assert "setPointerCapture" not in js_inhalt, \
+        "setPointerCapture noch vorhanden — Bug-10 Drag-Code nicht entfernt"
+    assert "pointermove" not in js_inhalt, \
+        "pointermove noch vorhanden — Bug-10 Drag-Code nicht entfernt"
+    # Pfeil-Buttons vorhanden
+    assert "pfeil-hoch" in js_inhalt, \
+        "pfeil-hoch fehlt in routine-anpassen.js — Bug-10 Pfeil-▲ nicht implementiert"
+    assert "pfeil-runter" in js_inhalt, \
+        "pfeil-runter fehlt in routine-anpassen.js — Bug-10 Pfeil-▼ nicht implementiert"
+    # Aria-Label für Barrierefreiheit
+    assert "aria-label" in js_inhalt, \
+        "aria-label fehlt in routine-anpassen.js — Pfeil-Buttons nicht barrierefrei"
+
+
+def test_t728_fix10_css_pfeil_buttons_vorhanden():
+    """T728 Bug-10 / AC-Bug10-2: CSS hat .pfeil-hoch und .pfeil-runter (Tap-freundliche Pfeil-Buttons)."""
+    css_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.css")
+    with open(css_path, encoding="utf-8") as f:
+        css_inhalt = f.read()
+    assert ".pfeil-hoch" in css_inhalt, \
+        ".pfeil-hoch fehlt in routine-anpassen.css — Bug-10 Pfeil-▲ CSS nicht implementiert"
+    assert ".pfeil-runter" in css_inhalt, \
+        ".pfeil-runter fehlt in routine-anpassen.css — Bug-10 Pfeil-▼ CSS nicht implementiert"
+    # Drag-Handle-CSS ohne .drag-handle-Selektor mit cursor:grab (kein Drag mehr)
+    assert "cursor: grab" not in css_inhalt, \
+        "cursor: grab noch vorhanden — Bug-10 Drag-Handle-CSS nicht entfernt"
+
+
+def test_t728_fix9_js_sheet_offen_flag():
+    """T728 Bug-9 / AC-Bug9-1+2: _sheetOffen-Flag verhindert MainButton-Override waehrend Sheet offen.
+
+    AC-Bug9-1: _sheetOffen-Flag im JS; oeffneSheetOverlay setzt true, schliesseSheet setzt false.
+    AC-Bug9-2: _aktualisiereMainButton respektiert das Flag (return wenn _sheetOffen=true).
+    """
+    js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js_inhalt = f.read()
+    # Flag-Deklaration vorhanden
+    assert "_sheetOffen" in js_inhalt, \
+        "_sheetOffen fehlt in routine-anpassen.js — Bug-9 Flag nicht deklariert"
+    # Flag wird auf true gesetzt (in oeffneSheetOverlay)
+    assert "_sheetOffen = true" in js_inhalt, \
+        "_sheetOffen = true fehlt — Bug-9 oeffneSheetOverlay setzt Flag nicht"
+    # Flag wird auf false gesetzt (in schliesseSheet)
+    assert "_sheetOffen = false" in js_inhalt, \
+        "_sheetOffen = false fehlt — Bug-9 schliesseSheet setzt Flag nicht zurueck"
+    # Guard in _aktualisiereMainButton
+    assert "if (_sheetOffen) return" in js_inhalt, \
+        "if (_sheetOffen) return fehlt in _aktualisiereMainButton — Bug-9 Guard nicht implementiert"
