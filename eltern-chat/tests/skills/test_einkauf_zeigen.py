@@ -1,9 +1,15 @@
 """Tests für einkauf_zeigen + EinkaufZeigenTask — EZG-1 … EZG-8
-(specs/platform/einkauf-zeigen.md, Refs #653, RAT-16).
+(specs/platform/einkauf-zeigen.md, Refs #653, RAT-16, TASK-10c Form (b)).
+
+TASK-10c: einkauf_zeigen returnt jetzt ein Form-(b)-Dict {text, presentation}
+statt eines (text, buttons)-Tupels. EinkaufZeigenTask sendet NICHTS selbst —
+das Framework übersetzt `presentation`.
 
 Abgedeckte ACs:
+  AC3 — Form-(b)-Return von einkauf_zeigen (text+presentation-Dict).
+  AC4 — EinkaufZeigenTask.run() returnt Dict, kein Selbst-Send.
   AC6 — EZG-4/EZG-5/EZG-6: Lese-Pfad, Counter, Mini-App-Button,
-         Sonderfall leer, web_app-Payload-Form.
+         Sonderfall leer, inline_button-Payload-Form.
 
 Tests laufen ohne Netz (EC-17): EssenClient und TelegramClient werden
 durch kontrollierte Doppelungen ersetzt.
@@ -67,7 +73,7 @@ def _item(label, klasse="einkauf", erstellt_am="2026-06-11T10:00:00"):
 
 
 # ============================================================
-#  AC6 — einkauf_zeigen Funktion
+#  AC3/AC6 — einkauf_zeigen Funktion — Form-(b)-Dict
 # ============================================================
 
 def test_EZG4_ruft_lese_wuensche_mit_abgehakt_false():
@@ -84,6 +90,21 @@ def test_EZG4_ruft_lese_wuensche_mit_abgehakt_false():
     assert ec.lese_calls[0]["abgehakt"] is False
 
 
+def test_EZG_returnt_form_b_dict():
+    """AC3/TASK-10c: einkauf_zeigen returnt ein Dict mit text+presentation."""
+    ec = FakeEssenClient(items=[_item("Brot")])
+    result = einkauf_zeigen(
+        chat_id=42,
+        from_user_id=7,
+        essen_client=ec,
+        is_member_fn=_immer_mitglied,
+        mini_app_url="https://example.com/seiten/essen/einkauf",
+    )
+    assert isinstance(result, dict), "Form-(b): dict erwartet"
+    assert "text" in result
+    assert "presentation" in result
+
+
 def test_EZG4_per_klasse_counter():
     """AC6/EZG-4: Per-Klasse-Counter in der Antwort."""
     items = [
@@ -92,13 +113,14 @@ def test_EZG4_per_klasse_counter():
         _item("Lasagne", klasse="wunsch"),
     ]
     ec = FakeEssenClient(items=items)
-    text, _buttons = einkauf_zeigen(
+    result = einkauf_zeigen(
         chat_id=42,
         from_user_id=7,
         essen_client=ec,
         is_member_fn=_immer_mitglied,
         mini_app_url="https://example.com/seiten/essen/einkauf",
     )
+    text = result["text"]
     # Gesamt 3, wunsch 1, einkauf 2
     assert "3" in text
     assert "1" in text
@@ -113,8 +135,9 @@ def test_EZG4_drei_zuletzt_erstellt():
         _item("Neu1", erstellt_am="2026-06-11T10:00:00"),
         _item("Neu2", erstellt_am="2026-06-10T10:00:00"),
     ]
-    text, _ = _baue_uebersicht(
+    result = _baue_uebersicht(
         items, "https://example.com/seiten/essen/einkauf")
+    text = result["text"]
     # Die drei Neuesten sollen in der Antwort erscheinen
     assert "Neu1" in text
     assert "Neu2" in text
@@ -122,44 +145,49 @@ def test_EZG4_drei_zuletzt_erstellt():
 
 
 def test_EZG5_leer_kein_inline_button():
-    """AC6/EZG-5: Leere Liste → Klartext ohne Inline-Button."""
+    """AC6/EZG-5: Leere Liste → Form-(b)-Dict mit leerem presentation."""
     ec = FakeEssenClient(items=[])
-    text, buttons = einkauf_zeigen(
+    result = einkauf_zeigen(
         chat_id=42,
         from_user_id=7,
         essen_client=ec,
         is_member_fn=_immer_mitglied,
         mini_app_url="https://example.com/seiten/essen/einkauf",
     )
-    assert buttons == []
+    assert isinstance(result, dict)
+    assert result.get("presentation") == {}
+    text = result["text"]
     assert "leer" in text.lower() or "nichts" in text.lower()
 
 
 def test_EZG5_leer_folge_bubble_text():
     """AC6/EZG-5: Leere Liste → Hinweis auf Hinzufügen in Antwort-Text."""
     ec = FakeEssenClient(items=[])
-    text, _ = einkauf_zeigen(
+    result = einkauf_zeigen(
         chat_id=42, from_user_id=7,
         essen_client=ec, is_member_fn=_immer_mitglied,
         mini_app_url="https://example.com/seiten/essen/einkauf",
     )
+    text = result["text"]
     assert "Brot" in text or "Milch" in text or "hinzufügen" in text.lower()
 
 
-def test_EZG6_webappurl_im_button():
-    """AC6/EZG-6: Button enthält web_app_url mit https:// und essen/einkauf-Pfad."""
+def test_EZG6_inline_button_im_presentation():
+    """AC3/AC6/EZG-6: presentation enthält inline_button mit web_app_url."""
     ec = FakeEssenClient(items=[_item("Brot")])
     mini_app_url = "https://xbuddy.example.com/seiten/essen/einkauf"
-    _text, buttons = einkauf_zeigen(
+    result = einkauf_zeigen(
         chat_id=42, from_user_id=7,
         essen_client=ec, is_member_fn=_immer_mitglied,
         mini_app_url=mini_app_url,
     )
-    assert len(buttons) == 1
-    btn = buttons[0]
-    assert btn.get("web_app_url", "").startswith("https://")
-    assert "essen/einkauf" in btn.get("web_app_url", "")
-    assert "label" in btn
+    presentation = result.get("presentation", {})
+    assert "inline_button" in presentation, "presentation muss inline_button enthalten"
+    ib = presentation["inline_button"]
+    assert ib.get("web_app_url", "").startswith("https://")
+    assert "essen/einkauf" in ib.get("web_app_url", "")
+    assert "label" in ib
+    assert ib["label"] == "🛒 Liste öffnen"
 
 
 def test_EZG2_berechtigung_fehlt():
@@ -174,19 +202,33 @@ def test_EZG2_berechtigung_fehlt():
 
 
 def test_EZG7_nicht_erreichbar_kein_button():
-    """AC6/EZG-7: Nicht erreichbar → Klartext, kein Button."""
+    """AC6/EZG-7: Nicht erreichbar → Form-(b)-Dict mit leerem presentation."""
     ec = FakeEssenClient(error=EssenClientError("Timeout"))
-    text, buttons = einkauf_zeigen(
+    result = einkauf_zeigen(
         chat_id=42, from_user_id=7,
         essen_client=ec, is_member_fn=_immer_mitglied,
         mini_app_url="https://example.com/seiten/essen/einkauf",
     )
-    assert buttons == []
+    assert isinstance(result, dict)
+    assert result.get("presentation") == {}
+    text = result["text"]
     assert "erreichbar" in text.lower() or "versuch" in text.lower()
 
 
+def test_EZG6_fehlende_url_kein_button():
+    """AC3/EZG-6: Fehlende mini_app_url → presentation leer (kein Button-Aufsatz)."""
+    ec = FakeEssenClient(items=[_item("Brot")])
+    result = einkauf_zeigen(
+        chat_id=42, from_user_id=7,
+        essen_client=ec, is_member_fn=_immer_mitglied,
+        mini_app_url="",
+    )
+    assert isinstance(result, dict)
+    assert result.get("presentation") == {}
+
+
 # ============================================================
-#  EinkaufZeigenTask
+#  AC4 — EinkaufZeigenTask: Dict-Return, kein Selbst-Send
 # ============================================================
 
 def test_EZG8_ist_read_task():
@@ -208,8 +250,8 @@ def test_EZG8_task_name():
     assert task.name == "einkauf_zeigen"
 
 
-def test_EZG8_task_sendet_inline_keyboard_bei_items():
-    """AC6/EZG-8: Task sendet send_inline_keyboard, wenn Items vorhanden + URL gesetzt."""
+def test_AC4_task_returnt_form_b_dict():
+    """AC4/TASK-10c: EinkaufZeigenTask.run() returnt Form-(b)-Dict."""
     ec = FakeEssenClient(items=[_item("Brot")])
     tg = FakeTelegram()
     task = EinkaufZeigenTask(
@@ -219,14 +261,29 @@ def test_EZG8_task_sendet_inline_keyboard_bei_items():
 
     result = task.run({}, ctx)
 
-    assert len(tg.inline_sent) == 1
-    assert len(tg.sent) == 0
-    assert isinstance(result, str)
-    assert len(result) > 0
+    assert isinstance(result, dict), "AC4: run() muss Form-(b)-Dict zurückgeben"
+    assert "text" in result
+    assert "presentation" in result
 
 
-def test_EZG8_task_sendet_message_bei_leerer_liste():
-    """AC6/EZG-8: Leere Liste → send_message (kein Inline-Button)."""
+def test_AC4_task_sendet_nicht_selbst():
+    """AC4/TASK-10c: EinkaufZeigenTask.run() sendet NICHTS selbst (kein Selbst-Send)."""
+    ec = FakeEssenClient(items=[_item("Brot")])
+    tg = FakeTelegram()
+    task = EinkaufZeigenTask(
+        tg=tg, essen_client=ec, is_member_fn=_immer_mitglied,
+        mini_app_url="https://x.example.com/seiten/essen/einkauf")
+    ctx = TurnContext(chat_id=42, from_user_id=7)
+
+    task.run({}, ctx)
+
+    # Task sendet NICHTS — weder send_message noch send_inline_keyboard
+    assert len(tg.inline_sent) == 0, "AC4: Task darf send_inline_keyboard NICHT selbst rufen"
+    assert len(tg.sent) == 0, "AC4: Task darf send_message NICHT selbst rufen"
+
+
+def test_AC4_task_sendet_auch_bei_leerer_liste_nicht():
+    """AC4/TASK-10c: Auch bei leerer Liste kein Selbst-Send."""
     ec = FakeEssenClient(items=[])
     tg = FakeTelegram()
     task = EinkaufZeigenTask(
@@ -236,6 +293,6 @@ def test_EZG8_task_sendet_message_bei_leerer_liste():
 
     result = task.run({}, ctx)
 
+    assert isinstance(result, dict)
     assert len(tg.inline_sent) == 0
-    assert len(tg.sent) == 1
-    assert isinstance(result, str)
+    assert len(tg.sent) == 0
