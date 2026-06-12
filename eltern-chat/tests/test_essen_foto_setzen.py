@@ -1,20 +1,24 @@
-"""Tests für `skills.essen_foto_setzen` — ESSEN-22 Pfad 2.
+"""Tests für `skills.essen_foto_setzen` — ESSEN-22 Pfad 2, atomar (T782).
 
 Trigger-agnostisch geprüft: kein TelegramClient, kein Task — nur die Funktion
 selbst gegen kontrollierte Doppelungen von PhotoClient und EssenClient.
 
 Pflicht-Tests (AC1–AC4):
-- AC1: hochladen → PHOTO-13-Aufruf → Signal foto_hochgeladen mit medien_id
-       und Ziel-Information.
+- AC1: hochladen + Gericht-Ziel → Upload UND PATCH in EINEM Aufruf.
+- AC1: hochladen + Basis-Item-Ziel → Upload UND Override-Schreiben in EINEM Aufruf.
 - AC1: Berechtigung — Nicht-Mitglied → abgelehnt, kein POST.
-- AC3: patch_gericht → EssenClient.patch_gericht_bild → Signal gericht_patch.
-- AC4: schreibe_override → foto_overrides.json schreiben (merge, atomar).
-- AC4: schreibe_override — fehlende Datei → anlegen.
-- AC4: overrides_pfad=None → nichts_zu_tun.
-- Grenze: 4xx vom Buddy → Signal grenze.
+- AC3: Quittung Gericht — 'Foto bei Gericht … gesetzt', kein 'Bestätige mit...'.
+- AC3: Quittung Item — 'Foto bei Item … hinterlegt', kein 'Bestätige mit...'.
+- AC4: Photo-Fehler → kein PATCH-Aufruf.
+- AC4: Upload OK, PATCH 400 → klare Fehlerquittung, kein halber Zustand.
+- Ziel-leer nach Upload → SIGNAL_ZIEL_UNBEKANNT (Upload bereits passiert).
+- Override-Schreiben (merge, atomar).
+- Fehlende Datei → anlegen.
+- overrides_pfad=None → nichts_zu_tun.
+- Grenze: 4xx vom Photo-Buddy → Signal grenze.
 - Nicht erreichbar: Connection-Fehler → Signal nicht_erreichbar.
+- Abbruch-Aktion → abgebrochen.
 - Unbekannte Aktion → nichts_zu_tun.
-- Abbruch-Aktion → nichts_zu_tun.
 """
 
 import json
@@ -25,10 +29,8 @@ from skills.essen_client import EssenClientError
 from skills.essen_foto_setzen import (
     AKTION_ABBRUCH,
     AKTION_HOCHLADEN,
-    AKTION_PATCH_GERICHT,
-    AKTION_SCHREIBE_OVERRIDE,
+    SIGNAL_ABGEBROCHEN,
     SIGNAL_ABGELEHNT,
-    SIGNAL_FOTO_HOCHGELADEN,
     SIGNAL_GERICHT_PATCH,
     SIGNAL_GRENZE,
     SIGNAL_NICHT_ERREICHBAR,
@@ -149,17 +151,18 @@ def test_berechtigung_from_user_id_none_abgelehnt():
 
 
 # ============================================================
-#  AC1 — Hochladen (PHOTO-13)
+#  AC1 — Atomar: hochladen + Gericht → Upload UND PATCH
 # ============================================================
 
-def test_AC1_hochladen_gericht_ziel_ruft_upload():
-    """AC1: hochladen mit Gericht-Ziel → PHOTO-13-Aufruf → foto_hochgeladen."""
+def test_atomar_gericht_setzt_foto_ref():
+    """AC1: hochladen mit Gericht-Ziel → Upload + PATCH in EINEM Aufruf."""
     photo = FakePhotoClient(upload_result={"id": "m-abc", "typ": "foto"})
+    essen = FakeEssenClient()
 
     signal, daten = essen_foto_setzen(
         aktion=AKTION_HOCHLADEN,
         photo_client=photo,
-        essen_client=FakeEssenClient(),
+        essen_client=essen,
         ziel=_gericht_ziel("g-42"),
         is_member_fn=_immer_mitglied,
         from_user_id=7,
@@ -168,32 +171,46 @@ def test_AC1_hochladen_gericht_ziel_ruft_upload():
         content_type="image/jpeg",
     )
 
-    assert signal == SIGNAL_FOTO_HOCHGELADEN
+    assert signal == SIGNAL_GERICHT_PATCH
+    assert daten["gericht_id"] == "g-42"
     assert daten["medien_id"] == "m-abc"
-    assert daten["ziel"] == {"typ": "gericht", "gericht_id": "g-42"}
+    # Upload muss aufgerufen worden sein.
     assert len(photo.upload_calls) == 1
     assert photo.upload_calls[0]["medium_bytes"] == b"JPEGBYTES"
+    # PATCH muss aufgerufen worden sein.
+    assert len(essen.patch_calls) == 1
+    assert essen.patch_calls[0]["gericht_id"] == "g-42"
+    assert essen.patch_calls[0]["foto_ref"] == "m-abc"
 
 
-def test_AC1_hochladen_item_ziel_gibt_item_zurueck():
-    """AC1: hochladen mit Basis-Item-Ziel → Ziel korrekt in daten."""
+def test_atomar_basis_item_schreibt_override():
+    """AC1: hochladen mit Basis-Item-Ziel → Upload + Override in EINEM Aufruf."""
     photo = FakePhotoClient(upload_result={"id": "m-xyz", "typ": "foto"})
+    essen = FakeEssenClient()
 
-    signal, daten = essen_foto_setzen(
-        aktion=AKTION_HOCHLADEN,
-        photo_client=photo,
-        essen_client=FakeEssenClient(),
-        ziel=_item_ziel("obst:apfel"),
-        is_member_fn=_immer_mitglied,
-        from_user_id=7,
-        medium_bytes=b"JPEGDATA",
-        filename="foto.jpg",
-        content_type="image/jpeg",
-    )
+    with tempfile.TemporaryDirectory() as tmpdir:
+        pfad = os.path.join(tmpdir, "foto_overrides.json")
 
-    assert signal == SIGNAL_FOTO_HOCHGELADEN
+        signal, daten = essen_foto_setzen(
+            aktion=AKTION_HOCHLADEN,
+            photo_client=photo,
+            essen_client=essen,
+            ziel=_item_ziel("obst:apfel"),
+            is_member_fn=_immer_mitglied,
+            from_user_id=7,
+            medium_bytes=b"JPEGDATA",
+            filename="foto.jpg",
+            content_type="image/jpeg",
+            overrides_pfad=pfad,
+        )
+
+    assert signal == SIGNAL_OVERRIDE_GESCHRIEBEN
+    assert daten["item_id"] == "obst:apfel"
     assert daten["medien_id"] == "m-xyz"
-    assert daten["ziel"] == {"typ": "basis_item", "item_id": "obst:apfel"}
+    # Upload muss aufgerufen worden sein.
+    assert len(photo.upload_calls) == 1
+    # Kein PATCH für Basis-Item.
+    assert essen.patch_calls == []
 
 
 def test_hochladen_ohne_bytes_nichts_zu_tun():
@@ -214,37 +231,56 @@ def test_hochladen_ohne_bytes_nichts_zu_tun():
     assert photo.upload_calls == []
 
 
-def test_hochladen_4xx_grenze():
-    """PHOTO-13 4xx → Signal grenze."""
-    photo = FakePhotoClient(
-        upload_result=PhotoClientError(
-            "Photo-Buddy: HTTP 413 bei POST /api/v1/photo/medien — zu groß"))
+# ============================================================
+#  AC3 — Quittungen: keine 'Bestätige mit...'-Phrase
+# ============================================================
 
-    signal, daten = essen_foto_setzen(
-        aktion=AKTION_HOCHLADEN,
-        photo_client=photo,
-        essen_client=FakeEssenClient(),
-        ziel=_gericht_ziel(),
-        is_member_fn=_immer_mitglied,
-        from_user_id=7,
-        medium_bytes=b"BIG",
-        filename="big.jpg",
-        content_type="image/jpeg",
-    )
+def test_quittung_gericht_format():
+    """AC3: nach hochladen+Gericht → Quittung enthält gericht_id + medien_id,
+    kein 'Bestätige mit...'-Text."""
+    from skills import essen_foto_setzen as efs_mod
+    from skills.essen_foto_setzen_task import _quittung_fuer
 
-    assert signal == SIGNAL_GRENZE
-    assert "HTTP 413" in daten["detail"]
+    quittung = _quittung_fuer(
+        efs_mod.SIGNAL_GERICHT_PATCH,
+        {"gericht_id": "g-7", "medien_id": "m-99"})
+
+    assert "g-7" in quittung
+    assert "m-99" in quittung
+    assert "Bestätige" not in quittung
+    assert "bestätige" not in quittung.lower()
 
 
-def test_hochladen_connection_nicht_erreichbar():
-    """Connection-Fehler → Signal nicht_erreichbar."""
+def test_quittung_item_format():
+    """AC3: nach hochladen+Item → Quittung enthält item_id + medien_id,
+    kein 'Bestätige mit...'-Text."""
+    from skills import essen_foto_setzen as efs_mod
+    from skills.essen_foto_setzen_task import _quittung_fuer
+
+    quittung = _quittung_fuer(
+        efs_mod.SIGNAL_OVERRIDE_GESCHRIEBEN,
+        {"item_id": "obst:birne", "medien_id": "m-birne"})
+
+    assert "obst:birne" in quittung
+    assert "m-birne" in quittung
+    assert "Bestätige" not in quittung
+    assert "bestätige" not in quittung.lower()
+
+
+# ============================================================
+#  AC4 — Fehler-Pfade: klare Quittung, kein halber Zustand
+# ============================================================
+
+def test_photo_fehler_kein_patch():
+    """AC4: Photo-Buddy-Fehler → kein PATCH-Aufruf."""
     photo = FakePhotoClient(
         upload_result=PhotoClientError("Photo-Buddy nicht erreichbar"))
+    essen = FakeEssenClient()
 
     signal, daten = essen_foto_setzen(
         aktion=AKTION_HOCHLADEN,
         photo_client=photo,
-        essen_client=FakeEssenClient(),
+        essen_client=essen,
         ziel=_gericht_ziel(),
         is_member_fn=_immer_mitglied,
         from_user_id=7,
@@ -255,103 +291,130 @@ def test_hochladen_connection_nicht_erreichbar():
 
     assert signal == SIGNAL_NICHT_ERREICHBAR
     assert "detail" in daten
+    # Kein PATCH — Upload ist schon fehlgeschlagen.
+    assert essen.patch_calls == []
 
 
-# ============================================================
-#  AC3 — patch_gericht (ESSEN-19a)
-# ============================================================
-
-def test_AC3_patch_gericht_ruft_patch_gericht_bild():
-    """AC3: patch_gericht → EssenClient.patch_gericht_bild → gericht_patch."""
-    essen = FakeEssenClient()
-
-    signal, daten = essen_foto_setzen(
-        aktion=AKTION_PATCH_GERICHT,
-        photo_client=FakePhotoClient(),
-        essen_client=essen,
-        ziel=_gericht_ziel("g-7"),
-        is_member_fn=_immer_mitglied,
-        from_user_id=42,
-        medien_id="media-99",
-    )
-
-    assert signal == SIGNAL_GERICHT_PATCH
-    assert daten["gericht_id"] == "g-7"
-    assert daten["medien_id"] == "media-99"
-    assert len(essen.patch_calls) == 1
-    assert essen.patch_calls[0]["gericht_id"] == "g-7"
-    assert essen.patch_calls[0]["foto_ref"] == "media-99"
-
-
-def test_AC3_patch_gericht_4xx_grenze():
-    """ESSEN-19a 4xx → Signal grenze."""
+def test_essen_fehler_nach_upload_klare_quittung():
+    """AC4: Upload OK, PATCH 400 → klare Fehlerquittung (Foto bleibt im Photo-Buddy)."""
+    photo = FakePhotoClient(upload_result={"id": "m-ok", "typ": "foto"})
     essen = FakeEssenClient(
         patch_error=EssenClientError(
             "Essens-Buddy: HTTP 404 bei PATCH /api/v1/essen/katalog/gerichte/x"))
 
     signal, daten = essen_foto_setzen(
-        aktion=AKTION_PATCH_GERICHT,
-        photo_client=FakePhotoClient(),
+        aktion=AKTION_HOCHLADEN,
+        photo_client=photo,
         essen_client=essen,
         ziel=_gericht_ziel("x"),
         is_member_fn=_immer_mitglied,
-        from_user_id=42,
-        medien_id="m-1",
+        from_user_id=7,
+        medium_bytes=b"FOTO",
+        filename="foto.jpg",
+        content_type="image/jpeg",
     )
 
+    # Upload war OK (PATCH ist fehlgeschlagen).
+    assert len(photo.upload_calls) == 1
+    # Klare Fehlerquittung.
     assert signal == SIGNAL_GRENZE
     assert "HTTP 404" in daten["detail"]
 
 
-def test_patch_gericht_ohne_medien_id_nichts_zu_tun():
-    """Ohne medien_id → nichts_zu_tun, kein PATCH."""
+def test_hochladen_4xx_grenze():
+    """PHOTO-13 4xx → Signal grenze, kein PATCH."""
+    photo = FakePhotoClient(
+        upload_result=PhotoClientError(
+            "Photo-Buddy: HTTP 413 bei POST /api/v1/photo/medien — zu groß"))
     essen = FakeEssenClient()
-    signal, _ = essen_foto_setzen(
-        aktion=AKTION_PATCH_GERICHT,
-        photo_client=FakePhotoClient(),
+
+    signal, daten = essen_foto_setzen(
+        aktion=AKTION_HOCHLADEN,
+        photo_client=photo,
         essen_client=essen,
         ziel=_gericht_ziel(),
         is_member_fn=_immer_mitglied,
-        from_user_id=42,
-        medien_id=None,
+        from_user_id=7,
+        medium_bytes=b"BIG",
+        filename="big.jpg",
+        content_type="image/jpeg",
     )
-    assert signal == SIGNAL_NICHTS_ZU_TUN
+
+    assert signal == SIGNAL_GRENZE
+    assert "HTTP 413" in daten["detail"]
     assert essen.patch_calls == []
 
 
-def test_patch_gericht_falscher_ziel_typ_ziel_unbekannt():
-    """Ziel-typ != 'gericht' → ziel_unbekannt."""
+def test_hochladen_connection_nicht_erreichbar():
+    """Connection-Fehler → Signal nicht_erreichbar, kein PATCH."""
+    photo = FakePhotoClient(
+        upload_result=PhotoClientError("Photo-Buddy nicht erreichbar"))
     essen = FakeEssenClient()
-    signal, _ = essen_foto_setzen(
-        aktion=AKTION_PATCH_GERICHT,
-        photo_client=FakePhotoClient(),
+
+    signal, daten = essen_foto_setzen(
+        aktion=AKTION_HOCHLADEN,
+        photo_client=photo,
         essen_client=essen,
-        ziel=_item_ziel("obst:apfel"),
+        ziel=_gericht_ziel(),
         is_member_fn=_immer_mitglied,
-        from_user_id=42,
-        medien_id="m-1",
+        from_user_id=7,
+        medium_bytes=b"x",
+        filename="f.jpg",
+        content_type="image/jpeg",
     )
-    assert signal == SIGNAL_ZIEL_UNBEKANNT
+
+    assert signal == SIGNAL_NICHT_ERREICHBAR
+    assert "detail" in daten
     assert essen.patch_calls == []
 
 
 # ============================================================
-#  AC4 — schreibe_override (foto_overrides.json)
+#  Ziel-leer nach Upload → SIGNAL_ZIEL_UNBEKANNT
 # ============================================================
 
-def test_AC4_schreibe_override_erstellt_datei_und_mergt():
-    """AC4: schreibe_override → foto_overrides.json anlegen (merge)."""
+def test_hochladen_leeres_ziel_nach_upload_ziel_unbekannt():
+    """Upload OK, aber Ziel leer → SIGNAL_ZIEL_UNBEKANNT (medien_id im Payload)."""
+    photo = FakePhotoClient(upload_result={"id": "m-1", "typ": "foto"})
+    essen = FakeEssenClient()
+
+    signal, daten = essen_foto_setzen(
+        aktion=AKTION_HOCHLADEN,
+        photo_client=photo,
+        essen_client=essen,
+        ziel={},
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        medium_bytes=b"DATA",
+        filename="foto.jpg",
+        content_type="image/jpeg",
+    )
+
+    assert signal == SIGNAL_ZIEL_UNBEKANNT
+    assert daten.get("medien_id") == "m-1"
+    assert essen.patch_calls == []
+
+
+# ============================================================
+#  Override-Schreiben (merge, atomar)
+# ============================================================
+
+def test_atomar_schreibe_override_erstellt_datei_und_mergt():
+    """hochladen+Item → foto_overrides.json anlegen (merge)."""
+    photo = FakePhotoClient(upload_result={"id": "m-42", "typ": "foto"})
+
     with tempfile.TemporaryDirectory() as tmpdir:
         pfad = os.path.join(tmpdir, "foto_overrides.json")
 
         signal, daten = essen_foto_setzen(
-            aktion=AKTION_SCHREIBE_OVERRIDE,
-            photo_client=FakePhotoClient(),
+            aktion=AKTION_HOCHLADEN,
+            photo_client=photo,
             essen_client=FakeEssenClient(),
             ziel=_item_ziel("obst:apfel"),
             is_member_fn=_immer_mitglied,
             from_user_id=42,
-            medien_id="m-42",
+            medium_bytes=b"FOTO",
+            filename="foto.jpg",
+            content_type="image/jpeg",
             overrides_pfad=pfad,
         )
 
@@ -363,8 +426,10 @@ def test_AC4_schreibe_override_erstellt_datei_und_mergt():
         assert data["obst:apfel"] == "m-42"
 
 
-def test_AC4_schreibe_override_mergt_bestehende_eintraege():
-    """AC4: schreibe_override mergt vorhandene Einträge — kein Verlust."""
+def test_atomar_schreibe_override_mergt_bestehende_eintraege():
+    """hochladen+Item mergt vorhandene Einträge — kein Verlust."""
+    photo = FakePhotoClient(upload_result={"id": "m-new", "typ": "foto"})
+
     with tempfile.TemporaryDirectory() as tmpdir:
         pfad = os.path.join(tmpdir, "foto_overrides.json")
         # Vorhandenen Eintrag anlegen.
@@ -372,13 +437,15 @@ def test_AC4_schreibe_override_mergt_bestehende_eintraege():
             json.dump({"brotbelag:butter": "old-media"}, fh)
 
         essen_foto_setzen(
-            aktion=AKTION_SCHREIBE_OVERRIDE,
-            photo_client=FakePhotoClient(),
+            aktion=AKTION_HOCHLADEN,
+            photo_client=photo,
             essen_client=FakeEssenClient(),
             ziel=_item_ziel("obst:apfel"),
             is_member_fn=_immer_mitglied,
             from_user_id=42,
-            medien_id="m-new",
+            medium_bytes=b"FOTO",
+            filename="foto.jpg",
+            content_type="image/jpeg",
             overrides_pfad=pfad,
         )
 
@@ -389,20 +456,24 @@ def test_AC4_schreibe_override_mergt_bestehende_eintraege():
         assert data["obst:apfel"] == "m-new"
 
 
-def test_AC4_schreibe_override_toleriert_fehlende_datei():
-    """AC4: fehlende foto_overrides.json → anlegen ohne Fehler."""
+def test_atomar_schreibe_override_toleriert_fehlende_datei():
+    """Fehlende foto_overrides.json → anlegen ohne Fehler."""
+    photo = FakePhotoClient(upload_result={"id": "m-milk", "typ": "foto"})
+
     with tempfile.TemporaryDirectory() as tmpdir:
         pfad = os.path.join(tmpdir, "sub", "foto_overrides.json")
         # sub/ existiert noch nicht.
 
         signal, _ = essen_foto_setzen(
-            aktion=AKTION_SCHREIBE_OVERRIDE,
-            photo_client=FakePhotoClient(),
+            aktion=AKTION_HOCHLADEN,
+            photo_client=photo,
             essen_client=FakeEssenClient(),
             ziel=_item_ziel("sonstiges:milch"),
             is_member_fn=_immer_mitglied,
             from_user_id=42,
-            medien_id="m-milk",
+            medium_bytes=b"FOTO",
+            filename="foto.jpg",
+            content_type="image/jpeg",
             overrides_pfad=pfad,
         )
 
@@ -412,60 +483,33 @@ def test_AC4_schreibe_override_toleriert_fehlende_datei():
         assert data["sonstiges:milch"] == "m-milk"
 
 
-def test_AC4_schreibe_override_ohne_pfad_nichts_zu_tun():
-    """AC4: overrides_pfad=None → nichts_zu_tun, kein Schreiben."""
+def test_hochladen_item_ziel_ohne_overrides_pfad_nichts_zu_tun():
+    """hochladen+Item ohne overrides_pfad → nichts_zu_tun (Upload trotzdem passiert)."""
+    photo = FakePhotoClient(upload_result={"id": "m-1", "typ": "foto"})
+
     signal, _ = essen_foto_setzen(
-        aktion=AKTION_SCHREIBE_OVERRIDE,
-        photo_client=FakePhotoClient(),
+        aktion=AKTION_HOCHLADEN,
+        photo_client=photo,
         essen_client=FakeEssenClient(),
         ziel=_item_ziel("obst:apfel"),
         is_member_fn=_immer_mitglied,
         from_user_id=42,
-        medien_id="m-1",
+        medium_bytes=b"FOTO",
+        filename="foto.jpg",
+        content_type="image/jpeg",
         overrides_pfad=None,
     )
+    # Upload passiert, aber ohne Pfad kann nicht geschrieben werden.
+    assert len(photo.upload_calls) == 1
     assert signal == SIGNAL_NICHTS_ZU_TUN
-
-
-def test_schreibe_override_ohne_medien_id_nichts_zu_tun():
-    """Ohne medien_id → nichts_zu_tun."""
-    signal, _ = essen_foto_setzen(
-        aktion=AKTION_SCHREIBE_OVERRIDE,
-        photo_client=FakePhotoClient(),
-        essen_client=FakeEssenClient(),
-        ziel=_item_ziel("obst:apfel"),
-        is_member_fn=_immer_mitglied,
-        from_user_id=42,
-        medien_id=None,
-        overrides_pfad="/tmp/x.json",
-    )
-    assert signal == SIGNAL_NICHTS_ZU_TUN
-
-
-def test_schreibe_override_falscher_ziel_typ_ziel_unbekannt():
-    """Ziel-typ != 'basis_item' → ziel_unbekannt, kein Schreiben."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        pfad = os.path.join(tmpdir, "foto_overrides.json")
-        signal, _ = essen_foto_setzen(
-            aktion=AKTION_SCHREIBE_OVERRIDE,
-            photo_client=FakePhotoClient(),
-            essen_client=FakeEssenClient(),
-            ziel=_gericht_ziel("g-1"),
-            is_member_fn=_immer_mitglied,
-            from_user_id=42,
-            medien_id="m-1",
-            overrides_pfad=pfad,
-        )
-        assert signal == SIGNAL_ZIEL_UNBEKANNT
-        assert not os.path.exists(pfad)
 
 
 # ============================================================
 #  Abbruch / unbekannte Aktion
 # ============================================================
 
-def test_abbruch_aktion_nichts_zu_tun():
-    """Abbruch-Aktion → nichts_zu_tun, kein API-Aufruf."""
+def test_abbruch_aktion_abgebrochen():
+    """Abbruch-Aktion → abgebrochen, kein API-Aufruf."""
     photo = FakePhotoClient()
     essen = FakeEssenClient()
     signal, _ = essen_foto_setzen(
@@ -476,7 +520,7 @@ def test_abbruch_aktion_nichts_zu_tun():
         is_member_fn=_immer_mitglied,
         from_user_id=42,
     )
-    assert signal == SIGNAL_NICHTS_ZU_TUN
+    assert signal == SIGNAL_ABGEBROCHEN
     assert photo.upload_calls == []
     assert essen.patch_calls == []
 
