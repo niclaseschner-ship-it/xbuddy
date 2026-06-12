@@ -180,13 +180,18 @@ async function deleteItem(id) {
 
 /**
  * Ersetzt die geordnete default-Liste (PUT /api/v1/routine/items).
- * Payload: {items: ["id1", "id2", ...]}
+ * T728 Iter-11 Bug-25 Fix: Spec-Drift Spec sagt {items:[ids]}, Backend
+ * (routine/main.py PUT-Handler #354) erwartet aber direkt eine Liste von
+ * {id, label, piktogramm}-Objects. Pragma: Frontend folgt Backend (sofort
+ * grün), Spec-Update als Folge-Ticket.
+ *
+ * Payload: [{id, label, piktogramm}, ...]
  */
-async function putItems(items) {
+async function putItems(itemsAsObjects) {
   const resp = await fetch("/api/v1/routine/items", {
     method:  "PUT",
     headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify({ items }),
+    body:    JSON.stringify(itemsAsObjects),
   });
   return resp;
 }
@@ -570,22 +575,26 @@ async function onSpeichern() {
     // Schritt 2: Reihenfolge / neue default-Items (PUT /api/v1/routine/items)
     // Bug-8-Fix: PUT-Array explizit ohne gelöschte IDs bauen.
     // Server validiert: alle PUT-IDs müssen nach dem DELETE-Schritt existieren.
-    const neueDefaultIds = _editItems
+    // T728 Iter-11 Bug-25 Fix: Backend erwartet Liste von {id, label, piktogramm}-Objects
+    // (Spec-Drift zu ROUTINE-20 — Folge-Ticket für Spec-Update).
+    const neueDefaultItems = _editItems
       .filter(i => i.quelle === "default" && !geloeschteIds.has(i.id))
-      .map(i => i.id);
+      .map(i => ({ id: i.id, label: i.label, piktogramm: i.piktogramm }));
 
     const reihenfolgeGeaendert = (
-      neueDefaultIds.length !== _serverItemsDefault.length ||
-      neueDefaultIds.some((id, idx) => id !== (_serverItemsDefault[idx] || {}).id)
+      neueDefaultItems.length !== _serverItemsDefault.length ||
+      neueDefaultItems.some((it, idx) => it.id !== (_serverItemsDefault[idx] || {}).id)
     );
 
     // Reihenfolge-Update: neue Items kommen bereits via Bottom-Sheet-POST an
     // den Server — dieser Pfad ist nur für Reihenfolge-Updates zuständig.
-    if (reihenfolgeGeaendert && neueDefaultIds.length > 0) {
-      const resp = await putItems(neueDefaultIds);
+    if (reihenfolgeGeaendert && neueDefaultItems.length > 0) {
+      const resp = await putItems(neueDefaultItems);
       if (!resp.ok) {
+        // T728 Iter-11 Bug-24: freundlicher Fehler statt rohem Server-Text.
+        zeigeToast("Konnte Reihenfolge nicht speichern — versuch's gleich nochmal.");
         const msg = await _fehlerText(resp, "Reihenfolge speichern");
-        zeigeToast(msg);
+        console.error("routine-anpassen: PUT items fail —", msg);
         return;
       }
     }
