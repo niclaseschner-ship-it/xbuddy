@@ -784,11 +784,9 @@ function oeffneHinzufuegenSheet() {
 /**
  * Lädt ICONS-7 und rendert die Galerie.
  * ROUTINE-21a/21c.
- * T728 Iter-8 (Live-Pragma, ROUTINE-21a-Drift): Wort-Split-Fallback bei Null-Treffer.
- *   Vollstring-Suche → 0 Treffer + Mehrwort → Wörter einzeln parallel suchen →
- *   Union dedupliziert (Set nach Pikto-ID) → rendern mit Klartext-Hinweis.
- *   Race-Schutz: Token-Vergleich gegen aktuellen Input-Wert vor Render.
- * @param {string} q      - Suchbegriff
+ * ICONS-7: Backend übernimmt Mehrwort-Tokenisierung + OR-Score-Sortierung.
+ *   Frontend schickt ganzen Eingabe-Text (ROUTINE-21a); kein Wort-Split-Workaround.
+ * @param {string} q      - Suchbegriff (auch Mehrwort)
  * @param {string} [_src] - Quelle ("auto"|"manual"), nur für interne Nutzung
  */
 async function _sucheUndRendereIcons(q, _src) {
@@ -813,54 +811,10 @@ async function _sucheUndRendereIcons(q, _src) {
     if (aktuellerWert !== suchToken) return;
 
     if (!treffer || treffer.length === 0) {
-
-      // T728 Iter-8: Wort-Split-Fallback bei Mehrwort-Eingabe (Live-Pragma ROUTINE-21a-Drift)
-      if (/\s/.test(q)) {
-        const woerter = q.trim().split(/\s+/);
-        const teilTreffer = await Promise.all(woerter.map(w => sucheIcons(w)));
-
-        // Race-Schutz für Fallback-Promises
-        const aktuellerWertNach = aktuellerInput ? aktuellerInput.value.trim() : suchToken;
-        if (aktuellerWertNach !== suchToken) return;
-
-        // Deduplizierung nach Pikto-ID (Set)
-        const geseheneIds = new Set();
-        const merged = [];
-        for (const teilListe of teilTreffer) {
-          for (const item of (teilListe || [])) {
-            const id = String(item.id || item.arasaac_id || item);
-            if (!geseheneIds.has(id)) {
-              geseheneIds.add(id);
-              merged.push(item);
-              if (merged.length >= 12) break;
-            }
-          }
-          if (merged.length >= 12) break;
-        }
-
-        if (merged.length > 0) {
-          // Wort-Suche erfolgreich: rendern + Klartext-Hinweis
-          const hinweisLabel = woerter.map(w => "'" + esc(w) + "'").join(" und ");
-          const hinweisEl = document.createElement("div");
-          hinweisEl.className = "picker-leer picker-wortsuche-hinweis";
-          hinweisEl.innerHTML =
-            'Treffer für ' + hinweisLabel + ' <span class="wortsuche-badge">Wort-Suche</span>';
-          galerieEl.innerHTML = "";
-          galerieEl.appendChild(hinweisEl);
-          _rendereIconGrid(galerieEl, merged);
-          return;
-        }
-      }
-
-      // ROUTINE-21c: Null-Treffer-Klartext (auch wenn Wort-Split ebenfalls 0 ergab)
+      // ROUTINE-21c: Null-Treffer-Klartext
       galerieEl.innerHTML =
         '<div class="picker-leer">Nichts gefunden für <strong>' + esc(q) +
         '</strong> — versuch ein anderes Wort.</div>';
-
-      // T728 Live-Befund: Focus-Wechsel weggelassen (ROUTINE-21c sagte: Focus auf manuelle Suche).
-      // ICONS-7 backend kann heute kein Mehrwort (Folge-Ticket #741) → bei jedem Tipp nach
-      // Whitespace = Null-Treffer = ungewollter Focus-Steal. Cursor bleibt im Label-Input.
-      // Manuelle Suchleiste bleibt per Tap erreichbar. Spec ROUTINE-21c sollte nachgezogen werden.
 
       _pickerSelectedId = null;
       _aktualisiereAnlegenBtn();
@@ -879,7 +833,7 @@ async function _sucheUndRendereIcons(q, _src) {
 
 /**
  * Rendert Icon-Treffer als Grid in galerieEl.
- * Intern genutzt von _sucheUndRendereIcons (Vollsuche + Wort-Split-Fallback).
+ * Intern genutzt von _sucheUndRendereIcons.
  * @param {HTMLElement} galerieEl  - Container-Element
  * @param {Array}       treffer    - Array von Treffer-Objekten ({id|arasaac_id} oder String)
  */

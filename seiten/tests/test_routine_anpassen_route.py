@@ -755,69 +755,59 @@ def test_t728_iter5_bug11_css_body_has_override():
     )
 
 
-# ── T728 Iter-8 — 3 neue Klauseln (AC-1 / AC-2 / AC-3+4 / AC-5) ─────────────
+# ── T741 ICONS-7 — Iter-8-Workaround-Rueckbau ────────────────────────────────
+# Der JS-Wort-Split-Fallback (T728 Iter-8) wurde entfernt; das Backend
+# uebernimmt Mehrwort-Tokenisierung + OR-Score-Sortierung (ICONS-7).
 
-def test_t728_iter8_ac1_wort_split_und_promise_all():
-    """T728 Iter-8 / AC-1: _sucheUndRendereIcons() enthaelt Whitespace-Split und Promise.all fuer parallele Sub-Suchen."""
+def test_t741_icons7_kein_wort_split_fallback_im_frontend():
+    """T741 / AC4: _sucheUndRendereIcons() enthaelt KEINEN Whitespace-Split-Fallback mehr.
+    Der Iter-8-Guard /\\s/.test(q) darf nicht mehr im JS stehen."""
     js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
     with open(js_path, encoding="utf-8") as f:
         js_inhalt = f.read()
 
-    # Whitespace-Split: q.trim().split(/\s+/) — Mehrwort-Eingabe auf einzelne Woerter zerlegen
-    assert r"split(/\s+/)" in js_inhalt, (
-        r"split(/\s+/) fehlt in routine-anpassen.js — "
-        "AC-1 Wort-Split nicht implementiert"
+    # Kein /\\s/.test(q)-Guard mehr (der explizit den Fallback triggerte)
+    assert r"/\s/.test(q)" not in js_inhalt, (
+        r"/\s/.test(q) gefunden in routine-anpassen.js — "
+        "T741 AC4: Mehrwort-Guard aus Iter-8 muss weg sein"
     )
-    # Promise.all fuer parallele Sub-Suchen
-    assert "Promise.all" in js_inhalt, (
-        "Promise.all fehlt in routine-anpassen.js — "
-        "AC-1 parallele Wort-Suchen nicht implementiert"
+    # split(/\\s+/) gehoerte zum Fallback-Block — ebenfalls weg
+    assert r"split(/\s+/)" not in js_inhalt, (
+        r"split(/\s+/) gefunden in routine-anpassen.js — "
+        "T741 AC4: Wort-Split aus Iter-8-Fallback muss entfernt sein"
     )
 
 
-def test_t728_iter8_ac2_wortsuche_hinweis_text():
-    """T728 Iter-8 / AC-2: Klartext-Hinweis 'Wort-Suche' ist im Code als Render-Pfad bei Fallback-Erfolg sichtbar."""
+def test_t741_icons7_kein_wortsuche_badge_im_frontend():
+    """T741 / AC4: Kein 'Wort-Suche'-Badge und kein wortsuche-badge im JS-Render-Pfad.
+    Das Backend liefert OR-Ergebnisse direkt; kein Klartext-Hinweis noetig."""
     js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
     with open(js_path, encoding="utf-8") as f:
         js_inhalt = f.read()
 
-    # Klartext-Hinweis 'Wort-Suche' (oder Wort-Suche-Badge) im Fallback-Render-Pfad
-    assert "Wort-Suche" in js_inhalt, (
-        "'Wort-Suche' fehlt in routine-anpassen.js — "
-        "AC-2 Klartext-Hinweis bei Fallback-Erfolg nicht implementiert"
+    assert "wortsuche-badge" not in js_inhalt, (
+        "wortsuche-badge gefunden in routine-anpassen.js — "
+        "T741 AC4: Badge-Render-Code muss weg sein"
     )
-    # CSS-Badge .wortsuche-badge ergaenzt den Hinweis visuell
-    css_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.css")
-    with open(css_path, encoding="utf-8") as f:
-        css_inhalt = f.read()
-    assert "wortsuche-badge" in css_inhalt, (
-        ".wortsuche-badge fehlt in routine-anpassen.css — "
-        "AC-2 Wort-Suche-Badge-CSS nicht implementiert"
+    assert "Wort-Suche" not in js_inhalt, (
+        "'Wort-Suche' gefunden in routine-anpassen.js — "
+        "T741 AC4: Wort-Suche-Hinweis-Text muss weg sein"
     )
 
 
-def test_t728_iter8_ac3_ac4_single_word_no_fallback_und_race_schutz():
-    """T728 Iter-8 / AC-3+AC-4: Single-Wort macht keinen Fallback (Whitespace-Check); Race-Schutz via Token-Vergleich."""
+def test_t741_icons7_suche_icons_single_fetch():
+    """T741 / AC4: _sucheUndRendereIcons() ruft sucheIcons(q) — der ehrliche Ganzwort-Aufruf
+    bleibt erhalten; kein Wort-Split-Fallback mehr (ROUTINE-21a)."""
     js_path = os.path.join(_SEITEN_DIR, "static", "routine-anpassen.js")
     with open(js_path, encoding="utf-8") as f:
         js_inhalt = f.read()
 
-    # AC-3: Whitespace-Check — Fallback nur wenn /\s/.test(q) = true (Mehrwort)
-    assert r"/\s/.test(q)" in js_inhalt, (
-        r"/\s/.test(q) fehlt in routine-anpassen.js — "
-        "AC-3 Single-Wort darf keinen Fallback ausloesen (kein Whitespace = kein Split)"
+    assert "sucheIcons(q)" in js_inhalt, (
+        "sucheIcons(q) fehlt in routine-anpassen.js — "
+        "T741 AC4: Haupt-Suche-Aufruf muss erhalten bleiben"
     )
-    # AC-4: Race-Schutz via Token — suchToken oder Vergleich gegen Input-Wert vor Render
-    assert "suchToken" in js_inhalt, (
-        "suchToken fehlt in routine-anpassen.js — "
-        "AC-4 Race-Schutz (Token-Match) nicht implementiert"
-    )
-    # Deduplizierung (AC-5): Set nach Pikto-ID, max 12 Bilder
-    assert "geseheneIds" in js_inhalt, (
-        "geseheneIds fehlt in routine-anpassen.js — "
-        "AC-5 Set-Dedupe nach Pikto-ID nicht implementiert"
-    )
-    assert ">= 12" in js_inhalt, (
-        ">= 12 fehlt in routine-anpassen.js — "
-        "AC-5 max-12-Begrenzung nicht implementiert"
+    # Kein Fallback-Split: geseheneIds gehoerte zum Dedup-Block der Iter-8-Fallback-Schicht
+    assert "geseheneIds" not in js_inhalt, (
+        "geseheneIds gefunden in routine-anpassen.js — "
+        "T741 AC4: Iter-8-Dedup-Block muss weg sein"
     )

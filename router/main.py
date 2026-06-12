@@ -1117,27 +1117,41 @@ def icons_suche():
         max_results = 3
     max_results = max(1, min(max_results, _ICONS_SUCHE_MAX_CAP))
 
-    needle = q.lower()
+    # ICONS-7 Mehrwort: Whitespace-Split; leere Tokens raus.
+    tokens = q.split()
+    if not tokens:
+        return jsonify([])
+
     cache = _load_pictogram_cache()
 
-    # Teilwort-Suche, case-insensitiv; ID-dedupliziert (mehrere Wörter → eine ID).
-    seen_ids: set = set()
-    candidates: list = []
-    for word, icon_id in cache.items():
-        if needle in word.lower() and icon_id not in seen_ids:
-            seen_ids.add(icon_id)
-            candidates.append(icon_id)
+    # Pro Token: Teilwort-Suche (case-insensitiv), ID-Dedup.
+    # score(id) = Anzahl Token-Matches; first_seen für Stichhalter-Reihenfolge.
+    score: dict = {}
+    first_seen: dict = {}
+    for _ti, token in enumerate(tokens):
+        needle = token.lower()
+        matched_this_token: set = set()
+        for idx, (word, icon_id) in enumerate(cache.items()):
+            if icon_id in matched_this_token:
+                continue
+            if needle in word.lower():
+                matched_this_token.add(icon_id)
+                if icon_id not in first_seen:
+                    first_seen[icon_id] = idx
+                score[icon_id] = score.get(icon_id, 0) + 1
+
+    # Absteigende Score, bei Gleichstand Cache-Reihenfolge.
+    sorted_ids = sorted(score.keys(), key=lambda i: (-score[i], first_seen[i]))
 
     # Nur IDs mit lokalem PNG (ICONS-7 / AC4); Pfad-/Wurzel-Schutz wie ROU-26.
     root = os.path.realpath(icon_root())
     results = []
-    for icon_id in candidates:
+    for icon_id in sorted_ids:
         if len(results) >= max_results:
             break
         rel = os.path.join('arasaac', f'{icon_id}.png')
         target = os.path.realpath(os.path.join(root, rel))
-        # Wurzel-Schutz: target muss innerhalb von root liegen (sollte
-        # immer gelten, da icon_id aus dem Cache stammt — defensiv behalten).
+        # Wurzel-Schutz: target muss innerhalb von root liegen (defensiv).
         if not (target == root or target.startswith(root + os.sep)):
             continue
         if os.path.isfile(target):
