@@ -1,6 +1,6 @@
 # Hörspiel-Buddy — Spec     (ID-Präfix: HSP)
 
-> Status: V1 · Refs #TBD (Werft-Lauf 2026-06-12)
+> Status: V1 · Refs #729
 
 ## Problem & North-Star-Bezug
 
