@@ -189,6 +189,9 @@ def baue_album(*, titel: str, text: str, voice: str, idee: str,
     bundles = buendele(story_absaetze)
 
     # HSP-15 atomar: erst alles in tmpdir bauen, dann os.rename.
+    # HSP-15 / Befund 4: Synopse (LLM-Call) MUSS vor os.rename laufen —
+    # sonst ist das Album sichtbar, aber Historie + Index nicht fortgeschrieben,
+    # was bei Folge-Aufrufen doppelte Nummern erzeugt.
     tmp_root = tempfile.mkdtemp(prefix="hoerspiel_build_", dir=alben_root)
     try:
         audio_tmp = os.path.join(tmp_root, "audio")
@@ -205,6 +208,10 @@ def baue_album(*, titel: str, text: str, voice: str, idee: str,
         manifest = album_manifest.manifest_to_dict(manifest)
         data_io.atomic_write_json(os.path.join(tmp_root, "manifest.json"), manifest)
 
+        # Synopse vor rename: wenn der LLM-Call fehlschlägt, bleibt das Album
+        # im tmpdir und wird aufgeräumt — kein halbfertiger Zustand sichtbar.
+        synopse = llm_service.erzeuge_synopse(titel=titel, text=text, llm=llm)
+
         ziel = _album_dir(data_root, album_id)
         if os.path.exists(ziel):
             shutil.rmtree(ziel)
@@ -214,7 +221,6 @@ def baue_album(*, titel: str, text: str, voice: str, idee: str,
         if tmp_root and os.path.isdir(tmp_root):
             shutil.rmtree(tmp_root, ignore_errors=True)
 
-    synopse = llm_service.erzeuge_synopse(titel=titel, text=text, llm=llm)
     addendum = _format_historie_entry(
         nummer=nummer, titel=titel, datum=erstellt_am, synopse=synopse,
     )
