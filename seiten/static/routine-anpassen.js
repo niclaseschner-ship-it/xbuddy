@@ -775,6 +775,10 @@ function oeffneHinzufuegenSheet() {
 /**
  * Lädt ICONS-7 und rendert die Galerie.
  * ROUTINE-21a/21c.
+ * T728 Iter-8 (Live-Pragma, ROUTINE-21a-Drift): Wort-Split-Fallback bei Null-Treffer.
+ *   Vollstring-Suche → 0 Treffer + Mehrwort → Wörter einzeln parallel suchen →
+ *   Union dedupliziert (Set nach Pikto-ID) → rendern mit Klartext-Hinweis.
+ *   Race-Schutz: Token-Vergleich gegen aktuellen Input-Wert vor Render.
  * @param {string} q      - Suchbegriff
  * @param {string} [_src] - Quelle ("auto"|"manual"), nur für interne Nutzung
  */
@@ -782,16 +786,66 @@ async function _sucheUndRendereIcons(q, _src) {
   const galerieEl = document.getElementById("picker-galerie");
   if (!galerieEl) return;
 
+  // Race-Schutz: aktuellen Token merken (q ist unveränderlich im Closure)
+  const suchToken = q;
+
   galerieEl.innerHTML = '<div class="picker-leer">Suche …</div>';
 
   try {
     const treffer = await sucheIcons(q);
 
+    // Race-Schutz: falls Nutzer weitertippt, alten Render verwerfen
+    const aktuellerInput = (
+      document.getElementById("picker-suche") ||
+      document.getElementById("sheet-label")
+    );
+    const aktuellerWert = aktuellerInput ? aktuellerInput.value.trim() : suchToken;
+    if (aktuellerWert !== suchToken) return;
+
     if (!treffer || treffer.length === 0) {
-      // ROUTINE-21c: Null-Treffer-Klartext
+
+      // T728 Iter-8: Wort-Split-Fallback bei Mehrwort-Eingabe (Live-Pragma ROUTINE-21a-Drift)
+      if (/\s/.test(q)) {
+        const woerter = q.trim().split(/\s+/);
+        const teilTreffer = await Promise.all(woerter.map(w => sucheIcons(w)));
+
+        // Race-Schutz für Fallback-Promises
+        const aktuellerWertNach = aktuellerInput ? aktuellerInput.value.trim() : suchToken;
+        if (aktuellerWertNach !== suchToken) return;
+
+        // Deduplizierung nach Pikto-ID (Set)
+        const geseheneIds = new Set();
+        const merged = [];
+        for (const teilListe of teilTreffer) {
+          for (const item of (teilListe || [])) {
+            const id = String(item.id || item.arasaac_id || item);
+            if (!geseheneIds.has(id)) {
+              geseheneIds.add(id);
+              merged.push(item);
+              if (merged.length >= 12) break;
+            }
+          }
+          if (merged.length >= 12) break;
+        }
+
+        if (merged.length > 0) {
+          // Wort-Suche erfolgreich: rendern + Klartext-Hinweis
+          const hinweisLabel = woerter.map(w => "'" + esc(w) + "'").join(" und ");
+          const hinweisEl = document.createElement("div");
+          hinweisEl.className = "picker-leer picker-wortsuche-hinweis";
+          hinweisEl.innerHTML =
+            'Treffer für ' + hinweisLabel + ' <span class="wortsuche-badge">Wort-Suche</span>';
+          galerieEl.innerHTML = "";
+          galerieEl.appendChild(hinweisEl);
+          _rendereIconGrid(galerieEl, merged);
+          return;
+        }
+      }
+
+      // ROUTINE-21c: Null-Treffer-Klartext (auch wenn Wort-Split ebenfalls 0 ergab)
       galerieEl.innerHTML =
         '<div class="picker-leer">Nichts gefunden für <strong>' + esc(q) +
-        '</strong>.<br>Versuch ein anderes Wort.</div>';
+        '</strong> — versuch ein anderes Wort.</div>';
 
       // T728 Live-Befund: Focus-Wechsel weggelassen (ROUTINE-21c sagte: Focus auf manuelle Suche).
       // ICONS-7 backend kann heute kein Mehrwort (Folge-Ticket #741) → bei jedem Tipp nach
@@ -804,35 +858,44 @@ async function _sucheUndRendereIcons(q, _src) {
     }
 
     // Galerie rendern (ROUTINE-21: 3-Spalten-Grid)
-    const grid = document.createElement("div");
-    grid.className = "icon-grid";
-
-    for (const treffer_item of treffer) {
-      const id  = treffer_item.id || treffer_item.arasaac_id || treffer_item;
-      const url = "/display/_shared/icons/arasaac/" + encodeURIComponent(String(id)) + ".png";
-
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "icon-grid-btn" + (_pickerSelectedId === String(id) ? " selected" : "");
-      btn.innerHTML = '<img src="' + esc(url) + '" alt="" loading="lazy">';
-      btn.addEventListener("click", () => {
-        // Deselect alle
-        grid.querySelectorAll(".icon-grid-btn").forEach(b => b.classList.remove("selected"));
-        btn.classList.add("selected");
-        _pickerSelectedId = String(id);
-        _aktualisiereAnlegenBtn();
-      });
-      grid.appendChild(btn);
-    }
-
-    galerieEl.innerHTML = "";
-    galerieEl.appendChild(grid);
+    _rendereIconGrid(galerieEl, treffer);
 
   } catch (err) {
     galerieEl.innerHTML =
       '<div class="picker-leer">Icon-Suche nicht erreichbar.</div>';
     console.error("routine-anpassen: Icon-Suche Fehler", err);
   }
+}
+
+/**
+ * Rendert Icon-Treffer als Grid in galerieEl.
+ * Intern genutzt von _sucheUndRendereIcons (Vollsuche + Wort-Split-Fallback).
+ * @param {HTMLElement} galerieEl  - Container-Element
+ * @param {Array}       treffer    - Array von Treffer-Objekten ({id|arasaac_id} oder String)
+ */
+function _rendereIconGrid(galerieEl, treffer) {
+  const grid = document.createElement("div");
+  grid.className = "icon-grid";
+
+  for (const treffer_item of treffer) {
+    const id  = treffer_item.id || treffer_item.arasaac_id || treffer_item;
+    const url = "/display/_shared/icons/arasaac/" + encodeURIComponent(String(id)) + ".png";
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "icon-grid-btn" + (_pickerSelectedId === String(id) ? " selected" : "");
+    btn.innerHTML = '<img src="' + esc(url) + '" alt="" loading="lazy">';
+    btn.addEventListener("click", () => {
+      // Deselect alle
+      grid.querySelectorAll(".icon-grid-btn").forEach(b => b.classList.remove("selected"));
+      btn.classList.add("selected");
+      _pickerSelectedId = String(id);
+      _aktualisiereAnlegenBtn();
+    });
+    grid.appendChild(btn);
+  }
+
+  galerieEl.appendChild(grid);
 }
 
 /**
