@@ -393,6 +393,16 @@ DCOMP-3/4 wie `PUT …/config`:
   fachlich unterschiedliche Persistenz/Lebensdauer haben (RPS-3) — ein Konsument
   muss den Unterschied erkennen können, ohne erneut zu fragen. Reload-on-Read
   (DCOMP-2): die Antwort spiegelt den aktuellen Stand bei jedem Aufruf.
+- **`GET /api/v1/routine/config` — die aktuellen Zeit-Schlüssel lesen** (V1.1,
+  #678; bindend ergänzt 2026-06-12 mit ROUTINE-20 als Konsument). Antwort:
+  `{"abfahrtszeit": "HH:MM" oder Wochentag→Zeit-Map, "aufstehzeit": "HH:MM" oder
+  Map, "anzieh_vorlauf_min": <int>}` — gleiche Schlüssel wie `PUT …/config`,
+  nur lesend. Reload-on-Read wie alle Routine-Buddy-Reads. Auslöser: die
+  Anpassen-Mini-App (ROUTINE-20) muss die heutigen Zeitwerte zum Vorbelegen ihrer
+  Felder kennen; ohne diesen Endpunkt müsste sie raten oder die `routine.json`
+  direkt lesen (APP-3-Verstoß). **Befund 2026-06-12 (Werft-F3 Live-Probe):** der
+  Live-Buddy antwortet auf `GET` heute `405 Method Not Allowed` — die Implementation
+  ergänzt den Lese-Pfad als Teil des Routine-Anpassen-Tracks.
 
 Die übrigen Schnittstellen bleiben **entworfen, aber bewusst nicht gebaut**;
 jede wird erst geliefert, wenn ihr konkreter Konsument/Produzent existiert
@@ -539,14 +549,19 @@ atomar; `PUT /api/v1/routine/items` ersetzt die geordnete `default`-Liste
 idempotent; ROUTINE-19 max-8-Klemme + Label/Piktogramm-Validierung → 4xx;
 `einmalig`-Auto-Verfall am Tageswechsel ROUTINE-6) ·
 **ROUTINE-20** (Mini-App-View-Render-Test: gemischte Liste rendert in
-korrekter Reihenfolge mit `🌅`-Marker für `einmalig`-heute; Drag-Bewegung
-eines `default`-Items erzeugt `PUT /api/v1/routine/items`-Call mit dem neuen
-ID-Array; Save mit Zeit-Änderung erzeugt `PUT …/config` mit nur dem
-geänderten Schlüssel; 4xx vom Buddy bricht den Save mit ehrlicher Meldung
-ab) · **ROUTINE-21** (Bottom-Sheet: Label-Tippen führt zu
-ICONS-7-Stub-Call mit `q=<label>`, ohne Wort-Split-Magie;
-manuelle Suchleiste löst zweiten ICONS-7-Call aus; Null-Treffer zeigt
-Klartext + Fokus auf Such-Feld; Save disabled ohne Pikto-Wahl).
+korrekter Reihenfolge mit `🌅`-Marker für `einmalig`-heute; drei Zeit-Anker-
+Cards mit Schloss-Symbol auf Aufstehen+Losgehen; Inline-Add-Buttons je
+Sektion — der Items-Add aktiv, der Zeit-Add `disabled` ohne Click-Handler;
+**kein FAB** im DOM; Drag-Bewegung eines `default`-Items erzeugt
+`PUT /api/v1/routine/items`-Call mit dem neuen ID-Array; Save mit
+Zeit-Änderung erzeugt `PUT …/config` mit nur dem geänderten Schlüssel;
+4xx vom Buddy bricht den Save mit ehrlicher Meldung ab; Frontend liest
+Zeitwerte aus `GET /api/v1/routine/config`) ·
+**ROUTINE-21** (Bottom-Sheet wird vom Items-Inline-Add-Button geöffnet:
+Label-Tippen führt zu ICONS-7-Stub-Call mit `q=<label>`, ohne
+Wort-Split-Magie; manuelle Suchleiste löst zweiten ICONS-7-Call aus;
+Null-Treffer zeigt Klartext + Fokus auf Such-Feld; Save disabled ohne
+Pikto-Wahl).
 
 *Tickets:* #335
 
@@ -571,14 +586,39 @@ Die View rendert **eine einzige Bedien-Fläche** mit zwei Sektionen:
   `einmalig`-heute, kein Marker für `default`) und eine **Lösch-Affordanz**.
   Die Cards sind per **Drag-Handle** sortierbar (nur `default`-Items sind
   bewegbar — `einmalig_heute` rutscht ans Ende, wird beim Save nicht in `PUT
-  …/items` mitgegeben). **Floating Action Button (FAB)** unten rechts (analog
-  MAD-3) öffnet das **Hinzufügen-Bottom-Sheet** (ROUTINE-21).
-- **Sektion „Zeiten"** — drei Felder: Abfahrtszeit, Aufstehzeit,
-  Anzieh-Vorlauf (Daten aus `GET /api/v1/routine/config`). Felder sind direkt
-  editierbar. **V1: Globalwert je Feld** (keine Per-Wochentag-UI; die API
-  trägt die Map, die V1-UI nicht — Begrenzung wie RZS V1-Scope). Eingaben
-  werden im Frontend strikt gegen `HH:MM` / nicht-negativen Integer
-  validiert (vor `PUT …/config`).
+  …/items` mitgegeben). Am **Listen-Ende** sitzt ein gestrichelter
+  **Inline-Add-Button** `＋ Routine-Punkt hinzufügen`, der das
+  **Hinzufügen-Bottom-Sheet** (ROUTINE-21) öffnet. **Kein FAB** — die
+  Inline-Add-Geste lebt in der Sektion, in der das Element entsteht
+  (siehe ROUTINE-23 Abweichung von MAD-3).
+- **Sektion „Zeiten"** — Card-Liste der Zeit-Anker (gleiche Card-Optik wie
+  Routine-Punkte für visuelle Konsistenz). V1.1 hat genau **drei feste Anker**:
+  Aufstehen (`HH:MM`), Anziehen (Vorlauf in Min vor Losgehen), Losgehen
+  (`HH:MM`). Daten aus `GET /api/v1/routine/config`. **Anker-Piktogramme**
+  spiegeln die Display-View — heute ARASAAC `8152` (Aufstehen) / `6627`
+  (Anziehen) / `8142` (Losgehen), hartcodiert im Display-Template
+  (`routine/templates/morgen.html:84-104`) und in V1.1 zusätzlich im
+  Mini-App-Frontend gleich gespiegelt; **Lego-Schuld V1.1** (DRY-Verletzung,
+  zwei Stellen). Cleanup-Folge zieht die Anker-IDs in eine geteilte Quelle
+  (z. B. `routine/anker_default.py`-Konstante), Template + Mini-App-Frontend
+  + V2-Migration #726 lesen daraus — eigenes Lego-Cleanup-Ticket.
+  Felder sind direkt editierbar; **V1: Globalwert je Feld** (keine
+  Per-Wochentag-UI; die API trägt die Map, die V1-UI nicht — Begrenzung wie
+  RZS V1-Scope). Eingaben werden im Frontend strikt gegen `HH:MM` /
+  nicht-negativen Integer validiert (vor `PUT …/config`). **Aufstehen und
+  Losgehen sind unverrückbar** (kein Drag, kein Löschen — Verriegelungs-
+  Klausel #726); V1.1 zeigt das visuell durch ein **Schloss-Symbol** statt
+  Drag-Handle. Am Listen-Ende sitzt ein **deaktivierter Inline-Add-Button**
+  `＋ Zwischen-Anker hinzufügen — V2 (#726)` — er macht den V2-Aufbohrpunkt
+  in V1.1 visuell, ohne Funktion (V2 schaltet ihn scharf, gleicher Stil wie
+  der Items-Add-Button).
+
+**V2-Aufbohrpunkt (#726).** Die Zeit-Sektion ist im Frontend bereits als
+**Liste von Zeit-Anker-Einträgen** strukturiert (Items-Card-Form), damit V2
+ohne UI-Umbau nur das Backend-Schema und den aktiven Add-Button +
+Drag-Activation einschaltet. Folge-Ticket trägt das dynamische
+`zeit_anker[]`-Schema, die Verriegelungs-Klausel, das API-Tripel und die
+Display-Re-Render-Logik.
 
 **Bild-Pfad:** Mini-App fordert die ARASAAC-PNGs **same-origin** unter
 `/display/_shared/icons/arasaac/<id>.png` (ICONS-5, MAD-6) — kein
@@ -613,11 +653,13 @@ MAD-7-Folge-Ticket „Mini-App-Auth-Header"), kein V1-Blocker hier.
 
 *Test-Implikation:* Render-Test mit gemischter Liste (3 `default` + 1
 `einmalig`-heute, Config mit Zeiten) → die View zeigt 4 Cards in der richtigen
-Reihenfolge, `einmalig` mit `🌅`-Marker am Listen-Ende, drei Zeit-Felder
-vorbelegt. Drag eines `default`-Items → Save sendet `PUT
+Reihenfolge, `einmalig` mit `🌅`-Marker am Listen-Ende, drei Zeit-Anker-Cards
+(Aufstehen/Anziehen/Losgehen) mit den jeweiligen Anker-Piktos und Schloss-Symbol
+auf Aufstehen+Losgehen. Drag eines `default`-Items → Save sendet `PUT
 /api/v1/routine/items` mit dem neuen Array. Tap Lösch-Affordanz → `DELETE`
-mit korrekter ID. FAB → öffnet Bottom-Sheet (ROUTINE-21). Zeit-Feld geändert
-→ Save sendet `PUT …/config` mit nur dem geänderten Schlüssel.
+mit korrekter ID. Inline-Add-Button → öffnet Bottom-Sheet (ROUTINE-21). Zeit-Feld
+geändert → Save sendet `PUT …/config` mit nur dem geänderten Schlüssel. Der
+V2-Add-Button bei Zeit-Anker ist `disabled` (kein Click-Handler in V1.1).
 
 *Tickets:* #678 (MVP-Sammler-Naht), Folge-Implementierungs-Ticket
 
@@ -696,8 +738,8 @@ nach essen-einkauf (#653). Sie folgt bewusst dem
 First-Occurrence-Pattern aus
 `~/brainstorm/conventions-vorab/mini-app-design-erstes-vorkommen.md` (MAD-1
 bis MAD-9 + Anti-Patterns) — gleicher DTOK-Andock, gleiches Card-Pattern
-(MAD-2), gleicher FAB (MAD-3), gleiches Bottom-Sheet (MAD-4),
-`platform.js`-Wrapper (MAD-5), Asset-Pfade (MAD-6), V1-Auth-Modell (MAD-7).
+(MAD-2), gleiches Bottom-Sheet (MAD-4), `platform.js`-Wrapper (MAD-5),
+Asset-Pfade (MAD-6), V1-Auth-Modell (MAD-7).
 
 **Erwartete Abweichungen** (zur Beobachtung im Impl-Lauf, nicht als Veto):
 
@@ -711,6 +753,17 @@ bis MAD-9 + Anti-Patterns) — gleicher DTOK-Andock, gleiches Card-Pattern
   Kategorie-Auto-Match — die essen-einkauf-Quick-Add-Heuristik trifft hier
   nicht, weil Routine-Punkte semantisch einzeln gewählt sind, nicht aus
   einer Brot-Milch-Liste.
+- **Inline-Add-Button je Sektion statt FAB** (Abweichung von **MAD-3**, Nic
+  2026-06-12). Begründung: Routine-Anpassen ist ein Multi-Sektion-Editor
+  (Routine-Punkte + Zeiten) mit **zwei semantisch unterschiedlichen
+  Add-Pfaden** — ein einzelner FAB kann das nicht ehrlich tragen, zwei
+  FABs verbietet MAD-3 selbst. Die Inline-Geste lebt *in* der Sektion, in
+  der das Element entsteht (gleiches `add-row`-CSS für aktiven Items-Add
+  und V2-Zeit-Anker-Add); konsistent zwischen den Sektionen, konsistent
+  auch zur V2-Aufbohrlogik (gleicher Button schaltet von disabled auf
+  aktiv, kein Layout-Umbau). **Eingangsfrage für die MAD-Berater-Runde:**
+  soll MAD-3 erweitert werden um „bei Multi-Sektion-Editor: Inline-Add je
+  Sektion statt FAB"?
 
 **MAD-Ratifizierung erfolgt NICHT im Spec-PR dieser Mini-App.** Stattdessen
 läuft nach Live-Implementation eine eigene `/berater-runde` mit beiden
