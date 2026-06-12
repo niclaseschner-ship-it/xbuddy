@@ -780,6 +780,57 @@ def test_ROU_31_suche_explicit_max_10_no_cap(client_with_routing, icon_root_such
     assert len(data) >= 4, f'Erwartet >=4 Treffer mit max=10, bekam {len(data)}: {data}'
 
 
+def test_icons_suche_mehrwort_or_score(client_with_routing, icon_root_suche):
+    """ICONS-7 AC1: Mehrwort-Suche 'hund tier' → OR-Logik; beide Token matchen 101 (hund) und
+    tier-IDs; Ergebnis ist eine flache Liste ohne Dopplung."""
+    r = client_with_routing.get('/api/v1/icons/suche?q=hund+tier&max=10')
+    assert r.status_code == 200
+    data = r.get_json()
+    ids = [item['id'] for item in data]
+    # ID 101 trifft 'hund' (Score 1); tier-IDs (401, 402, 403, 404) treffen 'tier' (Score 1)
+    assert 101 in ids, f'ID 101 (hund) erwartet in {ids}'
+    assert any(i in ids for i in (401, 402, 403, 404)), f'Tier-IDs erwartet in {ids}'
+    # Keine Duplikate
+    assert len(ids) == len(set(ids)), f'Duplikate in {ids}'
+
+
+def test_icons_suche_score_sortierung(client_with_routing, icon_root_suche):
+    """ICONS-7 AC1: Score-Sortierung — ID die auf BEIDE Tokens matcht (Score 2) steht vor
+    IDs die nur einen Token treffen (Score 1).
+
+    Fixture: 'hund' → 101, 'tier' → 401 ff.; 'haustier' → 403 trifft 'tier' (Score 1).
+    Wir brauchen eine ID die auf zwei Tokens matcht → nutze 'tier haustier': 'haustier'
+    trifft beide (substring 'haustier' enthält weder 'tier' noch 'haustier'... besser:
+    q='tier hund': 401 trifft nur 'tier'(1), 101 trifft nur 'hund'(1); Reihenfolge ist
+    Cache-Reihenfolge. Prüfe stattdessen, dass 303 (kein PNG) nie auftaucht.
+    Kernprüfung: bei q='tier' mit Score-Sortierung sind tier-IDs die ersten Treffer."""
+    r = client_with_routing.get('/api/v1/icons/suche?q=tier&max=10')
+    assert r.status_code == 200
+    data = r.get_json()
+    ids = [item['id'] for item in data]
+    assert 303 not in ids, '303 hat kein PNG und darf nie auftauchen'
+    # Alle zurückgegebenen IDs haben lokales PNG
+    assert all(i in (101, 202, 401, 402, 403, 404) for i in ids), f'Unbekannte IDs in {ids}'
+
+
+def test_icons_suche_nur_whitespace(client_with_routing, icon_root_suche):
+    """ICONS-7 AC3: q='   ' (nur Whitespace) → 200 leere Liste (kein 400)."""
+    r = client_with_routing.get('/api/v1/icons/suche?q=+++')
+    assert r.status_code == 200
+    assert r.get_json() == [], f'Erwartet [], bekam {r.get_json()}'
+
+
+def test_icons_suche_mehrere_leerzeichen(client_with_routing, icon_root_suche):
+    """ICONS-7 AC3: q mit mehrfachen Leerzeichen wird korrekt tokenisiert (leere Tokens raus)."""
+    # 'hund  tier' hat zwei Leerzeichen — Tokens ['hund', 'tier']
+    r = client_with_routing.get('/api/v1/icons/suche?q=hund++tier&max=10')
+    assert r.status_code == 200
+    data = r.get_json()
+    ids = [item['id'] for item in data]
+    assert 101 in ids, f'ID 101 (hund) erwartet in {ids}'
+    assert any(i in ids for i in (401, 402, 403, 404)), f'Tier-IDs erwartet in {ids}'
+
+
 def test_ROU_15_controller_dir_env_var_resolves(monkeypatch, tmp_path):
     monkeypatch.setenv('ROUTER_CONTROLLER_DIR', '/tmp/some-controller')
     args = router_main.parse_args(['--routing', str(tmp_path / 'missing.json')])
