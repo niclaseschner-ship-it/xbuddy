@@ -66,16 +66,20 @@ class RoutineAnpassenOeffnenTask(ReadTask):
         super().__init__(
             name="routine_anpassen_oeffnen",
             description=(
-                "Öffnet die Routine-Anpassen-Mini-App mit einer Übersicht. "
-                "Aufrufen, wenn jemand sagt: \"Routine anpassen\", "
-                "\"Routine bearbeiten\", \"Morgenroutine ändern\", "
-                "\"neuen Routine-Punkt hinzufügen\", \"Punkt zur Routine\", "
-                "\"Reihenfolge ändern\", \"Routine umsortieren\", "
-                "\"Punkt löschen\", \"Routine-Punkt entfernen\" oder Ähnliches. "
-                "Sendet eine kompakte Übersicht mit Schritt-Anzahl "
-                "und einem Knopf, der die Routine-Anpassen-Mini-App öffnet. "
+                "Öffnet die Routine-Anpassen-Mini-App (Multi-Feld-Editor). "
+                "Trigger: \"Routine anpassen\", \"Routine bearbeiten\", "
+                "\"Punkte umsortieren\", \"Punkt hinzufügen\", "
+                "\"Punkt löschen\", \"neuen Routine-Punkt hinzufügen\", "
+                "\"Punkt zur Routine\", \"Reihenfolge ändern\", "
+                "\"Routine umsortieren\", \"Routine-Punkt entfernen\", "
+                "\"Morgenroutine ändern\" oder ähnliches. "
+                "Sofort aufrufen — NICHT erst fragen, ob per Chat oder per "
+                "Mini-App. Sendet eine Übersicht mit Schritt-Anzahl und einem "
+                "Knopf, der die Routine-Anpassen-Mini-App öffnet. "
                 "Auch bei leerer Routine wird der Button gesendet "
-                "(Routine ist Anfangszustand, kein Endzustand)."),
+                "(Routine ist Anfangszustand, kein Endzustand). "
+                "Abgrenzung: Einzelnen Zeitwert setzen (z.B. 'Abfahrtszeit auf "
+                "8:15') → stattdessen routine_zeiten_setzen aufrufen."),
             parameters={
                 "type": "object",
                 "properties": {},

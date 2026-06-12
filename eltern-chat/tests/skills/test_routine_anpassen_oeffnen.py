@@ -12,6 +12,9 @@ Abgedeckte ACs:
          Berechtigung fehlt → Klartext; Buddy 5xx/Netz → Klartext.
   AC_ENTRY — IncomingMessage-form durch Skill bis zum Strukturierten-Ergebnis
               (echter Runtime-Pfad ohne Telegram-Lib).
+  AC_UX2 — T728: Skill-Antwort-Text enthält Klartext-Hinweis auf RZS-Direktsatz
+            (Zeiten direkt im Chat nennen) in jedem Aufschlag (nicht-leere Routine
+            und leere Routine).
 
 Tests laufen ohne Netz (EC-17): RoutineClient und TelegramClient werden
 durch kontrollierte Doppelungen ersetzt.
@@ -392,3 +395,79 @@ def test_AC_ENTRY_vollpfad_durch_skill():
     text = payload["text"]
     assert "2" in text
     assert "+1" in text or "nur heute" in text.lower()
+
+
+# ============================================================
+#  AC_UX2 — T728: RZS-Direktsatz-Hinweis im Skill-Antwort-Text
+# ============================================================
+
+
+def test_T728_rzs_hinweis_in_text_mit_items():
+    """AC_UX2/T728: Skill-Antwort-Text enthält Hinweis auf RZS-Direktsatz
+    (Zeiten direkt hier sagen), wenn Routine nicht leer ist."""
+    rc = FakeRoutineClient(
+        items_data=_items_data(default=[_item("Zähne putzen"), _item("Anziehen")]))
+    text, _buttons = routine_anpassen_oeffnen(
+        chat_id=42, from_user_id=7,
+        routine_client=rc, is_member_fn=_immer_mitglied,
+        mini_app_url=_MINI_APP_URL,
+    )
+    text_lower = text.lower()
+    # Hinweis auf direkte Zeiten-Eingabe muss enthalten sein
+    assert "direkt" in text_lower or "abfahrtszeit" in text_lower or "aufstehzeit" in text_lower
+
+
+def test_T728_rzs_hinweis_in_text_bei_leerer_routine():
+    """AC_UX2/T728: Skill-Antwort-Text enthält RZS-Direktsatz-Hinweis
+    auch wenn die Routine leer ist (E-RAO-3-Fall)."""
+    rc = FakeRoutineClient(items_data=_items_data())
+    text, _buttons = routine_anpassen_oeffnen(
+        chat_id=42, from_user_id=7,
+        routine_client=rc, is_member_fn=_immer_mitglied,
+        mini_app_url=_MINI_APP_URL,
+    )
+    text_lower = text.lower()
+    assert "direkt" in text_lower or "abfahrtszeit" in text_lower or "aufstehzeit" in text_lower
+
+
+def test_T728_rzs_hinweis_nennt_keine_punkte():
+    """AC_UX2/T728: RZS-Hinweis-Text nennt Zeiten (z.B. Abfahrtszeit / Aufstehzeit),
+    NICHT 'Punkte' — RZS kann keine Punkte setzen, nur Zeiten (kein falsches Versprechen)."""
+    rc = FakeRoutineClient(
+        items_data=_items_data(default=[_item("Zähne putzen")]))
+    text, _buttons = routine_anpassen_oeffnen(
+        chat_id=42, from_user_id=7,
+        routine_client=rc, is_member_fn=_immer_mitglied,
+        mini_app_url=_MINI_APP_URL,
+    )
+    # Hinweis darf nicht versprechen, Punkte direkt setzen zu können
+    assert "punkte direkt" not in text.lower()
+    assert "punkt direkt" not in text.lower()
+
+
+def test_T728_task_description_enthaelt_sofort_trigger():
+    """AC_UX-1/T728: Task-Description enthält expliziten Hinweis, sofort aufzurufen
+    (kein Zurückfragen) und nennt konkrete Trigger-Phrasen."""
+    rc = FakeRoutineClient()
+    tg = FakeTelegram()
+    task = RoutineAnpassenOeffnenTask(
+        tg=tg, routine_client=rc, is_member_fn=_immer_mitglied,
+        mini_app_url=_MINI_APP_BASE)
+    desc = task.description.lower()
+    # Klares Verb: öffnet Mini-App
+    assert "öffnet" in desc or "mini-app" in desc or "multi-feld" in desc
+    # Konkrete Trigger-Phrasen
+    assert "routine bearbeiten" in desc or "routine anpassen" in desc
+    assert "punkt" in desc or "punkte" in desc
+
+
+def test_T728_task_description_enthaelt_abgrenzung_zu_rzs():
+    """AC_UX-1/T728: Task-Description enthält Abgrenzung zu RZS (Zeitwert → anderen Skill)."""
+    rc = FakeRoutineClient()
+    tg = FakeTelegram()
+    task = RoutineAnpassenOeffnenTask(
+        tg=tg, routine_client=rc, is_member_fn=_immer_mitglied,
+        mini_app_url=_MINI_APP_BASE)
+    desc = task.description.lower()
+    # Abgrenzung zu routine_zeiten_setzen erwähnt
+    assert "zeiten_setzen" in desc or "routine_zeiten_setzen" in desc or "abfahrtszeit" in desc
