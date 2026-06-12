@@ -127,6 +127,13 @@ DEFAULTS = {
     # (RAO-8 dreifacher Guard). Selbe Domain wie mini_app_einkauf_url-Basis,
     # aber als separater Slot — kein String-Parsing der Einkauf-URL.
     "mini_app_base_url": "",
+    # HFE-9 / #729: Origin des Hörspiel-Buddys, über die die
+    # HoerspielFolgeErzeugenTask Folgen-Vorschläge holt
+    # (POST /api/v1/hoerspiel/folgen-vorschlag HFE-3) und Alben baut
+    # (POST /api/v1/hoerspiel/alben HFE-5). Per-Instanz-Wert; Default passt
+    # zum Pi-Setup (PORT-2 Hörspiel-Buddy auf 5053). Leer ⇒ Aufgabe NICHT im
+    # Katalog (AND-Guard mit family_group_chat_id_getter).
+    "hoerspiel_url_origin": "http://127.0.0.1:5053",
     # ONB-6 / EC-15: Familien-Gruppen-Chat-ID. Default leer = Onboarding-
     # Bindung. Über ENV oder Datei gesetzt → gesperrt (Vorrang vor
     # Onboarding-Bindung) — die Sperr-Logik sitzt in `resolve`, nicht im
@@ -173,7 +180,8 @@ class Config:
                  multimodal_api_key="",
                  multimodal_model="",
                  mini_app_einkauf_url="",
-                 mini_app_base_url=""):
+                 mini_app_base_url="",
+                 hoerspiel_url_origin=""):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
         self.provider = provider
@@ -203,6 +211,8 @@ class Config:
         self.mini_app_einkauf_url = mini_app_einkauf_url  # leer → ENV-Fallback MINI_APP_EINKAUF_URL
         # RAO-6 / T728-C: Basis-URL aller Mini-Apps (Funnel-Domain).
         self.mini_app_base_url = mini_app_base_url  # leer → RAO NICHT im Katalog
+        # HFE-9 / #729: Origin des Hörspiel-Buddys (HFE-3/HFE-5, HSP-17).
+        self.hoerspiel_url_origin = hoerspiel_url_origin  # leer → HFE NICHT im Katalog
 
 
 def _family_group_in_file(config_path):
@@ -329,4 +339,6 @@ def resolve(config_path, zd=None):
         mini_app_einkauf_url=str(values["mini_app_einkauf_url"]).strip(),
         # RAO-6 / T728-C: Basis-URL aller Mini-Apps (Funnel-Domain).
         mini_app_base_url=str(values["mini_app_base_url"]).strip().rstrip("/"),
+        # HFE-9 / #729: Origin des Hörspiel-Buddys.
+        hoerspiel_url_origin=str(values["hoerspiel_url_origin"]).strip().rstrip("/"),
     )
