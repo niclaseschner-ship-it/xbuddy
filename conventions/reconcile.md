@@ -36,13 +36,29 @@ offenes Issue, ist ein echter Spec-PR, oder ist bewusst als ticketlos markiert.
 ## RECON-3 — Status-Übergänge fasst NUR eine Action an, nie ein Agent per Shell
 <a id="recon-3"></a>
 
-Der `status:*`-Lebenszyklus (`spec → in-progress/in-review → ready → [Merge: leer]`)
-wird ausschließlich von `ticket-status-flow.yml` auf PR-Events gesetzt. **Kein Agent
-ruft `gh issue edit --add/--remove-label` für Status-Übergänge im laufenden Betrieb.**
-Grund: die #315-Klasse — ein `gh`-Shell-Befehl in einem Compound-Kommando brach still
-ab (Quoting), der Erfolg wurde dem Kommentar geglaubt, das Label blieb hängen. Die
-Action arbeitet **fail-loud + verify** (entfernt nur vorhandene Labels, kein
-`|| true`, liest den Soll-Zustand zurück und scheitert rot bei Abweichung).
+Der `status:*`-Lebenszyklus (`spec → [spec-in-progress] → ready → in-progress
+→ in-review → [Merge: leer]`) wird ausschließlich von `ticket-status-flow.yml`
+auf PR-Events gesetzt. **Kein Agent ruft `gh issue edit --add/--remove-label`
+für Status-Übergänge im laufenden Betrieb.** Grund: die #315-Klasse — ein
+`gh`-Shell-Befehl in einem Compound-Kommando brach still ab (Quoting), der
+Erfolg wurde dem Kommentar geglaubt, das Label blieb hängen. Die Action arbeitet
+**fail-loud + verify** (entfernt nur vorhandene Labels, kein `|| true`, liest
+den Soll-Zustand zurück und scheitert rot bei Abweichung).
+
+**Ausnahmen mit dokumentiertem Skill-Skip-Pfad** (`# status_rollback_guard:skip`,
+am Bash-Befehl): es gibt zwei Pfade, die per Skill-Disziplin direkt am Issue
+das `status:*`-Label setzen — der `status_rollback_guard.py`-Hook lässt sie
+durch:
+
+- **Nic-Stempel** (`-spec +ready` ODER `-spec-in-progress +ready`) — in
+  `arbeitstag-prep.md` Nic-Block, mit `prep_verdict`-Comment-Pflicht (PW-30).
+  Vorher Spec-PR mergen, dann Label.
+- **prep-Lock-Übergänge** (PW-33, 2026-06-09): `-spec +spec-in-progress`
+  (Claim vor Watchdog-Dispatch) und `-spec-in-progress +spec` (Release
+  zurück bei `zurück`/`parken`). Lock-Semantik: „jemand prept gerade an
+  diesem Ticket, niemand anders anfassen".
+
+Andere `status:*`-Mutationen per Shell sind weiterhin RECON-3-widrig.
 
 Geschlossene Issues tragen **kein** `status:*`-Label (`status:done` existiert bewusst
 nicht — „geschlossen" *ist* done). `prep-reconcile.yml` validiert das.
