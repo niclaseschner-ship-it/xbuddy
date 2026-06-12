@@ -651,6 +651,14 @@ spätere `Authorization: tma <initData>`-Härtung (V1.x) ist gemeinsame
 Mini-App-Aufgabe (siehe `~/brainstorm/conventions-vorab/mini-app-design-erstes-vorkommen.md`
 MAD-7-Folge-Ticket „Mini-App-Auth-Header"), kein V1-Blocker hier.
 
+**Launcher (V1.1):** Die Mini-App wird in V1.1 ausschließlich über einen
+**Inline-`web_app`-Button** geöffnet (RAO-6). Der breitere Launcher-Pfad
+(MAD-10, Button **oder** `t.me`-Direktlink) wird in V1.1 **nicht** scharf
+geschaltet, weil seine V1-Vorbedingung — Server-seitige `initData`-Validierung
+im `seiten`-Service (`seiten/main.py:378-410`, heute offen) — vorher
+geschlossen werden muss. Das ist eine Werft-Naht zum #719-Folge-Ticket-Stapel,
+nicht eine Routine-Anpassen-Werft-Eigene-Sache.
+
 *Test-Implikation:* Render-Test mit gemischter Liste (3 `default` + 1
 `einmalig`-heute, Config mit Zeiten) → die View zeigt 4 Cards in der richtigen
 Reihenfolge, `einmalig` mit `🌅`-Marker am Listen-Ende, drei Zeit-Anker-Cards
@@ -736,10 +744,23 @@ gebaut). V1 trägt die manuelle Such-Reibung bewusst.
 Die Anpassen-Mini-App ist der **zweite Mini-App-Konsument** der Plattform
 nach essen-einkauf (#653). Sie folgt bewusst dem
 First-Occurrence-Pattern aus
-`~/brainstorm/conventions-vorab/mini-app-design-erstes-vorkommen.md` (MAD-1
-bis MAD-9 + Anti-Patterns) — gleicher DTOK-Andock, gleiches Card-Pattern
-(MAD-2), gleiches Bottom-Sheet (MAD-4), `platform.js`-Wrapper (MAD-5),
-Asset-Pfade (MAD-6), V1-Auth-Modell (MAD-7).
+`~/brainstorm/conventions-vorab/mini-app-design-erstes-vorkommen.md`
+(MAD-1..7 + MAD-10 + Anti-Patterns; **Stand 2026-06-12 nach #719**: MAD-7
+ist offen für Button **oder** `t.me`-Direktlink — beide Wege liefern
+`initData`; MAD-8 ausgelagert nach `specs/platform/eltern-chat.md` EC-10
+A2-Klausel; MAD-9 ausgelagert in Deployment-Heimat; MAD-10 neu = Launcher-
+Capability). Routine-Anpassen folgt: gleicher DTOK-Andock, gleiches
+Card-Pattern (MAD-2), gleiches Bottom-Sheet (MAD-4), `platform.js`-Wrapper
+(MAD-5), Asset-Pfade (MAD-6), V1-Auth-Modell (MAD-7), V1.1-Launcher als
+Inline-Button via MAD-10 (V2-Direktlink-Pfad wartet auf
+`initData`-Validierung).
+
+Die Mini-App ist gleichzeitig die formale **Bestätigung der EC-33-Schwelle**
+(`specs/platform/eltern-chat.md`): Routine-Anpassen passt das ganze
+Routine-Set + drei Zeit-Felder an = ≥5 Werte und ≥2 Achsen pro Anstoß →
+WebApp ist der richtige UI-Modus (statt Chat-propose→confirm-pro-Eintrag).
+Genau das war auch der Begründungs-Kern der RPS-Deprecation (siehe
+`specs/platform/routine-punkte-setzen.md` E-RPS-3).
 
 **Erwartete Abweichungen** (zur Beobachtung im Impl-Lauf, nicht als Veto):
 
