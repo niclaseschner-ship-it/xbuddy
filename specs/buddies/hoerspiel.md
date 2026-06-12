@@ -664,7 +664,7 @@ Jedes Album hat ein Manifest `data/alben/<album-id>/manifest.json`:
   "voice": "shimmer",
   "erstellt-am": "2026-06-12",
   "freigegeben": true,
-  "cover-asset": "/display/hoerspiel/static/cover-default.png",
+  "cover-asset": "/display/hoerspiel/data/shared-assets/cover-default.jpg",
   "tracks": [
     {"id": "intro-shimmer", "position": 1, "art": "intro",
      "audio-asset": "/display/hoerspiel/data/shared-assets/intro_shimmer.mp3",
