@@ -227,8 +227,7 @@ function renderCard(item) {
   return (
     '<div class="item-card' + erledigt + '" ' +
          dataId + ' ' + dataKlasse + ' ' + dataKat + ' ' + dataAbge + '>' +
-      '<img class="item-bild" src="' + esc(bildSrc) + '" alt="" loading="lazy" ' +
-           'onerror="this.outerHTML=\'<span class=\\\"item-bild-placeholder\\\">🛒</span>\'">' +
+      '<img class="item-bild" src="' + esc(bildSrc) + '" alt="" loading="lazy">' +
       '<div class="item-text">' +
         '<span class="item-label">' + esc(item.label) + '</span>' +
       '</div>' +
