@@ -38,7 +38,7 @@ import time
 import urllib.error
 import urllib.request
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, make_response, render_template, request
 
 # Repo-Wurzel auf den Importpfad, damit `tools.configloader` (CONFIG-1),
 # `tools.logsetup` (LOG-4) und `seiten.aggregator` auch beim Direktstart
@@ -428,8 +428,22 @@ def routine_anpassen_view():
       GET /api/v1/routine/items  (ROUTINE-14, items-Liste)
       GET /api/v1/routine/config (ROUTINE-14, Zeit-Schluessel)
     nginx routet /api/v1/routine/... zum routine-Buddy (Port 5050).
+
+    Cache-Buster (T728 Live-Iter): build_id aus mtime der JS-Datei haengt
+    am CSS+JS als ?v=... — Telegram cached Mini-App-Assets sonst aggressiv
+    und Iterationen werden im Phone nicht sichtbar (Befund Nic 2026-06-12).
+    response-Header no-store zusaetzlich, damit jeder Open das HTML neu
+    holt.
     """
-    return render_template("routine-anpassen.html")
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    try:
+        build_id = str(int(os.path.getmtime(os.path.join(static_dir, "routine-anpassen.js"))))
+    except OSError:
+        build_id = "0"
+    resp = make_response(render_template("routine-anpassen.html", build_id=build_id))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
 
 
 # ============================================================

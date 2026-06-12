@@ -8,11 +8,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Cache-Buster (T728 Live-Iter): Telegram cached Mini-App-Assets sonst zu hart -->
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
   <title>Morgenroutine anpassen · XBuddy</title>
-  <link rel="stylesheet" href="/api/v1/seiten/static/routine-anpassen.css">
+  <link rel="stylesheet" href="/api/v1/seiten/static/routine-anpassen.css?v={{ build_id }}">
   <!-- platform.js (RAT-16) muss vor routine-anpassen.js geladen sein -->
-  <script src="/api/v1/seiten/static/platform.js"></script>
-  <script src="/api/v1/seiten/static/routine-anpassen.js" defer></script>
+  <script src="/api/v1/seiten/static/platform.js?v={{ build_id }}"></script>
+  <script src="/api/v1/seiten/static/routine-anpassen.js?v={{ build_id }}" defer></script>
 </head>
 <body>
   <header class="app-header">
