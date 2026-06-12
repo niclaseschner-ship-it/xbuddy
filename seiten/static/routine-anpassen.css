@@ -1,0 +1,537 @@
+/* routine-anpassen.css — Eltern-Anpassen-Mini-App (ROUTINE-20, Variante A).
+   MAD-1: Skalierungs-Parameter als zentrales Tuning-Idiom.
+   MAD-2: Bring!-Card-Pattern.
+   MAD-4: Bottom-Sheet.
+   Kein Telegram-spezifisches CSS (RAT-16). */
+
+/* DTOK-Andock (MAD-1): Farbpalette aus brainstorm/_shared.css
+   (Forest/Clay-Strang — Routine-App-Tokens) */
+:root {
+  --bg:            #F5F1E8;
+  --card:          #FFFFFF;
+  --ink:           #2B2A28;
+  --ink-soft:      #6B6761;
+  --rule:          #E3DCCF;
+  --rule-strong:   #D5CDBF;
+  --accent:        #47503C;    /* forest */
+  --accent-2:      #B06B3C;    /* clay */
+  --danger:        #B85544;
+  --surface-soft:  #FAF7F2;
+  --sheet-overlay: rgba(40, 38, 32, 0.55);
+  --sheet-radius:  18px;
+
+  /* MAD-1 — Skalierungs-Parameter */
+  --item-scale:        0.85;
+  --item-min-height:   calc(64px  * var(--item-scale));
+  --item-bild-size:    calc(44px  * var(--item-scale));
+  --item-padding-y:    calc(10px  * var(--item-scale));
+  --item-padding-x:    calc(12px  * var(--item-scale));
+  --item-gap:          calc(12px  * var(--item-scale));
+  --item-label-size:   calc(1.05rem * var(--item-scale));
+  --item-marker-size:  calc(1.1rem  * var(--item-scale));
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.4;
+  overscroll-behavior: contain;
+}
+
+/* ── App-Header ─────────────────────────────────────────── */
+
+.app-header {
+  position: sticky;
+  top: 0;
+  background: var(--accent);
+  color: #fff;
+  padding: 12px 16px;
+  z-index: 10;
+}
+
+.app-header h1 {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+/* ── Lade-Hinweis ───────────────────────────────────────── */
+
+.lade-hinweis {
+  text-align: center;
+  padding: 40px 16px;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+/* ── Haupt-Inhalt ───────────────────────────────────────── */
+
+#routine-inhalt {
+  padding: 12px 14px 100px;
+}
+
+/* ── Sektion-Header (ROUTINE-20) ────────────────────────── */
+
+.sektion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 18px 4px 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.sektion-titel {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-soft);
+}
+
+.sektion-subtitel {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--ink-soft);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ── Item-Card (MAD-2 Bring!-Pattern, ROUTINE-20) ───────── */
+
+.item-card {
+  display: grid;
+  grid-template-columns: 22px var(--item-bild-size) 1fr auto auto;
+  align-items: center;
+  gap: var(--item-gap);
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: var(--item-padding-y) var(--item-padding-x);
+  margin-bottom: 8px;
+  min-height: var(--item-min-height);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  user-select: none;
+}
+
+/* einmalig-Items: gestrichelt (ROUTINE-20: 🌅-Marker) */
+.item-card.einmalig {
+  background: var(--surface-soft);
+  border-style: dashed;
+}
+
+/* gesperrte Zeit-Anker: andere Hintergrundfarbe (ROUTINE-20: Schloss) */
+.item-card.gesperrt {
+  background: var(--surface-soft);
+}
+
+/* ── Drag-Handle ────────────────────────────────────────── */
+
+.drag-handle {
+  color: var(--ink-soft);
+  font-size: 18px;
+  text-align: center;
+  cursor: grab;
+  opacity: 0.6;
+  line-height: 1;
+}
+
+.drag-handle:active { cursor: grabbing; }
+
+/* Schloss-Symbol für gesperrte Anker (ROUTINE-20: Aufstehen + Losgehen) */
+.drag-handle.schloss {
+  cursor: default;
+  font-size: 14px;
+  opacity: 0.35;
+}
+
+/* ── Card-Bild ───────────────────────────────────────────── */
+
+.item-bild {
+  width: var(--item-bild-size);
+  height: var(--item-bild-size);
+  object-fit: contain;
+  border-radius: 4px;
+  background: var(--bg);
+}
+
+/* ── Card-Text ───────────────────────────────────────────── */
+
+.item-label {
+  font-size: var(--item-label-size);
+  font-weight: 500;
+  color: var(--ink);
+}
+
+/* ── Quellen-Marker (ROUTINE-20: 🌅 für einmalig) ───────── */
+
+.item-marker {
+  font-size: var(--item-marker-size);
+  line-height: 1;
+}
+
+/* ── Zeit-Input (Zeiten-Sektion) ─────────────────────────── */
+
+.zeit-input {
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--surface-soft);
+  border: 1px solid var(--rule-strong);
+  border-radius: 8px;
+  padding: 6px 10px;
+  text-align: center;
+}
+
+.zeit-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: #fff;
+}
+
+/* Minute-Input etwas schmaler */
+.zeit-input-min {
+  width: 58px;
+}
+
+.zeit-input-uhr {
+  width: 86px;
+}
+
+/* Einheit-Label nach dem Input */
+.zeit-einheit {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  margin-left: 4px;
+  white-space: nowrap;
+}
+
+/* Container für Input + Einheit */
+.zeit-feld-gruppe {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Lösch-Knopf (delete) */
+.del-btn {
+  background: transparent;
+  border: none;
+  color: var(--danger);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  line-height: 1;
+}
+
+.del-btn:active { background: rgba(184, 85, 68, 0.1); }
+
+/* Platzhalter für fehlenden del-btn bei gesperrten Items */
+.del-placeholder {
+  width: 34px;
+}
+
+/* ── Inline-Add-Button (ROUTINE-23: Abweichung von MAD-3, kein FAB) ── */
+
+.add-row {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  margin: 4px 0 0;
+  background: transparent;
+  border: 2px dashed var(--rule-strong);
+  border-radius: 10px;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.add-row:hover {
+  background: var(--surface-soft);
+  border-color: var(--accent);
+}
+
+.add-row:active { background: #e8e4db; }
+
+/* Deaktivierter V2-Add-Button (ROUTINE-20) */
+.add-row:disabled,
+.add-row[disabled] {
+  cursor: not-allowed;
+  color: var(--ink-soft);
+  border-color: var(--rule);
+  opacity: 0.6;
+}
+
+.add-row:disabled:hover,
+.add-row[disabled]:hover {
+  background: transparent;
+  border-color: var(--rule);
+}
+
+/* V2-Hinweis-Zeile */
+.v2-hinweis {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  text-align: center;
+  margin-top: 4px;
+}
+
+/* ── Bottom-Sheet (MAD-4) ─────────────────────────────────── */
+
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--sheet-overlay);
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+}
+
+.sheet-overlay[hidden] { display: none; }
+
+.sheet {
+  width: 100%;
+  background: var(--card);
+  border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
+  max-height: 85vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15);
+}
+
+.sheet-handle {
+  width: 40px;
+  height: 4px;
+  background: var(--rule-strong);
+  border-radius: 2px;
+  margin: 10px auto 0;
+}
+
+.sheet-inhalt {
+  padding: 16px 16px 32px;
+}
+
+/* ── Sheet-Inhalt ─────────────────────────────────────────── */
+
+.sheet-titel {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+
+.sheet-field { margin-bottom: 12px; }
+
+.sheet-field label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sheet-input {
+  display: block;
+  width: 100%;
+  font-family: inherit;
+  font-size: 1rem;
+  padding: 10px 12px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+
+.sheet-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: #fff;
+}
+
+/* Toggle dauerhaft / nur heute */
+.toggle-quelle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: #ede8de;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.toggle-quelle button {
+  font-family: inherit;
+  border: none;
+  background: transparent;
+  padding: 8px 4px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.1s;
+}
+
+.toggle-quelle button.active {
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+/* ── Icon-Picker (ROUTINE-21) ────────────────────────────── */
+
+.picker-search-wrap {
+  position: relative;
+  margin: 6px 0 10px;
+}
+
+.picker-search-wrap::before {
+  content: "🔍";
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.picker-search-input {
+  width: 100%;
+  padding-left: 32px !important;
+  font-family: inherit;
+  font-size: 0.95rem;
+  padding: 10px 12px 10px 32px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.picker-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: #fff;
+}
+
+.picker-galerie {
+  min-height: 60px;
+  margin-bottom: 10px;
+}
+
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 6px 0 12px;
+}
+
+.icon-grid-btn {
+  aspect-ratio: 1;
+  background: var(--surface-soft);
+  border: 2px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  transition: border-color 0.1s;
+}
+
+.icon-grid-btn:hover { background: #e8e4db; }
+
+.icon-grid-btn.selected {
+  border-color: var(--accent);
+  background: var(--card);
+}
+
+.icon-grid-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Null-Treffer-Klartext (ROUTINE-21c) */
+.picker-leer {
+  text-align: center;
+  padding: 20px 12px;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  background: var(--surface-soft);
+  border-radius: 8px;
+  margin: 6px 0 12px;
+}
+
+.picker-leer strong { color: var(--ink); }
+
+/* ── Sheet-Buttons ───────────────────────────────────────── */
+
+.sheet-btn-gruppe {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 8px;
+}
+
+.sheet-btn {
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 12px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  min-height: 44px;
+  transition: opacity 0.1s;
+}
+
+.sheet-btn:active { opacity: 0.8; }
+.sheet-btn:disabled { opacity: 0.4; cursor: default; }
+
+.sheet-btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.sheet-btn-ghost {
+  background: #ede8de;
+  color: var(--ink);
+}
+
+/* ── Toast ───────────────────────────────────────────────── */
+
+.toast {
+  position: fixed;
+  bottom: 90px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  z-index: 40;
+  white-space: nowrap;
+}
+
+.toast.visible { opacity: 0.92; }
+
+/* ── Leer-Meldung ────────────────────────────────────────── */
+
+.leer-hinweis {
+  text-align: center;
+  padding: 48px 16px;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
