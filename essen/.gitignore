@@ -8,3 +8,10 @@
 wuensche.json
 gerichte.json
 katalog.json
+
+# Per-Instanz-Daten (ESSEN-7) — leben pro Familie, nicht im Repo.
+# Default-Pfade wenn essen-Buddy ohne --wuensche-file/--einkaufsliste-file/--zaehler-file
+# läuft (Pi-Setup-Folge-Befund 2026-06-12).
+einkaufsliste.json
+zaehler.json
+wuensche.json
