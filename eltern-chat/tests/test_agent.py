@@ -505,3 +505,156 @@ def test_EC_30_system_prompt_enthält_trennlinie():
     # EC-22-Geist (gezielte Rückfrage, keine Varianten) bleibt erhalten.
     assert "fehlenden Kontext" in prompt
     assert "Niemals mehrere Varianten" in prompt or "niemals mehrere varianten" in prompt.lower()
+
+
+# ============================================================
+#  EC-35 — task_events Insert-Pfad in run_turn (Refs #724)
+# ============================================================
+
+class _FakeTaskEventsStore:
+    """Minimale Test-Doppelung für TaskEventsStore (EC-35)."""
+
+    def __init__(self):
+        self.inserts = []   # [(task_name, chat_id, outcome)]
+
+    def insert(self, task_name, chat_id, outcome):
+        self.inserts.append((task_name, chat_id, outcome))
+
+
+def test_EC35_no_store_no_insert():
+    """AC3: task_events_store=None (Default) → kein Insert, kein Fehler.
+    Sandbox-Verträglichkeit: der Default-Pfad ohne Store bleibt völlig
+    unchanged."""
+    read = FakeReadTask(name="info_lesen", result="Ergebnis")
+    provider = FakeProvider([
+        task_call_response("info_lesen"),
+        text_response("ok"),
+    ])
+    # Kein Store → kein Fehler, Ergebnis wie bisher.
+    result = agent.run_turn([], _user(), provider, _catalog(read), _TURN)
+    assert result.reply_text == "ok"
+
+
+def test_EC35_single_skill_call_inserts_success(tmp_path):
+    """AC2: ein Skill-Call im Turn → genau 1 Insert mit outcome='success'."""
+    store = _FakeTaskEventsStore()
+    read = FakeReadTask(name="info_lesen", result="42")
+    provider = FakeProvider([
+        task_call_response("info_lesen"),
+        text_response("Die Antwort ist 42."),
+    ])
+    agent.run_turn([], _user(), provider, _catalog(read), _TURN,
+                   task_events_store=store)
+
+    assert len(store.inserts) == 1
+    name, chat_id, outcome = store.inserts[0]
+    assert name == "info_lesen"
+    assert chat_id == 42           # TurnContext.chat_id = 42
+    assert outcome == "success"
+
+
+def test_EC35_two_calls_same_skill_one_insert():
+    """AC4 (Deduplizierung): ein Turn mit zwei Aufrufen desselben Skills →
+    genau 1 Insert. Der Anker ist 'Familie hat diesen Skill genutzt',
+    nicht 'LLM hat einmal getoolt'."""
+    store = _FakeTaskEventsStore()
+    read = FakeReadTask(name="seiten_uebersicht", result="Seite A")
+    provider = FakeProvider([
+        # Erste Iteration: Skill aufgerufen.
+        task_call_response("seiten_uebersicht", call_id="c-1"),
+        # Zweite Iteration: NOCHMALS derselbe Skill.
+        task_call_response("seiten_uebersicht", call_id="c-2"),
+        text_response("Fertig."),
+    ])
+    agent.run_turn([], _user(), provider, _catalog(read), _TURN,
+                   task_events_store=store)
+
+    # Nur 1 Insert trotz 2 Aufrufen.
+    assert len(store.inserts) == 1
+    assert store.inserts[0][0] == "seiten_uebersicht"
+    assert store.inserts[0][2] == "success"
+
+
+def test_EC35_failing_skill_inserts_error():
+    """AC2: Skill wirft → 1 Insert mit outcome='error'."""
+    store = _FakeTaskEventsStore()
+    read = FakeReadTask(name="info_lesen", result=RuntimeError("Quelle weg"))
+    provider = FakeProvider([
+        task_call_response("info_lesen"),
+        text_response("Das hat nicht geklappt."),
+    ])
+    agent.run_turn([], _user(), provider, _catalog(read), _TURN,
+                   task_events_store=store)
+
+    assert len(store.inserts) == 1
+    assert store.inserts[0][0] == "info_lesen"
+    assert store.inserts[0][2] == "error"
+
+
+def test_EC35_write_proposal_inserts_abort():
+    """AC2: WRITE-Vorschlag (pending proposal) → Insert mit outcome='abort'
+    für den involvierten Skill."""
+    store = _FakeTaskEventsStore()
+    write = FakeWriteTask(name="termin_eintragen", summary="Termin am Dienstag")
+    provider = FakeProvider([task_call_response("termin_eintragen")])
+    result = agent.run_turn([], _user(), provider, _catalog(write), _TURN,
+                            task_events_store=store)
+
+    assert result.proposal is not None
+    assert len(store.inserts) == 1
+    assert store.inserts[0][0] == "termin_eintragen"
+    assert store.inserts[0][2] == "abort"
+
+
+def test_EC35_two_different_skills_two_inserts():
+    """AC2: zwei verschiedene Skills in einem Turn → zwei separate Inserts."""
+    store = _FakeTaskEventsStore()
+    read_a = FakeReadTask(name="skill_a", result="A")
+    read_b = FakeReadTask(name="skill_b", result="B")
+
+    from model import GenerationResponse, TaskCallBlock
+    # Beide Skills werden in einer einzigen Provider-Antwort aufgerufen.
+    provider = FakeProvider([
+        GenerationResponse(
+            text="",
+            task_calls=[
+                TaskCallBlock(call_id="c-a", task="skill_a", arguments={}),
+                TaskCallBlock(call_id="c-b", task="skill_b", arguments={}),
+            ]),
+        text_response("Beide Skills liefen."),
+    ])
+    agent.run_turn([], _user(), provider, _catalog(read_a, read_b), _TURN,
+                   task_events_store=store)
+
+    inserted_names = {r[0] for r in store.inserts}
+    assert inserted_names == {"skill_a", "skill_b"}
+    assert len(store.inserts) == 2
+    for _, chat_id, outcome in store.inserts:
+        assert outcome == "success"
+        assert chat_id == 42
+
+
+def test_EC35_no_insert_when_no_skill_called():
+    """Kein Insert, wenn der Provider keinen Tool-Call macht (reine Text-
+    Antwort). Ein leerer Turn soll keine leere Zeile in task_events hinterlassen."""
+    store = _FakeTaskEventsStore()
+    provider = FakeProvider([text_response("Hallo!")])
+    agent.run_turn([], _user(), provider, Catalog(), _TURN,
+                   task_events_store=store)
+    assert store.inserts == []
+
+
+def test_EC35_chat_id_passed_correctly_from_turn_context():
+    """AC2: chat_id kommt aus turn_context.chat_id — nicht hartcodiert."""
+    store = _FakeTaskEventsStore()
+    read = FakeReadTask(name="info_lesen", result="X")
+    provider = FakeProvider([
+        task_call_response("info_lesen"),
+        text_response("ok"),
+    ])
+    turn = TurnContext(chat_id=9999)
+    agent.run_turn([], _user(), provider, _catalog(read), turn,
+                   task_events_store=store)
+
+    assert len(store.inserts) == 1
+    assert store.inserts[0][1] == 9999

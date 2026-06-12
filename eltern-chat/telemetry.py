@@ -10,6 +10,9 @@ Wall-Clock, geschätzte Kosten) und bietet:
 - `TelemetryStore.persist_turn(turn_id, chat_id, telemetry)` — speichert
   alle Calls eines Turns in `conversations.db`, Tabelle `provider_calls`
   (AC4). Schema-CREATE-IF-NOT-EXISTS analog history.py (E-EC-8).
+- `TaskEventsStore.insert(task_name, chat_id, outcome)` — speichert pro
+  Nutzer-Turn einen Eintrag in `task_events` (EC-35). Deduplizierung
+  (ein Skill = ein Event pro Turn) liegt beim Aufrufer (agent.py).
 
 Die History persistiert KEINEN Suffix (R7) — das macht main.py beim Senden,
 nicht beim Speichern. So bleibt der Verlauf neutral.
@@ -168,6 +171,68 @@ class TelemetryStore:
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))",
             rows)
         self._conn.commit()
+
+    def close(self):
+        self._conn.close()
+
+
+# ============================================================
+#  EC-35 — Skill-Nutzungs-Telemetrie (task_events-Tabelle)
+# ============================================================
+
+_TASK_EVENTS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS task_events (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_name  TEXT    NOT NULL,
+    chat_id    INTEGER NOT NULL,
+    created_at TEXT    NOT NULL,
+    outcome    TEXT    NOT NULL CHECK(outcome IN ('success','abort','error'))
+);
+CREATE INDEX IF NOT EXISTS idx_task_events_chat ON task_events (chat_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_task_events_name ON task_events (task_name);
+"""
+
+
+class TaskEventsStore:
+    """Persistiert Skill-Nutzungs-Events pro Nutzer-Turn in `conversations.db`
+    (EC-35).
+
+    Deduplizierung (ein Skill = ein Event pro Turn) liegt beim Aufrufer
+    (agent.run_turn). `insert` schreibt immer eine Zeile — die Caller-Logik
+    stellt sicher, dass pro Skill nur einmal gerufen wird.
+
+    `query_by_name_chat_since` liefert die Anzahl Events für EC-34-Frequenz-
+    Trigger („≥3 Aufrufe diese Woche").
+    """
+
+    def __init__(self, db_path):
+        self._conn = sqlite3.connect(db_path)
+        self._conn.executescript(_TASK_EVENTS_SCHEMA)
+        self._conn.commit()
+
+    def insert(self, task_name, chat_id, outcome):
+        """Speichert ein Task-Event. `created_at` wird als UTC-Zeitstempel
+        gesetzt (datetime('now')). `outcome` muss 'success', 'abort' oder
+        'error' sein — SQLite CHECK erzwingt das auf DB-Ebene.
+        """
+        self._conn.execute(
+            "INSERT INTO task_events (task_name, chat_id, created_at, outcome) "
+            "VALUES (?, ?, datetime('now'), ?)",
+            (task_name, int(chat_id), outcome))
+        self._conn.commit()
+
+    def query_by_name_chat_since(self, task_name, chat_id, since):
+        """Liefert die Anzahl Events für `task_name` + `chat_id` ab `since`
+        (ISO-Datetime-String, z. B. '2026-06-05 00:00:00').
+
+        Wird von EC-34-Frequenz-Trigger genutzt: „≥3 Aufrufe diese Woche
+        → Footer-Hinweis auf Mini-App schalten".
+        """
+        cur = self._conn.execute(
+            "SELECT COUNT(*) FROM task_events "
+            "WHERE task_name = ? AND chat_id = ? AND created_at >= ?",
+            (task_name, int(chat_id), since))
+        return cur.fetchone()[0]
 
     def close(self):
         self._conn.close()
