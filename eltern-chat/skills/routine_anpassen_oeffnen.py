@@ -12,6 +12,13 @@ Schwester-Skill von einkauf_zeigen (EZG) — Stil-Anker gespiegelt
 wird ein Inline-Button zurückgegeben — eine leere Routine ist Anfangszustand,
 nicht Endzustand wie eine leere Einkaufsliste.
 
+**TASK-10c Form-(a)-Ausnahme (RAO-9 / Bauschuld):** Dieser Skill baut
+TASK-10c Form (a) — Tuple-Return `(text, buttons)` + Selbst-Send im
+Task-Adapter — analog EZG, weil das presentation-Framework (TASK-10c Form (b):
+strukturiertes `{text, presentation}`-Ergebnis) zum Bau-Zeitpunkt noch nicht
+ratifiziert war. Migrationsschuld wandert mit EZG mit (Folge-Ticket separat);
+kein Code-Change nötig bis zur EZG-Migration.
+
 **Eingang:**
   - `chat_id`          — Telegram-Chat, in dem die Antwort landen wird (RAO-1).
   - `from_user_id`     — Telegram-User-ID des Aufrufers (Berechtigung RAO-2).
