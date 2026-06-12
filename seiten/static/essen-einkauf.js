@@ -214,7 +214,7 @@ function sektionHeader(kat, offenItems, erledigtItems) {
 function renderCard(item) {
   const erledigt = item.abgehakt ? " erledigt" : "";
   const marker = _marker(item);
-  const bildSrc = "/_shared/icons/arasaac/" + encodeURIComponent(item.bild_ref) + ".png";
+  const bildSrc = "/display/_shared/icons/arasaac/" + encodeURIComponent(item.bild_ref) + ".png";
 
   // data-* für Event-Handler
   const dataId      = 'data-item-id="' + esc(item.id) + '"';
@@ -381,7 +381,7 @@ function oeffneUebernahmeSheet(gericht, zutaten) {
     const nAusgewaehlt = zutatStatus.filter(s => s.ausgewaehlt).length;
 
     const zeilen = zutatStatus.map((s, idx) => {
-      const bildSrc = "/_shared/icons/arasaac/" + encodeURIComponent(s.zutat.bild_ref) + ".png";
+      const bildSrc = "/display/_shared/icons/arasaac/" + encodeURIComponent(s.zutat.bild_ref) + ".png";
       const ausgewaehltKlasse = s.ausgewaehlt ? " ausgewaehlt" : "";
       const check = s.ausgewaehlt ? "✓" : "";
       const hinweis = s.schonDrauf ? '<span class="zutat-hinweis"> · schon drauf</span>' : "";
