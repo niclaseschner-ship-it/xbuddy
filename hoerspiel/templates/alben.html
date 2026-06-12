@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#FBF2D4">
-<title>Hörspiel — Stigi &amp; Co.</title>
+<title>Hörspiele — Stigi &amp; Co.</title>
 
-{# HSP-2/HSP-4: Token-Strang einbinden (DTOK-2/3) — keine lokale Kopie. #}
+{# HSP-4: Token-Strang einbinden (DTOK-2/3) — keine lokale Kopie. #}
 <link rel="stylesheet" href="/display/_shared/design/tokens.css">
 <link rel="stylesheet" href="/display/hoerspiel/static/alben.css">
 <link rel="manifest" href="/display/hoerspiel/static/manifest.webmanifest">
@@ -15,82 +15,94 @@
 {# HSP-4: stage=toddler (Paula 4 J) — font-hand + Caveat, XL, hand-drawn #}
 <body class="xb" data-stage="toddler">
 
-{# HSP-2: Splitscreen — linke Kachel-Spalte + rechte Player-Säule auf einer Canvas #}
-<div class="splitscreen" id="app">
+{# HSP-2: Shell-Grid — topbar / main player / footer (Werft-Mockup iter-3) #}
+<div class="shell" id="app">
+
+  {# ── KOPFZEILE: Logo + Serien-Titel + Subtitle ── #}
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-icon">
+        <img src="/display/_shared/icons/arasaac/5915.png" alt="" aria-hidden="true">
+      </div>
+      <div class="topbar-text">
+        <div class="topbar-title">Hörspiele</div>
+        <div class="topbar-sub" id="topbar-sub">Stigi, Malini &amp; Vögelchen — Geschichten aus dem Garten</div>
+      </div>
+    </div>
+  </header>
 
   {# ── LINKE SPALTE: Album-Kachel-Raster (HSP-2, E-HSP-8: 5×2 ohne Scroll) ── #}
-  <section class="kacheln-col" aria-label="Folgen auswählen">
-    <div class="kacheln-grid" id="kacheln-grid" role="list">
+  <main class="main" aria-label="Folgen auswählen">
+    <div class="grid" id="kacheln-grid" role="list">
       {# Kacheln werden von alben.js befüllt #}
     </div>
-  </section>
+  </main>
 
   {# ── RECHTE SPALTE: Player (HSP-2/21/22 — immer sichtbare vertikale Säule) ── #}
-  <aside class="player-col" aria-label="Abspielen">
-    <div class="player-card card" id="player">
+  <aside class="player" id="player" aria-label="Abspielen">
 
-      {# Cover-Slot (HSP-4b E-HSP-10: 1:1 aspect-ratio, gleicher Slot wie Kachel) #}
-      <div class="player-cover-wrap">
-        <img class="player-cover" id="player-cover"
-             src="" alt="" aria-hidden="true">
-      </div>
-
-      {# Album-Header (HSP-21) #}
-      <div class="player-header">
-        <div class="player-album-nr" id="player-album-nr"></div>
-        <div class="player-album-titel" id="player-album-titel"></div>
-      </div>
-
-      {# Track-Liste (HSP-4b: grid-auto-rows:minmax(0,1fr) bis 10 Tracks ohne Scroll) #}
-      <ul class="player-tracks" id="player-tracks" aria-label="Tracks" role="list">
-      </ul>
-
-      {# Now-Playing (HSP-2/21: aktueller Track mit Pikto-Wortblock, HSP-4a) #}
-      <div class="player-now-playing" id="player-now-playing" aria-live="polite">
-      </div>
-
-      {# Progress-Bar (HSP-21 V1: Anzeige, nicht zwingend interaktiv) #}
-      <div class="player-progress-wrap" aria-hidden="true">
-        <div class="player-progress-bar">
-          <div class="player-progress-fill" id="player-progress-fill"></div>
-        </div>
-      </div>
-
-      {# Controls am Boden (HSP-3/21: groß, touch-tauglich) #}
-      <div class="player-controls">
-        <button class="ctrl-btn ctrl-prev" id="ctrl-prev"
-                aria-label="Voriger Track" title="Voriger Track">
-          <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
-            <polygon points="38,8 14,24 38,40" fill="currentColor"/>
-            <rect x="8" y="8" width="6" height="32" rx="3" fill="currentColor"/>
-          </svg>
-        </button>
-
-        {# Play/Pause — orange bei Resume (HSP-2/23) #}
-        <button class="ctrl-btn ctrl-play" id="ctrl-play"
-                aria-label="Abspielen" title="Abspielen">
-          <svg class="icon-play" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
-            <polygon points="12,6 42,24 12,42" fill="currentColor"/>
-          </svg>
-          <svg class="icon-pause" viewBox="0 0 48 48" aria-hidden="true" focusable="false" hidden>
-            <rect x="8" y="6" width="12" height="36" rx="4" fill="currentColor"/>
-            <rect x="28" y="6" width="12" height="36" rx="4" fill="currentColor"/>
-          </svg>
-        </button>
-
-        <button class="ctrl-btn ctrl-next" id="ctrl-next"
-                aria-label="Nächster Track" title="Nächster Track">
-          <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
-            <polygon points="10,8 34,24 10,40" fill="currentColor"/>
-            <rect x="34" y="8" width="6" height="32" rx="3" fill="currentColor"/>
-          </svg>
-        </button>
-      </div>
-
+    {# Cover-Slot (HSP-4b E-HSP-10: 1:1 aspect-ratio, gleicher Slot wie Kachel) #}
+    <div class="player-cover">
+      <img id="player-cover-img" src="" alt="" aria-hidden="true">
     </div>
+
+    {# Album-Header (HSP-21) #}
+    <div class="player-header">
+      <div class="player-album-nr" id="player-album-nr"></div>
+      <div class="player-album-title" id="player-album-title"></div>
+    </div>
+
+    {# Track-Liste (HSP-4b: grid-auto-rows:minmax(0,1fr) bis 10 Tracks ohne Scroll) #}
+    <div class="player-tracks" aria-label="Tracks">
+      <div class="player-tracks-title">Tracks</div>
+      <div class="player-tracks-list" id="player-tracks-list" role="list"></div>
+    </div>
+
+    {# Now-Playing + Progress (HSP-21) #}
+    <div class="player-now">
+      <div class="player-now-label" id="player-now-label"></div>
+      <div class="player-now-text" id="player-now-text"></div>
+      <div class="progress" aria-hidden="true">
+        <div class="progress-bar" id="player-progress-fill"></div>
+      </div>
+    </div>
+
+    {# Controls am Boden (HSP-3/21: groß, touch-tauglich) #}
+    <div class="player-ctrl">
+      <button class="btn-circle btn-prev" id="ctrl-prev"
+              aria-label="Voriger Track" title="Voriger Track">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M6 5h2v14H6V5zM20 5l-10 7 10 7V5z"/>
+        </svg>
+      </button>
+
+      {# Play/Pause — orange bei Resume (HSP-2/23) #}
+      <button class="btn-circle btn-play" id="ctrl-play"
+              aria-label="Abspielen" title="Abspielen">
+        <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M8 5v14l11-7z"/>
+        </svg>
+        <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true" focusable="false" hidden>
+          <path d="M6 5h4v14H6V5zM14 5h4v14h-4V5z"/>
+        </svg>
+      </button>
+
+      <button class="btn-circle btn-next" id="ctrl-next"
+              aria-label="Nächster Track" title="Nächster Track">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M16 5h2v14h-2V5zM4 5l10 7-10 7V5z"/>
+        </svg>
+      </button>
+    </div>
+
   </aside>
 
-</div>{# /.splitscreen #}
+  {# ── FUSSZEILE: ARASAAC-Credit ── #}
+  <footer class="footer">
+    <div>Piktogramme: ARASAAC / Sergio Palao (CC BY-NC-SA)</div>
+  </footer>
+
+</div>{# /.shell #}
 
 {# HSP-22: PWA-Manifest + MediaSession werden in alben.js eingerichtet #}
 <script src="/display/hoerspiel/static/alben.js"></script>
