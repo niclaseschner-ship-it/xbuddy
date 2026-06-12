@@ -1,17 +1,20 @@
-"""Tests für EssenFotoSetzenTask und Catalog-Registrierung (ESSEN-22 Pfad 2).
+"""Tests für EssenFotoSetzenTask und Catalog-Registrierung (ESSEN-22 Pfad 2, T782).
 
 Analog `test_gericht_anlegen_task.py` / `test_foto_senden_task.py`:
 - WriteTask-Prüfung (EC-10): propose→confirm-Aufgabe, Klasse C.
 - AND-Guard: essen_origin_url UND photo_origin_url UND
   family_group_chat_id_getter (T531/AC5).
 - propose-Tests: Vorschlag nennt Ziel + Bestätigungshinweis.
-- execute-Tests: Hochladen (Schritt 1), PATCH (Schritt 2a), Override (Schritt 2b).
+- execute-Tests: atomarer hochladen-Pfad (Upload + Schreiben).
 - Abbruch-Pfad.
 - Nicht-Mitglied → kein Schreiben.
+- Schema-enum nur hochladen+abbruch (AC2).
 
 Pflicht-Tests (AC1–AC5):
+- AC2: Schema-aktion-enum enthält nur 'hochladen' und 'abbruch'.
 - AC2: propose → confirm: Task-Vorschlag beschreibt Ziel; nach Bestätigung schreibt
-  execute entweder PATCH oder foto_overrides.json.
+  execute atomar Upload+PATCH oder Upload+Override.
+- AC3: Quittung nach hochladen enthält item/gericht + medien_id, kein 'Bestätige mit...'.
 - AC5: tasks.py-Guard — essen+photo+fgcid → registriert; fehlt eines → nicht registriert.
 """
 
@@ -159,6 +162,26 @@ def test_task_name():
 
 
 # ============================================================
+#  AC2 — Schema: enum nur hochladen+abbruch
+# ============================================================
+
+def test_AC2_schema_enum_nur_hochladen_und_abbruch():
+    """AC2: Schema-aktion-enum enthält nur 'hochladen' und 'abbruch'."""
+    task = _make_task()
+    enum_werte = task.parameters["properties"]["aktion"]["enum"]
+    assert set(enum_werte) == {"hochladen", "abbruch"}, (
+        "Schema-enum muss genau ['hochladen', 'abbruch'] enthalten — "
+        "patch_gericht und schreibe_override sind deprecated (T782/AC2)")
+
+
+def test_AC2_schema_kein_medien_id_parameter():
+    """AC2: medien_id ist nicht mehr im Schema (atomar — kein Schritt-2-Aufruf nötig)."""
+    task = _make_task()
+    assert "medien_id" not in task.parameters["properties"], (
+        "medien_id darf nicht im Schema sein — Skill ist atomar (T782/AC2)")
+
+
+# ============================================================
 #  T777 / ESSEN-22 V1.1: Description-Schärfung
 # ============================================================
 
@@ -225,16 +248,6 @@ def test_AC2_propose_hochladen_item_nennt_item():
     assert "obst:apfel" in p.summary
 
 
-def test_propose_patch_gericht_nennt_aktion():
-    """propose für 'patch_gericht' → Vorschlag nennt PATCH-Aktion."""
-    task = _make_task()
-    p = task.propose(
-        {"aktion": "patch_gericht", "gericht_id": "g-5", "medien_id": "m-1"},
-        _ctx())
-    assert isinstance(p, Proposal)
-    assert "g-5" in p.summary or "patch" in p.summary.lower()
-
-
 def test_propose_abbruch_nennt_abbruch():
     """propose für 'abbruch' → Vorschlag nennt Abbruch."""
     task = _make_task()
@@ -244,28 +257,102 @@ def test_propose_abbruch_nennt_abbruch():
 
 
 # ============================================================
-#  AC2 — execute Hochladen (Schritt 1)
+#  AC1+AC3 — execute hochladen atomar (Upload + Schreiben)
 # ============================================================
 
-def test_AC2_execute_hochladen_mit_file_id_postet_photo():
-    """AC2 Schritt 1: execute('hochladen') mit file_id → POST an Photo-Buddy."""
+def test_AC1_execute_hochladen_gericht_atomar():
+    """AC1+AC3: execute('hochladen') mit gericht_id → POST Photo-Buddy + PATCH Essen-Buddy."""
+    from skills.essen_client import EssenClient
     from skills.photo_client import PhotoClient
 
     photo_transport, photo_calls = _transport_stub_photo(
         post_body=json.dumps({"id": "m-high", "typ": "foto"}).encode("utf-8"))
     photo_client = PhotoClient(
         origin_url="http://127.0.0.1:5070", transport=photo_transport)
+    essen_transport, essen_calls = _transport_stub_essen()
+    essen_client = EssenClient(
+        origin_url="http://127.0.0.1:5052", transport=essen_transport)
     tg = FakeTelegramMitDownload(file_bytes=b"JPEGDATA", members=_members(42))
-    task = _make_task(tg=tg, photo_client=photo_client)
+    task = _make_task(tg=tg, photo_client=photo_client, essen_client=essen_client)
 
     quittung = task.execute(
         {"aktion": "hochladen", "gericht_id": "g-1"},
         _ctx(file_id="tg-photo-1"))
 
     assert tg.download_calls == ["tg-photo-1"]
+    # Photo-Buddy: Upload.
     assert len(photo_calls) == 1
     assert photo_calls[0]["method"] == "POST"
+    # Essen-Buddy: PATCH (atomar).
+    patch_calls = [c for c in essen_calls if c["method"] == "PATCH"]
+    assert len(patch_calls) == 1
+    assert "g-1" in patch_calls[0]["path"]
+    # Quittung nennt gericht_id und medien_id.
+    assert "g-1" in quittung
     assert "m-high" in quittung
+
+
+def test_AC1_execute_hochladen_item_atomar(tmp_path):
+    """AC1+AC3: execute('hochladen') mit item_id → POST Photo-Buddy + Override-JSON."""
+    from skills.essen_client import EssenClient
+    from skills.photo_client import PhotoClient
+
+    photo_transport, photo_calls = _transport_stub_photo(
+        post_body=json.dumps({"id": "m-item", "typ": "foto"}).encode("utf-8"))
+    photo_client = PhotoClient(
+        origin_url="http://127.0.0.1:5070", transport=photo_transport)
+    essen_transport, essen_calls = _transport_stub_essen()
+    essen_client = EssenClient(
+        origin_url="http://127.0.0.1:5052", transport=essen_transport)
+    pfad = str(tmp_path / "foto_overrides.json")
+    tg = FakeTelegramMitDownload(file_bytes=b"JPEGDATA", members=_members(42))
+    task = _make_task(
+        tg=tg, photo_client=photo_client, essen_client=essen_client,
+        overrides_pfad=pfad)
+
+    quittung = task.execute(
+        {"aktion": "hochladen", "item_id": "obst:apfel"},
+        _ctx(file_id="tg-foto-2"))
+
+    # Upload muss passiert sein.
+    assert len(photo_calls) == 1
+    assert photo_calls[0]["method"] == "POST"
+    # Kein PATCH für Basis-Item.
+    patch_calls = [c for c in essen_calls if c["method"] == "PATCH"]
+    assert patch_calls == []
+    # Override-JSON muss geschrieben sein.
+    assert os.path.exists(pfad)
+    with open(pfad, encoding="utf-8") as fh:
+        data = json.load(fh)
+    assert data.get("obst:apfel") == "m-item"
+    # Quittung nennt item_id und medien_id.
+    assert "obst:apfel" in quittung
+    assert "m-item" in quittung
+
+
+def test_AC3_quittung_gericht_kein_bestaetigung_hinweis():
+    """AC3: Quittung nach hochladen+Gericht enthält keine 'Bestätige mit...'-Phrase."""
+    from skills.essen_client import EssenClient
+    from skills.photo_client import PhotoClient
+
+    photo_transport, _ = _transport_stub_photo(
+        post_body=json.dumps({"id": "m-q", "typ": "foto"}).encode("utf-8"))
+    photo_client = PhotoClient(
+        origin_url="http://127.0.0.1:5070", transport=photo_transport)
+    essen_transport, _ = _transport_stub_essen()
+    essen_client = EssenClient(
+        origin_url="http://127.0.0.1:5052", transport=essen_transport)
+    tg = FakeTelegramMitDownload(file_bytes=b"FOTO")
+    task = _make_task(tg=tg, photo_client=photo_client, essen_client=essen_client)
+
+    quittung = task.execute(
+        {"aktion": "hochladen", "gericht_id": "g-99"},
+        _ctx(file_id="tg-f"))
+
+    assert "Bestätige" not in quittung
+    assert "bestätige" not in quittung.lower()
+    assert "g-99" in quittung
+    assert "m-q" in quittung
 
 
 def test_execute_hochladen_ohne_file_id_ehrliche_grenze():
@@ -303,54 +390,6 @@ def test_execute_hochladen_nicht_mitglied_kein_post():
 
     assert quittung
     assert photo_calls == []
-
-
-# ============================================================
-#  AC2 — execute PATCH (Schritt 2a)
-# ============================================================
-
-def test_AC2_execute_patch_gericht_ruft_essen_buddy():
-    """AC2 Schritt 2a: execute('patch_gericht') → PATCH an Essen-Buddy."""
-    from skills.essen_client import EssenClient
-
-    essen_transport, essen_calls = _transport_stub_essen()
-    essen_client = EssenClient(
-        origin_url="http://127.0.0.1:5052", transport=essen_transport)
-    task = _make_task(essen_client=essen_client)
-
-    quittung = task.execute(
-        {"aktion": "patch_gericht", "gericht_id": "g-5", "medien_id": "m-abc"},
-        _ctx())
-
-    patch_calls = [c for c in essen_calls if c["method"] == "PATCH"]
-    assert len(patch_calls) == 1
-    assert "g-5" in patch_calls[0]["path"]
-    assert "g-5" in quittung
-    assert "m-abc" in quittung
-
-
-# ============================================================
-#  AC2 — execute Override (Schritt 2b)
-# ============================================================
-
-def test_AC2_execute_schreibe_override_schreibt_datei():
-    """AC2 Schritt 2b: execute('schreibe_override') → foto_overrides.json."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        pfad = os.path.join(tmpdir, "foto_overrides.json")
-        task = _make_task(overrides_pfad=pfad)
-
-        quittung = task.execute(
-            {"aktion": "schreibe_override",
-             "item_id": "obst:birne",
-             "medien_id": "m-birne"},
-            _ctx())
-
-        assert os.path.exists(pfad)
-        with open(pfad, encoding="utf-8") as fh:
-            data = json.load(fh)
-        assert data["obst:birne"] == "m-birne"
-        assert "obst:birne" in quittung
-        assert "m-birne" in quittung
 
 
 # ============================================================
@@ -461,24 +500,12 @@ def test_AC5_nicht_registriert_ohne_fgcid():
 
 def test_execute_kein_gericht_id_ohne_item_id_ehrliche_grenze():
     """Weder gericht_id noch item_id in arguments → nichts_zu_tun-Quittung."""
-    task = _make_task()
+    tg = FakeTelegramMitDownload(file_bytes=b"FOTO")
+    task = _make_task(tg=tg)
     quittung = task.execute(
-        {"aktion": "patch_gericht"},  # gericht_id fehlt
-        _ctx())
+        {"aktion": "hochladen"},  # gericht_id und item_id fehlen
+        _ctx(file_id="tg-1"))
     assert quittung  # ehrliche Grenze, kein Crash
-
-
-def test_propose_schreibe_override_nennt_item_und_medien():
-    """propose für 'schreibe_override' mit item_id+medien_id → beide in Vorschlag."""
-    task = _make_task()
-    p = task.propose(
-        {"aktion": "schreibe_override",
-         "item_id": "obst:apfel",
-         "medien_id": "m-99"},
-        _ctx())
-    assert isinstance(p, Proposal)
-    assert "obst:apfel" in p.summary
-    assert "m-99" in p.summary
 
 
 # ============================================================
@@ -487,11 +514,11 @@ def test_propose_schreibe_override_nennt_item_und_medien():
 
 def test_live_pfad_basis_item_override_funktioniert(tmp_path, monkeypatch):
     """AC3: build_catalog übergibt ESSEN_FOTO_OVERRIDES_FILE an EssenFotoSetzenTask;
-    execute('schreibe_override') schreibt tatsächlich an tmp_path — kein stilles NICHTS_ZU_TUN.
+    execute('hochladen') mit item_id schreibt tatsächlich an tmp_path — kein stilles NICHTS_ZU_TUN.
 
     Live-Naht: simuliert den echten build_catalog-Pfad mit allen AND-Guard-Argumenten
     + ESSEN_FOTO_OVERRIDES_FILE=<tmp_path>; greift den registrierten Task,
-    ruft schreibe_override aus und prüft, dass die Datei existiert.
+    ruft hochladen mit item_id aus und prüft, dass die Datei existiert.
     """
     overrides_datei = tmp_path / "foto_overrides.json"
     monkeypatch.setenv(
@@ -519,25 +546,26 @@ def test_live_pfad_basis_item_override_funktioniert(tmp_path, monkeypatch):
         "build_catalog muss ESSEN_FOTO_OVERRIDES_FILE als overrides_pfad übergeben; "
         "war None → Live-NO-OP (Watchdog-Befund T531-S3b-FIX1/AC3)")
 
-    # Führe schreibe_override aus und prüfe, dass die Datei am tmp_path erscheint.
-    from skills.essen_client import EssenClient
-    from skills.photo_client import PhotoClient
-    photo_transport, _ = _transport_stub_photo()
-    essen_transport, _ = _transport_stub_essen()
-
     # Ersetze Clients im Task durch Stubs (Reflection) — der Task ist schon
     # aus dem Catalog, wir wollen nur den Live-Pfad durch execute testen.
+    from skills.essen_client import EssenClient
+    from skills.photo_client import PhotoClient
+    photo_transport, _ = _transport_stub_photo(
+        post_body=json.dumps({"id": "m-karotte", "typ": "foto"}).encode("utf-8"))
+    essen_transport, _ = _transport_stub_essen()
+
     task._photo_client = PhotoClient(
         origin_url="http://127.0.0.1:5070", transport=photo_transport)
     task._essen_client = EssenClient(
         origin_url="http://127.0.0.1:5052", transport=essen_transport)
     task._is_member_fn = _immer_mitglied
+    task._tg = FakeTelegramMitDownload(
+        file_bytes=b"KAROTTENFOTO", members=_members(42))
 
     quittung = task.execute(
-        {"aktion": "schreibe_override",
-         "item_id": "gemuese:karotte",
-         "medien_id": "m-karotte"},
-        _ctx())
+        {"aktion": "hochladen",
+         "item_id": "gemuese:karotte"},
+        _ctx(file_id="tg-karotte"))
 
     assert overrides_datei.exists(), (
         "foto_overrides.json muss am ENV-Pfad geschrieben sein — "

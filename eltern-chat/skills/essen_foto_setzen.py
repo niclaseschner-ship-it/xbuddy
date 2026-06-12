@@ -6,10 +6,11 @@ zuerst Photo-Buddy (PHOTO-13) und dann — je nach Ziel — entweder
 ESSEN-19a (PATCH /api/v1/essen/katalog/gerichte/<id>) oder schreibt in
 xbuddy-data/essen/foto_overrides.json.
 
-ESSEN-22 Pfad 2 zweistufig (propose→confirm, EC-10 Klasse C/D):
-- Schritt 1 — Hochladen: Foto an Photo-Buddy, Medien-ID zurück
-  → Signal SIGNAL_FOTO_HOCHGELADEN + medien_id + Ziel-Information.
-- Schritt 2 — Setzen: je nach `ziel.typ` PATCH oder Override-JSON-Schreiben.
+ESSEN-22 Pfad 2 atomar (E-EC-7): EIN Confirm pro Operation.
+aktion='hochladen' führt Upload + Schreiben in EINEM Schritt durch:
+- Photo-Buddy Upload (PHOTO-13)
+- je nach ziel.typ: PATCH ESSEN-19a (Gericht) ODER Override-JSON schreiben (Basis-Item)
+Kein zweistufiges propose→Schritt2-Confirm mehr.
 
 Ziel-Dict-Form:
   {"typ": "gericht",    "gericht_id": "<id>"}
@@ -20,12 +21,12 @@ der Task setzt `overrides_pfad` auf den echten xbuddy-data-Pfad, Tests
 übergeben einen Tmp-Pfad.
 
 Ausgang: Ergebnis-Tuple `(signal, daten)`:
-  (SIGNAL_FOTO_HOCHGELADEN,       {"medien_id": <str>, "ziel": ziel})
-                                  — PHOTO-13 ok, Setzen noch ausstehend.
   (SIGNAL_GERICHT_PATCH,          {"gericht_id": <str>, "medien_id": <str>})
-                                  — PATCH ESSEN-19a erfolgreich.
+                                  — Upload + PATCH ESSEN-19a erfolgreich.
   (SIGNAL_OVERRIDE_GESCHRIEBEN,   {"item_id": <str>, "medien_id": <str>})
-                                  — foto_overrides.json geschrieben.
+                                  — Upload + foto_overrides.json geschrieben.
+  (SIGNAL_ZIEL_UNBEKANNT,         {"medien_id": <str>})
+                                  — Upload ok, aber Ziel-typ nicht erkannt.
   (SIGNAL_ABGELEHNT,              {})
                                   — Nicht-Mitglied.
   (SIGNAL_GRENZE,                 {"detail": <str>})
@@ -34,8 +35,8 @@ Ausgang: Ergebnis-Tuple `(signal, daten)`:
                                   — Buddy nicht erreichbar.
   (SIGNAL_NICHTS_ZU_TUN,          {})
                                   — Eingabe unvollständig / unbekannte Aktion.
-  (SIGNAL_ZIEL_UNBEKANNT,         {"ziel": ziel})
-                                  — Ziel-typ nicht erkannt.
+  (SIGNAL_ABGEBROCHEN,            {})
+                                  — aktion='abbruch'.
 """
 
 import json
@@ -49,35 +50,35 @@ logger = logging.getLogger(__name__)
 
 
 # ESSEN-22 / FSE-1: Ergebnis-Signale.
-SIGNAL_FOTO_HOCHGELADEN   = "foto_hochgeladen"
-SIGNAL_GERICHT_PATCH      = "gericht_patch"
+SIGNAL_GERICHT_PATCH        = "gericht_patch"
 SIGNAL_OVERRIDE_GESCHRIEBEN = "override_geschrieben"
-SIGNAL_ABGELEHNT          = "abgelehnt"
-SIGNAL_GRENZE             = "grenze"
-SIGNAL_NICHT_ERREICHBAR   = "nicht_erreichbar"
-SIGNAL_NICHTS_ZU_TUN      = "nichts_zu_tun"
-SIGNAL_ZIEL_UNBEKANNT     = "ziel_unbekannt"
+SIGNAL_ABGELEHNT            = "abgelehnt"
+SIGNAL_GRENZE               = "grenze"
+SIGNAL_NICHT_ERREICHBAR     = "nicht_erreichbar"
+SIGNAL_NICHTS_ZU_TUN        = "nichts_zu_tun"
+SIGNAL_ZIEL_UNBEKANNT       = "ziel_unbekannt"
+SIGNAL_ABGEBROCHEN          = "abgebrochen"
 
-# Aktionen (zweistufig: Schritt 1 hochladen, Schritt 2 setzen/abbruch).
-AKTION_HOCHLADEN          = "hochladen"
-AKTION_PATCH_GERICHT      = "patch_gericht"
-AKTION_SCHREIBE_OVERRIDE  = "schreibe_override"
-AKTION_ABBRUCH            = "abbruch"
+# Aktionen (atomar: hochladen macht Upload+Schreiben in einem Schritt).
+AKTION_HOCHLADEN            = "hochladen"
+AKTION_ABBRUCH              = "abbruch"
+
+# Rückwärtskompatible Aliasse für Test-Naht (nicht als öffentliche Skill-Aktionen).
+AKTION_PATCH_GERICHT        = "patch_gericht"
+AKTION_SCHREIBE_OVERRIDE    = "schreibe_override"
 
 
 def essen_foto_setzen(*, aktion, photo_client, essen_client, ziel,
                       is_member_fn, from_user_id,
                       medium_bytes=None, filename=None, content_type=None,
                       medien_id=None, overrides_pfad=None):
-    """Essens-Foto setzen — aufrufbare Funktion (ESSEN-22 Pfad 2).
+    """Essens-Foto setzen — aufrufbare Funktion (ESSEN-22 Pfad 2, atomar).
 
-    Zweistufig: erst `hochladen` (Foto → Photo-Buddy, gibt medien_id zurück),
-    dann `patch_gericht` oder `schreibe_override` (Medien-ID an Essen-Buddy
-    oder foto_overrides.json schreiben).
+    aktion='hochladen': Upload an Photo-Buddy + sofort Schreiben je ziel.typ.
+    EIN Confirm pro Operation (E-EC-7) — kein zweiter Tool-Call mehr nötig.
 
     Parameter:
-      `aktion`          — AKTION_HOCHLADEN / AKTION_PATCH_GERICHT /
-                          AKTION_SCHREIBE_OVERRIDE / AKTION_ABBRUCH.
+      `aktion`          — AKTION_HOCHLADEN / AKTION_ABBRUCH.
       `photo_client`    — PhotoClient-Instanz (PHOTO-13).
       `essen_client`    — EssenClient-Instanz (ESSEN-19a).
       `ziel`            — Dict {"typ": "gericht", "gericht_id": "..."}
@@ -89,14 +90,8 @@ def essen_foto_setzen(*, aktion, photo_client, essen_client, ziel,
         `medium_bytes`  — Foto-Bytes (JPEG/PNG).
         `filename`      — Dateiname für multipart-Header.
         `content_type`  — MIME-Typ.
-
-      Bei AKTION_PATCH_GERICHT / AKTION_SCHREIBE_OVERRIDE:
-        `medien_id`     — die id aus der vorherigen PHOTO-13-Antwort.
-
-      Bei AKTION_SCHREIBE_OVERRIDE:
         `overrides_pfad` — absoluter Pfad zu foto_overrides.json
-                           (z. B. „xbuddy-data/essen/foto_overrides.json").
-                           Fehlt er, ist SIGNAL_NICHTS_ZU_TUN die Folge.
+                           (bei Basis-Item-Ziel erforderlich).
 
     Ergebnis: (signal, daten) — siehe Modul-Docstring.
     """
@@ -108,26 +103,23 @@ def essen_foto_setzen(*, aktion, photo_client, essen_client, ziel,
         return SIGNAL_ABGELEHNT, {}
 
     if aktion == AKTION_HOCHLADEN:
-        return _hochladen(photo_client, ziel, medium_bytes, filename,
-                          content_type)
-
-    if aktion == AKTION_PATCH_GERICHT:
-        return _patch_gericht(essen_client, ziel, medien_id)
-
-    if aktion == AKTION_SCHREIBE_OVERRIDE:
-        return _schreibe_override(ziel, medien_id, overrides_pfad)
+        return _hochladen_und_schreiben(
+            photo_client, essen_client, ziel,
+            medium_bytes, filename, content_type, overrides_pfad)
 
     if aktion == AKTION_ABBRUCH:
         logger.info("essen_foto_setzen: Abbruch durch Benutzer")
-        return SIGNAL_NICHTS_ZU_TUN, {}
+        return SIGNAL_ABGEBROCHEN, {}
 
     logger.warning("essen_foto_setzen: unbekannte Aktion %r — nichts zu tun",
                    aktion)
     return SIGNAL_NICHTS_ZU_TUN, {}
 
 
-def _hochladen(photo_client, ziel, medium_bytes, filename, content_type):
-    """Schritt 1: Foto an Photo-Buddy (PHOTO-13), medien_id + Ziel zurück.
+def _hochladen_und_schreiben(photo_client, essen_client, ziel,
+                              medium_bytes, filename, content_type,
+                              overrides_pfad):
+    """Upload an Photo-Buddy + sofort Schreiben je ziel.typ (atomar, ESSEN-22).
 
     Ohne Medien-Bytes ist nichts zu tun (Modell hat das Tool auf falscher
     Spur gerufen — analog FSE-3).
@@ -135,6 +127,7 @@ def _hochladen(photo_client, ziel, medium_bytes, filename, content_type):
     if not medium_bytes:
         return SIGNAL_NICHTS_ZU_TUN, {}
 
+    # Schritt 1: Upload an Photo-Buddy (PHOTO-13).
     try:
         response = photo_client.upload_medium(
             medium_bytes=medium_bytes,
@@ -154,13 +147,24 @@ def _hochladen(photo_client, ziel, medium_bytes, filename, content_type):
     medien_id = response.get("id")
     logger.info("essen_foto_setzen: hochgeladen medien_id=%s ziel=%r",
                 medien_id, ziel)
-    return SIGNAL_FOTO_HOCHGELADEN, {"medien_id": medien_id, "ziel": ziel}
+
+    # Schritt 2: atomar Schreiben je ziel.typ.
+    ziel_typ = (ziel or {}).get("typ")
+    if ziel_typ == "gericht":
+        return _patch_gericht(essen_client, ziel, medien_id)
+    if ziel_typ == "basis_item":
+        return _schreibe_override(ziel, medien_id, overrides_pfad)
+
+    logger.warning("essen_foto_setzen: Ziel-typ %r nicht erkannt nach Upload "
+                   "medien_id=%s", ziel_typ, medien_id)
+    return SIGNAL_ZIEL_UNBEKANNT, {"medien_id": medien_id}
 
 
 def _patch_gericht(essen_client, ziel, medien_id):
-    """Schritt 2a: PATCH ESSEN-19a — foto_ref auf das Gericht setzen.
+    """PATCH ESSEN-19a — foto_ref auf das Gericht setzen.
 
     `ziel` muss {"typ": "gericht", "gericht_id": "<id>"} sein.
+    Interne Helper-Funktion — wird von _hochladen_und_schreiben aufgerufen.
     """
     if not medien_id:
         return SIGNAL_NICHTS_ZU_TUN, {}
@@ -169,7 +173,7 @@ def _patch_gericht(essen_client, ziel, medien_id):
     gericht_id = (ziel or {}).get("gericht_id")
 
     if ziel_typ != "gericht" or not gericht_id:
-        logger.warning("essen_foto_setzen: patch_gericht-Aktion mit Ziel %r — "
+        logger.warning("essen_foto_setzen: _patch_gericht mit Ziel %r — "
                        "Typ oder gericht_id fehlt", ziel)
         return SIGNAL_ZIEL_UNBEKANNT, {"ziel": ziel}
 
@@ -187,16 +191,17 @@ def _patch_gericht(essen_client, ziel, medien_id):
     logger.info("essen_foto_setzen: gericht_id=%s foto_ref=%s gesetzt",
                 gericht_id, medien_id)
     return SIGNAL_GERICHT_PATCH, {"gericht_id": gericht_id,
-                                  "medien_id": medien_id}
+                                   "medien_id": medien_id}
 
 
 def _schreibe_override(ziel, medien_id, overrides_pfad):
-    """Schritt 2b: foto_overrides.json schreiben — {item_id: medien_id}.
+    """foto_overrides.json schreiben — {item_id: medien_id}.
 
     Tolerant gegen fehlende Datei (anlegt sie), mergt vorhandene Einträge.
     Atomares Schreiben via .tmp-Datei + os.replace (POSIX-Garantie).
 
     `overrides_pfad` ist Pflicht — ohne Pfad ist SIGNAL_NICHTS_ZU_TUN die Folge.
+    Interne Helper-Funktion — wird von _hochladen_und_schreiben aufgerufen.
     """
     if not medien_id:
         return SIGNAL_NICHTS_ZU_TUN, {}
@@ -205,7 +210,7 @@ def _schreibe_override(ziel, medien_id, overrides_pfad):
     item_id = (ziel or {}).get("item_id")
 
     if ziel_typ != "basis_item" or not item_id:
-        logger.warning("essen_foto_setzen: schreibe_override-Aktion mit "
+        logger.warning("essen_foto_setzen: _schreibe_override mit "
                        "Ziel %r — Typ oder item_id fehlt", ziel)
         return SIGNAL_ZIEL_UNBEKANNT, {"ziel": ziel}
 
@@ -248,4 +253,4 @@ def _schreibe_override(ziel, medien_id, overrides_pfad):
     logger.info("essen_foto_setzen: item_id=%s medien_id=%s in %s eingetragen",
                 item_id, medien_id, overrides_pfad)
     return SIGNAL_OVERRIDE_GESCHRIEBEN, {"item_id": item_id,
-                                         "medien_id": medien_id}
+                                          "medien_id": medien_id}

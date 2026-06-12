@@ -5,12 +5,10 @@ Diese Aufgabe ist der Trigger der `essen_foto_setzen`-Funktion: versteht der
 Agent eine Foto-Nachricht mit Essens-Caption, schlägt er das Setzen vor
 (propose→confirm, EC-10 zweistufige Variante, Klasse C).
 
-Zweistufiger Ablauf:
-  1. Agent ruft Task mit `aktion='hochladen'`: Foto holen, an Photo-Buddy
-     laden (PHOTO-13), Medien-ID zurück. Der Vorschlag (propose) nennt Ziel
-     und fragt nach Bestätigung.
-  2. Nach Bestätigung (E-EC-7): Agent ruft Task mit `aktion='patch_gericht'`
-     (Gericht-Ziel) ODER `aktion='schreibe_override'` (Basis-Item-Ziel).
+Atomarer Ablauf (E-EC-7 — EIN Confirm pro Operation):
+  Agent ruft Task mit `aktion='hochladen'`: Foto holen, an Photo-Buddy
+  laden (PHOTO-13) + sofort Schreiben (PATCH ESSEN-19a bei Gericht ODER
+  foto_overrides.json bei Basis-Item). Kein zweiter Tool-Call nötig.
 
 Catalog-Name: „essen_foto_setzen".
 Klasse: C/D (propose→confirm, schreibend, ESSEN-22 Pfad 2).
@@ -30,26 +28,18 @@ from skills import essen_foto_setzen as efs_mod
 from skills.essen_foto_setzen import (
     AKTION_ABBRUCH,
     AKTION_HOCHLADEN,
-    AKTION_PATCH_GERICHT,
-    AKTION_SCHREIBE_OVERRIDE,
 )
 
 logger = logging.getLogger(__name__)
 
 
 # EC-10 / ESSEN-22: Quittungen in den Agent-Loop.
-_QUITTUNG_HOCHGELADEN_GERICHT = (
-    "Foto hochgeladen (medien_id: {medien_id}) — bereit, es bei Gericht "
-    "»{gericht_id}« zu setzen. Bestätige mit »Foto setzen«.")
-_QUITTUNG_HOCHGELADEN_ITEM = (
-    "Foto hochgeladen (medien_id: {medien_id}) — bereit, es beim Item "
-    "»{item_id}« zu hinterlegen. Bestätige mit »Foto setzen«.")
 _QUITTUNG_GERICHT_GESETZT = (
-    "Foto gesetzt — Gericht »{gericht_id}« zeigt jetzt dein Familien-Foto "
-    "(medien_id: {medien_id}). Beim nächsten Reload der Essens-View sichtbar.")
+    "Foto bei Gericht »{gericht_id}« gesetzt (medien_id: {medien_id}) — "
+    "beim nächsten Öffnen sichtbar.")
 _QUITTUNG_OVERRIDE_GESCHRIEBEN = (
-    "Foto hinterlegt — Item »{item_id}« zeigt jetzt dein Familien-Foto "
-    "(medien_id: {medien_id}). Beim nächsten Reload der Essens-View sichtbar.")
+    "Foto bei Item »{item_id}« hinterlegt (medien_id: {medien_id}) — "
+    "beim nächsten Öffnen sichtbar.")
 _QUITTUNG_ABGELEHNT = (
     "Essens-Foto setzen geht nur für Mitglieder der Familien-Gruppe.")
 _QUITTUNG_GRENZE = (
@@ -72,14 +62,13 @@ _QUITTUNG_KEIN_MATCH = (
 
 class EssenFotoSetzenTask(WriteTask):
     """Schreibende Katalog-Aufgabe (EC-10), die »Essens-Foto setzen« auslöst
-    (ESSEN-22 Pfad 2, Klasse C propose→confirm).
+    (ESSEN-22 Pfad 2, Klasse C propose→confirm, atomar E-EC-7).
 
     propose(): nennt Ziel und Foto, fragt nach Bestätigung (E-EC-7 — das
     Bestätigungswort »Foto setzen« ist das deterministischste Gate, das ohne
     freien Text auskommt).
 
-    execute(): je nach `aktion` entweder Hochladen (Schritt 1) oder
-    Setzen/Schreiben (Schritt 2).
+    execute(): hochladen macht Upload + Schreiben in EINEM Schritt.
     """
 
     is_async = False
@@ -91,9 +80,10 @@ class EssenFotoSetzenTask(WriteTask):
         super().__init__(
             name="essen_foto_setzen",
             description=(
-                "Setzt ein Familien-Foto für ein Essens-Katalog-Item "
-                "(Gericht oder Basis-Item) — ersetzt den ARASAAC-Default "
-                "am Display (ESSEN-22 Pfad 2). "
+                "Lädt ein Familien-Foto in Photo-Buddy hoch und setzt es in einem "
+                "Schritt am Gericht (foto_ref via PATCH ESSEN-19a) oder am "
+                "Basis-Item (foto_overrides.json). EIN Confirm pro Operation "
+                "(E-EC-7). "
                 "Aufrufen, wenn jemand ein Foto MIT Essens-Caption schickt "
                 "(z. B. »Lasagne« oder »essen-foto«). "
                 "WICHTIG: Bevor du diesen Skill aufrufst, rufe ZUERST "
@@ -103,10 +93,7 @@ class EssenFotoSetzenTask(WriteTask):
                 "aktion='hochladen' + gericht_id (für Gericht-Match) ODER "
                 "item_id (für Basis-Item-Match) auf. Wenn KEIN Match: schlage "
                 "stattdessen gericht_anlegen vor (Pfad 1 ESSEN-22). "
-                "Zweistufig: erst {aktion: 'hochladen'} mit den Ziel-Infos; "
-                "nach Bestätigung {aktion: 'patch_gericht', gericht_id: '...'} "
-                "für ein Gericht ODER {aktion: 'schreibe_override', "
-                "item_id: '...'} für ein Lebensmittel-Basis-Item."),
+                "Upload und Schreiben erfolgen atomar in einem Schritt."),
             parameters={
                 "type": "object",
                 "properties": {
@@ -114,38 +101,26 @@ class EssenFotoSetzenTask(WriteTask):
                         "type": "string",
                         "enum": [
                             AKTION_HOCHLADEN,
-                            AKTION_PATCH_GERICHT,
-                            AKTION_SCHREIBE_OVERRIDE,
                             AKTION_ABBRUCH,
                         ],
                         "description": (
-                            "'hochladen' — Foto zu Photo-Buddy laden (Schritt 1). "
-                            "'patch_gericht' — foto_ref auf Gericht setzen (ESSEN-19a, Schritt 2). "
-                            "'schreibe_override' — Eintrag in foto_overrides.json (Basis-Item, Schritt 2). "
+                            "'hochladen' — Foto hochladen und sofort am Ziel setzen "
+                            "(Upload + PATCH/Override atomar, ESSEN-22 E-EC-7). "
                             "'abbruch' — Vorgang beenden, kein Schreiben."),
                     },
                     "gericht_id": {
                         "type": "string",
                         "description": (
-                            "ID des Gerichts bei 'hochladen' (Ziel-Angabe) "
-                            "und 'patch_gericht'. "
+                            "ID des Gerichts bei 'hochladen' (Ziel-Angabe). "
                             "MUSS aus essen_katalog_lesen-Output stammen — "
                             "keine erfundenen IDs."),
                     },
                     "item_id": {
                         "type": "string",
                         "description": (
-                            "ID des Basis-Items bei 'hochladen' (Ziel-Angabe) "
-                            "und 'schreibe_override'. "
+                            "ID des Basis-Items bei 'hochladen' (Ziel-Angabe). "
                             "MUSS aus essen_katalog_lesen-Output stammen — "
                             "keine erfundenen IDs."),
-                    },
-                    "medien_id": {
-                        "type": "string",
-                        "description": (
-                            "Photo-Buddy-Medien-ID aus Schritt 1 "
-                            "('hochladen'). Bei 'patch_gericht' und "
-                            "'schreibe_override' zwingend mitzugeben."),
                     },
                 },
                 "required": [],
@@ -163,13 +138,11 @@ class EssenFotoSetzenTask(WriteTask):
         """EC-10-Vorschlag — nennt Aktion und Ziel, fragt nach Bestätigung.
 
         Für 'hochladen': beschreibt welches Ziel mit Foto versehen wird.
-        Für 'patch_gericht' / 'schreibe_override': nennt die konkrete Schreib-Aktion.
         """
         args = arguments or {}
         aktion = args.get("aktion") or AKTION_HOCHLADEN
         gericht_id = (args.get("gericht_id") or "").strip()
         item_id = (args.get("item_id") or "").strip()
-        medien_id = (args.get("medien_id") or "").strip()
 
         if aktion == AKTION_HOCHLADEN:
             if gericht_id:
@@ -187,38 +160,20 @@ class EssenFotoSetzenTask(WriteTask):
                     "Foto für ein Essens-Katalog-Item hochladen — bitte Ziel angeben.")
             return Proposal(summary)
 
-        if aktion == AKTION_PATCH_GERICHT:
-            if gericht_id and medien_id:
-                summary = (
-                    "Foto (medien_id: %s) bei Gericht »%s« setzen "
-                    "(ESSEN-19a PATCH) — bestehender Pikto-Default wird ersetzt."
-                    % (medien_id, gericht_id))
-            else:
-                summary = "Foto auf Gericht setzen (ESSEN-19a PATCH)."
-            return Proposal(summary)
-
-        if aktion == AKTION_SCHREIBE_OVERRIDE:
-            if item_id and medien_id:
-                summary = (
-                    "Foto (medien_id: %s) für Item »%s« in "
-                    "foto_overrides.json hinterlegen."
-                    % (medien_id, item_id))
-            else:
-                summary = "Foto als Override für Basis-Item hinterlegen."
-            return Proposal(summary)
-
         if aktion == AKTION_ABBRUCH:
             return Proposal("Vorgang abbrechen — kein Foto gesetzt.")
 
         return Proposal("Essens-Foto setzen (Aktion noch unklar).")
 
     def execute(self, arguments, turn_context):
-        """Führt die essen_foto_setzen-Funktion synchron aus (ESSEN-22).
+        """Führt die essen_foto_setzen-Funktion synchron aus (ESSEN-22, atomar).
 
         Die Medien-Bytes werden aus dem TurnContext gelesen (media_telegram_file_id)
         — EC-12-Geist: nicht das Modell bestimmt welches Foto. Gericht-ID /
         Item-ID kommen aus den `arguments` (LLM-Klassifikation, ESSEN-22
         Vor-Routing).
+
+        aktion='hochladen': macht Upload + Schreiben in EINEM Aufruf.
         """
         args = arguments or {}
         aktion = args.get("aktion") or AKTION_HOCHLADEN
@@ -229,7 +184,6 @@ class EssenFotoSetzenTask(WriteTask):
 
         gericht_id = (args.get("gericht_id") or "").strip() or None
         item_id = (args.get("item_id") or "").strip() or None
-        medien_id_arg = (args.get("medien_id") or "").strip() or None
 
         # Ziel-Dict aus arguments aufbauen.
         if gericht_id:
@@ -246,35 +200,10 @@ class EssenFotoSetzenTask(WriteTask):
             return self._execute_hochladen(
                 is_member_fn, from_user_id, ziel, turn_context)
 
-        if aktion == AKTION_PATCH_GERICHT:
-            signal, daten = efs_mod.essen_foto_setzen(
-                aktion=AKTION_PATCH_GERICHT,
-                photo_client=self._photo_client,
-                essen_client=self._essen_client,
-                ziel=ziel,
-                is_member_fn=is_member_fn,
-                from_user_id=from_user_id,
-                medien_id=medien_id_arg,
-            )
-            return _quittung_fuer(signal, daten)
-
-        if aktion == AKTION_SCHREIBE_OVERRIDE:
-            signal, daten = efs_mod.essen_foto_setzen(
-                aktion=AKTION_SCHREIBE_OVERRIDE,
-                photo_client=self._photo_client,
-                essen_client=self._essen_client,
-                ziel=ziel,
-                is_member_fn=is_member_fn,
-                from_user_id=from_user_id,
-                medien_id=medien_id_arg,
-                overrides_pfad=self._overrides_pfad,
-            )
-            return _quittung_fuer(signal, daten)
-
         return _QUITTUNG_NICHTS_ZU_TUN
 
     def _execute_hochladen(self, is_member_fn, from_user_id, ziel, turn_context):
-        """Schritt 1 via TurnContext: Foto holen (EC-12-Geist) + hochladen."""
+        """Atomarer Schritt via TurnContext: Foto holen (EC-12-Geist) + hochladen + schreiben."""
         file_id = getattr(turn_context, "media_telegram_file_id", None)
         medium_typ = getattr(turn_context, "medium_typ", None)
 
@@ -302,27 +231,13 @@ class EssenFotoSetzenTask(WriteTask):
             medium_bytes=medium_bytes,
             filename=filename,
             content_type=content_type,
+            overrides_pfad=self._overrides_pfad,
         )
         return _quittung_fuer(signal, daten)
 
 
 def _quittung_fuer(signal, daten):
     """Übersetzt das (signal, daten)-Tuple in eine Agent-Loop-Quittung."""
-    if signal == efs_mod.SIGNAL_FOTO_HOCHGELADEN:
-        medien_id = daten.get("medien_id", "?")
-        ziel = daten.get("ziel") or {}
-        ziel_typ = ziel.get("typ")
-        if ziel_typ == "gericht":
-            return _QUITTUNG_HOCHGELADEN_GERICHT.format(
-                medien_id=medien_id,
-                gericht_id=ziel.get("gericht_id", "?"))
-        if ziel_typ == "basis_item":
-            return _QUITTUNG_HOCHGELADEN_ITEM.format(
-                medien_id=medien_id,
-                item_id=ziel.get("item_id", "?"))
-        return ("Foto hochgeladen (medien_id: %s) — Ziel unklar, "
-                "bitte Aktion und Ziel angeben." % medien_id)
-
     if signal == efs_mod.SIGNAL_GERICHT_PATCH:
         return _QUITTUNG_GERICHT_GESETZT.format(
             gericht_id=daten.get("gericht_id", "?"),
@@ -344,6 +259,9 @@ def _quittung_fuer(signal, daten):
 
     if signal == efs_mod.SIGNAL_ZIEL_UNBEKANNT:
         return _QUITTUNG_ZIEL_UNBEKANNT
+
+    if signal == efs_mod.SIGNAL_ABGEBROCHEN:
+        return _QUITTUNG_ABBRUCH
 
     return _QUITTUNG_NICHTS_ZU_TUN
 
