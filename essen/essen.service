@@ -18,6 +18,7 @@ WorkingDirectory=__XBUDDY_REPO__
 EnvironmentFile=__XBUDDY_DATA__/eltern-chat/.env
 Environment=PYTHONUNBUFFERED=1
 Environment=HOME=__XBUDDY_HOME__
+Environment=ESSEN_FOTO_OVERRIDES_FILE=__XBUDDY_DATA__/essen/foto_overrides.json
 ExecStart=__XBUDDY_PYTHON__ -m essen.main --host 127.0.0.1 --port 5052
 Restart=on-failure
 RestartSec=10
