@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   set-default-status:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, ARM64]
     steps:
       - name: Add status:spec label
         env:
