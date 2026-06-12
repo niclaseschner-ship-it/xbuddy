@@ -136,6 +136,13 @@ def execute(*, hoerspiel_client, tg, chat_id,
     logger.info(
         "hoerspiel_folge_erzeugen.execute: POST /alben titel=%r voice=%s",
         titel, voice)
+    # HFE-5: Start-Bubble vor dem langen Album-Bau-Aufruf — Eltern wissen,
+    # dass im Hintergrund gearbeitet wird, und können in der Zwischenzeit
+    # andere Fragen stellen (V1: andere Skill-Turns laufen unabhängig).
+    _sende(tg, chat_id,
+           "Alles klar — ich schreibe und vertone die Folge gerade. "
+           "Das dauert etwa 1–3 Minuten. Bis dahin melde ich mich kurz.\n"
+           "(Andere Fragen kannst du in der Zwischenzeit weiter stellen.)")
     try:
         data = hoerspiel_client.album_bauen(
             titel=titel, text=text, voice=voice, idee=idee)
