@@ -1133,13 +1133,38 @@ seitig per ESSEN-16 angelegt mit `klasse=einkauf`.
 (HMAC mit Bot-Token, geprüft durch den `seiten`-Service / Buddy-Service —
 Architektur-Frage in der Lego-Basis, MVP-Sammler-Ticket #678).
 
-*Test-Implikation:* Render-Test mit gemischter Liste (1 Wunsch-Gericht +
-2 Rezept-Zutaten + 3 Eltern-Items + 1 erledigtes) → Mini App zeigt vier
-Kategorien (oder die nicht-leeren) in fester Reihenfolge, Sektion-Header
-mit Aufteilung, Erledigtes am Ende der Kategorie. Tap auf 🧒-Gericht-Card
-öffnet Übernahme-Sheet. Tap auf Wunsch-Lebensmittel-Card toggelt
-`abgehakt` direkt. Bilder werden über `/_shared/icons/arasaac/<id>.png`
-angefordert.
+*Test-Implikation (Verhaltens-Probe-Liste, analog ROUTINE-20):* die
+folgenden konkreten Proben gelten als Akzeptanz und werden als
+Frontend-Verhaltens-Tests umgesetzt (Mechanik Code-Track-Sache — DOM-Attrappe
+oder jsdom-Wrapper, siehe Code-Track-Folge-Ticket):
+
+- **Render-Reihenfolge:** Render-Test mit gemischter Liste (1 Wunsch-Gericht +
+  2 Rezept-Zutaten + 3 Eltern-Items + 1 erledigtes) → Mini App zeigt vier
+  Kategorien (oder die nicht-leeren) in fester Reihenfolge (Wunsch-Gerichte,
+  Obst & Gemüse, Brotbelag, Sonstiges), Sektion-Header trägt die Aufteilung
+  (`Sonstiges · 4 + 📖 1 + 🧒 0`-Format), Erledigte rutschen ans Ende ihrer
+  Kategorie mit ausgegrauter Optik + grünem Häkchen.
+- **Quellen-Marker:** in jeder Card steht exakt **ein** Marker — `🧒` bei
+  `klasse=wunsch`, `📖` bei `klasse=einkauf` mit gesetztem `aus_gericht`,
+  **kein** Marker bei `klasse=einkauf` ohne `aus_gericht`.
+- **Tap auf 🧒-Gericht-Card mit Zutaten** → öffnet Übernahme-Sheet (ESSEN-30),
+  kein PATCH-fetch.
+- **Tap auf Wunsch-Lebensmittel-Card** → genau **ein** `fetch`-Aufruf
+  `PATCH /api/v1/essen/wuensche/<id>` mit Body `{abgehakt: true}` (bzw.
+  `false` beim Rück-Toggle).
+- **Quick-Add mit Komma-Liste** („Brot, Milch") → genau **zwei** `fetch`-
+  Aufrufe `POST /api/v1/essen/wuensche` mit je `{label: "Brot", ...}` bzw.
+  `{label: "Milch", ...}`. `kategorie` ist `sonstiges` als Default; mit
+  bekannten Items im ICONS-7/Katalog-Match wird `kategorie` korrekt gesetzt.
+- **Bild-Pfad:** alle gerenderten `<img>` haben `src`, der mit
+  `/_shared/icons/arasaac/` beginnt und auf `.png` endet (Same-Origin-Lego,
+  kein CORS, keine externen Hosts).
+- **Bild-Lade-Fehler:** wenn `<img>` ein `error`-Event feuert, rendert das
+  Mini-Frontend einen Placeholder (Bring!-Default-Stoff/Cart), das UI bricht
+  nicht.
+
+Diese Probe-Liste ist Bauplan für das jeweilige Frontend-Verhaltens-
+Test-Modul (Skill-/Render-Layer, nicht Pixel-Layer).
 
 *Tickets:* #653
 
