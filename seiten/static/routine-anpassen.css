@@ -626,13 +626,11 @@ body {
 }
 
 /* ── T728 Bug-11 Härt-Sicherung ─────────────────────────────── */
-/* BrowserPlatform._btn hat keine ID — es ist der einzige dynamisch
-   erzeugte fixed-Button mit zIndex:100 den platform.js an body anhängt.
-   CSS-Override: wenn Sheet-Overlay sichtbar, BrowserPlatform-Fallback-Button verstecken.
-   Hinweis: #mainbutton-fallback existiert im Template NICHT — _btn hat keine ID.
-   Selector zielt auf dynamisch erzeugten button[style*="zIndex"] (BrowserPlatform.setMainButton).
-   Dreifaches JS-Hide (sofort + Microtask + 50ms) in oeffneSheetOverlay() ist die primäre Sicherung.
-   CSS ist Belt-Sicherung 4 — greift auch wenn JS-Hide in Render-Race verfehlt. */
-body:has(#sheet-overlay:not([hidden])) button[style*="zIndex"] {
+/* BrowserPlatform._btn hat keine ID — es ist der einzige dynamisch erzeugte
+   fixed-Button, den platform.js ans body anhängt (style.zIndex="100" in JS;
+   HTML serialisiert kebab-case → style="z-index: 100").
+   CSS-Override: wenn Sheet-Overlay sichtbar, alle direkt am body hängenden
+   <button>s verstecken (BrowserPlatform-Fallback ist der einzige Konsument). */
+body:has(#sheet-overlay:not([hidden])) > button {
   display: none !important;
 }
