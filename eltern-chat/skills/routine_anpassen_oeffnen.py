@@ -80,9 +80,20 @@ def _baue_uebersicht(items_data, mini_app_url):
 
     buttons = [{"label": "🛠️ Routine öffnen", "web_app_url": mini_app_url}]
 
+    # RAO-5 / T728: Klartext-Hinweis auf RZS-Direktsatz (Zeiten-Schnellsatz).
+    # RZS kann nur Zeiten (abfahrtszeit, aufstehzeit, anzieh_vorlauf_min) —
+    # der Hinweis nennt nur Zeiten, NICHT Punkte (wäre falsch versprechen).
+    _RZS_HINWEIS = (
+        "Einzelne Zeiten (z. B. „Abfahrtszeit auf 7:50“ oder "
+        "„Aufstehzeit auf 6:30“) kannst du mir auch direkt hier sagen."
+    )
+
     # E-RAO-3: Leere Routine → Klartext + Button (Anfangszustand, nicht Endzustand)
     if default_n == 0 and einmalig_n == 0:
-        text = ("🛠️ Die Morgenroutine ist leer — leg den ersten Punkt an.")
+        text = (
+            "🛠️ Die Morgenroutine ist leer — leg den ersten Punkt an.\n"
+            + _RZS_HINWEIS
+        )
         return text, buttons
 
     # RAO-5: Übersichts-Zeile mit Counter
@@ -104,6 +115,9 @@ def _baue_uebersicht(items_data, mini_app_url):
 
     if zuletzt_labels:
         text_lines.append("Zuletzt drauf: %s" % ", ".join(zuletzt_labels))
+
+    # T728: Hinweis auf RZS-Direktsatz in jedem Aufschlag (ein Schritt weniger).
+    text_lines.append(_RZS_HINWEIS)
 
     text = "\n".join(text_lines)
     return text, buttons
