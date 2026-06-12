@@ -155,3 +155,58 @@ def test_album_manifest_cover_jpg_pfad(data_root, fake_llm, fake_tts, fixed_now)
         manifest = json.load(f)
     assert manifest["cover-asset"].endswith("cover-default.jpg")
     assert manifest["cover-asset"] == album_manifest.COVER_DEFAULT_ASSET
+
+
+def test_album_bau_synopse_fehler_laesst_album_unsichtbar(
+        data_root, fake_tts, fixed_now):
+    """HSP-15 / Befund 4: LLM-Fehler beim Synopse-Call → kein
+    alben/<id>/-Verzeichnis sichtbar, Historie unverändert, Index unverändert.
+
+    baue_album macht genau einen LLM-Call: erzeuge_synopse. Schlägt dieser
+    fehl (ProviderError), darf das Album nicht sichtbar werden (rename vor
+    Synopse wäre Befund 4 — Fix: Synopse vor rename, Befund 4).
+    """
+    from hoerspiel.providers.base import ProviderError
+
+    # fail=True → alle complete()-Calls werfen ProviderError
+    from hoerspiel.tests.conftest import FakeLLM
+    fail_llm = FakeLLM(fail=True)
+
+    alben_root = os.path.join(data_root, "alben")
+    historie_pfad = os.path.join(data_root, "folgen-historie.md")
+    import json as _json
+
+    # Index vor dem Bau
+    idx_pfad = os.path.join(alben_root, album_builder.DEFAULT_INDEX_FILENAME)
+    idx_vor = {}
+    if os.path.exists(idx_pfad):
+        with open(idx_pfad) as f:
+            idx_vor = _json.load(f)
+
+    historie_vor = data_io.read_text_or_empty(historie_pfad)
+
+    text = _text(absatz_count=2, woerter=80)
+    with pytest.raises(ProviderError):
+        album_builder.baue_album(
+            titel="Synopse-Fail-Test", text=text, voice="shimmer", idee="x",
+            data_root=data_root, llm=fail_llm, tts_engine=fake_tts, now=fixed_now,
+        )
+
+    # Album-Verzeichnis darf NICHT angelegt worden sein
+    alben_eintraege = [
+        e for e in os.listdir(alben_root) if not e.startswith(".")
+    ] if os.path.isdir(alben_root) else []
+    assert alben_eintraege == [], (
+        "Kein Album-Verzeichnis sichtbar nach Synopse-Fehler (HSP-15/Befund 4)")
+
+    # Historie unverändert
+    assert data_io.read_text_or_empty(historie_pfad) == historie_vor, (
+        "Historie darf nach Synopse-Fehler nicht verändert sein")
+
+    # Index unverändert
+    idx_nach = {}
+    if os.path.exists(idx_pfad):
+        with open(idx_pfad) as f:
+            idx_nach = _json.load(f)
+    assert idx_nach == idx_vor, (
+        "Index darf nach Synopse-Fehler nicht verändert sein")
