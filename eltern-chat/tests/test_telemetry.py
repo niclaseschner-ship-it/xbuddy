@@ -1,8 +1,11 @@
-"""Tests für TurnTelemetry + TelemetryStore — EC-23/E-EC-11 (Refs #268)."""
+"""Tests für TurnTelemetry + TelemetryStore — EC-23/E-EC-11 (Refs #268).
+TaskEventsStore — EC-35 (Refs #724).
+"""
 
+import re
 import sqlite3
 
-from telemetry import ProviderCall, TelemetryStore, TurnTelemetry
+from telemetry import ProviderCall, TaskEventsStore, TelemetryStore, TurnTelemetry
 
 # ============================================================
 #  TurnTelemetry — Aggregation, has_calls, format_suffix
@@ -229,3 +232,152 @@ def test_AC1_migration_adds_created_at_to_existing_db(tmp_path):
     conn.close()
     assert row is not None, "Nach Migration wurde kein Row eingefügt"
     assert row[0] is not None, "created_at ist NULL nach Migration+Insert"
+
+
+# ============================================================
+#  TaskEventsStore — EC-35 (Refs #724)
+# ============================================================
+
+def test_EC35_schema_creates_task_events_table(tmp_path):
+    """AC1: TaskEventsStore legt die Tabelle task_events an (CREATE IF NOT
+    EXISTS). Fehlende DB wird automatisch erstellt (E-EC-8-Muster)."""
+    db_path = str(tmp_path / "ev.db")
+    store = TaskEventsStore(db_path)
+    store.close()
+    conn = sqlite3.connect(db_path)
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")}
+    conn.close()
+    assert "task_events" in tables
+
+
+def test_EC35_schema_has_required_columns(tmp_path):
+    """AC1: task_events besitzt mindestens id, task_name, chat_id,
+    created_at, outcome."""
+    db_path = str(tmp_path / "ev.db")
+    store = TaskEventsStore(db_path)
+    store.close()
+    conn = sqlite3.connect(db_path)
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(task_events)")}
+    conn.close()
+    assert {"id", "task_name", "chat_id", "created_at", "outcome"} <= cols
+
+
+def test_EC35_schema_has_indexes(tmp_path):
+    """AC1: Indizes idx_task_events_chat und idx_task_events_name vorhanden."""
+    db_path = str(tmp_path / "ev.db")
+    store = TaskEventsStore(db_path)
+    store.close()
+    conn = sqlite3.connect(db_path)
+    idxs = {r[1] for r in conn.execute(
+        "SELECT * FROM sqlite_master WHERE type='index'")}
+    conn.close()
+    assert "idx_task_events_chat" in idxs
+    assert "idx_task_events_name" in idxs
+
+
+def test_EC35_insert_success_writes_row(tmp_path):
+    """AC1: insert() schreibt eine Zeile mit korrekten Feldern."""
+    db_path = str(tmp_path / "ev.db")
+    store = TaskEventsStore(db_path)
+    store.insert("seiten_uebersicht", 42, "success")
+    store.close()
+
+    conn = sqlite3.connect(db_path)
+    rows = conn.execute(
+        "SELECT task_name, chat_id, outcome FROM task_events"
+    ).fetchall()
+    conn.close()
+    assert len(rows) == 1
+    assert rows[0] == ("seiten_uebersicht", 42, "success")
+
+
+def test_EC35_insert_created_at_is_utc_datetime(tmp_path):
+    """AC1: created_at ist kein NULL und hat ISO-Datetime-Format."""
+    db_path = str(tmp_path / "ev.db")
+    store = TaskEventsStore(db_path)
+    store.insert("info_lesen", 7, "success")
+    store.close()
+
+    conn = sqlite3.connect(db_path)
+    row = conn.execute("SELECT created_at FROM task_events").fetchone()
+    conn.close()
+    assert row[0] is not None
+    assert re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$", row[0]), (
+        f"Unerwartetes created_at-Format: {row[0]!r}")
+
+
+def test_EC35_insert_all_outcome_values(tmp_path):
+    """AC1: alle erlaubten outcome-Werte werden akzeptiert."""
+    db_path = str(tmp_path / "ev.db")
+    store = TaskEventsStore(db_path)
+    store.insert("a", 1, "success")
+    store.insert("b", 1, "abort")
+    store.insert("c", 1, "error")
+    store.close()
+
+    conn = sqlite3.connect(db_path)
+    outcomes = {r[0] for r in conn.execute(
+        "SELECT outcome FROM task_events").fetchall()}
+    conn.close()
+    assert outcomes == {"success", "abort", "error"}
+
+
+def test_EC35_insert_invalid_outcome_raises(tmp_path):
+    """AC1: outcome-CHECK-Constraint — ungültiger Wert wird abgelehnt
+    (sqlite3.IntegrityError wegen CHECK-Constraint)."""
+    import pytest
+    db_path = str(tmp_path / "ev.db")
+    store = TaskEventsStore(db_path)
+    with pytest.raises(sqlite3.IntegrityError):
+        store.insert("a", 1, "unknown")
+    store.close()
+
+
+def test_EC35_query_by_name_chat_since_counts_correctly(tmp_path):
+    """AC1 query-Helper: zählt Events korrekt nach task_name, chat_id, since."""
+    db_path = str(tmp_path / "ev.db")
+    store = TaskEventsStore(db_path)
+    store.insert("seiten_uebersicht", 42, "success")
+    store.insert("seiten_uebersicht", 42, "success")
+    store.insert("info_lesen", 42, "success")
+    store.insert("seiten_uebersicht", 99, "success")
+    store.close()
+
+    conn = sqlite3.connect(db_path)
+    # Anchor: alle Events liegen nach 2000-01-01
+    from telemetry import TaskEventsStore as TES
+    store2 = TES.__new__(TES)
+    store2._conn = conn
+    count = store2.query_by_name_chat_since(
+        "seiten_uebersicht", 42, "2000-01-01 00:00:00")
+    assert count == 2
+    # Anderer chat_id → 1
+    count2 = store2.query_by_name_chat_since(
+        "seiten_uebersicht", 99, "2000-01-01 00:00:00")
+    assert count2 == 1
+    # Anderer task_name → 1
+    count3 = store2.query_by_name_chat_since(
+        "info_lesen", 42, "2000-01-01 00:00:00")
+    assert count3 == 1
+    # Zukunfts-Since → 0
+    count4 = store2.query_by_name_chat_since(
+        "seiten_uebersicht", 42, "9999-01-01 00:00:00")
+    assert count4 == 0
+    conn.close()
+
+
+def test_EC35_idempotent_schema_creation(tmp_path):
+    """AC1: zweimaliges Öffnen derselben DB (CREATE IF NOT EXISTS) wirft
+    keinen Fehler — Schema-Idempotenz."""
+    db_path = str(tmp_path / "ev.db")
+    s1 = TaskEventsStore(db_path)
+    s1.insert("x", 1, "success")
+    s1.close()
+    s2 = TaskEventsStore(db_path)
+    s2.insert("y", 1, "success")
+    s2.close()
+    conn = sqlite3.connect(db_path)
+    count = conn.execute("SELECT COUNT(*) FROM task_events").fetchone()[0]
+    conn.close()
+    assert count == 2

@@ -103,6 +103,21 @@ def _proposal_pending(task_name):
     )
 
 
+def _flush_task_events(store, chat_id, called_skills, error_skills):
+    """Persistiert Task-Events für alle eindeutig gerufenen Skills eines Turns
+    (EC-35). Ist `store` None, ist diese Funktion ein No-op (Sandbox-Pfad).
+
+    Outcome-Regel: hat ein Skill irgendwann in diesem Turn geworfen (er steht
+    in `error_skills`), bekommt er outcome='error'; sonst 'success'.
+    Deduplizierung liegt schon in `called_skills` (Set).
+    """
+    if store is None:
+        return
+    for name in called_skills:
+        outcome = "error" if name in error_skills else "success"
+        store.insert(name, chat_id, outcome)
+
+
 @dataclass
 class AgentResult:
     """Ergebnis eines Agenten-Durchlaufs.
@@ -236,7 +251,7 @@ def _call_provider(provider, request, telemetry):
 
 def run_turn(history_messages, user_message, provider, catalog, turn_context,
              max_iterations=MAX_ITERATIONS, before_provider_call=None,
-             chat_action_renewer=None):
+             chat_action_renewer=None, task_events_store=None):
     """Verarbeitet eine Anfrage und liefert ein `AgentResult`.
 
     `history_messages` ist der geladene Gesprächskontext (EC-6), `user_message`
@@ -262,6 +277,13 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
     Provider-Return — kein Leak. `chat_action_renewer` ist UNABHÄNGIG von
     `before_provider_call`; beide können gleichzeitig gesetzt sein.
 
+    `task_events_store` (EC-35): optionale `TaskEventsStore`-Instanz. Ist sie
+    gesetzt, schreibt `run_turn` am Ende des Turns für jeden eindeutig gerufenen
+    Skill einen Event-Eintrag (Deduplizierung: zwei Aufrufe desselben Skills =
+    ein Event). Ist sie None (Default), wird kein Event geschrieben — die
+    Sandbox- und Test-Kompatibilität bleibt unverändert. Für Live-Aktivierung
+    muss main.py `task_events_store=ctx.task_events_store` durchreichen.
+
     Wirft `model.ProviderError` weiter, wenn der Anbieter scheitert (EC-14) —
     die Behandlung liegt bei der Orchestrierung.
     """
@@ -271,6 +293,14 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
     # einen einzigen Call bleibt das Objekt gesetzt — die Orchestrierung
     # erkennt an `has_calls()`, ob ein Suffix anzuhängen ist (AC2/AC3).
     telemetry = TurnTelemetry()
+
+    # EC-35: Deduplizierter Skill-Tracker. Set — ein Skill taucht pro Turn
+    # nur einmal auf, egal wie oft das Modell ihn in diesem Turn aufruft.
+    # `_called_skills`: {task_name} für Erfolg-Pfad.
+    # `_error_skills`: {task_name} für Skills, die im letzten Aufruf geworfen
+    # haben. (Letzter Aufruf bestimmt outcome, falls mehrere Pfade möglich.)
+    _called_skills: set = set()
+    _error_skills: set = set()
 
     for _ in range(max_iterations):
         if before_provider_call is not None:
@@ -313,6 +343,11 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
             reply_text = response.text or _EMPTY_REPLY
             transcript = (messages[len(history_messages):]
                           + [Message(role="assistant", blocks=[TextBlock(reply_text)])])
+            # EC-35: Task-Events für alle in diesem Turn eindeutig gerufenen
+            # Skills persistieren (Erfolgs-Pfad). Outcome: 'error' wenn der
+            # Skill geworfen hat, sonst 'success'. Dedupliziert via Set.
+            _flush_task_events(task_events_store, turn_context.chat_id,
+                               _called_skills, _error_skills)
             return AgentResult(reply_text=reply_text, telemetry=telemetry,
                                transcript=transcript)
 
@@ -351,11 +386,16 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
                     write_result = catalog.execute_write_task(
                         task, call.arguments, turn_context)
                 except Exception as e:
+                    # EC-35: Skill ist fehlgeschlagen — als error tracken.
+                    _called_skills.add(call.task)
+                    _error_skills.add(call.task)
                     result_blocks.append(TaskResultBlock(
                         call_id=call.call_id,
                         content="Aufgabe fehlgeschlagen: %s" % e,
                         is_error=True))
                     continue
+                # EC-35: erfolgreicher auto_confirm Write — als success tracken.
+                _called_skills.add(call.task)
                 reply = write_result.reply if write_result else ""
                 result_blocks.append(TaskResultBlock(
                     call_id=call.call_id,
@@ -386,6 +426,10 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
                     call_id=call.call_id,
                     content=_proposal_pending(task.name),
                     is_error=False)]))
+                # EC-35: WRITE-Vorschlag = abort für diesen Skill.
+                if task_events_store is not None:
+                    task_events_store.insert(call.task, turn_context.chat_id,
+                                             "abort")
                 # Den reinen Vorschlagstext hängt die Orchestrierung an (via
                 # _format_proposal) — er ist nicht Teil des Loop-Transkripts.
                 return AgentResult(proposal=proposal, pending_call=call,
@@ -396,10 +440,15 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
             try:
                 content = task.run(call.arguments, turn_context)
             except Exception as e:  # Aufgabe isoliert melden
+                # EC-35: Skill geworfen — als error tracken.
+                _called_skills.add(call.task)
+                _error_skills.add(call.task)
                 result_blocks.append(TaskResultBlock(
                     call_id=call.call_id,
                     content="Fehler bei der Aufgabe: %s" % e, is_error=True))
                 continue
+            # EC-35: lesender Skill erfolgreich abgeschlossen.
+            _called_skills.add(call.task)
             result_blocks.append(TaskResultBlock(
                 call_id=call.call_id, content=content, is_error=False))
 
@@ -411,6 +460,11 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
     # hängen (neue Liste, nicht `messages` mutieren — EC-13), damit die
     # persistierte History auch hier den vollen Tool-Turn-Verlauf bis zur
     # Antwort trägt (gleiche Reihenfolge wie der Erfolgs-Pfad).
+    # EC-35: Max-Iterationen-Abbruch → gave_up → alle bekannten Skills als
+    # abort persistieren.
+    if task_events_store is not None:
+        for name in _called_skills:
+            task_events_store.insert(name, turn_context.chat_id, "abort")
     transcript = (messages[len(history_messages):]
                   + [Message(role="assistant", blocks=[TextBlock(_GAVE_UP)])])
     return AgentResult(reply_text=_GAVE_UP, telemetry=telemetry,
