@@ -1,440 +1,451 @@
-/* ══════════════════════════════════════════════════════════════════════════
-   Hörspiel-Buddy — View `alben`, Splitscreen, Stufe toddler.
-   HSP-2/3/4/4a/4b/19/20/21/22/23 · E-HSP-8/9/10/11
+/* HSP-2/3/4/4a/4b/19-23 · E-HSP-8/9/10/11 — Werft-Iter-3 (Gate-B). */
 
-   Stilwerte ausschließlich als Token aus display/_shared/design/tokens.css
-   (HSP-4, DTOK-3, DTOK-5: keine hartcodierten Farben/Maße).
-   Layout-Basis: Splitscreen 65 % Kacheln / 35 % Player, 1920×1080 Kiosk.
-   Card/Card-Label-Optik: 1:1-Spiegel aus wetter/static/wetter.css (HSP-4).
-   ══════════════════════════════════════════════════════════════════════════ */
-
-/* ── KIOSK SHELL (HSP-4b: raumfüllend, analog WETTER-25) ───────────────── */
 html, body {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
-  max-width: 1920px;
-  max-height: 1080px;
+  margin: 0; padding: 0;
+  width: 100%; height: 100%;
   overflow: hidden;
   background: var(--kids-bg);
 }
 
 body.xb[data-stage="toddler"] {
   font-family: var(--font-hand);
-  font-size: var(--fs-20);
   color: var(--kids-ink);
-  background: var(--kids-bg);
 }
 
-/* ── SPLITSCREEN (HSP-2/E-HSP-8: ~65 % Kacheln / ~35 % Player) ─────────── */
-.splitscreen {
-  display: grid;
-  grid-template-columns: 65fr 35fr;
-  gap: var(--space-4);
+/* ── SHELL: topbar / main player / footer (E-HSP-8) ─────────────────── */
+.shell {
   width: 100%;
-  height: 100%;
+  height: 100vh;
+  max-width: 1920px;
   max-height: 1080px;
-  padding: var(--space-4);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.85fr 1fr;
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    "topbar topbar"
+    "main   player"
+    "footer footer";
+  padding: var(--space-5) var(--space-6);
+  gap: var(--space-4);
   box-sizing: border-box;
 }
 
-/* ── LINKE SPALTE: Kacheln-Raster ───────────────────────────────────────── */
-.kacheln-col {
+/* ── TOPBAR ─────────────────────────────────────────────────────────── */
+.topbar {
+  grid-area: topbar;
   display: flex;
-  flex-direction: column;
-  min-width: 0;   /* HSP-4b: kein Inhalts-Push */
-  min-height: 0;
-  overflow: hidden;
+  align-items: center;
+  gap: var(--space-5);
 }
 
-/* HSP-2/E-HSP-8: 5 Spalten × 2 Reihen ohne Scroll.
-   grid-auto-rows:auto (HSP-4b: nicht 1fr, kollidiert mit aspect-ratio des Covers). */
-.kacheln-grid {
+.topbar-left { display: flex; align-items: center; gap: var(--space-4); }
+
+.topbar-icon {
+  width: 88px; height: 88px;
+  background: var(--kids-paper);
+  border-radius: var(--radius-2xl);
+  border: 2px solid var(--kids-border-soft);
+  box-shadow: var(--shadow-hand-sm);
+  display: grid; place-items: center;
+  flex-shrink: 0;
+}
+
+.topbar-icon img { width: 72px; height: 72px; object-fit: contain; }
+
+.topbar-text { display: flex; flex-direction: column; gap: 2px; }
+
+.topbar-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-64);
+  line-height: 1;
+  color: var(--kids-ink);
+}
+
+.topbar-sub {
+  font-family: var(--font-hand);
+  font-size: var(--fs-24);
+  color: var(--kids-ink-soft);
+}
+
+/* ── MAIN: Kachel-Raster (HSP-2/E-HSP-8: 5×2 ohne Scroll) ───────────── */
+.main { grid-area: main; min-height: 0; min-width: 0; display: grid; }
+
+.grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   grid-auto-rows: auto;
-  gap: var(--space-3);
-  width: 100%;
-  flex: 1;
-  min-height: 0;
+  gap: var(--space-4);
+  min-width: 0;
   align-content: start;
 }
 
-/* ── CARD BASE — 1:1-Spiegel aus wetter.css .card (HSP-4) ──────────────── */
-.card {
+/* ── KACHEL (HSP-19/E-HSP-8/E-HSP-10) ───────────────────────────────── */
+.tile {
   background: var(--kids-paper);
-  border-radius: var(--radius-3xl);
-  border: 2px solid var(--kids-border-soft);
-  box-shadow: var(--shadow-hand-lg);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  position: relative;
-}
-
-/* ── ALBUM-KACHEL (HSP-19/E-HSP-8/E-HSP-10) ────────────────────────────── */
-.kachel {
+  border: 3px solid var(--kids-border-soft);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-hand);
+  display: grid;
+  grid-template-rows: auto auto auto;
+  padding: 10px;
+  gap: 6px;
   cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  min-width: 0; min-height: 0;
+  align-content: start;
   transition:
     box-shadow var(--dur-base) var(--ease-out),
     border-color var(--dur-base) var(--ease-out);
-  min-width: 0;   /* HSP-4b */
   outline: none;
-  /* Kachel nimmt die gesamte verfügbare Höhe in der 2-Reihen-Grid */
 }
 
-.kachel:focus-visible {
-  box-shadow: var(--focus-ring), var(--shadow-hand-lg);
-}
+.tile:focus-visible { box-shadow: var(--focus-ring), var(--shadow-hand-lg); }
+.tile.is-playing { border-color: #5C8442; box-shadow: 4px 6px 0 rgba(92,132,66,.38); }
+.tile.is-resume  { border-color: #E08545; }
 
-.kachel:active,
-.kachel.active {
-  border-color: var(--primary);
-  box-shadow: var(--shadow-hand-sm);
-}
-
-/* Resume-Kachel: oranger Rand + Badge (HSP-2/23, E-HSP-9) */
-.kachel.resume {
-  border-color: var(--kids-today);      /* orange */
-  border-width: 3px;
-}
-
-/* HSP-19: Cover-Slot 1:1 (E-HSP-10) */
-.kachel-cover-wrap {
+/* Tile-Cover: striktes 1:1 (E-HSP-10) — identisch zu Player-Cover. */
+.tile-cover {
   width: 100%;
-  aspect-ratio: 1;                       /* E-HSP-10: quadratisch */
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--kids-border-soft);
   background: var(--kids-tint-sky);
   overflow: hidden;
-  flex-shrink: 0;
+  display: grid; place-items: center;
+  justify-self: center;
 }
 
-.kachel-cover {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;                     /* E-HSP-10: gleicher Asset-Pfad überall */
+.tile-cover img {
+  width: 100%; height: 100%;
+  object-fit: cover;
   display: block;
 }
 
-/* Kachel-Body (Titel + ggf. Badge) */
-.kachel-body {
-  padding: var(--space-2) var(--space-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
-  flex: 1;
-}
-
-/* Folgen-Titel: 2 Zeilen, kein Clip-Bruch (HSP-4b) */
-.kachel-titel {
+.tile-nr {
   font-family: var(--font-hand);
-  font-weight: 700;
-  /* HSP-4b: clamp() skaliert Schrift über Viewport-Breiten */
-  font-size: clamp(var(--fs-14), 1.4vw, var(--fs-20));
-  color: var(--kids-ink);
-  line-height: var(--lh-snug);
-  /* HSP-4b: 2-Zeilen-Truncate */
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  min-width: 0;
-}
-
-/* Resume-Badge oben rechts (HSP-2/23) */
-.resume-badge {
-  display: none;
-  position: absolute;
-  top: var(--space-2);
-  right: var(--space-2);
-  background: var(--kids-today);        /* orange */
-  color: var(--kids-paper);
-  font-family: var(--font-hand);
-  font-weight: 700;
-  font-size: var(--fs-12);
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-full);
+  font-size: 13px;
+  line-height: 1;
+  color: var(--kids-ink-soft);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
   white-space: nowrap;
-  z-index: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.kachel.resume .resume-badge {
-  display: block;
-}
-
-/* ── „ÄLTERE FOLGEN"-SLOT (HSP-2/E-HSP-8: gestrichelte Border, Mehr-Pikto) ── */
-.kachel.mehr-slot {
-  border-style: dashed;
-  border-color: var(--kids-border-soft);
-  cursor: pointer;
-  opacity: 0.85;
-}
-
-.kachel.mehr-slot .kachel-cover-wrap {
-  background: var(--kids-bg);
+/* Titel mit Pikto-im-Text-Wortblock (HSP-4a, HSP-5a) */
+.tile-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(17px, 2.0vh, 24px);
+  line-height: 1.15;
+  color: var(--kids-ink);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
+  gap: 4px 6px;
+  min-height: calc(2 * 1.2em);
+  overflow: hidden;
 }
 
-.kachel.mehr-slot .kachel-cover-wrap img {
-  width: var(--pikto-xl);
-  height: var(--pikto-xl);
+/* Resume-Badge */
+.tile-badge {
+  position: absolute;
+  top: var(--space-2); right: var(--space-2);
+  color: #FFFFFF;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-hand-sm);
+  background: #E08545;
+}
+
+/* Mehr-Kachel (HSP-2 Ältere-Folgen-Slot) */
+.tile.is-more {
+  background: var(--kids-bg-soft, var(--kids-bg));
+  border-style: dashed;
+  border-color: var(--kids-border-strong, var(--kids-border-soft));
+  box-shadow: none;
+}
+
+.tile.is-more .more-pikto {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: var(--kids-paper);
+  border: 2px solid var(--kids-border-soft);
+  border-radius: var(--radius-lg);
+  display: grid; place-items: center;
+  justify-self: center;
+  overflow: hidden;
+}
+
+.tile.is-more .more-pikto img {
+  max-width: 55%; max-height: 55%;
+  width: auto; height: auto;
   object-fit: contain;
 }
 
-/* ── RECHTE SPALTE: Player (HSP-2/21 — immer sichtbare Säule) ───────────── */
-.player-col {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-}
-
-.player-card {
-  flex: 1;
-  padding: var(--space-4) var(--space-5);
-  gap: var(--space-3);
-  min-height: 0;
-}
-
-/* Player-Cover 1:1 (HSP-4b/E-HSP-10: identisches Format zum Kachel-Cover) */
-.player-cover-wrap {
-  width: 100%;
-  aspect-ratio: 1;                       /* E-HSP-10: quadratisch */
-  background: var(--kids-tint-sky);
-  border-radius: var(--radius-2xl);
-  border: 2px solid var(--kids-border-soft);
+.tile.is-more .more-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(17px, 2.0vh, 24px);
+  color: var(--kids-ink);
+  text-align: center;
+  line-height: 1.1;
   overflow: hidden;
-  flex-shrink: 0;
-  max-height: 30%;                       /* lässt Track-Liste und Controls Raum */
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+.tile.is-more .more-sub {
+  font-family: var(--font-hand);
+  font-size: 13px;
+  line-height: 1;
+  color: var(--kids-ink-soft);
+  text-align: center;
+}
+
+/* ── INLINE-PIKTO-WORTBLOCK (HSP-4a, E-HSP-11) ──────────────────────── */
+.word-pikto {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 3px;
+  background: var(--kids-bg);
+  border: 2px solid var(--kids-border-soft);
+  border-radius: var(--radius-lg);
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--kids-ink);
+  line-height: 1;
+}
+
+.word-pikto img {
+  width: 1.2em; height: 1.2em;
+  max-width: 28px; max-height: 28px;
+  object-fit: contain;
+  background: var(--kids-paper);
+  border-radius: var(--radius-s);
+}
+
+/* ── PLAYER (HSP-2/21/22 — immer sichtbare vertikale Säule) ─────────── */
+.player {
+  grid-area: player;
+  background: var(--kids-paper);
+  border: 3px solid var(--kids-border-soft);
+  border-radius: var(--radius-3xl);
+  box-shadow: var(--shadow-hand-lg);
+  padding: var(--space-4) var(--space-5);
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  gap: var(--space-3);
+  min-height: 0; min-width: 0;
+  overflow: hidden;
+}
+
+/* Player-Cover: 1:1 (E-HSP-10), max-width statt max-height. */
 .player-cover {
   width: 100%;
-  height: 100%;
+  max-width: 280px;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-2xl);
+  border: 2px solid var(--kids-border-soft);
+  background: var(--kids-tint-sky);
+  overflow: hidden;
+  display: grid; place-items: center;
+  justify-self: center;
+  align-self: start;
+}
+
+.player-cover img {
+  width: 100%; height: 100%;
   object-fit: cover;
   display: block;
 }
 
 /* Album-Header (HSP-21) */
 .player-header {
-  flex-shrink: 0;
-  min-width: 0;
+  display: flex; flex-direction: column;
+  gap: 2px;
+  text-align: center;
 }
 
 .player-album-nr {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: clamp(var(--fs-14), 1.3vw, var(--fs-20));
+  font-family: var(--font-hand);
+  font-size: 14px;
   color: var(--kids-ink-soft);
-  letter-spacing: var(--ls-wide);
   text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+  line-height: 1;
 }
 
-.player-album-titel {
+.player-album-title {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: clamp(var(--fs-18), 1.8vw, var(--fs-28));
+  font-size: clamp(22px, 2.6vh, 30px);
+  line-height: 1.05;
   color: var(--kids-ink);
-  line-height: var(--lh-snug);
-  /* HSP-4b: 2-Zeilen-Truncate */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-/* Track-Liste (HSP-4b: grid-auto-rows:minmax(0,1fr) für 6–10 Tracks ohne Scroll) */
+/* Track-Liste — 1fr, skaliert für bis zu 10 Tracks (HSP-4b) */
 .player-tracks {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  flex: 1;
   display: grid;
-  grid-auto-rows: minmax(0, 1fr);       /* HSP-4b: skaliert 6–10 Tracks */
-  gap: var(--space-1);
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0; min-width: 0;
+  overflow: hidden;
+}
+
+.player-tracks-title {
+  font-family: var(--font-hand);
+  font-size: 12px;
+  color: var(--kids-ink-soft);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+  margin-bottom: 4px;
+}
+
+.player-tracks-list {
+  display: grid;
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 2px;
   min-height: 0;
   overflow: hidden;
 }
 
-.track-item {
+.player-track {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-md);
-  background: var(--kids-bg);
-  border: 1px solid transparent;
-  cursor: pointer;
-  min-height: 0;
-  min-width: 0;
-  transition:
-    background var(--dur-fast) var(--ease-out),
-    border-color var(--dur-fast) var(--ease-out);
-}
-
-.track-item:hover {
-  background: var(--kids-weekend-bg);
-}
-
-.track-item.active {
-  background: var(--kids-tint-mint);
-  border-color: var(--success);
-}
-
-.track-pos {
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-s);
   font-family: var(--font-hand);
-  font-size: clamp(var(--fs-12), 1.1vw, var(--fs-16));
-  color: var(--kids-ink-soft);
-  flex-shrink: 0;
-  width: 1.6em;
+  font-size: clamp(12px, 1.5vh, 16px);
+  line-height: 1.1;
+  color: var(--kids-ink);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.player-track .pos {
+  width: 18px;
   text-align: right;
-}
-
-.track-label {
-  font-family: var(--font-hand);
-  font-size: clamp(var(--fs-12), 1.1vw, var(--fs-16));
-  color: var(--kids-ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-  min-width: 0;
-}
-
-/* Pikto-im-Text-Wortblock (HSP-4a/E-HSP-11: kompakte Inline-Variante von .card-pikto) */
-.word-pikto {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  vertical-align: middle;
-  background: var(--kids-bg);
-  border: 1px solid var(--kids-border-soft);
-  border-radius: var(--radius-sm);
-  padding: 1px var(--space-1);
-}
-
-.word-pikto img {
-  height: var(--pikto-sm);
-  width: var(--pikto-sm);
-  object-fit: contain;
-  display: block;
-  border-radius: 4px;
-}
-
-.word-pikto span {
   font-family: var(--font-display);
-  font-size: clamp(var(--fs-12), 1.1vw, var(--fs-16));
-  color: var(--kids-ink);
-  white-space: nowrap;
-}
-
-/* Now-Playing (HSP-2: aktueller Track-Name) */
-.player-now-playing {
-  flex-shrink: 0;
-  min-width: 0;
-  font-family: var(--font-hand);
-  font-size: clamp(var(--fs-14), 1.3vw, var(--fs-20));
+  font-size: clamp(13px, 1.6vh, 18px);
   color: var(--kids-ink-soft);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Progress (HSP-21: Anzeige) */
-.player-progress-wrap {
   flex-shrink: 0;
 }
 
-.player-progress-bar {
-  height: 8px;
-  background: var(--kids-border-soft);
-  border-radius: var(--radius-full);
+.player-track .name {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 4px;
   overflow: hidden;
 }
 
-.player-progress-fill {
-  height: 100%;
-  background: var(--primary);
-  border-radius: var(--radius-full);
-  width: 0%;
-  transition: width var(--dur-base) var(--ease-soft);
+.player-track .word-pikto {
+  padding: 0px 6px 0px 2px;
+  font-size: clamp(12px, 1.5vh, 16px);
+  flex-shrink: 0;
 }
 
-/* ── CONTROLS (HSP-3/21: groß, touch-tauglich, am Boden) ───────────────── */
-.player-controls {
-  display: flex;
+.player-track .word-pikto img { width: 18px; height: 18px; }
+
+.player-track.is-active {
+  background: var(--kids-tint-mint);
+  border: 2px solid #5C8442;
+  padding: 0 6px;
+}
+.player-track.is-active .pos { color: #5C8442; font-weight: 700; }
+
+.player-track.intro, .player-track.outro {
+  color: var(--kids-ink-soft);
+  font-style: italic;
+}
+
+/* Now-Playing + Progress (HSP-21) */
+.player-now {
+  display: flex; flex-direction: column;
+  gap: 4px;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-5);
-  flex-shrink: 0;
-  padding: var(--space-2) 0;
+  text-align: center;
 }
 
-.ctrl-btn {
-  background: var(--kids-paper);
+.player-now-label {
+  font-family: var(--font-hand);
+  font-size: 13px;
+  color: var(--kids-ink-soft);
+}
+
+.player-now-text {
+  font-family: var(--font-display);
+  font-size: clamp(16px, 1.9vh, 22px);
+  line-height: 1.1;
+  color: var(--kids-ink);
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center;
+}
+
+.progress {
+  width: 100%;
+  height: 12px;
+  background: var(--kids-tint-sky);
   border: 2px solid var(--kids-border-soft);
   border-radius: var(--radius-full);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--kids-ink);
-  transition:
-    background var(--dur-fast) var(--ease-out),
-    box-shadow var(--dur-fast) var(--ease-out);
-  box-shadow: var(--shadow-hand-sm);
-  padding: 0;
-  flex-shrink: 0;
+  overflow: hidden;
 }
 
-.ctrl-btn svg {
-  display: block;
+.progress-bar { height: 100%; width: 0%; background: #7BAE57; }
+
+/* Controls am Boden (HSP-3/21) */
+.player-ctrl {
+  display: flex; align-items: center; justify-content: center;
+  gap: var(--space-3);
 }
 
-.ctrl-prev,
-.ctrl-next {
-  width: clamp(56px, 6vw, 80px);
-  height: clamp(56px, 6vw, 80px);
-}
-
-.ctrl-prev svg,
-.ctrl-next svg {
-  width: 60%;
-  height: 60%;
-}
-
-/* Haupt-Play/Pause — größer (HSP-3: „großer Play/Pause-Knopf in der Mitte") */
-.ctrl-play {
-  width: clamp(72px, 8vw, 108px);
-  height: clamp(72px, 8vw, 108px);
-  background: var(--primary);
-  border-color: var(--primary-ink);
-  color: var(--kids-paper);
+.btn-circle {
+  width: 72px; height: 72px;
+  border-radius: 9999px;
+  border: 3px solid var(--kids-ink);
+  background: var(--kids-paper);
   box-shadow: var(--shadow-hand);
+  display: grid; place-items: center;
+  cursor: pointer; flex-shrink: 0;
+  color: var(--kids-ink);
 }
 
-.ctrl-play svg {
-  width: 55%;
-  height: 55%;
+.btn-circle:focus-visible { box-shadow: var(--focus-ring), var(--shadow-hand); }
+.btn-circle svg { width: 32px; height: 32px; fill: var(--kids-ink); }
+
+.btn-play {
+  width: 110px; height: 110px;
+  background: #7BAE57;
+  border-color: var(--kids-ink);
+  box-shadow: var(--shadow-hand-lg);
 }
 
-/* Resume-Zustand: oranger Play-Button (HSP-2/23) */
-.ctrl-play.resume {
-  background: var(--kids-today);        /* orange */
-  border-color: var(--warning);
-  color: var(--kids-paper);
+.btn-play svg { width: 50px; height: 50px; fill: #FFFFFF; }
+
+/* "Weiter hören"-Knopf-Variante (HSP-23 Default-Stand) */
+.btn-play.is-resume { background: #E08545; }
+
+/* ── FOOTER ─────────────────────────────────────────────────────────── */
+.footer {
+  grid-area: footer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-hand);
+  font-size: 12px;
+  color: var(--kids-ink-soft);
+  opacity: 0.85;
 }
 
-.ctrl-btn:active {
-  box-shadow: none;
-  transform: scale(0.95);
-}
-
-/* Kein Wisch/Long-Press/Tastatur-Fokus außer focus-visible (HSP-3) */
-.ctrl-btn:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring), var(--shadow-hand-sm);
-}
+audio { display: none; }
