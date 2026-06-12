@@ -29,8 +29,6 @@ import argparse
 import logging
 import os
 import sys
-import urllib.error
-import urllib.request
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -48,12 +46,14 @@ if __package__:
     from . import katalog as katalog_mod
     from . import render as render_mod
     from . import store as store_mod
+    from .photo_client import EssenPhotoClient, EssenPhotoClientError
 else:
     sys.path.insert(0, _REPO_ROOT)
     from essen import config as config_mod
     from essen import katalog as katalog_mod
     from essen import render as render_mod
     from essen import store as store_mod
+    from essen.photo_client import EssenPhotoClient, EssenPhotoClientError
 
 
 # ============================================================
@@ -306,29 +306,17 @@ def _valide_bild_ref(bild_ref):
         return False
 
 
-# Test-Naht: kann per monkeypatch durch einen Stub ersetzt werden.
-# Signatur: (foto_ref: str) -> bool — True = Photo-Buddy kennt die ID.
-_photo_buddy_existenz_check = None  # None = echter HTTP-Check
-
-
 def _foto_ref_existiert(foto_ref):
     """Prüft, ob foto_ref im Photo-Buddy existiert (ESSEN-19/19a, ESSEN-22).
 
-    Ruft GET /api/v1/photo/medien/<id> am Photo-Buddy auf und prüft 200.
-    Test-Naht: wenn _photo_buddy_existenz_check gesetzt ist, wird der Stub
-    statt des echten HTTP-Calls verwendet (CLIENT-1-Analog).
+    Baut einen EssenPhotoClient und ruft medium_existiert() auf (CLIENT-1).
+    Test-Naht: `EssenPhotoClient` im Modul-Namespace per monkeypatch ersetzbar.
+    Bei Netzwerkfehler → False (kein Exception-Durchbruch an Endpoint).
     """
-    if _photo_buddy_existenz_check is not None:
-        return _photo_buddy_existenz_check(foto_ref)
-    base_url = config_mod.photo_buddy_url()
-    url = "%s/api/v1/photo/medien/%s" % (base_url, foto_ref)
+    client = EssenPhotoClient(config_mod.photo_buddy_url())
     try:
-        req = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(req, timeout=2.0) as resp:
-            return resp.status == 200
-    except urllib.error.HTTPError as e:
-        return e.code == 200
-    except (urllib.error.URLError, OSError):
+        return client.medium_existiert(foto_ref)
+    except EssenPhotoClientError:
         return False
 
 

@@ -20,6 +20,7 @@ from essen import katalog as katalog_mod  # noqa: E402, I001
 from essen import main as main_mod  # noqa: E402
 from essen import render as render_mod  # noqa: E402
 from essen import store as store_mod  # noqa: E402
+from essen.photo_client import EssenPhotoClient  # noqa: E402
 
 
 # ============================================================
@@ -924,19 +925,39 @@ def test_healthz_gibt_200(client):
 
 # Helfer: setzt den Photo-Buddy-Check-Stub für die Dauer eines Tests.
 # Alle ESSEN-19/19a-Tests verwenden diesen Stub (kein echtes Netz).
+# Test-Naht über transport=-Injection (CLIENT-1): FakeTransport liefert
+# (status, bytes) je nach bekannter ID-Menge.
+
+class _FakeTransport:
+    """In-Process-Stub für EssenPhotoClient._call (CLIENT-1-Signatur)."""
+
+    def __init__(self, known_ids=None):
+        self._known_ids = known_ids  # None = alle IDs gültig
+
+    def __call__(self, method, path, *, body=None, content_type=None):
+        # Pfad-Format: /api/v1/photo/medien/<id>
+        medien_id = path.rsplit("/", 1)[-1]
+        if self._known_ids is None or medien_id in self._known_ids:
+            return (200, b'{"id": "%s"}' % medien_id.encode())
+        return (404, b'{"error": "nicht gefunden"}')
+
 
 def _set_photo_stub(monkeypatch, known_ids=None):
-    """Monkeypatcht _foto_ref_existiert für netzfreie Tests.
+    """Monkeypatcht EssenPhotoClient im main-Modul für netzfreie Tests.
 
-    known_ids: Menge gültiger Medien-IDs. Alle anderen → False.
+    known_ids: Menge gültiger Medien-IDs. Alle anderen → 404.
     None = alle IDs gültig.
-    """
-    def _stub(foto_ref):
-        if known_ids is None:
-            return True
-        return foto_ref in known_ids
 
-    monkeypatch.setattr(main_mod, "_photo_buddy_existenz_check", _stub)
+    Test-Naht über transport=-Injection: EssenPhotoClient wird durch eine
+    Klasse ersetzt, deren Konstruktor einen FakeTransport nutzt (CLIENT-1).
+    """
+    transport = _FakeTransport(known_ids)
+
+    class _FakeClient(EssenPhotoClient):
+        def __init__(self, base_url, **kwargs):
+            super().__init__(base_url, transport=transport)
+
+    monkeypatch.setattr(main_mod, "EssenPhotoClient", _FakeClient)
 
 
 def test_essen19_foto_ref_legt_gericht_an(client, monkeypatch):
@@ -1096,3 +1117,37 @@ def test_essen19a_patch_unbekannte_foto_ref_gibt_400(client, monkeypatch):
     g = next((x for x in data["kategorien"]["gericht"] if x["id"] == gericht_id), None)
     assert g.get("bild_ref") == "2527"
     assert "foto_ref" not in g
+
+
+def test_essen19a_patch_label_wird_ignoriert(client, monkeypatch):
+    """ESSEN-19a (Watchdog-Befund AC2): PATCH {label, bild_ref} → 200;
+    label bleibt unverändert (Ignorier-Klausel), bild_ref wird gewechselt.
+
+    Spec-Klausel: 'Unbekannte/Label/Zutaten-Felder werden ignoriert
+    (Vorwärtskompatibilität).' — ESSEN-19a {label:'Neu'} → ignoriert.
+    """
+    _set_photo_stub(monkeypatch, known_ids={"foto-X"})
+
+    # Gericht mit label="Original" und bild_ref="X" anlegen.
+    resp_post = client.post(
+        "/api/v1/essen/katalog/gerichte",
+        json={"label": "Original", "bild_ref": "2527"},
+    )
+    assert resp_post.status_code == 201
+    gericht_id = resp_post.get_json()["id"]
+
+    # PATCH: label="Neu" (ignoriert) + bild_ref="Y" (gewechselt).
+    resp_patch = client.patch(
+        "/api/v1/essen/katalog/gerichte/" + gericht_id,
+        json={"label": "Neu", "bild_ref": "9999"},
+    )
+    assert resp_patch.status_code == 200
+
+    # GET: label muss "Original" sein (unverändert), bild_ref muss "9999" sein.
+    data = client.get("/api/v1/essen/katalog").get_json()
+    g = next((x for x in data["kategorien"]["gericht"] if x["id"] == gericht_id), None)
+    assert g is not None, "Gericht nicht im Katalog nach PATCH"
+    assert g.get("label") == "Original", (
+        "label muss unverändert 'Original' sein — ESSEN-19a ignoriert label-Felder"
+    )
+    assert g.get("bild_ref") == "9999", "bild_ref muss auf '9999' gewechselt haben"
