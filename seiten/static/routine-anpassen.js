@@ -724,6 +724,14 @@ function oeffneHinzufuegenSheet() {
     }
   });
 
+  // T728 Bug-19: Enter im Label-Input → blur() → Tastatur schließt sich
+  labelInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      labelInput.blur();
+    }
+  });
+
   // ROUTINE-21b: manuelle Suchleiste
   const pickerSuche = inhalt.querySelector("#picker-suche");
   pickerSuche.addEventListener("input", () => {
@@ -731,6 +739,19 @@ function oeffneHinzufuegenSheet() {
     clearTimeout(_debounceTimer);
     if (q.length >= 1) {
       _debounceTimer = setTimeout(() => _sucheUndRendereIcons(q), 250);
+    }
+  });
+
+  // T728 Bug-19: Enter in manueller Suchleiste → Suche triggern + blur()
+  pickerSuche.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const q = pickerSuche.value.trim();
+      if (q.length >= 1) {
+        clearTimeout(_debounceTimer);
+        _sucheUndRendereIcons(q, "manual");
+      }
+      pickerSuche.blur();
     }
   });
 
@@ -754,8 +775,10 @@ function oeffneHinzufuegenSheet() {
 /**
  * Lädt ICONS-7 und rendert die Galerie.
  * ROUTINE-21a/21c.
+ * @param {string} q      - Suchbegriff
+ * @param {string} [_src] - Quelle ("auto"|"manual"), nur für interne Nutzung
  */
-async function _sucheUndRendereIcons(q) {
+async function _sucheUndRendereIcons(q, _src) {
   const galerieEl = document.getElementById("picker-galerie");
   if (!galerieEl) return;
 
