@@ -385,57 +385,76 @@ function _parseZeitInput(inputEl, anker) {
 // ── Drag-and-Drop (default-Items) ─────────────────────────────────────────────
 
 /**
- * Einfaches Touch/Mouse Drag-and-Drop für default-Items.
+ * T728 Bug-2: Pointer-Events Drag-and-Drop für default-Items.
+ * Nutzt setPointerCapture + pointermove + elementFromPoint statt pointerover,
+ * damit Drag in Telegram-Mini-App (wo touch events durch scroll blockiert werden)
+ * zuverlässig funktioniert. touch-action: none auf dem Handle (CSS).
  * Nur default-Items sind bewegbar (einmalig rutscht ans Ende, ROUTINE-20).
  */
 function _bindeDragAndDrop() {
   const container = document.getElementById("routine-inhalt");
-  let dragging = null;
-  let dragOverId = null;
 
   container.querySelectorAll(".drag-handle[data-drag-id]").forEach(handle => {
     const card = handle.closest(".item-card");
     if (!card) return;
 
+    let draggingId = null;
+    let dragOverId = null;
+
     handle.addEventListener("pointerdown", (e) => {
-      dragging = card.dataset.itemId;
+      draggingId = card.dataset.itemId;
+      dragOverId = null;
       card.style.opacity = "0.5";
+      // setPointerCapture: handle bekommt alle pointer-Events auch wenn Finger wandert
+      handle.setPointerCapture(e.pointerId);
       e.preventDefault();
     });
-  });
 
-  container.addEventListener("pointerover", (e) => {
-    if (!dragging) return;
-    const card = e.target.closest(".item-card[data-item-id]");
-    if (!card) return;
-    const overId = card.dataset.itemId;
-    // Nur default-Items als Ziel
-    const overItem = _editItems.find(i => i.id === overId);
-    if (!overItem || overItem.quelle !== "default") return;
-    if (overId !== dragging) {
-      dragOverId = overId;
-    }
-  });
+    handle.addEventListener("pointermove", (e) => {
+      if (!draggingId) return;
+      // Pointer-Capture bedeutet, handle bekommt die Events — wir müssen elementFromPoint nutzen
+      // um zu sehen, über welcher Card wir uns befinden
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      if (!el) return;
+      const overCard = el.closest(".item-card[data-item-id]");
+      if (!overCard) return;
+      const overId = overCard.dataset.itemId;
+      const overItem = _editItems.find(i => i.id === overId);
+      if (!overItem || overItem.quelle !== "default") return;
+      if (overId !== draggingId) {
+        dragOverId = overId;
+        // Visuelles Feedback: alle Cards zurücksetzen, dann Target markieren
+        container.querySelectorAll(".item-card[data-item-id]").forEach(c => {
+          c.style.outline = "";
+        });
+        overCard.style.outline = "2px solid var(--accent)";
+      }
+    });
 
-  container.addEventListener("pointerup", () => {
-    if (!dragging) return;
-    if (dragOverId && dragOverId !== dragging) {
-      _bewegeItem(dragging, dragOverId);
-    }
-    // Opacity zurücksetzen
-    const cards = container.querySelectorAll(".item-card[data-item-id]");
-    cards.forEach(c => { c.style.opacity = ""; });
-    dragging = null;
-    dragOverId = null;
-  });
+    handle.addEventListener("pointerup", () => {
+      if (!draggingId) return;
+      if (dragOverId && dragOverId !== draggingId) {
+        _bewegeItem(draggingId, dragOverId);
+      } else {
+        // Kein gültiges Drop-Ziel: nur Opacity zurücksetzen
+        card.style.opacity = "";
+        container.querySelectorAll(".item-card[data-item-id]").forEach(c => {
+          c.style.outline = "";
+        });
+      }
+      draggingId = null;
+      dragOverId = null;
+    });
 
-  document.addEventListener("pointerup", () => {
-    if (!dragging) return;
-    const cards = container.querySelectorAll(".item-card[data-item-id]");
-    cards.forEach(c => { c.style.opacity = ""; });
-    dragging = null;
-    dragOverId = null;
-  }, { once: true });
+    handle.addEventListener("pointercancel", () => {
+      card.style.opacity = "";
+      container.querySelectorAll(".item-card[data-item-id]").forEach(c => {
+        c.style.outline = "";
+      });
+      draggingId = null;
+      dragOverId = null;
+    });
+  });
 }
 
 /**
@@ -613,8 +632,13 @@ async function _fehlerText(resp, kontext) {
 // ── Hinzufügen-Bottom-Sheet (ROUTINE-21) ──────────────────────────────────────
 
 /**
- * Öffnet das Hinzufügen-Bottom-Sheet für einen neuen Routine-Punkt.
+ * T728 Bug-3: Öffnet das Hinzufügen-Bottom-Sheet für einen neuen Routine-Punkt.
  * ROUTINE-21: Label-Input, dauerhaft/nur-heute-Toggle, Icon-Picker mit ICONS-7.
+ *
+ * Bug-3-Fix: Sheet-HTML wird NUR EINMAL gerendert. Toggle-Klick aktualisiert
+ * nur die CSS-Klassen der Toggle-Buttons (kein innerHTML-Ersetzen → kein Focus-Loss).
+ * Label-Input bleibt <input type=text> (einzeilig), max 40 Zeichen (ROUTINE-21).
+ * Auto-Suche rendert nur #picker-galerie neu, nie das gesamte Sheet.
  */
 function oeffneHinzufuegenSheet() {
   _pickerSelectedId = null;
@@ -622,107 +646,105 @@ function oeffneHinzufuegenSheet() {
 
   const inhalt = document.getElementById("sheet-inhalt");
 
-  function _renderSheet() {
-    inhalt.innerHTML =
-      '<p class="sheet-titel">Neuen Punkt anlegen</p>' +
+  // Sheet-HTML einmalig aufbauen (T728 Bug-3: kein _renderSheet()-Re-Render)
+  inhalt.innerHTML =
+    '<p class="sheet-titel">Neuen Punkt anlegen</p>' +
 
-      // Label-Input
-      '<div class="sheet-field">' +
-        '<label for="sheet-label">Text</label>' +
-        '<input type="text" class="sheet-input" id="sheet-label" ' +
-               'placeholder="z. B. Turnbeutel" maxlength="40" autocomplete="off">' +
-      '</div>' +
+    // Label-Input (ROUTINE-21: einzeilig <input type=text>, max 40 Zeichen)
+    '<div class="sheet-field">' +
+      '<label for="sheet-label">Text</label>' +
+      '<input type="text" class="sheet-input" id="sheet-label" ' +
+             'placeholder="z. B. Turnbeutel" maxlength="40" autocomplete="off">' +
+    '</div>' +
 
-      // dauerhaft / nur heute Toggle (ROUTINE-21)
-      '<div class="sheet-field">' +
-        '<label>Wann gilt der Punkt?</label>' +
-        '<div class="toggle-quelle">' +
-          '<button type="button" id="tog-default" ' +
-                  'class="' + (quelleAuswahl === "default" ? "active" : "") + '">' +
-            '📅 dauerhaft' +
-          '</button>' +
-          '<button type="button" id="tog-einmalig" ' +
-                  'class="' + (quelleAuswahl === "einmalig" ? "active" : "") + '">' +
-            '🌅 nur heute' +
-          '</button>' +
-        '</div>' +
-      '</div>' +
-
-      // Icon-Picker (ROUTINE-21a/21b/21c/21d)
-      '<div class="sheet-field">' +
-        '<label>Piktogramm <span style="color:var(--ink-soft);font-weight:400;">— per Tap wählen</span></label>' +
-        // ROUTINE-21b: manuelle Suchleiste immer sichtbar
-        '<div class="picker-search-wrap">' +
-          '<input type="text" class="picker-search-input" id="picker-suche" ' +
-                 'placeholder="Anderes Wort suchen …" autocomplete="off">' +
-        '</div>' +
-        '<div id="picker-galerie" class="picker-galerie">' +
-          '<div class="picker-leer">Tippe einen Begriff in das Feld oben.</div>' +
-        '</div>' +
-      '</div>' +
-
-      // Buttons
-      '<div class="sheet-btn-gruppe">' +
-        '<button type="button" class="sheet-btn sheet-btn-ghost" id="sheet-abbrechen">Abbrechen</button>' +
-        '<button type="button" class="sheet-btn sheet-btn-primary" id="sheet-anlegen" disabled>' +
-          'Anlegen' +
+    // dauerhaft / nur heute Toggle (ROUTINE-21)
+    '<div class="sheet-field">' +
+      '<label>Wann gilt der Punkt?</label>' +
+      '<div class="toggle-quelle">' +
+        '<button type="button" id="tog-default" class="active">' +
+          '📅 dauerhaft' +
         '</button>' +
-      '</div>';
+        '<button type="button" id="tog-einmalig">' +
+          '🌅 nur heute' +
+        '</button>' +
+      '</div>' +
+    '</div>' +
 
-    // Toggle-Handler
-    inhalt.querySelector("#tog-default").addEventListener("click", () => {
-      quelleAuswahl = "default";
-      _renderSheet();
-      // Label und Picker-Auswahl beibehalten
-      const labelEl = inhalt.querySelector("#sheet-label");
-      if (labelEl) setTimeout(() => labelEl.focus(), 0);
-    });
-    inhalt.querySelector("#tog-einmalig").addEventListener("click", () => {
-      quelleAuswahl = "einmalig";
-      _renderSheet();
-      const labelEl = inhalt.querySelector("#sheet-label");
-      if (labelEl) setTimeout(() => labelEl.focus(), 0);
-    });
+    // Icon-Picker (ROUTINE-21a/21b/21c/21d)
+    '<div class="sheet-field">' +
+      '<label>Piktogramm <span style="color:var(--ink-soft);font-weight:400;">— per Tap wählen</span></label>' +
+      // ROUTINE-21b: manuelle Suchleiste immer sichtbar
+      '<div class="picker-search-wrap">' +
+        '<input type="text" class="picker-search-input" id="picker-suche" ' +
+               'placeholder="Anderes Wort suchen …" autocomplete="off">' +
+      '</div>' +
+      '<div id="picker-galerie" class="picker-galerie">' +
+        '<div class="picker-leer">Tippe einen Begriff in das Feld oben.</div>' +
+      '</div>' +
+    '</div>' +
 
-    // Label-Input: debounced ICONS-7 Auto-Suche (ROUTINE-21a)
-    const labelInput = inhalt.querySelector("#sheet-label");
-    labelInput.addEventListener("input", () => {
-      const q = labelInput.value.trim();
-      clearTimeout(_debounceTimer);
-      if (q.length >= 1) {
-        _debounceTimer = setTimeout(() => _sucheUndRendereIcons(q), 250);
-      } else {
-        document.getElementById("picker-galerie").innerHTML =
+    // Buttons
+    '<div class="sheet-btn-gruppe">' +
+      '<button type="button" class="sheet-btn sheet-btn-ghost" id="sheet-abbrechen">Abbrechen</button>' +
+      '<button type="button" class="sheet-btn sheet-btn-primary" id="sheet-anlegen" disabled>' +
+        'Anlegen' +
+      '</button>' +
+    '</div>';
+
+  // Toggle-Handler: NUR Klassen wechseln, KEIN innerHTML-Re-Render (T728 Bug-3)
+  inhalt.querySelector("#tog-default").addEventListener("click", () => {
+    quelleAuswahl = "default";
+    inhalt.querySelector("#tog-default").classList.add("active");
+    inhalt.querySelector("#tog-einmalig").classList.remove("active");
+  });
+  inhalt.querySelector("#tog-einmalig").addEventListener("click", () => {
+    quelleAuswahl = "einmalig";
+    inhalt.querySelector("#tog-einmalig").classList.add("active");
+    inhalt.querySelector("#tog-default").classList.remove("active");
+  });
+
+  // Label-Input: debounced ICONS-7 Auto-Suche (ROUTINE-21a)
+  // T728 Bug-3: nur Galerie neu rendern, nicht das ganze Sheet
+  const labelInput = inhalt.querySelector("#sheet-label");
+  labelInput.addEventListener("input", () => {
+    const q = labelInput.value.trim();
+    clearTimeout(_debounceTimer);
+    _aktualisiereAnlegenBtn();
+    if (q.length >= 1) {
+      _debounceTimer = setTimeout(() => _sucheUndRendereIcons(q), 250);
+    } else {
+      const galerieEl = document.getElementById("picker-galerie");
+      if (galerieEl) {
+        galerieEl.innerHTML =
           '<div class="picker-leer">Tippe einen Begriff in das Feld oben.</div>';
       }
-    });
+    }
+  });
 
-    // ROUTINE-21b: manuelle Suchleiste
-    const pickerSuche = inhalt.querySelector("#picker-suche");
-    pickerSuche.addEventListener("input", () => {
-      const q = pickerSuche.value.trim();
-      clearTimeout(_debounceTimer);
-      if (q.length >= 1) {
-        _debounceTimer = setTimeout(() => _sucheUndRendereIcons(q), 250);
-      }
-    });
+  // ROUTINE-21b: manuelle Suchleiste
+  const pickerSuche = inhalt.querySelector("#picker-suche");
+  pickerSuche.addEventListener("input", () => {
+    const q = pickerSuche.value.trim();
+    clearTimeout(_debounceTimer);
+    if (q.length >= 1) {
+      _debounceTimer = setTimeout(() => _sucheUndRendereIcons(q), 250);
+    }
+  });
 
-    // Abbrechen
-    inhalt.querySelector("#sheet-abbrechen").addEventListener("click", schliesseSheet);
+  // Abbrechen
+  inhalt.querySelector("#sheet-abbrechen").addEventListener("click", schliesseSheet);
 
-    // Anlegen (ROUTINE-21d: disabled ohne Pikto-Wahl)
-    inhalt.querySelector("#sheet-anlegen").addEventListener("click", async () => {
-      const label = labelInput.value.trim();
-      if (!label || !_pickerSelectedId) return;
+  // Anlegen (ROUTINE-21d: disabled ohne Pikto-Wahl)
+  inhalt.querySelector("#sheet-anlegen").addEventListener("click", async () => {
+    const label = labelInput.value.trim();
+    if (!label || !_pickerSelectedId) return;
 
-      await _legeItemAn(label, quelleAuswahl, _pickerSelectedId);
-    });
+    await _legeItemAn(label, quelleAuswahl, _pickerSelectedId);
+  });
 
-    // Nach Render: Label fokussieren
-    setTimeout(() => labelInput && labelInput.focus(), 60);
-  }
+  // Nach Render: Label fokussieren
+  setTimeout(() => labelInput && labelInput.focus(), 60);
 
-  _renderSheet();
   oeffneSheetOverlay();
 }
 
@@ -834,21 +856,39 @@ async function _legeItemAn(label, quelle, piktogramm) {
 
 // ── Sheet-Overlay ─────────────────────────────────────────────────────────────
 
+/**
+ * T728 Bug-6: Beim Öffnen des Bottom-Sheets MainButton deaktivieren,
+ * damit er die Sheet-Buttons nicht überdeckt.
+ * platform.js hat kein hideMainButton() — V1-Fix: setMainButton mit enabled:false
+ * deaktiviert den Button (grau, nicht klickbar). CSS margin-bottom auf .sheet-btn-gruppe
+ * als Sicherung gegen Überlappung. TODO: platform.js um hideMainButton() erweitern.
+ */
 function oeffneSheetOverlay() {
   const overlay = document.getElementById("sheet-overlay");
   overlay.hidden = false;
+
+  // T728 Bug-6: MainButton während Sheet deaktivieren (MAD-5-konform via platform)
+  const platform = getPlatform();
+  platform.setMainButton("Speichern", onSpeichern, { enabled: false });
 
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) schliesseSheet();
   }, { once: true });
 }
 
+/**
+ * T728 Bug-6: Beim Schließen des Sheets MainButton restaurieren.
+ * Nur wenn Diff vorhanden aktiv schalten (ROUTINE-20 Diff-Logik).
+ */
 function schliesseSheet() {
   const overlay = document.getElementById("sheet-overlay");
   overlay.hidden = true;
   document.getElementById("sheet-inhalt").innerHTML = "";
   _pickerSelectedId = null;
   clearTimeout(_debounceTimer);
+
+  // T728 Bug-6: MainButton restaurieren (aktiv wenn Diff vorhanden)
+  _aktualisiereMainButton();
 }
 
 // ── Hilfs-Funktionen ──────────────────────────────────────────────────────────
