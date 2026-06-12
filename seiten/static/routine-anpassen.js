@@ -714,7 +714,7 @@ function oeffneHinzufuegenSheet() {
     clearTimeout(_debounceTimer);
     _aktualisiereAnlegenBtn();
     if (q.length >= 1) {
-      _debounceTimer = setTimeout(() => _sucheUndRendereIcons(q), 250);
+      _debounceTimer = setTimeout(() => _sucheUndRendereIcons(q, "auto"), 250);
     } else {
       const galerieEl = document.getElementById("picker-galerie");
       if (galerieEl) {
@@ -738,7 +738,7 @@ function oeffneHinzufuegenSheet() {
     const q = pickerSuche.value.trim();
     clearTimeout(_debounceTimer);
     if (q.length >= 1) {
-      _debounceTimer = setTimeout(() => _sucheUndRendereIcons(q), 250);
+      _debounceTimer = setTimeout(() => _sucheUndRendereIcons(q, "manual"), 250);
     }
   });
 
@@ -794,11 +794,12 @@ async function _sucheUndRendereIcons(q, _src) {
   try {
     const treffer = await sucheIcons(q);
 
-    // Race-Schutz: falls Nutzer weitertippt, alten Render verwerfen
-    const aktuellerInput = (
-      document.getElementById("picker-suche") ||
-      document.getElementById("sheet-label")
-    );
+    // Race-Schutz: falls Nutzer weitertippt, alten Render verwerfen.
+    // T728 Iter-9 Bug-Fix: das richtige Input-Element je nach Quelle prüfen —
+    // vorher griff der Auto-Pfad fälschlich auf #picker-suche (manuelle Suchleiste,
+    // leer) statt #sheet-label → Auto-Suche aus Label-Input wurde immer verworfen.
+    const inputId = _src === "manual" ? "picker-suche" : "sheet-label";
+    const aktuellerInput = document.getElementById(inputId);
     const aktuellerWert = aktuellerInput ? aktuellerInput.value.trim() : suchToken;
     if (aktuellerWert !== suchToken) return;
 
