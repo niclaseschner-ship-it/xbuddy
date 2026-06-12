@@ -370,6 +370,7 @@ def wunsch_view():
         kategorien,
         wuensche_daten.get("wuensche", []),
         aktiv_tab=aktiv_tab,
+        foto_overrides_pfad=_paths()["foto_overrides_file"],
     )
     return render_template("wunsch.html", view=view)
 

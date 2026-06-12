@@ -40,6 +40,12 @@ ENV_KATALOG_FILE         = "ESSEN_KATALOG_FILE"
 DEFAULT_KATALOG_DEFAULT_FILE = os.path.join(HERE, "katalog.default.json")
 ENV_KATALOG_DEFAULT_FILE     = "ESSEN_KATALOG_DEFAULT_FILE"
 
+# Familien-Foto-Overrides für Basis-Items (ESSEN-22, V1.1, SVC-5).
+# Per-Instanz unter xbuddy-data/essen/foto_overrides.json — ENV-Override:
+# ESSEN_FOTO_OVERRIDES_FILE.
+DEFAULT_FOTO_OVERRIDES_FILE = os.path.join(HERE, "foto_overrides.json")
+ENV_FOTO_OVERRIDES_FILE     = "ESSEN_FOTO_OVERRIDES_FILE"
+
 
 # Photo-Buddy-Basis-URL für Medien-Validierung (ESSEN-19/ESSEN-19a, ESSEN-22).
 # ENV-Override: PHOTO_BUDDY_URL
@@ -59,7 +65,8 @@ def data_paths(env=None):
 
     Gibt ein dict mit Schlüsseln:
       wuensche_file, einkaufsliste_file, zaehler_file,
-      gerichte_file, katalog_file, katalog_default_file
+      gerichte_file, katalog_file, katalog_default_file,
+      foto_overrides_file
     """
     if env is None:
         env = os.environ
@@ -70,4 +77,5 @@ def data_paths(env=None):
         "gerichte_file":         env.get(ENV_GERICHTE_FILE,          DEFAULT_GERICHTE_FILE),
         "katalog_file":          env.get(ENV_KATALOG_FILE,           DEFAULT_KATALOG_FILE),
         "katalog_default_file":  env.get(ENV_KATALOG_DEFAULT_FILE,   DEFAULT_KATALOG_DEFAULT_FILE),
+        "foto_overrides_file":   env.get(ENV_FOTO_OVERRIDES_FILE,    DEFAULT_FOTO_OVERRIDES_FILE),
     }
