@@ -37,7 +37,8 @@ zwei Azure-OpenAI-tts-hd-Voices `shimmer` (weich/weiblich) und `onyx`
 Stretching) · Intro/Outro als vorsynthetisierte Shared-Assets je Voice (vier
 feste MP3) · Track-Resume mit Rundung auf Track-Anfang · MediaSession-API
 + PWA `display:standalone` gegen Geräte-Schlaf · App-eigener **LLM-Adapter
-mit Provider-Switch** (`claude` Default; `mistral` als V2-Hook, V1 Stub) ·
+mit Provider-Switch** (`claude` Default; weitere Provider als V2-Hook
+über das kopierfähige Adapter-Pattern, V1 nur `claude`) ·
 App-eigener **TTS-Adapter** (Azure OpenAI, Region `swedencentral`) · zwei
 schreibende API-Endpoints für den Eltern-Chat-Skill (`POST /folgen-vorschlag`,
 `POST /alben`) · Lese-Endpoints für Bible/Historie/Album-Liste/Manifest ·
@@ -249,10 +250,20 @@ Folgen-Titel mit Inline-Wortblöcken nach HSP-4a — die genannten Wörter
 werden im Titel-Fließtext durch Pikto-Wortblöcke ersetzt. **Wenn** das
 Feld fehlt oder leer ist, **dann** rendert die Kachel den Titel pur.
 
-Der Album-Builder befüllt das Feld beim Erzeugen aus dem Folgentitel
-(GeschichtenBuddy-Output) per Heuristik oder durch eine kurze LLM-
-Klassifikation; der genaue Befüllungs-Pfad ist Implementations-Detail,
-nicht Spec.
+**V1-Befüllung:** Der Album-Builder befüllt das Feld in V1 **nicht
+selbst** — V1 hat **keine eigene Pikto-Klassifikations-Logik**
+(weder Heuristik noch LLM-Pass). Stattdessen:
+
+1. **Neue Alben** (aus dem Eltern-Chat-Skill HFE-5 / `POST /alben`)
+   landen mit dem Feld **leer** (`pikto-hauptbegriffe: []`) — die View
+   rendert den Titel pur.
+2. **Bestehende Folgen 14–22** (Migration) bekommen das Feld per Hand
+   in einer einmaligen Befüllungs-Datei `hoerspiel/data/pikto-mapping.json`
+   beim Setup — der Album-Builder liest sie beim Manifest-Schreiben und
+   überträgt die Mappings in das Manifest.
+3. **V2-Erweiterung:** automatische Befüllung per Heuristik oder
+   LLM-Klassifikation kommt als eigenes Ticket, **nicht in V1**
+   (OPEN-HSP-P).
 
 ### HSP-6 — Ein Album besteht aus geordneten Tracks
 Ein Album hat eine geordnete Liste von Tracks. Der Track ist die
@@ -269,8 +280,12 @@ Ein Track **kann** ein Feld `pikto-hauptbegriffe` tragen — analoge Form
 wie HSP-5a (Liste von Schlüsselwort-Pikto-Mappings). Die Player-View
 rendert die Track-Liste und den Now-Playing-Bereich mit Inline-Wortblöcken
 nach HSP-4a. Fehlt das Feld, rendert die View den Track-Namen (oder die
-Track-Position bei fehlendem `titel`) pur. Datenquelle und Befüllung
-identisch zu HSP-5a.
+Track-Position bei fehlendem `titel`) pur.
+
+**V1-Befüllung:** analog HSP-5a — neue Tracks landen mit leerem Feld;
+die Folgen-22-Migration (und ggf. ältere) kann Tracks per Hand in der
+`pikto-mapping.json` mit Pikto-Mappings versorgen. V1-Album-Builder hat
+**keine eigene Track-Klassifikations-Logik**.
 
 ### HSP-7 — Zielgröße eines Inhalts-Tracks: 3–4 Minuten
 Inhalts-Tracks (`art = inhalt`) enthalten **3–4 Minuten** Audio. Die
@@ -307,16 +322,19 @@ Tracks in Reihenfolge des Folgentextes, Position N ist Outro-Track.
 Der Hörspiel-Buddy ruft den LLM-Anbieter über ein **internes Provider-
 Adapter-Modul** (`hoerspiel/providers/`) mit derselben Form wie
 `eltern-chat/providers/`: ein abstrakter Basis-Adapter (`base.py`) und je
-Provider eine konkrete Implementierung. **V1 implementiert nur den
-`claude`-Adapter**; der `mistral`-Adapter existiert in V1 als
-nicht-funktionaler Stub mit identischer Signatur und löst bei Auswahl ohne
-gesetzten Mistral-Key eine sichtbare Fehlermeldung aus, kein stilles
-Scheitern (HSP-11).
+Provider eine konkrete Implementierung. **V1 liefert ausschließlich den
+`claude`-Adapter** (`providers/base.py` + `providers/claude.py`). Das
+Adapter-Pattern ist kopierfähig vorbereitet — ein zweiter Provider
+landet in V2 als neue Datei (`providers/<name>.py`) hinter derselben
+Basis-Schnittstelle, ohne Strukturänderung. **Mistral ist V2**
+(OPEN-HSP-N): in V1 ist der Wert `mistral` für `llm_provider` **kein
+gültiger Wert** — der Config-Loader (HSP-26) und `PATCH /config`
+(HSP-17) lehnen unbekannte Provider mit HTTP 422 + Klartext-Hinweis ab.
 
 **Wenn** der konfigurierte Provider (HSP-26) `claude` ist, **dann** wird
 der Anthropic-SDK-Adapter genutzt mit dem im Provider-Default verankerten
 Modell-Pin (`claude-opus-4-7`) oder dem in der Config überschriebenen
-Wert; **wenn** `mistral`, **dann** der Mistral-Adapter (V2-funktional).
+Wert.
 
 *Verworfen (E-HSP-3):* Plattform-LLM-Gateway in V1, weil HSP der erste KI-
 Buddy ist und das Pattern erst beim zweiten Vorkommen ratifiziert wird
@@ -461,12 +479,14 @@ Idempotenz: ein erneuter Aufruf mit identischen Inhalt + Voice erkennt
 das bereits gebaute Album über einen Hash und antwortet mit demselben
 `album-id` ohne erneute TTS-Kosten.
 
-**`PATCH /config`** Body: `{llm_provider?: "claude"|"mistral", llm_model?: string}`.
-Wirkung: setzt die Werte in der Per-Instanz-Runtime-Config (HSP-26) und
-gibt die neue effektive Konfig zurück. **Wenn** der gesetzte Provider
-keinen API-Key konfiguriert hat, **dann** lehnt der Endpoint mit HTTP 422
-und Klartext-Hinweis ab — Provider-Switch ohne Key-Voraussetzung wird
-nie aktiv.
+**`PATCH /config`** Body: `{llm_provider?: "claude", llm_model?: string}`.
+V1 akzeptiert nur `claude` als `llm_provider` — andere Werte (etwa
+`mistral`, OPEN-HSP-N) lehnt der Endpoint mit HTTP 422 und Klartext-
+Hinweis ab. Wirkung: setzt die Werte in der Per-Instanz-Runtime-Config
+(HSP-26) und gibt die neue effektive Konfig zurück. **Wenn** der
+gesetzte Provider keinen API-Key konfiguriert hat, **dann** lehnt der
+Endpoint ebenfalls mit HTTP 422 ab — Provider-Switch ohne Key-
+Voraussetzung wird nie aktiv.
 
 ### HSP-18 — Direkter Datei-Zugriff durch andere Apps ist verboten
 Welt-Bible, Folgen-Historie, Album-Manifeste und Audio-Assets liegen im
@@ -697,7 +717,7 @@ OPEN-HSP-M.
 | Default-Voice | `shimmer` | `default_voice` | Eltern (Hörspiel-Konfig) |
 | Serien-Name | `Stigi & Co.` | `serien_name` | Familie (Daten-Konfig) |
 | Anthropic-Key | (Pflicht wenn `llm_provider=claude`) | — | ENV `HOERSPIEL_ANTHROPIC_KEY` (CONFIG-3) |
-| Mistral-Key | (Pflicht wenn `llm_provider=mistral`) | — | ENV `HOERSPIEL_MISTRAL_KEY` (CONFIG-3) |
+| Mistral-Key | — (V2, OPEN-HSP-N) | — | — (V1: nicht konfigurierbar) |
 | Azure-Endpoint | (Pflicht) | `azure_openai_endpoint` | ENV `HOERSPIEL_AZURE_OPENAI_ENDPOINT` |
 | Azure-Deployment | (Pflicht) | `azure_openai_deployment` | ENV `HOERSPIEL_AZURE_OPENAI_DEPLOYMENT` |
 | Azure-Key | (Pflicht) | — | ENV `HOERSPIEL_AZURE_OPENAI_KEY` (CONFIG-3) |
@@ -784,8 +804,8 @@ analog WETTER-24). Mindest-Abdeckung:
 - HSP-23/24 (Resume-Marke wird auf Track-Anfang gerundet; Test nutzt
   injizierten `now`)
 - HSP-27 (fehlender Anthropic-Key bei `llm_provider=claude` → HTTP 503
-  auf `/folgen-vorschlag`; fehlender Mistral-Key bei `llm_provider=mistral`
-  ebenso)
+  auf `/folgen-vorschlag`; `PATCH /config` mit `llm_provider=mistral`
+  oder unbekanntem Provider → HTTP 422)
 - HSP-29 (Album-Bau ohne vorhandene Shared-Assets für die gewählte Voice
   → HTTP 412; Auto-Rebuild findet **nicht** statt)
 
