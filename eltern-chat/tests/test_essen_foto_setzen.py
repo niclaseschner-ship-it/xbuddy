@@ -53,11 +53,12 @@ class FakePhotoClient:
             else {"id": "media-1", "typ": "foto"}
         self.upload_calls = []
 
-    def upload_medium(self, medium_bytes, filename, content_type):
+    def upload_medium(self, medium_bytes, filename, content_type, *, in_library=True):
         self.upload_calls.append({
             "medium_bytes": medium_bytes,
             "filename": filename,
             "content_type": content_type,
+            "in_library": in_library,
         })
         if isinstance(self._upload_result, Exception):
             raise self._upload_result
@@ -177,6 +178,8 @@ def test_atomar_gericht_setzt_foto_ref():
     # Upload muss aufgerufen worden sein.
     assert len(photo.upload_calls) == 1
     assert photo.upload_calls[0]["medium_bytes"] == b"JPEGBYTES"
+    # T799/AC5: in_library=False — Essen-Fotos nicht im Bilderrahmen.
+    assert photo.upload_calls[0]["in_library"] is False
     # PATCH muss aufgerufen worden sein.
     assert len(essen.patch_calls) == 1
     assert essen.patch_calls[0]["gericht_id"] == "g-42"
@@ -539,3 +542,51 @@ def test_unbekannte_aktion_nichts_zu_tun():
     assert signal == SIGNAL_NICHTS_ZU_TUN
     assert daten == {}
     assert photo.upload_calls == []
+
+
+# ============================================================
+#  T799/AC5 — in_library=False bei Essen-Foto-Upload
+# ============================================================
+
+def test_t799_ac5_essen_foto_upload_in_library_false():
+    """AC5/T799: essen_foto_setzen ruft upload_medium mit in_library=False."""
+    photo = FakePhotoClient(upload_result={"id": "m-essen", "typ": "foto"})
+    essen = FakeEssenClient()
+
+    essen_foto_setzen(
+        aktion=AKTION_HOCHLADEN,
+        photo_client=photo,
+        essen_client=essen,
+        ziel=_gericht_ziel("g-1"),
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        medium_bytes=b"FOTO",
+        filename="essen.jpg",
+        content_type="image/jpeg",
+    )
+
+    assert len(photo.upload_calls) == 1
+    assert photo.upload_calls[0]["in_library"] is False
+
+
+def test_t799_ac5_basis_item_upload_in_library_false():
+    """AC5/T799: essen_foto_setzen (Basis-Item) ruft upload_medium mit in_library=False."""
+    photo = FakePhotoClient(upload_result={"id": "m-item", "typ": "foto"})
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        pfad = os.path.join(tmpdir, "foto_overrides.json")
+
+        essen_foto_setzen(
+            aktion=AKTION_HOCHLADEN,
+            photo_client=photo,
+            essen_client=FakeEssenClient(),
+            ziel=_item_ziel("obst:apfel"),
+            is_member_fn=_immer_mitglied,
+            from_user_id=42,
+            medium_bytes=b"FOTO",
+            filename="item.jpg",
+            content_type="image/jpeg",
+            overrides_pfad=pfad,
+        )
+
+    assert photo.upload_calls[0]["in_library"] is False

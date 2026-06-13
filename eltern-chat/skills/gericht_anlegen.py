@@ -200,11 +200,13 @@ def _foto_hinzufuegen(photo_client, essen_client, label,
         return SIGNAL_NICHTS_ZU_TUN, {"reason": "kein Photo-Client"}
 
     # Schritt 1: Foto hochladen.
+    # T799: in_library=False — Essen-Fotos sollen nicht im Bilderrahmen erscheinen.
     try:
         photo_response = photo_client.upload_medium(
             medium_bytes=medium_bytes,
             filename=filename or "foto.jpg",
             content_type=content_type or "image/jpeg",
+            in_library=False,
         )
     except PhotoClientError as e:
         fehler_str = str(e)

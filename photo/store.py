@@ -46,10 +46,13 @@ class Medium:
 
     `aufgenommen`/`dauer` sind optional (None, wenn nicht ermittelbar bzw. kein
     Video). `datei`/`thumbnail` sind Dateinamen relativ zum library_verzeichnis.
+    `in_library` steuert die Library-Sichtbarkeit (T799): False schließt das
+    Medium aus der Standard-Listenansicht aus (z. B. Essen-Fotos), es bleibt
+    aber über die Einzel-URL abrufbar (PHOTO-15, ESSEN-22).
     """
 
     def __init__(self, id, datei, thumbnail, typ, hinzugefuegt,
-                 aufgenommen=None, dauer=None):
+                 aufgenommen=None, dauer=None, in_library=True):
         self.id = id
         self.datei = datei
         self.thumbnail = thumbnail
@@ -57,6 +60,7 @@ class Medium:
         self.hinzugefuegt = hinzugefuegt    # ISO-8601, immer (TTL-Basis + Sortier-Fallback)
         self.aufgenommen = aufgenommen      # ISO-8601 | None
         self.dauer = dauer                  # Sekunden float | None (nur Video)
+        self.in_library = in_library        # bool, Default True (T799)
 
     def to_index_dict(self):
         """Voller Eintrag für library.json (PHOTO-7)."""
@@ -68,6 +72,7 @@ class Medium:
             "hinzugefuegt": self.hinzugefuegt,
             "aufgenommen": self.aufgenommen,
             "dauer": self.dauer,
+            "in_library": self.in_library,
         }
 
     def to_meta_dict(self):
@@ -78,6 +83,7 @@ class Medium:
             "hinzugefuegt": self.hinzugefuegt,
             "aufgenommen": self.aufgenommen,
             "dauer": self.dauer,
+            "in_library": self.in_library,
         }
 
 
@@ -112,6 +118,7 @@ def load(library_verzeichnis):
                 hinzugefuegt=raw["hinzugefuegt"],
                 aufgenommen=raw.get("aufgenommen"),
                 dauer=raw.get("dauer"),
+                in_library=raw.get("in_library", True),  # T799: Default True (backwards-compat)
             ))
         except (KeyError, TypeError) as e:
             logger.warning("library.json-Eintrag unvollständig (%r): %s — übersprungen", raw, e)
@@ -156,7 +163,7 @@ def _atomar_schreiben(ziel_pfad, daten):
 
 
 def add(library_verzeichnis, *, id, typ, daten, dateiname, thumbnail_daten,
-        thumbnail_name, aufgenommen=None, dauer=None, now=None):
+        thumbnail_name, aufgenommen=None, dauer=None, in_library=True, now=None):
     """Schreibt Vollmedium + Thumbnail + Index-Eintrag atomar zusammen (PHOTO-10).
 
     Reihenfolge mit Rollback (DCOMP-4): erst Vollmedium, dann Thumbnail, dann der
@@ -166,6 +173,7 @@ def add(library_verzeichnis, *, id, typ, daten, dateiname, thumbnail_daten,
 
     `now` ist die injizierbare Zeitquelle für den Hinzufüge-Stempel (PHOTO-12,
     Test-Determinismus) — nie eine Wall-Clock tief im Code.
+    `in_library` steuert die Library-Sichtbarkeit (T799): False für Essen-Fotos.
     """
     if now is None:
         now = datetime.now(UTC)
@@ -183,7 +191,8 @@ def add(library_verzeichnis, *, id, typ, daten, dateiname, thumbnail_daten,
 
     medium = Medium(
         id=id, datei=dateiname, thumbnail=thumbnail_name, typ=typ,
-        hinzugefuegt=hinzugefuegt, aufgenommen=aufgenommen, dauer=dauer)
+        hinzugefuegt=hinzugefuegt, aufgenommen=aufgenommen, dauer=dauer,
+        in_library=in_library)
 
     medien = load(library_verzeichnis)
     medien.append(medium)

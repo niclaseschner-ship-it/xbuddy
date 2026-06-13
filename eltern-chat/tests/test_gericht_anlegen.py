@@ -70,11 +70,12 @@ class FakePhotoClient:
         self._upload_response = upload_response or {"id": "foto-1", "typ": "image"}
         self._upload_error = upload_error
 
-    def upload_medium(self, medium_bytes, filename, content_type):
+    def upload_medium(self, medium_bytes, filename, content_type, *, in_library=True):
         self.upload_calls.append({
             "medium_bytes": medium_bytes,
             "filename": filename,
             "content_type": content_type,
+            "in_library": in_library,
         })
         if self._upload_error is not None:
             raise self._upload_error
@@ -430,6 +431,8 @@ def test_GAN_FOTO_happy_path_upload_und_post():
     # Photo-Upload wurde gemacht
     assert len(pc.upload_calls) == 1
     assert pc.upload_calls[0]["medium_bytes"] == foto_bytes
+    # T799/AC5: in_library=False — Essen-Fotos nicht im Bilderrahmen.
+    assert pc.upload_calls[0]["in_library"] is False
     # Essen-POST mit foto_ref (nicht icon_id)
     assert len(ec.post_calls) == 1
     assert ec.post_calls[0]["foto_ref"] == "foto-42"
@@ -584,3 +587,29 @@ def test_GAN_FOTO_nicht_mitglied_kein_upload():
 
     assert signal == SIGNAL_ABGELEHNT
     assert pc.upload_calls == []
+
+
+# ============================================================
+#  T799/AC5 — gericht_anlegen: Foto-Upload mit in_library=False
+# ============================================================
+
+def test_t799_ac5_foto_upload_in_library_false():
+    """AC5/T799: gericht_anlegen(foto_hinzufuegen) ruft upload_medium mit in_library=False."""
+    pc = FakePhotoClient(upload_response={"id": "foto-t799", "typ": "image"})
+    ec = FakeEssenClient(post_response={"id": "g-t799"})
+
+    gericht_anlegen(
+        aktion=AKTION_FOTO_HINZUFUEGEN,
+        essen_client=ec,
+        icon_client=FakeIconClient(),
+        photo_client=pc,
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        label="T799-Gericht",
+        medium_bytes=b"\xff\xd8\xff" + b"\x00" * 5,
+        filename="t799.jpg",
+        content_type="image/jpeg",
+    )
+
+    assert len(pc.upload_calls) == 1
+    assert pc.upload_calls[0]["in_library"] is False
