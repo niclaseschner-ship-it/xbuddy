@@ -128,11 +128,13 @@ def _hochladen_und_schreiben(photo_client, essen_client, ziel,
         return SIGNAL_NICHTS_ZU_TUN, {}
 
     # Schritt 1: Upload an Photo-Buddy (PHOTO-13).
+    # T799: in_library=False — Essen-Fotos sollen nicht im Bilderrahmen erscheinen.
     try:
         response = photo_client.upload_medium(
             medium_bytes=medium_bytes,
             filename=filename or "foto.jpg",
             content_type=content_type or "image/jpeg",
+            in_library=False,
         )
     except PhotoClientError as e:
         fehler_str = str(e)
