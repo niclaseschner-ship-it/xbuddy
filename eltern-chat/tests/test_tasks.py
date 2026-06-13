@@ -9,6 +9,8 @@ from fakes import FakeReadTask, FakeTelegram, FakeWriteTask
 from hooks import HookContext, HookFailure, HookSuccess
 from model import READ, WRITE
 from tasks import (
+    PRESENTATION_INLINE_BUTTON,
+    PRESENTATION_WEBAPP_LINK,
     Catalog,
     ReadTask,
     TurnContext,
@@ -16,6 +18,7 @@ from tasks import (
     _make_is_member_fn,
     build_catalog,
     is_from_private_chat,
+    render_form_b,
 )
 
 
@@ -503,3 +506,99 @@ def test_ETAB6_V1_default_kein_multimodal_gesetzt_nutzt_text_provider():
         "V1-Default: ohne multimodal_provider muss ClaudeMultimodalProvider "
         "gebaut werden, nicht %r" % type(adapter).__name__
     )
+
+
+# ============================================================
+#  TASK-10c Form (b) — render_form_b-Helper
+# ============================================================
+
+class _FakeTgForRender:
+    """Minimale tg-Doppelung für render_form_b-Tests."""
+
+    def __init__(self):
+        self.inline_sent = []
+        self.sent = []
+
+    def send_inline_keyboard(self, chat_id, text, buttons):
+        self.inline_sent.append({"chat_id": chat_id, "text": text, "buttons": buttons})
+        return {"message_id": 8001}
+
+    def send_message(self, chat_id, text, reply_to_message_id=None):
+        self.sent.append({"chat_id": chat_id, "text": text})
+        return {"message_id": 8002}
+
+
+def test_render_form_b_inline_button_ruft_send_inline_keyboard():
+    """AC1/TASK-10c: render_form_b mit inline_button → send_inline_keyboard."""
+    tg = _FakeTgForRender()
+    result = render_form_b(
+        {"text": "Einkaufsliste", "presentation": {
+            "inline_button": {"label": "🛒 öffnen", "web_app_url": "https://x.example.com/app"}
+        }},
+        tg, chat_id=42)
+
+    assert len(tg.inline_sent) == 1
+    assert tg.inline_sent[0]["chat_id"] == 42
+    assert tg.inline_sent[0]["text"] == "Einkaufsliste"
+    buttons = tg.inline_sent[0]["buttons"]
+    assert buttons[0]["label"] == "🛒 öffnen"
+    assert buttons[0]["web_app_url"] == "https://x.example.com/app"
+    assert isinstance(result, str)
+    assert "Button" in result or "gesendet" in result.lower()
+
+
+def test_render_form_b_webapp_link_ruft_send_inline_keyboard():
+    """AC1/AC2/TASK-10c: render_form_b mit webapp_link → send_inline_keyboard."""
+    tg = _FakeTgForRender()
+    result = render_form_b(
+        {"text": "App öffnen", "presentation": {
+            "webapp_link": {"label": "Start", "url": "https://x.example.com/wa"}
+        }},
+        tg, chat_id=99)
+
+    assert len(tg.inline_sent) == 1
+    assert tg.inline_sent[0]["chat_id"] == 99
+    buttons = tg.inline_sent[0]["buttons"]
+    assert buttons[0]["label"] == "Start"
+    assert buttons[0]["web_app_url"] == "https://x.example.com/wa"
+    assert isinstance(result, str)
+
+
+def test_render_form_b_unbekannter_key_fallback_send_message():
+    """AC2/TASK-10c: Unbekannter presentation-Schlüssel → send_message (Fallback)."""
+    tg = _FakeTgForRender()
+    result = render_form_b(
+        {"text": "Nur Text", "presentation": {"unbekannt": {"label": "x"}}},
+        tg, chat_id=7)
+
+    assert len(tg.inline_sent) == 0
+    assert len(tg.sent) == 1
+    assert tg.sent[0]["text"] == "Nur Text"
+    assert isinstance(result, str)
+
+
+def test_render_form_b_leeres_presentation_send_message():
+    """AC2/TASK-10c: Leeres presentation → send_message."""
+    tg = _FakeTgForRender()
+    render_form_b({"text": "Nur Text", "presentation": {}}, tg, chat_id=7)
+
+    assert len(tg.inline_sent) == 0
+    assert len(tg.sent) == 1
+
+
+def test_render_form_b_quittung_ist_string():
+    """AC1/TASK-10c: render_form_b gibt immer einen String zurück."""
+    tg = _FakeTgForRender()
+    quittung = render_form_b(
+        {"text": "x", "presentation": {"inline_button": {
+            "label": "y", "web_app_url": "https://z.de"
+        }}},
+        tg, chat_id=1)
+    assert isinstance(quittung, str)
+    assert len(quittung) > 0
+
+
+def test_presentation_constants_sind_korrekt():
+    """AC2/TASK-10c: Vokabular-Konstanten haben die erwarteten Werte."""
+    assert PRESENTATION_INLINE_BUTTON == "inline_button"
+    assert PRESENTATION_WEBAPP_LINK == "webapp_link"

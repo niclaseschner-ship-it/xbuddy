@@ -7,18 +7,13 @@ zu öffnen oder zu zeigen, ruft er sie auf.
 
 Eine **lesende** Aufgabe (EC-9): verändert keine Familien-Daten.
 
-EZG-6: sendet send_inline_keyboard über den Telegram-Client (Task-Adapter
-ist die einzige Stelle, die Telegram kennt). Das LLM bekommt eine kurze
-Quittung zurück.
+TASK-10c Form (b): run() returnt das Form-(b)-Dict
+`{text, presentation: {inline_button: {...}}}` direkt — das Framework
+(agent.py + render_form_b) übersetzt `presentation` in eine Telegram-
+Nachricht. Der Task sendet NICHTS selbst (EC-29 „Eine Stimme im Agent-Turn").
 
-RAT-16: Adapter-Disziplin — diese Datei koordiniert Telegram-Senden,
-aber `reply_markup`/`inline_keyboard`-JSON wird NICHT direkt gebaut;
-das macht `tg.send_inline_keyboard` (Adapter-API, nicht Telegram-Vokabular
-im Skill).
-
-EC-29 / TASK-10: run() sendet selbst per tg.send_inline_keyboard (wegen
-web_app-Button, der keine reine Text-Antwort ist) und gibt dem LLM eine
-kurze Quittung zurück.
+RAT-16: Adapter-Disziplin — diese Datei koordiniert NICHT mehr Telegram-
+Senden; der Telegram-Aufruf liegt vollständig beim Framework.
 
 Mini-App-URL-Konfig: kommt aus dem `mini_app_url`-Konstruktor-Parameter
 (von build_catalog befüllt). Leer → Skill zeigt Fehler-Text ohne Button
@@ -41,13 +36,13 @@ ENV_MINI_APP_EINKAUF_URL = "MINI_APP_EINKAUF_URL"
 class EinkaufZeigenTask(ReadTask):
     """Lesende Katalog-Aufgabe (EC-9), die einkauf_zeigen auslöst (EZG-8).
 
-    Die instanz-festen Abhängigkeiten — TelegramClient, EssenClient,
-    is_member_fn und mini_app_url — werden im Konstruktor injiziert.
+    Die instanz-festen Abhängigkeiten — EssenClient, is_member_fn und
+    mini_app_url — werden im Konstruktor injiziert. `tg` wird NICHT mehr
+    für das Senden verwendet (TASK-10c Form (b) — das Framework sendet).
 
-    EZG-6: run() sendet die Übersichts-Nachricht mit dem Mini-App-Button
-    via `tg.send_inline_keyboard`. Das LLM bekommt eine kurze Quittung
-    zurück (EC-29-Geist: nicht Antwort-Text, sondern Quittung, weil der
-    Skill selbst sendet).
+    TASK-10c Form (b): run() returnt das Form-(b)-Dict aus einkauf_zeigen
+    direkt. Das Framework (agent.py run_turn + render_form_b) übersetzt
+    `presentation` in eine Telegram-Nachricht — kein Selbst-Send im Task.
     """
 
     def __init__(self, tg, essen_client, is_member_fn, mini_app_url=""):
@@ -66,6 +61,8 @@ class EinkaufZeigenTask(ReadTask):
                 "properties": {},
                 "required": [],
             })
+        # tg bleibt im Konstruktor für Rückwärts-Kompatibilität mit build_catalog
+        # (wird dort noch übergeben); der Task sendet selbst NICHTS mehr.
         self._tg = tg
         self._essen_client = essen_client
         self._is_member_fn = is_member_fn
@@ -76,22 +73,19 @@ class EinkaufZeigenTask(ReadTask):
         )
 
     def run(self, arguments, turn_context):
-        """Führt die Einkauf-zeigen-Aufgabe aus (EZG-1/EC-29/TASK-10).
+        """Führt die Einkauf-zeigen-Aufgabe aus (EZG-1/EC-9/TASK-10c Form (b)).
 
         Zielchat kommt aus `turn_context.chat_id` (EZG-5/EZG-6).
         User-ID aus `turn_context.from_user_id` (EZG-2).
 
-        Sendet die Übersichts-Nachricht + Mini-App-Button via
-        tg.send_inline_keyboard (wenn Buttons nicht-leer). Im Leer-/Fehlerfall
-        sendet tg.send_message.
-
-        Returnt eine kurze Quittung als Tool-Result-String (EC-29).
-        BerechtigungError propagiert zum Agent-Loop (is_error-Pfad).
+        Returnt das Form-(b)-Dict `{text, presentation}` direkt — das
+        Framework übersetzt `presentation` in eine Telegram-Nachricht
+        (TASK-10c). BerechtigungError propagiert zum Agent-Loop (is_error-Pfad).
         """
         chat_id = turn_context.chat_id if turn_context else None
         from_user_id = turn_context.from_user_id if turn_context else None
 
-        text, buttons = ezg_mod.einkauf_zeigen(
+        result = ezg_mod.einkauf_zeigen(
             chat_id=chat_id,
             from_user_id=from_user_id,
             essen_client=self._essen_client,
@@ -99,14 +93,6 @@ class EinkaufZeigenTask(ReadTask):
             mini_app_url=self._mini_app_url,
         )
 
-        # EZG-5/EZG-6: Senden — mit Button oder als einfacher Text
-        if buttons:
-            self._tg.send_inline_keyboard(chat_id, text, buttons)
-            quittung = "Einkaufsliste gezeigt — Mini-App-Button gesendet."
-        else:
-            self._tg.send_message(chat_id, text)
-            quittung = "Einkaufsliste gezeigt."
-
-        logger.info("EinkaufZeigenTask: chat=%s, buttons=%d",
-                    chat_id, len(buttons))
-        return quittung
+        logger.info("EinkaufZeigenTask: chat=%s, Form-(b)-Dict zurückgegeben",
+                    chat_id)
+        return result

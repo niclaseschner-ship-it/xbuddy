@@ -285,7 +285,8 @@ def _run_agent(msg, ctx):
         result = agent.run_turn(history, user_message, ctx.provider,
                                 ctx.catalog, turn_context,
                                 before_provider_call=_typing,
-                                chat_action_renewer=_typing)  # Issue #165
+                                chat_action_renewer=_typing,  # Issue #165
+                                tg=ctx.tg)  # T722: Form-(b)-Übersetzer braucht tg für send
     except ProviderError as err:
         # EC-14: klarer Hinweis, sauberer Abbruch — keine halbfertige Aufgabe.
         # EC-23 (#268): der Wrapper im Agenten hat einen Stub-Call angehängt

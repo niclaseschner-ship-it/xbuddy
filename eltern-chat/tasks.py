@@ -303,6 +303,52 @@ class Catalog:
                                hook_failures=tuple(failures))
 
 
+# ---------------------------------------------------------------------------
+# TASK-10c Form (b) — Übersetzer
+# ---------------------------------------------------------------------------
+
+#: Vokabular-Schlüssel für Präsentations-Hinweise (TASK-10c Form (b)).
+PRESENTATION_INLINE_BUTTON = "inline_button"
+PRESENTATION_WEBAPP_LINK = "webapp_link"
+
+
+def render_form_b(result, tg, chat_id):
+    """TASK-10c Form (b): {text, presentation} → eine Telegram-Nachricht.
+
+    Nimmt ein Form-(b)-Dict entgegen (`{"text": ..., "presentation": ...}`),
+    übersetzt den `presentation`-Hinweis in einen passenden Telegram-Aufruf
+    und gibt eine Quittungs-Zeichenkette zurück.
+
+    Bekannte Schlüssel in `presentation`:
+      * ``inline_button`` → `tg.send_inline_keyboard` mit web_app_url-Button.
+      * ``webapp_link``   → ebenso (web_app_url als Alias).
+      * Unbekannter / leerer Schlüssel → Fallback auf `tg.send_message`.
+
+    Der Skill sendet NICHTS selbst — das Framework (agent.py) ruft diesen
+    Übersetzer auf (EC-29 „Eine Stimme im Agent-Turn").
+    """
+    text = result.get("text", "")
+    presentation = result.get("presentation") or {}
+
+    if PRESENTATION_INLINE_BUTTON in presentation:
+        ib = presentation[PRESENTATION_INLINE_BUTTON]
+        buttons = [{"label": ib["label"], "web_app_url": ib.get("web_app_url")}]
+        tg.send_inline_keyboard(chat_id, text, buttons)
+        return "Nachricht mit Inline-Button gesendet."
+
+    if PRESENTATION_WEBAPP_LINK in presentation:
+        wl = presentation[PRESENTATION_WEBAPP_LINK]
+        buttons = [{"label": wl["label"], "web_app_url": wl["url"]}]
+        tg.send_inline_keyboard(chat_id, text, buttons)
+        return "Nachricht mit WebApp-Link gesendet."
+
+    # Unbekannter Schlüssel oder leeres presentation → nur Text
+    tg.send_message(chat_id, text)
+    return "Nachricht gesendet."
+
+
+# ---------------------------------------------------------------------------
+
 def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   faa_sessions=None, family_group_chat_id_getter=None,
                   geraete_origin_url=None, gaa_sessions=None,

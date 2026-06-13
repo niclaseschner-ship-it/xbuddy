@@ -658,3 +658,158 @@ def test_EC35_chat_id_passed_correctly_from_turn_context():
 
     assert len(store.inserts) == 1
     assert store.inserts[0][1] == 9999
+
+
+# ============================================================
+#  TASK-10c Form (b) — Framework-Übersetzer
+# ============================================================
+
+class _FakeTg:
+    """Minimale tg-Doppelung für Form-(b)-Übersetzer-Tests."""
+
+    def __init__(self):
+        self.inline_sent = []
+        self.sent = []
+
+    def send_inline_keyboard(self, chat_id, text, buttons):
+        self.inline_sent.append({"chat_id": chat_id, "text": text, "buttons": buttons})
+        return {"message_id": 9001}
+
+    def send_message(self, chat_id, text, reply_to_message_id=None):
+        self.sent.append({"chat_id": chat_id, "text": text})
+        return {"message_id": 9002}
+
+
+class _FormBReadTask(FakeReadTask):
+    """Fake-Task, der ein Form-(b)-Dict zurückgibt."""
+
+    def __init__(self, name="form_b_task", text="Hallo Welt",
+                 presentation=None):
+        super().__init__(name=name, result=None)
+        self._form_b = {
+            "text": text,
+            "presentation": presentation if presentation is not None else {
+                "inline_button": {
+                    "label": "🛒 Klick mich",
+                    "web_app_url": "https://example.com/app",
+                }
+            },
+        }
+
+    def run(self, arguments, turn_context):
+        self.run_calls.append(arguments)
+        self.turn_contexts.append(turn_context)
+        return self._form_b
+
+
+def test_AC5_form_b_dict_ruft_send_inline_keyboard():
+    """AC5/TASK-10c: run_turn erkennt Form-(b)-Dict + ruft send_inline_keyboard via tg."""
+    task = _FormBReadTask()
+    tg = _FakeTg()
+    turn = TurnContext(chat_id=42)
+    provider = FakeProvider([
+        task_call_response("form_b_task"),
+        text_response("Erledigt."),
+    ])
+
+    result = agent.run_turn([], _user(), provider, _catalog(task), turn, tg=tg)
+
+    assert len(tg.inline_sent) == 1
+    assert tg.inline_sent[0]["chat_id"] == 42
+    assert "Hallo Welt" in tg.inline_sent[0]["text"]
+    assert result.reply_text == "Erledigt."
+
+
+def test_AC5_form_b_content_ist_quittungs_string():
+    """AC5/TASK-10c: Nach dem Übersetzen liegt ein String-content im TaskResultBlock."""
+    task = _FormBReadTask()
+    tg = _FakeTg()
+    turn = TurnContext(chat_id=42)
+    provider = FakeProvider([
+        task_call_response("form_b_task", call_id="c-fb"),
+        text_response("ok"),
+    ])
+
+    agent.run_turn([], _user(), provider, _catalog(task), turn, tg=tg)
+
+    # Das Framework hat den Dict durch render_form_b ersetzt.
+    # Der dem Anbieter zurückgespiesene Tool-Result muss ein String sein.
+    fed_back = provider.requests[1].messages[-1].blocks[0]
+    assert isinstance(fed_back, TaskResultBlock)
+    assert isinstance(fed_back.content, str), "content muss nach Form-(b)-Übersetzung String sein"
+    assert fed_back.is_error is False
+
+
+def test_AC2_unbekannter_presentation_key_fallback_auf_send_message():
+    """AC2/TASK-10c: Unbekannter presentation-Schlüssel → Fallback auf send_message."""
+    task = _FormBReadTask(
+        text="Fallback-Text",
+        presentation={"unbekannte_variante": {"label": "test"}})
+    tg = _FakeTg()
+    turn = TurnContext(chat_id=42)
+    provider = FakeProvider([
+        task_call_response("form_b_task"),
+        text_response("ok"),
+    ])
+
+    agent.run_turn([], _user(), provider, _catalog(task), turn, tg=tg)
+
+    # Unbekannter Schlüssel → nur send_message, kein send_inline_keyboard.
+    assert len(tg.inline_sent) == 0
+    assert len(tg.sent) == 1
+    assert tg.sent[0]["text"] == "Fallback-Text"
+
+
+def test_AC2_leeres_presentation_fallback_auf_send_message():
+    """AC2/TASK-10c: Leeres presentation → Fallback auf send_message (nur Text)."""
+    task = _FormBReadTask(text="Nur Text", presentation={})
+    tg = _FakeTg()
+    turn = TurnContext(chat_id=42)
+    provider = FakeProvider([
+        task_call_response("form_b_task"),
+        text_response("ok"),
+    ])
+
+    agent.run_turn([], _user(), provider, _catalog(task), turn, tg=tg)
+
+    assert len(tg.inline_sent) == 0
+    assert len(tg.sent) == 1
+    assert tg.sent[0]["text"] == "Nur Text"
+
+
+def test_AC5_form_b_ohne_tg_fallback_auf_text_als_content():
+    """AC5: Wenn kein tg übergeben wird, nutzt Framework text als content-Fallback."""
+    task = _FormBReadTask(text="Fallback ohne tg")
+    turn = TurnContext(chat_id=42)
+    provider = FakeProvider([
+        task_call_response("form_b_task"),
+        text_response("ok"),
+    ])
+
+    # tg=None (Standard ohne tg-Parameter)
+    agent.run_turn([], _user(), provider, _catalog(task), turn)
+
+    fed_back = provider.requests[1].messages[-1].blocks[0]
+    assert isinstance(fed_back, TaskResultBlock)
+    assert fed_back.content == "Fallback ohne tg"
+
+
+def test_AC5_webapp_link_presentation():
+    """AC2/AC5/TASK-10c: webapp_link-Schlüssel → send_inline_keyboard analog inline_button."""
+    task = _FormBReadTask(
+        text="WebApp öffnen",
+        presentation={"webapp_link": {"label": "Öffnen", "url": "https://example.com/wa"}})
+    tg = _FakeTg()
+    turn = TurnContext(chat_id=42)
+    provider = FakeProvider([
+        task_call_response("form_b_task"),
+        text_response("ok"),
+    ])
+
+    agent.run_turn([], _user(), provider, _catalog(task), turn, tg=tg)
+
+    assert len(tg.inline_sent) == 1
+    assert tg.inline_sent[0]["text"] == "WebApp öffnen"
+    buttons = tg.inline_sent[0]["buttons"]
+    assert buttons[0]["label"] == "Öffnen"
+    assert buttons[0]["web_app_url"] == "https://example.com/wa"

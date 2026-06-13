@@ -3,23 +3,23 @@
 Aufrufbare, trigger-agnostische Funktion (EZG-1, E-EZG-1-Muster): liest
 die Einkaufsliste des Essens-Buddys (ESSEN-15, GET mit abgehakt=false),
 baut eine kompakte Übersichts-Nachricht + Inline-Button auf die Mini App
-(EZG-5/EZG-6) und gibt Text + Button-Daten zurück.
+(EZG-5/EZG-6) und gibt ein Form-(b)-Dict zurück (TASK-10c).
 
-Im Unterschied zu wuensche_zeigen (WZE) sendet dieser Skill SELBST die
-Nachricht über den Telegram-Client — der Inline-Button erfordert
-`send_inline_keyboard`, nicht `send_message`. Das LLM bekommt eine kurze
-Quittung zurück (EC-29-Geist: send-only im Task-Adapter, kein Senden im Skill
-selbst — der Skill returnt Text + Button-Daten, der Task sendet).
+TASK-10c Form (b): der Skill returnt `{text, presentation}` — der Task
+reicht das Dict direkt weiter; das Framework (agent.py + render_form_b)
+übersetzt `presentation` in eine Telegram-Nachricht. Der Skill sendet
+NICHTS selbst (EC-29 „Eine Stimme im Agent-Turn").
 
 **Eingang:**
   - `chat_id`        — Telegram-Chat, in dem die Antwort landen wird (EZG-5).
   - `from_user_id`   — Telegram-User-ID des Aufrufers (Berechtigung EZG-2).
   - `essen_client`   — EssenClient-Instanz (EZG-4, CLIENT-1-Naht).
   - `is_member_fn`   — Callable `(user_id) -> bool` (EZG-2, EC-2).
-  - `mini_app_url`   — URL der Einkauf-Mini-App (EZG-6). Leer → Fehler-Text.
+  - `mini_app_url`   — URL der Einkauf-Mini-App (EZG-6). Leer → kein Button.
 
-**Ausgang:** `(text, buttons)` — Text-String + Liste von Button-Dicts für
-`send_inline_keyboard`, oder `(text, [])` im Leer- und Fehlerfall.
+**Ausgang:** Form-(b)-Dict `{text, presentation}`:
+  - Mit Button: `presentation: {inline_button: {label, web_app_url}}`.
+  - Ohne Button (Leer- oder Fehlerfall): `presentation: {}`.
 
 Wirft `BerechtigungError` bei EZG-2-Verletzung.
 
@@ -47,14 +47,14 @@ def _kuerze_label(label):
 
 
 def _baue_uebersicht(items, mini_app_url):
-    """EZG-5/EZG-6: baut Text + Button-Liste für die Übersichts-Nachricht.
+    """EZG-5/EZG-6: baut Text + presentation für die Übersichts-Nachricht.
 
     `items` — Liste aller offenen Wunsch/Einkauf-Einträge (EZG-4).
     `mini_app_url` — URL der Einkauf-Mini-App (EZG-6).
 
-    Liefert (text, buttons):
-      - Standardfall: Text mit Counter + Zuletzt-Zeile + web_app-Button.
-      - Leer-Fall: Klartext ohne Button.
+    Liefert ein Form-(b)-Dict `{text, presentation}` (TASK-10c):
+      - Standardfall: presentation mit inline_button (web_app_url).
+      - Leer-Fall oder fehlende URL: presentation leer (nur Text).
     """
     wunsch_n = sum(1 for i in items if i.get("klasse") == "wunsch")
     einkauf_n = sum(1 for i in items if i.get("klasse") == "einkauf")
@@ -64,7 +64,7 @@ def _baue_uebersicht(items, mini_app_url):
     if gesamt_n == 0:
         text = ("📋 Die Einkaufsliste ist leer — nichts zu holen heute. 🎉\n"
                 "Schick mir Items zum Hinzufügen, z. B. `Brot, Milch`.")
-        return text, []
+        return {"text": text, "presentation": {}}
 
     # EZG-4: drei zuletzt erstellte Items (erstellt_am absteigend).
     try:
@@ -85,30 +85,37 @@ def _baue_uebersicht(items, mini_app_url):
         "Zuletzt dazugekommen: %s"
     ) % (gesamt_n, wunsch_n, einkauf_n, zuletzt_str)
 
-    # EZG-6: Mini-App-Button
+    # EZG-6: Mini-App-Button — fehlt die URL, nur Text (kein Button-Aufsatz).
     if not mini_app_url:
         logger.warning("einkauf_zeigen: mini_app_url fehlt in Konfig (EZG-7)")
         text = (
             text
             + "\n\n⚠️ Die Mini-App-URL fehlt in meiner Konfig — frag Nic."
         )
-        return text, []
+        return {"text": text, "presentation": {}}
 
-    buttons = [{"label": "🛒 Liste öffnen", "web_app_url": mini_app_url}]
-    return text, buttons
+    # TASK-10c Form (b): presentation mit inline_button-Schlüssel.
+    return {
+        "text": text,
+        "presentation": {
+            "inline_button": {
+                "label": "🛒 Liste öffnen",
+                "web_app_url": mini_app_url,
+            }
+        },
+    }
 
 
 def einkauf_zeigen(chat_id, from_user_id, essen_client, is_member_fn,
                    mini_app_url):
     """Einkauf zeigen — aufrufbare Funktion (EZG-1, E-EZG-1).
 
-    Liest die offene Einkaufsliste (EZG-4), baut Übersichts-Text + Button
-    (EZG-5/EZG-6).
+    Liest die offene Einkaufsliste (EZG-4), baut Übersichts-Text + Präsentations-
+    Hinweis (EZG-5/EZG-6, TASK-10c Form (b)).
 
-    Returnt `(text, buttons)`:
-      - `text`    — User-tauglicher Antwort-Text.
-      - `buttons` — Liste von Button-Dicts für send_inline_keyboard, oder []
-                    im Leer-/Fehlerfall.
+    Returnt ein Form-(b)-Dict `{text, presentation}`:
+      - Mit Button: `presentation: {inline_button: {label, web_app_url}}`.
+      - Ohne Button (Leer- oder Fehlerfall): `presentation: {}`.
 
     Wirft `BerechtigungError` bei EZG-2-Verletzung.
     """
@@ -124,13 +131,17 @@ def einkauf_zeigen(chat_id, from_user_id, essen_client, is_member_fn,
     except EssenClientError as e:
         # EZG-7: Nicht-erreichbar → Klartext, kein Button
         logger.warning("einkauf_zeigen: Essens-Buddy nicht erreichbar — %s", e)
-        return (
-            "Die Liste ist gerade nicht erreichbar — "
-            "versuch's gleich nochmal.",
-            [],
-        )
+        return {
+            "text": (
+                "Die Liste ist gerade nicht erreichbar — "
+                "versuch's gleich nochmal."
+            ),
+            "presentation": {},
+        }
 
-    text, buttons = _baue_uebersicht(items, mini_app_url)
+    result = _baue_uebersicht(items, mini_app_url)
+    presentation = result.get("presentation") or {}
+    button_count = 1 if "inline_button" in presentation else 0
     logger.info("einkauf_zeigen: %d Items für Chat %s, Buttons=%d",
-                len(items), chat_id, len(buttons))
-    return text, buttons
+                len(items), chat_id, button_count)
+    return result
