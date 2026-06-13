@@ -65,13 +65,15 @@ class PhotoClient:
         self._transport = transport
         self._timeout = timeout
 
-    def upload_medium(self, medium_bytes, filename, content_type):
+    def upload_medium(self, medium_bytes, filename, content_type, *, in_library=True):
         """Lädt ein Medium über PHOTO-13 hoch (FSE-7, Muster FAM-13).
 
         `medium_bytes` ist der binäre Medien-Inhalt (Foto JPEG oder Video MP4
         u. ä.). `filename` ist der Dateiname für den multipart-Header (Telegram
         liefert ihn als `file_path`-Suffix). `content_type` ist der MIME-Typ
         des Mediums (z. B. `image/jpeg`, `video/mp4`).
+        `in_library` steuert die Library-Sichtbarkeit (T799): False für Essen-Fotos,
+        damit sie nicht im Bilderrahmen auftauchen.
 
         Liefert das geparste Antwort-Dict des Buddys: `{"id": ..., "typ": ...}`
         (PHOTO-13). Wirft `PhotoClientError`, wenn der Aufruf scheitert oder
@@ -79,9 +81,11 @@ class PhotoClient:
         zentral (eine Fehler-Klasse, FSE-1).
         """
         boundary = "----xbuddy%d" % id(medium_bytes)
+        # T799: in_library als zusätzliches Form-Feld im multipart-Body.
+        in_library_str = "true" if in_library else "false"
         body = encode_multipart(
             boundary,
-            fields={},
+            fields={"in_library": in_library_str},
             file_field="medium",
             file_name=filename,
             file_bytes=medium_bytes,
