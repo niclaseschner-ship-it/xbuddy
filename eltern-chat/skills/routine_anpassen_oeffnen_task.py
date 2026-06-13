@@ -7,33 +7,22 @@ Routine anzupassen oder zu öffnen, ruft er sie auf.
 
 Eine **lesende** Aufgabe (EC-9): verändert keine Familien-Daten.
 
-RAO-6: sendet send_inline_keyboard über den Telegram-Client (Task-Adapter
-ist die einzige Stelle, die Telegram kennt). Das LLM bekommt eine kurze
-Quittung zurück.
+TASK-10c Form (b): run() returnt das Form-(b)-Dict
+`{text, presentation: {inline_button: {...}}}` direkt — das Framework
+(agent.py + render_form_b) übersetzt `presentation` in eine Telegram-
+Nachricht. Der Task sendet NICHTS selbst (EC-29 „Eine Stimme im Agent-Turn").
 
-E-RAO-3: Im Unterschied zu EZG sendet dieser Task IMMER send_inline_keyboard
-— auch bei leerer Routine. Die Routine ist Anfangszustand, nicht Endzustand.
-Nur bei Konfig-/Netz-Fehler (leere buttons-Liste) wird send_message gerufen.
+RAT-16: Adapter-Disziplin — diese Datei koordiniert NICHT mehr Telegram-
+Senden; der Telegram-Aufruf liegt vollständig beim Framework.
 
-RAT-16: Adapter-Disziplin — diese Datei koordiniert Telegram-Senden,
-aber `reply_markup`/`inline_keyboard`-JSON wird NICHT direkt gebaut;
-das macht `tg.send_inline_keyboard` (Adapter-API, nicht Telegram-Vokabular
-im Skill).
-
-EC-29 / TASK-10: run() sendet selbst per tg.send_inline_keyboard (wegen
-web_app-Button, der keine reine Text-Antwort ist) und gibt dem LLM eine
-kurze Quittung zurück.
+E-RAO-3: Im Unterschied zu EZG enthält das zurückgegebene Dict IMMER einen
+inline_button in der presentation — auch bei leerer Routine. Die Routine ist
+Anfangszustand, nicht Endzustand. Nur bei Konfig-/Netz-Fehler ist
+presentation leer.
 
 Mini-App-URL-Konfig: kommt aus `mini_app_base_url`-Konstruktor-Parameter
 (von build_catalog befüllt) + Pfad `/seiten/routine/anpassen` (RAO-6).
 Leer → Skill zeigt Fehler-Text ohne Button (RAO-7).
-
-**TASK-10c Form-(a)-Ausnahme (RAO-9 / Bauschuld):** Dieser Adapter baut
-TASK-10c Form (a) — Selbst-Send via `tg.send_inline_keyboard` + Quittung
-als Tool-Result — analog EZG, weil das presentation-Framework (TASK-10c
-Form (b): strukturiertes `{text, presentation}`-Ergebnis) zum Bau-Zeitpunkt
-noch nicht ratifiziert war. Migrationsschuld wandert mit EZG mit (Folge-Ticket
-separat); kein Code-Change nötig bis zur EZG-Migration.
 """
 
 import logging
@@ -54,12 +43,11 @@ class RoutineAnpassenOeffnenTask(ReadTask):
     Die instanz-festen Abhängigkeiten — TelegramClient, RoutineClient,
     is_member_fn und mini_app_url — werden im Konstruktor injiziert.
 
-    RAO-6: run() sendet die Übersichts-Nachricht mit dem Mini-App-Button
-    via `tg.send_inline_keyboard`. Das LLM bekommt eine kurze Quittung
-    zurück (EC-29-Geist: nicht Antwort-Text, sondern Quittung, weil der
-    Skill selbst sendet).
+    TASK-10c Form (b): run() returnt das Form-(b)-Dict aus routine_anpassen_oeffnen
+    direkt. Das Framework (agent.py run_turn + render_form_b) übersetzt
+    `presentation` in eine Telegram-Nachricht — kein Selbst-Send im Task.
 
-    E-RAO-3: Button wird auch bei leerer Routine gesendet.
+    E-RAO-3: Button wird auch bei leerer Routine zurückgegeben (im Dict).
     """
 
     def __init__(self, tg, routine_client, is_member_fn, mini_app_url=""):
@@ -85,6 +73,8 @@ class RoutineAnpassenOeffnenTask(ReadTask):
                 "properties": {},
                 "required": [],
             })
+        # tg bleibt im Konstruktor für Rückwärts-Kompatibilität mit build_catalog
+        # (wird dort noch übergeben); der Task sendet selbst NICHTS mehr.
         self._tg = tg
         self._routine_client = routine_client
         self._is_member_fn = is_member_fn
@@ -96,22 +86,19 @@ class RoutineAnpassenOeffnenTask(ReadTask):
         )
 
     def run(self, arguments, turn_context):
-        """Führt die Routine-Anpassen-öffnen-Aufgabe aus (RAO-1/EC-29/TASK-10).
+        """Führt die Routine-Anpassen-öffnen-Aufgabe aus (RAO-1/EC-9/TASK-10c Form (b)).
 
         Zielchat kommt aus `turn_context.chat_id` (RAO-5/RAO-6).
         User-ID aus `turn_context.from_user_id` (RAO-2).
 
-        E-RAO-3: sendet IMMER via tg.send_inline_keyboard, solange
-        mini_app_url gesetzt und Buddy erreichbar ist.
-        Im Konfig-/Netz-Fehlerfall (leere buttons) → send_message.
-
-        Returnt eine kurze Quittung als Tool-Result-String (EC-29).
-        BerechtigungError propagiert zum Agent-Loop (is_error-Pfad).
+        Returnt das Form-(b)-Dict `{text, presentation}` direkt — das
+        Framework übersetzt `presentation` in eine Telegram-Nachricht
+        (TASK-10c). BerechtigungError propagiert zum Agent-Loop (is_error-Pfad).
         """
         chat_id = turn_context.chat_id if turn_context else None
         from_user_id = turn_context.from_user_id if turn_context else None
 
-        text, buttons = rao_mod.routine_anpassen_oeffnen(
+        result = rao_mod.routine_anpassen_oeffnen(
             chat_id=chat_id,
             from_user_id=from_user_id,
             routine_client=self._routine_client,
@@ -119,14 +106,6 @@ class RoutineAnpassenOeffnenTask(ReadTask):
             mini_app_url=self._mini_app_url,
         )
 
-        # RAO-5/RAO-6: Senden — mit Button oder als einfacher Text (Fehlerfall)
-        if buttons:
-            self._tg.send_inline_keyboard(chat_id, text, buttons)
-            quittung = "Routine-Anpassen-Mini-App geöffnet — Button gesendet."
-        else:
-            self._tg.send_message(chat_id, text)
-            quittung = "Routine-Anpassen öffnen: Fehler gemeldet."
-
-        logger.info("RoutineAnpassenOeffnenTask: chat=%s, buttons=%d",
-                    chat_id, len(buttons))
-        return quittung
+        logger.info("RoutineAnpassenOeffnenTask: chat=%s, Form-(b)-Dict zurückgegeben",
+                    chat_id)
+        return result

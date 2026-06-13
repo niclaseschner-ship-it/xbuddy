@@ -3,7 +3,12 @@
 Aufrufbare, trigger-agnostische Funktion (RAO-1, E-RAO-1-Muster): liest
 die Routine-Items (ROUTINE-14, GET /api/v1/routine/items), baut eine
 kompakte Übersichts-Nachricht + Inline-Button auf die Anpassen-Mini-App
-(RAO-5/RAO-6) und gibt Text + Button-Daten zurück.
+(RAO-5/RAO-6) und gibt ein Form-(b)-Dict zurück (TASK-10c).
+
+TASK-10c Form (b): der Skill returnt `{text, presentation}` — der Task
+reicht das Dict direkt weiter; das Framework (agent.py + render_form_b)
+übersetzt `presentation` in eine Telegram-Nachricht. Der Skill sendet
+NICHTS selbst (EC-29 „Eine Stimme im Agent-Turn").
 
 Schwester-Skill von einkauf_zeigen (EZG) — Stil-Anker gespiegelt
 (eltern-chat-skills.md Klasse-B-Bauplan).
@@ -12,13 +17,6 @@ Schwester-Skill von einkauf_zeigen (EZG) — Stil-Anker gespiegelt
 wird ein Inline-Button zurückgegeben — eine leere Routine ist Anfangszustand,
 nicht Endzustand wie eine leere Einkaufsliste.
 
-**TASK-10c Form-(a)-Ausnahme (RAO-9 / Bauschuld):** Dieser Skill baut
-TASK-10c Form (a) — Tuple-Return `(text, buttons)` + Selbst-Send im
-Task-Adapter — analog EZG, weil das presentation-Framework (TASK-10c Form (b):
-strukturiertes `{text, presentation}`-Ergebnis) zum Bau-Zeitpunkt noch nicht
-ratifiziert war. Migrationsschuld wandert mit EZG mit (Folge-Ticket separat);
-kein Code-Change nötig bis zur EZG-Migration.
-
 **Eingang:**
   - `chat_id`          — Telegram-Chat, in dem die Antwort landen wird (RAO-1).
   - `from_user_id`     — Telegram-User-ID des Aufrufers (Berechtigung RAO-2).
@@ -26,9 +24,10 @@ kein Code-Change nötig bis zur EZG-Migration.
   - `is_member_fn`     — Callable `(user_id) -> bool` (RAO-2, EC-2).
   - `mini_app_url`     — URL der Routine-Anpassen-Mini-App (RAO-6). Leer → Fehler-Text.
 
-**Ausgang:** `(text, buttons)` — Text-String + Liste von Button-Dicts für
-`send_inline_keyboard`, oder `(text, [])` im Fehlerfall (NICHT im Leer-Fall
-— E-RAO-3 verlangt Button auch bei leerer Routine).
+**Ausgang:** Form-(b)-Dict `{text, presentation}`:
+  - Mit Button: `presentation: {inline_button: {label, web_app_url}}`.
+  - Ohne Button (Konfig-/Netz-Fehler): `presentation: {}`.
+  E-RAO-3: Bei leerer Routine wird trotzdem ein Button zurückgegeben.
 
 Wirft `BerechtigungError` bei RAO-2-Verletzung.
 
@@ -55,15 +54,15 @@ def _kuerze_label(label):
 
 
 def _baue_uebersicht(items_data, mini_app_url):
-    """RAO-5/RAO-6: baut Text + Button-Liste für die Übersichts-Nachricht.
+    """RAO-5/RAO-6: baut Text + presentation für die Übersichts-Nachricht.
 
     `items_data` — Dict {"default": [...], "einmalig_heute": [...]} (RAO-4).
     `mini_app_url` — URL der Routine-Anpassen-Mini-App (RAO-6).
 
-    Liefert (text, buttons):
-      - Standardfall: Text mit Counter + Zuletzt-Zeile + web_app-Button.
-      - Leer-Fall (E-RAO-3): Klartext + web_app-Button (anders als EZG-5!).
-      - Fehlerfall mini_app_url leer: Fehler-Text, kein Button (RAO-7).
+    Liefert ein Form-(b)-Dict `{text, presentation}` (TASK-10c):
+      - Standardfall: Text mit Counter + Zuletzt-Zeile + inline_button.
+      - Leer-Fall (E-RAO-3): Klartext + inline_button (anders als EZG-5!).
+      - Fehlerfall mini_app_url leer: Fehler-Text, presentation leer (RAO-7).
     """
     default_items = items_data.get("default") or []
     einmalig_items = items_data.get("einmalig_heute") or []
@@ -76,9 +75,15 @@ def _baue_uebersicht(items_data, mini_app_url):
         logger.warning(
             "routine_anpassen_oeffnen: mini_app_url fehlt in Konfig (RAO-7)")
         text = "⚠️ Die Mini-App-URL fehlt in meiner Konfig — frag Nic."
-        return text, []
+        return {"text": text, "presentation": {}}
 
-    buttons = [{"label": "🛠️ Routine öffnen", "web_app_url": mini_app_url}]
+    # TASK-10c Form (b): presentation mit inline_button-Schlüssel.
+    presentation = {
+        "inline_button": {
+            "label": "🛠️ Routine öffnen",
+            "web_app_url": mini_app_url,
+        }
+    }
 
     # RAO-5 / T728: Klartext-Hinweis auf RZS-Direktsatz (Zeiten-Schnellsatz).
     # RZS kann nur Zeiten (abfahrtszeit, aufstehzeit, anzieh_vorlauf_min) —
@@ -94,7 +99,7 @@ def _baue_uebersicht(items_data, mini_app_url):
             "🛠️ Die Morgenroutine ist leer — leg den ersten Punkt an.\n"
             + _RZS_HINWEIS
         )
-        return text, buttons
+        return {"text": text, "presentation": presentation}
 
     # RAO-5: Übersichts-Zeile mit Counter
     einmalig_klammer = ""
@@ -120,21 +125,20 @@ def _baue_uebersicht(items_data, mini_app_url):
     text_lines.append(_RZS_HINWEIS)
 
     text = "\n".join(text_lines)
-    return text, buttons
+    return {"text": text, "presentation": presentation}
 
 
 def routine_anpassen_oeffnen(chat_id, from_user_id, routine_client,
                               is_member_fn, mini_app_url):
     """Routine-Anpassen öffnen — aufrufbare Funktion (RAO-1, E-RAO-1).
 
-    Liest die Routine-Items (RAO-4), baut Übersichts-Text + Button
-    (RAO-5/RAO-6).
+    Liest die Routine-Items (RAO-4), baut Übersichts-Text + Präsentations-
+    Hinweis (RAO-5/RAO-6, TASK-10c Form (b)).
 
-    Returnt `(text, buttons)`:
-      - `text`    — User-tauglicher Antwort-Text.
-      - `buttons` — Liste von Button-Dicts für send_inline_keyboard.
-                    Im Fehlerfall (Konfig/Netz) [], sonst immer nicht-leer
-                    (E-RAO-3: Button auch bei leerer Routine).
+    Returnt ein Form-(b)-Dict `{text, presentation}`:
+      - Mit Button: `presentation: {inline_button: {label, web_app_url}}`.
+      - Ohne Button (Konfig-/Netz-Fehler): `presentation: {}`.
+      E-RAO-3: Bei leerer Routine wird trotzdem ein Button zurückgegeben.
 
     Wirft `BerechtigungError` bei RAO-2-Verletzung.
     """
@@ -153,19 +157,23 @@ def routine_anpassen_oeffnen(chat_id, from_user_id, routine_client,
         logger.warning(
             "routine_anpassen_oeffnen: Routine-Buddy nicht erreichbar — %s",
             e)
-        return (
-            "Die Routine ist gerade nicht erreichbar — "
-            "versuch's gleich nochmal.",
-            [],
-        )
+        return {
+            "text": (
+                "Die Routine ist gerade nicht erreichbar — "
+                "versuch's gleich nochmal."
+            ),
+            "presentation": {},
+        }
 
-    text, buttons = _baue_uebersicht(items_data, mini_app_url)
+    result = _baue_uebersicht(items_data, mini_app_url)
+    presentation = result.get("presentation") or {}
+    button_count = 1 if "inline_button" in presentation else 0
     logger.info(
         "routine_anpassen_oeffnen: default=%d, einmalig=%d für Chat %s, "
         "Buttons=%d",
         len((items_data or {}).get("default") or []),
         len((items_data or {}).get("einmalig_heute") or []),
         chat_id,
-        len(buttons),
+        button_count,
     )
-    return text, buttons
+    return result
