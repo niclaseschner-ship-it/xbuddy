@@ -4,10 +4,8 @@ außer explizit gelisteten Form-(a)-Ausnahmen (TASK-10c).
 Regel: Skills/Tasks sendet keine Nachrichten selbst — das Framework
 übersetzt (Form (b)) oder schickt ausschließlich Form-(c)-Datei-Anhänge.
 
-Ausnahmen (FORM_A_EXCEPTIONS):
-  * routine_anpassen_oeffnen_task.py — RAO-6 Form (a): Selbst-Send via
-    send_inline_keyboard ist per E-RAO-3 erlaubt (TASK-10c Form-(a)-Ausnahme
-    bis zur RAO-Migration auf Form (b)). Kein Ticket für diese Migration hier.
+Ausnahmen (FORM_A_EXCEPTIONS): aktuell keine — RAO wurde mit T739 auf
+Form (b) migriert, Migrationsschuld getilgt.
 
 Testet per AST-Scan alle eltern-chat/skills/*_task.py-Dateien.
 """
@@ -21,9 +19,8 @@ _SKILLS_DIR = _ELTERN_CHAT / "skills"
 
 # Explizite Form-(a)-Ausnahmen: Dateiname (ohne Pfad), die send_inline_keyboard
 # direkt rufen dürfen (per Spec bestätigt, noch nicht auf Form-(b) migriert).
-FORM_A_EXCEPTIONS = {
-    "routine_anpassen_oeffnen_task.py",  # RAO-6/E-RAO-3: Form (a) bis RAO-Migration
-}
+# T739: routine_anpassen_oeffnen_task.py wurde auf Form (b) migriert — leer.
+FORM_A_EXCEPTIONS: set = set()
 
 
 def _hat_send_inline_keyboard_aufruf(filepath):
