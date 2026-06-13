@@ -199,24 +199,6 @@ IncomingMessage-Form). Tests decken RAO-3 bis RAO-7 mindestens je einmal
 ab. Mini-App-URL-Konfig ist im Test mockbar. Katalog-Guard-Test: alle drei
 Abhängigkeiten gesetzt → Aufgabe drin; eine fehlt → Aufgabe nicht drin.
 
-## RAO-9 — Form-(a)-Ausnahme: TASK-10c Migrations-Schuld
-
-RAO baut **TASK-10c Form (a)** — Tuple-Return `(text, buttons)` im Skill +
-Selbst-Send via `tg.send_inline_keyboard` im Task-Adapter — **analog EZG**,
-weil das presentation-Framework (TASK-10c Form (b): strukturiertes
-`{text, presentation}`-Ergebnis mit eigenem Präsentations-Layer) zum
-RAO-Bau-Zeitpunkt noch nicht ratifiziert war.
-
-**Bauschuld ist bewusst und dokumentiert:**
-- Kein Code-Change bis zur EZG-Migration nötig.
-- Migration auf Form (b) wandert **mit EZG mit** (gemeinsames Folge-Ticket,
-  sobald das presentation-Framework ratifiziert ist).
-- Migrations-Sucher: Grep nach `Form (a)` findet EZG + RAO zusammen.
-
-*Bauplan-Hinweis in der Klassen-Einordnung (Header):* der Spec-Header nennt
-TASK-10c Form (b) als Soll-Bauplan — RAO-9 ist die explizite Ausnahme-
-Klausel, die das Delta zwischen Soll und gebautem Ist sichtbar macht.
-
 ---
 
 ## Entscheidungen
