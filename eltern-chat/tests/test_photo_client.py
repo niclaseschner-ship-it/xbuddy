@@ -193,3 +193,48 @@ def test_FSE4_delete_medium_4xx_wirft_photo_client_error():
         client.delete_medium("ghost")
     assert "HTTP 404" in str(exc.value)
     assert "id nicht gefunden" in str(exc.value)
+
+
+# ============================================================
+#  T799/AC4 — in_library-Parameter in upload_medium
+# ============================================================
+
+def test_t799_upload_medium_in_library_false_im_body():
+    """T799/AC4: upload_medium(in_library=False) sendet 'in_library=false' im multipart-Body."""
+    transport, calls = _transport_factory([
+        (200, json.dumps({"id": "essen-01", "typ": "foto"}).encode("utf-8")),
+    ])
+    client = PhotoClient(origin_url="http://127.0.0.1:5070", transport=transport)
+
+    client.upload_medium(b"ESSENDATA", "essen.jpg", "image/jpeg", in_library=False)
+
+    body = calls[0]["body"]
+    assert b'name="in_library"' in body, "in_library-Feld muss im Body stehen (T799)"
+    assert b"false" in body
+
+
+def test_t799_upload_medium_in_library_true_im_body():
+    """T799/AC4: upload_medium(in_library=True, Default) sendet 'in_library=true' im Body."""
+    transport, calls = _transport_factory([
+        (200, json.dumps({"id": "foto-01", "typ": "foto"}).encode("utf-8")),
+    ])
+    client = PhotoClient(origin_url="http://127.0.0.1:5070", transport=transport)
+
+    client.upload_medium(b"FOTODATA", "foto.jpg", "image/jpeg")  # Default in_library=True
+
+    body = calls[0]["body"]
+    assert b'name="in_library"' in body
+    assert b"true" in body
+
+
+def test_t799_upload_medium_default_in_library_kein_pflichtparameter():
+    """T799: in_library ist optionaler kw-Parameter mit Default True —
+    bestehende Aufrufe ohne in_library brechen nicht."""
+    transport, _ = _transport_factory([
+        (200, json.dumps({"id": "x", "typ": "foto"}).encode("utf-8")),
+    ])
+    client = PhotoClient(origin_url="http://127.0.0.1:5070", transport=transport)
+
+    # Aufruf OHNE in_library darf keinen TypeError werfen.
+    result = client.upload_medium(b"DATA", "foto.jpg", "image/jpeg")
+    assert result["id"] == "x"

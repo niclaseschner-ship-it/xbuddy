@@ -489,3 +489,156 @@ def test_config_ungueltige_richtung_fehler(tmp_path):
     p.write_text('{"sortier_richtung": "quer"}')
     with pytest.raises(config_mod.ConfigError):
         config_mod.resolve(str(p), env={})
+
+
+# ============================================================
+#  T799 — in_library-Flag (AC1..AC8)
+# ============================================================
+
+def test_t799_ac1_store_add_default_in_library(tmp_path, jpeg_bytes):
+    """AC1/T799: store.add() mit Default in_library=True persistiert in library.json."""
+    cfg = _cfg(tmp_path)
+    lib = cfg.library_verzeichnis
+    medium = ingest_mod.ingest(lib, cfg, jpeg_bytes(), "foto.jpg")
+    assert medium.in_library is True
+    geladen = store.load(lib)
+    assert len(geladen) == 1
+    assert geladen[0].in_library is True
+
+
+def test_t799_ac1_store_add_in_library_false(tmp_path, jpeg_bytes):
+    """AC1/T799: store.add() mit in_library=False persistiert False in library.json."""
+    cfg = _cfg(tmp_path)
+    lib = cfg.library_verzeichnis
+    medium = ingest_mod.ingest(lib, cfg, jpeg_bytes(), "foto.jpg", in_library=False)
+    assert medium.in_library is False
+    geladen = store.load(lib)
+    assert len(geladen) == 1
+    assert geladen[0].in_library is False
+
+
+def test_t799_ac1_backwards_compat_fehlendes_feld(tmp_path):
+    """AC1/T799: library.json ohne in_library-Feld -> Default True (backwards-kompatibel)."""
+    import json
+    import os
+    lib = str(tmp_path / "medien")
+    os.makedirs(lib, exist_ok=True)
+    # Altes library.json-Format ohne in_library.
+    alt = {
+        "medien": [{
+            "id": "foto-01",
+            "datei": "foto-01.jpg",
+            "thumbnail": "foto-01.thumb.jpg",
+            "typ": "foto",
+            "hinzugefuegt": "2026-01-01T00:00:00+00:00",
+            "aufgenommen": None,
+            "dauer": None,
+        }]
+    }
+    pfad = os.path.join(lib, store.INDEX_DATEI)
+    with open(pfad, "w", encoding="utf-8") as f:
+        json.dump(alt, f)
+    geladen = store.load(lib)
+    assert geladen[0].in_library is True
+
+
+def test_t799_ac2_get_medien_filtert_default(client, jpeg_bytes):
+    """AC2/T799: GET /medien filtert per Default auf in_library=true."""
+    # Medium mit in_library=false hochladen.
+    resp_hidden = client.post(
+        "/api/v1/photo/medien",
+        data={"medium": (io.BytesIO(jpeg_bytes()), "essen.jpg"),
+              "in_library": "false"},
+        content_type="multipart/form-data")
+    assert resp_hidden.status_code == 200
+    hidden_id = resp_hidden.get_json()["id"]
+
+    # Medium mit in_library=true (Default).
+    resp_sichtbar = client.post(
+        "/api/v1/photo/medien",
+        data={"medium": (io.BytesIO(jpeg_bytes()), "rahmen.jpg")},
+        content_type="multipart/form-data")
+    assert resp_sichtbar.status_code == 200
+    sichtbar_id = resp_sichtbar.get_json()["id"]
+
+    # Standard-Liste: nur das sichtbare Medium.
+    liste = client.get("/api/v1/photo/medien").get_json()
+    ids = [m["id"] for m in liste]
+    assert sichtbar_id in ids
+    assert hidden_id not in ids
+
+
+def test_t799_ac2_include_hidden_zeigt_alle(client, jpeg_bytes):
+    """AC2/T799: ?include_hidden=true liefert alle Medien (auch in_library=false)."""
+    resp_hidden = client.post(
+        "/api/v1/photo/medien",
+        data={"medium": (io.BytesIO(jpeg_bytes()), "essen.jpg"),
+              "in_library": "false"},
+        content_type="multipart/form-data")
+    hidden_id = resp_hidden.get_json()["id"]
+
+    resp_sichtbar = client.post(
+        "/api/v1/photo/medien",
+        data={"medium": (io.BytesIO(jpeg_bytes()), "rahmen.jpg")},
+        content_type="multipart/form-data")
+    sichtbar_id = resp_sichtbar.get_json()["id"]
+
+    alle = client.get("/api/v1/photo/medien?include_hidden=true").get_json()
+    alle_ids = [m["id"] for m in alle]
+    assert hidden_id in alle_ids
+    assert sichtbar_id in alle_ids
+
+
+def test_t799_ac3_einzelmedium_auch_hidden_abrufbar(client, jpeg_bytes):
+    """AC3/T799: GET /medien/<id> liefert auch in_library=false-Medien (ESSEN-22 Pfad)."""
+    resp = client.post(
+        "/api/v1/photo/medien",
+        data={"medium": (io.BytesIO(jpeg_bytes()), "essen.jpg"),
+              "in_library": "false"},
+        content_type="multipart/form-data")
+    hidden_id = resp.get_json()["id"]
+
+    # Einzelmedium bleibt abrufbar.
+    einzel = client.get("/api/v1/photo/medien/%s" % hidden_id)
+    assert einzel.status_code == 200
+
+    # Thumbnail bleibt abrufbar.
+    thumb = client.get("/api/v1/photo/medien/%s/thumbnail" % hidden_id)
+    assert thumb.status_code == 200
+
+
+def test_t799_ac4_post_in_library_false_form_feld(client, jpeg_bytes):
+    """AC4/T799: POST mit Form-Feld in_library='false' setzt in_library=false."""
+    resp = client.post(
+        "/api/v1/photo/medien",
+        data={"medium": (io.BytesIO(jpeg_bytes()), "essen.jpg"),
+              "in_library": "false"},
+        content_type="multipart/form-data")
+    assert resp.status_code == 200
+    mid = resp.get_json()["id"]
+
+    # Standard-Liste zeigt es nicht.
+    liste = client.get("/api/v1/photo/medien").get_json()
+    assert all(m["id"] != mid for m in liste)
+
+    # include_hidden zeigt es.
+    alle = client.get("/api/v1/photo/medien?include_hidden=true").get_json()
+    hidden = next(m for m in alle if m["id"] == mid)
+    assert hidden["in_library"] is False
+
+
+def test_t799_ac4_post_default_in_library_true(client, jpeg_bytes):
+    """AC4/T799: POST ohne in_library-Feld -> Default in_library=true."""
+    resp = client.post(
+        "/api/v1/photo/medien",
+        data={"medium": (io.BytesIO(jpeg_bytes()), "foto.jpg")},
+        content_type="multipart/form-data")
+    assert resp.status_code == 200
+    mid = resp.get_json()["id"]
+
+    liste = client.get("/api/v1/photo/medien").get_json()
+    assert any(m["id"] == mid for m in liste)
+
+    alle = client.get("/api/v1/photo/medien?include_hidden=true").get_json()
+    sichtbar = next(m for m in alle if m["id"] == mid)
+    assert sichtbar["in_library"] is True

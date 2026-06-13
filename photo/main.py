@@ -139,11 +139,15 @@ def post_medium():
     if not rohbytes:
         return _bad_request("Medien-Inhalt ist leer")
 
+    # T799: optionales Form-Feld `in_library` (string 'true'/'false', Default 'true').
+    in_library = request.form.get("in_library", "true").strip().lower() == "true"
+
     cfg = _current_config()
     with _write_lock:
         try:
             medium = ingest_mod.ingest(
-                cfg.library_verzeichnis, cfg, rohbytes, dateiname)
+                cfg.library_verzeichnis, cfg, rohbytes, dateiname,
+                in_library=in_library)
         except ingest_mod.VideoZuLang as e:
             return _bad_request(str(e), status=413)
         except ingest_mod.normalize_mod.NormalizeError as e:
@@ -158,9 +162,16 @@ def post_medium():
 
 @app.route("/api/v1/photo/medien", methods=["GET"])
 def get_medien():
-    """PHOTO-14: Library-Metadaten, geordnet nach PHOTO-11 — Datenquelle der View."""
+    """PHOTO-14: Library-Metadaten, geordnet nach PHOTO-11 — Datenquelle der View.
+
+    T799: filtert per Default auf in_library=true. Query-Param
+    ?include_hidden=true zeigt alle Medien (admin/debug).
+    """
+    include_hidden = request.args.get("include_hidden") == "true"
     cfg = _current_config()
     medien = store.load(cfg.library_verzeichnis)
+    if not include_hidden:
+        medien = [m for m in medien if m.in_library]
     geordnet = store.sortiere(medien, cfg.sortier_richtung, cfg.stempel_quelle)
     return jsonify([m.to_meta_dict() for m in geordnet])
 

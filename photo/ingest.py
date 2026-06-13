@@ -33,7 +33,7 @@ class VideoZuLang(Exception):
             % (dauer, video_max_s))
 
 
-def ingest(library_verzeichnis, cfg, rohbytes, dateiname, now=None):
+def ingest(library_verzeichnis, cfg, rohbytes, dateiname, in_library=True, now=None):
     """Nimmt ein Medium auf (PHOTO-13).
 
     1. Normalisieren (PHOTO-8/9): HEIC→JPEG / HEVC-MOV→MP4, Thumbnail/Poster,
@@ -44,6 +44,7 @@ def ingest(library_verzeichnis, cfg, rohbytes, dateiname, now=None):
 
     `now` wird an `store.add` durchgereicht (injizierbarer Hinzufüge-Stempel,
     PHOTO-12). Liefert das geschriebene `store.Medium`.
+    `in_library` steuert die Library-Sichtbarkeit (T799): False für Essen-Fotos.
     """
     norm = normalize_mod.normalisiere(rohbytes, dateiname)
 
@@ -62,6 +63,7 @@ def ingest(library_verzeichnis, cfg, rohbytes, dateiname, now=None):
         thumbnail_name=medium_id + ".thumb" + norm.thumbnail_endung,
         aufgenommen=norm.aufgenommen,
         dauer=norm.dauer,
+        in_library=in_library,
         now=now)
     # PHOTO-12: Auto-Delete-Sweep als laufendes Verhalten an den realen
     # Ingest-Pfad gehängt (den die POST-Route ruft) — nicht nur als aufrufbarer
