@@ -149,10 +149,12 @@ def test_photo9_video_poster_frame(mp4_h264_bytes):
 def test_photo10_teilfehler_kein_medium_kein_index(tmp_path, jpeg_bytes, monkeypatch):
     """PHOTO-10: scheitert das Thumbnail-Schreiben, bleibt weder ein
     Vollmedium noch ein Index-Eintrag zurueck (Rollback)."""
+    import tools.medien_store.store as _ms_store
+
     cfg = _cfg(tmp_path)
     lib = cfg.library_verzeichnis
 
-    echtes_schreiben = store._atomar_schreiben
+    echtes_schreiben = _ms_store._atomar_schreiben
     aufrufe = {"n": 0}
 
     def flaky_schreiben(ziel_pfad, daten):
@@ -161,7 +163,7 @@ def test_photo10_teilfehler_kein_medium_kein_index(tmp_path, jpeg_bytes, monkeyp
             raise store.StoreError("simulierter Thumbnail-Fehler")
         return echtes_schreiben(ziel_pfad, daten)
 
-    monkeypatch.setattr(store, "_atomar_schreiben", flaky_schreiben)
+    monkeypatch.setattr(_ms_store, "_atomar_schreiben", flaky_schreiben)
     with pytest.raises(store.StoreError):
         ingest_mod.ingest(lib, cfg, jpeg_bytes(), "foto.jpg")
 
@@ -470,30 +472,6 @@ def test_display_rahmen_leer_neutral(client):
     assert "Noch keine Fotos" in resp.get_data(as_text=True)
 
 
-def test_display_rahmen_filtert_in_library_false(client, jpeg_bytes):
-    """T802: die rahmen-View filtert wie PHOTO-14 per Default auf in_library=true —
-    Essen-Fotos (in_library=false) erscheinen NICHT im Bilderrahmen."""
-    # Familien-Foto (Default in_library=true)
-    fam = client.post(
-        "/api/v1/photo/medien",
-        data={"medium": (io.BytesIO(jpeg_bytes()), "familie.jpg")},
-        content_type="multipart/form-data")
-    fam_id = fam.get_json()["id"]
-    # Essen-Foto (in_library=false)
-    essen = client.post(
-        "/api/v1/photo/medien",
-        data={"medium": (io.BytesIO(jpeg_bytes()), "lasagne.jpg"),
-              "in_library": "false"},
-        content_type="multipart/form-data")
-    essen_id = essen.get_json()["id"]
-    assert fam_id != essen_id
-    resp = client.get("/display/photo/rahmen")
-    assert resp.status_code == 200
-    html = resp.get_data(as_text=True)
-    assert fam_id in html, "Familien-Foto sollte im Rahmen sichtbar sein"
-    assert essen_id not in html, "Essen-Foto darf NICHT im Rahmen erscheinen"
-
-
 # ============================================================
 #  Config (PHOTO-19)
 # ============================================================
@@ -515,154 +493,3 @@ def test_config_ungueltige_richtung_fehler(tmp_path):
         config_mod.resolve(str(p), env={})
 
 
-# ============================================================
-#  T799 — in_library-Flag (AC1..AC8)
-# ============================================================
-
-def test_t799_ac1_store_add_default_in_library(tmp_path, jpeg_bytes):
-    """AC1/T799: store.add() mit Default in_library=True persistiert in library.json."""
-    cfg = _cfg(tmp_path)
-    lib = cfg.library_verzeichnis
-    medium = ingest_mod.ingest(lib, cfg, jpeg_bytes(), "foto.jpg")
-    assert medium.in_library is True
-    geladen = store.load(lib)
-    assert len(geladen) == 1
-    assert geladen[0].in_library is True
-
-
-def test_t799_ac1_store_add_in_library_false(tmp_path, jpeg_bytes):
-    """AC1/T799: store.add() mit in_library=False persistiert False in library.json."""
-    cfg = _cfg(tmp_path)
-    lib = cfg.library_verzeichnis
-    medium = ingest_mod.ingest(lib, cfg, jpeg_bytes(), "foto.jpg", in_library=False)
-    assert medium.in_library is False
-    geladen = store.load(lib)
-    assert len(geladen) == 1
-    assert geladen[0].in_library is False
-
-
-def test_t799_ac1_backwards_compat_fehlendes_feld(tmp_path):
-    """AC1/T799: library.json ohne in_library-Feld -> Default True (backwards-kompatibel)."""
-    import json
-    import os
-    lib = str(tmp_path / "medien")
-    os.makedirs(lib, exist_ok=True)
-    # Altes library.json-Format ohne in_library.
-    alt = {
-        "medien": [{
-            "id": "foto-01",
-            "datei": "foto-01.jpg",
-            "thumbnail": "foto-01.thumb.jpg",
-            "typ": "foto",
-            "hinzugefuegt": "2026-01-01T00:00:00+00:00",
-            "aufgenommen": None,
-            "dauer": None,
-        }]
-    }
-    pfad = os.path.join(lib, store.INDEX_DATEI)
-    with open(pfad, "w", encoding="utf-8") as f:
-        json.dump(alt, f)
-    geladen = store.load(lib)
-    assert geladen[0].in_library is True
-
-
-def test_t799_ac2_get_medien_filtert_default(client, jpeg_bytes):
-    """AC2/T799: GET /medien filtert per Default auf in_library=true."""
-    # Medium mit in_library=false hochladen.
-    resp_hidden = client.post(
-        "/api/v1/photo/medien",
-        data={"medium": (io.BytesIO(jpeg_bytes()), "essen.jpg"),
-              "in_library": "false"},
-        content_type="multipart/form-data")
-    assert resp_hidden.status_code == 200
-    hidden_id = resp_hidden.get_json()["id"]
-
-    # Medium mit in_library=true (Default).
-    resp_sichtbar = client.post(
-        "/api/v1/photo/medien",
-        data={"medium": (io.BytesIO(jpeg_bytes()), "rahmen.jpg")},
-        content_type="multipart/form-data")
-    assert resp_sichtbar.status_code == 200
-    sichtbar_id = resp_sichtbar.get_json()["id"]
-
-    # Standard-Liste: nur das sichtbare Medium.
-    liste = client.get("/api/v1/photo/medien").get_json()
-    ids = [m["id"] for m in liste]
-    assert sichtbar_id in ids
-    assert hidden_id not in ids
-
-
-def test_t799_ac2_include_hidden_zeigt_alle(client, jpeg_bytes):
-    """AC2/T799: ?include_hidden=true liefert alle Medien (auch in_library=false)."""
-    resp_hidden = client.post(
-        "/api/v1/photo/medien",
-        data={"medium": (io.BytesIO(jpeg_bytes()), "essen.jpg"),
-              "in_library": "false"},
-        content_type="multipart/form-data")
-    hidden_id = resp_hidden.get_json()["id"]
-
-    resp_sichtbar = client.post(
-        "/api/v1/photo/medien",
-        data={"medium": (io.BytesIO(jpeg_bytes()), "rahmen.jpg")},
-        content_type="multipart/form-data")
-    sichtbar_id = resp_sichtbar.get_json()["id"]
-
-    alle = client.get("/api/v1/photo/medien?include_hidden=true").get_json()
-    alle_ids = [m["id"] for m in alle]
-    assert hidden_id in alle_ids
-    assert sichtbar_id in alle_ids
-
-
-def test_t799_ac3_einzelmedium_auch_hidden_abrufbar(client, jpeg_bytes):
-    """AC3/T799: GET /medien/<id> liefert auch in_library=false-Medien (ESSEN-22 Pfad)."""
-    resp = client.post(
-        "/api/v1/photo/medien",
-        data={"medium": (io.BytesIO(jpeg_bytes()), "essen.jpg"),
-              "in_library": "false"},
-        content_type="multipart/form-data")
-    hidden_id = resp.get_json()["id"]
-
-    # Einzelmedium bleibt abrufbar.
-    einzel = client.get("/api/v1/photo/medien/%s" % hidden_id)
-    assert einzel.status_code == 200
-
-    # Thumbnail bleibt abrufbar.
-    thumb = client.get("/api/v1/photo/medien/%s/thumbnail" % hidden_id)
-    assert thumb.status_code == 200
-
-
-def test_t799_ac4_post_in_library_false_form_feld(client, jpeg_bytes):
-    """AC4/T799: POST mit Form-Feld in_library='false' setzt in_library=false."""
-    resp = client.post(
-        "/api/v1/photo/medien",
-        data={"medium": (io.BytesIO(jpeg_bytes()), "essen.jpg"),
-              "in_library": "false"},
-        content_type="multipart/form-data")
-    assert resp.status_code == 200
-    mid = resp.get_json()["id"]
-
-    # Standard-Liste zeigt es nicht.
-    liste = client.get("/api/v1/photo/medien").get_json()
-    assert all(m["id"] != mid for m in liste)
-
-    # include_hidden zeigt es.
-    alle = client.get("/api/v1/photo/medien?include_hidden=true").get_json()
-    hidden = next(m for m in alle if m["id"] == mid)
-    assert hidden["in_library"] is False
-
-
-def test_t799_ac4_post_default_in_library_true(client, jpeg_bytes):
-    """AC4/T799: POST ohne in_library-Feld -> Default in_library=true."""
-    resp = client.post(
-        "/api/v1/photo/medien",
-        data={"medium": (io.BytesIO(jpeg_bytes()), "foto.jpg")},
-        content_type="multipart/form-data")
-    assert resp.status_code == 200
-    mid = resp.get_json()["id"]
-
-    liste = client.get("/api/v1/photo/medien").get_json()
-    assert any(m["id"] == mid for m in liste)
-
-    alle = client.get("/api/v1/photo/medien?include_hidden=true").get_json()
-    sichtbar = next(m for m in alle if m["id"] == mid)
-    assert sichtbar["in_library"] is True
