@@ -180,7 +180,7 @@ def baue_item_grid(katalog_kategorien, aktiv_slug, gesperrte_item_ids=None,
     }
 
 
-def baue_wunsch_liste(wuensche, foto_overrides=None):
+def baue_wunsch_liste(wuensche, foto_overrides=None, katalog_foto_refs=None):
     """Baut den kategorie-gruppierten Wunsch-Listen-Block (ESSEN-8/15/27, WZE-5).
 
     Gibt list of { kat_slug, kat_label, eintraege: [{id, label, icon_url,
@@ -191,27 +191,39 @@ def baue_wunsch_liste(wuensche, foto_overrides=None):
     Display-Lösch-Symbol. Das Attribut `data-wunsch-id` im Template greift
     auf `eintrag.id`.
 
-    ESSEN-22: `foto_overrides` wird geprüft (item_id-basiert, ESSEN-28 analog).
-    Wunsch-Eintrag trägt foto_ref oder item_id-Override → Foto-URL +
-    ist_foto=True; sonst ARASAAC + ist_foto=False.
+    ESSEN-22 (V1.2 + T812):
+    - `foto_overrides`  — dict { item_id: medien_id } aus foto_overrides.json
+      (Basis-Item-Override, ESSEN-28-Matching).
+    - `katalog_foto_refs` — dict { item_id: foto_ref } aus dem Gerichte-
+      Katalog (gerichte.json). Wunsch-Einträge tragen kein foto_ref selbst
+      (POST /wuensche schreibt nur bild_ref), deshalb wird der Katalog
+      beim Render konsultiert. Reihenfolge: w.foto_ref > overrides[item_id]
+      > katalog_foto_refs[item_id] > ARASAAC.
     """
     entfernen_url = icon_url(ENTFERNEN_ICON_REF)
     overrides = foto_overrides or {}
+    katalog_refs = katalog_foto_refs or {}
     gruppen = {k: [] for k in GRUPPEN_REIHENFOLGE}
     for w in wuensche:
         kat = w.get("kategorie")
         if kat in gruppen:
             item_id = w.get("item_id", "")
             bild_ref = w.get("bild_ref", "")
-            # ESSEN-22 Pfad 1: Wunsch-Eintrag trägt foto_ref (Gericht).
+            # ESSEN-22 Pfad 1: Wunsch-Eintrag trägt foto_ref (selten — POST
+            # /wuensche persistiert es heute nicht; nur, wenn historischer
+            # Schreiber es mit-geliefert hat).
             w_foto_ref = w.get("foto_ref", "")
 
-            # ESSEN-22: Override-Logik — Reihenfolge: foto_ref > foto_overrides > ARASAAC.
+            # ESSEN-22: Override-Logik (T812 erweitert um Katalog-Lookup):
+            #   foto_ref am Wunsch > foto_overrides > katalog_foto_refs > ARASAAC.
             if w_foto_ref:
                 url = foto_url(w_foto_ref)
                 ist_foto = True
             elif item_id and item_id in overrides:
                 url = foto_url(overrides[item_id])
+                ist_foto = True
+            elif item_id and item_id in katalog_refs:
+                url = foto_url(katalog_refs[item_id])
                 ist_foto = True
             else:
                 url = icon_url(bild_ref)
@@ -275,11 +287,18 @@ def baue_view(katalog_kategorien, wuensche, aktiv_tab=DEFAULT_TAB,
     gesperrte_ids = baue_gesperrte_item_ids(wuensche)
     # ESSEN-22: ein Lade-Aufruf pro Render-Cycle, tolerant gegen Fehler.
     overrides = lade_foto_overrides(foto_overrides_pfad)
+    # T812: Map gericht-item_id → foto_ref aus dem Katalog. Wunsch-Einträge
+    # tragen kein eigenes foto_ref (POST /wuensche schreibt nur bild_ref),
+    # deshalb beim Render-Cycle nachschlagen.
+    katalog_foto_refs = {}
+    for it in katalog_kategorien.get("gericht", []) or []:
+        if it.get("foto_ref"):
+            katalog_foto_refs[it.get("id")] = it.get("foto_ref")
 
     return {
         "tabs":        baue_tabs(aktiv_tab),
         "aktiv_tab":   aktiv_tab,
         "item_grid":   baue_item_grid(
             katalog_kategorien, aktiv_tab, gesperrte_ids, overrides),
-        "wunsch_liste": baue_wunsch_liste(wuensche, overrides),
+        "wunsch_liste": baue_wunsch_liste(wuensche, overrides, katalog_foto_refs),
     }
