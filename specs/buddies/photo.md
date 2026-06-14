@@ -140,19 +140,16 @@ Eltern-Chat-Ingest-Skill über das kanonische HTTP-`tool_use`-Modell ruft (RAT-3
 keine MCP-Schicht).** Überschreitet ein Video die konfigurierte Maximaldauer/-größe
 (PHOTO-19/OPEN-PHOTO-J), wird es mit einem klaren Fehler abgelehnt.
 
-Optionales Form-Feld **`in_library`** (String `'true'`/`'false'`, Default `'true'`):
-steuert die Library-Sichtbarkeit des hochgeladenen Mediums. `false` schließt das
-Medium aus der Standard-Listenansicht aus (T799 — Essen-Fotos sollen nicht im
-Bilderrahmen erscheinen, bleiben aber über PHOTO-15 abrufbar).
+Photo-Buddy ist Familien-Album-Bounded-Context und hält ausschließlich
+Familien-Album-Inhalte. Fremde Foto-Sorten (z.B. Essens-Katalog-Assets) gehören
+in den jeweiligen Owner-Buddy (siehe `conventions/medien-store.md` und
+ESSEN-22 V1.2). Das in T799 vorübergehend eingeführte `in_library`-Feld
+entfällt mit V1.2 — der Lego-Schnitt erfolgt jetzt über Daten-Eigentum
+pro Buddy, nicht über Flag-Unterscheidung im Photo-Buddy.
 
 ### PHOTO-14 — Liste: Library-Metadaten
 `GET /api/v1/photo/medien` liefert die Library-Metadaten (IDs, `typ`, Stempel,
-`dauer`, `in_library`) **geordnet nach PHOTO-11** — die Datenquelle der View.
-
-Per Default werden nur Medien mit `in_library=true` geliefert (T799). Der optionale
-Query-Parameter **`?include_hidden=true`** zeigt alle Medien unabhängig von
-`in_library` (admin/debug). Medien mit `in_library=false` bleiben über PHOTO-15
-(Einzel-URL) weiterhin abrufbar — Essen-Display-Pfad (ESSEN-22).
+`dauer`) **geordnet nach PHOTO-11** — die Datenquelle der View.
 
 ### PHOTO-15 — Einzelmedium & Thumbnail
 `GET /api/v1/photo/medien/<id>` liefert das Vollmedium (JPEG oder MP4) mit
