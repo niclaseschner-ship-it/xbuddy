@@ -70,8 +70,7 @@ AKTION_SCHREIBE_OVERRIDE    = "schreibe_override"
 def essen_foto_setzen(*, aktion, essen_client, ziel,
                       is_member_fn, from_user_id,
                       medium_bytes=None, filename=None, content_type=None,
-                      medien_id=None, overrides_pfad=None,
-                      photo_client=None):
+                      medien_id=None, overrides_pfad=None):
     """Essens-Foto setzen — aufrufbare Funktion (ESSEN-22 Pfad 2, atomar).
 
     aktion='hochladen': Upload an Essen-Buddy (ESSEN-22 V1.2) + sofort
@@ -91,8 +90,6 @@ def essen_foto_setzen(*, aktion, essen_client, ziel,
         `content_type`  — MIME-Typ.
         `overrides_pfad` — absoluter Pfad zu foto_overrides.json
                            (bei Basis-Item-Ziel erforderlich).
-
-      `photo_client`    — petraltet (Welle 3), wird nicht mehr genutzt.
 
     Ergebnis: (signal, daten) — siehe Modul-Docstring.
     """
