@@ -470,25 +470,6 @@ def test_GAN_FOTO_kein_medium_nichts_zu_tun():
     assert ec.post_foto_calls == []
 
 
-def test_GAN_FOTO_photo_client_none_wird_ignoriert():
-    """ESSEN-22 V1.2: photo_client=None wird silently ignoriert —
-    Upload läuft über essen_client.post_foto (MEDIEN-1)."""
-    ec = FakeEssenClient(post_foto_result="foto-ok", post_response={"id": "5"})
-
-    signal, _ = gericht_anlegen(
-        aktion=AKTION_FOTO_HINZUFUEGEN,
-        essen_client=ec,
-        icon_client=FakeIconClient(),
-        photo_client=None,   # veraltet, Welle 3 — wird ignoriert
-        is_member_fn=_immer_mitglied,
-        from_user_id=7,
-        label="Lasagne",
-        medium_bytes=b"bytes",
-    )
-
-    assert signal == SIGNAL_ANGELEGT
-    assert len(ec.post_foto_calls) == 1
-
 
 def test_GAN_FOTO_essen_buddy_4xx_grenze():
     """ESSEN-22 V1.2: Essen-Buddy-4xx bei post_foto → SIGNAL_GRENZE

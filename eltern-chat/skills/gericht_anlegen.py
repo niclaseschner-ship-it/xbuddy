@@ -21,8 +21,7 @@ Vorab-Bestätigung ist die richtige Reibung (RPS-5-analog).
 
 Eingang: Aktion + Gericht-Daten (label/icon_id/foto_ref/icon_stichwort
 je nach Aktion), ein EssenClient (GAN-6), ein IconClient (GAN-4,
-ICONS-7), ein PhotoClient (ESSEN-22 Pfad 1, optional — nur bei
-foto_hinzufuegen genutzt), `is_member_fn` (GAN-2), `from_user_id` (GAN-2).
+ICONS-7), `is_member_fn` (GAN-2), `from_user_id` (GAN-2).
 
 Ausgang: Ergebnis-Tuple `(signal, daten)`:
   („angelegt",       {"id": <str>})          — POST erfolgreich.
@@ -64,8 +63,7 @@ def gericht_anlegen(*, aktion, essen_client, icon_client,
                     label=None, icon_id=None,
                     icon_stichwort=None, icon_max=3,
                     medium_bytes=None,
-                    filename=None, content_type=None,
-                    photo_client=None):
+                    filename=None, content_type=None):
     """Gericht anlegen — aufrufbare Funktion (GAN-1).
 
     Eine **schreibende** Aufgabe (EC-10, GAN-5) mit **propose→confirm**
@@ -79,7 +77,6 @@ def gericht_anlegen(*, aktion, essen_client, icon_client,
     `icon_client`   — IconClient-Instanz für ICONS-7 (GAN-4).
     `is_member_fn`  — Callable `(user_id) -> bool` (GAN-2).
     `from_user_id`  — Telegram-User-ID des Aufrufers (GAN-2).
-    `photo_client`  — veraltet (Welle 3), wird nicht mehr genutzt.
 
     Parameter je Aktion:
       hinzufuegen      — `label`, `icon_id` (ARASAAC-ID aus vorheriger

@@ -3,7 +3,6 @@
 Photo-spezifische Belange:
   - VideoZuLang-Check (PHOTO-13) vor dem Schreiben.
   - Auto-Delete-Sweep nach dem Schreiben (PHOTO-12).
-  - in_library-Unterstuetzung (T799) als Argument.
 
 Re-Exportiert alle heutigen Public-Symbole fuer photo/main.py + Tests.
 """
@@ -32,19 +31,18 @@ class VideoZuLang(Exception):
             % (dauer, video_max_s))
 
 
-def ingest(library_verzeichnis, cfg, rohbytes, dateiname, in_library=True, now=None):
+def ingest(library_verzeichnis, cfg, rohbytes, dateiname, now=None):
     """Nimmt ein Medium auf (PHOTO-13).
 
     1. Normalisieren (PHOTO-8/9): HEIC->JPEG / HEVC-MOV->MP4, Thumbnail/Poster,
        Aufnahmedatum.
     2. Video-Maximaldauer pruefen (PHOTO-13): zu lang -> `VideoZuLang`.
     3. Atomar in die Library schreiben (PHOTO-10): Vollmedium + Thumbnail +
-       Index-Eintrag zusammen (inkl. in_library).
+       Index-Eintrag zusammen.
     4. PHOTO-12: Auto-Delete-Sweep (photo-spezifisch).
 
-    `in_library` steuert die Library-Sichtbarkeit (T799): False fuer Essen-Fotos.
     `now` ist die injizierbare Zeitquelle (Test-Determinismus, PHOTO-23).
-    Liefert das geschriebene `store.Medium` (photo-spezifisches Medium mit in_library).
+    Liefert das geschriebene `store.Medium`.
     """
     norm = normalisiere(rohbytes, dateiname)
 
@@ -63,7 +61,6 @@ def ingest(library_verzeichnis, cfg, rohbytes, dateiname, in_library=True, now=N
         thumbnail_name=medium_id + ".thumb" + norm.thumbnail_endung,
         aufgenommen=norm.aufgenommen,
         dauer=norm.dauer,
-        in_library=in_library,
         now=now)
 
     store.auto_delete(library_verzeichnis, cfg.auto_delete_tage, now=now)
