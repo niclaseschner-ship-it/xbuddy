@@ -6,9 +6,9 @@ Agent eine Foto-Nachricht mit Essens-Caption, schlägt er das Setzen vor
 (propose→confirm, EC-10 zweistufige Variante, Klasse C).
 
 Atomarer Ablauf (E-EC-7 — EIN Confirm pro Operation):
-  Agent ruft Task mit `aktion='hochladen'`: Foto holen, an Photo-Buddy
-  laden (PHOTO-13) + sofort Schreiben (PATCH ESSEN-19a bei Gericht ODER
-  foto_overrides.json bei Basis-Item). Kein zweiter Tool-Call nötig.
+  Agent ruft Task mit `aktion='hochladen'`: Foto holen, an Essen-Buddy
+  laden (ESSEN-22 V1.2) + sofort Schreiben (PATCH ESSEN-19a bei Gericht ODER
+  foto_overrides.json bei Basis-Item). Kein zweiter Tool-Call noetig.
 
 Catalog-Name: „essen_foto_setzen".
 Klasse: C/D (propose→confirm, schreibend, ESSEN-22 Pfad 2).
@@ -76,8 +76,7 @@ class EssenFotoSetzenTask(WriteTask):
 
     def __init__(self, tg, essen_client,
                  family_group_chat_id_getter, is_member_fn=None,
-                 overrides_pfad=None,
-                 photo_client=None):
+                 overrides_pfad=None):
         super().__init__(
             name="essen_foto_setzen",
             description=(
@@ -133,8 +132,6 @@ class EssenFotoSetzenTask(WriteTask):
         # overrides_pfad: absoluter Pfad zu xbuddy-data/essen/foto_overrides.json.
         # Von build_catalog gesetzt; None in Tests, die ihn selbst übergeben.
         self._overrides_pfad = overrides_pfad
-        # photo_client: petraltet (Welle 3), wird nicht mehr genutzt.
-        # Parameter bleibt für Übergangskompatibilität.
 
     def propose(self, arguments, turn_context):
         """EC-10-Vorschlag — nennt Aktion und Ziel, fragt nach Bestätigung.
