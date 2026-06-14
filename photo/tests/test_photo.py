@@ -470,6 +470,30 @@ def test_display_rahmen_leer_neutral(client):
     assert "Noch keine Fotos" in resp.get_data(as_text=True)
 
 
+def test_display_rahmen_filtert_in_library_false(client, jpeg_bytes):
+    """T802: die rahmen-View filtert wie PHOTO-14 per Default auf in_library=true —
+    Essen-Fotos (in_library=false) erscheinen NICHT im Bilderrahmen."""
+    # Familien-Foto (Default in_library=true)
+    fam = client.post(
+        "/api/v1/photo/medien",
+        data={"medium": (io.BytesIO(jpeg_bytes()), "familie.jpg")},
+        content_type="multipart/form-data")
+    fam_id = fam.get_json()["id"]
+    # Essen-Foto (in_library=false)
+    essen = client.post(
+        "/api/v1/photo/medien",
+        data={"medium": (io.BytesIO(jpeg_bytes()), "lasagne.jpg"),
+              "in_library": "false"},
+        content_type="multipart/form-data")
+    essen_id = essen.get_json()["id"]
+    assert fam_id != essen_id
+    resp = client.get("/display/photo/rahmen")
+    assert resp.status_code == 200
+    html = resp.get_data(as_text=True)
+    assert fam_id in html, "Familien-Foto sollte im Rahmen sichtbar sein"
+    assert essen_id not in html, "Essen-Foto darf NICHT im Rahmen erscheinen"
+
+
 # ============================================================
 #  Config (PHOTO-19)
 # ============================================================
