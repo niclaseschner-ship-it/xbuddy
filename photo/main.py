@@ -227,7 +227,11 @@ def rahmen():
     neutralen Zustand (PHOTO-6).
     """
     cfg = _current_config()
-    medien = store.load(cfg.library_verzeichnis)
+    # T802: rahmen-View filtert wie GET /api/v1/photo/medien per Default
+    # auf in_library=true — Essen-Fotos (T799) sollen nicht im Bilderrahmen
+    # erscheinen, auch wenn sie über GET /api/v1/photo/medien/<id> weiter
+    # für das Essens-Display abrufbar bleiben.
+    medien = [m for m in store.load(cfg.library_verzeichnis) if m.in_library]
     view = render_mod.baue_view(cfg, medien)
     return render_template("rahmen.html", view=view)
 
