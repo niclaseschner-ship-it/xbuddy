@@ -29,12 +29,45 @@ HTTP_TIMEOUT_SECONDS = 2.0
 PFAD_WUENSCHE = "/api/v1/essen/wuensche"
 PFAD_KATALOG_GERICHTE = "/api/v1/essen/katalog/gerichte"
 PFAD_KATALOG = "/api/v1/essen/katalog"
+PFAD_FOTOS = "/api/v1/essen/fotos"  # ESSEN-22 V1.2: Essen-eigene Foto-API
 
 # Fehler-Marker im EssenClientError.message (ESSEN-29 / ESSEN-16).
 FEHLER_DUPLIKAT = "duplikat"   # 409 — gleicher item_id+klasse schon offen
 FEHLER_GRENZE = "grenze"       # 413 — Listen-Grenze erreicht
 FEHLER_4XX = "4xx"             # sonstige 4xx
 FEHLER_5XX = "5xx"             # 5xx / Connection
+
+
+def _encode_multipart(boundary, file_field, file_name, file_bytes,
+                      file_content_type="application/octet-stream"):
+    """Minimaler multipart/form-data-Encoder für einen Datei-Part (ESSEN-22 V1.2).
+
+    Kein eigener MIME-Encoder (RAT-12: kein gemeinsamer Encoder, solange nur
+    ein Konsument hier). Analog photo_client.py/telegram.encode_multipart.
+    """
+    crlf = b"\r\n"
+    body = []
+    body.append(b"--" + boundary.encode("ascii"))
+    body.append(
+        ('Content-Disposition: form-data; name="%s"; filename="%s"'
+         % (file_field, file_name)).encode("utf-8"))
+    body.append(
+        ("Content-Type: %s" % file_content_type).encode("ascii"))
+    body.append(b"")
+    body.append(file_bytes)
+    body.append(b"--" + boundary.encode("ascii") + b"--")
+    return crlf.join(body)
+
+
+def _detail_aus_response(resp_bytes):
+    """Versucht, einen Fehler-Detail-String aus dem Response-Body zu lesen."""
+    try:
+        data = json.loads(resp_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    return data.get("error") or data.get("message") or ""
 
 
 class EssenClientError(Exception):
@@ -388,6 +421,55 @@ class EssenClient:
             msg = "%s — %s" % (msg, detail)
         marker = FEHLER_5XX if status >= 500 else FEHLER_4XX
         raise EssenClientError(msg, marker=marker)
+
+    def post_foto(self, rohbytes, dateiname, content_type="image/jpeg"):
+        """ESSEN-22 V1.2: lädt ein Foto in den Essen-Buddy hoch (MEDIEN-1).
+
+        POST /api/v1/essen/fotos als multipart/form-data mit Feld `medium`.
+        Antwort: {"id": <str>, "typ": <str>} (analog PHOTO-13).
+
+        Fehler-Pfade:
+          - HTTP 4xx — Buddy-Validierung (leerer Body, fehlender Dateiname)
+            → EssenClientError mit marker=FEHLER_4XX.
+          - HTTP 5xx / Connection-Fehler
+            → EssenClientError mit marker=FEHLER_5XX.
+        """
+        boundary = "----xbuddy%d" % id(rohbytes)
+        body = _encode_multipart(
+            boundary,
+            file_field="medium",
+            file_name=dateiname,
+            file_bytes=rohbytes,
+            file_content_type=content_type,
+        )
+        status, resp_bytes = self._call(
+            "POST", PFAD_FOTOS,
+            body=body,
+            content_type="multipart/form-data; boundary=%s" % boundary)
+        if status >= 400:
+            detail = _detail_aus_response(resp_bytes)
+            msg = "Essens-Buddy: HTTP %s bei POST %s" % (status, PFAD_FOTOS)
+            if detail:
+                msg = "%s — %s" % (msg, detail)
+            marker = FEHLER_5XX if status >= 500 else FEHLER_4XX
+            raise EssenClientError(msg, marker=marker)
+        try:
+            data = json.loads(resp_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise EssenClientError(
+                "Essens-Buddy: POST-Fotos-Antwort nicht parsebar (%s)" % e) from e
+        if not isinstance(data, dict) or "id" not in data:
+            raise EssenClientError(
+                "Essens-Buddy: POST-Fotos-Antwort hat unerwartete Form (%r)" % data)
+        return data["id"]
+
+    def get_foto_url(self, foto_ref):
+        """ESSEN-22 V1.2: baut die URL eines Essen-Buddy-Fotos (MEDIEN-1).
+
+        Gibt eine absolute URL zurück (Origin + Pfad). Für relative URLs in
+        render.py nutze render.foto_url() direkt.
+        """
+        return "%s%s/%s" % (self._origin, PFAD_FOTOS, foto_ref)
 
     # -- HTTP-Innerei ---------------------------------------------------------
 

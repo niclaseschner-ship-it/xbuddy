@@ -44,7 +44,6 @@ import logging
 import os
 
 from skills.essen_client import EssenClientError
-from skills.photo_client import PhotoClientError
 
 logger = logging.getLogger(__name__)
 
@@ -68,19 +67,19 @@ AKTION_PATCH_GERICHT        = "patch_gericht"
 AKTION_SCHREIBE_OVERRIDE    = "schreibe_override"
 
 
-def essen_foto_setzen(*, aktion, photo_client, essen_client, ziel,
+def essen_foto_setzen(*, aktion, essen_client, ziel,
                       is_member_fn, from_user_id,
                       medium_bytes=None, filename=None, content_type=None,
-                      medien_id=None, overrides_pfad=None):
+                      medien_id=None, overrides_pfad=None,
+                      photo_client=None):
     """Essens-Foto setzen — aufrufbare Funktion (ESSEN-22 Pfad 2, atomar).
 
-    aktion='hochladen': Upload an Photo-Buddy + sofort Schreiben je ziel.typ.
-    EIN Confirm pro Operation (E-EC-7) — kein zweiter Tool-Call mehr nötig.
+    aktion='hochladen': Upload an Essen-Buddy (ESSEN-22 V1.2) + sofort
+    Schreiben je ziel.typ. EIN Confirm pro Operation (E-EC-7).
 
     Parameter:
       `aktion`          — AKTION_HOCHLADEN / AKTION_ABBRUCH.
-      `photo_client`    — PhotoClient-Instanz (PHOTO-13).
-      `essen_client`    — EssenClient-Instanz (ESSEN-19a).
+      `essen_client`    — EssenClient-Instanz (post_foto + ESSEN-19a).
       `ziel`            — Dict {"typ": "gericht", "gericht_id": "..."}
                           ODER {"typ": "basis_item", "item_id": "..."}.
       `is_member_fn`    — Callable `(user_id) -> bool`.
@@ -93,6 +92,8 @@ def essen_foto_setzen(*, aktion, photo_client, essen_client, ziel,
         `overrides_pfad` — absoluter Pfad zu foto_overrides.json
                            (bei Basis-Item-Ziel erforderlich).
 
+      `photo_client`    — veraltet (Welle 3), wird nicht mehr genutzt.
+
     Ergebnis: (signal, daten) — siehe Modul-Docstring.
     """
     # Berechtigung — live geprüft, identisch zum FSE-/RZS-Muster (EC-2).
@@ -104,7 +105,7 @@ def essen_foto_setzen(*, aktion, photo_client, essen_client, ziel,
 
     if aktion == AKTION_HOCHLADEN:
         return _hochladen_und_schreiben(
-            photo_client, essen_client, ziel,
+            essen_client, ziel,
             medium_bytes, filename, content_type, overrides_pfad)
 
     if aktion == AKTION_ABBRUCH:
@@ -116,37 +117,34 @@ def essen_foto_setzen(*, aktion, photo_client, essen_client, ziel,
     return SIGNAL_NICHTS_ZU_TUN, {}
 
 
-def _hochladen_und_schreiben(photo_client, essen_client, ziel,
+def _hochladen_und_schreiben(essen_client, ziel,
                               medium_bytes, filename, content_type,
                               overrides_pfad):
-    """Upload an Photo-Buddy + sofort Schreiben je ziel.typ (atomar, ESSEN-22).
+    """Upload an Essen-Buddy + sofort Schreiben je ziel.typ (atomar, ESSEN-22 V1.2).
 
     Ohne Medien-Bytes ist nichts zu tun (Modell hat das Tool auf falscher
     Spur gerufen — analog FSE-3).
+    Welle 2 von #804: Upload geht jetzt an POST /api/v1/essen/fotos (MEDIEN-1),
+    nicht mehr an Photo-Buddy.
     """
     if not medium_bytes:
         return SIGNAL_NICHTS_ZU_TUN, {}
 
-    # Schritt 1: Upload an Photo-Buddy (PHOTO-13).
-    # T799: in_library=False — Essen-Fotos sollen nicht im Bilderrahmen erscheinen.
+    # Schritt 1: Upload an Essen-Buddy (ESSEN-22 V1.2, MEDIEN-1).
     try:
-        response = photo_client.upload_medium(
-            medium_bytes=medium_bytes,
-            filename=filename or "foto.jpg",
+        medien_id = essen_client.post_foto(
+            rohbytes=medium_bytes,
+            dateiname=filename or "foto.jpg",
             content_type=content_type or "image/jpeg",
-            in_library=False,
         )
-    except PhotoClientError as e:
+    except EssenClientError as e:
         fehler_str = str(e)
         if "HTTP 4" in fehler_str:
-            logger.info("essen_foto_setzen: PHOTO-13 hat Medium abgelehnt — %s",
-                        e)
+            logger.info("essen_foto_setzen: Essen-Buddy hat Foto abgelehnt — %s", e)
             return SIGNAL_GRENZE, {"detail": fehler_str}
-        logger.warning("essen_foto_setzen: Photo-Buddy nicht erreichbar — %s",
-                       e)
+        logger.warning("essen_foto_setzen: Essen-Buddy nicht erreichbar — %s", e)
         return SIGNAL_NICHT_ERREICHBAR, {"detail": fehler_str}
 
-    medien_id = response.get("id")
     logger.info("essen_foto_setzen: hochgeladen medien_id=%s ziel=%r",
                 medien_id, ziel)
 
