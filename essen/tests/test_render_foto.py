@@ -181,6 +181,52 @@ def test_kein_foto_wunschliste_bleibt_arasaac(tmp_path):
     assert "arasaac" in eintrag["icon_url"]
 
 
+def test_t812_wunsch_gericht_lookup_katalog_foto_ref():
+    """T812: Wunsch zeigt Gericht, Katalog-Gericht hat foto_ref → Render
+    löst das Foto über katalog_foto_refs auf (Wunsch hat selbst kein foto_ref)."""
+    wunsch = {
+        "id": "eltern:1", "label": "Lasagne", "bild_ref": "9051",
+        "item_id": "1", "quelle": "eltern", "kategorie": "gericht",
+        "erstellt_am": "2026-06-14T20:00:00+02:00",
+    }
+    katalog_refs = {"1": "foto-01"}
+    liste = render_mod.baue_wunsch_liste([wunsch], katalog_foto_refs=katalog_refs)
+
+    assert len(liste) == 1
+    eintrag = liste[0]["eintraege"][0]
+    assert eintrag["ist_foto"] is True
+    assert "/api/v1/essen/fotos/foto-01" in eintrag["icon_url"]
+
+
+def test_t812_wunsch_override_schlaegt_katalog_lookup():
+    """T812: Wenn Override für ein Basis-Item vorhanden, hat es Vorrang
+    vor katalog_foto_refs (Override gewinnt; relevant für Gerichte mit
+    sowohl Override-Eintrag als auch Katalog-foto_ref)."""
+    wunsch = {
+        "id": "eltern:2", "label": "Risotto", "bild_ref": "2259",
+        "item_id": "2", "quelle": "eltern", "kategorie": "gericht",
+        "erstellt_am": "2026-06-14T20:01:00+02:00",
+    }
+    liste = render_mod.baue_wunsch_liste(
+        [wunsch], foto_overrides={"2": "foto-99"}, katalog_foto_refs={"2": "foto-02"})
+
+    assert liste[0]["eintraege"][0]["ist_foto"] is True
+    assert "/api/v1/essen/fotos/foto-99" in liste[0]["eintraege"][0]["icon_url"]
+
+
+def test_t812_wunsch_ohne_katalog_lookup_arasaac():
+    """T812: Ohne katalog_foto_refs UND ohne Override → ARASAAC wie heute."""
+    wunsch = {
+        "id": "eltern:3", "label": "Spaghetti", "bild_ref": "9999",
+        "item_id": "99", "quelle": "eltern", "kategorie": "gericht",
+        "erstellt_am": "2026-06-14T20:02:00+02:00",
+    }
+    liste = render_mod.baue_wunsch_liste([wunsch])
+
+    assert liste[0]["eintraege"][0]["ist_foto"] is False
+    assert "arasaac" in liste[0]["eintraege"][0]["icon_url"]
+
+
 # ============================================================
 #  AC4 — Fehlende foto_overrides.json → kein Crash, ARASAAC
 # ============================================================
