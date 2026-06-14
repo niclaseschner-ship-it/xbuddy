@@ -81,9 +81,10 @@ class GerichtAnlegenTask(WriteTask):
     is_async = False
     post_execute_hooks = ()
 
-    def __init__(self, tg, essen_client, icon_client, photo_client,
+    def __init__(self, tg, essen_client, icon_client,
                  family_group_chat_id_getter, is_member_fn=None,
-                 icon_origin_url=None):
+                 icon_origin_url=None,
+                 photo_client=None):
         super().__init__(
             name="gericht_anlegen",
             description=(
@@ -148,12 +149,13 @@ class GerichtAnlegenTask(WriteTask):
         self._tg = tg
         self._essen_client = essen_client
         self._icon_client = icon_client
-        self._photo_client = photo_client
         self._family_group_chat_id_getter = family_group_chat_id_getter
         self._is_member_fn = is_member_fn
         # icon_origin_url: Basis-Origin des Routers für die Album-Bilder
         # (TASK-10b). Wird von build_catalog durchgereicht (icon_origin_url).
         self._icon_origin_url = icon_origin_url or ""
+        # photo_client: veraltet (Welle 3), wird nicht mehr genutzt.
+        # Parameter bleibt für Übergangskompatibilität.
 
     def propose(self, arguments, turn_context):
         """EC-10-Vorschlag — beschreibt die geplante Änderung (GAN-5, E-GAN-2).
@@ -280,7 +282,6 @@ class GerichtAnlegenTask(WriteTask):
             aktion=gan_mod.AKTION_FOTO_HINZUFUEGEN,
             essen_client=self._essen_client,
             icon_client=self._icon_client,
-            photo_client=self._photo_client,
             is_member_fn=is_member_fn,
             from_user_id=from_user_id,
             label=args.get("label"),
