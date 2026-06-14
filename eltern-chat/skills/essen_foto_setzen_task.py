@@ -74,14 +74,15 @@ class EssenFotoSetzenTask(WriteTask):
     is_async = False
     post_execute_hooks = ()
 
-    def __init__(self, tg, essen_client, photo_client,
+    def __init__(self, tg, essen_client,
                  family_group_chat_id_getter, is_member_fn=None,
-                 overrides_pfad=None):
+                 overrides_pfad=None,
+                 photo_client=None):
         super().__init__(
             name="essen_foto_setzen",
             description=(
-                "Lädt ein Familien-Foto in Photo-Buddy hoch und setzt es in einem "
-                "Schritt am Gericht (foto_ref via PATCH ESSEN-19a) oder am "
+                "Lädt ein Familien-Foto in den Essen-Buddy hoch und setzt es in "
+                "einem Schritt am Gericht (foto_ref via PATCH ESSEN-19a) oder am "
                 "Basis-Item (foto_overrides.json). EIN Confirm pro Operation "
                 "(E-EC-7). "
                 "Aufrufen, wenn jemand ein Foto MIT Essens-Caption schickt "
@@ -127,12 +128,13 @@ class EssenFotoSetzenTask(WriteTask):
             })
         self._tg = tg
         self._essen_client = essen_client
-        self._photo_client = photo_client
         self._family_group_chat_id_getter = family_group_chat_id_getter
         self._is_member_fn = is_member_fn
         # overrides_pfad: absoluter Pfad zu xbuddy-data/essen/foto_overrides.json.
         # Von build_catalog gesetzt; None in Tests, die ihn selbst übergeben.
         self._overrides_pfad = overrides_pfad
+        # photo_client: petraltet (Welle 3), wird nicht mehr genutzt.
+        # Parameter bleibt für Übergangskompatibilität.
 
     def propose(self, arguments, turn_context):
         """EC-10-Vorschlag — nennt Aktion und Ziel, fragt nach Bestätigung.
@@ -223,7 +225,6 @@ class EssenFotoSetzenTask(WriteTask):
 
         signal, daten = efs_mod.essen_foto_setzen(
             aktion=AKTION_HOCHLADEN,
-            photo_client=self._photo_client,
             essen_client=self._essen_client,
             ziel=ziel,
             is_member_fn=is_member_fn,

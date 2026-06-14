@@ -23,22 +23,28 @@ Endpunkte:
   GET    /api/v1/essen/katalog             — Katalog lesen (ESSEN-18)
   POST   /api/v1/essen/katalog/gerichte    — Gericht anlegen (ESSEN-19)
   PATCH  /api/v1/essen/katalog/gerichte/<id> — Gericht-Bild ändern (ESSEN-19a)
+  POST   /api/v1/essen/fotos              — Foto ingest, multipart `medium` (ESSEN-22 V1.2)
+  GET    /api/v1/essen/fotos/<id>         — Vollbild JPEG (ESSEN-22 V1.2)
+  GET    /api/v1/essen/fotos/<id>/thumbnail — Thumbnail JPEG (ESSEN-22 V1.2)
+  DELETE /api/v1/essen/fotos/<id>         — Löschen atomar (ESSEN-22 V1.2)
 """
 
 import argparse
 import logging
 import os
 import sys
+import threading
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_file
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
+import tools.medien_store as medien_store  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
 
 if __package__:
@@ -73,6 +79,12 @@ runtime = {
     "listen_grenze_wunsch":  100,   # ESSEN-29
     "listen_grenze_einkauf": 100,   # ESSEN-29
 }
+
+# Schreib-Serialisierung für Foto-Ingest (ESSEN-22 V1.2): Read-Modify-Write
+# des fotos-Index aus parallelen Flask-Threads würde ohne Lock verloren-gehende
+# Updates produzieren (Muster photo/main.py _write_lock). Das Lock klammert
+# nur den Schreib-Pfad (Ingest/Delete) — Lesen bleibt lock-frei.
+_foto_write_lock = threading.Lock()
 
 
 def configure(paths, zeitzone="Europe/Berlin", listen_grenze=None,
@@ -826,6 +838,81 @@ def gericht_bild_patchen(gericht_id):
     logger.info("PATCH Gericht id=%s foto_ref=%s bild_ref=%s",
                 gericht_id, body.get("foto_ref"), body.get("bild_ref"))
     return jsonify(aktualisiert), 200
+
+
+# ── API: Fotos (ESSEN-22 V1.2) ──────────────────────────────────────────────
+# Essen-Buddy besitzt seine eigenen Foto-Daten (MEDIEN-2, SVC-5).
+# Mechanik über tools.medien_store (MEDIEN-1), kein Adapter-Layer nötig.
+
+
+def _bad_request(msg, status=400):
+    """4xx/503 mit JSON-Fehler, keine Stack-Traces vor dem Konsumenten."""
+    return jsonify({"error": msg}), status
+
+
+@app.route("/api/v1/essen/fotos", methods=["POST"])
+def post_foto():
+    """ESSEN-22 V1.2: Foto aufnehmen. Multipart-Feld `medium`.
+
+    Normalisiert (HEIC→JPEG, Thumbnail), schreibt atomar in das Essen-eigene
+    Foto-Verzeichnis (MEDIEN-2, SVC-5). Antwort `{"id", "typ"}`.
+    Leeres/fehlendes Feld → 400. Schreib-/Petrarbeitungsfehler → 503.
+    """
+    if "medium" not in request.files:
+        return _bad_request("multipart-Feld 'medium' fehlt")
+    upload = request.files["medium"]
+    dateiname = (upload.filename or "").strip()
+    if not dateiname:
+        return _bad_request("Medien-Dateiname fehlt")
+    rohbytes = upload.read()
+    if not rohbytes:
+        return _bad_request("Medien-Inhalt ist leer")
+
+    fotos_verz = _paths()["fotos_verzeichnis"]
+    with _foto_write_lock:
+        try:
+            medium = medien_store.ingest(fotos_verz, rohbytes, dateiname)
+        except medien_store.NormalizeError as e:
+            return _bad_request("Medium nicht petrarbeitbar: %s" % e)
+        except medien_store.StoreError as e:
+            logger.warning("post_foto: Schreiben fehlgeschlagen: %s", e)
+            return _bad_request(str(e), status=503)
+    return jsonify({"id": medium.id, "typ": medium.typ}), 200
+
+
+@app.route("/api/v1/essen/fotos/<medium_id>", methods=["GET"])
+def get_foto(medium_id):
+    """ESSEN-22 V1.2: Vollbild (JPEG) mit korrektem Content-Type (send_file)."""
+    fotos_verz = _paths()["fotos_verzeichnis"]
+    pfad = medien_store.serve_pfad(fotos_verz, medium_id)
+    if pfad is None:
+        return _bad_request("unbekannte id", status=404)
+    return send_file(pfad)
+
+
+@app.route("/api/v1/essen/fotos/<medium_id>/thumbnail", methods=["GET"])
+def get_foto_thumbnail(medium_id):
+    """ESSEN-22 V1.2: Thumbnail-JPEG mit korrektem Content-Type."""
+    fotos_verz = _paths()["fotos_verzeichnis"]
+    pfad = medien_store.thumb_pfad(fotos_verz, medium_id)
+    if pfad is None:
+        return _bad_request("unbekannte id", status=404)
+    return send_file(pfad)
+
+
+@app.route("/api/v1/essen/fotos/<medium_id>", methods=["DELETE"])
+def delete_foto(medium_id):
+    """ESSEN-22 V1.2: Vollbild + Thumbnail + Index-Eintrag atomar entfernen."""
+    fotos_verz = _paths()["fotos_verzeichnis"]
+    with _foto_write_lock:
+        try:
+            entfernt = medien_store.delete(fotos_verz, medium_id)
+        except medien_store.StoreError as e:
+            logger.warning("delete_foto: Löschen fehlgeschlagen: %s", e)
+            return _bad_request(str(e), status=503)
+    if not entfernt:
+        return _bad_request("unbekannte id", status=404)
+    return jsonify({"id": medium_id}), 200
 
 
 # ============================================================

@@ -40,6 +40,7 @@ def demo_paths(tmp_path):
         "katalog_file":         str(tmp_path / "katalog.json"),           # Override — fehlt = kein Override
         "katalog_default_file": real_default,
         "foto_overrides_file":  str(tmp_path / "foto_overrides.json"),    # fehlt = keine Overrides
+        "fotos_verzeichnis":    str(tmp_path / "fotos"),                   # ESSEN-22 V1.2: Essen-Foto-Verzeichnis
     }
 
 
