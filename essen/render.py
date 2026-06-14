@@ -29,8 +29,11 @@ logger = logging.getLogger(__name__)
 # ICONS-5: geteilte Icon-Plattform-URL — kein buddy-eigener ARASAAC-Bezug (ESSEN-11).
 ICON_BASIS = "/display/_shared/icons/arasaac/"
 
-# ESSEN-22: Photo-Buddy-Pfad für Familien-Fotos (relative URL, nginx-geroutet).
-PHOTO_BUDDY_MEDIEN_PFAD = "/api/v1/photo/medien/"
+# ESSEN-22 V1.2: Essen-Buddy-Foto-Pfad (relative URL, nginx-geroutet).
+# Welle 2 von #804: Fotos liegen jetzt im Essen-Buddy (MEDIEN-2, SVC-5).
+# Rückwärts-Kompat: PHOTO_BUDDY_MEDIEN_PFAD bleibt als Alias (Welle 3 räumt auf).
+ESSEN_FOTOS_PFAD = "/api/v1/essen/fotos/"
+PHOTO_BUDDY_MEDIEN_PFAD = ESSEN_FOTOS_PFAD  # Alias für Welle-3-Migration
 
 # ESSEN-27: Entfernen-Symbol ARASAAC ID 11751 — sichtbar auf jeder liste-eintrag-Kachel.
 ENTFERNEN_ICON_REF = "11751"
@@ -67,14 +70,15 @@ def icon_url(bild_ref):
 
 
 def foto_url(medien_id):
-    """URL eines Familien-Fotos aus dem Photo-Buddy (ESSEN-22, PHOTO-15).
+    """URL eines Essen-Buddy-Fotos (ESSEN-22 V1.2, MEDIEN-2).
 
-    Baut eine relative URL `/api/v1/photo/medien/<id>` — konsistent mit der
-    ICON_BASIS-Konvention (relative, nginx-geroutet).
+    Baut eine relative URL `/api/v1/essen/fotos/<id>` — konsistent mit der
+    ICON_BASIS-Konvention (relative, nginx-geroutet). Welle 2 von #804:
+    Fotos liegen im Essen-Buddy, nicht mehr im Photo-Buddy.
     """
     if medien_id in (None, ""):
         return None
-    return PHOTO_BUDDY_MEDIEN_PFAD + str(medien_id)
+    return ESSEN_FOTOS_PFAD + str(medien_id)
 
 
 def lade_foto_overrides(pfad=None):

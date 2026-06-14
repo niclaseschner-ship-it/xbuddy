@@ -57,7 +57,8 @@ def _katalog_mit(gericht_items=None, obst_items=None):
 
 
 def _foto_url(medien_id):
-    return render_mod.PHOTO_BUDDY_MEDIEN_PFAD + str(medien_id)
+    # ESSEN-22 V1.2: Welle 2 — Fotos liegen im Essen-Buddy, Pfad ist /api/v1/essen/fotos/
+    return render_mod.ESSEN_FOTOS_PFAD + str(medien_id)
 
 
 # ============================================================
@@ -74,7 +75,7 @@ def test_gericht_mit_foto_ref():
 
     assert kachel["ist_foto"] is True
     assert kachel["icon_url"] == _foto_url("abc123")
-    assert "/api/v1/photo/medien/" in kachel["icon_url"]
+    assert "/api/v1/essen/fotos/" in kachel["icon_url"]
     assert "arasaac" not in kachel["icon_url"]
 
 
@@ -293,9 +294,9 @@ def test_template_kachel_foto_klasse_vorhanden():
 # ============================================================
 
 def test_foto_url_baut_pfad():
-    """foto_url baut korrekte relative Photo-Buddy-URL."""
+    """foto_url baut korrekte relative Essen-Buddy-URL (ESSEN-22 V1.2)."""
     url = render_mod.foto_url("abc-123")
-    assert url == "/api/v1/photo/medien/abc-123"
+    assert url == "/api/v1/essen/fotos/abc-123"
 
 
 def test_foto_url_leer_gibt_none():
