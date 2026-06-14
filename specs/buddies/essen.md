@@ -692,7 +692,7 @@ Wahrheit kommt aus den Dateien. ENV-Overrides `ESSEN_<KEY>` (CONFIG-5).
 
 *Tickets:* #474
 
-## 6a. Familien-Foto-Override (V1.1)
+## 6a. Familien-Foto-Override (V1.2)
 
 ### ESSEN-22 — Familien-Foto je Item (Anlegen-mit-Foto ODER nachträglich setzen)
 
@@ -704,10 +704,10 @@ Anlegen des Items vorliegt oder erst später nachgereicht wird.
 **Pfad 1 — Beim Anlegen mit Foto statt Pikto (GAN-Erweiterung).** Wenn Eltern
 über `gericht-anlegen` (GAN) ein neues Gericht anlegen, können sie statt
 eines ARASAAC-Piktos ein Foto mitschicken. Der GAN-Skill lädt das Foto vorab
-über die bestehende Photo-Buddy-API (`POST /api/v1/photo/medien`) hoch und
-ruft `POST /api/v1/essen/katalog/gerichte` (ESSEN-19) mit `foto_ref` statt
-`bild_ref` auf. Das Gericht trägt damit von Beginn an die Foto-Referenz im
-Katalog-Eintrag.
+über die **Essen-eigene Foto-API** (`POST /api/v1/essen/fotos`, V1.2) hoch
+und ruft `POST /api/v1/essen/katalog/gerichte` (ESSEN-19) mit `foto_ref`
+statt `bild_ref` auf. Das Gericht trägt damit von Beginn an die Foto-Referenz
+im Katalog-Eintrag.
 
 **Pfad 2 — Nachträglich für existierende Items (Skill `essen_foto_setzen`).**
 Trägt ein Item heute schon einen ARASAAC-Default (oder wurde ohne Foto
@@ -749,8 +749,34 @@ Foto-Verzeichnis lebt, hängt vom Item-Typ ab:
 - **Lebensmittel-Basis-Items** (statisch im Repo, ESSEN-12/ESSEN-13): die
   Repo-Datei `essen/katalog.default.json` wird NICHT mutiert — Override lebt
   per-Instanz in `essen/foto_overrides.json` (Schema:
-  `{ "<item_id>": "<photo_buddy_medien_id>" }`). Die Datei folgt SVC-5
+  `{ "<item_id>": "<essen-foto-id>" }`). Die Datei folgt SVC-5
   (Per-Instanz-Daten unter `xbuddy-data/essen/foto_overrides.json`).
+
+**Foto-Daten-Heimat im Essen-Buddy (V1.2, ESSEN-22b).** Die Foto-Bytes
+selbst leben im Essens-Buddy unter `xbuddy-data/essen/fotos/` (Per-Instanz,
+SVC-5), nicht im Photo-Buddy. Photo-Buddy ist Familien-Album-Bounded-
+Context (Bilderrahmen) und hält ausschließlich Familien-Album-Inhalte;
+Katalog-Item-Assets (Lasagne, Apfel-Override) sind ein anderer Bounded
+Context und gehören in den jeweiligen Owner-Buddy (Lego-Trennung pro
+Buddy, Anti-Pattern: ein Buddy hält fremde Sorten mit Flag/Tag/Owner-Feld).
+
+`foto_ref` ist eine String-ID, die der Essens-Buddy vergibt und auflöst.
+URL-Form: `/api/v1/essen/fotos/<id>` für Vollmedium, `.../thumbnail` für
+Thumb.
+
+**Essen-Foto-API (V1.2, ESSEN-22b):**
+
+- `POST /api/v1/essen/fotos` (multipart/form-data, Form-Feld `medium`) —
+  Ingest analog PHOTO-13. Antwort `{"id":<str>,"typ":<str>}`.
+- `GET /api/v1/essen/fotos/<id>` — Vollmedium (JPEG/MP4).
+- `GET /api/v1/essen/fotos/<id>/thumbnail` — Thumbnail (JPEG).
+- `DELETE /api/v1/essen/fotos/<id>` — atomar entfernen (Vollmedium +
+  Thumbnail + Index-Eintrag).
+
+Index: `xbuddy-data/essen/fotos.json`. Foto-Petrarbeitung (Normalize,
+Thumbnail, atomar schreiben) über die geteilte Library
+`tools/medien_store/` (siehe `conventions/medien-store.md`) — Code-Reuse
+ohne Lego-Bruch.
 
 **Display-Stil — Foto kreisförmig, Pikto-Konsistenz.** Familien-Fotos werden
 im Display **kreisförmig ausgeschnitten** (CSS `border-radius: 50%` +
@@ -762,14 +788,15 @@ Image-Processing, kein Cache-Bust am Backend — reiner CSS-Effekt.
 **Display-Konsum (ESSEN-11-Override).** Pro Render-Cycle prüft
 `essen/render.py` je Item in dieser Reihenfolge:
 
-1. Gericht mit `foto_ref`-Feld gesetzt → Foto-URL aus Photo-Buddy
-   (`/api/v1/photo/medien/<medien-id>`), kreisförmig stylen.
+1. Gericht mit `foto_ref`-Feld gesetzt → Foto-URL aus Essens-Buddy
+   (`/api/v1/essen/fotos/<id>`), kreisförmig stylen.
 2. Lebensmittel-Item mit Eintrag in `foto_overrides.json` → Foto-URL aus
-   Photo-Buddy (gleiche Mechanik), kreisförmig stylen.
+   Essens-Buddy (gleiche Mechanik), kreisförmig stylen.
 3. Sonst → ARASAAC-Default-Pfad (ESSEN-11), quadratisch wie heute.
 
-Der Essens-Buddy hält **keine eigene Foto-Kopie**. Photo-Buddy bleibt die
-einzige Speicher-Stelle (APP-3: Photo-Buddy besitzt seine Daten).
+Der Essens-Buddy besitzt seine Foto-Daten selbst (APP-3 pro Bounded
+Context). Photo-Buddy hält ausschließlich Familien-Album-Inhalte und
+wird vom Essens-Display NICHT konsumiert.
 
 **Lösch-Pfad.**
 
@@ -795,17 +822,21 @@ einzige Speicher-Stelle (APP-3: Photo-Buddy besitzt seine Daten).
 - **Mehrere Fotos pro Item** (Karussell). V1.1 trägt genau eins.
 - **OpenFoodFacts oder externe Foto-Datenbank** → bleibt OPEN-ESSEN-B,
   eigener Werft-Lauf (E-ESSEN-6).
-- **Generisches Photo-Buddy-Tag-Schema** (Cross-Buddy-Konsum für Routine,
-  HSP etc.) → vertagt bis n=2 (Berater-Regel: zwei gebaute Konsumenten,
-  dann Konvention).
+- **Generisches Photo-Buddy-Tag-Schema** — entfällt. Lego-Trennung wird
+  nicht über Tag/Flag/Owner-Felder im Photo-Buddy gelöst, sondern über
+  eigene Daten-Heimat pro Buddy (V1.2). Wenn ein dritter Buddy
+  Foto-Daten braucht (z.B. Hörspiel-Cover), hält er sie analog
+  ESSEN-22b in seinem eigenen Verzeichnis und konsumiert
+  `tools/medien_store/` (kein zentraler Foto-Service nötig).
 - **Eltern-Chat-Skill für Override-Lösch auf Basis-Items** → solange die
   Pflege selten ist, reicht händische `foto_overrides.json`-Edit.
 
 *Test-Implikationen:*
 
 - **GAN-Pfad-Test:** Anlegen eines Gerichts „Lasagne" mit Foto-Anhang im
-  Chat → Photo-Buddy hat ein Medium, `gerichte.json` trägt für „Lasagne"
-  `foto_ref` (kein `bild_ref`).
+  Chat → Essen-Buddy-Foto-API hat ein Medium (`xbuddy-data/essen/fotos/`),
+  `gerichte.json` trägt für „Lasagne" `foto_ref` (kein `bild_ref`).
+  Photo-Buddy hat KEIN neues Medium.
 - **essen_foto_setzen-Test (Gericht):** Foto für existierendes Gericht
   setzen → `foto_ref` im Gericht-Eintrag, alter `bild_ref` weg.
 - **essen_foto_setzen-Test (Basis-Item):** Foto für „Apfel" setzen →
