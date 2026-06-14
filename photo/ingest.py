@@ -1,29 +1,28 @@
-"""Photo-Buddy — Ingest-Orchestrierung (PHOTO-13).
+"""Photo-Buddy — Ingest: duenner Adapter auf tools.medien_store.
 
-Siehe specs/buddies/photo.md §4. Dieses Modul verkettet den Aufnahme-Pfad:
-normalisieren (PHOTO-8/9) → Video-Maximaldauer prüfen (PHOTO-13/OPEN-PHOTO-J) →
-atomar in die Library schreiben (PHOTO-10). Es kennt **kein** Flask — die
-HTTP-Schicht (main.py) ruft `ingest()` und mappt das Ergebnis/die Fehler auf
-Statuscodes.
+Photo-spezifische Belange:
+  - VideoZuLang-Check (PHOTO-13) vor dem Schreiben.
+  - Auto-Delete-Sweep nach dem Schreiben (PHOTO-12).
+  - in_library-Unterstuetzung (T799) als Argument.
 
-Public-API: `ingest(library_verzeichnis, cfg, rohbytes, dateiname, now=None)
--> store.Medium`. Hebt `VideoZuLang` (PHOTO-13-Ablehnung, 400/413) und reicht
-`NormalizeError`/`StoreError` durch.
+Re-Exportiert alle heutigen Public-Symbole fuer photo/main.py + Tests.
 """
 
 import logging
 
-from . import normalize as normalize_mod
+from tools.medien_store.normalize import normalisiere
+
 from . import store
 
 logger = logging.getLogger(__name__)
 
 
 class VideoZuLang(Exception):
-    """Das Video überschreitet die konfigurierte Maximaldauer (PHOTO-13).
+    """Das Video ueberschreitet die konfigurierte Maximaldauer (PHOTO-13).
 
-    Trägt die ermittelte und die erlaubte Dauer, damit die HTTP-Schicht eine
-    klare Fehlermeldung formulieren kann."""
+    Traegt die ermittelte und die erlaubte Dauer, damit die HTTP-Schicht eine
+    klare Fehlermeldung formulieren kann.
+    """
 
     def __init__(self, dauer, video_max_s):
         self.dauer = dauer
@@ -36,17 +35,18 @@ class VideoZuLang(Exception):
 def ingest(library_verzeichnis, cfg, rohbytes, dateiname, in_library=True, now=None):
     """Nimmt ein Medium auf (PHOTO-13).
 
-    1. Normalisieren (PHOTO-8/9): HEIC→JPEG / HEVC-MOV→MP4, Thumbnail/Poster,
+    1. Normalisieren (PHOTO-8/9): HEIC->JPEG / HEVC-MOV->MP4, Thumbnail/Poster,
        Aufnahmedatum.
-    2. Video-Maximaldauer prüfen (PHOTO-13): zu lang → `VideoZuLang`.
+    2. Video-Maximaldauer pruefen (PHOTO-13): zu lang -> `VideoZuLang`.
     3. Atomar in die Library schreiben (PHOTO-10): Vollmedium + Thumbnail +
-       Index-Eintrag zusammen.
+       Index-Eintrag zusammen (inkl. in_library).
+    4. PHOTO-12: Auto-Delete-Sweep (photo-spezifisch).
 
-    `now` wird an `store.add` durchgereicht (injizierbarer Hinzufüge-Stempel,
-    PHOTO-12). Liefert das geschriebene `store.Medium`.
-    `in_library` steuert die Library-Sichtbarkeit (T799): False für Essen-Fotos.
+    `in_library` steuert die Library-Sichtbarkeit (T799): False fuer Essen-Fotos.
+    `now` ist die injizierbare Zeitquelle (Test-Determinismus, PHOTO-23).
+    Liefert das geschriebene `store.Medium` (photo-spezifisches Medium mit in_library).
     """
-    norm = normalize_mod.normalisiere(rohbytes, dateiname)
+    norm = normalisiere(rohbytes, dateiname)
 
     if (norm.typ == store.TYP_VIDEO and norm.dauer is not None
             and norm.dauer > cfg.video_max_s):
@@ -65,22 +65,13 @@ def ingest(library_verzeichnis, cfg, rohbytes, dateiname, in_library=True, now=N
         dauer=norm.dauer,
         in_library=in_library,
         now=now)
-    # PHOTO-12: Auto-Delete-Sweep als laufendes Verhalten an den realen
-    # Ingest-Pfad gehängt (den die POST-Route ruft) — nicht nur als aufrufbarer
-    # Helfer. Default `auto_delete_tage = 0` => No-Op (E-PHOTO-6). `now` wird
-    # mitgereicht (Test-Determinismus, PHOTO-23). Das frisch geschriebene Medium
-    # (Stempel == now, Alter 0) wird nie vom selben Sweep getroffen.
+
     store.auto_delete(library_verzeichnis, cfg.auto_delete_tage, now=now)
     return medium
 
 
 def _neue_id(library_verzeichnis, typ):
-    """Vergibt eine stabile, kollisionsfreie IDENT-1-Medien-id `<typ>-<nn>`.
-
-    Sucht je Typ die kleinste freie `<nn>` ab `01` über die bestehende Library
-    (reine Funktion über den geladenen Index — analog FAM `naechste_person_id`).
-    Der Dateiname leitet sich aus der id ab, sodass id und Datei stabil
-    aneinander hängen (PHOTO-7)."""
+    """Vergibt eine stabile, kollisionsfreie id `<typ>-<nn>` (IDENT-1)."""
     belegt = {m.id for m in store.load(library_verzeichnis)}
     n = 1
     while True:
