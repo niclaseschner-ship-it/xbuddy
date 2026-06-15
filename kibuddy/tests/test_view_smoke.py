@@ -157,3 +157,80 @@ def test_js_kein_emoji_ui_render(client):
         assert emoji not in js, (
             "frage.js enthält Emoji '%s' als UI-String — KIBUDDY-30 verletzt" % emoji
         )
+
+
+# ---- AC3: Kein Doppelrender (KIBUDDY-17) ----
+
+def test_js_buddy_bubble_kein_doppelrender(client):
+    """AC3: frage.js enthält kein Text-Duplikat zusätzlich zu words[]-Render.
+
+    Prüft, dass die Buddy-Bubble KEINE unconditional textZeile-Append-Logik
+    mehr enthält — nur bedingter Fallback wenn words[] leer.
+    """
+    resp = client.get("/display/kibuddy/static/frage.js")
+    assert resp.status_code == 200
+    js = resp.data.decode("utf-8")
+    # Das alte Muster: textZeile.textContent = antwort.text ohne Bedingung.
+    # Nach Fix ist textZeile NUR im else-Zweig (d.h. nach "} else {" und vor "}")
+    # — eine unbedingte Zeile "buddyBubble.appendChild(textZeile)" darf es nicht geben.
+    assert "bubble-laden" in js, "Lade-Bubble-Klasse fehlt in frage.js"
+    # Kein unconditional textZeile direkt vor wortRender-Block
+    # (Heuristik: kein 'textZeile.textContent = antwort.text' gefolgt von wortRender-Append)
+    # Stattdessen: prüfen, dass buddyBubble.appendChild(textZeile) NUR im else-Zweig vorkommt.
+    # Wir prüfen, dass das Muster 'textZeile.style.margin = "0 0 8px 0"' nicht mehr da ist
+    # (das war die unbedingte Variante aus dem Bug).
+    assert '"0 0 8px 0"' not in js, (
+        "Buddy-Bubble: alte unconditional textZeile (margin: 0 0 8px 0) noch im JS — AC3 verletzt"
+    )
+
+
+def test_js_lade_bubble_klasse_vorhanden(client):
+    """AC4: frage.js injiziert bubble-laden-Klasse in den Chat."""
+    resp = client.get("/display/kibuddy/static/frage.js")
+    assert resp.status_code == 200
+    js = resp.data.decode("utf-8")
+    assert "bubble-laden" in js, "bubble-laden fehlt in frage.js — AC4 Lade-Bubble nicht implementiert"
+    assert "lade-dots" in js, "lade-dots fehlt in frage.js — AC4 Lade-Indikator nicht implementiert"
+
+
+def test_css_lade_bubble_definiert(client):
+    """AC4: frage.css enthält .bubble-laden + .lade-dots Definitionen."""
+    resp = client.get("/display/kibuddy/static/frage.css")
+    assert resp.status_code == 200
+    css = resp.data.decode("utf-8")
+    assert ".bubble-laden" in css, ".bubble-laden fehlt in frage.css — AC4 nicht implementiert"
+    assert ".lade-dots" in css, ".lade-dots fehlt in frage.css — AC4 nicht implementiert"
+    assert "lade-pulse" in css, "@keyframes lade-pulse fehlt in frage.css — AC4 Animation fehlt"
+
+
+def test_css_bubble_font_size_gross(client):
+    """AC2: .bubble hat font-size >= 24px."""
+    resp = client.get("/display/kibuddy/static/frage.css")
+    assert resp.status_code == 200
+    css = resp.data.decode("utf-8")
+    assert "font-size: 24px" in css, ".bubble font-size ist nicht 24px — AC2 verletzt"
+
+
+def test_css_bubble_kein_word_break(client):
+    """AC2: .bubble hat word-break: keep-all (kein mid-word-Umbruch)."""
+    resp = client.get("/display/kibuddy/static/frage.css")
+    assert resp.status_code == 200
+    css = resp.data.decode("utf-8")
+    assert "word-break: keep-all" in css, "word-break: keep-all fehlt — AC2 verletzt"
+    assert "hyphens: none" in css, "hyphens: none fehlt — AC2 verletzt"
+
+
+def test_css_stopp_row_position_absolute(client):
+    """AC1: .stopp-row ist position: absolute (kein Layout-Push auf mikro-row)."""
+    resp = client.get("/display/kibuddy/static/frage.css")
+    assert resp.status_code == 200
+    css = resp.data.decode("utf-8")
+    # Wir prüfen, dass .stopp-row position: absolute enthält.
+    # Einfache Heuristik: suche nach dem Block nach ".stopp-row"
+    stopp_idx = css.find(".stopp-row")
+    assert stopp_idx != -1, ".stopp-row Block fehlt in CSS"
+    block_end = css.find("}", stopp_idx)
+    stopp_block = css[stopp_idx:block_end]
+    assert "position: absolute" in stopp_block, (
+        ".stopp-row ist nicht position: absolute — AC1 Knopf-Position-Fix fehlt"
+    )
