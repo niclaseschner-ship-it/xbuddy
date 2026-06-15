@@ -75,9 +75,12 @@ ID-Präfix HFE).
 - **OPEN-HSP-K** — Audio-Format MP3 96 kbps mono in V1; Opus später.
 - **OPEN-HSP-L** — Asynchrone Generierung mit Benachrichtigung am Ende
   statt blockierender Synthese.
-- **OPEN-HSP-M** — Azure-/Anthropic-Schlüssel-Verwaltung in der Plattform-
-  Schicht (heute per-App-ENV nach CONFIG-1/CONFIG-3, siehe HSP-26). Folge-
-  Ticket im Werft-Lauf 2026-06-12 angelegt.
+- **OPEN-HSP-M — ERLEDIGT #749 (2026-06-15).** Azure-/Anthropic-Schlüssel-
+  Verwaltung läuft jetzt über die zentrale ZD-Library
+  (`specs/platform/zugangsdaten.md`), Slot-Namen `hoerspiel-anthropic-api-key`
+  und `hoerspiel-azure-openai-api-key`. Migration zweistufig analog ONB-5→ZD
+  (#84 + #336): Welle A read-both/write-ZD, Welle B ENV-Fallback entfernt.
+  Details in HSP-27.
 - **OPEN-HSP-N** — Eltern-Chat-Skill „LLM-Provider für Hörspiel wechseln"
   (Inline-Befehl „wechsele mal auf mistral für hörbücher" patcht den
   Provider via `PATCH /api/v1/hoerspiel/config`, HSP-19). V1 exposed den
@@ -699,13 +702,32 @@ Zwei Per-Instanz-Dateien neben dem Code (BUD-2, BUD-2a, beide gitignored
   Serien-Name; familien-spezifisch).
 
 **Geheimnisse** (Anthropic-Key, Azure-Key) landen **nie** in einer Datei
-im Repo (CONFIG-3, CLAUDE.md §8). Sie kommen ausschließlich aus
-Umgebungsvariablen, gesetzt im systemd-Service oder einer ENV-Datei
-außerhalb des Repos. Die zentrale Geheimnis-Verwaltung pro Familien-
-Instanz folgt heute dem **EC-15-Pattern des Eltern-Chats** (ENV-Variable,
-ggf. Onboarding-Store) — keine zweite, parallele Secret-Schicht für den
-Hörspiel-Buddy. Eine plattformweite Verwaltung dieser Schlüssel ist
-OPEN-HSP-M.
+im Repo (CONFIG-3, CLAUDE.md §8). Sie wohnen im **zentralen
+Zugangsdaten-Speicher** (`specs/platform/zugangsdaten.md` ZD-1..ZD-5),
+abgelegt unter ZD-2-konformen Slot-Namen:
+
+- `hoerspiel-anthropic-api-key` — Anthropic-LLM (wenn `llm_provider=claude`)
+- `hoerspiel-azure-openai-api-key` — Azure-OpenAI-TTS (immer Pflicht)
+
+Der Hörspiel-Buddy liest sie über die geteilte ZD-Library
+(`from tools.zugangsdaten import …`, ZD-5) — kein direkter Datei-Zugriff,
+keine zweite Geheimnis-Schicht. Damit ist OPEN-HSP-M (Plattform-weite
+Verwaltung dieser Schlüssel) **abgeschlossen mit #749 (2026-06-15)**:
+die ZD-Library war bereits Plattform-Wahrheit, Hörspiel war nur der
+einzige Außenseiter mit ENV-Brücke (`tools/sync_hoerspiel_env.py`).
+
+**Migration auf ZD (zweistufige Deprecation analog ONB-5→ZD,
+Vorbild #84 + #336):**
+
+- **Schritt 1 (#749 Welle A):** Hörspiel liest read-both — zuerst ZD-Slot,
+  bei leerem Wert Fallback auf die alte ENV-Variable (`HOERSPIEL_ANTHROPIC_KEY`,
+  `HOERSPIEL_AZURE_OPENAI_KEY`). Schreibt ausschließlich ZD (lazy
+  one-time-Migration der ENV-Werte in den Store). `tools/sync_hoerspiel_env.py`
+  bleibt für Übergangs-Konsumenten, gibt aber Deprecation-Warnung aus.
+- **Schritt 2 (#749 Welle B):** ENV-Fallback entfernt; Hörspiel liest
+  ausschließlich ZD. `tools/sync_hoerspiel_env.py` ist gelöscht.
+  `HOERSPIEL_ANTHROPIC_KEY`/`HOERSPIEL_AZURE_OPENAI_KEY` werden in HSP-27
+  nicht mehr genannt; nur die ZD-Slots bleiben.
 
 | Name | Default | Datei-Schlüssel | Quelle |
 |---|---|---|---|
@@ -716,11 +738,11 @@ OPEN-HSP-M.
 | `llm_model` | `claude-opus-4-7` | `llm_model` | Eltern (PATCH-Endpoint) |
 | Default-Voice | `shimmer` | `default_voice` | Eltern (Hörspiel-Konfig) |
 | Serien-Name | `Stigi & Co.` | `serien_name` | Familie (Daten-Konfig) |
-| Anthropic-Key | (Pflicht wenn `llm_provider=claude`) | — | ENV `HOERSPIEL_ANTHROPIC_KEY` (CONFIG-3) |
+| Anthropic-Key | (Pflicht wenn `llm_provider=claude`) | — | ZD-Slot `hoerspiel-anthropic-api-key` (ZD-5); Welle-A-Übergang: ENV `HOERSPIEL_ANTHROPIC_KEY` als Fallback |
 | Mistral-Key | — (V2, OPEN-HSP-N) | — | — (V1: nicht konfigurierbar) |
-| Azure-Endpoint | (Pflicht) | `azure_openai_endpoint` | ENV `HOERSPIEL_AZURE_OPENAI_ENDPOINT` |
-| Azure-Deployment | (Pflicht) | `azure_openai_deployment` | ENV `HOERSPIEL_AZURE_OPENAI_DEPLOYMENT` |
-| Azure-Key | (Pflicht) | — | ENV `HOERSPIEL_AZURE_OPENAI_KEY` (CONFIG-3) |
+| Azure-Endpoint | (Pflicht) | `azure_openai_endpoint` | ENV `HOERSPIEL_AZURE_OPENAI_ENDPOINT` (kein Geheimnis, bleibt ENV) |
+| Azure-Deployment | (Pflicht) | `azure_openai_deployment` | ENV `HOERSPIEL_AZURE_OPENAI_DEPLOYMENT` (kein Geheimnis, bleibt ENV) |
+| Azure-Key | (Pflicht) | — | ZD-Slot `hoerspiel-azure-openai-api-key` (ZD-5); Welle-A-Übergang: ENV `HOERSPIEL_AZURE_OPENAI_KEY` als Fallback |
 
 Werte fehlen → Code-Default greift mit Warnung, der Prozess startet weiter
 (CONFIG-4), **außer** bei Pflicht-Geheimnissen: fehlt der für den aktiven
