@@ -59,41 +59,49 @@ class PendingProposal:
 class PendingStore:
     """Hält offene Vorschläge je Chat (in-memory, V1).
 
-    Die Zuordnung Bestätigung → Vorschlag ist eindeutig, auch wenn dazwischen
-    andere Nachrichten eingehen (EC-10): primär über den Antwort-Bezug
-    (reply_to der Vorschlags-Nachricht), ersatzweise über »genau ein offener
-    Vorschlag im Chat«.
+    EC-10 Single-Slot: Pro Chat-Faden hält der Store zu jeder Zeit genau
+    einen offenen Vorschlag. Ein zweiter add()-Aufruf verdrängt den ersten
+    atomar — der alte gilt als verfallen, ohne Schreibakt.
+
+    Die Zuordnung Bestätigung → Vorschlag ist damit immer eindeutig:
+    wer „ja" sagt, bestätigt den einzigen aktiven Vorschlag. Die primäre
+    Zuordnung erfolgt über den Antwort-Bezug (reply_to der Vorschlags-Nachricht),
+    die sekundäre über den Single-Slot (kein Raten nötig).
     """
 
     def __init__(self):
-        self._by_chat = {}   # chat_id -> list[PendingProposal]
+        self._by_chat = {}   # chat_id -> PendingProposal | None  (EC-10 Single-Slot)
 
     def add(self, pending):
-        """Merkt einen vorgelegten Vorschlag vor."""
-        self._by_chat.setdefault(pending.chat_id, []).append(pending)
+        """Merkt einen vorgelegten Vorschlag vor — verdrängt vorhandenen Pending atomar.
+
+        EC-10 Single-Slot: Ein zweiter Vorschlag ersetzt den ersten, ohne
+        Schreibakt für den alten. Latest-wins-list ist explizit verworfen
+        (EC-10:664-671).
+        """
+        self._by_chat[pending.chat_id] = pending
 
     def open_count(self, chat_id):
-        """Anzahl der offenen Vorschläge in einem Chat."""
-        return len(self._by_chat.get(chat_id, []))
+        """Anzahl der offenen Vorschläge in einem Chat (0 oder 1, EC-10 Single-Slot)."""
+        return 1 if self._by_chat.get(chat_id) is not None else 0
 
     def take(self, chat_id, reply_to_message_id):
         """Entnimmt den zur Bestätigung passenden Vorschlag — oder None.
 
-        Mit Antwort-Bezug: der Vorschlag mit genau dieser Nachrichten-ID. Ohne
-        Antwort-Bezug: der einzige offene Vorschlag, falls es genau einen gibt
-        — bei mehreren bleibt die Zuordnung mehrdeutig und es wird None
-        geliefert, statt zu raten.
+        Mit Antwort-Bezug: der Vorschlag mit genau dieser Nachrichten-ID.
+        Ohne Antwort-Bezug: der einzige offene Single-Slot-Vorschlag (EC-10).
+        In beiden Fällen wird der Slot nach Entnahme geleert.
         """
-        proposals = self._by_chat.get(chat_id, [])
-        if not proposals:
+        pending = self._by_chat.get(chat_id)
+        if pending is None:
             return None
 
         if reply_to_message_id is not None:
-            for i, p in enumerate(proposals):
-                if p.proposal_message_id == reply_to_message_id:
-                    return proposals.pop(i)
+            if pending.proposal_message_id == reply_to_message_id:
+                self._by_chat[chat_id] = None
+                return pending
             return None
 
-        if len(proposals) == 1:
-            return proposals.pop(0)
-        return None   # mehrdeutig — keine Bestätigung ohne klaren Bezug
+        # Single-Slot: kein Raten nötig — es gibt genau einen Vorschlag.
+        self._by_chat[chat_id] = None
+        return pending

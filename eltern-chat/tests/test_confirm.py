@@ -32,14 +32,13 @@ def _proposal(chat="c1", msg_id=10, task="t", args=None):
 
 
 def test_EC_10_take_by_reply_matches_exact_proposal():
+    """EC-10 Single-Slot: take() per Reply-ID liefert den aktiven Vorschlag."""
     store = PendingStore()
-    store.add(_proposal(msg_id=10, task="erste"))
-    store.add(_proposal(msg_id=20, task="zweite"))
-    # Bestätigung als Antwort auf die zweite Vorschlags-Nachricht.
+    store.add(_proposal(msg_id=20, task="aktiv"))
+    # Bestätigung als Antwort auf die aktive Vorschlags-Nachricht.
     taken = store.take("c1", reply_to_message_id=20)
-    assert taken.task_name == "zweite"
-    # die erste bleibt offen
-    assert store.open_count("c1") == 1
+    assert taken.task_name == "aktiv"
+    assert store.open_count("c1") == 0
 
 
 def test_EC_10_take_by_reply_unknown_id_returns_none():
@@ -55,14 +54,22 @@ def test_EC_10_take_without_reply_uses_single_open_proposal():
     assert taken.task_name == "einzige"
 
 
-def test_EC_10_take_without_reply_is_ambiguous_with_multiple():
-    """Mehrere offene Vorschläge ohne Antwortbezug → keine Bestätigung, statt zu raten."""
+def test_EC_10_verdraengt_vorhandenen_pending_bei_zweitem_add():
+    """EC-10 Single-Slot: zweites add() verdrängt erstes; take() liefert nur zweiten.
+
+    Latest-wins-list ist verworfen (EC-10:664-671). open_count() ist nach
+    zwei add() exakt 1 — kein Multi-Slot.
+    """
     store = PendingStore()
-    store.add(_proposal(msg_id=10))
-    store.add(_proposal(msg_id=20))
-    assert store.take("c1", reply_to_message_id=None) is None
-    # beide bleiben offen
-    assert store.open_count("c1") == 2
+    store.add(_proposal(msg_id=10, task="erster"))
+    store.add(_proposal(msg_id=20, task="zweiter"))
+    # open_count ist 1, nicht 2 — Single-Slot-Garantie
+    assert store.open_count("c1") == 1
+    # take() ohne Reply liefert den jüngsten (und einzigen) Vorschlag
+    taken = store.take("c1", reply_to_message_id=None)
+    assert taken is not None
+    assert taken.task_name == "zweiter"
+    assert store.open_count("c1") == 0
 
 
 def test_EC_10_no_pending_proposal_returns_none():
