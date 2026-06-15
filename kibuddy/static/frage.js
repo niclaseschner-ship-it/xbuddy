@@ -21,6 +21,11 @@ const CFG = {
   ICON_SUCHE_BASE:   "/api/v1/icons/suche",
 };
 
+// VAD-Konfig aus Server-Render (KIBUDDY-21/AC3); Fallback auf Defaults
+const _serverCfg = (typeof window !== "undefined" && window.KIBUDDY_CFG) || {};
+const VAD_STILLE_MS    = ((_serverCfg.vad_stille_sek  != null) ? _serverCfg.vad_stille_sek  : 1.5) * 1000;
+const VAD_THRESHOLD_DB = (_serverCfg.vad_threshold_db != null) ? _serverCfg.vad_threshold_db : -50.0;
+
 // ============================================================
 //  DOM-Refs
 // ============================================================
@@ -48,7 +53,6 @@ const $lockHinweis   = document.getElementById("lock-hinweis");
 const $cancelHinweis = document.getElementById("cancel-hinweis");
 const $stoppRow      = document.getElementById("stopp-row");
 const $btnStopp      = document.getElementById("btn-stopp");
-const $ladehinweis   = document.getElementById("ladehinweis");
 const $mikroFehler   = document.getElementById("mikro-fehler");
 
 // ============================================================
@@ -124,6 +128,77 @@ function stopPegel() {
 }
 
 // ============================================================
+//  VAD — Voice Activity Detection im Lock-Modus (KIBUDDY-7/AC3)
+// ============================================================
+
+/** Zeitpunkt, ab dem Stille unter Threshold anhält (ms, performance.now()) */
+let vadStilleStart = null;
+/** RAF-ID für VAD-Loop (getrennt von Pegel-rafId) */
+let vadRafId = null;
+
+/**
+ * Berechnet RMS-dB aus AnalyserNode-Float32-Puffer.
+ * Gibt -Infinity wenn der Puffer leer ist.
+ */
+function _computeRmsDb(analyserNode) {
+  const buf = new Float32Array(analyserNode.frequencyBinCount);
+  analyserNode.getFloatTimeDomainData(buf);
+  let sumSq = 0;
+  for (let i = 0; i < buf.length; i++) sumSq += buf[i] * buf[i];
+  const rms = Math.sqrt(sumSq / buf.length);
+  if (rms === 0) return -Infinity;
+  return 20 * Math.log10(rms);
+}
+
+/**
+ * VAD-Loop: läuft nur im Lock-Modus.
+ * Erkennt Stille (dB < VAD_THRESHOLD_DB) über VAD_STILLE_MS hinaus
+ * und ruft dann automatisch stopUndSende(false) auf (AC3).
+ * Manueller Stopp-Knopf bleibt Override (KIBUDDY-7).
+ */
+function vadLoop() {
+  if (pttState !== "locked") {
+    vadRafId = null;
+    vadStilleStart = null;
+    return;
+  }
+  if (!analyser) {
+    // Analyser noch nicht bereit — kurz warten
+    vadRafId = requestAnimationFrame(vadLoop);
+    return;
+  }
+
+  const db = _computeRmsDb(analyser);
+
+  if (db < VAD_THRESHOLD_DB) {
+    // Stille erkannt
+    if (vadStilleStart === null) {
+      vadStilleStart = performance.now();
+    } else if (performance.now() - vadStilleStart >= VAD_STILLE_MS) {
+      // Stille-Schwelle überschritten → Auto-Stop
+      vadRafId = null;
+      vadStilleStart = null;
+      stopUndSende(false);
+      return;
+    }
+  } else {
+    // Sprache erkannt — Stille-Timer zurücksetzen
+    vadStilleStart = null;
+  }
+
+  vadRafId = requestAnimationFrame(vadLoop);
+}
+
+/** Stoppt den VAD-Loop (beim Verlassen des Lock-Modus). */
+function stopVad() {
+  if (vadRafId !== null) {
+    cancelAnimationFrame(vadRafId);
+    vadRafId = null;
+  }
+  vadStilleStart = null;
+}
+
+// ============================================================
 //  MediaRecorder (KIBUDDY-5/7)
 // ============================================================
 
@@ -169,9 +244,8 @@ async function send_aufnahme(chunks, mimeType) {
   formData.append("audio", blob, `aufnahme.${ext}`);
 
   setHeaderStatus("Ich denke nach…");
-  $ladehinweis.hidden = false;
 
-  // AC4: Lade-Bubble in Chat einhängen während fetch
+  // Lade-Bubble in Chat einhängen während fetch (KIBUDDY-8/AC1)
   const ladeBubbleRow = document.createElement("div");
   ladeBubbleRow.className = "bubble-row buddy";
   const ladeBubble = document.createElement("div");
@@ -201,7 +275,6 @@ async function send_aufnahme(chunks, mimeType) {
     appendFehlerBubble("Netzwerk-Fehler: " + err.message);
     return;
   } finally {
-    $ladehinweis.hidden = true;
     setHeaderStatus("Drück mich, wenn du eine Frage hast");
   }
 
@@ -425,7 +498,7 @@ function playAudio(url) {
 
 /**
  * Zeigt dezenten Inline-Fehler-Hinweis statt alert() (FIX4, KIBUDDY-30).
- * Legt einen temporären Hinweis-Span in #ladehinweis-Bereich.
+ * Legt einen temporären Hinweis-Span in der ptt-zone ab.
  */
 function _zeigeTtsFehler() {
   const existierend = document.getElementById("tts-fehler-hinweis");
@@ -434,7 +507,7 @@ function _zeigeTtsFehler() {
   hinweis.id = "tts-fehler-hinweis";
   hinweis.className = "tts-fehler-hinweis";
   hinweis.textContent = "Vorlesen geht gerade nicht";
-  $ladehinweis.parentElement.appendChild(hinweis);
+  document.getElementById("ptt-zone").appendChild(hinweis);
   setTimeout(() => hinweis.remove(), 4000);
 }
 
@@ -594,6 +667,7 @@ function stopRecorder() {
   if (maxAufnahmeTimer) { clearTimeout(maxAufnahmeTimer); maxAufnahmeTimer = null; }
   $lockHinweis.hidden = true;
   $cancelHinweis.hidden = true;
+  stopVad();
   stopPegel();
   $btnPtt.classList.remove("aktiv", "locked");
   $stoppRow.hidden = true;
@@ -638,6 +712,9 @@ function einrastenLock() {
   // Stopp-Knopf zeigen (KIBUDDY-7 "Stopp-Knopf an Slide-Ziel")
   $stoppRow.hidden = false;
   setHeaderStatus("Aufnahme l\xE4uft… Stopp dr\xFCcken zum Senden");
+  // VAD starten (KIBUDDY-7/AC3): Auto-Stop bei Stille im Lock-Modus
+  vadStilleStart = null;
+  vadRafId = requestAnimationFrame(vadLoop);
 }
 
 function setHeaderStatus(text) {

@@ -102,9 +102,6 @@
       </button>
     </div>
 
-    <div class="ladehinweis" id="ladehinweis" hidden aria-live="polite">
-      Ich denke nach&#x2026;
-    </div>
   </div>
 
   {# ── FUSSZEILE: ARASAAC-Credit ── #}
@@ -114,6 +111,10 @@
 
 </div>{# /.shell #}
 
+<script>
+  /* VAD-Konfig (KIBUDDY-21/AC3) — vom Server gerendert, kein fetch nötig */
+  window.KIBUDDY_CFG = {{ kibuddy_cfg | tojson }};
+</script>
 <script src="/display/kibuddy/static/frage.js"></script>
 </body>
 </html>

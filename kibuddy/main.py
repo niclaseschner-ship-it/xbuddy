@@ -183,7 +183,13 @@ def healthz():
 
 @app.route("/display/kibuddy/frage", methods=["GET"])
 def display_frage():
-    return render_template("frage.html")
+    cfg = _runtime_cfg()
+    # VAD-Konfig an Template übergeben (KIBUDDY-21/AC3)
+    kibuddy_cfg = cfg.to_vad_cfg() if cfg is not None else {
+        "vad_stille_sek": config_mod.DEFAULT_VAD_STILLE_SEK,
+        "vad_threshold_db": config_mod.DEFAULT_VAD_THRESHOLD_DB,
+    }
+    return render_template("frage.html", kibuddy_cfg=kibuddy_cfg)
 
 
 # ---- Audio-Cache-Auslieferung (KIBUDDY-24) ----
