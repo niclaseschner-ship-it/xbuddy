@@ -36,6 +36,52 @@ def get_stream_event(resp, event_name):
             return ev
     return None
 
+# ---- parse_kibuddy_response (T865, AC1) ----
+
+def test_parse_kibuddy_response_valid_json():
+    """T865/AC1: Valides JSON → antwort + buzzwords extrahiert."""
+    from kibuddy.llm_service import parse_kibuddy_response
+    raw = '{"antwort": "Der Hund bellt.", "buzzwords": ["hund", "bellen", "laut"]}'
+    result = parse_kibuddy_response(raw)
+    assert result["antwort"] == "Der Hund bellt."
+    assert result["buzzwords"] == ["hund", "bellen", "laut"]
+
+
+def test_parse_kibuddy_response_markdown_fence():
+    """T865/AC1: JSON in Markdown-Fence → korrekt extrahiert."""
+    from kibuddy.llm_service import parse_kibuddy_response
+    raw = '```json\n{"antwort": "Test.", "buzzwords": ["a", "b", "c"]}\n```'
+    result = parse_kibuddy_response(raw)
+    assert result["antwort"] == "Test."
+    assert result["buzzwords"] == ["a", "b", "c"]
+
+
+def test_parse_kibuddy_response_fallback_bei_kein_json():
+    """T865/AC1 Fallback: Kein valides JSON → raw als antwort, buzzwords leer."""
+    from kibuddy.llm_service import parse_kibuddy_response
+    raw = "Das ist kein JSON."
+    result = parse_kibuddy_response(raw)
+    assert result["antwort"] == raw
+    assert result["buzzwords"] == []
+
+
+def test_parse_kibuddy_response_buzzwords_sanitisiert():
+    """T865: buzzwords werden durch validate_buzzwords bereinigt (max 3, lowercase)."""
+    from kibuddy.llm_service import parse_kibuddy_response
+    raw = '{"antwort": "Text.", "buzzwords": ["Hund", "KATZE", "Maus", "Extra"]}'
+    result = parse_kibuddy_response(raw)
+    assert result["buzzwords"] == ["hund", "katze", "maus"]  # max 3, lowercase
+
+
+def test_parse_kibuddy_response_fehlende_felder_fallback():
+    """T865: JSON ohne erwartete Felder → antwort leer-string, buzzwords leer."""
+    from kibuddy.llm_service import parse_kibuddy_response
+    raw = '{"something": "else"}'
+    result = parse_kibuddy_response(raw)
+    assert result["antwort"] == ""
+    assert result["buzzwords"] == []
+
+
 # ---- /healthz ----
 
 def test_healthz(client):
@@ -56,9 +102,9 @@ def test_display_frage_view(client):
 # ---- POST /api/v1/kibuddy/frage — NDJSON-Stream (KIBUDDY-13/24) ----
 
 def test_frage_happy_path(client, fake_stt, fake_llm, fake_tts):
-    """AC2/FIX1/KIBUDDY-13: POST /frage → NDJSON-Stream mit kind- und buddy-Event.
+    """AC2/T865/KIBUDDY-13: POST /frage → NDJSON-Stream mit kind- und buddy-Event.
 
-    FIX1: words-Slots haben {text, is_inhaltswort}, KEIN icon_id (KIBUDDY-17).
+    Stage 2 buddy-Event enthält buzzwords[] statt words[] (T865/KIBUDDY-24).
     """
     resp = client.post(
         "/api/v1/kibuddy/frage",
@@ -78,15 +124,14 @@ def test_frage_happy_path(client, fake_stt, fake_llm, fake_tts):
     assert "transkript_words" in kind_ev
 
     assert "text" in buddy_ev
-    assert "words" in buddy_ev
+    assert "buzzwords" in buddy_ev      # T865: buzzwords statt words
     assert "tts_audio_url" in buddy_ev
+    assert "words" not in buddy_ev      # T865: words[] entfaellt
 
-    # words ist eine Liste mit text/is_inhaltswort pro Wort (FIX1, KIBUDDY-17).
-    assert isinstance(buddy_ev["words"], list)
-    for slot in buddy_ev["words"]:
-        assert "text" in slot
-        assert "is_inhaltswort" in slot
-        assert "icon_id" not in slot   # FIX1: icon_id entfaellt (clientseitig)
+    # buzzwords ist eine Liste mit max 3 Strings (T865/KIBUDDY-24).
+    assert isinstance(buddy_ev["buzzwords"], list)
+    for bw in buddy_ev["buzzwords"]:
+        assert isinstance(bw, str)
     # STT wurde aufgerufen.
     assert len(fake_stt.calls) == 1
     # LLM wurde aufgerufen.
@@ -99,11 +144,11 @@ def test_frage_happy_path(client, fake_stt, fake_llm, fake_tts):
 
 
 def test_frage_streaming_zwei_stages(client, fake_stt, fake_llm, fake_tts):
-    """AC1 (KIBUDDY-13): Stream liefert genau zwei Events: kind + buddy.
+    """AC1 (KIBUDDY-13/T865): Stream liefert genau zwei Events: kind + buddy.
 
     Beide Events koennen als separates JSON geparst werden.
-    Stage 1 (kind) enthaelt transkript + transkript_words.
-    Stage 2 (buddy) enthaelt text + words + tts_audio_url.
+    Stage 1 (kind) enthaelt transkript + transkript_words (Diagnose-Liste).
+    Stage 2 (buddy) enthaelt text + buzzwords + tts_audio_url (T865/KIBUDDY-24).
     """
     resp = client.post(
         "/api/v1/kibuddy/frage",
@@ -123,20 +168,20 @@ def test_frage_streaming_zwei_stages(client, fake_stt, fake_llm, fake_tts):
     # Stage 1: kind-Felder vorhanden.
     assert "transkript" in e1
     assert isinstance(e1["transkript_words"], list)
-    for slot in e1["transkript_words"]:
-        assert "text" in slot
-        assert "is_inhaltswort" in slot
+    # transkript_words ist Diagnose-Feld — kann leer sein (T865 minimal-invasiv).
 
-    # Stage 2: buddy-Felder vorhanden.
+    # Stage 2: buddy-Felder vorhanden (T865: buzzwords statt words).
     assert "text" in e2
-    assert isinstance(e2["words"], list)
+    assert isinstance(e2["buzzwords"], list)
     assert "tts_audio_url" in e2
+    assert "words" not in e2
 
 
-def test_frage_transkript_words_form(client, fake_stt, fake_llm, fake_tts):
-    """FIX1/KIBUDDY-24: transkript_words[] hat gleiche {text, is_inhaltswort}-Form wie words[].
+def test_frage_transkript_words_diagnose_feld(client, fake_stt, fake_llm, fake_tts):
+    """T865/KIBUDDY-24: transkript_words[] ist Diagnose-Feld, bleibt im kind-Event.
 
-    Prueft: transkript_words ist nicht leer, kein icon_id, alle Slots bool-Flag.
+    Frontend ignoriert es (Kind-Bubble text-only, KIBUDDY-19 Option C).
+    In T865 liefert Backend eine leere Liste (minimal-invasiv).
     """
     resp = client.post(
         "/api/v1/kibuddy/frage",
@@ -149,16 +194,11 @@ def test_frage_transkript_words_form(client, fake_stt, fake_llm, fake_tts):
 
     tw = kind_ev.get("transkript_words")
     assert isinstance(tw, list), "transkript_words muss eine Liste sein (KIBUDDY-24)"
-    assert len(tw) > 0, "transkript_words darf nicht leer sein wenn transkript vorhanden"
-    for slot in tw:
-        assert "text" in slot, "transkript_words-Slot fehlt 'text'"
-        assert "is_inhaltswort" in slot, "transkript_words-Slot fehlt 'is_inhaltswort'"
-        assert isinstance(slot["is_inhaltswort"], bool), "is_inhaltswort muss bool sein"
-        assert "icon_id" not in slot, "icon_id darf nicht im transkript_words-Slot sein (KIBUDDY-30)"
+    # In T865: leere Liste ist OK (Diagnose-Feld, Wortklassen-Filter entfällt)
 
 
-def test_frage_response_schema_v2(client):
-    """FIX1: words[].is_inhaltswort ist bool, kein icon_id im Stream-Response."""
+def test_frage_response_schema_buzzwords(client, fake_llm):
+    """T865/KIBUDDY-24: buddy-Event hat buzzwords[] (string-Liste), kein words[]."""
     resp = client.post(
         "/api/v1/kibuddy/frage",
         data={"audio": (io.BytesIO(b"AUDIO"), "audio.webm")},
@@ -167,9 +207,11 @@ def test_frage_response_schema_v2(client):
     assert resp.status_code == 200
     buddy_ev = get_stream_event(resp, "buddy")
     assert buddy_ev is not None
-    for slot in buddy_ev["words"]:
-        assert isinstance(slot["is_inhaltswort"], bool)
-        assert "icon_id" not in slot
+    assert "buzzwords" in buddy_ev
+    assert "words" not in buddy_ev
+    assert isinstance(buddy_ev["buzzwords"], list)
+    for bw in buddy_ev["buzzwords"]:
+        assert isinstance(bw, str)
 
 
 def test_frage_ohne_audio_feld(client):
