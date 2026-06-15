@@ -1036,8 +1036,35 @@ aktiver Tab unterstrichen. Das ist V1 das **erste Vorkommen** eines
 Tab-Patterns in xbuddy-Mini-Apps (n=1); eine MAD-Konventions-Klausel
 für Tabs wird bei zweitem Konsumenten via `/berater-runde` ratifiziert.
 
-- **Reiter 1 „Einstellungen"** (HSP-34, Default beim Laden)
-- **Reiter 2 „Folgen"** (HSP-35)
+**Tab-Deeplink — URL-Hash-Steuerung (Werft-Folge 2026-06-15, Refs #848):**
+
+Die Mini-App liest beim Laden das URL-Hash-Fragment der Funnel-URL:
+
+- `<funnel>/seiten/hoerspiel/eltern#einstellungen` → Tab „Einstellungen"
+  aktiv (Default-Verhalten konsistent zum Tab-Default ohne Hash).
+- `<funnel>/seiten/hoerspiel/eltern#folgen` → Tab „Folgen" aktiv.
+- Kein Hash oder unbekannter Hash → Default-Tab „Einstellungen".
+
+`hoerspiel/static/eltern.js` registriert zusätzlich einen
+`hashchange`-Listener, der den aktiven Tab live umschaltet, ohne die
+Seite neu zu laden — Tap auf eine Inline-Link-URL aus dem Eltern-Chat
+(z. B. `web_app`-Button mit anderem Hash) öffnet so den korrekten Tab
+ohne Reload und ohne erneute `initData`-Validierung. Das Hash-Fragment
+ist reiner Client-State (Browser sendet es nicht an den Server), die
+Server-Routes (`GET /config`, `GET /alben`, `PATCH /config`, …) sind
+hash-unabhängig.
+
+n=1 für URL-Hash-Tab-Navigation in xbuddy-Mini-Apps — eine
+MAD-Konventions-Klausel für Tab-Deeplinks wird bei zweitem Konsumenten
+via `/berater-runde` ratifiziert (gemeinsam mit der Tab-Form-Klausel
+oben). Heimat der Implementation: `hoerspiel/static/eltern.js`.
+
+Konsumiert von `specs/platform/hoerspiel-oeffnen.md` HOE-5 (Skill setzt
+den Hash passend zum Tab-Hint).
+
+- **Reiter 1 „Einstellungen"** (HSP-34, Default beim Laden / bei Hash
+  `#einstellungen`)
+- **Reiter 2 „Folgen"** (HSP-35, bei Hash `#folgen`)
 
 ### HSP-34 — Reiter „Einstellungen"
 
