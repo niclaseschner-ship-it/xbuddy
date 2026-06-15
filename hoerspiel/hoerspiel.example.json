@@ -1,5 +1,24 @@
 {
-  "_comment": "HSP-27 — Hörspiel-Buddy-Daten-Konfiguration einer Instanz. Kopiere als hoerspiel.json (per .gitignore aus dem Repo ausgeschlossen, je Instanz separat gepflegt). 'default_voice' steuert den Voice-Default im Skill-Vorschlag (HFE-4); zulässig sind 'shimmer' und 'onyx' (HSP-13). 'serien_name' ist familien-spezifisch und in V1 nur für die UI/Logs relevant.",
+  "_comment": "HSP-27 — Hörspiel-Buddy-Daten-Konfiguration einer Instanz. Kopiere als hoerspiel.json (per .gitignore aus dem Repo ausgeschlossen, je Instanz separat gepflegt). Alle Felder sind optional — Code-Defaults greifen bei fehlendem Wert.",
   "default_voice": "shimmer",
-  "serien_name": "Stigi & Co."
+  "serien_name": "Stigi & Co.",
+  "_pause_absatz_sek": "Stille zwischen Inhalts-Absätzen + am Bündel-Ende. Range 0.0–2.0 s. Default 0.55.",
+  "pause_absatz_sek": 0.55,
+  "_pause_titel_sek": "Stille nach Titel-Absatz (Folge N: <Titel>). Range 0.5–3.0 s. Default 1.8.",
+  "pause_titel_sek": 1.8,
+  "_playback_tempo": "Wiedergabe-Geschwindigkeit im Mini-App-Player. Range 0.7–1.3. Default 1.0.",
+  "playback_tempo": 1.0,
+  "_themen_je_alter": "Kuratierte Themen-Liste je Alter (HSP-27a). Key = Alter als String, Wert = Liste von Themen-Strings. V1 nur Alter 4 für Paula gepflegt.",
+  "themen_je_alter": {
+    "4": [
+      "Mut beim Probieren",
+      "Streit vertragen",
+      "Selbst anziehen / aufräumen",
+      "Warten lernen",
+      "Gefühle erkennen und benennen",
+      "Jahreszeiten erleben",
+      "Bitte und Danke",
+      "Neue Sachen essen"
+    ]
+  }
 }

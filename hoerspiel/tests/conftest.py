@@ -147,6 +147,9 @@ def client(runtime_config, data_config, data_root, fake_llm, fake_tts, fixed_now
     main_mod.configure(
         runtime_config=runtime_config, data_config=data_config,
         data_root=data_root, llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
+        # bot_token="TEST" aktiviert Auth-Bypass in _validate_mini_app_request
+        # (HSP-40: Test-Modus, kein echtes Telegram).
+        bot_token="TEST",
     )
     return main_mod.app.test_client()
 
@@ -164,5 +167,6 @@ def client_keyless(data_config, data_root, fake_tts, fixed_now):
         runtime_config=rc, data_config=data_config,
         data_root=data_root, llm=None, llm_factory=None,
         tts_engine=fake_tts, now=fixed_now,
+        bot_token="TEST",
     )
     return main_mod.app.test_client()

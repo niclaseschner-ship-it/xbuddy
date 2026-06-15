@@ -15,6 +15,14 @@ DEFAULT_MODEL = "claude-opus-4-7"
 # 2700-Wörter-Folge ≈ ~3500 Tokens; Sicherheits-Puffer für JSON-Schale.
 MAX_TOKENS = 8192
 
+# HSP-27b — ratifizierte V1-Modell-Liste für Claude.
+# Label-Format: "<Bezeichnung> (<Charakterisierung>)"
+AVAILABLE_MODELS: list[tuple[str, str]] = [
+    ("claude-opus-4-7",    "Opus 4.7 (kreativ, langsamer, teurer)"),
+    ("claude-sonnet-4-6",  "Sonnet 4.6 (ausgewogen)"),
+    ("claude-haiku-4-5",   "Haiku 4.5 (schnell, kompakt, günstig)"),
+]
+
 
 class ClaudeProvider(LLMProvider):
     """Anthropic-Messages-Adapter für den Hörspiel-Buddy."""
