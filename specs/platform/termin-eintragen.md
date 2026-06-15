@@ -234,13 +234,17 @@ insensitiv, ganzes Wort, **deterministisch** und außerhalb des Agent-
 Loops (E-EC-4).
 
 Erst eine erkannte Bestätigung schaltet das Schreiben (TES-8) frei.
-Antwortet der Aufrufer nicht bestätigend (z. B. „nein", „abbrechen" oder
-eine inhaltliche Korrektur wie „nee, doch Freitag"), wird **nicht**
-geschrieben — die Funktion endet mit Ergebnis „verworfen" und der
-Familien-Kalender bleibt unverändert. Eine inhaltliche Korrektur kann der
-Aufrufer als neuen Anstoß formulieren; V1 startet dafür einen neuen Aufruf
-(kein Korrektur-Branch innerhalb derselben Session — Vereinfachung analog
-`familie-anlegen.md` FAA-7).
+Antwortet der Aufrufer mit `falsch` (oder einer nicht-bestätigenden
+Antwort wie „nein", „abbrechen"), wird **nicht** geschrieben — die
+Funktion endet mit Ergebnis „verworfen" und der Familien-Kalender bleibt
+unverändert. Eine **inhaltliche Korrektur** läuft über den
+**EC-36-Korrektur-Dialog** (`specs/platform/eltern-chat.md` EC-36) —
+nach `falsch` fragt der Bot „Was war falsch?", der User formuliert
+die Korrektur („nee, doch Freitag") und der Bot baut einen neuen
+Vorschlag (Re-Propose mit gepatchten Args, durch Confirm-Gate). Die
+alte Vereinfachungs-Linie „kein Korrektur-Branch innerhalb derselben
+Session" fällt damit für TES; **FAA-7 bleibt** für `familie_anlegen`
+als Klasse-E-Auth-Loop unverändert.
 
 Der konkrete Wortlaut des Vorschlags lebt im Code als hart-codierter
 String; die Spec normiert das **Soll** (Vorschlag enthält Titel, den
