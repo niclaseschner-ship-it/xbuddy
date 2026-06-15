@@ -169,6 +169,10 @@ def baue_item_grid(katalog_kategorien, aktiv_slug, gesperrte_item_ids=None,
             "label":     item.get("label", ""),
             "icon_url":  url,
             "bild_ref":  bild_ref,
+            # ESSEN-22 Pfad 1: Foto-Gerichte tragen foto_ref am Katalog-Item.
+            # Wird im Template als data-foto-ref gerendert; Kind-Tablet-JS
+            # sendet beides im POST (Server akzeptiert bild_ref ODER foto_ref).
+            "foto_ref":  gericht_foto_ref or "",
             "kategorie": aktiv_slug,
             "gesperrt":  gesperrt,
             "ist_foto":  ist_foto,
