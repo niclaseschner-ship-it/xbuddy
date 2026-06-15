@@ -384,27 +384,62 @@ nicht persistiert. Der Buddy unterstützt für V1 zwei Voices:
 Beim Album-Anstoß wählt der Skill (Eltern) die Voice. Die Wahl ist **pro
 Album fix** (kein Mix innerhalb eines Albums in V1, E-HSP-1).
 
-### HSP-14 — Synthese-Architektur: Bündel-Calls mit strukturierten Pausen
-Der Inhalt eines Albums wird in **Absatz-Bündeln** synthetisiert (nicht
-pro Absatz, nicht als ein einziger Call). Bündel-Heuristik: solange das
+Die **Default-Voice** für neue Folgen ist familien-konfigurierbar via
+`default_voice` in `hoerspiel.json` (HSP-27) und zur Laufzeit über die
+Eltern-Mini-App (HSP-34) per `PATCH /api/v1/hoerspiel/config` mit Body
+`{"default_voice": "shimmer"|"onyx"}` setzbar. Der HFE-Skill liest die
+Default-Voice für seine Vorschlag-Erzeugung weiter über `GET /config`
+(HFE-4, unverändert).
+
+### HSP-14 — Synthese-Architektur: Absatz-Calls mit strukturierten Pausen
+Der Inhalt eines Albums wird in **Absatz-Calls** synthetisiert: pro
+Story-Absatz ein einzelner TTS-Call mit `speed=1.0`, dazwischen Stille
+als ffmpeg-Silence-Concat (siehe `hoerspiel/album_builder.py:169-211`).
+Die Bündel-Heuristik unten bleibt für die **Track-Gruppierung** auf der
+Manifest-Ebene relevant (mehrere Absatz-MP3s pro Track werden als ein
+Track-MP3 zusammengeführt).
+
+> **Drift-Reconcile 2026-06-15** (Refs #848 Werft): der vorige Spec-Text
+> sagte „Bündel-Calls" (ein TTS-Call pro Bündel); der Code macht aber
+> seit Anfang an Absatz-Calls. Die Spec ist auf den Code gehoben — die
+> Bündel-Logik gilt jetzt nur noch für die Track-Gruppierung im
+> Manifest, nicht für die Synthese-Granularität.
+
+Bündel-Heuristik (für Track-Gruppierung): solange das
 laufende Bündel < ~450 Wörter, nächsten Absatz dranhängen; bei ≥450
 Wörtern Bündel abschließen. **Schnitte fallen immer auf Absatzgrenzen,
 nie mitten in einen Satz.**
 
 Pausen werden über **expliziten Silence-Insert** abgebildet, nicht über
-den `speed`-Parameter der TTS-API (post-hoc Time-Stretching erzeugt
-blechernen Klang, HSP-23):
+den `speed`-Parameter der TTS-API. Die Werft-F1-Probe 2026-06-15
+(`/tmp/werft-hoerspiel-probe/`, vergleichbarer Hörtest TTS-`speed` vs.
+Browser-`playbackRate` auf identischem Text) hat bestätigt, dass eine
+Tempo-Veränderung **am Wiedergabepfad** (Mini-App-`<audio>.playbackRate`,
+HSP-34) deutlich besser klingt als am Synthese-Pfad. Tempo-Tuning lebt
+darum ausschließlich auf der Mini-App-Wiedergabe-Seite, nicht in der
+Synthese.
 
-- nach Intro-Track-Ende: 1,2 s (im Intro-Asset enthalten)
-- nach Titel-Absatz (erster Inhalts-Absatz mit Folgennummer): 1,8 s
-- zwischen normalen Inhalts-Absätzen: 0,55 s
-- vor Outro-Track-Beginn: 0,55 s
+Standard-Pausen-Werte (familien-konfigurierbar, HSP-27):
 
-Der `speed`-Parameter wird **nicht** genutzt (immer 1.0).
+| Pause | Daten-Konfig-Feld | Default | Wirkung |
+|---|---|---|---|
+| nach Intro-Track-Ende | (im Intro-Asset enthalten) | 1,2 s | fix |
+| nach Titel-Absatz (`Folge N: <Titel>`) | `pause_titel_sek` | 1,8 s | bei nächster Generierung |
+| zwischen Inhalts-Absätzen + am Bündel-Ende + vor Outro | `pause_absatz_sek` | 0,55 s | bei nächster Generierung |
+
+`pause_absatz_sek` und `pause_titel_sek` sind familien-spezifisch via
+`hoerspiel.json` und zur Laufzeit über die Eltern-Mini-App
+(HSP-34) per `PATCH /config` setzbar (Range: `0.0–2.0` s bzw.
+`0.5–3.0` s). Die Werte gelten bei der **nächsten Generierung** —
+bereits gebaute Alben bleiben unverändert (Pausen sind im MP3
+eingebrannt).
+
+Der `speed`-Parameter der TTS-API wird **nicht** genutzt (immer 1.0,
+Werft-F1-Probe 2026-06-15 bestätigt).
 
 *Test-Implikation:* ein Folgentext mit fünf Absätzen (à 200 Wörter)
-ergibt zwei Bündel-Calls; eine Folge mit zwei Absätzen (à 600 Wörter)
-ergibt zwei Bündel-Calls. Die Bündel-Schnitt-Funktion ist deterministisch
+ergibt zwei Bündel-Tracks; eine Folge mit zwei Absätzen (à 600 Wörter)
+ergibt zwei Bündel-Tracks. Die Bündel-Schnitt-Funktion ist deterministisch
 und ohne Netz testbar.
 
 ### HSP-15 — Album-Bau als atomarer Vorgang
@@ -466,8 +501,12 @@ bereit (BUD-1b, URL-4):
 | `GET` | `/api/v1/hoerspiel/alben/<id>/manifest` | Album-Manifest als JSON | View, Skill |
 | `POST` | `/api/v1/hoerspiel/folgen-vorschlag` | Folgen-Idee → `{titel, text}` per LLM | Skill (HFE) |
 | `POST` | `/api/v1/hoerspiel/alben` | Album bauen (TTS-Pipeline + Historie-Update) | Skill (HFE) |
-| `GET` | `/api/v1/hoerspiel/config` | Aktive Provider/Modell-Konfig lesen | Skill (V2-Provider-Wechsel, OPEN-HSP-N) |
-| `PATCH` | `/api/v1/hoerspiel/config` | Provider/Modell zur Laufzeit umschalten | Skill (V2-Provider-Wechsel) |
+| `GET` | `/api/v1/hoerspiel/config` | Aktive Eltern-Tuning-Konfig (Provider, Modell, Voice, Pausen, Tempo, verfügbare Modelle) | Mini-App (HSP-34), HFE-Skill |
+| `PATCH` | `/api/v1/hoerspiel/config` | Eltern-Tuning setzen | Mini-App (HSP-34) |
+| `GET` | `/api/v1/hoerspiel/themen?alter=<n>` | Kuratierte Themen-Liste je Alter | HFE-Skill (HFE-3) |
+| `GET` | `/api/v1/hoerspiel/alben/<id>/audio/<track>.mp3` | Audio-Track streamen (Range-Requests) | Mini-App-Player (HSP-35/37) |
+| `GET` | `/api/v1/hoerspiel/resume?album=<id>` | Resume-Stand lesen | Mini-App-Player (HSP-36) |
+| `PUT` | `/api/v1/hoerspiel/resume` | Resume-Stand setzen | Mini-App-Player (HSP-36) |
 | `GET` | `/api/v1/hoerspiel/shared-assets/status` | Vorhanden je Voice (`shimmer.intro`, `shimmer.outro`, `onyx.intro`, `onyx.outro`) | Setup-Check, Skill |
 | `POST` | `/api/v1/hoerspiel/shared-assets/rebuild` | Intro/Outro neu vorsynthetisieren | Setup-Aufruf (HSP-22) |
 
@@ -482,14 +521,70 @@ Idempotenz: ein erneuter Aufruf mit identischen Inhalt + Voice erkennt
 das bereits gebaute Album über einen Hash und antwortet mit demselben
 `album-id` ohne erneute TTS-Kosten.
 
-**`PATCH /config`** Body: `{llm_provider?: "claude", llm_model?: string}`.
-V1 akzeptiert nur `claude` als `llm_provider` — andere Werte (etwa
-`mistral`, OPEN-HSP-N) lehnt der Endpoint mit HTTP 422 und Klartext-
-Hinweis ab. Wirkung: setzt die Werte in der Per-Instanz-Runtime-Config
-(HSP-26) und gibt die neue effektive Konfig zurück. **Wenn** der
-gesetzte Provider keinen API-Key konfiguriert hat, **dann** lehnt der
-Endpoint ebenfalls mit HTTP 422 ab — Provider-Switch ohne Key-
-Voraussetzung wird nie aktiv.
+**`GET /config`** Response (alle Felder Pflicht):
+```json
+{
+  "llm_provider": "claude" | "mistral",
+  "llm_model": "<id-aus-modelle_je_anbieter>",
+  "default_voice": "shimmer" | "onyx",
+  "pause_absatz_sek": 0.55,
+  "pause_titel_sek": 1.8,
+  "playback_tempo": 1.0,
+  "anthropic_key_set": true,
+  "mistral_key_set": true,
+  "azure_key_set": true,
+  "voices_verfuegbar": ["shimmer", "onyx"],
+  "provider_verfuegbar": ["claude", "mistral"],
+  "modelle_je_anbieter": {
+    "claude":  [{"id": "claude-opus-4-7", "label": "Opus 4.7 (kreativ, langsamer, teurer)"}, ...],
+    "mistral": [{"id": "mistral-large-2411", "label": "Large 2.1 (Frontier, kreativ)"}, ...]
+  }
+}
+```
+
+`provider_verfuegbar` enthält nur Provider mit gesetztem Key — die
+Mini-App rendert ihr Anbieter-Dropdown daraus, sodass Provider ohne
+Key gar nicht erst auswählbar sind. `modelle_je_anbieter` trägt die
+**ratifizierten Modell-IDs** je Provider (HSP-27b).
+
+**`PATCH /config`** Body (alle Felder optional; nur die genannten Felder werden gesetzt):
+```json
+{
+  "llm_provider": "claude" | "mistral",
+  "llm_model": "<id-aus-modelle_je_anbieter>",
+  "default_voice": "shimmer" | "onyx",
+  "pause_absatz_sek": 0.0-2.0,
+  "pause_titel_sek": 0.5-3.0,
+  "playback_tempo": 0.7-1.3
+}
+```
+
+Wirkung: setzt die genannten Werte (Provider+Modell in `config.json`,
+die übrigen vier in `hoerspiel.json`, beide atomar geschrieben). Gibt
+die neue effektive Konfig zurück (gleiches Schema wie `GET /config`).
+
+HTTP 422 bei: Range-Verletzung (`pause_*`, `playback_tempo`),
+Whitelist-Verletzung (`llm_provider`, `default_voice`), unbekanntes
+`llm_model` (nicht in `AVAILABLE_MODELS` des gesetzten Providers),
+oder `llm_provider`-Wechsel ohne konfigurierten Key.
+
+**`GET /themen?alter=<n>`** Response: `{"alter": 4, "themen": ["Mut beim
+Probieren", "Streit vertragen", ...]}`. Quelle:
+`hoerspiel.json.themen_je_alter[<alter>]` (HSP-27a). 404 wenn Alter
+nicht gepflegt: `{"fehler": "Themen-Liste für Alter <n> nicht
+gepflegt — Eltern können im Chat eigene Idee geben."}`.
+
+**`GET /alben/<id>/audio/<track>.mp3`** liefert die rohen MP3-Bytes
+des Tracks (HSP-37). Range-Requests Pflicht. `Content-Type: audio/mpeg`.
+`Cache-Control: private, max-age=86400` (Album-MP3s sind immutable je
+`album-id`).
+
+**`GET /resume?album=<id>`** Response: `{"album": "<id>", "track":
+<position>}` (Track-Anfang gerundet, HSP-23). 404 wenn kein
+Resume-Stand existiert.
+
+**`PUT /resume`** Body: `{"album": "<id>", "track": <position>}`.
+Idempotent. Schreibt den Stand atomar.
 
 ### HSP-18 — Direkter Datei-Zugriff durch andere Apps ist verboten
 Welt-Bible, Folgen-Historie, Album-Manifeste und Audio-Assets liegen im
@@ -707,6 +802,7 @@ Zugangsdaten-Speicher** (`specs/platform/zugangsdaten.md` ZD-1..ZD-5),
 abgelegt unter ZD-2-konformen Slot-Namen:
 
 - `hoerspiel-anthropic-api-key` — Anthropic-LLM (wenn `llm_provider=claude`)
+- `hoerspiel-mistral-api-key` — Mistral-LLM (wenn `llm_provider=mistral`, HSP-27b)
 - `hoerspiel-azure-openai-api-key` — Azure-OpenAI-TTS (immer Pflicht)
 
 Der Hörspiel-Buddy liest sie über die geteilte ZD-Library
@@ -734,12 +830,16 @@ Vorbild #84 + #336):**
 | `listen_host` | `127.0.0.1` | `listen_host` | n/a (PORT-3) |
 | `listen_port` | `5053` (HSP-28) | `listen_port` | n/a (PORT-2) |
 | `log_level` | `INFO` | `log_level` | n/a |
-| `llm_provider` | `claude` | `llm_provider` | Eltern (PATCH-Endpoint, V2-Skill) |
-| `llm_model` | `claude-opus-4-7` | `llm_model` | Eltern (PATCH-Endpoint) |
-| Default-Voice | `shimmer` | `default_voice` | Eltern (Hörspiel-Konfig) |
+| `llm_provider` | `claude` | `llm_provider` | Eltern (Mini-App PATCH, HSP-34) |
+| `llm_model` | `claude-opus-4-7` | `llm_model` | Eltern (Mini-App PATCH, HSP-34) |
+| Default-Voice | `shimmer` | `default_voice` | Eltern (Mini-App PATCH, HSP-34) |
+| Pause nach Absatz | `0.55` | `pause_absatz_sek` | Eltern (Mini-App PATCH, HSP-34) |
+| Pause nach Titel | `1.8` | `pause_titel_sek` | Eltern (Mini-App PATCH, HSP-34) |
+| Playback-Tempo | `1.0` | `playback_tempo` | Eltern (Mini-App PATCH, HSP-34) |
+| Themen je Alter | siehe HSP-27a | `themen_je_alter` | Familie (handgepflegt, V1 Alter 4) |
 | Serien-Name | `Stigi & Co.` | `serien_name` | Familie (Daten-Konfig) |
 | Anthropic-Key | (Pflicht wenn `llm_provider=claude`) | — | ZD-Slot `hoerspiel-anthropic-api-key` (ZD-5); Welle-A-Übergang: ENV `HOERSPIEL_ANTHROPIC_KEY` als Fallback |
-| Mistral-Key | — (V2, OPEN-HSP-N) | — | — (V1: nicht konfigurierbar) |
+| Mistral-Key | (Pflicht wenn `llm_provider=mistral`) | — | ZD-Slot `hoerspiel-mistral-api-key` (ZD-5); ENV `HOERSPIEL_MISTRAL_KEY` als Fallback |
 | Azure-Endpoint | (Pflicht) | `azure_openai_endpoint` | ENV `HOERSPIEL_AZURE_OPENAI_ENDPOINT` (kein Geheimnis, bleibt ENV) |
 | Azure-Deployment | (Pflicht) | `azure_openai_deployment` | ENV `HOERSPIEL_AZURE_OPENAI_DEPLOYMENT` (kein Geheimnis, bleibt ENV) |
 | Azure-Key | (Pflicht) | — | ZD-Slot `hoerspiel-azure-openai-api-key` (ZD-5); Welle-A-Übergang: ENV `HOERSPIEL_AZURE_OPENAI_KEY` als Fallback |
@@ -748,6 +848,76 @@ Werte fehlen → Code-Default greift mit Warnung, der Prozess startet weiter
 (CONFIG-4), **außer** bei Pflicht-Geheimnissen: fehlt der für den aktiven
 Provider nötige Key, antwortet der Buddy auf API-Aufrufe, die ihn brauchen,
 mit HTTP 503 + Klartext-Hinweis (kein stilles Scheitern).
+
+V1-Provider-Whitelist: `VALID_PROVIDERS = ("claude", "mistral")`
+(`hoerspiel/config.py`). Andere Werte lehnt der Loader mit `ConfigError`
+ab, den `PATCH /config` in HTTP 422 übersetzt.
+
+### HSP-27a — Themen-Liste je Alter (V1-Initial-Bestand)
+
+`hoerspiel.json.themen_je_alter` ist eine Map `alter → string[]` mit
+kuratierten Themen-Vorschlägen für die HFE-Diskussion (HFE-3). V1 nur
+**Alter 4** für Mia gepflegt — Erweiterung auf andere Alter ist
+Familien-Tätigkeit (Edit der JSON), keine Code-Pflicht.
+
+**V1-Bestand für `themen_je_alter["4"]`** (8 pädagogisch breit gestreute
+Themen für eine 4-jährige Hörerin; Anker für die HFE-Diskussion, nicht
+finale Folgen-Titel):
+
+1. **Mut beim Probieren** — etwas Neues wagen, von der Angst zur Lust.
+2. **Streit vertragen** — Konflikt mit dem Freund / der Schwester
+   verstehen und auflösen.
+3. **Selbst anziehen / aufräumen** — Selbstständigkeit im Alltag.
+4. **Warten lernen** — Geduld haben, etwas freuen, bis es soweit ist.
+5. **Gefühle erkennen und benennen** — Wut, Trauer, Eifersucht, Freude.
+6. **Jahreszeiten erleben** — Wetter, Tiere, Farben durch das Jahr.
+7. **Bitte und Danke** — Höflichkeit als gelebte Wertschätzung.
+8. **Neue Sachen essen** — Skepsis gegen unbekannte Lebensmittel
+   überwinden.
+
+Die Liste ist familien-spezifisch in `hoerspiel.json` und damit zur
+Laufzeit ohne Code-Änderung anpassbar. Über die HFE-Diskussion (HFE-3
+erweitert) nehmen die Eltern ein Thema als Anker und führen die
+Konkretisierung selbst durch („Mut beim Probieren" → „mit Schmuggli am
+Eichelnberg" → konkrete Folge).
+
+### HSP-27b — Modell-Listen-Quelle je LLM-Anbieter
+
+Jeder LLM-Provider-Adapter (`hoerspiel/providers/claude.py`,
+`hoerspiel/providers/mistral.py`) führt eine Modul-Konstante:
+
+```python
+AVAILABLE_MODELS: list[tuple[str, str]] = [
+    ("<model-id>", "<UI-Display-Label>"),
+    ...
+]
+```
+
+`GET /config` aggregiert diese Listen zur `modelle_je_anbieter`-Antwort
+(HSP-17). `PATCH /config` validiert `llm_model` gegen die Liste des
+gesetzten Providers und antwortet HTTP 422 bei unbekanntem Wert.
+
+**V1-Initial-Bestand:**
+
+| Provider | Modell-ID | UI-Display-Label |
+|---|---|---|
+| claude  | `claude-opus-4-7`      | Opus 4.7 (kreativ, langsamer, teurer) |
+| claude  | `claude-sonnet-4-6`    | Sonnet 4.6 (ausgewogen) |
+| claude  | `claude-haiku-4-5`     | Haiku 4.5 (schnell, kompakt, günstig) |
+| mistral | `mistral-large-2411`   | Large 2.1 (Frontier, kreativ) |
+| mistral | `mistral-medium-2508`  | Medium 3.1 (ausgewogen, V1-Default Mistral) |
+| mistral | `mistral-small-2503`   | Small 3.1 (schnell, günstig) |
+
+Erweiterung um weitere Modelle = Tupel an `AVAILABLE_MODELS` anhängen,
+keine Spec-Änderung nötig. Petraltete Modell-IDs werden aus der Liste
+entfernt; ein in `config.json` persistiertes `llm_model` außerhalb der
+Liste wird beim Start mit Warnung auf den Provider-Default
+zurückgesetzt (CONFIG-4).
+
+*F5-Abend-Test-Hinweis:* Mistral-La-Plateforme-Snapshot-IDs ändern
+sich gelegentlich. Beim ersten Live-Lauf mit jeder ID einen
+Folgen-Build durchführen — schlägt die ID 404 oder 422, ist sie aus
+`AVAILABLE_MODELS` zu entfernen (kein Spec-Update nötig).
 
 ---
 
@@ -831,8 +1001,217 @@ analog WETTER-24). Mindest-Abdeckung:
 - HSP-29 (Album-Bau ohne vorhandene Shared-Assets für die gewählte Voice
   → HTTP 412; Auto-Rebuild findet **nicht** statt)
 
-Läufe gegen echte Engines (Azure tts-hd, Anthropic) sind opt-in und nicht
-Teil der V1-Standard-Test-Suite.
+Läufe gegen echte Engines (Azure tts-hd, Anthropic, Mistral) sind opt-in
+und nicht Teil der V1-Standard-Test-Suite.
+
+---
+
+## 12. Eltern-Mini-App (HSP-33..HSP-40)
+
+> V1 nach Werft-Lauf 2026-06-15 (Refs #848). Vorbild für Wohnort und
+> Auslieferung: Routine-Anpassen-Mini-App (#728, `<funnel>/seiten/routine/anpassen`).
+> Auth-Pattern: `Authorization: tma <initData>`-Header analog #708.
+
+### HSP-33 — Wohnort, Auslieferung, Auth, Tab-Form
+
+Der Hörspiel-Buddy stellt eine Eltern-Mini-App bereit unter
+`<funnel-domain>/seiten/hoerspiel/eltern`, **gehostet vom seiten-
+Service** (Pattern wie Routine-Anpassen). Wohnort der View-Assets:
+
+- `hoerspiel/templates/eltern.html`
+- `hoerspiel/static/eltern.css`
+- `hoerspiel/static/eltern.js`
+
+**Auth** nach `conventions/mini-app-design.md` MAD-7 und #708-Pattern:
+alle HTML- und API-Routes prüfen den `Authorization: tma <initData>`-
+Header über die geteilte `eltern-chat/init_data.py`-Library
+(HMAC-SHA256-Validierung, Bot-Token via EnvironmentFile). Ungültig oder
+fehlend → HTTP 401, kein Render, kein Daten-Leak. Telegram-User-ID aus
+initData wird mit Familien-Registry (FAM-7/8) abgeglichen — nur
+Familienmitglieder lesen und schreiben.
+
+**Tab-Form:** zwei Tabs als Top-Tabs (Werft-Lauf Gate B 2026-06-15
+Variante A) — zwei volle-Breite Tab-Buttons unter dem Buddy-Titel,
+aktiver Tab unterstrichen. Das ist V1 das **erste Vorkommen** eines
+Tab-Patterns in xbuddy-Mini-Apps (n=1); eine MAD-Konventions-Klausel
+für Tabs wird bei zweitem Konsumenten via `/berater-runde` ratifiziert.
+
+- **Reiter 1 „Einstellungen"** (HSP-34, Default beim Laden)
+- **Reiter 2 „Folgen"** (HSP-35)
+
+### HSP-34 — Reiter „Einstellungen"
+
+Lädt die aktiven Werte aus `GET /config` (HSP-17). Fünf Steuer-Elemente
+in einer vertikalen Karten-Liste (parent stage, MAD-andocked an
+`display/_shared/design/tokens.css`):
+
+| Element | Form | Wert-Range / Optionen | API-Feld |
+|---|---|---|---|
+| Playback-Tempo | Slider | 0.7–1.3 in 0.05-Schritten | `playback_tempo` |
+| Pause nach Absatz | Slider | 0.0–2.0 s in 0.05-Schritten | `pause_absatz_sek` |
+| Pause nach Titel | Slider | 0.5–3.0 s in 0.1-Schritten | `pause_titel_sek` |
+| Stimme | 2-Kachel-Wahl | aus `voices_verfuegbar` | `default_voice` |
+| LLM (Anbieter + Modell) | zwei abhängige Dropdowns | Anbieter aus `provider_verfuegbar`; Modell aus `modelle_je_anbieter[<anbieter>]` | `llm_provider` + `llm_model` |
+
+**Hinweis-Block** über dem Speichern-Knopf:
+
+> Pausen, Stimme und Anbieter+Modell wirken bei der **nächsten Folge** —
+> Playback-Tempo gilt sofort, auch für bestehende Alben.
+
+**Speichern-Knopf** unten sticky. Tap löst einen `PATCH /config` mit
+**allen geänderten Feldern** aus. Bei Erfolg erscheint ein **Toast**
+(MAD-Toast-Pattern):
+
+> ✓ Gespeichert — Pausen, Stimme, Anbieter und Modell wirken ab der
+> nächsten Folge.
+
+(Werft-Lauf 2026-06-15 Nic-Klärung: ein gemeinsamer Toast, der die
+„Wirkung-ab-nächster-Folge"-Information explizit trägt. Playback-
+Tempo wirkt zwar sofort, der Toast benennt die verzögerte Mehrheit.)
+
+Bei HTTP 422 vom Server zeigt die Mini-App den vom Server gelieferten
+`fehler`-Klartext im Toast, in roter Tönung.
+
+**Abhängiges Dropdown:** Wechsel des Anbieter-Dropdowns füllt das
+Modell-Dropdown aus `modelle_je_anbieter[<neuer-anbieter>]` neu und
+setzt es auf den ersten Eintrag (Provider-Default).
+
+### HSP-35 — Reiter „Folgen" (Album-Galerie + Multi-Track-Player)
+
+Lädt die Album-Liste aus `GET /alben` (existing). Rendert sie als
+vertikale Kachel-Liste (MAD-2 Card-Pattern):
+
+```
+[cover 56×56] [Folge N · Titel]       [▶ ab Track X | (leer)]
+                voice · datum
+```
+
+Tap auf eine Kachel → öffnet den **Inline-Player** unten im selben
+Reiter (kein Modal). Der Player nutzt das **Multi-Track-Modell** aus
+HSP-6 (Intro · Inhalts-Tracks · Outro):
+
+- HTML5 `<audio>`-Element pro **aktuellem Track**
+- Audio-URL aus `audio-asset` im Manifest, ausgeliefert über
+  `GET /api/v1/hoerspiel/alben/<id>/audio/<track>.mp3` (HSP-37,
+  Range-Requests Pflicht)
+- `<audio>.playbackRate` aus aktivem `playback_tempo` (HSP-34); Wechsel
+  des Tempo-Sliders aktualisiert den laufenden Player live
+- Anzeige: Cover, Folgen-Titel, **Track-Anzeige** `Track X/Y · <Label>`
+  (Label = "Intro" / "Outro" / Inhalts-Titel) inkl. Track-Dauer
+- **Track-Liste** unter dem Player klappbar (`<details>`), aktiver
+  Track hervorgehoben. Tap auf einen Track-Listen-Eintrag → springt
+  direkt dorthin und startet die Wiedergabe
+- **Track-Navigation:** `⏮ Track` / `Track ⏭` als eigene Buttons,
+  disabled am ersten/letzten Track
+- **Skip:** `−15 s` / `+15 s` getrennt von Track-Navigation
+- **Auto-Play-Folge:** am Track-Ende lädt der Player automatisch den
+  nächsten Track und startet die Wiedergabe; am Album-Ende (letzter
+  Track beendet) wird der Wake-Lock freigegeben (HSP-39)
+- **Wake-Lock**: bei Play-Tap `navigator.wakeLock.request('screen')`;
+  bei manueller Pause + Verlassen-der-View + Album-Ende Release.
+  Wake-Lock-Fehler (`'wakeLock' not in navigator`, Berechtigung
+  verweigert) → Toast „Bildschirm bleibt nicht wach — Tablet manuell
+  entsperren oder Telefon nicht weglegen", kein Abbruch der
+  Wiedergabe
+
+**Resume-Stand-Tap-Verhalten** (HSP-36): wenn ein Album einen Resume-
+Stand hat, startet der Tap auf die Kachel **direkt beim Resume-Track**
+(nicht beim Intro). Ohne Resume-Stand startet die Wiedergabe beim
+Intro-Track.
+
+### HSP-36 — Resume-Stand auf Mini-App-Player erweitert
+
+HSP-23 hält die Resume-Marke pro Album auf Track-Anfang gerundet
+(existing). Der Mini-App-Player schreibt denselben Resume-Stand wie
+die Mia-View: bei jedem Track-Wechsel und bei jeder Pause-Tap-Aktion
+ruft die Mini-App `PUT /resume` mit Album-ID + Track-Position (HSP-17).
+
+**Konkurrenz-Schreiben** (Mini-App + Mia-View gleichzeitig) ist
+erlaubt — Last-Write-Wins auf Track-Anfang (Track-Position-Granularität,
+nicht Sekunden-Position; ein Race auf derselben Position ist no-op).
+
+### HSP-37 — Track-MP3-Streaming-Endpoint
+
+`GET /api/v1/hoerspiel/alben/<id>/audio/<track>.mp3` liefert die rohen
+MP3-Bytes des Tracks:
+
+- HTTP Range-Request-Support (`Range: bytes=N-M` Request → Status 206
+  Partial Content + `Content-Range` Response)
+- Auth-Check wie alle `/api/v1/hoerspiel/*` (HSP-33) **vor** der
+  Range-Logik
+- `Content-Type: audio/mpeg`
+- `Cache-Control: private, max-age=86400` (Album-MP3s sind immutable
+  je `album-id`, ein Tag Browser-Cache OK)
+
+**Drift-Bemerkung zu HSP-18:** HSP-18 verbietet „direkter Datei-
+Zugriff durch andere Apps — ausschließlich über HTTP-API". Die
+Mini-App fällt **unter diese Regel** — sie greift NICHT auf Dateien
+unter `/display/hoerspiel/data/...` zu, sondern ausschließlich über
+diesen Audio-Endpoint (API-Naht, APP-3).
+
+### HSP-38 — Themen-Liste-Endpoint
+
+`GET /api/v1/hoerspiel/themen?alter=<n>` liefert die kuratierte
+Themen-Liste für ein Alter (Quelle: `themen_je_alter[<n>]` aus
+`hoerspiel.json`, HSP-27a):
+
+```
+200 {"alter": 4, "themen": ["Mut beim Probieren", "Streit vertragen", ...]}
+404 wenn Alter nicht in `themen_je_alter`
+```
+
+Konsumenten V1: nur der HFE-Skill ruft diesen Endpoint (HFE-3
+erweitert). Die Mini-App selbst zeigt **keine** Themen-Liste — die
+Themen-Diskussion lebt im Eltern-Chat.
+
+### HSP-39 — Auth-Klausel (Pflicht-Verhalten)
+
+Eingehende Aufrufe:
+
+1. HTML-Route `/seiten/hoerspiel/eltern` ohne `Authorization`-Header
+   oder mit ungültiger initData-Signatur → HTTP 401 + Klartext
+   „Bitte über den Familien-Bot öffnen" (kein Render).
+2. API-Route `/api/v1/hoerspiel/*` ohne gültigen Header → HTTP 401.
+3. Header gültig, aber Telegram-User-ID nicht in Familien-Registry
+   (FAM-7/8) → HTTP 403 + Klartext „Nicht Familienmitglied".
+4. Header gültig + Familienmitglied → Request läuft.
+
+Bot-Token-Quelle: `eltern-chat/.env` (EC-Token-Sharing-Pattern), via
+EnvironmentFile in den `xbuddy-hoerspiel.service`-Prozess gegeben.
+
+### HSP-40 — Tests Eltern-Mini-App (Mock-Pflicht)
+
+Pflicht-Tests (ohne Netz, ohne Telegram, ohne Mistral-/Anthropic-API):
+
+- **HSP-33-Auth** — 401 ohne `Authorization`-Header; 401 mit
+  manipulierter Signatur (HMAC schlägt fehl); 200 mit gültiger Signatur
+  für Familienmitglied; 403 für validen aber Nicht-Familien-User.
+- **HSP-34-`GET /config`** — Response trägt alle Pflicht-Felder
+  inkl. `modelle_je_anbieter` mit beiden Providern.
+- **HSP-34-`PATCH /config`** — Teilmenge der Felder ändert genau diese;
+  Range-Verletzung (`playback_tempo=2.0`) → 422; unbekanntes
+  `llm_model` → 422; `llm_provider=mistral` ohne `hoerspiel-mistral-api-key`
+  → 422.
+- **HSP-35/37-Audio** — Range-Request `bytes=0-1023` liefert 206 +
+  passende ersten 1024 Bytes; ohne Range liefert 200 + voller
+  Inhalt; Auth-Check vor Range-Logik (401 trumpft 206).
+- **HSP-36-Resume** — Mini-App `PUT /resume` und Mia-View-Update
+  landen im selben Modell (gleiche Track-Position lesbar nach
+  beiden Schreiben); ein zweites `PUT /resume` für dasselbe Album +
+  Track-Position ist no-op.
+- **HSP-38-Themen** — `?alter=4` liefert die 8 V1-Themen aus
+  `themen_je_alter` (HSP-27a); `?alter=7` liefert 404.
+- **Mistral-Adapter** (`hoerspiel/providers/mistral.py`) gegen Mock-API:
+  erfolgreiche Folgen-Erzeugung; HTTP-Fehler → `LLMError`; fehlender
+  Key → `ConfigError`. Tests für jedes der drei V1-Modelle (`mistral-large-2411`,
+  `mistral-medium-2508`, `mistral-small-2503`) — auch mit Mock,
+  damit `AVAILABLE_MODELS`-Konstante nicht stillschweigend abweicht.
+
+**Echter Smoke-Test** gegen Mistral-La-Plateforme / Anthropic läuft im
+**F5-Abend-Test** (Nic-Tap in der Mini-App auf jeden Anbieter + jedes
+Modell, mindestens einmal Folgen-Build pro Provider). Eine
+Mistral-Modell-ID, die 404/422 antwortet, wird aus `AVAILABLE_MODELS`
+entfernt (Konstante anpassen, kein Spec-Update — HSP-27b).
 
 ---
 
