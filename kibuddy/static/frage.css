@@ -427,6 +427,12 @@ body.xb[data-stage="toddler"] {
   z-index: 10;
 }
 
+/* HTML hidden-Attribut respektieren — sonst überdeckt der Stopp-Knopf
+   im Initial-Zustand den PTT-Knopf (display:flex oben gewinnt sonst). */
+.stopp-row[hidden] {
+  display: none;
+}
+
 .btn-stopp {
   display: flex;
   align-items: center;
