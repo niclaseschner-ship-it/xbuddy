@@ -317,12 +317,8 @@ body.xb[data-stage="toddler"] {
   color: #c47a00;
 }
 
-.lock-img {
-  width: 56px;
-  height: 56px;
-  object-fit: contain;
-  /* KIBUDDY-30: Vollfarbe */
-}
+/* .lock-img entfernt (KIBUDDY-30 V1 2026-06-15) — Schloss-Pikto ausgeblendet,
+   Slide-Lock wird verbal erklärt. Pfeil-Glyph trägt den Hinweis. */
 
 /* KIBUDDY-11: Cancel-Hinweis */
 .cancel-hinweis {
