@@ -2,10 +2,11 @@
 """Erzeugt /home/buddy/xbuddy-data/zugangsdaten/kibuddy-env aus
 zugangsdaten.json (KIBUDDY-21 / CONFIG-3).
 
-Schreibt drei ENV-Zeilen (KEY=VALUE, 600er-Permissions) für den Service
-xbuddy-kibuddy: ANTHROPIC_API_KEY + AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY.
+Schreibt ENV-Zeilen (KEY=VALUE, 600er-Permissions) für den Service
+xbuddy-kibuddy: ANTHROPIC_API_KEY + AZURE_OPENAI_ENDPOINT +
+AZURE_OPENAI_API_KEY + OPENAI_API_KEY.
 KIBuddy nutzt diese ENV-Variablen ohne `KIBUDDY_`-Prefix, weil sie aus
-dem Azure-/Anthropic-SDK-Standard kommen (siehe kibuddy/config.py).
+dem Azure-/Anthropic-/OpenAI-SDK-Standard kommen (siehe kibuddy/config.py).
 
 **Fallback-Logik:** pro Ziel-ENV werden mehrere zugangsdaten-Keys in
 Reihenfolge probiert — der erste gefüllte gewinnt. So funktioniert das
@@ -39,6 +40,9 @@ KEY_FALLBACKS: dict[str, list[str]] = {
     "AZURE_OPENAI_API_KEY": [
         "kibuddy-azure-openai-api-key",
         "hoerspiel-azure-openai-api-key",
+    ],
+    "OPENAI_API_KEY": [
+        "kibuddy-openai-key",
     ],
 }
 

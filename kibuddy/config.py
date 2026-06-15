@@ -1,9 +1,10 @@
 """KIBuddy — Konfigurations-Auflösung (KIBUDDY-21).
 
 Per-Instanz-Datei `config.json` unter $KIBUDDY_DATA_ROOT (SVC-5).
-Geheimnisse (Anthropic-Key, Azure-Key) kommen ausschließlich aus ENV (CONFIG-3).
+Geheimnisse (Anthropic-Key, Azure-Key, OpenAI-Key) kommen ausschließlich aus ENV (CONFIG-3).
 
 V1: einziger gültiger `llm_provider` ist `claude` (KIBUDDY-14).
+V1: `stt_provider` ist `openai` (Default) oder `azure_openai` (KIBUDDY-12).
 """
 
 import json
@@ -25,14 +26,17 @@ ENV_ANTHROPIC_KEY = "ANTHROPIC_API_KEY"
 ENV_AZURE_ENDPOINT = "AZURE_OPENAI_ENDPOINT"
 ENV_AZURE_KEY = "AZURE_OPENAI_API_KEY"
 ENV_AZURE_API_VERSION = "AZURE_OPENAI_API_VERSION"
+ENV_OPENAI_KEY = "OPENAI_API_KEY"
 
 DEFAULT_AZURE_API_VERSION = "2024-10-01-preview"
 
 VALID_PROVIDERS = ("claude",)
+VALID_STT_PROVIDERS = ("openai", "azure_openai")
 VALID_VOICES = ("alloy", "echo", "fable", "onyx", "nova", "shimmer")
 
 DEFAULT_LLM_PROVIDER = "claude"
 DEFAULT_LLM_MODEL = "claude-haiku-4-5"
+DEFAULT_STT_PROVIDER = "openai"
 DEFAULT_TTS_VOICE = "onyx"
 DEFAULT_TTS_MODEL = "tts-1-hd"
 DEFAULT_TTS_SPEED = 0.9
@@ -61,6 +65,7 @@ class RuntimeConfig:
         tts_voice: str,
         tts_model: str,
         tts_speed: float,
+        stt_provider: str,
         stt_model: str,
         stt_sprache: str,
         aufnahme_quelle: str,
@@ -71,6 +76,7 @@ class RuntimeConfig:
         azure_endpoint: str | None,
         azure_key: str | None,
         azure_api_version: str,
+        openai_key: str | None,
     ):
         self.listen_host = listen_host
         self.listen_port = listen_port
@@ -80,6 +86,7 @@ class RuntimeConfig:
         self.tts_voice = tts_voice
         self.tts_model = tts_model
         self.tts_speed = tts_speed
+        self.stt_provider = stt_provider
         self.stt_model = stt_model
         self.stt_sprache = stt_sprache
         self.aufnahme_quelle = aufnahme_quelle
@@ -90,6 +97,7 @@ class RuntimeConfig:
         self.azure_endpoint = azure_endpoint
         self.azure_key = azure_key
         self.azure_api_version = azure_api_version
+        self.openai_key = openai_key
 
     def to_public_dict(self) -> dict[str, Any]:
         """Form für GET /config (KIBUDDY-24). Geheimnisse fliegen raus (LOG-3)."""
@@ -99,6 +107,7 @@ class RuntimeConfig:
             "tts_voice": self.tts_voice,
             "tts_model": self.tts_model,
             "tts_speed": self.tts_speed,
+            "stt_provider": self.stt_provider,
             "stt_model": self.stt_model,
             "stt_sprache": self.stt_sprache,
             "aufnahme_quelle": self.aufnahme_quelle,
@@ -106,6 +115,7 @@ class RuntimeConfig:
             "inaktivitaet_sek": self.inaktivitaet_sek,
             "anthropic_key_set": bool(self.anthropic_key),
             "azure_key_set": bool(self.azure_key),
+            "openai_key_set": bool(self.openai_key),
         }
 
 
@@ -131,6 +141,17 @@ def _resolve_provider(raw: Any) -> str:
         raise ConfigError(
             "llm_provider %r ist V1 nicht unterstützt — erlaubt: %s (KIBUDDY-14)"
             % (val, ", ".join(VALID_PROVIDERS))
+        )
+    return val
+
+
+def _resolve_stt_provider(raw: Any) -> str:
+    """Validiert den `stt_provider`-Wert gegen die V1-Whitelist (KIBUDDY-12)."""
+    val = (str(raw) if raw is not None else DEFAULT_STT_PROVIDER).strip().lower()
+    if val not in VALID_STT_PROVIDERS:
+        raise ConfigError(
+            "stt_provider %r ist V1 nicht unterstützt — erlaubt: %s (KIBUDDY-12)"
+            % (val, ", ".join(VALID_STT_PROVIDERS))
         )
     return val
 
@@ -162,6 +183,8 @@ def resolve_runtime(
 
     llm_provider = _resolve_provider(env.get("KIBUDDY_LLM_PROVIDER") or file_cfg.get("llm_provider") or DEFAULT_LLM_PROVIDER)
     llm_model = str(env.get("KIBUDDY_LLM_MODEL") or file_cfg.get("llm_model") or DEFAULT_LLM_MODEL).strip()
+
+    stt_provider = _resolve_stt_provider(env.get("KIBUDDY_STT_PROVIDER") or file_cfg.get("stt_provider") or DEFAULT_STT_PROVIDER)
 
     tts_voice = str(env.get("KIBUDDY_VOICE") or file_cfg.get("tts_voice") or DEFAULT_TTS_VOICE).strip().lower()
     tts_model = str(env.get("KIBUDDY_TTS_MODEL") or file_cfg.get("tts_model") or DEFAULT_TTS_MODEL).strip()
@@ -196,6 +219,7 @@ def resolve_runtime(
         tts_voice=tts_voice,
         tts_model=tts_model,
         tts_speed=tts_speed,
+        stt_provider=stt_provider,
         stt_model=stt_model,
         stt_sprache=stt_sprache,
         aufnahme_quelle=aufnahme_quelle,
@@ -206,6 +230,7 @@ def resolve_runtime(
         azure_endpoint=env.get(ENV_AZURE_ENDPOINT),
         azure_key=env.get(ENV_AZURE_KEY),
         azure_api_version=env.get(ENV_AZURE_API_VERSION) or DEFAULT_AZURE_API_VERSION,
+        openai_key=env.get(ENV_OPENAI_KEY),
     )
 
 
@@ -225,6 +250,7 @@ def patch_aufnahme_quelle(cfg: RuntimeConfig, neue_quelle: str) -> RuntimeConfig
         tts_voice=cfg.tts_voice,
         tts_model=cfg.tts_model,
         tts_speed=cfg.tts_speed,
+        stt_provider=cfg.stt_provider,
         stt_model=cfg.stt_model,
         stt_sprache=cfg.stt_sprache,
         aufnahme_quelle=neue_quelle,
@@ -235,4 +261,5 @@ def patch_aufnahme_quelle(cfg: RuntimeConfig, neue_quelle: str) -> RuntimeConfig
         azure_endpoint=cfg.azure_endpoint,
         azure_key=cfg.azure_key,
         azure_api_version=cfg.azure_api_version,
+        openai_key=cfg.openai_key,
     )
