@@ -524,7 +524,6 @@ def wunsch_view():
 # ── API: Wünsche (ESSEN-15..17, ESSEN-32) ────────────────────────────────
 
 @app.route("/api/v1/essen/wuensche", methods=["GET"])
-@require_init_data
 def wuensche_lesen():
     """GET /api/v1/essen/wuensche — Liste lesen (ESSEN-15).
 
@@ -573,7 +572,6 @@ def wuensche_lesen():
 
 
 @app.route("/api/v1/essen/wuensche", methods=["POST"])
-@require_init_data
 def wunsch_hinzufuegen():
     """POST /api/v1/essen/wuensche — Wunsch/Einkauf hinzufügen (ESSEN-16).
 
@@ -713,7 +711,6 @@ def wunsch_hinzufuegen():
 
 
 @app.route("/api/v1/essen/wuensche/<wunsch_id>", methods=["PATCH"])
-@require_init_data
 def wunsch_patchen(wunsch_id):
     """PATCH /api/v1/essen/wuensche/<id> — sparse update (ESSEN-32).
 
@@ -808,7 +805,6 @@ def wunsch_patchen(wunsch_id):
 
 
 @app.route("/api/v1/essen/wuensche/<wunsch_id>", methods=["DELETE"])
-@require_init_data
 def wunsch_loeschen(wunsch_id):
     """DELETE /api/v1/essen/wuensche/<id> — Wunsch/Einkauf entfernen (ESSEN-17).
 
@@ -839,7 +835,6 @@ def wunsch_loeschen(wunsch_id):
 # ── API: Katalog (ESSEN-18/19) ────────────────────────────────────────────
 
 @app.route("/api/v1/essen/katalog", methods=["GET"])
-@require_init_data
 def katalog_lesen():
     """GET /api/v1/essen/katalog — Katalog lesen (ESSEN-18).
 
@@ -851,7 +846,6 @@ def katalog_lesen():
 
 
 @app.route("/api/v1/essen/katalog/gerichte", methods=["POST"])
-@require_init_data
 def gericht_anlegen():
     """POST /api/v1/essen/katalog/gerichte — Gericht anlegen (ESSEN-19).
 
@@ -925,7 +919,6 @@ def gericht_anlegen():
 
 
 @app.route("/api/v1/essen/katalog/gerichte/<gericht_id>", methods=["PATCH"])
-@require_init_data
 def gericht_bild_patchen(gericht_id):
     """PATCH /api/v1/essen/katalog/gerichte/<id> — Gericht-Bild ändern (ESSEN-19a).
 
@@ -992,7 +985,6 @@ def _bad_request(msg, status=400):
 
 
 @app.route("/api/v1/essen/fotos", methods=["POST"])
-@require_init_data
 def post_foto():
     """ESSEN-22 V1.2: Foto aufnehmen. Multipart-Feld `medium`.
 
@@ -1023,7 +1015,6 @@ def post_foto():
 
 
 @app.route("/api/v1/essen/fotos/<medium_id>", methods=["GET"])
-@require_init_data
 def get_foto(medium_id):
     """ESSEN-22 V1.2: Vollbild (JPEG) mit korrektem Content-Type (send_file)."""
     fotos_verz = _paths()["fotos_verzeichnis"]
@@ -1034,7 +1025,6 @@ def get_foto(medium_id):
 
 
 @app.route("/api/v1/essen/fotos/<medium_id>/thumbnail", methods=["GET"])
-@require_init_data
 def get_foto_thumbnail(medium_id):
     """ESSEN-22 V1.2: Thumbnail-JPEG mit korrektem Content-Type."""
     fotos_verz = _paths()["fotos_verzeichnis"]
@@ -1045,7 +1035,6 @@ def get_foto_thumbnail(medium_id):
 
 
 @app.route("/api/v1/essen/fotos/<medium_id>", methods=["DELETE"])
-@require_init_data
 def delete_foto(medium_id):
     """ESSEN-22 V1.2: Vollbild + Thumbnail + Index-Eintrag atomar entfernen."""
     fotos_verz = _paths()["fotos_verzeichnis"]
