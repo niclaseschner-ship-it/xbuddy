@@ -265,8 +265,11 @@ def require_mini_app_auth(f):
                 and request.remote_addr in ("127.0.0.1", "::1")):
             return f(*args, **kwargs)
 
-        # V3 Soft-Auth: Header optional.
-        if not request.headers.get("Authorization"):
+        # V3 Soft-Auth: Header optional. Fehlt ODER leerer "tma "-Wert → pass.
+        ah = request.headers.get("Authorization", "").strip()
+        if not ah or ah.lower() in ("tma", "tma ") or (
+            ah.lower().startswith("tma ") and not ah[4:].strip()
+        ):
             return f(*args, **kwargs)
 
         init_data, err = _validate_mini_app_request()
