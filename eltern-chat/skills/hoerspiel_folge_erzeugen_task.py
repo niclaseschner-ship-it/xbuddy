@@ -14,6 +14,7 @@ Die Aufgabe ist ein dünner Aufrufer der trigger-agnostischen Funktion
 (HFE-1 / E-HFE-1) — keine eigene LLM-/TTS-Logik.
 """
 
+import contextlib
 import logging
 import re
 
@@ -40,7 +41,8 @@ class HoerspielFolgeErzeugenTask(WriteTask):
     post_execute_hooks = ()
 
     def __init__(self, tg, hoerspiel_client, display_url_origin: str = "",
-                 family_group_chat_id_getter=None, is_member_fn=None):
+                 family_group_chat_id_getter=None, is_member_fn=None,
+                 mini_app_base_url: str = ""):
         super().__init__(
             name="hoerspiel_folge_erzeugen",
             description=(
@@ -48,15 +50,25 @@ class HoerspielFolgeErzeugenTask(WriteTask):
                 "Folgentext per KI und vertont ihn als Album.\n\n"
                 "Aufrufen, wenn jemand sagt »Schreib eine Folge über …«, "
                 "»Neue Folge über …«, »Mach Paula eine Folge zu …«, "
-                "»Hörspiel-Folge: <Idee>«, »Neues Hörbuch über …« oder "
-                "Ähnliches (HFE-6).\n\n"
+                "»Hörspiel-Folge: <Idee>«, »Neues Hörbuch über …«, "
+                "»Welche Themen gibt es?«, »Was könnte ich Paula erzählen?«, "
+                "»Vorschläge?« oder Ähnliches (HFE-6).\n\n"
                 "Parameter `idee`: die Folgen-Idee aus der Eltern-Nachricht "
-                "(1–2 Sätze). Ist die Idee leer oder sehr vage, diesen Task "
-                "NOCH NICHT aufrufen — stattdessen erst gezielt nach der Idee "
-                "fragen (EC-22).\n\n"
+                "(1–2 Sätze). Leer lassen oder auf leeren String setzen, wenn "
+                "die Eltern nach Themen-Vorschlägen fragen — der Skill holt "
+                "dann eine Themen-Liste (HFE-3 Sub-Case 1).\n\n"
+                "Parameter `idee_diskussion` (bool, optional): True setzen, "
+                "wenn die Idee konkret aber noch unvollständig ist und der "
+                "Agent mehr Details klären will (HFE-3 Sub-Case 2).\n\n"
                 "Parameter `voice` (optional): »shimmer« (weich/weiblich, "
                 "Default) oder »onyx« (tief/männlich) — nur setzen, wenn die "
-                "Eltern eine Voice explizit genannt haben (HFE-4)."),
+                "Eltern eine Voice explizit genannt haben (HFE-4).\n\n"
+                "Eltern-Signal-Phrasen (beenden die Diskussion und lösen den "
+                "Vorschlag-Endpoint aus): »los«, »los gehts«, »mach das«, "
+                "»passt so«, »okay so«, »fang an«, »jetzt vertonen«, "
+                "»schreib jetzt«. Bei diesen Phrasen diesen Task mit der "
+                "zusammengeführten konkreten Idee und idee_diskussion=False "
+                "aufrufen (HFE-3, HFE-6)."),
             parameters={
                 "type": "object",
                 "properties": {
@@ -65,7 +77,15 @@ class HoerspielFolgeErzeugenTask(WriteTask):
                         "description": (
                             "Die Folgen-Idee aus der Eltern-Nachricht, "
                             "z. B. 'Stigi findet einen geheimen Tunnel "
-                            "unter dem Garten'. 1–2 Sätze."),
+                            "unter dem Garten'. 1–2 Sätze. Leer lassen "
+                            "für Themen-Anfrage."),
+                    },
+                    "idee_diskussion": {
+                        "type": "boolean",
+                        "description": (
+                            "True wenn die Idee konkret aber noch "
+                            "unvollständig ist (HFE-3 Sub-Case 2). "
+                            "False (Default) für vollständige Idee."),
                     },
                     "voice": {
                         "type": "string",
@@ -84,10 +104,17 @@ class HoerspielFolgeErzeugenTask(WriteTask):
         self._display_url_origin = display_url_origin or ""
         self._family_group_chat_id_getter = family_group_chat_id_getter
         self._is_member_fn = is_member_fn
+        self._mini_app_base_url = mini_app_base_url or ""
         # HFE-5: Session-State überbrückt propose→execute (Befund 1).
         # chat_id → {titel, text, voice, idee} aus dem Buddy-Vorschlag.
         # Nur eine offene Vorschlag-Session pro Chat — älter wird überschrieben.
         self._pending_vorschlaege: dict[object, dict] = {}
+        # HFE-10: Tracking ob die erste propose()-Antwort im aktuellen Turn
+        # für einen Chat bereits gesendet wurde. Ein Set von chat_ids.
+        # Wird beim nächsten propose()-Aufruf nach EC-10-Confirm zurückgesetzt
+        # (durch propose() → execute() Zyklus werden neue Turns automatisch
+        # erkannt, da _pending_vorschlaege geleert wird).
+        self._first_propose_done: set = set()
 
     def propose(self, arguments, turn_context):
         """EC-10-Vorschlag — holt Folgen-Vorschlag vom Hörspiel-Buddy (HFE-3/4).
@@ -97,21 +124,32 @@ class HoerspielFolgeErzeugenTask(WriteTask):
         Speichert titel/text/voice/idee im Session-State, damit execute()
         sie ohne Modell-Kanal-Vertrauen bekommt (HFE-5, Befund 1).
 
-        Bei Fehler wird die Exception weitergereicht — agent.py fängt sie
-        als is_error=True-Tool-Result; das LLM antwortet entsprechend.
+        HFE-3 Sub-Cases 1+2: wenn propose() ein ValueError wirft (leere Idee
+        oder Diskussions-Marker), propagiert die Exception zu agent.py →
+        is_error=True Tool-Result → LLM formuliert Rückfrage für den User.
+        Das EC-10-Gate feuert NICHT für Sub-Cases 1+2.
 
-        HFE-7: kein tg.send_*-Aufruf in dieser Methode.
+        HFE-10: first_propose-Tracking per chat_id; beim nächsten
+        vollständigen propose()-Aufruf (Sub-Case 3) wird das Flag zurückgesetzt.
         """
         args = arguments or {}
         idee  = (args.get("idee") or "").strip()
         voice_hint = args.get("voice") or None
+        idee_diskussion = bool(args.get("idee_diskussion", False))
 
         is_member_fn = self._is_member_fn or (lambda uid: True)
         from_user_id = getattr(turn_context, "from_user_id", None)
         chat_id = turn_context.chat_id
 
+        # HFE-10: "erste propose()-Antwort des Turns" bestimmen.
+        # Heuristik: wenn für diesen Chat noch kein propose() des laufenden
+        # HFE-Turns gelaufen ist, ist es die erste Antwort.
+        is_first = chat_id not in self._first_propose_done
+        # Als "gesehen" markieren — alle Folge-Antworten sind nicht-erste.
+        self._first_propose_done.add(chat_id)
+
         # Wirft BerechtigungError, ValueError oder HoerspielClientError —
-        # alle propagieren zu agent.py.
+        # Sub-Cases 1+2 via ValueError, Sub-Case 3 via Tuple-Return.
         propose_result = hfe_mod.propose(
             hoerspiel_client=self._hoerspiel_client,
             is_member_fn=is_member_fn,
@@ -120,8 +158,11 @@ class HoerspielFolgeErzeugenTask(WriteTask):
             voice_hint=voice_hint,
             tg=self._tg,
             chat_id=chat_id,
+            mini_app_base_url=self._mini_app_base_url,
+            is_first_propose=is_first,
+            idee_diskussion=idee_diskussion,
         )
-        # propose() returnt seit Multipart-Refactor (result_text, fields-dict).
+        # propose() gibt (result_text, fields-dict) bei Sub-Case 3 (Erfolg).
         # Backward-Compat: alte Form (nur String) wird via Text-Parser
         # geparst — wird mit dem nächsten Release entfernt.
         if isinstance(propose_result, tuple):
@@ -140,10 +181,13 @@ class HoerspielFolgeErzeugenTask(WriteTask):
             "voice": voice,
             "idee": idee,
         }
+        # HFE-10: Sub-Case 3 war erfolgreich — next propose() ist ein neuer
+        # Turn (nach EC-10-Confirm). Flag zurücksetzen damit Beifang erneut erscheint.
+        self._first_propose_done.discard(chat_id)
         logger.debug("HFE-Vorschlag im Session-State gespeichert chat_id=%s titel=%r",
                      chat_id, titel)
 
-        # Nur bei Erfolg: Proposal zurückgeben → EC-10-Gate feuert (HFE-1/3).
+        # Nur bei Erfolg (Sub-Case 3): Proposal zurückgeben → EC-10-Gate feuert.
         return Proposal(result_text)
 
     def execute(self, arguments, turn_context):
@@ -162,13 +206,11 @@ class HoerspielFolgeErzeugenTask(WriteTask):
                 "HFE-execute: kein Session-State für chat_id=%s — "
                 "Vorschlag verloren oder nie gemacht", chat_id)
             # Fehler-Bubble direkt senden (TASK-10-Kontext, analog HFE-5-Fehler).
-            try:
+            with contextlib.suppress(Exception):
                 self._tg.send_message(
                     chat_id,
                     "Der Hörspiel-Vorschlag ist nicht mehr verfügbar — "
                     "bitte erneut starten.")
-            except Exception:
-                pass
             return "Vorschlag verloren — erneut starten."
 
         hfe_mod.execute(

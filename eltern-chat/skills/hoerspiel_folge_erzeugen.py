@@ -1,5 +1,5 @@
 """Hörspiel-Folge erzeugen — specs/platform/hoerspiel-folge-erzeugen.md
-(HFE-1 … HFE-9, E-HFE-1 … E-HFE-5).
+(HFE-1 … HFE-10, E-HFE-1 … E-HFE-5).
 
 Aufrufbare, trigger-agnostische Funktion (HFE-1, E-HFE-1): nimmt eine
 Folgen-Idee entgegen, holt vom Hörspiel-Buddy einen Folgen-Vorschlag
@@ -15,15 +15,29 @@ Berechtigung (HFE-2): nur Familien-Mitglieder (is_member_fn). Im
 Agent-Loop wirft die Funktion `BerechtigungError` — kein Buddy-Aufruf.
 
 Eingang propose(): hoerspiel_client, is_member_fn, from_user_id, idee,
-  voice_hint (aus dem Aufrufer-Text, optional).
+  voice_hint (aus dem Aufrufer-Text, optional),
+  mini_app_base_url (für HFE-10 Settings-Beifang, optional),
+  is_first_propose (HFE-10: True für erste propose()-Antwort im Turn).
 Eingang execute(): hoerspiel_client, tg, chat_id, display_url_origin,
   titel, text, voice, idee.
 
 Ausgang propose(): strukturierter Tool-Result-Text (HFE-4) bei Erfolg,
-  oder EC-22-Rückfrage-Text, oder HoerspielClientError bei Fehler.
+  oder EC-22-Rückfrage-Text via ValueError (Sub-Case 1/2),
+  oder HoerspielClientError bei Fehler.
 Ausgang execute(): sendet Erfolgs- oder Fehler-Bubble über tg (HFE-5).
+
+HFE-3 Diskussions-Schleife (Werft-Lauf 2026-06-15, Refs #848):
+  Sub-Case 1: leere/mehrdeutige Idee → themen_lesen + EC-22-Rückfrage.
+  Sub-Case 2: konkret-aber-unvollständig (vom Agent markiert via
+              idee_diskussion=True) → Diskussions-Marker zurückgeben.
+  Sub-Case 3: konkrete vollständige Idee → Standard-Pfad.
+
+HFE-10 Settings-Beifang: In der ersten propose()-Antwort eines Turns
+trägt die Antwort einen Settings-Button (⚙️ Einstellungen) via
+tg.send_inline_keyboard. Wenn mini_app_base_url leer: still ausgelassen.
 """
 
+import json
 import logging
 
 from skills._errors import BerechtigungError
@@ -36,14 +50,24 @@ VOICE_SHIMMER = "shimmer"
 VOICE_ONYX    = "onyx"
 VOICE_DEFAULT = VOICE_SHIMMER   # HSP-26-Default, Fallback wenn config nicht erreichbar
 
-# HFE-3: Phrases, die als "leere/mehrdeutige Idee" gelten (EC-22).
-# Statt hart-gecodete Prüfung nutzt propose() eine Längen-/Inhalt-Prüfung.
+# HFE-3 Sub-Case 1: Alter-Konstante für Paula (V1 hart, Mehr-Kind V2).
+PAULA_ALTER = 4
+
+# HFE-3 Sub-Case 2: JSON-Marker-Präfix für den Diskussions-Pattern.
+# Der Agent erkennt diesen Marker im Tool-Result und stellt Rückfragen.
+_DISKUSSION_MARKER_KEY = "diskussion"
+
+# HFE-3 Sub-Case 1: Mindest-Länge in Zeichen für eine nicht-leere Idee.
+# Ideen unter diesem Wert gelten als leer/mehrdeutig → Themen-Rückfrage.
 _IDEE_MIN_ZEICHEN = 5
 
 
 def propose(*, hoerspiel_client, is_member_fn, from_user_id,
             idee: str, voice_hint: str | None = None,
-            tg=None, chat_id=None) -> str:
+            tg=None, chat_id=None,
+            mini_app_base_url: str | None = None,
+            is_first_propose: bool = True,
+            idee_diskussion: bool = False) -> tuple[str, dict]:
     """Folgen-Vorschlag holen und als strukturierten Text zurückgeben (HFE-3/4).
 
     Trigger-agnostisch (E-HFE-1): wer diese Funktion aufruft, ist nicht
@@ -55,17 +79,26 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
     `from_user_id`     — Telegram-User-ID des Aufrufers (HFE-2).
     `idee`             — Folgen-Idee aus dem Aufrufer-Text (HFE-3).
     `voice_hint`       — optionale Voice aus dem Aufrufer-Text (HFE-4).
+    `tg`               — optionaler Telegram-Client (für Start-Bubble + HFE-10).
+    `chat_id`          — Ziel-Chat (für Start-Bubble + HFE-10).
+    `mini_app_base_url`— Basis-URL der Eltern-Mini-App (HFE-10, optional).
+    `is_first_propose` — True wenn dies die erste propose()-Antwort des Turns
+                         ist (HFE-10 Settings-Beifang); False für Folge-Antworten.
+    `idee_diskussion`  — True wenn der Agent eine konkret-aber-unvollständige
+                         Idee erkannt hat (HFE-3 Sub-Case 2). Default: False.
 
-    Rückgabe: strukturierter Tool-Result-Text (Titel + Vorschau + Voice +
-    Bestätigungs-Frage) bei Erfolg.
+    Rückgabe: Tuple (result_text, fields_dict) bei Erfolg (Sub-Case 3).
 
     Wirft:
       BerechtigungError — Aufrufer nicht berechtigt (HFE-2).
-      ValueError        — leere/mehrdeutige Idee; Nachricht ist EC-22-Rückfrage.
+      ValueError        — leere/mehrdeutige Idee (Sub-Case 1) oder
+                          Diskussions-Marker (Sub-Case 2); Nachricht ist der
+                          Tool-Result-Text den das LLM als Antwort nutzt.
       HoerspielClientError(status=503)  — LLM-Provider nicht eingerichtet.
       HoerspielClientError(status!=503) — Buddy nicht erreichbar.
 
-    HFE-7: keine tg.send_*-Aufrufe in dieser Funktion.
+    HFE-7: keine tg.send_*-Aufrufe außer Start-Bubble (1-2 min Stille)
+    und HFE-10 Beifang-Button (erster Turn) in dieser Funktion.
     """
     # HFE-2: Berechtigung prüfen — kein Buddy-Aufruf bei Nicht-Mitglied.
     if from_user_id is None or not is_member_fn(from_user_id):
@@ -74,22 +107,42 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
             from_user_id)
         raise BerechtigungError("Das geht nur für Eltern.")
 
-    # EC-22: leere oder mehrdeutige Idee → Rückfrage, kein Buddy-Aufruf.
     idee_bereinigt = (idee or "").strip()
+
+    # HFE-3 Sub-Case 2: Agent hat die Idee als "konkret-aber-unvollständig"
+    # markiert. Der Skill gibt einen Diskussions-Marker zurück.
+    # Der Agent (Agent-Prompt, EC-30-Trennlinie) stellt die Rückfragen.
+    if idee_diskussion and idee_bereinigt:
+        logger.info(
+            "hoerspiel_folge_erzeugen.propose: Sub-Case 2 — Diskussions-Marker "
+            "(idee=%r)", idee_bereinigt)
+        # HFE-10: Settings-Beifang-Button in erster propose()-Antwort.
+        if is_first_propose and tg is not None and chat_id is not None:
+            _sende_beifang_button(tg, chat_id, mini_app_base_url)
+        marker = json.dumps(
+            {_DISKUSSION_MARKER_KEY: True, "idee_bisher": idee_bereinigt},
+            ensure_ascii=False)
+        raise ValueError(marker)
+
+    # HFE-3 Sub-Case 1: leere oder mehrdeutige Idee → Themen-Liste + Rückfrage.
     if len(idee_bereinigt) < _IDEE_MIN_ZEICHEN:
         logger.info(
-            "hoerspiel_folge_erzeugen.propose: Idee zu kurz/leer — EC-22")
-        raise ValueError(
-            "Worum soll die Folge gehen? Beschreib die Idee kurz "
-            "(ein Satz reicht), dann erstelle ich einen Vorschlag.")
+            "hoerspiel_folge_erzeugen.propose: Sub-Case 1 — leere/mehrdeutige "
+            "Idee — rufe GET /themen?alter=%d (HFE-3)", PAULA_ALTER)
+        rueckfrage = _baue_themen_rueckfrage(hoerspiel_client)
+        # HFE-10: Settings-Beifang-Button in erster propose()-Antwort.
+        if is_first_propose and tg is not None and chat_id is not None:
+            _sende_beifang_button(tg, chat_id, mini_app_base_url)
+        raise ValueError(rueckfrage)
 
+    # HFE-3 Sub-Case 3: konkrete vollständige Idee → Vorschlag-Endpoint.
     # HFE-4: Voice auflösen.
     voice = _voice_aus_hint(voice_hint)
     if voice is None:
         # Kein Voice-Hinweis → Default aus config lesen (HFE-4).
         voice = _voice_default_lesen(hoerspiel_client)
 
-    # HFE-3: Folgen-Vorschlag vom Hörspiel-Buddy holen.
+    # HFE-3 Sub-Case 3: Folgen-Vorschlag vom Hörspiel-Buddy holen.
     # Live-UX: der LLM-Call dauert 1-2 min, propose() bleibt sonst stumm.
     # Nic-Befund 2026-06-12: Eltern denken in der Stille, der Bot sei
     # eingefroren. Start-Bubble vor dem Aufruf — analog execute().
@@ -98,7 +151,7 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
                "Klar, ich überlege mir gerade eine Folge. "
                "Das dauert 1–2 Minuten — bitte solange nicht stören, "
                "ich melde mich, sobald der Vorschlag steht.")
-    logger.info("hoerspiel_folge_erzeugen.propose: rufe POST %s (HFE-3)",
+    logger.info("hoerspiel_folge_erzeugen.propose: rufe POST %s (HFE-3 Sub-Case 3)",
                 "/api/v1/hoerspiel/folgen-vorschlag")
     data = hoerspiel_client.folgen_vorschlag(idee_bereinigt)
 
@@ -135,6 +188,11 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
             "Voice: %s (oder schreib »shimmer« / »onyx«)\n"
             "Soll ich vertonen? Das dauert 1–5 Minuten."
         ) % (folge_nr, titel, splits[0] if splits else text, voice)
+
+    # HFE-10: Settings-Beifang-Button in erster propose()-Antwort.
+    # Sub-Case 3: Button wird nach dem Vorschlagstext gesendet (tg direkt).
+    if is_first_propose and tg is not None and chat_id is not None:
+        _sende_beifang_button(tg, chat_id, mini_app_base_url)
 
     logger.info(
         "hoerspiel_folge_erzeugen.propose: Vorschlag bereit "
@@ -199,6 +257,61 @@ def execute(*, hoerspiel_client, tg, chat_id,
 # ============================================================
 #  Helpers
 # ============================================================
+
+def _baue_themen_rueckfrage(hoerspiel_client) -> str:
+    """HFE-3 Sub-Case 1: GET /themen?alter=N + EC-22-Rückfrage-Text bauen.
+
+    Bei 404 (Alter nicht gepflegt, HSP-38): nur EC-22-Rückfrage ohne Themen.
+    Bei anderen Fehlern: nur EC-22-Rückfrage (degrades gracefully).
+    """
+    themen: list[str] = []
+    try:
+        themen = hoerspiel_client.themen_lesen(PAULA_ALTER)
+    except HoerspielClientError as exc:
+        logger.warning(
+            "hoerspiel_folge_erzeugen: themen_lesen fehlgeschlagen — %s; "
+            "Rückfrage ohne Themen", exc)
+
+    if themen:
+        themen_str = ", ".join(themen)
+        return (
+            "Worum soll die Folge gehen? "
+            "Hier ein paar Vorschläge für %d-Jährige: %s"
+        ) % (PAULA_ALTER, themen_str)
+    return (
+        "Worum soll die Folge gehen? "
+        "Beschreib die Idee kurz (ein Satz reicht), "
+        "dann erstelle ich einen Vorschlag."
+    )
+
+
+def _sende_beifang_button(tg, chat_id, mini_app_base_url: str | None) -> None:
+    """HFE-10: Settings-Beifang-Button senden (einmal pro Turn, erste Antwort).
+
+    Wenn mini_app_base_url leer: still ausgelassen, kein Fehler, kein Text.
+    Button-Label: ⚙️ Einstellungen; URL: <mini_app_base_url>/seiten/hoerspiel/eltern#einstellungen.
+    """
+    if not mini_app_base_url:
+        logger.debug(
+            "hoerspiel_folge_erzeugen: mini_app_base_url leer — "
+            "Settings-Beifang-Button entfällt (HFE-10)")
+        return
+    base = mini_app_base_url.rstrip("/")
+    settings_url = "%s/seiten/hoerspiel/eltern#einstellungen" % base
+    try:
+        tg.send_inline_keyboard(
+            chat_id,
+            "",    # Beifang-Button hat keinen eigenen Text-Body (EC-29)
+            [{"label": "⚙️ Einstellungen", "web_app_url": settings_url}],
+        )
+        logger.debug(
+            "hoerspiel_folge_erzeugen: Settings-Beifang-Button gesendet "
+            "(HFE-10) chat_id=%s", chat_id)
+    except Exception as exc:  # Beifang darf HFE-Fluss nicht brechen
+        logger.warning(
+            "hoerspiel_folge_erzeugen: send_inline_keyboard fehlgeschlagen "
+            "(HFE-10, verschluckt): %s", exc)
+
 
 def _voice_aus_hint(hint: str | None) -> str | None:
     """HFE-4: extrahiert shimmer/onyx aus einem optionalen Hinweis-Text.

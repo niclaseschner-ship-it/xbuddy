@@ -4,6 +4,7 @@ Konsument der Hörspiel-Buddy-API:
   - POST /api/v1/hoerspiel/folgen-vorschlag  — Folgen-Idee → Vorschlag (HFE-3)
   - POST /api/v1/hoerspiel/alben             — Album bauen (HFE-5)
   - GET  /api/v1/hoerspiel/config            — Voice-Default lesen (HFE-4)
+  - GET  /api/v1/hoerspiel/themen?alter=N    — Themen-Liste für Alter N (HFE-3 Sub-Case 1, HSP-38)
 
 Folgt der HTTP-Client-Konvention (CLIENT-1 bis CLIENT-4):
 transport=Callable als Test-Naht, 2-s-Timeout (außer Album-Bau: 600 s),
@@ -33,6 +34,7 @@ HTTP_TIMEOUT_ALBUM_SEKUNDEN = 600.0
 PFAD_FOLGEN_VORSCHLAG = "/api/v1/hoerspiel/folgen-vorschlag"
 PFAD_ALBEN            = "/api/v1/hoerspiel/alben"
 PFAD_CONFIG           = "/api/v1/hoerspiel/config"
+PFAD_THEMEN           = "/api/v1/hoerspiel/themen"  # HSP-38 (HFE-3 Sub-Case 1)
 
 
 class HoerspielClientError(Exception):
@@ -161,6 +163,34 @@ class HoerspielClient:
                 "Hörspiel-Buddy: Config-Antwort nicht parsebar (%s)" % exc,
                 status=status) from exc
         return data
+
+    def themen_lesen(self, alter: int) -> list[str]:
+        """GET /api/v1/hoerspiel/themen?alter=N (HFE-3 Sub-Case 1, HSP-38).
+
+        Liefert eine Liste von Themen-Strings für das angegebene Alter.
+        Response: {"themen": ["<thema1>", "<thema2>", ...]}
+
+        Bei 404 (Alter nicht gepflegt, HSP-38): gibt leere Liste zurück —
+        der Aufrufer stellt dann nur die EC-22-Rückfrage ohne Themen-Liste.
+        Andere Fehler (5xx, Netz): werfen HoerspielClientError weiter.
+        """
+        pfad = "%s?alter=%d" % (PFAD_THEMEN, alter)
+        status, resp_bytes = self._call("GET", pfad)
+        if status == 404:
+            logger.info(
+                "HoerspielClient: GET %s → 404 (Alter nicht gepflegt, HSP-38)", pfad)
+            return []
+        if status != 200:
+            raise HoerspielClientError(
+                "Hörspiel-Buddy: HTTP %s bei GET %s" % (status, pfad),
+                status=status)
+        try:
+            data = json.loads(resp_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise HoerspielClientError(
+                "Hörspiel-Buddy: Themen-Antwort nicht parsebar (%s)" % exc,
+                status=status) from exc
+        return data.get("themen") or []
 
     # -- HTTP-Innerei ---------------------------------------------------------
 
