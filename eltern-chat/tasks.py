@@ -877,4 +877,23 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             family_group_chat_id_getter=family_group_chat_id_getter,
             is_member_fn=_kaqs_is_member))
 
+    # KPA-8 / #883: »KIBuddy-Prompt anpassen« als synchrone schreibende
+    # Aufgabe (EC-10, KPA-2 propose→confirm mit Diff-Vorschau, KPA-6).
+    # AND-Guard: kibuddy_origin_url UND family_group_chat_id_getter müssen
+    # gesetzt sein — fehlt eine, erscheint die Aufgabe NICHT im Katalog
+    # (KPA-8, analog KAQS-6-Linie):
+    # - kibuddy_origin_url:            KIBuddy-Prompt-Schnittstelle (KIBUDDY-24,
+    #                                  GET/PUT /api/v1/kibuddy/prompt, KPA-7).
+    # - family_group_chat_id_getter:   Live-Berechtigung (KPA-3, EC-2).
+    #   is_member_fn baut den Live-Check analog der KAQS-/RZS-/TES-Linie.
+    if kibuddy_origin_url is not None and family_group_chat_id_getter is not None:
+        from skills.kibuddy_prompt_anpassen_client import KibuddyPromptClient
+        from skills.kibuddy_prompt_anpassen_task import KibuddyPromptAnpassenTask
+        _kpa_client = KibuddyPromptClient(origin_url=kibuddy_origin_url)
+        _kpa_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
+        catalog.register(KibuddyPromptAnpassenTask(
+            kibuddy_prompt_client=_kpa_client,
+            family_group_chat_id_getter=family_group_chat_id_getter,
+            is_member_fn=_kpa_is_member))
+
     return catalog
