@@ -234,7 +234,100 @@ Kindi").
 zwischen den Zeiten und nach `losgehen` liefert die Zeit-Logik die erwarteten
 Restzeiten/Phasen — ohne echte Wall-Clock.
 
-*Tickets:* #335 · #364 (Fallback fehlender Map-Tag, AC-FIX4)
+**Live-Tick (#824, 2026-06-15):** Solange die View geöffnet ist, läuft der
+Zeitstrahl **clientseitig weiter** — ohne Page-Reload. **Wenn** die View
+mindestens eine Minute offen ist, **dann** hat sich die Position des „jetzt"-
+Markers (`jetzt_pct`) und die Höhe des Verstrichen-Bandes (`elapsed_pct`) mindestens
+einmal sichtbar fortgeschrieben. **Quelle der Wahrheit bleibt der Server-Render**
+beim Page-Load (`aufstehen`/`anziehen`/`losgehen` als absolute Zeitstempel im
+Template). Die clientseitige Fortschreibung interpoliert nur den Zeitablauf
+zwischen den vom Server bekannten Ankern. **Server-Zeit-Drift:** Server liefert
+`server_now` (ISO-Timestamp) zusätzlich; Client berechnet einmalig
+`offset = server_now − Date.now()` und nutzt `Date.now() + offset` als
+View-Now — Tablets mit ungetretener Uhr verschieben den Render nicht.
+**Polling-Intervall:** ≤ 60 s (Tuning-Wert, V1 darf 60 s im Code-Default
+hardcoden; ein zweites Vorkommen mit unterschiedlichem Intervall externalisiert
+in die Config-Datei nach CLAUDE.md §6).
+
+**Bewegung des Jetzt-Markers — kontinuierlich, nicht rastend (#824, 2026-06-15):**
+Der „jetzt"-Marker (`.timeline-now`) **gleitet sichtbar kontinuierlich** zwischen
+zwei Polling-Ticks — nicht in Sprüngen am 5-Min-Raster. Mechanik: CSS-Transition
+(`transition: top <poll-intervall> linear`) lässt den Browser die lineare
+Interpolation übernehmen; alternativ JS-`requestAnimationFrame`-Loop mit
+`top = jetzt_pct(view_now)` pro Frame. Die 5-Min-Striche (siehe nächster Absatz)
+sind ausschließlich **Skala für die Restzeit-Lesung des Kindes**, kein
+Marker-Raster — der Marker steht zwischen den Strichen genauso oft wie auf
+ihnen. *Test-Implikation:* mit injizierter Wall-Clock-Verschiebung um 30 s
+zwischen zwei Tick-Render zeigt der Computed-Style von `.timeline-now` eine
+`top`-Position, die **zwischen** zwei 5-Min-Strich-Positionen liegt — kein Snap.
+
+**5-Min-Marker am Balken (#824, 2026-06-15):** Der vertikale Balken trägt
+**visuelle 5-Minuten-Striche** als Skalen-Hilfe. **Wenn** das Zeitfenster
+`aufstehen → losgehen` z. B. 90 Min umfasst, **dann** sind am Balken 18
+äquidistante kurze Striche sichtbar (90/5). Die Striche sind feiner als die
+Pin-Zeit-Labels und der Jetzt-Marker, damit Letztere weiterhin dominieren
+(Kiosk-Lesbarkeit ROUTINE-11). **Daten-getrieben, nicht hartcodiert:** Schrittweite
+kommt aus `zeitfenster_min` und einer **Skalen-Schrittweite** (Default 5 Min;
+ein zweites Vorkommen mit anderer Schrittweite externalisiert nach
+CLAUDE.md §6). **Balken-Breite:** keine harte px-Vorgabe (DTOK-5); die Spec
+verlangt: „Track-Breite gewährleistet, dass 5-Min-Striche aus 1,5 m Abstand
+erkennbar sind" (Akzeptanz: Sichtprobe am 1920×1080-Kiosk; Gate-B-Probe 2026-06-15
+hat 56 px als Empfehlung etabliert). *Test-Implikation:* der View-Render bei
+`zeitfenster_min = 90` zeigt 18 Strich-Elemente am Balken (DOM-Assertion).
+
+**Zonen-Farbschema des Verstrichen-Bandes (#824, 2026-06-15):** Das
+Verstrichen-Band (`.timeline-elapsed`) nimmt seine Farbe **aus der Position
+im Tagesfenster**, sodass der Farbwechsel im verstrichenen Teil selbst die
+Zonen-Grenze sichtbar macht. Track-Hintergrund (unverstrichener Teil) bleibt
+**neutral** — keine Zonen-Vorschau dahinter; der Track ist „leerer Raum,
+der noch nicht durchlaufen wurde".
+
+**Drei Zonen** entlang der Vertikalen (greifen auf das Verstrichen-Band, nicht
+auf den Track):
+
+- **0 % bis `anziehen_pct`:** **grün** (Token `--success`) — Zeit reicht.
+- **`anziehen_pct` bis 100 %:** **orange** (Token `--warning`) — Restzeit
+  knapp, Eltern-Signal „jetzt wird's eng".
+- **jenseits 100 %:** **rot** (Token `--danger`) — überfällig.
+
+**Wenn** das Verstrichen-Band die Zonen-Grenze überschreitet, **dann** zeigt
+das Band an der Grenze einen sichtbaren Farbwechsel (harter Stop, kein
+Gradient-Übergang über die Grenze hinweg). **Wenn** das Verstrichen-Band die
+Grenze nicht überschritten hat, **dann** ist es einfarbig grün — die orange
+Zone wird im Bild **nicht vorab angedeutet** (der unverstrichene Track-Bereich
+bleibt neutral).
+
+*Test-Implikation:* gefüllter Balken mit `elapsed_pct = 0,95` und
+`anziehen_pct = 0,908` zeigt am `.timeline-elapsed` einen grünen Bereich
+0–90,8 % und orange 90,8–95 %; der Track-Hintergrund (`.timeline-track`)
+bleibt unverändert. DOM-/Computed-Style-Assertion auf die CSS-Custom-Property
+`--anziehen-stop` und CSS-Token-Bezug (kein Hex). `--success` / `--warning` /
+`--danger` existieren im geteilten Token-Strang (`conventions/design-tokens.md`
+DTOK-1) und werden referenziert, nicht kopiert (DTOK-3).
+
+**Implementierungs-Hinweis (load-bearing — CSS-Bug vermeiden):** Der
+`linear-gradient` sitzt auf `.timeline-elapsed`, dessen Höhe `elapsed_pct` der
+**Track-Höhe** entspricht. CSS-Gradient-Stops sind relativ zur **Element-Höhe**,
+nicht zur Container-Höhe — daher muss `--anziehen-stop` server-seitig
+**umgerechnet** werden auf die Element-Höhe:
+
+```python
+if elapsed_pct <= anziehen_pct:
+    anziehen_stop_rel = 110.0   # > 100 %, Element ist komplett grün
+else:
+    anziehen_stop_rel = (anziehen_pct / elapsed_pct) * 100
+```
+
+Template setzt im Inline-Style:
+`style="height: {elapsed_pct}%; --anziehen-stop: {anziehen_stop_rel}%;"`. So
+liegt der Farbwechsel **immer an der korrekten Track-Position** `anziehen_pct`,
+egal wie hoch `elapsed_pct` ist. Bei `elapsed_pct ≤ anziehen_pct` bleibt das
+Element komplett grün; bei `elapsed_pct > anziehen_pct` zeigt es grün bis zur
+Anziehen-Position und orange bis zum Element-Ende. Der rote Bereich erscheint
+nur, wenn `elapsed_pct > 100 %` möglich ist (heute clamp auf 100 % in
+`uhr.py`).
+
+*Tickets:* #335 · #364 (Fallback fehlender Map-Tag, AC-FIX4) · #824 (Live-Tick + 5-Min-Skala + Zonen-Farbschema)
 
 ### ROUTINE-10 — Piktogramm je Punkt über die geteilte Icon-Plattform
 Jeder Routine-Punkt trägt ein **ARASAAC-Piktogramm**, bezogen **über die
