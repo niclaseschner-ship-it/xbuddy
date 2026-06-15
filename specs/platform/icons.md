@@ -155,6 +155,30 @@ als JSON — `[{ "id": <arasaac-id>, "url": "/display/_shared/icons/arasaac/<id>
   bleibt zustandslos.
 - Kein Treffer → **leere Liste**, kein Fehler.
 
+**Match-Score (2026-06-15 Refactor, ICONS-7):**
+
+Pro Token wird jedes Cache-Wort gegen den Token gescort:
+
+| Stufe | Bedingung | Score |
+|---|---|---|
+| Exact match | Wort == Token (case-insensitiv) | 1000 |
+| Prefix | Wort startet mit Token | 400 + Längen-Bonus |
+| Word-Boundary mid-string | Wort enthält Space/Bindestrich + Token | 100 + Längen-Bonus |
+| Reine Substring | Token kommt irgendwo im Wort vor | 1 + Längen-Bonus |
+| Kein Match | Token nicht im Wort enthalten | 0 (ausgeschlossen) |
+
+Längen-Bonus: `100 / len(Wort)` (bei Prefix) bzw. `50 / len(Wort)` (bei
+Word-Boundary) und `1 / len(Wort)` (Substring) — kürzere Wörter ranken höher
+(einfacher = bessere ARASAAC-Treffer; lange Multi-Wort-Konstrukte sind nicht
+der typische Konsument-Treffer). Beispiel: q=Mensch → „menschen" (Prefix, 8
+Zeichen, Score ≈ 412.5) gewinnt vor „mensch ärgere dich nicht" (Prefix, 26
+Zeichen, Score ≈ 403.8) und vor „marsmensch" (Substring, Score ≈ 1.1).
+
+Bei Multi-Token-Queries: Score additiv über Tokens. Wer mehr Tokens matcht,
+gewinnt. Tiebreaker: erste Vorkommen-Reihenfolge im Cache (first_seen). Die
+Score-Skalen (1000 / 500 / 100 / 1) stellen sicher, dass Single-Token-Exact
+(1000) immer vor Multi-Token-Substring (z. B. 2 × 1.x = ~2.x) landet.
+
 Read-only, keine Schreibwirkung, kein externer Call. Ausgeliefert vom Router
 (ROU-31), der die icon-root ohnehin besitzt — **kein** eigener Dienst.
 

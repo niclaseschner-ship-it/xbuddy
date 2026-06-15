@@ -831,6 +831,132 @@ def test_icons_suche_mehrere_leerzeichen(client_with_routing, icon_root_suche):
     assert any(i in ids for i in (401, 402, 403, 404)), f'Tier-IDs erwartet in {ids}'
 
 
+# ============================================================
+#  ICONS-7 Match-Qualität-Sortierung (AC1–AC5 aus T869)
+# ============================================================
+
+@pytest.fixture
+def icon_root_mensch(tmp_path):
+    """icon-root für ICONS-7-Match-Score-Tests.
+
+    Cache:
+      'mensch ärgere dich nicht' → 2501  (Substring-Match für 'mensch')
+      'menschen'                 → 7116  (Prefix-Match für 'mensch')
+      'menschenfressender riese' → 6160  (Prefix-Match für 'mensch', aber länger)
+      'marsmensch'               → 5050  (Mid-String-Match für 'mensch')
+      'hund'                     → 101   (Exact-Match für 'hund')
+      'hundebett'                → 102   (Prefix-Match für 'hund')
+      'alter'                    → 300   (für Multi-Token-Test)
+      'alter mann'               → 301   (beide Tokens 'alter' und 'mann')
+      'mann'                     → 302   (für Multi-Token-Test)
+
+    Alle PNGs vorhanden.
+    """
+    root = tmp_path / 'icons_mensch'
+    arasaac = root / 'arasaac'
+    arasaac.mkdir(parents=True)
+    for icon_id in (2501, 7116, 6160, 5050, 101, 102, 300, 301, 302):
+        (arasaac / f'{icon_id}.png').write_bytes(_TINY_PNG)
+    cache = {
+        'mensch ärgere dich nicht': 2501,
+        'menschen': 7116,
+        'menschenfressender riese': 6160,
+        'marsmensch': 5050,
+        'hund': 101,
+        'hundebett': 102,
+        'alter': 300,
+        'alter mann': 301,
+        'mann': 302,
+    }
+    (root / 'pictogram_cache.json').write_text(
+        json.dumps(cache), encoding='utf-8'
+    )
+    original = router_main.runtime_config.get('icon_root', '')
+    router_main.runtime_config['icon_root'] = str(root)
+    router_main._pictogram_cache_root = ''
+    try:
+        yield root
+    finally:
+        router_main.runtime_config['icon_root'] = original
+        router_main._pictogram_cache_root = ''
+
+
+def test_icons7_ac1_mensch_top1_ist_7116(client_with_routing, icon_root_mensch):
+    """AC1: q=Mensch → Top-1 ist ID 7116 ('menschen', Prefix), NICHT 2501 (Substring)."""
+    r = client_with_routing.get('/api/v1/icons/suche?q=Mensch&max=3')
+    assert r.status_code == 200
+    data = r.get_json()
+    assert len(data) >= 1, f'Erwartet >=1 Treffer, bekam {data}'
+    assert data[0]['id'] == 7116, (
+        f"Top-1 soll 7116 ('menschen') sein, aber bekam {data[0]['id']}. "
+        f"Reihenfolge: {[d['id'] for d in data]}"
+    )
+
+
+def test_icons7_ac2_exact_match_top(client_with_routing, icon_root_mensch):
+    """AC2: q=hund → exact-Match ID 101 ('hund') vor Prefix-Match ID 102 ('hundebett')."""
+    r = client_with_routing.get('/api/v1/icons/suche?q=hund&max=5')
+    assert r.status_code == 200
+    data = r.get_json()
+    ids = [d['id'] for d in data]
+    assert 101 in ids, f'ID 101 (hund, exact) erwartet in {ids}'
+    assert 102 in ids, f'ID 102 (hundebett, prefix) erwartet in {ids}'
+    idx_101 = ids.index(101)
+    idx_102 = ids.index(102)
+    assert idx_101 < idx_102, (
+        f"Exact-Match 101 soll vor Prefix-Match 102 stehen, "
+        f"aber 101 ist an Position {idx_101}, 102 an {idx_102}"
+    )
+
+
+def test_icons7_ac3_prefix_vor_substring(client_with_routing, icon_root_mensch):
+    """AC3: Prefix-Match 'menschen' (7116) gewinnt über Mid-String-Match 'marsmensch' (5050)."""
+    r = client_with_routing.get('/api/v1/icons/suche?q=Mensch&max=5')
+    assert r.status_code == 200
+    data = r.get_json()
+    ids = [d['id'] for d in data]
+    assert 7116 in ids, f'ID 7116 (menschen) erwartet in {ids}'
+    assert 5050 in ids, f'ID 5050 (marsmensch) erwartet in {ids}'
+    assert ids.index(7116) < ids.index(5050), (
+        f"Prefix-Match 7116 soll vor Substring-Match 5050 stehen, "
+        f"Reihenfolge: {ids}"
+    )
+
+
+def test_icons7_ac4_laengen_tiebreaker(client_with_routing, icon_root_mensch):
+    """AC4: Zwei Prefix-Matches — kürzeres Wort gewinnt.
+    'menschen' (8 Zeichen) vor 'menschenfressender riese' (23 Zeichen).
+    """
+    r = client_with_routing.get('/api/v1/icons/suche?q=Mensch&max=5')
+    assert r.status_code == 200
+    data = r.get_json()
+    ids = [d['id'] for d in data]
+    assert 7116 in ids, f'ID 7116 (menschen) erwartet in {ids}'
+    assert 6160 in ids, f'ID 6160 (menschenfressender riese) erwartet in {ids}'
+    assert ids.index(7116) < ids.index(6160), (
+        f"Kürzeres-Wort 7116 ('menschen') soll vor längerem 6160 stehen, "
+        f"Reihenfolge: {ids}"
+    )
+
+
+def test_icons7_ac5_mehrwort_score_additiv(client_with_routing, icon_root_mensch):
+    """AC5: Multi-Token 'alter mann' → ID 301 ('alter mann', beide Tokens) vor
+    ID 300 ('alter', nur ein Token) und ID 302 ('mann', nur ein Token).
+    """
+    r = client_with_routing.get('/api/v1/icons/suche?q=alter+mann&max=5')
+    assert r.status_code == 200
+    data = r.get_json()
+    ids = [d['id'] for d in data]
+    assert 301 in ids, f'ID 301 (alter mann) erwartet in {ids}'
+    idx_301 = ids.index(301)
+    # 300 und 302 dürfen nach 301 kommen (oder gar nicht, aber 301 muss Top-1 sein)
+    for other_id in [i for i in (300, 302) if i in ids]:
+        assert idx_301 < ids.index(other_id), (
+            f"ID 301 (beide Token) soll vor {other_id} (ein Token) stehen, "
+            f"Reihenfolge: {ids}"
+        )
+
+
 def test_ROU_15_controller_dir_env_var_resolves(monkeypatch, tmp_path):
     monkeypatch.setenv('ROUTER_CONTROLLER_DIR', '/tmp/some-controller')
     args = router_main.parse_args(['--routing', str(tmp_path / 'missing.json')])
