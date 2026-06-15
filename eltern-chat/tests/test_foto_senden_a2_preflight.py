@@ -4,7 +4,8 @@ Prüft den Entry-Path: FotoSendenTask.run() → A2ReceiptStore.insert().
 
 Test-Plan (AC2, AC4):
 - Happy-Path: Hochladen → Receipt geschrieben, resource_id=medium_id,
-  inverse_call='photo_client.delete_medium("<id>")'.
+  inverse_call='photo DELETE /api/v1/photo/medien/<id>' (HTTP-Form,
+  EC-10 spec Z. 533-535).
 - Sequenz-Probe: Hochladen → delete-Stub aufgerufen (Widerruf simuliert).
 - Kein Receipt bei Fehler-Signal (Grenze, nicht erreichbar).
 - Kein Receipt, wenn receipt_store=None (Backward-Compat).
@@ -73,7 +74,8 @@ def _receipts(conn):
 
 def test_hochladen_schreibt_receipt(tmp_path):
     """AC2: erfolgreicher Upload → Receipt mit resource_id=medium_id,
-    inverse_call='photo_client.delete_medium("<id>")'."""
+    inverse_call='photo DELETE /api/v1/photo/medien/<id>' (HTTP-Form,
+    EC-10 spec Z. 533-535)."""
     db_path = str(tmp_path / "test.db")
     store = A2ReceiptStore(db_path)
 
@@ -106,7 +108,7 @@ def test_hochladen_schreibt_receipt(tmp_path):
     assert task_name == "foto_senden"
     assert chat_id == 100
     assert resource_id == "med-xyz"
-    assert inverse_call == 'photo_client.delete_medium("med-xyz")'
+    assert inverse_call == 'photo DELETE /api/v1/photo/medien/med-xyz'
     assert sealed_at is None  # frisch, noch nicht versiegelt
 
 

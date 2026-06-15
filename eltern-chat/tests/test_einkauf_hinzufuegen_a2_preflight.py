@@ -4,7 +4,8 @@ Prüft den Entry-Path: einkauf_hinzufuegen() → A2ReceiptStore.insert_many().
 
 Test-Plan (AC3, AC4):
 - 3-Item-Happy-Path: 3 Items angelegt → 3 Receipts mit identischer committed_at,
-  inverse_call='essen_client.delete_einkauf("<item_id>")' pro Item.
+  inverse_call='essen DELETE /api/v1/essen/wuensche/<item_id>' pro Item
+  (HTTP-Form, EC-10 spec Z. 533-535).
 - Duplikat-Skip: übersprungene Items bekommen keinen Receipt.
 - Kein Receipt bei sonstigem Fehler (Rückgabe-Pfad verlässt Loop früh).
 - Backward-Compat: receipt_store=None → kein Fehler, Items trotzdem geschrieben.
@@ -104,10 +105,10 @@ def test_drei_items_drei_receipts(tmp_path):
         assert row[0] == "einkauf_hinzufuegen"
         assert row[1] == 100
 
-    # inverse_call hat die korrekte Form
+    # inverse_call hat die korrekte HTTP-Form (EC-10 spec Z. 533-535)
     inverse_calls = {row[3] for row in rows}
     for inv in inverse_calls:
-        assert inv.startswith('essen_client.delete_einkauf("'), (
+        assert inv.startswith('essen DELETE /api/v1/essen/wuensche/'), (
             "inverse_call hat falsche Form: %r" % inv)
 
     # Alle drei haben identische committed_at (insert_many in einer Transaktion)
@@ -151,7 +152,7 @@ def test_resource_id_ist_item_id(tmp_path):
 
     assert len(rows) == 1
     assert rows[0][2] == "brot-id-42"   # resource_id
-    assert rows[0][3] == 'essen_client.delete_einkauf("brot-id-42")'
+    assert rows[0][3] == 'essen DELETE /api/v1/essen/wuensche/brot-id-42'
 
 
 def test_duplikat_kein_receipt(tmp_path):

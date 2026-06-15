@@ -329,9 +329,13 @@ def einkauf_hinzufuegen(text, from_user_id, essen_client, icon_client,
             hinzugefuegt.append(canonical)
             # EC-10 A2-Receipt: item_id ist der kanonische Schlüssel (EIN-5,
             # Phase-0-Befund: item_id ist INPUT, schon bekannt vor dem POST).
+            # inverse_call in HTTP-Form (spec Z. 533-535) — Endpunkt für
+            # Einkaufs-/Wunsch-Löschung: essen/main.py:22, 807 (ESSEN-17,
+            # DELETE /api/v1/essen/wuensche/<id>). Klasse=einkauf wird über
+            # denselben Endpunkt entfernt (gemeinsamer wuensche.json-Store).
             receipt_items.append(
                 (str(item_id),
-                 'essen_client.delete_einkauf("%s")' % item_id))
+                 'essen DELETE /api/v1/essen/wuensche/%s' % item_id))
             logger.info(
                 "einkauf_hinzufuegen: angelegt %r (item_id=%s, kat=%s)",
                 canonical, item_id, kategorie)
