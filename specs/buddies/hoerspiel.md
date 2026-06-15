@@ -1299,20 +1299,39 @@ Mini-App fällt **unter diese Regel** — sie greift NICHT auf Dateien
 unter `/display/hoerspiel/data/...` zu, sondern ausschließlich über
 diesen Audio-Endpoint (API-Naht, APP-3).
 
-### HSP-38 — Themen-Liste-Endpoint
+### HSP-38 — Themen-Liste-Endpoint (kind_id-tragend, RAT-17)
 
-`GET /api/v1/hoerspiel/themen?alter=<n>` liefert die kuratierte
-Themen-Liste für ein Alter (Quelle: `themen_je_alter[<n>]` aus
-`hoerspiel.json`, HSP-27a):
+`GET /api/v1/hoerspiel/<kind_id>/themen` liefert die kuratierte
+Themen-Liste der Instanz. Das Alter zieht der Buddy implizit aus seiner
+`instance.json` (HSP-27, Feld `themen_je_alter` als Map mit dem
+instance-eigenen Alters-Schlüssel). Der Aufruf-Pfad enthält **kein**
+Alter — RAT-17 Entscheidung „Single Source of Truth pro Instanz" (vgl.
+E-HFE-3): Alter lebt nur in instance.json, nicht doppelt im Aufruf.
 
 ```
-200 {"alter": 4, "themen": ["Mut beim Probieren", "Streit vertragen", ...]}
-404 wenn Alter nicht in `themen_je_alter`
+200 {"kind_id": "mia", "name": "Mia", "alter": 4,
+     "themen": ["Mut beim Probieren", "Streit vertragen", …]}
+404 wenn kind_id unbekannt (kein hoerspiel-Pfad für diesen Wert)
+422 wenn das Alter der Instanz nicht in
+    instance.json.themen_je_alter gepflegt ist
 ```
+
+Antwort-Felder: `kind_id` und `name` stammen aus `familie.json` (FK
+über `instance.json.kind_id`), `alter` aus der instance.json-Themen-
+Map-Schlüssel-Wahl (V1 ein Schlüssel je Instanz, z. B. „4" für Mia).
+Die `name`-Mitlieferung erlaubt dem HFE-Skill personalisierte Tool-
+Result-Texte („Vorschläge für \<Name> …", HFE-3).
 
 Konsumenten V1: nur der HFE-Skill ruft diesen Endpoint (HFE-3
 erweitert). Die Mini-App selbst zeigt **keine** Themen-Liste — die
 Themen-Diskussion lebt im Eltern-Chat.
+
+**Migration (Welle B, im Zuge von #910):** der alte Pfad
+`GET /api/v1/hoerspiel/themen?alter=<n>` (Single-Tenant-Form vor
+RAT-17) wird ersatzlos entfernt; HFE-3 + Tests gehen mit demselben PR
+auf die neue Form. Kein Übergangs-Doppelpfad — die alte Route hat
+genau einen Konsumenten (HFE-Skill, monorepo) und kann atomar gedreht
+werden.
 
 ### HSP-39 — Auth-Klausel (Pflicht-Verhalten)
 
