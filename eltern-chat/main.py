@@ -45,6 +45,7 @@ import authz
 import config as config_mod
 import confirm
 import onboarding
+from a2_receipt_store import A2ReceiptStore
 from confirm import PendingProposal, PendingStore
 from history import History
 from model import ImageBlock, Message, ProviderError, TextBlock
@@ -53,7 +54,6 @@ from onboarding_store import OnboardingStore
 from private_chat_session import SessionSortEntry
 from providers import get_provider
 from tasks import TurnContext, build_catalog
-from a2_receipt_store import A2ReceiptStore
 from telegram import ChatMigratedError, TelegramClient, TelegramError
 from telemetry import TelemetryStore
 
@@ -65,6 +65,40 @@ _PROVIDER_DOWN = ("Ich kann deine Anfrage gerade nicht bearbeiten — der "
                   "noch einmal.")   # EC-14
 _TASK_GONE = "Diese Aufgabe ist nicht mehr verfügbar."
 _TASK_FAILED = "Die Aufgabe konnte nicht ausgeführt werden: %s"
+
+# EC-36 Korrektur-Hook (#844): das deterministische `falsch`-Wort vor dem
+# Agenten — case-insensitiv, getrimmt, ganzes Wort. Nur diese Form triggert
+# den Hook; »falsch eingeschätzt«, »ist falsch gelaufen« etc. sind Gesprächs-
+# text und gehen an den Agenten. Subsumiert #721 (deterministischer Vor-Agent-
+# Hook): das Match HIER ist der erste Schritt, danach folgt A2-Inverse oder
+# Klasse-C-Verwerfung.
+_FALSCH_WORT = "falsch"
+
+# EC-36 (#844): Quittungs-Wortlaute pro Pfad-Sorte (spec Z. 1162-1168).
+# Beide Pfade fragen anschließend mit derselben Folge-Frage nach der Korrektur.
+_QUITTUNG_A2_POSITIV = "Ok, rückgängig."
+# EC-7 / EC-10-Spec Z. 586-597: Ambiguitäts-Form für 4xx/5xx oder Connection-
+# Fehler — der Bot bleibt ehrlich, behauptet keinen sauberen Rollback.
+_QUITTUNG_A2_AMBIVALENT = (
+    "Konnte den Eintrag nicht zweifelsfrei zurücknehmen — bitte selbst an "
+    "der Quelle prüfen.")
+_QUITTUNG_C_VERWORFEN = "Ok, Vorschlag verworfen."
+# Folge-Frage des Bots NACH der Quittung — identisch für A2 und Klasse-C
+# (spec Z. 1162-1168).
+_QUITTUNG_KORREKTUR_FRAGE = "Was war falsch, wie soll ich es machen?"
+
+# EC-36 / EC-10 spec Z. 533-535: inverse_call ist HTTP-Form
+# "<buddy-key> <method> <api-path>". Buddy-Key → Origin-URL-Resolver:
+# der Hook nutzt einen reinen Getter, damit der Skill-Client unangetastet
+# bleibt (T844-stop_rule client_pollution). Neue Buddies werden hier
+# ergänzt, sobald sie A2-Receipts schreiben.
+def _resolve_origin(buddy_key, ctx):
+    """Liefert die Origin-URL für einen Buddy-Key des inverse_call (#844)."""
+    if buddy_key == "photo":
+        return ctx.photo_origin_url
+    if buddy_key == "essen":
+        return ctx.essen_origin_url
+    return ""
 
 
 @dataclass
@@ -93,6 +127,14 @@ class Context:
     paa_sessions: dict = None  # PAA-6: laufende »Panel anlegen«-Sessions (chat_id → PaaSession)
     tab_sessions: dict = None  # TAB-12: laufende »Termine aus Bild«-Sessions (chat_id → TabSession)
     avb_sessions: dict = None  # AVB/ONB-11: laufende »Anbieter wechseln«-Sessions (chat_id → AvbSession)
+    # EC-36 Korrektur-Hook (#844): der Vor-Agent-Hook liest unversiegelte
+    # A2-Receipts aus dem Store und ruft je inverse_call den passenden Buddy-
+    # Endpunkt deterministisch (HTTP DELETE) — Origin-URLs werden im build_context
+    # aus cfg.* eingespeist, der Hook braucht keinen Skill-Client-Wrapper
+    # (RAT-12 / T844-stop_rule client_pollution).
+    a2_receipt_store: object = None   # A2ReceiptStore | None — None ⇒ Hook ist no-op
+    photo_origin_url: str = ""        # Origin des Photo-Buddys (cfg.photo_origin_url)
+    essen_origin_url: str = ""        # Origin des Essens-Buddys (cfg.essen_origin_url)
 
 
 # SESS-5: Session-Sorten-Registry — modul-weit, einmal definiert.
@@ -195,6 +237,16 @@ def handle_update(update, ctx):
                      msg.from_user_id)
         return
 
+    # EC-36 Korrektur-Hook (#844): vor dem Bestätigungs-Gate UND vor dem Agenten.
+    # Der `falsch`-Vor-Agent-Hook ist deterministisch, außerhalb des Agenten
+    # (E-EC-4-Linie wie is_confirmation): das LLM entscheidet nie über das
+    # Rückgängigmachen. Subsumiert #721. Liegt ein unversiegelter A2-Receipt vor,
+    # läuft der Inverse-Call; sonst wird ein offener Klasse-C-Vorschlag verworfen.
+    # Im trivialen Fall (kein Receipt, kein Pending) ist `falsch` Gesprächstext
+    # und der Hook gibt False zurück — der Agent kann antworten.
+    if _is_falsch_wort(msg.text) and _falsch_hook(msg, ctx):
+        return
+
     # EC-10: Bestätigung schreibender Aufgaben — deterministisch (E-EC-7),
     # außerhalb des Agenten. Nur wenn der Text ein Bestätigungswort ist UND ein
     # passender offener Vorschlag existiert, wird ausgeführt.
@@ -207,6 +259,176 @@ def handle_update(update, ctx):
         # an den Agenten.
 
     _run_agent(msg, ctx)
+
+
+def _is_falsch_wort(text):
+    """True, wenn `text` GENAU dem Korrektur-Wort `falsch` entspricht (EC-36,
+    case-insensitiv, getrimmt; analog confirm.is_confirmation für »ok«)."""
+    if not text:
+        return False
+    return text.strip().lower() == _FALSCH_WORT
+
+
+def _http_delete(origin_url, api_path, timeout=2.0, transport=None):
+    """Setzt einen HTTP DELETE auf `origin_url + api_path` ab (EC-36 Inverse).
+
+    Liefert `(status_code, body_bytes)`. Connection-Fehler werden als
+    `(0, b"")` zurückgegeben — der Hook wertet status < 200 oder >= 300 als
+    Ambiguität (EC-7/EC-10 spec Z. 586-597) und siegelt den Bon trotzdem.
+
+    Test-Naht analog `conventions/http-client.md` CLIENT-1: optionaler
+    `transport=`-Callable, Default ist der echte HTTP-Aufruf über urllib.
+    Tests übergeben einen In-Process-Stub statt monkeypatch — die
+    Signatur des Stubs ist identisch mit dem Default-Transport:
+    `(url, timeout) -> (status_code, bytes)`.
+
+    Hinweis zur Lego-Form: _http_delete ist KEIN voller Komponenten-Client
+    nach CLIENT-1..CLIENT-4. Der Pfad kommt aus dem persistierten
+    `inverse_call` (EC-36 spec Z. 543-561, `a2_receipts.inverse_call`),
+    nicht aus dem Skill-Code — CLIENT-4 (Pfad-Konstanten aus urls.md)
+    trifft für inverse_call deshalb nicht. Eine eigene Komponenten-Error-
+    Klasse (CLIENT-3) ist hier ebenfalls offen — Halt-zu-Nic-Sonderfall,
+    weil der Hook ausdrücklich auf Ambiguitäts-Quittung statt Exception
+    setzt (EC-7/EC-10 spec Z. 586-597).
+
+    Bewusst urllib (kein requests-Dependency); konsistent mit
+    `skills/photo_client.py:152-186`.
+    """
+    import urllib.error
+    import urllib.request
+
+    url = (origin_url or "").rstrip("/") + api_path
+    if transport is not None:
+        # CLIENT-1 Test-Naht — Stub erhält dieselbe Signatur wie der echte
+        # Default-Transport unten (URL + timeout).
+        return transport(url, timeout)
+    request = urllib.request.Request(url, method="DELETE")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as resp:
+            return resp.status, resp.read()
+    except urllib.error.HTTPError as e:
+        # 4xx/5xx kommen als HTTPError — der Hook liest sie als Ambiguität.
+        return e.code, e.read()
+    except (urllib.error.URLError, OSError) as e:
+        logging.warning("EC-36-Hook: DELETE %s nicht erreichbar (%s)", url, e)
+        return 0, b""
+
+
+def _falsch_hook(msg, ctx, http_delete=None):
+    """Vor-Agent-Hook für das Korrektur-Wort `falsch` (EC-36, #844).
+
+    Reihenfolge der Pfade (spec Z. 1145-1168):
+      1. **A2-Pfad** — wenn unversiegelte A2-Receipts der `chat_id` existieren,
+         pro Receipt den `inverse_call` parsen und HTTP-DELETE absetzen,
+         danach **alle** Receipts des Chats versiegeln (auch im Ambiguitäts-
+         Fall, spec Z. 593-597). Quittung positiv bei sauberen 2xx auf allen
+         Receipts, sonst Ambiguitäts-Quittung (EC-7/EC-10 spec Z. 586-597).
+         Korrektur-State wird gesetzt — die Folge-Frage „Was war falsch?"
+         wird angehängt; der nächste User-Turn läuft mit erweitertem System-
+         Prompt durch den Agenten (Re-Propose ⇒ Confirm-Gate, spec Z. 1193-1201).
+      2. **Klasse-C-Pfad** — kein A2-Receipt, aber ein offener Pending-Vorschlag:
+         der Vorschlag wird verworfen (`take()` ohne Reply-ID nutzt den Single-
+         Slot), Quittung „Vorschlag verworfen", Korrektur-State gesetzt.
+      3. **Trivialer Fall** — weder Receipt noch Pending: der Hook gibt False
+         zurück, `falsch` ist Gesprächstext und geht an den Agenten.
+
+    Rückgabe: True ⇒ Hook hat petrarbeitet, Orchestrierung beendet den Turn.
+              False ⇒ Hook hat nichts gefunden, weiterreichen.
+
+    `http_delete` (Test-Naht, CLIENT-1-Pattern): optionaler Callable mit
+    derselben Signatur wie `_http_delete(origin, api_path) -> (status, bytes)`.
+    Default `None` → das Modul-Level `_http_delete` (echter HTTP-Aufruf).
+    Tests injizieren einen In-Process-Stub statt monkeypatch.
+
+    Cross-Skill-Exit (spec Z. 1184-1191) ist implizit: der Korrektur-State lebt
+    nur einen Folge-Turn — schickt der User dort eine Anfrage zu einem anderen
+    Skill, läuft der Agent durch seinen normalen Pfad (neuer Vorschlag in
+    `pending.add()` verdrängt nichts, weil der alte Pending bereits beim
+    `falsch` verworfen wurde). `_run_agent` löscht den State nach jedem Turn.
+    """
+    chat_id = msg.chat_id
+    if http_delete is None:
+        http_delete = _http_delete
+
+    # Pfad 1: A2-Receipts.
+    receipts = []
+    if ctx.a2_receipt_store is not None:
+        try:
+            receipts = ctx.a2_receipt_store.fetch_unsealed_for_chat(chat_id)
+        except Exception as e:
+            # Receipt-Lese-Fehler darf den Hook nicht sprengen — er fällt auf
+            # den Klasse-C-Pfad zurück. Ehrliche Grenze (EC-7).
+            logging.warning("EC-36-Hook: fetch_unsealed_for_chat fehlgeschlagen "
+                            "chat_id=%s: %s", chat_id, e)
+
+    if receipts:
+        alle_ok = True
+        last_skill = receipts[-1]["task_name"]
+        for receipt in receipts:
+            inverse = receipt.get("inverse_call") or ""
+            parts = inverse.split(None, 2)
+            if len(parts) != 3:
+                logging.warning("EC-36-Hook: ungültige inverse_call-Form %r "
+                                "(receipt id=%s)", inverse, receipt.get("id"))
+                alle_ok = False
+                continue
+            buddy_key, method, api_path = parts
+            origin = _resolve_origin(buddy_key, ctx)
+            if not origin or method.upper() != "DELETE":
+                logging.warning("EC-36-Hook: keine Origin/Method-Form für "
+                                "buddy_key=%r method=%r", buddy_key, method)
+                alle_ok = False
+                continue
+            status, _body = http_delete(origin, api_path)
+            if not (200 <= status < 300):
+                # EC-10 spec Z. 586-597: Ambiguitäts-Pfad — Quittung wird
+                # ehrlich, Bon trotzdem gesiegelt (kein zweiter Versuch).
+                logging.info("EC-36-Hook: inverse DELETE %s%s -> %s (ambivalent)",
+                             origin, api_path, status)
+                alle_ok = False
+            else:
+                logging.info("EC-36-Hook: inverse DELETE %s%s -> %s (ok)",
+                             origin, api_path, status)
+
+        # Versiegelung läuft IMMER nach den Inverse-Versuchen (spec Z. 593-597):
+        # auch im Ambiguitäts-Fall ist der Bon „verbraucht", ein zweiter
+        # `falsch` greift nicht mehr auf dieselbe Zeile.
+        try:
+            ctx.a2_receipt_store.seal_all_for_chat(chat_id)
+        except Exception as e:
+            logging.warning("EC-36-Hook: seal_all_for_chat fehlgeschlagen "
+                            "chat_id=%s: %s", chat_id, e)
+
+        quittung = (_QUITTUNG_A2_POSITIV if alle_ok
+                    else _QUITTUNG_A2_AMBIVALENT)
+        _send(ctx, chat_id, quittung + "\n" + _QUITTUNG_KORREKTUR_FRAGE,
+              reply_to_message_id=msg.message_id)
+        ctx.pending.set_correction(chat_id, confirm.CorrectionState(
+            last_skill=last_skill, last_args={}, quelle="a2"))
+        return True
+
+    # Pfad 2: offener Klasse-C-Pending-Vorschlag.
+    # take() ohne Reply-ID nutzt den Single-Slot (confirm.py Z. 95-107).
+    pending = ctx.pending.take(chat_id, msg.reply_to_message_id)
+    if pending is None and msg.reply_to_message_id is not None:
+        # Fallback: Reply-Bezug passt nicht (z. B. Antwort auf alte Nachricht) —
+        # trotzdem den Single-Slot ziehen, weil `falsch` der eindeutige Korrektur-
+        # Trigger ist und keine ID-Sortierung braucht (EC-36 Wortmatch ist
+        # deterministisch, kein LLM).
+        pending = ctx.pending.take(chat_id, None)
+    if pending is not None:
+        _send(ctx, chat_id,
+              _QUITTUNG_C_VERWORFEN + "\n" + _QUITTUNG_KORREKTUR_FRAGE,
+              reply_to_message_id=msg.message_id)
+        ctx.pending.set_correction(chat_id, confirm.CorrectionState(
+            last_skill=pending.task_name,
+            last_args=dict(pending.arguments or {}),
+            quelle="klasse_c"))
+        return True
+
+    # Pfad 3: trivial — kein Receipt, kein Pending. `falsch` ist Gesprächstext
+    # und geht an den Agenten (ohne Hook-Markierung).
+    return False
 
 
 def _maybe_append_telemetry(text, telemetry):
@@ -282,12 +504,21 @@ def _run_agent(msg, ctx):
             logging.warning("Typing-Indikator-Aufruf hat trotz Wrapper-Schluck "
                             "geworfen: %s", e)
 
+    # EC-36 Korrektur-Hook (#844): liegt ein Korrektur-State für diesen Chat
+    # vor, reicht die Orchestrierung ihn an den Agenten — der erweitert seinen
+    # System-Prompt um den Original-Kontext (last_skill, last_args, quelle),
+    # damit das LLM einen gezielten Patch baut statt blank von vorn zu starten.
+    # Lebensdauer: genau-ein-Turn — nach dem Agent-Lauf (unten) wird der State
+    # gelöscht, egal ob ein Re-Propose oder eine LLM-Rückfrage entstand.
+    correction_state = ctx.pending.get_correction(msg.chat_id)
+
     try:
         result = agent.run_turn(history, user_message, ctx.provider,
                                 ctx.catalog, turn_context,
                                 before_provider_call=_typing,
                                 chat_action_renewer=_typing,  # Issue #165
-                                tg=ctx.tg)  # T722: Form-(b)-Übersetzer braucht tg für send
+                                tg=ctx.tg,  # T722: Form-(b)-Übersetzer braucht tg für send
+                                correction_state=correction_state)
     except ProviderError as err:
         # EC-14: klarer Hinweis, sauberer Abbruch — keine halbfertige Aufgabe.
         # EC-23 (#268): der Wrapper im Agenten hat einen Stub-Call angehängt
@@ -296,8 +527,19 @@ def _run_agent(msg, ctx):
         # ist erfolgreich durchgekommen, also wäre ein Suffix irreführend.
         _persist_telemetry(ctx, turn_id, msg.chat_id,
                            getattr(err, "telemetry", None))
+        # EC-36 (#844): Korrektur-State auch im Provider-Down-Fall verbrauchen
+        # — sonst würde der nächste Turn ihn doppelt zugespielt bekommen.
+        if correction_state is not None:
+            ctx.pending.clear_correction(msg.chat_id)
         _send(ctx, msg.chat_id, _PROVIDER_DOWN)
         return
+
+    # EC-36 (#844): Korrektur-State gilt genau einen Folge-Turn — egal ob ein
+    # Re-Propose entstand, eine LLM-Rückfrage kam, ein Cross-Skill-Aufruf lief
+    # oder eine reine Text-Antwort. Beim Re-Propose liegt der neue Vorschlag
+    # bereits im Pending-Slot, der Confirm-Gate-Pfad läuft danach normal.
+    if correction_state is not None:
+        ctx.pending.clear_correction(msg.chat_id)
 
     # #310: das VOLLE Turn-Transkript in Loop-Reihenfolge persistieren — nicht
     # nur die finale Text-Quittung. Das Modell muss in Folge-Turns seine eigenen
@@ -661,6 +903,15 @@ def build_context(cfg, db_path, zd_cli_path=None):
         paa_sessions=paa_sessions,
         tab_sessions=tab_sessions,
         avb_sessions=avb_sessions,
+        # EC-36 Korrektur-Hook (#844): der Vor-Agent-Hook braucht denselben
+        # A2ReceiptStore wie die A2-Skills (foto_senden, einkauf_hinzufuegen),
+        # damit `falsch` die zuletzt geschriebenen Bons unversiegelt findet und
+        # die inverse_calls deterministisch ausführen kann. Origin-URLs werden
+        # für den HTTP-DELETE-Aufruf gebraucht (Buddy-Key → Origin-URL-Map im
+        # Hook, siehe _BUDDY_ORIGIN_GETTERS).
+        a2_receipt_store=a2_receipt_store,
+        photo_origin_url=cfg.photo_origin_url or "",
+        essen_origin_url=cfg.essen_origin_url or "",
     )
     # FAA-12 / GAA-5 / KAV-3: Familien-Gruppen-ID darf nach einer Migration
     # (EC-18) wechseln — der Getter liest sie zur Laufzeit aus dem Context,
