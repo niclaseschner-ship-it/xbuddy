@@ -269,9 +269,41 @@ def _call_provider(provider, request, telemetry):
     return response
 
 
+def _correction_system_suffix(correction_state):
+    """Baut den System-Prompt-Anhang für den EC-36-Korrektur-Folge-Turn (#844).
+
+    Der Suffix sagt dem LLM offen, dass der vorige Akt zurückgenommen wurde
+    und die nächste User-Nachricht den Patch trägt. Es darf rückfragen, wenn
+    der Patch unklar ist (spec Z. 1177-1182), und es darf den Skill wechseln,
+    wenn die User-Antwort gar nicht mehr zum alten Skill gehört (Cross-Skill-
+    Exit, spec Z. 1184-1191). Der Wortlaut nennt explizit den vorigen
+    `last_skill`, damit das LLM bei einem Re-Propose denselben Skill wieder
+    ruft (mit gepatchten Args) statt einen ähnlichen zu raten. Re-Propose
+    durchläuft IMMER das zweistufige Confirm-Gate (spec Z. 1193-1201) — das
+    erzwingt das Framework selbst (WRITE → propose, kein A2-Sofort-Modus im
+    Folge-Turn nötig, weil der Skill seinen Klasse bestimmt; siehe agent.py
+    Z. 410 auto_confirm-Branch).
+    """
+    last_skill = correction_state.last_skill or "unbekannt"
+    return (
+        "\n\nKORREKTUR-STATE (EC-36, #844):\n"
+        "Der vorige Schreibakt/Vorschlag des Skills «%s» wurde gerade per "
+        "»falsch« vom User zurückgenommen. Die folgende User-Nachricht trägt "
+        "die Korrektur (z. B. »eigentlich Brötchen«, »Donnerstag 17 statt 16«). "
+        "Baue daraus einen neuen Aufruf desselben Skills mit gepatchten "
+        "Argumenten — das System legt ihn als Vorschlag vor (Confirm-Gate). "
+        "Ist die Korrektur unklar (z. B. »alle Termine einen Tag nach vorne« "
+        "ohne klare Auswahl), stelle eine knappe Rückfrage statt zu raten. "
+        "Will der User einen anderen Skill (z. B. nach »falsch« zum Termin: "
+        "»eigentlich Plan-Aktivität«), rufe den passenden Skill — der Korrektur-"
+        "Pfad wird damit verlassen." % last_skill
+    )
+
+
 def run_turn(history_messages, user_message, provider, catalog, turn_context,
              max_iterations=MAX_ITERATIONS, before_provider_call=None,
-             chat_action_renewer=None, tg=None, task_events_store=None):
+             chat_action_renewer=None, tg=None, task_events_store=None,
+             correction_state=None):
     """Verarbeitet eine Anfrage und liefert ein `AgentResult`.
 
     `history_messages` ist der geladene Gesprächskontext (EC-6), `user_message`
@@ -310,11 +342,21 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
     Sandbox- und Test-Kompatibilität bleibt unverändert. Für Live-Aktivierung
     muss main.py `task_events_store=ctx.task_events_store` durchreichen.
 
+    `correction_state` (EC-36 Korrektur-Hook, #844): optionaler
+    `confirm.CorrectionState`. Ist er gesetzt, hängt run_turn einen Suffix an
+    den SYSTEM_PROMPT — das LLM sieht, dass der vorige Akt zurückgenommen
+    wurde und die User-Nachricht den Patch trägt. Lebenszyklus liegt bei der
+    Orchestrierung (main.py löscht den State nach jedem Turn).
+
     Wirft `model.ProviderError` weiter, wenn der Anbieter scheitert (EC-14) —
     die Behandlung liegt bei der Orchestrierung.
     """
     messages = list(history_messages) + [user_message]
     task_defs = catalog.task_defs()
+    # EC-36 (#844): System-Prompt-Erweiterung im Korrektur-Folge-Turn.
+    effective_system = SYSTEM_PROMPT
+    if correction_state is not None:
+        effective_system = SYSTEM_PROMPT + _correction_system_suffix(correction_state)
     # EC-23 (#268): Sammler für die Provider-Calls dieses Turns. Auch ohne
     # einen einzigen Call bleibt das Objekt gesetzt — die Orchestrierung
     # erkennt an `has_calls()`, ob ein Suffix anzuhängen ist (AC2/AC3).
@@ -349,7 +391,7 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
             _renewal = None
 
         request = GenerationRequest(
-            system=SYSTEM_PROMPT, messages=messages, task_defs=task_defs)
+            system=effective_system, messages=messages, task_defs=task_defs)
         with (_renewal if _renewal is not None else _NullContext()):
             # Issue #165: Renewal-Thread hält den Typing-Indikator für die
             # Dauer des Provider-Calls lebendig; _call_provider kapselt den

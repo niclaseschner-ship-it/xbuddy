@@ -1,7 +1,11 @@
-"""Tests für die Bestätigung — EC-10, E-EC-7 (Refs #27)."""
+"""Tests für die Bestätigung — EC-10, E-EC-7 (Refs #27).
+
+EC-36 Korrektur-State (#844): zusätzlich der Single-Slot-Lifecycle für
+`CorrectionState` (set/get/clear).
+"""
 
 import confirm
-from confirm import PendingProposal, PendingStore
+from confirm import CorrectionState, PendingProposal, PendingStore
 
 # -- is_confirmation: deterministischer Wort-Abgleich (E-EC-7) ----
 
@@ -82,3 +86,59 @@ def test_EC_10_taken_proposal_is_consumed():
     store.take("c1", reply_to_message_id=10)
     # ein zweites Mal nicht mehr da — keine doppelte Ausführung
     assert store.take("c1", reply_to_message_id=10) is None
+
+
+# ============================================================
+#  EC-36 Korrektur-State (#844)
+# ============================================================
+
+
+def _correction(skill="einkauf_hinzufuegen", args=None, quelle="a2"):
+    return CorrectionState(last_skill=skill, last_args=args or {},
+                           quelle=quelle)
+
+
+def test_EC_36_get_correction_returns_none_initially():
+    """Frischer Store hat keinen Korrektur-State."""
+    assert PendingStore().get_correction("c1") is None
+
+
+def test_EC_36_set_and_get_correction_roundtrip():
+    """set_correction() macht den State per get_correction() sichtbar."""
+    store = PendingStore()
+    state = _correction(skill="foto_senden", quelle="a2")
+    store.set_correction("c1", state)
+
+    got = store.get_correction("c1")
+    assert got is state
+    assert got.last_skill == "foto_senden"
+    assert got.quelle == "a2"
+
+
+def test_EC_36_clear_correction_macht_state_unsichtbar():
+    """clear_correction() löscht den State (genau-ein-Turn-Lebensdauer)."""
+    store = PendingStore()
+    store.set_correction("c1", _correction())
+    store.clear_correction("c1")
+    assert store.get_correction("c1") is None
+
+
+def test_EC_36_set_correction_verdraengt_vorhandenen_state():
+    """Zweites set_correction() ersetzt den ersten State atomar (Single-Slot)."""
+    store = PendingStore()
+    store.set_correction("c1", _correction(skill="erster"))
+    store.set_correction("c1", _correction(skill="zweiter"))
+    assert store.get_correction("c1").last_skill == "zweiter"
+
+
+def test_EC_36_correction_state_per_chat_isoliert():
+    """States verschiedener chat_ids stören sich nicht."""
+    store = PendingStore()
+    store.set_correction("c1", _correction(skill="skill1"))
+    store.set_correction("c2", _correction(skill="skill2"))
+    assert store.get_correction("c1").last_skill == "skill1"
+    assert store.get_correction("c2").last_skill == "skill2"
+    store.clear_correction("c1")
+    # c2 bleibt erhalten
+    assert store.get_correction("c1") is None
+    assert store.get_correction("c2").last_skill == "skill2"
