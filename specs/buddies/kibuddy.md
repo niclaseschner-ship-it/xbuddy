@@ -81,9 +81,12 @@ und Bestätigung.
   Service (KIBUDDY-16), aber **nicht** persistent auf Platte. View-Reload
   oder Service-Neustart löscht den Verlauf. V2-Pfad bedient Eltern-
   Einsicht und „weiter wo wir aufgehört haben"-Resume.
-- **OPEN-KIBUDDY-I** — **Lemmatisierung/Stemmer für Icon-Lookup**: V1 macht
-  reinen Teilwort-Substring-Match über ICONS-7 — „läuft" findet ggf. nicht
-  „laufen". Lemma-Schicht ist V2.
+- **OPEN-KIBUDDY-I** — **Lemmatisierung/Stemmer für Buzzword-Icon-Lookup**:
+  V1 verlässt sich darauf, dass der LLM-Output (`buzzwords[3]` aus T865-Refactor)
+  bereits Grundform-Wörter liefert (System-Prompt fordert „Substantiv/Verb/
+  Adjektiv im Singular"). Wenn der LLM doch flektiert (z. B. „Häuser" statt
+  „Haus") trifft ICONS-7 das Lemma ggf. nicht — Lemma-Schicht im Backend
+  ist V2.
 
 ---
 
@@ -470,7 +473,7 @@ in der Berater-Runde den richtigen Generalisierungs-Schnitt zu legen
 | `prompt.max-bytes` | `50000` | Max-Größe für PUT /prompt (KIBUDDY-24) | Config |
 | `llm.provider` | `claude` | LLM-Provider | Config; V1 nur `claude` |
 | `llm.modell` | `claude-haiku-4-5` | Modell-Wahl | Config |
-| `stt_provider` | `openai` | STT-Anbieter-Wahl (`openai` oder `azure_openai`, KIBUDDY-12) | Config; ENV `KIBUDDY_STT_PROVIDER` |
+| `stt.provider` | `openai` | STT-Anbieter-Wahl (`openai` oder `azure_openai`, KIBUDDY-12). Code-Identifier: `stt_provider`. | Config; ENV `KIBUDDY_STT_PROVIDER` |
 | `stt.modell` | `whisper-1` | Whisper-Modell-Variante | Config |
 | `stt.sprache` | `de` | STT-Sprache | Config |
 | `tts.stimme` | `onyx` | TTS-Voice | Config |
