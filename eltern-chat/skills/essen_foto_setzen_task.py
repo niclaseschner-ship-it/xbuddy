@@ -3,7 +3,7 @@
 
 Diese Aufgabe ist der Trigger der `essen_foto_setzen`-Funktion: versteht der
 Agent eine Foto-Nachricht mit Essens-Caption, schlägt er das Setzen vor
-(propose→confirm, EC-10 zweistufige Variante, Klasse C).
+(propose→confirm, EC-10 zweistufige Variante, Cluster C / Capability-Karte).
 
 Atomarer Ablauf (E-EC-7 — EIN Confirm pro Operation):
   Agent ruft Task mit `aktion='hochladen'`: Foto holen, an Essen-Buddy
@@ -11,7 +11,7 @@ Atomarer Ablauf (E-EC-7 — EIN Confirm pro Operation):
   foto_overrides.json bei Basis-Item). Kein zweiter Tool-Call noetig.
 
 Catalog-Name: „essen_foto_setzen".
-Klasse: C/D (propose→confirm, schreibend, ESSEN-22 Pfad 2).
+Profil: Cluster C / Capability-Karte (propose→confirm, schreibend, ESSEN-22 Pfad 2).
 
 Die Ziel-Ermittlung (Katalog-Lookup nach Caption-Item-Name) liegt beim
 Aufrufer (LLM-Klassifikation, ESSEN-22 Vor-Routing); der Task bekommt das
@@ -62,7 +62,7 @@ _QUITTUNG_KEIN_MATCH = (
 
 class EssenFotoSetzenTask(WriteTask):
     """Schreibende Katalog-Aufgabe (EC-10), die »Essens-Foto setzen« auslöst
-    (ESSEN-22 Pfad 2, Klasse C propose→confirm, atomar E-EC-7).
+    (ESSEN-22 Pfad 2, Cluster C propose→confirm per Capability-Karte, atomar E-EC-7).
 
     propose(): nennt Ziel und Foto, fragt nach Bestätigung (E-EC-7 — das
     Bestätigungswort »Foto setzen« ist das deterministischste Gate, das ohne
