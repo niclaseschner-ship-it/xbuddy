@@ -15,8 +15,8 @@
  */
 
 const CFG = {
-  LOCK_DISTANZ_PX:   80,    // Slide-up → Lock
-  ABBRUCH_DISTANZ_PX: 100,  // Slide-down → Cancel
+  LOCK_DISTANZ_PX:   30,    // Slide-up → Lock (T864: war 80 — jetzt erreichbar)
+  ABBRUCH_DISTANZ_PX: 60,   // Slide-down → Cancel (T864: war 100, proportional)
   LOCK_HINWEIS_MS:   800,   // ms bis Slide-Hinweis erscheint
   MAX_AUFNAHME_MS:   30000, // 30 s
   ICON_ARASAAC_BASE: "/display/_shared/icons/arasaac/",
@@ -27,6 +27,12 @@ const CFG = {
 const _serverCfg = (typeof window !== "undefined" && window.KIBUDDY_CFG) || {};
 const VAD_STILLE_MS    = ((_serverCfg.vad_stille_sek  != null) ? _serverCfg.vad_stille_sek  : 1.5) * 1000;
 const VAD_THRESHOLD_DB = (_serverCfg.vad_threshold_db != null) ? _serverCfg.vad_threshold_db : -50.0;
+
+// Neue Cfg-Felder (T864: Long-Hold-Auto-Lock + Mindest-Aufnahme-Dauer)
+const cfg = {
+  vad_long_hold_lock_sek: (_serverCfg.vad_long_hold_lock_sek != null) ? _serverCfg.vad_long_hold_lock_sek : 3.0,
+  aufnahme_min_sek:       (_serverCfg.aufnahme_min_sek       != null) ? _serverCfg.aufnahme_min_sek       : 0.5,
+};
 
 // ============================================================
 //  DOM-Refs
@@ -74,6 +80,10 @@ let pttState = "idle";
 let touchStartY = null;
 let lockHinweisTimer = null;
 let maxAufnahmeTimer = null;
+/** T864: Long-Hold-Auto-Lock-Timer (AC2) */
+let longHoldLockTimer = null;
+/** T864: Aufnahme-Start-Zeitpunkt für Mindest-Dauer-Prüfung (AC3) */
+let aufnahmeStartMs = null;
 
 // ============================================================
 //  Audio-Kontext + Pegel (KIBUDDY-9)
@@ -650,6 +660,19 @@ function appendFehlerBubble(msg) {
   $chat.scrollTop = $chat.scrollHeight;
 }
 
+/**
+ * T864-AC3: Dezente Hinweis-Bubble wenn Aufnahme zu kurz war.
+ * Entfernt sich nach 4s automatisch.
+ */
+function appendKurzAufnahmeHinweis() {
+  const div = document.createElement("div");
+  div.className = "bubble bubble-hinweis";
+  div.textContent = "Bitte sprich etwas lauter und l\xE4nger";
+  $chat.appendChild(div);
+  $chat.scrollTop = $chat.scrollHeight;
+  setTimeout(() => div.remove(), 4000);
+}
+
 // ============================================================
 //  Reset (KIBUDDY-29)
 // ============================================================
@@ -693,6 +716,7 @@ async function startAufnahme() {
 
   recorder.start(100); // alle 100ms ein Chunk
   pttState = "recording";
+  aufnahmeStartMs = performance.now(); // T864-AC3: Mindest-Dauer-Messung
 
   // KIBUDDY-8: sofortiges Echo
   $btnPtt.classList.add("aktiv");
@@ -712,12 +736,20 @@ async function startAufnahme() {
       stopUndSende(false);
     }
   }, CFG.MAX_AUFNAHME_MS);
+
+  // T864-AC2: Long-Hold-Auto-Lock nach cfg.vad_long_hold_lock_sek
+  longHoldLockTimer = setTimeout(() => {
+    if (pttState === "recording") {
+      einrastenLock();
+    }
+  }, cfg.vad_long_hold_lock_sek * 1000);
 }
 
 /** Stoppt Recorder (ohne zu senden) */
 function stopRecorder() {
   if (lockHinweisTimer) { clearTimeout(lockHinweisTimer); lockHinweisTimer = null; }
   if (maxAufnahmeTimer) { clearTimeout(maxAufnahmeTimer); maxAufnahmeTimer = null; }
+  if (longHoldLockTimer) { clearTimeout(longHoldLockTimer); longHoldLockTimer = null; } // T864-AC2
   $lockHinweis.hidden = true;
   $cancelHinweis.hidden = true;
   stopVad();
@@ -740,27 +772,42 @@ function stopRecorder() {
 /**
  * Stoppt Aufnahme und sendet (wenn !abbruch).
  * KIBUDDY-11: Bei abbruch=true kein POST.
+ * T864-AC3: Mindest-Aufnahme-Dauer-Filter.
  */
 async function stopUndSende(abbruch) {
   if (pttState === "idle") return;
+
+  // T864-AC3: Dauer messen vor stopRecorder (der setzt pttState → idle)
+  const dauerSek = aufnahmeStartMs !== null
+    ? (performance.now() - aufnahmeStartMs) / 1000
+    : Infinity;
 
   const chunks = aufnahmeChunks.slice();
   const mime   = aufnahmeMimeType;
   stopRecorder();
 
   if (abbruch) {
-    setHeaderStatus("Drück mich, wenn du eine Frage hast");
+    setHeaderStatus("Dr\xFCck mich, wenn du eine Frage hast");
     return;
   }
+
+  // T864-AC3: Aufnahme zu kurz → verwerfen, Hinweis zeigen
+  if (dauerSek < cfg.aufnahme_min_sek) {
+    appendKurzAufnahmeHinweis();
+    setHeaderStatus("Dr\xFCck mich, wenn du eine Frage hast");
+    return;
+  }
+
   await send_aufnahme(chunks, mime);
 }
 
-/** Wechsel in Lock-Modus (KIBUDDY-7 Modus B) */
+/** Wechsel in Lock-Modus (KIBUDDY-7 Modus B + T864-AC2 Long-Hold) */
 function einrastenLock() {
   if (pttState !== "recording") return;
   pttState = "locked";
   $lockHinweis.hidden = true;
   if (lockHinweisTimer) { clearTimeout(lockHinweisTimer); lockHinweisTimer = null; }
+  if (longHoldLockTimer) { clearTimeout(longHoldLockTimer); longHoldLockTimer = null; } // T864-AC2
   $btnPtt.classList.add("locked");
   // Stopp-Knopf zeigen (KIBUDDY-7 "Stopp-Knopf an Slide-Ziel")
   $stoppRow.hidden = false;

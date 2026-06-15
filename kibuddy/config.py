@@ -48,6 +48,8 @@ DEFAULT_INAKTIVITAET_SEK = 60
 DEFAULT_PROMPT_MAX_BYTES = 50000
 DEFAULT_VAD_STILLE_SEK = 1.5
 DEFAULT_VAD_THRESHOLD_DB = -50.0
+DEFAULT_VAD_LONG_HOLD_LOCK_SEK = 3.0
+DEFAULT_AUFNAHME_MIN_SEK = 0.5
 
 
 class ConfigError(Exception):
@@ -76,6 +78,8 @@ class RuntimeConfig:
         prompt_max_bytes: int,
         vad_stille_sek: float,
         vad_threshold_db: float,
+        vad_long_hold_lock_sek: float,
+        aufnahme_min_sek: float,
         anthropic_key: str | None,
         azure_endpoint: str | None,
         azure_key: str | None,
@@ -99,6 +103,8 @@ class RuntimeConfig:
         self.prompt_max_bytes = prompt_max_bytes
         self.vad_stille_sek = vad_stille_sek
         self.vad_threshold_db = vad_threshold_db
+        self.vad_long_hold_lock_sek = vad_long_hold_lock_sek
+        self.aufnahme_min_sek = aufnahme_min_sek
         self.anthropic_key = anthropic_key
         self.azure_endpoint = azure_endpoint
         self.azure_key = azure_key
@@ -121,6 +127,8 @@ class RuntimeConfig:
             "inaktivitaet_sek": self.inaktivitaet_sek,
             "vad_stille_sek": self.vad_stille_sek,
             "vad_threshold_db": self.vad_threshold_db,
+            "vad_long_hold_lock_sek": self.vad_long_hold_lock_sek,
+            "aufnahme_min_sek": self.aufnahme_min_sek,
             "anthropic_key_set": bool(self.anthropic_key),
             "azure_key_set": bool(self.azure_key),
             "openai_key_set": bool(self.openai_key),
@@ -131,6 +139,8 @@ class RuntimeConfig:
         return {
             "vad_stille_sek": self.vad_stille_sek,
             "vad_threshold_db": self.vad_threshold_db,
+            "vad_long_hold_lock_sek": self.vad_long_hold_lock_sek,
+            "aufnahme_min_sek": self.aufnahme_min_sek,
         }
 
 
@@ -232,6 +242,22 @@ def resolve_runtime(
         vad_threshold_db = float(env.get("KIBUDDY_VAD_THRESHOLD_DB") or file_cfg.get("vad_threshold_db") or DEFAULT_VAD_THRESHOLD_DB)
     except (TypeError, ValueError):
         vad_threshold_db = DEFAULT_VAD_THRESHOLD_DB
+    try:
+        vad_long_hold_lock_sek = float(
+            env.get("KIBUDDY_VAD_LONG_HOLD_LOCK_SEK")
+            or file_cfg.get("vad_long_hold_lock_sek")
+            or DEFAULT_VAD_LONG_HOLD_LOCK_SEK
+        )
+    except (TypeError, ValueError):
+        vad_long_hold_lock_sek = DEFAULT_VAD_LONG_HOLD_LOCK_SEK
+    try:
+        aufnahme_min_sek = float(
+            env.get("KIBUDDY_AUFNAHME_MIN_SEK")
+            or file_cfg.get("aufnahme_min_sek")
+            or DEFAULT_AUFNAHME_MIN_SEK
+        )
+    except (TypeError, ValueError):
+        aufnahme_min_sek = DEFAULT_AUFNAHME_MIN_SEK
 
     return RuntimeConfig(
         listen_host=listen_host,
@@ -251,6 +277,8 @@ def resolve_runtime(
         prompt_max_bytes=prompt_max_bytes,
         vad_stille_sek=vad_stille_sek,
         vad_threshold_db=vad_threshold_db,
+        vad_long_hold_lock_sek=vad_long_hold_lock_sek,
+        aufnahme_min_sek=aufnahme_min_sek,
         anthropic_key=env.get(ENV_ANTHROPIC_KEY),
         azure_endpoint=env.get(ENV_AZURE_ENDPOINT),
         azure_key=env.get(ENV_AZURE_KEY),
@@ -284,6 +312,8 @@ def patch_aufnahme_quelle(cfg: RuntimeConfig, neue_quelle: str) -> RuntimeConfig
         prompt_max_bytes=cfg.prompt_max_bytes,
         vad_stille_sek=cfg.vad_stille_sek,
         vad_threshold_db=cfg.vad_threshold_db,
+        vad_long_hold_lock_sek=cfg.vad_long_hold_lock_sek,
+        aufnahme_min_sek=cfg.aufnahme_min_sek,
         anthropic_key=cfg.anthropic_key,
         azure_endpoint=cfg.azure_endpoint,
         azure_key=cfg.azure_key,
