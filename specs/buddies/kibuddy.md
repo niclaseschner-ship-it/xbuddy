@@ -258,12 +258,25 @@ Der Adapter-Schnitt folgt dem LLM-Provider-Switch (KIBUDDY-14): ein konkreter
 STT-Adapter implementiert `transkribiere(audio_bytes, filename)` und wirft
 `STTError` bei Anbieter-Fehler. `stt_service.py` ist provider-agnostisch.
 
-### KIBUDDY-13 — STT ist synchron, blockiert den `/api/v1/kibuddy/frage`-Request
-V1 petrarbeitet eine Frage **synchron**: die View postet das Audio per
-`POST /api/v1/kibuddy/frage` (KIBUDDY-24), wartet auf die Antwort. STT,
-LLM und (optional) TTS-Synthese laufen alle im selben Request-Frame.
-Erwartete Gesamt-Latenz: 2–6 s. Async-Streaming (Server-Sent-Events,
-Wort-für-Wort-Render) ist V2-Pfad (siehe Test-Implikation in KIBUDDY-16).
+### KIBUDDY-13 — Streaming-Reveal: STT-Phase synchron, LLM+TTS-Phase progressiv
+V1 petrarbeitet eine Frage als **NDJSON-Chunked-Stream**: die View postet das
+Audio per `POST /api/v1/kibuddy/frage` (KIBUDDY-24) und liest die Response
+als ReadableStream.
+
+**Stage 1 (kind):** STT läuft synchron im ersten Chunk. Sobald das Transkript
+vorliegt (~1–2 s), liefert der Server sofort die erste NDJSON-Zeile
+`{"event":"kind","transkript":"...","transkript_words":[...]}`. Das Frontend
+rendert die Kind-Bubble direkt daraus — ohne auf LLM zu warten.
+
+**Stage 2 (buddy):** LLM + TTS laufen danach. Wenn fertig, sendet der Server
+die zweite NDJSON-Zeile `{"event":"buddy","text":"...","words":[...],"tts_audio_url":"..."}`.
+Das Frontend rendert die Buddy-Bubble und spielt TTS-Audio ab.
+
+**Lade-Bubble:** bleibt sichtbar zwischen Stage 1 und Stage 2, verschwindet
+erst nach Stage 2 (oder bei Fehler-Event).
+
+Wort-für-Wort-Render innerhalb einer Bubble ist V2-Pfad (Wort für Wort mit
+Scroll-Effekt); V1 rendert jede Bubble komplett nach Empfang des Events.
 
 ## 4. LLM — Antwort-Generierung
 
@@ -517,22 +530,36 @@ Interface-first).
 | `PUT` | `/api/v1/kibuddy/prompt` | Neuen System-Prompt schreiben (KIBUDDY-15) | KPA-Skill |
 
 **POST `/api/v1/kibuddy/frage`** — Multipart-Form mit `audio` (Browser-
-Container, WebM/Opus oder MP4). Response: JSON `{ text: "<antwort>",
-transkript: "<STT-Erkennung des Kind-Inputs>",
-transkript_words: [{ text: "<wort>", is_inhaltswort: true|false }],
-words: [{ text: "<wort>", is_inhaltswort: true|false }], tts_audio_url:
-"/api/v1/kibuddy/audio/<id>.mp3" | null }`. `transkript` ist ein
-**Diagnose-Feld** (Eltern können das Erkannte in Server-Logs / Browser-
-Devtools nachsehen, falls eine Frage falsch verstanden wurde).
-`transkript_words` ist die tokenisierte Form des STT-Transkripts (gleicher
-Wortklassen-Filter wie `words` für die Antwort, KIBUDDY-17) — für die
-Kind-Bubble nach KIBUDDY-17/-19. `tts_audio_url`
-ist `null`, wenn TTS-Synthese fehlschlägt (Resilienz: das Kind sieht
-zumindest die Text-Antwort). Die `words[]`- und `transkript_words[]`-Listen
-enthalten nur `text` + `is_inhaltswort` — clientseitiges Icon-Lookup läuft
-parallel über ICONS-7 pro Inhaltswort (KIBUDDY-17, Stück B). URL-Form
-ermöglicht Browser-Cache + Replay über KIBUDDY-31 ohne JS-State-Bloat im
-Chat-Verlauf (KIBUDDY-19); analog Hörspiel-Folgen-URLs.
+Container, WebM/Opus oder MP4). Response: `Content-Type: application/x-ndjson`,
+`Transfer-Encoding: chunked`, **zwei NDJSON-Zeilen** (KIBUDDY-13):
+
+```
+{"event":"kind","transkript":"<STT-Erkennung>","transkript_words":[{"text":"<w>","is_inhaltswort":true|false},...]}
+{"event":"buddy","text":"<LLM-Antwort>","words":[{"text":"<w>","is_inhaltswort":true|false},...],"tts_audio_url":"/api/v1/kibuddy/audio/<id>.mp3"|null}
+```
+
+Stage-1-Zeile (`event=kind`) wird sofort nach STT gesendet — vor LLM-Aufruf.
+Stage-2-Zeile (`event=buddy`) wird nach LLM+TTS gesendet.
+
+Bei STT-Fehler (vor Stage 1): kein `kind`-Event, stattdessen einzeilige
+Fehler-Response `{"event":"error","stage":"stt","detail":"..."}` (HTTP 200,
+Stream-Level-Fehler — Client prüft `event`-Feld).
+
+Bei LLM-Fehler (nach Stage 1): `kind`-Event wurde bereits gesendet; es folgt
+`{"event":"error","stage":"llm","detail":"..."}` — Kind-Bubble ist sichtbar,
+Buddy-Bubble fehlt.
+
+Bei TTS-Fehler: Stage-2-Zeile trägt `tts_audio_url: null` (Resilienz, wie
+zuvor — Kind sieht zumindest die Text-Antwort).
+
+`transkript` / `transkript_words` sind **Diagnose-Felder** (Eltern können das
+Erkannte in Server-Logs / Browser-Devtools nachsehen). `transkript_words` ist
+die tokenisierte Form des STT-Transkripts (gleicher Wortklassen-Filter wie
+`words`, KIBUDDY-17) — für die Kind-Bubble (KIBUDDY-17/-19). Die `words[]`-
+und `transkript_words[]`-Listen enthalten nur `text` + `is_inhaltswort` —
+clientseitiges Icon-Lookup läuft parallel über ICONS-7 pro Inhaltswort
+(KIBUDDY-17). URL-Form ermöglicht Browser-Cache + Replay über KIBUDDY-31
+ohne JS-State-Bloat im Chat-Verlauf (KIBUDDY-19); analog Hörspiel-Folgen-URLs.
 
 **PUT `/api/v1/kibuddy/config`** — JSON-Body, schreibt das spezifizierte
 Feld in die Per-Instanz-`config.json`. V1 akzeptiert nur das Feld

@@ -3,8 +3,10 @@
  *
  * Abgedeckte Spec-Punkte:
  *   KIBUDDY-5..11  Push-to-Talk (Tap-Hold, Slide-Lock, Slide-Cancel, Pegel)
- *   KIBUDDY-17     Wort-für-Wort-Render, clientseitiger Icon-Lookup (ICONS-7)
+ *   KIBUDDY-13     NDJSON-Stream-Reader: Stage 1 (kind) sofort, Stage 2 (buddy) nach LLM+TTS
+ *   KIBUDDY-17     Wort-fur-Wort-Render, clientseitiger Icon-Lookup (ICONS-7)
  *   KIBUDDY-19     Chat-Verlauf, Auto-Scroll, Reset
+ *   KIBUDDY-24     NDJSON-Stream-Response (zwei Events: kind + buddy)
  *   KIBUDDY-29     Reset-Knopf
  *   KIBUDDY-30     UI-Icons aus /display/_shared/icons/arasaac/<id>.png
  *   KIBUDDY-31     Vorlese-Knopf je Bubble
@@ -232,6 +234,9 @@ async function mikro_start() {
 
 /**
  * Stoppt Aufnahme und sendet Audio an /api/v1/kibuddy/frage.
+ * Liest NDJSON-Stream: Stage 1 (event=kind) → Kind-Bubble sofort,
+ * Stage 2 (event=buddy) → Buddy-Bubble + TTS-Audio nach LLM+TTS.
+ * Lade-Bubble bleibt sichtbar zwischen Stage 1 und Stage 2 (KIBUDDY-13/24).
  * chunks: Blob-Parts der Aufnahme.
  * mimeType: MIME-Typ des Recorders.
  */
@@ -245,7 +250,7 @@ async function send_aufnahme(chunks, mimeType) {
 
   setHeaderStatus("Ich denke nach…");
 
-  // Lade-Bubble in Chat einhängen während fetch (KIBUDDY-8/AC1)
+  // Lade-Bubble in Chat einhaengen waehrend Stream laeuft (KIBUDDY-8/AC1)
   const ladeBubbleRow = document.createElement("div");
   ladeBubbleRow.className = "bubble-row buddy";
   const ladeBubble = document.createElement("div");
@@ -256,105 +261,153 @@ async function send_aufnahme(chunks, mimeType) {
   $chat.appendChild(ladeBubbleRow);
   $chat.scrollTop = $chat.scrollHeight;
 
-  let antwort;
+  // Turn-Container wird beim ersten Stage-1-Event (kind) erzeugt und im DOM petrankert,
+  // damit Kind-Bubble und spaetere Buddy-Bubble im selben .turn-Div landen.
+  let turnEl = null;
+
   try {
     const resp = await fetch("/api/v1/kibuddy/frage", {
       method: "POST",
       body: formData,
     });
+
     if (!resp.ok) {
+      // HTTP-Fehler vor Stream (z. B. 400/503 bei fehlenden Keys/audio)
       const body = await resp.json().catch(() => ({}));
-      const msg = body.fehler || `Fehler ${resp.status}`;
-      ladeBubbleRow.remove(); // AC4: Lade-Bubble entfernen bei Fehler
+      const msg = body.fehler || ("Fehler " + resp.status);
+      ladeBubbleRow.remove();
       appendFehlerBubble(msg);
       return;
     }
-    antwort = await resp.json();
+
+    // NDJSON-Stream-Reader (KIBUDDY-13/24)
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let lineEnd;
+      while ((lineEnd = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, lineEnd);
+        buffer = buffer.slice(lineEnd + 1);
+        if (!line.trim()) continue;
+
+        let event;
+        try {
+          event = JSON.parse(line);
+        } catch (_e) {
+          continue; // kaputte Zeile ignorieren
+        }
+
+        if (event.event === "kind") {
+          // Stage 1: Kind-Bubble sofort rendern (KIBUDDY-13/19)
+          turnEl = document.createElement("div");
+          turnEl.className = "turn";
+          $chat.appendChild(turnEl);
+          await renderKindBubble(turnEl, event.transkript, event.transkript_words);
+          $chat.scrollTop = $chat.scrollHeight;
+          // Lade-Bubble bleibt sichtbar bis Stage 2 kommt
+
+        } else if (event.event === "buddy") {
+          // Stage 2: Lade-Bubble weg, Buddy-Bubble in denselben Turn (KIBUDDY-13/19)
+          ladeBubbleRow.remove();
+          if (!turnEl) {
+            // Defensiv: Stage 1 fehlte (sollte nicht vorkommen) — neuen Turn anlegen
+            turnEl = document.createElement("div");
+            turnEl.className = "turn";
+            $chat.appendChild(turnEl);
+          }
+          await renderBuddyBubble(turnEl, event.text, event.words, event.tts_audio_url);
+          $chat.scrollTop = $chat.scrollHeight;
+
+          if (event.tts_audio_url) {
+            playAudio(event.tts_audio_url);
+          }
+
+        } else if (event.event === "error") {
+          // Fehler-Event aus dem Stream
+          ladeBubbleRow.remove();
+          appendFehlerBubble(event.detail || "Unbekannter Fehler");
+          return;
+        }
+      }
+    }
+
   } catch (err) {
-    ladeBubbleRow.remove(); // AC4: Lade-Bubble entfernen bei Netz-Fehler
+    ladeBubbleRow.remove();
     appendFehlerBubble("Netzwerk-Fehler: " + err.message);
-    return;
   } finally {
-    setHeaderStatus("Drück mich, wenn du eine Frage hast");
+    setHeaderStatus("Dr\xFCck mich, wenn du eine Frage hast");
   }
-
-  // AC4: Lade-Bubble entfernen bevor Kind+Buddy-Bubbles kommen
-  ladeBubbleRow.remove();
-
-  await renderTurn(antwort);
 }
 
-// ============================================================
-//  Chat-Render (KIBUDDY-17/19/31)
-// ============================================================
-
 /**
- * Rendert einen Turn: Kind-Bubble + Buddy-Bubble.
- * antwort: { text, transkript, transkript_words, words, tts_audio_url }
+ * Rendert Kind-Bubble (Stage 1) in den uebergebenen Turn-Container (KIBUDDY-13/19).
+ * transkript: STT-Text.
+ * transkript_words: [{text, is_inhaltswort}].
  */
-async function renderTurn(antwort) {
-  const turn = document.createElement("div");
-  turn.className = "turn";
-
-  // Kind-Bubble (KIBUDDY-19: wort-für-wort nach KIBUDDY-17, analog Buddy-Bubble)
+async function renderKindBubble(turnEl, transkript, transkript_words) {
   const kindRow = document.createElement("div");
   kindRow.className = "bubble-row kind";
 
   const kindBubble = document.createElement("div");
   kindBubble.className = "bubble kind-bubble";
 
-  if (Array.isArray(antwort.transkript_words) && antwort.transkript_words.length > 0) {
-    const kindWortRender = await buildWortRender(antwort.transkript_words);
+  if (Array.isArray(transkript_words) && transkript_words.length > 0) {
+    const kindWortRender = await buildWortRender(transkript_words);
     kindBubble.appendChild(kindWortRender);
-  } else if (antwort.transkript) {
-    // Fallback: transkript-Text (nur wenn transkript_words fehlt — ältere Backend-Version)
+  } else if (transkript) {
     const fallback = document.createElement("span");
-    fallback.textContent = antwort.transkript;
+    fallback.textContent = transkript;
     kindBubble.appendChild(fallback);
   }
 
   // Vorlese-Knopf Kind (KIBUDDY-31)
-  const vorlKind = buildVorlBtn(() => vorleseText(antwort.transkript));
+  const vorlKind = buildVorlBtn(() => vorleseText(transkript));
   kindRow.appendChild(vorlKind);
   kindRow.appendChild(kindBubble);
+  turnEl.appendChild(kindRow);
+}
 
-  // Buddy-Bubble (KIBUDDY-17)
+/**
+ * Rendert Buddy-Bubble (Stage 2) in den uebergebenen Turn-Container (KIBUDDY-13/19).
+ * text: LLM-Antwort.
+ * words: [{text, is_inhaltswort}].
+ * tts_audio_url: URL oder null.
+ */
+async function renderBuddyBubble(turnEl, text, words, tts_audio_url) {
   const buddyRow = document.createElement("div");
   buddyRow.className = "bubble-row buddy";
 
   const buddyBubble = document.createElement("div");
   buddyBubble.className = "bubble buddy-bubble";
 
-  // AC3: Wort-Icon-Render als Default; Klartext-Fallback NUR wenn words[] leer
-  if (Array.isArray(antwort.words) && antwort.words.length > 0) {
-    // KIBUDDY-17: Wort-Icon-Render — kein Klartext-Duplikat
-    const wortRender = await buildWortRender(antwort.words);
+  if (Array.isArray(words) && words.length > 0) {
+    const wortRender = await buildWortRender(words);
     buddyBubble.appendChild(wortRender);
   } else {
-    // Fallback: Backend hat keine words[] geliefert (Fehler-Pfad / ältere Version)
     const textZeile = document.createElement("p");
     textZeile.style.margin = "0";
-    textZeile.textContent = antwort.text || "";
+    textZeile.textContent = text || "";
     buddyBubble.appendChild(textZeile);
   }
 
   // Vorlese-Knopf Buddy (KIBUDDY-31)
-  const vorlBuddy = buildVorlBtn(() => vorleseBubble(antwort));
+  const antwortObj = { text, tts_audio_url };
+  const vorlBuddy = buildVorlBtn(() => vorleseBubble(antwortObj));
   buddyRow.appendChild(buddyBubble);
   buddyRow.appendChild(vorlBuddy);
-
-  turn.appendChild(kindRow);
-  turn.appendChild(buddyRow);
-  $chat.appendChild(turn);
-
-  // Auto-Scroll nach unten (KIBUDDY-19)
-  $chat.scrollTop = $chat.scrollHeight;
-
-  // TTS auto-play nach User-Geste (KIBUDDY-20)
-  if (antwort.tts_audio_url) {
-    playAudio(antwort.tts_audio_url);
-  }
+  turnEl.appendChild(buddyRow);
 }
+
+// ============================================================
+//  Chat-Render (KIBUDDY-17/19/31)
+// ============================================================
+// renderKindBubble() und renderBuddyBubble() sind Teil von send_aufnahme() (KIBUDDY-13/24).
 
 /**
  * Baut das Wort-für-Wort Render-Element (KIBUDDY-17).
