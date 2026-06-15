@@ -24,6 +24,7 @@ FakeKibuddyPromptClient ersetzt (CLIENT-1 Transport-Stub-Naht).
 from skills.kibuddy_prompt_anpassen_client import KibuddyPromptClientError
 from skills.kibuddy_prompt_anpassen_task import (
     KibuddyPromptAnpassenTask,
+    _DIALOG_START,
     _build_diff,
     _split_for_telegram,
 )
@@ -471,3 +472,51 @@ def test_split_langer_text_schneidet_an_doppel_newline():
     assert len(parts) == 2
     assert parts[0] == "A" * 50
     assert parts[1] == "B" * 50
+
+
+# ============================================================
+#  KPA-4 Mehrturn-Loop-Awareness (Live-Bug 2026-06-15)
+# ============================================================
+#
+# Hintergrund: Nics Live-Test endete nach dem Klär-Dialog ohne erneuten
+# Skill-Aufruf — LLM hatte keine explizite Anweisung, dass es nach Eltern-
+# Antwort den Skill ein zweites Mal aufrufen MUSS mit `neuer_prompt`.
+# Fix: _DIALOG_START enthält jetzt eine [ANWEISUNG AN DICH, LLM]-Sektion.
+
+def test_dialog_start_enthaelt_llm_loop_anweisung():
+    """KPA-4: _DIALOG_START muss dem LLM explizit den Re-Call vorschreiben."""
+    text = _DIALOG_START
+    # Loop-Hint: aktion='vorschlagen' + neuer_prompt erneut aufrufen
+    assert "erneut" in text.lower() or "wieder" in text.lower() or "nochmal" in text.lower(), (
+        "_DIALOG_START muss klar machen, dass der Skill nach Klärung ERNEUT aufgerufen wird"
+    )
+    # Zielparameter explizit nennen
+    assert "neuer_prompt" in text, "_DIALOG_START muss `neuer_prompt` als Ziel-Argument nennen"
+    # Klär-Anweisung an LLM gekennzeichnet
+    assert "[ANWEISUNG" in text or "LLM" in text, (
+        "_DIALOG_START sollte LLM-Anweisung sichtbar markieren"
+    )
+
+
+def test_dialog_start_kein_neuer_prompt_eltern_frage_bleibt():
+    """KPA-4: Eltern-Frage ist trotzdem präsent (LLM darf direkten Text an Eltern leiten)."""
+    text = _DIALOG_START
+    # Eltern-sichtbarer Frage-Teil
+    assert "?" in text, "_DIALOG_START sollte eine konkrete Frage an Eltern enthalten"
+    assert "Verhalten" in text or "Tonfall" in text or "Themen" in text, (
+        "_DIALOG_START sollte konkrete Anpass-Dimensionen für Eltern erwähnen"
+    )
+
+
+def test_description_erwaehnt_mehrturn_re_call():
+    """KPA-4: Skill-Description muss dem LLM den Mehrturn-Loop erklären."""
+    # Wir bauen einen Mock-Catalog und prüfen die Task-Beschreibung
+    task = KibuddyPromptAnpassenTask(
+        kibuddy_prompt_client=FakeKibuddyPromptClient(),
+        family_group_chat_id_getter=lambda: -123,
+    )
+    desc = task.description
+    assert "ERNEUT" in desc.upper() or "MEHRTURN" in desc.upper() or "ZWEITEN AUFRUF" in desc.upper(), (
+        f"Task-Description muss Mehrturn-Re-Call explizit nennen, war: {desc[:200]}"
+    )
+    assert "neuer_prompt" in desc, "Description muss neuer_prompt als Pfad-C-Argument nennen"
