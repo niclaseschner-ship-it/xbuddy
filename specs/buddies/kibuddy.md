@@ -168,7 +168,7 @@ einem Messenger-Bedienschema:
 
 **Eingabe-Modus B — Tap-und-Slide-to-Lock:**
 - **Wenn** das Kind den Knopf drückt und **nach oben** über eine
-  **Schwellen-Distanz** (KIBUDDY-21, Default 80 px) hinaus zieht, **dann**
+  **Schwellen-Distanz** (KIBUDDY-21, Default **30 px** — T864-AC1: war 80) hinaus zieht, **dann**
   „rastet" die Aufnahme **ein**: sie läuft auch nach dem Loslassen weiter.
 - Im eingerasteten Zustand ersetzt ein **Stopp-Knopf** an der Slide-Ziel-
   Position den Push-to-Talk-Knopf (KIBUDDY-8 Visual).
@@ -478,8 +478,6 @@ in der Berater-Runde den richtigen Generalisierungs-Schnitt zu legen
 | `funktionswort-liste` | `<data>/funktionswort-liste.txt` | Wortklassen-Filter (KIBUDDY-17) | Config |
 | `ui-icons` | `<data>/ui-icons.json` | UI-Icon-ID-Mapping (KIBUDDY-30) | Config |
 | `ui.lock-hinweis-ms` | `800` | Slide-Hinweis erscheint nach | Config |
-| `ui.lock-distanz-px` | `30` | Slide-to-Lock-Schwelle (T864-AC1: war 80) | Code-Konstante |
-| `ui.abbruch-distanz-px` | `60` | Slide-nach-unten-Schwelle (T864-AC1: war 100) | Code-Konstante |
 | `vad.stille-sek` | `1.5` | VAD-Stille-Schwelle (Sekunden) im Lock-Modus | Config |
 | `vad.threshold-db` | `-50` | VAD-Pegel-Schwelle (dB) — unter Schwelle = Stille | Config |
 | `vad.long-hold-lock-sek` | `3.0` | Auto-Lock nach langem Halten (KIBUDDY-7/T864-AC2) | Config |
