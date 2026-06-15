@@ -1,34 +1,43 @@
 # Hörspiel-Buddy — Spec     (ID-Präfix: HSP)
 
-> Status: V1 · Refs #729
+> Status: V1 · Refs #729, #907 (Mehr-Instanz-Cut Paula + Neko, RAT-17)
 
 ## Problem & North-Star-Bezug
 
-Paula (4) hört seit Monaten ihre eigene Hörspiel-Serie „Stigi, Malini &
-Vögelchen — Geschichten aus dem Garten im Dreisamtal" — Folgen werden lokal
-geschrieben und über das Handy eines Elternteils abgespielt. Drei Probleme:
+Jedes Kind in der Familie hat sein eigenes Hörspiel-Universum: Paula (4)
+hört seit Monaten „Stigi, Malini & Vögelchen — Geschichten aus dem Garten
+im Dreisamtal", Neko bekommt mit V1 (RAT-17) seine eigene Welt. Folgen
+wurden bisher lokal geschrieben und über das Handy eines Elternteils
+abgespielt. Drei Probleme:
 
-1. **Hardware-Knappheit:** Sie braucht Mamas oder Papas Handy, das oft
-   anderswo gebraucht wird.
+1. **Hardware-Knappheit:** Das Kind braucht Mamas oder Papas Handy, das
+   oft anderswo gebraucht wird.
 2. **Abbrüche:** Vorlesen bricht beim App-Wechsel ab, beim Anruf, beim
    Lock-Screen. Kein „weiter wo aufgehört".
-3. **Keine Selbstbedienung:** Sie kann nicht eigenständig wählen, welche
-   Folge sie hören will, geschweige denn eine zuvor unterbrochene Stelle
-   wiederfinden.
+3. **Keine Selbstbedienung:** Das Kind kann nicht eigenständig wählen,
+   welche Folge es hören will, geschweige denn eine zuvor unterbrochene
+   Stelle wiederfinden.
 
-**North-Star-Bezug (constitution.md):** Paula **wählt und steuert das
-Hören selbst** über eine Kachel-Oberfläche auf einem eigenen Gerät, statt
-ein Elternteil mit dem Handy zu binden. Was die Eltern bisher taten
-(Hörspiel auswählen, Wiedergabe starten, Stelle finden), verschiebt sich
-vollständig zum Kind.
+**North-Star-Bezug (constitution.md):** Das **Kind** wählt und steuert
+das Hören selbst über eine Kachel-Oberfläche auf einem eigenen Gerät,
+statt ein Elternteil mit dem Handy zu binden. Was die Eltern bisher
+taten (Hörspiel auswählen, Wiedergabe starten, Stelle finden),
+verschiebt sich vollständig zum Kind.
 
-Der Hörspiel-Buddy ist eine eigenständige XBuddy-**App** mit einer Display-
-View — der **Album-Übersicht und Player für Paula** — und einer App-eigenen
-**KI-Funktion**, die im Eltern-Chat-Skill (Familien-Schnittstelle) neue
-Folgen erzeugt und vertont. Als App **besitzt** er seine Daten (Welt-Bible,
-Folgen-Historie, Alben + Audio-Assets), seine Funktion (LLM-gestützte
-Folgen-Erzeugung, TTS-Album-Bau, Resume-Verwaltung) und stellt das Ergebnis
-über seine Display-View bereit (HSP-1, APP-1).
+Der Hörspiel-Buddy ist eine eigenständige XBuddy-**App** mit einer
+Display-View — der **Album-Übersicht und Player pro Kind** — und einer
+App-eigenen **KI-Funktion**, die im Eltern-Chat-Skill (Familien-
+Schnittstelle) neue Folgen erzeugt und vertont. Als App **besitzt** er
+seine Daten (Welt-Bible, Folgen-Historie, Alben + Audio-Assets), seine
+Funktion (LLM-gestützte Folgen-Erzeugung, TTS-Album-Bau, Resume-
+Verwaltung) und stellt das Ergebnis über seine Display-View bereit
+(HSP-1, APP-1).
+
+V1 läuft mit **zwei expliziten Instanzen** Paula + Neko, handverdrahtet
+(zwei systemd-Units, zwei Ports, zwei Origin-Pfade nach URL-3a). Eine
+Instanz-Registry oder generische „Buddy-mit-n-Instanzen"-Konvention gibt
+es bewusst nicht (RAT-17, n=1-Klasse für diese Sorte). Details siehe
+HSP-28a.
 
 **V1-Scope:** Single-Page-View `alben` (Kachel-Raster + Player auf einer
 Canvas) · Album-Modell mit geordneten Tracks · Voice-Casting je Album über
@@ -53,9 +62,9 @@ ID-Präfix HFE).
   Serien-Cover** im 1:1-Format, von den Eltern austauschbar — der V2-Pfad
   ist ein Eltern-Chat-Skill „Cover austauschen" + per-Folge-Cover, der
   über das gleiche 1:1-Format-Schema landet, E-HSP-10).
-- **OPEN-HSP-B** — Paula äußert per Sprache ihren Folgen-Wunsch im Eltern-
-  Chat („Ich möchte eine Folge über Schnee"). Würde denselben V1-Endpoint
-  `POST /folgen-vorschlag` bedienen — Trigger-Agnostik.
+- **OPEN-HSP-B** — Das Kind äußert per Sprache seinen Folgen-Wunsch im
+  Eltern-Chat („Ich möchte eine Folge über Schnee"). Würde denselben
+  V1-Endpoint `POST /folgen-vorschlag` bedienen — Trigger-Agnostik.
 - **OPEN-HSP-C** — Bilder synchron zum Track-Inhalt (Bilderbuch-Modus).
   Braucht die Track-Granularität, die V1 schon legt.
 - **OPEN-HSP-D** — Aussprache-Lexikon für Eigennamen (Stigi, Schmuggli,
@@ -65,8 +74,11 @@ ID-Präfix HFE).
 - **OPEN-HSP-F** — Premium-Voice-Upgrade zu ElevenLabs oder einer Custom-
   Neural-Voice für native deutsche Aussprache (V1 akzeptiert die leichte
   engl. R-Rollung von `shimmer`/`onyx`, HSP-23).
-- **OPEN-HSP-G** — App auf Paulas eigenem Gerät (V1 nimmt Familien-Tablet
-  im Browser an; eigenes Gerät ist Hardware-/Onboarding-Frage).
+- **OPEN-HSP-G** — App auf einem kind-eigenen Gerät (V1 nimmt das
+  geteilte Familien-Tablet im Browser an; ein eigenes Kind-Gerät ist
+  Hardware-/Onboarding-Frage). Bei geteiltem Tablet steuert die Face-
+  Pille (HSP-3a / #911) den Wechsel zwischen den beiden Hörspiel-
+  Instanzen Paula ↔ Neko.
 - **OPEN-HSP-H** — Concurrency-Lock am TTS-Adapter bei der heutigen 3-RPM-
   Quota; bei höherer Quota entfällt das.
 - **OPEN-HSP-I** — Album-Sortierung in der Kachel-View (neuestes zuerst /
@@ -154,12 +166,12 @@ freigegebenen Alben, (b) den Player-Bereich mit dem letzten Stand
 (c) bei vorhandenem Resume-State ein Resume-Badge auf der zugehörigen
 Kachel + den orangen „Weiter hören"-Play-Button im Player.
 
-### HSP-3 — Touch-Display, Paula-taugliche Bedienung (Kiosk)
+### HSP-3 — Touch-Display, Kind-taugliche Bedienung (Kiosk)
 Die View ist für ein Touch-/Kiosk-Display gebaut. **Statisches Dashboard,
 keine Menüführung** — oberste Priorität für Kinder-Frontends (Nic-Standard
 Werft 2026-06-12). Modus-Wechsel ist kein Navigationsakt; Kacheln und
 Player leben gemeinsam auf einer Canvas (HSP-2). Maximale Bedien-
-Affordanzen für eine Vierjährige:
+Affordanzen für die Altersklasse der gerade aktiven Instanz:
 
 - Album-Kachel tippen → Player rechts wechselt auf dieses Album und
   Wiedergabe startet (siehe HSP-13).
@@ -170,11 +182,22 @@ Affordanzen für eine Vierjährige:
 Lautstärke wird **nicht** in der App geregelt — System-Lautstärke des
 Gerätes reicht.
 
+### HSP-3a — Face-Pille für Instanz-Wechsel auf geteiltem Tablet
+Auf dem geteilten Familien-Tablet (V1-Default, OPEN-HSP-G) trägt die
+View **oben rechts eine Face-Pille** (Ring + Foto + Name des aktiven
+Kindes, gelesen aus `xbuddy-data/familie/familie.json`). Tap auf die
+Pille wechselt zur anderen Hörspiel-Instanz (Paula ↔ Neko) per
+kompletter View-Neulade (kein State-Vermischen). Auf einem kind-eigenen
+Gerät ohne Sharing kann die Pille entfallen oder reine Anzeige sein.
+Details + Cross-Bezug zur Eltern-App-Pille: #911.
+
 ### HSP-4 — Visueller Stil aus dem geteilten Design-Token-Strang
 Der visuelle Stil bindet an `display/_shared/design/tokens.css` (DTOK-1..5,
 `conventions/design-tokens.md`); keine hartcodierten Farben/Maße im Buddy-
-CSS. Stage `toddler` (Paula 4 J, `font-hand` Patrick Hand für Body,
-`font-display` Caveat für Headlines) — Schrift-Disziplin konsistent zu
+CSS. Die **Stage** (z. B. `toddler` für 4-Jährige mit `font-hand` Patrick
+Hand für Body, `font-display` Caveat für Headlines) wird **nicht** im
+Code festgelegt, sondern kommt aus der `instance.json` der aktiven
+Hörspiel-Instanz (HSP-27, Feld `stage`). Schrift-Disziplin konsistent zu
 Routine-/Wetter-/Plan-Buddy. Komponenten erden an die bestehende
 Buddy-Card-Optik (Anker: `wetter/static/wetter.css` `.card`/`.card-label`)
 und für **Pikto-im-Text-Wortblöcke** an das Routine-`.card-pikto`-Pattern
@@ -210,7 +233,7 @@ Viewport-Wechseln:
 - **Skalierende Schriftgrößen:** `clamp(min, vh-basiert, max)` für
   Titel- und Track-Schriftgrößen — anders als feste px-Werte überleben
   Schriftgrößen verschiedene Tablet-Auflösungen (Familien-Tablet, künftig
-  Paula-eigenes Gerät, OPEN-HSP-G).
+  ein kind-eigenes Gerät, OPEN-HSP-G).
 - **Player-Track-Liste skaliert auf bis zu 10 Tracks:**
   `grid-auto-rows: minmax(0, 1fr)` im Player-Tracks-Container, sodass die
   Liste **ohne Scroll** zwischen 6 (Standard) und 10 Tracks (Maximum)
@@ -356,7 +379,7 @@ Absatz = Intro-Reim-Platzhalter wortgleich, zweiter Absatz = Titel-Block,
 restliche Absätze = Story).
 
 Die Funktion ist **trigger-agnostisch** (analog WZE-1): wer sie aufruft —
-der Eltern-Chat-Skill in V1, ein Sprach-Trigger für Paula in V2
+der Eltern-Chat-Skill in V1, ein Sprach-Trigger fürs Kind in V2
 (OPEN-HSP-B), ein Cron-Job — ist nicht Teil ihres Vertrags. Schnittstelle:
 HSP-17.
 
@@ -594,7 +617,11 @@ Skill die Bible über `GET /bible`, nicht aus dem Dateisystem.
 
 ---
 
-## 6. Paula-View — Kacheln und Player
+## 6. Kinder-View — Kacheln und Player
+
+(Die Klauseln in diesem Abschnitt sprechen vom „Kind" als generischem
+Akteur — V1 sind das Paula und Neko, jede Instanz mit ihrer eigenen
+Album-Liste und Resume-Marke.)
 
 ### HSP-19 — Album-Kachel
 Eine Kachel zeigt: das Cover-Asset des Albums (V1: festes Default-Cover
@@ -603,7 +630,7 @@ für dieses Album ein Resume-State existiert — eine sichtbare „Weiter
 hören"-Markierung. Tap-Affordanz ist die gesamte Kachel.
 
 ### HSP-20 — Tap auf Kachel startet (oder setzt fort) das Album
-**Wenn** Paula auf eine Album-Kachel tippt, **dann**:
+**Wenn** das Kind auf eine Album-Kachel tippt, **dann**:
 
 - Falls für dieses Album ein Resume-State existiert (HSP-23) und das
   Album noch nicht vollständig durchgehört wurde: Player startet am
@@ -622,14 +649,14 @@ Der Player zeigt:
 - Fortschrittsbalken des aktuellen Tracks (Anzeige, V1 nicht zwingend
   interaktiv)
 
-**Wenn** Paula auf „nächster Track" tippt, **dann** springt die Wiedergabe
-sofort zum Anfang des nächsten Tracks im Album. Beim letzten Track des
-Albums springt sie zum ersten Track desselben Albums zurück (kein
-automatisches Verkettungswechseln zu einem anderen Album in V1).
+**Wenn** das Kind auf „nächster Track" tippt, **dann** springt die
+Wiedergabe sofort zum Anfang des nächsten Tracks im Album. Beim letzten
+Track des Albums springt sie zum ersten Track desselben Albums zurück
+(kein automatisches Verkettungswechseln zu einem anderen Album in V1).
 
-**Wenn** Paula auf „voriger Track" tippt, **dann** springt sie zum Anfang
-des aktuellen Tracks zurück. Tippt sie nochmal innerhalb von 3 s, springt
-sie zum vorherigen Track (klassisches Audio-Player-Muster).
+**Wenn** das Kind auf „voriger Track" tippt, **dann** springt sie zum
+Anfang des aktuellen Tracks zurück. Tippt sie nochmal innerhalb von 3 s,
+springt sie zum vorherigen Track (klassisches Audio-Player-Muster).
 
 ### HSP-22 — Audio-Wiedergabe robust gegen Geräte-Schlaf
 Die Wiedergabe verwendet die **MediaSession-API** des Browsers und ein
@@ -639,8 +666,10 @@ Die Wiedergabe verwendet die **MediaSession-API** des Browsers und ein
 - Audio nicht stoppt, wenn der Bildschirm schwarz wird
 - Album-Titel und Track-Position auf dem Lock-Screen sichtbar sind
 
-V1-Annahme: Paula nutzt die App im Browser oder als „Zum Home-Bildschirm
-hinzufügen"-PWA. Eigenes Gerät = OPEN-HSP-G.
+V1-Annahme: das Kind nutzt die App im Browser oder als „Zum Home-Bildschirm
+hinzufügen"-PWA — bei zwei Instanzen je Kind eine eigene URL
+(`/display/hoerspiel/paula/alben`, `/display/hoerspiel/neko/alben`).
+Eigenes Kind-Gerät = OPEN-HSP-G.
 
 ---
 
@@ -649,17 +678,19 @@ hinzufügen"-PWA. Eigenes Gerät = OPEN-HSP-G.
 ### HSP-23 — Resume-Marke pro Album, auf Track-Anfang gerundet
 Pro Album wird **eine** Resume-Marke gehalten: `track-position` (int,
 welcher Track gerade lief). **Innerhalb** eines Tracks wird die Offset-
-Position bei Wiederaufnahme auf den **Track-Anfang** gerundet — Paula
+Position bei Wiederaufnahme auf den **Track-Anfang** gerundet — das Kind
 hört den unterbrochenen 3–4-Minuten-Block ab seiner letzten Schwelle, nicht
 mitten im Satz. Track-Granularität ist die natürliche Wiederaufnahme-
 Granularität (E-HSP-4).
 
 V1 hält die Resume-Marke im Browser-`localStorage` pro Album. Ein Server-
 seitiger Resume-State (Multi-User, Multi-Gerät-Sync) ist OPEN-HSP-G-Folge.
+Da die zwei Instanzen Paula/Neko unter getrennten URLs leben, hat jede
+ihren eigenen `localStorage`-Namensraum — kein Mischen über den Wechsel.
 
-**Wenn** Paula die View wieder aufruft und für ein Album ein Resume-State
-besteht, **dann** zeigt die Kachel zusätzlich „Weiter hören" und der Tap
-startet die Wiedergabe beim **Anfang** des unterbrochenen Tracks.
+**Wenn** das Kind die View wieder aufruft und für ein Album ein Resume-
+State besteht, **dann** zeigt die Kachel zusätzlich „Weiter hören" und der
+Tap startet die Wiedergabe beim **Anfang** des unterbrochenen Tracks.
 
 **Wenn** das Album zu Ende läuft (Outro abgespielt), **dann** wird die
 Marke zurückgesetzt (= „fertig gehört").
@@ -675,13 +706,16 @@ ein Rollover-Test beim Merge grün ist und Stunden später rot wird.)
 
 ## 8. Datenhaltung
 
-### HSP-25 — Daten-Layout
+### HSP-25 — Daten-Layout (mit `<kind_id>`-Owner-Achse, RAT-17)
 Der Hörspiel-Buddy hält drei Klassen Daten im Per-Instanz-Daten-Bereich
-(BUD-2a, gitignored über `hoerspiel/.gitignore` per BUD-2b):
+**je Kind** (BUD-2a, gitignored über `hoerspiel/.gitignore` per BUD-2b).
+Die `<kind_id>` (V1: `paula`, `neko` — FK in `xbuddy-data/familie/familie.json`)
+ist die alleinige Owner-Achse:
 
 ```
-hoerspiel/data/
-  bible.md                     # Welt-Bible (familien-spezifisch)
+xbuddy-data/hoerspiel/<kind_id>/
+  instance.json                # Per-Instanz-Daten-Konfig (HSP-27)
+  bible.md                     # Welt-Bible (kind-spezifisch)
   folgen-historie.md           # chronologische Synopsen aller Folgen
   alben/<album-id>/
     manifest.json              # Album-Manifest (HSP-26)
@@ -697,9 +731,16 @@ hoerspiel/data/
   pikto-mapping.json           # Migration-Mappings für HSP-5a/HSP-6a
 ```
 
+Der Filesystem-Daten-Pfad pro Instanz wird über die ENV-Variable
+`HOERSPIEL_DATA_ROOT` (CONFIG-5) auf `xbuddy-data/hoerspiel/<kind_id>`
+gesetzt — eine systemd-Drop-In-Datei pro Instanz, kein Code-Hardcode
+(SVC-5, SVC-5a). Die `<kind_id>` ist außerdem als zweites URL-Segment
+sichtbar (HSP-26, URL-3a-konform).
+
 Die Welt-Bible ist der Musterfall der **Familie-3-Probe**: was sich je
-Familie ändert, ist Daten, nicht Code (E-HSP-5). Eine andere Familie hätte
-eine andere Bible (andere Charaktere, andere Welt) — dieselbe App.
+Familie und je Kind ändert, ist Daten, nicht Code (E-HSP-5). Eine andere
+Familie und ein anderes Kind haben eine andere Bible (andere Charaktere,
+andere Welt) — dieselbe App.
 
 **Datei-Format-Disziplin:**
 - `bible.md` und `folgen-historie.md` sind **freie Markdown-Strings**
@@ -726,12 +767,17 @@ eine andere Bible (andere Charaktere, andere Welt) — dieselbe App.
 Runtime-Config HSP-27). Direkter Datei-Zugriff durch andere Apps ist
 verboten (HSP-18, APP-3).
 
-### HSP-25a — Erst-Bestückung der Domänen-Daten (V1, manuell)
+### HSP-25a — Erst-Bestückung der Domänen-Daten pro Kind-Instanz (V1, manuell)
 Die Domänen-Daten (`bible.md`, `folgen-historie.md`, `pikto-mapping.json`,
 `shared-assets/cover-default.jpg`, `shared-assets/intro.txt`,
-`shared-assets/outro.txt`) werden in V1 **manuell** beim Einrichten der
-Familien-Instanz ins `data/`-Verzeichnis gelegt — **kein automatisches
-Migration-Skript V1**. Quell-Pfade für die Paula-Instanz:
+`shared-assets/outro.txt`) werden in V1 **manuell pro Kind-Instanz**
+beim Einrichten ins `xbuddy-data/hoerspiel/<kind_id>/`-Verzeichnis
+gelegt — **kein automatisches Migration-Skript V1**, **keine** Bootstrap-
+Generalisierung (Premature Generalization, RAT-17). Der bestehende
+`deploy/hoerspiel/bootstrap.sh` ist Paula-spezifisch und wird **nicht**
+generalisiert — Neko + spätere Instanzen werden manuell initialisiert.
+
+Quell-Pfade für die **Paula-Instanz** (`xbuddy-data/hoerspiel/paula/…`):
 
 - `bible.md` ← Inhalt aus
   `brainstorm/ideas/paula-hoerspiel-app/welt_und_charaktere.md`
@@ -748,11 +794,26 @@ Migration-Skript V1**. Quell-Pfade für die Paula-Instanz:
   Copy-Paste-Schritt durch den Hub-Owner als Quell-Text für die
   Vorsynthese (HSP-29)
 
+Quell-Pfade für die **Neko-Instanz** (`xbuddy-data/hoerspiel/neko/…`):
+Bibel + Folgen-Historie + Cover schreibt Nic per Hand (RAT-17
+Entscheidung 5 — kein LLM-Bible-Buddy-Flow in V1). Folge-Ticket #912
+trägt diesen Inhalts-Schritt; Service-Skelett (#909) legt nur die
+Verzeichnis-Struktur an.
+
 Ein automatisches Migrations-Werkzeug (Setup-Skript) ist V2-Material
 (OPEN-HSP-Q).
 
-### HSP-26 — Album-Manifest-Format (JSON)
-Jedes Album hat ein Manifest `data/alben/<album-id>/manifest.json`:
+**Bestehender Paula-Daten-Umzug (Single-Tenant → `<kind_id>=paula`)**
+folgt SVC-5 wörtlich (Ticket #908): `cp -a` der Alt-Pfade nach
+`xbuddy-data/hoerspiel/paula/`, Drop-In `20-data-path.conf` umstellen,
+Smoke-Test, **dann erst** Alt-Pfad entfernen. Restic-Snapshot davor als
+Gürtel, nicht als Rollback-Mechanismus.
+
+### HSP-26 — Album-Manifest-Format (JSON, mit `<kind_id>`-tragenden URLs)
+Jedes Album hat ein Manifest unter
+`xbuddy-data/hoerspiel/<kind_id>/alben/<album-id>/manifest.json`. Die
+`audio-asset`-/`cover-asset`-URLs tragen die `<kind_id>` als zweites
+Segment im Display-Pfad (URL-3a-Form, RAT-17):
 
 ```json
 {
@@ -762,39 +823,72 @@ Jedes Album hat ein Manifest `data/alben/<album-id>/manifest.json`:
   "voice": "shimmer",
   "erstellt-am": "2026-06-12",
   "freigegeben": true,
-  "cover-asset": "/display/hoerspiel/data/shared-assets/cover-default.jpg",
+  "cover-asset": "/display/hoerspiel/paula/data/shared-assets/cover-default.jpg",
   "tracks": [
     {"id": "intro-shimmer", "position": 1, "art": "intro",
-     "audio-asset": "/display/hoerspiel/data/shared-assets/intro_shimmer.mp3",
+     "audio-asset": "/display/hoerspiel/paula/data/shared-assets/intro_shimmer.mp3",
      "dauer-sek": 18},
     {"id": "folge-22-track-02", "position": 2, "art": "inhalt",
-     "audio-asset": "/display/hoerspiel/data/alben/folge-22/audio/track-02.mp3",
+     "audio-asset": "/display/hoerspiel/paula/data/alben/folge-22/audio/track-02.mp3",
      "dauer-sek": 215, "titel": null},
     {"id": "outro-shimmer", "position": "N", "art": "outro",
-     "audio-asset": "/display/hoerspiel/data/shared-assets/outro_shimmer.mp3",
+     "audio-asset": "/display/hoerspiel/paula/data/shared-assets/outro_shimmer.mp3",
      "dauer-sek": 22}
   ]
 }
 ```
 
 `audio-asset`-Pfade werden vom Buddy-Service über den Display-Namensraum
-ausgeliefert (Route `GET /display/hoerspiel/data/<sub>` mappt auf den
-Daten-Bereich, nur freigegebene Album-IDs). Die Pfade sind absolute
+ausgeliefert (Route `GET /display/hoerspiel/<kind_id>/data/<sub>` mappt
+auf den jeweiligen Daten-Bereich, nur freigegebene Album-IDs). Die
+zentrale URL-Form lebt im Code als parametrische Funktion
+`f(kind_id) → /display/hoerspiel/<kind_id>/data` (vorhanden als
+`DISPLAY_DATA_PREFIX` in `hoerspiel/album_manifest.py`, im Zuge von
+#908 auf `kind_id`-Argument umgestellt). Die Pfade sind absolute
 View-URLs für das Frontend.
+
+API-Pfade folgen analog der URL-3a-Form:
+`/api/v1/hoerspiel/<kind_id>/<resource>` (z. B.
+`/api/v1/hoerspiel/paula/alben`, `/api/v1/hoerspiel/neko/folgen-vorschlag`).
 
 ---
 
 ## 9. Konfiguration
 
-### HSP-27 — Konfigurationswerte
-Zwei Per-Instanz-Dateien neben dem Code (BUD-2, BUD-2a, beide gitignored
-über `hoerspiel/.gitignore`):
+### HSP-27 — Konfigurationswerte (Runtime + Per-Kind-Instanz)
+Drei Konfig-Ebenen, klar getrennt nach Lebenszyklus (RAT-17):
 
 - `hoerspiel/config.json` — **Runtime-Config** (Bind, Log, Provider,
-  Modelle), via `tools/configloader.py` (CONFIG-1). ENV-Overrides folgen
-  `HOERSPIEL_<KEY>` (BUD-2, CONFIG-5).
-- `hoerspiel/hoerspiel.json` — **Daten-Konfig** (Default-Voice,
-  Serien-Name; familien-spezifisch).
+  Modelle), via `tools/configloader.py` (CONFIG-1). Eine Datei pro
+  Service-Prozess, gitignored über `hoerspiel/.gitignore`. ENV-Overrides
+  folgen `HOERSPIEL_<KEY>` (BUD-2, CONFIG-5). Bei zwei Instanzen läuft
+  dieselbe `config.json` zweimal mit unterschiedlichen ENV-Overrides
+  (Port, Data-Root, Secrets-Slots).
+- `xbuddy-data/hoerspiel/<kind_id>/instance.json` — **Per-Kind-Instanz-
+  Daten-Konfig** (kind-spezifische Werte, je Instanz eigene Datei).
+  Heimat aller Werte, die zwischen Paula und Neko unterschiedlich sind:
+  Serien-Name, Voice-Default, kognitive Stufe, Themen-Liste je Alter,
+  Cover-Pfad-Override. Beispiel:
+  ```json
+  {
+    "kind_id": "paula",
+    "serien_name": "Stigi & Co.",
+    "default_voice": "shimmer",
+    "stage": "toddler",
+    "kognitiv_stufe": "5-6",
+    "themen_je_alter": { "4": [ "Mut beim Probieren", "…" ] },
+    "pause_absatz_sek": 0.55,
+    "pause_titel_sek": 1.8,
+    "playback_tempo": 1.0
+  }
+  ```
+  Das `kind_id`-Feld ist Pflicht und Wahrheits-Quelle für die Instanz —
+  Code und Eltern-Chat-Skill (HFE) lesen Alter, Themen und kognitiv-
+  Stufe **nur** aus dieser Datei, nicht aus Modul-Konstanten.
+- `hoerspiel/hoerspiel.json` — **Legacy Single-Tenant-Daten-Konfig**
+  (vor RAT-17 die einzige Daten-Konfig). Wird in Welle B (#908+#909) auf
+  `instance.json` migriert; nach Migration ist die Datei leer oder
+  entfernt.
 
 **Geheimnisse** (Anthropic-Key, Azure-Key) landen **nie** in einer Datei
 im Repo (CONFIG-3, CLAUDE.md §8). Sie wohnen im **zentralen
@@ -855,10 +949,11 @@ ab, den `PATCH /config` in HTTP 422 übersetzt.
 
 ### HSP-27a — Themen-Liste je Alter (V1-Initial-Bestand)
 
-`hoerspiel.json.themen_je_alter` ist eine Map `alter → string[]` mit
-kuratierten Themen-Vorschlägen für die HFE-Diskussion (HFE-3). V1 nur
-**Alter 4** für Paula gepflegt — Erweiterung auf andere Alter ist
-Familien-Tätigkeit (Edit der JSON), keine Code-Pflicht.
+`instance.json.themen_je_alter` ist eine Map `alter → string[]` mit
+kuratierten Themen-Vorschlägen für die HFE-Diskussion (HFE-3). V1 für
+Paula (Alter 4) gepflegt; Nekos Themen-Liste wird im Zuge von #912 von
+Nic per Hand gesetzt. Erweiterung auf andere Alter ist Familien-Tätigkeit
+(Edit der JSON pro Instanz), keine Code-Pflicht.
 
 **V1-Bestand für `themen_je_alter["4"]`** (8 pädagogisch breit gestreute
 Themen für eine 4-jährige Hörerin; Anker für die HFE-Diskussion, nicht
@@ -923,11 +1018,39 @@ Folgen-Build durchführen — schlägt die ID 404 oder 422, ist sie aus
 
 ## 10. Service & Registrierung
 
-### HSP-28 — Eigener Service, fester Port
-Der Hörspiel-Buddy läuft als eigener Prozess `xbuddy-hoerspiel.service`
+### HSP-28 — Eigener Service, fester Port (Paula-Instanz)
+Die Paula-Instanz läuft als eigener Prozess `xbuddy-hoerspiel.service`
 (SVC-1..4, `Restart=on-failure`, Logs an stdout/stderr) und bindet nur an
-`127.0.0.1` (PORT-3). Port **5053** (PORT-2, `xbuddy-hoerspiel`, einzutragen
-in `conventions/ports.md`).
+`127.0.0.1` (PORT-3). Port **5053** (PORT-2, `xbuddy-hoerspiel`,
+eingetragen in `conventions/ports.md`).
+
+### HSP-28a — Mehr-Instanz-Realität V1: Paula + Neko handverdrahtet (RAT-17)
+V1 läuft mit **zwei expliziten Hörspiel-Instanzen** Paula und Neko. Diese
+sind **handverdrahtet** — es gibt **keine** Instanz-Registry, **keinen**
+Port-Offset-Algorithmus, **keine** generische „Buddy-mit-n-Instanzen"-
+Konvention. Jede Instanz ist ein eigener Eintrag an vier Stellen
+(`conventions/ports.md`, `conventions/urls.md`, `deploy/nginx/xbuddy-
+origin.conf`, `eltern-chat/config.py`):
+
+| Instanz | systemd-Unit                       | Port | Daten-Pfad                          | Origin-Pfade (URL-3a)                                          |
+|---------|------------------------------------|------|-------------------------------------|----------------------------------------------------------------|
+| Paula   | `xbuddy-hoerspiel.service`         | 5053 | `xbuddy-data/hoerspiel/paula/`      | `/display/hoerspiel/paula/<view>` · `/api/v1/hoerspiel/paula/<resource>` |
+| Neko    | `xbuddy-hoerspiel-neko.service`    | 5054 oder nächster freier Port aus PORT-2-Block | `xbuddy-data/hoerspiel/neko/`       | `/display/hoerspiel/neko/<view>` · `/api/v1/hoerspiel/neko/<resource>`   |
+
+Die Konvention „Buddy-Klasse mit n Instanzen pro Pi" wird **nicht jetzt**
+ratifiziert — sie braucht zwei gebaute Buddy-Klassen mit n Instanzen
+(Hörbuchbuddy ist die erste; Kandidaten zweite Klasse: Kibuddy, Routine,
+mit derzeit nur offenen Punkten für Per-Kind). Wenn ein drittes Kind oder
+eine zweite n-Instanz-Buddy-Klasse hinzukommt, wird der Cut neu beraten
+und ggf. eine Registry-Konvention ratifiziert (n=2-Regel).
+
+**Service-Vorlage-Ablage (Realitäts-Vermerk):** beide Hörspiel-Service-
+Vorlagen liegen am Repo-Root (`xbuddy/xbuddy-hoerspiel.service`,
+`xbuddy/xbuddy-hoerspiel-neko.service`) und folgen damit dem Bestands-
+Pattern, das auch Kibuddy nutzt. Das weicht von BUD-1a wörtlich ab
+(„Service-Vorlage neben dem Code", Ablage `hoerspiel/hoerspiel.service`).
+Die Klärung dieses Pattern-Bruchs (Konvention nachziehen vs. Realität
+nachziehen) ist eigener /watchdog-Auftrag, kein Blocker für RAT-17.
 
 ### HSP-29 — Vorsynthese der Shared-Assets als Setup-Schritt
 Vor der ersten Folge in einer Familien-Instanz müssen die vier Shared-
@@ -964,7 +1087,7 @@ Der `views.json`-Eintrag der View `alben` trägt `icons[]` mit dem Pfad
 **kein** app-eigenes Asset (URL-13) und **kein** buddy-eigener
 ARASAAC-Bezug. Die ARASAAC-ID 5915 ist im Werft-F3-Lauf 2026-06-12 als
 Wortmarke-Pikto ratifiziert (passt zum Hörspiel-Begriff: Kopfhörer-
-affordance ist für Paula sofort lesbar).
+affordance ist für ein vier- oder fünfjähriges Kind sofort lesbar).
 
 ---
 
@@ -1150,10 +1273,10 @@ Intro-Track.
 
 HSP-23 hält die Resume-Marke pro Album auf Track-Anfang gerundet
 (existing). Der Mini-App-Player schreibt denselben Resume-Stand wie
-die Paula-View: bei jedem Track-Wechsel und bei jeder Pause-Tap-Aktion
+die Kinder-View: bei jedem Track-Wechsel und bei jeder Pause-Tap-Aktion
 ruft die Mini-App `PUT /resume` mit Album-ID + Track-Position (HSP-17).
 
-**Konkurrenz-Schreiben** (Mini-App + Paula-View gleichzeitig) ist
+**Konkurrenz-Schreiben** (Mini-App + Kinder-View gleichzeitig) ist
 erlaubt — Last-Write-Wins auf Track-Anfang (Track-Position-Granularität,
 nicht Sekunden-Position; ein Race auf derselben Position ist no-op).
 
@@ -1222,7 +1345,7 @@ Pflicht-Tests (ohne Netz, ohne Telegram, ohne Mistral-/Anthropic-API):
 - **HSP-35/37-Audio** — Range-Request `bytes=0-1023` liefert 206 +
   passende ersten 1024 Bytes; ohne Range liefert 200 + voller
   Inhalt; Auth-Check vor Range-Logik (401 trumpft 206).
-- **HSP-36-Resume** — Mini-App `PUT /resume` und Paula-View-Update
+- **HSP-36-Resume** — Mini-App `PUT /resume` und Kinder-View-Update
   landen im selben Modell (gleiche Track-Position lesbar nach
   beiden Schreiben); ein zweites `PUT /resume` für dasselbe Album +
   Track-Position ist no-op.
@@ -1271,9 +1394,9 @@ vor V1 (Premature Plattform).
 
 ### E-HSP-4 — Resume auf Track-Anfang, nicht auf Sekunde
 *Datum:* 2026-06-12 · Brainstorm-Nic: „wir können einfacher zurückspringen
-wenn Paula nicht zu Ende gehört hat". Track ist die natürliche
+wenn das Kind nicht zu Ende gehört hat". Track ist die natürliche
 Wiederaufnahme-Granularität (3–4 min, geschnitten an Absatzgrenzen).
-Trade-off: Paula hört 30–60 s nochmal — akzeptabel und gut (sie erinnert
+Trade-off: das Kind hört 30–60 s nochmal — akzeptabel und gut (es erinnert
 sich wieder an die Szene). Im Gegenzug ist die Persistenz extrem einfach:
 Album-ID + Track-Position, keine Sekunden-Sync. **Verworfen:** Sekunden-
 genaue Server-seitige Resume-Persistenz.
