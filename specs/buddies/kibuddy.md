@@ -219,28 +219,21 @@ Sichtbarkeit: **ab dem Druck-Beginn** (gleichzeitig mit dem Echo aus
 KIBUDDY-8), **nicht erst** beim Lock-Übergang. Visuelles Ziel: dem Kind zeigen
 „ich höre dich gerade", ohne den Chat-Verlauf zu verdecken.
 
-### KIBUDDY-10 — Slide-to-Lock-Hinweis: Richtungspfeil
-**Wenn** der Knopf länger als **Lock-Hinweis-Schwelle** (KIBUDDY-21,
-Default 800 ms) gedrückt gehalten wird, **dann** erscheint **über** dem Knopf
-ein **reiner Richtungs-Pfeil** nach oben (Unicode `↑` oder ein
-gleichwertiges Pfeil-Glyph), **NICHT** das ARASAAC-Pfeil-Piktogramm —
-der Pfeil ist als Richtungsanzeige zu lesen, nicht als Symbol-Inhalt.
+### KIBUDDY-10 — Slide-to-Lock-Hinweis: V1 ENTFERNT
+**V1-Setzung (2026-06-15 Nic-Live-Befund #3):** Der Slide-to-Lock-Hinweis
+ist in V1 **komplett entfernt** — der Pfeil-Glyph ragte ins Chat-Fenster
+und war im Weg. Long-Hold-Auto-Lock (KIBUDDY-7 / T864-AC2: nach 3 s im
+recording-State automatisch einrasten) ersetzt das visuelle Slide-Feedback;
+Eltern erklären den Slide-Lock-Mechanismus dem Kind verbal.
 
-**V1-Setzung (2026-06-15 Nic-Live-Befund):** Das ursprünglich geplante
-**Schloss-Piktogramm** (ARASAAC 3261) ist im V1-Hinweis **ausgeblendet** —
-Eltern erklären den Slide-to-Lock-Mechanismus dem Kind verbal, das
-Schloss-Pikto war im Weg und Kinder lesen es im UX-Fluss nicht als
-Symbol-Inhalt. Der Pfeil-Glyph allein trägt den Hinweis. Folge: ARASAAC-
-Eintrag 3261 ist nicht mehr Teil des V1-UI-Icon-Sets (KIBUDDY-30).
+Historie der Reduktion:
+- ursprünglich: Pfeil `↑` + Schloss-Pikto (ARASAAC 3261)
+- 2026-06-15 erster Schritt: Schloss-Pikto ausgeblendet (Pikto im Weg)
+- 2026-06-15 zweiter Schritt: kompletter Hinweis entfernt (Pfeil ragte in Chat)
 
-**Mindestgröße:** Pfeil-Glyph ≥ 56px Schriftgröße. Hintergrund-Karte mit
-≥ 3px Border und deutlich sichtbarem Schatten — die Anweisung muss aus
-1m Tablet-Abstand für ein Vier-Jähriges klar erkennbar sein.
-
-Kein oder höchstens minimaler erklärender Text — die Anweisung muss
-**grafisch verständlich** sein. Schwebt mit sanfter Auf-Ab-Animation,
-nicht modal, nicht blockend. Verschwindet bei Loslassen oder bei
-Überschreiten der Slide-Schwelle (Lock).
+Folge-V2-Möglichkeiten (OPEN): wenn der Hinweis später wieder erwünscht
+ist, gehört er **außerhalb** des Chat-Fensters (z. B. seitlich neben dem
+PTT-Knopf), nicht darüber.
 
 ### KIBUDDY-11 — Aufnahme-Abbruch durch Slide-nach-Unten
 **Wenn** das Kind während des Tap-Hold-Modus den Finger **nach unten** über
