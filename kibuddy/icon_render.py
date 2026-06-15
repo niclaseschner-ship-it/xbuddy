@@ -1,11 +1,11 @@
 """KIBuddy — Icon-Render-Hilfsmodul (KIBUDDY-17 Buzzword-Refactor, T865).
 
-Wortklassen-Filter und Tokenisierung sind entfernt.
-Die per-Instanz-Datei kibuddy/data/funktionswort-liste.default.txt bleibt
-liegen (nicht löschen), wird aber von diesem Modul nicht mehr geladen.
+Wortklassen-Filter, Tokenisierung und die Funktionswort-Default-Datei sind
+mit T865 ersatzlos entfernt — LLM liefert direkt 3 Buzzwords, Client fetched
+Icons pro Buzzword (KIBUDDY-17).
 
 Einzig verbleibende öffentliche Funktion: validate_buzzwords() — sanitisiert
-die Buzzword-Liste aus der LLM-JSON-Antwort (AC6-Vereinfachungen, T865).
+die Buzzword-Liste aus der LLM-JSON-Antwort.
 """
 
 import logging
