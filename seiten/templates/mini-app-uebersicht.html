@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<!-- MAU-1: Mini-App-Uebersicht als Telegram-Mini-App.
+     MAU-4: drei <details>-Accordion-Sektionen, default collapsed.
+     MAU-7: fester heller Hintergrund (#f4f5f7), kein Telegram-Theme-Override.
+     MAD-5: kein direktes Telegram.WebApp im App-Code — alles ueber platform.js.
+     MAD-6: Assets unter /api/v1/seiten/static/<datei>.
+     MAD-7: Auth via Authorization: tma <initData>-Header (JS-Seite). -->
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Cache-Buster (Mini-App-Cache-Buster-Pattern: Telegram cached Assets aggressiv) -->
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <title>xbuddy</title>
+  <link rel="stylesheet" href="/api/v1/seiten/static/mini-app-uebersicht.css?v={{ build_id }}">
+  <!-- platform.js (RAT-16) muss vor mini-app-uebersicht.js geladen sein (MAD-5) -->
+  <script src="/api/v1/seiten/static/platform.js?v={{ build_id }}"></script>
+  <script src="/api/v1/seiten/static/mini-app-uebersicht.js?v={{ build_id }}" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <h1>xbuddy</h1>
+  </header>
+
+  <!-- MAU-4 / MAU-8: drei Accordion-Sektionen als Skeleton (collapsed, JS rendert Inhalt).
+       Skeleton ist sofort sichtbar — kein weisses Flackern waehrend Inventar-Load. -->
+  <main id="uebersicht-inhalt" aria-label="xbuddy Uebersicht" aria-live="polite">
+    <details class="accordion-sektion" id="sec-mini-apps">
+      <summary>
+        <div class="summary-titel">
+          <span class="summary-emoji" aria-hidden="true">📱</span>
+          <span>Mini Telegram Apps</span>
+        </div>
+        <span class="summary-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="accordion-body">
+        <p class="lade-hinweis" id="lade-mini-apps">Wird geladen …</p>
+      </div>
+    </details>
+
+    <details class="accordion-sektion" id="sec-geraete-paare">
+      <summary>
+        <div class="summary-titel">
+          <span class="summary-emoji" aria-hidden="true">📺</span>
+          <span>Geräte-Paare</span>
+        </div>
+        <span class="summary-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="accordion-body">
+        <p class="lade-hinweis" id="lade-geraete">Wird geladen …</p>
+      </div>
+    </details>
+
+    <details class="accordion-sektion" id="sec-buddy-seiten">
+      <summary>
+        <div class="summary-titel">
+          <span class="summary-emoji" aria-hidden="true">📄</span>
+          <span>Buddy-Seiten</span>
+        </div>
+        <span class="summary-chevron" aria-hidden="true">▼</span>
+      </summary>
+      <div class="accordion-body">
+        <p class="lade-hinweis" id="lade-buddy-seiten">Wird geladen …</p>
+      </div>
+    </details>
+  </main>
+
+  <!-- MAU-8: Fehler-Banner (401 / 5xx / Netz) — JS befuellt -->
+  <div id="fehler-banner" class="fehler-banner" hidden role="alert">
+    <p id="fehler-text" class="fehler-text"></p>
+    <div class="fehler-aktionen">
+      <button id="btn-schliessen" class="fehler-btn" hidden>Schliessen</button>
+      <button id="btn-retry" class="fehler-btn fehler-btn-primary" hidden>Erneut versuchen</button>
+    </div>
+  </div>
+
+  <!-- MAU-8: Snapshot-Pending-Banner — JS setzt visible -->
+  <div id="snapshot-banner" class="snapshot-banner" hidden role="status">
+    Geraete/Panels werden gerade nachgeladen …
+  </div>
+
+  <!-- Toast fuer copyText-Quittung (MAU-6) -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
