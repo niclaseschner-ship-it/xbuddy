@@ -14,7 +14,7 @@
       ],
       "zeigt": "Push-to-Talk-Frage-View: Kind spricht eine Frage, Buddy antwortet mit Text und Icons.",
       "zielgruppe": "kind",
-      "icons": []
+      "icons": ["arasaac/37404.png"]
     }
   ]
 }
