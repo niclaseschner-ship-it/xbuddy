@@ -1,6 +1,7 @@
 # Mini-App-Übersicht — Spec     (ID-Präfix: MAU)
 
-> Status: V1 · Refs #678 (Werft-Sammler, Funktion 3 „Übersicht"), RAT-16, MAD-1..10,
+> Status: V1 · Refs #678 (Werft-Sammler, Funktion 3 „Übersicht"), RAT-16,
+> `conventions/mini-app-design.md` (MAD-1..10 ratifiziert 2026-06-15 / #708-Folge),
 > SREG-12 (Vorgänger-View im Browser), SREG-14 (Mini-App-Sorte im Manifest), #708
 > (Auth-Header — wird in dieser V1 mitgehärtet)
 
@@ -17,9 +18,10 @@ vorausgesetzt). Beide Views ziehen aus derselben Aggregator-Wahrheit
 (`baue_inventar` in `seiten/aggregator.py`) — keine Doppel-Wahrheit, keine
 Doppel-Pflege.
 
-**Klassen-Einordnung:** Mini-App-Konsument #3 nach essen-einkauf (#653) und
-routine-anpassen (#728). Folgt dem MAD-Pattern
-(`brainstorm/conventions-vorab/mini-app-design-erstes-vorkommen.md`).
+**Klassen-Einordnung:** Mini-App-Konsument **#4** nach essen-einkauf (#653,
+n=1), routine-anpassen (#728, n=2 → MAD-Ratifizierungs-Trigger) und
+Hörspiel-Eltern-Mini-App (#848, n=3, n=1 für Tabs). Folgt der ratifizierten
+**MAD-Konvention** (`conventions/mini-app-design.md`).
 
 ## MAU-1 — Mini-App-Übersicht ist eine Telegram-Mini-App
 
@@ -150,11 +152,14 @@ wichtiger als Telegram-Dark-Mode-Spiegelung. Eltern erleben die
 Übersicht in beiden Heimaten (Telegram-Mini-App + Tablet-Browser) als
 optisch identisch.
 
-**Spec-Konflikt zu MAD-Andocken:** MAD-Vorlage empfiehlt Telegram-
-Theme-Bindung — die Mini-App-Übersicht setzt sich davon ab und
-dokumentiert die Abweichung als bewusste Form-Entscheidung. Wenn die
-Ratifizierungs-Berater-Runde MAD ratifiziert, ist dies eine
-explizite Klausel „MAU folgt MAD ausgenommen Theme-Bindung".
+**Verhältnis zu MAD:** Die ratifizierte MAD-Konvention
+(`conventions/mini-app-design.md`) regelt Theme-Andocken **nicht
+explizit** als Pflicht — sie verlangt nur, dass Mini-Apps keine eigenen
+Farb-/Maß-Werte erfinden, sondern DTOK-Tokens nutzen (`conventions/
+design-tokens.md`). MAU folgt der DTOK-Andock-Disziplin (siehe MAD-
+Datei-Header), nutzt aber feste DTOK-Werte statt Telegram-Theme-
+Variablen. Keine Konvention wird verletzt; die Abweichung ist
+dokumentiert und View-spezifisch begründet.
 
 ## MAU-8 — Lade-Verhalten + Fehler-Modi
 
@@ -216,9 +221,11 @@ ist die Übersicht aller Seiten und Apps:") + `web_app`-Inline-Button
   Aktionen tragen (Öffnen vs. Kopieren). Karte-als-Ganzes-Tap würde
   eine Aktion bevorzugen und die andere verstecken. Zwei explizite
   Buttons sind klarer.
-- **Telegram-Theme-Bindung (MAD-Default):** verworfen für MAU
-  (Gate B 2026-06-15) — siehe MAU-7. Setup-Tauglichkeit + Konsistenz
-  zu SREG-12 sind wichtiger als Dark-Mode-Spiegelung.
+- **Telegram-Theme-Bindung (`--tg-theme-*` an DTOK-Variablen):** verworfen
+  für MAU (Gate B 2026-06-15) — siehe MAU-7. Setup-Tauglichkeit +
+  Konsistenz zu SREG-12 sind wichtiger als Dark-Mode-Spiegelung. MAD
+  verlangt das nicht — DTOK-Werte sind die Andockstelle, Theme-Variablen
+  sind nur eine mögliche Quelle.
 
 ## Refs
 
@@ -234,9 +241,10 @@ ist die Übersicht aller Seiten und Apps:") + `web_app`-Inline-Button
   genutzt).
 - `eltern-chat/skills/{einkauf_zeigen,routine_anpassen_oeffnen}.py`
   (Skill-Vorbilder für SREG-5-Pivot).
-- `brainstorm/conventions-vorab/mini-app-design-erstes-vorkommen.md`
-  (MAD-1..10).
+- `conventions/mini-app-design.md` (MAD-1..10, ratifiziert 2026-06-15).
+- `conventions/design-tokens.md` (DTOK — Andockstelle).
 - #708 (Mini-App-Auth — wird mit dieser Werft geschlossen).
 - #684 (Lego-Basis — CLOSED, MAD-5 platform.js).
 - #653 (essen-einkauf — CLOSED, n=1).
-- #728 (routine-anpassen — CLOSED, n=2).
+- #728 (routine-anpassen — CLOSED, n=2, MAD-Ratifizierungs-Trigger).
+- #848 (Hörspiel-Eltern-Mini-App — CLOSED, n=3).

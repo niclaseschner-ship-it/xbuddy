@@ -747,9 +747,11 @@ backgefillt war. Mit SREG-13 ist der Schalter graduell umlegbar.
 > (Lego-Mechanik SREG-2: `<root>/<app>/views.json` glob), das Inventar
 > wird die EINE Wahrheit für SREG-12 und MAU.
 
-Mini-Apps sind Eltern-Form-Faktor mit `initData`-Auth und Telegram-WebView-
-Launcher. Sie werden in Buddy-`views.json` als **neuer Sorten-Eintrag**
-deklariert — analog zu Sorten a/b/c, aber mit eigener Form-Pflicht:
+Mini-Apps sind Eltern-Form-Faktor mit `initData`-Auth (`Authorization: tma
+<initData>`-Header, **MAD-7** ratifiziert in `conventions/mini-app-design.md`)
+und Telegram-WebView-Launcher. Sie werden in Buddy-`views.json` als **neuer
+Sorten-Eintrag** deklariert — analog zu Sorten a/b/c, aber mit eigener
+Form-Pflicht:
 
 ```json
 {
