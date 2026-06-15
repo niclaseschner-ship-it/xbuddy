@@ -46,6 +46,8 @@ DEFAULT_AUFNAHME_QUELLE = "display"
 DEFAULT_AUFNAHME_MAX_SEK = 30
 DEFAULT_INAKTIVITAET_SEK = 60
 DEFAULT_PROMPT_MAX_BYTES = 50000
+DEFAULT_VAD_STILLE_SEK = 1.5
+DEFAULT_VAD_THRESHOLD_DB = -50.0
 
 
 class ConfigError(Exception):
@@ -72,6 +74,8 @@ class RuntimeConfig:
         aufnahme_max_sek: int,
         inaktivitaet_sek: int,
         prompt_max_bytes: int,
+        vad_stille_sek: float,
+        vad_threshold_db: float,
         anthropic_key: str | None,
         azure_endpoint: str | None,
         azure_key: str | None,
@@ -93,6 +97,8 @@ class RuntimeConfig:
         self.aufnahme_max_sek = aufnahme_max_sek
         self.inaktivitaet_sek = inaktivitaet_sek
         self.prompt_max_bytes = prompt_max_bytes
+        self.vad_stille_sek = vad_stille_sek
+        self.vad_threshold_db = vad_threshold_db
         self.anthropic_key = anthropic_key
         self.azure_endpoint = azure_endpoint
         self.azure_key = azure_key
@@ -113,9 +119,18 @@ class RuntimeConfig:
             "aufnahme_quelle": self.aufnahme_quelle,
             "aufnahme_max_sek": self.aufnahme_max_sek,
             "inaktivitaet_sek": self.inaktivitaet_sek,
+            "vad_stille_sek": self.vad_stille_sek,
+            "vad_threshold_db": self.vad_threshold_db,
             "anthropic_key_set": bool(self.anthropic_key),
             "azure_key_set": bool(self.azure_key),
             "openai_key_set": bool(self.openai_key),
+        }
+
+    def to_vad_cfg(self) -> dict[str, Any]:
+        """Minimales VAD-Dict für Template-Render (KIBUDDY-21/AC3)."""
+        return {
+            "vad_stille_sek": self.vad_stille_sek,
+            "vad_threshold_db": self.vad_threshold_db,
         }
 
 
@@ -209,6 +224,14 @@ def resolve_runtime(
         prompt_max_bytes = int(env.get("KIBUDDY_PROMPT_MAX_BYTES") or file_cfg.get("prompt_max_bytes") or DEFAULT_PROMPT_MAX_BYTES)
     except (TypeError, ValueError):
         prompt_max_bytes = DEFAULT_PROMPT_MAX_BYTES
+    try:
+        vad_stille_sek = float(env.get("KIBUDDY_VAD_STILLE_SEK") or file_cfg.get("vad_stille_sek") or DEFAULT_VAD_STILLE_SEK)
+    except (TypeError, ValueError):
+        vad_stille_sek = DEFAULT_VAD_STILLE_SEK
+    try:
+        vad_threshold_db = float(env.get("KIBUDDY_VAD_THRESHOLD_DB") or file_cfg.get("vad_threshold_db") or DEFAULT_VAD_THRESHOLD_DB)
+    except (TypeError, ValueError):
+        vad_threshold_db = DEFAULT_VAD_THRESHOLD_DB
 
     return RuntimeConfig(
         listen_host=listen_host,
@@ -226,6 +249,8 @@ def resolve_runtime(
         aufnahme_max_sek=aufnahme_max_sek,
         inaktivitaet_sek=inaktivitaet_sek,
         prompt_max_bytes=prompt_max_bytes,
+        vad_stille_sek=vad_stille_sek,
+        vad_threshold_db=vad_threshold_db,
         anthropic_key=env.get(ENV_ANTHROPIC_KEY),
         azure_endpoint=env.get(ENV_AZURE_ENDPOINT),
         azure_key=env.get(ENV_AZURE_KEY),
@@ -257,6 +282,8 @@ def patch_aufnahme_quelle(cfg: RuntimeConfig, neue_quelle: str) -> RuntimeConfig
         aufnahme_max_sek=cfg.aufnahme_max_sek,
         inaktivitaet_sek=cfg.inaktivitaet_sek,
         prompt_max_bytes=cfg.prompt_max_bytes,
+        vad_stille_sek=cfg.vad_stille_sek,
+        vad_threshold_db=cfg.vad_threshold_db,
         anthropic_key=cfg.anthropic_key,
         azure_endpoint=cfg.azure_endpoint,
         azure_key=cfg.azure_key,
