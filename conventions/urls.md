@@ -74,6 +74,14 @@ und kein Asset:
   (`/controller/<source>/<X>`). Quelle:
   [`../specs/platform/app-panel.md`](../specs/platform/app-panel.md),
   PANEL-2.
+- **HSP-25/HSP-26** — `/display/hoerspiel/<kind_id>/<view>` und
+  `/api/v1/hoerspiel/<kind_id>/<resource>` tragen die Kind-Instanz-
+  Identität als zweites Segment (Hörbuchbuddy V1 mit zwei expliziten
+  Instanzen Mia + Finn; eine Hörbuchbuddy-Klasse, n Instanzen pro Pi,
+  handverdrahtet — siehe RAT-17). Abweichung von URL-2/URL-4 (Kind ist
+  kein View und kein Resource-Name). Quelle:
+  [`../specs/buddies/hoerspiel.md`](../specs/buddies/hoerspiel.md),
+  HSP-25/HSP-26/HSP-28a.
 
 Die Identitäts-Form ist konsistent über Event-Schema, Config und
 Routing-Tabelle: die Schlüssel des `panels`-Abschnitts in `routing.json`
@@ -84,7 +92,7 @@ Neue Abweichungen werden hier eingetragen, sobald sie in ihrer
 Komponenten-Spec eine eigene ID bekommen — `urls.md` bleibt die
 Übersicht, die jeweilige Komponenten-Spec die Begründung.
 
-*Tickets:* #122
+*Tickets:* #122, #907
 
 ### URL-4 — API-Pfade
 
