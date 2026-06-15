@@ -1,9 +1,13 @@
 """Tests für hoerspiel_folge_erzeugen + HoerspielFolgeErzeugenTask —
-HFE-1 … HFE-9 (specs/platform/hoerspiel-folge-erzeugen.md).
+HFE-1 … HFE-10 (specs/platform/hoerspiel-folge-erzeugen.md).
 
 Abgedeckte ACs (HFE-9-Mindest-Abdeckung):
   HFE-2  — BerechtigungError für Nicht-Eltern, kein Buddy-Aufruf
   HFE-3  — leere/mehrdeutige Idee → ValueError (EC-22-Rückfrage), kein Buddy-Aufruf
+  HFE-3  — leere Idee + Themen verfügbar → Rückfrage mit Themen-Liste (Sub-Case 1)
+  HFE-3  — leere Idee + 404 vom Themen-Endpoint → nur EC-22-Rückfrage ohne Themen
+  HFE-3  — konkrete-aber-unvollständige Idee → Diskussions-Marker (Sub-Case 2)
+  HFE-3  — Eltern-Signal nach Diskussion → Standard-Pfad zum Vorschlag-Endpoint
   HFE-3  — gefüllte Idee → POST /folgen-vorschlag mit Idee im Body
   HFE-3  — HTTP 503 / 5xx vom Vorschlag-Endpoint → HoerspielClientError,
             kein Vorschlag-Block
@@ -16,6 +20,9 @@ Abgedeckte ACs (HFE-9-Mindest-Abdeckung):
   HFE-5  — HTTP 412 → Shared-Asset-Hinweis ohne erneuten Build-Versuch
   HFE-5  — HTTP 503/5xx → Fehler-Bubble ohne Build-Versuch
   HFE-7  — kein tg.send_* in propose() (Routing-Test)
+  HFE-10 — Settings-Beifang-Button in erster propose()-Antwort (Sub-Case 1/2/3)
+  HFE-10 — Beifang NICHT in Folge-Antworten (is_first_propose=False)
+  HFE-10 — Bei leerer mini_app_base_url kein Beifang-Button, keine Fehler
 
 Tests laufen ohne Netz (HFE-9): HoerspielClient wird durch FakeHoerspielClient
 ersetzt (CLIENT-1 Transport-Stub-Naht).
@@ -42,10 +49,13 @@ class FakeHoerspielClient:
                  album_response=None,
                  album_error=None,
                  config_response=None,
-                 config_error=None):
+                 config_error=None,
+                 themen_response=None,
+                 themen_error=None):
         self.vorschlag_calls = []   # [(idee,)]
         self.album_calls = []       # [{"titel", "text", "voice", "idee"}]
         self.config_calls = 0
+        self.themen_calls = []      # [alter]
 
         self._vorschlag_response = vorschlag_response or {
             "titel": "Der Schneesturm",
@@ -57,6 +67,10 @@ class FakeHoerspielClient:
         self._album_error = album_error
         self._config_response = config_response or {"default_voice": "shimmer"}
         self._config_error = config_error
+        # themen_response=None bedeutet: 404 (leere Liste)
+        # themen_response=[...] bedeutet: 200 mit Themen
+        self._themen_response = themen_response   # None → leere Liste (wie 404)
+        self._themen_error = themen_error
 
     def folgen_vorschlag(self, idee: str) -> dict:
         self.vorschlag_calls.append(idee)
@@ -78,16 +92,27 @@ class FakeHoerspielClient:
             raise self._config_error
         return dict(self._config_response)
 
+    def themen_lesen(self, alter: int) -> list:
+        self.themen_calls.append(alter)
+        if self._themen_error is not None:
+            raise self._themen_error
+        return list(self._themen_response) if self._themen_response is not None else []
+
 
 class FakeTelegram:
-    """Minimale Telegram-Doppelung — aufzeichnende send_message."""
+    """Minimale Telegram-Doppelung — aufzeichnende send_message + send_inline_keyboard."""
 
     def __init__(self):
-        self.sent = []   # [{chat_id, text}]
+        self.sent = []          # [{chat_id, text}]
+        self.keyboards = []     # [{chat_id, text, buttons}]
 
     def send_message(self, chat_id, text):
         self.sent.append({"chat_id": chat_id, "text": text})
         return {"message_id": 3000 + len(self.sent)}
+
+    def send_inline_keyboard(self, chat_id, text, buttons):
+        self.keyboards.append({"chat_id": chat_id, "text": text, "buttons": buttons})
+        return {"message_id": 4000 + len(self.keyboards)}
 
 
 def _immer_mitglied(uid):
@@ -103,12 +128,14 @@ def _ctx(chat_id=42, from_user_id=7):
 
 
 def _make_task(*, hoerspiel_client=None, tg=None, is_member_fn=None,
-               display_url_origin="https://app.example.com"):
+               display_url_origin="https://app.example.com",
+               mini_app_base_url="https://mini.example.com"):
     return HoerspielFolgeErzeugenTask(
         tg=tg or FakeTelegram(),
         hoerspiel_client=hoerspiel_client or FakeHoerspielClient(),
         display_url_origin=display_url_origin,
         is_member_fn=is_member_fn or _immer_mitglied,
+        mini_app_base_url=mini_app_base_url,
     )
 
 
@@ -545,10 +572,153 @@ def test_task_execute_ohne_vorherigen_propose_meldet_klar():
     task = _make_task(hoerspiel_client=client, tg=tg)
     ctx = _ctx(chat_id=99)
 
-    result = task.execute({}, ctx)
+    task.execute({}, ctx)
 
     assert client.album_calls == [], "kein album_bauen ohne Session-State"
     assert len(tg.sent) == 1, "Fehler-Bubble muss gesendet werden"
     bubble = tg.sent[0]["text"]
     assert "verloren" in bubble.lower() or "starten" in bubble.lower(), (
         "Fehler-Bubble soll klar auf Problem hinweisen")
+
+
+# ============================================================
+#  HFE-9: neue Tests (HFE-3 Diskussions-Schleife + HFE-10)
+# ============================================================
+
+
+def test_HFE9_leere_idee_themen_verfuegbar():
+    """HFE-9 / HFE-3 Sub-Case 1: leere Idee + Themen-Liste verfügbar →
+    Tool-Result-Text trägt die Themen + EC-22-Rückfrage.
+    Kein POST /folgen-vorschlag-Aufruf."""
+    themen = ["Freundschaft", "Mut", "Abenteuer", "Familie",
+              "Tiere", "Natur", "Geister", "Rätsel"]
+    client = FakeHoerspielClient(themen_response=themen)
+    with pytest.raises(ValueError, match=r"Worum|gehen|Vorschläge") as exc_info:
+        propose(
+            hoerspiel_client=client,
+            is_member_fn=_immer_mitglied,
+            from_user_id=7,
+            idee="",   # leer → Sub-Case 1
+        )
+    msg = str(exc_info.value)
+    # Mindestens ein Thema aus der Liste muss enthalten sein
+    assert any(t in msg for t in themen), (
+        "Sub-Case 1: Themen-Liste muss im Tool-Result-Text erscheinen")
+    # Kein Vorschlag-Endpoint-Aufruf
+    assert client.vorschlag_calls == [], "Sub-Case 1: kein POST /folgen-vorschlag"
+    assert client.themen_calls == [4], "Sub-Case 1: GET /themen?alter=4 muss aufgerufen werden"
+
+
+def test_HFE9_leere_idee_themen_404():
+    """HFE-9 / HFE-3 Sub-Case 1: leere Idee + leere Themen-Liste (wie 404) →
+    Tool-Result-Text trägt NUR die EC-22-Rückfrage, keine Themen.
+    Kein POST /folgen-vorschlag-Aufruf.
+
+    Hinweis: themen_lesen() gibt bei 404 eine leere Liste zurück (kein Raise).
+    themen_response=None im FakeClient simuliert dieses Verhalten.
+    """
+    # themen_response=None → leere Liste (entspricht 404-Verhalten von themen_lesen)
+    client = FakeHoerspielClient(themen_response=None)
+    with pytest.raises(ValueError, match=r"Worum|gehen|Beschreib") as exc_info:
+        propose(
+            hoerspiel_client=client,
+            is_member_fn=_immer_mitglied,
+            from_user_id=7,
+            idee="",   # leer → Sub-Case 1
+        )
+    msg = str(exc_info.value)
+    # Keine Themen-Liste im Text (da keine Themen vorhanden)
+    assert "Freundschaft" not in msg, (
+        "Sub-Case 1 (kein Themen): keine Themen-Aufzählung im Text")
+    assert "Mut" not in msg, (
+        "Sub-Case 1 (kein Themen): keine Themen-Aufzählung im Text")
+    assert client.vorschlag_calls == [], "kein POST /folgen-vorschlag"
+
+
+def test_HFE9_diskussion_marker_bei_unvollstaendiger_idee():
+    """HFE-9 / HFE-3 Sub-Case 2: konkrete-aber-unvollständige Idee (idee_diskussion=True)
+    → Tool-Result-Text mit JSON-Diskussions-Marker.
+    Kein POST /folgen-vorschlag-Aufruf."""
+    import json as _json
+    client = FakeHoerspielClient()
+    with pytest.raises(ValueError, match=r'diskussion') as exc_info:
+        propose(
+            hoerspiel_client=client,
+            is_member_fn=_immer_mitglied,
+            from_user_id=7,
+            idee="Stigi lernt etwas über Mut",
+            idee_diskussion=True,   # Sub-Case 2
+        )
+    msg = str(exc_info.value)
+    # Marker-Dict muss parsebar sein
+    marker = _json.loads(msg)
+    assert marker.get("diskussion") is True, (
+        "Sub-Case 2: diskussion=True im JSON-Marker")
+    assert "idee_bisher" in marker, "Sub-Case 2: idee_bisher im JSON-Marker"
+    assert "Mut" in marker["idee_bisher"] or "Stigi" in marker["idee_bisher"], (
+        "Sub-Case 2: idee_bisher enthält die originale Idee")
+    # Kein Vorschlag-Endpoint-Aufruf
+    assert client.vorschlag_calls == [], "Sub-Case 2: kein POST /folgen-vorschlag"
+
+
+def test_HFE10_settings_beifang_nur_in_erster_antwort():
+    """HFE-10: Settings-Beifang-Button erscheint in der ersten propose()-Antwort
+    eines Turns, NICHT in Folge-Antworten.
+
+    Szenario: Zweimaliger propose()-Aufruf auf denselben Task.
+    Erster Aufruf (Sub-Case 1, leere Idee) → Beifang-Button vorhanden.
+    Zweiter Aufruf (Sub-Case 1, erneute Rückfrage) → KEIN Beifang-Button.
+    """
+    themen = ["Abenteuer", "Freundschaft"]
+    client = FakeHoerspielClient(themen_response=themen)
+    tg = FakeTelegram()
+    task = _make_task(
+        hoerspiel_client=client, tg=tg,
+        mini_app_base_url="https://mini.example.com")
+    ctx = _ctx(chat_id=42, from_user_id=7)
+
+    # Erster Aufruf: leere Idee → Sub-Case 1 → ValueError + Beifang-Button
+    with pytest.raises(ValueError, match=r"Worum|gehen"):
+        task.propose({"idee": ""}, ctx)
+
+    keyboards_nach_erstem = len(tg.keyboards)
+    assert keyboards_nach_erstem == 1, (
+        "HFE-10: Erster propose()-Aufruf muss Settings-Beifang-Button senden")
+    beifang_btn = tg.keyboards[0]["buttons"]
+    assert any("einstellungen" in str(b.get("label", "")).lower()
+               or "⚙" in str(b.get("label", ""))
+               for b in beifang_btn), (
+        "HFE-10: Beifang-Button muss Label ⚙️ Einstellungen tragen")
+    assert any("#einstellungen" in str(b.get("web_app_url", ""))
+               for b in beifang_btn), (
+        "HFE-10: Beifang-Button muss URL mit #einstellungen tragen")
+
+    # Zweiter Aufruf: gleicher Turn, leere Idee → Sub-Case 1 → KEIN neuer Button
+    with pytest.raises(ValueError, match=r"Worum|gehen"):
+        task.propose({"idee": ""}, ctx)
+
+    assert len(tg.keyboards) == keyboards_nach_erstem, (
+        "HFE-10: Folge-Antwort darf keinen weiteren Beifang-Button senden")
+
+
+def test_HFE10_kein_beifang_bei_leerer_mini_app_url():
+    """HFE-10: Wenn mini_app_base_url leer ist, entfällt der Beifang-Button still.
+    Kein Fehler-Text, keine Exception, Rest der Antwort bleibt grün."""
+    client = FakeHoerspielClient(themen_response=["Abenteuer"])
+    tg = FakeTelegram()
+    # mini_app_base_url="" → kein Beifang
+    task = _make_task(
+        hoerspiel_client=client, tg=tg,
+        mini_app_base_url="")
+    ctx = _ctx(chat_id=42, from_user_id=7)
+
+    with pytest.raises(ValueError, match=r"Worum|gehen") as exc_info:
+        task.propose({"idee": ""}, ctx)
+
+    # Keine Inline-Keyboard-Nachrichten
+    assert tg.keyboards == [], (
+        "HFE-10: Bei leerer mini_app_base_url kein send_inline_keyboard")
+    # Aber die EC-22-Rückfrage ist trotzdem im ValueError
+    msg = str(exc_info.value)
+    assert "Worum" in msg or "gehen" in msg.lower(), (
+        "HFE-10: EC-22-Rückfrage bleibt auch ohne Beifang erhalten")
