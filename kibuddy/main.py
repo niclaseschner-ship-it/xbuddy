@@ -21,11 +21,12 @@ Icon-Lookup: clientseitig via Browser-Fetch-API (KIBUDDY-17 letzter Absatz).
 """
 
 import argparse
+import json
 import logging
 import os
 import sys
 
-from flask import Flask, g, jsonify, render_template, request, send_from_directory
+from flask import Flask, Response, g, jsonify, render_template, request, send_from_directory, stream_with_context
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
@@ -205,18 +206,20 @@ def audio_file(audio_filename: str):
 
 @app.route("/api/v1/kibuddy/frage", methods=["POST"])
 def frage():
-    """POST audio → STT → LLM (mit Memory) → Tokenisierung → TTS → JSON.
+    """POST audio → NDJSON-Stream: Stage 1 (kind) sofort nach STT, Stage 2 (buddy) nach LLM+TTS.
 
     Multipart-Form mit Feld `audio` (Browser-Audio, WebM/Opus o. ä.).
-    Response: { text, transkript, words: [{text, is_inhaltswort}], tts_audio_url }
+    Response: application/x-ndjson, zwei Zeilen:
+      {"event":"kind","transkript":"...","transkript_words":[...]}\n
+      {"event":"buddy","text":"...","words":[...],"tts_audio_url":"..."}\n
 
-    Icon-Lookup läuft clientseitig (KIBUDDY-17 letzter Absatz):
-    Stück B ruft /api/v1/icons/suche parallel per Browser-Fetch für alle
-    is_inhaltswort=true-Wörter auf.
+    Bei Fehler vor Stage 1: {"event":"error","stage":"stt","detail":"..."}\n
+    Bei Fehler nach Stage 1: {"event":"error","stage":"llm",...}\n
 
+    Icon-Lookup läuft clientseitig (KIBUDDY-17 letzter Absatz).
     Cookie: kibuddy_sid (HttpOnly, SameSite=Lax) wird gesetzt wenn fehlend.
     """
-    # Audio aus Request holen.
+    # Audio aus Request holen (vor Generator — Flask-Request ist nur im Request-Kontext lesbar).
     audio_file_obj = request.files.get("audio")
     if audio_file_obj is None:
         return jsonify({"fehler": "audio-Feld fehlt (multipart/form-data)"}), 400
@@ -227,69 +230,87 @@ def frage():
 
     filename = audio_file_obj.filename or "audio.webm"
 
-    # Session-Memory via Cookie (KIBUDDY-16).
+    # Session-Memory via Cookie (KIBUDDY-16) — vor Generator, damit Cookie-Hook greift.
     _sid, memory = _get_or_create_session()
 
-    # STT.
     stt = _stt()
     if stt is None:
         return jsonify({"fehler": "stt-engine nicht konfiguriert"}), 503
-    try:
-        frage_text = stt_service.transkribiere(audio_bytes, stt, filename=filename)
-    except STTError as e:
-        return jsonify({"fehler": "stt-anbieter nicht erreichbar: %s" % e}), 503
 
-    if not frage_text.strip():
-        return jsonify({"fehler": "transkript leer — konnte die Frage nicht verstehen"}), 422
-
-    # LLM (mit Memory).
     llm = _llm()
     if llm is None:
         return jsonify({
             "fehler": "llm-provider %s hat keinen API-Key"
             % (_runtime_cfg().llm_provider if _runtime_cfg() else "?"),
         }), 503
-    try:
-        antwort_text = llm_service.beantworte_frage(
-            frage_text=frage_text,
-            data_root=_data_root(),
-            memory=memory,
-            llm=llm,
-        )
-    except ProviderError as e:
-        return jsonify({"fehler": "llm-provider nicht erreichbar: %s" % e}), 503
 
-    # Tokenisierung + Wortklassen-Filter (clientseitiger Icon-Lookup, KIBUDDY-17).
-    # transkript_words: gleicher Tokenizer wie words[] — für Kind-Bubble (KIBUDDY-19).
-    transkript_words_api = icon_render.worte_zu_words_api(frage_text)
-    words_api = icon_render.worte_zu_words_api(antwort_text)
-
-    # TTS (Resilienz: Fehler → tts_audio_url: null, KIBUDDY-24).
+    # Snapshot-Referenzen für den Generator (Request-Kontext endet nach Response-Start).
     cfg = _runtime_cfg()
     tts = _tts()
-    tts_audio_url = None
-    if tts is not None and cfg is not None:
-        try:
-            audio_id = tts_service.synthetisiere(
-                text=antwort_text,
-                voice=cfg.tts_voice,
-                speed=cfg.tts_speed,
-                data_root=_data_root(),
-                tts_engine=tts,
-            )
-            tts_audio_url = "/api/v1/kibuddy/audio/%s.mp3" % audio_id
-        except TTSError as e:
-            logger.warning("tts: fehler bei frage-endpoint: %s", e)
-            # tts_audio_url bleibt None — Kind sieht zumindest Text (KIBUDDY-24).
+    data_root = _data_root()
 
-    response_data = {
-        "text": antwort_text,
-        "transkript": frage_text,
-        "transkript_words": transkript_words_api,
-        "words": words_api,
-        "tts_audio_url": tts_audio_url,
-    }
-    return jsonify(response_data)
+    def generate():
+        # ---- Stage 1: STT ----
+        try:
+            frage_text = stt_service.transkribiere(audio_bytes, stt, filename=filename)
+        except STTError as e:
+            yield json.dumps({"event": "error", "stage": "stt", "detail": str(e)}) + "\n"
+            return
+
+        if not frage_text.strip():
+            yield json.dumps({"event": "error", "stage": "stt", "detail": "transkript leer — konnte die Frage nicht verstehen"}) + "\n"
+            return
+
+        transkript_words_api = icon_render.worte_zu_words_api(frage_text)
+
+        yield json.dumps({
+            "event": "kind",
+            "transkript": frage_text,
+            "transkript_words": transkript_words_api,
+        }) + "\n"
+        # Werkzeug/Gunicorn flusht bei jedem yield — Stage 1 wird sofort gesendet.
+
+        # ---- Stage 2: LLM + TTS ----
+        try:
+            antwort_text = llm_service.beantworte_frage(
+                frage_text=frage_text,
+                data_root=data_root,
+                memory=memory,
+                llm=llm,
+            )
+        except ProviderError as e:
+            yield json.dumps({"event": "error", "stage": "llm", "detail": str(e)}) + "\n"
+            return
+
+        words_api = icon_render.worte_zu_words_api(antwort_text)
+
+        tts_audio_url = None
+        if tts is not None and cfg is not None:
+            try:
+                audio_id = tts_service.synthetisiere(
+                    text=antwort_text,
+                    voice=cfg.tts_voice,
+                    speed=cfg.tts_speed,
+                    data_root=data_root,
+                    tts_engine=tts,
+                )
+                tts_audio_url = "/api/v1/kibuddy/audio/%s.mp3" % audio_id
+            except TTSError as e:
+                logger.warning("tts: fehler bei frage-endpoint: %s", e)
+                # tts_audio_url bleibt None — Kind sieht zumindest Text (KIBUDDY-24).
+
+        yield json.dumps({
+            "event": "buddy",
+            "text": antwort_text,
+            "words": words_api,
+            "tts_audio_url": tts_audio_url,
+        }) + "\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="application/x-ndjson",
+        headers={"X-Accel-Buffering": "no"},  # nginx: kein Response-Buffering (ROU-22 analog)
+    )
 
 
 # ---- Vorlesen-Endpoint (KIBUDDY-24, KIBUDDY-31) ----
