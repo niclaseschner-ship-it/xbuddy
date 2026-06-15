@@ -52,14 +52,12 @@ if __package__:
     from . import katalog as katalog_mod
     from . import render as render_mod
     from . import store as store_mod
-    from .photo_client import EssenPhotoClient, EssenPhotoClientError
 else:
     sys.path.insert(0, _REPO_ROOT)
     from essen import config as config_mod
     from essen import katalog as katalog_mod
     from essen import render as render_mod
     from essen import store as store_mod
-    from essen.photo_client import EssenPhotoClient, EssenPhotoClientError
 
 
 # ============================================================
