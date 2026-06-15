@@ -513,13 +513,74 @@ dahinterliegender Schreibakt, der nicht in der Quittung steht,
 existiert für sie nicht.
 
 **Undo-Bindung ist deterministisch, nicht LLM-gewählt.** Das
-Undo-Wort wird **vor dem Agenten** an einen persistenten Datensatz in
-EC-35 (`task_events`) gebunden — das LLM entscheidet **nicht** über
+Undo-Wort wird **vor dem Agenten** an einen persistenten
+**A2-Receipt-Datensatz** gebunden — das LLM entscheidet **nicht** über
 Ziel oder Ressource des Undo. Der konkrete Vor-Agent-Hook ist
 Code-Track-Sache und nicht Teil dieser Spec; die Spec normiert nur
 das Soll (Undo bindet auf den persistierten letzten erfolgreichen
 Schreibakt der A2-Klasse, nicht auf eine LLM-Interpretation des
 Verlaufs).
+
+**A2-Receipt — der Kassenbon (#841, 2026-06-15).** Pro erfolgreichem
+A2-Schreibakt schreibt das Framework einen **persistenten Datensatz**
+(`a2_receipts` in derselben SQLite-Datei wie EC-35-`task_events` —
+`conversations.db`) mit:
+
+- **`task_name`** — Skill-Name (`einkauf_hinzufuegen`, `foto_senden`, …)
+- **`chat_id`** — Chat-Faden, in dem die Quittung gilt
+- **`resource_id`** — die konkrete Ressourcen-ID, die durch den
+  Inverse-Aufruf rückgängig gemacht werden kann
+- **`inverse_call`** — strukturierter Verweis auf den Inverse
+  (Buddy-Endpunkt + Pfad-Parameter), den der Vor-Agent-Hook
+  deterministisch ausführen kann
+- **`committed_at`** — Zeitpunkt des erfolgreichen Schreibakts
+- **`sealed_at`** — NULL, solange `falsch` noch greift; gesetzt bei
+  Versiegelung (siehe nächster Absatz)
+
+Ein A2-Schreibakt mit **mehreren** Ressourcen (Multi-Item — z. B.
+`einkauf_hinzufuegen` mit drei Items) schreibt **eine Receipt-Zeile
+pro Ressource**. `falsch` ruft dann **alle** zugehörigen
+Inverse-Aufrufe; der Bot quittiert, was tatsächlich rückgängig wurde
+(zweistufig, ehrlich: „Brot und Milch wieder weg, Joghurt klemmt —
+bitte manuell prüfen", EC-7).
+
+**Versiegelung — wann der Kassenbon nicht mehr eingelöst wird.** Die
+nächste **inhaltlich folgende Anfrage** in demselben Chat-Faden
+versiegelt alle unversiegelten Receipt-Zeilen des Vor-Schreibakts
+(setzt `sealed_at`). `falsch` greift dann nur noch auf den **neuen**
+letzten Schreibakt — die alten Bons sind „verbraucht" und können
+nicht mehr per `falsch` angefasst werden. Das ist die mechanische
+Form der Versiegelungs-Klausel oben.
+
+**Wer schreibt einen Bon — wer nicht.** Nur A2-Skills mit
+**erreichbarem Inverse** (Bedingung 2 der A2-Klausel: stabile ID +
+idempotentes DELETE) schreiben einen Receipt-Eintrag. Hat ein Skill
+keinen Inverse-Vertrag (heute z. B. `termin_eintragen`/TES, weil
+Plan-Buddy keinen DELETE-Endpunkt für Termine hat —
+`specs/platform/termin-eintragen.md:44-47`), läuft er **nicht** im
+A2-Sofort-Write-Default; die Quittung trägt **kein** `falsch`-Wort.
+Solche Skills müssen entweder einen DELETE-Endpunkt am Konsumenten
+ergänzen (Folge-Ticket beim jeweiligen Buddy) oder bleiben in der
+zweistufigen Variante (Confirm-Gate vor Schreib, Korrektur über
+Welle-3-Korrektur-Dialog vor `ja`).
+
+**Statistik-Nebennutzen (kein V1-Feature).** Das Receipt-Datenmodell
+zusammen mit EC-35-`task_events` ermöglicht später Auswertungen
+(Call-Dauer pro Skill, Häufigkeit, Fehlerraten, Undo-Quote pro Skill).
+V1 baut **keine** Auswertungs-Schnittstelle; die Spec petrankert nur,
+dass das Schema diese Auswertung **erlaubt**, ohne sie zu erzwingen.
+Eine konkrete Statistik-Funktion entsteht erst beim ersten Vorkommen
+mit belegtem Bedarf (CLAUDE.md §6).
+
+*Test-Implikation:* ein A2-Schreibakt mit drei Ressourcen schreibt
+drei Receipt-Zeilen mit identischer `committed_at` und denselben
+`task_name`/`chat_id`-Werten; eine **Folge-Anfrage** im selben Chat
+setzt `sealed_at` auf alle drei. `falsch` **nach** der Folge-Anfrage
+greift auf die Receipt-Zeilen der Folge-Anfrage, nicht der alten.
+
+*Tickets:* #841 (A2-Receipt-Naht + Multi-Item-Migration +
+Pre-Flight-Tests) · #721 (deterministischer Undo-Hook bindet an
+`a2_receipts` statt `task_events`).
 
 **Zweistufige Variante als Default für alles andere.** Liefert der
 Anstoß einer **nicht-A2**-Schreibaufgabe alle Pflicht-Felder, kombiniert
