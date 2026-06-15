@@ -637,3 +637,53 @@ def test_description_erwaehnt_mehrturn_re_call():
         f"Task-Description muss Mehrturn-Re-Call explizit nennen, war: {desc[:200]}"
     )
     assert "neuer_prompt" in desc, "Description muss neuer_prompt als Pfad-C-Argument nennen"
+
+
+def test_FIX2_langer_diff_sendet_teile_direkt():
+    """Live-Bug 2026-06-15 (Nic): Diff-Vorschau bei realem Prompt (~4600 Bytes)
+    sprengt Telegram-4096-Limit. _propose_vorschlagen muss bei langem Diff
+    ebenfalls über Multi-Part-Send (tg.send_message) gehen."""
+    alter_prompt = "Zeile " + "X" * 50  # kurzer alter Prompt
+    neuer_prompt = "Zeile " + "Y" * 4500  # >> 3500 Zeichen
+    client = FakeKibuddyPromptClient(get_response={
+        "prompt": alter_prompt,
+        "byte-laenge": len(alter_prompt.encode()),
+        "geaendert-am": "2026-06-15T10:00:00",
+    })
+    fake_tg = FakeTg()
+    task = _make_task_mit_tg(client=client, tg=fake_tg)
+    result = task.propose(
+        {"aktion": "vorschlagen", "neuer_prompt": neuer_prompt},
+        _turn_context(chat_id=200))
+
+    # Diff wird via tg multi-part gesendet
+    assert len(fake_tg.sent_messages) >= 2, (
+        "langer Diff muss in mehreren tg.send_message-Aufrufen landen, "
+        f"war: {len(fake_tg.sent_messages)}")
+    assert all(chat_id == 200 for chat_id, _ in fake_tg.sent_messages)
+    gesendete = [text for _, text in fake_tg.sent_messages]
+    assert any("(Teil 1/" in t for t in gesendete)
+    # Proposal.summary ist kurzer Verweis + Footer
+    assert isinstance(result, Proposal)
+    assert "oben" in result.summary.lower() or "siehe" in result.summary.lower()
+    assert len(result.summary) < 500
+
+
+def test_FIX2_kurzer_diff_kein_tg_send():
+    """Bei kurzem Diff (< 3500 Zeichen) bleibt das bisherige Verhalten: Diff
+    landet als Volltext in Proposal.summary, kein tg.send_message-Call."""
+    client = FakeKibuddyPromptClient(get_response={
+        "prompt": "Alter Prompt.",
+        "byte-laenge": 13,
+        "geaendert-am": "2026-06-15T10:00:00",
+    })
+    fake_tg = FakeTg()
+    task = _make_task_mit_tg(client=client, tg=fake_tg)
+    result = task.propose(
+        {"aktion": "vorschlagen", "neuer_prompt": "Neuer Prompt."},
+        _turn_context(chat_id=200))
+
+    # Kurzer Diff: kein Multi-Part, alles in Summary
+    assert fake_tg.sent_messages == []
+    assert isinstance(result, Proposal)
+    assert "- " in result.summary or "+ " in result.summary  # Diff-Zeilen drin
