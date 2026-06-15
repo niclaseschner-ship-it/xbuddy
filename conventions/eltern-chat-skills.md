@@ -3,33 +3,89 @@
 > Wegweiser, kein Normativ-Speicher. Alle Norm-Aussagen leben in den
 > zitierten Quellen.
 
-Die 24 Eltern-Chat-Skills (Stand 2026-06-12) zerfallen in fünf
-Klassen mit unterschiedlichen Bauplänen. Wer einen neuen Skill baut
-oder einen bestehenden anfasst, **liest in der für seine Klasse
-genannten Reihenfolge** — und folgt von dort den verlinkten
-ID-Ankern. Diese Datei vergibt **keine eigenen** Norm-IDs (kein
-`ECS-N`-Präfix); sie ist Indexseite, nicht zweite Wahrheit.
+Die Eltern-Chat-Skills (Stand 2026-06-15) werden hier nach **Fähigkeiten**
+beschrieben, nicht nach exklusiven Klassen. Wer einen neuen Skill baut
+oder einen bestehenden anfasst, liest sein **Fähigkeits-Profil** in der
+Tabelle ab und folgt der Lese-Reihenfolge der Bauplan-Anker, die zu den
+„ja"-Spalten gehören. Diese Datei vergibt **keine eigenen** Norm-IDs
+(kein `ECS-N`-Präfix); sie ist Indexseite, nicht zweite Wahrheit.
 
-Grund für die Karte: Ohne sie lebt ein Skill-Autor heute in drei
-Dateien gleichzeitig (`specs/platform/eltern-chat.md`,
-`conventions/tasks.md`, `conventions/mini-app-design.md`) und muss
-sich die richtige Lese-Reihenfolge je nach Klasse selbst
-zusammensuchen. Die Klassen-Tabelle löst das.
+Grund für die Karte: Ohne sie lebt ein Skill-Autor in mehreren Dateien
+gleichzeitig (`specs/platform/eltern-chat.md`, `conventions/tasks.md`,
+`conventions/mini-app-design.md`, `conventions/privatchat-session.md`).
+Die Karte gibt jedem Skill ein eindeutiges Profil.
 
-## Skill-Klassen
+**Pivot von Klassen-Tabelle zur Capability-Karte (#842, 2026-06-15).**
+Die ursprüngliche A/B/C/D/E-Klassen-Tabelle war drift-anfällig — z. B.
+stand `panel_anlegen` gleichzeitig in Klasse C und Klasse E, weil seine
+A2-Eignung von der Anfrage abhing (Confirm-Phase + Auth-Loop). Die
+Capability-Karte beschreibt **orthogonale Fähigkeiten** statt exklusive
+Klassen; Skills mit gemischtem Profil (z. B. `termin_eintragen`, das
+mal A2-direkt, mal Worker-Confirm läuft) fallen ohne Doppelnennung rein.
+Die alten Klassen-Buchstaben werden als **Spalten-Gruppen** beibehalten,
+damit Bestands-Verweise lesbar bleiben (Klasse A = pure-Read, Klasse C =
+zweistufig-Confirm, Klasse D = A2-Sofort-Write, Klasse E = Auth-Loop).
 
-| Klasse | Was sie ist | Beispiele heute |
-|---|---|---|
-| **A** | Pure Read — Tool-Result als Text-String, keine Daten-Änderung, kein Anhang | `seiten_uebersicht` (Übersicht), `termine_erfragen`, `wuensche_zeigen` (Lese-Pfad) |
-| **B** | Read mit Anhang oder Button — Datei via Skill **oder** strukturiertes Präsentations-Ergebnis | `ca_verteilung` (Datei-Anhang), `einkauf_zeigen` (WebApp-Button, nach Migration auf TASK-10c Form b) |
-| **C** | Kanonisch `propose` → `confirm` — schreibend mit Vorab-Bestätigung (EC-10 zweistufige Variante) | `routine_punkte_setzen`, `gericht_anlegen`, `panel_anlegen` (vor A2-Migration: alle schreibenden außer Klasse-D) |
-| **D** | Sofort-Write (A2-Klausel) — One-Shot + stabile ID + idempotentes DELETE + Pre-Flight | `termin_eintragen`, `einkauf_hinzufuegen`, `foto_senden` |
-| **E** | Mehrstufige Privatchat-Dialoge / Auth-Loops — eigener Abschluss-Gate-Pfad, **kein** A2-Default | `familie_anlegen`, `geraet_anlegen`, `kalender_verbinden`, `anbieter_wechseln`, `panel_anlegen` |
+## Capability-Karte
 
-## Reihenfolge pro Klasse
+Sechs Fähigkeits-Achsen pro Skill:
 
-Was lese ich zuerst, wenn ich einen Skill dieser Klasse baue oder
-anfasse? Drei Zeilen pro Klasse.
+| # | Achse | Werte | Heimat-Bauplan |
+|---|---|---|---|
+| **1** | **Schreibt Daten?** | nein / ja | TASK-3 (lesend) / TASK-4 (zweistufig) / TASK-9 (sofort) |
+| **2** | **Schreib-Pfad** | — / zweistufig (EC-10 Confirm) / sofort (EC-10 A2) | TASK-4 / TASK-9 + A2-Klausel |
+| **3** | **Anstoß-Vollständigkeit** | One-Shot (alle Pflicht-Felder im Anstoß) / Mehrstufig (Worker fragt nach) | TASK-3/4 / TASK-5 + SESS |
+| **4** | **Ressourcen-Anzahl pro Akt** | — / 1 / N | EC-10 A2 Receipt-Multi-Item |
+| **5** | **Inverse-Vertrag** | — / kein / idempotentes DELETE pro Ressource | EC-10 A2 Bedingung 2 |
+| **6** | **Präsentations-Form** | reiner String / Anhang + String / Button-/WebApp-Aufsatz | TASK-10c Form (a)/(b)/(c) |
+
+**Zwei Skills können dasselbe Profil haben** und teilen den Bauplan;
+zwei Profile mit unterschiedlicher Belegung sind unterschiedliche Skills.
+
+## Heutige Skills nach Profil (Stand 2026-06-15)
+
+| Skill | (1) schreibt | (2) Schreib-Pfad | (3) Anstoß | (4) Ressourcen | (5) Inverse | (6) Form | Alt-Klasse |
+|---|---|---|---|---|---|---|---|
+| `seiten_uebersicht` | nein | — | One-Shot | — | — | String | A |
+| `termine_erfragen` | nein | — | One-Shot | — | — | String | A |
+| `wuensche_zeigen` | nein | — | One-Shot | — | — | String | A |
+| `routine_punkte_lesen` | nein | — | One-Shot | — | — | String | A |
+| `essen_katalog_lesen` | nein | — | One-Shot | — | — | String | A |
+| `ca_verteilung` | nein | — | One-Shot | — | — | Anhang + String | B |
+| `einkauf_zeigen` | nein | — | One-Shot | — | — | Button-Aufsatz | B |
+| `routine_anpassen_oeffnen` | nein | — | One-Shot | — | — | Button-Aufsatz | B |
+| `gericht_anlegen` | ja | zweistufig | One-Shot oder Mehrstufig | 1 | kein | String | C |
+| `plan_aktivitaeten_setzen` | ja | zweistufig | One-Shot oder Mehrstufig | 1 | kein | String | C |
+| `routine_punkte_setzen` | ja | zweistufig | One-Shot oder Mehrstufig | 1 | kein | String | C |
+| `routine_zeiten_setzen` | ja | zweistufig | One-Shot | 1 | kein | String | C |
+| `hoerspiel_folge_erzeugen` | ja | zweistufig | One-Shot | 1 | kein | String | C |
+| `essen_foto_setzen` | ja | zweistufig | One-Shot | 1 | kein | String | C |
+| `foto_senden` | ja | **sofort (A2)** | One-Shot | 1 | DELETE da | String | D |
+| `einkauf_hinzufuegen` | ja | **sofort (A2)** | One-Shot | N | DELETE da | String | D |
+| `termin_eintragen` | ja | **sofort (A2)** oder **zweistufig** je Anstoß | **gemischt**: One-Shot oder Mehrstufig | 1 | **kein** (Plan-Buddy hat keinen DELETE — `specs/platform/termin-eintragen.md:44-47`) | String | D + E |
+| `familie_anlegen` | ja | Auth-Loop | Mehrstufig (Worker) | 1 | — (Profil-Identität) | String | E |
+| `geraet_anlegen` | ja | Auth-Loop | Mehrstufig (Worker) | 1 | — | String | E |
+| `kalender_verbinden` | ja | Auth-Loop | Mehrstufig (Worker) | 1 | — | String | E |
+| `anbieter_wechseln` | ja | Auth-Loop | Mehrstufig (Worker) | 1 | — | String | E |
+| `panel_anlegen` | ja | zweistufig + Worker-Identität | Mehrstufig (Worker) | 1 | — | String | C + E |
+| `termine_aus_bild` | ja | **Mehrfach** (Worker-Sammler) | Mehrstufig (Worker) | N | **kein** (Plan-Buddy DELETE-Lücke) | String | E (mit Sammel-Eigenschaft) |
+
+### Was die Karte über Drift-Befunde sagt
+
+- **`termin_eintragen` (Alt-Klassen D + E):** ist im Profil GEMISCHT. Bei vollständigem Anstoß A2-direkt, bei unvollständigem Worker-Confirm. **Spec-Bruch:** EC-10:480 listet TES als A2-freigegeben, A2-Bedingung 2 (idempotentes DELETE) ist mangels Plan-Buddy-DELETE-Endpunkt mechanisch **nicht** erfüllt (Profil-Achse 5 = „kein"). Folge-Klärung: entweder Plan-Buddy DELETE bauen (eigenes Folge-Ticket) oder TES vollständig auf zweistufig migrieren — die Capability-Karte zeigt beide Pfade ohne TES in zwei Klassen zu doppeln.
+- **`panel_anlegen` (Alt-Klassen C + E):** schreibt einen Panel-Eintrag (zweistufig-Confirm) UND führt eine Auth-Identitäts-Etablierung (Worker). Profil-Achse 3 zeigt Mehrstufig, Profil-Achse 6 = String. Kein Klassen-Doppel mehr.
+- **`einkauf_hinzufuegen` (Alt-Klasse D, A2 mit Multi-Item):** Profil-Achse 4 = N (mehrere Ressourcen pro Schreibakt). EC-10-Receipt-Naht (#841 Welle 2) muss Multi-Item-Inverse tragen.
+- **`termine_aus_bild` (Alt-Klasse E mit Sammel-Eigenschaft):** Worker-Sammler mit Mehrfach-Ressourcen, ohne DELETE. Profil zeigt: weder reines A2 noch reine Klasse-E. Korrektur-Pfad für TAB läuft in Welle 3 über Welle-3-Korrektur-Dialog vor dem `ja`, nicht über Receipt-`falsch` danach.
+
+## Reihenfolge pro Profil-Cluster
+
+Die Capability-Karte zerlegt Skills in orthogonale Fähigkeiten — der
+Lese-Pfad für den **Bauplan** folgt aber natürlichen Profil-Clustern.
+Die folgenden Cluster decken alle heutigen Skills ab; ein Skill mit
+gemischtem Profil liest **beide** zugehörigen Cluster (z. B.
+`termin_eintragen`: Cluster D für den A2-Pfad + Cluster E für den
+Worker-Fallback). Die alten Klassen-Buchstaben (A/B/C/D/E) bleiben
+als Cluster-Namen, weil viele Bestands-Verweise sie zitieren.
 
 ### Klasse A — Pure Read
 
@@ -73,7 +129,10 @@ anfasse? Drei Zeilen pro Klasse.
 1. `specs/platform/eltern-chat.md` **EC-10 A2-Klausel** (Sofort-Write
    + Quittung + Undo-Wort als enger Default) — die drei Bedingungen
    (stabile ID, idempotentes DELETE, Pre-Flight-Check) müssen alle
-   erfüllt sein.
+   erfüllt sein. **EC-10 A2-Receipt** („Kassenbon"): pro erfolgreichem
+   Schreibakt eine `a2_receipts`-Zeile pro Ressource (Multi-Item:
+   N Zeilen); Versiegelung durch Folge-Anfrage; nur Skills mit
+   erreichbarem Inverse schreiben Bons.
 2. `conventions/tasks.md` **TASK-9** (Sofort-Schreib-Aufgabe;
    verschärfte Form für A2 in der TASK-9-Verweis-Klausel) und
    **TASK-3** (Klassen-Form ist `ReadTask` mit Schreib-Wirkung).
@@ -94,19 +153,23 @@ anfasse? Drei Zeilen pro Klasse.
    `geraet-anlegen.md`, `kalender-verbinden.md`,
    `panel-anlegen.md`, ggf. `zugangsdaten.md`).
 
-## Bestehende Skills pro Klasse — wo finde ich Code-Beispiele
+## Bestehende Skills pro Cluster — wo finde ich Code-Beispiele
 
-Diese Tabelle ist Bestandsaufnahme zum Stichtag 2026-06-12, kein
-Norm-Vertrag. Sie zeigt, wo der Bauplan einer Klasse als gebauter
-Skill nachgelesen werden kann.
+Diese Bestandsaufnahme bleibt erhalten als Code-Nachschlag (kein
+Norm-Vertrag). Die **vollständige Profil-Belegung pro Skill** steht
+oben in der Capability-Karte; diese Tabelle nennt nur die Skills, in
+deren Modul man die Cluster-Bauformen am klarsten gebaut sieht.
 
-| Klasse | Bestehende Skills (Module unter `eltern-chat/skills/`) |
+| Cluster | Bestehende Skills (Module unter `eltern-chat/skills/`) |
 |---|---|
-| **A** | `seiten_uebersicht`, `termine_erfragen`, `wuensche_zeigen` (Lese-Pfad), `ca_verteilung` (Lese-Hälfte) |
-| **B** | `ca_verteilung` (Datei-Anhang via Skill), `einkauf_zeigen` (Button-Aufsatz; nach TASK-10c Form-(b)-Migration), RPS/GAN/PAS (Bilder-Album via TASK-10b) |
-| **C** | `routine_punkte_setzen`, `gericht_anlegen`, `plan_aktivitaeten_setzen`, weitere schreibende mit Vorab-Confirm |
-| **D** | `termin_eintragen`, `einkauf_hinzufuegen`, `foto_senden` (die drei A2-freigegebenen Skills) |
-| **E** | `familie_anlegen`, `geraet_anlegen`, `kalender_verbinden`, `anbieter_wechseln`, `panel_anlegen` |
+| **A** Pure-Read | `seiten_uebersicht`, `termine_erfragen`, `wuensche_zeigen`, `routine_punkte_lesen`, `essen_katalog_lesen` |
+| **B** Read + Aufsatz | `ca_verteilung` (Datei-Anhang), `einkauf_zeigen` (Button-Aufsatz, TASK-10c Form-b), `routine_anpassen_oeffnen` (Türöffner-Skill, TASK-10c Form-b) |
+| **C** zweistufig-Confirm | `routine_punkte_setzen`, `gericht_anlegen`, `plan_aktivitaeten_setzen`, `routine_zeiten_setzen`, `hoerspiel_folge_erzeugen`, `essen_foto_setzen` |
+| **D** A2-Sofort-Write | `foto_senden` (Single-Item), `einkauf_hinzufuegen` (Multi-Item — Receipt mit N Zeilen) |
+| **C+E** zweistufig + Auth-Identität | `panel_anlegen` (Confirm + Worker-Identität) |
+| **E** Auth-Loop (Worker) | `familie_anlegen`, `geraet_anlegen`, `kalender_verbinden`, `anbieter_wechseln` |
+| **D oder C, je Anstoß** (Mixed) | `termin_eintragen` (A2 bei vollständigem Anstoß, zweistufig + Worker sonst — kein DELETE-Vertrag, deshalb heute **nicht** im A2-Default trotz EC-10:480-Listing) |
+| **Sammler-Worker (N Ressourcen, kein DELETE)** | `termine_aus_bild` (Mehrfach-Termine, Korrektur über Welle-3-Korrektur-Dialog vor `ja`) |
 
 Welche Skills nach EC-33 als WebApp-Pendant entstehen (z. B.
 Routine-Mini-App, Wünsche-Edit-App), gehört nicht in diese Tabelle —
