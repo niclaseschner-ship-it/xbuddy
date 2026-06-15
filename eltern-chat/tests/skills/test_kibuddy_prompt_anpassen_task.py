@@ -194,13 +194,18 @@ def test_AC2_propose_kein_put():
 #  KPA-6 — Diff-Vorschau enthält Diff-Zeilen
 # ============================================================
 
-def test_KPA6_diff_enthaelt_minus_und_plus_zeilen():
-    """KPA-6: Diff zwischen altem und neuem Text enthält '- ' und '+ ' Zeilen."""
+def test_KPA6_diff_enthaelt_zwei_sektionen():
+    """KPA-6 (Live-Bug 2026-06-15): Diff nutzt zwei klare Sektionen
+    'Wird ENTFERNT' / 'Wird HINZUGEFÜGT', nicht +/- Zeilen-Prefix —
+    sonst Verwechslung mit Markdown-Aufzählungen."""
     alter = "Zeile 1\nZeile 2 alt\nZeile 3"
     neuer = "Zeile 1\nZeile 2 neu\nZeile 3"
     diff = _build_diff(alter, neuer)
-    assert "- " in diff
-    assert "+ " in diff
+    assert "Wird ENTFERNT" in diff
+    assert "Wird HINZUGEFÜGT" in diff
+    # Inhalt soll als Bullet mit › angereichert sein (kein +/- Prefix)
+    assert "Zeile 2 alt" in diff
+    assert "Zeile 2 neu" in diff
 
 
 def test_KPA6_diff_identischer_text():
@@ -211,7 +216,7 @@ def test_KPA6_diff_identischer_text():
 
 
 def test_KPA6_propose_diff_in_proposal_summary():
-    """KPA-6: propose() mit geändertem Prompt enthält Diff-Indikatoren."""
+    """KPA-6: propose() mit geändertem Prompt enthält Diff-Sektionen."""
     client = FakeKibuddyPromptClient(get_response={
         "prompt": "Zeile 1\nZeile 2 alt\nZeile 3",
         "byte-laenge": 30,
@@ -222,8 +227,8 @@ def test_KPA6_propose_diff_in_proposal_summary():
         {"neuer_prompt": "Zeile 1\nZeile 2 neu\nZeile 3"},
         _turn_context())
     text = result.summary
-    # Diff-Vorschau muss Minus- oder Plus-Zeilen enthalten
-    assert "- " in text or "+ " in text
+    # Diff-Vorschau im Zwei-Sektionen-Format
+    assert "Wird ENTFERNT" in text or "Wird HINZUGEFÜGT" in text
 
 
 # ============================================================
@@ -686,4 +691,5 @@ def test_FIX2_kurzer_diff_kein_tg_send():
     # Kurzer Diff: kein Multi-Part, alles in Summary
     assert fake_tg.sent_messages == []
     assert isinstance(result, Proposal)
-    assert "- " in result.summary or "+ " in result.summary  # Diff-Zeilen drin
+    # Diff im Zwei-Sektionen-Format
+    assert "Wird ENTFERNT" in result.summary or "Wird HINZUGEFÜGT" in result.summary
