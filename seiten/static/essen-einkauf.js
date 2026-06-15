@@ -66,7 +66,7 @@ const _gerichtOhneTapStatus = new Map(); // item.id → "erstertap"|undefined
  */
 async function holeListe() {
   const resp = await fetch("/api/v1/essen/wuensche", {
-    headers: { "Authorization": "tma " + _initData },
+    headers: _initData ? { "Authorization": "tma " + _initData } : {},
   });
   if (!resp.ok) {
     throw new Error("Liste-Abruf fehlgeschlagen: " + resp.status);
@@ -79,7 +79,7 @@ async function holeListe() {
  */
 async function holeKatalog() {
   const resp = await fetch("/api/v1/essen/katalog", {
-    headers: { "Authorization": "tma " + _initData },
+    headers: _initData ? { "Authorization": "tma " + _initData } : {},
   });
   if (!resp.ok) return { kategorien: {} };
   return resp.json();
@@ -91,7 +91,9 @@ async function holeKatalog() {
 async function patchAbgehakt(id, abgehakt) {
   const resp = await fetch("/api/v1/essen/wuensche/" + encodeURIComponent(id), {
     method:  "PATCH",
-    headers: { "Content-Type": "application/json", "Authorization": "tma " + _initData },
+    headers: _initData
+      ? { "Content-Type": "application/json", "Authorization": "tma " + _initData }
+      : { "Content-Type": "application/json" },
     body:    JSON.stringify({ abgehakt }),
   });
   if (!resp.ok) {
@@ -106,7 +108,9 @@ async function patchAbgehakt(id, abgehakt) {
 async function patchAusGericht(id, ausGericht) {
   const resp = await fetch("/api/v1/essen/wuensche/" + encodeURIComponent(id), {
     method:  "PATCH",
-    headers: { "Content-Type": "application/json", "Authorization": "tma " + _initData },
+    headers: _initData
+      ? { "Content-Type": "application/json", "Authorization": "tma " + _initData }
+      : { "Content-Type": "application/json" },
     body:    JSON.stringify({ aus_gericht: ausGericht }),
   });
   if (!resp.ok) {
@@ -121,7 +125,9 @@ async function patchAusGericht(id, ausGericht) {
 async function postItem(payload) {
   const resp = await fetch("/api/v1/essen/wuensche", {
     method:  "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "tma " + _initData },
+    headers: _initData
+      ? { "Content-Type": "application/json", "Authorization": "tma " + _initData }
+      : { "Content-Type": "application/json" },
     body:    JSON.stringify(payload),
   });
   return resp; // Aufrufer prüft Status selbst (409 ist erwartet bei Dedupe)

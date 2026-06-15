@@ -154,7 +154,7 @@ let _sheetOffen = false;
  */
 async function holeItems() {
   const resp = await fetch("/api/v1/routine/items", {
-    headers: { "Authorization": "tma " + _initData },
+    headers: _initData ? { "Authorization": "tma " + _initData } : {},
   });
   if (!resp.ok) throw new Error("items-Abruf fehlgeschlagen: " + resp.status);
   return resp.json();
@@ -166,7 +166,7 @@ async function holeItems() {
  */
 async function holeConfig() {
   const resp = await fetch("/api/v1/routine/config", {
-    headers: { "Authorization": "tma " + _initData },
+    headers: _initData ? { "Authorization": "tma " + _initData } : {},
   });
   if (!resp.ok) throw new Error("config-Abruf fehlgeschlagen: " + resp.status);
   return resp.json();
@@ -179,7 +179,9 @@ async function holeConfig() {
 async function postItem(payload) {
   const resp = await fetch("/api/v1/routine/items", {
     method:  "POST",
-    headers: { "Content-Type": "application/json", "Authorization": "tma " + _initData },
+    headers: _initData
+      ? { "Content-Type": "application/json", "Authorization": "tma " + _initData }
+      : { "Content-Type": "application/json" },
     body:    JSON.stringify(payload),
   });
   return resp;
@@ -191,7 +193,7 @@ async function postItem(payload) {
 async function deleteItem(id) {
   const resp = await fetch(
     "/api/v1/routine/items/" + encodeURIComponent(id),
-    { method: "DELETE", headers: { "Authorization": "tma " + _initData } }
+    { method: "DELETE", headers: _initData ? { "Authorization": "tma " + _initData } : {} }
   );
   return resp;
 }
@@ -208,7 +210,9 @@ async function deleteItem(id) {
 async function putItems(itemsAsObjects) {
   const resp = await fetch("/api/v1/routine/items", {
     method:  "PUT",
-    headers: { "Content-Type": "application/json", "Authorization": "tma " + _initData },
+    headers: _initData
+      ? { "Content-Type": "application/json", "Authorization": "tma " + _initData }
+      : { "Content-Type": "application/json" },
     body:    JSON.stringify(itemsAsObjects),
   });
   return resp;
@@ -221,7 +225,9 @@ async function putItems(itemsAsObjects) {
 async function putConfig(payload) {
   const resp = await fetch("/api/v1/routine/config", {
     method:  "PUT",
-    headers: { "Content-Type": "application/json", "Authorization": "tma " + _initData },
+    headers: _initData
+      ? { "Content-Type": "application/json", "Authorization": "tma " + _initData }
+      : { "Content-Type": "application/json" },
     body:    JSON.stringify(payload),
   });
   return resp;
@@ -234,7 +240,7 @@ async function putConfig(payload) {
 async function sucheIcons(q) {
   const resp = await fetch(
     "/api/v1/icons/suche?q=" + encodeURIComponent(q) + "&max=12",
-    { headers: { "Authorization": "tma " + _initData } }
+    { headers: _initData ? { "Authorization": "tma " + _initData } : {} }
   );
   if (!resp.ok) return [];
   const data = await resp.json();
