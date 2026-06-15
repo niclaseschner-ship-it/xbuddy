@@ -798,6 +798,26 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             family_group_chat_id_getter=family_group_chat_id_getter,
             is_member_fn=_hfe_is_member))
 
+    # HOE-8 / #876: »Hörspiel öffnen« als lesende Aufgabe (EC-9, Klasse B).
+    # Dreifacher AND-Guard: hoerspiel_url_origin UND mini_app_base_url UND
+    # family_group_chat_id_getter müssen ALLE gesetzt sein — fehlt eine,
+    # erscheint die Aufgabe NICHT im Katalog (HOE-8).
+    # - hoerspiel_url_origin: Lese-Naht für GET /config und GET /alben (HOE-1).
+    # - mini_app_base_url: Funnel-Domain für web_app.url (HOE-5, EZG-6/RAO-6-Naht).
+    # - family_group_chat_id_getter: Live-Berechtigung gegen die Familien-Gruppe
+    #   (HOE-2). is_member_fn analog der RAO-/HFE-Linie.
+    if hoerspiel_url_origin is not None and mini_app_base_url is not None \
+            and family_group_chat_id_getter is not None:
+        from skills.hoerspiel_client import HoerspielClient as _HoeHoerspielClient
+        from skills.hoerspiel_oeffnen_task import HoerspielOeffnenTask
+        _hoe_client = _HoeHoerspielClient(origin_url=hoerspiel_url_origin)
+        _hoe_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
+        catalog.register(HoerspielOeffnenTask(
+            tg=tg,
+            hoerspiel_client=_hoe_client,
+            is_member_fn=_hoe_is_member,
+            mini_app_url=mini_app_base_url))
+
     # T531 / ESSEN-22 V1.2 Pfad 2: »Foto für Essens-Item setzen« als
     # Klasse-C-Skill (propose→confirm, EC-10 zweistufige Variante).
     # AND-Guard: essen_origin_url UND family_group_chat_id_getter müssen
