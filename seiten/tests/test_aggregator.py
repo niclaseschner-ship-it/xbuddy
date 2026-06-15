@@ -595,3 +595,141 @@ def test_sreg4_baue_inventar_durchreicht_panels_an_display_lookup(manifest_root)
     inv = aggregator.baue_inventar(manifest_root, panels=panels, geraete=geraete)
     display = next(e for e in inv["eintraege"] if e["key"] == "display-pi-A")
     assert display["verknuepft_mit_panels"] == ["k-01"]
+
+
+# ============================================================
+#  SREG-14 — Mini-App-Sorte (typ:mini-app)
+# ============================================================
+
+def _view_mini_app(slug, pfad, app_short_name="testapp",
+                   bot_env_var="ELTERNCHAT_BOT_USERNAME", **extra):
+    """Hilfsfunktion: baut einen validen mini-app-View-Dict."""
+    eintrag = {
+        "slug": slug,
+        "typ": "mini-app",
+        "pfad": pfad,
+        "label": "Label %s" % slug,
+        "synonyme": [slug],
+        "zeigt": "Zeigt %s." % slug,
+        "zielgruppe": "eltern",
+        "web_app": {
+            "bot_env_var": bot_env_var,
+            "app_short_name": app_short_name,
+            "icons": ["arasaac/28339.png"],
+        },
+    }
+    eintrag.update(extra)
+    return eintrag
+
+
+def test_aggregator_typ_mini_app(tmp_path, monkeypatch):
+    """AC1 + AC4 (SREG-14): Mini-App-Manifest liefert typ:mini-app + komponierte URLs.
+
+    Vier Mini-App-Views in einem Manifest → vier typ:mini-app-Einträge mit
+    web_app_url und funnel_url korrekt komponiert.
+    """
+    monkeypatch.setenv("ELTERNCHAT_BOT_USERNAME", "testbot")
+    root = str(tmp_path)
+    # Vier Mini-App-Einträge über vier App-Verzeichnisse (analog essen/routine/seiten/hoerspiel)
+    _schreibe_manifest(root, "essen", [
+        _view_mini_app("einkauf", "/seiten/essen/einkauf", "einkauf"),
+    ])
+    _schreibe_manifest(root, "routine", [
+        _view_mini_app("anpassen", "/seiten/routine/anpassen", "routine"),
+    ])
+    _schreibe_manifest(root, "seiten", [
+        _view_mini_app("mini-app-uebersicht", "/api/v1/seiten/mini-app-uebersicht", "uebersicht"),
+    ])
+    _schreibe_manifest(root, "hoerspiel", [
+        _view_mini_app("eltern", "/seiten/hoerspiel/eltern", "hoerspiel"),
+    ])
+
+    eintraege = aggregator.manifest_eintraege(
+        root, funnel_domain="buddyboard.demo-tailnet.ts.net")
+    mini_apps = [e for e in eintraege if e["typ"] == aggregator.TYP_MINI_APP]
+    assert len(mini_apps) == 4, "Vier Mini-App-Einträge erwartet, got: %d" % len(mini_apps)
+
+    by_key = {e["key"]: e for e in mini_apps}
+
+    # web_app_url: https://t.me/<bot_username>/<app_short_name>
+    einkauf = by_key["essen-einkauf"]
+    assert einkauf["typ"] == aggregator.TYP_MINI_APP
+    assert einkauf["web_app_url"] == "https://t.me/testbot/einkauf"
+    assert einkauf["funnel_url"] == "https://buddyboard.demo-tailnet.ts.net/seiten/essen/einkauf"
+    assert "icons" in einkauf  # icons[] aus web_app.icons[] durchgereicht
+
+    # Alle vier haben web_app_url + funnel_url
+    for e in mini_apps:
+        assert "web_app_url" in e, "web_app_url fehlt bei %r" % e["key"]
+        assert "funnel_url" in e, "funnel_url fehlt bei %r" % e["key"]
+        assert e["web_app_url"].startswith("https://t.me/testbot/")
+        assert e["funnel_url"].startswith("https://buddyboard.demo-tailnet.ts.net/")
+
+
+def test_aggregator_typ_mini_app_ohne_app_short_name(tmp_path, monkeypatch):
+    """AC2 (SREG-14/SREG-13): ManifestError bei fehlendem app_short_name → per-View-Skip.
+
+    Das defekte Mini-App-View wird übersprungen, der valide Buddy-View desselben
+    Manifests bleibt im Inventar (SREG-13: per-View-Skip, nicht per-Manifest-Skip).
+    """
+    monkeypatch.setenv("ELTERNCHAT_BOT_USERNAME", "testbot")
+    root = str(tmp_path)
+    _schreibe_manifest(root, "essen", [
+        # Valider Display-View (bleibt nach Skip)
+        _view("wunsch", "/display/essen/wunsch", icons=["arasaac/28339.png"]),
+        # Mini-App ohne app_short_name → ManifestError → per-View-Skip
+        {
+            "slug": "einkauf",
+            "typ": "mini-app",
+            "pfad": "/seiten/essen/einkauf",
+            "label": "Einkaufsliste",
+            "synonyme": ["einkaufen"],
+            "zeigt": "Einkaufsliste.",
+            "zielgruppe": "eltern",
+            "web_app": {
+                "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
+                # app_short_name fehlt absichtlich
+            },
+        },
+    ])
+
+    eintraege = aggregator.manifest_eintraege(root)
+    keys = {e["key"] for e in eintraege}
+    # Valide View bleibt drin
+    assert "essen-wunsch" in keys, "essen-wunsch muss trotz Skip-Nachbar im Inventar bleiben"
+    # Defekte Mini-App-View wird übersprungen
+    assert "essen-einkauf" not in keys, "essen-einkauf (fehlendes app_short_name) muss übersprungen werden"
+
+
+def test_aggregator_typ_mini_app_falsche_zielgruppe(tmp_path, monkeypatch):
+    """AC2 (SREG-14/SREG-13): ManifestError bei zielgruppe != 'eltern' → per-View-Skip.
+
+    Der valide Nachbar-View desselben Manifests bleibt im Inventar.
+    """
+    monkeypatch.setenv("ELTERNCHAT_BOT_USERNAME", "testbot")
+    root = str(tmp_path)
+    _schreibe_manifest(root, "routine", [
+        # Valider Display-View (bleibt nach Skip)
+        _view("morgen", "/display/routine/morgen", icons=["arasaac/7152.png"]),
+        # Mini-App mit falscher zielgruppe → ManifestError → per-View-Skip
+        {
+            "slug": "anpassen",
+            "typ": "mini-app",
+            "pfad": "/seiten/routine/anpassen",
+            "label": "Routine anpassen",
+            "synonyme": ["routine"],
+            "zeigt": "Routine anpassen.",
+            "zielgruppe": "kind",  # falsch — muss 'eltern' sein
+            "web_app": {
+                "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
+                "app_short_name": "routine",
+            },
+        },
+    ])
+
+    eintraege = aggregator.manifest_eintraege(root)
+    keys = {e["key"] for e in eintraege}
+    # Valide View bleibt drin
+    assert "routine-morgen" in keys, "routine-morgen muss trotz Skip-Nachbar im Inventar bleiben"
+    # Defekte Mini-App-View (falsche zielgruppe) wird übersprungen
+    assert "routine-anpassen" not in keys, "routine-anpassen (zielgruppe=kind) muss übersprungen werden"

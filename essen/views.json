@@ -15,6 +15,20 @@
       "zeigt": "Tabbed Single-Canvas: Kind wählt Lebensmittel und Gerichte per Touch-Tap aus dem Katalog und legt Wünsche auf die Liste.",
       "zielgruppe": "kind",
       "icons": ["arasaac/28339.png"]
+    },
+    {
+      "slug": "einkauf",
+      "typ": "mini-app",
+      "pfad": "/seiten/essen/einkauf",
+      "label": "Einkaufsliste pflegen",
+      "synonyme": ["einkaufen", "liste", "abhaken"],
+      "zeigt": "Einkaufsliste bearbeiten — abhaken, hinzufügen, Wünsche übernehmen.",
+      "zielgruppe": "eltern",
+      "web_app": {
+        "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
+        "app_short_name": "einkauf",
+        "icons": ["arasaac/28339.png"]
+      }
     }
   ]
 }
