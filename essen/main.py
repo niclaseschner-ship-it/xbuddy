@@ -435,9 +435,15 @@ def require_init_data(fn):
             g.init_data = None
             return fn(*args, **kwargs)
 
-        # V3 Soft-Auth: Header optional. Fehlt → pass-through.
-        auth_header = request.headers.get("Authorization")
-        if not auth_header:
+        # V3 Soft-Auth: Header optional. Fehlt ODER leerer "tma "-Wert
+        # (Mini-App-JS außerhalb Telegram-Kontext sendet "tma " mit leerem
+        # initData) → pass-through ohne 401.
+        auth_header = request.headers.get("Authorization", "").strip()
+        if not auth_header or auth_header.lower() in ("tma", "tma "):
+            g.init_data = None
+            return fn(*args, **kwargs)
+        # Auch: Header beginnt mit "tma " aber initData-Teil ist leer.
+        if auth_header.lower().startswith("tma ") and not auth_header[4:].strip():
             g.init_data = None
             return fn(*args, **kwargs)
 
