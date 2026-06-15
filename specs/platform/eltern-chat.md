@@ -765,9 +765,21 @@ Das System wird je Instanz über Konfigurationswerte eingerichtet. Der Bot-Token
 wird ausschließlich über eine Umgebungsvariable gesetzt. Der Anbieter-API-Key
 und die Familien-Gruppen-Chat-ID kommen aus Umgebungsvariable/Konfiguration oder
 werden per Onboarding gesetzt (siehe
-[`eltern-chat-onboarding.md`](eltern-chat-onboarding.md)); fehlt der
-Anbieter-API-Key auf beiden Wegen, läuft die Instanz im Onboarding-Modus
-(ONB-1). Geheimnisse liegen nie in einer Datei im Repo (CLAUDE.md §8).
+[`eltern-chat-onboarding.md`](eltern-chat-onboarding.md)); fehlt für den
+aktiven Anbieter ein API-Key auf beiden Wegen, läuft die Instanz im
+Onboarding-Modus (ONB-1). Geheimnisse liegen nie in einer Datei im Repo
+(CLAUDE.md §8).
+
+**Multi-Vendor-Slot-Adressierung (#663).** Der Anbieter-API-Key wird im
+zentralen Zugangsdaten-Speicher unter dem vendor-spezifischen Slot
+`eltern-chat-<vendor>-api-key` abgelegt (`zugangsdaten.md` ZD-2 Multi-Slot-
+Schema). Der `provider`-Wert in der Konfiguration entscheidet, welchen
+Slot der Eltern-Chat zur Laufzeit liest. Ein Wechsel des aktiven Anbieters
+auf einen bereits eingerichteten Vendor (vorhandener Slot) braucht keinen
+Re-Key (ONB-11 Pfad A); ein erster Wechsel auf einen neuen Vendor läuft
+die Re-Key-Sequenz (ONB-11 Pfad B). Der heutige Single-Slot
+`eltern-chat-provider-api-key` bleibt während Welle A als Fallback
+lesbar; Welle B entfernt ihn.
 
 Die nicht-geheimen Werte leben in der Per-Instanz-Datei
 `eltern-chat/config.json` (gitignored). Auflösung, Datei-Schlüssel, ENV-

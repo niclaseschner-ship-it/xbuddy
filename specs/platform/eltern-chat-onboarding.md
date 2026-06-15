@@ -177,30 +177,53 @@ ohne LLM-Beteiligung möglich und so robust gegen Fehl-Deutung.
 Eine bereits eingerichtete Instanz bietet im Eltern-Chat-Katalog (EC-8) den
 Skill `anbieter_wechseln` an. Trigger ist eine natürliche User-Aufforderung
 in Familien-Gruppe oder Privatchat (z. B. „LLM wechseln", „Anbieter ändern",
-„auf Mistral umstellen"). Berechtigt ist jedes Familien-Mitglied (EC-2).
+„auf Mistral umstellen", „wechsel zu claude"). Berechtigt ist jedes
+Familien-Mitglied (EC-2).
 
-Der Skill führt im **Privatchat** (E-ONB-2 / ONB-3) durch:
+Der Skill führt im **Privatchat** (E-ONB-2 / ONB-3) durch — zwei Pfade
+je nach Slot-Befund (`zugangsdaten.md` ZD-2 Multi-Slot-Schema):
 
-1. Wahl des neuen Anbieters aus der zentralen Liste (ONB-10) — wer den
-   gleichen Anbieter erneut wählt, bekommt eine harte Quittung („Du nutzt
-   diesen Anbieter bereits — nichts geändert."); kein versehentlicher Re-Key.
-2. Eingabe des neuen Keys (analog ONB-3 — Privatchat, Schutz vor Gruppen-
-   Sichtbarkeit).
+**Pfad A — Bekannter Anbieter (kein Re-Key).** Existiert für den
+gewählten Anbieter bereits ein vendor-spezifischer Slot (z. B.
+`eltern-chat-anthropic-api-key`), wird der aktive Vendor in der
+Konfiguration umgeschaltet, **ohne** den Key erneut zu erfragen. Der
+Wechsel ist deterministisch und sofort: keine Eingabe, kein
+Validierungs-Ping (der Key hat schon einmal funktioniert; ein erneutes
+Ping wäre Reibung ohne Nutzen). Quittung in der Familien-Gruppe:
+„KI-Anbieter ist jetzt X." Wer den **aktuell aktiven** Anbieter erneut
+wählt, bekommt die harte Same-Provider-Quittung („Du nutzt diesen
+Anbieter bereits — nichts geändert.").
+
+**Pfad B — Neuer Anbieter (Re-Key-Sequenz).** Existiert für den
+gewählten Anbieter noch kein Slot, läuft die heutige Initial-Sequenz:
+
+1. Wahl des neuen Anbieters aus der zentralen Liste (ONB-10).
+2. Eingabe des neuen Keys (analog ONB-3 — Privatchat, Schutz vor
+   Gruppen-Sichtbarkeit).
 3. Validierungs-Ping gegen den neuen Anbieter (ONB-4) mit dessen Adapter.
-4. Atomares Ersetzen im Zugangsdaten-Speicher (ONB-12).
-5. Bestätigung in der Familien-Gruppe analog ONB-7 („KI-Anbieter ist jetzt
-   X.") — der alte Key wird nicht zurückgespiegelt (ONB-8).
+4. Atomares Schreiben des neuen Slots im Zugangsdaten-Speicher (ONB-12).
+5. Aktiv-Vendor-Umschaltung in der Konfiguration.
+6. Bestätigung in der Familien-Gruppe analog ONB-7 — der Key wird nicht
+   zurückgespiegelt (ONB-8).
+
+**Pfad-Wahl deterministisch ohne LLM.** Der Skill prüft den Slot-Befund
+über die ZD-Library (`tools.zugangsdaten.has(slot_name)`); das LLM
+entscheidet nicht zwischen Pfad A und Pfad B.
 
 Der Skill nutzt das Schreib-Aufgaben-Pattern aus EC-10 (propose→confirm) nicht
 zwingend — die deterministische Privatchat-Sequenz mit Validierungs-Ping als
 Schluss-Gate ist sicherer als ein konversationaler Bestätigungs-Schritt (analog
 E-ONB-1-Gedanke: kein LLM im Wechsel-Akt).
 
-**Verworfen:** Anbieter-Wechsel direkt in der Familien-Gruppe oder mit
-Sichtbarkeit für andere Mitglieder. Der neue Key wäre kurzzeitig öffentlich
-sichtbar — derselbe Grund wie E-ONB-2 für das Initial-Onboarding.
+**Verworfen:** (a) Anbieter-Wechsel direkt in der Familien-Gruppe oder mit
+Sichtbarkeit für andere Mitglieder — derselbe Grund wie E-ONB-2 für das
+Initial-Onboarding. (b) Bekannten Anbieter trotzdem re-keyen, „für den
+Fall, dass der alte Key abgelaufen ist" — Reibung ohne Nutzen; abgelaufener
+Key meldet sich beim nächsten Provider-Call mit Auth-Fehler, dann läuft die
+Re-Key-Sequenz von dort. (c) LLM lässt die Pfad-Wahl entscheiden — bricht
+E-EC-4 und E-ONB-1.
 
-*Tickets:* #639
+*Tickets:* #639, #663 (Multi-Slot-Erweiterung + Pfad A)
 
 ### ONB-12 — Atomares Ersetzen beim Anbieter-Wechsel
 Bei einem Anbieter-Wechsel (ONB-11) ersetzt das System den Eintrag im
@@ -245,20 +268,30 @@ Analog ONB-9, mit kontrollierter Doppelung **beider** Anbieter-Adapter
 - ONB-10: der Wahl-Dialog im Initial-Onboarding bietet alle in der zentralen
   Liste eingetragenen Anbieter an, re-prompt bei nicht-passender Antwort
   (SESS-4).
-- ONB-11 Happy-Path je Anbieter: Wechsel von Claude → Mistral und Mistral →
-  Claude in beide Richtungen, mit Validierungs-Ping-Erfolg, atomarem
-  Ersetzen, Bestätigung in der Familien-Gruppe.
+- ONB-11 Pfad A (bekannter Anbieter, kein Re-Key): vorbefüllte ZD-Slots
+  für Anthropic UND Mistral; Skill wechselt zwischen ihnen ohne
+  Key-Eingabe, ohne Validierungs-Ping. Quittung in der Familien-Gruppe
+  enthält den neuen Vendor-Namen.
+- ONB-11 Pfad B (neuer Anbieter, Re-Key): Slot für Mistral fehlt, Skill
+  durchläuft die volle ONB-3/ONB-4-Sequenz (Privatchat-Eingabe,
+  Validierungs-Ping, atomares Schreiben, Aktiv-Vendor-Umschaltung,
+  Familien-Gruppe-Quittung).
 - ONB-11 Same-Provider-Quittung: wer den aktuell aktiven Anbieter erneut
   wählt, bekommt eine deterministische Quittung; nichts wird geändert.
-- ONB-12 Validierungs-Fehler: Wechsel-Versuch mit ungültigem Key → alter
-  Eintrag bleibt byte-gleich, alter Anbieter weiter aktiv.
-- ONB-12 Schreib-Fehler: provozierter Schreibfehler beim Ersetzen
-  (z. B. simulierter `os.replace`-Bruch) → alter Eintrag bleibt byte-gleich,
+- ONB-11 Multi-Slot-Migration (Welle A): vorbefüllter Single-Slot
+  `eltern-chat-provider-api-key` (heutige Form) + aktiver `provider=claude`
+  → Skill liest read-both, schreibt `eltern-chat-anthropic-api-key` (lazy
+  Migration), Single-Slot-Wert bleibt vorerst stehen.
+- ONB-12 Validierungs-Fehler: Pfad-B-Wechsel-Versuch mit ungültigem Key →
+  neuer vendor-spezifischer Slot wird NICHT geschrieben, alter Anbieter
+  bleibt aktiv.
+- ONB-12 Schreib-Fehler: provozierter Schreibfehler beim Schreiben des
+  neuen Slots → kein Slot-Schreiben, alter Anbieter bleibt aktiv,
   laufende Instanz nicht unterbrochen.
 - ONB-8-Schutz im Wechsel-Skill: weder alter noch neuer Key im Klartext in
-  Bestätigungen, Fehlermeldungen oder Logs.
+  Bestätigungen, Fehlermeldungen oder Logs (gilt für beide Pfade).
 
-*Tickets:* #639
+*Tickets:* #639, #663 (Pfad-A + Multi-Slot-Migration-Tests)
 
 ---
 
