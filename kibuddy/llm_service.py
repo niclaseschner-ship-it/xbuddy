@@ -10,6 +10,7 @@ parse_kibuddy_response() extrahiert beides; Fallback bei ungültigem JSON.
 import json
 import logging
 import os
+import re
 
 from . import data_io
 from .icon_render import validate_buzzwords
@@ -39,17 +40,31 @@ Regeln:
 """
 
 # JSON-Ausgabe-Anweisung wird an jeden System-Prompt angehängt (T865, AC1-System-Prompt-JSON).
+# Verschärft 2026-06-15 nach Live-Befund: Claude lieferte Prosa-Text + JSON-Fence
+# parallel; Parser fiel in Fallback. Anweisung hammert jetzt explizit
+# "nur JSON, kein Text davor".
 _JSON_OUTPUT_ANWEISUNG = """\
 
-AUSGABE-FORMAT (Pflicht): Antworte AUSSCHLIESSLICH als JSON in genau dieser Form:
-{
-  "antwort": "<deine Antwort, vollständige Sätze, 2-4 Sätze>",
-  "buzzwords": ["<wort1>", "<wort2>", "<wort3>"]
-}
+AUSGABE-FORMAT (PFLICHT — KEINE AUSNAHME):
+
+Deine Antwort MUSS mit dem Zeichen `{` beginnen und mit `}` enden.
+Kein Text davor, kein Text danach, keine Markdown-Code-Fences (```), keine Erklärung.
+Sonst kann das System deine Antwort nicht anzeigen.
+
+Format:
+{"antwort": "<deine Antwort, vollständige Sätze, 2-4 Sätze>", "buzzwords": ["<wort1>", "<wort2>", "<wort3>"]}
 
 Genau 3 Buzzwords. Jedes ist EIN deutsches Wort (Substantiv/Verb/Adjektiv im Singular),
 das ein zentrales Konzept deiner Antwort trägt. Lowercase, ohne Sonderzeichen.
-Kein Text außerhalb des JSON.
+
+Beispiel-Korrekt:
+{"antwort": "Ein Apfel ist eine Frucht. Hast du heute schon einen gegessen?", "buzzwords": ["apfel", "frucht", "essen"]}
+
+Beispiel-FALSCH (führt zu Anzeigefehler):
+Ein Apfel ist eine Frucht.
+```json
+{"antwort": "Ein Apfel ist eine Frucht.", "buzzwords": ["apfel"]}
+```
 """
 
 
@@ -68,30 +83,86 @@ def _load_prompt(data_root: str) -> str:
     return base + _JSON_OUTPUT_ANWEISUNG
 
 
+def _extract_json_object(text: str) -> str | None:
+    """Sucht den ersten {...}-Block im Text mit balancierten Klammern.
+
+    Robustheit gegen LLM-Output mit Prosa-Vorlauf, Markdown-Fences oder
+    Trailing-Text (Live-Befund 2026-06-15: Claude lieferte Antwort als
+    Prosa + ```json-Fence; Parser fiel in Fallback).
+
+    Greift: ```json {...} ```, "Prosa {...}", "{...} Prosa", "{...}".
+    Returns: JSON-String oder None wenn kein Block gefunden.
+    """
+    # Suche erste '{', dann zähle Klammern-Balance bis zur schließenden.
+    start = text.find("{")
+    if start < 0:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return None
+
+
 def parse_kibuddy_response(raw: str) -> dict:
-    """Parst JSON-Antwort des LLM (T865, AC1).
+    """Parst JSON-Antwort des LLM (T865, AC1; verschärft 2026-06-15).
 
     Erwartet {"antwort": "...", "buzzwords": ["x","y","z"]}.
-    Robustheit: entfernt Markdown-Code-Fences wenn vorhanden.
-    Fallback bei ungültigem JSON: raw als antwort, buzzwords leer.
+
+    Robustheit (Live-Befund 2026-06-15): LLM liefert manchmal Prosa-Text
+    PLUS JSON-Fence parallel ("Das ist der Baum... ```json {...} ```").
+    Parser extrahiert deshalb erst den ersten balancierten {...}-Block
+    aus dem raw-Text und parst nur den. Fallback bei totalem Fehl-Output:
+    raw als antwort, buzzwords leer (defensiv).
     """
     text = raw.strip()
-    # Markdown-Fence entfernen (manche Modelle wrappen JSON in ```json ... ```)
-    if text.startswith("```"):
-        parts = text.split("```")
-        if len(parts) >= 2:
-            text = parts[1]
-        if text.startswith("json"):
-            text = text[4:].strip()
+    # 1. Versuch: direkter JSON-Parse (idealer Fall, System-Prompt-konform)
     try:
         data = json.loads(text)
-        antwort = str(data.get("antwort", "")).strip()
-        buzzwords_raw = data.get("buzzwords", []) or []
-        buzzwords = validate_buzzwords(buzzwords_raw)
-        return {"antwort": antwort, "buzzwords": buzzwords}
-    except (json.JSONDecodeError, AttributeError, ValueError):
-        logger.warning("llm-service: LLM lieferte kein valides JSON — Fallback auf raw")
+    except (json.JSONDecodeError, ValueError):
+        # 2. Versuch: balancierten {...}-Block im Text suchen (gegen Prosa-Vorlauf/Fence)
+        json_block = _extract_json_object(text)
+        if json_block is None:
+            logger.warning(
+                "llm-service: kein JSON-Block im LLM-Output gefunden — Fallback (len=%d)",
+                len(raw),
+            )
+            return {"antwort": raw, "buzzwords": []}
+        try:
+            data = json.loads(json_block)
+        except (json.JSONDecodeError, ValueError):
+            logger.warning(
+                "llm-service: extrahierter JSON-Block nicht parsbar — Fallback (len=%d)",
+                len(json_block),
+            )
+            return {"antwort": raw, "buzzwords": []}
+
+    if not isinstance(data, dict):
+        logger.warning("llm-service: JSON ist kein Object — Fallback")
         return {"antwort": raw, "buzzwords": []}
+
+    antwort = str(data.get("antwort", "")).strip()
+    buzzwords_raw = data.get("buzzwords", []) or []
+    buzzwords = validate_buzzwords(buzzwords_raw)
+    return {"antwort": antwort, "buzzwords": buzzwords}
 
 
 def beantworte_frage(
