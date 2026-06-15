@@ -30,6 +30,8 @@ Endpunkte:
 """
 
 import argparse
+import functools
+import json
 import logging
 import os
 import sys
@@ -37,12 +39,20 @@ import threading
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from flask import Flask, jsonify, render_template, request, send_file
+from flask import Flask, g, jsonify, render_template, request, send_file
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
+
+# MAD-7 / T708-C: Init-Data-Auth aus dem Lego-Basis-Modul (eltern-chat/init_data.py).
+# Vendor-neutrale HMAC-SHA256-Validierung. sys.path-Erweiterung analog seiten/main.py.
+_ELTERN_CHAT_DIR = os.path.join(_REPO_ROOT, "eltern-chat")
+if _ELTERN_CHAT_DIR not in sys.path:
+    sys.path.insert(0, _ELTERN_CHAT_DIR)
+
+import init_data as _init_data_mod  # noqa: E402
 
 import tools.medien_store as medien_store  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
@@ -76,6 +86,10 @@ runtime = {
     "zeitzone":             "Europe/Berlin",
     "listen_grenze_wunsch":  100,   # ESSEN-29
     "listen_grenze_einkauf": 100,   # ESSEN-29
+    # MAD-7 / T708-C: Mini-App-Auth (Test-Naht; im Produktiv-Betrieb aus ENV).
+    "bot_token":         None,
+    "init_data_config":  None,
+    "familie_json_path": None,
 }
 
 # Schreib-Serialisierung für Foto-Ingest (ESSEN-22 V1.2): Read-Modify-Write
@@ -86,13 +100,16 @@ _foto_write_lock = threading.Lock()
 
 
 def configure(paths, zeitzone="Europe/Berlin", listen_grenze=None,
-              listen_grenze_wunsch=None, listen_grenze_einkauf=None):
+              listen_grenze_wunsch=None, listen_grenze_einkauf=None,
+              bot_token=None, init_data_config=None, familie_json_path=None):
     """Setzt die Datei-Pfade, Zeitzone und Listen-Grenzen (Test-Naht).
 
     `paths` ist ein dict aus config_mod.data_paths().
     Listen-Grenzen (ESSEN-29): `listen_grenze_wunsch` / `listen_grenze_einkauf`
     überschreiben den Default 100; `listen_grenze` (Übergangs-Schlüssel) greift
     für beide, wenn spezifische Werte fehlen.
+    `bot_token`, `init_data_config`, `familie_json_path` (MAD-7 / T708-C):
+    Auth-Naht für Tests; im Produktiv-Betrieb aus ENV.
     """
     runtime["paths"] = paths
     runtime["zeitzone"] = zeitzone
@@ -110,6 +127,14 @@ def configure(paths, zeitzone="Europe/Berlin", listen_grenze=None,
         grenze_e = int(listen_grenze_einkauf)
     runtime["listen_grenze_wunsch"]  = grenze_w
     runtime["listen_grenze_einkauf"] = grenze_e
+
+    # MAD-7 Auth-Naht (Test-Modus)
+    if bot_token is not None:
+        runtime["bot_token"] = bot_token
+    if init_data_config is not None:
+        runtime["init_data_config"] = init_data_config
+    if familie_json_path is not None:
+        runtime["familie_json_path"] = familie_json_path
 
 
 def _paths():
@@ -253,17 +278,17 @@ def _lade_alle_kategorien():
     lebensmittel = _lade_katalog_frisch()
     gerichte_daten = _lade_gerichte_frisch()
     gerichte_items = []
-    for g in gerichte_daten.get("gerichte", []):
+    for gericht in gerichte_daten.get("gerichte", []):
         item = {
-            "id":        str(g.get("id", "")),
-            "label":     g.get("label", ""),
+            "id":        str(gericht.get("id", "")),
+            "label":     gericht.get("label", ""),
             "kategorie": "gericht",
         }
         # ESSEN-22: Gericht trägt entweder bild_ref ODER foto_ref (ESSEN-19/19a).
-        if "foto_ref" in g:
-            item["foto_ref"] = g["foto_ref"]
+        if "foto_ref" in gericht:
+            item["foto_ref"] = gericht["foto_ref"]
         else:
-            item["bild_ref"] = g.get("bild_ref", "")
+            item["bild_ref"] = gericht.get("bild_ref", "")
         gerichte_items.append(item)
     return dict(lebensmittel, gericht=gerichte_items)
 
@@ -349,6 +374,88 @@ def _parse_bool_query(wert):
 
 
 # ============================================================
+#  MAD-7 Mini-App-Auth (T708-C)
+# ============================================================
+
+# ENV-Variable für Bot-Token (APP-7 / MAD-9): gesetzt via systemd EnvironmentFile
+# aus eltern-chat/.env (Token-Sharing #684).
+_ENV_BOT_TOKEN = "ELTERNCHAT_BOT_TOKEN"
+# ENV-Variable für Familien-Registry-Pfad (FAM-7/8)
+_ENV_FAMILIE_JSON = "FAMILIE_JSON_PATH"
+
+
+def _get_bot_token():
+    """Bot-Token aus runtime-Dict (Test-Naht) oder ENV (APP-7)."""
+    return runtime.get("bot_token") or os.environ.get(_ENV_BOT_TOKEN)
+
+
+def _lade_familie_telegram_ids():
+    """Liest telegram_ids aller Familien-Mitglieder aus familie.json (FAM-7/8).
+
+    V1: direktes JSON-Read ohne familie-Service-Dependency (MOD-2).
+    Fehlt der Pfad oder die Datei → None (fail-open, Warnung).
+    """
+    path = runtime.get("familie_json_path") or os.environ.get(_ENV_FAMILIE_JSON)
+    if not path:
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (FileNotFoundError, OSError, json.JSONDecodeError) as exc:
+        logger.warning("FAM-7: familie.json nicht lesbar (%s): %s — FAM-Check uebersprungen", path, exc)
+        return None
+    ids = set()
+    for gruppe in ("erwachsene", "kinder"):
+        for person in (data.get(gruppe) or []):
+            tg_id = person.get("telegram_id")
+            if tg_id is not None:
+                ids.add(int(tg_id))
+    return ids
+
+
+def require_init_data(fn):
+    """Decorator: validiert Authorization: tma <initData>-Header (MAD-7 / AC2).
+
+    Bei Erfolg: speichert InitData in flask.g.init_data, ruft Route auf.
+    Bei fehlendem/ungültigem Header → 401.
+    Bei fehlendem Bot-Token → 500.
+    Bei Nicht-Mitglied (FAM-7/8) → 403.
+    """
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        bot_token = _get_bot_token()
+        if not bot_token:
+            logger.error("MAD-7: %s nicht gesetzt — Mini-App-Route nicht nutzbar.", _ENV_BOT_TOKEN)
+            return ("", 500)
+
+        # Init-Data-Konfig (gecacht in runtime)
+        cfg = runtime.get("init_data_config")
+        if cfg is None:
+            cfg = _init_data_mod.load_config()
+            runtime["init_data_config"] = cfg
+
+        auth_header = request.headers.get("Authorization")
+        try:
+            init_data = _init_data_mod.validate_header(
+                auth_header,
+                bot_token,
+                cfg["max_age_seconds"],
+            )
+        except _init_data_mod.InitDataError:
+            return ("", 401)
+
+        # FAM-7/8: User-ID gegen Familien-Registry prüfen
+        familie_ids = _lade_familie_telegram_ids()
+        if familie_ids is not None and init_data.user_id not in familie_ids:
+            logger.warning("FAM-7: user_id %s ist kein Familien-Mitglied → 403", init_data.user_id)
+            return ("", 403)
+
+        g.init_data = init_data
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+# ============================================================
 #  Flask-App
 # ============================================================
 
@@ -394,6 +501,7 @@ def wunsch_view():
 # ── API: Wünsche (ESSEN-15..17, ESSEN-32) ────────────────────────────────
 
 @app.route("/api/v1/essen/wuensche", methods=["GET"])
+@require_init_data
 def wuensche_lesen():
     """GET /api/v1/essen/wuensche — Liste lesen (ESSEN-15).
 
@@ -442,6 +550,7 @@ def wuensche_lesen():
 
 
 @app.route("/api/v1/essen/wuensche", methods=["POST"])
+@require_init_data
 def wunsch_hinzufuegen():
     """POST /api/v1/essen/wuensche — Wunsch/Einkauf hinzufügen (ESSEN-16).
 
@@ -581,6 +690,7 @@ def wunsch_hinzufuegen():
 
 
 @app.route("/api/v1/essen/wuensche/<wunsch_id>", methods=["PATCH"])
+@require_init_data
 def wunsch_patchen(wunsch_id):
     """PATCH /api/v1/essen/wuensche/<id> — sparse update (ESSEN-32).
 
@@ -675,6 +785,7 @@ def wunsch_patchen(wunsch_id):
 
 
 @app.route("/api/v1/essen/wuensche/<wunsch_id>", methods=["DELETE"])
+@require_init_data
 def wunsch_loeschen(wunsch_id):
     """DELETE /api/v1/essen/wuensche/<id> — Wunsch/Einkauf entfernen (ESSEN-17).
 
@@ -705,6 +816,7 @@ def wunsch_loeschen(wunsch_id):
 # ── API: Katalog (ESSEN-18/19) ────────────────────────────────────────────
 
 @app.route("/api/v1/essen/katalog", methods=["GET"])
+@require_init_data
 def katalog_lesen():
     """GET /api/v1/essen/katalog — Katalog lesen (ESSEN-18).
 
@@ -716,6 +828,7 @@ def katalog_lesen():
 
 
 @app.route("/api/v1/essen/katalog/gerichte", methods=["POST"])
+@require_init_data
 def gericht_anlegen():
     """POST /api/v1/essen/katalog/gerichte — Gericht anlegen (ESSEN-19).
 
@@ -760,8 +873,8 @@ def gericht_anlegen():
 
     # Duplikat-Check (ESSEN-19: gleiches label → 409).
     label_norm = str(label).strip().lower()
-    for g in gerichte:
-        if g.get("label", "").strip().lower() == label_norm:
+    for gericht in gerichte:
+        if gericht.get("label", "").strip().lower() == label_norm:
             return jsonify({"fehler": "Gericht mit diesem Label existiert bereits"}), 409
 
     zaehler = daten.get("zaehler", 0) + 1
@@ -789,6 +902,7 @@ def gericht_anlegen():
 
 
 @app.route("/api/v1/essen/katalog/gerichte/<gericht_id>", methods=["PATCH"])
+@require_init_data
 def gericht_bild_patchen(gericht_id):
     """PATCH /api/v1/essen/katalog/gerichte/<id> — Gericht-Bild ändern (ESSEN-19a).
 
@@ -855,6 +969,7 @@ def _bad_request(msg, status=400):
 
 
 @app.route("/api/v1/essen/fotos", methods=["POST"])
+@require_init_data
 def post_foto():
     """ESSEN-22 V1.2: Foto aufnehmen. Multipart-Feld `medium`.
 
@@ -885,6 +1000,7 @@ def post_foto():
 
 
 @app.route("/api/v1/essen/fotos/<medium_id>", methods=["GET"])
+@require_init_data
 def get_foto(medium_id):
     """ESSEN-22 V1.2: Vollbild (JPEG) mit korrektem Content-Type (send_file)."""
     fotos_verz = _paths()["fotos_verzeichnis"]
@@ -895,6 +1011,7 @@ def get_foto(medium_id):
 
 
 @app.route("/api/v1/essen/fotos/<medium_id>/thumbnail", methods=["GET"])
+@require_init_data
 def get_foto_thumbnail(medium_id):
     """ESSEN-22 V1.2: Thumbnail-JPEG mit korrektem Content-Type."""
     fotos_verz = _paths()["fotos_verzeichnis"]
@@ -905,6 +1022,7 @@ def get_foto_thumbnail(medium_id):
 
 
 @app.route("/api/v1/essen/fotos/<medium_id>", methods=["DELETE"])
+@require_init_data
 def delete_foto(medium_id):
     """ESSEN-22 V1.2: Vollbild + Thumbnail + Index-Eintrag atomar entfernen."""
     fotos_verz = _paths()["fotos_verzeichnis"]

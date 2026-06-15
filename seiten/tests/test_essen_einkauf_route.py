@@ -1,18 +1,21 @@
-"""Tests fuer GET /seiten/essen/einkauf — ESSEN-31 / EZG-6 / AC1 / AC2 / AC3.
+"""Tests fuer GET /seiten/essen/einkauf — ESSEN-31 / EZG-6 / MAD-7 / AC1 / AC2 / AC3.
 
 Testet:
   AC1  — Route ist in seiten/main.py implementiert und antwortet mit HTML.
-  AC2  — Init-Data-Auth: ohne initData → 401; manipulierter Hash → 401;
-          gueltiger HMAC → 200.
+  AC2  — Init-Data-Auth (MAD-7): ohne Authorization-Header → 401;
+          manipulierter Hash → 401; gueltiger Header → 200.
   AC3  — HTML-Render: Bring!-Card-Skelett ist im Template vorhanden (statisches
           HTML); die dynamische Liste wird per JS gerendert (kein Server-Render
           noetig fuer diesen Test).
+  AC4  — FAM-7/8: User-ID nicht in familie.json → 403.
 
 Lauf: python3 -m pytest seiten/tests/test_essen_einkauf_route.py -x -v
 
 Entry-Path-Probe (AC1):
   grep '/seiten/essen/einkauf' seiten/main.py
   → @app.route("/seiten/essen/einkauf", methods=["GET"])
+
+MAD-7: Auth via 'Authorization: tma <initData>'-Header (nicht mehr Query-Param).
 """
 
 import hashlib
@@ -95,6 +98,7 @@ def reset_runtime(monkeypatch):
         inventar_path=None,
         bot_token=BOT_TOKEN,
         init_data_config={"max_age_seconds": 86400},
+        # familie_json_path=None → FAM-Check uebersprungen (fail-open)
     )
     seiten_main.app.config["TESTING"] = True
     # Stub fuer Holer: keine echten HTTP-Calls
@@ -110,9 +114,12 @@ def client():
 # ── AC1 — Route vorhanden und liefert HTML ────────────────────────────────────
 
 def test_ac1_route_liefert_200_mit_gueltigem_init_data(client):
-    """AC1: GET /seiten/essen/einkauf mit gueltiger initData → 200 HTML."""
+    """AC1: GET /seiten/essen/einkauf mit gueltiger initData → 200 HTML (MAD-7 Header)."""
     init_data = _baue_init_data()
-    resp = client.get("/seiten/essen/einkauf?initData=" + urllib.parse.quote(init_data))
+    resp = client.get(
+        "/seiten/essen/einkauf",
+        headers={"Authorization": "tma " + init_data},
+    )
     assert resp.status_code == 200
     assert "text/html" in resp.mimetype
 
@@ -129,82 +136,138 @@ def test_ac1_route_in_main_py():
 # ── AC2 — Init-Data-Auth: drei Pfade ─────────────────────────────────────────
 
 def test_ac2_ohne_init_data_liefert_401(client):
-    """AC2: Request ohne ?initData= → 401."""
+    """AC2 (MAD-7): Request ohne Authorization-Header → 401."""
     resp = client.get("/seiten/essen/einkauf")
     assert resp.status_code == 401
     body = resp.get_json()
     assert body is not None
-    assert "initData" in body.get("error", "")
+    assert body.get("error")  # irgendeine Fehler-Meldung
 
 
 def test_ac2_manipulierter_hash_liefert_401(client):
-    """AC2: Request mit manipuliertem Hash → 401."""
+    """AC2 (MAD-7): Authorization-Header mit manipuliertem Hash → 401."""
     init_data = _baue_init_data_manipuliert()
-    resp = client.get("/seiten/essen/einkauf?initData=" + urllib.parse.quote(init_data))
+    resp = client.get(
+        "/seiten/essen/einkauf",
+        headers={"Authorization": "tma " + init_data},
+    )
     assert resp.status_code == 401
     body = resp.get_json()
     assert body is not None
 
 
 def test_ac2_gueltiger_init_data_liefert_200(client):
-    """AC2: Request mit gueltiger HMAC-Signatur → 200."""
+    """AC2 (MAD-7): Authorization-Header mit gueltiger HMAC-Signatur → 200."""
     init_data = _baue_init_data(user_id=99)
-    resp = client.get("/seiten/essen/einkauf?initData=" + urllib.parse.quote(init_data))
+    resp = client.get(
+        "/seiten/essen/einkauf",
+        headers={"Authorization": "tma " + init_data},
+    )
     assert resp.status_code == 200
 
 
-def test_ac2_tg_web_app_data_parameter_akzeptiert(client):
-    """AC2: Telegram nutzt manchmal ?tgWebAppData= statt ?initData= — beide werden akzeptiert."""
+def test_ac2_falsches_schema_liefert_401(client):
+    """AC2 (MAD-7): Authorization-Header mit falschem Schema (kein 'tma '-Praefix) → 401."""
     init_data = _baue_init_data()
-    resp = client.get("/seiten/essen/einkauf?tgWebAppData=" + urllib.parse.quote(init_data))
-    assert resp.status_code == 200
+    resp = client.get(
+        "/seiten/essen/einkauf",
+        headers={"Authorization": "Bearer " + init_data},
+    )
+    assert resp.status_code == 401
 
 
 def test_ac2_abgelaufener_init_data_liefert_401(client):
-    """AC2: auth_date mehr als max_age_seconds in der Vergangenheit → 401."""
+    """AC2 (MAD-7): auth_date mehr als max_age_seconds in der Vergangenheit → 401."""
     # max_age_seconds = 86400 (1 Tag); wir setzen offset auf -86401
     init_data = _baue_init_data(offset_seconds=-(86400 + 1))
-    resp = client.get("/seiten/essen/einkauf?initData=" + urllib.parse.quote(init_data))
+    resp = client.get(
+        "/seiten/essen/einkauf",
+        headers={"Authorization": "tma " + init_data},
+    )
     assert resp.status_code == 401
 
 
 def test_ac2_fehlendes_bot_token_liefert_500(client, monkeypatch):
-    """AC2: Bot-Token fehlt in ENV und runtime → 500 Konfig-Fehler."""
-    # Bot-Token aus runtime loeschen
+    """AC2 (MAD-7): Bot-Token fehlt in ENV und runtime → 500 Konfig-Fehler."""
     seiten_main.runtime["bot_token"] = None
+    monkeypatch.delenv("ELTERNCHAT_BOT_TOKEN", raising=False)
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
 
     init_data = _baue_init_data()
-    resp = client.get("/seiten/essen/einkauf?initData=" + urllib.parse.quote(init_data))
+    resp = client.get(
+        "/seiten/essen/einkauf",
+        headers={"Authorization": "tma " + init_data},
+    )
     assert resp.status_code == 500
+
+
+# ── AC4 — FAM-7/8-Check ──────────────────────────────────────────────────────
+
+def test_ac4_fremde_user_id_liefert_403(client, tmp_path):
+    """AC4 (FAM-7/8): User-ID nicht in familie.json → 403."""
+    familie = {"erwachsene": [{"id": "p1", "name": "Elter", "ring": "blue", "telegram_id": 99999}], "kinder": []}
+    f = tmp_path / "familie.json"
+    f.write_text(__import__("json").dumps(familie), encoding="utf-8")
+    seiten_main.runtime["familie_json_path"] = str(f)
+
+    # User-ID 42 ist nicht in der Registry (nur 99999 ist drin)
+    init_data = _baue_init_data(user_id=42)
+    resp = client.get(
+        "/seiten/essen/einkauf",
+        headers={"Authorization": "tma " + init_data},
+    )
+    assert resp.status_code == 403
+    body = resp.get_json()
+    assert body is not None
+
+    # Cleanup
+    seiten_main.runtime["familie_json_path"] = None
+
+
+def test_ac4_bekannte_user_id_liefert_200(client, tmp_path):
+    """AC4 (FAM-7/8): User-ID in familie.json → 200."""
+    familie = {"erwachsene": [{"id": "p1", "name": "Elter", "ring": "blue", "telegram_id": 42}], "kinder": []}
+    f = tmp_path / "familie.json"
+    f.write_text(__import__("json").dumps(familie), encoding="utf-8")
+    seiten_main.runtime["familie_json_path"] = str(f)
+
+    init_data = _baue_init_data(user_id=42)
+    resp = client.get(
+        "/seiten/essen/einkauf",
+        headers={"Authorization": "tma " + init_data},
+    )
+    assert resp.status_code == 200
+
+    # Cleanup
+    seiten_main.runtime["familie_json_path"] = None
 
 
 # ── AC3 — HTML-Render: statisches Skelett korrekt ────────────────────────────
 
+def _get_html(client, user_id=42):
+    """Helper: GET /seiten/essen/einkauf mit gueltiger MAD-7-Auth."""
+    init_data = _baue_init_data(user_id=user_id)
+    return client.get(
+        "/seiten/essen/einkauf",
+        headers={"Authorization": "tma " + init_data},
+    ).get_data(as_text=True)
+
+
 def test_ac3_html_enthaelt_listen_container(client):
     """AC3: HTML traegt #liste-Container (JS rendert Karten darin)."""
-    init_data = _baue_init_data()
-    body = client.get(
-        "/seiten/essen/einkauf?initData=" + urllib.parse.quote(init_data)
-    ).get_data(as_text=True)
+    body = _get_html(client)
     assert 'id="liste"' in body
 
 
 def test_ac3_html_enthaelt_quick_add_button(client):
     """AC3: HTML traegt ➕-FAB fuer Quick-Add (ESSEN-31)."""
-    init_data = _baue_init_data()
-    body = client.get(
-        "/seiten/essen/einkauf?initData=" + urllib.parse.quote(init_data)
-    ).get_data(as_text=True)
+    body = _get_html(client)
     assert 'id="quick-add"' in body
 
 
 def test_ac3_html_laedt_platform_js(client):
     """AC3 / AC7: HTML laedt platform.js (RAT-16-Wrapper) vor essen-einkauf.js."""
-    init_data = _baue_init_data()
-    body = client.get(
-        "/seiten/essen/einkauf?initData=" + urllib.parse.quote(init_data)
-    ).get_data(as_text=True)
+    body = _get_html(client)
     assert "platform.js" in body
     assert "essen-einkauf.js" in body
     # platform.js muss VOR essen-einkauf.js erscheinen (ESSEN-31 Lade-Reihenfolge)
@@ -216,10 +279,7 @@ def test_ac3_html_laedt_platform_js(client):
 
 def test_ac3_html_enthaelt_sheet_overlay(client):
     """AC3: HTML traegt sheet-overlay fuer ESSEN-30-Bottom-Sheets."""
-    init_data = _baue_init_data()
-    body = client.get(
-        "/seiten/essen/einkauf?initData=" + urllib.parse.quote(init_data)
-    ).get_data(as_text=True)
+    body = _get_html(client)
     assert 'id="sheet-overlay"' in body
 
 

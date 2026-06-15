@@ -23,6 +23,7 @@ Port: 5050 (ROUTINE-15).
 import argparse
 import contextlib
 import dataclasses
+import functools
 import json
 import logging
 import os
@@ -36,12 +37,19 @@ if __package__:
 else:
     from routine._jsonio import read_json_or_empty
 
-from flask import Flask, jsonify, redirect, render_template, request, url_for
+from flask import Flask, g, jsonify, redirect, render_template, request, url_for
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
+
+# MAD-7 / T708-C: Init-Data-Auth aus dem Lego-Basis-Modul (eltern-chat/init_data.py).
+_ELTERN_CHAT_DIR = os.path.join(_REPO_ROOT, "eltern-chat")
+if _ELTERN_CHAT_DIR not in sys.path:
+    sys.path.insert(0, _ELTERN_CHAT_DIR)
+
+import init_data as _init_data_mod  # noqa: E402
 
 from tools import configloader, logsetup  # noqa: E402
 
@@ -149,14 +157,29 @@ runtime = {
     "config": None,       # routine.config.RoutineConfig — Last-Known-Good-Snapshot
     "data_path": None,    # Pfad zu routine.json — für späteres Reload-on-Read
     "store_path": None,   # Pfad zu routine_store.json (Test-Naht)
+    # MAD-7 / T708-C: Mini-App-Auth (Test-Naht; im Produktiv-Betrieb aus ENV).
+    "bot_token":         None,
+    "init_data_config":  None,
+    "familie_json_path": None,
 }
 
 
-def configure(cfg, data_path=None, store_path=None):
-    """Setzt die Konfiguration (Test-Naht)."""
+def configure(cfg, data_path=None, store_path=None,
+              bot_token=None, init_data_config=None, familie_json_path=None):
+    """Setzt die Konfiguration (Test-Naht).
+
+    `bot_token`, `init_data_config`, `familie_json_path` (MAD-7 / T708-C):
+    Auth-Naht für Tests; im Produktiv-Betrieb aus ENV.
+    """
     runtime["config"] = cfg
     runtime["data_path"] = data_path
     runtime["store_path"] = store_path
+    if bot_token is not None:
+        runtime["bot_token"] = bot_token
+    if init_data_config is not None:
+        runtime["init_data_config"] = init_data_config
+    if familie_json_path is not None:
+        runtime["familie_json_path"] = familie_json_path
 
 
 def _current_config():
@@ -208,6 +231,83 @@ def _now(zeitzone):
     Now-Injektion für Tests liegt in uhr.py (E-ROUTINE-9, ROUTINE-18).
     """
     return datetime.now(ZoneInfo(zeitzone))
+
+
+# ============================================================
+#  MAD-7 Mini-App-Auth (T708-C)
+# ============================================================
+
+_ENV_BOT_TOKEN = "ELTERNCHAT_BOT_TOKEN"
+_ENV_FAMILIE_JSON = "FAMILIE_JSON_PATH"
+
+
+def _get_bot_token():
+    """Bot-Token aus runtime-Dict (Test-Naht) oder ENV (APP-7)."""
+    return runtime.get("bot_token") or os.environ.get(_ENV_BOT_TOKEN)
+
+
+def _lade_familie_telegram_ids():
+    """Liest telegram_ids aller Familien-Mitglieder aus familie.json (FAM-7/8).
+
+    V1: direktes JSON-Read ohne familie-Service-Dependency (MOD-2).
+    Fehlt der Pfad oder die Datei → None (fail-open, Warnung).
+    """
+    path = runtime.get("familie_json_path") or os.environ.get(_ENV_FAMILIE_JSON)
+    if not path:
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (FileNotFoundError, OSError, json.JSONDecodeError) as exc:
+        logger.warning("FAM-7: familie.json nicht lesbar (%s): %s — FAM-Check uebersprungen", path, exc)
+        return None
+    ids = set()
+    for gruppe in ("erwachsene", "kinder"):
+        for person in (data.get(gruppe) or []):
+            tg_id = person.get("telegram_id")
+            if tg_id is not None:
+                ids.add(int(tg_id))
+    return ids
+
+
+def require_init_data(fn):
+    """Decorator: validiert Authorization: tma <initData>-Header (MAD-7 / AC2).
+
+    Bei Erfolg: speichert InitData in flask.g.init_data, ruft Route auf.
+    Bei fehlendem/ungültigem Header → 401.
+    Bei fehlendem Bot-Token → 500.
+    Bei Nicht-Mitglied (FAM-7/8) → 403.
+    """
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        bot_token = _get_bot_token()
+        if not bot_token:
+            logger.error("MAD-7: %s nicht gesetzt — Mini-App-Route nicht nutzbar.", _ENV_BOT_TOKEN)
+            return ("", 500)
+
+        cfg = runtime.get("init_data_config")
+        if cfg is None:
+            cfg = _init_data_mod.load_config()
+            runtime["init_data_config"] = cfg
+
+        auth_header = request.headers.get("Authorization")
+        try:
+            init_data = _init_data_mod.validate_header(
+                auth_header,
+                bot_token,
+                cfg["max_age_seconds"],
+            )
+        except _init_data_mod.InitDataError:
+            return ("", 401)
+
+        familie_ids = _lade_familie_telegram_ids()
+        if familie_ids is not None and init_data.user_id not in familie_ids:
+            logger.warning("FAM-7: user_id %s ist kein Familien-Mitglied → 403", init_data.user_id)
+            return ("", 403)
+
+        g.init_data = init_data
+        return fn(*args, **kwargs)
+    return wrapper
 
 
 # ============================================================
@@ -301,6 +401,7 @@ def index():
 
 
 @app.route("/api/v1/routine/config", methods=["GET"])
+@require_init_data
 def api_config_get():
     """Zeiten-Lese-API (ROUTINE-14, #728, URL-14).
 
@@ -332,6 +433,7 @@ def api_config_get():
 
 
 @app.route("/api/v1/routine/config", methods=["PUT"])
+@require_init_data
 def api_config():
     """Zeiten-Schreib-API (ROUTINE-14, #343, URL-14).
 
@@ -383,6 +485,7 @@ def _items_zeitzone():
 
 
 @app.route("/api/v1/routine/items", methods=["GET"])
+@require_init_data
 def api_items_get():
     """Aktuelle Items-Liste lesen (ROUTINE-14, V1.2, #469).
 
@@ -411,6 +514,7 @@ def api_items_get():
 
 
 @app.route("/api/v1/routine/items", methods=["POST"])
+@require_init_data
 def api_items_post():
     """Punkt anlegen (ROUTINE-14, #354, URL-14).
 
@@ -444,6 +548,7 @@ def api_items_post():
 
 
 @app.route("/api/v1/routine/items", methods=["PUT"])
+@require_init_data
 def api_items_put():
     """Geordnete default-Liste ersetzen (ROUTINE-14, #354, URL-14).
 
@@ -469,6 +574,7 @@ def api_items_put():
 
 
 @app.route("/api/v1/routine/items/<item_id>", methods=["DELETE"])
+@require_init_data
 def api_items_delete(item_id):
     """Punkt entfernen (ROUTINE-14, #354, URL-14).
 
