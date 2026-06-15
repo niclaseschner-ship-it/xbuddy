@@ -69,10 +69,17 @@ _DIALOG_START = (
     "Ich helfe dir, den KIBuddy-Prompt anzupassen. "
     "Stell dem Elternteil 1–3 Rückfragen zu Tonfall, Themen oder "
     "Verhaltensregeln. Sobald die Wünsche klar sind, formuliere den "
-    "vollständigen neuen Prompt-Text (Baseline: aktueller Prompt — bei Bedarf "
-    "via kibuddy_prompt_anpassen mit aktion='anzeigen' holen). "
+    "vollständigen neuen Prompt-Text. "
+    "WICHTIG (Baseline-Erhalt): Hole zuerst den aktuellen Prompt via "
+    "kibuddy_prompt_anpassen mit aktion='anzeigen' als BASELINE. Übernimm "
+    "ALLE bestehenden Klauseln wortgleich, ergänze oder modifiziere NUR "
+    "die Stellen, die der Elternteil ausdrücklich angesprochen hat. Lösche "
+    "keine Klauseln, die nicht thematisiert wurden (z. B. gewaltfreie "
+    "Sprache, Sicherheit, Datenschutz, kindgerechtes Sprachniveau) — auch "
+    "wenn sie zum aktuellen Thema scheinbar nicht passen. "
     "Rufe danach diesen Task erneut auf mit "
-    "aktion='vorschlagen' und neuer_prompt=<vollständiger Vorschlag>. "
+    "aktion='vorschlagen' und neuer_prompt=<vollständiger Vorschlag inkl. "
+    "aller Baseline-Klauseln>. "
     "Der Skill zeigt dann die Diff-Vorschau zur Bestätigung. "
     "Ohne diesen zweiten Aufruf mit neuer_prompt endet der Dialog ohne Wirkung.\n\n"
     "Was möchtest du am Verhalten des KIBuddys ändern? "
@@ -98,39 +105,65 @@ _DIFF_CONTEXT_LINES = 2
 
 
 def _build_diff(alter_text, neuer_text):
-    """Baut eine Diff-Vorschau im unified-diff-Stil (KPA-6).
+    """Baut eine Diff-Vorschau im Eltern-lesbaren Zwei-Sektionen-Format (KPA-6).
 
-    Liefert einen String mit:
-      - `-`-Zeilen für entfernte Zeilen
-      - `+`-Zeilen für neue Zeilen
-      - `… N unveränderte Zeilen …`-Platzhalter für übersprungene Blöcke
+    Live-Bug 2026-06-15 (Nic): Unified-Diff (`+`/`-` Zeilen-Prefix) kollidiert
+    mit Markdown-Aufzählungen, die selbst mit `- ` beginnen — Eltern können
+    nicht klar erkennen, ob eine Zeile entfernt wurde oder nur ein
+    Listen-Marker ist.
+
+    Neue Form: pro Änderungs-Block ein Hunk mit zwei klar gelabelten
+    Sektionen ("Wird ENTFERNT" / "Wird HINZUGEFÜGT"). Aufzählungszeichen im
+    Content bleiben unangetastet. Hunks werden durch Trenner separiert.
 
     Vollständig identische Prompts: kurze Hinweis-Zeile statt leerer Diff.
     """
     alte_zeilen = alter_text.splitlines()
     neue_zeilen = neuer_text.splitlines()
 
-    diff_lines = []
+    hunks = []
     for gruppe in difflib.SequenceMatcher(
             None, alte_zeilen, neue_zeilen).get_grouped_opcodes(
                 _DIFF_CONTEXT_LINES):
-        for tag, i1, i2, j1, j2 in gruppe:
+        entfernt = []
+        hinzugefuegt = []
+        kontext_vor = []
+        kontext_nach = []
+        for idx, (tag, i1, i2, j1, j2) in enumerate(gruppe):
             if tag == "equal":
-                for line in alte_zeilen[i1:i2]:
-                    diff_lines.append("  " + line)
-            elif tag in ("replace", "delete"):
-                for line in alte_zeilen[i1:i2]:
-                    diff_lines.append("- " + line)
-                if tag == "replace":
-                    for line in neue_zeilen[j1:j2]:
-                        diff_lines.append("+ " + line)
+                if idx == 0:
+                    kontext_vor = alte_zeilen[i1:i2]
+                else:
+                    kontext_nach = alte_zeilen[i1:i2]
+            elif tag == "delete":
+                entfernt.extend(alte_zeilen[i1:i2])
             elif tag == "insert":
-                for line in neue_zeilen[j1:j2]:
-                    diff_lines.append("+ " + line)
+                hinzugefuegt.extend(neue_zeilen[j1:j2])
+            elif tag == "replace":
+                entfernt.extend(alte_zeilen[i1:i2])
+                hinzugefuegt.extend(neue_zeilen[j1:j2])
 
-    if not diff_lines:
+        teile = []
+        if kontext_vor:
+            teile.append("Kontext davor:\n" + "\n".join(
+                "  " + l for l in kontext_vor))
+        if entfernt:
+            teile.append("Wird ENTFERNT:\n" + "\n".join(
+                "  › " + l for l in entfernt))
+        if hinzugefuegt:
+            teile.append("Wird HINZUGEFÜGT:\n" + "\n".join(
+                "  › " + l for l in hinzugefuegt))
+        if kontext_nach:
+            teile.append("Kontext danach:\n" + "\n".join(
+                "  " + l for l in kontext_nach))
+        if teile:
+            hunks.append("\n".join(teile))
+
+    if not hunks:
         return "(Kein Unterschied — der Prompt ist identisch.)"
-    return "\n".join(diff_lines)
+
+    trenner = "\n\n── nächste Änderung ──\n\n"
+    return trenner.join(hunks)
 
 
 def _split_for_telegram(text: str,
