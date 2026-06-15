@@ -109,15 +109,26 @@
   // ── Render-Hilfsfunktionen ────────────────────────────────────────────────
 
   /**
-   * Rendert eine URL-Karte (MAU-6): Label + Typ-Badge + URL-Mono + Oeffnen/Kopieren-Buttons.
+   * Rendert eine URL-Karte (MAU-6): Icon + Label + Typ-Badge + URL-Mono + Oeffnen/Kopieren-Buttons.
    * Kein <a href> — Long-Press-Browser-Menue ist in Telegram-WebView unzuverlaessig (MAU-6).
+   * iconRef (optional): ARASAAC-ID aus inventar.icons[0] — gerendert als <img>.
    */
-  function _bauUrlKarte(label, typ, url) {
+  function _bauUrlKarte(label, typ, url, iconRef) {
     const karte = document.createElement("div");
     karte.className = "url-karte";
 
     const kopfzeile = document.createElement("div");
     kopfzeile.className = "url-karte-kopfzeile";
+
+    // Icon analog zur Mini-App-Kachel — SREG-12-konsistent: jede Seite ihr Icon.
+    if (iconRef) {
+      const ikon = document.createElement("img");
+      ikon.className = "url-karte-icon";
+      ikon.src = "/display/_shared/icons/" + iconRef;
+      ikon.alt = "";
+      ikon.loading = "lazy";
+      kopfzeile.appendChild(ikon);
+    }
 
     const labelEl = document.createElement("span");
     labelEl.className = "url-karte-label";
@@ -282,10 +293,12 @@
       // Display-Karte mit URL (Heim + Tailscale wenn vorhanden)
       // URL = pfad des display-client-Eintrags
       const displayUrl = (window.location.origin || "") + (display.pfad || "");
+      const displayIcon = (display.icons || [])[0];
       const displayKarte = _bauUrlKarte(
         display.label || display.instanz,
         "Display",
-        displayUrl
+        displayUrl,
+        displayIcon
       );
       paar.appendChild(displayKarte);
 
@@ -297,10 +310,12 @@
           ? panelEintrag.pfad
           : "/controller/app-panel/" + panelId;
         const panelUrl = (window.location.origin || "") + panelPfad;
+        const panelIcon = (panelEintrag && panelEintrag.icons || [])[0];
         const panelKarte = _bauUrlKarte(
           (panelEintrag && panelEintrag.label) || "Panel " + panelId,
           "Panel",
-          panelUrl
+          panelUrl,
+          panelIcon
         );
         paar.appendChild(panelKarte);
       }
@@ -348,7 +363,8 @@
 
       for (const view of gruppen[slug]) {
         const url = (window.location.origin || "") + (view.pfad || "");
-        const karte = _bauUrlKarte(view.label, "Seite", url);
+        const ikon = (view.icons || [])[0];
+        const karte = _bauUrlKarte(view.label, "Seite", url, ikon);
         kartenContainer.appendChild(karte);
       }
 
