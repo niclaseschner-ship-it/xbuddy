@@ -136,11 +136,11 @@ als JSON — `[{ "id": <arasaac-id>, "url": "/display/_shared/icons/arasaac/<id>
   (ID-dedupliziert).
 - **Mehrwort-Eingabe (Whitespace in `q`):** der Cache-Match läuft pro Wort
   einzeln (Whitespace-Split, Tokens werden getrimmt, leere Tokens fallen raus).
-  Treffer werden mit **OR-Logik** vereint und nach einem **Score** sortiert:
-  `score(id) = Anzahl der Eingabe-Tokens, deren Teilwort-Match die ID liefert`.
-  Beispiel: `q=Brot schmieren` listet IDs, die sowohl auf „Brot" als auch auf
-  „schmieren" matchen (Score 2), VOR IDs, die nur eines der beiden matchen
-  (Score 1). Bei gleichem Score bleibt die heutige Reihenfolge (Cache-Reihenfolge).
+  Treffer werden mit **OR-Logik** vereint und primär nach **`token_hits`**
+  (Anzahl matchender Tokens) sortiert, sekundär nach Match-Score-Qualität
+  (siehe Match-Score-Tabelle unten). Beispiel: `q=Brot schmieren` listet IDs,
+  die sowohl „Brot" als auch „schmieren" matchen (`token_hits=2`), VOR IDs,
+  die nur eines der beiden matchen (`token_hits=1`).
   Begründung: Eltern tippt 2–3-Wort-Routine-Punkte („Rucksack packen",
   „Brot schmieren") — Single-Wort-Substring-Match liefert systematisch null
   Treffer, weil die Kombinationen so im Cache nicht stehen.
@@ -174,10 +174,12 @@ der typische Konsument-Treffer). Beispiel: q=Mensch → „menschen" (Prefix, 8
 Zeichen, Score ≈ 412.5) gewinnt vor „mensch ärgere dich nicht" (Prefix, 26
 Zeichen, Score ≈ 403.8) und vor „marsmensch" (Substring, Score ≈ 1.1).
 
-Bei Multi-Token-Queries: Score additiv über Tokens. Wer mehr Tokens matcht,
-gewinnt. Tiebreaker: erste Vorkommen-Reihenfolge im Cache (first_seen). Die
-Score-Skalen (1000 / 500 / 100 / 1) stellen sicher, dass Single-Token-Exact
-(1000) immer vor Multi-Token-Substring (z. B. 2 × 1.x = ~2.x) landet.
+**Multi-Token-Queries: Coverage schlägt Qualität.** Sortier-Reihenfolge ist
+`(-token_hits, -score, first_seen)`. Wer mehr Tokens matcht (`token_hits`)
+gewinnt immer — ein 2-Token-Substring-Treffer (token_hits=2) rankt vor einem
+1-Token-Exact-Treffer (token_hits=1). Innerhalb derselben `token_hits`-Stufe
+sortiert der additive Match-Score (Qualität: exact/prefix/word-boundary/substring).
+Tiebreaker: erste Vorkommen-Reihenfolge im Cache (first_seen).
 
 Read-only, keine Schreibwirkung, kein externer Call. Ausgeliefert vom Router
 (ROU-31), der die icon-root ohnehin besitzt — **kein** eigener Dienst.
