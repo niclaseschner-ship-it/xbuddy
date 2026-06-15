@@ -371,7 +371,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   mini_app_einkauf_url=None,
                   mini_app_base_url=None,
                   hoerspiel_url_origin=None,
-                  kibuddy_origin_url=None):
+                  kibuddy_origin_url=None,
+                  a2_receipt_store=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
@@ -566,7 +567,11 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             tg=tg,
             photo_client=_fse_client,
             family_group_chat_id_getter=family_group_chat_id_getter,
-            is_member_fn=_fse_is_member))
+            is_member_fn=_fse_is_member,
+            # EC-10 A2-Receipt (#841): Store-Instanz für persistenten Bon
+            # nach jedem erfolgreichen Hochladen. None → Skill schreibt
+            # keinen Receipt (Backward-Compat für Test-Kataloge).
+            receipt_store=a2_receipt_store))
 
     # RPS-3 V1.2 / EC-9: »Routine-Punkte lesen« als lesende Aufgabe (ReadTask).
     # Guard: routine_origin_url UND family_group_chat_id_getter müssen gesetzt sein.
@@ -715,7 +720,11 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             essen_client=_ein_essen_client,
             icon_client=_ein_icon_client,
             is_member_fn=_ein_is_member,
-            katalog_getter=_ein_katalog_getter))
+            katalog_getter=_ein_katalog_getter,
+            # EC-10 A2-Receipt (#841): Store-Instanz für persistenten Bon
+            # pro angelegtem Item (insert_many in einer Transaktion). None →
+            # Skill schreibt keine Receipts (Backward-Compat).
+            receipt_store=a2_receipt_store))
 
     # EZG-8 / #653: »Einkauf zeigen« als lesende Aufgabe (EC-9).
     # AND-Guard: essen_origin_url UND family_group_chat_id_getter müssen

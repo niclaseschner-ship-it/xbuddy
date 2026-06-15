@@ -53,6 +53,7 @@ from onboarding_store import OnboardingStore
 from private_chat_session import SessionSortEntry
 from providers import get_provider
 from tasks import TurnContext, build_catalog
+from a2_receipt_store import A2ReceiptStore
 from telegram import ChatMigratedError, TelegramClient, TelegramError
 from telemetry import TelemetryStore
 
@@ -627,6 +628,12 @@ def build_context(cfg, db_path, zd_cli_path=None):
     from tools.zugangsdaten import Zugangsdaten, resolve_store_path
     zd_store = Zugangsdaten(resolve_store_path(cli_path=zd_cli_path))
 
+    # EC-10 A2-Receipt (#841): einmalige Store-Instanz pro laufender Instanz.
+    # Selbe db_path wie TelemetryStore — `a2_receipts`-Tabelle lebt in
+    # `conversations.db`. Wird gleich an build_catalog weitergereicht, damit
+    # FotoSendenTask und EinkaufHinzufuegenTask Bons schreiben können.
+    a2_receipt_store = A2ReceiptStore(db_path)
+
     ctx = Context(
         tg=tg,
         bot_username=me.get("username", ""),
@@ -639,6 +646,12 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # EC-23/AC4 (#268): Telemetrie liegt in derselben SQLite-Datei wie der
         # Verlauf — kein zweiter SSoT, kein zweites Backup-Ziel.
         telemetry_store=TelemetryStore(db_path),
+        # EC-10 A2-Receipt (#841): A2-Kassenbons liegen in derselben SQLite-Datei
+        # wie task_events/provider_calls — `a2_receipts`-Tabelle wird beim ersten
+        # Init via CREATE TABLE IF NOT EXISTS angelegt (a2_receipt_store.py).
+        # Wird direkt an build_catalog gereicht (FotoSendenTask /
+        # EinkaufHinzufuegenTask), nicht über den Context — analog der
+        # Skill-Client-Instanziierung in build_catalog.
         store=OnboardingStore(zd=zd_store),
         family_group_locked=cfg.family_group_locked,
         faa_sessions=faa_sessions,
@@ -732,7 +745,11 @@ def build_context(cfg, db_path, zd_cli_path=None):
         hoerspiel_url_origin=cfg.hoerspiel_url_origin or None,
         # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts. Leer/None →
         # KibuddyAufnahmeQuelleSetzenTask NICHT im Katalog (AND-Guard KAQS-6).
-        kibuddy_origin_url=cfg.kibuddy_origin_url or None)
+        kibuddy_origin_url=cfg.kibuddy_origin_url or None,
+        # EC-10 A2-Receipt (#841): Store-Instanz für FotoSendenTask /
+        # EinkaufHinzufuegenTask. None → Skills laufen ohne Receipt-Schreibung
+        # (Backward-Compat für Test-Kataloge).
+        a2_receipt_store=a2_receipt_store)
 
     if cfg.provider_api_key:
         # KI-Modus — Anbieter steht; die Familien-Gruppe muss gesetzt sein (EC-2).

@@ -77,7 +77,7 @@ class FotoSendenTask(ReadTask):
     """
 
     def __init__(self, tg, photo_client, family_group_chat_id_getter,
-                 is_member_fn=None):
+                 is_member_fn=None, receipt_store=None):
         super().__init__(
             name="foto_senden",
             description=(
@@ -119,6 +119,9 @@ class FotoSendenTask(ReadTask):
         # injiziert; None nur für Tests, die eine eigene Funktion übergeben
         # (analog RoutineZeitenSetzenTask).
         self._is_member_fn = is_member_fn
+        # receipt_store: A2ReceiptStore-Instanz (EC-10 A2-Receipt, #841).
+        # None in Tests ohne Receipt-Probe; build_catalog injiziert immer.
+        self._receipt_store = receipt_store
 
     def run(self, arguments, turn_context):
         """Sofort-Schreib-Aufgabe (TASK-9): ruft FSE-1 direkt im Lese-Pfad.
@@ -177,6 +180,35 @@ class FotoSendenTask(ReadTask):
             filename=filename,
             content_type=content_type,
         )
+
+        # EC-10 A2-Receipt (#841): nach erfolgreichem Upload einen Bon schreiben.
+        # Versiegelung von Vorgänger-Receipts desselben chat_id ist atomar in
+        # receipt_store.insert() (Versiegelungs-Klausel, spec Z. 550-556).
+        if signal == fs_mod.SIGNAL_HOCHGELADEN and self._receipt_store is not None:
+            medium_id = daten.get("id")
+            chat_id = getattr(turn_context, "chat_id", None)
+            if medium_id and chat_id is not None:
+                # EC-10 spec Z. 533-535: inverse_call ist strukturierter Verweis
+                # in HTTP-Form (Buddy-Endpunkt + Pfad-Parameter), parsbar als
+                # "<buddy-key> <method> <api-path-with-id>". photo-Endpunkt:
+                # photo_client.py:59 (PHOTO-16/FSE-4) — DELETE /api/v1/photo/medien/<id>.
+                inverse_call = 'photo DELETE /api/v1/photo/medien/%s' % medium_id
+                try:
+                    self._receipt_store.insert(
+                        task_name="foto_senden",
+                        chat_id=chat_id,
+                        resource_id=medium_id,
+                        inverse_call=inverse_call,
+                    )
+                    logger.debug(
+                        "foto_senden: A2-Receipt geschrieben medium_id=%s chat_id=%s",
+                        medium_id, chat_id)
+                except Exception as e:
+                    # Receipt-Fehler bricht den erfolgreichen Upload NICHT ab
+                    # (ehrliche Grenze EC-7: Upload war ok, Receipt ist Monitoring).
+                    logger.warning(
+                        "foto_senden: A2-Receipt-Insert fehlgeschlagen: %s", e)
+
         return _quittung_fuer(signal, daten)
 
 
