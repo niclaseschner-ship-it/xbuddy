@@ -261,24 +261,18 @@
 
   // ── Sektion 2: Geraete-Paare (MAU-4 Punkt 2) ─────────────────────────────
 
-  function rendereGeraetePaare(container, displayClients, panels, panelSettings) {
-    // Sortierung: alphabetisch nach instanz (display_id) — MAU-4
-    const displays = [...displayClients].sort((a, b) =>
+  function rendereGeraetePaare(container, heroDisplays, panelIndex, editorByPanelId) {
+    // Sortierung: alphabetisch nach instanz (SREG-12 Pattern).
+    const displays = [...heroDisplays].sort((a, b) =>
       (a.instanz || "").localeCompare(b.instanz || "")
     );
 
     if (!displays.length) {
       const leer = document.createElement("p");
       leer.className = "leer-hinweis";
-      leer.textContent = "Keine Geraete-Paare gefunden.";
+      leer.textContent = "Keine gekoppelten Display-Panel-Paare gefunden.";
       container.appendChild(leer);
       return;
-    }
-
-    // Panel-Index fuer Reverse-Lookup (panel_id → panel-Eintrag)
-    const panelIndex = {};
-    for (const p of panels) {
-      if (p.instanz) panelIndex[p.instanz] = p;
     }
 
     for (const display of displays) {
@@ -302,7 +296,8 @@
       );
       paar.appendChild(displayKarte);
 
-      // Panel(s) die dieses Display steuern — plus jeweils ihre Settings-Karte.
+      // Panel(s) die dieses Display steuern — plus jeweils ihre Editor-Karte.
+      // Editor-Lookup über verknuepft_mit_panel-Feld (SREG-12 Datentreue).
       const verbPanelIds = display.verknuepft_mit_panels || [];
       for (const panelId of verbPanelIds) {
         const panelEintrag = panelIndex[panelId];
@@ -319,19 +314,18 @@
         );
         paar.appendChild(panelKarte);
 
-        // Settings-Karte für dieses Panel (Live-Befund Nic 2026-06-15:
-        // Panel-Settings-Seiten gehören zu ihren Panels, nicht in "Sonstiges").
-        const settingsView = panelSettings && panelSettings[panelId];
-        if (settingsView) {
-          const settingsUrl = (window.location.origin || "") + settingsView.pfad;
-          const settingsIcon = (settingsView.icons || [])[0];
-          const settingsKarte = _bauUrlKarte(
-            settingsView.label || ("Panel " + panelId + " bearbeiten"),
-            "Settings",
-            settingsUrl,
-            settingsIcon
+        // Editor-Karte angedockt an dieses Panel (Lego via verknuepft_mit_panel).
+        const editorView = editorByPanelId && editorByPanelId[panelId];
+        if (editorView) {
+          const editorUrl = (window.location.origin || "") + editorView.pfad;
+          const editorIcon = (editorView.icons || [])[0];
+          const editorKarte = _bauUrlKarte(
+            editorView.label || ("Panel " + panelId + " bearbeiten"),
+            "Editor",
+            editorUrl,
+            editorIcon
           );
-          paar.appendChild(settingsKarte);
+          paar.appendChild(editorKarte);
         }
       }
 
@@ -350,24 +344,18 @@
       return;
     }
 
-    // Gruppieren nach app-Slug (MAU-4: analog SREG-12).
-    // Wenn view.app fehlt, aus pfad extrahieren: /<segment>/... → segment als app-slug.
+    // Gruppieren nach app-Slug (SREG-12 Pattern, render.py::_buddy_gruppen).
+    // Sorten ohne app fallen in eine Sammel-Gruppe "instanz" (SREG-12 Punkt 3).
     const gruppen = {};
     for (const view of elternViews) {
-      let slug = view.app;
-      if (!slug) {
-        const m = (view.pfad || "").match(/^\/([^/]+)/);
-        slug = m ? m[1] : "andere";
-      }
+      const slug = view.app || "instanz";
       if (!gruppen[slug]) gruppen[slug] = [];
       gruppen[slug].push(view);
     }
 
-    // Sortierung: Gruppen nach Karten-Anzahl absteigend, dann alphabetisch (MAU-4)
-    const sortierteSlugs = Object.keys(gruppen).sort((a, b) => {
-      const diff = gruppen[b].length - gruppen[a].length;
-      return diff !== 0 ? diff : a.localeCompare(b);
-    });
+    // Sortierung Nics Setzung 2026-06-15: alphabetisch nach app-Slug
+    // (deutlicher als SREG-12 "Karten-Anzahl absteigend").
+    const sortierteSlugs = Object.keys(gruppen).sort((a, b) => a.localeCompare(b));
 
     for (const slug of sortierteSlugs) {
       const gruppe = document.createElement("div");
@@ -381,10 +369,21 @@
       const kartenContainer = document.createElement("div");
       kartenContainer.className = "buddy-gruppe-karten";
 
-      for (const view of gruppen[slug]) {
+      // Innerhalb der Gruppe: nach label alphabetisch (Lesbarkeit).
+      const sortierteViews = [...gruppen[slug]].sort((a, b) =>
+        (a.label || "").localeCompare(b.label || "")
+      );
+      for (const view of sortierteViews) {
         const url = (window.location.origin || "") + (view.pfad || "");
         const ikon = (view.icons || [])[0];
-        const karte = _bauUrlKarte(view.label, "Seite", url, ikon);
+        // Typ-Badge je Sorte: Display für Kind-Tablet, Eltern, Controller, Panel.
+        let typLabel = "Seite";
+        if (view.typ === "display") typLabel = "Display";
+        else if (view.typ === "controller") typLabel = "Controller";
+        else if (view.typ === "panel") typLabel = "Panel";
+        else if (view.typ === "display-client") typLabel = "Display-Client";
+        else if (view.typ === "eltern") typLabel = "Eltern";
+        const karte = _bauUrlKarte(view.label, typLabel, url, ikon);
         kartenContainer.appendChild(karte);
       }
 
@@ -404,29 +403,52 @@
       snapshotBanner.hidden = false;
     }
 
-    // Eintraege nach Typ filtern
-    const miniApps       = eintraege.filter(e => e.typ === "mini-app");
-    const displayClients = eintraege.filter(e => e.typ === "display-client");
-    const panels         = eintraege.filter(e => e.typ === "panel");
+    // Pattern aus SREG-12 (`seiten/render.py::_hero_paare`): Hero-Paare sind nur
+    // Displays mit verknuepft_mit_panels. Panel-Editor-Anhang per
+    // verknuepft_mit_panel-Feld (sauberer Lookup als Pfad-Regex).
+    const miniApps = eintraege.filter(e => e.typ === "mini-app");
+    const allePanels = eintraege.filter(e => e.typ === "panel");
+    const panelIndex = {};
+    for (const p of allePanels) {
+      if (p.instanz) panelIndex[p.instanz] = p;
+    }
 
-    // Panel-Editor-Seiten (typ:eltern + pfad /controller/app-panel/<id>/bearbeiten)
-    // gehören zu den jeweiligen Panels, nicht in "Sonstiges". Live-Befund Nic 2026-06-15.
-    const panelSettings = {};  // panelId → Editor-View
-    const eltern = eintraege.filter(e => e.typ === "eltern");
-    const elternOhnePanelEdit = [];
-    const _panelEditRegex = /^\/controller\/app-panel\/([^/]+)\/bearbeiten$/;
-    for (const v of eltern) {
-      const m = (v.pfad || "").match(_panelEditRegex);
-      if (m) {
-        panelSettings[m[1]] = v;
-      } else {
-        elternOhnePanelEdit.push(v);
+    // Panel-Editor-Lookup via verknuepft_mit_panel-Feld (Datentreue-Lego).
+    const editorByPanelId = {};
+    for (const v of eintraege) {
+      if (v.typ === "eltern" && v.verknuepft_mit_panel) {
+        editorByPanelId[v.verknuepft_mit_panel] = v;
       }
     }
 
-    // Buddy-Seiten: eltern-Views ohne Panel-Editoren + controller-Views (Lego-konsistent).
-    const controllerViews = eintraege.filter(e => e.typ === "controller");
-    const buddyViews = elternOhnePanelEdit.concat(controllerViews);
+    // Hero-Paare: nur display-clients MIT verknuepft_mit_panels.
+    const heroDisplays = eintraege.filter(e =>
+      e.typ === "display-client"
+      && Array.isArray(e.verknuepft_mit_panels)
+      && e.verknuepft_mit_panels.length > 0
+    );
+
+    // Mitglieder der Hero-Paare — werden aus den Buddy-Gruppen ausgeschlossen.
+    const inHero = new Set();
+    for (const d of heroDisplays) {
+      inHero.add("display-client:" + (d.instanz || ""));
+      for (const pid of d.verknuepft_mit_panels) {
+        inHero.add("panel:" + pid);
+        if (editorByPanelId[pid]) {
+          inHero.add("eltern:" + (editorByPanelId[pid].pfad || ""));
+        }
+      }
+    }
+
+    // Buddy-Gruppen-Einträge: ALLES außer mini-apps, Hero-Mitglieder, snapshot-pending.
+    const buddyViews = eintraege.filter(e => {
+      if (e.typ === "mini-app") return false;
+      const key = e.typ + ":" + (e.instanz || e.pfad || "");
+      if (e.typ === "display-client" && inHero.has("display-client:" + e.instanz)) return false;
+      if (e.typ === "panel" && inHero.has("panel:" + e.instanz)) return false;
+      if (e.typ === "eltern" && inHero.has("eltern:" + e.pfad)) return false;
+      return true;
+    });
 
     // Skeleton-Bodies mit realem Inhalt befuellen (ersetzt Lade-Hinweis)
     // MAU-8: Skeleton-Elemente sind schon im HTML (drei collapsed <details>) — nur Inhalt ersetzen.
@@ -436,10 +458,10 @@
     body1.innerHTML = "";
     rendereMinApps(body1, miniApps);
 
-    // Sektion 2: Geraete-Paare (mit Panel-Settings-Karten)
+    // Sektion 2: Geraete-Paare (Hero — nur Displays mit Panel-Kopplung)
     const body2 = secGeraete.querySelector(".accordion-body");
     body2.innerHTML = "";
-    rendereGeraetePaare(body2, displayClients, panels, panelSettings);
+    rendereGeraetePaare(body2, heroDisplays, panelIndex, editorByPanelId);
 
     // Sektion 3: Buddy-Seiten (eltern + controller, ohne Panel-Editoren)
     const body3 = secBuddySeiten.querySelector(".accordion-body");
