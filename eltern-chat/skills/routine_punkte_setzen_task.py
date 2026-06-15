@@ -27,6 +27,18 @@ from tasks import Proposal, WriteTask
 
 from skills import icon_album
 from skills import routine_punkte_setzen as rps_mod
+from skills._quittungen import (
+    KEINE_ICONS as _KEINE_ICONS_TMPL,
+)
+from skills._quittungen import (
+    abgelehnt as _q_abgelehnt,
+)
+from skills._quittungen import (
+    grenze as _q_grenze,
+)
+from skills._quittungen import (
+    nicht_erreichbar as _q_nicht_erreichbar,
+)
 from skills.icon_album import IconAlbumError
 from skills.routine_punkte_setzen import (
     AKTION_EINMALIG,
@@ -55,13 +67,6 @@ _QUITTUNG_GELOESCHT = (
 _QUITTUNG_NEUGEORDNET = (
     "Punkt-Reihenfolge gesetzt ({count} Einträge) — beim nächsten Öffnen "
     "des Routine-Displays in der neuen Reihenfolge sichtbar.")
-_QUITTUNG_ABGELEHNT = (
-    "Routine-Punkte setzen geht nur für Mitglieder der Familien-Gruppe.")
-_QUITTUNG_GRENZE = (
-    "Der Routine-Buddy hat die Änderung abgelehnt: {detail}")
-_QUITTUNG_NICHT_ERREICHBAR = (
-    "Der Routine-Buddy ist gerade nicht erreichbar — bitte gleich nochmal "
-    "versuchen.")
 _QUITTUNG_NICHTS_ZU_TUN_LABEL = (
     "Ich brauche einen Punkt-Namen (»Label«), um etwas anzulegen.")
 _QUITTUNG_NICHTS_ZU_TUN_IKON = (
@@ -75,14 +80,6 @@ _QUITTUNG_NICHTS_ZU_TUN_ITEMS = (
     "setzen.")
 _QUITTUNG_NICHTS_ZU_TUN_STICHWORT = (
     "Sag mir, wonach ich suchen soll, z. B. »such ein Icon für ‹Zähne›«.")
-
-# RPS-4: Icon-Suchergebnis ist die Wahl-Vorlage. Das Modell sieht die
-# Kandidaten in der Quittung und ruft den Task danach mit
-# {aktion: hinzufuegen, label, piktogramm: <id>} erneut auf (D6, analog
-# FSE-Undo via zweitem tool_use).
-_QUITTUNG_KEINE_ICONS = (
-    "Ich habe für »{label}« kein Piktogramm gefunden — sag mir ein anderes "
-    "Wort (Synonym), und ich suche erneut.")
 
 
 # ============================================================
@@ -351,7 +348,7 @@ class RoutinePunkteSetzenTask(WriteTask):
                     logger.warning(
                         "routine_punkte_setzen: Album-Senden fehlgeschlagen "
                         "— %s", e)
-                    return _QUITTUNG_NICHT_ERREICHBAR
+                    return _q_nicht_erreichbar("Routine-Buddy")
 
         return _quittung_fuer(signal, daten, aktion=aktion)
 
@@ -400,16 +397,16 @@ def _quittung_fuer(signal, daten, aktion=""):
                 "lege ich den Punkt an." % (label, mapping))
 
     if signal == rps_mod.SIGNAL_KEINE_ICONS:
-        return _QUITTUNG_KEINE_ICONS.format(label=daten.get("label", "?"))
+        return _KEINE_ICONS_TMPL.format(label=daten.get("label", "?"))
 
     if signal == rps_mod.SIGNAL_ABGELEHNT:
-        return _QUITTUNG_ABGELEHNT
+        return _q_abgelehnt("Routine-Punkte setzen")
 
     if signal == rps_mod.SIGNAL_GRENZE:
-        return _QUITTUNG_GRENZE.format(detail=daten.get("detail", ""))
+        return _q_grenze("Routine-Buddy", "die Änderung", daten.get("detail", ""))
 
     if signal == rps_mod.SIGNAL_NICHT_ERREICHBAR:
-        return _QUITTUNG_NICHT_ERREICHBAR
+        return _q_nicht_erreichbar("Routine-Buddy")
 
     # SIGNAL_NICHTS_ZU_TUN — abhängig von der Aktion eine spezifische
     # Erinnerung an die fehlende Eingabe.
