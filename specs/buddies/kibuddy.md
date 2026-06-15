@@ -395,12 +395,17 @@ einen Config-Override (Familie kann auf `1.0` zurück), nicht in ein
 Codepfad-Sondergetue.
 
 Die Synthese läuft **synchron** im selben Request wie LLM (KIBUDDY-13).
-Das Audio wird als `audio/mpeg` im Response-Body neben der Text-Antwort
-zurückgegeben (Form: JSON mit `text` + Base64-Audio, oder Multipart —
-in F3-Design konkret entschieden). Der Client spielt das Audio direkt nach
-Empfang ab — **synchron zum Render-Beginn** der Text-Antwort (parallel,
-nicht nacheinander; das Kind sieht den Text aufgebaut werden und hört
-gleichzeitig die Stimme).
+Das fertige Audio wird in einem **TTS-Audio-Cache** abgelegt (Disk unter
+`<data>/audio/<id>.mp3`, `<id>` = SHA-Hash über `(text, stimme, speed)`,
+also content-adressiert und automatisch dedupliziert). Die Frage-Response
+liefert nur die URL `/api/v1/kibuddy/audio/<id>.mp3` (siehe KIBUDDY-24).
+Der Cache ist **nicht persistent** über Service-Neustart hinaus (analog
+KIBUDDY-16 Session-Memory): beim systemd-Start wird das Verzeichnis
+geleert. Bei Reset (KIBUDDY-29) werden ebenfalls alle Cache-Einträge
+gelöscht. LRU/TTL ist V2 (OPEN-KIBUDDY-K). Der Client spielt das Audio
+direkt nach Empfang über `<audio src="…">` ab — **synchron zum Render-
+Beginn** der Text-Antwort (parallel, nicht nacheinander; das Kind sieht
+den Text aufgebaut werden und hört gleichzeitig die Stimme).
 
 **Lego-Punkt:** der TTS-Adapter trägt **denselben Provider-Schnitt** wie
 der Hörspiel-Buddy-TTS-Adapter (HSP-13). Die Wiederholung ist V1-bewusst
@@ -485,7 +490,7 @@ Interface-first).
 |---|---|---|---|
 | `GET` | `/display/kibuddy/frage` | Frage-View | Display-Client |
 | `POST` | `/api/v1/kibuddy/frage` | Audio rein → Text+Audio raus | Frage-View (clientseitig) |
-| `GET` | `/api/v1/kibuddy/audio/<id>.mp3` | MP3-Datei aus TTS-Audio-Cache (KIBUDDY-24) | Frage-View (Vorlese-Knopf, KIBUDDY-31) |
+| `GET` | `/api/v1/kibuddy/audio/<id>.mp3` | MP3-Datei aus TTS-Audio-Cache (Cache-Mechanik in KIBUDDY-20) | Frage-View (Vorlese-Knopf, KIBUDDY-31) |
 | `POST` | `/api/v1/kibuddy/vorlesen` | Text-zu-TTS für Vorlese-Knopf (KIBUDDY-31) | Frage-View (clientseitig) |
 | `POST` | `/api/v1/kibuddy/reset` | Session-Konversation + Audio-Cache löschen (KIBUDDY-29) | Frage-View (clientseitig) |
 | `GET` | `/api/v1/kibuddy/config` | Aktuelle Config (ohne Keys) | KAQS-Skill, Diagnose |
@@ -495,15 +500,19 @@ Interface-first).
 
 **POST `/api/v1/kibuddy/frage`** — Multipart-Form mit `audio` (Browser-
 Container, WebM/Opus oder MP4). Response: JSON `{ text: "<antwort>",
-transkript: "<eltern-debug-sicht der STT-Erkennung>", words: [{ text:
+transkript: "<STT-Erkennung des Kind-Inputs>", words: [{ text:
 "<wort>", is_inhaltswort: true|false }], tts_audio_url:
-"/api/v1/kibuddy/audio/<id>.mp3" | null }`. `tts_audio_url` ist `null`,
-wenn TTS-Synthese fehlschlägt (Resilienz: das Kind sieht zumindest die
-Text-Antwort). Die `words[]`-Liste enthält nur `text` + `is_inhaltswort` —
-clientseitige Icon-Lookup läuft parallel über ICONS-7 pro Inhaltswort
-(KIBUDDY-17, Stück B). URL-Form ermöglicht Browser-Cache + Replay über
-KIBUDDY-31 ohne JS-State-Bloat im Chat-Verlauf (KIBUDDY-19); analog
-Hörspiel-Folgen-URLs.
+"/api/v1/kibuddy/audio/<id>.mp3" | null }`. `transkript` ist ein
+**Diagnose-Feld** (Eltern können das Erkannte in Server-Logs / Browser-
+Devtools nachsehen, falls eine Frage falsch verstanden wurde); die View
+rendert es **nicht** als eigene Bubble (die Kind-Bubble nutzt die nach
+Wortklassen-Filter aufbereitete Wort-Liste, KIBUDDY-19). `tts_audio_url`
+ist `null`, wenn TTS-Synthese fehlschlägt (Resilienz: das Kind sieht
+zumindest die Text-Antwort). Die `words[]`-Liste enthält nur `text` +
+`is_inhaltswort` — clientseitiges Icon-Lookup läuft parallel über
+ICONS-7 pro Inhaltswort (KIBUDDY-17, Stück B). URL-Form ermöglicht
+Browser-Cache + Replay über KIBUDDY-31 ohne JS-State-Bloat im Chat-
+Verlauf (KIBUDDY-19); analog Hörspiel-Folgen-URLs.
 
 **PUT `/api/v1/kibuddy/config`** — JSON-Body, schreibt das spezifizierte
 Feld in die Per-Instanz-`config.json`. V1 akzeptiert nur das Feld
