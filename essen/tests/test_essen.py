@@ -20,7 +20,8 @@ from essen import katalog as katalog_mod  # noqa: E402, I001
 from essen import main as main_mod  # noqa: E402
 from essen import render as render_mod  # noqa: E402
 from essen import store as store_mod  # noqa: E402
-from essen.photo_client import EssenPhotoClient  # noqa: E402
+# T814: EssenPhotoClient-Import entfällt — Validierung läuft seit ESSEN-22 V1.2
+# über tools.medien_store gegen den lokalen Essen-Fotos-Index (siehe Stub unten).
 
 
 # ============================================================
@@ -976,36 +977,21 @@ def test_healthz_gibt_200(client):
 # Test-Naht über transport=-Injection (CLIENT-1): FakeTransport liefert
 # (status, bytes) je nach bekannter ID-Menge.
 
-class _FakeTransport:
-    """In-Process-Stub für EssenPhotoClient._call (CLIENT-1-Signatur)."""
-
-    def __init__(self, known_ids=None):
-        self._known_ids = known_ids  # None = alle IDs gültig
-
-    def __call__(self, method, path, *, body=None, content_type=None):
-        # Pfad-Format: /api/v1/photo/medien/<id>
-        medien_id = path.rsplit("/", 1)[-1]
-        if self._known_ids is None or medien_id in self._known_ids:
-            return (200, b'{"id": "%s"}' % medien_id.encode())
-        return (404, b'{"error": "nicht gefunden"}')
-
-
 def _set_photo_stub(monkeypatch, known_ids=None):
-    """Monkeypatcht EssenPhotoClient im main-Modul für netzfreie Tests.
+    """Monkeypatcht den essen-Foto-Index-Lookup im main-Modul (T814).
 
-    known_ids: Menge gültiger Medien-IDs. Alle anderen → 404.
-    None = alle IDs gültig.
+    Nach Welle 2 (T808 / #804) liegen Essens-Fotos im Essen-Buddy selbst;
+    `_foto_ref_existiert` ruft `medien_store.load(verzeichnis)` und prüft
+    auf Vorkommen der ID. Der Stub ersetzt `_foto_ref_existiert` direkt
+    (Test-Naht — vermeidet das Anlegen einer echten essen/fotos/-Datei).
 
-    Test-Naht über transport=-Injection: EssenPhotoClient wird durch eine
-    Klasse ersetzt, deren Konstruktor einen FakeTransport nutzt (CLIENT-1).
+    known_ids: Menge gültiger Medien-IDs. None = alle IDs gültig.
     """
-    transport = _FakeTransport(known_ids)
-
-    class _FakeClient(EssenPhotoClient):
-        def __init__(self, base_url, **kwargs):
-            super().__init__(base_url, transport=transport)
-
-    monkeypatch.setattr(main_mod, "EssenPhotoClient", _FakeClient)
+    if known_ids is None:
+        monkeypatch.setattr(main_mod, "_foto_ref_existiert", lambda _ref: True)
+    else:
+        ids = set(known_ids)
+        monkeypatch.setattr(main_mod, "_foto_ref_existiert", lambda ref: ref in ids)
 
 
 def test_essen19_foto_ref_legt_gericht_an(client, monkeypatch):

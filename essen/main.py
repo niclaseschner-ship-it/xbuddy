@@ -319,17 +319,23 @@ def _valide_bild_ref(bild_ref):
 
 
 def _foto_ref_existiert(foto_ref):
-    """Prüft, ob foto_ref im Photo-Buddy existiert (ESSEN-19/19a, ESSEN-22).
+    """Prüft, ob foto_ref im Essen-Buddy-Foto-Index existiert (ESSEN-19/19a, V1.2).
 
-    Baut einen EssenPhotoClient und ruft medium_existiert() auf (CLIENT-1).
-    Test-Naht: `EssenPhotoClient` im Modul-Namespace per monkeypatch ersetzbar.
-    Bei Netzwerkfehler → False (kein Exception-Durchbruch an Endpoint).
+    Lookup gegen `tools.medien_store.load(cfg.fotos_verzeichnis)`. Nach Welle 2
+    (T808/#804) liegen Essens-Fotos im Essen-Buddy selbst — kein Cross-Buddy-
+    Call mehr. Test-Naht: `medien_store.load` im Modul-Namespace per monkeypatch
+    ersetzbar.
+    Bei Fehler (Verzeichnis fehlt o. ä.) → False (kein Exception-Durchbruch).
     """
-    client = EssenPhotoClient(config_mod.photo_buddy_url())
-    try:
-        return client.medium_existiert(foto_ref)
-    except EssenPhotoClientError:
+    paths = _paths()
+    verzeichnis = paths.get("fotos_verzeichnis")
+    if not verzeichnis:
         return False
+    try:
+        medien = medien_store.load(verzeichnis)
+    except Exception:
+        return False
+    return any(m.id == foto_ref for m in medien)
 
 
 def _parse_bool_query(wert):
