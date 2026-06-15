@@ -25,7 +25,7 @@ import logging
 import os
 import sys
 
-from flask import Flask, jsonify, make_response, render_template, request, send_from_directory
+from flask import Flask, g, jsonify, render_template, request, send_from_directory
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
@@ -76,17 +76,15 @@ def configure(
     llm=None,
     stt_engine=None,
     tts_engine=None,
-    session_memory=None,       # Petraltet: wird als Session für sid="__test__" registriert
-    session_registry=None,     # Direkte Registry-Injection (neue Test-Naht)
+    session_registry=None,     # Registry-Injection (Test-Naht, KIBUDDY-16)
 ) -> None:
     """Setzt Konfiguration und Adapter-Fabriken (Test-Naht).
 
     `llm_factory(cfg) -> LLMProvider` baut den Provider.
     In Tests bleibt `llm_factory=None` und `llm=` wird direkt gesetzt.
 
-    `session_memory` (SessionMemory) ist die alte Test-Naht — wird intern in
-    eine Registry mit fester SID "__test__" gewrappt. Verwende lieber
-    `session_registry` direkt für neue Tests.
+    `session_registry` (SessionRegistry) ist die Test-Naht — erlaubt Injection
+    einer vorbereiteten Registry mit fest gesetzten SIDs via Cookie.
     """
     runtime["runtime_config"] = runtime_config
     runtime["data_root"] = data_root
@@ -94,20 +92,7 @@ def configure(
     runtime["llm"] = llm
     runtime["stt_engine"] = stt_engine
     runtime["tts_engine"] = tts_engine
-
-    if session_registry is not None:
-        runtime["session_registry"] = session_registry
-    elif session_memory is not None:
-        # Alte Test-Naht: Wrap SessionMemory in Registry unter fester SID.
-        reg = SessionRegistry()
-        reg._sessions[_TEST_SID] = session_memory
-        runtime["session_registry"] = reg
-    else:
-        runtime["session_registry"] = SessionRegistry()
-
-
-# Feste SID für Test-Client ohne Cookie-Support (alte Naht).
-_TEST_SID = "__test__"
+    runtime["session_registry"] = session_registry if session_registry is not None else SessionRegistry()
 
 
 def _runtime_cfg():
@@ -147,25 +132,19 @@ def _registry() -> SessionRegistry:
     return runtime["session_registry"]
 
 
-def _get_or_create_session() -> tuple[str, SessionMemory, bool]:
-    """Liest kibuddy_sid-Cookie oder erzeugt eine neue SID.
+def _get_or_create_session() -> tuple[str, SessionMemory]:
+    """Liest kibuddy_sid-Cookie oder erzeugt eine neue SID (KIBUDDY-16).
 
-    Gibt (sid, memory, is_new) zurück.
-    is_new=True bedeutet, der Cookie muss noch gesetzt werden.
+    Gibt (sid, memory) zurück.
+    Wenn kein Cookie da war, wird g._kibuddy_new_sid gesetzt — der
+    after_request-Hook setzt dann den Cookie konsistent für alle Endpunkte.
     """
     registry = _registry()
-
-    # Test-Client-Erkennung: wenn Registry nur _TEST_SID hat und kein Cookie.
     sid = request.cookies.get(SID_COOKIE)
     if sid is None:
-        if _TEST_SID in registry._sessions:
-            # Alte Naht: Test-Client ohne Cookie → _TEST_SID
-            return _TEST_SID, registry.get_or_create(_TEST_SID), False
-        # Echter Browser: neue SID anlegen.
-        new_sid = registry.new_sid()
-        return new_sid, registry.get_or_create(new_sid), True
-
-    return sid, registry.get_or_create(sid), False
+        sid = registry.new_sid()
+        g._kibuddy_new_sid = sid  # Signal für after_request-Hook (FIX-5)
+    return sid, registry.get_or_create(sid)
 
 
 # ============================================================
@@ -173,6 +152,24 @@ def _get_or_create_session() -> tuple[str, SessionMemory, bool]:
 # ============================================================
 
 app = Flask(__name__, template_folder="templates", static_url_path="/display/kibuddy/static")
+
+
+@app.after_request
+def _set_session_cookie(response):
+    """Setzt kibuddy_sid-Cookie wenn in diesem Request eine neue SID erzeugt wurde (FIX-5).
+
+    Gilt für ALLE Endpunkte — kein Phantom-Session-Leak bei /reset-zuerst-Pattern.
+    """
+    new_sid = getattr(g, "_kibuddy_new_sid", None)
+    if new_sid is not None:
+        response.set_cookie(
+            SID_COOKIE,
+            new_sid,
+            httponly=True,
+            samesite="Lax",
+            path="/",
+        )
+    return response
 
 
 # ---- Health-Check (SVC-1) ----
@@ -225,7 +222,7 @@ def frage():
     filename = audio_file_obj.filename or "audio.webm"
 
     # Session-Memory via Cookie (KIBUDDY-16).
-    sid, memory, is_new_sid = _get_or_create_session()
+    _sid, memory = _get_or_create_session()
 
     # STT.
     stt = _stt()
@@ -283,19 +280,7 @@ def frage():
         "words": words_api,
         "tts_audio_url": tts_audio_url,
     }
-    resp = make_response(jsonify(response_data))
-
-    # Cookie setzen wenn neu (HttpOnly, SameSite=Lax, KIBUDDY-16).
-    if is_new_sid:
-        resp.set_cookie(
-            SID_COOKIE,
-            sid,
-            httponly=True,
-            samesite="Lax",
-            path="/",
-        )
-
-    return resp
+    return jsonify(response_data)
 
 
 # ---- Vorlesen-Endpoint (KIBUDDY-24, KIBUDDY-31) ----
@@ -308,6 +293,7 @@ def vorlesen():
     Oder:  {"tts_audio_id": "<id>"} — Audio-Replay aus Cache.
     Response: {"tts_audio_url": "<pfad>"}
     """
+    _get_or_create_session()  # Cookie konsistent setzen (FIX-5, KIBUDDY-16)
     body = request.get_json(silent=True) or {}
     cfg = _runtime_cfg()
     tts = _tts()
@@ -352,7 +338,7 @@ def reset():
     Die Session-History wird geleert (reset()); die SID bleibt aktiv.
     Audio-Cache bleibt global (per content-Hash dedupliziert, OPEN-KIBUDDY-K).
     """
-    sid, memory, _is_new = _get_or_create_session()
+    sid, memory = _get_or_create_session()
     turn_count = len(memory)
     memory.reset()
     audio_count = tts_service.clear_audio_cache(_data_root())
@@ -364,6 +350,7 @@ def reset():
 
 @app.route("/api/v1/kibuddy/config", methods=["GET", "PUT"])
 def config_endpoint():
+    _get_or_create_session()  # Cookie konsistent setzen (FIX-5, KIBUDDY-16)
     cfg = _runtime_cfg()
     if cfg is None:
         return jsonify({"fehler": "runtime-config nicht geladen"}), 503
@@ -388,6 +375,7 @@ def config_endpoint():
 @app.route("/api/v1/kibuddy/prompt", methods=["GET"])
 def prompt_get():
     """Liest den aktuell wirksamen System-Prompt (KIBUDDY-15/24)."""
+    _get_or_create_session()  # Cookie konsistent setzen (FIX-5, KIBUDDY-16)
     path = data_io.prompt_path(_data_root())
     text = data_io.read_text_or_empty(path)
     if not text.strip():
@@ -411,6 +399,7 @@ def prompt_get():
 @app.route("/api/v1/kibuddy/prompt", methods=["PUT"])
 def prompt_put():
     """Schreibt neuen System-Prompt atomar (KIBUDDY-15/24)."""
+    _get_or_create_session()  # Cookie konsistent setzen (FIX-5, KIBUDDY-16)
     body = request.get_json(silent=True) or {}
     neuer_prompt = body.get("prompt", "")
     if not isinstance(neuer_prompt, str) or not neuer_prompt.strip():
@@ -507,6 +496,12 @@ def main(argv=None):
     )
     os.makedirs(data_root, exist_ok=True)
     os.makedirs(data_io.audio_dir(data_root), exist_ok=True)
+
+    # KIBUDDY-20: Audio-Cache beim Service-Start leeren.
+    tts_service.clear_audio_cache_dir(data_root)
+
+    # KIBUDDY-17.3: Funktionswort-Override einmalig beim Start laden (befüllt Modul-Cache).
+    icon_render.load_stop_words(data_root=data_root)
 
     configure(
         runtime_config=runtime_cfg,

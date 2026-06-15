@@ -2,7 +2,6 @@
 
 
 from kibuddy.icon_render import (
-    STOP_WORDS_DE,
     _reset_stop_words_cache,
     load_stop_words,
     tokenisiere,
@@ -15,28 +14,32 @@ from kibuddy.icon_render import (
 
 
 def test_stop_words_enthalten_artikel():
+    words = load_stop_words()
     for wort in ("der", "die", "das", "ein", "eine"):
-        assert wort in STOP_WORDS_DE, "%r fehlt in STOP_WORDS_DE" % wort
+        assert wort in words, "%r fehlt in load_stop_words()" % wort
 
 
 def test_stop_words_enthalten_hilfsverben():
+    words = load_stop_words()
     for wort in ("haben", "ist", "wird", "kann", "muss"):
-        assert wort in STOP_WORDS_DE
+        assert wort in words
 
 
 def test_stop_words_enthalten_praepostitionen():
+    words = load_stop_words()
     for wort in ("in", "an", "auf", "von", "zu", "bei", "mit"):
-        assert wort in STOP_WORDS_DE
+        assert wort in words
 
 
 def test_stop_words_enthalten_konjunktionen():
+    words = load_stop_words()
     for wort in ("und", "oder", "aber", "weil", "dass", "wenn"):
-        assert wort in STOP_WORDS_DE
+        assert wort in words
 
 
 def test_stop_words_min_150():
     """KIBUDDY-17 verlangt ~150 deutsche Funktionswörter."""
-    assert len(STOP_WORDS_DE) >= 150
+    assert len(load_stop_words()) >= 150
 
 
 # ============================================================
@@ -155,3 +158,29 @@ def test_worte_zu_words_api_kein_urllib_call(monkeypatch):
     monkeypatch.setattr(urllib.request, "urlopen", _fail)
     # Dieser Aufruf darf keinen urllib-Call machen.
     worte_zu_words_api("Der Hund bellt.")
+
+
+# ============================================================
+#  FIX-1: Override-Datei wirkt im Live-Pfad (KIBUDDY-17.3)
+# ============================================================
+
+
+def test_stop_words_override_wirkt_im_live_pfad(tmp_path):
+    """FIX-1: load_stop_words(data_root) mit Override-Datei wirkt auf tokenisiere().
+
+    Prüft, dass ein Wort aus der Override-Datei als Funktionswort klassifiziert
+    wird — das ist der Pfad, den main() beim Service-Start beschreitet.
+    """
+    _reset_stop_words_cache()
+    override = tmp_path / "funktionswort-liste.txt"
+    override.write_text("quassel\nplapper\n", encoding="utf-8")
+
+    words = load_stop_words(data_root=tmp_path)
+    assert "quassel" in words
+
+    # worte_zu_words_api nutzt denselben Modul-Cache.
+    api = worte_zu_words_api("quassel")
+    fw = next(w for w in api if w["text"] == "quassel")
+    assert fw["is_inhaltswort"] is False
+
+    _reset_stop_words_cache()

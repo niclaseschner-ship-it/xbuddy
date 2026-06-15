@@ -1,10 +1,11 @@
-"""Test-Suite für kibuddy/tts/azure.py (KIBUDDY-20, KIBUDDY-28)."""
+"""Test-Suite für kibuddy/tts/azure.py + tts_service (KIBUDDY-20, KIBUDDY-28)."""
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from kibuddy.tts.azure import TTSError
+from kibuddy.tts_service import clear_audio_cache_dir
 
 
 def test_azure_tts_happy_path():
@@ -66,3 +67,35 @@ def test_azure_tts_error_on_exception():
         engine = AzureTTSEngine(endpoint="https://x", api_key="k")
         with pytest.raises(TTSError):
             engine.synthese(text="x", voice="onyx")
+
+
+# ============================================================
+#  FIX-2: Audio-Cache wird beim Service-Start geleert (KIBUDDY-20)
+# ============================================================
+
+
+def test_clear_audio_cache_dir_loescht_mp3s(tmp_path):
+    """FIX-2: clear_audio_cache_dir löscht alle MP3-Dateien und lässt audio/-Ordner bestehen."""
+    audio_dir = tmp_path / "audio"
+    audio_dir.mkdir()
+    dummy_a = audio_dir / "aaa.mp3"
+    dummy_b = audio_dir / "bbb.mp3"
+    dummy_a.write_bytes(b"ID3FAKE_A")
+    dummy_b.write_bytes(b"ID3FAKE_B")
+
+    assert dummy_a.exists()
+    assert dummy_b.exists()
+
+    clear_audio_cache_dir(str(tmp_path))
+
+    # Dateien weg, Ordner noch da.
+    assert not dummy_a.exists()
+    assert not dummy_b.exists()
+    assert audio_dir.exists()
+
+
+def test_clear_audio_cache_dir_kein_audio_ordner(tmp_path):
+    """clear_audio_cache_dir ohne vorhandenen audio/-Ordner wirft keinen Fehler."""
+    # audio/ existiert nicht — kein Crash.
+    clear_audio_cache_dir(str(tmp_path))
+    assert (tmp_path / "audio").exists()  # Ordner wird neu angelegt.

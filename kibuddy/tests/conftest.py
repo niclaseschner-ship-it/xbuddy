@@ -16,7 +16,7 @@ if _REPO_ROOT not in sys.path:
 from kibuddy import config as config_mod  # noqa: E402
 from kibuddy import main as main_mod  # noqa: E402
 from kibuddy.providers.base import LLMProvider, ProviderError  # noqa: E402
-from kibuddy.session_memory import SessionMemory  # noqa: E402
+from kibuddy.session_memory import SID_COOKIE, SessionMemory, SessionRegistry  # noqa: E402
 from kibuddy.stt.azure_whisper import STTError  # noqa: E402
 from kibuddy.tts.azure import TTSError  # noqa: E402
 
@@ -135,6 +135,9 @@ def fake_tts():
     return FakeTTSEngine()
 
 
+_TEST_CLIENT_SID = "test-client-sid"  # Feste Cookie-SID für Standard-Test-Client (FIX-3)
+
+
 @pytest.fixture
 def session_memory():
     return SessionMemory()
@@ -142,21 +145,30 @@ def session_memory():
 
 @pytest.fixture
 def client(runtime_config, data_root, fake_llm, fake_stt, fake_tts, session_memory):
+    """Standard-Test-Client mit fester Cookie-SID (FIX-3, KIBUDDY-16).
+
+    Injiziert eine SessionRegistry mit der fest gesetzten SID _TEST_CLIENT_SID,
+    die auf die übergebene session_memory-Instanz zeigt. Der Test-Client sendet
+    diesen Cookie mit jedem Request — kein _TEST_SID-Sentinel mehr.
+    """
+    registry = SessionRegistry()
+    registry._sessions[_TEST_CLIENT_SID] = session_memory
     main_mod.configure(
         runtime_config=runtime_config,
         data_root=data_root,
         llm=fake_llm,
         stt_engine=fake_stt,
         tts_engine=fake_tts,
-        session_memory=session_memory,
-        # icons_base_url entfernt — Icon-Lookup ist clientseitig (KIBUDDY-17 FIX1)
+        session_registry=registry,
     )
-    return main_mod.app.test_client()
+    tc = main_mod.app.test_client()
+    tc.set_cookie(SID_COOKIE, _TEST_CLIENT_SID)
+    return tc
 
 
 @pytest.fixture
 def client_no_keys(data_root, session_memory):
-    """Test-Client ohne Azure-/Anthropic-Key → 503 auf Adapter-Calls."""
+    """Test-Client ohne Azure-/Anthropic-Key → 503 auf Adapter-Calls (FIX-3)."""
     cfg = config_mod.RuntimeConfig(
         listen_host="127.0.0.1",
         listen_port=5054,
@@ -177,6 +189,8 @@ def client_no_keys(data_root, session_memory):
         azure_key=None,
         azure_api_version="2024-10-01-preview",
     )
+    registry = SessionRegistry()
+    registry._sessions[_TEST_CLIENT_SID] = session_memory
     main_mod.configure(
         runtime_config=cfg,
         data_root=data_root,
@@ -184,6 +198,8 @@ def client_no_keys(data_root, session_memory):
         llm_factory=None,
         stt_engine=None,
         tts_engine=None,
-        session_memory=session_memory,
+        session_registry=registry,
     )
-    return main_mod.app.test_client()
+    tc = main_mod.app.test_client()
+    tc.set_cookie(SID_COOKIE, _TEST_CLIENT_SID)
+    return tc
