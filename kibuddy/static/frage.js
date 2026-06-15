@@ -4,7 +4,7 @@
  * Abgedeckte Spec-Punkte:
  *   KIBUDDY-5..11  Push-to-Talk (Tap-Hold, Slide-Lock, Slide-Cancel, Pegel)
  *   KIBUDDY-13     NDJSON-Stream-Reader: Stage 1 (kind) sofort, Stage 2 (buddy) nach LLM+TTS
- *   KIBUDDY-17     Wort-fur-Wort-Render, clientseitiger Icon-Lookup (ICONS-7)
+ *   KIBUDDY-17     Buzzword-Render: 3 Buzzwords vom LLM, clientseitiger ICONS-7-Lookup (T865)
  *   KIBUDDY-19     Chat-Verlauf, Auto-Scroll, Reset
  *   KIBUDDY-24     NDJSON-Stream-Response (zwei Events: kind + buddy)
  *   KIBUDDY-29     Reset-Knopf
@@ -331,7 +331,7 @@ async function send_aufnahme(chunks, mimeType) {
             turnEl.className = "turn";
             $chat.appendChild(turnEl);
           }
-          await renderBuddyBubble(turnEl, event.text, event.words, event.tts_audio_url);
+          await renderBuddyBubble(turnEl, event.text, event.buzzwords, event.tts_audio_url);
           $chat.scrollTop = $chat.scrollHeight;
 
           if (event.tts_audio_url) {
@@ -356,9 +356,9 @@ async function send_aufnahme(chunks, mimeType) {
 }
 
 /**
- * Rendert Kind-Bubble (Stage 1) in den uebergebenen Turn-Container (KIBUDDY-13/19).
- * transkript: STT-Text.
- * transkript_words: [{text, is_inhaltswort}].
+ * Rendert Kind-Bubble (Stage 1) in den uebergebenen Turn-Container.
+ * KIBUDDY-19/Option-C (T865): text-only, kein Icon-Render.
+ * transkript_words[] wird vom Backend als Diagnose-Feld geliefert, aber hier ignoriert.
  */
 async function renderKindBubble(turnEl, transkript, transkript_words) {
   const kindRow = document.createElement("div");
@@ -367,14 +367,11 @@ async function renderKindBubble(turnEl, transkript, transkript_words) {
   const kindBubble = document.createElement("div");
   kindBubble.className = "bubble kind-bubble";
 
-  if (Array.isArray(transkript_words) && transkript_words.length > 0) {
-    const kindWortRender = await buildWortRender(transkript_words);
-    kindBubble.appendChild(kindWortRender);
-  } else if (transkript) {
-    const fallback = document.createElement("span");
-    fallback.textContent = transkript;
-    kindBubble.appendChild(fallback);
-  }
+  // Option C (T865): Kind-Bubble text-only (KIBUDDY-19).
+  const p = document.createElement("p");
+  p.className = "kind-frage-text";
+  p.textContent = transkript || "";
+  kindBubble.appendChild(p);
 
   // Vorlese-Knopf Kind (KIBUDDY-31)
   const vorlKind = buildVorlBtn(() => vorleseText(transkript));
@@ -384,26 +381,29 @@ async function renderKindBubble(turnEl, transkript, transkript_words) {
 }
 
 /**
- * Rendert Buddy-Bubble (Stage 2) in den uebergebenen Turn-Container (KIBUDDY-13/19).
- * text: LLM-Antwort.
- * words: [{text, is_inhaltswort}].
+ * Rendert Buddy-Bubble (Stage 2) in den uebergebenen Turn-Container.
+ * T865/KIBUDDY-17: Text als Absatz + Buzzword-Block am Ende.
+ * text: LLM-Antwort (Fließtext).
+ * buzzwords: string[] mit 3 Buzzwords vom LLM.
  * tts_audio_url: URL oder null.
  */
-async function renderBuddyBubble(turnEl, text, words, tts_audio_url) {
+async function renderBuddyBubble(turnEl, text, buzzwords, tts_audio_url) {
   const buddyRow = document.createElement("div");
   buddyRow.className = "bubble-row buddy";
 
   const buddyBubble = document.createElement("div");
   buddyBubble.className = "bubble buddy-bubble";
 
-  if (Array.isArray(words) && words.length > 0) {
-    const wortRender = await buildWortRender(words);
-    buddyBubble.appendChild(wortRender);
-  } else {
-    const textZeile = document.createElement("p");
-    textZeile.style.margin = "0";
-    textZeile.textContent = text || "";
-    buddyBubble.appendChild(textZeile);
+  // Antwort-Text als zusammenhängender Absatz (T865/KIBUDDY-17)
+  const p = document.createElement("p");
+  p.className = "buddy-antwort-text";
+  p.textContent = text || "";
+  buddyBubble.appendChild(p);
+
+  // Buzzword-Block am Ende (T865/KIBUDDY-17 — 3 Icons via ICONS-7-Lookup)
+  if (Array.isArray(buzzwords) && buzzwords.length > 0) {
+    const buzzBlock = await buildBuzzwordBlock(buzzwords);
+    buddyBubble.appendChild(buzzBlock);
   }
 
   // Vorlese-Knopf Buddy (KIBUDDY-31)
@@ -415,85 +415,46 @@ async function renderBuddyBubble(turnEl, text, words, tts_audio_url) {
 }
 
 // ============================================================
-//  Chat-Render (KIBUDDY-17/19/31)
+//  Chat-Render (KIBUDDY-17/19/31, T865 Buzzword-Render)
 // ============================================================
 // renderKindBubble() und renderBuddyBubble() sind Teil von send_aufnahme() (KIBUDDY-13/24).
 
 /**
- * Baut das Wort-für-Wort Render-Element (KIBUDDY-17).
- * Für Inhaltswörter: parallel fetch /api/v1/icons/suche → Icon darunter.
- * Für Funktionswörter: nur Text ohne Icon-Slot.
+ * Baut den Buzzword-Block mit 3 Icon-Karten (T865/KIBUDDY-17).
+ * Parallel ICONS-7-Lookup fuer alle Buzzwords (Promise.all).
+ * buzzwords: string[] — max 3 Wörter vom LLM.
+ * Gibt ein <div class="buzzword-block"> zurück (Icons werden async eingefügt).
  */
-async function buildWortRender(words) {
-  const container = document.createElement("div");
-  container.className = "wort-render";
+async function buildBuzzwordBlock(buzzwords) {
+  const block = document.createElement("div");
+  block.className = "buzzword-block";
 
-  // Inhaltswörter parallel fetchen (KIBUDDY-17 Schritt 4)
-  const inhaltIndizes = words
-    .map((w, i) => (w.is_inhaltswort ? i : -1))
-    .filter(i => i >= 0);
+  // Parallel fetch (KIBUDDY-17 "parallel, kein Wort-für-Wort-Serial")
+  const iconUrls = await Promise.all(buzzwords.map(w => fetchIcon(w)));
 
-  // Promise.all parallel fetch (KIBUDDY-17 "parallel, kein Wort-für-Wort-Serial")
-  const iconResults = await Promise.all(
-    inhaltIndizes.map(idx => fetchIcon(words[idx].text))
-  );
-  const iconMap = {};
-  inhaltIndizes.forEach((idx, pos) => {
-    iconMap[idx] = iconResults[pos]; // null wenn kein Treffer
-  });
+  buzzwords.forEach((wort, i) => {
+    const item = document.createElement("div");
+    item.className = "buzzword-item";
 
-  words.forEach((wort, idx) => {
-    const text = wort.text || "";
-    if (!text) return;
-
-    // Prüfe ob Satzzeichen am Ende (KIBUDDY-17 Punkt 7)
-    const satzzeichen = text.match(/[.!?,;:]$/);
-    const wortKern = satzzeichen ? text.slice(0, -1) : text;
-
-    if (wort.is_inhaltswort) {
-      // Inhaltswort-Slot (KIBUDDY-17 Punkt 5/6)
-      const slot = document.createElement("div");
-      slot.className = "wort-slot";
-
-      const icoReserve = document.createElement("div");
-      icoReserve.className = "icon-reserve";
-
-      const icoUrl = iconMap[idx];
-      if (icoUrl) {
-        const img = document.createElement("img");
-        img.src = icoUrl;
-        img.alt = wortKern;
-        img.loading = "lazy";
-        // KIBUDDY-30: Vollfarbe, KEIN filter
-        icoReserve.appendChild(img);
-      }
-      slot.appendChild(icoReserve);
-
-      const wortText = document.createElement("span");
-      wortText.className = "wort-text";
-      wortText.textContent = wortKern;
-      slot.appendChild(wortText);
-
-      if (satzzeichen) {
-        const sz = document.createElement("span");
-        sz.className = "wort-satz";
-        sz.textContent = satzzeichen[0];
-        container.appendChild(slot);
-        container.appendChild(sz);
-      } else {
-        container.appendChild(slot);
-      }
-
-    } else {
-      // Funktionswort — nur Text, kein Icon-Slot (KIBUDDY-17 Punkt 6a)
-      const span = document.createElement("span");
-      span.className = "wort-funk";
-      span.textContent = text;
-      container.appendChild(span);
+    const icoUrl = iconUrls[i];
+    if (icoUrl) {
+      const img = document.createElement("img");
+      img.src = icoUrl;
+      img.alt = wort;
+      img.loading = "lazy";
+      // KIBUDDY-30: Vollfarbe, KEIN filter
+      item.appendChild(img);
     }
+
+    const lbl = document.createElement("div");
+    lbl.className = "buzzword-label";
+    lbl.textContent = wort;
+    item.appendChild(lbl);
+
+    block.appendChild(item);
   });
 
-  return container;
+  return block;
 }
 
 /**
