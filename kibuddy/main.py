@@ -254,6 +254,8 @@ def frage():
         return jsonify({"fehler": "llm-provider nicht erreichbar: %s" % e}), 503
 
     # Tokenisierung + Wortklassen-Filter (clientseitiger Icon-Lookup, KIBUDDY-17).
+    # transkript_words: gleicher Tokenizer wie words[] — für Kind-Bubble (KIBUDDY-19).
+    transkript_words_api = icon_render.worte_zu_words_api(frage_text)
     words_api = icon_render.worte_zu_words_api(antwort_text)
 
     # TTS (Resilienz: Fehler → tts_audio_url: null, KIBUDDY-24).
@@ -277,6 +279,7 @@ def frage():
     response_data = {
         "text": antwort_text,
         "transkript": frage_text,
+        "transkript_words": transkript_words_api,
         "words": words_api,
         "tts_audio_url": tts_audio_url,
     }

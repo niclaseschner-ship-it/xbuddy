@@ -1,0 +1,484 @@
+/* KIBuddy Frage-View — KIBUDDY-2..11, -19, -27, -29, -30, -31
+   Touch-Display, Kiosk-Modus, stage=toddler.
+   Keine filter:brightness/invert (KIBUDDY-30). */
+
+/* ── Reset / Base ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0;
+  width: 100%; height: 100%;
+  /* KIBUDDY-19: Seite selbst scrollt NICHT */
+  overflow: hidden;
+  background: #f0f7f0;
+  touch-action: none; /* verhindern, dass Swipe die Seite scrollt */
+}
+
+body.xb[data-stage="toddler"] {
+  font-family: "Caveat", "Comic Sans MS", cursive, sans-serif;
+  color: #1a2e1a;
+}
+
+/* ── Shell-Grid ─────────────────────────────────────────────── */
+.shell {
+  width: 100%;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  grid-template-areas:
+    "topbar"
+    "chat"
+    "ptt"
+    "footer";
+  gap: 0;
+  overflow: hidden;
+}
+
+/* ── TOPBAR (KIBUDDY-29) ────────────────────────────────────── */
+.topbar {
+  grid-area: topbar;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px 8px;
+  background: #e8f4e8;
+  border-bottom: 2px solid #c5ddc5;
+  min-height: 64px;
+}
+
+.topbar-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1a4d1a;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.topbar-status {
+  flex: 1;
+  font-size: 18px;
+  color: #3a6b3a;
+  text-align: center;
+  padding: 0 8px;
+}
+
+/* KIBUDDY-29: Reset-Knopf — oben rechts, immer sichtbar, Vollfarbe */
+.btn-reset {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px 8px 10px;
+  border: 2px solid #8b4513;
+  border-radius: 40px;
+  background: #fff8f0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  color: #6b2d0a;
+  flex-shrink: 0;
+  touch-action: manipulation;
+  box-shadow: 0 2px 6px rgba(139, 69, 19, 0.25);
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.btn-reset:active {
+  transform: scale(0.95);
+  box-shadow: 0 1px 3px rgba(139, 69, 19, 0.2);
+}
+
+/* KIBUDDY-30: Vollfarbe, KEIN filter:brightness/invert */
+.btn-reset img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+}
+
+/* ── CHAT-AREA (KIBUDDY-19) ─────────────────────────────────── */
+.chat-area {
+  grid-area: chat;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 12px 4px;
+  min-height: 0;
+}
+
+/* KIBUDDY-19: scrollender Container, Seite scrollt nicht */
+.chat {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 4px 8px;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Mikro-Fehler-Hinweis (KIBUDDY-6) */
+.mikro-fehler {
+  background: #fff3cd;
+  border: 2px solid #ffba00;
+  border-radius: 16px;
+  padding: 16px 20px;
+  margin: 12px 0;
+  font-size: 20px;
+  text-align: center;
+}
+.mikro-fehler-sub {
+  font-size: 16px;
+  color: #7a6000;
+  margin-top: 8px;
+}
+
+/* ── CHAT-BUBBLES (KIBUDDY-19) ───────────────────────────────── */
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* bubble-row: Bubble + Vorlese-Knopf nebeneinander (KIBUDDY-31) */
+.bubble-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* Kind-Bubble rechts (KIBUDDY-19) */
+.bubble-row.kind {
+  flex-direction: row-reverse;
+}
+
+/* Buddy-Bubble links */
+.bubble-row.buddy {
+  flex-direction: row;
+}
+
+.bubble {
+  border-radius: 20px;
+  padding: 12px 16px;
+  max-width: 80%;
+  font-size: 20px;
+  line-height: 1.4;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+/* Kind-Bubble: hellblau, rechts */
+.bubble.kind-bubble {
+  background: #dbeafe;
+  border: 2px solid #93c5fd;
+  border-bottom-right-radius: 4px;
+  text-align: right;
+}
+
+/* Buddy-Bubble: hellgrün, links */
+.bubble.buddy-bubble {
+  background: #d1fae5;
+  border: 2px solid #6ee7b7;
+  border-bottom-left-radius: 4px;
+}
+
+/* Wort-Render-Container (KIBUDDY-17) */
+.wort-render {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: flex-end;
+  padding-top: 8px;
+}
+
+/* Inhaltswort-Slot mit Icon-Reserve (KIBUDDY-17 Punkt 5/6) */
+.wort-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Icon-Reserve-Höhe für Miss-Slot — Baseline-Alignment bleibt einheitlich */
+.wort-slot .icon-reserve {
+  height: 52px; /* gleich wie img height */
+  display: flex;
+  align-items: flex-end;
+}
+
+.wort-slot img {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  display: block;
+  /* KIBUDDY-30: KEIN filter:brightness/invert — Vollfarbe */
+}
+
+.wort-slot .wort-text {
+  font-size: 17px;
+  font-weight: 600;
+  text-align: center;
+  color: #1a2e1a;
+  max-width: 64px;
+  word-break: break-word;
+  hyphens: auto;
+}
+
+/* Funktionswort — nur Text, kein Icon-Slot (KIBUDDY-17 Punkt 6a) */
+.wort-funk {
+  font-size: 18px;
+  color: #3a5a3a;
+  align-self: flex-end;
+  padding-bottom: 2px;
+  line-height: 1.3;
+}
+
+/* Satzzeichen (KIBUDDY-17 Punkt 7) */
+.wort-satz {
+  font-size: 18px;
+  color: #3a5a3a;
+  align-self: flex-end;
+  padding-bottom: 2px;
+  margin-left: -8px; /* an vorheriges Wort anschmiegen */
+}
+
+/* KIBUDDY-31: Vorlese-Knopf je Bubble */
+.btn-vorlese {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: 2px solid #6ee7b7;
+  background: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+  touch-action: manipulation;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  transition: transform 0.1s;
+}
+
+.btn-vorlese:active {
+  transform: scale(0.93);
+}
+
+/* KIBUDDY-30: Vorlese-Icon (38221) Vollfarbe */
+.btn-vorlese img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  /* KEIN filter:brightness/invert */
+}
+
+/* ── PTT-ZONE (KIBUDDY-7..11) ───────────────────────────────── */
+.ptt-zone {
+  grid-area: ptt;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 8px 16px 12px;
+  background: #f0f7f0;
+  border-top: 2px solid #c5ddc5;
+  position: relative;
+  min-height: 140px;
+}
+
+/* KIBUDDY-10: Slide-to-Lock-Hinweis */
+.lock-hinweis {
+  position: absolute;
+  top: -80px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fffbe6;
+  border: 3px solid #f6a800;
+  border-radius: 16px;
+  padding: 10px 18px;
+  box-shadow: 0 4px 16px rgba(246, 168, 0, 0.35);
+  animation: bobUp 1.2s ease-in-out infinite;
+  z-index: 20;
+}
+
+@keyframes bobUp {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(-6px); }
+}
+
+.lock-pfeil {
+  font-size: 56px;
+  line-height: 1;
+  color: #c47a00;
+}
+
+.lock-img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  /* KIBUDDY-30: Vollfarbe */
+}
+
+/* KIBUDDY-11: Cancel-Hinweis */
+.cancel-hinweis {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fdecea;
+  border: 3px solid #e53935;
+  border-radius: 16px;
+  padding: 10px 18px;
+  box-shadow: 0 4px 16px rgba(229, 57, 53, 0.3);
+  z-index: 20;
+}
+
+.cancel-img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+
+/* KIBUDDY-9: Pegel-Zeile mit PTT-Knopf in der Mitte */
+.mikro-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  width: 100%;
+}
+
+/* Pegel-Gruppen links und rechts (KIBUDDY-9) */
+.pegel-links,
+.pegel-rechts {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 80px;
+}
+
+/* Einzelner Pegel-Balken */
+.pegel-bar {
+  width: 8px;
+  border-radius: 4px;
+  background: #4ade80;
+  height: 8px; /* Dynamisch per JS gesetzt */
+  transition: height 0.04s linear;
+  min-height: 4px;
+  max-height: 72px;
+  align-self: center;
+}
+
+/* KIBUDDY-7/8: PTT-Knopf — fix in Mitte, sofortige Skalierung */
+.btn-ptt {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  border: 4px solid #22c55e;
+  background: #fff;
+  cursor: pointer;
+  touch-action: none; /* wichtig für touchmove (Slide) */
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.35);
+  transition: transform 0.05s, border-color 0.05s, box-shadow 0.05s;
+  /* KIBUDDY-8: Echo < 50 ms — kein delay */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* KIBUDDY-8: sofortiges Echo im Druck-Moment */
+.btn-ptt.aktiv {
+  transform: scale(1.06);
+  border-color: #16a34a;
+  box-shadow: 0 6px 24px rgba(22, 163, 74, 0.5);
+}
+
+/* KIBUDDY-8: Lock-Zustand */
+.btn-ptt.locked {
+  border-color: #f59e0b;
+  box-shadow: 0 6px 24px rgba(245, 158, 11, 0.45);
+}
+
+/* KIBUDDY-30: Mikro-Piktogramm 37404, Vollfarbe */
+.btn-ptt img {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  /* KEIN filter:brightness/invert */
+  pointer-events: none;
+}
+
+/* Lock-Modus: Stopp-Zeile */
+.stopp-row {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.btn-stopp {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 28px;
+  border-radius: 40px;
+  border: 3px solid #ef4444;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-family: inherit;
+  font-size: 22px;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+  box-shadow: 0 3px 12px rgba(239, 68, 68, 0.3);
+  transition: transform 0.08s;
+}
+
+.btn-stopp:active { transform: scale(0.96); }
+
+.stopp-quad {
+  font-size: 28px;
+  color: #dc2626;
+}
+
+/* Ladehinweis */
+.ladehinweis {
+  font-size: 20px;
+  color: #3a6b3a;
+  margin-top: 6px;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* ── TTS-Fehler-Hinweis (FIX4, KIBUDDY-30) ────────────────── */
+.tts-fehler-hinweis {
+  display: block;
+  font-size: 13px;
+  color: #a05000;
+  background: #fff8ee;
+  border: 1px solid #f6d07a;
+  border-radius: 8px;
+  padding: 4px 10px;
+  margin-top: 6px;
+  text-align: center;
+  /* Kein filter, kein brightness (KIBUDDY-30) */
+}
+
+/* ── FOOTER ────────────────────────────────────────────────── */
+.footer {
+  grid-area: footer;
+  padding: 4px 16px;
+  font-size: 11px;
+  color: #7a9a7a;
+  text-align: center;
+  background: #e8f4e8;
+  border-top: 1px solid #c5ddc5;
+}

@@ -184,3 +184,41 @@ def test_stop_words_override_wirkt_im_live_pfad(tmp_path):
     assert fw["is_inhaltswort"] is False
 
     _reset_stop_words_cache()
+
+
+# ============================================================
+#  transkript_words: gleicher Tokenizer-Pfad wie words[] (FIX1, KIBUDDY-19/24)
+# ============================================================
+
+
+def test_transkript_words_gleiche_form_wie_words():
+    """FIX1/KIBUDDY-24: worte_zu_words_api() produziert für transkript_words
+    dieselbe {text, is_inhaltswort}-Form wie für words[].
+
+    Der Tokenizer-Helper wird im Backend für beide Felder genutzt —
+    kein separater Code-Pfad.
+    """
+    transkript_text = "Was ist das?"
+    antwort_text = "Das ist ein Hund."
+
+    transkript_words = worte_zu_words_api(transkript_text)
+    antwort_words = worte_zu_words_api(antwort_text)
+
+    # Beide Listen sind nicht leer.
+    assert len(transkript_words) > 0
+    assert len(antwort_words) > 0
+
+    # Beide haben die gleiche Slot-Struktur.
+    for slot in transkript_words + antwort_words:
+        assert "text" in slot
+        assert "is_inhaltswort" in slot
+        assert isinstance(slot["is_inhaltswort"], bool)
+        assert "icon_id" not in slot
+
+    # "Was" ist im Transkript als Inhaltswort klassifiziert (nicht in Stop-Words).
+    was_slot = next((s for s in transkript_words if s["text"] == "Was"), None)
+    assert was_slot is not None
+    # "ist" ist Funktionswort (in Stop-Words).
+    ist_slot = next((s for s in transkript_words if s["text"] == "ist"), None)
+    assert ist_slot is not None
+    assert ist_slot["is_inhaltswort"] is False
