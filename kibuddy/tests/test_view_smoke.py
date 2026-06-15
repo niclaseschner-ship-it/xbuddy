@@ -161,26 +161,27 @@ def test_js_kein_emoji_ui_render(client):
 
 # ---- AC3: Kein Doppelrender (KIBUDDY-17) ----
 
-def test_js_buddy_bubble_kein_doppelrender(client):
-    """AC3: frage.js enthält kein Text-Duplikat zusätzlich zu words[]-Render.
-
-    Prüft, dass die Buddy-Bubble KEINE unconditional textZeile-Append-Logik
-    mehr enthält — nur bedingter Fallback wenn words[] leer.
-    """
+def test_js_buzzword_block_vorhanden(client):
+    """T865/AC3: frage.js enthält buildBuzzwordBlock (Wort-fuer-Wort-Render entfallen)."""
     resp = client.get("/display/kibuddy/static/frage.js")
     assert resp.status_code == 200
     js = resp.data.decode("utf-8")
-    # Das alte Muster: textZeile.textContent = antwort.text ohne Bedingung.
-    # Nach Fix ist textZeile NUR im else-Zweig (d.h. nach "} else {" und vor "}")
-    # — eine unbedingte Zeile "buddyBubble.appendChild(textZeile)" darf es nicht geben.
+    assert "buildBuzzwordBlock" in js, "buildBuzzwordBlock fehlt in frage.js — T865/AC3"
+    assert "buzzword-block" in js, "buzzword-block CSS-Klasse fehlt in frage.js — T865/AC3"
+    assert "buzzword-item" in js, "buzzword-item CSS-Klasse fehlt in frage.js — T865/AC3"
     assert "bubble-laden" in js, "Lade-Bubble-Klasse fehlt in frage.js"
-    # Kein unconditional textZeile direkt vor wortRender-Block
-    # (Heuristik: kein 'textZeile.textContent = antwort.text' gefolgt von wortRender-Append)
-    # Stattdessen: prüfen, dass buddyBubble.appendChild(textZeile) NUR im else-Zweig vorkommt.
-    # Wir prüfen, dass das Muster 'textZeile.style.margin = "0 0 8px 0"' nicht mehr da ist
-    # (das war die unbedingte Variante aus dem Bug).
-    assert '"0 0 8px 0"' not in js, (
-        "Buddy-Bubble: alte unconditional textZeile (margin: 0 0 8px 0) noch im JS — AC3 verletzt"
+
+
+def test_js_wort_render_entfernt(client):
+    """T865/AC3: buildWortRender ist aus frage.js entfernt."""
+    resp = client.get("/display/kibuddy/static/frage.js")
+    assert resp.status_code == 200
+    js = resp.data.decode("utf-8")
+    assert "buildWortRender" not in js, (
+        "buildWortRender ist noch in frage.js — T865 Refactor unvollständig"
+    )
+    assert "is_inhaltswort" not in js, (
+        "is_inhaltswort ist noch in frage.js — Wort-für-Wort-Render nicht entfernt (T865)"
     )
 
 

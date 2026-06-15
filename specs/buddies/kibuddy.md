@@ -281,8 +281,8 @@ vorliegt (~1–2 s), liefert der Server sofort die erste NDJSON-Zeile
 rendert die Kind-Bubble direkt daraus — ohne auf LLM zu warten.
 
 **Stage 2 (buddy):** LLM + TTS laufen danach. Wenn fertig, sendet der Server
-die zweite NDJSON-Zeile `{"event":"buddy","text":"...","words":[...],"tts_audio_url":"..."}`.
-Das Frontend rendert die Buddy-Bubble und spielt TTS-Audio ab.
+die zweite NDJSON-Zeile `{"event":"buddy","text":"...","buzzwords":[...],"tts_audio_url":"..."}`.
+Das Frontend rendert die Buddy-Bubble (Text + Buzzword-Block, KIBUDDY-17) und spielt TTS-Audio ab.
 
 **Lade-Bubble:** bleibt sichtbar zwischen Stage 1 und Stage 2, verschwindet
 erst nach Stage 2 (oder bei Fehler-Event).
@@ -344,65 +344,76 @@ LLM-Token-Historie.
 **Persistenter Verlauf** über View-Reload, Eltern-Einsicht oder per-Familien-
 Profile bleibt OPEN (siehe OPEN-Liste).
 
-## 5. Antwort-Render — Text mit Icon-unter-Wort
+## 5. Antwort-Render — Text + 3 Buzzword-Icons am Ende
 
-### KIBUDDY-17 — Render-Schicht: wort-für-wort mit Wortklassen-Filter
-Die LLM-Antwort kommt als Fließtext (1–4 Sätze laut Prompt). Die
-**Render-Schicht** tokenisiert den Text und sucht **je Wort** im
-zentralen Icon-Cache, **aber nur für Inhaltswörter**:
+### KIBUDDY-17 — Render-Schicht: Antwort-Text + 3 Buzzword-Icons am Ende
 
-1. **Tokenisierung:** Whitespace-Split + Trennung von Satz-/Frage-Zeichen.
-2. **Normalisierung:** lowercase, Strip-Trailing-Punctuation am Wort.
-3. **Wortklassen-Filter (Nic-Setzung, Iter 2 2026-06-15):** ein Wort wird
-   für Icon-Lookup nur dann zugelassen, wenn es **nicht** in der V1-
-   **Funktionswort-Liste** steht. Die Liste enthält Artikel, Pronomen,
-   Konjunktionen, Präpositionen, Hilfs-/Modalverben, Adverbien und
-   reine Partikeln — alles, was kein Nomen, kein Vollverb und kein
-   Adjektiv ist. Funktionswörter werden direkt als Text-Token gerendert
-   (siehe Schritt 6a, **kein** miss-Slot).
-   **V1-Liste in Per-Instanz-Config** (`funktionswort-liste.txt`,
-   editierbar — Default-Liste mit ~150 deutschen Funktionswörtern wird
-   mit dem Code mitgeliefert). Lemma-Liste ist V1; POS-Tagging ist V2
-   (OPEN-KIBUDDY-I). Wenn unsicher, ob ein Wort Funktionswort ist:
-   raus aus der Liste, Lookup-Versuch ist die robustere Wahl.
-4. **Icon-Lookup (nur für Inhaltswörter):** `GET /api/v1/icons/suche?q=
-   <normalisiertes-wort>&max=1` (ICONS-7).
-5. **Treffer:** Wort wird als kleine Spalte gerendert (Icon-PNG aus
-   `result[0].url` darüber, Wort darunter als Text).
-6. **Miss bei Inhaltswort:** Wort wird nur als Text gerendert mit
-   **versteckter Icon-Slot-Reserve** (Baseline-Alignment bleibt
-   einheitlich zwischen Treffer- und Miss-Inhaltswörtern).
-6a. **Funktionswort:** wird nur als Text gerendert **ohne** Icon-Slot —
-    sitzt direkt auf der Text-Baseline der Inhaltswörter und nimmt
-    keinen vertikalen Raum oberhalb ein.
-7. **Satz-Zeichen:** als kleines Text-Token am Ende des vorhergehenden
-   Wort-Slots ohne eigenen Render-Container.
+**Refactored 2026-06-15 (T865, Nic-Live-Befund Mikro-Test #3):**
+Wort-für-Wort-Filter wurde durch LLM-generierte Buzzwords ersetzt.
+Begründung: Wort-für-Wort-Filter traf oft nicht die Konzept-Bedeutung;
+Verben wurden fälschlich als Funktionswörter ausgefiltert; LLM kann
+pädagogisch passendere Buzzwords wählen als ein statischer Wortklassen-Filter.
 
-Die Render-Schicht läuft **clientseitig** in der View (JS), nicht
-serverseitig. Sie ruft `/api/v1/icons/suche` über die Browser-Fetch-API
-einmal pro Inhaltswort (parallel, kein Wort-für-Wort-Serial). Funktionswörter
-erzeugen keine Backend-Calls.
+**LLM liefert JSON-Output (System-Prompt-Pflicht):**
+Der System-Prompt enthält eine JSON-Ausgabe-Anweisung, die das LLM zwingt,
+ausschliesslich ein JSON-Objekt zurückzugeben:
+```json
+{
+  "antwort": "<deine Antwort, vollständige Sätze, 2-4 Sätze>",
+  "buzzwords": ["<wort1>", "<wort2>", "<wort3>"]
+}
+```
+Genau 3 Buzzwords, jedes ein einzelnes deutsches Wort (Substantiv/Verb/Adjektiv),
+lowercase, ohne Sonderzeichen. Kein Text ausserhalb des JSON.
 
-### KIBUDDY-18 — Icon-Lookup ist „ehrlich-Single-Wort" — keine Lemmatisierung V1
-V1 sucht reinen Substring-Match über ICONS-7 mit dem **normalisierten Wort**
-(lowercase, ohne Trailing-Punctuation). Wörter mit Flexion („läuft", „Häuser")
-treffen **bewusst** nicht das Lemma („laufen", „Haus") — Lemmatisierungs-
-Schicht ist OPEN-KIBUDDY-I. Sichtbare Folge: ein Teil der Antwort-Wörter
-hat kein Icon. Das ist V1-akzeptiert (Anti-Pikto-Zwang analog HSP-NEU).
+**Backend-Parse + Fallback:** `parse_kibuddy_response()` in `llm_service.py`
+extrahiert `antwort` und `buzzwords` aus dem JSON. Bei ungültigem JSON:
+raw-Text als `antwort`, leere `buzzwords`-Liste.
+
+**Render in der Buddy-Bubble:**
+1. Antwort-Text als zusammenhängender Absatz (`<p class="buddy-antwort-text">`).
+2. Direkt danach ein **Buzzword-Block** (`<div class="buzzword-block">`):
+   drei Karten nebeneinander, je mit ARASAAC-Pikto aus ICONS-7-Lookup
+   (`fetchIcon(wort)`) und Wort-Label darunter (`<div class="buzzword-label">`).
+
+**Icon-Lookup:** 3 parallele ICONS-7-Requests (`Promise.all`) — deutlich
+weniger Traffic als der frühere Wort-für-Wort-Lookup (0–15+ Requests).
+Miss (kein ICONS-7-Treffer) → nur Wort-Label, kein Icon-Slot (kein Crash).
+
+**Out-of-Scope V1:** animierte Buzzword-Reveal, alternative Icon-Quellen,
+Buzzword-Konfiguration durch Eltern. Folge-Tickets bei Bedarf.
+
+### KIBUDDY-18 — Icon-Lookup für Buzzwords ist „ehrlich-Single-Wort"
+V1 sucht reinen Substring-Match über ICONS-7 mit jedem der drei vom LLM
+gelieferten Buzzwords (KIBUDDY-17). Wörter mit Flexion treffen
+**bewusst** nicht das Lemma — Lemmatisierungs-Schicht ist OPEN-KIBUDDY-I.
+
+**Hinweis nach T865-Refactor (2026-06-15):** Da der System-Prompt explizit
+Grundform-Buzzwords fordert (Substantiv/Verb/Adjektiv im Singular), greift
+diese Klausel in der Praxis selten — der LLM liefert typisch schon
+lemma-nahe Buzzwords. Bleibt als Vertragsklarstellung für die Fälle, wo
+der LLM doch flektiert. Sichtbare Folge: eines der drei Buzzwords kann
+kein Icon haben (`fetchIcon(buzzword)` gibt null zurück → nur Label
+gerendert, kein `<img>`).
 
 ### KIBUDDY-19 — Chat-Verlauf-Container, Scroll innen, Reset löscht alles
 Der Chat-Verlauf lebt in einem **eigenen scrollenden Container** in der
 Mitte der View — die **Seite selbst scrollt nicht** (`html, body {
 overflow: hidden }`), nur der Chat-Container (`.chat { overflow-y: auto }`).
 Jeder Turn besteht aus:
-- einer **Kind-Bubble** (rechts ausgerichtet, mit STT-Transkript der Kind-
-  Frage **gerendert nach KIBUDDY-17** — also wort-für-wort mit Icon für
-  Inhaltswörter, gleicher Filter wie die Buddy-Bubble), und
-- einer **Buddy-Bubble** (links ausgerichtet, mit dem gerenderten Wort-Icon-
-  Bündel der Antwort nach KIBUDDY-17).
+- einer **Kind-Bubble** (rechts ausgerichtet) und
+- einer **Buddy-Bubble** (links ausgerichtet).
 
-**Beide Bubbles** tragen den **Vorlese-Knopf** (KIBUDDY-31) in der
-Meta-Zeile oberhalb der Bubble.
+**Kind-Bubble — V1 Option C (T865): text-only.**
+Rendert das STT-Transkript als reinen Text-Absatz (`<p class="kind-frage-text">`).
+KEIN Wort-für-Wort-Render mit Icons (Begründung: das Kind hat die Frage gerade
+selbst gesagt — Icons bei der Antwort genügen für die Lese-Vorbereitung).
+`transkript_words[]` wird vom Backend als Diagnose-Feld weiter geliefert,
+aber das Frontend ignoriert es.
+
+**Buddy-Bubble:** Antwort-Text als Absatz + 3-Buzzword-Block am Ende (KIBUDDY-17).
+
+**Beide Bubbles** tragen den **Vorlese-Knopf** (KIBUDDY-31).
 
 Neuer Turn am Ende, alte Turns scrollen nach oben weg. Der Container scrollt
 auf neuen Turn automatisch nach unten (`scrollTop = scrollHeight`).
@@ -475,7 +486,6 @@ in der Berater-Runde den richtigen Generalisierungs-Schnitt zu legen
 | `aufnahme-quelle` | `display` | Wo nehmen wir auf | KAQS-Skill (KIBUDDY-23), Eltern-Chat |
 | `aufnahme.max-sek` | `30` | Max. Aufnahme-Dauer | Config |
 | `aufnahme.inaktivitaet-sek` | `60` | Header-Schlaf-Schwelle (Chat bleibt) | Config |
-| `funktionswort-liste` | `<data>/funktionswort-liste.txt` | Wortklassen-Filter (KIBUDDY-17) | Config |
 | `ui-icons` | `<data>/ui-icons.json` | UI-Icon-ID-Mapping (KIBUDDY-30) | Config |
 | `ui.lock-hinweis-ms` | `800` | Slide-Hinweis erscheint nach | Config |
 | `vad.stille-sek` | `1.5` | VAD-Stille-Schwelle (Sekunden) im Lock-Modus | Config |
@@ -546,12 +556,22 @@ Container, WebM/Opus oder MP4). Response: `Content-Type: application/x-ndjson`,
 `Transfer-Encoding: chunked`, **zwei NDJSON-Zeilen** (KIBUDDY-13):
 
 ```
-{"event":"kind","transkript":"<STT-Erkennung>","transkript_words":[{"text":"<w>","is_inhaltswort":true|false},...]}
-{"event":"buddy","text":"<LLM-Antwort>","words":[{"text":"<w>","is_inhaltswort":true|false},...],"tts_audio_url":"/api/v1/kibuddy/audio/<id>.mp3"|null}
+{"event":"kind","transkript":"<STT-Erkennung>","transkript_words":[]}
+{"event":"buddy","text":"<LLM-Antwort>","buzzwords":["<w1>","<w2>","<w3>"],"tts_audio_url":"/api/v1/kibuddy/audio/<id>.mp3"|null}
 ```
 
-Stage-1-Zeile (`event=kind`) wird sofort nach STT gesendet — vor LLM-Aufruf.
-Stage-2-Zeile (`event=buddy`) wird nach LLM+TTS gesendet.
+**Stage 1 — kind-Event** (sofort nach STT, vor LLM-Aufruf):
+- `transkript`: STT-Erkennung als Fließtext.
+- `transkript_words`: Diagnose-Feld, bleibt im Schema erhalten. V1 liefert
+  eine leere Liste — Wortklassen-Tokenisierung entfällt (T865). Frontend
+  ignoriert das Feld (Kind-Bubble text-only, KIBUDDY-19).
+
+**Stage 2 — buddy-Event** (nach LLM+TTS):
+- `text`: LLM-Antwort als Fließtext (aus JSON-Antwort des LLM geparst).
+- `buzzwords`: string-Liste mit max. 3 Buzzwords (aus JSON-Antwort des LLM,
+  sanitisiert durch `validate_buzzwords()`). Bei LLM-Fallback: leere Liste.
+- `tts_audio_url`: URL oder `null` bei TTS-Fehler.
+- `words[]` entfällt (T865 Buzzword-Refactor).
 
 Bei STT-Fehler (vor Stage 1): kein `kind`-Event, stattdessen einzeilige
 Fehler-Response `{"event":"error","stage":"stt","detail":"..."}` (HTTP 200,
@@ -561,16 +581,10 @@ Bei LLM-Fehler (nach Stage 1): `kind`-Event wurde bereits gesendet; es folgt
 `{"event":"error","stage":"llm","detail":"..."}` — Kind-Bubble ist sichtbar,
 Buddy-Bubble fehlt.
 
-Bei TTS-Fehler: Stage-2-Zeile trägt `tts_audio_url: null` (Resilienz, wie
-zuvor — Kind sieht zumindest die Text-Antwort).
+Bei TTS-Fehler: Stage-2-Zeile trägt `tts_audio_url: null` (Resilienz —
+Kind sieht zumindest die Text-Antwort).
 
-`transkript` / `transkript_words` sind **Diagnose-Felder** (Eltern können das
-Erkannte in Server-Logs / Browser-Devtools nachsehen). `transkript_words` ist
-die tokenisierte Form des STT-Transkripts (gleicher Wortklassen-Filter wie
-`words`, KIBUDDY-17) — für die Kind-Bubble (KIBUDDY-17/-19). Die `words[]`-
-und `transkript_words[]`-Listen enthalten nur `text` + `is_inhaltswort` —
-clientseitiges Icon-Lookup läuft parallel über ICONS-7 pro Inhaltswort
-(KIBUDDY-17). URL-Form ermöglicht Browser-Cache + Replay über KIBUDDY-31
+URL-Form ermöglicht Browser-Cache + Replay über KIBUDDY-31
 ohne JS-State-Bloat im Chat-Verlauf (KIBUDDY-19); analog Hörspiel-Folgen-URLs.
 
 **PUT `/api/v1/kibuddy/config`** — JSON-Body, schreibt das spezifizierte
