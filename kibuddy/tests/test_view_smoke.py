@@ -234,3 +234,57 @@ def test_css_stopp_row_position_absolute(client):
     assert "position: absolute" in stopp_block, (
         ".stopp-row ist nicht position: absolute — AC1 Knopf-Position-Fix fehlt"
     )
+
+
+# ---- AC1: ladehinweis-Element entfernt (T852-S1) ----
+
+def test_html_kein_ladehinweis_element(client):
+    """AC1: ladehinweis-DIV ist aus dem HTML entfernt."""
+    resp = client.get("/display/kibuddy/frage")
+    html = resp.data.decode("utf-8")
+    assert "ladehinweis" not in html, (
+        "'ladehinweis' darf nicht mehr im HTML stehen — AC1 T852-S1"
+    )
+
+
+def test_js_kein_ladehinweis_ref(client):
+    """AC1: frage.js enthält keine ladehinweis-DOM-Referenz mehr."""
+    resp = client.get("/display/kibuddy/static/frage.js")
+    js = resp.data.decode("utf-8")
+    assert "ladehinweis" not in js, (
+        "'ladehinweis' darf nicht mehr in frage.js stehen — AC1 T852-S1"
+    )
+
+
+def test_css_kein_ladehinweis_regel(client):
+    """AC1: frage.css enthält keine .ladehinweis Regel mehr."""
+    resp = client.get("/display/kibuddy/static/frage.css")
+    css = resp.data.decode("utf-8")
+    assert ".ladehinweis" not in css, (
+        "'.ladehinweis' CSS-Regel darf nicht mehr in frage.css stehen — AC1 T852-S1"
+    )
+
+
+def test_html_enthaelt_kibuddy_cfg_block(client):
+    """AC3: HTML enthält window.KIBUDDY_CFG Script-Block mit VAD-Werten."""
+    resp = client.get("/display/kibuddy/frage")
+    html = resp.data.decode("utf-8")
+    assert "KIBUDDY_CFG" in html, (
+        "window.KIBUDDY_CFG fehlt im HTML — VAD-Konfig nicht übergeben (AC3 T852-S1)"
+    )
+    assert "vad_stille_sek" in html, (
+        "vad_stille_sek fehlt im KIBUDDY_CFG Block (AC3 T852-S1)"
+    )
+    assert "vad_threshold_db" in html, (
+        "vad_threshold_db fehlt im KIBUDDY_CFG Block (AC3 T852-S1)"
+    )
+
+
+def test_js_enthaelt_vad_loop(client):
+    """AC3: frage.js enthält VAD-Loop-Implementierung."""
+    resp = client.get("/display/kibuddy/static/frage.js")
+    js = resp.data.decode("utf-8")
+    assert "vadLoop" in js, "vadLoop fehlt in frage.js — AC3 T852-S1"
+    assert "VAD_STILLE_MS" in js, "VAD_STILLE_MS fehlt in frage.js — AC3 T852-S1"
+    assert "VAD_THRESHOLD_DB" in js, "VAD_THRESHOLD_DB fehlt in frage.js — AC3 T852-S1"
+    assert "vadStilleStart" in js, "vadStilleStart fehlt in frage.js — AC3 T852-S1"

@@ -458,20 +458,7 @@ body.xb[data-stage="toddler"] {
   color: #dc2626;
 }
 
-/* Ladehinweis */
-.ladehinweis {
-  font-size: 20px;
-  color: #3a6b3a;
-  margin-top: 6px;
-  animation: pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.45; }
-}
-
-/* ── AC4: Lade-Bubble (Chat-Indikator während fetch) ─────── */
+/* ── Lade-Bubble (Chat-Indikator während fetch, AC1/KIBUDDY-8) ──── */
 .bubble-laden {
   background: #d1fae5;
   border: 2px solid #6ee7b7;
