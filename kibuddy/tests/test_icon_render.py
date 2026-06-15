@@ -1,14 +1,16 @@
-"""Test-Suite für kibuddy/icon_render.py (KIBUDDY-17, KIBUDDY-28)."""
+"""Test-Suite für kibuddy/icon_render.py (KIBUDDY-17, KIBUDDY-17.3, KIBUDDY-28)."""
+
 
 from kibuddy.icon_render import (
     STOP_WORDS_DE,
-    render_worte,
+    _reset_stop_words_cache,
+    load_stop_words,
     tokenisiere,
-    worte_zu_api_format,
+    worte_zu_words_api,
 )
 
 # ============================================================
-#  Funktionswort-Liste (KIBUDDY-17 ~150 Wörter)
+#  Funktionswort-Liste (KIBUDDY-17 ~150 Wörter, aus Default-Datei)
 # ============================================================
 
 
@@ -35,6 +37,46 @@ def test_stop_words_enthalten_konjunktionen():
 def test_stop_words_min_150():
     """KIBUDDY-17 verlangt ~150 deutsche Funktionswörter."""
     assert len(STOP_WORDS_DE) >= 150
+
+
+# ============================================================
+#  Funktionswort-Override aus data_root (KIBUDDY-17.3)
+# ============================================================
+
+
+def test_load_stop_words_override(tmp_path):
+    """Override-Datei in data_root überschreibt Default (KIBUDDY-17.3)."""
+    _reset_stop_words_cache()
+    override = tmp_path / "funktionswort-liste.txt"
+    override.write_text("testfunktionswort\nandereswort\n", encoding="utf-8")
+    words = load_stop_words(data_root=tmp_path)
+    assert "testfunktionswort" in words
+    assert "andereswort" in words
+    _reset_stop_words_cache()
+
+
+def test_load_stop_words_fallback_to_default(tmp_path):
+    """Fehlende Override-Datei → Default-Datei wird benutzt (KIBUDDY-17.3)."""
+    _reset_stop_words_cache()
+    # tmp_path hat keine funktionswort-liste.txt
+    words = load_stop_words(data_root=tmp_path)
+    assert len(words) >= 150
+    assert "der" in words
+    _reset_stop_words_cache()
+
+
+def test_load_stop_words_override_wort_wird_gefiltert(tmp_path):
+    """Ein Wort in der Override-Datei wird als Funktionswort klassifiziert."""
+    _reset_stop_words_cache()
+    override = tmp_path / "funktionswort-liste.txt"
+    override.write_text("quarkulus\n", encoding="utf-8")
+    words = load_stop_words(data_root=tmp_path)
+    assert "quarkulus" in words
+    # Tokenisierung benutzt diesen Cache.
+    tokens = tokenisiere("quarkulus")
+    assert len(tokens) == 1
+    assert tokens[0]["typ"] == "funktionswort"
+    _reset_stop_words_cache()
 
 
 # ============================================================
@@ -73,79 +115,43 @@ def test_tokenisiere_nur_funktionswoerter():
 
 
 # ============================================================
-#  Render-Wort-Logik (KIBUDDY-17 Schritte 3–6a)
+#  API-Format (KIBUDDY-17 FIX1: {text, is_inhaltswort} — kein icon_id)
 # ============================================================
 
 
-def test_render_worte_icon_lookup_aufgerufen_fuer_inhaltswort():
-    """Icon-Lookup wird für Inhaltswörter aufgerufen, nicht für Funktionswörter."""
-    lookup_calls = []
-
-    def fake_lookup(wort):
-        lookup_calls.append(wort)
-        return "/display/_shared/icons/arasaac/1234.png"
-
-    render_worte("Der Hund bellt.", icon_lookup_fn=fake_lookup)
-    # "Der" ist Funktionswort → kein Lookup-Call.
-    assert "der" not in lookup_calls
-    # "Hund" und "bellt" sind Inhaltswörter → Lookup-Call.
-    assert "hund" in lookup_calls or "bellt" in lookup_calls
+def test_worte_zu_words_api_inhaltswort():
+    """Inhaltswort bekommt is_inhaltswort=True (KIBUDDY-17 FIX1)."""
+    api = worte_zu_words_api("Hund")
+    inhaltswort = next(w for w in api if w["text"] == "Hund")
+    assert inhaltswort["is_inhaltswort"] is True
+    assert "icon_id" not in inhaltswort
 
 
-def test_render_worte_kein_lookup_fuer_funktionswort():
-    lookup_calls = []
-
-    def fake_lookup(wort):
-        lookup_calls.append(wort)
-        return None
-
-    render_worte("und oder", icon_lookup_fn=fake_lookup)
-    assert lookup_calls == []
+def test_worte_zu_words_api_funktionswort():
+    """Funktionswort bekommt is_inhaltswort=False."""
+    api = worte_zu_words_api("und")
+    fw = next(w for w in api if w["text"] == "und")
+    assert fw["is_inhaltswort"] is False
+    assert "icon_id" not in fw
 
 
-def test_render_worte_treffer_hat_icon_url():
-    def fake_lookup(wort):
-        return "/display/_shared/icons/arasaac/2239.png"
-
-    result = render_worte("Biene", icon_lookup_fn=fake_lookup)
-    inhaltswort = next(r for r in result if r["typ"] == "inhaltswort")
-    assert inhaltswort["icon_url"] == "/display/_shared/icons/arasaac/2239.png"
-
-
-def test_render_worte_miss_hat_icon_url_none():
-    def fake_lookup(wort):
-        return None
-
-    result = render_worte("Quarkulus", icon_lookup_fn=fake_lookup)
-    inhaltswort = next(r for r in result if r["typ"] == "inhaltswort")
-    assert inhaltswort["icon_url"] is None
+def test_worte_zu_words_api_gemischter_satz():
+    """Gemischter Satz: Artikel False, Nomen True (KIBUDDY-17)."""
+    api = worte_zu_words_api("Der Hund bellt.")
+    by_text = {w["text"]: w for w in api}
+    assert by_text["Der"]["is_inhaltswort"] is False
+    assert by_text["Hund"]["is_inhaltswort"] is True
+    # Satzzeichen ist kein Inhaltswort.
+    assert by_text["."]["is_inhaltswort"] is False
 
 
-def test_render_worte_funktionswort_hat_kein_icon_field():
-    """Funktionswörter haben keinen icon_url-Slot (KIBUDDY-17 6a)."""
-    result = render_worte("und", icon_lookup_fn=lambda w: None)
-    fw = next(r for r in result if r["typ"] == "funktionswort")
-    assert "icon_url" not in fw
+def test_worte_zu_words_api_kein_urllib_call(monkeypatch):
+    """Kein urllib-Call vom Server — Icon-Lookup ist clientseitig (KIBUDDY-17)."""
+    import urllib.request
 
+    def _fail(*a, **kw):
+        raise AssertionError("Server darf keinen urllib-Call machen (KIBUDDY-17 FIX1)")
 
-# ============================================================
-#  API-Format-Konvertierung (KIBUDDY-24 words-Liste)
-# ============================================================
-
-
-def test_worte_zu_api_format_icon_id_extrahiert():
-    worte = [
-        {"token": "Hund", "typ": "inhaltswort", "icon_url": "/display/_shared/icons/arasaac/2239.png"},
-    ]
-    api = worte_zu_api_format(worte)
-    assert api[0]["text"] == "Hund"
-    assert api[0]["icon_id"] == "2239"
-
-
-def test_worte_zu_api_format_kein_icon_null():
-    worte = [
-        {"token": "und", "typ": "funktionswort"},
-    ]
-    api = worte_zu_api_format(worte)
-    assert api[0]["text"] == "und"
-    assert api[0]["icon_id"] is None
+    monkeypatch.setattr(urllib.request, "urlopen", _fail)
+    # Dieser Aufruf darf keinen urllib-Call machen.
+    worte_zu_words_api("Der Hund bellt.")
