@@ -26,7 +26,7 @@
       "zielgruppe": "eltern",
       "web_app": {
         "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
-        "app_short_name": "einkauf",
+        "app_short_name": "einkaufen",
         "icons": ["arasaac/28339.png"]
       }
     }
