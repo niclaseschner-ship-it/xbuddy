@@ -11,10 +11,13 @@
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <title>Hörspiel · XBuddy</title>
-  <link rel="stylesheet" href="/api/v1/seiten/static/eltern.css?v={{ build_id }}">
+  <!-- eltern.{css,js} leben in hoerspiel/static/ (HSP-33), ausgeliefert vom
+       hoerspiel-Service unter /display/hoerspiel/static/*. platform.js bleibt
+       beim seiten-Service (zentral). -->
+  <link rel="stylesheet" href="/display/hoerspiel/static/eltern.css?v={{ build_id }}">
   <!-- platform.js (MAD-5 / RAT-16) muss vor eltern.js geladen sein -->
   <script src="/api/v1/seiten/static/platform.js?v={{ build_id }}"></script>
-  <script src="/api/v1/seiten/static/eltern.js?v={{ build_id }}" defer></script>
+  <script src="/display/hoerspiel/static/eltern.js?v={{ build_id }}" defer></script>
 </head>
 <body>
   <header class="app-header">
