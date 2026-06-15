@@ -80,11 +80,12 @@ def seiten_uebersicht(chat_id, from_user_id, is_member_fn, mini_app_url):
             "presentation": {},
         }
 
-    web_app_url = mini_app_url.rstrip("/") + _MAU_APP_PATH
+    # mini_app_url ist bereits die volle URL inkl. /api/v1/seiten/mini-app-uebersicht
+    # (Task-Konstruktor hängt _MAU_APP_PATH an — analog RAO). Nicht nochmal anhängen.
     presentation = {
         "inline_button": {
             "label": _BUTTON_LABEL,
-            "web_app_url": web_app_url,
+            "web_app_url": mini_app_url,
         }
     }
 
