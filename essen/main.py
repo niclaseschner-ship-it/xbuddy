@@ -592,6 +592,7 @@ def wunsch_hinzufuegen():
 
     label       = body.get("label", "")
     bild_ref    = body.get("bild_ref", "")
+    foto_ref    = body.get("foto_ref", "")    # ESSEN-22 #922: Foto-Gerichte-Alternative
     quelle      = body.get("quelle", "")
     kategorie   = body.get("kategorie", "")
     item_id     = body.get("item_id", "")
@@ -606,7 +607,11 @@ def wunsch_hinzufuegen():
         fehler.append("quelle muss 'kind' oder 'eltern' sein")
     if kategorie not in GUELTIGE_KATEGORIE:
         fehler.append("kategorie muss gericht, obst_gemuese, brotbelag oder sonstiges sein")
-    if not bild_ref or not _valide_bild_ref(bild_ref):
+    # ESSEN-22 (#922): bild_ref ODER foto_ref Pflicht (mind. einer). Foto-Gerichte
+    # tragen foto_ref aus dem Katalog statt einer numerischen ARASAAC-ID.
+    if not bild_ref and not foto_ref:
+        fehler.append("bild_ref oder foto_ref muss gesetzt sein")
+    elif bild_ref and not _valide_bild_ref(bild_ref):
         fehler.append("bild_ref muss eine numerische ARASAAC-ID sein")
     if not item_id or not str(item_id).strip():
         fehler.append("item_id darf nicht leer sein")
@@ -679,7 +684,11 @@ def wunsch_hinzufuegen():
     neuer_eintrag = {
         "id":          neue_id,
         "label":       str(label).strip(),
-        "bild_ref":    str(bild_ref),
+        # ESSEN-22 (#922): Foto-Gerichte tragen foto_ref statt bild_ref.
+        # Reader-Logik (ESSEN-22 in render.py) konsumiert beides; persistieren
+        # was gesetzt ist.
+        "bild_ref":    str(bild_ref) if bild_ref else "",
+        "foto_ref":    str(foto_ref) if foto_ref else "",
         "quelle":      quelle,
         "kategorie":   kategorie,
         "item_id":     item_id_str,
