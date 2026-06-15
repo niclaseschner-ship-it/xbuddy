@@ -185,10 +185,12 @@ def healthz():
 @app.route("/display/kibuddy/frage", methods=["GET"])
 def display_frage():
     cfg = _runtime_cfg()
-    # VAD-Konfig an Template übergeben (KIBUDDY-21/AC3)
+    # VAD-Konfig an Template übergeben (KIBUDDY-21/AC3, KIBUDDY-7/T864)
     kibuddy_cfg = cfg.to_vad_cfg() if cfg is not None else {
         "vad_stille_sek": config_mod.DEFAULT_VAD_STILLE_SEK,
         "vad_threshold_db": config_mod.DEFAULT_VAD_THRESHOLD_DB,
+        "vad_long_hold_lock_sek": config_mod.DEFAULT_VAD_LONG_HOLD_LOCK_SEK,
+        "aufnahme_min_sek": config_mod.DEFAULT_AUFNAHME_MIN_SEK,
     }
     return render_template("frage.html", kibuddy_cfg=kibuddy_cfg)
 

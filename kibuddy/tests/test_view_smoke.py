@@ -288,3 +288,68 @@ def test_js_enthaelt_vad_loop(client):
     assert "VAD_STILLE_MS" in js, "VAD_STILLE_MS fehlt in frage.js — AC3 T852-S1"
     assert "VAD_THRESHOLD_DB" in js, "VAD_THRESHOLD_DB fehlt in frage.js — AC3 T852-S1"
     assert "vadStilleStart" in js, "vadStilleStart fehlt in frage.js — AC3 T852-S1"
+
+
+# ---- T864: Lock-Bug-Fixes ----
+
+def test_js_lock_distanz_30(client):
+    """T864-AC1: LOCK_DISTANZ_PX ist 30 (war 80)."""
+    resp = client.get("/display/kibuddy/static/frage.js")
+    js = resp.data.decode("utf-8")
+    assert "LOCK_DISTANZ_PX:   30" in js, (
+        "LOCK_DISTANZ_PX ist nicht 30 in frage.js — T864-AC1"
+    )
+
+
+def test_js_abbruch_distanz_60(client):
+    """T864-AC1: ABBRUCH_DISTANZ_PX ist 60 (war 100)."""
+    resp = client.get("/display/kibuddy/static/frage.js")
+    js = resp.data.decode("utf-8")
+    assert "ABBRUCH_DISTANZ_PX: 60" in js, (
+        "ABBRUCH_DISTANZ_PX ist nicht 60 in frage.js — T864-AC1"
+    )
+
+
+def test_js_long_hold_lock_timer(client):
+    """T864-AC2: frage.js enthält longHoldLockTimer-Implementierung."""
+    resp = client.get("/display/kibuddy/static/frage.js")
+    js = resp.data.decode("utf-8")
+    assert "longHoldLockTimer" in js, (
+        "longHoldLockTimer fehlt in frage.js — T864-AC2"
+    )
+    assert "vad_long_hold_lock_sek" in js, (
+        "vad_long_hold_lock_sek fehlt in frage.js — T864-AC2"
+    )
+
+
+def test_js_mindest_aufnahme_dauer(client):
+    """T864-AC3: frage.js prüft Mindest-Aufnahme-Dauer."""
+    resp = client.get("/display/kibuddy/static/frage.js")
+    js = resp.data.decode("utf-8")
+    assert "aufnahmeStartMs" in js, (
+        "aufnahmeStartMs fehlt in frage.js — T864-AC3"
+    )
+    assert "aufnahme_min_sek" in js, (
+        "aufnahme_min_sek fehlt in frage.js — T864-AC3"
+    )
+    assert "appendKurzAufnahmeHinweis" in js, (
+        "appendKurzAufnahmeHinweis fehlt in frage.js — T864-AC3"
+    )
+
+
+def test_html_kibuddy_cfg_enthaelt_long_hold_lock(client):
+    """T864-AC2: window.KIBUDDY_CFG enthält vad_long_hold_lock_sek."""
+    resp = client.get("/display/kibuddy/frage")
+    html = resp.data.decode("utf-8")
+    assert "vad_long_hold_lock_sek" in html, (
+        "vad_long_hold_lock_sek fehlt im KIBUDDY_CFG Block — T864-AC2"
+    )
+
+
+def test_html_kibuddy_cfg_enthaelt_aufnahme_min_sek(client):
+    """T864-AC3: window.KIBUDDY_CFG enthält aufnahme_min_sek."""
+    resp = client.get("/display/kibuddy/frage")
+    html = resp.data.decode("utf-8")
+    assert "aufnahme_min_sek" in html, (
+        "aufnahme_min_sek fehlt im KIBUDDY_CFG Block — T864-AC3"
+    )
