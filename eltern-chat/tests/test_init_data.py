@@ -253,3 +253,81 @@ def test_example_json_existiert():
 
     assert "max_age_seconds" in data
     assert data["max_age_seconds"] == 86400
+
+
+# ---------------------------------------------------------------------------
+# AC6 — validate_header() (MAD-7 / T708-C)
+# ---------------------------------------------------------------------------
+
+
+def test_validate_header_gueltiger_header_gibt_init_data_zurueck():
+    """validate_header() mit gueltiger 'Authorization: tma <initData>' → InitData (MAD-7)."""
+    init_data_str = _build_init_data(user_id=55)
+    result = lib.validate_header(
+        "tma " + init_data_str,
+        bot_token=_TEST_BOT_TOKEN,
+        max_age_seconds=86400,
+    )
+    assert isinstance(result, lib.InitData)
+    assert result.user_id == 55
+
+
+def test_validate_header_none_wirft_init_data_error():
+    """validate_header() mit None als Header → InitDataError."""
+    try:
+        lib.validate_header(None, bot_token=_TEST_BOT_TOKEN, max_age_seconds=86400)
+        raise AssertionError("InitDataError wurde nicht geworfen")
+    except lib.InitDataError:
+        pass
+
+
+def test_validate_header_leerer_string_wirft_init_data_error():
+    """validate_header() mit leerem Header → InitDataError."""
+    try:
+        lib.validate_header("", bot_token=_TEST_BOT_TOKEN, max_age_seconds=86400)
+        raise AssertionError("InitDataError wurde nicht geworfen")
+    except lib.InitDataError:
+        pass
+
+
+def test_validate_header_falsches_schema_wirft_init_data_error():
+    """validate_header() mit 'Bearer ...' statt 'tma ...' → InitDataError."""
+    init_data_str = _build_init_data()
+    try:
+        lib.validate_header(
+            "Bearer " + init_data_str,
+            bot_token=_TEST_BOT_TOKEN,
+            max_age_seconds=86400,
+        )
+        raise AssertionError("InitDataError wurde nicht geworfen")
+    except lib.InitDataError:
+        pass
+
+
+def test_validate_header_manipulierter_hash_wirft_init_data_error():
+    """validate_header() mit manipuliertem Hash → InitDataError."""
+    init_data_str = _build_init_data(tamper_hash=True)
+    try:
+        lib.validate_header(
+            "tma " + init_data_str,
+            bot_token=_TEST_BOT_TOKEN,
+            max_age_seconds=86400,
+        )
+        raise AssertionError("InitDataError wurde nicht geworfen")
+    except lib.InitDataError:
+        pass
+
+
+def test_validate_header_abgelaufener_init_data_wirft_init_data_error():
+    """validate_header() mit abgelaufenem auth_date → InitDataError."""
+    old_auth_date = int(time.time()) - 7200  # 2 Stunden alt
+    init_data_str = _build_init_data(auth_date=old_auth_date)
+    try:
+        lib.validate_header(
+            "tma " + init_data_str,
+            bot_token=_TEST_BOT_TOKEN,
+            max_age_seconds=3600,  # max 1 Stunde
+        )
+        raise AssertionError("InitDataError wurde nicht geworfen")
+    except lib.InitDataError:
+        pass

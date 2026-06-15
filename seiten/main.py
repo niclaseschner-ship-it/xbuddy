@@ -90,18 +90,23 @@ runtime = {
     # Tailscale ist V1-Soll — fehlt, zeigt SREG-12 nur Heim + Banner.
     "heim_origin":       "",
     "tailscale_origin":  "",
-    # EZG-6 / ESSEN-31: Init-Data-Auth fuer Mini-App-Route.
-    # bot_token: aus ENV TELEGRAM_BOT_TOKEN (gesetzt durch systemd EnvironmentFile).
+    # MAD-7 / EZG-6 / ESSEN-31: Init-Data-Auth fuer Mini-App-Routen.
+    # bot_token: aus ENV ELTERNCHAT_BOT_TOKEN (systemd EnvironmentFile, APP-7).
     # init_data_config: dict aus init_data.load_config() — cached nach erstem Lauf.
     "bot_token":         None,
     "init_data_config":  None,
+    # FAM-7/8: Familien-Registry-JSON-Pfad fuer User-ID-Lookup.
+    # Aus ENV FAMILIE_JSON_PATH oder runtime-Dict (Test-Naht).
+    # Fehlt der Pfad oder die Datei → kein FAM-Check (fail-open in V1).
+    "familie_json_path": None,
 }
 
 
 def configure(root=None, inventar_path=None, panel_url=None,
               geraete_url=None, ttl=None,
               heim_origin=None, tailscale_origin=None,
-              bot_token=None, init_data_config=None):
+              bot_token=None, init_data_config=None,
+              familie_json_path=None):
     """Setzt Aufbau-Wurzel, Inventar-Pfad, Upstream-Origins, TTL und
     Display-URL-Origins (SREG-3, SREG-7).
 
@@ -113,9 +118,13 @@ def configure(root=None, inventar_path=None, panel_url=None,
     benoetigt (render.baue_layout). Leer = Wert bleibt unpetraendert (None
     ueberschreibt auf leeren String — explizit loeschbar).
 
-    `bot_token` und `init_data_config` werden fuer die ESSEN-31-Mini-App-Route
-    benoetigt (EZG-6 Init-Data-Auth). Im Test-Modus werden sie direkt gesetzt;
+    `bot_token` und `init_data_config` werden fuer die MAD-7-Mini-App-Auth
+    benoetigt. Im Test-Modus werden sie direkt gesetzt;
     im Produktiv-Betrieb kommen sie aus ENV / init_data.load_config().
+
+    `familie_json_path` (FAM-7/8): Pfad zu familie.json fuer User-ID-Lookup.
+    Im Test-Modus direkt setzen; im Produktiv-Betrieb aus ENV FAMILIE_JSON_PATH.
+    Fehlt der Pfad → kein FAM-Check (fail-open, Warnung im Log).
     """
     if root is not None:
         runtime["root"] = root
@@ -134,6 +143,8 @@ def configure(root=None, inventar_path=None, panel_url=None,
         runtime["bot_token"] = bot_token
     if init_data_config is not None:
         runtime["init_data_config"] = init_data_config
+    if familie_json_path is not None:
+        runtime["familie_json_path"] = familie_json_path
     runtime["inventar"] = None
     runtime["gebaut_um"] = 0.0
 
@@ -301,6 +312,55 @@ def _aktuelles_inventar():
 
 
 # ============================================================
+#  FAM-7/8 — Familien-Mitglieds-Prüfung
+# ============================================================
+
+def _lade_familie_telegram_ids():
+    """Liest telegram_ids aller Familien-Mitglieder aus familie.json (FAM-7/8).
+
+    Pfad: runtime['familie_json_path'] → ENV FAMILIE_JSON_PATH → None (skip).
+    Fehlt die Datei oder ist sie kaputt → leere Menge (fail-open, Warnung).
+    V1-Implementierung: direktes JSON-Read ohne familie-Service-Dependency
+    (MOD-2: Services voneinander unabhaengig).
+    """
+    path = runtime.get("familie_json_path") or os.environ.get("FAMILIE_JSON_PATH")
+    if not path:
+        return None  # kein Pfad konfiguriert → FAM-Check überspringen
+
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (FileNotFoundError, OSError, json.JSONDecodeError) as exc:
+        logging.warning("FAM-7: familie.json nicht lesbar (%s): %s — FAM-Check uebersprungen", path, exc)
+        return None
+
+    ids = set()
+    for gruppe in ("erwachsene", "kinder"):
+        for person in (data.get(gruppe) or []):
+            tg_id = person.get("telegram_id")
+            if tg_id is not None:
+                ids.add(int(tg_id))
+    return ids
+
+
+def _check_familie_mitglied(user_id):
+    """Prüft ob user_id in der Familien-Registry registriert ist (FAM-7/8 / AC4).
+
+    Gibt None zurück wenn OK (user_id ist Mitglied oder kein Pfad konfiguriert).
+    Gibt (json-Response, 403) zurück wenn user_id NICHT in der Registry.
+    """
+    familie_ids = _lade_familie_telegram_ids()
+    if familie_ids is None:
+        # Kein Pfad konfiguriert → fail-open (kein Block)
+        logging.debug("FAM-7: kein familie_json_path konfiguriert — FAM-Check uebersprungen")
+        return None
+    if user_id not in familie_ids:
+        logging.warning("FAM-7: user_id %s ist kein Familien-Mitglied → 403", user_id)
+        return jsonify({"error": "Nicht autorisiert — kein Familienmitglied"}), 403
+    return None
+
+
+# ============================================================
 #  Flask-App
 # ============================================================
 
@@ -343,86 +403,86 @@ def get_seiten_uebersicht():
     return render_template("uebersicht.html", **layout)
 
 
-@app.route("/seiten/essen/einkauf", methods=["GET"])
-def essen_einkauf_view():
-    """EZG-6 / ESSEN-31: Eltern-Mini-App-View fuer die Einkaufsliste.
+def _get_bot_token():
+    """Liest den Bot-Token aus runtime-Dict oder ENV (MAD-7 / APP-7).
 
-    Init-Data-Auth (AC2): Request ohne ?initData= oder mit ungueltiger
-    Signatur → 401. Request mit gueltiger Signatur (HMAC-SHA256 ueber
-    Bot-Token, eltern-chat/init_data.py validate) → 200 HTML.
-
-    Bot-Token kommt aus ENV TELEGRAM_BOT_TOKEN (systemd EnvironmentFile
-    aus eltern-chat/.env). Fehlt das Token im ENV → 500 (Konfig-Fehler).
-
-    V1-Vereinfachung (bekannte Luecke): der essen-Buddy (Port 5052) ist nur
-    auf 127.0.0.1 gebunden und hat selbst keine initData-Pruefung. Schutz
-    liegt allein auf dieser seiten-Route (EZG-6). Nachfolgende API-Calls
-    vom JS an /api/v1/essen/... laufen ueber nginx-Routing (Same-Host),
-    der essen-Buddy prueft initData in V1.x nach (Handoff-Befund).
+    Reihenfolge: runtime-Dict (Test-Naht) → ELTERNCHAT_BOT_TOKEN
+    (CONFIG-5-Schema aus eltern-chat/.env via systemd EnvironmentFile-Sharing,
+    #684) → TELEGRAM_BOT_TOKEN (Fallback-Name).
     """
-    # --- Token aus ENV oder runtime-Dict ---
-    # Token-Quelle: runtime-Dict (Test-Naht) → TELEGRAM_BOT_TOKEN (Standard-ENV-Name) →
-    # ELTERNCHAT_BOT_TOKEN (Fallback, weil eltern-chat/.env das Token unter
-    # CONFIG-5-Schema <COMPONENT>_<KEY> hält und seiten via EnvironmentFile-Sharing
-    # an dieselbe Datei kommt — #684 Token-Sharing, #710).
-    bot_token = (
+    return (
         runtime.get("bot_token")
-        or os.environ.get("TELEGRAM_BOT_TOKEN")
         or os.environ.get("ELTERNCHAT_BOT_TOKEN")
+        or os.environ.get("TELEGRAM_BOT_TOKEN")
     )
+
+
+def _validate_mini_app_request():
+    """Validiert den Authorization-Header für Mini-App-Requests (MAD-7).
+
+    Liest 'Authorization: tma <initData>' aus dem Request-Header,
+    validiert via HMAC-SHA256 (init_data.validate_header).
+
+    Gibt InitData zurück bei Erfolg.
+    Gibt (json-Response, 401) zurück bei Auth-Fehler.
+    Gibt (json-Response, 500) zurück bei fehlendem Bot-Token.
+    """
+    bot_token = _get_bot_token()
     if not bot_token:
-        logging.error(
-            "ESSEN-31: TELEGRAM_BOT_TOKEN nicht gesetzt — Mini-App-Route nicht nutzbar.")
-        return jsonify({"error": "Serverkonfiguration unvollständig (Bot-Token fehlt)"}), 500
+        logging.error("MAD-7: ELTERNCHAT_BOT_TOKEN nicht gesetzt — Mini-App-Route nicht nutzbar.")
+        return None, (jsonify({"error": "Serverkonfiguration unvollständig (Bot-Token fehlt)"}), 500)
 
-    # --- initData aus Query-String (optional, wenn JS sie aktiv weiterleitet) ---
-    # Architektur-Hinweis: Telegram fuegt initData NICHT automatisch in die URL ein,
-    # sondern stellt sie nur als window.Telegram.WebApp.initData (JS-Property)
-    # bereit. Der Frontend-JS muss sie aktiv an den Server senden (z.B. via
-    # Authorization-Header oder Query). Bis das umgesetzt ist (Folge-Ticket
-    # T653-Auth-Header), laedt die Route HTML ohne Auth (V1-Vereinfachung).
-    # Schutz heute: essen-Buddy ist 127.0.0.1-bound, nginx Same-Host-Routing
-    # ueber Tailscale-Funnel mit Per-Node-Cert.
-    init_data_str = (
-        request.args.get("initData")
-        or request.args.get("tgWebAppData")
-    )
-    if not init_data_str:
-        logging.warning(
-            "ESSEN-31 V1: Mini-App ohne initData geladen — V1-Vereinfachung. "
-            "Folge-Ticket: JS sendet initData aktiv via Header an Server.")
-        return render_template("essen-einkauf.html", user_id=None)
-
-    # --- Konfig laden (gecacht im runtime-Dict) ---
+    # Konfig laden (gecacht im runtime-Dict)
     cfg = runtime.get("init_data_config")
     if cfg is None:
         cfg = _init_data_mod.load_config()
         runtime["init_data_config"] = cfg
 
-    # --- Validierung (HMAC-SHA256, eltern-chat/init_data.py) ---
-    parsed = _init_data_mod.validate(
-        init_data_str,
-        bot_token,
-        cfg["max_age_seconds"],
-    )
-    if parsed is None:
-        # initData wurde mitgegeben, aber ist ungueltig — strenger Ablehnungsfall.
-        return jsonify({"error": "initData ungültig oder abgelaufen"}), 401
+    auth_header = request.headers.get("Authorization")
+    try:
+        init_data = _init_data_mod.validate_header(
+            auth_header,
+            bot_token,
+            cfg["max_age_seconds"],
+        )
+    except _init_data_mod.InitDataError as exc:
+        logging.warning("MAD-7 Auth fehlgeschlagen: %s", exc)
+        return None, (jsonify({"error": "initData ungültig, abgelaufen oder fehlt"}), 401)
 
-    return render_template("essen-einkauf.html", user_id=parsed.user_id)
+    return init_data, None
+
+
+@app.route("/seiten/essen/einkauf", methods=["GET"])
+def essen_einkauf_view():
+    """EZG-6 / ESSEN-31: Eltern-Mini-App-View fuer die Einkaufsliste.
+
+    Init-Data-Auth (MAD-7 / AC2): Request ohne 'Authorization: tma <initData>'-Header
+    oder mit ungueltiger Signatur → 401. Request mit gueltiger Signatur
+    (HMAC-SHA256 ueber Bot-Token, eltern-chat/init_data.py validate_header) → 200 HTML.
+
+    Bot-Token kommt aus ENV ELTERNCHAT_BOT_TOKEN (systemd EnvironmentFile,
+    APP-7 / #684). Fehlt das Token → 500 (Konfig-Fehler).
+    FAM-7/8: User-ID aus validiertem initData gegen Familien-Registry prüfen;
+    Nicht-Mitglied → 403.
+    """
+    init_data, err = _validate_mini_app_request()
+    if err is not None:
+        return err
+
+    # FAM-7/8: User-ID gegen Familien-Registry prüfen
+    fam_err = _check_familie_mitglied(init_data.user_id)
+    if fam_err is not None:
+        return fam_err
+
+    return render_template("essen-einkauf.html", user_id=init_data.user_id)
 
 
 @app.route("/seiten/routine/anpassen", methods=["GET"])
 def routine_anpassen_view():
     """ROUTINE-20 / ROUTINE-23: Eltern-Anpassen-Mini-App-View.
 
-    Auth (V1): Route laedt ohne initData-Validierung (MAD-7 V1-Pattern,
-    brainstorm-Vorlage NICHT ratifiziert — Ratifizierung folgt nach Live,
-    ROUTINE-23; analog essen-einkauf-Route V1-Vereinfachung). Der
-    seiten-Service ist an 127.0.0.1 gebunden; Schutz liegt im
-    Tailscale-Funnel (Per-Node-Cert).
-    Eine initData-Haertung folgt als gemeinsames Mini-App-Auth-Ticket (MAD-7
-    Folge-Ticket, kein V1-Blocker).
+    Auth (MAD-7 / T708-C): Authorization: tma <initData>-Header Pflicht.
+    Fehlender oder ungültiger Header → 401. Nicht-Familienmitglied → 403.
 
     JS laedt Items und Config beim Boot via:
       GET /api/v1/routine/items  (ROUTINE-14, items-Liste)
@@ -435,6 +495,15 @@ def routine_anpassen_view():
     response-Header no-store zusaetzlich, damit jeder Open das HTML neu
     holt.
     """
+    init_data, err = _validate_mini_app_request()
+    if err is not None:
+        return err
+
+    # FAM-7/8: User-ID gegen Familien-Registry prüfen
+    fam_err = _check_familie_mitglied(init_data.user_id)
+    if fam_err is not None:
+        return fam_err
+
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     try:
         build_id = str(int(os.path.getmtime(os.path.join(static_dir, "routine-anpassen.js"))))

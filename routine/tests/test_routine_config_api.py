@@ -21,6 +21,10 @@ if _REPO_ROOT not in sys.path:
 
 from routine import config as config_mod   # noqa: E402  # isort:skip
 from routine import main as main_mod       # noqa: E402  # isort:skip
+from routine.tests._test_auth import (    # noqa: E402  # isort:skip
+    TEST_BOT_TOKEN,
+    patch_client_auth,
+)
 
 
 # ============================================================
@@ -49,8 +53,9 @@ def data_path_und_client(tmp_path):
     }))
     store_path = str(tmp_path / "routine_store.json")
     cfg = config_mod.resolve_data(str(data_file))
-    main_mod.configure(cfg, data_path=str(data_file), store_path=store_path)
-    return str(data_file), main_mod.app.test_client()
+    main_mod.configure(cfg, data_path=str(data_file), store_path=store_path,
+                       bot_token=TEST_BOT_TOKEN, init_data_config={"max_age_seconds": 86400})
+    return str(data_file), patch_client_auth(main_mod.app.test_client())
 
 
 # ============================================================
@@ -580,8 +585,9 @@ def test_ac2_get_kein_data_path_liefert_500(tmp_path):
     }))
     cfg = config_mod.resolve_data(str(data_file))
     # data_path bewusst NICHT übergeben
-    main_mod.configure(cfg, data_path=None, store_path=None)
-    client = main_mod.app.test_client()
+    main_mod.configure(cfg, data_path=None, store_path=None,
+                       bot_token=TEST_BOT_TOKEN, init_data_config={"max_age_seconds": 86400})
+    client = patch_client_auth(main_mod.app.test_client())
 
     resp = client.get("/api/v1/routine/config")
     assert resp.status_code == 500

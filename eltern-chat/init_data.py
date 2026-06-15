@@ -103,6 +103,67 @@ def load_config(path: str | None = None) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Fehler-Klasse (AC1 — validate_header raises statt None)
+# ---------------------------------------------------------------------------
+
+
+class InitDataError(Exception):
+    """Header fehlt, hat falsches Schema oder HMAC-Validierung schlägt fehl.
+
+    Wird von validate_header() geworfen. Konsumenten fangen InitDataError
+    und antworten mit HTTP 401 (oder 403 für FAM-Lookup-Fehlschlag).
+    """
+
+
+# ---------------------------------------------------------------------------
+# Header-Helper (AC1 — MAD-7: Authorization: tma <initData>)
+# ---------------------------------------------------------------------------
+
+_TMA_PREFIX = "tma "
+
+
+def validate_header(
+    authorization_header: str | None,
+    bot_token: str,
+    max_age_seconds: int | None = None,
+) -> InitData:
+    """Parst und validiert den 'Authorization: tma <initData>'-Header (MAD-7).
+
+    Schritt 1: Prüft, ob der Header vorhanden ist und 'tma '-Präfix trägt
+               (case-insensitive, Whitespace-tolerant).
+    Schritt 2: Delegiert die HMAC-SHA256-Validierung an validate().
+    Wirft InitDataError wenn:
+      - Header fehlt (None oder leer)
+      - Schema falsch (kein 'tma '-Präfix)
+      - HMAC-Validierung schlägt fehl (validate() liefert None)
+
+    max_age_seconds: Default aus load_config(), wenn None übergeben.
+    """
+    if not authorization_header or not authorization_header.strip():
+        raise InitDataError("Authorization-Header fehlt")
+
+    stripped = authorization_header.strip()
+    if not stripped.lower().startswith(_TMA_PREFIX.lower()):
+        raise InitDataError(
+            "Authorization-Header hat falsches Schema — erwartet 'tma <initData>'"
+        )
+
+    init_data_str = stripped[len(_TMA_PREFIX):].strip()
+    if not init_data_str:
+        raise InitDataError("initData-Teil im Authorization-Header ist leer")
+
+    if max_age_seconds is None:
+        cfg = load_config()
+        max_age_seconds = cfg["max_age_seconds"]
+
+    result = validate(init_data_str, bot_token, max_age_seconds)
+    if result is None:
+        raise InitDataError("initData-Signatur ungültig oder abgelaufen")
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Validierungs-Funktion (AC1, AC5)
 # ---------------------------------------------------------------------------
 

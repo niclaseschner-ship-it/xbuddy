@@ -21,6 +21,10 @@ if _REPO_ROOT not in sys.path:
 
 from routine import config as config_mod  # noqa: E402  # isort:skip
 from routine import main as main_mod      # noqa: E402  # isort:skip
+from routine.tests._test_auth import (   # noqa: E402  # isort:skip
+    TEST_BOT_TOKEN,
+    patch_client_auth,
+)
 
 
 # ============================================================
@@ -42,8 +46,9 @@ def _make_client(tmp_path):
     }))
     store_path = str(tmp_path / "routine_store.json")
     cfg = config_mod.resolve_data(str(data_file))
-    main_mod.configure(cfg, data_path=str(data_file), store_path=store_path)
-    return str(data_file), store_path, main_mod.app.test_client()
+    main_mod.configure(cfg, data_path=str(data_file), store_path=store_path,
+                       bot_token=TEST_BOT_TOKEN, init_data_config={"max_age_seconds": 86400})
+    return str(data_file), store_path, patch_client_auth(main_mod.app.test_client())
 
 
 # ============================================================

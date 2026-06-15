@@ -26,6 +26,10 @@ if _REPO_ROOT not in sys.path:
 from routine import config as config_mod  # noqa: E402  # isort:skip
 from routine import items as items_mod    # noqa: E402  # isort:skip
 from routine import main as main_mod      # noqa: E402  # isort:skip
+from routine.tests._test_auth import (   # noqa: E402  # isort:skip
+    TEST_BOT_TOKEN,
+    patch_client_auth,
+)
 
 
 # ============================================================
@@ -49,8 +53,9 @@ def items_client(tmp_path):
     }))
     store_path = str(tmp_path / "routine_store.json")
     cfg = config_mod.resolve_data(str(data_file))
-    main_mod.configure(cfg, data_path=str(data_file), store_path=store_path)
-    return str(data_file), store_path, main_mod.app.test_client()
+    main_mod.configure(cfg, data_path=str(data_file), store_path=store_path,
+                       bot_token=TEST_BOT_TOKEN, init_data_config={"max_age_seconds": 86400})
+    return str(data_file), store_path, patch_client_auth(main_mod.app.test_client())
 
 
 @pytest.fixture
@@ -71,8 +76,9 @@ def volle_liste_client(tmp_path):
     }))
     store_path = str(tmp_path / "routine_store.json")
     cfg = config_mod.resolve_data(str(data_file))
-    main_mod.configure(cfg, data_path=str(data_file), store_path=store_path)
-    return str(data_file), store_path, main_mod.app.test_client()
+    main_mod.configure(cfg, data_path=str(data_file), store_path=store_path,
+                       bot_token=TEST_BOT_TOKEN, init_data_config={"max_age_seconds": 86400})
+    return str(data_file), store_path, patch_client_auth(main_mod.app.test_client())
 
 
 # ============================================================
@@ -444,8 +450,9 @@ def test_ac4_grenzfall_post_bei_sieben_items_gibt_201_und_datei_hat_acht(tmp_pat
     import routine.config as _cfg
     import routine.main as _main
     cfg = _cfg.resolve_data(str(data_file))
-    _main.configure(cfg, data_path=str(data_file), store_path=store_path)
-    client = _main.app.test_client()
+    _main.configure(cfg, data_path=str(data_file), store_path=store_path,
+                    bot_token=TEST_BOT_TOKEN, init_data_config={"max_age_seconds": 86400})
+    client = patch_client_auth(_main.app.test_client())
 
     resp = client.post("/api/v1/routine/items",
                        json={"quelle": "default", "label": "Achter Punkt", "piktogramm": "9999"},
@@ -474,8 +481,9 @@ def test_ac4_grenzfall_put_mit_acht_items_gibt_200(tmp_path):
     import routine.config as _cfg
     import routine.main as _main
     cfg = _cfg.resolve_data(str(data_file))
-    _main.configure(cfg, data_path=str(data_file), store_path=store_path)
-    client = _main.app.test_client()
+    _main.configure(cfg, data_path=str(data_file), store_path=store_path,
+                    bot_token=TEST_BOT_TOKEN, init_data_config={"max_age_seconds": 86400})
+    client = patch_client_auth(_main.app.test_client())
 
     genau_acht = [
         {"id": "item%d" % i, "label": "Item %d" % i, "piktogramm": str(1000 + i)}
