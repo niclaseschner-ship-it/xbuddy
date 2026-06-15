@@ -607,21 +607,18 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             is_member_fn=_rps_is_member,
             icon_origin_url=icon_origin_url))
 
-    # SREG-5/SREG-6 / #476: »Seiten-Übersicht« als lesende Aufgabe (EC-9).
-    # AND-Guard: seiten_origin_url UND family_group_chat_id_getter müssen
-    # gesetzt sein — analog der TER-Linie. Fehlt eine → Aufgabe nicht im
-    # Katalog (SREG-6). seiten_origin_url: Seiten-Registry-Schnittstelle
-    # (GET /api/v1/seiten, SREG-3, nur im Opt-in-Pfad genutzt).
-    # display_url_origin_heim: Heim-Origin für den Übersichts-Link (SREG-7).
-    if seiten_origin_url is not None and family_group_chat_id_getter is not None:
-        from skills.seiten_client import SeitenClient
+    # SREG-5 Pivot / #882: »Seiten-Übersicht« als Klasse-B-Launcher (EC-9).
+    # AND-Guard: mini_app_base_url UND family_group_chat_id_getter müssen
+    # gesetzt sein — analog der RAO-/HOE-Linie. Fehlt eine → Aufgabe nicht im
+    # Katalog. mini_app_base_url: Funnel-Domain für web_app.url (MAU-1).
+    # SREG-5b deprecated: SeitenClient und display_url_origin_heim werden hier
+    # nicht mehr benötigt (der alte Text-Link-Pfad ist inaktiv).
+    if mini_app_base_url is not None and family_group_chat_id_getter is not None:
         from skills.seiten_uebersicht_task import SeitenUebersichtTask
-        _su_client = SeitenClient(origin_url=seiten_origin_url)
         _su_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
         catalog.register(SeitenUebersichtTask(
-            seiten_client=_su_client,
             is_member_fn=_su_is_member,
-            display_url_origin_heim=display_url_origin_heim))
+            mini_app_url=mini_app_base_url))
 
     # PAS-8 / #578: »Plan-Aktivitäten setzen« als synchrone schreibende Aufgabe
     # (EC-10, E-PAS-1 propose→confirm). AND-Guard: plan_origin_url UND
