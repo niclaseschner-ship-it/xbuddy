@@ -280,9 +280,11 @@ def _correction_system_suffix(correction_state):
     `last_skill`, damit das LLM bei einem Re-Propose denselben Skill wieder
     ruft (mit gepatchten Args) statt einen ähnlichen zu raten. Re-Propose
     durchläuft IMMER das zweistufige Confirm-Gate (spec Z. 1193-1201) — das
-    erzwingt das Framework selbst (WRITE → propose, kein A2-Sofort-Modus im
-    Folge-Turn nötig, weil der Skill seinen Klasse bestimmt; siehe agent.py
-    Z. 410 auto_confirm-Branch).
+    erzwingt das Framework selbst: der auto_confirm-Branch unten prüft den
+    Korrektur-State und fällt auf den propose-Pfad zurück, selbst wenn ein
+    A2-Skill (z. B. einkauf_hinzufuegen mit auto_confirm=True) erneut
+    aufgerufen wird. Ohne diesen Gate-Zwang würde das Vertrauen aus der
+    A2-Klausel — das nach `falsch` verbraucht ist — fälschlich weiterleben.
     """
     last_skill = correction_state.last_skill or "unbekannt"
     return (
@@ -449,7 +451,17 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
             # sofort ohne Bestätigungs-Gate, weil die Wirkung schmerzlos
             # rückgängig zu machen ist (z. B. Einkaufs-Item per Mini-App-Geste
             # entfernbar). Frame ruft execute() direkt via Catalog.
-            if task.kind == WRITE and getattr(task, "auto_confirm", False):
+            #
+            # GEGEN-AUSNAHME EC-36 (spec Z. 1193-1201): im Korrektur-State
+            # (Re-Propose nach »falsch«) wird auto_confirm IGNORIERT. Das
+            # Vertrauen aus der A2-Klausel war auf den ursprünglichen Anstoß
+            # bezogen; nach »falsch« ist es verbraucht — der gepatchte Aufruf
+            # läuft IMMER durch das zweistufige Confirm-Gate, selbst für
+            # Skills wie einkauf_hinzufuegen (auto_confirm=True). Der Branch
+            # fällt im Korrektur-State stattdessen in den propose-Pfad unten.
+            if (task.kind == WRITE
+                    and getattr(task, "auto_confirm", False)
+                    and correction_state is None):
                 try:
                     write_result = catalog.execute_write_task(
                         task, call.arguments, turn_context)
