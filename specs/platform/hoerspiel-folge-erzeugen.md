@@ -325,6 +325,64 @@ wird durch einen kontrollierten Doppelten ersetzt):
 Läufe gegen echte Engines (Hörspiel-Buddy mit echter Azure-/LLM-Anbindung)
 sind opt-in und nicht Teil der V1-Standard-Test-Suite.
 
+## HFE-10 — Settings-Beifang-Button (einmal pro Turn, erste `propose()`-Antwort)
+
+**Werft-Lauf 2026-06-15 (Refs #848).** In der **ersten** `propose()`-
+Antwort eines HFE-Turns trägt das presentation-Dict einen **zweiten**
+inline_button neben dem Bestätigungs-/Antwort-Knopf:
+
+- **Label:** `⚙️ Einstellungen`
+- **web_app_url:** `<mini_app_base_url>/seiten/hoerspiel/eltern#einstellungen`
+
+Damit bekommt Eltern **einmal pro Anstoß** die Chance, vor dem Album-Bau
+Voice / LLM-Anbieter / LLM-Modell / Playback-Tempo / Pausen in der
+Eltern-Mini-App (HSP-33, HSP-34) zu tunen — ohne den HFE-Turn zu
+verlassen, ohne einen separaten HOE-Aufruf provozieren zu müssen.
+
+**Gilt für alle drei HFE-3-Sub-Cases der ersten `propose()`-Antwort:**
+
+1. **Leere / mehrdeutige Idee** → Themen-Liste + EC-22-Rückfrage → erste
+   Antwort trägt Beifang-Button.
+2. **Konkrete-aber-unvollständige Idee** → Diskussions-Pattern
+   (`{"diskussion": true, ...}`) → erste Antwort trägt Beifang-Button.
+3. **Konkrete vollständige Idee** → Standard-Pfad mit Vorschlag-Endpoint-
+   Aufruf → erste Antwort (mit Bestätigungs-Vorschlag) trägt Beifang-
+   Button.
+
+**Folge-Antworten der Diskussions-Schleife** (zweite, dritte, … Rückfrage
+des Agents nach der Eröffnung) tragen den Beifang-Button **nicht**. Die
+**EC-10-Bestätigungs-Antwort** des Agents trägt den Beifang-Button
+**nicht** (Confirm-Phase ist Bestätigungs-Frage, kein Tuning-Anlass mehr).
+Die Quittung in `execute()` (Erfolg- oder Fehler-Bubble) trägt den
+Beifang-Button **nicht**.
+
+Begründung: einmal pro Anstoß die Tuning-Tür öffnen — nicht jeden
+Folge-Turn mit zwei Buttons aufblähen. Konsistent mit EC-29 („eine Stimme
+im Turn") und der HFE-7-Klausel: der Beifang ändert nichts an der
+sprachlosen `propose()`-Form — er erscheint im selben Tool-Result-Text,
+das LLM bekommt einen erweiterten `presentation`-Dict-Eintrag.
+
+**Implementations-Hinweis (für Track HSP-2):** Der Skill erkennt „erste
+Antwort des Turns" anhand des `turn_context`-Markers (analog dem
+Diskussions-Trigger-Pattern aus HFE-3 — der Subagent in HSP-2 wählt die
+saubere Mechanik). Der Beifang-Button wird im **gleichen** Form-(b)-Dict
+abgelegt (TASK-10c) — zwei Button-Einträge im `inline_keyboard`. Wenn
+`mini_app_base_url` leer ist (Konfig-Lücke analog HOE-7), **fällt der
+Beifang-Button still aus**: kein Fehler-Text, kein Skill-Abbruch — der
+bestehende HFE-Output bleibt grün, nur ohne Beifang. Begründung: HFE-
+Erzeugen-Pfad darf nicht an einer fehlenden Mini-App-Konfig scheitern;
+der Beifang ist additiv, nicht Pflicht.
+
+*Test-Implikation:* Skill-Test prüft, dass die erste `propose()`-
+Antwort des Turns (alle drei Sub-Cases je einmal) im
+`presentation.inline_button`-Array zwei Einträge enthält, davon einer
+mit Label `⚙️ Einstellungen` und URL endend auf `#einstellungen`.
+Folge-Diskussions-Antworten (`{"diskussion": true, ...}` mit
+`turn_context.is_first = false`) sowie die Confirm-/Execute-Bubbles
+enthalten den Beifang-Button **nicht**. Bei fehlender
+`mini_app_base_url` enthält auch die erste Antwort den Beifang-Button
+**nicht**, der Rest der Antwort bleibt unverändert.
+
 ---
 
 ## Entscheidungen

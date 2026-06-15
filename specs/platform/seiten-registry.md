@@ -810,10 +810,45 @@ Folgende `views.json`-Dateien werden im Implementierungs-Track gepatcht
   ergänzen.
 - `seiten/views.json` — Eintrag für `mini-app-uebersicht` (Selbst-
   Eintrag).
+- `hoerspiel/views.json` — Eintrag für die `hoerspiel-eltern` Mini-App
+  (Werft-Folge #848, Hörspiel-Eltern-Mini-App nach HSP-33). Vorlage:
+
+  ```json
+  {
+    "slug": "eltern",
+    "typ": "mini-app",
+    "pfad": "/seiten/hoerspiel/eltern",
+    "label": "Hörspiel pflegen",
+    "synonyme": [
+      "hoerspiel-einstellungen",
+      "voice ändern",
+      "folge hören",
+      "tempo",
+      "mistral",
+      "claude"
+    ],
+    "zeigt": "Hörspiel-Tuning (Voice, LLM-Anbieter/Modell, Tempo, Pausen) und Album-Galerie mit Multi-Track-Player.",
+    "zielgruppe": "eltern",
+    "web_app": {
+      "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
+      "app_short_name": "hoerspiel",
+      "icons": ["arasaac/5915.png"]
+    }
+  }
+  ```
+
+  Begründung der Feld-Wahlen: Werft #848 ratifiziert die Eltern-Mini-App
+  als HSP-33-Wohnort `/seiten/hoerspiel/eltern` → `slug = "eltern"`,
+  `pfad` analog. Botfather-`app_short_name`-Lego-Brille (`einkauf`,
+  `routine`, `uebersicht` → single-word, kein Bindestrich) →
+  `app_short_name = "hoerspiel"`. Der bestehende `slug: "alben"`-
+  Eintrag (Paula-Display-View, Sorte a) bleibt unverändert — der
+  Mini-App-Eintrag kommt **neben** ihn (analog
+  essen/routine/seiten-Pattern).
 
 Bestehende Einträge (essen `wunsch`, routine `morgen`, seiten
-`uebersicht`) bleiben unverändert — Mini-App-Einträge kommen **neben**
-sie, nicht statt ihrer.
+`uebersicht`, hoerspiel `alben`) bleiben unverändert — Mini-App-Einträge
+kommen **neben** sie, nicht statt ihrer.
 
 *Test (Aggregator):* `views.json` mit `typ: mini-app` → Eintrag im
 Inventar mit `typ: "mini-app"`, `web_app_url` und `funnel_url` korrekt
