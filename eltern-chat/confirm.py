@@ -36,6 +36,42 @@ def is_confirmation(text):
 
 
 @dataclass
+class CorrectionState:
+    """Korrektur-State eines Chats nach einem `falsch`-Vor-Agent-Hook
+    (EC-36 Korrektur-Dialog, #844, spec Z. 1127-1209).
+
+    Trägt den Original-Kontext des zurückgenommenen Schreibakts/Vorschlags in
+    den Folge-Turn — der Agent baut darauf eine gezielte Patch-Frage statt
+    blank von vorn zu starten:
+
+      `last_skill`  — Name des Skills, der zurückgenommen wurde (z. B.
+                      ``foto_senden``, ``einkauf_hinzufuegen``,
+                      ``gericht_anlegen``). Der Re-Propose nutzt denselben Skill
+                      mit gepatchten Args.
+      `last_args`   — die Arguments des Original-Aufrufs (Modell-Kanal). Bei
+                      A2-Pfaden (foto_senden im V1) sind sie oft leer, weil
+                      Foto-Bytes über die Medien-Naht laufen — der Korrektur-
+                      State trägt sie dennoch zur Referenz.
+      `quelle`      — ``"a2"`` oder ``"klasse_c"``, rein informativ für die
+                      System-Prompt-Erweiterung (spec Z. 1162-1168 trennt die
+                      Wortlaut-Sorten; der Korrektur-Dialog selbst ist identisch).
+
+    Lebensdauer: genau EIN Folge-Turn. Nach jedem Agent-Turn wird der State
+    gelöscht (siehe `PendingStore.clear_correction`) — entweder weil ein
+    neuer Vorschlag entstand (Re-Propose), oder weil die LLM-Rückfrage den
+    Patch noch nicht abschließen konnte und der nächste User-Turn frisch
+    durch den Hook läuft. **Cross-Skill-Exit:** wenn der LLM im Korrektur-
+    State einen anderen Skill ruft (spec Z. 1184-1191), wird der State
+    ebenfalls verworfen — der neue Skill läuft durch seinen normalen
+    Confirm-/A2-Pfad. Da der Zustand pro Turn gelöscht wird, fällt das
+    mechanisch in denselben Pfad: ein neuer Turn ohne State.
+    """
+    last_skill: str
+    last_args: dict
+    quelle: str   # "a2" | "klasse_c"
+
+
+@dataclass
 class PendingProposal:
     """Ein vorgelegter, noch unbestätigter schreibender Vorschlag (EC-10).
 
@@ -71,6 +107,12 @@ class PendingStore:
 
     def __init__(self):
         self._by_chat = {}   # chat_id -> PendingProposal | None  (EC-10 Single-Slot)
+        # EC-36 Korrektur-Dialog (#844): pro Chat höchstens ein offener Korrektur-
+        # State, gesetzt vom `falsch`-Vor-Agent-Hook (main.py), gelesen vom Agent
+        # für die System-Prompt-Erweiterung im Folge-Turn, anschließend gelöscht.
+        # Single-Slot wie der Pending-Slot: parallele Korrektur-Dialoge je Chat
+        # gibt es nicht; ein zweiter `falsch` verdrängt den vorigen State atomar.
+        self._correction_by_chat = {}   # chat_id -> CorrectionState | None
 
     def add(self, pending):
         """Merkt einen vorgelegten Vorschlag vor — verdrängt vorhandenen Pending atomar.
@@ -105,3 +147,29 @@ class PendingStore:
         # Single-Slot: kein Raten nötig — es gibt genau einen Vorschlag.
         self._by_chat[chat_id] = None
         return pending
+
+    # ---- EC-36 Korrektur-State (#844) -------------------------------
+
+    def set_correction(self, chat_id, state):
+        """Setzt den Korrektur-State für `chat_id` (verdrängt vorhandenen).
+
+        Vom `falsch`-Vor-Agent-Hook in `main.py` direkt nach Inverse-Aufruf
+        (A2) oder PendingStore-Verwerfung (Klasse-C) gesetzt — der nächste
+        Agent-Turn liest ihn über `get_correction()` für die System-Prompt-
+        Erweiterung.
+        """
+        self._correction_by_chat[chat_id] = state
+
+    def get_correction(self, chat_id):
+        """Liefert den aktuellen Korrektur-State des Chats oder None."""
+        return self._correction_by_chat.get(chat_id)
+
+    def clear_correction(self, chat_id):
+        """Löscht den Korrektur-State (genau-ein-Turn-Lebensdauer, EC-36).
+
+        Wird vom Agent-Pfad nach jedem Turn aufgerufen — der State darf nicht
+        session-übergreifend liegen bleiben. Im Re-Propose-Erfolgsfall ist der
+        neue Vorschlag bereits im Pending-Slot; der gelöschte Korrektur-State
+        verhindert eine doppelte System-Prompt-Erweiterung im Folge-Turn.
+        """
+        self._correction_by_chat[chat_id] = None

@@ -14,6 +14,8 @@ liefert (Entry-Path-Probe).
 import logging
 import time
 
+import main as main_mod
+from a2_receipt_store import A2ReceiptStore
 from confirm import PendingStore
 from fakes import (
     FakeProvider,
@@ -491,3 +493,458 @@ def test_SESS5_registry_routes_privatchat_to_session_deliver(tmp_path):
         "SESS-5: Bei aktiver Session darf der Agent nicht aufgerufen werden.")
     assert not tg.sent, (
         "SESS-5: Bei aktiver Session darf keine Bot-Antwort gesendet werden.")
+
+
+# ============================================================
+#  EC-36 Korrektur-Hook (#844) — Integrationstests handle_update
+# ============================================================
+
+
+class _StubHTTP:
+    """Stubt main._http_delete für die Integrationstests."""
+
+    def __init__(self, statuses=None):
+        self._statuses = list(statuses or [])
+        self.calls = []
+
+    def __call__(self, origin_url, api_path, timeout=2.0):
+        self.calls.append((origin_url, api_path))
+        if self._statuses:
+            return self._statuses.pop(0), b""
+        return 200, b""
+
+
+def _ec36_ctx(tmp_path, tg, provider, *, catalog=None, store=None,
+              photo_origin="", essen_origin=""):
+    """Context mit EC-36-Feldern."""
+    return Context(
+        tg=tg, bot_username="mybot", family_group_chat_id="-100",
+        context_depth=20, provider=provider,
+        catalog=catalog if catalog is not None else Catalog(),
+        history=History(str(tmp_path / "ec36.db")),
+        pending=PendingStore(),
+        a2_receipt_store=store,
+        photo_origin_url=photo_origin,
+        essen_origin_url=essen_origin,
+    )
+
+
+def test_EC_36_falsch_nach_a2_foto_loest_inverse_aus(tmp_path, monkeypatch):
+    """AC1/AC2-Integration: handle_update verarbeitet »falsch« VOR dem Agenten;
+    A2-Receipt löst HTTP DELETE aus, Quittung positiv, kein Provider-Call."""
+    store = A2ReceiptStore(str(tmp_path / "rec.db"))
+    chat_id = 42
+    store.insert("foto_senden", chat_id, "med-7",
+                 'photo DELETE /api/v1/photo/medien/med-7')
+
+    tg = FakeTelegram(members=_members(7))
+    # Provider darf NICHT gerufen werden — der Hook handelt allein.
+    provider = FakeProvider([])
+    ctx = _ec36_ctx(tmp_path, tg, provider, store=store,
+                    photo_origin="http://127.0.0.1:5070")
+
+    http = _StubHTTP(statuses=[200])
+    monkeypatch.setattr(main_mod, "_http_delete", http)
+
+    handle_update(make_message("falsch", chat_id=chat_id, from_user_id=7),
+                  ctx)
+
+    assert provider.requests == [], (
+        "EC-36: »falsch« muss VOR dem Agenten greifen — kein Provider-Call.")
+    assert http.calls == [
+        ("http://127.0.0.1:5070", "/api/v1/photo/medien/med-7")]
+    assert len(tg.sent) == 1
+    assert "rückgängig" in tg.sent[0]["text"].lower()
+    # Korrektur-State sichtbar für den Folge-Turn
+    assert ctx.pending.get_correction(chat_id) is not None
+
+
+def test_EC_36_falsch_nach_klasse_c_verwirft_pending(tmp_path):
+    """AC1-Integration Klasse-C: »falsch« nach Pending verwirft den Vorschlag,
+    Quittung „Vorschlag verworfen", kein Provider-Call."""
+    write = FakeWriteTask(name="gericht_anlegen", summary="Pizza anlegen",
+                          result="Pizza angelegt.")
+    catalog = Catalog()
+    catalog.register(write)
+
+    tg = FakeTelegram(members=_members(7))
+    # Schritt 1: ein Vorschlag entsteht (write_proposal-Flow).
+    provider = FakeProvider([
+        task_call_response("gericht_anlegen", arguments={"label": "Pizza"}),
+        # Schritt 2 NICHT erwartet — »falsch« greift VOR dem Agenten.
+    ])
+    ctx = _ec36_ctx(tmp_path, tg, provider, catalog=catalog)
+
+    handle_update(make_message("trag Pizza ein", message_id=100,
+                               from_user_id=7), ctx)
+    assert ctx.pending.open_count(42) == 1
+
+    handle_update(make_message("falsch", message_id=101, from_user_id=7), ctx)
+
+    # Pending verworfen
+    assert ctx.pending.open_count(42) == 0
+    # Quittung
+    texts = [s["text"] for s in tg.sent]
+    assert any("vorschlag verworfen" in t.lower() for t in texts)
+    # Agent wurde nur EINMAL gerufen (für den ersten Vorschlag)
+    assert len(provider.requests) == 1
+    # Korrektur-State trägt Original-Skill + Args
+    state = ctx.pending.get_correction(42)
+    assert state is not None
+    assert state.last_skill == "gericht_anlegen"
+    assert state.last_args == {"label": "Pizza"}
+
+
+def test_EC_36_re_propose_durchlaeuft_confirm_gate(tmp_path):
+    """AC4 Re-Propose: nach »falsch« + Patch baut der Agent einen neuen
+    Vorschlag, der IMMER durch das zweistufige Confirm-Gate geht — auch wenn
+    der Original-Skill A2 war (spec Z. 1193-1201).
+
+    Hier am Klasse-C-Beispiel: »falsch« → Patch → neuer Vorschlag → »ja«
+    → Ausführung. Belegt damit, dass das System die Re-Propose-Form als
+    normalen Pending-Pfad handhabt.
+    """
+    write = FakeWriteTask(name="gericht_anlegen", summary="Nudeln anlegen",
+                          result="Nudeln angelegt.")
+    catalog = Catalog()
+    catalog.register(write)
+
+    tg = FakeTelegram(members=_members(7))
+    # Turn 1: erster Vorschlag (Pizza)
+    # Turn 2 (nach »falsch« + Patch »Nudeln«): zweiter Vorschlag (Nudeln)
+    provider = FakeProvider([
+        task_call_response("gericht_anlegen", arguments={"label": "Pizza"},
+                           call_id="c1"),
+        task_call_response("gericht_anlegen", arguments={"label": "Nudeln"},
+                           call_id="c2"),
+    ])
+    ctx = _ec36_ctx(tmp_path, tg, provider, catalog=catalog)
+
+    # Schritt 1: »trag Pizza ein« → Vorschlag
+    handle_update(make_message("trag Pizza ein", message_id=100,
+                               from_user_id=7), ctx)
+    assert ctx.pending.open_count(42) == 1
+    assert write.execute_calls == []
+
+    # Schritt 2: »falsch« → Vorschlag verworfen, Korrektur-State gesetzt
+    handle_update(make_message("falsch", message_id=101, from_user_id=7), ctx)
+    assert ctx.pending.open_count(42) == 0
+    assert ctx.pending.get_correction(42) is not None
+
+    # Schritt 3: Patch »Nudeln« → Agent baut neuen Vorschlag (Confirm-Gate)
+    handle_update(make_message("Nudeln", message_id=102, from_user_id=7), ctx)
+    # Korrektur-State nach dem Agent-Turn verbraucht
+    assert ctx.pending.get_correction(42) is None
+    # Neuer Vorschlag liegt vor
+    assert ctx.pending.open_count(42) == 1
+    proposal_msg_id = tg.sent[-1]["message_id"]
+    # Noch nicht ausgeführt
+    assert write.execute_calls == []
+
+    # Schritt 4: »ja« als Antwort auf den neuen Vorschlag → Ausführung
+    handle_update(make_message("ja", message_id=103, from_user_id=7,
+                               reply_to_message_id=proposal_msg_id), ctx)
+    # Re-Propose-Args wurden ausgeführt
+    assert write.execute_calls == [{"label": "Nudeln"}]
+
+
+def test_EC_36_falsch_nach_a2_provider_nicht_gerufen(tmp_path, monkeypatch):
+    """Negativ-Probe: Der Hook fängt »falsch« VOR dem Agenten ab — also läuft
+    der Provider auch dann nicht, wenn er skriptiert wäre."""
+    store = A2ReceiptStore(str(tmp_path / "rec.db"))
+    chat_id = 42
+    store.insert("einkauf_hinzufuegen", chat_id, "item-1",
+                 'essen DELETE /api/v1/essen/wuensche/item-1')
+
+    tg = FakeTelegram(members=_members(7))
+    provider = FakeProvider([text_response("DARF NICHT KOMMEN")])
+    ctx = _ec36_ctx(tmp_path, tg, provider, store=store,
+                    essen_origin="http://127.0.0.1:5052")
+
+    monkeypatch.setattr(main_mod, "_http_delete", _StubHTTP(statuses=[200]))
+    handle_update(make_message("falsch", chat_id=chat_id, from_user_id=7),
+                  ctx)
+
+    assert provider.requests == []
+    assert "DARF NICHT KOMMEN" not in (tg.sent[0]["text"] if tg.sent else "")
+
+
+def test_EC_36_falsch_ohne_vorgang_geht_an_agent(tmp_path):
+    """»falsch« ohne A2-Receipt + ohne Pending → Hook gibt False, Agent läuft."""
+    tg = FakeTelegram(members=_members(7))
+    provider = FakeProvider([text_response("Was war falsch?")])
+    # Kein store, kein pending — Hook ist no-op
+    ctx = _ec36_ctx(tmp_path, tg, provider)
+
+    handle_update(make_message("falsch", from_user_id=7), ctx)
+
+    # Agent wurde gerufen
+    assert len(provider.requests) == 1
+    assert tg.sent[0]["text"] == "Was war falsch?"
+
+
+# ============================================================
+#  EC-36 Test-Implikationen 2/3/4 (spec Z. 1211-1224) +
+#  Re-Propose-Gate-Pflicht für A2-Skills (FIX 1, Watchdog T844-S1-W)
+# ============================================================
+
+
+def test_EC_36_re_propose_auto_confirm_task_geht_durch_gate(tmp_path,
+                                                             monkeypatch):
+    """FIX 1 (Watchdog T844-S1-W, EC-36 spec Z. 1193-1201): Ein A2-Skill
+    (auto_confirm=True) ruft im Korrektur-State NICHT direkt execute(),
+    sondern läuft durch propose() — das Vertrauen aus der A2-Klausel ist
+    nach »falsch« verbraucht.
+
+    Reale Live-Drift, die der Patch schließt: einkauf_hinzufuegen
+    (auto_confirm=True) hätte im Re-Propose nach »falsch + eigentlich
+    Brötchen« sofort »Brötchen« geschrieben — der User hätte ihn ein
+    zweites Mal mit »falsch« rückgängig machen müssen.
+    """
+    chat_id = 42
+    # Auto-confirm-Schreibtask, der den »einkauf_hinzufuegen«-Charakter trägt.
+    write = FakeWriteTask(name="einkauf_hinzufuegen",
+                          summary="Brötchen auf die Liste",
+                          result="Brötchen eingetragen.",
+                          auto_confirm=True)
+    catalog = Catalog()
+    catalog.register(write)
+
+    # A2-Receipt für den Ursprungs-Akt »Brot« — der »falsch«-Hook löst den
+    # Inverse-Call aus und setzt den Korrektur-State.
+    store = A2ReceiptStore(str(tmp_path / "rec.db"))
+    store.insert("einkauf_hinzufuegen", chat_id, "item-brot",
+                 'essen DELETE /api/v1/essen/wuensche/item-brot')
+
+    tg = FakeTelegram(members=_members(7))
+    # Provider antwortet im Korrektur-Folge-Turn mit dem Re-Aufruf des
+    # auto_confirm-Skills (gepatchte Args »Brötchen«).
+    provider = FakeProvider([
+        task_call_response("einkauf_hinzufuegen",
+                           arguments={"text": "Brötchen"}, call_id="c-re"),
+    ])
+    ctx = _ec36_ctx(tmp_path, tg, provider, catalog=catalog, store=store,
+                    essen_origin="http://127.0.0.1:5052")
+
+    monkeypatch.setattr(main_mod, "_http_delete", _StubHTTP(statuses=[200]))
+
+    # Schritt 1: »falsch« nach A2-Akt → Korrektur-State gesetzt
+    handle_update(make_message("falsch", message_id=200, from_user_id=7), ctx)
+    assert ctx.pending.get_correction(chat_id) is not None
+    # Provider wurde noch NICHT gerufen
+    assert provider.requests == []
+
+    # Schritt 2: Patch »eigentlich Brötchen« → Agent baut neuen Aufruf
+    handle_update(make_message("eigentlich Brötchen", message_id=201,
+                               from_user_id=7), ctx)
+
+    # FIX 1 — execute() wurde NICHT direkt aufgerufen, obwohl auto_confirm=True
+    assert write.execute_calls == [], (
+        "EC-36 spec Z. 1193-1201: Re-Propose für A2-Skill (auto_confirm) "
+        "muss durch das Confirm-Gate laufen — execute_calls darf leer sein.")
+    # Stattdessen liegt ein propose-Vorschlag im Pending-Slot
+    assert ctx.pending.open_count(chat_id) == 1
+    assert write.propose_calls == [{"text": "Brötchen"}]
+    # Korrektur-State nach dem Folge-Turn verbraucht
+    assert ctx.pending.get_correction(chat_id) is None
+
+
+def test_EC_36_impl2_re_propose_a2_durchlaeuft_gate(tmp_path, monkeypatch):
+    """EC-36 spec Z. 1213-1217 Test-Implikation 2: A2-Pfad
+    einkauf_hinzufuegen Sofort-Write von »Brot« → User »falsch« → Bot löscht
+    und fragt »Was war falsch?« → User »eigentlich Brötchen« → Bot propose
+    mit »Brötchen« (Confirm-Gate erzwungen) → User »ja« → Schreibakt grün.
+
+    Subsumiert FIX 1, prüft aber auch den vollständigen ja-Pfad bis zum
+    execute() nach der Bestätigung.
+    """
+    chat_id = 42
+    write = FakeWriteTask(name="einkauf_hinzufuegen",
+                          summary="Brötchen auf die Liste",
+                          result="Brötchen eingetragen.",
+                          auto_confirm=True)
+    catalog = Catalog()
+    catalog.register(write)
+
+    store = A2ReceiptStore(str(tmp_path / "rec.db"))
+    store.insert("einkauf_hinzufuegen", chat_id, "item-brot",
+                 'essen DELETE /api/v1/essen/wuensche/item-brot')
+
+    tg = FakeTelegram(members=_members(7))
+    provider = FakeProvider([
+        task_call_response("einkauf_hinzufuegen",
+                           arguments={"text": "Brötchen"}, call_id="c-re"),
+    ])
+    ctx = _ec36_ctx(tmp_path, tg, provider, catalog=catalog, store=store,
+                    essen_origin="http://127.0.0.1:5052")
+
+    monkeypatch.setattr(main_mod, "_http_delete", _StubHTTP(statuses=[200]))
+
+    # »falsch« → Korrektur-State
+    handle_update(make_message("falsch", message_id=300, from_user_id=7), ctx)
+    # Patch → propose statt sofort-execute
+    handle_update(make_message("eigentlich Brötchen", message_id=301,
+                               from_user_id=7), ctx)
+    assert write.execute_calls == []
+    assert ctx.pending.open_count(chat_id) == 1
+    proposal_msg_id = tg.sent[-1]["message_id"]
+
+    # »ja« als Reply auf den Vorschlag → execute() grün
+    handle_update(make_message("ja", message_id=302, from_user_id=7,
+                               reply_to_message_id=proposal_msg_id), ctx)
+    assert write.execute_calls == [{"text": "Brötchen"}]
+
+
+def test_EC_36_impl3_cross_skill_exit_versiegelt_correction(tmp_path):
+    """EC-36 spec Z. 1219-1221 Test-Implikation 3 (Cross-Skill-Exit):
+    termin_eintragen propose → »falsch« → User »lieber als Plan-Aktivität«
+    → Bot startet plan_aktivitaeten_setzen, alter Korrektur-State versiegelt.
+
+    Mechanisch: nach `_falsch_hook` ist der Korrektur-State gesetzt. Im
+    Folge-Turn ruft der Agent einen ANDEREN Skill — main.py löscht den
+    Korrektur-State NACH dem Agent-Lauf (genau-ein-Turn-Lebensdauer). Der
+    neue Skill läuft durch seinen normalen Pfad.
+    """
+    chat_id = 42
+    termin = FakeWriteTask(name="termin_eintragen",
+                           summary="Sport Mo 17:00",
+                           result="Termin eingetragen.")
+    plan = FakeWriteTask(name="plan_aktivitaeten_setzen",
+                         summary="Sport als Plan-Aktivität",
+                         result="Plan-Aktivität gesetzt.")
+    catalog = Catalog()
+    catalog.register(termin)
+    catalog.register(plan)
+
+    tg = FakeTelegram(members=_members(7))
+    # Turn 1: Termin-Vorschlag
+    # Turn 2 (nach »falsch« + Cross-Skill): plan_aktivitaeten_setzen-Vorschlag
+    provider = FakeProvider([
+        task_call_response("termin_eintragen",
+                           arguments={"titel": "Sport", "zeit": "Mo 17"},
+                           call_id="t1"),
+        task_call_response("plan_aktivitaeten_setzen",
+                           arguments={"titel": "Sport"}, call_id="t2"),
+    ])
+    ctx = _ec36_ctx(tmp_path, tg, provider, catalog=catalog)
+
+    # Schritt 1: Termin-Vorschlag entsteht
+    handle_update(make_message("Sport Mo 17 eintragen", message_id=400,
+                               from_user_id=7), ctx)
+    assert ctx.pending.open_count(chat_id) == 1
+
+    # Schritt 2: »falsch« → Pending verworfen, Korrektur-State zeigt auf termin_eintragen
+    handle_update(make_message("falsch", message_id=401, from_user_id=7), ctx)
+    state = ctx.pending.get_correction(chat_id)
+    assert state is not None
+    assert state.last_skill == "termin_eintragen"
+
+    # Schritt 3: Cross-Skill — »lieber als Plan-Aktivität«
+    handle_update(make_message("lieber als Plan-Aktivität", message_id=402,
+                               from_user_id=7), ctx)
+    # Alter Korrektur-State versiegelt (genau-ein-Turn-Lebensdauer)
+    assert ctx.pending.get_correction(chat_id) is None
+    # Neuer Skill lief durch seinen normalen Pfad — Vorschlag liegt vor,
+    # NICHT mehr für termin_eintragen, sondern für plan_aktivitaeten_setzen
+    assert ctx.pending.open_count(chat_id) == 1
+    assert plan.propose_calls == [{"titel": "Sport"}]
+    # Der alte Skill wurde im Cross-Skill-Turn nicht erneut aufgerufen
+    assert termin.propose_calls == [{"titel": "Sport", "zeit": "Mo 17"}]
+
+
+def test_EC_36_impl4_klasse_c_mehrere_iterationen(tmp_path):
+    """EC-36 spec Z. 1223-1224 Test-Implikation 4: Klasse-C propose →
+    »falsch« → Patch → propose → »falsch« → erneut Patch → propose → »ja«
+    → grün.
+
+    Geprüft wird, dass der Korrektur-Hook und der Confirm-Gate auch in
+    mehreren Iterationen sauber zusammenspielen — jeder Iterations-Bon
+    wird sauber verworfen, der Korrektur-State nach jedem Patch-Turn
+    verbraucht, der finale »ja«-Pfad führt zum execute().
+    """
+    chat_id = 42
+    write = FakeWriteTask(name="gericht_anlegen",
+                          summary="Nudeln anlegen",
+                          result="Nudeln angelegt.")
+    catalog = Catalog()
+    catalog.register(write)
+
+    tg = FakeTelegram(members=_members(7))
+    provider = FakeProvider([
+        # Turn 1: erster Vorschlag (Pizza)
+        task_call_response("gericht_anlegen", arguments={"label": "Pizza"},
+                           call_id="c1"),
+        # Turn 2 (nach »falsch« + Patch »Lasagne«): zweiter Vorschlag
+        task_call_response("gericht_anlegen", arguments={"label": "Lasagne"},
+                           call_id="c2"),
+        # Turn 3 (nach erneutem »falsch« + Patch »Nudeln«): dritter Vorschlag
+        task_call_response("gericht_anlegen", arguments={"label": "Nudeln"},
+                           call_id="c3"),
+    ])
+    ctx = _ec36_ctx(tmp_path, tg, provider, catalog=catalog)
+
+    # Iteration 1: Vorschlag → »falsch« → Patch → neuer Vorschlag
+    handle_update(make_message("trag Pizza ein", message_id=500,
+                               from_user_id=7), ctx)
+    assert ctx.pending.open_count(chat_id) == 1
+    handle_update(make_message("falsch", message_id=501, from_user_id=7), ctx)
+    assert ctx.pending.get_correction(chat_id) is not None
+    handle_update(make_message("Lasagne", message_id=502, from_user_id=7), ctx)
+    assert ctx.pending.get_correction(chat_id) is None
+    assert ctx.pending.open_count(chat_id) == 1
+    assert write.execute_calls == []
+
+    # Iteration 2: erneut »falsch« → Patch → dritter Vorschlag
+    handle_update(make_message("falsch", message_id=503, from_user_id=7), ctx)
+    assert ctx.pending.open_count(chat_id) == 0
+    assert ctx.pending.get_correction(chat_id) is not None
+    handle_update(make_message("Nudeln", message_id=504, from_user_id=7), ctx)
+    assert ctx.pending.get_correction(chat_id) is None
+    assert ctx.pending.open_count(chat_id) == 1
+    proposal_msg_id = tg.sent[-1]["message_id"]
+    assert write.execute_calls == []
+
+    # Finale Bestätigung
+    handle_update(make_message("ja", message_id=505, from_user_id=7,
+                               reply_to_message_id=proposal_msg_id), ctx)
+    assert write.execute_calls == [{"label": "Nudeln"}]
+
+
+def test_EC_36_provider_error_clears_correction(tmp_path):
+    """FIX 4 (Watchdog T844-S1-W, Befund 5): ProviderError im Korrektur-Folge-
+    Turn versiegelt den Korrektur-State trotzdem (main.py Z. 506-509).
+
+    Ohne diesen Cleanup würde der Korrektur-State doppelt zugespielt — der
+    nächste User-Turn liefe mit altem Suffix in einen neuen Agent-Turn, der
+    inhaltlich gar nicht zum Patch passt.
+    """
+    chat_id = 42
+    write = FakeWriteTask(name="gericht_anlegen", summary="Pizza anlegen",
+                          result="Pizza angelegt.")
+    catalog = Catalog()
+    catalog.register(write)
+
+    tg = FakeTelegram(members=_members(7))
+    # Turn 1: erster Vorschlag — sauber
+    # Turn 2 (Patch nach »falsch«): Provider wirft
+    provider = FakeProvider([
+        task_call_response("gericht_anlegen", arguments={"label": "Pizza"},
+                           call_id="c1"),
+        ProviderError("Anbieter weg"),
+    ])
+    ctx = _ec36_ctx(tmp_path, tg, provider, catalog=catalog)
+
+    # Schritt 1: Vorschlag → Pending
+    handle_update(make_message("trag Pizza ein", message_id=600,
+                               from_user_id=7), ctx)
+    # Schritt 2: »falsch« → Korrektur-State gesetzt
+    handle_update(make_message("falsch", message_id=601, from_user_id=7), ctx)
+    assert ctx.pending.get_correction(chat_id) is not None
+
+    # Schritt 3: Patch — Provider wirft, _PROVIDER_DOWN-Nachricht
+    handle_update(make_message("Nudeln", message_id=602, from_user_id=7), ctx)
+
+    # FIX 4 — Korrektur-State wurde im Provider-Down-Pfad versiegelt
+    assert ctx.pending.get_correction(chat_id) is None
+    # Der Provider-Down-Hinweis wurde gesendet
+    assert any(_PROVIDER_DOWN in s["text"] for s in tg.sent)
