@@ -98,6 +98,7 @@ def client_mini_no_auth(runtime_cfg_with_mistral, data_cfg_mini, data_root_mini)
 #  HSP-33-Auth — 401/403-Verhalten (HSP-40)
 # ============================================================
 
+@pytest.mark.skip(reason="V3 #898: Soft-Auth — Header optional, kein 401 mehr bei fehlendem Header")
 def test_config_ohne_auth_header_401(client_mini_no_auth):
     """HSP-39: GET /config ohne Authorization-Header → 401 oder 500."""
     resp = client_mini_no_auth.get("/api/v1/hoerspiel/config")
@@ -105,6 +106,7 @@ def test_config_ohne_auth_header_401(client_mini_no_auth):
     assert resp.status_code in (401, 500)
 
 
+@pytest.mark.skip(reason="V3 #898: Soft-Auth — Header optional, kein 401 mehr bei fehlendem Header")
 def test_themen_ohne_auth_header_401(client_mini_no_auth):
     resp = client_mini_no_auth.get("/api/v1/hoerspiel/themen?alter=4")
     assert resp.status_code in (401, 500)
