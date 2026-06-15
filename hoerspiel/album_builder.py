@@ -33,6 +33,7 @@ from datetime import datetime
 from typing import Any
 
 from . import album_manifest, data_io, llm_service, tts_service
+from . import config as config_mod
 from .providers.base import LLMProvider
 
 logger = logging.getLogger(__name__)
@@ -43,13 +44,12 @@ BUNDLE_THRESHOLD_WORDS = 450
 # HSP-7/HSP-14: durchschnittlich 150 Wörter/Minute als grobe Track-Dauer.
 WORDS_PER_SECOND = 2.5
 
-# HSP-14 Pausen (aus Brainstorm-Demo `generate_structured.py`):
-# - 0.55s Stille zwischen normalen Inhalts-Absätzen + am Track-Ende
-# - 1.8s nach Titel-Absatz (`Folge N: <Titel>`, erster Absatz)
-# - vor Outro-Track 0.55s — als Tail des letzten Inhalts-Bündels
-BUNDLE_TAIL_SILENCE_SEK = 0.55
-PARAGRAPH_SILENCE_SEK = 0.55
-TITLE_SILENCE_SEK = 1.8
+# HSP-14 Pausen — Module-Level-Defaults (familien-konfigurierbar via DataConfig).
+# baue_album() nimmt die Werte aus DataConfig; diese Konstanten sind Fallbacks
+# für Code, der DataConfig nicht kennt (Rückwärtskompatibilität).
+BUNDLE_TAIL_SILENCE_SEK = config_mod.DEFAULT_PAUSE_ABSATZ_SEK
+PARAGRAPH_SILENCE_SEK = config_mod.DEFAULT_PAUSE_ABSATZ_SEK
+TITLE_SILENCE_SEK = config_mod.DEFAULT_PAUSE_TITEL_SEK
 
 DEFAULT_INDEX_FILENAME = ".index.json"
 
@@ -168,16 +168,21 @@ def _pad_silence(mp3_bytes: bytes, silence_sek: float) -> bytes:
 
 def _synthese_bundle_mit_pausen(bundle: str, voice: str, *, tts_engine,
                                 ist_erster_bundle: bool,
-                                ist_letzter_bundle: bool) -> tuple[bytes, int]:
+                                ist_letzter_bundle: bool,
+                                pause_absatz_sek: float = PARAGRAPH_SILENCE_SEK,
+                                pause_titel_sek: float = TITLE_SILENCE_SEK,
+                                ) -> tuple[bytes, int]:
     """Synthetisiert ein Bündel als pro-Absatz-TTS-Calls + Pausen (HSP-14).
 
     Brainstorm-Demo `generate_structured.py`-Architektur:
       - jeder Absatz wird einzeln synthetisiert
       - nach Titel-Absatz (erster Absatz im ersten Bündel,
-        `Folge N: <Titel>`) wird 1.8 s Stille angehängt
-      - zwischen normalen Inhalts-Absätzen 0.55 s
-      - vor dem Outro-Track (Ende des letzten Bündels) 0.55 s
+        `Folge N: <Titel>`) wird pause_titel_sek Stille angehängt
+      - zwischen normalen Inhalts-Absätzen + am Bündel-Ende pause_absatz_sek
     Re-encode mit libmp3lame bei jedem Concat-Schritt — sonst DTS-Müll.
+
+    pause_absatz_sek / pause_titel_sek: aus DataConfig (HSP-14/HSP-27),
+    Defaults entsprechen den Modul-Konstanten (0.55 / 1.8).
 
     Returns (mp3_bytes, dauer_sek) — Dauer als Wort-basierte Schätzung
     plus Anzahl Pausen.
@@ -195,13 +200,11 @@ def _synthese_bundle_mit_pausen(bundle: str, voice: str, *, tts_engine,
             and re.match(r"^Folge\s+\d+", absatz)
         )
         if ist_letzter_absatz_im_bundle:
-            # Letzter Absatz im letzten Bündel: Pre-Outro-Pause.
-            # Sonst zwischen-Bündel-Pause am Track-Ende.
-            pause = BUNDLE_TAIL_SILENCE_SEK if ist_letzter_bundle else BUNDLE_TAIL_SILENCE_SEK
+            pause = pause_absatz_sek
         elif ist_titel_absatz:
-            pause = TITLE_SILENCE_SEK
+            pause = pause_titel_sek
         else:
-            pause = PARAGRAPH_SILENCE_SEK
+            pause = pause_absatz_sek
         chunks.append((mp3, pause))
 
     track_mp3 = _concat_chunks_mit_pausen(chunks)
@@ -285,7 +288,10 @@ def baue_album(*, titel: str, text: str, voice: str, idee: str,
                data_root: str,
                llm: LLMProvider,
                tts_engine,
-               now: Callable[[], datetime]) -> BaueErgebnis:
+               now: Callable[[], datetime],
+               pause_absatz_sek: float = PARAGRAPH_SILENCE_SEK,
+               pause_titel_sek: float = TITLE_SILENCE_SEK,
+               ) -> BaueErgebnis:
     """Führt die HSP-15-Pipeline atomar aus.
 
     Idempotenz (Q3): Hash über `(titel, text, voice)` → wenn der Index
@@ -347,7 +353,10 @@ def baue_album(*, titel: str, text: str, voice: str, idee: str,
             mp3, dauer = _synthese_bundle_mit_pausen(
                 bundle, voice, tts_engine=tts_engine,
                 ist_erster_bundle=(idx == 0),
-                ist_letzter_bundle=(idx == n_bundles - 1))
+                ist_letzter_bundle=(idx == n_bundles - 1),
+                pause_absatz_sek=pause_absatz_sek,
+                pause_titel_sek=pause_titel_sek,
+            )
             track_filename = "track-%02d.mp3" % position
             data_io.atomic_write_bytes(os.path.join(audio_tmp, track_filename), mp3)
             album_manifest.add_inhalt_track(

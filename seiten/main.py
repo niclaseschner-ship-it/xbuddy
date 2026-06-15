@@ -515,6 +515,61 @@ def routine_anpassen_view():
     return resp
 
 
+@app.route("/seiten/hoerspiel/eltern", methods=["GET"])
+def hoerspiel_eltern_view():
+    """HSP-33: Hörspiel-Eltern-Mini-App-View.
+
+    Auth (MAD-7 / HSP-39): Authorization: tma <initData>-Header Pflicht.
+    Fehlender oder ungültiger Header → 401 + Klartext.
+    Nicht-Familienmitglied → 403.
+
+    Template liegt in hoerspiel/templates/eltern.html (HSP-33: Wohnort im
+    hoerspiel/-Modul). Rendered via absoluten Pfad analog anderen Mini-Apps.
+
+    JS laedt beim Boot via:
+      GET /api/v1/hoerspiel/config  (HSP-34: Einstellungen)
+      GET /api/v1/hoerspiel/alben   (HSP-35: Folgen-Liste)
+    nginx routet /api/v1/hoerspiel/... zum hoerspiel-Buddy (Port 5053).
+
+    Cache-Buster: build_id aus mtime von hoerspiel/static/eltern.js.
+    response-Header no-store, damit jeder Open das HTML neu holt.
+    """
+    init_data, err = _validate_mini_app_request()
+    if err is not None:
+        # HSP-39: 401 mit Klartext-Hinweis (kein JSON-Render für HTML-Route)
+        _json_body, status_code = err
+        if status_code == 401:
+            return make_response(
+                "Bitte über den Familien-Bot öffnen (initData fehlt oder ist ungültig).", 401)
+        return err
+
+    # FAM-7/8: User-ID gegen Familien-Registry prüfen
+    fam_err = _check_familie_mitglied(init_data.user_id)
+    if fam_err is not None:
+        return fam_err
+
+    # build_id aus mtime von eltern.js in hoerspiel/static/
+    _REPO_ROOT_SEITEN = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    hoerspiel_static = os.path.join(_REPO_ROOT_SEITEN, "hoerspiel", "static")
+    try:
+        build_id = str(int(os.path.getmtime(os.path.join(hoerspiel_static, "eltern.js"))))
+    except OSError:
+        build_id = "0"
+
+    # Template aus hoerspiel/templates/ via absolutem Pfad.
+    hoerspiel_templates = os.path.join(_REPO_ROOT_SEITEN, "hoerspiel", "templates")
+    from jinja2 import Environment, FileSystemLoader
+    env = Environment(loader=FileSystemLoader(hoerspiel_templates), autoescape=True)
+    tmpl = env.get_template("eltern.html")
+    html = tmpl.render(build_id=build_id)
+
+    resp = make_response(html, 200)
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
+
+
 # ============================================================
 #  Entrypoint
 # ============================================================

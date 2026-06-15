@@ -1,0 +1,422 @@
+/* HSP-33..35 — Hörspiel-Eltern-Mini-App Styles.
+   Andockt an display/_shared/design/tokens.css (DTOK-1, MAD).
+   Kein hardcodierter Farbwert — ausschließlich CSS-Variablen aus tokens.css.
+   --item-scale: zentraler MAD-1-Tuning-Parameter. */
+
+/* ── MAD-1: Skalierungs-Parameter ────────────────────────────────────────── */
+:root {
+  --item-scale:       0.9;
+  --item-min-height:  calc(56px * var(--item-scale));
+  --item-padding-y:   calc(10px * var(--item-scale));
+  --item-padding-x:   calc(14px * var(--item-scale));
+  --item-gap:         calc(10px * var(--item-scale));
+  --item-label-size:  calc(0.95rem * var(--item-scale));
+  --cover-size:       calc(56px * var(--item-scale));
+
+  /* Tab-Bar */
+  --tab-height:       44px;
+  --tab-border-width: 2px;
+}
+
+/* ── Reset + Base ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-body, sans-serif);
+  background: var(--bg, #f9f7f4);
+  color: var(--ink, #1a1a1a);
+  min-height: 100dvh;
+}
+
+/* ── App-Header + Tab-Navigation ─────────────────────────────────────────── */
+.app-header {
+  background: var(--surface, #fff);
+  border-bottom: 1px solid var(--border, #e0ddd8);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.app-header h1 {
+  font-family: var(--font-display, sans-serif);
+  font-size: 1.1rem;
+  font-weight: 700;
+  padding: 10px var(--item-padding-x);
+  color: var(--ink, #1a1a1a);
+}
+
+/* HSP-33: Top-Tabs */
+.tab-nav {
+  display: flex;
+  border-top: 1px solid var(--border, #e0ddd8);
+}
+
+.tab-btn {
+  flex: 1;
+  height: var(--tab-height);
+  background: none;
+  border: none;
+  border-bottom: var(--tab-border-width) solid transparent;
+  font-family: var(--font-body, sans-serif);
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--ink-soft, #888);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  padding: 0 var(--item-padding-x);
+}
+
+.tab-btn[aria-selected="true"] {
+  color: var(--accent, #5b6af5);
+  border-bottom-color: var(--accent, #5b6af5);
+  font-weight: 700;
+}
+
+/* ── Tab-Panels ──────────────────────────────────────────────────────────── */
+.tab-panel {
+  padding: var(--item-padding-y) 0;
+  padding-bottom: 80px; /* Platz für sticky Speichern-Knopf */
+}
+
+.tab-panel[hidden] { display: none; }
+
+/* ── Lade-Hinweis ─────────────────────────────────────────────────────────── */
+.lade-hinweis {
+  padding: 24px var(--item-padding-x);
+  color: var(--ink-soft, #888);
+  font-size: 0.9rem;
+}
+
+/* ── Einstellungen-Karten (HSP-34) ───────────────────────────────────────── */
+.einstellung-karte {
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e0ddd8);
+  border-radius: 10px;
+  margin: var(--item-gap) var(--item-padding-x);
+  padding: var(--item-padding-y) var(--item-padding-x);
+}
+
+.einstellung-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-soft, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+.einstellung-wert {
+  font-size: var(--item-label-size);
+  color: var(--ink, #1a1a1a);
+  margin-bottom: 4px;
+}
+
+/* Slider */
+.einstellung-slider {
+  width: 100%;
+  accent-color: var(--accent, #5b6af5);
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+/* Slider-Wert-Anzeige */
+.slider-wert {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent, #5b6af5);
+  float: right;
+  margin-top: -18px;
+}
+
+/* Voice-Kacheln (2-Kachel-Wahl, HSP-34) */
+.voice-kacheln {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--item-gap);
+  margin-top: 8px;
+}
+
+.voice-kachel {
+  border: 2px solid var(--border, #e0ddd8);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--bg, #f9f7f4);
+  cursor: pointer;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--ink, #1a1a1a);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.voice-kachel[aria-pressed="true"] {
+  border-color: var(--accent, #5b6af5);
+  background: var(--accent-light, #eef0fd);
+  color: var(--accent, #5b6af5);
+  font-weight: 700;
+}
+
+/* Abhängige Dropdowns (Anbieter + Modell) */
+.einstellung-select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border, #e0ddd8);
+  border-radius: 6px;
+  background: var(--bg, #f9f7f4);
+  font-family: var(--font-body, sans-serif);
+  font-size: 0.9rem;
+  color: var(--ink, #1a1a1a);
+  margin-top: 6px;
+  cursor: pointer;
+}
+
+/* Hinweis-Block über Speichern (HSP-34) */
+.einstellung-hinweis {
+  margin: var(--item-gap) var(--item-padding-x);
+  padding: 10px 12px;
+  background: var(--surface, #fff);
+  border-left: 3px solid var(--accent, #5b6af5);
+  border-radius: 0 6px 6px 0;
+  font-size: 0.82rem;
+  color: var(--ink-soft, #888);
+  line-height: 1.5;
+}
+
+/* Sticky Speichern-Knopf (HSP-34) */
+.speichern-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 10px var(--item-padding-x);
+  background: var(--surface, #fff);
+  border-top: 1px solid var(--border, #e0ddd8);
+  z-index: 10;
+}
+
+.speichern-btn {
+  width: 100%;
+  padding: 12px;
+  background: var(--accent, #5b6af5);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-family: var(--font-body, sans-serif);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.speichern-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Folgen-Liste / Album-Kacheln (HSP-35, MAD-2-Card-Pattern) ───────────── */
+.album-kachel {
+  display: flex;
+  align-items: center;
+  min-height: var(--item-min-height);
+  gap: var(--item-gap);
+  padding: var(--item-padding-y) var(--item-padding-x);
+  background: var(--surface, #fff);
+  border-bottom: 1px solid var(--border, #e0ddd8);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.album-kachel:active {
+  background: var(--bg, #f9f7f4);
+}
+
+.album-kachel.aktiv {
+  background: var(--accent-light, #eef0fd);
+  border-left: 3px solid var(--accent, #5b6af5);
+}
+
+.album-cover {
+  width: var(--cover-size);
+  height: var(--cover-size);
+  border-radius: 6px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--bg, #f9f7f4);
+}
+
+.album-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.album-titel {
+  font-size: var(--item-label-size);
+  font-weight: 600;
+  color: var(--ink, #1a1a1a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.album-meta {
+  font-size: 0.78rem;
+  color: var(--ink-soft, #888);
+  margin-top: 2px;
+}
+
+.album-resume-badge {
+  font-size: 0.78rem;
+  color: #e07b00;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ── Inline-Player (HSP-35) ──────────────────────────────────────────────── */
+.folgen-player {
+  background: var(--surface, #fff);
+  border-top: 2px solid var(--accent, #5b6af5);
+  padding: var(--item-padding-y) var(--item-padding-x);
+  margin-top: 2px;
+}
+
+.player-kopf {
+  display: flex;
+  gap: var(--item-gap);
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.player-cover {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.player-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.player-titel {
+  font-size: 0.95rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-track-anzeige {
+  font-size: 0.8rem;
+  color: var(--ink-soft, #888);
+  margin-top: 2px;
+}
+
+/* Player-Controls */
+.player-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.player-btn {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  font-size: 1.3rem;
+  color: var(--ink, #1a1a1a);
+  transition: background 0.12s;
+}
+
+.player-btn:active { background: var(--bg, #f9f7f4); }
+.player-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.player-btn-play {
+  font-size: 2rem;
+  color: var(--accent, #5b6af5);
+}
+
+/* Track-Liste (klappbar) */
+.track-liste-toggle {
+  font-size: 0.82rem;
+  color: var(--ink-soft, #888);
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-bottom: 6px;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.track-liste {
+  list-style: none;
+  font-size: 0.82rem;
+  border: 1px solid var(--border, #e0ddd8);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.track-zeile {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border, #e0ddd8);
+  cursor: pointer;
+  color: var(--ink-soft, #888);
+  transition: background 0.1s;
+}
+
+.track-zeile:last-child { border-bottom: none; }
+.track-zeile:active { background: var(--bg, #f9f7f4); }
+.track-zeile.aktiv {
+  background: var(--accent-light, #eef0fd);
+  color: var(--accent, #5b6af5);
+  font-weight: 700;
+}
+
+/* Wake-Lock-Hinweis */
+.wake-lock-hinweis {
+  font-size: 0.78rem;
+  color: var(--ink-soft, #888);
+  margin-top: 4px;
+}
+
+/* ── Toast ────────────────────────────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--ink, #1a1a1a);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s, transform 0.25s;
+  white-space: nowrap;
+  max-width: calc(100vw - 32px);
+  z-index: 100;
+}
+
+.toast.sichtbar {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.toast.fehler {
+  background: var(--danger, #d44);
+}
+
+/* ── Leer-Zustand ─────────────────────────────────────────────────────────── */
+.leer-hinweis {
+  padding: 24px var(--item-padding-x);
+  color: var(--ink-soft, #888);
+  font-size: 0.9rem;
+  text-align: center;
+}

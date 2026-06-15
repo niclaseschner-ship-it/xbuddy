@@ -9,8 +9,12 @@ Siehe specs/buddies/hoerspiel.md. Endpunkte:
   GET  /api/v1/hoerspiel/alben/<id>/manifest         — Album-Manifest
   POST /api/v1/hoerspiel/folgen-vorschlag            — LLM-Vorschlag (Side-Effekt-frei)
   POST /api/v1/hoerspiel/alben                       — Album bauen (TTS + Historie)
-  GET  /api/v1/hoerspiel/config                      — Provider/Modell lesen
-  PATCH /api/v1/hoerspiel/config                     — Provider/Modell setzen
+  GET  /api/v1/hoerspiel/config                      — Eltern-Tuning-Konfig lesen (HSP-34)
+  PATCH /api/v1/hoerspiel/config                     — Eltern-Tuning setzen (HSP-34)
+  GET  /api/v1/hoerspiel/themen?alter=N              — Themen-Liste je Alter (HSP-38)
+  GET  /api/v1/hoerspiel/alben/<id>/audio/<track>.mp3 — Audio-Track mit Range-Requests (HSP-37)
+  GET  /api/v1/hoerspiel/resume?album=<id>           — Resume-Stand lesen (HSP-36)
+  PUT  /api/v1/hoerspiel/resume                      — Resume-Stand setzen (HSP-36)
   GET  /api/v1/hoerspiel/shared-assets/status        — Vorhandensein je Voice
   POST /api/v1/hoerspiel/shared-assets/rebuild       — alle vier MP3s neu bauen
 
@@ -22,6 +26,7 @@ Port: 5053 (HSP-28). Service-Topologie: schlanke eigenständige Flask-App
 """
 
 import argparse
+import functools
 import logging
 import os
 import sys
@@ -49,6 +54,18 @@ else:  # python3 hoerspiel/main.py
     from hoerspiel.providers.base import LLMProvider, ProviderError
     from hoerspiel.tts.azure import TTSError
 
+# MAD-7 / HSP-39: Init-Data-Auth aus eltern-chat/init_data.py.
+_ELTERN_CHAT_DIR = os.path.join(_REPO_ROOT, "eltern-chat")
+if _ELTERN_CHAT_DIR not in sys.path:
+    sys.path.insert(0, _ELTERN_CHAT_DIR)
+
+try:
+    import init_data as _init_data_mod
+    _INIT_DATA_AVAILABLE = True
+except ImportError:
+    _INIT_DATA_AVAILABLE = False
+    _init_data_mod = None  # type: ignore[assignment]
+
 
 logger = logging.getLogger(__name__)
 
@@ -64,12 +81,19 @@ runtime: dict = {
     "llm": None,               # LLMProvider (Cache; gebunden an provider+model+key)
     "tts_engine": None,        # tts.azure.AzureTTSEngine (oder Fake in Tests)
     "now": lambda: datetime.now(ZoneInfo("Europe/Berlin")),
+    # MAD-7 / HSP-39: Bot-Token + init_data-Konfig für Mini-App-Auth.
+    "bot_token": None,         # str | None — aus ENV ELTERNCHAT_BOT_TOKEN
+    "init_data_config": None,  # dict — gecacht nach erstem Lauf
+    "familie_json_path": None, # str | None — aus ENV FAMILIE_JSON_PATH
+    "resume_store": {},        # dict album_id -> track_position (in-process für V1)
 }
 
 
 def configure(*, runtime_config, data_config, data_root: str,
               llm_factory=None, llm=None,
-              tts_engine=None, now=None) -> None:
+              tts_engine=None, now=None,
+              bot_token=None, init_data_config=None,
+              familie_json_path=None) -> None:
     """Setzt Konfiguration und Adapter-Fabriken (Test-Naht, HSP-24).
 
     `llm_factory(cfg) -> LLMProvider` baut den Provider passend zur aktiven
@@ -79,6 +103,9 @@ def configure(*, runtime_config, data_config, data_root: str,
 
     `now` ist die HSP-24-Naht für deterministische Zeit (Manifest-`erstellt-
     am`, Historie-Datum, ...).
+
+    `bot_token` + `init_data_config` + `familie_json_path`: MAD-7/HSP-39 Auth-Naht
+    (Test-Modus direkt setzen; Produktiv-Betrieb liest ENV).
     """
     runtime["runtime_config"] = runtime_config
     runtime["data_config"] = data_config
@@ -88,6 +115,12 @@ def configure(*, runtime_config, data_config, data_root: str,
     runtime["tts_engine"] = tts_engine
     if now is not None:
         runtime["now"] = now
+    # Auth-Felder immer überschreiben damit Test-Isolation funktioniert (HSP-40).
+    # Wer einen leeren Client will muss explizit bot_token=None übergeben.
+    runtime["bot_token"] = bot_token
+    runtime["init_data_config"] = init_data_config
+    runtime["familie_json_path"] = familie_json_path
+    runtime["resume_store"] = {}
 
 
 def _runtime_cfg():
@@ -114,6 +147,8 @@ def _llm() -> LLMProvider | None:
         return None
     if cfg.llm_provider == "claude" and not cfg.anthropic_key:
         return None
+    if cfg.llm_provider == "mistral" and not cfg.mistral_key:
+        return None
     llm = factory(cfg)
     runtime["llm"] = llm
     return llm
@@ -125,6 +160,157 @@ def _tts():
 
 def _now() -> datetime:
     return runtime["now"]()
+
+
+# ============================================================
+#  MAD-7 / HSP-39: Auth-Helpers
+# ============================================================
+
+def _get_bot_token() -> str | None:
+    """Liest den Bot-Token aus runtime-Dict oder ENV (MAD-7 / APP-7)."""
+    return (
+        runtime.get("bot_token")
+        or os.environ.get("ELTERNCHAT_BOT_TOKEN")
+        or os.environ.get("TELEGRAM_BOT_TOKEN")
+    )
+
+
+def _lade_familie_telegram_ids():
+    """Liest telegram_ids aller Familien-Mitglieder aus familie.json (FAM-7/8)."""
+    import json as _json
+    path = runtime.get("familie_json_path") or os.environ.get("FAMILIE_JSON_PATH")
+    if not path:
+        return None  # kein Pfad konfiguriert → FAM-Check überspringen
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = _json.load(fh)
+    except (FileNotFoundError, OSError, _json.JSONDecodeError) as exc:
+        logger.warning("FAM-7: familie.json nicht lesbar (%s): %s — FAM-Check uebersprungen",
+                       path, exc)
+        return None
+    ids = set()
+    for gruppe in ("erwachsene", "kinder"):
+        for person in (data.get(gruppe) or []):
+            tg_id = person.get("telegram_id")
+            if tg_id is not None:
+                ids.add(int(tg_id))
+    return ids
+
+
+def _validate_mini_app_request():
+    """Validiert Authorization: tma <initData>-Header (MAD-7 / HSP-39).
+
+    Gibt (InitData, None) bei Erfolg zurück.
+    Gibt (None, (json_response, status)) bei Auth-Fehler zurück.
+    """
+    bot_token = _get_bot_token()
+
+    # HSP-40: Test-Modus-Bypass — bot_token="TEST" überspringt alle Auth-Checks.
+    # Das wird ausschließlich in unit-Tests via configure(bot_token="TEST") gesetzt.
+    if bot_token == "TEST":
+        from types import SimpleNamespace
+        return SimpleNamespace(user_id=1), None
+
+    if not _INIT_DATA_AVAILABLE or _init_data_mod is None:
+        return None, (jsonify({"error": "Init-Data-Modul nicht verfügbar"}), 500)
+
+    if not bot_token:
+        logger.error("MAD-7: ELTERNCHAT_BOT_TOKEN nicht gesetzt — Mini-App-Route nicht nutzbar.")
+        return None, (jsonify({"error": "Serverkonfiguration unvollständig (Bot-Token fehlt)"}), 500)
+
+    cfg = runtime.get("init_data_config")
+    if cfg is None:
+        cfg = _init_data_mod.load_config()
+        runtime["init_data_config"] = cfg
+
+    auth_header = request.headers.get("Authorization")
+    try:
+        init_data = _init_data_mod.validate_header(
+            auth_header,
+            bot_token,
+            cfg["max_age_seconds"],
+        )
+    except _init_data_mod.InitDataError as exc:
+        logger.warning("MAD-7 Auth fehlgeschlagen: %s", exc)
+        return None, (jsonify({"error": "initData ungültig, abgelaufen oder fehlt"}), 401)
+
+    return init_data, None
+
+
+def _check_familie_mitglied(user_id):
+    """Prüft ob user_id in der Familien-Registry registriert ist (FAM-7/8)."""
+    familie_ids = _lade_familie_telegram_ids()
+    if familie_ids is None:
+        return None  # kein Pfad konfiguriert → fail-open
+    if user_id not in familie_ids:
+        logger.warning("FAM-7: user_id %s ist kein Familien-Mitglied → 403", user_id)
+        return jsonify({"error": "Nicht autorisiert — kein Familienmitglied"}), 403
+    return None
+
+
+def require_mini_app_auth(f):
+    """Decorator: MAD-7 / HSP-39 Auth-Pflicht für Mini-App-API-Routen.
+
+    Prüft Authorization: tma <initData>-Header. Bei Fehler → 401/500.
+    Prüft Familien-Registry. Bei Fehler → 403.
+    """
+    @functools.wraps(f)
+    def wrapper(*args, **kwargs):
+        init_data, err = _validate_mini_app_request()
+        if err is not None:
+            return err
+        fam_err = _check_familie_mitglied(init_data.user_id)
+        if fam_err is not None:
+            return fam_err
+        return f(*args, **kwargs)
+    return wrapper
+
+
+# ============================================================
+#  HSP-27b — Modell-Listen-Aggregation
+# ============================================================
+
+def _modelle_je_anbieter() -> dict:
+    """Gibt die AVAILABLE_MODELS aller Provider als Dict zurück (HSP-27b).
+
+    Format: {"claude": [{"id": ..., "label": ...}, ...], "mistral": [...]}
+    """
+    result = {}
+    try:
+        from hoerspiel.providers.claude import AVAILABLE_MODELS as CLAUDE_MODELS
+    except ImportError:
+        try:
+            from .providers.claude import AVAILABLE_MODELS as CLAUDE_MODELS
+        except ImportError:
+            CLAUDE_MODELS = []
+    result["claude"] = [{"id": mid, "label": label} for mid, label in CLAUDE_MODELS]
+
+    try:
+        from hoerspiel.providers.mistral import AVAILABLE_MODELS as MISTRAL_MODELS
+    except ImportError:
+        try:
+            from .providers.mistral import AVAILABLE_MODELS as MISTRAL_MODELS
+        except ImportError:
+            MISTRAL_MODELS = []
+    result["mistral"] = [{"id": mid, "label": label} for mid, label in MISTRAL_MODELS]
+    return result
+
+
+def _provider_verfuegbar(cfg) -> list[str]:
+    """Gibt nur Provider zurück, für die ein Key konfiguriert ist (HSP-17)."""
+    verfuegbar = []
+    if cfg.anthropic_key:
+        verfuegbar.append("claude")
+    if cfg.mistral_key:
+        verfuegbar.append("mistral")
+    return verfuegbar
+
+
+def _validate_llm_model(provider: str, model: str) -> bool:
+    """Prüft ob model in AVAILABLE_MODELS des Providers enthalten ist (HSP-27b)."""
+    models = _modelle_je_anbieter()
+    provider_models = models.get(provider, [])
+    return any(m["id"] == model for m in provider_models)
 
 
 # ============================================================
@@ -224,12 +410,18 @@ def _post_alben():
     if llm is None:
         return jsonify({"fehler": "llm-provider nicht eingerichtet"}), 503
 
+    dcfg = _data_cfg()
+    pause_absatz = dcfg.pause_absatz_sek if dcfg is not None else config_mod.DEFAULT_PAUSE_ABSATZ_SEK
+    pause_titel = dcfg.pause_titel_sek if dcfg is not None else config_mod.DEFAULT_PAUSE_TITEL_SEK
+
     try:
         ergebnis = album_builder.baue_album(
             titel=titel, text=text, voice=voice, idee=idee,
             data_root=_data_root(),
             llm=llm, tts_engine=tts,
             now=runtime["now"],
+            pause_absatz_sek=pause_absatz,
+            pause_titel_sek=pause_titel,
         )
     except tts_service.SharedAssetsMissing as e:
         return jsonify({"fehler": str(e)}), 412
@@ -248,36 +440,156 @@ def _post_alben():
 
 # ---- Config-Endpoints (HSP-17, V2-Provider-Wechsel-Vorgriff) ----
 
+def _build_config_response(cfg, dcfg) -> dict:
+    """Baut die vollständige GET /config-Antwort (HSP-17/34)."""
+    public = cfg.to_public_dict()
+    if dcfg is not None:
+        public["default_voice"] = dcfg.default_voice
+        public["serien_name"] = dcfg.serien_name
+        public["pause_absatz_sek"] = dcfg.pause_absatz_sek
+        public["pause_titel_sek"] = dcfg.pause_titel_sek
+        public["playback_tempo"] = dcfg.playback_tempo
+    else:
+        public.setdefault("default_voice", config_mod.DEFAULT_VOICE)
+        public.setdefault("pause_absatz_sek", config_mod.DEFAULT_PAUSE_ABSATZ_SEK)
+        public.setdefault("pause_titel_sek", config_mod.DEFAULT_PAUSE_TITEL_SEK)
+        public.setdefault("playback_tempo", config_mod.DEFAULT_PLAYBACK_TEMPO)
+    public["voices_verfuegbar"] = list(config_mod.VALID_VOICES)
+    public["provider_verfuegbar"] = _provider_verfuegbar(cfg)
+    public["modelle_je_anbieter"] = _modelle_je_anbieter()
+    return public
+
+
 @app.route("/api/v1/hoerspiel/config", methods=["GET", "PATCH"])
+@require_mini_app_auth
 def config_endpoint():
     cfg = _runtime_cfg()
     if cfg is None:
         return jsonify({"fehler": "runtime-config nicht geladen"}), 503
 
     if request.method == "GET":
-        public = cfg.to_public_dict()
-        dcfg = _data_cfg()
-        if dcfg is not None:
-            public["default_voice"] = dcfg.default_voice
-            public["serien_name"] = dcfg.serien_name
-        return jsonify(public)
+        return jsonify(_build_config_response(cfg, _data_cfg()))
 
     body = request.get_json(silent=True) or {}
+
+    # Runtime-Felder (llm_provider, llm_model).
     try:
         new_cfg = config_mod.patch_runtime(cfg, body)
     except config_mod.ConfigError as e:
         return jsonify({"fehler": str(e)}), 422
 
+    # Modell-Validierung gegen AVAILABLE_MODELS des Providers (HSP-27b).
+    if ("llm_model" in body and body["llm_model"] is not None
+            and not _validate_llm_model(new_cfg.llm_provider, new_cfg.llm_model)):
+        return jsonify({
+            "fehler": "llm_model %r ist für Anbieter %r nicht bekannt (HSP-27b)"
+                      % (new_cfg.llm_model, new_cfg.llm_provider),
+        }), 422
+
     runtime["runtime_config"] = new_cfg
-    # Cache invalidieren — Provider-/Modell-Wechsel zwingt Neuaufbau.
+    # LLM-Cache invalidieren — Provider-/Modell-Wechsel zwingt Neuaufbau.
     if (new_cfg.llm_provider, new_cfg.llm_model) != (cfg.llm_provider, cfg.llm_model):
         runtime["llm"] = None
-    public = new_cfg.to_public_dict()
+
+    # Daten-Konfig-Felder (default_voice, pause_*, playback_tempo).
     dcfg = _data_cfg()
-    if dcfg is not None:
-        public["default_voice"] = dcfg.default_voice
-        public["serien_name"] = dcfg.serien_name
-    return jsonify(public)
+    try:
+        new_dcfg = config_mod.patch_data(dcfg, body) if dcfg is not None else dcfg
+    except config_mod.ConfigError as e:
+        return jsonify({"fehler": str(e)}), 422
+    runtime["data_config"] = new_dcfg
+
+    return jsonify(_build_config_response(new_cfg, new_dcfg))
+
+
+# ---- Themen-Endpoint (HSP-38) ----
+
+@app.route("/api/v1/hoerspiel/themen", methods=["GET"])
+@require_mini_app_auth
+def themen_endpoint():
+    """HSP-38: GET /themen?alter=N → kuratierte Themen-Liste je Alter."""
+    alter_raw = request.args.get("alter", "").strip()
+    dcfg = _data_cfg()
+    themen_je_alter = dcfg.themen_je_alter if dcfg is not None else \
+        dict(config_mod.DEFAULT_THEMEN_JE_ALTER)
+
+    if alter_raw not in themen_je_alter:
+        return jsonify({
+            "fehler": "Themen-Liste für Alter %s nicht gepflegt — "
+                      "Eltern können im Chat eigene Idee geben." % alter_raw,
+        }), 404
+
+    try:
+        alter_int = int(alter_raw)
+    except (TypeError, ValueError):
+        alter_int = 0
+
+    return jsonify({"alter": alter_int, "themen": themen_je_alter[alter_raw]})
+
+
+# ---- Audio-Streaming-Endpoint (HSP-37) ----
+
+@app.route("/api/v1/hoerspiel/alben/<album_id>/audio/<path:track_filename>",
+           methods=["GET"])
+@require_mini_app_auth
+def album_audio(album_id: str, track_filename: str):
+    """HSP-37: Audio-Track streamen mit Range-Requests.
+
+    Auth-Check (HSP-39) läuft via require_mini_app_auth-Decorator vor der
+    Range-Logik (401 trumpft 206). send_from_directory blockt Pfad-Traversal.
+    `Content-Type: audio/mpeg`, `Cache-Control: private, max-age=86400`.
+    """
+    audio_dir = os.path.join(_data_root(), "alben", album_id, "audio")
+    if not os.path.isdir(audio_dir):
+        return jsonify({"fehler": "album nicht gefunden"}), 404
+
+    response = send_from_directory(
+        audio_dir,
+        track_filename,
+        mimetype="audio/mpeg",
+        conditional=True,  # aktiviert Range-Request-Support via Flask/Werkzeug
+    )
+    response.headers["Cache-Control"] = "private, max-age=86400"
+    return response
+
+
+# ---- Resume-Endpoints (HSP-36) ----
+
+@app.route("/api/v1/hoerspiel/resume", methods=["GET", "PUT"])
+@require_mini_app_auth
+def resume_endpoint():
+    """HSP-36: Resume-Stand lesen (GET) und setzen (PUT).
+
+    GET ?album=<id> → {"album": "<id>", "track": <position>} oder 404.
+    PUT Body: {"album": "<id>", "track": <position>} → 200 + Echo.
+
+    V1: in-process-Store (runtime['resume_store']). Last-Write-Wins.
+    """
+    store = runtime.get("resume_store")
+    if store is None:
+        store = {}
+        runtime["resume_store"] = store
+
+    if request.method == "GET":
+        album_id = (request.args.get("album") or "").strip()
+        if not album_id:
+            return jsonify({"fehler": "album-Parameter fehlt"}), 400
+        if album_id not in store:
+            return jsonify({"fehler": "kein Resume-Stand für album %s" % album_id}), 404
+        return jsonify({"album": album_id, "track": store[album_id]})
+
+    # PUT
+    body = request.get_json(silent=True) or {}
+    album_id = (body.get("album") or "").strip()
+    track = body.get("track")
+    if not album_id or track is None:
+        return jsonify({"fehler": "album und track sind Pflichtfelder"}), 400
+    try:
+        track_pos = int(track)
+    except (TypeError, ValueError):
+        return jsonify({"fehler": "track muss eine Ganzzahl sein"}), 400
+    store[album_id] = track_pos
+    return jsonify({"album": album_id, "track": track_pos})
 
 
 # ---- Shared-Assets (HSP-17/22/29) ----
@@ -334,6 +646,11 @@ def _build_llm(cfg) -> LLMProvider | None:
             return None
         from .providers.claude import ClaudeProvider
         return ClaudeProvider(api_key=cfg.anthropic_key, model=cfg.llm_model)
+    if cfg.llm_provider == "mistral":
+        if not cfg.mistral_key:
+            return None
+        from .providers.mistral import MistralProvider
+        return MistralProvider(api_key=cfg.mistral_key, model=cfg.llm_model)
     return None
 
 

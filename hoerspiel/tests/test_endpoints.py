@@ -129,10 +129,18 @@ def test_patch_config_ohne_key_422(client_keyless):
 
 
 def test_patch_config_modell_wechsel(client):
+    """HSP-27b: Modell-Wechsel zu bekanntem Modell → 200 + Echo."""
+    response = client.patch("/api/v1/hoerspiel/config",
+                            json={"llm_model": "claude-sonnet-4-6"})
+    assert response.status_code == 200
+    assert response.get_json()["llm_model"] == "claude-sonnet-4-6"
+
+
+def test_patch_config_unbekanntes_modell_422(client):
+    """HSP-27b: Unbekanntes Modell wird abgelehnt → 422."""
     response = client.patch("/api/v1/hoerspiel/config",
                             json={"llm_model": "claude-opus-4-7-x"})
-    assert response.status_code == 200
-    assert response.get_json()["llm_model"] == "claude-opus-4-7-x"
+    assert response.status_code == 422
 
 
 def test_shared_assets_status(client):
