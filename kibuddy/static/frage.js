@@ -171,6 +171,17 @@ async function send_aufnahme(chunks, mimeType) {
   setHeaderStatus("Ich denke nach…");
   $ladehinweis.hidden = false;
 
+  // AC4: Lade-Bubble in Chat einhängen während fetch
+  const ladeBubbleRow = document.createElement("div");
+  ladeBubbleRow.className = "bubble-row buddy";
+  const ladeBubble = document.createElement("div");
+  ladeBubble.className = "bubble bubble-laden";
+  ladeBubble.setAttribute("aria-label", "Ich arbeite…");
+  ladeBubble.innerHTML = '<span class="lade-dots"><span></span><span></span><span></span></span>';
+  ladeBubbleRow.appendChild(ladeBubble);
+  $chat.appendChild(ladeBubbleRow);
+  $chat.scrollTop = $chat.scrollHeight;
+
   let antwort;
   try {
     const resp = await fetch("/api/v1/kibuddy/frage", {
@@ -180,17 +191,22 @@ async function send_aufnahme(chunks, mimeType) {
     if (!resp.ok) {
       const body = await resp.json().catch(() => ({}));
       const msg = body.fehler || `Fehler ${resp.status}`;
+      ladeBubbleRow.remove(); // AC4: Lade-Bubble entfernen bei Fehler
       appendFehlerBubble(msg);
       return;
     }
     antwort = await resp.json();
   } catch (err) {
+    ladeBubbleRow.remove(); // AC4: Lade-Bubble entfernen bei Netz-Fehler
     appendFehlerBubble("Netzwerk-Fehler: " + err.message);
     return;
   } finally {
     $ladehinweis.hidden = true;
     setHeaderStatus("Drück mich, wenn du eine Frage hast");
   }
+
+  // AC4: Lade-Bubble entfernen bevor Kind+Buddy-Bubbles kommen
+  ladeBubbleRow.remove();
 
   await renderTurn(antwort);
 }
@@ -236,16 +252,17 @@ async function renderTurn(antwort) {
   const buddyBubble = document.createElement("div");
   buddyBubble.className = "bubble buddy-bubble";
 
-  // Text-Zeile
-  const textZeile = document.createElement("p");
-  textZeile.style.margin = "0 0 8px 0";
-  textZeile.textContent = antwort.text || "";
-  buddyBubble.appendChild(textZeile);
-
-  // Wort-Icon-Render (KIBUDDY-17)
+  // AC3: Wort-Icon-Render als Default; Klartext-Fallback NUR wenn words[] leer
   if (Array.isArray(antwort.words) && antwort.words.length > 0) {
+    // KIBUDDY-17: Wort-Icon-Render — kein Klartext-Duplikat
     const wortRender = await buildWortRender(antwort.words);
     buddyBubble.appendChild(wortRender);
+  } else {
+    // Fallback: Backend hat keine words[] geliefert (Fehler-Pfad / ältere Version)
+    const textZeile = document.createElement("p");
+    textZeile.style.margin = "0";
+    textZeile.textContent = antwort.text || "";
+    buddyBubble.appendChild(textZeile);
   }
 
   // Vorlese-Knopf Buddy (KIBUDDY-31)
