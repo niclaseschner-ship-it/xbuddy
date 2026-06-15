@@ -1140,6 +1140,17 @@ def icons_suche():
         max_results = 3
     max_results = max(1, min(max_results, _ICONS_SUCHE_MAX_CAP))
 
+    # min_score Threshold (Live-Befund 2026-06-15): bei Single-Token-Queries
+    # ist ein reiner Substring-Match irreführend ("höhe" findet "erhöhen" mit
+    # Score ~1.x — Pikto passt nicht zum Konzept). Default-Schwelle 100
+    # akzeptiert exact (1000), prefix (~412), word-boundary (~106), schließt
+    # reine Substring-Mid-String aus. Konsumenten können 0 setzen für altes
+    # Verhalten (Mehrwort-Routine bleibt unverändert, weil token_hits primär).
+    try:
+        min_score = float(request.args.get('min_score', 100))
+    except (ValueError, TypeError):
+        min_score = 100.0
+
     # ICONS-7 Mehrwort: Whitespace-Split; leere Tokens raus.
     tokens = q.split()
     if not tokens:
@@ -1167,11 +1178,15 @@ def icons_suche():
                 score[icon_id] = score.get(icon_id, 0.0) + match_score
                 token_hits[icon_id] = token_hits.get(icon_id, 0) + 1
 
+    # min_score-Filter: schließt zu schwache Substring-Matches aus
+    # (Single-Token-Live-Befund "höhe → erhöhen" Pikto irreführend).
+    qualified_ids = [i for i in score if score[i] >= min_score]
+
     # Primär: Token-Coverage absteigend (wer mehr Tokens matcht, gewinnt).
     # Sekundär: Score absteigend (Qualität innerhalb gleicher Coverage).
     # Tertiär: Cache-Reihenfolge (first_seen aufsteigend) als Tiebreaker.
     sorted_ids = sorted(
-        score.keys(),
+        qualified_ids,
         key=lambda i: (-token_hits[i], -score[i], first_seen[i]),
     )
 
