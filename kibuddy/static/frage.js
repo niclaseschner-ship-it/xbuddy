@@ -684,9 +684,10 @@ async function startAufnahme() {
   startPegel(stream);
   setHeaderStatus("Ich h\xF6re zu…");
 
-  // KIBUDDY-10: Lock-Hinweis nach 800ms
+  // KIBUDDY-10 V1 ENTFERNT (2026-06-15): Lock-Hinweis-Element existiert nicht
+  // mehr im DOM. Timer-Block bleibt no-op für Backward-Compat der Restlogik.
   lockHinweisTimer = setTimeout(() => {
-    if (pttState === "recording") {
+    if (pttState === "recording" && $lockHinweis) {
       $lockHinweis.hidden = false;
     }
   }, CFG.LOCK_HINWEIS_MS);
@@ -711,7 +712,7 @@ function stopRecorder() {
   if (lockHinweisTimer) { clearTimeout(lockHinweisTimer); lockHinweisTimer = null; }
   if (maxAufnahmeTimer) { clearTimeout(maxAufnahmeTimer); maxAufnahmeTimer = null; }
   if (longHoldLockTimer) { clearTimeout(longHoldLockTimer); longHoldLockTimer = null; } // T864-AC2
-  $lockHinweis.hidden = true;
+  if ($lockHinweis) $lockHinweis.hidden = true;  // KIBUDDY-10 V1 entfernt: Element kann null sein
   $cancelHinweis.hidden = true;
   stopVad();
   stopPegel();
@@ -766,7 +767,7 @@ async function stopUndSende(abbruch) {
 function einrastenLock() {
   if (pttState !== "recording") return;
   pttState = "locked";
-  $lockHinweis.hidden = true;
+  if ($lockHinweis) $lockHinweis.hidden = true;  // KIBUDDY-10 V1 entfernt
   if (lockHinweisTimer) { clearTimeout(lockHinweisTimer); lockHinweisTimer = null; }
   if (longHoldLockTimer) { clearTimeout(longHoldLockTimer); longHoldLockTimer = null; } // T864-AC2
   $btnPtt.classList.add("locked");
