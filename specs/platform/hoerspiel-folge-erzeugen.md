@@ -90,21 +90,46 @@ skill-eigener Exception-Typ.
 
 ## HFE-3 — `propose()`: Folgen-Vorschlag holen und vorlegen
 
-**Eingang:** die vom Agent extrahierte Folgen-Idee.
+**Eingang:** die vom Agent extrahierte Folgen-Idee **und** der `kind_id`
+der gewünschten Hörspiel-Instanz (Pflicht-Argument seit RAT-17 /
+specs/buddies/hoerspiel.md HSP-28a — V1: `mia` oder `finn`). Der
+`kind_id` kommt vom aktiven Face-Pille-State der Mini-App oder, wo
+keine Mini-App-Auswahl vorliegt, aus dem Chat-Kontext (LLM-Entscheidung
+durch den Eltern-Chat-Agent-Prompt). Der Skill validiert nicht — er
+reicht den Wert in den kind_id-tragenden API-Pfad durch und gibt einen
+Fehler-Tool-Result-Text aus, wenn der Buddy HTTP 404 antwortet (Instanz
+unbekannt).
 
 **Diskussions-Schleife** (Werft-Lauf 2026-06-15, Refs #848): `propose()`
 fungiert vor dem Vorschlag-Endpoint-Aufruf als zwei-stufiger Filter:
 
 1. **Idee ist leer oder sehr mehrdeutig** (z. B. nur „mach eine Folge"):
-   `propose()` ruft zusätzlich `GET /api/v1/hoerspiel/themen?alter=4`
-   (HSP-38; der Alter-Wert lebt V1 hart als Skill-Modul-Konstante für
-   Mia, Mehr-Kind-Petrallgemeinerung ist V2) und gibt einen Tool-
-   Result-Text zurück, der **die EC-22-Rückfrage plus die Themen-Liste**
-   trägt. Form: „Worum soll's gehen? Hier ein paar Vorschläge für
-   4-jährige Kinder: <thema-1>, <thema-2>, …" — Kein Buddy-Vorschlag-
-   Endpoint-Aufruf. Antwortet der Themen-Endpoint 404 (Alter nicht
-   gepflegt, HSP-38), trägt der Tool-Result-Text **nur** die
-   EC-22-Rückfrage ohne Themen.
+   `propose()` ruft zusätzlich
+   `GET /api/v1/hoerspiel/<kind_id>/themen` (HSP-38, URL-3a-konform
+   nach RAT-17). Der Buddy liest das Alter aus seiner instance.json
+   und liefert die kuratierte Themen-Liste je Alter — **kein** Query-
+   Parameter, **keine** Skill-Modul-Konstante für das Alter (vor
+   RAT-17 trug der Skill `MIA_ALTER = 4` als V1-Hardcode; dieser
+   Cross-Service-Schnitt ist mit RAT-17 / #910 aufgelöst). Antwort-
+   Form trägt Alter + Name des Kindes mit zurück, damit der Tool-
+   Result-Text personalisierbar bleibt:
+
+   ```
+   200 {"kind_id": "mia", "name": "Mia", "alter": 4,
+        "themen": ["Mut beim Probieren", "Streit vertragen", …]}
+   404 wenn kind_id unbekannt (kein hoerspiel-Pfad für diesen Wert)
+   422 wenn Alter der Instanz nicht in instance.json.themen_je_alter
+       gepflegt
+   ```
+
+   Der Tool-Result-Text trägt **die EC-22-Rückfrage plus die Themen-
+   Liste** mit dem Kindernamen: „Worum soll's gehen? Hier ein paar
+   Vorschläge für \<Name> (\<Alter> Jahre): \<thema-1>, \<thema-2>, …".
+   Antwortet der Themen-Endpoint 422 (Alter nicht gepflegt), trägt der
+   Tool-Result-Text **nur** die EC-22-Rückfrage ohne Themen. Bei 404
+   (kind_id unbekannt) gibt der Skill einen Fehler-Tool-Result-Text
+   aus („Für \<kind_id> gibt es keinen Hörspiel-Buddy.") und ruft den
+   Vorschlag-Endpoint nicht.
 
 2. **Idee ist konkret aber unvollständig** (z. B. „mach eine Folge über
    Mut"): `propose()` gibt einen Tool-Result-Text mit Pattern
@@ -126,13 +151,18 @@ ruft den Vorschlag-Endpoint.
 die Mutter entscheidet, wann genug Klärung war. Eine Iterations-Cap
 im Skill würde die Eltern-Hoheit über die Diskussion verletzen.
 
-Mit gefüllter konkreter Idee ruft `propose()` den Hörspiel-Buddy:
+Mit gefüllter konkreter Idee ruft `propose()` die kind_id-tragende
+Vorschlag-Route des Hörspiel-Buddys:
 
 ```
-POST /api/v1/hoerspiel/folgen-vorschlag
+POST /api/v1/hoerspiel/<kind_id>/folgen-vorschlag
 Body: {"idee": "<text>"}
 → 200 {"titel": "<titel>", "text": "<markdown>", "folgen-nr-vorschlag": <int>}
 ```
+
+Die `<kind_id>`-Segment-Form ist URL-3a-konform und einheitlich für alle
+Hörspiel-Routen (HSP-25/26/38, RAT-17). `POST /alben` (HFE-5) folgt
+demselben Schema.
 
 Der Aufruf dauert je nach LLM-Provider 20–90 s. **Während des Aufrufs
 darf `propose()` keinen separaten „Moment …"-Bubble senden** (EC-29:
@@ -389,10 +419,25 @@ enthalten den Beifang-Button **nicht**. Bei fehlender
 
 ### E-HFE-1 — Skill ist trigger-agnostische Funktion, nicht Telegram-spezifisch
 *Datum:* 2026-06-12 · Analog E-WZE-1, E-EZG-1. Wer den Skill aufruft —
-Eltern-Chat-Aufgabe in V1, künftiger Sprach-Trigger für Mia (OPEN-HSP-B)
-in V2 — ist nicht Teil seines Vertrags. Der V1-Trigger ist eine Eltern-
-Chat-Aufgabe (EC-8). **Verworfen:** Telegram-API-Aufrufe oder Chat-Form-
-Erwartungen in die Funktionsdefinition zu schreiben.
+Eltern-Chat-Aufgabe in V1, künftiger Sprach-Trigger fürs Kind
+(OPEN-HSP-B) in V2 — ist nicht Teil seines Vertrags. Der V1-Trigger ist
+eine Eltern-Chat-Aufgabe (EC-8). **Verworfen:** Telegram-API-Aufrufe
+oder Chat-Form-Erwartungen in die Funktionsdefinition zu schreiben.
+
+### E-HFE-3 — kind_id-Lookup statt Modul-Konstante (RAT-17)
+*Datum:* 2026-06-15 · Refs #910, RAT-17. Vor RAT-17 trug der Skill
+`MIA_ALTER = 4` als V1-Modul-Konstante; die zweite Hörspiel-Instanz
+Finn brach diese Form (Skill hätte für Finn 4-Jährige-Themen geliefert,
+unabhängig von Finns echtem Alter). Mit RAT-17 wird `kind_id` zum
+Pflicht-Argument des Skills, und das Alter zieht der Buddy implizit aus
+seiner instance.json. **Wahl der Endpoint-Form (architecture_class:
+wahl, Nic-Verdikt 2026-06-15-22:50): Variante B** — kind_id im URL-Pfad
+(`GET /api/v1/hoerspiel/<kind_id>/themen`) statt Query (`?alter=<n>`).
+Begründung: URL-3a-Konsistenz mit allen anderen Hörspiel-Routen
+(HSP-25/26), Single Source of Truth pro Instanz (Alter lebt nur in
+instance.json), keine Drift-Klasse Skill-Alter vs. Server-Alter.
+**Verworfen Variante A** (Query bleibt, kind_id als zusätzliches
+Skill-Arg): doppelte Wahrheit, Sonderweg im Schnittprinzip.
 
 ### E-HFE-2 — Skill ist dünner Konsument, LLM-Aufruf lebt im Hörspiel-Buddy
 *Datum:* 2026-06-12 (Werft-Lauf) · APP-1: die Folgen-Erzeugungs-Funktion
