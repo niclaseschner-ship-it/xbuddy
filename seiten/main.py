@@ -452,29 +452,46 @@ def _validate_mini_app_request():
     return init_data, None
 
 
-@app.route("/seiten/essen/einkauf", methods=["GET"])
-def essen_einkauf_view():
-    """EZG-6 / ESSEN-31: Eltern-Mini-App-View fuer die Einkaufsliste.
+@app.route("/api/v1/init-data/validate", methods=["POST"])
+def init_data_validate():
+    """MAD-11: JS-Side-Auth-Endpoint für Mini-App-Mount-Validation.
 
-    Init-Data-Auth (MAD-7 / AC2): Request ohne 'Authorization: tma <initData>'-Header
-    oder mit ungueltiger Signatur → 401. Request mit gueltiger Signatur
-    (HMAC-SHA256 ueber Bot-Token, eltern-chat/init_data.py validate_header) → 200 HTML.
+    Mini-App-JS macht beim Mount POST mit Authorization: tma <initData>-Header.
+    Endpoint validiert via HMAC + FAM-Lookup. Returnt 200 + {user_id, family_member}
+    bei Erfolg, 401 (ungültig/abgelaufen) oder 403 (kein Familien-Mitglied).
 
-    Bot-Token kommt aus ENV ELTERNCHAT_BOT_TOKEN (systemd EnvironmentFile,
-    APP-7 / #684). Fehlt das Token → 500 (Konfig-Fehler).
-    FAM-7/8: User-ID aus validiertem initData gegen Familien-Registry prüfen;
-    Nicht-Mitglied → 403.
+    Antwort-Format (200):
+      {"user_id": 12345, "user_first_name": "Nic", "family_member": true}
+
+    Pendant zu MAD-7: HTML-Render-Route ist public (Telegram-WebView sendet
+    beim Initial-Load keinen Header); JS-Mount-Call macht die Auth-Probe.
     """
     init_data, err = _validate_mini_app_request()
     if err is not None:
         return err
 
-    # FAM-7/8: User-ID gegen Familien-Registry prüfen
     fam_err = _check_familie_mitglied(init_data.user_id)
     if fam_err is not None:
         return fam_err
 
-    return render_template("essen-einkauf.html", user_id=init_data.user_id)
+    return jsonify({
+        "user_id": init_data.user_id,
+        "user_first_name": getattr(init_data, "user_first_name", None),
+        "family_member": True,
+    }), 200
+
+
+@app.route("/seiten/essen/einkauf", methods=["GET"])
+def essen_einkauf_view():
+    """EZG-6 / ESSEN-31: Eltern-Mini-App-View fuer die Einkaufsliste.
+
+    HTML-Render-Route lädt Skeleton OHNE Auth (MAD-7-konform: Telegram-WebView
+    sendet beim HTML-Initial-Load KEINEN Authorization-Header — initData kommt
+    nur via window.Telegram.WebApp.initData in der JS-App). JS macht beim Mount
+    platform.ensureAuth() → ruft /api/v1/init-data/validate mit Header → bei
+    401/403 sperrt UI. Daten-Schutz auf API-Routen (essen/main.py) bleibt scharf.
+    """
+    return render_template("essen-einkauf.html", user_id=None)
 
 
 @app.route("/api/v1/seiten/mini-app-uebersicht", methods=["GET"])
@@ -495,15 +512,8 @@ def mini_app_uebersicht_view():
     haengt am CSS+JS als ?v=... — Telegram cached Mini-App-Assets sonst aggressiv.
     Response-Header no-store zusaetzlich, damit jeder Open das HTML neu holt.
     """
-    init_data, err = _validate_mini_app_request()
-    if err is not None:
-        return err
-
-    # FAM-7/8: User-ID gegen Familien-Registry pruefen
-    fam_err = _check_familie_mitglied(init_data.user_id)
-    if fam_err is not None:
-        return fam_err
-
+    # MAD-7-konform: HTML-Render-Route lädt Skeleton OHNE Auth (Telegram-WebView
+    # sendet beim Initial-Load keinen Header). JS macht platform.ensureAuth().
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     try:
         build_id = str(int(os.path.getmtime(
@@ -535,15 +545,7 @@ def routine_anpassen_view():
     response-Header no-store zusaetzlich, damit jeder Open das HTML neu
     holt.
     """
-    init_data, err = _validate_mini_app_request()
-    if err is not None:
-        return err
-
-    # FAM-7/8: User-ID gegen Familien-Registry prüfen
-    fam_err = _check_familie_mitglied(init_data.user_id)
-    if fam_err is not None:
-        return fam_err
-
+    # MAD-7-konform: HTML-Render-Route lädt Skeleton OHNE Auth. JS macht ensureAuth().
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     try:
         build_id = str(int(os.path.getmtime(os.path.join(static_dir, "routine-anpassen.js"))))
@@ -574,20 +576,7 @@ def hoerspiel_eltern_view():
     Cache-Buster: build_id aus mtime von hoerspiel/static/eltern.js.
     response-Header no-store, damit jeder Open das HTML neu holt.
     """
-    init_data, err = _validate_mini_app_request()
-    if err is not None:
-        # HSP-39: 401 mit Klartext-Hinweis (kein JSON-Render für HTML-Route)
-        _json_body, status_code = err
-        if status_code == 401:
-            return make_response(
-                "Bitte über den Familien-Bot öffnen (initData fehlt oder ist ungültig).", 401)
-        return err
-
-    # FAM-7/8: User-ID gegen Familien-Registry prüfen
-    fam_err = _check_familie_mitglied(init_data.user_id)
-    if fam_err is not None:
-        return fam_err
-
+    # MAD-7-konform: HTML-Render-Route lädt Skeleton OHNE Auth. JS macht ensureAuth().
     # build_id aus mtime von eltern.js in hoerspiel/static/
     _REPO_ROOT_SEITEN = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     hoerspiel_static = os.path.join(_REPO_ROOT_SEITEN, "hoerspiel", "static")

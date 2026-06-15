@@ -321,3 +321,45 @@ dieselbe Launcher-Schnittstelle mit eigenen Capabilities.
   Funnel, Token-Sharing)
 - gh issue #728 — routine-anpassen (2. Konsument, Ratifizierungs-Trigger)
 - gh issue #708 — Mini-App-Auth-Header-Härtung
+
+---
+
+### MAD-11 — JS-Side-Auth-Probe (`ensureAuth`) für HTML-Render-Routen
+
+**Live-Befund 2026-06-15 (#708-Folge):** Telegram-WebView sendet beim
+HTML-Initial-Load **keinen** `Authorization`-Header. `initData` ist nur als
+`window.Telegram.WebApp.initData` (JS-Property) verfügbar — Header-Auth-Check
+auf der HTML-Render-Route ist Telegram-spezifisch nicht durchführbar.
+
+**Bindendes Pattern (ratifiziert mit n=4 Konsumenten — essen, routine,
+hoerspiel, mini-app-uebersicht):**
+
+1. **HTML-Render-Route ist public** — lädt das Mini-App-Skeleton ohne
+   Authorization-Header (kein Daten-Leak, nur leeres Gerüst).
+2. **JS macht beim Mount** `await platform.ensureAuth()`:
+   - Sendet `POST /api/v1/init-data/validate` mit
+     `Authorization: tma <initData>`-Header.
+   - Bei 200 (`{user_id, family_member: true}`): JS lädt Daten via API.
+   - Bei 401/403 oder Netzfehler: JS sperrt das DOM mit Klartext-Hinweis
+     („Bitte über den Familien-Bot öffnen.").
+3. **API-Routen aller Buddies** (`/api/v1/<buddy>/*`) bleiben hart
+   auth-geschützt (`require_init_data`-Decorator, MAD-7) — Daten-Schutz
+   lebt auf der API, nicht auf dem HTML-Render.
+
+**Wohnort:** Helper `ensureAuth(opts)` in `seiten/static/platform.js`
+(Lego-Brille: bestehender Platform-Wrapper als Single-Source-of-Truth für
+Telegram-Web-API-Calls). Validate-Endpoint in `seiten/main.py`
+(`/api/v1/init-data/validate`, POST) als zentrale Naht.
+
+**Begründung der Architektur-Spaltung:** HTML-Render-Auth ist Telegram-spec'd
+nicht durchführbar; API-Auth bleibt scharf. Skeleton-only-HTML ist kein
+Sicherheits-Regress, weil keine Daten im HTML — alle Daten kommen via
+authentifizierte API-Calls.
+
+**Berater-Runden-Lehre für künftige Plattform-Specs:** Realitäts-Check der
+Client-/Browser-Mechanik gegen das ratifizierte Auth-Pattern ist Pflicht-
+Linse — nicht nur Backend-Architektur (HMAC, Header-Schema). Track-C-Subagent
+hatte MAD-7 wörtlich umgesetzt, die Telegram-WebView-Realität schlug live
+durch.
+
+*Tickets:* #708 (Auth-Härtung), #896 (V2-Fix mit MAD-11-Ratifizierung)

@@ -112,6 +112,28 @@ class TelegramPlatform {
       return false;
     }
   }
+
+  // MAD-11: JS-Side-Auth-Probe beim Mount.
+  // Sendet POST /api/v1/init-data/validate mit Authorization-Header.
+  // Returnt true bei 200, false bei 401/403/Netzfehler.
+  // Bei false: Mini-App sperrt UI mit kein-Zugriff-Marker.
+  async ensureAuth(opts) {
+    const initData = this._wa?.initData ?? "";
+    try {
+      const r = await fetch("/api/v1/init-data/validate", {
+        method: "POST",
+        headers: { "Authorization": "tma " + initData },
+      });
+      if (r.ok) {
+        const j = await r.json();
+        this._authUser = j;
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
 }
 
 // --- Browser-Branch (DOM-Fallback) ------------------------------------------
@@ -238,6 +260,15 @@ class BrowserPlatform {
     } catch (e) {
       return false;
     }
+  }
+
+  // MAD-11: Browser-Branch hat keinen initData → Auth-Probe schlägt fehl,
+  // außer Test-Bypass setzt einen Header (Pi-DevTest, reference_xbuddy_pi_devtest).
+  // Pragma V1: in Browser-Direkt-Zugriff (Desktop-Dev) Skeleton sichtbar lassen,
+  // returnt true (kein UI-Lock im Dev-Browser). Hardening kommt mit V2.
+  async ensureAuth(opts) {
+    this._authUser = null;
+    return true;
   }
 }
 
