@@ -54,6 +54,15 @@ ERLAUBTE_ZIELGRUPPEN = ("kind", "eltern")
 # Pflichtfelder je View-Eintrag (SREG-4 / BUD-3). `varianten` ist optional.
 PFLICHTFELDER = ("slug", "pfad", "label", "synonyme", "zeigt", "zielgruppe")
 
+# SREG-14: Mini-App-Sorte-Marker.
+TYP_MINI_APP = "mini-app"
+
+# SREG-14: Pflichtfelder im `web_app`-Block bei typ:mini-app.
+WEB_APP_PFLICHTFELDER = ("bot_env_var", "app_short_name")
+
+# SREG-14: Mini-Apps adressieren in V1 ausschließlich Eltern.
+MINI_APP_ZIELGRUPPE = "eltern"
+
 # BUD-4: icons[]-Bereich für Display-Views — mindestens ein Kachel-Icon, max 3
 # (Default-Icon + bis zu zwei Markern, ICONS-5/PANEL-3). Sorten b/c tragen kein
 # icons-Feld und werden hier NICHT geprüft (SREG-10: kein icons-Feld bei b/c).
@@ -158,6 +167,39 @@ def validate_eintrag(roh):
             "views.json: `zielgruppe` muss %s sein, ist %r (slug %r)"
             % (ERLAUBTE_ZIELGRUPPEN, roh["zielgruppe"], roh.get("slug")))
 
+
+    # SREG-14: Mini-App-Sorte — `typ: "mini-app"` erfordert einen validen
+    # `web_app`-Block mit `bot_env_var` + `app_short_name` und
+    # `zielgruppe == "eltern"` (per-View-Skip nach SREG-13 bei Fehler).
+    # Der Check läuft VOR dem BUD-4-icons-Check, da Mini-Apps ihr icons-Feld
+    # im `web_app`-Block tragen (nicht auf Top-Level) — kein BUD-4-Konflikt.
+    if roh.get("typ") == TYP_MINI_APP:
+        if roh["zielgruppe"] != MINI_APP_ZIELGRUPPE:
+            raise ManifestError(
+                "views.json: Mini-App (typ='mini-app') muss zielgruppe=%r haben,"
+                " ist %r (slug %r) — SREG-14"
+                % (MINI_APP_ZIELGRUPPE, roh["zielgruppe"], roh.get("slug")))
+        web_app = roh.get("web_app")
+        if not isinstance(web_app, dict):
+            raise ManifestError(
+                "views.json: Mini-App (typ='mini-app') ohne `web_app`-Block"
+                " (slug %r) — SREG-14" % roh.get("slug"))
+        for feld in WEB_APP_PFLICHTFELDER:
+            if not web_app.get(feld):
+                raise ManifestError(
+                    "views.json: Mini-App `web_app.%s` fehlt oder leer"
+                    " (slug %r) — SREG-14" % (feld, roh.get("slug")))
+        # icons[] im web_app-Block ist Pflicht (SREG-14: analog Sorte a)
+        web_app_icons = web_app.get("icons")
+        if web_app_icons is not None:
+            _validate_icons(web_app_icons, roh.get("slug"), feldname="web_app.icons")
+        # Mini-Apps tragen kein Top-Level icons-Feld und keine varianten[].
+        if "icons" in roh:
+            raise ManifestError(
+                "views.json: Mini-App darf kein Top-Level `icons[]` tragen —"
+                " Icons liegen in `web_app.icons[]` (slug %r, SREG-14)"
+                % roh.get("slug"))
+        return roh
 
     ist_display = _ist_display_view(roh)
     # BUD-4: icons[] nur bei Display-Views prüfen — Sorten b/c tragen kein

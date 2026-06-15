@@ -15,6 +15,20 @@
       "zeigt": "Album-Kacheln und Player für Paulas Hörspiel-Serie Stigi & Co.",
       "zielgruppe": "kind",
       "icons": ["arasaac/5915.png"]
+    },
+    {
+      "slug": "eltern",
+      "typ": "mini-app",
+      "pfad": "/seiten/hoerspiel/eltern",
+      "label": "Hörspiel pflegen",
+      "synonyme": ["hoerspiel-einstellungen", "voice ändern", "folge hören", "tempo", "mistral", "claude"],
+      "zeigt": "Hörspiel-Tuning (Voice, LLM-Anbieter/Modell, Tempo, Pausen) und Album-Galerie mit Multi-Track-Player.",
+      "zielgruppe": "eltern",
+      "web_app": {
+        "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
+        "app_short_name": "hoerspiel",
+        "icons": ["arasaac/5915.png"]
+      }
     }
   ]
 }

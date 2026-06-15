@@ -86,6 +86,9 @@ TYP_ELTERN = "eltern"
 TYP_CONTROLLER = "controller"
 TYP_PANEL = "panel"
 TYP_DISPLAY_CLIENT = "display-client"
+# SREG-14: Mini-App-Sorte — explizit aus dem Manifest-Feld `typ`, nie aus
+# `zielgruppe` abgeleitet (Sonderfall in `_typ_for_view`).
+TYP_MINI_APP = "mini-app"
 
 # SREG-1 (e)-Filter: nur diese `verwendung`-Werte zählen als Display-Seite.
 _DISPLAY_VERWENDUNGEN = ("display", "beides")
@@ -126,33 +129,49 @@ def discover_manifests(root):
 #  Eintrags-Ableitung (SREG-4)
 # ============================================================
 
-def _typ_for_view(ist_controller, zielgruppe):
-    """Leitet `typ` aus Sorte + `zielgruppe` ab (SREG-4).
+def _typ_for_view(ist_controller, view):
+    """Leitet `typ` aus Sorte + View-Dict ab (SREG-4 / SREG-14).
 
-    Controller-Apps → `controller`. Sonst entscheidet `zielgruppe`:
-    `eltern` → `eltern` (Sorte b, Settings/Editor-Views), `kind` → `display`
-    (Sorte a, Kind-Display-Views).
+    Controller-Apps → `controller`. SREG-14-Sonderfall: `view['typ'] ==
+    'mini-app'` → `TYP_MINI_APP` (explizit aus dem Manifest, NICHT aus
+    `zielgruppe` abgeleitet — `zielgruppe` ist hier immer `eltern`, aber der
+    Typ kommt aus dem deklarierten Feld). Sonst entscheidet `zielgruppe`:
+    `eltern` → `eltern` (Sorte b), `kind` → `display` (Sorte a).
     """
     if ist_controller:
         return TYP_CONTROLLER
+    if view.get("typ") == TYP_MINI_APP:
+        return TYP_MINI_APP
+    zielgruppe = view.get("zielgruppe")
     if zielgruppe == "eltern":
         return TYP_ELTERN
     return TYP_DISPLAY
 
 
-def _eintrag_aus_manifest(app_slug, ist_controller, view, icons_erforderlich=False):
-    """Baut EINEN Inventar-Eintrag aus einem Manifest-View (SREG-4/SREG-10).
+def _eintrag_aus_manifest(app_slug, ist_controller, view, icons_erforderlich=False,
+                         funnel_domain=""):
+    """Baut EINEN Inventar-Eintrag aus einem Manifest-View (SREG-4/SREG-10/SREG-14).
 
     `key`/`typ`/`app` sind abgeleitet (deterministisch aus app+slug), der Rest
     kommt 1:1 aus dem Manifest. `varianten` und `icons[]` werden durchgereicht,
     wenn vorhanden (SREG-10 — nur Sorte a, kein Komponieren).
 
+    SREG-14 (Mini-App-Sorte): bei `typ == 'mini-app'` werden `web_app_url` und
+    `funnel_url` im Aggregator komponiert (URL-12-Disziplin: URLs entstehen
+    beim Konsumenten, nicht im Manifest):
+      web_app_url = https://t.me/<bot_username>/<app_short_name>
+      funnel_url  = https://<funnel_domain><pfad>
+    `bot_username` wird aus `os.environ[view['web_app']['bot_env_var']]` gelesen;
+    fehlt die ENV-Variable, wird der Eintrag übersprungen (per-View-Skip,
+    SREG-13). `funnel_domain` kommt aus der Aggregator-Konfig (SEITEN_TAILSCALE_ORIGIN
+    analog — wird von `manifest_eintraege`/`baue_inventar` durchgereicht).
+
     Bei Sorte a (Display-View): fehlendes `icons[]` erzeugt je nach Schalter
     `icons_erforderlich` eine Warnung (False) oder einen Skip-Signal (True).
-    Liefert `None`, wenn der Eintrag übersprungen werden soll (SREG-10).
+    Liefert `None`, wenn der Eintrag übersprungen werden soll (SREG-10/SREG-13).
     """
     slug = view["slug"]
-    typ = _typ_for_view(ist_controller, view["zielgruppe"])
+    typ = _typ_for_view(ist_controller, view)
     eintrag = {
         "key": "%s-%s" % (app_slug, slug),
         "typ": typ,
@@ -163,6 +182,27 @@ def _eintrag_aus_manifest(app_slug, ist_controller, view, icons_erforderlich=Fal
         "zeigt": view["zeigt"],
         "zielgruppe": view["zielgruppe"],
     }
+
+    # SREG-14: Mini-App — web_app_url + funnel_url im Aggregator komponieren.
+    # icons[] aus web_app.icons[]; kein varianten-Feld (Mini-Apps haben keine
+    # Varianten in V1).
+    if typ == TYP_MINI_APP:
+        web_app = view.get("web_app", {})
+        bot_env_var = web_app.get("bot_env_var", "")
+        app_short_name = web_app.get("app_short_name", "")
+        bot_username = os.environ.get(bot_env_var, "") if bot_env_var else ""
+        if not bot_username:
+            logger.warning(
+                "Mini-App-View übersprungen (SREG-14/SREG-13 per-View-Skip):"
+                " app=%s slug=%s — ENV %r nicht gesetzt",
+                app_slug, slug, bot_env_var)
+            return None
+        eintrag["web_app_url"] = "https://t.me/%s/%s" % (bot_username, app_short_name)
+        eintrag["funnel_url"] = "https://%s%s" % (funnel_domain, view["pfad"])
+        icons = web_app.get("icons")
+        if icons is not None:
+            eintrag["icons"] = list(icons)
+        return eintrag
 
     # SREG-10: icons[] nur bei Display-Views (Sorte a, zielgruppe=kind).
     # Sorten b/c tragen kein icons-Feld (kein Feld, nicht null).
@@ -256,8 +296,9 @@ def _views_mit_per_view_resilienz(pfad, app_slug):
     return gueltige, False
 
 
-def manifest_eintraege(root, icons_erforderlich=False):
-    """Sammelt die Inventar-Einträge der Manifest-Sorten a/b/c (SREG-2/SREG-4/SREG-10).
+def manifest_eintraege(root, icons_erforderlich=False, funnel_domain=""):
+    """Sammelt die Inventar-Einträge der Manifest-Sorten a/b/c/mini-app
+    (SREG-2/SREG-4/SREG-10/SREG-14).
 
     Liest jedes per `discover_manifests` gefundene `views.json`. Ein kaputtes
     Manifest (`ManifestError`) wird mit Warnung übersprungen (SREG-3/DCOMP-3) —
@@ -269,6 +310,9 @@ def manifest_eintraege(root, icons_erforderlich=False):
 
     `icons_erforderlich` steuert das SREG-10-Verhalten für fehlende `icons[]`
     bei Sorte-a-Views: False = Warnung + gelistet, True = per-View-Skip.
+
+    `funnel_domain` (SREG-14): Tailscale-Funnel-Domain für `funnel_url`-Komposition
+    bei Mini-App-Einträgen (URL-12 — Origin kommt vom Aggregator, nicht vom Manifest).
     """
     eintraege = []
     for app_slug, ist_controller, pfad in discover_manifests(root):
@@ -282,7 +326,8 @@ def manifest_eintraege(root, icons_erforderlich=False):
         for view in views:
             eintrag = _eintrag_aus_manifest(
                 app_slug, ist_controller, view,
-                icons_erforderlich=icons_erforderlich)
+                icons_erforderlich=icons_erforderlich,
+                funnel_domain=funnel_domain)
             if eintrag is not None:
                 eintraege.append(eintrag)
     return eintraege
@@ -434,8 +479,8 @@ def _snapshot_sorte(neu, ableiter, vorheriges, typ):
 
 
 def baue_inventar(root, panels=None, geraete=None, vorheriges=None,
-                  icons_erforderlich=False):
-    """Baut das vollständige Inventar (SREG-3/SREG-4/SREG-10/SREG-11) — der Kern-Aufruf.
+                  icons_erforderlich=False, funnel_domain=""):
+    """Baut das vollständige Inventar (SREG-3/SREG-4/SREG-10/SREG-11/SREG-14) — Kern-Aufruf.
 
     Args:
         root: Repo-Wurzel, unter der die `views.json`-Manifeste liegen (SREG-2).
@@ -444,6 +489,9 @@ def baue_inventar(root, panels=None, geraete=None, vorheriges=None,
         vorheriges: das vorige `inventar`-Dict (für Last-Known-Good), oder None.
         icons_erforderlich: SREG-10-Schalter (Default False = Migrationsphase;
             True = nach Backfill, per-View-Skip bei fehlendem icons[]).
+        funnel_domain: Tailscale-Funnel-Domain für `funnel_url`-Komposition bei
+            Mini-App-Einträgen (SREG-14, URL-12). Leer = `funnel_url` ohne Host
+            (nur sinnvoll im Test-Modus).
 
     Returns:
         Ein `inventar`-Dict mit:
@@ -459,7 +507,9 @@ def baue_inventar(root, panels=None, geraete=None, vorheriges=None,
     """
     vorherige_eintraege = (vorheriges or {}).get("eintraege", [])
 
-    eintraege = list(manifest_eintraege(root, icons_erforderlich=icons_erforderlich))
+    eintraege = list(manifest_eintraege(
+        root, icons_erforderlich=icons_erforderlich,
+        funnel_domain=funnel_domain))
 
     pending = []
     panel_e, panel_pending = _snapshot_sorte(
