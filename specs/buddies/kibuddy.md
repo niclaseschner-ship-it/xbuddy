@@ -41,9 +41,14 @@ Vollverben, Adjektive; Funktionswörter nur als Text — KIBUDDY-17 Filter) ·
 KIBUDDY-19) · **UI-Icons aus zentraler Icon-Bibliothek** (Mikro/Mülleimer/
 Schloss/Pfeil — KIBUDDY-30) · Antwort-Render mit Icon
 darunter aus zentraler Icon-Bibliothek (ICONS-5/ICONS-7) — Wörter ohne Treffer
-nur als Text · Prompt aus Per-Instanz-Daten · ein App-eigener Eltern-Chat-Skill
-`aufnahme-quelle-setzen` (Folge-Plattform-Spec `specs/platform/kibuddy-aufnahme-quelle-setzen.md`,
-ID-Präfix KAQS) zum Umschalten der Aufnahme-Quelle (Display ↔ Panel).
+nur als Text · Prompt aus Per-Instanz-Daten, **zur Laufzeit lese- und
+schreibbar** über `GET`/`PUT /api/v1/kibuddy/prompt` (KIBUDDY-15,
+KIBUDDY-24) · **zwei** App-eigene Eltern-Chat-Skills:
+`aufnahme-quelle-setzen` (KAQS, `specs/platform/kibuddy-aufnahme-quelle-setzen.md`)
+zum Umschalten der Aufnahme-Quelle (Display ↔ Panel) und
+`kibuddy-prompt-anpassen` (KPA, `specs/platform/kibuddy-prompt-anpassen.md`)
+zum sokratisch-geführten Verbessern des System-Prompts mit Diff-Vorschau
+und Bestätigung.
 
 **Out-of-Scope V1** (je eigenes Ticket, sobald gebraucht):
 
@@ -256,12 +261,28 @@ Provider-Switch ist als Code-Pfad **vorhanden**, weitere Provider werden
 nicht antizipiert (CLAUDE.md §6 — keine Vorrat-Abstraktion); zweiter
 Provider entsteht erst bei OPEN-KIBUDDY-D / OPEN-KIBUDDY-F-Trigger.
 
-### KIBUDDY-15 — Prompt aus Per-Instanz-Daten
+### KIBUDDY-15 — Prompt aus Per-Instanz-Daten, lese- und schreibbar zur Laufzeit
 Der System-Prompt liegt als Per-Instanz-Datei (`/home/buddy/xbuddy-data/
 kibuddy/prompt.txt` o. ä.) und wird beim Service-Start eingelesen.
 Default-Prompt ist der bestehende Pre-xbuddy-KIBuddy-Prompt (Sokratisch,
 kindgerecht, „2–4 Sätze pro Antwort"). Der Prompt ist **kein** Code, er
 ist Per-Instanz-Daten (analog Welt-Bible des Hörspiel-Buddy, HSP-25a).
+
+**Laufzeit-Lese-/Schreibzugriff:** Der Prompt ist über die HTTP-API
+zu lesen (`GET /api/v1/kibuddy/prompt`) und zu schreiben (`PUT
+/api/v1/kibuddy/prompt`), siehe KIBUDDY-24. Eine Schreibwirkung
+ist **sofort wirksam** — der nächste LLM-Aufruf nutzt den neuen
+Prompt. Es ist keine Service-Reload nötig (der Dateiinhalt wird je
+LLM-Call frisch gelesen oder ein In-Memory-Cache wird auf PUT
+invalidiert; die Implementation entscheidet die Form, der Vertrag ist
+„nächster Call → neuer Prompt"). Der Schreibpfad wird vom
+Eltern-Chat-Skill `kibuddy-prompt-anpassen` (KPA, KIBUDDY-23) bedient.
+
+**Datei-Schutz:** Atomare Schreibung (Write-to-temp + Rename) gegen
+halbe Dateien bei Fehlschlag (analog FAA-Schreibvorgängen). Vor jedem
+PUT wird die alte Version als `prompt.txt.bak` gesichert (genau eine
+Generation, je PUT überschrieben — Last-Known-Good für Notfall-Rollback
+per `cp`).
 
 ### KIBUDDY-16 — Konversations-Kontext V1: Mehrturn mit Session-Memory
 V1 fährt einen **fortlaufenden Mehrturn-Dialog**: je neuer Kind-Frage sendet
@@ -397,6 +418,7 @@ in der Berater-Runde den richtigen Generalisierungs-Schnitt zu legen
 | Feld | Default | Wirkung | Override |
 |---|---|---|---|
 | `prompt-pfad` | `<data>/prompt.txt` | System-Prompt-Datei | `KIBUDDY_PROMPT_PATH` ENV oder Config |
+| `prompt.max-bytes` | `50000` | Max-Größe für PUT /prompt (KIBUDDY-24) | Config |
 | `llm.provider` | `claude` | LLM-Provider | Config; V1 nur `claude` |
 | `llm.modell` | `claude-haiku-4-5` | Modell-Wahl | Config |
 | `stt.modell` | `whisper-1` | Whisper-Modell-Variante | Config |
@@ -428,21 +450,30 @@ Hinweis-Bereich („Mikro am Panel — V2-Funktion") statt des Push-to-Talk-
 Knopfs und stellt den Knopf nicht bereit. Klare Fail-Closed-Semantik: keine
 stille Halb-Funktion. Vollständiger Panel-Pfad ist OPEN-KIBUDDY-A.
 
-## 8. Familien-Schnittstelle — Eltern-Chat-Skill `aufnahme-quelle-setzen` (KAQS)
+## 8. Familien-Schnittstelle — Zwei Eltern-Chat-Skills
 
 ### KIBUDDY-23 — Familien-Schnittstelle-Beitrag (APP-4)
-Der KIBuddy stellt **einen** Eltern-Chat-Skill bereit:
-`aufnahme-quelle-setzen` (eigene Plattform-Spec
-`specs/platform/kibuddy-aufnahme-quelle-setzen.md`, ID-Präfix KAQS).
-Wirkung: ein Elternteil ändert per Chat-Befehl die Aufnahme-Quelle
-zwischen `display` und `panel` (KIBUDDY-21). Schreibpfad: `PUT
-/api/v1/kibuddy/config` mit `{aufnahme-quelle: "display"|"panel"}`.
-Aktivierung über den bestehenden TASK-7-`build_catalog`-Pfad
-(analog RZS-5).
+Der KIBuddy stellt **zwei** Eltern-Chat-Skills bereit:
 
-Note V1-Akzeptanz: weil `panel` heute kein implementierter Aufnahme-Pfad
-ist (KIBUDDY-22), ist der Skill in V1 **funktional eingeschränkt** — er
-kann zwar `panel` setzen, aber die View bleibt im Hinweis-Zustand. Das
+1. **`aufnahme-quelle-setzen`** (eigene Plattform-Spec
+   `specs/platform/kibuddy-aufnahme-quelle-setzen.md`, ID-Präfix KAQS).
+   Wirkung: ein Elternteil ändert per Chat-Befehl die Aufnahme-Quelle
+   zwischen `display` und `panel` (KIBUDDY-21). Schreibpfad: `PUT
+   /api/v1/kibuddy/config` mit `{aufnahme-quelle: "display"|"panel"}`.
+2. **`kibuddy-prompt-anpassen`** (eigene Plattform-Spec
+   `specs/platform/kibuddy-prompt-anpassen.md`, ID-Präfix KPA). Wirkung:
+   ein Elternteil verfeinert per **sokratischem Mehrturn-Dialog** mit dem
+   Bot den System-Prompt des KIBuddys (KIBUDDY-15), sieht eine **Diff-
+   Vorschau** und schreibt nach Bestätigung den neuen Prompt. Lesepfad:
+   `GET /api/v1/kibuddy/prompt`, Schreibpfad: `PUT
+   /api/v1/kibuddy/prompt`.
+
+Beide Skills aktivieren sich über den bestehenden TASK-7-`build_catalog`-
+Pfad (analog RZS-5).
+
+Note V1-Akzeptanz KAQS: weil `panel` heute kein implementierter Aufnahme-
+Pfad ist (KIBUDDY-22), ist der Skill in V1 **funktional eingeschränkt** —
+er kann zwar `panel` setzen, aber die View bleibt im Hinweis-Zustand. Das
 ist eine bewusste **Interface-first-Auslage**: die Spec exposed jetzt die
 volle API-Schnittstelle, der Konsum-Pfad zieht in V2 nach (Werft-Disziplin
 Interface-first).
@@ -458,6 +489,8 @@ Interface-first).
 | `POST` | `/api/v1/kibuddy/reset` | Session-Konversation löschen (KIBUDDY-29) | Frage-View (clientseitig) |
 | `GET` | `/api/v1/kibuddy/config` | Aktuelle Config (ohne Keys) | KAQS-Skill, Diagnose |
 | `PUT` | `/api/v1/kibuddy/config` | Aufnahme-Quelle setzen | KAQS-Skill |
+| `GET` | `/api/v1/kibuddy/prompt` | Aktuellen System-Prompt lesen (KIBUDDY-15) | KPA-Skill, Diagnose |
+| `PUT` | `/api/v1/kibuddy/prompt` | Neuen System-Prompt schreiben (KIBUDDY-15) | KPA-Skill |
 
 **POST `/api/v1/kibuddy/frage`** — Multipart-Form mit `audio` (Browser-
 Container, WebM/Opus oder MP4). Response: JSON `{ text: "<antwort>",
@@ -469,6 +502,27 @@ Antwort).
 Feld in die Per-Instanz-`config.json`. V1 akzeptiert nur das Feld
 `aufnahme-quelle`. Andere Felder werden **abgelehnt** (HTTP 400) — die
 volle Config-Schreibung ist V2 (OPEN-KIBUDDY-D).
+
+**GET `/api/v1/kibuddy/prompt`** — Response: JSON `{ "prompt": "<voller
+Prompt-Text>", "byte-laenge": <int>, "geaendert-am": "<ISO-Zeitstempel
+der letzten Schreibung>" }`. Liefert immer den **aktuell wirksamen**
+Prompt (was beim nächsten LLM-Call benutzt wird). Read-only.
+
+**PUT `/api/v1/kibuddy/prompt`** — JSON-Body `{ "prompt": "<neuer
+Prompt-Text>" }`. Wirkung: atomare Datei-Schreibung der
+`prompt.txt` (Write-to-temp + Rename), die bisherige Version wandert
+nach `prompt.txt.bak` (eine Generation, je PUT überschrieben — Last-
+Known-Good, KIBUDDY-15). **Validierung:** der Prompt-Text muss
+nicht-leer sein (`len(text.strip()) > 0`) und unter der
+**Maximum-Prompt-Länge** liegen (Default 50 000 Bytes, KIBUDDY-21).
+Andere Felder im Body werden ignoriert. Response: JSON
+`{ "ok": true, "byte-laenge": <int>, "bisherige-laenge": <int> }`.
+Fehler-Pfade: HTTP 400 bei leerem oder zu langem Prompt; HTTP 500
+bei Schreibfehler (Disk voll, Permission) — dann bleibt der **alte
+Prompt** wirksam (kein halbtoter Zustand). Idempotenz: PUT mit
+identischem Text ist erlaubt und wirkt als Touch (Backup-Datei wird
+trotzdem aktualisiert, Last-Known-Good ist immer der vorletzte
+Stand).
 
 ## 10. Registrierung & Auslieferung
 
