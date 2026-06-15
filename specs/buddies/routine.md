@@ -782,9 +782,10 @@ Routine-Punkt an. Es enthält:
 **Grid-Galerie** (3 Spalten, MAD-2-Card-Pattern) angezeigt — Bilder aus
 `/display/_shared/icons/arasaac/<id>.png`. Tap auf ein Bild = Auswahl,
 Bottom-Sheet bleibt offen (Eltern kann Label nachschärfen und neu suchen).
-**Kein heimlicher Fallback** auf einzelne Wörter aus dem Label — die Suche
-nimmt den ganzen Eingabe-Text wie er ist (UX-Ehrlichkeit, RPS-4-Konsistenz:
-keine ID erfinden, keine UX-Magie).
+Liefert die Voll-String-Suche keine Treffer und enthält die Eingabe Whitespace,
+fällt das Frontend transparent auf Einzelwort-Suche zurück. Die Galerie zeigt
+einen Klartext-Hinweis „Treffer für *X* und *Y* (Wort-Suche)", damit der
+Fallback sichtbar ist (UX-Ehrlichkeit bleibt, keine ID-Erfindung).
 
 **ROUTINE-21b — Manuelle Suchleiste, immer sichtbar.** Über/unter der
 Galerie sitzt ein eigenes Such-Feld („Anderes Wort suchen"). Eingabe dort
@@ -794,8 +795,7 @@ nicht erst „etwas Falsches probieren", bevor sie selbst suchen darf.
 
 **ROUTINE-21c — Null-Treffer-Zustand.** Liefert ICONS-7 eine leere Liste,
 zeigt die Galerie-Sektion Klartext: „Nichts gefunden für *X* — versuch ein
-anderes Wort" mit Fokus auf der manuellen Suchleiste. **Kein
-Default-„Fragezeichen"-Piktogramm**, kein implizites Hilfs-Icon (würde
+anderes Wort". **Kein Default-„Fragezeichen"-Piktogramm**, kein implizites Hilfs-Icon (würde
 generische Routine-Karten am Display erzeugen, ROUTINE-10-Konsistenz).
 
 **ROUTINE-21d — Save disabled ohne Pikto-Wahl.** Der Bottom-Sheet-Save-Button
@@ -808,7 +808,9 @@ neuer Punkt erscheint in der Liste. 4xx-Antwort (z. B. >8 Punkte, ROUTINE-19)
 *Test-Implikation:* Label-Tippen → ICONS-7-Stub liefert 3 Treffer → Grid
 rendert 3 Bilder; Tap eines Bildes → ausgewählt-Markierung. Manuelle Suche
 mit anderem Term → neuer ICONS-7-Call mit dem manuellen Wort. Null-Treffer
-→ Klartext + Fokus auf Such-Feld. Save ohne Pikto-Wahl → Button disabled.
+→ Klartext. Voll-String-Suche mit Whitespace-Eingabe und Null-Treffer →
+transparenter Wort-Split-Fallback mit Klartext-Hinweis „Treffer für X und Y (Wort-Suche)".
+Save ohne Pikto-Wahl → Button disabled.
 
 *Tickets:* #678, Folge-Implementierungs-Ticket
 
