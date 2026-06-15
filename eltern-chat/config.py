@@ -134,6 +134,12 @@ DEFAULTS = {
     # zum Pi-Setup (PORT-2 Hörspiel-Buddy auf 5053). Leer ⇒ Aufgabe NICHT im
     # Katalog (AND-Guard mit family_group_chat_id_getter).
     "hoerspiel_url_origin": "http://127.0.0.1:5053",
+    # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts, über den die
+    # KibuddyAufnahmeQuelleSetzenTask die Aufnahme-Quelle schreibt
+    # (PUT /api/v1/kibuddy/config KAQS-5). Per-Instanz-Wert; Default passt
+    # zum Pi-Setup (PORT-2 KIBuddy auf 5054, KIBUDDY-25). Leer ⇒ Aufgabe
+    # NICHT im Katalog (AND-Guard mit family_group_chat_id_getter, KAQS-6).
+    "kibuddy_origin_url": "http://127.0.0.1:5054",
     # ONB-6 / EC-15: Familien-Gruppen-Chat-ID. Default leer = Onboarding-
     # Bindung. Über ENV oder Datei gesetzt → gesperrt (Vorrang vor
     # Onboarding-Bindung) — die Sperr-Logik sitzt in `resolve`, nicht im
@@ -181,7 +187,8 @@ class Config:
                  multimodal_model="",
                  mini_app_einkauf_url="",
                  mini_app_base_url="",
-                 hoerspiel_url_origin=""):
+                 hoerspiel_url_origin="",
+                 kibuddy_origin_url=""):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
         self.provider = provider
@@ -213,6 +220,8 @@ class Config:
         self.mini_app_base_url = mini_app_base_url  # leer → RAO NICHT im Katalog
         # HFE-9 / #729: Origin des Hörspiel-Buddys (HFE-3/HFE-5, HSP-17).
         self.hoerspiel_url_origin = hoerspiel_url_origin  # leer → HFE NICHT im Katalog
+        # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts (KAQS-5, KIBUDDY-24/25).
+        self.kibuddy_origin_url = kibuddy_origin_url      # leer → KAQS NICHT im Katalog
 
 
 def _family_group_in_file(config_path):
@@ -341,4 +350,6 @@ def resolve(config_path, zd=None):
         mini_app_base_url=str(values["mini_app_base_url"]).strip().rstrip("/"),
         # HFE-9 / #729: Origin des Hörspiel-Buddys.
         hoerspiel_url_origin=str(values["hoerspiel_url_origin"]).strip().rstrip("/"),
+        # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts (KAQS-5, KIBUDDY-25).
+        kibuddy_origin_url=str(values["kibuddy_origin_url"]).strip().rstrip("/"),
     )
