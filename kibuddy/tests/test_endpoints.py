@@ -73,6 +73,50 @@ def test_parse_kibuddy_response_buzzwords_sanitisiert():
     assert result["buzzwords"] == ["hund", "katze", "maus"]  # max 3, lowercase
 
 
+def test_parse_kibuddy_response_prosa_vorlauf_plus_fence():
+    """Live-Bug 2026-06-15: Claude liefert Prosa + ```json-Fence parallel.
+    Parser muss den JSON-Block extrahieren, nicht in Fallback fallen."""
+    from kibuddy.llm_service import parse_kibuddy_response
+    raw = (
+        'Das hängt davon ab. Ein Apfelbaum braucht 3-4 Jahre. '
+        'Hast du schon mal einen Baum gepflanzt?\n'
+        '```json\n'
+        '{"antwort": "Das hängt davon ab. Ein Apfelbaum braucht 3-4 Jahre.", '
+        '"buzzwords": ["baum", "wachsen", "jahre"]}\n'
+        '```'
+    )
+    result = parse_kibuddy_response(raw)
+    assert result["antwort"] == "Das hängt davon ab. Ein Apfelbaum braucht 3-4 Jahre."
+    assert result["buzzwords"] == ["baum", "wachsen", "jahre"]
+
+
+def test_parse_kibuddy_response_prosa_vorlauf_ohne_fence():
+    """Variante: Prosa-Vorlauf + nacktes JSON ohne Fence."""
+    from kibuddy.llm_service import parse_kibuddy_response
+    raw = 'Hier kommt die Antwort: {"antwort": "Hallo.", "buzzwords": ["a","b","c"]}'
+    result = parse_kibuddy_response(raw)
+    assert result["antwort"] == "Hallo."
+    assert result["buzzwords"] == ["a", "b", "c"]
+
+
+def test_parse_kibuddy_response_json_mit_trailing_text():
+    """Variante: JSON gefolgt von Prosa-Trailing."""
+    from kibuddy.llm_service import parse_kibuddy_response
+    raw = '{"antwort": "Test.", "buzzwords": ["a","b","c"]}\n\nNoch ein Hinweis.'
+    result = parse_kibuddy_response(raw)
+    assert result["antwort"] == "Test."
+    assert result["buzzwords"] == ["a", "b", "c"]
+
+
+def test_parse_kibuddy_response_balancierte_klammern_im_string():
+    """Edge-Case: { im JSON-String-Wert darf den Klammern-Counter nicht verwirren."""
+    from kibuddy.llm_service import parse_kibuddy_response
+    raw = '{"antwort": "Ein Apfel {} ist eine Frucht.", "buzzwords": ["a","b","c"]}'
+    result = parse_kibuddy_response(raw)
+    assert result["antwort"] == "Ein Apfel {} ist eine Frucht."
+    assert result["buzzwords"] == ["a", "b", "c"]
+
+
 def test_parse_kibuddy_response_fehlende_felder_fallback():
     """T865: JSON ohne erwartete Felder → antwort leer-string, buzzwords leer."""
     from kibuddy.llm_service import parse_kibuddy_response
