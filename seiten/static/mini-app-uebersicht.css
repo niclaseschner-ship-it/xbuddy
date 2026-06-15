@@ -299,6 +299,15 @@ body {
   margin-bottom: 6px;
 }
 
+/* SREG-12-konsistent: jede Seite/Display/Panel hat ihr Icon als Erstkennung. */
+.url-karte-icon {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border-radius: 4px;
+  object-fit: contain;
+}
+
 .url-karte-label {
   font-size: 0.88rem;
   font-weight: 600;
