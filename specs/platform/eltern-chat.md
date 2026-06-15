@@ -534,8 +534,11 @@ A2-Schreibakt schreibt das Framework einen **persistenten Datensatz**
   (Buddy-Endpunkt + Pfad-Parameter), den der Vor-Agent-Hook
   deterministisch ausführen kann
 - **`committed_at`** — Zeitpunkt des erfolgreichen Schreibakts
+- **`expires_at`** — NULL für rein-interne Schreibakte (gilt bis
+  Versiegelung); gesetzter Zeitstempel für Schreibakte gegen
+  **externe APIs** (siehe „Intern vs. extern" unten)
 - **`sealed_at`** — NULL, solange `falsch` noch greift; gesetzt bei
-  Versiegelung (siehe nächster Absatz)
+  Versiegelung (siehe übernächster Absatz)
 
 Ein A2-Schreibakt mit **mehreren** Ressourcen (Multi-Item — z. B.
 `einkauf_hinzufuegen` mit drei Items) schreibt **eine Receipt-Zeile
@@ -552,17 +555,59 @@ letzten Schreibakt — die alten Bons sind „verbraucht" und können
 nicht mehr per `falsch` angefasst werden. Das ist die mechanische
 Form der Versiegelungs-Klausel oben.
 
+**Intern vs. extern — Lebensdauer-Differenzierung pro Schreib-Ziel
+(#841, 2026-06-15).** Die **Customer-Journey-Wortlaute sind identisch
+für alle A2-Skills** („Wenn falsch, sag »falsch«"); die mechanische
+Lebensdauer des Receipts ist aber an das Schreib-Ziel gekoppelt:
+
+- **Intern (xbuddy-eigener Buddy als Konsument, `conventions/apps.md`
+  APP-3):** `expires_at = NULL`. Der Bon gilt bis zur Versiegelung
+  durch die nächste inhaltlich folgende Anfrage. Begründung: Niemand
+  außer xbuddy selbst kann die Ressource zwischenzeitlich verändern;
+  ein DELETE auf die im Bon gespeicherte ID ist deterministisch
+  korrekt. Beispiele heute: `foto_senden` (Photo-Buddy intern),
+  `einkauf_hinzufuegen` (Essens-Buddy intern).
+
+- **Extern (Konsument schreibt seinerseits gegen einen Drittanbieter —
+  Plan-Buddy gegen Google Calendar / iCal; künftige Buddies gegen
+  externe APIs):** `expires_at = committed_at + Default-Fenster`
+  (V1: **5 Min**, später Config-tunable bei n=2-Schmerz). Nach Ablauf
+  greift `falsch` **nicht mehr** — der Bot quittiert mit EC-7-Form:
+  „Eintrag ist schon eine Weile her — bitte direkt an der Quelle
+  (Kalender, …) korrigieren." Begründung: Externe Aktoren können den
+  Schreibakt zwischenzeitlich verändert oder verschoben haben (User
+  am Smartphone öffnet Google Calendar manuell); ein DELETE auf die
+  gespeicherte ID kann dann **die User-Korrektur zerstören**, statt
+  den ursprünglichen Akt rückgängig zu machen. Das kurze Fenster
+  begrenzt die Wahrscheinlichkeit dieser Race auf das Minimum, ohne
+  die Customer-Journey zu brechen. Beispiele heute: `termin_eintragen`
+  (Plan-Buddy → externer Kalender-Provider).
+
+**Ambiguitäts-Quittung bei nicht-eindeutigem DELETE (#841, 2026-06-15).**
+Liefert der Inverse-Aufruf einen **unklaren Erfolg** — HTTP 404
+(Ressource bei externer Quelle schon weg), HTTP-Konflikt (Ressource
+verändert), Provider-Fehler ohne klare Zustands-Bestätigung —
+quittiert der Bot **ehrlich** (EC-7-Linie): „Konnte den Eintrag nicht
+zweifelsfrei zurücknehmen — bitte selbst an der Quelle prüfen."
+Schreibakt selbst gilt dann als nicht-eindeutig-rückgenommen; der
+Receipt-Eintrag wird **trotzdem** mit `sealed_at` versiegelt (kein
+zweiter `falsch`-Versuch auf denselben Bon). Nur ein sauberer 200 OK
+(oder Provider-Äquivalent) erlaubt die positive Quittung „Termin
+wieder weg." Das gilt für **intern und extern**, fällt mechanisch
+aber nur bei externen Schreibakten realistisch an.
+
 **Wer schreibt einen Bon — wer nicht.** Nur A2-Skills mit
 **erreichbarem Inverse** (Bedingung 2 der A2-Klausel: stabile ID +
 idempotentes DELETE) schreiben einen Receipt-Eintrag. Hat ein Skill
-keinen Inverse-Vertrag (heute z. B. `termin_eintragen`/TES, weil
-Plan-Buddy keinen DELETE-Endpunkt für Termine hat —
-`specs/platform/termin-eintragen.md:44-47`), läuft er **nicht** im
-A2-Sofort-Write-Default; die Quittung trägt **kein** `falsch`-Wort.
-Solche Skills müssen entweder einen DELETE-Endpunkt am Konsumenten
-ergänzen (Folge-Ticket beim jeweiligen Buddy) oder bleiben in der
-zweistufigen Variante (Confirm-Gate vor Schreib, Korrektur über
-Welle-3-Korrektur-Dialog vor `ja`).
+keinen Inverse-Vertrag heute, liegt das entweder am **Konsumenten**
+(Plan-Buddy hat noch keinen DELETE-Endpunkt für Termine —
+`specs/platform/termin-eintragen.md:44-47`, Folge-Track beim
+Plan-Buddy ergänzt das, damit `termin_eintragen` mit
+`expires_at = +5 Min` als externer Schreibakt im A2-Receipt-Pfad
+läuft) oder an der Skill-Eigenschaft selbst (TASK-9-Pattern, kein
+DELETE-Verlangen). Skills ohne Inverse trägt **kein** `falsch`-Wort
+in der Quittung; die Familie korrigiert über die zweistufige
+Variante (Confirm vor Schreib, EC-2X Welle 3).
 
 **Statistik-Nebennutzen (kein V1-Feature).** Das Receipt-Datenmodell
 zusammen mit EC-35-`task_events` ermöglicht später Auswertungen
