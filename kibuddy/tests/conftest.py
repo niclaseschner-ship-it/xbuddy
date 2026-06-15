@@ -107,6 +107,7 @@ def runtime_config():
         tts_voice="onyx",
         tts_model="tts-1-hd",
         tts_speed=0.9,
+        stt_provider="openai",
         stt_model="whisper-1",
         stt_sprache="de",
         aufnahme_quelle="display",
@@ -117,6 +118,7 @@ def runtime_config():
         azure_endpoint="https://example.invalid",
         azure_key="test-azure-key",
         azure_api_version="2024-10-01-preview",
+        openai_key="test-openai-key",
     )
 
 
@@ -178,6 +180,7 @@ def client_no_keys(data_root, session_memory):
         tts_voice="onyx",
         tts_model="tts-1-hd",
         tts_speed=0.9,
+        stt_provider="openai",
         stt_model="whisper-1",
         stt_sprache="de",
         aufnahme_quelle="display",
@@ -188,6 +191,7 @@ def client_no_keys(data_root, session_memory):
         azure_endpoint=None,
         azure_key=None,
         azure_api_version="2024-10-01-preview",
+        openai_key=None,
     )
     registry = SessionRegistry()
     registry._sessions[_TEST_CLIENT_SID] = session_memory
