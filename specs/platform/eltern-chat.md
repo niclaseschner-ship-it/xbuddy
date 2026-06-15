@@ -538,6 +538,32 @@ Die zweistufige Variante gilt für alle schreibenden Aufgaben außerhalb
 der A2-Klasse (FAA, GAA, KAV — Klasse E mit eigenem Abschluss-Gate —,
 TES außerhalb des A2-Falls und künftige Aufgaben desselben Musters).
 
+**Single-Slot-Pending-Politik in der zweistufigen Variante.** Pro
+Chat-Faden hält der `PendingStore` zu jeder Zeit **genau einen**
+offenen Vorschlag der zweistufigen Variante. Trifft ein neuer
+zweistufiger Vorschlag ein, während ein älterer noch unbestätigt
+ist, **verdrängt** der neue den alten — der alte gilt als verfallen,
+ohne Schreibakt. Der Bot quittiert die Verdrängung in einem Satz mit
+den geparsten Schlüssel-Werten beider Vorschläge, z. B.: „Vorschlag
+‚Tafel-Geburtstag Mi 19 Uhr' verfällt — neuer Vorschlag
+‚Geburtstag Sa 14 Uhr' wartet auf `ja` oder `falsch`." Damit ist
+die Bestätigung **immer eindeutig genau einem Vorschlag zugeordnet**:
+wer „ja" sagt, bestätigt den jüngsten und einzigen aktiven Vorschlag.
+
+A2-Aufgaben (Sofort-Write + Quittung + Undo-Wort) sind von dieser
+Politik nicht betroffen — sie legen direkt eine Ressource an und
+versiegeln den vorigen Schreibakt durch die nächste inhaltliche
+Anfrage.
+
+**Verworfen:** (a) **Latest-wins** bei „ja" ohne Reply (jüngster
+Pending gewinnt) — bricht die EC-10-Garantie „eindeutig einem
+konkreten Vorschlag zugeordnet"; (b) **Agent-Gate** (Agent darf
+keinen zweiten Vorschlag produzieren, solange einer pendet) — koppelt
+die Mechanik an LLM-Compliance und blockt die Familie an einem
+unbeantworteten Stapel; (c) **Stapel mit ID-Markierung in der
+Bestätigung** — überfrachtet die Bot-Nachricht und verlangt von der
+Familie, Vorschlags-IDs zu zitieren.
+
 *Was sich für die Familie ändert.* Bei A2-Aufgaben antwortet der Bot
 auf einen vollständigen Anstoß („Mittwoch 19 Uhr Pauls
 Geburtstagsfeier") direkt mit der Quittung — der Termin steht. Ein
@@ -1139,6 +1165,29 @@ halluziniertes »Ja« eine Datenänderung auslösen — genau das schließt EC-1
 Eine Nachricht, die keinem Bestätigungswort entspricht, ist keine Bestätigung; sie
 wird als normale Anfrage an den Agenten behandelt und der offene Vorschlag bleibt
 unbestätigt.
+
+**Ablehnungs-Wortliste (Pendant zu CONFIRM_WORDS).** In der
+zweistufigen Variante (EC-10) leert eine ausdrückliche **Ablehnung**
+den `PendingStore` ohne Schreibakt — der offene Vorschlag verfällt.
+Die Liste ist fest definiert: `nein`, `nicht`, `nö`, `nope`,
+`vergiss es`, `lass mal`, `abbrechen`, `cancel`, `doch nicht` —
+Vergleich case-insensitiv, ganzes Wort/ganzer Ausdruck (keine
+Teilstring-Treffer). Der Bot quittiert mit einem Satz in der Stimme
+des jeweiligen Skills (z. B.: „ok, Vorschlag verworfen."). Der
+Abgleich ist analog zur Bestätigung **deterministisch** und liegt
+außerhalb des Agent-Loops — keine LLM-Interpretation.
+
+Die Liste ist bewusst eng (eindeutige Ablehnungs-Marker, keine
+ambivalenten Phrasen wie „mal sehen", „später"). A2-Schreibakte
+sind nicht betroffen — sie kennen das Undo-Wort `falsch` (EC-10
+A2-Klausel).
+
+**Verworfen:** (a) **LLM-Interpretation der Ablehnung** — bricht
+E-EC-4/EC-12; (b) **dieselbe Wortliste wie das A2-Undo (`falsch`)**
+— mischt zwei unterschiedliche Mechaniken (Vorschlag verwerfen vs.
+ausgeführten Schreibakt rückgängig machen); (c) **`nein` als
+einziges Wort** — Familien nutzen viele Ablehnungs-Wendungen, eine
+zu enge Liste produziert „keine Ablehnung erkannt"-Schmerz.
 
 **Verworfen:** (1) 👍 als *Reaktion* statt als Nachricht — ein Bot empfängt
 Reaktions-Updates in einer Gruppe nur als Administrator; das würde Gruppen-Admin-
