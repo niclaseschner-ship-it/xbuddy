@@ -14,6 +14,20 @@
       ],
       "zeigt": "Alle aufrufbaren XBuddy-Seiten mit Geräte-Paaren oben und Buddy-Gruppen darunter.",
       "zielgruppe": "eltern"
+    },
+    {
+      "slug": "mini-app-uebersicht",
+      "typ": "mini-app",
+      "pfad": "/api/v1/seiten/mini-app-uebersicht",
+      "label": "Mini-App-Übersicht",
+      "synonyme": ["übersicht", "apps", "alles"],
+      "zeigt": "Übersicht aller Mini-Apps und Buddy-Seiten.",
+      "zielgruppe": "eltern",
+      "web_app": {
+        "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
+        "app_short_name": "uebersicht",
+        "icons": ["arasaac/8056.png"]
+      }
     }
   ]
 }
