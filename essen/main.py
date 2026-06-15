@@ -423,6 +423,15 @@ def require_init_data(fn):
     """
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
+        # Localhost-Bypass für Internal-Service-Calls (eltern-chat → essen).
+        # nginx-Forwards tragen X-Forwarded-For; direkte 127.0.0.1-Calls
+        # (z.B. von eltern-chat-Skills via http://127.0.0.1:5052/...) nicht.
+        # Public-Mini-App-Calls (Browser via nginx) bleiben auth-gesichert.
+        if (not request.headers.get("X-Forwarded-For")
+                and request.remote_addr in ("127.0.0.1", "::1")):
+            g.init_data = None
+            return fn(*args, **kwargs)
+
         bot_token = _get_bot_token()
         if not bot_token:
             logger.error("MAD-7: %s nicht gesetzt — Mini-App-Route nicht nutzbar.", _ENV_BOT_TOKEN)

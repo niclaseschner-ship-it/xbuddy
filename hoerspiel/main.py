@@ -256,6 +256,13 @@ def require_mini_app_auth(f):
     """
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
+        # Localhost-Bypass für Internal-Service-Calls (eltern-chat → hoerspiel).
+        # nginx-Forwards tragen X-Forwarded-For; direkte 127.0.0.1-Calls nicht.
+        # Public-Mini-App-Calls (Browser via nginx) bleiben auth-gesichert.
+        if (not request.headers.get("X-Forwarded-For")
+                and request.remote_addr in ("127.0.0.1", "::1")):
+            return f(*args, **kwargs)
+
         init_data, err = _validate_mini_app_request()
         if err is not None:
             return err
