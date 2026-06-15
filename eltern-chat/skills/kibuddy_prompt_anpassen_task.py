@@ -1,9 +1,10 @@
 """KIBuddy-Prompt anpassen als Aufgaben-Katalog-Aufgabe —
-specs/platform/kibuddy-prompt-anpassen.md (KPA-1/2/6/7/8).
+specs/platform/kibuddy-prompt-anpassen.md (KPA-1/2/5/6/7/8).
 
 Eltern verfeinern per sokratischem Mehrturn-Dialog (KPA-4) den System-Prompt
-des KIBuddys, sehen eine Diff-Vorschau (KPA-6) und schreiben nach Bestätigung
-via PUT auf /api/v1/kibuddy/prompt (KIBUDDY-24, KPA-7).
+des KIBuddys, können den aktuellen Prompt auf Wunsch anzeigen lassen (KPA-5),
+sehen eine Diff-Vorschau (KPA-6) und schreiben nach Bestätigung via PUT auf
+/api/v1/kibuddy/prompt (KIBUDDY-24, KPA-7).
 
 Dies ist eine **schreibende** Aufgabe (EC-10, KPA-2): das EC-10-
 Bestätigungs-Gate (propose/execute) ist die einzige Bestätigung —
@@ -14,9 +15,12 @@ Kein eigener State-Store: der Konversations-Kontext lebt im laufenden
 Agent-Loop (KPA-2).
 
 V1-Scope:
-  - propose(): sokratischer Dialog-Start; bei leerem Wunsch Klär-Nachfrage
-    (KPA-4 Schritt 1). Mit `neuer_prompt`-Argument: Diff-Vorschau generieren
-    (KPA-6) und Bestätigungs-Frage stellen.
+  - propose() mit aktion='anzeigen': aktuellen Prompt lesen und anzeigen
+    (KPA-5). Bei >3500 Zeichen: mehrteilige Antwort mit (Teil X/Y)-Markierung.
+  - propose() ohne aktion / aktion='vorschlagen': sokratischer Dialog-Start;
+    bei leerem Wunsch Klär-Nachfrage (KPA-4 Schritt 1). Mit
+    `neuer_prompt`-Argument: Diff-Vorschau generieren (KPA-6) und
+    Bestätigungs-Frage stellen.
   - execute(): PUT /api/v1/kibuddy/prompt (KPA-7). Erfolgs- oder Fehler-
     Quittung mit .bak-Hinweis bei 500 (KIBUDDY-15).
 
@@ -62,6 +66,13 @@ _DIALOG_START = (
     "Ich helfe dir, den KIBuddy-Prompt anzupassen. "
     "Was möchtest du am Verhalten des KIBuddys ändern? "
     "(Tonfall, Themen, bestimmte Reaktionen auf Fragen, …)")
+
+# KPA-5: Fehler-Quittung beim Anzeige-Pfad (GET-Fehler).
+_QUITTUNG_ANZEIGE_FEHLER = (
+    "KIBuddy gerade nicht erreichbar — versuch es gleich nochmal.")
+
+# KPA-5: Telegram-Zeichen-Limit pro Teil (Sicherheitsmarge vor 4096).
+_TELEGRAM_MAX_ZEICHEN = 3500
 
 # KPA-6: Diff-Vorschau-Rahmen.
 _DIFF_HEADLINE = (
@@ -111,6 +122,33 @@ def _build_diff(alter_text, neuer_text):
     return "\n".join(diff_lines)
 
 
+def _split_for_telegram(text: str,
+                        max_per_part: int = _TELEGRAM_MAX_ZEICHEN) -> list:
+    """Splittet langen Text in Teile ≤ max_per_part Zeichen (KPA-5).
+
+    Bevorzugt Schnitte an \\n\\n-Grenzen; fällt auf \\n zurück; als letztes
+    Mittel harter Schnitt. Gibt eine Liste von Teil-Strings zurück — bei
+    kurzem Text ist die Liste einelementig.
+    """
+    if len(text) <= max_per_part:
+        return [text]
+    parts = []
+    rest = text
+    while rest:
+        if len(rest) <= max_per_part:
+            parts.append(rest)
+            break
+        # Bevorzuge letztes \n\n vor max_per_part
+        cut = rest.rfind("\n\n", 0, max_per_part)
+        if cut <= 0:
+            cut = rest.rfind("\n", 0, max_per_part)
+        if cut <= 0:
+            cut = max_per_part
+        parts.append(rest[:cut].rstrip())
+        rest = rest[cut:].lstrip()
+    return parts
+
+
 class KibuddyPromptAnpassenTask(WriteTask):
     """Schreibende Katalog-Aufgabe (EC-10), die »KIBuddy-Prompt anpassen«
     auslöst (KPA-8).
@@ -140,23 +178,42 @@ class KibuddyPromptAnpassenTask(WriteTask):
         super().__init__(
             name="kibuddy_prompt_anpassen",
             description=(
-                "Verbessert den KIBuddy-Prompt im Gespräch. "
-                "Aufrufen, wenn ein Elternteil den KIBuddy anpassen möchte — "
-                "Tonfall ändern, neue Verhaltens-Regeln einbauen, Themen "
-                "ergänzen. Der Bot führt einen sokratischen Dialog, zeigt "
-                "eine Diff-Vorschau und schreibt den neuen Prompt erst nach "
-                "Bestätigung. (KPA-1)"),
+                "Zwei Funktionen fuer den KIBuddy-Prompt:\n"
+                "(1) ANZEIGEN (aktion='anzeigen'): aktuellen Prompt-Text "
+                "holen und an die Eltern senden - bei Fragen wie "
+                "\"zeig mir den Prompt\", \"wie lautet der aktuelle Prompt\", "
+                "\"was steht im Prompt\", \"was steht aktuell drin\".\n"
+                "(2) VORSCHLAGEN (aktion='vorschlagen' + neuer_prompt): "
+                "neuen Prompt-Text validieren, Diff-Vorschau anzeigen, "
+                "Bestaetigung holen, dann schreiben - bei Auftraegen wie "
+                "\"mach den Prompt freundlicher\", \"aendere den Tonfall\", "
+                "\"fuege eine Regel hinzu\".\n"
+                "Der Bot fuehrt beim Vorschlagen einen sokratischen Dialog "
+                "(KPA-4) und schreibt erst nach Bestaetigung. (KPA-1/KPA-5)"),
             parameters={
                 "type": "object",
                 "properties": {
+                    "aktion": {
+                        "type": "string",
+                        "enum": ["anzeigen", "vorschlagen"],
+                        "default": "vorschlagen",
+                        "description": (
+                            "anzeigen → aktuellen Prompt holen + zeigen "
+                            "(KPA-5). Bei Eltern-Fragen wie 'zeig mir den "
+                            "Prompt' / 'wie sieht der aktuelle Prompt aus' "
+                            "/ 'was steht drin' → aktion=anzeigen. "
+                            "vorschlagen → neuen Prompt-Text validieren + "
+                            "Diff-Vorschau (KPA-6). Default: 'vorschlagen'."),
+                    },
                     "neuer_prompt": {
                         "type": "string",
                         "description": (
                             "Der vollständige neue System-Prompt-Text, den "
                             "das LLM nach dem sokratischen Dialog (KPA-4) "
-                            "erarbeitet hat. Leer lassen beim ersten "
-                            "Dialog-Schritt — der Skill startet dann den "
-                            "Klär-Dialog (KPA-4 Schritt 1)."),
+                            "erarbeitet hat. Nur bei aktion='vorschlagen' "
+                            "relevant. Leer lassen beim ersten Dialog-Schritt "
+                            "— der Skill startet dann den Klär-Dialog "
+                            "(KPA-4 Schritt 1)."),
                     },
                 },
                 "required": [],
@@ -168,16 +225,26 @@ class KibuddyPromptAnpassenTask(WriteTask):
         self._is_member_fn = is_member_fn
 
     def propose(self, arguments, turn_context):
-        """EC-10-Vorschlag — beschreibt die geplante Änderung (KPA-6).
+        """EC-10-Vorschlag — beschreibt die geplante Änderung (KPA-5/KPA-6).
 
-        Ohne `neuer_prompt`: sokratischer Dialog-Start (KPA-4 Schritt 1).
-        Mit `neuer_prompt`: Diff-Vorschau gegen den aktuellen Prompt (KPA-6)
-        + Bestätigungs-Frage. Falls GET /prompt fehlschlägt, zeigt der Skill
-        einen Hinweis und bittet um erneuten Versuch.
+        aktion='anzeigen': liest aktuellen Prompt via GET und gibt ihn zurück
+        (KPA-5). Bei >3500 Zeichen mehrteilig mit (Teil X/Y)-Markierung.
+
+        aktion='vorschlagen' (Default):
+          Ohne `neuer_prompt`: sokratischer Dialog-Start (KPA-4 Schritt 1).
+          Mit `neuer_prompt`: Diff-Vorschau gegen den aktuellen Prompt (KPA-6)
+          + Bestätigungs-Frage. Falls GET /prompt fehlschlägt, zeigt der Skill
+          einen Hinweis und bittet um erneuten Versuch.
 
         Kein Aufruf an PUT in dieser Phase (TASK-10: propose schreibt nie).
         """
         args = arguments or {}
+        aktion = (args.get("aktion") or "vorschlagen").strip().lower()
+
+        if aktion == "anzeigen":
+            return self._propose_anzeigen()
+
+        # Fallback / aktion='vorschlagen'
         neuer_prompt = (args.get("neuer_prompt") or "").strip()
 
         if not neuer_prompt:
@@ -204,6 +271,40 @@ class KibuddyPromptAnpassenTask(WriteTask):
         diff_text = _build_diff(alter_prompt, neuer_prompt)
         summary = _DIFF_HEADLINE + diff_text + _DIFF_FOOTER
         return Proposal(summary)
+
+    def _propose_anzeigen(self):
+        """KPA-5: Liest den aktuellen Prompt und gibt ihn als Proposal zurück.
+
+        Bei mehr als 3500 Zeichen: Aufteilung in mehrere Teile mit Markierung
+        '(Teil X/Y)' innerhalb einer Proposal-Summary.
+        Fehler beim GET → klare Nutzer-Quittung (AC5).
+        """
+        try:
+            prompt_data = self._client.get_prompt()
+        except KibuddyPromptClientError:
+            return Proposal(_QUITTUNG_ANZEIGE_FEHLER)
+
+        prompt_text = prompt_data.get("prompt", "")
+        byte_laenge = prompt_data.get("byte-laenge", len(prompt_text.encode("utf-8")))
+        geaendert = prompt_data.get("geaendert-am", "unbekannt")
+
+        header = (
+            "Aktueller KIBuddy-Prompt "
+            "(%s Bytes, geändert %s):\n\n" % (byte_laenge, geaendert)
+        )
+        volltext = header + prompt_text
+        teile = _split_for_telegram(volltext)
+
+        if len(teile) == 1:
+            return Proposal(teile[0])
+
+        # Mehrteilig: alle Teile mit (Teil X/Y)-Markierung zusammenbauen.
+        n = len(teile)
+        zusammen = "\n\n".join(
+            "(Teil %d/%d)\n%s" % (i + 1, n, teil)
+            for i, teil in enumerate(teile)
+        )
+        return Proposal(zusammen)
 
     def execute(self, arguments, turn_context):
         """Schreibt den neuen Prompt via PUT /api/v1/kibuddy/prompt (KPA-7).
