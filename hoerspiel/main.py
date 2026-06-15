@@ -249,18 +249,24 @@ def _check_familie_mitglied(user_id):
 
 
 def require_mini_app_auth(f):
-    """Decorator: MAD-7 / HSP-39 Auth-Pflicht für Mini-App-API-Routen.
+    """Decorator: SOFT-AUTH (V3, #898) — Header optional.
 
-    Prüft Authorization: tma <initData>-Header. Bei Fehler → 401/500.
-    Prüft Familien-Registry. Bei Fehler → 403.
+    Verhalten:
+    - Fehlt Authorization-Header: pass-through (Kind-Tablet-V1-Niveau).
+    - Header vorhanden, ungültig: 401 (vom Helper).
+    - Header vorhanden, gültig + Familien-Mitglied: weiter.
+    - Header vorhanden, gültig + Nicht-Mitglied: 403.
+    - Localhost-Bypass: pass-through.
     """
     @functools.wraps(f)
     def wrapper(*args, **kwargs):
-        # Localhost-Bypass für Internal-Service-Calls (eltern-chat → hoerspiel).
-        # nginx-Forwards tragen X-Forwarded-For; direkte 127.0.0.1-Calls nicht.
-        # Public-Mini-App-Calls (Browser via nginx) bleiben auth-gesichert.
+        # Localhost-Bypass für Internal-Service-Calls.
         if (not request.headers.get("X-Forwarded-For")
                 and request.remote_addr in ("127.0.0.1", "::1")):
+            return f(*args, **kwargs)
+
+        # V3 Soft-Auth: Header optional.
+        if not request.headers.get("Authorization"):
             return f(*args, **kwargs)
 
         init_data, err = _validate_mini_app_request()

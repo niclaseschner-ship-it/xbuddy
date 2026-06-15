@@ -414,36 +414,44 @@ def _lade_familie_telegram_ids():
 
 
 def require_init_data(fn):
-    """Decorator: validiert Authorization: tma <initData>-Header (MAD-7 / AC2).
+    """Decorator: SOFT-AUTH (V3, #898) — Header optional.
 
-    Bei Erfolg: speichert InitData in flask.g.init_data, ruft Route auf.
-    Bei fehlendem/ungültigem Header → 401.
-    Bei fehlendem Bot-Token → 500.
-    Bei Nicht-Mitglied (FAM-7/8) → 403.
+    Verhalten:
+    - Fehlt Authorization-Header: pass-through, g.init_data = None.
+      Grund: Kind-Tablet (/display/essen/wunsch-JS) hat kein initData, ruft
+      aber dieselben /api/v1/essen/*-Routen wie die Eltern-Mini-App.
+    - Header vorhanden, ungültig: 401 (explizites Sicherheits-Signal).
+    - Header vorhanden, gültig + Familien-Mitglied: g.init_data = InitData.
+    - Header vorhanden, gültig + Nicht-Mitglied: 403.
+    - Localhost-Bypass (Server-zu-Server, eltern-chat → essen): pass-through.
+
+    Routes, die Eltern-only-Verhalten brauchen, prüfen explizit g.init_data.
     """
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
-        # Localhost-Bypass für Internal-Service-Calls (eltern-chat → essen).
-        # nginx-Forwards tragen X-Forwarded-For; direkte 127.0.0.1-Calls
-        # (z.B. von eltern-chat-Skills via http://127.0.0.1:5052/...) nicht.
-        # Public-Mini-App-Calls (Browser via nginx) bleiben auth-gesichert.
+        # Localhost-Bypass für Internal-Service-Calls (V1, RFC).
         if (not request.headers.get("X-Forwarded-For")
                 and request.remote_addr in ("127.0.0.1", "::1")):
             g.init_data = None
             return fn(*args, **kwargs)
 
+        # V3 Soft-Auth: Header optional. Fehlt → pass-through.
+        auth_header = request.headers.get("Authorization")
+        if not auth_header:
+            g.init_data = None
+            return fn(*args, **kwargs)
+
+        # Header da → validieren (Bot-Token + HMAC + FAM)
         bot_token = _get_bot_token()
         if not bot_token:
             logger.error("MAD-7: %s nicht gesetzt — Mini-App-Route nicht nutzbar.", _ENV_BOT_TOKEN)
             return ("", 500)
 
-        # Init-Data-Konfig (gecacht in runtime)
         cfg = runtime.get("init_data_config")
         if cfg is None:
             cfg = _init_data_mod.load_config()
             runtime["init_data_config"] = cfg
 
-        auth_header = request.headers.get("Authorization")
         try:
             init_data = _init_data_mod.validate_header(
                 auth_header,
