@@ -201,20 +201,28 @@ async function send_aufnahme(chunks, mimeType) {
 
 /**
  * Rendert einen Turn: Kind-Bubble + Buddy-Bubble.
- * antwort: { text, transkript, words, tts_audio_url }
+ * antwort: { text, transkript, transkript_words, words, tts_audio_url }
  */
 async function renderTurn(antwort) {
   const turn = document.createElement("div");
   turn.className = "turn";
 
-  // Kind-Bubble (KIBUDDY-19: Platzhalter "deine Frage")
-  // Spec-Drift-Schutz: transkript ist Diagnose-Feld, View rendert Platzhalter
+  // Kind-Bubble (KIBUDDY-19: wort-für-wort nach KIBUDDY-17, analog Buddy-Bubble)
   const kindRow = document.createElement("div");
   kindRow.className = "bubble-row kind";
 
   const kindBubble = document.createElement("div");
   kindBubble.className = "bubble kind-bubble";
-  kindBubble.textContent = "🎤 (deine Frage)";
+
+  if (Array.isArray(antwort.transkript_words) && antwort.transkript_words.length > 0) {
+    const kindWortRender = await buildWortRender(antwort.transkript_words);
+    kindBubble.appendChild(kindWortRender);
+  } else if (antwort.transkript) {
+    // Fallback: transkript-Text (nur wenn transkript_words fehlt — ältere Backend-Version)
+    const fallback = document.createElement("span");
+    fallback.textContent = antwort.transkript;
+    kindBubble.appendChild(fallback);
+  }
 
   // Vorlese-Knopf Kind (KIBUDDY-31)
   const vorlKind = buildVorlBtn(() => vorleseText(antwort.transkript));
@@ -399,6 +407,21 @@ function playAudio(url) {
 }
 
 /**
+ * Zeigt dezenten Inline-Fehler-Hinweis statt alert() (FIX4, KIBUDDY-30).
+ * Legt einen temporären Hinweis-Span in #ladehinweis-Bereich.
+ */
+function _zeigeTtsFehler() {
+  const existierend = document.getElementById("tts-fehler-hinweis");
+  if (existierend) return; // bereits sichtbar
+  const hinweis = document.createElement("span");
+  hinweis.id = "tts-fehler-hinweis";
+  hinweis.className = "tts-fehler-hinweis";
+  hinweis.textContent = "Vorlesen geht gerade nicht";
+  $ladehinweis.parentElement.appendChild(hinweis);
+  setTimeout(() => hinweis.remove(), 4000);
+}
+
+/**
  * KIBUDDY-31: Vorlese-Knopf Buddy-Bubble.
  * Versucht tts_audio_url; bei 404 → POST /vorlesen mit text.
  */
@@ -423,11 +446,11 @@ async function vorleseBubble(antwort) {
       await vorleseFallback(antwort.text);
     });
   } else {
-    // tts_audio_url: null → Fallback oder Hinweis
+    // tts_audio_url: null → Fallback oder Inline-Hinweis (FIX4)
     if (antwort.text) {
       await vorleseFallback(antwort.text);
     } else {
-      alert("TTS heute nicht verfügbar.");
+      _zeigeTtsFehler();
     }
   }
 }
@@ -436,7 +459,7 @@ async function vorleseBubble(antwort) {
  * KIBUDDY-31 Fallback: POST /vorlesen → MP3-URL → abspielen.
  */
 async function vorleseFallback(text) {
-  if (!text) { alert("TTS heute nicht verfügbar."); return; }
+  if (!text) { _zeigeTtsFehler(); return; }
   try {
     const resp = await fetch("/api/v1/kibuddy/vorlesen", {
       method: "POST",
@@ -444,7 +467,7 @@ async function vorleseFallback(text) {
       body: JSON.stringify({ text }),
     });
     if (!resp.ok) {
-      alert("TTS heute nicht verfügbar.");
+      _zeigeTtsFehler();
       return;
     }
     const body = await resp.json();
@@ -452,7 +475,7 @@ async function vorleseFallback(text) {
       playAudio(body.tts_audio_url);
     }
   } catch (_err) {
-    alert("TTS heute nicht verfügbar.");
+    _zeigeTtsFehler();
   }
 }
 

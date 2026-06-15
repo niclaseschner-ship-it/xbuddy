@@ -28,7 +28,7 @@ def test_display_frage_view(client):
 # ---- POST /api/v1/kibuddy/frage (AC2, FIX1 Response-Schema) ----
 
 def test_frage_happy_path(client, fake_stt, fake_llm, fake_tts):
-    """AC2: POST /frage → JSON {text, transkript, words, tts_audio_url}.
+    """AC2/FIX1: POST /frage → JSON {text, transkript, transkript_words, words, tts_audio_url}.
 
     FIX1: words-Slots haben {text, is_inhaltswort}, KEIN icon_id (KIBUDDY-17).
     """
@@ -41,6 +41,7 @@ def test_frage_happy_path(client, fake_stt, fake_llm, fake_tts):
     body = resp.get_json()
     assert "text" in body
     assert "transkript" in body
+    assert "transkript_words" in body
     assert "words" in body
     assert "tts_audio_url" in body
     # words ist eine Liste mit text/is_inhaltswort pro Wort (FIX1, KIBUDDY-17).
@@ -58,6 +59,28 @@ def test_frage_happy_path(client, fake_stt, fake_llm, fake_tts):
     # tts_audio_url zeigt auf /api/v1/kibuddy/audio/*.mp3.
     assert body["tts_audio_url"].startswith("/api/v1/kibuddy/audio/")
     assert body["tts_audio_url"].endswith(".mp3")
+
+
+def test_frage_transkript_words_form(client, fake_stt, fake_llm, fake_tts):
+    """FIX1/KIBUDDY-24: transkript_words[] hat gleiche {text, is_inhaltswort}-Form wie words[].
+
+    Prüft: transkript_words ist nicht leer, kein icon_id, alle Slots bool-Flag.
+    """
+    resp = client.post(
+        "/api/v1/kibuddy/frage",
+        data={"audio": (io.BytesIO(b"AUDIO"), "audio.webm")},
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    tw = body.get("transkript_words")
+    assert isinstance(tw, list), "transkript_words muss eine Liste sein (KIBUDDY-24)"
+    assert len(tw) > 0, "transkript_words darf nicht leer sein wenn transkript vorhanden"
+    for slot in tw:
+        assert "text" in slot, "transkript_words-Slot fehlt 'text'"
+        assert "is_inhaltswort" in slot, "transkript_words-Slot fehlt 'is_inhaltswort'"
+        assert isinstance(slot["is_inhaltswort"], bool), "is_inhaltswort muss bool sein"
+        assert "icon_id" not in slot, "icon_id darf nicht im transkript_words-Slot sein (KIBUDDY-30)"
 
 
 def test_frage_response_schema_v2(client):

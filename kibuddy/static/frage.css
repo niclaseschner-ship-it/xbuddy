@@ -458,6 +458,20 @@ body.xb[data-stage="toddler"] {
   50% { opacity: 0.45; }
 }
 
+/* ── TTS-Fehler-Hinweis (FIX4, KIBUDDY-30) ────────────────── */
+.tts-fehler-hinweis {
+  display: block;
+  font-size: 13px;
+  color: #a05000;
+  background: #fff8ee;
+  border: 1px solid #f6d07a;
+  border-radius: 8px;
+  padding: 4px 10px;
+  margin-top: 6px;
+  text-align: center;
+  /* Kein filter, kein brightness (KIBUDDY-30) */
+}
+
 /* ── FOOTER ────────────────────────────────────────────────── */
 .footer {
   grid-area: footer;

@@ -138,3 +138,22 @@ def test_js_kein_brightness_invert(client):
     js = resp.data.decode("utf-8")
     assert "brightness(0)" not in js, "JS enthält brightness(0)"
     assert "invert(1)" not in js, "JS enthält invert(1)"
+
+
+def test_js_kein_emoji_ui_render(client):
+    """FIX5/KIBUDDY-30: frage.js enthält kein Emoji als UI-Render-String.
+
+    Wache analog test_css_kein_brightness_invert: prüft, dass der Emoji-
+    Platzhalter '🎤' (Kind-Bubble-Stub aus Stück B) nicht mehr im JS steht.
+    Emoji in Kommentaren wären ebenfalls ein Smell — vollständig verboten
+    als UI-String-Literal (KIBUDDY-30).
+    """
+    resp = client.get("/display/kibuddy/static/frage.js")
+    assert resp.status_code == 200
+    js = resp.data.decode("utf-8")
+    # Emoji-Codepoints die als UI-String-Literale verboten sind (KIBUDDY-30).
+    verbotene_emoji = ["\U0001f3a4", "\U0001f44d", "ℹ️"]  # 🎤 👍 ℹ️
+    for emoji in verbotene_emoji:
+        assert emoji not in js, (
+            "frage.js enthält Emoji '%s' als UI-String — KIBUDDY-30 verletzt" % emoji
+        )
