@@ -261,7 +261,7 @@
 
   // ── Sektion 2: Geraete-Paare (MAU-4 Punkt 2) ─────────────────────────────
 
-  function rendereGeraetePaare(container, displayClients, panels) {
+  function rendereGeraetePaare(container, displayClients, panels, panelSettings) {
     // Sortierung: alphabetisch nach instanz (display_id) — MAU-4
     const displays = [...displayClients].sort((a, b) =>
       (a.instanz || "").localeCompare(b.instanz || "")
@@ -302,7 +302,7 @@
       );
       paar.appendChild(displayKarte);
 
-      // Panel(s) die dieses Display steuern
+      // Panel(s) die dieses Display steuern — plus jeweils ihre Settings-Karte.
       const verbPanelIds = display.verknuepft_mit_panels || [];
       for (const panelId of verbPanelIds) {
         const panelEintrag = panelIndex[panelId];
@@ -318,6 +318,21 @@
           panelIcon
         );
         paar.appendChild(panelKarte);
+
+        // Settings-Karte für dieses Panel (Live-Befund Nic 2026-06-15:
+        // Panel-Settings-Seiten gehören zu ihren Panels, nicht in "Sonstiges").
+        const settingsView = panelSettings && panelSettings[panelId];
+        if (settingsView) {
+          const settingsUrl = (window.location.origin || "") + settingsView.pfad;
+          const settingsIcon = (settingsView.icons || [])[0];
+          const settingsKarte = _bauUrlKarte(
+            settingsView.label || ("Panel " + panelId + " bearbeiten"),
+            "Settings",
+            settingsUrl,
+            settingsIcon
+          );
+          paar.appendChild(settingsKarte);
+        }
       }
 
       container.appendChild(paar);
@@ -335,10 +350,15 @@
       return;
     }
 
-    // Gruppieren nach app-Slug (MAU-4: analog SREG-12)
+    // Gruppieren nach app-Slug (MAU-4: analog SREG-12).
+    // Wenn view.app fehlt, aus pfad extrahieren: /<segment>/... → segment als app-slug.
     const gruppen = {};
     for (const view of elternViews) {
-      const slug = view.app || "sonstige";
+      let slug = view.app;
+      if (!slug) {
+        const m = (view.pfad || "").match(/^\/([^/]+)/);
+        slug = m ? m[1] : "andere";
+      }
       if (!gruppen[slug]) gruppen[slug] = [];
       gruppen[slug].push(view);
     }
@@ -388,8 +408,25 @@
     const miniApps       = eintraege.filter(e => e.typ === "mini-app");
     const displayClients = eintraege.filter(e => e.typ === "display-client");
     const panels         = eintraege.filter(e => e.typ === "panel");
-    // Buddy-Seiten: eltern-Views (Sorte b)
-    const elternViews    = eintraege.filter(e => e.typ === "eltern");
+
+    // Panel-Editor-Seiten (typ:eltern + pfad /controller/app-panel/<id>/bearbeiten)
+    // gehören zu den jeweiligen Panels, nicht in "Sonstiges". Live-Befund Nic 2026-06-15.
+    const panelSettings = {};  // panelId → Editor-View
+    const eltern = eintraege.filter(e => e.typ === "eltern");
+    const elternOhnePanelEdit = [];
+    const _panelEditRegex = /^\/controller\/app-panel\/([^/]+)\/bearbeiten$/;
+    for (const v of eltern) {
+      const m = (v.pfad || "").match(_panelEditRegex);
+      if (m) {
+        panelSettings[m[1]] = v;
+      } else {
+        elternOhnePanelEdit.push(v);
+      }
+    }
+
+    // Buddy-Seiten: eltern-Views ohne Panel-Editoren + controller-Views (Lego-konsistent).
+    const controllerViews = eintraege.filter(e => e.typ === "controller");
+    const buddyViews = elternOhnePanelEdit.concat(controllerViews);
 
     // Skeleton-Bodies mit realem Inhalt befuellen (ersetzt Lade-Hinweis)
     // MAU-8: Skeleton-Elemente sind schon im HTML (drei collapsed <details>) — nur Inhalt ersetzen.
@@ -399,15 +436,15 @@
     body1.innerHTML = "";
     rendereMinApps(body1, miniApps);
 
-    // Sektion 2: Geraete-Paare
+    // Sektion 2: Geraete-Paare (mit Panel-Settings-Karten)
     const body2 = secGeraete.querySelector(".accordion-body");
     body2.innerHTML = "";
-    rendereGeraetePaare(body2, displayClients, panels);
+    rendereGeraetePaare(body2, displayClients, panels, panelSettings);
 
-    // Sektion 3: Buddy-Seiten
+    // Sektion 3: Buddy-Seiten (eltern + controller, ohne Panel-Editoren)
     const body3 = secBuddySeiten.querySelector(".accordion-body");
     body3.innerHTML = "";
-    rendereBuddySeiten(body3, elternViews);
+    rendereBuddySeiten(body3, buddyViews);
   }
 
   // ── Haupt-Lade-Sequenz (MAU-8) ────────────────────────────────────────────
