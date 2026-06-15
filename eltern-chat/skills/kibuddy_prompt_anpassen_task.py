@@ -293,7 +293,55 @@ class KibuddyPromptAnpassenTask(WriteTask):
 
         diff_text = _build_diff(alter_prompt, neuer_prompt)
         summary = _DIFF_HEADLINE + diff_text + _DIFF_FOOTER
-        return Proposal(summary)
+        return self._maybe_multipart_send(summary, turn_context,
+                                          kurz_verweis="Diff-Vorschau — siehe oben.\n\n" + _DIFF_FOOTER)
+
+    def _maybe_multipart_send(self, summary: str, turn_context,
+                              kurz_verweis: str) -> Proposal:
+        """Sendet langen Summary bei vorhandenem tg in Teilen direkt.
+
+        Bei kurzem Summary (≤ _TELEGRAM_MAX_ZEICHEN) bleibt es ein einzelnes
+        Proposal mit dem Volltext (bisheriges Verhalten).
+        Bei langem Summary + vorhandenem tg: Teile direkt via send_message
+        (analog _propose_anzeigen-Pattern), Proposal.summary = kurz_verweis.
+        Bei langem Summary ohne tg (Tests / Backward-Compat): Warn-Wrapper
+        um den vollen Multi-Part-String — Senden würde Telegram-Limit reißen,
+        aber Tests können wenigstens das Markup prüfen.
+
+        Live-Bug 2026-06-15 (Nic): Diff-Vorschau bei realem Prompt (~4600
+        Bytes) reißt das Telegram-4096-Limit; dieser Wrapper fängt das.
+        """
+        if len(summary) <= _TELEGRAM_MAX_ZEICHEN:
+            return Proposal(summary)
+
+        teile = _split_for_telegram(summary)
+
+        if self._tg is not None:
+            chat_id = getattr(turn_context, "chat_id", None)
+            if chat_id is None and self._chat_id_getter is not None:
+                chat_id = self._chat_id_getter()
+            n = len(teile)
+            for i, teil in enumerate(teile):
+                markiert = "(Teil %d/%d)\n%s" % (i + 1, n, teil)
+                try:
+                    self._tg.send_message(chat_id, markiert)
+                except Exception as exc:
+                    logger.warning(
+                        "kibuddy_prompt_anpassen: send_message fehlgeschlagen "
+                        "(Teil %d/%d): %s", i + 1, n, exc)
+            return Proposal(kurz_verweis)
+
+        # Fallback ohne tg
+        logger.warning(
+            "kibuddy_prompt_anpassen: langer Summary (%d Zeichen) — "
+            "Multi-Part-Send nicht verfügbar (tg fehlt)", len(summary))
+        n = len(teile)
+        zusammen = "\n\n".join(
+            "(Teil %d/%d)\n%s" % (i + 1, n, teil)
+            for i, teil in enumerate(teile))
+        return Proposal(
+            "Antwort zu lang für eine Nachricht — Multi-Part-Send nicht "
+            "verfügbar.\n\n" + zusammen)
 
     def _propose_anzeigen(self, turn_context=None):
         """KPA-5: Liest den aktuellen Prompt und gibt ihn als Proposal zurück.
