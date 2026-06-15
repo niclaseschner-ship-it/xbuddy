@@ -795,7 +795,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             family_group_chat_id_getter=family_group_chat_id_getter,
             is_member_fn=_hfe_is_member))
 
-    # HOE-8 / #876: »Hörspiel öffnen« als lesende Aufgabe (EC-9, Klasse B).
+    # HOE-8 / #876: »Hörspiel öffnen« als lesende Aufgabe (EC-9, Cluster B / Capability-Karte).
     # Dreifacher AND-Guard: hoerspiel_url_origin UND mini_app_base_url UND
     # family_group_chat_id_getter müssen ALLE gesetzt sein — fehlt eine,
     # erscheint die Aufgabe NICHT im Katalog (HOE-8).
