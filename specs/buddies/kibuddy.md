@@ -383,12 +383,18 @@ Miss (kein ICONS-7-Treffer) → nur Wort-Label, kein Icon-Slot (kein Crash).
 **Out-of-Scope V1:** animierte Buzzword-Reveal, alternative Icon-Quellen,
 Buzzword-Konfiguration durch Eltern. Folge-Tickets bei Bedarf.
 
-### KIBUDDY-18 — Icon-Lookup ist „ehrlich-Single-Wort" — keine Lemmatisierung V1
-V1 sucht reinen Substring-Match über ICONS-7 mit dem **normalisierten Wort**
-(lowercase, ohne Trailing-Punctuation). Wörter mit Flexion („läuft", „Häuser")
-treffen **bewusst** nicht das Lemma („laufen", „Haus") — Lemmatisierungs-
-Schicht ist OPEN-KIBUDDY-I. Sichtbare Folge: ein Teil der Antwort-Wörter
-hat kein Icon. Das ist V1-akzeptiert (Anti-Pikto-Zwang analog HSP-NEU).
+### KIBUDDY-18 — Icon-Lookup für Buzzwords ist „ehrlich-Single-Wort"
+V1 sucht reinen Substring-Match über ICONS-7 mit jedem der drei vom LLM
+gelieferten Buzzwords (KIBUDDY-17). Wörter mit Flexion treffen
+**bewusst** nicht das Lemma — Lemmatisierungs-Schicht ist OPEN-KIBUDDY-I.
+
+**Hinweis nach T865-Refactor (2026-06-15):** Da der System-Prompt explizit
+Grundform-Buzzwords fordert (Substantiv/Verb/Adjektiv im Singular), greift
+diese Klausel in der Praxis selten — der LLM liefert typisch schon
+lemma-nahe Buzzwords. Bleibt als Vertragsklarstellung für die Fälle, wo
+der LLM doch flektiert. Sichtbare Folge: eines der drei Buzzwords kann
+kein Icon haben (`fetchIcon(buzzword)` gibt null zurück → nur Label
+gerendert, kein `<img>`).
 
 ### KIBUDDY-19 — Chat-Verlauf-Container, Scroll innen, Reset löscht alles
 Der Chat-Verlauf lebt in einem **eigenen scrollenden Container** in der
@@ -480,7 +486,6 @@ in der Berater-Runde den richtigen Generalisierungs-Schnitt zu legen
 | `aufnahme-quelle` | `display` | Wo nehmen wir auf | KAQS-Skill (KIBUDDY-23), Eltern-Chat |
 | `aufnahme.max-sek` | `30` | Max. Aufnahme-Dauer | Config |
 | `aufnahme.inaktivitaet-sek` | `60` | Header-Schlaf-Schwelle (Chat bleibt) | Config |
-| `funktionswort-liste` | `<data>/funktionswort-liste.txt` | Wortklassen-Filter (KIBUDDY-17) | Config |
 | `ui-icons` | `<data>/ui-icons.json` | UI-Icon-ID-Mapping (KIBUDDY-30) | Config |
 | `ui.lock-hinweis-ms` | `800` | Slide-Hinweis erscheint nach | Config |
 | `vad.stille-sek` | `1.5` | VAD-Stille-Schwelle (Sekunden) im Lock-Modus | Config |
