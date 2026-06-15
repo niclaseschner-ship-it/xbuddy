@@ -1,0 +1,17 @@
+{
+  "_comment": "KIBuddy Runtime-Config — Vorlage (KIBUDDY-21). Kopiere nach config.json und passe an.",
+  "listen_host": "127.0.0.1",
+  "listen_port": 5054,
+  "log_level": "INFO",
+  "llm_provider": "claude",
+  "llm_model": "claude-haiku-4-5",
+  "tts_voice": "onyx",
+  "tts_model": "tts-1-hd",
+  "tts_speed": 0.9,
+  "stt_model": "whisper-1",
+  "stt_sprache": "de",
+  "aufnahme_quelle": "display",
+  "aufnahme_max_sek": 30,
+  "inaktivitaet_sek": 60,
+  "prompt_max_bytes": 50000
+}
