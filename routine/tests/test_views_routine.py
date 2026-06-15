@@ -1,5 +1,3 @@
-import pytest
-
 """Routine-Buddy BUD-3-Eigentest: views.json ⇔ echte Flask-Routen (SREG-9).
 
 Lädt das committete `routine/views.json` über das geteilte Manifest-Rückgrat
@@ -17,6 +15,8 @@ View-Einstiegspunkte und werden über `ausgenommene_pfade` ausgeklammert (BUD-3)
 """
 
 import os
+
+import pytest
 
 from routine import main as routine_main
 from tools import views_manifest
