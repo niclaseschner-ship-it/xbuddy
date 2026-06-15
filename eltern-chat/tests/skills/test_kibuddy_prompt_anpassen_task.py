@@ -23,8 +23,8 @@ FakeKibuddyPromptClient ersetzt (CLIENT-1 Transport-Stub-Naht).
 
 from skills.kibuddy_prompt_anpassen_client import KibuddyPromptClientError
 from skills.kibuddy_prompt_anpassen_task import (
-    KibuddyPromptAnpassenTask,
     _DIALOG_START,
+    KibuddyPromptAnpassenTask,
     _build_diff,
     _split_for_telegram,
 )
