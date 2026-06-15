@@ -188,7 +188,11 @@ class FotoSendenTask(ReadTask):
             medium_id = daten.get("id")
             chat_id = getattr(turn_context, "chat_id", None)
             if medium_id and chat_id is not None:
-                inverse_call = 'photo_client.delete_medium("%s")' % medium_id
+                # EC-10 spec Z. 533-535: inverse_call ist strukturierter Verweis
+                # in HTTP-Form (Buddy-Endpunkt + Pfad-Parameter), parsbar als
+                # "<buddy-key> <method> <api-path-with-id>". photo-Endpunkt:
+                # photo_client.py:59 (PHOTO-16/FSE-4) — DELETE /api/v1/photo/medien/<id>.
+                inverse_call = 'photo DELETE /api/v1/photo/medien/%s' % medium_id
                 try:
                     self._receipt_store.insert(
                         task_name="foto_senden",

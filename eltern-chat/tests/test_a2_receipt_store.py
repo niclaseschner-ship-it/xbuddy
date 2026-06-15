@@ -71,7 +71,7 @@ def test_insert_creates_row(tmp_path):
         task_name="foto_senden",
         chat_id=100,
         resource_id="med-42",
-        inverse_call='photo_client.delete_medium("med-42")',
+        inverse_call='photo DELETE /api/v1/photo/medien/med-42',
     )
     store.close()
 
@@ -84,7 +84,7 @@ def test_insert_creates_row(tmp_path):
     assert task_name == "foto_senden"
     assert chat_id == 100
     assert resource_id == "med-42"
-    assert inverse_call == 'photo_client.delete_medium("med-42")'
+    assert inverse_call == 'photo DELETE /api/v1/photo/medien/med-42'
     assert committed_at is not None       # datetime('now') gesetzt
     assert expires_at is None             # intern → NULL
     assert sealed_at is None              # noch nicht versiegelt
@@ -95,7 +95,7 @@ def test_insert_expires_at_null_default(tmp_path):
     db_path = str(tmp_path / "test.db")
     store = A2ReceiptStore(db_path)
     store.insert("einkauf_hinzufuegen", 200, "item-99",
-                 'essen_client.delete_einkauf("item-99")')
+                 'essen DELETE /api/v1/essen/wuensche/item-99')
     store.close()
 
     conn = sqlite3.connect(db_path)
@@ -118,9 +118,9 @@ def test_versiegelung_beim_zweiten_insert(tmp_path):
     db_path = str(tmp_path / "test.db")
     store = A2ReceiptStore(db_path)
     store.insert("foto_senden", 100, "med-1",
-                 'photo_client.delete_medium("med-1")')
+                 'photo DELETE /api/v1/photo/medien/med-1')
     store.insert("foto_senden", 100, "med-2",
-                 'photo_client.delete_medium("med-2")')
+                 'photo DELETE /api/v1/photo/medien/med-2')
     store.close()
 
     conn = sqlite3.connect(db_path)
@@ -139,12 +139,12 @@ def test_versiegelung_nur_gleicher_chat_id(tmp_path):
     db_path = str(tmp_path / "test.db")
     store = A2ReceiptStore(db_path)
     store.insert("einkauf_hinzufuegen", 100, "item-1",
-                 'essen_client.delete_einkauf("item-1")')
+                 'essen DELETE /api/v1/essen/wuensche/item-1')
     store.insert("einkauf_hinzufuegen", 200, "item-2",
-                 'essen_client.delete_einkauf("item-2")')
+                 'essen DELETE /api/v1/essen/wuensche/item-2')
     # Dritter Insert auf chat_id=100 → versiegelt item-1, nicht item-2
     store.insert("foto_senden", 100, "med-x",
-                 'photo_client.delete_medium("med-x")')
+                 'photo DELETE /api/v1/photo/medien/med-x')
     store.close()
 
     conn = sqlite3.connect(db_path)
@@ -167,7 +167,7 @@ def test_dreifache_versiegelung_kette(tmp_path):
     store = A2ReceiptStore(db_path)
     for i in range(3):
         store.insert("foto_senden", 100, "med-%d" % i,
-                     'photo_client.delete_medium("med-%d")' % i)
+                     'photo DELETE /api/v1/photo/medien/med-%d' % i)
     store.close()
 
     conn = sqlite3.connect(db_path)
@@ -191,9 +191,9 @@ def test_insert_many_drei_items(tmp_path):
     db_path = str(tmp_path / "test.db")
     store = A2ReceiptStore(db_path)
     items = [
-        ("item-a", 'essen_client.delete_einkauf("item-a")'),
-        ("item-b", 'essen_client.delete_einkauf("item-b")'),
-        ("item-c", 'essen_client.delete_einkauf("item-c")'),
+        ("item-a", 'essen DELETE /api/v1/essen/wuensche/item-a'),
+        ("item-b", 'essen DELETE /api/v1/essen/wuensche/item-b'),
+        ("item-c", 'essen DELETE /api/v1/essen/wuensche/item-c'),
     ]
     store.insert_many("einkauf_hinzufuegen", 300, items)
     store.close()
@@ -218,10 +218,10 @@ def test_insert_many_versiegelt_vorherige(tmp_path):
     db_path = str(tmp_path / "test.db")
     store = A2ReceiptStore(db_path)
     store.insert("foto_senden", 400, "med-first",
-                 'photo_client.delete_medium("med-first")')
+                 'photo DELETE /api/v1/photo/medien/med-first')
     items = [
-        ("item-x", 'essen_client.delete_einkauf("item-x")'),
-        ("item-y", 'essen_client.delete_einkauf("item-y")'),
+        ("item-x", 'essen DELETE /api/v1/essen/wuensche/item-x'),
+        ("item-y", 'essen DELETE /api/v1/essen/wuensche/item-y'),
     ]
     store.insert_many("einkauf_hinzufuegen", 400, items)
     store.close()

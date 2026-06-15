@@ -10,9 +10,11 @@ Versiegelungs-Klausel (spec/platform/eltern-chat.md Z. 550-556): die nächste
 inhaltlich folgende Anfrage im selben Chat-Faden macht den Vorgänger-Bon
 ungültig.
 
-Inverse-Aufruf-Form (TASK-9 / EC-10): `'photo_client.delete_medium("<id>")'`
-bzw. `'essen_client.delete_einkauf("<id>")'` — schema-konforme String-Werte, die
-der Vor-Agent-Hook (#721) deterministisch parsen und ausführen kann.
+Inverse-Aufruf-Form (TASK-9 / EC-10 spec Z. 533-535) — HTTP-Form, drei Felder
+per Whitespace, parsbar: `"<buddy-key> <method> <api-path-with-id>"`. Beispiele:
+`'photo DELETE /api/v1/photo/medien/med-42'` bzw.
+`'essen DELETE /api/v1/essen/wuensche/<id>'`. Der Vor-Agent-Hook (#721)
+parst die drei Felder und ruft den jeweiligen Buddy-Endpunkt deterministisch.
 
 `expires_at = NULL` für interne Schreibziele (foto_senden, einkauf_hinzufuegen —
 beide APP-3-interne Buddies; spec Z. 563-569).
@@ -60,12 +62,12 @@ class A2ReceiptStore:
         self._conn.commit()
 
     def insert(self, task_name, chat_id, resource_id, inverse_call,
-               committed_at=None, expires_at=None):
+               expires_at=None):
         """Schreibt einen Receipt-Eintrag; siegelt vorher unversiegelte Receipts
         derselben chat_id (EC-10 Versiegelungs-Klausel).
 
-        `committed_at` — ISO-Datetime-String (z. B. '2026-06-15 12:34:56') oder
-        None (dann `datetime('now')` auf DB-Ebene).
+        `committed_at` setzt die DB selbst via `datetime('now')` —
+        kein Caller-override (T841-S2: spekulative Generik raus).
 
         `expires_at` — None für interne Schreibziele (spec Z. 563-569);
         ISO-Datetime-String für externe (termin_eintragen, TES out-of-scope V1).
@@ -77,21 +79,12 @@ class A2ReceiptStore:
                 "UPDATE a2_receipts SET sealed_at = datetime('now') "
                 "WHERE chat_id = ? AND sealed_at IS NULL",
                 (chat_id,))
-            if committed_at is not None:
-                self._conn.execute(
-                    "INSERT INTO a2_receipts "
-                    "(task_name, chat_id, resource_id, inverse_call, "
-                    " committed_at, expires_at, sealed_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, NULL)",
-                    (task_name, chat_id, resource_id, inverse_call,
-                     committed_at, expires_at))
-            else:
-                self._conn.execute(
-                    "INSERT INTO a2_receipts "
-                    "(task_name, chat_id, resource_id, inverse_call, "
-                    " committed_at, expires_at, sealed_at) "
-                    "VALUES (?, ?, ?, ?, datetime('now'), ?, NULL)",
-                    (task_name, chat_id, resource_id, inverse_call, expires_at))
+            self._conn.execute(
+                "INSERT INTO a2_receipts "
+                "(task_name, chat_id, resource_id, inverse_call, "
+                " committed_at, expires_at, sealed_at) "
+                "VALUES (?, ?, ?, ?, datetime('now'), ?, NULL)",
+                (task_name, chat_id, resource_id, inverse_call, expires_at))
 
     def insert_many(self, task_name, chat_id, items, expires_at=None):
         """Schreibt mehrere Receipt-Einträge atomar mit identischer committed_at

@@ -51,7 +51,7 @@ class EinkaufHinzufuegenTask(WriteTask):
     post_execute_hooks = ()
 
     def __init__(self, essen_client, icon_client, is_member_fn,
-                 katalog_getter=None):
+                 katalog_getter=None, receipt_store=None):
         super().__init__(
             name="einkauf_hinzufuegen",
             description=(
@@ -81,6 +81,10 @@ class EinkaufHinzufuegenTask(WriteTask):
         # Wenn gesetzt, wird der Katalog pro Aufruf frisch gelesen
         # (Test-Naht + Laufzeit-Nutzung).
         self._katalog_getter = katalog_getter
+        # receipt_store: A2ReceiptStore-Instanz (EC-10 A2-Receipt, #841).
+        # None in Tests ohne Receipt-Probe; build_catalog injiziert immer
+        # die laufende Store-Instanz (main.py build_context).
+        self._receipt_store = receipt_store
 
     def propose(self, arguments, turn_context):
         """EIN-5 Direkt-Modus: propose liefert einen allgemeinen Hinweis.
@@ -126,6 +130,12 @@ class EinkaufHinzufuegenTask(WriteTask):
             icon_client=self._icon_client,
             is_member_fn=self._is_member_fn,
             katalog=katalog,
+            # EC-10 A2-Receipt (#841): Store + chat_id durchreichen, damit die
+            # trigger-agnostische Funktion einen Bon pro Item schreiben kann
+            # (insert_many in einer Transaktion). chat_id=None → kein Receipt
+            # (Sicherheits-Fallback in einkauf_hinzufuegen.py).
+            receipt_store=self._receipt_store,
+            chat_id=getattr(turn_context, "chat_id", None),
         )
 
         logger.info("EinkaufHinzufuegenTask: chat=%s, result_len=%d",
