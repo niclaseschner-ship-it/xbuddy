@@ -62,18 +62,25 @@
    * item_id wird mitgesendet, damit der Server Kacheln als .kachel-gesperrt
    * rendern kann (ESSEN-28, Render-Vertrag).
    */
-  async function legeWunschAb(itemId, label, bildRef, kategorie) {
+  async function legeWunschAb(itemId, label, bildRef, fotoRef, kategorie) {
     try {
+      // ESSEN-22 (#922): Foto-Gerichte tragen foto_ref statt bild_ref.
+      // Server akzeptiert eines von beiden; sende den, der gefüllt ist.
+      var body = {
+        item_id: itemId,
+        label: label,
+        quelle: "kind",
+        kategorie: kategorie
+      };
+      if (fotoRef) {
+        body.foto_ref = fotoRef;
+      } else if (bildRef) {
+        body.bild_ref = bildRef;
+      }
       var resp = await fetch("/api/v1/essen/wuensche", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          item_id: itemId,
-          label: label,
-          bild_ref: bildRef,
-          quelle: "kind",
-          kategorie: kategorie
-        })
+        body: JSON.stringify(body)
       });
       if (!resp.ok) return;  // Validierungsfehler still, Kiosk stabil (ESSEN-3).
       await aktualisiereGridUndListe();  // ESSEN-28: Grid-Refresh nötig für Sperr-Zustand.
@@ -172,6 +179,7 @@
           btn.dataset.itemId,
           btn.dataset.label,
           btn.dataset.bildRef,
+          btn.dataset.fotoRef,
           btn.dataset.kategorie
         );
       });
