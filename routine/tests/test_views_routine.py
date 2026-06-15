@@ -1,4 +1,5 @@
 import pytest
+
 """Routine-Buddy BUD-3-Eigentest: views.json ⇔ echte Flask-Routen (SREG-9).
 
 Lädt das committete `routine/views.json` über das geteilte Manifest-Rückgrat
