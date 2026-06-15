@@ -24,6 +24,13 @@ const KATEGORIE_LABEL = {
 const MARKER_WUNSCH = "🧒";
 const MARKER_REZEPT = "📖";
 
+// ── MAD-7 Auth-Header ─────────────────────────────────────────────────────────
+
+// initData aus Telegram-WebApp (MAD-7): bei jedem fetch()-Call als
+// Authorization: tma <initData>-Header gesendet. Leer außerhalb Telegram
+// (Test-Browser) → Server antwortet mit 401.
+const _initData = window.Telegram?.WebApp?.initData ?? "";
+
 // ── State ─────────────────────────────────────────────────────────────────────
 
 // Alle offenen + erledigten Items (letzte geladene Liste)
@@ -51,7 +58,9 @@ const _gerichtOhneTapStatus = new Map(); // item.id → "erstertap"|undefined
  * Nutzt relativen Pfad — nginx routet /api/v1/essen/... zum essen-Buddy (Port 5052).
  */
 async function holeListe() {
-  const resp = await fetch("/api/v1/essen/wuensche");
+  const resp = await fetch("/api/v1/essen/wuensche", {
+    headers: { "Authorization": "tma " + _initData },
+  });
   if (!resp.ok) {
     throw new Error("Liste-Abruf fehlgeschlagen: " + resp.status);
   }
@@ -62,7 +71,9 @@ async function holeListe() {
  * Lädt den Katalog für Quick-Add-Auto-Match (ESSEN-31).
  */
 async function holeKatalog() {
-  const resp = await fetch("/api/v1/essen/katalog");
+  const resp = await fetch("/api/v1/essen/katalog", {
+    headers: { "Authorization": "tma " + _initData },
+  });
   if (!resp.ok) return { kategorien: {} };
   return resp.json();
 }
@@ -73,7 +84,7 @@ async function holeKatalog() {
 async function patchAbgehakt(id, abgehakt) {
   const resp = await fetch("/api/v1/essen/wuensche/" + encodeURIComponent(id), {
     method:  "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Authorization": "tma " + _initData },
     body:    JSON.stringify({ abgehakt }),
   });
   if (!resp.ok) {
@@ -88,7 +99,7 @@ async function patchAbgehakt(id, abgehakt) {
 async function patchAusGericht(id, ausGericht) {
   const resp = await fetch("/api/v1/essen/wuensche/" + encodeURIComponent(id), {
     method:  "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Authorization": "tma " + _initData },
     body:    JSON.stringify({ aus_gericht: ausGericht }),
   });
   if (!resp.ok) {
@@ -103,7 +114,7 @@ async function patchAusGericht(id, ausGericht) {
 async function postItem(payload) {
   const resp = await fetch("/api/v1/essen/wuensche", {
     method:  "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Authorization": "tma " + _initData },
     body:    JSON.stringify(payload),
   });
   return resp; // Aufrufer prüft Status selbst (409 ist erwartet bei Dedupe)

@@ -17,8 +17,6 @@ import json
 import os
 import sys
 
-import pytest
-
 _REPO_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
@@ -29,31 +27,7 @@ from essen import main as main_mod  # noqa: E402, I001
 from essen import config as config_mod  # noqa: E402
 
 
-# ── Fixtures ─────────────────────────────────────────────────────────────────
-
-@pytest.fixture
-def foto_client(tmp_path):
-    """Flask-Testclient mit tmp-Foto-Verzeichnis."""
-    paths = {
-        "wuensche_file":        str(tmp_path / "wuensche.json"),
-        "einkaufsliste_file":   str(tmp_path / "einkaufsliste.json"),
-        "zaehler_file":         str(tmp_path / "zaehler.json"),
-        "gerichte_file":        str(tmp_path / "gerichte.json"),
-        "katalog_file":         str(tmp_path / "katalog.json"),
-        "katalog_default_file": os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "katalog.default.json"),
-        "foto_overrides_file":  str(tmp_path / "foto_overrides.json"),
-        "fotos_verzeichnis":    str(tmp_path / "fotos"),
-    }
-    main_mod.runtime["wuensche_snapshot"] = None
-    main_mod.runtime["einkauf_snapshot"]  = None
-    main_mod.runtime["zaehler_snapshot"]  = None
-    main_mod.runtime["gerichte_snapshot"] = None
-    main_mod.runtime["katalog_snapshot"]  = None
-    main_mod.configure(paths)
-    return main_mod.app.test_client()
-
+# foto_client-Fixture ist in conftest.py definiert (MAD-7 Auth, T708-C).
 
 # ── Medien-Store-Doppelungen ────────────────────────────────────────────────
 

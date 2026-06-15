@@ -2,6 +2,9 @@
 
 Die Suite läuft OHNE Netz. Die Uhr wird durch injizierbares `now` ersetzt
 (E-ROUTINE-9, ROUTINE-18). Daten kommen aus In-Memory-Config-Dicts.
+
+Auth (MAD-7 / T708-C): client-Fixture setzt Authorization-Header automatisch
+(environ_base), damit bestehende API-Tests ohne Änderung weiterhin 200 erhalten.
 """
 
 import json
@@ -16,6 +19,10 @@ if _REPO_ROOT not in sys.path:
 
 from routine import config as config_mod  # noqa: E402  # isort:skip
 from routine import main as main_mod  # noqa: E402  # isort:skip
+from routine.tests._test_auth import (  # noqa: E402  # isort:skip
+    TEST_BOT_TOKEN,
+    patch_client_auth,
+)
 
 
 # ============================================================
@@ -56,8 +63,28 @@ def demo_store(tmp_path):
     return str(tmp_path / "routine_store.json")
 
 
+def make_authed_client(app=None):
+    """Baut einen Flask-Testclient mit MAD-7-Auth im environ_base.
+
+    Kann auch direkt in lokalen Fixtures aufgerufen werden, die
+    main_mod.app.test_client() erzeugen (T708-C).
+    """
+    if app is None:
+        app = main_mod.app
+    return patch_client_auth(app.test_client())
+
+
 @pytest.fixture
 def client(demo_config, demo_store):
-    """Flask-Test-Client mit demo_config und isoliertem Store."""
-    main_mod.configure(demo_config, store_path=demo_store)
-    return main_mod.app.test_client()
+    """Flask-Test-Client mit demo_config, isoliertem Store und MAD-7-Auth (T708-C).
+
+    environ_base setzt den Authorization-Header automatisch, damit bestehende
+    API-Tests ohne Änderung weiterhin 200 erhalten.
+    """
+    main_mod.configure(
+        demo_config,
+        store_path=demo_store,
+        bot_token=TEST_BOT_TOKEN,
+        init_data_config={"max_age_seconds": 86400},
+    )
+    return patch_client_auth(main_mod.app.test_client())
