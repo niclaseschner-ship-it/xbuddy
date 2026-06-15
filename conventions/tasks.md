@@ -374,6 +374,69 @@ weil das LLM keinen Datei-Sende-Vertrag hat.
 *Tickets:* #TBD-A3 (Framework-`presentation`-Übersetzung in
 `run_turn`, Migration von `einkauf_zeigen` auf Form (b))
 
+### TASK-10d — Standard-Quittungen Klasse C über geteilten Helper
+
+Eine **Klasse-C-Katalog-Aufgabe** (kanonisch `propose → confirm`,
+`conventions/eltern-chat-skills.md` Klasse C) führt **wiederkehrende
+Quittungs-Texte** — Ablehnung mangels Mitgliedschaft, Buddy-API
+nicht erreichbar, Buddy-API-Grenze abgelehnt, Piktogramm-Suche
+ergibt keinen Treffer — **nicht** als skill-lokale Konstanten,
+sondern über den **geteilten Helper** `eltern-chat/skills/_quittungen.py`.
+
+```python
+def abgelehnt(skill_verb: str) -> str: ...
+def nicht_erreichbar(buddy_name: str) -> str: ...
+def grenze(buddy_name: str, aktion: str, detail: str) -> str: ...
+KEINE_ICONS = "Ich habe für »{label}« kein Piktogramm gefunden …"
+```
+
+`_quittungen.py` ist die einzige Heimat dieser vier Standard-
+Quittungs-Texte; ein Skill, der ein zweites Mal eine `_QUITTUNG_ABGELEHNT`-,
+`_QUITTUNG_NICHT_ERREICHBAR`-, `_QUITTUNG_GRENZE`- oder
+`_QUITTUNG_KEINE_ICONS`-Konstante anlegt, ist Spec-Verletzung
+(CLAUDE.md §6 „dieselbe Logik zweimal zu schreiben ist verboten").
+
+**Pflicht-Klausel.** Wer einen Klasse-C-Skill baut oder anfasst,
+nutzt die Helper für die vier Standard-Quittungen. Custom-Quittungen
+nur dort, wo der Helper das Verhalten **nicht trägt** (skill-eigene
+Erfolgs-Quittungen wie `_QUITTUNG_HINZUGEFUEGT`/`_ANGELEGT`/`_GELOESCHT`
+und skill-eigene `_QUITTUNG_NICHTS_ZU_TUN_*`-Varianten bleiben
+skill-lokal — sie tragen Skill-eigene Semantik). Driftet ein
+Standard-Wortlaut im Helper nicht für einen Skill, wird der **Helper
+erweitert**, nicht parallel templated.
+
+**Heutige Konsumenten:** `routine_punkte_setzen`, `gericht_anlegen`,
+`plan_aktivitaeten_setzen` — drei *gebaute* Klasse-C-Skills mit
+nachgewiesener Drift (`_QUITTUNG_KEINE_ICONS` byte-identisch in
+allen drei Modulen, `_QUITTUNG_NICHT_ERREICHBAR`/`_GRENZE`/
+`_ABGELEHNT` schablonen-identisch mit driftendem Buddy-Namen oder
+Aktions-Verb). Die Konvention entsteht jetzt mit drei *gebauten*
+Konsumenten — kein Vorratsbau (CLAUDE.md §6 „Lege nichts auf
+Vorrat an"), Trigger ist konkreter Schmerz, nicht Antizipation
+(`decisions/RAT-7-297-skill-convention-defer.md` — RAT-7 nennt
+explizit „3+ Skills, die in Tonfall/Quittungs-Format messbar
+voneinander driften" als Re-Opening-Trigger).
+
+**Abgrenzung zu A2-Klasse-D.** Die A2-Klausel (EC-10, drei A2-Skills
+`termin_eintragen`, `einkauf_hinzufuegen`, `foto_senden`) trägt eine
+**eigene** Quittungs-Pflicht (Undo-Wort `falsch` explizit nennen,
+Schlüssel-Werte prominent zuerst — `specs/platform/eltern-chat.md`
+EC-10 A2-Klausel). Diese A2-Quittungen sind **nicht** Konsumenten
+von `_quittungen.py` heute. Wenn n=2 dort eine gleichartige Drift
+zeigt, kann der Helper später A2-Mitnutzer aufnehmen — heute kein
+Schmerz, keine Vorrats-Erweiterung.
+
+**Geltungsbereich.** TASK-10d ist die Bauregel für **alle** Klasse-C-
+Skills mit den vier Standard-Quittungen. Heutige Konsumenten siehe
+oben; spätere Konsumenten docken an, ohne TASK-10d zu erweitern;
+der Helper bleibt die eine Heimat. Pattern analog TASK-10b/10c —
+gleiche Sub-ID-Form, gleicher Helper-Modul-Ort
+(`eltern-chat/skills/<helper>.py`), gleiche n=3-Mechanik.
+
+*Tickets:* #817 (TASK-10d Spec + RPS/GAN/PAS Migration —
+n=3-Trigger aus RAT-7, Welle-3 Eltern-Chat-Vereinheitlichung
+2026-06-15)
+
 ---
 
 **Hinweis (historisch, jetzt GEBAUT):** Das Privatchat-Session-Routing in
