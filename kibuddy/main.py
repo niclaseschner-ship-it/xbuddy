@@ -4,7 +4,7 @@
 Endpunkte (KIBUDDY-24):
 
   GET  /display/kibuddy/frage            — Frage-View (Stub, Stück B baut UI)
-  POST /api/v1/kibuddy/frage             — Audio → STT → LLM → Icon-Render → TTS
+  POST /api/v1/kibuddy/frage             — Audio → STT → LLM → Tokenisierung → TTS
   POST /api/v1/kibuddy/vorlesen          — Text-zu-TTS für Vorlese-Knopf
   POST /api/v1/kibuddy/reset             — Session-Memory + Audio-Cache leeren
   GET  /api/v1/kibuddy/audio/<id>.mp3   — MP3 aus Audio-Cache
@@ -15,6 +15,9 @@ Endpunkte (KIBUDDY-24):
   GET  /healthz                          — Health-Check (SVC-1)
 
 Port: 5054 (PORT-2, KIBUDDY-25). Service: xbuddy-kibuddy (SVC-1).
+
+Session-Cookie: kibuddy_sid (HttpOnly, SameSite=Lax) pro Browser (KIBUDDY-16).
+Icon-Lookup: clientseitig via Browser-Fetch-API (KIBUDDY-17 letzter Absatz).
 """
 
 import argparse
@@ -22,7 +25,7 @@ import logging
 import os
 import sys
 
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask import Flask, jsonify, make_response, render_template, request, send_from_directory
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
@@ -35,7 +38,7 @@ if __package__:
     from . import config as config_mod
     from . import data_io, icon_render, llm_service, stt_service, tts_service
     from .providers.base import LLMProvider, ProviderError
-    from .session_memory import SessionMemory
+    from .session_memory import SID_COOKIE, SessionMemory, SessionRegistry
     from .stt.azure_whisper import STTError
     from .tts.azure import TTSError
 else:  # python3 kibuddy/main.py
@@ -43,7 +46,7 @@ else:  # python3 kibuddy/main.py
     from kibuddy import config as config_mod
     from kibuddy import data_io, icon_render, llm_service, stt_service, tts_service
     from kibuddy.providers.base import LLMProvider, ProviderError
-    from kibuddy.session_memory import SessionMemory
+    from kibuddy.session_memory import SID_COOKIE, SessionMemory, SessionRegistry
     from kibuddy.stt.azure_whisper import STTError
     from kibuddy.tts.azure import TTSError
 
@@ -55,14 +58,13 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 runtime: dict = {
-    "runtime_config": None,   # config.RuntimeConfig
-    "data_root": None,        # str — SVC-5-Daten-Bereich
-    "llm_factory": None,      # cfg -> LLMProvider
-    "llm": None,              # LLMProvider (Cache)
-    "stt_engine": None,       # AzureWhisperSTT (oder Fake in Tests)
-    "tts_engine": None,       # AzureTTSEngine (oder Fake in Tests)
-    "session_memory": None,   # SessionMemory (KIBUDDY-16)
-    "icons_base_url": "http://127.0.0.1:5000",  # ICONS-7-Basis-URL
+    "runtime_config": None,    # config.RuntimeConfig
+    "data_root": None,         # str — SVC-5-Daten-Bereich
+    "llm_factory": None,       # cfg -> LLMProvider
+    "llm": None,               # LLMProvider (Cache)
+    "stt_engine": None,        # AzureWhisperSTT (oder Fake in Tests)
+    "tts_engine": None,        # AzureTTSEngine (oder Fake in Tests)
+    "session_registry": None,  # SessionRegistry (KIBUDDY-16 Cookie-Session)
 }
 
 
@@ -74,13 +76,17 @@ def configure(
     llm=None,
     stt_engine=None,
     tts_engine=None,
-    session_memory=None,
-    icons_base_url: str = "http://127.0.0.1:5000",
+    session_memory=None,       # Veraltet: wird als Session für sid="__test__" registriert
+    session_registry=None,     # Direkte Registry-Injection (neue Test-Naht)
 ) -> None:
     """Setzt Konfiguration und Adapter-Fabriken (Test-Naht).
 
     `llm_factory(cfg) -> LLMProvider` baut den Provider.
     In Tests bleibt `llm_factory=None` und `llm=` wird direkt gesetzt.
+
+    `session_memory` (SessionMemory) ist die alte Test-Naht — wird intern in
+    eine Registry mit fester SID "__test__" gewrappt. Verwende lieber
+    `session_registry` direkt für neue Tests.
     """
     runtime["runtime_config"] = runtime_config
     runtime["data_root"] = data_root
@@ -88,8 +94,20 @@ def configure(
     runtime["llm"] = llm
     runtime["stt_engine"] = stt_engine
     runtime["tts_engine"] = tts_engine
-    runtime["session_memory"] = session_memory if session_memory is not None else SessionMemory()
-    runtime["icons_base_url"] = icons_base_url
+
+    if session_registry is not None:
+        runtime["session_registry"] = session_registry
+    elif session_memory is not None:
+        # Alte Test-Naht: Wrap SessionMemory in Registry unter fester SID.
+        reg = SessionRegistry()
+        reg._sessions[_TEST_SID] = session_memory
+        runtime["session_registry"] = reg
+    else:
+        runtime["session_registry"] = SessionRegistry()
+
+
+# Feste SID für Test-Client ohne Cookie-Support (alte Naht).
+_TEST_SID = "__test__"
 
 
 def _runtime_cfg():
@@ -125,12 +143,29 @@ def _tts():
     return runtime.get("tts_engine")
 
 
-def _memory() -> SessionMemory:
-    return runtime["session_memory"]
+def _registry() -> SessionRegistry:
+    return runtime["session_registry"]
 
 
-def _icons_base_url() -> str:
-    return runtime.get("icons_base_url", "http://127.0.0.1:5000")
+def _get_or_create_session() -> tuple[str, SessionMemory, bool]:
+    """Liest kibuddy_sid-Cookie oder erzeugt eine neue SID.
+
+    Gibt (sid, memory, is_new) zurück.
+    is_new=True bedeutet, der Cookie muss noch gesetzt werden.
+    """
+    registry = _registry()
+
+    # Test-Client-Erkennung: wenn Registry nur _TEST_SID hat und kein Cookie.
+    sid = request.cookies.get(SID_COOKIE)
+    if sid is None:
+        if _TEST_SID in registry._sessions:
+            # Alte Naht: Test-Client ohne Cookie → _TEST_SID
+            return _TEST_SID, registry.get_or_create(_TEST_SID), False
+        # Echter Browser: neue SID anlegen.
+        new_sid = registry.new_sid()
+        return new_sid, registry.get_or_create(new_sid), True
+
+    return sid, registry.get_or_create(sid), False
 
 
 # ============================================================
@@ -167,10 +202,16 @@ def audio_file(audio_filename: str):
 
 @app.route("/api/v1/kibuddy/frage", methods=["POST"])
 def frage():
-    """POST audio → STT → LLM (mit Memory) → Icon-Render → TTS → JSON.
+    """POST audio → STT → LLM (mit Memory) → Tokenisierung → TTS → JSON.
 
     Multipart-Form mit Feld `audio` (Browser-Audio, WebM/Opus o. ä.).
-    Response: { text, words: [{text, icon_id}], tts_audio_url }
+    Response: { text, transkript, words: [{text, is_inhaltswort}], tts_audio_url }
+
+    Icon-Lookup läuft clientseitig (KIBUDDY-17 letzter Absatz):
+    Stück B ruft /api/v1/icons/suche parallel per Browser-Fetch für alle
+    is_inhaltswort=true-Wörter auf.
+
+    Cookie: kibuddy_sid (HttpOnly, SameSite=Lax) wird gesetzt wenn fehlend.
     """
     # Audio aus Request holen.
     audio_file_obj = request.files.get("audio")
@@ -182,6 +223,9 @@ def frage():
         return jsonify({"fehler": "audio-Feld ist leer"}), 400
 
     filename = audio_file_obj.filename or "audio.webm"
+
+    # Session-Memory via Cookie (KIBUDDY-16).
+    sid, memory, is_new_sid = _get_or_create_session()
 
     # STT.
     stt = _stt()
@@ -206,15 +250,14 @@ def frage():
         antwort_text = llm_service.beantworte_frage(
             frage_text=frage_text,
             data_root=_data_root(),
-            memory=_memory(),
+            memory=memory,
             llm=llm,
         )
     except ProviderError as e:
         return jsonify({"fehler": "llm-provider nicht erreichbar: %s" % e}), 503
 
-    # Wort-Icon-Render.
-    worte = icon_render.render_worte(antwort_text, icons_base_url=_icons_base_url())
-    words_api = icon_render.worte_zu_api_format(worte)
+    # Tokenisierung + Wortklassen-Filter (clientseitiger Icon-Lookup, KIBUDDY-17).
+    words_api = icon_render.worte_zu_words_api(antwort_text)
 
     # TTS (Resilienz: Fehler → tts_audio_url: null, KIBUDDY-24).
     cfg = _runtime_cfg()
@@ -234,12 +277,25 @@ def frage():
             logger.warning("tts: fehler bei frage-endpoint: %s", e)
             # tts_audio_url bleibt None — Kind sieht zumindest Text (KIBUDDY-24).
 
-    return jsonify({
+    response_data = {
         "text": antwort_text,
         "transkript": frage_text,
         "words": words_api,
         "tts_audio_url": tts_audio_url,
-    })
+    }
+    resp = make_response(jsonify(response_data))
+
+    # Cookie setzen wenn neu (HttpOnly, SameSite=Lax, KIBUDDY-16).
+    if is_new_sid:
+        resp.set_cookie(
+            SID_COOKIE,
+            sid,
+            httponly=True,
+            samesite="Lax",
+            path="/",
+        )
+
+    return resp
 
 
 # ---- Vorlesen-Endpoint (KIBUDDY-24, KIBUDDY-31) ----
@@ -290,12 +346,17 @@ def vorlesen():
 
 @app.route("/api/v1/kibuddy/reset", methods=["POST"])
 def reset():
-    """Löscht Session-Memory + Audio-Cache (KIBUDDY-16/29)."""
-    memory = _memory()
+    """Löscht Session-Memory des Aufrufers + Audio-Cache (KIBUDDY-16/29).
+
+    Löscht NUR die Session der aufrufenden SID, nicht alle Sessions.
+    Die Session-History wird geleert (reset()); die SID bleibt aktiv.
+    Audio-Cache bleibt global (per content-Hash dedupliziert, OPEN-KIBUDDY-K).
+    """
+    sid, memory, _is_new = _get_or_create_session()
     turn_count = len(memory)
     memory.reset()
     audio_count = tts_service.clear_audio_cache(_data_root())
-    logger.info("reset: %d turns gelöscht, %d audio-dateien gelöscht", turn_count, audio_count)
+    logger.info("reset: %d turns gelöscht (sid=%s), %d audio-dateien gelöscht", turn_count, sid[:8], audio_count)
     return jsonify({"ok": True, "turns_geloescht": turn_count, "audio_geloescht": audio_count})
 
 

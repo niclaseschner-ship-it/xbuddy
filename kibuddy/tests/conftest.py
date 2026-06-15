@@ -149,7 +149,7 @@ def client(runtime_config, data_root, fake_llm, fake_stt, fake_tts, session_memo
         stt_engine=fake_stt,
         tts_engine=fake_tts,
         session_memory=session_memory,
-        icons_base_url="http://127.0.0.1:9999",  # kein echter Icon-Call in Tests
+        # icons_base_url entfernt — Icon-Lookup ist clientseitig (KIBUDDY-17 FIX1)
     )
     return main_mod.app.test_client()
 

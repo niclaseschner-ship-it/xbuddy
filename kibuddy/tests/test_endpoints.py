@@ -22,10 +22,13 @@ def test_display_frage_view(client):
     assert resp.status_code == 200
 
 
-# ---- POST /api/v1/kibuddy/frage (AC2) ----
+# ---- POST /api/v1/kibuddy/frage (AC2, FIX1 Response-Schema) ----
 
 def test_frage_happy_path(client, fake_stt, fake_llm, fake_tts):
-    """AC2: POST /frage → JSON {text, transkript, words, tts_audio_url}."""
+    """AC2: POST /frage → JSON {text, transkript, words, tts_audio_url}.
+
+    FIX1: words-Slots haben {text, is_inhaltswort}, KEIN icon_id (KIBUDDY-17).
+    """
     resp = client.post(
         "/api/v1/kibuddy/frage",
         data={"audio": (io.BytesIO(b"FAKEAUDIO"), "audio.webm")},
@@ -37,11 +40,12 @@ def test_frage_happy_path(client, fake_stt, fake_llm, fake_tts):
     assert "transkript" in body
     assert "words" in body
     assert "tts_audio_url" in body
-    # words ist eine Liste mit text/icon_id pro Wort.
+    # words ist eine Liste mit text/is_inhaltswort pro Wort (FIX1, KIBUDDY-17).
     assert isinstance(body["words"], list)
     for slot in body["words"]:
         assert "text" in slot
-        assert "icon_id" in slot
+        assert "is_inhaltswort" in slot
+        assert "icon_id" not in slot   # FIX1: icon_id entfällt (clientseitig)
     # STT wurde aufgerufen.
     assert len(fake_stt.calls) == 1
     # LLM wurde aufgerufen.
@@ -51,6 +55,20 @@ def test_frage_happy_path(client, fake_stt, fake_llm, fake_tts):
     # tts_audio_url zeigt auf /api/v1/kibuddy/audio/*.mp3.
     assert body["tts_audio_url"].startswith("/api/v1/kibuddy/audio/")
     assert body["tts_audio_url"].endswith(".mp3")
+
+
+def test_frage_response_schema_v2(client):
+    """FIX1: words[].is_inhaltswort ist bool, kein icon_id im Response."""
+    resp = client.post(
+        "/api/v1/kibuddy/frage",
+        data={"audio": (io.BytesIO(b"AUDIO"), "audio.webm")},
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 200
+    body = resp.get_json()
+    for slot in body["words"]:
+        assert isinstance(slot["is_inhaltswort"], bool)
+        assert "icon_id" not in slot
 
 
 def test_frage_ohne_audio_feld(client):
@@ -284,3 +302,86 @@ def test_frage_uebergibt_history_an_llm(client, fake_llm):
     assert len(turns_bei_frage_1) == 0
     # Bei Frage 2: 2 Turns aus Frage 1 (user + assistant).
     assert len(turns_bei_frage_2) == 2
+
+
+# ---- Session-Cookie-Isolation (FIX3, KIBUDDY-16) ----
+
+def test_zwei_clients_unabhaengige_sessions(runtime_config, data_root, fake_llm, fake_stt, fake_tts):
+    """FIX3: Zwei Browser (zwei Cookies) haben unabhängige Session-Memories.
+
+    Client A und Client B schicken je eine Frage. Reset auf A löscht NICHT B.
+    """
+    import kibuddy.main as main_mod
+    from kibuddy.session_memory import SessionRegistry
+
+    registry = SessionRegistry()
+    main_mod.configure(
+        runtime_config=runtime_config,
+        data_root=data_root,
+        llm=fake_llm,
+        stt_engine=fake_stt,
+        tts_engine=fake_tts,
+        session_registry=registry,
+    )
+
+    # Client A: feste Cookie-SID.
+    sid_a = "client-a-sid"
+    sid_b = "client-b-sid"
+
+    with main_mod.app.test_client() as client_a:
+        client_a.set_cookie("kibuddy_sid", sid_a)
+        client_a.post(
+            "/api/v1/kibuddy/frage",
+            data={"audio": (io.BytesIO(b"AUDIO_A"), "audio.webm")},
+            content_type="multipart/form-data",
+        )
+
+    with main_mod.app.test_client() as client_b:
+        client_b.set_cookie("kibuddy_sid", sid_b)
+        client_b.post(
+            "/api/v1/kibuddy/frage",
+            data={"audio": (io.BytesIO(b"AUDIO_B"), "audio.webm")},
+            content_type="multipart/form-data",
+        )
+
+    mem_a = registry.get_or_create(sid_a)
+    mem_b = registry.get_or_create(sid_b)
+    assert len(mem_a) > 0
+    assert len(mem_b) > 0
+
+    # Reset auf A löscht NICHT B.
+    with main_mod.app.test_client() as client_a:
+        client_a.set_cookie("kibuddy_sid", sid_a)
+        reset_resp = client_a.post("/api/v1/kibuddy/reset")
+    assert reset_resp.status_code == 200
+
+    # A ist leer, B noch voll.
+    assert len(registry.get_or_create(sid_a)) == 0
+    assert len(mem_b) > 0
+
+
+def test_neuer_client_bekommt_cookie(runtime_config, data_root, fake_llm, fake_stt, fake_tts):
+    """FIX3: Ein neuer Browser (kein Cookie) bekommt kibuddy_sid gesetzt."""
+    import kibuddy.main as main_mod
+    from kibuddy.session_memory import SID_COOKIE, SessionRegistry
+
+    registry = SessionRegistry()
+    main_mod.configure(
+        runtime_config=runtime_config,
+        data_root=data_root,
+        llm=fake_llm,
+        stt_engine=fake_stt,
+        tts_engine=fake_tts,
+        session_registry=registry,
+    )
+
+    with main_mod.app.test_client() as fresh_client:
+        resp = fresh_client.post(
+            "/api/v1/kibuddy/frage",
+            data={"audio": (io.BytesIO(b"AUDIO"), "audio.webm")},
+            content_type="multipart/form-data",
+        )
+    assert resp.status_code == 200
+    # Cookie wurde gesetzt.
+    cookie_header = resp.headers.get("Set-Cookie", "")
+    assert SID_COOKIE in cookie_header
