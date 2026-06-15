@@ -140,6 +140,31 @@ class HoerspielClient:
                 status=status)
         return data
 
+    def alben_lesen(self) -> list:
+        """GET /api/v1/hoerspiel/alben (HOE-1, HSP-17).
+
+        Liefert die Album-Liste als Liste von Dicts mit mind.
+        {"folgen_nr": int, "titel": str, "erstellt_am": str}.
+
+        Wirft HoerspielClientError bei Fehler.
+        """
+        status, resp_bytes = self._call("GET", PFAD_ALBEN)
+        if status != 200:
+            raise HoerspielClientError(
+                "Hörspiel-Buddy: HTTP %s bei GET %s" % (status, PFAD_ALBEN),
+                status=status)
+        try:
+            data = json.loads(resp_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise HoerspielClientError(
+                "Hörspiel-Buddy: Alben-Antwort nicht parsebar (%s)" % exc,
+                status=status) from exc
+        if not isinstance(data, list):
+            raise HoerspielClientError(
+                "Hörspiel-Buddy: Alben-Antwort ist keine Liste (%r)" % type(data),
+                status=status)
+        return data
+
     def config_lesen(self) -> dict:
         """GET /api/v1/hoerspiel/config (HFE-4, HSP-17).
 
