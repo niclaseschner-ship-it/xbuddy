@@ -55,9 +55,9 @@ def _ctx(tmp_path, tg, *, a2_receipt_store=None, photo_origin=None,
 class _StubHTTP:
     """Sammelt _http_delete-Aufrufe und liefert skriptierte Status-Codes.
 
-    Patcht main._http_delete (monkeypatched per Test), damit kein realer
-    HTTP-Call läuft. Der Hook ruft `(origin_url, api_path)` — wir
-    speichern beide und antworten je Aufruf mit dem nächsten skripted Status.
+    CLIENT-1-Naht: wird per `http_delete=`-Parameter direkt in
+    `_falsch_hook` injiziert (kein monkeypatch). Signatur identisch zum
+    Modul-Level `_http_delete(origin_url, api_path)`.
     """
 
     def __init__(self, statuses=None):
@@ -88,9 +88,12 @@ def _all_sealed(db_path, chat_id):
 # ============================================================
 
 
-def test_falsch_a2_foto_senden_dispatcht_photo_delete(tmp_path, monkeypatch):
+def test_falsch_a2_foto_senden_dispatcht_photo_delete(tmp_path):
     """»falsch« nach foto_senden-A2-Akt → HTTP DELETE auf photo-Endpoint,
-    Receipt sealed, positive Quittung, Korrektur-State gesetzt (AC1/AC2/AC6)."""
+    Receipt sealed, positive Quittung, Korrektur-State gesetzt (AC1/AC2/AC6).
+
+    CLIENT-1-Naht: http_delete-Stub direkt eingereicht (kein monkeypatch).
+    """
     db_path = str(tmp_path / "rec.db")
     store = A2ReceiptStore(db_path)
     chat_id = 42
@@ -102,10 +105,10 @@ def test_falsch_a2_foto_senden_dispatcht_photo_delete(tmp_path, monkeypatch):
                photo_origin="http://127.0.0.1:5070")
 
     http = _StubHTTP(statuses=[200])
-    monkeypatch.setattr(main, "_http_delete", http)
 
     handled = main._falsch_hook(make_message("falsch", chat_id=chat_id,
-                                             from_user_id=7), ctx)
+                                             from_user_id=7), ctx,
+                                http_delete=http)
 
     assert handled is True
     # Genau ein DELETE-Call auf den Photo-Endpunkt
@@ -125,7 +128,7 @@ def test_falsch_a2_foto_senden_dispatcht_photo_delete(tmp_path, monkeypatch):
     assert state.quelle == "a2"
 
 
-def test_falsch_a2_receipt_sealed(tmp_path, monkeypatch):
+def test_falsch_a2_receipt_sealed(tmp_path):
     """AC1 write_verification: nach `falsch`-Petrarbeitung sind alle vorher
     unversiegelten Receipts der chat_id sealed."""
     db_path = str(tmp_path / "rec.db")
@@ -141,9 +144,8 @@ def test_falsch_a2_receipt_sealed(tmp_path, monkeypatch):
     ctx = _ctx(tmp_path, tg, a2_receipt_store=store,
                photo_origin="http://127.0.0.1:5070")
 
-    monkeypatch.setattr(main, "_http_delete", _StubHTTP(statuses=[200]))
     main._falsch_hook(make_message("falsch", chat_id=chat_id, from_user_id=7),
-                      ctx)
+                      ctx, http_delete=_StubHTTP(statuses=[200]))
 
     # Post-Condition: keine unversiegelten Receipts mehr
     assert store.fetch_unsealed_for_chat(chat_id) == []
@@ -155,8 +157,7 @@ def test_falsch_a2_receipt_sealed(tmp_path, monkeypatch):
 # ============================================================
 
 
-def test_falsch_a2_einkauf_multi_item_dispatcht_delete_pro_item(tmp_path,
-                                                                monkeypatch):
+def test_falsch_a2_einkauf_multi_item_dispatcht_delete_pro_item(tmp_path):
     """Multi-Item-A2: 3 Receipts → 3 DELETE-Aufrufe; alle sealed.
 
     Bestätigt EC-10 spec Z. 543-548 (eine Receipt-Zeile pro Ressource) im
@@ -177,10 +178,10 @@ def test_falsch_a2_einkauf_multi_item_dispatcht_delete_pro_item(tmp_path,
                essen_origin="http://127.0.0.1:5052")
 
     http = _StubHTTP(statuses=[200, 200, 200])
-    monkeypatch.setattr(main, "_http_delete", http)
 
     handled = main._falsch_hook(
-        make_message("falsch", chat_id=chat_id, from_user_id=7), ctx)
+        make_message("falsch", chat_id=chat_id, from_user_id=7), ctx,
+        http_delete=http)
 
     assert handled is True
     # 3 DELETE-Calls — pro item_id einer
@@ -238,8 +239,7 @@ def test_falsch_klasse_c_verwirft_pending_vorschlag(tmp_path):
 # ============================================================
 
 
-def test_falsch_a2_404_quittiert_ambivalent_aber_sealt_trotzdem(tmp_path,
-                                                                monkeypatch):
+def test_falsch_a2_404_quittiert_ambivalent_aber_sealt_trotzdem(tmp_path):
     """DELETE liefert 404 (Ressource verändert/weg) → Ambiguitäts-Quittung,
     Receipt trotzdem sealed (kein zweiter Versuch auf denselben Bon)."""
     db_path = str(tmp_path / "rec.db")
@@ -252,9 +252,9 @@ def test_falsch_a2_404_quittiert_ambivalent_aber_sealt_trotzdem(tmp_path,
     ctx = _ctx(tmp_path, tg, a2_receipt_store=store,
                photo_origin="http://127.0.0.1:5070")
 
-    monkeypatch.setattr(main, "_http_delete", _StubHTTP(statuses=[404]))
     handled = main._falsch_hook(
-        make_message("falsch", chat_id=chat_id, from_user_id=7), ctx)
+        make_message("falsch", chat_id=chat_id, from_user_id=7), ctx,
+        http_delete=_StubHTTP(statuses=[404]))
 
     assert handled is True
     # Ambiguitäts-Quittung
@@ -294,8 +294,7 @@ def test_falsch_ohne_receipt_und_ohne_pending_ist_no_op(tmp_path):
 # ============================================================
 
 
-def test_falsch_dreifach_iteration_jedesmal_nur_letzter_bon_greift(tmp_path,
-                                                                   monkeypatch):
+def test_falsch_dreifach_iteration_jedesmal_nur_letzter_bon_greift(tmp_path):
     """»falsch« → Patch → neuer A2-Akt → »falsch« → ...: jede Iteration siegelt
     den vorigen Bon (insert() versiegelt vor Insert), der Hook greift nur auf
     den neuen unversiegelten Bon zu. Belegt: dreifache Korrektur-Sequenz ohne
@@ -308,7 +307,6 @@ def test_falsch_dreifach_iteration_jedesmal_nur_letzter_bon_greift(tmp_path,
                photo_origin="http://127.0.0.1:5070")
 
     http = _StubHTTP(statuses=[200, 200, 200])
-    monkeypatch.setattr(main, "_http_delete", http)
 
     for n, med_id in enumerate(("med-1", "med-2", "med-3"), start=1):
         # Neuer A2-Akt simuliert (insert siegelt automatisch vorigen)
@@ -320,7 +318,7 @@ def test_falsch_dreifach_iteration_jedesmal_nur_letzter_bon_greift(tmp_path,
         # Hook löst »falsch« aus
         handled = main._falsch_hook(
             make_message("falsch", chat_id=chat_id, from_user_id=7,
-                         message_id=1000 + n), ctx)
+                         message_id=1000 + n), ctx, http_delete=http)
         assert handled is True
 
     # Drei DELETE-Calls, je einer pro Iteration
@@ -348,3 +346,42 @@ def test_is_falsch_wort_matched_nur_ganzes_wort():
     assert main._is_falsch_wort("ist falsch") is False
     assert main._is_falsch_wort("") is False
     assert main._is_falsch_wort(None) is False
+
+
+# ============================================================
+#  CLIENT-1 Test-Naht — _http_delete(transport=)
+# ============================================================
+
+
+def test_http_delete_nutzt_transport_stub_statt_urllib():
+    """CLIENT-1 (conventions/http-client.md): _http_delete akzeptiert einen
+    optionalen `transport=`-Callable. Wird er übergeben, ruft die Funktion
+    NICHT urllib auf, sondern den Stub mit `(url, timeout)`.
+
+    Belegt die saubere Test-Naht ohne monkeypatch — Geschwister-Naht zu
+    den FamilieClient/GeraeteClient-Tests, die denselben Vertrag tragen.
+    """
+    calls = []
+
+    def stub_transport(url, timeout):
+        calls.append((url, timeout))
+        return 204, b""
+
+    status, body = main._http_delete(
+        "http://127.0.0.1:5052", "/api/v1/essen/wuensche/item-x",
+        timeout=1.5, transport=stub_transport)
+
+    assert status == 204
+    assert body == b""
+    assert calls == [("http://127.0.0.1:5052/api/v1/essen/wuensche/item-x", 1.5)]
+
+
+def test_http_delete_default_transport_kein_call_an_stub():
+    """Negativ-Probe: ohne transport=-Parameter läuft der Default-Pfad
+    (urllib). Wir verifizieren das indirekt — der Aufruf landet bei einem
+    nicht erreichbaren Loopback-Port und liefert (0, b"") (URLError-Schluck)."""
+    # Port 1 ist privilegiert + nicht gebunden — connect schlägt sofort fehl
+    status, body = main._http_delete(
+        "http://127.0.0.1:1", "/api/v1/x", timeout=0.1)
+    assert status == 0
+    assert body == b""

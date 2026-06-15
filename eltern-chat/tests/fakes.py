@@ -73,15 +73,24 @@ class FakeReadTask(ReadTask):
 
 
 class FakeWriteTask(WriteTask):
-    """Eine schreibende Test-Aufgabe (EC-10)."""
+    """Eine schreibende Test-Aufgabe (EC-10).
+
+    `auto_confirm=True` schaltet den E-EIN-1-Direkt-Modus an (Skill schreibt
+    sofort, kein Confirm-Gate). Default False = Standard EC-10 (propose →
+    confirm → execute).
+    """
 
     def __init__(self, name="daten_setzen", summary="Test-Änderung",
-                 result="erledigt", propose_error=None):
+                 result="erledigt", propose_error=None, auto_confirm=False):
         super().__init__(name, "Test-Schreib-Aufgabe",
                          {"type": "object", "properties": {}})
         self._summary = summary
         self._result = result
         self._propose_error = propose_error
+        # E-EIN-1: Klassen-Attribut wird vom Framework (agent.py) und vom
+        # Catalog.execute_write_task gelesen. Instanz-Override reicht — Python
+        # findet das Attribut über die normale Lookup-Kette.
+        self.auto_confirm = auto_confirm
         self.propose_calls = []
         self.execute_calls = []
         self.turn_contexts = []

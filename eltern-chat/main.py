@@ -269,22 +269,39 @@ def _is_falsch_wort(text):
     return text.strip().lower() == _FALSCH_WORT
 
 
-def _http_delete(origin_url, api_path, timeout=2.0):
+def _http_delete(origin_url, api_path, timeout=2.0, transport=None):
     """Setzt einen HTTP DELETE auf `origin_url + api_path` ab (EC-36 Inverse).
 
     Liefert `(status_code, body_bytes)`. Connection-Fehler werden als
     `(0, b"")` zurückgegeben — der Hook wertet status < 200 oder >= 300 als
     Ambiguität (EC-7/EC-10 spec Z. 586-597) und siegelt den Bon trotzdem.
 
+    Test-Naht analog `conventions/http-client.md` CLIENT-1: optionaler
+    `transport=`-Callable, Default ist der echte HTTP-Aufruf über urllib.
+    Tests übergeben einen In-Process-Stub statt monkeypatch — die
+    Signatur des Stubs ist identisch mit dem Default-Transport:
+    `(url, timeout) -> (status_code, bytes)`.
+
+    Hinweis zur Lego-Form: _http_delete ist KEIN voller Komponenten-Client
+    nach CLIENT-1..CLIENT-4. Der Pfad kommt aus dem persistierten
+    `inverse_call` (EC-36 spec Z. 543-561, `a2_receipts.inverse_call`),
+    nicht aus dem Skill-Code — CLIENT-4 (Pfad-Konstanten aus urls.md)
+    trifft für inverse_call deshalb nicht. Eine eigene Komponenten-Error-
+    Klasse (CLIENT-3) ist hier ebenfalls offen — Halt-zu-Nic-Sonderfall,
+    weil der Hook ausdrücklich auf Ambiguitäts-Quittung statt Exception
+    setzt (EC-7/EC-10 spec Z. 586-597).
+
     Bewusst urllib (kein requests-Dependency); konsistent mit
-    `skills/photo_client.py:152-186`. Kein Skill-Client-Wrapper —
-    T844-stop_rule client_pollution: HTTP-Form aus #841 macht delete_-Methoden
-    überflüssig.
+    `skills/photo_client.py:152-186`.
     """
     import urllib.error
     import urllib.request
 
     url = (origin_url or "").rstrip("/") + api_path
+    if transport is not None:
+        # CLIENT-1 Test-Naht — Stub erhält dieselbe Signatur wie der echte
+        # Default-Transport unten (URL + timeout).
+        return transport(url, timeout)
     request = urllib.request.Request(url, method="DELETE")
     try:
         with urllib.request.urlopen(request, timeout=timeout) as resp:
@@ -297,7 +314,7 @@ def _http_delete(origin_url, api_path, timeout=2.0):
         return 0, b""
 
 
-def _falsch_hook(msg, ctx):
+def _falsch_hook(msg, ctx, http_delete=None):
     """Vor-Agent-Hook für das Korrektur-Wort `falsch` (EC-36, #844).
 
     Reihenfolge der Pfade (spec Z. 1145-1168):
@@ -318,6 +335,11 @@ def _falsch_hook(msg, ctx):
     Rückgabe: True ⇒ Hook hat petrarbeitet, Orchestrierung beendet den Turn.
               False ⇒ Hook hat nichts gefunden, weiterreichen.
 
+    `http_delete` (Test-Naht, CLIENT-1-Pattern): optionaler Callable mit
+    derselben Signatur wie `_http_delete(origin, api_path) -> (status, bytes)`.
+    Default `None` → das Modul-Level `_http_delete` (echter HTTP-Aufruf).
+    Tests injizieren einen In-Process-Stub statt monkeypatch.
+
     Cross-Skill-Exit (spec Z. 1184-1191) ist implizit: der Korrektur-State lebt
     nur einen Folge-Turn — schickt der User dort eine Anfrage zu einem anderen
     Skill, läuft der Agent durch seinen normalen Pfad (neuer Vorschlag in
@@ -325,6 +347,8 @@ def _falsch_hook(msg, ctx):
     `falsch` verworfen wurde). `_run_agent` löscht den State nach jedem Turn.
     """
     chat_id = msg.chat_id
+    if http_delete is None:
+        http_delete = _http_delete
 
     # Pfad 1: A2-Receipts.
     receipts = []
@@ -355,7 +379,7 @@ def _falsch_hook(msg, ctx):
                                 "buddy_key=%r method=%r", buddy_key, method)
                 alle_ok = False
                 continue
-            status, _body = _http_delete(origin, api_path)
+            status, _body = http_delete(origin, api_path)
             if not (200 <= status < 300):
                 # EC-10 spec Z. 586-597: Ambiguitäts-Pfad — Quittung wird
                 # ehrlich, Bon trotzdem gesiegelt (kein zweiter Versuch).
