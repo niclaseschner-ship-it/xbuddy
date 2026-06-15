@@ -414,17 +414,21 @@ def test_AC2_anzeige_summary_enthaelt_prompt():
     assert "Ich bin ein KIBuddy für die Familie." in result.summary
 
 
-def test_AC3_langer_prompt_wird_geteilt():
-    """AC3 (KPA-5): Prompt > 3500 Zeichen → Proposal enthält '(Teil X/Y)'-Markierung."""
+def test_AC3_langer_prompt_fallback_ohne_tg():
+    """AC3 (KPA-5): Prompt > 3500 Zeichen + kein tg → Fallback-Summary mit Warn-Quittung."""
     langer_prompt = ("A" * 1800 + "\n\n" + "B" * 1800)
     client = FakeKibuddyPromptClient(get_response={
         "prompt": langer_prompt,
         "byte-laenge": len(langer_prompt.encode()),
         "geaendert-am": "2026-06-15T10:00:00",
     })
+    # _make_task ohne tg → Fallback-Pfad (Backward-Compat)
     task = _make_task(client=client)
     result = task.propose({"aktion": "anzeigen"}, _turn_context())
     assert isinstance(result, Proposal)
+    # Fallback-Warnung im summary
+    assert "Multi-Part-Send" in result.summary or "nicht verfügbar" in result.summary
+    # Trotzdem (Teil X/Y)-Teile im summary (gebündelt)
     assert "(Teil 1/" in result.summary
     assert "(Teil 2/" in result.summary
 
@@ -475,16 +479,126 @@ def test_split_langer_text_schneidet_an_doppel_newline():
 
 
 # ============================================================
+#  FIX1 — Multi-Part-Send via FakeTg (KPA-5, FIX1-FIX2)
+# ============================================================
+
+
+class FakeTg:
+    """Minimaler Telegram-Stub für Multi-Part-Send-Tests (FIX1)."""
+
+    def __init__(self):
+        self.sent_messages = []   # Liste von (chat_id, text)-Tupeln
+
+    def send_message(self, chat_id, text):
+        self.sent_messages.append((chat_id, text))
+
+    def get_chat_member(self, chat_id, user_id):
+        return {"status": "member"}
+
+
+def _make_task_mit_tg(client=None, tg=None, chat_id_getter=None,
+                      family_group_chat_id_getter=None, is_member_fn=None):
+    """Hilfsfunktion: Task mit tg + chat_id_getter für FIX1-Tests."""
+    if client is None:
+        client = FakeKibuddyPromptClient()
+    if family_group_chat_id_getter is None:
+        family_group_chat_id_getter = _family_getter()
+    if is_member_fn is None:
+        is_member_fn = _immer_mitglied
+    from skills.kibuddy_prompt_anpassen_task import KibuddyPromptAnpassenTask
+    return KibuddyPromptAnpassenTask(
+        kibuddy_prompt_client=client,
+        family_group_chat_id_getter=family_group_chat_id_getter,
+        is_member_fn=is_member_fn,
+        tg=tg,
+        chat_id_getter=chat_id_getter)
+
+
+def test_FIX1_langer_prompt_sendet_teile_direkt():
+    """FIX1 (KPA-5): Langer Prompt + tg → Teile via tg.send_message gesendet."""
+    langer_prompt = ("A" * 1800 + "\n\n" + "B" * 1800)
+    client = FakeKibuddyPromptClient(get_response={
+        "prompt": langer_prompt,
+        "byte-laenge": len(langer_prompt.encode()),
+        "geaendert-am": "2026-06-15T10:00:00",
+    })
+    fake_tg = FakeTg()
+    task = _make_task_mit_tg(client=client, tg=fake_tg)
+    task.propose({"aktion": "anzeigen"}, _turn_context(chat_id=100))
+
+    # tg.send_message muss für jeden Teil aufgerufen worden sein
+    assert len(fake_tg.sent_messages) >= 2
+    # Alle Sends gehen an die korrekte chat_id
+    assert all(chat_id == 100 for chat_id, _ in fake_tg.sent_messages)
+    # (Teil X/Y)-Markierung in den gesendeten Nachrichten
+    gesendete_texte = [text for _, text in fake_tg.sent_messages]
+    assert any("(Teil 1/" in t for t in gesendete_texte)
+    assert any("(Teil 2/" in t for t in gesendete_texte)
+
+
+def test_FIX1_proposal_summary_ist_kurzer_verweis():
+    """FIX1 (KPA-5): Nach Multi-Part-Send ist Proposal.summary nur kurzer Verweis."""
+    langer_prompt = ("A" * 1800 + "\n\n" + "B" * 1800)
+    client = FakeKibuddyPromptClient(get_response={
+        "prompt": langer_prompt,
+        "byte-laenge": len(langer_prompt.encode()),
+        "geaendert-am": "2026-06-15T10:00:00",
+    })
+    fake_tg = FakeTg()
+    task = _make_task_mit_tg(client=client, tg=fake_tg)
+    result = task.propose({"aktion": "anzeigen"}, _turn_context(chat_id=100))
+
+    assert isinstance(result, Proposal)
+    # Summary ist kurz — kein vollständiger Prompt-Text darin
+    assert len(result.summary) < 200
+    assert "oben" in result.summary.lower() or "Prompt" in result.summary
+
+
+def test_FIX2_backward_compat_ohne_tg():
+    """FIX2 (KPA-5): Ohne tg und langem Prompt → Fallback-Summary mit Warnung."""
+    langer_prompt = ("A" * 1800 + "\n\n" + "B" * 1800)
+    client = FakeKibuddyPromptClient(get_response={
+        "prompt": langer_prompt,
+        "byte-laenge": len(langer_prompt.encode()),
+        "geaendert-am": "2026-06-15T10:00:00",
+    })
+    # Kein tg → Fallback
+    task = _make_task(client=client)
+    result = task.propose({"aktion": "anzeigen"}, _turn_context())
+    assert isinstance(result, Proposal)
+    # Warn-Quittung im summary
+    assert "Multi-Part-Send" in result.summary or "nicht verfügbar" in result.summary
+
+
+def test_FIX1_kurzer_prompt_kein_tg_send():
+    """FIX1 (KPA-5): Kurzer Prompt → kein tg.send_message-Aufruf."""
+    client = FakeKibuddyPromptClient(get_response={
+        "prompt": "Kurz.",
+        "byte-laenge": 5,
+        "geaendert-am": "2026-06-15T10:00:00",
+    })
+    fake_tg = FakeTg()
+    task = _make_task_mit_tg(client=client, tg=fake_tg)
+    result = task.propose({"aktion": "anzeigen"}, _turn_context(chat_id=100))
+
+    # Kurzer Prompt: kein send_message
+    assert fake_tg.sent_messages == []
+    # Volltext im summary
+    assert isinstance(result, Proposal)
+    assert "Kurz." in result.summary
+
+
+# ============================================================
 #  KPA-4 Mehrturn-Loop-Awareness (Live-Bug 2026-06-15)
 # ============================================================
 #
 # Hintergrund: Nics Live-Test endete nach dem Klär-Dialog ohne erneuten
 # Skill-Aufruf — LLM hatte keine explizite Anweisung, dass es nach Eltern-
 # Antwort den Skill ein zweites Mal aufrufen MUSS mit `neuer_prompt`.
-# Fix: _DIALOG_START enthält jetzt eine [ANWEISUNG AN DICH, LLM]-Sektion.
+# Fix: _DIALOG_START im Sach-Ton (FIX3), ohne []-Markup-Marker.
 
 def test_dialog_start_enthaelt_llm_loop_anweisung():
-    """KPA-4: _DIALOG_START muss dem LLM explizit den Re-Call vorschreiben."""
+    """KPA-4: _DIALOG_START muss dem LLM explizit den Re-Call vorschreiben (Sach-Ton)."""
     text = _DIALOG_START
     # Loop-Hint: aktion='vorschlagen' + neuer_prompt erneut aufrufen
     assert "erneut" in text.lower() or "wieder" in text.lower() or "nochmal" in text.lower(), (
@@ -492,9 +606,12 @@ def test_dialog_start_enthaelt_llm_loop_anweisung():
     )
     # Zielparameter explizit nennen
     assert "neuer_prompt" in text, "_DIALOG_START muss `neuer_prompt` als Ziel-Argument nennen"
-    # Klär-Anweisung an LLM gekennzeichnet
-    assert "[ANWEISUNG" in text or "LLM" in text, (
-        "_DIALOG_START sollte LLM-Anweisung sichtbar markieren"
+    # Kein []-Markup-Marker (FIX3: Sach-Ton ohne [ANWEISUNG]-Blöcke)
+    assert "[ANWEISUNG" not in text, (
+        "_DIALOG_START darf keine [ANWEISUNG AN DICH, LLM]-Marker enthalten (FIX3-Markup-Stil)"
+    )
+    assert "[FRAGE" not in text, (
+        "_DIALOG_START darf keine [FRAGE AN ELTERN]-Marker enthalten (FIX3-Markup-Stil)"
     )
 
 
