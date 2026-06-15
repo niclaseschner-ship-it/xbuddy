@@ -1,8 +1,10 @@
-"""Tests fuer GET /seiten/routine/anpassen — ROUTINE-20 / ROUTINE-23 / AC1 / AC_ENTRY.
+"""Tests fuer GET /seiten/routine/anpassen — ROUTINE-20 / ROUTINE-23 / MAD-7 / AC1 / AC_ENTRY.
 
 Testet:
   AC1      — Route ist in seiten/main.py implementiert und antwortet mit 200 HTML.
   AC_ENTRY — Render-Test: 200 + HTML enthaelt Sektion-Header-Marker + Anker-Pfade.
+  AC2-Auth — MAD-7 Auth: ohne Header → 401; manipulierter Hash → 401; gueltiger Header → 200.
+  AC4-FAM  — FAM-7/8: fremde User-ID → 403; bekannte User-ID → 200.
   AC2-Stub — JS-Lifecycle-Hinweis (struktureller Test ohne echten Boot).
 
 Entry-Path-Probe (AC_ENTRY):
@@ -12,8 +14,13 @@ Entry-Path-Probe (AC_ENTRY):
 Lauf: uv run pytest seiten/tests/test_routine_anpassen_route.py -x -v
 """
 
+import hashlib
+import hmac
+import json as _json_mod
 import os
 import sys
+import time
+import urllib.parse
 
 import pytest
 
@@ -26,6 +33,54 @@ _ELTERN_CHAT_DIR = os.path.join(_REPO_ROOT, "eltern-chat")
 sys.path.insert(0, _ELTERN_CHAT_DIR)
 
 from seiten import main as seiten_main  # noqa: E402  # isort:skip
+
+
+# ── Hilfs-Funktionen fuer initData-Erzeugung ─────────────────────────────────
+
+BOT_TOKEN = "test:token"  # muss mit reset_runtime-Fixture uebereinstimmen
+
+
+def _baue_init_data(bot_token=BOT_TOKEN, user_id=42, offset_seconds=0):
+    """Baut einen validen Telegram-initData-String mit korrektem HMAC.
+
+    Algorithmus (eltern-chat/init_data.py, Telegram-Doku):
+      secret_key = HMAC_SHA256(key=b'WebAppData', data=bot_token)
+      hash       = HMAC_SHA256(key=secret_key,  data=data_check_string).hexdigest()
+    """
+    auth_date = int(time.time()) + offset_seconds
+    user_json = _json_mod.dumps({"id": user_id, "first_name": "Test"}, separators=(",", ":"))
+
+    felder = {
+        "auth_date": str(auth_date),
+        "user":      user_json,
+    }
+
+    data_check_string = "\n".join(
+        f"{k}={v}" for k, v in sorted(felder.items())
+    )
+
+    secret_key = hmac.new(
+        key=b"WebAppData",
+        msg=bot_token.encode("utf-8"),
+        digestmod=hashlib.sha256,
+    ).digest()
+
+    computed_hash = hmac.new(
+        key=secret_key,
+        msg=data_check_string.encode("utf-8"),
+        digestmod=hashlib.sha256,
+    ).hexdigest()
+
+    felder["hash"] = computed_hash
+    return urllib.parse.urlencode(felder)
+
+
+def _baue_init_data_manipuliert():
+    """Baut initData mit korrektem Format, aber falschem Hash."""
+    init_data = _baue_init_data()
+    params = dict(urllib.parse.parse_qsl(init_data))
+    params["hash"] = "0" * 64  # falscher Hash
+    return urllib.parse.urlencode(params)
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -52,8 +107,12 @@ def client():
 # ── AC1 — Route vorhanden und liefert 200 HTML ───────────────────────────────
 
 def test_ac1_route_liefert_200(client):
-    """AC1: GET /seiten/routine/anpassen -> 200 HTML (V1 ohne Auth, MAD-7 brainstorm-Vorlage NICHT ratifiziert)."""
-    resp = client.get("/seiten/routine/anpassen")
+    """AC1: GET /seiten/routine/anpassen mit gueltiger initData → 200 HTML (MAD-7 Header)."""
+    init_data = _baue_init_data()
+    resp = client.get(
+        "/seiten/routine/anpassen",
+        headers={"Authorization": "tma " + init_data},
+    )
     assert resp.status_code == 200
     assert "text/html" in resp.mimetype
 
@@ -67,25 +126,142 @@ def test_ac1_route_in_main_py():
         "Route /seiten/routine/anpassen fehlt in seiten/main.py"
 
 
+# ── AC2-Auth — Init-Data-Auth: drei Pfade ─────────────────────────────────────
+
+def test_ac2_ohne_init_data_liefert_401(client):
+    """AC2 (MAD-7): Request ohne Authorization-Header → 401."""
+    resp = client.get("/seiten/routine/anpassen")
+    assert resp.status_code == 401
+    body = resp.get_json()
+    assert body is not None
+    assert body.get("error")
+
+
+def test_ac2_manipulierter_hash_liefert_401(client):
+    """AC2 (MAD-7): Authorization-Header mit manipuliertem Hash → 401."""
+    init_data = _baue_init_data_manipuliert()
+    resp = client.get(
+        "/seiten/routine/anpassen",
+        headers={"Authorization": "tma " + init_data},
+    )
+    assert resp.status_code == 401
+    body = resp.get_json()
+    assert body is not None
+
+
+def test_ac2_gueltiger_init_data_liefert_200(client):
+    """AC2 (MAD-7): Authorization-Header mit gueltiger HMAC-Signatur → 200."""
+    init_data = _baue_init_data(user_id=99)
+    resp = client.get(
+        "/seiten/routine/anpassen",
+        headers={"Authorization": "tma " + init_data},
+    )
+    assert resp.status_code == 200
+
+
+def test_ac2_falsches_schema_liefert_401(client):
+    """AC2 (MAD-7): Authorization-Header mit falschem Schema (kein 'tma '-Praefix) → 401."""
+    init_data = _baue_init_data()
+    resp = client.get(
+        "/seiten/routine/anpassen",
+        headers={"Authorization": "Bearer " + init_data},
+    )
+    assert resp.status_code == 401
+
+
+def test_ac2_abgelaufener_init_data_liefert_401(client):
+    """AC2 (MAD-7): auth_date mehr als max_age_seconds in der Vergangenheit → 401."""
+    init_data = _baue_init_data(offset_seconds=-(86400 + 1))
+    resp = client.get(
+        "/seiten/routine/anpassen",
+        headers={"Authorization": "tma " + init_data},
+    )
+    assert resp.status_code == 401
+
+
+def test_ac2_fehlendes_bot_token_liefert_500(client, monkeypatch):
+    """AC2 (MAD-7): Bot-Token fehlt in ENV und runtime → 500 Konfig-Fehler."""
+    seiten_main.runtime["bot_token"] = None
+    monkeypatch.delenv("ELTERNCHAT_BOT_TOKEN", raising=False)
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+
+    init_data = _baue_init_data()
+    resp = client.get(
+        "/seiten/routine/anpassen",
+        headers={"Authorization": "tma " + init_data},
+    )
+    assert resp.status_code == 500
+
+
+# ── AC4-FAM — FAM-7/8-Check ──────────────────────────────────────────────────
+
+def test_ac4_fremde_user_id_liefert_403(client, tmp_path):
+    """AC4 (FAM-7/8): User-ID nicht in familie.json → 403."""
+    familie = {"erwachsene": [{"id": "p1", "name": "Elter", "ring": "blue", "telegram_id": 99999}], "kinder": []}
+    f = tmp_path / "familie.json"
+    f.write_text(_json_mod.dumps(familie), encoding="utf-8")
+    seiten_main.runtime["familie_json_path"] = str(f)
+
+    # User-ID 42 ist nicht in der Registry (nur 99999 ist drin)
+    init_data = _baue_init_data(user_id=42)
+    resp = client.get(
+        "/seiten/routine/anpassen",
+        headers={"Authorization": "tma " + init_data},
+    )
+    assert resp.status_code == 403
+    body = resp.get_json()
+    assert body is not None
+
+    # Cleanup
+    seiten_main.runtime["familie_json_path"] = None
+
+
+def test_ac4_bekannte_user_id_liefert_200(client, tmp_path):
+    """AC4 (FAM-7/8): User-ID in familie.json → 200."""
+    familie = {"erwachsene": [{"id": "p1", "name": "Elter", "ring": "blue", "telegram_id": 42}], "kinder": []}
+    f = tmp_path / "familie.json"
+    f.write_text(_json_mod.dumps(familie), encoding="utf-8")
+    seiten_main.runtime["familie_json_path"] = str(f)
+
+    init_data = _baue_init_data(user_id=42)
+    resp = client.get(
+        "/seiten/routine/anpassen",
+        headers={"Authorization": "tma " + init_data},
+    )
+    assert resp.status_code == 200
+
+    # Cleanup
+    seiten_main.runtime["familie_json_path"] = None
+
+
 # ── AC_ENTRY — HTML-Skelett korrekt ──────────────────────────────────────────
+
+def _get_html(client, user_id=42):
+    """Helper: GET /seiten/routine/anpassen mit gueltiger MAD-7-Auth."""
+    init_data = _baue_init_data(user_id=user_id)
+    return client.get(
+        "/seiten/routine/anpassen",
+        headers={"Authorization": "tma " + init_data},
+    ).get_data(as_text=True)
+
 
 def test_ac_entry_html_enthaelt_hauptcontainer(client):
     """AC_ENTRY: HTML traegt #routine-inhalt (JS rendert Cards darin)."""
-    body = client.get("/seiten/routine/anpassen").get_data(as_text=True)
+    body = _get_html(client)
     assert 'id="routine-inhalt"' in body, \
         "Hauptcontainer #routine-inhalt fehlt im Template"
 
 
 def test_ac_entry_html_enthaelt_sheet_overlay(client):
-    """AC_ENTRY: HTML traegt #sheet-overlay (MAD-4 Bottom-Sheet-Pattern, brainstorm-Vorlage NICHT ratifiziert)."""
-    body = client.get("/seiten/routine/anpassen").get_data(as_text=True)
+    """AC_ENTRY: HTML traegt #sheet-overlay (MAD-4 Bottom-Sheet-Pattern)."""
+    body = _get_html(client)
     assert 'id="sheet-overlay"' in body, \
         "#sheet-overlay fehlt — Bottom-Sheet (ROUTINE-21 / MAD-4) nicht vorhanden"
 
 
 def test_ac_entry_html_laedt_platform_js(client):
-    """AC_ENTRY / MAD-5 (brainstorm-Vorlage NICHT ratifiziert): HTML laedt platform.js vor routine-anpassen.js."""
-    body = client.get("/seiten/routine/anpassen").get_data(as_text=True)
+    """AC_ENTRY / MAD-5: HTML laedt platform.js vor routine-anpassen.js."""
+    body = _get_html(client)
     assert "platform.js" in body, "platform.js fehlt im Template (MAD-5)"
     assert "routine-anpassen.js" in body, "routine-anpassen.js fehlt im Template"
     pos_platform = body.index("platform.js")
@@ -95,14 +271,14 @@ def test_ac_entry_html_laedt_platform_js(client):
 
 
 def test_ac_entry_html_laedt_css(client):
-    """AC_ENTRY: HTML laedt routine-anpassen.css (MAD-6 Asset-Pfad, brainstorm-Vorlage NICHT ratifiziert)."""
-    body = client.get("/seiten/routine/anpassen").get_data(as_text=True)
+    """AC_ENTRY: HTML laedt routine-anpassen.css."""
+    body = _get_html(client)
     assert "routine-anpassen.css" in body, "routine-anpassen.css fehlt im Template"
 
 
 def test_ac_entry_html_enthaelt_routine_titel(client):
     """AC_ENTRY: HTML-Titel enthaelt 'Morgenroutine' (Seiten-Identifikation)."""
-    body = client.get("/seiten/routine/anpassen").get_data(as_text=True)
+    body = _get_html(client)
     assert "Morgenroutine" in body, \
         "Routine-Titel fehlt im HTML (AC_ENTRY Sektions-Header-Marker)"
 

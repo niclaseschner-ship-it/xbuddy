@@ -60,6 +60,13 @@ const ZEIT_ANKER = [
   },
 ];
 
+// ── MAD-7 Auth-Header ─────────────────────────────────────────────────────────
+
+// initData aus Telegram-WebApp (MAD-7): bei jedem fetch()-Call als
+// Authorization: tma <initData>-Header gesendet. Leer außerhalb Telegram
+// (Test-Browser) → Server antwortet mit 401.
+const _initData = window.Telegram?.WebApp?.initData ?? "";
+
 // ── State ─────────────────────────────────────────────────────────────────────
 
 // Server-Stand beim Laden (zum Diff-Vergleich für MainButton-Aktivierung)
@@ -139,7 +146,9 @@ let _sheetOffen = false;
  * Antwort: {default: [{id, label, piktogramm}], einmalig_heute: [...]}
  */
 async function holeItems() {
-  const resp = await fetch("/api/v1/routine/items");
+  const resp = await fetch("/api/v1/routine/items", {
+    headers: { "Authorization": "tma " + _initData },
+  });
   if (!resp.ok) throw new Error("items-Abruf fehlgeschlagen: " + resp.status);
   return resp.json();
 }
@@ -149,7 +158,9 @@ async function holeItems() {
  * Antwort: {aufstehzeit, anzieh_vorlauf_min, abfahrtszeit}
  */
 async function holeConfig() {
-  const resp = await fetch("/api/v1/routine/config");
+  const resp = await fetch("/api/v1/routine/config", {
+    headers: { "Authorization": "tma " + _initData },
+  });
   if (!resp.ok) throw new Error("config-Abruf fehlgeschlagen: " + resp.status);
   return resp.json();
 }
@@ -161,7 +172,7 @@ async function holeConfig() {
 async function postItem(payload) {
   const resp = await fetch("/api/v1/routine/items", {
     method:  "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Authorization": "tma " + _initData },
     body:    JSON.stringify(payload),
   });
   return resp;
@@ -173,7 +184,7 @@ async function postItem(payload) {
 async function deleteItem(id) {
   const resp = await fetch(
     "/api/v1/routine/items/" + encodeURIComponent(id),
-    { method: "DELETE" }
+    { method: "DELETE", headers: { "Authorization": "tma " + _initData } }
   );
   return resp;
 }
@@ -190,7 +201,7 @@ async function deleteItem(id) {
 async function putItems(itemsAsObjects) {
   const resp = await fetch("/api/v1/routine/items", {
     method:  "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Authorization": "tma " + _initData },
     body:    JSON.stringify(itemsAsObjects),
   });
   return resp;
@@ -203,7 +214,7 @@ async function putItems(itemsAsObjects) {
 async function putConfig(payload) {
   const resp = await fetch("/api/v1/routine/config", {
     method:  "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "Authorization": "tma " + _initData },
     body:    JSON.stringify(payload),
   });
   return resp;
@@ -215,7 +226,8 @@ async function putConfig(payload) {
  */
 async function sucheIcons(q) {
   const resp = await fetch(
-    "/api/v1/icons/suche?q=" + encodeURIComponent(q) + "&max=12"
+    "/api/v1/icons/suche?q=" + encodeURIComponent(q) + "&max=12",
+    { headers: { "Authorization": "tma " + _initData } }
   );
   if (!resp.ok) return [];
   const data = await resp.json();
