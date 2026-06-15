@@ -477,6 +477,46 @@ def essen_einkauf_view():
     return render_template("essen-einkauf.html", user_id=init_data.user_id)
 
 
+@app.route("/api/v1/seiten/mini-app-uebersicht", methods=["GET"])
+def mini_app_uebersicht_view():
+    """MAU-1: Telegram-Mini-App-Uebersichts-View — HTML fuer den Familien-Bot.
+
+    Auth (MAD-7 / MAU-3): Authorization: tma <initData>-Header Pflicht.
+    Fehlender oder ungueliger Header → 401. Nicht-Familienmitglied → 403.
+
+    JS laedt das Inventar bei Boot via:
+      GET /api/v1/seiten  (SREG-3, aggregiertes Inventar)
+    und rendert drei Accordion-Sektionen (MAU-4):
+      1. Mini Telegram Apps (typ: mini-app)
+      2. Geraete-Paare (typ: display-client + verknuepft_mit_panels)
+      3. Buddy-Seiten (typ: eltern)
+
+    Cache-Buster (Mini-App-Cache-Buster-Pattern): build_id aus mtime der JS-Datei
+    haengt am CSS+JS als ?v=... — Telegram cached Mini-App-Assets sonst aggressiv.
+    Response-Header no-store zusaetzlich, damit jeder Open das HTML neu holt.
+    """
+    init_data, err = _validate_mini_app_request()
+    if err is not None:
+        return err
+
+    # FAM-7/8: User-ID gegen Familien-Registry pruefen
+    fam_err = _check_familie_mitglied(init_data.user_id)
+    if fam_err is not None:
+        return fam_err
+
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    try:
+        build_id = str(int(os.path.getmtime(
+            os.path.join(static_dir, "mini-app-uebersicht.js"))))
+    except OSError:
+        build_id = "0"
+
+    resp = make_response(render_template("mini-app-uebersicht.html", build_id=build_id))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
+
+
 @app.route("/seiten/routine/anpassen", methods=["GET"])
 def routine_anpassen_view():
     """ROUTINE-20 / ROUTINE-23: Eltern-Anpassen-Mini-App-View.
