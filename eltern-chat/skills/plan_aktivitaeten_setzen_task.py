@@ -30,6 +30,18 @@ from tasks import Proposal, WriteTask
 
 from skills import icon_album
 from skills import plan_aktivitaeten_setzen as pas_mod
+from skills._quittungen import (
+    KEINE_ICONS as _KEINE_ICONS_TMPL,
+)
+from skills._quittungen import (
+    abgelehnt as _q_abgelehnt,
+)
+from skills._quittungen import (
+    grenze as _q_grenze,
+)
+from skills._quittungen import (
+    nicht_erreichbar as _q_nicht_erreichbar,
+)
 from skills.icon_album import IconAlbumError
 from skills.plan_aktivitaeten_setzen import (
     AKTION_HINZUFUEGEN,
@@ -51,16 +63,6 @@ _QUITTUNG_HINZUGEFUEGT = (
 _QUITTUNG_GELOESCHT = (
     "Aktivität entfernt (art: {art}) — beim nächsten Plan-Display-Aufruf "
     "weg.")
-_QUITTUNG_ABGELEHNT = (
-    "Plan-Aktivitäten setzen geht nur für Mitglieder der Familien-Gruppe.")
-_QUITTUNG_GRENZE = (
-    "Der Plan-Buddy hat die Änderung abgelehnt: {detail}")
-_QUITTUNG_NICHT_ERREICHBAR = (
-    "Der Plan-Buddy ist gerade nicht erreichbar — bitte gleich nochmal "
-    "versuchen.")
-_QUITTUNG_KEINE_ICONS = (
-    "Ich habe für »{label}« kein Piktogramm gefunden — sag mir ein anderes "
-    "Wort (Synonym), und ich suche erneut.")
 _QUITTUNG_NICHTS_ZU_TUN_ART = (
     "Ich brauche einen Aktivitäts-Schlüssel (»art«), z. B. 'capueira'.")
 _QUITTUNG_NICHTS_ZU_TUN_LABEL = (
@@ -75,14 +77,6 @@ _QUITTUNG_NICHTS_ZU_TUN_ART_LOESCHEN = (
     "Ich brauche die art (den Schlüssel) der zu löschenden Aktivität.")
 _QUITTUNG_NICHTS_ZU_TUN_STICHWORT = (
     "Sag mir, wonach ich suchen soll, z. B. »such ein Icon für ‹Capueira›«.")
-
-# PAS-4: Icon-Suchergebnis ist die Wahl-Vorlage. Das Modell sieht die
-# Kandidaten in der Quittung und ruft den Task danach mit
-# {aktion: hinzufuegen, art, label, keywords, piktogramm: <id>} erneut auf
-# (D6-Muster analog RPS-4 / FSE-Undo).
-_QUITTUNG_KEINE_ICONS_LABEL = (
-    "Ich habe für »{label}« kein Piktogramm gefunden — sag mir ein anderes "
-    "Wort (Synonym), und ich suche erneut.")
 
 
 # ============================================================
@@ -309,7 +303,7 @@ class PlanAktivitaetenSetzenTask(WriteTask):
                     logger.warning(
                         "plan_aktivitaeten_setzen: Album-Senden fehlgeschlagen "
                         "— %s", e)
-                    return _QUITTUNG_NICHT_ERREICHBAR
+                    return _q_nicht_erreichbar("Plan-Buddy")
 
         return _quittung_fuer(signal, daten, aktion=aktion)
 
@@ -354,16 +348,16 @@ def _quittung_fuer(signal, daten, aktion=""):
                 "die Aktivität an.)" % (label, ids))
 
     if signal == pas_mod.SIGNAL_KEINE_ICONS:
-        return _QUITTUNG_KEINE_ICONS.format(label=daten.get("label", "?"))
+        return _KEINE_ICONS_TMPL.format(label=daten.get("label", "?"))
 
     if signal == pas_mod.SIGNAL_ABGELEHNT:
-        return _QUITTUNG_ABGELEHNT
+        return _q_abgelehnt("Plan-Aktivitäten setzen")
 
     if signal == pas_mod.SIGNAL_GRENZE:
-        return _QUITTUNG_GRENZE.format(detail=daten.get("detail", ""))
+        return _q_grenze("Plan-Buddy", "die Änderung", daten.get("detail", ""))
 
     if signal == pas_mod.SIGNAL_NICHT_ERREICHBAR:
-        return _QUITTUNG_NICHT_ERREICHBAR
+        return _q_nicht_erreichbar("Plan-Buddy")
 
     # SIGNAL_NICHTS_ZU_TUN — abhängig von der Aktion eine spezifische
     # Erinnerung an die fehlende Eingabe.
