@@ -82,24 +82,6 @@ def _reset_stop_words_cache() -> None:
     _stop_words_cache = None
 
 
-# Rückwärtskompatibles Symbol für Tests, die STOP_WORDS_DE direkt importieren.
-# Wird beim ersten Zugriff aus der Default-Datei befüllt.
-class _LazyStopWords:
-    """Lazy-Proxy für STOP_WORDS_DE — kompatibel mit `in`-Operator und `len()`."""
-
-    def __contains__(self, item: str) -> bool:
-        return item in load_stop_words()
-
-    def __len__(self) -> int:
-        return len(load_stop_words())
-
-    def __iter__(self):
-        return iter(load_stop_words())
-
-
-STOP_WORDS_DE: _LazyStopWords = _LazyStopWords()
-
-
 def tokenisiere(text: str) -> list[dict]:
     """Tokenisiert text in Wort-Token-Liste (KIBUDDY-17 Schritte 1–6a).
 

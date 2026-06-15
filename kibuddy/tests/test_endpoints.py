@@ -5,6 +5,9 @@ Alle externen Calls (STT, LLM, TTS) sind gemockt — kein echter Azure-/Anthropi
 
 import io
 
+import kibuddy.main as main_mod
+from kibuddy.session_memory import SID_COOKIE, SessionRegistry
+
 # ---- /healthz ----
 
 def test_healthz(client):
@@ -383,5 +386,45 @@ def test_neuer_client_bekommt_cookie(runtime_config, data_root, fake_llm, fake_s
         )
     assert resp.status_code == 200
     # Cookie wurde gesetzt.
+    cookie_header = resp.headers.get("Set-Cookie", "")
+    assert SID_COOKIE in cookie_header
+
+
+# ---- FIX-5: Alle Endpunkte setzen Cookie konsistent (kein Phantom-Session-Leak) ----
+
+def test_reset_ohne_cookie_setzt_cookie(runtime_config, data_root, fake_llm, fake_stt, fake_tts):
+    """FIX-5: POST /reset ohne Cookie → Response setzt Set-Cookie-Header (KIBUDDY-16)."""
+    registry = SessionRegistry()
+    main_mod.configure(
+        runtime_config=runtime_config,
+        data_root=data_root,
+        llm=fake_llm,
+        stt_engine=fake_stt,
+        tts_engine=fake_tts,
+        session_registry=registry,
+    )
+
+    with main_mod.app.test_client() as fresh_client:
+        resp = fresh_client.post("/api/v1/kibuddy/reset")
+    assert resp.status_code == 200
+    cookie_header = resp.headers.get("Set-Cookie", "")
+    assert SID_COOKIE in cookie_header
+
+
+def test_config_get_ohne_cookie_setzt_cookie(runtime_config, data_root, fake_llm, fake_stt, fake_tts):
+    """FIX-5: GET /config ohne Cookie → Response setzt Set-Cookie-Header."""
+    registry = SessionRegistry()
+    main_mod.configure(
+        runtime_config=runtime_config,
+        data_root=data_root,
+        llm=fake_llm,
+        stt_engine=fake_stt,
+        tts_engine=fake_tts,
+        session_registry=registry,
+    )
+
+    with main_mod.app.test_client() as fresh_client:
+        resp = fresh_client.get("/api/v1/kibuddy/config")
+    assert resp.status_code == 200
     cookie_header = resp.headers.get("Set-Cookie", "")
     assert SID_COOKIE in cookie_header
