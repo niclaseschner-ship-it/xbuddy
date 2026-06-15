@@ -1,0 +1,20 @@
+{
+  "views": [
+    {
+      "slug": "frage",
+      "pfad": "/display/kibuddy/frage",
+      "label": "KIBuddy",
+      "synonyme": [
+        "kibuddy",
+        "ki-buddy",
+        "fragen",
+        "wissensfrage",
+        "kind-frage",
+        "wissensfragen"
+      ],
+      "zeigt": "Push-to-Talk-Frage-View: Kind spricht eine Frage, Buddy antwortet mit Text und Icons.",
+      "zielgruppe": "kind",
+      "icons": []
+    }
+  ]
+}

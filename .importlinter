@@ -18,6 +18,7 @@ root_packages =
     familie
     geraete
     hoerspiel
+    kibuddy
     panel
     photo
     plan
@@ -33,7 +34,7 @@ name = MOD-1 Layer-Modell (eltern-chat -> Services -> tools)
 type = layers
 layers =
     eltern-chat
-    essen | familie | geraete | hoerspiel | photo | plan | router | routine | seiten | wetter
+    essen | familie | geraete | hoerspiel | kibuddy | photo | plan | router | routine | seiten | wetter
     tools
 containers =
 
@@ -45,6 +46,7 @@ modules =
     familie
     geraete
     hoerspiel
+    kibuddy
     photo
     plan
     router
@@ -63,6 +65,7 @@ forbidden_modules =
     familie
     geraete
     hoerspiel
+    kibuddy
     photo
     plan
     router
@@ -78,6 +81,7 @@ source_modules =
     familie
     geraete
     hoerspiel
+    kibuddy
     photo
     plan
     router
@@ -97,6 +101,7 @@ source_modules =
     familie
     geraete
     hoerspiel
+    kibuddy
     photo
     plan
     router
