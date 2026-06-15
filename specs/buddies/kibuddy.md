@@ -511,19 +511,21 @@ Interface-first).
 
 **POST `/api/v1/kibuddy/frage`** — Multipart-Form mit `audio` (Browser-
 Container, WebM/Opus oder MP4). Response: JSON `{ text: "<antwort>",
-transkript: "<STT-Erkennung des Kind-Inputs>", words: [{ text:
-"<wort>", is_inhaltswort: true|false }], tts_audio_url:
+transkript: "<STT-Erkennung des Kind-Inputs>",
+transkript_words: [{ text: "<wort>", is_inhaltswort: true|false }],
+words: [{ text: "<wort>", is_inhaltswort: true|false }], tts_audio_url:
 "/api/v1/kibuddy/audio/<id>.mp3" | null }`. `transkript` ist ein
 **Diagnose-Feld** (Eltern können das Erkannte in Server-Logs / Browser-
-Devtools nachsehen, falls eine Frage falsch verstanden wurde); die View
-rendert es **nicht** als eigene Bubble (die Kind-Bubble nutzt die nach
-Wortklassen-Filter aufbereitete Wort-Liste, KIBUDDY-19). `tts_audio_url`
+Devtools nachsehen, falls eine Frage falsch verstanden wurde).
+`transkript_words` ist die tokenisierte Form des STT-Transkripts (gleicher
+Wortklassen-Filter wie `words` für die Antwort, KIBUDDY-17) — für die
+Kind-Bubble nach KIBUDDY-17/-19. `tts_audio_url`
 ist `null`, wenn TTS-Synthese fehlschlägt (Resilienz: das Kind sieht
-zumindest die Text-Antwort). Die `words[]`-Liste enthält nur `text` +
-`is_inhaltswort` — clientseitiges Icon-Lookup läuft parallel über
-ICONS-7 pro Inhaltswort (KIBUDDY-17, Stück B). URL-Form ermöglicht
-Browser-Cache + Replay über KIBUDDY-31 ohne JS-State-Bloat im Chat-
-Verlauf (KIBUDDY-19); analog Hörspiel-Folgen-URLs.
+zumindest die Text-Antwort). Die `words[]`- und `transkript_words[]`-Listen
+enthalten nur `text` + `is_inhaltswort` — clientseitiges Icon-Lookup läuft
+parallel über ICONS-7 pro Inhaltswort (KIBUDDY-17, Stück B). URL-Form
+ermöglicht Browser-Cache + Replay über KIBUDDY-31 ohne JS-State-Bloat im
+Chat-Verlauf (KIBUDDY-19); analog Hörspiel-Folgen-URLs.
 
 **PUT `/api/v1/kibuddy/config`** — JSON-Body, schreibt das spezifizierte
 Feld in die Per-Instanz-`config.json`. V1 akzeptiert nur das Feld
