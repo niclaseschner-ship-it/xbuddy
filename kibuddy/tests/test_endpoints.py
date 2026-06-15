@@ -4,9 +4,37 @@ Alle externen Calls (STT, LLM, TTS) sind gemockt — kein echter Azure-/Anthropi
 """
 
 import io
+import json
 
 import kibuddy.main as main_mod
 from kibuddy.session_memory import SID_COOKIE, SessionRegistry
+
+# ============================================================
+#  NDJSON-Stream-Helfer (KIBUDDY-13/24)
+# ============================================================
+
+def parse_ndjson_stream(resp):
+    """Parst NDJSON-Body einer Streaming-Response in eine Liste von dicts.
+
+    Flask-Testclient gibt .data als Bytes (alle Chunks zusammengefasst).
+    Jede nicht-leere Zeile wird als JSON geparst.
+    """
+    text = resp.data.decode("utf-8")
+    events = []
+    for line in text.split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        events.append(json.loads(line))
+    return events
+
+
+def get_stream_event(resp, event_name):
+    """Gibt das erste Event mit event=event_name zurück, oder None."""
+    for ev in parse_ndjson_stream(resp):
+        if ev.get("event") == event_name:
+            return ev
+    return None
 
 # ---- /healthz ----
 
@@ -25,10 +53,10 @@ def test_display_frage_view(client):
     assert resp.status_code == 200
 
 
-# ---- POST /api/v1/kibuddy/frage (AC2, FIX1 Response-Schema) ----
+# ---- POST /api/v1/kibuddy/frage — NDJSON-Stream (KIBUDDY-13/24) ----
 
 def test_frage_happy_path(client, fake_stt, fake_llm, fake_tts):
-    """AC2/FIX1: POST /frage → JSON {text, transkript, transkript_words, words, tts_audio_url}.
+    """AC2/FIX1/KIBUDDY-13: POST /frage → NDJSON-Stream mit kind- und buddy-Event.
 
     FIX1: words-Slots haben {text, is_inhaltswort}, KEIN icon_id (KIBUDDY-17).
     """
@@ -38,18 +66,27 @@ def test_frage_happy_path(client, fake_stt, fake_llm, fake_tts):
         content_type="multipart/form-data",
     )
     assert resp.status_code == 200
-    body = resp.get_json()
-    assert "text" in body
-    assert "transkript" in body
-    assert "transkript_words" in body
-    assert "words" in body
-    assert "tts_audio_url" in body
+    assert "application/x-ndjson" in resp.content_type
+
+    kind_ev = get_stream_event(resp, "kind")
+    buddy_ev = get_stream_event(resp, "buddy")
+
+    assert kind_ev is not None, "kind-Event fehlt im Stream"
+    assert buddy_ev is not None, "buddy-Event fehlt im Stream"
+
+    assert "transkript" in kind_ev
+    assert "transkript_words" in kind_ev
+
+    assert "text" in buddy_ev
+    assert "words" in buddy_ev
+    assert "tts_audio_url" in buddy_ev
+
     # words ist eine Liste mit text/is_inhaltswort pro Wort (FIX1, KIBUDDY-17).
-    assert isinstance(body["words"], list)
-    for slot in body["words"]:
+    assert isinstance(buddy_ev["words"], list)
+    for slot in buddy_ev["words"]:
         assert "text" in slot
         assert "is_inhaltswort" in slot
-        assert "icon_id" not in slot   # FIX1: icon_id entfällt (clientseitig)
+        assert "icon_id" not in slot   # FIX1: icon_id entfaellt (clientseitig)
     # STT wurde aufgerufen.
     assert len(fake_stt.calls) == 1
     # LLM wurde aufgerufen.
@@ -57,14 +94,49 @@ def test_frage_happy_path(client, fake_stt, fake_llm, fake_tts):
     # TTS wurde aufgerufen.
     assert len(fake_tts.calls) == 1
     # tts_audio_url zeigt auf /api/v1/kibuddy/audio/*.mp3.
-    assert body["tts_audio_url"].startswith("/api/v1/kibuddy/audio/")
-    assert body["tts_audio_url"].endswith(".mp3")
+    assert buddy_ev["tts_audio_url"].startswith("/api/v1/kibuddy/audio/")
+    assert buddy_ev["tts_audio_url"].endswith(".mp3")
+
+
+def test_frage_streaming_zwei_stages(client, fake_stt, fake_llm, fake_tts):
+    """AC1 (KIBUDDY-13): Stream liefert genau zwei Events: kind + buddy.
+
+    Beide Events koennen als separates JSON geparst werden.
+    Stage 1 (kind) enthaelt transkript + transkript_words.
+    Stage 2 (buddy) enthaelt text + words + tts_audio_url.
+    """
+    resp = client.post(
+        "/api/v1/kibuddy/frage",
+        data={"audio": (io.BytesIO(b"FAKEAUDIO"), "audio.webm")},
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 200
+    events = parse_ndjson_stream(resp)
+
+    # Genau zwei Events (kein Fehler-Event dazwischen).
+    assert len(events) == 2, "Erwartet genau 2 NDJSON-Events (kind + buddy), bekommen: %d" % len(events)
+
+    e1, e2 = events
+    assert e1["event"] == "kind", "Erstes Event muss 'kind' sein"
+    assert e2["event"] == "buddy", "Zweites Event muss 'buddy' sein"
+
+    # Stage 1: kind-Felder vorhanden.
+    assert "transkript" in e1
+    assert isinstance(e1["transkript_words"], list)
+    for slot in e1["transkript_words"]:
+        assert "text" in slot
+        assert "is_inhaltswort" in slot
+
+    # Stage 2: buddy-Felder vorhanden.
+    assert "text" in e2
+    assert isinstance(e2["words"], list)
+    assert "tts_audio_url" in e2
 
 
 def test_frage_transkript_words_form(client, fake_stt, fake_llm, fake_tts):
     """FIX1/KIBUDDY-24: transkript_words[] hat gleiche {text, is_inhaltswort}-Form wie words[].
 
-    Prüft: transkript_words ist nicht leer, kein icon_id, alle Slots bool-Flag.
+    Prueft: transkript_words ist nicht leer, kein icon_id, alle Slots bool-Flag.
     """
     resp = client.post(
         "/api/v1/kibuddy/frage",
@@ -72,8 +144,10 @@ def test_frage_transkript_words_form(client, fake_stt, fake_llm, fake_tts):
         content_type="multipart/form-data",
     )
     assert resp.status_code == 200
-    body = resp.get_json()
-    tw = body.get("transkript_words")
+    kind_ev = get_stream_event(resp, "kind")
+    assert kind_ev is not None
+
+    tw = kind_ev.get("transkript_words")
     assert isinstance(tw, list), "transkript_words muss eine Liste sein (KIBUDDY-24)"
     assert len(tw) > 0, "transkript_words darf nicht leer sein wenn transkript vorhanden"
     for slot in tw:
@@ -84,49 +158,72 @@ def test_frage_transkript_words_form(client, fake_stt, fake_llm, fake_tts):
 
 
 def test_frage_response_schema_v2(client):
-    """FIX1: words[].is_inhaltswort ist bool, kein icon_id im Response."""
+    """FIX1: words[].is_inhaltswort ist bool, kein icon_id im Stream-Response."""
     resp = client.post(
         "/api/v1/kibuddy/frage",
         data={"audio": (io.BytesIO(b"AUDIO"), "audio.webm")},
         content_type="multipart/form-data",
     )
     assert resp.status_code == 200
-    body = resp.get_json()
-    for slot in body["words"]:
+    buddy_ev = get_stream_event(resp, "buddy")
+    assert buddy_ev is not None
+    for slot in buddy_ev["words"]:
         assert isinstance(slot["is_inhaltswort"], bool)
         assert "icon_id" not in slot
 
 
 def test_frage_ohne_audio_feld(client):
-    """Kein audio-Feld → 400."""
+    """Kein audio-Feld → 400 (vor Stream-Start, klassisches JSON-Error)."""
     resp = client.post("/api/v1/kibuddy/frage", data={})
     assert resp.status_code == 400
 
 
-def test_frage_stt_fehler_503(client, fake_stt):
-    """STT-Ausfall → 503."""
+def test_frage_stt_fehler_stream_error_event(client, fake_stt):
+    """AC4/KIBUDDY-13: STT-Ausfall → HTTP 200 + error-Event im Stream (stage=stt).
+
+    Kein kind-Event (STT ist fehlgeschlagen vor Stage 1).
+    """
     fake_stt.fail = True
     resp = client.post(
         "/api/v1/kibuddy/frage",
         data={"audio": (io.BytesIO(b"AUDIO"), "audio.webm")},
         content_type="multipart/form-data",
     )
-    assert resp.status_code == 503
+    assert resp.status_code == 200
+    assert "application/x-ndjson" in resp.content_type
+    events = parse_ndjson_stream(resp)
+    assert len(events) == 1
+    assert events[0]["event"] == "error"
+    assert events[0].get("stage") == "stt"
+    assert "detail" in events[0]
+
+    # Kein kind-Event — STT ist vor Stage 1 fehlgeschlagen.
+    kind_ev = get_stream_event(resp, "kind")
+    assert kind_ev is None
 
 
-def test_frage_llm_fehler_503(client, fake_llm):
-    """LLM-Ausfall → 503."""
+def test_frage_llm_fehler_stream_error_event(client, fake_llm):
+    """AC4/KIBUDDY-13: LLM-Ausfall → HTTP 200 + kind-Event (Stage 1 OK) + error-Event (Stage 2).
+
+    Stage 1 (kind) wurde bereits gesendet als der LLM-Fehler auftrat.
+    """
     fake_llm.fail = True
     resp = client.post(
         "/api/v1/kibuddy/frage",
         data={"audio": (io.BytesIO(b"AUDIO"), "audio.webm")},
         content_type="multipart/form-data",
     )
-    assert resp.status_code == 503
+    assert resp.status_code == 200
+    events = parse_ndjson_stream(resp)
+    assert len(events) == 2, "Erwartet kind-Event + error-Event, bekommen: %d" % len(events)
+    assert events[0]["event"] == "kind"
+    assert events[1]["event"] == "error"
+    assert events[1].get("stage") == "llm"
+    assert "detail" in events[1]
 
 
-def test_frage_tts_fehler_text_trotzdem_da(client, fake_tts):
-    """TTS-Ausfall → 200 mit tts_audio_url=null (KIBUDDY-24 Resilienz)."""
+def test_frage_tts_fehler_tts_audio_url_null(client, fake_tts):
+    """AC4/KIBUDDY-24 Resilienz: TTS-Ausfall → buddy-Event mit tts_audio_url=null."""
     fake_tts.fail = True
     resp = client.post(
         "/api/v1/kibuddy/frage",
@@ -134,13 +231,14 @@ def test_frage_tts_fehler_text_trotzdem_da(client, fake_tts):
         content_type="multipart/form-data",
     )
     assert resp.status_code == 200
-    body = resp.get_json()
-    assert body["text"]  # Text ist trotzdem vorhanden.
-    assert body["tts_audio_url"] is None
+    buddy_ev = get_stream_event(resp, "buddy")
+    assert buddy_ev is not None
+    assert buddy_ev["text"]  # Text ist trotzdem vorhanden.
+    assert buddy_ev["tts_audio_url"] is None
 
 
 def test_frage_ohne_llm_key_503(client_no_keys):
-    """Kein Anthropic-Key → 503 auf LLM-Calls."""
+    """Kein Anthropic-Key → 503 vor Stream-Start (klassisches JSON-Error)."""
     resp = client_no_keys.post(
         "/api/v1/kibuddy/frage",
         data={"audio": (io.BytesIO(b"AUDIO"), "audio.webm")},
@@ -171,16 +269,17 @@ def test_vorlesen_ohne_payload_400(client):
 def test_reset_loescht_session_memory(client, session_memory):
     """AC3: reset löscht Session-Memory (Mehrturn → Reset → leere History)."""
     # Erst zwei Fragen stellen (baut Memory auf).
-    client.post(
+    # .data lesen: zwingt den NDJSON-Stream-Generator zur Ausfuehrung (KIBUDDY-13).
+    parse_ndjson_stream(client.post(
         "/api/v1/kibuddy/frage",
         data={"audio": (io.BytesIO(b"AUDIO_A"), "audio.webm")},
         content_type="multipart/form-data",
-    )
-    client.post(
+    ))
+    parse_ndjson_stream(client.post(
         "/api/v1/kibuddy/frage",
         data={"audio": (io.BytesIO(b"AUDIO_B"), "audio.webm")},
         content_type="multipart/form-data",
-    )
+    ))
     assert len(session_memory) > 0
 
     # Reset.
@@ -199,27 +298,27 @@ def test_reset_dreifach_ablauf(client, session_memory, fake_llm):
 
     Verifiziert über die turns-Liste, die dem LLM übergeben wird.
     """
-    # A.
-    client.post(
+    # A. (.data lesen: NDJSON-Stream-Generator ausfuehren, KIBUDDY-13)
+    parse_ndjson_stream(client.post(
         "/api/v1/kibuddy/frage",
         data={"audio": (io.BytesIO(b"AUDIO"), "audio.webm")},
         content_type="multipart/form-data",
-    )
+    ))
     # B.
-    client.post(
+    parse_ndjson_stream(client.post(
         "/api/v1/kibuddy/frage",
         data={"audio": (io.BytesIO(b"AUDIO"), "audio.webm")},
         content_type="multipart/form-data",
-    )
+    ))
     # Reset.
     client.post("/api/v1/kibuddy/reset")
     # C.
     fake_llm.calls.clear()
-    client.post(
+    parse_ndjson_stream(client.post(
         "/api/v1/kibuddy/frage",
         data={"audio": (io.BytesIO(b"AUDIO"), "audio.webm")},
         content_type="multipart/form-data",
-    )
+    ))
     # Der LLM-Call für C hatte eine leere Turn-Liste (kein A/B-Kontext).
     assert len(fake_llm.calls) == 1
     _system, turns_bei_c, _user = fake_llm.calls[0]
@@ -293,34 +392,36 @@ def test_prompt_put_zu_lang_400(client, runtime_config):
 # ---- Mehrturn-Memory (KIBUDDY-16) ----
 
 def test_frage_baut_memory_auf(client, session_memory):
-    """Jede Frage hängt User+Assistant-Turn an (KIBUDDY-16)."""
-    client.post(
+    """Jede Frage haengt User+Assistant-Turn an (KIBUDDY-16)."""
+    # .data lesen: NDJSON-Stream-Generator ausfuehren (KIBUDDY-13).
+    parse_ndjson_stream(client.post(
         "/api/v1/kibuddy/frage",
         data={"audio": (io.BytesIO(b"AUDIO"), "audio.webm")},
         content_type="multipart/form-data",
-    )
+    ))
     assert len(session_memory) == 2  # User + Assistant.
 
-    client.post(
+    parse_ndjson_stream(client.post(
         "/api/v1/kibuddy/frage",
         data={"audio": (io.BytesIO(b"AUDIO"), "audio.webm")},
         content_type="multipart/form-data",
-    )
+    ))
     assert len(session_memory) == 4  # Zwei weitere Turns.
 
 
 def test_frage_uebergibt_history_an_llm(client, fake_llm):
     """LLM bekommt bei der zweiten Frage die History der ersten (KIBUDDY-16)."""
-    client.post(
+    # .data lesen: NDJSON-Stream-Generator ausfuehren (KIBUDDY-13).
+    parse_ndjson_stream(client.post(
         "/api/v1/kibuddy/frage",
         data={"audio": (io.BytesIO(b"AUDIO"), "audio.webm")},
         content_type="multipart/form-data",
-    )
-    client.post(
+    ))
+    parse_ndjson_stream(client.post(
         "/api/v1/kibuddy/frage",
         data={"audio": (io.BytesIO(b"AUDIO"), "audio.webm")},
         content_type="multipart/form-data",
-    )
+    ))
     assert len(fake_llm.calls) == 2
     _sys, turns_bei_frage_1, _u = fake_llm.calls[0]
     _sys, turns_bei_frage_2, _u = fake_llm.calls[1]
@@ -356,19 +457,20 @@ def test_zwei_clients_unabhaengige_sessions(runtime_config, data_root, fake_llm,
 
     with main_mod.app.test_client() as client_a:
         client_a.set_cookie("kibuddy_sid", sid_a)
-        client_a.post(
+        # .data lesen: NDJSON-Stream-Generator ausfuehren (KIBUDDY-13).
+        parse_ndjson_stream(client_a.post(
             "/api/v1/kibuddy/frage",
             data={"audio": (io.BytesIO(b"AUDIO_A"), "audio.webm")},
             content_type="multipart/form-data",
-        )
+        ))
 
     with main_mod.app.test_client() as client_b:
         client_b.set_cookie("kibuddy_sid", sid_b)
-        client_b.post(
+        parse_ndjson_stream(client_b.post(
             "/api/v1/kibuddy/frage",
             data={"audio": (io.BytesIO(b"AUDIO_B"), "audio.webm")},
             content_type="multipart/form-data",
-        )
+        ))
 
     mem_a = registry.get_or_create(sid_a)
     mem_b = registry.get_or_create(sid_b)
