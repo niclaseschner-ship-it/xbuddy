@@ -1,7 +1,7 @@
 """Tests für EssenFotoSetzenTask und Catalog-Registrierung (ESSEN-22 Pfad 2, T782).
 
 Analog `test_gericht_anlegen_task.py` / `test_foto_senden_task.py`:
-- WriteTask-Prüfung (EC-10): propose→confirm-Aufgabe, Klasse C.
+- WriteTask-Prüfung (EC-10): propose→confirm-Aufgabe, Cluster C / Capability-Karte.
 - AND-Guard: essen_origin_url UND photo_origin_url UND
   family_group_chat_id_getter (T531/AC5).
 - propose-Tests: Vorschlag nennt Ziel + Bestätigungshinweis.
