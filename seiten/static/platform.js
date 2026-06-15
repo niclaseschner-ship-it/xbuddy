@@ -18,6 +18,8 @@
  *   platform.enableClosingConfirmation();        // Dirty-Guard aktivieren
  *   platform.setDirty(bool);                    // Änderungs-Signal
  *   platform.onSave(callback);                  // Speicher-Handler registrieren
+ *   platform.openLink(url);                     // URL im System-Browser oeffnen (MAU-6)
+ *   platform.copyText(text);                    // Text in Zwischenablage kopieren — gibt bool zurueck (MAU-6)
  */
 
 // --- Telegram-Branch --------------------------------------------------------
@@ -81,6 +83,34 @@ class TelegramPlatform {
 
   onSave(callback) {
     this._saveCallback = callback;
+  }
+
+  // MAU-6: URL im System-Browser oeffnen via WebApp.openLink (offiziell garantiert).
+  // tryBrowser: 'chrome' hint damit Telegram moeglichst den nativen Browser nutzt.
+  openLink(url) {
+    this._wa.openLink(url, { tryBrowser: "chrome" });
+  }
+
+  // MAU-6: Text in Zwischenablage kopieren.
+  // navigator.clipboard.writeText ist in Telegram-Mini-App gesperrt (NotAllowedError, memory).
+  // execCommand('copy') ist deprecated aber praktisch haeufig erfolgreich (Best-Effort-Fallback).
+  // Gibt true bei Erfolg, false bei Fehler zurueck.
+  copyText(text) {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "-9999px";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok === true;
+    } catch (e) {
+      return false;
+    }
   }
 }
 
@@ -176,6 +206,38 @@ class BrowserPlatform {
 
   onSave(callback) {
     this._saveCallback = callback;
+  }
+
+  // MAU-6: URL in neuem Tab oeffnen (Browser-Fallback fuer openLink).
+  openLink(url) {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  // MAU-6: Text in Zwischenablage kopieren via navigator.clipboard (Browser unterstuetzt es).
+  // Gibt true zurueck wenn erfolgreich, false bei Fehler.
+  copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      // Asynchron — wir starten den Promise, koennen aber nicht synchron warten.
+      // Rueckgabe true als optimistisches Signal (Browser-Kontext).
+      navigator.clipboard.writeText(text).catch(() => {});
+      return true;
+    }
+    // Fallback fuer aeltere Browser
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.top = "-9999px";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok === true;
+    } catch (e) {
+      return false;
+    }
   }
 }
 
