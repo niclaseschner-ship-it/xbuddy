@@ -424,21 +424,6 @@ Eltern-Chat-Aufgabe in V1, künftiger Sprach-Trigger fürs Kind
 eine Eltern-Chat-Aufgabe (EC-8). **Verworfen:** Telegram-API-Aufrufe
 oder Chat-Form-Erwartungen in die Funktionsdefinition zu schreiben.
 
-### E-HFE-3 — kind_id-Lookup statt Modul-Konstante (RAT-17)
-*Datum:* 2026-06-15 · Refs #910, RAT-17. Vor RAT-17 trug der Skill
-`MIA_ALTER = 4` als V1-Modul-Konstante; die zweite Hörspiel-Instanz
-Finn brach diese Form (Skill hätte für Finn 4-Jährige-Themen geliefert,
-unabhängig von Finns echtem Alter). Mit RAT-17 wird `kind_id` zum
-Pflicht-Argument des Skills, und das Alter zieht der Buddy implizit aus
-seiner instance.json. **Wahl der Endpoint-Form (architecture_class:
-wahl, Nic-Verdikt 2026-06-15-22:50): Variante B** — kind_id im URL-Pfad
-(`GET /api/v1/hoerspiel/<kind_id>/themen`) statt Query (`?alter=<n>`).
-Begründung: URL-3a-Konsistenz mit allen anderen Hörspiel-Routen
-(HSP-25/26), Single Source of Truth pro Instanz (Alter lebt nur in
-instance.json), keine Drift-Klasse Skill-Alter vs. Server-Alter.
-**Verworfen Variante A** (Query bleibt, kind_id als zusätzliches
-Skill-Arg): doppelte Wahrheit, Sonderweg im Schnittprinzip.
-
 ### E-HFE-2 — Skill ist dünner Konsument, LLM-Aufruf lebt im Hörspiel-Buddy
 *Datum:* 2026-06-12 (Werft-Lauf) · APP-1: die Folgen-Erzeugungs-Funktion
 braucht die Welt-Bible-Daten, gehört darum zur App, der die Daten gehören
@@ -473,3 +458,18 @@ vorab sichtbare Vorschau (E-HFE-3). Klasse C (EC-10 zweistufig) ist
 darum die richtige Form. **Verworfen:** A2-Sofort-Write mit Undo-Wort
 (würde den Text-Gate-Schutz E-HFE-3 unterlaufen und gegen die HSP-29-
 Vorsynthese-Disziplin laufen).
+
+### E-HFE-6 — kind_id-Lookup statt Modul-Konstante (RAT-17)
+*Datum:* 2026-06-15 · Refs #910, RAT-17. Vor RAT-17 trug der Skill
+`MIA_ALTER = 4` als V1-Modul-Konstante; die zweite Hörspiel-Instanz
+Finn brach diese Form (Skill hätte für Finn 4-Jährige-Themen geliefert,
+unabhängig von Finns echtem Alter). Mit RAT-17 wird `kind_id` zum
+Pflicht-Argument des Skills, und das Alter zieht der Buddy implizit aus
+seiner instance.json. **Wahl der Endpoint-Form (architecture_class:
+wahl, Nic-Verdikt 2026-06-15-22:50): Variante B** — kind_id im URL-Pfad
+(`GET /api/v1/hoerspiel/<kind_id>/themen`) statt Query (`?alter=<n>`).
+Begründung: URL-3a-Konsistenz mit allen anderen Hörspiel-Routen
+(HSP-25/26), Single Source of Truth pro Instanz (Alter lebt nur in
+instance.json), keine Drift-Klasse Skill-Alter vs. Server-Alter.
+**Verworfen Variante A** (Query bleibt, kind_id als zusätzliches
+Skill-Arg): doppelte Wahrheit, Sonderweg im Schnittprinzip.
