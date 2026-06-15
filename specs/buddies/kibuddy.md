@@ -209,21 +209,23 @@ Sichtbarkeit: **ab dem Druck-Beginn** (gleichzeitig mit dem Echo aus
 KIBUDDY-8), **nicht erst** beim Lock-Übergang. Visuelles Ziel: dem Kind zeigen
 „ich höre dich gerade", ohne den Chat-Verlauf zu verdecken.
 
-### KIBUDDY-10 — Slide-to-Lock-Hinweis: Richtungspfeil + Schloss-Piktogramm
+### KIBUDDY-10 — Slide-to-Lock-Hinweis: Richtungspfeil
 **Wenn** der Knopf länger als **Lock-Hinweis-Schwelle** (KIBUDDY-21,
 Default 800 ms) gedrückt gehalten wird, **dann** erscheint **über** dem Knopf
-ein **grafischer Hinweis** aus zwei visuell unterschiedlichen Elementen
-nebeneinander:
-1. einem **reinen Richtungs-Pfeil** nach oben (Unicode `↑` oder ein
-   gleichwertiges Pfeil-Glyph), **NICHT** das ARASAAC-Pfeil-Piktogramm —
-   der Pfeil ist als Richtungsanzeige zu lesen, nicht als Symbol-Inhalt;
-2. dem **Schloss-Piktogramm** aus der zentralen Icon-Bibliothek
-   (KIBUDDY-30) als Ziel-Zustand des Slides.
+ein **reiner Richtungs-Pfeil** nach oben (Unicode `↑` oder ein
+gleichwertiges Pfeil-Glyph), **NICHT** das ARASAAC-Pfeil-Piktogramm —
+der Pfeil ist als Richtungsanzeige zu lesen, nicht als Symbol-Inhalt.
 
-**Mindestgröße:** Pfeil-Glyph ≥ 56px Schriftgröße, Schloss-Piktogramm
-≥ 56px Bildhöhe. Hintergrund-Karte mit ≥ 3px Border und deutlich
-sichtbarem Schatten — die Anweisung muss aus 1m Tablet-Abstand für ein
-Vier-Jähriges klar lesbar sein.
+**V1-Setzung (2026-06-15 Nic-Live-Befund):** Das ursprünglich geplante
+**Schloss-Piktogramm** (ARASAAC 3261) ist im V1-Hinweis **ausgeblendet** —
+Eltern erklären den Slide-to-Lock-Mechanismus dem Kind verbal, das
+Schloss-Pikto war im Weg und Kinder lesen es im UX-Fluss nicht als
+Symbol-Inhalt. Der Pfeil-Glyph allein trägt den Hinweis. Folge: ARASAAC-
+Eintrag 3261 ist nicht mehr Teil des V1-UI-Icon-Sets (KIBUDDY-30).
+
+**Mindestgröße:** Pfeil-Glyph ≥ 56px Schriftgröße. Hintergrund-Karte mit
+≥ 3px Border und deutlich sichtbarem Schatten — die Anweisung muss aus
+1m Tablet-Abstand für ein Vier-Jähriges klar erkennbar sein.
 
 Kein oder höchstens minimaler erklärender Text — die Anweisung muss
 **grafisch verständlich** sein. Schwebt mit sanfter Auf-Ab-Animation,
@@ -634,10 +636,9 @@ Konsistenz; ist dort funktional ein No-Op).
 
 ### KIBUDDY-30 — UI-Icons aus zentraler Icon-Bibliothek (ICONS-5)
 Alle in der View benutzten UI-Icons — **Mikrofon-Knopf**, **Stopp-Symbol-
-Variante** (Mikro + Stopp-Quadrat), **Schloss** (im Slide-Hinweis und am
-Lock-Badge), **Pfeil** (im Slide-Hinweis), **Mülleimer** (im Reset-Knopf),
-**Vorlese-Symbol** (in jeder Bubble, KIBUDDY-31) — laden ihre Grafik aus
-der **zentralen Icon-Bibliothek** über
+Variante** (Mikro + Stopp-Quadrat), **Mülleimer** (im Reset-Knopf und im
+Cancel-Hinweis KIBUDDY-11), **Vorlese-Symbol** (in jeder Bubble,
+KIBUDDY-31) — laden ihre Grafik aus der **zentralen Icon-Bibliothek** über
 `/display/_shared/icons/arasaac/<id>.png` (ICONS-5). Kein Inline-SVG, keine
 Emoji, keine Icon-Webfont. Begründung: Konsistenz mit dem Antwort-Render
 (KIBUDDY-17), eine einzige Asset-Quelle, austauschbar ohne Code-Änderung.
@@ -652,14 +653,16 @@ Piktogramm vollständig sichtbar bleibt.
 | Funktion | ARASAAC-ID | Cache-Wort |
 |---|---|---|
 | Mikrofon (PTT-Knopf) | `37404` | mikrophon |
-| Mülleimer (Reset-Knopf) | `2498` | mülleimer/papierkorb |
-| Schloss (Slide-Hinweis-Ziel, Lock-Badge) | `3261` | schloss |
+| Mülleimer (Reset-Knopf, Cancel-Hinweis) | `2498` | mülleimer/papierkorb |
 | Vorlesen-Replay (Vorlese-Knopf je Bubble) | `38221` | play-taste |
 
-Der **Pfeil** im Slide-Hinweis (KIBUDDY-10) ist ein Unicode-Pfeil-Glyph
-(`↑`), **kein** ARASAAC-Piktogramm — er ist Richtungsanzeige, nicht
-Symbol-Inhalt. Der ARASAAC-Pfeil-Eintrag `5471` ist **nicht** Teil des
-V1-UI-Icon-Sets.
+**Pfeil + Schloss im Slide-Lock-Hinweis (KIBUDDY-10):**
+- Der **Pfeil** ist ein Unicode-Pfeil-Glyph (`↑`), **kein** ARASAAC-
+  Piktogramm — Richtungsanzeige, nicht Symbol-Inhalt. ARASAAC-Eintrag
+  `5471` (Pfeil) ist **nicht** Teil des V1-UI-Icon-Sets.
+- Das **Schloss-Piktogramm** (ARASAAC `3261`) war ursprünglich Teil des
+  V1-Sets, ist seit 2026-06-15 **ausgeblendet** (Nic-Live-Befund: im Weg,
+  Eltern erklären Slide-to-Lock verbal). Siehe KIBUDDY-10.
 
 Die IDs sind als Per-Instanz-Config einstellbar (`ui-icons.json`); andere
 Familien-Stile (z. B. Custom-Illustrationen einer Plattform-Asset-Erweiterung)
