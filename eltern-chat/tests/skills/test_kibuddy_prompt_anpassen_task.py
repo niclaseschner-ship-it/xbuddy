@@ -25,6 +25,7 @@ from skills.kibuddy_prompt_anpassen_client import KibuddyPromptClientError
 from skills.kibuddy_prompt_anpassen_task import (
     KibuddyPromptAnpassenTask,
     _build_diff,
+    _split_for_telegram,
 )
 from tasks import Proposal, TurnContext, WriteTask, build_catalog
 
@@ -384,3 +385,89 @@ def test_AC1_kaqs_und_kpa_beide_registriert():
     catalog = _make_catalog_via_build_catalog()
     assert catalog.get("kibuddy_aufnahme_quelle_setzen") is not None
     assert catalog.get("kibuddy_prompt_anpassen") is not None
+
+
+# ============================================================
+#  KPA-5 — Anzeige-Pfad (AC1-Args-Schema, AC2, AC3, AC5)
+# ============================================================
+
+def test_AC1_aktion_anzeigen_ruft_get_prompt():
+    """AC1/AC2 (KPA-5): propose() mit aktion='anzeigen' ruft GET auf, kein PUT."""
+    client = FakeKibuddyPromptClient()
+    task = _make_task(client=client)
+    task.propose({"aktion": "anzeigen"}, _turn_context())
+    assert len(client.get_calls) == 1
+    assert client.put_calls == []
+
+
+def test_AC2_anzeige_summary_enthaelt_prompt():
+    """AC2 (KPA-5): propose() mit aktion='anzeigen' gibt Prompt-Text zurück."""
+    client = FakeKibuddyPromptClient(get_response={
+        "prompt": "Ich bin ein KIBuddy für die Familie.",
+        "byte-laenge": 36,
+        "geaendert-am": "2026-06-15T10:00:00",
+    })
+    task = _make_task(client=client)
+    result = task.propose({"aktion": "anzeigen"}, _turn_context())
+    assert isinstance(result, Proposal)
+    assert "Ich bin ein KIBuddy für die Familie." in result.summary
+
+
+def test_AC3_langer_prompt_wird_geteilt():
+    """AC3 (KPA-5): Prompt > 3500 Zeichen → Proposal enthält '(Teil X/Y)'-Markierung."""
+    langer_prompt = ("A" * 1800 + "\n\n" + "B" * 1800)
+    client = FakeKibuddyPromptClient(get_response={
+        "prompt": langer_prompt,
+        "byte-laenge": len(langer_prompt.encode()),
+        "geaendert-am": "2026-06-15T10:00:00",
+    })
+    task = _make_task(client=client)
+    result = task.propose({"aktion": "anzeigen"}, _turn_context())
+    assert isinstance(result, Proposal)
+    assert "(Teil 1/" in result.summary
+    assert "(Teil 2/" in result.summary
+
+
+def test_AC4_anzeige_get_fehler_quittung():
+    """AC4/AC5 (KPA-5): GET-Fehler beim Anzeigen → klare Fehler-Quittung."""
+    def get_prompt_wirft():
+        raise KibuddyPromptClientError("Connection refused", status=None)
+
+    client = FakeKibuddyPromptClient()
+    client.get_prompt = get_prompt_wirft
+    task = _make_task(client=client)
+    result = task.propose({"aktion": "anzeigen"}, _turn_context())
+    assert isinstance(result, Proposal)
+    assert "erreichbar" in result.summary.lower() or "nochmal" in result.summary.lower()
+
+
+def test_AC5_aktion_vorschlagen_default_bleibt_kompatibel():
+    """AC5: Bestehende Aufrufe ohne aktion-Argument landen weiterhin im Vorschlagen-Pfad."""
+    client = FakeKibuddyPromptClient()
+    task = _make_task(client=client)
+    # Kein aktion-Argument — Backward-Compat Default = 'vorschlagen'
+    result = task.propose({}, _turn_context())
+    # Ohne neuer_prompt → Dialog-Start (KPA-4)
+    assert isinstance(result, Proposal)
+    assert "KIBuddy" in result.summary or "ändern" in result.summary.lower()
+    # Kein GET-Aufruf beim Dialog-Start
+    assert client.get_calls == []
+
+
+# ============================================================
+#  _split_for_telegram — Unit-Tests
+# ============================================================
+
+def test_split_kurzer_text_einelementig():
+    """_split_for_telegram: kurzer Text → einelementige Liste."""
+    parts = _split_for_telegram("Kurz", max_per_part=100)
+    assert parts == ["Kurz"]
+
+
+def test_split_langer_text_schneidet_an_doppel_newline():
+    """_split_for_telegram: bevorzugt Schnitt an \\n\\n-Grenze."""
+    text = "A" * 50 + "\n\n" + "B" * 50
+    parts = _split_for_telegram(text, max_per_part=60)
+    assert len(parts) == 2
+    assert parts[0] == "A" * 50
+    assert parts[1] == "B" * 50
