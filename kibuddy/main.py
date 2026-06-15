@@ -452,6 +452,16 @@ def _build_llm(cfg) -> LLMProvider | None:
 
 
 def _build_stt(cfg):
+    if cfg.stt_provider == "openai":
+        if not cfg.openai_key:
+            return None
+        from .stt.openai_whisper import OpenAIWhisperSTT
+        return OpenAIWhisperSTT(
+            api_key=cfg.openai_key,
+            model=cfg.stt_model,
+            sprache=cfg.stt_sprache,
+        )
+    # azure_openai
     if not (cfg.azure_endpoint and cfg.azure_key):
         return None
     from .stt.azure_whisper import AzureWhisperSTT
@@ -512,9 +522,10 @@ def main(argv=None):
     )
 
     logger.info(
-        "KIBuddy hört auf http://%s:%s (provider=%s model=%s voice=%s speed=%.1f data=%s)",
+        "KIBuddy hört auf http://%s:%s (llm=%s model=%s stt=%s voice=%s speed=%.1f data=%s)",
         runtime_cfg.listen_host, runtime_cfg.listen_port,
         runtime_cfg.llm_provider, runtime_cfg.llm_model,
+        runtime_cfg.stt_provider,
         runtime_cfg.tts_voice, runtime_cfg.tts_speed, data_root,
     )
     app.run(host=runtime_cfg.listen_host, port=runtime_cfg.listen_port, debug=False, threaded=True)

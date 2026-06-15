@@ -235,13 +235,23 @@ Stopp-Knopf das Ende).
 
 ## 3. STT — Sprache zu Text
 
-### KIBUDDY-12 — STT über Azure-OpenAI Whisper, Adapter-Schnitt analog Hörspiel-TTS
-Der KIBuddy hat einen **App-eigenen STT-Adapter** (`kibuddy/adapters/stt.py`
-o. ä.), der das aufgenommene Audio (WebM/Opus oder vom Browser geliefertes
-Container-Format) an **Azure-OpenAI Whisper** in der Region
-`swedencentral` schickt (gleicher Region-Standard wie HSP-19/HSP-23) und
+### KIBUDDY-12 — STT über OpenAI-API direkt oder Azure-OpenAI Whisper, Provider-Switch analog KIBUDDY-14
+Der KIBuddy hat einen **App-eigenen STT-Adapter**, der das aufgenommene Audio
+(WebM/Opus oder vom Browser geliefertes Container-Format) transkribiert und
 den Transkript-Text zurückgibt. Sprache `de` als Default; Sprache ist
-Config (KIBUDDY-21).
+Config (KIBUDDY-21). Zwei STT-Anbieter-Pfade stehen zur Wahl (`stt_provider`,
+KIBUDDY-21):
+
+- **`openai`** (V1-Default): **OpenAI-API direkt** mit `whisper-1`. Kinderstimmen-
+  Qualität in der Vorläufer-App (Port 5006, Pre-xbuddy) belegt — dieser Pfad
+  war dort produktiv und hat sich bewährt. ENV: `OPENAI_API_KEY`.
+- **`azure_openai`**: Azure-OpenAI Whisper in der Region `swedencentral`
+  (gleicher Region-Standard wie HSP-19/HSP-23). ENV: `AZURE_OPENAI_ENDPOINT`
+  + `AZURE_OPENAI_API_KEY`.
+
+Der Adapter-Schnitt folgt dem LLM-Provider-Switch (KIBUDDY-14): ein konkreter
+STT-Adapter implementiert `transkribiere(audio_bytes, filename)` und wirft
+`STTError` bei Anbieter-Fehler. `stt_service.py` ist provider-agnostisch.
 
 ### KIBUDDY-13 — STT ist synchron, blockiert den `/api/v1/kibuddy/frage`-Request
 V1 petrarbeitet eine Frage **synchron**: die View postet das Audio per
@@ -426,6 +436,7 @@ in der Berater-Runde den richtigen Generalisierungs-Schnitt zu legen
 | `prompt.max-bytes` | `50000` | Max-Größe für PUT /prompt (KIBUDDY-24) | Config |
 | `llm.provider` | `claude` | LLM-Provider | Config; V1 nur `claude` |
 | `llm.modell` | `claude-haiku-4-5` | Modell-Wahl | Config |
+| `stt_provider` | `openai` | STT-Anbieter-Wahl (`openai` oder `azure_openai`, KIBUDDY-12) | Config; ENV `KIBUDDY_STT_PROVIDER` |
 | `stt.modell` | `whisper-1` | Whisper-Modell-Variante | Config |
 | `stt.sprache` | `de` | STT-Sprache | Config |
 | `tts.stimme` | `onyx` | TTS-Voice | Config |
