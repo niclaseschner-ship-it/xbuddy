@@ -43,7 +43,25 @@ seine zwei Onboarding-Werte unter den stabilen Namen
 OPEN-ZD-B). Namen werden nicht neu vergeben. Welche Namen es gibt, wächst mit
 den Komponenten — der Speicher selbst kennt keine feste Liste.
 
-*Tickets:* #37
+**Namens-Konvention `<konsument>-<vendor>-<purpose>` (Eigentümer-zuerst).**
+Der Konsumenten-Präfix steht voran, damit beim Lesen sofort klar ist, wem das
+Geheimnis gehört und wer es schreibt. Der Vendor-Mittelteil unterscheidet
+Anbieter im selben Konsumenten (z. B. mehrere LLM-Vendoren pro Buddy). Der
+Purpose-Suffix beschreibt den Schlüsseltyp (`api-key`, `oauth-token`,
+`group-chat-id`, …). Heute genutzt:
+
+| Konsument | Vendor | Purpose | Slot-Name |
+|---|---|---|---|
+| Eltern-Chat | Anbieter (LLM) | API-Key | `eltern-chat-provider-api-key` |
+| Eltern-Chat | (Plattform) | Family-Group-Chat-ID | `eltern-chat-family-group-chat-id` |
+| Plan-Buddy | Google | OAuth-Token | `plan-google-oauth-token` |
+| Hörspiel-Buddy | Anthropic | API-Key | `hoerspiel-anthropic-api-key` |
+| Hörspiel-Buddy | Azure-OpenAI | API-Key | `hoerspiel-azure-openai-api-key` |
+
+Diese Konvention ist Lese-Hilfe, keine Mechanik: der Speicher selbst kennt
+keine Vendor- oder Konsumenten-Aufteilung — nur stabile Namen (ZD-5).
+
+*Tickets:* #37, #749 (Hörspiel-Migration auf ZD-Slots)
 
 ## 2. Datenhaltung
 
