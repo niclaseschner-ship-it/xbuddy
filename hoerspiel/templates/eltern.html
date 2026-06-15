@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<!-- HSP-33: Hörspiel-Eltern-Mini-App. Wohnort hoerspiel/templates/eltern.html;
+     seiten-Service liefert aus (analog routine-anpassen.html).
+     Auth: Authorization: tma <initData>-Header (MAD-7). Tab-Form: 2 Top-Tabs.
+     Tab-Deeplink via URL-Hash #einstellungen/#folgen (HSP-33). -->
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Cache-Buster: Telegram cached Mini-App-Assets aggressiv -->
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <title>Hörspiel · XBuddy</title>
+  <link rel="stylesheet" href="/api/v1/seiten/static/eltern.css?v={{ build_id }}">
+  <!-- platform.js (MAD-5 / RAT-16) muss vor eltern.js geladen sein -->
+  <script src="/api/v1/seiten/static/platform.js?v={{ build_id }}"></script>
+  <script src="/api/v1/seiten/static/eltern.js?v={{ build_id }}" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <h1>Hörspiel</h1>
+    <!-- HSP-33: Top-Tabs (erstes Tab-Vorkommen in xbuddy Mini-Apps, n=1) -->
+    <nav class="tab-nav" role="tablist" aria-label="Hörspiel-Bereiche">
+      <button class="tab-btn" id="tab-einstellungen"
+              role="tab" aria-selected="true"
+              aria-controls="panel-einstellungen"
+              data-tab="einstellungen">Einstellungen</button>
+      <button class="tab-btn" id="tab-folgen"
+              role="tab" aria-selected="false"
+              aria-controls="panel-folgen"
+              data-tab="folgen">Folgen</button>
+    </nav>
+  </header>
+
+  <!-- Tab-Panel: Einstellungen (HSP-34) -->
+  <main id="panel-einstellungen" class="tab-panel" role="tabpanel"
+        aria-labelledby="tab-einstellungen">
+    <p class="lade-hinweis" id="einstellungen-ladehinweis">Einstellungen werden geladen …</p>
+  </main>
+
+  <!-- Tab-Panel: Folgen / Album-Galerie (HSP-35) -->
+  <main id="panel-folgen" class="tab-panel" role="tabpanel"
+        aria-labelledby="tab-folgen" hidden>
+    <p class="lade-hinweis" id="folgen-ladehinweis">Folgen werden geladen …</p>
+    <!-- Inline-Player wird von JS in diesen Container gerendert -->
+    <div id="folgen-player" class="folgen-player" hidden></div>
+  </main>
+
+  <!-- Toast-Hinweis für transiente Meldungen (MAD-Toast-Pattern) -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
