@@ -16,5 +16,7 @@
   "inaktivitaet_sek": 60,
   "prompt_max_bytes": 50000,
   "vad_stille_sek": 1.5,
-  "vad_threshold_db": -50.0
+  "vad_threshold_db": -50.0,
+  "vad_long_hold_lock_sek": 3.0,
+  "aufnahme_min_sek": 0.5
 }

@@ -69,6 +69,7 @@ def test_to_public_dict_no_secrets():
         aufnahme_quelle="display", aufnahme_max_sek=30,
         inaktivitaet_sek=60, prompt_max_bytes=50000,
         vad_stille_sek=1.5, vad_threshold_db=-50.0,
+        vad_long_hold_lock_sek=3.0, aufnahme_min_sek=0.5,
         anthropic_key="secret", azure_endpoint="https://x", azure_key="secret",
         azure_api_version="2024-10-01-preview",
         openai_key="openai-secret",
@@ -84,6 +85,8 @@ def test_to_public_dict_no_secrets():
     assert public["tts_speed"] == 0.9
     assert public["vad_stille_sek"] == 1.5
     assert public["vad_threshold_db"] == -50.0
+    assert public["vad_long_hold_lock_sek"] == 3.0
+    assert public["aufnahme_min_sek"] == 0.5
 
 
 def test_patch_aufnahme_quelle():
@@ -95,6 +98,7 @@ def test_patch_aufnahme_quelle():
         aufnahme_quelle="display", aufnahme_max_sek=30,
         inaktivitaet_sek=60, prompt_max_bytes=50000,
         vad_stille_sek=1.5, vad_threshold_db=-50.0,
+        vad_long_hold_lock_sek=3.0, aufnahme_min_sek=0.5,
         anthropic_key=None, azure_endpoint=None, azure_key=None,
         azure_api_version="2024-10-01-preview",
         openai_key=None,
@@ -107,6 +111,8 @@ def test_patch_aufnahme_quelle():
     assert new_cfg.tts_voice == "onyx"
     assert new_cfg.vad_stille_sek == 1.5
     assert new_cfg.vad_threshold_db == -50.0
+    assert new_cfg.vad_long_hold_lock_sek == 3.0
+    assert new_cfg.aufnahme_min_sek == 0.5
 
 
 def test_resolve_runtime_vad_defaults():
@@ -128,7 +134,38 @@ def test_resolve_runtime_vad_env_override():
 
 
 def test_to_vad_cfg():
-    """KIBUDDY-21/AC3: to_vad_cfg() liefert nur VAD-Felder."""
+    """KIBUDDY-21/AC3: to_vad_cfg() liefert VAD-Felder inkl. neuer T864-Felder."""
     cfg = config_mod.resolve_runtime(env={})
     vad = cfg.to_vad_cfg()
-    assert vad == {"vad_stille_sek": 1.5, "vad_threshold_db": -50.0}
+    assert vad == {
+        "vad_stille_sek": 1.5,
+        "vad_threshold_db": -50.0,
+        "vad_long_hold_lock_sek": 3.0,
+        "aufnahme_min_sek": 0.5,
+    }
+
+
+def test_resolve_runtime_long_hold_lock_defaults():
+    """T864-AC2: vad_long_hold_lock_sek Default ist 3.0."""
+    cfg = config_mod.resolve_runtime(env={})
+    assert cfg.vad_long_hold_lock_sek == 3.0
+
+
+def test_resolve_runtime_aufnahme_min_sek_default():
+    """T864-AC3: aufnahme_min_sek Default ist 0.5."""
+    cfg = config_mod.resolve_runtime(env={})
+    assert cfg.aufnahme_min_sek == 0.5
+
+
+def test_resolve_runtime_long_hold_lock_env_override():
+    """T864-AC2: vad_long_hold_lock_sek aus ENV."""
+    env = {"KIBUDDY_VAD_LONG_HOLD_LOCK_SEK": "5.0"}
+    cfg = config_mod.resolve_runtime(env=env)
+    assert cfg.vad_long_hold_lock_sek == 5.0
+
+
+def test_resolve_runtime_aufnahme_min_sek_env_override():
+    """T864-AC3: aufnahme_min_sek aus ENV."""
+    env = {"KIBUDDY_AUFNAHME_MIN_SEK": "1.0"}
+    cfg = config_mod.resolve_runtime(env=env)
+    assert cfg.aufnahme_min_sek == 1.0
