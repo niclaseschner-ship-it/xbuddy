@@ -279,13 +279,20 @@ N) <Datum> — <Titel> [— <Uhrzeit-Spanne>]
 
 Erst eine erkannte Bestätigung (E-EC-7-Wort: ok, ja, passt, …) schaltet
 das **Bulk-Schreiben** (TAB-9) frei. Die Bestätigung gilt für die **ganze**
-Liste — siehe E-TAB-4. Antwortet der Aufrufer nicht bestätigend (z. B.
-„nein", „abbrechen", eine inhaltliche Korrektur wie „Nummer 3 ist
-falsch"), wird **nicht** geschrieben — die Funktion endet mit Ergebnis
-„verworfen" und der Familien-Kalender bleibt unverändert. V1 hat **keinen**
-selektiven Streich-Pfad innerhalb der Bestätigung („nur 1, 2 und 5"); eine
-inhaltliche Korrektur ist ein neuer Aufruf (analog `termin-eintragen.md`
-TES-7: kein Korrektur-Branch in derselben Session — Vereinfachung).
+Liste — siehe E-TAB-4. Antwortet der Aufrufer mit `falsch` (oder einer
+nicht-bestätigenden Antwort wie „nein", „abbrechen"), wird **nicht**
+geschrieben — die Funktion endet mit Ergebnis „verworfen" und der
+Familien-Kalender bleibt unverändert. V1 hat **keinen** selektiven Streich-
+Pfad innerhalb der Bestätigung („nur 1, 2 und 5"); eine **inhaltliche
+Korrektur** läuft über den **EC-36-Korrektur-Dialog**
+(`specs/platform/eltern-chat.md` EC-36) — nach `falsch` fragt der Bot
+„Was war falsch?", der User formuliert die Korrektur (z. B. „alle Termine
+einen Tag nach vorne") und der Bot baut einen neuen Sammel-Vorschlag.
+Die alte Vereinfachungs-Linie „kein Korrektur-Branch in derselben
+Session" (vorher analog TES-7 / FAA-7) fällt damit für TAB; **FAA-7
+bleibt** für `familie_anlegen` als Klasse-E-Auth-Loop unverändert
+(Auth-Identität braucht Schritt-für-Schritt-Folge, kein Patch-
+Re-Propose).
 
 Der konkrete Wortlaut des Sammel-Vorschlags lebt im Code als hart-
 codierter String; die Spec normiert das **Soll** (nummerierte Liste mit

@@ -1124,6 +1124,109 @@ eigene Tabelle ist ein bewusst kleiner Aufpreis.
 *Tickets:* #TBD-Q1 (Code-Track `task_events`-Tabelle in
 `conversations.db`)
 
+### EC-36 — Korrektur-Dialog: nach `falsch` führt der Bot durch die Korrektur
+
+**Heutiger Schmerz (Bug #662, TAB-Live-Probe 2026-06-10):** Eine
+Familie sagt „nein, aber X war anders" — der Bot interpretiert das
+als **Komplett-Ablehnung**, wirft den Schreibakt weg, ohne nach der
+Korrektur zu fragen. Die Familie muss von vorn beginnen. Die alten
+Vereinfachungs-Klauseln in den Skill-Specs (`termine-aus-bild.md`
+Z. 282–288 + `termin-eintragen.md` TES-7 Z. 237–243 +
+`familie-anlegen.md` FAA-7-Vereinfachungs-Linie) hatten das bewusst
+so gesetzt („inhaltliche Korrektur = neuer Aufruf"); für die
+Familien-Sprache ist das aber Frust-Loop.
+
+EC-36 hebt diese Vereinfachung **für alle A2- und Klasse-C-Pfade**
+auf. **Klasse-E** (Privatchat-Auth-Loops FAA/GAA/KAV/PAA/AWE) bleibt
+explizit **außerhalb** (eigener Abschluss-Gate-Pfad mit FAA-7-eigener
+Vereinfachung — Auth-Identität braucht klare Schritt-für-Schritt-
+Folge, kein Patch-Re-Propose).
+
+**Customer Journey (identisch über alle in-scope Skill-Pfade):**
+
+```
+Bot:  [A2:]   X eingetragen. Wenn falsch, »falsch«.
+      [C:]   Soll ich X tun? Sag »falsch«, wenn nicht passt.
+Du:   falsch.
+Bot:  [A2:]  Ok, rückgängig.  (oder Ambiguitäts-Quittung, siehe EC-10 A2)
+      [C:]   Ok, Vorschlag verworfen.
+      Was war falsch, wie soll ich's machen?
+Du:   bitte alle Termine einen Tag nach vorne   /  Nudeln mit Tomatensoße  /  nur XY
+Bot:  Verstanden. Neuer Vorschlag: Y. Soll ich das tun?
+Du:   Ja, passt.
+Bot:  Eingetragen.
+```
+
+**Wortlaut-Pflicht pro Pfad-Sorte:**
+
+- **A2** (Sofort-Write + Receipt-`falsch`): „Ok, rückgängig." nach
+  saubererem Inverse-Aufruf; Ambiguitäts-Quittung nach EC-10 A2 bei
+  unklarem Inverse; **„Was war falsch?"** ist die Folge-Frage des
+  Bots NACH der Quittung in beiden Fällen.
+- **Klasse-C** (propose→confirm): „Ok, Vorschlag verworfen." nach
+  `falsch` vor dem `ja`; **„Was war falsch?"** ist die Folge-Frage.
+- Beide Pfade führen denselben Korrektur-Dialog (s.u.).
+
+**Mehrere Iterationen erlaubt.** Schritt 5 → User sagt wieder
+`falsch` → Bot fragt nochmal nach Korrektur → neuer Vorschlag →
+rekursiv bis User `ja` sagt. **Keine harte Iterations-Grenze in V1**;
+ein Folge-Ticket fügt eine Grenze hinzu, falls Familien sich in der
+Schleife verlieren (Messung über EC-35 `task_events`-Korrektur-Tiefe
+ist möglich, V1 baut sie nicht).
+
+**LLM darf Rückfragen stellen** im Korrektur-State, wenn die
+Korrektur unklar ist. Beispiel: User: „bitte alle Termine einen Tag
+nach vorne" → Bot: „den 12. auch, oder nur die ab Mittwoch?" → User:
+„nur die ab Mittwoch" → Bot baut Vorschlag. Rückfragen-Pfad ist nicht
+auf eine Runde begrenzt; der LLM klärt so lange, bis ein sauberer
+Patch vorliegt, dann erst der propose-Schritt.
+
+**Cross-Skill-Exit ist erlaubt.** Sagt der User in der Korrektur-
+Phase einen Auftrag, der zu einem **anderen Skill** gehört (z. B.
+nach Termin-Eintragung `falsch` → „eigentlich kein Termin, lieber
+als Plan-Aktivität setzen"), ist das eine neue Absicht. Der alte
+Korrektur-State wird **versiegelt** (mechanisch wie EC-10
+Folge-Anfrage), der neue Skill läuft durch seinen normalen Confirm-
+oder A2-Pfad. M2c-Skill-Identitäts-Erzwingung würde die Familie hier
+falsch sperren — explizit verworfen.
+
+**Erzwungenes Confirm-Gate für Re-Propose nach A2.** Auch wenn der
+**Original-Pfad A2 war**, läuft der gepatchte Re-Aufruf
+**immer durch das zweistufige Confirm-Gate** (EC-10 zweistufige
+Variante). Begründung: Das Vertrauen aus der A2-Klausel war auf den
+ursprünglichen Anstoß bezogen; nach `falsch` ist es verbraucht.
+Beispiel: Termin per A2 eingetragen → `falsch` → rückgängig → User
+sagt „Donnerstag 17 statt 16" → Bot **fragt zurück** „Sport am Do
+17:00 — eintragen?" → User: „ja" → eingetragen (jetzt mit neuem
+Receipt, gilt wieder das A2-`falsch`).
+
+**Mechanik (kein Spec-Inhalt, nur Bezug):** Der Korrektur-Dialog
+sitzt auf den Welle-2-Lego-Steinen: Vor-Agent-Hook für `falsch` (vgl.
+#721 + EC-10 A2 Undo-Bindung), Pending-Korrektur-State im
+Confirm-State-Carrier (`PendingStore` für Klasse-C, Worker-Session
+für gemischte Skills — Carrier bleiben getrennt nach Welle-2-Pivot),
+LLM-Tool-Loop nutzt für Re-Propose denselben Skill mit gepatchten
+Args. Konkrete Implementierung im Code-Track #844.
+
+**Test-Implikation:**
+
+1. **Klasse-C-Pfad:** `gericht_anlegen` propose → User `falsch` →
+   Bot fragt „Was war falsch?" → User „Nudeln mit Tomatensoße" →
+   Bot propose mit gepatchtem Label → User `ja` → Schreibakt grün.
+2. **A2-Pfad:** `einkauf_hinzufuegen` Sofort-Write von „Brot" → User
+   `falsch` → Bot löscht und fragt „Was war falsch?" → User „eigentlich
+   Brötchen" → Bot **propose** mit „Brötchen" (Confirm-Gate erzwungen,
+   nicht direkt geschrieben) → User `ja` → Schreibakt grün.
+3. **Cross-Skill-Exit:** `termin_eintragen` propose → `falsch` → User
+   „lieber als Plan-Aktivität" → Bot startet `plan_aktivitaeten_setzen`,
+   alter Korrektur-State wird versiegelt.
+4. **Mehrere Iterationen:** Klasse-C propose → `falsch` → Patch →
+   propose → `falsch` → erneut Patch → propose → `ja` → grün.
+
+*Tickets:* #843 (diese Spec), #844 (Code-Track Korrektur-Hook),
+#662 (Original-Bug TAB ja-mit-Korrektur — wird durch diese Klausel
+gelöst).
+
 ---
 
 ## Offene Punkte
