@@ -121,11 +121,12 @@ body {
 
 /* Slider-Wert-Anzeige */
 .slider-wert {
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--accent, #5b6af5);
-  float: right;
-  margin-top: -18px;
+  display: inline-block;
+  margin-left: 8px;
+  vertical-align: middle;
 }
 
 /* Voice-Kacheln (2-Kachel-Wahl, HSP-34) */
