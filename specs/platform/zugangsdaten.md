@@ -52,16 +52,42 @@ Purpose-Suffix beschreibt den Schlüsseltyp (`api-key`, `oauth-token`,
 
 | Konsument | Vendor | Purpose | Slot-Name |
 |---|---|---|---|
-| Eltern-Chat | Anbieter (LLM) | API-Key | `eltern-chat-provider-api-key` |
+| Eltern-Chat | Anthropic | API-Key | `eltern-chat-anthropic-api-key` |
+| Eltern-Chat | Azure-OpenAI | API-Key | `eltern-chat-azure-openai-api-key` |
+| Eltern-Chat | OpenAI | API-Key | `eltern-chat-openai-api-key` |
+| Eltern-Chat | Mistral | API-Key | `eltern-chat-mistral-api-key` |
 | Eltern-Chat | (Plattform) | Family-Group-Chat-ID | `eltern-chat-family-group-chat-id` |
 | Plan-Buddy | Google | OAuth-Token | `plan-google-oauth-token` |
 | Hörspiel-Buddy | Anthropic | API-Key | `hoerspiel-anthropic-api-key` |
 | Hörspiel-Buddy | Azure-OpenAI | API-Key | `hoerspiel-azure-openai-api-key` |
 
+**Multi-Slot pro Konsument-Vendor-Paar.** Ein Konsument kann mehrere
+Vendor-Slots gleichzeitig pflegen (z. B. der Eltern-Chat hält Keys für
+Anthropic UND Azure-OpenAI UND Mistral parallel, je einen Slot). Welcher
+Vendor aktiv ist, entscheidet die Komponente in ihrer Konfiguration (z. B.
+`eltern-chat.md` EC-15 `provider`-Wert). Der Speicher kennt keinen
+„aktiven Slot" — er liefert nur, was unter dem gefragten Namen liegt.
+
+**Migration des Single-Slot-Vorlebens (Eltern-Chat heute → Multi-Slot,
+#663).** Heute pflegt der Eltern-Chat einen einzigen Slot
+`eltern-chat-provider-api-key` ohne Vendor-Differenzierung. Mit dem
+Multi-Slot-Schema wird daraus `eltern-chat-<vendor>-api-key`. Migration
+zweistufig analog ONB-5→ZD (#84 + #336):
+
+- **Schritt 1 (#663 Welle A):** Eltern-Chat liest read-both — zuerst den
+  vendor-spezifischen Slot, bei leerem Wert Fallback auf
+  `eltern-chat-provider-api-key`. Schreibt ausschließlich vendor-spezifisch
+  (lazy one-time-Migration: der heutige Single-Slot wird auf den aktiven
+  `provider`-Wert gemappt und unter neuem Namen abgelegt).
+- **Schritt 2 (#663 Welle B):** Single-Slot-Fallback entfernt;
+  `eltern-chat-provider-api-key` wird aus dem Store gelöscht. Konsumenten
+  lesen nur noch `<konsument>-<vendor>-<purpose>`.
+
 Diese Konvention ist Lese-Hilfe, keine Mechanik: der Speicher selbst kennt
 keine Vendor- oder Konsumenten-Aufteilung — nur stabile Namen (ZD-5).
 
-*Tickets:* #37, #749 (Hörspiel-Migration auf ZD-Slots)
+*Tickets:* #37, #749 (Hörspiel-Migration auf ZD-Slots), #663 (Eltern-Chat
+Multi-Slot-Migration für Anbieter-Wechsel ohne Re-Key)
 
 ## 2. Datenhaltung
 
