@@ -176,41 +176,59 @@ gespeichert** — sie entsteht erst beim Konsumenten aus `display_url_origin +
 pfad` (URL-12: eine Origin; der Pfad ist die Wahrheit, die Origin ist
 Per-Instanz-Deployment).
 
-## SREG-5 — Skill `seiten_uebersicht` (Trigger, ein Link)
-Eltern-Chat-Skill — eine **lesende, trigger-agnostische** Funktion (EC-9-Muster).
-**Nur EIN Modus**, kein KI-Matching, keine Rückfrage-Logik: erkennt eine
-Frage-Familie wie „zeig mir alle Seiten", „welche Seiten gibt es", „Link zur
-Garderoben-Seite", „wo stelle ich X ein", „Link zum Küchen-Panel-Editor" →
-returnt **einen** Tool-Result-Text, der den Link auf die gerenderte
-Übersichtsseite (SREG-12) trägt. Das LLM formuliert daraus die
-Bot-Nachricht und postet sie als einzigen Schreibakt des Turns
-(EC-29 — eine Stimme im Agent-Turn). Die Pro-View-Auflösung („welchen
-genau?") passiert auf der Seite per Volltextsuche gegen
-`label`/`synonyme`/`zeigt` (SREG-12), nicht im Chat — das hält den Chat
-schlank und die Wartung in EINER Seite.
+## SREG-5 — Skill `seiten_uebersicht` (Trigger, `web_app`-Launcher)
 
-Der Link wird gebildet als `display_url_origin_heim` + `/api/v1/seiten/uebersicht`
-(SREG-12). Heimnetz-Variante ist der Default, weil der Eltern-Chat im
-Heimnetz/Tailscale-Kontext läuft und Eltern „am Familien-Tablet" landen sollen;
-die Tailscale-Variante ist auf der Seite selbst kopierbar (SREG-12).
+> **Pivot 2026-06-15 (Werft #678 → MAU):** Skill liefert nicht länger einen
+> Text-Link auf SREG-12, sondern eine kompakte Bot-Nachricht +
+> `web_app`-Inline-Button auf die Mini-App-Übersicht (MAU-1). Konsistent zu
+> `einkauf_zeigen` (EZG-7) und `routine_anpassen_oeffnen` (RAO-6). Die alte
+> Text-Link-Variante entfällt — Telegram ist der einzige Adapter (RAT-16),
+> und alle berechtigten Eltern haben Telegram am Eltern-Endgerät
+> (Setzung 2026-06-12 `project_xbuddy_telegram_endgerate_pflicht`).
 
-Der Skill ruft `GET /api/v1/seiten` **nicht** mehr selbst auf — die
-Übersichtsseite ist sein einziger Konsument der Registry.
+Eltern-Chat-Skill — eine **lesende, trigger-agnostische** Funktion
+(EC-9-Muster). **Nur EIN Modus**, kein KI-Matching, keine Rückfrage-Logik:
+erkennt eine Frage-Familie wie „zeig mir alle Seiten", „welche Apps gibt
+es", „Link zur Übersicht", „xbuddy öffnen" → returnt **einen** Tool-Result
+mit kompakter Bot-Text-Antwort + Mini-App-`web_app`-Inline-Button. Das LLM
+postet die Nachricht als einzigen Schreibakt des Turns (EC-29 — eine
+Stimme im Agent-Turn). Die Pro-View-Auflösung („welche genau?") passiert
+**in der Mini-App** per Karten-Liste, nicht im Chat — das hält den Chat
+schlank und die Wartung in EINER View.
 
-**Pivot-Begründung (Nic, /arbeitstag-prep 2026-06-07):** Der vorherige Modus
-„gib mir den Link zu X" mit KI-Matching gegen `label`/`synonyme` und
-Mehrdeutigkeits-Rückfrage ist **ersetzt** durch die gerenderte Seite +
-Volltextsuche. Die Komplexität wandert aus dem KI-Skill in eine Seite, die
-einfach zu warten ist. PBE-2 („je Panel direkter Editor-Link aus dem
-Eltern-Chat") wird durch SREG-12 mit-bedient: der Editor-Eintrag erscheint als
-eigene Karte direkt am gepaarten Display (SREG-12 Hero-Sektion „Geräte-Paare"),
-kopierbar — der „direkte Link je Panel" ist weiterhin in einem Tipp
-erreichbar, nur einen Tipp später als ein eigener Chat-Skill und konsistent
-für **alle** Eintrags-Sorten.
+**Bot-Antwort-Form:**
 
-*Tickets:* #467, #551
+- Text: kurze Begrüßung („Hier ist die Übersicht aller Seiten und Apps:").
+- Inline-Button: Label **„🏠 xbuddy öffnen"**, `web_app: {url:
+  <mau_url>}`, wobei `<mau_url>` aus seiten-Konfig (`mini_app_url`-
+  Schlüssel analog EZG/RAO) gezogen wird.
+- Berechtigung wie EZG-2: nur Telegram-User mit Status `Eltern`.
+
+Der Skill ruft `GET /api/v1/seiten` **nicht** selbst auf — die Mini-App-
+Übersicht (MAU-2) ist der einzige Konsument der Registry.
+
+**Pivot-Begründung (Werft #678, Nic 2026-06-15):** Die Verlagerung vom
+Text-Link-Skill auf den `web_app`-Launcher folgt dem Pattern der zwei
+gebauten Mini-App-Launcher-Skills (`einkauf_zeigen` EZG-7,
+`routine_anpassen_oeffnen` RAO-6) — Eltern erleben für alle Übersichts-/
+Editier-Wege denselben einen Tap-Knopf-Stil im Chat. Die Komplexität wandert
+aus dem Skill in die Mini-App-Übersicht (MAU), die das Inventar visuell
+trägt; der Skill bleibt ein dünner Launcher.
+
+*Tickets:* #467 (SREG-12), #551, #678 (Pivot)
 
 ## SREG-5b — Opt-in-Direktantwort (Sekundärpfad nach SREG-5)
+
+> **Deprecated 2026-06-15 (Werft #678):** Mit dem SREG-5-Pivot auf den
+> Mini-App-Launcher entfällt die Notwendigkeit der Opt-in-Direktantwort —
+> die Mini-App-Übersicht selbst (MAU) ist der „eine Tap zu allen Seiten
+> und Apps". SREG-5b-Code-Mechanik bleibt vorerst stehen (kein Entfern-
+> Auftrag dieser Werft), wird aber im Implementierungs-Track inaktiv
+> geschaltet (Skill antwortet ausschließlich mit dem Launcher-Button,
+> kein Opt-in-Folge-Dialog). Reopen nur, wenn ein neuer Use-Case
+> Direkt-Auflösung im Chat verlangt.
+
+
 Nach der Default-Antwort (SREG-5 Übersichtslink) **bietet der Bot in derselben
 Nachricht** an, die spezifisch angefragte Seite **direkt im Chat** zu schicken:
 
@@ -477,6 +495,15 @@ ehemalige Direkt-Link aus dem Chat, dafür konsistent für alle Eintrags-Sorten
 und ohne KI-Matching im Skill.
 
 ## SREG-12 — Gerenderte Eltern-Übersichts-Seite (HTML, neben der Registry-API)
+
+> **Werft #678-Klarstellung 2026-06-15:** SREG-12 bleibt **als Tablet-
+> Browser-View** für den Einrichtungs-Use-Case (Direkt-Zugriff am Pi-Tablet,
+> das kein Telegram hat). Die Telegram-Mini-App-Variante derselben Übersicht
+> ist MAU (`specs/platform/mini-app-uebersicht.md`). Beide Views ziehen aus
+> demselben Aggregator-Inventar (`seiten/aggregator.py` `baue_inventar`) —
+> kein Doppel-Wahrheit, keine Doppel-Pflege. Kein Spec-Delta am Layout/
+> Render von SREG-12 in dieser Werft.
+
 Die V1-Antwort auf „wo finde ich die Seiten" ist **eine eigene HTML-Seite** im
 seiten-Service. Sie listet das gesamte Inventar aus `inventar.json` (SREG-3)
 auf, und ist für **Eltern am Handy** gebaut (Tablet/Phone, Daumen-bedienbar).
@@ -710,6 +737,91 @@ wäre damit erst sicher umlegbar gewesen, nachdem absolut JEDES Manifest
 backgefillt war. Mit SREG-13 ist der Schalter graduell umlegbar.
 
 *Tickets:* #388
+
+## SREG-14 — Mini-App-Sorte in `views.json` (typ: mini-app)
+
+> Werft #678 (Funktion 3): neue Sorte für Mini-App-Manifest-Einträge. Vorher
+> waren Mini-Apps nicht im Inventar führbar — die zwei gebauten Mini-Apps
+> (essen-einkauf #653, routine-anpassen #728) lebten als Templates ohne
+> Manifest-Eintrag. Mit SREG-14 melden sich Mini-Apps wie Buddy-Views
+> (Lego-Mechanik SREG-2: `<root>/<app>/views.json` glob), das Inventar
+> wird die EINE Wahrheit für SREG-12 und MAU.
+
+Mini-Apps sind Eltern-Form-Faktor mit `initData`-Auth (`Authorization: tma
+<initData>`-Header, **MAD-7** ratifiziert in `conventions/mini-app-design.md`)
+und Telegram-WebView-Launcher. Sie werden in Buddy-`views.json` als **neuer
+Sorten-Eintrag** deklariert — analog zu Sorten a/b/c, aber mit eigener
+Form-Pflicht:
+
+```json
+{
+  "slug": "einkauf",
+  "typ": "mini-app",
+  "pfad": "/api/v1/seiten/essen-einkauf",
+  "label": "Einkaufsliste bearbeiten",
+  "synonyme": ["einkaufen", "liste pflegen"],
+  "zeigt": "Einkaufsliste bearbeiten — abhaken, hinzufügen, Wünsche übernehmen.",
+  "zielgruppe": "eltern",
+  "web_app": {
+    "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
+    "app_short_name": "einkauf",
+    "icons": ["arasaac/28339.png"]
+  }
+}
+```
+
+**Pflicht-Felder bei `typ: "mini-app"`:**
+
+- `slug`, `pfad` (HTML-Render-Route), `label`, `synonyme`, `zeigt`.
+- `zielgruppe = "eltern"` — Mini-Apps adressieren immer Eltern; kein
+  anderer Wert erlaubt V1 (Validation-Error sonst).
+- `web_app.bot_env_var`: Name der ENV-Variable, aus der der Aggregator
+  den Bot-Username zieht (familien-spezifisch, geteiltes
+  `EnvironmentFile=__XBUDDY_DATA__/eltern-chat/.env` analog MAD-9
+  Token-Sharing).
+- `web_app.app_short_name`: Telegram-Botfather-konfigurierter App-
+  Short-Name (z. B. `einkauf`, `routine`, `uebersicht`).
+- `web_app.icons[]`: Piktogramm-Liste analog Sorte a (SREG-10).
+
+**Vom Aggregator abgeleitet (`_typ_for_view` Sonderfall):**
+
+- `typ = "mini-app"` — **explizit aus dem Manifest**, nicht aus
+  `zielgruppe` abgeleitet (Sonderfall in `_typ_for_view`; neue
+  Konstante `TYP_MINI_APP = "mini-app"`).
+- `web_app_url = https://t.me/${bot_username}/${app_short_name}` —
+  komponiert beim Inventar-Bau, NICHT im Manifest gespeichert
+  (URL-12-Disziplin: eine Origin, Konsument komponiert).
+- `funnel_url = https://${funnel_domain}${pfad}` — Direkt-URL als
+  Fallback für `window.location.href`-Wechsel (MAU-5).
+
+**Schema-Validierung (`tools/views_manifest.py`):**
+
+- `typ == "mini-app"` ohne `web_app.bot_env_var` ODER `app_short_name`
+  → `ManifestError` (per-View-Skip, SREG-13).
+- `typ == "mini-app"` mit `zielgruppe != "eltern"` → `ManifestError`.
+
+**Migrations-Liste (im selben Spec-PR-Folge-Implementierungs-Track):**
+
+Folgende `views.json`-Dateien werden im Implementierungs-Track gepatcht
+(siehe MAU-Übergabe-Ticket Tracks A):
+
+- `essen/views.json` — Eintrag für `essen-einkauf` Mini-App ergänzen.
+- `routine/views.json` — Eintrag für `routine-anpassen` Mini-App
+  ergänzen.
+- `seiten/views.json` — Eintrag für `mini-app-uebersicht` (Selbst-
+  Eintrag).
+
+Bestehende Einträge (essen `wunsch`, routine `morgen`, seiten
+`uebersicht`) bleiben unverändert — Mini-App-Einträge kommen **neben**
+sie, nicht statt ihrer.
+
+*Test (Aggregator):* `views.json` mit `typ: mini-app` → Eintrag im
+Inventar mit `typ: "mini-app"`, `web_app_url` und `funnel_url` korrekt
+komponiert. Fehlendes `app_short_name` → `ManifestError` + Eintrag
+übersprungen (SREG-13), übrige Views des Manifests bleiben.
+
+*Tickets:* #678 (Werft-Sammler), MAU-1..MAU-10 (Konsument), #708
+(Auth-Härtung in derselben Werft mitgehärtet)
 
 ## Offene Punkte
 
