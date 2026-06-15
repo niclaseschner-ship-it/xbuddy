@@ -729,7 +729,10 @@ def build_context(cfg, db_path, zd_cli_path=None):
         multimodal_model=getattr(cfg, "multimodal_model", "") or "",
         # HFE-9 / #729: Origin des Hörspiel-Buddys. Leer/None → HFE NICHT im
         # Katalog (AND-Guard in tasks.py).
-        hoerspiel_url_origin=cfg.hoerspiel_url_origin or None)
+        hoerspiel_url_origin=cfg.hoerspiel_url_origin or None,
+        # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts. Leer/None →
+        # KibuddyAufnahmeQuelleSetzenTask NICHT im Katalog (AND-Guard KAQS-6).
+        kibuddy_origin_url=cfg.kibuddy_origin_url or None)
 
     if cfg.provider_api_key:
         # KI-Modus — Anbieter steht; die Familien-Gruppe muss gesetzt sein (EC-2).

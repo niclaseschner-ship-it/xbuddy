@@ -264,6 +264,45 @@ def test_SREG6_seiten_origin_url_strips_trailing_slash(tmp_path, monkeypatch):
     assert cfg.seiten_origin_url == "http://127.0.0.1:5042"
 
 
+# -- KAQS-6 / #825: kibuddy_origin_url (KIBuddy-Config-Naht für KAQS-5) -----
+
+def test_KAQS6_kibuddy_origin_url_default(tmp_path, monkeypatch):
+    """KAQS-6 / #825: kibuddy_origin_url hat den Default http://127.0.0.1:5054
+    (KIBuddy, PORT-2 KIBUDDY-25). Fehlt der Wert in ENV und Datei, wird der
+    Default gesetzt — das ist die Wiring-Bedingung für KAQS im Katalog."""
+    _set_bot_token(monkeypatch)
+    monkeypatch.delenv("ELTERNCHAT_KIBUDDY_ORIGIN_URL", raising=False)
+    cfg = config_mod.resolve(_missing(tmp_path))
+    assert cfg.kibuddy_origin_url == "http://127.0.0.1:5054"
+
+
+def test_KAQS6_kibuddy_origin_url_from_env(tmp_path, monkeypatch):
+    """KAQS-6 / #825: kibuddy_origin_url aus ENV ELTERNCHAT_KIBUDDY_ORIGIN_URL."""
+    _set_bot_token(monkeypatch)
+    monkeypatch.setenv("ELTERNCHAT_KIBUDDY_ORIGIN_URL", "http://192.168.1.5:5054")
+    cfg = config_mod.resolve(_missing(tmp_path))
+    assert cfg.kibuddy_origin_url == "http://192.168.1.5:5054"
+
+
+def test_KAQS6_kibuddy_origin_url_from_file(tmp_path, monkeypatch):
+    """KAQS-6 / #825: kibuddy_origin_url aus Konfig-Datei (Datei-Wert schlägt
+    Default, ENV schlägt Datei — analog alle anderen Origin-URLs)."""
+    _set_bot_token(monkeypatch)
+    monkeypatch.delenv("ELTERNCHAT_KIBUDDY_ORIGIN_URL", raising=False)
+    cfg_file = tmp_path / "config.json"
+    cfg_file.write_text(json.dumps({"kibuddy_origin_url": "http://10.0.0.1:5054"}))
+    cfg = config_mod.resolve(str(cfg_file))
+    assert cfg.kibuddy_origin_url == "http://10.0.0.1:5054"
+
+
+def test_KAQS6_kibuddy_origin_url_strips_trailing_slash(tmp_path, monkeypatch):
+    """KAQS-6 / #825: Trailing-Slash wird gestripped (analog andere Origin-URLs)."""
+    _set_bot_token(monkeypatch)
+    monkeypatch.setenv("ELTERNCHAT_KIBUDDY_ORIGIN_URL", "http://127.0.0.1:5054/")
+    cfg = config_mod.resolve(_missing(tmp_path))
+    assert cfg.kibuddy_origin_url == "http://127.0.0.1:5054"
+
+
 # -- Loader-Integration (#179): Underscore-Keys in der Datei -----
 
 def test_EC_15_underscore_keys_in_file_are_tolerated(tmp_path, monkeypatch, caplog):
