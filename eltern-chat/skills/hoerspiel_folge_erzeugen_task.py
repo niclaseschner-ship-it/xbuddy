@@ -6,8 +6,8 @@ Diese Aufgabe ist der V1-Trigger der `hoerspiel_folge_erzeugen`-Funktion
 („Schreib eine Folge über Schnee"), holt er einen Folgen-Vorschlag vom
 Hörspiel-Buddy — nach EC-10-Bestätigung baut er das Album.
 
-Eine **schreibende** Aufgabe (EC-10, HFE-1): Klasse C (E-HFE-5, A2-Klausel
-trifft nicht — Album-Bau ist 1–5-min-Pipeline, kein One-Shot). Die
+Eine **schreibende** Aufgabe (EC-10, HFE-1): Cluster C / Capability-Karte
+(E-HFE-5, A2-Klausel trifft nicht — Album-Bau ist 1–5-min-Pipeline, kein One-Shot). Die
 propose/execute-Zweiteilung ist die einzige Bestätigung; kein Sofort-Undo.
 
 Die Aufgabe ist ein dünner Aufrufer der trigger-agnostischen Funktion
