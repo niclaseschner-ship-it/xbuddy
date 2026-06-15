@@ -1,6 +1,6 @@
 """KIBuddy-Aufnahme-Quelle setzen als Aufgaben-Katalog-Aufgabe —
-specs/platform/kibuddy-aufnahme-quelle-setzen.md (KAQS-6, EC-8/EC-10,
-E-KAQS-1).
+specs/platform/kibuddy-aufnahme-quelle-setzen.md (KAQS-1/4/5/6,
+KIBUDDY-22/24).
 
 Diese Aufgabe ist der V1-Trigger der KAQS-Funktion (KAQS-1): versteht der
 Agent eine natürlichsprachige Bitte („setze KIBuddy-Aufnahme auf Display"),
@@ -18,7 +18,7 @@ implementiert). Der Skill gibt bei 501 eine Fail-Closed-Quittung aus
 („Panel-Mikro kommt mit V2.").
 
 Die Aufgabe ist ein dünner Aufrufer der trigger-agnostischen Funktion
-(KAQS-1 / E-KAQS-1) — keine eigene Config-Logik.
+(KAQS-1) — keine eigene Config-Logik.
 """
 
 import logging

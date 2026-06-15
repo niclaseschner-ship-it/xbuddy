@@ -370,7 +370,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   current_provider_getter=None,
                   mini_app_einkauf_url=None,
                   mini_app_base_url=None,
-                  hoerspiel_url_origin=None):
+                  hoerspiel_url_origin=None,
+                  kibuddy_origin_url=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
@@ -396,6 +397,11 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
     SREG-5/5b) — hinter dem AND-Guard auf `seiten_origin_url` +
     `family_group_chat_id_getter` (SREG-6-Berechtigung via EC-2-Mitgliedschaft).
     `display_url_origin_heim` ist die Heim-Origin (SREG-7) für den Übersichts-Link.
+
+    KAQS-6 / #825: Setzt der Aufrufer `kibuddy_origin_url`, registriert
+    build_catalog zusätzlich die schreibende »KIBuddy-Aufnahme-Quelle setzen«-
+    Aufgabe (EC-10, KAQS-4 propose→confirm) — hinter dem AND-Guard auf
+    `kibuddy_origin_url` + `family_group_chat_id_getter` (KAQS-3-Berechtigung).
     """
     # Lokale Imports: brechen den Import-Zyklus tasks <-> ca_task/faa_task/
     # gaa_task/kav_task — nicht hochziehen.
@@ -833,5 +839,25 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
         catalog.register(EssenKatalogLesenTask(
             essen_client=_ekl_essen_client,
             is_member_fn=_ekl_is_member))
+
+    # KAQS-6 / #825: »KIBuddy-Aufnahme-Quelle setzen« als synchrone schreibende
+    # Aufgabe (EC-10, KAQS-4 propose→confirm). AND-Guard: kibuddy_origin_url UND
+    # family_group_chat_id_getter müssen gesetzt sein — fehlt eine, erscheint die
+    # Aufgabe NICHT im Katalog (KAQS-6):
+    # - kibuddy_origin_url:            KIBuddy-Config-Schnittstelle (KIBUDDY-24,
+    #                                  PUT /api/v1/kibuddy/config, KAQS-5).
+    # - family_group_chat_id_getter:   Live-Berechtigung (KAQS-3, EC-2).
+    #   is_member_fn baut den Live-Check analog der RZS-/TES-/FSE-Linie.
+    if kibuddy_origin_url is not None and family_group_chat_id_getter is not None:
+        from skills.kibuddy_aufnahme_quelle_setzen_client import KibuddyConfigClient
+        from skills.kibuddy_aufnahme_quelle_setzen_task import (
+            KibuddyAufnahmeQuelleSetzenTask,
+        )
+        _kaqs_client = KibuddyConfigClient(origin_url=kibuddy_origin_url)
+        _kaqs_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
+        catalog.register(KibuddyAufnahmeQuelleSetzenTask(
+            kibuddy_config_client=_kaqs_client,
+            family_group_chat_id_getter=family_group_chat_id_getter,
+            is_member_fn=_kaqs_is_member))
 
     return catalog

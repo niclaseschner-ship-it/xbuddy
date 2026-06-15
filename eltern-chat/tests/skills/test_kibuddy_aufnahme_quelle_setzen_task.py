@@ -2,8 +2,8 @@
 (KAQS-6, Refs #825).
 
 Abgedeckte ACs:
-  AC1  — Skill ist via build_catalog/_catalog_seeds registrierbar; Listung
-          zeigt 'kibuddy_aufnahme_quelle_setzen'.
+  AC1  — Skill ist via build_catalog inline registriert (KAQS-6, TASK-7);
+          Listung zeigt 'kibuddy_aufnahme_quelle_setzen'.
   AC2  — propose('display') → Vorschlag-Text mit Bestätigungs-Frage,
           kein PUT-Aufruf (KAQS-4, TASK-10).
   AC2  — execute('display') nach Confirm → PUT mit {"aufnahme-quelle":
@@ -19,12 +19,11 @@ FakeKibuddyConfigClient ersetzt (CLIENT-1 Transport-Stub-Naht).
 """
 
 
-from skills._catalog_seeds import seed_kibuddy_aufnahme_quelle_setzen
 from skills.kibuddy_aufnahme_quelle_setzen_client import KibuddyConfigClientError
 from skills.kibuddy_aufnahme_quelle_setzen_task import (
     KibuddyAufnahmeQuelleSetzenTask,
 )
-from tasks import Catalog, Proposal, TurnContext, WriteTask
+from tasks import Proposal, TurnContext, WriteTask, build_catalog
 
 # ============================================================
 #  Doppelungen
@@ -224,33 +223,38 @@ def test_KAQS2_ungueltige_quelle_in_propose():
 
 
 # ============================================================
-#  AC1 — Catalog-Registrierung via _catalog_seeds
+#  AC1 — Catalog-Registrierung via build_catalog (KAQS-6, TASK-7)
 # ============================================================
 
-def _make_catalog_mit_seed(kibuddy_url="http://127.0.0.1:5090"):
-    """Baut einen Catalog mit KAQS-Seed (ohne CA-PEM — seed direkt)."""
-    catalog = Catalog()
-    seed_kibuddy_aufnahme_quelle_setzen(
-        catalog=catalog,
+class _FakeTelegram:
+    """Minimaler Telegram-Stub für build_catalog-Tests."""
+    def get_chat_member(self, chat_id, user_id):
+        return {"status": "member"}
+
+
+def _make_catalog_via_build_catalog(kibuddy_url="http://127.0.0.1:5090",
+                                     fgcid_getter=None):
+    """Baut einen Catalog via build_catalog mit KAQS-Parametern (KAQS-6, TASK-7)."""
+    if fgcid_getter is None:
+        fgcid_getter = _family_getter()
+    return build_catalog(
+        _FakeTelegram(), "/instanz/rootCA.pem",
         kibuddy_origin_url=kibuddy_url,
-        family_group_chat_id_getter=_family_getter(),
-        is_member_fn=_immer_mitglied)
-    return catalog
+        family_group_chat_id_getter=fgcid_getter)
 
 
 def test_AC1_skill_ist_registriert():
-    """AC1: seed_kibuddy_aufnahme_quelle_setzen registriert den Skill im Katalog."""
-    catalog = _make_catalog_mit_seed()
+    """AC1: build_catalog mit kibuddy_origin_url registriert den Skill im Katalog (KAQS-6)."""
+    catalog = _make_catalog_via_build_catalog()
     task = catalog.get("kibuddy_aufnahme_quelle_setzen")
     assert task is not None
 
 
 def test_AC1_ohne_kibuddy_url_nicht_registriert():
     """AC1 AND-Guard: ohne kibuddy_origin_url → Skill NICHT im Katalog."""
-    catalog = Catalog()
-    seed_kibuddy_aufnahme_quelle_setzen(
-        catalog=catalog,
-        kibuddy_origin_url=None,
+    catalog = build_catalog(
+        _FakeTelegram(), "/instanz/rootCA.pem",
+        # kibuddy_origin_url fehlt
         family_group_chat_id_getter=_family_getter())
     task = catalog.get("kibuddy_aufnahme_quelle_setzen")
     assert task is None
@@ -258,17 +262,17 @@ def test_AC1_ohne_kibuddy_url_nicht_registriert():
 
 def test_AC1_ohne_family_getter_nicht_registriert():
     """AC1 AND-Guard: ohne family_group_chat_id_getter → Skill NICHT im Katalog."""
-    catalog = Catalog()
-    seed_kibuddy_aufnahme_quelle_setzen(
-        catalog=catalog,
+    catalog = build_catalog(
+        _FakeTelegram(), "/instanz/rootCA.pem",
         kibuddy_origin_url="http://127.0.0.1:5090",
-        family_group_chat_id_getter=None)
+        # family_group_chat_id_getter fehlt
+    )
     task = catalog.get("kibuddy_aufnahme_quelle_setzen")
     assert task is None
 
 
 def test_AC1_skill_name_in_katalog():
     """AC1: Registrierter Task trägt Namen 'kibuddy_aufnahme_quelle_setzen'."""
-    catalog = _make_catalog_mit_seed()
+    catalog = _make_catalog_via_build_catalog()
     task = catalog.get("kibuddy_aufnahme_quelle_setzen")
     assert task.name == "kibuddy_aufnahme_quelle_setzen"
