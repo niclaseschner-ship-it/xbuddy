@@ -266,13 +266,17 @@ def _baue_antwort(hinzugefuegt, uebersprungen, grenze_halt, offen_n):
 # ============================================================
 
 def einkauf_hinzufuegen(text, from_user_id, essen_client, icon_client,
-                        is_member_fn, katalog=None):
+                        is_member_fn, katalog=None, receipt_store=None,
+                        chat_id=None):
     """Einkauf hinzufügen — aufrufbare Funktion (EIN-1, E-EIN-2, EC-29).
 
     Trigger-agnostisch: nimmt Eltern-Text und schreibt Items zur
     Einkaufsliste (klasse=einkauf, quelle=eltern).
 
     Direkt-Modus (E-EIN-1): kein propose→confirm.
+
+    `receipt_store` — A2ReceiptStore-Instanz (EC-10 A2-Receipt, #841) oder None.
+    `chat_id`       — Telegram-Chat-ID für den Receipt; None → kein Receipt.
 
     Wirft `BerechtigungError` bei EIN-2-Verletzung.
     Gibt User-tauglichen Antwort-Text als String zurück (EC-29).
@@ -303,6 +307,8 @@ def einkauf_hinzufuegen(text, from_user_id, essen_client, icon_client,
     uebersprungen = []   # Labels als Duplikat übersprungen
     grenze_halt = None   # (offen_jetzt, grenze, nicht_konnten_n) oder None
     grenze_items = []    # Labels die wegen Grenze nicht angelegt werden konnten
+    # EC-10 A2-Receipt (#841): (resource_id, inverse_call)-Tupel pro erfolgreichem Item.
+    receipt_items = []   # gesammelt, am Ende atomar geschrieben
 
     for item_text in items:
         if grenze_halt is not None:
@@ -321,6 +327,11 @@ def einkauf_hinzufuegen(text, from_user_id, essen_client, icon_client,
                 kategorie=kategorie,
             )
             hinzugefuegt.append(canonical)
+            # EC-10 A2-Receipt: item_id ist der kanonische Schlüssel (EIN-5,
+            # Phase-0-Befund: item_id ist INPUT, schon bekannt vor dem POST).
+            receipt_items.append(
+                (str(item_id),
+                 'essen_client.delete_einkauf("%s")' % item_id))
             logger.info(
                 "einkauf_hinzufuegen: angelegt %r (item_id=%s, kat=%s)",
                 canonical, item_id, kategorie)
@@ -353,6 +364,22 @@ def einkauf_hinzufuegen(text, from_user_id, essen_client, icon_client,
                     return ("Die Liste ist gerade nicht erreichbar — "
                             "versuch's gleich nochmal.")
                 return "Hat nicht geklappt: %s. Schreib's nochmal." % e
+
+    # EC-10 A2-Receipt (#841): alle erfolgreich angelegten Items atomar receipten.
+    # insert_many() siegelt Vorgänger-Receipts desselben chat_id und schreibt
+    # alle neuen Einträge mit identischer committed_at (spec Z. 543-548).
+    if receipt_items and receipt_store is not None and chat_id is not None:
+        try:
+            receipt_store.insert_many(
+                "einkauf_hinzufuegen", chat_id, receipt_items)
+            logger.debug(
+                "einkauf_hinzufuegen: %d A2-Receipts geschrieben (chat_id=%s)",
+                len(receipt_items), chat_id)
+        except Exception as e:
+            # Receipt-Fehler bricht die bereits erfolgreichen Schreibakte
+            # NICHT ab (ehrliche Grenze EC-7: Items sind in der Liste).
+            logger.warning(
+                "einkauf_hinzufuegen: A2-Receipt-Insert fehlgeschlagen: %s", e)
 
     # EIN-6: Antwort bauen
     # offen_n: wir haben keine direkte Counter-API; wir approximieren
