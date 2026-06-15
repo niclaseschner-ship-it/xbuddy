@@ -6,10 +6,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Einkaufsliste · XBuddy</title>
-  <link rel="stylesheet" href="/api/v1/seiten/static/essen-einkauf.css">
+  <link rel="stylesheet" href="/api/v1/seiten/static/essen-einkauf.css?v={{ build_id }}">
   <!-- platform.js (RAT-16) muss vor essen-einkauf.js geladen sein -->
-  <script src="/api/v1/seiten/static/platform.js"></script>
-  <script src="/api/v1/seiten/static/essen-einkauf.js" defer></script>
+  <script src="/api/v1/seiten/static/platform.js?v={{ build_id }}"></script>
+  <script src="/api/v1/seiten/static/essen-einkauf.js?v={{ build_id }}" defer></script>
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
 </head>
 <body>
   <header class="app-header">

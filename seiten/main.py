@@ -490,8 +490,19 @@ def essen_einkauf_view():
     nur via window.Telegram.WebApp.initData in der JS-App). JS macht beim Mount
     platform.ensureAuth() → ruft /api/v1/init-data/validate mit Header → bei
     401/403 sperrt UI. Daten-Schutz auf API-Routen (essen/main.py) bleibt scharf.
+
+    Cache-Buster: build_id aus mtime der JS-Datei (Telegram-WebView cached
+    Mini-App-Assets sonst aggressiv — Pattern analog routine/MAU/hoerspiel).
     """
-    return render_template("essen-einkauf.html", user_id=None)
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    try:
+        build_id = str(int(os.path.getmtime(os.path.join(static_dir, "essen-einkauf.js"))))
+    except OSError:
+        build_id = "0"
+    resp = make_response(render_template("essen-einkauf.html", build_id=build_id))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
 
 
 @app.route("/api/v1/seiten/mini-app-uebersicht", methods=["GET"])
