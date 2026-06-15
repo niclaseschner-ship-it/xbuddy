@@ -485,8 +485,9 @@ Interface-first).
 |---|---|---|---|
 | `GET` | `/display/kibuddy/frage` | Frage-View | Display-Client |
 | `POST` | `/api/v1/kibuddy/frage` | Audio rein → Text+Audio raus | Frage-View (clientseitig) |
+| `GET` | `/api/v1/kibuddy/audio/<id>.mp3` | MP3-Datei aus TTS-Audio-Cache (KIBUDDY-24) | Frage-View (Vorlese-Knopf, KIBUDDY-31) |
 | `POST` | `/api/v1/kibuddy/vorlesen` | Text-zu-TTS für Vorlese-Knopf (KIBUDDY-31) | Frage-View (clientseitig) |
-| `POST` | `/api/v1/kibuddy/reset` | Session-Konversation löschen (KIBUDDY-29) | Frage-View (clientseitig) |
+| `POST` | `/api/v1/kibuddy/reset` | Session-Konversation + Audio-Cache löschen (KIBUDDY-29) | Frage-View (clientseitig) |
 | `GET` | `/api/v1/kibuddy/config` | Aktuelle Config (ohne Keys) | KAQS-Skill, Diagnose |
 | `PUT` | `/api/v1/kibuddy/config` | Aufnahme-Quelle setzen | KAQS-Skill |
 | `GET` | `/api/v1/kibuddy/prompt` | Aktuellen System-Prompt lesen (KIBUDDY-15) | KPA-Skill, Diagnose |
@@ -494,9 +495,15 @@ Interface-first).
 
 **POST `/api/v1/kibuddy/frage`** — Multipart-Form mit `audio` (Browser-
 Container, WebM/Opus oder MP4). Response: JSON `{ text: "<antwort>",
-tts-audio-base64: "<...>" | null }`. `tts-audio-base64` ist `null`, wenn
-TTS-Synthese fehlschlägt (Resilienz: das Kind sieht zumindest die Text-
-Antwort).
+transkript: "<eltern-debug-sicht der STT-Erkennung>", words: [{ text:
+"<wort>", is_inhaltswort: true|false }], tts_audio_url:
+"/api/v1/kibuddy/audio/<id>.mp3" | null }`. `tts_audio_url` ist `null`,
+wenn TTS-Synthese fehlschlägt (Resilienz: das Kind sieht zumindest die
+Text-Antwort). Die `words[]`-Liste enthält nur `text` + `is_inhaltswort` —
+clientseitige Icon-Lookup läuft parallel über ICONS-7 pro Inhaltswort
+(KIBUDDY-17, Stück B). URL-Form ermöglicht Browser-Cache + Replay über
+KIBUDDY-31 ohne JS-State-Bloat im Chat-Verlauf (KIBUDDY-19); analog
+Hörspiel-Folgen-URLs.
 
 **PUT `/api/v1/kibuddy/config`** — JSON-Body, schreibt das spezifizierte
 Feld in die Per-Instanz-`config.json`. V1 akzeptiert nur das Feld
@@ -560,6 +567,9 @@ Icon-Bibliothek (KIBUDDY-30) plus die Aufschrift „Neue Frage".
 - löscht alle sichtbaren Chat-Turns im View-Container,
 - löscht den Session-Memory-Konversations-Kontext am Service (KIBUDDY-16) —
   die nächste Kind-Frage geht **ohne Turn-Historie** an den LLM,
+- löscht den TTS-Audio-Cache (alle Audio-Dateien aus bisherigen Turns werden
+  gelöscht; die `tts_audio_url`-Links aus dem Browser-Cache werden damit
+  invalidiert, KIBUDDY-31),
 - fällt visuell in den Initial-Zustand zurück (KIBUDDY-4): leerer
   Chat-Container, neutraler Header.
 
@@ -614,11 +624,13 @@ neben der `meta`-Zeile.
 dickem Kinderfinger; kein „Mini-Knopf".
 
 **Klick auf Vorlese-Knopf:**
-- **Buddy-Bubble:** spielt das gespeicherte TTS-Audio der Antwort erneut
-  ab. Wenn das Audio nicht mehr im Browser-Cache liegt (z. B. nach Tab-
-  Wechsel), synthetisiert der Backend per Request `POST /api/v1/kibuddy/
-  vorlesen` mit dem Bubble-Text neu (Stimme `onyx`, Speed `0.9` aus
-  KIBUDDY-21).
+- **Buddy-Bubble:** spielt das TTS-Audio-Cache-Replay ab. Der Browser lädt
+  die `tts_audio_url` (Endpoint `GET /api/v1/kibuddy/audio/<id>.mp3`,
+  KIBUDDY-24) nach. Wenn das Audio nicht mehr auf dem Server liegt (z. B.
+  nach Reset über KIBUDDY-29 oder bei Fehler), synthetisiert der Backend
+  per Request `POST /api/v1/kibuddy/vorlesen` mit dem Bubble-Text neu
+  (Stimme `onyx`, Speed `0.9` aus KIBUDDY-21). Fallback-Form ermöglicht
+  Replay auch ohne Session-State-Speicher.
 - **Kind-Bubble:** liest den **STT-Transkript-Text der Kind-Frage** mit
   derselben TTS-Pipeline vor (Stimme `onyx`, Speed `0.9`). Das gibt dem
   Kind eine Rückmeldung, was der Buddy verstanden hat — pädagogisch
