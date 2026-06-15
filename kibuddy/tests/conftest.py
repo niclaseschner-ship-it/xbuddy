@@ -26,13 +26,25 @@ from kibuddy.tts.azure import TTSError  # noqa: E402
 
 
 class FakeLLM(LLMProvider):
-    """Liefert für jeden multiturn-Call eine vorbereitete Antwort."""
+    """Liefert für jeden multiturn-Call eine vorbereitete JSON-Antwort (T865).
+
+    Default-Antwort ist valides JSON mit antwort + buzzwords[3],
+    damit parse_kibuddy_response() ohne Fallback arbeitet.
+    """
 
     name = "fake"
     model = "fake-model"
 
-    def __init__(self, *, antwort: str = "Der Himmel ist blau, weil das Licht gebrochen wird. Was denkst du?", fail: bool = False):
-        self.antwort = antwort
+    # T865: FakeLLM liefert JSON-Format (AC1-System-Prompt-JSON).
+    _DEFAULT_JSON = (
+        '{"antwort": "Der Himmel ist blau, weil das Licht gebrochen wird.'
+        ' Was denkst du?", "buzzwords": ["himmel", "licht", "blau"]}'
+    )
+
+    def __init__(self, *, antwort: str = "", fail: bool = False):
+        # antwort-Param bleibt für Rückwärtskompatibilität, wird als raw_json behandelt.
+        # Wenn leer: Default-JSON verwenden.
+        self.antwort = antwort if antwort else self._DEFAULT_JSON
         self.fail = fail
         self.calls: list[tuple] = []
 

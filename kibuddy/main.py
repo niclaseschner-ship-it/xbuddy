@@ -4,7 +4,7 @@
 Endpunkte (KIBUDDY-24):
 
   GET  /display/kibuddy/frage            — Frage-View (Stub, Stück B baut UI)
-  POST /api/v1/kibuddy/frage             — Audio → STT → LLM → Tokenisierung → TTS
+  POST /api/v1/kibuddy/frage             — Audio → STT → LLM → Buzzwords → TTS
   POST /api/v1/kibuddy/vorlesen          — Text-zu-TTS für Vorlese-Knopf
   POST /api/v1/kibuddy/reset             — Session-Memory + Audio-Cache leeren
   GET  /api/v1/kibuddy/audio/<id>.mp3   — MP3 aus Audio-Cache
@@ -17,7 +17,7 @@ Endpunkte (KIBUDDY-24):
 Port: 5054 (PORT-2, KIBUDDY-25). Service: xbuddy-kibuddy (SVC-1).
 
 Session-Cookie: kibuddy_sid (HttpOnly, SameSite=Lax) pro Browser (KIBUDDY-16).
-Icon-Lookup: clientseitig via Browser-Fetch-API (KIBUDDY-17 letzter Absatz).
+Icon-Lookup: clientseitig via Browser-Fetch-API (KIBUDDY-17 Buzzword-Render, T865).
 """
 
 import argparse
@@ -37,7 +37,7 @@ from tools import logsetup  # noqa: E402
 
 if __package__:
     from . import config as config_mod
-    from . import data_io, icon_render, llm_service, stt_service, tts_service
+    from . import data_io, llm_service, stt_service, tts_service
     from .providers.base import LLMProvider, ProviderError
     from .session_memory import SID_COOKIE, SessionMemory, SessionRegistry
     from .stt.azure_whisper import STTError
@@ -45,7 +45,7 @@ if __package__:
 else:  # python3 kibuddy/main.py
     sys.path.insert(0, _REPO_ROOT)
     from kibuddy import config as config_mod
-    from kibuddy import data_io, icon_render, llm_service, stt_service, tts_service
+    from kibuddy import data_io, llm_service, stt_service, tts_service
     from kibuddy.providers.base import LLMProvider, ProviderError
     from kibuddy.session_memory import SID_COOKIE, SessionMemory, SessionRegistry
     from kibuddy.stt.azure_whisper import STTError
@@ -263,18 +263,20 @@ def frage():
             yield json.dumps({"event": "error", "stage": "stt", "detail": "transkript leer — konnte die Frage nicht verstehen"}) + "\n"
             return
 
-        transkript_words_api = icon_render.worte_zu_words_api(frage_text)
-
+        # transkript_words: Diagnose-Feld (KIBUDDY-24/T865).
+        # Frontend ignoriert es (Kind-Bubble text-only, KIBUDDY-19/AC4).
+        # Wortklassen-Tokenisierung entfällt (T865 stop_rules keine_breaking_kind_change):
+        # leere Liste — kompatibel mit bestehendem Schema, kein STT-Mehraufwand.
         yield json.dumps({
             "event": "kind",
             "transkript": frage_text,
-            "transkript_words": transkript_words_api,
+            "transkript_words": [],
         }) + "\n"
         # Werkzeug/Gunicorn flusht bei jedem yield — Stage 1 wird sofort gesendet.
 
         # ---- Stage 2: LLM + TTS ----
         try:
-            antwort_text = llm_service.beantworte_frage(
+            llm_result = llm_service.beantworte_frage(
                 frage_text=frage_text,
                 data_root=data_root,
                 memory=memory,
@@ -284,7 +286,8 @@ def frage():
             yield json.dumps({"event": "error", "stage": "llm", "detail": str(e)}) + "\n"
             return
 
-        words_api = icon_render.worte_zu_words_api(antwort_text)
+        antwort_text = llm_result["antwort"]
+        buzzwords = llm_result["buzzwords"]
 
         tts_audio_url = None
         if tts is not None and cfg is not None:
@@ -304,7 +307,7 @@ def frage():
         yield json.dumps({
             "event": "buddy",
             "text": antwort_text,
-            "words": words_api,
+            "buzzwords": buzzwords,
             "tts_audio_url": tts_audio_url,
         }) + "\n"
 
@@ -541,9 +544,6 @@ def main(argv=None):
 
     # KIBUDDY-20: Audio-Cache beim Service-Start leeren.
     tts_service.clear_audio_cache_dir(data_root)
-
-    # KIBUDDY-17.3: Funktionswort-Override einmalig beim Start laden (befüllt Modul-Cache).
-    icon_render.load_stop_words(data_root=data_root)
 
     configure(
         runtime_config=runtime_cfg,
