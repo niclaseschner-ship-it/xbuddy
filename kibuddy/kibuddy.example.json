@@ -1,0 +1,8 @@
+{
+  "_comment": "KIBuddy Per-Instanz-Daten-Vorlage. Diese Datei ist ein Platzhalter — echte Daten liegen unter xbuddy-data/kibuddy/ (SVC-5).",
+  "_data_pfade": {
+    "prompt_txt": "xbuddy-data/kibuddy/prompt.txt",
+    "config_json": "xbuddy-data/kibuddy/config.json",
+    "audio_dir": "xbuddy-data/kibuddy/audio/"
+  }
+}
