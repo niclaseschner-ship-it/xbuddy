@@ -477,7 +477,6 @@ def _build_config_response(cfg, dcfg) -> dict:
 
 
 @app.route("/api/v1/hoerspiel/config", methods=["GET", "PATCH"])
-@require_mini_app_auth
 def config_endpoint():
     cfg = _runtime_cfg()
     if cfg is None:
@@ -521,7 +520,6 @@ def config_endpoint():
 # ---- Themen-Endpoint (HSP-38) ----
 
 @app.route("/api/v1/hoerspiel/themen", methods=["GET"])
-@require_mini_app_auth
 def themen_endpoint():
     """HSP-38: GET /themen?alter=N → kuratierte Themen-Liste je Alter."""
     alter_raw = request.args.get("alter", "").strip()
@@ -547,7 +545,6 @@ def themen_endpoint():
 
 @app.route("/api/v1/hoerspiel/alben/<album_id>/audio/<path:track_filename>",
            methods=["GET"])
-@require_mini_app_auth
 def album_audio(album_id: str, track_filename: str):
     """HSP-37: Audio-Track streamen mit Range-Requests.
 
@@ -572,7 +569,6 @@ def album_audio(album_id: str, track_filename: str):
 # ---- Resume-Endpoints (HSP-36) ----
 
 @app.route("/api/v1/hoerspiel/resume", methods=["GET", "PUT"])
-@require_mini_app_auth
 def resume_endpoint():
     """HSP-36: Resume-Stand lesen (GET) und setzen (PUT).
 

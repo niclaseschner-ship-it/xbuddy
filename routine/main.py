@@ -423,7 +423,6 @@ def index():
 
 
 @app.route("/api/v1/routine/config", methods=["GET"])
-@require_init_data
 def api_config_get():
     """Zeiten-Lese-API (ROUTINE-14, #728, URL-14).
 
@@ -455,7 +454,6 @@ def api_config_get():
 
 
 @app.route("/api/v1/routine/config", methods=["PUT"])
-@require_init_data
 def api_config():
     """Zeiten-Schreib-API (ROUTINE-14, #343, URL-14).
 
@@ -507,7 +505,6 @@ def _items_zeitzone():
 
 
 @app.route("/api/v1/routine/items", methods=["GET"])
-@require_init_data
 def api_items_get():
     """Aktuelle Items-Liste lesen (ROUTINE-14, V1.2, #469).
 
@@ -536,7 +533,6 @@ def api_items_get():
 
 
 @app.route("/api/v1/routine/items", methods=["POST"])
-@require_init_data
 def api_items_post():
     """Punkt anlegen (ROUTINE-14, #354, URL-14).
 
@@ -570,7 +566,6 @@ def api_items_post():
 
 
 @app.route("/api/v1/routine/items", methods=["PUT"])
-@require_init_data
 def api_items_put():
     """Geordnete default-Liste ersetzen (ROUTINE-14, #354, URL-14).
 
@@ -596,7 +591,6 @@ def api_items_put():
 
 
 @app.route("/api/v1/routine/items/<item_id>", methods=["DELETE"])
-@require_init_data
 def api_items_delete(item_id):
     """Punkt entfernen (ROUTINE-14, #354, URL-14).
 
