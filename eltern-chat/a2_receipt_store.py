@@ -86,6 +86,53 @@ class A2ReceiptStore:
                 "VALUES (?, ?, ?, ?, datetime('now'), ?, NULL)",
                 (task_name, chat_id, resource_id, inverse_call, expires_at))
 
+    def fetch_unsealed_for_chat(self, chat_id):
+        """Liefert alle unversiegelten Receipts der `chat_id` als list[dict]
+        (EC-36 Korrektur-Hook, #844).
+
+        Reine LESE-Methode — siegelt NICHT. Der Vor-Agent-Hook (main.py) entscheidet
+        nach dem Lesen über Inverse-Aufrufe und ruft anschließend
+        `seal_all_for_chat()`, sobald die Inverse-Pfade durch sind. Trennung von
+        Lese und Versiegelung erlaubt dem Hook, bei einem Provider-Down-Fehler
+        ehrlich abzubrechen, ohne die Bons fälschlich zu verbrennen.
+
+        Dict-Felder (stabile Hook-Schnittstelle):
+          `id`, `task_name`, `chat_id`, `resource_id`, `inverse_call`,
+          `committed_at`, `expires_at`.
+
+        Reihenfolge: aufsteigend nach `id` (Insert-Reihenfolge). Bei Multi-Item
+        sind alle Zeilen einer Anfrage zusammenhängend.
+        """
+        chat_id = int(chat_id)
+        cur = self._conn.execute(
+            "SELECT id, task_name, chat_id, resource_id, inverse_call, "
+            "       committed_at, expires_at "
+            "FROM a2_receipts "
+            "WHERE chat_id = ? AND sealed_at IS NULL "
+            "ORDER BY id",
+            (chat_id,))
+        cols = ("id", "task_name", "chat_id", "resource_id", "inverse_call",
+                "committed_at", "expires_at")
+        return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
+
+    def seal_all_for_chat(self, chat_id):
+        """Versiegelt alle unversiegelten Receipts der `chat_id` (EC-36, #844).
+
+        Pendant zu `fetch_unsealed_for_chat`. Wird vom Vor-Agent-Hook nach
+        Abschluss der Inverse-Aufrufe gerufen — auch im Ambiguitäts-Fall
+        (EC-10 spec Z. 586-597: jeder DELETE-Versuch siegelt den Bon, ob 200
+        oder 4xx/5xx, kein zweiter Versuch auf denselben Bon).
+
+        Liefert die Anzahl gesiegelter Zeilen (für Logging/Tests).
+        """
+        chat_id = int(chat_id)
+        with self._conn:
+            cur = self._conn.execute(
+                "UPDATE a2_receipts SET sealed_at = datetime('now') "
+                "WHERE chat_id = ? AND sealed_at IS NULL",
+                (chat_id,))
+            return cur.rowcount
+
     def insert_many(self, task_name, chat_id, items, expires_at=None):
         """Schreibt mehrere Receipt-Einträge atomar mit identischer committed_at
         (Multi-Item-Fall, EC-10 spec Z. 543-548).

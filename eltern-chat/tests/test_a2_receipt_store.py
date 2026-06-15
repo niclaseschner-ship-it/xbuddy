@@ -250,3 +250,102 @@ def test_insert_many_leer_macht_nichts(tmp_path):
     conn.close()
 
     assert rows == []
+
+
+# ============================================================
+#  EC-36 Korrektur-Hook (#844) — fetch_unsealed_for_chat / seal_all_for_chat
+# ============================================================
+
+def test_fetch_unsealed_for_chat_liefert_nur_unsealed(tmp_path):
+    """fetch_unsealed_for_chat() liefert nur unversiegelte Receipts der chat_id.
+
+    Nach insert(A) + insert(B) ist A versiegelt, B frisch; fetch() liefert
+    nur B. Dict-Keys sind die stabile Hook-Schnittstelle.
+    """
+    store = A2ReceiptStore(str(tmp_path / "test.db"))
+    store.insert("foto_senden", 100, "med-1",
+                 'photo DELETE /api/v1/photo/medien/med-1')
+    store.insert("foto_senden", 100, "med-2",
+                 'photo DELETE /api/v1/photo/medien/med-2')
+
+    rows = store.fetch_unsealed_for_chat(100)
+    assert len(rows) == 1
+    assert rows[0]["resource_id"] == "med-2"
+    assert rows[0]["task_name"] == "foto_senden"
+    assert rows[0]["inverse_call"] == 'photo DELETE /api/v1/photo/medien/med-2'
+    assert rows[0]["chat_id"] == 100
+    assert rows[0]["committed_at"] is not None
+    assert rows[0]["expires_at"] is None
+    store.close()
+
+
+def test_fetch_unsealed_for_chat_ignoriert_andere_chat_id(tmp_path):
+    """Receipts anderer chat_ids bleiben außen vor."""
+    store = A2ReceiptStore(str(tmp_path / "test.db"))
+    store.insert("foto_senden", 100, "med-1",
+                 'photo DELETE /api/v1/photo/medien/med-1')
+    store.insert("einkauf_hinzufuegen", 200, "item-x",
+                 'essen DELETE /api/v1/essen/wuensche/item-x')
+
+    rows_100 = store.fetch_unsealed_for_chat(100)
+    rows_200 = store.fetch_unsealed_for_chat(200)
+    assert len(rows_100) == 1
+    assert rows_100[0]["chat_id"] == 100
+    assert len(rows_200) == 1
+    assert rows_200[0]["chat_id"] == 200
+    store.close()
+
+
+def test_fetch_unsealed_for_chat_multi_item_alle_unsealed(tmp_path):
+    """Bei insert_many() sind alle N Receipts unversiegelt und werden geliefert."""
+    store = A2ReceiptStore(str(tmp_path / "test.db"))
+    items = [
+        ("item-a", 'essen DELETE /api/v1/essen/wuensche/item-a'),
+        ("item-b", 'essen DELETE /api/v1/essen/wuensche/item-b'),
+        ("item-c", 'essen DELETE /api/v1/essen/wuensche/item-c'),
+    ]
+    store.insert_many("einkauf_hinzufuegen", 300, items)
+
+    rows = store.fetch_unsealed_for_chat(300)
+    assert len(rows) == 3
+    assert [r["resource_id"] for r in rows] == ["item-a", "item-b", "item-c"]
+    store.close()
+
+
+def test_fetch_unsealed_for_chat_leer_nach_seal(tmp_path):
+    """Nach seal_all_for_chat() ist fetch() leer."""
+    store = A2ReceiptStore(str(tmp_path / "test.db"))
+    store.insert("foto_senden", 100, "med-1",
+                 'photo DELETE /api/v1/photo/medien/med-1')
+    n_sealed = store.seal_all_for_chat(100)
+
+    assert n_sealed == 1
+    assert store.fetch_unsealed_for_chat(100) == []
+    store.close()
+
+
+def test_seal_all_for_chat_nur_gleicher_chat_id(tmp_path):
+    """seal_all_for_chat(100) berührt chat_id=200 nicht."""
+    store = A2ReceiptStore(str(tmp_path / "test.db"))
+    store.insert("foto_senden", 100, "med-1",
+                 'photo DELETE /api/v1/photo/medien/med-1')
+    store.insert("einkauf_hinzufuegen", 200, "item-x",
+                 'essen DELETE /api/v1/essen/wuensche/item-x')
+
+    n = store.seal_all_for_chat(100)
+    assert n == 1
+    # chat 200 bleibt unsealed
+    assert len(store.fetch_unsealed_for_chat(200)) == 1
+    store.close()
+
+
+def test_seal_all_for_chat_idempotent(tmp_path):
+    """Zweites seal_all_for_chat() siegelt nichts mehr — Rückgabe 0."""
+    store = A2ReceiptStore(str(tmp_path / "test.db"))
+    store.insert("foto_senden", 100, "med-1",
+                 'photo DELETE /api/v1/photo/medien/med-1')
+    store.seal_all_for_chat(100)
+    n2 = store.seal_all_for_chat(100)
+
+    assert n2 == 0
+    store.close()

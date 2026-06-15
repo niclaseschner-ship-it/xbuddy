@@ -14,6 +14,8 @@ liefert (Entry-Path-Probe).
 import logging
 import time
 
+import main as main_mod
+from a2_receipt_store import A2ReceiptStore
 from confirm import PendingStore
 from fakes import (
     FakeProvider,
@@ -491,3 +493,191 @@ def test_SESS5_registry_routes_privatchat_to_session_deliver(tmp_path):
         "SESS-5: Bei aktiver Session darf der Agent nicht aufgerufen werden.")
     assert not tg.sent, (
         "SESS-5: Bei aktiver Session darf keine Bot-Antwort gesendet werden.")
+
+
+# ============================================================
+#  EC-36 Korrektur-Hook (#844) — Integrationstests handle_update
+# ============================================================
+
+
+class _StubHTTP:
+    """Stubt main._http_delete für die Integrationstests."""
+
+    def __init__(self, statuses=None):
+        self._statuses = list(statuses or [])
+        self.calls = []
+
+    def __call__(self, origin_url, api_path, timeout=2.0):
+        self.calls.append((origin_url, api_path))
+        if self._statuses:
+            return self._statuses.pop(0), b""
+        return 200, b""
+
+
+def _ec36_ctx(tmp_path, tg, provider, *, catalog=None, store=None,
+              photo_origin="", essen_origin=""):
+    """Context mit EC-36-Feldern."""
+    return Context(
+        tg=tg, bot_username="mybot", family_group_chat_id="-100",
+        context_depth=20, provider=provider,
+        catalog=catalog if catalog is not None else Catalog(),
+        history=History(str(tmp_path / "ec36.db")),
+        pending=PendingStore(),
+        a2_receipt_store=store,
+        photo_origin_url=photo_origin,
+        essen_origin_url=essen_origin,
+    )
+
+
+def test_EC_36_falsch_nach_a2_foto_loest_inverse_aus(tmp_path, monkeypatch):
+    """AC1/AC2-Integration: handle_update petrarbeitet »falsch« VOR dem Agenten;
+    A2-Receipt löst HTTP DELETE aus, Quittung positiv, kein Provider-Call."""
+    store = A2ReceiptStore(str(tmp_path / "rec.db"))
+    chat_id = 42
+    store.insert("foto_senden", chat_id, "med-7",
+                 'photo DELETE /api/v1/photo/medien/med-7')
+
+    tg = FakeTelegram(members=_members(7))
+    # Provider darf NICHT gerufen werden — der Hook handelt allein.
+    provider = FakeProvider([])
+    ctx = _ec36_ctx(tmp_path, tg, provider, store=store,
+                    photo_origin="http://127.0.0.1:5070")
+
+    http = _StubHTTP(statuses=[200])
+    monkeypatch.setattr(main_mod, "_http_delete", http)
+
+    handle_update(make_message("falsch", chat_id=chat_id, from_user_id=7),
+                  ctx)
+
+    assert provider.requests == [], (
+        "EC-36: »falsch« muss VOR dem Agenten greifen — kein Provider-Call.")
+    assert http.calls == [
+        ("http://127.0.0.1:5070", "/api/v1/photo/medien/med-7")]
+    assert len(tg.sent) == 1
+    assert "rückgängig" in tg.sent[0]["text"].lower()
+    # Korrektur-State sichtbar für den Folge-Turn
+    assert ctx.pending.get_correction(chat_id) is not None
+
+
+def test_EC_36_falsch_nach_klasse_c_verwirft_pending(tmp_path):
+    """AC1-Integration Klasse-C: »falsch« nach Pending verwirft den Vorschlag,
+    Quittung „Vorschlag verworfen", kein Provider-Call."""
+    write = FakeWriteTask(name="gericht_anlegen", summary="Pizza anlegen",
+                          result="Pizza angelegt.")
+    catalog = Catalog()
+    catalog.register(write)
+
+    tg = FakeTelegram(members=_members(7))
+    # Schritt 1: ein Vorschlag entsteht (write_proposal-Flow).
+    provider = FakeProvider([
+        task_call_response("gericht_anlegen", arguments={"label": "Pizza"}),
+        # Schritt 2 NICHT erwartet — »falsch« greift VOR dem Agenten.
+    ])
+    ctx = _ec36_ctx(tmp_path, tg, provider, catalog=catalog)
+
+    handle_update(make_message("trag Pizza ein", message_id=100,
+                               from_user_id=7), ctx)
+    assert ctx.pending.open_count(42) == 1
+
+    handle_update(make_message("falsch", message_id=101, from_user_id=7), ctx)
+
+    # Pending verworfen
+    assert ctx.pending.open_count(42) == 0
+    # Quittung
+    texts = [s["text"] for s in tg.sent]
+    assert any("vorschlag verworfen" in t.lower() for t in texts)
+    # Agent wurde nur EINMAL gerufen (für den ersten Vorschlag)
+    assert len(provider.requests) == 1
+    # Korrektur-State trägt Original-Skill + Args
+    state = ctx.pending.get_correction(42)
+    assert state is not None
+    assert state.last_skill == "gericht_anlegen"
+    assert state.last_args == {"label": "Pizza"}
+
+
+def test_EC_36_re_propose_durchlaeuft_confirm_gate(tmp_path):
+    """AC4 Re-Propose: nach »falsch« + Patch baut der Agent einen neuen
+    Vorschlag, der IMMER durch das zweistufige Confirm-Gate geht — auch wenn
+    der Original-Skill A2 war (spec Z. 1193-1201).
+
+    Hier am Klasse-C-Beispiel: »falsch« → Patch → neuer Vorschlag → »ja«
+    → Ausführung. Belegt damit, dass das System die Re-Propose-Form als
+    normalen Pending-Pfad handhabt.
+    """
+    write = FakeWriteTask(name="gericht_anlegen", summary="Nudeln anlegen",
+                          result="Nudeln angelegt.")
+    catalog = Catalog()
+    catalog.register(write)
+
+    tg = FakeTelegram(members=_members(7))
+    # Turn 1: erster Vorschlag (Pizza)
+    # Turn 2 (nach »falsch« + Patch »Nudeln«): zweiter Vorschlag (Nudeln)
+    provider = FakeProvider([
+        task_call_response("gericht_anlegen", arguments={"label": "Pizza"},
+                           call_id="c1"),
+        task_call_response("gericht_anlegen", arguments={"label": "Nudeln"},
+                           call_id="c2"),
+    ])
+    ctx = _ec36_ctx(tmp_path, tg, provider, catalog=catalog)
+
+    # Schritt 1: »trag Pizza ein« → Vorschlag
+    handle_update(make_message("trag Pizza ein", message_id=100,
+                               from_user_id=7), ctx)
+    assert ctx.pending.open_count(42) == 1
+    assert write.execute_calls == []
+
+    # Schritt 2: »falsch« → Vorschlag verworfen, Korrektur-State gesetzt
+    handle_update(make_message("falsch", message_id=101, from_user_id=7), ctx)
+    assert ctx.pending.open_count(42) == 0
+    assert ctx.pending.get_correction(42) is not None
+
+    # Schritt 3: Patch »Nudeln« → Agent baut neuen Vorschlag (Confirm-Gate)
+    handle_update(make_message("Nudeln", message_id=102, from_user_id=7), ctx)
+    # Korrektur-State nach dem Agent-Turn verbraucht
+    assert ctx.pending.get_correction(42) is None
+    # Neuer Vorschlag liegt vor
+    assert ctx.pending.open_count(42) == 1
+    proposal_msg_id = tg.sent[-1]["message_id"]
+    # Noch nicht ausgeführt
+    assert write.execute_calls == []
+
+    # Schritt 4: »ja« als Antwort auf den neuen Vorschlag → Ausführung
+    handle_update(make_message("ja", message_id=103, from_user_id=7,
+                               reply_to_message_id=proposal_msg_id), ctx)
+    # Re-Propose-Args wurden ausgeführt
+    assert write.execute_calls == [{"label": "Nudeln"}]
+
+
+def test_EC_36_falsch_nach_a2_provider_nicht_gerufen(tmp_path, monkeypatch):
+    """Negativ-Probe: Der Hook fängt »falsch« VOR dem Agenten ab — also läuft
+    der Provider auch dann nicht, wenn er skriptiert wäre."""
+    store = A2ReceiptStore(str(tmp_path / "rec.db"))
+    chat_id = 42
+    store.insert("einkauf_hinzufuegen", chat_id, "item-1",
+                 'essen DELETE /api/v1/essen/wuensche/item-1')
+
+    tg = FakeTelegram(members=_members(7))
+    provider = FakeProvider([text_response("DARF NICHT KOMMEN")])
+    ctx = _ec36_ctx(tmp_path, tg, provider, store=store,
+                    essen_origin="http://127.0.0.1:5052")
+
+    monkeypatch.setattr(main_mod, "_http_delete", _StubHTTP(statuses=[200]))
+    handle_update(make_message("falsch", chat_id=chat_id, from_user_id=7),
+                  ctx)
+
+    assert provider.requests == []
+    assert "DARF NICHT KOMMEN" not in (tg.sent[0]["text"] if tg.sent else "")
+
+
+def test_EC_36_falsch_ohne_vorgang_geht_an_agent(tmp_path):
+    """»falsch« ohne A2-Receipt + ohne Pending → Hook gibt False, Agent läuft."""
+    tg = FakeTelegram(members=_members(7))
+    provider = FakeProvider([text_response("Was war falsch?")])
+    # Kein store, kein pending — Hook ist no-op
+    ctx = _ec36_ctx(tmp_path, tg, provider)
+
+    handle_update(make_message("falsch", from_user_id=7), ctx)
+
+    # Agent wurde gerufen
+    assert len(provider.requests) == 1
+    assert tg.sent[0]["text"] == "Was war falsch?"
