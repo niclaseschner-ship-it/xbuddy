@@ -161,9 +161,12 @@ body.xb[data-stage="toddler"] {
   border-radius: 20px;
   padding: 12px 16px;
   max-width: 80%;
-  font-size: 20px;
+  font-size: 24px;        /* AC2: deutlich größer (war 20px) */
   line-height: 1.4;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  word-break: keep-all;  /* AC2: kein mid-word-Umbruch */
+  overflow-wrap: normal; /* AC2: kein overflow-word-Wrap */
+  hyphens: none;         /* AC2: keine Silbentrennung */
 }
 
 /* Kind-Bubble: hellblau, rechts */
@@ -218,9 +221,10 @@ body.xb[data-stage="toddler"] {
   font-weight: 600;
   text-align: center;
   color: #1a2e1a;
-  max-width: 64px;
-  word-break: break-word;
-  hyphens: auto;
+  max-width: 72px;       /* etwas breiter damit keep-all mehr Raum hat */
+  word-break: keep-all;  /* AC2: kein mid-word-Umbruch */
+  hyphens: none;         /* AC2: keine Silbentrennung */
+  overflow-wrap: normal;
 }
 
 /* Funktionswort — nur Text, kein Icon-Slot (KIBUDDY-17 Punkt 6a) */
@@ -412,12 +416,15 @@ body.xb[data-stage="toddler"] {
   pointer-events: none;
 }
 
-/* Lock-Modus: Stopp-Zeile */
+/* Lock-Modus: Stopp-Zeile — AC1: absolute damit mikro-row NICHT verschoben wird */
 .stopp-row {
+  position: absolute;
+  top: 8px;          /* oberhalb mikro-row, innerhalb ptt-zone */
+  left: 0;
   width: 100%;
   display: flex;
   justify-content: center;
-  margin-bottom: 4px;
+  z-index: 10;
 }
 
 .btn-stopp {
@@ -456,6 +463,40 @@ body.xb[data-stage="toddler"] {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.45; }
+}
+
+/* ── AC4: Lade-Bubble (Chat-Indikator während fetch) ─────── */
+.bubble-laden {
+  background: #d1fae5;
+  border: 2px solid #6ee7b7;
+  border-radius: 20px;
+  border-bottom-left-radius: 4px;
+  padding: 14px 20px;
+  display: inline-flex;
+  align-items: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.lade-dots {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.lade-dots span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #4a8a4a;
+  animation: lade-pulse 1.2s infinite;
+}
+
+.lade-dots span:nth-child(2) { animation-delay: 0.2s; }
+.lade-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes lade-pulse {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40%           { opacity: 1;   transform: scale(1.0); }
 }
 
 /* ── TTS-Fehler-Hinweis (FIX4, KIBUDDY-30) ────────────────── */
