@@ -1,0 +1,24 @@
+{
+  "name": "KIBuddy",
+  "short_name": "KIBuddy",
+  "description": "Frag mich — Wissensfragen für Kinder",
+  "start_url": "/display/kibuddy/frage",
+  "display": "standalone",
+  "background_color": "#f0f7f0",
+  "theme_color": "#f0f7f0",
+  "lang": "de",
+  "icons": [
+    {
+      "src": "/display/kibuddy/static/icons/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/display/kibuddy/static/icons/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}

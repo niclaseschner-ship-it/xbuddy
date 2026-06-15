@@ -1,12 +1,119 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f0f7f0">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="KIBuddy">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>KIBuddy</title>
+
+  {# Design-Tokens analog Hörspiel (DTOK-2/3) #}
+  <link rel="stylesheet" href="/display/_shared/design/tokens.css">
+  <link rel="stylesheet" href="/display/kibuddy/static/frage.css">
+  <link rel="manifest" href="/display/kibuddy/static/manifest.webmanifest">
 </head>
-<body>
-<!-- Stück B baut UI hier -->
-<p>KIBuddy Frage-View — Platzhalter (Stück B)</p>
+
+{# KIBUDDY-2: Single-Page-View, Touch-Display, stage=toddler #}
+<body class="xb" data-stage="toddler">
+
+<div class="shell" id="app">
+
+  {# ── HEADER: Titel + Reset-Knopf (KIBUDDY-29) ── #}
+  <header class="topbar" role="banner">
+    <div class="topbar-title">KIBuddy</div>
+    <div class="topbar-status" id="header-status" aria-live="polite">
+      Drück mich, wenn du eine Frage hast
+    </div>
+    {# KIBUDDY-29: Mülleimer 2498, immer sichtbar, oben rechts #}
+    <button class="btn-reset" id="btn-reset"
+            aria-label="Neue Frage — alles löschen"
+            title="Neue Frage">
+      <img src="/display/_shared/icons/arasaac/2498.png"
+           alt="Mülleimer" aria-hidden="true">
+      <span>Neue Frage</span>
+    </button>
+  </header>
+
+  {# ── MITTE: Chat-Verlauf (KIBUDDY-19) ── #}
+  <main class="chat-area" aria-label="Chat-Verlauf">
+    <div class="chat" id="chat" role="log" aria-live="polite" aria-relevant="additions">
+      {# Turns werden von frage.js befüllt #}
+    </div>
+
+    {# KIBUDDY-6: Mikro-Erlaubnis-Fehler-Hinweis #}
+    <div class="mikro-fehler" id="mikro-fehler" hidden role="alert">
+      <p>Ich darf gerade nicht zuhören.</p>
+      <p class="mikro-fehler-sub">
+        Bitte frag eine/n Erwachsene/n, das Mikrofon in den Browser-Einstellungen freizugeben,
+        und drücke dann nochmals auf das Mikrofon.
+      </p>
+    </div>
+  </main>
+
+  {# ── UNTEN: PTT-Zone (KIBUDDY-7/8/9/10/11) ── #}
+  <div class="ptt-zone" id="ptt-zone">
+
+    {# KIBUDDY-10: Slide-to-Lock-Hinweis — erscheint nach Lock-Hinweis-Schwelle #}
+    <div class="lock-hinweis" id="lock-hinweis" hidden aria-hidden="true">
+      <span class="lock-pfeil">&#x2191;</span>
+      <img src="/display/_shared/icons/arasaac/3261.png"
+           alt="Schloss" class="lock-img">
+    </div>
+
+    {# KIBUDDY-11: Cancel-Hinweis (Slide nach unten) #}
+    <div class="cancel-hinweis" id="cancel-hinweis" hidden aria-hidden="true">
+      <img src="/display/_shared/icons/arasaac/2498.png"
+           alt="Abbruch" class="cancel-img">
+    </div>
+
+    {# KIBUDDY-9: Pegel symmetrisch links UND rechts des Knopfs #}
+    <div class="mikro-row" id="mikro-row">
+      <div class="pegel-links" id="pegel-links" aria-hidden="true">
+        <div class="pegel-bar" id="pl1"></div>
+        <div class="pegel-bar" id="pl2"></div>
+        <div class="pegel-bar" id="pl3"></div>
+        <div class="pegel-bar" id="pl4"></div>
+        <div class="pegel-bar" id="pl5"></div>
+      </div>
+
+      {# KIBUDDY-7/8: PTT-Knopf (Mikrofon 37404) — fix in der Mitte #}
+      <button class="btn-ptt" id="btn-ptt"
+              aria-label="Gedrückt halten zum Sprechen">
+        <img src="/display/_shared/icons/arasaac/37404.png"
+             alt="Mikrofon" id="ptt-img" aria-hidden="true">
+      </button>
+
+      <div class="pegel-rechts" id="pegel-rechts" aria-hidden="true">
+        <div class="pegel-bar" id="pr1"></div>
+        <div class="pegel-bar" id="pr2"></div>
+        <div class="pegel-bar" id="pr3"></div>
+        <div class="pegel-bar" id="pr4"></div>
+        <div class="pegel-bar" id="pr5"></div>
+      </div>
+    </div>
+
+    {# Lock-Modus: Stopp-Knopf ersetzt PTT #}
+    <div class="stopp-row" id="stopp-row" hidden>
+      <button class="btn-stopp" id="btn-stopp" aria-label="Aufnahme beenden">
+        <span class="stopp-quad" aria-hidden="true">&#x25FC;</span>
+        Stopp
+      </button>
+    </div>
+
+    <div class="ladehinweis" id="ladehinweis" hidden aria-live="polite">
+      Ich denke nach&#x2026;
+    </div>
+  </div>
+
+  {# ── FUSSZEILE: ARASAAC-Credit ── #}
+  <footer class="footer">
+    <div>Piktogramme: ARASAAC / Sergio Palao (CC BY-NC-SA)</div>
+  </footer>
+
+</div>{# /.shell #}
+
+<script src="/display/kibuddy/static/frage.js"></script>
 </body>
 </html>
