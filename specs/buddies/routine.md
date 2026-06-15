@@ -889,6 +889,156 @@ oder restrukturiert wird.
 
 ---
 
+## 11. V2 — Dynamische Zeit-Anker (Zwischenschritte editierbar)
+
+Die V1-Mechanik (drei feste Anker `aufstehzeit` / `anzieh_vorlauf_min` /
+`abfahrtszeit` aus `ROUTINE-12`) reicht für die Morgen-Sicht der ersten
+Familie. Mit dem 2. Familien-Setup wird der Wunsch konkret, eigene
+**Zwischenschritte** einzufügen ("nach Aufstehen 10 Min Hände waschen, dann
+Anziehen, 5 Min vor Aufbruch Schuhe an"). V2 trägt das, **additiv** zur V1.
+items[] (`ROUTINE-4`) bleibt SSoT der Reihenfolge — V2 erweitert das
+Schema um einen optionalen `zeit`-Sub-Block am Item; die V1-Anker werden
+schrittweise zu items mit `zeit.typ=anker` (`ROUTINE-28`).
+
+### ROUTINE-24 — Datenmodell-Erweiterung: optionaler `zeit`-Sub-Block am Item
+
+Ein Routine-Punkt (`ROUTINE-4`) bekommt einen optionalen `zeit`-Sub-Block:
+
+```json
+{
+  "id": "...", "label": "...", "piktogramm": "...", "quelle": "default",
+  "zeit": null
+  //  oder { "typ": "anker",   "uhrzeit": "08:00", "locked": false }
+  //  oder { "typ": "vorlauf", "minuten": 10, "bezug": "vorheriger_anker" }
+}
+```
+
+- **`zeit` fehlt** (oder `null`) → reiner Routine-Punkt ohne Zeit
+  (heutiges V1-items[]-Verhalten); im Display ohne Uhrzeit-Anker.
+- **`typ: anker`** → absolute Uhrzeit (lokale Familien-Zeitzone, `HH:MM`).
+  Optional `locked: true` schützt das Datenfeld vor Mini-App-Edit
+  (V1-Kompat-Anker: `aufstehzeit`/`abfahrtszeit` werden zu
+  `locked: true`-Ankern; siehe `ROUTINE-28`).
+- **`typ: vorlauf`** → relativ zum **letzten Anker davor** in der
+  items[]-Ordnung (`bezug: "vorheriger_anker"`), in Minuten. Robust bei
+  End-Vorläufen und intuitiv ("10 Min nach Aufstehen Zähne putzen").
+
+**items[]-Reihenfolge = Zeitlinie.** Der Display-Render rechnet
+Vorlauf-Uhrzeit live aus dem letzten Anker davor + minuten. Gibt es
+keinen Anker davor (Vorlauf am Anfang der Liste), zeigt das Display
+„—:—" (MAD-1-Disziplin: keine Fake-Daten).
+
+**Verworfen:** (a) eigene `zeit_anker[]`-Liste neben items[] — zwei
+Sub-Ressourcen, getrennte Order, mehr Stellen für Drift; bricht
+items[]-SSoT. (b) `bezug: "naechster_anker"` — Vorlauf am Listen-Ende
+hätte keinen „nächsten"; vorheriger_anker hat immer einen verfügbaren
+oder fällt sauber auf „—:—". (c) Vorlauf relativ zum Listen-Start
+(absolute Position) — verliert die intuitive Lesart „X Min nach Y".
+
+*Tickets:* #726
+
+### ROUTINE-25 — Schreib-API-Erweiterung (kein neuer Endpunkt)
+
+`PUT /api/v1/routine/items` und `POST /api/v1/routine/items` (`ROUTINE-14`)
+akzeptieren den neuen `zeit`-Sub-Block am Item-Schema. **Kein neuer
+Endpunkt.** Items ohne `zeit` bleiben weiter zulässig; `null`-Werte sind
+äquivalent zu „kein zeit-Block".
+
+`PUT /api/v1/routine/config` (V1-Schreibpfad für `aufstehzeit`/
+`anzieh_vorlauf_min`/`abfahrtszeit`) bleibt als V1-Kompat-Bridge mit
+**Deprecation-Hinweis** in den 200-Antworten (`X-Deprecation`-Header oder
+JSON-Feld `deprecated: true`). Aufrufer werden auf den items[]-Pfad
+verwiesen; der Endpunkt selbst bleibt funktionsfähig.
+
+*Tickets:* #726
+
+### ROUTINE-26 — Display-Erweiterung: items mit `zeit.typ=anker` sind
+                Zeitstrahl-Pins
+
+Das Display (`ROUTINE-9`) erweitert sein Zeitstrahl-Rendering wie folgt:
+
+- Alle items mit `zeit.typ=anker` werden als **Pin-Piktogramme** am
+  vertikalen Balken gerendert, in items[]-Reihenfolge (oben = frühe
+  Uhrzeit, unten = späte Uhrzeit). Seiten-Alternation (`ROUTINE-9`)
+  greift weiter; bei N>3 Ankern wechselt die Seite pro Position.
+- Items mit `zeit.typ=vorlauf` werden als **eigene Pins zwischen den
+  Ankern** dargestellt — mit Uhrzeit-Label `<anker_uhrzeit> − <minuten>`,
+  Pikto, und einem feineren visuellen Marker (kleinere Pikto-Skala) als
+  die Anker selbst.
+- Items ohne `zeit`-Block bleiben in der Checkliste rechts vom Balken
+  (heutiges V1-Verhalten der Routine-Karten).
+- Das Verstrichen-Band, die 5-Min-Marker und die Zonen-Farben aus
+  `ROUTINE-9` rechnen weiterhin gegen `aufstehen` und `losgehen` als
+  Fenster-Ränder — diese sind nach `ROUTINE-28` selbst items mit
+  `zeit.typ=anker` + `locked: true`.
+
+*Test-Implikation:* items mit drei Ankern (`aufstehen 07:00`,
+`Schule-los 08:30`, plus Zwischen-Anker `Pause 07:30`) und einem Vorlauf
+(`vor Schule Schuhe 10 Min`) liefern vier Pins am Balken in der
+richtigen Reihenfolge mit den richtigen Uhrzeiten.
+
+*Tickets:* #726
+
+### ROUTINE-27 — Mini-App-Erweiterung: Typ-Toggle im Bottom-Sheet
+
+Die Anpassen-Mini-App (`ROUTINE-20`, `ROUTINE-21`) erweitert das
+Hinzufügen-Bottom-Sheet um einen **Typ-Toggle** mit drei Werten:
+
+- **Punkt** (Default) — kein `zeit`-Block, heutiges Verhalten.
+- **Anker** — Uhrzeit-Picker (`HH:MM`-Input). Das Item bekommt
+  `zeit: { typ: "anker", uhrzeit: "<eingabe>", locked: false }`.
+- **Vorlauf** — Minuten-Stepper (5er-Schritte, Default 10 Min). Das
+  Item bekommt `zeit: { typ: "vorlauf", minuten: <eingabe>,
+  bezug: "vorheriger_anker" }`.
+
+Reorder per ▲/▼-Pfeile (`feedback_telegram_drag_vs_arrows`) bleibt; die
+Vorlauf-Uhrzeit aktualisiert sich automatisch im Render der Liste, weil
+sie auf den vorigen Anker bezogen ist.
+
+**`locked: true`-Anker im Bottom-Sheet sichtbar gesperrt:** der
+Uhrzeit-Picker zeigt den Wert read-only, mit Hinweis „V1-Anker, ändern
+in der Config" — Migration auf editierbar steht in `ROUTINE-28`.
+
+*Tickets:* #726
+
+### ROUTINE-28 — Migration V1-Anker → items mit `zeit.typ=anker`
+
+Die V1-Anker `aufstehzeit`/`anzieh_vorlauf_min`/`abfahrtszeit`
+(`ROUTINE-12`) leben heute in der Per-Instanz-Config. V2 führt sie
+schrittweise als items mit `zeit.typ=anker` + `locked: true` in items[]
+ein. Migration zweistufig analog ONB-5→ZD (#84 + #336):
+
+- **Welle A (#726 Welle A):** Beim Start liest der Routine-Buddy
+  weiter `ROUTINE-12`-Config UND items[]. Existieren in items[] keine
+  Anker mit `locked: true`, werden sie aus `aufstehzeit`/`abfahrtszeit`
+  synthetisch erzeugt und mit `locked: true` eingehängt. `PUT /config`
+  bleibt funktionsfähig (V1-Bridge, `ROUTINE-25`); ein Schreibvorgang
+  darauf aktualisiert den synthetischen Anker im items[]-State live.
+- **Welle B (#726 Welle B):** Die synthetische Quelle wird umgekehrt:
+  items[] ist die Wahrheit, `ROUTINE-12`-Config-Schlüssel werden read-only
+  Ableitungen aus den `locked: true`-Ankern. `PUT /config` wird in der
+  Antwort als deprecated markiert. Welle B beendet, wenn alle Familien
+  ihre V1-Anker in items[] gesehen haben (Live-Probe).
+- **Welle C (zukünftig):** `PUT /config` wird entfernt; Anker leben nur
+  in items[].
+
+**Edge-Cases (lösbar ohne Architektur-Runde):**
+
+- **Anker gelöscht** → alle nachfolgenden Vorläufe bekommen den davor-
+  Anker zugewiesen (Auto-Rebind, Frontend zeigt einen Hinweis im
+  nächsten Save).
+- **`locked: true`-Anker verschoben** → erlaubt; `locked` schützt nur das
+  Datenfeld vor Mini-App-Edit, nicht die items[]-Position. Reorder via
+  ▲/▼ bleibt frei.
+- **Vorlauf vor allen Ankern** → Display zeigt „—:—" als Uhrzeit (MAD-1-
+  Disziplin: keine Fake-Daten); items[]-Save bleibt zulässig.
+- **`zeit.typ=anker`-Items mit gleicher Uhrzeit** → Display-Render
+  rendert beide Pins; items[]-Reihenfolge bricht den Tie.
+
+*Tickets:* #726
+
+---
+
 ## Offene Punkte
 
 - **OPEN-ROUTINE-A — `einmalig`/`bedingt`-Slots befüllen (Build-Layering).** Das
@@ -1057,3 +1207,16 @@ nur aus Tokens neu bauen (sieht „neu"/inkonsistent aus).
 **8** Punkten, alle ohne Scroll darstellbar (Karten skalieren mit der Anzahl).
 **Verworfen:** feste 4er-Liste (würde mehr Punkte nicht tragen) **und** eine
 unbegrenzte Liste mit Scroll (Kiosk-untauglich für ein Kind).
+
+### E-ROUTINE-12 — V2-Zeit-Anker leben in items[], nicht als separate Liste
+*Datum:* 2026-06-15 · V2 (`ROUTINE-24` … `ROUTINE-28`) erweitert items[]
+um einen optionalen `zeit`-Sub-Block, statt eine eigene `zeit_anker[]`-
+Liste anzulegen. Die items[]-Reihenfolge bleibt die einzige Wahrheit der
+Zeitlinie. **Begründung:** zwei Sub-Ressourcen (items[] + zeit_anker[])
+müssten ihre Reihenfolge separat synchron halten — bricht
+items[]-SSoT und produziert zwei Stellen für Drift. Vorlauf-Items
+referenzieren den **vorherigen** Anker statt den nächsten — robust bei
+Listen-Ende (kein „nächster" verfügbar) und intuitiver lesbar ("10 Min
+nach Aufstehen Zähne putzen"). **Verworfen:** (a) eigene
+`zeit_anker[]`-Liste; (b) `bezug: "naechster_anker"`; (c) Vorlauf
+relativ zum Listen-Start (absolute Minutenangabe).
