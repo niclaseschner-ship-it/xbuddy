@@ -764,17 +764,24 @@ def test_ROU_31_suche_default_max_3_no_param(client_with_routing, icon_root_such
 
     Fixture hat 4 IDs mit 'tier'-Substring und PNG (401, 402, 403, 404) plus 303
     ohne PNG (wird wegen fehlendem PNG geskippt). Ohne max → Default 3 klemmt scharf.
-    Mutation Default 3→10 würde diesen Test brechen.
+
+    Hinweis (2026-06-15): seit Default min_score=100 würden 'haustier' und
+    'lieblingstier' (substring-mid-string, Score ~1.x) ausgefiltert. Test
+    nutzt explizit min_score=0, um die alte Default-Cap-Mechanik isoliert
+    zu prüfen.
     """
-    r = client_with_routing.get('/api/v1/icons/suche?q=tier')
+    r = client_with_routing.get('/api/v1/icons/suche?q=tier&min_score=0')
     assert r.status_code == 200
     data = r.get_json()
     assert len(data) == 3, f'Default-Cap 3 erwartet, bekam {len(data)}: {data}'
 
 
 def test_ROU_31_suche_explicit_max_10_no_cap(client_with_routing, icon_root_suche):
-    """AC5 Gegenprobe: max=10 → kein Default-Cap, alle 4 tier-IDs mit PNG erscheinen."""
-    r = client_with_routing.get('/api/v1/icons/suche?q=tier&max=10')
+    """AC5 Gegenprobe: max=10 → kein Default-Cap, alle 4 tier-IDs mit PNG erscheinen.
+
+    Hinweis (2026-06-15): min_score=0 explizit, damit Substring-Matches durchgehen.
+    """
+    r = client_with_routing.get('/api/v1/icons/suche?q=tier&max=10&min_score=0')
     assert r.status_code == 200
     data = r.get_json()
     assert len(data) >= 4, f'Erwartet >=4 Treffer mit max=10, bekam {len(data)}: {data}'
@@ -910,8 +917,11 @@ def test_icons7_ac2_exact_match_top(client_with_routing, icon_root_mensch):
 
 
 def test_icons7_ac3_prefix_vor_substring(client_with_routing, icon_root_mensch):
-    """AC3: Prefix-Match 'menschen' (7116) gewinnt über Mid-String-Match 'marsmensch' (5050)."""
-    r = client_with_routing.get('/api/v1/icons/suche?q=Mensch&max=5')
+    """AC3: Prefix-Match 'menschen' (7116) gewinnt über Mid-String-Match 'marsmensch' (5050).
+
+    Mit min_score=0 explizit: alte Verhalten testen (alle Substring-Treffer drin).
+    """
+    r = client_with_routing.get('/api/v1/icons/suche?q=Mensch&max=5&min_score=0')
     assert r.status_code == 200
     data = r.get_json()
     ids = [d['id'] for d in data]
@@ -921,6 +931,30 @@ def test_icons7_ac3_prefix_vor_substring(client_with_routing, icon_root_mensch):
         f"Prefix-Match 7116 soll vor Substring-Match 5050 stehen, "
         f"Reihenfolge: {ids}"
     )
+
+
+def test_icons7_min_score_default_filtert_substring(client_with_routing, icon_root_mensch):
+    """Live-Befund 2026-06-15: Default min_score=100 schließt reine Substring-
+    Matches aus. Bei q=Mensch: 'marsmensch' (substring) NICHT mehr in Top-3."""
+    r = client_with_routing.get('/api/v1/icons/suche?q=Mensch&max=10')
+    assert r.status_code == 200
+    data = r.get_json()
+    ids = [d['id'] for d in data]
+    assert 7116 in ids, f'ID 7116 (menschen, prefix) erwartet in {ids}'
+    assert 5050 not in ids, (
+        f"Substring-Match 5050 (marsmensch, score ~1.x) soll NICHT durch den "
+        f"min_score=100-Filter, war aber in {ids}"
+    )
+
+
+def test_icons7_min_score_zero_zeigt_alle(client_with_routing, icon_root_mensch):
+    """min_score=0 (explizit) liefert wieder alle Substring-Treffer (Rückwärts-Kompat)."""
+    r = client_with_routing.get('/api/v1/icons/suche?q=Mensch&max=10&min_score=0')
+    assert r.status_code == 200
+    data = r.get_json()
+    ids = [d['id'] for d in data]
+    assert 7116 in ids
+    assert 5050 in ids, "mit min_score=0 muss marsmensch wieder dabei sein"
 
 
 def test_icons7_ac4_laengen_tiebreaker(client_with_routing, icon_root_mensch):

@@ -442,6 +442,9 @@ async function buildBuzzwordBlock(buzzwords) {
       img.src = icoUrl;
       img.alt = wort;
       img.loading = "lazy";
+      // Live-Befund 2026-06-15: bei broken-image zeigt der Browser sein
+      // Default-Fragezeichen-Icon — entfernen statt verwirrend anzeigen.
+      img.onerror = () => img.remove();
       // KIBUDDY-30: Vollfarbe, KEIN filter
       item.appendChild(img);
     }
