@@ -13,6 +13,20 @@
       "zeigt": "Die tägliche Morgen-Checkliste mit ablaufender Uhr.",
       "zielgruppe": "kind",
       "icons": ["arasaac/7152.png"]
+    },
+    {
+      "slug": "anpassen",
+      "typ": "mini-app",
+      "pfad": "/seiten/routine/anpassen",
+      "label": "Routine anpassen",
+      "synonyme": ["routine", "anpassen", "umsortieren", "punkt hinzufügen"],
+      "zeigt": "Routine-Punkte umsortieren, hinzufügen, löschen, Zeiten setzen.",
+      "zielgruppe": "eltern",
+      "web_app": {
+        "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
+        "app_short_name": "routine",
+        "icons": ["arasaac/2418.png"]
+      }
     }
   ]
 }
