@@ -46,6 +46,13 @@ const _gerichtOhneTapStatus = new Map(); // item.id → "erstertap"|undefined
   const platform = getPlatform();
   await platform.ready();
 
+  // MAD-11: JS-Side-Auth-Probe (HTML-Route ist public — Skeleton lädt ohne Auth,
+  // hier prüft JS, ob valide initData für die API-Aufrufe vorliegt).
+  if (!(await platform.ensureAuth())) {
+    document.body.innerHTML = '<div style="padding:2rem;text-align:center;font-family:system-ui;color:#666;font-size:1rem">Bitte über den Familien-Bot öffnen (initData fehlt oder ist ungültig).</div>';
+    return;
+  }
+
   await ladeUndRendere();
 
   document.getElementById("quick-add").addEventListener("click", oeffneQuickAddSheet);
