@@ -68,6 +68,7 @@ def test_to_public_dict_no_secrets():
         stt_provider="openai", stt_model="whisper-1", stt_sprache="de",
         aufnahme_quelle="display", aufnahme_max_sek=30,
         inaktivitaet_sek=60, prompt_max_bytes=50000,
+        vad_stille_sek=1.5, vad_threshold_db=-50.0,
         anthropic_key="secret", azure_endpoint="https://x", azure_key="secret",
         azure_api_version="2024-10-01-preview",
         openai_key="openai-secret",
@@ -81,6 +82,8 @@ def test_to_public_dict_no_secrets():
     assert public["stt_provider"] == "openai"
     assert public["tts_voice"] == "onyx"
     assert public["tts_speed"] == 0.9
+    assert public["vad_stille_sek"] == 1.5
+    assert public["vad_threshold_db"] == -50.0
 
 
 def test_patch_aufnahme_quelle():
@@ -91,6 +94,7 @@ def test_patch_aufnahme_quelle():
         stt_provider="openai", stt_model="whisper-1", stt_sprache="de",
         aufnahme_quelle="display", aufnahme_max_sek=30,
         inaktivitaet_sek=60, prompt_max_bytes=50000,
+        vad_stille_sek=1.5, vad_threshold_db=-50.0,
         anthropic_key=None, azure_endpoint=None, azure_key=None,
         azure_api_version="2024-10-01-preview",
         openai_key=None,
@@ -101,3 +105,30 @@ def test_patch_aufnahme_quelle():
     assert new_cfg.llm_provider == "claude"
     assert new_cfg.stt_provider == "openai"
     assert new_cfg.tts_voice == "onyx"
+    assert new_cfg.vad_stille_sek == 1.5
+    assert new_cfg.vad_threshold_db == -50.0
+
+
+def test_resolve_runtime_vad_defaults():
+    """KIBUDDY-21/AC3: VAD-Defaults sind korrekt."""
+    cfg = config_mod.resolve_runtime(env={})
+    assert cfg.vad_stille_sek == 1.5
+    assert cfg.vad_threshold_db == -50.0
+
+
+def test_resolve_runtime_vad_env_override():
+    """KIBUDDY-21/AC3: VAD-Werte aus ENV."""
+    env = {
+        "KIBUDDY_VAD_STILLE_SEK": "2.0",
+        "KIBUDDY_VAD_THRESHOLD_DB": "-40.0",
+    }
+    cfg = config_mod.resolve_runtime(env=env)
+    assert cfg.vad_stille_sek == 2.0
+    assert cfg.vad_threshold_db == -40.0
+
+
+def test_to_vad_cfg():
+    """KIBUDDY-21/AC3: to_vad_cfg() liefert nur VAD-Felder."""
+    cfg = config_mod.resolve_runtime(env={})
+    vad = cfg.to_vad_cfg()
+    assert vad == {"vad_stille_sek": 1.5, "vad_threshold_db": -50.0}

@@ -177,6 +177,11 @@ einem Messenger-Bedienschema:
 **Beide Modi haben dieselbe Wirkung:** das aufgenommene Audio wird nach
 Aufnahme-Ende sofort an den STT-Endpunkt (KIBUDDY-24) gepostet.
 
+**VAD-Auto-Stop im Lock-Modus:** Im Lock-Modus erkennt das System
+Sprech-Pausen automatisch via RMS-Pegel-Threshold und beendet die
+Aufnahme bei `vad.stille-sek` Stille (KIBUDDY-21); manueller Stopp-Knopf
+bleibt Override.
+
 **Wenn** die Aufnahme länger als die **Maximum-Aufnahme-Dauer** (KIBUDDY-21,
 Default 30 s) läuft, **dann** endet sie automatisch und wird normal
 petrarbeitet (Kinder-Resilienz, keine Endlos-Aufnahme).
@@ -450,6 +455,8 @@ in der Berater-Runde den richtigen Generalisierungs-Schnitt zu legen
 | `ui.lock-hinweis-ms` | `800` | Slide-Hinweis erscheint nach | Config |
 | `ui.lock-distanz-px` | `80` | Slide-to-Lock-Schwelle | Config |
 | `ui.abbruch-distanz-px` | `100` | Slide-nach-unten-Schwelle | Config |
+| `vad.stille-sek` | `1.5` | VAD-Stille-Schwelle (Sekunden) im Lock-Modus | Config |
+| `vad.threshold-db` | `-50` | VAD-Pegel-Schwelle (dB) — unter Schwelle = Stille | Config |
 | `azure.openai-endpoint` | (ENV-Pflicht) | Azure-OpenAI-Endpunkt | `AZURE_OPENAI_ENDPOINT` |
 | `azure.openai-key` | (ENV-Pflicht) | Azure-OpenAI-Key | `AZURE_OPENAI_API_KEY` |
 | `anthropic.api-key` | (ENV-Pflicht) | Anthropic-Key für `claude` | `ANTHROPIC_API_KEY` |

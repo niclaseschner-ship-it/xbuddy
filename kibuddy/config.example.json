@@ -14,5 +14,7 @@
   "aufnahme_quelle": "display",
   "aufnahme_max_sek": 30,
   "inaktivitaet_sek": 60,
-  "prompt_max_bytes": 50000
+  "prompt_max_bytes": 50000,
+  "vad_stille_sek": 1.5,
+  "vad_threshold_db": -50.0
 }
