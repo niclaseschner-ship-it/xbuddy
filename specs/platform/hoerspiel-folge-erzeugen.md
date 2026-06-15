@@ -42,9 +42,10 @@ nach erfolgreichem Build.
 - **Async-Generierung mit „später benachrichtigen"** — V1 blockiert in
   `execute()` für die Synthese-Dauer (1–5 min). Async ist OPEN-HSP-L.
 - **Audio-Probehören vor Freigabe** — V1 ist Text-Gate (E-HSP-7).
-- **LLM-Provider-Wechsel im selben Chat** — ein eigener Skill
-  (OPEN-HSP-N) bedient `PATCH /api/v1/hoerspiel/config`. Dieser Skill
-  hier wechselt den Provider nicht.
+- **LLM-Provider/-Modell-Wechsel im selben Chat** — seit Werft-Lauf
+  2026-06-15 (Refs #848, schließt OPEN-HSP-N #750) lebt der Wechsel in
+  der Eltern-Mini-App (HSP-34 `PATCH /config`), nicht in einem
+  Chat-Skill. Dieser Skill hier wechselt weder Provider noch Modell.
 - **Sprach-Trigger für Paula** — V2 (OPEN-HSP-B); bedient denselben
   Vorschlag-Endpoint.
 
@@ -89,13 +90,43 @@ skill-eigener Exception-Typ.
 
 ## HFE-3 — `propose()`: Folgen-Vorschlag holen und vorlegen
 
-**Eingang:** die vom Agent extrahierte Folgen-Idee. **Ist die Idee leer
-oder mehrdeutig** (z. B. nur „mach eine Folge"), wendet `propose()` das
-EC-22-Pattern an und gibt einen Tool-Result-Text zurück, der das LLM
-gezielt nach einer konkreten Idee fragen lässt („Worum soll die Folge
-gehen? Ein Satz reicht.") — kein Buddy-Aufruf, kein Vorschlag.
+**Eingang:** die vom Agent extrahierte Folgen-Idee.
 
-Mit gefüllter Idee ruft `propose()` den Hörspiel-Buddy:
+**Diskussions-Schleife** (Werft-Lauf 2026-06-15, Refs #848): `propose()`
+fungiert vor dem Vorschlag-Endpoint-Aufruf als zwei-stufiger Filter:
+
+1. **Idee ist leer oder sehr mehrdeutig** (z. B. nur „mach eine Folge"):
+   `propose()` ruft zusätzlich `GET /api/v1/hoerspiel/themen?alter=4`
+   (HSP-38; der Alter-Wert lebt V1 hart als Skill-Modul-Konstante für
+   Paula, Mehr-Kind-Verallgemeinerung ist V2) und gibt einen Tool-
+   Result-Text zurück, der **die EC-22-Rückfrage plus die Themen-Liste**
+   trägt. Form: „Worum soll's gehen? Hier ein paar Vorschläge für
+   4-jährige Kinder: <thema-1>, <thema-2>, …" — Kein Buddy-Vorschlag-
+   Endpoint-Aufruf. Antwortet der Themen-Endpoint 404 (Alter nicht
+   gepflegt, HSP-38), trägt der Tool-Result-Text **nur** die
+   EC-22-Rückfrage ohne Themen.
+
+2. **Idee ist konkret aber unvollständig** (z. B. „mach eine Folge über
+   Mut"): `propose()` gibt einen Tool-Result-Text mit Pattern
+   `{"diskussion": true, "idee_bisher": "<text>"}` zurück. Der Eltern-
+   Chat-Agent stellt 1–N Rückfragen, um die Idee zu konkretisieren
+   („mit Stigi alleine oder Schmuggli dabei?", „lustig oder lehrreich?").
+   Die Rückfragen leben **im Agent-Prompt** (EC-30-Trennlinie), nicht
+   im Skill — der Skill nimmt nur den Diskussions-Trigger entgegen.
+
+**Eltern-Signal beendet die Diskussion.** Die Mutter äußert ein
+Vorschlag-Trigger-Signal („los", „los gehts", „schreib", „mach das",
+„passt so", „fang an", „jetzt vertonen", „okay so" — Phrasen leben
+im Eltern-Chat-Agent-Prompt). Der Agent ruft daraufhin `propose()`
+**erneut** mit der zusammengeführten konkreten Idee aus der Diskussion
+(kein `diskussion: true` mehr). Der Skill geht den Standard-Pfad und
+ruft den Vorschlag-Endpoint.
+
+**Kein technischer Loop-Schutz im Skill** (Nic-Setzung 2026-06-15):
+die Mutter entscheidet, wann genug Klärung war. Eine Iterations-Cap
+im Skill würde die Eltern-Hoheit über die Diskussion verletzen.
+
+Mit gefüllter konkreter Idee ruft `propose()` den Hörspiel-Buddy:
 
 ```
 POST /api/v1/hoerspiel/folgen-vorschlag
@@ -208,10 +239,28 @@ verankert, nicht im Skill, EC-30-Trennlinie):
 - „Hörspiel-Folge: <Idee>"
 - „Neues Hörbuch über …"
 
-**Abgrenzung zu OPEN-HSP-N (Provider-Wechsel):** Wenn die Eltern-
-Nachricht nach Konfigurations-Wechsel klingt („wechsel mal auf
-mistral"), nutzt der Agent den künftigen Provider-Wechsel-Skill, nicht
-HFE.
+**Themen-Anfrage-Phrasen** (HFE-3 erweitert 2026-06-15 Refs #848 — der
+Agent ruft `propose()` mit leerer Idee, was die Themen-Liste auslöst):
+
+- „Welche Themen gibt es?"
+- „Was könnte ich Paula erzählen?"
+- „Vorschläge?"
+- „Mach Paula eine Folge." (ohne Inhalts-Stichwort)
+
+**Eltern-Signal-Phrasen** (HFE-3 erweitert — beenden die Diskussion und
+triggern den Vorschlag-Endpoint):
+
+- „los", „los gehts", „los, schreib"
+- „mach das", „passt so", „okay so", „fang an"
+- „jetzt vertonen", „schreib jetzt"
+
+**Abgrenzung zu Provider-/Modell-Wechsel:** Wechsel von LLM-Provider
+oder Modell lebt seit Werft-Lauf 2026-06-15 (Refs #848, schließt
+OPEN-HSP-N #750) in der Eltern-Mini-App (HSP-34 `PATCH /config`),
+nicht in einem eigenen Chat-Skill. Eltern-Nachrichten der Form
+„wechsel auf mistral" werden vom Agent mit einem Hinweis-Text
+beantwortet („Anbieter und Modell wählst du in der Hörspiel-Mini-App")
+und **nicht** als HFE-Trigger interpretiert.
 
 ## HFE-7 — Eine Stimme im Agent-Turn (EC-29)
 
@@ -246,9 +295,17 @@ wird durch einen kontrollierten Doppelten ersetzt):
 
 - HFE-2 (Berechtigung: `BerechtigungError` aus `_errors.py` für
   nicht-Eltern-User; kein Buddy-Aufruf erfolgt)
-- HFE-3 (leere/mehrdeutige Idee → EC-22-Rückfrage im Tool-Result, kein
-  Buddy-Aufruf; gefüllte Idee → ein `POST /folgen-vorschlag` mit Idee
-  im Body)
+- HFE-3 (leere Idee + Themen-Liste verfügbar, Mock-Buddy gibt 200 mit
+  8 Themen für Alter 4 → Tool-Result-Text trägt die Themen + EC-22-
+  Rückfrage; **kein** Vorschlag-Endpoint-Aufruf)
+- HFE-3 (leere Idee + Alter ohne Themen-Liste, Mock-Buddy gibt 404 →
+  Tool-Result-Text trägt **nur** die EC-22-Rückfrage, keine Themen-
+  Aufzählung; kein Vorschlag-Endpoint-Aufruf)
+- HFE-3 (konkrete-aber-unvollständige Idee → Tool-Result-Text mit
+  `{"diskussion": true, "idee_bisher": "<text>"}`-Pattern; **kein**
+  Vorschlag-Endpoint-Aufruf)
+- HFE-3 (konkrete vollständige Idee nach Diskussion → Standard-Pfad zum
+  Vorschlag-Endpoint mit einem `POST /folgen-vorschlag`)
 - HFE-3 (HTTP 503 / 5xx vom Vorschlag-Endpoint → Tool-Result trägt
   Klartext-Hinweis, **kein** Vorschlag-Block, EC-10-Gate löst nicht aus)
 - HFE-4 (Tool-Result-Text trägt Titel + Vorschau-Text + Bestätigungs-
