@@ -1099,6 +1099,29 @@ def _load_pictogram_cache():
         return _pictogram_cache
 
 
+def _score_match(needle: str, word: str) -> float:
+    """Match-Score: exact > prefix > word-boundary > substring.
+
+    Längen-Bonus: kürzere Wörter ranken höher (einfacher = bessere ARASAAC-Treffer).
+    Prefix-Stufe ist einheitlich (kein Extra für Space-nach-Needle), damit ein
+    kurzes Einzel-Wort wie 'menschen' vor einem langen Mehrwort-Phrase wie
+    'mensch ärgere dich nicht' landet — der Längen-Bonus entscheidet.
+    Returns 0.0 wenn kein Substring-Match (Wort wird ausgeschlossen).
+    """
+    needle = needle.lower()
+    w = word.lower()
+    if needle not in w:
+        return 0.0
+    if w == needle:
+        return 1000.0  # exact match
+    if w.startswith(needle):
+        return 400.0 + 100.0 / max(len(w), 1)  # prefix (kurzes Wort gewinnt via Längen-Bonus)
+    if (' ' + needle) in w or ('-' + needle) in w:
+        return 100.0 + 50.0 / max(len(w), 1)   # word-boundary in mid-string
+    # reine Substring (mid-string ohne word-boundary)
+    return 1.0 + 1.0 / max(len(w), 1)
+
+
 @app.route('/api/v1/icons/suche', methods=['GET'])
 def icons_suche():
     """ROU-31 / ICONS-7 / URL-4: Stichwort-Suche über den lokalen Icon-Cache.
@@ -1124,24 +1147,33 @@ def icons_suche():
 
     cache = _load_pictogram_cache()
 
-    # Pro Token: Teilwort-Suche (case-insensitiv), ID-Dedup.
-    # score(id) = Anzahl Token-Matches; first_seen für Stichhalter-Reihenfolge.
+    # Pro Token: Match-Qualitäts-Score (ICONS-7 Match-Score-Refactor).
+    # token_hits(id) = Anzahl Tokens, die die ID treffen (primäre Sortierdimension).
+    # score(id) additiv über Tokens (sekundär, entscheidet Qualität innerhalb gleicher Copetrage).
+    # first_seen für Cache-Reihenfolge-Tiebreaker (tertiär).
     score: dict = {}
+    token_hits: dict = {}
     first_seen: dict = {}
     for _ti, token in enumerate(tokens):
-        needle = token.lower()
         matched_this_token: set = set()
         for idx, (word, icon_id) in enumerate(cache.items()):
             if icon_id in matched_this_token:
                 continue
-            if needle in word.lower():
+            match_score = _score_match(token, word)
+            if match_score > 0:
                 matched_this_token.add(icon_id)
                 if icon_id not in first_seen:
                     first_seen[icon_id] = idx
-                score[icon_id] = score.get(icon_id, 0) + 1
+                score[icon_id] = score.get(icon_id, 0.0) + match_score
+                token_hits[icon_id] = token_hits.get(icon_id, 0) + 1
 
-    # Absteigende Score, bei Gleichstand Cache-Reihenfolge.
-    sorted_ids = sorted(score.keys(), key=lambda i: (-score[i], first_seen[i]))
+    # Primär: Token-Copetrage absteigend (wer mehr Tokens matcht, gewinnt).
+    # Sekundär: Score absteigend (Qualität innerhalb gleicher Copetrage).
+    # Tertiär: Cache-Reihenfolge (first_seen aufsteigend) als Tiebreaker.
+    sorted_ids = sorted(
+        score.keys(),
+        key=lambda i: (-token_hits[i], -score[i], first_seen[i]),
+    )
 
     # Nur IDs mit lokalem PNG (ICONS-7 / AC4); Pfad-/Wurzel-Schutz wie ROU-26.
     root = os.path.realpath(icon_root())
