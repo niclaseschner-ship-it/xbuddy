@@ -182,6 +182,16 @@ Sprech-Pausen automatisch via RMS-Pegel-Threshold und beendet die
 Aufnahme bei `vad.stille-sek` Stille (KIBUDDY-21); manueller Stopp-Knopf
 bleibt Override.
 
+**Lock-Auslösung:** Lock-Modus kann ausgelöst werden via (a) Slide nach oben
+über `LOCK_DISTANZ_PX` (30 px) ODER (b) Long-Hold: nach
+`vad.long-hold-lock-sek` (Default 3.0 s) automatisch ohne Slide-Geste.
+(T864-AC1/AC2)
+
+**Mindest-Aufnahme-Dauer:** Aufnahmen kürzer als `aufnahme.min-sek`
+(Default 0.5 s) werden verworfen — kein STT-Aufruf, kein LLM-Aufruf.
+Sichtbare Hinweis-Bubble „Bitte sprich etwas lauter und länger" für 4 s.
+(T864-AC3)
+
 **Wenn** die Aufnahme länger als die **Maximum-Aufnahme-Dauer** (KIBUDDY-21,
 Default 30 s) läuft, **dann** endet sie automatisch und wird normal
 petrarbeitet (Kinder-Resilienz, keine Endlos-Aufnahme).
@@ -234,7 +244,7 @@ nicht modal, nicht blockend. Verschwindet bei Loslassen oder bei
 
 ### KIBUDDY-11 — Aufnahme-Abbruch durch Slide-nach-Unten
 **Wenn** das Kind während des Tap-Hold-Modus den Finger **nach unten** über
-die **Abbruch-Distanz** (KIBUDDY-21, Default 100 px) hinaus zieht, **dann**
+die **Abbruch-Distanz** (KIBUDDY-21, Default 60 px — T864-AC1 proportional zu Lock-Distanz) hinaus zieht, **dann**
 wird die Aufnahme **verworfen** (kein POST an STT). Visuell signalisiert
 durch eine **Mülleimer-Marke** an der Slide-Ziel-Position. Default-WhatsApp/
 Telegram-Konvention. Im Lock-Modus existiert dieser Pfad nicht (dort ist der
@@ -468,10 +478,12 @@ in der Berater-Runde den richtigen Generalisierungs-Schnitt zu legen
 | `funktionswort-liste` | `<data>/funktionswort-liste.txt` | Wortklassen-Filter (KIBUDDY-17) | Config |
 | `ui-icons` | `<data>/ui-icons.json` | UI-Icon-ID-Mapping (KIBUDDY-30) | Config |
 | `ui.lock-hinweis-ms` | `800` | Slide-Hinweis erscheint nach | Config |
-| `ui.lock-distanz-px` | `80` | Slide-to-Lock-Schwelle | Config |
-| `ui.abbruch-distanz-px` | `100` | Slide-nach-unten-Schwelle | Config |
+| `ui.lock-distanz-px` | `30` | Slide-to-Lock-Schwelle (T864-AC1: war 80) | Code-Konstante |
+| `ui.abbruch-distanz-px` | `60` | Slide-nach-unten-Schwelle (T864-AC1: war 100) | Code-Konstante |
 | `vad.stille-sek` | `1.5` | VAD-Stille-Schwelle (Sekunden) im Lock-Modus | Config |
 | `vad.threshold-db` | `-50` | VAD-Pegel-Schwelle (dB) — unter Schwelle = Stille | Config |
+| `vad.long-hold-lock-sek` | `3.0` | Auto-Lock nach langem Halten (KIBUDDY-7/T864-AC2) | Config |
+| `aufnahme.min-sek` | `0.5` | Mindest-Aufnahme-Dauer — kürzere Aufnahmen verwerfen (KIBUDDY-7/T864-AC3) | Config |
 | `azure.openai-endpoint` | (ENV-Pflicht) | Azure-OpenAI-Endpunkt | `AZURE_OPENAI_ENDPOINT` |
 | `azure.openai-key` | (ENV-Pflicht) | Azure-OpenAI-Key | `AZURE_OPENAI_API_KEY` |
 | `anthropic.api-key` | (ENV-Pflicht) | Anthropic-Key für `claude` | `ANTHROPIC_API_KEY` |
