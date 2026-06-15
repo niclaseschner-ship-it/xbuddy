@@ -67,6 +67,47 @@ APP-1 bis APP-4 gelten für Apps; die Familien-Schnittstelle ist davon
 ausgenommen, weil sie keine App-Funktion besitzt. Ihre eigene Spec ist
 `specs/platform/eltern-chat.md`.
 
+### APP-7 — Token-Sharing-EnvironmentFile (Mini-App-Auth-Token-Heimat)
+
+Konsumierende Buddys, die Telegram-Mini-Apps mit
+`Authorization: tma <initData>`-Header validieren (siehe
+`conventions/mini-app-design.md` MAD-7), brauchen Zugriff auf den
+Telegram-Bot-Token. Der Token wohnt **ausschließlich** im
+Eltern-Chat-Eigentum (`__XBUDDY_DATA__/eltern-chat/.env`); andere Buddys
+lesen ihn als systemd-`EnvironmentFile=` aus genau dieser Datei.
+
+```
+# Beispiel: seiten/seiten.service (oder essen/essen.service, …)
+EnvironmentFile=__XBUDDY_DATA__/eltern-chat/.env
+```
+
+**Niemals Token duplizieren** in service-eigene `.env`-Dateien — Pi-Drift-
+Risiko (essen-einkauf-Live-Fix 2026-06-12: ENV-Naming-Drift zwischen Kopien
+führte zu stiller Auth-Falschnegative). Wenn der Konsument einen anderen
+ENV-Variablen-Namen erwartet, **Code anpassen** statt Alias-Eintrag in der
+`.env` — die `.env` bleibt einzige Wahrheit.
+
+**Pro Backend-Instanz ein Bot-Token** (Multi-Tenancy via Hardware-Trennung,
+Nic-Setzung 2026-06-15): jede Familie hat eigene Pi-Hardware, eigenen Bot,
+eigenen Token. Keine `BOT_TOKEN_FAMILIE_<id>`-Suffix-Mechanik im Code; die
+Familie ist die Pi-Instanz.
+
+**Begründung:** Token-Duplikation in zwei `.env`-Dateien ist eine bekannte
+Drift-Quelle (ein Update an einer Stelle, vergessen an der anderen → eine
+Mini-App authentifiziert weiter, eine 401). EnvironmentFile-Sharing
+zentralisiert die Token-Heimat, ohne den Konsumenten-Buddys Zugriff auf
+andere Eltern-Chat-Secrets zu geben (`EnvironmentFile=` lädt nur Variablen,
+nicht ganze Dateien).
+
+**Verworfen:** (a) Token in zentrale Geheimnis-Datenbank
+(`tools/zugangsdaten/`) verschieben — der Bot-Token ist Eltern-Chat-eigene
+Identität, nicht familien-übergreifender Vendor-Key (das ist `zugangsdaten.md`
+Eigentum); (b) eigene `secrets/`-Datei pro Buddy mit Sync-Mechanismus —
+EnvironmentFile-Sharing ist die einfachere systemd-native Lösung.
+
+*Tickets:* #684 (Token-Sharing-Mechanik), #708 (Verortung als APP-7),
+RATIFIZIERT-Datei `brainstorm/berater-runde/20260612-093034-RATIFIZIERT-elternchat-ui-pattern.md` (Punkt 5)
+
 ### APP-6 — Spec-Datei-Verortung: buddies/ vs. platform/
 
 Eine Fähigkeit mit eigener **Display-View** für die Familie wird unter
