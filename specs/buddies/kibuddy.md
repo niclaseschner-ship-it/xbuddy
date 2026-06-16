@@ -266,6 +266,36 @@ Der Adapter-Schnitt folgt dem LLM-Provider-Switch (KIBUDDY-14): ein konkreter
 STT-Adapter implementiert `transkribiere(audio_bytes, filename)` und wirft
 `STTError` bei Anbieter-Fehler. `stt_service.py` ist provider-agnostisch.
 
+### KIBUDDY-12-H — Whisper-Stille-Halluzinationen werden gefiltert (#952)
+Whisper-Trainings-Daten enthielten viele YouTube-DE-Untertitel mit
+Bauch-Klauseln. Bei stillem oder sehr kurzem Audio liefert Whisper statt
+eines leeren Strings eine dieser Phrasen — z. B. „Untertitelung des
+ZDF, 2020", „Untertitel im Auftrag von Funk", „Untertitel der
+Amara.org-Community", „Vielen Dank fürs Zuschauen", „Music". Diese
+Halluzinationen würden als echte Frage ans LLM gehen und KIBuddy zu
+Phantom-Antworten verleiten.
+
+`stt_service.ist_stille_halluzination(text)` prüft zwei Klassen:
+
+1. **Exakter Match** (normalisiert) gegen eine Liste bekannter
+   Komplett-Phrasen.
+2. **Substring-Match** auf eindeutige Indikatoren („untertitelung",
+   „im Auftrag des ZDF", „im Auftrag von Funk", „amara.org",
+   „stephanie geiges"), die ein Kind (4–7) nicht selbst formuliert.
+
+Der Frage-Endpunkt ruft den Filter direkt nach `transkribiere()` auf
+und liefert bei Halluzinations-Treffer denselben Fehler-Pfad wie bei
+leerem Transkript: NDJSON `{"event":"error","stage":"stt",
+"detail":"transkript leer — konnte die Frage nicht verstehen"}`. Das
+Frontend zeigt den existierenden `mikro-fehler`-Hint
+(„Ich darf gerade nicht zuhören.") und resettet die Eingabe — kein
+LLM-Call, keine Phantom-Antwort.
+
+**Bewusste Engstelle:** Substring „zdf" oder „funk" allein filtert
+NICHT — Kinder-Fragen wie „Was ist das ZDF?" oder „Was ist Funk?"
+gehen normal durch. Nur Phrasen, die Kinder nie verwenden
+(„im Auftrag", „Untertitelung", „Amara.org"), lösen den Filter aus.
+
 ### KIBUDDY-13 — Streaming-Reveal: STT-Phase synchron, LLM+TTS-Phase progressiv
 V1 petrarbeitet eine Frage als **NDJSON-Chunked-Stream**: die View postet das
 Audio per `POST /api/v1/kibuddy/frage` (KIBUDDY-24) und liest die Response

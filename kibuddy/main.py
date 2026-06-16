@@ -263,6 +263,14 @@ def frage():
             yield json.dumps({"event": "error", "stage": "stt", "detail": "transkript leer — konnte die Frage nicht verstehen"}) + "\n"
             return
 
+        # KIBUDDY-12-H (T952): Whisper liefert bei Stille gern DE-YouTube-
+        # Untertitel-Halluzinationen ("Untertitel im Auftrag von Funk")
+        # statt leerem String. Gleicher Fehler-Pfad wie leeres Transkript.
+        if stt_service.ist_stille_halluzination(frage_text):
+            logger.info("stt: Stille-Halluzination gefiltert: '%s'", frage_text[:80])
+            yield json.dumps({"event": "error", "stage": "stt", "detail": "transkript leer — konnte die Frage nicht verstehen"}) + "\n"
+            return
+
         # transkript_words: Diagnose-Feld (KIBUDDY-24/T865).
         # Frontend ignoriert es (Kind-Bubble text-only, KIBUDDY-19/AC4).
         # Wortklassen-Tokenisierung entfällt (T865 stop_rules keine_breaking_kind_change):
