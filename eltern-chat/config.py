@@ -127,13 +127,19 @@ DEFAULTS = {
     # (RAO-8 dreifacher Guard). Selbe Domain wie mini_app_einkauf_url-Basis,
     # aber als separater Slot — kein String-Parsing der Einkauf-URL.
     "mini_app_base_url": "",
-    # HFE-9 / #729: Origin des Hörspiel-Buddys, über die die
+    # HFE-9 / #729: Origin des Hörspiel-Buddys (Mia-Instanz), über die die
     # HoerspielFolgeErzeugenTask Folgen-Vorschläge holt
     # (POST /api/v1/hoerspiel/folgen-vorschlag HFE-3) und Alben baut
     # (POST /api/v1/hoerspiel/alben HFE-5). Per-Instanz-Wert; Default passt
-    # zum Pi-Setup (PORT-2 Hörspiel-Buddy auf 5053). Leer ⇒ Aufgabe NICHT im
+    # zum Pi-Setup (PORT-2 Hörspiel-Buddy Mia auf 5053). Leer ⇒ Aufgabe NICHT im
     # Katalog (AND-Guard mit family_group_chat_id_getter).
     "hoerspiel_url_origin": "http://127.0.0.1:5053",
+    # RAT-17 / #910: zweite Hörspiel-Buddy-Origin (Finn-Instanz). Resolution-Logik
+    # im Skill (HFE-3, E-HFE-6): kind_id="mia" → hoerspiel_url_origin,
+    # kind_id="finn" → hoerspiel_url_origin_finn. Option A handverdrahtet (kein
+    # Registry-Dict). Default 5055 = PORT-2-Slot Hörspiel-Buddy Finn. Leer ⇒
+    # Finn-Anfragen scheitern mit Fehler-Text im Tool-Result.
+    "hoerspiel_url_origin_finn": "http://127.0.0.1:5055",
     # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts, über den die
     # KibuddyAufnahmeQuelleSetzenTask die Aufnahme-Quelle schreibt
     # (PUT /api/v1/kibuddy/config KAQS-5). Per-Instanz-Wert; Default passt
@@ -188,6 +194,7 @@ class Config:
                  mini_app_einkauf_url="",
                  mini_app_base_url="",
                  hoerspiel_url_origin="",
+                 hoerspiel_url_origin_finn="",
                  kibuddy_origin_url=""):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
@@ -218,8 +225,10 @@ class Config:
         self.mini_app_einkauf_url = mini_app_einkauf_url  # leer → ENV-Fallback MINI_APP_EINKAUF_URL
         # RAO-6 / T728-C: Basis-URL aller Mini-Apps (Funnel-Domain).
         self.mini_app_base_url = mini_app_base_url  # leer → RAO NICHT im Katalog
-        # HFE-9 / #729: Origin des Hörspiel-Buddys (HFE-3/HFE-5, HSP-17).
+        # HFE-9 / #729: Origin des Hörspiel-Buddys Mia (HFE-3/HFE-5, HSP-17).
         self.hoerspiel_url_origin = hoerspiel_url_origin  # leer → HFE NICHT im Katalog
+        # RAT-17 / #910: zweite Origin für Finn-Instanz (Option A handverdrahtet, E-HFE-6).
+        self.hoerspiel_url_origin_finn = hoerspiel_url_origin_finn  # leer → Finn-Fehler-Text
         # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts (KAQS-5, KIBUDDY-24/25).
         self.kibuddy_origin_url = kibuddy_origin_url      # leer → KAQS NICHT im Katalog
 
@@ -348,8 +357,10 @@ def resolve(config_path, zd=None):
         mini_app_einkauf_url=str(values["mini_app_einkauf_url"]).strip(),
         # RAO-6 / T728-C: Basis-URL aller Mini-Apps (Funnel-Domain).
         mini_app_base_url=str(values["mini_app_base_url"]).strip().rstrip("/"),
-        # HFE-9 / #729: Origin des Hörspiel-Buddys.
+        # HFE-9 / #729: Origin des Hörspiel-Buddys Mia.
         hoerspiel_url_origin=str(values["hoerspiel_url_origin"]).strip().rstrip("/"),
+        # RAT-17 / #910: zweite Origin für Finn-Instanz (Option A handverdrahtet).
+        hoerspiel_url_origin_finn=str(values["hoerspiel_url_origin_finn"]).strip().rstrip("/"),
         # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts (KAQS-5, KIBUDDY-25).
         kibuddy_origin_url=str(values["kibuddy_origin_url"]).strip().rstrip("/"),
     )

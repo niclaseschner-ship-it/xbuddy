@@ -42,7 +42,9 @@ class HoerspielFolgeErzeugenTask(WriteTask):
 
     def __init__(self, tg, hoerspiel_client, display_url_origin: str = "",
                  family_group_chat_id_getter=None, is_member_fn=None,
-                 mini_app_base_url: str = ""):
+                 mini_app_base_url: str = "",
+                 hoerspiel_url_origin: str = "",
+                 hoerspiel_url_origin_finn: str = ""):
         super().__init__(
             name="hoerspiel_folge_erzeugen",
             description=(
@@ -113,6 +115,24 @@ class HoerspielFolgeErzeugenTask(WriteTask):
         self._family_group_chat_id_getter = family_group_chat_id_getter
         self._is_member_fn = is_member_fn
         self._mini_app_base_url = mini_app_base_url or ""
+        # E-HFE-6 / RAT-17 / #910: Mini-Map kind_id → HoerspielClient-Instanz.
+        # Ermöglicht dem Task, bei jedem propose()-Aufruf den passenden Client
+        # anhand der kind_id zu wählen (Option A: je Client eine Origin).
+        # hoerspiel_url_origin = Mia (5053), hoerspiel_url_origin_finn = Finn (5055).
+        # Leer → Mia-Client-Fallback (hoerspiel_client ist bereits Mia).
+        from skills.hoerspiel_client import HoerspielClient as _HoerspielClient
+        _mia_origin = (hoerspiel_url_origin or "").rstrip("/")
+        _finn_origin = (hoerspiel_url_origin_finn or "").rstrip("/")
+        self._client_by_kind_id: dict = {
+            "mia": (
+                _HoerspielClient(origin_url=_mia_origin, kind_id="mia")
+                if _mia_origin else self._hoerspiel_client
+            ),
+            "finn": (
+                _HoerspielClient(origin_url=_finn_origin, kind_id="finn")
+                if _finn_origin else self._hoerspiel_client
+            ),
+        }
         # HFE-5: Session-State überbrückt propose→execute (Befund 1).
         # chat_id → {titel, text, voice, idee} aus dem Buddy-Vorschlag.
         # Nur eine offene Vorschlag-Session pro Chat — älter wird überschrieben.
@@ -149,6 +169,12 @@ class HoerspielFolgeErzeugenTask(WriteTask):
         from_user_id = getattr(turn_context, "from_user_id", None)
         chat_id = turn_context.chat_id
 
+        # E-HFE-6 / RAT-17 / #910: kind_id-Auflösung via Mini-Map.
+        # V1: hartkodiert "mia" — Face-Pille (#911) bringt den aktiven kind_id-State.
+        # TODO #911 Face-Pille bringt aktiven kind_id-State — hier ersetzen.
+        kind_id = "mia"
+        active_client = self._client_by_kind_id.get(kind_id, self._hoerspiel_client)
+
         # HFE-10: "erste propose()-Antwort des Turns" bestimmen.
         # Heuristik: wenn für diesen Chat noch kein propose() des laufenden
         # HFE-Turns gelaufen ist, ist es die erste Antwort.
@@ -159,10 +185,11 @@ class HoerspielFolgeErzeugenTask(WriteTask):
         # Wirft BerechtigungError, ValueError oder HoerspielClientError —
         # Sub-Cases 1+2 via ValueError, Sub-Case 3 via Tuple-Return.
         propose_result = hfe_mod.propose(
-            hoerspiel_client=self._hoerspiel_client,
+            hoerspiel_client=active_client,
             is_member_fn=is_member_fn,
             from_user_id=from_user_id,
             idee=idee,
+            kind_id=kind_id,
             voice_hint=voice_hint,
             tg=self._tg,
             chat_id=chat_id,

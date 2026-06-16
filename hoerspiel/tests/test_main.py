@@ -108,7 +108,8 @@ def test_config_ohne_auth_header_401(client_mini_no_auth):
 
 @pytest.mark.skip(reason="V3 #898: Soft-Auth — Header optional, kein 401 mehr bei fehlendem Header")
 def test_themen_ohne_auth_header_401(client_mini_no_auth):
-    resp = client_mini_no_auth.get("/api/v1/hoerspiel/themen?alter=4")
+    # RAT-17 / #910: neue URL-Form mit kind_id
+    resp = client_mini_no_auth.get("/api/v1/hoerspiel/mia/themen")
     assert resp.status_code in (401, 500)
 
 
@@ -296,24 +297,108 @@ def test_resume_put_und_get_verschiedene_alben(client_mini):
 
 
 # ============================================================
-#  HSP-38-Themen (HSP-40)
+#  HSP-38-Themen (kind_id-tragend, RAT-17, #910)
 # ============================================================
 
-def test_themen_alter_4_liefert_8_themen(client_mini):
-    """HSP-38: ?alter=4 → 8 V1-Themen aus DataConfig."""
-    resp = client_mini.get("/api/v1/hoerspiel/themen?alter=4")
+def test_themen_kind_id_liefert_themen_aus_datacfg(client_mini, data_root_mini):
+    """HSP-38 / RAT-17 / #910 / ENTRY-PATH-PROBE:
+    GET /api/v1/hoerspiel/mia/themen → 200 mit {kind_id, name, alter, themen}.
+
+    Kein ?alter=-Query. Kein instance.json vorhanden → ENV-Fallback greift
+    (HOERSPIEL_KIND_ALTER + HOERSPIEL_KIND_NAME). Alter fehlt → 422.
+
+    Da die Fixture kein instance.json legt, testet dieser Test den ENV-Fallback-
+    Pfad. Bei Alter=0 (kein ENV): 422 (Alter nicht in themen_je_alter)."""
+    resp = client_mini.get("/api/v1/hoerspiel/mia/themen")
+    # Ohne instance.json und ohne ENV: alter=0 → nicht in themen_je_alter → 422
+    assert resp.status_code == 422
+    body = resp.get_json()
+    assert "fehler" in body
+
+
+def test_themen_mit_instance_json(runtime_cfg_with_mistral, data_root_mini):
+    """HSP-38 / HSP-27 / RAT-17 / ENTRY-PATH-PROBE:
+    GET /api/v1/hoerspiel/mia/themen mit instance.json → 200 mit
+    {kind_id: "mia", name: "Mia", alter: 4, themen: [...]}.
+
+    instance.json liegt in data_root_mini/instance.json mit kind_id="mia"."""
+    import json
+    # instance.json mit Themen anlegen
+    instance = {
+        "kind_id": "mia",
+        "name": "Mia",
+        "alter": 4,
+        "themen_je_alter": {
+            "4": ["Mut beim Probieren", "Streit vertragen", "Freundschaft"],
+        },
+    }
+    import os
+    with open(os.path.join(data_root_mini, "instance.json"), "w") as f:
+        json.dump(instance, f)
+
+    from hoerspiel import config as config_mod
+    from hoerspiel import main as main_mod
+    main_mod.configure(
+        runtime_config=runtime_cfg_with_mistral,
+        data_config=config_mod.DataConfig(
+            default_voice="shimmer",
+            serien_name="Stigi & Co.",
+        ),
+        data_root=data_root_mini,
+        llm=None, tts_engine=None,
+        bot_token="TEST",
+    )
+    client = main_mod.app.test_client()
+    resp = client.get("/api/v1/hoerspiel/mia/themen")
     assert resp.status_code == 200
     body = resp.get_json()
+    assert body["kind_id"] == "mia"
+    assert body["name"] == "Mia"
     assert body["alter"] == 4
-    assert len(body["themen"]) == 8
     assert "Mut beim Probieren" in body["themen"]
+    assert "Streit vertragen" in body["themen"]
+    assert len(body["themen"]) == 3
 
 
-def test_themen_unbekanntes_alter_404(client_mini):
-    """HSP-38: unbekanntes Alter → 404."""
-    resp = client_mini.get("/api/v1/hoerspiel/themen?alter=7")
+def test_themen_falsche_kind_id_404(client_mini):
+    """HSP-38 / RAT-17 / #910: GET /api/v1/hoerspiel/finn/themen → 404
+    (kind_id nicht diese Instanz, _assert_self_kind)."""
+    resp = client_mini.get("/api/v1/hoerspiel/finn/themen")
     assert resp.status_code == 404
     assert "fehler" in resp.get_json()
+
+
+def test_themen_alter_nicht_gepflegt_422(runtime_cfg_with_mistral, data_root_mini):
+    """HSP-38 / RAT-17 / #910: instance.json vorhanden aber Alter nicht in
+    themen_je_alter → 422."""
+    import json
+    import os
+    instance = {
+        "kind_id": "mia",
+        "name": "Mia",
+        "alter": 7,  # Alter 7 nicht in themen_je_alter
+        "themen_je_alter": {
+            "4": ["Mut beim Probieren"],
+            # Kein "7"-Schlüssel → 422
+        },
+    }
+    with open(os.path.join(data_root_mini, "instance.json"), "w") as f:
+        json.dump(instance, f)
+
+    from hoerspiel import config as config_mod
+    from hoerspiel import main as main_mod
+    main_mod.configure(
+        runtime_config=runtime_cfg_with_mistral,
+        data_config=config_mod.DataConfig(default_voice="shimmer", serien_name="T"),
+        data_root=data_root_mini,
+        llm=None, tts_engine=None,
+        bot_token="TEST",
+    )
+    client = main_mod.app.test_client()
+    resp = client.get("/api/v1/hoerspiel/mia/themen")
+    assert resp.status_code == 422
+    body = resp.get_json()
+    assert "fehler" in body
 
 
 # ============================================================

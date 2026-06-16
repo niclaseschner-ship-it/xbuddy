@@ -35,6 +35,9 @@ DEFAULT_DATA_ROOT = os.path.join(HERE, "data")
 ENV_KIND_ID = "HOERSPIEL_KIND_ID"
 DEFAULT_KIND_ID = "mia"
 
+ENV_KIND_NAME = "HOERSPIEL_KIND_NAME"    # V1-Übergangs-ENV — bis instance.json je Kind angelegt
+ENV_KIND_ALTER = "HOERSPIEL_KIND_ALTER"  # V1-Übergangs-ENV — bis instance.json je Kind angelegt
+
 ENV_ANTHROPIC_KEY = "HOERSPIEL_ANTHROPIC_KEY"
 ENV_MISTRAL_KEY = "HOERSPIEL_MISTRAL_KEY"
 ENV_AZURE_ENDPOINT = "HOERSPIEL_AZURE_OPENAI_ENDPOINT"
@@ -66,6 +69,96 @@ DEFAULT_THEMEN_JE_ALTER: dict[str, list[str]] = {
         "Neue Sachen essen",
     ],
 }
+
+
+class InstanceConfig:
+    """Per-Kind-Instanz-Daten — aus instance.json (HSP-27) oder ENV-Fallback (V1).
+
+    Felder:
+    - kind_id   — Instanz-Identität (Pflicht-Feld in instance.json)
+    - name      — Anzeige-Name des Kindes (z. B. "Mia")
+    - alter     — Alter als int (aus instance.json oder ENV HOERSPIEL_KIND_ALTER)
+    - themen_je_alter — Map alter-str → list[str] (aus instance.json oder DataConfig)
+    """
+
+    def __init__(self, kind_id: str, name: str, alter: int,
+                 themen_je_alter: dict[str, list[str]] | None = None):
+        self.kind_id = kind_id
+        self.name = name
+        self.alter = alter
+        self.themen_je_alter = themen_je_alter if themen_je_alter is not None \
+            else dict(DEFAULT_THEMEN_JE_ALTER)
+
+
+def load_instance(data_root: str, kind_id: str,
+                  env: dict[str, str] | None = None,
+                  data_cfg: "DataConfig | None" = None) -> InstanceConfig:
+    """Lädt die instance.json aus <data_root>/instance.json (HSP-27).
+
+    Fallback-Kette (V1-Übergangs-Lösung bis instance.json je Kind angelegt):
+      1. instance.json vorhanden + gültig: dessen Werte.
+      2. Datei fehlt oder ungültig: ENV HOERSPIEL_KIND_NAME + ENV
+         HOERSPIEL_KIND_ALTER + themen_je_alter aus DataConfig (oder Default).
+
+    Ist weder instance.json noch ENV gesetzt, liefert `name` einen
+    leeren String und `alter` 0. Die Themen-Endpoint-Route gibt dann
+    422 zurück (Alter 0 ist nie in themen_je_alter — klare Fehlermeldung
+    statt Mia-Hardcode). Kein hardcoded Mia-Default.
+    """
+    if env is None:
+        env = dict(os.environ)
+
+    instance_path = os.path.join(data_root, "instance.json")
+    raw = _load_json(instance_path)
+
+    # Wenn instance.json vorhanden und kind_id-Feld stimmt: Datei-Werte nutzen.
+    if raw and raw.get("kind_id") == kind_id:
+        try:
+            alter_raw = raw.get("alter")
+            alter = int(alter_raw) if alter_raw is not None else 0
+        except (TypeError, ValueError):
+            alter = 0
+
+        name = str(raw.get("name") or "").strip()
+
+        raw_themen = raw.get("themen_je_alter")
+        if isinstance(raw_themen, dict):
+            themen_je_alter = {str(k): list(v) for k, v in raw_themen.items()
+                               if isinstance(v, list)}
+        elif data_cfg is not None:
+            themen_je_alter = dict(data_cfg.themen_je_alter)
+        else:
+            themen_je_alter = dict(DEFAULT_THEMEN_JE_ALTER)
+
+        return InstanceConfig(
+            kind_id=kind_id,
+            name=name,
+            alter=alter,
+            themen_je_alter=themen_je_alter,
+        )
+
+    # Fallback: instance.json fehlt oder für andere kind_id — ENV-Overgangs-Werte.
+    logger.info(
+        "hoerspiel/config: instance.json nicht gefunden oder kind_id-Mismatch "
+        "(%s) — nutze ENV-Fallback HOERSPIEL_KIND_NAME / HOERSPIEL_KIND_ALTER",
+        instance_path)
+
+    name = str(env.get(ENV_KIND_NAME) or "").strip()
+    alter_env = env.get(ENV_KIND_ALTER, "").strip()
+    try:
+        alter = int(alter_env) if alter_env else 0
+    except (TypeError, ValueError):
+        alter = 0
+
+    themen_je_alter = (dict(data_cfg.themen_je_alter) if data_cfg is not None
+                       else dict(DEFAULT_THEMEN_JE_ALTER))
+
+    return InstanceConfig(
+        kind_id=kind_id,
+        name=name,
+        alter=alter,
+        themen_je_alter=themen_je_alter,
+    )
 
 
 class ConfigError(Exception):
