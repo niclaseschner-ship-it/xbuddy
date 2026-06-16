@@ -101,7 +101,7 @@ def client_mini_no_auth(runtime_cfg_with_mistral, data_cfg_mini, data_root_mini)
 @pytest.mark.skip(reason="V3 #898: Soft-Auth — Header optional, kein 401 mehr bei fehlendem Header")
 def test_config_ohne_auth_header_401(client_mini_no_auth):
     """HSP-39: GET /config ohne Authorization-Header → 401 oder 500."""
-    resp = client_mini_no_auth.get("/api/v1/hoerspiel/config")
+    resp = client_mini_no_auth.get("/api/v1/hoerspiel/mia/config")
     # 500 wenn Token fehlt, 401 wenn Token da aber initData fehlt.
     assert resp.status_code in (401, 500)
 
@@ -118,7 +118,7 @@ def test_themen_ohne_auth_header_401(client_mini_no_auth):
 
 def test_get_config_pflichtfelder(client_mini):
     """HSP-34: GET /config muss alle Pflicht-Felder enthalten."""
-    resp = client_mini.get("/api/v1/hoerspiel/config")
+    resp = client_mini.get("/api/v1/hoerspiel/mia/config")
     assert resp.status_code == 200
     body = resp.get_json()
 
@@ -154,7 +154,7 @@ def test_get_config_pflichtfelder(client_mini):
 
 def test_get_config_werte_entsprechen_data_config(client_mini):
     """HSP-34: GET /config-Werte kommen aus DataConfig."""
-    resp = client_mini.get("/api/v1/hoerspiel/config")
+    resp = client_mini.get("/api/v1/hoerspiel/mia/config")
     body = resp.get_json()
     assert abs(body["pause_absatz_sek"] - 0.55) < 0.01
     assert abs(body["pause_titel_sek"] - 1.8) < 0.01
@@ -168,7 +168,7 @@ def test_get_config_werte_entsprechen_data_config(client_mini):
 
 def test_patch_config_playback_tempo_range_verletzung(client_mini):
     """HSP-40: playback_tempo=2.0 → 422."""
-    resp = client_mini.patch("/api/v1/hoerspiel/config",
+    resp = client_mini.patch("/api/v1/hoerspiel/mia/config",
                              json={"playback_tempo": 2.0})
     assert resp.status_code == 422
     assert "fehler" in resp.get_json()
@@ -176,7 +176,7 @@ def test_patch_config_playback_tempo_range_verletzung(client_mini):
 
 def test_patch_config_unbekanntes_modell_422(client_mini):
     """HSP-40: unbekanntes llm_model → 422."""
-    resp = client_mini.patch("/api/v1/hoerspiel/config",
+    resp = client_mini.patch("/api/v1/hoerspiel/mia/config",
                              json={"llm_model": "claude-ultra-9999"})
     assert resp.status_code == 422
 
@@ -196,7 +196,7 @@ def test_patch_config_mistral_ohne_key_422():
         bot_token="TEST",
     )
     client = main_mod.app.test_client()
-    resp = client.patch("/api/v1/hoerspiel/config",
+    resp = client.patch("/api/v1/hoerspiel/mia/config",
                         json={"llm_provider": "mistral"})
     assert resp.status_code == 422
     assert "mistral" in resp.get_json().get("fehler", "").lower()
@@ -205,10 +205,10 @@ def test_patch_config_mistral_ohne_key_422():
 def test_patch_config_teilmenge_aendert_genau_diese(client_mini):
     """HSP-40: PATCH mit Teilmenge ändert nur die genannten Felder."""
     # Zuerst aktuellen Stand lesen
-    before = client_mini.get("/api/v1/hoerspiel/config").get_json()
+    before = client_mini.get("/api/v1/hoerspiel/mia/config").get_json()
 
     # Nur playback_tempo ändern
-    resp = client_mini.patch("/api/v1/hoerspiel/config", json={"playback_tempo": 1.1})
+    resp = client_mini.patch("/api/v1/hoerspiel/mia/config", json={"playback_tempo": 1.1})
     assert resp.status_code == 200
     body = resp.get_json()
     assert abs(body["playback_tempo"] - 1.1) < 0.01
@@ -224,7 +224,7 @@ def test_audio_endpoint_ohne_range_200(client_mini, data_root_mini):
     """HSP-37: Vollständiger Track ohne Range → 200."""
     # Track anlegen
     resp = client_mini.get(
-        "/api/v1/hoerspiel/alben/folge-1/audio/track-02.mp3")
+        "/api/v1/hoerspiel/mia/alben/folge-1/audio/track-02.mp3")
     assert resp.status_code == 200
     assert resp.content_type == "audio/mpeg"
     # Cache-Header
@@ -234,7 +234,7 @@ def test_audio_endpoint_ohne_range_200(client_mini, data_root_mini):
 def test_audio_endpoint_mit_range_206(client_mini):
     """HSP-37: Range-Request → 206 Partial Content."""
     resp = client_mini.get(
-        "/api/v1/hoerspiel/alben/folge-1/audio/track-02.mp3",
+        "/api/v1/hoerspiel/mia/alben/folge-1/audio/track-02.mp3",
         headers={"Range": "bytes=0-9"})
     # Flask/Werkzeug unterstützt Range → 206 oder 200 je nach Konditionierung
     assert resp.status_code in (200, 206)
@@ -244,7 +244,7 @@ def test_audio_endpoint_mit_range_206(client_mini):
 def test_audio_endpoint_album_nicht_gefunden_404(client_mini):
     """HSP-37: Album nicht vorhanden → 404."""
     resp = client_mini.get(
-        "/api/v1/hoerspiel/alben/folge-999/audio/track-02.mp3")
+        "/api/v1/hoerspiel/mia/alben/folge-999/audio/track-02.mp3")
     assert resp.status_code == 404
 
 
@@ -254,29 +254,29 @@ def test_audio_endpoint_album_nicht_gefunden_404(client_mini):
 
 def test_resume_get_kein_stand_404(client_mini):
     """HSP-36: kein Resume-Stand → 404."""
-    resp = client_mini.get("/api/v1/hoerspiel/resume?album=folge-1")
+    resp = client_mini.get("/api/v1/hoerspiel/mia/resume?album=folge-1")
     assert resp.status_code == 404
 
 
 def test_resume_put_und_get(client_mini):
     """HSP-36: PUT setzt Stand; GET liest ihn zurück."""
-    put_resp = client_mini.put("/api/v1/hoerspiel/resume",
+    put_resp = client_mini.put("/api/v1/hoerspiel/mia/resume",
                                json={"album": "folge-1", "track": 3})
     assert put_resp.status_code == 200
     body = put_resp.get_json()
     assert body["album"] == "folge-1"
     assert body["track"] == 3
 
-    get_resp = client_mini.get("/api/v1/hoerspiel/resume?album=folge-1")
+    get_resp = client_mini.get("/api/v1/hoerspiel/mia/resume?album=folge-1")
     assert get_resp.status_code == 200
     assert get_resp.get_json()["track"] == 3
 
 
 def test_resume_put_idempotent(client_mini):
     """HSP-36: Zweites PUT mit gleicher Position ist no-op (kein Fehler)."""
-    client_mini.put("/api/v1/hoerspiel/resume",
+    client_mini.put("/api/v1/hoerspiel/mia/resume",
                     json={"album": "folge-1", "track": 2})
-    resp2 = client_mini.put("/api/v1/hoerspiel/resume",
+    resp2 = client_mini.put("/api/v1/hoerspiel/mia/resume",
                              json={"album": "folge-1", "track": 2})
     assert resp2.status_code == 200
     assert resp2.get_json()["track"] == 2
@@ -284,13 +284,13 @@ def test_resume_put_idempotent(client_mini):
 
 def test_resume_put_und_get_verschiedene_alben(client_mini):
     """HSP-36: Resume-Stände verschiedener Alben leben separat."""
-    client_mini.put("/api/v1/hoerspiel/resume",
+    client_mini.put("/api/v1/hoerspiel/mia/resume",
                     json={"album": "folge-1", "track": 2})
-    client_mini.put("/api/v1/hoerspiel/resume",
+    client_mini.put("/api/v1/hoerspiel/mia/resume",
                     json={"album": "folge-2", "track": 5})
 
-    r1 = client_mini.get("/api/v1/hoerspiel/resume?album=folge-1").get_json()
-    r2 = client_mini.get("/api/v1/hoerspiel/resume?album=folge-2").get_json()
+    r1 = client_mini.get("/api/v1/hoerspiel/mia/resume?album=folge-1").get_json()
+    r2 = client_mini.get("/api/v1/hoerspiel/mia/resume?album=folge-2").get_json()
     assert r1["track"] == 2
     assert r2["track"] == 5
 
