@@ -128,7 +128,7 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
             "(idee=%r)", idee_bereinigt)
         # HFE-10: Settings-Beifang-Button in erster propose()-Antwort.
         if is_first_propose and tg is not None and chat_id is not None:
-            _sende_beifang_button(tg, chat_id, mini_app_base_url)
+            _sende_beifang_button(tg, chat_id, mini_app_base_url, kind_id)
         marker = json.dumps(
             {_DISKUSSION_MARKER_KEY: True, "idee_bisher": idee_bereinigt},
             ensure_ascii=False)
@@ -142,7 +142,7 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
         rueckfrage = _baue_themen_rueckfrage(hoerspiel_client, kind_id)
         # HFE-10: Settings-Beifang-Button in erster propose()-Antwort.
         if is_first_propose and tg is not None and chat_id is not None:
-            _sende_beifang_button(tg, chat_id, mini_app_base_url)
+            _sende_beifang_button(tg, chat_id, mini_app_base_url, kind_id)
         raise ValueError(rueckfrage)
 
     # HFE-3: kind_id-Validierung via Buddy-Aufruf entfällt hier — der Buddy
@@ -170,7 +170,7 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
     # Vorschlag käme, hätte Eltern keine Chance mehr, Voice/Provider vorher zu
     # tunen — Spec-Sinn verfehlt. Sende ihn jetzt direkt nach "Klar, ich überlege".
     if is_first_propose and tg is not None and chat_id is not None:
-        _sende_beifang_button(tg, chat_id, mini_app_base_url)
+        _sende_beifang_button(tg, chat_id, mini_app_base_url, kind_id)
     logger.info(
         "hoerspiel_folge_erzeugen.propose: rufe POST /api/v1/hoerspiel/%s/"
         "folgen-vorschlag (HFE-3 Sub-Case 3, RAT-17)", kind_id)
@@ -332,11 +332,14 @@ def _baue_themen_rueckfrage(hoerspiel_client, kind_id: str) -> str:
     )
 
 
-def _sende_beifang_button(tg, chat_id, mini_app_base_url: str | None) -> None:
+def _sende_beifang_button(tg, chat_id, mini_app_base_url: str | None,
+                          kind_id: str = "paula") -> None:
     """HFE-10: Settings-Beifang-Button senden (einmal pro Turn, erste Antwort).
 
     Wenn mini_app_base_url leer: still ausgelassen, kein Fehler, kein Text.
-    Button-Label: ⚙️ Einstellungen; URL: <mini_app_base_url>/seiten/hoerspiel/eltern#einstellungen.
+    Button-Label: ⚙️ Einstellungen;
+    URL: <mini_app_base_url>/seiten/hoerspiel/<kind_id>/eltern#einstellungen
+    (HSP-26 / URL-3a / T970).
     """
     if not mini_app_base_url:
         logger.debug(
@@ -344,7 +347,7 @@ def _sende_beifang_button(tg, chat_id, mini_app_base_url: str | None) -> None:
             "Settings-Beifang-Button entfällt (HFE-10)")
         return
     base = mini_app_base_url.rstrip("/")
-    settings_url = "%s/seiten/hoerspiel/eltern#einstellungen" % base
+    settings_url = "%s/seiten/hoerspiel/%s/eltern#einstellungen" % (base, kind_id)
     try:
         tg.send_inline_keyboard(
             chat_id,

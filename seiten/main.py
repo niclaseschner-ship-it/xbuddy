@@ -568,9 +568,9 @@ def routine_anpassen_view():
     return resp
 
 
-@app.route("/seiten/hoerspiel/eltern", methods=["GET"])
-def hoerspiel_eltern_view():
-    """HSP-33: Hörspiel-Eltern-Mini-App-View.
+@app.route("/seiten/hoerspiel/<kind_id>/eltern", methods=["GET"])
+def hoerspiel_eltern_view(kind_id: str):
+    """HSP-33: Hörspiel-Eltern-Mini-App-View (kind_id-tragend, HSP-26 / URL-3a).
 
     Auth (MAD-7 / HSP-39): Authorization: tma <initData>-Header Pflicht.
     Fehlender oder ungültiger Header → 401 + Klartext.
@@ -580,9 +580,10 @@ def hoerspiel_eltern_view():
     hoerspiel/-Modul). Rendered via absoluten Pfad analog anderen Mini-Apps.
 
     JS laedt beim Boot via:
-      GET /api/v1/hoerspiel/config  (HSP-34: Einstellungen)
-      GET /api/v1/hoerspiel/alben   (HSP-35: Folgen-Liste)
+      GET /api/v1/hoerspiel/<kind_id>/config  (HSP-34: Einstellungen)
+      GET /api/v1/hoerspiel/<kind_id>/alben   (HSP-35: Folgen-Liste)
     nginx routet /api/v1/hoerspiel/... zum hoerspiel-Buddy (Port 5053).
+    kind_id kommt aus location.pathname (eltern.js, T970).
 
     Cache-Buster: build_id aus mtime von hoerspiel/static/eltern.js.
     response-Header no-store, damit jeder Open das HTML neu holt.
