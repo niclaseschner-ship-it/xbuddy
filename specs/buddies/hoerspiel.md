@@ -182,14 +182,29 @@ Affordanzen für die Altersklasse der gerade aktiven Instanz:
 Lautstärke wird **nicht** in der App geregelt — System-Lautstärke des
 Gerätes reicht.
 
-### HSP-3a — Face-Pille für Instanz-Wechsel auf geteiltem Tablet
+### HSP-3a — Face-Pille im Kinder-View für Instanz-Wechsel auf geteiltem Tablet
 Auf dem geteilten Familien-Tablet (V1-Default, OPEN-HSP-G) trägt die
-View **oben rechts eine Face-Pille** (Ring + Foto + Name des aktiven
-Kindes, gelesen aus `xbuddy-data/familie/familie.json`). Tap auf die
-Pille wechselt zur anderen Hörspiel-Instanz (Paula ↔ Neko) per
-kompletter View-Neulade (kein State-Vermischen). Auf einem kind-eigenen
-Gerät ohne Sharing kann die Pille entfallen oder reine Anzeige sein.
-Details + Cross-Bezug zur Eltern-App-Pille: #911.
+Kinder-View **oben rechts eine Face-Pille** (Ring + Foto + Name des
+aktiven Kindes, gelesen aus `xbuddy-data/familie/familie.json` via
+einem schlanken `familie_client` analog `plan/familie_client.py`).
+Tap auf die Pille wechselt zur anderen Hörspiel-Instanz (Paula ↔ Neko)
+per **vollständiger Navigation** auf die andere Kind-URL
+(`/display/hoerspiel/paula/alben` ↔ `/display/hoerspiel/neko/alben`) —
+kein State-Wechsel innerhalb derselben Seite, keine Resume-Marken-
+Vermischung (localStorage-Namensräume sind URL-getrennt, HSP-23).
+Auf einem kind-eigenen Gerät ohne Sharing kann die Pille entfallen
+oder reine Anzeige sein.
+
+**Bewusst keine Pille im Eltern-Mini-App-Header** (RAT-17 + #911 Nic-
+Wahl Variante C, 2026-06-16): die Eltern-Mini-App ist URL-parametrisch
+pro Kind (HSP-33-Form `<funnel>/seiten/hoerspiel/<kind_id>/eltern`),
+der Wechsel zwischen Paula und Neko läuft über zwei Web-App-Menu-
+Buttons im Telegram-Bot, nicht über ein UI-Element in der App. Damit
+bleibt die Eltern-App single-tenant intern, und die Face-Pille-Form
+hat n=1 gebautes Beispiel (Kinder-View) statt zwei mit unterschiedlicher
+Semantik (Kinder = Instanz-Wechsel, Eltern = Verantwortungs-Stempel-
+Pendant aus Plan-Buddy). MAD-Konventions-Klausel für Face-Pille wartet
+auf zweiten Konsumenten in der **gleichen** Semantik (n=2-Regel).
 
 ### HSP-4 — Visueller Stil aus dem geteilten Design-Token-Strang
 Der visuelle Stil bindet an `display/_shared/design/tokens.css` (DTOK-1..5,
@@ -1138,12 +1153,28 @@ und nicht Teil der V1-Standard-Test-Suite.
 ### HSP-33 — Wohnort, Auslieferung, Auth, Tab-Form
 
 Der Hörspiel-Buddy stellt eine Eltern-Mini-App bereit unter
-`<funnel-domain>/seiten/hoerspiel/eltern`, **gehostet vom seiten-
-Service** (Pattern wie Routine-Anpassen). Wohnort der View-Assets:
+`<funnel-domain>/seiten/hoerspiel/<kind_id>/eltern` (kind_id-tragend
+nach RAT-17 / URL-3a, V1: `paula` oder `neko`), **gehostet vom seiten-
+Service** (Pattern wie Routine-Anpassen). Eine **gemeinsame Code-
+Basis** pro Instanz — die Mini-App liest die `<kind_id>` aus
+`window.location.pathname` und reicht sie an alle API-Calls weiter
+(`/api/v1/hoerspiel/<kind_id>/config`, `/api/v1/hoerspiel/<kind_id>/alben`,
+…). **Keine** Face-Pille im Mini-App-Header, **kein** App-internes
+Toggle (siehe HSP-3a-Begründung). Wohnort der View-Assets:
 
 - `hoerspiel/templates/eltern.html`
 - `hoerspiel/static/eltern.css`
 - `hoerspiel/static/eltern.js`
+
+**Bot-Menü-Buttons (Telegram-WebApp).** Im Eltern-Chat-Bot trägt das
+persistente Menü pro Hörspiel-Instanz einen eigenen Web-App-Button mit
+der jeweiligen kind-spezifischen URL. V1: zwei Einträge
+(`📚 Hörspiel Paula` → `<funnel>/seiten/hoerspiel/paula/eltern`,
+`📚 Hörspiel Neko` → `<funnel>/seiten/hoerspiel/neko/eltern`).
+Konfiguration in `eltern-chat/config.py` als Liste; bei einem dritten
+Kind wird ein weiterer Eintrag handverdrahtet ergänzt (Option A aus
+RAT-17, keine Registry). Bot-Setup ruft die Telegram-API
+`setChatMenuButton` einmalig je Eintrag — kein Per-Request-Roundtrip.
 
 **Auth** nach `conventions/mini-app-design.md` MAD-7 und #708-Pattern:
 alle HTML- und API-Routes prüfen den `Authorization: tma <initData>`-
@@ -1163,9 +1194,11 @@ für Tabs wird bei zweitem Konsumenten via `/berater-runde` ratifiziert.
 
 Die Mini-App liest beim Laden das URL-Hash-Fragment der Funnel-URL:
 
-- `<funnel>/seiten/hoerspiel/eltern#einstellungen` → Tab „Einstellungen"
-  aktiv (Default-Verhalten konsistent zum Tab-Default ohne Hash).
-- `<funnel>/seiten/hoerspiel/eltern#folgen` → Tab „Folgen" aktiv.
+- `<funnel>/seiten/hoerspiel/<kind_id>/eltern#einstellungen` → Tab
+  „Einstellungen" aktiv (Default-Verhalten konsistent zum Tab-Default
+  ohne Hash).
+- `<funnel>/seiten/hoerspiel/<kind_id>/eltern#folgen` → Tab „Folgen"
+  aktiv.
 - Kein Hash oder unbekannter Hash → Default-Tab „Einstellungen".
 
 `hoerspiel/static/eltern.js` registriert zusätzlich einen
