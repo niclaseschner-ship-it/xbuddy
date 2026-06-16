@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
 """Hörspiel-Buddy-App — HTTP-Schnittstelle + Entrypoint (HSP-17/HSP-28).
 
-Siehe specs/buddies/hoerspiel.md. Endpunkte:
+Siehe specs/buddies/hoerspiel.md. Endpunkte (seit #908 URL-3a-konform, HSP-26):
 
-  GET  /api/v1/hoerspiel/bible                       — Welt-Bible als Markdown
-  GET  /api/v1/hoerspiel/folgen-historie             — Folgen-Historie als Markdown
-  GET  /api/v1/hoerspiel/alben                       — Liste freigegebener Alben
-  GET  /api/v1/hoerspiel/alben/<id>/manifest         — Album-Manifest
-  POST /api/v1/hoerspiel/folgen-vorschlag            — LLM-Vorschlag (Side-Effekt-frei)
-  POST /api/v1/hoerspiel/alben                       — Album bauen (TTS + Historie)
-  GET  /api/v1/hoerspiel/config                      — Eltern-Tuning-Konfig lesen (HSP-34)
-  PATCH /api/v1/hoerspiel/config                     — Eltern-Tuning setzen (HSP-34)
-  GET  /api/v1/hoerspiel/themen?alter=N              — Themen-Liste je Alter (HSP-38)
-  GET  /api/v1/hoerspiel/alben/<id>/audio/<track>.mp3 — Audio-Track mit Range-Requests (HSP-37)
-  GET  /api/v1/hoerspiel/resume?album=<id>           — Resume-Stand lesen (HSP-36)
-  PUT  /api/v1/hoerspiel/resume                      — Resume-Stand setzen (HSP-36)
-  GET  /api/v1/hoerspiel/shared-assets/status        — Vorhandensein je Voice
-  POST /api/v1/hoerspiel/shared-assets/rebuild       — alle vier MP3s neu bauen
+  GET  /api/v1/hoerspiel/<kind_id>/bible             — Welt-Bible als Markdown
+  GET  /api/v1/hoerspiel/<kind_id>/folgen-historie   — Folgen-Historie als Markdown
+  GET  /api/v1/hoerspiel/<kind_id>/alben             — Liste freigegebener Alben
+  GET  /api/v1/hoerspiel/<kind_id>/alben/<id>/manifest — Album-Manifest
+  POST /api/v1/hoerspiel/<kind_id>/folgen-vorschlag  — LLM-Vorschlag (Side-Effekt-frei)
+  POST /api/v1/hoerspiel/<kind_id>/alben             — Album bauen (TTS + Historie)
+  GET  /api/v1/hoerspiel/<kind_id>/config            — Eltern-Tuning-Konfig lesen (HSP-34)
+  PATCH /api/v1/hoerspiel/<kind_id>/config           — Eltern-Tuning setzen (HSP-34)
+  GET  /api/v1/hoerspiel/themen?alter=N              — Themen-Liste je Alter (HSP-38, T4)
+  GET  /api/v1/hoerspiel/<kind_id>/alben/<id>/audio/<track>.mp3 — Audio-Track (HSP-37)
+  GET  /api/v1/hoerspiel/<kind_id>/resume?album=<id> — Resume-Stand lesen (HSP-36)
+  PUT  /api/v1/hoerspiel/<kind_id>/resume            — Resume-Stand setzen (HSP-36)
+  GET  /api/v1/hoerspiel/<kind_id>/shared-assets/status — Vorhandensein je Voice
+  POST /api/v1/hoerspiel/<kind_id>/shared-assets/rebuild — alle vier MP3s neu bauen
 
-Daten-Router (HSP-26):
-  GET  /display/hoerspiel/data/<sub>                 — Audio-/Cover-Assets
+Daten-Router (HSP-26, URL-3a):
+  GET  /display/hoerspiel/<kind_id>/alben            — Alben-View (HTML)
+  GET  /display/hoerspiel/<kind_id>/data/<sub>       — Audio-/Cover-Assets
 
 Port: 5053 (HSP-28). Service-Topologie: schlanke eigenständige Flask-App
 (Geschwister von wetter/, routine/, plan/).
@@ -283,6 +284,30 @@ def require_mini_app_auth(f):
 
 
 # ============================================================
+#  URL-3a / HSP-26: kind_id-Self-Check
+# ============================================================
+
+def _self_kind_id() -> str:
+    """Gibt die eigene kind_id der Instanz zurück (aus RuntimeConfig, HSP-26)."""
+    cfg = runtime.get("runtime_config")
+    if cfg is not None and hasattr(cfg, "kind_id"):
+        return cfg.kind_id
+    return config_mod.DEFAULT_KIND_ID
+
+
+def _assert_self_kind(kind_id: str):
+    """Prüft URL-`<kind_id>` gegen eigene Instanz-Identität (HSP-26, URL-3a).
+
+    Gibt None zurück wenn ok, oder eine (response, status)-Tuple für 404.
+    Fremde kind_ids werden nicht weitergeleitet — 404, nicht 302 (RAT-17).
+    """
+    if kind_id != _self_kind_id():
+        return jsonify({"fehler": "unbekannte kind_id %r — dieser Service ist %r (HSP-26, URL-3a)"
+                        % (kind_id, _self_kind_id())}), 404
+    return None
+
+
+# ============================================================
 #  HSP-27b — Modell-Listen-Aggregation
 # ============================================================
 
@@ -338,34 +363,49 @@ app = Flask(__name__, static_url_path="/display/hoerspiel/static")
 
 # ---- Display-View (HSP-2, HSP-3 — Single-Page-Splitscreen Mia-View) ----
 
-@app.route("/display/hoerspiel/alben", methods=["GET"])
-def display_alben():
+@app.route("/display/hoerspiel/<kind_id>/alben", methods=["GET"])
+def display_alben(kind_id: str):
+    err = _assert_self_kind(kind_id)
+    if err is not None:
+        return err
     return render_template("alben.html")
 
 
 # ---- Lese-Endpoints (HSP-17, Side-Effekt-frei) ----
 
-@app.route("/api/v1/hoerspiel/bible", methods=["GET"])
-def bible():
+@app.route("/api/v1/hoerspiel/<kind_id>/bible", methods=["GET"])
+def bible(kind_id: str):
+    err = _assert_self_kind(kind_id)
+    if err is not None:
+        return err
     text = data_io.read_text_or_empty(os.path.join(_data_root(), "bible.md"))
     return text, 200, {"Content-Type": "text/markdown; charset=utf-8"}
 
 
-@app.route("/api/v1/hoerspiel/folgen-historie", methods=["GET"])
-def folgen_historie():
+@app.route("/api/v1/hoerspiel/<kind_id>/folgen-historie", methods=["GET"])
+def folgen_historie(kind_id: str):
+    err = _assert_self_kind(kind_id)
+    if err is not None:
+        return err
     text = data_io.read_text_or_empty(os.path.join(_data_root(), "folgen-historie.md"))
     return text, 200, {"Content-Type": "text/markdown; charset=utf-8"}
 
 
-@app.route("/api/v1/hoerspiel/alben", methods=["GET", "POST"])
-def alben():
+@app.route("/api/v1/hoerspiel/<kind_id>/alben", methods=["GET", "POST"])
+def alben(kind_id: str):
+    err = _assert_self_kind(kind_id)
+    if err is not None:
+        return err
     if request.method == "GET":
         return jsonify(album_builder.liste_alben(_data_root()))
     return _post_alben()
 
 
-@app.route("/api/v1/hoerspiel/alben/<album_id>/manifest", methods=["GET"])
-def album_manifest_get(album_id: str):
+@app.route("/api/v1/hoerspiel/<kind_id>/alben/<album_id>/manifest", methods=["GET"])
+def album_manifest_get(kind_id: str, album_id: str):
+    err = _assert_self_kind(kind_id)
+    if err is not None:
+        return err
     manifest = album_builder.lade_manifest(_data_root(), album_id)
     if manifest is None:
         return jsonify({"fehler": "album nicht gefunden"}), 404
@@ -374,8 +414,11 @@ def album_manifest_get(album_id: str):
 
 # ---- Schreib-Endpoints (HSP-17, Eltern-Chat-Skill) ----
 
-@app.route("/api/v1/hoerspiel/folgen-vorschlag", methods=["POST"])
-def folgen_vorschlag():
+@app.route("/api/v1/hoerspiel/<kind_id>/folgen-vorschlag", methods=["POST"])
+def folgen_vorschlag(kind_id: str):
+    err = _assert_self_kind(kind_id)
+    if err is not None:
+        return err
     body = request.get_json(silent=True) or {}
     idee = (body.get("idee") or "").strip()
     if not idee:
@@ -476,8 +519,11 @@ def _build_config_response(cfg, dcfg) -> dict:
     return public
 
 
-@app.route("/api/v1/hoerspiel/config", methods=["GET", "PATCH"])
-def config_endpoint():
+@app.route("/api/v1/hoerspiel/<kind_id>/config", methods=["GET", "PATCH"])
+def config_endpoint(kind_id: str):
+    err = _assert_self_kind(kind_id)
+    if err is not None:
+        return err
     cfg = _runtime_cfg()
     if cfg is None:
         return jsonify({"fehler": "runtime-config nicht geladen"}), 503
@@ -543,15 +589,18 @@ def themen_endpoint():
 
 # ---- Audio-Streaming-Endpoint (HSP-37) ----
 
-@app.route("/api/v1/hoerspiel/alben/<album_id>/audio/<path:track_filename>",
+@app.route("/api/v1/hoerspiel/<kind_id>/alben/<album_id>/audio/<path:track_filename>",
            methods=["GET"])
-def album_audio(album_id: str, track_filename: str):
+def album_audio(kind_id: str, album_id: str, track_filename: str):
     """HSP-37: Audio-Track streamen mit Range-Requests.
 
     Auth-Check (HSP-39) läuft via require_mini_app_auth-Decorator vor der
     Range-Logik (401 trumpft 206). send_from_directory blockt Pfad-Traversal.
     `Content-Type: audio/mpeg`, `Cache-Control: private, max-age=86400`.
     """
+    err = _assert_self_kind(kind_id)
+    if err is not None:
+        return err
     audio_dir = os.path.join(_data_root(), "alben", album_id, "audio")
     if not os.path.isdir(audio_dir):
         return jsonify({"fehler": "album nicht gefunden"}), 404
@@ -568,8 +617,8 @@ def album_audio(album_id: str, track_filename: str):
 
 # ---- Resume-Endpoints (HSP-36) ----
 
-@app.route("/api/v1/hoerspiel/resume", methods=["GET", "PUT"])
-def resume_endpoint():
+@app.route("/api/v1/hoerspiel/<kind_id>/resume", methods=["GET", "PUT"])
+def resume_endpoint(kind_id: str):
     """HSP-36: Resume-Stand lesen (GET) und setzen (PUT).
 
     GET ?album=<id> → {"album": "<id>", "track": <position>} oder 404.
@@ -577,6 +626,9 @@ def resume_endpoint():
 
     V1: in-process-Store (runtime['resume_store']). Last-Write-Wins.
     """
+    err = _assert_self_kind(kind_id)
+    if err is not None:
+        return err
     store = runtime.get("resume_store")
     if store is None:
         store = {}
@@ -606,13 +658,19 @@ def resume_endpoint():
 
 # ---- Shared-Assets (HSP-17/22/29) ----
 
-@app.route("/api/v1/hoerspiel/shared-assets/status", methods=["GET"])
-def shared_assets_status():
+@app.route("/api/v1/hoerspiel/<kind_id>/shared-assets/status", methods=["GET"])
+def shared_assets_status(kind_id: str):
+    err = _assert_self_kind(kind_id)
+    if err is not None:
+        return err
     return jsonify(tts_service.status_shared_assets(_data_root()))
 
 
-@app.route("/api/v1/hoerspiel/shared-assets/rebuild", methods=["POST"])
-def shared_assets_rebuild():
+@app.route("/api/v1/hoerspiel/<kind_id>/shared-assets/rebuild", methods=["POST"])
+def shared_assets_rebuild(kind_id: str):
+    err = _assert_self_kind(kind_id)
+    if err is not None:
+        return err
     tts = _tts()
     if tts is None:
         return jsonify({"fehler": "tts-engine nicht konfiguriert"}), 503
@@ -622,15 +680,18 @@ def shared_assets_rebuild():
         return jsonify({"fehler": "tts-engine nicht erreichbar: %s" % e}), 503
 
 
-# ---- Daten-Router (HSP-26 `GET /display/hoerspiel/data/<sub>`) ----
+# ---- Daten-Router (HSP-26 `GET /display/hoerspiel/<kind_id>/data/<sub>`, URL-3a) ----
 
-@app.route("/display/hoerspiel/data/<path:sub>", methods=["GET"])
-def display_data(sub: str):
-    """Liefert Audio-/Cover-Assets aus dem Daten-Bereich aus (HSP-26).
+@app.route("/display/hoerspiel/<kind_id>/data/<path:sub>", methods=["GET"])
+def display_data(kind_id: str, sub: str):
+    """Liefert Audio-/Cover-Assets aus dem Daten-Bereich aus (HSP-26, URL-3a).
 
     Streng auf Subpfade unter `data/` begrenzt — `send_from_directory`
     blockt Pfad-Traversal.
     """
+    err = _assert_self_kind(kind_id)
+    if err is not None:
+        return err
     return send_from_directory(_data_root(), sub)
 
 
