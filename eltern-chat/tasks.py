@@ -802,7 +802,11 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             hoerspiel_client=_hfe_client,
             display_url_origin=display_url_origin or "",
             family_group_chat_id_getter=family_group_chat_id_getter,
-            is_member_fn=_hfe_is_member))
+            is_member_fn=_hfe_is_member,
+            # HFE-10 (#937-Folge 2026-06-16): mini_app_base_url an HFE-Task
+            # durchschleifen, sonst sendet _sende_beifang_button früh-Return
+            # (URL leer) und der Settings-Beifang-Button erscheint NIE.
+            mini_app_base_url=mini_app_base_url or ""))
 
     # HOE-8 / #876: »Hörspiel öffnen« als lesende Aufgabe (EC-9, Cluster B / Capability-Karte).
     # Dreifacher AND-Guard: hoerspiel_url_origin UND mini_app_base_url UND
