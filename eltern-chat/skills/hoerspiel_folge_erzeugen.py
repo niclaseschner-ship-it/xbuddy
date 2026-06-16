@@ -69,7 +69,7 @@ _IDEE_MIN_ZEICHEN = 5
 
 
 def propose(*, hoerspiel_client, is_member_fn, from_user_id,
-            idee: str, kind_id: str = "mia",
+            idee: str, kind_id: str,
             voice_hint: str | None = None,
             tg=None, chat_id=None,
             mini_app_base_url: str | None = None,
@@ -292,7 +292,7 @@ def _baue_themen_rueckfrage(hoerspiel_client, kind_id: str) -> str:
     Bei anderen Fehlern: nur EC-22-Rückfrage (degrades gracefully).
     """
     try:
-        data = hoerspiel_client.themen_lesen(kind_id)
+        data = hoerspiel_client.themen_lesen()
     except HoerspielClientError as exc:
         if exc.status == 404:
             # kind_id unbekannt — Fehler-Tool-Result-Text (HFE-3, keine Themen möglich)
