@@ -371,6 +371,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   mini_app_einkauf_url=None,
                   mini_app_base_url=None,
                   hoerspiel_url_origin=None,
+                  hoerspiel_url_origin_finn: str = "",
                   kibuddy_origin_url=None,
                   a2_receipt_store=None):
     """Baut den Katalog für eine laufende Instanz.
@@ -806,7 +807,12 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             # HFE-10 (#937-Folge 2026-06-16): mini_app_base_url an HFE-Task
             # durchschleifen, sonst sendet _sende_beifang_button früh-Return
             # (URL leer) und der Settings-Beifang-Button erscheint NIE.
-            mini_app_base_url=mini_app_base_url or ""))
+            mini_app_base_url=mini_app_base_url or "",
+            # RAT-17 / #910 / T954: Finn-Origin durchreichen, damit Mini-Map
+            # _client_by_kind_id["finn"] einen echten HoerspielClient mit
+            # Finn-Origin bekommt (statt stillschweigende Mia-Fallback, AC-1).
+            hoerspiel_url_origin=hoerspiel_url_origin or "",
+            hoerspiel_url_origin_finn=hoerspiel_url_origin_finn or ""))
 
     # HOE-8 / #876: »Hörspiel öffnen« als lesende Aufgabe (EC-9, Cluster B / Capability-Karte).
     # Dreifacher AND-Guard: hoerspiel_url_origin UND mini_app_base_url UND

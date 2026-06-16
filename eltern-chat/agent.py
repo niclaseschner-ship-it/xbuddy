@@ -86,7 +86,10 @@ SYSTEM_PROMPT = (
     "zum Vorschlag-Endpoint (HFE-3, HFE-6).\n"
     "Anbieter-/Modell-Wechsel — Nachrichten wie »wechsel auf mistral« sind KEIN "
     "HFE-Trigger. Antwort: »Anbieter und Modell wählst du in der Hörspiel-Mini-App.« "
-    "(Refs #848, schließt OPEN-HSP-N #750)."
+    "(Refs #848, schließt OPEN-HSP-N #750).\n"
+    "kind_id-Wahl (HFE-3, E-HFE-6): Nennt die Mutter ein Kind (»Mia« oder »Finn«), "
+    "setze kind_id entsprechend (»mia« bzw. »finn«). Bei Mehrdeutigkeit — kein "
+    "Kindname im Satz — stelle EINE kurze Rückfrage: »Für Mia oder Finn?«."
 )
 
 # Obergrenze der Loop-Durchläufe — schützt vor einer Aufgaben-Schleife ohne Ende.
