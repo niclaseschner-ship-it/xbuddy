@@ -115,19 +115,20 @@ class FakeHoerspielClient:
             raise self._config_error
         return dict(self._config_response)
 
-    def themen_lesen(self, kind_id: str) -> dict:
-        """Neu #910 (HSP-38, RAT-17): kind_id statt alter, gibt dict zurück."""
-        self.themen_calls.append(kind_id)
+    def themen_lesen(self) -> dict:
+        """Neu #910 (HSP-38, RAT-17): kein kind_id-Argument mehr (Sister-Pattern).
+        Client-Instanz kennt kind_id aus self._kind_id."""
+        self.themen_calls.append(self._kind_id)
         if self._themen_error is not None:
             raise self._themen_error
         if self._themen_response == "404":
             raise HoerspielClientError(
-                "Hörspiel-Buddy: GET /api/v1/hoerspiel/%s/themen → 404" % kind_id,
+                "Hörspiel-Buddy: GET /api/v1/hoerspiel/%s/themen → 404" % self._kind_id,
                 status=404)
         if self._themen_response is None:
             # 422 (Alter nicht gepflegt) → nur EC-22-Rückfrage ohne Themen
             raise HoerspielClientError(
-                "Hörspiel-Buddy: GET /api/v1/hoerspiel/%s/themen → 422" % kind_id,
+                "Hörspiel-Buddy: GET /api/v1/hoerspiel/%s/themen → 422" % self._kind_id,
                 status=422)
         # 200 mit vollständigem Response-Dict (HSP-38)
         return {
@@ -806,7 +807,7 @@ def test_EHF6_themen_lesen_url_form():
         kind_id="paula",
         transport=transport,
     )
-    result = client.themen_lesen("paula")
+    result = client.themen_lesen()  # kein Argument — Sister-Pattern (#910)
 
     assert len(aufgerufen) == 1
     method, path = aufgerufen[0]
@@ -833,7 +834,7 @@ def test_EHF6_themen_lesen_404_raises():
         transport=transport,
     )
     with pytest.raises(HoerspielClientError) as exc_info:
-        client.themen_lesen("neko")
+        client.themen_lesen()  # kein Argument — Sister-Pattern (#910)
     assert exc_info.value.status == 404
 
 
@@ -850,7 +851,7 @@ def test_EHF6_themen_lesen_422_raises():
         transport=transport,
     )
     with pytest.raises(HoerspielClientError) as exc_info:
-        client.themen_lesen("paula")
+        client.themen_lesen()  # kein Argument — Sister-Pattern (#910)
     assert exc_info.value.status == 422
 
 
@@ -921,3 +922,83 @@ def test_HFE10_kein_beifang_bei_leerer_mini_app_url():
     msg = str(exc_info.value)
     assert "Worum" in msg or "gehen" in msg.lower() or "Abenteuer" in msg, (
         "HFE-10: EC-22-Rückfrage bleibt auch ohne Beifang erhalten")
+
+
+# ============================================================
+#  #910 Watchdog-Pflicht-Tests: propose() ohne kind_id + Mini-Map
+# ============================================================
+
+
+def test_propose_ohne_kind_id_wirft_typeerror():
+    """AC-1 / HFE-3 / E-HFE-6 / #910: propose() ohne kind_id wirft TypeError.
+
+    kind_id ist Pflicht-Argument (kein Default mehr seit Watchdog T4-Fix,
+    Pfad A). Der Aufruf ohne kind_id darf die Berechtigung nicht einmal prüfen.
+    entry_path_probe_result: probed.
+    """
+    client = FakeHoerspielClient()
+    with pytest.raises(TypeError):
+        propose(
+            hoerspiel_client=client,
+            is_member_fn=_immer_mitglied,
+            from_user_id=7,
+            idee="Stigi und der Regenwald",
+            # kind_id absichtlich NICHT übergeben → TypeError
+        )
+
+
+def test_task_mini_map_kind_id_paula_nutzt_paula_client():
+    """AC-3 / E-HFE-6 / #910: HoerspielFolgeErzeugenTask.propose() nutzt
+    den Paula-Client aus der Mini-Map (kind_id="paula").
+
+    Die Mini-Map _client_by_kind_id wird im Konstruktor befüllt; in V1 ist
+    kind_id="paula" hartkodiert (TODO #911). Der aktive Client muss mit
+    der Paula-Origin konstruiert worden sein.
+    """
+    from skills.hoerspiel_client import HoerspielClient
+
+    aufgerufen: list = []
+
+    def transport(method, path, *, body=None, content_type=None):
+        aufgerufen.append((method, path))
+        if "folgen-vorschlag" in path:
+            import json as _json
+            resp = _json.dumps({
+                "titel": "Paula-Folge",
+                "text": "Stigi und das Abenteuer.",
+                "folgen-nr-vorschlag": 1,
+            }).encode()
+            return 200, resp
+        if "config" in path:
+            import json as _json
+            return 200, _json.dumps({"default_voice": "shimmer"}).encode()
+        return 404, b"{}"
+
+    tg = FakeTelegram()
+    # Task mit expliziten Origins konstruieren — Mini-Map baut eigene Clients.
+    paula_origin = "http://127.0.0.1:5053"
+    neko_origin = "http://127.0.0.1:5055"
+    # Basis-Client (Fallback) ohne Transport — Paula-Client via Mini-Map hat Transport.
+    basis_client = FakeHoerspielClient()
+    paula_client = HoerspielClient(
+        origin_url=paula_origin, kind_id="paula", transport=transport)
+
+    task = HoerspielFolgeErzeugenTask(
+        tg=tg,
+        hoerspiel_client=basis_client,
+        display_url_origin="https://app.example.com",
+        is_member_fn=_immer_mitglied,
+        mini_app_base_url="https://mini.example.com",
+        hoerspiel_url_origin=paula_origin,
+        hoerspiel_url_origin_neko=neko_origin,
+    )
+    # Überschreiben: Paula-Slot auf kontrollierten Client setzen.
+    task._client_by_kind_id["paula"] = paula_client
+
+    ctx = _ctx(chat_id=42, from_user_id=7)
+    proposal = task.propose({"idee": "Stigi findet Gold"}, ctx)
+
+    assert isinstance(proposal, Proposal), "propose() muss Proposal zurückgeben"
+    # Transport wurde aufgerufen (Paula-Client genutzt, nicht basis_client)
+    assert any("folgen-vorschlag" in p for _, p in aufgerufen), (
+        "Mini-Map: Paula-Client muss für propose() genutzt worden sein")

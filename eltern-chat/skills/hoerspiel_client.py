@@ -198,14 +198,15 @@ class HoerspielClient:
                 status=status) from exc
         return data
 
-    def themen_lesen(self, kind_id: str) -> dict:
+    def themen_lesen(self) -> dict:
         """GET /api/v1/hoerspiel/<kind_id>/themen (HFE-3 Sub-Case 1, HSP-38, RAT-17).
 
         Liefert den vollständigen Response-Body der Instanz als Dict:
         {"kind_id": str, "name": str, "alter": int, "themen": list[str]}
 
         Kein ?alter=-Query-Parameter mehr (RAT-17): Alter lebt nur in
-        instance.json des Buddys. kind_id im Pfad ist URL-3a-konform.
+        instance.json des Buddys. kind_id kommt aus self._kind_id (Sister-
+        Pattern zu folgen_vorschlag/album_bauen/alben_lesen/config_lesen).
 
         Bei 404 (kind_id unbekannt — Instanz nicht erreichbar): wirft
         HoerspielClientError(status=404).
@@ -214,7 +215,7 @@ class HoerspielClient:
         ohne Themen-Liste (HFE-3 Sub-Case 1).
         Andere Fehler (5xx, Netz): werfen HoerspielClientError weiter.
         """
-        pfad = "/api/v1/hoerspiel/%s/themen" % kind_id
+        pfad = self._pfad("themen")
         status, resp_bytes = self._call("GET", pfad)
         if status == 404:
             raise HoerspielClientError(
