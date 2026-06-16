@@ -5,7 +5,7 @@
 /* ── MOCK-DATEN (Entry-Path-Probe ohne Backend) ──────────────────────
    MOCK_ALBEN: Listen-Form (Summary, ohne tracks).
    MOCK_MANIFESTE: id → Manifest mit tracks (HSP-17 Liste-vs-Manifest). */
-const COVER_DEFAULT = '/display/hoerspiel/data/shared-assets/cover-default.jpg';
+const COVER_DEFAULT = '/display/hoerspiel/paula/data/shared-assets/cover-default.jpg';
 
 const MOCK_ALBEN = [
   {
@@ -40,17 +40,17 @@ const MOCK_MANIFESTE = {
     'pikto-hauptbegriffe': [{ wort: 'Trübsee', 'arasaac-id': 6022 }],
     tracks: [
       { id: 'intro-shimmer', position: 1, art: 'intro',
-        'audio-asset': '/display/hoerspiel/data/shared-assets/intro_shimmer.mp3',
+        'audio-asset': '/display/hoerspiel/paula/data/shared-assets/intro_shimmer.mp3',
         'dauer-sek': 18 },
       { id: 'folge-22-track-02', position: 2, art: 'inhalt',
-        'audio-asset': '/display/hoerspiel/data/alben/folge-22/audio/track-02.mp3',
+        'audio-asset': '/display/hoerspiel/paula/data/alben/folge-22/audio/track-02.mp3',
         'dauer-sek': 215, titel: 'Der Weg zum See' },
       { id: 'folge-22-track-03', position: 3, art: 'inhalt',
-        'audio-asset': '/display/hoerspiel/data/alben/folge-22/audio/track-03.mp3',
+        'audio-asset': '/display/hoerspiel/paula/data/alben/folge-22/audio/track-03.mp3',
         'dauer-sek': 200, titel: 'Am Trübsee-Ufer',
         'pikto-hauptbegriffe': [{ wort: 'See', 'arasaac-id': 5199 }] },
       { id: 'outro-shimmer', position: 4, art: 'outro',
-        'audio-asset': '/display/hoerspiel/data/shared-assets/outro_shimmer.mp3',
+        'audio-asset': '/display/hoerspiel/paula/data/shared-assets/outro_shimmer.mp3',
         'dauer-sek': 20 }
     ]
   }
