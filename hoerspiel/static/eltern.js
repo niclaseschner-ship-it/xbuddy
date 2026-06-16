@@ -574,10 +574,12 @@ function _ladeTrack(manifest, tracks, idx, autoplay = false) {
 
   _aktiverTrackIdx = idx;
 
-  // Audio-URL aufbauen (HSP-37: über /api/v1/hoerspiel/alben/<id>/audio/<track>.mp3)
-  const trackFilename = (track["audio-asset"] || "").split("/").pop() || "";
-  const audioUrl = "/api/v1/hoerspiel/alben/" +
-    encodeURIComponent(manifest.id) + "/audio/" + encodeURIComponent(trackFilename);
+  // Audio-URL direkt aus Manifest (Live-Fix 2026-06-16): HSP-37
+  // (/api/v1/hoerspiel/alben/<id>/audio/<track>.mp3) ist heute nicht implementiert
+  // bzw. die Pfad-Konstruktion via split/pop traf den Server-Mount nicht
+  // (Shared-Assets liegen in /shared-assets/, Inhalt-Tracks unter /alben/<id>/audio/).
+  // Manifest liefert die exakte URL bereits — nutzen ohne Umweg.
+  const audioUrl = track["audio-asset"] || "";
 
   // Altes Audio-Element entfernen.
   if (_audio) {
