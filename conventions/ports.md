@@ -24,7 +24,8 @@ in einer Service-Datei oder im Code als wahre Quelle.
 | 5052 | Essens-Buddy | xbuddy-essen |
 | 5053 | Hörspiel-Buddy | xbuddy-hoerspiel |
 | 5054 | KI-Buddy | xbuddy-kibuddy |
-| 5055-5099 | für neue Buddys reserviert | — |
+| 5055 | Hörspiel-Buddy (Neko) | xbuddy-hoerspiel-neko |
+| 5056-5099 | für neue Buddys reserviert | — |
 
 ### PORT-3 — Komponenten binden nur an 127.0.0.1, nie an 0.0.0.0
 Komponenten binden ihren HTTP-Server an `127.0.0.1`, nicht an `0.0.0.0`.
