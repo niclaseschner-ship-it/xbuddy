@@ -96,6 +96,9 @@ def test_hochladen_schreibt_receipt(tmp_path):
     assert any(c["method"] == "POST" for c in calls)
     # Quittung enthält die id
     assert "med-xyz" in result
+    # AC4/#938: EC-10 A2-Quittungs-Wort-Pflicht — Wort `falsch` muss im Erfolgstext
+    assert "falsch" in result.lower(), (
+        "Hochladen-Quittung muss das Wort 'falsch' enthalten (EC-10 A2): %r" % result)
 
     # Receipt wurde geschrieben
     conn = sqlite3.connect(db_path)

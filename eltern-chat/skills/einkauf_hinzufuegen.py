@@ -244,6 +244,10 @@ def _baue_antwort(hinzugefuegt, uebersprungen, grenze_halt, offen_n):
     if prefix:
         zeilen.append(prefix)
 
+    # EC-10 A2-Quittungs-Wort-Pflicht: Undo-Hinweis mit Wort `falsch` (EC-10 A2, #938)
+    if hinzugefuegt:
+        zeilen.append("Wenn das ein Missverständnis war, sag einfach `falsch`.")
+
     # Skip-Zeile
     if uebersprungen:
         skip_labels = ", ".join(_kuerze(lbl) for lbl in uebersprungen)
@@ -320,25 +324,23 @@ def einkauf_hinzufuegen(text, from_user_id, essen_client, icon_client,
             item_text, katalog, icon_client)
 
         try:
-            essen_client.hinzufuegen_einkauf(
+            resp = essen_client.hinzufuegen_einkauf(
                 label=canonical,
                 bild_ref=bild_ref,
                 item_id=item_id,
                 kategorie=kategorie,
             )
+            server_id = resp["id"]
             hinzugefuegt.append(canonical)
-            # EC-10 A2-Receipt: item_id ist der kanonische Schlüssel (EIN-5,
-            # Phase-0-Befund: item_id ist INPUT, schon bekannt vor dem POST).
-            # inverse_call in HTTP-Form (spec Z. 533-535) — Endpunkt für
-            # Einkaufs-/Wunsch-Löschung: essen/main.py:22, 807 (ESSEN-17,
-            # DELETE /api/v1/essen/wuensche/<id>). Klasse=einkauf wird über
-            # denselben Endpunkt entfernt (gemeinsamer wuensche.json-Store).
+            # EC-10 A2-Receipt (#938): server_id aus POST-Antwort verwenden,
+            # NICHT die clientseitige item_id. DELETE filtert per Server-ID
+            # (essen/main.py ESSEN-17). inverse_call in HTTP-Form (spec Z. 533-535).
             receipt_items.append(
-                (str(item_id),
-                 'essen DELETE /api/v1/essen/wuensche/%s' % item_id))
+                (str(server_id),
+                 'essen DELETE /api/v1/essen/wuensche/%s' % server_id))
             logger.info(
-                "einkauf_hinzufuegen: angelegt %r (item_id=%s, kat=%s)",
-                canonical, item_id, kategorie)
+                "einkauf_hinzufuegen: angelegt %r (item_id=%s, server_id=%s, kat=%s)",
+                canonical, item_id, server_id, kategorie)
 
         except EssenClientError as e:
             if e.marker == FEHLER_DUPLIKAT:
