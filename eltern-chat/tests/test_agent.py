@@ -832,16 +832,20 @@ def test_T942_system_prompt_enthält_a2_undo_hinweis_wortwörtlich_regel():
     assert "nicht kürzen" in prompt or "nicht umformulieren" in prompt
 
 
-def test_T942_correction_suffix_enthält_bereits_entfernt():
+def test_T942_correction_suffix_enthält_klarheit_zur_rueckname():
     """AC2 (T942): _correction_system_suffix-Output enthält den Hinweis, dass
-    die betreffenden Ressourcen bereits per Inverse-Aufruf entfernt sind — das
-    LLM soll sie NICHT als noch vorhanden erwähnen und nicht nach erneutem
-    Löschen fragen (EC-36, Live-Bug: Bot fragte 'Soll ich Spültabs wieder
-    runternehmen?', obwohl Items bereits per DELETE entfernt waren)."""
+    die betreffenden Ressourcen NICHT als noch vorhanden zu erwähnen sind und
+    auf die vorherige Bot-Quittung verwiesen wird (EC-36 — Ambiguitäts-Fall
+    Z. 547-548 ist abgedeckt: Watchdog T942-S1-W Befund 1 Pragma-Fix).
+    Live-Bug: Bot fragte 'Soll ich Spültabs wieder runternehmen?', obwohl
+    Items bereits per DELETE entfernt waren."""
     from confirm import CorrectionState  # nur für den Test importiert
     state = CorrectionState(last_skill="einkauf_hinzufuegen",
                             last_args={}, quelle="a2")
     suffix = agent._correction_system_suffix(state)
-    # Schlüsselbegriff: Ressourcen sind bereits entfernt
-    assert "bereits" in suffix
-    assert "entfernt" in suffix or "gelöscht" in suffix
+    # Negation: entfernte Ressourcen NICHT als vorhanden erwähnen
+    assert "NICHT als noch vorhanden" in suffix
+    # Anker: verlass dich auf die vorherige Quittung (Ambiguitäts-Fall mit ehrlicher Quittung)
+    assert "vorherigen Bot-Quittung" in suffix
+    # kein erneutes Löschen
+    assert "nicht nach erneutem Löschen" in suffix
