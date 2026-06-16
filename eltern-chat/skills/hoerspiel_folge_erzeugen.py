@@ -303,7 +303,7 @@ def _sende_beifang_button(tg, chat_id, mini_app_base_url: str | None) -> None:
     try:
         tg.send_inline_keyboard(
             chat_id,
-            "",    # Beifang-Button hat keinen eigenen Text-Body (EC-29)
+            "⚙️ Voice oder Anbieter ändern?",
             [{"label": "⚙️ Einstellungen", "web_app_url": settings_url}],
         )
         logger.debug(
