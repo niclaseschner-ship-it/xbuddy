@@ -21,7 +21,8 @@ presentation — analog E-RAO-3 (Anfangszustand, kein Endzustand). Nur bei
 Konfig-/Netz-Fehler ist presentation leer.
 
 Mini-App-URL-Konfig: kommt aus `mini_app_base_url`-Konstruktor-Parameter
-(von build_catalog befüllt) + Pfad `/seiten/hoerspiel/eltern` (HOE-5).
+(von build_catalog befüllt) + Pfad `/seiten/hoerspiel/<kind_id>/eltern` (HOE-5,
+HSP-26 / URL-3a / T970). `kind_id` wird als Konstruktor-Parameter übergeben.
 Das Hash-Fragment `#einstellungen` oder `#folgen` wird im Skill aus dem
 `tab_hint`-Parameter gebaut.
 Leer → Skill zeigt Fehler-Text ohne Button (HOE-7).
@@ -35,8 +36,9 @@ from skills import hoerspiel_oeffnen as hoe_mod
 
 logger = logging.getLogger(__name__)
 
-# HOE-5: Pfad der Hörspiel-Eltern-Mini-App (ohne Hash-Fragment).
-_HOE_APP_PATH = "/seiten/hoerspiel/eltern"
+# HOE-5 / HSP-26 / URL-3a / T970: Pfad-Template der Hörspiel-Eltern-Mini-App.
+# kind_id wird als Format-Argument eingesetzt (ohne Hash-Fragment).
+_HOE_APP_PATH_TMPL = "/seiten/hoerspiel/%s/eltern"
 
 
 class HoerspielOeffnenTask(ReadTask):
@@ -52,7 +54,8 @@ class HoerspielOeffnenTask(ReadTask):
     E-HOE-3: Button wird auch bei leerem Album-Bestand zurückgegeben (im Dict).
     """
 
-    def __init__(self, tg, hoerspiel_client, is_member_fn, mini_app_url=""):
+    def __init__(self, tg, hoerspiel_client, is_member_fn, mini_app_url="",
+                 kind_id: str = "mia"):
         super().__init__(
             name="hoerspiel_oeffnen",
             description=(
@@ -97,10 +100,11 @@ class HoerspielOeffnenTask(ReadTask):
         self._tg = tg
         self._hoerspiel_client = hoerspiel_client
         self._is_member_fn = is_member_fn
-        # HOE-5: Mini-App-URL aus mini_app_base_url + Pfad (ohne Hash-Fragment).
+        # HOE-5 / HSP-26 / URL-3a / T970: Mini-App-URL aus mini_app_base_url +
+        # kind_id-tragendem Pfad (ohne Hash-Fragment).
         # Das Hash-Fragment wird im Skill aus tab_hint gebaut.
         self._mini_app_url = (
-            mini_app_url.rstrip("/") + _HOE_APP_PATH
+            mini_app_url.rstrip("/") + (_HOE_APP_PATH_TMPL % kind_id)
             if mini_app_url
             else ""
         )
