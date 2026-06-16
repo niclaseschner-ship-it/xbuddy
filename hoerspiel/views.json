@@ -1,34 +1,22 @@
 {
   "views": [
     {
-      "slug": "alben",
-      "pfad": "/display/hoerspiel/alben",
-      "label": "Hörspiel",
-      "synonyme": [
-        "hoerspiel",
-        "hörspiel",
-        "stigi",
-        "folgen",
-        "alben",
-        "mia"
-      ],
-      "zeigt": "Album-Kacheln und Player für Mias Hörspiel-Serie Stigi & Co.",
+      "slug": "alben-mia",
+      "pfad": "/display/hoerspiel/mia/alben",
+      "label": "Mias Hörspiele",
+      "synonyme": ["mia", "stigi", "folgen", "alben", "hörspiel"],
+      "zeigt": "Album-Kacheln und Player für Mias Hörspiel-Serie (Stigi & Co.).",
       "zielgruppe": "kind",
       "icons": ["arasaac/5915.png"]
     },
     {
-      "slug": "eltern",
-      "typ": "mini-app",
-      "pfad": "/seiten/hoerspiel/eltern",
-      "label": "Hörspiel pflegen",
-      "synonyme": ["hoerspiel-einstellungen", "voice ändern", "folge hören", "tempo", "mistral", "claude"],
-      "zeigt": "Hörspiel-Tuning (Voice, LLM-Anbieter/Modell, Tempo, Pausen) und Album-Galerie mit Multi-Track-Player.",
-      "zielgruppe": "eltern",
-      "web_app": {
-        "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
-        "app_short_name": "hoerspiel",
-        "icons": ["arasaac/5915.png"]
-      }
+      "slug": "alben-finn",
+      "pfad": "/display/hoerspiel/finn/alben",
+      "label": "Finns Hörspiele",
+      "synonyme": ["finn", "quasiluxi", "alpaki", "haski", "hörspiel"],
+      "zeigt": "Album-Kacheln und Player für Finns Hörspiel-Serie (Quasiluxi, Alpaki & Haski).",
+      "zielgruppe": "kind",
+      "icons": ["arasaac/5915.png"]
     }
   ]
 }
