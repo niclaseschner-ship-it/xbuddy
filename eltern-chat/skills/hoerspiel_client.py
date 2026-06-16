@@ -1,17 +1,19 @@
 """Eltern-Chat — HTTP-Client zur Hörspiel-Buddy-Schnittstelle (HSP-17).
 
-Konsument der Hörspiel-Buddy-API:
-  - POST /api/v1/hoerspiel/folgen-vorschlag  — Folgen-Idee → Vorschlag (HFE-3)
-  - POST /api/v1/hoerspiel/alben             — Album bauen (HFE-5)
-  - GET  /api/v1/hoerspiel/config            — Voice-Default lesen (HFE-4)
-  - GET  /api/v1/hoerspiel/themen?alter=N    — Themen-Liste für Alter N (HFE-3 Sub-Case 1, HSP-38)
+Konsument der Hörspiel-Buddy-API (URL-3a-konform, RAT-17, #910):
+  - POST /api/v1/hoerspiel/<kind_id>/folgen-vorschlag  — Folgen-Idee → Vorschlag (HFE-3)
+  - POST /api/v1/hoerspiel/<kind_id>/alben             — Album bauen (HFE-5)
+  - GET  /api/v1/hoerspiel/<kind_id>/config            — Voice-Default lesen (HFE-4)
+  - GET  /api/v1/hoerspiel/<kind_id>/themen            — Themen-Liste (HFE-3 Sub-Case 1, HSP-38)
 
 Folgt der HTTP-Client-Konvention (CLIENT-1 bis CLIENT-4):
 transport=Callable als Test-Naht, 2-s-Timeout (außer Album-Bau: 600 s),
 eigene Fehler-Klasse.
 
-Base-URL kommt aus `hoerspiel_url_origin` der Eltern-Chat-Config (analog
-`routine_origin_url`, EC-15).
+`kind_id` wird bei Konstruktion gesetzt — jede Client-Instanz gehört
+zu genau einem Hörspiel-Buddy. Die Origin-Auflösung (kind_id="paula" →
+hoerspiel_url_origin, kind_id="neko" → hoerspiel_url_origin_neko) liegt
+im aufrufenden Skill (RAT-17 Option A, E-HFE-6).
 """
 
 import json
@@ -29,12 +31,6 @@ HTTP_TIMEOUT_VORSCHLAG_SEKUNDEN = 180.0
 
 # Album-Bau blockiert 1–5 min (V1 synchron, OPEN-HSP-L) — eigener Timeout.
 HTTP_TIMEOUT_ALBUM_SEKUNDEN = 600.0
-
-# CLIENT-4: stabile Pfade der Hörspiel-Buddy-Schnittstelle (HSP-17).
-PFAD_FOLGEN_VORSCHLAG = "/api/v1/hoerspiel/folgen-vorschlag"
-PFAD_ALBEN            = "/api/v1/hoerspiel/alben"
-PFAD_CONFIG           = "/api/v1/hoerspiel/config"
-PFAD_THEMEN           = "/api/v1/hoerspiel/themen"  # HSP-38 (HFE-3 Sub-Case 1)
 
 
 class HoerspielClientError(Exception):
@@ -54,23 +50,33 @@ class HoerspielClient:
     """HTTP-Client zur Hörspiel-Buddy-Schnittstelle.
 
     `origin_url` ist die Basis-Origin des Hörspiel-Buddys (z. B.
-    `http://127.0.0.1:5060`). `transport` ist die Test-Naht: ein Callable
+    `http://127.0.0.1:5053`). `kind_id` ist die Instanz-Identität (z. B.
+    "paula" oder "neko") — alle Pfade tragen kind_id als URL-Segment
+    (URL-3a, RAT-17, #910).
+
+    `transport` ist die Test-Naht: ein Callable
     `(method, path, *, body=None, content_type=None) -> (status_code, bytes)`
     (CLIENT-1). Bleibt der Wert None, nutzt der Client `urllib.request`.
     """
 
-    def __init__(self, origin_url: str, transport=None,
+    def __init__(self, origin_url: str, kind_id: str = "paula",
+                 transport=None,
                  timeout: float = HTTP_TIMEOUT_SECONDS,
                  vorschlag_timeout: float = HTTP_TIMEOUT_VORSCHLAG_SEKUNDEN,
                  album_timeout: float = HTTP_TIMEOUT_ALBUM_SEKUNDEN):
         self._origin = (origin_url or "").rstrip("/")
+        self._kind_id = kind_id
         self._transport = transport
         self._timeout = timeout
         self._vorschlag_timeout = vorschlag_timeout
         self._album_timeout = album_timeout
 
+    def _pfad(self, resource: str) -> str:
+        """Baut den kind_id-tragenden API-Pfad (URL-3a, RAT-17)."""
+        return "/api/v1/hoerspiel/%s/%s" % (self._kind_id, resource)
+
     def folgen_vorschlag(self, idee: str) -> dict:
-        """POST /api/v1/hoerspiel/folgen-vorschlag (HFE-3, HSP-17).
+        """POST /api/v1/hoerspiel/<kind_id>/folgen-vorschlag (HFE-3, HSP-17).
 
         Body: {"idee": idee}
         Response: {"titel": str, "text": str, "folgen-nr-vorschlag": int}
@@ -79,15 +85,15 @@ class HoerspielClient:
         status=503 → LLM-Provider nicht konfiguriert (HSP-26).
         status=5xx sonst / None → Buddy nicht erreichbar.
         """
+        pfad = self._pfad("folgen-vorschlag")
         payload = json.dumps({"idee": idee}).encode("utf-8")
         status, resp_bytes = self._call(
-            "POST", PFAD_FOLGEN_VORSCHLAG,
+            "POST", pfad,
             body=payload, content_type="application/json",
             timeout=self._vorschlag_timeout)
         if status != 200:
             raise HoerspielClientError(
-                "Hörspiel-Buddy: HTTP %s bei POST %s" % (
-                    status, PFAD_FOLGEN_VORSCHLAG),
+                "Hörspiel-Buddy: HTTP %s bei POST %s" % (status, pfad),
                 status=status)
         try:
             data = json.loads(resp_bytes.decode("utf-8"))
@@ -105,7 +111,7 @@ class HoerspielClient:
 
     def album_bauen(self, titel: str, text: str,
                     voice: str, idee: str) -> dict:
-        """POST /api/v1/hoerspiel/alben (HFE-5, HSP-17).
+        """POST /api/v1/hoerspiel/<kind_id>/alben (HFE-5, HSP-17).
 
         Body: {"titel", "text", "voice", "idee"}
         Response: {"album-id": str, "manifest-pfad": str, "dauer-sek-gesamt": int}
@@ -116,6 +122,7 @@ class HoerspielClient:
           status=503 → Azure-TTS nicht erreichbar.
           status=5xx sonst → anderer Buddy-Fehler.
         """
+        pfad = self._pfad("alben")
         payload = json.dumps({
             "titel": titel,
             "text": text,
@@ -123,12 +130,12 @@ class HoerspielClient:
             "idee": idee,
         }).encode("utf-8")
         status, resp_bytes = self._call(
-            "POST", PFAD_ALBEN,
+            "POST", pfad,
             body=payload, content_type="application/json",
             timeout=self._album_timeout)
         if status != 200:
             raise HoerspielClientError(
-                "Hörspiel-Buddy: HTTP %s bei POST %s" % (status, PFAD_ALBEN),
+                "Hörspiel-Buddy: HTTP %s bei POST %s" % (status, pfad),
                 status=status)
         try:
             data = json.loads(resp_bytes.decode("utf-8"))
@@ -143,17 +150,18 @@ class HoerspielClient:
         return data
 
     def alben_lesen(self) -> list:
-        """GET /api/v1/hoerspiel/alben (HOE-1, HSP-17).
+        """GET /api/v1/hoerspiel/<kind_id>/alben (HOE-1, HSP-17).
 
         Liefert die Album-Liste als Liste von Dicts mit mind.
         {"folgen_nr": int, "titel": str, "erstellt_am": str}.
 
         Wirft HoerspielClientError bei Fehler.
         """
-        status, resp_bytes = self._call("GET", PFAD_ALBEN)
+        pfad = self._pfad("alben")
+        status, resp_bytes = self._call("GET", pfad)
         if status != 200:
             raise HoerspielClientError(
-                "Hörspiel-Buddy: HTTP %s bei GET %s" % (status, PFAD_ALBEN),
+                "Hörspiel-Buddy: HTTP %s bei GET %s" % (status, pfad),
                 status=status)
         try:
             data = json.loads(resp_bytes.decode("utf-8"))
@@ -168,7 +176,7 @@ class HoerspielClient:
         return data
 
     def config_lesen(self) -> dict:
-        """GET /api/v1/hoerspiel/config (HFE-4, HSP-17).
+        """GET /api/v1/hoerspiel/<kind_id>/config (HFE-4, HSP-17).
 
         Liefert die aktive Provider/Voice-Konfig, u. a.
         {"default_voice": "shimmer"|"onyx", ...}.
@@ -176,10 +184,11 @@ class HoerspielClient:
         Wirft HoerspielClientError bei Fehler. Ein fehlender Default fällt
         auf "shimmer" zurück (HFE-4: HSP-26 Default).
         """
-        status, resp_bytes = self._call("GET", PFAD_CONFIG)
+        pfad = self._pfad("config")
+        status, resp_bytes = self._call("GET", pfad)
         if status != 200:
             raise HoerspielClientError(
-                "Hörspiel-Buddy: HTTP %s bei GET %s" % (status, PFAD_CONFIG),
+                "Hörspiel-Buddy: HTTP %s bei GET %s" % (status, pfad),
                 status=status)
         try:
             data = json.loads(resp_bytes.decode("utf-8"))
@@ -189,22 +198,32 @@ class HoerspielClient:
                 status=status) from exc
         return data
 
-    def themen_lesen(self, alter: int) -> list[str]:
-        """GET /api/v1/hoerspiel/themen?alter=N (HFE-3 Sub-Case 1, HSP-38).
+    def themen_lesen(self, kind_id: str) -> dict:
+        """GET /api/v1/hoerspiel/<kind_id>/themen (HFE-3 Sub-Case 1, HSP-38, RAT-17).
 
-        Liefert eine Liste von Themen-Strings für das angegebene Alter.
-        Response: {"themen": ["<thema1>", "<thema2>", ...]}
+        Liefert den vollständigen Response-Body der Instanz als Dict:
+        {"kind_id": str, "name": str, "alter": int, "themen": list[str]}
 
-        Bei 404 (Alter nicht gepflegt, HSP-38): gibt leere Liste zurück —
-        der Aufrufer stellt dann nur die EC-22-Rückfrage ohne Themen-Liste.
+        Kein ?alter=-Query-Parameter mehr (RAT-17): Alter lebt nur in
+        instance.json des Buddys. kind_id im Pfad ist URL-3a-konform.
+
+        Bei 404 (kind_id unbekannt — Instanz nicht erreichbar): wirft
+        HoerspielClientError(status=404).
+        Bei 422 (Alter der Instanz nicht in themen_je_alter gepflegt): wirft
+        HoerspielClientError(status=422) — Aufrufer nutzt nur EC-22-Rückfrage
+        ohne Themen-Liste (HFE-3 Sub-Case 1).
         Andere Fehler (5xx, Netz): werfen HoerspielClientError weiter.
         """
-        pfad = "%s?alter=%d" % (PFAD_THEMEN, alter)
+        pfad = "/api/v1/hoerspiel/%s/themen" % kind_id
         status, resp_bytes = self._call("GET", pfad)
         if status == 404:
-            logger.info(
-                "HoerspielClient: GET %s → 404 (Alter nicht gepflegt, HSP-38)", pfad)
-            return []
+            raise HoerspielClientError(
+                "Hörspiel-Buddy: GET %s → 404 (kind_id unbekannt, HSP-38)" % pfad,
+                status=404)
+        if status == 422:
+            raise HoerspielClientError(
+                "Hörspiel-Buddy: GET %s → 422 (Alter nicht gepflegt, HSP-38)" % pfad,
+                status=422)
         if status != 200:
             raise HoerspielClientError(
                 "Hörspiel-Buddy: HTTP %s bei GET %s" % (status, pfad),
@@ -215,7 +234,7 @@ class HoerspielClient:
             raise HoerspielClientError(
                 "Hörspiel-Buddy: Themen-Antwort nicht parsebar (%s)" % exc,
                 status=status) from exc
-        return data.get("themen") or []
+        return data
 
     # -- HTTP-Innerei ---------------------------------------------------------
 
