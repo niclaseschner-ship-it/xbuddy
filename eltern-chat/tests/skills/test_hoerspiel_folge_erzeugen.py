@@ -1083,3 +1083,53 @@ def test_task_kind_id_fehlend_wirft_fehler():
     # Kein Buddy-Aufruf ohne kind_id
     assert paula_client.vorschlag_calls == [], (
         "T954: kein Buddy-Aufruf bei fehlendem kind_id")
+
+
+# ============================================================
+#  T962 — execute() kind_id aus pending (T954-Folge-Bug)
+# ============================================================
+
+
+def test_execute_uses_kind_id_neko_from_pending():
+    """T962 / HFE-3 / E-HFE-6 / HFE-5: execute() liest kind_id aus dem
+    pending-Dict und wählt den Neko-Client, NICHT den Paula-Default.
+
+    Szenario: propose(kind_id=neko) → pending trägt kind_id=neko →
+    execute() → hfe_mod.execute aufgerufen mit Neko-Client.
+
+    Deckt den Live-Bug vom 2026-06-16 15:44 ab: Paula-Instanz (Port 5053)
+    wurde beim Neko-Album-Bau aufgerufen statt Neko (Port 5055).
+
+    entry_path_probe_result: probed.
+    """
+    neko_client = FakeHoerspielClient(
+        kind_id="neko",
+        album_response={"album-id": "neko-alb-1"},
+    )
+    paula_client = FakeHoerspielClient(
+        kind_id="paula",
+        album_response={"album-id": "paula-alb-1"},
+    )
+    tg = FakeTelegram()
+
+    task = _make_task(hoerspiel_client=paula_client, tg=tg)
+    task._client_by_kind_id["paula"] = paula_client
+    task._client_by_kind_id["neko"] = neko_client
+
+    ctx = _ctx(chat_id=88, from_user_id=7)
+
+    # propose() mit kind_id=neko → pending trägt kind_id=neko
+    proposal = task.propose({"kind_id": "neko", "idee": "Neko und das Wettrennen"}, ctx)
+    assert isinstance(proposal, Proposal)
+    assert "kind_id" in task._pending_vorschlaege.get(88, {}), (
+        "T962 AC-1: pending-Dict muss kind_id enthalten")
+    assert task._pending_vorschlaege[88]["kind_id"] == "neko", (
+        "T962 AC-1: pending kind_id muss 'neko' sein")
+
+    # execute() → Neko-Client muss album_bauen() aufgerufen haben
+    task.execute({}, ctx)
+
+    assert len(neko_client.album_calls) == 1, (
+        "T962 AC-2: execute() muss Neko-Client für album_bauen wählen")
+    assert paula_client.album_calls == [], (
+        "T962 AC-2: Paula-Client darf bei kind_id='neko' NICHT aufgerufen werden")
