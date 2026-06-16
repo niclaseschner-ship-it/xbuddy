@@ -6,15 +6,25 @@ Hilfsfunktionen, die alle Konsumenten brauchen:
   - track-Sortierung deterministisch in `position`-Reihenfolge (HSP-6)
   - intro-/outro-Asset-Pfad-Berechnung pro Voice (HSP-8, HSP-26)
   - Default-Cover-Pfad (HSP-26 mit `.jpg`-Form, Q5 vom Orchestrator)
+
+Seit #908 (URL-3a, HSP-26): alle URL-Helfer tragen `kind_id` als ersten
+Parameter — `DISPLAY_DATA_PREFIX` ist nun die Funktion
+`display_data_prefix(kind_id)`.
 """
 
 from typing import Any
 
 VOICES = ("shimmer", "onyx")
 
-# HSP-26: Audio-Asset-Pfade als View-URLs unter dem Display-Namensraum.
-DISPLAY_DATA_PREFIX = "/display/hoerspiel/data"
-COVER_DEFAULT_ASSET = f"{DISPLAY_DATA_PREFIX}/shared-assets/cover-default.jpg"
+
+def display_data_prefix(kind_id: str) -> str:
+    """Gibt das Display-Datenpfad-Präfix für die gegebene kind_id zurück (HSP-26, URL-3a)."""
+    return "/display/hoerspiel/%s/data" % kind_id
+
+
+def cover_default_asset(kind_id: str) -> str:
+    """Gibt den Cover-Default-Asset-Pfad zurück (HSP-26)."""
+    return "%s/shared-assets/cover-default.jpg" % display_data_prefix(kind_id)
 
 
 def album_id_for_nummer(nummer: int) -> str:
@@ -22,16 +32,16 @@ def album_id_for_nummer(nummer: int) -> str:
     return "folge-%d" % nummer
 
 
-def intro_asset_path(voice: str) -> str:
-    return f"{DISPLAY_DATA_PREFIX}/shared-assets/intro_{voice}.mp3"
+def intro_asset_path(kind_id: str, voice: str) -> str:
+    return "%s/shared-assets/intro_%s.mp3" % (display_data_prefix(kind_id), voice)
 
 
-def outro_asset_path(voice: str) -> str:
-    return f"{DISPLAY_DATA_PREFIX}/shared-assets/outro_{voice}.mp3"
+def outro_asset_path(kind_id: str, voice: str) -> str:
+    return "%s/shared-assets/outro_%s.mp3" % (display_data_prefix(kind_id), voice)
 
 
-def track_asset_path(album_id: str, track_filename: str) -> str:
-    return f"{DISPLAY_DATA_PREFIX}/alben/{album_id}/audio/{track_filename}"
+def track_asset_path(kind_id: str, album_id: str, track_filename: str) -> str:
+    return "%s/alben/%s/audio/%s" % (display_data_prefix(kind_id), album_id, track_filename)
 
 
 def sortiere_tracks(tracks: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -58,12 +68,13 @@ def manifest_to_dict(manifest: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_skeleton(*, album_id: str, nummer: int, titel: str, voice: str,
-                   erstellt_am: str) -> dict[str, Any]:
+                   erstellt_am: str, kind_id: str = "paula") -> dict[str, Any]:
     """Baut die Manifest-Grundstruktur (HSP-5) ohne Inhalts-Tracks.
 
     Intro- und Outro-Track werden vorne und hinten angesetzt (HSP-8/HSP-9);
     `freigegeben` startet auf `True` (V1: nach Eltern-Freigabe immer true,
-    HSP-5).
+    HSP-5). `kind_id` wird für die URL-Generierung (HSP-26, URL-3a) benötigt.
+    Default `paula` für Rückwärtskompatibilität mit album_builder (V1).
     """
     if voice not in VOICES:
         raise ValueError("voice %r ist V1 nicht unterstützt (HSP-13)" % voice)
@@ -74,14 +85,14 @@ def build_skeleton(*, album_id: str, nummer: int, titel: str, voice: str,
         "voice": voice,
         "erstellt-am": erstellt_am,
         "freigegeben": True,
-        "cover-asset": COVER_DEFAULT_ASSET,
+        "cover-asset": cover_default_asset(kind_id),
         "pikto-hauptbegriffe": [],
         "tracks": [
             {
                 "id": "intro-%s" % voice,
                 "position": 1,
                 "art": "intro",
-                "audio-asset": intro_asset_path(voice),
+                "audio-asset": intro_asset_path(kind_id, voice),
                 "dauer-sek": 0,
             },
         ],
@@ -89,14 +100,17 @@ def build_skeleton(*, album_id: str, nummer: int, titel: str, voice: str,
 
 
 def add_inhalt_track(manifest: dict[str, Any], *, position: int,
-                     album_id: str, dauer_sek: int) -> dict[str, Any]:
-    """Hängt einen `inhalt`-Track ans Manifest. Pfade folgen HSP-26."""
+                     album_id: str, dauer_sek: int, kind_id: str = "paula") -> dict[str, Any]:
+    """Hängt einen `inhalt`-Track ans Manifest. Pfade folgen HSP-26.
+
+    Default `kind_id=paula` für Rückwärtskompatibilität mit album_builder (V1).
+    """
     track_filename = "track-%02d.mp3" % position
     track = {
         "id": "%s-track-%02d" % (album_id, position),
         "position": position,
         "art": "inhalt",
-        "audio-asset": track_asset_path(album_id, track_filename),
+        "audio-asset": track_asset_path(kind_id, album_id, track_filename),
         "dauer-sek": dauer_sek,
         "titel": None,
     }
@@ -104,8 +118,11 @@ def add_inhalt_track(manifest: dict[str, Any], *, position: int,
     return track
 
 
-def add_outro_track(manifest: dict[str, Any]) -> dict[str, Any]:
-    """Hängt den Outro-Track ans Manifest (HSP-9)."""
+def add_outro_track(manifest: dict[str, Any], *, kind_id: str = "paula") -> dict[str, Any]:
+    """Hängt den Outro-Track ans Manifest (HSP-9).
+
+    Default `kind_id=paula` für Rückwärtskompatibilität mit album_builder (V1).
+    """
     voice = manifest["voice"]
     position = max((t.get("position", 0) for t in manifest["tracks"]
                     if isinstance(t.get("position"), int)),
@@ -114,7 +131,7 @@ def add_outro_track(manifest: dict[str, Any]) -> dict[str, Any]:
         "id": "outro-%s" % voice,
         "position": position,
         "art": "outro",
-        "audio-asset": outro_asset_path(voice),
+        "audio-asset": outro_asset_path(kind_id, voice),
         "dauer-sek": 0,
     }
     manifest["tracks"].append(track)
