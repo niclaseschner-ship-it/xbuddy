@@ -2,10 +2,19 @@
 
 'use strict';
 
+/* ── KIND_ID aus URL (HSP-26, URL-3a) ────────────────────────────────
+   Pattern: /display/hoerspiel/<kind_id>/alben → kind_id ist Segment 3
+   (0-basiert nach dem ersten Slash). Fallback: 'mia' für Dev/Standalone. */
+const KIND_ID = (() => {
+  const m = location.pathname.match(/^\/display\/hoerspiel\/([^/]+)\/alben/);
+  return m ? m[1] : 'mia';
+})();
+
 /* ── MOCK-DATEN (Entry-Path-Probe ohne Backend) ──────────────────────
    MOCK_ALBEN: Listen-Form (Summary, ohne tracks).
-   MOCK_MANIFESTE: id → Manifest mit tracks (HSP-17 Liste-vs-Manifest). */
-const COVER_DEFAULT = '/display/hoerspiel/mia/data/shared-assets/cover-default.jpg';
+   MOCK_MANIFESTE: id → Manifest mit tracks (HSP-17 Liste-vs-Manifest).
+   Mock-URLs tragen KIND_ID damit Finn-Demo nicht mia-spezifische Pfade zeigt. */
+const COVER_DEFAULT = `/display/hoerspiel/${KIND_ID}/data/shared-assets/cover-default.jpg`;
 
 const MOCK_ALBEN = [
   {
@@ -40,17 +49,17 @@ const MOCK_MANIFESTE = {
     'pikto-hauptbegriffe': [{ wort: 'Trübsee', 'arasaac-id': 6022 }],
     tracks: [
       { id: 'intro-shimmer', position: 1, art: 'intro',
-        'audio-asset': '/display/hoerspiel/mia/data/shared-assets/intro_shimmer.mp3',
+        'audio-asset': `/display/hoerspiel/${KIND_ID}/data/shared-assets/intro_shimmer.mp3`,
         'dauer-sek': 18 },
       { id: 'folge-22-track-02', position: 2, art: 'inhalt',
-        'audio-asset': '/display/hoerspiel/mia/data/alben/folge-22/audio/track-02.mp3',
+        'audio-asset': `/display/hoerspiel/${KIND_ID}/data/alben/folge-22/audio/track-02.mp3`,
         'dauer-sek': 215, titel: 'Der Weg zum See' },
       { id: 'folge-22-track-03', position: 3, art: 'inhalt',
-        'audio-asset': '/display/hoerspiel/mia/data/alben/folge-22/audio/track-03.mp3',
+        'audio-asset': `/display/hoerspiel/${KIND_ID}/data/alben/folge-22/audio/track-03.mp3`,
         'dauer-sek': 200, titel: 'Am Trübsee-Ufer',
         'pikto-hauptbegriffe': [{ wort: 'See', 'arasaac-id': 5199 }] },
       { id: 'outro-shimmer', position: 4, art: 'outro',
-        'audio-asset': '/display/hoerspiel/mia/data/shared-assets/outro_shimmer.mp3',
+        'audio-asset': `/display/hoerspiel/${KIND_ID}/data/shared-assets/outro_shimmer.mp3`,
         'dauer-sek': 20 }
     ]
   }
@@ -503,7 +512,7 @@ async function initPlayerDefault(alben) {
 /* ── DATEN LADEN ─────────────────────────────────────────────────── */
 async function loadAlben() {
   try {
-    const res = await fetch('/api/v1/hoerspiel/alben');
+    const res = await fetch(`/api/v1/hoerspiel/${KIND_ID}/alben`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (Array.isArray(data) && data.length > 0) return data;
@@ -516,7 +525,7 @@ async function loadAlben() {
 async function loadAlbumManifest(albumId) {
   if (state.manifestCache[albumId]) return state.manifestCache[albumId];
   try {
-    const res = await fetch('/api/v1/hoerspiel/alben/' + albumId + '/manifest');
+    const res = await fetch(`/api/v1/hoerspiel/${KIND_ID}/alben/${albumId}/manifest`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const manifest = await res.json();
     state.manifestCache[albumId] = manifest;
