@@ -53,9 +53,12 @@
 </head>
 <body>
   <!-- DC-12 — Skalierungs-Container + iframe. Hidden im Ruhe-Zustand;
-       sichtbar, sobald der Stream einen Inhalt liefert. -->
+       sichtbar, sobald der Stream einen Inhalt liefert.
+       DC-17 — allow="microphone; autoplay": Feature-Policy für Buddy-
+       Apps im iframe (KIBuddy Push-to-Talk braucht getUserMedia,
+       TTS-Wiedergabe braucht Autoplay ohne separate User-Geste). -->
   <div id="scaler" hidden>
-    <iframe id="content"></iframe>
+    <iframe id="content" allow="microphone; autoplay"></iframe>
   </div>
   <div id="setup">
     <h1>Dieses Anzeigegerät ist noch nicht eingerichtet</h1>
