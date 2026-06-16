@@ -108,10 +108,26 @@
 
   // ── Render-Hilfsfunktionen ────────────────────────────────────────────────
 
+  // Fallback-Icons je Typ (display-client + panel haben heute keine icons[]
+  // im Aggregator-Output — Server-Side-Spec-Folge-Ticket; bis dahin Emoji).
+  const _TYP_FALLBACK_EMOJI = {
+    "Display":         "📺",
+    "Display-Client":  "📺",
+    "Panel":           "📱",
+    "Editor":          "⚙️",
+    "Mini-App":        "🟦",
+    "Controller":      "🎛️",
+    "Eltern":          "📄",
+    "Seite":           "📄",
+  };
+
   /**
    * Rendert eine URL-Karte (MAU-6): Icon + Label + Typ-Badge + URL-Mono + Oeffnen/Kopieren-Buttons.
    * Kein <a href> — Long-Press-Browser-Menue ist in Telegram-WebView unzuverlaessig (MAU-6).
-   * iconRef (optional): ARASAAC-ID aus inventar.icons[0] — gerendert als <img>.
+   * iconRef (optional): ARASAAC-Pfad (z.B. "arasaac/28339.png") aus inventar.icons[0].
+   * Wenn iconRef fehlt: Emoji-Fallback je Typ (display-client/panel haben keine icons[]).
+   * Wenn url eine t.me/-URL ist, oeffnet der Open-Button via openTelegramLink
+   * (Mini-App-zu-Mini-App-Navigation im selben Telegram-Overlay).
    */
   function _bauUrlKarte(label, typ, url, iconRef) {
     const karte = document.createElement("div");
@@ -128,6 +144,12 @@
       ikon.alt = "";
       ikon.loading = "lazy";
       kopfzeile.appendChild(ikon);
+    } else if (_TYP_FALLBACK_EMOJI[typ]) {
+      const ikonText = document.createElement("span");
+      ikonText.className = "url-karte-icon-fallback";
+      ikonText.textContent = _TYP_FALLBACK_EMOJI[typ];
+      ikonText.setAttribute("aria-hidden", "true");
+      kopfzeile.appendChild(ikonText);
     }
 
     const labelEl = document.createElement("span");
@@ -148,11 +170,24 @@
     const btnGruppe = document.createElement("div");
     btnGruppe.className = "url-btn-gruppe";
 
+    // Telegram-Mini-App-Aware: t.me/-URLs gehen via openTelegramLink, alles
+    // andere via platform.openLink (System-Browser). Lego-konsistent fuer alle
+    // Karten-Typen, inkl. Mini-Apps.
+    const _istTelegramDeepLink = url && url.indexOf("https://t.me/") === 0;
+
     const btnOeffnen = document.createElement("button");
     btnOeffnen.className = "url-btn url-btn-primary";
     btnOeffnen.textContent = "🔗 Oeffnen";
-    btnOeffnen.setAttribute("aria-label", "URL im Browser oeffnen: " + url);
+    btnOeffnen.setAttribute("aria-label", "Oeffnen: " + url);
     btnOeffnen.addEventListener("click", () => {
+      if (_istTelegramDeepLink) {
+        try {
+          window.Telegram.WebApp.openTelegramLink(url);
+          return;
+        } catch (e) {
+          // Fallback unten
+        }
+      }
       platform.openLink(url);
     });
 
@@ -191,72 +226,16 @@
       return;
     }
 
-    const grid = document.createElement("div");
-    grid.className = "kachel-grid";
-
+    // Lego-Konsistenz: Mini-Apps rendern als URL-Karte (gleiche Form wie alle
+    // anderen Karten in MAU). _bauUrlKarte erkennt t.me/-URLs und nutzt
+    // openTelegramLink fuer den Open-Click. Icon kommt direkt aus icons[0]
+    // (Aggregator liefert "arasaac/<id>.png" — kein doppelter Prefix).
     for (const app of miniApps) {
-      const kachel = document.createElement("button");
-      kachel.className = "mini-app-kachel";
-      kachel.setAttribute("aria-label", app.label + " oeffnen");
-      kachel.dataset.webAppUrl = app.web_app_url || "";
-      kachel.dataset.funnelUrl = app.funnel_url || "";
-
-      // Icon (MAD-6: /display/_shared/icons/arasaac/ — falls vorhanden)
-      const icons = app.icons || [];
-      const bild = document.createElement("img");
-      bild.className = "kachel-bild";
-      bild.loading = "lazy";
-      bild.alt = "";
-      if (icons.length > 0) {
-        bild.src = "/display/_shared/icons/arasaac/" + icons[0] + ".png";
-      } else {
-        bild.src = "";
-        bild.alt = "📱";
-        bild.style.display = "none";
-      }
-
-      const textDiv = document.createElement("div");
-      textDiv.className = "kachel-text";
-
-      const labelSpan = document.createElement("span");
-      labelSpan.className = "kachel-label";
-      labelSpan.textContent = app.label;
-
-      textDiv.appendChild(labelSpan);
-
-      const pfeil = document.createElement("span");
-      pfeil.className = "kachel-oeffnen-pfeil";
-      pfeil.textContent = "▶︎";
-      pfeil.setAttribute("aria-hidden", "true");
-
-      kachel.appendChild(bild);
-      kachel.appendChild(textDiv);
-      kachel.appendChild(pfeil);
-
-      // MAU-5: Tap → Mini-App im selben Overlay oeffnen via openTelegramLink
-      kachel.addEventListener("click", () => {
-        const webAppUrl = kachel.dataset.webAppUrl;
-        const funnelUrl = kachel.dataset.funnelUrl;
-
-        if (webAppUrl) {
-          try {
-            // MAU-5 Default-Pfad: openTelegramLink wechselt im selben Overlay
-            window.Telegram.WebApp.openTelegramLink(webAppUrl);
-          } catch (e) {
-            // MAU-5 Fallback: funnel_url
-            if (funnelUrl) {
-              window.location.href = funnelUrl;
-            }
-          }
-        } else if (funnelUrl) {
-          window.location.href = funnelUrl;
-        }
-      });
-
-      grid.appendChild(kachel);
+      const url = app.web_app_url || app.funnel_url || "";
+      const ikon = (app.icons || [])[0];
+      const karte = _bauUrlKarte(app.label, "Mini-App", url, ikon);
+      container.appendChild(karte);
     }
-
-    container.appendChild(grid);
   }
 
   // ── Sektion 2: Geraete-Paare (MAU-4 Punkt 2) ─────────────────────────────
