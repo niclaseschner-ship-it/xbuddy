@@ -46,23 +46,42 @@ Migration löst diesen Zustand flow-für-flow auf.
    ist Spec-Änderung, kein Config-Wert. Begründung: `/api/v1/<buddy>/*`
    mischt Datenrouten, Assets und Server-zu-Server — pauschale
    Prefix-Härtung würde Bot-Skills brechen.
+   [Quelle: ENTSCHEID 2026-06-16-1123 Paket-Sektion „Nic-Verdikte 2026-06-16"
+   → E1 „Endpoint-Liste statt Prefix"]
 
 2. **Cookie-Auth via Pairing (AUTH-2 + GAA-3.8).** Eltern legt Gerät an im
    Eltern-Chat (GAA), Bot postet Pairing-Link, User öffnet auf Zielgerät,
    Backend setzt `xbuddy_session`-Cookie (90 Tage rolling). Gleicher
    HMAC-Sign-Key wie initData (Bot-Token), keine zweite Geheimnis-Quelle.
+   Gilt für **alle** User-Endgeräte mit Telegram (Eltern-Phones/Tablets/Laptops
+   und Kind-Tablet — Setzung 2026-06-12).
+   [Quelle: ENTSCHEID 2026-06-16-1123 Paket-Sektion „Nic-Verdikte 2026-06-16"
+   → E2 „Eltern-Browser-direkt via Cookie"; Memory
+   `project_xbuddy_telegram_endgerate_pflicht`]
 
 3. **AUTH-5 Loopback-Bypass formalisiert.** Eltern-Chat-Skill ruft intern;
    Identität läuft über Heim-Pi-Loopback (`127.0.0.1`). AUTH-5 ist
    Konvention, nicht Implementierungs-Zufall.
+   [Quelle: ENTSCHEID 2026-06-16-1123 Paket-Sektion „Nic-Verdikte 2026-06-16"
+   → E4 „Loopback-Bypass formalisieren"]
 
 4. **AUTH-6 als dokumentierter Schuldstand.** Alle noch-nicht-migrierten
    Routen leben hier mit Pflicht-Defer-Trigger. Watchdog-Hook bei neuen
    Mini-App-PRs verlangt Einordnung in AUTH-3/4/5/6.
+   [Quelle: ENTSCHEID 2026-06-16-1123 Paket-Sektion „Nic-Verdikte 2026-06-16"
+   → E3 „AUTH-6 Backlog akzeptieren"]
 
 5. **AUTH-9 Decorator-Verriegelung.** Test prüft maschinell, dass jede
    AUTH-3-Route den Decorator wirklich im Source trägt. Ohne diesen Test
    bleibt die Spec kosmetisch (Belegfall vor 2026-06-16).
+   [Quelle: ENTSCHEID 2026-06-16-1123 Paket-Sektion „Pflicht-Patches"
+   → Patch C „Test-Hook auf Decorator-Anwendung"]
+
+**Übergeordnete Setzung (ratifiziert):** MAD-7 wird nicht gehärtet, sondern
+läuft schrittweise aus. Cookie-Auth wird Standard-Mechanismus für migrierte
+Routen. Mini-Apps bleiben dokumentiert PUBLIC bis flow-für-flow migriert.
+[Quelle: ENTSCHEID 2026-06-16-1123 Paket-Sektion „Nic-Verdikte 2026-06-16"
+→ Übergeordnete Setzung „Mini-App-Pfad wird NICHT gehärtet"]
 
 ## Verworfene Alternativen
 
