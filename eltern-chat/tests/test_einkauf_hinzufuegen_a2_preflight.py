@@ -26,19 +26,23 @@ class FakeEssenClient:
     """Minimalstub für EssenClient.hinzufuegen_einkauf().
 
     `responses`: Dict item_id → Exception oder True (Erfolg).
-    Standard-Verhalten: 201 OK mit {"id": item_id}.
+    Standard-Verhalten: 201 OK mit {"id": "test-server-id-N"} (Server-ID,
+    bewusst VERSCHIEDEN von item_id, um AC1/#938 korrekt zu testen).
     """
 
     def __init__(self, responses=None):
         self._responses = responses or {}
         self.calls = []  # Liste von item_id-Strings der POST-Aufrufe
+        self._counter = 0
 
     def hinzufuegen_einkauf(self, label, bild_ref, item_id, kategorie):
         self.calls.append(str(item_id))
         resp = self._responses.get(str(item_id))
         if isinstance(resp, Exception):
             raise resp
-        return {"id": str(item_id)}
+        self._counter += 1
+        # Server-ID ist NICHT identisch mit item_id — simuliert echtes Server-Verhalten
+        return {"id": "test-server-id-%d" % self._counter}
 
 
 class FakeIconClient:
@@ -121,8 +125,9 @@ def test_drei_items_drei_receipts(tmp_path):
         assert row[5] is None, "Frische Receipts dürfen nicht versiegelt sein"
 
 
-def test_resource_id_ist_item_id(tmp_path):
-    """resource_id im Receipt entspricht der item_id aus _match_item (EIN-5)."""
+def test_resource_id_ist_server_id(tmp_path):
+    """AC1/#938: resource_id im Receipt ist die Server-ID aus resp["id"],
+    NICHT die clientseitige item_id. Der Stub gibt bewusst eine andere ID zurück."""
     db_path = str(tmp_path / "test.db")
     store = A2ReceiptStore(db_path)
 
@@ -151,8 +156,11 @@ def test_resource_id_ist_item_id(tmp_path):
     store.close()
 
     assert len(rows) == 1
-    assert rows[0][2] == "brot-id-42"   # resource_id
-    assert rows[0][3] == 'essen DELETE /api/v1/essen/wuensche/brot-id-42'
+    # Stub gibt "test-server-id-1" zurück — NICHT "brot-id-42" (client item_id)
+    assert rows[0][2] == "test-server-id-1", (
+        "resource_id muss Server-ID sein, got: %r" % rows[0][2])
+    assert rows[0][3] == 'essen DELETE /api/v1/essen/wuensche/test-server-id-1', (
+        "inverse_call muss Server-ID enthalten, got: %r" % rows[0][3])
 
 
 def test_duplikat_kein_receipt(tmp_path):
@@ -202,6 +210,9 @@ def test_backward_compat_ohne_store(tmp_path):
 
     assert len(essen.calls) == 2
     assert "Milch" in result or "Eier" in result or "dazu" in result
+    # AC3/#938: EC-10 A2-Quittungs-Wort-Pflicht — Wort `falsch` muss im Erfolgstext
+    assert "falsch" in result.lower(), (
+        "Einkauf-Quittung muss das Wort 'falsch' enthalten (EC-10 A2): %r" % result)
 
 
 def test_kein_receipt_ohne_chat_id(tmp_path):

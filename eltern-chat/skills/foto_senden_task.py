@@ -40,7 +40,8 @@ logger = logging.getLogger(__name__)
 # kein neuer Speicher, kein neuer State).
 _QUITTUNG_HOCHGELADEN = (
     "Im Bilderrahmen — beim nächsten Öffnen sichtbar. "
-    "Wenn du es zurücknehmen möchtest, sag »widerrufen« — id: {id}.")
+    "Wenn du es zurücknehmen möchtest, sag »widerrufen« — id: {id}. "
+    "Wenn das ein Missverständnis war, sag einfach `falsch`, ich mach es dann rückgängig.")
 _QUITTUNG_WIDERRUFEN = (
     "Zurückgenommen — das Medium ist aus dem Bilderrahmen entfernt.")
 _QUITTUNG_ABGELEHNT = (
