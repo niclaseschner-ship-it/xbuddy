@@ -117,10 +117,53 @@ Implementierungs-Detail:
 
 Pflicht-Schritte ohne gültige Antwort wiederholen die Frage. Optionale
 Schritte gibt es V1 nicht — alle Felder aus `geraete.md` GER-3 außer `id`
-(vergibt die Funktion, GAA-3.7) und `status` (V1 hart `aktiv`, GAA-3.7)
-werden erfasst.
+(vergibt die Funktion, GAA-3.7), `status` (V1 hart `aktiv`, GAA-3.7) und
+`paired_at` (`null` bei Anlage, gesetzt durch Pairing in GAA-3.8) werden
+erfasst.
 
 *Tickets:* #106
+
+### GAA-3.8 — Pairing-Schritt nach Registry-Schreiben
+
+Nach GAA-3.7 (das neue Gerät steht in `geraete.json`) und vor der „noch
+ein Gerät?"-Schleife (GAA-4) postet die Funktion im Privatchat einen
+**Pairing-Link** für das soeben angelegte Gerät. Sinn: der Browser des
+Zielgeräts braucht den `xbuddy_session`-Cookie aus
+`specs/platform/auth.md` AUTH-2 — dieser wird über den Pairing-Endpoint
+(AUTH-2.a) gesetzt.
+
+**Mechanik:**
+
+1. Die Funktion generiert einen Pairing-Token (HMAC mit Bot-Token als
+   Sign-Key, Gültigkeit 15 Minuten, kodiert die soeben vergebene
+   `display_id`).
+2. Sie postet im Privatchat zwei Zeilen:
+   - **Anweisung:** „Öffne diesen Link **auf dem soeben angelegten Gerät**:
+     `https://<origin>/auth/pair?token=<X>` (gilt 15 Minuten)."
+   - **Hinweis:** „Nach dem Öffnen kannst du die Mini-Apps und den
+     Display-Renderer dieses Geräts ohne weiteren Login benutzen."
+3. Das Feld `paired_at` in `geraete.json` (`geraete.md` GER-3) bleibt
+   zunächst `null`. Sobald der Browser den Pairing-Link öffnet und der
+   Pairing-Endpoint den `xbuddy_session`-Cookie setzt, schreibt das
+   Backend den aktuellen ISO-8601-Timestamp in `paired_at`.
+
+**Aufruf-Vertrag:** GAA-3.8 ist Teil der GAA-1-Funktion und blockiert die
+„noch ein Gerät?"-Schleife (GAA-4) nicht — Eltern darf den Pairing-Link
+später öffnen. Solange `paired_at` `null` ist, kann ein Pairing-Link
+**neu angefordert** werden (eigene Eltern-Chat-Aufgabe, V2-Aufstockung —
+nicht V1-Bestandteil).
+
+**Geräte-Typ-Abhängigkeit:** Die Anweisung in (2) ist für jeden GER-2-
+Geräte-Typ gleich. Pi-Display (`pi-display`) bekommt V1 zwar denselben
+Pairing-Link gepostet, der Operator-Pfad (Pi-Stick-Setup) folgt aber
+einer separaten Anleitung (außerhalb dieser Spec, siehe `specs/platform/auth.md`
+Phase-4-Vorbereitung).
+
+[Quelle: ENTSCHEID 2026-06-16-1123 Paket-Sektion „Konsequenz Phase 1"
+→ Bauschritt „GAA-Pairing-Schritt: nach Geräte-Anlage Pairing-Link +
+Anweisungs-HTML"]
+
+*Tickets:* #948
 
 ## 3. Lebenszyklus
 
