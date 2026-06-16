@@ -151,6 +151,12 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
                "Klar, ich überlege mir gerade eine Folge. "
                "Das dauert 1–2 Minuten — bitte solange nicht stören, "
                "ich melde mich, sobald der Vorschlag steht.")
+    # HFE-10 (Live-Fix 2026-06-16): Settings-Beifang-Button gehört VOR den
+    # LLM-Call (= zur ERSTEN propose()-Antwort). Wenn er erst nach dem 1-2-min
+    # Vorschlag käme, hätte Eltern keine Chance mehr, Voice/Provider vorher zu
+    # tunen — Spec-Sinn verfehlt. Sende ihn jetzt direkt nach "Klar, ich überlege".
+    if is_first_propose and tg is not None and chat_id is not None:
+        _sende_beifang_button(tg, chat_id, mini_app_base_url)
     logger.info("hoerspiel_folge_erzeugen.propose: rufe POST %s (HFE-3 Sub-Case 3)",
                 "/api/v1/hoerspiel/folgen-vorschlag")
     data = hoerspiel_client.folgen_vorschlag(idee_bereinigt)
@@ -189,11 +195,7 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
             "Soll ich vertonen? Das dauert 1–5 Minuten."
         ) % (folge_nr, titel, splits[0] if splits else text, voice)
 
-    # HFE-10: Settings-Beifang-Button in erster propose()-Antwort.
-    # Sub-Case 3: Button wird nach dem Vorschlagstext gesendet (tg direkt).
-    if is_first_propose and tg is not None and chat_id is not None:
-        _sende_beifang_button(tg, chat_id, mini_app_base_url)
-
+    # HFE-10 wurde oben schon vor dem LLM-Call ausgelöst (Live-Fix 2026-06-16).
     logger.info(
         "hoerspiel_folge_erzeugen.propose: Vorschlag bereit "
         "(folge_nr=%s, voice=%s)", folge_nr, voice)
