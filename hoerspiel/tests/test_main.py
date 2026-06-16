@@ -502,3 +502,174 @@ def test_mistral_provider_complete_structured_mock():
         )
     assert result["titel"] == "Test"
     assert result["text"] == "Text."
+
+
+# ============================================================
+#  HSP-3a Variante C — Face-Pille im Kinder-View (#911)
+# ============================================================
+#
+# ENTRY-PATH-PROBE:
+#   GET /display/hoerspiel/mia/alben → HTML enthält Face-Pille mit „Mia"
+#   und href="/display/hoerspiel/finn/alben" für den Switch-Link.
+#   Plus Test mit Fehler-FamilieClient: HTML enthält keine Pille.
+#
+# Alle Tests: KEIN echter HTTP-Call — FamilieClient via transport-Naht gemockt.
+
+
+def _make_familie_transport(personen_json_list):
+    """Baut eine Transport-Naht, die stets eine feste JSON-Liste zurückgibt."""
+    import json as _json
+
+    def transport(url):
+        return _json.dumps(personen_json_list).encode("utf-8")
+
+    return transport
+
+
+def _make_error_transport():
+    """Baut eine Transport-Naht, die immer Connection-Error wirft."""
+    import urllib.error
+
+    def transport(url):
+        raise urllib.error.URLError("Connection refused")
+
+    return transport
+
+
+@pytest.fixture
+def client_mit_familie(runtime_cfg_with_mistral, data_cfg_mini, data_root_mini):
+    """Test-Client mit Mock-FamilieClient, der Mia + Finn kennt."""
+    from hoerspiel import familie_client as fc_mod
+
+    transport = _make_familie_transport([
+        {"id": "mia", "name": "Mia", "ring": "orange", "art": "kinder",
+         "foto": "/display/_shared/fotos/mia.jpg"},
+        {"id": "finn", "name": "Finn", "ring": "blue", "art": "kinder",
+         "foto": "/display/_shared/fotos/finn.jpg"},
+    ])
+    mock_client = fc_mod.FamilieClient(
+        origin_url="http://127.0.0.1:5010",
+        transport=transport,
+    )
+    main_mod.configure(
+        runtime_config=runtime_cfg_with_mistral,
+        data_config=data_cfg_mini,
+        data_root=data_root_mini,
+        llm=None, tts_engine=None,
+        bot_token="TEST",
+        familie_client=mock_client,
+    )
+    return main_mod.app.test_client()
+
+
+@pytest.fixture
+def client_ohne_familie(runtime_cfg_with_mistral, data_cfg_mini, data_root_mini):
+    """Test-Client mit Mock-FamilieClient, der immer Connection-Error wirft."""
+    from hoerspiel import familie_client as fc_mod
+
+    mock_client = fc_mod.FamilieClient(
+        origin_url="http://127.0.0.1:5010",
+        transport=_make_error_transport(),
+    )
+    main_mod.configure(
+        runtime_config=runtime_cfg_with_mistral,
+        data_config=data_cfg_mini,
+        data_root=data_root_mini,
+        llm=None, tts_engine=None,
+        bot_token="TEST",
+        familie_client=mock_client,
+    )
+    return main_mod.app.test_client()
+
+
+def test_face_pille_rendert_mit_aktivem_kind(client_mit_familie):
+    """HSP-3a Variante C / ENTRY-PATH-PROBE:
+    GET /display/hoerspiel/mia/alben → 200 HTML enthält Face-Pille
+    mit anderes-Kind-Name „Finn" und href zum Finn-Alben-View.
+
+    Vollständige Navigation via <a href> — kein JS-State-Wechsel (RAT-17 Option A).
+    """
+    resp = client_mit_familie.get("/display/hoerspiel/mia/alben")
+    assert resp.status_code == 200
+    html = resp.data.decode("utf-8")
+    # Face-Pille: Link auf anderes Kind (Finn) — vollständige Navigation (HSP-3a).
+    assert 'href="/display/hoerspiel/finn/alben"' in html
+    # Name des anderen Kindes in der Pille sichtbar.
+    assert "Finn" in html
+    # face-pille CSS-Klasse vorhanden.
+    assert "face-pille" in html
+    # face-Klasse mit ring-blue (Finns Ring) vorhanden.
+    assert "ring-blue" in html
+
+
+def test_face_pille_andere_kind_url_korrekt(client_mit_familie):
+    """HSP-3a Variante C / RAT-17 Option A:
+    Link zeigt auf /display/hoerspiel/finn/alben — handverdrahtete Map mia→finn.
+    Kein JS-State, kein Redirect-Schritt, direkter href.
+    """
+    resp = client_mit_familie.get("/display/hoerspiel/mia/alben")
+    html = resp.data.decode("utf-8")
+    # Exaktes href — RAT-17 handverdrahtet, KEINE Registry.
+    assert 'href="/display/hoerspiel/finn/alben"' in html
+    # Kein JS-State-Wechsel — kein onclick-Handler nötig (plain <a>).
+    assert 'data-switch' not in html
+
+
+def test_face_pille_familie_fehler_rendert_ohne_pille(client_ohne_familie):
+    """HSP-3a Variante C / PLAN-20-Geist:
+    Familie-Service nicht erreichbar → View rendert trotzdem 200,
+    aber ohne Face-Pille (kein face-pille-Element im HTML).
+
+    Stop-Rule: Familie-Service unerreichbar im Test → Mock, kein echter HTTP-Call.
+    """
+    resp = client_ohne_familie.get("/display/hoerspiel/mia/alben")
+    assert resp.status_code == 200
+    html = resp.data.decode("utf-8")
+    # Kein face-pille-Wechsel-Link bei Familie-Fehler.
+    assert 'href="/display/hoerspiel/finn/alben"' not in html
+    # Kein face-pille-Element sichtbar (weder Link noch solo).
+    assert "face-pille" not in html
+
+
+def test_familie_client_leerer_snapshot_bei_http_fehler():
+    """CLIENT-1 / DCOMP-1: FamilieClient.snapshot() gibt leere RegistryView
+    zurück wenn der Familie-Service 500 antwortet — kein Stack-Trace nach oben.
+    """
+    import urllib.error
+
+    from hoerspiel import familie_client as fc_mod
+
+    def error_transport(url):
+        raise urllib.error.HTTPError(url, 500, "Internal Server Error", {}, None)
+
+    client = fc_mod.FamilieClient(
+        origin_url="http://127.0.0.1:5010",
+        transport=error_transport,
+    )
+    registry = client.snapshot()
+    assert registry.alle() == []
+    assert registry.get("mia") is None
+
+
+def test_familie_client_person_felder_korrekt():
+    """FAM-7 / DCOMP-1: FamilieClient.snapshot() liefert Person mit
+    id/name/ring/foto aus dem JSON von GET /api/v1/familie/personen.
+    """
+    from hoerspiel import familie_client as fc_mod
+
+    transport = _make_familie_transport([
+        {"id": "mia", "name": "Mia", "ring": "orange", "art": "kinder",
+         "foto": "/fotos/mia.jpg"},
+    ])
+    client = fc_mod.FamilieClient(
+        origin_url="http://127.0.0.1:5010",
+        transport=transport,
+    )
+    registry = client.snapshot()
+    mia = registry.get("mia")
+    assert mia is not None
+    assert mia.id == "mia"
+    assert mia.name == "Mia"
+    assert mia.ring == "orange"
+    assert mia.foto == "/fotos/mia.jpg"
+    assert mia.is_kind() is True

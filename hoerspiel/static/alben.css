@@ -36,10 +36,78 @@ body.xb[data-stage="toddler"] {
   grid-area: topbar;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-5);
 }
 
 .topbar-left { display: flex; align-items: center; gap: var(--space-4); }
+
+/* ── FACE-PILLE (HSP-3a Variante C — top-right, Ring + Foto + Name) ─── */
+/* Vollständige Navigation via <a href>: kein JS-State-Wechsel (RAT-17). */
+
+/* Face / Ring-Foto — analog plan_kinder.html .face-Pattern (DCOMP-1). */
+.face {
+  border-radius: 50%;
+  background: var(--kids-paper);
+  display: inline-flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.04);
+}
+.face img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.face.size-54 { width: 54px; height: 54px; }
+
+.face.ring-blue   { border: 4px solid var(--kids-ring-blue); }
+.face.ring-orange { border: 4px solid var(--kids-ring-orange); }
+.face.ring-green  { border: 4px solid var(--kids-ring-green); }
+.face.ring-red    { border: 4px solid var(--kids-ring-red); }
+.face.ring-purple { border: 4px solid var(--kids-ring-purple); }
+.face.ring-teal   { border: 4px solid var(--kids-ring-teal); }
+.face.ring-gray   { border: 4px solid var(--kids-ring-gray); }
+
+/* size-54 mit Ring: 4px border already in .face.ring-*, kein Korrektur nötig. */
+
+/* Pille-Container: <a href> oder <div> (solo/inaktiv). */
+.face-pille {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  text-decoration: none;
+  flex-shrink: 0;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border-radius: var(--radius-2xl, 20px);
+  border: 2px solid var(--kids-border-soft);
+  background: var(--kids-paper);
+  box-shadow: var(--shadow-hand-sm);
+  cursor: pointer;
+  transition:
+    box-shadow var(--dur-base, 120ms) var(--ease-out, ease),
+    border-color var(--dur-base, 120ms) var(--ease-out, ease);
+}
+
+.face-pille:hover,
+.face-pille:focus-visible {
+  box-shadow: var(--focus-ring), var(--shadow-hand-sm);
+  border-color: var(--kids-border-strong, var(--kids-border-soft));
+  outline: none;
+}
+
+/* Solo-Variante (kein anderes Kind verfügbar): Anzeige ohne Tap-Wechsel. */
+.face-pille--solo {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.face-pille-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-18, 18px);
+  color: var(--kids-ink);
+  line-height: 1;
+  white-space: nowrap;
+}
 
 .topbar-icon {
   width: 88px; height: 88px;
