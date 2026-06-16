@@ -18,7 +18,7 @@
 {# HSP-2: Shell-Grid — topbar / main player / footer (Werft-Mockup iter-3) #}
 <div class="shell" id="app">
 
-  {# ── KOPFZEILE: Logo + Serien-Titel + Subtitle ── #}
+  {# ── KOPFZEILE: Logo + Serien-Titel + Subtitle + Face-Pille (HSP-3a Variante C) ── #}
   <header class="topbar">
     <div class="topbar-left">
       <div class="topbar-icon">
@@ -29,6 +29,30 @@
         <div class="topbar-sub" id="topbar-sub">Stigi, Malini &amp; Vögelchen — Geschichten aus dem Garten</div>
       </div>
     </div>
+
+    {# HSP-3a Variante C: Face-Pille top-right — vollständige Navigation auf andere kind_id-URL.
+       Kein JS-State-Wechsel (RAT-17 Option A handverdrahtet zwei Instanzen). #}
+    {% if anderes_kind and anderes_kind_url %}
+    <a class="face-pille" href="{{ anderes_kind_url }}"
+       aria-label="Zu {{ anderes_kind.name }} wechseln">
+      <div class="face size-54 ring-{{ anderes_kind.ring }}">
+        {% if anderes_kind.foto %}
+        <img src="{{ anderes_kind.foto }}" alt="{{ anderes_kind.name }}">
+        {% endif %}
+      </div>
+      <span class="face-pille-name">{{ anderes_kind.name }}</span>
+    </a>
+    {% elif aktives_kind %}
+    {# Nur Anzeige des aktiven Kindes, kein Wechsel-Link — Pille ist sichtbar inaktiv. #}
+    <div class="face-pille face-pille--solo" aria-label="{{ aktives_kind.name }}">
+      <div class="face size-54 ring-{{ aktives_kind.ring }}">
+        {% if aktives_kind.foto %}
+        <img src="{{ aktives_kind.foto }}" alt="{{ aktives_kind.name }}">
+        {% endif %}
+      </div>
+      <span class="face-pille-name">{{ aktives_kind.name }}</span>
+    </div>
+    {% endif %}
   </header>
 
   {# ── LINKE SPALTE: Album-Kachel-Raster (HSP-2, E-HSP-8: 5×2 ohne Scroll) ── #}
