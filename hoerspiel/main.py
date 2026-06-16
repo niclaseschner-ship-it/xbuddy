@@ -46,12 +46,14 @@ from tools import logsetup  # noqa: E402
 if __package__:
     from . import album_builder, data_io, llm_service, tts_service
     from . import config as config_mod
+    from . import familie_client as familie_client_mod
     from .providers.base import LLMProvider, ProviderError
     from .tts.azure import TTSError
 else:  # python3 hoerspiel/main.py
     sys.path.insert(0, _REPO_ROOT)
     from hoerspiel import album_builder, data_io, llm_service, tts_service
     from hoerspiel import config as config_mod
+    from hoerspiel import familie_client as familie_client_mod
     from hoerspiel.providers.base import LLMProvider, ProviderError
     from hoerspiel.tts.azure import TTSError
 
@@ -74,6 +76,17 @@ logger = logging.getLogger(__name__)
 #  Laufzeit-Zustand (Test-Naht analog wetter/main.py)
 # ============================================================
 
+# HSP-3a Variante C / RAT-17 Option A: handverdrahtete Kind-Paarung (zwei Instanzen).
+# KEINE Registry, KEINE automatische Erkennung. V1 zwei explizite Einträge.
+_OTHER_KIND: dict[str, str] = {
+    "mia": "finn",
+    "finn": "mia",
+}
+
+# ENV-Key für den Familie-Service-Origin (DCOMP-1 / CLIENT-1).
+ENV_FAMILIE_ORIGIN = "HOERSPIEL_FAMILIE_ORIGIN"
+DEFAULT_FAMILIE_ORIGIN = "http://127.0.0.1:5010"
+
 runtime: dict = {
     "runtime_config": None,    # config.RuntimeConfig
     "data_config": None,       # config.DataConfig
@@ -87,6 +100,8 @@ runtime: dict = {
     "init_data_config": None,  # dict — gecacht nach erstem Lauf
     "familie_json_path": None, # str | None — aus ENV FAMILIE_JSON_PATH
     "resume_store": {},        # dict album_id -> track_position (in-process für V1)
+    # HSP-3a: FamilieClient-Instanz für Face-Pille (Test-Naht: direkt setzen).
+    "familie_client": None,    # familie_client_mod.FamilieClient | None
 }
 
 
@@ -94,7 +109,8 @@ def configure(*, runtime_config, data_config, data_root: str,
               llm_factory=None, llm=None,
               tts_engine=None, now=None,
               bot_token=None, init_data_config=None,
-              familie_json_path=None) -> None:
+              familie_json_path=None,
+              familie_client=None) -> None:
     """Setzt Konfiguration und Adapter-Fabriken (Test-Naht, HSP-24).
 
     `llm_factory(cfg) -> LLMProvider` baut den Provider passend zur aktiven
@@ -107,6 +123,10 @@ def configure(*, runtime_config, data_config, data_root: str,
 
     `bot_token` + `init_data_config` + `familie_json_path`: MAD-7/HSP-39 Auth-Naht
     (Test-Modus direkt setzen; Produktiv-Betrieb liest ENV).
+
+    `familie_client`: HSP-3a Test-Naht — wenn gesetzt, wird dieser Client
+    direkt genutzt statt eines neuen FamilieClient aus ENV (für Tests ohne
+    echten HTTP-Call). Keiner gesetzt = Produktiv-Pfad via ENV.
     """
     runtime["runtime_config"] = runtime_config
     runtime["data_config"] = data_config
@@ -122,6 +142,7 @@ def configure(*, runtime_config, data_config, data_root: str,
     runtime["init_data_config"] = init_data_config
     runtime["familie_json_path"] = familie_json_path
     runtime["resume_store"] = {}
+    runtime["familie_client"] = familie_client
 
 
 def _runtime_cfg():
@@ -284,6 +305,40 @@ def require_mini_app_auth(f):
 
 
 # ============================================================
+#  HSP-3a: Familie-Client-Accessor + Face-Pille-Helfer
+# ============================================================
+
+def _get_familie_client() -> "familie_client_mod.FamilieClient":
+    """Gibt den FamilieClient zurück (gecacht oder frisch aus ENV).
+
+    Test-Naht: wenn runtime['familie_client'] gesetzt, diesen nutzen.
+    Produktiv-Pfad: neue Instanz aus HOERSPIEL_FAMILIE_ORIGIN (oder Default).
+    """
+    client = runtime.get("familie_client")
+    if client is not None:
+        return client
+    origin = (os.environ.get(ENV_FAMILIE_ORIGIN) or DEFAULT_FAMILIE_ORIGIN)
+    return familie_client_mod.FamilieClient(origin_url=origin)
+
+
+def _pille_vars(kind_id: str) -> dict:
+    """Holt aktives Kind + anderes Kind aus Familie-Service (HSP-3a).
+
+    Gibt dict mit 'aktives_kind' (Person | None) und 'anderes_kind'
+    (Person | None) zurück. Bei Fehler oder nicht gefundenen Personen:
+    beide None → Template rendert ohne Pille (PLAN-20-Geist).
+    """
+    other_id = _OTHER_KIND.get(kind_id)
+    client = _get_familie_client()
+    registry = client.snapshot()
+
+    aktives_kind = registry.get(kind_id)
+    anderes_kind = registry.get(other_id) if other_id else None
+
+    return {"aktives_kind": aktives_kind, "anderes_kind": anderes_kind}
+
+
+# ============================================================
 #  URL-3a / HSP-26: kind_id-Self-Check
 # ============================================================
 
@@ -368,7 +423,16 @@ def display_alben(kind_id: str):
     err = _assert_self_kind(kind_id)
     if err is not None:
         return err
-    return render_template("alben.html")
+    # HSP-3a Variante C: Face-Pille-Vars aus Familie-Service holen.
+    pille = _pille_vars(kind_id)
+    other_id = _OTHER_KIND.get(kind_id)
+    other_url = ("/display/hoerspiel/%s/alben" % other_id) if other_id else None
+    return render_template(
+        "alben.html",
+        aktives_kind=pille["aktives_kind"],
+        anderes_kind=pille["anderes_kind"],
+        anderes_kind_url=other_url,
+    )
 
 
 # ---- Lese-Endpoints (HSP-17, Side-Effekt-frei) ----
