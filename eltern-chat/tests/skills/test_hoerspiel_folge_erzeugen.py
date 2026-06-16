@@ -1002,3 +1002,81 @@ def test_task_mini_map_kind_id_mia_nutzt_mia_client():
     # Transport wurde aufgerufen (Mia-Client genutzt, nicht basis_client)
     assert any("folgen-vorschlag" in p for _, p in aufgerufen), (
         "Mini-Map: Mia-Client muss für propose() genutzt worden sein")
+
+
+# ============================================================
+#  T954 — kind_id aus Tool-Call-arguments (kein 'mia'-Hardcode mehr)
+# ============================================================
+
+
+def test_task_uses_kind_id_from_arguments():
+    """T954 / E-HFE-6 / HFE-3: Task.propose() liest kind_id aus arguments und
+    wählt den passenden Client aus der Mini-Map (entry_path_probe).
+
+    Mock-Aufruf mit arguments = {"kind_id": "finn", "idee": "..."} →
+    prüft, dass der Finn-Client verwendet wird (nicht der Mia-Client).
+    """
+    finn_client = FakeHoerspielClient(kind_id="finn")
+    mia_client = FakeHoerspielClient(kind_id="mia")
+    tg = FakeTelegram()
+
+    task = _make_task(hoerspiel_client=mia_client, tg=tg)
+    # Mini-Map manuell bestücken mit kontrollierten Clients
+    task._client_by_kind_id["mia"] = mia_client
+    task._client_by_kind_id["finn"] = finn_client
+
+    ctx = _ctx(chat_id=42, from_user_id=7)
+    proposal = task.propose({"kind_id": "finn", "idee": "Finn findet ein Abenteuer"}, ctx)
+
+    assert isinstance(proposal, Proposal), "propose() muss Proposal zurückgeben"
+    # Finn-Client wurde aufgerufen, nicht Mia-Client
+    assert len(finn_client.vorschlag_calls) == 1, (
+        "T954: Finn-Client muss via kind_id='finn' aus arguments gewählt worden sein")
+    assert finn_client.vorschlag_calls[0] == "Finn findet ein Abenteuer"
+    assert mia_client.vorschlag_calls == [], (
+        "T954: Mia-Client darf bei kind_id='finn' nicht aufgerufen werden")
+    # kind_id des genutzten Clients muss 'finn' sein
+    assert finn_client._kind_id == "finn"
+
+
+def test_task_fallback_unbekannte_kind_id():
+    """T954 / E-HFE-6 / HFE-3: arguments mit unbekannter kind_id ('fremdkind')
+    → Fallback auf 'mia'; Warnung geloggt; kein Exception-Raise.
+    """
+    mia_client = FakeHoerspielClient(kind_id="mia")
+    tg = FakeTelegram()
+
+    task = _make_task(hoerspiel_client=mia_client, tg=tg)
+    task._client_by_kind_id["mia"] = mia_client
+    # 'fremdkind' ist nicht in _client_by_kind_id
+
+    ctx = _ctx(chat_id=42, from_user_id=7)
+    proposal = task.propose(
+        {"kind_id": "fremdkind", "idee": "Ein Abenteuer für ein unbekanntes Kind"},
+        ctx,
+    )
+
+    assert isinstance(proposal, Proposal), (
+        "T954: Fallback auf mia muss Proposal liefern, kein Crash")
+    assert len(mia_client.vorschlag_calls) == 1, (
+        "T954: Fallback auf Mia-Client bei unbekannter kind_id")
+
+
+def test_task_default_mia_kind_id():
+    """T954 / E-HFE-6 / HFE-3: arguments ohne kind_id-Feld →
+    Backward-Compat-Fallback auf 'mia'; kein KeyError, kein Crash.
+    """
+    mia_client = FakeHoerspielClient(kind_id="mia")
+    tg = FakeTelegram()
+
+    task = _make_task(hoerspiel_client=mia_client, tg=tg)
+    task._client_by_kind_id["mia"] = mia_client
+
+    ctx = _ctx(chat_id=42, from_user_id=7)
+    # Kein kind_id-Feld in arguments (Backward-Compat)
+    proposal = task.propose({"idee": "Stigi im Herbstwald"}, ctx)
+
+    assert isinstance(proposal, Proposal), (
+        "T954: Fehlender kind_id → Fallback mia muss Proposal liefern")
+    assert len(mia_client.vorschlag_calls) == 1, (
+        "T954: Mia-Client muss als Default greifen wenn kind_id fehlt")

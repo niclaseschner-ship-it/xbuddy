@@ -48,20 +48,24 @@ class HoerspielFolgeErzeugenTask(WriteTask):
         super().__init__(
             name="hoerspiel_folge_erzeugen",
             description=(
-                "Erstellt eine neue Hörspiel-Folge für Mia: schreibt einen "
-                "Folgentext per KI und vertont ihn als Album.\n\n"
+                "Erstellt eine neue Hörspiel-Folge für ein Kind (Mia oder "
+                "Finn): schreibt einen Folgentext per KI und vertont ihn als "
+                "Album.\n\n"
                 "Aufrufen, wenn jemand sagt »Schreib eine Folge über …«, "
                 "»Neue Folge«, »Neues Hörbuch«, »Neues Hörspiel«, »Hörbuch "
                 "anlegen«, »Hörspiel machen«, »Mach Mia eine Folge«, "
-                "»Schreib eine Folge«, »Folge erzeugen« — auch OHNE konkreten "
-                "Inhalt/Suffix. Plus mit Inhalt: »Neue Folge über X«, »Mach "
-                "Mia eine Folge zu Y«, »Hörbuch über Z«. Plus Themen-"
-                "Anfrage: »Welche Themen gibt es?«, »Was könnte ich Mia "
-                "erzählen?«, »Vorschläge?«.\n\n"
+                "»Mach Finn eine Folge«, »Schreib eine Folge«, »Folge "
+                "erzeugen« — auch OHNE konkreten Inhalt/Suffix. Plus mit "
+                "Inhalt: »Neue Folge über X«, »Mach Mia eine Folge zu Y«, "
+                "»Hörbuch über Z«. Plus Themen-Anfrage: »Welche Themen gibt "
+                "es?«, »Was könnte ich Mia erzählen?«, »Vorschläge?«.\n\n"
                 "WICHTIG: bei JEDEM Hörspiel-/Hörbuch-/Folgen-Trigger SOFORT "
                 "diesen Skill aufrufen — KEINE eigenen Rückfragen stellen, "
                 "der Skill macht die Diskussion und holt Themen-Vorschläge "
                 "selbst (HFE-3 Sub-Case 1).\n\n"
+                "Parameter `kind_id`: welches Kind die Folge bekommt "
+                "(HFE-3, E-HFE-6). »mia« wenn die Mutter sagt 'für Mia'; "
+                "»finn« wenn sie 'für Finn' sagt. Default: mia.\n\n"
                 "Parameter `idee`: die Folgen-Idee aus der Eltern-Nachricht "
                 "(1–2 Sätze). LEER STRING »« setzen, wenn die Eltern noch "
                 "keine konkrete Idee genannt haben (»Neues Hörbuch«, »Mach "
@@ -82,6 +86,15 @@ class HoerspielFolgeErzeugenTask(WriteTask):
             parameters={
                 "type": "object",
                 "properties": {
+                    "kind_id": {
+                        "type": "string",
+                        "enum": ["mia", "finn"],
+                        "description": (
+                            "Für welches Kind die Folge erzeugt werden soll: "
+                            "mia oder finn. Wenn die Mutter sagt 'für Mia', "
+                            "kind_id=mia; 'für Finn', kind_id=finn. "
+                            "Pflicht-Argument (HFE-3, E-HFE-6)."),
+                    },
                     "idee": {
                         "type": "string",
                         "description": (
@@ -107,7 +120,7 @@ class HoerspielFolgeErzeugenTask(WriteTask):
                             "Sonst weglassen — der Skill liest den Default."),
                     },
                 },
-                "required": ["idee"],
+                "required": ["kind_id", "idee"],
             })
         self._tg = tg
         self._hoerspiel_client = hoerspiel_client
@@ -169,11 +182,14 @@ class HoerspielFolgeErzeugenTask(WriteTask):
         from_user_id = getattr(turn_context, "from_user_id", None)
         chat_id = turn_context.chat_id
 
-        # E-HFE-6 / RAT-17 / #910: kind_id-Auflösung via Mini-Map.
-        # V1: hartkodiert "mia" — Face-Pille (#911) bringt den aktiven kind_id-State.
-        # TODO #911 Face-Pille bringt aktiven kind_id-State — hier ersetzen.
-        kind_id = "mia"
-        active_client = self._client_by_kind_id.get(kind_id, self._hoerspiel_client)
+        # E-HFE-6 / RAT-17 / #910: kind_id aus Tool-Call-arguments lesen (HFE-3).
+        # Fallback "mia" für Backward-Compat (fehlender Parameter).
+        kind_id = args.get("kind_id", "mia")  # Fallback mia für Backward-Compat
+        if kind_id not in self._client_by_kind_id:
+            # LLM hat einen unbekannten Wert geliefert — Hartfall auf mia
+            logger.warning("Hörspiel-Task: unbekannte kind_id %r, falle auf mia", kind_id)
+            kind_id = "mia"
+        active_client = self._client_by_kind_id[kind_id]
 
         # HFE-10: "erste propose()-Antwort des Turns" bestimmen.
         # Heuristik: wenn für diesen Chat noch kein propose() des laufenden
