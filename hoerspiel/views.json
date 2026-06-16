@@ -7,7 +7,7 @@
       "synonyme": ["paula", "stigi", "folgen", "alben", "hörspiel"],
       "zeigt": "Album-Kacheln und Player für Paulas Hörspiel-Serie (Stigi & Co.).",
       "zielgruppe": "kind",
-      "icons": ["/api/v1/familie/foto/paula"]
+      "icons": ["arasaac/5915.png"]
     },
     {
       "slug": "alben-neko",
@@ -16,35 +16,7 @@
       "synonyme": ["neko", "quasiluxi", "alpaki", "haski", "hörspiel"],
       "zeigt": "Album-Kacheln und Player für Nekos Hörspiel-Serie (Quasiluxi, Alpaki & Haski).",
       "zielgruppe": "kind",
-      "icons": ["/api/v1/familie/foto/neko"]
-    },
-    {
-      "slug": "eltern-paula",
-      "typ": "mini-app",
-      "pfad": "/seiten/hoerspiel/paula/eltern",
-      "label": "Paulas Hörspiel pflegen",
-      "synonyme": ["paula-einstellungen", "voice ändern paula", "tempo paula"],
-      "zeigt": "Hörspiel-Tuning für Paula (Voice, LLM, Tempo, Album-Galerie).",
-      "zielgruppe": "eltern",
-      "web_app": {
-        "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
-        "app_short_name": "hoerspiel",
-        "icons": ["/api/v1/familie/foto/paula"]
-      }
-    },
-    {
-      "slug": "eltern-neko",
-      "typ": "mini-app",
-      "pfad": "/seiten/hoerspiel/neko/eltern",
-      "label": "Nekos Hörspiel pflegen",
-      "synonyme": ["neko-einstellungen", "voice ändern neko", "tempo neko"],
-      "zeigt": "Hörspiel-Tuning für Neko (Voice, LLM, Tempo, Album-Galerie).",
-      "zielgruppe": "eltern",
-      "web_app": {
-        "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
-        "app_short_name": "hoerspiel",
-        "icons": ["/api/v1/familie/foto/neko"]
-      }
+      "icons": ["arasaac/5915.png"]
     }
   ]
 }
