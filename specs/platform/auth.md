@@ -33,11 +33,22 @@ User-Rolle:
 | Pfad-3 — Loopback Server-zu-Server | Eltern-Chat-Skill ruft intern (AUTH-5-Liste) | Backend-Prozess | Quell-IP `127.0.0.1` |
 | Pfad-4 — Backlog / dokumentiert offen | alle noch-nicht-migrierten Routen (AUTH-6) | — | keine (PUBLIC) |
 
-Die Display-Renderer-Klasse (Pfad-2 der R2-Analyse, Kind-Tablet + Pi-Display)
-ist V1 nicht ratifiziert; sie kommt in Phase 4 als AUTH-7.
+**Reichweite der Klassen:** Pfad-1 (AUTH-3) trägt **alle User-Endgeräte mit
+Telegram** — Eltern-Phones, Eltern-Tablets, Eltern-Laptops und **Kind-
+Tablet** (Setzung 2026-06-12: jedes User-Endgerät hat Telegram installiert,
+Onboarding ohne Telegram findet nicht statt). Jedes dieser Geräte
+durchläuft GAA-3.8 (`specs/platform/geraet-anlegen.md`) und bekommt einen
+`xbuddy_session`-Cookie über den Pairing-Link.
+
+**Pi-Display ist explizit kein User-Endgerät** — es ist ein HDMI-Stick im
+Wohnzimmer, ohne Telegram, mit eigenem Operator-Pfad (SSH-Setup,
+`url.conf`-Pflege). Die Display-Renderer-Klasse für Pi-Display (Pfad-2 der
+R2-Analyse) ist V1 nicht ratifiziert; sie kommt in Phase 4 als AUTH-7.
 
 [Quelle: ENTSCHEID 2026-06-16-1123 Paket-Sektion „Konvergenz auf Stoßrichtung"
-→ Sorten-Grenze-Tabelle]
+→ Sorten-Grenze-Tabelle; Memory `project_xbuddy_telegram_endgerate_pflicht`
+→ „Alle User-Endgeräte haben Telegram, Pi-Sticks bekommen separaten
+einfacheren Operator-Pfad"]
 
 *Tickets:* #948
 
@@ -97,13 +108,23 @@ durch Spec-Änderung in dieser Liste ergänzt (kein Implementierungs-Detail).
 **V1-Liste (Phase 1, essen-einkauf):**
 
 ```
-/api/v1/essen/wuensche                        (GET, POST, PATCH, DELETE)
+/api/v1/essen/wuensche                        (GET)
+/api/v1/essen/wuensche                        (POST)
+/api/v1/essen/wuensche/<wunsch_id>            (PATCH)
+/api/v1/essen/wuensche/<wunsch_id>            (DELETE)
 /api/v1/essen/katalog                         (GET)
-/api/v1/essen/katalog/gerichte                (POST, PATCH)
+/api/v1/essen/katalog/gerichte                (POST)
+/api/v1/essen/katalog/gerichte/<gericht_id>   (PATCH)
 /api/v1/essen/fotos                           (POST)
-/api/v1/essen/fotos/<medium_id>               (GET, DELETE)
+/api/v1/essen/fotos/<medium_id>               (GET)
+/api/v1/essen/fotos/<medium_id>               (DELETE)
 /api/v1/essen/fotos/<medium_id>/thumbnail     (GET)
 ```
+
+Jede Zeile ist eine eindeutige Flask-Route mit konkretem URL-Pfad und HTTP-
+Methode — keine Sammel-Zeilen mehr (eine Zeile pro tatsächlich registrierter
+Route, sonst kann der AUTH-9-Test den Decorator-Anwendungs-Stand nicht
+eindeutig prüfen).
 
 Weitere Routen kommen mit jeder Power-Flow-Migration (Phase 2: routine,
 Phase 3: hörspiel-eltern). Bis dahin sind sie in AUTH-6 dokumentiert.
@@ -137,8 +158,15 @@ Eine Route gehört in AUTH-4, wenn sie **inhaltlich öffentlich** ist — der
 Zugriffsschutz lebt nicht in der Route selbst, sondern in der Tatsache, dass
 nichts Familienprivates über sie ausgegeben wird.
 
+**V1-Klarstellung zu `/display/_shared/*` und `/display/<buddy>/*`:** Diese
+beiden Pfade sind V1 **ohne nginx-Schutz** im Funnel-Pfad öffentlich — die
+nginx-Map mit den Ausnahmen `^~ /display/_shared/` und `^~ /display/<buddy>/`
+vor dem Renderer-Match lebt erst in AUTH-7 und gewinnt Bindewirkung mit
+Phase 4. Bis dahin sind sie de facto offen, sind aber AUTH-4-konform
+(inhaltlich öffentlich: Icons, Buddy-Renderer-Views).
+
 [Quelle: ENTSCHEID 2026-06-16-1123 Paket-Sektion „R2-Patches"
-→ Patch A Endpoint-Liste AUTH-4]
+→ Patch A Endpoint-Liste AUTH-4 + Patch B nginx-Map (Phase 4)]
 
 *Tickets:* #948
 
@@ -150,10 +178,20 @@ Backend-Komponenten rufen Mini-App-APIs intern (z. B. `PUT
 /api/v1/routine/config` aus dem Eltern-Chat-Konfig-Skill); Identität ist
 hier Backend-Prozess-Identität via Heim-Pi-Loopback, nicht User-Identität.
 
-**Mechanik:** Der Decorator `require_init_data` (oder seine Schwester
-`require_session`) prüft zuerst `request.remote_addr in ('127.0.0.1', '::1')`.
-Trifft das zu, läuft die Route ohne Identifikation durch; `g.init_data`
-ist `None`.
+**Mechanik:** Der Loopback-Bypass lebt **im jeweiligen Buddy-Decorator**
+(`essen/main.py`, `routine/main.py`, …), nicht in einer geteilten Lib —
+heute kopiert je Buddy. AUTH-9 prüft, dass jede AUTH-3-Route den Decorator
+trägt; eine Konsistenz-Prüfung des Loopback-Bypass-Verhaltens (alle Buddys
+verhalten sich gleich) ist Aufgabe einer geteilten Helper-Lib
+(`eltern-chat/init_data.py` als Heimat-Kandidat), deren Auslagerung erst
+beim n=3-Verbrauch (Codex-Kriterium aus `conventions/README.md`)
+ratifiziert wird. **Phase 1** kopiert das Verhalten je Buddy-Decorator
+konsistent; **n=3-Trigger** (z. B. `routine/main.py` + `hoerspiel/main.py`
+folgen) löst die Lib-Auslagerung aus.
+
+Der Decorator-Code (egal in welchem Buddy) prüft zuerst
+`request.remote_addr in ('127.0.0.1', '::1')`. Trifft das zu, läuft die
+Route ohne Identifikation durch; `g.init_data` ist `None`.
 
 **V1-Liste:**
 

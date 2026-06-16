@@ -154,8 +154,17 @@ später öffnen. Solange `paired_at` `null` ist, kann ein Pairing-Link
 nicht V1-Bestandteil).
 
 **Geräte-Typ-Abhängigkeit:** Die Anweisung in (2) ist für jeden GER-2-
-Geräte-Typ gleich. Pi-Display (`pi-display`) bekommt V1 zwar denselben
-Pairing-Link gepostet, der Operator-Pfad (Pi-Stick-Setup) folgt aber
+Geräte-Typ-mit-Telegram gleich — `tablet`, `handy`, `monitor` (sofern als
+User-Endgerät genutzt). Das schließt **Kind-Tablet** ausdrücklich ein:
+beim Setup öffnet ein Elternteil Telegram am Kind-Tablet, tappt den
+Pairing-Link, der `xbuddy_session`-Cookie wird gesetzt; das Kind nutzt
+das Tablet danach im Kiosk-Modus mit dem Cookie im Hintergrund. Setzung
+2026-06-12: jedes User-Endgerät hat Telegram, Onboarding ohne Telegram
+findet nicht statt.
+
+Pi-Display (`pi-display`) ist explizit **kein** User-Endgerät — kein
+Telegram, kein User in der Hand. Der Operator-Pfad (Pi-Stick-Setup)
+folgt aber
 einer separaten Anleitung (außerhalb dieser Spec, siehe `specs/platform/auth.md`
 Phase-4-Vorbereitung).
 
