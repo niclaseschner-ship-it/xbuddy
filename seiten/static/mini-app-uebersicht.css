@@ -299,6 +299,16 @@ body {
   margin-bottom: 6px;
 }
 
+/* Fallback-Icon (Emoji) wenn icons[] im Aggregator-Output fehlt — display-client
+   und panel haben heute keine icons[] (Server-Side-Folge-Ticket #934). */
+.url-karte-icon-fallback {
+  font-size: 1.4rem;
+  flex: 0 0 auto;
+  width: 28px;
+  text-align: center;
+  line-height: 28px;
+}
+
 /* SREG-12-konsistent: jede Seite/Display/Panel hat ihr Icon als Erstkennung. */
 .url-karte-icon {
   width: 28px;
