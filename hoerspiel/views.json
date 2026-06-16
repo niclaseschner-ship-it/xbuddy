@@ -7,7 +7,7 @@
       "synonyme": ["mia", "stigi", "folgen", "alben", "hörspiel"],
       "zeigt": "Album-Kacheln und Player für Mias Hörspiel-Serie (Stigi & Co.).",
       "zielgruppe": "kind",
-      "icons": ["/api/v1/familie/foto/mia"]
+      "icons": ["arasaac/5915.png"]
     },
     {
       "slug": "alben-finn",
@@ -16,35 +16,7 @@
       "synonyme": ["finn", "quasiluxi", "alpaki", "haski", "hörspiel"],
       "zeigt": "Album-Kacheln und Player für Finns Hörspiel-Serie (Quasiluxi, Alpaki & Haski).",
       "zielgruppe": "kind",
-      "icons": ["/api/v1/familie/foto/finn"]
-    },
-    {
-      "slug": "eltern-mia",
-      "typ": "mini-app",
-      "pfad": "/seiten/hoerspiel/mia/eltern",
-      "label": "Mias Hörspiel pflegen",
-      "synonyme": ["mia-einstellungen", "voice ändern mia", "tempo mia"],
-      "zeigt": "Hörspiel-Tuning für Mia (Voice, LLM, Tempo, Album-Galerie).",
-      "zielgruppe": "eltern",
-      "web_app": {
-        "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
-        "app_short_name": "hoerspiel",
-        "icons": ["/api/v1/familie/foto/mia"]
-      }
-    },
-    {
-      "slug": "eltern-finn",
-      "typ": "mini-app",
-      "pfad": "/seiten/hoerspiel/finn/eltern",
-      "label": "Finns Hörspiel pflegen",
-      "synonyme": ["finn-einstellungen", "voice ändern finn", "tempo finn"],
-      "zeigt": "Hörspiel-Tuning für Finn (Voice, LLM, Tempo, Album-Galerie).",
-      "zielgruppe": "eltern",
-      "web_app": {
-        "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
-        "app_short_name": "hoerspiel",
-        "icons": ["/api/v1/familie/foto/finn"]
-      }
+      "icons": ["arasaac/5915.png"]
     }
   ]
 }
