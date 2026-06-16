@@ -3,11 +3,13 @@
  *
  * HSP-33: Tab-Hash-Reader + hashchange-Listener. Zwei Tabs: Einstellungen / Folgen.
  * HSP-34: Reiter Einstellungen (5 Steuer-Elemente + Speichern + Toast).
- * HSP-35: Reiter Folgen (Album-Galerie + Inline-Player mit HTML5 audio,
- *          Wake-Lock, Auto-Play nächster Track, Resume-Stand).
+ * HSP-35: Reiter Folgen — aggregierte Liste über alle V1-kind_ids (mia+finn),
+ *          sortiert nach erstellt-am desc. Avatar (FAM-8) pro Eintrag.
+ *          Player öffnet folge.kind_id-Manifest, nicht URL-KIND_ID. (#973)
+ *          Wake-Lock, Auto-Play nächster Track, Resume-Stand.
  * MAD-5 (ratifiziert): kein direktes window.Telegram.WebApp.* — nur platform.* erlaubt.
  * MAD-7 (ratifiziert): Authorization: tma <initData>-Header bei jedem fetch().
- * T970 / HSP-26 / URL-3a: kind_id aus location.pathname → alle API-Pfade kind_id-tragend.
+ * T970 / HSP-26 / URL-3a: kind_id aus location.pathname → Settings-Tab kind_id-tragend.
  */
 
 /* global getPlatform */
@@ -15,10 +17,15 @@
 // ── KIND_ID aus URL (HSP-26, URL-3a, T970) ──────────────────────────────────
 // Pattern: /seiten/hoerspiel/<kind_id>/eltern → kind_id ist Segment 3 (0-basiert).
 // Fallback: 'mia' für Dev/Standalone (nie im Produktivbetrieb wirksam).
+// Settings-Tab (HSP-34) nutzt KIND_ID weiterhin für /config-Endpoint.
 const KIND_ID = (() => {
   const m = location.pathname.match(/^\/seiten\/hoerspiel\/([^/]+)\/eltern/);
   return m ? m[1] : 'mia';
 })();
+
+// ── KIND_IDS_V1: V1-Hardcode für Folgen-Tab-Aggregation (HSP-35, #973) ──────
+// FAM-7-Generalisierung (dynamisch aus Familie-Registry) ist Folge-Ticket.
+const KIND_IDS_V1 = ["mia", "finn"]; // V1-Hardcode, FAM-7-Generalisierung im Folge-Ticket
 
 // ── MAD-7 Auth-Header ────────────────────────────────────────────────────────
 // initData aus Telegram-WebApp — bei jedem fetch()-Call als Header gesendet.
@@ -127,26 +134,26 @@ async function _patchConfig(patch) {
   return resp;
 }
 
-async function _holeAlben() {
-  const resp = await fetch("/api/v1/hoerspiel/" + KIND_ID + "/alben", {
+async function _holeAlben(kindId) {
+  const resp = await fetch("/api/v1/hoerspiel/" + kindId + "/alben", {
     headers: _authHeader(),
   });
   if (!resp.ok) throw new Error("alben-Abruf fehlgeschlagen: " + resp.status);
   return resp.json();
 }
 
-async function _holeManifest(albumId) {
+async function _holeManifest(kindId, albumId) {
   const resp = await fetch(
-    "/api/v1/hoerspiel/" + KIND_ID + "/alben/" + encodeURIComponent(albumId) + "/manifest", {
+    "/api/v1/hoerspiel/" + kindId + "/alben/" + encodeURIComponent(albumId) + "/manifest", {
     headers: _authHeader(),
   });
   if (!resp.ok) throw new Error("manifest-Abruf fehlgeschlagen: " + resp.status);
   return resp.json();
 }
 
-async function _holeResume(albumId) {
+async function _holeResume(kindId, albumId) {
   const resp = await fetch(
-    "/api/v1/hoerspiel/" + KIND_ID + "/resume?album=" + encodeURIComponent(albumId), {
+    "/api/v1/hoerspiel/" + kindId + "/resume?album=" + encodeURIComponent(albumId), {
     headers: _authHeader(),
   });
   if (resp.status === 404) return null;
@@ -154,8 +161,8 @@ async function _holeResume(albumId) {
   return resp.json();
 }
 
-async function _setzeResume(albumId, trackPos) {
-  await fetch("/api/v1/hoerspiel/" + KIND_ID + "/resume", {
+async function _setzeResume(kindId, albumId, trackPos) {
+  await fetch("/api/v1/hoerspiel/" + kindId + "/resume", {
     method: "PUT",
     headers: { "Content-Type": "application/json", ..._authHeader() },
     body: JSON.stringify({ album: albumId, track: trackPos }),
@@ -388,7 +395,33 @@ async function _onSpeichern() {
   }
 }
 
-// ── Reiter Folgen (HSP-35) ────────────────────────────────────────────────────
+// ── Reiter Folgen (HSP-35, #973) ────────────────────────────────────────────
+// Aggregiert über alle V1-Kinder (KIND_IDS_V1). Jede Folge trägt ihre
+// eigene kind_id im JS-State; Player öffnet folge.kind_id-Manifest.
+
+/**
+ * Mergt und sortiert Alben-Arrays aller KIND_IDS_V1 nach erstellt-am desc.
+ * Jedes Album bekommt eine `kind_id`-Property für spätere API-Calls.
+ * @param {Array<{kindId: string, alben: Array}>} alleAlben
+ * @returns {Array} Gemergtes, sortiertes Array
+ */
+function _mergeUndSortiereAlben(alleAlben) {
+  const merged = [];
+  for (const { kindId, alben } of alleAlben) {
+    for (const album of alben) {
+      merged.push({ ...album, kind_id: kindId });
+    }
+  }
+  // Sortierung: erstellt-am desc (neueste zuerst), dann nummer desc als Fallback.
+  merged.sort((a, b) => {
+    const da = a["erstellt-am"] || "";
+    const db = b["erstellt-am"] || "";
+    if (da > db) return -1;
+    if (da < db) return 1;
+    return (b.nummer || 0) - (a.nummer || 0);
+  });
+  return merged;
+}
 
 async function _ladeAlbenListe() {
   const container = document.getElementById("panel-folgen");
@@ -396,13 +429,23 @@ async function _ladeAlbenListe() {
   const ladeHinweis = document.getElementById("folgen-ladehinweis");
   if (ladeHinweis) ladeHinweis.textContent = "Folgen werden geladen …";
 
+  // HSP-35 / #973: Promise.all-Fetches für alle V1-Kinder parallel.
+  let alleAlben;
   try {
-    _albenListe = await _holeAlben();
+    const ergebnisse = await Promise.all(
+      KIND_IDS_V1.map(async (kindId) => {
+        const alben = await _holeAlben(kindId);
+        return { kindId, alben };
+      })
+    );
+    alleAlben = ergebnisse;
   } catch (err) {
     if (ladeHinweis) ladeHinweis.textContent = "Folgen konnten nicht geladen werden.";
-    console.error("eltern.js: Alben Ladefehler", err);
+    console.error("eltern.js: Alben Ladefehler (Aggregation)", err);
     return;
   }
+
+  _albenListe = _mergeUndSortiereAlben(alleAlben);
 
   if (_albenListe.length === 0) {
     if (ladeHinweis) ladeHinweis.textContent = "Noch keine Folgen vorhanden.";
@@ -411,10 +454,10 @@ async function _ladeAlbenListe() {
 
   if (ladeHinweis) ladeHinweis.hidden = true;
 
-  // Resume-Stände für alle Alben laden (parallel).
+  // Resume-Stände für alle Alben laden (parallel, je folge.kind_id).
   const resumeMap = {};
   await Promise.all(_albenListe.map(async (album) => {
-    const r = await _holeResume(album.id).catch(() => null);
+    const r = await _holeResume(album.kind_id, album.id).catch(() => null);
     if (r) resumeMap[album.id] = r.track;
   }));
 
@@ -435,22 +478,34 @@ function _rendereAlbenListe(container, player, resumeMap) {
       ? '<span class="album-resume-badge">▶ ab Track ' + esc(String(resumeMap[album.id])) + '</span>'
       : "";
 
+    // HSP-35 / #973: Kind-Avatar (FAM-8) pro Eintrag — selber URL-Mechanismus
+    // wie Face-Pille in alben.html (HSP-3a, T911 Vorbild).
+    // album.kind_id ist durch _mergeUndSortiereAlben garantiert gesetzt.
+    const avatarHtml =
+      '<img class="album-kind-avatar" src="' +
+        esc("/api/v1/familie/foto/" + album.kind_id) +
+        '" alt="' + esc(album.kind_id) + '" loading="lazy" ' +
+        'onerror="this.style.display=\'none\'">';
+
     const kachelEl = document.createElement("div");
     kachelEl.className = "album-kachel";
     kachelEl.dataset.albumId = album.id;
+    kachelEl.dataset.kindId = album.kind_id;
     kachelEl.innerHTML =
       '<img class="album-cover" src="' +
-        esc("/api/v1/hoerspiel/" + KIND_ID + "/alben/" + encodeURIComponent(album.id) + "/audio/cover.jpg") +
+        esc("/api/v1/hoerspiel/" + album.kind_id + "/alben/" + encodeURIComponent(album.id) + "/audio/cover.jpg") +
         '" alt="" loading="lazy" ' +
         'onerror="this.style.display=\'none\'">' +
       '<div class="album-info">' +
         '<div class="album-titel">Folge ' + esc(String(album.nummer || "")) + ' · ' + esc(album.titel || "") + '</div>' +
         '<div class="album-meta">' + esc(album.voice || "") + ' · ' + esc(album["erstellt-am"] || "") + '</div>' +
       '</div>' +
+      avatarHtml +
       resumeHtml;
 
     kachelEl.addEventListener("click", () => {
-      _oeffneAlbum(album.id, resumeMap[album.id] || null);
+      // #973: Player öffnet folge.kind_id-Manifest, nicht URL-KIND_ID.
+      _oeffneAlbum(album.kind_id, album.id, resumeMap[album.id] || null);
     });
 
     if (insertTarget) {
@@ -463,17 +518,20 @@ function _rendereAlbenListe(container, player, resumeMap) {
   if (player) player.hidden = false;
 }
 
-async function _oeffneAlbum(albumId, resumeTrackPos) {
+async function _oeffneAlbum(kindId, albumId, resumeTrackPos) {
   // Aktive Kachel markieren.
   document.querySelectorAll(".album-kachel").forEach(k => {
-    k.classList.toggle("aktiv", k.dataset.albumId === albumId);
+    k.classList.toggle("aktiv", k.dataset.albumId === albumId && k.dataset.kindId === kindId);
   });
 
   // Audio stoppen.
   _stoppeAudio();
 
   try {
-    const manifest = await _holeManifest(albumId);
+    // #973: Manifest via folge.kind_id, nicht URL-KIND_ID.
+    const manifest = await _holeManifest(kindId, albumId);
+    // kind_id im Manifest-State sichern für Resume-Writes.
+    manifest._kind_id = kindId;
     _aktivesAlbum = manifest;
 
     // Start-Track: Resume-Position oder Track 0 (Intro).
@@ -613,8 +671,9 @@ function _ladeTrack(manifest, tracks, idx, autoplay = false) {
   });
 
   // Resume-Stand schreiben bei Track-Start (HSP-36).
+  // manifest._kind_id ist durch _oeffneAlbum garantiert gesetzt (#973).
   _audio.addEventListener("play", () => {
-    _setzeResume(manifest.id, track.position);
+    _setzeResume(manifest._kind_id || KIND_ID, manifest.id, track.position);
   });
 
   // UI aktualisieren.
@@ -752,5 +811,5 @@ function esc(str) {
 
 // ── Exports (für Tests) ──────────────────────────────────────────────────────
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { esc, _leseHashTab, zeigeToast, KIND_ID };
+  module.exports = { esc, _leseHashTab, zeigeToast, KIND_ID, KIND_IDS_V1, _mergeUndSortiereAlben };
 }
