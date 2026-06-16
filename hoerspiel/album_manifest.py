@@ -68,13 +68,13 @@ def manifest_to_dict(manifest: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_skeleton(*, album_id: str, nummer: int, titel: str, voice: str,
-                   erstellt_am: str, kind_id: str = "mia") -> dict[str, Any]:
+                   erstellt_am: str, kind_id: str) -> dict[str, Any]:
     """Baut die Manifest-Grundstruktur (HSP-5) ohne Inhalts-Tracks.
 
     Intro- und Outro-Track werden vorne und hinten angesetzt (HSP-8/HSP-9);
     `freigegeben` startet auf `True` (V1: nach Eltern-Freigabe immer true,
     HSP-5). `kind_id` wird für die URL-Generierung (HSP-26, URL-3a) benötigt.
-    Default `mia` für Rückwärtskompatibilität mit album_builder (V1).
+    Pflicht-Parameter (kein Default) — Aufrufer muss kind_id explizit setzen (#968, HSP-26).
     """
     if voice not in VOICES:
         raise ValueError("voice %r ist V1 nicht unterstützt (HSP-13)" % voice)
@@ -100,10 +100,10 @@ def build_skeleton(*, album_id: str, nummer: int, titel: str, voice: str,
 
 
 def add_inhalt_track(manifest: dict[str, Any], *, position: int,
-                     album_id: str, dauer_sek: int, kind_id: str = "mia") -> dict[str, Any]:
+                     album_id: str, dauer_sek: int, kind_id: str) -> dict[str, Any]:
     """Hängt einen `inhalt`-Track ans Manifest. Pfade folgen HSP-26.
 
-    Default `kind_id=mia` für Rückwärtskompatibilität mit album_builder (V1).
+    Pflicht-Parameter (kein Default) — Aufrufer muss kind_id explizit setzen (#968, HSP-26).
     """
     track_filename = "track-%02d.mp3" % position
     track = {
@@ -118,10 +118,10 @@ def add_inhalt_track(manifest: dict[str, Any], *, position: int,
     return track
 
 
-def add_outro_track(manifest: dict[str, Any], *, kind_id: str = "mia") -> dict[str, Any]:
+def add_outro_track(manifest: dict[str, Any], *, kind_id: str) -> dict[str, Any]:
     """Hängt den Outro-Track ans Manifest (HSP-9).
 
-    Default `kind_id=mia` für Rückwärtskompatibilität mit album_builder (V1).
+    Pflicht-Parameter (kein Default) — Aufrufer muss kind_id explizit setzen (#968, HSP-26).
     """
     voice = manifest["voice"]
     position = max((t.get("position", 0) for t in manifest["tracks"]
