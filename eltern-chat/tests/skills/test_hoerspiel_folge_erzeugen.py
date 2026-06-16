@@ -523,7 +523,7 @@ def test_HFE7_propose_sendet_quittungen_direkt():
     task = _make_task(tg=tg)
     ctx = _ctx()
     proposal = task.propose(
-        {"idee": "Stigi und der Regenwald"},
+        {"kind_id": "paula", "idee": "Stigi und der Regenwald"},
         ctx,
     )
     assert isinstance(proposal, Proposal)
@@ -567,7 +567,7 @@ def test_task_propose_liefert_proposal():
     """HFE-3/4: Task.propose() liefert Proposal mit strukturiertem Summary."""
     task = _make_task()
     ctx = _ctx()
-    proposal = task.propose({"idee": "Stigi und der Drachenturm"}, ctx)
+    proposal = task.propose({"kind_id": "paula", "idee": "Stigi und der Drachenturm"}, ctx)
     assert isinstance(proposal, Proposal)
     assert len(proposal.summary) > 10
 
@@ -577,7 +577,7 @@ def test_task_propose_berechtigung_fehler():
     task = _make_task(is_member_fn=_kein_mitglied)
     ctx = _ctx(from_user_id=99)
     with pytest.raises(BerechtigungError):
-        task.propose({"idee": "Stigi auf dem Mond"}, ctx)
+        task.propose({"kind_id": "paula", "idee": "Stigi auf dem Mond"}, ctx)
 
 
 # ============================================================
@@ -592,7 +592,7 @@ def test_task_execute_ruft_album_und_sendet():
     task = _make_task(hoerspiel_client=client, tg=tg)
     ctx = _ctx(chat_id=55)
     # Erst propose aufrufen um Session-State zu befüllen
-    task.propose({"idee": "Stigi und der Drachenturm"}, ctx)
+    task.propose({"kind_id": "paula", "idee": "Stigi und der Drachenturm"}, ctx)
     task.execute({}, ctx)
     assert len(client.album_calls) == 1
     assert tg.sent[0]["chat_id"] == 55
@@ -619,11 +619,11 @@ def test_task_propose_execute_end_to_end_session_state():
     task = _make_task(hoerspiel_client=client, tg=tg)
     ctx = _ctx(chat_id=77, from_user_id=7)
 
-    proposal = task.propose({"idee": "Stigi und der Schneesturm"}, ctx)
+    proposal = task.propose({"kind_id": "paula", "idee": "Stigi und der Schneesturm"}, ctx)
     assert isinstance(proposal, Proposal)
 
     # execute() ohne titel/text im arguments-Dict — Session-State trägt sie.
-    task.execute({"idee": "Stigi und der Schneesturm"}, ctx)
+    task.execute({"kind_id": "paula", "idee": "Stigi und der Schneesturm"}, ctx)
 
     assert len(client.album_calls) == 1
     call = client.album_calls[0]
@@ -876,7 +876,7 @@ def test_HFE10_settings_beifang_nur_in_erster_antwort():
 
     # Erster Aufruf: leere Idee → Sub-Case 1 → ValueError + Beifang-Button
     with pytest.raises(ValueError, match=r"Worum|gehen|Paula|Abenteuer"):
-        task.propose({"idee": ""}, ctx)
+        task.propose({"kind_id": "paula", "idee": ""}, ctx)
 
     keyboards_nach_erstem = len(tg.keyboards)
     assert keyboards_nach_erstem == 1, (
@@ -892,7 +892,7 @@ def test_HFE10_settings_beifang_nur_in_erster_antwort():
 
     # Zweiter Aufruf: gleicher Turn, leere Idee → Sub-Case 1 → KEIN neuer Button
     with pytest.raises(ValueError, match=r"Worum|gehen|Paula|Abenteuer"):
-        task.propose({"idee": ""}, ctx)
+        task.propose({"kind_id": "paula", "idee": ""}, ctx)
 
     assert len(tg.keyboards) == keyboards_nach_erstem, (
         "HFE-10: Folge-Antwort darf keinen weiteren Beifang-Button senden")
@@ -913,7 +913,7 @@ def test_HFE10_kein_beifang_bei_leerer_mini_app_url():
     ctx = _ctx(chat_id=42, from_user_id=7)
 
     with pytest.raises(ValueError, match=r"Worum|gehen|Paula|Abenteuer") as exc_info:
-        task.propose({"idee": ""}, ctx)
+        task.propose({"kind_id": "paula", "idee": ""}, ctx)
 
     # Keine Inline-Keyboard-Nachrichten
     assert tg.keyboards == [], (
@@ -996,9 +996,90 @@ def test_task_mini_map_kind_id_paula_nutzt_paula_client():
     task._client_by_kind_id["paula"] = paula_client
 
     ctx = _ctx(chat_id=42, from_user_id=7)
-    proposal = task.propose({"idee": "Stigi findet Gold"}, ctx)
+    proposal = task.propose({"kind_id": "paula", "idee": "Stigi findet Gold"}, ctx)
 
     assert isinstance(proposal, Proposal), "propose() muss Proposal zurückgeben"
     # Transport wurde aufgerufen (Paula-Client genutzt, nicht basis_client)
     assert any("folgen-vorschlag" in p for _, p in aufgerufen), (
         "Mini-Map: Paula-Client muss für propose() genutzt worden sein")
+
+
+# ============================================================
+#  T954 — kind_id aus Tool-Call-arguments (kein 'paula'-Hardcode mehr)
+# ============================================================
+
+
+def test_task_uses_kind_id_from_arguments():
+    """T954 / E-HFE-6 / HFE-3: Task.propose() liest kind_id aus arguments und
+    wählt den passenden Client aus der Mini-Map (entry_path_probe).
+
+    Mock-Aufruf mit arguments = {"kind_id": "neko", "idee": "..."} →
+    prüft, dass der Neko-Client verwendet wird (nicht der Paula-Client).
+    """
+    neko_client = FakeHoerspielClient(kind_id="neko")
+    paula_client = FakeHoerspielClient(kind_id="paula")
+    tg = FakeTelegram()
+
+    task = _make_task(hoerspiel_client=paula_client, tg=tg)
+    # Mini-Map manuell bestücken mit kontrollierten Clients
+    task._client_by_kind_id["paula"] = paula_client
+    task._client_by_kind_id["neko"] = neko_client
+
+    ctx = _ctx(chat_id=42, from_user_id=7)
+    proposal = task.propose({"kind_id": "neko", "idee": "Neko findet ein Abenteuer"}, ctx)
+
+    assert isinstance(proposal, Proposal), "propose() muss Proposal zurückgeben"
+    # Neko-Client wurde aufgerufen, nicht Paula-Client
+    assert len(neko_client.vorschlag_calls) == 1, (
+        "T954: Neko-Client muss via kind_id='neko' aus arguments gewählt worden sein")
+    assert neko_client.vorschlag_calls[0] == "Neko findet ein Abenteuer"
+    assert paula_client.vorschlag_calls == [], (
+        "T954: Paula-Client darf bei kind_id='neko' nicht aufgerufen werden")
+    # kind_id des genutzten Clients muss 'neko' sein
+    assert neko_client._kind_id == "neko"
+
+
+def test_task_unbekannte_kind_id_wirft_fehler():
+    """T954 / HFE-9 / AC-2 / Watchdog-Fix Pfad A: arguments mit unbekannter
+    kind_id ('fremdkind') → ValueError mit Hinweis auf erlaubte Werte.
+    Kein stiller Fallback auf 'paula' mehr (HFE-9 Pflicht-Argument ohne Default).
+    """
+    paula_client = FakeHoerspielClient(kind_id="paula")
+    tg = FakeTelegram()
+
+    task = _make_task(hoerspiel_client=paula_client, tg=tg)
+    task._client_by_kind_id["paula"] = paula_client
+    # 'fremdkind' ist nicht in _client_by_kind_id
+
+    ctx = _ctx(chat_id=42, from_user_id=7)
+    with pytest.raises(ValueError, match=r"fremdkind|Erlaubt|Unbekannte"):
+        task.propose(
+            {"kind_id": "fremdkind", "idee": "Ein Abenteuer für ein unbekanntes Kind"},
+            ctx,
+        )
+    # Kein Buddy-Aufruf bei unbekannter kind_id
+    assert paula_client.vorschlag_calls == [], (
+        "T954: kein Buddy-Aufruf bei unbekannter kind_id")
+
+
+def test_task_kind_id_fehlend_wirft_fehler():
+    """T954 / HFE-9 / AC-2 / Watchdog-Fix Pfad A: arguments ohne kind_id-Feld →
+    ValueError (HFE-9 Pflicht-Argument ohne Default).
+    Kein stiller Fallback auf 'paula' mehr — agent.py fängt als is_error=True.
+
+    test_task_kind_id_fehlend_wirft_fehler: deckt AC-2 ab.
+    """
+    paula_client = FakeHoerspielClient(kind_id="paula")
+    tg = FakeTelegram()
+
+    task = _make_task(hoerspiel_client=paula_client, tg=tg)
+    task._client_by_kind_id["paula"] = paula_client
+
+    ctx = _ctx(chat_id=42, from_user_id=7)
+    # Kein kind_id-Feld in arguments → Pflicht-Fehler
+    with pytest.raises(ValueError, match=r"kind_id|Pflicht"):
+        task.propose({"idee": "Stigi im Herbstwald"}, ctx)
+
+    # Kein Buddy-Aufruf ohne kind_id
+    assert paula_client.vorschlag_calls == [], (
+        "T954: kein Buddy-Aufruf bei fehlendem kind_id")

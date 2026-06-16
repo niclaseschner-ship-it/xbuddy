@@ -1,4 +1,10 @@
-"""Smoke-Test: cfg.kibuddy_origin_url → build_catalog → KAQS im Katalog.
+"""Smoke-Tests: Verdrahtung von Origins durch build_catalog.
+
+T954 / RAT-17 / #910 (Neko-Origin): build_catalog reicht
+hoerspiel_url_origin_neko an HoerspielFolgeErzeugenTask durch — Mini-Map
+_client_by_kind_id["neko"] bekommt echten Neko-Client (AC-1).
+
+
 
 Watchdog-Runde-2-Befund (T825-FIX2): main.py reichte kibuddy_origin_url nicht
 an build_catalog weiter — AND-Guard in tasks.py:851 schaltete KAQS im
@@ -85,4 +91,57 @@ def test_kaqs_cfg_default_url_is_not_empty():
     assert "5054" in default_url, (
         "DEFAULTS['kibuddy_origin_url'] enthält nicht Port 5054 (KIBUDDY-25). "
         "Ist: %r" % default_url
+    )
+
+
+# ---------------------------------------------------------------------------
+# T954 / RAT-17 / #910 — Neko-Origin-Verdrahtung (entry_path_probe)
+# ---------------------------------------------------------------------------
+
+_HFE_PAULA_ORIGIN = "http://127.0.0.1:5053"
+_HFE_NEKO_ORIGIN = "http://127.0.0.1:5055"
+
+
+def test_build_catalog_durchgereicht_neko_origin():
+    """T954 / AC-1 / RAT-17 / #910 / entry_path_probe: build_catalog reicht
+    hoerspiel_url_origin_neko an HoerspielFolgeErzeugenTask durch —
+    task._client_by_kind_id["neko"]._origin zeigt auf den Neko-Default
+    (http://127.0.0.1:5055), NICHT auf Paula-Origin oder leer.
+
+    Verriegelt Watchdog-Befund #1: Neko-Origin wurde vor T954-Fix nicht
+    an HoerspielFolgeErzeugenTask weitergereicht — stiller Paula-Fallback.
+
+    entry_path_probe_result: probed.
+    """
+    from fakes import FakeTelegram
+    tg = FakeTelegram()
+    catalog = build_catalog(
+        tg, "/instanz/rootCA.pem",
+        hoerspiel_url_origin=_HFE_PAULA_ORIGIN,
+        hoerspiel_url_origin_neko=_HFE_NEKO_ORIGIN,
+        family_group_chat_id_getter=lambda: "-100",
+    )
+    task = catalog._tasks.get("hoerspiel_folge_erzeugen")
+    assert task is not None, (
+        "HoerspielFolgeErzeugenTask fehlt im Catalog — AND-Guard greift "
+        "nicht, obwohl hoerspiel_url_origin und family_group_chat_id_getter "
+        "gesetzt sind.")
+
+    neko_client = task._client_by_kind_id.get("neko")
+    assert neko_client is not None, (
+        "task._client_by_kind_id['neko'] ist None — Neko-Client fehlt.")
+    neko_origin = getattr(neko_client, "_origin", None)
+    assert neko_origin == _HFE_NEKO_ORIGIN, (
+        "Neko-Client._origin zeigt nicht auf Neko-Default "
+        "http://127.0.0.1:5055 — Verdrahtung defekt (T954-Watchdog-AC-1). "
+        "Ist: %r" % neko_origin
+    )
+
+    # Sanity: Paula-Client muss ebenfalls korrekt verdrahtet sein.
+    paula_client = task._client_by_kind_id.get("paula")
+    assert paula_client is not None, "task._client_by_kind_id['paula'] fehlt."
+    paula_origin = getattr(paula_client, "_origin", None)
+    assert paula_origin == _HFE_PAULA_ORIGIN, (
+        "Paula-Client._origin zeigt nicht auf Paula-Default "
+        "http://127.0.0.1:5053. Ist: %r" % paula_origin
     )
