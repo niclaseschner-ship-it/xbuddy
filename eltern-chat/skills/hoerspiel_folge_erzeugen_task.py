@@ -182,13 +182,18 @@ class HoerspielFolgeErzeugenTask(WriteTask):
         from_user_id = getattr(turn_context, "from_user_id", None)
         chat_id = turn_context.chat_id
 
-        # E-HFE-6 / RAT-17 / #910: kind_id aus Tool-Call-arguments lesen (HFE-3).
-        # Fallback "mia" für Backward-Compat (fehlender Parameter).
-        kind_id = args.get("kind_id", "mia")  # Fallback mia für Backward-Compat
+        # E-HFE-6 / RAT-17 / #910 / T954: kind_id ist Pflicht-Argument (HFE-9).
+        # Kein stiller Default mehr — fehlende oder unbekannte kind_id wirft
+        # ValueError → agent.py fängt als is_error=True-Tool-Result (AC-2,
+        # Watchdog-Fix Pfad A). EC-10-Gate feuert NICHT.
+        if "kind_id" not in args:
+            raise ValueError(
+                "Tool-Call ohne kind_id — HFE-9 verlangt Pflicht-Argument.")
+        kind_id = args["kind_id"]
         if kind_id not in self._client_by_kind_id:
-            # LLM hat einen unbekannten Wert geliefert — Hartfall auf mia
-            logger.warning("Hörspiel-Task: unbekannte kind_id %r, falle auf mia", kind_id)
-            kind_id = "mia"
+            erlaubt = ", ".join(sorted(self._client_by_kind_id))
+            raise ValueError(
+                f"Unbekannte kind_id {kind_id!r}. Erlaubt: {erlaubt}.")
         active_client = self._client_by_kind_id[kind_id]
 
         # HFE-10: "erste propose()-Antwort des Turns" bestimmen.
