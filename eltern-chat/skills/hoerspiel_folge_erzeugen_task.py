@@ -236,6 +236,7 @@ class HoerspielFolgeErzeugenTask(WriteTask):
             "text": text,
             "voice": voice,
             "idee": idee,
+            "kind_id": kind_id,   # HFE-3/E-HFE-6: für execute()-Client-Lookup
         }
         # HFE-10: Sub-Case 3 war erfolgreich — next propose() ist ein neuer
         # Turn (nach EC-10-Confirm). Flag zurücksetzen damit Beifang erneut erscheint.
@@ -269,8 +270,13 @@ class HoerspielFolgeErzeugenTask(WriteTask):
                     "bitte erneut starten.")
             return "Vorschlag verloren — erneut starten."
 
+        # E-HFE-6 / HFE-3: kind_id aus dem pending-Dict → passenden Client wählen
+        # (analog propose()). Verhindert den Mia-Default-Bug (T962-Befund).
+        kind_id = pending["kind_id"]
+        active_client = self._client_by_kind_id.get(kind_id, self._hoerspiel_client)
+
         hfe_mod.execute(
-            hoerspiel_client=self._hoerspiel_client,
+            hoerspiel_client=active_client,
             tg=self._tg,
             chat_id=chat_id,
             display_url_origin=self._display_url_origin,

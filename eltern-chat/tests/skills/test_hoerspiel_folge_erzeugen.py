@@ -1083,3 +1083,53 @@ def test_task_kind_id_fehlend_wirft_fehler():
     # Kein Buddy-Aufruf ohne kind_id
     assert mia_client.vorschlag_calls == [], (
         "T954: kein Buddy-Aufruf bei fehlendem kind_id")
+
+
+# ============================================================
+#  T962 — execute() kind_id aus pending (T954-Folge-Bug)
+# ============================================================
+
+
+def test_execute_uses_kind_id_finn_from_pending():
+    """T962 / HFE-3 / E-HFE-6 / HFE-5: execute() liest kind_id aus dem
+    pending-Dict und wählt den Finn-Client, NICHT den Mia-Default.
+
+    Szenario: propose(kind_id=finn) → pending trägt kind_id=finn →
+    execute() → hfe_mod.execute aufgerufen mit Finn-Client.
+
+    Deckt den Live-Bug vom 2026-06-16 15:44 ab: Mia-Instanz (Port 5053)
+    wurde beim Finn-Album-Bau aufgerufen statt Finn (Port 5055).
+
+    entry_path_probe_result: probed.
+    """
+    finn_client = FakeHoerspielClient(
+        kind_id="finn",
+        album_response={"album-id": "finn-alb-1"},
+    )
+    mia_client = FakeHoerspielClient(
+        kind_id="mia",
+        album_response={"album-id": "mia-alb-1"},
+    )
+    tg = FakeTelegram()
+
+    task = _make_task(hoerspiel_client=mia_client, tg=tg)
+    task._client_by_kind_id["mia"] = mia_client
+    task._client_by_kind_id["finn"] = finn_client
+
+    ctx = _ctx(chat_id=88, from_user_id=7)
+
+    # propose() mit kind_id=finn → pending trägt kind_id=finn
+    proposal = task.propose({"kind_id": "finn", "idee": "Finn und das Wettrennen"}, ctx)
+    assert isinstance(proposal, Proposal)
+    assert "kind_id" in task._pending_vorschlaege.get(88, {}), (
+        "T962 AC-1: pending-Dict muss kind_id enthalten")
+    assert task._pending_vorschlaege[88]["kind_id"] == "finn", (
+        "T962 AC-1: pending kind_id muss 'finn' sein")
+
+    # execute() → Finn-Client muss album_bauen() aufgerufen haben
+    task.execute({}, ctx)
+
+    assert len(finn_client.album_calls) == 1, (
+        "T962 AC-2: execute() muss Finn-Client für album_bauen wählen")
+    assert mia_client.album_calls == [], (
+        "T962 AC-2: Mia-Client darf bei kind_id='finn' NICHT aufgerufen werden")
