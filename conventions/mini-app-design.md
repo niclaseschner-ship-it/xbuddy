@@ -177,14 +177,21 @@ Statische Mini-App-Assets liegen im seiten-Service:
 
 ---
 
-### MAD-7 — Authentifizierung: `Authorization: tma <initData>`-Header verbindlich
+### MAD-7 — Authentifizierung: `Authorization: tma <initData>`-Header (im Auslaufen seit 2026-06-16)
+
+> **Status:** Im Auslaufen seit 2026-06-16. Cookie-Auth (`xbuddy_session`)
+> aus `specs/platform/auth.md` AUTH-2 ist neuer Standard; `tma`-Header bleibt
+> **additiv akzeptiert** (Mini-Apps brechen nicht), wird aber pro Power-Flow-
+> Migration zurückgebaut. Endgültige Ablösung in Phase 6 (RAT-18,
+> AUTH-6 leer). [Quelle: ENTSCHEID 2026-06-16-1123 Paket-Sektion
+> „Nic-Verdikte 2026-06-16" → übergeordnete Setzung „MAD-7 obsolet"]
 
 **Telegram fügt `initData` NICHT automatisch in die URL ein** — sie steht nur
 als `window.Telegram.WebApp.initData` (JS-Property) bereit. Server-Routes
 dürfen `initData` NICHT als Query-Param vom HTML-Render-Pfad erwarten.
 
-**Bindender Default für jede neue Mini-App** (ratifiziert 2026-06-15 mit dem
-2. Konsumenten):
+**Übergangs-Default für bestehende Mini-Apps** (ratifiziert 2026-06-15 mit dem
+2. Konsumenten, im Auslaufen seit RAT-18 2026-06-16):
 
 - JS liest `window.Telegram.WebApp.initData` aus der Telegram-Property.
 - JS sendet bei **jedem** API-Call den Header `Authorization: tma <initData>`.
