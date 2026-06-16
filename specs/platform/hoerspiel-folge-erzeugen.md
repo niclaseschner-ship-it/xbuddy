@@ -326,24 +326,30 @@ wird durch einen kontrollierten Doppelten ersetzt):
 - HFE-2 (Berechtigung: `BerechtigungError` aus `_errors.py` für
   nicht-Eltern-User; kein Buddy-Aufruf erfolgt)
 - HFE-3 (leere Idee + Themen-Liste verfügbar, Mock-Buddy gibt 200 mit
-  8 Themen für Alter 4 → Tool-Result-Text trägt die Themen + EC-22-
-  Rückfrage; **kein** Vorschlag-Endpoint-Aufruf)
-- HFE-3 (leere Idee + Alter ohne Themen-Liste, Mock-Buddy gibt 404 →
-  Tool-Result-Text trägt **nur** die EC-22-Rückfrage, keine Themen-
+  8 Themen → Tool-Result-Text trägt die Themen + EC-22-Rückfrage mit
+  Kindname; **kein** Vorschlag-Endpoint-Aufruf; `GET /<kind_id>/themen`
+  ohne `?alter=`-Query — RAT-17)
+- HFE-3 (leere Idee + **kind_id unbekannt**, Mock-Buddy gibt **404** →
+  Fehler-Tool-Result-Text: „Für <kind_id> gibt es keinen Hörspiel-Buddy";
+  kein Vorschlag-Endpoint-Aufruf)
+- HFE-3 (leere Idee + Alter nicht gepflegt, Mock-Buddy gibt **422** →
+  Tool-Result-Text trägt **nur** die EC-22-Rückfrage ohne Themen-
   Aufzählung; kein Vorschlag-Endpoint-Aufruf)
 - HFE-3 (konkrete-aber-unvollständige Idee → Tool-Result-Text mit
   `{"diskussion": true, "idee_bisher": "<text>"}`-Pattern; **kein**
   Vorschlag-Endpoint-Aufruf)
 - HFE-3 (konkrete vollständige Idee nach Diskussion → Standard-Pfad zum
-  Vorschlag-Endpoint mit einem `POST /folgen-vorschlag`)
+  Vorschlag-Endpoint mit einem `POST /<kind_id>/folgen-vorschlag`)
 - HFE-3 (HTTP 503 / 5xx vom Vorschlag-Endpoint → Tool-Result trägt
   Klartext-Hinweis, **kein** Vorschlag-Block, EC-10-Gate löst nicht aus)
+- E-HFE-6 / #910 (`propose()` ohne `kind_id` → `TypeError`; `kind_id`
+  ist Pflicht-Argument ohne Default)
 - HFE-4 (Tool-Result-Text trägt Titel + Vorschau-Text + Bestätigungs-
   Block mit Voice; Intro/Outro nicht im Vorschau-Text)
 - HFE-4 (Voice-Default: kein Voice-Hinweis im Aufrufer-Text → Skill
-  liest `GET /config` und setzt Default; Voice im Aufrufer-Text →
+  liest `GET /<kind_id>/config` und setzt Default; Voice im Aufrufer-Text →
   diese Voice gesetzt)
-- HFE-5 (Confirm → `execute()` ruft `POST /alben` mit den vier
+- HFE-5 (Confirm → `execute()` ruft `POST /<kind_id>/alben` mit den vier
   Vorschlag-Feldern; erfolgreicher Build → Erfolgs-Bubble mit Display-URL;
   HTTP 412 → Shared-Asset-Hinweis ohne erneuten Build-Versuch; HTTP 503
   / 5xx → Fehler-Bubble ohne Build-Versuch)

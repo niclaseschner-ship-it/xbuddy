@@ -1,14 +1,16 @@
 """Tests für hoerspiel_folge_erzeugen + HoerspielFolgeErzeugenTask —
-HFE-1 … HFE-10 (specs/platform/hoerspiel-folge-erzeugen.md).
+HFE-1 … HFE-10, E-HFE-6 (specs/platform/hoerspiel-folge-erzeugen.md).
 
-Abgedeckte ACs (HFE-9-Mindest-Abdeckung):
+Abgedeckte ACs (HFE-9-Mindest-Abdeckung + #910-Pflicht-ACs):
   HFE-2  — BerechtigungError für Nicht-Eltern, kein Buddy-Aufruf
   HFE-3  — leere/mehrdeutige Idee → ValueError (EC-22-Rückfrage), kein Buddy-Aufruf
   HFE-3  — leere Idee + Themen verfügbar → Rückfrage mit Themen-Liste (Sub-Case 1)
-  HFE-3  — leere Idee + 404 vom Themen-Endpoint → nur EC-22-Rückfrage ohne Themen
+  HFE-3  — leere Idee + 404 vom Themen-Endpoint → Fehler-Tool-Result-Text
+  HFE-3  — leere Idee + 422 vom Themen-Endpoint → EC-22-Rückfrage ohne Themen
   HFE-3  — konkrete-aber-unvollständige Idee → Diskussions-Marker (Sub-Case 2)
   HFE-3  — Eltern-Signal nach Diskussion → Standard-Pfad zum Vorschlag-Endpoint
   HFE-3  — gefüllte Idee → POST /folgen-vorschlag mit Idee im Body
+  HFE-3  — HTTP 404 vom Vorschlag-Endpoint → Fehler-Tool-Result-Text (kein Vorschlag)
   HFE-3  — HTTP 503 / 5xx vom Vorschlag-Endpoint → HoerspielClientError,
             kein Vorschlag-Block
   HFE-4  — Tool-Result-Text trägt Titel + Vorschau-Text + Bestätigungs-Block
@@ -20,6 +22,8 @@ Abgedeckte ACs (HFE-9-Mindest-Abdeckung):
   HFE-5  — HTTP 412 → Shared-Asset-Hinweis ohne erneuten Build-Versuch
   HFE-5  — HTTP 503/5xx → Fehler-Bubble ohne Build-Versuch
   HFE-7  — kein tg.send_* in propose() (Routing-Test)
+  E-HFE-6 / #910 — kind_id Pflicht-Argument in propose(); PAULA_ALTER entfernt
+  E-HFE-6 / #910 — themen_lesen(kind_id) ruft GET /<kind_id>/themen; Response-Schema prüfen
   HFE-10 — Settings-Beifang-Button in erster propose()-Antwort (Sub-Case 1/2/3)
   HFE-10 — Beifang NICHT in Folge-Antworten (is_first_propose=False)
   HFE-10 — Bei leerer mini_app_base_url kein Beifang-Button, keine Fehler
@@ -41,7 +45,19 @@ from tasks import Proposal, TurnContext, WriteTask
 
 
 class FakeHoerspielClient:
-    """Kontrollierter Doppelter des HoerspielClient (CLIENT-1)."""
+    """Kontrollierter Doppelter des HoerspielClient (CLIENT-1).
+
+    themen_response semantics (neu #910, HSP-38, RAT-17):
+      None (default)  → HoerspielClientError(status=422) simulieren
+                        (Alter nicht gepflegt — EC-22-Rückfrage ohne Themen)
+      list[str]       → 200 mit {"kind_id", "name", "alter", "themen"} — Themen-Liste
+      "404"           → HoerspielClientError(status=404) simulieren (kind_id unbekannt)
+
+    Hinweis: das alte themen_response=None = "leere Liste (wie 404)"-Verhalten
+    ist auf 422 umgestellt, da themen_lesen() jetzt bei 404 explizit eine
+    Exception wirft (statt leere Liste). Der 422-Pfad entspricht dem alten
+    "Alter nicht gepflegt"-Verhalten.
+    """
 
     def __init__(self, *,
                  vorschlag_response=None,
@@ -51,11 +67,14 @@ class FakeHoerspielClient:
                  config_response=None,
                  config_error=None,
                  themen_response=None,
-                 themen_error=None):
-        self.vorschlag_calls = []   # [(idee,)]
+                 themen_error=None,
+                 kind_id: str = "paula",
+                 kind_name: str = "Paula",
+                 kind_alter: int = 4):
+        self.vorschlag_calls = []   # [idee_str]
         self.album_calls = []       # [{"titel", "text", "voice", "idee"}]
         self.config_calls = 0
-        self.themen_calls = []      # [alter]
+        self.themen_calls = []      # [kind_id_str]
 
         self._vorschlag_response = vorschlag_response or {
             "titel": "Der Schneesturm",
@@ -67,10 +86,14 @@ class FakeHoerspielClient:
         self._album_error = album_error
         self._config_response = config_response or {"default_voice": "shimmer"}
         self._config_error = config_error
-        # themen_response=None bedeutet: 404 (leere Liste)
-        # themen_response=[...] bedeutet: 200 mit Themen
-        self._themen_response = themen_response   # None → leere Liste (wie 404)
+        # themen_response: None → 422 (Alter nicht gepflegt, Sub-Case 1 ohne Themen)
+        #                  list  → 200 mit {kind_id, name, alter, themen}
+        #                  "404" → 404 (kind_id unbekannt)
+        self._themen_response = themen_response
         self._themen_error = themen_error
+        self._kind_id = kind_id
+        self._kind_name = kind_name
+        self._kind_alter = kind_alter
 
     def folgen_vorschlag(self, idee: str) -> dict:
         self.vorschlag_calls.append(idee)
@@ -92,11 +115,28 @@ class FakeHoerspielClient:
             raise self._config_error
         return dict(self._config_response)
 
-    def themen_lesen(self, alter: int) -> list:
-        self.themen_calls.append(alter)
+    def themen_lesen(self) -> dict:
+        """Neu #910 (HSP-38, RAT-17): kein kind_id-Argument mehr (Sister-Pattern).
+        Client-Instanz kennt kind_id aus self._kind_id."""
+        self.themen_calls.append(self._kind_id)
         if self._themen_error is not None:
             raise self._themen_error
-        return list(self._themen_response) if self._themen_response is not None else []
+        if self._themen_response == "404":
+            raise HoerspielClientError(
+                "Hörspiel-Buddy: GET /api/v1/hoerspiel/%s/themen → 404" % self._kind_id,
+                status=404)
+        if self._themen_response is None:
+            # 422 (Alter nicht gepflegt) → nur EC-22-Rückfrage ohne Themen
+            raise HoerspielClientError(
+                "Hörspiel-Buddy: GET /api/v1/hoerspiel/%s/themen → 422" % self._kind_id,
+                status=422)
+        # 200 mit vollständigem Response-Dict (HSP-38)
+        return {
+            "kind_id": self._kind_id,
+            "name": self._kind_name,
+            "alter": self._kind_alter,
+            "themen": list(self._themen_response),
+        }
 
 
 class FakeTelegram:
@@ -153,6 +193,7 @@ def test_HFE2_berechtigung_wirft_fehler_kein_buddy():
             is_member_fn=_kein_mitglied,
             from_user_id=99,
             idee="Stigi findet einen geheimen Tunnel",
+            kind_id="paula",
         )
     assert client.vorschlag_calls == [], "kein Buddy-Aufruf bei Nicht-Mitglied"
 
@@ -166,6 +207,7 @@ def test_HFE2_none_user_id_wirft_berechtigung_fehler():
             is_member_fn=_immer_mitglied,
             from_user_id=None,
             idee="Eine tolle Idee",
+            kind_id="paula",
         )
     assert client.vorschlag_calls == []
 
@@ -176,27 +218,30 @@ def test_HFE2_none_user_id_wirft_berechtigung_fehler():
 
 
 def test_HFE3_leere_idee_raises_value_error():
-    """HFE-3: leere Idee → ValueError (EC-22-Rückfrage), kein Buddy-Aufruf."""
-    client = FakeHoerspielClient()
+    """HFE-3: leere Idee + 422 vom Themen-Endpoint → ValueError (EC-22-Rückfrage), kein Buddy-Aufruf."""
+    # themen_response=None → FakeClient gibt 422 zurück → EC-22-Rückfrage ohne Themen
+    client = FakeHoerspielClient(themen_response=None)
     with pytest.raises(ValueError, match=r"Worum|Idee|Beschreib"):
         propose(
             hoerspiel_client=client,
             is_member_fn=_immer_mitglied,
             from_user_id=7,
             idee="",
+            kind_id="paula",
         )
     assert client.vorschlag_calls == []
 
 
 def test_HFE3_kurze_idee_raises_value_error():
     """HFE-3: Idee unter Mindest-Zeichen → ValueError, kein Buddy-Aufruf."""
-    client = FakeHoerspielClient()
+    client = FakeHoerspielClient(themen_response=None)
     with pytest.raises(ValueError, match=r"Worum|Idee|Beschreib"):
         propose(
             hoerspiel_client=client,
             is_member_fn=_immer_mitglied,
             from_user_id=7,
             idee="Hi",
+            kind_id="paula",
         )
     assert client.vorschlag_calls == []
 
@@ -210,6 +255,7 @@ def test_HFE3_gefuellte_idee_ruft_post_vorschlag():
         is_member_fn=_immer_mitglied,
         from_user_id=7,
         idee=idee,
+        kind_id="paula",
     )
     assert len(client.vorschlag_calls) == 1
     assert client.vorschlag_calls[0] == idee
@@ -225,6 +271,7 @@ def test_HFE3_http_503_wirft_client_error():
             is_member_fn=_immer_mitglied,
             from_user_id=7,
             idee="Stigi und der Schneesturm",
+            kind_id="paula",
         )
     assert exc_info.value.status == 503
 
@@ -239,7 +286,26 @@ def test_HFE3_http_5xx_wirft_client_error():
             is_member_fn=_immer_mitglied,
             from_user_id=7,
             idee="Stigi und das Mondlicht",
+            kind_id="paula",
         )
+
+
+def test_HFE3_http_404_vom_vorschlag_endpoint_fehler_text():
+    """HFE-3 / E-HFE-6 / #910: HTTP 404 vom Vorschlag-Endpoint (kind_id unbekannt)
+    → Fehler-Tool-Result-Text als ValueError, KEIN HoerspielClientError.
+    Kein Vorschlag-Block (kein folgen_vorschlag-Aufruf ohne 404)."""
+    error_404 = HoerspielClientError("404", status=404)
+    client = FakeHoerspielClient(vorschlag_error=error_404)
+    with pytest.raises(ValueError, match=r"neko|Hörspiel-Buddy|keinen"):
+        propose(
+            hoerspiel_client=client,
+            is_member_fn=_immer_mitglied,
+            from_user_id=7,
+            idee="Neko und das Abenteuer",
+            kind_id="neko",  # → 404 vom Buddy (unbekannte Instanz)
+        )
+    # vorschlag_calls hat 1 Eintrag (404 kommt vom Aufruf selbst)
+    assert len(client.vorschlag_calls) == 1
 
 
 # ============================================================
@@ -263,6 +329,7 @@ def test_HFE4_propose_happy_path_struktur():
         is_member_fn=_immer_mitglied,
         from_user_id=7,
         idee="Stigi und der Schneesturm",
+        kind_id="paula",
     )
     assert "Der Schneesturm" in result
     assert "Stigi entdeckt eine verschneite Höhle." in result
@@ -287,6 +354,7 @@ def test_HFE4_intro_outro_nicht_in_vorschau():
         is_member_fn=_immer_mitglied,
         from_user_id=7,
         idee="Ein ganz geheimes Abenteuer",
+        kind_id="paula",
     )
     # Der Skill selbst fügt kein Intro/Outro-Markup hinzu (HSP-8 — geteilt).
     # Der Buddy-Text enthält hier bewusst kein "intro"/"outro", sodass der
@@ -307,6 +375,7 @@ def test_HFE4_voice_default_aus_config_wenn_kein_hint():
         from_user_id=7,
         idee="Stigi im Gebirge",
         voice_hint=None,
+        kind_id="paula",
     )
     assert client.config_calls == 1, "GET /config muss aufgerufen worden sein"
     assert "onyx" in result
@@ -321,6 +390,7 @@ def test_HFE4_voice_hint_im_text_nutzt_hint():
         from_user_id=7,
         idee="Stigi und das Mondlicht",
         voice_hint="onyx",
+        kind_id="paula",
     )
     assert client.config_calls == 0, "GET /config darf nicht aufgerufen werden, wenn hint vorhanden"
     assert "onyx" in result
@@ -335,6 +405,7 @@ def test_HFE4_voice_shimmer_hint():
         from_user_id=7,
         idee="Stigi auf der Suche nach Schatz",
         voice_hint="shimmer",
+        kind_id="paula",
     )
     assert client.config_calls == 0
     assert "shimmer" in result
@@ -587,18 +658,23 @@ def test_task_execute_ohne_vorherigen_propose_meldet_klar():
 
 
 def test_HFE9_leere_idee_themen_verfuegbar():
-    """HFE-9 / HFE-3 Sub-Case 1: leere Idee + Themen-Liste verfügbar →
-    Tool-Result-Text trägt die Themen + EC-22-Rückfrage.
+    """HFE-9 / HFE-3 Sub-Case 1 / E-HFE-6 / #910: leere Idee + Themen-Liste verfügbar →
+    Tool-Result-Text trägt die Themen + EC-22-Rückfrage mit Kindname.
+    themen_lesen("paula") wird aufgerufen (kind_id im Pfad, nicht ?alter=).
     Kein POST /folgen-vorschlag-Aufruf."""
     themen = ["Freundschaft", "Mut", "Abenteuer", "Familie",
               "Tiere", "Natur", "Geister", "Rätsel"]
-    client = FakeHoerspielClient(themen_response=themen)
-    with pytest.raises(ValueError, match=r"Worum|gehen|Vorschläge") as exc_info:
+    client = FakeHoerspielClient(
+        themen_response=themen,
+        kind_id="paula", kind_name="Paula", kind_alter=4,
+    )
+    with pytest.raises(ValueError, match=r"Worum|gehen|Vorschläge|Paula") as exc_info:
         propose(
             hoerspiel_client=client,
             is_member_fn=_immer_mitglied,
             from_user_id=7,
             idee="",   # leer → Sub-Case 1
+            kind_id="paula",
         )
     msg = str(exc_info.value)
     # Mindestens ein Thema aus der Liste muss enthalten sein
@@ -606,18 +682,46 @@ def test_HFE9_leere_idee_themen_verfuegbar():
         "Sub-Case 1: Themen-Liste muss im Tool-Result-Text erscheinen")
     # Kein Vorschlag-Endpoint-Aufruf
     assert client.vorschlag_calls == [], "Sub-Case 1: kein POST /folgen-vorschlag"
-    assert client.themen_calls == [4], "Sub-Case 1: GET /themen?alter=4 muss aufgerufen werden"
+    # themen_lesen wurde mit kind_id "paula" aufgerufen (nicht mit alter=4)
+    assert client.themen_calls == ["paula"], (
+        "Sub-Case 1 / #910: themen_lesen muss mit kind_id='paula' aufgerufen werden")
 
 
 def test_HFE9_leere_idee_themen_404():
-    """HFE-9 / HFE-3 Sub-Case 1: leere Idee + leere Themen-Liste (wie 404) →
-    Tool-Result-Text trägt NUR die EC-22-Rückfrage, keine Themen.
+    """HFE-9 / HFE-3 Sub-Case 1 / #910: leere Idee + 404 vom Themen-Endpoint
+    (kind_id unbekannt) → Fehler-Tool-Result-Text (kein Vorschlag).
     Kein POST /folgen-vorschlag-Aufruf.
 
-    Hinweis: themen_lesen() gibt bei 404 eine leere Liste zurück (kein Raise).
-    themen_response=None im FakeClient simuliert dieses Verhalten.
+    Neu #910: themen_lesen() wirft jetzt HoerspielClientError(status=404)
+    bei unbekannter kind_id (statt früher leere Liste zurückzugeben).
+    Bei 404 in Sub-Case 1: Fehler-Tool-Result-Text statt EC-22-Rückfrage.
     """
-    # themen_response=None → leere Liste (entspricht 404-Verhalten von themen_lesen)
+    # themen_response="404" → FakeClient simuliert HoerspielClientError(status=404)
+    client = FakeHoerspielClient(themen_response="404")
+    with pytest.raises(ValueError, match=r"keinen|Hörspiel-Buddy|unbekannt") as exc_info:
+        propose(
+            hoerspiel_client=client,
+            is_member_fn=_immer_mitglied,
+            from_user_id=7,
+            idee="",   # leer → Sub-Case 1
+            kind_id="unbekannt",
+        )
+    msg = str(exc_info.value)
+    # Der Fehler-Text enthält kind_id oder Hinweis auf fehlenden Buddy
+    assert "unbekannt" in msg or "Hörspiel-Buddy" in msg, (
+        "404-Fehlertext muss kind_id oder Buddy-Hinweis enthalten")
+    assert client.vorschlag_calls == [], "kein POST /folgen-vorschlag bei 404"
+
+
+def test_HFE9_leere_idee_themen_422():
+    """HFE-9 / HFE-3 Sub-Case 1 / #910: leere Idee + 422 vom Themen-Endpoint
+    (Alter nicht gepflegt) → EC-22-Rückfrage OHNE Themen.
+    Kein POST /folgen-vorschlag-Aufruf.
+
+    Neu #910: themen_lesen() wirft HoerspielClientError(status=422) wenn
+    Alter nicht in themen_je_alter. Bei 422 → nur EC-22-Rückfrage.
+    """
+    # themen_response=None → FakeClient gibt 422 (Alter nicht gepflegt)
     client = FakeHoerspielClient(themen_response=None)
     with pytest.raises(ValueError, match=r"Worum|gehen|Beschreib") as exc_info:
         propose(
@@ -625,14 +729,15 @@ def test_HFE9_leere_idee_themen_404():
             is_member_fn=_immer_mitglied,
             from_user_id=7,
             idee="",   # leer → Sub-Case 1
+            kind_id="paula",
         )
     msg = str(exc_info.value)
-    # Keine Themen-Liste im Text (da keine Themen vorhanden)
+    # Keine Themen-Liste im Text (da 422)
     assert "Freundschaft" not in msg, (
-        "Sub-Case 1 (kein Themen): keine Themen-Aufzählung im Text")
+        "Sub-Case 1 (422): keine Themen-Aufzählung im Text")
     assert "Mut" not in msg, (
-        "Sub-Case 1 (kein Themen): keine Themen-Aufzählung im Text")
-    assert client.vorschlag_calls == [], "kein POST /folgen-vorschlag"
+        "Sub-Case 1 (422): keine Themen-Aufzählung im Text")
+    assert client.vorschlag_calls == [], "kein POST /folgen-vorschlag bei 422"
 
 
 def test_HFE9_diskussion_marker_bei_unvollstaendiger_idee():
@@ -648,6 +753,7 @@ def test_HFE9_diskussion_marker_bei_unvollstaendiger_idee():
             from_user_id=7,
             idee="Stigi lernt etwas über Mut",
             idee_diskussion=True,   # Sub-Case 2
+            kind_id="paula",
         )
     msg = str(exc_info.value)
     # Marker-Dict muss parsebar sein
@@ -661,6 +767,94 @@ def test_HFE9_diskussion_marker_bei_unvollstaendiger_idee():
     assert client.vorschlag_calls == [], "Sub-Case 2: kein POST /folgen-vorschlag"
 
 
+# ============================================================
+#  E-HFE-6 / #910 — kind_id-Pflicht: PAULA_ALTER entfernt, themen_lesen(kind_id)
+# ============================================================
+
+
+def test_EHF6_paula_alter_konstante_nicht_vorhanden():
+    """E-HFE-6 / #910: PAULA_ALTER muss aus hoerspiel_folge_erzeugen.py
+    entfernt worden sein — kein Modul-Attribut mehr."""
+    import skills.hoerspiel_folge_erzeugen as hfe_mod
+    assert not hasattr(hfe_mod, "PAULA_ALTER"), (
+        "E-HFE-6: PAULA_ALTER muss aus dem Modul entfernt sein (#910)")
+
+
+def test_EHF6_themen_lesen_url_form():
+    """E-HFE-6 / #910 / HSP-38: HoerspielClient.themen_lesen(kind_id) ruft
+    GET /api/v1/hoerspiel/<kind_id>/themen auf — kein ?alter=-Query.
+
+    entry_path_probe: themen_lesen("paula") über Transport-Naht,
+    URL-Konstruktion prüfen."""
+    import json
+
+    from skills.hoerspiel_client import HoerspielClient
+
+    aufgerufen: list = []
+
+    def transport(method, path, *, body=None, content_type=None):
+        aufgerufen.append((method, path))
+        if path == "/api/v1/hoerspiel/paula/themen":
+            resp = json.dumps({
+                "kind_id": "paula", "name": "Paula", "alter": 4,
+                "themen": ["Mut beim Probieren", "Streit vertragen"],
+            }).encode()
+            return 200, resp
+        return 404, b'{"fehler": "not found"}'
+
+    client = HoerspielClient(
+        origin_url="http://127.0.0.1:5053",
+        kind_id="paula",
+        transport=transport,
+    )
+    result = client.themen_lesen()  # kein Argument — Sister-Pattern (#910)
+
+    assert len(aufgerufen) == 1
+    method, path = aufgerufen[0]
+    assert method == "GET"
+    assert path == "/api/v1/hoerspiel/paula/themen", (
+        "HSP-38 / RAT-17: themen_lesen muss GET /api/v1/hoerspiel/paula/themen "
+        "aufrufen — kein ?alter=-Query")
+    assert result["kind_id"] == "paula"
+    assert result["name"] == "Paula"
+    assert result["alter"] == 4
+    assert "Mut beim Probieren" in result["themen"]
+
+
+def test_EHF6_themen_lesen_404_raises():
+    """E-HFE-6 / #910: themen_lesen bei 404 → HoerspielClientError(status=404)."""
+    from skills.hoerspiel_client import HoerspielClient, HoerspielClientError
+
+    def transport(method, path, *, body=None, content_type=None):
+        return 404, b'{"fehler": "unbekannte kind_id"}'
+
+    client = HoerspielClient(
+        origin_url="http://127.0.0.1:5053",
+        kind_id="neko",
+        transport=transport,
+    )
+    with pytest.raises(HoerspielClientError) as exc_info:
+        client.themen_lesen()  # kein Argument — Sister-Pattern (#910)
+    assert exc_info.value.status == 404
+
+
+def test_EHF6_themen_lesen_422_raises():
+    """E-HFE-6 / #910: themen_lesen bei 422 → HoerspielClientError(status=422)."""
+    from skills.hoerspiel_client import HoerspielClient, HoerspielClientError
+
+    def transport(method, path, *, body=None, content_type=None):
+        return 422, b'{"fehler": "Alter nicht gepflegt"}'
+
+    client = HoerspielClient(
+        origin_url="http://127.0.0.1:5053",
+        kind_id="paula",
+        transport=transport,
+    )
+    with pytest.raises(HoerspielClientError) as exc_info:
+        client.themen_lesen()  # kein Argument — Sister-Pattern (#910)
+    assert exc_info.value.status == 422
+
+
 def test_HFE10_settings_beifang_nur_in_erster_antwort():
     """HFE-10: Settings-Beifang-Button erscheint in der ersten propose()-Antwort
     eines Turns, NICHT in Folge-Antworten.
@@ -670,7 +864,10 @@ def test_HFE10_settings_beifang_nur_in_erster_antwort():
     Zweiter Aufruf (Sub-Case 1, erneute Rückfrage) → KEIN Beifang-Button.
     """
     themen = ["Abenteuer", "Freundschaft"]
-    client = FakeHoerspielClient(themen_response=themen)
+    client = FakeHoerspielClient(
+        themen_response=themen,
+        kind_id="paula", kind_name="Paula", kind_alter=4,
+    )
     tg = FakeTelegram()
     task = _make_task(
         hoerspiel_client=client, tg=tg,
@@ -678,7 +875,7 @@ def test_HFE10_settings_beifang_nur_in_erster_antwort():
     ctx = _ctx(chat_id=42, from_user_id=7)
 
     # Erster Aufruf: leere Idee → Sub-Case 1 → ValueError + Beifang-Button
-    with pytest.raises(ValueError, match=r"Worum|gehen"):
+    with pytest.raises(ValueError, match=r"Worum|gehen|Paula|Abenteuer"):
         task.propose({"idee": ""}, ctx)
 
     keyboards_nach_erstem = len(tg.keyboards)
@@ -694,7 +891,7 @@ def test_HFE10_settings_beifang_nur_in_erster_antwort():
         "HFE-10: Beifang-Button muss URL mit #einstellungen tragen")
 
     # Zweiter Aufruf: gleicher Turn, leere Idee → Sub-Case 1 → KEIN neuer Button
-    with pytest.raises(ValueError, match=r"Worum|gehen"):
+    with pytest.raises(ValueError, match=r"Worum|gehen|Paula|Abenteuer"):
         task.propose({"idee": ""}, ctx)
 
     assert len(tg.keyboards) == keyboards_nach_erstem, (
@@ -704,7 +901,10 @@ def test_HFE10_settings_beifang_nur_in_erster_antwort():
 def test_HFE10_kein_beifang_bei_leerer_mini_app_url():
     """HFE-10: Wenn mini_app_base_url leer ist, entfällt der Beifang-Button still.
     Kein Fehler-Text, keine Exception, Rest der Antwort bleibt grün."""
-    client = FakeHoerspielClient(themen_response=["Abenteuer"])
+    client = FakeHoerspielClient(
+        themen_response=["Abenteuer"],
+        kind_id="paula", kind_name="Paula", kind_alter=4,
+    )
     tg = FakeTelegram()
     # mini_app_base_url="" → kein Beifang
     task = _make_task(
@@ -712,7 +912,7 @@ def test_HFE10_kein_beifang_bei_leerer_mini_app_url():
         mini_app_base_url="")
     ctx = _ctx(chat_id=42, from_user_id=7)
 
-    with pytest.raises(ValueError, match=r"Worum|gehen") as exc_info:
+    with pytest.raises(ValueError, match=r"Worum|gehen|Paula|Abenteuer") as exc_info:
         task.propose({"idee": ""}, ctx)
 
     # Keine Inline-Keyboard-Nachrichten
@@ -720,5 +920,85 @@ def test_HFE10_kein_beifang_bei_leerer_mini_app_url():
         "HFE-10: Bei leerer mini_app_base_url kein send_inline_keyboard")
     # Aber die EC-22-Rückfrage ist trotzdem im ValueError
     msg = str(exc_info.value)
-    assert "Worum" in msg or "gehen" in msg.lower(), (
+    assert "Worum" in msg or "gehen" in msg.lower() or "Abenteuer" in msg, (
         "HFE-10: EC-22-Rückfrage bleibt auch ohne Beifang erhalten")
+
+
+# ============================================================
+#  #910 Watchdog-Pflicht-Tests: propose() ohne kind_id + Mini-Map
+# ============================================================
+
+
+def test_propose_ohne_kind_id_wirft_typeerror():
+    """AC-1 / HFE-3 / E-HFE-6 / #910: propose() ohne kind_id wirft TypeError.
+
+    kind_id ist Pflicht-Argument (kein Default mehr seit Watchdog T4-Fix,
+    Pfad A). Der Aufruf ohne kind_id darf die Berechtigung nicht einmal prüfen.
+    entry_path_probe_result: probed.
+    """
+    client = FakeHoerspielClient()
+    with pytest.raises(TypeError):
+        propose(
+            hoerspiel_client=client,
+            is_member_fn=_immer_mitglied,
+            from_user_id=7,
+            idee="Stigi und der Regenwald",
+            # kind_id absichtlich NICHT übergeben → TypeError
+        )
+
+
+def test_task_mini_map_kind_id_paula_nutzt_paula_client():
+    """AC-3 / E-HFE-6 / #910: HoerspielFolgeErzeugenTask.propose() nutzt
+    den Paula-Client aus der Mini-Map (kind_id="paula").
+
+    Die Mini-Map _client_by_kind_id wird im Konstruktor befüllt; in V1 ist
+    kind_id="paula" hartkodiert (TODO #911). Der aktive Client muss mit
+    der Paula-Origin konstruiert worden sein.
+    """
+    from skills.hoerspiel_client import HoerspielClient
+
+    aufgerufen: list = []
+
+    def transport(method, path, *, body=None, content_type=None):
+        aufgerufen.append((method, path))
+        if "folgen-vorschlag" in path:
+            import json as _json
+            resp = _json.dumps({
+                "titel": "Paula-Folge",
+                "text": "Stigi und das Abenteuer.",
+                "folgen-nr-vorschlag": 1,
+            }).encode()
+            return 200, resp
+        if "config" in path:
+            import json as _json
+            return 200, _json.dumps({"default_voice": "shimmer"}).encode()
+        return 404, b"{}"
+
+    tg = FakeTelegram()
+    # Task mit expliziten Origins konstruieren — Mini-Map baut eigene Clients.
+    paula_origin = "http://127.0.0.1:5053"
+    neko_origin = "http://127.0.0.1:5055"
+    # Basis-Client (Fallback) ohne Transport — Paula-Client via Mini-Map hat Transport.
+    basis_client = FakeHoerspielClient()
+    paula_client = HoerspielClient(
+        origin_url=paula_origin, kind_id="paula", transport=transport)
+
+    task = HoerspielFolgeErzeugenTask(
+        tg=tg,
+        hoerspiel_client=basis_client,
+        display_url_origin="https://app.example.com",
+        is_member_fn=_immer_mitglied,
+        mini_app_base_url="https://mini.example.com",
+        hoerspiel_url_origin=paula_origin,
+        hoerspiel_url_origin_neko=neko_origin,
+    )
+    # Überschreiben: Paula-Slot auf kontrollierten Client setzen.
+    task._client_by_kind_id["paula"] = paula_client
+
+    ctx = _ctx(chat_id=42, from_user_id=7)
+    proposal = task.propose({"idee": "Stigi findet Gold"}, ctx)
+
+    assert isinstance(proposal, Proposal), "propose() muss Proposal zurückgeben"
+    # Transport wurde aufgerufen (Paula-Client genutzt, nicht basis_client)
+    assert any("folgen-vorschlag" in p for _, p in aufgerufen), (
+        "Mini-Map: Paula-Client muss für propose() genutzt worden sein")

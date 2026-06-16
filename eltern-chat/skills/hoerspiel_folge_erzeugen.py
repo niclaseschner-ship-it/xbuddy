@@ -1,11 +1,16 @@
 """Hörspiel-Folge erzeugen — specs/platform/hoerspiel-folge-erzeugen.md
-(HFE-1 … HFE-10, E-HFE-1 … E-HFE-5).
+(HFE-1 … HFE-10, E-HFE-1 … E-HFE-6).
 
 Aufrufbare, trigger-agnostische Funktion (HFE-1, E-HFE-1): nimmt eine
-Folgen-Idee entgegen, holt vom Hörspiel-Buddy einen Folgen-Vorschlag
-(POST /api/v1/hoerspiel/folgen-vorschlag) und löst den Album-Bau aus
-(POST /api/v1/hoerspiel/alben). Der LLM-Aufruf lebt im Hörspiel-Buddy
-— dieser Skill ist ein dünner Konsument (E-HFE-2).
+Folgen-Idee und die `kind_id` der Ziel-Instanz entgegen, holt vom
+Hörspiel-Buddy einen Folgen-Vorschlag
+(POST /api/v1/hoerspiel/<kind_id>/folgen-vorschlag) und löst den Album-Bau
+aus (POST /api/v1/hoerspiel/<kind_id>/alben). Der LLM-Aufruf lebt im
+Hörspiel-Buddy — dieser Skill ist ein dünner Konsument (E-HFE-2).
+
+`kind_id` ist Pflicht-Argument seit RAT-17 / E-HFE-6 (#910). Die
+Modul-Konstante PAULA_ALTER wurde damit ersetzt: Alter lebt in der
+instance.json des Buddys, nicht im Skill (E-HFE-6, HSP-27).
 
 Pattern (E-HFE-5 / E-HFE-3): **propose → confirm**, NICHT Sofort-Wirkung.
 Ein Album-Bau kostet 1–5 min TTS-Zeit; die Voice-Wahl verlangt einen
@@ -15,6 +20,7 @@ Berechtigung (HFE-2): nur Familien-Mitglieder (is_member_fn). Im
 Agent-Loop wirft die Funktion `BerechtigungError` — kein Buddy-Aufruf.
 
 Eingang propose(): hoerspiel_client, is_member_fn, from_user_id, idee,
+  kind_id (Pflicht, RAT-17 / E-HFE-6),
   voice_hint (aus dem Aufrufer-Text, optional),
   mini_app_base_url (für HFE-10 Settings-Beifang, optional),
   is_first_propose (HFE-10: True für erste propose()-Antwort im Turn).
@@ -27,7 +33,7 @@ Ausgang propose(): strukturierter Tool-Result-Text (HFE-4) bei Erfolg,
 Ausgang execute(): sendet Erfolgs- oder Fehler-Bubble über tg (HFE-5).
 
 HFE-3 Diskussions-Schleife (Werft-Lauf 2026-06-15, Refs #848):
-  Sub-Case 1: leere/mehrdeutige Idee → themen_lesen + EC-22-Rückfrage.
+  Sub-Case 1: leere/mehrdeutige Idee → themen_lesen(kind_id) + EC-22-Rückfrage.
   Sub-Case 2: konkret-aber-unvollständig (vom Agent markiert via
               idee_diskussion=True) → Diskussions-Marker zurückgeben.
   Sub-Case 3: konkrete vollständige Idee → Standard-Pfad.
@@ -50,8 +56,8 @@ VOICE_SHIMMER = "shimmer"
 VOICE_ONYX    = "onyx"
 VOICE_DEFAULT = VOICE_SHIMMER   # HSP-26-Default, Fallback wenn config nicht erreichbar
 
-# HFE-3 Sub-Case 1: Alter-Konstante für Paula (V1 hart, Mehr-Kind V2).
-PAULA_ALTER = 4
+# E-HFE-6 / RAT-17: PAULA_ALTER wurde entfernt. kind_id ist Pflicht-Argument
+# von propose(); Alter zieht der Buddy aus seiner instance.json (HSP-27).
 
 # HFE-3 Sub-Case 2: JSON-Marker-Präfix für den Diskussions-Pattern.
 # Der Agent erkennt diesen Marker im Tool-Result und stellt Rückfragen.
@@ -63,7 +69,8 @@ _IDEE_MIN_ZEICHEN = 5
 
 
 def propose(*, hoerspiel_client, is_member_fn, from_user_id,
-            idee: str, voice_hint: str | None = None,
+            idee: str, kind_id: str,
+            voice_hint: str | None = None,
             tg=None, chat_id=None,
             mini_app_base_url: str | None = None,
             is_first_propose: bool = True,
@@ -78,6 +85,9 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
     `is_member_fn`     — Callable `(user_id) -> bool` (HFE-2).
     `from_user_id`     — Telegram-User-ID des Aufrufers (HFE-2).
     `idee`             — Folgen-Idee aus dem Aufrufer-Text (HFE-3).
+    `kind_id`          — Pflicht-Arg: Instanz-Identität des Hörspiel-Buddys
+                         (E-HFE-6, RAT-17). Kommt aus Face-Pille-State der
+                         Mini-App oder LLM-Entscheidung im Agent-Prompt (HFE-3).
     `voice_hint`       — optionale Voice aus dem Aufrufer-Text (HFE-4).
     `tg`               — optionaler Telegram-Client (für Start-Bubble + HFE-10).
     `chat_id`          — Ziel-Chat (für Start-Bubble + HFE-10).
@@ -128,12 +138,16 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
     if len(idee_bereinigt) < _IDEE_MIN_ZEICHEN:
         logger.info(
             "hoerspiel_folge_erzeugen.propose: Sub-Case 1 — leere/mehrdeutige "
-            "Idee — rufe GET /themen?alter=%d (HFE-3)", PAULA_ALTER)
-        rueckfrage = _baue_themen_rueckfrage(hoerspiel_client)
+            "Idee — rufe GET /api/v1/hoerspiel/%s/themen (HFE-3, RAT-17)", kind_id)
+        rueckfrage = _baue_themen_rueckfrage(hoerspiel_client, kind_id)
         # HFE-10: Settings-Beifang-Button in erster propose()-Antwort.
         if is_first_propose and tg is not None and chat_id is not None:
             _sende_beifang_button(tg, chat_id, mini_app_base_url)
         raise ValueError(rueckfrage)
+
+    # HFE-3: kind_id-Validierung via Buddy-Aufruf entfällt hier — der Buddy
+    # selbst gibt 404 zurück wenn die kind_id unbekannt ist. Das wird weiter
+    # unten in HoerspielClientError(status=404) übersetzt.
 
     # HFE-3 Sub-Case 3: konkrete vollständige Idee → Vorschlag-Endpoint.
     # HFE-4: Voice auflösen.
@@ -157,9 +171,16 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
     # tunen — Spec-Sinn verfehlt. Sende ihn jetzt direkt nach "Klar, ich überlege".
     if is_first_propose and tg is not None and chat_id is not None:
         _sende_beifang_button(tg, chat_id, mini_app_base_url)
-    logger.info("hoerspiel_folge_erzeugen.propose: rufe POST %s (HFE-3 Sub-Case 3)",
-                "/api/v1/hoerspiel/folgen-vorschlag")
-    data = hoerspiel_client.folgen_vorschlag(idee_bereinigt)
+    logger.info(
+        "hoerspiel_folge_erzeugen.propose: rufe POST /api/v1/hoerspiel/%s/"
+        "folgen-vorschlag (HFE-3 Sub-Case 3, RAT-17)", kind_id)
+    try:
+        data = hoerspiel_client.folgen_vorschlag(idee_bereinigt)
+    except HoerspielClientError as exc:
+        if exc.status == 404:
+            # kind_id unbekannt — Fehler-Tool-Result-Text (HFE-3, kein Vorschlag).
+            raise ValueError("Für %s gibt es keinen Hörspiel-Buddy." % kind_id) from exc
+        raise  # 503 / 5xx / None → propagiert weiter (Task-Layer übernimmt)
 
     titel   = data.get("titel", "")
     text    = data.get("text", "")
@@ -260,26 +281,50 @@ def execute(*, hoerspiel_client, tg, chat_id,
 #  Helpers
 # ============================================================
 
-def _baue_themen_rueckfrage(hoerspiel_client) -> str:
-    """HFE-3 Sub-Case 1: GET /themen?alter=N + EC-22-Rückfrage-Text bauen.
+def _baue_themen_rueckfrage(hoerspiel_client, kind_id: str) -> str:
+    """HFE-3 Sub-Case 1: GET /api/v1/hoerspiel/<kind_id>/themen + EC-22-Rückfrage-Text.
 
-    Bei 404 (Alter nicht gepflegt, HSP-38): nur EC-22-Rückfrage ohne Themen.
+    Response-Body trägt {kind_id, name, alter, themen} (HFE-3, HSP-38, RAT-17).
+    Der Kindername wird in der personalisierten Rückfrage genutzt.
+
+    Bei 404 (kind_id unbekannt): Fehler-Tool-Result-Text (kein Vorschlag).
+    Bei 422 (Alter nicht gepflegt): nur EC-22-Rückfrage ohne Themen (HFE-3).
     Bei anderen Fehlern: nur EC-22-Rückfrage (degrades gracefully).
     """
-    themen: list[str] = []
     try:
-        themen = hoerspiel_client.themen_lesen(PAULA_ALTER)
+        data = hoerspiel_client.themen_lesen()
     except HoerspielClientError as exc:
+        if exc.status == 404:
+            # kind_id unbekannt — Fehler-Tool-Result-Text (HFE-3, keine Themen möglich)
+            logger.warning(
+                "hoerspiel_folge_erzeugen: themen_lesen kind_id=%r → 404 "
+                "(unbekannte Instanz, HFE-3)", kind_id)
+            return "Für %s gibt es keinen Hörspiel-Buddy." % kind_id
+        # 422 (Alter nicht gepflegt) oder Netzfehler → EC-22-Rückfrage ohne Themen
         logger.warning(
-            "hoerspiel_folge_erzeugen: themen_lesen fehlgeschlagen — %s; "
-            "Rückfrage ohne Themen", exc)
+            "hoerspiel_folge_erzeugen: themen_lesen fehlgeschlagen "
+            "(status=%s) — Rückfrage ohne Themen", exc.status)
+        return (
+            "Worum soll die Folge gehen? "
+            "Beschreib die Idee kurz (ein Satz reicht), "
+            "dann erstelle ich einen Vorschlag."
+        )
+
+    themen = data.get("themen") or []
+    name = data.get("name") or ""
+    alter = data.get("alter")
 
     if themen:
         themen_str = ", ".join(themen)
+        if name and alter is not None:
+            return (
+                "Worum soll die Folge gehen? "
+                "Hier ein paar Vorschläge für %s (%d Jahre): %s"
+            ) % (name, alter, themen_str)
         return (
             "Worum soll die Folge gehen? "
-            "Hier ein paar Vorschläge für %d-Jährige: %s"
-        ) % (PAULA_ALTER, themen_str)
+            "Hier ein paar Vorschläge: %s"
+        ) % themen_str
     return (
         "Worum soll die Folge gehen? "
         "Beschreib die Idee kurz (ein Satz reicht), "

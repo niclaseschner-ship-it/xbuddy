@@ -102,6 +102,11 @@ ID-Präfix HFE).
   Feld leer; Migration über `pikto-mapping.json` ist V1-Pfad). V2.
 - **OPEN-HSP-Q** — Setup-Skript für die Erst-Bestückung des
   Daten-Bereichs (V1 manuelle Copy-Paste-Migration, HSP-25a). V2.
+- **OPEN-HSP-R** — `name`/`alter` der Hörspiel-Instanz aus `familie.json`
+  per FK lesen (HSP-38 Soll-Form), ENV-Krücke `HOERSPIEL_KIND_NAME` /
+  `HOERSPIEL_KIND_ALTER` (V1-Übergang seit T4 #910) ablösen. Trigger:
+  familie_client für Hörspiel-Service angebunden — gehört zur Welle
+  „Hörspiel besitzt seinen familie-FK".
 
 ---
 
@@ -1401,8 +1406,13 @@ Pflicht-Tests (ohne Netz, ohne Telegram, ohne Mistral-/Anthropic-API):
   landen im selben Modell (gleiche Track-Position lesbar nach
   beiden Schreiben); ein zweites `PUT /resume` für dasselbe Album +
   Track-Position ist no-op.
-- **HSP-38-Themen** — `?alter=4` liefert die 8 V1-Themen aus
-  `themen_je_alter` (HSP-27a); `?alter=7` liefert 404.
+- **HSP-38-Themen** — `GET /api/v1/hoerspiel/<kind_id>/themen` mit
+  gepflegter `instance.json` liefert die 8 V1-Themen aus `themen_je_alter`
+  (HSP-27a); unbekannter `kind_id` liefert **404**; ungepflegtes Alter
+  (kein Eintrag in `themen_je_alter`) liefert **422**.
+- **HSP-40-Themen-URL** — kein `?alter=`-Query-Parameter; `kind_id` trägt
+  die Instanz-Identität als URL-Segment (`/api/v1/hoerspiel/<kind_id>/themen`,
+  RAT-17 URL-3a-konform, #910).
 - **Mistral-Adapter** (`hoerspiel/providers/mistral.py`) gegen Mock-API:
   erfolgreiche Folgen-Erzeugung; HTTP-Fehler → `LLMError`; fehlender
   Key → `ConfigError`. Tests für jedes der drei V1-Modelle (`mistral-large-2411`,
