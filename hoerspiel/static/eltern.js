@@ -7,9 +7,18 @@
  *          Wake-Lock, Auto-Play nächster Track, Resume-Stand).
  * MAD-5 (ratifiziert): kein direktes window.Telegram.WebApp.* — nur platform.* erlaubt.
  * MAD-7 (ratifiziert): Authorization: tma <initData>-Header bei jedem fetch().
+ * T970 / HSP-26 / URL-3a: kind_id aus location.pathname → alle API-Pfade kind_id-tragend.
  */
 
 /* global getPlatform */
+
+// ── KIND_ID aus URL (HSP-26, URL-3a, T970) ──────────────────────────────────
+// Pattern: /seiten/hoerspiel/<kind_id>/eltern → kind_id ist Segment 3 (0-basiert).
+// Fallback: 'paula' für Dev/Standalone (nie im Produktivbetrieb wirksam).
+const KIND_ID = (() => {
+  const m = location.pathname.match(/^\/seiten\/hoerspiel\/([^/]+)\/eltern/);
+  return m ? m[1] : 'paula';
+})();
 
 // ── MAD-7 Auth-Header ────────────────────────────────────────────────────────
 // initData aus Telegram-WebApp — bei jedem fetch()-Call als Header gesendet.
@@ -102,7 +111,7 @@ function _authHeader() {
 }
 
 async function _holeConfig() {
-  const resp = await fetch("/api/v1/hoerspiel/config", {
+  const resp = await fetch("/api/v1/hoerspiel/" + KIND_ID + "/config", {
     headers: _authHeader(),
   });
   if (!resp.ok) throw new Error("config-Abruf fehlgeschlagen: " + resp.status);
@@ -110,7 +119,7 @@ async function _holeConfig() {
 }
 
 async function _patchConfig(patch) {
-  const resp = await fetch("/api/v1/hoerspiel/config", {
+  const resp = await fetch("/api/v1/hoerspiel/" + KIND_ID + "/config", {
     method: "PATCH",
     headers: { "Content-Type": "application/json", ..._authHeader() },
     body: JSON.stringify(patch),
@@ -119,7 +128,7 @@ async function _patchConfig(patch) {
 }
 
 async function _holeAlben() {
-  const resp = await fetch("/api/v1/hoerspiel/alben", {
+  const resp = await fetch("/api/v1/hoerspiel/" + KIND_ID + "/alben", {
     headers: _authHeader(),
   });
   if (!resp.ok) throw new Error("alben-Abruf fehlgeschlagen: " + resp.status);
@@ -127,7 +136,8 @@ async function _holeAlben() {
 }
 
 async function _holeManifest(albumId) {
-  const resp = await fetch("/api/v1/hoerspiel/alben/" + encodeURIComponent(albumId) + "/manifest", {
+  const resp = await fetch(
+    "/api/v1/hoerspiel/" + KIND_ID + "/alben/" + encodeURIComponent(albumId) + "/manifest", {
     headers: _authHeader(),
   });
   if (!resp.ok) throw new Error("manifest-Abruf fehlgeschlagen: " + resp.status);
@@ -135,7 +145,8 @@ async function _holeManifest(albumId) {
 }
 
 async function _holeResume(albumId) {
-  const resp = await fetch("/api/v1/hoerspiel/resume?album=" + encodeURIComponent(albumId), {
+  const resp = await fetch(
+    "/api/v1/hoerspiel/" + KIND_ID + "/resume?album=" + encodeURIComponent(albumId), {
     headers: _authHeader(),
   });
   if (resp.status === 404) return null;
@@ -144,7 +155,7 @@ async function _holeResume(albumId) {
 }
 
 async function _setzeResume(albumId, trackPos) {
-  await fetch("/api/v1/hoerspiel/resume", {
+  await fetch("/api/v1/hoerspiel/" + KIND_ID + "/resume", {
     method: "PUT",
     headers: { "Content-Type": "application/json", ..._authHeader() },
     body: JSON.stringify({ album: albumId, track: trackPos }),
@@ -429,7 +440,7 @@ function _rendereAlbenListe(container, player, resumeMap) {
     kachelEl.dataset.albumId = album.id;
     kachelEl.innerHTML =
       '<img class="album-cover" src="' +
-        esc("/api/v1/hoerspiel/alben/" + encodeURIComponent(album.id) + "/audio/cover.jpg") +
+        esc("/api/v1/hoerspiel/" + KIND_ID + "/alben/" + encodeURIComponent(album.id) + "/audio/cover.jpg") +
         '" alt="" loading="lazy" ' +
         'onerror="this.style.display=\'none\'">' +
       '<div class="album-info">' +
@@ -741,5 +752,5 @@ function esc(str) {
 
 // ── Exports (für Tests) ──────────────────────────────────────────────────────
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { esc, _leseHashTab, zeigeToast };
+  module.exports = { esc, _leseHashTab, zeigeToast, KIND_ID };
 }
