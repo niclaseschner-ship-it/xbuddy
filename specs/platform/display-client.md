@@ -247,6 +247,45 @@ sind die Standard-Browser-Ereignisse (`resize`, ggf. `orientationchange`).
 
 *Tickets:* #107
 
+### DC-17 — Iframe-Permissions für Browser-APIs
+Der Inhalt-iframe (DC-12) trägt das Attribut
+`allow="microphone; autoplay"`. Diese Feature-Policy gibt Buddy-Apps,
+die im iframe geladen werden, Zugriff auf Browser-APIs, die der
+Display-iframe sonst standardmäßig blockiert — unabhängig davon, ob
+am Top-Frame eine Permission gewährt wurde.
+
+- **`microphone`** — Push-to-Talk-Apps brauchen `getUserMedia({audio:
+  true})`. Erster Konsument: KIBuddy (KIBUDDY-5..11). Ohne diese
+  Klausel meldet das KIBuddy-Frontend „Ich darf gerade nicht zuhören",
+  weil der Browser den Permission-Pfad gar nicht aufmacht, auch wenn
+  am Display-Top-Frame Mikro-Permission existiert.
+- **`autoplay`** — Audio-Auto-Play ohne explizite User-Geste auf der
+  iframe-Seite. Erste Konsumenten: KIBuddy TTS-Antwort (KIBUDDY-20),
+  Hörspiel-Player (HSP-Player). TTS-Audio nach der Buddy-Antwort
+  startet ohne neuen Tap; ohne `autoplay` blockiert der Browser den
+  ersten `<audio>`-Play.
+
+Same-origin reicht nicht aus, weil Feature-Policy in modernen
+Browsern (Chromium, Safari) **unabhängig von der Origin** auf iframes
+greift — Buddy-Apps laufen zwar same-origin (DC-3, der gerouteter
+Inhalt sitzt unter `/display/<app>/<view>`), bekommen aber ohne
+explizites `allow=` keinen Mikro- oder Autoplay-Zugriff.
+
+Begründung: Live-Bug 2026-06-16 (#960) — KIBuddy V1 lief am Pi-Display
+und auf Paulas Tablet nicht, obwohl getUserMedia-Permission auf dem
+Top-Frame gewährt war (Pi-Kiosk per `--use-fake-ui-for-media-stream`,
+Tablet per User-Tap-Grant). Erst die Ergänzung des iframe-`allow`-
+Attributs öffnete den Permission-Pfad.
+
+**Gilt für alle Display-Konsumenten**, nicht nur Pi: die iframe-Policy
+greift in jedem Browser (Chromium, Safari, Firefox), unabhängig von
+der Plattform. Pi-Kiosk braucht zusätzlich seinen eigenen
+Permission-Pfad (`--use-fake-ui-for-media-stream`-Flag im
+`buddyboard-core/deploy/pi-display/kiosk.sh`); ohne iframe-`allow=`
+hilft auch dieser Pi-Kiosk-Flag nichts.
+
+*Tickets:* #819, #960
+
 ### DC-15 — Design-Auflösung des Inhalts
 Der Adapter braucht die Design-Auflösung des gerouteten Inhalts, um den
 Skalierungs-Faktor (DC-12) zu bestimmen. V1 verwendet hartcodiert
