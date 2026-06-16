@@ -154,7 +154,7 @@ def test_album_manifest_cover_jpg_pfad(data_root, fake_llm, fake_tts, fixed_now)
     with open(ergebnis.manifest_pfad) as f:
         manifest = json.load(f)
     assert manifest["cover-asset"].endswith("cover-default.jpg")
-    assert manifest["cover-asset"] == album_manifest.COVER_DEFAULT_ASSET
+    assert manifest["cover-asset"] == album_manifest.cover_default_asset("mia")
 
 
 def test_album_bau_synopse_fehler_laesst_album_unsichtbar(
