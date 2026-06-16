@@ -541,6 +541,7 @@ def _post_alben():
         ergebnis = album_builder.baue_album(
             titel=titel, text=text, voice=voice, idee=idee,
             data_root=_data_root(),
+            kind_id=_self_kind_id(),
             llm=llm, tts_engine=tts,
             now=runtime["now"],
             pause_absatz_sek=pause_absatz,
