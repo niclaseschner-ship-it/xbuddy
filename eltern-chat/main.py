@@ -994,6 +994,10 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # HFE-9 / #729: Origin des Hörspiel-Buddys. Leer/None → HFE NICHT im
         # Katalog (AND-Guard in tasks.py).
         hoerspiel_url_origin=cfg.hoerspiel_url_origin or None,
+        # RAT-17 / #910 / T954: Neko-Origin an build_catalog durchreichen,
+        # damit HoerspielFolgeErzeugenTask die Mini-Map mit echtem Neko-Client
+        # befüllt (kind_id="neko" → hoerspiel_url_origin_neko, AC-1).
+        hoerspiel_url_origin_neko=cfg.hoerspiel_url_origin_neko or "",
         # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts. Leer/None →
         # KibuddyAufnahmeQuelleSetzenTask NICHT im Katalog (AND-Guard KAQS-6).
         kibuddy_origin_url=cfg.kibuddy_origin_url or None,
