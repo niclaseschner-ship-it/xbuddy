@@ -813,3 +813,35 @@ def test_AC5_webapp_link_presentation():
     buttons = tg.inline_sent[0]["buttons"]
     assert buttons[0]["label"] == "Öffnen"
     assert buttons[0]["web_app_url"] == "https://example.com/wa"
+
+
+# ============================================================
+#  T942 — EC-10 A2-Undo-Hinweis + EC-36-Korrektur-State-Klarheit
+# ============================================================
+
+def test_T942_system_prompt_enthält_a2_undo_hinweis_wortwörtlich_regel():
+    """AC1 (T942): SYSTEM_PROMPT enthält die Regel, dass Zeilen mit dem Wort
+    `falsch` aus Skill-Results wortwörtlich an die Familie übernommen werden —
+    nicht kürzen, nicht umformulieren (EC-10 A2)."""
+    prompt = agent.SYSTEM_PROMPT
+    # Kernbegriff der Regel
+    assert "falsch" in prompt
+    # Wortwörtlich-Direktive
+    assert "wortwörtlich" in prompt or "wortwoertlich" in prompt
+    # Negation von Kürzen/Umformulieren
+    assert "nicht kürzen" in prompt or "nicht umformulieren" in prompt
+
+
+def test_T942_correction_suffix_enthält_bereits_entfernt():
+    """AC2 (T942): _correction_system_suffix-Output enthält den Hinweis, dass
+    die betreffenden Ressourcen bereits per Inverse-Aufruf entfernt sind — das
+    LLM soll sie NICHT als noch vorhanden erwähnen und nicht nach erneutem
+    Löschen fragen (EC-36, Live-Bug: Bot fragte 'Soll ich Spültabs wieder
+    runternehmen?', obwohl Items bereits per DELETE entfernt waren)."""
+    from confirm import CorrectionState  # nur für den Test importiert
+    state = CorrectionState(last_skill="einkauf_hinzufuegen",
+                            last_args={}, quelle="a2")
+    suffix = agent._correction_system_suffix(state)
+    # Schlüsselbegriff: Ressourcen sind bereits entfernt
+    assert "bereits" in suffix
+    assert "entfernt" in suffix or "gelöscht" in suffix
