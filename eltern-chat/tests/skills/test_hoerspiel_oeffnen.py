@@ -98,7 +98,8 @@ def _album(nr, titel):
 
 
 _MINI_APP_BASE = "https://xbuddy.example.com"
-_HOE_APP_PATH = "/seiten/hoerspiel/eltern"
+_TEST_KIND_ID = "mia"
+_HOE_APP_PATH = "/seiten/hoerspiel/%s/eltern" % _TEST_KIND_ID
 _MINI_APP_URL = _MINI_APP_BASE + _HOE_APP_PATH
 
 # ============================================================
@@ -443,36 +444,40 @@ def test_AC2_task_folgen_returnt_form_b():
 
 
 def test_AC2_task_mini_app_url_baut_pfad_einstellungen():
-    """AC2/HOE-5: Task baut web_app_url = base + /seiten/hoerspiel/eltern#einstellungen."""
+    """AC2/HOE-5: Task baut web_app_url = base + /seiten/hoerspiel/<kind_id>/eltern#einstellungen
+    (HSP-26 / URL-3a / T970).
+    """
     client = FakeHoerspielClient()
     tg = FakeTelegram()
     task = HoerspielOeffnenTask(
         tg=tg, hoerspiel_client=client, is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_BASE)
+        mini_app_url=_MINI_APP_BASE, kind_id=_TEST_KIND_ID)
     ctx = TurnContext(chat_id=42, from_user_id=7)
 
     result = task.run({"tab_hint": "einstellungen"}, ctx)
 
     url = result["presentation"]["inline_button"]["web_app_url"]
     assert url.startswith("https://")
-    assert "/seiten/hoerspiel/eltern" in url
+    assert ("/seiten/hoerspiel/%s/eltern" % _TEST_KIND_ID) in url
     assert url.endswith("#einstellungen")
 
 
 def test_AC2_task_mini_app_url_baut_pfad_folgen():
-    """AC2/HOE-5: Task baut web_app_url = base + /seiten/hoerspiel/eltern#folgen."""
+    """AC2/HOE-5: Task baut web_app_url = base + /seiten/hoerspiel/<kind_id>/eltern#folgen
+    (HSP-26 / URL-3a / T970).
+    """
     client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
     tg = FakeTelegram()
     task = HoerspielOeffnenTask(
         tg=tg, hoerspiel_client=client, is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_BASE)
+        mini_app_url=_MINI_APP_BASE, kind_id=_TEST_KIND_ID)
     ctx = TurnContext(chat_id=42, from_user_id=7)
 
     result = task.run({"tab_hint": "folgen"}, ctx)
 
     url = result["presentation"]["inline_button"]["web_app_url"]
     assert url.startswith("https://")
-    assert "/seiten/hoerspiel/eltern" in url
+    assert ("/seiten/hoerspiel/%s/eltern" % _TEST_KIND_ID) in url
     assert url.endswith("#folgen")
 
 
