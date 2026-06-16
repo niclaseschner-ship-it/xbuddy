@@ -813,3 +813,39 @@ def test_AC5_webapp_link_presentation():
     buttons = tg.inline_sent[0]["buttons"]
     assert buttons[0]["label"] == "Öffnen"
     assert buttons[0]["web_app_url"] == "https://example.com/wa"
+
+
+# ============================================================
+#  T942 — EC-10 A2-Undo-Hinweis + EC-36-Korrektur-State-Klarheit
+# ============================================================
+
+def test_T942_system_prompt_enthält_a2_undo_hinweis_wortwörtlich_regel():
+    """AC1 (T942): SYSTEM_PROMPT enthält die Regel, dass Zeilen mit dem Wort
+    `falsch` aus Skill-Results wortwörtlich an die Familie übernommen werden —
+    nicht kürzen, nicht umformulieren (EC-10 A2)."""
+    prompt = agent.SYSTEM_PROMPT
+    # Kernbegriff der Regel
+    assert "falsch" in prompt
+    # Wortwörtlich-Direktive
+    assert "wortwörtlich" in prompt or "wortwoertlich" in prompt
+    # Negation von Kürzen/Umformulieren
+    assert "nicht kürzen" in prompt or "nicht umformulieren" in prompt
+
+
+def test_T942_correction_suffix_enthält_klarheit_zur_rueckname():
+    """AC2 (T942): _correction_system_suffix-Output enthält den Hinweis, dass
+    die betreffenden Ressourcen NICHT als noch vorhanden zu erwähnen sind und
+    auf die vorherige Bot-Quittung verwiesen wird (EC-36 — Ambiguitäts-Fall
+    Z. 547-548 ist abgedeckt: Watchdog T942-S1-W Befund 1 Pragma-Fix).
+    Live-Bug: Bot fragte 'Soll ich Spültabs wieder runternehmen?', obwohl
+    Items bereits per DELETE entfernt waren."""
+    from confirm import CorrectionState  # nur für den Test importiert
+    state = CorrectionState(last_skill="einkauf_hinzufuegen",
+                            last_args={}, quelle="a2")
+    suffix = agent._correction_system_suffix(state)
+    # Negation: entfernte Ressourcen NICHT als vorhanden erwähnen
+    assert "NICHT als noch vorhanden" in suffix
+    # Anker: verlass dich auf die vorherige Quittung (Ambiguitäts-Fall mit ehrlicher Quittung)
+    assert "vorherigen Bot-Quittung" in suffix
+    # kein erneutes Löschen
+    assert "nicht nach erneutem Löschen" in suffix
