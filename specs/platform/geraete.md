@@ -59,6 +59,7 @@ Jedes Gerät trägt:
 | `os`          | Pflicht  | einer aus `android`/`ios`/`windows`/`macos`/`linux`/`unbekannt`       | Betriebssystem-Familie. Quelle für die CA-Anleitung pro Gerät (#82). |
 | `verwendung`  | Pflicht  | einer aus `display`/`controller`/`beides`                             | Wofür wird das Gerät genutzt. |
 | `status`      | Pflicht  | einer aus `aktiv`/`inaktiv`                                           | Soll-Zustand: ist das Gerät in Betrieb. V1 manuell gesetzt (OPEN-GER-B). |
+| `paired_at`   | Optional | ISO-8601-Timestamp oder `null`                                        | Zeitpunkt des Auth-Pairings (Browser-Cookie gesetzt). `null` bei Anlage; wird vom `/auth/pair`-Endpoint (`specs/platform/auth.md` AUTH-2.a) gesetzt, sobald ein Browser den Pairing-Link öffnet und den `xbuddy_session`-Cookie annimmt. Quelle der Befüllung: GAA-3.8 (`specs/platform/geraet-anlegen.md`). [Quelle: ENTSCHEID 2026-06-16-1123 Paket-Sektion „Konsequenz Phase 1" → „`paired_at`-Feld"] |
 
 Die Geräte sind **Daten** und stehen vollständig in der Datei aus GER-4 —
 nicht im Code (CLAUDE.md §6).
