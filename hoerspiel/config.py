@@ -32,6 +32,9 @@ DEFAULT_DATA_CONFIG_FILE = os.path.join(HERE, "hoerspiel.json")
 ENV_DATA_ROOT = "HOERSPIEL_DATA_ROOT"
 DEFAULT_DATA_ROOT = os.path.join(HERE, "data")
 
+ENV_KIND_ID = "HOERSPIEL_KIND_ID"
+DEFAULT_KIND_ID = "mia"
+
 ENV_ANTHROPIC_KEY = "HOERSPIEL_ANTHROPIC_KEY"
 ENV_MISTRAL_KEY = "HOERSPIEL_MISTRAL_KEY"
 ENV_AZURE_ENDPOINT = "HOERSPIEL_AZURE_OPENAI_ENDPOINT"
@@ -69,8 +72,19 @@ class ConfigError(Exception):
     """Pflicht-Konfiguration fehlt oder ist ungültig (HSP-26/HSP-27)."""
 
 
+def _resolve_kind_id(raw: Any) -> str:
+    """Validiert die kind_id gegen [a-z]+ (CONFIG-3, HSP-25, URL-3a)."""
+    import re
+    val = (str(raw) if raw is not None else DEFAULT_KIND_ID).strip().lower()
+    if not val or not re.fullmatch(r"[a-z]+", val):
+        raise ConfigError(
+            "HOERSPIEL_KIND_ID %r ist ungültig — erlaubt: lowercase [a-z]+ (HSP-25, URL-3a)"
+            % val)
+    return val
+
+
 class RuntimeConfig:
-    """Runtime-Config-Snapshot (Bind, Log, Provider, Modell + Secrets)."""
+    """Runtime-Config-Snapshot (Bind, Log, Provider, Modell + Secrets + kind_id)."""
 
     def __init__(self, listen_host: str, listen_port: int, log_level: str,
                  llm_provider: str, llm_model: str,
@@ -78,7 +92,8 @@ class RuntimeConfig:
                  mistral_key: str | None = None,
                  azure_endpoint: str | None = None,
                  azure_deployment: str | None = None,
-                 azure_key: str | None = None):
+                 azure_key: str | None = None,
+                 kind_id: str = DEFAULT_KIND_ID):
         self.listen_host = listen_host
         self.listen_port = listen_port
         self.log_level = log_level
@@ -89,6 +104,7 @@ class RuntimeConfig:
         self.azure_endpoint = azure_endpoint
         self.azure_deployment = azure_deployment
         self.azure_key = azure_key
+        self.kind_id = kind_id
 
     def to_public_dict(self) -> dict[str, Any]:
         """Basis-Form für `GET /config` (HSP-17). Geheimnisse fliegen raus (LOG-3).
@@ -96,6 +112,7 @@ class RuntimeConfig:
         Wird von main.py mit DataConfig-Feldern und modelle_je_anbieter ergänzt.
         """
         return {
+            "kind_id": self.kind_id,
             "llm_provider": self.llm_provider,
             "llm_model": self.llm_model,
             "default_voice": None,
@@ -186,6 +203,8 @@ def resolve_runtime(config_path: str | None = None,
     llm_model = str(env.get("HOERSPIEL_LLM_MODEL")
                     or file_cfg.get("llm_model") or DEFAULT_LLM_MODEL).strip()
 
+    kind_id = _resolve_kind_id(env.get(ENV_KIND_ID) or DEFAULT_KIND_ID)
+
     return RuntimeConfig(
         listen_host=listen_host,
         listen_port=listen_port,
@@ -197,6 +216,7 @@ def resolve_runtime(config_path: str | None = None,
         azure_endpoint=env.get(ENV_AZURE_ENDPOINT),
         azure_deployment=env.get(ENV_AZURE_DEPLOYMENT),
         azure_key=env.get(ENV_AZURE_KEY),
+        kind_id=kind_id,
     )
 
 
@@ -286,6 +306,7 @@ def patch_runtime(cfg: RuntimeConfig, patch: dict[str, Any]) -> RuntimeConfig:
         azure_endpoint=cfg.azure_endpoint,
         azure_deployment=cfg.azure_deployment,
         azure_key=cfg.azure_key,
+        kind_id=cfg.kind_id,
     )
 
 
