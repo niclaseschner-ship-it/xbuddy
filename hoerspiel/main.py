@@ -11,7 +11,7 @@ Siehe specs/buddies/hoerspiel.md. Endpunkte (seit #908 URL-3a-konform, HSP-26):
   POST /api/v1/hoerspiel/<kind_id>/alben             — Album bauen (TTS + Historie)
   GET  /api/v1/hoerspiel/<kind_id>/config            — Eltern-Tuning-Konfig lesen (HSP-34)
   PATCH /api/v1/hoerspiel/<kind_id>/config           — Eltern-Tuning setzen (HSP-34)
-  GET  /api/v1/hoerspiel/themen?alter=N              — Themen-Liste je Alter (HSP-38, T4)
+  GET  /api/v1/hoerspiel/<kind_id>/themen             — Themen-Liste je Alter (HSP-38, T4, RAT-17)
   GET  /api/v1/hoerspiel/<kind_id>/alben/<id>/audio/<track>.mp3 — Audio-Track (HSP-37)
   GET  /api/v1/hoerspiel/<kind_id>/resume?album=<id> — Resume-Stand lesen (HSP-36)
   PUT  /api/v1/hoerspiel/<kind_id>/resume            — Resume-Stand setzen (HSP-36)
@@ -563,28 +563,45 @@ def config_endpoint(kind_id: str):
     return jsonify(_build_config_response(new_cfg, new_dcfg))
 
 
-# ---- Themen-Endpoint (HSP-38) ----
+# ---- Themen-Endpoint (HSP-38, URL-3a, RAT-17) ----
 
-@app.route("/api/v1/hoerspiel/themen", methods=["GET"])
-def themen_endpoint():
-    """HSP-38: GET /themen?alter=N → kuratierte Themen-Liste je Alter."""
-    alter_raw = request.args.get("alter", "").strip()
-    dcfg = _data_cfg()
-    themen_je_alter = dcfg.themen_je_alter if dcfg is not None else \
-        dict(config_mod.DEFAULT_THEMEN_JE_ALTER)
+@app.route("/api/v1/hoerspiel/<kind_id>/themen", methods=["GET"])
+def themen_endpoint(kind_id: str):
+    """HSP-38: GET /api/v1/hoerspiel/<kind_id>/themen → kuratierte Themen-Liste.
 
-    if alter_raw not in themen_je_alter:
+    Kein ?alter=-Query mehr (RAT-17, URL-3a): Alter zieht der Buddy aus
+    seiner instance.json. kind_id-Self-Check via _assert_self_kind (HSP-26).
+
+    200 {"kind_id": "mia", "name": "Mia", "alter": 4, "themen": [...]}
+    404 wenn kind_id unbekannt (kein hoerspiel-Pfad für diesen Wert)
+    422 wenn das Alter der Instanz nicht in themen_je_alter gepflegt ist
+    """
+    err = _assert_self_kind(kind_id)
+    if err is not None:
+        return err
+
+    instance = config_mod.load_instance(
+        data_root=_data_root(),
+        kind_id=_self_kind_id(),
+        data_cfg=_data_cfg(),
+    )
+
+    alter_str = str(instance.alter)
+    themen = instance.themen_je_alter.get(alter_str)
+    if themen is None:
         return jsonify({
             "fehler": "Themen-Liste für Alter %s nicht gepflegt — "
-                      "Eltern können im Chat eigene Idee geben." % alter_raw,
-        }), 404
+                      "instance.json.themen_je_alter muss Schlüssel %r tragen. "
+                      "Eltern können im Chat eine eigene Idee geben." % (
+                          alter_str, alter_str),
+        }), 422
 
-    try:
-        alter_int = int(alter_raw)
-    except (TypeError, ValueError):
-        alter_int = 0
-
-    return jsonify({"alter": alter_int, "themen": themen_je_alter[alter_raw]})
+    return jsonify({
+        "kind_id": instance.kind_id,
+        "name": instance.name,
+        "alter": instance.alter,
+        "themen": themen,
+    })
 
 
 # ---- Audio-Streaming-Endpoint (HSP-37) ----
