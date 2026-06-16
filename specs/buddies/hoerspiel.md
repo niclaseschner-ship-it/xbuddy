@@ -1264,15 +1264,29 @@ Bei HTTP 422 vom Server zeigt die Mini-App den vom Server gelieferten
 Modell-Dropdown aus `modelle_je_anbieter[<neuer-anbieter>]` neu und
 setzt es auf den ersten Eintrag (Provider-Default).
 
-### HSP-35 — Reiter „Folgen" (Album-Galerie + Multi-Track-Player)
+### HSP-35 — Reiter „Folgen" (aggregierte Liste + Multi-Track-Player)
 
-Lädt die Album-Liste aus `GET /alben` (existing). Rendert sie als
-vertikale Kachel-Liste (MAD-2 Card-Pattern):
+**#973 (2026-06-16):** Der Folgen-Tab aggregiert Folgen über **alle
+V1-Kinder** (`KIND_IDS_V1 = ["paula", "neko"]` — V1-Hardcode, FAM-7-
+Generalisierung via Registry im Folge-Ticket). Er lädt die Alben-Listen
+aller kind_ids **parallel** (`Promise.all`), mergt sie und sortiert nach
+`erstellt-am` desc (gleicher Datumswert: `nummer` desc als Fallback).
+Jede Folge trägt ihre `kind_id` im JS-State — Player öffnet
+`/api/v1/hoerspiel/<folge.kind_id>/alben/<id>/manifest`, **nicht**
+URL-KIND_ID. Settings-Tab (HSP-34) bleibt instance-getrennt und
+verwendet weiterhin KIND_ID aus dem URL-Pfad.
+
+Rendert als vertikale Kachel-Liste (MAD-2 Card-Pattern):
 
 ```
-[cover 56×56] [Folge N · Titel]       [▶ ab Track X | (leer)]
+[cover 56×56] [Folge N · Titel]   [kind-avatar 28×28] [▶ ab Track X | (leer)]
                 voice · datum
 ```
+
+- **Kind-Avatar** links neben dem Resume-Badge: `<img
+  src="/api/v1/familie/foto/<folge.kind_id>">` (FAM-8) — selber
+  Mechanismus wie Face-Pille in `alben.html` (HSP-3a, T911 Vorbild).
+  Fehler beim Laden der Avatar-URL → Bild versteckt, kein Abbruch.
 
 Tap auf eine Kachel → öffnet den **Inline-Player** unten im selben
 Reiter (kein Modal). Der Player nutzt das **Multi-Track-Modell** aus
@@ -1305,7 +1319,8 @@ HSP-6 (Intro · Inhalts-Tracks · Outro):
 **Resume-Stand-Tap-Verhalten** (HSP-36): wenn ein Album einen Resume-
 Stand hat, startet der Tap auf die Kachel **direkt beim Resume-Track**
 (nicht beim Intro). Ohne Resume-Stand startet die Wiedergabe beim
-Intro-Track.
+Intro-Track. Resume-Read/Write-Calls nutzen `folge.kind_id` (nicht
+URL-KIND_ID).
 
 ### HSP-36 — Resume-Stand auf Mini-App-Player erweitert
 
