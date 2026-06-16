@@ -673,3 +673,58 @@ def test_familie_client_person_felder_korrekt():
     assert mia.ring == "orange"
     assert mia.foto == "/fotos/mia.jpg"
     assert mia.is_kind() is True
+
+
+# ============================================================
+#  T950 Pi-Live-Fix — alben.js fetch kind_id-tragend + Face-Pille FAM-8
+# ============================================================
+#
+# ENTRY-PATH-PROBE:
+#   1. alben.js enthält kind_id-tragende fetch-URLs (HSP-26).
+#   2. /display/hoerspiel/mia/alben HTML: Face-Pille <img> nutzt
+#      /api/v1/familie/foto/<id> (FAM-8), nicht relativen Pfad.
+
+
+def test_alben_js_uses_kind_id_in_fetch(client_mit_familie):
+    """HSP-26 / ENTRY-PATH-PROBE / T950:
+    alben.js enthält kind_id-tragende fetch-URLs statt der alten
+    /api/v1/hoerspiel/alben-Form (die 404 liefert, da Routes nur mit
+    <kind_id> existieren, HSP-26 URL-3a).
+
+    Prüft statische JS-Quelle direkt — kein DOM-Test nötig.
+    """
+    resp = client_mit_familie.get("/display/hoerspiel/static/alben.js")
+    assert resp.status_code == 200
+    js_content = resp.data.decode("utf-8")
+
+    # KIND_ID-Konstante muss im JS stehen (HSP-26).
+    assert "KIND_ID" in js_content
+
+    # fetch-Calls müssen ${KIND_ID} enthalten (Template-Literal-Form).
+    assert "/api/v1/hoerspiel/${KIND_ID}/alben`" in js_content
+    assert "/api/v1/hoerspiel/${KIND_ID}/alben/${albumId}/manifest`" in js_content
+
+    # Alter 404-Pfad darf nicht mehr auftreten.
+    assert "fetch('/api/v1/hoerspiel/alben')" not in js_content
+    assert "fetch('/api/v1/hoerspiel/alben/" not in js_content
+
+
+def test_face_pille_foto_url_absolute(client_mit_familie):
+    """FAM-8 / ENTRY-PATH-PROBE / T950:
+    GET /display/hoerspiel/mia/alben → <img src="/api/v1/familie/foto/finn">
+    in der Face-Pille (anderes_kind ist finn wenn aktiv mia).
+
+    Relativer Pfad (z.B. "finn.jpg") wäre Bug — Browser resolved zu
+    /display/hoerspiel/mia/finn.jpg → 404 → Broken-Img (Vorbefund T950).
+    """
+    resp = client_mit_familie.get("/display/hoerspiel/mia/alben")
+    assert resp.status_code == 200
+    html = resp.data.decode("utf-8")
+
+    # FAM-8 absolute Foto-URL — anderes_kind=finn.
+    assert '/api/v1/familie/foto/finn' in html
+
+    # Kein relativer Pfad (relativer Pfad wäre Bug, HSP-3a FAM-8).
+    import re
+    # Matched: src="<was-auch-immer-ohne-slash>" — würde relativen Pfad aufdecken.
+    assert not re.search(r'src="(?!/)(?!http)[^"]+\.(jpg|png|webp)"', html)
