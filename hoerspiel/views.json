@@ -1,33 +1,49 @@
 {
   "views": [
     {
-      "slug": "alben",
-      "pfad": "/display/hoerspiel/alben",
-      "label": "Hörspiel",
-      "synonyme": [
-        "hoerspiel",
-        "hörspiel",
-        "stigi",
-        "folgen",
-        "alben",
-        "paula"
-      ],
-      "zeigt": "Album-Kacheln und Player für Paulas Hörspiel-Serie Stigi & Co.",
+      "slug": "alben-paula",
+      "pfad": "/display/hoerspiel/paula/alben",
+      "label": "Paulas Hörspiele",
+      "synonyme": ["paula", "stigi", "folgen", "alben", "hörspiel"],
+      "zeigt": "Album-Kacheln und Player für Paulas Hörspiel-Serie (Stigi & Co.).",
       "zielgruppe": "kind",
-      "icons": ["arasaac/5915.png"]
+      "icons": ["/api/v1/familie/foto/paula"]
     },
     {
-      "slug": "eltern",
+      "slug": "alben-neko",
+      "pfad": "/display/hoerspiel/neko/alben",
+      "label": "Nekos Hörspiele",
+      "synonyme": ["neko", "quasiluxi", "alpaki", "haski", "hörspiel"],
+      "zeigt": "Album-Kacheln und Player für Nekos Hörspiel-Serie (Quasiluxi, Alpaki & Haski).",
+      "zielgruppe": "kind",
+      "icons": ["/api/v1/familie/foto/neko"]
+    },
+    {
+      "slug": "eltern-paula",
       "typ": "mini-app",
-      "pfad": "/seiten/hoerspiel/eltern",
-      "label": "Hörspiel pflegen",
-      "synonyme": ["hoerspiel-einstellungen", "voice ändern", "folge hören", "tempo", "mistral", "claude"],
-      "zeigt": "Hörspiel-Tuning (Voice, LLM-Anbieter/Modell, Tempo, Pausen) und Album-Galerie mit Multi-Track-Player.",
+      "pfad": "/seiten/hoerspiel/paula/eltern",
+      "label": "Paulas Hörspiel pflegen",
+      "synonyme": ["paula-einstellungen", "voice ändern paula", "tempo paula"],
+      "zeigt": "Hörspiel-Tuning für Paula (Voice, LLM, Tempo, Album-Galerie).",
       "zielgruppe": "eltern",
       "web_app": {
         "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
         "app_short_name": "hoerspiel",
-        "icons": ["arasaac/5915.png"]
+        "icons": ["/api/v1/familie/foto/paula"]
+      }
+    },
+    {
+      "slug": "eltern-neko",
+      "typ": "mini-app",
+      "pfad": "/seiten/hoerspiel/neko/eltern",
+      "label": "Nekos Hörspiel pflegen",
+      "synonyme": ["neko-einstellungen", "voice ändern neko", "tempo neko"],
+      "zeigt": "Hörspiel-Tuning für Neko (Voice, LLM, Tempo, Album-Galerie).",
+      "zielgruppe": "eltern",
+      "web_app": {
+        "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
+        "app_short_name": "hoerspiel",
+        "icons": ["/api/v1/familie/foto/neko"]
       }
     }
   ]
