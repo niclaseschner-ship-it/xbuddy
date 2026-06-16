@@ -286,6 +286,7 @@ def _format_historie_entry(*, nummer: int, titel: str, datum: str,
 
 def baue_album(*, titel: str, text: str, voice: str, idee: str,
                data_root: str,
+               kind_id: str,
                llm: LLMProvider,
                tts_engine,
                now: Callable[[], datetime],
@@ -331,7 +332,7 @@ def baue_album(*, titel: str, text: str, voice: str, idee: str,
 
     manifest = album_manifest.build_skeleton(
         album_id=album_id, nummer=nummer, titel=titel, voice=voice,
-        erstellt_am=erstellt_am,
+        erstellt_am=erstellt_am, kind_id=kind_id,
     )
 
     story_absaetze = absaetze(text)
@@ -361,8 +362,8 @@ def baue_album(*, titel: str, text: str, voice: str, idee: str,
             data_io.atomic_write_bytes(os.path.join(audio_tmp, track_filename), mp3)
             album_manifest.add_inhalt_track(
                 manifest, position=position, album_id=album_id,
-                dauer_sek=dauer)
-        album_manifest.add_outro_track(manifest)
+                dauer_sek=dauer, kind_id=kind_id)
+        album_manifest.add_outro_track(manifest, kind_id=kind_id)
 
         manifest = album_manifest.manifest_to_dict(manifest)
         data_io.atomic_write_json(os.path.join(tmp_root, "manifest.json"), manifest)
