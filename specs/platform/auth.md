@@ -231,6 +231,7 @@ Eintrag nicht in AUTH-6, sondern in eine der ratifizierten Klassen.
 /api/v1/hoerspiel/resume                      (Trigger: Phase 3)
 /api/v1/hoerspiel/themen                      (Trigger: Phase 3)
 /api/v1/hoerspiel/folgen-vorschlag            (Trigger: Phase 3)
+/api/v1/hoerspiel/<kind_id>/play-extern       (Trigger: HSP-Pairing-Token V2 — Loopback-only V1, HSP-42)
 /api/v1/seiten                                (Trigger: Phase 2/3, mini-app-uebersicht-Migration)
 /api/v1/seiten/uebersicht                     (Trigger: Phase 2/3)
 /api/v1/seiten/mini-app-uebersicht            (Trigger: Phase 2/3)
