@@ -134,6 +134,47 @@ async function _patchConfig(patch) {
   return resp;
 }
 
+// HSP-41/34 — UI-Kollaps für Paula+Neko: parallele Fetches/PATCHes über
+// alle V1-Kinder (KIND_IDS_V1). HSP-28a hält die Backend-Configs getrennt;
+// die UI macht sie als ein Setting sichtbar. Drift-Anzeige bei
+// unterschiedlichen Werten.
+
+async function _holeBeideConfigs() {
+  const results = await Promise.allSettled(
+    KIND_IDS_V1.map(kindId =>
+      fetch("/api/v1/hoerspiel/" + kindId + "/config", {
+        headers: _authHeader(),
+      }).then(r => r.ok ? r.json() : Promise.reject("status " + r.status))
+    )
+  );
+  const map = {};
+  KIND_IDS_V1.forEach((kindId, i) => {
+    const r = results[i];
+    map[kindId] = (r.status === "fulfilled") ? r.value : null;
+  });
+  return map;
+}
+
+async function _patchBeideConfigs(patch) {
+  const results = await Promise.allSettled(
+    KIND_IDS_V1.map(kindId =>
+      fetch("/api/v1/hoerspiel/" + kindId + "/config", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ..._authHeader() },
+        body: JSON.stringify(patch),
+      }).then(async r => ({ ok: r.ok, status: r.status,
+                            body: await r.json().catch(() => ({})) }))
+    )
+  );
+  const map = {};
+  KIND_IDS_V1.forEach((kindId, i) => {
+    const r = results[i];
+    map[kindId] = (r.status === "fulfilled") ? r.value
+                                              : { ok: false, status: 0, body: { fehler: String(r.reason) } };
+  });
+  return map;
+}
+
 async function _holeAlben(kindId) {
   const resp = await fetch("/api/v1/hoerspiel/" + kindId + "/alben", {
     headers: _authHeader(),
@@ -171,13 +212,41 @@ async function _setzeResume(kindId, albumId, trackPos) {
 
 // ── Reiter Einstellungen (HSP-34) ────────────────────────────────────────────
 
+// HSP-41 — UI-Kollaps-State: kollabierter audio_ziel-Wert (gemeinsam für
+// Paula+Neko) plus Drift-Indikator wenn die beiden Backend-Configs
+// auseinander laufen.
+let _audioZielKollabiert = { value: null, drift: false, paula: null, neko: null };
+
 async function _ladeEinstellungen() {
   const container = document.getElementById("panel-einstellungen");
   try {
+    // Single-kind_id-Config (für die kind-spezifischen Felder wie playback_tempo)
     const config = await _holeConfig();
     _serverConfig = config;
     _editConfig = { ...config };
+
+    // HSP-41 UI-Kollaps: beide Configs holen und audio_ziel kollabieren.
+    try {
+      const beide = await _holeBeideConfigs();
+      _audioZielKollabiert.paula = beide.paula?.audio_ziel ?? null;
+      _audioZielKollabiert.neko = beide.neko?.audio_ziel ?? null;
+      const werte = Object.values(beide).filter(c => c).map(c => c.audio_ziel);
+      const unique = [...new Set(werte)];
+      _audioZielKollabiert.drift = unique.length > 1;
+      _audioZielKollabiert.value = _audioZielKollabiert.drift
+        ? (config.audio_ziel ?? "display")  // bei Drift: aktuelle kind_id-Wert anzeigen
+        : (werte[0] ?? "display");
+    } catch (e) {
+      console.warn("eltern.js: Kollaps-Fetch fehlgeschlagen — Fallback Single-Config", e);
+      _audioZielKollabiert.value = config.audio_ziel ?? "display";
+      _audioZielKollabiert.drift = false;
+    }
+
     _rendereEinstellungen(container, config);
+
+    if (_audioZielKollabiert.drift) {
+      zeigeToast("Audio-Ausgabe weicht zwischen Paula und Neko ab — Speichern setzt beide gleich.", false);
+    }
   } catch (err) {
     container.innerHTML = '<p class="lade-hinweis">Einstellungen konnten nicht geladen werden.</p>';
     console.error("eltern.js: Einstellungen Ladefehler", err);
@@ -193,7 +262,11 @@ function _rendereEinstellungen(container, config) {
     default_voice: config.default_voice ?? "shimmer",
     llm_provider: config.llm_provider ?? "claude",
     llm_model: config.llm_model ?? "",
+    // HSP-41 — audio_ziel ist global für Paula+Neko (UI-Kollaps):
+    // Wert wird aus _audioZielKollabiert ermittelt, kommt aus beiden Configs.
+    audio_ziel: _audioZielKollabiert.value || (config.audio_ziel ?? "display"),
   };
+  const audioZielVerfuegbar = config.audio_ziel_verfuegbar || ["display", "panel"];
 
   const providerVerfuegbar = config.provider_verfuegbar || [];
   const modelleJeAnbieter = config.modelle_je_anbieter || {};
@@ -254,6 +327,28 @@ function _rendereEinstellungen(container, config) {
       '<div class="voice-kacheln" id="voice-kacheln">' + voiceKachelnHtml + '</div>' +
     '</div>' +
 
+    // HSP-41 — Audio-Ausgabe (Display/Panel-Wahl, global für Paula+Neko)
+    '<div class="einstellung-karte">' +
+      '<div class="einstellung-label">Audio-Ausgabe' +
+        (_audioZielKollabiert.drift ?
+          ' <span style="color:#c00; font-size:0.85em;">(Paula: ' +
+            esc(_audioZielKollabiert.paula || "?") + ', Neko: ' +
+            esc(_audioZielKollabiert.neko || "?") + ')</span>'
+          : '') +
+      '</div>' +
+      '<div class="einstellung-wert">Wo der Ton beim Tippen am Kind-Tablet rauskommt (gilt für Paula+Neko)</div>' +
+      '<div class="voice-kacheln" id="audio-ziel-kacheln">' +
+        audioZielVerfuegbar.map(z => {
+          const pressed = (z === _editConfig.audio_ziel) ? "true" : "false";
+          const label = z === "display" ? "Display (Kind-Tablet)"
+                      : z === "panel" ? "Panel (Wand-/Eltern-Gerät)"
+                      : esc(z);
+          return '<button type="button" class="voice-kachel" data-audio-ziel="' + esc(z) + '" ' +
+                 'aria-pressed="' + pressed + '">' + label + '</button>';
+        }).join("") +
+      '</div>' +
+    '</div>' +
+
     // LLM (Anbieter + Modell)
     (providerVerfuegbar.length > 0 ?
     '<div class="einstellung-karte">' +
@@ -266,7 +361,8 @@ function _rendereEinstellungen(container, config) {
 
     // Hinweis-Block
     '<p class="einstellung-hinweis">Pausen, Stimme und Anbieter+Modell wirken bei der ' +
-    '<strong>nächsten Folge</strong> — Playback-Tempo gilt sofort, auch für bestehende Alben.</p>' +
+    '<strong>nächsten Folge</strong> — Playback-Tempo und Audio-Ausgabe wirken <strong>sofort</strong>, ' +
+    'auch für bestehende Alben.</p>' +
 
     // Sticky Speichern-Knopf
     '<div class="speichern-footer">' +
@@ -317,6 +413,19 @@ function _rendereEinstellungen(container, config) {
     _aktualisiereSpeichernBtn();
   });
 
+  // HSP-41 — Audio-Ziel-Kacheln (Display/Panel)
+  const audioZielContainer = document.getElementById("audio-ziel-kacheln");
+  audioZielContainer && audioZielContainer.addEventListener("click", (e) => {
+    const btn = e.target.closest(".voice-kachel[data-audio-ziel]");
+    if (!btn) return;
+    _editConfig.audio_ziel = btn.dataset.audioZiel;
+    audioZielContainer.querySelectorAll(".voice-kachel").forEach(b => {
+      b.setAttribute("aria-pressed",
+        b.dataset.audioZiel === _editConfig.audio_ziel ? "true" : "false");
+    });
+    _aktualisiereSpeichernBtn();
+  });
+
   // Anbieter-Dropdown → Modell-Dropdown neu befüllen
   const selectAnbieter = document.getElementById("select-anbieter");
   selectAnbieter && selectAnbieter.addEventListener("change", () => {
@@ -357,6 +466,8 @@ function _hatDiff() {
   for (const k of felder) {
     if (String(_editConfig[k]) !== String(_serverConfig[k])) return true;
   }
+  // HSP-41 — audio_ziel hat eigene Drift-Logik (Kollaps-Wert vergleichen).
+  if (String(_editConfig.audio_ziel) !== String(_audioZielKollabiert.value)) return true;
   return false;
 }
 
@@ -364,29 +475,57 @@ async function _onSpeichern() {
   const btn = document.getElementById("speichern-btn");
   if (btn) btn.disabled = true;
 
-  // Nur geänderte Felder senden.
-  const patch = {};
+  // Nur geänderte Felder senden — kind-spezifische Felder.
+  const patchEinzeln = {};
   const felder = ["playback_tempo", "pause_absatz_sek", "pause_titel_sek",
                   "default_voice", "llm_provider", "llm_model"];
   for (const k of felder) {
     if (String(_editConfig[k]) !== String(_serverConfig[k])) {
-      patch[k] = _editConfig[k];
+      patchEinzeln[k] = _editConfig[k];
     }
   }
 
+  // HSP-41 — audio_ziel wird per UI-Kollaps an BEIDE Configs geschrieben.
+  const audioZielGeaendert =
+    String(_editConfig.audio_ziel) !== String(_audioZielKollabiert.value);
+
   try {
-    const resp = await _patchConfig(patch);
-    if (!resp.ok) {
-      const body = await resp.json().catch(() => ({}));
-      const msg = (body.fehler || body.error || ("Fehler " + resp.status));
-      zeigeToast(msg, true);
-      if (btn) btn.disabled = false;
-      return;
+    // Schritt 1: Kind-spezifische Felder (single PATCH).
+    if (Object.keys(patchEinzeln).length > 0) {
+      const resp = await _patchConfig(patchEinzeln);
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        const msg = (body.fehler || body.error || ("Fehler " + resp.status));
+        zeigeToast(msg, true);
+        if (btn) btn.disabled = false;
+        return;
+      }
+      const neueConfig = await resp.json();
+      _serverConfig = neueConfig;
+      _editConfig = { ...neueConfig, audio_ziel: _editConfig.audio_ziel };
     }
-    const neueConfig = await resp.json();
-    _serverConfig = neueConfig;
-    _editConfig = { ...neueConfig };
-    zeigeToast("✓ Gespeichert — Pausen, Stimme, Anbieter und Modell wirken ab der nächsten Folge.");
+
+    // Schritt 2: audio_ziel an alle V1-Kinder parallel.
+    if (audioZielGeaendert) {
+      const ergebnisse = await _patchBeideConfigs({ audio_ziel: _editConfig.audio_ziel });
+      const fehler = [];
+      for (const kindId of KIND_IDS_V1) {
+        if (!ergebnisse[kindId].ok) {
+          fehler.push(kindId + ": " + (ergebnisse[kindId].body.fehler || "HTTP " + ergebnisse[kindId].status));
+        }
+      }
+      if (fehler.length > 0) {
+        zeigeToast("Audio-Ausgabe teilweise gesetzt — Fehler: " + fehler.join("; "), true);
+      } else {
+        // Kollaps-State aktualisieren auf den neuen Wert.
+        _audioZielKollabiert.value = _editConfig.audio_ziel;
+        _audioZielKollabiert.paula = _editConfig.audio_ziel;
+        _audioZielKollabiert.neko = _editConfig.audio_ziel;
+        _audioZielKollabiert.drift = false;
+      }
+    }
+
+    zeigeToast("✓ Gespeichert — Playback-Tempo + Audio-Ausgabe wirken sofort, Stimme/Pausen/Modell ab nächster Folge.");
     if (btn) btn.disabled = true;
   } catch (err) {
     zeigeToast("Buddy nicht erreichbar — versuch es gleich nochmal.", true);
