@@ -170,19 +170,15 @@ Zuordnung (analog zur Memory-Notiz `feedback-pi-service-restart`):
 | `panel/` oder ein `panels.json`-Manifest | `sudo systemctl restart xbuddy-panel` |
 | `essen/` | `sudo systemctl restart xbuddy-essen` |
 | `eltern-chat/` | `sudo systemctl restart xbuddy-eltern-chat` |
-| `hoerspiel/` (Mia-Daten, kind_id=mia) | `sudo systemctl restart xbuddy-hoerspiel` |
-| `hoerspiel/` (Finn-Daten, kind_id=finn) | `sudo systemctl restart xbuddy-hoerspiel-finn` |
+| `hoerspiel/` (Repo-Code, shared zwischen Instanzen) | `sudo systemctl restart xbuddy-hoerspiel && sudo systemctl restart xbuddy-hoerspiel-finn` |
 | `kibuddy/` | `sudo systemctl restart xbuddy-kibuddy` |
 | `deploy/nginx/xbuddy-origin.conf` | `sudo nginx -t && sudo systemctl reload nginx` |
 
-**Hörspiel n-Instanz-Sonderfall (RAT-17, `decisions/RAT-17-907-hoerbuchbuddy-n-instanzen.md`):**
-Mia und Finn sind getrennte Services (`conventions/ports.md:25-27`, `conventions/urls.md:207-208`). Bei `hoerspiel/`-Pfaden ist das **konkrete geänderte File** maßgeblich:
+**Hörspiel n-Instanz-Realität (RAT-17, `decisions/RAT-17-907-hoerbuchbuddy-n-instanzen.md`; PW-58 V1, ENTSCHEID-File `brainstorm/berater-runde/20260617-2330-RATIFIZIERT-pw58-pw52-disziplin-mechanik-katalog.md` Sektion „R2-Empfehlung → Fall 1 Schritt 1" mit Codex-Pass-2-Korrektur):**
 
-- Kind-spezifische Daten (`hoerspiel/config/mia.json`, `hoerspiel/data/mia/*`) → nur Mia-Service.
-- Kind-spezifische Daten (`hoerspiel/config/finn.json`, `hoerspiel/data/finn/*`) → nur Finn-Service.
-- Shared Code (`hoerspiel/album_builder.py`, `hoerspiel/static/*`, `hoerspiel/main.py`) → **BEIDE Services** neu starten.
+Mia und Finn sind getrennte Services (`conventions/ports.md:25-27`, `conventions/urls.md:207-208`). **Kind-spezifische Daten liegen NICHT im Repo**, sondern unter `xbuddy-data/hoerspiel/<kind_id>/` (`specs/buddies/hoerspiel.md:751-820`). Ein `git pull` sieht diese Daten nie — alle `hoerspiel/`-Repo-Touches sind per Definition Shared-Code und brauchen **BEIDE Services** neu gestartet.
 
-Pattern für Diff-Analyse: `git log <pre>..<post> --name-only -- hoerspiel/` durchgehen, pro Pfad das Kind-Segment oder Shared-Marker erkennen.
+Eine frühere Idee, anhand des Pfad-Segments (`hoerspiel/config/mia.json`) zwischen Mia-only und Finn-only zu unterscheiden, wurde mit dem ratifizierten Stand verworfen: solche Pfade existieren im Repo nicht, und Datei-Namen mit „mia"/„finn" (Tests, CSS-Klassen, Mocks) sind selten kind-exklusiv. Reine Pfad-Segment-Heuristik wäre fragil — daher BEIDE bei jedem Repo-Diff unter `hoerspiel/`.
 
 Reihenfolge bei einem Sammel-Pull, der mehrere Komponenten anfasst:
 zuerst die unabhängigen Backends (`xbuddy-familie`, `xbuddy-plan`,
