@@ -46,6 +46,8 @@ ENV_AZURE_KEY = "HOERSPIEL_AZURE_OPENAI_KEY"
 
 VALID_PROVIDERS = ("claude", "mistral")
 VALID_VOICES = ("shimmer", "onyx")
+# HSP-41 — Audio-Ziel-Schema (KAQS-Symmetrie zu aufnahme_quelle).
+VALID_AUDIO_ZIEL = ("display", "panel")
 
 DEFAULT_LLM_MODEL = "claude-opus-4-7"
 DEFAULT_VOICE = "shimmer"
@@ -55,6 +57,8 @@ DEFAULT_SERIEN_NAME = "Stigi & Co."
 DEFAULT_PAUSE_ABSATZ_SEK: float = 0.55
 DEFAULT_PAUSE_TITEL_SEK: float = 1.8
 DEFAULT_PLAYBACK_TEMPO: float = 1.0
+# HSP-41 — Audio-Ziel-Default (Display = lokales <audio> wie heute).
+DEFAULT_AUDIO_ZIEL: str = "display"
 
 # HSP-27a — Themen-Defaults für V1 (Alter 4 → 8 Themen).
 DEFAULT_THEMEN_JE_ALTER: dict[str, list[str]] = {
@@ -226,13 +230,15 @@ class DataConfig:
     - pause_titel_sek     — Stille nach Titel-Absatz (HSP-14)
     - playback_tempo      — Wiedergabe-Geschwindigkeit im Player (HSP-34)
     - themen_je_alter     — kuratierte Themen-Liste je Alter (HSP-27a)
+    - audio_ziel          — Audio-Ausgabegerät: "display" | "panel" (HSP-41)
     """
 
     def __init__(self, default_voice: str, serien_name: str,
                  pause_absatz_sek: float = DEFAULT_PAUSE_ABSATZ_SEK,
                  pause_titel_sek: float = DEFAULT_PAUSE_TITEL_SEK,
                  playback_tempo: float = DEFAULT_PLAYBACK_TEMPO,
-                 themen_je_alter: dict | None = None):
+                 themen_je_alter: dict | None = None,
+                 audio_ziel: str = DEFAULT_AUDIO_ZIEL):
         self.default_voice = default_voice
         self.serien_name = serien_name
         self.pause_absatz_sek = pause_absatz_sek
@@ -240,6 +246,7 @@ class DataConfig:
         self.playback_tempo = playback_tempo
         self.themen_je_alter = themen_je_alter if themen_je_alter is not None \
             else dict(DEFAULT_THEMEN_JE_ALTER)
+        self.audio_ziel = audio_ziel
 
 
 def _load_json(path: str) -> dict[str, Any]:
@@ -357,6 +364,13 @@ def resolve_data(config_path: str | None = None,
     else:
         themen_je_alter = dict(DEFAULT_THEMEN_JE_ALTER)
 
+    # HSP-41 — audio_ziel: display|panel
+    audio_ziel = str(file_cfg.get("audio_ziel") or DEFAULT_AUDIO_ZIEL).strip().lower()
+    if audio_ziel not in VALID_AUDIO_ZIEL:
+        raise ConfigError(
+            "audio_ziel %r ist nicht unterstützt — erlaubt: %s (HSP-41)"
+            % (audio_ziel, ", ".join(VALID_AUDIO_ZIEL)))
+
     return DataConfig(
         default_voice=default_voice,
         serien_name=serien_name,
@@ -364,6 +378,7 @@ def resolve_data(config_path: str | None = None,
         pause_titel_sek=pause_titel,
         playback_tempo=playback_tempo,
         themen_je_alter=themen_je_alter,
+        audio_ziel=audio_ziel,
     )
 
 
@@ -403,6 +418,42 @@ def patch_runtime(cfg: RuntimeConfig, patch: dict[str, Any]) -> RuntimeConfig:
     )
 
 
+def data_config_to_dict(dcfg: DataConfig) -> dict[str, Any]:
+    """Serialisiert DataConfig zu dict für hoerspiel.json (HSP-27, Persistenz für HSP-41)."""
+    return {
+        "default_voice": dcfg.default_voice,
+        "serien_name": dcfg.serien_name,
+        "pause_absatz_sek": dcfg.pause_absatz_sek,
+        "pause_titel_sek": dcfg.pause_titel_sek,
+        "playback_tempo": dcfg.playback_tempo,
+        "themen_je_alter": dcfg.themen_je_alter,
+        "audio_ziel": dcfg.audio_ziel,
+    }
+
+
+def persist_data(dcfg: DataConfig, config_path: str | None = None,
+                 env: dict[str, str] | None = None) -> None:
+    """Schreibt DataConfig atomar in hoerspiel.json (DCOMP-4, HSP-27/HSP-41).
+
+    Bisher hat PATCH /config nur den Runtime-Snapshot ersetzt — Werte
+    überlebten keinen Restart. Mit dieser Funktion persistiert PATCH die
+    Datei. Gilt für ALLE Daten-Config-Felder (nicht nur audio_ziel).
+    """
+    if env is None:
+        env = dict(os.environ)
+    if config_path is None:
+        config_path = env.get(ENV_DATA_CONFIG_FILE) or DEFAULT_DATA_CONFIG_FILE
+    # Existing-Datei lesen, _comment-Feld bewahren (falls vorhanden)
+    from . import data_io
+    existing = data_io.read_json_or_empty(config_path)
+    new_data = data_config_to_dict(dcfg)
+    # _comment und sonstige Meta-Felder behalten
+    for k, v in existing.items():
+        if k.startswith("_") and k not in new_data:
+            new_data[k] = v
+    data_io.atomic_write_json(config_path, new_data)
+
+
 def patch_data(dcfg: DataConfig, patch: dict[str, Any]) -> DataConfig:
     """Applies `PATCH /config`-Body auf einen DataConfig-Snapshot (HSP-17/34).
 
@@ -414,6 +465,7 @@ def patch_data(dcfg: DataConfig, patch: dict[str, Any]) -> DataConfig:
     new_pause_absatz = dcfg.pause_absatz_sek
     new_pause_titel = dcfg.pause_titel_sek
     new_playback_tempo = dcfg.playback_tempo
+    new_audio_ziel = dcfg.audio_ziel
 
     if "default_voice" in patch:
         v = str(patch["default_voice"]).strip().lower()
@@ -453,6 +505,15 @@ def patch_data(dcfg: DataConfig, patch: dict[str, Any]) -> DataConfig:
                 "playback_tempo %r liegt außerhalb des erlaubten Bereichs 0.7–1.3" % val)
         new_playback_tempo = val
 
+    # HSP-41 — audio_ziel: display|panel
+    if "audio_ziel" in patch:
+        v = str(patch["audio_ziel"]).strip().lower()
+        if v not in VALID_AUDIO_ZIEL:
+            raise ConfigError(
+                "audio_ziel %r ist nicht unterstützt — erlaubt: %s (HSP-41)"
+                % (v, ", ".join(VALID_AUDIO_ZIEL)))
+        new_audio_ziel = v
+
     return DataConfig(
         default_voice=new_voice,
         serien_name=dcfg.serien_name,
@@ -460,4 +521,5 @@ def patch_data(dcfg: DataConfig, patch: dict[str, Any]) -> DataConfig:
         pause_titel_sek=new_pause_titel,
         playback_tempo=new_playback_tempo,
         themen_je_alter=dcfg.themen_je_alter,
+        audio_ziel=new_audio_ziel,
     )
