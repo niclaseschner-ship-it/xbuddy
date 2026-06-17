@@ -28,6 +28,20 @@
     <div id="error" class="hidden" role="alert"></div>
     <div id="grid"></div>
   </main>
+  <!-- HSP-42 / PANEL-13 — verstecktes Audio-Element für Sticky-Activation-Prime.
+       Beim Tap auf eine Kachel startet app.js silent.mp3 als Stille-Loop, damit
+       Browser-Sticky-Activation greift und spätere SSE-getriggerte Audio-Quellen-
+       Updates ohne weitere User-Geste abspielen können. -->
+  <audio id="hsp-audio" preload="auto" style="display:none"></audio>
+  <!-- HSP-42 — Tap-Prompt-Overlay als Fallback wenn audio.play() mit
+       NotAllowedError rejected. Wird per app.js erstellt/entfernt. -->
+  <div id="hsp-tap-prompt" class="hidden" role="button" tabindex="0"
+       aria-label="Tippen, um Audio zu starten"
+       style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85);
+              color:#fff; align-items:center; justify-content:center;
+              font-size:1.4rem; z-index:9999; cursor:pointer;">
+    Tippen, um Audio zu starten
+  </div>
   <!-- PWA-4 — Shared Config-Lader (controller/_shared/config.js) muss vor
        app.js geladen werden, damit pwaShared.loadPwaConfig im Bootstrap
        verfügbar ist. -->
