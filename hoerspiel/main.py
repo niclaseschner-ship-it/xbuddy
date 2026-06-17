@@ -28,13 +28,16 @@ Port: 5053 (HSP-28). Service-Topologie: schlanke eigenständige Flask-App
 
 import argparse
 import functools
+import json
 import logging
 import os
+import queue
 import sys
+import threading
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask import Flask, Response, jsonify, render_template, request, send_from_directory
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
@@ -565,7 +568,7 @@ def _post_alben():
 # ---- Config-Endpoints (HSP-17, V2-Provider-Wechsel-Vorgriff) ----
 
 def _build_config_response(cfg, dcfg) -> dict:
-    """Baut die vollständige GET /config-Antwort (HSP-17/34)."""
+    """Baut die vollständige GET /config-Antwort (HSP-17/34/41)."""
     public = cfg.to_public_dict()
     if dcfg is not None:
         public["default_voice"] = dcfg.default_voice
@@ -573,12 +576,15 @@ def _build_config_response(cfg, dcfg) -> dict:
         public["pause_absatz_sek"] = dcfg.pause_absatz_sek
         public["pause_titel_sek"] = dcfg.pause_titel_sek
         public["playback_tempo"] = dcfg.playback_tempo
+        public["audio_ziel"] = dcfg.audio_ziel
     else:
         public.setdefault("default_voice", config_mod.DEFAULT_VOICE)
         public.setdefault("pause_absatz_sek", config_mod.DEFAULT_PAUSE_ABSATZ_SEK)
         public.setdefault("pause_titel_sek", config_mod.DEFAULT_PAUSE_TITEL_SEK)
         public.setdefault("playback_tempo", config_mod.DEFAULT_PLAYBACK_TEMPO)
+        public.setdefault("audio_ziel", config_mod.DEFAULT_AUDIO_ZIEL)
     public["voices_verfuegbar"] = list(config_mod.VALID_VOICES)
+    public["audio_ziel_verfuegbar"] = list(config_mod.VALID_AUDIO_ZIEL)
     public["provider_verfuegbar"] = _provider_verfuegbar(cfg)
     public["modelle_je_anbieter"] = _modelle_je_anbieter()
     return public
@@ -617,7 +623,7 @@ def config_endpoint(kind_id: str):
     if (new_cfg.llm_provider, new_cfg.llm_model) != (cfg.llm_provider, cfg.llm_model):
         runtime["llm"] = None
 
-    # Daten-Konfig-Felder (default_voice, pause_*, playback_tempo).
+    # Daten-Konfig-Felder (default_voice, pause_*, playback_tempo, audio_ziel HSP-41).
     dcfg = _data_cfg()
     try:
         new_dcfg = config_mod.patch_data(dcfg, body) if dcfg is not None else dcfg
@@ -625,7 +631,162 @@ def config_endpoint(kind_id: str):
         return jsonify({"fehler": str(e)}), 422
     runtime["data_config"] = new_dcfg
 
+    # Persistenz (DCOMP-4, HSP-27/HSP-41): Werte überleben Restart.
+    # Vorher schrieb PATCH nur den Memory-Snapshot — playback_tempo, default_voice
+    # etc. fielen nach systemctl restart auf Datei-Default zurück.
+    if new_dcfg is not None:
+        try:
+            config_mod.persist_data(new_dcfg)
+        except OSError as e:
+            logger.warning("hoerspiel/config: persist_data fehlgeschlagen — %s", e)
+            # Kein 5xx an den Client — Memory-Stand bleibt aktuell, nur Restart-Persistenz
+            # ist betroffen. Eltern sehen den Wert sofort, nach Restart fällt er zurück.
+
     return jsonify(_build_config_response(new_cfg, new_dcfg))
+
+
+# ---- Audio-Stream-SSE + play-extern (HSP-42, RATIFIZIERT 2026-06-17) ----
+#
+# Bei audio_ziel=panel pusht der HSP-Service über SSE an die Panel-PWA.
+# Pattern aus router/main.py:106-161 wiederverwendet — Subscribers in einer
+# Queue-Liste pro Prozess, Lock für Thread-Safety, 15s-Heartbeat.
+#
+# Auth: PUBLIC heute (AUTH-6-Backlog, Trigger „Phase 4 HSP-Audio-Routing").
+# Caller von /play-extern ist alben.js am Kinder-Tablet (Display-Renderer-
+# Klasse AUTH-7); Caller von /audio-stream ist die Panel-PWA. Browser über
+# nginx ist kein Loopback (X-Forwarded-For greift).
+
+SSE_HEARTBEAT_SECONDS = 15
+_audio_subscribers: list[queue.Queue] = []
+_audio_subscribers_lock = threading.Lock()
+
+
+def _audio_register_subscriber() -> queue.Queue:
+    q: queue.Queue = queue.Queue()
+    with _audio_subscribers_lock:
+        _audio_subscribers.append(q)
+    return q
+
+
+def _audio_unregister_subscriber(q: queue.Queue) -> None:
+    with _audio_subscribers_lock:
+        try:
+            _audio_subscribers.remove(q)
+        except ValueError:
+            pass
+
+
+def _audio_broadcast(event: dict) -> None:
+    """Pusht das Event an alle aktuell verbundenen Panel-PWAs."""
+    with _audio_subscribers_lock:
+        subs = list(_audio_subscribers)
+    for q in subs:
+        try:
+            q.put_nowait(event)
+        except queue.Full:
+            pass
+
+
+def _sse_pack(event: dict | None) -> str:
+    """Formatiert ein Event als SSE-Nachricht (analog router/main.py:147)."""
+    if event is None:
+        return ": heartbeat\n\n"
+    return "data: %s\n\n" % json.dumps(event, ensure_ascii=False)
+
+
+def _audio_event_stream():
+    """SSE-Generator: initialer Heartbeat, dann Events oder periodische Heartbeats."""
+    q = _audio_register_subscriber()
+    try:
+        # Initialer Heartbeat — Browser bestätigt Verbindung
+        yield ": connected\n\n"
+        while True:
+            try:
+                event = q.get(timeout=SSE_HEARTBEAT_SECONDS)
+                yield _sse_pack(event)
+            except queue.Empty:
+                yield _sse_pack(None)
+    finally:
+        _audio_unregister_subscriber(q)
+
+
+@app.route("/api/v1/hoerspiel/<kind_id>/audio-stream", methods=["GET"])
+def audio_stream(kind_id: str):
+    """HSP-42: SSE-Stream für Audio-Source-Push an Panel-PWA.
+
+    Caller: app-panel-PWA (controller/app-panel/), pro HSP-Instanz eine
+    EventSource-Verbindung. Browser-Native-Reconnect übernimmt Reconnect
+    bei Tab-visibility-Change (DC-7-Pattern).
+
+    Auth: PUBLIC (AUTH-6, Trigger „Phase 4 HSP-Audio-Routing").
+    """
+    err = _assert_self_kind(kind_id)
+    if err is not None:
+        return err
+    response = Response(_audio_event_stream(), mimetype="text/event-stream")
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Accel-Buffering"] = "no"  # nginx-Buffering aus
+    return response
+
+
+@app.route("/api/v1/hoerspiel/<kind_id>/play-extern", methods=["POST"])
+def play_extern(kind_id: str):
+    """HSP-42: Audio-Source-Push triggern (alben.js ruft pro Track-Wechsel).
+
+    Body: {"album_id": <str>, "track_idx": <int>}
+    Antwort: 200 {"ok": true} bei Erfolg, 404 unbekanntes album, 422 ungültiger track_idx.
+
+    Caller: alben.js am Kinder-Tablet bei audio_ziel=panel (HSP-22-Erweiterung).
+    Auth: PUBLIC (AUTH-6, Trigger „Phase 4 HSP-Audio-Routing").
+    """
+    err = _assert_self_kind(kind_id)
+    if err is not None:
+        return err
+
+    body = request.get_json(silent=True) or {}
+    album_id = body.get("album_id")
+    track_idx = body.get("track_idx")
+
+    if not isinstance(album_id, str) or not album_id:
+        return jsonify({"fehler": "album_id (string) fehlt"}), 422
+    if not isinstance(track_idx, int):
+        return jsonify({"fehler": "track_idx (int) fehlt"}), 422
+
+    # Manifest holen, um Track-Filename + Audio-URL zu bauen
+    manifest_path = os.path.join(_data_root(), "alben", album_id, "manifest.json")
+    if not os.path.isfile(manifest_path):
+        return jsonify({"fehler": "album_id nicht gefunden"}), 404
+    try:
+        with open(manifest_path, encoding="utf-8") as f:
+            manifest = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        logger.warning("play-extern: manifest %s nicht lesbar — %s", album_id, e)
+        return jsonify({"fehler": "manifest nicht lesbar"}), 500
+
+    tracks = manifest.get("tracks") or []
+    if not isinstance(tracks, list) or track_idx < 0 or track_idx >= len(tracks):
+        return jsonify({"fehler": "track_idx außerhalb des Track-Bereichs"}), 422
+
+    track = tracks[track_idx]
+    # Audio-URL über offizielle HSP-37-API-Form (kind_id-tragend)
+    audio_filename = track.get("audio-asset") or track.get("filename") or ""
+    # audio-asset könnte schon vollständige URL sein, oder nur Dateiname
+    if audio_filename.startswith("/api/v1/") or audio_filename.startswith("/display/"):
+        audio_url = audio_filename
+    else:
+        # Fallback: Dateiname aus track-N.mp3-Konvention bauen
+        audio_url = "/api/v1/hoerspiel/%s/alben/%s/audio/%s" % (
+            kind_id, album_id, os.path.basename(audio_filename))
+
+    event = {
+        "type": "audio_play",
+        "kind_id": kind_id,
+        "album_id": album_id,
+        "track_idx": track_idx,
+        "audio_url": audio_url,
+    }
+    _audio_broadcast(event)
+    return jsonify({"ok": True})
 
 
 # ---- Themen-Endpoint (HSP-38, URL-3a, RAT-17) ----

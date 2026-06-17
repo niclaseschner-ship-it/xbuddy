@@ -728,3 +728,125 @@ def test_face_pille_foto_url_absolute(client_mit_familie):
     import re
     # Matched: src="<was-auch-immer-ohne-slash>" — würde relativen Pfad aufdecken.
     assert not re.search(r'src="(?!/)(?!http)[^"]+\.(jpg|png|webp)"', html)
+
+
+# ============================================================
+#  HSP-41 — audio_ziel-Feld in HSP-Config
+# ============================================================
+
+def test_get_config_liefert_audio_ziel_default(client_mini):
+    """HSP-41: GET /config liefert audio_ziel-Feld mit Default 'display'."""
+    resp = client_mini.get("/api/v1/hoerspiel/paula/config")
+    body = resp.get_json()
+    assert body["audio_ziel"] == "display"
+    assert "panel" in body["audio_ziel_verfuegbar"]
+    assert "display" in body["audio_ziel_verfuegbar"]
+
+
+def test_patch_config_audio_ziel_panel(client_mini):
+    """HSP-41: PATCH audio_ziel=panel → 200 + Wert übernommen."""
+    resp = client_mini.patch("/api/v1/hoerspiel/paula/config",
+                             json={"audio_ziel": "panel"})
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["audio_ziel"] == "panel"
+
+
+def test_patch_config_audio_ziel_ungueltig_422(client_mini):
+    """HSP-41: PATCH mit ungültigem audio_ziel → 422."""
+    resp = client_mini.patch("/api/v1/hoerspiel/paula/config",
+                             json={"audio_ziel": "bluetooth"})
+    assert resp.status_code == 422
+    assert "fehler" in resp.get_json()
+
+
+# ============================================================
+#  HSP-42 — play-extern + SSE Audio-Stream
+# ============================================================
+
+def test_play_extern_unbekanntes_album_404(client_mini):
+    """HSP-42: POST /play-extern mit unbekanntem album_id → 404."""
+    resp = client_mini.post("/api/v1/hoerspiel/paula/play-extern",
+                            json={"album_id": "folge-99999", "track_idx": 0})
+    assert resp.status_code == 404
+
+
+def test_play_extern_track_idx_out_of_range_422(client_mini, data_root_mini):
+    """HSP-42: POST /play-extern mit track_idx außerhalb Bereich → 422."""
+    # Album mit manifest.json anlegen
+    import json
+    album_dir = os.path.join(data_root_mini, "alben", "folge-test")
+    os.makedirs(album_dir, exist_ok=True)
+    manifest = {"tracks": [{"audio-asset": "track-01.mp3"}]}
+    with open(os.path.join(album_dir, "manifest.json"), "w") as f:
+        json.dump(manifest, f)
+
+    # Test-Client mit data_root setzen
+    main_mod.configure(
+        runtime_config=main_mod._runtime_cfg(),
+        data_config=main_mod._data_cfg(),
+        data_root=data_root_mini,
+        bot_token="TEST",
+    )
+    client = main_mod.app.test_client()
+    resp = client.post("/api/v1/hoerspiel/paula/play-extern",
+                       json={"album_id": "folge-test", "track_idx": 99})
+    assert resp.status_code == 422
+
+
+def test_play_extern_fehlende_felder_422(client_mini):
+    """HSP-42: POST /play-extern ohne album_id → 422."""
+    resp = client_mini.post("/api/v1/hoerspiel/paula/play-extern", json={})
+    assert resp.status_code == 422
+
+
+def test_audio_stream_endpoint_existiert(client_mini):
+    """HSP-42: GET /audio-stream antwortet mit text/event-stream Content-Type."""
+    # SSE-Stream darf nicht abgeschlossen werden — wir testen nur den Start
+    # über die Response-Header. Werkzeug ruft den Generator lazy auf.
+    resp = client_mini.get("/api/v1/hoerspiel/paula/audio-stream",
+                           headers={"Accept": "text/event-stream"},
+                           buffered=False)
+    # Wir lesen nur die ersten Bytes, dann schließen wir.
+    try:
+        first_chunk = next(resp.response, b"")
+        assert b"connected" in first_chunk or b":" in first_chunk
+    finally:
+        resp.close()
+
+
+# ============================================================
+#  HSP-27/41 — Persistenz-Fix: PATCH /config schreibt in Datei
+# ============================================================
+
+def test_patch_config_persistiert_in_datei(tmp_path, runtime_cfg_with_mistral, data_root_mini):
+    """HSP-27/41: PATCH /config schreibt Werte atomar in hoerspiel.json.
+
+    Vor diesem Fix überlebte PATCH /config keinen Restart — Werte fielen
+    auf Datei-Default zurück.
+    """
+    # Eigenen hoerspiel.json-Pfad setzen
+    data_config_file = tmp_path / "hoerspiel.json"
+    initial_data = {"default_voice": "shimmer", "playback_tempo": 1.0,
+                    "audio_ziel": "display"}
+    import json
+    data_config_file.write_text(json.dumps(initial_data))
+    os.environ["HOERSPIEL_DATA_CONFIG_FILE"] = str(data_config_file)
+    try:
+        # Frische DataConfig aus Datei
+        dcfg = config_mod.resolve_data()
+        main_mod.configure(
+            runtime_config=runtime_cfg_with_mistral, data_config=dcfg,
+            data_root=data_root_mini, bot_token="TEST",
+        )
+        client = main_mod.app.test_client()
+        resp = client.patch("/api/v1/hoerspiel/paula/config",
+                            json={"audio_ziel": "panel", "playback_tempo": 1.2})
+        assert resp.status_code == 200
+
+        # Datei neu lesen — Werte müssen drinstehen
+        persisted = json.loads(data_config_file.read_text())
+        assert persisted["audio_ziel"] == "panel"
+        assert abs(persisted["playback_tempo"] - 1.2) < 0.01
+    finally:
+        del os.environ["HOERSPIEL_DATA_CONFIG_FILE"]
