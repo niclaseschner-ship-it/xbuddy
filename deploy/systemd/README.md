@@ -170,7 +170,19 @@ Zuordnung (analog zur Memory-Notiz `feedback-pi-service-restart`):
 | `panel/` oder ein `panels.json`-Manifest | `sudo systemctl restart xbuddy-panel` |
 | `essen/` | `sudo systemctl restart xbuddy-essen` |
 | `eltern-chat/` | `sudo systemctl restart xbuddy-eltern-chat` |
+| `hoerspiel/` (Mia-Daten, kind_id=mia) | `sudo systemctl restart xbuddy-hoerspiel` |
+| `hoerspiel/` (Finn-Daten, kind_id=finn) | `sudo systemctl restart xbuddy-hoerspiel-finn` |
+| `kibuddy/` | `sudo systemctl restart xbuddy-kibuddy` |
 | `deploy/nginx/xbuddy-origin.conf` | `sudo nginx -t && sudo systemctl reload nginx` |
+
+**Hörspiel n-Instanz-Sonderfall (RAT-17, `decisions/RAT-17-907-hoerbuchbuddy-n-instanzen.md`):**
+Mia und Finn sind getrennte Services (`conventions/ports.md:25-27`, `conventions/urls.md:207-208`). Bei `hoerspiel/`-Pfaden ist das **konkrete geänderte File** maßgeblich:
+
+- Kind-spezifische Daten (`hoerspiel/config/mia.json`, `hoerspiel/data/mia/*`) → nur Mia-Service.
+- Kind-spezifische Daten (`hoerspiel/config/finn.json`, `hoerspiel/data/finn/*`) → nur Finn-Service.
+- Shared Code (`hoerspiel/album_builder.py`, `hoerspiel/static/*`, `hoerspiel/main.py`) → **BEIDE Services** neu starten.
+
+Pattern für Diff-Analyse: `git log <pre>..<post> --name-only -- hoerspiel/` durchgehen, pro Pfad das Kind-Segment oder Shared-Marker erkennen.
 
 Reihenfolge bei einem Sammel-Pull, der mehrere Komponenten anfasst:
 zuerst die unabhängigen Backends (`xbuddy-familie`, `xbuddy-plan`,
