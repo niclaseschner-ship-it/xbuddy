@@ -202,8 +202,9 @@ test("HSP-35-Avatar-URL: Avatar-img src = /api/v1/familie/foto/<folge.kind_id>",
 
 /**
  * Test 4 — HSP-35-Aggregation: einseitiger 404 → Promise.all reject.
- * Heute kein Partial-Result — catch ist Pflicht, keine stille Ignorierung.
- * (Offene Frage für Folge-Ticket: partial list bei einseitigem 404.)
+ * V1-Verhalten (siehe HSP-40-Stichpunkt "HSP-35-Aggregation"): komplette
+ * Liste leer mit sichtbarem Lade-Hinweis. Partial-Result via
+ * Promise.allSettled + Warn-Banner ist Folge-Ticket #975.
  */
 test("HSP-35-Aggregation: einseitiger fetch-404 → Promise.all wirft (kein Partial-Result)", async () => {
   // Simuliert parallelen Lade-Pfad: paula OK, neko → 404-artige Ablehnung
