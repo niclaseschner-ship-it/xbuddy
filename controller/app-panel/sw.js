@@ -6,7 +6,9 @@
 
 'use strict';
 
-const CACHE_NAME = 'app-panel-v1';
+// HSP-42 / PANEL-13: silent.mp3 + neue app.js-Größe → Cache-Bust durch
+// Versions-Bump.
+const CACHE_NAME = 'app-panel-v2-hsp-audio';
 
 const STATIC_ASSETS = [
   './',
@@ -15,6 +17,9 @@ const STATIC_ASSETS = [
   './app.js',
   './style.css',
   './manifest.json',
+  // HSP-42 / PANEL-13 — Silent-MP3 für Sticky-Activation-Prime. Precachen,
+  // damit der Prime auch beim ersten Tap zuverlässig spielt.
+  './silent.mp3',
   // E-PANEL-6: Token-CSS precachen — gecachter Fall bleibt gestylt auch ohne WAN.
   // CDN-Schrift fällt dann auf System-Font-Stack (--font-sans) zurück.
   '/display/_shared/design/tokens.css',

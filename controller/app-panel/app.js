@@ -772,6 +772,122 @@
   }
 
   // ============================================================
+  //  HSP-42 / PANEL-13 — Audio-Source-Push aus HSP-Services
+  // ============================================================
+  //
+  // Pattern aus PANEL-11 (Z. 744+) wiederverwendet. Pro HSP-Instanz eine
+  // EventSource zu /api/v1/hoerspiel/<kind_id>/audio-stream. Bei
+  // audio_play-Event setzt das <audio id="hsp-audio">-Element die neue
+  // Source und ruft play(). Sticky-Activation muss zuvor durch einen
+  // Kachel-Tap gesetzt worden sein (primeSilentAudio).
+  //
+  // V1 hartkodiert paula+neko (HSP-28a — keine Instanz-Registry, RAT-17
+  // Option A).
+
+  var HSP_KIND_IDS = ['paula', 'neko'];
+  var hspStreams = {};
+
+  function primeSilentAudio() {
+    var a = document.getElementById('hsp-audio');
+    if (!a) return;
+    // Schon aktiv und nicht pausiert? Nichts tun (Empirie 2026-06-17 R6:
+    // kurzer Loop hält Browser-Idle-Detection wach).
+    if (a.src && !a.paused) return;
+    a.src = './silent.mp3';
+    a.loop = true;
+    var p = a.play();
+    if (p && typeof p.catch === 'function') {
+      p.catch(function (err) {
+        // Erst-Tap blockt mit NotAllowedError → das ist OK, der nächste
+        // Kachel-Tap wird die Geste tragen.
+        console.warn('silent-prime blockt:', err && err.name || err);
+      });
+    }
+  }
+
+  function showHspTapPrompt(queuedUrl) {
+    var prompt = document.getElementById('hsp-tap-prompt');
+    if (!prompt) return;
+    prompt.style.display = 'flex';
+    prompt.classList.remove('hidden');
+    var handler = function () {
+      var a = document.getElementById('hsp-audio');
+      if (!a) return;
+      a.pause();
+      a.src = queuedUrl;
+      a.loop = false;
+      var p = a.play();
+      if (p && typeof p.catch === 'function') {
+        p.catch(function (err) {
+          console.warn('manual play() failed:', err && err.name || err);
+        });
+      }
+      prompt.style.display = 'none';
+      prompt.classList.add('hidden');
+      prompt.removeEventListener('click', handler);
+    };
+    prompt.addEventListener('click', handler);
+  }
+
+  function onHspAudioEvent(event) {
+    if (!event || event.type !== 'audio_play') return;
+    var a = document.getElementById('hsp-audio');
+    if (!a) return;
+    // Sauber-Reset gegen Source-Wechsel-Glitch (Codex-Pass-2-R2).
+    a.pause();
+    a.src = '';
+    a.loop = false;
+    a.src = event.audio_url;
+    var p = a.play();
+    if (p && typeof p.catch === 'function') {
+      p.catch(function (err) {
+        if (err && err.name === 'NotAllowedError') {
+          // iOS-WebKit-Sticky-Activation hat eventuell ausgelaufen.
+          showHspTapPrompt(event.audio_url);
+        } else {
+          console.warn('hsp-audio play() error:', err);
+        }
+      });
+    }
+  }
+
+  function attachHspAudioStream(kindId) {
+    if (typeof EventSource === 'undefined') return null;
+    var url = '/api/v1/hoerspiel/' + encodeURIComponent(kindId) + '/audio-stream';
+    var es = new EventSource(url);
+    es.addEventListener('message', function (e) {
+      try {
+        var data = JSON.parse(e.data);
+        onHspAudioEvent(data);
+      } catch (err) {
+        console.warn('hsp-audio-stream: parse-Fehler', err);
+      }
+    });
+    es.onerror = function () {
+      console.warn('hsp-audio-stream ' + kindId + ' error — Browser reconnectet (DC-7).');
+    };
+    return es;
+  }
+
+  function attachHspAudioStreams() {
+    HSP_KIND_IDS.forEach(function (kindId) {
+      if (hspStreams[kindId]) {
+        try { hspStreams[kindId].close(); } catch (e) {}
+      }
+      hspStreams[kindId] = attachHspAudioStream(kindId);
+    });
+  }
+
+  // visibilitychange — EventSource wird auf iOS/Android im Hintergrund
+  // pausiert (siehe display-client.md:101-108); beim Zurück-in-den-
+  // Vordergrund neu öffnen.
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') {
+      attachHspAudioStreams();
+    }
+  });
+
+  // ============================================================
   //  PANEL-5 — Tap → POST /api/v1/events mit Retry
   // ============================================================
 
@@ -826,6 +942,11 @@
     var tiles = await loadTiles();
     renderGrid(tiles, cfg,
       function onTap(tile) {
+        // PANEL-13 — Silent-Audio-Prime bei JEDEM Kachel-Tap (HSP-42 + Empirie
+        // 2026-06-17). Browser-Sticky-Activation wird durch die User-Geste
+        // gesetzt; spätere SSE-getriggerte Audio-Source-Updates spielen ohne
+        // weitere Geste, weil die Tab-Session activated bleibt.
+        primeSilentAudio();
         sendEvent(cfg, panelLib.makeTileSelected(cfg.source_id, tile));
       },
       function onClear() {
@@ -837,6 +958,8 @@
     attachWakeLock();
     attachFullscreenOnGesture();
     attachStream(displayId, function () { return tiles; });
+    // HSP-42 — EventSource zu beiden HSP-Services für Audio-Source-Push.
+    attachHspAudioStreams();
   })();
 
   // Service Worker (PANEL-10 PWA-Begleitdatei). Fehler still ignorieren.
