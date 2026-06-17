@@ -272,6 +272,18 @@ body {
   flex-shrink: 0;
 }
 
+/* HSP-35 / #973: Kind-Avatar (FAM-8) pro Folgen-Eintrag —
+   selber Mechanismus wie Face-Pille in alben.html (HSP-3a, T911). */
+.album-kind-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--border, #e0ddd8);
+  background: var(--bg, #f9f7f4);
+}
+
 /* ── Inline-Player (HSP-35) ──────────────────────────────────────────────── */
 .folgen-player {
   background: var(--surface, #fff);

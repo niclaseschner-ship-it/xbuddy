@@ -1264,15 +1264,29 @@ Bei HTTP 422 vom Server zeigt die Mini-App den vom Server gelieferten
 Modell-Dropdown aus `modelle_je_anbieter[<neuer-anbieter>]` neu und
 setzt es auf den ersten Eintrag (Provider-Default).
 
-### HSP-35 — Reiter „Folgen" (Album-Galerie + Multi-Track-Player)
+### HSP-35 — Reiter „Folgen" (aggregierte Liste + Multi-Track-Player)
 
-Lädt die Album-Liste aus `GET /alben` (existing). Rendert sie als
-vertikale Kachel-Liste (MAD-2 Card-Pattern):
+**#973 (2026-06-16) · RAT-17 Option A handverdrahtet; Wiederaufnahme bei
+dritter Instanz oder zweiter Buddy-Klasse mit n Instanzen (RAT-17-Klausel):**
+Der Folgen-Tab lädt parallel die Folgen aller V1-Kinder (Mia und Finn),
+mergt sie und sortiert nach `erstellt-am` desc (gleicher Datumswert:
+`nummer` desc als Fallback).
+Jede Folge trägt ihre `kind_id` im JS-State — Player öffnet
+`/api/v1/hoerspiel/<folge.kind_id>/alben/<id>/manifest`, **nicht**
+URL-KIND_ID. Settings-Tab (HSP-34) bleibt instance-getrennt und
+verwendet weiterhin KIND_ID aus dem URL-Pfad.
+
+Rendert als vertikale Kachel-Liste (MAD-2 Card-Pattern):
 
 ```
-[cover 56×56] [Folge N · Titel]       [▶ ab Track X | (leer)]
+[cover 56×56] [Folge N · Titel]   [kind-avatar 28×28] [▶ ab Track X | (leer)]
                 voice · datum
 ```
+
+- **Kind-Avatar** links neben dem Resume-Badge: `<img
+  src="/api/v1/familie/foto/<folge.kind_id>">` (FAM-8) — selber
+  Mechanismus wie Face-Pille in `alben.html` (HSP-3a, T911 Vorbild).
+  Fehler beim Laden der Avatar-URL → Bild versteckt, kein Abbruch.
 
 Tap auf eine Kachel → öffnet den **Inline-Player** unten im selben
 Reiter (kein Modal). Der Player nutzt das **Multi-Track-Modell** aus
@@ -1305,7 +1319,8 @@ HSP-6 (Intro · Inhalts-Tracks · Outro):
 **Resume-Stand-Tap-Verhalten** (HSP-36): wenn ein Album einen Resume-
 Stand hat, startet der Tap auf die Kachel **direkt beim Resume-Track**
 (nicht beim Intro). Ohne Resume-Stand startet die Wiedergabe beim
-Intro-Track.
+Intro-Track. Resume-Read/Write-Calls nutzen `folge.kind_id` (nicht
+URL-KIND_ID).
 
 ### HSP-36 — Resume-Stand auf Mini-App-Player erweitert
 
@@ -1413,6 +1428,12 @@ Pflicht-Tests (ohne Netz, ohne Telegram, ohne Mistral-/Anthropic-API):
 - **HSP-40-Themen-URL** — kein `?alter=`-Query-Parameter; `kind_id` trägt
   die Instanz-Identität als URL-Segment (`/api/v1/hoerspiel/<kind_id>/themen`,
   RAT-17 URL-3a-konform, #910).
+- **HSP-35-Aggregation** — Parallele Lade-Pfade über alle V1-kind_ids
+  aggregieren; Merge-Sort `erstellt-am` desc; jeder Listen-Eintrag trägt
+  folge-eigene `kind_id`; Player-Klick öffnet `folge.kind_id`-Manifest
+  (nicht URL-`kind_id`); einseitiger 404 → komplette Liste leer mit
+  sichtbarem Lade-Hinweis (Partial-Result via `Promise.allSettled` +
+  Warn-Banner ist Folge-Ticket #975).
 - **Mistral-Adapter** (`hoerspiel/providers/mistral.py`) gegen Mock-API:
   erfolgreiche Folgen-Erzeugung; HTTP-Fehler → `LLMError`; fehlender
   Key → `ConfigError`. Tests für jedes der drei V1-Modelle (`mistral-large-2411`,
