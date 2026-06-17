@@ -691,6 +691,28 @@ hinzufügen"-PWA — bei zwei Instanzen je Kind eine eigene URL
 (`/display/hoerspiel/paula/alben`, `/display/hoerspiel/neko/alben`).
 Eigenes Kind-Gerät = OPEN-HSP-G.
 
+**Audio-Ziel-Weiche (Folge-Klausel zu HSP-41).** Der Player in `alben.js`
+liest beim Start `audio_ziel` aus der aktiven Service-Config (HSP-41) und
+verzweigt:
+
+- `audio_ziel = "display"` (Default): lokales `<audio>`-Element im
+  Kind-View-iframe, MediaSession- und Wake-Lock-Verhalten wie oben.
+- `audio_ziel = "panel"`: das lokale `<audio>` wird **nicht** gestartet
+  (kein `play()`-Aufruf, keine MediaSession, kein Wake-Lock auf dem
+  Kind-Display). Stattdessen ruft `alben.js` auf jeden Play-, Skip- und
+  Track-Wechsel-Befehl `POST /api/v1/hoerspiel/<kind_id>/play-extern`
+  am lokalen HSP-Service auf (HSP-42). Das Kind-Display geht zusätzlich
+  in den Ruhe-Zustand nach DC-5 (vollständig schwarze Fläche, keine
+  Status-Karte, keine Player-Buttons), weil der Inhalt dort weder
+  klingt noch lokal kontrolliert wird.
+
+Die Verzweigung sitzt im Player-Modul, nicht in der View-Auswahl — derselbe
+`/display/hoerspiel/<kind_id>/alben`-URL trägt beide Modi (kein
+URL-Splitting nach Audio-Ziel).
+
+(RATIFIZIERT 2026-06-17 audio-output-routing → "Kernmechanik" → lokales
+`<audio>` unterdrückt bei Ziel=Panel; Kind-Display DC-5)
+
 ---
 
 ## 7. Resume-Verhalten
@@ -1264,6 +1286,43 @@ Bei HTTP 422 vom Server zeigt die Mini-App den vom Server gelieferten
 Modell-Dropdown aus `modelle_je_anbieter[<neuer-anbieter>]` neu und
 setzt es auf den ersten Eintrag (Provider-Default).
 
+**Audio-Ziel-Schalter (Folge-Klausel zu HSP-41).** Eine sechste Karten-
+Zeile im Einstellungen-Reiter:
+
+| Element | Form | Wert-Range / Optionen | API-Feld |
+|---|---|---|---|
+| Audio-Ausgabe | 2-Kachel-Wahl | `display` / `panel` | `audio_ziel` |
+
+**UI-Kollaps für Paula+Neko (Variante D).** Der Audio-Ausgabe-Schalter
+wirkt **global für beide HSP-Service-Instanzen**, obwohl das Backend pro
+Instanz konfiguriert bleibt (HSP-28a, kein Shared-Settings-Layer):
+
+- Beim Laden des Einstellungen-Reiters fetcht die Mini-App **beide**
+  Service-Configs parallel (`GET /config` an Paula- und Neko-Instanz).
+  Stimmen die `audio_ziel`-Werte überein, wird der gemeinsame Wert
+  angezeigt. Stimmen sie nicht überein (Drift-Fall), wird die Kachel-Wahl
+  in einem neutralen Zustand gerendert und ein Hinweis-Toast eingeblendet:
+  „Audio-Ausgabe weicht zwischen Paula und Neko ab — Speichern setzt beide
+  gleich."
+- Beim Save löst der Speichern-Knopf **zwei parallele `PATCH /config`**
+  aus (Paula- und Neko-Instanz), beide mit demselben `audio_ziel`-Wert.
+  Schlägt einer der beiden Calls fehl, zeigt der Toast den Fehler-Klartext
+  des fehlgeschlagenen Calls und benennt die betroffene Instanz; der
+  gelungene Call bleibt persistiert (keine Transaktion).
+
+**Wirkungs-Hinweis pro Feld.** Die bestehende Hinweis-Block- und
+Toast-Klausel (Wirkung bei nächster Folge) gilt **nicht** für
+`audio_ziel`. Hinweis-Block wird zur Pro-Feld-Liste:
+
+> Pausen, Stimme und Anbieter+Modell wirken bei der **nächsten Folge**.
+> Playback-Tempo und Audio-Ausgabe wirken **sofort**, auch für laufende
+> Wiedergabe.
+
+Toast bei Save spiegelt die Pro-Feld-Wirkung in der Bestätigungs-Zeile.
+
+(RATIFIZIERT 2026-06-17 audio-output-routing → Setzung 6 „UI-Kollaps
+Variante D"; Setzung 5 „KAQS-Symmetrie audio_ziel: display|panel")
+
 ### HSP-35 — Reiter „Folgen" (aggregierte Liste + Multi-Track-Player)
 
 **#973 (2026-06-16) · RAT-17 Option A handverdrahtet; Wiederaufnahme bei
@@ -1445,6 +1504,136 @@ Pflicht-Tests (ohne Netz, ohne Telegram, ohne Mistral-/Anthropic-API):
 Modell, mindestens einmal Folgen-Build pro Provider). Eine
 Mistral-Modell-ID, die 404/422 antwortet, wird aus `AVAILABLE_MODELS`
 entfernt (Konstante anpassen, kein Spec-Update — HSP-27b).
+
+---
+
+## 13. Audio-Ziel-Routing (V1-Erweiterung)
+
+### HSP-41 — Audio-Ziel-Feld in HSP-Config
+
+Die HSP-Service-Config trägt ein Feld `audio_ziel` mit zwei zulässigen
+Werten:
+
+| Feld         | Form              | Werte                     | Default     |
+|--------------|-------------------|---------------------------|-------------|
+| `audio_ziel` | string (enum)     | `"display"` \| `"panel"`  | `"display"` |
+
+**Verortung.** `audio_ziel` lebt **pro Service-Instanz** in der jeweiligen
+HSP-`config.json` (HSP-27 ergänzt um dieses Feld; Paula-Instanz und
+Neko-Instanz konfigurieren es unabhängig im Backend). Es lebt **nicht**
+in `familie.json` (kein FAM-14) und **nicht** als Geräte-Capability in
+`geraete.json` (kein `audio_aktiv`-Feld). Globalität für Paula+Neko wird
+auf UI-Ebene über den Mini-App-Settings-Kollaps hergestellt (HSP-34).
+
+**KAQS-Symmetrie und Wortwahl-Setzung.** Das Schema ist bewusst spiegel-
+symmetrisch zum KiBuddy-Aufnahme-Quellen-Setting in
+`kibuddy-aufnahme-quelle-setzen.md` (`aufnahme_quelle: "display" | "panel"`).
+Beide Felder bezeichnen denselben Hardware-Sammelbegriff:
+
+- `"display"` = das Kind-Display-Gerät (Tablet im Kinderzimmer); für
+  Audio-Output dessen Lautsprecher und für Audio-Input dessen Mikrofon.
+- `"panel"` = das Familien-Panel-Gerät (Tablet in der Küche / im Flur);
+  für Audio-Output dessen Lautsprecher und für Audio-Input dessen
+  Mikrofon.
+
+**Wortwahl-Setzung (bewusst, nicht versehentlich):** „panel" wird hier
+als Hardware-Sammelbegriff für den Lautsprecher-/Mikro-Punkt verwendet
+und **nicht** im engeren `app-panel`-Spec-Sinn (PANEL-1 = Kachel-
+Controller-PWA). Die Wort-Kollision ist im Berater-Antiberater-Pass
+aufgefallen, durch Nic-Setzung 5 zugunsten der Input-/Output-Symmetrie
+akzeptiert worden und gilt nur innerhalb der `audio_ziel`-/
+`aufnahme_quelle`-Schema-Werte. PANEL-1..PANEL-12 bleiben unverändert.
+
+**Wirksamkeit.** Eine Änderung wirkt sofort auf neue Play-Befehle der
+Kinder-View; eine bereits laufende Wiedergabe wird durch den Tempo-/
+Pause-Mechanismus aus HSP-22 nicht migriert (User stoppt und startet
+neu).
+
+(RATIFIZIERT 2026-06-17 audio-output-routing → Setzung 5 „KAQS-Symmetrie";
+Setzung 3 „Setting-Verortung je App, nicht familie.json")
+
+### HSP-42 — `POST /play-extern` und Audio-Source-Push an die Panel-Shell
+
+Bei `audio_ziel = "panel"` läuft die Wiedergabe nicht im Kind-View-iframe,
+sondern auf dem Panel-Tab des Familien-Tablets. Die Kette:
+
+1. **Kind-View-Auslöser.** `alben.js` ruft auf jeden Play-/Skip-/
+   Track-Wechsel-Befehl
+   `POST /api/v1/hoerspiel/<kind_id>/play-extern` am lokalen
+   HSP-Service auf. Request-Body:
+
+   ```
+   { "album_id": "<string>", "track_idx": <int> }
+   ```
+
+   Antwort: `200 { "ok": true }` bei erfolgreicher Source-Annahme, `404`
+   wenn `album_id` unbekannt, `422` wenn `track_idx` außerhalb des
+   Track-Bereichs liegt.
+
+2. **Auth.** PUBLIC, AUTH-6-Backlog mit Trigger „Phase 4 HSP-Audio-
+   Routing (Display-Renderer + Panel-PWA)". Caller ist der Display-
+   Client am Kinder-Tablet (`alben.js` über nginx, **kein Loopback** —
+   Browser über nginx setzt `X-Forwarded-For`). Konsistent zu RAT-18 +
+   Setzung 2026-06-16 „Auth-Härtung blocked bis Familie-2": neue Mini-
+   App-/PWA-/Display-Renderer-Routen bleiben PUBLIC mit Pflicht-Defer-
+   Trigger, Härtung folgt bei Phase-4-Bau (AUTH-7-Klasse).
+
+3. **Audio-Source-Push an die Panel-Shell.** Der HSP-Service übermittelt
+   den neuen Audio-Source-Stand (`audio-asset`-URL des Tracks nach
+   HSP-26 und HSP-37 plus Spiel-Befehl `play`) an den Panel-Tab des
+   Familien-Tablets, der zur jeweiligen `kind_id` gehört. Dort hängt ein
+   bereits laufendes, beim letzten Kachel-Tap durch User-Geste
+   geprimtes silent `<audio>`-Element (PANEL-13); ein Source-Update auf
+   diesem Element löst sofortige Wiedergabe aus, weil die Sticky-
+   Activation der Tab-Session greift (Empirie-Test 2026-06-17).
+
+4. **Kind-Display.** Der Kind-Display-Tab geht für die Dauer der
+   `audio_ziel="panel"`-Sitzung in den Ruhe-Zustand DC-5 (vollständig
+   schwarz, keine Status-Karte, keine Player-Buttons) — siehe HSP-22.
+
+**Push-Weg: SSE direkt vom HSP-Service.** Der HSP-Service exponiert einen
+neuen SSE-Endpoint `GET /api/v1/hoerspiel/<kind_id>/audio-stream`. Die
+Panel-PWA (`controller/app-panel/`) hält pro HSP-Instanz (paula, neko)
+eine `EventSource`-Verbindung offen — Pattern aus PANEL-11
+(`controller/app-panel/app.js:744-760`) und ROU-22
+(`router/main.py:106-161`) wiederverwendet. Bei `/play-extern`-Empfang
+broadcastet HSP ein `audio_play`-Event mit der Track-`audio-asset`-URL
+an alle Subscribers der eigenen Instanz. Die Panel-PWA setzt
+`audio.src = event.audio_url` am beim Kachel-Tap geprimten Silent-
+Element und ruft `audio.play()` — Sticky-Activation greift.
+
+Auth des SSE-Endpoints: PUBLIC, AUTH-6-Backlog, gleicher Trigger wie
+`/play-extern` („Phase 4 HSP-Audio-Routing").
+
+**Track-Orchestrierung bleibt am Kind-Display.** `alben.js` ruft
+`/play-extern` pro Track-Wechsel (Play, Skip, Auto-Advance bei `ended`),
+nicht ein einziges Mal pro Album. Wake-Lock, Resume-Marke und Pause/
+Play-State bleiben am Kind-Tab — Panel-PWA ist reiner Audio-Receiver
+ohne eigene Queue. Damit bleibt das HSP-22-Player-Modell intakt; nur
+die Audio-Quelle wandert.
+
+**nginx-SSE-Location.** Damit der SSE-Stream nicht von nginx gepuffert
+wird, brauchen die zwei Routen `/api/v1/hoerspiel/{paula,neko}/audio-stream`
+eigene `location`-Blöcke mit `proxy_buffering off`, `proxy_cache off`,
+`proxy_read_timeout 1h` — analog zur bestehenden SSE-Location für
+`/api/v1/displays/<id>/events` (`deploy/nginx/xbuddy-origin.conf:368-383`).
+Ohne diese Locations werden Events erst verspätet ausgeliefert.
+
+**Restrisiko (Empirie-Anschluss-Pflicht).** Setzung 7 stützt sich auf
+Sticky-Activation der Tab-Session. Mehrfacher Source-Wechsel innerhalb
+derselben Session ist auf Mobile-Browsern (Familien-Tablet) **erlaubt,
+solange die Session lebt**; das wurde im Empirie-Test 2026-06-17 für den
+ersten Wechsel bestätigt, für n-fachen Iterations-Wechsel aber noch
+nicht. Der Bau-Track muss am Live-Setup eine kurze Iterations-Stabilitäts-
+Messung vornehmen, bevor die Mechanik scharf geschaltet wird; bricht das
+Browser-Verhalten dabei, kippt HSP-42 und eine neue Berater-Runde ist
+fällig.
+
+(RATIFIZIERT 2026-06-17 audio-output-routing → "Kernmechanik" → Source-
+Push an silent-Audio-Prime; Setzung 2 revidiert „PUBLIC, AUTH-6, Trigger
+Phase 4 HSP-Audio-Routing"; Setzung 4 konkretisiert „SSE direkt vom
+HSP-Service, kein Router-Hop"; Setzung 7 „Sticky-Activation via Kachel-
+Tap-Priming"; Empirie-Test 2026-06-17)
 
 ---
 

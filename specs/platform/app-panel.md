@@ -227,6 +227,56 @@ keine zusätzliche Tabelle, die `tile_id` auf URL mappen müsste.
 
 *Tickets:* #58
 
+### PANEL-13 — Silent-Audio-Prime als Side-Effect des Tile-Tap
+
+Jeder Tap auf eine sichtbare Kachel (`tile_selected`, PANEL-6) startet
+zusätzlich zum Routing-Event einen **silent `<audio>`-Prime** im selben
+Panel-Tab: das Panel-PWA-Skript startet ein verstecktes `<audio>`-Element
+mit einer kurzen, lautlosen Audio-Quelle (Stille-Loop) und ruft `play()`
+innerhalb desselben Synchron-Pfads wie das Event-Dispatch — also unter
+derselben Browser-User-Geste, die den Tap getragen hat.
+
+**Sinn.** Das versteckt-laufende `<audio>`-Element verschafft dem
+Panel-Tab eine durch User-Geste etablierte Sticky-Activation. Spätere
+Audio-Source-Updates auf demselben Element (durch buddy-eigene
+Mechaniken, z. B. HSP-42) lösen Browser-Wiedergabe **ohne weitere
+User-Geste** aus. Ohne diesen Prime blockieren Mobile-Browser ein neu
+gestartetes `<audio>` mit Autoplay-Policy — empirisch bestätigt
+2026-06-17 am Panel-Browser des Familien-Tablets.
+
+**Trennung zu PANEL-1.** Der Prime entscheidet **nichts** über das
+Routing: er liefert nur ein audio-fähiges DOM-Element, dessen Source
+später von außen gesetzt werden kann. PANEL-1 (Panel entscheidet kein
+Routing) und der DC-3-Renderer-only-Charakter des Display-Clients
+bleiben unangetastet — das Panel ist nicht der Display-Client, und der
+Prime ist ein browser-lokaler Side-Effect der bereits bestehenden
+User-Geste, kein neuer Routing-Pfad.
+
+**App-Agnostik.** Der Prime ist app-unabhängig: er wird für jeden
+`tile_selected`-Tap geschaltet, nicht nur für audio-konsumierende Apps.
+Ein Tile-Tap auf eine still-visuelle App-View lässt das Element auf
+Stille stehen; ein nachfolgender Source-Push aus einer audio-fähigen
+App findet dann ein bereits geprimtes Element vor. Diese App-Agnostik
+verhindert, dass das Panel den App-Typ kennen muss (PANEL-1-konsistent).
+
+**Robustheit.** Bei Tab-Cold-Start (nach Browser-Neustart oder OOM-Kill)
+ist der Prime noch nicht aktiv — der erste Tile-Tap nach dem Cold-Start
+liefert ihn nach. Das deckt den Familien-Alltag ab: jemand tippt täglich
+mindestens einmal auf das Panel.
+
+**Implementierungs-Detail.** Audio-Quelle des Stille-Loops und konkrete
+DOM-Verortung (`<audio>` neben dem Kachel-Grid vs. eigenes Hidden-Element)
+sind Implementierungsdetail und nicht Teil der Spec — die Spec verlangt
+nur, dass nach jedem Tile-Tap ein bereit-stehendes `<audio>`-Element
+vorhanden ist, dessen Source von späteren App-Mechaniken austauschbar
+ist.
+
+(RATIFIZIERT 2026-06-17 audio-output-routing → Setzung 7 „Sticky-
+Activation via Kachel-Tap-Priming"; Empirie-Test 2026-06-17 „Autoplay-
+Block auf Mobile-Browser bestätigt; Sticky-Activation reicht")
+
+*Tickets:* (folgt im Bau-Track)
+
 ## 4. Konfiguration
 
 ### PANEL-8 — Instanz-Konfiguration `config.json`
@@ -502,6 +552,15 @@ Mindest-Abdeckung:
   `safe-area-inset-top: 44px`, Home-Indicator `safe-area-inset-bottom: 34px`)
   bleibt `document.scrollHeight <= clientHeight` invariant — die Geometrie zieht
   die Insets von `vpH`/`vpW` ab statt sie additiv als Padding zu ergänzen.
+- PANEL-13 — Ein simulierter `tile_selected`-Tap startet ein verstecktes
+  `<audio>`-Element mit `play()` im selben Synchron-Pfad wie der
+  Event-Dispatch (DOM-Stub-Test: nach dem Tap existiert ein `<audio>`-
+  Element im DOM und `play()` wurde aufgerufen). Ein simuliertes
+  Source-Update auf demselben Element wirft keinen Autoplay-Fehler
+  (gemockter Browser meldet `play()`-Promise resolved). Bricht
+  `play()` im Test (gemockter Autoplay-Block), bleibt die Seite
+  funktionsfähig — der Test prüft, dass kein User-sichtbarer Crash
+  entsteht (Robustheits-Pflicht analog PANEL-10-Wake-Lock-Fehler).
 
 *Tickets:* #58, #375
 
@@ -532,6 +591,15 @@ Mindest-Abdeckung:
   Tuning-Tabelle in `app-panel.md` ist damit nicht mehr nötig. Ein
   späterer Override-Pfad (Datei-Schlüssel je Controller) gehört in die
   Konvention, nicht in diese Spec.
+- **OPEN-PANEL-E** — Lebenszyklus des Silent-Audio-Prime aus PANEL-13:
+  Soll der Prime beim `panel_cleared`-Tap (Aus-Kachel) **gestoppt**,
+  **stumm weiterlaufen** oder **bei jedem nächsten Tile-Tap neu
+  ge-primed** werden? Setzung 7 des RATIFIZIERT-Files 2026-06-17 beschreibt
+  nur den Start-Pfad (Kachel-Tap startet Prime), nicht das Stopp- oder
+  Re-Prime-Verhalten. Im Bau-Track entscheidet das Browser-Verhalten am
+  Live-Setup (Familien-Tablet) — wenn der erste Wechsel nach
+  `panel_cleared` stockt, kippt das in eine eigene Klausel. Erst nach
+  Messung formalisieren (kein antizipatives Setzen).
 
 ---
 
