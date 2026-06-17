@@ -1266,11 +1266,11 @@ setzt es auf den ersten Eintrag (Provider-Default).
 
 ### HSP-35 — Reiter „Folgen" (aggregierte Liste + Multi-Track-Player)
 
-**#973 (2026-06-16):** Der Folgen-Tab aggregiert Folgen über **alle
-V1-Kinder** (`KIND_IDS_V1 = ["mia", "finn"]` — V1-Hardcode, FAM-7-
-Generalisierung via Registry im Folge-Ticket). Er lädt die Alben-Listen
-aller kind_ids **parallel** (`Promise.all`), mergt sie und sortiert nach
-`erstellt-am` desc (gleicher Datumswert: `nummer` desc als Fallback).
+**#973 (2026-06-16) · RAT-17 Option A handverdrahtet; Wiederaufnahme bei
+dritter Instanz oder zweiter Buddy-Klasse mit n Instanzen (RAT-17-Klausel):**
+Der Folgen-Tab lädt parallel die Folgen aller V1-Kinder (Mia und Finn),
+mergt sie und sortiert nach `erstellt-am` desc (gleicher Datumswert:
+`nummer` desc als Fallback).
 Jede Folge trägt ihre `kind_id` im JS-State — Player öffnet
 `/api/v1/hoerspiel/<folge.kind_id>/alben/<id>/manifest`, **nicht**
 URL-KIND_ID. Settings-Tab (HSP-34) bleibt instance-getrennt und
@@ -1428,6 +1428,10 @@ Pflicht-Tests (ohne Netz, ohne Telegram, ohne Mistral-/Anthropic-API):
 - **HSP-40-Themen-URL** — kein `?alter=`-Query-Parameter; `kind_id` trägt
   die Instanz-Identität als URL-Segment (`/api/v1/hoerspiel/<kind_id>/themen`,
   RAT-17 URL-3a-konform, #910).
+- **HSP-35-Aggregation** — Parallele Lade-Pfade über alle V1-kind_ids
+  aggregieren; Merge-Sort `erstellt-am` desc; jeder Listen-Eintrag trägt
+  folge-eigene `kind_id`; Player-Klick öffnet `folge.kind_id`-Manifest
+  (nicht URL-`kind_id`); einseitiger 404 produziert teilweise Liste.
 - **Mistral-Adapter** (`hoerspiel/providers/mistral.py`) gegen Mock-API:
   erfolgreiche Folgen-Erzeugung; HTTP-Fehler → `LLMError`; fehlender
   Key → `ConfigError`. Tests für jedes der drei V1-Modelle (`mistral-large-2411`,
