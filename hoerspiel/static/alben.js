@@ -78,7 +78,12 @@ let state = {
   is_resume: false,
   audio: null,
   prev_tap_ts: 0,
-  manifestCache: {}
+  manifestCache: {},
+  // HSP-41/42 — Audio-Ziel (Default 'display' = lokales <audio> wie HSP-22).
+  // Bei 'panel' wird der Audio-Stream via POST /play-extern an die Panel-PWA
+  // gepusht; lokales <audio> wird unterdrückt, Auto-Advance läuft timer-basiert.
+  audio_ziel: 'display',
+  panel_timer: null  // setTimeout-Handle für Track-Auto-Advance im panel-Modus
 };
 
 const dom = {
@@ -341,8 +346,93 @@ async function tapKachel(album) {
   lastAlbumSet(album.id);
 }
 
+/* ── HSP-41/42 — Audio-Ziel-Config laden ─────────────────────────── */
+async function loadAudioZiel() {
+  try {
+    const res = await fetch(`/api/v1/hoerspiel/${KIND_ID}/config`);
+    if (!res.ok) throw new Error('config status ' + res.status);
+    const cfg = await res.json();
+    return (cfg.audio_ziel === 'panel') ? 'panel' : 'display';
+  } catch (e) {
+    console.warn('audio_ziel config-Abruf fehlgeschlagen, Fallback display:', e);
+    return 'display';
+  }
+}
+
+/* ── HSP-42 — Panel-Pfad: Audio läuft auf Panel-PWA via /play-extern ── */
+async function playTrackPanel(album, trackIdx) {
+  const tracks = sortedTracks(album);
+  const track = tracks[trackIdx];
+  if (!track) return;
+
+  // Lokales Audio sauber abbrechen (Setzung 1: minimal, kein lokales Geräusch)
+  if (state.audio) {
+    state.audio.pause();
+    state.audio.src = '';
+    state.audio = null;
+  }
+  if (state.panel_timer) {
+    clearTimeout(state.panel_timer);
+    state.panel_timer = null;
+  }
+
+  state.playing = true;
+  state.aktiv = album;
+  state.aktiv_track = trackIdx;
+
+  // /play-extern triggert SSE-Broadcast an Panel-PWA
+  try {
+    const res = await fetch(`/api/v1/hoerspiel/${KIND_ID}/play-extern`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ album_id: album.id, track_idx: trackIdx })
+    });
+    if (!res.ok) console.warn('play-extern fehlgeschlagen:', res.status);
+  } catch (e) {
+    console.warn('play-extern Netz-Fehler:', e);
+  }
+
+  // Resume-Marke setzen (HSP-23) — gilt auch im panel-Modus
+  resumeSet(album.id, track.position);
+
+  // UI-Update: Track als aktiv markieren, aber kein <audio>-Element
+  document.querySelectorAll('.player-track').forEach((li, i) =>
+    li.classList.toggle('is-active', i === trackIdx)
+  );
+  dom.nowLabel().textContent = `Track ${track.position} von ${tracks.length} (Panel)`;
+  dom.nowText().textContent = '';
+  dom.nowText().appendChild(renderPiktoText(trackLabel(track), track['pikto-hauptbegriffe'] || []));
+  state.is_resume = false;
+  dom.btnPlay().classList.remove('is-resume');
+  dom.btnPlay().setAttribute('aria-label', 'Pause');
+  syncPlayPauseIcons();
+
+  // Track-Auto-Advance: Timer-basiert mit Track-Dauer aus Manifest.
+  // OPEN: Wenn duration_sec im Manifest fehlt, kein Auto-Advance — User muss manuell skippen.
+  // V1-Pragma, in V2 könnte HSP-Service eine track-ended-SSE-Event-Variante schicken.
+  const dauerSec = Number(track['duration-sec'] || track.duration_sec || 0);
+  if (dauerSec > 0) {
+    state.panel_timer = setTimeout(() => {
+      const isLast = trackIdx >= tracks.length - 1;
+      if (isLast) {
+        resumeClear(album.id);
+        state.aktiv_track = 0;
+        state.playing = false;
+        renderKacheln(state.alben, null, album.id);
+      } else {
+        playTrackPanel(album, trackIdx + 1);
+      }
+    }, dauerSec * 1000);
+  }
+}
+
 /* ── AUDIO-WIEDERGABE (HSP-21/22/23) ────────────────────────────── */
 function playTrack(album, trackIdx) {
+  // HSP-42 — Panel-Pfad: Audio läuft am Panel-Gerät statt lokal
+  if (state.audio_ziel === 'panel') {
+    playTrackPanel(album, trackIdx);
+    return;
+  }
   const tracks = sortedTracks(album);
   const track = tracks[trackIdx];
   if (!track) return;
@@ -547,6 +637,8 @@ function bindControls() {
 async function init() {
   setupMediaSession();
   bindControls();
+  // HSP-41 — Audio-Ziel aus Config laden, Fallback display.
+  state.audio_ziel = await loadAudioZiel();
   const raw = await loadAlben();
   state.alben = [...raw].sort((a, b) => b.nummer - a.nummer);
   await initPlayerDefault(state.alben);
