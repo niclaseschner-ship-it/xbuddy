@@ -493,7 +493,7 @@ function _rendereAlbenListe(container, player, resumeMap) {
     kachelEl.dataset.kindId = album.kind_id;
     kachelEl.innerHTML =
       '<img class="album-cover" src="' +
-        esc("/api/v1/hoerspiel/" + album.kind_id + "/alben/" + encodeURIComponent(album.id) + "/audio/cover.jpg") +
+        esc(album["cover-asset"] || "") +
         '" alt="" loading="lazy" ' +
         'onerror="this.style.display=\'none\'">' +
       '<div class="album-info">' +
