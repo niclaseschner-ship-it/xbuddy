@@ -1431,7 +1431,9 @@ Pflicht-Tests (ohne Netz, ohne Telegram, ohne Mistral-/Anthropic-API):
 - **HSP-35-Aggregation** — Parallele Lade-Pfade über alle V1-kind_ids
   aggregieren; Merge-Sort `erstellt-am` desc; jeder Listen-Eintrag trägt
   folge-eigene `kind_id`; Player-Klick öffnet `folge.kind_id`-Manifest
-  (nicht URL-`kind_id`); einseitiger 404 produziert teilweise Liste.
+  (nicht URL-`kind_id`); einseitiger 404 → komplette Liste leer mit
+  sichtbarem Lade-Hinweis (Partial-Result via `Promise.allSettled` +
+  Warn-Banner ist Folge-Ticket #975).
 - **Mistral-Adapter** (`hoerspiel/providers/mistral.py`) gegen Mock-API:
   erfolgreiche Folgen-Erzeugung; HTTP-Fehler → `LLMError`; fehlender
   Key → `ConfigError`. Tests für jedes der drei V1-Modelle (`mistral-large-2411`,
