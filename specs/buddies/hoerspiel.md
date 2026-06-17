@@ -1570,11 +1570,13 @@ sondern auf dem Panel-Tab des Familien-Tablets. Die Kette:
    wenn `album_id` unbekannt, `422` wenn `track_idx` außerhalb des
    Track-Bereichs liegt.
 
-2. **Auth.** Loopback-only V1 — der Endpunkt akzeptiert ausschließlich
-   Requests von `127.0.0.1`/`::1` (Pattern AUTH-5, mit Loopback-Bypass
-   im HSP-Decorator). Eine Telegram-initData-Prüfung gibt es nicht. Diese
-   Härtung wird im AUTH-6-Backlog mit Trigger „HSP-Pairing-Token V2"
-   getragen.
+2. **Auth.** PUBLIC, AUTH-6-Backlog mit Trigger „Phase 4 HSP-Audio-
+   Routing (Display-Renderer + Panel-PWA)". Caller ist der Display-
+   Client am Kinder-Tablet (`alben.js` über nginx, **kein Loopback** —
+   Browser über nginx setzt `X-Forwarded-For`). Konsistent zu RAT-18 +
+   Setzung 2026-06-16 „Auth-Härtung blocked bis Familie-2": neue Mini-
+   App-/PWA-/Display-Renderer-Routen bleiben PUBLIC mit Pflicht-Defer-
+   Trigger, Härtung folgt bei Phase-4-Bau (AUTH-7-Klasse).
 
 3. **Audio-Source-Push an die Panel-Shell.** Der HSP-Service übermittelt
    den neuen Audio-Source-Stand (`audio-asset`-URL des Tracks nach
@@ -1589,21 +1591,33 @@ sondern auf dem Panel-Tab des Familien-Tablets. Die Kette:
    `audio_ziel="panel"`-Sitzung in den Ruhe-Zustand DC-5 (vollständig
    schwarz, keine Status-Karte, keine Player-Buttons) — siehe HSP-22.
 
-**Push-Weg bewusst offen (Setzung 4 „händisch verdrahten").** Wie der
-HSP-Service den Audio-Source-Stand konkret an den Panel-Tab überträgt,
-ist Implementierungsdetail im Bau-Track und **nicht Teil dieser
-Spec-Ratifikation**. Drei mögliche Realisierungen — alle ohne
-Erweiterung der Plattform-Specs (`router.md` bleibt unangefasst):
+**Push-Weg: SSE direkt vom HSP-Service.** Der HSP-Service exponiert einen
+neuen SSE-Endpoint `GET /api/v1/hoerspiel/<kind_id>/audio-stream`. Die
+Panel-PWA (`controller/app-panel/`) hält pro HSP-Instanz (mia, finn)
+eine `EventSource`-Verbindung offen — Pattern aus PANEL-11
+(`controller/app-panel/app.js:744-760`) und ROU-22
+(`router/main.py:106-161`) wiederverwendet. Bei `/play-extern`-Empfang
+broadcastet HSP ein `audio_play`-Event mit der Track-`audio-asset`-URL
+an alle Subscribers der eigenen Instanz. Die Panel-PWA setzt
+`audio.src = event.audio_url` am beim Kachel-Tap geprimten Silent-
+Element und ruft `audio.play()` — Sticky-Activation greift.
 
-- HSP-eigene SSE-Verbindung zwischen HSP-Service und Panel-Tab
-  (z. B. via `postMessage` aus der umgebenden Display-Client-iframe,
-  wenn die Panel-Seite den Kind-View einbettet).
-- Panel-Tab pollt einen HSP-eigenen Endpoint (`GET /api/v1/hoerspiel/
-  <kind_id>/play-extern/state`).
-- Synthetischer Event an `POST /api/v1/events` mit einem Source-ID-
-  Mapping in `routing.json` (ROU-18).
+Auth des SSE-Endpoints: PUBLIC, AUTH-6-Backlog, gleicher Trigger wie
+`/play-extern` („Phase 4 HSP-Audio-Routing").
 
-Diese Wahl wird im Bau-Track an Familie-1-Realität getroffen.
+**Track-Orchestrierung bleibt am Kind-Display.** `alben.js` ruft
+`/play-extern` pro Track-Wechsel (Play, Skip, Auto-Advance bei `ended`),
+nicht ein einziges Mal pro Album. Wake-Lock, Resume-Marke und Pause/
+Play-State bleiben am Kind-Tab — Panel-PWA ist reiner Audio-Receiver
+ohne eigene Queue. Damit bleibt das HSP-22-Player-Modell intakt; nur
+die Audio-Quelle wandert.
+
+**nginx-SSE-Location.** Damit der SSE-Stream nicht von nginx gepuffert
+wird, brauchen die zwei Routen `/api/v1/hoerspiel/{mia,finn}/audio-stream`
+eigene `location`-Blöcke mit `proxy_buffering off`, `proxy_cache off`,
+`proxy_read_timeout 1h` — analog zur bestehenden SSE-Location für
+`/api/v1/displays/<id>/events` (`deploy/nginx/xbuddy-origin.conf:368-383`).
+Ohne diese Locations werden Events erst verspätet ausgeliefert.
 
 **Restrisiko (Empirie-Anschluss-Pflicht).** Setzung 7 stützt sich auf
 Sticky-Activation der Tab-Session. Mehrfacher Source-Wechsel innerhalb
@@ -1616,9 +1630,10 @@ Browser-Verhalten dabei, kippt HSP-42 und eine neue Berater-Runde ist
 fällig.
 
 (RATIFIZIERT 2026-06-17 audio-output-routing → "Kernmechanik" → Source-
-Push an silent-Audio-Prime; Setzung 2 „Loopback-only V1, AUTH-6-Defer";
-Setzung 4 „Push-Weg händisch verdrahten"; Setzung 7 „Sticky-Activation
-via Kachel-Tap-Priming"; Empirie-Test 2026-06-17)
+Push an silent-Audio-Prime; Setzung 2 revidiert „PUBLIC, AUTH-6, Trigger
+Phase 4 HSP-Audio-Routing"; Setzung 4 konkretisiert „SSE direkt vom
+HSP-Service, kein Router-Hop"; Setzung 7 „Sticky-Activation via Kachel-
+Tap-Priming"; Empirie-Test 2026-06-17)
 
 ---
 
