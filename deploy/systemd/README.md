@@ -170,7 +170,15 @@ Zuordnung (analog zur Memory-Notiz `feedback-pi-service-restart`):
 | `panel/` oder ein `panels.json`-Manifest | `sudo systemctl restart xbuddy-panel` |
 | `essen/` | `sudo systemctl restart xbuddy-essen` |
 | `eltern-chat/` | `sudo systemctl restart xbuddy-eltern-chat` |
+| `hoerspiel/` (Repo-Code, shared zwischen Instanzen) | `sudo systemctl restart xbuddy-hoerspiel && sudo systemctl restart xbuddy-hoerspiel-finn` |
+| `kibuddy/` | `sudo systemctl restart xbuddy-kibuddy` |
 | `deploy/nginx/xbuddy-origin.conf` | `sudo nginx -t && sudo systemctl reload nginx` |
+
+**Hörspiel n-Instanz-Realität (RAT-17, `decisions/RAT-17-907-hoerbuchbuddy-n-instanzen.md`; PW-58 V1, ENTSCHEID-File `brainstorm/berater-runde/20260617-2330-RATIFIZIERT-pw58-pw52-disziplin-mechanik-katalog.md` Sektion „R2-Empfehlung → Fall 1 Schritt 1" mit Codex-Pass-2-Korrektur):**
+
+Mia und Finn sind getrennte Services (`conventions/ports.md:25-27`, `conventions/urls.md:207-208`). **Kind-spezifische Daten liegen NICHT im Repo**, sondern unter `xbuddy-data/hoerspiel/<kind_id>/` (`specs/buddies/hoerspiel.md:751-820`). Ein `git pull` sieht diese Daten nie — alle `hoerspiel/`-Repo-Touches sind per Definition Shared-Code und brauchen **BEIDE Services** neu gestartet.
+
+Eine frühere Idee, anhand des Pfad-Segments (`hoerspiel/config/mia.json`) zwischen Mia-only und Finn-only zu unterscheiden, wurde mit dem ratifizierten Stand verworfen: solche Pfade existieren im Repo nicht, und Datei-Namen mit „mia"/„finn" (Tests, CSS-Klassen, Mocks) sind selten kind-exklusiv. Reine Pfad-Segment-Heuristik wäre fragil — daher BEIDE bei jedem Repo-Diff unter `hoerspiel/`.
 
 Reihenfolge bei einem Sammel-Pull, der mehrere Komponenten anfasst:
 zuerst die unabhängigen Backends (`xbuddy-familie`, `xbuddy-plan`,
