@@ -1123,11 +1123,19 @@ gruppiert nach `kategorie`, mit drei sichtbaren Quellen-Markern:
 - **(kein Marker)** für `klasse=einkauf` ohne `aus_gericht` (Eltern
   explizit aufgeschrieben).
 
-**Reihenfolge innerhalb einer Kategorie:**
-Wunsch zuerst → Rezept-Zutaten → Eltern-explizit. Erledigte (`abgehakt=
-true`) rutschen ans Ende der Kategorie mit reduzierter Optik (ausgegraut,
-Häkchen grün gefüllt). Erledigt-Block ist nicht eingeklappt — Eltern
-sehen, was schon erledigt ist.
+**Reihenfolge innerhalb einer Kategorie (nur offene Items):**
+Wunsch zuerst → Rezept-Zutaten → Eltern-explizit. Die Kategorie-Sektionen
+führen ausschließlich offene Items (`abgehakt=false`).
+
+**Erledigt-Block am Listen-Ende:**
+Erledigte Items (`abgehakt=true`) werden aus der Kategorie-Gruppierung
+herausgezogen und in einer eigenen flachen Sektion `Erledigt · N` **am
+Ende der gesamten Liste** gerendert (nach allen Kategorie-Sektionen, ohne
+Kategorie-Untergruppe). Optik bleibt reduziert (ausgegraut, Häkchen grün
+gefüllt). Sektion ist nicht eingeklappt — Eltern sehen, was schon erledigt
+ist. Beim Rück-Toggle (`abgehakt=true` → `false`) rutscht das Item zurück
+in seine Kategorie-Sektion an die übliche Position innerhalb der Reihen-
+folge.
 
 **Reihenfolge der Kategorien:**
 1. **Wunsch-Gerichte** (Kategorie `gericht`, nur 🧒-Marker — Eltern-
@@ -1137,9 +1145,11 @@ sehen, was schon erledigt ist.
 3. **Brotbelag**.
 4. **Sonstiges**.
 
-**Sektion-Header je Kategorie** zeigt die Aufteilung: `Obst & Gemüse · N`
-mit `+ 📖 R + 🧒 W`, wenn Rezept-Zutaten R bzw. Wunsch-Items W vorhanden
-sind (Format-Beispiel `Sonstiges · 11 + 📖 3 + 🧒 1`).
+**Sektion-Header je Kategorie** zeigt die Aufteilung der **offenen** Items:
+`Obst & Gemüse · N` mit `+ 📖 R + 🧒 W`, wenn Rezept-Zutaten R bzw. Wunsch-
+Items W unter den offenen vorhanden sind (Format-Beispiel `Sonstiges · 11
++ 📖 3 + 🧒 1`). Erledigte zählen nicht mit (sie liegen im Erledigt-Block
+am Listen-Ende, dessen Header `Erledigt · N` die Gesamtzahl trägt).
 
 **Bild-Pfad:** Mini App fordert die ARASAAC-PNGs **vom selben Host** unter
 `/_shared/icons/arasaac/<bild_ref>.png` an (ICONS-5, Same-Origin-Lego, kein
@@ -1172,9 +1182,11 @@ oder jsdom-Wrapper, siehe Code-Track-Folge-Ticket):
 - **Render-Reihenfolge:** Render-Test mit gemischter Liste (1 Wunsch-Gericht +
   2 Rezept-Zutaten + 3 Eltern-Items + 1 erledigtes) → Mini App zeigt vier
   Kategorien (oder die nicht-leeren) in fester Reihenfolge (Wunsch-Gerichte,
-  Obst & Gemüse, Brotbelag, Sonstiges), Sektion-Header trägt die Aufteilung
-  (`Sonstiges · 4 + 📖 1 + 🧒 0`-Format), Erledigte rutschen ans Ende ihrer
-  Kategorie mit ausgegrauter Optik + grünem Häkchen.
+  Obst & Gemüse, Brotbelag, Sonstiges), gefüllt **nur mit den offenen Items**.
+  Sektion-Header trägt die Aufteilung der Offenen (`Sonstiges · 4 + 📖 1 +
+  🧒 0`-Format). Das erledigte Item liegt nicht in seiner Kategorie, sondern
+  in der eigenen flachen Sektion `Erledigt · 1` am Listen-Ende (mit
+  ausgegrauter Optik + grünem Häkchen).
 - **Quellen-Marker:** in jeder Card steht exakt **ein** Marker — `🧒` bei
   `klasse=wunsch`, `📖` bei `klasse=einkauf` mit gesetztem `aus_gericht`,
   **kein** Marker bei `klasse=einkauf` ohne `aus_gericht`.
