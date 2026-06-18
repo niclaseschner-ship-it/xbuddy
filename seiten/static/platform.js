@@ -20,6 +20,10 @@
  *   platform.onSave(callback);                  // Speicher-Handler registrieren
  *   platform.openLink(url);                     // URL im System-Browser oeffnen (MAU-6)
  *   platform.copyText(text);                    // Text in Zwischenablage kopieren — gibt bool zurueck (MAU-6)
+ *   platform.authHeaders(extra);                // Auth-Header fuer API-Calls (MAD-5)
+ *                                              // extra: optionales Objekt zum Mergen (z.B. {"Content-Type": "..."})
+ *                                              // Returnt {Authorization: "tma <initData>"} im Telegram-Branch,
+ *                                              // {} im Browser-Branch (kein Header → API gibt 401, fail-loud).
  */
 
 // --- Telegram-Branch --------------------------------------------------------
@@ -118,11 +122,10 @@ class TelegramPlatform {
   // Returnt true bei 200, false bei 401/403/Netzfehler.
   // Bei false: Mini-App sperrt UI mit kein-Zugriff-Marker.
   async ensureAuth(opts) {
-    const initData = this._wa?.initData ?? "";
     try {
       const r = await fetch("/api/v1/init-data/validate", {
         method: "POST",
-        headers: { "Authorization": "tma " + initData },
+        headers: this.authHeaders(),
       });
       if (r.ok) {
         const j = await r.json();
@@ -133,6 +136,20 @@ class TelegramPlatform {
     } catch (e) {
       return false;
     }
+  }
+
+  // MAD-5: Vendor-Disziplin — Mini-App-Frontends fordern Auth-Header ausschliesslich
+  // ueber diesen Wrapper an, kein direkter window.Telegram.WebApp.initData-Zugriff
+  // im App-Code. Spaetere Cookie-Auth-Erweiterung (#948 Plan B) erweitert nur diese
+  // Funktion, ohne dass App-JS angefasst werden muss.
+  //
+  // Returnt ein Headers-Plain-Object (mergeable mit zusaetzlichen Headers via Spread).
+  // extra: optionales Objekt; vorhandene Authorization-Header werden NICHT
+  // ueberschrieben — extra hat niedrigere Prioritaet als Auth.
+  authHeaders(extra) {
+    const initData = this._wa?.initData ?? "";
+    const base = initData ? { "Authorization": "tma " + initData } : {};
+    return Object.assign({}, extra || {}, base);
   }
 }
 
@@ -269,6 +286,14 @@ class BrowserPlatform {
   async ensureAuth(opts) {
     this._authUser = null;
     return true;
+  }
+
+  // MAD-5: kein Telegram-initData im Browser-Branch — leere Header.
+  // Server-Routes antworten mit 401 (fail-loud); im Dev-Browser kein
+  // Auth-Pfad. Spaetere Cookie-Pfad-Erweiterung (#948 Plan B) duerfte
+  // hier einen Cookie-Header bauen oder credentials:'include' setzen.
+  authHeaders(extra) {
+    return Object.assign({}, extra || {});
   }
 }
 

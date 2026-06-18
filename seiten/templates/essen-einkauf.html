@@ -1,11 +1,19 @@
 <!DOCTYPE html>
 <!-- ESSEN-31: Eltern-Mini-App-View — Bring!-Card-Liste, ARASAAC-Bilder, Init-Data-Auth.
+     ESSEN-33: PWA-Mantel — manifest.json + sw.js + Wake-Lock + Fullscreen.
      Statisches Skelett; JS-Hydration rendert die Liste und alle Sheets. EZG-6. -->
 <html lang="de">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#47503C">
   <title>Einkaufsliste · XBuddy</title>
+
+  <!-- ESSEN-33: PWA-Manifest (absoluter Pfad, weil HTML-Route ohne Trailing-Slash lebt) -->
+  <link rel="manifest" href="/seiten/essen/einkauf/manifest.json">
+  <link rel="icon" href="/seiten/essen/einkauf/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="/seiten/essen/einkauf/icon-192.png">
+
   <link rel="stylesheet" href="/api/v1/seiten/static/essen-einkauf.css?v={{ build_id }}">
   <!-- platform.js (RAT-16) muss vor essen-einkauf.js geladen sein -->
   <script src="/api/v1/seiten/static/platform.js?v={{ build_id }}"></script>
@@ -35,5 +43,86 @@
 
   <!-- Toast-Hinweis für Transient-Meldungen -->
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- ESSEN-33: PWA-Naht (Service-Worker, Wake-Lock, Fullscreen).
+       Best-effort analog conventions/pwa.md PWA-3: fehlt eine API
+       oder schlaegt sie fehl, laeuft die Seite weiter (console.warn). -->
+  <script>
+    (function () {
+      'use strict';
+
+      // ── Service-Worker registrieren (ESSEN-33/35) ────────────────────────
+      if ('serviceWorker' in navigator) {
+        // Scope explizit auf den Mini-App-Namespace begrenzen — SW.js liegt
+        // dort, der Default-Scope passt also, aber explizit ist klarer.
+        window.addEventListener('load', function () {
+          navigator.serviceWorker
+            .register('/seiten/essen/einkauf/sw.js', { scope: '/seiten/essen/einkauf/' })
+            .catch(function (err) {
+              console.warn('[pwa] Service-Worker-Registrierung fehlgeschlagen:', err);
+            });
+        });
+      } else {
+        console.warn('[pwa] Service-Worker nicht unterstuetzt — PWA-Install nicht moeglich.');
+      }
+
+      // ── Wake-Lock (PWA-3 analog) ─────────────────────────────────────────
+      // Bildschirm wach halten; bei visibilitychange erneut anfordern (System
+      // gibt den Lock beim Verdecken frei).
+      var _wakeLock = null;
+      function holeWakeLock() {
+        if (!('wakeLock' in navigator)) {
+          console.warn('[pwa] navigator.wakeLock nicht verfuegbar.');
+          return;
+        }
+        navigator.wakeLock.request('screen').then(function (lock) {
+          _wakeLock = lock;
+          lock.addEventListener('release', function () { _wakeLock = null; });
+        }).catch(function (err) {
+          console.warn('[pwa] wakeLock.request fehlgeschlagen:', err && err.message);
+        });
+      }
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') holeWakeLock();
+      });
+      // Erst-Versuch beim Laden (best-effort; manche Browser brauchen Geste).
+      holeWakeLock();
+
+      // ── Fullscreen aus User-Gesture (PWA-3 analog) ───────────────────────
+      // touchend/click sind die abgeschlossenen Gesten — touchstart liefert
+      // KEINE transient activation fuer requestFullscreen.
+      function fordereFullscreen() {
+        var el = document.documentElement;
+        var req =
+          el.requestFullscreen ||
+          el.webkitRequestFullscreen ||
+          el.msRequestFullscreen;
+        if (!req) {
+          // best-effort; im Telegram-WebView meist nicht verfuegbar — kein UI-Bruch.
+          return;
+        }
+        try {
+          var p = req.call(el);
+          if (p && typeof p.catch === 'function') {
+            p.catch(function (err) {
+              console.warn('[pwa] requestFullscreen abgelehnt:', err && err.message);
+            });
+          }
+        } catch (err) {
+          console.warn('[pwa] requestFullscreen-Aufruf warf:', err);
+        }
+      }
+      function fullscreenAktiv() {
+        return !!(document.fullscreenElement || document.webkitFullscreenElement);
+      }
+      // Self-healing: jeder Tap holt Fullscreen zurueck, wenn nicht aktiv.
+      document.addEventListener('touchend', function () {
+        if (!fullscreenAktiv()) fordereFullscreen();
+      }, { passive: true });
+      document.addEventListener('click', function () {
+        if (!fullscreenAktiv()) fordereFullscreen();
+      });
+    })();
+  </script>
 </body>
 </html>
