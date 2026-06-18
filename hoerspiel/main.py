@@ -712,17 +712,24 @@ def _sse_pack(event: dict | None) -> str:
 
 
 def _audio_event_stream():
-    """SSE-Generator: initialer Heartbeat, dann Events oder periodische Heartbeats."""
+    """SSE-Generator: initialer Heartbeat, dann Events oder periodische Heartbeats.
+
+    Heartbeats werden als data-Events gesendet (statt SSE-Comments), damit das
+    Client-JS sie als Lebenszeichen verbuchen kann — Comments triggern kein
+    `message`-Event im Browser. Watchdog im Client erkennt damit stillgewordene
+    Verbindungen und reconnectet (R6 aus Track-E: Mobile-Browser kappen
+    EventSource im Hintergrund, ohne onerror auszulösen).
+    """
     q = _audio_register_subscriber()
     try:
         # Initialer Heartbeat — Browser bestätigt Verbindung
-        yield ": connected\n\n"
+        yield 'data: {"type":"heartbeat"}\n\n'
         while True:
             try:
                 event = q.get(timeout=SSE_HEARTBEAT_SECONDS)
                 yield _sse_pack(event)
             except queue.Empty:
-                yield _sse_pack(None)
+                yield 'data: {"type":"heartbeat"}\n\n'
     finally:
         _audio_unregister_subscriber(q)
 

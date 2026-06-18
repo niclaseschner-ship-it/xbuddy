@@ -786,6 +786,11 @@
 
   var HSP_KIND_IDS = ['mia', 'finn'];
   var hspStreams = {};
+  // Letztes empfangenes SSE-Lebenszeichen je kind_id (Date.now()-Wert).
+  // Wird bei jedem Server-Heartbeat (15s) und jedem audio_play-Event gesetzt.
+  // Watchdog vergleicht gegen now() und reconnectet stillgewordene Verbindungen.
+  var hspLastSeen = {};
+  var HSP_HEARTBEAT_WATCHDOG_MS = 30000;  // 30s — Server-Heartbeat ist 15s
 
   function primeSilentAudio() {
     var a = document.getElementById('hsp-audio');
@@ -879,8 +884,11 @@
     var url = '/api/v1/hoerspiel/' + encodeURIComponent(kindId) + '/audio-stream';
     var es = new EventSource(url);
     es.addEventListener('message', function (e) {
+      // Jeder data-Event (auch Heartbeat) ist ein Lebenszeichen für den Watchdog.
+      hspLastSeen[kindId] = Date.now();
       try {
         var data = JSON.parse(e.data);
+        if (data && data.type === 'heartbeat') return;  // Heartbeat-only, kein audio
         onHspAudioEvent(data);
       } catch (err) {
         console.warn('hsp-audio-stream: parse-Fehler', err);
@@ -889,6 +897,8 @@
     es.onerror = function () {
       console.warn('hsp-audio-stream ' + kindId + ' error — Browser reconnectet (DC-7).');
     };
+    // Initialer Lastseen-Stempel beim Öffnen, damit Watchdog nicht sofort feuert.
+    hspLastSeen[kindId] = Date.now();
     return es;
   }
 
@@ -900,6 +910,28 @@
       hspStreams[kindId] = attachHspAudioStream(kindId);
     });
   }
+
+  // Watchdog: prüft alle 10s ob jeder Stream innerhalb der letzten 30s ein
+  // Lebenszeichen (Heartbeat oder Event) hatte. Server-Heartbeat ist 15s,
+  // also sollten neue Events spätestens nach 15-20s ankommen. Wenn nichts
+  // kam, ist die Verbindung still gestorben — neu öffnen.
+  // Adressiert R6 aus Track E: Mobile-Browser kappen EventSource im
+  // Hintergrund ohne onerror auszulösen.
+  setInterval(function () {
+    if (document.visibilityState !== 'visible') return;  // im Hintergrund sowieso egal
+    var now = Date.now();
+    HSP_KIND_IDS.forEach(function (kindId) {
+      var seen = hspLastSeen[kindId] || 0;
+      if (now - seen > HSP_HEARTBEAT_WATCHDOG_MS) {
+        console.warn('hsp-audio-stream ' + kindId + ' Watchdog: ' +
+                     Math.round((now - seen) / 1000) + 's still — Reconnect.');
+        if (hspStreams[kindId]) {
+          try { hspStreams[kindId].close(); } catch (e) {}
+        }
+        hspStreams[kindId] = attachHspAudioStream(kindId);
+      }
+    });
+  }, 10000);
 
   // visibilitychange — EventSource wird auf iOS/Android im Hintergrund
   // pausiert (siehe display-client.md:101-108); beim Zurück-in-den-
