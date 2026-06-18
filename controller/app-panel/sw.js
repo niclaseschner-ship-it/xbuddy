@@ -7,8 +7,8 @@
 'use strict';
 
 // HSP-42 / PANEL-13: silent.mp3 + neue app.js-Größe → Cache-Bust durch
-// Versions-Bump.
-const CACHE_NAME = 'app-panel-v2-hsp-audio';
+// Versions-Bump. v3: + pause/resume-SSE-Events.
+const CACHE_NAME = 'app-panel-v3-hsp-audio-controls';
 
 const STATIC_ASSETS = [
   './',
