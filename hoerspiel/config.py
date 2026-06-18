@@ -50,7 +50,7 @@ VALID_VOICES = ("shimmer", "onyx")
 VALID_AUDIO_ZIEL = ("display", "panel")
 
 DEFAULT_LLM_MODEL = "claude-opus-4-7"
-DEFAULT_VOICE = "shimmer"
+DEFAULT_VOICE = "onyx"
 DEFAULT_SERIEN_NAME = "Stigi & Co."
 
 # HSP-14 / HSP-27 — Pausen-Defaults (familien-konfigurierbar in hoerspiel.json).
