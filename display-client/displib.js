@@ -67,6 +67,11 @@
     source.onmessage = function (ev) {
       var stateObj;
       try { stateObj = JSON.parse(ev.data); } catch (e) { return; }
+      // Heartbeat-Events (ROU-22 2026-06-18) sind reine Lebenszeichen für
+      // EventSource — KEINE Zustands-Änderung. Ohne diesen Skip würde der
+      // Display-Client bei jedem 15-s-Heartbeat auf DC-5 (schwarz) flippen,
+      // weil heartbeat-Events kein payload.url tragen.
+      if (stateObj && stateObj.type === 'heartbeat') return;
       var next = contentUrl(stateObj);   // Inhalts-URL oder null (Ruhe-Zustand)
       if (next === current) return;      // unveränderter Zustand: kein Reload
       current = next;
