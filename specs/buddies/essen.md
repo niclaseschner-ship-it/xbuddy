@@ -1242,6 +1242,160 @@ unverändert). PATCH auf unbekannte ID → 404. PATCH
 
 *Tickets:* #653
 
+### ESSEN-33 — Eltern-Mini-App als installierbare PWA (Phase-1-Mantel)
+
+Die Eltern-Mini-App für die Einkaufsliste wird als **installierbare PWA**
+ausgeliefert, damit Eltern sie per „Zum Home-Bildschirm hinzufügen" als
+1-Tap-Icon auf iPhone und Android petrankern können (Bring!-Benchmark). Sie
+folgt `conventions/pwa.md` PWA-1..PWA-4 **analog** (n=1-Experiment einer
+dritten Konsumenten-Klasse „Power-Flow-PWA unter `seiten/static/<flow>/`";
+die Konvention selbst wird **nicht** in dieser Phase erweitert — siehe
+Schluss-Note dieser Klausel).
+
+**Pflicht-Dateien neben `essen-einkauf.html`** (analog `conventions/pwa.md`
+PWA-1, PANEL-10):
+
+- `essen-einkauf.html` — Einstiegspunkt; bindet `manifest.json` per
+  `<link rel="manifest" href="./manifest.json">` ein und registriert
+  `sw.js` als Service-Worker.
+- `manifest.json` — Web App Manifest mit den PWA-2-Pflichtfeldern:
+  `name`, `short_name`, `start_url: "./"`, `display: "fullscreen"`,
+  `orientation`, `background_color`, `theme_color`, mindestens zwei Icons
+  (192×192 + 512×512 PNG, davon mind. eines mit `purpose: "maskable"`).
+- `sw.js` — Service-Worker, beim Laden im Document registriert, mit
+  `fetch`-Handler (sonst verweigert Chrome den WebAPK-Install-Trigger).
+- Icons: `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`.
+
+**Wake-Lock + Fullscreen** (analog `conventions/pwa.md` PWA-3): die Seite
+fordert beim Laden `navigator.wakeLock.request('screen')` an und holt ihn
+bei jedem `visibilitychange`-Event nach. Fullscreen wird aus einem
+abgeschlossenen Nutzer-Gesture (`touchend`/`click`) per
+`requestFullscreen` angefordert. Best-effort: fehlt eine API oder schlägt
+sie fehl, läuft die Seite weiter und protokolliert `console.warn` — kein
+UI-Bruch.
+
+**Out-of-Scope dieser Phase** (Setzungs-Update 2026-06-18, siehe #948
+und Memory `project_xbuddy_pwa_first_power_flow.md`):
+- Cookie-Auth-Andockung (`BrowserPlatform.ensureAuth` bleibt V1-Pragma
+  `return true`; `/auth/pair`-Endpunkt + Cookie-Lib aus #948 wandern in
+  Plan B).
+- Konventions-Erweiterung von `conventions/pwa.md` um die dritte
+  Konsumenten-Klasse — wandert in eigenes Folge-Ticket „nach
+  Phase-1-Bewährung" (Trigger: 5-Tage-Realtest erfolgreich **und**
+  n=2 routine-anpassen-PWA als zweites Beispiel gebaut; folgt der
+  n=2-Regel aus Memory `feedback_berater_zwei_gebaute_beispiele.md`).
+
+*Test-Implikation:* die folgenden Pfade liefern die ESSEN-34-vorgegebenen
+Acceptance-Antworten. Visuelle Probe (Phase-1-Abschluss): auf iPhone
+Safari und Android Chrome erscheint der „Zum Home-Bildschirm
+hinzufügen"-Prompt; nach Install öffnet ein Tap das Icon randlos ohne
+Browser-Chrome.
+
+*Tickets:* #949 · *Verweis:* `conventions/pwa.md` (PWA-1..PWA-4 analog),
+PANEL-10, ROU-23 (Asset-Routing-Vorbild).
+
+### ESSEN-34 — Asset-Auslieferung am Mini-App-Pfad
+
+Die PWA-Assets (Manifest, Service-Worker, Icons) werden vom **selben URL-
+Pfad** wie `essen-einkauf.html` ausgeliefert, **nicht** unter dem
+generischen `/seiten/static/`-Pfad. Das ist Pflicht für PWA-Mechanik:
+relative Verweise (`./manifest.json`) müssen vom HTML aus auflösen,
+Service-Worker-Scope wird automatisch auf das `sw.js`-Verzeichnis
+beschränkt, und der WebAPK-Install-Trigger akzeptiert nur ein Manifest,
+das ohne Cross-Origin-/Pfad-Sprung erreichbar ist (ROU-23-Vorbild).
+
+Konkrete URL-Form (analog ROU-23 für Controller-PWAs):
+
+| Pfad | Antwort |
+|---|---|
+| `GET /seiten/essen/einkauf` | 200, `text/html`, Inhalt aus `essen-einkauf.html` |
+| `GET /seiten/essen/einkauf/manifest.json` | 200, `application/manifest+json` |
+| `GET /seiten/essen/einkauf/sw.js` | 200, `application/javascript` |
+| `GET /seiten/essen/einkauf/icon-192.png` | 200, `image/png` |
+| `GET /seiten/essen/einkauf/icon-512.png` | 200, `image/png` |
+| `GET /seiten/essen/einkauf/icon-maskable-512.png` | 200, `image/png` |
+| Pfad außerhalb des Mini-App-Wurzelverzeichnisses (Path-Traversal) | 404 |
+| Nicht existierendes Asset im Mini-App-Verzeichnis | 404 |
+
+Der Code-Track entscheidet, **wo** die Asset-Dateien physisch im Repo
+liegen — die Spec verlangt nur, dass sie unter dem oben genannten
+URL-Pfad erreichbar sind. Naheliegende Ablage (im Sinne der Lego-Trennung
+und ROU-23-Analogie): unter `seiten/static/einkauf/` neben den Icons,
+Flask-Route in `seiten/main.py` analog der bestehenden HTML-Route
+`/seiten/essen/einkauf`. Path-Traversal-Schutz (`realpath`-Check)
+zwingend, kein Dateizugriff jenseits des Mini-App-Wurzelverzeichnisses.
+
+**Service-Worker-Scope:** Da `sw.js` unter `/seiten/essen/einkauf/sw.js`
+liegt, kontrolliert die PWA per Default nur ihren eigenen
+Mini-App-Namensraum `/seiten/essen/einkauf/` — nicht den ganzen
+`/seiten/`-Prefix. Andere Mini-Apps (z. B. `mini-app-uebersicht`,
+`routine-anpassen`) bleiben außerhalb des PWA-Caches.
+
+*Tickets:* #949
+
+### ESSEN-35 — Service-Worker-Cache-Strategie
+
+Der Service-Worker cached **selektiv**:
+
+- **Cache-first** für statische Mantel-Assets: `essen-einkauf.html`,
+  `/seiten/static/essen-einkauf.js`, `/seiten/static/essen-einkauf.css`,
+  `/seiten/static/platform.js`, `manifest.json`, alle Icons unter dem
+  Mini-App-Pfad. Damit der Install-Trigger und kurze Netz-Aussetzer
+  keinen White-Screen erzeugen und die App wie eine native Familien-App
+  startet.
+- **Pass-through** (network only) für API-Aufrufe: alles unter
+  `/api/v1/essen/*` wird **nicht** gecached — Listen-Inhalte sind live,
+  ein petralteter Cache-Snapshot wäre für Eltern beim Einkauf gefährlich
+  (sie würden bereits eingekaufte Items erneut kaufen).
+- **Network-first mit Cache-Fallback** für ARASAAC-Piktogramme unter
+  `/_shared/icons/arasaac/<id>.png` (ICONS-5, ESSEN-31): erst Netz
+  probieren, bei Offline Cache verwenden, bei Cache-Miss Placeholder-
+  Rendering durch die Render-Funktion (ESSEN-31 Bild-Lade-Fehler).
+
+**Cache-Versionierung:** Der Service-Worker nutzt einen Cache-Namen mit
+`build_id` (vgl. Memory `reference_mini_app_cache_buster.md`); bei jedem
+Deploy invalidiert ein neuer `build_id` den alten Cache (`activate`-
+Event löscht alte Cache-Namespaces). Damit greift der bestehende
+Cache-Buster-Mechanismus (`?v={{ build_id }}` an Asset-URLs) auch im
+Service-Worker, und Eltern sehen Iter-Änderungen ohne manuellen
+„Hard-Reload".
+
+*Test-Implikation:* nach Install-and-Reload (PWA gestartet, dann
+offline) lädt `essen-einkauf.html` aus Cache; ein `GET
+/api/v1/essen/wuensche` schlägt fehl (kein gecachter API-Response).
+Nach Deploy mit neuer `build_id` invalidiert der Service-Worker den
+alten Cache (`caches.keys()` enthält nach `activate` nur den neuen
+Namespace).
+
+*Tickets:* #949
+
+### ESSEN-36 — MAD-5-Cleanup im Phase-1-PR (Hygiene, Auth-unabhängig)
+
+Mit dem PWA-Mantel wird **auch** die MAD-5-Disziplin (`conventions/mini-
+app-design.md` MAD-5) in `seiten/static/essen-einkauf.js` umgesetzt: alle
+direkten Zugriffe auf `window.Telegram.WebApp.initData` (heute
+`essen-einkauf.js:29-32, 68-70, 91-97, 125-130`) werden durch einen
+`platform.authHeaders()`-Wrapper in `seiten/static/platform.js`
+zentralisiert. Der Wrapper gibt heute `{Authorization: 'tma ' +
+initData}` zurück; eine spätere Cookie-Pfad-Erweiterung (Plan B, #948)
+kann die Funktion erweitern, ohne dass `essen-einkauf.js` erneut
+angefasst wird.
+
+**Begründung der Mit-Auslieferung:** MAD-5 ist eine Mini-App-Konvention,
+die unabhängig von Cookie-Auth gilt — direkter `initData`-Zugriff ist
+Lego-Bruch, weil künftige Auth-/Identity-Erweiterungen jedes Mini-App-JS
+einzeln anfassen müssten. Der MAD-5-Cleanup wandert deshalb **nicht** mit
+der Auth-Andockung in #948, sondern bleibt Teil von Phase-1 (Setzungs-
+Update 2026-06-18, Klarstellung der MAD-5-Frage im prep-Verlauf).
+
+**Stell-Probe:** nach dem Phase-1-PR enthält
+`seiten/static/essen-einkauf.js` keinen direkten
+`window.Telegram.WebApp.initData`-Zugriff mehr (Grep findet 0 Treffer);
+alle API-Aufrufe nutzen `platform.authHeaders()` aus
+`seiten/static/platform.js`.
+
+*Tickets:* #949 · *Verweis:* `conventions/mini-app-design.md` MAD-5.
+
 ---
 
 ## Offene Punkte
