@@ -195,26 +195,34 @@ analog EC-10):
    Intro/Outro-Reime sind in der Vorschau **nicht** enthalten — sie sind
    geteilte Serien-Assets (HSP-8) und für die Eltern-Freigabe nicht
    relevant.
-3. **Bestätigungs-Block** mit gewählter Voice und Bestätigungs-Frage:
+3. **Bestätigungs-Block** mit gesetzter Voice und Bestätigungs-Frage:
 
    ```
-   Voice: <voice-default> (oder schreib „shimmer" / „onyx")
+   Voice: <voice-default>
    Soll ich vertonen? Das dauert 1–5 Minuten.
    ```
 
-**Voice-Default-Resolution** in `propose()`:
+**Voice-Default-Resolution** in `propose()` (#995, 2026-06-18):
 
-- Hat der Aufrufer im selben Turn eine Voice genannt (`shimmer`/`onyx`),
-  setzt `propose()` diese Voice.
-- Sonst liest `propose()` die Default-Voice aus `GET
-  /api/v1/hoerspiel/config` (HSP-26, Default `shimmer`) und nutzt sie.
-- Antwortet der Aufrufer auf den Vorschlag mit „onyx" statt
-  Bestätigungswort, ruft der Agent `propose()` erneut mit der neuen
-  Voice — der vorherige Vorschlag wird ersetzt (Standard-EC-10-
-  Verhalten ohne Sonderregel).
+- Voice-Wechsel lebt **ausschließlich** in der Hörspiel-Mini-App
+  (HSP-34 `PATCH /<kind_id>/config`). Im Chat gibt es **keinen** Override-
+  Pfad — kein `voice`-Tool-Argument, kein „mit onyx vertonen"-Trigger.
+  Der Agent-Prompt weist solche Phrasen ab mit „Voice wählst du in der
+  Hörspiel-Mini-App." (analog Anbieter/Modell-Block, Refs #848/#750).
+- `propose()` liest die Default-Voice aus `GET /api/v1/hoerspiel/<kind_id>/config`
+  (HSP-26, Default `onyx` seit #995) — **nach** dem 90s-Folgen-Vorschlag-
+  LLM-Call. Damit fließt eine Mini-App-Änderung, die die Familie während
+  des HFE-10-Tune-Fensters (Settings-Beifang-Button) macht, noch in den
+  Bestätigungs-Block ein. (Vorher las propose() die Voice vor dem LLM-Call —
+  Race: Voice-Stand war beim Vorschlag bis zu 100 s alt, Live-Befund
+  2026-06-17 23:54.)
+- Fällt der Config-Aufruf aus (HoerspielClientError), nutzt der Skill den
+  Code-Fallback `VOICE_DEFAULT = onyx`. Der Vorschlag wird dabei nicht
+  blockiert (degrades gracefully).
 
 **Pflicht-Felder** im Sinne EC-22 sind hier: `idee` (vom Aufrufer);
-`voice` ist nie Pflicht-Feld, sie hat immer einen Default.
+`voice` ist gar kein Tool-Feld mehr (#995) — sie kommt immer aus der
+Buddy-Config und ist in der Mini-App familien-konfigurierbar.
 
 ## HFE-5 — `execute()`: Album-Bau auslösen
 
@@ -345,10 +353,14 @@ wird durch einen kontrollierten Doppelten ersetzt):
 - E-HFE-6 / #910 (`propose()` ohne `kind_id` → `TypeError`; `kind_id`
   ist Pflicht-Argument ohne Default)
 - HFE-4 (Tool-Result-Text trägt Titel + Vorschau-Text + Bestätigungs-
-  Block mit Voice; Intro/Outro nicht im Vorschau-Text)
-- HFE-4 (Voice-Default: kein Voice-Hinweis im Aufrufer-Text → Skill
-  liest `GET /<kind_id>/config` und setzt Default; Voice im Aufrufer-Text →
-  diese Voice gesetzt)
+  Block mit Voice; Intro/Outro nicht im Vorschau-Text; **kein**
+  „oder schreib …"-Override-Hinweis, #995)
+- HFE-4 / #995 (Voice-Default: `propose()` liest `GET /<kind_id>/config`
+  **nach** dem `POST /<kind_id>/folgen-vorschlag`-Aufruf — Reihenfolge-
+  Test via Call-Order-Spy; kein `voice`-Tool-Argument; Result-Text trägt
+  „Voice: <voice>\n" ohne Override-Phrase)
+- HFE-4 / #995 (Code-Fallback bei Config-Fehler → `onyx`,
+  `VOICE_DEFAULT = "onyx"`)
 - HFE-5 (Confirm → `execute()` ruft `POST /<kind_id>/alben` mit den vier
   Vorschlag-Feldern; erfolgreicher Build → Erfolgs-Bubble mit Display-URL;
   HTTP 412 → Shared-Asset-Hinweis ohne erneuten Build-Versuch; HTTP 503

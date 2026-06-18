@@ -106,7 +106,8 @@ def test_patch_runtime_lehnt_claude_ohne_key_ab():
 
 def test_resolve_data_defaults(tmp_path):
     cfg = config_mod.resolve_data(str(tmp_path / "fehlt.json"), env={})
-    assert cfg.default_voice == "shimmer"
+    # #995: Default-Voice ist onyx (war shimmer bis 2026-06-18, Familien-Setzung).
+    assert cfg.default_voice == "onyx"
     assert cfg.serien_name == "Stigi & Co."
     assert cfg.pause_absatz_sek == 0.55
     assert cfg.pause_titel_sek == 1.8

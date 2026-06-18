@@ -21,7 +21,6 @@ Agent-Loop wirft die Funktion `BerechtigungError` — kein Buddy-Aufruf.
 
 Eingang propose(): hoerspiel_client, is_member_fn, from_user_id, idee,
   kind_id (Pflicht, RAT-17 / E-HFE-6),
-  voice_hint (aus dem Aufrufer-Text, optional),
   mini_app_base_url (für HFE-10 Settings-Beifang, optional),
   is_first_propose (HFE-10: True für erste propose()-Antwort im Turn).
 Eingang execute(): hoerspiel_client, tg, chat_id, display_url_origin,
@@ -54,7 +53,7 @@ logger = logging.getLogger(__name__)
 # HFE-4: erlaubte Voice-Werte (shimmer/onyx, HSP-23).
 VOICE_SHIMMER = "shimmer"
 VOICE_ONYX    = "onyx"
-VOICE_DEFAULT = VOICE_SHIMMER   # HSP-26-Default, Fallback wenn config nicht erreichbar
+VOICE_DEFAULT = VOICE_ONYX   # HSP-26-Default, Fallback wenn config nicht erreichbar (#995)
 
 # E-HFE-6 / RAT-17: MIA_ALTER wurde entfernt. kind_id ist Pflicht-Argument
 # von propose(); Alter zieht der Buddy aus seiner instance.json (HSP-27).
@@ -70,7 +69,6 @@ _IDEE_MIN_ZEICHEN = 5
 
 def propose(*, hoerspiel_client, is_member_fn, from_user_id,
             idee: str, kind_id: str,
-            voice_hint: str | None = None,
             tg=None, chat_id=None,
             mini_app_base_url: str | None = None,
             is_first_propose: bool = True,
@@ -88,7 +86,6 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
     `kind_id`          — Pflicht-Arg: Instanz-Identität des Hörspiel-Buddys
                          (E-HFE-6, RAT-17). Kommt aus Face-Pille-State der
                          Mini-App oder LLM-Entscheidung im Agent-Prompt (HFE-3).
-    `voice_hint`       — optionale Voice aus dem Aufrufer-Text (HFE-4).
     `tg`               — optionaler Telegram-Client (für Start-Bubble + HFE-10).
     `chat_id`          — Ziel-Chat (für Start-Bubble + HFE-10).
     `mini_app_base_url`— Basis-URL der Eltern-Mini-App (HFE-10, optional).
@@ -96,6 +93,11 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
                          ist (HFE-10 Settings-Beifang); False für Folge-Antworten.
     `idee_diskussion`  — True wenn der Agent eine konkret-aber-unvollständige
                          Idee erkannt hat (HFE-3 Sub-Case 2). Default: False.
+
+    HFE-4 (#995): Voice-Wechsel lebt **nur** in der Mini-App (HSP-34 PATCH /config).
+    Kein voice_hint mehr — der Skill liest die Default-Voice aus GET /config
+    NACH dem Folgen-Vorschlag-LLM-Call, damit eine Mini-App-Änderung während
+    der 90s-Wartezeit (HFE-10-Settings-Beifang-Button) noch einfließt.
 
     Rückgabe: Tuple (result_text, fields_dict) bei Erfolg (Sub-Case 3).
 
@@ -149,13 +151,6 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
     # selbst gibt 404 zurück wenn die kind_id unbekannt ist. Das wird weiter
     # unten in HoerspielClientError(status=404) übersetzt.
 
-    # HFE-3 Sub-Case 3: konkrete vollständige Idee → Vorschlag-Endpoint.
-    # HFE-4: Voice auflösen.
-    voice = _voice_aus_hint(voice_hint)
-    if voice is None:
-        # Kein Voice-Hinweis → Default aus config lesen (HFE-4).
-        voice = _voice_default_lesen(hoerspiel_client)
-
     # HFE-3 Sub-Case 3: Folgen-Vorschlag vom Hörspiel-Buddy holen.
     # Live-UX: der LLM-Call dauert 1-2 min, propose() bleibt sonst stumm.
     # Nic-Befund 2026-06-12: Eltern denken in der Stille, der Bot sei
@@ -182,6 +177,13 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
             raise ValueError("Für %s gibt es keinen Hörspiel-Buddy." % kind_id) from exc
         raise  # 503 / 5xx / None → propagiert weiter (Task-Layer übernimmt)
 
+    # HFE-4 (#995): Voice-Default NACH dem 90s-LLM-Call lesen, damit eine
+    # Mini-App-Änderung während des HFE-10-Tune-Fensters (Settings-Beifang)
+    # noch in den Bestätigungs-Block einfließt. Vorher lag das vor dem Call —
+    # Race: User stellte in der Mini-App auf onyx um, Vorschlag kam aber
+    # mit dem alten shimmer-Stand zurück.
+    voice = _voice_default_lesen(hoerspiel_client)
+
     titel   = data.get("titel", "")
     text    = data.get("text", "")
     folge_nr = data.get("folgen-nr-vorschlag", "?")
@@ -201,9 +203,12 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
                 folge_nr, titel, i, len(splits)) if i == 1 else \
                 "**Folge %s** (%d/%d)\n\n" % (folge_nr, i, len(splits))
             _sende(tg, chat_id, header + teil)
+        # HFE-4 (#995): kein on-the-fly Voice-Override mehr — Voice-Wechsel
+        # lebt in der Mini-App-Settings (HSP-34). Result-Text trägt nur den
+        # aktuellen Stand zur Information.
         result = (
             "Vollständiger Vorschlag oben in %d Nachrichten.\n\n"
-            "Voice: %s (oder schreib »shimmer« / »onyx«)\n"
+            "Voice: %s\n"
             "Soll ich vertonen? Das dauert 1–5 Minuten."
         ) % (len(splits), voice)
     else:
@@ -212,7 +217,7 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
         result = (
             "**Folge %s: %s**\n\n"
             "%s\n\n"
-            "Voice: %s (oder schreib »shimmer« / »onyx«)\n"
+            "Voice: %s\n"
             "Soll ich vertonen? Das dauert 1–5 Minuten."
         ) % (folge_nr, titel, splits[0] if splits else text, voice)
 
@@ -361,21 +366,6 @@ def _sende_beifang_button(tg, chat_id, mini_app_base_url: str | None,
         logger.warning(
             "hoerspiel_folge_erzeugen: send_inline_keyboard fehlgeschlagen "
             "(HFE-10, verschluckt): %s", exc)
-
-
-def _voice_aus_hint(hint: str | None) -> str | None:
-    """HFE-4: extrahiert shimmer/onyx aus einem optionalen Hinweis-Text.
-
-    Gibt None zurück, wenn kein gültiger Voice-Hint vorhanden ist.
-    """
-    if not hint:
-        return None
-    h = hint.strip().lower()
-    if VOICE_ONYX in h:
-        return VOICE_ONYX
-    if VOICE_SHIMMER in h:
-        return VOICE_SHIMMER
-    return None
 
 
 def _voice_default_lesen(hoerspiel_client) -> str:

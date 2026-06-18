@@ -74,9 +74,12 @@ class HoerspielFolgeErzeugenTask(WriteTask):
                 "Parameter `idee_diskussion` (bool, optional): True setzen, "
                 "wenn die Idee konkret aber noch unvollständig ist und der "
                 "Agent mehr Details klären will (HFE-3 Sub-Case 2).\n\n"
-                "Parameter `voice` (optional): »shimmer« (weich/weiblich, "
-                "Default) oder »onyx« (tief/männlich) — nur setzen, wenn die "
-                "Eltern eine Voice explizit genannt haben (HFE-4).\n\n"
+                "Voice-Wechsel (#995): Die Stimme (shimmer/onyx) wählt die "
+                "Familie ausschließlich in der Hörspiel-Mini-App-Einstellung — "
+                "NICHT im Chat. Antworten wie »mit onyx vertonen« oder »auf "
+                "shimmer wechseln« sind KEIN Trigger für diesen Skill. Falls "
+                "danach gefragt wird, antworte: »Voice wählst du in der "
+                "Hörspiel-Mini-App.«\n\n"
                 "Eltern-Signal-Phrasen (beenden die Diskussion und lösen den "
                 "Vorschlag-Endpoint aus): »los«, »los gehts«, »mach das«, "
                 "»passt so«, »okay so«, »fang an«, »jetzt vertonen«, "
@@ -109,15 +112,6 @@ class HoerspielFolgeErzeugenTask(WriteTask):
                             "True wenn die Idee konkret aber noch "
                             "unvollständig ist (HFE-3 Sub-Case 2). "
                             "False (Default) für vollständige Idee."),
-                    },
-                    "voice": {
-                        "type": "string",
-                        "enum": [hfe_mod.VOICE_SHIMMER, hfe_mod.VOICE_ONYX],
-                        "description": (
-                            "Gewünschte Stimme: 'shimmer' (weich/weiblich) "
-                            "oder 'onyx' (tief/männlich). Nur setzen, wenn "
-                            "die Eltern eine Voice explizit genannt haben. "
-                            "Sonst weglassen — der Skill liest den Default."),
                     },
                 },
                 "required": ["kind_id", "idee"],
@@ -175,7 +169,6 @@ class HoerspielFolgeErzeugenTask(WriteTask):
         """
         args = arguments or {}
         idee  = (args.get("idee") or "").strip()
-        voice_hint = args.get("voice") or None
         idee_diskussion = bool(args.get("idee_diskussion", False))
 
         is_member_fn = self._is_member_fn or (lambda uid: True)
@@ -211,7 +204,6 @@ class HoerspielFolgeErzeugenTask(WriteTask):
             from_user_id=from_user_id,
             idee=idee,
             kind_id=kind_id,
-            voice_hint=voice_hint,
             tg=self._tg,
             chat_id=chat_id,
             mini_app_base_url=self._mini_app_base_url,
@@ -228,8 +220,7 @@ class HoerspielFolgeErzeugenTask(WriteTask):
             voice = fields.get("voice", "")
         else:
             result_text = propose_result
-            titel, text, voice = _extrahiere_vorschlag_felder(
-                result_text, voice_hint, self._hoerspiel_client)
+            titel, text, voice = _extrahiere_vorschlag_felder(result_text)
 
         self._pending_vorschlaege[chat_id] = {
             "titel": titel,
@@ -292,11 +283,7 @@ class HoerspielFolgeErzeugenTask(WriteTask):
         return "Folge erzeugt und Bubble gesendet."
 
 
-def _extrahiere_vorschlag_felder(
-        result_text: str,
-        voice_hint: str | None,
-        hoerspiel_client,
-) -> tuple[str, str, str]:
+def _extrahiere_vorschlag_felder(result_text: str) -> tuple[str, str, str]:
     """Extrahiert titel/text/voice aus dem strukturierten propose-Result-Text.
 
     Der Buddy-Vorschlag-Text hat das Format (HFE-4):

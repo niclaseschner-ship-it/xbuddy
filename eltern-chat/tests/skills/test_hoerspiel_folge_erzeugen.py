@@ -364,8 +364,9 @@ def test_HFE4_intro_outro_nicht_in_vorschau():
     assert "outro" not in text_lower, "Skill darf kein Outro-Markup einfügen (HFE-4)"
 
 
-def test_HFE4_voice_default_aus_config_wenn_kein_hint():
-    """HFE-4: kein Voice-Hint → GET /config aufgerufen, Default-Voice genutzt."""
+def test_HFE4_voice_default_aus_config():
+    """HFE-4 / #995: propose() liest immer GET /config (kein voice_hint mehr).
+    Default-Voice aus Mini-App-Settings → in Result-Text."""
     client = FakeHoerspielClient(
         config_response={"default_voice": "onyx"},
     )
@@ -374,41 +375,89 @@ def test_HFE4_voice_default_aus_config_wenn_kein_hint():
         is_member_fn=_immer_mitglied,
         from_user_id=7,
         idee="Stigi im Gebirge",
-        voice_hint=None,
         kind_id="mia",
     )
     assert client.config_calls == 1, "GET /config muss aufgerufen worden sein"
     assert "onyx" in result
 
 
-def test_HFE4_voice_hint_im_text_nutzt_hint():
-    """HFE-4: Voice-Hint im Aufrufer-Text → diese Voice, KEIN GET /config."""
-    client = FakeHoerspielClient()
+def test_HFE4_voice_config_lesen_NACH_folgen_vorschlag_995():
+    """HFE-4 / #995: Race-Fix — config_lesen läuft NACH folgen_vorschlag.
+
+    Begründung: HFE-10 sendet den Settings-Beifang-Button vor dem 90s-LLM-Call.
+    Stellt die Familie währenddessen in der Mini-App auf onyx um, soll die
+    neue Voice im Bestätigungs-Block stehen. Vorher las propose() die Voice
+    VOR dem LLM-Call → Stand bis zu 100 s alt (Live-Befund 2026-06-17 23:54).
+
+    Reihenfolge: folgen_vorschlag muss VOR config_lesen passieren.
+    """
+    call_order: list[str] = []
+
+    class OrderSpyClient(FakeHoerspielClient):
+        def folgen_vorschlag(self, idee):
+            call_order.append("folgen_vorschlag")
+            return super().folgen_vorschlag(idee)
+
+        def config_lesen(self):
+            call_order.append("config_lesen")
+            return super().config_lesen()
+
+    client = OrderSpyClient(config_response={"default_voice": "onyx"})
+    propose(
+        hoerspiel_client=client,
+        is_member_fn=_immer_mitglied,
+        from_user_id=7,
+        idee="Stigi und der Bergsee",
+        kind_id="mia",
+    )
+    assert call_order == ["folgen_vorschlag", "config_lesen"], (
+        "HFE-4 #995: Voice-Default muss NACH dem LLM-Call gelesen werden, "
+        "damit Mini-App-Tune während des Wartens noch greift. "
+        "Tatsächliche Reihenfolge: %r" % call_order)
+
+
+def test_HFE4_kein_on_the_fly_override_hinweis_995():
+    """HFE-4 / #995: Result-Text darf KEINEN Override-Hinweis tragen.
+
+    Voice-Wechsel lebt nur in der Mini-App — Phrasen wie „oder schreib
+    »shimmer« / »onyx«" laden zum on-the-fly-Override ein und sind raus.
+    """
+    client = FakeHoerspielClient(config_response={"default_voice": "onyx"})
     result, _fields = propose(
         hoerspiel_client=client,
         is_member_fn=_immer_mitglied,
         from_user_id=7,
-        idee="Stigi und das Mondlicht",
-        voice_hint="onyx",
+        idee="Stigi und der Mond",
         kind_id="mia",
     )
-    assert client.config_calls == 0, "GET /config darf nicht aufgerufen werden, wenn hint vorhanden"
-    assert "onyx" in result
+    # Konkrete Hinweis-Phrasen, die der Bot NICHT mehr senden darf
+    assert "oder schreib" not in result.lower(), (
+        "HFE-4 #995: Result-Text darf keinen Override-Hinweis tragen")
+    assert "»shimmer«" not in result, (
+        "HFE-4 #995: kein Voice-Override-Vorschlag im Result-Text")
+    assert "»onyx«" not in result, (
+        "HFE-4 #995: kein Voice-Override-Vorschlag im Result-Text")
 
 
-def test_HFE4_voice_shimmer_hint():
-    """HFE-4: voice_hint='shimmer' → shimmer in Result, kein Config-Aufruf."""
-    client = FakeHoerspielClient()
+def test_HFE4_voice_default_fallback_onyx_bei_config_fehler_995():
+    """HFE-4 / #995: Config-Fehler → Fallback ist onyx (VOICE_DEFAULT)."""
+    from skills.hoerspiel_folge_erzeugen import VOICE_DEFAULT, VOICE_ONYX
+
+    assert VOICE_DEFAULT == VOICE_ONYX, (
+        "#995: Code-Fallback muss onyx sein, nicht shimmer")
+
+    client = FakeHoerspielClient(
+        config_error=HoerspielClientError("Buddy down", status=None),
+    )
     result, _fields = propose(
         hoerspiel_client=client,
         is_member_fn=_immer_mitglied,
         from_user_id=7,
-        idee="Stigi auf der Suche nach Schatz",
-        voice_hint="shimmer",
+        idee="Stigi und das Echo",
         kind_id="mia",
     )
-    assert client.config_calls == 0
-    assert "shimmer" in result
+    assert "onyx" in result, (
+        "Config-Fehler → Fallback onyx (#995); Vorschlag wird trotzdem geliefert")
 
 
 # ============================================================
