@@ -149,7 +149,9 @@ async function ladeUndRendere() {
 /**
  * Rendert die vollständige Bring!-Card-Liste gruppiert nach Kategorie.
  * ESSEN-31: Reihenfolge gericht > obst_gemuese > brotbelag > sonstiges.
- * Erledigt-Items stehen am Ende jeder Kategorie mit reduzierter Optik.
+ * Kategorie-Sektionen führen ausschließlich offene Items; erledigte Items
+ * werden in einer eigenen flachen "Erledigt · N"-Sektion am Listen-Ende
+ * gerendert (ohne Kategorie-Untergruppe).
  */
 function rendereListe(items) {
   const container = document.getElementById("liste");
@@ -159,38 +161,45 @@ function rendereListe(items) {
     return;
   }
 
-  // Gruppieren nach Kategorie
-  const gruppen = {}; // kategorie → { offen: [], erledigt: [] }
+  // Pre-Split: offeneGruppen (kategorie → offen[]) + erledigtFlach (flach)
+  const offeneGruppen = {}; // kategorie → offen[]
+  const erledigtFlach = []; // alle erledigten Items, flach
   for (const item of items) {
     const kat = item.kategorie || "sonstiges";
-    if (!gruppen[kat]) gruppen[kat] = { offen: [], erledigt: [] };
     if (item.abgehakt) {
-      gruppen[kat].erledigt.push(item);
+      erledigtFlach.push(item);
     } else {
-      gruppen[kat].offen.push(item);
+      if (!offeneGruppen[kat]) offeneGruppen[kat] = [];
+      offeneGruppen[kat].push(item);
     }
   }
 
   // Innerhalb "offen": Reihenfolge wunsch → aus_gericht → einkauf ohne aus_gericht
-  for (const kat of Object.keys(gruppen)) {
-    gruppen[kat].offen.sort((a, b) => {
+  for (const kat of Object.keys(offeneGruppen)) {
+    offeneGruppen[kat].sort((a, b) => {
       return _itemRangfolge(a) - _itemRangfolge(b);
     });
   }
 
   const fragmente = [];
 
+  // Kategorie-Sektionen mit nur offenen Items
   for (const kat of KATEGORIE_REIHENFOLGE) {
-    const gruppe = gruppen[kat];
-    if (!gruppe) continue;
+    const offenItems = offeneGruppen[kat];
+    if (!offenItems || offenItems.length === 0) continue;
 
-    const alleItems = [...gruppe.offen, ...gruppe.erledigt];
-    if (alleItems.length === 0) continue;
+    // Sektion-Header (ESSEN-31: "Sonstiges · 11 + 📖 3 + 🧒 1" — nur Offene zählen)
+    fragmente.push(sektionHeader(kat, offenItems));
 
-    // Sektion-Header (ESSEN-31: "Sonstiges · 11 + 📖 3 + 🧒 1")
-    fragmente.push(sektionHeader(kat, gruppe.offen, gruppe.erledigt));
+    for (const item of offenItems) {
+      fragmente.push(renderCard(item));
+    }
+  }
 
-    for (const item of alleItems) {
+  // Erledigt-Block am Listen-Ende (ESSEN-31)
+  if (erledigtFlach.length > 0) {
+    fragmente.push(erledigtSektionHeader(erledigtFlach.length));
+    for (const item of erledigtFlach) {
       fragmente.push(renderCard(item));
     }
   }
@@ -208,16 +217,16 @@ function _itemRangfolge(item) {
 }
 
 /**
- * Baut den Sektion-Header-HTML.
- * ESSEN-31: "Obst & Gemüse · N + 📖 R + 🧒 W"
+ * Baut den Sektion-Header-HTML für eine Kategorie.
+ * ESSEN-31: "Obst & Gemüse · N + 📖 R + 🧒 W" — nur offene Items zählen.
  */
-function sektionHeader(kat, offenItems, erledigtItems) {
+function sektionHeader(kat, offenItems) {
   const titel = KATEGORIE_LABEL[kat] || kat;
-  const nGesamt = offenItems.length + erledigtItems.length;
+  const nOffen = offenItems.length;
   const nRezept = offenItems.filter(i => i.klasse === "einkauf" && i.aus_gericht).length;
   const nWunsch = offenItems.filter(i => i.klasse === "wunsch").length;
 
-  let counter = String(nGesamt);
+  let counter = String(nOffen);
   const extras = [];
   if (nRezept > 0) extras.push("📖 " + nRezept);
   if (nWunsch > 0) extras.push("🧒 " + nWunsch);
@@ -227,6 +236,19 @@ function sektionHeader(kat, offenItems, erledigtItems) {
     '<div class="sektion-header">' +
       '<span class="sektion-titel">' + esc(titel) + '</span>' +
       '<span class="sektion-counter">· ' + esc(counter) + '</span>' +
+    '</div>'
+  );
+}
+
+/**
+ * Baut den Sektion-Header-HTML für den Erledigt-Block.
+ * ESSEN-31: "Erledigt · N" — flache Sektion am Listen-Ende, keine Kategorie-Untergruppe.
+ */
+function erledigtSektionHeader(n) {
+  return (
+    '<div class="sektion-header erledigt-sektion-header">' +
+      '<span class="sektion-titel">Erledigt</span>' +
+      '<span class="sektion-counter">· ' + esc(String(n)) + '</span>' +
     '</div>'
   );
 }
@@ -679,5 +701,5 @@ function zeigeToast(msg) {
 // ── Exports (für Tests, wenn als Modul geladen) ───────────────────────────────
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { tokenisiereQuickAdd, sektionHeader, _marker, _itemRangfolge };
+  module.exports = { tokenisiereQuickAdd, sektionHeader, erledigtSektionHeader, _marker, _itemRangfolge };
 }

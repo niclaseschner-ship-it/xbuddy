@@ -103,6 +103,12 @@ body {
   color: var(--ink-soft);
 }
 
+/* Erledigt-Block-Header (ESSEN-31): gleiche Optik wie .sektion-header,
+   leicht abgesetzt durch zusätzlichen Abstand nach oben. */
+.erledigt-sektion-header {
+  margin-top: 24px;
+}
+
 /* ── Item-Card (ESSEN-31 Bring!-Optik) ─────────────────── */
 
 .item-card {
