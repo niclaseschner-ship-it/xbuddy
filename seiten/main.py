@@ -481,6 +481,18 @@ def init_data_validate():
     }), 200
 
 
+@app.route("/seiten/essen/einkauf/", methods=["GET"])
+def essen_einkauf_view_trailing_slash():
+    """ESSEN-34 Trailing-Slash-Alias: GET /seiten/essen/einkauf/ → HTML.
+
+    manifest.json traegt start_url: "/seiten/essen/einkauf/" — der PWA-Open
+    nach Install laedt diese URL. Ohne diese Route landet der Nutzer in 404.
+    Form: Option C (dedizierter Handler, kein strict_slashes, kein Reihenfolge-
+    Risiko gegenueber einkauf_asset_view bei /seiten/essen/einkauf/<asset>).
+    """
+    return essen_einkauf_view()
+
+
 @app.route("/seiten/essen/einkauf", methods=["GET"])
 def essen_einkauf_view():
     """EZG-6 / ESSEN-31 / ESSEN-33: Eltern-Mini-App-View fuer die Einkaufsliste.
