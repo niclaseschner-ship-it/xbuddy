@@ -7,8 +7,8 @@
 'use strict';
 
 // HSP-42 / PANEL-13: silent.mp3 + neue app.js-Größe → Cache-Bust durch
-// Versions-Bump. v4: + SSE-Heartbeat-Watchdog (R6 Track-E adressiert).
-const CACHE_NAME = 'app-panel-v4-hsp-audio-watchdog';
+// Versions-Bump. v5: + PANEL-11-Watchdog für displays-SSE.
+const CACHE_NAME = 'app-panel-v5-panel11-watchdog';
 
 const STATIC_ASSETS = [
   './',
