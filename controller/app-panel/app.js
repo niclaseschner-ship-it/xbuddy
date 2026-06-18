@@ -323,10 +323,15 @@
   // bleibt die letzte Markierung (DC-6); der Browser führt den
   // EventSource-Standard-Reconnect (DC-7) selbst.
 
-  function makeStreamHandlers(getTiles, onActive) {
+  function makeStreamHandlers(getTiles, onActive, onAlive) {
     function onMessage(ev) {
       var st = null;
       try { st = JSON.parse(ev.data); } catch (e) { return; }
+      // Lebenszeichen für Watchdog — jedes data-Event (auch heartbeat).
+      if (onAlive) onAlive();
+      // Heartbeat-Events (ROU-22 2026-06-18) sind reine Lebenszeichen; KEIN
+      // updateActiveMarker(null), sonst flackert die active-Klasse weg.
+      if (st && st.type === 'heartbeat') return;
       var payloadUrl = (st && st.payload && st.payload.url) || null;
       var active = findActiveTile(getTiles(), payloadUrl);
       onActive(active);
@@ -744,19 +749,45 @@
   //  PANEL-11 — Aktiv-Markierung aus SSE-Stream
   // ============================================================
 
+  // PANEL-11 Watchdog-State — letzter Heartbeat/Event für display-Stream.
+  var panel11LastSeen = 0;
+  var panel11Stream = null;
+  var panel11Args = null;  // {displayId, getTiles} für Reconnect
+
   function attachStream(displayId, getTiles) {
     if (typeof EventSource === 'undefined') return null;
     if (!displayId) return null;
+    panel11Args = { displayId: displayId, getTiles: getTiles };
     var url = '/api/v1/displays/' + encodeURIComponent(displayId) + '/events';
     var es = new EventSource(url);
-    var handlers = panelLib.makeStreamHandlers(getTiles, updateActiveMarker);
+    var handlers = panelLib.makeStreamHandlers(
+      getTiles,
+      updateActiveMarker,
+      function () { panel11LastSeen = Date.now(); }
+    );
     es.addEventListener('message', handlers.onMessage);
     // Stream-Abbruch: nichts unternehmen (DC-6-Linie); EventSource-Reconnect
-    // läuft Browser-seitig (DC-7). Expliziter Handler dokumentiert die
-    // Absicht — kein updateActiveMarker(null), kein Reset der active-Klasse.
+    // läuft Browser-seitig (DC-7). Watchdog unten reconnectet bei stillem Tod.
     es.onerror = handlers.onError;
+    panel11LastSeen = Date.now();
+    panel11Stream = es;
     return es;
   }
+
+  // PANEL-11 Watchdog (analog HSP-Audio R6, 2026-06-18): bei stillem
+  // Verbindungs-Tod auf Mobile-Browser feuert onerror nicht zuverlässig.
+  // Prüfe alle 10s ob Heartbeat innerhalb 30s kam, sonst reconnect.
+  var PANEL11_WATCHDOG_MS = 30000;
+  setInterval(function () {
+    if (document.visibilityState !== 'visible') return;
+    if (!panel11Args || !panel11Stream) return;
+    if (Date.now() - panel11LastSeen <= PANEL11_WATCHDOG_MS) return;
+    console.warn('PANEL-11 SSE Watchdog: ' +
+                 Math.round((Date.now() - panel11LastSeen) / 1000) +
+                 's still — Reconnect.');
+    try { panel11Stream.close(); } catch (e) {}
+    panel11Stream = attachStream(panel11Args.displayId, panel11Args.getTiles);
+  }, 10000);
 
   function updateActiveMarker(activeTile) {
     var els = document.querySelectorAll('#grid .tile');

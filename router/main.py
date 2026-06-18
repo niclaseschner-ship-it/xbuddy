@@ -151,8 +151,11 @@ def sse_pack(display_state):
 
 def display_event_stream(display_id):
     """Generator für ROU-22: liefert den aktuellen Zustand beim Verbinden,
-    danach jede Änderung. Heartbeat-Kommentare halten die Verbindung und
-    räumen die Subscription ab, sobald der Client weg ist."""
+    danach jede Änderung. Heartbeats sind data-Events
+    `{"type":"heartbeat"}` statt SSE-Comments, damit Mobile-Browser-
+    EventSource sie als Lebenszeichen sieht (Browser sieht Comments nicht
+    als message-Events, R6 aus Track-E 2026-06-18). Konsumenten (Panel-PWA-
+    Watchdog, Pi-Watchdog) müssen den heartbeat-Typ ignorieren."""
     q = subscribe(display_id)
     try:
         yield sse_pack(state.get(display_id))      # Zustand beim Verbinden
@@ -160,7 +163,7 @@ def display_event_stream(display_id):
             try:
                 s = q.get(timeout=SSE_HEARTBEAT_SECONDS)
             except queue.Empty:
-                yield ': keepalive\n\n'
+                yield 'data: {"type":"heartbeat"}\n\n'
                 continue
             yield sse_pack(s)
     finally:
