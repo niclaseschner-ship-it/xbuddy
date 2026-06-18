@@ -305,3 +305,30 @@ def test_pwa_dir_enthaelt_alle_pflicht_dateien():
                  "icon-maskable-512.png"]
     fehlt = [p for p in pflichten if not os.path.isfile(os.path.join(_PWA_DIR, p))]
     assert not fehlt, f"PWA-Pflicht-Dateien fehlen in {_PWA_DIR}: {fehlt}"
+
+
+# ── ESSEN-34 Trailing-Slash Echo-Probe (manifest.start_url) ──────────────────
+
+def test_essen34_pwa_start_url_trailing_slash(client):
+    """ESSEN-34 Echo-Probe: manifest.start_url muss als HTML-Route erreichbar sein.
+
+    Liest start_url direkt aus seiten/static/einkauf/manifest.json und probt
+    diesen Pfad gegen den Flask-test-client — 200 + text/html. So bleibt der
+    Test automatisch synchron, wenn die manifest.json angepasst wird.
+    """
+    import json
+
+    manifest_path = os.path.join(_PWA_DIR, "manifest.json")
+    with open(manifest_path, encoding="utf-8") as fh:
+        manifest = json.load(fh)
+
+    start_url = manifest["start_url"]  # erwartet: "/seiten/essen/einkauf/"
+    resp = client.get(start_url)
+    assert resp.status_code == 200, (
+        f"manifest.start_url '{start_url}' liefert {resp.status_code} statt 200 — "
+        "PWA-Open nach Install landet in Fehler (ESSEN-34)"
+    )
+    assert resp.content_type.startswith("text/html"), (
+        f"manifest.start_url '{start_url}' liefert Content-Type '{resp.content_type}' "
+        "statt text/html"
+    )
