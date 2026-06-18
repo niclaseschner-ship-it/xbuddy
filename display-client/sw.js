@@ -7,7 +7,7 @@
 
 'use strict';
 
-const CACHE_NAME = 'display-client-v1';
+const CACHE_NAME = 'display-client-v2-skip-heartbeat';
 
 // Nur die PWA-Pflicht-Assets werden gecacht — Manifest und Icons.
 // Kein config.json (PWA-4: Display-Client trägt keine config.json).
