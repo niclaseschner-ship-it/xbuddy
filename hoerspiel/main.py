@@ -731,10 +731,14 @@ def audio_stream(kind_id: str):
 
 @app.route("/api/v1/hoerspiel/<kind_id>/play-extern", methods=["POST"])
 def play_extern(kind_id: str):
-    """HSP-42: Audio-Source-Push triggern (alben.js ruft pro Track-Wechsel).
+    """HSP-42: Audio-Steuerung an Panel-PWA via SSE-Broadcast.
 
-    Body: {"album_id": <str>, "track_idx": <int>}
-    Antwort: 200 {"ok": true} bei Erfolg, 404 unbekanntes album, 422 ungültiger track_idx.
+    Body: {
+      "action": "play" | "pause" | "resume",  // Default "play"
+      "album_id": <str>,                       // Pflicht bei action=play
+      "track_idx": <int>                       // Pflicht bei action=play
+    }
+    Antwort: 200 {"ok": true} bei Erfolg, 404 unbekanntes album, 422 ungültige Felder.
 
     Caller: alben.js am Kinder-Tablet bei audio_ziel=panel (HSP-22-Erweiterung).
     Auth: PUBLIC (AUTH-6, Trigger „Phase 4 HSP-Audio-Routing").
@@ -744,6 +748,18 @@ def play_extern(kind_id: str):
         return err
 
     body = request.get_json(silent=True) or {}
+    action = body.get("action", "play")
+
+    if action not in ("play", "pause", "resume"):
+        return jsonify({"fehler": "action muss play|pause|resume sein"}), 422
+
+    # pause/resume sind body-frei (kein album_id/track_idx nötig).
+    if action in ("pause", "resume"):
+        event = {"type": "audio_" + action, "kind_id": kind_id}
+        _audio_broadcast(event)
+        return jsonify({"ok": True})
+
+    # action=play braucht album_id + track_idx + Audio-URL-Auflösung
     album_id = body.get("album_id")
     track_idx = body.get("track_idx")
 

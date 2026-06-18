@@ -830,24 +830,47 @@
   }
 
   function onHspAudioEvent(event) {
-    if (!event || event.type !== 'audio_play') return;
+    if (!event || typeof event.type !== 'string') return;
     var a = document.getElementById('hsp-audio');
     if (!a) return;
-    // Sauber-Reset gegen Source-Wechsel-Glitch (Codex-Pass-2-R2).
-    a.pause();
-    a.src = '';
-    a.loop = false;
-    a.src = event.audio_url;
-    var p = a.play();
-    if (p && typeof p.catch === 'function') {
-      p.catch(function (err) {
-        if (err && err.name === 'NotAllowedError') {
-          // iOS-WebKit-Sticky-Activation hat eventuell ausgelaufen.
-          showHspTapPrompt(event.audio_url);
-        } else {
-          console.warn('hsp-audio play() error:', err);
-        }
-      });
+
+    if (event.type === 'audio_play') {
+      // Sauber-Reset gegen Source-Wechsel-Glitch (Codex-Pass-2-R2).
+      a.pause();
+      a.src = '';
+      a.loop = false;
+      a.src = event.audio_url;
+      var p = a.play();
+      if (p && typeof p.catch === 'function') {
+        p.catch(function (err) {
+          if (err && err.name === 'NotAllowedError') {
+            // iOS-WebKit-Sticky-Activation hat eventuell ausgelaufen.
+            showHspTapPrompt(event.audio_url);
+          } else {
+            console.warn('hsp-audio play() error:', err);
+          }
+        });
+      }
+      return;
+    }
+
+    if (event.type === 'audio_pause') {
+      // Lokaler Pause-Button am Kinder-Display pausiert auch Panel-Audio.
+      a.pause();
+      return;
+    }
+
+    if (event.type === 'audio_resume') {
+      // play() ohne src-Reset — laufender Track fortsetzen.
+      var pr = a.play();
+      if (pr && typeof pr.catch === 'function') {
+        pr.catch(function (err) {
+          if (err && err.name === 'NotAllowedError') {
+            showHspTapPrompt(a.src);
+          }
+        });
+      }
+      return;
     }
   }
 
