@@ -421,6 +421,23 @@ app = Flask(__name__, static_url_path="/display/hoerspiel/static")
 
 # ---- Display-View (HSP-2, HSP-3 — Single-Page-Splitscreen Mia-View) ----
 
+@app.route("/display/hoerspiel/<kind_id>/", methods=["GET"])
+@app.route("/display/hoerspiel/<kind_id>", methods=["GET"])
+def display_index_redirect(kind_id: str):
+    """Convenience-Redirect: /display/hoerspiel/<kind_id>/ → /alben.
+
+    Browser-Cache-freundlich: 302 (Found) statt 301 (Moved Permanently),
+    damit ein versehentlich abgekürzter URL nicht dauerhaft im Browser-
+    Cache landet (Memory feedback_lief_gestern_geht_heute_nicht_reflex —
+    Cache-Trap auf URL-Ebene).
+    """
+    err = _assert_self_kind(kind_id)
+    if err is not None:
+        return err
+    from flask import redirect
+    return redirect("/display/hoerspiel/%s/alben" % kind_id, code=302)
+
+
 @app.route("/display/hoerspiel/<kind_id>/alben", methods=["GET"])
 def display_alben(kind_id: str):
     err = _assert_self_kind(kind_id)
