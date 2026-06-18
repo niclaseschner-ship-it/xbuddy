@@ -408,9 +408,11 @@ async function playTrackPanel(album, trackIdx) {
   syncPlayPauseIcons();
 
   // Track-Auto-Advance: Timer-basiert mit Track-Dauer aus Manifest.
-  // OPEN: Wenn duration_sec im Manifest fehlt, kein Auto-Advance — User muss manuell skippen.
-  // V1-Pragma, in V2 könnte HSP-Service eine track-ended-SSE-Event-Variante schicken.
-  const dauerSec = Number(track['duration-sec'] || track.duration_sec || 0);
+  // Manifest-Feld ist 'dauer-sek' (deutsch, siehe shared-assets/intro_*.mp3
+  // und Album-Manifests). Wenn fehlt, kein Auto-Advance — User muss
+  // manuell skippen. V1-Pragma, in V2 könnte HSP-Service eine
+  // track-ended-SSE-Event-Variante schicken.
+  const dauerSec = Number(track['dauer-sek'] || track['duration-sec'] || 0);
   if (dauerSec > 0) {
     state.panel_timer = setTimeout(() => {
       const isLast = trackIdx >= tracks.length - 1;

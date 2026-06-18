@@ -17,6 +17,23 @@
       "label":    "Wochenplan klein",
       "icons":    ["arasaac/32488.png", "arasaac/2484.png"],
       "sichtbar": true
+    },
+    {
+      "_comment": "HSP-Beispiel-Kacheln (HSP-42 audio_ziel=panel). Beim Tap baut der Router /display/<app>/<view> = /display/hoerspiel/paula/alben (URL-3a, RAT-17). primeSilentAudio() im Panel-PWA setzt User-Activation, danach werden audio_play-SSE-Events ohne weitere Geste abgespielt. Eine Kachel pro Kind.",
+      "key":      "hoerspiel-paula",
+      "app":      "hoerspiel",
+      "view":     "paula/alben",
+      "label":    "Hörspiel Paula",
+      "icons":    ["arasaac/2484.png"],
+      "sichtbar": true
+    },
+    {
+      "key":      "hoerspiel-neko",
+      "app":      "hoerspiel",
+      "view":     "neko/alben",
+      "label":    "Hörspiel Neko",
+      "icons":    ["arasaac/2484.png"],
+      "sichtbar": true
     }
   ]
 }
