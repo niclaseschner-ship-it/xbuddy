@@ -483,7 +483,7 @@ def init_data_validate():
 
 @app.route("/seiten/essen/einkauf", methods=["GET"])
 def essen_einkauf_view():
-    """EZG-6 / ESSEN-31: Eltern-Mini-App-View fuer die Einkaufsliste.
+    """EZG-6 / ESSEN-31 / ESSEN-33: Eltern-Mini-App-View fuer die Einkaufsliste.
 
     HTML-Render-Route lädt Skeleton OHNE Auth (MAD-7-konform: Telegram-WebView
     sendet beim HTML-Initial-Load KEINEN Authorization-Header — initData kommt
@@ -493,6 +493,9 @@ def essen_einkauf_view():
 
     Cache-Buster: build_id aus mtime der JS-Datei (Telegram-WebView cached
     Mini-App-Assets sonst aggressiv — Pattern analog routine/MAU/hoerspiel).
+
+    ESSEN-33: HTML bindet manifest.json + sw.js ein (PWA-Mantel). Asset-Routen
+    leben unter /seiten/essen/einkauf/<asset> — siehe einkauf_asset_view.
     """
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     try:
@@ -503,6 +506,103 @@ def essen_einkauf_view():
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     return resp
+
+
+# ============================================================
+#  ESSEN-33..35 — PWA-Asset-Auslieferung (Mantel, Service-Worker, Icons)
+# ============================================================
+#
+# Spec-Anker: specs/buddies/essen.md ESSEN-34 (Asset-Auslieferung am
+# Mini-App-Pfad, NICHT am generischen /seiten/static/-Pfad). Vorbild:
+# router/main.py _send_controller_asset (ROU-23) — Defense in Depth via
+# werkzeug safe_join (via send_from_directory) + expliziter realpath-Check.
+
+# Content-Types fuer die PWA-Mantel-Assets (ESSEN-34-Acceptance-Tabelle).
+_EINKAUF_MIME = {
+    ".json": "application/manifest+json",   # Manifest braucht diesen Typ,
+                                            # sonst lehnt Chrome WebAPK-Install ab.
+    ".js":   "application/javascript",
+    ".png":  "image/png",
+}
+
+
+def _einkauf_asset_root():
+    """Wurzelverzeichnis fuer PWA-Mantel-Assets (ESSEN-34).
+
+    Liegt unter seiten/static/einkauf/ (Lego-Trennung: PWA-Verzeichnis ist
+    Geschwister zu den anderen Mini-App-Assets, aber URL-mapped auf den
+    Mini-App-Pfad). Test-Naht: ueberschreibbar via runtime["einkauf_asset_dir"].
+    """
+    override = runtime.get("einkauf_asset_dir") if isinstance(runtime, dict) else None
+    if override:
+        return override
+    return os.path.join(os.path.dirname(__file__), "static", "einkauf")
+
+
+def _read_sw_with_build_id(asset_path, build_id):
+    """Liest sw.js, ersetzt __BUILD_ID__-Platzhalter und gibt String zurueck.
+
+    ESSEN-35 Cache-Versionierung: der Service-Worker traegt den Cache-Namen
+    'einkauf-pwa-<build_id>'. Beim Deploy mit neuer build_id invalidiert
+    der activate-Event den alten Cache.
+    """
+    with open(asset_path, encoding="utf-8") as fh:
+        content = fh.read()
+    return content.replace("__BUILD_ID__", build_id)
+
+
+def _current_build_id():
+    """build_id aus mtime der essen-einkauf.js — identisch zu HTML-Route."""
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    try:
+        return str(int(os.path.getmtime(os.path.join(static_dir, "essen-einkauf.js"))))
+    except OSError:
+        return "0"
+
+
+@app.route("/seiten/essen/einkauf/<path:asset>", methods=["GET"])
+def einkauf_asset_view(asset):
+    """ESSEN-34: PWA-Mantel-Asset-Auslieferung (analog ROU-23).
+
+    Antwortet auf /seiten/essen/einkauf/manifest.json, /sw.js, /icon-*.png.
+    Path-Traversal-Schutz via realpath-Check. Andere Pfade → 404.
+
+    Sonderfall sw.js: BUILD_ID-Platzhalter wird beim Ausliefern durch den
+    aktuellen build_id-Wert ersetzt (ESSEN-35-Cache-Versionierung).
+    """
+    from flask import abort, send_from_directory
+
+    root = os.path.realpath(_einkauf_asset_root())
+    # werkzeug safe_join (via send_from_directory) wuerde bei .. selbst
+    # ablehnen; zusaetzlich realpath-Check, damit Symlinks nicht
+    # ausbrechen koennen.
+    target = os.path.realpath(os.path.join(root, asset))
+    if target != root and not target.startswith(root + os.sep):
+        abort(404)
+    if not os.path.isfile(target):
+        abort(404)
+    # Privat-Datei (_make_icons.py) nicht ausliefern.
+    if os.path.basename(target).startswith("_"):
+        abort(404)
+
+    ext = os.path.splitext(target)[1].lower()
+    mimetype = _EINKAUF_MIME.get(ext, "application/octet-stream")
+
+    # Sonderfall sw.js: build_id-Platzhalter ersetzen + Cache-Control-Header
+    # damit der Browser den Worker bei jedem Update neu holt.
+    if os.path.basename(target) == "sw.js":
+        build_id = _current_build_id()
+        body = _read_sw_with_build_id(target, build_id)
+        resp = make_response(body, 200)
+        resp.headers["Content-Type"] = mimetype + "; charset=utf-8"
+        # Browser muss sw.js fresh holen, sonst kein Update-Trigger.
+        # https://web.dev/articles/service-worker-lifecycle#updates
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        # Service-Worker-Allowed nicht noetig — Scope passt zur Default-Wurzel.
+        return resp
+
+    # Andere Assets: send_from_directory mit explizitem Content-Type.
+    return send_from_directory(root, asset, mimetype=mimetype)
 
 
 @app.route("/api/v1/seiten/mini-app-uebersicht", methods=["GET"])

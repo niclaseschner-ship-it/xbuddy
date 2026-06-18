@@ -24,12 +24,13 @@ const KATEGORIE_LABEL = {
 const MARKER_WUNSCH = "🧒";
 const MARKER_REZEPT = "📖";
 
-// ── MAD-7 Auth-Header ─────────────────────────────────────────────────────────
+// ── MAD-5 Auth-Header via platform-Wrapper ────────────────────────────────────
 
-// initData aus Telegram-WebApp (MAD-7): bei jedem fetch()-Call als
-// Authorization: tma <initData>-Header gesendet. Leer außerhalb Telegram
-// (Test-Browser) → Server antwortet mit 401.
-const _initData = window.Telegram?.WebApp?.initData ?? "";
+// MAD-5 (Vendor-Disziplin): KEIN direkter Telegram-Vendor-Zugriff im App-JS — alle
+// Auth-Header laufen ueber platform.authHeaders() in platform.js (siehe Stell-Probe
+// ESSEN-36: grep -F des Vendor-Initdata-Property-Pfads → 0 Treffer in dieser Datei).
+// _platform wird in main() gesetzt und ist global im Modul verfuegbar.
+let _platform = null;
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -43,7 +44,8 @@ const _gerichtOhneTapStatus = new Map(); // item.id → "erstertap"|undefined
 
 (async function main() {
   // AC7/RAT-16: keine direkten WebApp-Aufrufe — nur platform.* erlaubt (platform.js)
-  const platform = getPlatform();
+  _platform = getPlatform();
+  const platform = _platform;
   await platform.ready();
 
   // MAD-11: JS-Side-Auth-Probe (HTML-Route ist public — Skeleton lädt ohne Auth,
@@ -66,7 +68,7 @@ const _gerichtOhneTapStatus = new Map(); // item.id → "erstertap"|undefined
  */
 async function holeListe() {
   const resp = await fetch("/api/v1/essen/wuensche", {
-    headers: _initData ? { "Authorization": "tma " + _initData } : {},
+    headers: _platform.authHeaders(),
   });
   if (!resp.ok) {
     throw new Error("Liste-Abruf fehlgeschlagen: " + resp.status);
@@ -79,7 +81,7 @@ async function holeListe() {
  */
 async function holeKatalog() {
   const resp = await fetch("/api/v1/essen/katalog", {
-    headers: _initData ? { "Authorization": "tma " + _initData } : {},
+    headers: _platform.authHeaders(),
   });
   if (!resp.ok) return { kategorien: {} };
   return resp.json();
@@ -91,9 +93,7 @@ async function holeKatalog() {
 async function patchAbgehakt(id, abgehakt) {
   const resp = await fetch("/api/v1/essen/wuensche/" + encodeURIComponent(id), {
     method:  "PATCH",
-    headers: _initData
-      ? { "Content-Type": "application/json", "Authorization": "tma " + _initData }
-      : { "Content-Type": "application/json" },
+    headers: _platform.authHeaders({ "Content-Type": "application/json" }),
     body:    JSON.stringify({ abgehakt }),
   });
   if (!resp.ok) {
@@ -108,9 +108,7 @@ async function patchAbgehakt(id, abgehakt) {
 async function patchAusGericht(id, ausGericht) {
   const resp = await fetch("/api/v1/essen/wuensche/" + encodeURIComponent(id), {
     method:  "PATCH",
-    headers: _initData
-      ? { "Content-Type": "application/json", "Authorization": "tma " + _initData }
-      : { "Content-Type": "application/json" },
+    headers: _platform.authHeaders({ "Content-Type": "application/json" }),
     body:    JSON.stringify({ aus_gericht: ausGericht }),
   });
   if (!resp.ok) {
@@ -125,9 +123,7 @@ async function patchAusGericht(id, ausGericht) {
 async function postItem(payload) {
   const resp = await fetch("/api/v1/essen/wuensche", {
     method:  "POST",
-    headers: _initData
-      ? { "Content-Type": "application/json", "Authorization": "tma " + _initData }
-      : { "Content-Type": "application/json" },
+    headers: _platform.authHeaders({ "Content-Type": "application/json" }),
     body:    JSON.stringify(payload),
   });
   return resp; // Aufrufer prüft Status selbst (409 ist erwartet bei Dedupe)
