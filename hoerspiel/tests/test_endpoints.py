@@ -225,3 +225,41 @@ def test_cross_kind_api_returns_404(client):
     assert response.status_code == 404
     body = response.get_json()
     assert "fehler" in body
+
+
+def test_post_alben_manifest_url_kind_id_verdrahtung(client):
+    """AC1 / T1027: POST /alben über HTTP-Handler nutzt _self_kind_id() (HSP-26, #968).
+
+    Die Instanz ist als 'paula' konfiguriert (RuntimeConfig.kind_id Default).
+    Das Manifest muss deshalb '/display/hoerspiel/paula/data/' in den
+    Pfad-Feldern tragen — nicht eine hart codierte Konstante oder eine
+    fremde kind_id.
+    """
+    r = client.post("/api/v1/hoerspiel/paula/alben", json={
+        "titel": "Manifest-URL-Test", "text": "A.\n\nB.\n\nC.",
+        "voice": "shimmer", "idee": "url-test",
+    })
+    assert r.status_code == 200, "POST /alben muss 200 zurückgeben"
+    body = r.get_json()
+    assert "manifest-pfad" in body
+
+    with open(body["manifest-pfad"]) as f:
+        manifest = json.load(f)
+
+    cover = manifest.get("cover-asset", "")
+    assert "/display/hoerspiel/paula/data/" in cover, (
+        "cover-asset muss '/display/hoerspiel/paula/data/' enthalten — "
+        "HTTP-Handler muss _self_kind_id() an baue_album weiterreichen (#968, HSP-26). "
+        "Tatsächlicher Wert: %r" % cover
+    )
+    assert "/display/hoerspiel/neko/data/" not in cover, (
+        "cover-asset darf keine fremde kind_id ('neko/data/') enthalten"
+    )
+
+    # Mindestens ein inhalt-Track muss ebenfalls paula/data/ tragen.
+    inhalt_tracks = [t for t in manifest.get("tracks", []) if t.get("art") == "inhalt"]
+    assert inhalt_tracks, "mindestens ein inhalt-Track erwartet"
+    track_asset = inhalt_tracks[0]["audio-asset"]
+    assert "/display/hoerspiel/paula/data/" in track_asset, (
+        "inhalt-track audio-asset muss paula/data/ enthalten, nicht: %r" % track_asset
+    )
