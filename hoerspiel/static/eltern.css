@@ -433,3 +433,15 @@ body {
   font-size: 0.9rem;
   text-align: center;
 }
+
+/* ── HSP-40: Warn-Banner pro fehlgeschlagener kind_id (kleiner Hinweis, nicht alarmistisch) */
+.album-warn-banner {
+  margin: var(--item-gap) var(--item-padding-x);
+  padding: 7px 12px;
+  background: var(--surface, #fff);
+  border-left: 3px solid var(--warn, #e07b00);
+  border-radius: 0 6px 6px 0;
+  font-size: 0.82rem;
+  color: var(--ink-soft, #888);
+  line-height: 1.4;
+}
