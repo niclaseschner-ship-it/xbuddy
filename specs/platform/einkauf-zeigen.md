@@ -85,20 +85,29 @@ Einträge (`erstellt_am` absteigend), unabhängig von Klasse. Wenn die Liste
 weniger als drei hat: alle. Format-Labels werden für die Bot-Antwort gekürzt
 auf max. 24 Zeichen je Label.
 
-## EZG-5 — Bot-Antwort: Übersicht + Mini-App-Button
+## EZG-5 — Bot-Antwort: Übersicht + Inline-Buttons
 
-Der Skill antwortet im selben Chat mit **einer Bot-Nachricht**:
+Der Skill antwortet im selben Chat mit **einer Bot-Nachricht** und **zwei
+Inline-Buttons** unter derselben Nachricht:
 
 ```
 📋 Einkaufsliste — N offen (🧒 W · 🛒 E)
 Zuletzt dazugekommen: <label1>, <label2>, <label3>
 
-[🛒 Liste öffnen]    ← web_app-Inline-Button
+[🛒 Liste öffnen]         ← web_app-Inline-Button (in Telegram)
+[Im Browser öffnen]       ← url-Inline-Button (externer Browser → PWA-Install)
 ```
 
 Mit `N` = `gesamt_n`, `W` = `wunsch_n`, `E` = `einkauf_n`. Die zweite Zeile
 fällt weg, wenn die Liste leer ist oder weniger als ein neuer Eintrag in den
 letzten 24h dazukam.
+
+**Warum zwei Buttons:** Der `web_app`-Button öffnet die Mini App in der
+Telegram-WebView (1-Tap-Lesefluss); der `url`-Button öffnet die identische
+URL im externen Browser (Safari/Chrome) — nur dort kann der Nutzer die
+Mini App als **PWA via „Zum Home-Bildschirm hinzufügen" installieren**
+(ESSEN-33, Bring!-Benchmark). Telegram-WebView bietet diesen Install-Prompt
+nicht.
 
 **Sonderfall „Liste leer":**
 ```
@@ -108,31 +117,40 @@ Kein Inline-Button (Mini App würde leere Liste zeigen, das ist
 unbefriedigend); statt dessen Klartext-Hinweis „Schick mir Items zum
 Hinzufügen, z. B. `Brot, Milch`." als Folge-Bubble.
 
-## EZG-6 — Mini-App-URL und `web_app`-Inline-Button
+## EZG-6 — Mini-App-URL und Inline-Buttons (web_app + url)
 
-Der Inline-Button trägt das Telegram-`web_app`-Feld mit der **Mini-App-URL**:
+Beide Inline-Buttons tragen die **identische Mini-App-URL**, aber unter-
+schiedliche Telegram-Felder:
 
 ```
-https://<funnel-domain>/seiten/essen/einkauf
+https://<funnel-domain>/seiten/essen/einkauf/
 ```
 
 Die Funnel-Domain stammt aus der Buddy-Übergreifenden Konfiguration (MVP-
 Sammler #678, Lego-Basis: Tailscale-Funnel-Hostname oder Cloudflare-Tunnel-
-URL — siehe `decisions/RAT-16-...` und den Funktion-3-Plan).
+URL — siehe `decisions/RAT-16-...` und den Funktion-3-Plan). Trailing-
+Slash ist bewusst: er ist die `start_url` der installierten PWA (ESSEN-34).
 
-**`callback_data` fällt weg** — `web_app`-Buttons öffnen die Mini App
-direkt, ohne Bot-Callback.
+**Button 1 — `web_app`-Feld:** öffnet die Mini App in der Telegram-WebView.
+Telegram fügt beim Öffnen die signierte `initData` an die URL an; die Mini
+App (ESSEN-31) validiert diese vor Anzeige (HMAC mit Bot-Token). Diese
+Auth-Schicht lebt im Buddy/`seiten`-Service, nicht im Skill. `callback_data`
+fällt weg — `web_app`-Buttons öffnen die Mini App direkt, ohne Bot-Callback.
 
-**Init-Data-Auth:** Telegram fügt beim Öffnen die signierte `initData` an
-die Mini-App-URL. Die Mini App (ESSEN-31) validiert diese vor Anzeige (HMAC
-mit Bot-Token). Diese Auth-Schicht lebt im Buddy/`seiten`-Service, nicht im
-Skill — Skill posten nur die URL.
+**Button 2 — `url`-Feld:** öffnet die identische URL im externen Browser
+(Safari/Chrome). Telegram setzt **keine** `initData` an die URL — die Mini
+App muss in diesem Pfad ohne initData laden können (Setzungs-Update
+2026-06-18: Mini-App-APIs bleiben PUBLIC, siehe Memory
+`project_xbuddy_pwa_first_power_flow.md`). Nur in diesem Pfad bietet der
+Browser den PWA-Install-Prompt („Zum Home-Bildschirm hinzufügen") an.
 
 *Test-Implikation:* Skill-Test prüft, dass die gepostete Nachricht ein
-`reply_markup.inline_keyboard`-Feld mit genau einem Button-Eintrag enthält,
-dessen `web_app.url` mit `https://` beginnt und auf den essen-einkauf-Pfad
-endet. Live-Probe in F5: Eltern tippt Button im echten Telegram → Mini App
-lädt mit gültiger initData.
+`reply_markup.inline_keyboard`-Feld mit **genau zwei Button-Einträgen**
+enthält: der erste mit `web_app.url`, der zweite mit `url`, beide auf den
+essen-einkauf-Pfad (Trailing-Slash für die `url`-Variante, damit PWA-
+`start_url` direkt greift). Live-Probe in F5: Eltern tippt web_app-Button →
+Mini App in Telegram lädt mit gültiger initData; tippt url-Button → externer
+Browser öffnet die identische URL mit PWA-Install-Prompt.
 
 ## EZG-7 — Fehlerfälle / Robustheit
 
