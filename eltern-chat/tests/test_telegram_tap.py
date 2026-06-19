@@ -249,6 +249,40 @@ def test_send_inline_keyboard_mit_button_id_url_encoded():
     assert btn["callback_data"] == "einkauf%3A42"
 
 
+def test_send_inline_keyboard_mit_url_button():
+    """Ein `url`-Button wird zu Telegram-`url`-Feld im inline_keyboard-Eintrag —
+    NICHT zu `web_app`, sondern zu einem externen Browser-Link (EZG-6 PWA-Install).
+
+    Schwester-Test zu `test_send_inline_keyboard_mit_web_app_url`: gleiche
+    Fixture-Struktur, nur Button-Typ getauscht (url statt web_app_url).
+    """
+    opener = _CapturingOpener(_ok_response({"message_id": 2}))
+    tc = _make_tc_with_opener(opener)
+
+    pwa_url = "https://buddyboard.demo-tailnet.ts.net/essen-einkauf/"
+    tc.send_inline_keyboard(
+        chat_id=42, text="Einkaufsliste",
+        buttons=[{"label": "Im Browser öffnen", "url": pwa_url}])
+
+    payload = _last_payload(opener)
+    assert payload["chat_id"] == 42
+    assert payload["text"] == "Einkaufsliste"
+    rows = payload["reply_markup"]["inline_keyboard"]
+    assert len(rows) == 1
+    assert len(rows[0]) == 1
+    btn = rows[0][0]
+    assert btn["text"] == "Im Browser öffnen"
+    assert btn.get("url") == pwa_url, (
+        "url-Button muss Telegram-`url`-Feld bekommen (externer Browser-Link, EZG-6)."
+    )
+    assert "web_app" not in btn, (
+        "url-Button darf kein web_app-Feld enthalten — das wäre Mini-App-Typ."
+    )
+    assert "callback_data" not in btn, (
+        "url-Button darf kein callback_data-Feld enthalten."
+    )
+
+
 def test_send_inline_keyboard_button_id_zu_lang_value_error():
     """Telegram-callback_data ist auf 64 Bytes begrenzt — ein zu langes
     `button_id` (URL-encoded > 64 Bytes) loest ValueError aus.

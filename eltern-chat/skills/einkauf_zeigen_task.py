@@ -8,9 +8,10 @@ zu öffnen oder zu zeigen, ruft er sie auf.
 Eine **lesende** Aufgabe (EC-9): verändert keine Familien-Daten.
 
 TASK-10c Form (b): run() returnt das Form-(b)-Dict
-`{text, presentation: {inline_button: {...}}}` direkt — das Framework
-(agent.py + render_form_b) übersetzt `presentation` in eine Telegram-
-Nachricht. Der Task sendet NICHTS selbst (EC-29 „Eine Stimme im Agent-Turn").
+`{text, presentation: {inline_buttons: [{web_app_url: ...}, {url: ...}]}}` —
+das Framework (agent.py + render_form_b) übersetzt `presentation` in eine
+Telegram-Nachricht mit ZWEI Inline-Buttons (EZG-5/EZG-6). Der Task sendet
+NICHTS selbst (EC-29 „Eine Stimme im Agent-Turn").
 
 RAT-16: Adapter-Disziplin — diese Datei koordiniert NICHT mehr Telegram-
 Senden; der Telegram-Aufruf liegt vollständig beim Framework.

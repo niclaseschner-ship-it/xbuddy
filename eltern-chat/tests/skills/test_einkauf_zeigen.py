@@ -1,15 +1,15 @@
 """Tests für einkauf_zeigen + EinkaufZeigenTask — EZG-1 … EZG-8
-(specs/platform/einkauf-zeigen.md, Refs #653, RAT-16, TASK-10c Form (b)).
+(specs/platform/einkauf-zeigen.md, Refs #653, #1012, RAT-16, TASK-10c Form (b)).
 
-TASK-10c: einkauf_zeigen returnt jetzt ein Form-(b)-Dict {text, presentation}
-statt eines (text, buttons)-Tupels. EinkaufZeigenTask sendet NICHTS selbst —
-das Framework übersetzt `presentation`.
+EZG-5/EZG-6 (T1012): einkauf_zeigen returnt presentation mit inline_buttons
+(Plural-Liste) mit GENAU ZWEI Einträgen: erster web_app_url, zweiter url,
+beide identische Mini-App-URL mit Trailing-Slash (PWA start_url ESSEN-34).
 
 Abgedeckte ACs:
   AC3 — Form-(b)-Return von einkauf_zeigen (text+presentation-Dict).
   AC4 — EinkaufZeigenTask.run() returnt Dict, kein Selbst-Send.
-  AC6 — EZG-4/EZG-5/EZG-6: Lese-Pfad, Counter, Mini-App-Button,
-         Sonderfall leer, inline_button-Payload-Form.
+  AC6 — EZG-4/EZG-5/EZG-6: Lese-Pfad, Counter, zwei Inline-Buttons,
+         Sonderfall leer, inline_buttons-Payload-Form (genau zwei Einträge).
 
 Tests laufen ohne Netz (EC-17): EssenClient und TelegramClient werden
 durch kontrollierte Doppelungen ersetzt.
@@ -172,8 +172,13 @@ def test_EZG5_leer_folge_bubble_text():
     assert "Brot" in text or "Milch" in text or "hinzufügen" in text.lower()
 
 
-def test_EZG6_inline_button_im_presentation():
-    """AC3/AC6/EZG-6: presentation enthält inline_button mit web_app_url."""
+def test_EZG6_inline_buttons_genau_zwei_eintraege():
+    """AC3/AC6/EZG-6 (T1012): presentation enthält inline_buttons mit genau ZWEI Einträgen.
+
+    Erster Eintrag: web_app_url (Mini App in Telegram-WebView).
+    Zweiter Eintrag: url (externer Browser, PWA-Install-Pfad).
+    Beide identische Mini-App-URL mit Trailing-Slash (ESSEN-34).
+    """
     ec = FakeEssenClient(items=[_item("Brot")])
     mini_app_url = "https://xbuddy.example.com/seiten/essen/einkauf"
     result = einkauf_zeigen(
@@ -182,12 +187,37 @@ def test_EZG6_inline_button_im_presentation():
         mini_app_url=mini_app_url,
     )
     presentation = result.get("presentation", {})
-    assert "inline_button" in presentation, "presentation muss inline_button enthalten"
-    ib = presentation["inline_button"]
-    assert ib.get("web_app_url", "").startswith("https://")
-    assert "essen/einkauf" in ib.get("web_app_url", "")
-    assert "label" in ib
-    assert ib["label"] == "🛒 Liste öffnen"
+    assert "inline_buttons" in presentation, (
+        "presentation muss inline_buttons (Plural-Liste) enthalten (EZG-5/EZG-6)")
+    buttons = presentation["inline_buttons"]
+    assert len(buttons) == 2, (
+        "EZG-5/EZG-6: genau ZWEI Button-Einträge erwartet, got %d" % len(buttons))
+
+    # Erster Button: web_app_url — Mini App in Telegram-WebView
+    btn1 = buttons[0]
+    assert "web_app_url" in btn1, "Erster Button muss web_app_url haben (EZG-6 Button 1)"
+    assert "url" not in btn1 or btn1.get("web_app_url"), (
+        "Erster Button ist der web_app-Button (EZG-6)")
+    assert btn1.get("web_app_url", "").startswith("https://")
+    assert "essen/einkauf" in btn1.get("web_app_url", "")
+    assert btn1.get("web_app_url", "").endswith("/"), (
+        "Trailing-Slash für PWA start_url (ESSEN-34)")
+    assert btn1.get("label") == "🛒 Liste öffnen"
+
+    # Zweiter Button: url — externer Browser (PWA-Install)
+    btn2 = buttons[1]
+    assert "url" in btn2, "Zweiter Button muss url-Feld haben (EZG-6 Button 2)"
+    assert "web_app_url" not in btn2, (
+        "Zweiter Button ist der url-Button, kein web_app_url (EZG-6)")
+    assert btn2.get("url", "").startswith("https://")
+    assert "essen/einkauf" in btn2.get("url", "")
+    assert btn2.get("url", "").endswith("/"), (
+        "Trailing-Slash für PWA start_url (ESSEN-34)")
+    assert btn2.get("label") == "Im Browser öffnen"
+
+    # Identische URL (EZG-6: beide Buttons gleiche URL)
+    assert btn1.get("web_app_url") == btn2.get("url"), (
+        "EZG-6: beide Buttons tragen identische Mini-App-URL")
 
 
 def test_EZG2_berechtigung_fehlt():

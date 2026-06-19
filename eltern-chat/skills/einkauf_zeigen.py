@@ -2,8 +2,8 @@
 
 Aufrufbare, trigger-agnostische Funktion (EZG-1, E-EZG-1-Muster): liest
 die Einkaufsliste des Essens-Buddys (ESSEN-15, GET mit abgehakt=false),
-baut eine kompakte Übersichts-Nachricht + Inline-Button auf die Mini App
-(EZG-5/EZG-6) und gibt ein Form-(b)-Dict zurück (TASK-10c).
+baut eine kompakte Übersichts-Nachricht + ZWEI Inline-Buttons auf die
+Mini App (EZG-5/EZG-6) und gibt ein Form-(b)-Dict zurück (TASK-10c).
 
 TASK-10c Form (b): der Skill returnt `{text, presentation}` — der Task
 reicht das Dict direkt weiter; das Framework (agent.py + render_form_b)
@@ -18,7 +18,12 @@ NICHTS selbst (EC-29 „Eine Stimme im Agent-Turn").
   - `mini_app_url`   — URL der Einkauf-Mini-App (EZG-6). Leer → kein Button.
 
 **Ausgang:** Form-(b)-Dict `{text, presentation}`:
-  - Mit Button: `presentation: {inline_button: {label, web_app_url}}`.
+  - Mit Buttons: `presentation: {inline_buttons: [
+        {label, web_app_url},  ← Button 1: Mini App in Telegram-WebView
+        {label, url},          ← Button 2: externer Browser (PWA-Install)
+    ]}`.
+    Beide Einträge tragen die identische Mini-App-URL (mit Trailing-Slash
+    für PWA start_url, EZG-6/ESSEN-34).
   - Ohne Button (Leer- oder Fehlerfall): `presentation: {}`.
 
 Wirft `BerechtigungError` bei EZG-2-Verletzung.
@@ -53,14 +58,18 @@ def _baue_uebersicht(items, mini_app_url):
     `mini_app_url` — URL der Einkauf-Mini-App (EZG-6).
 
     Liefert ein Form-(b)-Dict `{text, presentation}` (TASK-10c):
-      - Standardfall: presentation mit inline_button (web_app_url).
+      - Standardfall: presentation mit inline_buttons (zwei Einträge):
+          * Button 1: web_app_url — öffnet Mini App in Telegram-WebView.
+          * Button 2: url — öffnet externe URL im Browser (PWA-Install, EZG-6).
+        Beide Einträge tragen die identische URL (mit Trailing-Slash für
+        PWA start_url ESSEN-34).
       - Leer-Fall oder fehlende URL: presentation leer (nur Text).
     """
     wunsch_n = sum(1 for i in items if i.get("klasse") == "wunsch")
     einkauf_n = sum(1 for i in items if i.get("klasse") == "einkauf")
     gesamt_n = wunsch_n + einkauf_n
 
-    # EZG-5: Leer-Sonderfall
+    # EZG-5: Leer-Sonderfall — kein Button (Mini App würde leere Liste zeigen)
     if gesamt_n == 0:
         text = ("📋 Die Einkaufsliste ist leer — nichts zu holen heute. 🎉\n"
                 "Schick mir Items zum Hinzufügen, z. B. `Brot, Milch`.")
@@ -94,14 +103,27 @@ def _baue_uebersicht(items, mini_app_url):
         )
         return {"text": text, "presentation": {}}
 
-    # TASK-10c Form (b): presentation mit inline_button-Schlüssel.
+    # EZG-6: Trailing-Slash sicherstellen — PWA start_url (ESSEN-34).
+    # Beide Buttons tragen die identische URL; rstrip+Slash verhindert
+    # Doppel-Slash, falls die Konfig bereits einen Slash hat.
+    app_url = mini_app_url.rstrip("/") + "/"
+
+    # TASK-10c Form (b): presentation mit inline_buttons-Liste (EZG-5/EZG-6).
+    # Button 1 — web_app: öffnet Mini App in Telegram-WebView (initData).
+    # Button 2 — url: öffnet externe URL im Browser (PWA-Install-Prompt).
     return {
         "text": text,
         "presentation": {
-            "inline_button": {
-                "label": "🛒 Liste öffnen",
-                "web_app_url": mini_app_url,
-            }
+            "inline_buttons": [
+                {
+                    "label": "🛒 Liste öffnen",
+                    "web_app_url": app_url,
+                },
+                {
+                    "label": "Im Browser öffnen",
+                    "url": app_url,
+                },
+            ]
         },
     }
 
@@ -114,7 +136,10 @@ def einkauf_zeigen(chat_id, from_user_id, essen_client, is_member_fn,
     Hinweis (EZG-5/EZG-6, TASK-10c Form (b)).
 
     Returnt ein Form-(b)-Dict `{text, presentation}`:
-      - Mit Button: `presentation: {inline_button: {label, web_app_url}}`.
+      - Mit Buttons: `presentation: {inline_buttons: [
+            {label, web_app_url},  ← Button 1: Mini App in Telegram-WebView
+            {label, url},          ← Button 2: externer Browser (PWA-Install)
+        ]}`.
       - Ohne Button (Leer- oder Fehlerfall): `presentation: {}`.
 
     Wirft `BerechtigungError` bei EZG-2-Verletzung.
@@ -141,7 +166,8 @@ def einkauf_zeigen(chat_id, from_user_id, essen_client, is_member_fn,
 
     result = _baue_uebersicht(items, mini_app_url)
     presentation = result.get("presentation") or {}
-    button_count = 1 if "inline_button" in presentation else 0
+    button_count = len(presentation.get("inline_buttons", [])) or (
+        1 if "inline_button" in presentation else 0)
     logger.info("einkauf_zeigen: %d Items für Chat %s, Buttons=%d",
                 len(items), chat_id, button_count)
     return result
