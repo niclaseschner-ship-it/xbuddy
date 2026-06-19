@@ -299,43 +299,73 @@ body {
   container-name: timeline-section;
 }
 
-/* Vertikaler Balken-Track — mittig, über die Sektionshöhe */
+/* Vertikaler Balken-Track — mittig, über die Sektionshöhe.
+   56 px: Gate-B-Empfehlung (#824, ROUTINE-9): 5-Min-Striche aus 1,5 m lesbar. */
 .timeline-track {
   position: absolute;
   left: 50%;
   top: 0;
   bottom: 0;
   transform: translateX(-50%);
-  width: 32px;
+  width: 56px;
   background: var(--kids-weekend-bg);
   border-radius: var(--radius-full);
   border: 2px solid var(--kids-border-soft);
   overflow: visible;
 }
 
-/* Verstrichener Teil: füllt von OBEN nach unten (height) */
+/* Verstrichener Teil: füllt von OBEN nach unten (height).
+   Zonen-Farbschema (#824, ROUTINE-9, DTOK-3):
+     0 %  bis --anziehen-stop:   grün  (--success)  — Zeit reicht
+     --anziehen-stop bis 100 %:  orange (--warning)  — eng
+   --anziehen-stop wird server- und clientseitig als Element-relative Position gesetzt
+   (load-bearing Implementierungs-Hinweis ROUTINE-9: Gradient-Stop relativ zur
+   Element-Höhe, NICHT zur Track-Höhe). Keine Hex-Farben — DTOK-3/token_hardcode. */
 .timeline-elapsed {
+  --anziehen-stop: 110%;  /* Default: alles grün; überschrieben per Inline-Style */
   position: absolute;
   left: 0;
   right: 0;
   top: 0;
-  background: linear-gradient(180deg, var(--kids-today) 0%, var(--terracotta) 100%);
+  background: linear-gradient(
+    to bottom,
+    var(--success) 0%,
+    var(--success) var(--anziehen-stop),
+    var(--warning) var(--anziehen-stop),
+    var(--warning) 100%
+  );
   border-radius: var(--radius-full) var(--radius-full) 0 0;
   transition: height 1s linear;
 }
 
-/* JETZT-Marker (waagerechter Riegel quer über den Balken) */
+/* JETZT-Marker (waagerechter Riegel quer über den Balken).
+   Gleitet kontinuierlich via CSS-Transition — kein Snap am 5-Min-Raster (#824, AC4).
+   Intervall 60s entspricht dem JS setInterval-Wert (ROUTINE-9, CLAUDE.md §6). */
 .timeline-now {
   position: absolute;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 44px;
+  width: 68px;
   height: 18px;
   background: var(--kids-today);
   border-radius: var(--radius-full);
   border: 3px solid var(--kids-paper);
   box-shadow: var(--shadow-hand);
   z-index: 2;
+  transition: top 60s linear;
+}
+
+/* 5-Min-Striche am Balken (#824, ROUTINE-9, AC2).
+   Feiner als der Jetzt-Marker und die Pin-Labels (Kiosk-Lesbarkeit ROUTINE-11).
+   Keine Hex-Farben — DTOK-3. */
+.timeline-strich {
+  position: absolute;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 72px;   /* leicht breiter als der Track: ragt beidseitig raus */
+  height: 2px;
+  background: var(--kids-border-soft);
+  z-index: 1;
 }
 
 /*
