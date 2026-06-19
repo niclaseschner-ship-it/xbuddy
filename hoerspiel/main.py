@@ -904,7 +904,7 @@ def album_audio(kind_id: str, album_id: str, track_filename: str):
 def resume_endpoint(kind_id: str):
     """HSP-36: Resume-Stand lesen (GET) und setzen (PUT).
 
-    GET ?album=<id> → {"album": "<id>", "track": <position>} oder 404.
+    GET ?album=<id> → {"album": "<id>", "track": <int>, [status: "neu"]} (200; status="neu" wenn kein Stand existiert — HSP-36).
     PUT Body: {"album": "<id>", "track": <position>} → 200 + Echo.
 
     V1: in-process-Store (runtime['resume_store']). Last-Write-Wins.
@@ -922,7 +922,9 @@ def resume_endpoint(kind_id: str):
         if not album_id:
             return jsonify({"fehler": "album-Parameter fehlt"}), 400
         if album_id not in store:
-            return jsonify({"fehler": "kein Resume-Stand für album %s" % album_id}), 404
+            # HSP-36 (geändert): kein Stand → 200 mit Default-Body, kein 404.
+            # Frontend fragt präventiv für jede Folge; 404-Burst (~8x) ist vermeidbar.
+            return jsonify({"album": album_id, "track": 0, "status": "neu"})
         return jsonify({"album": album_id, "track": store[album_id]})
 
     # PUT
