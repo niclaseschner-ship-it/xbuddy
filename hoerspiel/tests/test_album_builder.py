@@ -213,6 +213,25 @@ def test_album_bau_synopse_fehler_laesst_album_unsichtbar(
         "Index darf nach Synopse-Fehler nicht verändert sein")
 
 
+def test_lade_manifest_returnt_sortierte_tracks_neko(data_root, fake_llm, fake_tts, fixed_now):
+    """AC2 / T1027: lade_manifest() sortiert Tracks auch für kind_id='neko' korrekt.
+
+    Spiegelt test_lade_manifest_returnt_sortierte_tracks für die neko-Variante —
+    Lego-Konsistenz: kind_id darf keinen Einfluss auf Track-Sortierung haben.
+    """
+    text = _text(absatz_count=3, woerter=200)  # mehrere Inhalts-Tracks
+    ergebnis = album_builder.baue_album(
+        titel="Neko Tracks Sortiert", text=text, voice="shimmer", idee="sort-test",
+        data_root=data_root, kind_id="neko", llm=fake_llm, tts_engine=fake_tts, now=fixed_now,
+    )
+    manifest = album_builder.lade_manifest(data_root, ergebnis.album_id)
+    assert manifest is not None, "Manifest muss nach dem Bau ladbar sein"
+    positions = [t.get("position") for t in manifest["tracks"]]
+    assert positions == sorted(positions, key=lambda p: int(p) if isinstance(p, int) else 99), (
+        "Tracks müssen aufsteigend nach position sortiert sein (neko-Variante, T1027/AC2)"
+    )
+
+
 def test_baue_album_neko_pfade_kein_paula(data_root, fake_llm, fake_tts, fixed_now):
     """HSP-26 (#968): baue_album(kind_id='neko') schreibt Manifest-Pfade auf
     neko/data/, nicht paula/data/. Acceptance-Criterion aus #968.
