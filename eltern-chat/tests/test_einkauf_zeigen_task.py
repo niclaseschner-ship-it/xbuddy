@@ -1,7 +1,11 @@
-"""Tests für EinkaufZeigenTask — TASK-10c Form (b) (AC4).
+"""Tests für EinkaufZeigenTask — TASK-10c Form (b) (AC4) + EZG-5/EZG-6 (T1012).
 
 AC4: EinkaufZeigenTask.run() returnt das Form-(b)-Dict direkt.
      KEIN tg.send_inline_keyboard oder tg.send_message im Task-Code.
+
+EZG-5/EZG-6 (T1012): presentation enthält inline_buttons (Plural-Liste) mit
+genau ZWEI Einträgen: erster web_app_url, zweiter url, beide identische
+Mini-App-URL mit Trailing-Slash (PWA start_url ESSEN-34).
 
 Tests laufen ohne Netz (EC-17).
 """
@@ -80,8 +84,13 @@ def test_AC4_run_kein_send_message():
     tg.send_message.assert_not_called()
 
 
-def test_AC4_form_b_hat_inline_button_wenn_items_und_url():
-    """AC4/AC3: Wenn Items vorhanden + URL gesetzt → presentation.inline_button."""
+def test_AC4_form_b_hat_inline_buttons_genau_zwei_wenn_items_und_url():
+    """AC4/AC3/EZG-5/EZG-6 (T1012): Wenn Items vorhanden + URL → genau ZWEI Buttons.
+
+    Erster Eintrag: web_app_url (Mini App in Telegram-WebView).
+    Zweiter Eintrag: url (externer Browser, PWA-Install-Pfad).
+    Beide identische URL mit Trailing-Slash (EZG-6/ESSEN-34).
+    """
     tg = MagicMock()
     ec = FakeEssenClient(items=[_item("Brot")])
     task = EinkaufZeigenTask(
@@ -93,10 +102,26 @@ def test_AC4_form_b_hat_inline_button_wenn_items_und_url():
     result = task.run({}, ctx)
 
     presentation = result.get("presentation", {})
-    assert "inline_button" in presentation
-    ib = presentation["inline_button"]
-    assert ib.get("label") == "🛒 Liste öffnen"
-    assert "x.example.com" in ib.get("web_app_url", "")
+    assert "inline_buttons" in presentation, (
+        "presentation muss inline_buttons (Plural-Liste) enthalten (EZG-5)")
+    buttons = presentation["inline_buttons"]
+    assert len(buttons) == 2, (
+        "EZG-5/EZG-6: genau ZWEI Button-Einträge erwartet, got %d" % len(buttons))
+
+    btn1 = buttons[0]
+    assert btn1.get("label") == "🛒 Liste öffnen"
+    assert "web_app_url" in btn1
+    assert "x.example.com" in btn1.get("web_app_url", "")
+    assert btn1.get("web_app_url", "").endswith("/"), "Trailing-Slash (ESSEN-34)"
+
+    btn2 = buttons[1]
+    assert btn2.get("label") == "Im Browser öffnen"
+    assert "url" in btn2
+    assert "x.example.com" in btn2.get("url", "")
+    assert btn2.get("url", "").endswith("/"), "Trailing-Slash (ESSEN-34)"
+
+    assert btn1.get("web_app_url") == btn2.get("url"), (
+        "EZG-6: beide Buttons tragen identische Mini-App-URL")
 
 
 def test_AC4_form_b_leer_presentation_wenn_leere_liste():
