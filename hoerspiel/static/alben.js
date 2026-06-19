@@ -613,3 +613,8 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+// ── Exports (für Tests, T1027/AC4) ──────────────────────────────────────────
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { KIND_ID };
+}
