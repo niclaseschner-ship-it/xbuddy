@@ -470,6 +470,9 @@ Familienmitglieder. Ein in-Memory `_HfeJobStore` (privat im Task-Modul
 - **Slot belegt:** Skill returnt sofort eine
   „Ich baue gerade noch eine Folge — bitte kurz warten."-Quittung,
   **kein** zweiter Thread, **kein** zweiter HTTP-Call zum Hörspiel-Buddy.
+  Der pending-Vorschlag des belegten `chat_id` wird verworfen; der User
+  startet die Folge nach Abschluss der laufenden Bauphase neu
+  (verhindert Doppel-Confirm-Risiko).
 - **Slot frei:** Daemon-Thread (`name="hfe-job-<chat_id>"`) startet,
   Slot belegt mit `started_at = monotonic()`. Im `finally` immer
   `release(chat_id)`.
