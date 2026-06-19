@@ -277,6 +277,16 @@ Provider-Calls (EC-14, EC-11), ohne die Latenz zu verändern.
 Code-Verweise, die heute den Typing-Indikator an EC-14 koppeln, werden auf EC-25
 umgezeigt — das ist Aufgabe der Code-Tracks, nicht dieser Spec.
 
+**Quer-Verweis EC-39 (2026-06-19; ENTSCHEID-File Paket-Sektion „R2-Paket →
+B) Spec-Patch-Skizze" → EC-N3-Klausel;
+`brainstorm/berater-runde/2026-06-19-1545-RATIFIZIERT-polling-reader-typing.md`):**
+EC-25 deckt Typing **innerhalb** einer mehrstufigen Schreib-Aufgabe ab
+(Session-intern, nach Auth, im Agent-Loop). EC-39 ergänzt das **Sofort-
+Typing bei Empfang** — gesendet vom Polling-Reader direkt nach
+`getUpdates`, **vor** der Auth- und Agent-Petrarbeitung — gilt ebenfalls
+nur für Privatchats. Beide Pfade können parallel laufen
+(Telegram-`sendChatAction` ist idempotent).
+
 *Tickets:* #284
 
 ### EC-26 — Telegram-Transport blockiert die familienseitige Antwort nicht durch tote Netzpfade
@@ -1227,6 +1237,176 @@ Args. Konkrete Implementierung im Code-Track #844.
 #662 (Original-Bug TAB ja-mit-Korrektur — wird durch diese Klausel
 gelöst).
 
+### EC-37 — Reader/Processor-Polling-Topologie
+
+**RATIFIZIERT 2026-06-19** (ENTSCHEID-File Paket-Sektion „R2-Paket → A) Naht-Liste";
+`brainstorm/berater-runde/2026-06-19-1545-RATIFIZIERT-polling-reader-typing.md`).
+
+Der Telegram-Long-Poll-Lesepfad (`getUpdates`) läuft in einem Daemon-Thread
+(`name="poll-reader"`), getrennt von der Update-Petrarbeitung (`dispatch`).
+Reader und Processor sind durch **zwei** Queues verbunden — eine
+Hand-off-Queue für Updates und eine ACK-Queue für Done-Signale:
+
+- **Hand-off-Queue:** `queue.Queue(maxsize=1)` für `(t0, update_id, update)`.
+- **ACK-Queue:** `queue.Queue(maxsize=1)` für `update_id` als Done-Signal
+  vom Processor zurück zum Reader.
+- **Reader-Schleife:** ruft `tg_reader.get_updates(offset, timeout=30)`,
+  nimmt **ein** Update aus dem Batch, schickt **vor** Hand-off ein
+  `sendChatAction(chat_id, "typing")` (EC-39) und füllt `open_chat_ids`,
+  dann `handoff.put((t0, update_id, update))` (blockiert bis Processor
+  entnimmt), dann **`ack.get()` (blockiert bis Processor Done meldet)**,
+  dann `offset = update_id + 1` und nächstes `get_updates`. Erst nach
+  dem ACK steigt der Offset — Telegram bestätigt das Update erst, wenn
+  der Processor seine Petrarbeitung abgeschlossen hat.
+- **Processor (Hauptthread):** `(t0, update_id, update) = handoff.get()`,
+  dann `dispatch(update, ctx)` (kann beliebig lange laufen, z. B. HFE.
+  propose() 20–90 s), dann `open_chat_ids.discard(chat_id)`, dann
+  `ack.put(update_id)`.
+- **TelegramClient-Form:** zwei `TelegramClient`-Instanzen mit gleichem
+  Token aber getrennten `_opener` — `tg_reader` für `get_updates` und
+  Sofort-Typing, `tg_main` für alles übrige (Bot-Antworten, Renewer,
+  Skills). Stateless HTTP-POST; keine Telegram-Session-Semantik gebrochen.
+- **`open_chat_ids`:** geteilte `set[int]`, **eine** `threading.RLock`-
+  Instanz in `main()` erzeugt und an Reader, Processor und Renewer
+  übergeben. Tolerante Race: Processor entfernt sofort beim `dispatch`-
+  Return; Renewer sendet im worst case einen `typing` zuviel (Telegram-
+  Client überschreibt das mit der nächsten Bot-Antwort).
+- **E-EC-2-Backoff** wandert in den Reader; Semantik unverändert.
+
+Die Trennung stellt sicher, dass eine länger laufende Petrarbeitung
+(z. B. HFE.propose() 20–90 s, EC-14-Fehlerfall) das Lesen der nächsten
+eingehenden Nachricht nicht blockiert — und insbesondere die familien-
+seitige Sichtbarkeit (EC-25 / EC-39) während laufender Schreibaufgaben
+nicht stillstellt.
+
+*Test-Implikation:*
+- `test_reader_waits_for_ack_before_offset_advance`: Mock-`get_updates`
+  liefert U1 und U2; Mock-`dispatch` blockiert 60 s auf U1; Reader hat
+  U1 in die Hand-off-Queue gelegt, wartet auf ACK; Hand-off-Queue ist
+  leer aber **kein** zweites `get_updates(offset)` wird gerufen, weil
+  Reader im `ack.get()` blockiert. Nach Processor-`ack.put(U1.id)` läuft
+  Reader weiter und ruft `get_updates(offset = U1.id + 1)`.
+- `test_at_least_once_on_processor_crash`: Reader hat U1 abgegeben, U1
+  ist noch nicht ACKed; SIGKILL auf Processor. Bot-Restart liefert U1
+  erneut, weil offset nie über U1.id hinaus erhöht wurde.
+- Pickup-Latenz-Tupel-Wrapper bleibt EC-23-konform.
+
+*Tickets:* (folgt mit `/arbeitstag-prep`).
+
+### EC-38 — At-least-once-Update-Petrarbeitung
+
+**RATIFIZIERT 2026-06-19** (ENTSCHEID-File Paket-Sektion „R2-Paket → B)
+Spec-Patch-Skizze" → EC-N2-Klausel;
+`brainstorm/berater-runde/2026-06-19-1545-RATIFIZIERT-polling-reader-typing.md`).
+
+Der Long-Poll-Offset (`getUpdates`-`offset`) wird erst nach der
+beobachteten Petrarbeitung erhöht. Konkret: der Reader bestätigt ein
+Update bei Telegram (= nächster `getUpdates(offset+1)`) **erst, nachdem**
+der Processor seine Petrarbeitung abgeschlossen UND ein Done-Signal über
+die ACK-Queue (EC-37) zurück an den Reader gemeldet hat. Bounded
+Hand-off-Queue (Slot 1) plus explizites ACK pro Update — der Reader
+blockiert in `ack.get()` zwischen Hand-off und Offset-Erhöhung.
+
+**Konsequenz:** Bei einem Pi-/Heimserver-Crash zwischen Reader-Empfang
+und Processor-Konsum liefert Telegram das Update beim Restart erneut
+(Telegram retent ungelesene Updates 24 h). Das Risiko sind doppelte
+Petrarbeitungen *innerhalb* der 24-h-Retention bei sofortigem Restart —
+bewertet als kleiner als der heutige Update-Verlust durch In-RAM-Burst-
+Petrarbeitung im sequenziellen `poll_loop`.
+
+**Akzeptanz-Begründung (Codex-Brüche in beiden Pässen):** Eine
+optimistische Variante hätte mehrere Updates in einer unbounded Queue
+puffern und den Offset sofort erhöhen können — dann wäre Telegrams
+24-h-Retention bei Crash wertlos und Lenas Nachricht ginge verloren.
+Eine bloß-bounded-Variante (`Queue(maxsize=1)` ohne explizites ACK)
+hätte einen subtilen Edge-Case offengelassen: Processor entnimmt U1
+(Slot frei), Reader legt U2 ab und erhöht Offset auf U2+1 — bei Crash
+während U2-dispatch wäre U2 verloren. Das explizite ACK-Signal (EC-37)
+schließt diesen Edge-Case sauber. xbuddy-Schreibakte sind über
+Bestätigungs-Gate (EC-10) plus A2-Receipt-Inverse idempotent genug,
+dass at-least-once die richtige Wahl ist.
+
+*Test-Implikation:* siehe EC-37 `test_at_least_once_on_processor_crash`.
+
+*Tickets:* (folgt mit `/arbeitstag-prep`).
+
+### EC-39 — Sofort-Typing-Indikator bei Privatchat-Empfang
+
+**RATIFIZIERT 2026-06-19** (ENTSCHEID-File Paket-Sektion „R2-Paket → B)
+Spec-Patch-Skizze" → EC-N3-Klausel;
+`brainstorm/berater-runde/2026-06-19-1545-RATIFIZIERT-polling-reader-typing.md`).
+
+Erhält der Reader (EC-37) ein Telegram-`message`-Update mit
+`chat.type == "private"`, sendet er **Fire-and-Forget**
+`tg_reader.send_chat_action(chat_id, "typing")` direkt nach dem Empfang —
+vor Auth-Check, vor Agent-Loop, vor jeder Bot-Antwort. Ein paralleler
+**`_TypingRenewer`**-Daemon-Thread erneuert den Indikator alle **4 s**
+(gemeinsame Intervall-Konstante mit EC-28 / `skills/typing_indicator.py:28-31`
+— *eine* Wahrheit), solange das Update in der Hand-off-Queue steht oder
+der Processor es petrarbeitet (`chat_id` in `open_chat_ids`).
+
+**Gilt nur für Privatchats.** Familien-Gruppe bleibt vom Sofort-Typing
+**ausgenommen** — EC-25 (Privatchat-only-Norm für mehrstufige Schreib-
+Aufgaben) und die Tests `test_familie_anlegen_task.py:471-482` und
+`test_termin_eintragen_task.py:375-382` verriegeln das Verhalten für
+Skill-Sessions; **EC-39 braucht eigene Reader-Tests** (siehe Test-
+Implikation unten).
+`my_chat_member`- und Gruppen-Updates haben kein `message.chat.type ==
+"private"` → Reader filtert sie automatisch raus.
+
+**Privacy-Trade-off (bewusst akzeptiert):** EC-39 sendet Typing **vor**
+dem Auth-Check (`is_authorized`-Gruppenmitgliedschafts-Prüfung,
+`authz.py:20`). Ein Privatchat-Sender, der nicht (mehr) Mitglied der
+Familien-Gruppe ist, sieht ein „tippt"-Signal, obwohl der Bot ihm später
+keine Nachricht zurücksendet (EC-2 ignoriert ihn). Das ist ein kleines
+Aktivitäts-Leak. Akzeptanz-Begründung: (a) Intra-Familie-1 ist Privatchat
+zwischen Bot und bekannten Familienmitgliedern — fremder Spammer findet
+den Bot-Token selten; (b) Inter-Familie-Trennung läuft via eigener
+Bot-Instanz pro Familie (Multi-Tenancy-Setzung 2026-06-15,
+`project_familie_2_3_eigener_bot.md`); (c) der UX-Gewinn (Lena sieht
+„beschäftigt" statt 90 s Stille) wiegt das Aktivitäts-Leak auf.
+Falls dieses Trade-off später kippt: EC-39 nach Auth verschieben =
+Sofort-Typing erst nach Live-Mitgliedschaftsprüfung (`is_authorized`-
+Call im Reader pro Update). Heute aufgeschoben.
+
+**Best-Effort:** Fehler beim `sendChatAction` (Telegram-Rate-Limit,
+HTTP-Fehler) unterbrechen die Petrarbeitung nicht; sie werden geschluckt
+und geloggt.
+
+**Wirkung für die Familie:** Während Nic eine Hörspiel-Folge anstößt
+(HFE.propose() 20–90 s, Polling-Loop blockiert für `dispatch`) sieht
+Lena binnen 1–2 s nach ihrer Nachricht einen Typing-Indikator
+(„Bot tippt"), der durch den Renewer alle 4 s erneuert wird, bis ihr
+Update petrarbeitet ist und der Bot antwortet. Statt 90 s Stille:
+durchgehendes „beschäftigt"-Signal. Quer-Verweis: EC-25 deckt Typing
+**innerhalb** der mehrstufigen Schreib-Aufgabe ab (nach Auth, im
+Agent-Loop); EC-39 ergänzt das **vor** der Auth.
+
+**Konventions-Aufschub:** Mit `_TypingRenewer` entsteht das **dritte**
+Renewer-Beispiel im Repo (`agent.py:_TypingRenewal` und
+`skills/typing_indicator.py:TypingRenewal` sind n=1 und n=2). Eine
+`conventions/typing-renewal.md` wird **nach Bau** in einer eigenen
+`/berater-runde` ratifiziert (Memory
+`feedback_berater_zwei_gebaute_beispiele.md`: Konventionen nicht
+antizipativ).
+
+*Test-Implikation (Reader-spezifisch, EC-25-Tests reichen nicht):*
+- `test_reader_typing_for_private_message`: Mock-Update mit
+  `chat.type == "private"` → `tg_reader.send_chat_action(chat_id, "typing")`
+  feuert genau einmal vor Hand-off.
+- `test_reader_typing_skipped_for_group`: Mock-Update mit
+  `chat.type == "group"` oder `"supergroup"` → kein `send_chat_action`.
+- `test_reader_typing_skipped_for_my_chat_member`: Update ohne `message`-
+  Feld (`my_chat_member`) → kein `send_chat_action`.
+- `test_renewer_ticks_every_4s`: Mock-Zeit, `open_chat_ids = {chat_id}`,
+  Renewer schickt alle 4 s `send_chat_action`; nach `discard(chat_id)`
+  hört er auf.
+- `test_send_chat_action_failure_is_swallowed`: `send_chat_action` wirft
+  Exception → Reader-Loop läuft weiter, Update wird trotzdem an Processor
+  übergeben.
+
+*Tickets:* (folgt mit `/arbeitstag-prep`).
+
 ---
 
 ## Offene Punkte
@@ -1311,6 +1491,18 @@ bis zum Ende unserer Petrarbeitung — und ist bewusst von der
 EC-23-Provider-Latenz (innerhalb eines Turns) abgegrenzt: EC-23 misst, wie
 lange der LLM-Anbieter braucht; diese Metrik misst, wie schnell das System
 auf ein eintreffendes Update reagiert.
+
+**Quer-Verweis EC-37/38 (2026-06-19; ENTSCHEID-File Paket-Sektion
+„R2-Paket → A) Naht-Liste" und „R2-Paket → B) Spec-Patch-Skizze";
+`brainstorm/berater-runde/2026-06-19-1545-RATIFIZIERT-polling-reader-typing.md`):**
+Der `poll_loop` wird ab 2026-06-19 in einen Reader-Daemon-Thread
+(`getUpdates` + Sofort-Typing + Hand-off) und einen Processor-
+Hauptthread (Hand-off-Consume + `dispatch`) geteilt. Der 30-s-Long-Poll-
+Timeout und die Backoff-Verfeinerung oben bleiben unverändert.
+Pickup-Latenz wird als Wrapper-Tupel `(t0, update)` durch die Hand-off-
+Mechanik gereicht (Reader misst t0, Processor misst t1) — Logformat
+unverändert. Details: EC-37 (Reader/Processor-Split), EC-38 (At-least-
+once).
 
 ### E-EC-3 — Berechtigung über Gruppen-Mitgliedschaft, live geprüft
 *Datum:* 2026-05-21

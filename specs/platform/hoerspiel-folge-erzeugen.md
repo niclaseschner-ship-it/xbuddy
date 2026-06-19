@@ -39,8 +39,13 @@ nach erfolgreichem Build.
 - **Inline-Edit der Vorschau** — wenn die Eltern die Vorschau nicht mögen,
   starten sie den Skill mit anderer Idee neu. Iteratives Re-Rolling auf
   Knopfdruck ist V2.
-- **Async-Generierung mit „später benachrichtigen"** — V1 blockiert in
-  `execute()` für die Synthese-Dauer (1–5 min). Async ist OPEN-HSP-L.
+- **Persistierte Job-Wiederaufnahme nach Restart** — V1.1 (HFE-11/12,
+  2026-06-19; ENTSCHEID-File Paket-Sektion „R2-Paket → B) Spec-Patch-
+  Skizze" → Restart-Klausel;
+  `brainstorm/berater-runde/2026-06-19-1505-RATIFIZIERT-hfe-async-schnitt.md`)
+  führt `execute()` im Daemon-Thread im Task aus (Polling-Loop bleibt
+  frei); ein Pi-Restart während des Baus verliert den Build, persistente
+  Wiederaufnahme bleibt OPEN-HSP-L V2.
 - **Audio-Probehören vor Freigabe** — V1 ist Text-Gate (E-HSP-7).
 - **LLM-Provider/-Modell-Wechsel im selben Chat** — seit Werft-Lauf
   2026-06-15 (Refs #848, schließt OPEN-HSP-N #750) lebt der Wechsel in
@@ -236,7 +241,12 @@ Body: {"titel": "<titel>", "text": "<text>", "voice": "<voice>", "idee": "<idee>
 → 200 {"album-id": "<id>", "manifest-pfad": "<pfad>", "dauer-sek-gesamt": <int>}
 ```
 
-Der Aufruf blockiert bis zur Fertigstellung (V1 synchron; OPEN-HSP-L).
+Der Aufruf blockiert bis zur Fertigstellung. **V1.1 (2026-06-19, HFE-11/12;
+ENTSCHEID-File Paket-Sektion „R2-Paket → A) Naht-Liste" → N2 Trampolin;
+`brainstorm/berater-runde/2026-06-19-1505-RATIFIZIERT-hfe-async-schnitt.md`)**
+führt den Aufruf in einem Daemon-Thread im Task aus, sodass der
+Polling-Loop während der 1–5 min frei bleibt; persistente
+Job-Wiederaufnahme über Restart hinweg bleibt OPEN-HSP-L V2.
 `execute()` darf nach Confirm selbst senden (TASK-10) und postet bei
 Erfolg über `tg.send_message` einen Erfolgs-Bubble in den aufrufenden
 Chat:
@@ -431,6 +441,77 @@ enthalten den Beifang-Button **nicht**. Bei fehlender
 `mini_app_base_url` enthält auch die erste Antwort den Beifang-Button
 **nicht**, der Rest der Antwort bleibt unverändert.
 
+## HFE-11 — Job-Single-Slot pro Chat (V1.1)
+
+**RATIFIZIERT 2026-06-19** (ENTSCHEID-File Paket-Sektion „R2-Paket → A) Naht-Liste" →
+`_HfeJobStore` + Trampolin in `execute()`;
+`brainstorm/berater-runde/2026-06-19-1505-RATIFIZIERT-hfe-async-schnitt.md`).
+
+`execute()` läuft ab V1.1 in einem Daemon-Thread im Task — der
+Polling-Loop ist während des 1–5-min-Album-Baus frei für andere
+Familienmitglieder. Ein in-Memory `_HfeJobStore` (privat im Task-Modul
+`hoerspiel_folge_erzeugen_task.py`) hält pro `chat_id` einen Single-Slot:
+
+- **Beim Start eines neuen Jobs:** `try_acquire(chat_id)`.
+- **Slot belegt:** Skill returnt sofort eine
+  „Ich baue gerade noch eine Folge — bitte kurz warten."-Quittung,
+  **kein** zweiter Thread, **kein** zweiter HTTP-Call zum Hörspiel-Buddy.
+- **Slot frei:** Daemon-Thread (`name="hfe-job-<chat_id>"`) startet,
+  Slot belegt mit `started_at = monotonic()`. Im `finally` immer
+  `release(chat_id)`.
+- **Stuck-Schutz:** Slot gilt nach **600 s** als „stale" und darf von
+  einem neuen `try_acquire` überschrieben werden (Schutz vor silent
+  Thread-Tod; im Normalfall räumt `finally` viel früher auf, und der
+  HTTP-Album-Timeout `HTTP_TIMEOUT_ALBUM_SEKUNDEN = 600.0` greift
+  zuerst).
+- **Lock:** `threading.RLock` um die Slot-Map.
+
+JobStore ist explizit **nicht** im Eltern-Chat-`Context`, **nicht** in
+einer SESS-Sorte (`conventions/privatchat-session.md`) und **nicht**
+über `is_async=True` (`conventions/tasks.md` TASK-5). Codex-Bruch
+(Antiberater-Report 2026-06-19): SESS würde den Privatchat „beanspruchen"
+(Routing würde User-Nachrichten in nutzlose Queue legen statt zum Agenten),
+`is_async=True` kollidiert mit künftigen Hook-Verträgen.
+
+Bei n=2 **vertragsgleichem** Long-Skill wird das Pattern Konvention
+(siehe Memory `feedback_berater_zwei_gebaute_beispiele.md` und
+`conventions/README.md`-Konventionsregeln). „Vertragsgleich" heißt:
+Long-Running-lokaler-HTTP-Call mit User-Quittung und Crash-Bubble,
+Single-Slot pro `chat_id`, kein User-Input während des Builds. Andere
+Long-Latenz-Pattern (z. B. externer Provider-Retry-Mechanismus, bulk-
+synchrone Schreibakte) sind **nicht** automatisch HFE-11-Sorten — vor
+Konventions-Bau Vertragsgleichheit prüfen (Start/Blockierstelle, Slot-
+Schlüssel, Recovery, Hook-Verhalten, User-Quittung).
+
+*Test-Implikation:* `test_jobstore_single_slot`,
+`test_jobstore_timeout` (Mock-`monotonic` 700 s in die Zukunft),
+`test_execute_returns_before_album_built` (Mock `hfe_mod.execute` mit
+`sleep(2)`, Wall-Clock von `task.execute(...)` < 100 ms),
+`test_polling_loop_frei_waehrend_job`,
+`test_second_confirm_blocked` (zweites `execute` returnt
+sofort mit „warte kurz"-Quittung, kein zweiter Thread),
+`test_crash_handler_releases_slot` (Mock `hfe_mod.execute` wirft
+`RuntimeError`; Crash-Bubble per `tg.send_message`, Slot freigegeben).
+
+## HFE-12 — Restart-Verlust akzeptiert (V1.1)
+
+**RATIFIZIERT 2026-06-19** (ENTSCHEID-File Paket-Sektion „R2-Paket → B)
+Spec-Patch-Skizze" → Restart-Klausel;
+`brainstorm/berater-runde/2026-06-19-1505-RATIFIZIERT-hfe-async-schnitt.md`).
+
+Ein Pi-/Heimserver-Restart während eines laufenden HFE-`execute()`-Jobs
+verliert den Build. Der Daemon-Thread und sein In-Memory-JobStore-Slot
+sind weg; es gibt **keinen** persistierten Job-State, **keine**
+Wiederaufnahme nach Restart, **keine** Crash-Notice beim Boot.
+
+Der User merkt es am Ausbleiben der Erfolgs-Bubble und startet die Folge
+neu. Eine konsistente Persistenz-Lösung (Job-State-DB, Wiederaufnahme,
+Crash-Notice beim Boot) bleibt **OPEN-HSP-L V2**.
+
+Begründung: Pi 5 mit Backup-Strom läuft selten in unkontrollierte
+Crashes; der Schmerz ist asymmetrisch zugunsten der täglich auftretenden
+Polling-Loop-Blockade (HFE-11), die V1.1 löst.
+
 ---
 
 ## Entscheidungen
@@ -458,11 +539,15 @@ Bestätigung. Audio-Probehören ist offen für V2 und vermutlich nicht
 nötig. **Verworfen:** Audio-Probehör-Gate, das Synthese-Kosten + 1–5 min
 Wartezeit für möglicherweise verworfene Aufnahmen verursacht.
 
-### E-HFE-4 — Synchroner Build mit Wartezeit-Hinweis
-*Datum:* 2026-06-12 · V1 hält `execute()` 1–5 min lang offen und meldet
-bei Fertigstellung den Link. Eine asynchrone Variante mit Benachrichtigung
-am Ende ist OPEN-HSP-L. **Verworfen:** Async-Pattern in V1 (verlangt einen
-Job-Tracking-Mechanismus, der V1 noch nicht trägt).
+### E-HFE-4 — Synchroner Build (V1) / Daemon-Thread im Task (V1.1, 2026-06-19)
+*Datum V1:* 2026-06-12 · *Update V1.1:* 2026-06-19 — `execute()` läuft
+ab V1.1 im Daemon-Thread im Task; der Polling-Loop ist während des
+1–5-min-Album-Baus frei. Details: HFE-11 (Job-Single-Slot pro Chat) und
+HFE-12 (Restart-Verlust akzeptiert). Ratifizierungs-Paket:
+`brainstorm/berater-runde/2026-06-19-1505-RATIFIZIERT-hfe-async-schnitt.md`.
+Persistente Job-Wiederaufnahme über Restart bleibt **OPEN-HSP-L V2**.
+**Verworfen V1 (2026-06-12):** Async-Pattern ohne Job-Tracking-Mechanismus,
+der zu dem Zeitpunkt nicht tragfähig war.
 
 ### E-HFE-5 — Klasse C, nicht Klasse D (A2-Klausel trifft nicht)
 *Datum:* 2026-06-12 (Werft-Lauf, gegen die am selben Tag ratifizierte
