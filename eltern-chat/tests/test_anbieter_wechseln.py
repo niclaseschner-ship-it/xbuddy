@@ -20,7 +20,11 @@ import json
 import logging
 
 from fakes import FakeTelegram
-from onboarding_store import zd_name_provider_api_key
+from onboarding_store import (
+    ZD_NAME_PROVIDER_API_KEY,
+    ZD_NAME_PROVIDER_NAME,
+    zd_name_provider_api_key,
+)
 from skills.anbieter_wechseln import (
     DONE_PRIVAT,
     ERGEBNIS_ABGELEHNT,
@@ -31,8 +35,6 @@ from skills.anbieter_wechseln import (
     REJECT_ANBIETER,
     SAME_PROVIDER,
     WRITE_FAILED,
-    ZD_NAME_PROVIDER_API_KEY,
-    ZD_NAME_PROVIDER_NAME,
     AvbInput,
     anbieter_wechseln,
 )

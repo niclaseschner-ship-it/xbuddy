@@ -85,6 +85,48 @@ def test_ONB_1_missing_provider_key_is_not_an_error(tmp_path, monkeypatch):
     assert cfg.provider_api_key == ""
 
 
+# -- T663 Welle A: Bootstrap nutzt read-both (Watchdog B1) -------
+
+def test_T663_bootstrap_reads_vendor_slot_for_active_provider(tmp_path, monkeypatch):
+    """T663 Welle A / Watchdog B1: config.resolve ruft
+    OnboardingStore.load(provider_name=values['provider']) — der vendor-Slot
+    (`eltern-chat-anthropic-api-key` für Adapter `claude`) wird primär gelesen.
+    Ein im Single-Slot liegender Alt-Wert darf NICHT gewinnen, wenn der
+    vendor-Slot gesetzt ist."""
+    _set_bot_token(monkeypatch)
+    monkeypatch.delenv("ELTERNCHAT_PROVIDER_API_KEY", raising=False)
+    zd = _zd(tmp_path)
+    # Vendor-Slot (Brand-Vendor anthropic für Adapter claude) UND Single-Slot.
+    zd.set("eltern-chat-anthropic-api-key", "sk-vendor-wins")
+    zd.set("eltern-chat-provider-api-key", "sk-single-loses")
+
+    # provider bleibt Default "claude" (DEFAULTS).
+    cfg = config_mod.resolve(_missing(tmp_path), zd=zd)
+
+    assert cfg.provider_api_key == "sk-vendor-wins", (
+        "Welle A Bootstrap: vendor-Slot muss vor Single-Slot gewinnen")
+
+
+def test_T663_bootstrap_falls_back_to_single_slot(tmp_path, monkeypatch):
+    """T663 Welle A / Watchdog B1+B3: leerer vendor-Slot + gefüllter
+    Single-Slot → Bootstrap liest den Single-Slot (Fallback in
+    OnboardingStore.load) und triggert die lazy-Migration."""
+    _set_bot_token(monkeypatch)
+    monkeypatch.delenv("ELTERNCHAT_PROVIDER_API_KEY", raising=False)
+    zd = _zd(tmp_path)
+    # Nur Single-Slot — vendor-Slot leer.
+    zd.set("eltern-chat-provider-api-key", "sk-single-fallback")
+
+    cfg = config_mod.resolve(_missing(tmp_path), zd=zd)
+
+    assert cfg.provider_api_key == "sk-single-fallback"
+    # Lazy-Migration hat den vendor-Slot beim Bootstrap befüllt (Brand-Vendor).
+    assert zd.get("eltern-chat-anthropic-api-key") == "sk-single-fallback", (
+        "Lazy-Migration muss beim Bootstrap den vendor-Slot füllen")
+    # Single-Slot bleibt stehen (Welle B-Aufgabe).
+    assert zd.get("eltern-chat-provider-api-key") == "sk-single-fallback"
+
+
 # -- Familien-Gruppe: Env > Datei > Store; Env/Datei sperren -----
 
 def test_EC_15_family_group_from_env_is_locked(tmp_path, monkeypatch):

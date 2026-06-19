@@ -45,7 +45,10 @@ from dataclasses import dataclass
 
 import authz
 from model import GenerationRequest, Message, ProviderError, TextBlock
-from onboarding_store import zd_name_provider_api_key
+from onboarding_store import (
+    ZD_NAME_PROVIDER_NAME,
+    zd_name_provider_api_key,
+)
 from providers import get_provider
 from telegram import TelegramError
 
@@ -55,27 +58,18 @@ from tools.zugangsdaten import StoreError
 # ============================================================
 #  ZD-Schlüssel-Namen (ONB-12 / ZD-2)
 # ============================================================
-
-# Schlüssel-Name im Zugangsdaten-Speicher — der API-Key des aktiven Anbieters.
-# Identisch mit dem Namen in `onboarding_store.ZD_NAME_PROVIDER_API_KEY`
-# (eine Wahrheitsquelle des Namens, CLAUDE.md §6 — wir lesen ihn hier via
-# Import nicht, um den Abhängigkeits-Zyklus zu vermeiden; der String ist
-# stabil und geht nicht in Config-Tabellen o. ä. ein).
 #
-# T663 Welle A: dieser Single-Slot bleibt als Fallback (read-both in
+# `ZD_NAME_PROVIDER_API_KEY` (Single-Slot, Welle-A-Fallback) und
+# `ZD_NAME_PROVIDER_NAME` (persistenter Anbieter-Name nach Wechsel) leben
+# zentral in `onboarding_store` — Watchdog B4 / CLAUDE.md §6. Der Skill
+# importiert sie hier nur, statt sie als String-Literale zu wiederholen.
+#
+# T663 Welle A: der Single-Slot bleibt als Fallback (read-both in
 # `OnboardingStore.load`), wird beim Wechsel aber NICHT mehr beschrieben —
-# der Skill schreibt jetzt in vendor-spezifische Slots
-# (`eltern-chat-<vendor>-api-key`), zusammen mit `ZD_NAME_PROVIDER_NAME` in
-# einem atomaren `set_multi`-Aufruf. Welle B entfernt den Single-Slot.
-ZD_NAME_PROVIDER_API_KEY = "eltern-chat-provider-api-key"
-
-# Schlüssel-Name für den Anbieter-Namen (neu, ONB-11).  Der config.py-Wert
-# (DEFAULTS["provider"]) ist statisch beim Start; nach einem Wechsel-Akt ohne
-# Neustart liest config.py noch den alten Wert.  Dieser ZD-Eintrag ist der
-# persistente Wert, der nach einem Neustart den config-Default überschreiben
-# kann (via Onboarding-Speicher-Erweiterung — dieser Slot existiert ab
-# Ticket #639).
-ZD_NAME_PROVIDER_NAME = "eltern-chat-provider-name"
+# der Skill schreibt in vendor-spezifische Slots
+# (`eltern-chat-<vendor>-api-key`, Brand-Vendor via `vendor_slug_for_adapter`),
+# zusammen mit `ZD_NAME_PROVIDER_NAME` in einem atomaren `set_multi`-Aufruf.
+# Welle B entfernt den Single-Slot.
 
 # ============================================================
 #  Verfügbare Anbieter (ONB-10 / ONB-11)

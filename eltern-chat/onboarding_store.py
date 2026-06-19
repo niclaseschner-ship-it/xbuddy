@@ -25,21 +25,64 @@ KEY_FAMILY_GROUP = "family_group_chat_id"
 ZD_NAME_PROVIDER_API_KEY = "eltern-chat-provider-api-key"
 ZD_NAME_FAMILY_GROUP = "eltern-chat-family-group-chat-id"
 
+# T663 Welle A: Slot-Name für den persistenten Anbieter-Namen (ONB-11). Lebt
+# zentral hier — der Skill `anbieter_wechseln` importiert die Konstante, statt
+# sie als String-Literal selbst zu führen (Watchdog B4: eine Wahrheitsquelle,
+# CLAUDE.md §6).
+ZD_NAME_PROVIDER_NAME = "eltern-chat-provider-name"
 
-def zd_name_provider_api_key(vendor):
+# T663 Welle A — Adapter→Vendor-Mapping (Watchdog B2):
+#
+# `cfg.provider` hält den Adapter-Namen, mit dem `providers.get_provider`
+# arbeitet (`claude`, `mistral`, später `openai`, `azure-openai`). Die
+# ZD-2-Tabelle (`specs/platform/zugangsdaten.md`, Lines 50-65) bindet den
+# Slot-Namen aber an den **Brand-Vendor** (Anthropic, Mistral) — `claude` ist
+# ein Anthropic-Adapter, der Slot heißt `eltern-chat-anthropic-api-key`, NICHT
+# `eltern-chat-claude-api-key`.
+#
+# Mapping ist eltern-chat-spezifisch (Hörspiel-Buddy hat seine eigenen Slots
+# `hoerspiel-<vendor>-api-key`). Wenn ein neuer Adapter dazukommt, ergänzt man
+# hier den Eintrag.
+ADAPTER_TO_VENDOR = {
+    "claude":        "anthropic",
+    "mistral":       "mistral",
+    "openai":        "openai",
+    "azure-openai":  "azure-openai",
+}
+
+
+def vendor_slug_for_adapter(adapter_name):
+    """Löst einen Adapter-Namen auf den Brand-Vendor-Slug auf (T663 Welle A).
+
+    `claude` → `anthropic`, `mistral` → `mistral`. Unbekannte Adapter-Namen
+    werden 1:1 zurückgegeben — Pragmatik für künftige Adapter, die der
+    Adapter-Name und der Brand-Vendor identisch sind. Bei einem Drift
+    (z. B. ein neuer Anthropic-Adapter namens `claude-haiku`) ist
+    ADAPTER_TO_VENDOR oben zu ergänzen.
+    """
+    if not isinstance(adapter_name, str) or not adapter_name:
+        raise ValueError("adapter_name muss ein nicht-leerer String sein")
+    return ADAPTER_TO_VENDOR.get(adapter_name, adapter_name)
+
+
+def zd_name_provider_api_key(adapter_name):
     """Vendor-spezifischer ZD-Slot-Name für den API-Key (T663 Welle A).
 
-    Welle A führt pro Vendor einen eigenen Slot ein
-    (`eltern-chat-claude-api-key`, `eltern-chat-mistral-api-key`). Der
+    Welle A führt pro Brand-Vendor einen eigenen Slot ein
+    (`eltern-chat-anthropic-api-key`, `eltern-chat-mistral-api-key`). Der
     Single-Slot-Name (`eltern-chat-provider-api-key`) bleibt Fallback —
     `load(provider_name=...)` liest vendor-Slot zuerst, fällt auf Single-Slot
     zurück. Welle B (späteres Ticket) entfernt den Single-Slot.
 
+    `adapter_name` ist der Adapter-Name aus `providers.get_provider`
+    (`claude`, `mistral`). Intern wird er über `vendor_slug_for_adapter` auf
+    den Brand-Vendor aufgelöst — die Spec ZD-2 bindet den Slot-Namen an den
+    Brand-Vendor (Watchdog B2).
+
     Helper ist hier zentral, damit der Skill `anbieter_wechseln` denselben
     Namens-Bauer importiert (eine Wahrheitsquelle, CLAUDE.md §6).
     """
-    if not isinstance(vendor, str) or not vendor:
-        raise ValueError("vendor muss ein nicht-leerer String sein")
+    vendor = vendor_slug_for_adapter(adapter_name)
     return "eltern-chat-%s-api-key" % vendor
 
 
@@ -62,11 +105,19 @@ class OnboardingStore:
         auf (wie zuvor).
 
         `provider_name` (T663 Welle A): wenn gesetzt, wird der vendor-spezifische
-        Slot zuerst gelesen (`eltern-chat-<vendor>-api-key`). Liegt dort kein
-        truthy-Wert, fällt der Aufruf auf den Single-Slot (`eltern-chat-
-        provider-api-key`) zurück. Default `None` bewahrt das alte Verhalten:
-        nur Single-Slot lesen — kein Bruch für Aufrufer, die den Vendor nicht
-        kennen (z. B. config.py-Bootstrap vor Provider-Wahl).
+        Slot zuerst gelesen (`eltern-chat-<vendor>-api-key`, Brand-Vendor —
+        ZD-2-Tabelle, `vendor_slug_for_adapter`). Liegt dort kein truthy-Wert,
+        fällt der Aufruf auf den Single-Slot (`eltern-chat-provider-api-key`)
+        zurück. Default `None` bewahrt das alte Verhalten: nur Single-Slot
+        lesen — kein Bruch für Aufrufer, die den Vendor nicht kennen.
+
+        Lazy-Migration (T663 Welle A, ONB-13, Watchdog B3): ist
+        `provider_name` gesetzt UND der vendor-Slot leer UND der Single-Slot
+        gefüllt, schreibt diese Methode den Single-Slot-Wert einmalig in den
+        vendor-Slot. Der Single-Slot bleibt unverändert (Welle B entfernt ihn
+        in einem späteren Ticket). Die Migration ist idempotent: läuft sie
+        nach dem Schreiben erneut, ist der vendor-Slot bereits gefüllt und
+        kein Schreibvorgang nötig.
         """
         data = {}
         provider = None
@@ -77,6 +128,15 @@ class OnboardingStore:
             vendor_value = self._zd.get(vendor_slot)
             if vendor_value:
                 provider = vendor_value
+            else:
+                # Lazy-Migration: vendor-Slot leer, Single-Slot prüfen.
+                single_value = self._zd.get(ZD_NAME_PROVIDER_API_KEY)
+                if single_value:
+                    # Einmalig in den vendor-Slot schreiben — Single-Slot bleibt
+                    # stehen (Welle B entfernt ihn). Idempotent: beim nächsten
+                    # Aufruf gewinnt der vendor-Slot direkt oben.
+                    self._zd.set(vendor_slot, single_value)
+                    provider = single_value
         if provider is None:
             # Fallback (Welle A) / Default-Pfad: Single-Slot lesen.
             provider = self._zd.get(ZD_NAME_PROVIDER_API_KEY)
