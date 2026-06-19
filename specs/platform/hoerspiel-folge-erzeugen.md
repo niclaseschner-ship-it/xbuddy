@@ -397,15 +397,22 @@ Voice / LLM-Anbieter / LLM-Modell / Playback-Tempo / Pausen in der
 Eltern-Mini-App (HSP-33, HSP-34) zu tunen — ohne den HFE-Turn zu
 verlassen, ohne einen separaten HOE-Aufruf provozieren zu müssen.
 
-**Gilt für alle drei HFE-3-Sub-Cases der ersten `propose()`-Antwort:**
+**Differenzierung nach HFE-3-Sub-Case:**
 
-1. **Leere / mehrdeutige Idee** → Themen-Liste + EC-22-Rückfrage → erste
-   Antwort trägt Beifang-Button.
-2. **Konkrete-aber-unvollständige Idee** → Diskussions-Pattern
-   (`{"diskussion": true, ...}`) → erste Antwort trägt Beifang-Button.
-3. **Konkrete vollständige Idee** → Standard-Pfad mit Vorschlag-Endpoint-
-   Aufruf → erste Antwort (mit Bestätigungs-Vorschlag) trägt Beifang-
-   Button.
+1. **Sub-Case 1 — Leere / mehrdeutige Idee** → `propose()` antwortet mit
+   präsentationslosem Tool-Result-Text (EC-22-Rückfrage + Themen-Liste,
+   Form (a) nach TASK-10c). Kein Form-(b)-Dict vorhanden — **kein
+   Beifang-Button** in dieser ersten Antwort.
+2. **Sub-Case 2 — Konkrete-aber-unvollständige Idee** → `propose()`
+   antwortet mit präsentationslosem Marker-Text
+   (`{"diskussion": true, "idee_bisher": "<text>"}`, Form (a) nach
+   TASK-10c). Kein Form-(b)-Dict vorhanden — **kein Beifang-Button** in
+   dieser ersten Antwort.
+3. **Sub-Case 3 — Konkrete vollständige Idee** → `propose()` ruft den
+   Vorschlag-Endpoint und liefert HFE-4-Bestätigungs-Vorschlag. In diesem
+   Sub-Case wickelt HFE-10 die Antwort in ein TASK-10c-Form-(b)-Dict
+   (`{text, presentation}`, TASK-10c), um den Beifang-Button im
+   `presentation.inline_button`-Array zu transportieren — zwei Button-Einträge.
 
 **Folge-Antworten der Diskussions-Schleife** (zweite, dritte, … Rückfrage
 des Agents nach der Eröffnung) tragen den Beifang-Button **nicht**. Die
@@ -417,29 +424,36 @@ Beifang-Button **nicht**.
 Begründung: einmal pro Anstoß die Tuning-Tür öffnen — nicht jeden
 Folge-Turn mit zwei Buttons aufblähen. Konsistent mit EC-29 („eine Stimme
 im Turn") und der HFE-7-Klausel: der Beifang ändert nichts an der
-sprachlosen `propose()`-Form — er erscheint im selben Tool-Result-Text,
-das LLM bekommt einen erweiterten `presentation`-Dict-Eintrag.
+sprachlosen `propose()`-Form — er erscheint nur dort, wo `propose()` ohnehin
+ein Form-(b)-Dict zurückgibt (Sub-Case 3), das LLM bekommt dann einen
+erweiterten `presentation`-Dict-Eintrag.
 
-**Implementations-Hinweis (für Track HSP-2):** Der Skill erkennt „erste
-Antwort des Turns" anhand des `turn_context`-Markers (analog dem
-Diskussions-Trigger-Pattern aus HFE-3 — der Subagent in HSP-2 wählt die
-saubere Mechanik). Der Beifang-Button wird im **gleichen** Form-(b)-Dict
-abgelegt (TASK-10c) — zwei Button-Einträge im `inline_keyboard`. Wenn
-`mini_app_base_url` leer ist (Konfig-Lücke analog HOE-7), **fällt der
-Beifang-Button still aus**: kein Fehler-Text, kein Skill-Abbruch — der
-bestehende HFE-Output bleibt grün, nur ohne Beifang. Begründung: HFE-
-Erzeugen-Pfad darf nicht an einer fehlenden Mini-App-Konfig scheitern;
-der Beifang ist additiv, nicht Pflicht.
+**Implementations-Hinweis (für Track HSP-2):** Der Skill erkennt, ob es
+die erste Antwort des Turns ist, anhand der Abwesenheit eines laufenden
+Diskussions-Markers in der Idee (Sub-Case-3-Pfad ist per Definition die
+erste und einzige nicht-diskutierende Antwort des propose-Turns — der
+Subagent in HSP-2 wählt die saubere Mechanik). Der Beifang-Button wird
+ausschließlich im Form-(b)-Dict des Sub-Case-3-Pfades abgelegt (TASK-10c)
+— zwei Button-Einträge im `presentation.inline_button`-Array. Wenn `mini_app_base_url` leer
+ist (Konfig-Lücke analog HOE-7), **fällt der Beifang-Button still aus**:
+kein Fehler-Text, kein Skill-Abbruch — der bestehende HFE-Output bleibt
+grün, nur ohne Beifang. Begründung: HFE-Erzeugen-Pfad darf nicht an einer
+fehlenden Mini-App-Konfig scheitern; der Beifang ist additiv, nicht Pflicht.
 
-*Test-Implikation:* Skill-Test prüft, dass die erste `propose()`-
-Antwort des Turns (alle drei Sub-Cases je einmal) im
-`presentation.inline_button`-Array zwei Einträge enthält, davon einer
-mit Label `⚙️ Einstellungen` und URL endend auf `#einstellungen`.
-Folge-Diskussions-Antworten (`{"diskussion": true, ...}` mit
-`turn_context.is_first = false`) sowie die Confirm-/Execute-Bubbles
-enthalten den Beifang-Button **nicht**. Bei fehlender
-`mini_app_base_url` enthält auch die erste Antwort den Beifang-Button
-**nicht**, der Rest der Antwort bleibt unverändert.
+*Test-Implikation:* Skill-Test prüft pro Sub-Case separat:
+- **Sub-Case 1 + 2 (erste Antwort):** Rückgabe ist präsentationsloser
+  Tool-Result-Text (Form (a)); kein `presentation`-Schlüssel im Return-Wert
+  vorhanden; kein Beifang-Button erwartet.
+- **Sub-Case 3 (erste Antwort):** Rückgabe ist Form-(b)-Dict; das
+  `presentation.inline_button`-Array enthält zwei Einträge, davon einer
+  mit Label `⚙️ Einstellungen` und URL endend auf `#einstellungen`.
+- **Folge-Diskussions-Antworten** (zweite, dritte, … Rückfrage nach der
+  Eröffnung) sowie die Confirm-/Execute-Bubbles enthalten den
+  Beifang-Button **nicht**. Die Mechanik, anhand derer der Skill erste
+  von Folge-Antworten unterscheidet, wird in HSP-2 festgelegt (kein
+  `TurnContext`-Feld vorgeschrieben).
+- **Fehlende `mini_app_base_url`:** auch die Sub-Case-3-Antwort enthält
+  den Beifang-Button **nicht**; der Rest der Antwort bleibt unverändert.
 
 ## HFE-11 — Job-Single-Slot pro Chat (V1.1)
 
