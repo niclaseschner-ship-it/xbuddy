@@ -309,6 +309,7 @@ class Catalog:
 
 #: Vokabular-Schlüssel für Präsentations-Hinweise (TASK-10c Form (b)).
 PRESENTATION_INLINE_BUTTON = "inline_button"
+PRESENTATION_INLINE_BUTTONS = "inline_buttons"   # EZG-5/EZG-6: Plural-Liste
 PRESENTATION_WEBAPP_LINK = "webapp_link"
 
 
@@ -320,6 +321,12 @@ def render_form_b(result, tg, chat_id):
     und gibt eine Quittungs-Zeichenkette zurück.
 
     Bekannte Schlüssel in `presentation`:
+      * ``inline_buttons`` → `tg.send_inline_keyboard` mit einer Liste von
+        Buttons. Jeder Eintrag hat ``label`` + entweder ``web_app_url``
+        (öffnet Mini App) oder ``url`` (externer Browser-Link). Reihenfolge
+        der Liste bestimmt die Button-Reihenfolge (EZG-5/EZG-6). Additive
+        Erweiterung — bestehende Skills, die ``inline_button`` (Singular)
+        liefern, sind davon unberührt.
       * ``inline_button`` → `tg.send_inline_keyboard` mit web_app_url-Button.
       * ``webapp_link``   → ebenso (web_app_url als Alias).
       * Unbekannter / leerer Schlüssel → Fallback auf `tg.send_message`.
@@ -329,6 +336,21 @@ def render_form_b(result, tg, chat_id):
     """
     text = result.get("text", "")
     presentation = result.get("presentation") or {}
+
+    # EZG-5/EZG-6: Plural-Liste (inline_buttons) — additive Erweiterung.
+    # Prüfung VOR dem Singular-Zweig, damit EZG den neuen Pfad bekommt.
+    if PRESENTATION_INLINE_BUTTONS in presentation:
+        btn_specs = presentation[PRESENTATION_INLINE_BUTTONS]
+        buttons = []
+        for spec in btn_specs:
+            btn = {"label": spec["label"]}
+            if "web_app_url" in spec:
+                btn["web_app_url"] = spec["web_app_url"]
+            elif "url" in spec:
+                btn["url"] = spec["url"]
+            buttons.append(btn)
+        tg.send_inline_keyboard(chat_id, text, buttons)
+        return "Nachricht mit %d Inline-Buttons gesendet." % len(buttons)
 
     if PRESENTATION_INLINE_BUTTON in presentation:
         ib = presentation[PRESENTATION_INLINE_BUTTON]

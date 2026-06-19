@@ -339,6 +339,10 @@ class TelegramClient:
             tg_btn = {"text": label}
             if "web_app_url" in btn:
                 tg_btn["web_app"] = {"url": btn["web_app_url"]}
+            elif "url" in btn:
+                # EZG-6: url-Feld öffnet die URL im externen Browser (PWA-Install-Pfad).
+                # Telegram-Payload: inline_keyboard-Button mit „url"-Feld.
+                tg_btn["url"] = btn["url"]
             elif "button_id" in btn:
                 encoded = urllib.parse.quote(btn["button_id"], safe="")
                 # Adapter-Detail: Telegram-callback_data hat ein 64-Byte-Limit.
@@ -349,7 +353,7 @@ class TelegramClient:
                 tg_btn["callback_data"] = encoded
             else:
                 raise ValueError(
-                    "Button braucht entweder web_app_url oder button_id.")
+                    "Button braucht entweder web_app_url, url oder button_id.")
             rows.append([tg_btn])
         params = {
             "chat_id": chat_id,
