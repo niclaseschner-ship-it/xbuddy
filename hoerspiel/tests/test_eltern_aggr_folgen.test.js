@@ -73,7 +73,7 @@ global.getPlatform = () => ({
 });
 
 const eltern = require(path.join(__dirname, "../static/eltern.js"));
-const { KIND_IDS_V1, _mergeUndSortiereAlben } = eltern;
+const { KIND_IDS_V1, _mergeUndSortiereAlben, _rendereWarnBanner } = eltern;
 
 // ── Fixture-Daten ─────────────────────────────────────────────────────────────
 
@@ -201,12 +201,12 @@ test("HSP-35-Avatar-URL: Avatar-img src = /api/v1/familie/foto/<folge.kind_id>",
 });
 
 /**
- * Test 4 — HSP-35-Aggregation: einseitiger 404 → Promise.all reject.
- * V1-Verhalten (siehe HSP-40-Stichpunkt "HSP-35-Aggregation"): komplette
- * Liste leer mit sichtbarem Lade-Hinweis. Partial-Result via
- * Promise.allSettled + Warn-Banner ist Folge-Ticket #975.
+ * Test 4 — HSP-40: einseitiger 404 → teilweise Liste + Warn-Banner (#975).
+ * Seit #975 nutzt _ladeAlbenListe Promise.allSettled: paula-OK-Ergebnis
+ * wird in die gemergete Liste übernommen, neko-404-Reject landet im
+ * fehlgeschlagen-Array → Warn-Banner "Neko-Folgen aktuell nicht verfügbar".
  */
-test("HSP-35-Aggregation: einseitiger fetch-404 → Promise.all wirft (kein Partial-Result)", async () => {
+test("HSP-40: einseitiger fetch-404 → teilweise Liste + Warn-Banner für fehlgeschlagene kind_id", async () => {
   // Simuliert parallelen Lade-Pfad: paula OK, neko → 404-artige Ablehnung
   async function holePaulaAlben() {
     return { kindId: "paula", alben: [ makeAlbum({ id: "p1" }) ] };
@@ -215,16 +215,49 @@ test("HSP-35-Aggregation: einseitiger fetch-404 → Promise.all wirft (kein Part
     throw new Error("alben-Abruf fehlgeschlagen: 404");
   }
 
-  let geworfen = false;
-  try {
-    await Promise.all([ holePaulaAlben(), holeNekoAlben() ]);
-  } catch (err) {
-    geworfen = true;
-    assert.ok(
-      err.message.includes("404") || err.message.includes("fehlgeschlagen"),
-      "Fehler-Meldung enthält '404' oder 'fehlgeschlagen': " + err.message
-    );
-  }
+  // Promise.allSettled — kein Wurf, beide Ergebnisse in settled-Array
+  const settled = await Promise.allSettled([ holePaulaAlben(), holeNekoAlben() ]);
 
-  assert.equal(geworfen, true, "Promise.all verwirft bei einseitigem 404 (kein Partial-Result)");
+  // Fulfilled-Ergebnisse → in Aggregat
+  const erfolgreich = settled
+    .filter(r => r.status === "fulfilled")
+    .map(r => r.value);
+
+  // Rejected → fehlgeschlagen-Array (kind_id-Index aus KIND_IDS_V1)
+  const quellenIds = ["paula", "neko"];
+  const fehlgeschlagen = settled
+    .map((r, i) => r.status === "rejected" ? quellenIds[i] : null)
+    .filter(Boolean);
+
+  // AC1/AC2: allSettled liefert Partial-Result
+  assert.equal(settled[0].status, "fulfilled", "paula-Fetch ist fulfilled");
+  assert.equal(settled[1].status, "rejected",  "neko-Fetch ist rejected");
+  assert.equal(erfolgreich.length, 1, "Genau eine erfolgreiche Quelle (paula)");
+  assert.equal(fehlgeschlagen.length, 1, "Genau eine fehlgeschlagene Quelle (neko)");
+  assert.equal(fehlgeschlagen[0], "neko", "Fehlgeschlagene kind_id ist 'neko'");
+
+  // AC2: Merge-Liste enthält paula-Folge
+  const merged = _mergeUndSortiereAlben(erfolgreich);
+  assert.equal(merged.length, 1, "Gemergete Liste enthält genau 1 paula-Folge");
+  assert.equal(merged[0].id, "p1", "Paula-Folge (p1) ist in der Teilliste");
+  assert.equal(merged[0].kind_id, "paula", "paula-Folge trägt kind_id=paula");
+
+  // AC3: Warn-Banner für neko im DOM sichtbar
+  const testContainer = doc.createElement("div");
+  const testPlayer    = doc.createElement("div");
+  _rendereWarnBanner(testContainer, testPlayer, fehlgeschlagen);
+
+  // Banner wurde als Kind eingefügt (insertBefore player)
+  const banner = testContainer._children.find(
+    c => c.className === "album-warn-banner"
+  );
+  assert.ok(banner, "Warn-Banner-Element mit Klasse album-warn-banner ist im Container");
+  assert.ok(
+    banner.textContent.includes("Neko") || banner.textContent.toLowerCase().includes("neko"),
+    "Warn-Banner-Text enthält 'Neko' (kind_id kapitalisiert): " + banner.textContent
+  );
+  assert.ok(
+    banner.textContent.includes("nicht verfügbar"),
+    "Warn-Banner-Text enthält 'nicht verfügbar': " + banner.textContent
+  );
 });
