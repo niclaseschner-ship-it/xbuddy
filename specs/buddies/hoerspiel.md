@@ -1245,6 +1245,14 @@ oben). Heimat der Implementation: `hoerspiel/static/eltern.js`.
 Konsumiert von `specs/platform/hoerspiel-oeffnen.md` HOE-5 (Skill setzt
 den Hash passend zum Tab-Hint).
 
+*Test-Implikation:* JS-Unit-Test (JSDOM, z. B. `hoerspiel/tests/test_eltern_js.py` oder
+`hoerspiel/tests/eltern.test.js`) prüft: (1) `window.location.hash = "#folgen"` zur
+Ladezeit setzt den Tab-Knopf für »Folgen« sichtbar in den Aktiv-Zustand (unterstrichen /
+hervorgehobenes Element); (2) `hashchange`-Event mit anderem Hash-Wert schaltet den
+aktiven Tab live um — der Listener löst dabei weder einen `fetch`-Call auf
+`/api/v1/hoerspiel/*` noch ein `window.location.reload()` aus. Bind-Punkt für
+Implementierungs-Track.
+
 - **Reiter 1 „Einstellungen"** (HSP-34, Default beim Laden / bei Hash
   `#einstellungen`)
 - **Reiter 2 „Folgen"** (HSP-35, bei Hash `#folgen`)
