@@ -646,7 +646,7 @@ korrekter Reihenfolge mit `🌅`-Marker für `einmalig`-heute; drei Zeit-Anker-
 Cards mit Schloss-Symbol auf Aufstehen+Losgehen; Inline-Add-Buttons je
 Sektion — der Items-Add aktiv, der Zeit-Add `disabled` ohne Click-Handler;
 **kein FAB** im DOM; Drag-Bewegung eines `default`-Items erzeugt
-`PUT /api/v1/routine/items`-Call mit dem neuen ID-Array; Save mit
+`PUT /api/v1/routine/items`-Call mit dem neuen Objects-Array `[{id,label,piktogramm},…]` (kein items-Wrapper); Save mit
 Zeit-Änderung erzeugt `PUT …/config` mit nur dem geänderten Schlüssel;
 4xx vom Buddy bricht den Save mit ehrlicher Meldung ab; Frontend liest
 Zeitwerte aus `GET /api/v1/routine/config`) ·
@@ -724,9 +724,11 @@ gegen die ROUTINE-14-API:
 
 1. Falls Items entfernt: je `DELETE /api/v1/routine/items/<id>`.
 2. Falls neue Items oder Reihenfolge geändert: ein `PUT /api/v1/routine/items`
-   mit der **vollständigen geordneten** `default`-Liste **als ID-Array**
-   (`{"items": ["id1", "id2", …]}` — Reihenfolge implizit aus Array-Position,
-   kein `position`-Feld, ROUTINE-14-Schema).
+   mit der **vollständigen geordneten** `default`-Liste **als Array von Objects**
+   (`[{"id": "…", "label": "…", "piktogramm": <id>}, …]` — Reihenfolge
+   implizit aus Array-Position, kein `items`-Wrapper, kein `position`-Feld,
+   ROUTINE-14-Schema; Backend validiert: `isinstance(body, list)`, sonst 400;
+   Drift-Auflösung: #354 Backend-Stand, #728 Frontend-Iter-11, #772 Spec-Korrektur).
 3. Falls Zeiten geändert: ein `PUT /api/v1/routine/config` mit den
    abweichenden Schlüsseln.
 
