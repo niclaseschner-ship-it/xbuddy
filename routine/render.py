@@ -102,4 +102,10 @@ def _uhr_to_dict(uhr_view):
         "rest_bis_anziehen_min": uhr_view.rest_bis_anziehen_min,
         "rest_bis_losgehen_min": uhr_view.rest_bis_losgehen_min,
         "zeitfenster_min": uhr_view.zeitfenster_min,
+        # Live-Tick (#824, ROUTINE-9):
+        "server_now": uhr_view.server_now,
+        "anziehen_stop_rel": round(uhr_view.anziehen_stop_rel, 2),
+        "strich_count": uhr_view.strich_count,
+        "aufstehen_iso": uhr_view.aufstehen_iso,
+        "losgehen_iso": uhr_view.losgehen_iso,
     }
