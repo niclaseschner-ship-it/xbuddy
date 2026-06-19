@@ -31,7 +31,6 @@ Endpunkte:
 
 import argparse
 import functools
-import json
 import logging
 import os
 import sys
@@ -46,16 +45,12 @@ _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-# MAD-7 / T708-C: Init-Data-Auth aus dem Lego-Basis-Modul (eltern-chat/init_data.py).
-# Vendor-neutrale HMAC-SHA256-Validierung. sys.path-Erweiterung analog seiten/main.py.
-_ELTERN_CHAT_DIR = os.path.join(_REPO_ROOT, "eltern-chat")
-if _ELTERN_CHAT_DIR not in sys.path:
-    sys.path.insert(0, _ELTERN_CHAT_DIR)
-
-import init_data as _init_data_mod  # noqa: E402
-
+# MAD-7 / T1015: Init-Data-Auth aus tools.initdata (vorher per sys.path-Hack
+# aus eltern-chat/init_data.py — MOD-6 / Cluster-A-Option-B 2026-06-18-1720).
 import tools.medien_store as medien_store  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
+from tools import familie_client as _familie_client_mod  # noqa: E402
+from tools.initdata import init_data as _init_data_mod  # noqa: E402
 
 if __package__:
     from . import config as config_mod
@@ -89,7 +84,11 @@ runtime = {
     # MAD-7 / T708-C: Mini-App-Auth (Test-Naht; im Produktiv-Betrieb aus ENV).
     "bot_token":         None,
     "init_data_config":  None,
-    "familie_json_path": None,
+    # T1015 / Cluster-A-Option-B: FAM-Lookup geht via tools.familie_client
+    # gegen Familie-Service-HTTP-API (DCOMP-1 / FAM-7) statt familie.json
+    # direkt zu lesen. familie_client darf eine FamilieClient-Instanz oder
+    # ein Test-Doppel mit get_telegram_ids()-Methode sein.
+    "familie_client":    None,
 }
 
 # Schreib-Serialisierung für Foto-Ingest (ESSEN-22 V1.2): Read-Modify-Write
@@ -101,15 +100,18 @@ _foto_write_lock = threading.Lock()
 
 def configure(paths, zeitzone="Europe/Berlin", listen_grenze=None,
               listen_grenze_wunsch=None, listen_grenze_einkauf=None,
-              bot_token=None, init_data_config=None, familie_json_path=None):
+              bot_token=None, init_data_config=None, familie_client=None):
     """Setzt die Datei-Pfade, Zeitzone und Listen-Grenzen (Test-Naht).
 
     `paths` ist ein dict aus config_mod.data_paths().
     Listen-Grenzen (ESSEN-29): `listen_grenze_wunsch` / `listen_grenze_einkauf`
     überschreiben den Default 100; `listen_grenze` (Übergangs-Schlüssel) greift
     für beide, wenn spezifische Werte fehlen.
-    `bot_token`, `init_data_config`, `familie_json_path` (MAD-7 / T708-C):
-    Auth-Naht für Tests; im Produktiv-Betrieb aus ENV.
+    `bot_token`, `init_data_config` (MAD-7 / T708-C): Auth-Naht für Tests;
+    im Produktiv-Betrieb aus ENV.
+    `familie_client` (T1015): Test-Doppel mit `get_telegram_ids()`-Methode
+    oder eine ``tools.familie_client.FamilieClient``-Instanz. None → ein
+    frischer FamilieClient aus ENV ``ESSEN_FAMILIE_ORIGIN`` wird gebaut.
     """
     runtime["paths"] = paths
     runtime["zeitzone"] = zeitzone
@@ -133,8 +135,10 @@ def configure(paths, zeitzone="Europe/Berlin", listen_grenze=None,
         runtime["bot_token"] = bot_token
     if init_data_config is not None:
         runtime["init_data_config"] = init_data_config
-    if familie_json_path is not None:
-        runtime["familie_json_path"] = familie_json_path
+    # T1015: familie_client Test-Naht (None bedeutet „aus ENV bauen", siehe
+    # _get_familie_client). Test-Doppel überschreibt explizit.
+    if familie_client is not None:
+        runtime["familie_client"] = familie_client
 
 
 def _paths():
@@ -380,8 +384,9 @@ def _parse_bool_query(wert):
 # ENV-Variable für Bot-Token (APP-7 / MAD-9): gesetzt via systemd EnvironmentFile
 # aus eltern-chat/.env (Token-Sharing #684).
 _ENV_BOT_TOKEN = "ELTERNCHAT_BOT_TOKEN"
-# ENV-Variable für Familien-Registry-Pfad (FAM-7/8)
-_ENV_FAMILIE_JSON = "FAMILIE_JSON_PATH"
+# T1015: Familie-Service-Origin per Komponenten-ENV (CONFIG-5-Schema).
+_ENV_FAMILIE_ORIGIN = "ESSEN_FAMILIE_ORIGIN"
+_DEFAULT_FAMILIE_ORIGIN = "http://127.0.0.1:5010"
 
 
 def _get_bot_token():
@@ -389,28 +394,19 @@ def _get_bot_token():
     return runtime.get("bot_token") or os.environ.get(_ENV_BOT_TOKEN)
 
 
-def _lade_familie_telegram_ids():
-    """Liest telegram_ids aller Familien-Mitglieder aus familie.json (FAM-7/8).
+def _get_familie_client():
+    """Liefert einen FamilieClient — gecacht im runtime-Dict oder frisch (T1015).
 
-    V1: direktes JSON-Read ohne familie-Service-Dependency (MOD-2).
-    Fehlt der Pfad oder die Datei → None (fail-open, Warnung).
+    Test-Naht: ``configure(familie_client=...)`` setzt direkt einen Stub.
+    Produktiv-Pfad: ``FamilieClient`` aus ENV ``ESSEN_FAMILIE_ORIGIN`` (Default
+    ``http://127.0.0.1:5010``). Replaced den früheren direkten familie.json-
+    Read (DCOMP-1 / FAM-7-Heilung, Cluster-A-Option-B).
     """
-    path = runtime.get("familie_json_path") or os.environ.get(_ENV_FAMILIE_JSON)
-    if not path:
-        return None
-    try:
-        with open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (FileNotFoundError, OSError, json.JSONDecodeError) as exc:
-        logger.warning("FAM-7: familie.json nicht lesbar (%s): %s — FAM-Check uebersprungen", path, exc)
-        return None
-    ids = set()
-    for gruppe in ("erwachsene", "kinder"):
-        for person in (data.get(gruppe) or []):
-            tg_id = person.get("telegram_id")
-            if tg_id is not None:
-                ids.add(int(tg_id))
-    return ids
+    cached = runtime.get("familie_client")
+    if cached is not None:
+        return cached
+    origin = os.environ.get(_ENV_FAMILIE_ORIGIN, _DEFAULT_FAMILIE_ORIGIN)
+    return _familie_client_mod.FamilieClient(origin_url=origin)
 
 
 def require_init_data(fn):
@@ -467,8 +463,8 @@ def require_init_data(fn):
         except _init_data_mod.InitDataError:
             return ("", 401)
 
-        # FAM-7/8: User-ID gegen Familien-Registry prüfen
-        familie_ids = _lade_familie_telegram_ids()
+        # FAM-7/8: User-ID gegen Familien-Registry prüfen (HTTP-Pfad, T1015).
+        familie_ids = _get_familie_client().get_telegram_ids()
         if familie_ids is not None and init_data.user_id not in familie_ids:
             logger.warning("FAM-7: user_id %s ist kein Familien-Mitglied → 403", init_data.user_id)
             return ("", 403)
