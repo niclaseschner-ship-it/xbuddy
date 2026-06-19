@@ -19,8 +19,8 @@ NICHTS selbst (EC-29 „Eine Stimme im Agent-Turn").
 
 **Ausgang:** Form-(b)-Dict `{text, presentation}`:
   - Mit Buttons: `presentation: {inline_buttons: [
-        {label, web_app_url},   ← Button 1: Mini App in Telegram-WebView
-        {label, url},           ← Button 2: externer Browser (PWA-Install)
+        {label, web_app_url},  ← Button 1: Mini App in Telegram-WebView
+        {label, url},          ← Button 2: externer Browser (PWA-Install)
     ]}`.
     Beide Einträge tragen die identische Mini-App-URL (mit Trailing-Slash
     für PWA start_url, EZG-6/ESSEN-34).
@@ -136,7 +136,10 @@ def einkauf_zeigen(chat_id, from_user_id, essen_client, is_member_fn,
     Hinweis (EZG-5/EZG-6, TASK-10c Form (b)).
 
     Returnt ein Form-(b)-Dict `{text, presentation}`:
-      - Mit Button: `presentation: {inline_button: {label, web_app_url}}`.
+      - Mit Buttons: `presentation: {inline_buttons: [
+            {label, web_app_url},  ← Button 1: Mini App in Telegram-WebView
+            {label, url},          ← Button 2: externer Browser (PWA-Install)
+        ]}`.
       - Ohne Button (Leer- oder Fehlerfall): `presentation: {}`.
 
     Wirft `BerechtigungError` bei EZG-2-Verletzung.
