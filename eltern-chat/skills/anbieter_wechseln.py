@@ -1,11 +1,11 @@
 """Anbieter wechseln — siehe specs/platform/eltern-chat-onboarding.md
-(ONB-11, ONB-12, E-ONB-7, Refs #639).
+(ONB-11, ONB-12, ONB-13, E-ONB-7, Refs #639, #663).
 
 »Anbieter wechseln« ist eine aufrufbare, **trigger-agnostische** Funktion
 (analog `familie_anlegen.familie_anlegen` E-FAA-1). Aufgerufen, führt sie ein
 Familienmitglied im Telegram-Privatchat durch den KI-Anbieter-Wechsel:
-Anbieter-Wahl → Key-Eingabe → Validierungs-Ping → atomares Ersetzen im
-Zugangsdaten-Speicher → Bestätigung in der Familien-Gruppe.
+Anbieter-Wahl → ggf. Key-Eingabe → ggf. Validierungs-Ping → atomares
+Schreiben im Zugangsdaten-Speicher → Bestätigung in der Familien-Gruppe.
 
 Die Funktion kennt ihren Aufrufer nicht. Sie nimmt nur die nötigen Dinge
 entgegen: Telegram-Kanal, Privatchat-ID, User-ID, Familien-Gruppen-ID,
@@ -16,23 +16,24 @@ aktuell konfigurierten Anbieter.
 deterministisch — hart-codierte Nachrichten, Validierungs-Ping als
 Abschluss-Gate, kein propose→confirm-Pattern (ONB-11-Spec).
 
-**Atomares Ersetzen (ONB-12) — V1-Einschränkung:** jedes einzelne `zd.set()`
-ist atomar (DCOMP-4, `os.replace`). Zwischen den *zwei* separaten Aufrufen
-(api_key, dann provider_name) existiert jedoch ein Race-Fenster: scheitert der
-zweite `set()`, bleibt der Speicher im Zustand „neuer api_key, alter
-provider_name" — **nicht** byte-gleich.  Die Doku-Behauptung „byte-gleich" in
-einem früheren Kommentar war daher ungenau.
+**ONB-11 V2 — Pfad A / Pfad B (T663 Welle A):** der ZD-Speicher hält pro
+Vendor einen eigenen Slot (`eltern-chat-claude-api-key`,
+`eltern-chat-mistral-api-key`). Beim Wechsel entscheidet die Funktion nach der
+Anbieter-Wahl per truthy-Check auf den vendor-spezifischen Slot:
 
-**V1-bekannter Schwachpunkt (ONB-12-Race-Fenster):** die ZD-Schicht bietet
-heute kein Multi-Key-Atomic (`store.set_multi()`). Das Race-Fenster ist klein
-(zwei sequentielle Disk-Writes), aber vorhanden.  Spec-konforme Auflösung
-erfordert Multi-Key-Atomic in `tools/zugangsdaten/store.py` — Folge-Ticket
-erforderlich.  Spec-Halt für Nic (nicht im Scope von #639).
+  * **Pfad A — vorbefüllter vendor-Slot:** liegt für den gewählten Vendor
+    bereits ein Key, wird KEIN Re-Key abgefragt und KEIN Validierungs-Ping
+    geschickt. Nur der `provider_name`-Slot wird umgeschaltet — der alte
+    vendor-Slot bleibt unverändert (Lookup-Modell, ONB-11 V2).
+  * **Pfad B — neuer Vendor:** kein truthy Wert im vendor-Slot → Key-Eingabe,
+    Validierungs-Ping, anschließend atomares `set_multi({vendor-Slot: key,
+    provider_name: vendor})`. Beide Werte landen in genau einem
+    Schreibvorgang (DCOMP-4) — Race-Fenster aus #639 ist geschlossen.
 
-Reihenfolge der Schreibvorgänge (api_key zuerst, dann provider_name): wenn der
-zweite `set()` (provider_name) scheitert, nutzt die laufende Instanz den
-claude-Adapter mit dem neuen mistral-Key.  Das schlägt sofort sichtbar fehl —
-schneller Fehler statt stiller Fehlleitung.  Beste V1-Wahl.
+**Atomares Ersetzen (ONB-12) — V2:** Pfad B nutzt `zd.set_multi(...)` mit
+beiden Slots als einzelnen atomaren `_write`-Vorgang. Scheitert er, bleibt
+der Speicher byte-gleich (DCOMP-4). Das ist der Fix der ONB-12-V1-Race-Lücke,
+die in #639 als bekannter Schwachpunkt markiert war.
 
 **ONB-8-Schutz:** Keys werden zu keinem Zeitpunkt im Klartext in
 Bestätigungen, Fehlermeldungen oder Logs gespiegelt (ZD-6).
@@ -44,6 +45,7 @@ from dataclasses import dataclass
 
 import authz
 from model import GenerationRequest, Message, ProviderError, TextBlock
+from onboarding_store import zd_name_provider_api_key
 from providers import get_provider
 from telegram import TelegramError
 
@@ -59,6 +61,12 @@ from tools.zugangsdaten import StoreError
 # (eine Wahrheitsquelle des Namens, CLAUDE.md §6 — wir lesen ihn hier via
 # Import nicht, um den Abhängigkeits-Zyklus zu vermeiden; der String ist
 # stabil und geht nicht in Config-Tabellen o. ä. ein).
+#
+# T663 Welle A: dieser Single-Slot bleibt als Fallback (read-both in
+# `OnboardingStore.load`), wird beim Wechsel aber NICHT mehr beschrieben —
+# der Skill schreibt jetzt in vendor-spezifische Slots
+# (`eltern-chat-<vendor>-api-key`), zusammen mit `ZD_NAME_PROVIDER_NAME` in
+# einem atomaren `set_multi`-Aufruf. Welle B entfernt den Single-Slot.
 ZD_NAME_PROVIDER_API_KEY = "eltern-chat-provider-api-key"
 
 # Schlüssel-Name für den Anbieter-Namen (neu, ONB-11).  Der config.py-Wert
@@ -238,9 +246,36 @@ def anbieter_wechseln(tg, chat_id, user_id, family_group_chat_id,
         _send(tg, chat_id, SAME_PROVIDER)
         return AnbieterWechselnResult(ergebnis=ERGEBNIS_UNVERAENDERT)
 
-    # ONB-11 Schritt 2: Key-Eingabe + Validierungs-Ping (Schritte 2 + 3).
-    # Schleife: bei ungültigem Key erneut fragen.
     anzeige = _anzeige(neuer_name)
+    vendor_slot = zd_name_provider_api_key(neuer_name)
+
+    # ONB-11 V2 Pfad-A-Wahl (T663 Welle A): liegt für den gewählten Vendor
+    # bereits ein truthy Key im vendor-Slot, springen wir die Re-Key-Schleife.
+    # Nur der provider_name wird umgeschaltet — der alte vendor-Slot bleibt
+    # unverändert (Lookup-Modell). Truthy-Check (R8): leere Strings zählen
+    # als nicht gesetzt und triggern Pfad B.
+    if zd.get(vendor_slot):
+        # Pfad A: kein Validierungs-Ping (SD5), kein Re-Key.
+        try:
+            zd.set_multi({ZD_NAME_PROVIDER_NAME: neuer_name})
+        except StoreError as e:
+            logging.error(
+                "anbieter_wechseln: ZD-Schreibvorgang (Pfad A) fehlgeschlagen "
+                "(%s) — alter Eintrag bleibt", e)
+            fire_typing(typing_fn)
+            _send(tg, chat_id, WRITE_FAILED)
+            return AnbieterWechselnResult(ergebnis=ERGEBNIS_UNVERAENDERT)
+
+        # ONB-11 Schritt 5a: Privatchat-Quittung.
+        fire_typing(typing_fn)
+        _send(tg, chat_id, DONE_PRIVAT)
+        # ONB-11 Schritt 5b: Bestätigung in der Familien-Gruppe.
+        _send(tg, family_group_chat_id, DONE_GRUPPE % anzeige)
+        return AnbieterWechselnResult(
+            ergebnis=ERGEBNIS_GEWECHSELT, neuer_anbieter=neuer_name)
+
+    # ONB-11 Pfad B Schritt 2 + 3: Key-Eingabe + Validierungs-Ping.
+    # Schleife: bei ungültigem Key erneut fragen.
     while True:
         fire_typing(typing_fn)
         _send(tg, chat_id, ASK_KEY % anzeige)
@@ -264,18 +299,16 @@ def anbieter_wechseln(tg, chat_id, user_id, family_group_chat_id,
             _send(tg, chat_id, KEY_INVALID % anzeige)
             continue
 
-        # ONB-11 Schritt 4: Schreiben in den ZD-Speicher (ONB-12).
-        # Jedes `zd.set()` ist einzeln atomar (DCOMP-4). Zwischen den zwei
-        # Aufrufen besteht ein Race-Fenster (V1-bekannter Schwachpunkt,
-        # ONB-12-Race-Fenster): scheitert der zweite `set()` (provider_name),
-        # ist der Speicher im Zustand „neuer api_key, alter provider_name".
-        # Reihenfolge: api_key zuerst — bei provider_name-Versagen schlägt
-        # der alte Adapter mit dem neuen Key sofort sichtbar fehl (schneller
-        # Fehler statt stiller Fehlleitung). Vollständige Atomarität erfordert
-        # Multi-Key-Atomic in ZD-Schicht — Folge-Ticket (nicht #639).
+        # ONB-11 Schritt 4: atomares Schreiben in den ZD-Speicher (ONB-12 V2).
+        # `set_multi` schreibt beide Werte in EINEM `_write`-Vorgang
+        # (DCOMP-4): vendor-Slot (eltern-chat-<vendor>-api-key) und
+        # provider-name. Scheitert der Schreibvorgang, bleibt die alte Datei
+        # byte-gleich — Race-Fenster aus #639/V1 ist geschlossen (T663 Welle A).
         try:
-            zd.set(ZD_NAME_PROVIDER_API_KEY, key)
-            zd.set(ZD_NAME_PROVIDER_NAME, neuer_name)
+            zd.set_multi({
+                vendor_slot: key,
+                ZD_NAME_PROVIDER_NAME: neuer_name,
+            })
         except StoreError as e:
             logging.error("anbieter_wechseln: ZD-Schreibvorgang fehlgeschlagen (%s) "
                           "— alter Eintrag bleibt", e)

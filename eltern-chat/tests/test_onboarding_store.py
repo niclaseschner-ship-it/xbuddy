@@ -13,6 +13,7 @@ from onboarding_store import (
     ZD_NAME_FAMILY_GROUP,
     ZD_NAME_PROVIDER_API_KEY,
     OnboardingStore,
+    zd_name_provider_api_key,
 )
 
 from tools.zugangsdaten import Zugangsdaten
@@ -90,3 +91,63 @@ def test_ONB_5_persists_across_instances(tmp_path):
     OnboardingStore(zd=Zugangsdaten(zd_path)).save(provider_api_key="sk-x")
     assert OnboardingStore(
         zd=Zugangsdaten(zd_path)).load()["provider_api_key"] == "sk-x"
+
+
+# -- T663 Welle A: load(provider_name=...) read-both ---------------------
+
+def test_load_reads_vendor_slot_first(tmp_path):
+    """T663 Welle A: load(provider_name='claude') liest vendor-Slot zuerst
+    (`eltern-chat-claude-api-key`), nicht den Single-Slot."""
+    zd = _zd(tmp_path)
+    zd.set(zd_name_provider_api_key("claude"), "sk-ant-vendor-key")
+    zd.set(ZD_NAME_PROVIDER_API_KEY, "sk-ant-single-slot-key")   # darf NICHT gewinnen
+    loaded = OnboardingStore(zd=zd).load(provider_name="claude")
+    assert loaded["provider_api_key"] == "sk-ant-vendor-key", (
+        "Welle A: vendor-Slot muss vor Single-Slot kommen")
+
+
+def test_load_falls_back_to_single_slot(tmp_path):
+    """T663 Welle A: vendor-Slot leer/fehlend → Fallback auf Single-Slot
+    (Welle B entfernt diesen Pfad später)."""
+    zd = _zd(tmp_path)
+    # Nur Single-Slot gesetzt — kein vendor-Slot.
+    zd.set(ZD_NAME_PROVIDER_API_KEY, "sk-mistral-single-only")
+    loaded = OnboardingStore(zd=zd).load(provider_name="mistral")
+    assert loaded["provider_api_key"] == "sk-mistral-single-only", (
+        "Welle A: Fallback auf Single-Slot wenn vendor-Slot leer")
+
+
+def test_load_falls_back_when_vendor_slot_empty_string(tmp_path):
+    """R8 truthy-Check: leerer String im vendor-Slot zählt als nicht gesetzt
+    und triggert Fallback auf Single-Slot."""
+    zd = _zd(tmp_path)
+    zd.set(zd_name_provider_api_key("claude"), "")   # leer → truthy-False
+    zd.set(ZD_NAME_PROVIDER_API_KEY, "sk-single-wins")
+    loaded = OnboardingStore(zd=zd).load(provider_name="claude")
+    assert loaded["provider_api_key"] == "sk-single-wins", (
+        "R8: leerer vendor-Slot muss Fallback auslösen, nicht als Wert gelten")
+
+
+def test_load_default_no_provider_name_unchanged(tmp_path):
+    """Default-Verhalten: load() ohne provider_name liest weiterhin nur den
+    Single-Slot (kein Bruch für config.py-Bootstrap)."""
+    zd = _zd(tmp_path)
+    zd.set(zd_name_provider_api_key("claude"), "sk-ant-vendor-key")   # da, aber ignoriert
+    # Kein Single-Slot gesetzt → kein provider-Key im Ergebnis.
+    loaded = OnboardingStore(zd=zd).load()
+    assert "provider_api_key" not in loaded, (
+        "Default-Verhalten: ohne provider_name darf der vendor-Slot NICHT "
+        "gelesen werden — sonst Bruch für config.py-Bootstrap")
+
+
+def test_zd_name_provider_api_key_helper():
+    """Helper baut den Slot-Namen aus dem Vendor-Slug (SD1)."""
+    assert zd_name_provider_api_key("claude") == "eltern-chat-claude-api-key"
+    assert zd_name_provider_api_key("mistral") == "eltern-chat-mistral-api-key"
+
+
+def test_zd_name_provider_api_key_rejects_empty():
+    """Helper wirft auf leeren Vendor-Namen."""
+    import pytest
+    with pytest.raises(ValueError, match="vendor"):
+        zd_name_provider_api_key("")
