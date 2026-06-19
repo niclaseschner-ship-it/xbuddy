@@ -253,10 +253,14 @@ def test_audio_endpoint_album_nicht_gefunden_404(client_mini):
 #  HSP-36-Resume (HSP-40)
 # ============================================================
 
-def test_resume_get_kein_stand_404(client_mini):
-    """HSP-36: kein Resume-Stand → 404."""
-    resp = client_mini.get("/api/v1/hoerspiel/paula/resume?album=folge-1")
-    assert resp.status_code == 404
+def test_resume_get_kein_stand_200_default(client_mini):
+    """HSP-36 (geändert): kein Resume-Stand → 200 mit Default-Body, kein 404."""
+    resp = client_mini.get("/api/v1/hoerspiel/paula/resume?album=folge-unbekannt")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["album"] == "folge-unbekannt"
+    assert body["track"] == 0
+    assert body["status"] == "neu"
 
 
 def test_resume_put_und_get(client_mini):
