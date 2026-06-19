@@ -1,7 +1,7 @@
 """Vendor-neutrale Telegram-Mini-App-Init-Data-Validierung (HMAC-SHA256).
 
 Quelle/Algorithmus: Telegram Mini App web_app_data-Doku.
-https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
+https://core.telegram.org/bots/webapps#validating-data-received-via-die-mini-app
 
 Schritte (AC5):
   1. Eingabe = URL-encoded Query-String (query_id=...&user=...&auth_date=...&hash=...).
@@ -14,13 +14,21 @@ Schritte (AC5):
   8. auth_date prüfen: now - auth_date > max_age_seconds → abgelaufen.
 
 Vendor-Adapter-Disziplin (RAT-16): diese Datei kennt nur Standard-Python;
-kein `telegram`-Import; kein Telegram-SDK-Vokabular. Konsumenten: seiten-Service
-(Mini-App-Middleware) und essen-Buddy.
+kein `telegram`-Import; kein Telegram-SDK-Vokabular. Konsumenten: alle
+Service-Mini-App-Auth-Decorators (essen, hoerspiel, routine, seiten).
 
-Konfig-Lader (AC3): max_age_seconds aus eltern-chat/init_data.json
-(Default 86400). Override per ENV ELTERNCHAT_INIT_DATA_MAX_AGE_SECONDS.
-Telegram-Doku definiert keinen festen Ablauf — Default 86400 (24h),
-konfigurierbar per JSON-Datei und ENV-Variable; kein hardcoded 3600.
+Wohnort (T1015 / Cluster-A-Option-B, ratifiziert 2026-06-18-1720): die Lib
+lebt unter `tools/initdata/`, damit Services aus tools/ importieren statt
+per sys.path-Hack auf eltern-chat (MOD-4 / MOD-6).
+
+Konfig-Lader (AC3): max_age_seconds aus init_data.json. Default-Pfad-Suche
+in dieser Reihenfolge:
+  1. `eltern-chat/init_data.json` relativ zur Repo-Wurzel (alte Wohnort-
+     Konvention, Per-Familie-Override-Konsumenten wie systemd-EnvironmentFile),
+  2. `init_data.json` neben diesem Modul (Default-Fall).
+Override per ENV ELTERNCHAT_INIT_DATA_MAX_AGE_SECONDS (ENV-Name unverändert,
+damit existierende systemd-EnvironmentFiles weiterlaufen — die ENV ist Vertrag,
+der Modul-Pfad nur Implementierung).
 """
 
 from __future__ import annotations
@@ -40,10 +48,18 @@ from dataclasses import dataclass
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
+# Repo-Wurzel: tools/initdata/init_data.py -> tools/initdata -> tools -> Repo.
+_REPO_ROOT = os.path.dirname(os.path.dirname(_HERE))
+
+# Default-Pfad-Reihenfolge (T1015):
+#   1. eltern-chat/init_data.json (alter Wohnort; per Familie ggf. gepflegt)
+#   2. init_data.json neben dem Modul (Fallback nach Move).
+_LEGACY_CONFIG_PATH = os.path.join(_REPO_ROOT, "eltern-chat", "init_data.json")
 _DEFAULT_CONFIG_PATH = os.path.join(_HERE, "init_data.json")
 
 # ENV-Variable für Override (AC3, CONFIG-5: ENV-Overrides folgen <COMPONENT>_<KEY>-Schema.
-# Lib lebt in eltern-chat/, daher ELTERNCHAT_-Präfix.)
+# ENV-Name bleibt ELTERNCHAT_-präfixiert: das ist Vertrag mit den heutigen
+# systemd-EnvironmentFiles. Modul-Pfad-Move (T1015) ändert die ENV nicht.
 _ENV_MAX_AGE = "ELTERNCHAT_INIT_DATA_MAX_AGE_SECONDS"
 
 _DEFAULT_MAX_AGE_SECONDS = 86400  # 24 h — Telegram-Doku definiert keinen festen Ablauf
@@ -74,24 +90,34 @@ class InitData:
 
 
 def load_config(path: str | None = None) -> dict:
-    """Lädt init_data.json. Default-Pfad: eltern-chat/init_data.json relativ zur Lib.
+    """Lädt init_data.json. Default-Pfad-Suche (T1015):
+
+      1. expliziter `path`-Parameter, wenn übergeben
+      2. eltern-chat/init_data.json (Legacy-Wohnort vor T1015-Move)
+      3. init_data.json neben tools/initdata/init_data.py
 
     ENV ELTERNCHAT_INIT_DATA_MAX_AGE_SECONDS überschreibt max_age_seconds (AC3).
     Fehlt die Datei: nur Defaults + ENV.
     Defaults: max_age_seconds=86400 (Praxis-Empfehlung 24h; kein hardcoded 3600).
     """
-    effective_path = path or _DEFAULT_CONFIG_PATH
-
     config: dict = {"max_age_seconds": _DEFAULT_MAX_AGE_SECONDS}
 
-    # Datei-Wert — Fehler beim Lesen/Parsen → Defaults bleiben stehen.
-    try:
-        with open(effective_path, encoding="utf-8") as fh:
-            data = json.load(fh)
-        if isinstance(data, dict) and "max_age_seconds" in data:
-            config["max_age_seconds"] = int(data["max_age_seconds"])
-    except (FileNotFoundError, OSError, json.JSONDecodeError, TypeError, ValueError):
-        pass
+    kandidaten = (
+        (path,) if path is not None
+        else (_LEGACY_CONFIG_PATH, _DEFAULT_CONFIG_PATH)
+    )
+
+    # Erster lesbarer Pfad gewinnt. Fehler werden geschluckt — Defaults
+    # bleiben stehen, falls keine Datei aufgelöst wurde.
+    for kandidat in kandidaten:
+        try:
+            with open(kandidat, encoding="utf-8") as fh:
+                data = json.load(fh)
+            if isinstance(data, dict) and "max_age_seconds" in data:
+                config["max_age_seconds"] = int(data["max_age_seconds"])
+            break
+        except (FileNotFoundError, OSError, json.JSONDecodeError, TypeError, ValueError):
+            continue
 
     # ENV-Override (höchste Priorität, AC3)
     env_val = os.environ.get(_ENV_MAX_AGE)

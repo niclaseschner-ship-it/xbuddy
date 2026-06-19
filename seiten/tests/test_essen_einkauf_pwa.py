@@ -26,10 +26,11 @@ _REPO_ROOT = os.path.dirname(_SEITEN_DIR)
 _PWA_DIR = os.path.join(_SEITEN_DIR, "static", "einkauf")
 
 sys.path.insert(0, _REPO_ROOT)
-sys.path.insert(0, os.path.join(_REPO_ROOT, "eltern-chat"))
+
+# T1015: init_data lebt unter tools.initdata; kein sys.path-Hack mehr auf
+# eltern-chat (Cluster-A-Option-B 2026-06-18-1720, MOD-6-Allowlist-Schmelze).
 
 from seiten import main as seiten_main  # noqa: E402
-
 
 _ENTRY_PATH = "/seiten/essen/einkauf"
 _ASSET_PREFIX = "/seiten/essen/einkauf/"
@@ -49,7 +50,7 @@ def reset_runtime(monkeypatch):
     rt_snapshot = {
         "bot_token":          seiten_main.runtime.get("bot_token"),
         "init_data_config":   seiten_main.runtime.get("init_data_config"),
-        "familie_json_path":  seiten_main.runtime.get("familie_json_path"),
+        "familie_client":     seiten_main.runtime.get("familie_client"),
         "inventar_path":      seiten_main.runtime.get("inventar_path"),
     }
     seiten_main.configure(

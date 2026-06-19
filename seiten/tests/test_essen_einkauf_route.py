@@ -32,11 +32,11 @@ _SEITEN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _REPO_ROOT = os.path.dirname(_SEITEN_DIR)
 sys.path.insert(0, _REPO_ROOT)
 
-# eltern-chat muss importierbar sein (Lego-Basis)
-_ELTERN_CHAT_DIR = os.path.join(_REPO_ROOT, "eltern-chat")
-sys.path.insert(0, _ELTERN_CHAT_DIR)
+# T1015: init_data lebt unter tools.initdata; kein sys.path-Hack mehr auf
+# eltern-chat (Cluster-A-Option-B 2026-06-18-1720).
 
 from seiten import main as seiten_main  # noqa: E402
+from seiten.tests._familie_test_doppel import FileFakeFamilieClient  # noqa: E402
 
 # ── Hilfs-Funktionen fuer initData-Erzeugung ─────────────────────────────────
 
@@ -98,7 +98,7 @@ def reset_runtime(monkeypatch):
         inventar_path=None,
         bot_token=BOT_TOKEN,
         init_data_config={"max_age_seconds": 86400},
-        # familie_json_path=None → FAM-Check uebersprungen (fail-open)
+        # familie_client=None → FAM-Check uebersprungen (fail-open, T1015)
     )
     seiten_main.app.config["TESTING"] = True
     # Stub fuer Holer: keine echten HTTP-Calls
@@ -214,7 +214,7 @@ def test_ac4_fremde_user_id_liefert_200_skeleton(client, tmp_path):
     familie = {"erwachsene": [{"id": "p1", "name": "Elter", "ring": "blue", "telegram_id": 99999}], "kinder": []}
     f = tmp_path / "familie.json"
     f.write_text(__import__("json").dumps(familie), encoding="utf-8")
-    seiten_main.runtime["familie_json_path"] = str(f)
+    seiten_main.runtime["familie_client"] = FileFakeFamilieClient(str(f))
 
     # User-ID 42 ist nicht in der Registry (nur 99999 ist drin)
     init_data = _baue_init_data(user_id=42)
@@ -227,7 +227,7 @@ def test_ac4_fremde_user_id_liefert_200_skeleton(client, tmp_path):
     assert body is not None
 
     # Cleanup
-    seiten_main.runtime["familie_json_path"] = None
+    seiten_main.runtime["familie_client"] = None
 
 
 def test_ac4_bekannte_user_id_liefert_200(client, tmp_path):
@@ -235,7 +235,7 @@ def test_ac4_bekannte_user_id_liefert_200(client, tmp_path):
     familie = {"erwachsene": [{"id": "p1", "name": "Elter", "ring": "blue", "telegram_id": 42}], "kinder": []}
     f = tmp_path / "familie.json"
     f.write_text(__import__("json").dumps(familie), encoding="utf-8")
-    seiten_main.runtime["familie_json_path"] = str(f)
+    seiten_main.runtime["familie_client"] = FileFakeFamilieClient(str(f))
 
     init_data = _baue_init_data(user_id=42)
     resp = client.get(
@@ -245,7 +245,7 @@ def test_ac4_bekannte_user_id_liefert_200(client, tmp_path):
     assert resp.status_code == 200
 
     # Cleanup
-    seiten_main.runtime["familie_json_path"] = None
+    seiten_main.runtime["familie_client"] = None
 
 
 # ── AC3 — HTML-Render: statisches Skelett korrekt ────────────────────────────
