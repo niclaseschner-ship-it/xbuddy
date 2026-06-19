@@ -208,7 +208,7 @@ function toggleItem(itemId) {
 
   var aufstehenMs = new Date(track.dataset.aufstehenIso).getTime();
   var losgehenMs  = new Date(track.dataset.losgehenIso).getTime();
-  var anziehenpct = parseFloat(track.dataset.anziehenpct);  /* bereits in % [0..100] */
+  var anziehenpct = parseFloat(track.dataset.anziehenPct);  /* bereits in % [0..100] */
   var zeitfensterMs = losgehenMs - aufstehenMs;
 
   var elapsedEl = document.getElementById('timeline-elapsed');
