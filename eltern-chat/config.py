@@ -294,7 +294,14 @@ def resolve(config_path, zd=None):
         raise ConfigError("%s ist nicht gesetzt (Pflicht, EC-15)" % ENV_BOT_TOKEN)
 
     # Anbieter-Key: Env > Onboarding-Speicher > leer (→ Onboarding-Modus, ONB-1).
-    store = OnboardingStore(zd=zd).load()
+    # T663 Welle A (Watchdog B1): provider_name=values["provider"] aktiviert die
+    # read-both-Naht in OnboardingStore.load — der vendor-spezifische Slot
+    # (`eltern-chat-<vendor>-api-key`, Brand-Vendor via vendor_slug_for_adapter)
+    # gewinnt vor dem Single-Slot. Triggert auch die lazy-Migration (Welle A,
+    # ONB-13): vendor-Slot leer + Single-Slot gefüllt → einmaliger Kopier-
+    # Schreibvorgang in den vendor-Slot beim Bootstrap.
+    provider_adapter = str(values["provider"]).strip()
+    store = OnboardingStore(zd=zd).load(provider_name=provider_adapter)
     provider_api_key = (os.environ.get(ENV_PROVIDER_API_KEY)
                         or store.get(KEY_PROVIDER_API_KEY)
                         or "").strip()

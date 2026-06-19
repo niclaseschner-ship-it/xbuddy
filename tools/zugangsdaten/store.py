@@ -102,6 +102,38 @@ class Zugangsdaten:
         # ZD-6: bestätigt wird nur der Name, nie der Wert.
         logger.info("Zugangsdate gesetzt: %s", name)
 
+    def set_multi(self, pairs):
+        """Setzt mehrere Zugangsdaten in EINEM atomaren Schreibvorgang (DCOMP-4).
+
+        `pairs` ist ein dict Name → Wert. Alle Paare landen in genau einem
+        `_write()`-Aufruf — entweder alle oder keine (kein partieller Zustand).
+        Schlägt der Schreibvorgang fehl, wirft `_write` `StoreError` und die
+        Ziel-Datei bleibt unverändert (alte Werte byte-gleich erhalten).
+
+        Naht-Vertrag: `set()` bleibt die Single-Key-Naht und ist unverändert;
+        `set_multi` ist die ergänzende Multi-Key-Naht (T663 Welle A). Aufrufer
+        mit zwei zusammengehörigen Werten (z. B. vendor-Slot + provider-name
+        in ONB-11 Pfad B) verwenden `set_multi`, damit das Race-Fenster zwischen
+        zwei separaten `set()`-Aufrufen geschlossen ist.
+
+        ZD-6: protokolliert werden nur die Namen, nie die Werte.
+        """
+        if not isinstance(pairs, dict):
+            raise ValueError(
+                "set_multi erwartet ein dict Name → Wert")
+        if not pairs:
+            # Nichts zu tun — kein Schreibvorgang, kein Log-Lärm.
+            return
+        for name in pairs:
+            if not isinstance(name, str) or not name:
+                raise ValueError(
+                    "Zugangsdaten-Name muss ein nicht-leerer String sein")
+        data = self._load()
+        data.update(pairs)
+        self._write(data)
+        # ZD-6: nur die Namen ins Log, nie die Werte. Sortiert für stabile Logs.
+        logger.info("Zugangsdaten gesetzt: %s", sorted(pairs.keys()))
+
     def _write(self, data):
         """Schreibt `data` als JSON atomar nach `self.path` mit Rechten 0600 (ZD-3, DCOMP-4).
 
