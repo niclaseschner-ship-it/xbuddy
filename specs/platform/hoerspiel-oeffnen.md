@@ -11,77 +11,74 @@
 > TASK-10 / TASK-10c Form (b) → MAD-7 + MAD-10 (Launcher).
 
 Damit ein Elternteil **im Eltern-Chat** die Hörspiel-Eltern-Mini-App
-(HSP-33) **öffnen** kann — entweder zum **Einstellungen-Tunen** („Stimme
-ändern", „LLM-Anbieter wechseln", „Tempo justieren") oder zum **Folgen-
-Anhören** auf dem eigenen Handy („Hörbuch starten", „Folge abspielen") —
-definiert diese Spec **Hörspiel öffnen als aufrufbare Funktion**: Sie
-antwortet im Chat mit einer **kompakten Übersichts-Nachricht** + einem
-`web_app`-Inline-Button, der die Eltern-Mini-App im Telegram-Overlay öffnet
-und über einen URL-Hash direkt den passenden Tab aktiviert (HSP-33
-Tab-Deeplink).
+(HSP-33) zum **Folgen-Anhören** auf dem eigenen Handy öffnen kann
+(„Hörbuch starten", „Folge abspielen") — definiert diese Spec **Hörspiel
+öffnen als aufrufbare Funktion**: Sie antwortet im Chat mit einer
+**kompakten Übersichts-Nachricht** + einem `web_app`-Inline-Button, der
+die Eltern-Mini-App im Telegram-Overlay direkt im Folgen-Tab öffnet
+(HSP-33 / HSP-35).
 
 Im Unterschied zu **HFE** (`hoerspiel-folge-erzeugen.md`, Klasse C) — der
 **erzeugt** neue Folgen über `propose()` + `execute()` — schreibt HOE
-**nichts**: es ist reiner Türöffner zur Mini-App, in der die Schreib-
-Wirkungen (Settings via HSP-34 `PATCH /config`) bzw. die Wiedergabe
-(HSP-35 Multi-Track-Player) passieren.
+**nichts**: es ist reiner Türöffner zur Mini-App, in der die Wiedergabe
+(HSP-35 Multi-Track-Player) passiert.
 
 **Plus:** dieser Skill ist der **dritte Mini-App-Türöffner** des
 Eltern-Chats nach `einkauf-zeigen.md` (EZG, n=1) und
 `routine-anpassen-oeffnen.md` (RAO, n=2). Stil-Anker und Vertrag bewusst
-gespiegelt; das **Neue** an HOE ist die **Tab-Hint-Mechanik** (HOE-1,
-HOE-3, HOE-4, HOE-5), weil die Eltern-Mini-App zwei strukturell
-verschiedene Anliegen unter einer URL bedient.
+gespiegelt — bewährter Klasse-B-Türöffner ohne eigene Mechanik-Erweiterung.
 
-**V1-Scope:** kompakte Übersichts-Nachricht im Chat (Counter passend zur
-Trigger-Klasse) · `web_app`-Inline-Button mit Mini-App-URL inkl.
-URL-Hash-Fragment (`#einstellungen` oder `#folgen`) · Trigger-Phrasen für
-LLM-Intent in zwei Klassen.
+**Anti-Redundanz-Setzung (2026-06-19 Refs #1028):** Was in der
+Hörspiel-Mini-App eingestellt werden kann (Voice, LLM-Anbieter, Modell,
+Tempo, Pausen — HSP-34 Einstellungen-Tab), **wird NICHT** zusätzlich
+über einen Eltern-Chat-Skill zum Einstellen angeboten. Bei
+Settings-Triggern verweist der Eltern-Chat-Agent **sprachlich** auf die
+Mini-App (siehe `eltern-chat/agent.py`-System-Prompt). Begründung:
+Bot-seitiger Settings-Read würde dasselbe doppeln, was die Mini-App
+ohnehin zeigt + ändern kann — Komplexität ohne Mehrwert.
+
+**V1-Scope:** kompakte Folgen-Übersichts-Nachricht im Chat (Album-Counter
++ Hinweis auf zuletzt erzeugte Folge) · `web_app`-Inline-Button mit
+Mini-App-URL inkl. URL-Hash-Fragment `#folgen` · Trigger-Phrasen für
+LLM-Intent (Folgen-Klasse, siehe HOE-3).
 
 **Out-of-Scope V1** (je eigenes Ticket, sobald gebraucht):
 
-- **Per-Kind-Auswahl im Chat** (welcher Hörspiel-Buddy soll geöffnet
-  werden) — V1 hat **einen** Hörspiel-Buddy je Familien-Instanz (Mia);
-  Mehr-Kind-Petrallgemeinerung folgt einem Familien-Schnittstellen-
-  Folge-Ticket.
-- **Direkter Deeplink auf eine einzelne Folge oder einen einzelnen
-  Settings-Slider** („öffne direkt den Voice-Wähler" / „spiel Folge 7
-  ab") — V1 öffnet den ganzen Tab, dort wählt Eltern aus.
+- **Settings-Tab über HOE-Skill** — siehe Anti-Redundanz-Setzung oben.
+  Agent verweist sprachlich auf die App.
+- **Per-Kind-Auswahl im Chat** — HOE öffnet `mia` als festen Launcher;
+  HSP-35 aggregiert beide V1-Kinder (Mia + Finn) clientseitig im
+  Folgen-Tab. Eine eigene Per-Kind-Auswahl wäre Re-Doppelung der
+  clientseitigen Aggregation.
+- **Direkter Deeplink auf einzelne Folge** („spiel Folge 7 ab") — V1
+  öffnet den ganzen Folgen-Tab, dort wählt Eltern aus.
 - **Volltext-Liste der Alben im Chat** — wer eine Liste „was hat Mia
   schon?" im Chat will, kriegt das von einem separaten Lese-Skill
   (analog WZE für die Einkaufsliste). HOE ist Aktiv-werden-Trigger,
   nicht Lese-Skill.
-- **Anbieter-Wechsel-Confirm im Chat** — der Wechsel von
-  LLM-Provider/-Modell lebt seit Werft-Lauf 2026-06-15 (Refs #848,
-  schließt OPEN-HSP-N #750) in der Mini-App (HSP-34 `PATCH /config`).
-  HOE öffnet die Mini-App, der Wechsel selbst passiert dort.
 
 ---
 
-## HOE-1 — Hörspiel öffnen ist eine aufrufbare Funktion (Tab-aware)
+## HOE-1 — Hörspiel öffnen ist eine aufrufbare Funktion (Folgen-Türöffner)
 
 „Hörspiel öffnen" ist eine klar abgegrenzte, **aufrufbare Funktion**.
 **Eingang:**
 
 - die Telegram-Chat-Identität (Gruppen-Chat-ID / Privatchat-ID),
-- die Telegram-User-ID des Aufrufers,
-- ein **Tab-Hint** mit Wertebereich `"einstellungen" | "folgen"`. Der
-  Tab-Hint wird vom Eltern-Chat-Agent aus der Trigger-Phrase abgeleitet
-  (LLM-Intent, siehe HOE-3) und als Skill-Parameter übergeben. Default
-  bei Mehrdeutigkeit: `"einstellungen"` (analog dem Default-Tab in
-  HSP-33).
+- die Telegram-User-ID des Aufrufers.
 
-**Wirkung:** ein lesender Buddy-Aufruf passend zur Trigger-Klasse —
-**keine** Familien-Daten-Änderung:
+Kein Tab-Parameter — HOE öffnet immer den **Folgen-Tab** der Hörspiel-
+Mini-App. Settings-Trigger werden vom Eltern-Chat-Agent **nicht** über
+HOE bedient, sondern sprachlich auf die App verwiesen (Anti-Redundanz-
+Setzung, siehe Eingangs-Block + `eltern-chat/agent.py`-System-Prompt).
 
-- Tab-Hint `"einstellungen"` → `GET /api/v1/hoerspiel/config` (HSP-17,
-  liefert aktuellen `default_voice`, `llm_provider`, `llm_model`).
-- Tab-Hint `"folgen"` → `GET /api/v1/hoerspiel/alben` (existing, liefert
-  Album-Liste mit `folgen_nr`, `titel`, `erstellt_am`).
+**Wirkung:** ein lesender Buddy-Aufruf an `GET /api/v1/hoerspiel/mia/alben`
+(fester Launcher, HSP-35 aggregiert beide V1-Kinder clientseitig) —
+**keine** Familien-Daten-Änderung.
 
 **Ausgang:** eine **kompakte Bot-Nachricht** im aufrufenden Chat mit
-Counter / Status passend zur Trigger-Klasse + Inline-Button auf die
-Mini-App mit dem korrekten URL-Hash (HOE-5).
+Album-Counter + Hinweis auf zuletzt erzeugte Folge + Inline-Button auf
+die Mini-App mit URL-Hash `#folgen` (HOE-5).
 
 Die Funktion ist **trigger-agnostisch** (E-HOE-1 analog E-RAO-1,
 E-EZG-1).
@@ -98,66 +95,41 @@ Bearbeitungs-/Wiedergabe-UI; die fachliche Schreibe in der Mini-App selbst
 hat dort ihre eigene Auth (MAD-7: `Authorization: tma <initData>`-Header,
 ratifiziert 2026-06-15).
 
-## HOE-3 — Trigger-Phrasen (für LLM-Intent, zwei Klassen)
+## HOE-3 — Trigger-Phrasen (für LLM-Intent, Folgen-Klasse)
 
-Der Eltern-Chat-Agent erkennt zwei Phrasen-Klassen als HOE-Aufruf
+Der Eltern-Chat-Agent erkennt eine Phrasen-Klasse als HOE-Aufruf
 (Beispiele, nicht abschließend — die LLM-Intent-Erkennung ist im
-Agent-Prompt petrankert, nicht im Skill, EC-30-Trennlinie). Die Klasse
-bestimmt den Tab-Hint, den der Agent als Skill-Parameter übergibt
-(HOE-1 Eingang).
+Agent-Prompt petrankert, nicht im Skill, EC-30-Trennlinie):
 
-**Settings-Klasse → Tab-Hint `"einstellungen"`:**
-
-- „Voice ändern" / „Stimme anpassen" / „Stimme wechseln"
-- „LLM-Anbieter wechseln" / „Anbieter ändern" / „auf Mistral wechseln"
-- „Modell wechseln" / „anderes Modell"
-- „Hörbuch-Einstellungen ändern" / „Hörspiel-Settings"
-- „Tempo ändern" / „Playback-Geschwindigkeit"
-- „Pausen tunen" / „Pause nach Absatz ändern"
-
-**Folgen-Klasse → Tab-Hint `"folgen"`:**
+**Folgen-Klasse → HOE-Aufruf:**
 
 - „Hörbuch hören" / „Hörspiel hören"
 - „Folge starten auf dem Handy" / „Hörbuch auf dem Handy"
 - „Folge abspielen" / „Hörspiel-Folge anhören"
 - „letzte Folge auf dem Telefon weiterhören"
-- „Hörspiel-App öffnen" (mehrdeutig — Default `"einstellungen"` per
-  HOE-1, weil HSP-33 die Einstellungen als Default-Tab definiert)
+- „Hörspiel-App öffnen" / „Hörbuch-App öffnen"
+
+**Settings-Trigger sind KEIN HOE-Aufruf** (Anti-Redundanz-Setzung).
+Eltern-Nachrichten der Form „Voice ändern", „Anbieter wechseln",
+„Modell wechseln", „Tempo ändern", „Pausen tunen", „auf Mistral
+wechseln" beantwortet der Agent **sprachlich** mit einem Verweis auf
+die Hörspiel-Mini-App (siehe `eltern-chat/agent.py`-System-Prompt) —
+**kein** Tool-Call. Eltern hat dort den Settings-Tab erreichbar (z.B.
+über den HFE-10-Settings-Beifang-Button in einer HFE-Antwort oder über
+die persistente Bot-Menü-Verlinkung).
 
 **Abgrenzung zu HFE:** Wenn die Eltern-Frage nach **Erzeugen** einer
 **neuen** Folge klingt („schreib eine Folge über Mut", „mach Mia ein
 neues Hörspiel"), nutzt der Agent **HFE** (Klasse-C-Erzeugen-Skill,
 `hoerspiel-folge-erzeugen.md`). Wenn die Frage nach **Öffnen** der
-Bearbeitungs-/Wiedergabe-UI klingt, nutzt er HOE. Im Zweifel: HOE
-(öffnet die Mini-App, dort sieht Eltern alles).
-
-**Abgrenzung Provider-/Modell-Wechsel:** Eltern-Nachrichten der Form
-„wechsel auf mistral" werden vom Agent **als HOE-Trigger der
-Settings-Klasse** interpretiert — der Agent ruft HOE mit
-`tab="einstellungen"`, der eigentliche Wechsel passiert in der Mini-App
-(HSP-34). Dies löst gleichzeitig HFE-6 (Provider-Wechsel-Hinweis-Text)
-ab: statt nur Hinweis-Text + kein Skill-Aufruf, ruft der Agent jetzt
-HOE.
+Wiedergabe-UI klingt, nutzt er HOE.
 
 ## HOE-4 — Bot-Antwort + Form-(b)-Dict (TASK-10c)
 
 Der Skill antwortet im selben Chat mit **einer Bot-Nachricht** und gibt
 einen **TASK-10c Form-(b)-Dict** zurück: `{text, presentation:
 {inline_button: {label, web_app_url}}}` (analog RAO-5). **Genau ein
-Button** pro Aufruf — Label und Hash-Fragment passend zur Trigger-Klasse:
-
-**Settings-Variante** (Tab-Hint `"einstellungen"`):
-
-```
-🎧 Hörspiel-Einstellungen — Voice: <voice>, Anbieter: <provider>/<model>
-
-[⚙️ Einstellungen öffnen]   ← web_app-Inline-Button, Hash #einstellungen
-```
-
-Mit `<voice>` = `default_voice` aus `GET /config`,
-`<provider>/<model>` = `llm_provider` + `llm_model`.
-
-**Folgen-Variante** (Tab-Hint `"folgen"`):
+Button** pro Aufruf — fester `#folgen`-Hash, weil HOE Folgen-only ist:
 
 ```
 🎧 Hörspiel — N Folgen (zuletzt: Folge <nr> „<titel>")
@@ -165,10 +137,12 @@ Mit `<voice>` = `default_voice` aus `GET /config`,
 [🎧 Folgen anhören]   ← web_app-Inline-Button, Hash #folgen
 ```
 
-Mit `N` = Album-Anzahl, `<nr>`/`<titel>` aus dem Album mit höchster
-`folgen_nr`. Die zweite Zeile fällt weg, wenn `N = 0` (siehe E-HOE-3).
+Mit `N` = Album-Anzahl aus `GET /api/v1/hoerspiel/mia/alben` (fester
+Launcher; HSP-35 aggregiert beide V1-Kinder clientseitig im Folgen-Tab).
+`<nr>`/`<titel>` aus dem Album mit höchster `folgen_nr`. Die zweite
+Zeile fällt weg, wenn `N = 0` (siehe E-HOE-3).
 
-**Sonderfall „leerer Album-Bestand" (Folgen-Variante):**
+**Sonderfall „leerer Album-Bestand":**
 
 ```
 🎧 Hörspiel — noch keine Folge vorhanden. Sag mir Bescheid, wenn ich eine schreiben soll.
@@ -182,26 +156,20 @@ ist genau der Ort, an dem Eltern den Folgen-Tab kennenlernen kann, auch
 wenn er heute leer ist. Eine leere Album-Liste ist Anfangszustand, kein
 Endzustand wie eine leere Einkaufsliste.
 
-**Implementations-Hinweis (für Track HSP-3):** Der Eltern-Chat-Agent muss
-die Trigger-Klasse via LLM-Intent erkennen und an den Skill als
-`tab`-Parameter übergeben — der Skill rät NICHT selbst aus dem
-Eingabe-Text. Damit bleibt die Intent-Erkennung im Agent-Prompt
-(EC-30-Trennlinie konsistent zu HFE-3, EZG-3, RAO-3).
-
 ## HOE-5 — Mini-App-URL inkl. URL-Hash-Fragment
 
 Der Button trägt das Telegram-`web_app`-Feld mit der Mini-App-URL plus
-URL-Hash-Fragment passend zum Tab-Hint:
+festem `#folgen`-Hash:
 
 ```
-https://<funnel-domain>/seiten/hoerspiel/eltern#einstellungen
-https://<funnel-domain>/seiten/hoerspiel/eltern#folgen
+https://<funnel-domain>/seiten/hoerspiel/mia/eltern#folgen
 ```
 
-Die Mini-App liest das Hash-Fragment beim Laden und aktiviert den
-passenden Tab (HSP-33 Tab-Deeplink-Klausel). Kein Hash oder unbekannter
-Hash → Default-Tab `"einstellungen"` (HSP-33-Default, mit HOE-1-Default
-konsistent).
+Fester `mia`-Pfad als Launcher (HSP-26 URL-3a-Form verlangt `<kind_id>`
+im Pfad; HSP-35 / #973 aggregiert dann clientseitig über alle V1-Kinder,
+sodass `mia` als URL-Träger fungiert, ohne die Folgen-Liste auf Mia
+zu filtern). Die Mini-App liest das Hash-Fragment beim Laden und
+aktiviert den Folgen-Tab (HSP-33 Tab-Deeplink-Klausel).
 
 Die Funnel-Domain stammt aus der Buddy-übergreifenden Konfiguration
 (MVP-Sammler #678 / RAT-16 / EZG-6 / RAO-6 — **identische Naht**, kein
@@ -223,17 +191,20 @@ nur Query-Params ab.
 *Test-Implikation:* Skill-Test prüft, dass die gepostete Nachricht ein
 `reply_markup.inline_keyboard`-Feld mit genau einem Button-Eintrag
 enthält, dessen `web_app.url` mit `https://` beginnt, auf
-`/seiten/hoerspiel/eltern` mündet und mit `#einstellungen` oder
-`#folgen` endet — passend zum Tab-Hint-Parameter. Live-Probe: Eltern
-tippt Button im echten Telegram → Mini-App lädt mit gültiger initData
-und korrektem aktivem Tab.
+`/seiten/hoerspiel/mia/eltern` mündet und mit `#folgen` endet.
+Live-Probe: Eltern tippt Button im echten Telegram → Mini-App lädt mit
+gültiger initData und aktivem Folgen-Tab.
 
 ## HOE-6 — Out-of-Scope V1 (Wiederholung der Eingangsklauseln, konsolidiert)
 
-- **Per-Kind-Auswahl im Chat** — V1 hat einen Hörspiel-Buddy je
-  Familien-Instanz (Mia).
-- **Direkter Deeplink auf einzelne Folge / einzelne Settings-Sektion**
-  — V1 öffnet den ganzen Tab.
+- **Settings-Tab über HOE-Skill** — siehe Anti-Redundanz-Setzung im
+  Eingangs-Block. Settings (Voice, Anbieter, Modell, Tempo, Pausen)
+  lebt ausschließlich in der Mini-App (HSP-34); Eltern-Chat-Agent
+  verweist sprachlich auf die App.
+- **Per-Kind-Auswahl im Chat** — HOE öffnet `mia` als festen
+  Launcher; HSP-35 aggregiert clientseitig.
+- **Direkter Deeplink auf einzelne Folge** — V1 öffnet den ganzen
+  Folgen-Tab.
 - **Volltext-Liste der Alben im Chat** — separater Lese-Skill, wenn
   gebraucht.
 
@@ -263,17 +234,13 @@ Mini-App-Türöffner-Pattern, andere Buddy-Naht plus Tab-Hint-Parameter.
 IncomingMessage-Form). Tests decken HOE-3 bis HOE-7 mindestens je einmal
 ab; insbesondere:
 
-- HOE-1 / HOE-4 (Tab-Hint `"einstellungen"` → Lese-Aufruf an `/config`,
-  Bot-Antwort trägt Voice + Provider/Model, Button-URL endet auf
-  `#einstellungen`).
-- HOE-1 / HOE-4 (Tab-Hint `"folgen"` → Lese-Aufruf an `/alben`,
-  Bot-Antwort trägt Album-Counter, Button-URL endet auf `#folgen`).
-- HOE-1 / HOE-4 (Tab-Hint fehlt / unbekannt → Default
-  `"einstellungen"`, konsistent zu HSP-33-Default).
+- HOE-1 / HOE-4 (HOE-Aufruf → Lese-Aufruf an `/alben`, Bot-Antwort
+  trägt Album-Counter + zuletzt erzeugte Folge, Button-URL endet auf
+  `#folgen`).
 - HOE-7 (alle drei Fehler-Zeilen je einmal mit Mock-Buddy bzw.
   Konfig-Lücke).
-- E-HOE-3 (leerer Album-Bestand bei Folgen-Variante → Button **wird**
-  gepostet, kein Sonderfall-Suppress).
+- E-HOE-3 (leerer Album-Bestand → Button **wird** gepostet, kein
+  Sonderfall-Suppress).
 
 Mini-App-URL-Konfig ist im Test mockbar. Katalog-Guard-Test: alle drei
 Abhängigkeiten gesetzt → Aufgabe drin; eine fehlt → Aufgabe nicht drin.
@@ -292,21 +259,32 @@ für HOE — Eltern-Anliegen — unwahrscheinlich).
 **Verworfen:** Telegram-API-Aufrufe oder Chat-Form-Erwartungen in die
 Funktionsdefinition zu schreiben.
 
-### E-HOE-2 — Ein Türöffner-Skill für zwei Tabs (nicht zwei Skills)
+### E-HOE-2 — KEIN Settings-Türöffner im Chat (Anti-Redundanz, 2026-06-19)
 
-*Datum:* 2026-06-15 (Werft-Lauf #848, Gate B) · Die Eltern-Mini-App
-HSP-33 hat zwei Tabs (Einstellungen, Folgen). Statt zwei separater
-Türöffner-Skills (`hoerspiel_einstellungen_oeffnen`,
-`hoerspiel_folgen_oeffnen`) baut V1 **einen** Skill HOE mit
-`tab`-Parameter. Begründung: die Lego-Mechanik (Lese-Call +
-Bot-Antwort + `web_app`-Button + Mini-App-URL) ist identisch; der
-einzige Unterschied ist der Lese-Endpoint, das Antwort-Format und der
-URL-Hash. Zwei Skills wären Copy-Paste; ein Skill mit Verzweigung an
-**einer** Stelle (Tab-Hint) hält den Lego-Bau dicht.
+*Datum:* 2026-06-19 (Refs #1028 /berater-runde + Nic-Rückbau-Setzung)
+· Die Eltern-Mini-App HSP-33 hat zwei Tabs (Einstellungen, Folgen). HOE
+bedient V1 **nur** den Folgen-Tab — der Settings-Tab ist über HOE NICHT
+erreichbar. Begründung: was in der Mini-App eingestellt werden kann
+(Voice, LLM-Anbieter, Modell, Tempo, Pausen — HSP-34), wird **nicht**
+zusätzlich über einen Eltern-Chat-Skill zum Einstellen angeboten — das
+wäre Bot-seitiger Read der Mini-App-Inhalte und damit reine Redundanz
+(„Voice: nova" als Bot-Text + Button → Eltern öffnet App und sieht das
+Gleiche). Komplexität ohne Mehrwert.
 
-**Verworfen:** zwei Türöffner-Skills mit identischer Bauform. Hätte
-die HOE-3-Trigger-Phrasen-Tabelle in zwei Skill-Dateien dupliziert und
-den Eltern-Chat-Agent-Katalog gebläht.
+Settings-Trigger werden vom Eltern-Chat-Agent **sprachlich** auf die
+Mini-App verwiesen (siehe `eltern-chat/agent.py`-System-Prompt). Eltern
+erreicht den Settings-Tab über den HFE-10-Settings-Beifang-Button (in
+HFE-Antworten) oder direkt über die Telegram-Bot-Menü-Verlinkung
+(HSP-33).
+
+**Verworfen:** zwei Türöffner-Skills oder ein Skill mit Tab-Parameter.
+Beides würde den Settings-Read im Bot zementieren und damit die
+Mini-App-Funktion doppeln.
+
+**Frühere Setzung (kassiert):** Bis 2026-06-19 hatte HOE einen
+`tab`-Parameter mit `"einstellungen" | "folgen"`-Variante (ratifiziert
+Werft-Lauf #848, 2026-06-15). Diese Setzung ist durch die
+Anti-Redundanz-Regel überholt.
 
 ### E-HOE-3 — Posten auch bei leerem Album-Bestand (analog E-RAO-3)
 
