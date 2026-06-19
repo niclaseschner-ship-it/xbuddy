@@ -1028,6 +1028,11 @@
     var tiles = await loadTiles();
     renderGrid(tiles, cfg,
       function onTap(tile) {
+        // PANEL-11 — Optimistisches lokales Update (Spec PANEL-11, Refs #959):
+        // Markierung sofort auf getappte Kachel setzen, BEVOR der POST-Roundtrip
+        // abgeschlossen ist. Stream bleibt die Wahrheit; bei Diskrepanz korrigiert
+        // das nächste Stream-Ereignis.
+        updateActiveMarker(tile);
         // PANEL-13 — Silent-Audio-Prime bei JEDEM Kachel-Tap (HSP-42 + Empirie
         // 2026-06-17). Browser-Sticky-Activation wird durch die User-Geste
         // gesetzt; spätere SSE-getriggerte Audio-Source-Updates spielen ohne
@@ -1036,6 +1041,11 @@
         sendEvent(cfg, panelLib.makeTileSelected(cfg.source_id, tile));
       },
       function onClear() {
+        // PANEL-11 — Optimistisches lokales Update (Spec PANEL-11, Refs #959):
+        // Markierung sofort entfernen, BEVOR der POST-Roundtrip abgeschlossen ist.
+        // Stream bleibt die Wahrheit; bei Diskrepanz korrigiert das nächste
+        // Stream-Ereignis.
+        updateActiveMarker(null);
         sendEvent(cfg, panelLib.makePanelCleared(cfg.source_id));
       });
     // PANEL-12: Geometrie nach Render berechnen, bei resize neu rechnen.
