@@ -387,6 +387,78 @@ def test_reader_typing_skipped_for_my_chat_member(monkeypatch):
         tg_reader.release()
 
 
+def test_reader_unexpected_exception_sets_stop_event(monkeypatch):
+    """EC-37 / AC1 (F1-Watchdog-Fix): Wirft `get_updates` eine unerwartete
+    Exception (z. B. ValueError — keine TelegramError), setzt der Reader
+    stop_event.set() VOR dem Return, damit der Processor aus dem
+    handoff.get-Loop austritt.
+
+    Prueft: _reader_loop direkt in Thread; get_updates wirft ValueError;
+    stop_event ist danach gesetzt; Processor-Schleife (separat gestartet)
+    beendet sich innerhalb 2 s.
+    """
+    import queue as queue_mod
+
+    class _ExplodingReaderTg:
+        """Wirft beim ersten get_updates-Aufruf einen ValueError."""
+        def __init__(self):
+            self.calls = 0
+
+        def get_updates(self, offset=None, timeout=30):
+            self.calls += 1
+            raise ValueError("test: unexpectedly broken")
+
+        def send_chat_action(self, chat_id, action):
+            pass
+
+    tg_reader = _ExplodingReaderTg()
+    tg_main = _MainTg()
+    ctx = _make_ctx(tg_main)
+
+    handoff = queue_mod.Queue(maxsize=1)
+    ack = queue_mod.Queue(maxsize=1)
+    open_chat_ids = set()
+    chat_ids_lock = __import__("threading").RLock()
+    stop_event = __import__("threading").Event()
+
+    reader_t = __import__("threading").Thread(
+        target=main_mod._reader_loop,
+        args=(ctx, tg_reader, handoff, ack, open_chat_ids, chat_ids_lock,
+              stop_event, 0),
+        daemon=True,
+    )
+
+    # Processor-Schleife wird nur beendet, wenn stop_event gesetzt wird.
+    dispatch_calls = []
+
+    def _fake_dispatch(update, ctx):
+        dispatch_calls.append(update)
+
+    monkeypatch.setattr(main_mod, "dispatch", _fake_dispatch)
+    processor_t = __import__("threading").Thread(
+        target=main_mod._processor_loop,
+        args=(ctx, handoff, ack, open_chat_ids, chat_ids_lock, stop_event),
+        daemon=True,
+    )
+
+    reader_t.start()
+    processor_t.start()
+
+    # Reader sollte nach dem ValueError schnell enden und stop_event setzen.
+    reader_t.join(timeout=2.0)
+    assert not reader_t.is_alive(), "Reader-Thread lief nach ValueError noch"
+    assert stop_event.is_set(), (
+        "stop_event NICHT gesetzt nach unerwarteter Reader-Exception — "
+        "Processor wuerde in handoff.get-Loop haengen (F1-Bug)"
+    )
+
+    # Processor soll sich dank stop_event sauber beenden.
+    processor_t.join(timeout=2.0)
+    assert not processor_t.is_alive(), (
+        "Processor-Thread lief weiter, obwohl stop_event gesetzt war"
+    )
+
+
 def test_send_chat_action_failure_is_swallowed(monkeypatch):
     """EC-39 / AC5 / spec Z. 1404-1406: Wirft `send_chat_action` eine
     Exception (Rate-Limit, HTTP-Fehler), unterbricht das den Reader nicht —

@@ -799,11 +799,16 @@ def _reader_loop(ctx, tg_reader, handoff, ack, open_chat_ids, chat_ids_lock,
             continue
         except Exception:
             # Reader-Daemon darf nicht still sterben — sonst sitzt der
-            # Processor fuer immer in `handoff.get(...)`. Test-Doppelungen
-            # werfen bewusst untypisierte Exceptions, um den Reader zu
-            # beenden; im Live-Betrieb stoppt der Stop-Event den Loop sowieso.
-            logging.exception("Reader-Loop: unerwartete Exception aus "
-                              "get_updates — Loop endet")
+            # Processor fuer immer in `handoff.get(...)`. stop_event wird
+            # gesetzt, damit der Processor aus dem handoff.get-Loop austritt.
+            # Test-Doppelungen werfen bewusst untypisierte Exceptions, um den
+            # Reader zu beenden; im Live-Betrieb stoppt der Stop-Event den
+            # Loop sowieso.
+            logging.warning(
+                "Reader-Loop: unerwartete Exception aus get_updates — "
+                "Reader beendet sich, stop_event wird gesetzt",
+                exc_info=True)
+            stop_event.set()
             return
 
         if not updates:
