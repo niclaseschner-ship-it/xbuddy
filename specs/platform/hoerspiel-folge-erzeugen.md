@@ -409,10 +409,10 @@ verlassen, ohne einen separaten HOE-Aufruf provozieren zu müssen.
    TASK-10c). Kein Form-(b)-Dict vorhanden — **kein Beifang-Button** in
    dieser ersten Antwort.
 3. **Sub-Case 3 — Konkrete vollständige Idee** → `propose()` ruft den
-   Vorschlag-Endpoint und antwortet mit dem strukturierten Bestätigungs-
-   Vorschlag als **Form-(b)-Dict** (`{text, presentation}`, TASK-10c).
-   Die erste Antwort dieses Sub-Cases trägt den Beifang-Button im
-   `presentation.inline_keyboard` — zwei Button-Einträge.
+   Vorschlag-Endpoint und liefert HFE-4-Bestätigungs-Vorschlag. In diesem
+   Sub-Case wickelt HFE-10 die Antwort in ein TASK-10c-Form-(b)-Dict
+   (`{text, presentation}`, TASK-10c), um den Beifang-Button im
+   `presentation.inline_button`-Array zu transportieren — zwei Button-Einträge.
 
 **Folge-Antworten der Diskussions-Schleife** (zweite, dritte, … Rückfrage
 des Agents nach der Eröffnung) tragen den Beifang-Button **nicht**. Die
@@ -434,7 +434,7 @@ Diskussions-Markers in der Idee (Sub-Case-3-Pfad ist per Definition die
 erste und einzige nicht-diskutierende Antwort des propose-Turns — der
 Subagent in HSP-2 wählt die saubere Mechanik). Der Beifang-Button wird
 ausschließlich im Form-(b)-Dict des Sub-Case-3-Pfades abgelegt (TASK-10c)
-— zwei Button-Einträge im `inline_keyboard`. Wenn `mini_app_base_url` leer
+— zwei Button-Einträge im `presentation.inline_button`-Array. Wenn `mini_app_base_url` leer
 ist (Konfig-Lücke analog HOE-7), **fällt der Beifang-Button still aus**:
 kein Fehler-Text, kein Skill-Abbruch — der bestehende HFE-Output bleibt
 grün, nur ohne Beifang. Begründung: HFE-Erzeugen-Pfad darf nicht an einer
