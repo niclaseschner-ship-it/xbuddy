@@ -922,7 +922,9 @@ def resume_endpoint(kind_id: str):
         if not album_id:
             return jsonify({"fehler": "album-Parameter fehlt"}), 400
         if album_id not in store:
-            return jsonify({"fehler": "kein Resume-Stand für album %s" % album_id}), 404
+            # HSP-36 (geändert): kein Stand → 200 mit Default-Body, kein 404.
+            # Frontend fragt präventiv für jede Folge; 404-Burst (~8x) ist vermeidbar.
+            return jsonify({"album": album_id, "track": 0, "status": "neu"})
         return jsonify({"album": album_id, "track": store[album_id]})
 
     # PUT

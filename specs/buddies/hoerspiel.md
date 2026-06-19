@@ -623,8 +623,9 @@ des Tracks (HSP-37). Range-Requests Pflicht. `Content-Type: audio/mpeg`.
 `album-id`).
 
 **`GET /resume?album=<id>`** Response: `{"album": "<id>", "track":
-<position>}` (Track-Anfang gerundet, HSP-23). 404 wenn kein
-Resume-Stand existiert.
+<position>}` (Track-Anfang gerundet, HSP-23) wenn ein Stand existiert.
+Wenn **kein Stand existiert**: 200 mit Default-Body `{"album": "<id>",
+"track": 0, "status": "neu"}` — kein 404 (HSP-36-Update).
 
 **`PUT /resume`** Body: `{"album": "<id>", "track": <position>}`.
 Idempotent. Schreibt den Stand atomar.
@@ -1399,6 +1400,14 @@ ruft die Mini-App `PUT /resume` mit Album-ID + Track-Position (HSP-17).
 **Konkurrenz-Schreiben** (Mini-App + Kinder-View gleichzeitig) ist
 erlaubt — Last-Write-Wins auf Track-Anfang (Track-Position-Granularität,
 nicht Sekunden-Position; ein Race auf derselben Position ist no-op).
+
+**GET ohne vorhandenen Stand → 200 mit Default-Body, kein 404.**
+Das Frontend fragt präventiv für jede Folge beim Settings-Open (`eltern.js`);
+8x 404-Bursts sind unnötig laut und deuten fälschlich auf Fehler hin.
+Antwort-Form: `{"album": "<id>", "track": 0, "status": "neu"}`. Der
+Konsument erkennt an `status == "neu"` (oder `track == 0` ohne
+persistierten Wert), dass noch kein Stand gesetzt wurde. GET ohne
+`album`-Parameter liefert weiter 400.
 
 ### HSP-37 — Track-MP3-Streaming-Endpoint
 
