@@ -260,3 +260,70 @@ def test_ac5_setinterval_im_template_und_kein_strich_tick():
     assert "timeline-strich" not in html.split("setInterval")[1], (
         "JS-Tick darf .timeline-strich nicht manipulieren (AC5: Striche sind reine Skala)"
     )
+
+
+def _data_attr_to_camel(attr_name: str) -> str:
+    """HTML5-Mapping: data-x-y-z → dataset.xYZ (camelCase).
+
+    Entfernt den 'data-'-Prefix, splittet an '-', ersetzt alle Folge-Segmente
+    durch Title-Case. Beispiel: 'anziehen-pct' → 'anziehenPct'.
+    """
+    parts = attr_name.split("-")
+    return parts[0] + "".join(p.capitalize() for p in parts[1:])
+
+
+def test_dataset_camelcase_konsistenz_im_live_tick():
+    """Watchdog Linse 1+7 — dataset-Read muss camelCase-äquivalent zum data-*-Attribut sein.
+
+    Rendert morgen.html als rohen Text, extrahiert:
+      - alle data-*-Attribut-Namen auf .timeline-track
+      - alle dataset.*-Reads im Inline-JS
+
+    Prüft: für jedes data-*-Attribut (ohne 'data-'-Prefix) existiert ein
+    HTML5-camelCase-äquivalenter dataset.*-Read — Bijektion in beide Richtungen.
+
+    Fängt speziell dataset.anziehenpct (alt) vs. dataset.anziehenPct (korrekt).
+    """
+    template_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "templates", "morgen.html")
+    with open(template_path, encoding="utf-8") as f:
+        html = f.read()
+
+    # Extrahiere alle data-*-Attribut-Namen auf dem .timeline-track-Div.
+    # Suche den Block ab 'timeline-track' bis zur schließenden '>'.
+    track_block_match = re.search(
+        r'class="timeline-track"(.*?)>', html, re.DOTALL)
+    assert track_block_match, ".timeline-track-Block muss im Template stehen"
+    track_block = track_block_match.group(1)
+
+    # data-x-y-z="" → extrahiere den Namen ohne 'data-'-Prefix
+    data_attrs = re.findall(r'data-([a-z][a-z0-9-]*)=', track_block)
+    assert data_attrs, "timeline-track muss mindestens ein data-*-Attribut tragen"
+
+    # Extrahiere alle dataset.*-Reads aus dem JS-Bereich (nach dem Track-Block).
+    js_block = html[track_block_match.end():]
+    dataset_reads = re.findall(r'dataset\.([a-zA-Z][a-zA-Z0-9]*)', js_block)
+    assert dataset_reads, "JS-Block muss mindestens einen dataset.*-Read enthalten"
+
+    # Erwartete camelCase-Werte aus den data-*-Attributen
+    erwartet_camel = {_data_attr_to_camel(a) for a in data_attrs}
+    tatsaechlich = set(dataset_reads)
+
+    fehlende = erwartet_camel - tatsaechlich
+    assert not fehlende, (
+        "Folgende data-*-Attribute haben keinen passenden camelCase-dataset-Read: %s. "
+        "HTML5-Mapping: data-x-y-z → dataset.xYZ. "
+        "Gefundene dataset-Reads: %s" % (sorted(fehlende), sorted(tatsaechlich))
+    )
+
+    unbekannte = tatsaechlich - erwartet_camel
+    # serverNow usw. sind alle abgedeckt — unbekannte Reads wären ein Hinweis auf
+    # Phantom-Reads ohne passendes Attribut. Warnung reicht (kein hard fail),
+    # da z. B. dataset.className o. Ä. aus anderem Kontext kommen könnte.
+    # Hier: harter Fail, da der JS-Block eng begrenzt ist und alle Reads
+    # zu track-Attributen gehören sollen.
+    assert not unbekannte, (
+        "Folgende dataset-Reads haben kein passendes data-*-Attribut auf .timeline-track: %s. "
+        "Entweder Attribut hinzufügen oder Read entfernen." % sorted(unbekannte)
+    )
