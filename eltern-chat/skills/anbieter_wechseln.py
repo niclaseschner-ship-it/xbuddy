@@ -123,9 +123,17 @@ WRITE_FAILED = (
     "aktualisieren — bitte später noch einmal versuchen. "
     "Dein bisheriger Anbieter läuft unverändert weiter.")
 
-# ONB-11 Schritt 5: Privatchat-Abschluss.
+# ONB-11 Schritt 5: Privatchat-Abschluss — Pfad B (Re-Key gerade gespeichert).
 DONE_PRIVAT = (
     "Anbieter-Wechsel abgeschlossen — der neue Key ist gespeichert. "
+    "Die Familie bekommt gleich eine Benachrichtigung.")
+
+# ONB-11 Schritt 5: Privatchat-Abschluss — Pfad A (#1021). Bei bekanntem
+# Vendor wird KEIN neuer Key gespeichert (der Slot war schon gefüllt); das
+# DONE_PRIVAT-Wording wäre irreführend. Pfad A schaltet nur den aktiven
+# Vendor um.
+DONE_PRIVAT_PFAD_A = (
+    "Anbieter umgeschaltet — Key war schon gespeichert. "
     "Die Familie bekommt gleich eine Benachrichtigung.")
 
 # ONB-11 Schritt 5: Bestätigung in der Familien-Gruppe (kein Key im Text).
@@ -260,9 +268,9 @@ def anbieter_wechseln(tg, chat_id, user_id, family_group_chat_id,
             _send(tg, chat_id, WRITE_FAILED)
             return AnbieterWechselnResult(ergebnis=ERGEBNIS_UNVERAENDERT)
 
-        # ONB-11 Schritt 5a: Privatchat-Quittung.
+        # ONB-11 Schritt 5a: Privatchat-Quittung — Pfad-A-Wording (#1021).
         fire_typing(typing_fn)
-        _send(tg, chat_id, DONE_PRIVAT)
+        _send(tg, chat_id, DONE_PRIVAT_PFAD_A)
         # ONB-11 Schritt 5b: Bestätigung in der Familien-Gruppe.
         _send(tg, family_group_chat_id, DONE_GRUPPE % anzeige)
         return AnbieterWechselnResult(
