@@ -570,26 +570,36 @@ async function _ladeAlbenListe() {
   const ladeHinweis = document.getElementById("folgen-ladehinweis");
   if (ladeHinweis) ladeHinweis.textContent = "Folgen werden geladen …";
 
-  // HSP-35 / #973: Promise.all-Fetches für alle V1-Kinder parallel.
-  let alleAlben;
-  try {
-    const ergebnisse = await Promise.all(
-      KIND_IDS_V1.map(async (kindId) => {
-        const alben = await _holeAlben(kindId);
-        return { kindId, alben };
-      })
-    );
-    alleAlben = ergebnisse;
-  } catch (err) {
-    if (ladeHinweis) ladeHinweis.textContent = "Folgen konnten nicht geladen werden.";
-    console.error("eltern.js: Alben Ladefehler (Aggregation)", err);
+  // HSP-35 / #975: Promise.allSettled — einseitiger 404 ergibt Partial-Result,
+  // nicht komplette Liste leer. Fehlgeschlagene kind_ids → Warn-Banner (HSP-40).
+  const settledErgebnisse = await Promise.allSettled(
+    KIND_IDS_V1.map(async (kindId) => {
+      const alben = await _holeAlben(kindId);
+      return { kindId, alben };
+    })
+  );
+
+  const erfolgreich = [];
+  const fehlgeschlagen = [];
+  settledErgebnisse.forEach((result, i) => {
+    if (result.status === "fulfilled") {
+      erfolgreich.push(result.value);
+    } else {
+      fehlgeschlagen.push(KIND_IDS_V1[i]);
+      console.warn("eltern.js: Alben-Fetch für " + KIND_IDS_V1[i] + " fehlgeschlagen:", result.reason);
+    }
+  });
+
+  _albenListe = _mergeUndSortiereAlben(erfolgreich);
+
+  if (_albenListe.length === 0 && fehlgeschlagen.length === 0) {
+    if (ladeHinweis) ladeHinweis.textContent = "Noch keine Folgen vorhanden.";
     return;
   }
 
-  _albenListe = _mergeUndSortiereAlben(alleAlben);
-
-  if (_albenListe.length === 0) {
-    if (ladeHinweis) ladeHinweis.textContent = "Noch keine Folgen vorhanden.";
+  if (_albenListe.length === 0 && fehlgeschlagen.length > 0) {
+    if (ladeHinweis) ladeHinweis.textContent = "Folgen konnten nicht geladen werden.";
+    _rendereWarnBanner(container, player, fehlgeschlagen);
     return;
   }
 
@@ -603,6 +613,34 @@ async function _ladeAlbenListe() {
   }));
 
   _rendereAlbenListe(container, player, resumeMap);
+
+  // HSP-40: Warn-Banner für fehlgeschlagene kind_ids am Listen-Ende.
+  if (fehlgeschlagen.length > 0) {
+    _rendereWarnBanner(container, player, fehlgeschlagen);
+  }
+}
+
+/**
+ * Fügt pro fehlgeschlagener kind_id einen Warn-Banner in den Folgen-Container ein.
+ * HSP-40: "einseitiger 404 produziert teilweise Liste + Warn-Banner pro fehlgeschlagener kind_id".
+ * @param {Element} container
+ * @param {Element|null} player
+ * @param {string[]} fehlgeschlageneKindIds
+ */
+function _rendereWarnBanner(container, player, fehlgeschlageneKindIds) {
+  // Bestehende Warn-Banner entfernen (idempotent bei erneutem Aufruf).
+  container.querySelectorAll(".album-warn-banner").forEach(b => b.remove());
+
+  for (const kindId of fehlgeschlageneKindIds) {
+    const banner = document.createElement("div");
+    banner.className = "album-warn-banner";
+    banner.textContent = kindId.charAt(0).toUpperCase() + kindId.slice(1) + "-Folgen aktuell nicht verfügbar";
+    if (player && typeof container.insertBefore === "function") {
+      container.insertBefore(banner, player);
+    } else {
+      container.appendChild(banner);
+    }
+  }
 }
 
 function _rendereAlbenListe(container, player, resumeMap) {
@@ -952,5 +990,5 @@ function esc(str) {
 
 // ── Exports (für Tests) ──────────────────────────────────────────────────────
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { esc, _leseHashTab, zeigeToast, KIND_ID, KIND_IDS_V1, _mergeUndSortiereAlben };
+  module.exports = { esc, _leseHashTab, zeigeToast, KIND_ID, KIND_IDS_V1, _mergeUndSortiereAlben, _rendereWarnBanner };
 }
