@@ -117,6 +117,17 @@ Kein Inline-Button (Mini App würde leere Liste zeigen, das ist
 unbefriedigend); statt dessen Klartext-Hinweis „Schick mir Items zum
 Hinzufügen, z. B. `Brot, Milch`." als Folge-Bubble.
 
+*Leer-Verhalten — Endzustand-Wahl (Refs #929 /berater-runde 2026-06-19):*
+EZG behandelt die leere Antwort als **Endzustand** (Liste abgearbeitet) und
+unterdrückt deshalb den Mini-App-Button. Aus dem Backend allein ist nicht
+ableitbar, ob die Liste je befüllt war (Antwort `[]` deckt sowohl
+„Anfangszustand frische Familie" als auch „voll, jetzt erledigt" ab) —
+die Endzustand-Wahl ist hier eine **Spec-Entscheidung pro Skill**, nicht
+eine Backend-Tatsache. Die andere Wahl trifft `routine-anpassen-oeffnen`
+(E-RAO-3 — Anfangszustand, Button bleibt); `hoerspiel-oeffnen` E-HOE-3
+folgt RAO, nicht EZG. Eine geteilte Convention ist heute nicht reif
+(siehe Memory-Marker n=4-Probe Klasse-B-Türöffner mit Backend-Leerbegriff).
+
 ## EZG-6 — Mini-App-URL und Inline-Buttons (web_app + url)
 
 Beide Inline-Buttons tragen die **identische Mini-App-URL**, aber unter-
