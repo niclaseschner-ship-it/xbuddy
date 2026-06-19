@@ -70,11 +70,26 @@
       <div class="timeline-section">
 
         {# Balken-Track (vertikal, mittig) #}
-        <div class="timeline-track">
-          {# Verstrichener Teil: füllt von OBEN nach unten #}
-          <div class="timeline-elapsed" style="height: {{ view.uhr.elapsed_pct }}%;"></div>
+        {# Live-Tick (#824, ROUTINE-9): server_now als data-Attribut für Client-Offset-Berechnung (AC1). #}
+        <div class="timeline-track"
+             data-server-now="{{ view.uhr.server_now }}"
+             data-aufstehen-iso="{{ view.uhr.aufstehen_iso }}"
+             data-losgehen-iso="{{ view.uhr.losgehen_iso }}"
+             data-anziehen-pct="{{ view.uhr.anziehen_pct }}">
+          {# Verstrichener Teil: füllt von OBEN nach unten.
+             --anziehen-stop: Gradient-Stop relativ zur Element-Höhe (#824, AC3, load-bearing). #}
+          <div class="timeline-elapsed"
+               id="timeline-elapsed"
+               style="height: {{ view.uhr.elapsed_pct }}%; --anziehen-stop: {{ view.uhr.anziehen_stop_rel }}%;"></div>
           {# JETZT-Marker: horizontaler Strich bei jetzt_pct (von oben) #}
-          <div class="timeline-now" style="top: {{ view.uhr.jetzt_pct }}%;"></div>
+          <div class="timeline-now" id="timeline-now" style="top: {{ view.uhr.jetzt_pct }}%;"></div>
+          {# 5-Min-Striche: Skala-Hilfe (#824, ROUTINE-9, AC2).
+             strich_count = zeitfenster_min // 5 (Default-Schrittweite 5 Min).
+             Position: i * 5 / zeitfenster_min * 100 % — äquidistant über das Zeitfenster.
+             Striche sind reine Skala, kein Marker-Raster — Jetzt-Marker gleitet dazwischen. #}
+          {% for i in range(1, view.uhr.strich_count + 1) %}
+          <div class="timeline-strich" style="top: {{ (i * 500.0 / view.uhr.zeitfenster_min) | round(2) }}%;"></div>
+          {% endfor %}
         </div>
 
         {# Aufstehen-Pin — LINKS, oben (top:0%) #}
@@ -176,6 +191,60 @@ function toggleItem(itemId) {
   });
 }
 </script>
+
+{% if view.uhr %}
+<script>
+/* Live-Tick (#824, ROUTINE-9): clientseitige Fortschreibung ohne Page-Reload.
+   Quelle der Wahrheit bleibt der Server-Render (aufstehen/losgehen als ISO-Anker).
+   Server-Zeit-Drift: offset = server_now - Date.now() einmalig berechnen (AC1).
+   Polling-Intervall: 60 s setInterval (AC5). CSS-Transition übernimmt Gleiten (AC4). */
+(function () {
+  var track = document.querySelector('.timeline-track');
+  if (!track) { return; }
+
+  /* AC1: Server-Now aus data-Attribut, einmaliger Offset-Calcul */
+  var serverNowMs = new Date(track.dataset.serverNow).getTime();
+  var offset = serverNowMs - Date.now();   /* offset = server_now - Date.now() */
+
+  var aufstehenMs = new Date(track.dataset.aufstehenIso).getTime();
+  var losgehenMs  = new Date(track.dataset.losgehenIso).getTime();
+  var anziehenpct = parseFloat(track.dataset.anziehenpct);  /* bereits in % [0..100] */
+  var zeitfensterMs = losgehenMs - aufstehenMs;
+
+  var elapsedEl = document.getElementById('timeline-elapsed');
+  var nowEl     = document.getElementById('timeline-now');
+
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+  function tick() {
+    var viewNow = Date.now() + offset;   /* AC1: view_now = Date.now() + offset */
+    var elapsedMs = viewNow - aufstehenMs;
+    var jetzt_pct = clamp(elapsedMs / zeitfensterMs * 100.0, 0, 100);
+
+    /* AC3: --anziehen-stop relativ zur Element-Höhe (load-bearing, ROUTINE-9) */
+    var anziehen_stop_rel;
+    if (jetzt_pct <= anziehenpct) {
+      anziehen_stop_rel = 110.0;
+    } else {
+      anziehen_stop_rel = (anziehenpct / jetzt_pct) * 100.0;
+    }
+
+    /* AC4: top-Transition auf .timeline-now übernimmt Gleiten (kein Snap) */
+    if (nowEl)     { nowEl.style.top     = jetzt_pct.toFixed(2) + '%'; }
+    if (elapsedEl) {
+      elapsedEl.style.height = jetzt_pct.toFixed(2) + '%';
+      elapsedEl.style.setProperty('--anziehen-stop', anziehen_stop_rel.toFixed(2) + '%');
+    }
+  }
+
+  /* AC5: Polling-Intervall 60 s (Tuning-Wert; zweites Vorkommen externalisiert per CLAUDE.md §6) */
+  var POLL_INTERVALL_MS = 60000;
+  setInterval(tick, POLL_INTERVALL_MS);
+  /* Ersten Tick sofort — nach kurzer Verzögerung damit DOM-Transition greift */
+  setTimeout(tick, 200);
+}());
+</script>
+{% endif %}
 
 </body>
 </html>

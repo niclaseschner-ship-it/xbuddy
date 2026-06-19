@@ -23,6 +23,11 @@ from routine import config as config_mod
 
 logger = logging.getLogger(__name__)
 
+# Live-Tick Skalen-Schrittweite in Minuten (ROUTINE-9 #824, CLAUDE.md §6).
+# V1-Default 5 Min; ein zweites Vorkommen mit anderer Schrittweite wird
+# externalisiert. Hier die Konstante — nicht in Code-Snippets tiefer im Modul.
+SKALEN_SCHRITTWEITE_MIN = 5
+
 PHASE_VOR_ANZIEHEN = "vor_anziehen"
 PHASE_ANZIEHEN = "anziehen_phase"
 PHASE_NACH_LOSGEHEN = "nach_losgehen"
@@ -42,6 +47,13 @@ class UhrView:
 
     Alle Zeitwerte als fertig formatierte Strings (HH:MM) oder Minuten-Restzeit
     (int ≥ 0). phase beschreibt den aktuellen Status.
+
+    Live-Tick (#824, ROUTINE-9):
+      server_now       — ISO-Timestamp des Server-now bei Render (für Client-Offset).
+      anziehen_stop_rel — Gradient-Stop relativ zur Element-Höhe [0..110] (Implementierungs-
+                          Hinweis load-bearing, ROUTINE-9 #824): wenn elapsed_pct ≤ anziehen_pct:
+                          110.0; sonst (anziehen_pct / elapsed_pct) * 100.
+      strich_count     — Anzahl 5-Min-Striche = zeitfenster_min // SKALEN_SCHRITTWEITE_MIN.
     """
     phase: str                    # PHASE_* Konstante
     losgehen_label: str           # "HH:MM"
@@ -53,6 +65,11 @@ class UhrView:
     rest_bis_anziehen_min: int | None   # None wenn Phase nicht vor_anziehen
     rest_bis_losgehen_min: int | None   # None wenn nach_losgehen
     zeitfenster_min: int          # Losgehen - Aufstehen in Minuten
+    server_now: str = ""          # ISO-Timestamp von now bei Render (#824, AC1)
+    anziehen_stop_rel: float = 110.0  # Gradient-Stop relativ zur Element-Höhe (#824, AC3)
+    strich_count: int = 0        # Anzahl 5-Min-Striche am Balken (#824, AC2)
+    aufstehen_iso: str = ""      # ISO-Timestamp aufstehen — JS-Anker für Live-Tick (#824)
+    losgehen_iso: str = ""       # ISO-Timestamp losgehen — JS-Anker für Live-Tick (#824)
 
 
 def _parse_abfahrtszeit(abfahrtszeit_cfg, tag, zeitzone):
@@ -185,6 +202,19 @@ def baue_uhr_view(zeiten, now):
     def _fmt(dt):
         return dt.strftime("%H:%M")
 
+    # Gradient-Stop relativ zur Element-Höhe (ROUTINE-9 #824, load-bearing):
+    # wenn elapsed_pct ≤ anziehen_pct → 110.0 (Element komplett grün);
+    # sonst (anziehen_pct / elapsed_pct) * 100 (Zonengrenze an richtiger Track-Position).
+    anziehen_stop_rel = (
+        110.0 if jetzt_pct <= anziehen_pct else (anziehen_pct / jetzt_pct) * 100.0
+    )
+
+    # 5-Min-Striche: zeitfenster_min / SKALEN_SCHRITTWEITE_MIN (#824, ROUTINE-9)
+    strich_count = max(0, zeitfenster_min // SKALEN_SCHRITTWEITE_MIN)
+
+    # server_now als ISO-Timestamp für Client-Offset-Berechnung (#824, AC1)
+    server_now_iso = now.isoformat()
+
     return UhrView(
         phase=phase,
         losgehen_label=_fmt(losgehen),
@@ -196,4 +226,9 @@ def baue_uhr_view(zeiten, now):
         rest_bis_anziehen_min=rest_anziehen,
         rest_bis_losgehen_min=rest_losgehen,
         zeitfenster_min=zeitfenster_min,
+        server_now=server_now_iso,
+        anziehen_stop_rel=anziehen_stop_rel,
+        strich_count=strich_count,
+        aufstehen_iso=aufstehen.isoformat(),
+        losgehen_iso=losgehen.isoformat(),
     )
