@@ -399,6 +399,13 @@ ROU-24) zur aktuellen Display-`payload.url` passt, ist aktiv markiert
   Ein optimistisches lokales Update (Markierung sofort weg) ist
   erlaubt, aber das Stream-Update bleibt die Wahrheit — bei Diskrepanz
   korrigiert sich die Markierung beim nächsten Stream-Ereignis.
+- **`tile_selected`-Tap:** analog. Der Panel-Code darf die Markierung
+  **optimistisch lokal** auf die getappte Kachel setzen, ohne auf das
+  Stream-Update zu warten — der Stream bleibt die Wahrheit und korrigiert
+  die Markierung beim nächsten Ereignis (z. B. wenn die Route durch
+  Figuren-Erkennung übersteuert wurde). Begründung: bei eingefrorenem
+  oder verzögertem SSE-Stream (iOS-Safari-Hintergrund-Tab) bleibt die
+  UI sonst sichtbar auf der alten Kachel kleben (Refs #959).
 
 PANEL-1 bleibt gewahrt: das Panel entscheidet weiterhin **nichts** über
 das Routing — es liest den Display-Zustand nur, um seine eigene UI zu
