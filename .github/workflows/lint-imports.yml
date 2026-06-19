@@ -31,17 +31,25 @@ jobs:
       - name: MOD-6 — kein sys.path-Insert auf fremdes eltern-chat
         # MOD-6 ergänzt MOD-4 für die Bauzeit-Praxis: import-linter sieht
         # sys.path-Manipulation nicht (statische Imports, Bindestrich-Trick).
-        # Grep matcht beide Pattern: String "eltern-chat" im Pfad-Argument
-        # UND Variable _ELTERN_CHAT*. Eltern-chat-Eigen-Inserts (innerhalb
+        # Zweistufiger Datei-Check: enthält die Datei sys.path-Manipulation
+        # UND einen String "eltern-chat"/'eltern-chat' irgendwo? Dann ist
+        # sie verdächtig (deckt single/double-quote, augmented assignment
+        # `sys.path += [...]`, neutrale Variablen-Namen mit String in
+        # vorheriger Zeile). Eltern-chat-Eigen-Inserts (innerhalb
         # eltern-chat/) sind KEIN MOD-4-Bruch und werden übersprungen.
+        # Zusätzlich: Veraltete-Allowlist-Check — Allowlist-Einträge ohne
+        # aktuellen Match müssen entfernt werden (Sanierungs-Schutz, zwingt
+        # Sanierungs-PRs zum gleichzeitigen Allowlist-Update).
         # Siehe conventions/module-boundaries.md MOD-6.
         run: |
           set -e
           ALLOWED="essen/main.py seiten/main.py routine/main.py hoerspiel/main.py seiten/tests/test_essen_einkauf_pwa.py seiten/tests/test_essen_einkauf_route.py seiten/tests/test_mini_app_uebersicht.py seiten/tests/test_routine_anpassen_route.py"
           BAD=""
+          HITS=""
           for f in $(git ls-files '*.py'); do
             case "$f" in eltern-chat/*) continue ;; esac
-            if grep -Eq 'sys\.path\.(insert|append).*(_ELTERN_CHAT|"eltern-chat")' "$f"; then
+            if grep -q 'sys\.path\.' "$f" && grep -Eq "['\"]eltern-chat['\"]" "$f"; then
+              HITS="$HITS $f"
               echo " $ALLOWED " | grep -q " $f " || BAD="$BAD $f"
             fi
           done
@@ -49,5 +57,15 @@ jobs:
             echo "::error::MOD-6 verletzt — sys.path-Insert auf eltern-chat außerhalb Allowlist:"
             for f in $BAD; do echo "  $f"; done
             echo "Siehe conventions/module-boundaries.md MOD-6"
+            exit 1
+          fi
+          STALE=""
+          for entry in $ALLOWED; do
+            echo " $HITS " | grep -q " $entry " || STALE="$STALE $entry"
+          done
+          if [ -n "$STALE" ]; then
+            echo "::error::MOD-6 Allowlist veraltet — folgende Einträge matchen nicht mehr, bitte entfernen:"
+            for e in $STALE; do echo "  $e"; done
+            echo "Siehe conventions/module-boundaries.md MOD-6 (Allowlist schmilzt mit Sanierungs-PRs)"
             exit 1
           fi

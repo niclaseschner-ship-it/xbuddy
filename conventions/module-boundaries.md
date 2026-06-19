@@ -115,8 +115,15 @@ mit `_ELTERN_CHAT = os.path.dirname(__file__)`) sind KEIN MOD-4-Bruch
 und vom Gate ausgenommen.
 
 Maschinelle Durchsetzung über einen zweiten CI-Step in
-`.github/workflows/lint-imports.yml` (Grep + Eigen-Verzeichnis-Filter +
-Bestand-Allowlist).
+`.github/workflows/lint-imports.yml`: zweistufiger Datei-Check (Datei
+enthält `sys.path.`-Manipulation UND String `"eltern-chat"`/`'eltern-chat'`
+irgendwo) + Eigen-Verzeichnis-Filter (`eltern-chat/*` übersprungen) +
+Bestand-Allowlist + Veraltete-Allowlist-Check (Allowlist-Einträge ohne
+aktuellen Match müssen entfernt werden — zwingt Sanierungs-PRs zum
+gleichzeitigen Allowlist-Update). Der zweistufige Datei-Check fängt
+auch Drift-Pfade, die ein zeilen-basierter Grep verfehlt: Single-Quote-
+Strings, `sys.path += [...]`-Augmented-Assignment, neutrale Variablen-
+Namen mit String-Definition in vorheriger Zeile.
 
 **Bestandsausnahme (Allowlist im CI-Workflow):** Acht Stellen importieren
 `init_data` für die Mini-App-Auth-HMAC-Validierung via sys.path-Trick —
