@@ -27,6 +27,7 @@ from onboarding_store import (
 )
 from skills.anbieter_wechseln import (
     DONE_PRIVAT,
+    DONE_PRIVAT_PFAD_A,
     ERGEBNIS_ABGELEHNT,
     ERGEBNIS_GEWECHSELT,
     ERGEBNIS_UNPETRAENDERT,
@@ -492,7 +493,42 @@ def test_gruppen_bestaetigung_nennt_anbieter():
 
 
 # ============================================================
-#  11. ONB-12 V2: set_multi schließt das V1-Race-Fenster (#663)
+#  11. Pfad A: Quittungs-Wording trennen (#1021)
+# ============================================================
+
+def test_pfad_a_quittung_unterscheidet_sich_von_pfad_b():
+    """T1021: Bei Pfad A (Vendor-Slot vorgefüllt, kein Re-Key) wird KEIN neuer
+    Key gespeichert — die Quittung darf nicht „der neue Key ist gespeichert"
+    sagen. Pfad A sendet DONE_PRIVAT_PFAD_A, Pfad B sendet DONE_PRIVAT.
+    """
+    tg = FakeTelegram(members=_members(42))
+    # Beide Vendor-Slots vorgefüllt → Wahl mistral → Pfad A (Mistral-Slot truthy).
+    zd = FakeZd(initial={
+        zd_name_provider_api_key("claude"): "existing-claude-key",
+        zd_name_provider_api_key("mistral"): "existing-mistral-key",
+        ZD_NAME_PROVIDER_NAME: "claude",
+    })
+
+    result = anbieter_wechseln(
+        tg=tg, chat_id=11, user_id=42,
+        family_group_chat_id=99,
+        zd=zd, next_message=_stream("mistral"),
+        current_provider_name="claude",
+        _validate=_validate_ok)
+
+    assert result.ergebnis == ERGEBNIS_GEWECHSELT
+    assert result.neuer_anbieter == "mistral"
+
+    privat_texte = [m["text"] for m in tg.sent if m["chat_id"] == 11]
+    # Pfad-A-Quittung muss kommen, Pfad-B-Quittung NICHT.
+    assert any(DONE_PRIVAT_PFAD_A in t for t in privat_texte), (
+        "Pfad A muss DONE_PRIVAT_PFAD_A senden, nicht DONE_PRIVAT")
+    assert not any(DONE_PRIVAT in t for t in privat_texte), (
+        "Pfad A darf das Pfad-B-Wording 'Key gespeichert' nicht senden")
+
+
+# ============================================================
+#  12. ONB-12 V2: set_multi schließt das V1-Race-Fenster (#663)
 # ============================================================
 
 def test_set_multi_atomic_kein_partial_state():

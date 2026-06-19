@@ -50,7 +50,7 @@ from confirm import PendingProposal, PendingStore
 from history import History
 from model import ImageBlock, Message, ProviderError, TextBlock
 from onboarding import OnboardingState
-from onboarding_store import OnboardingStore
+from onboarding_store import ZD_NAME_PROVIDER_NAME, OnboardingStore
 from private_chat_session import SessionSortEntry
 from providers import get_provider
 from tasks import TurnContext, build_catalog
@@ -973,12 +973,14 @@ def build_context(cfg, db_path, zd_cli_path=None):
         tab_sessions=tab_sessions,
         # AVB / ONB-11 / #639: Session-Map + Getter für den aktuellen Anbieter.
         # Ohne beide erscheint »Anbieter wechseln« nicht im Katalog (AND-Guard
-        # in tasks.py). `current_provider_getter` liest cfg.provider — gleicher
-        # Pattern wie `provider_name=cfg.provider` weiter oben (TAB-5-Kommentar).
-        # V1: cfg.provider ist der Start-Wert; nach einem Wechsel-Akt ohne
-        # Neustart kann er petraltet sein (zukünftiger Verbesserungspunkt).
+        # in tasks.py). `current_provider_getter` liest den persistierten
+        # Vendor-Namen aus dem ZD-Slot (`eltern-chat-provider-name`, T663
+        # Welle A) — Fallback auf `cfg.provider` (Start-Wert), wenn der Slot
+        # leer/fehlend ist. Damit greift die Same-Provider-Logik im Skill auch
+        # nach einem Wechsel-Akt ohne Neustart (Watchdog-Folge #1021).
         avb_sessions=avb_sessions,
-        current_provider_getter=lambda: cfg.provider,
+        current_provider_getter=lambda: (
+            zd_store.get(ZD_NAME_PROVIDER_NAME) or cfg.provider),
         # TAB-5 / E-TAB-6: V1 nutzt denselben Anbieter wie der Text-Pfad
         # (cfg.provider). V2 (E-TAB-6): multimodal_* können unabhängig
         # gesetzt werden — leere Werte fallen auf den Text-Pfad zurück.
