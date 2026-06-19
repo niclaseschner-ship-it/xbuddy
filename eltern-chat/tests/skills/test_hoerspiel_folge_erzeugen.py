@@ -643,6 +643,8 @@ def test_task_execute_ruft_album_und_sendet():
     # Erst propose aufrufen um Session-State zu befüllen
     task.propose({"kind_id": "paula", "idee": "Stigi und der Drachenturm"}, ctx)
     task.execute({}, ctx)
+    # HFE-11 V1.1: execute() läuft im Daemon-Thread — Worker abwarten.
+    assert task._wait_for_active_job(55, timeout=5.0)
     assert len(client.album_calls) == 1
     assert tg.sent[0]["chat_id"] == 55
 
@@ -673,6 +675,8 @@ def test_task_propose_execute_end_to_end_session_state():
 
     # execute() ohne titel/text im arguments-Dict — Session-State trägt sie.
     task.execute({"kind_id": "paula", "idee": "Stigi und der Schneesturm"}, ctx)
+    # HFE-11 V1.1: execute() läuft im Daemon-Thread — Worker abwarten.
+    assert task._wait_for_active_job(77, timeout=5.0)
 
     assert len(client.album_calls) == 1
     call = client.album_calls[0]
@@ -1177,6 +1181,8 @@ def test_execute_uses_kind_id_neko_from_pending():
 
     # execute() → Neko-Client muss album_bauen() aufgerufen haben
     task.execute({}, ctx)
+    # HFE-11 V1.1: execute() läuft im Daemon-Thread — Worker abwarten.
+    assert task._wait_for_active_job(88, timeout=5.0)
 
     assert len(neko_client.album_calls) == 1, (
         "T962 AC-2: execute() muss Neko-Client für album_bauen wählen")
