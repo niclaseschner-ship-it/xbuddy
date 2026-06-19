@@ -968,6 +968,29 @@ def test_PANEL_11_eventsource_used_for_reconnect():
         'app.js muss EventSource verwenden (Standard-Reconnect, DC-7)'
 
 
+def test_PANEL_11_find_active_tile_multi_segment_ac1():
+    """AC2 / T1007-S2: findActiveTile matcht Multi-Segment-Views korrekt.
+    Kachel { app: 'hoerspiel', view: 'paula/alben' } muss bei URL
+    /display/hoerspiel/paula/alben als aktiv erkannt werden.
+    Sichert den echten PANEL-11-Effekt-Pfad (parseDisplayUrl →
+    tileMatchesUrl → findActiveTile → updateActiveMarker)."""
+    out = run_node('''
+        const tiles = [
+            { key: 'p', app: 'hoerspiel', view: 'paula/alben',
+              label: 'Paulas Hörspiele', icons: ['arasaac/5915.png'],
+              sichtbar: true },
+            { key: 'n', app: 'hoerspiel', view: 'neko/alben',
+              label: 'Nekos Hörspiele', icons: ['arasaac/5915.png'],
+              sichtbar: true },
+        ];
+        const active = panelLib.findActiveTile(tiles, '/display/hoerspiel/paula/alben');
+        console.log(JSON.stringify({ key: active && active.key }));
+    ''')
+    assert out['key'] == 'p', (
+        'findActiveTile muss Multi-Segment-View paula/alben matchen — '
+        'bekommen: %r' % out.get('key'))
+
+
 def test_PANEL_11_fetch_display_id_known_source_returns_display_id():
     """PANEL-11 / ROU-32: fetchDisplayId liefert display_id bei bekannter
     source_id (Mock auf <router_url>/api/v1/router/panels/<source_id> → 200)."""

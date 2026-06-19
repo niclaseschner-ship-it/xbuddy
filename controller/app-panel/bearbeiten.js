@@ -112,7 +112,7 @@
     if (!entry || typeof entry !== 'object') return [];
     if (entry.typ && entry.typ !== 'display') return [];
     var pfad = entry.pfad || '';
-    var m = /^\/display\/([^/?#]+)\/([^/?#]+)/.exec(pfad);
+    var m = /^\/display\/([^/?#]+)\/(.+?)(\?[^#]*)?$/.exec(pfad);
     if (!m) return [];
     var app = m[1], view = m[2];
     var icons = Array.isArray(entry.icons) ? entry.icons.slice() : [];
