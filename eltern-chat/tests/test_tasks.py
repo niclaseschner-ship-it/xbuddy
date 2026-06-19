@@ -10,6 +10,7 @@ from hooks import HookContext, HookFailure, HookSuccess
 from model import READ, WRITE
 from tasks import (
     PRESENTATION_INLINE_BUTTON,
+    PRESENTATION_INLINE_BUTTONS,
     PRESENTATION_WEBAPP_LINK,
     Catalog,
     ReadTask,
@@ -602,3 +603,71 @@ def test_presentation_constants_sind_korrekt():
     """AC2/TASK-10c: Vokabular-Konstanten haben die erwarteten Werte."""
     assert PRESENTATION_INLINE_BUTTON == "inline_button"
     assert PRESENTATION_WEBAPP_LINK == "webapp_link"
+
+
+# ============================================================
+#  EZG-5/EZG-6 — render_form_b Plural-Zweig (inline_buttons)
+# ============================================================
+
+def test_render_form_b_inline_buttons_plural_beide_urls_durchgereicht():
+    """EZG-5/EZG-6 Linse-7: render_form_b mit inline_buttons (Plural-Liste)
+    reicht BEIDE Button-Eintraege unverändert an send_inline_keyboard weiter.
+
+    Prueft:
+    - send_inline_keyboard wird genau einmal aufgerufen.
+    - Erster Button hat web_app_url (Mini-App-Pfad).
+    - Zweiter Button hat url (externer Browser-Pfad, PWA-Install).
+    - Beide URLs sind korrekt durchgereicht (keine Stummschaltung).
+    - Quittungs-String nennt die Anzahl der Buttons.
+    """
+    tg = _FakeTgForRender()
+    app_url = "https://buddyboard.taile235cf.ts.net/essen-einkauf/"
+    result = render_form_b(
+        {
+            "text": "Einkaufsliste",
+            "presentation": {
+                PRESENTATION_INLINE_BUTTONS: [
+                    {"label": "Liste öffnen", "web_app_url": app_url},
+                    {"label": "Im Browser öffnen", "url": app_url},
+                ]
+            },
+        },
+        tg,
+        chat_id=42,
+    )
+
+    assert len(tg.inline_sent) == 1, (
+        "render_form_b muss send_inline_keyboard genau einmal aufrufen."
+    )
+    call = tg.inline_sent[0]
+    assert call["chat_id"] == 42
+    assert call["text"] == "Einkaufsliste"
+
+    buttons = call["buttons"]
+    assert len(buttons) == 2, (
+        "Plural-Zweig: beide Buttons müssen an send_inline_keyboard gegeben werden."
+    )
+
+    # Button 1: web_app_url (Mini-App in Telegram-WebView)
+    assert buttons[0]["label"] == "Liste öffnen"
+    assert buttons[0].get("web_app_url") == app_url, (
+        "Button 1 muss web_app_url tragen (Mini-App-Pfad, EZG-6)."
+    )
+    assert "url" not in buttons[0], (
+        "Button 1 darf kein url-Feld enthalten — es wäre der falsche Typ."
+    )
+
+    # Button 2: url (externer Browser, PWA-Install)
+    assert buttons[1]["label"] == "Im Browser öffnen"
+    assert buttons[1].get("url") == app_url, (
+        "Button 2 muss url tragen (externer Browser-Link, EZG-6)."
+    )
+    assert "web_app_url" not in buttons[1], (
+        "Button 2 darf kein web_app_url-Feld enthalten — es wäre der falsche Typ."
+    )
+
+    # Quittungs-String
+    assert isinstance(result, str)
+    assert "2" in result or "Buttons" in result or "Button" in result, (
+        "Quittung soll Anzahl der Buttons nennen."
+    )
