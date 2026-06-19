@@ -1,5 +1,6 @@
 """Hörspiel-Folge erzeugen als Aufgaben-Katalog-Aufgabe — specs/platform/
-hoerspiel-folge-erzeugen.md (HFE-1, HFE-8, EC-8/EC-10, E-HFE-1 … E-HFE-5).
+hoerspiel-folge-erzeugen.md (HFE-1, HFE-8, EC-8/EC-10, E-HFE-1 … E-HFE-5,
+HFE-11, HFE-12, E-HFE-4 V1.1).
 
 Diese Aufgabe ist der V1-Trigger der `hoerspiel_folge_erzeugen`-Funktion
 (HFE-1, E-HFE-1): versteht der Agent eine natürlichsprachige Bitte
@@ -12,17 +13,78 @@ propose/execute-Zweiteilung ist die einzige Bestätigung; kein Sofort-Undo.
 
 Die Aufgabe ist ein dünner Aufrufer der trigger-agnostischen Funktion
 (HFE-1 / E-HFE-1) — keine eigene LLM-/TTS-Logik.
+
+V1.1 (2026-06-19, HFE-11 / HFE-12 / E-HFE-4): `execute()` läuft im
+Daemon-Thread im Task, der Polling-Loop ist während des 1–5-min-Album-
+Baus frei (Single-Slot pro chat_id via `_HfeJobStore`).
 """
 
 import contextlib
 import logging
 import re
+import threading
+import time
 
 from tasks import Proposal, WriteTask
 
 import skills.hoerspiel_folge_erzeugen as hfe_mod
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================
+#  HFE-11 — Job-Single-Slot pro Chat
+# ============================================================
+
+
+class _HfeJobStore:
+    """In-Memory Single-Slot pro chat_id (HFE-11).
+
+    Hält pro chat_id maximal einen Slot mit `started_at = monotonic()`.
+    `try_acquire(chat_id)` ist atomar (RLock); wenn ein Slot älter als
+    `timeout` (600 s) ist, gilt er als „stale" und darf überschrieben
+    werden (Schutz vor silent Thread-Tod — HFE-11).
+
+    Bewusst privat im Task-Modul: kein SESS-Eintrag, kein Eltern-Chat-
+    `Context`, keine Persistenz (HFE-12 — Restart-Verlust akzeptiert).
+    """
+
+    _DEFAULT_TIMEOUT_SEC = 600.0
+    # Indirektion für Tests: monkeypatchbar.
+    _now = staticmethod(time.monotonic)
+
+    def __init__(self, timeout_sec: float = _DEFAULT_TIMEOUT_SEC):
+        self._timeout = float(timeout_sec)
+        self._slots: dict = {}     # chat_id → started_at (monotonic)
+        self._lock = threading.RLock()
+
+    def try_acquire(self, chat_id) -> bool:
+        """Versucht, einen Slot für chat_id zu belegen.
+
+        Returns True, wenn der Slot belegt wurde (kein bisheriger Job
+        ODER stale-Slot überschrieben); False, wenn ein lebender Job
+        bereits läuft.
+        """
+        with self._lock:
+            now = self._now()
+            started_at = self._slots.get(chat_id)
+            if started_at is not None and (now - started_at) < self._timeout:
+                return False
+            self._slots[chat_id] = now
+            return True
+
+    def release(self, chat_id) -> None:
+        """Gibt den Slot frei (No-op, wenn nicht belegt)."""
+        with self._lock:
+            self._slots.pop(chat_id, None)
+
+    def is_active(self, chat_id) -> bool:
+        """True, wenn ein lebender (nicht-stale) Slot existiert."""
+        with self._lock:
+            started_at = self._slots.get(chat_id)
+            if started_at is None:
+                return False
+            return (self._now() - started_at) < self._timeout
 
 
 class HoerspielFolgeErzeugenTask(WriteTask):
@@ -150,6 +212,12 @@ class HoerspielFolgeErzeugenTask(WriteTask):
         # (durch propose() → execute() Zyklus werden neue Turns automatisch
         # erkannt, da _pending_vorschlaege geleert wird).
         self._first_propose_done: set = set()
+        # HFE-11 (V1.1): Single-Slot pro chat_id für laufende Album-Bauten.
+        # execute() startet einen Daemon-Thread; der Polling-Loop ist frei.
+        self._jobstore = _HfeJobStore()
+        # chat_id → Worker-Thread (Test-Helper für Join).
+        self._active_threads: dict = {}
+        self._active_threads_lock = threading.RLock()
 
     def propose(self, arguments, turn_context):
         """EC-10-Vorschlag — holt Folgen-Vorschlag vom Hörspiel-Buddy (HFE-3/4).
@@ -239,13 +307,26 @@ class HoerspielFolgeErzeugenTask(WriteTask):
         return Proposal(result_text)
 
     def execute(self, arguments, turn_context):
-        """Baut das Album nach EC-10-Bestätigung (HFE-5, TASK-10).
+        """Trampolin: spawnt Daemon-Thread, returnt sofortige Quittung (HFE-11).
+
+        V1.1 (2026-06-19, HFE-11 / E-HFE-4): `execute()` startet einen
+        Daemon-Thread und returnt in < 100 ms eine kurze Quittung. Der
+        Polling-Loop ist während des 1–5-min-Album-Baus frei (HFE-11).
+        Bei Erfolg/Crash postet der Worker-Thread direkt via tg.send_message.
 
         Liest titel/text/voice/idee aus dem Session-State (Befund 1) —
         nicht aus dem Modell-Kanal `arguments`, da das Framework nur die
         ursprünglichen Tool-Call-arguments persistiert ({idee, voice?}).
 
+        Single-Slot pro chat_id (HFE-11): Während ein Job läuft, wird ein
+        zweites `execute()` mit einer „warte kurz"-Quittung beantwortet —
+        kein zweiter Thread, kein zweiter HTTP-Call.
+
+        Restart-Verlust akzeptiert (HFE-12, OPEN-HSP-L V2).
+
         TASK-10: execute() ist außerhalb des Agent-Loops und sendet selbst.
+        TASK-5: is_async bleibt False — wir wollen, dass das Framework die
+        post_execute_hooks-Iteration regulär macht (Tuple bleibt leer).
         """
         chat_id = turn_context.chat_id
         pending = self._pending_vorschlaege.pop(chat_id, None)
@@ -261,26 +342,80 @@ class HoerspielFolgeErzeugenTask(WriteTask):
                     "bitte erneut starten.")
             return "Vorschlag verloren — erneut starten."
 
+        # HFE-11: Single-Slot pro chat_id — Slot belegt → sofortige
+        # „warte kurz"-Quittung, kein zweiter Thread, kein zweiter HTTP-Call.
+        if not self._jobstore.try_acquire(chat_id):
+            logger.info(
+                "HFE-execute: Slot für chat_id=%s belegt — zweite Bestätigung "
+                "abgewiesen (HFE-11).", chat_id)
+            with contextlib.suppress(Exception):
+                self._tg.send_message(
+                    chat_id,
+                    "Ich baue gerade noch eine Folge — bitte kurz warten.")
+            # Pending-Vorschlag war für DIESE Bestätigung — restaurieren wäre
+            # gefährlich (Doppel-Confirm); wir verwerfen ihn bewusst.
+            return "Ich baue gerade noch eine Folge — bitte kurz warten."
+
         # E-HFE-6 / HFE-3: kind_id aus dem pending-Dict → passenden Client wählen
         # (analog propose()). Verhindert den Mia-Default-Bug (T962-Befund).
         kind_id = pending["kind_id"]
         active_client = self._client_by_kind_id.get(kind_id, self._hoerspiel_client)
 
-        hfe_mod.execute(
-            hoerspiel_client=active_client,
-            tg=self._tg,
-            chat_id=chat_id,
-            display_url_origin=self._display_url_origin,
-            titel=pending["titel"],
-            text=pending["text"],
-            voice=pending["voice"],
-            idee=pending["idee"],
-        )
+        def _worker():
+            try:
+                hfe_mod.execute(
+                    hoerspiel_client=active_client,
+                    tg=self._tg,
+                    chat_id=chat_id,
+                    display_url_origin=self._display_url_origin,
+                    titel=pending["titel"],
+                    text=pending["text"],
+                    voice=pending["voice"],
+                    idee=pending["idee"],
+                )
+            except Exception:
+                # HFE-11: Crash im Album-Bau → Fehler-Bubble + Slot frei (finally).
+                logger.exception(
+                    "HFE-execute Worker-Thread chat_id=%s: Album-Bau crashed",
+                    chat_id)
+                with contextlib.suppress(Exception):
+                    self._tg.send_message(
+                        chat_id,
+                        "Beim Folge-Bau ist etwas schiefgegangen — "
+                        "bitte erneut starten.")
+            finally:
+                self._jobstore.release(chat_id)
+                with self._active_threads_lock:
+                    self._active_threads.pop(chat_id, None)
 
-        # execute() sendet selbst (TASK-10); der Rückgabe-String ist die
-        # interne Quittung an den Agent-Loop (wird nach dem EC-10-Gate nicht
-        # mehr an den Nutzer gepostet — er hat die Telegram-Bubble bekommen).
-        return "Folge erzeugt und Bubble gesendet."
+        thread = threading.Thread(
+            target=_worker,
+            name="hfe-job-%s" % chat_id,
+            daemon=True,
+        )
+        with self._active_threads_lock:
+            self._active_threads[chat_id] = thread
+        thread.start()
+        logger.info(
+            "HFE-execute: Daemon-Thread %r gestartet (chat_id=%s, titel=%r)",
+            thread.name, chat_id, pending["titel"])
+
+        # HFE-11: Sofortige Quittung (< 100 ms). Der Worker postet die
+        # Erfolgs-/Fehler-Bubble selbst per tg.send_message.
+        return "Folge wird gebaut, melde mich."
+
+    def _wait_for_active_job(self, chat_id, timeout: float = 10.0) -> bool:
+        """Test-Helper: joint den Worker-Thread für chat_id (oder no-op).
+
+        Returns True, wenn der Thread nicht (mehr) lief oder rechtzeitig
+        beendet wurde; False bei Timeout. Nicht für Produktiv-Code gedacht.
+        """
+        with self._active_threads_lock:
+            thread = self._active_threads.get(chat_id)
+        if thread is None:
+            return True
+        thread.join(timeout=timeout)
+        return not thread.is_alive()
 
 
 def _extrahiere_vorschlag_felder(result_text: str) -> tuple[str, str, str]:
