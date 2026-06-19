@@ -1,14 +1,17 @@
 """Tests für hoerspiel_oeffnen + HoerspielOeffnenTask — HOE-1 … HOE-7
 (specs/platform/hoerspiel-oeffnen.md).
 
+Nach Rückbau 2026-06-19 (Refs #1028, Anti-Redundanz E-HOE-2): HOE ist
+Folgen-only. Settings-Tab wird vom Agent sprachlich auf die Mini-App
+verwiesen, KEIN Tool-Call.
+
 Abgedeckte ACs:
   AC1 — HoerspielOeffnenTask erbt von ReadTask (Klasse-B-Pattern).
-  AC2 — Task baut strukturiertes Ergebnis (TASK-10c Form (b)) mit Übersicht +
-         Mini-App-Button-Spec.
-  AC3 — HOE-3: Settings-Variante → Hash #einstellungen, Label ⚙️.
-         HOE-3: Folgen-Variante → Hash #folgen, Label 🎧.
-  AC4 — E-HOE-3: Leerer Album-Bestand (Folgen-Variante) → Button wird
-         trotzdem gepostet.
+  AC2 — Task baut strukturiertes Ergebnis (TASK-10c Form (b)) mit Folgen-
+         Übersicht + Mini-App-Button-Spec.
+  AC3 — HOE-5: Folgen-Türöffner → Hash #folgen, Label 🎧, fester
+         /seiten/hoerspiel/mia/eltern-Pfad (HSP-35 aggregiert).
+  AC4 — E-HOE-3: Leerer Album-Bestand → Button wird trotzdem gepostet.
   AC5 — HOE-7: mini_app_url leer → Klartext, presentation leer.
          HOE-7: Buddy nicht erreichbar → Klartext, presentation leer.
          HOE-2: Berechtigung fehlt → BerechtigungError.
@@ -34,29 +37,14 @@ from tasks import ReadTask, TurnContext
 class FakeHoerspielClient:
     """Test-Doppelung für HoerspielClient.
 
-    `config_data`: Rückgabewert für config_lesen().
     `alben_liste`: Rückgabewert für alben_lesen().
-    `config_error` / `alben_error`: wenn gesetzt, wird der Fehler geworfen.
+    `alben_error`: wenn gesetzt, wird der Fehler geworfen.
     """
 
-    def __init__(self, config_data=None, alben_liste=None,
-                 config_error=None, alben_error=None):
-        self.config_calls = 0
+    def __init__(self, alben_liste=None, alben_error=None):
         self.alben_calls = 0
-        self._config_data = config_data or {
-            "default_voice": "shimmer",
-            "llm_provider": "openai",
-            "llm_model": "gpt-4o-mini",
-        }
         self._alben_liste = alben_liste if alben_liste is not None else []
-        self._config_error = config_error
         self._alben_error = alben_error
-
-    def config_lesen(self):
-        self.config_calls += 1
-        if self._config_error is not None:
-            raise self._config_error
-        return dict(self._config_data)
 
     def alben_lesen(self):
         self.alben_calls += 1
@@ -98,83 +86,23 @@ def _album(nr, titel):
 
 
 _MINI_APP_BASE = "https://xbuddy.example.com"
-_TEST_KIND_ID = "mia"
-_HOE_APP_PATH = "/seiten/hoerspiel/%s/eltern" % _TEST_KIND_ID
+_HOE_APP_PATH = "/seiten/hoerspiel/mia/eltern"
 _MINI_APP_URL = _MINI_APP_BASE + _HOE_APP_PATH
 
+
 # ============================================================
-#  AC3 — Settings-Variante → #einstellungen
+#  AC3 — Folgen-Türöffner → #folgen
 # ============================================================
 
 
-def test_HOE3_settings_hash_einstellungen():
-    """AC3/HOE-3/HOE-5: Tab-Hint 'einstellungen' → web_app_url endet auf #einstellungen."""
-    client = FakeHoerspielClient()
+def test_HOE5_folgen_hash():
+    """AC3/HOE-5: HOE-Aufruf → web_app_url endet auf #folgen."""
+    client = FakeHoerspielClient(alben_liste=[_album(1, "Mias erstes Abenteuer")])
     result = hoerspiel_oeffnen(
         chat_id=42,
         from_user_id=7,
-        tab_hint="einstellungen",
         hoerspiel_client=client,
         is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_URL,
-    )
-    ib = result["presentation"]["inline_button"]
-    assert ib["web_app_url"].endswith("#einstellungen"), (
-        "web_app_url muss auf #einstellungen enden: %r" % ib["web_app_url"])
-
-
-def test_HOE3_settings_ruft_config_nicht_alben():
-    """AC3/HOE-1: Tab-Hint 'einstellungen' → config_lesen() aufgerufen, alben_lesen() NICHT."""
-    client = FakeHoerspielClient()
-    hoerspiel_oeffnen(
-        chat_id=42, from_user_id=7, tab_hint="einstellungen",
-        hoerspiel_client=client, is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_URL,
-    )
-    assert client.config_calls == 1
-    assert client.alben_calls == 0
-
-
-def test_HOE4_settings_text_enthaelt_voice_und_anbieter():
-    """AC3/HOE-4: Settings-Variante → Text enthält Voice und Anbieter/Modell."""
-    client = FakeHoerspielClient(config_data={
-        "default_voice": "onyx",
-        "llm_provider": "mistral",
-        "llm_model": "mistral-7b",
-    })
-    result = hoerspiel_oeffnen(
-        chat_id=42, from_user_id=7, tab_hint="einstellungen",
-        hoerspiel_client=client, is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_URL,
-    )
-    text = result["text"]
-    assert "onyx" in text
-    assert "mistral" in text
-
-
-def test_HOE4_settings_label():
-    """AC3/HOE-4: Settings-Variante → Button-Label enthält 'Einstellungen'."""
-    client = FakeHoerspielClient()
-    result = hoerspiel_oeffnen(
-        chat_id=42, from_user_id=7, tab_hint="einstellungen",
-        hoerspiel_client=client, is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_URL,
-    )
-    label = result["presentation"]["inline_button"]["label"]
-    assert "Einstellungen" in label or "einstellungen" in label.lower()
-
-
-# ============================================================
-#  AC3 — Folgen-Variante → #folgen
-# ============================================================
-
-
-def test_HOE3_folgen_hash_folgen():
-    """AC3/HOE-3/HOE-5: Tab-Hint 'folgen' → web_app_url endet auf #folgen."""
-    client = FakeHoerspielClient(alben_liste=[_album(1, "Mias erstes Abenteuer")])
-    result = hoerspiel_oeffnen(
-        chat_id=42, from_user_id=7, tab_hint="folgen",
-        hoerspiel_client=client, is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_URL,
     )
     ib = result["presentation"]["inline_button"]
@@ -182,27 +110,26 @@ def test_HOE3_folgen_hash_folgen():
         "web_app_url muss auf #folgen enden: %r" % ib["web_app_url"])
 
 
-def test_HOE3_folgen_ruft_alben_nicht_config():
-    """AC3/HOE-1: Tab-Hint 'folgen' → alben_lesen() aufgerufen, config_lesen() NICHT."""
+def test_HOE1_ruft_alben_lesen():
+    """AC3/HOE-1: HOE-Aufruf → alben_lesen() aufgerufen."""
     client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
     hoerspiel_oeffnen(
-        chat_id=42, from_user_id=7, tab_hint="folgen",
+        chat_id=42, from_user_id=7,
         hoerspiel_client=client, is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_URL,
     )
     assert client.alben_calls == 1
-    assert client.config_calls == 0
 
 
 def test_HOE4_folgen_text_enthaelt_counter():
-    """AC3/HOE-4: Folgen-Variante → Text enthält Album-Anzahl."""
+    """AC3/HOE-4: Folgen-Übersicht → Text enthält Album-Anzahl."""
     client = FakeHoerspielClient(alben_liste=[
         _album(1, "Folge eins"),
         _album(2, "Folge zwei"),
         _album(3, "Folge drei"),
     ])
     result = hoerspiel_oeffnen(
-        chat_id=42, from_user_id=7, tab_hint="folgen",
+        chat_id=42, from_user_id=7,
         hoerspiel_client=client, is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_URL,
     )
@@ -211,14 +138,14 @@ def test_HOE4_folgen_text_enthaelt_counter():
 
 
 def test_HOE4_folgen_text_enthaelt_letzten_titel():
-    """AC3/HOE-4: Folgen-Variante → Text enthält Titel der Folge mit höchster Nr."""
+    """AC3/HOE-4: Folgen-Übersicht → Text enthält Titel der Folge mit höchster Nr."""
     client = FakeHoerspielClient(alben_liste=[
         _album(1, "Erste Folge"),
         _album(3, "Dritte Folge"),
         _album(2, "Zweite Folge"),
     ])
     result = hoerspiel_oeffnen(
-        chat_id=42, from_user_id=7, tab_hint="folgen",
+        chat_id=42, from_user_id=7,
         hoerspiel_client=client, is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_URL,
     )
@@ -227,47 +154,15 @@ def test_HOE4_folgen_text_enthaelt_letzten_titel():
 
 
 def test_HOE4_folgen_label():
-    """AC3/HOE-4: Folgen-Variante mit Alben → Button-Label enthält 'Folgen' / 'anhören'."""
+    """AC3/HOE-4: Folgen-Übersicht mit Alben → Button-Label enthält 'Folgen' / 'anhören'."""
     client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
     result = hoerspiel_oeffnen(
-        chat_id=42, from_user_id=7, tab_hint="folgen",
+        chat_id=42, from_user_id=7,
         hoerspiel_client=client, is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_URL,
     )
     label = result["presentation"]["inline_button"]["label"]
     assert "Folgen" in label or "anhören" in label.lower()
-
-
-# ============================================================
-#  AC3 — Default-Tab bei fehlendem/unbekanntem Tab-Hint
-# ============================================================
-
-
-def test_HOE1_default_tab_bei_leerem_hint():
-    """HOE-1: Fehlendes tab_hint → Default 'einstellungen' (config_lesen aufgerufen)."""
-    client = FakeHoerspielClient()
-    result = hoerspiel_oeffnen(
-        chat_id=42, from_user_id=7, tab_hint=None,
-        hoerspiel_client=client, is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_URL,
-    )
-    assert client.config_calls == 1
-    assert client.alben_calls == 0
-    assert result["presentation"]["inline_button"]["web_app_url"].endswith(
-        "#einstellungen")
-
-
-def test_HOE1_default_tab_bei_unbekanntem_hint():
-    """HOE-1: Unbekanntes tab_hint → Default 'einstellungen'."""
-    client = FakeHoerspielClient()
-    result = hoerspiel_oeffnen(
-        chat_id=42, from_user_id=7, tab_hint="unbekannt",
-        hoerspiel_client=client, is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_URL,
-    )
-    assert client.config_calls == 1
-    assert result["presentation"]["inline_button"]["web_app_url"].endswith(
-        "#einstellungen")
 
 
 # ============================================================
@@ -279,7 +174,7 @@ def test_EHOE3_leer_button_vorhanden():
     """AC4/E-HOE-3: Leerer Album-Bestand → TROTZDEM inline_button (analog E-RAO-3)."""
     client = FakeHoerspielClient(alben_liste=[])
     result = hoerspiel_oeffnen(
-        chat_id=42, from_user_id=7, tab_hint="folgen",
+        chat_id=42, from_user_id=7,
         hoerspiel_client=client, is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_URL,
     )
@@ -292,7 +187,7 @@ def test_EHOE3_leer_button_endet_auf_folgen():
     """AC4/E-HOE-3: Leerer Album-Bestand → Button-URL endet auf #folgen."""
     client = FakeHoerspielClient(alben_liste=[])
     result = hoerspiel_oeffnen(
-        chat_id=42, from_user_id=7, tab_hint="folgen",
+        chat_id=42, from_user_id=7,
         hoerspiel_client=client, is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_URL,
     )
@@ -309,7 +204,7 @@ def test_HOE7_mini_app_url_fehlt_kein_button():
     """AC5/HOE-7: mini_app_url leer → Klartext, presentation leer."""
     client = FakeHoerspielClient()
     result = hoerspiel_oeffnen(
-        chat_id=42, from_user_id=7, tab_hint="einstellungen",
+        chat_id=42, from_user_id=7,
         hoerspiel_client=client, is_member_fn=_immer_mitglied,
         mini_app_url="",
     )
@@ -318,26 +213,12 @@ def test_HOE7_mini_app_url_fehlt_kein_button():
     assert "url" in text.lower() or "konfig" in text.lower() or "fehlt" in text.lower()
 
 
-def test_HOE7_config_nicht_erreichbar_kein_button():
-    """AC5/HOE-7: Buddy (config) nicht erreichbar → Klartext, presentation leer."""
-    client = FakeHoerspielClient(
-        config_error=HoerspielClientError("Connection refused"))
-    result = hoerspiel_oeffnen(
-        chat_id=42, from_user_id=7, tab_hint="einstellungen",
-        hoerspiel_client=client, is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_URL,
-    )
-    assert result["presentation"] == {}
-    text = result["text"]
-    assert "erreichbar" in text.lower() or "versuch" in text.lower()
-
-
 def test_HOE7_alben_nicht_erreichbar_kein_button():
     """AC5/HOE-7: Buddy (alben) nicht erreichbar → Klartext, presentation leer."""
     client = FakeHoerspielClient(
         alben_error=HoerspielClientError("Connection refused"))
     result = hoerspiel_oeffnen(
-        chat_id=42, from_user_id=7, tab_hint="folgen",
+        chat_id=42, from_user_id=7,
         hoerspiel_client=client, is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_URL,
     )
@@ -351,7 +232,7 @@ def test_HOE2_berechtigung_fehlt():
     client = FakeHoerspielClient()
     with pytest.raises(BerechtigungError):
         hoerspiel_oeffnen(
-            chat_id=42, from_user_id=99, tab_hint="einstellungen",
+            chat_id=42, from_user_id=99,
             hoerspiel_client=client, is_member_fn=_kein_mitglied,
             mini_app_url=_MINI_APP_URL,
         )
@@ -359,9 +240,9 @@ def test_HOE2_berechtigung_fehlt():
 
 def test_HOE_returnt_form_b_dict():
     """TASK-10c: hoerspiel_oeffnen returnt Form-(b)-Dict {text, presentation}."""
-    client = FakeHoerspielClient()
+    client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
     result = hoerspiel_oeffnen(
-        chat_id=42, from_user_id=7, tab_hint="einstellungen",
+        chat_id=42, from_user_id=7,
         hoerspiel_client=client, is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_URL,
     )
@@ -394,28 +275,27 @@ def test_AC1_task_name():
     assert task.name == "hoerspiel_oeffnen"
 
 
-def test_AC2_task_hat_tab_hint_parameter():
-    """AC2: HoerspielOeffnenTask hat 'tab_hint' im parameters-Dict."""
+def test_AC2_task_hat_keinen_tab_hint_parameter():
+    """AC2 (Anti-Redundanz Rückbau #1028): keine tab_hint-Parameter mehr — Folgen-only."""
     client = FakeHoerspielClient()
     tg = FakeTelegram()
     task = HoerspielOeffnenTask(
         tg=tg, hoerspiel_client=client, is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_BASE)
     props = task.parameters.get("properties", {})
-    assert "tab_hint" in props
-    assert props["tab_hint"].get("enum") == ["einstellungen", "folgen"]
+    assert "tab_hint" not in props
 
 
-def test_AC2_task_settings_returnt_form_b():
-    """AC2: Task returnt Form-(b)-Dict (Settings-Variante), sendet nichts selbst."""
-    client = FakeHoerspielClient()
+def test_AC2_task_folgen_returnt_form_b():
+    """AC2: Task returnt Form-(b)-Dict, sendet nichts selbst."""
+    client = FakeHoerspielClient(alben_liste=[_album(1, "Erste Folge")])
     tg = FakeTelegram()
     task = HoerspielOeffnenTask(
         tg=tg, hoerspiel_client=client, is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_BASE)
     ctx = TurnContext(chat_id=42, from_user_id=7)
 
-    result = task.run({"tab_hint": "einstellungen"}, ctx)
+    result = task.run({}, ctx)
 
     assert isinstance(result, dict)
     assert "text" in result
@@ -426,63 +306,30 @@ def test_AC2_task_settings_returnt_form_b():
     assert len(tg.sent) == 0
 
 
-def test_AC2_task_folgen_returnt_form_b():
-    """AC2: Task returnt Form-(b)-Dict (Folgen-Variante), sendet nichts selbst."""
-    client = FakeHoerspielClient(alben_liste=[_album(1, "Erste Folge")])
+def test_AC2_task_mini_app_url_baut_pfad_folgen():
+    """AC2/HOE-5: Task baut web_app_url = base + /seiten/hoerspiel/mia/eltern#folgen.
+
+    Fester mia-Launcher (HSP-35 aggregiert clientseitig).
+    """
+    client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
     tg = FakeTelegram()
     task = HoerspielOeffnenTask(
         tg=tg, hoerspiel_client=client, is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_BASE)
     ctx = TurnContext(chat_id=42, from_user_id=7)
 
-    result = task.run({"tab_hint": "folgen"}, ctx)
-
-    assert isinstance(result, dict)
-    assert "inline_button" in result["presentation"]
-    assert len(tg.inline_sent) == 0
-    assert len(tg.sent) == 0
-
-
-def test_AC2_task_mini_app_url_baut_pfad_einstellungen():
-    """AC2/HOE-5: Task baut web_app_url = base + /seiten/hoerspiel/<kind_id>/eltern#einstellungen
-    (HSP-26 / URL-3a / T970).
-    """
-    client = FakeHoerspielClient()
-    tg = FakeTelegram()
-    task = HoerspielOeffnenTask(
-        tg=tg, hoerspiel_client=client, is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_BASE, kind_id=_TEST_KIND_ID)
-    ctx = TurnContext(chat_id=42, from_user_id=7)
-
-    result = task.run({"tab_hint": "einstellungen"}, ctx)
+    result = task.run({}, ctx)
 
     url = result["presentation"]["inline_button"]["web_app_url"]
     assert url.startswith("https://")
-    assert ("/seiten/hoerspiel/%s/eltern" % _TEST_KIND_ID) in url
-    assert url.endswith("#einstellungen")
-
-
-def test_AC2_task_mini_app_url_baut_pfad_folgen():
-    """AC2/HOE-5: Task baut web_app_url = base + /seiten/hoerspiel/<kind_id>/eltern#folgen
-    (HSP-26 / URL-3a / T970).
-    """
-    client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
-    tg = FakeTelegram()
-    task = HoerspielOeffnenTask(
-        tg=tg, hoerspiel_client=client, is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_BASE, kind_id=_TEST_KIND_ID)
-    ctx = TurnContext(chat_id=42, from_user_id=7)
-
-    result = task.run({"tab_hint": "folgen"}, ctx)
-
-    url = result["presentation"]["inline_button"]["web_app_url"]
-    assert url.startswith("https://")
-    assert ("/seiten/hoerspiel/%s/eltern" % _TEST_KIND_ID) in url
+    assert "/seiten/hoerspiel/mia/eltern" in url
     assert url.endswith("#folgen")
 
 
-def test_AC2_task_description_enthaelt_sofort_und_trigger():
-    """AC2: Task-Description enthält klaren Sofort-Aufrufen-Marker und Trigger-Phrasen."""
+def test_AC2_task_description_enthaelt_folgen_trigger():
+    """AC2: Task-Description enthält Sofort-Aufruf-Marker, Folgen-Trigger und
+    expliziten Anti-Redundanz-Hinweis (kein Settings-Aufruf).
+    """
     client = FakeHoerspielClient()
     tg = FakeTelegram()
     task = HoerspielOeffnenTask(
@@ -490,8 +337,9 @@ def test_AC2_task_description_enthaelt_sofort_und_trigger():
         mini_app_url=_MINI_APP_BASE)
     desc = task.description.lower()
     assert "sofort aufrufen" in desc or "sofort" in desc
-    assert "voice" in desc or "stimme" in desc
     assert "folgen" in desc or "hörbuch" in desc
+    # Anti-Redundanz: Settings-Trigger sind ausgeschlossen
+    assert "nicht" in desc and ("voice" in desc or "stimme" in desc or "settings" in desc)
 
 
 # ============================================================

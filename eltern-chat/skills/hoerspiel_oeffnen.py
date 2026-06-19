@@ -1,10 +1,10 @@
 """Hörspiel öffnen — specs/platform/hoerspiel-oeffnen.md (HOE-1 … HOE-7).
 
 Aufrufbare, trigger-agnostische Funktion (HOE-1, E-HOE-1 analog E-RAO-1):
-liest die Hörspiel-Konfig (Settings-Variante: GET /api/v1/hoerspiel/config)
-oder die Album-Liste (Folgen-Variante: GET /api/v1/hoerspiel/alben), baut
-eine kompakte Übersichts-Nachricht + Inline-Button auf die Hörspiel-Eltern-
-Mini-App (HOE-4/HOE-5) und gibt ein Form-(b)-Dict zurück (TASK-10c).
+liest die Album-Liste (GET /api/v1/hoerspiel/mia/alben) als festen
+Launcher (HSP-35 aggregiert clientseitig), baut eine kompakte Folgen-
+Übersichts-Nachricht + Inline-Button auf den Folgen-Tab der Hörspiel-
+Eltern-Mini-App (HOE-4/HOE-5) und gibt ein Form-(b)-Dict zurück (TASK-10c).
 
 TASK-10c Form (b): der Skill returnt `{text, presentation}` — der Task
 reicht das Dict direkt weiter; das Framework (agent.py + render_form_b)
@@ -12,19 +12,14 @@ reicht das Dict direkt weiter; das Framework (agent.py + render_form_b)
 NICHTS selbst (EC-29 „Eine Stimme im Agent-Turn").
 
 Schwester-Skill von routine_anpassen_oeffnen (RAO) — identischer
-Mini-App-Türöffner-Pattern, andere Buddy-Naht plus Tab-Hint-Parameter
-(HOE-1, E-HOE-2).
-
-**Wesentlicher Unterschied zu RAO:** Tab-Hint-Parameter `tab_hint`
-bestimmt, welcher Lese-Pfad gewählt wird und welches URL-Hash-Fragment
-der Button trägt. Default bei fehlendem/unbekanntem Tab-Hint: `"einstellungen"`
-(konsistent zu HSP-33-Default, HOE-1).
+Mini-App-Türöffner-Pattern, andere Buddy-Naht. Ein Tab, ein Pfad
+(Folgen) — Anti-Redundanz-Setzung 2026-06-19 (E-HOE-2): Settings-Tab
+wird über HOE NICHT bedient, weil die Mini-App das selbst kann.
 
 **Eingang:**
   - `chat_id`           — Telegram-Chat (HOE-1).
   - `from_user_id`      — Telegram-User-ID des Aufrufers (Berechtigung HOE-2).
-  - `tab_hint`          — `"einstellungen"` | `"folgen"` (HOE-1/HOE-3).
-  - `hoerspiel_client`  — HoerspielClient-Instanz (HOE-1, CLIENT-1-Naht).
+  - `hoerspiel_client`  — HoerspielClient-Instanz für mia (HOE-1, CLIENT-1-Naht).
   - `is_member_fn`      — Callable `(user_id) -> bool` (HOE-2, EC-2).
   - `mini_app_url`      — Basis-URL der Hörspiel-Eltern-Mini-App (HOE-5).
                           Leer → Fehler-Text (HOE-7).
@@ -32,8 +27,8 @@ der Button trägt. Default bei fehlendem/unbekanntem Tab-Hint: `"einstellungen"`
 **Ausgang:** Form-(b)-Dict `{text, presentation}`:
   - Mit Button: `presentation: {inline_button: {label, web_app_url}}`.
   - Ohne Button (Konfig-/Netz-Fehler): `presentation: {}`.
-  E-HOE-3: Bei leerem Album-Bestand (Folgen-Variante) wird trotzdem ein
-  Button zurückgegeben (analog E-RAO-3 — Anfangszustand, kein Endzustand).
+  E-HOE-3: Bei leerem Album-Bestand wird trotzdem ein Button zurückgegeben
+  (analog E-RAO-3 — Anfangszustand, kein Endzustand).
 
 Wirft `BerechtigungError` bei HOE-2-Verletzung.
 
@@ -48,32 +43,13 @@ from skills.hoerspiel_client import HoerspielClientError
 
 logger = logging.getLogger(__name__)
 
-# HOE-1: Default-Tab bei fehlendem/unbekanntem Tab-Hint (HSP-33-Default).
-_DEFAULT_TAB = "einstellungen"
-
-# HOE-4: Labels pro Tab-Variante.
-_LABEL_EINSTELLUNGEN = "⚙️ Einstellungen öffnen"
+# HOE-4: Labels (Folgen-only nach Rückbau 2026-06-19, Refs #1028).
 _LABEL_FOLGEN = "🎧 Folgen anhören"
 _LABEL_FOLGEN_LEER = "🎧 Folgen-Tab öffnen"
 
 
-def _baue_einstellungen_text(config_data):
-    """HOE-4 Settings-Variante: kompakter Text aus GET /config.
-
-    Erwartet Dict mit `default_voice`, `llm_provider`, `llm_model`.
-    Fehlende Felder fallen auf Platzhalter zurück.
-    """
-    voice = config_data.get("default_voice") or "?"
-    provider = config_data.get("llm_provider") or "?"
-    model = config_data.get("llm_model") or "?"
-    return (
-        "🎧 Hörspiel-Einstellungen — Voice: %s, Anbieter: %s/%s"
-        % (voice, provider, model)
-    )
-
-
 def _baue_folgen_text(alben_liste):
-    """HOE-4 Folgen-Variante: kompakter Text aus GET /alben.
+    """HOE-4: kompakter Folgen-Text aus GET /alben.
 
     E-HOE-3: Leerer Album-Bestand → Sonderfall-Text (Button wird trotzdem gesetzt).
     """
@@ -96,12 +72,11 @@ def _baue_folgen_text(alben_liste):
     )
 
 
-def _baue_uebersicht(tab_hint, hoerspiel_client, mini_app_url):
-    """HOE-4/HOE-5: baut Text + presentation für die Übersichts-Nachricht.
+def _baue_uebersicht(hoerspiel_client, mini_app_url):
+    """HOE-4/HOE-5: baut Text + presentation für die Folgen-Übersichts-Nachricht.
 
-    Führt den Lese-Pfad passend zum Tab-Hint aus.
     Liefert ein Form-(b)-Dict `{text, presentation}` (TASK-10c):
-      - Standardfall: Text mit Übersicht + inline_button mit Hash-Fragment.
+      - Standardfall: Text mit Folgen-Übersicht + inline_button mit #folgen-Hash.
       - HOE-7 mini_app_url leer: Fehler-Text, presentation leer.
       - HOE-7 Buddy nicht erreichbar: Fehler-Text, presentation leer.
     """
@@ -114,47 +89,26 @@ def _baue_uebersicht(tab_hint, hoerspiel_client, mini_app_url):
             "presentation": {},
         }
 
-    # HOE-1: Default bei fehlendem/unbekanntem Tab-Hint
-    effective_tab = tab_hint if tab_hint in ("einstellungen", "folgen") \
-        else _DEFAULT_TAB
+    # HOE-5: fester #folgen-Hash an Mini-App-URL anhängen
+    web_app_url = mini_app_url.rstrip("/") + "#folgen"
 
-    # HOE-5: URL-Hash-Fragment an Mini-App-URL anhängen
-    web_app_url = mini_app_url.rstrip("/") + "#" + effective_tab
-
-    # HOE-4: Lese-Pfad + Button-Label abhängig vom Tab
-    if effective_tab == "folgen":
-        try:
-            alben_liste = hoerspiel_client.alben_lesen()
-        except HoerspielClientError as e:
-            logger.warning(
-                "hoerspiel_oeffnen: Hörspiel-Buddy (alben) nicht erreichbar — %s", e)
-            return {
-                "text": (
-                    "Der Hörspiel-Buddy ist gerade nicht erreichbar — "
-                    "versuch's gleich nochmal."
-                ),
-                "presentation": {},
-            }
-        n = len(alben_liste)
-        text = _baue_folgen_text(alben_liste)
-        # E-HOE-3: Button auch bei leerem Album-Bestand
-        label = _LABEL_FOLGEN_LEER if n == 0 else _LABEL_FOLGEN
-    else:
-        # Settings-Variante (einstellungen)
-        try:
-            config_data = hoerspiel_client.config_lesen()
-        except HoerspielClientError as e:
-            logger.warning(
-                "hoerspiel_oeffnen: Hörspiel-Buddy (config) nicht erreichbar — %s", e)
-            return {
-                "text": (
-                    "Der Hörspiel-Buddy ist gerade nicht erreichbar — "
-                    "versuch's gleich nochmal."
-                ),
-                "presentation": {},
-            }
-        text = _baue_einstellungen_text(config_data)
-        label = _LABEL_EINSTELLUNGEN
+    # HOE-4: Lese-Pfad /alben + Button-Label
+    try:
+        alben_liste = hoerspiel_client.alben_lesen()
+    except HoerspielClientError as e:
+        logger.warning(
+            "hoerspiel_oeffnen: Hörspiel-Buddy (alben) nicht erreichbar — %s", e)
+        return {
+            "text": (
+                "Der Hörspiel-Buddy ist gerade nicht erreichbar — "
+                "versuch's gleich nochmal."
+            ),
+            "presentation": {},
+        }
+    n = len(alben_liste)
+    text = _baue_folgen_text(alben_liste)
+    # E-HOE-3: Button auch bei leerem Album-Bestand
+    label = _LABEL_FOLGEN_LEER if n == 0 else _LABEL_FOLGEN
 
     presentation = {
         "inline_button": {
@@ -165,18 +119,17 @@ def _baue_uebersicht(tab_hint, hoerspiel_client, mini_app_url):
     return {"text": text, "presentation": presentation}
 
 
-def hoerspiel_oeffnen(chat_id, from_user_id, tab_hint,
+def hoerspiel_oeffnen(chat_id, from_user_id,
                       hoerspiel_client, is_member_fn, mini_app_url):
     """Hörspiel öffnen — aufrufbare Funktion (HOE-1, E-HOE-1).
 
-    Liest Hörspiel-Konfig oder Album-Liste (abhängig von `tab_hint`),
-    baut Übersichts-Text + Präsentations-Hinweis (HOE-4/HOE-5,
-    TASK-10c Form (b)).
+    Liest Album-Liste, baut Übersichts-Text + Präsentations-Hinweis
+    (HOE-4/HOE-5, TASK-10c Form (b)).
 
     Returnt ein Form-(b)-Dict `{text, presentation}`:
       - Mit Button: `presentation: {inline_button: {label, web_app_url}}`.
       - Ohne Button (Konfig-/Netz-Fehler): `presentation: {}`.
-      E-HOE-3: Bei leerem Album-Bestand (Folgen-Variante) trotzdem Button.
+      E-HOE-3: Bei leerem Album-Bestand trotzdem Button.
 
     Wirft `BerechtigungError` bei HOE-2-Verletzung.
     """
@@ -187,11 +140,11 @@ def hoerspiel_oeffnen(chat_id, from_user_id, tab_hint,
             from_user_id)
         raise BerechtigungError("Das geht nur für Eltern.")
 
-    result = _baue_uebersicht(tab_hint, hoerspiel_client, mini_app_url)
+    result = _baue_uebersicht(hoerspiel_client, mini_app_url)
     presentation = result.get("presentation") or {}
     button_count = 1 if "inline_button" in presentation else 0
     logger.info(
-        "hoerspiel_oeffnen: tab=%s für Chat %s, Buttons=%d",
-        tab_hint, chat_id, button_count,
+        "hoerspiel_oeffnen: Folgen-Türöffner für Chat %s, Buttons=%d",
+        chat_id, button_count,
     )
     return result
