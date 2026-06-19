@@ -22,7 +22,9 @@ an onboarding.handle_update, bis der Key per Chat eingerichtet ist.
 import argparse
 import logging
 import os
+import queue
 import sys
+import threading
 import time
 import uuid
 from dataclasses import dataclass
@@ -53,6 +55,11 @@ from onboarding import OnboardingState
 from onboarding_store import ZD_NAME_PROVIDER_NAME, OnboardingStore
 from private_chat_session import SessionSortEntry
 from providers import get_provider
+
+# EC-39: Renewer-Intervall — gemeinsame Wahrheit mit EC-28 / skills/typing_indicator.py.
+# Re-Export, damit eine spätere conventions/typing-renewal.md (n=3-Aufschub)
+# den Wert nicht an zwei Orten pflegt.
+from skills.typing_indicator import _DEFAULT_RENEWAL_INTERVAL as _RENEWER_INTERVAL_S
 from tasks import TurnContext, build_catalog
 from telegram import ChatMigratedError, TelegramClient, TelegramError
 from telemetry import TelemetryStore
@@ -733,32 +740,55 @@ def dispatch(update, ctx):
         handle_update(update, ctx)
 
 
-def poll_loop(ctx, get_updates_timeout=30):
-    """Liest fortlaufend Updates und verarbeitet sie (E-EC-2: Polling).
+_BACKOFF_START = 1      # Sekunden — Startverzögerung bei leerem Poll
+_BACKOFF_FACTOR = 2     # Multiplikator je aufeinanderfolgendem leeren Poll
+_BACKOFF_CAP = 5        # Sekunden — maximale Backoff-Pause
 
-    Backoff (E-EC-2, #294): Leere oder fehlgeschlagene Polls werden mit
-    exponentiellem Backoff verlangsamt — Start 1 s, Faktor 2, Cap 5 s.
-    Ein eintreffendes Update setzt den Backoff auf 0 zurück.
-    Der Long-Poll-`timeout`-Parameter (wie lange Telegram auf Updates wartet)
-    ist davon unabhängig — der Backoff betrifft nur den Abstand zwischen
-    aufeinanderfolgenden leeren/fehlgeschlagenen Poll-Aufrufen.
 
-    Latenz (E-EC-2, #294, LOG-4): Pro empfangenem Update-Batch wird die
-    familienseitige Pickup-Latenz geloggt — von getUpdates-Rückkehr (t0) bis
-    Ende der Verarbeitung (t1). Abgegrenzt von EC-23-Provider-Latenz.
+def _is_private_message_update(update):
+    """True, wenn das Update ein `message` mit `chat.type == "private"` trägt
+    (Reader-Filter für Sofort-Typing, EC-39). `my_chat_member` und Gruppen
+    fallen raus — EC-25 verriegelt das Bestand-Verhalten.
     """
-    _BACKOFF_START = 1      # Sekunden — Startverzögerung bei leerem Poll
-    _BACKOFF_FACTOR = 2     # Multiplikator je aufeinanderfolgendem leeren Poll
-    _BACKOFF_CAP = 5        # Sekunden — maximale Backoff-Pause
+    if not isinstance(update, dict):
+        return False
+    msg = update.get("message")
+    if not isinstance(msg, dict):
+        return False
+    chat = msg.get("chat") or {}
+    return chat.get("type") == "private"
 
+
+def _safe_send_chat_action(tg, chat_id, action="typing"):
+    """Sendet einen Typing-Indikator und schluckt jede Exception (EC-39:
+    Best-Effort; sendChatAction-Fehler dürfen den Reader-Pfad nicht
+    unterbrechen). Der echte TelegramClient.send_chat_action schluckt bereits
+    TelegramError; dieser Wrapper schließt auch alles weitere ein (Rate-Limit,
+    Test-Doppelungen, die andere Exceptions werfen).
+    """
+    try:
+        tg.send_chat_action(chat_id, action)
+    except Exception as e:  # EC-39 Best-Effort
+        logging.warning("send_chat_action chat_id=%s fehler=%s (geschluckt)",
+                        chat_id, e)
+
+
+def _reader_loop(ctx, tg_reader, handoff, ack, open_chat_ids, chat_ids_lock,
+                 stop_event, get_updates_timeout):
+    """Reader-Daemon (EC-37): Long-Poll, Sofort-Typing (EC-39), Hand-off, ACK.
+
+    Backoff (E-EC-2, #294) liegt jetzt hier: Reader pausiert bei leerem oder
+    fehlgeschlagenem Poll mit exponentiellem Backoff. Pro Update wird **vor**
+    dem `handoff.put` ein Sofort-Typing-Indikator gefeuert (EC-39, nur
+    Privatchat), die `chat_id` in `open_chat_ids` aufgenommen und dann auf
+    das ACK des Processors gewartet (EC-38: At-least-once).
+    """
     offset = None
-    backoff = 0.0           # aktuelle Backoff-Pause (0 = kein Backoff)
-    logging.info("Eltern-Chat läuft — warte auf Nachrichten.")
-    while True:
+    backoff = 0.0
+    while not stop_event.is_set():
         try:
-            updates = ctx.tg.get_updates(offset, timeout=get_updates_timeout)
+            updates = tg_reader.get_updates(offset, timeout=get_updates_timeout)
         except TelegramError as e:
-            # Fehlgeschlagener Poll: Backoff anwenden (Startwert, falls noch 0).
             if backoff == 0.0:
                 backoff = _BACKOFF_START
             logging.warning(
@@ -767,9 +797,21 @@ def poll_loop(ctx, get_updates_timeout=30):
             time.sleep(backoff)
             backoff = min(backoff * _BACKOFF_FACTOR, _BACKOFF_CAP)
             continue
+        except Exception:
+            # Reader-Daemon darf nicht still sterben — sonst sitzt der
+            # Processor fuer immer in `handoff.get(...)`. stop_event wird
+            # gesetzt, damit der Processor aus dem handoff.get-Loop austritt.
+            # Test-Doppelungen werfen bewusst untypisierte Exceptions, um den
+            # Reader zu beenden; im Live-Betrieb stoppt der Stop-Event den
+            # Loop sowieso.
+            logging.warning(
+                "Reader-Loop: unerwartete Exception aus get_updates — "
+                "Reader beendet sich, stop_event wird gesetzt",
+                exc_info=True)
+            stop_event.set()
+            return
 
         if not updates:
-            # Leerer Poll: Backoff hochzählen.
             if backoff == 0.0:
                 backoff = _BACKOFF_START
             else:
@@ -778,19 +820,146 @@ def poll_loop(ctx, get_updates_timeout=30):
                 time.sleep(backoff)
             continue
 
-        # Update(s) eingetroffen — Backoff zurücksetzen, Latenz messen.
+        # Update(s) eingetroffen — Backoff zurücksetzen.
         backoff = 0.0
-        t0 = time.monotonic()
         for update in updates:
-            offset = update.get("update_id", 0) + 1
+            if stop_event.is_set():
+                return
+            update_id = update.get("update_id", 0)
+            t0 = time.monotonic()
+
+            # EC-39: Sofort-Typing für Privatchat-Updates, VOR Hand-off.
+            # Privacy-Trade-off bewusst akzeptiert (vor Auth, spec Z. 1357-1370).
+            chat_id_for_typing = None
+            if _is_private_message_update(update):
+                chat_id_for_typing = (update["message"]["chat"] or {}).get("id")
+                if chat_id_for_typing is not None:
+                    _safe_send_chat_action(tg_reader, chat_id_for_typing)
+                    with chat_ids_lock:
+                        open_chat_ids.add(chat_id_for_typing)
+
+            # EC-37 Hand-off: bounded Queue(maxsize=1), blockiert bis Processor
+            # entnimmt. Tupel (t0, update_id, update) trägt die Pickup-Latenz
+            # bis zum Processor weiter (E-EC-2).
+            handoff.put((t0, update_id, update))
+
+            # EC-38: ACK abwarten — erst nach Done-Signal Offset erhöhen.
+            # At-least-once: Crash zwischen Hand-off und ACK ⇒ Telegram liefert
+            # das Update beim Restart erneut.
             try:
-                dispatch(update, ctx)
-            except Exception:  # ein Update darf den Loop nie killen
-                logging.exception("Verarbeitung eines Updates fehlgeschlagen")
-        latency_ms = int((time.monotonic() - t0) * 1000)
-        logging.info(
-            "poll event=pickup_latency count=%d latency_ms=%d",
-            len(updates), latency_ms)
+                acked_id = ack.get()
+            except Exception:  # pragma: no cover — Queue.get blockiert sonst nie
+                acked_id = None
+            if acked_id != update_id:
+                # Schreibender Watch-Punkt — sollte nie passieren, weil Queue
+                # serialisiert. Defensiv geloggt.
+                logging.error(
+                    "ACK-ID-Mismatch: erwartet %s, erhalten %s — "
+                    "Offset wird trotzdem auf %s gesetzt",
+                    update_id, acked_id, update_id + 1)
+            offset = update_id + 1
+
+
+def _processor_loop(ctx, handoff, ack, open_chat_ids, chat_ids_lock,
+                    stop_event):
+    """Processor (Hauptthread, EC-37): konsumiert die Hand-off-Queue,
+    läuft `dispatch(update, ctx)` und meldet das Done-Signal über die
+    ACK-Queue. `open_chat_ids` wird nach `dispatch` wieder frei — der
+    Renewer hört für diesen Chat auf, weitere Typing-Indikatoren zu schicken.
+    Pickup-Latenz wird hier geloggt (E-EC-2): t0 stammt aus dem Reader,
+    t1 ist der Zeitpunkt nach `dispatch`.
+    """
+    while not stop_event.is_set():
+        try:
+            t0, update_id, update = handoff.get(timeout=0.5)
+        except queue.Empty:
+            continue
+        chat_id_open = None
+        if _is_private_message_update(update):
+            chat_id_open = (update["message"]["chat"] or {}).get("id")
+        try:
+            dispatch(update, ctx)
+        except Exception:  # ein Update darf den Loop nie killen
+            logging.exception("Verarbeitung eines Updates fehlgeschlagen")
+        finally:
+            if chat_id_open is not None:
+                with chat_ids_lock:
+                    open_chat_ids.discard(chat_id_open)
+            latency_ms = int((time.monotonic() - t0) * 1000)
+            logging.info(
+                "poll event=pickup_latency count=%d latency_ms=%d",
+                1, latency_ms)
+            ack.put(update_id)
+
+
+def _renewer_loop(tg_main, open_chat_ids, chat_ids_lock, stop_event,
+                  interval=_RENEWER_INTERVAL_S):
+    """Renewer-Daemon (EC-39): erneuert den Typing-Indikator alle `interval`
+    Sekunden für jede `chat_id` in `open_chat_ids`. Telegram löscht das
+    Signal nach ~5 s — 4-s-Tick (EC-28-Konstante) hält es lebendig, solange
+    das Update in der Hand-off-Queue steht oder der Processor arbeitet.
+    Tolerante Race (spec Z. 1271-1273): worst case ein Typing zuviel — der
+    Telegram-Client überschreibt das mit der nächsten Bot-Antwort.
+    """
+    while not stop_event.wait(interval):
+        with chat_ids_lock:
+            chats = list(open_chat_ids)
+        for chat_id in chats:
+            _safe_send_chat_action(tg_main, chat_id)
+
+
+def poll_loop(ctx, get_updates_timeout=30, tg_reader=None):
+    """Reader/Processor/Renewer-Topologie (E-EC-2 / EC-37 / EC-38 / EC-39).
+
+    Drei Threads:
+      * **Reader** (Daemon) — Long-Poll auf `tg_reader.get_updates`, Sofort-
+        Typing für Privatchat-Updates (EC-39), Hand-off pro Update, blockiert
+        bis ACK vor Offset-Erhöhung (EC-38: At-least-once).
+      * **Processor** (Hauptthread) — konsumiert Hand-off, ruft
+        `dispatch(update, ctx)`, meldet ACK.
+      * **Renewer** (Daemon) — erneuert alle 4 s den Typing-Indikator für
+        jede `chat_id` in `open_chat_ids` (EC-39, EC-28-Intervall).
+
+    `tg_reader` ist ein separater `TelegramClient` mit gleichem Token aber
+    eigenem `_opener` (EC-37 spec Z. 1265-1268). `ctx.tg` (= `tg_main`)
+    bleibt für Renewer, Bot-Antworten und Skill-Sends. Fehlt `tg_reader`
+    (Test-Setup ohne expliziten zweiten Client), nutzt der Reader `ctx.tg`
+    — das ist ausreichend, solange der Test nicht parallel auf demselben
+    Opener Bot-Antworten sendet.
+
+    Backoff (E-EC-2 / #294): Reader hält Start 1 s, Faktor 2, Cap 5 s.
+    Pickup-Latenz (E-EC-2 / LOG-4): pro Update vom Reader bis Processor-
+    Ende, identisches Logformat `event=pickup_latency count=N latency_ms=X`.
+    """
+    if tg_reader is None:
+        tg_reader = ctx.tg
+
+    handoff = queue.Queue(maxsize=1)   # (t0, update_id, update) — EC-37
+    ack = queue.Queue(maxsize=1)       # update_id — Done-Signal (EC-37/EC-38)
+    open_chat_ids = set()              # set[int] — EC-37/EC-39
+    chat_ids_lock = threading.RLock()  # einzige RLock-Instanz, spec Z. 1269-1271
+    stop_event = threading.Event()
+
+    reader = threading.Thread(
+        target=_reader_loop,
+        name="poll-reader",
+        args=(ctx, tg_reader, handoff, ack, open_chat_ids, chat_ids_lock,
+              stop_event, get_updates_timeout),
+        daemon=True)
+    renewer = threading.Thread(
+        target=_renewer_loop,
+        name="poll-renewer",
+        args=(ctx.tg, open_chat_ids, chat_ids_lock, stop_event),
+        daemon=True)
+
+    logging.info("Eltern-Chat läuft — warte auf Nachrichten.")
+    reader.start()
+    renewer.start()
+    try:
+        _processor_loop(ctx, handoff, ack, open_chat_ids, chat_ids_lock,
+                        stop_event)
+    finally:
+        stop_event.set()
 
 
 # ============================================================
@@ -845,6 +1014,11 @@ def build_context(cfg, db_path, zd_cli_path=None):
     überschreibt er Umgebungsvariable und Default bei der Auflösung des
     Zugangsdaten-Speicher-Pfads.
     """
+    # EC-37: zwei TelegramClient-Instanzen — gleicher Token, getrennte _opener.
+    # `tg` (= tg_main) trägt alle Bot-Antworten, Renewer und Skill-Sends; der
+    # separate Reader-Client wird in `main()` instanziiert und durch `poll_loop`
+    # gereicht. Hier reicht der eine Client für Onboarding/get_me und alle
+    # Schreibwege.
     tg = TelegramClient(cfg.bot_token)
     me = tg.get_me()
 
@@ -1049,7 +1223,11 @@ def main(argv=None):
     else:
         logging.info("Bot @%s, Anbieter '%s', Familien-Gruppe %s",
                      ctx.bot_username, cfg.provider, ctx.family_group_chat_id)
-    poll_loop(ctx)
+    # EC-37: zweiter TelegramClient für Reader/Long-Poll (eigener _opener).
+    # Selber Token wie ctx.tg, aber unabhängige HTTP-Verbindung — der lange
+    # getUpdates-Aufruf blockiert die Bot-Sende-Pfade nicht.
+    tg_reader = TelegramClient(cfg.bot_token)
+    poll_loop(ctx, tg_reader=tg_reader)
     return 0
 
 

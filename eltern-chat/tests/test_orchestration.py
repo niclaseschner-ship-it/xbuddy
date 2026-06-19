@@ -261,15 +261,18 @@ class _StopAfterN(Exception):
 
 class _FakeTelegramPoll:
     """Telegram-Doppelung, die eine skriptierte Folge von getUpdates-Ergebnissen
-    liefert und nach Erschöpfung _StopAfterN wirft (zum kontrollierten Beenden
-    von poll_loop in Tests).
+    liefert. Nach Erschöpfung wird ein TelegramError("Alle Antworten
+    verbraucht") geworfen — der Reader-Thread (EC-37) faengt TelegramError
+    und macht Backoff; im Test-Setup laeuft der Reader im selben Thread (via
+    `_reader_loop` direkt), sodass die Exception nach oben gereicht werden
+    kann, um den Test sauber zu beenden.
 
     `sleep_calls` zeichnet alle time.sleep-Aufrufe auf, die der poll_loop
     durch den monkeypatched time.sleep abgesetzt hat.
     """
 
     def __init__(self, responses):
-        """responses: Liste von — [] (leer), [update-dict] oder TelegramError."""
+        """responses: Liste von — [] (leer), [update-dict] oder Exception."""
         self._responses = list(responses)
         self.sleep_calls = []
 
@@ -297,6 +300,49 @@ class _FakeTelegramPoll:
         pass
 
 
+def _drive_reader(tg, monkeypatch):
+    """Treibt `main._reader_loop` einmal durch — bis ein _StopAfterN-Wurf
+    aus der Telegram-Doppelung den Loop verlaesst. Hilfsfunktion fuer die
+    Backoff- und Pickup-Latenz-Tests in der Reader/Processor-Topologie
+    (EC-37, 2026-06-19).
+
+    Im Test-Setup laeuft der Reader im aktuellen Thread (nicht als Daemon-
+    Thread), damit Exceptions sichtbar sind und Backoff-Sleeps via
+    monkeypatch erfasst werden koennen. Der Processor-Pfad wird durch eine
+    Mini-Hand-off-Schleife im Test-Thread gespiegelt: pro Update sofort
+    `ack.put(update_id)`, damit der Reader weiterlaeuft.
+    """
+    import queue
+    import threading
+
+    handoff = queue.Queue(maxsize=1)
+    ack = queue.Queue(maxsize=1)
+    open_chat_ids = set()
+    lock = threading.RLock()
+    stop_event = threading.Event()
+
+    # Mini-Processor in einem Daemon-Thread: ACKt jedes Update sofort.
+    def _mini_processor():
+        while not stop_event.is_set():
+            try:
+                _t0, update_id, _update = handoff.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            ack.put(update_id)
+
+    proc = threading.Thread(target=_mini_processor, daemon=True)
+    proc.start()
+    try:
+        main_mod._reader_loop(
+            None, tg, handoff, ack, open_chat_ids, lock, stop_event,
+            get_updates_timeout=30)
+    except _StopAfterN:
+        pass
+    finally:
+        stop_event.set()
+        proc.join(timeout=1.0)
+
+
 def test_backoff_grows_on_empty_polls(tmp_path, monkeypatch):
     """AC3 (#294, E-EC-2-Verfeinerung): Aufeinanderfolgende leere getUpdates-
     Antworten führen zu exponentiell wachsenden sleep-Pausen.
@@ -305,24 +351,22 @@ def test_backoff_grows_on_empty_polls(tmp_path, monkeypatch):
       - Poll 1 → leer → sleep(1)
       - Poll 2 → leer → sleep(2)
       - Poll 3 → leer → sleep(4)
-      - Poll 4 → _StopAfterN beendet den Loop
+      - Poll 4 → _StopAfterN beendet den Reader
 
-    Der Long-Poll-timeout-Parameter (Sekunden, die Telegram wartet) ist davon
+    Reader-Topologie (EC-37): Backoff liegt jetzt im `_reader_loop`. Der
+    Long-Poll-timeout-Parameter (Sekunden, die Telegram wartet) ist davon
     unberührt — er bleibt auf dem Default (30 s in get_updates).
     """
     sleep_calls = []
     monkeypatch.setattr("main.time.sleep", lambda s: sleep_calls.append(s))
 
-    responses = [[], [], [], TelegramError("stop")]
+    # `Exception` (statt TelegramError) am Ende — der Reader-Loop faengt nur
+    # TelegramError; `_StopAfterN` schluepft durch und verlaesst den Loop.
+    responses = [[], [], [], TelegramError("dummy"), _StopAfterN("stop")]
     tg = _FakeTelegramPoll(responses)
-    ctx = _poll_ctx(tmp_path, tg)
+    _drive_reader(tg, monkeypatch)
 
-    try:
-        poll_loop(ctx, get_updates_timeout=30)
-    except (TelegramError, _StopAfterN):
-        pass
-
-    # Drei leere Polls → Backoff-Pausen 1, 2, dann Fehler mit Backoff 1
+    # Drei leere Polls → Backoff-Pausen 1, 2, dann Fehler mit Backoff 4
     # (Fehler nach leerem Poll hat kumulierten Backoff, zählt weiter).
     assert len(sleep_calls) >= 2, (
         "Erwartet mindestens 2 Backoff-Pausen für 3 leere Polls, erhalten: %s"
@@ -348,12 +392,7 @@ def test_backoff_resets_after_update(tmp_path, monkeypatch):
     update = {"update_id": 100}
     responses = [[], [update], [], [], _StopAfterN("stop")]
     tg = _FakeTelegramPoll(responses)
-    ctx = _poll_ctx(tmp_path, tg)
-
-    try:
-        poll_loop(ctx, get_updates_timeout=30)
-    except (TelegramError, _StopAfterN, Exception):
-        pass
+    _drive_reader(tg, monkeypatch)
 
     # Nach dem Update muss der Backoff zurückgesetzt sein — die nächste leere
     # Poll-Pause startet wieder bei 1 s, nicht bei 4 s (was sie wäre, wenn
@@ -375,14 +414,9 @@ def test_backoff_caps_at_5s(tmp_path, monkeypatch):
     # 6 leere Polls reichen, damit der Backoff die Cap erreicht (1→2→4→5→5→5).
     responses = [[] for _ in range(6)] + [_StopAfterN("stop")]
     tg = _FakeTelegramPoll(responses)
-    ctx = _poll_ctx(tmp_path, tg)
+    _drive_reader(tg, monkeypatch)
 
-    try:
-        poll_loop(ctx, get_updates_timeout=30)
-    except (TelegramError, _StopAfterN, Exception):
-        pass
-
-    assert sleep_calls, "poll_loop muss bei leeren Polls schlafen"
+    assert sleep_calls, "Reader muss bei leeren Polls schlafen"
     assert max(sleep_calls) <= 5, (
         "Backoff-Cap ist 5 s — kein Sleep darf darüber liegen. "
         "Max: %s, alle sleeps: %s" % (max(sleep_calls), sleep_calls))
@@ -393,22 +427,40 @@ def test_pickup_latency_logged_on_updates(tmp_path, monkeypatch, caplog):
     Pickup-Latenz als INFO-Eintrag geloggt (event=pickup_latency count=N latency_ms=X).
 
     Abgrenzung zu EC-23-Provider-Latenz: dieser Log-Eintrag misst die Zeit von
-    getUpdates-Rückkehr bis Ende der Verarbeitung des Batches, NICHT die
-    LLM-Provider-Latenz innerhalb eines Turns.
+    getUpdates-Rückkehr (im Reader, t0) bis Ende der Verarbeitung (im
+    Processor, t1), NICHT die LLM-Provider-Latenz innerhalb eines Turns.
+
+    Reader/Processor-Topologie (EC-37, 2026-06-19): Der Log wird im
+    Processor-Pfad gemacht. Wir treiben hier den vollen `poll_loop` in einem
+    Daemon-Thread und beenden ihn nach kurzem Wait.
     """
+    import threading
+    import time as _time
+
     monkeypatch.setattr("main.time.sleep", lambda s: None)
 
     update = {"update_id": 200}
-    # Ein Update-Batch, dann stop.
-    responses = [[update], _StopAfterN("stop")]
+    responses = [[update], [], [], [], [], _StopAfterN("stop")]
     tg = _FakeTelegramPoll(responses)
     ctx = _poll_ctx(tmp_path, tg)
 
-    with caplog.at_level(logging.INFO, logger="root"):
+    def _runner():
         try:
             poll_loop(ctx, get_updates_timeout=30)
-        except (TelegramError, _StopAfterN, Exception):
+        except Exception:  # Test-Daemon, alle Fehler schlucken
             pass
+
+    with caplog.at_level(logging.INFO, logger="root"):
+        th = threading.Thread(target=_runner, daemon=True)
+        th.start()
+        # Warten, bis der Latenz-Log auftaucht.
+        deadline = _time.monotonic() + 2.0
+        while _time.monotonic() < deadline:
+            info_messages = [r.message for r in caplog.records
+                             if r.levelno == logging.INFO]
+            if any("pickup_latency" in m for m in info_messages):
+                break
+            _time.sleep(0.02)
 
     info_messages = [r.message for r in caplog.records if r.levelno == logging.INFO]
     assert any(
