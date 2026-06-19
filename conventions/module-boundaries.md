@@ -101,6 +101,40 @@ damit die legitime Re-Export-Kette des Pakets selbst (`__init__` →
 `.store`/`.config`) nicht fälschlich als Verstoß gilt; gefangen werden
 nur **direkte** Importe der internen Module von außen.
 
+### MOD-6 — keine sys.path-Manipulation auf fremdes eltern-chat
+Keine Komponente außerhalb von `eltern-chat/` macht `sys.path.insert`
+oder `sys.path.append` auf das `eltern-chat/`-Verzeichnis. Das umginge
+MOD-4 (eltern-chat wird von keiner Komponente importiert), weil
+import-linter sys.path-Manipulation nicht prüft — statische Imports
+lösen wegen des Bindestrichs nach top-level (`import init_data` statt
+`from eltern-chat import init_data`), nicht in den eltern-chat-Namespace.
+Empirisch belegt: `lint-imports` läuft trotz dieser Imports sauber durch.
+
+Eltern-chat-eigene Stellen (in `eltern-chat/` selbst, z.B. Test-conftests
+mit `_ELTERN_CHAT = os.path.dirname(__file__)`) sind KEIN MOD-4-Bruch
+und vom Gate ausgenommen.
+
+Maschinelle Durchsetzung über einen zweiten CI-Step in
+`.github/workflows/lint-imports.yml` (Grep + Eigen-Verzeichnis-Filter +
+Bestand-Allowlist).
+
+**Bestandsausnahme (Allowlist im CI-Workflow):** Acht Stellen importieren
+`init_data` für die Mini-App-Auth-HMAC-Validierung via sys.path-Trick —
+vier Service-`main.py` (`essen/`, `seiten/`, `routine/`, `hoerspiel/`)
+plus vier `seiten/tests/test_*.py`, die `seiten/main.py` als Test-
+Konsumenten laden und denselben Pfad-Setup brauchen
+(`test_essen_einkauf_pwa.py`, `test_essen_einkauf_route.py`,
+`test_mini_app_uebersicht.py`, `test_routine_anpassen_route.py`).
+Sie fallen mit RAT-18 Phase 1 (essen-einkauf) sowie den Phasen 2-3
+(routine, hoerspiel) plus der parallelen `tools/initdata/`-Sanierung
+(Cluster-A-Option-B, ratifiziert in `brainstorm/berater-runde/2026-06-18-1720-RATIFIZIERT-watchdog-meta-cluster.md`)
+weg. Allowlist schrumpft mit jeder Sanierungs-PR.
+
+**Scope-Grenze:** MOD-6 greift heute nur auf `eltern-chat`-Insert. Wenn
+ein anderes sys.path-Cross-Component-Pattern auftaucht (Insert auf
+andere Service-Verzeichnisse), ist das n=2 → eigene Berater-Runde,
+MOD-6 erweitern. Keine antizipative Generalisierung.
+
 ## eltern-chat und der Bindestrich
 
 `eltern-chat` ist wegen des Bindestrichs kein importierbares
