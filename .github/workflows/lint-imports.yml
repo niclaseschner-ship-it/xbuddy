@@ -35,9 +35,14 @@ jobs:
         # UND Variable _ELTERN_CHAT*. Eltern-chat-Eigen-Inserts (innerhalb
         # eltern-chat/) sind KEIN MOD-4-Bruch und werden übersprungen.
         # Siehe conventions/module-boundaries.md MOD-6.
+        #
+        # T1015 / Cluster-A-Option-B (2026-06-18-1720 watchdog-meta-cluster):
+        # Allowlist auf leeren String reduziert. init_data wurde nach
+        # tools/initdata/ gehoben, alle Service-main.py + Test-Files importieren
+        # jetzt aus tools.initdata statt sys.path-Hack.
         run: |
           set -e
-          ALLOWED="essen/main.py seiten/main.py routine/main.py hoerspiel/main.py seiten/tests/test_essen_einkauf_pwa.py seiten/tests/test_essen_einkauf_route.py seiten/tests/test_mini_app_uebersicht.py seiten/tests/test_routine_anpassen_route.py"
+          ALLOWED=""
           BAD=""
           for f in $(git ls-files '*.py'); do
             case "$f" in eltern-chat/*) continue ;; esac

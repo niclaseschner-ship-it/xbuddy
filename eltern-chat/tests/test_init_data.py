@@ -20,7 +20,9 @@ import os
 import time
 import urllib.parse
 
-import init_data as lib
+# T1015: Lib lebt unter tools.initdata (vorher eltern-chat/init_data.py;
+# Cluster-A-Option-B ratifiziert 2026-06-18-1720 watchdog-meta-cluster).
+from tools.initdata import init_data as lib
 
 # ---------------------------------------------------------------------------
 # Test-Hilfsfunktionen

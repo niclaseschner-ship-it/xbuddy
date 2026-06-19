@@ -18,7 +18,7 @@ import pytest
 from flask import g  # noqa: F401
 
 from seiten import main as seiten_main
-
+from seiten.tests._familie_test_doppel import FileFakeFamilieClient
 
 BOT_TOKEN = "1234:TESTTOKEN"
 
@@ -26,10 +26,21 @@ BOT_TOKEN = "1234:TESTTOKEN"
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     seiten_main.app.config["TESTING"] = True
-    # Bot-Token in runtime cachen
+    # Bot-Token-Setup via ENV (Produktiv-Pfad).
     monkeypatch.setenv("ELTERNCHAT_BOT_TOKEN", BOT_TOKEN)
+    # T1015-Hygiene: explizit runtime["bot_token"] = None, damit ein Leak
+    # aus anderen seiten/tests-Fixtures (test_essen_einkauf_route u. a.)
+    # nicht den ENV-Token ueberschreibt — _get_bot_token reicht runtime VOR
+    # ENV durch. Pre-existing Test-Kontamination, gefixt im Zuge T1015.
+    prev_bot_token = seiten_main.runtime.get("bot_token")
+    prev_familie_client = seiten_main.runtime.get("familie_client")
+    seiten_main.runtime["bot_token"] = None
+    seiten_main.runtime["familie_client"] = None
     seiten_main.runtime["init_data_config"] = {"max_age_seconds": 86400}
     yield seiten_main.app.test_client()
+    # Rollback — dieser Test leakt nicht weiter.
+    seiten_main.runtime["bot_token"] = prev_bot_token
+    seiten_main.runtime["familie_client"] = prev_familie_client
 
 
 def _signiere_init_data(user_id: int = 42, name: str = "Nic") -> str:
@@ -68,7 +79,7 @@ def test_validate_gueltiger_init_data_liefert_200(client, tmp_path):
     }
     f = tmp_path / "familie.json"
     f.write_text(json.dumps(familie), encoding="utf-8")
-    seiten_main.runtime["familie_json_path"] = str(f)
+    seiten_main.runtime["familie_client"] = FileFakeFamilieClient(str(f))
 
     init_data = _signiere_init_data(user_id=42)
     resp = client.post(
@@ -88,7 +99,7 @@ def test_validate_fremde_user_id_liefert_403(client, tmp_path):
     }
     f = tmp_path / "familie.json"
     f.write_text(json.dumps(familie), encoding="utf-8")
-    seiten_main.runtime["familie_json_path"] = str(f)
+    seiten_main.runtime["familie_client"] = FileFakeFamilieClient(str(f))
 
     init_data = _signiere_init_data(user_id=42)
     resp = client.post(
