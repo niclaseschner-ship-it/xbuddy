@@ -197,9 +197,11 @@ async function _holeResume(kindId, albumId) {
     "/api/v1/hoerspiel/" + kindId + "/resume?album=" + encodeURIComponent(albumId), {
     headers: _authHeader(),
   });
-  if (resp.status === 404) return null;
   if (!resp.ok) return null;
-  return resp.json();
+  const data = await resp.json();
+  // Backend gibt status: "neu" zurück wenn kein Stand existiert (HSP-36); Aufrufer behandelt das als null.
+  if (data.status === 'neu') return null;
+  return data;
 }
 
 async function _setzeResume(kindId, albumId, trackPos) {
