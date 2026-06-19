@@ -1999,3 +1999,46 @@ def test_PANEL_9_test_file_covers_panel_12():
     here = read(os.path.abspath(__file__))
     assert re.search(r'def test_PANEL_12_', here), \
         'kein PANEL_12-Test gefunden — PANEL-9 Mindest-Abdeckung verletzt'
+
+
+# ---------------------------------------------------------------------------
+# PANEL-11 — parseDisplayUrl Mehr-Segment-View (ROU-24 / URL-3a / T#1007)
+# ---------------------------------------------------------------------------
+
+def test_PANEL_11_parse_display_url_multi_segment_ac1():
+    """AC1 (T#1007): /display/hoerspiel/paula/alben → {app:'hoerspiel', view:'paula/alben'},
+    NICHT null (ROU-24 + URL-3a erlauben Mehr-Segment-View-Suffix)."""
+    out = run_node('''
+        const result = panelLib.parseDisplayUrl('/display/hoerspiel/paula/alben');
+        console.log(JSON.stringify(result));
+    ''')
+    assert out is not None, (
+        'parseDisplayUrl darf bei Mehr-Segment-URL nicht null zurückgeben (ROU-24 / URL-3a)')
+    assert out.get('app') == 'hoerspiel', (
+        'app-Feld falsch: erwartet "hoerspiel", bekommen %r' % out.get('app'))
+    assert out.get('view') == 'paula/alben', (
+        'view-Feld falsch: erwartet "paula/alben", bekommen %r' % out.get('view'))
+
+
+def test_PANEL_11_parse_display_url_two_segment_ac2():
+    """AC2 (T#1007): /display/plan/woche → Bestand 2-Segment-Ergebnis bleibt
+    unverändert (app:'plan', view:'woche')."""
+    out = run_node('''
+        const result = panelLib.parseDisplayUrl('/display/plan/woche');
+        console.log(JSON.stringify(result));
+    ''')
+    assert out is not None, 'parseDisplayUrl soll bei 2-Segment-URL nicht null zurückgeben'
+    assert out.get('app') == 'plan', 'app-Feld: erwartet "plan", bekommen %r' % out.get('app')
+    assert out.get('view') == 'woche', 'view-Feld: erwartet "woche", bekommen %r' % out.get('view')
+
+
+def test_PANEL_11_parse_display_url_trailing_slash_ac3():
+    """AC3 (T#1007): /display/plan/ → null (trailing slash ohne view-Segment
+    ist kein gültiger Display-Pfad — leeres view-Segment muss abgelehnt werden)."""
+    out = run_node('''
+        const result = panelLib.parseDisplayUrl('/display/plan/');
+        console.log(JSON.stringify({ result }));
+    ''')
+    assert out['result'] is None, (
+        'parseDisplayUrl muss bei trailing slash ohne view null zurückgeben, '
+        'bekommen: %r' % out['result'])

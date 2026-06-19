@@ -115,7 +115,7 @@
 
   function parseDisplayUrl(url) {
     if (typeof url !== 'string') return null;
-    var m = /^\/display\/([^/?#]+)\/([^/?#]+)(\?.*)?$/.exec(url);
+    var m = /^\/display\/([^/?#]+)\/(.+?)(\?[^#]*)?$/.exec(url);
     if (!m) return null;
     var query = null;
     if (m[3]) {
