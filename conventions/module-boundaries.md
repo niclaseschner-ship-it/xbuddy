@@ -118,17 +118,16 @@ Maschinelle Durchsetzung über einen zweiten CI-Step in
 `.github/workflows/lint-imports.yml` (Grep + Eigen-Verzeichnis-Filter +
 Bestand-Allowlist).
 
-**Bestandsausnahme (Allowlist im CI-Workflow):** Acht Stellen importieren
-`init_data` für die Mini-App-Auth-HMAC-Validierung via sys.path-Trick —
-vier Service-`main.py` (`essen/`, `seiten/`, `routine/`, `hoerspiel/`)
-plus vier `seiten/tests/test_*.py`, die `seiten/main.py` als Test-
-Konsumenten laden und denselben Pfad-Setup brauchen
-(`test_essen_einkauf_pwa.py`, `test_essen_einkauf_route.py`,
-`test_mini_app_uebersicht.py`, `test_routine_anpassen_route.py`).
-Sie fallen mit RAT-18 Phase 1 (essen-einkauf) sowie den Phasen 2-3
-(routine, hoerspiel) plus der parallelen `tools/initdata/`-Sanierung
-(Cluster-A-Option-B, ratifiziert in `brainstorm/berater-runde/2026-06-18-1720-RATIFIZIERT-watchdog-meta-cluster.md`)
-weg. Allowlist schrumpft mit jeder Sanierungs-PR.
+**Bestandsausnahme (Allowlist im CI-Workflow):** seit T1015 leer.
+Cluster-A-Option-B (ratifiziert 2026-06-18-1720 watchdog-meta-cluster) hat
+`eltern-chat/init_data.py` nach `tools/initdata/` gehoben und einen
+gemeinsamen `tools/familie_client.py` eingeführt; die vier Service-`main.py`
+(essen, hoerspiel, routine, seiten) importieren jetzt aus `tools.initdata`
+statt per sys.path-Hack aus eltern-chat. Die vier `seiten/tests/test_*.py`
+ziehen die Lib ebenfalls aus `tools.initdata` und brauchen keinen
+eltern-chat-Insert mehr. Die Allowlist im CI-Workflow ist auf den leeren
+String reduziert; jeder neue sys.path-Insert auf eltern-chat wird vom Gate
+sofort gefangen.
 
 **Scope-Grenze:** MOD-6 greift heute nur auf `eltern-chat`-Insert. Wenn
 ein anderes sys.path-Cross-Component-Pattern auftaucht (Insert auf

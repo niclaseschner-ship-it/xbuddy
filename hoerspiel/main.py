@@ -44,6 +44,7 @@ _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
+from tools import familie_client as _tools_familie_client_mod  # noqa: E402
 from tools import logsetup  # noqa: E402
 
 if __package__:
@@ -60,17 +61,11 @@ else:  # python3 hoerspiel/main.py
     from hoerspiel.providers.base import LLMProvider, ProviderError
     from hoerspiel.tts.azure import TTSError
 
-# MAD-7 / HSP-39: Init-Data-Auth aus eltern-chat/init_data.py.
-_ELTERN_CHAT_DIR = os.path.join(_REPO_ROOT, "eltern-chat")
-if _ELTERN_CHAT_DIR not in sys.path:
-    sys.path.insert(0, _ELTERN_CHAT_DIR)
+# MAD-7 / HSP-39 / T1015: Init-Data-Auth aus tools.initdata (Cluster-A-Option-B
+# 2026-06-18-1720 — kein sys.path-Hack auf eltern-chat mehr).
+from tools.initdata import init_data as _init_data_mod  # noqa: E402
 
-try:
-    import init_data as _init_data_mod
-    _INIT_DATA_AVAILABLE = True
-except ImportError:
-    _INIT_DATA_AVAILABLE = False
-    _init_data_mod = None  # type: ignore[assignment]
+_INIT_DATA_AVAILABLE = True
 
 
 logger = logging.getLogger(__name__)
@@ -101,9 +96,11 @@ runtime: dict = {
     # MAD-7 / HSP-39: Bot-Token + init_data-Konfig für Mini-App-Auth.
     "bot_token": None,         # str | None — aus ENV ELTERNCHAT_BOT_TOKEN
     "init_data_config": None,  # dict — gecacht nach erstem Lauf
-    "familie_json_path": None, # str | None — aus ENV FAMILIE_JSON_PATH
+    # T1015: FAM-Auth-Lookup via tools.familie_client (HTTP); ersetzt den
+    # früheren familie.json-Direkt-Read (DCOMP-1 / FAM-7-Heilung).
+    "familie_client_auth": None,  # tools.familie_client.FamilieClient | Test-Doppel | None
     "resume_store": {},        # dict album_id -> track_position (in-process für V1)
-    # HSP-3a: FamilieClient-Instanz für Face-Pille (Test-Naht: direkt setzen).
+    # HSP-3a: lokaler FamilieClient für Face-Pille snapshot() (Test-Naht: direkt setzen).
     "familie_client": None,    # familie_client_mod.FamilieClient | None
 }
 
@@ -112,7 +109,7 @@ def configure(*, runtime_config, data_config, data_root: str,
               llm_factory=None, llm=None,
               tts_engine=None, now=None,
               bot_token=None, init_data_config=None,
-              familie_json_path=None,
+              familie_client_auth=None,
               familie_client=None) -> None:
     """Setzt Konfiguration und Adapter-Fabriken (Test-Naht, HSP-24).
 
@@ -124,12 +121,16 @@ def configure(*, runtime_config, data_config, data_root: str,
     `now` ist die HSP-24-Naht für deterministische Zeit (Manifest-`erstellt-
     am`, Historie-Datum, ...).
 
-    `bot_token` + `init_data_config` + `familie_json_path`: MAD-7/HSP-39 Auth-Naht
-    (Test-Modus direkt setzen; Produktiv-Betrieb liest ENV).
+    `bot_token` + `init_data_config` + `familie_client_auth`: MAD-7/HSP-39
+    Auth-Naht. ``familie_client_auth`` ist ein Test-Doppel mit
+    ``get_telegram_ids()``-Methode oder eine ``tools.familie_client.FamilieClient``-
+    Instanz; None → Produktiv-Pfad via ENV ``HOERSPIEL_FAMILIE_ORIGIN``
+    (T1015 / Cluster-A-Option-B).
 
-    `familie_client`: HSP-3a Test-Naht — wenn gesetzt, wird dieser Client
-    direkt genutzt statt eines neuen FamilieClient aus ENV (für Tests ohne
-    echten HTTP-Call). Keiner gesetzt = Produktiv-Pfad via ENV.
+    `familie_client`: HSP-3a-Face-Pille-Test-Naht — lokaler hoerspiel-Client
+    mit ``snapshot()``-API für die Pille-Darstellung. Separat vom Auth-Client,
+    weil zwei verschiedene Antwort-Formen gebraucht werden (Person-Lookup vs.
+    Telegram-IDs).
     """
     runtime["runtime_config"] = runtime_config
     runtime["data_config"] = data_config
@@ -143,7 +144,7 @@ def configure(*, runtime_config, data_config, data_root: str,
     # Wer einen leeren Client will muss explizit bot_token=None übergeben.
     runtime["bot_token"] = bot_token
     runtime["init_data_config"] = init_data_config
-    runtime["familie_json_path"] = familie_json_path
+    runtime["familie_client_auth"] = familie_client_auth
     runtime["resume_store"] = {}
     runtime["familie_client"] = familie_client
 
@@ -200,26 +201,25 @@ def _get_bot_token() -> str | None:
     )
 
 
-def _lade_familie_telegram_ids():
-    """Liest telegram_ids aller Familien-Mitglieder aus familie.json (FAM-7/8)."""
-    import json as _json
-    path = runtime.get("familie_json_path") or os.environ.get("FAMILIE_JSON_PATH")
-    if not path:
-        return None  # kein Pfad konfiguriert → FAM-Check überspringen
-    try:
-        with open(path, encoding="utf-8") as fh:
-            data = _json.load(fh)
-    except (FileNotFoundError, OSError, _json.JSONDecodeError) as exc:
-        logger.warning("FAM-7: familie.json nicht lesbar (%s): %s — FAM-Check uebersprungen",
-                       path, exc)
-        return None
-    ids = set()
-    for gruppe in ("erwachsene", "kinder"):
-        for person in (data.get(gruppe) or []):
-            tg_id = person.get("telegram_id")
-            if tg_id is not None:
-                ids.add(int(tg_id))
-    return ids
+# T1015: Familie-Service-Origin für den Auth-Lookup-Client.
+ENV_FAMILIE_AUTH_ORIGIN = "HOERSPIEL_FAMILIE_ORIGIN"
+
+
+def _get_familie_client_auth():
+    """Liefert den FAM-Auth-Client (T1015, Cluster-A-Option-B).
+
+    Test-Naht: ``configure(familie_client_auth=...)``. Produktiv-Pfad:
+    ``tools.familie_client.FamilieClient`` aus ENV
+    ``HOERSPIEL_FAMILIE_ORIGIN`` (Default ``http://127.0.0.1:5010``).
+    Wiederverwendet denselben ENV-Namen wie der Face-Pille-Client, weil beide
+    auf denselben Familie-Service zeigen — die zwei Clients teilen Origin,
+    nur API-Form unterscheidet sich.
+    """
+    cached = runtime.get("familie_client_auth")
+    if cached is not None:
+        return cached
+    origin = os.environ.get(ENV_FAMILIE_AUTH_ORIGIN, DEFAULT_FAMILIE_ORIGIN)
+    return _tools_familie_client_mod.FamilieClient(origin_url=origin)
 
 
 def _validate_mini_app_request():
@@ -263,10 +263,14 @@ def _validate_mini_app_request():
 
 
 def _check_familie_mitglied(user_id):
-    """Prüft ob user_id in der Familien-Registry registriert ist (FAM-7/8)."""
-    familie_ids = _lade_familie_telegram_ids()
+    """Prüft ob user_id in der Familien-Registry registriert ist (FAM-7/8).
+
+    T1015: HTTP-Pfad über ``tools.familie_client`` (DCOMP-1-konform, ersetzt
+    den früheren familie.json-Direkt-Read).
+    """
+    familie_ids = _get_familie_client_auth().get_telegram_ids()
     if familie_ids is None:
-        return None  # kein Pfad konfiguriert → fail-open
+        return None  # Familie-Service unerreichbar → fail-open
     if user_id not in familie_ids:
         logger.warning("FAM-7: user_id %s ist kein Familien-Mitglied → 403", user_id)
         return jsonify({"error": "Nicht autorisiert — kein Familienmitglied"}), 403

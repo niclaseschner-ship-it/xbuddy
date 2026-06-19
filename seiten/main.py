@@ -50,15 +50,12 @@ if _REPO_ROOT not in sys.path:
 
 from seiten import aggregator, render  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
+from tools import familie_client as _familie_client_mod  # noqa: E402
 
-# EZG-6 / ESSEN-31: Init-Data-Validierung aus dem Lego-Basis-Modul.
-# Vendor-neutrale HMAC-SHA256-Validierung (eltern-chat/init_data.py).
-# Der Pfad liegt neben dem Repo-Root im eltern-chat/-Verzeichnis.
-_ELTERN_CHAT_DIR = os.path.join(_REPO_ROOT, "eltern-chat")
-if _ELTERN_CHAT_DIR not in sys.path:
-    sys.path.insert(0, _ELTERN_CHAT_DIR)
-
-import init_data as _init_data_mod  # noqa: E402
+# EZG-6 / ESSEN-31 / T1015: Init-Data-Validierung aus tools.initdata
+# (vorher per sys.path-Hack aus eltern-chat/init_data.py — Cluster-A-Option-B
+# 2026-06-18-1720 heilt MOD-4 / MOD-6).
+from tools.initdata import init_data as _init_data_mod  # noqa: E402
 
 # DCOMP-4: Dateirechte auf den Eigentümer beschränkt — analog PREG-4 / GER-4.
 FILE_MODE = 0o600
@@ -95,10 +92,10 @@ runtime = {
     # init_data_config: dict aus init_data.load_config() — cached nach erstem Lauf.
     "bot_token":         None,
     "init_data_config":  None,
-    # FAM-7/8: Familien-Registry-JSON-Pfad fuer User-ID-Lookup.
-    # Aus ENV FAMILIE_JSON_PATH oder runtime-Dict (Test-Naht).
-    # Fehlt der Pfad oder die Datei → kein FAM-Check (fail-open in V1).
-    "familie_json_path": None,
+    # T1015 / Cluster-A-Option-B: FAM-Lookup via tools.familie_client gegen
+    # Familie-Service-API (FAM-7 / DCOMP-1) statt familie.json direkt zu lesen.
+    # familie_client darf eine FamilieClient-Instanz oder ein Test-Doppel sein.
+    "familie_client":    None,
 }
 
 
@@ -106,7 +103,7 @@ def configure(root=None, inventar_path=None, panel_url=None,
               geraete_url=None, ttl=None,
               heim_origin=None, tailscale_origin=None,
               bot_token=None, init_data_config=None,
-              familie_json_path=None):
+              familie_client=None):
     """Setzt Aufbau-Wurzel, Inventar-Pfad, Upstream-Origins, TTL und
     Display-URL-Origins (SREG-3, SREG-7).
 
@@ -122,9 +119,10 @@ def configure(root=None, inventar_path=None, panel_url=None,
     benoetigt. Im Test-Modus werden sie direkt gesetzt;
     im Produktiv-Betrieb kommen sie aus ENV / init_data.load_config().
 
-    `familie_json_path` (FAM-7/8): Pfad zu familie.json fuer User-ID-Lookup.
-    Im Test-Modus direkt setzen; im Produktiv-Betrieb aus ENV FAMILIE_JSON_PATH.
-    Fehlt der Pfad → kein FAM-Check (fail-open, Warnung im Log).
+    `familie_client` (T1015 / Cluster-A-Option-B): Test-Doppel mit
+    ``get_telegram_ids()``-Methode oder eine ``tools.familie_client.FamilieClient``-
+    Instanz. None → Produktiv-Pfad via ENV ``SEITEN_FAMILIE_ORIGIN``.
+    Ersetzt den frueheren ``familie_json_path``-Direkt-Read (DCOMP-1 / FAM-7).
     """
     if root is not None:
         runtime["root"] = root
@@ -143,8 +141,8 @@ def configure(root=None, inventar_path=None, panel_url=None,
         runtime["bot_token"] = bot_token
     if init_data_config is not None:
         runtime["init_data_config"] = init_data_config
-    if familie_json_path is not None:
-        runtime["familie_json_path"] = familie_json_path
+    if familie_client is not None:
+        runtime["familie_client"] = familie_client
     runtime["inventar"] = None
     runtime["gebaut_um"] = 0.0
 
@@ -315,44 +313,36 @@ def _aktuelles_inventar():
 #  FAM-7/8 — Familien-Mitglieds-Prüfung
 # ============================================================
 
-def _lade_familie_telegram_ids():
-    """Liest telegram_ids aller Familien-Mitglieder aus familie.json (FAM-7/8).
+# T1015 / Cluster-A-Option-B: Familie-Service-Origin per Komponenten-ENV.
+_ENV_FAMILIE_ORIGIN = "SEITEN_FAMILIE_ORIGIN"
+_DEFAULT_FAMILIE_ORIGIN = "http://127.0.0.1:5010"
 
-    Pfad: runtime['familie_json_path'] → ENV FAMILIE_JSON_PATH → None (skip).
-    Fehlt die Datei oder ist sie kaputt → leere Menge (fail-open, Warnung).
-    V1-Implementierung: direktes JSON-Read ohne familie-Service-Dependency
-    (MOD-2: Services voneinander unabhaengig).
+
+def _get_familie_client():
+    """Liefert einen FamilieClient (Test-Naht oder frisch aus ENV, T1015).
+
+    Replaced den frueheren familie.json-Direkt-Read (DCOMP-1 / FAM-7-Heilung).
     """
-    path = runtime.get("familie_json_path") or os.environ.get("FAMILIE_JSON_PATH")
-    if not path:
-        return None  # kein Pfad konfiguriert → FAM-Check überspringen
-
-    try:
-        with open(path, encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (FileNotFoundError, OSError, json.JSONDecodeError) as exc:
-        logging.warning("FAM-7: familie.json nicht lesbar (%s): %s — FAM-Check uebersprungen", path, exc)
-        return None
-
-    ids = set()
-    for gruppe in ("erwachsene", "kinder"):
-        for person in (data.get(gruppe) or []):
-            tg_id = person.get("telegram_id")
-            if tg_id is not None:
-                ids.add(int(tg_id))
-    return ids
+    cached = runtime.get("familie_client")
+    if cached is not None:
+        return cached
+    origin = os.environ.get(_ENV_FAMILIE_ORIGIN, _DEFAULT_FAMILIE_ORIGIN)
+    return _familie_client_mod.FamilieClient(origin_url=origin)
 
 
 def _check_familie_mitglied(user_id):
     """Prüft ob user_id in der Familien-Registry registriert ist (FAM-7/8 / AC4).
 
-    Gibt None zurück wenn OK (user_id ist Mitglied oder kein Pfad konfiguriert).
+    Gibt None zurück wenn OK (user_id ist Mitglied oder Familie-Service unerreichbar).
     Gibt (json-Response, 403) zurück wenn user_id NICHT in der Registry.
+
+    T1015: HTTP-Pfad über ``tools.familie_client``; fail-open bei Service-
+    Nichterreichbarkeit (Plan-Buddy-Geist, analog zum frueheren Datei-Fallback).
     """
-    familie_ids = _lade_familie_telegram_ids()
+    familie_ids = _get_familie_client().get_telegram_ids()
     if familie_ids is None:
-        # Kein Pfad konfiguriert → fail-open (kein Block)
-        logging.debug("FAM-7: kein familie_json_path konfiguriert — FAM-Check uebersprungen")
+        # Familie-Service nicht erreichbar oder kein Lookup möglich → fail-open
+        logging.debug("FAM-7: Familie-Service nicht erreichbar — FAM-Check uebersprungen")
         return None
     if user_id not in familie_ids:
         logging.warning("FAM-7: user_id %s ist kein Familien-Mitglied → 403", user_id)
