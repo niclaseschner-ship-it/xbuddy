@@ -968,6 +968,29 @@ def test_PANEL_11_eventsource_used_for_reconnect():
         'app.js muss EventSource verwenden (Standard-Reconnect, DC-7)'
 
 
+def test_PANEL_11_find_active_tile_multi_segment_ac1():
+    """AC2 / T1007-S2: findActiveTile matcht Multi-Segment-Views korrekt.
+    Kachel { app: 'hoerspiel', view: 'mia/alben' } muss bei URL
+    /display/hoerspiel/mia/alben als aktiv erkannt werden.
+    Sichert den echten PANEL-11-Effekt-Pfad (parseDisplayUrl →
+    tileMatchesUrl → findActiveTile → updateActiveMarker)."""
+    out = run_node('''
+        const tiles = [
+            { key: 'p', app: 'hoerspiel', view: 'mia/alben',
+              label: 'Mias Hörspiele', icons: ['arasaac/5915.png'],
+              sichtbar: true },
+            { key: 'n', app: 'hoerspiel', view: 'finn/alben',
+              label: 'Finns Hörspiele', icons: ['arasaac/5915.png'],
+              sichtbar: true },
+        ];
+        const active = panelLib.findActiveTile(tiles, '/display/hoerspiel/mia/alben');
+        console.log(JSON.stringify({ key: active && active.key }));
+    ''')
+    assert out['key'] == 'p', (
+        'findActiveTile muss Multi-Segment-View mia/alben matchen — '
+        'bekommen: %r' % out.get('key'))
+
+
 def test_PANEL_11_fetch_display_id_known_source_returns_display_id():
     """PANEL-11 / ROU-32: fetchDisplayId liefert display_id bei bekannter
     source_id (Mock auf <router_url>/api/v1/router/panels/<source_id> → 200)."""
@@ -1999,3 +2022,46 @@ def test_PANEL_9_test_file_covers_panel_12():
     here = read(os.path.abspath(__file__))
     assert re.search(r'def test_PANEL_12_', here), \
         'kein PANEL_12-Test gefunden — PANEL-9 Mindest-Abdeckung verletzt'
+
+
+# ---------------------------------------------------------------------------
+# PANEL-11 — parseDisplayUrl Mehr-Segment-View (ROU-24 / URL-3a / T#1007)
+# ---------------------------------------------------------------------------
+
+def test_PANEL_11_parse_display_url_multi_segment_ac1():
+    """AC1 (T#1007): /display/hoerspiel/mia/alben → {app:'hoerspiel', view:'mia/alben'},
+    NICHT null (ROU-24 + URL-3a erlauben Mehr-Segment-View-Suffix)."""
+    out = run_node('''
+        const result = panelLib.parseDisplayUrl('/display/hoerspiel/mia/alben');
+        console.log(JSON.stringify(result));
+    ''')
+    assert out is not None, (
+        'parseDisplayUrl darf bei Mehr-Segment-URL nicht null zurückgeben (ROU-24 / URL-3a)')
+    assert out.get('app') == 'hoerspiel', (
+        'app-Feld falsch: erwartet "hoerspiel", bekommen %r' % out.get('app'))
+    assert out.get('view') == 'mia/alben', (
+        'view-Feld falsch: erwartet "mia/alben", bekommen %r' % out.get('view'))
+
+
+def test_PANEL_11_parse_display_url_two_segment_ac2():
+    """AC2 (T#1007): /display/plan/woche → Bestand 2-Segment-Ergebnis bleibt
+    unverändert (app:'plan', view:'woche')."""
+    out = run_node('''
+        const result = panelLib.parseDisplayUrl('/display/plan/woche');
+        console.log(JSON.stringify(result));
+    ''')
+    assert out is not None, 'parseDisplayUrl soll bei 2-Segment-URL nicht null zurückgeben'
+    assert out.get('app') == 'plan', 'app-Feld: erwartet "plan", bekommen %r' % out.get('app')
+    assert out.get('view') == 'woche', 'view-Feld: erwartet "woche", bekommen %r' % out.get('view')
+
+
+def test_PANEL_11_parse_display_url_trailing_slash_ac3():
+    """AC3 (T#1007): /display/plan/ → null (trailing slash ohne view-Segment
+    ist kein gültiger Display-Pfad — leeres view-Segment muss abgelehnt werden)."""
+    out = run_node('''
+        const result = panelLib.parseDisplayUrl('/display/plan/');
+        console.log(JSON.stringify({ result }));
+    ''')
+    assert out['result'] is None, (
+        'parseDisplayUrl muss bei trailing slash ohne view null zurückgeben, '
+        'bekommen: %r' % out['result'])
