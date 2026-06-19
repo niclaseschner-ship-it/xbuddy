@@ -203,6 +203,48 @@ def test_PBE_7_flatten_registry_entry_with_variant():
     assert out[1]['icons'] == ['arasaac/32488.png', 'arasaac/2484.png']
 
 
+def test_PBE_7_flatten_registry_entry_multi_segment_view():
+    """AC3 / T1007-S2: flattenRegistryEntry parst Multi-Segment-Views korrekt.
+    /display/hoerspiel/paula/alben → app='hoerspiel', view='paula/alben'.
+    Vorher schnitt der 2-Segment-Regex das view auf 'paula' ab."""
+    out = run_node('''
+        const entry = {
+          typ: 'display',
+          pfad: '/display/hoerspiel/paula/alben',
+          label: 'Paulas Hörspiele',
+          icons: ['arasaac/5915.png'],
+        };
+        const cands = editorLib.flattenRegistryEntry(entry);
+        console.log(JSON.stringify(cands));
+    ''')
+    assert len(out) == 1, 'flattenRegistryEntry: 1 Eintrag erwartet (kein Varianten)'
+    assert out[0]['app'] == 'hoerspiel', \
+        'app muss "hoerspiel" sein, bekommen: %r' % out[0].get('app')
+    assert out[0]['view'] == 'paula/alben', \
+        'view muss "paula/alben" sein (Multi-Segment), bekommen: %r' % out[0].get('view')
+
+
+def test_PBE_7_flatten_registry_entry_multi_segment_with_query_edge():
+    """AC4 / T1007-S2: flattenRegistryEntry mit Query-String im pfad erzeugt
+    korrekte app/view ohne trailing Query (Query landet NICHT im view)."""
+    out = run_node('''
+        const entry = {
+          typ: 'display',
+          pfad: '/display/plan/woche?ansicht=klein',
+          label: 'Wochenplan klein',
+          icons: ['arasaac/32488.png'],
+        };
+        const cands = editorLib.flattenRegistryEntry(entry);
+        console.log(JSON.stringify(cands));
+    ''')
+    # Der pfad ist ungewöhnlich (Query üblicherweise via varianten.query),
+    # aber der Regex muss sauber parsen ohne Query in das view aufzunehmen.
+    assert len(out) == 1, 'flattenRegistryEntry mit Query-pfad: 1 Eintrag erwartet'
+    assert out[0]['app'] == 'plan'
+    assert out[0]['view'] == 'woche', \
+        'view darf keinen Query-String enthalten, bekommen: %r' % out[0].get('view')
+
+
 def test_PBE_7_flatten_skips_non_display_sorts():
     """PBE-7: nur Display-Views (Sorte a) — Sorte b/c/d/e werden ausgefiltert."""
     out = run_node('''
