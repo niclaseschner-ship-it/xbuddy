@@ -1,4 +1,4 @@
-"""Tests für »Anbieter wechseln« — ONB-11, ONB-12, ONB-13 (Refs #639).
+"""Tests für »Anbieter wechseln« — ONB-11, ONB-12, ONB-13 (Refs #639, #663).
 
 Geprüft werden:
   * die trigger-agnostische Funktion (`anbieter_wechseln`) — Auth,
@@ -7,8 +7,10 @@ Geprüft werden:
   * Validierungs-Fehler → byte-gleicher Erhalt des alten Eintrags (ONB-12).
   * Schreib-Fehler → byte-gleicher Erhalt, Instanz nicht unterbrochen (ONB-12).
   * ONB-8-Schutz: kein Klartext-Key in Bestätigungen, Fehlermeldungen, Logs.
-  * ONB-12 V1-Race-Fenster: partieller ZD-Zustand bei zweitem set()-Versagen.
   * ONB-13 caplog-Schutz: keine Keys im Log (Befund 4).
+  * T663 Welle A: Pfad A (vorbefüllter vendor-Slot, kein Re-Key) und Pfad B
+    (neuer Vendor → set_multi mit vendor-Slot + provider-name).
+  * ONB-12 V2: atomares set_multi schließt das V1-Race-Fenster.
 
 Telegram, Zugangsdaten-Speicher und Validierungs-Ping sind durch kontrollierte
 Doppelungen ersetzt (kein Netz, ONB-13).
@@ -17,8 +19,8 @@ Doppelungen ersetzt (kein Netz, ONB-13).
 import json
 import logging
 
-import pytest
 from fakes import FakeTelegram
+from onboarding_store import zd_name_provider_api_key
 from skills.anbieter_wechseln import (
     DONE_PRIVAT,
     ERGEBNIS_ABGELEHNT,
@@ -45,30 +47,36 @@ from tools.zugangsdaten import StoreError
 class FakeZd:
     """In-Memory-Zugangsdaten-Speicher (ZD-5).
 
-    `writes` protokolliert die Schreib-Reihenfolge (Tupel name/value).
-    `fail_on_write` lässt `set()` einen StoreError werfen — für ONB-12-
-    Schreib-Fehler-Tests.
-    `fail_on_nth_write` (int, 1-basiert) — wirft StoreError nur beim N-ten
-    set()-Aufruf; alle anderen Aufrufe landen im Speicher. Für Race-Fenster-
-    Tests (ONB-12 V1-Lücke).
+    `writes` protokolliert jede Schreib-Operation als Tupel:
+      * `("set", name, value)` — Single-Key-Naht.
+      * `("set_multi", dict(pairs))` — Multi-Key-Naht (T663 Welle A).
+
+    `fail_on_write` lässt jeden Schreibvorgang (`set` und `set_multi`) einen
+    StoreError werfen — für ONB-12-Schreib-Fehler-Tests. Beim `set_multi`-
+    Fehler bleibt der `_data`-Stand byte-gleich (atomar: alle oder keiner).
     """
 
-    def __init__(self, initial=None, fail_on_write=False, fail_on_nth_write=None):
+    def __init__(self, initial=None, fail_on_write=False):
         self._data = dict(initial or {})
         self.writes = []
         self.fail_on_write = fail_on_write
-        self._fail_on_nth_write = fail_on_nth_write
 
     def get(self, name, default=None):
         return self._data.get(name, default)
 
     def set(self, name, value):
-        self.writes.append((name, value))
+        self.writes.append(("set", name, value))
         if self.fail_on_write:
             raise StoreError("simulierter Schreib-Fehler")
-        if self._fail_on_nth_write is not None and len(self.writes) == self._fail_on_nth_write:
-            raise StoreError("simulierter Schreib-Fehler beim %d. set()" % self._fail_on_nth_write)
         self._data[name] = value
+
+    def set_multi(self, pairs):
+        # Snapshot der Paare für Test-Inspektion (eigene Kopie, kein Aliasing).
+        self.writes.append(("set_multi", dict(pairs)))
+        if self.fail_on_write:
+            # Atomar: kein Wert übernommen — `_data` bleibt byte-gleich.
+            raise StoreError("simulierter Schreib-Fehler")
+        self._data.update(pairs)
 
     def has(self, name):
         return name in self._data
@@ -106,10 +114,17 @@ def _validate_fail(name, key):
 
 def test_happy_path_claude_to_mistral():
     """ONB-13 Happy-Path Claude → Mistral: Wechsel abgeschlossen, ZD gesetzt,
-    Bestätigung im Privatchat und in der Familien-Gruppe."""
+    Bestätigung im Privatchat und in der Familien-Gruppe.
+
+    T663 Welle A: Mistral hat noch keinen vendor-Slot → Pfad B. Schreibt in
+    den mistral-Slot (`eltern-chat-mistral-api-key`) und den provider-name —
+    beide in einem `set_multi`-Aufruf.
+    """
     tg = FakeTelegram(members=_members(42))
+    # Alter claude-Slot ist gesetzt (vendor-spezifisch, Welle A). Mistral-Slot
+    # leer → Pfad B wird durchlaufen.
     zd = FakeZd(initial={
-        ZD_NAME_PROVIDER_API_KEY: "old-claude-key",
+        zd_name_provider_api_key("claude"): "old-claude-key",
         ZD_NAME_PROVIDER_NAME: "claude",
     })
     fgcid = 99
@@ -124,9 +139,11 @@ def test_happy_path_claude_to_mistral():
     assert result.ergebnis == ERGEBNIS_GEWECHSELT
     assert result.neuer_anbieter == "mistral"
 
-    # ZD-Speicher gesetzt (ONB-12).
-    assert zd.get(ZD_NAME_PROVIDER_API_KEY) == "new-mistral-key-xxxxxxxxxxxx"
+    # ZD-Speicher gesetzt (ONB-12 V2): vendor-spezifischer Slot + provider-name.
+    assert zd.get(zd_name_provider_api_key("mistral")) == "new-mistral-key-xxxxxxxxxxxx"
     assert zd.get(ZD_NAME_PROVIDER_NAME) == "mistral"
+    # Alter vendor-Slot bleibt erhalten (für späteren Rückwechsel — Pfad A).
+    assert zd.get(zd_name_provider_api_key("claude")) == "old-claude-key"
 
     # Bestätigung im Privatchat.
     privat_texte = [m["text"] for m in tg.sent if m["chat_id"] == 11]
@@ -145,10 +162,10 @@ def test_happy_path_claude_to_mistral():
 
 def test_happy_path_mistral_to_claude():
     """ONB-13 Happy-Path Mistral → Claude: analoger Wechsel in die andere
-    Richtung."""
+    Richtung. Welle A: Claude-Slot leer → Pfad B."""
     tg = FakeTelegram(members=_members(42))
     zd = FakeZd(initial={
-        ZD_NAME_PROVIDER_API_KEY: "old-mistral-key",
+        zd_name_provider_api_key("mistral"): "old-mistral-key",
         ZD_NAME_PROVIDER_NAME: "mistral",
     })
 
@@ -161,8 +178,10 @@ def test_happy_path_mistral_to_claude():
 
     assert result.ergebnis == ERGEBNIS_GEWECHSELT
     assert result.neuer_anbieter == "claude"
-    assert zd.get(ZD_NAME_PROVIDER_API_KEY) == "sk-ant-new-claude-xxxxxxxxxxxx"
+    assert zd.get(zd_name_provider_api_key("claude")) == "sk-ant-new-claude-xxxxxxxxxxxx"
     assert zd.get(ZD_NAME_PROVIDER_NAME) == "claude"
+    # Alter mistral-Slot bleibt erhalten.
+    assert zd.get(zd_name_provider_api_key("mistral")) == "old-mistral-key"
 
     # ONB-8: Key nirgendwo im Output.
     for m in tg.sent:
@@ -177,7 +196,7 @@ def test_same_provider_quittung_claude():
     """ONB-13 Same-Provider-Quittung: wählt man den aktuellen Anbieter erneut,
     kommt die harte Quittung — kein Schreiben, kein Re-Key."""
     tg = FakeTelegram(members=_members(42))
-    zd = FakeZd(initial={ZD_NAME_PROVIDER_API_KEY: "existing-key"})
+    zd = FakeZd(initial={zd_name_provider_api_key("claude"): "existing-key"})
     snapshot_vorher = zd.snapshot()
 
     result = anbieter_wechseln(
@@ -223,7 +242,7 @@ def test_validierungsfehler_alter_eintrag_byte_gleich():
     byte-gleich, alter Anbieter weiter aktiv."""
     tg = FakeTelegram(members=_members(42))
     zd = FakeZd(initial={
-        ZD_NAME_PROVIDER_API_KEY: "existing-claude-key",
+        zd_name_provider_api_key("claude"): "existing-claude-key",
         ZD_NAME_PROVIDER_NAME: "claude",
     })
     snapshot_vorher = zd.snapshot()
@@ -264,7 +283,7 @@ def test_validierungsfehler_retry_danach_erfolg():
         return call_count[0] >= 2   # erster Aufruf fehlschlägt, zweiter ok
 
     tg = FakeTelegram(members=_members(42))
-    zd = FakeZd(initial={ZD_NAME_PROVIDER_API_KEY: "old"})
+    zd = FakeZd(initial={zd_name_provider_api_key("claude"): "old"})
 
     result = anbieter_wechseln(
         tg=tg, chat_id=11, user_id=42,
@@ -277,7 +296,7 @@ def test_validierungsfehler_retry_danach_erfolg():
         _validate=validate_second_ok)
 
     assert result.ergebnis == ERGEBNIS_GEWECHSELT
-    assert zd.get(ZD_NAME_PROVIDER_API_KEY) == "good-key-xxxxxxxxxxxx"
+    assert zd.get(zd_name_provider_api_key("mistral")) == "good-key-xxxxxxxxxxxx"
 
 
 # ============================================================
@@ -290,7 +309,7 @@ def test_schreibfehler_alter_eintrag_byte_gleich():
     ZD-Speicher byte-gleich, laufende Instanz nicht unterbrochen."""
     tg = FakeTelegram(members=_members(42))
     initial = {
-        ZD_NAME_PROVIDER_API_KEY: "existing-key",
+        zd_name_provider_api_key("claude"): "existing-key",
         ZD_NAME_PROVIDER_NAME: "claude",
     }
     zd = FakeZd(initial=initial, fail_on_write=True)
@@ -327,7 +346,7 @@ def test_onb8_kein_key_in_gruppen_bestaetigung():
     neuen Key im Klartext."""
     tg = FakeTelegram(members=_members(42))
     new_key = "super-secret-key-xxxxxxxxxxxx"
-    zd = FakeZd(initial={ZD_NAME_PROVIDER_API_KEY: "old-key"})
+    zd = FakeZd(initial={zd_name_provider_api_key("claude"): "old-key"})
 
     anbieter_wechseln(
         tg=tg, chat_id=11, user_id=42,
@@ -432,7 +451,7 @@ def test_timeout_anbieter_wahl():
     """Gibt next_message() None zurück während der Anbieter-Wahl, ist das
     Ergebnis ERGEBNIS_UNPETRAENDERT ohne Schreiben."""
     tg = FakeTelegram(members=_members(42))
-    zd = FakeZd(initial={ZD_NAME_PROVIDER_API_KEY: "old"})
+    zd = FakeZd(initial={zd_name_provider_api_key("claude"): "old"})
     snapshot_vorher = zd.snapshot()
 
     result = anbieter_wechseln(
@@ -471,39 +490,27 @@ def test_gruppen_bestaetigung_nennt_anbieter():
 
 
 # ============================================================
-#  11. ONB-12 V1-Race-Fenster (Befund 3 — Teilfix, Spec-Halt)
+#  11. ONB-12 V2: set_multi schließt das V1-Race-Fenster (#663)
 # ============================================================
 
-@pytest.mark.xfail(
-    reason=(
-        "ONB-12 V1-bekannte Lücke: kein Multi-Key-Atomic in ZD-Schicht. "
-        "Wenn der zweite set() (provider_name) scheitert, ist der Speicher im "
-        "Zustand 'neuer api_key, alter provider_name' — NICHT byte-gleich. "
-        "Spec ONB-12 verspricht byte-gleich; vollständige Spec-Konformität "
-        "erfordert Multi-Key-Atomic in tools/zugangsdaten/store.py. "
-        "Folge-Ticket erforderlich. Spec-Halt für Nic. #639"
-    ),
-    strict=True,
-)
-def test_race_zweiter_set_scheitert_dokumentiert_V1_lucke():
-    """ONB-12 V1-Race-Fenster: zweiter set() (provider_name) scheitert →
-    Speicher im partiellen Zustand (neuer api_key, alter provider_name).
+def test_set_multi_atomic_kein_partial_state():
+    """ONB-12 V2 (#663 Welle A): set_multi schreibt atomar — bei Fehlschlag
+    bleibt der Speicher byte-gleich (alle Paare oder keines).
 
-    Dieser Test dokumentiert den bekannten V1-Schwachpunkt: der Speicher ist
-    NICHT byte-gleich zum Zustand vor dem Wechsel. Er ist als xfail markiert,
-    weil er genau das aktuelle (fehlerhafte) Verhalten festklopft — der Test
-    wird PASS wenn die V1-Lücke durch Multi-Key-Atomic geschlossen wird.
+    Das V1-Race-Fenster (zwei sequentielle set()-Calls, zwischen denen ein
+    partieller Zustand entstehen konnte) ist durch die Multi-Key-Atomic-Naht
+    in tools/zugangsdaten/store.py geschlossen — Pfad B des Wechsel-Skills
+    nutzt set_multi für vendor-Slot + provider-name in einem _write-Vorgang.
     """
     tg = FakeTelegram(members=_members(42))
     initial = {
-        ZD_NAME_PROVIDER_API_KEY: "existing-claude-key",
+        zd_name_provider_api_key("claude"): "existing-claude-key",
         ZD_NAME_PROVIDER_NAME: "claude",
     }
-    # Zweiter set()-Aufruf (provider_name) schlägt fehl — erster (api_key) ok.
-    zd = FakeZd(initial=initial, fail_on_nth_write=2)
+    # set_multi-Aufruf scheitert komplett — atomar, kein Paar übernommen.
+    zd = FakeZd(initial=initial, fail_on_write=True)
     snapshot_vorher = zd.snapshot()
 
-    # Die Funktion muss den Fehler abfangen und ERGEBNIS_UNPETRAENDERT zurückgeben.
     result = anbieter_wechseln(
         tg=tg, chat_id=11, user_id=42,
         family_group_chat_id=99,
@@ -517,13 +524,11 @@ def test_race_zweiter_set_scheitert_dokumentiert_V1_lucke():
     privat_texte = [m["text"] for m in tg.sent if m["chat_id"] == 11]
     assert any(WRITE_FAILED in t for t in privat_texte)
 
-    # V1-Lücke: Speicher ist NICHT byte-gleich — api_key wurde bereits
-    # überschrieben. Dieser assert schlägt (xfail) bis Multi-Key-Atomic
-    # implementiert ist.
+    # ONB-12 V2: Speicher ist byte-gleich — kein partieller Zustand.
     assert zd.snapshot() == snapshot_vorher, (
-        "ONB-12 V1-Race-Fenster: partieller Zustand — "
-        "api_key ist bereits 'valid-new-key', provider_name noch 'claude'. "
-        "Multi-Key-Atomic in ZD-Schicht erforderlich."
+        "ONB-12 V2 (#663): set_multi muss atomar sein — bei Fehlschlag "
+        "darf kein Paar im Speicher landen. Multi-Key-Atomic-Naht in "
+        "tools/zugangsdaten/store.py."
     )
 
 

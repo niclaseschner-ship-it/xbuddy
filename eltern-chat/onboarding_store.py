@@ -26,6 +26,23 @@ ZD_NAME_PROVIDER_API_KEY = "eltern-chat-provider-api-key"
 ZD_NAME_FAMILY_GROUP = "eltern-chat-family-group-chat-id"
 
 
+def zd_name_provider_api_key(vendor):
+    """Vendor-spezifischer ZD-Slot-Name für den API-Key (T663 Welle A).
+
+    Welle A führt pro Vendor einen eigenen Slot ein
+    (`eltern-chat-claude-api-key`, `eltern-chat-mistral-api-key`). Der
+    Single-Slot-Name (`eltern-chat-provider-api-key`) bleibt Fallback —
+    `load(provider_name=...)` liest vendor-Slot zuerst, fällt auf Single-Slot
+    zurück. Welle B (späteres Ticket) entfernt den Single-Slot.
+
+    Helper ist hier zentral, damit der Skill `anbieter_wechseln` denselben
+    Namens-Bauer importiert (eine Wahrheitsquelle, CLAUDE.md §6).
+    """
+    if not isinstance(vendor, str) or not vendor:
+        raise ValueError("vendor muss ein nicht-leerer String sein")
+    return "eltern-chat-%s-api-key" % vendor
+
+
 class OnboardingStore:
     """Lädt und speichert die per Onboarding gesetzten Werte über den zentralen
     Zugangsdaten-Speicher (#84/#336, ZD-1).
@@ -39,12 +56,30 @@ class OnboardingStore:
     def __init__(self, zd=None):
         self._zd = zd if zd is not None else Zugangsdaten(resolve_store_path())
 
-    def load(self):
+    def load(self, provider_name=None):
         """Liefert die gespeicherten Werte als dict — direkt aus dem ZD-Speicher
         (#336, ZD-only). Fehlt ein Wert, taucht der Schlüssel im Ergebnis nicht
-        auf (wie zuvor)."""
+        auf (wie zuvor).
+
+        `provider_name` (T663 Welle A): wenn gesetzt, wird der vendor-spezifische
+        Slot zuerst gelesen (`eltern-chat-<vendor>-api-key`). Liegt dort kein
+        truthy-Wert, fällt der Aufruf auf den Single-Slot (`eltern-chat-
+        provider-api-key`) zurück. Default `None` bewahrt das alte Verhalten:
+        nur Single-Slot lesen — kein Bruch für Aufrufer, die den Vendor nicht
+        kennen (z. B. config.py-Bootstrap vor Provider-Wahl).
+        """
         data = {}
-        provider = self._zd.get(ZD_NAME_PROVIDER_API_KEY)
+        provider = None
+        if provider_name is not None:
+            # Welle A: vendor-Slot bevorzugt, truthy-Check (R8) — leere Strings
+            # gelten als nicht gesetzt und triggern den Fallback.
+            vendor_slot = zd_name_provider_api_key(provider_name)
+            vendor_value = self._zd.get(vendor_slot)
+            if vendor_value:
+                provider = vendor_value
+        if provider is None:
+            # Fallback (Welle A) / Default-Pfad: Single-Slot lesen.
+            provider = self._zd.get(ZD_NAME_PROVIDER_API_KEY)
         if provider is not None:
             data[KEY_PROVIDER_API_KEY] = provider
         family = self._zd.get(ZD_NAME_FAMILY_GROUP)
