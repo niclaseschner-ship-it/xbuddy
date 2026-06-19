@@ -1481,11 +1481,13 @@ bevor es eine leere Liste zurückgibt; die Backoff-Pause liegt danach und
 betrifft nur den Abstand zum nächsten Poll-Aufruf bei Leerlauf/Fehler.
 
 **Verfeinerung Pickup-Latenz-Logging (#294):** Der `poll_loop` misst
-für jeden empfangenen Update-Batch die Latenz zwischen `getUpdates`-Rückkehr
-(t0) und der Fertigstellung der Petrarbeitung (t1) und schreibt sie pro Batch
+für jedes petrarbeitete Update die Latenz zwischen `getUpdates`-Rückkehr
+(t0) und der Fertigstellung der Petrarbeitung (t1) und schreibt sie pro Update
 als `INFO`-Eintrag gemäß LOG-1-Zeilenformat (`%(asctime)s %(levelname)s %(message)s`);
 der `message`-Teil enthält strukturierten Inhalt im `event=… key=value`-Stil:
-`poll event=pickup_latency count=N latency_ms=X`. Das ist die
+`poll event=pickup_latency count=1 latency_ms=X`. `count=1` ist fix, weil
+durch den Reader/Processor-Split der Processor stets ein Update pro
+Loop-Durchlauf sieht (Per-Update-Log statt Per-Batch). Das ist die
 **familienseitige Long-Poll-Pickup-Latenz** — von Telegrams Update-Lieferung
 bis zum Ende unserer Petrarbeitung — und ist bewusst von der
 EC-23-Provider-Latenz (innerhalb eines Turns) abgegrenzt: EC-23 misst, wie
@@ -1499,8 +1501,10 @@ Der `poll_loop` wird ab 2026-06-19 in einen Reader-Daemon-Thread
 (`getUpdates` + Sofort-Typing + Hand-off) und einen Processor-
 Hauptthread (Hand-off-Consume + `dispatch`) geteilt. Der 30-s-Long-Poll-
 Timeout und die Backoff-Verfeinerung oben bleiben unverändert.
-Pickup-Latenz wird als Wrapper-Tupel `(t0, update)` durch die Hand-off-
-Mechanik gereicht (Reader misst t0, Processor misst t1) — Logformat
+Pickup-Latenz wird als Wrapper-Tupel `(t0, update_id, update)` durch die
+Hand-off-Mechanik gereicht (Reader misst t0, Processor misst t1); die
+`update_id` im Tupel ist der ACK-Korrelations-Schlüssel, der Reader und
+Processor bei der At-least-once-Quittierung (EC-38) verknüpft. Logformat
 unverändert. Details: EC-37 (Reader/Processor-Split), EC-38 (At-least-
 once).
 
