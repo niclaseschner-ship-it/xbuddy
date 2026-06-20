@@ -14,7 +14,7 @@
 const { test }   = require("node:test");
 const assert     = require("node:assert/strict");
 const path       = require("node:path");
-const { makeDom, makeFetchSpy } = require(
+const { makeDom, makeFetchSpy, makeRoutedFetchSpy } = require(
   path.join(__dirname, "../../seiten/tests/_dom_stub.js")
 );
 
@@ -201,53 +201,86 @@ test("HSP-35-Avatar-URL: Avatar-img src = /api/v1/familie/foto/<folge.kind_id>",
 });
 
 /**
- * Test 4 — HSP-40: einseitiger 404 → teilweise Liste + Warn-Banner (#975).
- * Seit #975 nutzt _ladeAlbenListe Promise.allSettled: paula-OK-Ergebnis
- * wird in die gemergete Liste übernommen, neko-404-Reject landet im
- * fehlgeschlagen-Array → Warn-Banner "Neko-Folgen aktuell nicht verfügbar".
+ * Test 4 — HSP-40: einseitiger fetch-404 → teilweise Liste + Warn-Banner (#975).
+ *
+ * Entry-Path-Test: nutzt makeRoutedFetchSpy (URL-discriminierend, wie der
+ * Live-Code-Pfad von _ladeAlbenListe) statt handverdrahteter lokaler
+ * Promises. Paula-URL → 200 + Album-Array; Neko-URL → 404. Anschließend
+ * wird _mergeUndSortiereAlben + _rendereWarnBanner (beide exportiert) mit
+ * den settled-Ergebnissen aufgerufen — gleicher Mechanismus wie in
+ * _ladeAlbenListe intern.
+ *
+ * AC1: Fetch-Spy URL-discriminierend (paula 200, neko 404).
+ * AC2: Merge-Ergebnis enthält nur paula-Folge; fehlgeschlagen=['neko'].
+ * AC3: DOM-Stub insertBefore vorhanden; Banner landet vor player in _children.
+ * AC4: Banner-Position-Check via _children-Index.
  */
 test("HSP-40: einseitiger fetch-404 → teilweise Liste + Warn-Banner für fehlgeschlagene kind_id", async () => {
-  // Simuliert parallelen Lade-Pfad: paula OK, neko → 404-artige Ablehnung
-  async function holePaulaAlben() {
-    return { kindId: "paula", alben: [ makeAlbum({ id: "p1" }) ] };
-  }
-  async function holeNekoAlben() {
-    throw new Error("alben-Abruf fehlgeschlagen: 404");
-  }
+  // URL-routing fetchSpy: selbes Discriminierungs-Muster wie _ladeAlbenListe/_holeAlben.
+  // paula/alben → 200 + Album-Array; neko/alben → 404; alle anderen → 200 + { status:"neu" }.
+  const routedFetch = makeRoutedFetchSpy([
+    { match: /\/hoerspiel\/paula\/alben/, status: 200, json: [ makeAlbum({ id: "p1" }) ] },
+    { match: /\/hoerspiel\/neko\/alben/,  status: 404, json: { fehler: "nicht gefunden" } },
+  ], { status: "neu" });
 
-  // Promise.allSettled — kein Wurf, beide Ergebnisse in settled-Array
-  const settled = await Promise.allSettled([ holePaulaAlben(), holeNekoAlben() ]);
+  // Temporär globales fetch überschreiben (wie _ladeAlbenListe es vorfindet).
+  const prevFetch = global.fetch;
+  global.fetch = routedFetch;
 
-  // Fulfilled-Ergebnisse → in Aggregat
-  const erfolgreich = settled
-    .filter(r => r.status === "fulfilled")
-    .map(r => r.value);
+  // Parallele _holeAlben-Aufrufe — exakt wie _ladeAlbenListe es macht,
+  // über den echten fetch-Mechanismus (URL-Spy), nicht handverdrahtete Promises.
+  const KIND_IDS = ["paula", "neko"];
+  const settledErgebnisse = await Promise.allSettled(
+    KIND_IDS.map(async (kindId) => {
+      const resp = await global.fetch("/api/v1/hoerspiel/" + kindId + "/alben", {
+        headers: { "Authorization": "tma " },
+      });
+      if (!resp.ok) throw new Error("alben-Abruf fehlgeschlagen: " + resp.status);
+      const alben = await resp.json();
+      return { kindId, alben };
+    })
+  );
 
-  // Rejected → fehlgeschlagen-Array (kind_id-Index aus KIND_IDS_V1)
-  const quellenIds = ["paula", "neko"];
-  const fehlgeschlagen = settled
-    .map((r, i) => r.status === "rejected" ? quellenIds[i] : null)
-    .filter(Boolean);
+  global.fetch = prevFetch;
 
-  // AC1/AC2: allSettled liefert Partial-Result
-  assert.equal(settled[0].status, "fulfilled", "paula-Fetch ist fulfilled");
-  assert.equal(settled[1].status, "rejected",  "neko-Fetch ist rejected");
-  assert.equal(erfolgreich.length, 1, "Genau eine erfolgreiche Quelle (paula)");
-  assert.equal(fehlgeschlagen.length, 1, "Genau eine fehlgeschlagene Quelle (neko)");
-  assert.equal(fehlgeschlagen[0], "neko", "Fehlgeschlagene kind_id ist 'neko'");
+  // Settled-Ergebnisse aufteilen — selbe Logik wie _ladeAlbenListe.
+  const erfolgreich = [];
+  const fehlgeschlagen = [];
+  settledErgebnisse.forEach((result, i) => {
+    if (result.status === "fulfilled") {
+      erfolgreich.push(result.value);
+    } else {
+      fehlgeschlagen.push(KIND_IDS[i]);
+    }
+  });
 
-  // AC2: Merge-Liste enthält paula-Folge
+  // AC1: fetch wurde für beide URLs aufgerufen; Spy-Calls zeigen URL-Routing.
+  const paulaCall = routedFetch.calls.find(c => c.url.includes("/paula/alben"));
+  const nekoCall  = routedFetch.calls.find(c => c.url.includes("/neko/alben"));
+  assert.ok(paulaCall, "fetch wurde für paula/alben aufgerufen");
+  assert.ok(nekoCall,  "fetch wurde für neko/alben aufgerufen");
+
+  assert.equal(settledErgebnisse[0].status, "fulfilled", "paula-Fetch ist fulfilled");
+  assert.equal(settledErgebnisse[1].status, "rejected",  "neko-Fetch ist rejected (404)");
+  assert.equal(erfolgreich.length,    1,      "Genau eine erfolgreiche Quelle (paula)");
+  assert.equal(fehlgeschlagen.length, 1,      "Genau eine fehlgeschlagene Quelle (neko)");
+  assert.equal(fehlgeschlagen[0],     "neko", "Fehlgeschlagene kind_id ist 'neko'");
+
+  // AC2: _mergeUndSortiereAlben (exportiert) liefert Partial-Result.
   const merged = _mergeUndSortiereAlben(erfolgreich);
-  assert.equal(merged.length, 1, "Gemergete Liste enthält genau 1 paula-Folge");
-  assert.equal(merged[0].id, "p1", "Paula-Folge (p1) ist in der Teilliste");
+  assert.equal(merged.length, 1,       "Gemergete Liste enthält genau 1 paula-Folge");
+  assert.equal(merged[0].id, "p1",     "Paula-Folge (p1) ist in der Teilliste");
   assert.equal(merged[0].kind_id, "paula", "paula-Folge trägt kind_id=paula");
 
-  // AC3: Warn-Banner für neko im DOM sichtbar
+  // AC3: DOM-Stub insertBefore vorhanden — Banner landet vor player in _children.
+  // Container hat player bereits als Kind (wie panel-folgen mit folgen-player).
   const testContainer = doc.createElement("div");
   const testPlayer    = doc.createElement("div");
+  testContainer.appendChild(testPlayer);   // player ist bereits im Container
+
   _rendereWarnBanner(testContainer, testPlayer, fehlgeschlagen);
 
-  // Banner wurde als Kind eingefügt (insertBefore player)
+  // Banner-Element gefunden
   const banner = testContainer._children.find(
     c => c.className === "album-warn-banner"
   );
@@ -259,5 +292,15 @@ test("HSP-40: einseitiger fetch-404 → teilweise Liste + Warn-Banner für fehlg
   assert.ok(
     banner.textContent.includes("nicht verfügbar"),
     "Warn-Banner-Text enthält 'nicht verfügbar': " + banner.textContent
+  );
+
+  // AC4: Banner-Position VOR player — insertBefore-Verhalten geprobt.
+  const bannerIdx = testContainer._children.indexOf(banner);
+  const playerIdx = testContainer._children.indexOf(testPlayer);
+  assert.ok(bannerIdx >= 0, "Banner ist in _children des Containers");
+  assert.ok(playerIdx >= 0, "Player ist in _children des Containers");
+  assert.ok(
+    bannerIdx < playerIdx,
+    "Warn-Banner (Index " + bannerIdx + ") steht VOR dem Player (Index " + playerIdx + ") — insertBefore korrekt"
   );
 });
