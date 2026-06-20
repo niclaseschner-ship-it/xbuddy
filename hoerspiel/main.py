@@ -46,6 +46,7 @@ if _REPO_ROOT not in sys.path:
 
 from tools import familie_client as _tools_familie_client_mod  # noqa: E402
 from tools import logsetup  # noqa: E402
+from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # noqa: E402
 
 if __package__:
     from . import album_builder, data_io, llm_service, tts_service
@@ -82,8 +83,8 @@ _OTHER_KIND: dict[str, str] = {
 }
 
 # ENV-Key für den Familie-Service-Origin (DCOMP-1 / CLIENT-1).
+# Default kommt aus tools.familie_client.DEFAULT_ORIGIN (zentral, CLIENT-1).
 ENV_FAMILIE_ORIGIN = "HOERSPIEL_FAMILIE_ORIGIN"
-DEFAULT_FAMILIE_ORIGIN = "http://127.0.0.1:5010"
 
 runtime: dict = {
     "runtime_config": None,    # config.RuntimeConfig
@@ -201,10 +202,6 @@ def _get_bot_token() -> str | None:
     )
 
 
-# T1015: Familie-Service-Origin für den Auth-Lookup-Client.
-ENV_FAMILIE_AUTH_ORIGIN = "HOERSPIEL_FAMILIE_ORIGIN"
-
-
 def _get_familie_client_auth():
     """Liefert den FAM-Auth-Client (T1015, Cluster-A-Option-B).
 
@@ -218,7 +215,7 @@ def _get_familie_client_auth():
     cached = runtime.get("familie_client_auth")
     if cached is not None:
         return cached
-    origin = os.environ.get(ENV_FAMILIE_AUTH_ORIGIN, DEFAULT_FAMILIE_ORIGIN)
+    origin = os.environ.get(ENV_FAMILIE_ORIGIN, _FAMILIE_DEFAULT_ORIGIN)
     return _tools_familie_client_mod.FamilieClient(origin_url=origin)
 
 
@@ -324,7 +321,7 @@ def _get_familie_client() -> "familie_client_mod.FamilieClient":
     client = runtime.get("familie_client")
     if client is not None:
         return client
-    origin = (os.environ.get(ENV_FAMILIE_ORIGIN) or DEFAULT_FAMILIE_ORIGIN)
+    origin = (os.environ.get(ENV_FAMILIE_ORIGIN) or _FAMILIE_DEFAULT_ORIGIN)
     return familie_client_mod.FamilieClient(origin_url=origin)
 
 
