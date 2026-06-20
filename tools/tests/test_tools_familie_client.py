@@ -13,6 +13,7 @@ import json
 import urllib.error
 
 from tools.familie_client import (
+    DEFAULT_ORIGIN,
     HTTP_TIMEOUT_SECONDS,
     PFAD_PERSONEN,
     FamilieClient,
@@ -172,6 +173,11 @@ def test_fehler_klasse_existiert_und_ist_exception():
 def test_pfad_konstante_zeigt_auf_familie_personen():
     """CLIENT-4: Pfad-Konstante kein Magic-String."""
     assert PFAD_PERSONEN == "/api/v1/familie/personen"
+
+
+def test_default_origin_konstante_exportiert():
+    """CONFIG-5: DEFAULT_ORIGIN ist zentralisiert exportiert (T1015 / Befund 2)."""
+    assert DEFAULT_ORIGIN == "http://127.0.0.1:5010"
 
 
 # Entry-Path-Probe lebt in seiten/tests/test_t1015_entry_path_probe.py
