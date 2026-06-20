@@ -8,7 +8,7 @@
 
 // HSP-42 / PANEL-13: silent.mp3 + neue app.js-Größe → Cache-Bust durch
 // Versions-Bump. v5: + PANEL-11-Watchdog für displays-SSE.
-const CACHE_NAME = 'app-panel-v5-panel11-watchdog';
+const CACHE_NAME = 'app-panel-v6-t959-t1007-optimistic-multisegment';
 
 const STATIC_ASSETS = [
   './',
