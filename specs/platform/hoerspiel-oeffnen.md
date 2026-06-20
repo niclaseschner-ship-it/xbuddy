@@ -261,11 +261,13 @@ Funktionsdefinition zu schreiben.
 
 ### E-HOE-2 — KEIN Settings-Türöffner im Chat (Anti-Redundanz, 2026-06-19)
 
-*Datum:* 2026-06-19 (Refs #1028 /berater-runde + Nic-Rückbau-Setzung)
+*Datum:* 2026-06-19 (Refs #1028 /berater-runde + Nic-Rückbau-Setzung) ·
+*Schärfung:* 2026-06-20 (Refs #1048, Nic-Live-Setzung) — Direkt-Trigger-
+Ausnahme eingebaut (siehe unten).
 · Die Eltern-Mini-App HSP-33 hat zwei Tabs (Einstellungen, Folgen). HOE
 bedient V1 **nur** den Folgen-Tab — der Settings-Tab ist über HOE NICHT
-erreichbar. Begründung: was in der Mini-App eingestellt werden kann
-(Voice, LLM-Anbieter, Modell, Tempo, Pausen — HSP-34), wird **nicht**
+per Default erreichbar. Begründung: was in der Mini-App eingestellt werden
+kann (Voice, LLM-Anbieter, Modell, Tempo, Pausen — HSP-34), wird **nicht**
 zusätzlich über einen Eltern-Chat-Skill zum Einstellen angeboten — das
 wäre Bot-seitiger Read der Mini-App-Inhalte und damit reine Redundanz
 („Voice: nova" als Bot-Text + Button → Eltern öffnet App und sieht das
@@ -277,14 +279,36 @@ erreicht den Settings-Tab über den HFE-10-Settings-Beifang-Button (in
 HFE-Antworten) oder direkt über die Telegram-Bot-Menü-Verlinkung
 (HSP-33).
 
-**Verworfen:** zwei Türöffner-Skills oder ein Skill mit Tab-Parameter.
-Beides würde den Settings-Read im Bot zementieren und damit die
-Mini-App-Funktion doppeln.
+**Direkt-Trigger-Ausnahme (Nic-Setzung 2026-06-20, Refs #1048):** Fragt
+der User explizit nach dem Settings-Türöffner — direkte Aufforderung zum
+**Link**, nicht zum Inhalt (Phrasen wie „schick mir die settings",
+„öffne die einstellungen", „settings bitte", „Hörbuch settings") —
+postet der Agent doch den HOE-Button mit `#einstellungen`-Hash (HOE-4).
+Begründung: die Anti-Redundanz-Setzung verbietet **Inhalts-Doppelung**
+(Settings-Werte im Bot-Text), nicht den **reinen Türöffner-Link** auf
+explizite Bitte hin. Settings-Inhalte bleiben verboten — nur der
+Link/Button kommt mit, ohne Inhalts-Beifang. Beiläufige Settings-
+Erwähnung (z. B. mitten in HFE „wechsel auf onyx") bleibt beim
+sprachlichen Verweis ohne Button.
+
+Live-Auslöser der Schärfung war ein Familien-Test 2026-06-20: User
+schrieb „Schick mir mal die Hörbuch settings", der Agent antwortete
+mit Text-Verweis + Versprechen „Knopf unten" — aber kein Button kam mit
+(die alte E-HOE-2-Setzung verbot ihn). Eltern klickte ins Leere.
+
+**Verworfen:** Settings-INHALTE (Voice-Liste, aktuelle Tempo-Stufe etc.)
+als Bot-Text im Chat ausgeben. Der reine Türöffner-Link auf Direkt-
+Trigger zementiert keinen Settings-Read — er trägt keine Settings-Daten,
+nur den Link in den Settings-Tab der Mini-App.
 
 **Frühere Setzung (kassiert):** Bis 2026-06-19 hatte HOE einen
 `tab`-Parameter mit `"einstellungen" | "folgen"`-Variante (ratifiziert
 Werft-Lauf #848, 2026-06-15). Diese Setzung ist durch die
-Anti-Redundanz-Regel überholt.
+Anti-Redundanz-Regel überholt — kommt mit der 2026-06-20-Schärfung
+eingeschränkt zurück: `#einstellungen`-Hash (HOE-4) ist auf **Direkt-
+Trigger** wieder zulässig, Default-Pfad bleibt `#folgen`. Bau-Form
+(`tab`-Parameter im Skill vs. separater Mini-Skill `hoerspiel_settings_oeffnen`)
+fällt im Implementations-PR.
 
 ### E-HOE-3 — Posten auch bei leerem Album-Bestand (analog E-RAO-3)
 
