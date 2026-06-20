@@ -64,6 +64,17 @@ function makeDom() {
       return c;
     };
 
+    el.insertBefore = function(newNode, refNode) {
+      newNode.parentNode = el;
+      const idx = refNode ? el._children.indexOf(refNode) : -1;
+      if (idx >= 0) {
+        el._children.splice(idx, 0, newNode);
+      } else {
+        el._children.push(newNode);
+      }
+      return newNode;
+    };
+
     el.removeChild = function(c) {
       el._children = el._children.filter(x => x !== c);
     };
@@ -205,4 +216,51 @@ function makeFetchSpy(defaultJson = {}) {
   return spy;
 }
 
-module.exports = { makeDom, makeFetchSpy };
+/**
+ * Baut einen URL-routing fetch-Spy.
+ *
+ * routes: Array von { match: string|RegExp, status?: number, json: any }
+ *   match — wird als RegExp gegen die URL geprüft (string → neuer RegExp)
+ *   status — HTTP-Status (default 200)
+ *   json   — Rückgabe-Payload für resp.json()
+ *
+ * Fällt keine Route, gibt status 200 + defaultJson zurück.
+ * spy.calls: Array von {url, method, body}.
+ */
+function makeRoutedFetchSpy(routes = [], defaultJson = {}) {
+  const calls = [];
+
+  const spy = async function(url, options = {}) {
+    const body = options.body !== undefined ? options.body : undefined;
+    calls.push({ url, method: options.method || "GET", body });
+
+    for (const route of routes) {
+      const re = route.match instanceof RegExp
+        ? route.match
+        : new RegExp(String(route.match));
+      if (re.test(url)) {
+        const status = route.status !== undefined ? route.status : 200;
+        const json   = route.json;
+        return {
+          ok:     status >= 200 && status < 300,
+          status,
+          json:   async () => (typeof json === "function" ? json() : JSON.parse(JSON.stringify(json))),
+          text:   async () => JSON.stringify(json),
+        };
+      }
+    }
+
+    const status = 200;
+    return {
+      ok:   true,
+      status,
+      json: async () => JSON.parse(JSON.stringify(defaultJson)),
+      text: async () => JSON.stringify(defaultJson),
+    };
+  };
+
+  spy.calls = calls;
+  return spy;
+}
+
+module.exports = { makeDom, makeFetchSpy, makeRoutedFetchSpy };
