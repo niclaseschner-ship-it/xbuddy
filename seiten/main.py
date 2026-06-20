@@ -51,6 +51,7 @@ if _REPO_ROOT not in sys.path:
 from seiten import aggregator, render  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
 from tools import familie_client as _familie_client_mod  # noqa: E402
+from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # noqa: E402
 
 # EZG-6 / ESSEN-31 / T1015: Init-Data-Validierung aus tools.initdata
 # (vorher per sys.path-Hack aus eltern-chat/init_data.py — Cluster-A-Option-B
@@ -314,8 +315,8 @@ def _aktuelles_inventar():
 # ============================================================
 
 # T1015 / Cluster-A-Option-B: Familie-Service-Origin per Komponenten-ENV.
+# Default kommt aus tools.familie_client.DEFAULT_ORIGIN (zentral, CLIENT-1).
 _ENV_FAMILIE_ORIGIN = "SEITEN_FAMILIE_ORIGIN"
-_DEFAULT_FAMILIE_ORIGIN = "http://127.0.0.1:5010"
 
 
 def _get_familie_client():
@@ -326,7 +327,7 @@ def _get_familie_client():
     cached = runtime.get("familie_client")
     if cached is not None:
         return cached
-    origin = os.environ.get(_ENV_FAMILIE_ORIGIN, _DEFAULT_FAMILIE_ORIGIN)
+    origin = os.environ.get(_ENV_FAMILIE_ORIGIN, _FAMILIE_DEFAULT_ORIGIN)
     return _familie_client_mod.FamilieClient(origin_url=origin)
 
 

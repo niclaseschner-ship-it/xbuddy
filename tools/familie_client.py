@@ -40,6 +40,12 @@ HTTP_TIMEOUT_SECONDS = 2.0
 # CLIENT-4: FAM-7 — der Endpunkt-Pfad (vgl. familie/main.py:118).
 PFAD_PERSONEN = "/api/v1/familie/personen"
 
+# CONFIG-5: Zentralisierter Default-Origin für alle Service-Buddys (T1015).
+# Jeder Service überschreibt via eigenen ENV-Schlüssel (ESSEN_FAMILIE_ORIGIN,
+# ROUTINE_FAMILIE_ORIGIN, SEITEN_FAMILIE_ORIGIN, HOERSPIEL_FAMILIE_ORIGIN);
+# fehlt er, greift dieser Wert als gemeinsamer Fallback.
+DEFAULT_ORIGIN = "http://127.0.0.1:5010"
+
 
 class FamilieClientError(Exception):
     """Sammel-Fehler für HTTP-/Parse-/Schema-Probleme beim Familie-Service.
