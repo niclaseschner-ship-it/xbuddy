@@ -48,6 +48,7 @@ if _REPO_ROOT not in sys.path:
 # ratifiziert 2026-06-18-1720 — kein sys.path-Hack auf eltern-chat mehr).
 from tools import configloader, logsetup  # noqa: E402
 from tools import familie_client as _familie_client_mod  # noqa: E402
+from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # noqa: E402
 from tools.initdata import init_data as _init_data_mod  # noqa: E402
 
 if __package__:
@@ -240,8 +241,8 @@ def _now(zeitzone):
 
 _ENV_BOT_TOKEN = "ELTERNCHAT_BOT_TOKEN"
 # T1015: Familie-Service-Origin per Komponenten-ENV (CONFIG-5-Schema).
+# Default kommt aus tools.familie_client.DEFAULT_ORIGIN (zentral, CLIENT-1).
 _ENV_FAMILIE_ORIGIN = "ROUTINE_FAMILIE_ORIGIN"
-_DEFAULT_FAMILIE_ORIGIN = "http://127.0.0.1:5010"
 
 
 def _get_bot_token():
@@ -258,7 +259,7 @@ def _get_familie_client():
     cached = runtime.get("familie_client")
     if cached is not None:
         return cached
-    origin = os.environ.get(_ENV_FAMILIE_ORIGIN, _DEFAULT_FAMILIE_ORIGIN)
+    origin = os.environ.get(_ENV_FAMILIE_ORIGIN, _FAMILIE_DEFAULT_ORIGIN)
     return _familie_client_mod.FamilieClient(origin_url=origin)
 
 
