@@ -634,6 +634,44 @@ im Photo-Buddy nicht existiert → 400.
 
 *Tickets:* #531
 
+### ESSEN-19b — `DELETE /api/v1/essen/katalog/gerichte/<id>` — Gericht löschen
+
+Entfernt einen Gerichts-Eintrag aus dem dynamischen Katalog. **In V1.2
+exposed** (Folge aus ESSEN-22 V1.2 Pfad 1, der `gericht-loeschen` als
+Lösch-Pfad benennt).
+
+**Konsument in V1.2:** der Eltern-Chat-Skill `gericht-loeschen`
+(Drei-Phasen-Pattern, EC-10 „Drei-Phasen-Klausel").
+
+**Pfad-Parameter:** `<id>` = die Gericht-ID aus `ESSEN-18`-Antwort.
+
+**Foto-Kaskade (ESSEN-22 V1.2 Pfad 1).** Trägt das Gericht ein
+`foto_ref`, löscht der Buddy das zugehörige Familien-Foto aus
+`xbuddy-data/essen/fotos/<id>.<ext>` (ESSEN-22b) **synchron mit dem
+Katalog-Eintrag**. Der Lösch-Akt ist atomar: scheitert die
+Foto-Löschung, scheitert die Gericht-Löschung (kein Halb-Zustand). Trägt
+das Gericht nur `bild_ref` (ARASAAC-Default), passiert keine
+Foto-Aktion.
+
+**Antwort:** 204 No Content bei Erfolg. 404 bei unbekannter ID.
+
+**Idempotenz.** Wiederholter DELETE auf bereits gelöschte ID → 404 (kein
+spezieller „bereits gelöscht"-Status — der Skill behandelt 404 als
+„nicht da" identisch). EC-10-A2 ist **nicht** anwendbar — Lösch ist
+mehrstufig (Drei-Phasen-Klausel).
+
+**Persistenz:** Eintrag aus `essen/gerichte.json` raus, atomar
+(DCOMP-4, analog ESSEN-19). Reload-on-Read greift automatisch
+(ESSEN-20).
+
+*Test-Implikation:* DELETE auf existierende ID mit `foto_ref` → 204,
+GET liefert Gericht nicht mehr, Foto in `xbuddy-data/essen/fotos/` weg.
+DELETE auf existierende ID mit `bild_ref` → 204, GET liefert Gericht
+nicht mehr, keine Foto-Aktion. DELETE auf unbekannte ID → 404. DELETE
+zweimal hintereinander auf dieselbe ID → erst 204, dann 404.
+
+*Tickets:* #816
+
 ### ESSEN-20 — Reload-on-Read, atomares Schreiben, Last-Known-Good
 Der Buddy liest seine persistenten Dateien (`wuensche.json`, `gerichte.json`,
 Override-`katalog.json`) **je Request frisch** (Reload-on-Read, ROUTINE-14-
