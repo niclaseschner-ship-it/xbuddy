@@ -49,11 +49,11 @@ from skills.hoerspiel_client import HoerspielClientError
 logger = logging.getLogger(__name__)
 
 # HOE-4: Labels fuer Folgen-Tab (E-HOE-3: auch bei leerem Bestand).
-_LABEL_FOLGEN = "\U0001f3a7 Folgen anhoeren"
-_LABEL_FOLGEN_LEER = "\U0001f3a7 Folgen-Tab oeffnen"
+_LABEL_FOLGEN = "\U0001f3a7 Folgen anhören"
+_LABEL_FOLGEN_LEER = "\U0001f3a7 Folgen-Tab öffnen"
 
 # E-HOE-2 Schaerfung: Label fuer Einstellungen-Direkt-Trigger.
-_LABEL_EINSTELLUNGEN = "⚙️ Hoerspiel-Einstellungen oeffnen"
+_LABEL_EINSTELLUNGEN = "⚙️ Hörspiel-Einstellungen öffnen"
 
 # Gueltige Tab-Werte (E-HOE-4 Hash-Tab-Deeplink).
 _TAB_FOLGEN = "folgen"
@@ -66,7 +66,7 @@ def _baue_folgen_text(alben_liste):
     n = len(alben_liste)
     if n == 0:
         return (
-            "\U0001f3a7 Hoerspiel — noch keine Folge vorhanden. "
+            "\U0001f3a7 Hörspiel — noch keine Folge vorhanden. "
             "Sag mir Bescheid, wenn ich eine schreiben soll."
         )
     # Hoechste folgen_nr = zuletzt erzeugte Folge
@@ -77,7 +77,7 @@ def _baue_folgen_text(alben_liste):
     nr = letztes.get("folgen_nr") or "?"
     titel = letztes.get("titel") or "?"
     return (
-        "\U0001f3a7 Hoerspiel — %d %s (zuletzt: Folge %s „%s“)"
+        "\U0001f3a7 Hörspiel — %d %s (zuletzt: Folge %s „%s“)"
         % (n, "Folge" if n == 1 else "Folgen", nr, titel)
     )
 
@@ -104,7 +104,7 @@ def _baue_uebersicht(hoerspiel_client, mini_app_url, tab=_TAB_FOLGEN):
     if tab == _TAB_EINSTELLUNGEN:
         web_app_url = mini_app_url.rstrip("/") + "#einstellungen"
         return {
-            "text": "Hier sind die Hoerspiel-Einstellungen:",
+            "text": "Hier sind die Hörspiel-Einstellungen:",
             "presentation": {
                 "inline_button": {
                     "label": _LABEL_EINSTELLUNGEN,
@@ -124,7 +124,7 @@ def _baue_uebersicht(hoerspiel_client, mini_app_url, tab=_TAB_FOLGEN):
             "hoerspiel_oeffnen: Hoerspiel-Buddy (alben) nicht erreichbar — %s", e)
         return {
             "text": (
-                "Der Hoerspiel-Buddy ist gerade nicht erreichbar — "
+                "Der Hörspiel-Buddy ist gerade nicht erreichbar — "
                 "versuch's gleich nochmal."
             ),
             "presentation": {},
@@ -169,7 +169,7 @@ def hoerspiel_oeffnen(chat_id, from_user_id,
         logger.info(
             "hoerspiel_oeffnen: User %s nicht berechtigt (HOE-2)",
             from_user_id)
-        raise BerechtigungError("Das geht nur fuer Eltern.")
+        raise BerechtigungError("Das geht nur für Eltern.")
 
     result = _baue_uebersicht(hoerspiel_client, mini_app_url, tab=tab)
     presentation = result.get("presentation") or {}

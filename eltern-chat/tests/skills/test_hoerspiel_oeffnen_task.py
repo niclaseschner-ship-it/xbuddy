@@ -177,8 +177,9 @@ def test_AC_beschreibung_enthaelt_beilaeufig_warnung():
     task, _, _ = _make_task()
     desc = task.description.lower()
     # Warnung dass beiläufige Settings → sprachlicher Verweis (kein Tool-Call)
-    assert "beiläufig" in desc or "nicht" in desc, (
-        "Description muss vor beiläufiger Settings-Erwähnung warnen")
+    assert "beiläufig" in desc, (
+        "Description muss das Wort 'beiläufig' enthalten — damit der LLM "
+        "bei beiläufiger Settings-Erwähnung KEINEN Tool-Call macht")
 
 
 def test_AC_beschreibung_enthaelt_folgen_trigger():
