@@ -58,6 +58,56 @@ Wenn der angezeigte Tag der heutige ist, hebt das System ihn farblich ab.
 IDs werden nie neu vergeben und nie umnummeriert. Ein Ticket nennt die IDs,
 die es umsetzt — das ist der Link zwischen Ticket, Spec und Code.
 
+### Test-Anker pro Requirement (Hebel 0)
+
+Jede Requirement mit **Code-Verhalten** trägt zusätzlich entweder
+- `Test-Anker: <test-id-oder-pfad>` — Verweis auf den automatisierten Test, der
+  die Requirement prüft, **oder**
+- `nicht_automatisiert: <grund> · manuelle_probe: <konkreter Befehl/Klick-Pfad>`
+  — **nur** zulässig wenn das Verhalten nachweislich nicht codeförmig prüfbar
+  ist (Externe Realwelt: Hardware-Audio, Telegram-Sandbox-Verhalten,
+  Browser-Sensor-Permission, LE-Cert-Rotation).
+
+```markdown
+### HSP-2 — Plattform-Basis
+Der Hörspiel-Buddy lebt unter `hoerspiel/` ... (Verhaltens-Text)
+Test-Anker: hoerspiel/tests/test_album.py::test_hsp2_album_struktur
+
+### KIBUDDY-12 — STT über OpenAI-API oder Azure-Whisper
+... (Verhaltens-Text)
+Test-Anker: kibuddy/tests/test_stt_adapter.py::test_kibuddy12_mock_whisper
+nicht_automatisiert: echte Whisper-Latenz und Akzent-Toleranz — externer STT
+manuelle_probe: KIBuddy-Display öffnen, Push-to-Talk halten, "Wie ist das Wetter?" sprechen, Transkript binnen 2s
+```
+
+**Doppel-Form erlaubt:** wenn ein Requirement sowohl eine mockbare Schicht
+(Mock-Test) als auch eine nicht-automatisierbare Realwelt-Probe hat, dürfen beide
+Anker nebeneinander stehen — schärft die Realität statt zu vereinfachen.
+
+**Pure-Daten-Artefakte (keine Hebel-0-Requirements).** Asset-Pfade,
+Konfig-Konstanten, View-/Registry-Einträge sind **keine Code-Verhalten-
+Requirements** im Sinn dieser Regel. Sie fallen unter ihre konsumierende
+Convention (URL-13, PANEL-3, ICONS-5 etc.), deren Form-Tests die
+Existenz/Form-Korrektheit prüfen. Solche Requirements brauchen **keinen**
+`Test-Anker:`- oder `nicht_automatisiert:`-Marker am Requirement selbst.
+
+**Reject-Form (Form-Drift):**
+- `nicht_automatisiert:` ohne `manuelle_probe:` — der Grund allein lässt
+  „komplex" oder „später" durchgehen; die manuelle Probe zwingt zur konkreten
+  Verifikation.
+- `Test-Anker:` zeigt auf nicht-existenten Test — Anker rostet, falls
+  Renaming/Umzug nicht nachgezogen wird; Watchdog grept periodisch.
+- Code-Verhalten-Requirement ohne einen der beiden Marker — Form-Drift.
+
+**Bestehende Sammel-Anker bleiben gültig.** Lokale Test-Anker-Sektionen wie
+`### KIBUDDY-28 — Test-Anker` (Sammel-Sektion unter `## Tests`) sind weiterhin
+zulässig als Spec-Wahl. Die Hebel-0-Form-Regel ist **additiv pro Requirement**,
+nicht ersetzend.
+
+Diese Klausel ist ratifiziert in
+`brainstorm/berater-runde/2026-06-21-1620-RATIFIZIERT-werft-bauer-drift.md`
+(Pfad B Schritt 2).
+
 ## Bindend vs. vorläufig
 
 Specs mischen **beschlossene** Requirements mit **noch offenen** Punkten im
