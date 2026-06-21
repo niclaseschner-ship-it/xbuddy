@@ -73,17 +73,26 @@ class ConfigError(Exception):
 
 @dataclass
 class RoutineItem:
-    """Ein Routine-Punkt mit allen Feldern (ROUTINE-4).
+    """Ein Routine-Punkt mit allen Feldern (ROUTINE-4, ROUTINE-24).
 
     quelle ∈ {default, einmalig, bedingt} — V1 füllt nur default.
     Das Modell trägt quelle von Anfang an, damit spätere Erweiterungen
     keine Datenmodell-Migration erzwingen (E-ROUTINE-2).
+
+    ROUTINE-24 (V2): optionaler `zeit`-Sub-Block — drei Formen:
+      - None / fehlt   → reiner Punkt ohne Zeit (V1-Verhalten)
+      - {typ:'anker',   uhrzeit:'HH:MM', locked?:bool}
+      - {typ:'vorlauf', minuten:int, bezug:'vorheriger_anker'}
+    Validierung läuft in items.py vor jedem Schreib-Vorgang
+    (single source: _validate_zeit_block); resolve_data liest hier nur
+    den Roh-Dict ein und übergibt ihn unverändert.
     """
     id: str
     label: str
     piktogramm: str                      # numerische ARASAAC-ID als String
     quelle: str = "default"              # default | einmalig | bedingt
     piktogramm_url: str | None = None  # befüllt durch render.icon_url()
+    zeit: dict | None = None             # ROUTINE-24: zeit-Sub-Block (None | anker | vorlauf)
 
     QUELLEN = frozenset({"default", "einmalig", "bedingt"})
 
@@ -184,9 +193,19 @@ def _parse_items(raw_items):
         label = raw.get("label") or ""
         pikto = str(raw.get("piktogramm", ""))
         quelle = raw.get("quelle", "default")
+        # ROUTINE-24: zeit-Sub-Block übernehmen, wenn vorhanden (None|dict).
+        # Validierung der inneren Struktur passiert in items.py vor Schreib-Vorgängen
+        # (single source: _validate_zeit_block); Lese-Pfad ist tolerant — Roh-Dict
+        # wird durchgereicht, ungültiger Inhalt wird vom Render robust ignoriert.
+        zeit = raw.get("zeit")
+        if zeit is not None and not isinstance(zeit, dict):
+            logger.warning(
+                "items[%r].zeit hat ungültigen Typ %r — als None behandelt",
+                item_id, type(zeit).__name__)
+            zeit = None
         try:
             items.append(RoutineItem(
-                id=item_id, label=label, piktogramm=pikto, quelle=quelle))
+                id=item_id, label=label, piktogramm=pikto, quelle=quelle, zeit=zeit))
         except ConfigError as e:
             logger.warning("items-Eintrag %r ungültig: %s — übersprungen", item_id, e)
     return items
@@ -259,6 +278,89 @@ def resolve_data(data_path=None, env=None):
         zeitreferenzen=paare,
         zeitzone=zeitzone,
     )
+
+
+# ARASAAC-IDs der V1-Anker (Lego-Schuld V1.1 — analog
+# routine/templates/morgen.html, eigener Cleanup-Folge laut ROUTINE-20).
+_V1_ANKER_AUFSTEHEN_PIKTO = "8152"
+_V1_ANKER_LOSGEHEN_PIKTO = "8142"
+
+
+def _v1_zeit_string(wert):
+    """Liefert eine HH:MM-Repräsentation eines V1-Zeit-Werts (str oder Wochentag-Dict).
+
+    Für Wochentag-Dict greift ein 'default'-Key, sonst der erste non-leere
+    Wochentag-Eintrag, sonst None. Synth-Anker tragen Read-Only-Spiegel —
+    Wochentag-Aufdröselung im items[]-Schema ist OUT-of-V2-Scope.
+    """
+    if isinstance(wert, str) and wert:
+        return wert
+    if isinstance(wert, dict):
+        # Bevorzugt 'default'-Key, sonst erster non-leerer Wert
+        if isinstance(wert.get("default"), str) and wert["default"]:
+            return wert["default"]
+        for v in wert.values():
+            if isinstance(v, str) and v:
+                return v
+    return None
+
+
+def migriere_v1_anker(cfg):
+    """ROUTINE-28 Welle A: liefert eine RoutineConfig-Kopie mit Synth-End-Ankern.
+
+    Eintrittspunkt für Display-Render und Lese-API: main.py:_current_config()
+    ruft diese Funktion, bevor das Ergebnis an Render/JSON geht. Schreib-Pfad
+    (items.py write_data / replace_default_items) bleibt unverändert — V1-Felder
+    bleiben als Read-only-Spiegel (Welle A, ROUTINE-28).
+
+    Idempotent: existieren bereits items mit zeit.typ=anker, locked=True →
+    cfg wird unverändert zurückgegeben (kein Doppel-Synth).
+    Synth-IDs 'aufstehen'/'losgehen' kollidieren mit user-IDs nur, wenn diese
+    KEIN locked-Anker tragen — dann gewinnt der user-Eintrag implizit, weil
+    seine ID den Synth-Eintrag in items.py vorgehen würde (Schreib-Pfad).
+    """
+    items_neu = _synth_v1_anker(cfg.items, cfg.aufstehzeit, cfg.abfahrtszeit)
+    if items_neu is cfg.items:
+        return cfg
+    import dataclasses
+    return dataclasses.replace(cfg, items=items_neu)
+
+
+def _synth_v1_anker(items, aufstehzeit_cfg, abfahrtszeit_cfg):
+    """Erzeugt synth. End-Anker aus V1-Feldern, wenn items[] keine eigenen
+    locked-Anker trägt. Liefert die items-Liste (neu, falls Synth angewandt;
+    sonst das Original, damit Aufrufer per Identitäts-Vergleich erkennen können).
+    """
+    hat_locked_anker = any(
+        isinstance(it.zeit, dict)
+        and it.zeit.get("typ") == "anker"
+        and bool(it.zeit.get("locked"))
+        for it in items
+    )
+    if hat_locked_anker:
+        return items  # Identität — Aufrufer kann erkennen: keine Mutation
+
+    aufstehen_str = _v1_zeit_string(aufstehzeit_cfg)
+    losgehen_str = _v1_zeit_string(abfahrtszeit_cfg)
+    if not aufstehen_str or not losgehen_str:
+        # Kein vollständiges V1-Anker-Paar → keine Synthese
+        return items  # Identität
+
+    aufstehen_item = RoutineItem(
+        id="aufstehen",
+        label="Aufstehen",
+        piktogramm=_V1_ANKER_AUFSTEHEN_PIKTO,
+        quelle="default",
+        zeit={"typ": "anker", "uhrzeit": aufstehen_str, "locked": True},
+    )
+    losgehen_item = RoutineItem(
+        id="losgehen",
+        label="Losgehen",
+        piktogramm=_V1_ANKER_LOSGEHEN_PIKTO,
+        quelle="default",
+        zeit={"typ": "anker", "uhrzeit": losgehen_str, "locked": True},
+    )
+    return [aufstehen_item, *items, losgehen_item]
 
 
 # ============================================================

@@ -110,6 +110,102 @@ def _parse_hhmm(s):
     return int(teile[0]), int(teile[1])
 
 
+# ============================================================
+#  ROUTINE-26: zeit-Pins aus items[] (anker + vorlauf)
+# ============================================================
+
+# Sentinel für Vorlauf am Listen-Anfang (kein vorheriger Anker, MAD-1).
+VORLAUF_KEINE_UHRZEIT_LABEL = "—:—"
+
+
+@dataclass
+class ZeitPin:
+    """Ein Pin am Display-Zeitstrahl (ROUTINE-26).
+
+    typ='anker'   → großer Pin mit absoluter Uhrzeit-Label
+    typ='vorlauf' → kleinerer Pin mit berechnetem Uhrzeit-Label
+                    '<anker_uhrzeit> − <minuten>' oder '—:—' wenn kein
+                    vorheriger Anker (MAD-1: keine Fake-Daten).
+    """
+    item_id: str
+    label: str
+    piktogramm: str
+    typ: str           # 'anker' | 'vorlauf'
+    uhrzeit_label: str  # 'HH:MM' oder '—:—'
+    minuten: int | None  # nur für vorlauf gesetzt (für Label-Anzeige)
+    locked: bool       # nur für anker relevant (Mini-App-Sperre)
+
+
+def berechne_zeit_pins(items):
+    """Baut die Pin-Liste aus items[] (ROUTINE-26).
+
+    items: iterable von routine.config.RoutineItem oder dict-artigen Items
+           mit Feldern id, label, piktogramm, zeit.
+    Liefert: list[ZeitPin] — nur items mit zeit.typ in ('anker','vorlauf').
+             Reihenfolge = items[]-Reihenfolge (oben=früh, unten=spät).
+
+    Vorlauf-Berechnung: '<vorheriger_anker.uhrzeit> − <minuten>'.
+    Kein vorheriger Anker (Vorlauf am Listen-Anfang) → '—:—' (MAD-1).
+    Ungültige Werte (kaputte uhrzeit, negative minuten) → still übersprungen
+    (Lese-Robustheit, Persistenz validiert vorab in items._validate_zeit_block).
+    """
+    pins = []
+    vorheriger_anker_uhrzeit = None  # 'HH:MM' oder None
+    for item in items:
+        # Sowohl RoutineItem als auch dict tolerieren (Render-Naht)
+        zeit = getattr(item, "zeit", None)
+        if zeit is None and isinstance(item, dict):
+            zeit = item.get("zeit")
+        if not isinstance(zeit, dict):
+            continue
+        typ = zeit.get("typ")
+        item_id = getattr(item, "id", None) or (item.get("id") if isinstance(item, dict) else "")
+        label = getattr(item, "label", None) or (item.get("label") if isinstance(item, dict) else "")
+        pikto = getattr(item, "piktogramm", None) or (item.get("piktogramm") if isinstance(item, dict) else "")
+
+        if typ == "anker":
+            uhrzeit = zeit.get("uhrzeit")
+            if not isinstance(uhrzeit, str):
+                continue  # ungültig, Lese-Pfad robust ignorieren
+            locked = bool(zeit.get("locked", False))
+            pins.append(ZeitPin(
+                item_id=item_id, label=label, piktogramm=str(pikto),
+                typ="anker", uhrzeit_label=uhrzeit, minuten=None, locked=locked,
+            ))
+            vorheriger_anker_uhrzeit = uhrzeit
+        elif typ == "vorlauf":
+            minuten = zeit.get("minuten")
+            if not isinstance(minuten, int) or isinstance(minuten, bool) or minuten < 0:
+                continue
+            uhrzeit_label = _vorlauf_label(vorheriger_anker_uhrzeit, minuten)
+            pins.append(ZeitPin(
+                item_id=item_id, label=label, piktogramm=str(pikto),
+                typ="vorlauf", uhrzeit_label=uhrzeit_label,
+                minuten=minuten, locked=False,
+            ))
+    return pins
+
+
+def _vorlauf_label(vorheriger_anker_uhrzeit, minuten):
+    """Berechnet '<anker_uhrzeit> − <minuten>' als 'HH:MM' (ROUTINE-26).
+
+    Kein vorheriger Anker → '—:—' (MAD-1: keine Fake-Daten).
+    Unparsbarer Anker-Wert → '—:—' (Robust-Lese-Pfad).
+    """
+    if not vorheriger_anker_uhrzeit:
+        return VORLAUF_KEINE_UHRZEIT_LABEL
+    try:
+        h, m = _parse_hhmm(vorheriger_anker_uhrzeit)
+    except (ValueError, TypeError):
+        return VORLAUF_KEINE_UHRZEIT_LABEL
+    gesamt = h * 60 + m - minuten
+    # Negativ-Edge (Vorlauf größer als Anker-Minuten-Offset seit Mitternacht):
+    # In der Praxis bedeutungslos für Morgen-Routine (Anker > Vorlauf-Min),
+    # aber stabil → modulo 24h, damit keine negativen Stunden gerendert werden.
+    gesamt = gesamt % (24 * 60)
+    return "%02d:%02d" % (gesamt // 60, gesamt % 60)
+
+
 def berechne_zeiten(abfahrtszeit_cfg, anzieh_vorlauf_min, zeitzone, tag=None,
                     aufstehzeit_cfg=None):
     """Berechnet die UhrZeiten für den gegebenen Tag (ROUTINE-9, AC-FIX1, #335).

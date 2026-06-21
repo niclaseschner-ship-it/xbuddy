@@ -11,6 +11,8 @@
 
   "zeitzone": "Europe/Berlin",
 
+  "_v2_zeit_block": "ROUTINE-24 (V2/#726): items[] tragen optional einen 'zeit'-Sub-Block — drei Formen: (a) fehlt/null → reiner Punkt ohne Zeit; (b) {typ:'anker', uhrzeit:'HH:MM', locked?:bool} — absolute Zeit, locked:true schützt vor Mini-App-Edit; (c) {typ:'vorlauf', minuten:int>=0, bezug:'vorheriger_anker'} — relativ zum letzten Anker davor. Beispiel: 'Zähne 5 Min vor Frühstück' = vorlauf nach dem Frühstück-Anker. Migration: erste V2-Lauf-Lesung von routine.json ohne locked-Anker erzeugt synth. Aufstehen/Losgehen-End-Anker aus den V1-Feldern (ROUTINE-28 Welle A); V1-Felder bleiben als Read-only-Spiegel (deprecated).",
+
   "items": [
     {
       "_was": "Frühstück — jeden Morgen (ARASAAC 4626: Frühstückstisch)",
