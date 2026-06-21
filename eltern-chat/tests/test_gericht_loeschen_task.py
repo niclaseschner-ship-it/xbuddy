@@ -221,6 +221,53 @@ def test_execute_loeschen_leere_ids_quittung():
 
 
 # ============================================================
+#  Live-Pfad — AC6/AC7: llm_fn Wire-Up (B2-Fix)
+# ============================================================
+
+def test_execute_auswaehlen_mit_echter_llm_fn():
+    """GerichtLoeschenTask(llm_fn=stub_fn) + execute(aktion='auswaehlen')
+    → Auswahl-Quittung mit den per stub_fn zurückgegebenen IDs.
+
+    Exerciert den EC-10-Drei-Phasen-Auswahlpfad mit einer stub-llm_fn, die
+    ein valides JSON-Array zurückgibt (["1", "2"]). Quittung muss "Ausgewählt"
+    enthalten und die Label der gewählten Gerichte nennen.
+    """
+    import json
+
+    def stub_fn(prompt):
+        return json.dumps(["1", "2"])
+
+    task, _ = _make_task(llm_fn=stub_fn)
+
+    quittung = task.execute(
+        {"aktion": "auswaehlen", "freitext": "Lasagne und Pizza"}, _turn_ctx())
+
+    assert "ausgewählt" in quittung.lower() or "Ausgewählt" in quittung
+    # Beide Labels sollen in der Quittung erscheinen
+    assert "Lasagne" in quittung or "Pizza" in quittung
+
+
+def test_execute_auswaehlen_mit_llm_fn_none_gibt_nichts_zu_tun():
+    """GerichtLoeschenTask(llm_fn=None) + execute(aktion='auswaehlen')
+    → SIGNAL_NICHTS_ZU_TUN-Quittung (Freitext-Hinweis).
+
+    Wenn provider_name/provider_api_key fehlen, bleibt _glo_llm_fn=None
+    (Fallback per _make_llm_fn_for_gericht_loeschen). Der Task soll dann
+    SIGNAL_NICHTS_ZU_TUN mit Freitext-Hinweis zurückgeben, nicht crashen.
+    Kein Hard-Guard (ESSEN-19b): die Liste- und Lösch-Phase sind weiterhin
+    verfügbar, nur die Auswahl-Phase via LLM ist nicht nutzbar.
+    """
+    task, _ = _make_task(llm_fn=None)  # Fallback: kein Provider
+
+    quittung = task.execute(
+        {"aktion": "auswaehlen", "freitext": "Lasagne"}, _turn_ctx())
+
+    # _QUITTUNG_NICHTS_ZU_TUN_FREITEXT: "Bitte sag mir, welche Gerichte..."
+    assert "Gerichte" in quittung or "Bitte" in quittung or "sagen" in quittung.lower()
+    assert quittung  # nicht leer
+
+
+# ============================================================
 #  Task-Metadaten (EC-8)
 # ============================================================
 

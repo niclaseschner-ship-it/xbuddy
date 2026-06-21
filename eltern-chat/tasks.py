@@ -371,6 +371,32 @@ def render_form_b(result, tg, chat_id):
 
 # ---------------------------------------------------------------------------
 
+def _make_llm_fn_for_gericht_loeschen(provider_name, provider_api_key):
+    """Erzeugt llm_fn(prompt: str) -> str fuer EC-10 Drei-Phasen-Auswahl-Phase.
+
+    Vorbild: eltern-chat/skills/anbieter_wechseln.py:347-353 — gleiche
+    Provider-Abstraktion (providers.get_provider + GenerationRequest).
+
+    Gibt None zurück, wenn provider_name oder provider_api_key fehlen
+    (Fallback: Auswahl-Phase nicht verfügbar, SIGNAL_NICHTS_ZU_TUN).
+    """
+    if not provider_name or not provider_api_key:
+        return None  # Fallback: ohne Provider keine Auswahl-Phase
+    from model import GenerationRequest, Message, TextBlock
+    from providers import get_provider
+    provider = get_provider(provider_name, provider_api_key)
+
+    def llm_fn(prompt):
+        resp = provider.generate(GenerationRequest(
+            system="Antworte ausschließlich mit einem JSON-Array von ID-Strings.",
+            messages=[Message(role="user",
+                              blocks=[TextBlock(text=prompt)])],
+            task_defs=[]))
+        return resp.text
+
+    return llm_fn
+
+
 def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   faa_sessions=None, family_group_chat_id_getter=None,
                   geraete_origin_url=None, gaa_sessions=None,
@@ -733,17 +759,16 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
         _glo_essen_client = _GloEssenClient(origin_url=essen_origin_url)
         _glo_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
         # llm_fn: Callable (prompt: str) -> str für die Auswahl-Phase (EC-10).
-        # Die eigentliche LLM-Infrastruktur (Provider-Abstraktion) liegt im
-        # Agent-Loop. Für gericht_loeschen nutzen wir ein dünnes Callable,
-        # das der Aufrufer (main.py build_context) setzt — None bedeutet:
-        # Auswahl-Phase nicht verfügbar (SIGNAL_NICHTS_ZU_TUN). In V1 ist
-        # llm_fn None — das LLM (agent.py) parst den Freitext selbst als
-        # Teil seines nächsten Tool-Calls (Drei-Phasen-Vertrag: das Modell
-        # ruft auswaehlen mit dem freitext aus der Familie-Antwort auf, und
-        # der Skill löst via llm_fn auf — alternativ kann das Modell die IDs
-        # direkt herleiten). None ist ein valider Produktiv-Wert bis Provider
-        # injiziert wird (convention_needed: nicht vorhanden, EC-10 hat Form).
-        _glo_llm_fn = None
+        # EC-10 Drei-Phasen-Klausel (spec:728-730): der Skill sendet die
+        # nummerierte Gerichte-Liste + Freitext an das LLM und erwartet ein
+        # JSON-Array der gewählten IDs zurück (Halluzinations-Schutz, spec:738-741).
+        # Wire-Up via Chat-Provider (analog anbieter_wechseln.py:347-353).
+        # Wenn provider_name/provider_api_key fehlen → None → Auswahl-Phase
+        # nicht verfügbar (SIGNAL_NICHTS_ZU_TUN). Kein Hard-Guard: der Task
+        # erscheint trotzdem im Katalog (ESSEN-19b), Liste + Lösch-Phase
+        # funktionieren ohne Provider.
+        _glo_llm_fn = _make_llm_fn_for_gericht_loeschen(
+            provider_name, provider_api_key)
         catalog.register(GerichtLoeschenTask(
             essen_client=_glo_essen_client,
             is_member_fn=_glo_is_member,
