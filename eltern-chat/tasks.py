@@ -371,6 +371,32 @@ def render_form_b(result, tg, chat_id):
 
 # ---------------------------------------------------------------------------
 
+def _make_llm_fn_for_gericht_loeschen(provider_name, provider_api_key):
+    """Erzeugt llm_fn(prompt: str) -> str fuer EC-10 Drei-Phasen-Auswahl-Phase.
+
+    Vorbild: eltern-chat/skills/anbieter_wechseln.py:347-353 — gleiche
+    Provider-Abstraktion (providers.get_provider + GenerationRequest).
+
+    Gibt None zurück, wenn provider_name oder provider_api_key fehlen
+    (Fallback: Auswahl-Phase nicht verfügbar, SIGNAL_NICHTS_ZU_TUN).
+    """
+    if not provider_name or not provider_api_key:
+        return None  # Fallback: ohne Provider keine Auswahl-Phase
+    from model import GenerationRequest, Message, TextBlock
+    from providers import get_provider
+    provider = get_provider(provider_name, provider_api_key)
+
+    def llm_fn(prompt):
+        resp = provider.generate(GenerationRequest(
+            system="Antworte ausschließlich mit einem JSON-Array von ID-Strings.",
+            messages=[Message(role="user",
+                              blocks=[TextBlock(text=prompt)])],
+            task_defs=[]))
+        return resp.text
+
+    return llm_fn
+
+
 def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   faa_sessions=None, family_group_chat_id_getter=None,
                   geraete_origin_url=None, gaa_sessions=None,
@@ -716,6 +742,38 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             family_group_chat_id_getter=family_group_chat_id_getter,
             is_member_fn=_gan_is_member,
             icon_origin_url=icon_origin_url))
+
+    # T816 / ESSEN-19b: »Gericht löschen« als synchrone schreibende Aufgabe
+    # (EC-10, Drei-Phasen-Klausel — nicht A2). AND-Guard: essen_origin_url UND
+    # family_group_chat_id_getter müssen gesetzt sein — fehlt eine, erscheint
+    # die Aufgabe NICHT im Katalog (ESSEN-19b).
+    # - essen_origin_url:            DELETE /api/v1/essen/katalog/gerichte/<id>
+    #                                + GET /api/v1/essen/katalog (ESSEN-18).
+    # - family_group_chat_id_getter: Live-Berechtigung (EC-2).
+    # provider_api_key: kein Hard-Guard — llm_fn bleibt None wenn kein Provider;
+    # der Task meldet dann SIGNAL_NICHTS_ZU_TUN (Auswahl-Phase nicht möglich).
+    # Im Onboarding-Modus (kein essen_origin_url) erscheint die Aufgabe nicht.
+    if essen_origin_url is not None and family_group_chat_id_getter is not None:
+        from skills.essen_client import EssenClient as _GloEssenClient
+        from skills.gericht_loeschen_task import GerichtLoeschenTask
+        _glo_essen_client = _GloEssenClient(origin_url=essen_origin_url)
+        _glo_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
+        # llm_fn: Callable (prompt: str) -> str für die Auswahl-Phase (EC-10).
+        # EC-10 Drei-Phasen-Klausel (spec:728-730): der Skill sendet die
+        # nummerierte Gerichte-Liste + Freitext an das LLM und erwartet ein
+        # JSON-Array der gewählten IDs zurück (Halluzinations-Schutz, spec:738-741).
+        # Wire-Up via Chat-Provider (analog anbieter_wechseln.py:347-353).
+        # Wenn provider_name/provider_api_key fehlen → None → Auswahl-Phase
+        # nicht verfügbar (SIGNAL_NICHTS_ZU_TUN). Kein Hard-Guard: der Task
+        # erscheint trotzdem im Katalog (ESSEN-19b), Liste + Lösch-Phase
+        # funktionieren ohne Provider.
+        _glo_llm_fn = _make_llm_fn_for_gericht_loeschen(
+            provider_name, provider_api_key)
+        catalog.register(GerichtLoeschenTask(
+            essen_client=_glo_essen_client,
+            is_member_fn=_glo_is_member,
+            family_group_chat_id_getter=family_group_chat_id_getter,
+            llm_fn=_glo_llm_fn))
 
     # EIN-8 / #653: »Einkauf hinzufügen« als schreibende Sofort-Aufgabe
     # (Direkt-Modus, E-EIN-1 — kein propose→confirm).
