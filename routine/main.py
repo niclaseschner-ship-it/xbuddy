@@ -195,11 +195,14 @@ def _current_config():
     (Datei kurz weg, atomares Replace-Race aus DCOMP-4, kaputtes JSON),
     fällt der Aufruf auf den letzten erfolgreich geladenen Snapshot zurück.
     KEIN Fall auf Code-Defaults solange ein gültiger Stand existiert.
-    Implementierung: roher JSON-Read zuerst — scheitert er, bleibt der Snapshot.
-    Erst nach erfolgreichem Parse delegiert resolve_data die Vollauflösung.
 
-    Ohne konfigurierten data_path (z.B. Tests, die configure() ohne
-    data_path aufgerufen haben): Snapshot direkt zurückgeben — Test-Naht bleibt.
+    V2-Disziplin: liefert die ROH-Form — KEINE V1→V2-Synth-Migration. Die
+    Migration ist ein Display-Render-Pfad-Anliegen (ROUTINE-28 Welle A) und
+    wird vom Aufrufer (View `morgen`) explizit via config_mod.migriere_v1_anker
+    gehoben, wenn der Render Synth-Anker braucht. Lese-API-Pfade (`GET /items`,
+    `GET /config`) zeigen den persistierten ROH-Stand — V1-Felder bleiben als
+    Spiegel sichtbar, items[] zeigt nur die wirklich persistierten Einträge.
+    Damit bleiben Schreib-Pfad-Symmetrie + V1-Bestands-Tests stabil.
     """
     data_path = runtime.get("data_path")
     snapshot = runtime["config"]
@@ -385,6 +388,12 @@ def morgen():
         logger.error("Uhr-Berechnung fehlgeschlagen: %s — Uhr wird ausgeblendet", e)
         uhr_view = None
 
+    # V2 (ROUTINE-28 Welle A): Display-Render zieht Synth-End-Anker aus den
+    # V1-Feldern (aufstehzeit/abfahrtszeit), falls items[] keine eigenen
+    # locked-Anker trägt. Lese-API (`GET /items`) bleibt bewusst auf der
+    # ROH-Form — Migration ist ein Display-Anliegen, nicht ein Schreib-Mirror.
+    cfg_display = config_mod.migriere_v1_anker(cfg)
+
     # Einmalig-Items für heute laden und zu den default-Items hinzufügen (ROUTINE-6/8)
     # ROUTINE-6: nach Tageswechsel sind einmalig-Items automatisch weg (load_einmalig_heute)
     einmalig_heute = items_mod.load_einmalig_heute(_store_path(), zeitzone)
@@ -395,13 +404,15 @@ def morgen():
                 label=e.get("label", ""),
                 piktogramm=str(e.get("piktogramm", "")),
                 quelle="einmalig",
+                zeit=e.get("zeit") if isinstance(e.get("zeit"), dict) else None,
             )
             for e in einmalig_heute
             if isinstance(e, dict) and e.get("id")
         ]
-        cfg_merged = dataclasses.replace(cfg, items=cfg.items + einmalig_item_objs)
+        cfg_merged = dataclasses.replace(
+            cfg_display, items=cfg_display.items + einmalig_item_objs)
     else:
-        cfg_merged = cfg
+        cfg_merged = cfg_display
 
     abhak = _abhak_zustand(zeitzone)
     view = render_mod.baue_view(cfg_merged, abhak, uhr_view)
@@ -478,7 +489,13 @@ def api_config():
     except config_mod.ValidationError as e:
         return jsonify({"error": str(e)}), 400
 
-    return jsonify({"ok": True})
+    # ROUTINE-25: V1-Bridge mit Deprecation-Hinweis (200-Antwort + Header).
+    # V2-Pfad ist PUT /api/v1/routine/items mit zeit-Sub-Block (ROUTINE-24);
+    # PUT /config bleibt funktionsfähig (Welle A, ROUTINE-28).
+    resp = jsonify({"ok": True, "deprecated": True})
+    resp.headers["X-Deprecation"] = (
+        "PUT /api/v1/routine/items akzeptiert zeit-Block (ROUTINE-25)")
+    return resp
 
 
 # ============================================================
@@ -510,18 +527,27 @@ def api_items_get():
     cfg = _current_config()
     zeitzone = cfg.zeitzone if cfg and cfg.zeitzone else "Europe/Berlin"
 
-    default_items = [
-        {"id": item.id, "label": item.label, "piktogramm": item.piktogramm}
-        for item in (cfg.items if cfg else [])
-    ]
+    default_items = []
+    for item in (cfg.items if cfg else []):
+        out = {"id": item.id, "label": item.label, "piktogramm": item.piktogramm}
+        # ROUTINE-24/25: zeit-Block in der Antwort durchreichen (für Mini-App-Konsumenten).
+        if item.zeit is not None:
+            out["zeit"] = item.zeit
+        default_items.append(out)
 
     einmalig_raw = items_mod.load_einmalig_heute(_store_path(), zeitzone)
-    einmalig_items = [
-        {"id": e["id"], "label": e.get("label", ""),
-         "piktogramm": str(e.get("piktogramm", ""))}
-        for e in einmalig_raw
-        if isinstance(e, dict) and e.get("id")
-    ]
+    einmalig_items = []
+    for e in einmalig_raw:
+        if not (isinstance(e, dict) and e.get("id")):
+            continue
+        out = {
+            "id": e["id"],
+            "label": e.get("label", ""),
+            "piktogramm": str(e.get("piktogramm", "")),
+        }
+        if isinstance(e.get("zeit"), dict):
+            out["zeit"] = e["zeit"]
+        einmalig_items.append(out)
 
     return jsonify({"default": default_items, "einmalig_heute": einmalig_items})
 
@@ -548,11 +574,12 @@ def api_items_post():
     quelle = body.get("quelle", "default")
     label = body.get("label", "")
     piktogramm = body.get("piktogramm", "")
+    zeit = body.get("zeit")  # ROUTINE-24/25: optionaler zeit-Sub-Block
     zeitzone = _items_zeitzone()
 
     try:
         result = items_mod.add_item(
-            data_path, store_path, quelle, label, piktogramm, zeitzone)
+            data_path, store_path, quelle, label, piktogramm, zeitzone, zeit=zeit)
     except items_mod.ItemsError as e:
         return jsonify({"error": str(e)}), 400
 

@@ -123,6 +123,28 @@
 
       </div>{# /timeline-section #}
 
+      {# ── V2-ZEIT-PINS (ROUTINE-26): items mit zeit.typ=anker / vorlauf ── #}
+      {# Migration-Welle A: anker-Items aus V1-Synth + nutzer-definierte
+         vorlauf-Items werden zusätzlich aufgelistet. V1-End-Pins
+         (Aufstehen/Anziehen/Losgehen) bleiben oben unverändert sichtbar
+         — Lego-Schuld V1.1, Konsolidierung in Folge-PR (ROUTINE-20 Lego). #}
+      {% if view.zeit_pins %}
+      <div class="zeit-pins-zone">
+        {% for pin in view.zeit_pins %}
+        <div class="zeit-pin zeit-pin-{{ pin.typ }}{% if pin.locked %} zeit-pin-locked{% endif %}"
+             data-id="{{ pin.id }}">
+          <div class="zeit-pin-pikto">
+            {% if pin.pikto_url %}
+            <img src="{{ pin.pikto_url }}" alt="{{ pin.label }}">
+            {% endif %}
+          </div>
+          <span class="zeit-pin-label">{{ pin.label }}</span>
+          <span class="zeit-pin-time">{{ pin.uhrzeit_label }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
       {# ── ZEIT-REFERENZEN (ROUTINE-13): config-schaltbar; an die vertikale Achse ── #}
       {# Default AUS (ROUTINE-13). Referenz-Balken liegen unter dem Balken-Block,
          Länge maßstabsgetreu zum Zeitfenster (Restzeit-Lesart). #}
