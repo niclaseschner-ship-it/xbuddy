@@ -618,3 +618,157 @@ def test_write_proof_store_pfad(tmp_path):
 
     assert "probe-einmalig" in after_content, \
         "write_proof store_path: 'probe-einmalig' muss in routine_store.json stehen"
+
+
+# ============================================================
+#  V2 AC1 — zeit-Sub-Block-Validierung (ROUTINE-24, ROUTINE-25)
+# ============================================================
+
+import pytest  # noqa: E402  # isort:skip — V2-Block am Ende
+
+
+class TestV2ZeitBlockValidierung:
+    """ROUTINE-24/25: drei zulässige zeit-Block-Formen, ungültig → ItemsError."""
+
+    def test_v2_zeit_none_passiert(self):
+        """zeit=None → kein Fehler, kein zeit-Feld im Item."""
+        assert items_mod._validate_zeit_block("x", None) is None
+
+    def test_v2_zeit_anker_minimal_kanonisiert(self):
+        out = items_mod._validate_zeit_block(
+            "x", {"typ": "anker", "uhrzeit": "07:30"})
+        assert out == {"typ": "anker", "uhrzeit": "07:30", "locked": False}
+
+    def test_v2_zeit_anker_locked_durchgereicht(self):
+        out = items_mod._validate_zeit_block(
+            "x", {"typ": "anker", "uhrzeit": "08:00", "locked": True})
+        assert out["locked"] is True
+
+    def test_v2_zeit_anker_uhrzeit_fehlt_4xx(self):
+        with pytest.raises(items_mod.ItemsError, match="uhrzeit"):
+            items_mod._validate_zeit_block("x", {"typ": "anker"})
+
+    def test_v2_zeit_anker_uhrzeit_format_kaputt_4xx(self):
+        """Kein HH:MM-Pattern → 4xx mit HH:MM-Hinweis."""
+        with pytest.raises(items_mod.ItemsError, match="HH:MM"):
+            items_mod._validate_zeit_block(
+                "x", {"typ": "anker", "uhrzeit": "halbsieben"})
+
+    def test_v2_zeit_anker_uhrzeit_24h_overflow_4xx(self):
+        """Stunden außerhalb 00–23 → 4xx mit Stunden-Hinweis (regex passt, aber Bereich nein)."""
+        with pytest.raises(items_mod.ItemsError, match="Stunden"):
+            items_mod._validate_zeit_block(
+                "x", {"typ": "anker", "uhrzeit": "25:00"})
+
+    def test_v2_zeit_vorlauf_minimal_kanonisiert(self):
+        out = items_mod._validate_zeit_block(
+            "x", {"typ": "vorlauf", "minuten": 10})
+        assert out == {"typ": "vorlauf", "minuten": 10, "bezug": "vorheriger_anker"}
+
+    def test_v2_zeit_vorlauf_minuten_negativ_4xx(self):
+        with pytest.raises(items_mod.ItemsError, match="≥ 0"):
+            items_mod._validate_zeit_block(
+                "x", {"typ": "vorlauf", "minuten": -5})
+
+    def test_v2_zeit_vorlauf_minuten_kein_int_4xx(self):
+        with pytest.raises(items_mod.ItemsError, match="Integer"):
+            items_mod._validate_zeit_block(
+                "x", {"typ": "vorlauf", "minuten": "fuenf"})
+
+    def test_v2_zeit_typ_unbekannt_4xx(self):
+        with pytest.raises(items_mod.ItemsError, match="anker"):
+            items_mod._validate_zeit_block(
+                "x", {"typ": "unsinn", "uhrzeit": "07:00"})
+
+    def test_v2_zeit_kein_dict_4xx(self):
+        with pytest.raises(items_mod.ItemsError, match="Objekt"):
+            items_mod._validate_zeit_block("x", "07:00")
+
+    def test_v2_zeit_bezug_unbekannt_4xx(self):
+        with pytest.raises(items_mod.ItemsError, match="bezug"):
+            items_mod._validate_zeit_block(
+                "x", {"typ": "vorlauf", "minuten": 5, "bezug": "naechster_anker"})
+
+
+# ============================================================
+#  V2 AC1 — API-Pfade akzeptieren zeit-Block (ROUTINE-25)
+# ============================================================
+
+
+class TestV2ApiZeitBlock:
+    """ROUTINE-25: PUT /items + POST /items akzeptieren zeit; ungültig → 4xx."""
+
+    def test_v2_put_items_mit_zeit_persistiert(self, items_client):
+        """PUT mit zeit-Block schreibt zeit in routine.json."""
+        data_path, _, client = items_client
+        neue = [
+            {"id": "auf", "label": "Aufstehen", "piktogramm": "8152",
+             "zeit": {"typ": "anker", "uhrzeit": "07:00", "locked": True}},
+            {"id": "zaehne", "label": "Zähne", "piktogramm": "2326",
+             "zeit": {"typ": "vorlauf", "minuten": 5,
+                      "bezug": "vorheriger_anker"}},
+        ]
+        resp = client.put("/api/v1/routine/items", json=neue,
+                          content_type="application/json")
+        assert resp.status_code == 200
+
+        with open(data_path, encoding="utf-8") as f:
+            gespeichert = json.load(f)
+        assert gespeichert["items"][0]["zeit"]["uhrzeit"] == "07:00"
+        assert gespeichert["items"][1]["zeit"]["minuten"] == 5
+
+    def test_v2_put_items_mit_kaputtem_zeit_4xx(self, items_client):
+        """PUT mit ungültigem zeit-Block → 400, kein Schreiben."""
+        _, _, client = items_client
+        neue = [
+            {"id": "kaputt", "label": "K", "piktogramm": "1",
+             "zeit": {"typ": "anker"}},  # uhrzeit fehlt
+        ]
+        resp = client.put("/api/v1/routine/items", json=neue,
+                          content_type="application/json")
+        assert resp.status_code == 400
+
+    def test_v2_post_item_mit_zeit_persistiert(self, items_client):
+        data_path, _, client = items_client
+        resp = client.post(
+            "/api/v1/routine/items",
+            json={"quelle": "default", "label": "Schuhe", "piktogramm": "1234",
+                  "zeit": {"typ": "vorlauf", "minuten": 5,
+                           "bezug": "vorheriger_anker"}},
+            content_type="application/json",
+        )
+        assert resp.status_code == 201
+        new_id = json.loads(resp.data)["id"]
+
+        with open(data_path, encoding="utf-8") as f:
+            gespeichert = json.load(f)
+        match = [i for i in gespeichert["items"] if i["id"] == new_id]
+        assert match
+        assert match[0]["zeit"]["minuten"] == 5
+
+    def test_v2_post_item_mit_kaputtem_zeit_4xx(self, items_client):
+        _, _, client = items_client
+        resp = client.post(
+            "/api/v1/routine/items",
+            json={"quelle": "default", "label": "K", "piktogramm": "1",
+                  "zeit": {"typ": "vorlauf", "minuten": -3}},
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+
+    def test_v2_get_items_liefert_zeit_block(self, items_client):
+        """GET /items liefert zeit-Block in der Antwort (Mini-App-Konsum)."""
+        _, _, client = items_client
+        # Erst V2-Item per PUT setzen
+        client.put("/api/v1/routine/items", json=[
+            {"id": "auf", "label": "Aufstehen", "piktogramm": "8152",
+             "zeit": {"typ": "anker", "uhrzeit": "07:00", "locked": True}},
+        ], content_type="application/json")
+
+        resp = client.get("/api/v1/routine/items")
+        assert resp.status_code == 200
+        body = json.loads(resp.data)
+        # Migration kann Synth-Anker ergänzen — find item 'auf'
+        auf_items = [i for i in body["default"] if i["id"] == "auf"]
+        assert auf_items, "ID 'auf' muss in GET-Antwort sein"
+        assert auf_items[0]["zeit"]["uhrzeit"] == "07:00"

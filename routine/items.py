@@ -43,6 +43,75 @@ class ItemsError(Exception):
 
 
 # ============================================================
+#  ROUTINE-24: zeit-Sub-Block (anker | vorlauf | null)
+# ============================================================
+
+_GUELTIGE_ZEIT_TYPEN = frozenset({"anker", "vorlauf"})
+_GUELTIGE_VORLAUF_BEZUEGE = frozenset({"vorheriger_anker"})
+
+
+def _validate_zeit_block(item_id, zeit):
+    """Validiert den optionalen zeit-Sub-Block eines Items (ROUTINE-24).
+
+    Drei zulässige Formen:
+      - None / fehlt   → reiner Punkt ohne Zeit (V1-Verhalten)
+      - {typ:'anker',   uhrzeit:'HH:MM', locked?:bool}
+      - {typ:'vorlauf', minuten:int>=0, bezug:'vorheriger_anker'}
+
+    Wirft ItemsError bei ungültigem Inhalt (kein Schreiben, kein Teil-Write).
+    Liefert den normalisierten zeit-Dict zurück (oder None), für direkte
+    Übernahme in die persistierte Form.
+    """
+    if zeit is None:
+        return None
+    if not isinstance(zeit, dict):
+        raise ItemsError(
+            "items[%s].zeit: muss Objekt oder null sein, erhalten: %r"
+            % (item_id, type(zeit).__name__))
+    typ = zeit.get("typ")
+    if typ not in _GUELTIGE_ZEIT_TYPEN:
+        raise ItemsError(
+            "items[%s].zeit.typ: '%s' ist ungültig (erlaubt: anker | vorlauf)"
+            % (item_id, typ))
+
+    if typ == "anker":
+        uhrzeit = zeit.get("uhrzeit")
+        if not isinstance(uhrzeit, str) or not re.fullmatch(r"[0-2]\d:[0-5]\d", uhrzeit):
+            raise ItemsError(
+                "items[%s].zeit.uhrzeit: '%s' ist kein gültiges HH:MM-Format "
+                "(24h, z.B. '08:30')" % (item_id, uhrzeit))
+        if int(uhrzeit[:2]) > 23:
+            raise ItemsError(
+                "items[%s].zeit.uhrzeit: Stunden '%s' außerhalb 00–23"
+                % (item_id, uhrzeit))
+        locked = zeit.get("locked", False)
+        if not isinstance(locked, bool):
+            raise ItemsError(
+                "items[%s].zeit.locked: muss bool sein, erhalten: %r"
+                % (item_id, type(locked).__name__))
+        # Kanonische Form: alle drei Felder; locked optional → Default False
+        out = {"typ": "anker", "uhrzeit": uhrzeit, "locked": locked}
+        return out
+
+    # typ == "vorlauf"
+    minuten = zeit.get("minuten")
+    if isinstance(minuten, bool) or not isinstance(minuten, int):
+        raise ItemsError(
+            "items[%s].zeit.minuten: muss Integer sein, erhalten: %r"
+            % (item_id, type(minuten).__name__))
+    if minuten < 0:
+        raise ItemsError(
+            "items[%s].zeit.minuten: muss ≥ 0 sein, erhalten: %d"
+            % (item_id, minuten))
+    bezug = zeit.get("bezug", "vorheriger_anker")
+    if bezug not in _GUELTIGE_VORLAUF_BEZUEGE:
+        raise ItemsError(
+            "items[%s].zeit.bezug: '%s' ist ungültig "
+            "(erlaubt: vorheriger_anker)" % (item_id, bezug))
+    return {"typ": "vorlauf", "minuten": minuten, "bezug": bezug}
+
+
+# ============================================================
 #  Hilfsfunktionen
 # ============================================================
 
@@ -145,9 +214,10 @@ def _validate_new_item(quelle, label, piktogramm):
 
 
 def _validate_replace_items(items):
-    """Validiert eine zu ersetzende default-Itemliste (PUT, ROUTINE-14).
+    """Validiert eine zu ersetzende default-Itemliste (PUT, ROUTINE-14, ROUTINE-25).
 
-    Erwartet eine Liste von Dicts mit id, label, piktogramm.
+    Erwartet eine Liste von Dicts mit id, label, piktogramm und optionalem
+    zeit-Sub-Block (ROUTINE-24).
     Wirft ItemsError bei ungültiger Eingabe.
     """
     if not isinstance(items, list):
@@ -169,25 +239,31 @@ def _validate_replace_items(items):
             raise ItemsError("items[%d]: label darf nicht leer sein" % i)
         if not item.get("piktogramm") or not str(item.get("piktogramm", "")).strip():
             raise ItemsError("items[%d]: piktogramm darf nicht leer sein" % i)
+        # ROUTINE-24: zeit-Block ist optional; wenn da, strikt validieren.
+        if "zeit" in item:
+            _validate_zeit_block(item_id, item.get("zeit"))
 
 
 # ============================================================
 #  API-Operationen
 # ============================================================
 
-def add_item(data_path, store_path, quelle, label, piktogramm, zeitzone="Europe/Berlin"):
-    """Fügt ein neues Item hinzu (POST /api/v1/routine/items, ROUTINE-14).
+def add_item(data_path, store_path, quelle, label, piktogramm,
+             zeitzone="Europe/Berlin", zeit=None):
+    """Fügt ein neues Item hinzu (POST /api/v1/routine/items, ROUTINE-14, ROUTINE-25).
 
     quelle=default → in routine.json (persistent, ROUTINE-12)
     quelle=einmalig → in den Tages-State (heute, Auto-Verfall ROUTINE-6)
 
     ROUTINE-19: max. 8 Items — bei ≥8 ItemsError.
     ROUTINE-5: stabile, herkunfts-eindeutige ID.
+    ROUTINE-24/25: optionaler zeit-Sub-Block (anker | vorlauf | None).
 
     Gibt dict {"id": <neue_id>} zurück.
     """
     # Validierung VOR dem Schreiben (kein Teil-Write, ROUTINE-14, AC2)
     _validate_new_item(quelle, label, piktogramm)
+    zeit_kanonisch = _validate_zeit_block("(neu)", zeit) if zeit is not None else None
 
     # max-8-Klemme (ROUTINE-19)
     gesamt = count_all_items(data_path, store_path, zeitzone)
@@ -200,12 +276,12 @@ def add_item(data_path, store_path, quelle, label, piktogramm, zeitzone="Europe/
     piktogramm = str(piktogramm).strip()
 
     if quelle == "default":
-        return _add_default_item(data_path, label, piktogramm)
+        return _add_default_item(data_path, label, piktogramm, zeit_kanonisch)
     else:
-        return _add_einmalig_item(store_path, zeitzone, label, piktogramm)
+        return _add_einmalig_item(store_path, zeitzone, label, piktogramm, zeit_kanonisch)
 
 
-def _add_default_item(data_path, label, piktogramm):
+def _add_default_item(data_path, label, piktogramm, zeit=None):
     """Fügt ein default-Item in routine.json ein (atomar, DCOMP-4)."""
     routine = read_json_or_empty(data_path)
     items = routine.get("items", [])
@@ -221,6 +297,8 @@ def _add_default_item(data_path, label, piktogramm):
         "piktogramm": piktogramm,
         "quelle": "default",
     }
+    if zeit is not None:
+        new_item["zeit"] = zeit
     items.append(new_item)
     routine["items"] = items
     atomic_write_json(data_path, routine)
@@ -229,7 +307,7 @@ def _add_default_item(data_path, label, piktogramm):
     return {"id": new_id}
 
 
-def _add_einmalig_item(store_path, zeitzone, label, piktogramm):
+def _add_einmalig_item(store_path, zeitzone, label, piktogramm, zeit=None):
     """Fügt ein einmalig-Item in den Tages-State ein (atomar, DCOMP-4).
 
     ID-Präfix einmalig: (ROUTINE-5) — kollidiert nie mit default-IDs.
@@ -250,6 +328,8 @@ def _add_einmalig_item(store_path, zeitzone, label, piktogramm):
         "piktogramm": piktogramm,
         "quelle": "einmalig",
     }
+    if zeit is not None:
+        new_item["zeit"] = zeit
     einmalig.append(new_item)
     _save_einmalig_heute(store_path, zeitzone, einmalig)
 
@@ -327,18 +407,24 @@ def replace_default_items(data_path, items):
 
     routine = read_json_or_empty(data_path)
 
-    # Canonical-Form: quelle immer 'default' setzen, _comment-Keys droppen
+    # Canonical-Form: quelle immer 'default' setzen, _comment-Keys droppen,
+    # zeit-Block durchreichen wenn vorhanden (ROUTINE-24/25, kanonisiert).
     normalized = []
     for item in items:
-        normalized.append({
+        out = {
             "id": str(item["id"]).strip(),
             "label": str(item["label"]).strip(),
             "piktogramm": str(item["piktogramm"]).strip(),
             "quelle": "default",
-        })
+        }
+        if "zeit" in item:
+            zeit_kanonisch = _validate_zeit_block(out["id"], item.get("zeit"))
+            if zeit_kanonisch is not None:
+                out["zeit"] = zeit_kanonisch
+        normalized.append(out)
 
     routine["items"] = normalized
     atomic_write_json(data_path, routine)
 
-    logger.info("default-Items ersetzt: %d Einträge (ROUTINE-14, #354)", len(normalized))
+    logger.info("default-Items ersetzt: %d Einträge (ROUTINE-14, ROUTINE-25, #354)", len(normalized))
     return {"count": len(normalized)}

@@ -61,3 +61,36 @@ def test_AC3_store_reads_from_env_path(monkeypatch, tmp_path, demo_config):
 
     loaded = main_mod._load_store()
     assert "2099-01-01" in loaded
+
+
+# ============================================================
+#  V2 AC5 — PUT /config: Deprecation-Hinweis (ROUTINE-25)
+# ============================================================
+
+def test_v2_ac5_put_config_setzt_deprecation_header(client, tmp_path, demo_config):
+    """V2 AC5: PUT /api/v1/routine/config bleibt funktionsfähig (200),
+    setzt aber X-Deprecation-Header und deprecated:true im JSON-Body
+    (ROUTINE-25)."""
+    import json
+    data_file = tmp_path / "routine.json"
+    data_file.write_text(json.dumps({
+        "abfahrtszeit": "07:45", "aufstehzeit": "07:00",
+        "anzieh_vorlauf_min": 8, "zeitzone": "Europe/Berlin",
+        "items": [], "zeit_referenzen": {"an": False, "paare": []},
+    }))
+    main_mod.configure(demo_config, data_path=str(data_file))
+
+    resp = client.put("/api/v1/routine/config",
+                      json={"abfahrtszeit": "08:00"},
+                      content_type="application/json")
+    assert resp.status_code == 200
+    # Header gesetzt
+    assert resp.headers.get("X-Deprecation"), \
+        "PUT /config muss X-Deprecation-Header setzen (ROUTINE-25)"
+    assert "routine/items" in resp.headers.get("X-Deprecation", ""), \
+        "X-Deprecation muss auf V2-Pfad /items hinweisen"
+    # JSON deprecated:true
+    body = json.loads(resp.data)
+    assert body.get("ok") is True
+    assert body.get("deprecated") is True, \
+        "PUT /config muss JSON deprecated:true tragen (ROUTINE-25)"
