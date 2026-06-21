@@ -717,6 +717,39 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             is_member_fn=_gan_is_member,
             icon_origin_url=icon_origin_url))
 
+    # T816 / ESSEN-19b: »Gericht löschen« als synchrone schreibende Aufgabe
+    # (EC-10, Drei-Phasen-Klausel — nicht A2). AND-Guard: essen_origin_url UND
+    # family_group_chat_id_getter müssen gesetzt sein — fehlt eine, erscheint
+    # die Aufgabe NICHT im Katalog (ESSEN-19b).
+    # - essen_origin_url:            DELETE /api/v1/essen/katalog/gerichte/<id>
+    #                                + GET /api/v1/essen/katalog (ESSEN-18).
+    # - family_group_chat_id_getter: Live-Berechtigung (EC-2).
+    # provider_api_key: kein Hard-Guard — llm_fn bleibt None wenn kein Provider;
+    # der Task meldet dann SIGNAL_NICHTS_ZU_TUN (Auswahl-Phase nicht möglich).
+    # Im Onboarding-Modus (kein essen_origin_url) erscheint die Aufgabe nicht.
+    if essen_origin_url is not None and family_group_chat_id_getter is not None:
+        from skills.essen_client import EssenClient as _GloEssenClient
+        from skills.gericht_loeschen_task import GerichtLoeschenTask
+        _glo_essen_client = _GloEssenClient(origin_url=essen_origin_url)
+        _glo_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
+        # llm_fn: Callable (prompt: str) -> str für die Auswahl-Phase (EC-10).
+        # Die eigentliche LLM-Infrastruktur (Provider-Abstraktion) liegt im
+        # Agent-Loop. Für gericht_loeschen nutzen wir ein dünnes Callable,
+        # das der Aufrufer (main.py build_context) setzt — None bedeutet:
+        # Auswahl-Phase nicht verfügbar (SIGNAL_NICHTS_ZU_TUN). In V1 ist
+        # llm_fn None — das LLM (agent.py) parst den Freitext selbst als
+        # Teil seines nächsten Tool-Calls (Drei-Phasen-Vertrag: das Modell
+        # ruft auswaehlen mit dem freitext aus der Familie-Antwort auf, und
+        # der Skill löst via llm_fn auf — alternativ kann das Modell die IDs
+        # direkt herleiten). None ist ein valider Produktiv-Wert bis Provider
+        # injiziert wird (convention_needed: nicht vorhanden, EC-10 hat Form).
+        _glo_llm_fn = None
+        catalog.register(GerichtLoeschenTask(
+            essen_client=_glo_essen_client,
+            is_member_fn=_glo_is_member,
+            family_group_chat_id_getter=family_group_chat_id_getter,
+            llm_fn=_glo_llm_fn))
+
     # EIN-8 / #653: »Einkauf hinzufügen« als schreibende Sofort-Aufgabe
     # (Direkt-Modus, E-EIN-1 — kein propose→confirm).
     # AND-Guard: essen_origin_url UND icon_origin_url UND

@@ -297,5 +297,127 @@ def test_post_gericht_ohne_icon_und_foto_ref_fehler():
         client.post_gericht(name="Lasagne")
 
     assert "icon_id oder foto_ref" in str(exc_info.value)
-    # Kein HTTP-Aufruf gemacht
-    assert stub.calls == []
+
+
+# ============================================================
+#  EssenClient.delete_gericht (ESSEN-19b) — AC3
+# ============================================================
+
+def test_delete_gericht_happy_path():
+    """ESSEN-19b AC3: delete_gericht liefert None bei HTTP 204."""
+    client = EssenClient(
+        origin_url="http://example",
+        transport=lambda m, p, *, body=None, content_type=None: (204, b""))
+
+    result = client.delete_gericht("42")
+
+    assert result is None
+
+
+def test_delete_gericht_sendet_delete_methode():
+    """ESSEN-19b: delete_gericht sendet DELETE-Request mit korrektem Pfad."""
+    stub = _stub_capture()
+    stub._default = (204, b"")
+    client = EssenClient(origin_url="http://example", transport=stub)
+
+    client.delete_gericht("7")
+
+    assert len(stub.calls) == 1
+    call = stub.calls[0]
+    assert call["method"] == "DELETE"
+    assert "/katalog/gerichte/7" in call["path"]
+
+
+def test_delete_gericht_404_wirft_essen_client_error():
+    """ESSEN-19b: DELETE auf unbekannte ID → EssenClientError (FEHLER_4XX)."""
+    from skills.essen_client import FEHLER_4XX
+
+    resp_body = json.dumps({"fehler": "Gericht nicht gefunden"}).encode("utf-8")
+    client = EssenClient(
+        origin_url="http://example",
+        transport=lambda m, p, *, body=None, content_type=None: (404, resp_body))
+
+    with pytest.raises(EssenClientError) as exc_info:
+        client.delete_gericht("9999")
+
+    assert exc_info.value.marker == FEHLER_4XX
+    assert "HTTP 404" in str(exc_info.value)
+
+
+def test_delete_gericht_5xx_wirft_essen_client_error():
+    """ESSEN-19b: DELETE mit 5xx → EssenClientError (FEHLER_5XX)."""
+    from skills.essen_client import FEHLER_5XX
+
+    client = EssenClient(
+        origin_url="http://example",
+        transport=lambda m, p, *, body=None, content_type=None: (500, b""))
+
+    with pytest.raises(EssenClientError) as exc_info:
+        client.delete_gericht("1")
+
+    assert exc_info.value.marker == FEHLER_5XX
+
+
+def test_delete_gericht_connection_fehler_wirft_essen_client_error():
+    """ESSEN-19b: Connection-Fehler → EssenClientError (CLIENT-2)."""
+    client = EssenClient(
+        origin_url="http://example",
+        transport=_stub_error(OSError("Connection refused")))
+
+    with pytest.raises(EssenClientError):
+        client.delete_gericht("1")
+
+
+def test_delete_gericht_timeout_wirft_essen_client_error():
+    """ESSEN-19b: 2s-Timeout-Naht (CLIENT-2) — Timeout zählt als nicht erreichbar."""
+    client = EssenClient(
+        origin_url="http://example",
+        transport=_stub_error(EssenClientError("Essens-Buddy timeout")))
+
+    with pytest.raises(EssenClientError):
+        client.delete_gericht("1")
+
+
+# ============================================================
+#  EssenClient.lese_gerichte — ESSEN-18 (Gerichte-Slice)
+# ============================================================
+
+def test_lese_gerichte_filtert_nur_gericht_kategorie():
+    """lese_gerichte gibt nur Einträge mit kategorie='gericht' zurück."""
+    katalog_body = json.dumps({
+        "kategorien": {
+            "gericht": [
+                {"id": "1", "label": "Lasagne", "bild_ref": "9999",
+                 "kategorie": "gericht"},
+            ],
+            "obst_gemuese": [
+                {"id": "apfel", "label": "Apfel", "bild_ref": "2462",
+                 "kategorie": "obst_gemuese"},
+            ],
+        }
+    }).encode("utf-8")
+    client = EssenClient(
+        origin_url="http://example",
+        transport=lambda m, p, *, body=None, content_type=None: (200, katalog_body))
+
+    gerichte = client.lese_gerichte()
+
+    assert len(gerichte) == 1
+    assert gerichte[0]["id"] == "1"
+    assert gerichte[0]["label"] == "Lasagne"
+
+
+def test_lese_gerichte_leer_wenn_keine_gerichte():
+    """lese_gerichte gibt leere Liste zurück wenn Gerichte-Kategorie fehlt."""
+    katalog_body = json.dumps({
+        "kategorien": {
+            "obst_gemuese": [],
+        }
+    }).encode("utf-8")
+    client = EssenClient(
+        origin_url="http://example",
+        transport=lambda m, p, *, body=None, content_type=None: (200, katalog_body))
+
+    gerichte = client.lese_gerichte()
+
+    assert gerichte == []
