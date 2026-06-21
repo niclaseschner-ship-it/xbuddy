@@ -813,12 +813,15 @@ Folgende `views.json`-Dateien werden im Implementierungs-Track gepatcht
 - `hoerspiel/views.json` — Eintrag für die `hoerspiel-eltern` Mini-App
   (Werft-Folge #848, Hörspiel-Eltern-Mini-App nach HSP-33). Vorlage:
 
+  Pro Instanz ein eigener Eintrag mit kind_id-tragender `pfad`-Form
+  (URL-3a, RAT-17, #965). V1: zwei Einträge:
+
   ```json
   {
-    "slug": "eltern",
+    "slug": "eltern-mia",
     "typ": "mini-app",
-    "pfad": "/seiten/hoerspiel/eltern",
-    "label": "Hörspiel pflegen",
+    "pfad": "/seiten/hoerspiel/mia/eltern",
+    "label": "Hörspiel pflegen (Mia)",
     "synonyme": [
       "hoerspiel-einstellungen",
       "voice ändern",
@@ -827,7 +830,7 @@ Folgende `views.json`-Dateien werden im Implementierungs-Track gepatcht
       "mistral",
       "claude"
     ],
-    "zeigt": "Hörspiel-Tuning (Voice, LLM-Anbieter/Modell, Tempo, Pausen) und Album-Galerie mit Multi-Track-Player.",
+    "zeigt": "Hörspiel-Tuning (Voice, LLM-Anbieter/Modell, Tempo, Pausen) und Album-Galerie mit Multi-Track-Player für Mias Instanz.",
     "zielgruppe": "eltern",
     "web_app": {
       "bot_env_var": "ELTERNCHAT_BOT_USERNAME",
@@ -837,18 +840,29 @@ Folgende `views.json`-Dateien werden im Implementierungs-Track gepatcht
   }
   ```
 
+  (analog für Finn: `slug: "eltern-finn"`, `pfad: "/seiten/hoerspiel/finn/eltern"`,
+  `label: "Hörspiel pflegen (Finn)"`).
+
   Begründung der Feld-Wahlen: Werft #848 ratifiziert die Eltern-Mini-App
-  als HSP-33-Wohnort `/seiten/hoerspiel/eltern` → `slug = "eltern"`,
-  `pfad` analog. Botfather-`app_short_name`-Lego-Brille (`einkauf`,
-  `routine`, `uebersicht` → single-word, kein Bindestrich) →
-  `app_short_name = "hoerspiel"`. Der bestehende `slug: "alben"`-
-  Eintrag (Mia-Display-View, Sorte a) bleibt unverändert — der
-  Mini-App-Eintrag kommt **neben** ihn (analog
-  essen/routine/seiten-Pattern).
+  als HSP-33-Wohnort; #911 (2026-06-16) setzt Variante C — URL-parametrisch
+  mit `<kind_id>` als zweitem Pfad-Segment (RAT-17). Botfather-`app_short_name`-
+  Lego-Brille (`einkauf`, `routine`, `uebersicht` → single-word, kein
+  Bindestrich) → `app_short_name = "hoerspiel"`.
+
+  **Migration kind_id-Form (hoerspiel `alben`-Slug, #965):**
+  Die ursprüngliche Absprache (`slug: "alben"`, `pfad: "/display/hoerspiel/alben"`,
+  „bleibt unverändert") ist durch RAT-17 und den Mehr-Instanz-Cut obsolet.
+  Die reale `hoerspiel/views.json` trägt seit #907/#908 zwei per-kind_id-Einträge:
+  `slug: "alben-mia"` (pfad `/display/hoerspiel/mia/alben`) und
+  `slug: "alben-finn"` (pfad `/display/hoerspiel/finn/alben`).
+  Der Singular-Eintrag `slug: "alben"` mit Pfad `/display/hoerspiel/alben`
+  **existiert nicht mehr** — er wurde durch die zwei kind_id-Einträge ersetzt.
+  Diese Spec-Änderung ratifiziert den tatsächlichen Stand (#965).
 
 Bestehende Einträge (essen `wunsch`, routine `morgen`, seiten
-`uebersicht`, hoerspiel `alben`) bleiben unverändert — Mini-App-Einträge
-kommen **neben** sie, nicht statt ihrer.
+`uebersicht`) bleiben unverändert — Mini-App-Einträge kommen **neben** sie.
+Hoerspiel-Einträge sind seit RAT-17 / #965 kind_id-getrennt
+(`alben-mia`, `alben-finn`, `eltern-mia`, `eltern-finn`).
 
 *Test (Aggregator):* `views.json` mit `typ: mini-app` → Eintrag im
 Inventar mit `typ: "mini-app"`, `web_app_url` und `funnel_url` korrekt
