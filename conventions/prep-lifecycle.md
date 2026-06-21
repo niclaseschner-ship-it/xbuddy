@@ -19,16 +19,32 @@ Requirement-ID bindend auf `origin/main` liegt. Es gibt keinen Pfad, in dem
 ein Spec-PR-Merge an den Stempel gekoppelt ist („Falls Spec-PR: zuerst mergen,
 dann Label" ist abgeschafft).
 
-Drei Karten-Klassen existieren:
+Drei Karten-Klassen existieren in der Karte-zu-Nic-Schicht (PREP-10 Form, PW-Karten-Form-Reform RATIFIZIERT 2026-06-21):
 
 1. **Stempel-Karte** — Spec liegt auf `origin/main`. Nic stempelt oder lehnt.
-2. **Mini-Wahl-Karte** — Architektur-Wahl steht offen (`architecture_class:
-   wahl`). Nic wählt eine Variante VOR dem Spec-Merge; Skill mergt dann den
-   Spec-PR mit der gewählten Variante; in der nächsten Charge erscheint die
-   Stempel-Karte. Wahl-Karten produzieren **kein** `prep_verdict`-Comment
-   (mechanische Unterscheidbarkeit gegen versehentlichen Stempel).
-3. **Cross-Spec-Koord-Karte** — der Spec-Pfad wird parallel von einem
-   `status:in-progress`-Ticket konsumiert. Nic entscheidet die Reihenfolge.
+   Aktion: `[stempeln]` `[parken]`.
+2. **Wahl-Karte** — zwei Sub-Klassen, syntaktisch unterscheidbar via
+   Header-Marker:
+   - **🔱 ARCH-WAHL** — Architektur-Wahl (`architecture_class: wahl`). Nic
+     wählt eine Variante VOR dem Spec-Merge; Skill mergt dann den Spec-PR mit
+     der gewählten Variante; in der nächsten Charge erscheint die Stempel-
+     Karte. Wahl-Karten produzieren **kein** `prep_verdict`-Comment
+     (mechanische Unterscheidbarkeit gegen versehentlichen Stempel,
+     PW-30-Hook-Sperre). Aktion: `[A]` `[B]` `[C]` `[halt: berater-runde]`.
+   - **⚠️ KOORD-WAHL** — Koordinations-Wahl. Subsumiert zwei Bestands-Fälle:
+     - **Cross-Spec-Koord** (PREP-6 Komponente 2): Spec-Pfad wird parallel von
+       einem `status:in-progress`-Ticket konsumiert; Nic entscheidet Reihenfolge.
+     - **Rollback-Koord** (PREP-7 nicht-triviale Variante): Folge-Merges
+       berühren die Spec-Datei; Nic wählt zwischen Folge-Reverts und Vorwärts-
+       Fix.
+     Aktion: variantenabhängig (`[Reihenfolge OK]` `[umkehren]` `[parken]`
+     bzw. `[a]` `[b]` `[parken]`).
+3. **Schließen-Karte** — Ticket-Schluss-Vorlage: `dup` von #MM /
+   `erledigt durch <commit>` / `überholt`. Stempel-artige Form, führt nach
+   Nic-OK `gh issue close` aus (kein `status:*`-Labelwechsel — RECON-3
+   bindet nur Status-Lifecycle, vgl. `reconcile.md:39-61` Geltungsbereich).
+   Aktion: `[schließen]` `[parken]`. Karten-Form trägt einen Mini-Beleg
+   (Grund + Anker auf duplizierendes Ticket / Commit).
 
 Grund: drei dokumentierte Belegfälle am 2026-06-09 (Vormittag, Nachmittag,
 Abend — drei verschiedene `/arbeitstag-prep`-Läufe, drei Nic-Korrekturen
@@ -196,6 +212,181 @@ Die PW-26-Mechanik wird **nicht** stillschweigend erweitert. Reopen-Trigger
    xbuddy-prozess#34) → Vor-Validierungs-Stufe vor autonomem Merge erwägen.
 3. **`conventions/`-Touch-Vorfall** ohne explizite
    `convention_low_blast_radius`-Markierung → PREP-8 verschärfen.
+4. **Karten-Form-Welle-2-Schwellen reißen** (PREP-11 Welle-1-Beobachtung,
+   gemessen via xbuddy-prozess#69): `preflight_missing > 10%`, **oder**
+   `over_14_lines > 20%`, **oder** `followup_pain ≥ 62%` (alte Baseline aus
+   29-Sample-Messung 2026-06-21) → neue `/berater-runde` entscheidet zwischen
+   mechanischem Hook und Pre-Flight-Form-Überarbeitung (siehe PREP-11
+   Welle-2-Ausgang).
+
+## PREP-10 — Karten-Form v5 (Pflicht-Felder, Ampel-Stempel)
+
+**Geltung:** Karten, die `/arbeitstag-prep` rendert. Andere Skills
+(`/arbeitstag`, `/werft`) übernehmen PREP-10/11 erst nach **eigener**
+Ratifikation mit Belegfall (Verbot vorzeitiger Generalisierung — Memory
+`feedback_berater_zwei_gebaute_beispiele`, RAT-7 Skill-Convention-Defer).
+
+
+Karten zu Nic sind kurz und ampel-first. Pflicht-Felder pro Klasse (Templates
+und Beispiele im Skill `~/.claude/commands/arbeitstag-prep.md`):
+
+**Stempel-Karte** (~9 Substanz-Zeilen):
+- `TREIBER` (Quelle + Befund, kanonische Form unten)
+- `EMPFEHLUNG` (ein Wort: `stempeln`)
+- `RISIKO` (Ampel + Wort + Schaden × Wahrscheinlichkeit)
+- `VERTRAUTHEIT` (Ampel + Wort, Begründung mit `n=…` bei LEGO)
+- `WIRKUNG` (ein Satz)
+- `KONTEXT` (ein Satz)
+- Aktions-Zeile + `Belege:` (Datei:Zeile-Anker, max 3)
+
+**Wahl-Karte** (~9 Substanz-Zeilen):
+- `TREIBER`, `EMPFEHLUNG` (ein Wort: `A` / `B` / `C`)
+- `KERNFRAGE` (ein Satz)
+- 2–3 Varianten als Halbsätze: `<Kurzname>  <Mechanik> — <Trade-Off>`
+  Empfohlene Variante mit `← empfohlen` markiert
+- Aktions-Zeile
+
+**Schließen-Karte** (~5 Substanz-Zeilen):
+- `TREIBER`, `EMPFEHLUNG` (`schließen — <Grund>`)
+- `WIRKUNG` (warum kein Bau nötig)
+- Aktions-Zeile + `Belege:` (RECON-3-Anker: `#MM`-PR oder commit-sha)
+
+### Ampel-Stempel
+
+**Risiko** (Schaden × Wahrscheinlichkeit):
+
+| Stempel | Schaden × Wahrscheinlichkeit |
+|---|---|
+| 🟢 niedrig | klein · selten |
+| 🟡 mittel | klein · oft  ODER  groß · selten |
+| 🟠 hoch | groß · oft  ODER  irreversibel · selten |
+| 🔴 kritisch | irreversibel · oft — Empfehlung `stempeln` verboten, wird zur WAHL-Karte (machen-mit-Mitigation vs. nicht) |
+
+**Vertrautheit**:
+
+| Stempel | Bedeutung |
+|---|---|
+| 🟢 LEGO | Sorte existiert n≥2, Convention trägt |
+| 🟡 NEU-MISCHUNG | bekannte Stücke neu komponiert |
+| 🟠 EXPERIMENT | neue Mechanik, brauchen Probe |
+| 🔴 OFFEN | wir wissen nicht wie — /berater-runde nötig |
+
+**Schwellen xbuddy-konkret:**
+- „irreversibel" = Daten-Verlust ohne Backup.
+- „oft" = ≥1× pro Familien-Tag.
+- „selten" = ≤1× pro Familien-Woche.
+
+### TREIBER-Form (kanonische Quellen)
+
+- `Nic <Datum>: <Stichwort>`
+- `Watchdog Linse-<N> (<Linsen-Name>): <Befund>`
+- `Werft #<idee>: <Stichwort>`
+- `Live-Bug #<nr> (<Kanal>): <Beobachtung>`
+- `Lego-Offensive: <Sorte> n=<N> erreicht`
+- `Folge aus #<vorigem-Ticket>: <Stichwort>`
+
+### Sprachregel Wahl-Karte
+
+Trade-Off in Freitext, **Konsequenz statt Mechanik**. Keine Spec-IDs im
+Variante-Text (nur in Belegen). Form: „wird teuer ab 3. Buddy", nicht
+„ROU-34 zeigt auf ROU-12".
+
+Grund: Roh-Daten-Analyse 2026-06-21 (1075+263 Nic-Inputs ausgewertet, 62%
+Folge-Schmerz im 29-Sample der kurzen Stempel-Bestätigungen). Alte
+Karten-Form (33 Zeilen, SPEC-DIFF inline, EMPFEHLUNG in Zeile 20+)
+produzierte blindes „ok" mit nachfolgender Korrektur. v5 macht die
+Entscheidungsachsen in den ersten drei Zeilen sichtbar.
+
+## PREP-11 — „Karte zu Nic ist FERTIG" + Pre-Flight-Disziplin
+
+### FERTIG-Disziplin (Erweiterung von PREP-1)
+
+Karten zu Nic enthalten **keine** Action `[zurück: was fehlt]`. Wäre eine
+Karte zurückzuschicken (Spec dünn, Substanz nicht da, Belege fehlen), geht
+sie **gar nicht** zu Nic — der Skill schärft im Koord-Block nach:
+
+- bei `architecture_class: nachzeichnen`: Spec-PR autonom schreiben (siehe
+  PW-26-Pfad in `arbeitstag-prep.md` Koord-Block),
+- bei dünner Substanz: zweite Charge mit gefülltem Verdikt,
+- bei fehlenden Belegen: Bestands-Grep + Anker holen.
+
+Der Nic-Block kennt nur die drei in PREP-1 genannten Karten-Klassen, jede
+mit klarer Aktion ohne Rückspiel.
+
+### Pre-Flight-Block (Schreib-Reflex am Issue)
+
+Vor jeder Karte rendert der Skill einen HTML-Kommentar als
+Selbstreflexion am Issue:
+
+```
+<!-- card_pre_flight v1 issue:<nr> kind:stempel|wahl|schliessen -->
+- [x] Spec liegt auf main (origin/main:<sha>)                                  [stempel]
+- [x] Bestand-Grep gemacht — keine offene Karte zum gleichen Thema
+- [x] RAT/Memory durchgesehen — keine ratifizierte Klausel wird übergangen
+- [x] Risiko in zwei Achsen einzeln bewertet, dann Gesamtnote                  [stempel]
+- [x] Vertrautheit bewertet (bei LEGO: Geschwister gezählt n=…)                [stempel]
+- [x] Empfehlung folgt aus den Achsen, keine Improvisation
+- [x] Karte ist FERTIG — kein „zurück" implizit
+- [x] Jede Variante ist baubar (eigener Spec-Pfad denkbar)                     [wahl]
+- [x] Trade-Off pro Variante in einfachen Worten (Konsequenz, kein ID-Jargon)  [wahl]
+<!-- /card_pre_flight -->
+```
+
+### Welle 1 ohne mechanischen Hook (befristet)
+
+Pre-Flight-Block ist heute Schreib-Reflex des Skills, **kein** Hook-Check.
+Das weicht bewusst von der „mechanisch, nicht 'Skill denkt dran'"-Auslegung
+oben ab (Nic-Setzung 2026-06-21: „Disziplin appellieren statt mechanisch
+prüfen"). Befristet, weil:
+
+- Die Karten-Form-Welle erzwingt selbst Selbstreflexion (kurze Karten,
+  TREIBER mit konkretem Befund, Ampel-Bewertung — wenn das gemacht wird,
+  ist die Disziplin Folge der Arbeit).
+- Die Bestands-Hooks (PW-26 Spec-Binding bei Stempel,
+  `check_spec_path_exclusive` beim Spec-Merge) bleiben unverändert scharf —
+  der mechanische Boden ist nicht ausgehebelt.
+
+### Mess-Pflicht in Welle 1
+
+Mess-Skript `tools/card_form_quote.py` (xbuddy-prozess#69) zählt pro
+Prep-Lauf:
+
+- `preflight_missing` — Karten ohne `card_pre_flight v1`-Marker
+- `over_14_lines` — Karten > 14 Zeilen
+- `followup_pain` — Folge-Korrektur-Rate auf Stempel-Karten (gleiche
+  Methodik wie die 18/29-Sample-Messung 2026-06-21)
+
+Output: einzeilige Bilanz, von /arbeitstag-prep am Ende jeder Retro
+abrufbar (`cards=N preflight_missing=X over_14_lines=Y followup_pain=Z%`).
+
+### Welle-2-Auslöser (Hook ODER Form-Überarbeitung)
+
+Nach 7 Tagen oder ~50 Karten ab Skill-Edit-Landung, falls **eine** der
+Schwellen reißt:
+
+- `preflight_missing > 10%`, **oder**
+- `over_14_lines > 20%`, **oder**
+- `followup_pain ≥ 62%` (alte Baseline aus 29-Sample-Messung 2026-06-21).
+
+→ Welle 2 hat **zwei** legitime Ausgänge — die Entscheidung trifft eine
+neue `/berater-runde` anhand der gerissenen Schwelle:
+
+- **mechanischer Hook** (`card_form_guard.py` o. ä.) prüft Form-Regeln vor
+  jedem Karten-Render — Standardpfad, wenn `preflight_missing` reißt
+  (Disziplin schleift) oder `over_14_lines` reißt (Form-Disziplin schleift).
+- **Pre-Flight-Form-Überarbeitung** — wenn `followup_pain` trotz erfüllter
+  Form reißt, ist die Pre-Flight-Checkliste selbst nicht trennscharf genug
+  (Hook am falschen Ort). Dann Form schärfen, Hook nicht ziehen.
+
+Wortlaut-Schärfung beider Pfade in der nächsten Runde, wenn Welle 2 ansteht.
+
+### Mess-Ausfall-Pfad
+
+Solange `tools/card_form_quote.py` (xbuddy-prozess#69) noch nicht
+gelandet ist, schreibt der `/arbeitstag-prep`-Retro die Bilanz-Zeile als
+`measurement_unavailable`. Die 7-Tage/~50-Karten-Uhr für Welle 2 startet
+erst mit der **ersten messbaren Bilanz** — nicht mit dem Skill-Edit-Merge.
+So kann die Reform nicht „stillschweigend laufen" ohne Falsifikator.
 
 ## Warum tool-erzwungen statt Prosa
 
@@ -222,3 +413,5 @@ Spur:
 - xbuddy-prozess#26 — Original-Ticket
 - xbuddy-prozess#33 — RECON-3-1 Skip-Pfad-Klarstellung (Folge-Ticket, vertagt)
 - xbuddy-prozess#34 — Mess-Skript für Rollback-Quote (Folge-Ticket, vertagt)
+- Karten-Form-Reform RATIFIZIERT 2026-06-21: `brainstorm/berater-runde/20260621-1700-RATIFIZIERT-karten-form-reform-prep.md` — PREP-10 + PREP-11 + Erweiterung PREP-1 um KOORD-WAHL + Schließen-Karte
+- xbuddy-prozess#69 — Mess-Skript `tools/card_form_quote.py` (Welle-1-Beobachtung)
