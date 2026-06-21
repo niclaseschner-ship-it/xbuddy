@@ -95,7 +95,7 @@ ID-Präfix HFE).
   Details in HSP-27.
 - **OPEN-HSP-N** — Eltern-Chat-Skill „LLM-Provider für Hörspiel wechseln"
   (Inline-Befehl „wechsele mal auf mistral für hörbücher" patcht den
-  Provider via `PATCH /api/v1/hoerspiel/config`, HSP-19). V1 exposed den
+  Provider via `PATCH /api/v1/hoerspiel/<kind_id>/config`, HSP-19). V1 exposed den
   Endpoint, der Skill zieht in V2 nach.
 - **OPEN-HSP-P** — Automatische `pikto-hauptbegriffe`-Befüllung beim
   Album-Bau per Heuristik oder LLM-Klassifikation (HSP-5a-V1 lässt das
@@ -432,7 +432,7 @@ Album fix** (kein Mix innerhalb eines Albums in V1, E-HSP-1).
 
 Die **Default-Voice** für neue Folgen ist familien-konfigurierbar via
 `default_voice` in `hoerspiel.json` (HSP-27) und zur Laufzeit über die
-Eltern-Mini-App (HSP-34) per `PATCH /api/v1/hoerspiel/config` mit Body
+Eltern-Mini-App (HSP-34) per `PATCH /api/v1/hoerspiel/<kind_id>/config` mit Body
 `{"default_voice": "shimmer"|"onyx"}` setzbar. Der HFE-Skill liest die
 Default-Voice für seine Vorschlag-Erzeugung weiter über `GET /config`
 (HFE-4, unverändert).
