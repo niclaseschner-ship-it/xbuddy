@@ -1088,12 +1088,11 @@ eine zweite n-Instanz-Buddy-Klasse hinzukommt, wird der Cut neu beraten
 und ggf. eine Registry-Konvention ratifiziert (n=2-Regel).
 
 **Service-Vorlage-Ablage (Realitäts-Vermerk):** beide Hörspiel-Service-
-Vorlagen liegen am Repo-Root (`xbuddy/xbuddy-hoerspiel.service`,
-`xbuddy/xbuddy-hoerspiel-finn.service`) und folgen damit dem Bestands-
-Pattern, das auch Kibuddy nutzt. Das weicht von BUD-1a wörtlich ab
-(„Service-Vorlage neben dem Code", Ablage `hoerspiel/hoerspiel.service`).
-Die Klärung dieses Pattern-Bruchs (Konvention nachziehen vs. Realität
-nachziehen) ist eigener /watchdog-Auftrag, kein Blocker für RAT-17.
+Vorlagen lagen am Repo-Root (`xbuddy-hoerspiel.service`,
+`xbuddy-hoerspiel-finn.service`) und wichen damit von BUD-1a ab
+(„Service-Vorlage neben dem Code"). Mit Ticket #1014 (SVC-2-Move)
+wurden sie nach `hoerspiel/hoerspiel.service` und
+`hoerspiel/hoerspiel-finn.service` verschoben — Pattern-Bruch aufgelöst.
 
 ### HSP-29 — Vorsynthese der Shared-Assets als Setup-Schritt
 Vor der ersten Folge in einer Familien-Instanz müssen die vier Shared-
