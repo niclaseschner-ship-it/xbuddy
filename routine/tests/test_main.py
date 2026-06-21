@@ -1,7 +1,5 @@
-"""Tests für routine/main.py — Store-Pfad-Override via ENV (SVC-5 / CONFIG-5 / AC3).
-
-Prüft, dass _store_path() ROUTINE_STORE_FILE aus der Umgebung liest und
-damit den Default-Pfad überschreibt — analog ROUTINE_DATA_FILE (ROUTINE-12).
+"""Tests für routine/main.py — Store-Pfad-Override via ENV (SVC-5 / CONFIG-5 / AC3)
+und HTTP-Smoke-Tests für die morgen-Route (ROUTINE-28 Welle A, T726).
 
 Lauf: pytest routine/tests/ -v
 """
@@ -10,12 +8,15 @@ import json
 import os
 import sys
 
+import pytest
+
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from routine import config as config_mod  # noqa: E402  # isort:skip
 from routine import main as main_mod      # noqa: E402  # isort:skip
+from routine.tests._test_auth import TEST_BOT_TOKEN, patch_client_auth  # noqa: E402  # isort:skip
 
 
 # ============================================================
@@ -94,3 +95,60 @@ def test_v2_ac5_put_config_setzt_deprecation_header(client, tmp_path, demo_confi
     assert body.get("ok") is True
     assert body.get("deprecated") is True, \
         "PUT /config muss JSON deprecated:true tragen (ROUTINE-25)"
+
+
+# ============================================================
+#  T726 AC7 — HTTP-Smoke: GET /display/routine/morgen mit V1-Config
+# ============================================================
+
+_V1_ROUTINE = {
+    "aufstehzeit": "07:00",
+    "abfahrtszeit": "07:45",
+    "anzieh_vorlauf_min": 5,
+    "zeitzone": "Europe/Berlin",
+    "items": [
+        {"id": "fruehstueck", "label": "Frühstück", "piktogramm": "4626", "quelle": "default"},
+    ],
+    "zeit_referenzen": {"an": False, "paare": []},
+}
+
+
+@pytest.fixture
+def v1_client(tmp_path):
+    """Flask-Test-Client mit reiner V1-Konfig (keine locked-Anker in items[]).
+
+    Kein data_path gesetzt → _current_config() liefert in-memory-Snapshot.
+    Damit prüft der Test: morgen-Route ruft migriere_v1_anker() auf und
+    der HTML-Output enthält die synthetisierten Anker-Labels und -Uhrzeiten.
+    """
+    data_file = tmp_path / "routine_v1.json"
+    data_file.write_text(json.dumps(_V1_ROUTINE))
+    cfg = config_mod.resolve_data(str(data_file))
+    store_file = str(tmp_path / "store_v1.json")
+    main_mod.configure(cfg, store_path=store_file, bot_token=TEST_BOT_TOKEN)
+    return patch_client_auth(main_mod.app.test_client())
+
+
+def test_ac7_http_smoke_morgen_v1_migration(v1_client):
+    """AC7: GET /display/routine/morgen mit V1-routine.json liefert HTML mit
+    synthetisierten Ankern (Aufstehen/Losgehen) und deren Uhrzeiten (ROUTINE-28 Welle A).
+
+    Regression-Schutz: jemand, der migriere_v1_anker() aus der morgen-Route entfernt,
+    bricht diesen Test — isolierte Unit-Tests in test_migration_v2.py/test_render.py
+    bleiben dabei grün (HTTP-Pfad blieb blind, T726 Watchdog-Befund B1).
+    """
+    resp = v1_client.get("/display/routine/morgen")
+    assert resp.status_code == 200, f"morgen-Route antwortete {resp.status_code}"
+    html = resp.data.decode("utf-8")
+
+    # Synth-Anker-Labels müssen im HTML auftauchen (als card-item-label und/oder zeit-pin-label)
+    assert "Aufstehen" in html, \
+        "HTML muss Synth-Anker-Label 'Aufstehen' enthalten (migriere_v1_anker() muss greifen)"
+    assert "Losgehen" in html, \
+        "HTML muss Synth-Anker-Label 'Losgehen' enthalten (migriere_v1_anker() muss greifen)"
+
+    # Anker-Uhrzeiten aus V1-Feldern (aufstehzeit=07:00, abfahrtszeit=07:45)
+    assert "07:00" in html, \
+        "HTML muss aufstehzeit '07:00' enthalten (Synth-Anker aus V1-Feld)"
+    assert "07:45" in html, \
+        "HTML muss abfahrtszeit '07:45' enthalten (Synth-Anker aus V1-Feld)"
