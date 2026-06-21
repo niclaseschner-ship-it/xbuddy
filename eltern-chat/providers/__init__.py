@@ -10,6 +10,9 @@ NICHT auf Vorrat (E-EC-6, CLAUDE.md §6).
 """
 
 
+_KNOWN_ADAPTERS = ("claude", "mistral")
+
+
 def get_provider_class(name):
     """Liefert die Provider-Klasse zum Adapter-Namen — ohne Instanziierung (ECP-1).
 
@@ -24,6 +27,17 @@ def get_provider_class(name):
         from .mistral import MistralProvider
         return MistralProvider
     raise ValueError("unbekannter KI-Anbieter: %r" % name)
+
+
+def iter_provider_classes():
+    """Iteriert über alle registrierten Provider-Klassen (ECP-1).
+
+    Einzige Wahrheitsquelle für die vollständige Adapter-Menge — Sweep-Tests
+    konsumieren diese Funktion, damit ein neuer Adapter ohne Anpassung der
+    Test-Datei in den Drift-Schutz einbezogen wird.
+    """
+    for name in _KNOWN_ADAPTERS:
+        yield get_provider_class(name)
 
 
 def get_provider(name, api_key, model=""):

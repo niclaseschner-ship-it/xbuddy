@@ -5,7 +5,7 @@
 import logging
 
 import pytest
-from providers import get_provider, get_provider_class
+from providers import get_provider, get_provider_class, iter_provider_classes
 
 # ============================================================
 #  ECP-1 — Provider-Self-Declaration: brand_vendor (T1022)
@@ -28,14 +28,19 @@ def test_ECP1_mistral_provider_has_brand_vendor():
 
 
 def test_ECP1_brand_vendor_values_are_nonempty_strings():
-    """ECP-1: brand_vendor ist ein nicht-leerer String bei allen bekannten
-    Provider-Klassen — Drift-Sperre maschinell."""
-    for adapter_name in ("claude", "mistral"):
-        cls = get_provider_class(adapter_name)
+    """ECP-1: brand_vendor ist ein nicht-leerer String bei allen registrierten
+    Provider-Klassen — Drift-Sperre maschinell.
+
+    Iteriert dynamisch über `iter_provider_classes()`, damit ein dritter Adapter
+    ohne Anpassung dieser Datei in den Sweep einbezogen wird (AC6)."""
+    checked = 0
+    for cls in iter_provider_classes():
         assert isinstance(cls.brand_vendor, str), (
-            "brand_vendor von %r ist kein String" % adapter_name)
+            "brand_vendor von %r ist kein String" % cls)
         assert cls.brand_vendor, (
-            "brand_vendor von %r ist ein leerer String" % adapter_name)
+            "brand_vendor von %r ist ein leerer String" % cls)
+        checked += 1
+    assert checked >= 2, "mindestens zwei Provider-Klassen müssen registriert sein"
 
 
 def test_ECP1_vendor_slug_via_provider_class_claude():
