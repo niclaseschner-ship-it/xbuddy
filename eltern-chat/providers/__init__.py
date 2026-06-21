@@ -10,6 +10,36 @@ NICHT auf Vorrat (E-EC-6, CLAUDE.md §6).
 """
 
 
+_KNOWN_ADAPTERS = ("claude", "mistral")
+
+
+def get_provider_class(name):
+    """Liefert die Provider-Klasse zum Adapter-Namen — ohne Instanziierung (ECP-1).
+
+    Wird intern von `vendor_slug_for_adapter` genutzt, damit der Brand-Vendor-Slug
+    über `brand_vendor` an der Klasse gelesen werden kann, ohne einen API-Key zu
+    benötigen. Unbekannte Namen werfen `ValueError`.
+    """
+    if name == "claude":
+        from .claude import ClaudeProvider
+        return ClaudeProvider
+    if name == "mistral":
+        from .mistral import MistralProvider
+        return MistralProvider
+    raise ValueError("unbekannter KI-Anbieter: %r" % name)
+
+
+def iter_provider_classes():
+    """Iteriert über alle registrierten Provider-Klassen (ECP-1).
+
+    Einzige Wahrheitsquelle für die vollständige Adapter-Menge — Sweep-Tests
+    konsumieren diese Funktion, damit ein neuer Adapter ohne Anpassung der
+    Test-Datei in den Drift-Schutz einbezogen wird.
+    """
+    for name in _KNOWN_ADAPTERS:
+        yield get_provider_class(name)
+
+
 def get_provider(name, api_key, model=""):
     """Liefert den Anbieter-Adapter zum konfigurierten Namen (EC-11).
 

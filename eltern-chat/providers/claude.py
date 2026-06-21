@@ -24,6 +24,9 @@ logger = logging.getLogger(__name__)
 class ClaudeProvider:
     """Übersetzt kanonisches Modell <-> Anthropic-Messages-API."""
 
+    # ECP-1: Brand-Vendor-Slug — eine Wahrheitsquelle für den Zugangsdaten-Slot.
+    brand_vendor = "anthropic"
+
     # Anbieter-Default-Modell (EC-15: Anbieter-Modell, Default = Anbieter-Default).
     DEFAULT_MODEL = "claude-opus-4-7"
     MAX_TOKENS = 4096

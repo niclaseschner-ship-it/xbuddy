@@ -13,6 +13,8 @@ beim Abschluss des Onboardings (ONB-5/ONB-6). Die gelesenen dict-Schlüssel
 konsumiert sie unverändert.
 """
 
+from providers import get_provider_class
+
 from tools.zugangsdaten import Zugangsdaten, resolve_store_path
 
 # Schlüssel im gelesenen dict (Public-Schnittstelle für config.py — unverändert).
@@ -31,38 +33,22 @@ ZD_NAME_FAMILY_GROUP = "eltern-chat-family-group-chat-id"
 # CLAUDE.md §6).
 ZD_NAME_PROVIDER_NAME = "eltern-chat-provider-name"
 
-# T663 Welle A — Adapter→Vendor-Mapping (Watchdog B2):
-#
-# `cfg.provider` hält den Adapter-Namen, mit dem `providers.get_provider`
-# arbeitet (`claude`, `mistral`, später `openai`, `azure-openai`). Die
-# ZD-2-Tabelle (`specs/platform/zugangsdaten.md`, Lines 50-65) bindet den
-# Slot-Namen aber an den **Brand-Vendor** (Anthropic, Mistral) — `claude` ist
-# ein Anthropic-Adapter, der Slot heißt `eltern-chat-anthropic-api-key`, NICHT
-# `eltern-chat-claude-api-key`.
-#
-# Mapping ist eltern-chat-spezifisch (Hörspiel-Buddy hat seine eigenen Slots
-# `hoerspiel-<vendor>-api-key`). Wenn ein neuer Adapter dazukommt, ergänzt man
-# hier den Eintrag.
-ADAPTER_TO_VENDOR = {
-    "claude":        "anthropic",
-    "mistral":       "mistral",
-    "openai":        "openai",
-    "azure-openai":  "azure-openai",
-}
-
-
 def vendor_slug_for_adapter(adapter_name):
-    """Löst einen Adapter-Namen auf den Brand-Vendor-Slug auf (T663 Welle A).
+    """Löst einen Adapter-Namen auf den Brand-Vendor-Slug auf (ECP-1, T1022).
 
-    `claude` → `anthropic`, `mistral` → `mistral`. Unbekannte Adapter-Namen
-    werden 1:1 zurückgegeben — Pragmatik für künftige Adapter, die der
-    Adapter-Name und der Brand-Vendor identisch sind. Bei einem Drift
-    (z. B. ein neuer Anthropic-Adapter namens `claude-haiku`) ist
-    ADAPTER_TO_VENDOR oben zu ergänzen.
+    `claude` → `anthropic`, `mistral` → `mistral`. Der Slug wird aus
+    `provider_class.brand_vendor` gelesen — eine Wahrheitsquelle am Adapter
+    (ECP-1). Unbekannte Adapter-Namen (ohne registrierte Provider-Klasse)
+    werden 1:1 zurückgegeben — Pragmatik für künftige Adapter, deren
+    Adapter-Name dem Brand-Vendor entspricht.
     """
     if not isinstance(adapter_name, str) or not adapter_name:
         raise ValueError("adapter_name muss ein nicht-leerer String sein")
-    return ADAPTER_TO_VENDOR.get(adapter_name, adapter_name)
+    try:
+        return get_provider_class(adapter_name).brand_vendor
+    except ValueError:
+        # Kein registrierter Provider → Adapter-Name ist der Vendor (Passthrough).
+        return adapter_name
 
 
 def zd_name_provider_api_key(adapter_name):
