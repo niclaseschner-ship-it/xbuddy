@@ -10,7 +10,6 @@ import os
 import stat
 
 from onboarding_store import (
-    ADAPTER_TO_VENDOR,
     ZD_NAME_FAMILY_GROUP,
     ZD_NAME_PROVIDER_API_KEY,
     ZD_NAME_PROVIDER_NAME,
@@ -174,17 +173,10 @@ def test_vendor_slug_for_adapter_mistral_passthrough():
 
 def test_vendor_slug_for_adapter_unknown_passthrough():
     """Unbekannter Adapter wird 1:1 zurückgegeben (Pragmatik für künftige
-    Adapter, deren Adapter-Name = Brand-Vendor; bei Drift wird
-    ADAPTER_TO_VENDOR ergänzt)."""
+    Adapter, deren Adapter-Name = Brand-Vendor). Der Passthrough erfolgt,
+    wenn get_provider_class keinen Treffer findet (ECP-1, T1022)."""
     assert vendor_slug_for_adapter("openai") == "openai"
     assert vendor_slug_for_adapter("azure-openai") == "azure-openai"
-
-
-def test_adapter_to_vendor_table_contains_claude_anthropic():
-    """ADAPTER_TO_VENDOR bindet die Spec-Aussage ZD-2 fest: `claude` ist ein
-    Anthropic-Adapter — Spec-Drift fällt hier auf, nicht in Produktion."""
-    assert ADAPTER_TO_VENDOR["claude"] == "anthropic"
-    assert ADAPTER_TO_VENDOR["mistral"] == "mistral"
 
 
 def test_vendor_slug_for_adapter_rejects_empty():
