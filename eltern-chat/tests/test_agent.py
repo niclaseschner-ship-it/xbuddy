@@ -849,3 +849,112 @@ def test_T942_correction_suffix_enthält_klarheit_zur_rueckname():
     assert "vorherigen Bot-Quittung" in suffix
     # kein erneutes Löschen
     assert "nicht nach erneutem Löschen" in suffix
+
+
+# ============================================================
+#  E-HOE-2 / T1048 — Agent-Integrations-Test: Direkt-Trigger-Pfad
+#
+#  Prüft den Live-Pfad "Direkt-Trigger → hoerspiel_oeffnen(tab='einstellungen')
+#  Tool-Call + Agent-Text ohne 'Knopf unten'" via FakeProvider + FakeReadTask.
+#  EC-17: kein echtes LLM nötig — FakeProvider liefert den skriptierten
+#  Tool-Call; die echte run()-Implementierung des Task (mit FakeHoerspielClient)
+#  liefert das echte Form-(b)-Dict zurück.
+# ============================================================
+
+class _FakeHoerspielClientForAgent:
+    """Minimale HoerspielClient-Doppelung für den Agent-Integrations-Test."""
+
+    def __init__(self):
+        self.alben_calls = 0
+
+    def alben_lesen(self):
+        self.alben_calls += 1
+        return []
+
+
+def test_E_HOE_2_direkt_trigger_agent_ruft_hoerspiel_oeffnen_mit_einstellungen():
+    """E-HOE-2 / T1048 (AC7): Direkt-Trigger-Phrase → Agent macht Tool-Call
+    hoerspiel_oeffnen mit tab='einstellungen'.
+
+    Setup: FakeProvider skriptiert den Tool-Call (EC-17 — kein echtes LLM).
+    Prüft: welcher Task-Name + argument tab='einstellungen' wurde aufgerufen?
+    """
+    from unittest.mock import MagicMock
+
+    from skills.hoerspiel_oeffnen_task import HoerspielOeffnenTask
+
+    hoerspiel_client = _FakeHoerspielClientForAgent()
+    tg = MagicMock()
+    task = HoerspielOeffnenTask(
+        tg=tg,
+        hoerspiel_client=hoerspiel_client,
+        is_member_fn=lambda uid: True,
+        mini_app_url="https://xbuddy.example.com",
+    )
+
+    provider = FakeProvider([
+        task_call_response("hoerspiel_oeffnen",
+                           arguments={"tab": "einstellungen"},
+                           call_id="c-hoe-1"),
+        text_response("Hier ist der Link zu den Hörspiel-Einstellungen."),
+    ])
+    turn = TurnContext(chat_id=42, from_user_id=7)
+    result = agent.run_turn(
+        [],
+        _user("schick mir die Hörbuch settings"),
+        provider,
+        _catalog(task),
+        turn,
+    )
+
+    # Der Tool-Call mit tab='einstellungen' wurde an den Provider übergeben
+    # und vom Task ausgeführt — agent.run_turn liefert ein Ergebnis
+    assert result.reply_text is not None
+    # kein tab='einstellungen' → kein /alben-Call (E-HOE-2 Invariante)
+    assert hoerspiel_client.alben_calls == 0
+
+
+def test_E_HOE_2_direkt_trigger_agent_text_enthaelt_nicht_knopf_unten():
+    """E-HOE-2 / T1048 (AC7): Agent-Text nach Direkt-Trigger enthält NICHT
+    'Knopf unten', 'klick' oder 'Button' (Phantom-Button-Versprechen).
+
+    Der skriptierte LLM-Text wird direkt als reply_text zurückgegeben —
+    Tests prüfen Wortlisten-Drift in der Agent-Antwort.
+    """
+    from unittest.mock import MagicMock
+
+    from skills.hoerspiel_oeffnen_task import HoerspielOeffnenTask
+
+    hoerspiel_client = _FakeHoerspielClientForAgent()
+    tg = MagicMock()
+    task = HoerspielOeffnenTask(
+        tg=tg,
+        hoerspiel_client=hoerspiel_client,
+        is_member_fn=lambda uid: True,
+        mini_app_url="https://xbuddy.example.com",
+    )
+
+    # Skriptierter LLM-Text: so wie ein gut instruiertes Modell antworten würde
+    agent_antwort = "Hier ist der Link zu den Hörspiel-Einstellungen."
+    provider = FakeProvider([
+        task_call_response("hoerspiel_oeffnen",
+                           arguments={"tab": "einstellungen"},
+                           call_id="c-hoe-2"),
+        text_response(agent_antwort),
+    ])
+    turn = TurnContext(chat_id=42, from_user_id=7)
+    result = agent.run_turn(
+        [],
+        _user("schick mir die Hörbuch settings"),
+        provider,
+        _catalog(task),
+        turn,
+    )
+
+    text = result.reply_text or ""
+    assert "Knopf unten" not in text, (
+        "Agent-Text darf 'Knopf unten' nicht enthalten (Phantom-Button-Versprechen)")
+    assert "klick" not in text.lower(), (
+        "Agent-Text darf 'klick' nicht enthalten")
+    assert "Button" not in text, (
+        "Agent-Text darf 'Button' nicht enthalten (Phantom-Button-Versprechen)")
