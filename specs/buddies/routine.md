@@ -164,6 +164,8 @@ kommen aus der Config (ROUTINE-12); keine doppelte Wahrheit. Form (SQLite vs.
 schlanke JSON-Datei) ist Implementierungswahl; entscheidend ist die
 Reload-Persistenz (ROUTINE-7) und der tägliche Reset (ROUTINE-6).
 
+Test-Anker: `routine/tests/test_items_api.py::test_AC1_get_items_einmalig_gefuellt`
+
 *Tickets:* #335
 
 ## 3. Routine-Checkliste (Anzeige)
