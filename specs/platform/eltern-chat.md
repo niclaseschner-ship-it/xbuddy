@@ -715,7 +715,37 @@ erkennt, WELCHES Werkzeug erneut aufzurufen ist. Das deterministische
 Schreib-Gate (Ausführung erst nach Bestätigung, `confirm.py`) bleibt davon
 unberührt — es wird im Code erzwungen, nicht über diesen Text.
 
-*Tickets:* #27 · #266 · #278 · #331 · #TBD-A2 (Deterministischer
+**Drei-Phasen-Klausel — Lese vor Schreib (Multi-Item-Lösch und ähnliche
+mehrstufige Auswahl-Skills, V1.2 2026-06-21).** Für Skills, die vor dem
+Schreib-/Lösch-Akt eine Auswahl aus einer dynamischen Liste verlangen
+(`gericht-loeschen` als n=1), gilt ein erweiterter Vorab-Confirm-Pfad in
+drei Phasen:
+
+1. **Lese-Phase.** Skill ruft die GET-API des Buddys, holt die aktuelle
+   Liste (Items mit ID + Name), präsentiert sie der Familie **nummeriert**.
+2. **Auswahl-Phase.** Familie antwortet in **Freitext** — Ordnungszahlen
+   („5 und 7"), Item-Namen („spaghetti und lasagne") oder Mischformen
+   („die erste und die Lasagne") sind alle erlaubt. Der Skill sendet
+   Liste + Freitext-Antwort an das LLM, das eine **strukturierte
+   ID-Liste** als JSON-Array zurückgibt. Bei Ambiguität (zwei
+   gleichnamige Items) fragt der Skill nach.
+3. **Schreib-Phase.** Skill legt einen strukturierten Vorschlag mit den
+   ausgewählten Items vor und ruft den Inverse-`DELETE` (bzw. analogen
+   Schreibakt) erst nach Bestätigung. Die A2-Klausel greift hier **nicht**
+   — die Auswahl-Phase ist per Definition mehrstufig, kein Sofort-Write.
+
+**Auswahl-Vertrag mit dem LLM:** Eingabe = nummerierte Liste + Freitext.
+Ausgabe = JSON-Array von Item-IDs (`["id1", "id7"]`). Die Bindung läuft
+ausschließlich über IDs aus der Eingabe-Liste — eine ID, die nicht in
+der Eingabe war, ist ein Fehler (Skill fragt nach), damit Namens-Drift
+oder LLM-Halluzination den Schreib-Vertrag nicht brechen.
+
+*Pattern-Vorbild* für künftige Multi-Item-Lösch-Skills
+(`termin-loeschen`, `plan-aktivitaet-loeschen`). Wenn n=2 erreicht ist,
+wandert die Klausel in eine eigene Convention.
+
+*Tickets:* #27 · #266 · #278 · #331 · #816 (Drei-Phasen, n=1
+`gericht-loeschen`) · #TBD-A2 (Deterministischer
 Undo-Hook + `task_events`-Bindung), #TBD-A2-Pre-Flight (Pre-Flight-Test
 des Inverse-Aufrufs für `termin_eintragen`, `einkauf_hinzufuegen`,
 `foto_senden`)
