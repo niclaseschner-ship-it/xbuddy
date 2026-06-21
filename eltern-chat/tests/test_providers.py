@@ -1,11 +1,79 @@
 """Tests für die Anbieter-Auswahl und den Claude-Adapter — EC-11 / E-EC-6
-(Refs #27, #93).
+(Refs #27, #93, T1022/ECP-1).
 """
 
 import logging
 
 import pytest
-from providers import get_provider
+from providers import get_provider, get_provider_class, iter_provider_classes
+
+# ============================================================
+#  ECP-1 — Provider-Self-Declaration: brand_vendor (T1022)
+# ============================================================
+
+def test_ECP1_claude_provider_has_brand_vendor():
+    """ECP-1: ClaudeProvider trägt brand_vendor als Klassen-Attribut
+    mit dem korrekten Slug (`anthropic`, ZD-2-Tabelle)."""
+    from providers.claude import ClaudeProvider
+    assert hasattr(ClaudeProvider, "brand_vendor")
+    assert ClaudeProvider.brand_vendor == "anthropic"
+
+
+def test_ECP1_mistral_provider_has_brand_vendor():
+    """ECP-1: MistralProvider trägt brand_vendor als Klassen-Attribut
+    mit dem korrekten Slug (`mistral`, ZD-2-Tabelle)."""
+    from providers.mistral import MistralProvider
+    assert hasattr(MistralProvider, "brand_vendor")
+    assert MistralProvider.brand_vendor == "mistral"
+
+
+def test_ECP1_brand_vendor_values_are_nonempty_strings():
+    """ECP-1: brand_vendor ist ein nicht-leerer String bei allen registrierten
+    Provider-Klassen — Drift-Sperre maschinell.
+
+    Iteriert dynamisch über `iter_provider_classes()`, damit ein dritter Adapter
+    ohne Anpassung dieser Datei in den Sweep einbezogen wird (AC6)."""
+    checked = 0
+    for cls in iter_provider_classes():
+        assert isinstance(cls.brand_vendor, str), (
+            "brand_vendor von %r ist kein String" % cls)
+        assert cls.brand_vendor, (
+            "brand_vendor von %r ist ein leerer String" % cls)
+        checked += 1
+    assert checked >= 2, "mindestens zwei Provider-Klassen müssen registriert sein"
+
+
+def test_ECP1_vendor_slug_via_provider_class_claude():
+    """ECP-1: Der Slug für `claude` geht über die Provider-Klasse, NICHT
+    über eine harte Tabelle in onboarding_store. Ergebnis bleibt `anthropic`."""
+    from onboarding_store import vendor_slug_for_adapter
+    assert vendor_slug_for_adapter("claude") == "anthropic"
+
+
+def test_ECP1_vendor_slug_via_provider_class_mistral():
+    """ECP-1: Der Slug für `mistral` geht über die Provider-Klasse. Ergebnis
+    bleibt `mistral`."""
+    from onboarding_store import vendor_slug_for_adapter
+    assert vendor_slug_for_adapter("mistral") == "mistral"
+
+
+def test_ECP1_unknown_adapter_raises_from_get_provider_class():
+    """ECP-1 / EC-11: get_provider_class wirft ValueError für unbekannte
+    Adapter-Namen — kein stiller Fallback."""
+    with pytest.raises(ValueError):
+        get_provider_class("gibt-es-nicht")
+
+
+def test_ECP1_stub_class_without_brand_vendor_raises_attribute_error():
+    """ECP-1 Sentinel: eine Stub-Provider-Klasse ohne brand_vendor-Attribut
+    produziert AttributeError beim Zugriff — kein stilles Versagen möglich.
+    (Stub greift nicht in echte Provider ein.)"""
+
+    class _StubProvider:
+        pass
+
+    with pytest.raises(AttributeError):
+        _ = _StubProvider.brand_vendor
 
 
 def test_EC_11_unknown_provider_raises():

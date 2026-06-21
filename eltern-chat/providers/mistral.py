@@ -31,6 +31,9 @@ _CHAT_ENDPOINT = _MISTRAL_API_BASE + "/chat/completions"
 class MistralProvider:
     """Übersetzt kanonisches Modell <-> Mistral-Chat-Completions-API."""
 
+    # ECP-1: Brand-Vendor-Slug — eine Wahrheitsquelle für den Zugangsdaten-Slot.
+    brand_vendor = "mistral"
+
     # Anbieter-Default-Modell (EC-15: Anbieter-Modell, Default = Anbieter-Default).
     DEFAULT_MODEL = "mistral-medium-2508"
     MAX_TOKENS = 4096
