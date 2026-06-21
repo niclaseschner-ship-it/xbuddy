@@ -61,6 +61,8 @@ def _encode_multipart(boundary, file_field, file_name, file_bytes,
 
 def _detail_aus_response(resp_bytes):
     """Versucht, einen Fehler-Detail-String aus dem Response-Body zu lesen."""
+    if not resp_bytes:
+        return ""
     try:
         data = json.loads(resp_bytes.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
@@ -324,6 +326,39 @@ class EssenClient:
             if isinstance(kat_items, list):
                 items.extend(kat_items)
         return items
+
+    def delete_gericht(self, gericht_id):
+        """ESSEN-19b: löscht ein Gericht aus dem Katalog (inkl. Foto-Kaskade).
+
+        DELETE /api/v1/essen/katalog/gerichte/<id>
+
+        Antwort: 204 No Content bei Erfolg → None.
+        404 — unbekannte ID → EssenClientError mit marker=FEHLER_4XX.
+        5xx / Connection-Fehler → EssenClientError mit marker=FEHLER_5XX.
+        """
+        pfad = "%s/%s" % (PFAD_KATALOG_GERICHTE, gericht_id)
+        status, resp_bytes = self._call("DELETE", pfad)
+        if status == 204:
+            return None
+        detail = _detail_aus_response(resp_bytes)
+        msg = "Essens-Buddy: HTTP %s bei DELETE %s" % (status, pfad)
+        if detail:
+            msg = "%s — %s" % (msg, detail)
+        marker = FEHLER_5XX if status >= 500 else FEHLER_4XX
+        raise EssenClientError(msg, marker=marker)
+
+    def lese_gerichte(self):
+        """ESSEN-18 (Gerichte-Slice): liest nur die Gerichte-Kategorie.
+
+        Ruft GET /api/v1/essen/katalog auf und gibt die `gericht`-Liste zurück.
+        Wird von `gericht_loeschen` für die Lese-Phase (EC-10 Drei-Phasen)
+        verwendet (ESSEN-19b).
+
+        Liefert eine Liste von Items `[{id, label, kategorie, bild_ref|foto_ref}]`.
+        Fehler: EssenClientError.
+        """
+        alle = self.lese_katalog()
+        return [item for item in alle if item.get("kategorie") == "gericht"]
 
     def patch_gericht_bild(self, gericht_id, *, foto_ref=None, bild_ref=None):
         """ESSEN-19a: setzt oder wechselt das Bild eines bestehenden Gerichts.
