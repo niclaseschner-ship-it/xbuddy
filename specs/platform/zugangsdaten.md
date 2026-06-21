@@ -43,6 +43,8 @@ seine zwei Onboarding-Werte unter den stabilen Namen
 OPEN-ZD-B). Namen werden nicht neu vergeben. Welche Namen es gibt, wächst mit
 den Komponenten — der Speicher selbst kennt keine feste Liste.
 
+Test-Anker: `tests/tools/test_zugangsdaten.py::test_ZD_2_credential_is_name_value_pair`
+
 **Namens-Konvention `<konsument>-<vendor>-<purpose>` (Eigentümer-zuerst).**
 Der Konsumenten-Präfix steht voran, damit beim Lesen sofort klar ist, wem das
 Geheimnis gehört und wer es schreibt. Der Vendor-Mittelteil unterscheidet
