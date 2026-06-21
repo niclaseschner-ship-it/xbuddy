@@ -95,7 +95,7 @@ ID-Präfix HFE).
   Details in HSP-27.
 - **OPEN-HSP-N** — Eltern-Chat-Skill „LLM-Provider für Hörspiel wechseln"
   (Inline-Befehl „wechsele mal auf mistral für hörbücher" patcht den
-  Provider via `PATCH /api/v1/hoerspiel/config`, HSP-19). V1 exposed den
+  Provider via `PATCH /api/v1/hoerspiel/<kind_id>/config`, HSP-19). V1 exposed den
   Endpoint, der Skill zieht in V2 nach.
 - **OPEN-HSP-P** — Automatische `pikto-hauptbegriffe`-Befüllung beim
   Album-Bau per Heuristik oder LLM-Klassifikation (HSP-5a-V1 lässt das
@@ -121,10 +121,12 @@ das Ergebnis über seine **Display-View** bereit (APP-1). Er stellt eine
 API für den Eltern-Chat-Skill bereit (BUD-1b, HSP-17).
 
 ### HSP-2 — Single-Page-View `alben`, Splitscreen aus Kacheln + Player
-Die Hör-View liegt unter `/display/hoerspiel/alben` (BUD-1, URL-2) und ist
-**eine Canvas**: links das Album-Kachel-Raster, rechts der Player als
-**immer sichtbare vertikale Säule**. Kein Routing zu Sub-Seiten, keine
-Menüführung — statisches Dashboard (HSP-3). Statische Assets unter
+Die Hör-View liegt unter `/display/hoerspiel/<kind_id>/alben` (BUD-1, URL-3a,
+RAT-17, #965) — z. B. `/display/hoerspiel/paula/alben` oder
+`/display/hoerspiel/neko/alben`. Sie ist **eine Canvas**: links das
+Album-Kachel-Raster, rechts der Player als **immer sichtbare vertikale
+Säule**. Kein Routing zu Sub-Seiten, keine Menüführung — statisches
+Dashboard (HSP-3). Statische Assets unter
 `/display/hoerspiel/static/<asset>` (URL-13); Audio- und Cover-Assets je
 Album werden aus dem Daten-Bereich über Router-Pfade in derselben
 Display-Origin ausgeliefert (HSP-21, HSP-26).
@@ -163,7 +165,8 @@ Resume-Rand. Ein eigener „Weiter hören"-Banner über dem Kachel-Raster
 ist V1 **nicht** vorgesehen — der Resume-Stand lebt im Player rechts
 (E-HSP-9, zieht E-HSP-4 nach).
 
-*Test-Implikation:* GET `/display/hoerspiel/alben` rendert
+*Test-Implikation:* GET `/display/hoerspiel/<kind_id>/alben` (z. B.
+`/display/hoerspiel/paula/alben`) rendert
 (a) mindestens eine Album-Kachel pro freigegebenem Album, oder genau 10
 sichtbare Kachel-Slots inkl. „Ältere Folgen"-Slot bei mehr als 10
 freigegebenen Alben, (b) den Player-Bereich mit dem letzten Stand
@@ -429,7 +432,7 @@ Album fix** (kein Mix innerhalb eines Albums in V1, E-HSP-1).
 
 Die **Default-Voice** für neue Folgen ist familien-konfigurierbar via
 `default_voice` in `hoerspiel.json` (HSP-27) und zur Laufzeit über die
-Eltern-Mini-App (HSP-34) per `PATCH /api/v1/hoerspiel/config` mit Body
+Eltern-Mini-App (HSP-34) per `PATCH /api/v1/hoerspiel/<kind_id>/config` mit Body
 `{"default_voice": "shimmer"|"onyx"}` setzbar. Der HFE-Skill liest die
 Default-Voice für seine Vorschlag-Erzeugung weiter über `GET /config`
 (HFE-4, unverändert).
@@ -486,7 +489,7 @@ ergibt zwei Bündel-Tracks. Die Bündel-Schnitt-Funktion ist deterministisch
 und ohne Netz testbar.
 
 ### HSP-15 — Album-Bau als atomarer Vorgang
-**Wenn** der Buddy einen `POST /api/v1/hoerspiel/alben`-Aufruf erhält,
+**Wenn** der Buddy einen `POST /api/v1/hoerspiel/<kind_id>/alben`-Aufruf erhält,
 **dann** läuft folgender Vorgang in dieser Reihenfolge:
 
 1. Album-Manifest anlegen (id, nummer, titel, voice, erstellt-am)
@@ -533,23 +536,25 @@ fehlgeschlagener Album-Bau lässt die Historie unverändert.
 > nach; der V1-Abend-Test seedet über die API per `curl` (HSP-25).
 
 ### HSP-17 — API-Endpoints
-Der Buddy stellt unter `/api/v1/hoerspiel/<resource>` folgende Endpoints
-bereit (BUD-1b, URL-4):
+Der Buddy stellt unter `/api/v1/hoerspiel/<kind_id>/<resource>` folgende
+Endpoints bereit (BUD-1b, URL-3a, RAT-17, #965). Instanz-gebundene Endpoints
+tragen `<kind_id>` als zweites URL-Segment; instanz-unabhängige
+Shared-Asset-Endpoints verzichten darauf:
 
 | Methode | Pfad | Zweck | Aufrufer |
 |---|---|---|---|
-| `GET` | `/api/v1/hoerspiel/bible` | Welt-Bible als Markdown lesen | Skill (Folgen-Prompt) |
-| `GET` | `/api/v1/hoerspiel/folgen-historie` | Folgen-Historie als Markdown lesen | Skill, künftige Konsumenten |
-| `GET` | `/api/v1/hoerspiel/alben` | Alle freigegebenen Alben als JSON-Array | View, Skill |
-| `GET` | `/api/v1/hoerspiel/alben/<id>/manifest` | Album-Manifest als JSON | View, Skill |
-| `POST` | `/api/v1/hoerspiel/folgen-vorschlag` | Folgen-Idee → `{titel, text}` per LLM | Skill (HFE) |
-| `POST` | `/api/v1/hoerspiel/alben` | Album bauen (TTS-Pipeline + Historie-Update) | Skill (HFE) |
-| `GET` | `/api/v1/hoerspiel/config` | Aktive Eltern-Tuning-Konfig (Provider, Modell, Voice, Pausen, Tempo, verfügbare Modelle) | Mini-App (HSP-34), HFE-Skill |
-| `PATCH` | `/api/v1/hoerspiel/config` | Eltern-Tuning setzen | Mini-App (HSP-34) |
-| `GET` | `/api/v1/hoerspiel/themen?alter=<n>` | Kuratierte Themen-Liste je Alter | HFE-Skill (HFE-3) |
-| `GET` | `/api/v1/hoerspiel/alben/<id>/audio/<track>.mp3` | Audio-Track streamen (Range-Requests) | Mini-App-Player (HSP-35/37) |
-| `GET` | `/api/v1/hoerspiel/resume?album=<id>` | Resume-Stand lesen | Mini-App-Player (HSP-36) |
-| `PUT` | `/api/v1/hoerspiel/resume` | Resume-Stand setzen | Mini-App-Player (HSP-36) |
+| `GET` | `/api/v1/hoerspiel/<kind_id>/bible` | Welt-Bible als Markdown lesen | Skill (Folgen-Prompt) |
+| `GET` | `/api/v1/hoerspiel/<kind_id>/folgen-historie` | Folgen-Historie als Markdown lesen | Skill, künftige Konsumenten |
+| `GET` | `/api/v1/hoerspiel/<kind_id>/alben` | Alle freigegebenen Alben als JSON-Array | View, Skill |
+| `GET` | `/api/v1/hoerspiel/<kind_id>/alben/<id>/manifest` | Album-Manifest als JSON | View, Skill |
+| `POST` | `/api/v1/hoerspiel/<kind_id>/folgen-vorschlag` | Folgen-Idee → `{titel, text}` per LLM | Skill (HFE) |
+| `POST` | `/api/v1/hoerspiel/<kind_id>/alben` | Album bauen (TTS-Pipeline + Historie-Update) | Skill (HFE) |
+| `GET` | `/api/v1/hoerspiel/<kind_id>/config` | Aktive Eltern-Tuning-Konfig (Provider, Modell, Voice, Pausen, Tempo, verfügbare Modelle) | Mini-App (HSP-34), HFE-Skill |
+| `PATCH` | `/api/v1/hoerspiel/<kind_id>/config` | Eltern-Tuning setzen | Mini-App (HSP-34) |
+| `GET` | `/api/v1/hoerspiel/<kind_id>/themen` | Kuratierte Themen-Liste je Alter (aus `instance.json`, RAT-17 #965) | HFE-Skill (HFE-3) |
+| `GET` | `/api/v1/hoerspiel/<kind_id>/alben/<id>/audio/<track>.mp3` | Audio-Track streamen (Range-Requests) | Mini-App-Player (HSP-35/37) |
+| `GET` | `/api/v1/hoerspiel/<kind_id>/resume?album=<id>` | Resume-Stand lesen | Mini-App-Player (HSP-36) |
+| `PUT` | `/api/v1/hoerspiel/<kind_id>/resume` | Resume-Stand setzen | Mini-App-Player (HSP-36) |
 | `GET` | `/api/v1/hoerspiel/shared-assets/status` | Vorhanden je Voice (`shimmer.intro`, `shimmer.outro`, `onyx.intro`, `onyx.outro`) | Setup-Check, Skill |
 | `POST` | `/api/v1/hoerspiel/shared-assets/rebuild` | Intro/Outro neu vorsynthetisieren | Setup-Aufruf (HSP-22) |
 
@@ -1111,20 +1116,26 @@ Auto-Rebuild beim Album-Bau (Trennung der Verantwortung).
 
 ### HSP-30 — Registrierung in der Plattform
 Der Slug `hoerspiel` wird im Origin-Routing (URL-14) registriert, damit
-`/display/hoerspiel/alben` und `/api/v1/hoerspiel/*` über die Origin
-erreichbar sind. Diese Verkabelung ist **Integration**, nicht App-Eigentum
+`/display/hoerspiel/<kind_id>/alben` und `/api/v1/hoerspiel/<kind_id>/*`
+über die Origin erreichbar sind (URL-3a, RAT-17, #965). V1-Instanzen:
+`/display/hoerspiel/paula/alben`, `/display/hoerspiel/neko/alben`.
+Diese Verkabelung ist **Integration**, nicht App-Eigentum
 — Gegenstand des arbeitstag-Track-Schnitts (F4/F5).
 
 **Familien-Schnittstelle-Beitrag (APP-4):** der Eltern-Chat-Skill
 `hoerspiel-folge-erzeugen` lebt unter `eltern-chat/skills/` und wird vom
 Hörspiel-Buddy-Owner gepflegt. Eigene Plattform-Spec
 `specs/platform/hoerspiel-folge-erzeugen.md`, ID-Präfix `HFE-`. Inhaltlich:
-dünner Telegram-Adapter, der `/folgen-vorschlag` und `/alben` ruft, ohne
-eigenen LLM-Zugriff.
+dünner Telegram-Adapter, der `/<kind_id>/folgen-vorschlag` und
+`/<kind_id>/alben` ruft, ohne eigenen LLM-Zugriff.
 
 ### HSP-31 — Kachel-Icon der Display-View
-Der `views.json`-Eintrag der View `alben` trägt `icons[]` mit dem Pfad
-**`arasaac/5915.png`** (Kopfhörer-Piktogramm) relativ zur Icon-Basis
+Pro Instanz trägt `hoerspiel/views.json` einen eigenen Eintrag mit
+`kind_id`-tragender `pfad`-Form (URL-3a, RAT-17, #965). V1-Einträge:
+`slug: "alben-paula"` → `pfad: "/display/hoerspiel/paula/alben"` und
+`slug: "alben-neko"` → `pfad: "/display/hoerspiel/neko/alben"`.
+Jeder Eintrag trägt `icons[]` mit dem Pfad **`arasaac/5915.png`**
+(Kopfhörer-Piktogramm) relativ zur Icon-Basis
 `/display/_shared/icons/` (BUD-4, PANEL-3, ICONS-5). Das Kachel-Icon ist
 **kein** app-eigenes Asset (URL-13) und **kein** buddy-eigener
 ARASAAC-Bezug. Die ARASAAC-ID 5915 ist im Werft-F3-Lauf 2026-06-12 als
@@ -1361,7 +1372,7 @@ HSP-6 (Intro · Inhalts-Tracks · Outro):
 
 - HTML5 `<audio>`-Element pro **aktuellem Track**
 - Audio-URL aus `audio-asset` im Manifest, ausgeliefert über
-  `GET /api/v1/hoerspiel/alben/<id>/audio/<track>.mp3` (HSP-37,
+  `GET /api/v1/hoerspiel/<kind_id>/alben/<id>/audio/<track>.mp3` (HSP-37,
   Range-Requests Pflicht)
 - `<audio>.playbackRate` aus aktivem `playback_tempo` (HSP-34); Wechsel
   des Tempo-Sliders aktualisiert den laufenden Player live
@@ -1410,7 +1421,7 @@ persistierten Wert), dass noch kein Stand gesetzt wurde. GET ohne
 
 ### HSP-37 — Track-MP3-Streaming-Endpoint
 
-`GET /api/v1/hoerspiel/alben/<id>/audio/<track>.mp3` liefert die rohen
+`GET /api/v1/hoerspiel/<kind_id>/alben/<id>/audio/<track>.mp3` liefert die rohen
 MP3-Bytes des Tracks:
 
 - HTTP Range-Request-Support (`Range: bytes=N-M` Request → Status 206
