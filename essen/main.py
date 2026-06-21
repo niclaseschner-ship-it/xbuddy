@@ -924,6 +924,63 @@ def gericht_anlegen():
     return jsonify({"id": neue_id}), 201
 
 
+@app.route("/api/v1/essen/katalog/gerichte/<gericht_id>", methods=["DELETE"])
+def gericht_loeschen(gericht_id):
+    """DELETE /api/v1/essen/katalog/gerichte/<id> — Gericht löschen (ESSEN-19b).
+
+    Entfernt den Gericht-Eintrag aus gerichte.json atomar (DCOMP-4).
+    Foto-Kaskade (ESSEN-19b): trägt das Gericht ein `foto_ref`, wird das
+    zugehörige Familien-Foto aus dem Foto-Verzeichnis synchron+atomar entfernt.
+    Scheitert die Foto-Löschung, scheitert der DELETE (kein Halb-Zustand).
+    `bild_ref`-Gerichte haben keine Foto-Kaskade.
+
+    Antwort: 204 bei Erfolg. 404 bei unbekannter ID.
+    Idempotenz: zweites DELETE auf gelöschte ID → 404 (ESSEN-19b-Spec).
+    """
+    p = _paths()
+    daten = store_mod.lade_gerichte(p["gerichte_file"], runtime["gerichte_snapshot"])
+    gerichte = daten.get("gerichte", [])
+
+    # Gericht suchen — 404 bei unbekannter ID (ESSEN-19b).
+    ziel = next((g for g in gerichte if str(g.get("id", "")) == gericht_id), None)
+    if ziel is None:
+        return jsonify({"fehler": "Gericht nicht gefunden", "id": gericht_id}), 404
+
+    # Foto-Kaskade (ESSEN-19b): foto_ref → Foto atomar löschen.
+    # Scheitert Foto-Lösch → DELETE scheitert (kein Halb-Zustand).
+    foto_ref = ziel.get("foto_ref")
+    if foto_ref:
+        fotos_verz = p.get("fotos_verzeichnis")
+        if fotos_verz:
+            with _foto_write_lock:
+                try:
+                    entfernt = medien_store.delete(fotos_verz, str(foto_ref))
+                except medien_store.StoreError as e:
+                    logger.warning(
+                        "gericht_loeschen: Foto-Kaskade fehlgeschlagen "
+                        "id=%s foto_ref=%s: %s", gericht_id, foto_ref, e)
+                    return jsonify({
+                        "fehler": "Foto-Löschung fehlgeschlagen — Gericht nicht entfernt",
+                        "detail": str(e),
+                    }), 500
+                if not entfernt:
+                    # Foto im Index nicht gefunden — defensiv weiter (Datei weg
+                    # ist möglicherweise OK), aber loggen.
+                    logger.warning(
+                        "gericht_loeschen: foto_ref=%s nicht im Foto-Index "
+                        "(Gericht id=%s wird trotzdem gelöscht)", foto_ref, gericht_id)
+
+    # Gericht aus Liste entfernen und atomar schreiben (DCOMP-4).
+    gerichte_neu = [g for g in gerichte if str(g.get("id", "")) != gericht_id]
+    neu_daten = {"gerichte": gerichte_neu, "zaehler": daten.get("zaehler", 0)}
+    store_mod.speichere_gerichte(p["gerichte_file"], neu_daten)
+    runtime["gerichte_snapshot"] = neu_daten
+
+    logger.info("DELETE Gericht id=%s label=%r foto_ref=%s",
+                gericht_id, ziel.get("label"), foto_ref)
+    return ("", 204)
+
+
 @app.route("/api/v1/essen/katalog/gerichte/<gericht_id>", methods=["PATCH"])
 def gericht_bild_patchen(gericht_id):
     """PATCH /api/v1/essen/katalog/gerichte/<id> — Gericht-Bild ändern (ESSEN-19a).
