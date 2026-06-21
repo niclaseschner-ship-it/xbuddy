@@ -37,14 +37,14 @@ ergänzt, fügt das Attribut hinzu — der Lookup zieht es automatisch.
 
 **Folge für den Lookup-Helper.** `vendor_slug_for_adapter(adapter_name)`
 (heute in `eltern-chat/onboarding_store.py`) löst den Adapter-Namen über
-`providers.get_provider` zur Klasse und liest `brand_vendor` daraus —
+`providers.get_provider_class` zur Klasse und liest `brand_vendor` daraus —
 nicht aus einem separaten Mapping.
 
 **Drift-Sperre maschinell.** Ein Test in
 `eltern-chat/tests/test_providers.py` prüft: jede Provider-Klasse, die
-`get_provider()` zurückgibt, trägt das Attribut, der Wert ist ein
+`iter_provider_classes()` liefert, trägt das Attribut, der Wert ist ein
 nicht-leerer String, und für jeden bekannten `adapter_name` matcht der
-Slug die zugehörige ZD-2-Tabellen-Zeile. Drift zwischen `get_provider()`
+Slug die zugehörige ZD-2-Tabellen-Zeile. Drift zwischen der Registry
 und `brand_vendor` wird vom Test gesperrt.
 
 **Wann diese Klausel wächst.** Wenn ein dritter Buddy eigene
