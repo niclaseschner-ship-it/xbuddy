@@ -15,10 +15,8 @@
 # des Repos (CONFIG-3, HSP-27); die EnvironmentFile-Zeile zeigt den
 # Standard-Pfad — der Installer ersetzt __XBUDDY_HOME__.
 #
-# Pattern-Vermerk: Diese Vorlage liegt wie xbuddy-hoerspiel.service und
-# xbuddy-kibuddy.service am Repo-Root statt neben dem Code (hoerspiel/).
-# Das weicht von BUD-1a wörtlich ab; die Klärung ist eigenständiger
-# /watchdog-Auftrag (HSP-28a-Fußnote), kein Blocker.
+# Ablage: liegt gemäß SVC-2/BUD-1a neben dem Code unter `hoerspiel/`
+# (verschoben mit #1014).
 
 [Unit]
 Description=XBuddy Hörspiel-Buddy-App (Finn-Instanz)

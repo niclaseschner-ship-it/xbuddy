@@ -53,11 +53,12 @@ Punkte für Per-Kind, nicht gebaut).
 **Realitäts-Setzung (vorgelagerte Arbeiten, vom Antiberater aufgedeckt):**
 
 - `hoerspiel/hoerspiel.service` existiert (Live-Grep bestätigt — Antiberater
-  hatte falsch geraten, suchte im falschen Ordner). Aber: Service-Vorlage liegt
-  am Repo-Root (`xbuddy-hoerspiel.service`), bricht BUD-1a wörtlich
-  („Service-Vorlage neben dem Code"). Pattern-Bruch teilt sich mit Kibuddy
-  (11 von 13 Buddies folgen der Konvention, 2 nicht). **Separater /watchdog-
+  hatte falsch geraten, suchte im falschen Ordner). Aber: Service-Vorlage lag
+  am Repo-Root (`xbuddy-hoerspiel.service`), brach BUD-1a wörtlich
+  („Service-Vorlage neben dem Code"). Pattern-Bruch teilte sich mit Kibuddy
+  (11 von 13 Buddies folgten der Konvention, 2 nicht). **Separater /watchdog-
   Befund**, kein Blocker hier — Finn-Service folgt dem bestehenden Pattern.
+  **Aufgelöst durch #1014 (SVC-2-Move, 2026-06-21).**
 - `deploy/hoerspiel/bootstrap.sh` ist Mia-hart — pro Instanz manuell
   initialisieren, **keine** Bootstrap-Petrallgemeinerung jetzt.
 - Eltern-Chat-Skill `eltern-chat/skills/hoerspiel_folge_erzeugen.py:54`

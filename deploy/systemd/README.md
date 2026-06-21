@@ -27,6 +27,9 @@ Komponenten-Prozesse, die durch diese Services am Leben gehalten werden.
 | `xbuddy-panel.service` | `panel/panel.service` | Panel-Registry (PREG-13/PREG-14/PREG-15, `GET /api/v1/panels`) | `127.0.0.1:5041` |
 | `xbuddy-essen.service` | `essen/essen.service` | Essens-Buddy (`/display/essen/`, `/api/v1/essen/`, ESSEN-23) | `127.0.0.1:5052` |
 | `xbuddy-eltern-chat.service` | `eltern-chat/eltern-chat.service` | Eltern-Chat Telegram-Bot (kein HTTP-Port, geht raus zu Telegram) | — |
+| `xbuddy-hoerspiel.service` | `hoerspiel/hoerspiel.service` | Hörspiel-Buddy für Mia (`/display/hoerspiel/mia/`, `/api/v1/hoerspiel/mia/`) | `127.0.0.1:5053` |
+| `xbuddy-hoerspiel-finn.service` | `hoerspiel/hoerspiel-finn.service` | Hörspiel-Buddy für Finn (`/display/hoerspiel/finn/`, `/api/v1/hoerspiel/finn/`) | `127.0.0.1:5055` |
+| `xbuddy-kibuddy.service` | `kibuddy/kibuddy.service` | KI-Buddy (KIBUDDY-21, `/api/v1/kibuddy/`, OpenAI/Anthropic-LLM-Integration) | `127.0.0.1:5054` |
 
 Jeder HTTP-Service bindet ausschließlich auf `127.0.0.1` (PORT-3) — von
 außen erreichbar ist nur die nginx-Origin auf `:8443` (URL-12). Alle
