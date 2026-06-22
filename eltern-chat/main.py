@@ -73,6 +73,16 @@ _PROVIDER_DOWN = ("Ich kann deine Anfrage gerade nicht bearbeiten — der "
 _TASK_GONE = "Diese Aufgabe ist nicht mehr verfügbar."
 _TASK_FAILED = "Die Aufgabe konnte nicht ausgeführt werden: %s"
 
+# FSE-3 / EC-12-Geist (#393): Marker statt Pixel für das kommentarlose Foto.
+# Ein Foto OHNE Begleittext ist das Intent-Signal für `foto_senden` (Bilderrahmen).
+# Der Haupt-Agent-LLM braucht dafür die Pixel NICHT — er routet allein aus diesem
+# Marker zu `foto_senden`; die Bytes fließen deterministisch über die TurnContext-
+# file_id-Naht zur Photo-API (foto_senden_task.py:160). Das Bild als base64 an den
+# Provider (Mistral `image_url`) zu hängen war redundant: es kostete bei JEDEM
+# Schnappschuss Tokens/Latenz und blähte die persistierte History (Re-Send pro
+# Folge-Turn). Foto MIT Begleittext bleibt unangetastet (EC-4 / Skill-Routing).
+_FOTO_OHNE_BEGLEITTEXT_MARKER = "[Ein Foto ohne Begleittext wurde gesendet.]"
+
 # EC-36 Korrektur-Hook (#844): das deterministische `falsch`-Wort vor dem
 # Agenten — case-insensitiv, getrimmt, ganzes Wort. Nur diese Form triggert
 # den Hook; »falsch eingeschätzt«, »ist falsch gelaufen« etc. sind Gesprächs-
@@ -655,8 +665,16 @@ def _user_message_from(msg):
     blocks = []
     if msg.text:
         blocks.append(TextBlock(msg.text))
-    for media_type, data_b64 in msg.images:
-        blocks.append(ImageBlock(media_type=media_type, data_b64=data_b64))
+    if msg.images and not msg.text:
+        # Kommentarloses Foto (FSE-3): nur der Marker geht an den Provider, nicht
+        # die base64-Pixel. Das routet zu `foto_senden` (Bilderrahmen); die Bytes
+        # holt der Task deterministisch über die TurnContext-file_id-Naht.
+        blocks.append(TextBlock(_FOTO_OHNE_BEGLEITTEXT_MARKER))
+    else:
+        # Foto MIT Begleittext: unverändert — ein konkreter Skill liest das Bild
+        # (TAB/Gericht/Essen) bzw. EC-4 greift. Verhalten wie bisher.
+        for media_type, data_b64 in msg.images:
+            blocks.append(ImageBlock(media_type=media_type, data_b64=data_b64))
     if not blocks:
         # Reine Nicht-Text/Nicht-Bild-Nachricht — leerer Text, der Agent fragt nach.
         blocks.append(TextBlock(""))
