@@ -92,6 +92,17 @@ class HoerspielOeffnenTask(ReadTask):
                 "WICHTIG — beiläufige Settings-Erwähnung (Voice-, Stimme-, "
                 "Anbieter-, Modell-, Tempo-, Pausen-Wechsel) → KEIN Tool-Call, "
                 "sprachlicher Verweis (siehe System-Prompt). "
+                "Auch ohne Aktions-Verb sofort aufrufen, wenn die Eltern-Nachricht "
+                "eine Aktion (settings/einstellungen/anpassen/bearbeiten/ändern/"
+                "öffnen/zeigen/schicken/geben/app/mini-app/löschen/umsortieren/"
+                "sortieren/hinzufügen) mit einer Hörspiel-Bezeichnung kombiniert: "
+                "Hörspiel · Hörbuch · Story · Folge · Geschichte. "
+                "Beispiele: 'gib mir die Hörbuch-App', 'Hörspiel öffnen', "
+                "'schick mir die Hörspiel mini-app', 'Folge zeigen'. "
+                "Schreibe in deiner Antwort NIEMALS einen Knopf als Markdown-Text "
+                "(z. B. '[**…öffnen**]') und versprich keinen 'Knopf unten' — "
+                "der Inline-Knopf kommt automatisch über den Tool-Call dieses Skills, "
+                "nicht über Prosa. "
                 "Abgrenzung: Neue Folge erzeugen ('schreib eine Folge', "
                 "'mach Paula ein neues Hörspiel') → hoerspiel_folge_erzeugen."),
             parameters={
