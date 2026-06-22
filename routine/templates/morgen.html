@@ -92,36 +92,8 @@
           {% endfor %}
         </div>
 
-        {# Aufstehen-Pin — LINKS, oben (top:0%) #}
-        <div class="event-pin event-pin-links" style="top: 0%;">
-          <div class="pin-pikto pin-pikto-start">
-            {# ARASAAC 8152: aufstehen — über geteilte Icon-Plattform (ROUTINE-10) #}
-            <img src="/display/_shared/icons/arasaac/8152.png" alt="Aufstehen">
-          </div>
-          {% if view.uhr.aufstehen_label %}
-          <span class="pin-time">{{ view.uhr.aufstehen_label }}</span>
-          {% endif %}
-        </div>
-
-        {# Anziehen-Pin — RECHTS, an proportionaler Vertikal-Position (anziehen_pct) #}
-        <div class="event-pin event-pin-rechts" style="top: {{ view.uhr.anziehen_pct }}%;">
-          <div class="pin-pikto pin-pikto-anziehen">
-            {# ARASAAC 6627: anziehen / bekleiden — über geteilte Icon-Plattform #}
-            <img src="/display/_shared/icons/arasaac/6627.png" alt="Anziehen">
-          </div>
-          <span class="pin-time">{{ view.uhr.anziehen_label }}</span>
-        </div>
-
-        {# Losgehen-Pin — LINKS, unten (top:100%) #}
-        <div class="event-pin event-pin-links" style="top: 100%;">
-          <div class="pin-pikto pin-pikto-losgehen">
-            {# ARASAAC 8142: gehen / losgehen — über geteilte Icon-Plattform #}
-            <img src="/display/_shared/icons/arasaac/8142.png" alt="Losgehen">
-          </div>
-          <span class="pin-time">{{ view.uhr.losgehen_label }}</span>
-        </div>
-
-      </div>{# /timeline-section #}
+      </div>{# /timeline-section — V1-Hartcode-Event-Pins entfernt (ROUTINE-28 Welle B, T1070).
+               Alle Pins kommen ausschließlich aus der zeit-pins-zone unten. #}
 
       {# ── V2-ZEIT-PINS (ROUTINE-26): items mit zeit.typ=anker / vorlauf ── #}
       {# Migration-Welle A: anker-Items aus V1-Synth + nutzer-definierte
