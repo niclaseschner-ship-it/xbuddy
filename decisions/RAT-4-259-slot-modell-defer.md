@@ -36,3 +36,20 @@ Kinder-/Misch-Zuweisung geändert werden müssen (E-PLAN-8-Trigger, `plan.md:627
 „assignment slots"-Contract-Test neu formuliert (+ Kind-Slot-Test) und `cycle`-Validierung
 konsistent in Defaults, PUT, GET, UI-Cycle **und** DB-Altzeilen. Sonst: schließen mit
 Verweis auf RAT-4.
+
+## Auflösung 2026-06-22 — Trigger (b) eingelöst
+
+Nic zog E-PLAN-8 bewusst neu, neues Argument: eine **Settings-Mini-App** für Slot-/Default-/Wochentag-Konfiguration ist absehbar nötig. Wenn das Slot-Modell **nach** der App parametrisiert wird, wandert die App-Implementierung mit — die Folgeinvestition macht das Aufschieben teurer als das Bauen.
+
+**Substantielle Vereinfachung gegenüber 2026-06-02:** **Toggle-All statt Whitelist** — alle Personen aus `familie.json` togglebar, keine Slot-spezifische „wer darf hier stehen"-Whitelist. Das entschärft die 06-02-Komplexitäts-Knochen mechanisch (keine „unzulässig gewordenen Alt-Zuweisungen", keine Slot-Whitelist-Validierung, PLAN-30-Vertragstest vereinfacht zu „Person existiert in familie.json").
+
+**Drei-Phasen-Schnitt:** P1 Slot-Modell + Layout + Icon-Migration + PLAN-24-Strip → P2 Eltern-Einstellungs-Seite (Wetter-RAT-2-Muster) → P3 Chat-Skill (geparkt, doppelt-bedingt auf Eltern-Chat-Anschluss + RAT-6-(A)-Trigger).
+
+**RAT-4-Drei-Spec-Pflichten gelöst:**
+- (a) Icon-Externalisierung — durch #445 (PLAN-28) erledigt; ARASAAC-Migration in P1 nachgezogen
+- (b) Regel für unzulässig gewordene Alt-Zuweisungen — durch Toggle-All gegenstandslos
+- (c) PLAN-30 als „Zuweisungs-Slots" — durch Toggle-All vereinfacht (Wertebereich `person_id` erweitert, API-Form stabil)
+
+**Voller Entscheid:** `brainstorm/berater-runde/20260622-091210-RATIFIZIERT-plan-rearch.md`
+**Ticket-Petrankerung:** #259 (Comment 2026-06-22)
+**Status RAT-4:** **AUFGELÖST** durch Berater-Runde 2026-06-22 + P1-Lieferung.
