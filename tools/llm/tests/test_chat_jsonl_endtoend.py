@@ -197,12 +197,21 @@ def test_kibuddy_chat_real_slot_lookup_succeeds(jsonl_path, zd_store_path):
 
 
 def test_missing_slot_in_zd_raises_at_boot(zd_store_path):
-    """AC4: fehlender Slot in der ZD-Datei wirft beim `get_chat(...)`-Boot,
-    nicht erst beim ersten `complete_multiturn`-Call (LLMP-S3/ZD-5).
+    """AC4: fehlender Slot in der ZD-Datei wirft beim Lib-Konstruktor
+    `get_chat(...)`, nicht erst beim ersten `complete_multiturn`-Call
+    (LLMP-S3/ZD-5).
 
-    Anti-Regression: würde der Boot stillschweigend durchgehen und erst
-    beim ersten Call kippen, wäre der Watchdog-Befund 2 (Live-Boot-
-    Tauglichkeit) nicht wirklich geschlossen.
+    Präzise Reichweite: dieser Test belegt Lib-Konstruktor-Fail. KIBuddy
+    selbst ruft `_build_llm()` LAZY beim ersten Kind-Call
+    (`kibuddy/main.py:_llm()` mit runtime["llm"]-Cache) — der Service
+    läuft also active running hoch, der Fehler trifft erst die erste
+    Kind-Anfrage. Für Operations heißt das: `LLMCapabilityError` ist
+    sichtbar im Service-Log nach dem ersten Call, nicht beim systemd-
+    Restart-Limit.
+
+    Anti-Regression: würde der Lib-Konstruktor stillschweigend durchgehen
+    und erst beim ersten Vendor-Call kippen, wäre der Watchdog-Befund 2
+    (Live-Boot-Tauglichkeit) nicht wirklich geschlossen.
     """
     import json as _json
     # ZD-Datei existiert, aber **ohne** den kibuddy-anthropic-api-key-Slot.
