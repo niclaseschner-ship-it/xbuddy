@@ -78,6 +78,18 @@ nicht im Skill):
 - „Turnbeutel für heute" / „nur heute …" (einmaliger Punkt — RAO öffnet die
   Mini-App, dort wählt Eltern Quelle `nur heute`)
 
+**RAO-3 App-Bezeichnungen (EC-40 Achse B):** Routine · Morgenroutine ·
+Ablauf · Tagesablauf.
+
+**RAO-3 EC-40-Familien-Trigger.** Zusätzlich zu den oben genannten Phrasen
+feuert RAO bei jeder Kombination aus dem Aktions-Vokabular EC-40 Achse A
+und einer RAO-Bezeichnung aus Achse B — auch ohne ein in der App-
+spezifischen Phrasen-Liste genanntes Verb. Beispiele: „gib mir die
+Routine settings", „Morgenroutine öffnen", „Ablauf zeigen", „schick mir
+die Routine mini-app", „Routine-Optionen". Das LLM formuliert in keinem
+Fall einen Mini-App-Knopf als Markdown-Text in seiner Antwort (EC-41 —
+der Knopf entsteht über den Tool-Call, nicht in Prosa).
+
 **Abgrenzung zu RZS:** Wenn die Eltern-Frage einen **einzelnen Zeitwert**
 benennt („setz die Abfahrtszeit auf 8:15"), nutzt der Agent **RZS** (Chat-
 Bestätigung). Wenn die Frage nach **Punkt-Bearbeitung** oder **Editor-
