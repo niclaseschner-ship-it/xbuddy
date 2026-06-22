@@ -107,6 +107,21 @@ Darstellung des Kalender-Slots neben dem Termin-Piktogramm, der Kalender-Icon
 ist konsistenter (Befund Pi-Deploy). Diese Werte sind Werft-Befunde und können
 je Familie über `plan.json` überschrieben werden (CONFIG-1).
 
+**Layout (V1.3 — Display-Robustheit, RAT-4-Auflösung 2026-06-22):** Die
+Schedule-Rail liegt als CSS-Grid im Frame mit der Zeilen-Form
+`grid-template-rows: auto auto repeat(var(--slot-count), 80px) 1fr`:
+Header, Day-Row, je Slot eine fixe Zeile (80 px), und die Termin-Leiste
+(PLAN-13) bekommt den verbleibenden Platz (`1fr`). Slot-Anzahl ist
+konfigurierbar via `--slot-count` (keine Hardcode-Annahme). Ab **9 Slots**
+schreibt `_parse_slots` ein WARN-Log — die Familien-1-Display-Geometrie
+(DC-15, 1920×1080 quer) ist nur bis 8 Slots vertikal lesbar getestet.
+Pflicht-Experiment vor Layout-Merge: Tablet-Screenshot mit 8 Slots × 3
+Tagen × 5 Terminen + 2 Spans, Termin-Bereich ≥ 200 px sichtbar.
+**Verworfen:** freier `flex`-Wuchs des Schedule-Bereichs, der die
+Termin-Leiste aus dem Frame drückte (heutige Form, Befund 2026-06-22).
+**Verworfen:** `vh`-Skalierung — auf fixem Tablet kein Viewport-Wechsel,
+nur Indirektion ohne Nutzen.
+
 *Tickets:* #40, #578, #642
 
 ### PLAN-7 — Erwachsenen-Slots: Zuweisung per Klick-Cycle
@@ -243,6 +258,15 @@ die Pille das generische Termin-Icon `kalender` (ARASAAC `3071`) statt des
 heutigen Wireframe-`icon_sparkle`. Auch das ist eine ARASAAC-`id`, nicht ein
 interner Key — eine Icon-Quelle, eine Form (PLAN-12 / PLAN-6).
 
+**Termin-Überschuss (V1.3 — RAT-4-Auflösung 2026-06-22):** Trägt eine
+Tagesspalte mehr Termine, als die Termin-Leiste vertikal ohne Druck
+darstellt, zeigt die Spalte die ersten N sichtbar und unten einen Counter
+`+M weitere` als gedimmten Text-Indikator. Der Counter ist V1.3 reine
+Sichtbarkeits-Mechanik **ohne Klick-Pfad** — eine Klick-Detail-View
+(Tages-Overlay) ist Folge-Ticket (QW4). **Verworfen:** vertikales Scrollen
+(Display-Modus ohne Touch-Fokus); dynamischer Schrift-Shrink (Pille wird
+unlesbar).
+
 *Tickets:* #40, #308, #578
 
 ### PLAN-14 — Mehrtages-Termine als Spanne
@@ -250,6 +274,20 @@ Ein Termin über mehrere Tage des Fensters wird **einmal** als durchgehender
 Balken über die betroffenen Spalten gezeigt, nicht je Tag wiederholt. Die
 Zusammengehörigkeit wird über die stabile Event-`id` (PLAN-17) erkannt — für
 ganztägige wie für zeitgebundene mehrtägige Events.
+
+**Sichtbarkeit (V1.3 — RAT-4-Auflösung 2026-06-22):** Eine Mehrtages-Spanne
+wird erst ab ihrem **Start-Tag** im sichtbaren Fenster gerendert.
+- Beginnt ein Event **vor** dem Fenster und reicht in das Fenster hinein
+  (z. B. Mo–Fr, Anzeige ab Mi), zeigt die Spanne ab dem ersten Fenster-Tag
+  (der Termin läuft bereits).
+- Beginnt ein Event **nach** dem ersten Fenster-Tag (z. B. Mi–Sa, Anzeige
+  ab Mo), bleibt die Termin-Zeile in den Vorlauf-Spalten (Mo–Di) **frei**
+  für andere Termine. Die Spanne reserviert ihre Zeile nicht ab Anzeige-
+  Beginn.
+
+**Verworfen:** durchgehende Zeilen-Reservierung über das ganze Fenster
+(heutige Form, Befund 2026-06-22: blockiert die Anzeige an Tagen, an
+denen die Spanne noch nicht läuft).
 
 *Tickets:* #40
 
