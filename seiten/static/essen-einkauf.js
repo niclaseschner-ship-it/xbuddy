@@ -24,6 +24,34 @@ const KATEGORIE_LABEL = {
 const MARKER_WUNSCH = "🧒";
 const MARKER_REZEPT = "📖";
 
+
+/**
+ * ESSEN-31 (#1011/#1074): Baut den <img>-HTML-Fragment mit Bild-Lade-Fehler-Guard.
+ *
+ * Wenn `bild_ref` leer/falsy ist → direkt Placeholder-Div (verhindert 404er auf
+ * `.png` mit leerem Pfad-Teil). Wenn der Browser den Bild-Pfad nicht laden kann
+ * (echter 404, Offline, Pfad-Drift) → onerror-Handler ersetzt das <img> durch
+ * den Placeholder-Div mit Bring!-Default-Cart-Symbol (Spec ESSEN-31 Wortlaut).
+ *
+ * Convention: `placeholderKlasse` = `imgKlasse + "-placeholder"` (siehe
+ * essen-einkauf.css `.item-bild-placeholder` / `.zutat-bild-placeholder`).
+ */
+function _bildHtml(bild_ref, imgKlasse) {
+  const placeholderKlasse = imgKlasse + "-placeholder";
+  if (!bild_ref) {
+    return '<div class="' + placeholderKlasse + '" aria-hidden="true"></div>';
+  }
+  const bildSrc = "/display/_shared/icons/arasaac/" + encodeURIComponent(bild_ref) + ".png";
+  // onerror: ersetzt das <img> durch einen Placeholder-Div, wenn das Bild nicht lädt.
+  // outerHTML-Replace ist robust gegen verschachtelten Markup; das Class-Tagging
+  // greift via CSS ::before-Symbol.
+  return (
+    '<img class="' + imgKlasse + '" src="' + esc(bildSrc) +
+    '" alt="" loading="lazy" ' +
+    'onerror="this.outerHTML=\'<div class=&quot;' + placeholderKlasse + '&quot; aria-hidden=&quot;true&quot;></div>\'">'
+  );
+}
+
 // ── MAD-5 Auth-Header via platform-Wrapper ────────────────────────────────────
 
 // MAD-5 (Vendor-Disziplin): KEIN direkter Telegram-Vendor-Zugriff im App-JS — alle
@@ -256,7 +284,7 @@ function erledigtSektionHeader(n) {
 function renderCard(item) {
   const erledigt = item.abgehakt ? " erledigt" : "";
   const marker = _marker(item);
-  const bildSrc = "/display/_shared/icons/arasaac/" + encodeURIComponent(item.bild_ref) + ".png";
+  const bildHtml = _bildHtml(item.bild_ref, "item-bild");
 
   // data-* für Event-Handler
   const dataId      = 'data-item-id="' + esc(item.id) + '"';
@@ -269,7 +297,7 @@ function renderCard(item) {
   return (
     '<div class="item-card' + erledigt + '" ' +
          dataId + ' ' + dataKlasse + ' ' + dataKat + ' ' + dataAbge + '>' +
-      '<img class="item-bild" src="' + esc(bildSrc) + '" alt="" loading="lazy">' +
+      bildHtml +
       '<div class="item-text">' +
         '<span class="item-label">' + esc(item.label) + '</span>' +
       '</div>' +
@@ -422,14 +450,14 @@ function oeffneUebernahmeSheet(gericht, zutaten) {
     const nAusgewaehlt = zutatStatus.filter(s => s.ausgewaehlt).length;
 
     const zeilen = zutatStatus.map((s, idx) => {
-      const bildSrc = "/display/_shared/icons/arasaac/" + encodeURIComponent(s.zutat.bild_ref) + ".png";
+      const bildHtml = _bildHtml(s.zutat.bild_ref, "zutat-bild");
       const ausgewaehltKlasse = s.ausgewaehlt ? " ausgewaehlt" : "";
       const check = s.ausgewaehlt ? "✓" : "";
       const hinweis = s.schonDrauf ? '<span class="zutat-hinweis"> · schon drauf</span>' : "";
 
       return (
         '<div class="zutat-zeile' + ausgewaehltKlasse + '" data-zutat-idx="' + idx + '">' +
-          '<img class="zutat-bild" src="' + esc(bildSrc) + '" alt="" loading="lazy">' +
+          bildHtml +
           '<span class="zutat-label">' + esc(s.zutat.label) + hinweis + '</span>' +
           '<div class="zutat-check">' + esc(check) + '</div>' +
         '</div>'
@@ -697,5 +725,5 @@ function zeigeToast(msg) {
 // ── Exports (für Tests, wenn als Modul geladen) ───────────────────────────────
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { tokenisiereQuickAdd, sektionHeader, erledigtSektionHeader, _marker, _itemRangfolge };
+  module.exports = { tokenisiereQuickAdd, sektionHeader, erledigtSektionHeader, _marker, _itemRangfolge, _bildHtml };
 }

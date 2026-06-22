@@ -153,7 +153,8 @@ body {
   background: var(--bg);
 }
 
-/* Placeholder bei Bild-Ladefehler (ESSEN-31) */
+/* Placeholder bei Bild-Ladefehler oder leerem bild_ref (ESSEN-31, #1011/#1074).
+   Bring!-Default-Cart-Symbol als CSS-content (Spec-Wortlaut). */
 .item-bild-placeholder {
   flex: 0 0 var(--item-bild-size);
   width: var(--item-bild-size);
@@ -164,6 +165,31 @@ body {
   align-items: center;
   justify-content: center;
   font-size: calc(1.3rem * var(--item-scale));
+}
+
+.item-bild-placeholder::before {
+  content: "🛒";
+  opacity: 0.55;
+  line-height: 1;
+}
+
+/* Zutat-Placeholder (Sheet) — kleinere Skala (36px wie .zutat-bild). */
+.zutat-bild-placeholder {
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  background: var(--rule);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+}
+
+.zutat-bild-placeholder::before {
+  content: "🛒";
+  opacity: 0.55;
+  line-height: 1;
 }
 
 /* ── Card-Text ───────────────────────────────────────────── */
