@@ -122,14 +122,34 @@ Termin-Leiste aus dem Frame drückte (heutige Form, Befund 2026-06-22).
 **Verworfen:** `vh`-Skalierung — auf fixem Tablet kein Viewport-Wechsel,
 nur Indirektion ohne Nutzen.
 
+**Icon-Migration-Lesephase (V1.3 — RAT-4-Auflösung 2026-06-22):** Damit die
+V1.2-ARASAAC-Form (siehe oben) im Live-Stand greift, trägt der Parser
+(`plan/config.py:_parse_slots`) eine **Migrations-Lesephase**: alte
+interne Keys (`sun`/`clock`/`fork`/`moon`/`star`) werden mit **WARN-Log**
+akzeptiert, neu geschriebene Slots tragen ARASAAC-IDs. Der Template-Mapper
+`SLOT_ICON_ID` (war zweite Icon-Quelle innerhalb der View, PLAN-6-Verstoß)
+entfällt; das Template rendert `slot.icon` direkt über den geteilten
+Icon-Pfad. Live-`plan.json`-Migration läuft **extern im Deploy-Schritt**
+(BUD-2: per-Instanz-Datei, nicht im Repo); `plan.example.json` wird im
+selben PR auf ARASAAC umgestellt. Die Lesephase ist Übergangshilfe —
+Folge-Ticket nach 2-3 Wochen Stabilität entfernt sie aus dem Parser.
+
 *Tickets:* #40, #578, #642
 
-### PLAN-7 — Erwachsenen-Slots: Zuweisung per Klick-Cycle
+### PLAN-7 — Petrantwortlichkeits-Slots: Zuweisung per Klick-Cycle
 Eine Zelle eines Erwachsenen-Slots zeigt entweder das Foto-im-Ring (FAM-4)
-eines Erwachsenen oder einen leeren Slot mit Plus-Icon. Ein Tippen schaltet
-zyklisch weiter: Erwachsener 1 → Erwachsener 2 → … → leer → Erwachsener 1. Nur
-Erwachsene der Familien-Registry (`familie.md` FAM-2) sind im Cycle; die
-Reihenfolge ist die der Registry.
+einer Person oder einen leeren Slot mit Plus-Icon. Ein Tippen schaltet
+zyklisch weiter: Person 1 → Person 2 → … → leer → Person 1.
+
+**Toggle-All (V1.3 — RAT-4-Auflösung 2026-06-22):** Der Cycle iteriert über
+**alle Personen** aus der Familien-Registry (`familie.md` FAM-2) —
+Erwachsene **und** Kinder. Die Reihenfolge ist die Registry-Reihenfolge.
+Diese Klausel löst die V1-Beschränkung „nur Erwachsene im Cycle" auf;
+eine Slot-spezifische Whitelist gibt es nicht (RAT-4-Auflösung). Wer in
+welchem Slot landen darf, ist familien-konfigurierbar über die
+Toggle-Wahl, nicht über Code (E-PLAN-8). Schreib-API-Validierung
+(PLAN-31) bleibt orthogonal: sie prüft Slot-Sorte und Personen-Existenz
+(FAM-3), nicht Personen-Art.
 
 *Tickets:* #40
 
@@ -710,7 +730,13 @@ In allen Stufen wird eine Person ausschließlich über ihr Foto im farbigen Ring
 gezeigt (`familie.md` FAM-4) — keine Personennamen im Plan-Buddy-UI. Das ist
 die Voraussetzung dafür, dass auch die Kleinkind-Stufe ohne Lesen funktioniert.
 
-Diese Regel betrifft die **vom Plan-Buddy selbst** gesetzte Personen-Identität (Foto-im-Ring statt Namens-Label). Sie strippt **nicht** den wörtlichen, familien-eigenen Kalender-Titel eines Einzel-Termins in der Termin-Leiste (PLAN-13) — dort darf ein vom Kalender gelieferter Titel einen Namen tragen, weil es der unveränderte Eintrag der Familie ist, keine vom Plan-Buddy erzeugte Namens-Beschriftung.
+Diese Regel betrifft die **vom Plan-Buddy selbst** gesetzte Personen-Identität (Foto-im-Ring statt Namens-Label).
+
+**Termin-Label-Strip bei eindeutiger Foto-Resolution (V1.3 — RAT-4-Auflösung 2026-06-22, Nic-Tatsachenbeleg „es ist zu voll, ich kann Zahnarzt heute nicht lesen"):** In Termin-Labels (PLAN-13) und Mehrtages-Span-Pillen (PLAN-14) wird ein erkannter Personen-Name aus dem familien-eigenen Kalender-Titel **gestrippt**, **wenn** `resolve_personen(titel)` (`plan/kalender.py`, PLAN-19) genau **eine** Person liefert. Die Foto-Resolution trägt dann die Identität (Foto-im-Ring), das Label trägt den verbleibenden Termin-Inhalt. Beispiel: „Niclas Zahnarzt" → Label „Zahnarzt" + Foto Niclas.
+
+**Verbatim bei Mehrdeutigkeit:** Bei **≥2 Personen-Treffern** im Titel (z. B. „Sport mit Petra und Niclas") bleibt das Label **verbatim**, weil die Foto-Resolution mehrdeutig wird und der Namens-Bezug semantisch trägt. Auch ohne Personen-Treffer bleibt das Label verbatim — Strippen passiert nur bei n=1.
+
+**Geltungsbereich:** Der Strip betrifft den Termin-Bereich (PLAN-13 + PLAN-14). Die Aktivitäts-Slot-Routing-Mechanik (PLAN-12) bleibt unberührt — Kind-Aktivitäten werden weiter über Titel-Kindername zugeordnet. Diese V1.3-Klausel **ersetzt** die V1-Ausnahme „Strippt nicht den wörtlichen Kalender-Titel" für den eindeutigen Single-Person-Fall; alle anderen Fälle (Mehrdeutigkeit, kein Treffer) behalten die V1-Verbatim-Form.
 
 *Tickets:* #40, #303
 
