@@ -56,7 +56,19 @@ class EinkaufZeigenTask(ReadTask):
                 "\"liste öffnen\", \"einkauf öffnen\", "
                 "\"ich gehe gleich zum Supermarkt\" oder Ähnliches. "
                 "Sendet eine kompakte Übersicht mit offener Item-Anzahl "
-                "und einem Knopf, der die Einkauf-Mini-App öffnet."),
+                "und einem Knopf, der die Einkauf-Mini-App öffnet. "
+                "Auch ohne Aktions-Verb sofort aufrufen, wenn die Eltern-Nachricht "
+                "eine Aktion (settings/einstellungen/anpassen/bearbeiten/ändern/"
+                "öffnen/zeigen/schicken/geben/app/mini-app/löschen/umsortieren/"
+                "sortieren/hinzufügen) mit einer Einkauf-Bezeichnung kombiniert: "
+                "Einkauf · Einkaufsliste · Liste · Einkaufszettel · Shoppingliste. "
+                "Beispiele: 'gib mir die Einkaufsliste-App', 'schick mir die Liste "
+                "settings', 'Einkaufsliste öffnen', 'Liste anpassen', "
+                "'Shoppingliste-Optionen'. "
+                "Schreibe in deiner Antwort NIEMALS einen Knopf als Markdown-Text "
+                "(z. B. '[**…öffnen**]') und versprich keinen 'Knopf unten' — "
+                "der Inline-Knopf kommt automatisch über den Tool-Call dieses Skills, "
+                "nicht über Prosa."),
             parameters={
                 "type": "object",
                 "properties": {},

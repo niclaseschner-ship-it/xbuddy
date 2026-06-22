@@ -66,6 +66,18 @@ class RoutineAnpassenOeffnenTask(ReadTask):
                 "Knopf, der die Routine-Anpassen-Mini-App öffnet. "
                 "Auch bei leerer Routine wird der Button gesendet "
                 "(Routine ist Anfangszustand, kein Endzustand). "
+                "Auch ohne Aktions-Verb sofort aufrufen, wenn die Eltern-Nachricht "
+                "eine Aktion (settings/einstellungen/anpassen/bearbeiten/ändern/"
+                "öffnen/zeigen/schicken/geben/app/mini-app/löschen/umsortieren/"
+                "sortieren/hinzufügen) mit einer Routine-Bezeichnung kombiniert: "
+                "Routine · Morgenroutine · Ablauf · Tagesablauf. "
+                "Beispiele: 'gib mir die Routine settings', 'Morgenroutine öffnen', "
+                "'Ablauf zeigen', 'schick mir die Routine mini-app', "
+                "'Routine-Optionen'. "
+                "Schreibe in deiner Antwort NIEMALS einen Knopf als Markdown-Text "
+                "(z. B. '[**…öffnen**]') und versprich keinen 'Knopf unten' — "
+                "der Inline-Knopf kommt automatisch über den Tool-Call dieses Skills, "
+                "nicht über Prosa. "
                 "Abgrenzung: Einzelnen Zeitwert setzen (z.B. 'Abfahrtszeit auf "
                 "8:15') → stattdessen routine_zeiten_setzen aufrufen."),
             parameters={

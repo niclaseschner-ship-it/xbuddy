@@ -58,7 +58,18 @@ class SeitenUebersichtTask(ReadTask):
                 "\"Mini Apps\", \"alle Seiten\", \"Apps öffnen\", "
                 "\"welche Apps gibt es\", \"zeig mir alles\", "
                 "\"was kann ich aufrufen\", \"Startseite\", \"Home\". "
-                "Sendet einen Button, der die Mini-App-Übersicht öffnet."
+                "Sendet einen Button, der die Mini-App-Übersicht öffnet. "
+                "Auch ohne Aktions-Verb sofort aufrufen, wenn die Eltern-Nachricht "
+                "eine Aktion (settings/einstellungen/anpassen/bearbeiten/ändern/"
+                "öffnen/zeigen/schicken/geben/app/mini-app/löschen/umsortieren/"
+                "sortieren/hinzufügen) mit einer App-Übersichts-Bezeichnung "
+                "kombiniert: Mini-Apps · App-Übersicht · alle Apps · Übersicht · "
+                "Seiten. Beispiele: 'gib mir die App-Übersicht', "
+                "'alle Mini-Apps öffnen', 'zeig mir alle Apps', 'Seiten-Optionen'. "
+                "Schreibe in deiner Antwort NIEMALS einen Knopf als Markdown-Text "
+                "(z. B. '[**…öffnen**]') und versprich keinen 'Knopf unten' — "
+                "der Inline-Knopf kommt automatisch über den Tool-Call dieses Skills, "
+                "nicht über Prosa."
             ),
             parameters={
                 "type": "object",
