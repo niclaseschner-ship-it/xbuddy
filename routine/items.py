@@ -47,7 +47,7 @@ class ItemsError(Exception):
 # ============================================================
 
 _GUELTIGE_ZEIT_TYPEN = frozenset({"anker", "vorlauf"})
-_GUELTIGE_VORLAUF_BEZUEGE = frozenset({"vorheriger_anker"})
+_GUELTIGE_VORLAUF_BEZUEGE = frozenset({"vorheriger_anker", "naechster_anker"})
 
 
 def _validate_zeit_block(item_id, zeit):
@@ -56,7 +56,7 @@ def _validate_zeit_block(item_id, zeit):
     Drei zulässige Formen:
       - None / fehlt   → reiner Punkt ohne Zeit (V1-Verhalten)
       - {typ:'anker',   uhrzeit:'HH:MM', locked?:bool}
-      - {typ:'vorlauf', minuten:int>=0, bezug:'vorheriger_anker'}
+      - {typ:'vorlauf', minuten:int>=0, bezug:'vorheriger_anker'|'naechster_anker'}
 
     Wirft ItemsError bei ungültigem Inhalt (kein Schreiben, kein Teil-Write).
     Liefert den normalisierten zeit-Dict zurück (oder None), für direkte
@@ -107,7 +107,7 @@ def _validate_zeit_block(item_id, zeit):
     if bezug not in _GUELTIGE_VORLAUF_BEZUEGE:
         raise ItemsError(
             "items[%s].zeit.bezug: '%s' ist ungültig "
-            "(erlaubt: vorheriger_anker)" % (item_id, bezug))
+            "(erlaubt: vorheriger_anker, naechster_anker)" % (item_id, bezug))
     return {"typ": "vorlauf", "minuten": minuten, "bezug": bezug}
 
 

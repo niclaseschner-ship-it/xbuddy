@@ -49,28 +49,39 @@ def _write_v1_routine_json(tmp_path, items_ohne_zeit=None):
 
 
 def test_ac2_migration_synth_end_anker_aus_v1_feldern(tmp_path):
-    """AC2: V1-routine.json → resolve_data ergänzt synth. aufstehen/losgehen-Anker."""
+    """AC2: V1-routine.json → resolve_data ergänzt synth. aufstehen/losgehen-Anker
+    sowie Anziehen-Vorlauf-Item (T1070 Welle B, ROUTINE-28).
+
+    anzieh_vorlauf_min=10 → Aufstehen(anker) + Anziehen(vorlauf) + 2 user-items
+    + Losgehen(anker) = 5 Items total.
+    """
     path = _write_v1_routine_json(tmp_path)
     cfg = config_mod.migriere_v1_anker(config_mod.resolve_data(path))
 
-    # 2 V1-Items + 2 Synth-Anker = 4 Items
-    assert len(cfg.items) == 4, \
-        "V1-Migration sollte 2 Synth-Anker an Pos 0 und N-1 ergänzen, " \
-        "ergibt: %d Items" % len(cfg.items)
+    # 2 V1-Items + Anziehen-Vorlauf + 2 End-Anker = 5 Items
+    assert len(cfg.items) == 5, \
+        "V1-Migration sollte Aufstehen-Anker, Anziehen-Vorlauf, 2 user-items, " \
+        "Losgehen-Anker = 5 Items ergeben, erhalten: %d Items" % len(cfg.items)
 
     # Position 0: Aufstehen-Anker
     erstes = cfg.items[0]
     assert erstes.id == "aufstehen"
     assert erstes.zeit == {"typ": "anker", "uhrzeit": "07:00", "locked": True}
 
+    # Position 1: Anziehen-Vorlauf-Item (Welle B)
+    anziehen = cfg.items[1]
+    assert anziehen.id == "anziehen"
+    assert anziehen.zeit["typ"] == "vorlauf"
+    assert anziehen.zeit["minuten"] == 10
+
+    # Original-Items dazwischen (nach Anziehen-Vorlauf)
+    assert cfg.items[2].id == "fruehstueck"
+    assert cfg.items[3].id == "zaehne"
+
     # Position N-1: Losgehen-Anker
     letztes = cfg.items[-1]
     assert letztes.id == "losgehen"
     assert letztes.zeit == {"typ": "anker", "uhrzeit": "08:25", "locked": True}
-
-    # Original-Items dazwischen, unverändert
-    assert cfg.items[1].id == "fruehstueck"
-    assert cfg.items[2].id == "zaehne"
 
 
 def test_ac2_v1_felder_bleiben_als_spiegel(tmp_path):
@@ -105,7 +116,11 @@ def test_ac2_migration_idempotent_bei_vorhandenem_locked_anker(tmp_path):
 
 
 def test_ac2_migration_unlocked_anker_loest_keine_synth_aus(tmp_path):
-    """AC2: anker ohne locked=true ist KEIN V2-Marker → Synth-End-Anker werden ergänzt."""
+    """AC2: anker ohne locked=true ist KEIN V2-Marker → Synth-End-Anker werden ergänzt.
+
+    T1070 Welle B: mit anzieh_vorlauf_min=10 kommen jetzt 4 Items:
+    Aufstehen(anker) + Anziehen(vorlauf) + user-anker + Losgehen(anker).
+    """
     items_unlocked = [
         {"id": "user-anker", "label": "Mein Anker", "piktogramm": "1111",
          "quelle": "default",
@@ -114,10 +129,12 @@ def test_ac2_migration_unlocked_anker_loest_keine_synth_aus(tmp_path):
     path = _write_v1_routine_json(tmp_path, items_ohne_zeit=items_unlocked)
     cfg = config_mod.migriere_v1_anker(config_mod.resolve_data(path))
 
-    # 1 unlocked-Anker + 2 Synth-End-Anker = 3 Items
-    assert len(cfg.items) == 3
+    # 1 unlocked-Anker + Anziehen-Vorlauf + 2 Synth-End-Anker = 4 Items (Welle B)
+    assert len(cfg.items) == 4
     assert cfg.items[0].id == "aufstehen"
     assert cfg.items[0].zeit.get("locked") is True
+    assert cfg.items[1].id == "anziehen"
+    assert cfg.items[1].zeit["typ"] == "vorlauf"
     assert cfg.items[-1].id == "losgehen"
 
 
@@ -141,13 +158,11 @@ def test_ac2_migration_aus_wochentag_dict_nimmt_default_oder_ersten_wert(tmp_pat
 
 
 def test_ac2_migration_ohne_v1_felder_keine_synth(tmp_path):
-    """AC2: fehlen V1-Anker komplett → keine Synth (keine Fake-Daten, MAD-1).
+    """AC2: fehlen V1-Felder komplett → CONFIG-4-Defaults greifen, Synth läuft durch.
 
-    Beachte: DATA_DEFAULTS füllen aufstehzeit/abfahrtszeit immer mit Werten —
-    dieser Test prüft daher den Fall, dass die Default-Werte als Synth-Quelle
-    angenommen werden (CONFIG-4: Prozess startet immer). Das ist die richtige
-    Disziplin: Wenn keine V1-Werte da sind, greifen Defaults und Synth nutzt
-    diese; ohne sie hätte resolve_data nicht-startbare Pfade.
+    Beachte: DATA_DEFAULTS füllen aufstehzeit/abfahrtszeit/anzieh_vorlauf_min immer —
+    dieser Test prüft daher: Defaults als Synth-Quelle + Anziehen-Vorlauf-Item
+    (T1070 Welle B, DATA_DEFAULTS['anzieh_vorlauf_min']=8 > 0).
     """
     data = {
         "zeitzone": "Europe/Berlin",
@@ -158,9 +173,11 @@ def test_ac2_migration_ohne_v1_felder_keine_synth(tmp_path):
     p.write_text(json.dumps(data))
     cfg = config_mod.migriere_v1_anker(config_mod.resolve_data(str(p)))
 
-    # Defaults greifen → Synth-Anker werden trotzdem erzeugt (3 Items)
-    assert len(cfg.items) == 3
+    # Defaults greifen (anzieh_vorlauf_min=8) → 4 Items:
+    # Aufstehen(anker) + Anziehen(vorlauf) + x(user) + Losgehen(anker)
+    assert len(cfg.items) == 4
     assert cfg.items[0].id == "aufstehen"
+    assert cfg.items[1].id == "anziehen"
     assert cfg.items[-1].id == "losgehen"
 
 
@@ -188,3 +205,124 @@ def test_ac2_resolve_data_alleine_macht_keine_synth(tmp_path):
     assert len(cfg.items) == 2
     assert cfg.items[0].id == "fruehstueck"
     assert cfg.items[1].id == "zaehne"
+
+
+# ============================================================
+#  T1070 AC2 — Anziehen-Vorlauf-Item bei gesetztem anzieh_vorlauf_min
+# ============================================================
+
+
+def test_t1070_ac2_synth_drei_items_mit_anzieh_vorlauf(tmp_path):
+    """T1070 AC2: V1-routine.json mit anzieh_vorlauf_min → 3 Synth-Items:
+    Aufstehen (anker), Anziehen (vorlauf), Losgehen (anker).
+
+    ROUTINE-28 Welle B: _synth_v1_anker fügt Anziehen-Vorlauf-Item ein,
+    nur wenn anzieh_vorlauf_min gesetzt (MAD-1).
+    """
+    path = _write_v1_routine_json(tmp_path, items_ohne_zeit=[])  # keine eigenen Items
+    cfg = config_mod.migriere_v1_anker(config_mod.resolve_data(path))
+
+    # anzieh_vorlauf_min=10 gesetzt → 3 Synth-Items (Aufstehen + Anziehen + Losgehen)
+    assert len(cfg.items) == 3, \
+        "Mit anzieh_vorlauf_min=10 erwartet: Aufstehen + Anziehen + Losgehen = 3 Items, " \
+        "erhalten: %d" % len(cfg.items)
+
+    # Position 0: Aufstehen-Anker
+    aufstehen = cfg.items[0]
+    assert aufstehen.id == "aufstehen"
+    assert aufstehen.zeit == {"typ": "anker", "uhrzeit": "07:00", "locked": True}
+    assert aufstehen.piktogramm == config_mod._V1_ANKER_AUFSTEHEN_PIKTO
+
+    # Position 1: Anziehen-Vorlauf
+    # bezug="naechster_anker" = Vorlauf vor Losgehen (V1-Sema ROUTINE-9,
+    # Nic-Setzung 2026-06-22 #1070)
+    anziehen = cfg.items[1]
+    assert anziehen.id == "anziehen"
+    assert anziehen.piktogramm == config_mod._V1_ANKER_ANZIEHEN_PIKTO
+    assert anziehen.zeit["typ"] == "vorlauf"
+    assert anziehen.zeit["minuten"] == 10
+    assert anziehen.zeit.get("bezug") == "naechster_anker"
+
+    # Position 2: Losgehen-Anker
+    losgehen = cfg.items[2]
+    assert losgehen.id == "losgehen"
+    assert losgehen.zeit == {"typ": "anker", "uhrzeit": "08:25", "locked": True}
+
+
+def test_t1070_ac2_synth_kein_anziehen_wenn_vorlauf_null(tmp_path):
+    """T1070 AC2/MAD-1: anzieh_vorlauf_min=0 → kein Anziehen-Vorlauf-Item (keine Vorrats-Konvention)."""
+    data = {
+        "abfahrtszeit": "08:25",
+        "aufstehzeit": "07:00",
+        "anzieh_vorlauf_min": 0,
+        "zeitzone": "Europe/Berlin",
+        "items": [],
+        "zeit_referenzen": {"an": False, "paare": []},
+    }
+    p = tmp_path / "routine.json"
+    p.write_text(json.dumps(data))
+    cfg = config_mod.migriere_v1_anker(config_mod.resolve_data(str(p)))
+
+    # anzieh_vorlauf_min=0 → NUR Aufstehen + Losgehen (kein Anziehen)
+    assert len(cfg.items) == 2
+    assert cfg.items[0].id == "aufstehen"
+    assert cfg.items[1].id == "losgehen"
+
+
+def test_t1070_ac2_synth_mit_user_items_zwischen_ankern(tmp_path):
+    """T1070 AC2: user-items bleiben zwischen Aufstehen und Losgehen;
+    Anziehen-Vorlauf-Item ist erstes middle-Item vor den user-items.
+    """
+    path = _write_v1_routine_json(tmp_path)  # enthält fruehstueck + zaehne
+    cfg = config_mod.migriere_v1_anker(config_mod.resolve_data(path))
+
+    # Aufstehen + Anziehen + fruehstueck + zaehne + Losgehen = 5 Items
+    assert len(cfg.items) == 5
+    assert cfg.items[0].id == "aufstehen"
+    assert cfg.items[1].id == "anziehen"
+    assert cfg.items[2].id == "fruehstueck"
+    assert cfg.items[3].id == "zaehne"
+    assert cfg.items[4].id == "losgehen"
+
+
+# ============================================================
+#  T1070 AC3 — berechne_zeit_pins findet locked-Anker aus migrierten items
+# ============================================================
+
+
+def test_t1070_ac3_berechne_zeit_pins_aus_locked_ankern(tmp_path):
+    """T1070 AC3: migrierte items (locked-Anker) werden korrekt als Pins gerendert.
+
+    uhr.berechne_zeit_pins() liest aufstehen+losgehen+anziehen aus
+    items mit locked=True (über items[]-SSoT, ROUTINE-26).
+    """
+    from routine import uhr as uhr_mod
+
+    path = _write_v1_routine_json(tmp_path, items_ohne_zeit=[])
+    cfg = config_mod.migriere_v1_anker(config_mod.resolve_data(path))
+
+    # Nach Migration: [Aufstehen(anker), Anziehen(vorlauf), Losgehen(anker)]
+    pins = uhr_mod.berechne_zeit_pins(cfg.items)
+
+    assert len(pins) == 3, "Erwarte 3 Pins: Aufstehen, Anziehen, Losgehen"
+
+    aufstehen_pin = pins[0]
+    assert aufstehen_pin.item_id == "aufstehen"
+    assert aufstehen_pin.typ == "anker"
+    assert aufstehen_pin.uhrzeit_label == "07:00"
+    assert aufstehen_pin.locked is True
+
+    anziehen_pin = pins[1]
+    assert anziehen_pin.item_id == "anziehen"
+    assert anziehen_pin.typ == "vorlauf"
+    # Vorlauf 10 Min VOR Losgehen 08:25 → 08:25 - 10 = 08:15
+    # (V1-Sema, ROUTINE-9 `abfahrtszeit − anzieh_vorlauf_min`,
+    # bezug="naechster_anker", Nic-Setzung 2026-06-22 #1070).
+    assert anziehen_pin.uhrzeit_label == "08:15"
+    assert anziehen_pin.minuten == 10
+
+    losgehen_pin = pins[2]
+    assert losgehen_pin.item_id == "losgehen"
+    assert losgehen_pin.typ == "anker"
+    assert losgehen_pin.uhrzeit_label == "08:25"
+    assert losgehen_pin.locked is True
