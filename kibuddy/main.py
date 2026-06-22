@@ -34,11 +34,12 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from tools import logsetup  # noqa: E402
+from tools.llm import LLMProvider  # noqa: E402 — LLMP-S8 Migration (T1082)
 
 if __package__:
     from . import config as config_mod
     from . import data_io, llm_service, stt_service, tts_service
-    from .providers.base import LLMProvider, ProviderError
+    from .llm_service import ProviderError  # LLMP-S8 Tuple-Re-Export, additiv-rückrollbar
     from .session_memory import SID_COOKIE, SessionMemory, SessionRegistry
     from .stt.azure_whisper import STTError
     from .tts.azure import TTSError
@@ -46,7 +47,7 @@ else:  # python3 kibuddy/main.py
     sys.path.insert(0, _REPO_ROOT)
     from kibuddy import config as config_mod
     from kibuddy import data_io, llm_service, stt_service, tts_service
-    from kibuddy.providers.base import LLMProvider, ProviderError
+    from kibuddy.llm_service import ProviderError  # LLMP-S8 Tuple-Re-Export
     from kibuddy.session_memory import SID_COOKIE, SessionMemory, SessionRegistry
     from kibuddy.stt.azure_whisper import STTError
     from kibuddy.tts.azure import TTSError
@@ -486,11 +487,19 @@ def parse_args(argv):
 
 
 def _build_llm(cfg) -> LLMProvider | None:
+    """Baut die LLM-Sicht über `tools.llm.get_chat` (LLMP-S8 KIBuddy-Migration, T1082).
+
+    Slot folgt LLMP-5: `kibuddy-anthropic-api-key` (Konsument-Vendor-Purpose).
+    Der API-Key kommt aus dem Zugangsdaten-Speicher (ZD-5); die heutige ENV-
+    `ANTHROPIC_API_KEY`-Quelle bleibt in `config.py` für die Boot-Lebendigkeits-
+    Probe (`if cfg.anthropic_key`), damit die Spike-Stufe-1 ohne ZD-Migration
+    läuft — die Lib selbst zieht über ZD nach Plan.
+    """
     if cfg.llm_provider == "claude":
         if not cfg.anthropic_key:
             return None
-        from .providers.claude import ClaudeProvider
-        return ClaudeProvider(api_key=cfg.anthropic_key, model=cfg.llm_model)
+        from tools.llm import get_chat
+        return get_chat(slot="kibuddy-anthropic-api-key")
     return None
 
 

@@ -10,12 +10,24 @@ parse_kibuddy_response() extrahiert beides; Fallback bei ungültigem JSON.
 import json
 import logging
 import os
-import re
+
+from tools.llm import LLMProvider
+from tools.llm import ProviderError as _LLMProviderError  # LLMP-S8 Migration (T1082)
 
 from . import data_io
 from .icon_render import validate_buzzwords
-from .providers.base import LLMProvider, ProviderError
+
+# LLMP-S8 additiv-rückrollbar: alter `kibuddy.providers.base.ProviderError` bleibt
+# stehen (forbidden_files), und Tests (`FakeLLM` in conftest) werfen ihn weiter.
+# Bis der Alt-Pfad nach Spike-Stufe-1-Erfolg gelöscht wird, deckt ein Tuple beide
+# Klassen — `except ProviderError` fängt dann egal, welche Klasse fliegt.
+from .providers.base import ProviderError as _LegacyProviderError
 from .session_memory import SessionMemory
+
+# Tuple, kein Type-Alias: gültig in `except` (CPython 3.13) und kompatibel mit
+# `raise` aus beiden Welten. Solange beide Klassen leben, ist das die naht-
+# minimale Übergangsform.
+ProviderError = (_LLMProviderError, _LegacyProviderError)
 
 logger = logging.getLogger(__name__)
 

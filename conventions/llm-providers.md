@@ -112,7 +112,16 @@ Vendor-/Konsumenten-Aufteilung — sie übergibt den Slot-Namen an
 welchem Slot lebt, ist Buddy-Konfiguration (z. B. EC-15 `provider`-Wert);
 die Lib trifft diese Entscheidung nicht.
 
-Konkretes Beispiel: `get_agent("eltern-chat-anthropic-api-key")` liest den
+Die Lib zerlegt den Slot-Namen am `-` und sucht das Vendor-Segment in der
+Liste der `_vendor/<vendor>.py`-Module: alles davor wird `caller` (für die
+JSONL-Telemetrie, LLMP-S4), alles danach `purpose` (für die ZD-Slot-
+Adresse). Damit dürfen Konsumenten-Namen Bindestriche enthalten
+(`eltern-chat`) — der Parser identifiziert den Vendor per Modul-Lookup,
+nicht per Positions-Annahme. Slots ohne bekanntes Vendor-Segment werfen
+beim Boot `LLMCapabilityError` (LLMP-S3) — kein stiller `ModuleNotFoundError`.
+
+Konkretes Beispiel: `get_agent("eltern-chat-anthropic-api-key")` löst zu
+caller `eltern-chat`, vendor `anthropic`, purpose `api-key` auf, liest den
 Slot via ZD-5, lädt `_vendor/anthropic.py`, prüft `CAPABILITIES` gegen das
 `get_agent`-Required-Set (LLMP-3) und liefert die Agent-Sicht — oder
 bricht mit `LLMCapabilityError` ab, falls der Vendor `tool_use` nicht
