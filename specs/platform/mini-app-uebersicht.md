@@ -197,6 +197,18 @@ ist die Übersicht aller Seiten und Apps:") + `web_app`-Inline-Button
 **„🏠 xbuddy öffnen"** mit der Mini-App-Übersicht-URL als
 `web_app_url`. Detail siehe SREG-5 Pivot (`seiten-registry.md`).
 
+**MAU-10 App-Bezeichnungen (EC-40 Achse B):** Mini-Apps · App-Übersicht
+· alle Apps · Übersicht · Seiten.
+
+**MAU-10 EC-40-Familien-Trigger.** Zusätzlich zu den heute via Bot-Menü-
+Pfad selten formulierten Direkt-Anfragen feuert MAU bei jeder Kombination
+aus dem Aktions-Vokabular EC-40 Achse A und einer MAU-Bezeichnung aus
+Achse B — Beispiele: „zeig mir alle Mini-Apps", „App-Übersicht öffnen",
+„welche Apps gibt es?", „Seiten zeigen", „Übersicht öffnen". Das LLM
+formuliert in keinem Fall einen Mini-App-Knopf als Markdown-Text in
+seiner Antwort (EC-41 — der Knopf entsteht über den Tool-Call, nicht
+in Prosa).
+
 ---
 
 ## E-MAU-1 — Verworfene Architektur-Alternativen
