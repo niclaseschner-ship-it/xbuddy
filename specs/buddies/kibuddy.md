@@ -520,7 +520,14 @@ in der Berater-Runde den richtigen Generalisierungs-Schnitt zu legen
 | `aufnahme.min-sek` | `0.5` | Mindest-Aufnahme-Dauer — kürzere Aufnahmen verwerfen (KIBUDDY-7/T864-AC3) | Config |
 | `azure.openai-endpoint` | (ENV-Pflicht) | Azure-OpenAI-Endpunkt | `AZURE_OPENAI_ENDPOINT` |
 | `azure.openai-key` | (ENV-Pflicht) | Azure-OpenAI-Key | `AZURE_OPENAI_API_KEY` |
-| `anthropic.api-key` | (ENV-Pflicht) | Anthropic-Key für `claude` | `ANTHROPIC_API_KEY` |
+| `anthropic.api-key` | (ENV-Pflicht) | Anthropic-Key für `claude` | `ANTHROPIC_API_KEY` + ZD-Slot `kibuddy-anthropic-api-key` (seit T1082, LLMP-5) |
+
+**Migrations-Notiz T1082:** KIBuddy ruft den LLM-Provider seit T1082 über
+`tools.llm.get_chat(slot="kibuddy-anthropic-api-key")`. Der ZD-Slot wird
+durch `tools/sync_kibuddy_env.py` aus der KEY_FALLBACKS-Quelle gespiegelt
+(`_sync_llm_slots()`, additiv-rückrollbar). Pflicht-Schritt bei Deploy +
+nach jedem Update der Zugangsdaten: `python3 tools/sync_kibuddy_env.py`
+laufen (analog `sync_hoerspiel_env.py`).
 
 Per-Instanz-Daten leben unter `/home/buddy/xbuddy-data/kibuddy/` (analog
 SVC-5 / RAT-14b1): `prompt.txt`, `config.json`. **Keine** Familien-
