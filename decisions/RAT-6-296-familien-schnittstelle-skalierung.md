@@ -69,6 +69,14 @@ Vertagt **mit Trigger** — neu aufmachen nur, wenn belegt:
   kaputten Tool-Args, Fake-Provider) fahren, das belegt, ob ein generischer Skill
   ohne eigenen Validator trägt.
 - **LLM-Gateway (Plattform-Dienst B):** ab KIBuddy (2. Konsument).
+
+  > **Spezifizierung der LLM-Form:** Siehe [RAT-20](RAT-20-llm-gateway-ist-lib.md),
+  > 2026-06-21. RAT-20 ersetzt die Form-Klausel „Plattform-Dienst B" für LLM
+  > durch **Plattform-Lib `tools/llm/`** (kein Service, keine HTTP-Fassade;
+  > eine Service-Form erst, wenn ein externer / nicht-Python-Konsument belegt
+  > ist). Der RAT-6-Trigger („ab KIBuddy") gilt unverändert. Wortlaut hier
+  > bleibt als historischer Diff-Anker.
+
 - **Kalender-Multi-Provider (Plattform-Dienst B):** ab belegtem Apple/CalDAV-Bedarf.
 
 Sonst: bei jeder neu aufkommenden „bauen wir jetzt die generische Mechanik?"-Frage
