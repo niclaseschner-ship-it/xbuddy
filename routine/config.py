@@ -369,7 +369,9 @@ def _synth_v1_anker(items, aufstehzeit_cfg, abfahrtszeit_cfg,
     )
 
     # Anziehen-Vorlauf-Item (ROUTINE-28 Welle B, MAD-1): nur wenn gesetzt.
-    # bezug="vorheriger_anker" = Vorlauf relativ zu Aufstehen (V2-kanonische Form).
+    # bezug="naechster_anker" = Vorlauf relativ zu Losgehen
+    # (V1-Anziehen-Semantik aus ROUTINE-9: `abfahrtszeit − anzieh_vorlauf_min`,
+    # Nic-Setzung 2026-06-22 #1070).
     middle_items = list(items)
     if isinstance(anzieh_vorlauf_min, int) and not isinstance(anzieh_vorlauf_min, bool) \
             and anzieh_vorlauf_min > 0:
@@ -379,7 +381,7 @@ def _synth_v1_anker(items, aufstehzeit_cfg, abfahrtszeit_cfg,
             piktogramm=_V1_ANKER_ANZIEHEN_PIKTO,
             quelle="default",
             zeit={"typ": "vorlauf", "minuten": anzieh_vorlauf_min,
-                  "bezug": "vorheriger_anker"},
+                  "bezug": "naechster_anker"},
         )
         middle_items = [anziehen_item, *middle_items]
 

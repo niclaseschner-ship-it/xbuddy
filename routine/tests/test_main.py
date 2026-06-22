@@ -152,3 +152,13 @@ def test_ac7_http_smoke_morgen_v1_migration(v1_client):
         "HTML muss aufstehzeit '07:00' enthalten (Synth-Anker aus V1-Feld)"
     assert "07:45" in html, \
         "HTML muss abfahrtszeit '07:45' enthalten (Synth-Anker aus V1-Feld)"
+
+    # T1070 (Nic-Setzung 2026-06-22): Anziehen-Vorlauf mit bezug=naechster_anker.
+    # V1-routine.json hat anzieh_vorlauf_min=5 → Anziehen-Pin zeigt 07:45 - 5 = 07:40
+    # (ROUTINE-9 V1-Sema: `abfahrtszeit − anzieh_vorlauf_min`).
+    # Watchdog-B3: AC7-HTTP-Smoke deckt jetzt auch Anziehen-Pfad ab.
+    assert "Anziehen" in html, \
+        "HTML muss Synth-Anziehen-Label enthalten (Welle-B Anziehen-Vorlauf-Item)"
+    assert "07:40" in html, \
+        "HTML muss Anziehen-Vorlauf-Uhrzeit '07:40' (abfahrtszeit 07:45 − vorlauf 5) " \
+        "enthalten (bezug=naechster_anker, Nic-Setzung 2026-06-22 #1070)"
