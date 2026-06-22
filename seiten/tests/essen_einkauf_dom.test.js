@@ -42,7 +42,7 @@ doc._registerEl("sheet-inhalt",  doc.createElement("div"));
 doc._registerEl("toast",         doc.createElement("div"));
 
 const einkauf = require("../static/essen-einkauf.js");
-const { tokenisiereQuickAdd, sektionHeader, _marker, _itemRangfolge } = einkauf;
+const { tokenisiereQuickAdd, sektionHeader, _marker, _itemRangfolge, _bildHtml } = einkauf;
 
 // ── Fixture-Daten ─────────────────────────────────────────────────────────────
 
@@ -197,29 +197,50 @@ test("ESSEN-31 Quick-Add Komma-Liste: tokenisiereQuickAdd zerlegt korrekt", () =
 });
 
 /**
- * Test 7 — ESSEN-31 Bild-Pfad ARASAAC + Bild-Lade-Fehler-Fallback:
- * src enthält /display/_shared/icons/arasaac/<bild_ref>.png (Same-Origin).
- * Bild-Lade-Fehler darf kein UI-Bruch erzeugen.
+ * Test 7 — ESSEN-31 Bild-Pfad ARASAAC mit gesetztem bild_ref:
+ * `_bildHtml("98765", "item-bild")` liefert <img>-Markup mit Same-Origin-Pfad
+ * + onerror-Handler, der bei 404 auf den Placeholder-Div fällt.
  */
-test("ESSEN-31 Bild-Pfad ARASAAC + Bild-Lade-Fehler-Fallback", () => {
-  const bild_ref = "98765";
-  const bildSrc  = "/display/_shared/icons/arasaac/" + encodeURIComponent(bild_ref) + ".png";
+test("ESSEN-31 Bild-HTML: gesetzter bild_ref → <img> mit Same-Origin-Pfad", () => {
+  const html = _bildHtml("98765", "item-bild");
 
-  assert.ok(bildSrc.startsWith("/display/_shared/icons/arasaac/"), "Same-Origin-Prefix korrekt");
-  assert.ok(bildSrc.endsWith(".png"),                              "Endet auf .png");
-  assert.ok(bildSrc.includes(bild_ref),                           "bild_ref in Pfad");
-  assert.ok(!bildSrc.includes("http"),                             "Kein externer Host (kein CORS)");
+  assert.ok(html.startsWith('<img class="item-bild"'),            "img-Tag mit korrekter Klasse");
+  assert.ok(html.includes('src="/display/_shared/icons/arasaac/98765.png"'),
+                                                                  "Same-Origin-Pfad mit bild_ref");
+  assert.ok(html.includes('onerror='),                            "onerror-Handler gesetzt (404-Fallback)");
+  assert.ok(html.includes("item-bild-placeholder"),               "onerror fällt auf item-bild-placeholder");
+  assert.ok(!html.includes("http"),                                "Kein externer Host (kein CORS)");
+});
 
-  // Bild-Lade-Fehler: onerror → Placeholder, kein UI-Bruch
-  const imgEl = doc.createElement("img");
-  imgEl.src     = bildSrc;
-  imgEl.onerror = function() {
-    imgEl.src = "/display/_shared/icons/arasaac/0.png"; // Placeholder
-  };
+/**
+ * Test 8 — Frontend-Guard (#1011/#1074): leerer bild_ref → direkt Placeholder
+ * statt <img> mit leerer URL (verhindert 404 auf /display/_shared/icons/arasaac/.png).
+ */
+test("#1011/#1074: leerer bild_ref liefert Placeholder-Div, kein 404-img", () => {
+  const htmlLeer    = _bildHtml("",         "item-bild");
+  const htmlNull    = _bildHtml(null,       "item-bild");
+  const htmlUndef   = _bildHtml(undefined,  "item-bild");
 
-  assert.doesNotThrow(() => {
-    if (typeof imgEl.onerror === "function") imgEl.onerror();
-  }, "Bild-Lade-Fehler wirft keine Exception (kein UI-Bruch)");
+  for (const [name, html] of [["leer", htmlLeer], ["null", htmlNull], ["undefined", htmlUndef]]) {
+    assert.ok(html.includes("item-bild-placeholder"),
+              `bild_ref=${name} → Placeholder-Klasse`);
+    assert.ok(!html.includes("<img"),
+              `bild_ref=${name} → kein <img>-Tag (verhindert 404)`);
+    assert.ok(!html.includes("arasaac/.png"),
+              `bild_ref=${name} → kein leerer ARASAAC-Pfad`);
+  }
+});
 
-  assert.equal(imgEl.src, "/display/_shared/icons/arasaac/0.png", "Placeholder nach onerror gesetzt");
+/**
+ * Test 9 — Frontend-Guard für Zutat-Sheet (#1074):
+ * `_bildHtml(bild_ref, "zutat-bild")` nutzt die zutat-Variante (kleinere Skala).
+ */
+test("#1074: Sheet-Zutat-Bild nutzt zutat-bild-placeholder bei leerem bild_ref", () => {
+  const htmlMitRef = _bildHtml("11751", "zutat-bild");
+  assert.ok(htmlMitRef.includes('<img class="zutat-bild"'), "zutat-bild-Klasse");
+  assert.ok(htmlMitRef.includes("zutat-bild-placeholder"),  "onerror fällt auf zutat-bild-placeholder");
+
+  const htmlLeer = _bildHtml("", "zutat-bild");
+  assert.ok(htmlLeer.includes("zutat-bild-placeholder"),    "Sheet: leerer bild_ref → zutat-bild-placeholder");
+  assert.ok(!htmlLeer.includes("<img"),                      "Sheet: kein <img>-Tag bei leerem bild_ref");
 });
