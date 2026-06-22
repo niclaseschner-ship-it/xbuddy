@@ -179,7 +179,9 @@ def _baue_auswahl_prompt(gerichte, freitext):
     """Baut den LLM-Prompt für die Auswahl-Phase (EC-10 Auswahl-Vertrag).
 
     Format: nummerierte Liste der Gerichte + Freitext-Anfrage der Familie.
-    Erwartet: JSON-Array der Gericht-IDs.
+    Erwartet: JSON-Array der Gericht-IDs. Bei vagen/unklaren Anfragen leeres
+    Array → der Skill fragt nach (Mistral-Robustheit, Refs #816 Live-Bug
+    2026-06-22: Mistral lieferte alle 6 IDs auf »2 und 3« zurück).
     """
     zeilen = []
     for i, g in enumerate(gerichte, start=1):
@@ -188,9 +190,22 @@ def _baue_auswahl_prompt(gerichte, freitext):
     return (
         "Gerichte-Liste:\n%s\n\n"
         "Familien-Anfrage: %s\n\n"
-        "Welche Gerichte sollen gelöscht werden? "
-        "Antworte NUR mit einem JSON-Array der Gericht-IDs aus der Liste, "
-        "z. B. [\"1\", \"3\"]. Keine IDs erfinden, nur IDs aus der Liste verwenden."
+        "Welche Gerichte sollen gelöscht werden?\n"
+        "Interpretiere die Familien-Anfrage so:\n"
+        "- Ordnungszahlen oder Listen-Positionen (»die zweite«, »2 und 3«, "
+        "»die ersten drei«) → Listen-Position oben, dann zur zugehörigen id "
+        "mappen. »2 und 3« heißt: Position 2 und Position 3 aus der Liste.\n"
+        "- Item-Namen (»Lasagne«, »die Pasta«) → match per label.\n"
+        "- Mischformen (»die erste und die Lasagne«) → beide mappen.\n"
+        "- Vage Anfragen (»alle«, »alles«, »irgendwas«, »wahllos«) → "
+        "leeres Array [] zurückgeben, NICHT raten.\n"
+        "- Mehrdeutige Anfragen → leeres Array [] zurückgeben.\n"
+        "WICHTIG: Antworte mit der KLEINSTEN sicheren Menge. Lieber leeres "
+        "Array bei Unsicherheit als zu viele IDs. Niemals mehr IDs zurückgeben, "
+        "als die Familie wirklich benannt hat.\n"
+        "Antworte NUR mit einem JSON-Array der Gericht-IDs aus der Liste oben, "
+        "z. B. [\"1\", \"3\"] oder []. Keine IDs erfinden, nur IDs aus der "
+        "Liste verwenden. Kein Text drumherum, nur das JSON-Array."
     ) % (liste_text, freitext)
 
 
