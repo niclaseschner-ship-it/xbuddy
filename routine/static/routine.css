@@ -518,6 +518,94 @@ body {
   color: var(--kids-ink-soft);
 }
 
+/* ── V2 ZEIT-PINS (ROUTINE-26): items[]-Pins für anker + vorlauf ──────────── */
+/*
+   Welle A (#726): zusätzlich zu den V1-Event-Pins (.event-pin) rendert das
+   Template eine zeit-pins-zone für migrierte items[] mit zeit-Block. Welle B
+   (#1070) wird die V1-Event-Pins entfernen — bis dahin liegen die zeit-Pins
+   visuell als zusätzlicher Strang in der timeline-section.
+
+   Pin-Skala unterscheidet anker (volle Pikto-Größe, analog .pin-pikto) und
+   vorlauf (kleinere Skala — ROUTINE-26 "feinerer visueller Marker").
+   Locked-Anker tragen ein Schloss-Marker im Label (unverrückbar-Semantik).
+*/
+.zeit-pins-zone {
+  position: absolute;
+  top: 8%;
+  right: calc(50% + 48px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-end;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.zeit-pin {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--kids-paper);
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--kids-border-soft);
+  font-family: var(--font-hand);
+  box-shadow: var(--shadow-hand-sm);
+}
+
+/* Default = vorlauf-Skala (kleinere Tile, ROUTINE-26 "feinerer Marker"). */
+.zeit-pin-pikto {
+  height: clamp(32px, 6cqh, 44px);
+  aspect-ratio: 1;
+  border-radius: var(--radius-md);
+  background: var(--kids-paper);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.zeit-pin-pikto img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* Anker-Pins: volle Pikto-Skala (analog .pin-pikto, ROUTINE-19/-26). */
+.zeit-pin-anker .zeit-pin-pikto {
+  height: clamp(48px, 10cqh, 64px);
+  border: 3px solid var(--kids-border-soft);
+  border-radius: var(--radius-xl);
+}
+
+/* Locked-Anker (Aufstehen/Losgehen): weicherer Hintergrund + Schloss-Marker
+   vor dem Label macht die "unverrückbar"-Semantik visuell sichtbar. */
+.zeit-pin-locked {
+  background: var(--kids-weekend-bg);
+}
+
+.zeit-pin-locked .zeit-pin-label::before {
+  content: "🔒 ";
+  opacity: 0.6;
+  margin-right: 2px;
+  font-size: 0.85em;
+}
+
+.zeit-pin-label {
+  font-size: var(--fs-16, var(--fs-14));
+  color: var(--kids-ink);
+}
+
+.zeit-pin-time {
+  font-size: var(--fs-14);
+  color: var(--kids-ink-soft);
+  margin-left: var(--space-2);
+  font-variant-numeric: tabular-nums;
+}
+
+
 /* ── ATTRIBUTION FOOTER (ROUTINE-10/ICONS-5) ────────────────────────────────── */
 .attribution-footer {
   position: fixed;
