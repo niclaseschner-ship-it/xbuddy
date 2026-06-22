@@ -23,6 +23,13 @@ Drei-Phasen-Klausel (EC-10, ESSEN-19b):
 
 Auswahl-Vertrag (EC-10): `llm_fn` bekommt nummerierte Liste + Freitext,
 gibt JSON-Array von IDs zurück. Halluzinierte IDs → SIGNAL_UNBEKANNTE_IDS.
+
+n=1-Marker (EC-10 Drei-Phasen-Klausel, specs/platform/eltern-chat.md:743):
+Dieser Skill ist heute der einzige Vertreter der Drei-Phasen-Sorte. **Bei n=2**
+(termin-loeschen / plan-aktivitaet-loeschen o.ä.) wandern SIGNAL_*/AKTION_*-
+Konstanten + Prompt-Format-Vorschrift (`_baue_auswahl_prompt`) in
+`conventions/multi-item-loesch.md`, dieses Modul behält nur die Skill-eigene
+Auswahl-/Bestätigungs-Wortwahl. Wer n=2-Skill anlegt, hebt die Convention.
 """
 
 import json
