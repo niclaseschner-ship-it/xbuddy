@@ -518,44 +518,39 @@ def test_acv1_zeitstrahl_ist_vertikal(client):
     assert "top:" in body
 
 
-def test_acv2_events_alternierende_seiten(client):
-    """AC-V2 (#335): Event-Icons abwechselnd links/rechts — aufstehen links,
-    anziehen rechts, losgehen links; je mit top:% an proportionaler Position.
+def test_acv2_events_in_zeit_pins_zone(client):
+    """T1070 AC1/AC4 (ehem. AC-V2 #335): V1-Hartcode-Event-Pins entfernt;
+    Aufstehen/Anziehen/Losgehen kommen ausschließlich aus der zeit-pins-zone
+    (ROUTINE-28 Welle B, items[]-SSoT).
     """
     body = client.get("/display/routine/morgen").get_data(as_text=True)
-    # Beide Seiten-Klassen gesetzt
-    assert "event-pin-links" in body
-    assert "event-pin-rechts" in body
-    # Alternation: genau zwei links (aufstehen, losgehen), eine rechts (anziehen)
-    assert body.count("event-pin-links") == 2
-    assert body.count("event-pin-rechts") == 1
-    # Drei Uhrzeit-Labels vorhanden (07:00 / 07:37 / 07:45 in Demo-Config)
-    assert "07:00" in body   # aufstehen (Default aufstehzeit)
-    assert "07:37" in body   # anziehen (07:45 - 8 Min)
-    assert "07:45" in body   # losgehen
-    # Pins per top:% petrankert (vertikale Achse), nicht left:%
-    assert "top: 0%" in body          # aufstehen oben
-    assert "top: 100%" in body        # losgehen unten
+    # AC1: KEINE V1-Hartcode-event-pin-Klassen mehr im HTML
+    assert "event-pin-links" not in body, \
+        "V1-Hartcode-event-pin-links muss nach Welle B entfernt sein"
+    assert "event-pin-rechts" not in body, \
+        "V1-Hartcode-event-pin-rechts muss nach Welle B entfernt sein"
+    # AC4: Anker-Uhrzeiten jetzt aus zeit-pins-zone (Synth-Anker)
+    assert "07:00" in body   # Aufstehen-Anker aus migriere_v1_anker
+    assert "07:45" in body   # Losgehen-Anker aus migriere_v1_anker
+    # Pins kommen aus der zeit-pins-zone
+    assert "zeit-pins-zone" in body
+    assert "Aufstehen" in body
+    assert "Losgehen" in body
 
 
-def test_acv3_anziehen_losgehen_verschiedene_seiten(client):
-    """AC-V3 (#335): anziehen (rechts) und losgehen (links) liegen strukturell auf
-    verschiedenen Seiten des Balkens → kein Overlap trotz 8 Min Abstand.
-
-    Geprüft am Markup: der Anziehen-Pin trägt event-pin-rechts, der Losgehen-Pin
-    event-pin-links. Beide Piktogramme + Uhrzeiten sind voll vorhanden.
+def test_acv3_pins_nur_in_zeit_pins_zone(client):
+    """T1070 AC1 (ehem. AC-V3 #335): kein doppelter Pin, Piktogramme ausschließlich
+    über zeit-pins-zone; milestone-pin-Altlasten ebenfalls entfernt.
     """
     body = client.get("/display/routine/morgen").get_data(as_text=True)
-    # Anziehen-Pin: rechts-Klasse im Abschnitt um das Anziehen-Piktogramm (alt-Text)
-    anziehen_idx = body.index('alt="Anziehen"')
-    fenster = body[anziehen_idx - 300:anziehen_idx + 100]
-    assert "event-pin-rechts" in fenster
-    # Losgehen-Pin: links-Klasse im Abschnitt um das Losgehen-Piktogramm (alt-Text)
-    losgehen_idx = body.index('alt="Losgehen"')
-    fenster_l = body[losgehen_idx - 300:losgehen_idx + 100]
-    assert "event-pin-links" in fenster_l
-    # Kein horizontaler Pin-Code mehr (alte milestone-pin-Klassen entfernt)
+    # AC1: Keine V1-Hartcode-event-pin-Blöcke
+    assert "event-pin" not in body, \
+        "Alle event-pin-Klassen müssen nach Welle B entfernt sein (AC1)"
+    # Keine Altlasten
     assert "milestone-pin" not in body
+    # Anziehen-Piktogramm erscheint NUR in der zeit-pins-zone (nicht doppelt)
+    assert body.count('alt="Anziehen"') <= 1, \
+        "Anziehen-Piktogramm darf maximal einmal vorkommen (kein Doppel-Pin)"
 
 
 def test_routine9_phasentext_im_view_modell(demo_config):

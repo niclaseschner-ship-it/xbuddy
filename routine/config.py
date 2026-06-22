@@ -280,9 +280,9 @@ def resolve_data(data_path=None, env=None):
     )
 
 
-# ARASAAC-IDs der V1-Anker (Lego-Schuld V1.1 — analog
-# routine/templates/morgen.html, eigener Cleanup-Folge laut ROUTINE-20).
+# ARASAAC-IDs der V1-Anker (ROUTINE-28 Welle B — V1-Hartcode-Cleanup).
 _V1_ANKER_AUFSTEHEN_PIKTO = "8152"
+_V1_ANKER_ANZIEHEN_PIKTO = "6627"
 _V1_ANKER_LOSGEHEN_PIKTO = "8142"
 
 
@@ -319,17 +319,24 @@ def migriere_v1_anker(cfg):
     KEIN locked-Anker tragen — dann gewinnt der user-Eintrag implizit, weil
     seine ID den Synth-Eintrag in items.py vorgehen würde (Schreib-Pfad).
     """
-    items_neu = _synth_v1_anker(cfg.items, cfg.aufstehzeit, cfg.abfahrtszeit)
+    items_neu = _synth_v1_anker(
+        cfg.items, cfg.aufstehzeit, cfg.abfahrtszeit, cfg.anzieh_vorlauf_min)
     if items_neu is cfg.items:
         return cfg
     import dataclasses
     return dataclasses.replace(cfg, items=items_neu)
 
 
-def _synth_v1_anker(items, aufstehzeit_cfg, abfahrtszeit_cfg):
-    """Erzeugt synth. End-Anker aus V1-Feldern, wenn items[] keine eigenen
-    locked-Anker trägt. Liefert die items-Liste (neu, falls Synth angewandt;
+def _synth_v1_anker(items, aufstehzeit_cfg, abfahrtszeit_cfg,
+                     anzieh_vorlauf_min=None):
+    """Erzeugt synth. End-Anker (+ Anziehen-Vorlauf-Item) aus V1-Feldern,
+    wenn items[] keine eigenen locked-Anker trägt (ROUTINE-28 Welle B).
+
+    Liefert die items-Liste (neu, falls Synth angewandt;
     sonst das Original, damit Aufrufer per Identitäts-Vergleich erkennen können).
+
+    anzieh_vorlauf_min: int > 0 → Anziehen-Vorlauf-Item wird zwischen
+    Aufstehen und Losgehen eingefügt (MAD-1: nur wenn gesetzt und > 0).
     """
     hat_locked_anker = any(
         isinstance(it.zeit, dict)
@@ -360,7 +367,23 @@ def _synth_v1_anker(items, aufstehzeit_cfg, abfahrtszeit_cfg):
         quelle="default",
         zeit={"typ": "anker", "uhrzeit": losgehen_str, "locked": True},
     )
-    return [aufstehen_item, *items, losgehen_item]
+
+    # Anziehen-Vorlauf-Item (ROUTINE-28 Welle B, MAD-1): nur wenn gesetzt.
+    # bezug="vorheriger_anker" = Vorlauf relativ zu Aufstehen (V2-kanonische Form).
+    middle_items = list(items)
+    if isinstance(anzieh_vorlauf_min, int) and not isinstance(anzieh_vorlauf_min, bool) \
+            and anzieh_vorlauf_min > 0:
+        anziehen_item = RoutineItem(
+            id="anziehen",
+            label="Anziehen",
+            piktogramm=_V1_ANKER_ANZIEHEN_PIKTO,
+            quelle="default",
+            zeit={"typ": "vorlauf", "minuten": anzieh_vorlauf_min,
+                  "bezug": "vorheriger_anker"},
+        )
+        middle_items = [anziehen_item, *middle_items]
+
+    return [aufstehen_item, *middle_items, losgehen_item]
 
 
 # ============================================================
