@@ -685,9 +685,17 @@ class TestV2ZeitBlockValidierung:
             items_mod._validate_zeit_block("x", "07:00")
 
     def test_v2_zeit_bezug_unbekannt_4xx(self):
+        # ROUTINE-24 erlaubt jetzt vorheriger_anker UND naechster_anker (#1070).
+        # Ungültig bleibt jeder andere Wert.
         with pytest.raises(items_mod.ItemsError, match="bezug"):
             items_mod._validate_zeit_block(
-                "x", {"typ": "vorlauf", "minuten": 5, "bezug": "naechster_anker"})
+                "x", {"typ": "vorlauf", "minuten": 5, "bezug": "irgendwas_anderes"})
+
+    def test_v2_zeit_bezug_naechster_anker_gueltig(self):
+        # Nic-Setzung 2026-06-22 #1070: naechster_anker = V1-Anziehen-Semantik.
+        normalized = items_mod._validate_zeit_block(
+            "x", {"typ": "vorlauf", "minuten": 5, "bezug": "naechster_anker"})
+        assert normalized == {"typ": "vorlauf", "minuten": 5, "bezug": "naechster_anker"}
 
 
 # ============================================================

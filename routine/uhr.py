@@ -144,14 +144,18 @@ def berechne_zeit_pins(items):
     Liefert: list[ZeitPin] — nur items mit zeit.typ in ('anker','vorlauf').
              Reihenfolge = items[]-Reihenfolge (oben=früh, unten=spät).
 
-    Vorlauf-Berechnung: '<vorheriger_anker.uhrzeit> − <minuten>'.
-    Kein vorheriger Anker (Vorlauf am Listen-Anfang) → '—:—' (MAD-1).
+    Vorlauf-Berechnung (ROUTINE-24, Nic-Setzung 2026-06-22 #1070):
+      - `bezug='vorheriger_anker'` (Default): `vorheriger_anker.uhrzeit − minuten`.
+      - `bezug='naechster_anker'`: `naechster_anker.uhrzeit − minuten`
+        (V1-Anziehen-Semantik, ROUTINE-9 `abfahrtszeit − anzieh_vorlauf_min`).
+    Fehlt der Referenz-Anker → '—:—' (MAD-1).
     Ungültige Werte (kaputte uhrzeit, negative minuten) → still übersprungen
     (Lese-Robustheit, Persistenz validiert vorab in items._validate_zeit_block).
     """
+    items_liste = list(items)  # für naechster_anker-Look-Ahead materialisiert
     pins = []
     vorheriger_anker_uhrzeit = None  # 'HH:MM' oder None
-    for item in items:
+    for idx, item in enumerate(items_liste):
         # Sowohl RoutineItem als auch dict tolerieren (Render-Naht)
         zeit = getattr(item, "zeit", None)
         if zeit is None and isinstance(item, dict):
@@ -177,13 +181,37 @@ def berechne_zeit_pins(items):
             minuten = zeit.get("minuten")
             if not isinstance(minuten, int) or isinstance(minuten, bool) or minuten < 0:
                 continue
-            uhrzeit_label = _vorlauf_label(vorheriger_anker_uhrzeit, minuten)
+            bezug = zeit.get("bezug", "vorheriger_anker")
+            if bezug == "naechster_anker":
+                ref_uhrzeit = _finde_naechster_anker_uhrzeit(items_liste, idx)
+            else:
+                ref_uhrzeit = vorheriger_anker_uhrzeit
+            uhrzeit_label = _vorlauf_label(ref_uhrzeit, minuten)
             pins.append(ZeitPin(
                 item_id=item_id, label=label, piktogramm=str(pikto),
                 typ="vorlauf", uhrzeit_label=uhrzeit_label,
                 minuten=minuten, locked=False,
             ))
     return pins
+
+
+def _finde_naechster_anker_uhrzeit(items_liste, ab_idx):
+    """Sucht den ersten Anker mit gültiger uhrzeit ab Position ab_idx+1.
+
+    Liefert die 'HH:MM'-uhrzeit oder None (kein Anker mehr danach).
+    """
+    for nachfolger in items_liste[ab_idx + 1:]:
+        zeit = getattr(nachfolger, "zeit", None)
+        if zeit is None and isinstance(nachfolger, dict):
+            zeit = nachfolger.get("zeit")
+        if not isinstance(zeit, dict):
+            continue
+        if zeit.get("typ") != "anker":
+            continue
+        uhrzeit = zeit.get("uhrzeit")
+        if isinstance(uhrzeit, str):
+            return uhrzeit
+    return None
 
 
 def _vorlauf_label(vorheriger_anker_uhrzeit, minuten):

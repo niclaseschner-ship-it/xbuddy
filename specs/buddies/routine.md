@@ -925,23 +925,32 @@ Ein Routine-Punkt (`ROUTINE-4`) bekommt einen optionalen `zeit`-Sub-Block:
   Optional `locked: true` schützt das Datenfeld vor Mini-App-Edit
   (V1-Kompat-Anker: `aufstehzeit`/`abfahrtszeit` werden zu
   `locked: true`-Ankern; siehe `ROUTINE-28`).
-- **`typ: vorlauf`** → relativ zum **letzten Anker davor** in der
-  items[]-Ordnung (`bezug: "vorheriger_anker"`), in Minuten. Robust bei
-  End-Vorläufen und intuitiv ("10 Min nach Aufstehen Zähne putzen").
+- **`typ: vorlauf`** → relativ zu einem Anker in der items[]-Ordnung,
+  in Minuten. Zwei zulässige `bezug`-Formen:
+  - `bezug: "vorheriger_anker"`: Pin-Uhrzeit =
+    `vorheriger_anker.uhrzeit − minuten`. Lesart: „X Min vor dem
+    letzten Anker davor" (z. B. „5 Min vor dem Frühstück Zähne putzen").
+    Fehlt der vorherige Anker (Vorlauf am Listen-Anfang), zeigt das
+    Display „—:—".
+  - `bezug: "naechster_anker"` (Nic-Setzung 2026-06-22, Folge T1070):
+    Pin-Uhrzeit = `naechster_anker.uhrzeit − minuten`. Lesart: „X Min
+    vor dem nächsten Anker danach" (z. B. „5 Min vor Losgehen Anziehen").
+    Ist die V1-Anziehen-Semantik (ROUTINE-9 `abfahrtszeit −
+    anzieh_vorlauf_min`) und wird in ROUTINE-28 Welle B für die
+    Migration genutzt. Fehlt der nächste Anker (Vorlauf hinter dem
+    letzten Anker), zeigt das Display „—:—".
 
 **items[]-Reihenfolge = Zeitlinie.** Der Display-Render rechnet
-Vorlauf-Uhrzeit live aus dem letzten Anker davor + minuten. Gibt es
-keinen Anker davor (Vorlauf am Anfang der Liste), zeigt das Display
-„—:—" (MAD-1-Disziplin: keine Fake-Daten).
+Vorlauf-Uhrzeit live aus dem Referenz-Anker − minuten. Fehlt der
+Referenz-Anker, zeigt das Display „—:—" (MAD-1-Disziplin: keine
+Fake-Daten).
 
 **Verworfen:** (a) eigene `zeit_anker[]`-Liste neben items[] — zwei
 Sub-Ressourcen, getrennte Order, mehr Stellen für Drift; bricht
-items[]-SSoT. (b) `bezug: "naechster_anker"` — Vorlauf am Listen-Ende
-hätte keinen „nächsten"; vorheriger_anker hat immer einen verfügbaren
-oder fällt sauber auf „—:—". (c) Vorlauf relativ zum Listen-Start
-(absolute Position) — verliert die intuitive Lesart „X Min nach Y".
+items[]-SSoT. (b) Vorlauf relativ zum Listen-Start (absolute Position)
+— verliert die intuitive Lesart „X Min vor Y".
 
-*Tickets:* #726
+*Tickets:* #726 · #1070
 
 ### ROUTINE-25 — Schreib-API-Erweiterung (kein neuer Endpunkt)
 
