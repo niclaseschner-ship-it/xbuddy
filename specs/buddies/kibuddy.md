@@ -784,7 +784,13 @@ Geräte-Display geht später schlafen (Mikro-Erlaubnis bleibt im PWA-Scope).
 - **OPEN-KIBUDDY-F** — Azure-Key + LLM-Config in Plattform-Schicht
   zentralisieren (RAT-6-„LLM-Gateway"-Trigger). **Nic-Auftrag in dieser
   Werft (2026-06-15):** als Folge-Ticket zur Berater-Runde nach V1-Bau
-  vorbereiten. KIBuddy V1 fährt mit per-App-ENV.
+  vorbereiten. KIBuddy V1 fährt mit per-App-ENV. *(geschlossen via
+  [RAT-20](../../decisions/RAT-20-llm-gateway-ist-lib.md), 2026-06-21:
+  LLM-Provider-Schicht als Lib `tools/llm/` ratifiziert mit Migrations-
+  Reihenfolge **KIBuddy zuerst** → hoerspiel → eltern-chat; Verhalten in
+  `specs/platform/llm-providers.md`, Bauregeln in
+  `conventions/llm-providers.md` LLMP-1..LLMP-5. Migration ist eigene
+  Werft, nicht Teil von RAT-20.)*
 - **OPEN-KIBUDDY-G** — Antwort-Cache für idempotente Fragen.
 - **OPEN-KIBUDDY-H** — Mehrturn-Konversations-Kontext (Sokratisch über
   mehrere Runden hinweg).
