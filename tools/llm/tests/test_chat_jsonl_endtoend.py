@@ -146,3 +146,104 @@ def test_kibuddy_chat_provider_error_propagates_and_no_jsonl(jsonl_path):
 
     # Bei Fehler vor `_emit_telemetry` → kein JSONL.
     assert not jsonl_path.exists()
+
+
+# ----------------------------------------------------------------------
+#  T1082-S2 Fix 2 / Fix 3 — echter ZD-Lookup-Pfad (kein resolve_api_key-Stub)
+# ----------------------------------------------------------------------
+
+
+@pytest.fixture
+def zd_store_path(tmp_path, monkeypatch):
+    """Lenkt `tools.zugangsdaten` auf eine Tmp-ZD-Datei (Test-Naht)."""
+    zd_path = tmp_path / "zugangsdaten.json"
+    monkeypatch.setenv("ZUGANGSDATEN_STORE_FILE", str(zd_path))
+    return zd_path
+
+
+def test_kibuddy_chat_real_slot_lookup_succeeds(jsonl_path, zd_store_path):
+    """AC4: End-to-End mit echtem `resolve_api_key`-Pfad (ohne Stub).
+
+    Belegt: wenn `kibuddy-anthropic-api-key` in der ZD-Datei liegt, kommt
+    der Boot durch und der Call landet im JSONL. Damit ist der Fix-2-
+    Migrationspfad (Spiegel-Slot via sync_kibuddy_env.py → tools.llm
+    findet den Slot) Test-gedeckt.
+    """
+    import json as _json
+    # ZD-Datei mit LLMP-5-Slot beschreiben (Spiegel-Form wie nach Fix 2).
+    zd_store_path.write_text(_json.dumps({
+        "kibuddy-anthropic-api-key": "sk-real-from-zd",
+    }), encoding="utf-8")
+
+    fake_anthropic = MagicMock()
+    fake_client = MagicMock()
+    fake_anthropic.Anthropic.return_value = fake_client
+    fake_anthropic.APIError = Exception
+    fake_client.messages.create.return_value = _make_fake_anthropic_response("Hallo.")
+
+    # KEIN resolve_api_key-Stub — der Lookup geht echt durch tools.zugangsdaten.
+    with patch.dict(sys.modules, {"anthropic": fake_anthropic}):
+        from tools.llm import get_chat
+        chat = get_chat(slot="kibuddy-anthropic-api-key")
+        text = chat.complete_multiturn(system="S.", turns=[], user_message="F?")
+
+    assert text == "Hallo."
+    # Der echte API-Key aus der ZD-Datei wurde an das SDK durchgereicht.
+    fake_anthropic.Anthropic.assert_called_once_with(api_key="sk-real-from-zd")
+    # JSONL-Eintrag mit caller=kibuddy (Tier-2-Projektion).
+    parsed = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
+    assert parsed["caller"] == "kibuddy"
+    assert parsed["slot"] == "kibuddy-anthropic-api-key"
+
+
+def test_missing_slot_in_zd_raises_at_boot(zd_store_path):
+    """AC4: fehlender Slot in der ZD-Datei wirft beim `get_chat(...)`-Boot,
+    nicht erst beim ersten `complete_multiturn`-Call (LLMP-S3/ZD-5).
+
+    Anti-Regression: würde der Boot stillschweigend durchgehen und erst
+    beim ersten Call kippen, wäre der Watchdog-Befund 2 (Live-Boot-
+    Tauglichkeit) nicht wirklich geschlossen.
+    """
+    import json as _json
+    # ZD-Datei existiert, aber **ohne** den kibuddy-anthropic-api-key-Slot.
+    zd_store_path.write_text(_json.dumps({
+        "irgendwas-anderes": "x",
+    }), encoding="utf-8")
+
+    from tools.llm import LLMCapabilityError, get_chat
+    with pytest.raises(LLMCapabilityError) as exc_info:
+        get_chat(slot="kibuddy-anthropic-api-key")
+    # Klartext nennt Slot und Zugangsdaten-Bezug.
+    msg = str(exc_info.value)
+    assert "kibuddy-anthropic-api-key" in msg
+    assert "Zugangsdaten" in msg or "Slot" in msg or "api-key" in msg.lower()
+
+
+def test_eltern_chat_slot_caller_is_eltern_chat(jsonl_path, zd_store_path):
+    """Fix-1/Fix-3 in einem: bindestrichiger Slot `eltern-chat-…` ergibt
+    `caller=eltern-chat` in der JSONL (LLMP-S4 Tier-2-Projektion).
+
+    Vorher (T1082-S1) hätte der naive Parser `caller=eltern` und
+    `vendor=chat` geliefert; der Boot wäre an `_vendor/chat.py` gescheitert.
+    Mit Fix 1 ist der Pfad sauber, mit Fix 3 ist der Caller in der JSONL
+    in der LLMP-S4-konformen Form.
+    """
+    import json as _json
+    zd_store_path.write_text(_json.dumps({
+        "eltern-chat-anthropic-api-key": "sk-ec-key",
+    }), encoding="utf-8")
+
+    fake_anthropic = MagicMock()
+    fake_client = MagicMock()
+    fake_anthropic.Anthropic.return_value = fake_client
+    fake_anthropic.APIError = Exception
+    fake_client.messages.create.return_value = _make_fake_anthropic_response("ok")
+
+    with patch.dict(sys.modules, {"anthropic": fake_anthropic}):
+        from tools.llm import get_chat
+        chat = get_chat(slot="eltern-chat-anthropic-api-key")
+        chat.complete_multiturn(system="S.", turns=[], user_message="F?")
+
+    parsed = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
+    assert parsed["caller"] == "eltern-chat"
+    assert parsed["slot"] == "eltern-chat-anthropic-api-key"
