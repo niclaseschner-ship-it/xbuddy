@@ -234,12 +234,14 @@ def test_t1070_ac2_synth_drei_items_mit_anzieh_vorlauf(tmp_path):
     assert aufstehen.piktogramm == config_mod._V1_ANKER_AUFSTEHEN_PIKTO
 
     # Position 1: Anziehen-Vorlauf
+    # bezug="naechster_anker" = Vorlauf vor Losgehen (V1-Sema ROUTINE-9,
+    # Nic-Setzung 2026-06-22 #1070)
     anziehen = cfg.items[1]
     assert anziehen.id == "anziehen"
     assert anziehen.piktogramm == config_mod._V1_ANKER_ANZIEHEN_PIKTO
     assert anziehen.zeit["typ"] == "vorlauf"
     assert anziehen.zeit["minuten"] == 10
-    assert anziehen.zeit.get("bezug") == "vorheriger_anker"
+    assert anziehen.zeit.get("bezug") == "naechster_anker"
 
     # Position 2: Losgehen-Anker
     losgehen = cfg.items[2]
@@ -313,8 +315,10 @@ def test_t1070_ac3_berechne_zeit_pins_aus_locked_ankern(tmp_path):
     anziehen_pin = pins[1]
     assert anziehen_pin.item_id == "anziehen"
     assert anziehen_pin.typ == "vorlauf"
-    # Vorlauf 10 Min nach Aufstehen 07:00 → 07:00 - 10 = 06:50
-    assert anziehen_pin.uhrzeit_label == "06:50"
+    # Vorlauf 10 Min VOR Losgehen 08:25 → 08:25 - 10 = 08:15
+    # (V1-Sema, ROUTINE-9 `abfahrtszeit − anzieh_vorlauf_min`,
+    # bezug="naechster_anker", Nic-Setzung 2026-06-22 #1070).
+    assert anziehen_pin.uhrzeit_label == "08:15"
     assert anziehen_pin.minuten == 10
 
     losgehen_pin = pins[2]
