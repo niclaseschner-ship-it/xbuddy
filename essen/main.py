@@ -928,13 +928,16 @@ def gericht_anlegen():
 def gericht_loeschen(gericht_id):
     """DELETE /api/v1/essen/katalog/gerichte/<id> — Gericht löschen (ESSEN-19b).
 
-    Entfernt den Gericht-Eintrag aus gerichte.json atomar (DCOMP-4).
-    Foto-Kaskade (ESSEN-19b): trägt das Gericht ein `foto_ref`, wird das
-    zugehörige Familien-Foto aus dem Foto-Verzeichnis synchron+atomar entfernt.
-    Scheitert die Foto-Löschung, scheitert der DELETE (kein Halb-Zustand).
-    `bild_ref`-Gerichte haben keine Foto-Kaskade.
+    Reihenfolge (ESSEN-19b "Katalog ist Wahrheit, Foto-Waise toleriert"):
+    1. Gericht-Eintrag aus gerichte.json atomar (DCOMP-4) entfernen.
+    2. Foto-Kaskade (best-effort): trägt das Gericht ein `foto_ref`, wird das
+       Familien-Foto aus dem Foto-Verzeichnis synchron entfernt. Scheitert
+       der Foto-Lösch, bleibt ein Foto-Waise — der Gericht-Lösch bleibt
+       wirksam (Watchdog-Folge zu PR #1068: mildere Asymmetrie, Katalog ist
+       Wahrheit; Re-Run via aufräum-Skript möglich).
+    3. `bild_ref`-Gerichte haben keine Foto-Kaskade.
 
-    Antwort: 204 bei Erfolg. 404 bei unbekannter ID.
+    Antwort: 204 bei Erfolg (inkl. Foto-Waise-Fall). 404 bei unbekannter ID.
     Idempotenz: zweites DELETE auf gelöschte ID → 404 (ESSEN-19b-Spec).
     """
     p = _paths()
@@ -946,9 +949,18 @@ def gericht_loeschen(gericht_id):
     if ziel is None:
         return jsonify({"fehler": "Gericht nicht gefunden", "id": gericht_id}), 404
 
-    # Foto-Kaskade (ESSEN-19b): foto_ref → Foto atomar löschen.
-    # Scheitert Foto-Lösch → DELETE scheitert (kein Halb-Zustand).
     foto_ref = ziel.get("foto_ref")
+
+    # 1) Gericht aus Liste entfernen und atomar schreiben (DCOMP-4) — VOR Foto-Lösch.
+    #    Katalog ist Wahrheit (ESSEN-19b). Scheitert dieser Schritt, bleibt das
+    #    Gericht im Katalog (kein Halb-Zustand, kein verwaistes Foto).
+    gerichte_neu = [g for g in gerichte if str(g.get("id", "")) != gericht_id]
+    neu_daten = {"gerichte": gerichte_neu, "zaehler": daten.get("zaehler", 0)}
+    store_mod.speichere_gerichte(p["gerichte_file"], neu_daten)
+    runtime["gerichte_snapshot"] = neu_daten
+
+    # 2) Foto-Kaskade (best-effort): bei Fehler Foto-Waise tolerieren.
+    #    Watchdog-Folge zu PR #1068: Reihenfolge tauschen, Katalog-Lösch zuerst.
     if foto_ref:
         fotos_verz = p.get("fotos_verzeichnis")
         if fotos_verz:
@@ -956,25 +968,17 @@ def gericht_loeschen(gericht_id):
                 try:
                     entfernt = medien_store.delete(fotos_verz, str(foto_ref))
                 except medien_store.StoreError as e:
+                    # Foto-Waise: Gericht ist weg, Foto-Datei bleibt liegen.
+                    # Spec ESSEN-19b toleriert das (Katalog ist Wahrheit).
                     logger.warning(
-                        "gericht_loeschen: Foto-Kaskade fehlgeschlagen "
+                        "gericht_loeschen: Foto-Lösch fehlgeschlagen — Foto-Waise "
                         "id=%s foto_ref=%s: %s", gericht_id, foto_ref, e)
-                    return jsonify({
-                        "fehler": "Foto-Löschung fehlgeschlagen — Gericht nicht entfernt",
-                        "detail": str(e),
-                    }), 500
-                if not entfernt:
-                    # Foto im Index nicht gefunden — defensiv weiter (Datei weg
-                    # ist möglicherweise OK), aber loggen.
-                    logger.warning(
-                        "gericht_loeschen: foto_ref=%s nicht im Foto-Index "
-                        "(Gericht id=%s wird trotzdem gelöscht)", foto_ref, gericht_id)
-
-    # Gericht aus Liste entfernen und atomar schreiben (DCOMP-4).
-    gerichte_neu = [g for g in gerichte if str(g.get("id", "")) != gericht_id]
-    neu_daten = {"gerichte": gerichte_neu, "zaehler": daten.get("zaehler", 0)}
-    store_mod.speichere_gerichte(p["gerichte_file"], neu_daten)
-    runtime["gerichte_snapshot"] = neu_daten
+                else:
+                    if not entfernt:
+                        logger.warning(
+                            "gericht_loeschen: foto_ref=%s nicht im Foto-Index "
+                            "(Gericht id=%s ist trotzdem gelöscht)",
+                            foto_ref, gericht_id)
 
     logger.info("DELETE Gericht id=%s label=%r foto_ref=%s",
                 gericht_id, ziel.get("label"), foto_ref)

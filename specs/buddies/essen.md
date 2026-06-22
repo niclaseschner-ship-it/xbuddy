@@ -648,12 +648,23 @@ Lösch-Pfad benennt).
 **Foto-Kaskade (ESSEN-22 V1.2 Pfad 1).** Trägt das Gericht ein
 `foto_ref`, löscht der Buddy das zugehörige Familien-Foto aus
 `xbuddy-data/essen/fotos/<id>.<ext>` (ESSEN-22b) **synchron mit dem
-Katalog-Eintrag**. Der Lösch-Akt ist atomar: scheitert die
-Foto-Löschung, scheitert die Gericht-Löschung (kein Halb-Zustand). Trägt
-das Gericht nur `bild_ref` (ARASAAC-Default), passiert keine
-Foto-Aktion.
+Katalog-Eintrag**. Trägt das Gericht nur `bild_ref` (ARASAAC-Default),
+passiert keine Foto-Aktion.
 
-**Antwort:** 204 No Content bei Erfolg. 404 bei unbekannter ID.
+**Reihenfolge — „Katalog ist Wahrheit, Foto-Waise toleriert"**
+(Watchdog-Folge zu PR #1068): Der Katalog-Lösch (atomar via Temp+Rename,
+DCOMP-4) läuft **zuerst**. Scheitert er, bleibt das Gericht und nichts
+ist geschehen. Erst danach läuft der Foto-Lösch als **best-effort**:
+scheitert er (Disk-Fehler, Permission, etc.), bleibt ein Foto-Waise —
+der Katalog-Lösch bleibt wirksam. Begründung: Der Katalog ist die
+Wahrheit des Familien-Plans; ein verwaistes Foto im Datenverzeichnis
+ist die mildere Asymmetrie als ein „Gericht ohne Bild im Katalog"
+oder ein blockierender 500 bei tippfehlhaften Foto-Pfaden. Re-Run via
+Aufräum-Skript ist möglich.
+
+**Antwort:** 204 No Content bei Erfolg (auch im Foto-Waise-Fall —
+Katalog ist Wahrheit). 404 bei unbekannter ID. **Kein 500 für
+Foto-Lösch-Fehler** (Watchdog-Folge #1068).
 
 **Idempotenz.** Wiederholter DELETE auf bereits gelöschte ID → 404 (kein
 spezieller „bereits gelöscht"-Status — der Skill behandelt 404 als
@@ -669,6 +680,8 @@ GET liefert Gericht nicht mehr, Foto in `xbuddy-data/essen/fotos/` weg.
 DELETE auf existierende ID mit `bild_ref` → 204, GET liefert Gericht
 nicht mehr, keine Foto-Aktion. DELETE auf unbekannte ID → 404. DELETE
 zweimal hintereinander auf dieselbe ID → erst 204, dann 404.
+**Foto-Lösch-Fehler bei vorhandenem foto_ref** → 204 + Foto-Waise +
+WARN-Log; Gericht ist im Katalog weg.
 
 *Tickets:* #816
 
@@ -1190,9 +1203,9 @@ Items W unter den offenen vorhanden sind (Format-Beispiel `Sonstiges · 11
 am Listen-Ende, dessen Header `Erledigt · N` die Gesamtzahl trägt).
 
 **Bild-Pfad:** Mini App fordert die ARASAAC-PNGs **vom selben Host** unter
-`/_shared/icons/arasaac/<bild_ref>.png` an (ICONS-5, Same-Origin-Lego, kein
-CORS). Lade-Fehler einzelner Bilder rendern Placeholder (Bring!-Default-
-Stoff/Cart-Symbol), kein UI-Bruch.
+`/display/_shared/icons/arasaac/<bild_ref>.png` an (ICONS-5 + ROU-26,
+Same-Origin-Lego, kein CORS). Lade-Fehler einzelner Bilder rendern Placeholder
+(Bring!-Default-Stoff/Cart-Symbol), kein UI-Bruch. Wortlaut-Patch #1011.
 
 **Tap-Routing pro Card:**
 - `klasse=wunsch` + `kategorie=gericht` + Gericht hat Zutaten → ESSEN-30
@@ -1238,8 +1251,8 @@ oder jsdom-Wrapper, siehe Code-Track-Folge-Ticket):
   `{label: "Milch", ...}`. `kategorie` ist `sonstiges` als Default; mit
   bekannten Items im ICONS-7/Katalog-Match wird `kategorie` korrekt gesetzt.
 - **Bild-Pfad:** alle gerenderten `<img>` haben `src`, der mit
-  `/_shared/icons/arasaac/` beginnt und auf `.png` endet (Same-Origin-Lego,
-  kein CORS, keine externen Hosts).
+  `/display/_shared/icons/arasaac/` beginnt und auf `.png` endet
+  (Same-Origin-Lego, kein CORS, keine externen Hosts).
 - **Bild-Lade-Fehler:** wenn `<img>` ein `error`-Event feuert, rendert das
   Mini-Frontend einen Placeholder (Bring!-Default-Stoff/Cart), das UI bricht
   nicht.
@@ -1389,9 +1402,9 @@ Der Service-Worker cached **selektiv**:
   ein veralteter Cache-Snapshot wäre für Eltern beim Einkauf gefährlich
   (sie würden bereits eingekaufte Items erneut kaufen).
 - **Network-first mit Cache-Fallback** für ARASAAC-Piktogramme unter
-  `/_shared/icons/arasaac/<id>.png` (ICONS-5, ESSEN-31): erst Netz
-  probieren, bei Offline Cache verwenden, bei Cache-Miss Placeholder-
-  Rendering durch die Render-Funktion (ESSEN-31 Bild-Lade-Fehler).
+  `/display/_shared/icons/arasaac/<id>.png` (ICONS-5 + ROU-26, ESSEN-31):
+  erst Netz probieren, bei Offline Cache verwenden, bei Cache-Miss
+  Placeholder-Rendering durch die Render-Funktion (ESSEN-31 Bild-Lade-Fehler).
 
 **Cache-Versionierung:** Der Service-Worker nutzt einen Cache-Namen mit
 `build_id` (vgl. Memory `reference_mini_app_cache_buster.md`); bei jedem
