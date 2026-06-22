@@ -1437,6 +1437,133 @@ antizipativ).
 
 *Tickets:* (folgt mit `/arbeitstag-prep`).
 
+### EC-40 — Mini-App-Skill-Familie: synchrones Trigger-Vokabular
+
+**RATIFIZIERT 2026-06-22** (Refs #1075 — Mistral-Routing-Regression nach
+Anbieter-Wechsel zeigte App-spezifische Trigger-Listen als zu eng).
+
+Skills, die eine Mini-App via Telegram-Inline-Button öffnen (heute vier
+Skills: `einkauf_zeigen` EZG, `hoerspiel_oeffnen` HOE,
+`routine_anpassen_oeffnen` RAO, `seiten_uebersicht` MAU — alle mit
+`web_app_url`-Inline-Button im Tool-Result, TASK-10c Form (b)), teilen
+ein gemeinsames **Trigger-Vokabular**, damit das LLM die Familie
+geschlossen routet — auch über Anbieter-Wechsel hinweg. Das Vokabular
+besteht aus zwei Achsen, die kombinatorisch wirken:
+
+**Achse A — Aktions-Vokabular (familien-weit, identisch über alle vier
+Skills):**
+
+> *settings, einstellungen, anpassen, bearbeiten, ändern, öffnen,
+> zeigen, schicken, geben, app, mini-app, löschen, umsortieren,
+> sortieren, hinzufügen* — plus Varianten in den natürlichen
+> Beuge-/Frage-Formen („gib mir die …", „schick mir die …", „zeig
+> mir die …").
+
+**Achse B — App-Bezeichnungen (pro Skill in seiner Spec gelistet — die
+Bezeichnungen pro App sind dort die einzige Wahrheit, EC-40 schreibt
+sie nicht selbst):**
+
+- `EZG`: Einkaufsliste-Bezeichnungen aus EZG-3.
+- `HOE`: Hörspiel-/Hörbuch-Bezeichnungen aus HOE-3.
+- `RAO`: Routine-Bezeichnungen aus RAO-3.
+- `MAU`: Mini-App-Übersicht-Bezeichnungen aus MAU-10.
+
+**Mechanik.** Jeder der vier Skill-Spec-Trigger-Abschnitte trägt die
+identische **Disziplin-Klausel**: „Der Skill feuert auch, wenn die
+Eltern-Nachricht eine Aktion aus Achse A mit einer App-Bezeichnung aus
+Achse B kombiniert — auch ohne ein in der App-spezifischen Phrasen-
+Liste genanntes Verb. Beispiele: »gib mir die <X> settings«, »schick
+mir die <X> einstellungen«, »<X> app öffnen«, »<X>-Optionen«."
+
+**Begründung.** Vor Mistral-Switch (Claude) hat das LLM auch ohne
+explizite Achsen-Kreuzungs-Phrase robust geroutet (Claude robuster
+gegenüber generischen Settings-Triggern). Nach Mistral-Switch
+(`mistral-medium-2508`) zeigten Familien-Live-Repros (Refs #1075,
+conversations.db chat 464143432, seq 600/602/604 am 2026-06-22):
+„Schick mir die Hörbuch settings", „Schick mir die settings", „Gib
+mir die Routine settings" wurden **nicht** zu Tool-Calls, sondern
+halluzinierten Markdown-Knöpfen im Antwort-Text (siehe EC-41). EC-40
+schließt diese Routing-Lücke **anbieter-unabhängig** über das
+Skill-Description-Vokabular — EC-12-konform.
+
+**Implementations-Pfad.** Tool-`description` der vier Skills (im
+Eltern-Chat-`tasks.py`-Aufruf via `build_catalog`, indirekt über
+`*_task.py:description=(…)`) trägt am Ende eine identische
+Disziplin-Klausel mit der App-spezifischen Achse-B-Liste. Welche
+Variante des Klausel-Wortlauts gilt, normiert `conventions/tasks.md`
+TASK-10 (Skill-Beschreibungs-Bauplan); diese Spec normiert das
+**Soll**: Vokabular synchron, Achsen sauber getrennt, keine
+App-spezifische Aktion in einer anderen App-Liste verstecken.
+
+**Geltungsbereich.** Skills, die KEINEN `web_app_url`-Inline-Button
+zurückgeben (z. B. `routine_zeiten_setzen` RZS, `termin_eintragen`),
+sind **nicht** in der Mini-App-Skill-Familie und damit nicht
+EC-40-bindend — die Abgrenzungen pro Skill-Spec (z. B. RAO-3 →
+RZS-Grenze, EZG-3 → WZE-Grenze, HOE-3 → HFE-Grenze) bleiben
+unverändert. Wächst eine neue Mini-App in die Familie (n=5,
+beispielsweise ein Plan/Wochenplan-Buddy mit Eltern-Chat-Anschluss),
+trägt sie EC-40 ab Werft-Lauf.
+
+*Tickets:* #1075
+
+### EC-41 — Mini-App-Knöpfe entstehen ausschließlich über Skill-Aufrufe
+
+**RATIFIZIERT 2026-06-22** (Refs #1075 — Markdown-Knopf-Halluzination
+unter `mistral-medium-2508`).
+
+Das LLM darf in seinen Bot-Texten **niemals** einen Web-App-Knopf
+oder einen Mini-App-Link als Markdown-Text formulieren — weder als
+`[**…**]`-Pseudo-Knopf, noch als Klartext-URL, noch als sprachliches
+Verspechen („Knopf unten", „klick auf den Button", „der Knopf öffnet
+…"), das keinen gleichzeitigen Tool-Call dieses Knopfes ausgelöst hat.
+Telegram rendert Markdown im Standard-Pfad (EC-27 ohne opt-in) nicht
+als Inline-Knopf — die Familie sieht literalen Text, der Knopf fehlt,
+das Versprechen läuft ins Leere.
+
+**Mechanik.** Ein Mini-App-Knopf kommt im Eltern-Chat ausschließlich
+zustande, wenn ein Skill der EC-40-Familie aufgerufen wird und sein
+Tool-Result-Dict ein `presentation: {inline_button: {label,
+web_app_url}}` enthält (TASK-10c Form (b)). Der Skill liefert den
+Knopf-Mechanismus; das LLM formuliert nur den Text-Teil (EC-29 „Eine
+Stimme"). Will das LLM einen Knopf anbieten, ruft es das passende
+Skill auf — nicht den Knopf in Prosa imitieren.
+
+**Geltungsbereich.** Diese Regel bindet jeden Agent-Turn des
+Eltern-Chats — sowohl die direkte LLM-Antwort als auch die
+Tool-Result-Verarbeitung. Sie ist **unabhängig vom KI-Anbieter**
+(EC-12) und damit auch bei künftigem Anbieter-Wechsel bindend.
+Tool-`description`-Texte der EC-40-Familie tragen die Regel als
+expliziten Negativ-Hinweis („keinen Markdown-Knopf in der Antwort
+schreiben — der Button kommt automatisch über den Tool-Call"), damit
+sie auch im Tool-Routing-Kontext sichtbar ist. Eine vorhandene
+App-spezifische Schärfung (heute HOE: E-HOE-2-Schärfung Refs #1048
+„»Knopf unten« oder »Button« NICHT versprechen") ist mit EC-41 auf
+die ganze Mini-App-Familie gehoben — die HOE-Klausel bleibt als
+App-spezifischer Reflex bestehen, ist aber redundant zu EC-41 und
+gilt mechanisch über EC-41 auch für EZG / RAO / MAU.
+
+**Begründung.** Live-Repro 2026-06-22 (Refs #1075,
+conversations.db chat 464143432, seq 601/603/605): unter
+`mistral-medium-2508` halluzinierte der Agent statt eines Tool-Calls
+literale Markdown-Knöpfe in den Antwort-Text — z. B. *„👉 **Öffne
+die App mit diesem Knopf:** [**Routine-Anpassen-Mini-App öffnen**]"*.
+Telegram zeigte den literalen Text, kein klickbarer Knopf, kein
+Mini-App-Aufruf möglich. Die App-spezifische E-HOE-2-Klausel war im
+HOE-Block des System-Prompts versteckt und wurde vom Anbieter
+übergangen. EC-41 hebt die Regel auf Top-Level-Geltung — anbieter-
+unabhängig, Skill-Familie-übergreifend.
+
+**Abgrenzung zu EC-27 (HTML-opt-in).** EC-27 regelt die *Telegram-
+Transport-Schicht* (HTML-Rendering pro Nachricht, nur für Skills, die
+strukturierte Listen brauchen). EC-41 regelt die *LLM-Antwort-
+Disziplin* (kein Pseudo-Knopf in Prosa) — auch in HTML-Nachrichten.
+EC-41 verbietet keine echten Links im Text, wenn sie thematisch
+gehören (z. B. eine externe Anleitung); es verbietet die Imitation
+eines Inline-Knopfes durch Markdown-/HTML-Text, ohne dass der
+zugehörige Skill ausgelöst wurde.
+
+*Tickets:* #1075
+
 ---
 
 ## Offene Punkte

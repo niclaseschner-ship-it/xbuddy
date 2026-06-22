@@ -62,6 +62,19 @@ verankert, nicht im Skill):
   Text-WZE)
 - „Liste öffnen" / „Einkauf öffnen"
 
+**EZG-3 App-Bezeichnungen (EC-40 Achse B):** Einkauf · Einkaufsliste ·
+Liste · Einkaufszettel · Shoppingliste.
+
+**EZG-3 EC-40-Familien-Trigger.** Zusätzlich zu den oben genannten
+Phrasen feuert EZG bei jeder Kombination aus dem Aktions-Vokabular
+EC-40 Achse A und einer EZG-Bezeichnung aus Achse B — auch ohne ein
+in der App-spezifischen Phrasen-Liste genanntes Verb. Beispiele:
+„gib mir die Einkaufsliste-App", „schick mir die Liste settings",
+„Einkaufsliste öffnen", „Liste anpassen", „Shoppingliste-Optionen".
+Das LLM formuliert in keinem Fall einen Mini-App-Knopf als
+Markdown-Text in seiner Antwort (EC-41 — der Knopf entsteht über
+den Tool-Call, nicht in Prosa).
+
 **Abgrenzung zu WZE (`wuensche-zeigen`):** Wenn die Eltern-Frage nach
 **Text-Info** klingt („Was steht denn alles drauf?"), nutzt der Agent
 WZE (Text-Antwort). Wenn die Frage nach **Öffnen-/Aktiv-werden** klingt

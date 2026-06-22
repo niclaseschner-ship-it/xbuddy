@@ -109,6 +109,26 @@ Agent-Prompt verankert, nicht im Skill, EC-30-Trennlinie):
 - „letzte Folge auf dem Telefon weiterhören"
 - „Hörspiel-App öffnen" / „Hörbuch-App öffnen"
 
+**HOE-3 App-Bezeichnungen (EC-40 Achse B):** Hörspiel · Hörbuch · Story
+· Folge · Geschichte (mit der bestehenden HOE-Direkt-Trigger-Ausnahme
+für Settings-Türöffner-Bitten via E-HOE-2-Schärfung Refs #1048; HOE-3
+und die EC-40-Familien-Erweiterung bleiben Folgen-Klasse — Settings-
+Bitten landen über E-HOE-2-Schärfung beim Settings-Tab-Hash).
+
+**HOE-3 EC-40-Familien-Trigger.** Zusätzlich zu den oben genannten
+Phrasen feuert HOE bei jeder Kombination aus dem Aktions-Vokabular
+EC-40 Achse A und einer HOE-Bezeichnung aus Achse B — auch ohne ein
+in der App-spezifischen Phrasen-Liste genanntes Verb. Beispiele:
+„gib mir die Hörbuch-App", „Hörspiel öffnen", „schick mir die
+Hörspiel mini-app", „Folge zeigen". Die HOE-Direkt-Trigger-Ausnahme
+(E-HOE-2-Schärfung Refs #1048) bleibt der Pfad für reine Settings-
+Link-Bitten („schick mir die settings", „Hörbuch settings") und
+schickt den Button mit `#einstellungen`-Hash; EC-40-Familien-Trigger
+ohne Settings-Bezug verwenden den Default-Pfad (`#folgen`, HOE-4).
+Das LLM formuliert in keinem Fall einen Mini-App-Knopf als
+Markdown-Text in seiner Antwort (EC-41 — der Knopf entsteht über
+den Tool-Call, nicht in Prosa).
+
 **Settings-Trigger sind KEIN HOE-Aufruf** (Anti-Redundanz-Setzung).
 Eltern-Nachrichten der Form „Voice ändern", „Anbieter wechseln",
 „Modell wechseln", „Tempo ändern", „Pausen tunen", „auf Mistral
