@@ -1,0 +1,120 @@
+# LLM-Provider — Konvention     (ID-Präfix: LLMP)
+
+XBuddy hat heute (2026-06-21) drei Konsumenten, die LLM-Provider ansprechen:
+`eltern-chat/` (Agent-Tool-Loop), `hoerspiel/` (Structured-Singleshot) und
+`kibuddy/` (Multi-Turn-Chat). Jeder pflegt seinen eigenen Provider-Adapter
+mit eigenem Vertrag — derselbe Vendor (Anthropic) ist dreimal verdrahtet
+(1087 Z Provider-Code total, Drift belegt).
+
+Diese Konvention legt fest, wie die geteilte LLM-Provider-Schicht
+`tools/llm/` strukturiert ist — als Lib-Schwester zu `tools/zugangsdaten/`
+(E-ZD-3), nicht als Service mit HTTP-Hop. Ratifiziert in
+[RAT-20](../decisions/RAT-20-llm-gateway-ist-lib.md), 2026-06-21. Die Spec
+mit dem Verhalten der Lib (Telemetrie-Disziplin, Spike-Stufen, Migration)
+liegt in [`specs/platform/llm-providers.md`](../specs/platform/llm-providers.md);
+diese Datei beschreibt die Bauregel, die Spec beschreibt das Verhalten.
+
+### LLMP-1 — Lib-Form, kein eigener Prozess
+Die LLM-Provider-Schicht lebt unter `tools/llm/`. Konsumenten importieren via
+`from tools.llm import …` (analog `tools.zugangsdaten`, `tools.configloader`,
+`tools.logsetup`). Es gibt **keinen** `xbuddy-llm.service`, **keine**
+HTTP-Fassade, **keinen** eigenen Port. Service-Form ist erst zu prüfen,
+wenn ein externer (nicht-Python / nicht-In-Prozess) Konsument belegt ist —
+bis dahin wäre der Hop Cloud-Reflex ohne Mehrwert
+(RAT-20 Sektion „Patch 1" → Form ist Lib; ENTSCHEID-File Sektion
+„Patch 1 — RAT-N überschreibt RAT-6-Wortlaut explizit").
+
+### LLMP-2 — Drei Public-API-Sichten
+`tools/llm` stellt genau drei Konsumenten-Sichten bereit, jede mit einem
+eigenen Vertrag, alle auf demselben `_vendor/<vendor>.py`-Kern:
+
+| Sicht             | Use-Case                                      | Heute belegt durch |
+|-------------------|-----------------------------------------------|--------------------|
+| `get_agent(slot)` | Tool-Loop mit Mid-Turn-Continuation           | eltern-chat        |
+| `get_singleshot(slot)` | Strukturierte Einzel-Antwort (Schema-erzwungen via Tool-Use) | hoerspiel |
+| `get_chat(slot)`  | Multi-Turn-Konversation mit History + System-Prompt | kibuddy      |
+
+Eine neue Vendor-Datei aktiviert automatisch alle drei Sichten — kein
+Adapter-Code pro Buddy. Eine vierte Sicht wird erst hinzugefügt, wenn ein
+vierter Use-Case mit eigenem Vertrag belegt ist (CLAUDE.md §6, „Vorschlagen,
+wenn Werte sich vermehren"). Verschmelzung zweier Sichten ist Re-Litigation
+nach Vertrag-Drift-Schwelle (RAT-20 „Kill-Kriterium")
+(ENTSCHEID-File Sektion „Finale Landung — MACH ES" → Was sich ändert /
+Trade-off; Verdikt Frage 6).
+
+### LLMP-3 — Capability-Matrix mit hartem Boot-Fail
+Jede Sicht deklariert ihr **Required-Capability-Set**; jeder Vendor-File
+deklariert sein **Available-Capability-Set**. Bei Slot-Vendor-Mismatch
+wirft die Lib beim Boot `LLMCapabilityError` und bricht den Service-Start
+ab — **kein** Runtime-Silent-Fallback auf ein Untermenge-Verhalten
+(ENTSCHEID-File Sektion „Patch 2 — Capability-Matrix + harter Boot-Fail").
+
+Die sechs ratifizierten Capabilities (V1):
+
+| Capability                       | Bedeutung                                                                 |
+|----------------------------------|---------------------------------------------------------------------------|
+| `tool_use`                       | Vendor unterstützt Anthropic-style `tool_use`/`tool_result`-Cycle         |
+| `multi_turn_assistant_prefill`   | Vendor erlaubt Assistant-Prefill für laufenden Turn                       |
+| `structured_output`              | Vendor erzwingt JSON-Schema im Output (nativ oder via forced `tool_use`)  |
+| `cache_control`                  | Vendor unterstützt expliziten Cache-Block-Marker                          |
+| `multimodal_input`               | Vendor akzeptiert Bild-/Audio-Input neben Text                            |
+| `system_message_distinct`        | Vendor trennt System-Prompt von User/Assistant-Turns (eigener Parameter)  |
+
+**Required-Sets pro Sicht (V1):**
+
+- `get_agent`: `{tool_use, multi_turn_assistant_prefill, cache_control,
+  system_message_distinct}`
+- `get_singleshot`: `{structured_output, system_message_distinct}` (heute
+  via `tool_use`-Erzwingung; Vendor ohne `structured_output` darf
+  `tool_use` als Substitut nicht auto-fallback — das ist Vendor-File-
+  Vertrag).
+- `get_chat`: `{multi_turn_assistant_prefill, cache_control,
+  system_message_distinct}`
+
+Erweiterung der Capability-Liste ist Spec-Änderung (`specs/platform/llm-providers.md`),
+nicht Convention-Drift.
+
+### LLMP-4 — Vendor-File-Skelett
+Jeder `_vendor/<vendor>.py` deklariert am Modulkopf:
+
+```python
+CAPABILITIES = frozenset({
+    "tool_use",
+    "multi_turn_assistant_prefill",
+    "cache_control",
+    "system_message_distinct",
+    # optional je nach Vendor:
+    # "structured_output",
+    # "multimodal_input",
+})
+```
+
+Das ist die **maschinell prüfbare** Wurzel von LLMP-3 — Watchdog-Regel
+(analog `module-boundaries.md` MOD-1..6): jeder File unter `tools/llm/_vendor/`
+ohne `CAPABILITIES`-Frozenset am Modulkopf ist ein Bruch. Die Lib lädt
+die Konstante beim Boot und vergleicht gegen die Sicht-Required-Sets;
+fehlt sie, ist `LLMCapabilityError` der erste Fehler vor allem anderen
+(ENTSCHEID-File Sektion „Patch 2 — Capability-Matrix + harter Boot-Fail").
+
+Re-Export-Form analog `tools.zugangsdaten` (MOD-5): externer Zugriff
+**nur** über `from tools.llm import get_agent, get_singleshot, get_chat`,
+**nie** direkt aus `tools.llm._vendor.<vendor>`. Der Unterstrich vor
+`_vendor` macht die Privat-Natur sichtbar; ein analoger MOD-Contract
+(z. B. „LLM-Vendor-Module nur über Public-API") darf nach der dritten
+Vendor-Datei mechanisch nachgezogen werden — heute ist n=1 (Anthropic),
+keine antizipative Generalisierung.
+
+### LLMP-5 — Slot-Konvention-Brücke zu ZD
+Slot-Namen folgen der `<konsument>-<vendor>-<purpose>`-Namens-Konvention aus
+ZD-2 (`specs/platform/zugangsdaten.md:48-53`). Die Lib selbst kennt keine
+Vendor-/Konsumenten-Aufteilung — sie übergibt den Slot-Namen an
+`tools.zugangsdaten` und erhält den Schlüssel zurück. Welcher Vendor unter
+welchem Slot lebt, ist Buddy-Konfiguration (z. B. EC-15 `provider`-Wert);
+die Lib trifft diese Entscheidung nicht.
+
+Konkretes Beispiel: `get_agent("eltern-chat-anthropic-api-key")` liest den
+Slot via ZD-5, lädt `_vendor/anthropic.py`, prüft `CAPABILITIES` gegen das
+`get_agent`-Required-Set (LLMP-3) und liefert die Agent-Sicht — oder
+bricht mit `LLMCapabilityError` ab, falls der Vendor `tool_use` nicht
+unterstützt
+(ENTSCHEID-File Sektion „Worum es geht" + Bezug ZD-2).
