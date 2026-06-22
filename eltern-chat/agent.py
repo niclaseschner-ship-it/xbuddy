@@ -18,6 +18,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+from _markdown_button_strip import strip_markdown_buttons
 from model import WRITE, GenerationRequest, Message, ProviderError, TaskResultBlock, TextBlock
 from providers.pricing import estimate_cost
 from tasks import render_form_b
@@ -443,6 +444,12 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
     # haben. (Letzter Aufruf bestimmt outcome, falls mehrere Pfade möglich.)
     _called_skills: set = set()
     _error_skills: set = set()
+    # EC-41 mechanische Sperre: trackt, ob im selben Turn ein Tool-Call mit
+    # Inline-Button gefeuert hat (TASK-10c Form (b) `inline_button`). Der
+    # Markdown-Strip-Filter im finalen reply_text-Pfad nutzt dieses Flag, um
+    # parallele Markdown-Knopf-Halluzinationen extra aggressiv zu entfernen
+    # (Live-Befund 2026-06-22 chat 464143432, Refs #1075).
+    _inline_button_emitted = False
 
     for _ in range(max_iterations):
         if before_provider_call is not None:
@@ -483,6 +490,16 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
             # sichtbare Anfrage darf nicht nachträglich um den Antwort-Block
             # wachsen (EC-13).
             reply_text = response.text or _EMPTY_REPLY
+            # EC-41 mechanische Sperre: Markdown-Knopf-Halluzinationen aus dem
+            # finalen LLM-Antwort-Text entfernen, BEVOR er ins Transkript geht
+            # (und damit vor dem Telegram-Send in main.py). Bei Tool-Call mit
+            # Inline-Button im selben Turn wird der Stripper extra aggressiv.
+            # Live-Befund 2026-06-22 (Refs #1075): mistral-medium-2508 ignoriert
+            # EC-41-Disziplin im SYSTEM_PROMPT trotz dreier Härtungs-Stufen.
+            reply_text = strip_markdown_buttons(
+                reply_text, inline_button_emitted=_inline_button_emitted)
+            if not reply_text:
+                reply_text = _EMPTY_REPLY
             transcript = (messages[len(history_messages):]
                           + [Message(role="assistant", blocks=[TextBlock(reply_text)])])
             # EC-35: Task-Events für alle in diesem Turn eindeutig gerufenen
@@ -608,6 +625,15 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
                     and "text" in content
                     and "presentation" in content):
                 _chat_id = turn_context.chat_id if turn_context else None
+                # EC-41: Vor render_form_b prüfen, ob ein Inline-Button gerendert
+                # wird — die Quittungs-Zeichenkette enthält dann "Inline-Button" /
+                # "Inline-Buttons" / "WebApp-Link". Flag triggert die aggressive
+                # Stripper-Stufe im finalen reply_text.
+                _presentation = content.get("presentation") or {}
+                if ("inline_button" in _presentation
+                        or "inline_buttons" in _presentation
+                        or "webapp_link" in _presentation):
+                    _inline_button_emitted = True
                 content = (render_form_b(content, tg, _chat_id)
                            if tg is not None else content.get("text", ""))
             result_blocks.append(TaskResultBlock(
