@@ -163,9 +163,14 @@ def test_DELETE_gericht_mit_bild_ref_keine_foto_aktion(
     assert delete_calls == [], "Foto-Kaskade darf bei bild_ref NICHT aufgerufen werden"
 
 
-def test_DELETE_gericht_foto_kaskade_fehler_verhindert_loeschung(
+def test_DELETE_gericht_foto_kaskade_fehler_lasst_foto_waise(
         client, demo_paths, monkeypatch):
-    """ESSEN-19b AC1: scheitert Foto-Lösch → Gericht-Lösch scheitert (kein Halb-Zustand)."""
+    """ESSEN-19b "Katalog ist Wahrheit, Foto-Waise toleriert" (Watchdog-Folge #1068).
+
+    Reihenfolge: Katalog-Lösch zuerst (atomar), dann Foto-Lösch best-effort.
+    Scheitert der Foto-Lösch, bleibt ein Foto-Waise — der Gericht-Lösch
+    ist trotzdem wirksam (mildere Asymmetrie, Katalog ist Wahrheit).
+    """
     import tools.medien_store as medien_store
 
     def fake_delete_fehler(verz, foto_ref):
@@ -181,12 +186,13 @@ def test_DELETE_gericht_foto_kaskade_fehler_verhindert_loeschung(
 
     resp = client.delete("/api/v1/essen/katalog/gerichte/3")
 
-    # Foto-Kaskade gescheitert → HTTP 500
-    assert resp.status_code == 500
-    # Gericht noch in der Datei (kein Halb-Zustand).
+    # Katalog-Lösch ist die Wahrheit — DELETE erfolgreich trotz Foto-Lösch-Fehler.
+    assert resp.status_code == 204
+    # Gericht weg (Katalog ist Wahrheit).
     verbleibend = _lese_gerichte(demo_paths["gerichte_file"])
-    assert any(g["id"] == "3" for g in verbleibend), (
-        "Gericht wurde gelöscht obwohl Foto-Kaskade scheiterte (Halb-Zustand!)")
+    assert not any(g["id"] == "3" for g in verbleibend), (
+        "Gericht muss gelöscht sein — Katalog ist Wahrheit, "
+        "Foto-Waise ist die explizit tolerierte Asymmetrie.")
 
 
 # ============================================================
