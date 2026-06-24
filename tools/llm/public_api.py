@@ -142,10 +142,12 @@ class _ChatFacade:
 
 
 class _SingleshotFacade:
-    """Sicht-Fassade für `get_singleshot` (LLMP-S1).
+    """Sicht-Fassade für `get_singleshot` (LLMP-S1, hoerspiel-Heimat).
 
-    Skelett bis T3 (hoerspiel-Migration). Konsumenten, die heute rufen,
-    sehen klar, dass die Sicht noch nicht durchgeschaltet ist.
+    Übersetzt den Structured-Singleshot-Vertrag `complete_structured(system,
+    prompt, schema)` auf den Vendor-Kern und injiziert die LLMP-S4-Telemetrie-
+    Felder (`caller`, `slot`) — der Konsument sieht sie nicht (analog
+    `_ChatFacade.complete_multiturn`).
     """
 
     def __init__(self, vendor: Any, caller: str, slot: str):
@@ -155,14 +157,35 @@ class _SingleshotFacade:
         self.model = getattr(vendor, "model", "")
         self.name = "singleshot"
 
-    def complete_structured(self, *args, **kwargs):
-        return self._vendor.singleshot_structured(*args, **kwargs)
+    def complete_structured(
+        self,
+        system: str,
+        prompt: str,
+        schema: dict[str, Any],
+        *,
+        tool_name: str = "ergebnis",
+        tool_description: str = "Strukturiertes Ergebnis-Objekt nach Schema.",
+        correlation_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Ein Call, forced `tool_use` → Schema-konformes dict (LLMP-S1)."""
+        return self._vendor.singleshot_structured(
+            system=system,
+            prompt=prompt,
+            schema=schema,
+            caller=self._caller,
+            slot=self._slot,
+            tool_name=tool_name,
+            tool_description=tool_description,
+            correlation_id=correlation_id,
+        )
 
 
 class _AgentFacade:
-    """Sicht-Fassade für `get_agent` (LLMP-S1).
+    """Sicht-Fassade für `get_agent` (LLMP-S1, eltern-chat-Heimat).
 
-    Skelett bis T4 (eltern-chat-Migration). Analog `_SingleshotFacade`.
+    Übersetzt den Agent-Tool-Loop-Vertrag `run(system, messages, tools,
+    tool_runner)` auf den Vendor-Kern und injiziert `caller`/`slot` (LLMP-S4),
+    analog `_ChatFacade`.
     """
 
     def __init__(self, vendor: Any, caller: str, slot: str):
@@ -172,8 +195,27 @@ class _AgentFacade:
         self.model = getattr(vendor, "model", "")
         self.name = "agent"
 
-    def run(self, *args, **kwargs):
-        return self._vendor.agent_run(*args, **kwargs)
+    def run(
+        self,
+        system: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        *,
+        tool_runner: Any = None,
+        max_iterations: int = 8,
+        correlation_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Tool-Use-Loop mit Mid-Turn-Continuation (LLMP-S1)."""
+        return self._vendor.agent_run(
+            system=system,
+            messages=messages,
+            tools=tools,
+            caller=self._caller,
+            slot=self._slot,
+            tool_runner=tool_runner,
+            max_iterations=max_iterations,
+            correlation_id=correlation_id,
+        )
 
 
 # ----------------------------------------------------------------------
