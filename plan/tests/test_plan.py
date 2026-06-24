@@ -184,10 +184,10 @@ def test_PLAN_6_slots_come_from_config(demo_config):
     # alten Icon-Key 'sun'; die config.py-Migrations-Lesephase (PLAN-6 V1.3,
     # T1092-Backend) übersetzt ihn beim Parsen auf die ARASAAC-id '37807'.
     bring = demo_config.slot("bring")
-    assert bring.art == config_mod.SLOT_ERWACHSENEN
+    assert bring.art == config_mod.SLOT_PETRANTWORTLICH
     assert bring.icon == "37807"
     act1 = demo_config.slot("act1")
-    assert act1.art == config_mod.SLOT_AKTIVITAET
+    assert act1.art == config_mod.SLOT_KALENDER_READ
     assert act1.kind == "mia"
 
 
