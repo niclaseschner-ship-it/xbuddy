@@ -581,16 +581,24 @@ def test_mehrtages_span_laufend_ab_fensterstart(demo_config, demo_registry):
 
 
 def test_termin_ueberschuss_zeigt_counter(demo_config, demo_registry):
-    """PLAN-13 V1.3: Mehr als TERMIN_LEISTE_MAX (5) Termine an einem Tag →
-    appointments auf 5 gekürzt, appointment_overflow trägt den Rest, und das
-    gerenderte HTML zeigt den gedimmten Counter `+M weitere`."""
+    """PLAN-13 V1.3: Mehr Termine an einem Tag als das HÖHEN-BASIERTE N (kein
+    Magic-5) → appointments auf N gekürzt, appointment_overflow trägt den Rest,
+    und das gerenderte HTML zeigt den gedimmten Counter `+M weitere`.
+
+    N kommt aus `sichtbare_termine(slot_count, hat_spans)` — bei der 7-Slot-
+    Demo-Config ohne Span ergibt die Geometrie 5; statt der Zahl hart zu setzen
+    leitet der Test sie aus der Funktion ab (Drift-Schutz)."""
     heute = date(2026, 5, 20)
-    # 8 zeitgebundene Einzel-Termine ohne Kind-/Personen-Name am selben Tag.
+    # Spalten-genaues N: kein Span, Slot-Anzahl aus der Demo-Config.
+    n = render_mod.sichtbare_termine(len(demo_config.slots), False)
+    ueberschuss = 3
+    anzahl = n + ueberschuss
+    # `anzahl` zeitgebundene Einzel-Termine ohne Kind-/Personen-Name am selben Tag.
     raw = [
         gcal_timed("ev%d" % i, "Termin %d" % i,
-                   "%sT%02d:00:00+02:00" % (heute.isoformat(), 9 + i),
-                   "%sT%02d:30:00+02:00" % (heute.isoformat(), 9 + i))
-        for i in range(8)
+                   "%sT%02d:00:00+02:00" % (heute.isoformat(), 8 + i),
+                   "%sT%02d:30:00+02:00" % (heute.isoformat(), 8 + i))
+        for i in range(anzahl)
     ]
     kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
     conn = db_mod.connect(demo_config.db_datei)
@@ -598,14 +606,147 @@ def test_termin_ueberschuss_zeigt_counter(demo_config, demo_registry):
                                 heute, 7, True, heute=heute)
     conn.close()
     iso = heute.isoformat()
-    assert len(view["appointments"][iso]) == 5, "auf TERMIN_LEISTE_MAX=5 gekürzt"
-    assert view["appointment_overflow"][iso] == 3, "Überschuss 8-5=3"
+    assert len(view["appointments"][iso]) == n, "auf höhen-basiertes N gekürzt"
+    assert view["appointment_overflow"][iso] == ueberschuss
     # Entry-Path: Counter im HTML.
     client = make_client(demo_config, demo_registry, FakeTransport(raw))
     r = client.get("/display/plan/woche?ab=%s" % iso)
     assert r.status_code == 200
-    assert b"+3 weitere" in r.data, (
-        "Termin-Überschuss-Counter '+3 weitere' fehlt im HTML"
+    assert ("+%d weitere" % ueberschuss).encode() in r.data, (
+        "Termin-Überschuss-Counter fehlt im HTML"
+    )
+
+
+# ------------------------------------------------------------
+#  #1092 Fix-Track — Drift-Korrektur an PLAN-13/14 V1.3
+#  Defekt 1: höhen-basiertes N (kein Magic-5, nichts clippt)
+#  Defekt 2: Span = Balken nur über berührte Spalten, Nachrutschen
+#  Defekt 3: Headline „mein Plan" raus
+# ------------------------------------------------------------
+
+def test_n_sichtbar_sinkt_mit_mehr_slots():
+    """#1092 Defekt 1 (PLAN-13 V1.3): N ist HÖHEN-BASIERT — mehr Slots fressen
+    den 1fr-Termin-Bereich, also sinkt die sichtbare Termin-Zahl monoton (kein
+    fixes Magic-5). Eine laufende Spanne kostet zusätzlich Höhe → N ≤ N-ohne-Span."""
+    # Monoton fallend über die realistische Slot-Spanne.
+    werte = [render_mod.sichtbare_termine(n, False) for n in range(5, 10)]
+    assert werte == sorted(werte, reverse=True), (
+        "N muss mit steigender Slot-Zahl monoton fallen (höhen-basiert), war %r" % werte
+    )
+    assert werte[0] > werte[-1], "mehr Slots → strikt kleineres N erwartet"
+    # Span kostet eine Balken-Zeile → N nicht größer als ohne Span.
+    for n in range(5, 10):
+        assert (render_mod.sichtbare_termine(n, True)
+                <= render_mod.sichtbare_termine(n, False)), (
+            "laufende Spanne darf N nicht erhöhen (Balken-Zeile kostet Höhe)"
+        )
+
+
+def test_n_sichtbar_nichts_clippt_ueber_1fr(tmp_path, demo_registry):
+    """#1092 Defekt 1 (PLAN-13 V1.3): Es wird NIE mehr gerendert, als in den
+    1fr-Bereich passt. Bei vielen Terminen ist die sichtbare Pillen-Zahl genau
+    N = sichtbare_termine(slot_count, hat_spans); der Rest geht in den Counter,
+    nichts wird über die verfügbare Höhe hinaus ausgegeben (kein overflow:hidden-
+    Clip mehr nötig).
+
+    Geprüft über die gerenderte HTML: Anzahl `.pill`-Termine in der berührten
+    Spalte == N, und der Counter trägt den Rest."""
+    # 8-Slot-Config → kleineres N, schärfere Probe.
+    cfg = _config_mit_slots(tmp_path, _n_erwachsenen_slots(8))
+    heute = date(2026, 5, 20)
+    n = render_mod.sichtbare_termine(len(cfg.slots), False)
+    ueberschuss = 4
+    anzahl = n + ueberschuss
+    raw = [
+        gcal_timed("ev%d" % i, "Termin %d" % i,
+                   "%sT%02d:00:00+02:00" % (heute.isoformat(), 7 + i),
+                   "%sT%02d:30:00+02:00" % (heute.isoformat(), 7 + i))
+        for i in range(anzahl)
+    ]
+    conn = db_mod.connect(cfg.db_datei)
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    view = render_mod.baue_view(cfg, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    iso = heute.isoformat()
+    assert view["termine_sichtbar"] == n
+    assert len(view["appointments"][iso]) == n, "View kappt auf N — nichts clippt"
+    assert view["appointment_overflow"][iso] == ueberschuss
+    # Entry-Path: gerenderte HTML trägt genau N Termin-Pillen am Tag + Counter.
+    client = make_client(cfg, demo_registry, FakeTransport(raw))
+    r = client.get("/display/plan/woche?ab=%s" % iso)
+    assert r.status_code == 200
+    # Termin-Pillen tragen `pill-label`; spans/activity nicht in dieser Probe.
+    assert r.data.count(b'class="pill-label"') == n, (
+        "es werden mehr/weniger als N Termin-Pillen gerendert — clippt oder "
+        "kappt nicht höhen-basiert"
+    )
+    assert ("+%d weitere" % ueberschuss).encode() in r.data
+
+
+def test_vorlauf_spalte_einer_spanne_traegt_tagestermine(demo_config, demo_registry):
+    """#1092 Defekt 2 (PLAN-14 V1.3): „in den Vorlauf-Spalten bleibt die
+    Termin-Zeile FREI FÜR ANDERE TERMINE." Eine Spanne beginnt erst ab Index 2;
+    ein Einzel-Termin an Tag 0 (Vorlauf-Spalte, ohne laufende Spanne) muss in
+    der Termin-Leiste erscheinen — die Spanne reserviert seine Zeile nicht, und
+    seine Spalte trägt im HTML KEIN .under-span (Nachrutschen von oben)."""
+    heute = date(2026, 5, 20)  # Mi (Tag 0)
+    spanne_start = heute + timedelta(days=2)  # Fr (Tag 2)
+    raw = [
+        # Mehrtages-Spanne Fr–Sa → start_day 2, end_day 3.
+        gcal_allday("span1", "Theaterwoche",
+                    spanne_start.isoformat(),
+                    (spanne_start + timedelta(days=2)).isoformat()),
+        # Einzel-Termin am Mi (Vorlauf-Spalte, Tag 0) — muss durchkommen.
+        gcal_timed("ev1", "Zahnarzt",
+                   heute.isoformat() + "T09:00:00+02:00",
+                   heute.isoformat() + "T09:30:00+02:00"),
+    ]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    # Spanne berührt Tag 2,3; Vorlauf-Spalten 0,1 sind frei.
+    assert view["span_cover"] == [2, 3], (
+        "span_cover muss NUR die berührten Spalten tragen (kein Voll-Breite-Band)"
+    )
+    assert 0 not in view["span_cover"], "Vorlauf-Spalte 0 darf nicht reserviert sein"
+    # Der Vorlauf-Termin am Tag 0 ist in der Termin-Leiste.
+    iso0 = heute.isoformat()
+    labels = [a["label"] for a in view["appointments"][iso0]]
+    assert "Zahnarzt" in labels, "Vorlauf-Termin fehlt — Zeile fälschlich reserviert?"
+    # Entry-Path: Tag-0-Spalte trägt KEIN .under-span (kein durchgehendes Band).
+    client = make_client(demo_config, demo_registry, FakeTransport(raw))
+    r = client.get("/display/plan/woche?ab=%s" % iso0)
+    assert r.status_code == 200
+    html = r.data.decode("utf-8")
+    cols = html.split('class="appts-col')[1:]  # je Tag-Spalte ein Fragment
+    assert len(cols) == 7, "7 Tag-Spalten erwartet"
+    # Spalte 0 (Vorlauf): kein under-span; Spalte 2 (Span-Start): under-span.
+    assert "under-span" not in cols[0][:40], (
+        "Vorlauf-Spalte 0 trägt under-span — Voll-Breite-Band statt Nachrutschen"
+    )
+    assert "under-span" in cols[2][:40], (
+        "Span-berührte Spalte 2 reserviert die Balken-Zeile nicht (under-span fehlt)"
+    )
+
+
+def test_headline_mein_plan_nicht_sichtbar(demo_config, demo_registry):
+    """#1092 Defekt 3: Die sichtbare Headline „mein Plan" (.brand-title) ist
+    entfernt — die Kopf-Zeile schrumpft (Platz für den 1fr-Termin-Bereich).
+    Der <title> des Dokuments darf „mein Plan" weiter tragen (Tab-Name)."""
+    client = make_client(demo_config, demo_registry, FakeTransport())
+    r = client.get("/display/plan/woche")
+    assert r.status_code == 200
+    html = r.data.decode("utf-8")
+    assert "brand-title" not in html, ".brand-title (Headline) noch im HTML"
+    # Der einzige verbliebene 'mein Plan'-String ist der <title> (Tab-Name).
+    assert html.count("mein Plan") == 1, (
+        "'mein Plan' mehr als einmal: sichtbare Headline nicht entfernt?"
+    )
+    assert "<title>" in html and "mein Plan</title>" in html, (
+        "<title> mit 'mein Plan' soll als Tab-Name erhalten bleiben"
     )
 
 

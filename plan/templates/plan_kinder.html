@@ -50,22 +50,13 @@
   }
 
   /* ─── Header ───────────────────────────────────────────────── */
+  /* #1092 Defekt 3: Die sichtbare Headline ist entfernt. Der Kopf trägt nur
+     noch den Datumsbereich oben rechts und schrumpft auf minimale Höhe — der
+     gewonnene vertikale Platz fließt in den 1fr-Termin-Bereich (PLAN-13). */
   .header {
-    display: flex; align-items: flex-end; justify-content: space-between;
-    padding: 20px 32px 12px;
+    display: flex; align-items: center; justify-content: flex-end;
+    padding: 6px 32px;
     border-bottom: 2px dashed var(--kids-border-soft);
-  }
-  .brand { display: flex; align-items: center; gap: 16px; }
-  .brand-swatch {
-    width: 28px; height: 28px; border-radius: 8px;
-    background: var(--kids-today);
-    border: 2px solid var(--kids-ink);
-    transform: rotate(-6deg);
-  }
-  .brand-title {
-    font-family: var(--kids-font-display);
-    font-size: 38px; font-weight: 700;
-    color: var(--kids-ink); line-height: 1;
   }
   .week-label {
     font-size: 18px; color: var(--kids-ink-soft);
@@ -281,28 +272,46 @@
     display: flex; align-items: center; justify-content: center;
     padding-top: 8px;
   }
-  .appts-stack {
-    display: flex; flex-direction: column; gap: 6px;
-  }
-  .appts-spans {
+  /* PLAN-14 V1.3: Ein gemeinsames Spalten-Grid für Tagestermine UND
+     Span-Balken. Die Span-Balken liegen als ABSOLUT positionierte Overlay-
+     Schicht über dem oberen Band — sie reservieren KEINE durchgehende Zeile
+     über das ganze Fenster (verworfene Voll-Breite-Band-Form, Befund
+     2026-06-22). Ein Balken läuft nur über seine berührten Spalten; in
+     span-losen Spalten beginnen die Tagestermine ganz oben (Nachrutschen). */
+  .appts-board {
+    position: relative;
     display: grid;
     grid-template-columns: repeat(var(--col-count, 7), minmax(0, 1fr));
     gap: 10px;
+    align-items: start;
+  }
+  /* Overlay-Schicht der durchgehenden Span-Balken — gleiches Spalten-Grid,
+     absolut über dem Board-Kopf. Leere Spalten tragen nichts und reservieren
+     darum keine Höhe in span-losen Spalten. */
+  .appts-spans {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    display: grid;
+    grid-template-columns: repeat(var(--col-count, 7), minmax(0, 1fr));
+    gap: 10px;
+    pointer-events: none;
   }
   .appts-spans:empty { display: none; }
   .pill.span {
-    /* Spalten-Span wird inline gesetzt (grid-column: start / end+1).
-       Style sonst wie eine normale Pille — width: 100% innerhalb der Spans. */
-  }
-  .appts-cells {
-    display: grid;
-    grid-template-columns: repeat(var(--col-count, 7), minmax(0, 1fr));
-    gap: 10px;
+    /* Spalten-Span wird inline gesetzt (grid-column: start / end+1) → ein
+       durchgehender Balken über die berührten Spalten (PLAN-14). Alle Balken
+       liegen auf derselben Overlay-Höhe → optisch durchgehend. */
+    pointer-events: auto;
   }
   .appts-col {
     display: flex; flex-direction: column; gap: 6px;
     min-height: 80px;
   }
+  /* PLAN-14 V1.3: Eine von einem Span-Balken berührte Spalte reserviert oben
+     genau die Balken-Höhe (--span-band), damit die Tagestermine unter dem
+     Balken beginnen. Span-LOSE Spalten haben diese Klasse nicht → ihre Termine
+     rutschen in den frei werdenden Platz von oben nach. */
+  .appts-col.under-span { padding-top: var(--span-band, 42px); }
   .pill {
     display: flex; align-items: center; gap: 6px;
     padding: 5px 8px;
@@ -508,14 +517,10 @@
 <div class="page">
   <div class="frame {% if variant == 'toddler' %}frame--toddler{% endif %}" style="--col-count: {{ days|length }}; --slot-count: {{ slots|length }};">
 
-    {# ─── Header ─── #}
+    {# ─── Header (#1092 Defekt 3: sichtbare Headline entfernt, Kopf auf
+       minimale Höhe geschrumpft → Platzgewinn für den 1fr-Termin-Bereich;
+       der Datumsbereich oben rechts bleibt). ─── #}
     <div class="header">
-      <div class="brand">
-        <div class="brand-swatch"></div>
-        <div>
-          <div class="brand-title">mein Plan</div>
-        </div>
-      </div>
       <div class="week-label">{{ days[0].date_short }} – {{ (days|last).date_short }}</div>
     </div>
 
@@ -598,34 +603,23 @@
     <div class="appts">
       <div class="appts-grid">
         <div class="appts-rail">{{ arasaac_img('3071', 42) }}</div>
-        <div class="appts-stack">
-          {# Mehrtages-Termine oben als Span über mehrere Spalten (PLAN-14) #}
-          <div class="appts-spans">
-            {% for s in span_appointments %}
-              <div class="pill span"
-                   style="grid-column: {{ s.start_day + 1 }} / {{ s.end_day + 2 }};">
-                {{ arasaac_img(s.icon, 22) }}
-                <div class="pill-body">
-                  <div class="pill-label">{{ s.label }}</div>
-                </div>
-                {# PLAN-19 V1.1: bis zu zwei Avatare nebeneinander (Foto-im-Ring-Stil) #}
-                {% if s.personen %}
-                  {% for pr in s.personen %}
-                    {% set p = person_photo_url.get(pr.person) %}
-                    {{ face(pr.ring, p, 'size-24') }}
-                  {% endfor %}
-                {% elif s.ring %}
-                  {# Backward-Compat: altes Termin-Modell ohne personen-Liste #}
-                  {% set p = person_photo_url.get(s.person) %}
-                  {{ face(s.ring, p, 'size-24') }}
-                {% endif %}
-              </div>
-            {% endfor %}
-          </div>
-          {# Einzel-Termine je Spalte (PLAN-13) #}
-          <div class="appts-cells">
-            {% for d in days %}
-            <div class="appts-col">
+        {# PLAN-14 V1.3: Ein Board — Tagestermine je Spalte, Span-Balken als
+           Overlay nur über die berührten Spalten. Span-lose Spalten reservieren
+           keine Zeile → Tagestermine rutschen dort nach oben (kein Voll-Breite-
+           Band über das ganze Fenster). span_cover wird NUR aus
+           span_appointments (start_day..end_day) abgeleitet. #}
+        {% set span_cover = [] %}
+        {% for s in span_appointments %}
+          {% for di in range(s.start_day, s.end_day + 1) %}
+            {% if di not in span_cover %}{% set _ = span_cover.append(di) %}{% endif %}
+          {% endfor %}
+        {% endfor %}
+        <div class="appts-board" style="--span-band: 42px;">
+          {# Tagestermine je Spalte (PLAN-13). Eine von einem Span berührte
+             Spalte (span_cover) hält oben die Balken-Höhe frei (.under-span);
+             span-lose Spalten lassen die Termine nach oben rutschen. #}
+          {% for d in days %}
+            <div class="appts-col{% if loop.index0 in span_cover %} under-span{% endif %}">
               {% for a in appointments[d.iso] %}
                 <div class="pill">
                   {{ arasaac_img(a.icon, 22) }}
@@ -652,6 +646,30 @@
                 <div class="appts-more">+{{ overflow }} weitere</div>
               {% endif %}
             </div>
+          {% endfor %}
+          {# Mehrtages-Spannen als durchgehende Balken NUR über die berührten
+             Spalten (PLAN-14) — Overlay-Schicht, reserviert keine Zeile in
+             span-losen Spalten. #}
+          <div class="appts-spans">
+            {% for s in span_appointments %}
+              <div class="pill span"
+                   style="grid-column: {{ s.start_day + 1 }} / {{ s.end_day + 2 }};">
+                {{ arasaac_img(s.icon, 22) }}
+                <div class="pill-body">
+                  <div class="pill-label">{{ s.label }}</div>
+                </div>
+                {# PLAN-19 V1.1: bis zu zwei Avatare nebeneinander (Foto-im-Ring-Stil) #}
+                {% if s.personen %}
+                  {% for pr in s.personen %}
+                    {% set p = person_photo_url.get(pr.person) %}
+                    {{ face(pr.ring, p, 'size-24') }}
+                  {% endfor %}
+                {% elif s.ring %}
+                  {# Backward-Compat: altes Termin-Modell ohne personen-Liste #}
+                  {% set p = person_photo_url.get(s.person) %}
+                  {{ face(s.ring, p, 'size-24') }}
+                {% endif %}
+              </div>
             {% endfor %}
           </div>
         </div>
