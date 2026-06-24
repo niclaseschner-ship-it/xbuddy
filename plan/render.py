@@ -406,7 +406,7 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
     span_appointments = []
     kinder = [p for p in registry.alle() if p.is_kind()]
     aktivitaets_slots = cfg.aktivitaets_slots()
-    # kind_id -> aktivitaets-slot-schluessel
+    # kind_id -> kalender-read-slot-schluessel
     kind_zu_slot = {s.kind: s.schluessel for s in aktivitaets_slots}
 
     events = kalender.events(anker, anzahl_tage)

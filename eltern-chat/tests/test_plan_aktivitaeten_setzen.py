@@ -921,7 +921,7 @@ def _build_plan_json(path, tmp_path):
     — CONFIG-4-Fallback greift bei GET/POST, PAS-5/PAS-3)."""
     data = {
         "slots": [
-            {"schluessel": "act1", "art": "aktivitaets-slot", "icon": "star",
+            {"schluessel": "act1", "art": "kalender-read", "icon": "star",
              "kind": "paula"},
         ],
         "default_verantwortlichkeiten": {},
