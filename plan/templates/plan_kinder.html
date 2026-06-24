@@ -582,22 +582,22 @@
                    data-wd="{{ d.wd }}"
                    style="background: var(--kids-wd-{{ wd_name }}-{{ wd_strength }});"
                    {% if slot.kind %}data-child="{{ slot.kind }}"{% endif %}
-                   {% if slot.art == 'erwachsenen-slot' and cell and cell is mapping and cell.person %}data-person-id="{{ cell.person }}"{% endif %}
+                   {% if slot.art == 'petrantwortlich' and cell and cell is mapping and cell.person %}data-person-id="{{ cell.person }}"{% endif %}
                    {% if cell and cell is mapping and cell.event_id %}data-event-id="{{ cell.event_id }}"{% endif %}>
-                {% if slot.art == 'aktivitaets-slot' and cell and cell is mapping %}
+                {% if slot.art == 'kalender-read' and cell and cell is mapping %}
                   <div class="activity-chip">
                     {{ arasaac_img(cell.piktogramm or '3071', 28) }}
                     <span>{{ cell.label or '' }}</span>
                   </div>
-                {% elif slot.art == 'aktivitaets-slot' and slot.kind %}
+                {% elif slot.art == 'kalender-read' and slot.kind %}
                   {# Leerer Kinder-Aktivitäts-Slot: Plus als Anlege-Indikator (PLAN-12) #}
                   <svg class="slot-plus" viewBox="0 0 64 64" width="30" height="30" fill="none" stroke="var(--kids-ink)" stroke-width="3.5" stroke-linecap="round" style="opacity:0.4;">
                     <path d="M32 14 L32 50 M14 32 L50 32"/>
                   </svg>
-                {% elif slot.art == 'erwachsenen-slot' and cell and cell is mapping %}
+                {% elif slot.art == 'petrantwortlich' and cell and cell is mapping %}
                   {% set photo = person_photo_url.get(cell.person) %}
                   {{ face(cell.ring, photo, 'size-76') }}
-                {% elif slot.art == 'erwachsenen-slot' %}
+                {% elif slot.art == 'petrantwortlich' %}
                   <div class="empty-face"></div>
                 {% endif %}
               </div>
@@ -772,7 +772,7 @@ document.addEventListener('click', async (e) => {
   const slotArt = cell.dataset.slotArt;
 
   // PLAN-7/8: Erwachsenen-Slot — Cycle, dann lokal speichern.
-  if (slotArt === 'erwachsenen-slot') {
+  if (slotArt === 'petrantwortlich') {
     const cur = currentAdultOfCell(cell);
     const nxt = nextAdult(cur);
     renderAdultCell(cell, nxt);
@@ -794,7 +794,7 @@ document.addEventListener('click', async (e) => {
   }
 
   // PLAN-11: Aktivitäts-Slot — Picker öffnen.
-  if (slotArt === 'aktivitaets-slot') {
+  if (slotArt === 'kalender-read') {
     openPicker(cell);
   }
 });

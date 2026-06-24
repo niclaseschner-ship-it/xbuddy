@@ -445,7 +445,7 @@ def api_zuteilung():
     # frischen plan.json — eine eben hinzugefügte Slot-Form wird sofort als
     # gültig akzeptiert, ohne Restart.
     slot = _current_config().slot(body["slot"])
-    if slot is None or not slot.ist_erwachsenen_slot():
+    if slot is None or not slot.ist_petrantwortlich_slot():
         return jsonify({"error": "kein Erwachsenen-Slot: %r" % body["slot"]}), 400
     person_id = body.get("person_id")
     if person_id is not None and _aktuelle_registry().get(person_id) is None:

@@ -184,10 +184,10 @@ def test_PLAN_6_slots_come_from_config(demo_config):
     # alten Icon-Key 'sun'; die config.py-Migrations-Lesephase (PLAN-6 V1.3,
     # T1092-Backend) übersetzt ihn beim Parsen auf die ARASAAC-id '37807'.
     bring = demo_config.slot("bring")
-    assert bring.art == config_mod.SLOT_ERWACHSENEN
+    assert bring.art == config_mod.SLOT_PETRANTWORTLICH
     assert bring.icon == "37807"
     act1 = demo_config.slot("act1")
-    assert act1.art == config_mod.SLOT_AKTIVITAET
+    assert act1.art == config_mod.SLOT_KALENDER_READ
     assert act1.kind == "mia"
 
 
@@ -205,7 +205,7 @@ def test_PLAN_6_activity_slot_without_child_is_config_error(tmp_path):
     """Ein Aktivitäts-Slot ohne `kind` ist eine ungültige Config (PLAN-6)."""
     bad = tmp_path / "plan.json"
     bad.write_text(json.dumps({
-        "slots": [{"schluessel": "act1", "art": "aktivitaets-slot", "icon": "star"}],
+        "slots": [{"schluessel": "act1", "art": "kalender-read", "icon": "star"}],
         "kalender_id": "x@group.calendar.google.com",
     }))
     with pytest.raises(config_mod.ConfigError):
@@ -477,7 +477,7 @@ def _config_mit_slots(tmp_path, slots, **overrides):
 def _n_erwachsenen_slots(n):
     """n Erwachsenen-Slots mit eindeutigen Schlüsseln und ARASAAC-icons."""
     return [
-        {"schluessel": "s%d" % i, "art": "erwachsenen-slot", "icon": "3071"}
+        {"schluessel": "s%d" % i, "art": "petrantwortlich", "icon": "3071"}
         for i in range(n)
     ]
 
@@ -942,8 +942,8 @@ def test_parser_akzeptiert_alte_und_arasaac_icons(tmp_path, caplog):
     cfg_path = tmp_path / "plan.json"
     data = dict(DEMO_CONFIG)
     data["slots"] = [
-        {"schluessel": "alt",  "art": "erwachsenen-slot", "icon": "sun"},    # alt
-        {"schluessel": "neu",  "art": "erwachsenen-slot", "icon": "37807"},  # ARASAAC
+        {"schluessel": "alt",  "art": "petrantwortlich", "icon": "sun"},    # alt Icon-Key
+        {"schluessel": "neu",  "art": "petrantwortlich", "icon": "37807"},  # ARASAAC-id
     ]
     data["default_petrantwortlichkeiten"] = {}
     data["db_datei"] = str(tmp_path / "plan.db")
@@ -966,6 +966,57 @@ def test_parser_akzeptiert_alte_und_arasaac_icons(tmp_path, caplog):
         % (len(migr_warns), migr_warns)
     )
     assert "'sun'" in migr_warns[0], "WARN soll den alten Key 'sun' nennen"
+
+
+def test_PLAN_6_slot_art_lese_toleranz(tmp_path, caplog):
+    """PLAN-6 V1.4 (Slot-Art-Migrations-Lesephase): Der Parser akzeptiert alte
+    Art-Strings (erwachsenen-slot / aktivitaets-slot) mit WARN-Log UND neue
+    Strings (petrantwortlich / kalender-read) ohne WARN. Beide Wege in einem
+    Aufruf: alt → WARN + intern neu; neu → kein WARN."""
+    cfg_path = tmp_path / "plan.json"
+    data = dict(DEMO_CONFIG)
+    data["slots"] = [
+        # ALT: sollen intern auf neue Strings migriert werden (Lese-Toleranz)
+        {"schluessel": "alt-erw",  "art": "erwachsenen-slot", "icon": "3071"},
+        {"schluessel": "alt-akt",  "art": "aktivitaets-slot", "icon": "3071", "kind": "mia"},
+        # NEU: unverändert, kein WARN
+        {"schluessel": "neu-ver",  "art": "petrantwortlich",   "icon": "3071"},
+        {"schluessel": "neu-kal",  "art": "kalender-read",    "icon": "3071", "kind": "finn"},
+    ]
+    data["default_petrantwortlichkeiten"] = {}
+    data["db_datei"] = str(tmp_path / "plan.db")
+    cfg_path.write_text(json.dumps(data))
+    with caplog.at_level("WARNING"):
+        cfg = config_mod.resolve(str(cfg_path))
+    by_key = {s.schluessel: s for s in cfg.slots}
+    # Alte Art-Strings wurden intern auf neue Strings migriert.
+    assert by_key["alt-erw"].art == config_mod.SLOT_PETRANTWORTLICH, (
+        "erwachsenen-slot nicht auf petrantwortlich migriert"
+    )
+    assert by_key["alt-akt"].art == config_mod.SLOT_KALENDER_READ, (
+        "aktivitaets-slot nicht auf kalender-read migriert"
+    )
+    # Neue Art-Strings blieben unverändert.
+    assert by_key["neu-ver"].art == config_mod.SLOT_PETRANTWORTLICH
+    assert by_key["neu-kal"].art == config_mod.SLOT_KALENDER_READ
+    # WARN für JEDEN alten Art-String — genau zwei (alt-erw + alt-akt).
+    art_warns = [r.getMessage() for r in caplog.records
+                 if r.levelname == "WARNING" and "Slot-Art-Migrations-Lesephase" in r.getMessage()]
+    assert len(art_warns) == 2, (
+        "Genau zwei Slot-Art-Migrations-WARNs (alt-erw + alt-akt) erwartet, bekam %d: %r"
+        % (len(art_warns), art_warns)
+    )
+    # WARN nennt jeweils den alten String.
+    assert any("'erwachsenen-slot'" in w for w in art_warns), (
+        "Keine WARN für 'erwachsenen-slot'"
+    )
+    assert any("'aktivitaets-slot'" in w for w in art_warns), (
+        "Keine WARN für 'aktivitaets-slot'"
+    )
+    # Für neue Strings kein Art-Migrations-WARN.
+    assert all("neu-ver" not in w and "neu-kal" not in w for w in art_warns), (
+        "Unerwartete Slot-Art-Migrations-WARN für neue Strings"
+    )
 
 
 def test_template_rendert_slot_icon_direkt(demo_config, demo_registry):
@@ -2020,7 +2071,7 @@ def _write_plan_json(path, kalender_id="demo@group.calendar.google.com",
     data["db_datei"] = str(os.path.dirname(path) + "/plan.db")
     if extra_slot:
         data["slots"].append({
-            "schluessel": "wash", "art": "erwachsenen-slot", "icon": "drop",
+            "schluessel": "wash", "art": "petrantwortlich", "icon": "drop",
         })
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f)
