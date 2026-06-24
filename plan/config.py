@@ -10,8 +10,8 @@ ohne sinnvollen Default (Google-Kalender-ID) werfen ConfigError, wenn sie
 fehlen.
 
 Die Slot-Liste ist die zentrale Datei-getriebene Struktur: jeder Slot hat
-einen stabilen Schlüssel, eine Art (`erwachsenen-slot` | `aktivitaets-slot`),
-ein Icon und — bei Aktivitäts-Slots — das zugehörige Kind (PLAN-6).
+einen stabilen Schlüssel, eine Art (`petrantwortlich` | `kalender-read`),
+ein Icon und — bei Kalender-read-Slots — das zugehörige Kind (PLAN-6).
 
 Der Aktivitäts-Katalog (`aktivitaeten`-Section in plan.json) ist die zweite
 Datei-getriebene Struktur: jeder Eintrag hat art, label, keywords und
@@ -27,10 +27,22 @@ logger = logging.getLogger(__name__)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# PLAN-6: die zwei Slot-Arten.
-SLOT_ERWACHSENEN = "erwachsenen-slot"
-SLOT_AKTIVITAET = "aktivitaets-slot"
-SLOT_ARTEN = (SLOT_ERWACHSENEN, SLOT_AKTIVITAET)
+# PLAN-6: die zwei Slot-Arten (V1.4 — Sprint 2, neue Strings).
+SLOT_PETRANTWORTLICH = "petrantwortlich"
+SLOT_KALENDER_READ = "kalender-read"
+SLOT_ARTEN = (SLOT_PETRANTWORTLICH, SLOT_KALENDER_READ)
+
+# PLAN-6 V1.4 — Slot-Art-Migrations-Lesephase: alte Strings werden mit
+# WARN-Log akzeptiert; neu geschriebene Slots tragen die neuen Strings.
+_LEGACY_SLOT_ART = {
+    "erwachsenen-slot": SLOT_PETRANTWORTLICH,
+    "aktivitaets-slot": SLOT_KALENDER_READ,
+}
+
+# Rückwärts-Kompatibilität: Code, der noch SLOT_ERWACHSENEN / SLOT_AKTIVITAET
+# liest, bekommt die neuen Strings (bis alle internen Nutzungen migriert sind).
+SLOT_ERWACHSENEN = SLOT_PETRANTWORTLICH
+SLOT_AKTIVITAET = SLOT_KALENDER_READ
 
 # PLAN-6 V1.3 (RAT-4-Auflösung 2026-06-22) — Icon-Migrations-Lesephase.
 # Alte interne Slot-Icon-Keys werden mit WARN-Log auf ihre ARASAAC-id
@@ -108,11 +120,11 @@ class Slot:
         self.icon = icon
         self.kind = kind
 
-    def ist_erwachsenen_slot(self):
-        return self.art == SLOT_ERWACHSENEN
+    def ist_petrantwortlich_slot(self):
+        return self.art == SLOT_PETRANTWORTLICH
 
-    def ist_aktivitaets_slot(self):
-        return self.art == SLOT_AKTIVITAET
+    def ist_kalender_read_slot(self):
+        return self.art == SLOT_KALENDER_READ
 
     def to_dict(self):
         d = {"schluessel": self.schluessel, "art": self.art, "icon": self.icon}
@@ -177,10 +189,10 @@ class Config:
         return None
 
     def erwachsenen_slots(self):
-        return [s for s in self.slots if s.ist_erwachsenen_slot()]
+        return [s for s in self.slots if s.ist_petrantwortlich_slot()]
 
     def aktivitaets_slots(self):
-        return [s for s in self.slots if s.ist_aktivitaets_slot()]
+        return [s for s in self.slots if s.ist_kalender_read_slot()]
 
 
 def _load_file(path):
@@ -229,16 +241,39 @@ def _migriere_slot_icon(schluessel, icon):
     return icon
 
 
+def _migriere_slot_art(schluessel, art):
+    """Slot-Art-Migrations-Lesephase (PLAN-6 V1.4 — Sprint 2).
+
+    Ein alter Art-String (`erwachsenen-slot` → `petrantwortlich`,
+    `aktivitaets-slot` → `kalender-read`) wird mit WARN-Log auf den neuen
+    String übersetzt; neue Strings werden unverändert durchgereicht. So
+    akzeptiert der Parser bestehende plan.json-Dateien ohne Deploy-Block —
+    die Lesephase ist Übergangs-Kompatibilität, neu geschriebene Slots sollen
+    die neuen Strings tragen.
+    """
+    if art in _LEGACY_SLOT_ART:
+        neu = _LEGACY_SLOT_ART[art]
+        logger.warning(
+            "Slot %r: alter Art-String %r → %r (Slot-Art-Migrations-Lesephase, "
+            "PLAN-6 V1.4) — neu geschriebene Slots sollten den neuen String tragen",
+            schluessel, art, neu)
+        return neu
+    return art
+
+
 def _parse_slots(raw_slots):
     """Baut Slot-Objekte aus dem `slots`-Abschnitt der Config (PLAN-6).
 
     Wirft ConfigError, wenn ein Slot ein Pflichtfeld vermisst, eine
-    unbekannte Art trägt oder ein Aktivitäts-Slot kein Kind benennt.
+    unbekannte Art trägt oder ein Kalender-read-Slot kein Kind benennt.
 
     PLAN-6 V1.3: alte Icon-Keys werden über die Migrations-Lesephase
     (`_migriere_slot_icon`) auf ARASAAC-ids übersetzt (WARN); ab `SLOT_WARN_AB`
     Slots schreibt der Parser einen WARN-Log (kein ERROR — die Familie läuft
     weiter, das Risiko ist Lesbarkeit, nicht Datenverlust).
+
+    PLAN-6 V1.4: alte Slot-Art-Strings werden über die Slot-Art-Migrations-
+    Lesephase (`_migriere_slot_art`) auf die neuen Strings übersetzt (WARN).
     """
     slots = []
     seen = set()
@@ -248,15 +283,15 @@ def _parse_slots(raw_slots):
         for feld in ("schluessel", "art", "icon"):
             if not raw.get(feld):
                 raise ConfigError("Slot ohne Pflichtfeld %r: %r" % (feld, raw))
-        art = raw["art"]
+        art = _migriere_slot_art(raw["schluessel"], raw["art"])
         if art not in SLOT_ARTEN:
             raise ConfigError(
                 "Slot %r: Art %r unbekannt (erlaubt: %s)"
                 % (raw["schluessel"], art, ", ".join(SLOT_ARTEN)))
         kind = raw.get("kind")
-        if art == SLOT_AKTIVITAET and not kind:
+        if art == SLOT_KALENDER_READ and not kind:
             raise ConfigError(
-                "Aktivitäts-Slot %r braucht ein `kind` (PLAN-6)" % raw["schluessel"])
+                "Kalender-read-Slot %r braucht ein `kind` (PLAN-6)" % raw["schluessel"])
         if raw["schluessel"] in seen:
             raise ConfigError("doppelter Slot-Schlüssel %r" % raw["schluessel"])
         seen.add(raw["schluessel"])
@@ -315,7 +350,7 @@ def _parse_defaults(raw_defaults, slots):
     werden mit None aufgefüllt. Defaults sind leer, wenn der Abschnitt fehlt
     (PLAN-28). Nur Erwachsenen-Slots können Defaults tragen.
     """
-    erwachsenen_keys = {s.schluessel for s in slots if s.ist_erwachsenen_slot()}
+    erwachsenen_keys = {s.schluessel for s in slots if s.ist_petrantwortlich_slot()}
     out = {}
     for slot_key, by_day in (raw_defaults or {}).items():
         if slot_key not in erwachsenen_keys:

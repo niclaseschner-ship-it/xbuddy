@@ -139,13 +139,13 @@ DEMO_REGISTRY = {
 # Plan-Buddy-Config: die 7 Slots des Handoffs + ein paar Defaults.
 DEMO_CONFIG = {
     "slots": [
-        {"schluessel": "bring", "art": "erwachsenen-slot", "icon": "sun"},
-        {"schluessel": "pick", "art": "erwachsenen-slot", "icon": "clock"},
-        {"schluessel": "act1", "art": "aktivitaets-slot", "icon": "star", "kind": "mia"},
-        {"schluessel": "act2", "art": "aktivitaets-slot", "icon": "star", "kind": "finn"},
-        {"schluessel": "cook", "art": "erwachsenen-slot", "icon": "fork"},
-        {"schluessel": "bed1", "art": "erwachsenen-slot", "icon": "moon", "kind": "mia"},
-        {"schluessel": "bed2", "art": "erwachsenen-slot", "icon": "moon", "kind": "finn"},
+        {"schluessel": "bring", "art": "petrantwortlich", "icon": "sun"},
+        {"schluessel": "pick", "art": "petrantwortlich", "icon": "clock"},
+        {"schluessel": "act1", "art": "kalender-read", "icon": "star", "kind": "mia"},
+        {"schluessel": "act2", "art": "kalender-read", "icon": "star", "kind": "finn"},
+        {"schluessel": "cook", "art": "petrantwortlich", "icon": "fork"},
+        {"schluessel": "bed1", "art": "petrantwortlich", "icon": "moon", "kind": "mia"},
+        {"schluessel": "bed2", "art": "petrantwortlich", "icon": "moon", "kind": "finn"},
     ],
     "default_petrantwortlichkeiten": {
         # Index 0=Mo … 6=So. bring ist Mo emil, Di petra.
