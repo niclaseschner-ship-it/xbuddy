@@ -2,13 +2,13 @@
   "_comment": "PLAN-28 — Plan-Buddy-Konfiguration einer Instanz. Kopiere als plan.json (per .gitignore aus dem Repo ausgeschlossen, je Instanz separat gepflegt). 'slots' definiert die Schedule-Rail (PLAN-6): jeder Slot hat schluessel (stabil), art (erwachsenen-slot | aktivitaets-slot), icon und — bei aktivitaets-slot — kind (Personen-id der Familien-Registry). 'default_verantwortlichkeiten' (PLAN-10) belegt erwachsenen-slots beim ersten Anzeigen einer Woche vor: je Slot eine Liste von 7 Personen-ids oder null (Index 0=Montag .. 6=Sonntag). 'kalender_id' (PLAN-15) ist Pflicht. Diese Beispiel-Config bildet die sieben Slots des Wireframe-Handoffs 1:1 ab.",
 
   "slots": [
-    {"schluessel": "bring", "art": "erwachsenen-slot", "icon": "sun"},
-    {"schluessel": "pick",  "art": "erwachsenen-slot", "icon": "clock"},
-    {"schluessel": "act1",  "art": "aktivitaets-slot", "icon": "star", "kind": "paula"},
-    {"schluessel": "act2",  "art": "aktivitaets-slot", "icon": "star", "kind": "neko"},
-    {"schluessel": "cook",  "art": "erwachsenen-slot", "icon": "fork"},
-    {"schluessel": "bed1",  "art": "erwachsenen-slot", "icon": "moon", "kind": "paula"},
-    {"schluessel": "bed2",  "art": "erwachsenen-slot", "icon": "moon", "kind": "neko"}
+    {"schluessel": "bring", "art": "erwachsenen-slot", "icon": "37807"},
+    {"schluessel": "pick",  "art": "erwachsenen-slot", "icon": "39520"},
+    {"schluessel": "act1",  "art": "aktivitaets-slot", "icon": "3071", "kind": "paula"},
+    {"schluessel": "act2",  "art": "aktivitaets-slot", "icon": "3071", "kind": "neko"},
+    {"schluessel": "cook",  "art": "erwachsenen-slot", "icon": "2342"},
+    {"schluessel": "bed1",  "art": "erwachsenen-slot", "icon": "6027", "kind": "paula"},
+    {"schluessel": "bed2",  "art": "erwachsenen-slot", "icon": "6027", "kind": "neko"}
   ],
 
   "default_verantwortlichkeiten": {

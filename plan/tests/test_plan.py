@@ -180,10 +180,12 @@ def test_PLAN_6_slots_come_from_config(demo_config):
     """Die 7 Slot-Zeilen kommen aus der Config, nicht aus Code-Konstanten."""
     keys = [s.schluessel for s in demo_config.slots]
     assert keys == ["bring", "pick", "act1", "act2", "cook", "bed1", "bed2"]
-    # Jede Slot-Definition trägt Art und Icon.
+    # Jede Slot-Definition trägt Art und Icon. DEMO_CONFIG schreibt noch den
+    # alten Icon-Key 'sun'; die config.py-Migrations-Lesephase (PLAN-6 V1.3,
+    # T1092-Backend) übersetzt ihn beim Parsen auf die ARASAAC-id '37807'.
     bring = demo_config.slot("bring")
     assert bring.art == config_mod.SLOT_ERWACHSENEN
-    assert bring.icon == "sun"
+    assert bring.icon == "37807"
     act1 = demo_config.slot("act1")
     assert act1.art == config_mod.SLOT_AKTIVITAET
     assert act1.kind == "paula"
@@ -447,6 +449,281 @@ def test_PLAN_14_timed_multi_day_event_is_one_span(demo_config, demo_registry):
     conn.close()
     assert len(view["span_appointments"]) == 1
     assert view["span_appointments"][0]["end_day"] == 2
+
+
+# ============================================================
+#  T1092 — PLAN-6/7/13/14 V1.3 (RAT-4-Auflösung 2026-06-22)
+#  Layout-Grid · Slot-WARN · Span-Start · Termin-Überschuss ·
+#  Toggle-All-Cycle · Label-Strip · Icon-Migration im Template
+# ============================================================
+
+def _config_mit_slots(tmp_path, slots, **overrides):
+    """Baut eine aufgelöste Config mit einer beliebigen Slot-Liste (T1092).
+
+    Für die Layout-/WARN-Proben: Slot-Anzahl frei wählbar. Alle Slots sind
+    Erwachsenen-Slots mit ARASAAC-icons (kein `kind` nötig). DB liegt in
+    tmp_path; sonst gelten die DEMO_CONFIG-Werte.
+    """
+    cfg_path = tmp_path / "plan.json"
+    data = dict(DEMO_CONFIG)
+    data["slots"] = slots
+    data["default_verantwortlichkeiten"] = {}
+    data["db_datei"] = str(tmp_path / "plan.db")
+    data.update(overrides)
+    cfg_path.write_text(json.dumps(data))
+    return config_mod.resolve(str(cfg_path))
+
+
+def _n_erwachsenen_slots(n):
+    """n Erwachsenen-Slots mit eindeutigen Schlüsseln und ARASAAC-icons."""
+    return [
+        {"schluessel": "s%d" % i, "art": "erwachsenen-slot", "icon": "3071"}
+        for i in range(n)
+    ]
+
+
+def test_layout_grid_reserviert_termin_bar_bei_8_slots(tmp_path, demo_registry):
+    """PLAN-6 V1.3: Die gerenderte HTML trägt das CSS-Grid mit fixer
+    Slot-Zeilen-Form und der 1fr-Termin-Restzeile — die Schedule-Rail kann die
+    Termin-Leiste nicht mehr aus dem Frame drücken (verworfene flex-Form,
+    Befund 2026-06-22).
+
+    DETERMINISTISCH geprüft (kein Browser-Tooling im Repo — keins installiert,
+    convention_needed→STOP): (a) das Grid-Template `repeat(var(--slot-count),
+    80px) 1fr` steht im HTML, (b) `--slot-count: 8` wird inline gesetzt.
+
+    Höhen-Arithmetik (Deploy-Visual-Check, NICHT hier hart assertiert):
+      Frame max-height 1020px (auf 1080px-Tablet quer).
+      Zeilen: Header(auto ~ 70px) + Day-Row(auto ~ 90px) + 8 × 80px(=640px)
+              + Termin-Rest(1fr).
+      1fr-Rest ≈ 1020 - 70 - 90 - 640 = 220px ≥ 200px (PLAN-6-Experiment).
+    Die gerenderte ≥200px-Prüfung bleibt der Tablet-Screenshot beim Deploy
+    (Handoff-watchdog_hint).
+    """
+    cfg = _config_mit_slots(tmp_path, _n_erwachsenen_slots(8))
+    client = make_client(cfg, demo_registry, FakeTransport())
+    r = client.get("/display/plan/woche")
+    assert r.status_code == 200
+    html = r.data
+    # (a) Grid-Template mit fixer Slot-Zeile + 1fr-Termin-Rest.
+    assert b"repeat(var(--slot-count, 7), 80px) 1fr" in html, (
+        "PLAN-6 V1.3 Grid-Template-Form fehlt im HTML"
+    )
+    # (b) --slot-count wird inline aus der Slot-Anzahl gesetzt (8 Slots).
+    assert b"--slot-count: 8" in html, (
+        "--slot-count: 8 nicht inline gesetzt — Hardcode-Annahme statt "
+        "konfigurierbarer Slot-Zahl?"
+    )
+
+
+def test_parse_slots_warnt_ab_neun_slots(tmp_path, caplog):
+    """PLAN-6 V1.3: Ab 9 Slots schreibt der Parser ein WARN (kein ERROR) — die
+    Familie läuft weiter, das Risiko ist Lesbarkeit, nicht Datenverlust."""
+    cfg_path = tmp_path / "plan.json"
+    data = dict(DEMO_CONFIG)
+    data["slots"] = _n_erwachsenen_slots(9)
+    data["default_verantwortlichkeiten"] = {}
+    data["db_datei"] = str(tmp_path / "plan.db")
+    cfg_path.write_text(json.dumps(data))
+    with caplog.at_level("WARNING"):
+        cfg = config_mod.resolve(str(cfg_path))
+    assert len(cfg.slots) == 9
+    warns = [r for r in caplog.records if r.levelname == "WARNING"]
+    assert any("Slots konfiguriert" in r.getMessage() for r in warns), (
+        "WARN-Log ab 9 Slots erwartet"
+    )
+    assert not [r for r in caplog.records if r.levelname == "ERROR"], (
+        "Kein ERROR erwartet — WARN ist genug (Familie läuft weiter)"
+    )
+
+
+def test_mehrtages_span_erst_ab_starttag(demo_config, demo_registry):
+    """PLAN-14 V1.3: Beginnt ein Event NACH dem ersten Fenster-Tag, bleiben die
+    Vorlauf-Spalten frei — die Spanne startet erst an ihrem Start-Tag im
+    Fenster (start_day > 0), reserviert die Zeile nicht ab Anzeige-Beginn."""
+    heute = date(2026, 5, 20)  # Mi
+    # Event Fr–Sa (Index 2–3), Fenster ab Mi (Index 0).
+    start = heute + timedelta(days=2)
+    raw = [gcal_allday("trip2", "Wochenende Oma",
+                       start.isoformat(), (start + timedelta(days=2)).isoformat())]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    spans = view["span_appointments"]
+    assert len(spans) == 1
+    assert spans[0]["start_day"] == 2, (
+        "Vorlauf-Spalten (0,1) müssen frei bleiben — start_day == 2 erwartet"
+    )
+    assert spans[0]["end_day"] == 3
+
+
+def test_mehrtages_span_laufend_ab_fensterstart(demo_config, demo_registry):
+    """PLAN-14 V1.3: Beginnt ein Event VOR dem Fenster und reicht hinein, zeigt
+    die Spanne ab dem ersten Fenster-Tag (start_day == 0) — der Termin läuft
+    bereits."""
+    heute = date(2026, 5, 20)  # Mi
+    # Event Mo–Fr (Mo = heute-2), Fenster ab Mi → in-Fenster Mi,Do,Fr.
+    start = heute - timedelta(days=2)
+    raw = [gcal_allday("ferien2", "Ferien Oma",
+                       start.isoformat(), (heute + timedelta(days=3)).isoformat())]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    spans = view["span_appointments"]
+    assert len(spans) == 1
+    assert spans[0]["start_day"] == 0, (
+        "Laufendes Event ab Fensterstart → start_day == 0 erwartet"
+    )
+
+
+def test_termin_ueberschuss_zeigt_counter(demo_config, demo_registry):
+    """PLAN-13 V1.3: Mehr als TERMIN_LEISTE_MAX (5) Termine an einem Tag →
+    appointments auf 5 gekürzt, appointment_overflow trägt den Rest, und das
+    gerenderte HTML zeigt den gedimmten Counter `+M weitere`."""
+    heute = date(2026, 5, 20)
+    # 8 zeitgebundene Einzel-Termine ohne Kind-/Personen-Name am selben Tag.
+    raw = [
+        gcal_timed("ev%d" % i, "Termin %d" % i,
+                   "%sT%02d:00:00+02:00" % (heute.isoformat(), 9 + i),
+                   "%sT%02d:30:00+02:00" % (heute.isoformat(), 9 + i))
+        for i in range(8)
+    ]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    iso = heute.isoformat()
+    assert len(view["appointments"][iso]) == 5, "auf TERMIN_LEISTE_MAX=5 gekürzt"
+    assert view["appointment_overflow"][iso] == 3, "Überschuss 8-5=3"
+    # Entry-Path: Counter im HTML.
+    client = make_client(demo_config, demo_registry, FakeTransport(raw))
+    r = client.get("/display/plan/woche?ab=%s" % iso)
+    assert r.status_code == 200
+    assert b"+3 weitere" in r.data, (
+        "Termin-Überschuss-Counter '+3 weitere' fehlt im HTML"
+    )
+
+
+def test_headline_subtitle_nicht_im_render(demo_config, demo_registry):
+    """QW1: Der Headline-Subtitle ('heute und die nächsten Tage') ist entfernt
+    — weder der Text noch die `.brand-subtitle`-Klasse stehen im HTML."""
+    client = make_client(demo_config, demo_registry, FakeTransport())
+    r = client.get("/display/plan/woche")
+    assert r.status_code == 200
+    assert "heute und die nächsten Tage".encode() not in r.data, (
+        "Subtitle-Text noch im HTML (QW1 nicht umgesetzt)"
+    )
+    assert b"brand-subtitle" not in r.data, (
+        ".brand-subtitle (Klasse/CSS) noch im HTML"
+    )
+
+
+def test_cycle_iteriert_alle_personen(demo_config, demo_registry):
+    """PLAN-7 V1.3 (Toggle-All): Der Klick-Cycle (JS ADULTS-Array) iteriert über
+    ALLE Personen der Registry — Erwachsene UND Kinder, Registry-Reihenfolge —
+    die frühere `art == 'erwachsene'`-Beschränkung ist entfernt."""
+    client = make_client(demo_config, demo_registry, FakeTransport())
+    r = client.get("/display/plan/woche")
+    assert r.status_code == 200
+    html = r.data.decode("utf-8")
+    # Registry: niclas, vera (Erwachsene) + paula, neko (Kinder).
+    for pid in ("niclas", "vera", "paula", "neko"):
+        assert ('"%s"' % pid) in html, (
+            "Person %r fehlt im Cycle-ADULTS-Array — Kinder ausgeschlossen?" % pid
+        )
+    # Kinder-id muss im JS-Array stehen (nicht nur als data-child im Rail):
+    # die id taucht hinter `{id:` im ADULTS-Literal auf.
+    assert "{id: \"paula\"" in html, "Kind paula nicht im ADULTS-Cycle-Literal"
+    assert "{id: \"neko\"" in html, "Kind neko nicht im ADULTS-Cycle-Literal"
+
+
+def test_termin_label_strippt_einzelne_person(demo_registry):
+    """PLAN-24 V1.3: Trägt der Termin-Titel GENAU EINEN Personen-Namen, wird er
+    aus dem Label gestrippt (Foto-im-Ring trägt die Identität)."""
+    label = render_mod.strip_person_name("Niclas Zahnarzt", demo_registry.alle())
+    assert label == "Zahnarzt", (
+        "Eindeutiger n=1-Name muss gestrippt werden, bekam %r" % label
+    )
+
+
+def test_termin_label_verbatim_bei_multi_person(demo_registry):
+    """PLAN-24 V1.3: Bei ZWEI Namens-Treffern bleibt das Label verbatim — der
+    Namens-Bezug trägt semantisch bei Mehrdeutigkeit."""
+    titel = "Sport mit Vera und Niclas"
+    label = render_mod.strip_person_name(titel, demo_registry.alle())
+    assert label == titel, (
+        "Multi-Person-Titel muss verbatim bleiben, bekam %r" % label
+    )
+
+
+def test_termin_label_verbatim_ohne_personen_treffer(demo_registry):
+    """PLAN-24 V1.3: Trägt der Titel KEINEN Personen-Namen, bleibt das Label
+    verbatim — es gibt nichts zu strippen."""
+    titel = "Zahnarzt um die Ecke"
+    label = render_mod.strip_person_name(titel, demo_registry.alle())
+    assert label == titel, (
+        "Titel ohne Namens-Treffer muss verbatim bleiben, bekam %r" % label
+    )
+
+
+def test_parser_akzeptiert_alte_und_arasaac_icons(tmp_path, caplog):
+    """PLAN-6 V1.3 (Icon-Migrations-Lesephase): Der Parser akzeptiert alte
+    interne Keys (mit WARN → ARASAAC-id übersetzt) UND bereits ARASAAC-förmige
+    ids (unverändert, kein WARN)."""
+    cfg_path = tmp_path / "plan.json"
+    data = dict(DEMO_CONFIG)
+    data["slots"] = [
+        {"schluessel": "alt",  "art": "erwachsenen-slot", "icon": "sun"},    # alt
+        {"schluessel": "neu",  "art": "erwachsenen-slot", "icon": "37807"},  # ARASAAC
+    ]
+    data["default_verantwortlichkeiten"] = {}
+    data["db_datei"] = str(tmp_path / "plan.db")
+    cfg_path.write_text(json.dumps(data))
+    with caplog.at_level("WARNING"):
+        cfg = config_mod.resolve(str(cfg_path))
+    by_key = {s.schluessel: s for s in cfg.slots}
+    # Alter Key wurde auf seine ARASAAC-id übersetzt (sun → 37807).
+    assert by_key["alt"].icon == "37807", (
+        "alter Icon-Key 'sun' nicht auf ARASAAC-id 37807 migriert"
+    )
+    # ARASAAC-id blieb unverändert.
+    assert by_key["neu"].icon == "37807"
+    # WARN GENAU EINMAL — nur für den alten Key 'sun'; die bereits ARASAAC-
+    # förmige id '37807' löst keine Migrations-WARN aus.
+    migr_warns = [r.getMessage() for r in caplog.records
+                  if r.levelname == "WARNING" and "alter Icon-Key" in r.getMessage()]
+    assert len(migr_warns) == 1, (
+        "Genau eine Migrations-WARN (nur 'sun') erwartet, bekam %d: %r"
+        % (len(migr_warns), migr_warns)
+    )
+    assert "'sun'" in migr_warns[0], "WARN soll den alten Key 'sun' nennen"
+
+
+def test_template_rendert_slot_icon_direkt(demo_config, demo_registry):
+    """PLAN-6 V1.3: Das Template rendert `slot.icon` DIREKT über den geteilten
+    ARASAAC-Pfad — der Template-Mapper `SLOT_ICON_ID` (zweite Icon-Quelle,
+    PLAN-6-Verstoß) ist entfernt.
+
+    DEMO_CONFIG trägt noch alte Keys (sun/clock/star/fork/moon) → config.py
+    migriert sie in der Lesephase → die ARASAAC-URLs erscheinen im HTML, und
+    die Template-Mapper-Stelle `SLOT_ICON_ID` taucht nicht mehr auf."""
+    client = make_client(demo_config, demo_registry, FakeTransport())
+    r = client.get("/display/plan/woche")
+    assert r.status_code == 200
+    html = r.data
+    # Migrierte Slot-Icons als ARASAAC-URLs (Schedule-Rail).
+    assert b"arasaac/37807.png" in html, "bring-Slot-Icon (37807) fehlt im Rail"
+    assert b"arasaac/2342.png" in html, "cook-Slot-Icon (2342) fehlt im Rail"
+    assert b"arasaac/6027.png" in html, "bed-Slot-Icon (6027) fehlt im Rail"
+    # Der entfernte Template-Mapper darf nicht mehr im HTML/Template-Output sein.
+    assert b"SLOT_ICON_ID" not in html, (
+        "SLOT_ICON_ID-Mapper noch vorhanden — zweite Icon-Quelle (PLAN-6-Verstoß)"
+    )
 
 
 # ============================================================
