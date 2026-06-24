@@ -19,12 +19,105 @@ logger = logging.getLogger(__name__)
 # PLAN-5: Wochentags-Kürzel (Mo=0 … So=6).
 DAY_SHORT = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 
-# PLAN-13 V1.3 (RAT-4-Auflösung 2026-06-22): Termin-Überschuss. So viele
-# Einzel-Termine zeigt eine Tagesspalte ohne Druck im 1fr-Termin-Bereich
-# (PLAN-6 V1.3, 80px-Slot-Zeilen → ≥200px Rest am Tablet-Viewport für ~5
-# Pillen à ~38px). Mehr Termine fasst ein gedimmter Counter `+M weitere`
+# PLAN-13 V1.3 (RAT-4-Auflösung 2026-06-22): Termin-Überschuss. Wie viele
+# Einzel-Termine eine Tagesspalte sichtbar zeigt, ist KEINE Magic-Zahl, sondern
+# eine Funktion der fixen Tablet-Geometrie: Das Display ist FEST 1920×1080 quer
+# (kein Headless-Browser-Tooling im Repo → kein Live-Messen). Die sichtbare
+# Termin-Anzahl N leitet sich deterministisch aus der verfügbaren 1fr-Höhe ab,
+# die der Termin-Bereich nach Kopf-Zeilen und Slot-Zeilen behält. So clippt
+# nichts: N ist genau, was VERTIKAL OHNE DRUCK in den 1fr-Bereich passt
+# (PLAN-13 V1.3). Mehr Termine fasst ein gedimmter Counter `+M weitere`
 # zusammen — Sichtbarkeits-Mechanik ohne Klick-Pfad (Tages-Overlay = QW4).
-TERMIN_LEISTE_MAX = 5
+#
+# Alle Maße in px, gespiegelt zu templates/plan_kinder.html (eine Quelle der
+# Geometrie ist das CSS; diese Konstanten müssen mit dem Frame-Grid und den
+# .pill-/.appts-Maßen dort übereinstimmen — bei CSS-Änderung mitziehen).
+#
+# #1092 S5 (Kompressions-Hebel, Befund 2026-06-24): Die REALE nutzbare Frame-
+# Höhe ist 944px, NICHT die .frame max-height (1020px). Die .scene-Zentrierung
+# (page-padding 24px oben+unten + Flex-Zentrierung auf dem 1080px-Display)
+# kürzt das Frame auf ~944px — PIL-Messung am gerenderten Orchestrator-
+# Screenshot. GEOMETRIE_FRAME_HOEHE überschätzte → Counter-Zeile wurde nicht
+# reserviert → N zu groß → Termin-Bereich clippte unten. Daher: reale 944px,
+# Counter-Zeile EXPLIZIT reserviert, Pillen/Chrome/Header gemessen-kompakt.
+GEOMETRIE_FRAME_HOEHE = 944    # real nutzbar (PIL-Messung; .scene kürzt 1020)
+GEOMETRIE_KOPF_HOEHE = 110     # Header (gestrafft) + Day-Row + Trenner
+GEOMETRIE_SLOT_HOEHE = 80      # je Schedule-Slot eine fixe 80px-Zeile (Nic-
+                               # Setzung: bleibt 80, Platz via Kompression)
+GEOMETRIE_APPTS_CHROME = 44    # .appts padding/border + Spaltenabstand (getrimmt)
+GEOMETRIE_SPAN_LANE_HOEHE = 34  # eine gepackte Span-Lane (Balken + gap, kompakt)
+GEOMETRIE_PILLE_HOEHE = 37     # eine Einzel-Termin-Pille inkl. gap (kompakter:
+                               # worst case mit Uhrzeit-Zeile)
+GEOMETRIE_COUNTER_HOEHE = 22   # „+M weitere"-Counter-Zeile — IMMER reserviert
+GEOMETRIE_SICHERHEITS_MARGE = 8  # kleine Marge gegen Sub-Pixel-Rundung
+TERMIN_LEISTE_MIN = 2          # Untergrenze: selbst bei vielen Slots zeigt eine
+                               # Spalte mindestens 2 Termine, bevor der Counter
+                               # greift (sonst frisst der Counter die Sicht).
+
+
+def pack_span_lanes(spans):
+    """Weist Mehrtages-Spans in MINIMAL viele Lanes ein (#1092 S5, PLAN-14).
+
+    Intervall-Scheduling (greedy): Spans nach `start_day` sortiert; jeder Span
+    nimmt die erste Lane, deren bisher belegter `end_day` strikt VOR seinem
+    `start_day` liegt (kein Tag-Überlapp). Nicht-überlappende Spans teilen sich
+    so eine Lane (z. B. Theaterwoche Mo–Mi + Skilager Do–Sa → 1 Lane); nur echt
+    überlappende Spans stapeln in getrennte Lanes.
+
+    Mutiert jeden Span-Dict um den Schlüssel `lane` (0-basiert) und liefert die
+    Anzahl belegter Lanes. Die Kontinuität (PLAN-14, durchgehender Balken über
+    start..end) bleibt — nur die Zeilen-Zahl sinkt.
+    """
+    lane_belegt_bis = []  # lane_index -> letzter belegter end_day
+    for span in sorted(spans, key=lambda s: (s["start_day"], s["end_day"])):
+        ziel = None
+        for li, belegt_bis in enumerate(lane_belegt_bis):
+            if belegt_bis < span["start_day"]:
+                ziel = li
+                break
+        if ziel is None:
+            ziel = len(lane_belegt_bis)
+            lane_belegt_bis.append(span["end_day"])
+        else:
+            lane_belegt_bis[ziel] = span["end_day"]
+        span["lane"] = ziel
+    return len(lane_belegt_bis)
+
+
+def sichtbare_termine(slot_count, span_lanes=0):
+    """Höhen-basiertes N: sichtbare Einzel-Termine pro Tagesspalte (PLAN-13 V1.3).
+
+    N ist KEINE Magic-Zahl, sondern eine Funktion der REALEN Tablet-Geometrie
+    (944px nutzbar, #1092 S5): verfügbare 1fr-Höhe des Termin-Bereichs, abzüglich
+    der EXPLIZIT reservierten Counter-Zeile und einer kleinen Marge, geteilt
+    durch die Pillen-Höhe. Mehr Slots → kleinere 1fr-Restzeile → kleineres N.
+
+    Laufen Mehrtages-Spannen (PLAN-14), kosten ihre gepackten Lanes Höhe:
+    `span_lanes` ist die Anzahl belegter Lanes (aus `pack_span_lanes`), nicht
+    mehr ein pauschales „hat_spans". So zahlt eine span-reiche Woche genau ihre
+    Lane-Zeilen, eine span-arme nichts.
+
+    Backward-Compat: ein bool für `span_lanes` (altes hat_spans) zählt als 1 Lane.
+    Untergrenze TERMIN_LEISTE_MIN — ABER nur, solange das nicht clippt: in
+    extremen Konfigs (8 Slots + 2 Lanes) lässt der reservierte Platz weniger als
+    TERMIN_LEISTE_MIN Pillen zu; dann gewinnt die No-Clip-Invariante (#1092 S5:
+    „lieber 1 Pille weniger als clippen, der Counter ist IMMER voll sichtbar").
+    Unit-testbar (#1092 Defekt 1).
+    """
+    lanes = int(span_lanes)  # bool True → 1, False → 0 (Backward-Compat)
+    verfuegbar = (GEOMETRIE_FRAME_HOEHE
+                  - GEOMETRIE_KOPF_HOEHE
+                  - slot_count * GEOMETRIE_SLOT_HOEHE
+                  - GEOMETRIE_APPTS_CHROME
+                  - GEOMETRIE_COUNTER_HOEHE
+                  - GEOMETRIE_SICHERHEITS_MARGE
+                  - lanes * GEOMETRIE_SPAN_LANE_HOEHE)
+    n = verfuegbar // GEOMETRIE_PILLE_HOEHE
+    # No-Clip-Invariante schlägt die Untergrenze: der Boden hebt N nur an, wenn
+    # der Platz das auch trägt — sonst clippte der (immer sichtbare) Counter.
+    if n < TERMIN_LEISTE_MIN:
+        return max(0, n)
+    return n
 
 # PLAN-12: Fallback-Typ für einen Kind-Aktivitäts-Slot, dessen Titel kein
 # Katalog-Schlüsselwort trägt — ein Kind-Slot-Eintrag ist nie symbol-/typlos.
@@ -377,16 +470,38 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
         else:
             appointments[tag_isos[0]].append(_einzel_termin(ev, ring, cfg, registry))
 
-    # PLAN-13 V1.3: Termin-Überschuss. Pro Tagesspalte werden höchstens
-    # TERMIN_LEISTE_MAX Termine sichtbar gezeigt; weitere fasst ein gedimmter
-    # Counter `+M weitere` zusammen (reine Sichtbarkeits-Mechanik ohne
-    # Klick-Pfad — das Tages-Overlay ist Folge-Ticket QW4). Spannen (PLAN-14)
-    # liegen in einer eigenen Zeile und zählen nicht in dieses Limit.
+    # PLAN-13 V1.3: Termin-Überschuss. Pro Tagesspalte werden höchstens N
+    # Termine sichtbar gezeigt; N ist HÖHEN-BASIERT aus der fixen Tablet-
+    # Geometrie (sichtbare_termine — kein Magic-5), damit nichts über die
+    # 1fr-Höhe hinaus clippt. Weitere fasst ein gedimmter Counter `+M weitere`
+    # zusammen (reine Sichtbarkeits-Mechanik ohne Klick-Pfad — Tages-Overlay =
+    # QW4). Eine laufende Mehrtages-Spanne (PLAN-14) kostet eine Balken-Zeile
+    # und senkt N. Die berührten Span-Spalten verlieren diese Höhe ohnehin durch
+    # den Balken; in span-losen Spalten rutschen die Tagestermine in den frei
+    # bleibenden Platz nach (PLAN-14 „frei für andere Termine") — das übernimmt
+    # das Spalten-Stack-Layout im Template, hier wird nur die Zahl gedeckelt.
+    # PLAN-14 V1.3: welche Tag-Indizes ein durchgehender Span-Balken berührt.
+    # NUR diese Spalten reservieren oben die Balken-Zeile; span-lose Spalten
+    # bleiben „frei für andere Termine" — dort rutschen die Tagestermine nach
+    # oben (kein Voll-Breite-Band über das ganze Fenster, verworfene Form).
+    span_cover = set()
+    for s in span_appointments:
+        for di in range(s["start_day"], s["end_day"] + 1):
+            span_cover.add(di)
+
+    # #1092 S5 (PLAN-14): Mehrtages-Spans in minimal viele Lanes packen — nicht-
+    # überlappende Spans teilen eine Lane (Intervall-Scheduling). Jeder Span
+    # trägt danach `lane`; span_lanes ist die Zahl belegter Lanes und fließt in
+    # die verfügbare Höhe ein (statt pauschal „hat_spans"). Der Balken bleibt
+    # durchgehend (grid-column start..end) — nur die Zeilen-Zahl sinkt.
+    span_lanes = pack_span_lanes(span_appointments)
+
+    n_sichtbar = sichtbare_termine(len(slot_keys), span_lanes)
     appointment_overflow = {}
     for iso, liste in appointments.items():
-        if len(liste) > TERMIN_LEISTE_MAX:
-            appointment_overflow[iso] = len(liste) - TERMIN_LEISTE_MAX
-            appointments[iso] = liste[:TERMIN_LEISTE_MAX]
+        if len(liste) > n_sichtbar:
+            appointment_overflow[iso] = len(liste) - n_sichtbar
+            appointments[iso] = liste[:n_sichtbar]
         else:
             appointment_overflow[iso] = 0
 
@@ -396,6 +511,17 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
         "appointments": appointments,
         "appointment_overflow": appointment_overflow if mit_terminen else {},
         "span_appointments": span_appointments if mit_terminen else [],
+        # PLAN-14 V1.3: Tag-Indizes mit laufendem Span-Balken (nur diese Spalten
+        # reservieren die Balken-Zeile; span-lose Spalten lassen die Tagestermine
+        # nach oben rutschen). Sortierte Liste für das Template.
+        "span_cover": sorted(span_cover) if mit_terminen else [],
+        # #1092 S5 (PLAN-14): Anzahl belegter Span-Lanes nach dem Packing — das
+        # Template reserviert oben in span-berührten Spalten genau so viele
+        # Lane-Höhen, und die N-Geometrie zahlt ihre Lane-Zeilen.
+        "span_lanes": span_lanes if mit_terminen else 0,
+        # PLAN-13 V1.3: höhen-basiertes N (Geometrie-Funktion) — exponiert für
+        # Tests/Diagnose; das Template braucht es nicht (Counter ist vorgekappt).
+        "termine_sichtbar": n_sichtbar,
         "show_appointments": mit_terminen,
         "picker_options": baue_picker_options(cfg),
     }
