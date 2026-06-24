@@ -144,30 +144,163 @@ class AnthropicVendor:
         return "\n".join(text_parts).strip()
 
     # ------------------------------------------------------------------
-    #  Sicht: get_singleshot / get_agent — Skelett (T3/T4)
+    #  Geteilte Bausteine aller drei Sichten (LLMP-S1, LLMP-S7-Lego-These)
     # ------------------------------------------------------------------
 
-    def singleshot_structured(self, *args, **kwargs):
-        """LLMP-S1 `get_singleshot` — bewusst noch nicht migriert.
+    def _system_blocks(self, system: str) -> list[dict[str, Any]]:
+        """System-Block (distinct) mit Cache-Marker — wie `chat_multiturn`."""
+        return [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
 
-        Wird mit T3 (hoerspiel-Migration) gefüllt; Spike-Stufe-1 Fixture 2
-        (Structured-Singleshot) belegt die Lego-Wiederholbarkeit dieses
-        Kerns. Wer heute ruft, soll klar sehen, dass die Sicht noch nicht
-        durchgeschaltet ist — kein Silent-Fallback.
+    def _create(self, **kwargs: Any) -> Any:
+        """`messages.create` mit APIError→ProviderError (wie `chat_multiturn`)."""
+        try:
+            return self._client.messages.create(
+                model=self.model, max_tokens=self.max_tokens, **kwargs,
+            )
+        except self._anthropic.APIError as e:
+            logger.warning("anthropic-vendor: API-Fehler: %s", e)
+            raise ProviderError(str(e)) from e
+
+    # ------------------------------------------------------------------
+    #  Sicht: get_singleshot — Structured Singleshot (hoerspiel, T3)
+    # ------------------------------------------------------------------
+
+    def singleshot_structured(
+        self,
+        system: str,
+        prompt: str,
+        schema: dict[str, Any],
+        *,
+        caller: str,
+        slot: str,
+        tool_name: str = "ergebnis",
+        tool_description: str = "Strukturiertes Ergebnis-Objekt nach Schema.",
+        correlation_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Ein Call, forced `tool_use` → Schema-konformes dict (LLMP-S1
+        `get_singleshot`). Required: `structured_output` +
+        `system_message_distinct` (+ `cache_control`). Telemetrie + ProviderError
+        wie `chat_multiturn`.
         """
-        raise NotImplementedError(
-            "tools.llm.get_singleshot ist V1-Skelett (T3 hoerspiel-Migration)"
+        tools = [{
+            "name": tool_name,
+            "description": tool_description,
+            "input_schema": schema,
+            "cache_control": {"type": "ephemeral"},
+        }]
+
+        t_start = time.monotonic()
+        response = self._create(
+            system=self._system_blocks(system),
+            messages=[{"role": "user", "content": prompt}],
+            tools=tools,
+            tool_choice={"type": "tool", "name": tool_name},
+        )
+        wall_ms = int((time.monotonic() - t_start) * 1000)
+
+        self._emit_telemetry(
+            response=response,
+            caller=caller,
+            slot=slot,
+            correlation_id=correlation_id,
+            wall_ms=wall_ms,
         )
 
-    def agent_run(self, *args, **kwargs):
-        """LLMP-S1 `get_agent` — bewusst noch nicht migriert.
+        for block in response.content:
+            if getattr(block, "type", None) == "tool_use" and getattr(block, "name", None) == tool_name:
+                return dict(block.input) if block.input else {}
+        raise ProviderError(
+            "anthropic-vendor: forced tool_use lieferte keinen %r-Block" % tool_name
+        )
 
-        Wird mit T4 (eltern-chat-Migration) gefüllt; Spike-Stufe-1 Fixture 1
-        (Agent-Tool-Loop) belegt die Lego-Wiederholbarkeit. Bis dahin: klarer
-        `NotImplementedError`, kein Silent-Fallback.
+    # ------------------------------------------------------------------
+    #  Sicht: get_agent — Agent-Tool-Loop (eltern-chat, T4)
+    # ------------------------------------------------------------------
+
+    def agent_run(
+        self,
+        system: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        *,
+        caller: str,
+        slot: str,
+        tool_runner: Any = None,
+        max_iterations: int = 8,
+        correlation_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Tool-Use-Loop mit Mid-Turn-Continuation (LLMP-S1 `get_agent`).
+        Required: `tool_use` + `multi_turn_assistant_prefill` + `cache_control`
+        + `system_message_distinct`. Pro Iteration ein Vendor-Call (Telemetrie
+        je Call). Bei `tool_use`-Blöcken ruft `tool_runner(name, input)`,
+        spiegelt assistant-Prefill + `tool_result` zurück, setzt fort. Liefert
+        `{"text", "messages"}`. APIError→ProviderError wie `chat_multiturn`.
         """
-        raise NotImplementedError(
-            "tools.llm.get_agent ist V1-Skelett (T4 eltern-chat-Migration)"
+        system_blocks = self._system_blocks(system)
+        # Cache-Marker auf letzten Tool-Eintrag (markiert implizit alle —
+        # Anthropic-Semantik, `eltern-chat/providers/claude.py:66-68`).
+        wire_tools = [dict(t) for t in tools]
+        if wire_tools:
+            wire_tools[-1] = {**wire_tools[-1], "cache_control": {"type": "ephemeral"}}
+
+        convo = list(messages)
+        for _ in range(max_iterations):
+            t_start = time.monotonic()
+            response = self._create(
+                system=system_blocks,
+                messages=convo,
+                tools=wire_tools,
+            )
+            wall_ms = int((time.monotonic() - t_start) * 1000)
+            self._emit_telemetry(
+                response=response,
+                caller=caller,
+                slot=slot,
+                correlation_id=correlation_id,
+                wall_ms=wall_ms,
+            )
+
+            tool_uses = [
+                b for b in response.content
+                if getattr(b, "type", None) == "tool_use"
+            ]
+            if not tool_uses:
+                text = "\n".join(
+                    b.text for b in response.content
+                    if getattr(b, "type", None) == "text"
+                ).strip()
+                return {"text": text, "messages": convo}
+
+            if tool_runner is None:
+                raise ProviderError(
+                    "anthropic-vendor: agent_run bekam tool_use-Blöcke, aber "
+                    "keinen tool_runner (Caller muss Tool-Results liefern)"
+                )
+
+            # multi_turn_assistant_prefill: die Assistant-Tool-Use-Nachricht
+            # zurück in den Verlauf spiegeln, dann die Tool-Results als user.
+            convo.append({
+                "role": "assistant",
+                "content": [
+                    {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
+                    for b in tool_uses
+                ],
+            })
+            convo.append({
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": b.id,
+                        "content": tool_runner(b.name, dict(b.input) if b.input else {}),
+                    }
+                    for b in tool_uses
+                ],
+            })
+
+        raise ProviderError(
+            "anthropic-vendor: agent_run erreichte max_iterations=%d ohne "
+            "Abschluss" % max_iterations
         )
 
     # ------------------------------------------------------------------
