@@ -22,6 +22,7 @@ US-Anbieter (vgl. eltern-chat OPEN-EC-A).
 
 import json
 import logging
+import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -93,9 +94,12 @@ class MistralVendor:
         KEINE Cache-Marker (Mistral kann kein Prompt-Caching).
         """
         payload = self._build_payload(system, messages, tools)
+        t_start = time.monotonic()
         response_data = self._call_api(payload)
+        wall_ms = int((time.monotonic() - t_start) * 1000)
         return self._emit_and_parse(
             response_data, caller=caller, slot=slot, correlation_id=correlation_id,
+            wall_ms=wall_ms,
         )
 
     def agent_run(
@@ -116,8 +120,9 @@ class MistralVendor:
         Copy-Paste — LLMP-S7). Spiegelt assistant-`tool_use` + user-`tool_result`
         in der NEUTRALEN Wire-Form zurück (die nächste `agent_step` übersetzt sie
         nach Mistral). is_error-Härtung wie Anthropic: `tool_runner` darf String
-        ODER `{"content":…, "is_error": bool}` liefern. Liefert
-        `{"text", "messages"}`.
+        ODER `{"content":…, "is_error": bool}` liefern. Jeder `agent_step` misst
+        seine Wandzeit und emittiert sie in die Telemetrie (LLMP-S4).
+        Liefert `{"text", "messages"}`.
         """
         convo = list(messages)
         for _ in range(max_iterations):
@@ -331,6 +336,7 @@ class MistralVendor:
         caller: str,
         slot: str,
         correlation_id: str | None,
+        wall_ms: int,
     ) -> dict[str, Any]:
         """Geteilter Telemetrie-/Parse-Helfer für agent_step UND agent_run
         (kein Copy-Paste — LLMP-S7). Emittiert den JSONL-Eintrag und liefert
@@ -338,6 +344,7 @@ class MistralVendor:
         """
         self._emit_telemetry(
             response_data, caller=caller, slot=slot, correlation_id=correlation_id,
+            wall_ms=wall_ms,
         )
         return self._parse_response(response_data)
 
@@ -381,6 +388,7 @@ class MistralVendor:
         caller: str,
         slot: str,
         correlation_id: str | None,
+        wall_ms: int,
     ) -> None:
         """Baut den JSONL-Eintrag aus der Mistral-`usage` und schreibt ihn via
         `tools.llm.telemetry.write_call` (LLMP-S4). Mistral kennt kein Caching →
@@ -407,7 +415,7 @@ class MistralVendor:
             "output_tokens": output_tokens,
             "cache_read_tokens": 0,
             "cache_creation_tokens": 0,
-            "wall_ms": 0,
+            "wall_ms": wall_ms,
             "est_cost_eur": est_cost_eur,
         }
         if correlation_id is not None:
