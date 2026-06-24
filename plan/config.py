@@ -39,11 +39,6 @@ _LEGACY_SLOT_ART = {
     "aktivitaets-slot": SLOT_KALENDER_READ,
 }
 
-# Rückwärts-Kompatibilität: Code, der noch SLOT_ERWACHSENEN / SLOT_AKTIVITAET
-# liest, bekommt die neuen Strings (bis alle internen Nutzungen migriert sind).
-SLOT_ERWACHSENEN = SLOT_VERANTWORTLICH
-SLOT_AKTIVITAET = SLOT_KALENDER_READ
-
 # PLAN-6 V1.3 (RAT-4-Auflösung 2026-06-22) — Icon-Migrations-Lesephase.
 # Alte interne Slot-Icon-Keys werden mit WARN-Log auf ihre ARASAAC-id
 # übersetzt; neu geschriebene Slots tragen die ARASAAC-id direkt. Damit
