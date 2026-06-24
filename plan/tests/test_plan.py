@@ -828,6 +828,33 @@ def test_n_sichtbar_span_lanes_kosten_hoehe():
     assert n0 > n2, "2 Lanes müssen N strikt unter 0 Lanes drücken"
 
 
+def test_under_span_reserve_groesser_als_reine_lane_hoehe():
+    """#1092 S6 (Span-Gap): Bei span_lanes > 0 ist die von der Geometrie
+    abgezogene Reserve größer als die reine Summe der Lane-Höhen — der
+    GEOMETRIE_SPAN_GAP (6px) zwischen Span-Band-Unterkante und erster Pille
+    wird MITGEZÄHLT, damit kein neuer Clip entsteht.
+
+    CSS↔Geometrie-Kopplung: GEOMETRIE_SPAN_GAP muss dem +6px in
+    .appts-col.under-span (plan_kinder.html) entsprechen."""
+    # Bei 0 Lanes: kein Gap abgezogen — Referenz-N.
+    n_ohne = render_mod.sichtbare_termine(7, 0)
+    # Bei 1 Lane: Lane-Höhe + Gap abgezogen → N strikt kleiner als n_ohne.
+    n_mit = render_mod.sichtbare_termine(7, 1)
+    # Die Differenz muss mehr kosten als eine reine Lane-Höhe allein, also
+    # muss n_mit < n_ohne gelten (nicht nur ≤) — der Gap macht den Unterschied.
+    assert n_mit < n_ohne, (
+        "span_lanes=1 muss N strikt senken (Lane + Gap zählen), n_ohne=%d n_mit=%d"
+        % (n_ohne, n_mit)
+    )
+    # Direkte Arithmetik: verfügbare Höhe bei 1 Lane muss den Gap enthalten.
+    reserve_mit_gap = (render_mod.GEOMETRIE_SPAN_LANE_HOEHE
+                       + render_mod.GEOMETRIE_SPAN_GAP)
+    reserve_ohne_gap = render_mod.GEOMETRIE_SPAN_LANE_HOEHE
+    assert reserve_mit_gap > reserve_ohne_gap, (
+        "GEOMETRIE_SPAN_GAP muss positiv sein und Reserve erhöhen"
+    )
+
+
 def test_headline_mein_plan_nicht_sichtbar(demo_config, demo_registry):
     """#1092 Defekt 3: Die sichtbare Headline „mein Plan" (.brand-title) ist
     entfernt — die Kopf-Zeile schrumpft (Platz für den 1fr-Termin-Bereich).

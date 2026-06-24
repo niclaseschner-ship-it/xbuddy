@@ -46,6 +46,11 @@ GEOMETRIE_SLOT_HOEHE = 80      # je Schedule-Slot eine fixe 80px-Zeile (Nic-
                                # Setzung: bleibt 80, Platz via Kompression)
 GEOMETRIE_APPTS_CHROME = 44    # .appts padding/border + Spaltenabstand (getrimmt)
 GEOMETRIE_SPAN_LANE_HOEHE = 34  # eine gepackte Span-Lane (Balken + gap, kompakt)
+GEOMETRIE_SPAN_GAP = 6         # Abstand Span-Band → erste Pille (.under-span
+                               # padding-top: calc(--span-band + 6px)).
+                               # CSS↔Geometrie-Kopplung: muss mit dem +6px in
+                               # plan_kinder.html übereinstimmen (#1092 S6).
+                               # Wird NUR abgezogen, wenn span_lanes > 0.
 GEOMETRIE_PILLE_HOEHE = 37     # eine Einzel-Termin-Pille inkl. gap (kompakter:
                                # worst case mit Uhrzeit-Zeile)
 GEOMETRIE_COUNTER_HOEHE = 22   # „+M weitere"-Counter-Zeile — IMMER reserviert
@@ -111,7 +116,8 @@ def sichtbare_termine(slot_count, span_lanes=0):
                   - GEOMETRIE_APPTS_CHROME
                   - GEOMETRIE_COUNTER_HOEHE
                   - GEOMETRIE_SICHERHEITS_MARGE
-                  - lanes * GEOMETRIE_SPAN_LANE_HOEHE)
+                  - lanes * GEOMETRIE_SPAN_LANE_HOEHE
+                  - (GEOMETRIE_SPAN_GAP if lanes > 0 else 0))
     n = verfuegbar // GEOMETRIE_PILLE_HOEHE
     # No-Clip-Invariante schlägt die Untergrenze: der Boden hebt N nur an, wenn
     # der Platz das auch trägt — sonst clippte der (immer sichtbare) Counter.
