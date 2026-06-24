@@ -216,13 +216,29 @@ löschen (Zwei-Schritt-Migration analog ZD-Migration ONB-5→ZD,
 (ENTSCHEID-File Sektion „Migration nach Spike-Erfolg"; Verdikt Frage 6 —
 Nic 2026-06-21: „KIBuddy zuerst").
 
+**Re-Order 2026-06-24 (Nic):** Nach KIBuddy (T1) wird **eltern-chat (T4) vor
+hoerspiel (T3) gezogen** — hoerspiel hat gerade andere Probleme und wird
+nachgezogen. Damit ist **eltern-chat der n=2-Beleg** der Vendor-Kern-These
+(statt hoerspiel). Bewusst getauschter Trade-off: der Voll-Last-Buddy kommt
+als n=2 **ohne** die kleinere hoerspiel-Generalprobe; akzeptiert, weil
+hoerspiel blockiert ist und die Migration additiv-rückrollbar bleibt (alter
+`providers/`-Ordner bleibt bis beide Anbieter grün). Die ursprüngliche
+Reihenfolge oben bleibt als Audit-Spur; gilt wieder, sobald hoerspiel
+entblockt ist.
+
 ### LLMP-S9 — Re-Evaluierung vor jedem Buddy
-Vor dem zweiten Migrations-Buddy (hoerspiel): Capability-Matrix-Review
-gegen den realen hoerspiel-Bestand. Vor dem dritten (eltern-chat): ebenso,
-plus Spike-Stufe-2-Beleg (7 Tage Familie-1, JSONL-vs-SQLite-`est_cost_eur`-
-Diff < 1%/Tag — sonst Schreibpfad-Fix vor weiterer Migration)
+Vor jedem Migrations-Buddy: Capability-Matrix-Review gegen den realen
+Bestand des Buddys (für eltern-chat: das Agent-Loop-Required-Set **und** der
+Mistral-Anbieter, da eltern-chat dual-provider fährt). Der **Spike-Stufe-2-Beleg**
+(7 Tage Familie-1, JSONL-vs-SQLite-`est_cost_eur`-Diff < 1%/Tag — sonst
+Schreibpfad-Fix vor weiterer Migration) ist **die Live-Probe des
+eltern-chat-Migrations-Tickets selbst** und läuft folgerichtig **nach** dessen
+Merge (eltern-chat ist der erste Voll-Last-Konsument; Stufe-2 ohne live
+migrierten eltern-chat ist nicht erhebbar). Re-Order-Konsequenz 2026-06-24:
+da eltern-chat als n=2 vorgezogen ist, fällt Stufe-2 mit der eltern-chat-
+Migration zusammen, nicht mit einem davorliegenden dritten Buddy
 (ENTSCHEID-File Sektion „Spike-Experiment (2 Stufen)" → Stufe 2 +
-Re-Evaluierungs-Klausel).
+Re-Evaluierungs-Klausel; Re-Order Nic 2026-06-24).
 
 ## 5. Tests
 
