@@ -57,3 +57,20 @@ def get_provider(name, api_key, model=""):
         from .mistral import MistralProvider
         return MistralProvider(api_key=api_key, model=model)
     raise ValueError("unbekannter KI-Anbieter: %r" % name)
+
+
+def get_lib_agent_provider(provider, provider_model=""):
+    """Liefert den Lib-Agent-Adapter (T1085) — eltern-chat über `tools.llm`.
+
+    Erfüllt denselben `generate(GenerationRequest) -> GenerationResponse`-Vertrag
+    wie `get_provider(...)`, holt den API-Key aber NICHT selbst: der Adapter löst
+    den Brand-Vendor-Slot (`eltern-chat-<vendor>-api-key`) auf und die Lib
+    (`tools.llm`) liest den Key aus dem Zugangsdaten-Speicher (ZD-5). `provider`
+    ist der Adapter-Name (`claude`/`mistral`), `provider_model` das konfigurierte
+    Modell (leer → Anbieter-Default).
+
+    Lazy-Import: `tools.llm` (und damit das anthropic-/httpx-SDK über die
+    Vendoren) wird nur geladen, wenn der Lib-Pfad tatsächlich verwendet wird.
+    """
+    from .lib_adapter import LibAgentAdapter
+    return LibAgentAdapter(provider=provider, provider_model=provider_model)

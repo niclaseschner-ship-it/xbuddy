@@ -85,10 +85,20 @@ class TaskDef:
 
 @dataclass
 class GenerationRequest:
-    """Was der Agent-Kern dem Anbieter-Adapter übergibt."""
+    """Was der Agent-Kern dem Anbieter-Adapter übergibt.
+
+    `correlation_id` (T1085, EC-23-Spiegel auf die JSONL-Telemetrie): die
+    Turn-ID, mit der `tools.llm` den JSONL-Eintrag (`var/llm/provider_calls.jsonl`)
+    an denselben Turn knüpft wie die SQLite-Doppelschreibung. Optional und als
+    letztes Feld defaultet — alle bestehenden `GenerationRequest(...)`-
+    Konstruktionen bleiben unverändert gültig. Adapter, die keine JSONL-
+    Telemetrie schreiben (`ClaudeProvider`/`MistralProvider`), ignorieren das
+    Feld; nur der `LibAgentAdapter` reicht es an die Lib durch.
+    """
     system: str
     messages: list           # list[Message]
     task_defs: list          # list[TaskDef]
+    correlation_id: str = None   # str | None — Turn-ID für JSONL (T1085)
 
 
 @dataclass
