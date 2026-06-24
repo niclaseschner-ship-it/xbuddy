@@ -83,9 +83,9 @@ Checkouts (SVC-5):
    den dasselbe Skript in den **Per-Instanz-Zugangsdaten-Store** spiegelt
    (`__XBUDDY_DATA__/zugangsdaten/zugangsdaten.json`).
 
-`tools.llm` löst den Store über `resolve_store_path()` auf; der Default zeigt per
-ZD-8 **in den Checkout**. Damit der Service den Per-Instanz-Store liest (wohin
-`sync_kibuddy_env.py` schreibt), setzt ein Drop-In die Override-Variable:
+`tools.llm` löst den Store über `resolve_store_path()` auf; der ZD-8-Default ist
+nur der **Code-Fallback** im Checkout. Der **Live-Ort** liegt nach SVC-5 außerhalb
+des Checkouts — die Unit setzt den Pfad per Override-Variable (analog Router/ROU-18):
 
 ```ini
 # 30-zugangsdaten-path.conf
@@ -97,10 +97,11 @@ Deploy-Reihenfolge: `python3 -m tools.sync_kibuddy_env` (schreibt ENV-Datei +
 Slot) → `daemon-reload` → `systemctl restart xbuddy-kibuddy`. Ohne den Slot wirft
 der erste Kind-Call `LLMCapabilityError`.
 
-> Offen (Architektur, eigene `/berater-runde`): aktuell setzt **nur** kibuddy
-> diesen Override; die übrige Flotte liest noch den In-Repo-Default-Store. Ob der
-> Per-Instanz-Store fleet-weit kanonisch wird (Override für alle) oder ZD-8 als
-> Default bleibt, ist eine eigene Entscheidung.
+> Dies ist das ratifizierte SVC-5-Muster (Live-Daten außerhalb des Checkouts,
+> Unit setzt den Pfad), **nicht** kibuddy-spezifisch und keine offene Frage:
+> `xbuddy-eltern-chat` fährt seit jeher denselben Override (Drop-In
+> `20-zugangsdaten.conf`). Jeder Service, der den Zugangsdaten-Store für
+> Live-Geheimnisse liest, bekommt dieses Drop-In.
 
 ## Token-Sharing (Mini-App-Auth, RAT-16 / #684)
 
