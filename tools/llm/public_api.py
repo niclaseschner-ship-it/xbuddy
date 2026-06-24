@@ -18,10 +18,15 @@ from ._types import Capability, LLMCapabilityError, LLMProvider
 
 # LLMP-3: Required-Capability-Sets pro Sicht (V1, sechs ratifizierte
 # Capabilities aus `conventions/llm-providers.md` LLMP-3).
+# LLMP-3-Patch (T1085, R0): `cache_control` ist NICHT mehr Boot-Minimum für
+# get_agent. Cache ist eine Anthropic-Optimierung (am Vendor weiterhin gesetzt,
+# wo verfügbar), aber kein Pflicht-Gate — sonst könnte ein cache-loser Vendor
+# (Mistral) die Agent-Sicht nie bedienen. R0-Spec ist gemergt; dieser Code
+# zieht sie nach. Boot-Minimum: tool_use + multi_turn_assistant_prefill +
+# system_message_distinct.
 REQUIRED_AGENT: frozenset[Capability] = frozenset({
     "tool_use",
     "multi_turn_assistant_prefill",
-    "cache_control",
     "system_message_distinct",
 })
 REQUIRED_SINGLESHOT: frozenset[Capability] = frozenset({
@@ -217,6 +222,31 @@ class _AgentFacade:
             correlation_id=correlation_id,
         )
 
+    def step(
+        self,
+        system: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        *,
+        correlation_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Single-Turn-Sicht: EIN Provider-Create, KEIN interner Tool-Loop (T1085).
+
+        Für Konsumenten wie eltern-chat, die ihren eigenen Loop behalten und pro
+        Iteration genau einen Create wollen (vgl. `run()`, das den Loop selbst
+        fährt). Liefert die geparste Provider-Antwort
+        `{"text", "tool_calls", "usage"}` durch — Tool-Use-Blöcke werden NICHT
+        ausgeführt, nur geparst. Telemetrie pro Create am Vendor (LLMP-S4).
+        """
+        return self._vendor.agent_step(
+            system=system,
+            messages=messages,
+            tools=tools,
+            caller=self._caller,
+            slot=self._slot,
+            correlation_id=correlation_id,
+        )
+
 
 # ----------------------------------------------------------------------
 #  Public-API — die drei `get_*`-Sichten (LLMP-2)
@@ -246,9 +276,10 @@ def get_singleshot(slot: str) -> Any:
 def get_agent(slot: str) -> Any:
     """Liefert die Agent-Tool-Loop-Sicht (LLMP-S1, eltern-chat-Heimat).
 
-    Required Capabilities (LLMP-3): `tool_use`, `multi_turn_assistant_prefill`,
-    `cache_control`, `system_message_distinct`. V1-Skelett — Methoden-Body
-    folgt mit T4.
+    Required Capabilities (LLMP-3, T1085-Patch): `tool_use`,
+    `multi_turn_assistant_prefill`, `system_message_distinct` — `cache_control`
+    ist NICHT mehr Boot-Minimum (R0). Liefert `.run()` (Tool-Loop) und
+    `.step()` (Single-Turn, ein Create).
     """
     vendor, caller, slot_name = _build_vendor(slot, "get_agent", REQUIRED_AGENT)
     return _AgentFacade(vendor, caller, slot_name)
