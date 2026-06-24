@@ -18,10 +18,15 @@ from ._types import Capability, LLMCapabilityError, LLMProvider
 
 # LLMP-3: Required-Capability-Sets pro Sicht (V1, sechs ratifizierte
 # Capabilities aus `conventions/llm-providers.md` LLMP-3).
+# LLMP-3-Patch (T1085, R0): `cache_control` ist NICHT mehr Boot-Minimum für
+# get_agent. Cache ist eine Anthropic-Optimierung (am Vendor weiterhin gesetzt,
+# wo verfügbar), aber kein Pflicht-Gate — sonst könnte ein cache-loser Vendor
+# (Mistral) die Agent-Sicht nie bedienen. R0-Spec ist gemergt; dieser Code
+# zieht sie nach. Boot-Minimum: tool_use + multi_turn_assistant_prefill +
+# system_message_distinct.
 REQUIRED_AGENT: frozenset[Capability] = frozenset({
     "tool_use",
     "multi_turn_assistant_prefill",
-    "cache_control",
     "system_message_distinct",
 })
 REQUIRED_SINGLESHOT: frozenset[Capability] = frozenset({
@@ -35,7 +40,12 @@ REQUIRED_CHAT: frozenset[Capability] = frozenset({
 })
 
 
-def _build_vendor(slot: str, sicht_name: str, required: frozenset[Capability]) -> tuple[Any, str, str]:
+def _build_vendor(
+    slot: str,
+    sicht_name: str,
+    required: frozenset[Capability],
+    model: str = "",
+) -> tuple[Any, str, str]:
     """Slot → (Vendor-Instanz, caller, slot-name) mit Capability-Boot-Fail (LLMP-S3).
 
     Verantwortlich für die vier mechanischen Schritte aus LLMP-5:
@@ -43,6 +53,11 @@ def _build_vendor(slot: str, sicht_name: str, required: frozenset[Capability]) -
       2. Vendor-Modul laden
       3. `CAPABILITIES` gegen Required-Set prüfen (LLMP-3, LLMP-S3)
       4. API-Key über `tools.zugangsdaten` holen + Vendor instanzieren
+
+    `model` (T1085-additiv): wenn nicht-leer, wählt der Konsument das effektive
+    Modell explizit — der Vendor nutzt es statt seines `DEFAULT_MODEL`. Leer
+    (Default) bewahrt das alte Verhalten (Vendor-Default). Die Vendoren
+    akzeptieren `model=` bereits am Konstruktor; hier wird es nur durchgereicht.
 
     Bei Cap-Mismatch oder fehlender `CAPABILITIES`-Konstante: `LLMCapabilityError`
     als erster Fehler vor allem anderen (LLMP-S3, LLMP-4 Watchdog-Regel).
@@ -80,7 +95,12 @@ def _build_vendor(slot: str, sicht_name: str, required: frozenset[Capability]) -
         )
 
     vendor_cls = _vendor_class(module, vendor)
-    instance = vendor_cls(api_key=api_key)
+    # `model` nur durchreichen, wenn der Konsument eines wählt — so bleibt der
+    # Default-Pfad `vendor_cls(api_key=…)` exakt wie bisher (rückwärtskompatibel
+    # für Vendoren/Test-Fakes ohne `model=`-Kwarg). Die Prod-Vendoren akzeptieren
+    # `model=` und defaulten leer → DEFAULT_MODEL (T1085-Durchreich).
+    instance = (vendor_cls(api_key=api_key, model=model) if model
+                else vendor_cls(api_key=api_key))
     return instance, caller, slot
 
 
@@ -217,6 +237,31 @@ class _AgentFacade:
             correlation_id=correlation_id,
         )
 
+    def step(
+        self,
+        system: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        *,
+        correlation_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Single-Turn-Sicht: EIN Provider-Create, KEIN interner Tool-Loop (T1085).
+
+        Für Konsumenten wie eltern-chat, die ihren eigenen Loop behalten und pro
+        Iteration genau einen Create wollen (vgl. `run()`, das den Loop selbst
+        fährt). Liefert die geparste Provider-Antwort
+        `{"text", "tool_calls", "usage"}` durch — Tool-Use-Blöcke werden NICHT
+        ausgeführt, nur geparst. Telemetrie pro Create am Vendor (LLMP-S4).
+        """
+        return self._vendor.agent_step(
+            system=system,
+            messages=messages,
+            tools=tools,
+            caller=self._caller,
+            slot=self._slot,
+            correlation_id=correlation_id,
+        )
+
 
 # ----------------------------------------------------------------------
 #  Public-API — die drei `get_*`-Sichten (LLMP-2)
@@ -243,12 +288,19 @@ def get_singleshot(slot: str) -> Any:
     return _SingleshotFacade(vendor, caller, slot_name)
 
 
-def get_agent(slot: str) -> Any:
+def get_agent(slot: str, model: str = "") -> Any:
     """Liefert die Agent-Tool-Loop-Sicht (LLMP-S1, eltern-chat-Heimat).
 
-    Required Capabilities (LLMP-3): `tool_use`, `multi_turn_assistant_prefill`,
-    `cache_control`, `system_message_distinct`. V1-Skelett — Methoden-Body
-    folgt mit T4.
+    Required Capabilities (LLMP-3, T1085-Patch): `tool_use`,
+    `multi_turn_assistant_prefill`, `system_message_distinct` — `cache_control`
+    ist NICHT mehr Boot-Minimum (R0). Liefert `.run()` (Tool-Loop) und
+    `.step()` (Single-Turn, ein Create).
+
+    `model` (T1085-additiv): wählt das effektive Modell explizit; leer (Default)
+    nutzt den Vendor-`DEFAULT_MODEL` (rückwärtskompatibel — `get_agent(slot)`
+    bleibt unverändert). eltern-chat reicht hier das alte effektive Modell durch
+    (provider_model bzw. Anbieter-Default), damit der Lib-Pfad das Modell-
+    Verhalten des Alt-Adapters exakt erhält.
     """
-    vendor, caller, slot_name = _build_vendor(slot, "get_agent", REQUIRED_AGENT)
+    vendor, caller, slot_name = _build_vendor(slot, "get_agent", REQUIRED_AGENT, model)
     return _AgentFacade(vendor, caller, slot_name)

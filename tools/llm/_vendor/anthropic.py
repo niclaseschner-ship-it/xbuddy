@@ -217,6 +217,62 @@ class AnthropicVendor:
     #  Sicht: get_agent — Agent-Tool-Loop (eltern-chat, T4)
     # ------------------------------------------------------------------
 
+    def agent_step(
+        self,
+        system: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        *,
+        caller: str,
+        slot: str,
+        correlation_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Single-Turn-Create (T1085): EIN Vendor-Call, kein interner Loop.
+
+        Für Konsumenten, die ihren eigenen Loop fahren (eltern-chat). Setzt die
+        2× ephemeral-Marker (System-Block + letzter Tool — Anthropic-Semantik,
+        `eltern-chat/providers/claude.py:66-68`), emittiert Telemetrie pro Call
+        (LLMP-S4) und PARST die Antwort, ohne Tool-Use auszuführen. Bild-Input:
+        `messages` wird unverändert durchgereicht (image-Blöcke bleiben). Liefert
+        `{"text": <str>, "tool_calls": [{"id","name","input"}…], "usage": <raw>}`.
+        """
+        system_blocks = self._system_blocks(system)
+        # Cache-Marker auf letzten Tool-Eintrag (markiert implizit alle —
+        # Anthropic-Semantik, `eltern-chat/providers/claude.py:66-68`).
+        wire_tools = [dict(t) for t in tools]
+        if wire_tools:
+            wire_tools[-1] = {**wire_tools[-1], "cache_control": {"type": "ephemeral"}}
+
+        t_start = time.monotonic()
+        response = self._create(
+            system=system_blocks,
+            messages=list(messages),
+            tools=wire_tools,
+        )
+        wall_ms = int((time.monotonic() - t_start) * 1000)
+        self._emit_telemetry(
+            response=response,
+            caller=caller,
+            slot=slot,
+            correlation_id=correlation_id,
+            wall_ms=wall_ms,
+        )
+
+        text = "\n".join(
+            b.text for b in response.content
+            if getattr(b, "type", None) == "text"
+        ).strip()
+        tool_calls = [
+            {"id": b.id, "name": b.name, "input": dict(b.input) if b.input else {}}
+            for b in response.content
+            if getattr(b, "type", None) == "tool_use"
+        ]
+        return {
+            "text": text,
+            "tool_calls": tool_calls,
+            "usage": getattr(response, "usage", None),
+        }
+
     def agent_run(
         self,
         system: str,
@@ -230,46 +286,28 @@ class AnthropicVendor:
         correlation_id: str | None = None,
     ) -> dict[str, Any]:
         """Tool-Use-Loop mit Mid-Turn-Continuation (LLMP-S1 `get_agent`).
-        Required: `tool_use` + `multi_turn_assistant_prefill` + `cache_control`
-        + `system_message_distinct`. Pro Iteration ein Vendor-Call (Telemetrie
-        je Call). Bei `tool_use`-Blöcken ruft `tool_runner(name, input)`,
-        spiegelt assistant-Prefill + `tool_result` zurück, setzt fort. Liefert
-        `{"text", "messages"}`. APIError→ProviderError wie `chat_multiturn`.
-        """
-        system_blocks = self._system_blocks(system)
-        # Cache-Marker auf letzten Tool-Eintrag (markiert implizit alle —
-        # Anthropic-Semantik, `eltern-chat/providers/claude.py:66-68`).
-        wire_tools = [dict(t) for t in tools]
-        if wire_tools:
-            wire_tools[-1] = {**wire_tools[-1], "cache_control": {"type": "ephemeral"}}
+        Required: `tool_use` + `multi_turn_assistant_prefill`
+        + `system_message_distinct`. Pro Iteration EIN `agent_step` (Single
+        Create + Telemetrie, kein Copy-Paste — LLMP-S7). Bei `tool_use`-Blöcken
+        ruft `tool_runner(name, input)`, spiegelt assistant-Prefill +
+        `tool_result` zurück, setzt fort. Liefert `{"text", "messages"}`.
 
+        is_error-Härtung (T1085, additiv): `tool_runner` darf einen String ODER
+        ein dict `{"content":…, "is_error": bool}` zurückgeben. Beim String ist
+        is_error=False (rückwärtskompatibel, test_fixture1 bleibt grün).
+        """
         convo = list(messages)
         for _ in range(max_iterations):
-            t_start = time.monotonic()
-            response = self._create(
-                system=system_blocks,
+            step = self.agent_step(
+                system=system,
                 messages=convo,
-                tools=wire_tools,
-            )
-            wall_ms = int((time.monotonic() - t_start) * 1000)
-            self._emit_telemetry(
-                response=response,
+                tools=tools,
                 caller=caller,
                 slot=slot,
                 correlation_id=correlation_id,
-                wall_ms=wall_ms,
             )
-
-            tool_uses = [
-                b for b in response.content
-                if getattr(b, "type", None) == "tool_use"
-            ]
-            if not tool_uses:
-                text = "\n".join(
-                    b.text for b in response.content
-                    if getattr(b, "type", None) == "text"
-                ).strip()
-                return {"text": text, "messages": convo}
+            if not step["tool_calls"]:
+                return {"text": step["text"], "messages": convo}
 
             if tool_runner is None:
                 raise ProviderError(
@@ -282,19 +320,15 @@ class AnthropicVendor:
             convo.append({
                 "role": "assistant",
                 "content": [
-                    {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
-                    for b in tool_uses
+                    {"type": "tool_use", "id": tc["id"], "name": tc["name"], "input": tc["input"]}
+                    for tc in step["tool_calls"]
                 ],
             })
             convo.append({
                 "role": "user",
                 "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": b.id,
-                        "content": tool_runner(b.name, dict(b.input) if b.input else {}),
-                    }
-                    for b in tool_uses
+                    self._tool_result_block(tc["id"], tool_runner(tc["name"], tc["input"]))
+                    for tc in step["tool_calls"]
                 ],
             })
 
@@ -302,6 +336,23 @@ class AnthropicVendor:
             "anthropic-vendor: agent_run erreichte max_iterations=%d ohne "
             "Abschluss" % max_iterations
         )
+
+    @staticmethod
+    def _tool_result_block(tool_use_id: str, runner_result: Any) -> dict[str, Any]:
+        """Baut einen `tool_result`-Block aus dem `tool_runner`-Rückgabewert.
+
+        Akzeptiert einen String (is_error=False, rückwärtskompatibel) ODER ein
+        dict `{"content":…, "is_error": bool}` (T1085 is_error-Härtung). Der
+        Marker landet nur dann auf dem Block, wenn der Runner ihn liefert —
+        sonst bleibt der Block wie bisher (test_fixture1-kompatibel).
+        """
+        block: dict[str, Any] = {"type": "tool_result", "tool_use_id": tool_use_id}
+        if isinstance(runner_result, dict):
+            block["content"] = runner_result.get("content", "")
+            block["is_error"] = bool(runner_result.get("is_error", False))
+        else:
+            block["content"] = runner_result
+        return block
 
     # ------------------------------------------------------------------
     #  Telemetrie-Hilfen (LLMP-S4)
