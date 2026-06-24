@@ -520,10 +520,10 @@ body {
 
 /* ── V2 ZEIT-PINS (ROUTINE-26): items[]-Pins für anker + vorlauf ──────────── */
 /*
-   Welle A (#726): zusätzlich zu den V1-Event-Pins (.event-pin) rendert das
-   Template eine zeit-pins-zone für migrierte items[] mit zeit-Block. Welle B
-   (#1070) wird die V1-Event-Pins entfernen — bis dahin liegen die zeit-Pins
-   visuell als zusätzlicher Strang in der timeline-section.
+   Welle B (#1070) hat die V1-Event-Pins (.event-pin) entfernt — seitdem ist die
+   zeit-pins-zone der EINZIGE Pin-Strang. Sie liegt als Overlay deckungsgleich in
+   der timeline-section; jeder Pin wird per top:% an seiner Zeitposition am Balken
+   verankert (vorher Flex-Column bei top:8% → alle Pins klebten oben).
 
    Pin-Skala unterscheidet anker (volle Pikto-Größe, analog .pin-pikto) und
    vorlauf (kleinere Skala — ROUTINE-26 "feinerer visueller Marker").
@@ -531,17 +531,17 @@ body {
 */
 .zeit-pins-zone {
   position: absolute;
-  top: 8%;
-  right: calc(50% + 48px);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  align-items: flex-end;
+  inset: 0;
   z-index: 4;
   pointer-events: none;
 }
 
+/* Ein Pin-Chip — an top:% verankert, vertikal um diese Position zentriert,
+   abwechselnd links/rechts NEBEN dem Balken (Seiten-Alternation löst enge
+   Zeitpunkte strukturell auf, analog der alten .event-pin-Logik). */
 .zeit-pin {
+  position: absolute;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -551,6 +551,17 @@ body {
   border: 2px solid var(--kids-border-soft);
   font-family: var(--font-hand);
   box-shadow: var(--shadow-hand-sm);
+}
+
+/* LINKS vom Balken: Chip endet 48px vor der Balken-Mitte (16px halbe Balkenbreite
+   + 32px Atem-Spalte) — Pin klebt nicht am Balken, auch bei großem Viewport. */
+.zeit-pin-links {
+  right: calc(50% + 48px);
+}
+
+/* RECHTS vom Balken: Chip beginnt 48px rechts der Mitte (s. links). */
+.zeit-pin-rechts {
+  left: calc(50% + 48px);
 }
 
 /* Default = vorlauf-Skala (kleinere Tile, ROUTINE-26 "feinerer Marker"). */
