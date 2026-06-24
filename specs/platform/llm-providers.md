@@ -41,8 +41,14 @@ alle drei Sichten — kein Adapter-Code pro Buddy
 - **`get_agent(slot)` — Agent-Tool-Loop.** Für Konversationen mit Tool-Use
   und Mid-Turn-Continuation. Heutiger Use-Case: eltern-chat
   (`providers/claude.py`-Bestand). Required Capabilities: `tool_use`,
-  `multi_turn_assistant_prefill`, `cache_control`, `system_message_distinct`
-  (LLMP-3).
+  `multi_turn_assistant_prefill`, `system_message_distinct` (LLMP-3).
+  `cache_control` ist bewusst **kein** Boot-Fail-Minimum (LLMP-S7:
+  Required-Set ist Boot-Fail-Minimum, kein Nutzungs-Whitelist) —
+  LLMP-S9-Capability-Matrix-Review 2026-06-24 (eltern-chat dual-provider):
+  Mistral unterstützt kein Prompt-Caching (`eltern-chat/providers/pricing.py:27`,
+  `eltern-chat/providers/mistral.py:77-80`) und würde mit `cache_control` im
+  Required-Set einen `LLMCapabilityError` beim Boot werfen. Vendoren mit
+  Caching (Anthropic) setzen Cache-Marker weiterhin.
 - **`get_singleshot(slot)` — Structured Singleshot.** Eine Anfrage, ein
   Schema-konformer Antwort-Block. Heutiger Use-Case: hoerspiel
   (Folgen-Beschreibung via JSON-Schema, heute via forced `tool_use`).
@@ -229,7 +235,14 @@ entblockt ist.
 ### LLMP-S9 — Re-Evaluierung vor jedem Buddy
 Vor jedem Migrations-Buddy: Capability-Matrix-Review gegen den realen
 Bestand des Buddys (für eltern-chat: das Agent-Loop-Required-Set **und** der
-Mistral-Anbieter, da eltern-chat dual-provider fährt). Der **Spike-Stufe-2-Beleg**
+Mistral-Anbieter, da eltern-chat dual-provider fährt).
+
+**LLMP-S9-Befund eltern-chat 2026-06-24:** Mistral ⊥ `cache_control`
+(kein Prompt-Caching; `pricing.py:27`, `mistral.py:77-80`). Konsequenz:
+`cache_control` aus dem `get_agent`-Required-Set entfernt — Begründung
+und Patch in LLMP-3 (Convention) und LLMP-S1 (Spec, `get_agent`-Bullet).
+
+Der **Spike-Stufe-2-Beleg**
 (7 Tage Familie-1, JSONL-vs-SQLite-`est_cost_eur`-Diff < 1%/Tag — sonst
 Schreibpfad-Fix vor weiterer Migration) ist **die Live-Probe des
 eltern-chat-Migrations-Tickets selbst** und läuft folgerichtig **nach** dessen

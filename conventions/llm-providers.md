@@ -62,8 +62,13 @@ Die sechs ratifizierten Capabilities (V1):
 
 **Required-Sets pro Sicht (V1):**
 
-- `get_agent`: `{tool_use, multi_turn_assistant_prefill, cache_control,
-  system_message_distinct}`
+- `get_agent`: `{tool_use, multi_turn_assistant_prefill,
+  system_message_distinct}` — `cache_control` ist **kein** Boot-Fail-
+  Minimum mehr (LLMP-S7: Required-Set = Boot-Fail-Minimum, kein
+  Nutzungs-Whitelist). Vendoren mit Prompt-Caching (Anthropic) setzen
+  Cache-Marker weiterhin; Vendoren ohne Caching (Mistral, kein
+  Prompt-Caching — LLMP-S9-Befund eltern-chat dual-provider
+  2026-06-24) booten ohne Fail.
 - `get_singleshot`: `{structured_output, system_message_distinct}` (heute
   via `tool_use`-Erzwingung; Vendor ohne `structured_output` darf
   `tool_use` als Substitut nicht auto-fallback — das ist Vendor-File-
