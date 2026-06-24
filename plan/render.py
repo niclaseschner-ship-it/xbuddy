@@ -19,12 +19,51 @@ logger = logging.getLogger(__name__)
 # PLAN-5: Wochentags-Kürzel (Mo=0 … So=6).
 DAY_SHORT = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 
-# PLAN-13 V1.3 (RAT-4-Auflösung 2026-06-22): Termin-Überschuss. So viele
-# Einzel-Termine zeigt eine Tagesspalte ohne Druck im 1fr-Termin-Bereich
-# (PLAN-6 V1.3, 80px-Slot-Zeilen → ≥200px Rest am Tablet-Viewport für ~5
-# Pillen à ~38px). Mehr Termine fasst ein gedimmter Counter `+M weitere`
+# PLAN-13 V1.3 (RAT-4-Auflösung 2026-06-22): Termin-Überschuss. Wie viele
+# Einzel-Termine eine Tagesspalte sichtbar zeigt, ist KEINE Magic-Zahl, sondern
+# eine Funktion der fixen Tablet-Geometrie: Das Display ist FEST 1920×1080 quer
+# (kein Headless-Browser-Tooling im Repo → kein Live-Messen). Die sichtbare
+# Termin-Anzahl N leitet sich deterministisch aus der verfügbaren 1fr-Höhe ab,
+# die der Termin-Bereich nach Kopf-Zeilen und Slot-Zeilen behält. So clippt
+# nichts: N ist genau, was VERTIKAL OHNE DRUCK in den 1fr-Bereich passt
+# (PLAN-13 V1.3). Mehr Termine fasst ein gedimmter Counter `+M weitere`
 # zusammen — Sichtbarkeits-Mechanik ohne Klick-Pfad (Tages-Overlay = QW4).
-TERMIN_LEISTE_MAX = 5
+#
+# Alle Maße in px, gespiegelt zu templates/plan_kinder.html (eine Quelle der
+# Geometrie ist das CSS; diese Konstanten müssen mit dem Frame-Grid und den
+# .pill-/.appts-Maßen dort übereinstimmen — bei CSS-Änderung mitziehen).
+GEOMETRIE_FRAME_HOEHE = 1020   # .frame max-height (auf 1080px-Tablet quer)
+GEOMETRIE_KOPF_HOEHE = 130     # Header (minimiert) + Day-Row + Trenner
+GEOMETRIE_SLOT_HOEHE = 80      # je Schedule-Slot eine fixe 80px-Zeile
+GEOMETRIE_APPTS_CHROME = 60    # .appts padding/border + Spaltenabstand
+GEOMETRIE_SPAN_HOEHE = 42      # eine durchgehende Span-Zeile (Balken + gap)
+GEOMETRIE_PILLE_HOEHE = 46     # eine Einzel-Termin-Pille inkl. gap (worst case
+                               # mit Uhrzeit-Zeile; ohne Uhrzeit kleiner)
+TERMIN_LEISTE_MIN = 2          # Untergrenze: selbst bei vielen Slots zeigt eine
+                               # Spalte mindestens 2 Termine, bevor der Counter
+                               # greift (sonst frisst der Counter die Sicht).
+
+
+def sichtbare_termine(slot_count, hat_spans):
+    """Höhen-basiertes N: sichtbare Einzel-Termine pro Tagesspalte (PLAN-13 V1.3).
+
+    N ist KEINE Magic-Zahl, sondern eine Funktion der fixen Tablet-Geometrie
+    (1080px quer): verfügbare 1fr-Höhe des Termin-Bereichs geteilt durch die
+    Pillen-Höhe, abgerundet. Mehr Slots → kleinere 1fr-Restzeile → kleineres N.
+    Läuft eine Mehrtages-Spanne (PLAN-14), kostet ihre durchgehende Balken-Zeile
+    zusätzliche Höhe und senkt N um ihren Anteil.
+
+    Untergrenze TERMIN_LEISTE_MIN, damit der Counter selbst bei vielen Slots
+    nicht die gesamte Sicht frisst. Unit-testbar (#1092 Defekt 1).
+    """
+    verfuegbar = (GEOMETRIE_FRAME_HOEHE
+                  - GEOMETRIE_KOPF_HOEHE
+                  - slot_count * GEOMETRIE_SLOT_HOEHE
+                  - GEOMETRIE_APPTS_CHROME)
+    if hat_spans:
+        verfuegbar -= GEOMETRIE_SPAN_HOEHE
+    n = verfuegbar // GEOMETRIE_PILLE_HOEHE
+    return max(TERMIN_LEISTE_MIN, n)
 
 # PLAN-12: Fallback-Typ für einen Kind-Aktivitäts-Slot, dessen Titel kein
 # Katalog-Schlüsselwort trägt — ein Kind-Slot-Eintrag ist nie symbol-/typlos.
@@ -377,16 +416,31 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
         else:
             appointments[tag_isos[0]].append(_einzel_termin(ev, ring, cfg, registry))
 
-    # PLAN-13 V1.3: Termin-Überschuss. Pro Tagesspalte werden höchstens
-    # TERMIN_LEISTE_MAX Termine sichtbar gezeigt; weitere fasst ein gedimmter
-    # Counter `+M weitere` zusammen (reine Sichtbarkeits-Mechanik ohne
-    # Klick-Pfad — das Tages-Overlay ist Folge-Ticket QW4). Spannen (PLAN-14)
-    # liegen in einer eigenen Zeile und zählen nicht in dieses Limit.
+    # PLAN-13 V1.3: Termin-Überschuss. Pro Tagesspalte werden höchstens N
+    # Termine sichtbar gezeigt; N ist HÖHEN-BASIERT aus der fixen Tablet-
+    # Geometrie (sichtbare_termine — kein Magic-5), damit nichts über die
+    # 1fr-Höhe hinaus clippt. Weitere fasst ein gedimmter Counter `+M weitere`
+    # zusammen (reine Sichtbarkeits-Mechanik ohne Klick-Pfad — Tages-Overlay =
+    # QW4). Eine laufende Mehrtages-Spanne (PLAN-14) kostet eine Balken-Zeile
+    # und senkt N. Die berührten Span-Spalten verlieren diese Höhe ohnehin durch
+    # den Balken; in span-losen Spalten rutschen die Tagestermine in den frei
+    # bleibenden Platz nach (PLAN-14 „frei für andere Termine") — das übernimmt
+    # das Spalten-Stack-Layout im Template, hier wird nur die Zahl gedeckelt.
+    # PLAN-14 V1.3: welche Tag-Indizes ein durchgehender Span-Balken berührt.
+    # NUR diese Spalten reservieren oben die Balken-Zeile; span-lose Spalten
+    # bleiben „frei für andere Termine" — dort rutschen die Tagestermine nach
+    # oben (kein Voll-Breite-Band über das ganze Fenster, verworfene Form).
+    span_cover = set()
+    for s in span_appointments:
+        for di in range(s["start_day"], s["end_day"] + 1):
+            span_cover.add(di)
+
+    n_sichtbar = sichtbare_termine(len(slot_keys), bool(span_appointments))
     appointment_overflow = {}
     for iso, liste in appointments.items():
-        if len(liste) > TERMIN_LEISTE_MAX:
-            appointment_overflow[iso] = len(liste) - TERMIN_LEISTE_MAX
-            appointments[iso] = liste[:TERMIN_LEISTE_MAX]
+        if len(liste) > n_sichtbar:
+            appointment_overflow[iso] = len(liste) - n_sichtbar
+            appointments[iso] = liste[:n_sichtbar]
         else:
             appointment_overflow[iso] = 0
 
@@ -396,6 +450,13 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
         "appointments": appointments,
         "appointment_overflow": appointment_overflow if mit_terminen else {},
         "span_appointments": span_appointments if mit_terminen else [],
+        # PLAN-14 V1.3: Tag-Indizes mit laufendem Span-Balken (nur diese Spalten
+        # reservieren die Balken-Zeile; span-lose Spalten lassen die Tagestermine
+        # nach oben rutschen). Sortierte Liste für das Template.
+        "span_cover": sorted(span_cover) if mit_terminen else [],
+        # PLAN-13 V1.3: höhen-basiertes N (Geometrie-Funktion) — exponiert für
+        # Tests/Diagnose; das Template braucht es nicht (Counter ist vorgekappt).
+        "termine_sichtbar": n_sichtbar,
         "show_appointments": mit_terminen,
         "picker_options": baue_picker_options(cfg),
     }
