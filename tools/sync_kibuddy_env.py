@@ -23,7 +23,13 @@ leben parallel, bis der alte Slot in einer eigenen Folge-Werft abgebaut
 wird (additiv-rückrollbar nach LLMP-S8).
 
 Nutzung:
-    python3 tools/sync_kibuddy_env.py
+    python3 tools/sync_kibuddy_env.py        # Per-Instanz-Store (xbuddy-data)
+    python3 -m tools.sync_kibuddy_env        # äquivalent
+
+Ziel-Store: $ZUGANGSDATEN_STORE_FILE, sonst der Per-Instanz-Default im
+Daten-Bereich (/home/buddy/xbuddy-data/zugangsdaten/zugangsdaten.json) —
+derselbe Store, den der Service tools.llm lesen lässt (Drop-In
+30-zugangsdaten-path.conf). Writer = Reader.
 """
 
 import json
@@ -31,7 +37,26 @@ import os
 import stat
 import sys
 
-ZD_PATH = "/home/buddy/xbuddy-data/zugangsdaten/zugangsdaten.json"
+# Direkt-Aufruf (`python3 tools/sync_kibuddy_env.py`) setzt sys.path[0] auf
+# tools/ — nicht den Repo-Root. Ohne diesen Bootstrap scheitert `import tools.*`
+# mit `No module named 'tools'`, der Slot-Mirror verpufft still (T1082-Folgefix).
+# Repo-Root voranstellen, bevor irgendein tools-Import läuft. Bei `-m`/pytest ist
+# er schon drin → idempotent.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+# Per-Instanz-Store (SVC-5): liegt im Daten-Bereich AUSSERHALB des Checkouts.
+# Bewusst NICHT der tools.zugangsdaten-Default (der zeigt per ZD-8 in den
+# Checkout und ist je Instanz stale) — dieses Skript ist ein Deploy-Tool für
+# diese Instanz und schreibt in deren kanonischen Store. Override via
+# $ZUGANGSDATEN_STORE_FILE, damit es exakt dort schreibt, wo der Service (per
+# Drop-In 30-zugangsdaten-path.conf) tools.llm lesen lässt — Writer = Reader.
+ZD_STORE_ENV = "ZUGANGSDATEN_STORE_FILE"
+DEFAULT_ZD_STORE = "/home/buddy/xbuddy-data/zugangsdaten/zugangsdaten.json"
+
+# OUT_PATH ist die ENV-Datei, die der systemd-Service via EnvironmentFile lädt
+# (10-secrets.conf) — ebenfalls im Daten-Bereich außerhalb des Checkouts (SVC-5).
 OUT_PATH = "/home/buddy/xbuddy-data/zugangsdaten/kibuddy-env"
 
 # Pro Ziel-ENV: Liste der zugangsdaten-Keys in Bevorzugungs-Reihenfolge.
@@ -105,14 +130,19 @@ def _sync_llm_slots(zd_path: str) -> list[tuple[str, str]]:
 
 
 def main():
+    # Store-Pfad: $ZUGANGSDATEN_STORE_FILE > Per-Instanz-Default (Daten-Bereich).
+    # Unter dem Service-Env (Drop-In setzt die Var) trifft das exakt den Store,
+    # den tools.llm liest — Writer = Reader.
+    zd_path = os.environ.get(ZD_STORE_ENV) or DEFAULT_ZD_STORE
+    print(f"Zugangsdaten-Store: {zd_path}")
     try:
-        with open(ZD_PATH, encoding="utf-8") as f:
+        with open(zd_path, encoding="utf-8") as f:
             zd = json.load(f)
     except FileNotFoundError:
-        print(f"Fehler: {ZD_PATH} nicht gefunden.", file=sys.stderr)
+        print(f"Fehler: {zd_path} nicht gefunden.", file=sys.stderr)
         sys.exit(1)
     except json.JSONDecodeError as exc:
-        print(f"Fehler: {ZD_PATH} ist kein gültiges JSON: {exc}", file=sys.stderr)
+        print(f"Fehler: {zd_path} ist kein gültiges JSON: {exc}", file=sys.stderr)
         sys.exit(1)
 
     lines = []
@@ -141,24 +171,18 @@ def main():
     os.replace(tmp_path, OUT_PATH)
     print(f"\nGeschrieben: {OUT_PATH} (600, {len(lines)} Zeilen)")
 
-    # T1082-S2 Fix 2: LLMP-5-Spiegel-Slots schreiben, damit `tools.llm`
-    # den neuen Slot `kibuddy-anthropic-api-key` beim Live-Boot findet.
-    try:
-        mirrored = _sync_llm_slots(ZD_PATH)
-    except Exception as exc:  # Diagnose: jeder Fehler darf den ENV-Schreib-Pfad nicht abreißen
-        print(
-            f"Warnung: LLM-Slot-Spiegel konnte nicht geschrieben werden: {exc}",
-            file=sys.stderr,
-        )
+    # T1082-S2 Fix 2: LLMP-5-Spiegel-Slot schreiben, damit `tools.llm` den Slot
+    # `kibuddy-anthropic-api-key` findet. KRITISCH — ohne ihn wirft der erste
+    # Kind-Call LLMCapabilityError. Fehler hart durchschlagen lassen (kein
+    # stilles Schlucken): ein nicht-geschriebener Slot ist ein Deploy-Fehler,
+    # kein Diagnose-Detail.
+    mirrored = _sync_llm_slots(zd_path)
+    if mirrored:
+        print(f"\nLLM-Slot-Spiegel (LLMP-5) aktualisiert ({len(mirrored)}):")
+        for ziel, quelle in mirrored:
+            print(f"  {ziel:40s} ← {quelle}")
     else:
-        if mirrored:
-            print(
-                f"\nLLM-Slot-Spiegel (LLMP-5) aktualisiert ({len(mirrored)}):"
-            )
-            for ziel, quelle in mirrored:
-                print(f"  {ziel:40s} ← {quelle}")
-        else:
-            print("\nLLM-Slot-Spiegel (LLMP-5): nichts zu tun (bereits aktuell).")
+        print("\nLLM-Slot-Spiegel (LLMP-5): nichts zu tun (bereits aktuell).")
 
 
 if __name__ == "__main__":
