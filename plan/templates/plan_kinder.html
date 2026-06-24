@@ -315,8 +315,12 @@
      reserviert oben genau so viele Lane-Höhen, wie es belegte Lanes gibt
      (--span-band = span_lanes × Lane-Höhe), damit die Tagestermine UNTER allen
      Balken beginnen. Span-LOSE Spalten haben diese Klasse nicht → ihre Termine
-     rutschen in den frei werdenden Platz von oben nach. */
-  .appts-col.under-span { padding-top: var(--span-band, 34px); }
+     rutschen in den frei werdenden Platz von oben nach.
+     #1092 S6: +6px Gap zwischen Span-Balken-Unterkante und erster Pille —
+     konsistent zum 6px Pillen-Stack-Gap (.appts-col gap: 5px + Abrundung).
+     CSS↔Geometrie-Kopplung: GEOMETRIE_SPAN_GAP in render.py muss diesem Wert
+     entsprechen (6px). */
+  .appts-col.under-span { padding-top: calc(var(--span-band, 34px) + 6px); }
   .pill {
     display: flex; align-items: center; gap: 5px;
     padding: 3px 7px;
