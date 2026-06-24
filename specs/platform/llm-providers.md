@@ -158,15 +158,44 @@ KIBuddy-Erfahrung hinaus, bevor ein kritischerer Buddy migriert wird:
 1. **Agent-Tool-Loop** (eltern-chat-ähnlich): `get_agent("test-slot").run(...)`
    mit Tool-Definition + Tool-Call + Mid-Turn-Continuation.
 2. **Structured-Singleshot** (hoerspiel-ähnlich):
-   `get_singleshot("test-slot").complete_structured(schema, prompt)`
+   `get_singleshot("test-slot").complete_structured(system, prompt, schema)`
    forced via Tool-Use.
-3. **Multi-Turn-Chat** (kibuddy-ähnlich): `get_chat("test-slot").turn(history, new_turn)`
+3. **Multi-Turn-Chat** (kibuddy-ähnlich): `get_chat("test-slot").complete_multiturn(system, turns, user_message)`
    mit System-Prompt + 3-Turn-History.
 
-Erfolg = alle drei grün **mit derselben** Vendor-Datei. Wenn eine Sicht
-den Kern um >30% LOC aufbläst oder Capabilities außerhalb der Matrix
-zwingt → Vertrag nicht ratifizieren, RAT-20 zurückziehen
-(ENTSCHEID-File Sektion „Spike-Experiment (2 Stufen)" → Stufe 1).
+Erfolg = alle drei grün **mit derselben** Vendor-Datei. Der Vertrag wird
+**nicht** ratifiziert (RAT-20 zurückziehen), wenn einer dieser drei
+**Lego-Brüche** eintritt (ENTSCHEID-File `20260624-1330-RATIFIZIERT-llm-s7-loc-kill.md`
+Paket-Sektion „Drei Lego-Bruch-Tests" → Kill-Kriterium):
+
+1. **Capability-Flucht:** Eine Sicht zwingt den Kern, eine Capability außerhalb
+   der **sechs ratifizierten** LLMP-3-Capabilities (`CAPABILITIES`-frozenset) zu
+   nutzen — die Ein-File-These versteckt dann echte Vendor-Divergenz. Das
+   Required-Set einer Sicht ist nur das **Boot-Fail-Minimum** (LLMP-S3), **kein**
+   Nutzungs-Whitelist: dass `get_chat`/`get_singleshot`/`get_agent` zusätzlich
+   eine der sechs ratifizierten Capabilities nutzen, die nicht in *ihrem*
+   Required-Set steht (z. B. `cache_control` in Singleshot), ist erlaubt.
+   Erweitern der sechs ist selbst eine Spec-Änderung (LLMP-3) und damit der
+   eigentliche Bruch-Pfad (ENTSCHEID Paket-Sektion „Capability-Bruch scharf"
+   → Capability-Flucht).
+2. **Adapter-Wildwuchs:** Eine Sicht erfordert Vendor-Verzweigung pro
+   Buddy/Konsument im Kern (`if caller == …`) statt sicht-uniformer
+   Behandlung — der „kein Adapter-Code pro Buddy"-Anspruch (LLMP-S1) ist
+   gebrochen.
+3. **Copy-Paste-Divergenz:** Zwei Sicht-Methoden duplizieren ≥8 nicht-triviale
+   zusammenhängende Zeilen mit gleicher Kontrollstruktur, ohne dass ein
+   gemeinsamer Helfer existiert — Indiz für faule Abstraktion. Der Review muss
+   beide `Datei:Zeile`-Ranges nennen; ohne konkrete Ranges kein Kill (gemessen
+   am Review, nicht an roher Gesamt-Zeilenzahl).
+
+**LOC-Frühwarnung (nicht-bindend, aber pflichtig):** Wächst der Kern beim
+Aktivieren einer Sicht um >30% LOC, ist das **kein** automatischer
+Vertrags-Stopp — aber der PR/Handoff **muss** eine Drei-Zeilen-Abhakung mit
+`Datei:Zeile` tragen (Capability-Flucht nein/ja · Adapter-Wildwuchs nein/ja ·
+Copy-Paste-Divergenz nein/ja). So stoppt das Signal nicht automatisch, kann
+aber nicht ignoriert verschwinden (ENTSCHEID Paket-Sektion „LOC-Frühwarn-Artefakt"
+→ nicht-bindend aber pflichtig). Reines Wachstum durch inhärent große,
+helfer-faktorierte Interaktionsmuster (z. B. Tool-Use-Loop) ist erlaubt.
 
 ### LLMP-S8 — Migrations-Reihenfolge KIBuddy → hoerspiel → eltern-chat
 1. **KIBuddy** (zuerst, weil wörtlicher RAT-6-Trigger „ab KIBuddy"; Blast-
@@ -279,3 +308,17 @@ Drei-Sichten-Trennung Über-Differenzierung — dann fusionieren und die
 Capability-Matrix-Verstecken-Frage (Berater hatte gewarnt, dass eine
 einzige Sicht Capabilities verstecken könnte) neu öffnen
 (RAT-20 Sektion „Kill-Kriterium" → Vertrag-Drift).
+
+### E-LLMP-4 — Proxy-Metrik korrigiert
+*Datum:* 2026-06-24
+
+Die ursprüngliche LLMP-S7-Kill-Schwelle „>30% LOC = Vertrag nicht
+ratifizieren" war eine Vor-Bau-Daumenregel und löste beim gebauten
+Spike-Stufe-1-Artefakt (#1083, Commit `12e68f4`: 223→356 Z, +59,6%)
+falsch-positiv aus — drei Sichten liefen grün gegen denselben Vendor-File,
+ohne Capability-Flucht. Das LOC-Bein wurde durch drei direkte Lego-Bruch-Tests
+ersetzt (Capability-Flucht / Adapter-Wildwuchs / Copy-Paste-Divergenz); LOC
+blieb als nicht-bindendes, aber pflichtiges Frühwarn-Artefakt erhalten (siehe
+LLMP-S7 oben). Lehre: ein Proxy darf einen Vertrag nicht killen, wenn das
+direkte Maß widerspricht — Proxy nachschärfen, wenn die Realität die Schätzung
+schlägt (ENTSCHEID-File `20260624-1330-RATIFIZIERT-llm-s7-loc-kill.md`).
