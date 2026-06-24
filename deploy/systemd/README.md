@@ -71,6 +71,37 @@ und die optionalen Variablen ergeben sich aus dem `eltern-chat`-Code.
 Die übrigen Services ohne Bot-Token-Bedarf haben keine `EnvironmentFile`-Abhängigkeit.
 `seiten` und `essen` lesen die Token-Datei über Token-Sharing (siehe unten).
 
+### KIBuddy-Geheimnisse (KIBUDDY-21, T1082)
+
+`xbuddy-kibuddy` zieht seine Geheimnisse aus zwei Quellen, beide außerhalb des
+Checkouts (SVC-5):
+
+1. **ENV-Datei** `__XBUDDY_DATA__/zugangsdaten/kibuddy-env` (STT/TTS/Azure-Keys),
+   erzeugt von `tools/sync_kibuddy_env.py` und via Drop-In `10-secrets.conf`
+   geladen.
+2. **LLM-Provider-Key** über den `tools.llm`-Slot `kibuddy-anthropic-api-key`,
+   den dasselbe Skript in den **Per-Instanz-Zugangsdaten-Store** spiegelt
+   (`__XBUDDY_DATA__/zugangsdaten/zugangsdaten.json`).
+
+`tools.llm` löst den Store über `resolve_store_path()` auf; der Default zeigt per
+ZD-8 **in den Checkout**. Damit der Service den Per-Instanz-Store liest (wohin
+`sync_kibuddy_env.py` schreibt), setzt ein Drop-In die Override-Variable:
+
+```ini
+# 30-zugangsdaten-path.conf
+[Service]
+Environment=ZUGANGSDATEN_STORE_FILE=__XBUDDY_DATA__/zugangsdaten/zugangsdaten.json
+```
+
+Deploy-Reihenfolge: `python3 -m tools.sync_kibuddy_env` (schreibt ENV-Datei +
+Slot) → `daemon-reload` → `systemctl restart xbuddy-kibuddy`. Ohne den Slot wirft
+der erste Kind-Call `LLMCapabilityError`.
+
+> Offen (Architektur, eigene `/berater-runde`): aktuell setzt **nur** kibuddy
+> diesen Override; die übrige Flotte liest noch den In-Repo-Default-Store. Ob der
+> Per-Instanz-Store fleet-weit kanonisch wird (Override für alle) oder ZD-8 als
+> Default bleibt, ist eine eigene Entscheidung.
+
 ## Token-Sharing (Mini-App-Auth, RAT-16 / #684)
 
 Der Telegram-Bot-Token liegt physisch in `__XBUDDY_DATA__/eltern-chat/.env` —
