@@ -38,9 +38,11 @@ und `get_chat(slot)`. Jede gibt ein Sicht-Objekt zurück, das auf demselben
 alle drei Sichten — kein Adapter-Code pro Buddy
 (RAT-20 Sektion „Finale Landung — MACH ES" → Was sich ändert).
 
-- **`get_agent(slot)` — Agent-Tool-Loop.** Für Konversationen mit Tool-Use
+- **`get_agent(slot, model="")` — Agent-Tool-Loop.** Für Konversationen mit Tool-Use
   und Mid-Turn-Continuation. Heutiger Use-Case: eltern-chat
-  (`providers/claude.py`-Bestand). Required Capabilities: `tool_use`,
+  (`providers/claude.py`-Bestand). `model` ist optional (leer → Vendor-Default);
+  Konsumenten mit eigenem `provider_model` reichen es durch, ohne dass die Lib
+  das Vendor-DEFAULT erzwingt. Required Capabilities: `tool_use`,
   `multi_turn_assistant_prefill`, `system_message_distinct` (LLMP-3).
   `cache_control` ist bewusst **kein** Boot-Fail-Minimum (LLMP-S7:
   Required-Set ist Boot-Fail-Minimum, kein Nutzungs-Whitelist) —
