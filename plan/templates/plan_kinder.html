@@ -55,18 +55,18 @@
      gewonnene vertikale Platz fließt in den 1fr-Termin-Bereich (PLAN-13). */
   .header {
     display: flex; align-items: center; justify-content: flex-end;
-    padding: 6px 32px;
+    padding: 3px 32px;
     border-bottom: 2px dashed var(--kids-border-soft);
   }
   .week-label {
-    font-size: 18px; color: var(--kids-ink-soft);
+    font-size: 16px; color: var(--kids-ink-soft);
   }
 
   /* ─── Day-Chips ────────────────────────────────────────────── */
   .day-row {
     display: grid;
     grid-template-columns: 150px 1fr;
-    padding: 14px 24px 8px;
+    padding: 10px 24px 6px;
   }
   .day-cells {
     display: grid;
@@ -257,7 +257,7 @@
      1fr-Restzeile. min-height:0, damit die Zeile schrumpfen statt überlaufen
      kann; der Termin-Überschuss (+M weitere, PLAN-13) kappt die Pillen-Zahl. */
   .appts {
-    padding: 12px 24px 22px;
+    padding: 8px 24px 12px;
     border-top: 2px dashed var(--kids-border-soft);
     background: var(--kids-paper);
     min-height: 0;
@@ -286,38 +286,43 @@
     align-items: start;
   }
   /* Overlay-Schicht der durchgehenden Span-Balken — gleiches Spalten-Grid,
-     absolut über dem Board-Kopf. Leere Spalten tragen nichts und reservieren
-     darum keine Höhe in span-losen Spalten. */
+     absolut über dem Board-Kopf. #1092 S5: mehrere LANES (Zeilen) — gepackte,
+     nicht-überlappende Spans teilen sich eine Lane (PLAN-14 Lane-Packing).
+     Die Lane-Zeilen sind feste --span-lane-h hoch; jeder Balken sitzt per
+     grid-row in seiner Lane und per grid-column über seine berührten Spalten.
+     Leere Lane-Zellen tragen nichts. */
   .appts-spans {
     position: absolute;
     top: 0; left: 0; right: 0;
     display: grid;
     grid-template-columns: repeat(var(--col-count, 7), minmax(0, 1fr));
-    gap: 10px;
+    grid-auto-rows: var(--span-lane-h, 34px);
+    gap: 4px 10px;
     pointer-events: none;
   }
   .appts-spans:empty { display: none; }
   .pill.span {
-    /* Spalten-Span wird inline gesetzt (grid-column: start / end+1) → ein
-       durchgehender Balken über die berührten Spalten (PLAN-14). Alle Balken
-       liegen auf derselben Overlay-Höhe → optisch durchgehend. */
+    /* Spalten-Span + Lane werden inline gesetzt (grid-column start/end+1,
+       grid-row lane) → durchgehender Balken über die berührten Spalten in
+       seiner Lane (PLAN-14, Lane-Packing). */
     pointer-events: auto;
   }
   .appts-col {
-    display: flex; flex-direction: column; gap: 6px;
+    display: flex; flex-direction: column; gap: 5px;
     min-height: 80px;
   }
-  /* PLAN-14 V1.3: Eine von einem Span-Balken berührte Spalte reserviert oben
-     genau die Balken-Höhe (--span-band), damit die Tagestermine unter dem
+  /* PLAN-14 V1.3 + #1092 S5: Eine von einem Span-Balken berührte Spalte
+     reserviert oben genau so viele Lane-Höhen, wie es belegte Lanes gibt
+     (--span-band = span_lanes × Lane-Höhe), damit die Tagestermine UNTER allen
      Balken beginnen. Span-LOSE Spalten haben diese Klasse nicht → ihre Termine
      rutschen in den frei werdenden Platz von oben nach. */
-  .appts-col.under-span { padding-top: var(--span-band, 42px); }
+  .appts-col.under-span { padding-top: var(--span-band, 34px); }
   .pill {
-    display: flex; align-items: center; gap: 6px;
-    padding: 5px 8px;
+    display: flex; align-items: center; gap: 5px;
+    padding: 3px 7px;
     background: var(--kids-paper);
     border: 2px solid var(--kids-ink);
-    border-radius: 10px;
+    border-radius: 9px;
     color: var(--kids-ink);
     width: 100%;
     min-width: 0;
@@ -330,12 +335,12 @@
   }
   .pill-body { min-width: 0; flex: 1; }
   .pill-time {
-    font-weight: 700; font-size: 11px;
+    font-weight: 700; font-size: 10px;
     color: var(--kids-ink-soft); line-height: 1;
   }
   .pill-label {
     font-family: var(--kids-font-display);
-    font-size: 19px; font-weight: 700;
+    font-size: 17px; font-weight: 700;
     line-height: 1; margin-top: 1px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
@@ -345,10 +350,10 @@
      (Tages-Overlay ist Folge-Ticket QW4). */
   .appts-more {
     font-family: var(--kids-font-display);
-    font-size: 15px; font-weight: 700;
+    font-size: 14px; font-weight: 700;
     color: var(--kids-ink-soft);
     opacity: 0.6;
-    padding: 2px 8px;
+    padding: 1px 8px;
     line-height: 1;
   }
 
@@ -614,9 +619,23 @@
             {% if di not in span_cover %}{% set _ = span_cover.append(di) %}{% endif %}
           {% endfor %}
         {% endfor %}
-        <div class="appts-board" style="--span-band: 42px;">
+        {# #1092 S5: Anzahl belegter Span-Lanes lokal aus den gepackten Spans
+           (render.pack_span_lanes hat jedem Span `lane` gesetzt) — max(lane)+1.
+           So braucht das Template keine neue Render-Variable (main.py reicht nur
+           span_appointments durch, wie schon bei span_cover). #}
+        {% set ns = namespace(max_lane=-1) %}
+        {% for s in span_appointments %}
+          {% if s.lane > ns.max_lane %}{% set ns.max_lane = s.lane %}{% endif %}
+        {% endfor %}
+        {% set span_lanes = ns.max_lane + 1 %}
+        {# --span-band ist span_lanes × Lane-Höhe (34px) — berührte Spalten halten
+           oben so viele Lane-Höhen frei, wie es belegte Lanes gibt. --span-lane-h
+           ist die feste Lane-Zeilen-Höhe der Overlay-Schicht. Bei 0 Lanes bleibt
+           --span-band 0 (kein Vorlauf). #}
+        <div class="appts-board"
+             style="--span-band: {{ span_lanes * 34 }}px; --span-lane-h: 34px;">
           {# Tagestermine je Spalte (PLAN-13). Eine von einem Span berührte
-             Spalte (span_cover) hält oben die Balken-Höhe frei (.under-span);
+             Spalte (span_cover) hält oben die Lane-Höhen frei (.under-span);
              span-lose Spalten lassen die Termine nach oben rutschen. #}
           {% for d in days %}
             <div class="appts-col{% if loop.index0 in span_cover %} under-span{% endif %}">
@@ -652,8 +671,11 @@
              span-losen Spalten. #}
           <div class="appts-spans">
             {% for s in span_appointments %}
+              {# #1092 S5: grid-column = berührte Spalten (durchgehender Balken),
+                 grid-row = gepackte Lane (nicht-überlappende Spans teilen sich
+                 eine Lane). #}
               <div class="pill span"
-                   style="grid-column: {{ s.start_day + 1 }} / {{ s.end_day + 2 }};">
+                   style="grid-column: {{ s.start_day + 1 }} / {{ s.end_day + 2 }}; grid-row: {{ s.lane + 1 }};">
                 {{ arasaac_img(s.icon, 22) }}
                 <div class="pill-body">
                   <div class="pill-label">{{ s.label }}</div>

@@ -732,6 +732,102 @@ def test_vorlauf_spalte_einer_spanne_traegt_tagestermine(demo_config, demo_regis
     )
 
 
+def test_span_lane_packing_nicht_ueberlappende_teilen_eine_lane():
+    """#1092 S5 (PLAN-14 Lane-Packing): Zwei Mehrtages-Spans, die sich NICHT
+    überlappen (Theaterwoche Mo–Mi, Skilager Do–Sa), teilen sich EINE Lane —
+    span_lanes == 1, und beide bekommen lane 0."""
+    spans = [
+        {"start_day": 0, "end_day": 2, "label": "Theaterwoche"},  # grid-column 1/4
+        {"start_day": 3, "end_day": 5, "label": "Skilager"},      # grid-column 4/7
+    ]
+    lanes = render_mod.pack_span_lanes(spans)
+    assert lanes == 1, "nicht-überlappende Spans müssen EINE Lane teilen, war %d" % lanes
+    by_label = {s["label"]: s for s in spans}
+    assert by_label["Theaterwoche"]["lane"] == 0
+    assert by_label["Skilager"]["lane"] == 0
+
+
+def test_span_lane_packing_ueberlappende_stapeln():
+    """#1092 S5 (PLAN-14 Lane-Packing): Zwei Spans, die sich auf mindestens
+    einem Tag überlappen, stapeln in GETRENNTE Lanes — span_lanes == 2."""
+    spans = [
+        {"start_day": 0, "end_day": 3, "label": "Ferien"},      # Mo–Do
+        {"start_day": 2, "end_day": 4, "label": "Besuch Oma"},  # Mi–Fr (Überlapp Mi/Do)
+    ]
+    lanes = render_mod.pack_span_lanes(spans)
+    assert lanes == 2, "überlappende Spans brauchen 2 Lanes, war %d" % lanes
+    laenge_lanes = {s["lane"] for s in spans}
+    assert laenge_lanes == {0, 1}, "Spans müssen auf zwei verschiedene Lanes"
+
+
+def test_span_lane_packing_endet_genau_vor_naechstem_start():
+    """#1092 S5: Grenzfall — endet ein Span an Tag k und beginnt der nächste an
+    Tag k+1, ist das KEIN Überlapp → eine gemeinsame Lane (end_day < start_day)."""
+    spans = [
+        {"start_day": 0, "end_day": 1, "label": "A"},  # Mo–Di
+        {"start_day": 2, "end_day": 3, "label": "B"},  # Mi–Do (B.start 2 > A.end 1)
+    ]
+    assert render_mod.pack_span_lanes(spans) == 1
+
+
+def test_span_lanes_im_view_und_template(demo_config, demo_registry):
+    """#1092 S5: baue_view packt die Spans (span_lanes im View-Modell), und das
+    Template reserviert oben span_lanes × Lane-Höhe (--span-band). Zwei nicht-
+    überlappende Spans → span_lanes == 1, --span-band: 34px im HTML."""
+    heute = date(2026, 5, 18)  # Mo
+    raw = [
+        # Theaterwoche Mo–Mi (allday end exklusiv → +3 = Do).
+        gcal_allday("span_th", "Theaterwoche",
+                    heute.isoformat(), (heute + timedelta(days=3)).isoformat()),
+        # Skilager Do–Sa (start +3 = Do, end exklusiv +6 = So).
+        gcal_allday("span_sk", "Skilager",
+                    (heute + timedelta(days=3)).isoformat(),
+                    (heute + timedelta(days=6)).isoformat()),
+    ]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    assert view["span_lanes"] == 1, "nicht-überlappende Spans → 1 Lane im View"
+    client = make_client(demo_config, demo_registry, FakeTransport(raw))
+    r = client.get("/display/plan/woche?ab=%s" % heute.isoformat())
+    assert r.status_code == 200
+    assert b"--span-band: 34px" in r.data, (
+        "--span-band muss span_lanes × 34px sein (1 Lane → 34px)"
+    )
+
+
+def test_n_sichtbar_reserviert_counter_kein_clip():
+    """#1092 S5 (PLAN-13): N ist an die REALE Geometrie (944px nutzbar) gebunden
+    und reserviert die Counter-Zeile EXPLIZIT. Ziel: bei der 7-Slot-Live-Config
+    passen ~5 Termin-Reihen + Counter ohne Clip. Die Invariante (Counter immer
+    voll sichtbar) heißt arithmetisch: die belegte Höhe (N × Pille + Counter +
+    Kopf + Slots + Chrome) bleibt ≤ 944px."""
+    n = render_mod.sichtbare_termine(7, 0)
+    assert n == 5, "7-Slot-Live-Config soll ~5 Termin-Reihen zeigen, war %d" % n
+    # Belegte Höhe mit N Pillen + reservierter Counter passt in 944px (kein Clip).
+    belegt = (render_mod.GEOMETRIE_KOPF_HOEHE
+              + 7 * render_mod.GEOMETRIE_SLOT_HOEHE
+              + render_mod.GEOMETRIE_APPTS_CHROME
+              + n * render_mod.GEOMETRIE_PILLE_HOEHE
+              + render_mod.GEOMETRIE_COUNTER_HOEHE)
+    assert belegt <= render_mod.GEOMETRIE_FRAME_HOEHE, (
+        "belegte Höhe %d übersteigt nutzbare %d — clippt unten"
+        % (belegt, render_mod.GEOMETRIE_FRAME_HOEHE)
+    )
+
+
+def test_n_sichtbar_span_lanes_kosten_hoehe():
+    """#1092 S5: span_lanes (statt pauschal hat_spans) senkt N — mehr belegte
+    Lanes kosten mehr Höhe, also monoton fallendes N. 0 Lanes ≥ 1 Lane ≥ 2."""
+    n0 = render_mod.sichtbare_termine(7, 0)
+    n1 = render_mod.sichtbare_termine(7, 1)
+    n2 = render_mod.sichtbare_termine(7, 2)
+    assert n0 >= n1 >= n2, "mehr Span-Lanes müssen N senken, war %r" % [n0, n1, n2]
+    assert n0 > n2, "2 Lanes müssen N strikt unter 0 Lanes drücken"
+
+
 def test_headline_mein_plan_nicht_sichtbar(demo_config, demo_registry):
     """#1092 Defekt 3: Die sichtbare Headline „mein Plan" (.brand-title) ist
     entfernt — die Kopf-Zeile schrumpft (Platz für den 1fr-Termin-Bereich).
