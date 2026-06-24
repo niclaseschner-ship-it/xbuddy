@@ -60,16 +60,16 @@ def test_parse_slot_bindestrich_caller():
 def test_parse_slot_unknown_vendor_raises():
     """Fix-1/AC2: unbekannter Vendor → `LLMCapabilityError` (nicht ModuleNotFoundError).
 
-    `mistral` ist heute nicht implementiert. Statt eines unklaren
-    `ModuleNotFoundError: tools.llm._vendor.mistral` beim späteren Import
+    `cohere` ist heute nicht implementiert. Statt eines unklaren
+    `ModuleNotFoundError: tools.llm._vendor.cohere` beim späteren Import
     wirft der Parser direkt einen ehrlichen `LLMCapabilityError` mit der
     Liste der bekannten Vendoren (LLMP-S3).
     """
     with pytest.raises(LLMCapabilityError) as exc_info:
-        parse_slot("hoerspiel-mistral-api-key")
+        parse_slot("hoerspiel-cohere-api-key")
     msg = str(exc_info.value)
-    assert "mistral" in msg or "kein bekanntes Vendor-Segment" in msg
-    assert "anthropic" in msg  # heutiger einziger Vendor in der Liste
+    assert "cohere" in msg or "kein bekanntes Vendor-Segment" in msg
+    assert "anthropic" in msg  # bekannte Vendoren werden gelistet
 
 
 def test_parse_slot_unknown_vendor_kibuddy_raises():
