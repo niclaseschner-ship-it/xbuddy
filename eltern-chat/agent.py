@@ -477,7 +477,8 @@ def run_turn(history_messages, user_message, provider, catalog, turn_context,
             _renewal = None
 
         request = GenerationRequest(
-            system=effective_system, messages=messages, task_defs=task_defs)
+            system=effective_system, messages=messages, task_defs=task_defs,
+            correlation_id=getattr(turn_context, "turn_id", None))
         with (_renewal if _renewal is not None else _NullContext()):
             # Issue #165: Renewal-Thread hält den Typing-Indikator für die
             # Dauer des Provider-Calls lebendig; _call_provider kapselt den
