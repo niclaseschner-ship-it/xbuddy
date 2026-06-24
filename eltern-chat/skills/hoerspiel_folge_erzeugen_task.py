@@ -147,7 +147,13 @@ class HoerspielFolgeErzeugenTask(WriteTask):
                 "»passt so«, »okay so«, »fang an«, »jetzt vertonen«, "
                 "»schreib jetzt«. Bei diesen Phrasen diesen Task mit der "
                 "zusammengeführten konkreten Idee und idee_diskussion=False "
-                "aufrufen (HFE-3, HFE-6)."),
+                "aufrufen (HFE-3, HFE-6). WICHTIG: Diese Phrasen lösen den "
+                "Vorschlag NUR aus, solange noch KEIN Vorschlag vorliegt. Wenn "
+                "du gerade eine Folge vorgeschlagen hast (»Vertonen? Antworte "
+                "nur mit »ja«…«), rufe diesen Task bei einer solchen Phrase NICHT "
+                "erneut auf — die Bestätigung läuft deterministisch außerhalb von "
+                "dir über EC-10. Erneutes Aufrufen würde nur neu texten statt zu "
+                "vertonen."),
             parameters={
                 "type": "object",
                 "properties": {
