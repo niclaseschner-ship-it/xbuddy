@@ -29,6 +29,33 @@ def icon_url(pikto_id):
     return ICON_BASIS + str(pikto_id) + ".png"
 
 
+def _pin_top_pct(uhrzeit_label, uhr_view):
+    """Vertikal-Position eines Pins am Zeitstrahl in % [0..100] (ROUTINE-9).
+
+    Proportional im Fenster aufstehen → losgehen:
+      (pin_min − aufstehen_min) / zeitfenster_min * 100, geclamped 0..100.
+    Restauriert die V1-event-pin-Platzierung (top:0% … 100%) für die items[]-Pins
+    nach T1070 Welle B — ohne Positions-% klebten alle Pins oben (Flex-Column).
+
+    Liefert None, wenn keine sinnvolle Position berechenbar ist (kein Schultag,
+    '—:—'-Pin ohne Referenz-Anker, fehlende aufstehen-Zeit) — solche Pins werden
+    nicht auf den Strahl gesetzt (MAD-1: keine Fake-Position).
+    """
+    if uhr_view is None or not uhr_view.aufstehen_label:
+        return None
+    try:
+        ph, pm = uhrzeit_label.split(":")
+        pin_min = int(ph) * 60 + int(pm)
+        ah, am = uhr_view.aufstehen_label.split(":")
+        aufstehen_min = int(ah) * 60 + int(am)
+    except (ValueError, AttributeError):
+        return None
+    if uhr_view.zeitfenster_min <= 0:
+        return None
+    pct = (pin_min - aufstehen_min) / uhr_view.zeitfenster_min * 100.0
+    return round(max(0.0, min(100.0, pct)), 1)
+
+
 def baue_view(cfg, abhak_zustand, uhr_view):
     """Baut das vollständige View-Modell der View `morgen` (ROUTINE-2, ROUTINE-26).
 
@@ -69,6 +96,8 @@ def baue_view(cfg, abhak_zustand, uhr_view):
             "uhrzeit_label": p.uhrzeit_label,
             "minuten": p.minuten,
             "locked": p.locked,
+            # ROUTINE-9: Vertikal-Position am Zeitstrahl (top:%); None → nicht platzierbar.
+            "top_pct": _pin_top_pct(p.uhrzeit_label, uhr_view),
         }
         for p in pin_objs
     ]

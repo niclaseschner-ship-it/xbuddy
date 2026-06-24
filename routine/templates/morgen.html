@@ -92,30 +92,34 @@
           {% endfor %}
         </div>
 
-      </div>{# /timeline-section — V1-Hartcode-Event-Pins entfernt (ROUTINE-28 Welle B, T1070).
-               Alle Pins kommen ausschließlich aus der zeit-pins-zone unten. #}
-
-      {# ── V2-ZEIT-PINS (ROUTINE-26): items mit zeit.typ=anker / vorlauf ── #}
-      {# Migration-Welle A: anker-Items aus V1-Synth + nutzer-definierte
-         vorlauf-Items werden zusätzlich aufgelistet. V1-End-Pins
-         (Aufstehen/Anziehen/Losgehen) bleiben oben unverändert sichtbar
-         — Lego-Schuld V1.1, Konsolidierung in Folge-PR (ROUTINE-20 Lego). #}
-      {% if view.zeit_pins %}
-      <div class="zeit-pins-zone">
-        {% for pin in view.zeit_pins %}
-        <div class="zeit-pin zeit-pin-{{ pin.typ }}{% if pin.locked %} zeit-pin-locked{% endif %}"
-             data-id="{{ pin.id }}">
-          <div class="zeit-pin-pikto">
-            {% if pin.pikto_url %}
-            <img src="{{ pin.pikto_url }}" alt="{{ pin.label }}">
-            {% endif %}
+        {# ── ZEIT-PINS (ROUTINE-26): items mit zeit.typ=anker / vorlauf ──
+           Jeder Pin sitzt an seiner proportionalen Vertikal-Position (top:%) am
+           Balken, abwechselnd links/rechts (loop.index0) — restauriert die
+           V1-event-pin-Platzierung nach T1070 Welle B (Pins klebten als
+           Flex-Column oben). Pins ohne berechenbare Position (top_pct=None,
+           z.B. '—:—' ohne Referenz-Anker) werden nicht auf den Strahl gesetzt. #}
+        {% if view.zeit_pins %}
+        <div class="zeit-pins-zone">
+          {% for pin in view.zeit_pins %}
+          {% if pin.top_pct is not none %}
+          <div class="zeit-pin zeit-pin-{{ pin.typ }}{% if pin.locked %} zeit-pin-locked{% endif %} {% if loop.index0 is even %}zeit-pin-links{% else %}zeit-pin-rechts{% endif %}"
+               data-id="{{ pin.id }}"
+               style="top: {{ pin.top_pct }}%;">
+            <div class="zeit-pin-pikto">
+              {% if pin.pikto_url %}
+              <img src="{{ pin.pikto_url }}" alt="{{ pin.label }}">
+              {% endif %}
+            </div>
+            <span class="zeit-pin-label">{{ pin.label }}</span>
+            <span class="zeit-pin-time">{{ pin.uhrzeit_label }}</span>
           </div>
-          <span class="zeit-pin-label">{{ pin.label }}</span>
-          <span class="zeit-pin-time">{{ pin.uhrzeit_label }}</span>
+          {% endif %}
+          {% endfor %}
         </div>
-        {% endfor %}
-      </div>
-      {% endif %}
+        {% endif %}
+
+      </div>{# /timeline-section — Pins sitzen positioniert am Balken (T1070 Welle B
+               Regression: zeit-pins-zone klebte als Flex-Column oben, jetzt top:%). #}
 
       {# ── ZEIT-REFERENZEN (ROUTINE-13): config-schaltbar; an die vertikale Achse ── #}
       {# Default AUS (ROUTINE-13). Referenz-Balken liegen unter dem Balken-Block,
