@@ -32,6 +32,28 @@ SLOT_ERWACHSENEN = "erwachsenen-slot"
 SLOT_AKTIVITAET = "aktivitaets-slot"
 SLOT_ARTEN = (SLOT_ERWACHSENEN, SLOT_AKTIVITAET)
 
+# PLAN-6 V1.3 (RAT-4-Auflösung 2026-06-22) — Icon-Migrations-Lesephase.
+# Alte interne Slot-Icon-Keys werden mit WARN-Log auf ihre ARASAAC-id
+# übersetzt; neu geschriebene Slots tragen die ARASAAC-id direkt. Damit
+# entfällt der Template-Mapper `SLOT_ICON_ID` (war eine zweite Icon-Quelle
+# innerhalb der View, PLAN-6-Verstoß). Die Werte entsprechen 1:1 dem alten
+# Template-Mapper (Werft #578 Revision Nic 2026-06-10): star→3071 (Kalender),
+# moon→6027 (Bett). Die Lesephase ist Übergangshilfe — ein Folge-Ticket
+# entfernt sie nach 2-3 Wochen Stabilität (specs/buddies/plan.md PLAN-6 V1.3).
+_LEGACY_ICON_ARASAAC = {
+    "sun":   "37807",   # bring (verabschieden)
+    "clock": "39520",   # pick  (wiedersehen)
+    "star":  "3071",    # act1/act2 (Kalender — Revision Nic 2026-06-10)
+    "fork":  "2342",    # cook  (kochen)
+    "moon":  "6027",    # bed1/bed2 (Bett — Revision Nic 2026-06-10 #647)
+}
+
+# PLAN-6 V1.3 — ab dieser Slot-Anzahl warnt der Parser (kein ERROR): die
+# Familien-1-Display-Geometrie (DC-15, 1920×1080 quer) ist nur bis 8 Slots
+# vertikal lesbar getestet. WARN, weil die Familie weiterläuft — das Risiko
+# ist Lesbarkeit, nicht Datenverlust.
+SLOT_WARN_AB = 9
+
 # PLAN-28: nicht-geheime Werte mit ihren Defaults. Code-Konstanten sind hier
 # nur Fallback-Default — jeder Wert hat einen Override-Pfad (Config/Env).
 #
@@ -188,11 +210,35 @@ def _load_file(path):
     return {k: v for k, v in data.items() if not k.startswith("_")}
 
 
+def _migriere_slot_icon(schluessel, icon):
+    """Icon-Migrations-Lesephase (PLAN-6 V1.3).
+
+    Ein alter interner Key (`sun`/`clock`/`fork`/`moon`/`star`) wird mit
+    WARN-Log auf seine ARASAAC-id übersetzt; eine bereits ARASAAC-förmige id
+    (Integer-String) wird unverändert durchgereicht. So rendert das Template
+    `slot.icon` direkt über den geteilten Icon-Pfad — der Template-Mapper
+    `SLOT_ICON_ID` (zweite Icon-Quelle, PLAN-6-Verstoß) entfällt.
+    """
+    if icon in _LEGACY_ICON_ARASAAC:
+        neu = _LEGACY_ICON_ARASAAC[icon]
+        logger.warning(
+            "Slot %r: alter Icon-Key %r → ARASAAC-id %r (Migrations-Lesephase, "
+            "PLAN-6 V1.3) — neu geschriebene Slots sollten die ARASAAC-id tragen",
+            schluessel, icon, neu)
+        return neu
+    return icon
+
+
 def _parse_slots(raw_slots):
     """Baut Slot-Objekte aus dem `slots`-Abschnitt der Config (PLAN-6).
 
     Wirft ConfigError, wenn ein Slot ein Pflichtfeld vermisst, eine
     unbekannte Art trägt oder ein Aktivitäts-Slot kein Kind benennt.
+
+    PLAN-6 V1.3: alte Icon-Keys werden über die Migrations-Lesephase
+    (`_migriere_slot_icon`) auf ARASAAC-ids übersetzt (WARN); ab `SLOT_WARN_AB`
+    Slots schreibt der Parser einen WARN-Log (kein ERROR — die Familie läuft
+    weiter, das Risiko ist Lesbarkeit, nicht Datenverlust).
     """
     slots = []
     seen = set()
@@ -214,7 +260,15 @@ def _parse_slots(raw_slots):
         if raw["schluessel"] in seen:
             raise ConfigError("doppelter Slot-Schlüssel %r" % raw["schluessel"])
         seen.add(raw["schluessel"])
-        slots.append(Slot(raw["schluessel"], art, raw["icon"], kind))
+        icon = _migriere_slot_icon(raw["schluessel"], raw["icon"])
+        slots.append(Slot(raw["schluessel"], art, icon, kind))
+    # PLAN-6 V1.3: WARN ab 9 Slots — Display-Geometrie nur bis 8 getestet.
+    if len(slots) >= SLOT_WARN_AB:
+        logger.warning(
+            "Plan-Buddy: %d Slots konfiguriert (>= %d) — die Display-Geometrie "
+            "(DC-15, 1920×1080 quer) ist nur bis 8 Slots vertikal lesbar getestet "
+            "(PLAN-6 V1.3). Kein Fehler, aber die Schedule-Rail kann überlaufen.",
+            len(slots), SLOT_WARN_AB)
     return slots
 
 

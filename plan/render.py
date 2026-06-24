@@ -19,6 +19,13 @@ logger = logging.getLogger(__name__)
 # PLAN-5: Wochentags-Kürzel (Mo=0 … So=6).
 DAY_SHORT = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 
+# PLAN-13 V1.3 (RAT-4-Auflösung 2026-06-22): Termin-Überschuss. So viele
+# Einzel-Termine zeigt eine Tagesspalte ohne Druck im 1fr-Termin-Bereich
+# (PLAN-6 V1.3, 80px-Slot-Zeilen → ≥200px Rest am Tablet-Viewport für ~5
+# Pillen à ~38px). Mehr Termine fasst ein gedimmter Counter `+M weitere`
+# zusammen — Sichtbarkeits-Mechanik ohne Klick-Pfad (Tages-Overlay = QW4).
+TERMIN_LEISTE_MAX = 5
+
 # PLAN-12: Fallback-Typ für einen Kind-Aktivitäts-Slot, dessen Titel kein
 # Katalog-Schlüsselwort trägt — ein Kind-Slot-Eintrag ist nie symbol-/typlos.
 # Das generische Fallback-Piktogramm ist FALLBACK_PIKTOGRAMM (3071, Kalender).
@@ -153,7 +160,13 @@ def klassifiziere_event(titel, kinder, config=None):
 
 
 def strip_kind_name(titel, kinder):
-    """Entfernt den Kindernamen aus dem Titel — für das Aktivitäts-Label (PLAN-11)."""
+    """Entfernt den Kindernamen aus dem Titel — für das Aktivitäts-Label (PLAN-11).
+
+    Aktivitäts-Slot-Routing (PLAN-12) bleibt Kind-only: ein Kind-Aktivitäts-
+    Chip trägt den Titel ohne den routenden Kindernamen. Diese Funktion wird
+    NICHT für die Termin-Leiste benutzt — dort gilt `strip_person_name`
+    (PLAN-24 V1.3, n=1-Regel über alle Personen).
+    """
     out = titel or ""
     for k in kinder:
         if not k.name:
@@ -162,6 +175,40 @@ def strip_kind_name(titel, kinder):
         if idx >= 0:
             out = (out[:idx] + out[idx + len(k.name):]).strip()
             break
+    return " ".join(out.split())
+
+
+def strip_person_name(titel, personen):
+    """Termin-Label-Strip bei eindeutiger Foto-Resolution (PLAN-24 V1.3).
+
+    Für die Termin-Leiste (PLAN-13) und Mehrtages-Span-Pillen (PLAN-14):
+    Trägt der Titel **genau einen** Personen-Namen aus der Familien-Registry
+    (`personen` = `registry.alle()`), wird dieser Name aus dem Label entfernt —
+    die Foto-Resolution (Foto-im-Ring) trägt dann die Identität, das Label den
+    verbleibenden Termin-Inhalt (z. B. „Niclas Zahnarzt" → „Zahnarzt").
+
+    Bei **≥2** Namens-Treffern (z. B. „Sport mit Vera und Niclas") oder **0**
+    Treffern bleibt das Label **verbatim** — bei Mehrdeutigkeit trägt der
+    Namens-Bezug semantisch, bei keinem Treffer gibt es nichts zu strippen.
+
+    Anders als `strip_kind_name` (PLAN-12 Aktivitäts-Routing, Kind-only)
+    operiert diese Funktion über **alle** Personen und strippt **nur** im
+    eindeutigen n=1-Fall.
+    """
+    out = titel or ""
+    lo = out.lower()
+    treffer = []  # (fundindex, name)
+    for p in personen:
+        if not p.name:
+            continue
+        idx = lo.find(p.name.lower())
+        if idx >= 0:
+            treffer.append((idx, p.name))
+    # PLAN-24 V1.3: Strip nur bei genau einem eindeutigen Namens-Treffer.
+    if len(treffer) != 1:
+        return " ".join(out.split())
+    idx, name = treffer[0]
+    out = (out[:idx] + out[idx + len(name):]).strip()
     return " ".join(out.split())
 
 
@@ -307,11 +354,20 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
 
         # PLAN-13/PLAN-14: Termin. Mehrtägig → eine Spanne, sonst je Tag.
         if len(tag_isos) > 1:
+            # PLAN-14 V1.3: Die Spanne wird erst ab ihrem Start-Tag IM Fenster
+            # gerendert. `_event_tage` liefert nur die in-Fenster-Tage, die das
+            # Event tatsächlich berührt — `indices[0]` ist damit:
+            #   - 0, wenn das Event vor dem Fenster begann (läuft schon),
+            #   - >0, wenn es erst im Fenster beginnt (Vorlauf-Spalten frei).
+            # Keine durchgehende Zeilen-Reservierung über das ganze Fenster
+            # (verworfene heutige Form, Befund 2026-06-22).
             indices = sorted(iso_index[i] for i in tag_isos)
             span_appointments.append({
                 "start_day": indices[0],
                 "end_day": indices[-1],
-                "label": ev.titel,
+                # PLAN-24 V1.3: Span-Label wird bei eindeutiger Foto-Resolution
+                # gestrippt (n=1), sonst verbatim.
+                "label": strip_person_name(ev.titel, registry.alle()),
                 "ring": ring,
                 "person": ev.person,
                 "personen": _personen_rings(ev.personen, registry),
@@ -321,10 +377,24 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
         else:
             appointments[tag_isos[0]].append(_einzel_termin(ev, ring, cfg, registry))
 
+    # PLAN-13 V1.3: Termin-Überschuss. Pro Tagesspalte werden höchstens
+    # TERMIN_LEISTE_MAX Termine sichtbar gezeigt; weitere fasst ein gedimmter
+    # Counter `+M weitere` zusammen (reine Sichtbarkeits-Mechanik ohne
+    # Klick-Pfad — das Tages-Overlay ist Folge-Ticket QW4). Spannen (PLAN-14)
+    # liegen in einer eigenen Zeile und zählen nicht in dieses Limit.
+    appointment_overflow = {}
+    for iso, liste in appointments.items():
+        if len(liste) > TERMIN_LEISTE_MAX:
+            appointment_overflow[iso] = len(liste) - TERMIN_LEISTE_MAX
+            appointments[iso] = liste[:TERMIN_LEISTE_MAX]
+        else:
+            appointment_overflow[iso] = 0
+
     return {
         "tage": tage,
         "schedule": schedule,
         "appointments": appointments,
+        "appointment_overflow": appointment_overflow if mit_terminen else {},
         "span_appointments": span_appointments if mit_terminen else [],
         "show_appointments": mit_terminen,
         "picker_options": baue_picker_options(cfg),
@@ -344,6 +414,10 @@ def _einzel_termin(ev, ring, config, registry):
     Backward-Compat (Single-Person-Pfad, Aktivitäts-Slot-Kind-Termine).
     `registry` ist Pflicht-Parameter — der `registry is None`-Zweig ist
     entfernt (Befund 3, T473-S2).
+
+    PLAN-24 V1.3: das Label wird über `strip_person_name` gestrippt, wenn der
+    Titel genau einen Personen-Namen trägt (Foto-im-Ring trägt dann die
+    Identität); sonst verbatim.
     """
     uhrzeit = None
     if not ev.ganztags and ev.beginn is not None:
@@ -352,7 +426,7 @@ def _einzel_termin(ev, ring, config, registry):
     personen_rings = _personen_rings(ev.personen, registry)
     return {
         "time": uhrzeit,
-        "label": ev.titel,
+        "label": strip_person_name(ev.titel, registry.alle()),
         "ring": ring,
         "person": ev.person,
         "personen": personen_rings,
