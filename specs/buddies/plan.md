@@ -87,8 +87,13 @@ und morgen tragen zusätzlich ein Über-Label („heute" / „morgen").
 Die Schedule-Rail besteht aus Slot-Zeilen — je Zeile ein wiederkehrender
 Tagesablauf-Punkt. Welche Slots eine Familie hat, ist **Konfiguration**, kein
 fest verdrahteter Code (CLAUDE.md §6, E-PLAN-2). Jeder Slot definiert in der
-Konfiguration: stabiler Schlüssel, Art (`erwachsenen-slot` | `aktivitäts-slot`),
-Icon und — bei Aktivitäts-Slots — das zugehörige Kind. Die Beispiel-Konfiguration
+Konfiguration: stabiler Schlüssel, Art (`verantwortlich` | `kalender-read`),
+Icon und — bei Kalender-Read-Slots (Aktivitäts-Slots) — das zugehörige Kind.
+Die Art-Maschinen-Strings sind seit Sprint 2 `verantwortlich` (Konzept
+„Verantwortlichkeits-Slot", PLAN-7 — war `erwachsenen-slot`, nach Toggle-All
+V1.3 eine Namens-Lüge, da Kinder zuweisbar sind) und `kalender-read` (Konzept
+„Aktivitäts-Slot", PLAN-11 — read-only aus dem Kalender, war `aktivitaets-slot`).
+Der Parser liest beide Schreibweisen (Lese-Toleranz, siehe unten). Die Beispiel-Konfiguration
 bildet die sieben Slots des Wireframe-Handoffs 1:1 ab: `bring`, `pick`, `act1`
 (Kind A), `act2` (Kind B), `cook`, `bed1` (Kind A), `bed2` (Kind B).
 
@@ -134,10 +139,24 @@ Icon-Pfad. Live-`plan.json`-Migration läuft **extern im Deploy-Schritt**
 selben PR auf ARASAAC umgestellt. Die Lesephase ist Übergangshilfe —
 Folge-Ticket nach 2-3 Wochen Stabilität entfernt sie aus dem Parser.
 
-*Tickets:* #40, #578, #642
+**Slot-Art-Lese-Toleranz (V1.4 — Sprint 2, Schema-Vereinheitlichung):** Die
+Slot-Art-Maschinen-Strings wurden umbenannt — `erwachsenen-slot` →
+`verantwortlich`, `aktivitaets-slot` → `kalender-read` (Treiber: Toggle-All
+V1.3 machte „erwachsenen" zur Lüge; „kalender-read" benennt die read-only
+Kalender-Herkunft klar). Es ist **reines Rename** — kein Verhaltenswechsel an
+den Slots. Der Parser (`plan/config.py:_parse_slots`) trägt analog zur
+Icon-Lesephase eine **Migrations-Lesephase**: die alten Art-Strings werden
+mit **WARN-Log** akzeptiert, neu geschriebene Slots tragen die neuen Strings.
+Live-`plan.json`-Migration läuft **extern im Deploy-Schritt** (BUD-2);
+`plan.example.json` wird im selben PR umgestellt. Die Lese-Toleranz ist
+Übergangshilfe — Folge-Ticket nach Stabilität entfernt sie. Der API-Wire-
+Vertrag (PLAN-30/31) ist **nicht** betroffen: die Payload trägt einen
+Slot-`key`, nie die Art.
+
+*Tickets:* #40, #578, #642, #1116
 
 ### PLAN-7 — Verantwortlichkeits-Slots: Zuweisung per Klick-Cycle
-Eine Zelle eines Erwachsenen-Slots zeigt entweder das Foto-im-Ring (FAM-4)
+Eine Zelle eines Verantwortlichkeits-Slots (`verantwortlich`) zeigt entweder das Foto-im-Ring (FAM-4)
 einer Person oder einen leeren Slot mit Plus-Icon. Ein Tippen schaltet
 zyklisch weiter: Person 1 → Person 2 → … → leer → Person 1.
 
@@ -226,7 +245,7 @@ Termin-spezifische Einträge).
 eines Kindes (kein Kalender-Event für diesen Slot) zeigt ein **Plus-Symbol**
 als Anlege-Indikator — Inline-SVG, gedimmt (opacity 0.4, ~30 px). Erwachsenen-
 Slots zeigen weiterhin `empty-face`; volle Kinder-Slots zeigen den Aktivitäts-
-Chip. Nur leere Kinder-Aktivitäts-Slots tragen das Plus, nicht Erwachsenen-Slots.
+Chip. Nur leere Kinder-Aktivitäts-Slots tragen das Plus, nicht Verantwortlichkeits-Slots.
 
 **Piktogramm-Form über die zentrale Bibliothek (ICONS-4/ICONS-7-Konsum,
 verbindlich, V1.1 #471):** Das Feld `piktogramm` eines `aktivitaeten`-
@@ -676,12 +695,12 @@ Calendar-API-Quoten). Eine reine 429-Erkennung würde die häufigeren
 *Tickets:* #475 (TAB Erst-Konsument)
 
 ### PLAN-30 — Lese-API für Wochenzuteilungen
-Der Plan-Buddy stellt die persistierten Erwachsenen-Slot-Zuteilungen einer
+Der Plan-Buddy stellt die persistierten Verantwortlichkeits-Slot-Zuteilungen einer
 Woche unter `GET /api/v1/plan/zuteilung?week_start=<YYYY-MM-DD>` bereit —
 Form analog FAM-7 (GET, Query-Parameter, JSON-Antwort). Antwort:
 `{ "week_start": "<YYYY-MM-DD>", "slots": [ { "day": 0..6, "slot": "<key>",
 "person_id": "<id>|null" }, … ] }`. Die Liste enthält je Wochentag je
-Erwachsenen-Slot eine Zeile; leere Stellen tragen `person_id: null`. Ein
+Verantwortlichkeits-Slot eine Zeile; leere Stellen tragen `person_id: null`. Ein
 ungültiges oder fehlendes `week_start` antwortet HTTP 400 mit JSON-Fehler,
 kein 500.
 
@@ -697,7 +716,7 @@ ohne direkten Zugriff auf `plan.db` (APP-3, einseitige Abhängigkeit).
 
 *Tickets:* #214
 
-### PLAN-31 — Schreib-API für Erwachsenen-Slot-Zuteilungen
+### PLAN-31 — Schreib-API für Verantwortlichkeits-Slot-Zuteilungen
 Der Plan-Buddy nimmt Zuteilungen von anderen XBuddy-Apps über
 `PUT /api/v1/plan/zuteilung` entgegen — analog PLAN-30 (Lese-Seite).
 Body: `{ "week_start": "<YYYY-MM-DD>", "day": 0..6, "slot": "<key>",
@@ -707,7 +726,7 @@ schreibt die Zuweisung atomar in `plan.db` (PLAN-9) — identisch mit dem
 Klick-Cycle im View (PLAN-7/PLAN-8). Antwort: `{ "ok": true }`.
 
 Fehler-Semantik: `400` mit JSON-Fehler bei fehlendem Pflichtfeld, `slot`
-nicht vorhanden oder kein Erwachsenen-Slot (PLAN-6), `person_id` unbekannt
+nicht vorhanden oder kein Verantwortlichkeits-Slot (PLAN-6), `person_id` unbekannt
 (FAM-3), ungültigem `day`. Reload-on-Read gilt auch hier: Slot-Definition
 und Registry werden pro Aufruf frisch gelesen (DCOMP-2).
 
