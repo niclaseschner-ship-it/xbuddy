@@ -172,6 +172,52 @@ def test_ac3_baue_view_liefert_zeit_pins():
     assert view["zeit_pins"][1]["uhrzeit_label"] == "06:55"
 
 
+def test_pins_tragen_top_pct_position_am_zeitstrahl():
+    """ROUTINE-9: zeit_pins tragen ein top_pct [0..100] proportional im Fenster
+    aufstehen → losgehen (Regression-Schutz T1070 Welle B — Pins klebten oben,
+    weil ihnen die Positions-% fehlte).
+    """
+    import datetime as _dt
+    from zoneinfo import ZoneInfo
+
+    items = [
+        _item("auf", "Aufstehen", "8152",
+              zeit={"typ": "anker", "uhrzeit": "07:00", "locked": True}),
+        _item("anz", "Anziehen", "6627",
+              zeit={"typ": "anker", "uhrzeit": "08:17", "locked": False}),
+        _item("los", "Losgehen", "8142",
+              zeit={"typ": "anker", "uhrzeit": "08:25", "locked": True}),
+    ]
+    cfg = _baue_test_config(items)
+    tag = _dt.date(2026, 6, 24)
+    zeiten = uhr_mod.berechne_zeiten(
+        cfg.abfahrtszeit, cfg.anzieh_vorlauf_min, cfg.zeitzone, tag,
+        aufstehzeit_cfg=cfg.aufstehzeit)
+    now = _dt.datetime(2026, 6, 24, 7, 30, tzinfo=ZoneInfo(cfg.zeitzone))
+    uhr_view = uhr_mod.baue_uhr_view(zeiten, now)
+
+    view = render_mod.baue_view(cfg, abhak_zustand={}, uhr_view=uhr_view)
+    pins = view["zeit_pins"]
+    # Fenster 07:00 → 08:25 = 85 Min.
+    assert pins[0]["top_pct"] == 0.0      # Aufstehen = oben
+    assert pins[2]["top_pct"] == 100.0    # Losgehen = unten
+    # Anziehen 08:17 = (497-420)/85*100 = 90.6 %
+    assert abs(pins[1]["top_pct"] - 90.6) < 0.2
+    # alle innerhalb [0..100]
+    assert all(0.0 <= p["top_pct"] <= 100.0 for p in pins)
+
+
+def test_pins_ohne_uhr_view_haben_keine_position():
+    """Ohne uhr_view (kein Schultag) ist top_pct None — Pin landet nicht auf dem Strahl."""
+    items = [
+        _item("auf", "Aufstehen", "8152",
+              zeit={"typ": "anker", "uhrzeit": "07:00", "locked": True}),
+    ]
+    cfg = _baue_test_config(items)
+    view = render_mod.baue_view(cfg, abhak_zustand={}, uhr_view=None)
+    assert view["zeit_pins"][0]["top_pct"] is None
+
+
 def test_ac3_items_mit_zeit_block_nicht_in_checkliste():
     """zeit-Items sind im Pin-Strang, NICHT in der Checkliste (Disziplin: kein Doppel)."""
     items = [
