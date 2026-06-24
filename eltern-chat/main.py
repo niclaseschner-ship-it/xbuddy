@@ -54,7 +54,7 @@ from model import ImageBlock, Message, ProviderError, TextBlock
 from onboarding import OnboardingState
 from onboarding_store import ZD_NAME_PROVIDER_NAME, OnboardingStore
 from private_chat_session import SessionSortEntry
-from providers import get_provider
+from providers import get_lib_agent_provider
 
 # EC-39: Renewer-Intervall — gemeinsame Wahrheit mit EC-28 / skills/typing_indicator.py.
 # Re-Export, damit eine spätere conventions/typing-renewal.md (n=3-Aufschub)
@@ -504,7 +504,11 @@ def _run_agent(msg, ctx):
         private_chat_id=(msg.chat_id if msg.chat_type == "private"
                          else msg.from_user_id),
         media_telegram_file_id=media_file_id,
-        medium_typ=medium_typ)
+        medium_typ=medium_typ,
+        # T1085: dieselbe turn_id (Z.489) als correlation_id durch run_turn an
+        # den GenerationRequest → JSONL-Telemetrie der Lib (EC-23-Spiegel). KEIN
+        # zweiter UUID — die SQLite-Doppelschreibung nutzt dieselbe turn_id.
+        turn_id=turn_id)
 
     # Issue #93 / #156: Typing-Indikator vor JEDEM Provider-Aufruf — auch in
     # Tool-Loops, in denen der Loop nach einem Tool-Ergebnis erneut den
@@ -1206,8 +1210,12 @@ def build_context(cfg, db_path, zd_cli_path=None):
             raise config_mod.ConfigError(
                 "Anbieter-Key vorhanden, aber keine Familien-Gruppe — "
                 "Onboarding unvollständig?")
-        ctx.provider = get_provider(cfg.provider, cfg.provider_api_key,
-                                    cfg.provider_model)
+        # T1085 PR2: Chat-Agent-Pfad über tools/llm (LibAgentAdapter). Der
+        # Adapter bildet den Brand-Vendor-Slot selbst und die Lib holt den Key
+        # aus dem Zugangsdaten-Speicher — der KI-Modus-Guard (cfg.provider_api_key)
+        # oben bleibt das Schaltkriterium (Onboarding-Modus ⇒ kein Adapter).
+        # Effektives Modell unverändert (provider_model bzw. Anbieter-Default).
+        ctx.provider = get_lib_agent_provider(cfg.provider, cfg.provider_model)
         # EC-19: kann der Bot die Nachrichten der Familien-Gruppe empfangen?
         _check_group_reception(tg, cfg.family_group_chat_id, me)
     else:

@@ -138,6 +138,32 @@ def test_step_passes_image_block_through_unmodified(jsonl_path):
     assert sent[0]["content"][1]["source"]["data"] == "AAAA"
 
 
+def test_get_agent_uses_explicit_model_not_default(jsonl_path):
+    """`get_agent(slot, model="claude-opus-4-7")` reicht das Modell an den Vendor
+    durch — der Create nutzt es statt des Vendor-DEFAULT_MODEL (T1085-Durchreich,
+    eltern-chat-Verhalten erhalten)."""
+    fake, client = _fake_anthropic()
+    client.messages.create.return_value = _response([_text_block("Hallo.")])
+
+    with patch.dict(sys.modules, {"anthropic": fake}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_agent
+        agent = get_agent(slot="eltern-chat-anthropic-api-key", model="claude-opus-4-7")
+        agent.step(system="S", messages=[{"role": "user", "content": "Hi"}], tools=TOOLS)
+
+    assert client.messages.create.call_args.kwargs["model"] == "claude-opus-4-7"
+    # Leeres Modell (Default) nutzt weiter den Vendor-DEFAULT_MODEL — Regress-Schutz.
+    client.messages.create.reset_mock()
+    client.messages.create.return_value = _response([_text_block("Hallo.")])
+    with patch.dict(sys.modules, {"anthropic": fake}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_agent
+        agent_default = get_agent(slot="eltern-chat-anthropic-api-key")
+        agent_default.step(system="S", messages=[{"role": "user", "content": "Hi"}], tools=TOOLS)
+    from tools.llm._vendor.anthropic import DEFAULT_MODEL
+    assert client.messages.create.call_args.kwargs["model"] == DEFAULT_MODEL
+
+
 def test_agent_run_sets_is_error_on_tool_result_block(jsonl_path):
     """`agent_run` mit dict-tool_runner {content, is_error} setzt is_error auf
     den tool_result-Block; String-Runner bleibt rückwärtskompatibel (kein Flag)."""

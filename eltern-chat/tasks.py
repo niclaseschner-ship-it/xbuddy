@@ -83,6 +83,7 @@ class TurnContext:
     private_chat_id: object = None
     media_telegram_file_id: object = None    # FSE-3 / D4 (Refs #393)
     medium_typ: object = None                # FSE-5 / D4 — "foto" | "video"
+    turn_id: object = None                   # T1085: correlation_id für JSONL-Telemetrie (EC-23-Spiegel)
 
 
 def is_from_private_chat(turn_context):
