@@ -209,7 +209,7 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
         result = (
             "Vollständiger Vorschlag oben in %d Nachrichten.\n\n"
             "Voice: %s\n"
-            "Soll ich vertonen? Das dauert 1–5 Minuten."
+            "Vertonen? Antworte nur mit »ja« (oder 👍). Das dauert 1–5 Minuten."
         ) % (len(splits), voice)
     else:
         # Kurze Folge (≤ 1 Split) oder kein tg verfügbar: alles in den
@@ -218,7 +218,7 @@ def propose(*, hoerspiel_client, is_member_fn, from_user_id,
             "**Folge %s: %s**\n\n"
             "%s\n\n"
             "Voice: %s\n"
-            "Soll ich vertonen? Das dauert 1–5 Minuten."
+            "Vertonen? Antworte nur mit »ja« (oder 👍). Das dauert 1–5 Minuten."
         ) % (folge_nr, titel, splits[0] if splits else text, voice)
 
     # HFE-10 wurde oben schon vor dem LLM-Call ausgelöst (Live-Fix 2026-06-16).

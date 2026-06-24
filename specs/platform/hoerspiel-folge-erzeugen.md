@@ -204,8 +204,17 @@ analog EC-10):
 
    ```
    Voice: <voice-default>
-   Soll ich vertonen? Das dauert 1–5 Minuten.
+   Vertonen? Antworte nur mit »ja« (oder 👍). Das dauert 1–5 Minuten.
    ```
+
+   Die Bestätigungs-Frage lenkt **bewusst auf ein Einzelwort der EC-10-Wortliste**
+   (`eltern-chat/confirm.py` `CONFIRM_WORDS`): EC-10-Confirm matcht ganze Wörter,
+   keine Mehrwort-Antworten. Eine offene Frage („Soll ich vertonen?") provoziert
+   Antworten wie „ja vertonen"/„los gehts", die durch `is_confirmation` fallen, im
+   Agent-Loop landen und dort als Signal-Phrase (Sub-Case 3) einen erneuten
+   `propose()` auslösen statt zu bestätigen — getextet-nie-vertont-Schleife.
+   (ENTSCHEID `brainstorm/berater-runde/20260624-152550-RATIFIZIERT-hfe-confirm-konflikt.md`,
+   Paket-Teil 1; #1118 / Refs #1050.)
 
 **Voice-Default-Resolution** in `propose()` (#995, 2026-06-18):
 
@@ -301,6 +310,18 @@ triggern den Vorschlag-Endpoint):
 - „los", „los gehts", „los, schreib"
 - „mach das", „passt so", „okay so", „fang an"
 - „jetzt vertonen", „schreib jetzt"
+
+Diese Signal-Phrasen lösen `propose()` **nur aus, solange noch KEIN Vorschlag
+vorliegt** (Diskussions-Phase, Sub-Case 2→3). Wurde der HFE-4-Bestätigungs-Block
+(„Vertonen? Antworte nur mit »ja«…") bereits gesendet, darf der Agent denselben
+Skill bei einer solchen Phrase **NICHT erneut** aufrufen — die Bestätigung läuft
+ab da deterministisch außerhalb des Agenten über EC-10 (`is_confirmation`). Sonst
+re-proposed das LLM statt zu vertonen (getextet-nie-vertont-Schleife). Diese
+Klausel ist Prompt-getragen (Agent-Compliance), keine deterministische Sperre —
+ein deterministisches Agent-Gate ist in `specs/platform/eltern-chat.md` (EC-10,
+„Verworfen: Agent-Gate") ausdrücklich verworfen und bliebe eine separate
+Spec-Frage. (ENTSCHEID `brainstorm/berater-runde/20260624-152550-RATIFIZIERT-hfe-confirm-konflikt.md`,
+Paket-Teil 2; #1118 / Refs #1050.)
 
 **Abgrenzung zu Provider-/Modell-Wechsel:** Wechsel von LLM-Provider
 oder Modell lebt seit Werft-Lauf 2026-06-15 (Refs #848, schließt
