@@ -365,6 +365,7 @@ def woche():
         days=view["tage"],
         schedule=view["schedule"],
         appointments=view["appointments"],
+        appointment_overflow=view["appointment_overflow"],
         span_appointments=view["span_appointments"],
         show_appointments=view["show_appointments"],
         picker_options=view["picker_options"],

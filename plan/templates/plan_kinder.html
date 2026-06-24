@@ -32,13 +32,21 @@
   /* Inneres Frame — feste Design-Maße aus dem Handoff.
      BG neutral cream, damit die Pastell-Wochentagsspalten klar sichtbar
      gegen die Page (--kids-bg, gelblich) abgesetzt sind. */
+  /* PLAN-6 V1.3 (RAT-4-Auflösung 2026-06-22) — Display-Robustheit:
+     Frame ist ein CSS-Grid. Zeilen-Form: Header (auto), Day-Row (auto),
+     je Slot eine FIXE 80px-Zeile (repeat(var(--slot-count), 80px)) und die
+     Termin-Leiste (PLAN-13) bekommt den verbleibenden Platz (1fr). So drückt
+     ein wachsender Schedule die Termin-Leiste nicht mehr aus dem Frame
+     (verworfene flex-Form, Befund 2026-06-22). --slot-count wird inline aus
+     der Slot-Anzahl gesetzt — keine Hardcode-Annahme. */
   .frame {
     width: 100%;
     max-width: 1500px;
     height: 100%;
     max-height: 1020px;
     background: #fdfaf2;
-    display: flex; flex-direction: column;
+    display: grid;
+    grid-template-rows: auto auto repeat(var(--slot-count, 7), 80px) 1fr;
   }
 
   /* ─── Header ───────────────────────────────────────────────── */
@@ -58,10 +66,6 @@
     font-family: var(--kids-font-display);
     font-size: 38px; font-weight: 700;
     color: var(--kids-ink); line-height: 1;
-  }
-  .brand-subtitle {
-    font-size: 18px; color: var(--kids-ink-soft);
-    margin-top: 4px;
   }
   .week-label {
     font-size: 18px; color: var(--kids-ink-soft);
@@ -127,18 +131,17 @@
   .day-overlabel:empty { visibility: hidden; }
 
   /* ─── Schedule Rail ────────────────────────────────────────── */
-  .schedule {
-    padding: 0 24px;
-    flex: 1 1 auto;
-    display: flex; flex-direction: column;
-  }
+  /* PLAN-6 V1.3: display:contents — die Slot-Zeilen (.row) werden direkte
+     Grid-Items des .frame-Grids und belegen so je eine 80px-Zeile. Der
+     .schedule-Wrapper selbst erzeugt keine Box mehr; Horizontal-Padding und
+     Zeilen-Trenner liegen darum an .row. */
+  .schedule { display: contents; }
   .row {
     display: grid;
     grid-template-columns: 150px 1fr;
     align-items: stretch;
     border-top: 2px solid var(--kids-border-soft);
-    flex: 1 1 0;
-    min-height: 88px;
+    padding: 0 24px;
   }
   .rail-cell {
     display: flex; align-items: center; justify-content: center;
@@ -259,10 +262,15 @@
   .activity-chip img { display: block; }
 
   /* ─── Appointments-Bar ─────────────────────────────────────── */
+  /* PLAN-6/PLAN-13 V1.3: letztes Grid-Item des .frame-Grids → belegt die
+     1fr-Restzeile. min-height:0, damit die Zeile schrumpfen statt überlaufen
+     kann; der Termin-Überschuss (+M weitere, PLAN-13) kappt die Pillen-Zahl. */
   .appts {
     padding: 12px 24px 22px;
     border-top: 2px dashed var(--kids-border-soft);
     background: var(--kids-paper);
+    min-height: 0;
+    overflow: hidden;
   }
   .appts-grid {
     display: grid;
@@ -323,6 +331,18 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
 
+  /* PLAN-13 V1.3 (Termin-Überschuss): gedimmter Counter unter den sichtbaren
+     Pillen einer Tagesspalte — reine Sichtbarkeits-Mechanik OHNE Klick-Pfad
+     (Tages-Overlay ist Folge-Ticket QW4). */
+  .appts-more {
+    font-family: var(--kids-font-display);
+    font-size: 15px; font-weight: 700;
+    color: var(--kids-ink-soft);
+    opacity: 0.6;
+    padding: 2px 8px;
+    line-height: 1;
+  }
+
   /* Löschen-Icon (UI-Control, kein ARASAAC) */
   svg.icon { display: block; }
 
@@ -339,9 +359,14 @@
   /* Row-Höhen sind aufs 1080-Display heruntergerechnet (Design-Original 132px
      würde auf 1220px Frame gehören). Wenn das Display kleiner ist, scrollt
      die page (siehe body-Override). */
+  /* Toddler: höhere Slot-Zeilen — die fixe Frame-Grid-Zeile wird auf 116px
+     gesetzt (PLAN-6 V1.3 Grid bleibt erhalten, nur die Slot-Höhe wächst). */
+  .frame--toddler {
+    grid-template-rows: auto auto repeat(var(--slot-count, 7), 116px) 1fr;
+  }
   .frame--toddler .row {
     grid-template-columns: 220px 1fr;
-    min-height: 116px;
+    padding: 0 40px;
   }
   .frame--toddler .rail-cell { gap: 16px; padding: 0 12px; }
   .frame--toddler .rail-cell > img { width: 68px !important; height: 68px !important; }
@@ -380,7 +405,6 @@
   .frame--toddler .day-cells { gap: 36px; }
   .frame--toddler .row-cells { gap: 36px; }
   .frame--toddler .day-row   { padding: 18px 40px 10px; }
-  .frame--toddler .schedule  { padding: 0 40px; }
 
   /* Falls auf einem kleineren Display nicht alles reinpasst: erlaube Scroll
      statt etwas wegzuklippen. body global hat overflow:hidden für A1. */
@@ -442,18 +466,11 @@
 {# Eine Icon-Quelle: /display/_shared/icons/arasaac/<id>.png (ICONS-4/ICONS-7).
    Verworfen: Inline-SVG-Macros — wären ein zweiter Icon-Pfad (CLAUDE.md §6).  #}
 
-{# Slot-Icon → ARASAAC-ID (Schedule-Rail, PLAN-6, Werft #578).
-   'star' → '3071' (Kalender): Werft #578 Revision (Nic 2026-06-10) —
-   Kinder-Aktivitäts-Slot-Spalten tragen Kalender statt Stern (2752).
-   'moon' → '6027' (Bett): Werft #578 Revision (Nic 2026-06-10 #647) —
-   Kinderschlaf-Slots tragen Bett statt Mond (2933). #}
-{% set SLOT_ICON_ID = {
-  'sun':   '37807',
-  'clock': '39520',
-  'star':  '3071',
-  'fork':  '2342',
-  'moon':  '6027',
-} %}
+{# PLAN-6 V1.3 (RAT-4-Auflösung 2026-06-22): `slot.icon` ist eine ARASAAC-id
+   (config.py migriert alte Keys in der Lesephase). Das Template rendert sie
+   DIREKT über den geteilten Icon-Pfad — der frühere Template-Mapper
+   `SLOT_ICON_ID` war eine zweite Icon-Quelle innerhalb der View (PLAN-6-
+   Verstoß, CLAUDE.md §6) und ist entfernt. #}
 
 {# Löschen-Icon (x-close) bleibt als Inline-SVG — kein ARASAAC für UI-Controls #}
 {% macro icon_x_close(size=22) %}
@@ -489,7 +506,7 @@
 {% set wd_names = ['mo','di','mi','do','fr','sa','so'] %}
 
 <div class="page">
-  <div class="frame {% if variant == 'toddler' %}frame--toddler{% endif %}" style="--col-count: {{ days|length }};">
+  <div class="frame {% if variant == 'toddler' %}frame--toddler{% endif %}" style="--col-count: {{ days|length }}; --slot-count: {{ slots|length }};">
 
     {# ─── Header ─── #}
     <div class="header">
@@ -497,7 +514,6 @@
         <div class="brand-swatch"></div>
         <div>
           <div class="brand-title">mein Plan</div>
-          <div class="brand-subtitle">heute und die nächsten Tage</div>
         </div>
       </div>
       <div class="week-label">{{ days[0].date_short }} – {{ (days|last).date_short }}</div>
@@ -527,8 +543,8 @@
         {% set is_first_row = loop.first %}
         <div class="row">
           <div class="rail-cell">
-            {% set rail_id = SLOT_ICON_ID.get(slot.icon) %}
-            {% if rail_id %}{{ arasaac_img(rail_id, 52) }}{% endif %}
+            {# PLAN-6 V1.3: slot.icon ist eine ARASAAC-id → direkt rendern. #}
+            {% if slot.icon %}{{ arasaac_img(slot.icon, 52) }}{% endif %}
             {% if slot.kind %}
               {% set kid_ring = person_ring.get(slot.kind) %}
               {% set kid_photo = person_photo_url.get(slot.kind) %}
@@ -630,6 +646,11 @@
                   {% endif %}
                 </div>
               {% endfor %}
+              {# PLAN-13 V1.3: Termin-Überschuss — gedimmter Counter, kein Klick. #}
+              {% set overflow = appointment_overflow.get(d.iso, 0) %}
+              {% if overflow > 0 %}
+                <div class="appts-more">+{{ overflow }} weitere</div>
+              {% endif %}
             </div>
             {% endfor %}
           </div>
@@ -665,10 +686,14 @@
 </div>
 
 <script>
-// PLAN-7: Erwachsenen-Cycle. ADULTS = Erwachsene der Familien-Registry in
-// Registry-Reihenfolge (FAM-2). Identität nur über Foto im Ring (PLAN-24).
+// PLAN-7 V1.3 (Toggle-All, RAT-4-Auflösung 2026-06-22): der Cycle iteriert
+// über ALLE Personen der Familien-Registry — Erwachsene UND Kinder — in
+// Registry-Reihenfolge (FAM-2). Die frühere `if p.art == 'erwachsene'`-
+// Beschränkung ist entfernt; wer in welchem Slot landen darf, ist familien-
+// konfigurierbar über die Toggle-Wahl, nicht über Code (E-PLAN-8).
+// Identität nur über Foto im Ring (PLAN-24).
 const ADULTS = [
-  {% for p in personen if p.art == 'erwachsene' -%}
+  {% for p in personen -%}
     {id: {{ p.id|tojson }}, ring: {{ p.ring|tojson }},
      photo: {{ person_photo_url.get(p.id)|tojson if person_photo_url.get(p.id) else 'null' }}}{% if not loop.last %},{% endif %}
   {% endfor %}
