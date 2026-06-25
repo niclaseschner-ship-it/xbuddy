@@ -466,7 +466,9 @@ function aktualisiereAnlegenBtn() {
   const overlay = document.getElementById("sheet-neu-slot");
   if (!overlay) return;
   const label = (overlay.querySelector(".neu-label-input") || {}).value || "";
-  overlay.querySelector(".neu-slot-anlegen").disabled = !(label.trim() && _pickerIconId);
+  // _pickerIconId muss vorhanden UND ein echter Wert sein (kein "null"/"undefined"/leer).
+  const iconOk = !!(_pickerIconId && _pickerIconId !== "null" && _pickerIconId !== "undefined" && _pickerIconId.trim() !== "");
+  overlay.querySelector(".neu-slot-anlegen").disabled = !(label.trim() && iconOk);
 }
 
 // ── Slot-Operationen ─────────────────────────────────────────────────────────
@@ -497,6 +499,10 @@ function loescheSlot(schluessel) {
 function setzeSlotIcon(schluessel, iconId) {
   const slot = _editSlots.find((s) => s.schluessel === schluessel);
   if (!slot) return;
+  if (!iconId || iconId === "null" || iconId === "undefined") {
+    console.error("plan-einstellungen: setzeSlotIcon: ungueltige iconId", iconId);
+    return;
+  }
   slot.icon = String(iconId);
   rendereSlotListe();
   bindeDelegation();
@@ -530,6 +536,14 @@ function setzeDefault(slotKey, tagIdx, personId) {
 }
 
 function legeSlotAn(label, art, iconId) {
+  // Defensiv-Guard: iconId muss ein echter Wert sein (nie "null"/"undefined"/leer).
+  // Der Anlegen-Button ist disabled bis _pickerIconId gesetzt ist (aktualisiereAnlegenBtn),
+  // aber diese Pruefung ist ein zusaetzlicher Sicherheits-Zaun (PLAN-1139-FIX1).
+  if (!iconId || String(iconId) === "null" || String(iconId) === "undefined" || String(iconId).trim() === "") {
+    console.error("plan-einstellungen: legeSlotAn: iconId ist nicht gesetzt — Anlegen abgebrochen", { label, art, iconId });
+    return;
+  }
+
   // Schlüssel: slugify + dedup
   const basisKey = label.toLowerCase()
     .replace(/[äöüß]/g, (c) => ({ ä: "ae", ö: "oe", ü: "ue", ß: "ss" }[c]))
@@ -890,9 +904,12 @@ async function ladeUndRendere() {
       iconGridEl.addEventListener("click", (e) => {
         const btn = e.target.closest(".neu-icon-btn");
         if (!btn) return;
+        const rawId = btn.dataset.iconId;
+        // Defensiv-Guard: leere/null-artige dataset-Werte nicht als Icon-ID akzeptieren (PLAN-1139-FIX1).
+        if (!rawId || rawId === "null" || rawId === "undefined" || rawId.trim() === "") return;
         iconGridEl.querySelectorAll(".neu-icon-btn").forEach((b) => b.classList.remove("gewaehlt"));
         btn.classList.add("gewaehlt");
-        _pickerIconId = btn.dataset.iconId;
+        _pickerIconId = rawId;
         aktualisiereAnlegenBtn();
       });
     }
