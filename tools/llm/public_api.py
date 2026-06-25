@@ -45,6 +45,7 @@ def _build_vendor(
     sicht_name: str,
     required: frozenset[Capability],
     model: str = "",
+    max_tokens: int = 0,
 ) -> tuple[Any, str, str]:
     """Slot → (Vendor-Instanz, caller, slot-name) mit Capability-Boot-Fail (LLMP-S3).
 
@@ -58,6 +59,11 @@ def _build_vendor(
     Modell explizit — der Vendor nutzt es statt seines `DEFAULT_MODEL`. Leer
     (Default) bewahrt das alte Verhalten (Vendor-Default). Die Vendoren
     akzeptieren `model=` bereits am Konstruktor; hier wird es nur durchgereicht.
+
+    `max_tokens` (T1084-additiv): wenn >0, überschreibt das Vendor-`DEFAULT_MAX_TOKENS`.
+    0 (Default) bewahrt das alte Verhalten (Vendor-Default). Analog der
+    `model`-Logik: nur durchreichen, wenn der Konsument einen Wert wählt —
+    Test-Fakes ohne `max_tokens=`-Kwarg bleiben grün.
 
     Bei Cap-Mismatch oder fehlender `CAPABILITIES`-Konstante: `LLMCapabilityError`
     als erster Fehler vor allem anderen (LLMP-S3, LLMP-4 Watchdog-Regel).
@@ -95,12 +101,17 @@ def _build_vendor(
         )
 
     vendor_cls = _vendor_class(module, vendor)
-    # `model` nur durchreichen, wenn der Konsument eines wählt — so bleibt der
-    # Default-Pfad `vendor_cls(api_key=…)` exakt wie bisher (rückwärtskompatibel
-    # für Vendoren/Test-Fakes ohne `model=`-Kwarg). Die Prod-Vendoren akzeptieren
-    # `model=` und defaulten leer → DEFAULT_MODEL (T1085-Durchreich).
-    instance = (vendor_cls(api_key=api_key, model=model) if model
-                else vendor_cls(api_key=api_key))
+    # `model` und `max_tokens` nur durchreichen, wenn der Konsument sie wählt —
+    # so bleibt der Default-Pfad `vendor_cls(api_key=…)` exakt wie bisher
+    # (rückwärtskompatibel für Vendoren/Test-Fakes ohne diese Kwargs).
+    # Die Prod-Vendoren akzeptieren beide Params und defaulten auf ihre eigenen
+    # Defaults (T1085-Durchreich für model; T1084-Durchreich für max_tokens).
+    kwargs: dict[str, Any] = {"api_key": api_key}
+    if model:
+        kwargs["model"] = model
+    if max_tokens > 0:
+        kwargs["max_tokens"] = max_tokens
+    instance = vendor_cls(**kwargs)
     return instance, caller, slot
 
 
@@ -278,7 +289,7 @@ def get_chat(slot: str) -> LLMProvider:
     return _ChatFacade(vendor, caller, slot_name)
 
 
-def get_singleshot(slot: str, model: str = "") -> Any:
+def get_singleshot(slot: str, model: str = "", max_tokens: int = 0) -> Any:
     """Liefert die Structured-Singleshot-Sicht (LLMP-S1, hoerspiel-Heimat).
 
     Required Capabilities (LLMP-3): `structured_output`, `system_message_distinct`.
@@ -289,8 +300,15 @@ def get_singleshot(slot: str, model: str = "") -> Any:
     bleibt unverändert). hoerspiel reicht hier sein konfiguriertes Modell durch
     (z. B. `claude-opus-4-7`), damit der Lib-Pfad das Modell-Verhalten des
     Alt-Adapters exakt erhält (Spiegel `get_agent`).
+
+    `max_tokens` (T1084-additiv): überschreibt das Vendor-`DEFAULT_MAX_TOKENS` wenn >0;
+    0 (Default) erhält den Vendor-Default (2048 Anthropic / 4096 Mistral).
+    hoerspiel reicht hier die Provider-eigenen MAX_TOKENS durch (8192 / 4096),
+    damit lange Folgentexte nicht beim DEFAULT_MAX_TOKENS=2048 trunkiert werden.
     """
-    vendor, caller, slot_name = _build_vendor(slot, "get_singleshot", REQUIRED_SINGLESHOT, model)
+    vendor, caller, slot_name = _build_vendor(
+        slot, "get_singleshot", REQUIRED_SINGLESHOT, model, max_tokens,
+    )
     return _SingleshotFacade(vendor, caller, slot_name)
 
 

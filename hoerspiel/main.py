@@ -1015,20 +1015,27 @@ def _build_llm(cfg) -> LLMProvider | None:
     if cfg.llm_provider == "claude":
         if not cfg.anthropic_key:
             return None
+        from .providers.claude import MAX_TOKENS as _CLAUDE_MAX_TOKENS
         from .providers.claude import ClaudeProvider
         alt = ClaudeProvider(api_key=cfg.anthropic_key, model=cfg.llm_model)
+        max_tokens = _CLAUDE_MAX_TOKENS  # 8192 — Sicherheits-Puffer für ~3500-Token-Folge
     elif cfg.llm_provider == "mistral":
         if not cfg.mistral_key:
             return None
+        from .providers.mistral import MAX_TOKENS as _MISTRAL_MAX_TOKENS
         from .providers.mistral import MistralProvider
         alt = MistralProvider(api_key=cfg.mistral_key, model=cfg.llm_model)
+        max_tokens = _MISTRAL_MAX_TOKENS  # 4096
     else:
         return None
 
     from .providers.lib_adapter import LibSingleshotAdapter
     slot = _LIB_SLOT_FOR_PROVIDER[cfg.llm_provider]
-    # `model=cfg.llm_model` durchreichen (Modell-Erhalt, z. B. claude-opus-4-7).
-    return LibSingleshotAdapter(slot=slot, model=cfg.llm_model, alt_provider=alt)
+    # `model` + `max_tokens` durchreichen: Modell-Erhalt (z. B. claude-opus-4-7)
+    # und Token-Limit (T1084: DEFAULT_MAX_TOKENS=2048 < ~3500 Token Folgentext).
+    return LibSingleshotAdapter(
+        slot=slot, model=cfg.llm_model, alt_provider=alt, max_tokens=max_tokens,
+    )
 
 
 def _build_tts(cfg):
