@@ -30,6 +30,19 @@ def _make_adapter(facade, alt_provider=None):
     return adapter, gs
 
 
+def _make_adapter_with_max_tokens(facade, max_tokens=0, alt_provider=None):
+    """Baut einen LibSingleshotAdapter mit gemockter Lib-Fassade + max_tokens."""
+    from hoerspiel.providers import lib_adapter
+    with patch.object(lib_adapter, "get_singleshot", return_value=facade) as gs:
+        adapter = lib_adapter.LibSingleshotAdapter(
+            slot="hoerspiel-anthropic-api-key",
+            model="claude-opus-4-7",
+            alt_provider=alt_provider,
+            max_tokens=max_tokens,
+        )
+    return adapter, gs
+
+
 def test_complete_structured_translates_signature_drift():
     """user→prompt, input_schema→schema; correlation_id NICHT durchgereicht."""
     facade = MagicMock()
@@ -38,8 +51,8 @@ def test_complete_structured_translates_signature_drift():
                                                "folgen-nr-vorschlag": 1}
     adapter, gs = _make_adapter(facade)
 
-    # Fassade EINMAL gebaut, mit Modell-Durchreichung.
-    gs.assert_called_once_with("hoerspiel-anthropic-api-key", "claude-opus-4-7")
+    # Fassade EINMAL gebaut, mit Modell-Durchreichung (ohne max_tokens → Default-Pfad 0).
+    gs.assert_called_once_with("hoerspiel-anthropic-api-key", "claude-opus-4-7", max_tokens=0)
 
     schema = {"type": "object"}
     out = adapter.complete_structured(
@@ -116,3 +129,31 @@ def test_entry_path_erzeuge_folgen_vorschlag_through_adapter():
     kwargs = facade.complete_structured.call_args.kwargs
     assert kwargs["tool_name"] == llm_service.FOLGEN_TOOL_NAME
     assert kwargs["schema"] == llm_service.FOLGEN_INPUT_SCHEMA
+
+
+def test_adapter_passes_max_tokens_to_get_singleshot():
+    """LibSingleshotAdapter reicht max_tokens an get_singleshot durch (AC2).
+
+    Prüft, dass der Adapter-Konstruktor mit max_tokens=8192 diesen Wert
+    als Keyword-Argument an get_singleshot weitergibt — verhindert Trunkierung
+    langer Folgentexte (T1084, DEFAULT_MAX_TOKENS=2048 < ~3500 Token Folge).
+    """
+    facade = MagicMock()
+    facade.model = "claude-opus-4-7"
+    _adapter, gs = _make_adapter_with_max_tokens(facade, max_tokens=8192)
+
+    # get_singleshot wurde mit max_tokens=8192 gerufen.
+    gs.assert_called_once_with(
+        "hoerspiel-anthropic-api-key", "claude-opus-4-7", max_tokens=8192,
+    )
+
+
+def test_adapter_without_max_tokens_uses_default_path():
+    """LibSingleshotAdapter ohne max_tokens → get_singleshot erhält max_tokens=0 (Default-Pfad)."""
+    facade = MagicMock()
+    facade.model = "claude-opus-4-7"
+    _adapter, gs = _make_adapter_with_max_tokens(facade, max_tokens=0)
+
+    gs.assert_called_once_with(
+        "hoerspiel-anthropic-api-key", "claude-opus-4-7", max_tokens=0,
+    )

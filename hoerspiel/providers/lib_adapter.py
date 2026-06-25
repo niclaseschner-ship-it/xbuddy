@@ -46,12 +46,14 @@ class LibSingleshotAdapter(LLMProvider):
 
     name = "lib-singleshot"
 
-    def __init__(self, slot, model="", alt_provider=None):
-        # Lib-Fassade EINMAL bauen (Slot + effektives Modell). Ein
+    def __init__(self, slot, model="", alt_provider=None, max_tokens=0):
+        # Lib-Fassade EINMAL bauen (Slot + effektives Modell + max_tokens). Ein
         # `LLMCapabilityError` hier ist ein Boot-Konfig-Fehler (fehlender Key,
         # Capability-Mismatch) — er propagiert klar und wird NICHT als
         # ProviderError verschluckt (Spiegel eltern-chat/lib_adapter.py:78-81).
-        self._singleshot = get_singleshot(slot, model)
+        # `max_tokens` (T1084-additiv): 0 → Vendor-Default; >0 → Durchreich an
+        # Vendor (verhindert Trunkierung langer Folgentexte bei DEFAULT_MAX_TOKENS=2048).
+        self._singleshot = get_singleshot(slot, model, max_tokens=max_tokens)
         self._alt_provider = alt_provider
         self._slot = slot
         # Für Diagnose/Tests sichtbar (gleiche Modell-Quelle wie die Fassade).

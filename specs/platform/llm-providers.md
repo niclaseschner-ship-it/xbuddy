@@ -51,11 +51,13 @@ alle drei Sichten — kein Adapter-Code pro Buddy
   `eltern-chat/providers/mistral.py:77-80`) und würde mit `cache_control` im
   Required-Set einen `LLMCapabilityError` beim Boot werfen. Vendoren mit
   Caching (Anthropic) setzen Cache-Marker weiterhin.
-- **`get_singleshot(slot, model="")` — Structured Singleshot.** Eine Anfrage, ein
+- **`get_singleshot(slot, model="", max_tokens=0)` — Structured Singleshot.** Eine Anfrage, ein
   Schema-konformer Antwort-Block. Heutiger Use-Case: hoerspiel
   (Folgen-Beschreibung via JSON-Schema, heute via forced `tool_use`).
   `model` ist optional (leer → Vendor-Default); Konsumenten mit eigenem Modell
-  reichen es durch (analog `get_agent`). Required Capabilities:
+  reichen es durch (analog `get_agent`). `max_tokens` ist optional (0 → Vendor-Default
+  2048/4096); hoerspiel reicht Provider-MAX_TOKENS (8192/4096) durch, damit lange
+  Folgentexte nicht trunkiert werden (T1084). Required Capabilities:
   `structured_output`, `system_message_distinct` (LLMP-3).
 - **`get_chat(slot)` — Multi-Turn-Chat.** Konversation mit History und
   System-Prompt, ohne Tool-Use im Kern-Pfad. Heutiger Use-Case: kibuddy
