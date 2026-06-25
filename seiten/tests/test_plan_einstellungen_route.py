@@ -794,3 +794,66 @@ def test_fix1139_neu_icon_btn_click_guard():
     assert "null" in block or "rawId" in block, (
         "neu-icon-btn click-Handler prueft dataset.iconId nicht auf null/leer (PLAN-1139-FIX1)"
     )
+
+
+# ── PLAN-1139-FIX2: onSpeichern() save-race ─────────────────────────────────
+
+def test_fix1139_save_race_sequenzielle_puts():
+    """PLAN-1139-FIX2: onSpeichern() fuehrt speichereSlotModell + speichereDefaults SEQUENZIELL aus.
+
+    Bug (4/12 Runs verlieren Daten): speichereSlotModell + speichereDefaults wurden
+    mit Promise.all parallel gefeuert. Beide sind Read-Modify-Write auf dieselbe
+    plan.json (Backend threaded=True) — der PUT mit Defaults liest manchmal den Stand
+    VOR dem Slot-PUT und ueberschreibt die Slot-Aenderung (neue Slots verschwinden,
+    geloeschte Slots kommen zurück).
+
+    Fix: Beide PUTs SEQUENZIELL ausfuehren — erst speichereSlotModell, dann
+    speichereDefaults. Die Regression-Pruefung stellt sicher, dass kein Promise.all
+    die beiden Calls mehr bündelt und dass beide als separate awaits vorliegen.
+    """
+    import re
+
+    js_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+
+    # Suche die onSpeichern()-Funktion
+    on_speichern_match = re.search(
+        r"async function onSpeichern\s*\(\)\s*\{(.+?)^}",
+        js,
+        re.DOTALL | re.MULTILINE,
+    )
+    assert on_speichern_match, "onSpeichern()-Funktion nicht gefunden"
+    on_speichern_body = on_speichern_match.group(1)
+
+    # Regressionstest 1: kein Promise.all mit speichereSlotModell + speichereDefaults
+    # (Promise.all wuerde wieder zur Race-Condition fuehren)
+    promise_all_match = re.search(
+        r"Promise\.all\s*\[\s*speichereSlotModell\s*\(",
+        on_speichern_body,
+        re.DOTALL,
+    )
+    assert not promise_all_match, (
+        "onSpeichern(): Promise.all um speichereSlotModell gefunden — "
+        "Save-Race-Fix wurde nicht angewendet oder revert-wurde (PLAN-1139-FIX2)"
+    )
+
+    # Regressionstest 2: speichereSlotModell mit await vorhanden
+    assert re.search(
+        r"await\s+speichereSlotModell\s*\(",
+        on_speichern_body,
+        re.DOTALL,
+    ), (
+        "onSpeichern(): 'await speichereSlotModell()' nicht gefunden — "
+        "Sequenzielle Ausfuehrung nicht implementiert (PLAN-1139-FIX2)"
+    )
+
+    # Regressionstest 3: speichereDefaults mit await vorhanden (NACH speichereSlotModell)
+    assert re.search(
+        r"await\s+speichereDefaults\s*\(",
+        on_speichern_body,
+        re.DOTALL,
+    ), (
+        "onSpeichern(): 'await speichereDefaults()' nicht gefunden — "
+        "Sequenzielle Ausfuehrung nicht implementiert (PLAN-1139-FIX2)"
+    )
