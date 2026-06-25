@@ -1493,13 +1493,21 @@ def api_slot_modell_schreiben():
         logger.error("PUT slot-modell: plan.json nicht lesbar: %s", e)
         return jsonify({"error": "plan.json nicht lesbar: %s" % e}), 500
 
-    # Multi-Sektion-Save: slots setzen UND defaults gelöschter Slots bereinigen.
-    obj["slots"] = sauber
-    behaltene_keys = seen
+    # Multi-Sektion-Save: slots setzen UND defaults gelöschter/art-gewechselter
+    # Slots bereinigen. Ein Default-Eintrag bleibt NUR, wenn sein Slot im neuen
+    # Soll-Zustand existiert UND art == verantwortlich ist (PLAN-37). Ein Slot,
+    # der von verantwortlich → kalender-read wechselt, verliert seine Defaults
+    # genauso wie ein gelöschter — sonst wirft _parse_defaults beim nächsten
+    # load einen ConfigError (plan/config.py:351-354).
+    verantwortlich_keys = {
+        s["schluessel"] for s in sauber
+        if s.get("art") == config_mod.SLOT_VERANTWORTLICH
+    }
     alte_defaults = obj.get("default_verantwortlichkeiten")
+    obj["slots"] = sauber
     if isinstance(alte_defaults, dict):
         obj["default_verantwortlichkeiten"] = {
-            k: v for k, v in alte_defaults.items() if k in behaltene_keys
+            k: v for k, v in alte_defaults.items() if k in verantwortlich_keys
         }
 
     try:

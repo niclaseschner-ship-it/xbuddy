@@ -4650,3 +4650,53 @@ def test_PLAN_37_AC_WRITER_MERGE_bewahrt_rest(settings_client):
     assert nachher["aktivitaeten"] == vorher["aktivitaeten"]
     assert nachher["kalender_id"] == vorher["kalender_id"]
     assert nachher["_kommentar"] == vorher["_kommentar"]
+
+
+def test_PLAN_37_put_slot_modell_art_wechsel_bereinigt_defaults(settings_client):
+    """AC-SLOT-INTEGRITÄT/art-Wechsel: ein Slot der von art=verantwortlich auf
+    art=kalender-read wechselt verliert seinen default_verantwortlichkeiten-
+    Eintrag — sonst wirft _parse_defaults beim nächsten load ConfigError
+    (latenter Boot-Crash, Watchdog-Befund T1126)."""
+    client, cfg_path = settings_client
+    # Vorher: bring ist verantwortlich und trägt Defaults (DEMO_CONFIG).
+    assert "bring" in config_mod.resolve(str(cfg_path)).default_verantwortlichkeiten
+
+    # bring auf kalender-read umschalten (kind=paula ist in DEMO_REGISTRY).
+    slots = _slots_aus_config()
+    for slot in slots:
+        if slot["schluessel"] == "bring":
+            slot["art"] = "kalender-read"
+            slot["kind"] = "paula"
+            break
+
+    r = client.put(SLOT_MODELL_URL, json={"slots": slots})
+    assert r.status_code == 200, r.get_json()
+
+    # Datei: bring in slots als kalender-read, aber NICHT mehr in defaults.
+    obj = _read_json_file(cfg_path)
+    bring_slot = next(s for s in obj["slots"] if s["schluessel"] == "bring")
+    assert bring_slot["art"] == "kalender-read"
+    assert "bring" not in obj["default_verantwortlichkeiten"]
+
+    # Roundtrip: _parse_defaults wirft KEINEN ConfigError mehr.
+    cfg = config_mod.resolve(str(cfg_path))
+    assert cfg.slot("bring") is not None
+    assert cfg.slot("bring").ist_kalender_read_slot()
+    assert "bring" not in cfg.default_verantwortlichkeiten
+
+
+def test_PLAN_36_put_defaults_null_erlaubt(settings_client):
+    """AC-NULL: PUT {"defaults": {"bring": {"0": null}}} → 200; danach zeigt GET
+    an Tag 0 null (explizites Löschen eines Tages-Defaults ist erlaubt, PLAN-36)."""
+    client, cfg_path = settings_client
+    # bring-Mo auf null setzen (vorher: niclas laut DEMO_CONFIG).
+    r = client.put(DEFAULTS_URL, json={"defaults": {"bring": {"0": None}}})
+    assert r.status_code == 200, r.get_json()
+
+    # Datei: Eintrag ist None für Tag 0.
+    obj = _read_json_file(cfg_path)
+    assert obj["default_verantwortlichkeiten"]["bring"][0] is None
+
+    # GET (Reload-on-Read) spiegelt das null.
+    g = client.get(DEFAULTS_URL).get_json()
+    assert g["defaults"]["bring"]["0"] is None
