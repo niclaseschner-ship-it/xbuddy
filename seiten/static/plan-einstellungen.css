@@ -427,6 +427,42 @@ details.slot > summary .meta {
   box-shadow: 0 0 0 2px #eef3ea;
 }
 
+/* Freies Suchfeld fuer Icon-Picker im Neu-Slot-Sheet (AC1) */
+.neu-icon-suche {
+  width: 100%;
+  font: inherit;
+  padding: 10px 14px;
+  border: 1px solid #d6d0c8;
+  border-radius: 8px;
+  background: #fff;
+  margin-bottom: 12px;
+  font-size: 15px;
+}
+.neu-icon-suche:focus {
+  outline: none;
+  border-color: #47503C;
+  box-shadow: 0 0 0 2px #eef3ea;
+}
+
+/* Label-Edit-Input in bestehenden Slot-Bodies (AC3) */
+.slot-label-input {
+  flex: 1;
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 10px;
+  border: 1px solid #d6d0c8;
+  border-radius: 6px;
+  background: #fff;
+  color: #1e1a14;
+  min-width: 0;
+}
+.slot-label-input:focus {
+  outline: none;
+  border-color: #47503C;
+  box-shadow: 0 0 0 2px #eef3ea;
+}
+.slot-label-input::placeholder { color: #b3ada1; }
+
 /* Sheet-Aktions-Leiste (sticky am Boden) */
 .sheet-btn-gruppe {
   position: sticky;
