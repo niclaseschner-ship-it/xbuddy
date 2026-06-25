@@ -4,7 +4,7 @@
   "description": "Eltern-Einstellungsseite fuer den Plan-Buddy — Slot-Modell und Default-Petrantwortlichkeiten.",
   "start_url": "/seiten/plan/einstellungen/",
   "scope": "/seiten/plan/einstellungen/",
-  "display": "standalone",
+  "display": "fullscreen",
   "orientation": "portrait",
   "background_color": "#F5F1E8",
   "theme_color": "#47503C",
