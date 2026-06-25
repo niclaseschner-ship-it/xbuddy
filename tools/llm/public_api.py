@@ -278,13 +278,19 @@ def get_chat(slot: str) -> LLMProvider:
     return _ChatFacade(vendor, caller, slot_name)
 
 
-def get_singleshot(slot: str) -> Any:
+def get_singleshot(slot: str, model: str = "") -> Any:
     """Liefert die Structured-Singleshot-Sicht (LLMP-S1, hoerspiel-Heimat).
 
     Required Capabilities (LLMP-3): `structured_output`, `system_message_distinct`.
-    V1-Skelett — Methoden-Body folgt mit T3.
+    Boot-Fail bei Mismatch.
+
+    `model` (T1084-additiv): wählt das effektive Modell explizit; leer (Default)
+    nutzt den Vendor-`DEFAULT_MODEL` (rückwärtskompatibel — `get_singleshot(slot)`
+    bleibt unverändert). hoerspiel reicht hier sein konfiguriertes Modell durch
+    (z. B. `claude-opus-4-7`), damit der Lib-Pfad das Modell-Verhalten des
+    Alt-Adapters exakt erhält (Spiegel `get_agent`).
     """
-    vendor, caller, slot_name = _build_vendor(slot, "get_singleshot", REQUIRED_SINGLESHOT)
+    vendor, caller, slot_name = _build_vendor(slot, "get_singleshot", REQUIRED_SINGLESHOT, model)
     return _SingleshotFacade(vendor, caller, slot_name)
 
 

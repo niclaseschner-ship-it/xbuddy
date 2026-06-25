@@ -188,3 +188,89 @@ def test_agent_run_loops_over_step(jsonl_path):
     # Zwei JSONL-Einträge (ein Telemetrie-Schreiben pro Create).
     lines = jsonl_path.read_text(encoding="utf-8").strip().split("\n")
     assert len(lines) == 2
+
+
+# ----------------------------------------------------------------------
+#  get_singleshot — Structured Singleshot (hoerspiel, T1084)
+# ----------------------------------------------------------------------
+
+SINGLESHOT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "titel": {"type": "string"},
+        "folgen-nr-vorschlag": {"type": "integer"},
+        "text": {"type": "string"},
+    },
+    "required": ["titel", "folgen-nr-vorschlag", "text"],
+}
+
+
+def test_singleshot_translates_forces_named_tool_and_parses(jsonl_path):
+    """singleshot_structured gegen gemocktes httpx.post (Spiegel
+    test_step_translates_and_parses): benannte tool_choice gesetzt,
+    tools→function-Form (parameters==schema), tool_call→input-dict,
+    JSONL caller=hoerspiel."""
+    ergebnis = {
+        "titel": "Stigi und der Trübsee",
+        "folgen-nr-vorschlag": 23,
+        "text": "Folge 23: Stigi und der Trübsee.\n\nStigi flog über das Tal.",
+    }
+    tool_call = {
+        "id": "call-7",
+        "type": "function",
+        "function": {"name": "folgen_vorschlag", "arguments": json.dumps(ergebnis)},
+    }
+    fake_httpx = _fake_httpx(_mistral_response(text="", tool_calls=[tool_call]))
+
+    with patch.dict(sys.modules, {"httpx": fake_httpx}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="key-fake"):
+        from tools.llm import get_singleshot
+        ss = get_singleshot(slot="hoerspiel-mistral-api-key")
+        out = ss.complete_structured(
+            system="Du erfindest Hörspiel-Folgen.",
+            prompt="Erfinde eine Folge über den Trübsee.",
+            schema=SINGLESHOT_SCHEMA,
+            tool_name="folgen_vorschlag",
+            tool_description="Übergibt den Folgen-Vorschlag.",
+        )
+
+    # Schema-konformes dict aus dem tool_call.
+    assert out == ergebnis
+
+    assert fake_httpx.post.call_count == 1
+    sent = json.loads(fake_httpx.post.call_args.kwargs["content"])
+    # System als eigene system-Message (system_message_distinct).
+    assert sent["messages"][0] == {"role": "system",
+                                   "content": "Du erfindest Hörspiel-Folgen."}
+    assert sent["messages"][1]["role"] == "user"
+    # Benannte tool_choice-Form (Anthropic-Parität).
+    assert sent["tool_choice"] == {"type": "function",
+                                   "function": {"name": "folgen_vorschlag"}}
+    # tools → Mistral-function-Form, parameters == schema.
+    assert sent["tools"][0]["type"] == "function"
+    assert sent["tools"][0]["function"]["name"] == "folgen_vorschlag"
+    assert sent["tools"][0]["function"]["parameters"] == SINGLESHOT_SCHEMA
+
+    # JSONL: ein Eintrag, caller=hoerspiel.
+    lines = jsonl_path.read_text(encoding="utf-8").strip().split("\n")
+    assert len(lines) == 1
+    parsed = json.loads(lines[0])
+    assert parsed["caller"] == "hoerspiel"
+    assert parsed["slot"] == "hoerspiel-mistral-api-key"
+    assert parsed["model_id"] == "mistral-medium-2508"
+
+
+def test_singleshot_no_tool_call_raises_provider_error(jsonl_path):
+    """Kein tool_call mit name==tool_name → ProviderError (Spiegel
+    anthropic.py:212-214)."""
+    fake_httpx = _fake_httpx(_mistral_response(text="Hier ist meine Antwort."))
+
+    with patch.dict(sys.modules, {"httpx": fake_httpx}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="key-fake"):
+        from tools.llm import ProviderError, get_singleshot
+        ss = get_singleshot(slot="hoerspiel-mistral-api-key")
+        with pytest.raises(ProviderError):
+            ss.complete_structured(
+                system="S", prompt="P", schema=SINGLESHOT_SCHEMA,
+                tool_name="folgen_vorschlag",
+            )
