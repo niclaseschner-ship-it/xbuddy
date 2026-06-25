@@ -116,6 +116,74 @@ def test_get_singleshot_without_model_uses_vendor_default():
 
 
 # ----------------------------------------------------------------------
+#  max_tokens-Durchreichung (T1084)
+# ----------------------------------------------------------------------
+
+def test_get_singleshot_passes_max_tokens_to_vendor_anthropic():
+    """get_singleshot(slot, max_tokens=8192) reicht max_tokens an den Anthropic-Vendor
+    durch — vendor.max_tokens == 8192 (AC1)."""
+    fake_anthropic, _client = _fake_anthropic()
+    with patch.dict(sys.modules, {"anthropic": fake_anthropic}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_singleshot
+        ss = get_singleshot(slot="hoerspiel-anthropic-api-key", max_tokens=8192)
+    assert ss._vendor.max_tokens == 8192
+
+
+def test_get_singleshot_without_max_tokens_keeps_vendor_default_anthropic():
+    """get_singleshot(slot) ohne max_tokens → Vendor-DEFAULT_MAX_TOKENS=2048 unverändert (AC1)."""
+    fake_anthropic, _client = _fake_anthropic()
+    with patch.dict(sys.modules, {"anthropic": fake_anthropic}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_singleshot
+        from tools.llm._vendor.anthropic import DEFAULT_MAX_TOKENS
+        ss = get_singleshot(slot="hoerspiel-anthropic-api-key")
+    assert ss._vendor.max_tokens == DEFAULT_MAX_TOKENS
+
+
+def test_get_singleshot_passes_max_tokens_to_vendor_mistral():
+    """get_singleshot(slot, max_tokens=4096) reicht max_tokens an den Mistral-Vendor
+    durch — vendor.max_tokens == 4096 (AC1, Mistral-Pfad)."""
+    fake_httpx = _fake_httpx({})
+    with patch.dict(sys.modules, {"httpx": fake_httpx}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="key-fake"):
+        from tools.llm import get_singleshot
+        ss = get_singleshot(slot="hoerspiel-mistral-api-key", max_tokens=4096)
+    assert ss._vendor.max_tokens == 4096
+
+
+def test_get_singleshot_without_max_tokens_keeps_vendor_default_mistral():
+    """get_singleshot(slot) ohne max_tokens → Mistral-Vendor-DEFAULT_MAX_TOKENS=4096 (AC1)."""
+    fake_httpx = _fake_httpx({})
+    with patch.dict(sys.modules, {"httpx": fake_httpx}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="key-fake"):
+        from tools.llm import get_singleshot
+        from tools.llm._vendor.mistral import DEFAULT_MAX_TOKENS as MISTRAL_DEFAULT_MAX_TOKENS
+        ss = get_singleshot(slot="hoerspiel-mistral-api-key")
+    assert ss._vendor.max_tokens == MISTRAL_DEFAULT_MAX_TOKENS
+
+
+def test_anthropic_singleshot_max_tokens_in_create_call(jsonl_path):
+    """Anthropic: max_tokens=8192 landet in messages.create (AC1 — _create verwendet vendor.max_tokens)."""
+    fake_anthropic, client = _fake_anthropic()
+    client.messages.create.return_value = _anthropic_response(
+        [_anthropic_tool_use_block("ergebnis", ERGEBNIS)]
+    )
+
+    with patch.dict(sys.modules, {"anthropic": fake_anthropic}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_singleshot
+        ss = get_singleshot(slot="hoerspiel-anthropic-api-key",
+                            model="claude-opus-4-7", max_tokens=8192)
+        ss.complete_structured(
+            system="S", prompt="P", schema=SCHEMA, tool_name="ergebnis",
+        )
+
+    call = client.messages.create.call_args
+    assert call.kwargs["max_tokens"] == 8192
+
+
+# ----------------------------------------------------------------------
 #  forced-tool end-to-end
 # ----------------------------------------------------------------------
 
