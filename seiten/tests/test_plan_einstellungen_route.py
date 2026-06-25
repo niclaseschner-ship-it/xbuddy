@@ -498,3 +498,194 @@ def test_plan37_get_liest_kind_feld():
         "plan-einstellungen.js: ladeSlotModell() liest 's.kind' nicht — "
         "GET-Antwort von /api/v1/plan/slot-modell liefert 'kind', nicht 'kind_id' (PLAN-37)"
     )
+
+
+# ── AC1: Freies Icon-Suchfeld im Anlege-Flow ─────────────────────────────────
+
+def test_ac1_neu_icon_suche_input_im_html(client):
+    """AC1: HTML traegt .neu-icon-suche-Input im sheet-neu-slot (freies Suchfeld).
+
+    Benutzer muss 'kalender' suchen koennen, auch wenn Slot-Name 'Termine Niclas' ist.
+    Das Suchfeld ist von .neu-label-input getrennt.
+    """
+    body = client.get(_ENTRY_PATH).get_data(as_text=True)
+    assert 'class="neu-icon-suche"' in body or "neu-icon-suche" in body, (
+        ".neu-icon-suche fehlt in plan-einstellungen.html (AC1: freies Suchfeld im Anlege-Flow)"
+    )
+
+
+def test_ac1_js_hat_neu_icon_suche_queryselector():
+    """AC1: plan-einstellungen.js verdrahtet .neu-icon-suche (freies Suchfeld)."""
+    js_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+    assert ".neu-icon-suche" in js, (
+        ".neu-icon-suche fehlt in plan-einstellungen.js — freies Suchfeld nicht verdrahtet (AC1)"
+    )
+
+
+def test_ac1_suche_entkoppelt_von_label():
+    """AC1: Icon-Suche im Neu-Slot-Sheet ist nicht ausschliesslich an labelInput gebunden.
+
+    Die Suchfunktion muss auch aus iconSucheInput ausgeloest werden koennen.
+    Geprüft: sowohl 'neu-icon-suche' als auch unabhaengige Suchfunktion vorhanden.
+    """
+    js_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+    # Freies Suchfeld muss eigenen Event-Listener haben
+    assert "iconSucheInput" in js, (
+        "iconSucheInput fehlt — freies Suchfeld hat keinen eigenen Listener (AC1)"
+    )
+    # Label-Auto-Suche darf nur ausfuehren wenn Suche-Feld leer (Entkopplungs-Guard)
+    assert "suchQ.length === 0" in js or 'suchQ === ""' in js or "suchQ.length == 0" in js, (
+        "Entkopplungs-Guard fehlt — Label-Auto-Suche wird auch ausgefuehrt wenn Suche-Feld gefuellt (AC1)"
+    )
+
+
+# ── AC2: Label-Fallback ───────────────────────────────────────────────────────
+
+def test_ac2_slot_label_funktion_vorhanden():
+    """AC2: plan-einstellungen.js hat slotLabel()-Funktion fuer Fallback-Logik."""
+    js_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+    assert "function slotLabel(" in js, (
+        "slotLabel() fehlt in plan-einstellungen.js (AC2: Fallback-Funktion)"
+    )
+
+
+def test_ac2_slot_label_fallback_bring():
+    """AC2: slotLabel() liefert 'Bringen' fuer key='bring'."""
+    js_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+    assert '"Bringen"' in js or "'Bringen'" in js, (
+        "Fallback 'Bringen' fehlt in slotLabel() (AC2)"
+    )
+
+
+def test_ac2_slot_label_fallback_holen():
+    """AC2: slotLabel() liefert 'Holen' fuer key='pick'."""
+    js_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+    assert '"Holen"' in js or "'Holen'" in js, (
+        "Fallback 'Holen' fehlt in slotLabel() (AC2)"
+    )
+
+
+def test_ac2_slot_label_fallback_kochen():
+    """AC2: slotLabel() liefert 'Kochen' fuer key='cook'."""
+    js_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+    assert '"Kochen"' in js or "'Kochen'" in js, (
+        "Fallback 'Kochen' fehlt in slotLabel() (AC2)"
+    )
+
+
+def test_ac2_slot_label_fallback_bett():
+    """AC2: slotLabel() hat Fallback-Logik fuer bed-Schluessen."""
+    js_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+    assert '"Bett"' in js or "'Bett'" in js or "Bett" in js, (
+        "Fallback 'Bett <Kind>' fehlt in slotLabel() (AC2)"
+    )
+
+
+def test_ac2_slot_label_fallback_termine():
+    """AC2: slotLabel() hat Fallback-Logik fuer act-Schluessen (Termine <Kind>)."""
+    js_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+    assert "Termine" in js, (
+        "Fallback 'Termine <Kind>' fehlt in slotLabel() (AC2)"
+    )
+
+
+# ── AC3: Label-Edit fuer bestehende Slots ────────────────────────────────────
+
+def test_ac3_slot_label_input_im_slot_body():
+    """AC3: plan-einstellungen.js rendert .slot-label-input in Slot-Body (Label-Edit)."""
+    js_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+    assert "slot-label-input" in js, (
+        ".slot-label-input fehlt in plan-einstellungen.js — Label-Edit nicht implementiert (AC3)"
+    )
+
+
+def test_ac3_setze_slot_label_funktion():
+    """AC3: plan-einstellungen.js hat setzeSlotLabel()-Funktion."""
+    js_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+    assert "function setzeSlotLabel(" in js, (
+        "setzeSlotLabel() fehlt in plan-einstellungen.js (AC3)"
+    )
+
+
+def test_ac3_label_input_change_listener():
+    """AC3: plan-einstellungen.js hat change-Listener fuer .slot-label-input."""
+    js_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+    assert '"change"' in js or "'change'" in js, (
+        "change-Listener fehlt — .slot-label-input-Aenderungen werden nicht getrackt (AC3)"
+    )
+
+
+# ── AC4: PWA-Icons sind Kalender (nicht Einkaufswagen) ───────────────────────
+
+def test_ac4_plan_icons_verschieden_von_einkauf():
+    """AC4: seiten/static/plan/ Icons unterscheiden sich von einkauf/ Icons (kein Copy-Paste)."""
+    import hashlib
+
+    from PIL import Image
+
+    plan_dir   = os.path.join(_SEITEN_DIR, "static", "plan")
+    einkauf_dir = os.path.join(_SEITEN_DIR, "static", "einkauf")
+
+    for name in ("icon-192.png", "icon-512.png", "icon-maskable-512.png"):
+        plan_path   = os.path.join(plan_dir, name)
+        einkauf_path = os.path.join(einkauf_dir, name)
+
+        assert os.path.isfile(plan_path), f"{name} fehlt in seiten/static/plan/"
+        assert os.path.isfile(einkauf_path), f"{name} fehlt in seiten/static/einkauf/ (Referenz)"
+
+        plan_img   = Image.open(plan_path)
+        einkauf_img = Image.open(einkauf_path)
+
+        h_plan   = hashlib.md5(plan_img.tobytes()).hexdigest()
+        h_einkauf = hashlib.md5(einkauf_img.tobytes()).hexdigest()
+
+        assert h_plan != h_einkauf, (
+            f"{name}: Plan-Icon ist identisch mit Einkauf-Icon — "
+            "Kalender-Motiv fehlt, Einkaufswagen-Copy wurde nicht ersetzt (AC4)"
+        )
+
+
+def test_ac4_make_icons_py_vorhanden():
+    """AC4: seiten/static/plan/_make_icons.py existiert (Kalender-Icon-Generator)."""
+    make_icons_path = os.path.join(_SEITEN_DIR, "static", "plan", "_make_icons.py")
+    assert os.path.isfile(make_icons_path), (
+        "_make_icons.py fehlt in seiten/static/plan/ — Icon-Generator nicht erstellt (AC4)"
+    )
+
+
+def test_ac4_make_icons_py_referenziert_kalender():
+    """AC4: seiten/static/plan/_make_icons.py beschreibt Kalender-Motiv (kein Einkaufskorb)."""
+    make_icons_path = os.path.join(_SEITEN_DIR, "static", "plan", "_make_icons.py")
+    with open(make_icons_path, encoding="utf-8") as f:
+        inhalt = f.read()
+    assert "kalender" in inhalt.lower() or "calendar" in inhalt.lower(), (
+        "_make_icons.py beschreibt kein Kalender-Motiv — Einkaufskorb-Code koennte kopiert sein (AC4)"
+    )
+    assert "einkauf" not in inhalt.lower(), (
+        "_make_icons.py referenziert 'einkauf' — Einkaufswagen-Symbol statt Kalender (AC4)"
+    )
+    assert "einkaufskorb" not in inhalt.lower(), (
+        "_make_icons.py referenziert 'einkaufskorb' — falsches Symbol (AC4)"
+    )
