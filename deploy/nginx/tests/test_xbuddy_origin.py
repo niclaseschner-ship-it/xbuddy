@@ -505,3 +505,44 @@ def test_URL_17_seiten_sub_pfad_routing_bleibt_intakt():
         "location ^~ /api/v1/seiten/ zeigt nicht mehr auf xbuddy_seiten — "
         "Routing für /api/v1/seiten/<sub-pfad> ist kaputt (URL-14, SREG-12, #616)"
     )
+
+
+# ============================================================
+#  Mini-App-Frontend für Eltern-Plan-Einstellungen (T1126, PLAN-35)
+# ============================================================
+
+
+def test_T1126_plan_location_proxypassed_an_seiten_upstream():
+    """T1126, PLAN-35: /seiten/plan/ wird an xbuddy_seiten geleitet.
+
+    Homescreen-PWA-HTML für Plan-Einstellungen analog zu /seiten/essen/ und
+    /seiten/routine/. Schreibwirkung läuft über /api/v1/plan/* (PLAN-36/37),
+    nicht durch diesen Block. JS/CSS/manifest unter /api/v1/seiten/static/.
+    """
+    text = _conf_text()
+    match = re.search(
+        r"location\s+/seiten/plan/\s*\{[^}]*proxy_pass\s+http://xbuddy_seiten\s*;[^}]*\}",
+        text,
+        re.DOTALL,
+    )
+    assert match is not None, (
+        "location /seiten/plan/ fehlt oder proxypasst nicht an xbuddy_seiten "
+        "(T1126, PLAN-35)"
+    )
+
+
+def test_T1126_plan_location_steht_nach_seiten_routine_location():
+    """T1126-Konvention: /seiten/plan/ steht nach /seiten/routine/ (Tabellenreihenfolge).
+
+    Die Seiten-Mini-Apps sind nach Buddy-Ordnung in der Conf gelistet; Plan kommt
+    nach Routine (analog zu URL-14 für API-Präfixe).
+    """
+    text = _conf_text()
+    pos_routine = text.find("location /seiten/routine/")
+    pos_plan = text.find("location /seiten/plan/")
+    assert pos_routine != -1, "location /seiten/routine/ nicht gefunden"
+    assert pos_plan != -1, "location /seiten/plan/ nicht gefunden"
+    assert pos_routine < pos_plan, (
+        "T1126: /seiten/plan/ muss nach /seiten/routine/ stehen "
+        f"(Positionen: routine={pos_routine}, plan={pos_plan})"
+    )
