@@ -608,6 +608,112 @@ def einkauf_asset_view(asset):
     return send_from_directory(root, asset, mimetype=mimetype)
 
 
+# ============================================================
+#  PLAN-35 — Plan-Einstellungs-PWA (Mantel, Service-Worker, Icons)
+# ============================================================
+#
+# Spec-Anker: specs/buddies/plan.md PLAN-35 (P2: Eltern-Einstellungs-Seite,
+# PWA-Mantel). Surface: /seiten/plan/einstellungen. PUBLIC / Netz-Trust
+# (auth.md AUTH-6, /api/v1/plan/*). Vorbild: ESSEN-34 (einkauf_asset_view).
+
+_PLAN_EINST_MIME = {
+    ".json": "application/manifest+json",
+    ".js":   "application/javascript",
+    ".png":  "image/png",
+}
+
+
+def _plan_einst_asset_root():
+    """Wurzelverzeichnis fuer Plan-Einstellungs-PWA-Mantel-Assets (PLAN-35).
+
+    Liegt unter seiten/static/plan/ (Lego-Trennung: PWA-Verzeichnis ist
+    Geschwister zu den anderen Mini-App-Assets). Test-Naht: ueberschreibbar
+    via runtime["plan_einst_asset_dir"].
+    """
+    override = runtime.get("plan_einst_asset_dir") if isinstance(runtime, dict) else None
+    if override:
+        return override
+    return os.path.join(os.path.dirname(__file__), "static", "plan")
+
+
+def _plan_einst_build_id():
+    """build_id aus mtime der plan-einstellungen.js (analog ESSEN-35)."""
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    try:
+        return str(int(os.path.getmtime(os.path.join(static_dir, "plan-einstellungen.js"))))
+    except OSError:
+        return "0"
+
+
+def _read_plan_sw_with_build_id(asset_path, build_id):
+    """Liest sw.js, ersetzt __BUILD_ID__-Platzhalter (analog ESSEN-35)."""
+    with open(asset_path, encoding="utf-8") as fh:
+        content = fh.read()
+    return content.replace("__BUILD_ID__", build_id)
+
+
+@app.route("/seiten/plan/einstellungen/", methods=["GET"])
+def plan_einstellungen_view_trailing_slash():
+    """PLAN-35 Trailing-Slash-Alias: GET /seiten/plan/einstellungen/ → HTML.
+
+    manifest.json traegt start_url: "/seiten/plan/einstellungen/" — der PWA-Open
+    nach Install laedt diese URL. Ohne diese Route landet der Nutzer in 404.
+    Form: Option C (dedizierter Handler, analog essen_einkauf_view_trailing_slash).
+    """
+    return plan_einstellungen_view()
+
+
+@app.route("/seiten/plan/einstellungen", methods=["GET"])
+def plan_einstellungen_view():
+    """PLAN-35: Plan-Einstellungs-PWA — HTML-Render-Route.
+
+    PUBLIC / Netz-Trust (auth.md AUTH-6): kein Auth-Header, kein initData.
+    Cache-Buster: build_id aus mtime der plan-einstellungen.js.
+    PWA-Mantel: manifest.json + sw.js unter /seiten/plan/einstellungen/<asset>.
+    """
+    build_id = _plan_einst_build_id()
+    resp = make_response(render_template("plan-einstellungen.html", build_id=build_id))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
+
+
+@app.route("/seiten/plan/einstellungen/<path:asset>", methods=["GET"])
+def plan_einstellungen_asset_view(asset):
+    """PLAN-35: PWA-Mantel-Asset-Auslieferung (analog ESSEN-34 / ROU-23).
+
+    Antwortet auf /seiten/plan/einstellungen/manifest.json, /sw.js, /icon-*.png.
+    Path-Traversal-Schutz via realpath-Check. Private Dateien (_*) → 404.
+
+    Sonderfall sw.js: __BUILD_ID__-Platzhalter wird beim Ausliefern ersetzt
+    (PLAN-35 Cache-Versionierung, analog ESSEN-35).
+    """
+    from flask import abort, send_from_directory
+
+    root = os.path.realpath(_plan_einst_asset_root())
+    target = os.path.realpath(os.path.join(root, asset))
+    if target != root and not target.startswith(root + os.sep):
+        abort(404)
+    if not os.path.isfile(target):
+        abort(404)
+    if os.path.basename(target).startswith("_"):
+        abort(404)
+
+    ext = os.path.splitext(target)[1].lower()
+    mimetype = _PLAN_EINST_MIME.get(ext, "application/octet-stream")
+
+    # Sonderfall sw.js: build_id-Platzhalter ersetzen.
+    if os.path.basename(target) == "sw.js":
+        build_id = _plan_einst_build_id()
+        body = _read_plan_sw_with_build_id(target, build_id)
+        resp = make_response(body, 200)
+        resp.headers["Content-Type"] = mimetype + "; charset=utf-8"
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return resp
+
+    return send_from_directory(root, asset, mimetype=mimetype)
+
+
 @app.route("/api/v1/seiten/mini-app-uebersicht", methods=["GET"])
 def mini_app_uebersicht_view():
     """MAU-1: Telegram-Mini-App-Uebersichts-View — HTML fuer den Familien-Bot.
