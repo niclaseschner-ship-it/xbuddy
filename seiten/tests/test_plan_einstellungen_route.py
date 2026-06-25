@@ -439,3 +439,62 @@ def test_manifest_display_fullscreen(client):
     assert body.get("display") == "fullscreen", (
         f"manifest.json: display='{body.get('display')}' statt 'fullscreen' (PWA-2)"
     )
+
+
+# ── PLAN-37: kind-Feld-Vertrag (GET liest "kind", PUT sendet "kind") ──────────
+
+def test_plan37_put_payload_sendet_kind_nicht_kind_id():
+    """PLAN-37 Feld-Vertrag: PUT-Payload sendet 'kind', nicht 'kind_id' als Objekt-Key.
+
+    Backend plan/config.py Slot.kind erwartet das Feld 'kind'.
+    Wenn JS 'kind_id' als Key sendet, antwortet die API mit HTTP 400 (kalender-read-Slot
+    braucht ein bekanntes kind) und Kind/Foto verschwindet.
+
+    Gesucht: das slotsPayload-Objekt-Literal enthaelt 'kind:' (API-Key) und
+    NICHT 'kind_id:' als API-Key (kind_id darf als interner Zugriff 'kind_id ||' vorkommen).
+    """
+    import re
+
+    js_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+
+    # Extrahiere den slotsPayload-Objekt-Block (der an speichereSlotModell geht)
+    # Suche das Map-Objekt: "schluessel: s.schluessel" bis ende der Map-Funktion
+    payload_match = re.search(
+        r"(schluessel:\s*s\.schluessel.+?reihenfolge:\s*i\s*,?\s*\})",
+        js,
+        re.DOTALL,
+    )
+    assert payload_match, (
+        "slotsPayload-Objekt-Block nicht gefunden — onSpeichern()-Struktur hat sich geaendert"
+    )
+    payload_block = payload_match.group(0)
+
+    # Im Payload-Objekt muss "kind:" als Key stehen (API-Feld gemaess PLAN-37)
+    assert re.search(r"\bkind\s*:", payload_block), (
+        "slotsPayload sendet kein 'kind:'-Feld — Backend erwartet 'kind' (PLAN-37)"
+    )
+
+    # Im Payload-Objekt darf KEIN "kind_id:" als Key stehen (wuerde HTTP 400 provozieren)
+    assert not re.search(r"\bkind_id\s*:", payload_block), (
+        "slotsPayload sendet 'kind_id:' als Key — Backend erwartet 'kind', nicht 'kind_id' "
+        "(PLAN-37: Feld-Vertrag verletzt → HTTP 400)"
+    )
+
+
+def test_plan37_get_liest_kind_feld():
+    """PLAN-37 Feld-Vertrag: ladeSlotModell() mapped API-Feld 'kind' auf internes kind_id.
+
+    Backend liefert im GET das Feld 'kind'. Ohne Mapping zeigen kalender-read-Slots
+    'kein Kind', weil slot.kind_id undefined ist.
+    """
+    js_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+
+    # ladeSlotModell muss s.kind lesen (API-Rand-Mapping)
+    assert "s.kind" in js, (
+        "plan-einstellungen.js: ladeSlotModell() liest 's.kind' nicht — "
+        "GET-Antwort von /api/v1/plan/slot-modell liefert 'kind', nicht 'kind_id' (PLAN-37)"
+    )
