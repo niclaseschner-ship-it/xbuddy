@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Plan-Einstellungen — Slot-Ansicht</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+<div class="kopf">
+  <h1>Plan-Einstellungen</h1>
+  <span class="pwa-chip">PWA · Heimnetz</span>
+</div>
+<p class="sub">Variante B — Slot-orientiert: jeder Slot ein ausklappbarer Reiter.</p>
+
+<div class="sektion">
+  <h2>Slots <span class="hint">▲▼ Reihenfolge · Reiter antippen zum Bearbeiten</span></h2>
+  <div id="slots"></div>
+  <button class="btn add" onclick="openTyp()">＋ Slot hinzufügen</button>
+</div>
+
+<!-- Bottom-Sheet: Piktogramm-Suche (wie Routine-Settings) -->
+<div class="sheet-overlay" id="sheet-icon">
+  <div class="sheet">
+    <div class="griff"></div>
+    <h3>Piktogramm suchen</h3>
+    <input class="such-input" id="icon-suche" type="search" placeholder="z. B. schwimmen, arzt, musik …" oninput="filterIcons()" autocomplete="off">
+    <div class="icon-grid" id="icon-grid"></div>
+  </div>
+</div>
+<!-- Bottom-Sheet: Person-Picker -->
+<div class="sheet-overlay" id="sheet-person">
+  <div class="sheet">
+    <div class="griff"></div>
+    <h3 id="person-titel">Person wählen</h3>
+    <div class="person-grid" id="person-grid"></div>
+  </div>
+</div>
+<!-- Bottom-Sheet: Neuer Slot — Typ-Wahl -->
+<div class="sheet-overlay" id="sheet-typ">
+  <div class="sheet">
+    <div class="griff"></div>
+    <h3>Neuer Slot — welche Art?</h3>
+    <div class="typ-wahl">
+      <div class="opt aktiv"><b>Petrantwortlich</b><span>Jemand ist zuständig (bringen, kochen). Mit Wer-macht-was je Wochentag.</span></div>
+      <div class="opt"><b>Kalender-Termine</b><span>Termine eines Kindes aus dem Kalender — gefiltert über seinen Namen.</span></div>
+    </div>
+    <div class="save-leiste"><button class="btn" onclick="closeSheets()">Abbrechen</button><button class="btn primary" onclick="closeSheets()">Weiter</button></div>
+  </div>
+</div>
+
+<script>
+const PERS = {
+  emil:{n:"Niclas",r:"blue",f:"emil.jpg"}, lena:{n:"Lena",r:"red",f:"lena.jpg"},
+  jonas:{n:"Jonas",r:"green",f:"jonas.png"}, petra:{n:"Petra",r:"orange",f:"petra.jpg"},
+  mia:{n:"Mia",r:"purple",f:"mia.jpg"}, finn:{n:"Finn",r:"teal",f:"finn.jpg"},
+  timo:{n:"Timo",r:"gray",f:"timo.jpg"}
+};
+const TAGE = ["Mo","Di","Mi","Do","Fr","Sa","So"];
+const SLOTS = [
+  {key:"bring",label:"Bringen",typ:"petrantwortlich",icon:"37807",def:["emil","petra","lena","jonas","petra",null,null]},
+  {key:"pick",label:"Abholen",typ:"petrantwortlich",icon:"39520",def:["petra","lena","lena","jonas","emil",null,null]},
+  {key:"cook",label:"Kochen",typ:"petrantwortlich",icon:"2342",def:["jonas","lena","petra",null,null,null,null]},
+  {key:"bed1",label:"Schlafen Mia",typ:"petrantwortlich",icon:"6027",kind:"mia",def:["lena","emil","lena","emil","lena","lena","emil"]},
+  {key:"bed2",label:"Schlafen Finn",typ:"petrantwortlich",icon:"6027",kind:"finn",def:["jonas","jonas","petra","petra","jonas","jonas","petra"]},
+  {key:"act1",label:"Termine Mia",typ:"kalender-read",icon:"3071",kind:"mia"},
+  {key:"act2",label:"Termine Finn",typ:"kalender-read",icon:"3071",kind:"finn"},
+];
+const PICKER_ICONS = [
+  {id:"6568",w:"schwimmen schwimmbad wasser"}, {id:"24791",w:"musik instrument"}, {id:"31945",w:"sport bewegung"},
+  {id:"6561",w:"arzt arztbesuch"}, {id:"11229",w:"zahnarzt zähne"}, {id:"16743",w:"fussball ball"},
+  {id:"37807",w:"sonne morgens bringen"}, {id:"39520",w:"uhr zeit abholen"}, {id:"2342",w:"essen kochen"},
+  {id:"6027",w:"mond schlafen bett"}, {id:"3071",w:"stern aktivität"}];
+
+function ring(id, cls="ring"){ if(!id) return `<span class="${cls} leer"></span>`;
+  const p=PERS[id]; return `<img class="${cls} ring-${p.r}" src="assets/fotos/${p.f}" alt="${p.n}" title="${p.n}">`; }
+function badge(t){ return t==="petrantwortlich"
+  ? `<span class="badge petrantwortlich">petrantwortlich</span>`
+  : `<span class="badge kalender">kalender-read</span>`; }
+
+function slotBody(s){
+  if(s.typ==="petrantwortlich"){
+    const tage = TAGE.map((t,i)=>`<div class="tag ${i>4?'we':''}"><span class="tagname">${t}</span>
+      <span onclick="openPerson('${s.label} · ${t}')">${ring(s.def[i])}</span></div>`).join("");
+    return `<div class="slot-body">
+      <div class="feldzeile"><span class="feldname">Piktogramm</span>
+        <img class="slot-icon" src="assets/arasaac/${s.icon}.png"><button class="btn" onclick="openIcon()">ändern</button></div>
+      <div class="feldzeile"><span class="feldname">Kind im Rail</span>
+        ${s.kind?`${ring(s.kind,'ring')} <span>${PERS[s.kind].n}</span>`:`<span style="color:#8a857c;font-size:var(--fs-14)">keins</span>`}
+        <button class="btn" onclick="openPerson('Kind im Rail wählen')">ändern</button></div>
+      <div class="feldzeile" style="align-items:flex-start"><span class="feldname">Wer macht's</span>
+        <div class="tagereihe">${tage}</div></div>
+      <div class="save-leiste"><button class="btn danger" onclick="return false">Slot löschen</button></div>
+    </div>`;
+  }
+  // kalender-read
+  return `<div class="slot-body">
+    <div class="feldzeile"><span class="feldname">Piktogramm</span>
+      <img class="slot-icon" src="assets/arasaac/${s.icon}.png"><button class="btn" onclick="openIcon()">ändern</button></div>
+    <div class="feldzeile"><span class="feldname">Kind</span>${ring(s.kind,'ring')} <span>${PERS[s.kind].n}</span><button class="btn" onclick="openPerson('Kind wählen')">ändern</button></div>
+    <div class="feldzeile"><span class="feldname">Filter</span>
+      <span style="font-size:var(--fs-14);color:#6b6760">Termine mit „<b style="color:var(--text)">${PERS[s.kind].n}</b>" im Titel landen hier (read-only aus dem Kalender).</span></div>
+    <div class="save-leiste"><button class="btn danger" onclick="return false">Slot löschen</button></div>
+  </div>`;
+}
+
+function render(){
+  document.getElementById("slots").innerHTML = SLOTS.map((s,i)=>`
+    <details class="slot" ${i===0?'open':''}>
+      <summary>
+        <div class="pfeile"><button class="pfeil" title="hoch">▲</button><button class="pfeil" title="runter">▼</button></div>
+        <img class="slot-icon" src="assets/arasaac/${s.icon}.png">
+        <span class="label">${s.label}</span>
+        <span class="meta">${badge(s.typ)}<span class="chev">▶</span></span>
+      </summary>
+      ${slotBody(s)}
+    </details>`).join("");
+}
+function renderIcons(filter){
+  const f=(filter||"").trim().toLowerCase();
+  const liste = f ? PICKER_ICONS.filter(p=>p.w.includes(f)) : PICKER_ICONS;
+  document.getElementById("icon-grid").innerHTML = liste.length
+    ? liste.map(p=>`<button onclick="closeSheets()"><img src="assets/arasaac/${p.id}.png"></button>`).join("")
+    : `<p class="lade-hinweis">Keine Treffer — anderes Wort probieren.</p>`;
+}
+function filterIcons(){ renderIcons(document.getElementById("icon-suche").value); }
+function openIcon(e){
+  document.getElementById("icon-suche").value="";
+  renderIcons("");
+  document.getElementById("sheet-icon").classList.add("auf");
+  if(e) e.stopPropagation();
+}
+function openPerson(titel){
+  document.getElementById("person-titel").textContent = titel;
+  const ids = Object.keys(PERS);
+  document.getElementById("person-grid").innerHTML =
+    `<div class="person leer" onclick="closeSheets()"><span class="ring leer">×</span><span>leer</span></div>`+
+    ids.map(id=>`<div class="person" onclick="closeSheets()">${ring(id)}<span>${PERS[id].n}</span></div>`).join("");
+  document.getElementById("sheet-person").classList.add("auf");
+  event && event.stopPropagation();
+}
+function openTyp(){ document.getElementById("sheet-typ").classList.add("auf"); }
+function closeSheets(){ document.querySelectorAll(".sheet-overlay").forEach(o=>o.classList.remove("auf")); }
+document.querySelectorAll(".sheet-overlay").forEach(o=>o.addEventListener("click",e=>{ if(e.target===o) closeSheets(); }));
+document.querySelectorAll(".typ-wahl .opt").forEach(o=>o.addEventListener("click",()=>{
+  document.querySelectorAll(".typ-wahl .opt").forEach(x=>x.classList.remove("aktiv")); o.classList.add("aktiv"); }));
+render();
+// Self-Check-Hooks: #icon öffnet das Such-Sheet, #person den Personen-Picker
+if(location.hash==="#icon") openIcon();
+if(location.hash==="#person") openPerson("Kind im Rail wählen");
+</script>
+</body>
+</html>

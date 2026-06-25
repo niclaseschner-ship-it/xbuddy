@@ -819,7 +819,7 @@ Werte, die im Onboarding entstehen (heute `kalender_id`), setzt der Eltern-Chat
 | Name                         | Default                          | Datei-Schlüssel                | Gesetzt durch (Onboarding-Schritt) |
 |------------------------------|----------------------------------|--------------------------------|------------------------------------|
 | Slot-Definitionen            | die 7 Slots des Handoffs         | `slots`                        | n/a V1 (familienspezifisch hartcodiert, E-PLAN-8) |
-| Default-Petrantwortlichkeiten | leer                             | `defaults`                     | n/a V1 (Familie trägt initial in Datei ein) |
+| Default-Petrantwortlichkeiten | leer                             | `default_petrantwortlichkeiten` | Eltern-Einstellungs-Seite P2 (PLAN-35) via PLAN-36; Familie kann `plan.json` zusätzlich direkt editieren |
 | Aktivitäts-Katalog           | 9 Einträge (V1-Default)          | `aktivitaeten`                 | Skill „Plan-Aktivitäten setzen" (`plan-aktivitaeten-setzen.md` PAS) ruft PLAN-34; Familie kann `plan.json` zusätzlich direkt editieren |
 | Fenster Lese-Kind            | 7 Tage                           | `fenster_lesekind`             | n/a (Default reicht) |
 | Fenster Kleinkind            | 3 Tage                           | `fenster_kleinkind`            | n/a (Default reicht) |
@@ -936,6 +936,211 @@ selbst; der Eltern-Chat-Skill „Plan-Aktivitäten setzen"
 `plan.json` zu schreiben (APP-3).
 
 *Tickets:* #445, #471, #578
+
+### PLAN-35 — P2: Eltern-Einstellungs-Seite (PWA-Mantel)
+
+> P2 der Drei-Phasen-Lieferung (RAT-4-Auflösung 2026-06-22, decisions/RAT-4-259).
+> Liefer-Form 2026-06-25 ratifiziert: PWA-Mantel + dedizierte plan-API, NICHT
+> Wetter-interner-Save.
+> ENTSCHEID-File 20260625-074425 Paket-Sektion „(a) Frontend-Ort" → seiten/-PWA-Mantel; Sektion „Call 1 (Sorte)" → typ:pwa-Schablone; Sektion „Call 2 (Auth)" → PUBLIC-Kopplung ohne authHeaders.
+
+Die Eltern-Einstellungs-Seite des Plan-Buddys ist eine **Homescreen-PWA**
+(`typ: "pwa"`, SREG-15) — kein Telegram-Mini-App-Formfaktor. Frontend-Mantel
+(Manifest, Service-Worker, statische Assets) lebt im Aggregator-Service `seiten`
+unter dessen Asset-Wurzel; die Daten-API bleibt beim Plan-Buddy (APP-1-Eigentum,
+PLAN-36/PLAN-37). Surface: `/seiten/plan/einstellungen`.
+
+Die Seite trägt **zwei Editor-Bereiche** nebeneinander: den **Defaults-Editor**
+(Default-Petrantwortlichkeiten, PLAN-10, über PLAN-36) und den
+**Slot-Modell-Editor** (Slot-Definitionen anlegen/löschen/ändern, PLAN-6, über
+PLAN-37). Beide bedienen dieselbe Instanz-Konfiguration (`plan.json`). Der
+Personen-Picker bietet **alle** Personen aus `familie.json` (FAM-3) an
+(Toggle-All, RAT-4-Auflösung: keine Slot-Whitelist); die Piktogramm-Suche im
+Slot-Modell-Editor nutzt den **geteilten Icon-Such-Pfad** (ICONS-1).
+
+**Zielgruppe:** Eltern. Die Seite ist **deskriptiv eltern-adressiert**, kein
+Berechtigungs-Gate (SREG-6).
+
+**Defaults-Editor — Verhalten:**
+- **Wenn** die Seite geladen wird, **dann** zeigt sie den aktuellen Stand der
+  Default-Petrantwortlichkeiten (PLAN-10) — bezogen über `GET /api/v1/plan/defaults`
+  (PLAN-36) — als bearbeitbares Raster Slot × Wochentag, mit den togglebaren
+  Personen aus `familie.json` (Toggle-All, RAT-4-Auflösung: keine Slot-Whitelist).
+- **Wenn** Eltern eine Slot/Wochentag-Zelle einer Person zuweisen oder leeren,
+  **dann** persistiert die Seite den Gesamtstand über `PUT /api/v1/plan/defaults`
+  (PLAN-36) — und die Default-Petrantwortlichkeiten gelten ab dem nächsten
+  Reload-on-Read (DCOMP-2) ohne Direkt-Schreiben in die Datei (CONFIG-1).
+- **Wenn** eine zugewiesene `person_id` nicht (mehr) in `familie.json` existiert,
+  **dann** weist PLAN-36 den Schreibvorgang ab (HTTP 400), und die Seite zeigt
+  den unveränderten Vorzustand.
+
+**Abgrenzung — Umfang von P2 (Nic-Setzung 2026-06-25):**
+- Die **wochenkonkrete** Petrantwortlichkeits-Zuteilung hat bereits einen
+  Schreib-/Lesevertrag (PLAN-30/PLAN-31, `/api/v1/plan/zuteilung`). PLAN-35
+  editiert ausschließlich die **Default**-Vorbelegung (PLAN-10), nicht die
+  Wochen-Overrides.
+- Das **Slot-Modell** (Slot-Definitionen — anlegen, löschen, `art`/`icon`/`kind`
+  ändern) IST jetzt Teil von P2: der Slot-Modell-Editor (PLAN-37) ist der zweite
+  Bereich dieser Seite. „Dafür machen wir ja die ganze Übung; P1/P2 waren die
+  Vorbereitung dafür" (Nic 2026-06-25, überstimmt die frühere ENTSCHEID-Linie
+  „slot-modell NOCH NICHT → P3").
+- **NICHT in P2 — sauber abgegrenzt:** Der **per-Slot-`cycle`-Filter** (eine
+  familien-spezifische Whitelist „wer darf in *diesem* Slot stehen", altes
+  #259/E-PLAN-8) bleibt **RAT-4-Defer** (decisions/RAT-4-259). PLAN-7 V1.3
+  Toggle-All gilt weiter: jede Person aus der Registry ist in jeden
+  Petrantwortlichkeits-Slot zuweisbar, es gibt keine Slot-Whitelist. Das ist die
+  **per-Slot-`cycle`-Generalisierung**, NICHT das Slot-CRUD — und nur sie ist
+  vertagt (siehe PLAN-37-Abgrenzung).
+
+**Auth:** PUBLIC / Netz-Trust (auth.md AUTH-6, `/api/v1/plan/*`). Die Seite zieht
+**keine** Identitäts-Header — der Browser-Pfad liefert leere Auth (kein `initData`,
+keine `authHeaders`/`ensureAuth`).
+
+*Tickets:* #1126 (Refs #259)
+
+### PLAN-36 — Defaults-Schreib-API: `GET/PUT /api/v1/plan/defaults`
+
+> Echte Lücke: für die Default-Petrantwortlichkeiten (PLAN-10) gibt es heute
+> keinen nicht-loopback Schreibpfad — nur Direkt-Edit der Datei oder der
+> loopback-only Admin-Reload (PLAN-32-Muster). PLAN-36 schließt sie genau für P2.
+> ENTSCHEID-File 20260625-074425 Paket-Sektion „(b) Daten-API" → genau EINE neue Route; Sektion „Call 3 (defaults-Korrektheit)" → Form↔Datei-Mapping + Roundtrip.
+
+Der Plan-Buddy stellt die Default-Petrantwortlichkeiten (PLAN-10) unter
+`/api/v1/plan/defaults` bereit — Form analog PLAN-30/PLAN-31.
+
+**`GET /api/v1/plan/defaults`** — liefert den aktuellen Stand:
+`{ "defaults": { "<slot_key>": { "<wochentag 0..6>": "<person_id>|null }, … } }`.
+Reload-on-Read (DCOMP-2): die Konfig wird pro Aufruf frisch gelesen.
+
+**`PUT /api/v1/plan/defaults`** — nimmt den Gesamtstand entgegen. Body:
+`{ "defaults": { "<slot_key>": { "<wochentag 0..6>": "<person_id>|null }, … } }`.
+
+- **Wenn** der Body wohlgeformt ist und alle genannten `person_id` in
+  `familie.json` (FAM-3) existieren und alle `slot_key` ein Petrantwortlichkeits-Slot
+  (PLAN-6) sind, **dann** wird der Stand persistiert und die Antwort ist
+  `{ "ok": true }`.
+- **Wenn** ein Pflichtfeld fehlt, ein `slot_key` unbekannt / kein
+  Petrantwortlichkeits-Slot ist, ein `wochentag` außerhalb 0..6 liegt oder eine
+  `person_id` unbekannt ist (FAM-3), **dann** HTTP 400 mit JSON-Fehler, **kein** 500,
+  und es wird **nichts** geschrieben (Validierung vor Persistenz).
+
+**Form↔Datei-Mapping (verbindlich):** Die API-Nutzform heißt `defaults`. Die
+Datei-Persistenz schreibt den Stand ZWINGEND unter dem Datei-Schlüssel
+`default_petrantwortlichkeiten` — denn das ist der Schlüssel, den der Config-Loader
+liest (`plan/config.py`). Ein Schreiben unter `defaults` würde beim nächsten Laden
+ignoriert.
+
+**Persistenz-Verhalten:**
+- **Wenn** ein `PUT` erfolgreich validiert, **dann** wird die Konfig-Datei
+  **atomar** geschrieben (kein Teilstand bei Absturz) und der Buddy übernimmt den
+  neuen Stand ohne Prozess-Neustart (Reload, PLAN-32-Muster `admin/reload`).
+- **Roundtrip-Garantie (testbares Requirement):** Nach einem erfolgreichen
+  `PUT defaults=X` liefert ein anschließendes `load_config` / `GET defaults`
+  denselben Stand X. Dieser Roundtrip ist als Test Pflicht.
+
+**Auth:** PUBLIC / Netz-Trust (auth.md AUTH-6, `/api/v1/plan/*`).
+
+*Tickets:* #1126 (Refs #259)
+
+### PLAN-37 — Slot-Modell-Editor & Slot-Modell-API: `GET/PUT /api/v1/plan/slot-modell`
+
+> P2-Erweiterung (Nic-Setzung 2026-06-25): das Editieren des Slot-Modells
+> (Slot-Definitionen, PLAN-6) ist der zweite Editor-Bereich der P2-PWA
+> (PLAN-35). „Dafür machen wir ja die ganze Übung; P1/P2 waren die Vorbereitung
+> dafür." Überstimmt die frühere ENTSCHEID-Linie „slot-modell NOCH NICHT → P3".
+> ENTSCHEID-File 20260625-074425 Paket-Sektion „(b) Daten-API" → slot-modell jetzt IN P2 (Nic 2026-06-25, überstimmt „→ P3"); Sektion „Call 1 (Sorte)" → typ:pwa-Schablone trägt auch diesen zweiten Editor-Bereich; Sektion „Call 3 (defaults-Korrektheit)" → Form↔Datei-Mapping + atomarer Multi-Sektion-Write + Roundtrip-Test, hier auf slots + default_petrantwortlichkeiten gespiegelt.
+
+**Surface:** Teil derselben P2-PWA (`/seiten/plan/einstellungen`, PLAN-35) — ein
+zweiter Editor-Bereich neben dem Defaults-Editor (PLAN-35/PLAN-36). Die Daten-API
+bleibt beim Plan-Buddy (APP-1-Eigentum).
+
+**Integritäts-Default (Nic-Setzung 2026-06-25): `schluessel` ist UNVERÄNDERLICH.**
+Der Slot-`schluessel` ist der stabile Identifikator des Slots in der Datenhaltung
+(PLAN-9) und in den Defaults (PLAN-10) — siehe PLAN-6. Der Editor erlaubt genau
+drei Operationen:
+- **Slot ANLEGEN** — ein neuer `schluessel`, der vorher nicht existierte.
+- **Slot LÖSCHEN** — ein bestehender `schluessel` wird aus der Liste entfernt.
+- **Slot ÄNDERN** — bei einem bestehenden `schluessel` dürfen NUR `art`, `icon`
+  und (bei `kalender-read`) `kind` geändert werden — **nicht** der `schluessel`.
+
+Ein **Umbenennen** des `schluessel` ist **nicht erlaubt** (vermeidet, dass
+Defaults (PLAN-10) und historische DB-Zuteilungen (PLAN-30/31) verwaisen, und
+spart eine DB-Migration). Umbenennen = Slot löschen + Slot neu anlegen, bewusst
+zweistufig.
+
+**`GET /api/v1/plan/slot-modell`** — liefert die aktuelle Slot-Liste:
+`{ "slots": [ { "schluessel": "<key>", "art": "petrantwortlich|kalender-read",
+"icon": "<arasaac-id>", "kind": "<person_id>"? }, … ] }` — Form aus PLAN-6
+(`plan/config.py` `Slot.to_dict`). Reload-on-Read (DCOMP-2): die Konfig wird pro
+Aufruf frisch gelesen.
+
+**`PUT /api/v1/plan/slot-modell`** — nimmt die **Gesamt-Slot-Liste** entgegen
+(Body wie GET). Die übergebene Liste IST der Soll-Zustand; was fehlt, gilt als
+gelöscht.
+
+- **Wenn** der Body wohlgeformt ist — jeder Slot hat `schluessel`, `art`, `icon`;
+  `art ∈ {petrantwortlich, kalender-read}`; jeder `kalender-read`-Slot trägt ein
+  `kind`, das in `familie.json` (FAM-3) existiert; alle `schluessel` sind
+  eindeutig — und kein Rename-Versuch vorliegt (s. u.), **dann** wird die
+  Slot-Liste persistiert, die Defaults werden konsistent gehalten (s. u.), die
+  Konfig neu geladen, und die Antwort ist `{ "ok": true }`.
+- **LÖSCHEN als Folge des Soll-Zustands:** **Wenn** ein `schluessel`, der vorher
+  in der Konfig stand, in der PUT-Liste **fehlt**, **dann** gilt das als LÖSCHEN:
+  der Slot UND seine Einträge in `default_petrantwortlichkeiten` (PLAN-10) werden
+  entfernt. Historische DB-Zuteilungen (PLAN-30/31) des gelöschten Slots bleiben
+  **unangetastet** (kein Cascade-Delete) — sie rendern nicht mehr, weil der Slot
+  fehlt, und sind harmlos.
+- **Rename-Versuch wird abgewiesen:** **Wenn** der PUT einen `schluessel` eines
+  bestehenden Slots *änderte* — also ein Schlüssel verschwindet UND ein neuer
+  auftaucht, der die Änderung eines bestehenden sein soll — wird das als Löschen
+  (alt) + Anlegen (neu) behandelt; ein direkter In-Place-Rename desselben Slots
+  ist nicht ausdrückbar, weil die Identität AM `schluessel` hängt. Trägt der Body
+  eine Form, die den `schluessel` eines existierenden Slots umschreiben will
+  (z. B. ein Editor-Feld, das ihn als veränderbar anbietet), weist die API das
+  mit **HTTP 400** ab (`schluessel ist unveränderlich`). Anlegen ist nur über
+  einen `schluessel`, der vorher nicht existierte.
+- **>8 Slots:** **Wenn** die PUT-Liste mehr als 8 Slots trägt (`SLOT_WARN_AB = 9`,
+  PLAN-6 V1.3), **dann** schreibt der Buddy ein **WARN-Log** und persistiert
+  trotzdem — **kein** Fehler (das Risiko ist Display-Lesbarkeit, nicht
+  Datenverlust).
+- **Wenn** ein Pflichtfeld fehlt, eine `art` unbekannt ist, ein
+  `kalender-read`-Slot kein/ein unbekanntes `kind` trägt (FAM-3), ein
+  `schluessel` doppelt vorkommt oder ein Rename-Versuch (s. o.) vorliegt,
+  **dann** HTTP 400 mit JSON-Fehler, **kein** 500, und es wird **nichts**
+  geschrieben (Validierung **vor** Persistenz).
+
+**Form↔Datei-Mapping (verbindlich — Multi-Sektion-Save):** Ein erfolgreicher PUT
+schreibt die `slots`-Sektion **und** bereinigt die `default_petrantwortlichkeiten`-
+Sektion (entfernt Einträge gelöschter Slots) **atomar in EINEM Write**. Das ist
+genau der Multi-Sektion-Save, für den die API-first-Form gewählt wurde
+(RAT-4-Kill-Kriterium erfüllt: zwei Sektionen müssen konsistent in einem Schreib-
+vorgang fallen, was ein view-internes Einzelfeld-Save nicht leistet).
+
+**Persistenz-Verhalten:**
+- **Wenn** ein PUT erfolgreich validiert, **dann** wird die Konfig-Datei
+  **atomar** geschrieben (kein Teilstand bei Absturz, kein 500 bei Bad-Input) und
+  der Buddy übernimmt den neuen Stand ohne Prozess-Neustart (Reload,
+  PLAN-32-Muster `admin/reload`).
+- **Roundtrip-Garantie (testbares Requirement, Pflicht):** Nach einem
+  erfolgreichen `PUT slot-modell=X` liefert ein anschließendes `load_config` /
+  `GET slot-modell` denselben Stand X. Ein gelöschter Slot fehlt danach **auch**
+  in `default_petrantwortlichkeiten` (Multi-Sektion-Konsistenz). Dieser Roundtrip
+  inkl. Defaults-Bereinigung ist als Test Pflicht.
+
+**Abgrenzung — Slot-CRUD JA, per-Slot-`cycle` NEIN (sauber trennen):**
+- **In P2 (PLAN-37):** Slot-CRUD = Slot **anlegen**, **löschen** und bei
+  bestehenden `art`/`icon`/`kind` (nicht `schluessel`) **ändern**.
+- **NICHT in P2 — bleibt RAT-4-Defer (decisions/RAT-4-259):** der per-Slot-
+  `cycle`-Filter, also eine familien-spezifische **Whitelist** „wer darf in
+  *diesem* Slot stehen" (altes #259 / E-PLAN-8). PLAN-7 V1.3 **Toggle-All** gilt
+  unverändert weiter: der Cycle iteriert über **alle** Personen der Registry
+  (Erwachsene und Kinder), jede Person ist in jeden Petrantwortlichkeits-Slot
+  zuweisbar; es gibt **keine** Slot-Whitelist. Diese per-Slot-`cycle`-
+  Generalisierung ist die vertagte Sache — NICHT das Slot-CRUD.
+
+**Auth:** PUBLIC / Netz-Trust (auth.md AUTH-6, `/api/v1/plan/*`), wie PLAN-36.
+
+*Tickets:* #1126 (Refs #259)
 
 ## 10. Tests
 

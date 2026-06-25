@@ -236,7 +236,7 @@ Eintrag nicht in AUTH-6, sondern in eine der ratifizierten Klassen.
 /api/v1/seiten                                (Trigger: Phase 2/3, mini-app-uebersicht-Migration)
 /api/v1/seiten/uebersicht                     (Trigger: Phase 2/3)
 /api/v1/seiten/mini-app-uebersicht            (Trigger: Phase 2/3)
-/api/v1/plan/*                                (Trigger: Plan-Buddy-Mini-App)
+/api/v1/plan/*                                (Trigger: belegter Auth-Schmerz ODER Familie-2-Instanz — härtet dann nach AUTH-3 via Cookie-Pairing #948; PWA-Auslieferung allein ist KEIN Trigger)
 /api/v1/familie/personen*                     (Trigger: Familien-Personen-Editor-Mini-App)
 /api/v1/familie/foto/*                        (Trigger: Familien-Foto-Mini-App)
 /api/v1/panels/*                              (Trigger: Phase 4 Panel-Mini-App)
