@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40" fill="none">
+  <!-- Mistral brand colors: orange/amber with dark base -->
+  <rect width="120" height="40" rx="6" fill="#FF7000"/>
+  <!-- Mistral block-pattern logomark (simplified squares) -->
+  <rect x="10" y="10" width="7" height="7" fill="#1A1A1A"/>
+  <rect x="19" y="10" width="7" height="7" fill="#1A1A1A"/>
+  <rect x="28" y="10" width="7" height="7" fill="#1A1A1A"/>
+  <rect x="10" y="19" width="7" height="7" fill="white"/>
+  <rect x="19" y="19" width="7" height="7" fill="#1A1A1A"/>
+  <rect x="28" y="19" width="7" height="7" fill="white"/>
+  <!-- Wordmark -->
+  <text x="42" y="25" font-family="system-ui,-apple-system,sans-serif" font-size="11" font-weight="700" fill="white" letter-spacing="0.3">Mistral</text>
+</svg>

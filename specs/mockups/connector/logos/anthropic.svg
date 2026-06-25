@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40" fill="none">
+  <!-- Anthropic brand: dark background, stylized A glyph -->
+  <rect width="120" height="40" rx="6" fill="#1A1A1A"/>
+  <!-- Anthropic triangle-A logomark (simplified) -->
+  <path d="M18 30L26 12L34 30H30.5L26 19.5L21.5 30H18Z" fill="white" opacity="0.95"/>
+  <path d="M22.5 25H29.5L28 22H24L22.5 25Z" fill="#1A1A1A"/>
+  <!-- Wordmark -->
+  <text x="40" y="25" font-family="system-ui,-apple-system,sans-serif" font-size="11" font-weight="600" fill="white" letter-spacing="0.5">anthropic</text>
+</svg>
