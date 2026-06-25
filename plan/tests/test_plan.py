@@ -4541,6 +4541,49 @@ def test_PLAN_37_put_slot_modell_roundtrip_anlegen(settings_client):
     assert any(s["schluessel"] == "hund" for s in g)
 
 
+def test_PLAN_6_PLAN_37_slot_label_roundtrip(settings_client):
+    """#1126: PUT mit `label` → GET zeigt label; ein Slot ohne label trägt
+    keins (kein null-Müll, kein Fehler). label persistiert über load_config."""
+    client, cfg_path = settings_client
+    slots = _slots_aus_config()
+    # Einen bestehenden Slot mit Anzeige-Namen versehen, einen ohne lassen.
+    bring = next(s for s in slots if s["schluessel"] == "bring")
+    bring["label"] = "Hinbringen"
+    pick = next(s for s in slots if s["schluessel"] == "pick")
+    pick.pop("label", None)
+    r = client.put(SLOT_MODELL_URL, json={"slots": slots})
+    assert r.status_code == 200, r.get_json()
+
+    # Config-Modell trägt das label (Slot.label), pick bleibt None.
+    cfg = config_mod.resolve(str(cfg_path))
+    assert cfg.slot("bring").label == "Hinbringen"
+    assert cfg.slot("pick").label is None
+
+    # GET zeigt label nur beim benannten Slot, nicht beim namenlosen.
+    g = client.get(SLOT_MODELL_URL).get_json()["slots"]
+    g_bring = next(s for s in g if s["schluessel"] == "bring")
+    g_pick = next(s for s in g if s["schluessel"] == "pick")
+    assert g_bring["label"] == "Hinbringen"
+    assert "label" not in g_pick
+
+    # Persistenz: kein null-Müll in der Datei beim namenlosen Slot.
+    obj = _read_json_file(cfg_path)
+    o_pick = next(s for s in obj["slots"] if s["schluessel"] == "pick")
+    assert "label" not in o_pick
+
+
+def test_PLAN_37_put_slot_modell_label_kein_string_400(settings_client):
+    """#1126: ein label, das kein String ist (z. B. Zahl) → HTTP 400,
+    nichts geschrieben."""
+    client, cfg_path = settings_client
+    vorher = open(str(cfg_path), encoding="utf-8").read()
+    slots = _slots_aus_config()
+    slots[0]["label"] = 123
+    r = client.put(SLOT_MODELL_URL, json={"slots": slots})
+    assert r.status_code == 400
+    assert open(str(cfg_path), encoding="utf-8").read() == vorher
+
+
 def test_PLAN_37_put_slot_modell_loeschen_bereinigt_defaults(settings_client):
     """AC-SLOT-INTEGRITÄT/Multi-Sektion: ein gelöschter Slot (bring fehlt im PUT)
     verschwindet UND seine default_verantwortlichkeiten-Einträge — sonst wirft
