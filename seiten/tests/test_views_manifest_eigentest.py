@@ -110,13 +110,17 @@ def test_alle_seiten_subpfade_routen_im_manifest_gelistet():
 
 
 def test_manifest_pfade_nur_unter_api_v1_seiten():
-    """SREG-2: seiten/views.json darf nur Pfade unter /api/v1/seiten/* listen —
-    der seiten-Service hat keine anderen Routen-Wurzeln."""
+    """SREG-2 / SREG-15: seiten/views.json listet Pfade nur unter /api/v1/seiten/*
+    — AUSNAHME: typ='pwa' (SREG-15) traegt den echten HTML-Render-Pfad als pfad
+    (z. B. /seiten/plan/einstellungen), weil die PWA-Route ausserhalb des
+    /api/v1/seiten-Praefixes liegt."""
     daten = _lade_views()
     fremde = [v["pfad"] for v in daten["views"]
-              if not v["pfad"].startswith("/api/v1/seiten")]
+              if not v["pfad"].startswith("/api/v1/seiten")
+              and v.get("typ") != "pwa"]
     assert not fremde, (
-        "seiten/views.json listet Pfade ausserhalb /api/v1/seiten/*: %s" % fremde)
+        "seiten/views.json listet Pfade ausserhalb /api/v1/seiten/* "
+        "(nur typ='pwa' ist erlaubt): %s" % fremde)
 
 
 def test_manifest_uebersicht_traegt_zielgruppe_eltern():

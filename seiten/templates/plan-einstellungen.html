@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<!-- PLAN-35: Plan-Einstellungs-PWA (P2) — Eltern-Homescreen-Seite.
+     PUBLIC / Netz-Trust (auth.md AUTH-6): kein Auth-Header, kein initData.
+     Editor-Bereiche: Slot-Modell (PLAN-37) + Default-Verantwortlichkeiten (PLAN-36).
+     PWA-Mantel: manifest.json + sw.js (SREG-15). -->
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#47503C">
+  <title>Plan-Einstellungen · XBuddy</title>
+
+  <!-- PWA-Manifest (absoluter Pfad, PLAN-35 / PWA-1) -->
+  <link rel="manifest" href="/seiten/plan/einstellungen/manifest.json">
+  <link rel="icon" href="/seiten/plan/einstellungen/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="/seiten/plan/einstellungen/icon-192.png">
+
+  <link rel="stylesheet" href="/api/v1/seiten/static/plan-einstellungen.css?v={{ build_id }}">
+  <!-- platform.js vor plan-einstellungen.js (RAT-16, auch wenn diese PWA keinen Telegram-Zweig nutzt) -->
+  <script src="/api/v1/seiten/static/platform.js?v={{ build_id }}"></script>
+  <script src="/api/v1/seiten/static/plan-einstellungen.js?v={{ build_id }}" defer></script>
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+</head>
+<body>
+  <!-- Kopfzeile -->
+  <div class="kopf">
+    <h1>Plan-Einstellungen</h1>
+    <span class="pwa-chip">PWA · Heimnetz</span>
+  </div>
+
+  <!-- Slot-Modell-Sektion (PLAN-37) -->
+  <section class="sektion" id="sektion-slots">
+    <h2>Slots <span class="hint">▲▼ Reihenfolge · Reiter antippen zum Bearbeiten</span></h2>
+    <div id="slots-container">
+      <p class="lade-hinweis">Wird geladen …</p>
+    </div>
+    <button type="button" id="slot-add-btn" class="btn add">＋ Slot hinzufügen</button>
+  </section>
+
+  <!-- Sticky Speichern-Leiste -->
+  <div class="speichern-leiste">
+    <span id="speichern-status" style="font-size:14px;color:#6b6760;align-self:center"></span>
+    <button type="button" id="speichern-btn" class="btn primary" disabled>Speichern</button>
+  </div>
+
+  <!-- ── Bottom-Sheets ─────────────────────────────────────────────────────── -->
+
+  <!-- Sheet: ARASAAC-Icon-Picker (für bestehende Slots — wie routine-anpassen) -->
+  <div class="sheet-overlay" id="sheet-icon" hidden aria-modal="true" role="dialog" aria-label="Piktogramm suchen">
+    <div class="sheet">
+      <div class="griff" aria-hidden="true"></div>
+      <h3>Piktogramm suchen</h3>
+      <input class="such-input" id="icon-suche" type="search"
+             placeholder="z. B. schwimmen, arzt, musik …" autocomplete="off">
+      <div class="icon-grid" id="icon-grid">
+        <p class="lade-hinweis">Suchbegriff eingeben …</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sheet: Personen-Picker -->
+  <div class="sheet-overlay" id="sheet-person" hidden aria-modal="true" role="dialog" aria-label="Person wählen">
+    <div class="sheet">
+      <div class="griff" aria-hidden="true"></div>
+      <h3 id="person-titel">Person wählen</h3>
+      <div class="person-grid" id="person-grid"></div>
+    </div>
+  </div>
+
+  <!-- Sheet: Neuer Slot — Typ-Wahl -->
+  <div class="sheet-overlay" id="sheet-typ" hidden aria-modal="true" role="dialog" aria-label="Neuer Slot — Typ wählen">
+    <div class="sheet">
+      <div class="griff" aria-hidden="true"></div>
+      <h3>Neuer Slot — welche Art?</h3>
+      <div class="typ-wahl">
+        <div class="opt aktiv" data-art="verantwortlich">
+          <b>Verantwortlich</b>
+          <span>Jemand ist zuständig (bringen, kochen). Mit Wer-macht-was je Wochentag.</span>
+        </div>
+        <div class="opt" data-art="kalender-read">
+          <b>Kalender-Termine</b>
+          <span>Termine eines Kindes aus dem Kalender — gefiltert über seinen Namen.</span>
+        </div>
+      </div>
+      <div class="sheet-btn-gruppe">
+        <button type="button" class="btn typ-wahl-abbrechen">Abbrechen</button>
+        <button type="button" class="btn primary typ-wahl-weiter">Weiter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sheet: Neuer Slot — Label + Icon-Picker (kombiniert) -->
+  <div class="sheet-overlay" id="sheet-neu-slot" hidden aria-modal="true" role="dialog" aria-label="Neuer Slot anlegen">
+    <div class="sheet">
+      <div class="griff" aria-hidden="true"></div>
+      <h3>Neuer Slot</h3>
+      <p style="font-size:14px;color:#6b6760;margin-bottom:12px">Name für den Slot eingeben — Piktogramm wird automatisch gesucht.</p>
+      <input class="neu-label-input" type="text" placeholder="z. B. Bringen, Kochen, Schlafen …" autocomplete="off">
+      <div class="icon-grid">
+        <p class="lade-hinweis">Suchbegriff eingeben …</p>
+      </div>
+      <div class="sheet-btn-gruppe">
+        <button type="button" class="btn neu-slot-abbrechen">Abbrechen</button>
+        <button type="button" class="btn primary neu-slot-anlegen" disabled>Anlegen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PWA-Naht: Service-Worker, Wake-Lock, Fullscreen (analog essen-einkauf, PLAN-35) -->
+  <script>
+    (function () {
+      'use strict';
+
+      // ── Service-Worker registrieren (PLAN-35 / PWA-1) ─────────────────────
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker
+            .register('/seiten/plan/einstellungen/sw.js', { scope: '/seiten/plan/einstellungen/' })
+            .catch(function (err) {
+              console.warn('[pwa] Service-Worker-Registrierung fehlgeschlagen:', err);
+            });
+        });
+      } else {
+        console.warn('[pwa] Service-Worker nicht unterstuetzt.');
+      }
+
+      // ── Wake-Lock (PWA-3 analog) ───────────────────────────────────────────
+      var _wakeLock = null;
+      function holeWakeLock() {
+        if (!('wakeLock' in navigator)) {
+          console.warn('[pwa] navigator.wakeLock nicht verfuegbar.');
+          return;
+        }
+        navigator.wakeLock.request('screen').then(function (lock) {
+          _wakeLock = lock;
+          lock.addEventListener('release', function () { _wakeLock = null; });
+        }).catch(function (err) {
+          console.warn('[pwa] wakeLock.request fehlgeschlagen:', err && err.message);
+        });
+      }
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') holeWakeLock();
+      });
+      holeWakeLock();
+
+      // ── Fullscreen aus User-Gesture (PWA-3 analog) ────────────────────────
+      function fordereFullscreen() {
+        var el = document.documentElement;
+        var req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+        if (!req) return;
+        try {
+          var p = req.call(el);
+          if (p && typeof p.catch === 'function') {
+            p.catch(function (err) {
+              console.warn('[pwa] requestFullscreen abgelehnt:', err && err.message);
+            });
+          }
+        } catch (err) {
+          console.warn('[pwa] requestFullscreen-Aufruf warf:', err);
+        }
+      }
+      function fullscreenAktiv() {
+        return !!(document.fullscreenElement || document.webkitFullscreenElement);
+      }
+      document.addEventListener('touchend', function () {
+        if (!fullscreenAktiv()) fordereFullscreen();
+      }, { passive: true });
+      document.addEventListener('click', function () {
+        if (!fullscreenAktiv()) fordereFullscreen();
+      });
+    })();
+  </script>
+</body>
+</html>
