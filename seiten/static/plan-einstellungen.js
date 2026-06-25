@@ -106,7 +106,7 @@ async function speichereDefaults(defaults) {
 }
 
 /**
- * ICONS-1: Icon-Suche ohne Auth-Header.
+ * ROU-31: Icon-Suche ohne Auth-Header.
  * GET /api/v1/icons/suche?q=…&max=12
  */
 async function sucheIcons(q) {
