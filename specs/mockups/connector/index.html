@@ -1,0 +1,1372 @@
+<!DOCTYPE html>
+<!--
+  Connector-Übersicht — Eltern-PWA Mockup (Gate B, Werft F3, Nic-Feedback V4)
+  Ticket #1086 · Revision 2026-06-25
+
+  Nic-Feedback V4 (Polish):
+    NF-V4-1  Mobile-First: @media (max-width:480px) — Tabellen als gestapelte Karten
+             (display:block + data-label::before), kein horizontales Scrollen auf 390px.
+    NF-V4-2  Slot-Namen komplett entfernt (Sektion 1 Tabelle + alle Sheets) — CONN-7 strenger.
+             Statt Slots: Buddy-Chips mit Emoji-Icon als bedeutungsvolle Info.
+
+  CONN-ID-Abdeckung:
+    CONN-1  Provider-Inventar (Sektion 1 Tabelle, aktiv/inaktiv)          → #schnittstellen
+    CONN-2  Live-Status "konfiguriert"-Badge                               → .badge-ok / .badge-leer
+    CONN-3  Verbrauch & Kosten (aggregiert per Vendor + per Buddy)         → #schnittstellen + #je-buddy
+    CONN-4  "Daten ab <Datum>"-Marker (Tail-Fenster)                       → .daten-fenster
+    CONN-5  Schreib-Aktionen via Deep-Link / beschreibende Modals          → .edit-btn → .sheet-overlay
+    CONN-6  V2-Platzhalter in Modals (nicht mehr als separate Section)     → .sheet .v2-hint
+    CONN-7  Kein Key-Klartext, keine Slot-Namen (nur gesetzt/leer + Buddy-Chips)  → badge + buddy-chips
+
+  Machart-Vorbild:
+    specs/mockups/plan-einstellungen/slots.html — Tabelle + Edit-Icon + Bottom-Sheet
+    seiten/static/plan-einstellungen.css        — .sheet-overlay, .griff, .feldzeile, .btn
+    seiten/static/routine-anpassen.css          — .badge, .sektion-header, Farb-Tokens
+
+  Nic-Feedback V3:
+    NF-V3-1  Sektion 1 jetzt auch Tabelle (war Cards)
+    NF-V3-2  "+ Neue Schnittstelle"-Button (oben + unten) → Modal mit Flow-Beschreibung
+    NF-V3-3  Sektion 2 eine Zeile PRO FUNKTION (hoerspiel: 2 Zeilen LLM+TTS)
+    NF-V3-4  V2-Direktkonfigurations-Block entfernt (V2-Hinweise in Modals)
+    NF-V3-5  Edit-Stift am Zeilenende beider Tabellen (plan-einstellungen-Muster)
+    NF-V3-6  Buddy-Icons aus views.json (arasaac): kibuddy=37404, hoerspiel=5915, eltern-chat=chat-emoji
+-->
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connector — KI-Anbieter</title>
+  <link rel="stylesheet" href="./style.css">
+  <style>
+    /* ── Tabellen-Machart (plan-einstellungen-Spiegel) ──────────────────── */
+    .conn-table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      box-shadow: var(--shadow-soft);
+    }
+    .conn-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: var(--fs-14);
+      background: var(--surface);
+    }
+    .conn-table thead th {
+      background: var(--surface-2);
+      color: var(--text-2);
+      font-size: var(--fs-12);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: var(--space-3) var(--space-4);
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .conn-table thead th.num { text-align: right; }
+    .conn-table thead th.act { text-align: center; width: 48px; }
+    .conn-table tbody tr {
+      border-bottom: 1px solid var(--border-soft);
+      transition: background 120ms ease;
+    }
+    .conn-table tbody tr:hover { background: var(--surface-soft); }
+    .conn-table tbody tr.inactive { opacity: 0.6; }
+    .conn-table td {
+      padding: var(--space-3) var(--space-4);
+      vertical-align: middle;
+    }
+    .conn-table td.num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+    }
+    .conn-table td.act { text-align: center; }
+    .conn-table tfoot td {
+      background: var(--primary);
+      color: #fff;
+      font-weight: 700;
+      padding: var(--space-3) var(--space-4);
+      font-size: var(--fs-14);
+    }
+    .conn-table tfoot td.num {
+      font-size: var(--fs-16);
+      color: #fff;
+    }
+
+    /* ── Tabellen-Abschlusszeile "+ Neue Schnittstelle" ─────────────────── */
+    .conn-table .add-row td {
+      background: var(--surface-soft);
+      border-top: 1px dashed var(--border-strong);
+    }
+    .add-row-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: var(--fs-13, 13px);
+      font-weight: 600;
+      color: var(--primary);
+      border: 1px dashed var(--primary);
+      border-radius: var(--radius-full);
+      padding: 4px 14px;
+      background: transparent;
+      cursor: pointer;
+      transition: background 120ms ease;
+    }
+    .add-row-btn:hover { background: #eef3ea; }
+
+    /* ── Edit-Stift-Button (plan-einstellungen-Muster) ───────────────────── */
+    .edit-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      color: var(--text-2);
+      cursor: pointer;
+      transition: background 120ms ease, border-color 120ms ease;
+      flex-shrink: 0;
+    }
+    .edit-btn:hover {
+      background: var(--bg-soft);
+      border-color: var(--border-strong);
+      color: var(--primary);
+    }
+    .edit-btn svg {
+      width: 14px;
+      height: 14px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+    }
+
+    /* ── Vendor-Zelle in Tabelle ─────────────────────────────────────────── */
+    .vendor-cell {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      min-width: 140px;
+    }
+    .vendor-logo-sm {
+      width: 72px;
+      height: 22px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+    .vendor-label-generic {
+      font-size: var(--fs-12);
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
+
+    /* ── Buddy-Icon-Zelle ────────────────────────────────────────────────── */
+    .buddy-cell {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .buddy-icon-wrap {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: var(--bg-soft);
+      border: 1px solid var(--border-soft);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 18px;
+      line-height: 1;
+      overflow: hidden;
+    }
+    .buddy-icon-wrap img {
+      width: 28px;
+      height: 28px;
+      object-fit: contain;
+    }
+
+    /* ── Funktion-Badge ──────────────────────────────────────────────────── */
+    .fn-badge {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      padding: 2px 7px;
+      border-radius: var(--radius-full);
+      white-space: nowrap;
+    }
+    .fn-badge--llm {
+      background: #e8ede3;
+      color: var(--primary-ink, #2E3527);
+      border: 1px solid #c8d4c0;
+    }
+    .fn-badge--tts {
+      background: #e5ecf8;
+      color: #1a4a9c;
+      border: 1px solid #b8cef0;
+    }
+
+    /* ── Modell-Tag inline ───────────────────────────────────────────────── */
+    .model-mono {
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 12px;
+      padding: 2px 6px;
+      border-radius: 5px;
+      background: var(--bg-soft);
+      color: var(--text-2);
+      border: 1px solid var(--border-soft);
+      white-space: nowrap;
+    }
+    .model-mono--dim { color: var(--text-3); }
+
+    /* ── Telemetrie-Hinweis ──────────────────────────────────────────────── */
+    .tele-hint {
+      font-size: 11px;
+      color: var(--warning);
+      font-style: italic;
+      font-weight: 500;
+    }
+
+    /* ── Nutzende-Buddy-Chips in Sektion 1 ──────────────────────────────── */
+    .buddy-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    /* ── Slot-Name inline ────────────────────────────────────────────────── */
+    .slot-name-inline {
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 11px;
+      color: var(--text-2);
+      background: var(--bg);
+      border: 1px solid var(--border-soft);
+      border-radius: 5px;
+      padding: 2px 6px;
+      word-break: break-all;
+      display: block;
+      margin-top: 3px;
+    }
+
+    /* ── 7-Tage-Chart Row ────────────────────────────────────────────────── */
+    .chart-row { display: none; }
+    .chart-row.open { display: table-row; }
+    .chart-expand-cell {
+      padding: 0 var(--space-4) var(--space-3);
+      background: var(--surface-soft);
+    }
+    .chart-inner {
+      padding: var(--space-3) var(--space-4);
+      background: var(--surface);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-sm);
+      margin-top: var(--space-2);
+    }
+    .chart-title-sm {
+      font-size: var(--fs-12);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: var(--space-3);
+    }
+    .chart-close-hint {
+      font-size: 11px;
+      color: var(--text-3);
+      margin-top: var(--space-1);
+      text-align: center;
+    }
+    /* Make rows with expandable charts show pointer */
+    .conn-table tr.clickable { cursor: pointer; }
+
+    /* ── Bottom-Sheet (plan-einstellungen-Muster) ────────────────────────── */
+    .sheet-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(30, 26, 20, 0.4);
+      display: none;
+      z-index: 50;
+    }
+    .sheet-overlay.auf { display: block; }
+    .sheet {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      background: var(--bg, #F5F1E8);
+      z-index: 51;
+      border-radius: 24px 24px 0 0;
+      padding: var(--space-5) var(--space-4) var(--space-8);
+      max-width: 800px;
+      margin: 0 auto;
+      transform: translateY(100%);
+      transition: transform 220ms ease;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 -8px 32px rgba(44, 42, 39, 0.16);
+    }
+    .sheet-overlay.auf .sheet { transform: translateY(0); }
+    .griff {
+      width: 40px;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border-strong, #D5CDBF);
+      margin: 0 auto var(--space-4);
+    }
+    .sheet h3 {
+      font-size: var(--fs-18);
+      font-weight: 600;
+      margin-bottom: var(--space-4);
+      color: var(--text);
+    }
+    .sheet p, .sheet .sheet-body {
+      font-size: var(--fs-14);
+      color: var(--text-2);
+      line-height: 1.55;
+      margin-bottom: var(--space-4);
+    }
+    .sheet .sheet-btn-gruppe {
+      display: flex;
+      justify-content: flex-end;
+      gap: var(--space-3);
+      margin-top: var(--space-5);
+    }
+    .sheet .btn {
+      font-family: inherit;
+      font-size: var(--fs-14);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: var(--radius-sm, 12px);
+      padding: 10px 20px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 120ms ease;
+    }
+    .sheet .btn:hover { background: var(--bg-soft); }
+    .sheet .btn.primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+    .sheet .btn.primary:hover { filter: brightness(1.08); }
+    .sheet .btn:disabled, .sheet .btn.disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .sheet .feldzeile {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-3);
+      padding: var(--space-3) 0;
+      border-bottom: 1px solid var(--border-soft, #efe8dc);
+    }
+    .sheet .feldzeile:last-of-type { border-bottom: none; }
+    .sheet .feldname {
+      font-size: var(--fs-14);
+      color: var(--text-3);
+      width: 100px;
+      flex: 0 0 auto;
+      font-weight: 500;
+      padding-top: 2px;
+    }
+    .sheet .feldwert {
+      font-size: var(--fs-14);
+      color: var(--text);
+      flex: 1;
+    }
+    .sheet .v2-hint {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-2);
+      font-size: var(--fs-13, 13px);
+      color: var(--text-2);
+      background: #fdf0dc;
+      border: 1px solid #f0d5a0;
+      border-radius: var(--radius-sm);
+      padding: var(--space-3) var(--space-4);
+      margin-top: var(--space-4);
+    }
+    .sheet .v2-hint svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      stroke: var(--warning);
+      fill: none;
+      stroke-width: 2;
+      margin-top: 1px;
+    }
+    .sheet .chat-link-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: var(--space-2) var(--space-4);
+      background: var(--primary);
+      color: #fff;
+      border-radius: var(--radius-sm);
+      font-size: var(--fs-14);
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+      transition: background 120ms ease;
+      margin-top: var(--space-4);
+    }
+    .sheet .chat-link-btn:hover { background: var(--primary-light); }
+    .sheet .chat-link-btn svg {
+      width: 14px; height: 14px;
+      stroke: rgba(255,255,255,.9);
+      fill: none;
+      stroke-width: 2;
+    }
+    .sheet .info-hint {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-2);
+      font-size: var(--fs-13, 13px);
+      color: var(--text-2);
+      background: #eaf2f8;
+      border: 1px solid #c8dde8;
+      border-radius: var(--radius-sm);
+      padding: var(--space-3) var(--space-4);
+      margin-top: var(--space-3);
+    }
+    .sheet .info-hint svg {
+      width: 16px; height: 16px;
+      flex-shrink: 0;
+      stroke: var(--info, #668EA8);
+      fill: none;
+      stroke-width: 2;
+      margin-top: 1px;
+    }
+
+    /* ── "+ Neue Schnittstelle"-Button oberhalb der Tabelle ─────────────── */
+    .section-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: calc(-1 * var(--space-2));
+    }
+    .add-btn-top {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: var(--fs-13, 13px);
+      font-weight: 600;
+      color: var(--primary);
+      border: 1px solid var(--primary);
+      border-radius: var(--radius-full);
+      padding: 5px 14px;
+      background: transparent;
+      cursor: pointer;
+      transition: background 120ms ease;
+    }
+    .add-btn-top:hover { background: #eef3ea; }
+
+    /* ── Sektion-Nummer-Marker ───────────────────────────────────────────── */
+    .sektion-marker {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+    }
+    .sektion-nummer {
+      flex-shrink: 0;
+      width: 24px;
+      height: 24px;
+      border-radius: var(--radius-full);
+      background: var(--primary);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── Cursor hint ─────────────────────────────────────────────────────── */
+    .conn-table tr.clickable:hover td { background: var(--surface-soft); }
+
+    /* ── Responsive: Sheet auf kleinen Screens ──────────────────────────── */
+    @media (max-width: 600px) {
+      .sheet { padding: var(--space-4) var(--space-3) var(--space-7); }
+      .sheet .feldzeile { flex-wrap: wrap; }
+      .sheet .feldname { width: 100%; }
+      .vendor-logo-sm { width: 56px; }
+    }
+
+    /* ── Mobile-First: Tabellen-Breakpoint (≤480px) ─────────────────────── */
+    /*
+      Mechanik: thead wird ausgeblendet, jede tbody-Zeile wird per
+      display:block zur Karte. Jede td bekommt über data-label=""
+      eine CSS-generierte Beschriftung (::before). Chart-Rows und
+      Add-Row bleiben im normalen Flow.
+    */
+    @media (max-width: 480px) {
+      /* ── Sektion 1: Schnittstellen-Tabelle ── */
+      .conn-table-wrap { overflow-x: hidden; }
+
+      .conn-table thead { display: none; }
+
+      .conn-table tbody tr:not(.chart-row):not(.add-row) {
+        display: block;
+        padding: var(--space-3) var(--space-4);
+        border-bottom: 1px solid var(--border);
+        position: relative;
+      }
+      .conn-table tbody tr:not(.chart-row):not(.add-row) td {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--space-3);
+        padding: var(--space-1) 0;
+        border: none;
+        text-align: left;
+      }
+      /* Label-Spalte links (::before aus data-label) */
+      .conn-table tbody tr:not(.chart-row):not(.add-row) td[data-label]::before {
+        content: attr(data-label);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--text-3);
+        min-width: 80px;
+        flex-shrink: 0;
+        padding-top: 2px;
+      }
+      /* Aktions-Zelle (Edit-Stift): absolute oben-rechts */
+      .conn-table tbody tr:not(.chart-row):not(.add-row) td.act {
+        position: absolute;
+        top: var(--space-3);
+        right: var(--space-4);
+        padding: 0;
+        width: auto;
+      }
+      .conn-table tbody tr:not(.chart-row):not(.add-row) td.act::before {
+        display: none;
+      }
+      /* num-Ausrichtung links auf Mobile */
+      .conn-table td.num { text-align: left; }
+      /* Vendor-Zelle: kein min-width */
+      .vendor-cell { min-width: unset; }
+
+      /* Chart-Row: colspan spielt keine Rolle mehr bei block-Zellen,
+         chart-row bleibt table-row damit colspan-td korrekt läuft */
+      .chart-row td.chart-expand-cell { display: table-cell; padding: var(--space-2) var(--space-3); }
+
+      /* Add-Row als Block */
+      .conn-table .add-row { display: table-row; }
+
+      /* ── Sektion 2: Je-Buddy-Tabelle ── */
+      /* Gleiche Mechanik: thead verstecken, Zeilen als Karte */
+      .conn-table[aria-label="Verbrauch je Buddy"] thead { display: none; }
+      .conn-table[aria-label="Verbrauch je Buddy"] tbody tr:not(.chart-row) {
+        display: block;
+        padding: var(--space-3) var(--space-4);
+        border-bottom: 1px solid var(--border);
+        position: relative;
+      }
+      .conn-table[aria-label="Verbrauch je Buddy"] tbody tr:not(.chart-row) td {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--space-3);
+        padding: var(--space-1) 0;
+        border: none;
+        text-align: left;
+      }
+      .conn-table[aria-label="Verbrauch je Buddy"] tbody tr:not(.chart-row) td[data-label]::before {
+        content: attr(data-label);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--text-3);
+        min-width: 80px;
+        flex-shrink: 0;
+        padding-top: 2px;
+      }
+      .conn-table[aria-label="Verbrauch je Buddy"] tbody tr:not(.chart-row) td.act {
+        position: absolute;
+        top: var(--space-3);
+        right: var(--space-4);
+        padding: 0;
+        width: auto;
+      }
+      .conn-table[aria-label="Verbrauch je Buddy"] tbody tr:not(.chart-row) td.act::before {
+        display: none;
+      }
+      .conn-table[aria-label="Verbrauch je Buddy"] td.num { text-align: left; }
+
+      /* tfoot: als Block-Karte */
+      .conn-table tfoot tr { display: block; padding: var(--space-3) var(--space-4); }
+      .conn-table tfoot td { display: block; padding: 0; border: none; }
+      .conn-table tfoot td.num { font-size: var(--fs-16); padding-top: var(--space-1); }
+    }
+  </style>
+</head>
+<body class="xb" data-stage="parent">
+
+  <!-- ══ KOPFZEILE ══════════════════════════════════════════════════════════ -->
+  <header class="page-header">
+    <div class="header-inner">
+      <div class="header-title-row">
+        <span class="header-back" aria-label="Zurück">&#8592;</span>
+        <h1>KI-Anbieter</h1>
+        <span class="header-chip">Eltern-Plus</span>
+      </div>
+      <p class="header-sub">Read-only Übersicht · Schreib-Aktionen via Eltern-Chat (CONN-5) · Zeile anklicken = 7-Tage-Verlauf</p>
+    </div>
+  </header>
+
+  <main class="page-main">
+
+    <!-- CONN-4: Daten-Marker -->
+    <div style="display:flex;justify-content:flex-end;">
+      <span class="daten-fenster">Daten ab 2026-05-26 · letzte 30 Tage</span>
+    </div>
+
+    <!-- ══ SEKTION 1 — SCHNITTSTELLEN & TOKENS ══════════════════════════════ -->
+    <section id="schnittstellen" class="sektion">
+      <div class="sektion-marker">
+        <span class="sektion-nummer">1</span>
+        <h2 class="sektion-titel">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+          </svg>
+          Schnittstellen &amp; Tokens
+        </h2>
+      </div>
+      <p class="sektion-beschr">Eine Zeile pro externer Verbindung — aggregiert über alle Buddys, die sie nutzen.</p>
+
+      <div class="section-actions">
+        <button class="add-btn-top" onclick="openSheet('sheet-neue-schnittstelle')" aria-label="Neue Schnittstelle anlegen">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Neue Schnittstelle
+        </button>
+      </div>
+
+      <div class="conn-table-wrap">
+        <table class="conn-table" aria-label="Schnittstellen & Tokens">
+          <thead>
+            <tr>
+              <th>Anbieter</th>
+              <th>Status</th>
+              <th>Nutzende Buddys</th>
+              <th class="num">Abgerechnet</th>
+              <th class="act" title="Bearbeiten"></th>
+            </tr>
+          </thead>
+          <tbody>
+
+            <!-- ── Anthropic ── -->
+            <tr class="clickable" onclick="toggleChart(event,'chart-anthropic')" aria-expanded="false">
+              <td data-label="Anbieter">
+                <div class="vendor-cell">
+                  <img class="vendor-logo-sm" src="./logos/anthropic.svg" alt="Anthropic">
+                </div>
+              </td>
+              <td data-label="Status"><span class="badge badge-ok">konfiguriert</span></td>
+              <td data-label="Buddys">
+                <div class="buddy-chips">
+                  <span class="buddy-chip">💬 eltern-chat</span>
+                  <span class="buddy-chip buddy-chip--hoerspiel">🎧 hoerspiel</span>
+                  <span class="buddy-chip buddy-chip--kibuddy">🤖 kibuddy</span>
+                </div>
+              </td>
+              <td class="num" data-label="Abgerechnet">0,8595 €</td>
+              <td class="act">
+                <button class="edit-btn" onclick="event.stopPropagation(); openSheet('sheet-anbieter-anthropic')" title="Anthropic bearbeiten" aria-label="Anthropic bearbeiten">
+                  <!-- Stift-Icon (Lucide pencil) -->
+                  <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+              </td>
+            </tr>
+            <tr class="chart-row" id="chart-anthropic">
+              <td class="chart-expand-cell" colspan="5">
+                <div class="chart-inner">
+                  <div class="chart-title-sm">Verlauf — letzte 7 Tage (Anthropic)</div>
+                  <!-- Real data: 2026-06-24 = 0.1632 EUR, 2026-06-25 = 0.6963 EUR. max=0.70 -->
+                  <svg width="100%" viewBox="0 0 308 80" xmlns="http://www.w3.org/2000/svg" aria-label="7-Tage Balkendiagramm Anthropic">
+                    <text x="0"   y="72" font-size="8" fill="#9A938A">19.6</text><rect x="12"  y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="44"  y="72" font-size="8" fill="#9A938A">20.6</text><rect x="56"  y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="88"  y="72" font-size="8" fill="#9A938A">21.6</text><rect x="100" y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="132" y="72" font-size="8" fill="#9A938A">22.6</text><rect x="144" y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="176" y="72" font-size="8" fill="#9A938A">23.6</text><rect x="188" y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <!-- 24.6: 0.1632/0.70*55 ≈ 12.8px -->
+                    <text x="220" y="72" font-size="8" fill="#2B2A28">24.6</text>
+                    <rect x="232" y="57" width="24" height="13" fill="#47503C" rx="2" opacity="0.8"/>
+                    <text x="244" y="54" font-size="7" fill="#47503C" text-anchor="middle">0,16€</text>
+                    <!-- 25.6: 0.6963/0.70*55 ≈ 54.7px -->
+                    <text x="264" y="72" font-size="8" fill="#2B2A28" font-weight="600">25.6</text>
+                    <rect x="276" y="12" width="24" height="55" fill="#47503C" rx="2" opacity="0.95"/>
+                    <text x="288" y="9"  font-size="7" fill="#47503C" text-anchor="middle">0,70€</text>
+                  </svg>
+                  <p class="chart-close-hint">Zeile erneut klicken zum Schließen</p>
+                </div>
+              </td>
+            </tr>
+
+            <!-- ── Mistral ── -->
+            <tr class="clickable" onclick="toggleChart(event,'chart-mistral')" aria-expanded="false">
+              <td data-label="Anbieter">
+                <div class="vendor-cell">
+                  <img class="vendor-logo-sm" src="./logos/mistral.svg" alt="Mistral">
+                </div>
+              </td>
+              <td data-label="Status"><span class="badge badge-ok">konfiguriert</span></td>
+              <td data-label="Buddys">
+                <div class="buddy-chips">
+                  <span class="buddy-chip">💬 eltern-chat</span>
+                </div>
+              </td>
+              <td class="num" data-label="Abgerechnet">0,2907 €</td>
+              <td class="act">
+                <button class="edit-btn" onclick="event.stopPropagation(); openSheet('sheet-anbieter-mistral')" title="Mistral bearbeiten" aria-label="Mistral bearbeiten">
+                  <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+              </td>
+            </tr>
+            <tr class="chart-row" id="chart-mistral">
+              <td class="chart-expand-cell" colspan="5">
+                <div class="chart-inner">
+                  <div class="chart-title-sm">Verlauf — letzte 7 Tage (Mistral)</div>
+                  <!-- Real data: 2026-06-24 = 0.0925 EUR, 2026-06-25 = 0.1983 EUR. max=0.20 -->
+                  <svg width="100%" viewBox="0 0 308 80" xmlns="http://www.w3.org/2000/svg" aria-label="7-Tage Balkendiagramm Mistral">
+                    <text x="0"   y="72" font-size="8" fill="#9A938A">19.6</text><rect x="12"  y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="44"  y="72" font-size="8" fill="#9A938A">20.6</text><rect x="56"  y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="88"  y="72" font-size="8" fill="#9A938A">21.6</text><rect x="100" y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="132" y="72" font-size="8" fill="#9A938A">22.6</text><rect x="144" y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="176" y="72" font-size="8" fill="#9A938A">23.6</text><rect x="188" y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <!-- 24.6: 0.0925/0.20*55 ≈ 25.4px -->
+                    <text x="220" y="72" font-size="8" fill="#2B2A28">24.6</text>
+                    <rect x="232" y="42" width="24" height="25" fill="#FF7000" rx="2" opacity="0.8"/>
+                    <text x="244" y="39" font-size="7" fill="#C55500" text-anchor="middle">0,09€</text>
+                    <!-- 25.6: 0.1983/0.20*55 ≈ 54.5px -->
+                    <text x="264" y="72" font-size="8" fill="#2B2A28" font-weight="600">25.6</text>
+                    <rect x="276" y="12" width="24" height="55" fill="#FF7000" rx="2" opacity="0.9"/>
+                    <text x="288" y="9"  font-size="7" fill="#C55500" text-anchor="middle">0,20€</text>
+                  </svg>
+                  <p class="chart-close-hint">Zeile erneut klicken zum Schließen</p>
+                </div>
+              </td>
+            </tr>
+
+            <!-- ── Azure OpenAI TTS — aktiv ── -->
+            <tr class="clickable" onclick="toggleChart(event,'chart-azure')" aria-expanded="false">
+              <td data-label="Anbieter">
+                <div class="vendor-cell">
+                  <img class="vendor-logo-sm" src="./logos/azure.svg" alt="Azure OpenAI">
+                </div>
+              </td>
+              <td data-label="Status">
+                <span class="badge" style="background:#e5ecf8;color:#1a4a9c;border:1px solid #b8cef0;">aktiv (TTS)</span>
+              </td>
+              <td data-label="Buddys">
+                <div class="buddy-chips">
+                  <span class="buddy-chip buddy-chip--hoerspiel">🎧 hoerspiel</span>
+                </div>
+              </td>
+              <td class="num" data-label="Abgerechnet">
+                <span class="tele-hint">Telemetrie folgt</span>
+              </td>
+              <td class="act">
+                <button class="edit-btn" onclick="event.stopPropagation(); openSheet('sheet-anbieter-azure')" title="Azure TTS bearbeiten" aria-label="Azure TTS bearbeiten">
+                  <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+              </td>
+            </tr>
+            <tr class="chart-row" id="chart-azure">
+              <td class="chart-expand-cell" colspan="5">
+                <div class="chart-inner">
+                  <div class="chart-title-sm">Verlauf — letzte 7 Tage (Azure TTS)</div>
+                  <p style="font-size:var(--fs-13,13px);color:var(--text-2);">TTS-Calls landen noch nicht in <code class="inline">provider_calls.jsonl</code> (LLMP-S6). Verlauf folgt nach Telemetrie-Anbindung.</p>
+                  <p class="chart-close-hint">Zeile erneut klicken zum Schließen</p>
+                </div>
+              </td>
+            </tr>
+
+            <!-- ── hoerspiel-llm-provider — inaktiv/Altlast ── -->
+            <tr class="inactive">
+              <td data-label="Anbieter">
+                <div class="vendor-cell">
+                  <span class="vendor-label-generic">Generisch</span>
+                </div>
+              </td>
+              <td data-label="Status"><span class="badge badge-inactive">inaktiv / Altlast</span></td>
+              <td data-label="Buddys">
+                <div class="buddy-chips">
+                  <span class="buddy-chip buddy-chip--dim">🎧 hoerspiel</span>
+                </div>
+              </td>
+              <td class="num" data-label="Abgerechnet" style="color:var(--text-3);">—</td>
+              <td class="act">
+                <button class="edit-btn" onclick="openSheet('sheet-anbieter-legacy')" title="Altlast-Details" aria-label="Altlast-Details" style="opacity:.55;">
+                  <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+              </td>
+            </tr>
+
+            <!-- ── Add-Row ── -->
+            <tr class="add-row">
+              <td colspan="5" style="text-align:center;padding:var(--space-3) var(--space-4);">
+                <button class="add-row-btn" onclick="openSheet('sheet-neue-schnittstelle')">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Neue Schnittstelle anlegen
+                </button>
+              </td>
+            </tr>
+
+          </tbody>
+        </table>
+      </div>
+
+      <p class="table-note">CONN-7 (strenger): Kein Key-Klartext, keine Slot-Namen — nur Status „konfiguriert/leer" und nutzende Buddys werden angezeigt.</p>
+    </section>
+
+
+    <!-- ══ SEKTION 2 — JE BUDDY ══════════════════════════════════════════════ -->
+    <section id="je-buddy" class="sektion">
+      <div class="sektion-marker">
+        <span class="sektion-nummer">2</span>
+        <h2 class="sektion-titel">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          Je Buddy
+        </h2>
+      </div>
+      <p class="sektion-beschr">Verbrauch und Provider-Zuweisung pro Buddy und Funktion. Zeile anklicken = 7-Tage-Verlauf. Stift = Details/Wechsel.</p>
+
+      <div class="conn-table-wrap">
+        <table class="conn-table" aria-label="Verbrauch je Buddy">
+          <thead>
+            <tr>
+              <th>Buddy</th>
+              <th>Funktion</th>
+              <th>Aktuell genutzt</th>
+              <th class="num">Calls</th>
+              <th class="num">Kosten (€)</th>
+              <th class="act" title="Bearbeiten"></th>
+            </tr>
+          </thead>
+          <tbody>
+
+            <!-- ── eltern-chat / LLM ── -->
+            <tr class="clickable" onclick="toggleChart(event,'chart-eltern')" aria-expanded="false">
+              <td data-label="Buddy">
+                <div class="buddy-cell">
+                  <!-- Icon: eltern-chat = Chat/Sprech-Symbol (kein arasaac, Text-Emoji-Fallback) -->
+                  <div class="buddy-icon-wrap" title="eltern-chat">💬</div>
+                  <span style="font-weight:600;font-size:var(--fs-14);">eltern-chat</span>
+                </div>
+              </td>
+              <td data-label="Funktion"><span class="fn-badge fn-badge--llm">LLM</span></td>
+              <td data-label="Genutzt">
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                  <span style="font-size:var(--fs-12);color:var(--text-3);font-weight:600;">Mistral (aktiv)</span>
+                  <code class="model-mono">mistral-medium-2508</code>
+                  <span style="font-size:var(--fs-12);color:var(--text-3);">+ Fallback</span>
+                  <code class="model-mono model-mono--dim">claude-opus-4-7</code>
+                </div>
+              </td>
+              <td class="num" data-label="Calls">14</td>
+              <td class="num" data-label="Kosten">0,4509 €</td>
+              <td class="act">
+                <button class="edit-btn" onclick="event.stopPropagation(); openSheet('sheet-buddy-eltern-llm')" title="eltern-chat LLM bearbeiten" aria-label="eltern-chat LLM bearbeiten">
+                  <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+              </td>
+            </tr>
+            <tr class="chart-row" id="chart-eltern">
+              <td class="chart-expand-cell" colspan="6">
+                <div class="chart-inner">
+                  <div class="chart-title-sm">Verlauf — letzte 7 Tage (eltern-chat)</div>
+                  <!-- Real: 2026-06-24 = 0.2527 EUR, 2026-06-25 = 0.1983 EUR. max=0.26 -->
+                  <svg width="100%" viewBox="0 0 308 80" xmlns="http://www.w3.org/2000/svg" aria-label="7-Tage eltern-chat">
+                    <text x="0"   y="72" font-size="8" fill="#9A938A">19.6</text><rect x="12"  y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="44"  y="72" font-size="8" fill="#9A938A">20.6</text><rect x="56"  y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="88"  y="72" font-size="8" fill="#9A938A">21.6</text><rect x="100" y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="132" y="72" font-size="8" fill="#9A938A">22.6</text><rect x="144" y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="176" y="72" font-size="8" fill="#9A938A">23.6</text><rect x="188" y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <!-- 24.6: 0.2527/0.26*55 ≈ 53.5px -->
+                    <text x="220" y="72" font-size="8" fill="#2B2A28">24.6</text>
+                    <rect x="232" y="13" width="24" height="54" fill="#47503C" rx="2" opacity="0.85"/>
+                    <text x="244" y="10" font-size="7" fill="#47503C" text-anchor="middle">0,25€</text>
+                    <!-- 25.6: 0.1983/0.26*55 ≈ 42px -->
+                    <text x="264" y="72" font-size="8" fill="#2B2A28" font-weight="600">25.6</text>
+                    <rect x="276" y="25" width="24" height="42" fill="#47503C" rx="2" opacity="0.75"/>
+                    <text x="288" y="22" font-size="7" fill="#47503C" text-anchor="middle">0,20€</text>
+                  </svg>
+                  <p class="chart-close-hint">Zeile erneut klicken zum Schließen</p>
+                </div>
+              </td>
+            </tr>
+
+            <!-- ── hoerspiel / LLM ── -->
+            <tr class="clickable" onclick="toggleChart(event,'chart-hoerspiel-llm')" aria-expanded="false">
+              <td data-label="Buddy">
+                <div class="buddy-cell">
+                  <!-- Icon: hoerspiel = arasaac/5915.png (Kopfhörer) — Emoji-Fallback 🎧 -->
+                  <div class="buddy-icon-wrap" title="hoerspiel">🎧</div>
+                  <span style="font-weight:600;font-size:var(--fs-14);">hoerspiel</span>
+                </div>
+              </td>
+              <td data-label="Funktion"><span class="fn-badge fn-badge--llm">LLM</span></td>
+              <td data-label="Genutzt">
+                <code class="model-mono">claude-opus-4-7</code>
+                <div style="font-size:var(--fs-12);color:var(--text-3);margin-top:3px;">Anthropic</div>
+              </td>
+              <td class="num" data-label="Calls">3</td>
+              <td class="num" data-label="Kosten">0,6963 €</td>
+              <td class="act">
+                <button class="edit-btn" onclick="event.stopPropagation(); openSheet('sheet-buddy-hoerspiel-llm')" title="hoerspiel LLM bearbeiten" aria-label="hoerspiel LLM bearbeiten">
+                  <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+              </td>
+            </tr>
+            <tr class="chart-row" id="chart-hoerspiel-llm">
+              <td class="chart-expand-cell" colspan="6">
+                <div class="chart-inner">
+                  <div class="chart-title-sm">Verlauf — letzte 7 Tage (hoerspiel LLM)</div>
+                  <!-- Real: 2026-06-24 = 0 EUR, 2026-06-25 = 0.6963 EUR. max=0.70 -->
+                  <svg width="100%" viewBox="0 0 308 80" xmlns="http://www.w3.org/2000/svg" aria-label="7-Tage hoerspiel LLM">
+                    <text x="0"   y="72" font-size="8" fill="#9A938A">19.6</text><rect x="12"  y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="44"  y="72" font-size="8" fill="#9A938A">20.6</text><rect x="56"  y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="88"  y="72" font-size="8" fill="#9A938A">21.6</text><rect x="100" y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="132" y="72" font-size="8" fill="#9A938A">22.6</text><rect x="144" y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="176" y="72" font-size="8" fill="#9A938A">23.6</text><rect x="188" y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="220" y="72" font-size="8" fill="#9A938A">24.6</text><rect x="232" y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <!-- 25.6: 0.6963/0.70*55 ≈ 54.6px -->
+                    <text x="264" y="72" font-size="8" fill="#2B2A28" font-weight="600">25.6</text>
+                    <rect x="276" y="12" width="24" height="55" fill="#2a4080" rx="2" opacity="0.85"/>
+                    <text x="288" y="9"  font-size="7" fill="#2a4080" text-anchor="middle">0,70€</text>
+                  </svg>
+                  <p class="chart-close-hint">Zeile erneut klicken zum Schließen</p>
+                </div>
+              </td>
+            </tr>
+
+            <!-- ── hoerspiel / TTS ── -->
+            <tr>
+              <td data-label="Buddy">
+                <div class="buddy-cell">
+                  <div class="buddy-icon-wrap" title="hoerspiel" style="opacity:.6;">🎧</div>
+                  <span style="font-weight:600;font-size:var(--fs-14);color:var(--text-2);">hoerspiel</span>
+                </div>
+              </td>
+              <td data-label="Funktion"><span class="fn-badge fn-badge--tts">TTS</span></td>
+              <td data-label="Genutzt">
+                <code class="model-mono model-mono--dim">azure-tts-*</code>
+                <div style="font-size:var(--fs-12);color:var(--text-3);margin-top:3px;">Azure OpenAI</div>
+              </td>
+              <td class="num" data-label="Calls" style="color:var(--text-3);">—</td>
+              <td class="num" data-label="Kosten">
+                <span class="tele-hint">Telemetrie folgt</span>
+              </td>
+              <td class="act">
+                <button class="edit-btn" onclick="openSheet('sheet-buddy-hoerspiel-tts')" title="hoerspiel TTS bearbeiten" aria-label="hoerspiel TTS bearbeiten">
+                  <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+              </td>
+            </tr>
+
+            <!-- ── kibuddy / LLM ── -->
+            <tr class="clickable" onclick="toggleChart(event,'chart-kibuddy')" aria-expanded="false">
+              <td data-label="Buddy">
+                <div class="buddy-cell">
+                  <!-- Icon: kibuddy = arasaac/37404.png (Wissensfrage-Piktogramm) — Emoji-Fallback 🤖 -->
+                  <div class="buddy-icon-wrap" title="kibuddy">🤖</div>
+                  <span style="font-weight:600;font-size:var(--fs-14);">kibuddy</span>
+                </div>
+              </td>
+              <td data-label="Funktion"><span class="fn-badge fn-badge--llm">LLM</span></td>
+              <td data-label="Genutzt">
+                <code class="model-mono">claude-haiku-4-5</code>
+                <div style="font-size:var(--fs-12);color:var(--text-3);margin-top:3px;">Anthropic</div>
+              </td>
+              <td class="num" data-label="Calls">3</td>
+              <td class="num" data-label="Kosten">0,0030 €</td>
+              <td class="act">
+                <button class="edit-btn" onclick="event.stopPropagation(); openSheet('sheet-buddy-kibuddy-llm')" title="kibuddy LLM bearbeiten" aria-label="kibuddy LLM bearbeiten">
+                  <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+              </td>
+            </tr>
+            <tr class="chart-row" id="chart-kibuddy">
+              <td class="chart-expand-cell" colspan="6">
+                <div class="chart-inner">
+                  <div class="chart-title-sm">Verlauf — letzte 7 Tage (kibuddy)</div>
+                  <!-- Real: 2026-06-24 = 0.002981 EUR, 2026-06-25 = 0 EUR. max=0.003 -->
+                  <svg width="100%" viewBox="0 0 308 80" xmlns="http://www.w3.org/2000/svg" aria-label="7-Tage kibuddy">
+                    <text x="0"   y="72" font-size="8" fill="#9A938A">19.6</text><rect x="12"  y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="44"  y="72" font-size="8" fill="#9A938A">20.6</text><rect x="56"  y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="88"  y="72" font-size="8" fill="#9A938A">21.6</text><rect x="100" y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="132" y="72" font-size="8" fill="#9A938A">22.6</text><rect x="144" y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <text x="176" y="72" font-size="8" fill="#9A938A">23.6</text><rect x="188" y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                    <!-- 24.6: 0.002981/0.003*55 ≈ 55px (Vollanschlag) -->
+                    <text x="220" y="72" font-size="8" fill="#2B2A28">24.6</text>
+                    <rect x="232" y="12" width="24" height="55" fill="#5a2a80" rx="2" opacity="0.8"/>
+                    <text x="244" y="9"  font-size="7" fill="#5a2a80" text-anchor="middle">0,003€</text>
+                    <text x="264" y="72" font-size="8" fill="#9A938A">25.6</text>
+                    <rect x="276" y="67" width="24" height="3" fill="#E3DCCF" rx="2"/>
+                  </svg>
+                  <p class="chart-close-hint">Zeile erneut klicken zum Schließen</p>
+                </div>
+              </td>
+            </tr>
+
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="4">Gesamtkosten LLM (alle Buddys)</td>
+              <td class="num">1,1502 €</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <p class="table-note">
+        Kosten aus <code class="inline">var/llm/provider_calls.jsonl</code> (LLMP-S4) · Tail-Fenster 30 Tage (CONN-4) ·
+        TTS-Verbindung (Azure) nicht erfasst (LLMP-S6, folgt) · Kein Key-Klartext (CONN-7).
+      </p>
+    </section>
+
+  </main>
+
+  <footer class="page-footer">
+    <span>Eltern-Plus PWA · Connector V1 · read-only · #1086</span>
+    <span>LLM-Kosten: letzte 30 Tage · TTS-Telemetrie folgt</span>
+  </footer>
+
+
+  <!-- ══════════════════════════════════════════════════════════════════════════
+       BOTTOM-SHEETS (plan-einstellungen-Muster)
+       Jeder Sheet: .sheet-overlay > .sheet > .griff + h3 + Inhalt
+       Schließen: Klick auf Overlay oder Abbrechen-Button
+  ═══════════════════════════════════════════════════════════════════════════ -->
+
+  <!-- ── Sheet: Neue Schnittstelle ── -->
+  <div class="sheet-overlay" id="sheet-neue-schnittstelle" role="dialog" aria-modal="true" aria-label="Neue Schnittstelle anlegen">
+    <div class="sheet">
+      <div class="griff"></div>
+      <h3>Neue Schnittstelle anlegen</h3>
+      <div class="sheet-body">
+        <p>Neue Anbieter-Verbindungen (API-Key + Slot) werden über den <strong>Eltern-Chat</strong> angelegt — nicht direkt auf dieser Seite (V1 read-only, CONN-5).</p>
+        <p>Im Eltern-Chat: Befehl <code class="inline">anbieter_wechseln</code> starten (ONB-11/12). Der Flow führt durch Key-Eingabe, Slot-Anlage und Bestätigung.</p>
+        <div class="info-hint">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span>In V2 wird diese Seite eigene Eingabe-Felder bekommen (wartet auf Auth-Schreibpfad #948).</span>
+        </div>
+        <button class="chat-link-btn" onclick="return false;" title="Eltern-Chat öffnen (CONN-5)">
+          <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Eltern-Chat öffnen
+        </button>
+      </div>
+      <div class="sheet-btn-gruppe">
+        <button class="btn" onclick="closeSheets()">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Sheet: Anthropic bearbeiten ── -->
+  <div class="sheet-overlay" id="sheet-anbieter-anthropic" role="dialog" aria-modal="true" aria-label="Anthropic — Details">
+    <div class="sheet">
+      <div class="griff"></div>
+      <h3>Anthropic</h3>
+      <div class="sheet-body">
+        <div class="feldzeile">
+          <span class="feldname">Status</span>
+          <span class="feldwert"><span class="badge badge-ok">konfiguriert</span></span>
+        </div>
+        <div class="feldzeile">
+          <span class="feldname">Nutzende Buddys</span>
+          <span class="feldwert">
+            <div class="buddy-chips" style="flex-wrap:wrap;gap:6px;">
+              <span class="buddy-chip">💬 eltern-chat</span>
+              <span class="buddy-chip buddy-chip--hoerspiel">🎧 hoerspiel</span>
+              <span class="buddy-chip buddy-chip--kibuddy">🤖 kibuddy</span>
+            </div>
+            <div style="font-size:var(--fs-12);color:var(--text-3);margin-top:6px;">eltern-chat: LLM-Fallback · hoerspiel: LLM · kibuddy: LLM</div>
+          </span>
+        </div>
+        <div class="feldzeile">
+          <span class="feldname">Abgerechnet</span>
+          <span class="feldwert" style="font-weight:700;">0,8595 € (letzte 30 Tage)</span>
+        </div>
+        <div class="info-hint">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span>Key erneuern oder Slot-Zuweisung ändern: Eltern-Chat (<code class="inline">anbieter_wechseln</code>, CONN-5).</span>
+        </div>
+        <button class="chat-link-btn" onclick="return false;" title="Eltern-Chat öffnen">
+          <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Im Chat öffnen
+        </button>
+      </div>
+      <div class="sheet-btn-gruppe">
+        <button class="btn" onclick="closeSheets()">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Sheet: Mistral bearbeiten ── -->
+  <div class="sheet-overlay" id="sheet-anbieter-mistral" role="dialog" aria-modal="true" aria-label="Mistral — Details">
+    <div class="sheet">
+      <div class="griff"></div>
+      <h3>Mistral</h3>
+      <div class="sheet-body">
+        <div class="feldzeile">
+          <span class="feldname">Status</span>
+          <span class="feldwert"><span class="badge badge-ok">konfiguriert</span> <span style="font-size:var(--fs-12);color:var(--text-3);">Aktiver LLM-Provider eltern-chat</span></span>
+        </div>
+        <div class="feldzeile">
+          <span class="feldname">Nutzende Buddys</span>
+          <span class="feldwert">
+            <div class="buddy-chips">
+              <span class="buddy-chip">💬 eltern-chat</span>
+            </div>
+            <div style="font-size:var(--fs-12);color:var(--text-3);margin-top:6px;">Aktiver LLM-Anbieter (primär)</div>
+          </span>
+        </div>
+        <div class="feldzeile">
+          <span class="feldname">Abgerechnet</span>
+          <span class="feldwert" style="font-weight:700;">0,2907 € (letzte 30 Tage)</span>
+        </div>
+        <div class="info-hint">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span>Anbieter für eltern-chat wechseln: Eltern-Chat (<code class="inline">anbieter_wechseln</code>, ONB-11/12).</span>
+        </div>
+        <button class="chat-link-btn" onclick="return false;" title="Eltern-Chat öffnen">
+          <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Im Chat öffnen
+        </button>
+      </div>
+      <div class="sheet-btn-gruppe">
+        <button class="btn" onclick="closeSheets()">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Sheet: Azure TTS bearbeiten ── -->
+  <div class="sheet-overlay" id="sheet-anbieter-azure" role="dialog" aria-modal="true" aria-label="Azure TTS — Details">
+    <div class="sheet">
+      <div class="griff"></div>
+      <h3>Azure OpenAI TTS</h3>
+      <div class="sheet-body">
+        <div class="feldzeile">
+          <span class="feldname">Status</span>
+          <span class="feldwert"><span class="badge" style="background:#e5ecf8;color:#1a4a9c;border:1px solid #b8cef0;">aktiv (TTS)</span></span>
+        </div>
+        <div class="feldzeile">
+          <span class="feldname">Nutzung</span>
+          <span class="feldwert">hoerspiel — Sprachsynthese (<code class="inline">hoerspiel/tts/azure.py</code>)</span>
+        </div>
+        <div class="feldzeile">
+          <span class="feldname">Kosten</span>
+          <span class="feldwert tele-hint">Telemetrie folgt — TTS außerhalb LLMP-S6-Scope</span>
+        </div>
+        <div class="v2-hint">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span>Azure-only — kein Anbieter-Wechsel über den Chat möglich. TTS-Kosten-Telemetrie und ggf. Anbieter-Erweiterung folgen in V2.</span>
+        </div>
+      </div>
+      <div class="sheet-btn-gruppe">
+        <button class="btn" onclick="closeSheets()">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Sheet: Altlast/Legacy ── -->
+  <div class="sheet-overlay" id="sheet-anbieter-legacy" role="dialog" aria-modal="true" aria-label="Altlast — Details">
+    <div class="sheet">
+      <div class="griff"></div>
+      <h3>Generisch (Altlast)</h3>
+      <div class="sheet-body">
+        <div class="feldzeile">
+          <span class="feldname">Status</span>
+          <span class="feldwert"><span class="badge badge-inactive">inaktiv / Altlast</span></span>
+        </div>
+        <div class="feldzeile">
+          <span class="feldname">Nutzende Buddys</span>
+          <span class="feldwert">
+            <div class="buddy-chips">
+              <span class="buddy-chip buddy-chip--dim">🎧 hoerspiel (inaktiv)</span>
+            </div>
+          </span>
+        </div>
+        <div class="feldzeile">
+          <span class="feldname">Hinweis</span>
+          <span class="feldwert" style="color:var(--warning);">Petraltete Verbindung ohne aktiven Caller. Bereinigung möglich — kein Schreib-Pfad V1.</span>
+        </div>
+      </div>
+      <div class="sheet-btn-gruppe">
+        <button class="btn" onclick="closeSheets()">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Sheet: eltern-chat LLM ── -->
+  <div class="sheet-overlay" id="sheet-buddy-eltern-llm" role="dialog" aria-modal="true" aria-label="eltern-chat LLM — Details">
+    <div class="sheet">
+      <div class="griff"></div>
+      <h3>eltern-chat — LLM</h3>
+      <div class="sheet-body">
+        <div class="feldzeile">
+          <span class="feldname">Aktuell</span>
+          <span class="feldwert"><code class="model-mono">mistral-medium-2508</code> (Mistral, aktiv)</span>
+        </div>
+        <div class="feldzeile">
+          <span class="feldname">Fallback</span>
+          <span class="feldwert"><code class="model-mono model-mono--dim">claude-opus-4-7</code> (Anthropic)</span>
+        </div>
+        <div class="feldzeile">
+          <span class="feldname">Wechseln</span>
+          <span class="feldwert">Anbieter wechselbar über den <strong>Eltern-Chat</strong> (<code class="inline">anbieter_wechseln</code>, V1-Pfad).</span>
+        </div>
+        <button class="chat-link-btn" onclick="return false;" title="Eltern-Chat öffnen (CONN-5)">
+          <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          Im Chat öffnen (anbieter_wechseln)
+        </button>
+      </div>
+      <div class="sheet-btn-gruppe">
+        <button class="btn" onclick="closeSheets()">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Sheet: hoerspiel LLM ── -->
+  <div class="sheet-overlay" id="sheet-buddy-hoerspiel-llm" role="dialog" aria-modal="true" aria-label="hoerspiel LLM — Details">
+    <div class="sheet">
+      <div class="griff"></div>
+      <h3>hoerspiel — LLM</h3>
+      <div class="sheet-body">
+        <div class="feldzeile">
+          <span class="feldname">Aktuell</span>
+          <span class="feldwert"><code class="model-mono">claude-opus-4-7</code> (Anthropic)</span>
+        </div>
+        <div class="feldzeile">
+          <span class="feldname">Wechseln</span>
+          <span class="feldwert" style="color:var(--text-3);">Wechsel in V2 — heute nur per Config + Service-Neustart, kein Self-Service.</span>
+        </div>
+        <div class="v2-hint">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span><code class="inline">anbieter_wechseln</code> kennt nur eltern-chat. Hoerspiel-LLM-Wechsel kommt in V2.</span>
+        </div>
+        <button class="btn disabled" disabled aria-disabled="true" style="margin-top:var(--space-4);opacity:.45;cursor:not-allowed;">Im Chat öffnen (nicht verfügbar)</button>
+      </div>
+      <div class="sheet-btn-gruppe">
+        <button class="btn" onclick="closeSheets()">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Sheet: hoerspiel TTS ── -->
+  <div class="sheet-overlay" id="sheet-buddy-hoerspiel-tts" role="dialog" aria-modal="true" aria-label="hoerspiel TTS — Details">
+    <div class="sheet">
+      <div class="griff"></div>
+      <h3>hoerspiel — TTS</h3>
+      <div class="sheet-body">
+        <div class="feldzeile">
+          <span class="feldname">Aktuell</span>
+          <span class="feldwert"><code class="model-mono model-mono--dim">azure-tts-*</code> (Azure OpenAI)</span>
+        </div>
+        <div class="feldzeile">
+          <span class="feldname">Kosten</span>
+          <span class="feldwert tele-hint">Telemetrie folgt (LLMP-S6)</span>
+        </div>
+        <div class="feldzeile">
+          <span class="feldname">Wechseln</span>
+          <span class="feldwert" style="color:var(--text-3);">Azure-only — kein Anbieter-Wechsel. Kommt ggf. in V2.</span>
+        </div>
+        <div class="v2-hint">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span>TTS-Anbieter-Wechsel ist in V1 nicht abgebildet. Kosten-Telemetrie + Provider-Erweiterung folgen in V2.</span>
+        </div>
+        <button class="btn disabled" disabled aria-disabled="true" style="margin-top:var(--space-4);opacity:.45;cursor:not-allowed;">Im Chat öffnen (nicht verfügbar)</button>
+      </div>
+      <div class="sheet-btn-gruppe">
+        <button class="btn" onclick="closeSheets()">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Sheet: kibuddy LLM ── -->
+  <div class="sheet-overlay" id="sheet-buddy-kibuddy-llm" role="dialog" aria-modal="true" aria-label="kibuddy LLM — Details">
+    <div class="sheet">
+      <div class="griff"></div>
+      <h3>kibuddy — LLM</h3>
+      <div class="sheet-body">
+        <div class="feldzeile">
+          <span class="feldname">Aktuell</span>
+          <span class="feldwert"><code class="model-mono">claude-haiku-4-5</code> (Anthropic)</span>
+        </div>
+        <div class="feldzeile">
+          <span class="feldname">Wechseln</span>
+          <span class="feldwert" style="color:var(--text-3);">Wechsel in V2 — heute nur per Config + Service-Neustart, kein Self-Service.</span>
+        </div>
+        <div class="v2-hint">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span><code class="inline">anbieter_wechseln</code> kennt nur eltern-chat. KIBuddy-LLM-Wechsel kommt in V2.</span>
+        </div>
+        <button class="btn disabled" disabled aria-disabled="true" style="margin-top:var(--space-4);opacity:.45;cursor:not-allowed;">Im Chat öffnen (nicht verfügbar)</button>
+      </div>
+      <div class="sheet-btn-gruppe">
+        <button class="btn" onclick="closeSheets()">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══ JavaScript ═══════════════════════════════════════════════════════════ -->
+  <script>
+    // ── Sheet-Steuerung (plan-einstellungen-Muster) ──────────────────────────
+    function openSheet(id) {
+      closeSheets();
+      var overlay = document.getElementById(id);
+      if (overlay) overlay.classList.add('auf');
+    }
+    function closeSheets() {
+      document.querySelectorAll('.sheet-overlay').forEach(function(o) {
+        o.classList.remove('auf');
+      });
+    }
+    // Klick auf Overlay schließt
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.sheet-overlay').forEach(function(o) {
+        o.addEventListener('click', function(e) {
+          if (e.target === o) closeSheets();
+        });
+      });
+    });
+
+    // ── 7-Tage-Chart Toggle (Tabellenzeilen) ────────────────────────────────
+    // Jede clickable-Row hat eine direkt nachfolgende .chart-row mit der Chart-ID
+    function toggleChart(evt, chartId) {
+      // Stift-Button-Klick stoppt sich selbst, kommt nicht hierher
+      var row = document.getElementById(chartId);
+      if (!row) return;
+      var isOpen = row.classList.contains('open');
+      // Alle schließen
+      document.querySelectorAll('.chart-row.open').forEach(function(r) {
+        r.classList.remove('open');
+      });
+      document.querySelectorAll('[aria-expanded="true"]').forEach(function(tr) {
+        tr.setAttribute('aria-expanded', 'false');
+      });
+      if (!isOpen) {
+        row.classList.add('open');
+        evt.currentTarget.setAttribute('aria-expanded', 'true');
+      }
+    }
+  </script>
+
+</body>
+</html>
