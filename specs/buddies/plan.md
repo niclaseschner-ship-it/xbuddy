@@ -97,6 +97,16 @@ Der Parser liest beide Schreibweisen (Lese-Toleranz, siehe unten). Die Beispiel-
 bildet die sieben Slots des Wireframe-Handoffs 1:1 ab: `bring`, `pick`, `act1`
 (Kind A), `act2` (Kind B), `cook`, `bed1` (Kind A), `bed2` (Kind B).
 
+**Anzeige-Name `label` (optional, #1126):** Ein Slot trägt zusätzlich ein
+**optionales `label`** — einen frei wählbaren Anzeige-Namen für die Eltern-
+Einstellungs-Seite (PLAN-35/PLAN-37). Es ist **rein anzeigend**: der stabile
+`schluessel` (PLAN-9) bleibt unberührter Identifikator, `label` ändert keine
+Datenhaltung. **Wenn** ein Slot ein `label` trägt, **dann** muss es ein String
+sein und die Anzeige nutzt es; **fehlt** es (`null`/weggelassen), **dann** zeigt
+die Einstellungs-Seite den `schluessel` als Fallback. Der Parser
+(`plan/config.py:_parse_slots`) liest `label` tolerant (optional, kein
+Pflichtfeld) — bestehende `plan.json`-Dateien ohne `label` laufen unverändert.
+
 **Icon-Form (V1.2, #578):** Das `icon`-Feld eines Slots ist eine **ARASAAC-`id`**
 (Integer-String, identisch zur Form in PLAN-12). Der Plan-Buddy konsumiert das
 Bild über den geteilten Icon-Pfad `/display/_shared/icons/arasaac/<id>.png`
@@ -1060,8 +1070,9 @@ Der Slot-`schluessel` ist der stabile Identifikator des Slots in der Datenhaltun
 drei Operationen:
 - **Slot ANLEGEN** — ein neuer `schluessel`, der vorher nicht existierte.
 - **Slot LÖSCHEN** — ein bestehender `schluessel` wird aus der Liste entfernt.
-- **Slot ÄNDERN** — bei einem bestehenden `schluessel` dürfen NUR `art`, `icon`
-  und (bei `kalender-read`) `kind` geändert werden — **nicht** der `schluessel`.
+- **Slot ÄNDERN** — bei einem bestehenden `schluessel` dürfen NUR `art`, `icon`,
+  das optionale `label` (Anzeige-Name, PLAN-6) und (bei `kalender-read`) `kind`
+  geändert werden — **nicht** der `schluessel`.
 
 Ein **Umbenennen** des `schluessel` ist **nicht erlaubt** (vermeidet, dass
 Defaults (PLAN-10) und historische DB-Zuteilungen (PLAN-30/31) verwaisen, und
@@ -1070,9 +1081,10 @@ zweistufig.
 
 **`GET /api/v1/plan/slot-modell`** — liefert die aktuelle Slot-Liste:
 `{ "slots": [ { "schluessel": "<key>", "art": "petrantwortlich|kalender-read",
-"icon": "<arasaac-id>", "kind": "<person_id>"? }, … ] }` — Form aus PLAN-6
-(`plan/config.py` `Slot.to_dict`). Reload-on-Read (DCOMP-2): die Konfig wird pro
-Aufruf frisch gelesen.
+"icon": "<arasaac-id>", "kind": "<person_id>"?, "label": "<anzeige-name>"? },
+… ] }` — Form aus PLAN-6 (`plan/config.py` `Slot.to_dict`). `label` ist der
+optionale Anzeige-Name (fehlt, wenn nicht gesetzt). Reload-on-Read (DCOMP-2): die
+Konfig wird pro Aufruf frisch gelesen.
 
 **`PUT /api/v1/plan/slot-modell`** — nimmt die **Gesamt-Slot-Liste** entgegen
 (Body wie GET). Die übergebene Liste IST der Soll-Zustand; was fehlt, gilt als
@@ -1080,10 +1092,13 @@ gelöscht.
 
 - **Wenn** der Body wohlgeformt ist — jeder Slot hat `schluessel`, `art`, `icon`;
   `art ∈ {petrantwortlich, kalender-read}`; jeder `kalender-read`-Slot trägt ein
-  `kind`, das in `familie.json` (FAM-3) existiert; alle `schluessel` sind
-  eindeutig — und kein Rename-Versuch vorliegt (s. u.), **dann** wird die
-  Slot-Liste persistiert, die Defaults werden konsistent gehalten (s. u.), die
-  Konfig neu geladen, und die Antwort ist `{ "ok": true }`.
+  `kind`, das in `familie.json` (FAM-3) existiert; ein etwaiges `label` ist ein
+  String (optional, fehlen/`null` erlaubt); alle `schluessel` sind eindeutig —
+  und kein Rename-Versuch vorliegt (s. u.), **dann** wird die Slot-Liste inkl.
+  `label` persistiert, die Defaults werden konsistent gehalten (s. u.), die
+  Konfig neu geladen, und die Antwort ist `{ "ok": true }`. **Fehlt** das `label`
+  eines Slots, **dann** wird es nicht persistiert (kein `null`-Müll) und der GET
+  liefert den Slot ohne `label`.
 - **LÖSCHEN als Folge des Soll-Zustands:** **Wenn** ein `schluessel`, der vorher
   in der Konfig stand, in der PUT-Liste **fehlt**, **dann** gilt das als LÖSCHEN:
   der Slot UND seine Einträge in `default_petrantwortlichkeiten` (PLAN-10) werden
