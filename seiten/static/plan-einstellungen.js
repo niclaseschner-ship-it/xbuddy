@@ -9,8 +9,8 @@
 // APIs:
 //   GET  /api/v1/plan/defaults    → { defaults: { slot_key: { "0": person_id|null, … } } }
 //   PUT  /api/v1/plan/defaults    ← { defaults: … }
-//   GET  /api/v1/plan/slot-modell → { slots: [ { schluessel, label, art, icon, kind_id } ] }
-//   PUT  /api/v1/plan/slot-modell ← { slots: [ … ] }
+//   GET  /api/v1/plan/slot-modell → { slots: [ { schluessel, label, art, icon, kind } ] }
+//   PUT  /api/v1/plan/slot-modell ← { slots: [ … ] }  (Feld: kind, nicht kind_id)
 //   GET  /api/v1/familie/personen → { personen: [ { id, name, ring, … } ] }
 //   GET  /api/v1/familie/foto/<id> → Foto-Datei (FAM-8)
 //   GET  /api/v1/icons/suche?q=…&max=12 → { treffer: [ { id, … } ] }
@@ -69,7 +69,8 @@ async function ladeSlotModell() {
   const resp = await fetch("/api/v1/plan/slot-modell");
   if (!resp.ok) throw new Error("Slot-Modell laden fehlgeschlagen: " + resp.status);
   const data = await resp.json();
-  return data.slots || [];
+  // API liefert "kind" (PLAN-37) — intern als kind_id verwenden (API-Rand-Mapping)
+  return (data.slots || []).map((s) => ({ ...s, kind_id: s.kind ?? null }));
 }
 
 async function ladeDefaults() {
@@ -551,12 +552,13 @@ async function onSpeichern() {
 
   try {
     // Slots mit korrekter Reihenfolge (Index = Reihenfolge)
+    // API erwartet "kind" (PLAN-37, Backend-Schema plan/config.py Slot.kind) — intern kind_id
     const slotsPayload = _editSlots.map((s, i) => ({
       schluessel: s.schluessel,
       label: s.label,
       art: s.art,
       icon: String(s.icon),
-      kind_id: s.kind_id || null,
+      kind: s.kind_id || null,
       reihenfolge: i,
     }));
 
