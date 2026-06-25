@@ -4347,3 +4347,356 @@ def test_PLAN_12_erwachsenen_slot_unveraendert(demo_config, demo_registry):
     assert "empty-face" in html, (
         "empty-face fehlt — Erwachsenen-Slots sollten empty-face tragen"
     )
+
+
+# ============================================================
+#  PLAN-36 / PLAN-37: Defaults- + Slot-Modell-API (PUBLIC, #1126)
+# ============================================================
+#
+# Zwei PUBLIC-Daten-APIs für die Eltern-Einstellungs-PWA (PLAN-35):
+#   GET|PUT /api/v1/plan/defaults     — Default-Verantwortlichkeiten (PLAN-36)
+#   GET|PUT /api/v1/plan/slot-modell  — Slot-Modell-Editor (PLAN-37)
+# Test-Setup: config_path gesetzt → die Routen können plan.json schreiben und
+# der Reload-on-Read-Pfad (DCOMP-2) macht den neuen Stand ohne Restart sichtbar.
+
+DEFAULTS_URL = "/api/v1/plan/defaults"
+SLOT_MODELL_URL = "/api/v1/plan/slot-modell"
+
+
+def _make_plan_json_writable(tmp_path):
+    """Schreibt eine valide plan.json (DEMO_CONFIG) und liefert (cfg, cfg_path)."""
+    cfg_path = tmp_path / "plan.json"
+    data = json.loads(json.dumps(DEMO_CONFIG))
+    data["db_datei"] = str(tmp_path / "plan.db")
+    # Eine _-Kommentar-Key + zusätzliche Sektion, um den Rest-Dict-Merge zu prüfen.
+    data["_kommentar"] = "nicht anfassen"
+    data["aktivitaeten"] = [
+        {"art": "klettern", "label": "Klettern",
+         "keywords": ["klettern"], "piktogramm": "6591"},
+    ]
+    with open(str(cfg_path), "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    cfg = config_mod.resolve(str(cfg_path))
+    return cfg, cfg_path
+
+
+@pytest.fixture
+def settings_client(tmp_path, demo_registry):
+    """Plan-Buddy mit schreibbarer plan.json (config_path gesetzt).
+
+    Liefert (client, cfg_path). Reload-on-Read aktiv → ein PUT ist beim
+    nächsten GET sichtbar.
+    """
+    cfg, cfg_path = _make_plan_json_writable(tmp_path)
+    plan_main.configure(cfg, demo_registry, FakeTransport(), config_path=str(cfg_path))
+    plan_main.app.testing = True
+    return plan_main.app.test_client(), cfg_path
+
+
+def _read_json_file(path):
+    with open(str(path), encoding="utf-8") as f:
+        return json.load(f)
+
+
+# ── PLAN-36: GET/PUT defaults ──────────────────────────────────────────────
+
+def test_PLAN_36_get_defaults_form(settings_client):
+    """GET liefert {defaults: {slot: {0..6: pid|null}}} mit allen 7 Tagen."""
+    client, _ = settings_client
+    r = client.get(DEFAULTS_URL)
+    assert r.status_code == 200
+    body = r.get_json()
+    assert "defaults" in body
+    bring = body["defaults"]["bring"]
+    # Alle Wochentag-Keys 0..6 als Strings vorhanden.
+    assert set(bring.keys()) == {str(i) for i in range(7)}
+    assert bring["0"] == "niclas"  # Mo
+    assert bring["1"] == "vera"    # Di
+    assert bring["5"] is None      # Sa
+
+
+def test_PLAN_36_put_defaults_roundtrip(settings_client):
+    """AC1/Roundtrip: PUT defaults=X → load_config + GET liefern X; persistiert
+    unter dem Datei-Schlüssel default_verantwortlichkeiten in Listen-Form."""
+    client, cfg_path = settings_client
+    neu = {"defaults": {"pick": {"0": "vera", "2": "niclas", "4": None}}}
+    r = client.put(DEFAULTS_URL, json=neu)
+    assert r.status_code == 200, r.get_json()
+    assert r.get_json() == {"ok": True}
+
+    # Datei-Form: Listen unter default_verantwortlichkeiten (config-loader-Form).
+    obj = _read_json_file(cfg_path)
+    assert "default_verantwortlichkeiten" in obj
+    liste = obj["default_verantwortlichkeiten"]["pick"]
+    assert isinstance(liste, list) and len(liste) == 7
+    assert liste[0] == "vera"
+    assert liste[2] == "niclas"
+    assert liste[4] is None
+
+    # load_config sieht den neuen Stand.
+    cfg = config_mod.resolve(str(cfg_path))
+    assert cfg.default_verantwortlichkeiten["pick"][0] == "vera"
+
+    # GET (Reload-on-Read) spiegelt den PUT.
+    g = client.get(DEFAULTS_URL).get_json()
+    assert g["defaults"]["pick"]["0"] == "vera"
+    assert g["defaults"]["pick"]["2"] == "niclas"
+
+
+def test_PLAN_36_put_defaults_unbekannte_person_400_nichts_geschrieben(settings_client):
+    """PUT mit unbekannter person_id → 400, plan.json byte-gleich (nichts
+    geschrieben — Validierung vor Persistenz)."""
+    client, cfg_path = settings_client
+    vorher = open(str(cfg_path), encoding="utf-8").read()
+    r = client.put(DEFAULTS_URL, json={"defaults": {"bring": {"0": "fremder"}}})
+    assert r.status_code == 400
+    assert "error" in r.get_json()
+    assert open(str(cfg_path), encoding="utf-8").read() == vorher
+
+
+def test_PLAN_36_put_defaults_kein_verantwortlich_slot_400(settings_client):
+    """PUT auf einen kalender-read-Slot (act1) → 400, nichts geschrieben."""
+    client, cfg_path = settings_client
+    vorher = open(str(cfg_path), encoding="utf-8").read()
+    r = client.put(DEFAULTS_URL, json={"defaults": {"act1": {"0": "niclas"}}})
+    assert r.status_code == 400
+    assert open(str(cfg_path), encoding="utf-8").read() == vorher
+
+
+def test_PLAN_36_put_defaults_wochentag_ausser_bereich_400(settings_client):
+    """PUT mit Wochentag 7 (außerhalb 0..6) → 400, nichts geschrieben."""
+    client, cfg_path = settings_client
+    vorher = open(str(cfg_path), encoding="utf-8").read()
+    r = client.put(DEFAULTS_URL, json={"defaults": {"bring": {"7": "niclas"}}})
+    assert r.status_code == 400
+    assert open(str(cfg_path), encoding="utf-8").read() == vorher
+
+
+def test_PLAN_36_put_defaults_pflichtfeld_fehlt_400(settings_client):
+    """PUT ohne defaults-Schlüssel → 400."""
+    client, _ = settings_client
+    r = client.put(DEFAULTS_URL, json={"foo": "bar"})
+    assert r.status_code == 400
+
+
+def test_PLAN_36_AC_PUBLIC_kein_initdata_kein_auth(settings_client):
+    """AC-PUBLIC: keine Auth/initData nötig — der GET/PUT geht ohne jeden
+    Telegram-Header durch (200), nicht 401/403."""
+    client, _ = settings_client
+    assert client.get(DEFAULTS_URL).status_code == 200
+    r = client.put(DEFAULTS_URL, json={"defaults": {"bring": {"0": "niclas"}}})
+    assert r.status_code == 200
+
+
+def test_PLAN_36_AC_WRITER_MERGE_bewahrt_rest(settings_client):
+    """AC3/AC-WRITER-MERGE: ein defaults-PUT bewahrt aktivitaeten, kalender_id,
+    slots und _-Kommentar-Keys — nur default_verantwortlichkeiten ändert sich."""
+    client, cfg_path = settings_client
+    vorher = _read_json_file(cfg_path)
+    r = client.put(DEFAULTS_URL, json={"defaults": {"bring": {"0": "vera"}}})
+    assert r.status_code == 200
+    nachher = _read_json_file(cfg_path)
+    assert nachher["aktivitaeten"] == vorher["aktivitaeten"]
+    assert nachher["kalender_id"] == vorher["kalender_id"]
+    assert nachher["slots"] == vorher["slots"]
+    assert nachher["_kommentar"] == vorher["_kommentar"]
+    # Die Ziel-Sektion IST geändert.
+    assert nachher["default_verantwortlichkeiten"]["bring"][0] == "vera"
+
+
+# ── PLAN-37: GET/PUT slot-modell ───────────────────────────────────────────
+
+def test_PLAN_37_get_slot_modell_form(settings_client):
+    """GET liefert {slots: [{schluessel, art, icon, kind?}, …]} aus Config."""
+    client, _ = settings_client
+    r = client.get(SLOT_MODELL_URL)
+    assert r.status_code == 200
+    slots = r.get_json()["slots"]
+    keys = [s["schluessel"] for s in slots]
+    assert "bring" in keys and "act1" in keys
+    act1 = next(s for s in slots if s["schluessel"] == "act1")
+    assert act1["art"] == "kalender-read"
+    assert act1["kind"] == "paula"
+
+
+def _slots_aus_config():
+    """Die DEMO_CONFIG-Slot-Liste als API-Body-Form (slots-Schlüssel)."""
+    return json.loads(json.dumps(DEMO_CONFIG["slots"]))
+
+
+def test_PLAN_37_put_slot_modell_roundtrip_anlegen(settings_client):
+    """AC2/Roundtrip: PUT mit einem zusätzlichen Slot → load_config + GET zeigen
+    ihn; Rest bewahrt."""
+    client, cfg_path = settings_client
+    slots = _slots_aus_config()
+    slots.append({"schluessel": "hund", "art": "verantwortlich", "icon": "9999"})
+    r = client.put(SLOT_MODELL_URL, json={"slots": slots})
+    assert r.status_code == 200, r.get_json()
+
+    cfg = config_mod.resolve(str(cfg_path))
+    assert cfg.slot("hund") is not None
+    assert cfg.slot("hund").ist_verantwortlich_slot()
+
+    g = client.get(SLOT_MODELL_URL).get_json()["slots"]
+    assert any(s["schluessel"] == "hund" for s in g)
+
+
+def test_PLAN_37_put_slot_modell_loeschen_bereinigt_defaults(settings_client):
+    """AC-SLOT-INTEGRITÄT/Multi-Sektion: ein gelöschter Slot (bring fehlt im PUT)
+    verschwindet UND seine default_verantwortlichkeiten-Einträge — sonst wirft
+    _parse_defaults beim nächsten load ConfigError. Roundtrip lädt sauber."""
+    client, cfg_path = settings_client
+    # Vorher: bring trägt Defaults (DEMO_CONFIG).
+    assert "bring" in config_mod.resolve(str(cfg_path)).default_verantwortlichkeiten
+    slots = [s for s in _slots_aus_config() if s["schluessel"] != "bring"]
+    r = client.put(SLOT_MODELL_URL, json={"slots": slots})
+    assert r.status_code == 200, r.get_json()
+
+    # Datei: bring fehlt in slots UND in default_verantwortlichkeiten.
+    obj = _read_json_file(cfg_path)
+    assert all(s["schluessel"] != "bring" for s in obj["slots"])
+    assert "bring" not in obj["default_verantwortlichkeiten"]
+
+    # Roundtrip: load_config wirft NICHT (Defaults-Bereinigung griff).
+    cfg = config_mod.resolve(str(cfg_path))
+    assert cfg.slot("bring") is None
+    assert "bring" not in cfg.default_verantwortlichkeiten
+
+
+def test_PLAN_37_put_slot_modell_rename_versuch_400(settings_client):
+    """AC-SLOT-INTEGRITÄT: ein Umbenenn-Feld (schluessel_neu) → HTTP 400,
+    nichts geschrieben (schluessel ist unveränderlich)."""
+    client, cfg_path = settings_client
+    vorher = open(str(cfg_path), encoding="utf-8").read()
+    slots = _slots_aus_config()
+    slots[0]["schluessel_neu"] = "bring2"
+    r = client.put(SLOT_MODELL_URL, json={"slots": slots})
+    assert r.status_code == 400
+    assert "unveränderlich" in r.get_json()["error"]
+    assert open(str(cfg_path), encoding="utf-8").read() == vorher
+
+
+def test_PLAN_37_put_slot_modell_unbekannte_art_400(settings_client):
+    """PUT mit unbekannter art → 400, nichts geschrieben."""
+    client, cfg_path = settings_client
+    vorher = open(str(cfg_path), encoding="utf-8").read()
+    slots = _slots_aus_config()
+    slots[0]["art"] = "quatsch"
+    r = client.put(SLOT_MODELL_URL, json={"slots": slots})
+    assert r.status_code == 400
+    assert open(str(cfg_path), encoding="utf-8").read() == vorher
+
+
+def test_PLAN_37_put_slot_modell_kalender_read_ohne_kind_400(settings_client):
+    """kalender-read-Slot ohne kind → 400."""
+    client, _ = settings_client
+    slots = _slots_aus_config()
+    act1 = next(s for s in slots if s["schluessel"] == "act1")
+    act1.pop("kind", None)
+    r = client.put(SLOT_MODELL_URL, json={"slots": slots})
+    assert r.status_code == 400
+
+
+def test_PLAN_37_put_slot_modell_kalender_read_unbekanntes_kind_400(settings_client):
+    """kalender-read-Slot mit unbekanntem kind (FAM-3) → 400."""
+    client, _ = settings_client
+    slots = _slots_aus_config()
+    act1 = next(s for s in slots if s["schluessel"] == "act1")
+    act1["kind"] = "niemand"
+    r = client.put(SLOT_MODELL_URL, json={"slots": slots})
+    assert r.status_code == 400
+
+
+def test_PLAN_37_put_slot_modell_doppelter_schluessel_400(settings_client):
+    """Doppelter schluessel → 400."""
+    client, _ = settings_client
+    slots = _slots_aus_config()
+    slots.append({"schluessel": "bring", "art": "verantwortlich", "icon": "1"})
+    r = client.put(SLOT_MODELL_URL, json={"slots": slots})
+    assert r.status_code == 400
+
+
+def test_PLAN_37_put_slot_modell_ueber_8_warnt_aber_persistiert(settings_client, caplog):
+    """>8 Slots → WARN-Log beim Reload, aber 200 + persistiert (kein Fehler)."""
+    import logging
+    client, cfg_path = settings_client
+    slots = _slots_aus_config()  # 7 Slots
+    for i in range(3):  # → 10 Slots
+        slots.append({"schluessel": "extra%d" % i, "art": "verantwortlich", "icon": "1"})
+    with caplog.at_level(logging.WARNING):
+        r = client.put(SLOT_MODELL_URL, json={"slots": slots})
+    assert r.status_code == 200, r.get_json()
+    cfg = config_mod.resolve(str(cfg_path))
+    assert len(cfg.slots) == 10
+    assert any("Slots konfiguriert" in rec.message for rec in caplog.records)
+
+
+def test_PLAN_37_AC_PUBLIC_kein_initdata(settings_client):
+    """AC-PUBLIC: slot-modell GET/PUT ohne Auth/initData (200, nicht 401/403)."""
+    client, _ = settings_client
+    assert client.get(SLOT_MODELL_URL).status_code == 200
+    r = client.put(SLOT_MODELL_URL, json={"slots": _slots_aus_config()})
+    assert r.status_code == 200
+
+
+def test_PLAN_37_AC_WRITER_MERGE_bewahrt_rest(settings_client):
+    """AC3/AC-WRITER-MERGE: ein slot-modell-PUT bewahrt aktivitaeten,
+    kalender_id und _-Kommentar-Keys."""
+    client, cfg_path = settings_client
+    vorher = _read_json_file(cfg_path)
+    r = client.put(SLOT_MODELL_URL, json={"slots": _slots_aus_config()})
+    assert r.status_code == 200
+    nachher = _read_json_file(cfg_path)
+    assert nachher["aktivitaeten"] == vorher["aktivitaeten"]
+    assert nachher["kalender_id"] == vorher["kalender_id"]
+    assert nachher["_kommentar"] == vorher["_kommentar"]
+
+
+def test_PLAN_37_put_slot_modell_art_wechsel_bereinigt_defaults(settings_client):
+    """AC-SLOT-INTEGRITÄT/art-Wechsel: ein Slot der von art=verantwortlich auf
+    art=kalender-read wechselt verliert seinen default_verantwortlichkeiten-
+    Eintrag — sonst wirft _parse_defaults beim nächsten load ConfigError
+    (latenter Boot-Crash, Watchdog-Befund T1126)."""
+    client, cfg_path = settings_client
+    # Vorher: bring ist verantwortlich und trägt Defaults (DEMO_CONFIG).
+    assert "bring" in config_mod.resolve(str(cfg_path)).default_verantwortlichkeiten
+
+    # bring auf kalender-read umschalten (kind=paula ist in DEMO_REGISTRY).
+    slots = _slots_aus_config()
+    for slot in slots:
+        if slot["schluessel"] == "bring":
+            slot["art"] = "kalender-read"
+            slot["kind"] = "paula"
+            break
+
+    r = client.put(SLOT_MODELL_URL, json={"slots": slots})
+    assert r.status_code == 200, r.get_json()
+
+    # Datei: bring in slots als kalender-read, aber NICHT mehr in defaults.
+    obj = _read_json_file(cfg_path)
+    bring_slot = next(s for s in obj["slots"] if s["schluessel"] == "bring")
+    assert bring_slot["art"] == "kalender-read"
+    assert "bring" not in obj["default_verantwortlichkeiten"]
+
+    # Roundtrip: _parse_defaults wirft KEINEN ConfigError mehr.
+    cfg = config_mod.resolve(str(cfg_path))
+    assert cfg.slot("bring") is not None
+    assert cfg.slot("bring").ist_kalender_read_slot()
+    assert "bring" not in cfg.default_verantwortlichkeiten
+
+
+def test_PLAN_36_put_defaults_null_erlaubt(settings_client):
+    """AC-NULL: PUT {"defaults": {"bring": {"0": null}}} → 200; danach zeigt GET
+    an Tag 0 null (explizites Löschen eines Tages-Defaults ist erlaubt, PLAN-36)."""
+    client, cfg_path = settings_client
+    # bring-Mo auf null setzen (vorher: niclas laut DEMO_CONFIG).
+    r = client.put(DEFAULTS_URL, json={"defaults": {"bring": {"0": None}}})
+    assert r.status_code == 200, r.get_json()
+
+    # Datei: Eintrag ist None für Tag 0.
+    obj = _read_json_file(cfg_path)
+    assert obj["default_verantwortlichkeiten"]["bring"][0] is None
+
+    # GET (Reload-on-Read) spiegelt das null.
+    g = client.get(DEFAULTS_URL).get_json()
+    assert g["defaults"]["bring"]["0"] is None
