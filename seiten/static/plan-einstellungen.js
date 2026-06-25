@@ -633,10 +633,11 @@ async function onSpeichern() {
       reihenfolge: i,
     }));
 
-    await Promise.all([
-      speichereSlotModell(slotsPayload),
-      speichereDefaults(_editDefaults),
-    ]);
+    // Sequenziell, NICHT parallel: beide PUTs sind Read-Modify-Write auf dieselbe
+    // plan.json (Backend threaded) — parallel racen sie und überschreiben sich
+    // gegenseitig (PLAN-1139 Save-Race). Erst Slot-Modell, dann Defaults.
+    await speichereSlotModell(slotsPayload);
+    await speichereDefaults(_editDefaults);
 
     // Server-Stand aktualisieren
     _serverSlots = _editSlots.map((s) => ({ ...s }));
