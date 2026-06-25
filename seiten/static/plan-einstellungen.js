@@ -119,6 +119,32 @@ async function sucheIcons(q) {
   return data.treffer || data.results || data || [];
 }
 
+// ── Label-Fallback (AC2) ──────────────────────────────────────────────────────
+
+/**
+ * Gibt einen sinnvollen Anzeige-Namen fuer einen Slot zurueck.
+ * Falls slot.label gesetzt, wird es verwendet. Andernfalls Fallback aus schluessel + kind.
+ * Fallback-Regeln:
+ *   bring  → "Bringen"
+ *   pick   → "Holen"
+ *   cook   → "Kochen"
+ *   bed1/bed2 → "Bett <Kind>"
+ *   act1/act2 → "Termine <Kind>"
+ *   default: schluessel (erster Buchstabe gross)
+ */
+function slotLabel(slot) {
+  if (slot.label) return slot.label;
+  const key = slot.schluessel || "";
+  const kindPerson = slot.kind_id ? personById(slot.kind_id) : null;
+  const kindName = kindPerson ? kindPerson.name : "";
+  if (key === "bring") return "Bringen";
+  if (key === "pick") return "Holen";
+  if (key === "cook") return "Kochen";
+  if (/^bed\d*$/.test(key)) return "Bett" + (kindName ? " " + kindName : "");
+  if (/^act\d*$/.test(key)) return "Termine" + (kindName ? " " + kindName : "");
+  return key ? (key[0].toUpperCase() + key.slice(1)) : key;
+}
+
 // ── Render-Helfer ─────────────────────────────────────────────────────────────
 
 function personById(id) {
@@ -168,18 +194,19 @@ function rendereSlotListe() {
     const istLetzte = idx === _editSlots.length - 1;
     const hochDisabled = istErste ? " disabled" : "";
     const runterDisabled = istLetzte ? " disabled" : "";
+    const anzeigeName = slotLabel(slot);
 
     return (
       '<details class="slot" id="slot-' + esc(slot.schluessel) + '">' +
         '<summary>' +
           '<div class="pfeile">' +
             '<button type="button" class="pfeil pfeil-hoch" data-slot-key="' + esc(slot.schluessel) + '"' +
-              hochDisabled + ' aria-label="' + esc(slot.label) + ' nach oben">▲</button>' +
+              hochDisabled + ' aria-label="' + esc(anzeigeName) + ' nach oben">▲</button>' +
             '<button type="button" class="pfeil pfeil-runter" data-slot-key="' + esc(slot.schluessel) + '"' +
-              runterDisabled + ' aria-label="' + esc(slot.label) + ' nach unten">▼</button>' +
+              runterDisabled + ' aria-label="' + esc(anzeigeName) + ' nach unten">▼</button>' +
           '</div>' +
           '<img class="slot-icon" src="' + esc(arasaacUrl(slot.icon)) + '" alt="" loading="lazy">' +
-          '<span class="label">' + esc(slot.label) + '</span>' +
+          '<span class="label">' + esc(anzeigeName) + '</span>' +
           '<span class="meta">' + badgeHtml(slot.art) + '<span class="chev">▶</span></span>' +
         '</summary>' +
         slotBodyHtml(slot) +
@@ -197,6 +224,7 @@ function slotBodyHtml(slot) {
 
 function verantwortlichBodyHtml(slot) {
   const defaults = _editDefaults[slot.schluessel] || {};
+  const anzeigeName = slotLabel(slot);
 
   const tagereihe = TAGE.map((tagName, i) => {
     const personId = defaults[String(i)] || null;
@@ -205,7 +233,7 @@ function verantwortlichBodyHtml(slot) {
         '<span class="tagname">' + esc(tagName) + '</span>' +
         '<button type="button" class="person-tag-btn" ' +
           'data-slot-key="' + esc(slot.schluessel) + '" data-tag-idx="' + i + '" ' +
-          'aria-label="Person fuer ' + esc(tagName) + ' in ' + esc(slot.label) + ' waehlen">' +
+          'aria-label="Person fuer ' + esc(tagName) + ' in ' + esc(anzeigeName) + ' waehlen">' +
           ringHtml(personId, "ring sm") +
         '</button>' +
       '</div>'
@@ -216,6 +244,13 @@ function verantwortlichBodyHtml(slot) {
 
   return (
     '<div class="slot-body">' +
+      '<div class="feldzeile">' +
+        '<span class="feldname">Name</span>' +
+        '<input type="text" class="slot-label-input" data-slot-key="' + esc(slot.schluessel) + '"' +
+          ' value="' + esc(slot.label || "") + '"' +
+          ' placeholder="' + esc(anzeigeName) + '"' +
+          ' aria-label="Name des Slots">' +
+      '</div>' +
       '<div class="feldzeile">' +
         '<span class="feldname">Piktogramm</span>' +
         '<img class="slot-icon" src="' + esc(arasaacUrl(slot.icon)) + '" alt="" loading="lazy">' +
@@ -241,9 +276,17 @@ function verantwortlichBodyHtml(slot) {
 
 function kalenderReadBodyHtml(slot) {
   const kind = slot.kind_id ? personById(slot.kind_id) : null;
+  const anzeigeName = slotLabel(slot);
 
   return (
     '<div class="slot-body">' +
+      '<div class="feldzeile">' +
+        '<span class="feldname">Name</span>' +
+        '<input type="text" class="slot-label-input" data-slot-key="' + esc(slot.schluessel) + '"' +
+          ' value="' + esc(slot.label || "") + '"' +
+          ' placeholder="' + esc(anzeigeName) + '"' +
+          ' aria-label="Name des Slots">' +
+      '</div>' +
       '<div class="feldzeile">' +
         '<span class="feldname">Piktogramm</span>' +
         '<img class="slot-icon" src="' + esc(arasaacUrl(slot.icon)) + '" alt="" loading="lazy">' +
@@ -397,10 +440,12 @@ function oeffneNeuSlotSheet(art) {
 
   const overlay = document.getElementById("sheet-neu-slot");
   const input = overlay.querySelector(".neu-label-input");
+  const iconSuche = overlay.querySelector(".neu-icon-suche");
   const iconGrid = overlay.querySelector(".icon-grid");
 
   input.value = "";
-  iconGrid.innerHTML = '<p class="lade-hinweis">Suchbegriff eingeben …</p>';
+  if (iconSuche) iconSuche.value = "";
+  iconGrid.innerHTML = '<p class="lade-hinweis">Suchbegriff oben eingeben …</p>';
   overlay.querySelector(".neu-slot-anlegen").disabled = true;
   overlay.removeAttribute("hidden");
 
@@ -408,7 +453,10 @@ function oeffneNeuSlotSheet(art) {
 }
 
 function schliesseNeuSlotSheet() {
-  document.getElementById("sheet-neu-slot").setAttribute("hidden", "");
+  const overlay = document.getElementById("sheet-neu-slot");
+  const iconSuche = overlay ? overlay.querySelector(".neu-icon-suche") : null;
+  if (iconSuche) iconSuche.value = "";
+  overlay.setAttribute("hidden", "");
   _aktuellesSheet = null;
   _pickerIconId = null;
   clearTimeout(_debounceTimer);
@@ -452,6 +500,15 @@ function setzeSlotIcon(schluessel, iconId) {
   slot.icon = String(iconId);
   rendereSlotListe();
   bindeDelegation();
+  aktualisiereSpeichernBtn();
+}
+
+function setzeSlotLabel(schluessel, neuesLabel) {
+  const slot = _editSlots.find((s) => s.schluessel === schluessel);
+  if (!slot) return;
+  // Leerer String → null (Fallback greift dann in slotLabel())
+  slot.label = neuesLabel.trim() || null;
+  // Kein Re-Render (Input bleibt fokussiert), aber Speichern-Knopf aktualisieren
   aktualisiereSpeichernBtn();
 }
 
@@ -599,6 +656,14 @@ function bindeDelegation() {
   // Neu binden
   const c = document.getElementById("slots-container");
 
+  // Label-Input: change-Event fuer bestehende Slots (AC3)
+  c.addEventListener("change", (e) => {
+    const labelInput = e.target.closest(".slot-label-input");
+    if (labelInput) {
+      setzeSlotLabel(labelInput.dataset.slotKey, labelInput.value);
+    }
+  });
+
   c.addEventListener("click", (e) => {
     // ▲ Reorder
     const hochBtn = e.target.closest(".pfeil-hoch");
@@ -742,45 +807,81 @@ async function ladeUndRendere() {
   const neuSlotSheet = document.getElementById("sheet-neu-slot");
   if (neuSlotSheet) {
     const labelInput = neuSlotSheet.querySelector(".neu-label-input");
+    const iconSucheInput = neuSlotSheet.querySelector(".neu-icon-suche");
     const iconGridEl = neuSlotSheet.querySelector(".icon-grid");
 
+    /**
+     * Sucht Icons und rendert das Grid im Neu-Slot-Sheet.
+     * AC1: Entkoppelt von labelInput — freigetippter Suchbegriff moeglich.
+     */
+    async function sucheUndRendereNeuSlotIcons(q, tokenInput) {
+      const token = q;
+      iconGridEl.innerHTML = '<p class="lade-hinweis">Suche …</p>';
+      try {
+        const treffer = await sucheIcons(q);
+        // Race-Schutz: nur rendern wenn der Input-Wert noch derselbe ist
+        if (tokenInput && tokenInput.value.trim() !== token) return;
+        if (!treffer || treffer.length === 0) {
+          iconGridEl.innerHTML = '<p class="lade-hinweis">Nichts gefunden — anderes Wort probieren.</p>';
+          _pickerIconId = null;
+          aktualisiereAnlegenBtn();
+          return;
+        }
+        iconGridEl.innerHTML = treffer.map((t) => {
+          const id = t.id || t.arasaac_id || t;
+          const gewaehlt = _pickerIconId === String(id) ? " gewaehlt" : "";
+          return (
+            '<button type="button" class="neu-icon-btn' + gewaehlt + '" data-icon-id="' + esc(String(id)) + '">' +
+              '<img src="' + esc(arasaacUrl(id)) + '" alt="" loading="lazy">' +
+            '</button>'
+          );
+        }).join("");
+      } catch (err) {
+        iconGridEl.innerHTML = '<p class="lade-hinweis">Icon-Suche nicht erreichbar.</p>';
+      }
+    }
+
     if (labelInput) {
+      // AC1: Label-Input loest Best-Match-Suche aus, SOFERN Suche-Input leer ist.
+      // Falls Benutzer bereits im Suche-Input was tippt, dominiert der Suche-Input.
       labelInput.addEventListener("input", () => {
         clearTimeout(_debounceTimer);
         aktualisiereAnlegenBtn();
         const q = labelInput.value.trim();
-        if (q.length >= 1) {
-          _debounceTimer = setTimeout(async () => {
-            const token = q;
-            iconGridEl.innerHTML = '<p class="lade-hinweis">Suche …</p>';
-            try {
-              const treffer = await sucheIcons(q);
-              if (labelInput.value.trim() !== token) return;
-              if (!treffer || treffer.length === 0) {
-                iconGridEl.innerHTML = '<p class="lade-hinweis">Nichts gefunden — anderes Wort probieren.</p>';
-                _pickerIconId = null;
-                aktualisiereAnlegenBtn();
-                return;
-              }
-              iconGridEl.innerHTML = treffer.map((t) => {
-                const id = t.id || t.arasaac_id || t;
-                const gewaehlt = _pickerIconId === String(id) ? " gewaehlt" : "";
-                return (
-                  '<button type="button" class="neu-icon-btn' + gewaehlt + '" data-icon-id="' + esc(String(id)) + '">' +
-                    '<img src="' + esc(arasaacUrl(id)) + '" alt="" loading="lazy">' +
-                  '</button>'
-                );
-              }).join("");
-            } catch (err) {
-              iconGridEl.innerHTML = '<p class="lade-hinweis">Icon-Suche nicht erreichbar.</p>';
-            }
-          }, 250);
-        } else {
-          iconGridEl.innerHTML = '<p class="lade-hinweis">Suchbegriff eingeben …</p>';
+        const suchQ = iconSucheInput ? iconSucheInput.value.trim() : "";
+        // Nur Auto-Suche aus Label wenn Suche-Feld leer
+        if (suchQ.length === 0) {
+          if (q.length >= 1) {
+            _debounceTimer = setTimeout(() => sucheUndRendereNeuSlotIcons(q, labelInput), 250);
+          } else {
+            iconGridEl.innerHTML = '<p class="lade-hinweis">Suchbegriff oben eingeben …</p>';
+          }
         }
       });
       labelInput.addEventListener("keydown", (e) => {
         if (e.key === "Enter") { e.preventDefault(); labelInput.blur(); }
+      });
+    }
+
+    // AC1: Freies Suchfeld — überschreibt die Label-basierte Auto-Suche
+    if (iconSucheInput) {
+      iconSucheInput.addEventListener("input", () => {
+        clearTimeout(_debounceTimer);
+        const q = iconSucheInput.value.trim();
+        if (q.length >= 1) {
+          _debounceTimer = setTimeout(() => sucheUndRendereNeuSlotIcons(q, iconSucheInput), 250);
+        } else {
+          // Suche-Feld geleert → Fallback auf Label-Auto-Suche
+          const labelQ = labelInput ? labelInput.value.trim() : "";
+          if (labelQ.length >= 1) {
+            _debounceTimer = setTimeout(() => sucheUndRendereNeuSlotIcons(labelQ, null), 250);
+          } else {
+            iconGridEl.innerHTML = '<p class="lade-hinweis">Suchbegriff oben eingeben …</p>';
+          }
+        }
+      });
+      iconSucheInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); iconSucheInput.blur(); }
       });
     }
 
