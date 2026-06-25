@@ -1,0 +1,450 @@
+/* plan-einstellungen.css — Plan-P2 Eltern-Einstellungs-PWA (PLAN-35).
+   Visuell deckungsgleich mit specs/mockups/plan-einstellungen/slots.html + shared.css
+   (Variante B: Slot-orientiert). Farbtokens aus dem Essen-Einkauf-Farbschema. */
+
+/* ── Reset ──────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: #F5F1E8;
+  color: #1e1a14;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  max-width: 760px;
+  margin: 0 auto;
+}
+body {
+  padding: 16px 16px 80px;
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* ── Kopf ────────────────────────────────────────────────────────────────────── */
+.kopf {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0 20px;
+}
+.kopf h1 {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.kopf .pwa-chip {
+  margin-left: auto;
+  font-size: 12px;
+  color: #47503C;
+  border: 1px solid #d6d0c8;
+  border-radius: 999px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+/* Speichern-Knopf (fester unterer Rand statt Telegram MainButton) */
+.speichern-leiste {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 12px 16px;
+  background: #F5F1E8;
+  border-top: 1px solid #d6d0c8;
+  z-index: 40;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+/* ── Lade-Hinweis ────────────────────────────────────────────────────────────── */
+.lade-hinweis {
+  color: #8a857c;
+  text-align: center;
+  padding: 40px 0;
+  font-size: 14px;
+}
+.fehler-hinweis {
+  color: #c0473a;
+  text-align: center;
+  padding: 20px 0;
+  font-size: 14px;
+}
+
+/* ── Sektion ─────────────────────────────────────────────────────────────────── */
+.sektion {
+  margin-bottom: 28px;
+}
+.sektion > h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sektion > h2 .hint {
+  font-weight: 400;
+  font-size: 12px;
+  color: #8a857c;
+  margin-left: auto;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────────── */
+.btn {
+  font: inherit;
+  font-size: 14px;
+  border: 1px solid #d6d0c8;
+  background: #fff;
+  color: #1e1a14;
+  border-radius: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.12s ease;
+}
+.btn:hover { background: #F5F1E8; }
+.btn.primary {
+  background: #47503C;
+  color: #fff;
+  border-color: #47503C;
+}
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.primary:disabled {
+  background: #9aab8e;
+  border-color: #9aab8e;
+  cursor: not-allowed;
+}
+.btn.add {
+  width: 100%;
+  justify-content: center;
+  border-style: dashed;
+  color: #47503C;
+  margin-top: 12px;
+}
+.btn.danger { color: #c0473a; border-color: #e7cfc9; }
+.btn.danger:hover { background: #fdf5f4; }
+.btn.sm { padding: 6px 12px; font-size: 13px; }
+
+/* ── Foto-im-Ring (FAM-8) ────────────────────────────────────────────────────── */
+.ring {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 3px solid #cfc7b8;
+  object-fit: cover;
+  background: #ede8df;
+  flex: 0 0 auto;
+  display: block;
+}
+.ring.sm { width: 32px; height: 32px; border-width: 2px; }
+.ring.lg { width: 56px; height: 56px; }
+.ring.leer {
+  border-style: dashed;
+  border-color: #cfc7b8;
+  display: grid;
+  place-items: center;
+  color: #b3ada1;
+  font-size: 20px;
+}
+.ring-blue   { border-color: #4a90d9; }
+.ring-red    { border-color: #e05a5a; }
+.ring-green  { border-color: #56a35a; }
+.ring-orange { border-color: #e07a30; }
+.ring-purple { border-color: #8a56c8; }
+.ring-teal   { border-color: #4aaab5; }
+.ring-gray   { border-color: #8a8a8a; }
+
+/* ── Slot-Icon (ARASAAC) ─────────────────────────────────────────────────────── */
+.slot-icon {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+/* ── Typ-Badge ───────────────────────────────────────────────────────────────── */
+.badge {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.badge.petrantwortlich { background: #eef3ea; color: #47503C; }
+.badge.kalender { background: #f6ece2; color: #b05a20; }
+
+/* ── Pfeile (Reorder wie routine-anpassen) ───────────────────────────────────── */
+.pfeile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pfeil {
+  width: 30px;
+  height: 22px;
+  border: 1px solid #d6d0c8;
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  color: #6b6760;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pfeil:active { background: #F5F1E8; }
+.pfeil:disabled { opacity: 0.35; cursor: default; }
+
+/* ── Slot-Accordion (Variante B) ─────────────────────────────────────────────── */
+details.slot {
+  background: #fff;
+  border: 1px solid #d6d0c8;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+details.slot > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+}
+details.slot > summary::-webkit-details-marker { display: none; }
+details.slot > summary .chev {
+  margin-left: 6px;
+  color: #b3ada1;
+  transition: transform 0.12s;
+  flex-shrink: 0;
+}
+details.slot[open] > summary .chev { transform: rotate(90deg); }
+details.slot > summary .label {
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+details.slot > summary .meta {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* ── Slot-Body ───────────────────────────────────────────────────────────────── */
+.slot-body {
+  padding: 0 16px 16px;
+  border-top: 1px solid #efe8dc;
+}
+.feldzeile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid #f0ebe3;
+}
+.feldzeile:last-child { border-bottom: none; }
+.feldzeile .feldname {
+  font-size: 14px;
+  color: #6b6760;
+  width: 96px;
+  flex: 0 0 auto;
+}
+
+/* ── Wochentage-Raster (Defaults) ────────────────────────────────────────────── */
+.tagereihe {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.tag {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.tag .tagname {
+  font-size: 11px;
+  color: #8a857c;
+}
+.tag.we .tagname { color: #b05a20; }
+
+/* ── Save-Leiste in Slot-Body ────────────────────────────────────────────────── */
+.save-leiste {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+/* ── Bottom-Sheet-Overlay ────────────────────────────────────────────────────── */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(30, 26, 20, 0.4);
+  z-index: 50;
+  display: block;
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+.sheet-overlay[hidden] { display: none; }
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #F5F1E8;
+  z-index: 51;
+  border-radius: 20px 20px 0 0;
+  padding: 20px 16px calc(env(safe-area-inset-bottom, 0px) + 32px);
+  max-width: 760px;
+  margin: 0 auto;
+  transform: translateY(100%);
+  transition: transform 0.2s ease;
+  min-height: 90vh;
+  max-height: 100vh;
+  overflow-y: auto;
+  box-shadow: 0 -4px 24px rgba(0,0,0,.12);
+}
+.sheet-overlay:not([hidden]) .sheet { transform: translateY(0); }
+.sheet h3 { font-size: 18px; font-weight: 600; margin-bottom: 16px; }
+.sheet .griff {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: #cfc7b8;
+  margin: 0 auto 16px;
+}
+
+/* Suchfeld im Sheet */
+.such-input {
+  width: 100%;
+  font: inherit;
+  padding: 12px 16px;
+  border: 1px solid #d6d0c8;
+  border-radius: 8px;
+  background: #fff;
+  margin-bottom: 16px;
+  font-size: 16px;
+}
+.such-input:focus {
+  outline: none;
+  border-color: #47503C;
+  box-shadow: 0 0 0 2px #eef3ea;
+}
+
+/* Icon-Grid (ARASAAC-Picker) */
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.icon-grid button {
+  aspect-ratio: 1;
+  border: 1px solid #d6d0c8;
+  background: #fff;
+  border-radius: 8px;
+  padding: 10px;
+  cursor: pointer;
+}
+.icon-grid button img { width: 100%; height: 100%; object-fit: contain; }
+.icon-grid button.gewaehlt {
+  border-color: #47503C;
+  box-shadow: 0 0 0 2px #47503C;
+}
+
+/* Personen-Grid */
+.person-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+.person-grid .person {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  text-align: center;
+  border-radius: 8px;
+  padding: 8px 4px;
+  transition: background 0.1s;
+}
+.person-grid .person:hover { background: #ede8df; }
+.person-grid .person.gewaehlt {
+  background: #eef3ea;
+  outline: 2px solid #47503C;
+  border-radius: 8px;
+}
+
+/* Typ-Wahl-Sheet */
+.typ-wahl {
+  display: flex;
+  gap: 12px;
+  margin: 12px 0;
+}
+.typ-wahl .opt {
+  flex: 1;
+  border: 1px solid #d6d0c8;
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+.typ-wahl .opt.aktiv {
+  border-color: #47503C;
+  background: #eef3ea;
+}
+.typ-wahl .opt b { display: block; margin-bottom: 4px; }
+.typ-wahl .opt span { font-size: 12px; color: #6b6760; }
+
+/* Neuer-Slot-Label-Input */
+.neu-label-input {
+  width: 100%;
+  font: inherit;
+  padding: 12px 16px;
+  border: 1px solid #d6d0c8;
+  border-radius: 8px;
+  background: #fff;
+  margin-bottom: 12px;
+  font-size: 16px;
+}
+.neu-label-input:focus {
+  outline: none;
+  border-color: #47503C;
+  box-shadow: 0 0 0 2px #eef3ea;
+}
+
+/* Sheet-Aktions-Leiste (sticky am Boden) */
+.sheet-btn-gruppe {
+  position: sticky;
+  bottom: 0;
+  background: #F5F1E8;
+  z-index: 10;
+  padding: 12px 0 4px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────────── */
+@media (max-width: 460px) {
+  .icon-grid, .person-grid { grid-template-columns: repeat(3, 1fr); }
+  .feldzeile { flex-wrap: wrap; }
+  .feldzeile .feldname { width: 100%; }
+  .kopf .pwa-chip { display: none; }
+  .sektion > h2 .hint { display: none; }
+  .typ-wahl { flex-direction: column; }
+}
