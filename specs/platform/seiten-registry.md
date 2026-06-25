@@ -52,7 +52,7 @@ Einstiegspunkt mit HTML-Antwort** — nicht „jede mögliche URL". Konkret:
   `query`, `label`), damit „die Wochenansicht" und „die Kleinkind-Wochenansicht"
   beide auflösbar sind, ohne dass freie Filter die Registry sprengen.
 
-**Fünf Sorten** aufrufbarer Seiten, ein gemeinsames Eintrags-Schema (SREG-4):
+**Sieben Sorten** aufrufbarer Seiten, ein gemeinsames Eintrags-Schema (SREG-4):
 
 | Sorte | Beispiel | instanz-spezifisch | Wahrheitsquelle |
 |-------|----------|--------------------|-----------------|
@@ -61,6 +61,8 @@ Einstiegspunkt mit HTML-Antwort** — nicht „jede mögliche URL". Konkret:
 | (c) Controller-App | `/controller/figuren-erkennung/` | nein | Controller-Manifest (BUD-3) |
 | (d) Panel-Instanz | `/controller/app-panel/<panel_id>` | **ja** | `panels.json`-Snapshot (PREG) |
 | (e) Display-Client | `/display/<display_id>` | **ja** | Geräte-Registry-Snapshot (GER), gefiltert |
+| (f) Homescreen-PWA | `/seiten/plan/einstellungen` | nein | Buddy- **oder Platform-Service-Manifest** (`views.json`, typ: "pwa"); Form SREG-15 |
+| (g) Mini-App (Telegram) | `/seiten/mini-app-uebersicht` | nein | Buddy- **oder Platform-Service-Manifest** (`views.json`, typ: "mini-app"); Form SREG-14 |
 
 Sorte (b) deckt zwei Eigentümer-Klassen:
 - **Buddy-Eigentümer**: eine Eltern-Settings-View, die zu einem Familien-Buddy
@@ -871,6 +873,68 @@ komponiert. Fehlendes `app_short_name` → `ManifestError` + Eintrag
 
 *Tickets:* #678 (Werft-Sammler), MAU-1..MAU-10 (Konsument), #708
 (Auth-Härtung in derselben Werft mitgehärtet)
+
+## SREG-15 — Homescreen-PWA-Sorte in `views.json` (typ: "pwa")
+
+> ENTSCHEID-File 20260625-074425 Paket-Sektion „Call 1 (Sorte)" → typ:"pwa" jetzt
+> ratifizieren, P2 als Schablone, BEWUSST MINIMAL + explizit erweiterbar.
+> Erste Nutzung: Plan-Buddy Eltern-Einstellungs-Seite (PLAN-35).
+
+Eine **Homescreen-PWA** ist ein Eltern-Formfaktor, der als installierbare
+Web-App auf dem Home-Screen lebt (Manifest + Service-Worker) — **kein**
+Telegram-WebView, **kein** `initData`. Sie wird in `views.json` als neuer
+Sorten-Eintrag deklariert, analog zu den Sorten a/c und zur Mini-App-Sorte
+(SREG-14), aber mit eigener Form-Pflicht.
+
+**BEWUSST MINIMAL (Nic-Setzung 2026-06-25):** Diese Sorte trägt heute genau das,
+was P2 braucht — Manifest/Service-Worker-Andockung und einen Auth-Slot. Sie ist
+**explizit erweiterbar**: kommende typ:"pwa"-Exemplare (Wellen-Anfang, nicht n=1)
+dürfen weitere Pflichtfelder zuziehen, ohne falsche Vorgriffe rausoperieren zu
+müssen.
+
+```json
+{
+  "slug": "einstellungen",
+  "typ": "pwa",
+  "pfad": "/seiten/plan/einstellungen",
+  "label": "Plan-Einstellungen",
+  "synonyme": ["petrantwortlichkeiten", "wer macht was"],
+  "zeigt": "Default-Petrantwortlichkeiten je Slot und Wochentag setzen.",
+  "zielgruppe": "eltern",
+  "pwa": {
+    "manifest": "/seiten/static/plan/manifest.json",
+    "start_url": "/seiten/plan/einstellungen",
+    "service_worker": "/seiten/static/plan/sw.js"
+  },
+  "auth": "public"
+}
+```
+
+**Pflicht-Felder bei `typ: "pwa"`:**
+- `slug`, `pfad` (HTML-Render-Route), `label`, `synonyme`, `zeigt`.
+- `zielgruppe` — frei wählbar (`eltern` oder `kind`); **kein** Berechtigungs-Gate
+  (SREG-6, deskriptiv). Anders als die Mini-App-Sorte (SREG-14), die auf `eltern`
+  festgenagelt ist.
+- `pwa.manifest` — Pfad zum Web-App-Manifest.
+- `pwa.start_url` — Einstiegs-URL der installierten PWA.
+- `pwa.service_worker` — Pfad zum Service-Worker.
+- `auth` — Auth-Slot, Wertebereich **`"public"` | `"cookie"`** (Geräte-Cookie-
+  Pairing nach AUTH-3, falls/wenn gehärtet). **`initData` ist hier NICHT zulässig**
+  (das ist die Mini-App-Welt). V1 (P2): `"public"`.
+
+**Abgrenzung — was diese Sorte NICHT ist:**
+- **≠ `typ: "mini-app"` (SREG-14):** Mini-Apps laufen im Telegram-WebView mit
+  `initData`-Auth und einem `web_app`-Block (Bot-Username, Botfather-Short-Name).
+  Eine Homescreen-PWA hat **keinen** `web_app`-Block und **kein** `initData`.
+- **≠ Eltern-/Settings-View (Sorte b):** Sorte b ist eine server-gerenderte
+  HTML-View ohne installierbaren Mantel (kein Manifest/Service-Worker). Eine
+  typ:"pwa" trägt den Homescreen-Mantel und ist installierbar.
+
+**Vom Aggregator abgeleitet:**
+- `typ = "pwa"` — **explizit aus dem Manifest**, nicht aus `zielgruppe` abgeleitet
+  (Sonderfall analog SREG-14; neue Konstante, z. B. `TYP_PWA = "pwa"`).
+
+*Tickets:* #1126 (Refs #259)
 
 ## Offene Punkte
 

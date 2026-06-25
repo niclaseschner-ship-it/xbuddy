@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Plan-Einstellungen — Wochen-Matrix</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+<div class="kopf">
+  <h1>Plan-Einstellungen</h1>
+  <span class="pwa-chip">PWA · Heimnetz</span>
+</div>
+<p class="sub">Variante A — Wochen-Matrix: alle Petrantwortlichkeiten auf einen Blick (am Handy seitlich scrollen).</p>
+
+<div class="sektion">
+  <h2>Default-Petrantwortlichkeiten <span class="hint">Zelle antippen → Person wählen</span></h2>
+  <div class="card matrix-wrap">
+    <table class="matrix"><thead><tr><th class="slot-th"></th><th>Mo</th><th>Di</th><th>Mi</th><th>Do</th><th>Fr</th><th class="wochenende">Sa</th><th class="wochenende">So</th></tr></thead>
+    <tbody id="matrix-body"></tbody></table>
+  </div>
+</div>
+
+<div class="sektion">
+  <h2>Slots verwalten <span class="hint">▲▼ Reihenfolge · anlegen · löschen</span></h2>
+  <div class="card" id="slot-liste"></div>
+  <button class="btn add" onclick="openTyp()">＋ Slot hinzufügen</button>
+</div>
+
+<div class="sheet-overlay" id="sheet-person"><div class="sheet"><div class="griff"></div>
+  <h3 id="person-titel">Person wählen</h3><div class="person-grid" id="person-grid"></div></div></div>
+<div class="sheet-overlay" id="sheet-typ"><div class="sheet"><div class="griff"></div>
+  <h3>Neuer Slot — welche Art?</h3>
+  <div class="typ-wahl">
+    <div class="opt aktiv"><b>Petrantwortlich</b><span>Jemand ist zuständig — mit Wer-macht-was je Wochentag.</span></div>
+    <div class="opt"><b>Kalender-Termine</b><span>Termine eines Kindes, gefiltert über seinen Namen.</span></div>
+  </div>
+  <div class="save-leiste"><button class="btn" onclick="closeSheets()">Abbrechen</button><button class="btn primary" onclick="closeSheets()">Weiter</button></div>
+</div></div>
+
+<script>
+const PERS = {
+  emil:{n:"Niclas",r:"blue",f:"emil.jpg"}, lena:{n:"Lena",r:"red",f:"lena.jpg"},
+  jonas:{n:"Jonas",r:"green",f:"jonas.png"}, petra:{n:"Petra",r:"orange",f:"petra.jpg"},
+  mia:{n:"Mia",r:"purple",f:"mia.jpg"}, finn:{n:"Finn",r:"teal",f:"finn.jpg"}, timo:{n:"Timo",r:"gray",f:"timo.jpg"}
+};
+const TAGE=["Mo","Di","Mi","Do","Fr","Sa","So"];
+const SLOTS=[
+  {key:"bring",label:"Bringen",typ:"petrantwortlich",icon:"37807",def:["emil","petra","lena","jonas","petra",null,null]},
+  {key:"pick",label:"Abholen",typ:"petrantwortlich",icon:"39520",def:["petra","lena","lena","jonas","emil",null,null]},
+  {key:"cook",label:"Kochen",typ:"petrantwortlich",icon:"2342",def:["jonas","lena","petra",null,null,null,null]},
+  {key:"bed1",label:"Schlafen Mia",typ:"petrantwortlich",icon:"6027",kind:"mia",def:["lena","emil","lena","emil","lena","lena","emil"]},
+  {key:"bed2",label:"Schlafen Finn",typ:"petrantwortlich",icon:"6027",kind:"finn",def:["jonas","jonas","petra","petra","jonas","jonas","petra"]},
+  {key:"act1",label:"Termine Mia",typ:"kalender-read",icon:"3071",kind:"mia"},
+  {key:"act2",label:"Termine Finn",typ:"kalender-read",icon:"3071",kind:"finn"},
+];
+function ring(id,cls="ring"){ if(!id) return `<span class="${cls} leer"></span>`;
+  const p=PERS[id]; return `<img class="${cls} ring-${p.r}" src="assets/fotos/${p.f}" alt="${p.n}" title="${p.n}">`; }
+function badge(t){ return t==="petrantwortlich"?`<span class="badge petrantwortlich">petrantwortlich</span>`:`<span class="badge kalender">kalender-read</span>`; }
+
+// Matrix: nur petrantwortlich-Slots
+document.getElementById("matrix-body").innerHTML = SLOTS.filter(s=>s.typ==="petrantwortlich").map(s=>`
+  <tr><th class="slot-th"><span class="label"><img class="slot-icon" src="assets/arasaac/${s.icon}.png">${s.label}</span></th>
+  ${s.def.map((d,i)=>`<td class="${i>4?'wochenende':''}"><span class="zelle" onclick="openPerson('${s.label} · ${TAGE[i]}')">${ring(d)}</span></td>`).join("")}</tr>`).join("");
+
+// Slot-Verwaltungs-Liste: alle Slots
+document.getElementById("slot-liste").innerHTML = SLOTS.map(s=>`
+  <div class="slot-row">
+    <div class="pfeile"><button class="pfeil">▲</button><button class="pfeil">▼</button></div>
+    <img class="slot-icon" src="assets/arasaac/${s.icon}.png">
+    <span class="label">${s.label}</span>
+    <span class="meta">${badge(s.typ)}${s.kind?ring(s.kind,'ring sm'):''}<button class="btn icon" title="bearbeiten">✎</button></span>
+  </div>`).join("");
+
+function openPerson(titel){ document.getElementById("person-titel").textContent=titel;
+  const ids=Object.keys(PERS);
+  document.getElementById("person-grid").innerHTML=
+    `<div class="person leer" onclick="closeSheets()"><span class="ring leer">×</span><span>leer</span></div>`+
+    ids.map(id=>`<div class="person" onclick="closeSheets()">${ring(id)}<span>${PERS[id].n}</span></div>`).join("");
+  document.getElementById("sheet-person").classList.add("auf"); }
+function openTyp(){ document.getElementById("sheet-typ").classList.add("auf"); }
+function closeSheets(){ document.querySelectorAll(".sheet-overlay").forEach(o=>o.classList.remove("auf")); }
+document.querySelectorAll(".sheet-overlay").forEach(o=>o.addEventListener("click",e=>{ if(e.target===o) closeSheets(); }));
+document.querySelectorAll(".typ-wahl .opt").forEach(o=>o.addEventListener("click",()=>{
+  document.querySelectorAll(".typ-wahl .opt").forEach(x=>x.classList.remove("aktiv")); o.classList.add("aktiv"); }));
+</script>
+</body>
+</html>
