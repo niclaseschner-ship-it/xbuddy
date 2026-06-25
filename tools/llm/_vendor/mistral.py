@@ -178,6 +178,76 @@ class MistralVendor:
         return block
 
     # ------------------------------------------------------------------
+    #  Sicht: get_singleshot — Structured Singleshot (hoerspiel, T1084)
+    # ------------------------------------------------------------------
+
+    def singleshot_structured(
+        self,
+        system: str,
+        prompt: str,
+        schema: dict[str, Any],
+        *,
+        caller: str,
+        slot: str,
+        tool_name: str = "ergebnis",
+        tool_description: str = "Strukturiertes Ergebnis-Objekt nach Schema.",
+        correlation_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Ein Call, forced `tool_use` → Schema-konformes dict (LLMP-S1
+        `get_singleshot`, Spiegel `anthropic.singleshot_structured`).
+
+        Baut den Mistral-Payload aus EINER user-Message (`prompt`) + EINEM Tool
+        (`_to_mistral_tool` — geteilt mit der Agent-Sicht) und erzwingt es über
+        die **benannte** `tool_choice`-Form (Anthropic-Parität: dort
+        `{"type":"tool","name":…}`). `"any"` ist ein validierter Fallback (vgl.
+        `hoerspiel/providers/mistral.py:100`), aber die benannte Form pinnt das
+        EINE Schema-Tool. KEINE Cache-Marker (Mistral kann kein Prompt-Caching).
+        Telemetrie via geteiltem `_emit_telemetry` (kein Copy-Paste — LLMP-S7).
+        Kein `tool_call` mit `name==tool_name` → `ProviderError`
+        (Spiegel `anthropic.py:212-214`).
+        """
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": self.max_tokens,
+            "messages": [],
+            "tools": [self._to_mistral_tool({
+                "name": tool_name,
+                "description": tool_description,
+                "input_schema": schema,
+            })],
+            # Benannte Form (Anthropic-Parität); `"any"` ist validierter
+            # Fallback, vgl. hoerspiel/providers/mistral.py:100.
+            "tool_choice": {"type": "function", "function": {"name": tool_name}},
+        }
+        if system:
+            payload["messages"].append({"role": "system", "content": system})
+        payload["messages"].append({"role": "user", "content": prompt})
+
+        t_start = time.monotonic()
+        response_data = self._call_api(payload)
+        wall_ms = int((time.monotonic() - t_start) * 1000)
+        self._emit_telemetry(
+            response_data, caller=caller, slot=slot,
+            correlation_id=correlation_id, wall_ms=wall_ms,
+        )
+
+        for choice in response_data.get("choices") or []:
+            message = choice.get("message") or {}
+            for tc in message.get("tool_calls") or []:
+                fn = tc.get("function") or {}
+                if fn.get("name") != tool_name:
+                    continue
+                raw_args = fn.get("arguments") or "{}"
+                try:
+                    args = json.loads(raw_args)
+                except (json.JSONDecodeError, TypeError):
+                    args = {}
+                return args if isinstance(args, dict) else {}
+        raise ProviderError(
+            "mistral-vendor: forced tool_use lieferte keinen %r-Block" % tool_name
+        )
+
+    # ------------------------------------------------------------------
     #  neutrale Wire-Form -> Mistral-Payload
     # ------------------------------------------------------------------
 

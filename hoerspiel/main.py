@@ -999,18 +999,36 @@ def parse_args(argv):
     return p.parse_args(argv)
 
 
+# T1084: Der strukturierte Folgen-Pfad (HSP-11) läuft seit #1084 über
+# `tools.llm` (Singleshot-Sicht). Slot pro Brand-Vendor — derselbe ZD-Slot, den
+# die Alt-Provider nutzen (hoerspiel-<vendor>-api-key, HSP-27).
+_LIB_SLOT_FOR_PROVIDER = {
+    "claude": "hoerspiel-anthropic-api-key",
+    "mistral": "hoerspiel-mistral-api-key",
+}
+
+
 def _build_llm(cfg) -> LLMProvider | None:
+    # Alt-Provider bleibt für den Freitext-Synopse-Pfad (HSP-16) — der Lib-
+    # Adapter delegiert `complete` an ihn (additiv, bis Folge-Ticket). Der
+    # strukturierte Folgen-Vorschlag (complete_structured) geht über tools.llm.
     if cfg.llm_provider == "claude":
         if not cfg.anthropic_key:
             return None
         from .providers.claude import ClaudeProvider
-        return ClaudeProvider(api_key=cfg.anthropic_key, model=cfg.llm_model)
-    if cfg.llm_provider == "mistral":
+        alt = ClaudeProvider(api_key=cfg.anthropic_key, model=cfg.llm_model)
+    elif cfg.llm_provider == "mistral":
         if not cfg.mistral_key:
             return None
         from .providers.mistral import MistralProvider
-        return MistralProvider(api_key=cfg.mistral_key, model=cfg.llm_model)
-    return None
+        alt = MistralProvider(api_key=cfg.mistral_key, model=cfg.llm_model)
+    else:
+        return None
+
+    from .providers.lib_adapter import LibSingleshotAdapter
+    slot = _LIB_SLOT_FOR_PROVIDER[cfg.llm_provider]
+    # `model=cfg.llm_model` durchreichen (Modell-Erhalt, z. B. claude-opus-4-7).
+    return LibSingleshotAdapter(slot=slot, model=cfg.llm_model, alt_provider=alt)
 
 
 def _build_tts(cfg):
