@@ -14,6 +14,8 @@ Endpunkte:
   PUT|DELETE /api/v1/plan/aktivitaet    — Kind-Aktivität setzen/löschen (PLAN-11)
   GET|PUT /api/v1/plan/termine          — Termin-Schnittstelle für Apps (PLAN-22)
   POST /api/v1/plan/termine/bulk        — Bulk-Termin-Schnittstelle (PLAN-33)
+  GET|PUT /api/v1/plan/defaults         — Default-Verantwortlichkeiten (PLAN-36, public)
+  GET|PUT /api/v1/plan/slot-modell      — Slot-Modell-Editor-API (PLAN-37, public)
   PUT /api/v1/plan/admin/kalender       — kalender_id setzen (PLAN-32, loopback)
 
 Service-Topologie wie familie/main.py: eine schlanke eigenständige Flask-App,
@@ -1270,6 +1272,249 @@ def api_aktivitaeten_loeschen(art):
 
     logger.info("admin/aktivitaeten DELETE: art=%r entfernt", art)
     return jsonify({"ok": True, "art": art}), 200
+
+
+# ============================================================
+#  Public: Default-Verantwortlichkeiten + Slot-Modell (PLAN-36/PLAN-37, #1126)
+# ============================================================
+#
+# Zwei PUBLIC-Daten-APIs für die Eltern-Einstellungs-PWA (PLAN-35). Anders als
+# der Aktivitäts-Katalog (PLAN-34, loopback) sind diese Routen NICHT loopback-
+# beschränkt: auth.md AUTH-6 stellt `/api/v1/plan/*` als Netz-Trust-PUBLIC.
+# Es gibt KEIN require_init_data, KEINEN initData-Check (P2 ist PWA, nicht
+# Telegram-Mini-App).
+#
+# Persistenz: gleicher atomare Merge-Pfad wie PLAN-34 — _read_plan_json_obj
+# liest den ganzen plan.json-Dict, der Endpoint setzt NUR seine Sektion(en),
+# _write_plan_json_obj schreibt das ganze (gemergte) Objekt über Temp +
+# os.replace. Alle anderen Sektionen (aktivitaeten, kalender_id,
+# _-Kommentar-Keys, slots/defaults der je anderen Route) bleiben byte-gleich.
+
+
+def _defaults_aus_config():
+    """Liefert die Default-Verantwortlichkeiten in API-Nutzform `defaults`.
+
+    In-Memory liegt der Stand als `{ slot: { wochentag_int: person_id|None } }`
+    vor (`Config.default_verantwortlichkeiten`, PLAN-10). Die API-Form spiegelt
+    das mit String-Wochentag-Keys (JSON kennt keine int-Keys):
+    `{ "<slot>": { "0".."6": "<pid>"|null } }`.
+    Reload-on-Read (DCOMP-2): pro Aufruf frisch via `_current_config()`.
+    """
+    cfg = _current_config()
+    out = {}
+    for slot_key, by_day in cfg.default_verantwortlichkeiten.items():
+        out[slot_key] = {str(wd): by_day.get(wd) for wd in range(7)}
+    return out
+
+
+@app.route("/api/v1/plan/defaults", methods=["GET"])
+def api_defaults_lesen():
+    """PLAN-36: PUBLIC GET — Default-Verantwortlichkeiten (PLAN-10).
+
+    Antwort: `{ "defaults": { "<slot>": { "0".."6": "<pid>"|null } } }`.
+    Reload-on-Read (DCOMP-2): pro Aufruf frisch aus plan.json.
+    """
+    return jsonify({"defaults": _defaults_aus_config()}), 200
+
+
+@app.route("/api/v1/plan/defaults", methods=["PUT"])
+def api_defaults_schreiben():
+    """PLAN-36: PUBLIC PUT — setzt die Default-Verantwortlichkeiten (PLAN-10).
+
+    Body: `{ "defaults": { "<slot>": { "<wochentag 0..6>": "<pid>"|null } } }`.
+    Der übergebene Stand ist der Gesamt-Soll-Zustand der Defaults.
+
+    Validierung VOR Persistenz (kein 500, kein Teil-Write bei Fehler):
+      - `defaults` ist Pflicht und ein Objekt;
+      - jeder slot_key ist ein Verantwortlichkeits-Slot (PLAN-6) der aktuellen
+        Config;
+      - jeder Wochentag-Key ist 0..6;
+      - jede person_id existiert in familie.json (FAM-3) — `null` (leerer Tag)
+        ist erlaubt.
+    Persistenz (Form↔Datei-Mapping, verbindlich): geschrieben wird ZWINGEND
+    unter dem Datei-Schlüssel `default_verantwortlichkeiten` in LISTEN-Form
+    `[p0..p6]` — das ist die Form, die der Config-Loader liest
+    (`plan/config.py` `_parse_defaults`). Atomar + Reload (PLAN-32-Muster).
+    """
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or not isinstance(body.get("defaults"), dict):
+        return jsonify({"error": "defaults (Objekt) ist Pflicht"}), 400
+
+    cfg = _current_config()
+    verantwortlich_keys = {s.schluessel for s in cfg.erwachsenen_slots()}
+    registry = _aktuelle_registry()
+
+    # Validierung + Übersetzung in die Datei-Listen-Form — alles VOR Persistenz.
+    datei_defaults = {}
+    for slot_key, by_day in body["defaults"].items():
+        if slot_key not in verantwortlich_keys:
+            return jsonify({
+                "error": "kein Verantwortlichkeits-Slot: %r" % slot_key
+            }), 400
+        if not isinstance(by_day, dict):
+            return jsonify({
+                "error": "defaults[%r] muss ein Wochentag-Objekt sein" % slot_key
+            }), 400
+        liste = [None] * 7
+        for wd_raw, pid in by_day.items():
+            try:
+                wd = int(wd_raw)
+            except (TypeError, ValueError):
+                return jsonify({
+                    "error": "Wochentag %r ist keine Ganzzahl 0..6" % wd_raw
+                }), 400
+            if not (0 <= wd <= 6):
+                return jsonify({
+                    "error": "Wochentag %r liegt außerhalb 0..6" % wd_raw
+                }), 400
+            if pid is not None and registry.get(pid) is None:
+                return jsonify({"error": "unbekannte person_id: %r" % pid}), 400
+            liste[wd] = pid
+        datei_defaults[slot_key] = liste
+
+    path = runtime.get("config_path")
+    if not path:
+        return jsonify({"error": "kein plan.json-Pfad konfiguriert"}), 500
+
+    try:
+        obj = _read_plan_json_obj(path)
+    except (OSError, ValueError) as e:
+        logger.error("PUT defaults: plan.json nicht lesbar: %s", e)
+        return jsonify({"error": "plan.json nicht lesbar: %s" % e}), 500
+
+    # Rest-Dict-Merge: nur die eine Sektion setzen, alles andere bleibt stehen.
+    obj["default_verantwortlichkeiten"] = datei_defaults
+
+    try:
+        _write_plan_json_obj(path, obj)
+    except OSError as e:
+        logger.error("PUT defaults: plan.json nicht schreibbar: %s", e)
+        return jsonify({"error": "plan.json nicht schreibbar: %s" % e}), 500
+
+    # In-process-Übernahme (PLAN-32-Muster); Reload-on-Read greift ohnehin.
+    try:
+        reload_plan_config()
+    except PlanReloadError as e:
+        logger.error("PUT defaults: Reload fehlgeschlagen: %s", e)
+
+    logger.info("PUT defaults: %d Slot-Defaults gesetzt", len(datei_defaults))
+    return jsonify({"ok": True}), 200
+
+
+@app.route("/api/v1/plan/slot-modell", methods=["GET"])
+def api_slot_modell_lesen():
+    """PLAN-37: PUBLIC GET — die aktuelle Slot-Liste (PLAN-6).
+
+    Antwort: `{ "slots": [ { "schluessel", "art", "icon", "kind"? }, … ] }`
+    (Form aus `Slot.to_dict`). Reload-on-Read (DCOMP-2).
+    """
+    cfg = _current_config()
+    return jsonify({"slots": [s.to_dict() for s in cfg.slots]}), 200
+
+
+@app.route("/api/v1/plan/slot-modell", methods=["PUT"])
+def api_slot_modell_schreiben():
+    """PLAN-37: PUBLIC PUT — setzt die Gesamt-Slot-Liste (PLAN-6).
+
+    Body: `{ "slots": [ { "schluessel", "art", "icon", "kind"? }, … ] }`. Die
+    übergebene Liste IST der Soll-Zustand; ein vorher vorhandener `schluessel`,
+    der fehlt, gilt als GELÖSCHT.
+
+    Validierung VOR Persistenz (kein 500, kein Teil-Write):
+      - `slots` ist Pflicht und eine Liste;
+      - jeder Slot trägt `schluessel`, `art`, `icon`;
+      - `art ∈ {verantwortlich, kalender-read}`;
+      - jeder `kalender-read`-Slot trägt ein `kind`, das in familie.json (FAM-3)
+        existiert;
+      - alle `schluessel` sind eindeutig;
+      - `schluessel` ist UNVERÄNDERLICH: trägt ein Slot ein Feld, das den
+        `schluessel` eines bestehenden Slots umbenennen will
+        (`schluessel_neu`/`rename`/`neuer_schluessel`), → HTTP 400.
+    >8 Slots → WARN-Log, kein Fehler (`SLOT_WARN_AB`, PLAN-6 V1.3) — der Parser
+    loggt das beim Reload.
+
+    Multi-Sektion-Save (verbindlich, atomar in EINEM Write): die `slots`-Sektion
+    UND die `default_verantwortlichkeiten`-Sektion fallen konsistent — Defaults
+    eines gelöschten Slots werden mit entfernt (sonst wirft `_parse_defaults`
+    beim nächsten load einen ConfigError, plan/config.py).
+    """
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or not isinstance(body.get("slots"), list):
+        return jsonify({"error": "slots (Liste) ist Pflicht"}), 400
+
+    registry = _aktuelle_registry()
+    seen = set()
+    sauber = []
+    for raw in body["slots"]:
+        if not isinstance(raw, dict):
+            return jsonify({"error": "Slot-Eintrag ist kein Objekt"}), 400
+        # schluessel ist UNVERÄNDERLICH: ein Umbenenn-Feld weisen wir ab (400).
+        for verboten in ("schluessel_neu", "neuer_schluessel", "rename"):
+            if verboten in raw:
+                return jsonify({"error": "schluessel ist unveränderlich"}), 400
+        for feld in ("schluessel", "art", "icon"):
+            val = raw.get(feld)
+            if not val or not isinstance(val, str) or not val.strip():
+                return jsonify({
+                    "error": "Slot ohne Pflichtfeld %r" % feld
+                }), 400
+        schluessel = raw["schluessel"]
+        art = raw["art"]
+        if art not in config_mod.SLOT_ARTEN:
+            return jsonify({
+                "error": "Slot %r: Art %r unbekannt" % (schluessel, art)
+            }), 400
+        kind = raw.get("kind")
+        if art == config_mod.SLOT_KALENDER_READ:
+            if not kind or registry.get(kind) is None:
+                return jsonify({
+                    "error": "kalender-read-Slot %r braucht ein bekanntes kind"
+                             % schluessel
+                }), 400
+        if schluessel in seen:
+            return jsonify({
+                "error": "doppelter Slot-Schlüssel %r" % schluessel
+            }), 400
+        seen.add(schluessel)
+        eintrag = {"schluessel": schluessel, "art": art, "icon": raw["icon"]}
+        # kind nur übernehmen, wenn gesetzt (verantwortlich-Slots dürfen ein
+        # kind tragen — z. B. bett-bringt-Slot — aber es ist optional).
+        if kind:
+            eintrag["kind"] = kind
+        sauber.append(eintrag)
+
+    path = runtime.get("config_path")
+    if not path:
+        return jsonify({"error": "kein plan.json-Pfad konfiguriert"}), 500
+
+    try:
+        obj = _read_plan_json_obj(path)
+    except (OSError, ValueError) as e:
+        logger.error("PUT slot-modell: plan.json nicht lesbar: %s", e)
+        return jsonify({"error": "plan.json nicht lesbar: %s" % e}), 500
+
+    # Multi-Sektion-Save: slots setzen UND defaults gelöschter Slots bereinigen.
+    obj["slots"] = sauber
+    behaltene_keys = seen
+    alte_defaults = obj.get("default_verantwortlichkeiten")
+    if isinstance(alte_defaults, dict):
+        obj["default_verantwortlichkeiten"] = {
+            k: v for k, v in alte_defaults.items() if k in behaltene_keys
+        }
+
+    try:
+        _write_plan_json_obj(path, obj)
+    except OSError as e:
+        logger.error("PUT slot-modell: plan.json nicht schreibbar: %s", e)
+        return jsonify({"error": "plan.json nicht schreibbar: %s" % e}), 500
+
+    try:
+        reload_plan_config()
+    except PlanReloadError as e:
+        logger.error("PUT slot-modell: Reload fehlgeschlagen: %s", e)
+
+    logger.info("PUT slot-modell: %d Slots gesetzt", len(sauber))
+    return jsonify({"ok": True}), 200
 
 
 # ============================================================
