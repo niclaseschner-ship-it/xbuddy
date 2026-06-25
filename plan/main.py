@@ -1405,8 +1405,9 @@ def api_defaults_schreiben():
 def api_slot_modell_lesen():
     """PLAN-37: PUBLIC GET — die aktuelle Slot-Liste (PLAN-6).
 
-    Antwort: `{ "slots": [ { "schluessel", "art", "icon", "kind"? }, … ] }`
-    (Form aus `Slot.to_dict`). Reload-on-Read (DCOMP-2).
+    Antwort: `{ "slots": [ { "schluessel", "art", "icon", "kind"?, "label"? }, … ] }`
+    (Form aus `Slot.to_dict`; `label` ist der optionale Anzeige-Name, PLAN-6).
+    Reload-on-Read (DCOMP-2).
     """
     cfg = _current_config()
     return jsonify({"slots": [s.to_dict() for s in cfg.slots]}), 200
@@ -1416,9 +1417,9 @@ def api_slot_modell_lesen():
 def api_slot_modell_schreiben():
     """PLAN-37: PUBLIC PUT — setzt die Gesamt-Slot-Liste (PLAN-6).
 
-    Body: `{ "slots": [ { "schluessel", "art", "icon", "kind"? }, … ] }`. Die
-    übergebene Liste IST der Soll-Zustand; ein vorher vorhandener `schluessel`,
-    der fehlt, gilt als GELÖSCHT.
+    Body: `{ "slots": [ { "schluessel", "art", "icon", "kind"?, "label"? }, … ] }`.
+    Die übergebene Liste IST der Soll-Zustand; ein vorher vorhandener
+    `schluessel`, der fehlt, gilt als GELÖSCHT.
 
     Validierung VOR Persistenz (kein 500, kein Teil-Write):
       - `slots` ist Pflicht und eine Liste;
@@ -1426,6 +1427,7 @@ def api_slot_modell_schreiben():
       - `art ∈ {verantwortlich, kalender-read}`;
       - jeder `kalender-read`-Slot trägt ein `kind`, das in familie.json (FAM-3)
         existiert;
+      - `label` ist optional (fehlt/null erlaubt); wenn vorhanden, ein String;
       - alle `schluessel` sind eindeutig;
       - `schluessel` ist UNVERÄNDERLICH: trägt ein Slot ein Feld, das den
         `schluessel` eines bestehenden Slots umbenennen will
@@ -1475,12 +1477,22 @@ def api_slot_modell_schreiben():
             return jsonify({
                 "error": "doppelter Slot-Schlüssel %r" % schluessel
             }), 400
+        # label ist ein optionaler Anzeige-Name (PLAN-6/PLAN-37). Fehlt/None
+        # erlaubt; wenn vorhanden, muss es ein String sein.
+        label = raw.get("label")
+        if label is not None and not isinstance(label, str):
+            return jsonify({
+                "error": "Slot %r: label muss ein String sein" % schluessel
+            }), 400
         seen.add(schluessel)
         eintrag = {"schluessel": schluessel, "art": art, "icon": raw["icon"]}
         # kind nur übernehmen, wenn gesetzt (verantwortlich-Slots dürfen ein
         # kind tragen — z. B. bett-bringt-Slot — aber es ist optional).
         if kind:
             eintrag["kind"] = kind
+        # label nur übernehmen, wenn gesetzt (optionaler Anzeige-Name).
+        if label is not None:
+            eintrag["label"] = label
         sauber.append(eintrag)
 
     path = runtime.get("config_path")

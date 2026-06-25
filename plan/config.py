@@ -107,13 +107,18 @@ class Slot:
     Pflicht für Aktivitäts-Slots (PLAN-6); bei Erwachsenen-Slots optional —
     ein bett-bringt-Slot etwa zeigt das Kind im Rail, weist aber einem
     Erwachsenen zu (Wireframe-Handoff `bed1`/`bed2`).
+
+    `label` ist ein optionaler Anzeige-Name (Eltern-Einstellungs-Seite,
+    PLAN-6/PLAN-37); fehlt er, nutzt die Anzeige den `schluessel` als
+    Fallback. Rein anzeigend — keine Datenhaltungs-Bedeutung.
     """
 
-    def __init__(self, schluessel, art, icon, kind=None):
+    def __init__(self, schluessel, art, icon, kind=None, label=None):
         self.schluessel = schluessel
         self.art = art
         self.icon = icon
         self.kind = kind
+        self.label = label
 
     def ist_verantwortlich_slot(self):
         return self.art == SLOT_VERANTWORTLICH
@@ -125,6 +130,8 @@ class Slot:
         d = {"schluessel": self.schluessel, "art": self.art, "icon": self.icon}
         if self.kind is not None:
             d["kind"] = self.kind
+        if self.label is not None:
+            d["label"] = self.label
         return d
 
 
@@ -287,11 +294,18 @@ def _parse_slots(raw_slots):
         if art == SLOT_KALENDER_READ and not kind:
             raise ConfigError(
                 "Kalender-read-Slot %r braucht ein `kind` (PLAN-6)" % raw["schluessel"])
+        # PLAN-6/PLAN-37: optionaler Anzeige-Name. Fehlt/None erlaubt; wenn
+        # vorhanden, muss er ein String sein (keine weitere Validierung).
+        label = raw.get("label")
+        if label is not None and not isinstance(label, str):
+            raise ConfigError(
+                "Slot %r: label muss ein String sein, gefunden: %r"
+                % (raw["schluessel"], label))
         if raw["schluessel"] in seen:
             raise ConfigError("doppelter Slot-Schlüssel %r" % raw["schluessel"])
         seen.add(raw["schluessel"])
         icon = _migriere_slot_icon(raw["schluessel"], raw["icon"])
-        slots.append(Slot(raw["schluessel"], art, icon, kind))
+        slots.append(Slot(raw["schluessel"], art, icon, kind, label))
     # PLAN-6 V1.3: WARN ab 9 Slots — Display-Geometrie nur bis 8 getestet.
     if len(slots) >= SLOT_WARN_AB:
         logger.warning(
