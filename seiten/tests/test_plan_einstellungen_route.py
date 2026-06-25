@@ -689,3 +689,108 @@ def test_ac4_make_icons_py_referenziert_kalender():
     assert "einkaufskorb" not in inhalt.lower(), (
         "_make_icons.py referenziert 'einkaufskorb' — falsches Symbol (AC4)"
     )
+
+
+# ── PLAN-1139-FIX1: Null-Guard im Anlege-Flow ───────────────────────────────
+
+def test_fix1139_lege_slot_an_null_guard():
+    """PLAN-1139-FIX1: legeSlotAn() hat Null-Guard — erzeugt nie icon='null'.
+
+    Bug: legeSlotAn(label, art, null) lieferte icon='null' (String(null)),
+    das zu /display/_shared/icons/arasaac/null.png (404) fuehrt und '?' anzeigt.
+    Fix: defensiver Null-Guard bricht den Anlege-Pfad ab, bevor der falsche Wert
+    in den Slot-State landet.
+    """
+    import re
+
+    js_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+
+    # legeSlotAn muss vor icon: String(iconId) einen Null-Guard haben.
+    # Gesucht: eine Pruefung auf falsy/null/undefined vor der Slot-Erstellung.
+    lege_fn_match = re.search(
+        r"function legeSlotAn\s*\([^)]+\)\s*\{(.+?)^}",
+        js,
+        re.DOTALL | re.MULTILINE,
+    )
+    assert lege_fn_match, "legeSlotAn()-Funktion nicht gefunden"
+    lege_body = lege_fn_match.group(1)
+
+    # Null-Guard: return vor dem Slot-Anlegen wenn iconId fehlt
+    assert "return" in lege_body, (
+        "legeSlotAn() hat kein 'return' — Null-Guard-Abbruch fehlt (PLAN-1139-FIX1)"
+    )
+    assert "iconId" in lege_body or "icon" in lege_body.lower(), (
+        "legeSlotAn() referenziert 'iconId' nicht — Null-Guard fuer Icon fehlt (PLAN-1139-FIX1)"
+    )
+
+    # Die Pruefung muss VOR dem neuerSlot-Objekt stehen (frueher Abbruch)
+    guard_pos = lege_body.find("!iconId")
+    slot_pos  = lege_body.find("neuerSlot")
+    if guard_pos == -1:
+        # Alternativer Guard-Pattern
+        guard_pos = lege_body.find('"null"')
+    assert guard_pos != -1, (
+        "legeSlotAn(): kein Null-Guard mit '!iconId' oder '\"null\"'-Pruefung gefunden (PLAN-1139-FIX1)"
+    )
+    if slot_pos != -1:
+        assert guard_pos < slot_pos, (
+            "legeSlotAn(): Null-Guard steht NACH dem neuerSlot-Objekt — fruehzeitiger Abbruch fehlt"
+        )
+
+
+def test_fix1139_anlegen_btn_disabled_ohne_icon():
+    """PLAN-1139-FIX1: aktualisiereAnlegenBtn() prueft auf echte Icon-ID (kein 'null'-String).
+
+    Der Anlegen-Knopf darf nicht aktiv sein, wenn _pickerIconId den String 'null' traegt.
+    """
+    import re as _re
+
+    js_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+
+    # aktualisiereAnlegenBtn muss gegen "null"-String pruuefen
+    fn_match = _re.search(
+        r"function aktualisiereAnlegenBtn\s*\(\)\s*\{(.+?)^}",
+        js,
+        _re.DOTALL | _re.MULTILINE,
+    )
+    assert fn_match, "aktualisiereAnlegenBtn()-Funktion nicht gefunden"
+    fn_body = fn_match.group(1)
+
+    # Muss "null"-String-Pruefung enthalten
+    assert '"null"' in fn_body or "'null'" in fn_body, (
+        "aktualisiereAnlegenBtn() prueft nicht auf '\"null\"'-String — "
+        "Anlegen-Button koennte bei kaputtem _pickerIconId aktiv sein (PLAN-1139-FIX1)"
+    )
+
+
+def test_fix1139_neu_icon_btn_click_guard():
+    """PLAN-1139-FIX1: Icon-Klick im Neu-Slot-Sheet prueft dataset.iconId vor Setzen von _pickerIconId.
+
+    Ein icon-pick-btn mit leerem/null dataset-Wert darf _pickerIconId nicht auf
+    'null' oder '' setzen — sonst landet der kaputte Wert im Anlege-Flow.
+    """
+    import re as _re
+
+    js_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+
+    # Suche den neu-icon-btn click-Handler-Block
+    click_match = _re.search(
+        r'neu-icon-btn["\']?\s*\).*?_pickerIconId\s*=',
+        js,
+        _re.DOTALL,
+    )
+    assert click_match, (
+        "neu-icon-btn click → _pickerIconId-Zuweisung nicht gefunden (PLAN-1139-FIX1)"
+    )
+    block = click_match.group(0)
+
+    # Muss eine Pruefung auf rawId/null vor der Zuweisung haben
+    assert "null" in block or "rawId" in block, (
+        "neu-icon-btn click-Handler prueft dataset.iconId nicht auf null/leer (PLAN-1139-FIX1)"
+    )
