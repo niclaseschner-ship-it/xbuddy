@@ -406,8 +406,12 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
     span_appointments = []
     kinder = [p for p in registry.alle() if p.is_kind()]
     aktivitaets_slots = cfg.aktivitaets_slots()
-    # kind_id -> kalender-read-slot-schluessel
-    kind_zu_slot = {s.kind: s.schluessel for s in aktivitaets_slots}
+    # kind_id -> [schluessel, …] — Liste aller kalender-read-Slots dieses Kindes.
+    # Ein Kind kann mehrere Slots haben (z.B. zwei Neko-Zeilen); alle müssen
+    # befüllt werden (#1145).
+    kind_zu_slot: dict = {}
+    for _s in aktivitaets_slots:
+        kind_zu_slot.setdefault(_s.kind, []).append(_s.schluessel)
 
     events = kalender.events(anker, anzahl_tage)
     iso_index = {t["iso"]: i for i, t in enumerate(tage)}
@@ -440,8 +444,7 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
                 "event_id": ev.id,
             }
             for kind_id in kind_ids:
-                slot_key = kind_zu_slot.get(kind_id)
-                if slot_key is not None:
+                for slot_key in kind_zu_slot.get(kind_id, []):
                     for iso in tag_isos:
                         schedule[iso][slot_key] = chip
             # PLAN-13: Ein zeitgebundener Einzel-Termin erscheint zusätzlich in
