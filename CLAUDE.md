@@ -20,12 +20,10 @@
   Tool-neutraler Einstieg: `AGENTS.md` (Repo-Root).
 
 Das *Warum* — Vision, Kontext, Begründung — lebt im Repo `xbuddy-knowledge`
-in `CONTEXT.md`. Wer hier neu startet, liest in dieser Reihenfolge:
-
-1. `xbuddy-knowledge/CONTEXT.md` — Vision (Warum)
-2. `specs/constitution.md` — operative Prinzipien
-3. `specs/README.md` — Spec-Modell + die eine Sync-Regel
-4. `WORKFLOW.md` — Ticket-Workflow
+in `CONTEXT.md`. **Einstieg + Lese-Reihenfolge stehen an einem Ort: `AGENTS.md`
+(Repo-Root).** Wer neu ist, startet dort — die Karte führt von der Vision
+(`xbuddy-knowledge/CONTEXT.md`) über `specs/constitution.md`, `specs/README.md`
+bis `WORKFLOW.md`.
 
 ## 2. Die zwei Repos
 
