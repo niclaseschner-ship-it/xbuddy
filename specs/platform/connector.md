@@ -13,9 +13,12 @@ bestehenden Eltern-Chat — die Seite selbst ist in V1 **read-only**.
 **Datenquellen:** `var/llm/provider_calls.jsonl` (LLMP-S4, Verbrauch/Kosten) +
 `tools/zugangsdaten`-Slot-Inventar (ZD-2, welche Verbindungen).
 
-**Heimat (Gate A 2026-06-25):** Eltern-App-Plus-Seite (PWA), Cookie-Auth AUTH-3
-(RAT-18 PWA-First) — **nicht** die fail-open/PUBLIC `seiten/`-Übersicht, weil
-Kosten-/Nutzungsdaten gezeigt werden.
+**Heimat (Gate A 2026-06-25):** Eltern-App-Plus-Seite (PWA) unter dem
+`seiten/`-Mantel. **V1-Auth = PUBLIC** (auth.md AUTH-6, fail-open), exakt wie
+die übrigen `seiten/`-Mini-Apps (plan-einstellungen, einkauf) — **keine** neue
+Auth-Klasse. (Nic 2026-06-26: AUTH-3/Cookie-Auth ist ungebaut; bis dahin trägt
+der Connector dieselbe PUBLIC-Posture wie die Geschwister-Seiten und härtet
+gemeinsam mit ihnen über [#948](../../README.md).)
 
 **V1-Posture (Berater-Runde 2026-06-25):** Die Seite schreibt in V1 **keine** ZD-Slots
 und **keine** Provider-Config über HTTP (`tools/zugangsdaten` ist Lib-kein-HTTP,
@@ -78,10 +81,33 @@ Verbindung nutzen.
 
 ## 4. Schnittstelle & Auth
 
-### CONN-8 — Read-only HTTP, Cookie-Auth
-Exponiert `GET /api/v1/connector/uebersicht` (read-only, Cookie-Auth AUTH-3). **Kein**
-PUT/POST/DELETE in V1. Konsumiert: `provider_calls.jsonl` (lesen) + ZD-Slot-Inventar
-(nur Namen-Existenz/Status, **nicht** Werte).
+### CONN-8 — Read-only HTTP, PUBLIC (AUTH-6), server-gerendert
+Exponiert unter dem bestehenden nginx-`^~ /api/v1/seiten/`-Block (keine
+nginx-Änderung; ein `/seiten/connector/`-Block existiert **nicht**):
+- `GET /api/v1/seiten/connector/` — PWA-HTML-Shell, die das **read-only
+  Aggregat server-rendert** (Track A + ZD-Inventar als JSON-Blob in die Seite;
+  das JS rendert beide Tabellen + 7-Tage-Charts daraus).
+- `GET /api/v1/seiten/static/connector/<datei>` — PWA-Mantel (manifest.json,
+  sw.js, style.css, logos/*), via Flask-static.
+
+**Kein** separater `/uebersicht`-Sub-Endpunkt und **kein** Asset-Sub-Pfad unter
+`/api/v1/seiten/connector/`: der Manifest⇔Route-Eigentest (SREG-12,
+`seiten/tests/test_views_manifest_eigentest.py`) verlangt, dass jede
+`/api/v1/seiten/<sub>`-Rule ein **gelisteter View** ist — ein Daten- oder
+Asset-Endpunkt wäre ein Nicht-View und würde die Eltern-Übersicht verschmutzen.
+Darum trägt der Connector genau **eine** Rule (die HTML-Shell, als PWA-View in
+`seiten/views.json` gelistet, SREG-15), und die Daten reisen **eingebettet**
+mit. *(Wenn der Eigentest später einen Daten-Sub-Pfad zulässt, kann V2 auf eine
+fetch-/PWA-First-Variante mit eigenem `…/uebersicht`-Endpunkt umstellen.)*
+
+**Kein** PUT/POST/DELETE in V1. Konsumiert: `provider_calls.jsonl` (lesen, via
+`tools.llm.telemetry_read`) + ZD-Slot-Inventar (nur Anzahl/Status, **nicht**
+Namen, **nicht** Werte — CONN-7).
+
+**Auth = PUBLIC (auth.md AUTH-6, fail-open)**, wie plan-einstellungen/einkauf —
+**nicht** Cookie-Auth AUTH-3 (Nic 2026-06-26: AUTH-3 ungebaut; härtet mit
+[#948](../../README.md)). Die ältere Fassung (`GET /api/v1/connector/uebersicht`,
+Cookie-Auth) war deploy-inkompatibel (eigener nginx-Block) und ist ersetzt.
 
 ## Familie-3-Probe
 Pro Familie variiert allein das **Slot-Inventar** (welche Verbindungen) — Config im
