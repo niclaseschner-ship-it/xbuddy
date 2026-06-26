@@ -411,6 +411,43 @@ def test_PLAN_12_event_without_child_name_becomes_termin(demo_config, demo_regis
     assert len(termine) == 1 and termine[0]["label"] == "Zahnarzt"
 
 
+def test_1145_kind_mit_zwei_slots_event_in_beiden_zeilen(tmp_path, demo_registry):
+    """#1145: Hat ein Kind ZWEI kalender-read-Slots, erscheint sein Event in
+    BEIDEN Slot-Zeilen (gleiche event_id) — nicht nur im letzten (Dict-Kollaps).
+
+    Config: Neko bekommt zwei kalender-read-Slots (neko1 + neko2), Paula einen.
+    Ein Klettern-Neko-Event muss schedule[iso]["neko1"] UND schedule[iso]["neko2"]
+    setzen; schedule[iso]["act_paula"] bleibt None.
+    """
+    cfg = _config_mit_slots(tmp_path, [
+        {"schluessel": "act_paula", "art": "kalender-read", "icon": "3071",
+         "kind": "paula"},
+        {"schluessel": "neko1", "art": "kalender-read", "icon": "3071",
+         "kind": "neko"},
+        {"schluessel": "neko2", "art": "kalender-read", "icon": "3071",
+         "kind": "neko"},
+    ])
+    heute = date(2026, 5, 20)
+    raw = [gcal_allday("e_neko", "Klettern Neko", heute.isoformat())]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(cfg.db_datei)
+    view = render_mod.baue_view(cfg, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    iso = heute.isoformat()
+    chip1 = view["schedule"][iso]["neko1"]
+    chip2 = view["schedule"][iso]["neko2"]
+    assert chip1 is not None, "neko1-Slot bleibt leer — Dict-Kollaps nicht behoben"
+    assert chip2 is not None, "neko2-Slot bleibt leer — Dict-Kollaps nicht behoben"
+    assert chip1["event_id"] == chip2["event_id"] == "e_neko", (
+        "Beide Slots sollen denselben Chip (gleiche event_id) tragen"
+    )
+    # Paulas Slot darf nicht befüllt sein.
+    assert view["schedule"][iso]["act_paula"] is None, (
+        "Paulas Slot darf durch Nekos Event nicht befüllt werden"
+    )
+
+
 # ============================================================
 #  PLAN-14 — Mehrtages-Termin als eine Spanne
 # ============================================================
