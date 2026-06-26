@@ -43,6 +43,21 @@
         "service_worker": "/seiten/static/plan/sw.js"
       },
       "auth": "public"
+    },
+    {
+      "slug": "connector",
+      "typ": "pwa",
+      "pfad": "/api/v1/seiten/connector/",
+      "label": "KI-Anbieter (Connector)",
+      "synonyme": ["connector", "ki-anbieter", "schnittstellen", "provider", "kosten", "tokens"],
+      "zeigt": "Read-only Übersicht der externen KI-Anbieter: Schnittstellen, Kosten und welcher Buddy welche nutzt.",
+      "zielgruppe": "eltern",
+      "pwa": {
+        "manifest": "/api/v1/seiten/static/connector/manifest.json",
+        "start_url": "/api/v1/seiten/connector/",
+        "service_worker": "/api/v1/seiten/static/connector/sw.js"
+      },
+      "auth": "public"
     }
   ]
 }
