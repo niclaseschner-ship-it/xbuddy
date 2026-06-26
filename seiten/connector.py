@@ -37,12 +37,12 @@ _BUDDY_META = {
     "kibuddy": {"label": "kibuddy", "emoji": "🤖"},
 }
 
-# Vendor-Label → Logo-Slug (Datei seiten/static/connector/logos/<slug>.svg).
-_VENDOR_LOGO = {
-    "Anthropic": "anthropic",
-    "Mistral": "mistral",
-    "Azure OpenAI": "azure",
-}
+# Vendor-Slug (parse_slot, == _vendor/<slug>.py) → Anzeige-Label + Logo-Datei
+# (seiten/static/connector/logos/<slug>.svg). Generischer Title-Case-Fallback:
+# ein neues _vendor-Modul (Familie 3) rendert OHNE Code-Änderung — kein
+# Familie-1-Hardcode (Familie-3-Probe, specs/platform/connector.md).
+_VENDOR_LABEL = {"anthropic": "Anthropic", "mistral": "Mistral", "azure": "Azure OpenAI"}
+_VENDOR_LOGO_SLUG = {"anthropic": "anthropic", "mistral": "mistral", "azure": "azure"}
 
 # CONN-2: feste Zeilen-Reihenfolge je Buddy×Funktion (Mockup-treu).
 # eltern-chat LLM → hoerspiel LLM → hoerspiel TTS → kibuddy LLM.
@@ -55,7 +55,12 @@ def buddy_meta(caller):
 
 
 def model_to_vendor(model_id):
-    """model_id → (Vendor-Label, Logo-Slug). Unbekannt → ('Unbekannt', None)."""
+    """model_id → (Vendor-Label, Logo-Slug). Unbekannt → ('Unbekannt', None).
+
+    Nur Sektion 2 (Je-Buddy-Nutzung) — dort ist der Vendor das Beiwerk zum real
+    genutzten Modell, also legitim modell-abgeleitet. Sektion 1 (Inventar) leitet
+    den Vendor autoritativ aus dem Slot ab (``_slot_vendor``), nicht von hier.
+    """
     m = (model_id or "").lower()
     if m.startswith("claude"):
         return ("Anthropic", "anthropic")
@@ -66,16 +71,60 @@ def model_to_vendor(model_id):
     return ("Unbekannt", None)
 
 
+def vendor_label(slug):
+    """Vendor-Slug → Anzeige-Label; unbekannt → generischer Title-Case-Fallback."""
+    if not slug:
+        return "—"
+    return _VENDOR_LABEL.get(slug, slug.replace("-", " ").title())
+
+
+def _slot_vendor(slot):
+    """slot → (caller, vendor-slug) autoritativ via ``parse_slot`` (LLMP-5).
+
+    Generisch gegen die real existierenden ``_vendor/<slug>.py``-Module — kein
+    Hardcode. Trägt der Slot kein bekanntes Vendor-Segment (Nicht-LLM- oder
+    Altlast-Slot wie ``*-provider-api-key``), wird (None, None) geliefert.
+    """
+    try:
+        from tools.llm._resolver import parse_slot
+
+        caller, vendor, _purpose = parse_slot(slot)
+        return caller, vendor
+    except Exception:
+        return None, None
+
+
+def _ist_legacy_provider_key(slot):
+    """CONN-1: Slot sieht aus wie ein LLM-Provider-Key (endet auf ``-key``), trägt
+    aber kein bekanntes Vendor-Segment und gehört nicht zur aktiven Azure-TTS-
+    Bindung → Altlast-Kandidat. Rein aus der Slot-FORM abgeleitet (kein Klartext
+    nach außen, CONN-7), generisch über jedes Inventar."""
+    s = (slot or "").lower()
+    if not s.endswith("-key"):
+        return False
+    if "azure" in s:  # Azure-TTS wird als aktive Verbindung geführt (CONN-3).
+        return False
+    _caller, vendor = _slot_vendor(slot)
+    return vendor is None
+
+
 def _round_eur(value):
     """Kosten auf 4 Nachkommastellen runden; None bleibt None (OPEN-LLMP-A)."""
     return None if value is None else round(float(value), 4)
 
 
 def _enrich(events):
-    """Versieht jedes Event mit ``_vendor`` (Label) für vendorweise Aggregation."""
+    """Versieht jedes Event mit ``_vendor`` (Slug) für vendorweise Aggregation.
+
+    Autoritativ aus dem Slot (``_slot_vendor``/parse_slot, LLMP-5); Fallback auf
+    den model_id-Prefix nur, wenn das Event keinen parsebaren Slot trägt (alte
+    Zeile, Test-Mock) — damit keine Telemetrie still verschwindet.
+    """
     for e in events:
-        label, _logo = model_to_vendor(e.get("model_id"))
-        e["_vendor"] = label
+        _caller, vendor = _slot_vendor(e.get("slot"))
+        if vendor is None:
+            _label, vendor = model_to_vendor(e.get("model_id"))  # logo-slug
+        e["_vendor"] = vendor
     return events
 
 
@@ -92,39 +141,56 @@ def _daily_list(daily, key):
     ]
 
 
-def _schnittstellen(events, today):
-    """CONN-1: eine Zeile pro externer Verbindung (Vendor), aggregiert.
+def _schnittstellen(events, today, slot_names):
+    """CONN-1: eine Zeile pro angebundenem LLM-Provider-Vendor AUS DEM SLOT-INVENTAR.
 
-    LLM-Vendoren kommen aus der Telemetrie; Azure-TTS (CONN-3) und die
-    Altlast-Verbindung werden als feste Zeilen ergänzt.
+    Vendor + nutzende caller kommen generisch via ``parse_slot`` aus dem ZD-Slot-
+    Inventar (ZD-2) — kein Familie-1-Hardcode (Familie-3-Probe). Telemetrie-Kosten
+    und 7-Tage-Verlauf werden je Vendor left-joined; ein konfigurierter, aber
+    ungenutzter Slot erscheint mit Kosten „—". Azure-TTS (CONN-3, aktiv) und eine
+    Altlast-Sammelzeile (nur falls Legacy-Provider-Slots existieren) ergänzen.
     """
+    slot_names = list(slot_names or [])
+
+    # 1. Inventar → Vendor-Slug → nutzende caller (autoritativ, generisch).
+    inv_caller = defaultdict(set)
+    legacy = 0
+    for slot in slot_names:
+        caller, vendor = _slot_vendor(slot)
+        if vendor is not None:
+            inv_caller[vendor].add(caller)
+        elif _ist_legacy_provider_key(slot):
+            legacy += 1
+
+    # 2. Telemetrie je Vendor-Slug (Kosten + 7-Tage-Verlauf + nutzende caller).
     agg = {r["_vendor"]: r for r in aggregate(events, group_keys=("_vendor",))}
     daily = daily_series(events, group_keys=("_vendor",), days=CHART_DAYS, today=today)
-
-    buddys_pro_vendor = defaultdict(set)
+    tele_caller = defaultdict(set)
     for e in events:
-        buddys_pro_vendor[e["_vendor"]].add(e.get("caller"))
+        if e.get("_vendor"):
+            tele_caller[e["_vendor"]].add(e.get("caller"))
+
+    # Vendor-Menge = Inventar ∪ Telemetrie (beide Quellen ehrlich vereint; ein
+    # Vendor mit Telemetrie, aber ohne aktuellen Inventar-Slot, bleibt sichtbar).
+    slugs = {s for s in (set(inv_caller) | set(agg)) if s}
 
     rows = []
-    # Vendoren mit echter Telemetrie, teuerster zuerst.
-    for vendor in sorted(
-        agg, key=lambda v: agg[v].get("est_cost_eur") or 0.0, reverse=True
+    for slug in sorted(
+        slugs, key=lambda s: (-(agg.get(s, {}).get("est_cost_eur") or 0.0), s)
     ):
-        if vendor == "Unbekannt":
-            continue
-        callers = sorted(c for c in buddys_pro_vendor[vendor] if c)
+        callers = sorted(c for c in (inv_caller[slug] | tele_caller[slug]) if c)
         rows.append(
             {
-                "vendor": vendor,
-                "logo": _VENDOR_LOGO.get(vendor),
+                "vendor": vendor_label(slug),
+                "logo": _VENDOR_LOGO_SLUG.get(slug),
                 "status": "konfiguriert",
                 "status_kind": "ok",
                 "buddys": [buddy_meta(c) for c in callers],
-                "abgerechnet_eur": _round_eur(agg[vendor].get("est_cost_eur")),
+                "abgerechnet_eur": _round_eur(agg.get(slug, {}).get("est_cost_eur")),
                 "telemetrie_folgt": False,
                 "inaktiv": False,
-                "daily": _daily_list(daily, vendor),
-                "key": _VENDOR_LOGO.get(vendor, vendor.lower()),
+                "daily": _daily_list(daily, slug),
+                "key": slug,
             }
         )
 
@@ -144,21 +210,24 @@ def _schnittstellen(events, today):
         }
     )
 
-    # CONN-1: Altlast-Slot ohne aktiven caller → inaktiv.
-    rows.append(
-        {
-            "vendor": "Generisch",
-            "logo": None,
-            "status": "inaktiv / Altlast",
-            "status_kind": "inactive",
-            "buddys": [dict(buddy_meta("hoerspiel"), dim=True)],
-            "abgerechnet_eur": None,
-            "telemetrie_folgt": False,
-            "inaktiv": True,
-            "daily": [],
-            "key": "legacy",
-        }
-    )
+    # CONN-1: Altlast-Sammelzeile NUR wenn das Inventar Legacy-Provider-Slots
+    # enthält (abgeleitet, kein fester Demo-Eintrag; CONN-7: nur Anzahl, kein Name).
+    if legacy:
+        rows.append(
+            {
+                "vendor": "Altlast",
+                "logo": None,
+                "status": "inaktiv / Altlast (%d)" % legacy,
+                "status_kind": "inactive",
+                "buddys": [],
+                "abgerechnet_eur": None,
+                "telemetrie_folgt": False,
+                "inaktiv": True,
+                "legacy_count": legacy,
+                "daily": [],
+                "key": "legacy",
+            }
+        )
     return rows
 
 
@@ -232,20 +301,26 @@ def _je_buddy(events, today):
     return rows
 
 
-def _zd_inventar(slot_names=None, store_path=None):
-    """CONN-7: nur Anzahl/Status der ZD-Slots — NIE Klartext-Name, NIE Wert.
+def _resolve_slot_names(slot_names, store_path):
+    """Liest die ZD-Slot-Namen EINMAL (Test-Naht ``slot_names``; sonst live via
+    ``Zugangsdaten.names()`` — nur Schlüssel, nie Werte, ZD-6/CONN-7).
 
-    ``slot_names`` ist eine Test-Naht; im Normalfall liest das Modul die Namen
-    via ``Zugangsdaten(resolve_store_path()).names()`` (nur Schlüssel, ZD-6).
+    Die Liste speist sowohl Sektion 1 (Inventar-Zeilen, CONN-1) als auch
+    ``_zd_inventar`` (Status-Zähler, CONN-7) — eine Quelle, ein Lesevorgang.
     """
-    if slot_names is None:
-        try:
-            # MOD-5: nur ueber die zugangsdaten-Public-API (Paket-Wurzel).
-            from tools.zugangsdaten import Zugangsdaten, resolve_store_path
+    if slot_names is not None:
+        return list(slot_names)
+    try:
+        # MOD-5: nur über die zugangsdaten-Public-API (Paket-Wurzel).
+        from tools.zugangsdaten import Zugangsdaten, resolve_store_path
 
-            slot_names = Zugangsdaten(store_path or resolve_store_path()).names()
-        except Exception:
-            slot_names = []
+        return list(Zugangsdaten(store_path or resolve_store_path()).names())
+    except Exception:
+        return []
+
+
+def _zd_inventar(slot_names):
+    """CONN-7: nur Anzahl/Status der ZD-Slots — NIE Klartext-Name, NIE Wert."""
     return {"slots_total": len(slot_names), "konfiguriert": len(slot_names) > 0}
 
 
@@ -258,6 +333,7 @@ def baue_context(jsonl_source="", *, today=None, slot_names=None, store_path=Non
     ``slot_names`` / ``store_path``: ZD-Inventar-Naht (CONN-7).
     """
     today = today or date.today()
+    slots = _resolve_slot_names(slot_names, store_path)
     events = _enrich(read_calls(jsonl_source, tail_days=TAIL_DAYS, today=today))
 
     je_buddy = _je_buddy(events, today)
@@ -267,8 +343,8 @@ def baue_context(jsonl_source="", *, today=None, slot_names=None, store_path=Non
         "daten_ab": daten_ab(events),
         "fenster_tage": TAIL_DAYS,
         "chart_tage": CHART_DAYS,
-        "schnittstellen": _schnittstellen(events, today),
+        "schnittstellen": _schnittstellen(events, today, slots),
         "je_buddy": je_buddy,
         "gesamt_llm_eur": _round_eur(gesamt) if gesamt else (gesamt or None),
-        "zd_inventar": _zd_inventar(slot_names=slot_names, store_path=store_path),
+        "zd_inventar": _zd_inventar(slots),
     }

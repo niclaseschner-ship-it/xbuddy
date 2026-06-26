@@ -40,7 +40,15 @@ _STATIC_PREFIX = "/api/v1/seiten/static/connector/"
 
 # Synthetische Telemetrie — bewusst geerdet an realen caller/model der JSONL.
 _HEUTE = date(2026, 6, 26)
-_SLOT_NAMES = ["eltern-chat-mistral-api-key", "kibuddy-anthropic-api-key"]
+# Geerdet am realen Live-Inventar (parse_slot-konform + 1 konfiguriert-ungenutzt
+# + 1 Legacy-Altlast), damit beide neuen Pfade (Inventar-Zeile ohne Telemetrie,
+# Altlast-Ableitung) getestet sind.
+_SLOT_NAMES = [
+    "eltern-chat-mistral-api-key",
+    "kibuddy-anthropic-api-key",
+    "hoerspiel-mistral-api-key",        # konfiguriert, in der Telemetrie UNgenutzt
+    "hoerspiel-llm-provider-api-key",   # Legacy-Provider-Slot → Altlast
+]
 _JSONL_LINES = [
     '{"caller":"eltern-chat","model_id":"mistral-medium-2508","ts":"2026-06-25T10:00:00Z","input_tokens":1000,"output_tokens":50,"est_cost_eur":0.20,"slot":"eltern-chat-mistral-api-key"}',
     '{"caller":"eltern-chat","model_id":"mistral-medium-2508","ts":"2026-06-26T05:00:00Z","input_tokens":1200,"output_tokens":40,"est_cost_eur":0.10,"slot":"eltern-chat-mistral-api-key"}',
@@ -144,6 +152,19 @@ def test_ac2_schnittstellen_vendoren(client):
     assert all("datum" in p and "calls" in p for p in anthro["daily"])
 
 
+def test_ac2_schnittstellen_inventar_getrieben(client):
+    """CONN-1/Familie-3: Sektion 1 kommt AUS DEM INVENTAR — ein konfigurierter,
+    aber in der Telemetrie ungenutzter Slot (hoerspiel-mistral) erzeugt trotzdem
+    eine nutzende-Buddy-Zuordnung; die Altlast-Zeile ist abgeleitet (legacy_count)."""
+    data = _embedded_data(client.get(_HTML_PATH).get_data(as_text=True))
+    mistral = next(r for r in data["schnittstellen"] if r["vendor"] == "Mistral")
+    labels = {b["label"] for b in mistral["buddys"]}
+    assert "hoerspiel" in labels, "konfiguriert-ungenutzter Mistral-Slot fehlt (Inventar-getrieben)"
+    assert "eltern-chat" in labels  # aus der Telemetrie
+    altlast = next(r for r in data["schnittstellen"] if r.get("inaktiv"))
+    assert altlast["legacy_count"] == 1  # genau 1 Legacy-Slot im Fixture-Inventar
+
+
 def test_ac2_je_buddy_zeilen(client):
     """AC2/CONN-2: Sektion 2 = eltern LLM, hoerspiel LLM, hoerspiel TTS, kibuddy LLM."""
     data = _embedded_data(client.get(_HTML_PATH).get_data(as_text=True))
@@ -179,7 +200,7 @@ def test_conn7_kein_slot_klartext_im_html(client):
 def test_conn7_zd_inventar_nur_status(client):
     """CONN-7: zd_inventar liefert nur Anzahl/Status, keine Namen."""
     data = _embedded_data(client.get(_HTML_PATH).get_data(as_text=True))
-    assert data["zd_inventar"] == {"slots_total": 2, "konfiguriert": True}
+    assert data["zd_inventar"] == {"slots_total": 4, "konfiguriert": True}
 
 
 # ── AC3: PWA-Mantel-Assets (Flask-static) ─────────────────────────────────────
@@ -230,6 +251,28 @@ def test_mapping_model_to_vendor():
     assert connector_modul.model_to_vendor("mistral-medium-2508") == ("Mistral", "mistral")
     assert connector_modul.model_to_vendor("gpt-4o") == ("Azure OpenAI", "azure")
     assert connector_modul.model_to_vendor("unbekannt-1")[0] == "Unbekannt"
+
+
+def test_vendor_label_generischer_fallback():
+    """Familie-3-Probe: ein neuer Vendor-Slug (ohne Eintrag in _VENDOR_LABEL)
+    rendert via Title-Case-Fallback, statt verworfen zu werden."""
+    assert connector_modul.vendor_label("anthropic") == "Anthropic"
+    assert connector_modul.vendor_label("mistral") == "Mistral"
+    assert connector_modul.vendor_label("cohere") == "Cohere"   # neues _vendor-Modul
+    assert connector_modul.vendor_label(None) == "—"
+
+
+def test_ist_legacy_provider_key():
+    """Altlast-Erkennung rein aus der Slot-FORM (generisch, kein Slot-Klartext raus)."""
+    assert connector_modul._ist_legacy_provider_key("hoerspiel-llm-provider-api-key")
+    assert connector_modul._ist_legacy_provider_key("kibuddy-openai-key")
+    # konforme Vendor-Slots sind KEINE Altlast (parse_slot greift):
+    assert not connector_modul._ist_legacy_provider_key("eltern-chat-mistral-api-key")
+    # Azure-TTS-Bindung wird als aktiv geführt (CONN-3), nicht als Altlast:
+    assert not connector_modul._ist_legacy_provider_key("hoerspiel-azure-openai-api-key")
+    # Nicht-Provider-Slots fallen raus:
+    assert not connector_modul._ist_legacy_provider_key("eltern-chat-family-group-chat-id")
+    assert not connector_modul._ist_legacy_provider_key("kav-access-token")
 
 
 def test_mapping_caller_to_buddy():
