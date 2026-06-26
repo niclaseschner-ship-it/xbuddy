@@ -72,6 +72,13 @@ blockiert / Clobber), ODER ein Hook-Smoke divergiert (Exit/Deny deployt ≠ Quel
 → **Rückbau der betroffenen Sorte** auf `~/.claude`-lokal-SSoT, Symlink-Gabel
 reaktivieren.
 
+**Bekannte Grenze (additiver Deploy, Watchdog-Befund PW-74):** Der Drift-Wächter
+fängt „neu/geändert erscheint nicht in `~/.claude`", **nicht** „aus der SSoT
+entfernte Glue bleibt in `~/.claude` liegen". Kein `rsync --delete`/Orphan-Scan,
+weil `~/.claude` legitim Nicht-Migriertes hält (cynthra, Scratch, `logs/`,
+`retros/`). Entfernen einer Glue-Datei erfordert manuelles `~/.claude`-Cleanup.
+Dokumentiert in `methode/README.md`.
+
 ## Experiment (Ein-Wege-Tür, vor Welle-1-Merge — durchgeführt)
 
 `deploy-methode.sh --source-ref <pilot-branch>` gegen einen Ref, der `methode/`

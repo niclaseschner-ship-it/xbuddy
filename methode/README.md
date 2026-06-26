@@ -53,3 +53,14 @@ methode/deploy-methode.sh --verify-only
 Quelle ist immer ein git-Objekt-Ref (`git archive`), nie der Working Tree —
 branch-flip-immun (RAT-14). Nach jedem Merge einer Methoden-Änderung gehört der
 Deploy zur „nach Merge"-Disziplin (wie `systemctl restart` für Services).
+
+### Grenze: Deploy ist additiv (bewusst)
+
+`deploy-methode.sh` schreibt/aktualisiert nur Dateien, die in der SSoT (`methode/`)
+existieren; `--verify-only` prüft ebenfalls nur present files. Es gibt **kein**
+`rsync --delete` und keinen Orphan-Scan — bewusst: `~/.claude` enthält
+legitim Nicht-Migriertes (cynthra, `_probe_dump.py`, `logs/`, `retros/`), das ein
+naiver Lösch-Lauf zerstören würde. **Folge:** Wird eine Glue-Datei aus der SSoT
+*entfernt* (abgeschaffter Command/Hook), bleibt die alte Kopie in `~/.claude`
+liegen und muss **von Hand** gelöscht werden. Der Drift-Wächter fängt „neu/geändert
+erscheint nicht", nicht „entfernt bleibt liegen" (Watchdog-Befund PW-74).
