@@ -14,6 +14,10 @@
   wie es gebaut wird.
 - den **Implementierungscode**
 - den **Ticket-Workflow** (GitHub Issues + Projects)
+- den **Methoden-Korpus** (`methode/`) — die versionierte Arbeits-Methode
+  (Commands, Subagents, Contracts, Hooks). SSoT; `~/.claude` ist Deploy-Ziel
+  (`methode/deploy-methode.sh`). Modell: `methode/README.md`, decisions/RAT-23.
+  Tool-neutraler Einstieg: `AGENTS.md` (Repo-Root).
 
 Das *Warum* — Vision, Kontext, Begründung — lebt im Repo `xbuddy-knowledge`
 in `CONTEXT.md`. Wer hier neu startet, liest in dieser Reihenfolge:
