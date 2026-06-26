@@ -930,3 +930,77 @@ def test_fix1139_anlegen_handler_reihenfolge():
         f"const iconId ({iconid_pos}) muss VOR schliesseNeuSlotSheet ({schliesse_pos}) "
         f"kommen, und beide VOR legeSlotAn ({lege_pos}) (PLAN-1139-FIX3 Regression-Schutz)"
     )
+
+
+# ── PLAN-1139-FIX4: Icon-Picker speichert iconId VOR Schließen ───────────────
+
+def test_fix1139_icon_picker_reihenfolge():
+    """PLAN-1139-FIX4: Icon-Picker-Click-Handler sichert iconId BEVOR schliesseIconPicker() ihn nullt.
+
+    Bug (PLAN-1139 Icon-Änderung bei bestehenden Slots): im Icon-Picker-Click-Handler
+    wurde schliesseIconPicker() aufgerufen, bevor das Callback die Icon-ID las — aber
+    schliesseIconPicker() nullt _pickerIconId (Zeile 337). Folge: callback(null) →
+    setzeSlotIcon(slotKey, null) → Null-Guard greift → Icon ändert sich NICHT.
+
+    Fix: _pickerIconId wird in einer lokalen Konstante `iconId` GEFANGEN, BEVOR das Sheet
+    geschlossen wird. Das Callback erhält dann diese lokale Konstante, nicht das nullte Global.
+
+    Regression-Schutz: der Test verifiziert die Reihenfolge:
+    1. const iconId = btn.dataset.iconId    ← Gefängnis BEVOR schließen
+    2. schliesseIconPicker()
+    3. kontext.callback(iconId)             ← lokale Variable, nicht global
+    """
+    import re
+
+    js_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+
+    # Suche den Icon-Grid-Click-Handler (sheet-icon Handler)
+    icon_picker_match = re.search(
+        r'iconGrid\.addEventListener\s*\(\s*["\']click["\']\s*,\s*\(\s*e\s*\)\s*=>\s*\{(.+?)^\s*\}\s*\);',
+        js,
+        re.DOTALL | re.MULTILINE,
+    )
+    assert icon_picker_match, (
+        "Icon-Picker-Click-Handler (iconGrid) nicht gefunden — Test-Struktur hat sich geaendert"
+    )
+    handler_body = icon_picker_match.group(1)
+
+    # Verifikation 1: eine lokale `iconId`-Konstante wird gesetzt
+    assert re.search(r"const\s+iconId\s*=\s*btn\.dataset\.iconId", handler_body), (
+        "Icon-Picker-Handler: 'const iconId = btn.dataset.iconId' nicht gefunden — "
+        "Icon wird nicht in lokale Variable gesichert (PLAN-1139-FIX4)"
+    )
+
+    # Verifikation 2: schliesseIconPicker() wird aufgerufen
+    assert "schliesseIconPicker()" in handler_body, (
+        "Icon-Picker-Handler: 'schliesseIconPicker()' nicht gefunden — "
+        "Handler-Struktur hat sich geaendert (PLAN-1139-FIX4)"
+    )
+
+    # Verifikation 3: callback wird mit der lokalen iconId aufgerufen
+    assert re.search(r"kontext\.callback\s*\(\s*iconId\s*\)", handler_body), (
+        "Icon-Picker-Handler: 'kontext.callback(iconId)' nicht gefunden — "
+        "Icon wird nicht von der gesicherten Konstante gelesen (PLAN-1139-FIX4)"
+    )
+
+    # Verifikation 4: Reihenfolge-Check — const iconId vor schliesseIconPicker vor callback
+    iconid_pos = handler_body.find("const iconId")
+    schliesse_pos = handler_body.find("schliesseIconPicker()")
+    callback_pos = handler_body.find("kontext.callback(")
+
+    assert iconid_pos != -1, (
+        "Icon-Picker-Handler: 'const iconId' nicht gefunden"
+    )
+    assert schliesse_pos != -1, (
+        "Icon-Picker-Handler: 'schliesseIconPicker()' nicht gefunden"
+    )
+    assert callback_pos != -1, (
+        "Icon-Picker-Handler: 'kontext.callback(' nicht gefunden"
+    )
+    assert iconid_pos < schliesse_pos < callback_pos, (
+        "Icon-Picker-Handler: falsche Reihenfolge — "
+        f"const iconId ({iconid_pos}) muss VOR schliesseIconPicker ({schliesse_pos}) "
+        f"kommen, und beide VOR kontext.callback ({callback_pos}) (PLAN-1139-FIX4 Regression-Schutz)"
+    )

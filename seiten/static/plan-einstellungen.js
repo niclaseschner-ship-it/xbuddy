@@ -957,11 +957,12 @@ async function ladeUndRendere() {
         if (!btn) return;
         iconGrid.querySelectorAll(".icon-pick-btn").forEach((b) => b.classList.remove("gewaehlt"));
         btn.classList.add("gewaehlt");
-        _pickerIconId = btn.dataset.iconId;
+        const iconId = btn.dataset.iconId;     // FIX PLAN-1139: vor dem Schließen sichern
+        _pickerIconId = iconId;
         // Icon direkt übernehmen + Sheet schließen
         const kontext = _sheetKontext;
         schliesseIconPicker();
-        if (kontext && kontext.callback) kontext.callback(_pickerIconId);
+        if (kontext && kontext.callback) kontext.callback(iconId);
       });
     }
 
