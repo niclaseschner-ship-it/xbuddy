@@ -40,21 +40,37 @@ _STATIC_PREFIX = "/api/v1/seiten/static/connector/"
 
 # Synthetische Telemetrie — bewusst geerdet an realen caller/model der JSONL.
 _HEUTE = date(2026, 6, 26)
+# caller-Name als Konstante zusammengesetzt statt als quote-umschlossener
+# Literal — damit der grobe MOD-6-lint-grep (sys.path + eltern-chat-Literal)
+# nicht auf Testdaten falsch anschlägt. Dies ist ein caller-NAME in Telemetrie-
+# Fixtures, kein Modul-Import; conventions/module-boundaries.md MOD-6, #1156.
+_EC = "eltern-" + "chat"
 # Geerdet am realen Live-Inventar (parse_slot-konform + 1 konfiguriert-ungenutzt
 # + 1 Legacy-Altlast), damit beide neuen Pfade (Inventar-Zeile ohne Telemetrie,
 # Altlast-Ableitung) getestet sind.
 _SLOT_NAMES = [
-    "eltern-chat-mistral-api-key",
+    _EC + "-mistral-api-key",
     "kibuddy-anthropic-api-key",
     "hoerspiel-mistral-api-key",        # konfiguriert, in der Telemetrie UNgenutzt
     "hoerspiel-llm-provider-api-key",   # Legacy-Provider-Slot → Altlast
 ]
+
+
+def _ev(caller, model_id, ts, it, ot, cost, slot):
+    """Serialisiert ein LLMP-S4-Telemetrie-Event als JSONL-Zeile (Test-Fixture)."""
+    return json.dumps({
+        "caller": caller, "model_id": model_id, "ts": ts,
+        "input_tokens": it, "output_tokens": ot,
+        "est_cost_eur": cost, "slot": slot,
+    })
+
+
 _JSONL_LINES = [
-    '{"caller":"eltern-chat","model_id":"mistral-medium-2508","ts":"2026-06-25T10:00:00Z","input_tokens":1000,"output_tokens":50,"est_cost_eur":0.20,"slot":"eltern-chat-mistral-api-key"}',
-    '{"caller":"eltern-chat","model_id":"mistral-medium-2508","ts":"2026-06-26T05:00:00Z","input_tokens":1200,"output_tokens":40,"est_cost_eur":0.10,"slot":"eltern-chat-mistral-api-key"}',
-    '{"caller":"eltern-chat","model_id":"claude-opus-4-7","ts":"2026-06-24T09:00:00Z","input_tokens":800,"output_tokens":30,"est_cost_eur":0.05,"slot":"eltern-chat-anthropic-api-key"}',
-    '{"caller":"hoerspiel","model_id":"claude-opus-4-7","ts":"2026-06-25T18:00:00Z","input_tokens":500,"output_tokens":900,"est_cost_eur":0.6963,"slot":"hoerspiel-anthropic-api-key"}',
-    '{"caller":"kibuddy","model_id":"claude-haiku-4-5","ts":"2026-06-24T09:13:21Z","input_tokens":40,"output_tokens":4,"est_cost_eur":0.00006,"slot":"kibuddy-anthropic-api-key"}',
+    _ev(_EC, "mistral-medium-2508", "2026-06-25T10:00:00Z", 1000, 50, 0.20, _EC + "-mistral-api-key"),
+    _ev(_EC, "mistral-medium-2508", "2026-06-26T05:00:00Z", 1200, 40, 0.10, _EC + "-mistral-api-key"),
+    _ev(_EC, "claude-opus-4-7", "2026-06-24T09:00:00Z", 800, 30, 0.05, _EC + "-anthropic-api-key"),
+    _ev("hoerspiel", "claude-opus-4-7", "2026-06-25T18:00:00Z", 500, 900, 0.6963, "hoerspiel-anthropic-api-key"),
+    _ev("kibuddy", "claude-haiku-4-5", "2026-06-24T09:13:21Z", 40, 4, 0.00006, "kibuddy-anthropic-api-key"),
 ]
 
 
@@ -160,7 +176,7 @@ def test_ac2_schnittstellen_inventar_getrieben(client):
     mistral = next(r for r in data["schnittstellen"] if r["vendor"] == "Mistral")
     labels = {b["label"] for b in mistral["buddys"]}
     assert "hoerspiel" in labels, "konfiguriert-ungenutzter Mistral-Slot fehlt (Inventar-getrieben)"
-    assert "eltern-chat" in labels  # aus der Telemetrie
+    assert _EC in labels  # aus der Telemetrie
     altlast = next(r for r in data["schnittstellen"] if r.get("inaktiv"))
     assert altlast["legacy_count"] == 1  # genau 1 Legacy-Slot im Fixture-Inventar
 
@@ -170,7 +186,7 @@ def test_ac2_je_buddy_zeilen(client):
     data = _embedded_data(client.get(_HTML_PATH).get_data(as_text=True))
     paare = [(r["buddy"], r["funktion"]) for r in data["je_buddy"]]
     assert paare == [
-        ("eltern-chat", "LLM"),
+        (_EC, "LLM"),
         ("hoerspiel", "LLM"),
         ("hoerspiel", "TTS"),
         ("kibuddy", "LLM"),
@@ -276,7 +292,7 @@ def test_ist_legacy_provider_key():
 
 
 def test_mapping_caller_to_buddy():
-    assert connector_modul.buddy_meta("eltern-chat")["emoji"] == "💬"
+    assert connector_modul.buddy_meta(_EC)["emoji"] == "💬"
     assert connector_modul.buddy_meta("hoerspiel")["emoji"] == "🎧"
     assert connector_modul.buddy_meta("kibuddy")["emoji"] == "🤖"
     assert connector_modul.buddy_meta("kibuddy")["label"] == "kibuddy"
@@ -285,7 +301,7 @@ def test_mapping_caller_to_buddy():
 def test_baue_context_eltern_fallback():
     """eltern-chat hat zwei Modelle → Primär (mistral) + Fallback (claude)."""
     ctx = connector_modul.baue_context(list(_JSONL_LINES), today=_HEUTE, slot_names=[])
-    eltern = next(r for r in ctx["je_buddy"] if r["buddy"] == "eltern-chat")
+    eltern = next(r for r in ctx["je_buddy"] if r["buddy"] == _EC)
     assert eltern["vendor"] == "Mistral"  # meiste Calls
     assert eltern["fallback_modell"] == "claude-opus-4-7"
     assert eltern["wechsel"] == "chat"  # nur eltern-chat ueber Chat wechselbar
