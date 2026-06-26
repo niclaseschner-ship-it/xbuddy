@@ -714,6 +714,95 @@ def plan_einstellungen_asset_view(asset):
     return send_from_directory(root, asset, mimetype=mimetype)
 
 
+# ============================================================
+#  CONN-8 — Connector-Übersicht-PWA (KI-Anbieter-Landschaft)
+# ============================================================
+#
+# Spec-Anker: specs/platform/connector.md (CONN-1..CONN-8). Surface:
+# /api/v1/seiten/connector/ (faellt unter den bestehenden nginx-^~ /api/v1/seiten/-
+# Block — KEINE nginx-Aenderung; ein /seiten/connector/-Block existiert nicht).
+# PUBLIC / Netz-Trust (auth.md AUTH-6, wie plan-einstellungen; haertet mit #948).
+#
+# EINE dynamische Route: die HTML-Shell. Sie SERVER-RENDERt das Aggregat
+# (connector.py → tools.llm.telemetry_read, Track A) + ZD-Inventar (CONN-7, nur
+# Status) als JSON-Blob in die Seite — KEIN separater /uebersicht-Sub-Endpunkt.
+# Grund: der Manifest⇔Route-Eigentest (test_views_manifest_eigentest.py) verlangt,
+# dass JEDE /api/v1/seiten/<sub>-Rule ein gelisteter View ist; ein Daten-Endpunkt
+# waere ein Nicht-View und wuerde die Eltern-Uebersicht verschmutzen. Darum:
+#   - HTML-Shell  → /api/v1/seiten/connector/  (gelisteter PWA-View, SREG-15)
+#   - PWA-Assets  → /api/v1/seiten/static/connector/<datei>  (Flask-static,
+#                   vom Eigentest via "/static/" ausgenommen — keine Extra-Rule)
+# (PWA-First/fetch-Variante mit eigenem Endpunkt: V2, wenn der Eigentest einen
+# Daten-Sub-Pfad zulaesst — Handoff-Flag fuer Nic.)
+
+
+def _connector_asset_root():
+    """Wurzelverzeichnis fuer Connector-Assets (seiten/static/connector/).
+
+    Test-Naht: runtime["connector_asset_dir"].
+    """
+    override = runtime.get("connector_asset_dir") if isinstance(runtime, dict) else None
+    if override:
+        return override
+    return os.path.join(os.path.dirname(__file__), "static", "connector")
+
+
+def _connector_build_id():
+    """build_id aus mtime der connector/index.html (Cache-Buster, analog PLAN-35)."""
+    try:
+        return str(int(os.path.getmtime(
+            os.path.join(_connector_asset_root(), "index.html"))))
+    except OSError:
+        return "0"
+
+
+def _connector_jsonl_source():
+    """Telemetrie-Quelle fuer das Aggregat.
+
+    Test-Naht: runtime["connector_jsonl_source"] (Pfad-String ODER Iterable von
+    JSONL-Zeilen). Default leerer String → telemetry_read loest den ENV-Pfad auf.
+    """
+    src = runtime.get("connector_jsonl_source") if isinstance(runtime, dict) else None
+    return src if src is not None else ""
+
+
+@app.route("/api/v1/seiten/connector/", methods=["GET"])
+def connector_view():
+    """CONN-8: Connector-PWA — server-gerenderte HTML-Shell. PUBLIC (AUTH-6).
+
+    Read-only. Baut das Aggregat (Track A) + ZD-Inventar (CONN-7, nur Status)
+    via seiten/connector.py und bettet es als JSON-Blob (__CONNECTOR_DATA__) in
+    die Shell — das JS rendert beide Tabellen + 7-Tage-Charts daraus. Kein
+    PUT/POST/DELETE (V1 read-only).
+    """
+    import json as _json
+
+    from seiten import connector as connector_modul
+
+    # Test-Nahte: deterministisches Heute + injizierbares ZD-Slot-Inventar,
+    # damit Tests den realen Store/heute nicht anfassen (Default None → selbst
+    # aufgeloest).
+    today = runtime.get("connector_today") if isinstance(runtime, dict) else None
+    slot_names = runtime.get("connector_slot_names") if isinstance(runtime, dict) else None
+    context = connector_modul.baue_context(
+        _connector_jsonl_source(), today=today, slot_names=slot_names)
+
+    root = _connector_asset_root()
+    with open(os.path.join(root, "index.html"), encoding="utf-8") as fh:
+        html = fh.read()
+    # CONN-7: json.dumps der bereits geheimnis-freien Struktur. </script>-Guard,
+    # damit ein etwaiger String den Inline-<script>-Block nicht schliesst.
+    blob = _json.dumps(context, ensure_ascii=False).replace("</", "<\\/")
+    html = html.replace("__CONNECTOR_DATA__", blob)
+    html = html.replace("__BUILD_ID__", _connector_build_id())
+
+    resp = make_response(html)
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
+
+
 @app.route("/api/v1/seiten/mini-app-uebersicht", methods=["GET"])
 def mini_app_uebersicht_view():
     """MAU-1: Telegram-Mini-App-Uebersichts-View — HTML fuer den Familien-Bot.
