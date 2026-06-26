@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<!--
+  Connector-Übersicht — Eltern-PWA (CONN-8, Ticket #1086 Track B).
+
+  Datengetriebene Variante des Mockups specs/mockups/connector/index.html:
+  Die zwei Tabellen-Sektionen + 7-Tage-Charts werden client-seitig aus dem
+  Endpoint /api/v1/seiten/connector/uebersicht gerendert (echte JSONL-Zahlen,
+  Track A telemetry_read). Machart/CSS sind aus dem Mockup übernommen
+  (seiten/static/connector/style.css). PUBLIC (AUTH-6, wie plan-einstellungen).
+
+  CONN-Abdeckung:
+    CONN-1  Schnittstellen-Tabelle (aktiv/inaktiv)         → #sek1-body
+    CONN-2  Je-Buddy×Funktion-Tabelle                       → #sek2-body
+    CONN-3  Azure-TTS aktiv, Kosten "Telemetrie folgt"      → tele-hint
+    CONN-4  "Daten ab <Datum>"-Marker (Tail-Fenster)        → .daten-fenster
+    CONN-5  7-Tage-Verlauf bei Zeilen-Klick                 → chart-row (echte daily-Daten)
+    CONN-6  Edit/Add → Sheet mit ehrlicher Wechsel-Realität → openDetailSheet
+    CONN-7  Kein Key-Klartext, keine Slot-Namen             → nur Status + Buddy-Chips
+-->
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#47503C">
+  <title>Connector — KI-Anbieter</title>
+  <link rel="manifest" href="/api/v1/seiten/static/connector/manifest.json">
+  <link rel="stylesheet" href="/api/v1/seiten/static/connector/style.css?v=__BUILD_ID__">
+</head>
+<body class="xb" data-stage="parent">
+
+  <!-- ══ KOPFZEILE ══════════════════════════════════════════════════════════ -->
+  <header class="page-header">
+    <div class="header-inner">
+      <div class="header-title-row">
+        <span class="header-back" aria-label="Zurück">&#8592;</span>
+        <h1>KI-Anbieter</h1>
+        <span class="header-chip">Eltern-Plus</span>
+      </div>
+      <p class="header-sub">Read-only Übersicht · Schreib-Aktionen via Eltern-Chat (CONN-6) · Zeile anklicken = 7-Tage-Verlauf</p>
+    </div>
+  </header>
+
+  <main class="page-main">
+
+    <!-- CONN-4: Daten-Marker -->
+    <div style="display:flex;justify-content:flex-end;">
+      <span class="daten-fenster" id="daten-fenster">Lade Daten…</span>
+    </div>
+
+    <p id="lade-fehler" style="display:none;color:var(--warning,#b06a00);font-weight:600;"></p>
+
+    <!-- ══ SEKTION 1 — SCHNITTSTELLEN & TOKENS ══════════════════════════════ -->
+    <section id="schnittstellen" class="sektion">
+      <div class="sektion-marker">
+        <span class="sektion-nummer">1</span>
+        <h2 class="sektion-titel">Schnittstellen &amp; Tokens</h2>
+      </div>
+      <p class="sektion-beschr">Eine Zeile pro externer Verbindung — aggregiert über alle Buddys, die sie nutzen.</p>
+
+      <div class="section-actions">
+        <button class="add-btn-top" id="neue-schnittstelle-top" aria-label="Neue Schnittstelle anlegen">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Neue Schnittstelle
+        </button>
+      </div>
+
+      <div class="conn-table-wrap">
+        <table class="conn-table" aria-label="Schnittstellen & Tokens">
+          <thead>
+            <tr>
+              <th>Anbieter</th>
+              <th>Status</th>
+              <th>Nutzende Buddys</th>
+              <th class="num">Abgerechnet</th>
+              <th class="act" title="Bearbeiten"></th>
+            </tr>
+          </thead>
+          <tbody id="sek1-body"></tbody>
+        </table>
+      </div>
+      <p class="table-note">CONN-7 (strenger): Kein Key-Klartext, keine Slot-Namen — nur Status „konfiguriert/inaktiv" und nutzende Buddys.</p>
+    </section>
+
+    <!-- ══ SEKTION 2 — JE BUDDY ══════════════════════════════════════════════ -->
+    <section id="je-buddy" class="sektion">
+      <div class="sektion-marker">
+        <span class="sektion-nummer">2</span>
+        <h2 class="sektion-titel">Je Buddy</h2>
+      </div>
+      <p class="sektion-beschr">Verbrauch und Provider-Zuweisung pro Buddy und Funktion. Zeile anklicken = 7-Tage-Verlauf. Stift = Details/Wechsel.</p>
+
+      <div class="conn-table-wrap">
+        <table class="conn-table" aria-label="Verbrauch je Buddy">
+          <thead>
+            <tr>
+              <th>Buddy</th>
+              <th>Funktion</th>
+              <th>Aktuell genutzt</th>
+              <th class="num">Calls</th>
+              <th class="num">Kosten (€)</th>
+              <th class="act" title="Bearbeiten"></th>
+            </tr>
+          </thead>
+          <tbody id="sek2-body"></tbody>
+          <tfoot>
+            <tr>
+              <td colspan="4">Gesamtkosten LLM (alle Buddys)</td>
+              <td class="num" id="sek2-total">—</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p class="table-note">
+        Kosten aus <code class="inline">var/llm/provider_calls.jsonl</code> (LLMP-S4) · Tail-Fenster 30 Tage (CONN-4) ·
+        TTS-Verbindung (Azure) nicht erfasst (LLMP-S6, folgt) · Kein Key-Klartext (CONN-7).
+      </p>
+    </section>
+
+  </main>
+
+  <footer class="page-footer">
+    <span>Eltern-Plus PWA · Connector V1 · read-only · #1086</span>
+    <span>LLM-Kosten: letzte 30 Tage · TTS-Telemetrie folgt</span>
+  </footer>
+
+  <!-- Generisches Bottom-Sheet (plan-einstellungen-Muster) — Inhalt aus JS -->
+  <div class="sheet-overlay" id="sheet-overlay" role="dialog" aria-modal="true" aria-label="Details">
+    <div class="sheet">
+      <div class="griff"></div>
+      <div id="sheet-inhalt"></div>
+      <div class="sheet-btn-gruppe">
+        <button class="btn" id="sheet-close">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONN-8: Server-gerendertes Aggregat (Track A + ZD-Inventar, CONN-7).
+       seiten/main.py ersetzt __CONNECTOR_DATA__ durch das JSON aus connector.py. -->
+  <script id="connector-data" type="application/json">__CONNECTOR_DATA__</script>
+
+  <script>
+  'use strict';
+  var LOGO_BASE = '/api/v1/seiten/static/connector/logos/';
+
+  // ── PWA-Mantel: Service-Worker registrieren (best-effort) ───────────────────
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker
+        .register('/api/v1/seiten/static/connector/sw.js')
+        .catch(function (e) { console.warn('[connector] SW-Register fehlgeschlagen', e); });
+    });
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+  function eur(v) {
+    if (v === null || v === undefined) return null;
+    return v.toLocaleString('de-DE', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' €';
+  }
+  function eurShort(v) {
+    if (v === null || v === undefined) return '0€';
+    return v.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '€';
+  }
+  var EDIT_SVG = '<svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+
+  // ── 7-Tage-Balkendiagramm aus echten daily-Daten (CONN-5) ──────────────────
+  function buildChart(daily, title, color) {
+    if (!daily || !daily.length) {
+      return '<div class="chart-inner"><div class="chart-title-sm">' + esc(title) +
+        '</div><p style="font-size:13px;color:var(--text-2);">Noch keine Telemetrie für dieses Fenster.</p>' +
+        '<p class="chart-close-hint">Zeile erneut klicken zum Schließen</p></div>';
+    }
+    var hasCost = daily.some(function (d) { return d.est_cost_eur != null && d.est_cost_eur > 0; });
+    var vals = daily.map(function (d) { return hasCost ? (d.est_cost_eur || 0) : (d.calls || 0); });
+    var max = Math.max.apply(null, vals) || 1;
+    var bars = '';
+    daily.forEach(function (d, i) {
+      var x = 12 + i * 42, lx = i * 44 + 6;
+      var dd = d.datum.slice(8) + '.' + d.datum.slice(5, 7);
+      var v = vals[i];
+      var h = v > 0 ? Math.max(3, Math.round((v / max) * 55)) : 3;
+      var y = 67 - h;
+      var fill = v > 0 ? color : '#E3DCCF';
+      bars += '<text x="' + lx + '" y="72" font-size="8" fill="#9A938A" text-anchor="middle">' + esc(dd) + '</text>';
+      bars += '<rect x="' + x + '" y="' + y + '" width="24" height="' + h + '" rx="2" fill="' + fill + '"' + (v > 0 ? ' opacity="0.9"' : '') + '/>';
+      if (v > 0 && hasCost) {
+        bars += '<text x="' + (x + 12) + '" y="' + (y - 3) + '" font-size="7" fill="' + color + '" text-anchor="middle">' + esc(eurShort(d.est_cost_eur)) + '</text>';
+      } else if (v > 0) {
+        bars += '<text x="' + (x + 12) + '" y="' + (y - 3) + '" font-size="7" fill="' + color + '" text-anchor="middle">' + v + '</text>';
+      }
+    });
+    return '<div class="chart-inner"><div class="chart-title-sm">' + esc(title) + '</div>' +
+      '<svg width="100%" viewBox="0 0 308 84" xmlns="http://www.w3.org/2000/svg" aria-label="7-Tage Balkendiagramm">' + bars + '</svg>' +
+      '<p class="chart-close-hint">Zeile erneut klicken zum Schließen</p></div>';
+  }
+
+  function chip(b) {
+    var cls = 'buddy-chip';
+    if (b.dim) cls += ' buddy-chip--dim';
+    else if (b.label === 'hoerspiel') cls += ' buddy-chip--hoerspiel';
+    else if (b.label === 'kibuddy') cls += ' buddy-chip--kibuddy';
+    return '<span class="' + cls + '">' + esc(b.emoji) + ' ' + esc(b.label) + (b.dim ? ' (inaktiv)' : '') + '</span>';
+  }
+
+  // ── Sektion 1: Schnittstellen ──────────────────────────────────────────────
+  function renderSchnittstellen(rows) {
+    var body = document.getElementById('sek1-body');
+    var html = '';
+    rows.forEach(function (r, idx) {
+      var chartId = 'chart-s-' + r.key;
+      var vendorCell = r.logo
+        ? '<img class="vendor-logo-sm" src="' + LOGO_BASE + esc(r.logo) + '.svg" alt="' + esc(r.vendor) + '">'
+        : '<span class="vendor-label-generic">' + esc(r.vendor) + '</span>';
+      var statusBadge;
+      if (r.status_kind === 'ok') statusBadge = '<span class="badge badge-ok">' + esc(r.status) + '</span>';
+      else if (r.status_kind === 'tts') statusBadge = '<span class="badge" style="background:#e5ecf8;color:#1a4a9c;border:1px solid #b8cef0;">' + esc(r.status) + '</span>';
+      else statusBadge = '<span class="badge badge-inactive">' + esc(r.status) + '</span>';
+      var abger = r.telemetrie_folgt
+        ? '<span class="tele-hint">Telemetrie folgt</span>'
+        : (r.abgerechnet_eur != null ? esc(eur(r.abgerechnet_eur)) : '<span style="color:var(--text-3);">—</span>');
+
+      html += '<tr class="clickable" data-chart="' + chartId + '" aria-expanded="false">' +
+        '<td data-label="Anbieter"><div class="vendor-cell">' + vendorCell + '</div></td>' +
+        '<td data-label="Status">' + statusBadge + '</td>' +
+        '<td data-label="Buddys"><div class="buddy-chips">' + r.buddys.map(chip).join('') + '</div></td>' +
+        '<td class="num" data-label="Abgerechnet">' + abger + '</td>' +
+        '<td class="act"><button class="edit-btn" data-sheet="s-' + idx + '" title="' + esc(r.vendor) + ' bearbeiten" aria-label="' + esc(r.vendor) + ' bearbeiten">' + EDIT_SVG + '</button></td>' +
+        '</tr>';
+      html += '<tr class="chart-row" id="' + chartId + '"><td class="chart-expand-cell" colspan="5">' +
+        buildChart(r.daily, 'Verlauf — letzte 7 Tage (' + r.vendor + ')', '#47503C') + '</td></tr>';
+    });
+    // Add-Row
+    html += '<tr class="add-row"><td colspan="5" style="text-align:center;padding:var(--space-3) var(--space-4);">' +
+      '<button class="add-row-btn" id="neue-schnittstelle-row"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Neue Schnittstelle anlegen</button></td></tr>';
+    body.innerHTML = html;
+    rows.forEach(function (r, idx) {
+      var b = body.querySelector('.edit-btn[data-sheet="s-' + idx + '"]');
+      if (b) b.addEventListener('click', function (e) { e.stopPropagation(); openSchnittstelleSheet(r); });
+    });
+  }
+
+  // ── Sektion 2: Je Buddy ────────────────────────────────────────────────────
+  function renderJeBuddy(rows, gesamt) {
+    var body = document.getElementById('sek2-body');
+    var html = '';
+    rows.forEach(function (r, idx) {
+      var chartId = 'chart-b-' + r.key;
+      var fnCls = r.funktion_kind === 'tts' ? 'fn-badge fn-badge--tts' : 'fn-badge fn-badge--llm';
+      var genutzt = '<code class="model-mono' + (r.funktion_kind === 'tts' ? ' model-mono--dim' : '') + '">' + esc(r.modell) + '</code>' +
+        '<div style="font-size:var(--fs-12);color:var(--text-3);margin-top:3px;">' + esc(r.vendor) + '</div>';
+      if (r.fallback_modell) {
+        genutzt += '<div style="font-size:var(--fs-12);color:var(--text-3);margin-top:4px;">+ Fallback</div>' +
+          '<code class="model-mono model-mono--dim">' + esc(r.fallback_modell) + '</code>';
+      }
+      var calls = r.calls != null ? r.calls : '<span style="color:var(--text-3);">—</span>';
+      var kosten = r.telemetrie_folgt ? '<span class="tele-hint">Telemetrie folgt</span>'
+        : (r.kosten_eur != null ? esc(eur(r.kosten_eur)) : '<span style="color:var(--text-3);">—</span>');
+      var rowCls = r.funktion_kind === 'tts' ? '' : 'clickable';
+      var rowAttrs = r.funktion_kind === 'tts' ? '' : ' data-chart="' + chartId + '" aria-expanded="false"';
+
+      html += '<tr class="' + rowCls + '"' + rowAttrs + '>' +
+        '<td data-label="Buddy"><div class="buddy-cell"><div class="buddy-icon-wrap"' + (r.funktion_kind === 'tts' ? ' style="opacity:.6;"' : '') + ' title="' + esc(r.buddy) + '">' + esc(r.emoji) + '</div>' +
+        '<span style="font-weight:600;font-size:var(--fs-14);">' + esc(r.buddy) + '</span></div></td>' +
+        '<td data-label="Funktion"><span class="' + fnCls + '">' + esc(r.funktion) + '</span></td>' +
+        '<td data-label="Genutzt">' + genutzt + '</td>' +
+        '<td class="num" data-label="Calls">' + calls + '</td>' +
+        '<td class="num" data-label="Kosten">' + kosten + '</td>' +
+        '<td class="act"><button class="edit-btn" data-sheet="b-' + idx + '" title="' + esc(r.buddy) + ' ' + esc(r.funktion) + ' bearbeiten">' + EDIT_SVG + '</button></td>' +
+        '</tr>';
+      if (r.funktion_kind !== 'tts') {
+        html += '<tr class="chart-row" id="' + chartId + '"><td class="chart-expand-cell" colspan="6">' +
+          buildChart(r.daily, 'Verlauf — letzte 7 Tage (' + r.buddy + ' ' + r.funktion + ')', '#47503C') + '</td></tr>';
+      }
+    });
+    body.innerHTML = html;
+    rows.forEach(function (r, idx) {
+      var b = body.querySelector('.edit-btn[data-sheet="b-' + idx + '"]');
+      if (b) b.addEventListener('click', function (e) { e.stopPropagation(); openBuddySheet(r); });
+    });
+    document.getElementById('sek2-total').textContent = gesamt != null ? eur(gesamt) : '—';
+  }
+
+  // ── Chart-Toggle (Zeilen-Klick) ─────────────────────────────────────────────
+  function wireChartToggles() {
+    document.querySelectorAll('tr.clickable[data-chart]').forEach(function (tr) {
+      tr.addEventListener('click', function () {
+        var row = document.getElementById(tr.getAttribute('data-chart'));
+        if (!row) return;
+        var open = row.classList.contains('open');
+        document.querySelectorAll('.chart-row.open').forEach(function (r) { r.classList.remove('open'); });
+        document.querySelectorAll('tr[aria-expanded="true"]').forEach(function (t) { t.setAttribute('aria-expanded', 'false'); });
+        if (!open) { row.classList.add('open'); tr.setAttribute('aria-expanded', 'true'); }
+      });
+    });
+  }
+
+  // ── Bottom-Sheets (CONN-6: ehrliche Wechsel-Realität) ──────────────────────
+  function openSheet(html) {
+    document.getElementById('sheet-inhalt').innerHTML = html;
+    document.getElementById('sheet-overlay').classList.add('auf');
+  }
+  function closeSheet() { document.getElementById('sheet-overlay').classList.remove('auf'); }
+
+  var CHAT_LINK = '<button class="chat-link-btn" type="button"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Im Chat öffnen (anbieter_wechseln)</button>';
+  var V2_DISABLED = '<button class="btn disabled" disabled aria-disabled="true" style="margin-top:var(--space-4);opacity:.45;cursor:not-allowed;">Im Chat öffnen (nicht verfügbar)</button>';
+
+  function openSchnittstelleSheet(r) {
+    var feld = '';
+    feld += '<div class="feldzeile"><span class="feldname">Status</span><span class="feldwert">' + esc(r.status) + '</span></div>';
+    feld += '<div class="feldzeile"><span class="feldname">Nutzende Buddys</span><span class="feldwert"><div class="buddy-chips">' + r.buddys.map(chip).join('') + '</div></span></div>';
+    var kosten = r.telemetrie_folgt ? '<span class="tele-hint">Telemetrie folgt — TTS außerhalb LLMP-S6-Scope</span>'
+      : (r.abgerechnet_eur != null ? esc(eur(r.abgerechnet_eur)) + ' (letzte 30 Tage)' : '—');
+    feld += '<div class="feldzeile"><span class="feldname">Abgerechnet</span><span class="feldwert" style="font-weight:700;">' + kosten + '</span></div>';
+    var hinweis;
+    if (r.status_kind === 'tts') {
+      hinweis = '<div class="v2-hint"><span>Azure-only — kein Anbieter-Wechsel über den Chat. TTS-Kosten-Telemetrie + Anbieter-Erweiterung folgen in V2.</span></div>';
+    } else if (r.inaktiv) {
+      hinweis = '<div class="v2-hint"><span>Veraltete Verbindung ohne aktiven Caller. Bereinigung möglich — kein Schreib-Pfad in V1.</span></div>';
+    } else {
+      hinweis = '<div class="info-hint"><span>Key erneuern oder Anbieter wechseln: über den Eltern-Chat (<code class="inline">anbieter_wechseln</code>, CONN-6).</span></div>' + CHAT_LINK;
+    }
+    openSheet('<h3>' + esc(r.vendor) + '</h3><div class="sheet-body">' + feld + hinweis + '</div>');
+  }
+
+  function openBuddySheet(r) {
+    var feld = '<div class="feldzeile"><span class="feldname">Aktuell</span><span class="feldwert"><code class="model-mono">' + esc(r.modell) + '</code> (' + esc(r.vendor) + ')</span></div>';
+    if (r.fallback_modell) {
+      feld += '<div class="feldzeile"><span class="feldname">Fallback</span><span class="feldwert"><code class="model-mono model-mono--dim">' + esc(r.fallback_modell) + '</code></span></div>';
+    }
+    var body;
+    if (r.wechsel === 'chat') {
+      feld += '<div class="feldzeile"><span class="feldname">Wechseln</span><span class="feldwert">Anbieter wechselbar über den <strong>Eltern-Chat</strong> (<code class="inline">anbieter_wechseln</code>, V1-Pfad).</span></div>';
+      body = feld + CHAT_LINK;
+    } else {
+      feld += '<div class="feldzeile"><span class="feldname">Wechseln</span><span class="feldwert" style="color:var(--text-3);">Wechsel in V2 — heute nur per Config + Service-Neustart, kein Self-Service.</span></div>';
+      var why = r.funktion_kind === 'tts'
+        ? 'TTS-Anbieter-Wechsel ist in V1 nicht abgebildet (Azure-only). Kommt ggf. in V2.'
+        : '<code class="inline">anbieter_wechseln</code> kennt nur eltern-chat. ' + esc(r.buddy) + '-LLM-Wechsel kommt in V2.';
+      body = feld + '<div class="v2-hint"><span>' + why + '</span></div>' + V2_DISABLED;
+    }
+    openSheet('<h3>' + esc(r.buddy) + ' — ' + esc(r.funktion) + '</h3><div class="sheet-body">' + body + '</div>');
+  }
+
+  function openNeueSchnittstelle() {
+    openSheet('<h3>Neue Schnittstelle anlegen</h3><div class="sheet-body">' +
+      '<p>Neue Anbieter-Verbindungen (API-Key + Slot) werden über den <strong>Eltern-Chat</strong> angelegt — nicht direkt auf dieser Seite (V1 read-only, CONN-6).</p>' +
+      '<p>Im Eltern-Chat: <code class="inline">anbieter_wechseln</code> starten (ONB-11/12).</p>' +
+      '<div class="info-hint"><span>In V2 bekommt diese Seite eigene Eingabe-Felder (wartet auf Auth-Schreibpfad #948).</span></div>' + CHAT_LINK + '</div>');
+  }
+
+  // ── Boot ────────────────────────────────────────────────────────────────────
+  function boot() {
+    document.getElementById('sheet-close').addEventListener('click', closeSheet);
+    document.getElementById('sheet-overlay').addEventListener('click', function (e) {
+      if (e.target === this) closeSheet();
+    });
+    document.getElementById('neue-schnittstelle-top').addEventListener('click', openNeueSchnittstelle);
+
+    try {
+      var raw = document.getElementById('connector-data').textContent;
+      var data = JSON.parse(raw);
+      var marker = document.getElementById('daten-fenster');
+      marker.textContent = data.daten_ab
+        ? 'Daten ab ' + data.daten_ab + ' · letzte ' + data.fenster_tage + ' Tage'
+        : 'Noch keine Daten · Fenster ' + data.fenster_tage + ' Tage';
+      renderSchnittstellen(data.schnittstellen || []);
+      renderJeBuddy(data.je_buddy || [], data.gesamt_llm_eur);
+      wireChartToggles();
+      var rowBtn = document.getElementById('neue-schnittstelle-row');
+      if (rowBtn) rowBtn.addEventListener('click', openNeueSchnittstelle);
+    } catch (e) {
+      var f = document.getElementById('lade-fehler');
+      f.style.display = 'block';
+      f.textContent = 'Daten konnten nicht geladen werden (' + e.message + ').';
+      document.getElementById('daten-fenster').textContent = 'Daten nicht verfügbar';
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+  </script>
+
+</body>
+</html>

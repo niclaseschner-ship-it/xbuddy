@@ -1,0 +1,26 @@
+{
+  "name": "Connector · KI-Anbieter · XBuddy",
+  "short_name": "Connector",
+  "description": "Read-only Übersicht der externen KI-Anbieter-Landschaft: welche Schnittstellen angebunden sind, was sie kosten, welcher Buddy welche nutzt.",
+  "start_url": "/api/v1/seiten/connector/",
+  "scope": "/api/v1/seiten/connector/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F5F1E8",
+  "theme_color": "#47503C",
+  "lang": "de",
+  "icons": [
+    {
+      "src": "/api/v1/seiten/static/connector/logos/anthropic.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/api/v1/seiten/static/connector/logos/anthropic.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

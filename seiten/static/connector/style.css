@@ -1,0 +1,1250 @@
+/* Connector-Übersicht Mockup — style.css
+   Farbtokens aus xbuddy/display/_shared/design/tokens.css (v2.0)
+   Card-Optik geerdet an seiten/static/plan-einstellungen.css
+   Parent-Stage: Inter, dicht, nüchtern.
+   Self-contained — keine externen Fonts (Inline Google-Fonts-Import unten).
+*/
+
+/* ── Fonts ──────────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* ── Design Tokens (inline subset — aus tokens.css kopiert) ──────────────── */
+:root {
+  --bg:            #F5F1E8;
+  --bg-soft:       #EFE8DC;
+  --surface:       #FFFFFF;
+  --surface-2:     #F0EBE0;
+  --surface-soft:  #FAF7F2;
+  --border:        #E3DCCF;
+  --border-soft:   #DED6C9;
+  --border-strong: #D5CDBF;
+  --text:          #2B2A28;
+  --text-2:        #6B6761;
+  --text-3:        #9A938A;
+  --primary:       #47503C;
+  --primary-light: #56624B;
+  --primary-ink:   #2E3527;
+  --success:       #5D8F4F;
+  --warning:       #C9913B;
+  --danger:        #B85544;
+  --info:          #668EA8;
+  --clay:          #B06B3C;
+  --lake:          #668EA8;
+  --lavender-earth:#8D829B;
+  --sand:          #D6B98C;
+  --shadow-soft:   0 6px 20px rgba(37,31,24,.04);
+  --shadow:        0 4px 16px rgba(44,42,39,.08);
+  --radius-sm:     12px;
+  --radius-md:     16px;
+  --radius-lg:     20px;
+  --radius-full:   9999px;
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --fs-12: 12px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-18: 18px;
+  --fs-20: 20px;
+  --fs-24: 24px;
+  --fs-28: 28px;
+}
+
+/* ── Reset ───────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Base ────────────────────────────────────────────────────────────────── */
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-16);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Page Header ─────────────────────────────────────────────────────────── */
+.page-header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+.header-inner {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-4) var(--space-2);
+}
+.header-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.header-back {
+  font-size: var(--fs-18);
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+.page-header h1 {
+  font-size: var(--fs-24);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  flex: 1;
+}
+.header-chip {
+  font-size: var(--fs-12);
+  font-weight: 500;
+  color: var(--primary);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-full);
+  padding: 3px 10px;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.header-sub {
+  font-size: var(--fs-14);
+  color: var(--text-3);
+  padding-top: var(--space-1);
+}
+
+/* ── Page Main ───────────────────────────────────────────────────────────── */
+.page-main {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) var(--space-10, 80px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-7);
+}
+
+/* ── Sektion ─────────────────────────────────────────────────────────────── */
+.sektion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.sektion-titel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.sektion-titel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-20);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.sektion-titel--dim { color: var(--text-2); }
+.sektion-beschr {
+  font-size: var(--fs-14);
+  color: var(--text-2);
+  line-height: 1.5;
+}
+.sektion-beschr--dim { color: var(--text-3); }
+.icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  stroke: var(--text-2);
+}
+
+/* ── Provider-Grid (CONN-1, CONN-2) ─────────────────────────────────────── */
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+
+.provider-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+  transition: box-shadow 180ms ease;
+}
+.provider-card:hover { box-shadow: var(--shadow); }
+
+.provider-card--inactive {
+  background: var(--surface-soft);
+  border-color: var(--border-soft);
+  opacity: 0.7;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--surface-2);
+}
+
+.vendor-badge {
+  font-size: var(--fs-12);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+}
+.vendor-badge.anthropic {
+  background: #e8efe5;
+  color: var(--primary-ink);
+}
+.vendor-badge.mistral {
+  background: #e5eaf0;
+  color: #2c4a7c;
+}
+.vendor-badge.azure {
+  background: #e5ecf8;
+  color: #1a3f7c;
+}
+.vendor-badge.generic {
+  background: var(--bg-soft);
+  color: var(--text-2);
+}
+
+.card-body {
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.slot-label {
+  font-size: var(--fs-12);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.slot-name {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: var(--fs-12);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  padding: 3px 8px;
+  word-break: break-all;
+}
+.slot-meta-row {
+  display: flex;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+  padding-top: var(--space-1);
+}
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.meta-label {
+  font-size: var(--fs-12);
+  color: var(--text-3);
+  font-weight: 500;
+}
+.slot-note {
+  font-size: var(--fs-12);
+  color: var(--text-2);
+  margin-top: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  background: var(--surface-2);
+  border-radius: 6px;
+  border-left: 3px solid var(--border-strong);
+}
+.slot-note--warn {
+  border-left-color: var(--warning);
+  color: var(--clay);
+}
+
+/* Badges (CONN-2, CONN-7 — nur gesetzt/leer, kein Key-Klartext) */
+.badge {
+  font-size: var(--fs-12);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
+.badge-ok {
+  background: #e6f0e4;
+  color: var(--success);
+  border: 1px solid #c2ddbf;
+}
+.badge-leer {
+  background: #f7ede4;
+  color: var(--danger);
+  border: 1px solid #e8c9be;
+}
+.badge-inactive {
+  background: var(--bg-soft);
+  color: var(--text-3);
+  border: 1px solid var(--border);
+}
+
+/* Buddy + Model chips */
+.buddy-chip {
+  display: inline-block;
+  font-size: var(--fs-12);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: #e8ede3;
+  color: var(--primary-ink);
+  letter-spacing: 0.01em;
+}
+.buddy-chip--hoerspiel {
+  background: #e5eaf5;
+  color: #2a4080;
+}
+.buddy-chip--kibuddy {
+  background: #ede5f5;
+  color: #5a2a80;
+}
+.buddy-chip--dim {
+  background: var(--bg-soft);
+  color: var(--text-3);
+}
+
+.model-tag {
+  display: inline-block;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  background: var(--bg-soft);
+  color: var(--text-2);
+  border: 1px solid var(--border-soft);
+}
+.model-tag--dim { color: var(--text-3); }
+
+/* ── Kosten-Tabelle (CONN-3) ─────────────────────────────────────────────── */
+.daten-fenster {
+  font-size: var(--fs-12);
+  color: var(--info);
+  background: #eaf2f8;
+  border: 1px solid #c8dde8;
+  border-radius: var(--radius-full);
+  padding: 3px 12px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.kosten-table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-soft);
+}
+
+.kosten-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-14);
+  background: var(--surface);
+}
+
+.kosten-table thead th {
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: var(--fs-12);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.kosten-table thead th.num { text-align: right; }
+
+.kosten-table tbody tr {
+  border-bottom: 1px solid var(--border-soft);
+  transition: background 120ms ease;
+}
+.kosten-table tbody tr:hover { background: var(--surface-soft); }
+
+.kosten-table td {
+  padding: var(--space-3) var(--space-4);
+  vertical-align: middle;
+}
+.kosten-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.kosten-table td.cost {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.subtotal-row td {
+  background: var(--bg);
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--border);
+  border-bottom: 2px solid var(--border-strong);
+}
+.subtotal-label {
+  font-size: var(--fs-12);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.subtotal-cost {
+  font-size: var(--fs-14);
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.total-row td {
+  background: var(--primary);
+  color: #fff;
+  padding: var(--space-3) var(--space-4);
+}
+.total-label {
+  font-size: var(--fs-14);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(255,255,255,.9);
+}
+.total-cost {
+  font-size: var(--fs-18);
+  font-weight: 700;
+  color: #fff;
+  text-align: right;
+}
+
+.table-note {
+  font-size: var(--fs-12);
+  color: var(--text-3);
+  line-height: 1.5;
+  padding: var(--space-2) 0;
+}
+
+.inline {
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.9em;
+  background: var(--bg-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--text-2);
+}
+
+/* ── Aktion-Cards (CONN-5) ──────────────────────────────────────────────── */
+.aktion-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.aktion-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+  padding: var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.aktion-icon-wrap {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.aktion-icon-wrap svg {
+  width: 20px;
+  height: 20px;
+  stroke: var(--primary);
+}
+
+.aktion-body {
+  flex: 1;
+  min-width: 0;
+}
+.aktion-titel {
+  font-size: var(--fs-16);
+  font-weight: 600;
+  color: var(--text);
+}
+.aktion-desc {
+  font-size: var(--fs-14);
+  color: var(--text-2);
+  margin-top: 2px;
+}
+
+.aktion-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: var(--fs-14);
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 150ms ease;
+  flex-shrink: 0;
+}
+.aktion-btn:hover { background: var(--primary-light); }
+.btn-icon {
+  width: 14px;
+  height: 14px;
+  stroke: rgba(255,255,255,.8);
+  flex-shrink: 0;
+}
+
+.deeplink-hinweis {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--fs-13, 13px);
+  color: var(--text-2);
+  background: #eaf2f8;
+  border: 1px solid #c8dde8;
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+}
+.deeplink-hinweis svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  stroke: var(--info);
+  margin-top: 2px;
+}
+
+/* ── V2-Platzhalter (CONN-6) ────────────────────────────────────────────── */
+.sektion--v2 {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  background: var(--surface-soft);
+}
+
+.v2-badge {
+  font-size: var(--fs-12);
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--warning);
+  background: #fdf0dc;
+  border: 1px solid #f0d5a0;
+  border-radius: var(--radius-full);
+  padding: 3px 12px;
+  white-space: nowrap;
+}
+
+.v2-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-4);
+  pointer-events: none;
+  user-select: none;
+}
+
+.v2-control-card {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  opacity: 0.55;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.v2-control-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.v2-control-label {
+  font-size: var(--fs-14);
+  font-weight: 600;
+  color: var(--text-2);
+}
+.v2-lock-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke: var(--text-3);
+}
+
+.v2-input-mock {
+  display: flex;
+  gap: var(--space-2);
+}
+.v2-input-mock input {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: monospace;
+  font-size: var(--fs-14);
+  background: var(--bg-soft);
+  color: var(--text-3);
+}
+.v2-input-mock button,
+.v2-switch-mock button {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+  color: var(--text-3);
+  font-size: var(--fs-14);
+  cursor: not-allowed;
+}
+
+.v2-switch-mock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.switch-mock-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-14);
+  color: var(--text-3);
+  cursor: not-allowed;
+}
+
+.v2-blocker-label {
+  font-size: var(--fs-12);
+  color: var(--warning);
+  font-weight: 500;
+  font-style: italic;
+}
+
+/* ── Page Footer ─────────────────────────────────────────────────────────── */
+.page-footer {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) var(--space-7);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  font-size: var(--fs-12);
+  color: var(--text-3);
+  border-top: 1px solid var(--border-soft);
+}
+
+/* ── Tablet / Responsive ────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .provider-grid { grid-template-columns: 1fr; }
+  .v2-controls-grid { grid-template-columns: 1fr; }
+  .aktion-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .aktion-btn { align-self: stretch; justify-content: center; }
+  .sektion-titel-row { flex-direction: column; align-items: flex-start; }
+  .header-title-row h1 { font-size: var(--fs-20); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+
+/* ── Connector-Tabellen-Machart (aus Mockup-Inline-<style>, CONN-1/2) ── */
+/* ── Tabellen-Machart (plan-einstellungen-Spiegel) ──────────────────── */
+    .conn-table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      box-shadow: var(--shadow-soft);
+    }
+    .conn-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: var(--fs-14);
+      background: var(--surface);
+    }
+    .conn-table thead th {
+      background: var(--surface-2);
+      color: var(--text-2);
+      font-size: var(--fs-12);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: var(--space-3) var(--space-4);
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .conn-table thead th.num { text-align: right; }
+    .conn-table thead th.act { text-align: center; width: 48px; }
+    .conn-table tbody tr {
+      border-bottom: 1px solid var(--border-soft);
+      transition: background 120ms ease;
+    }
+    .conn-table tbody tr:hover { background: var(--surface-soft); }
+    .conn-table tbody tr.inactive { opacity: 0.6; }
+    .conn-table td {
+      padding: var(--space-3) var(--space-4);
+      vertical-align: middle;
+    }
+    .conn-table td.num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+    }
+    .conn-table td.act { text-align: center; }
+    .conn-table tfoot td {
+      background: var(--primary);
+      color: #fff;
+      font-weight: 700;
+      padding: var(--space-3) var(--space-4);
+      font-size: var(--fs-14);
+    }
+    .conn-table tfoot td.num {
+      font-size: var(--fs-16);
+      color: #fff;
+    }
+
+    /* ── Tabellen-Abschlusszeile "+ Neue Schnittstelle" ─────────────────── */
+    .conn-table .add-row td {
+      background: var(--surface-soft);
+      border-top: 1px dashed var(--border-strong);
+    }
+    .add-row-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: var(--fs-13, 13px);
+      font-weight: 600;
+      color: var(--primary);
+      border: 1px dashed var(--primary);
+      border-radius: var(--radius-full);
+      padding: 4px 14px;
+      background: transparent;
+      cursor: pointer;
+      transition: background 120ms ease;
+    }
+    .add-row-btn:hover { background: #eef3ea; }
+
+    /* ── Edit-Stift-Button (plan-einstellungen-Muster) ───────────────────── */
+    .edit-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--surface);
+      color: var(--text-2);
+      cursor: pointer;
+      transition: background 120ms ease, border-color 120ms ease;
+      flex-shrink: 0;
+    }
+    .edit-btn:hover {
+      background: var(--bg-soft);
+      border-color: var(--border-strong);
+      color: var(--primary);
+    }
+    .edit-btn svg {
+      width: 14px;
+      height: 14px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+    }
+
+    /* ── Vendor-Zelle in Tabelle ─────────────────────────────────────────── */
+    .vendor-cell {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      min-width: 140px;
+    }
+    .vendor-logo-sm {
+      width: 72px;
+      height: 22px;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+    .vendor-label-generic {
+      font-size: var(--fs-12);
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
+
+    /* ── Buddy-Icon-Zelle ────────────────────────────────────────────────── */
+    .buddy-cell {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    .buddy-icon-wrap {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: var(--bg-soft);
+      border: 1px solid var(--border-soft);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 18px;
+      line-height: 1;
+      overflow: hidden;
+    }
+    .buddy-icon-wrap img {
+      width: 28px;
+      height: 28px;
+      object-fit: contain;
+    }
+
+    /* ── Funktion-Badge ──────────────────────────────────────────────────── */
+    .fn-badge {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      padding: 2px 7px;
+      border-radius: var(--radius-full);
+      white-space: nowrap;
+    }
+    .fn-badge--llm {
+      background: #e8ede3;
+      color: var(--primary-ink, #2E3527);
+      border: 1px solid #c8d4c0;
+    }
+    .fn-badge--tts {
+      background: #e5ecf8;
+      color: #1a4a9c;
+      border: 1px solid #b8cef0;
+    }
+
+    /* ── Modell-Tag inline ───────────────────────────────────────────────── */
+    .model-mono {
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 12px;
+      padding: 2px 6px;
+      border-radius: 5px;
+      background: var(--bg-soft);
+      color: var(--text-2);
+      border: 1px solid var(--border-soft);
+      white-space: nowrap;
+    }
+    .model-mono--dim { color: var(--text-3); }
+
+    /* ── Telemetrie-Hinweis ──────────────────────────────────────────────── */
+    .tele-hint {
+      font-size: 11px;
+      color: var(--warning);
+      font-style: italic;
+      font-weight: 500;
+    }
+
+    /* ── Nutzende-Buddy-Chips in Sektion 1 ──────────────────────────────── */
+    .buddy-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    /* ── Slot-Name inline ────────────────────────────────────────────────── */
+    .slot-name-inline {
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: 11px;
+      color: var(--text-2);
+      background: var(--bg);
+      border: 1px solid var(--border-soft);
+      border-radius: 5px;
+      padding: 2px 6px;
+      word-break: break-all;
+      display: block;
+      margin-top: 3px;
+    }
+
+    /* ── 7-Tage-Chart Row ────────────────────────────────────────────────── */
+    .chart-row { display: none; }
+    .chart-row.open { display: table-row; }
+    .chart-expand-cell {
+      padding: 0 var(--space-4) var(--space-3);
+      background: var(--surface-soft);
+    }
+    .chart-inner {
+      padding: var(--space-3) var(--space-4);
+      background: var(--surface);
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-sm);
+      margin-top: var(--space-2);
+    }
+    .chart-title-sm {
+      font-size: var(--fs-12);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: var(--space-3);
+    }
+    .chart-close-hint {
+      font-size: 11px;
+      color: var(--text-3);
+      margin-top: var(--space-1);
+      text-align: center;
+    }
+    /* Make rows with expandable charts show pointer */
+    .conn-table tr.clickable { cursor: pointer; }
+
+    /* ── Bottom-Sheet (plan-einstellungen-Muster) ────────────────────────── */
+    .sheet-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(30, 26, 20, 0.4);
+      display: none;
+      z-index: 50;
+    }
+    .sheet-overlay.auf { display: block; }
+    .sheet {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      background: var(--bg, #F5F1E8);
+      z-index: 51;
+      border-radius: 24px 24px 0 0;
+      padding: var(--space-5) var(--space-4) var(--space-8);
+      max-width: 800px;
+      margin: 0 auto;
+      transform: translateY(100%);
+      transition: transform 220ms ease;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 -8px 32px rgba(44, 42, 39, 0.16);
+    }
+    .sheet-overlay.auf .sheet { transform: translateY(0); }
+    .griff {
+      width: 40px;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--border-strong, #D5CDBF);
+      margin: 0 auto var(--space-4);
+    }
+    .sheet h3 {
+      font-size: var(--fs-18);
+      font-weight: 600;
+      margin-bottom: var(--space-4);
+      color: var(--text);
+    }
+    .sheet p, .sheet .sheet-body {
+      font-size: var(--fs-14);
+      color: var(--text-2);
+      line-height: 1.55;
+      margin-bottom: var(--space-4);
+    }
+    .sheet .sheet-btn-gruppe {
+      display: flex;
+      justify-content: flex-end;
+      gap: var(--space-3);
+      margin-top: var(--space-5);
+    }
+    .sheet .btn {
+      font-family: inherit;
+      font-size: var(--fs-14);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: var(--radius-sm, 12px);
+      padding: 10px 20px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 120ms ease;
+    }
+    .sheet .btn:hover { background: var(--bg-soft); }
+    .sheet .btn.primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+    .sheet .btn.primary:hover { filter: brightness(1.08); }
+    .sheet .btn:disabled, .sheet .btn.disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .sheet .feldzeile {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-3);
+      padding: var(--space-3) 0;
+      border-bottom: 1px solid var(--border-soft, #efe8dc);
+    }
+    .sheet .feldzeile:last-of-type { border-bottom: none; }
+    .sheet .feldname {
+      font-size: var(--fs-14);
+      color: var(--text-3);
+      width: 100px;
+      flex: 0 0 auto;
+      font-weight: 500;
+      padding-top: 2px;
+    }
+    .sheet .feldwert {
+      font-size: var(--fs-14);
+      color: var(--text);
+      flex: 1;
+    }
+    .sheet .v2-hint {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-2);
+      font-size: var(--fs-13, 13px);
+      color: var(--text-2);
+      background: #fdf0dc;
+      border: 1px solid #f0d5a0;
+      border-radius: var(--radius-sm);
+      padding: var(--space-3) var(--space-4);
+      margin-top: var(--space-4);
+    }
+    .sheet .v2-hint svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      stroke: var(--warning);
+      fill: none;
+      stroke-width: 2;
+      margin-top: 1px;
+    }
+    .sheet .chat-link-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: var(--space-2) var(--space-4);
+      background: var(--primary);
+      color: #fff;
+      border-radius: var(--radius-sm);
+      font-size: var(--fs-14);
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+      transition: background 120ms ease;
+      margin-top: var(--space-4);
+    }
+    .sheet .chat-link-btn:hover { background: var(--primary-light); }
+    .sheet .chat-link-btn svg {
+      width: 14px; height: 14px;
+      stroke: rgba(255,255,255,.9);
+      fill: none;
+      stroke-width: 2;
+    }
+    .sheet .info-hint {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-2);
+      font-size: var(--fs-13, 13px);
+      color: var(--text-2);
+      background: #eaf2f8;
+      border: 1px solid #c8dde8;
+      border-radius: var(--radius-sm);
+      padding: var(--space-3) var(--space-4);
+      margin-top: var(--space-3);
+    }
+    .sheet .info-hint svg {
+      width: 16px; height: 16px;
+      flex-shrink: 0;
+      stroke: var(--info, #668EA8);
+      fill: none;
+      stroke-width: 2;
+      margin-top: 1px;
+    }
+
+    /* ── "+ Neue Schnittstelle"-Button oberhalb der Tabelle ─────────────── */
+    .section-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: calc(-1 * var(--space-2));
+    }
+    .add-btn-top {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: var(--fs-13, 13px);
+      font-weight: 600;
+      color: var(--primary);
+      border: 1px solid var(--primary);
+      border-radius: var(--radius-full);
+      padding: 5px 14px;
+      background: transparent;
+      cursor: pointer;
+      transition: background 120ms ease;
+    }
+    .add-btn-top:hover { background: #eef3ea; }
+
+    /* ── Sektion-Nummer-Marker ───────────────────────────────────────────── */
+    .sektion-marker {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+    }
+    .sektion-nummer {
+      flex-shrink: 0;
+      width: 24px;
+      height: 24px;
+      border-radius: var(--radius-full);
+      background: var(--primary);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── Cursor hint ─────────────────────────────────────────────────────── */
+    .conn-table tr.clickable:hover td { background: var(--surface-soft); }
+
+    /* ── Responsive: Sheet auf kleinen Screens ──────────────────────────── */
+    @media (max-width: 600px) {
+      .sheet { padding: var(--space-4) var(--space-3) var(--space-7); }
+      .sheet .feldzeile { flex-wrap: wrap; }
+      .sheet .feldname { width: 100%; }
+      .vendor-logo-sm { width: 56px; }
+    }
+
+    /* ── Mobile-First: Tabellen-Breakpoint (≤480px) ─────────────────────── */
+    /*
+      Mechanik: thead wird ausgeblendet, jede tbody-Zeile wird per
+      display:block zur Karte. Jede td bekommt über data-label=""
+      eine CSS-generierte Beschriftung (::before). Chart-Rows und
+      Add-Row bleiben im normalen Flow.
+    */
+    @media (max-width: 480px) {
+      /* ── Sektion 1: Schnittstellen-Tabelle ── */
+      .conn-table-wrap { overflow-x: hidden; }
+
+      .conn-table thead { display: none; }
+
+      .conn-table tbody tr:not(.chart-row):not(.add-row) {
+        display: block;
+        padding: var(--space-3) var(--space-4);
+        border-bottom: 1px solid var(--border);
+        position: relative;
+      }
+      .conn-table tbody tr:not(.chart-row):not(.add-row) td {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--space-3);
+        padding: var(--space-1) 0;
+        border: none;
+        text-align: left;
+      }
+      /* Label-Spalte links (::before aus data-label) */
+      .conn-table tbody tr:not(.chart-row):not(.add-row) td[data-label]::before {
+        content: attr(data-label);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--text-3);
+        min-width: 80px;
+        flex-shrink: 0;
+        padding-top: 2px;
+      }
+      /* Aktions-Zelle (Edit-Stift): absolute oben-rechts */
+      .conn-table tbody tr:not(.chart-row):not(.add-row) td.act {
+        position: absolute;
+        top: var(--space-3);
+        right: var(--space-4);
+        padding: 0;
+        width: auto;
+      }
+      .conn-table tbody tr:not(.chart-row):not(.add-row) td.act::before {
+        display: none;
+      }
+      /* num-Ausrichtung links auf Mobile */
+      .conn-table td.num { text-align: left; }
+      /* Vendor-Zelle: kein min-width */
+      .vendor-cell { min-width: unset; }
+
+      /* Chart-Row: colspan spielt keine Rolle mehr bei block-Zellen,
+         chart-row bleibt table-row damit colspan-td korrekt läuft */
+      .chart-row td.chart-expand-cell { display: table-cell; padding: var(--space-2) var(--space-3); }
+
+      /* Add-Row als Block */
+      .conn-table .add-row { display: table-row; }
+
+      /* ── Sektion 2: Je-Buddy-Tabelle ── */
+      /* Gleiche Mechanik: thead verstecken, Zeilen als Karte */
+      .conn-table[aria-label="Verbrauch je Buddy"] thead { display: none; }
+      .conn-table[aria-label="Verbrauch je Buddy"] tbody tr:not(.chart-row) {
+        display: block;
+        padding: var(--space-3) var(--space-4);
+        border-bottom: 1px solid var(--border);
+        position: relative;
+      }
+      .conn-table[aria-label="Verbrauch je Buddy"] tbody tr:not(.chart-row) td {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--space-3);
+        padding: var(--space-1) 0;
+        border: none;
+        text-align: left;
+      }
+      .conn-table[aria-label="Verbrauch je Buddy"] tbody tr:not(.chart-row) td[data-label]::before {
+        content: attr(data-label);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--text-3);
+        min-width: 80px;
+        flex-shrink: 0;
+        padding-top: 2px;
+      }
+      .conn-table[aria-label="Verbrauch je Buddy"] tbody tr:not(.chart-row) td.act {
+        position: absolute;
+        top: var(--space-3);
+        right: var(--space-4);
+        padding: 0;
+        width: auto;
+      }
+      .conn-table[aria-label="Verbrauch je Buddy"] tbody tr:not(.chart-row) td.act::before {
+        display: none;
+      }
+      .conn-table[aria-label="Verbrauch je Buddy"] td.num { text-align: left; }
+
+      /* tfoot: als Block-Karte */
+      .conn-table tfoot tr { display: block; padding: var(--space-3) var(--space-4); }
+      .conn-table tfoot td { display: block; padding: 0; border: none; }
+      .conn-table tfoot td.num { font-size: var(--fs-16); padding-top: var(--space-1); }
+    }
