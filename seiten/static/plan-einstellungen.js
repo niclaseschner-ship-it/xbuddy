@@ -923,8 +923,9 @@ async function ladeUndRendere() {
         const label = labelInput.value.trim();
         if (!label) return;
         const art = (_sheetKontext && _sheetKontext.art) || "petrantwortlich";
+        const iconId = _pickerIconId;      // FIX PLAN-1139: vor dem Schließen sichern (schliesseNeuSlotSheet nullt _pickerIconId)
         schliesseNeuSlotSheet();
-        legeSlotAn(label, art, _pickerIconId);
+        legeSlotAn(label, art, iconId);
       }
     });
   }
