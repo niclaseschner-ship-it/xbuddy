@@ -230,6 +230,15 @@ Die Art der Aktivität (Icon/Label) folgt aus einem Schlüsselwort im Titel.
 Trägt ein Event keinen Kindernamen, ist es kein Aktivitäts-Slot-Inhalt, sondern
 ein Termin (PLAN-13).
 
+**Mehrere Slots pro Kind (#1145, #1150):** Hat ein Kind mehrere
+Aktivitäts-Slot-Zeilen (PLAN-11) — zwei Zeilen für dasselbe Kind —, erscheint
+ein passendes Kalender-Event in **jeder** dieser Slot-Zeilen als regulärer
+Aktivitäts-Chip: gleiche Event-`id`, gleiches Aktivitäts-Icon und Label. Das
+Kind→Slot-Mapping ist 1:n, nicht 1:1; kein einzelner Slot „gewinnt" das Event
+für sich. Dies ist die Kind-Geschwister-Klausel zur Multi-Person-Regel
+(PLAN-19, „landet in **jeder** der zugeordneten Slot-Zeilen, gleiche
+Event-`id`").
+
 Ein Kind-Aktivitäts-Eintrag trägt immer ein Symbol: das Piktogramm der
 erkannten Aktivitäts-Art (Schlüsselwort im Titel) oder — wenn kein Schlüsselwort
 passt — ein generisches Fallback-Symbol. Ein Kind-Slot-Eintrag ist nie
