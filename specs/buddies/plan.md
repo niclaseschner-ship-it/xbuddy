@@ -1056,6 +1056,16 @@ ignoriert.
 - **Roundtrip-Garantie (testbares Requirement):** Nach einem erfolgreichen
   `PUT defaults=X` liefert ein anschließendes `load_config` / `GET defaults`
   denselben Stand X. Dieser Roundtrip ist als Test Pflicht.
+- **Schreib-Serialisierung gegen Lost-Update (#1149):** Die `plan.json`-Schreibpfade
+  von PLAN-36 (`defaults`) und PLAN-37 (`slot-modell`) lesen-ändern-schreiben
+  **dieselbe** Datei. Zwei zeitgleiche `PUT` (z. B. `defaults` + `slot-modell`)
+  dürfen sich **nicht** überschreiben — kein verlorenes Section-Update. Da der
+  Plan-Buddy ein einzelner Prozess mit `threaded=True` ist, **genügt eine
+  prozess-interne Serialisierung**: ein gemeinsamer In-Process-Lock um das
+  Read-Modify-Write beider Endpunkte. Ein Datei-Lock über Prozessgrenzen ist
+  **nicht** nötig (ein Prozess, konsistent mit RAT-14). Das atomare Schreiben
+  (DCOMP-4) verhindert nur Torn-Reads, **nicht** den Lost-Update bei
+  überlappendem Read-Modify-Write — daher diese zusätzliche Serialisierung.
 
 **Auth:** PUBLIC / Netz-Trust (auth.md AUTH-6, `/api/v1/plan/*`).
 
