@@ -857,3 +857,76 @@ def test_fix1139_save_race_sequenzielle_puts():
         "onSpeichern(): 'await speichereDefaults()' nicht gefunden — "
         "Sequenzielle Ausfuehrung nicht implementiert (PLAN-1139-FIX2)"
     )
+
+
+# ── PLAN-1139-FIX3: Anlegen-Handler speichert iconId VOR Schließen ────────────
+
+def test_fix1139_anlegen_handler_reihenfolge():
+    """PLAN-1139-FIX3: Anlegen-Handler sichert iconId BEVOR schliesseNeuSlotSheet() ihn nullt.
+
+    Bug (PLAN-1139 Hauptursache): im Anlegen-Click-Handler wurde schliesseNeuSlotSheet()
+    vor legeSlotAn() aufgerufen — aber schliesseNeuSlotSheet() nullt _pickerIconId (Zeile 461).
+    Folge: legeSlotAn() erhielt null statt der echten Icon-ID → Anlegen abgebrochen.
+
+    Fix: _pickerIconId wird in einer lokalen Konstante `iconId` GEFANGEN, BEVOR das Sheet
+    geschlossen wird. legeSlotAn() erhält dann diese lokale Konstante, nicht das nullte Global.
+
+    Regression-Schutz: der Test verifiziert die Reihenfolge:
+    1. const iconId = _pickerIconId    ← Gefängnis BEVOR schliesse…()
+    2. schliesseNeuSlotSheet()
+    3. legeSlotAn(label, art, iconId)  ← lokale Variable, nicht global
+    """
+    import re
+
+    js_path = os.path.join(_SEITEN_DIR, "static", "plan-einstellungen.js")
+    with open(js_path, encoding="utf-8") as f:
+        js = f.read()
+
+    # Suche den Anlegen-Button-Click-Handler im neuSlotSheet-Click-Listener
+    anlegen_match = re.search(
+        r'if\s*\(\s*e\.target\.closest\s*\(\s*["\']\.neu-slot-anlegen["\']\s*\)\s*\)\s*\{(.+?)^\s*\}',
+        js,
+        re.DOTALL | re.MULTILINE,
+    )
+    assert anlegen_match, (
+        "Anlegen-Handler (.neu-slot-anlegen) nicht gefunden — Test-Struktur hat sich geaendert"
+    )
+    handler_body = anlegen_match.group(1)
+
+    # Verifikation 1: eine lokale `iconId`-Konstante wird gesetzt
+    assert re.search(r"const\s+iconId\s*=\s*_pickerIconId", handler_body), (
+        "Anlegen-Handler: 'const iconId = _pickerIconId' nicht gefunden — "
+        "Icon wird nicht in lokale Variable gesichert (PLAN-1139-FIX3)"
+    )
+
+    # Verifikation 2: schliesseNeuSlotSheet() wird aufgerufen
+    assert "schliesseNeuSlotSheet()" in handler_body, (
+        "Anlegen-Handler: 'schliesseNeuSlotSheet()' nicht gefunden — "
+        "Handler-Struktur hat sich geaendert (PLAN-1139-FIX3)"
+    )
+
+    # Verifikation 3: legeSlotAn() wird mit der lokalen iconId aufgerufen
+    assert re.search(r"legeSlotAn\s*\(\s*label\s*,\s*art\s*,\s*iconId\s*\)", handler_body), (
+        "Anlegen-Handler: legeSlotAn(label, art, iconId) nicht gefunden — "
+        "Icon wird nicht von der gesicherten Konstante gelesen (PLAN-1139-FIX3)"
+    )
+
+    # Verifikation 4: Reihenfolge-Check — const iconId vor schliesseNeuSlotSheet vor legeSlotAn
+    iconid_pos = handler_body.find("const iconId")
+    schliesse_pos = handler_body.find("schliesseNeuSlotSheet()")
+    lege_pos = handler_body.find("legeSlotAn(")
+
+    assert iconid_pos != -1, (
+        "Anlegen-Handler: 'const iconId' nicht gefunden"
+    )
+    assert schliesse_pos != -1, (
+        "Anlegen-Handler: 'schliesseNeuSlotSheet()' nicht gefunden"
+    )
+    assert lege_pos != -1, (
+        "Anlegen-Handler: 'legeSlotAn(' nicht gefunden"
+    )
+    assert iconid_pos < schliesse_pos < lege_pos, (
+        "Anlegen-Handler: falsche Reihenfolge — "
+        f"const iconId ({iconid_pos}) muss VOR schliesseNeuSlotSheet ({schliesse_pos}) "
+        f"kommen, und beide VOR legeSlotAn ({lege_pos}) (PLAN-1139-FIX3 Regression-Schutz)"
+    )
