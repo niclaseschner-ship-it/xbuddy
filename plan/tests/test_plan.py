@@ -411,6 +411,43 @@ def test_PLAN_12_event_without_child_name_becomes_termin(demo_config, demo_regis
     assert len(termine) == 1 and termine[0]["label"] == "Zahnarzt"
 
 
+def test_1145_kind_mit_zwei_slots_event_in_beiden_zeilen(tmp_path, demo_registry):
+    """#1145: Hat ein Kind ZWEI kalender-read-Slots, erscheint sein Event in
+    BEIDEN Slot-Zeilen (gleiche event_id) — nicht nur im letzten (Dict-Kollaps).
+
+    Config: Finn bekommt zwei kalender-read-Slots (finn1 + finn2), Mia einen.
+    Ein Klettern-Finn-Event muss schedule[iso]["finn1"] UND schedule[iso]["finn2"]
+    setzen; schedule[iso]["act_mia"] bleibt None.
+    """
+    cfg = _config_mit_slots(tmp_path, [
+        {"schluessel": "act_mia", "art": "kalender-read", "icon": "3071",
+         "kind": "mia"},
+        {"schluessel": "finn1", "art": "kalender-read", "icon": "3071",
+         "kind": "finn"},
+        {"schluessel": "finn2", "art": "kalender-read", "icon": "3071",
+         "kind": "finn"},
+    ])
+    heute = date(2026, 5, 20)
+    raw = [gcal_allday("e_finn", "Klettern Finn", heute.isoformat())]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(cfg.db_datei)
+    view = render_mod.baue_view(cfg, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    iso = heute.isoformat()
+    chip1 = view["schedule"][iso]["finn1"]
+    chip2 = view["schedule"][iso]["finn2"]
+    assert chip1 is not None, "finn1-Slot bleibt leer — Dict-Kollaps nicht behoben"
+    assert chip2 is not None, "finn2-Slot bleibt leer — Dict-Kollaps nicht behoben"
+    assert chip1["event_id"] == chip2["event_id"] == "e_finn", (
+        "Beide Slots sollen denselben Chip (gleiche event_id) tragen"
+    )
+    # Mias Slot darf nicht befüllt sein.
+    assert view["schedule"][iso]["act_mia"] is None, (
+        "Mias Slot darf durch Finns Event nicht befüllt werden"
+    )
+
+
 # ============================================================
 #  PLAN-14 — Mehrtages-Termin als eine Spanne
 # ============================================================
