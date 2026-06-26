@@ -430,9 +430,6 @@ geparkt bis n=2 belegt.
   offenen App-Installations-Mechanismus #296) ist **nie durch die Werft gelaufen**.
   Der erste Buddy mit Eltern-Chat-Beitrag wird F4/F5 hier am ehesten brechen —
   **nicht als gelöst behandeln.** *(Das ist NICHT der geparkte KI-Eltern-Katalog.)*
-- **Kein Repo-SSoT.** Diese Methode ist Command-only; wenn sie sich über weitere
-  Buddies bewährt und stabilisiert, ist „ins Repo-Overhead neben `decisions/`
-  heben" der nächste Schritt (dann von Actions lesbar + mitstreiter-sichtbar).
 
 ## Nach dem Lauf
 - **Retro — Pflicht-Abschluss-Schritt.** Start/Stop/Continue + Flughöhe über die
