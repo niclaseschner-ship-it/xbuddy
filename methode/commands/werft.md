@@ -16,12 +16,9 @@ bündelst du auf **drei scharfe Gates** (A Spec · B Design · C Paket).
 **Erdung:** der Checkout `/home/buddy/repos/xbuddy` (Session-Start `git pull
 --ff-only`, origin ist die Wahrheit — RAT-9). Nur xbuddy ist im Scope.
 
-> **Diese Methode ist versioniert** unter `methode/commands/werft.md` im xbuddy-Repo
-> (SSoT seit RAT-23 / PW-74; die frühere Command-only-Lage von 2026-06-05 ist
-> aufgehoben, seit das Repo öffentlich gemacht wird und Mitstreiter/Actions die
-> Regeln lesen). `~/.claude` ist nur Deploy-Ziel (`methode/deploy-methode.sh`).
-> Datenbasis dieses Rezepts: **n=2** (WetterBuddy #137, RoutineBuddy) — **beide
-> display-only**, siehe „Grenzen" unten.
+> **Datenbasis dieses Rezepts: n=2** (WetterBuddy #137, RoutineBuddy) — **beide
+> display-only**, siehe „Grenzen" unten. (Verweise auf `RAT-`/`PW-`-Nummern + Specs
+> im Text sind Referenz-Projekt-Artefakte, kein Framework-Pflicht — siehe README.)
 
 ---
 
