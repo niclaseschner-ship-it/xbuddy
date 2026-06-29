@@ -4784,7 +4784,7 @@ def test_PLAN_36_put_defaults_null_erlaubt(settings_client):
 
 
 # ============================================================
-#  T1149 — fcntl.LOCK_EX: kein Lost-Update bei nebenläufigen Schreibern
+#  T1149 — In-Process threading.Lock: kein Lost-Update bei nebenläufigen Schreibern
 # ============================================================
 
 def test_T1149_AC2_concurrent_writers_no_lost_update(tmp_path):
@@ -4862,7 +4862,7 @@ def test_T1149_FX2_admin_kalender_betritt_write_lock(reload_client, monkeypatch)
     _plan_json_write_lock-Kontext bei jedem echten Request-Pfad.
 
     Strategie: _plan_json_write_lock mit einem wrapping-Spy patchen, der die
-    Original-Implementierung (inklusive flock) weiter ausführt und dabei
+    Original-Implementierung (inklusive threading.Lock) weiter ausführt und dabei
     zählt, wie oft der Context-Manager betreten wurde.  So bleibt die
     Integrität des Schreibvorgangs erhalten und der Test beweist das Wiring
     — nicht nur die isolierte Helper-Funktion.
