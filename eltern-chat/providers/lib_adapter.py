@@ -74,11 +74,14 @@ class LibAgentAdapter:
         self._provider = provider
         self._slot = slot
 
-        # Lib-Fassade EINMAL bauen (Slot + effektives Modell). Ein
-        # `LLMCapabilityError` hier ist ein Boot-Konfig-Fehler (fehlender Key,
-        # Capability-Mismatch) — er propagiert klar (wie der alte fehlender-Key-
-        # Pfad) und wird NICHT als ProviderError verschluckt.
-        self._agent = get_agent(slot=slot, model=self._model)
+        # Lib-Fassade EINMAL bauen (Slot + effektives Modell + alt-treuem
+        # max_tokens). Ein `LLMCapabilityError` hier ist ein Boot-Konfig-Fehler
+        # (fehlender Key, Capability-Mismatch) — er propagiert klar (wie der alte
+        # fehlender-Key-Pfad) und wird NICHT als ProviderError verschluckt.
+        # max_tokens=4096: Alt-Wert aus claude.py:32 MAX_TOKENS=4096 (T1129);
+        # ohne explizite Übergabe würde die Lib DEFAULT_MAX_TOKENS=2048 nutzen —
+        # stille Halbierung, die lange Antworten trunkieren kann (vgl. #1084-502).
+        self._agent = get_agent(slot=slot, model=self._model, max_tokens=4096)
 
     def generate(self, request):
         """Führt eine Anbieter-Anfrage über `tools.llm` aus und liefert eine

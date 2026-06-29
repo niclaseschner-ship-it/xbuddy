@@ -312,7 +312,7 @@ def get_singleshot(slot: str, model: str = "", max_tokens: int = 0) -> Any:
     return _SingleshotFacade(vendor, caller, slot_name)
 
 
-def get_agent(slot: str, model: str = "") -> Any:
+def get_agent(slot: str, model: str = "", max_tokens: int = 0) -> Any:
     """Liefert die Agent-Tool-Loop-Sicht (LLMP-S1, eltern-chat-Heimat).
 
     Required Capabilities (LLMP-3, T1085-Patch): `tool_use`,
@@ -325,6 +325,14 @@ def get_agent(slot: str, model: str = "") -> Any:
     bleibt unverändert). eltern-chat reicht hier das alte effektive Modell durch
     (provider_model bzw. Anbieter-Default), damit der Lib-Pfad das Modell-
     Verhalten des Alt-Adapters exakt erhält.
+
+    `max_tokens` (T1129-additiv): überschreibt das Vendor-`DEFAULT_MAX_TOKENS` wenn >0;
+    0 (Default) erhält den Vendor-Default (2048 Anthropic / 4096 Mistral).
+    eltern-chat reicht hier den alt-treuen MAX_TOKENS (4096, claude.py:32) durch,
+    damit lange Antworten nicht beim DEFAULT_MAX_TOKENS=2048 trunkiert werden
+    (Spiegel `get_singleshot`, T1084).
     """
-    vendor, caller, slot_name = _build_vendor(slot, "get_agent", REQUIRED_AGENT, model)
+    vendor, caller, slot_name = _build_vendor(
+        slot, "get_agent", REQUIRED_AGENT, model, max_tokens,
+    )
     return _AgentFacade(vendor, caller, slot_name)
