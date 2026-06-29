@@ -4910,3 +4910,47 @@ def test_T1149_FX2_admin_kalender_betritt_write_lock(reload_client, monkeypatch)
         "admin_aktivitaeten POST hat _plan_json_write_lock NICHT betreten — "
         "Wiring-Regression (FX2, #1149)"
     )
+
+
+def test_T1149_FX3_defaults_und_slot_modell_betreten_write_lock(settings_client, monkeypatch):
+    """FX3 (#1149): Wiring-Test — PUT defaults + PUT slot-modell betreten den
+    _plan_json_write_lock-Kontext (die im #1149-AC namentlich genannten Endpunkte).
+
+    Strategie identisch zu test_T1149_FX2: wrapping-Spy zählt Lock-Eintritte,
+    Original-Implementierung läuft durch — Daten-Integrität bleibt erhalten.
+    """
+    import contextlib
+    client, _ = settings_client
+
+    enter_count = []
+    original_lock = plan_main._plan_json_write_lock
+
+    @contextlib.contextmanager
+    def spy_lock(path):
+        enter_count.append(path)
+        with original_lock(path):
+            yield
+
+    monkeypatch.setattr(plan_main, "_plan_json_write_lock", spy_lock)
+
+    # ── PUT defaults ──────────────────────────────────────────────────────────
+    r_defaults = client.put(
+        DEFAULTS_URL,
+        json={"defaults": {"bring": {"0": "petra", "1": "petra", "2": "petra",
+                                     "3": "petra", "4": "petra", "5": None, "6": None}}},
+    )
+    assert r_defaults.status_code == 200, r_defaults.get_json()
+    assert enter_count, (
+        "PUT defaults hat _plan_json_write_lock NICHT betreten — "
+        "Wiring-Regression (FX3, #1149)"
+    )
+
+    # ── PUT slot-modell ───────────────────────────────────────────────────────
+    enter_count.clear()
+    slots = _slots_aus_config()
+    r_slot = client.put(SLOT_MODELL_URL, json={"slots": slots})
+    assert r_slot.status_code == 200, r_slot.get_json()
+    assert enter_count, (
+        "PUT slot-modell hat _plan_json_write_lock NICHT betreten — "
+        "Wiring-Regression (FX3, #1149)"
+    )
