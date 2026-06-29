@@ -1,66 +1,100 @@
-# methode/ — die Arbeits-Methode als SSoT
+# Die Methode — disziplinierte Orchestrierung von KI-Coding-Agenten
 
-Hier lebt die **Methoden-Glue** des xbuddy-Ökosystems versioniert: die
-Orchestrierungs-Commands, die Subagent-Definitionen, die maschinen-lesbaren
-Contracts und die Guard-Hooks. Vor PW-74 lag sie command-only in einem lokalen,
-remote-losen `~/.claude`-Repo — nicht reviewbar, nicht von Actions/Mitstreitern
-lesbar. Dieser Ordner beendet die Spaltung (decisions/RAT-23).
+> Arbeitstitel. Ein dateibasiertes **Framework**, das KI-Coding-Agenten durch eine
+> disziplinierte Strecke von der Idee bis zur gemergten Änderung führt — mit
+> gegnerischer Review, einem Ratifizierungs-Ledger und einem Retro-Lernkreis.
+> Werkzeug-agnostisch im Geist; die Referenz-Implementierung läuft auf Claude Code.
 
-## Das Modell: Repo = SSoT, `~/.claude` = Deploy-Ziel
+*(Framework-Name + Lizenz sind noch offen — siehe „Offene Punkte" unten.)*
 
-- **Bearbeitet** wird hier (`methode/`), über normale Feature-Branch-PRs nach
-  `main` (Review + closes-guard + Action-Sicht).
-- **Ausgeführt** wird aus `~/.claude/{agents,commands,contracts,hooks}/` — das ist
-  der Ort, den der Claude-Code-Harness liest. `./deploy-methode.sh` spiegelt die
-  ratifizierte SSoT dorthin.
-- **Pfad-Verweise** in den Commands/Contracts zeigen bewusst auf `~/.claude/…` —
-  das ist der **Laufzeit-Ort**, an dem sich die Glue gegenseitig referenziert.
-  Sie sind nach dem Deploy korrekt; sie werden NICHT auf `methode/`-Pfade
-  umgeschrieben.
+## Das Problem
 
-## Inhalt
+KI-Agenten driften: sie übergeneralisieren auf Vorrat, re-litigieren längst
+entschiedene Fragen, überspringen Review, und treffen Architektur-Entscheidungen
+aus dem Bauch. Diese Methode legt Struktur drüber:
 
-| Ordner | Was | Sorte |
-|--------|-----|-------|
-| `agents/` | Subagent-Definitionen (berater, antiberater, watchdog, watchdog-prep) | reine Methode |
-| `commands/` | `/arbeitstag`, `/arbeitstag-prep`, `/berater-runde`, `/prozesswerkstatt`, `/watchdog`, `/watchdog-codex`, `/werft` | Methode |
-| `contracts/` | `schemas.md`, `preflight.md`, `retro.md`, `README.md`, `example-T137.md` | Schema/Doku |
-| `hooks/` | `dispatch_status_guard.py`, `handoff_check.py`, `status_rollback_guard.py`, `restart_pending_log.py` | ausführbares Harness |
+- Jede Änderung läuft **Idee → Spec → Bau → Review** — kein Code ohne Requirement.
+- Jede Architektur-Entscheidung wird **gegnerisch geprüft und genau einmal
+  ratifiziert** (kein Re-Litigieren).
+- Prozess-Schmerz wird systematisch in Verbesserungen geerntet.
 
-`settings.fragment.json` dokumentiert die xbuddy-Hook-Verdrahtung (die echte
-`~/.claude/settings.json` bleibt maschinen-lokaler Kompositions-Root — sie mischt
-kommandobruecke-Hooks und Permissions hinzu).
+## Die Strecke (Commands)
 
-**Bewusst NICHT hier** (siehe `MIGRATION-MANIFEST.md`): Cynthra (`cynthra.md`,
-`cynthra_fence.py` — Fremdkörper `/srv/cynthra`), `~/.claude/retros/` (Session-
-Auswurf), Scratch (`_probe_dump.py`, `__pycache__`), `~/.claude/logs/` (Runtime-
-State).
+| Command | Was es tut |
+|---------|-----------|
+| `/werft` | Eine Produkt-/Feature-Idee von der Rahmung bis zum übergabereifen Ticket führen (Mensch-Gates A Spec · B Design · C Paket). |
+| `/arbeitstag-prep` | `spec`-Tickets bis `ready` reifen — der Mensch ist der einzige Stempel-Setzer. |
+| `/arbeitstag` | Mehrere Tickets **parallel + konfliktfrei** umsetzen (git-Worktrees). |
+| `/berater-runde` | **Eine** Architektur-Runde: Berater schlägt vor, Antiberater (anderer Kopf/Modell) widerlegt, Landung auf **genau einem** von drei Ausgängen — MACH ES / NOCH NICHT / ECHTE GABEL. |
+| `/watchdog` (+ `/watchdog-codex`) | Architektur-Review des Diffs vor dem Merge (optional Cross-Engine-Vergleich). |
+| `/prozesswerkstatt` | Session-Retros quer ernten → Prozess-Tickets → Top-Punkte an `/berater-runde`. |
 
-## Deploy
+## Kern-Ideen
+
+- **Reversibilität sortiert.** Zwei-Wege-Tür (reversibel, klein) → die kühnere
+  Form ist Default, das Tun ist das Experiment. Ein-Wege-Tür (Datenmodell,
+  öffentliche Schnittstelle, irreversibel) → volle Schärfe, Experiment vor Commit.
+- **Gegnerischer zweiter Kopf.** Rat wird *prüfbar*, indem ein anderes Modell ihn
+  zu widerlegen versucht — nicht, indem man den Berater klüger macht.
+- **Ratifizierungs-Ledger.** Entscheide einmal, halte es fest, re-litigiere nicht.
+- **Contracts, die Hooks erzwingen.** Maschinen-lesbare Schemas + Guard-Hooks
+  machen Disziplin mechanisch statt nur appellativ.
+- **Retro → Verbesserung.** Jeder Lauf endet mit einer Retro über die
+  *Arbeitsweise*; die Werkstatt verdichtet sie zu Schärfungen.
+
+## Bausteine
+
+| Ordner | Inhalt |
+|--------|--------|
+| `commands/` | Die Orchestrierungs-Commands (s. Tabelle oben). |
+| `agents/` | Subagent-Rollen: Berater, Antiberater, Architektur-Watchdog, Prep-Watchdog. |
+| `contracts/` | Maschinen-lesbare Schemas (`schemas.md`), Preflight-Vertrag, Retro-Format. |
+| `hooks/` | Guard-Hooks: Dispatch-Status, Handoff-Check, Status-Rollback, Restart-Log. |
+
+## Referenz-Beispiel: xbuddy
+
+Die Commands/Contracts hier sind in einem **echten Projekt** kampferprobt — *xbuddy*,
+einem Familien-Software-Ökosystem. Im Text begegnen dir konkrete Verweise auf dessen
+Ratifizierungs-Ledger (`RAT-N`), Prozess-Tickets (`PW-N`) und `specs/`/`conventions/`-
+Pfade. **Das sind Beispiel-Projekt-Artefakte, keine Framework-Pflicht** — sie zeigen
+die Methode an einem realen Codebase. Wer die Methode adaptiert, ersetzt Ledger,
+Specs und Conventions durch die eigenen.
+
+## Getting Started (Referenz-Setup, Claude Code)
+
+Die Methode wird **im Repo bearbeitet** (Review + CI-Sicht) und an den Laufzeit-Ort
+des Agenten-Harness **deployt**:
 
 ```bash
-# Nach einem Merge nach main (Default-Quelle origin/main):
-methode/deploy-methode.sh
+# Deployt die Methode an den Harness-Lese-Ort (Default-Quelle: origin/main):
+./deploy-methode.sh
 
-# Vor dem Merge gegen einen Pilot-Branch testen (origin/main trägt methode/
-# anfangs noch nicht):
-methode/deploy-methode.sh --source-ref feature/pw74-glue-ssot --dry-run
+# Vor dem Merge gegen einen Feature-Branch testen:
+./deploy-methode.sh --source-ref <branch> --dry-run
 
-# Drift-Probe (Kill-Kriterium RAT-23): weicht ~/.claude von der SSoT ab?
-methode/deploy-methode.sh --verify-only
+# Drift-Probe: weicht der Laufzeit-Ort von der versionierten Quelle ab?
+./deploy-methode.sh --verify-only
 ```
 
-Quelle ist immer ein git-Objekt-Ref (`git archive`), nie der Working Tree —
-branch-flip-immun (RAT-14). Nach jedem Merge einer Methoden-Änderung gehört der
-Deploy zur „nach Merge"-Disziplin (wie `systemctl restart` für Services).
+**Modell: Repo = Source of Truth, Laufzeit-Ort = Deploy-Ziel.** Quelle ist immer
+ein git-Objekt-Ref (`git archive`), nie der Working Tree — branch-flip-immun. Der
+Deploy ist **additiv** (kein `rsync --delete`): aus der Quelle entfernte Dateien
+müssen am Laufzeit-Ort von Hand gelöscht werden (der Drift-Wächter meldet
+„neu/geändert erscheint nicht", nicht „entfernt bleibt liegen").
 
-### Grenze: Deploy ist additiv (bewusst)
+> Pfad-Verweise in den Commands/Contracts zeigen auf den **Laufzeit-Ort** des
+> Referenz-Setups (dort referenziert sich die Methode gegenseitig); nach dem Deploy
+> sind sie korrekt.
 
-`deploy-methode.sh` schreibt/aktualisiert nur Dateien, die in der SSoT (`methode/`)
-existieren; `--verify-only` prüft ebenfalls nur present files. Es gibt **kein**
-`rsync --delete` und keinen Orphan-Scan — bewusst: `~/.claude` enthält
-legitim Nicht-Migriertes (cynthra, `_probe_dump.py`, `logs/`, `retros/`), das ein
-naiver Lösch-Lauf zerstören würde. **Folge:** Wird eine Glue-Datei aus der SSoT
-*entfernt* (abgeschaffter Command/Hook), bleibt die alte Kopie in `~/.claude`
-liegen und muss **von Hand** gelöscht werden. Der Drift-Wächter fängt „neu/geändert
-erscheint nicht", nicht „entfernt bleibt liegen" (Watchdog-Befund PW-74).
+## Mitarbeit & Lizenz
+
+Siehe [`CONTRIBUTING.md`](CONTRIBUTING.md). Sprache der Methode ist Deutsch
+(etablierte Fachbegriffe bleiben englisch).
+
+## Offene Punkte (vor Veröffentlichung)
+
+- **Framework-Name** — Arbeitstitel „Die Methode"; ein echter Name fehlt (Nic).
+- **Lizenz** — OSS-Lizenz-Entscheid offen (Vorschlag: Apache-2.0 oder MIT). `LICENSE` fehlt noch.
+- **Extraktion** in ein eigenes Repo mit sauberer History (Roadmap: xbuddy-prozess#76).
+- Die `settings.fragment.json` + `MIGRATION-MANIFEST.md` sind Referenz-Setup-Artefakte
+  (Claude-Code-Verdrahtung / xbuddy-Migrations-Record), kein Framework-Kern.
