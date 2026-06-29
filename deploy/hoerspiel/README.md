@@ -66,10 +66,10 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ```bash
 # Hörspiel-Buddy Health
-curl -sk https://192.168.178.78:8443/api/v1/hoerspiel/config | python3 -m json.tool
+curl -sk https://<pi-lan-ip>:8443/api/v1/hoerspiel/config | python3 -m json.tool
 
 # Display-View erreichbar
-curl -sk -o /dev/null -w "%{http_code}" https://192.168.178.78:8443/display/hoerspiel/
+curl -sk -o /dev/null -w "%{http_code}" https://<pi-lan-ip>:8443/display/hoerspiel/
 
 # Service-Status
 systemctl status xbuddy-hoerspiel xbuddy-eltern-chat
