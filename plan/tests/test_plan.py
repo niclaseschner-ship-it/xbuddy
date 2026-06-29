@@ -8,6 +8,7 @@ Die Suite läuft OHNE Netz: der Google-Kalender wird über den FakeTransport
 
 import json
 import os
+import threading
 from datetime import date, datetime, timedelta
 
 import pytest
@@ -4780,3 +4781,77 @@ def test_PLAN_36_put_defaults_null_erlaubt(settings_client):
     # GET (Reload-on-Read) spiegelt das null.
     g = client.get(DEFAULTS_URL).get_json()
     assert g["defaults"]["bring"]["0"] is None
+
+
+# ============================================================
+#  T1149 — fcntl.LOCK_EX: kein Lost-Update bei nebenläufigen Schreibern
+# ============================================================
+
+def test_T1149_AC2_concurrent_writers_no_lost_update(tmp_path):
+    """AC2 (#1149): N nebenläufige Schreiber auf disjunkte Felder → alle Felder
+    stehen nach dem letzten Write in plan.json (kein Lost-Update).
+
+    Testet _plan_json_write_lock direkt (ohne Flask-Overhead), da der
+    Flask-Testclient nicht für Thread-parallele Aufrufe ausgelegt ist.
+    Die Lock-Funktion ist der kritische Pfad — jeder Endpoint ruft sie auf.
+    """
+    cfg_path = tmp_path / "plan.json"
+    cfg_path.write_text(json.dumps({"_basis": True}), encoding="utf-8")
+
+    N = 8
+    errors = []
+
+    def writer(key):
+        try:
+            with plan_main._plan_json_write_lock(cfg_path):
+                obj = plan_main._read_plan_json_obj(cfg_path)
+                obj[key] = key
+                plan_main._write_plan_json_obj(cfg_path, obj)
+        except Exception as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=writer, args=(f"feld_{i}",)) for i in range(N)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, f"Schreiber-Fehler: {errors}"
+
+    result = json.loads(cfg_path.read_text(encoding="utf-8"))
+    for i in range(N):
+        assert f"feld_{i}" in result, (
+            f"feld_{i} fehlt in plan.json — Lost-Update trotz Lock"
+        )
+    # Basis-Key darf nicht verloren gehen.
+    assert result.get("_basis") is True
+
+
+def test_T1149_AC3_serial_rmw_bleibt_gruen(tmp_path):
+    """AC3 (#1149): serielle Schreiber (kein Concurrency) über _plan_json_write_lock
+    laufen weiterhin korrekt durch — kein Regression durch den Lock.
+
+    Prüft: temp+rename-Pfad (PLAN-34) bleibt atomar, bestehender Inhalt
+    wird korrekt erhalten (Rest-Dict-Merge).
+    """
+    cfg_path = tmp_path / "plan.json"
+    initial = {"_kommentar": "regression", "sektionA": "wert-a"}
+    cfg_path.write_text(json.dumps(initial), encoding="utf-8")
+
+    # Erster serieller Write — setzt sektionB, lässt sektionA stehen.
+    with plan_main._plan_json_write_lock(cfg_path):
+        obj = plan_main._read_plan_json_obj(cfg_path)
+        obj["sektionB"] = "wert-b"
+        plan_main._write_plan_json_obj(cfg_path, obj)
+
+    # Zweiter serieller Write — liest frisch (nach os.replace) und setzt sektionC.
+    with plan_main._plan_json_write_lock(cfg_path):
+        obj = plan_main._read_plan_json_obj(cfg_path)
+        obj["sektionC"] = "wert-c"
+        plan_main._write_plan_json_obj(cfg_path, obj)
+
+    result = json.loads(cfg_path.read_text(encoding="utf-8"))
+    assert result["_kommentar"] == "regression"
+    assert result["sektionA"] == "wert-a"
+    assert result["sektionB"] == "wert-b"
+    assert result["sektionC"] == "wert-c"
