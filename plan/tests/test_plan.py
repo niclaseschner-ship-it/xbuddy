@@ -8,6 +8,7 @@ Die Suite läuft OHNE Netz: der Google-Kalender wird über den FakeTransport
 
 import json
 import os
+import threading
 from datetime import date, datetime, timedelta
 
 import pytest
@@ -4780,3 +4781,176 @@ def test_PLAN_36_put_defaults_null_erlaubt(settings_client):
     # GET (Reload-on-Read) spiegelt das null.
     g = client.get(DEFAULTS_URL).get_json()
     assert g["defaults"]["bring"]["0"] is None
+
+
+# ============================================================
+#  T1149 — In-Process threading.Lock: kein Lost-Update bei nebenläufigen Schreibern
+# ============================================================
+
+def test_T1149_AC2_concurrent_writers_no_lost_update(tmp_path):
+    """AC2 (#1149): N nebenläufige Schreiber auf disjunkte Felder → alle Felder
+    stehen nach dem letzten Write in plan.json (kein Lost-Update).
+
+    Testet _plan_json_write_lock direkt (ohne Flask-Overhead), da der
+    Flask-Testclient nicht für Thread-parallele Aufrufe ausgelegt ist.
+    Die Lock-Funktion ist der kritische Pfad — jeder Endpoint ruft sie auf.
+    """
+    cfg_path = tmp_path / "plan.json"
+    cfg_path.write_text(json.dumps({"_basis": True}), encoding="utf-8")
+
+    N = 8
+    errors = []
+
+    def writer(key):
+        try:
+            with plan_main._plan_json_write_lock(cfg_path):
+                obj = plan_main._read_plan_json_obj(cfg_path)
+                obj[key] = key
+                plan_main._write_plan_json_obj(cfg_path, obj)
+        except Exception as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=writer, args=(f"feld_{i}",)) for i in range(N)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, f"Schreiber-Fehler: {errors}"
+
+    result = json.loads(cfg_path.read_text(encoding="utf-8"))
+    for i in range(N):
+        assert f"feld_{i}" in result, (
+            f"feld_{i} fehlt in plan.json — Lost-Update trotz Lock"
+        )
+    # Basis-Key darf nicht verloren gehen.
+    assert result.get("_basis") is True
+
+
+def test_T1149_AC3_serial_rmw_bleibt_gruen(tmp_path):
+    """AC3 (#1149): serielle Schreiber (kein Concurrency) über _plan_json_write_lock
+    laufen weiterhin korrekt durch — kein Regression durch den Lock.
+
+    Prüft: temp+rename-Pfad (PLAN-34) bleibt atomar, bestehender Inhalt
+    wird korrekt erhalten (Rest-Dict-Merge).
+    """
+    cfg_path = tmp_path / "plan.json"
+    initial = {"_kommentar": "regression", "sektionA": "wert-a"}
+    cfg_path.write_text(json.dumps(initial), encoding="utf-8")
+
+    # Erster serieller Write — setzt sektionB, lässt sektionA stehen.
+    with plan_main._plan_json_write_lock(cfg_path):
+        obj = plan_main._read_plan_json_obj(cfg_path)
+        obj["sektionB"] = "wert-b"
+        plan_main._write_plan_json_obj(cfg_path, obj)
+
+    # Zweiter serieller Write — liest frisch (nach os.replace) und setzt sektionC.
+    with plan_main._plan_json_write_lock(cfg_path):
+        obj = plan_main._read_plan_json_obj(cfg_path)
+        obj["sektionC"] = "wert-c"
+        plan_main._write_plan_json_obj(cfg_path, obj)
+
+    result = json.loads(cfg_path.read_text(encoding="utf-8"))
+    assert result["_kommentar"] == "regression"
+    assert result["sektionA"] == "wert-a"
+    assert result["sektionB"] == "wert-b"
+    assert result["sektionC"] == "wert-c"
+
+
+def test_T1149_FX2_admin_kalender_betritt_write_lock(reload_client, monkeypatch):
+    """FX2 (#1149): Endpunkt-Wiring-Test — admin_kalender betritt den
+    _plan_json_write_lock-Kontext bei jedem echten Request-Pfad.
+
+    Strategie: _plan_json_write_lock mit einem wrapping-Spy patchen, der die
+    Original-Implementierung (inklusive threading.Lock) weiter ausführt und dabei
+    zählt, wie oft der Context-Manager betreten wurde.  So bleibt die
+    Integrität des Schreibvorgangs erhalten und der Test beweist das Wiring
+    — nicht nur die isolierte Helper-Funktion.
+    """
+    import contextlib
+    client, cfg_path, _ = reload_client
+
+    enter_count = []
+
+    original_lock = plan_main._plan_json_write_lock
+
+    @contextlib.contextmanager
+    def spy_lock(path):
+        enter_count.append(path)
+        with original_lock(path):
+            yield
+
+    monkeypatch.setattr(plan_main, "_plan_json_write_lock", spy_lock)
+
+    neue_id = "wiring-test@group.calendar.google.com"
+    r = client.put(KALENDER_ADMIN_URL,
+                   data=json.dumps({"kalender_id": neue_id}),
+                   content_type="application/json")
+    assert r.status_code == 200, r.get_json()
+
+    assert enter_count, (
+        "admin_kalender hat _plan_json_write_lock NICHT betreten — "
+        "Wiring-Regression (FX2, #1149)"
+    )
+    # Zweiter Endpunkt als Anker: admin_aktivitaeten POST ebenfalls geprüft.
+    enter_count.clear()
+    r2 = client.post(
+        "/api/v1/plan/admin/aktivitaeten",
+        data=json.dumps({
+            "art": "wiring-probe",
+            "label": "Wiring-Probe",
+            "keywords": ["wiring"],
+            "piktogramm": "\U0001f527",
+        }),
+        content_type="application/json",
+    )
+    # 200 oder 409 (falls art schon existiert) — beides bedeutet, Lock wurde betreten.
+    assert r2.status_code in (200, 409), r2.get_json()
+    assert enter_count, (
+        "admin_aktivitaeten POST hat _plan_json_write_lock NICHT betreten — "
+        "Wiring-Regression (FX2, #1149)"
+    )
+
+
+def test_T1149_FX3_defaults_und_slot_modell_betreten_write_lock(settings_client, monkeypatch):
+    """FX3 (#1149): Wiring-Test — PUT defaults + PUT slot-modell betreten den
+    _plan_json_write_lock-Kontext (die im #1149-AC namentlich genannten Endpunkte).
+
+    Strategie identisch zu test_T1149_FX2: wrapping-Spy zählt Lock-Eintritte,
+    Original-Implementierung läuft durch — Daten-Integrität bleibt erhalten.
+    """
+    import contextlib
+    client, _ = settings_client
+
+    enter_count = []
+    original_lock = plan_main._plan_json_write_lock
+
+    @contextlib.contextmanager
+    def spy_lock(path):
+        enter_count.append(path)
+        with original_lock(path):
+            yield
+
+    monkeypatch.setattr(plan_main, "_plan_json_write_lock", spy_lock)
+
+    # ── PUT defaults ──────────────────────────────────────────────────────────
+    r_defaults = client.put(
+        DEFAULTS_URL,
+        json={"defaults": {"bring": {"0": "petra", "1": "petra", "2": "petra",
+                                     "3": "petra", "4": "petra", "5": None, "6": None}}},
+    )
+    assert r_defaults.status_code == 200, r_defaults.get_json()
+    assert enter_count, (
+        "PUT defaults hat _plan_json_write_lock NICHT betreten — "
+        "Wiring-Regression (FX3, #1149)"
+    )
+
+    # ── PUT slot-modell ───────────────────────────────────────────────────────
+    enter_count.clear()
+    slots = _slots_aus_config()
+    r_slot = client.put(SLOT_MODELL_URL, json={"slots": slots})
+    assert r_slot.status_code == 200, r_slot.get_json()
+    assert enter_count, (
+        "PUT slot-modell hat _plan_json_write_lock NICHT betreten — "
+        "Wiring-Regression (FX3, #1149)"
+    )
