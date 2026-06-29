@@ -32,6 +32,7 @@ import os
 import random
 import sys
 import tempfile
+import threading
 import time
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
@@ -1046,7 +1047,8 @@ def admin_kalender():
         }), 500
 
     try:
-        _write_kalender_id(path, kalender_id)
+        with _plan_json_write_lock(path):
+            _write_kalender_id(path, kalender_id)
     except (OSError, ValueError) as e:
         logger.error("admin/kalender: plan.json konnte nicht geschrieben werden: %s", e)
         return jsonify({
@@ -1109,6 +1111,29 @@ def _write_plan_json_obj(path, obj):
         with contextlib.suppress(OSError):
             os.remove(tmp_path)
         raise
+
+
+# Gemeinsamer In-Process-Lock für alle plan.json-Read-Modify-Write-Pfade
+# (PLAN-32/admin_kalender, PLAN-34/aktivitaeten POST+DELETE, PLAN-36/defaults,
+# PLAN-37/slot-modell).  Ein Datei-Lock ist nicht nötig — der Plan-Buddy läuft
+# als einzelner Prozess mit threaded=True (RAT-14, #1149).
+_PLAN_JSON_WRITE_LOCK = threading.Lock()
+
+
+@contextlib.contextmanager
+def _plan_json_write_lock(path):
+    """In-Process-Lock (threading.Lock) für den Read-Modify-Write-Pfad.
+
+    Serialisiert gleichzeitige Schreiber auf plan.json.  Alle 5 RMW-Pfade
+    (admin_kalender, aktivitaeten POST, aktivitaeten DELETE, defaults,
+    slot-modell) nutzen denselben modul-globalen Lock — konsistent mit RAT-14.
+    Stdlib only, kein Datei-Lock-Sidecar.
+    """
+    _PLAN_JSON_WRITE_LOCK.acquire()
+    try:
+        yield
+    finally:
+        _PLAN_JSON_WRITE_LOCK.release()
 
 
 def _current_aktivitaeten_list():
@@ -1180,33 +1205,34 @@ def api_aktivitaeten_hinzufuegen():
     if not path:
         return jsonify({"ok": False, "error": "kein plan.json-Pfad konfiguriert"}), 500
 
-    try:
-        obj = _read_plan_json_obj(path)
-    except (OSError, ValueError) as e:
-        logger.error("admin/aktivitaeten POST: plan.json nicht lesbar: %s", e)
-        return jsonify({"ok": False, "error": "plan.json nicht lesbar: %s" % e}), 500
+    with _plan_json_write_lock(path):
+        try:
+            obj = _read_plan_json_obj(path)
+        except (OSError, ValueError) as e:
+            logger.error("admin/aktivitaeten POST: plan.json nicht lesbar: %s", e)
+            return jsonify({"ok": False, "error": "plan.json nicht lesbar: %s" % e}), 500
 
-    # Sektion materialisieren, falls noch nicht vorhanden (CONFIG-4).
-    if "aktivitaeten" not in obj or obj["aktivitaeten"] is None:
-        obj["aktivitaeten"] = [dict(e) for e in aktivitaeten_mod.AKTIVITAETEN_V1]
+        # Sektion materialisieren, falls noch nicht vorhanden (CONFIG-4).
+        if "aktivitaeten" not in obj or obj["aktivitaeten"] is None:
+            obj["aktivitaeten"] = [dict(e) for e in aktivitaeten_mod.AKTIVITAETEN_V1]
 
-    # 409, wenn art bereits existiert.
-    existing_arts = {e["art"] for e in obj["aktivitaeten"]}
-    if art in existing_arts:
-        return jsonify({"ok": False, "error": "art_existiert"}), 409
+        # 409, wenn art bereits existiert.
+        existing_arts = {e["art"] for e in obj["aktivitaeten"]}
+        if art in existing_arts:
+            return jsonify({"ok": False, "error": "art_existiert"}), 409
 
-    obj["aktivitaeten"].append({
-        "art": art,
-        "label": label,
-        "keywords": list(keywords),
-        "piktogramm": piktogramm,
-    })
+        obj["aktivitaeten"].append({
+            "art": art,
+            "label": label,
+            "keywords": list(keywords),
+            "piktogramm": piktogramm,
+        })
 
-    try:
-        _write_plan_json_obj(path, obj)
-    except OSError as e:
-        logger.error("admin/aktivitaeten POST: plan.json nicht schreibbar: %s", e)
-        return jsonify({"ok": False, "error": "plan.json nicht schreibbar: %s" % e}), 500
+        try:
+            _write_plan_json_obj(path, obj)
+        except OSError as e:
+            logger.error("admin/aktivitaeten POST: plan.json nicht schreibbar: %s", e)
+            return jsonify({"ok": False, "error": "plan.json nicht schreibbar: %s" % e}), 500
 
     # In-process-Übernahme — gleicher Pfad wie admin/kalender.
     try:
@@ -1239,29 +1265,30 @@ def api_aktivitaeten_loeschen(art):
     if not path:
         return jsonify({"ok": False, "error": "kein plan.json-Pfad konfiguriert"}), 500
 
-    try:
-        obj = _read_plan_json_obj(path)
-    except (OSError, ValueError) as e:
-        logger.error("admin/aktivitaeten DELETE: plan.json nicht lesbar: %s", e)
-        return jsonify({"ok": False, "error": "plan.json nicht lesbar: %s" % e}), 500
+    with _plan_json_write_lock(path):
+        try:
+            obj = _read_plan_json_obj(path)
+        except (OSError, ValueError) as e:
+            logger.error("admin/aktivitaeten DELETE: plan.json nicht lesbar: %s", e)
+            return jsonify({"ok": False, "error": "plan.json nicht lesbar: %s" % e}), 500
 
-    # Sektion materialisieren, falls noch nicht vorhanden (CONFIG-4).
-    if "aktivitaeten" not in obj or obj["aktivitaeten"] is None:
-        obj["aktivitaeten"] = [dict(e) for e in aktivitaeten_mod.AKTIVITAETEN_V1]
+        # Sektion materialisieren, falls noch nicht vorhanden (CONFIG-4).
+        if "aktivitaeten" not in obj or obj["aktivitaeten"] is None:
+            obj["aktivitaeten"] = [dict(e) for e in aktivitaeten_mod.AKTIVITAETEN_V1]
 
-    # 404, wenn art unbekannt.
-    before = obj["aktivitaeten"]
-    after = [e for e in before if e["art"] != art]
-    if len(after) == len(before):
-        return jsonify({"ok": False, "error": "art unbekannt: %r" % art}), 404
+        # 404, wenn art unbekannt.
+        before = obj["aktivitaeten"]
+        after = [e for e in before if e["art"] != art]
+        if len(after) == len(before):
+            return jsonify({"ok": False, "error": "art unbekannt: %r" % art}), 404
 
-    obj["aktivitaeten"] = after
+        obj["aktivitaeten"] = after
 
-    try:
-        _write_plan_json_obj(path, obj)
-    except OSError as e:
-        logger.error("admin/aktivitaeten DELETE: plan.json nicht schreibbar: %s", e)
-        return jsonify({"ok": False, "error": "plan.json nicht schreibbar: %s" % e}), 500
+        try:
+            _write_plan_json_obj(path, obj)
+        except OSError as e:
+            logger.error("admin/aktivitaeten DELETE: plan.json nicht schreibbar: %s", e)
+            return jsonify({"ok": False, "error": "plan.json nicht schreibbar: %s" % e}), 500
 
     # In-process-Übernahme.
     try:
@@ -1376,20 +1403,21 @@ def api_defaults_schreiben():
     if not path:
         return jsonify({"error": "kein plan.json-Pfad konfiguriert"}), 500
 
-    try:
-        obj = _read_plan_json_obj(path)
-    except (OSError, ValueError) as e:
-        logger.error("PUT defaults: plan.json nicht lesbar: %s", e)
-        return jsonify({"error": "plan.json nicht lesbar: %s" % e}), 500
+    with _plan_json_write_lock(path):
+        try:
+            obj = _read_plan_json_obj(path)
+        except (OSError, ValueError) as e:
+            logger.error("PUT defaults: plan.json nicht lesbar: %s", e)
+            return jsonify({"error": "plan.json nicht lesbar: %s" % e}), 500
 
-    # Rest-Dict-Merge: nur die eine Sektion setzen, alles andere bleibt stehen.
-    obj["default_verantwortlichkeiten"] = datei_defaults
+        # Rest-Dict-Merge: nur die eine Sektion setzen, alles andere bleibt stehen.
+        obj["default_verantwortlichkeiten"] = datei_defaults
 
-    try:
-        _write_plan_json_obj(path, obj)
-    except OSError as e:
-        logger.error("PUT defaults: plan.json nicht schreibbar: %s", e)
-        return jsonify({"error": "plan.json nicht schreibbar: %s" % e}), 500
+        try:
+            _write_plan_json_obj(path, obj)
+        except OSError as e:
+            logger.error("PUT defaults: plan.json nicht schreibbar: %s", e)
+            return jsonify({"error": "plan.json nicht schreibbar: %s" % e}), 500
 
     # In-process-Übernahme (PLAN-32-Muster); Reload-on-Read greift ohnehin.
     try:
@@ -1499,34 +1527,35 @@ def api_slot_modell_schreiben():
     if not path:
         return jsonify({"error": "kein plan.json-Pfad konfiguriert"}), 500
 
-    try:
-        obj = _read_plan_json_obj(path)
-    except (OSError, ValueError) as e:
-        logger.error("PUT slot-modell: plan.json nicht lesbar: %s", e)
-        return jsonify({"error": "plan.json nicht lesbar: %s" % e}), 500
+    with _plan_json_write_lock(path):
+        try:
+            obj = _read_plan_json_obj(path)
+        except (OSError, ValueError) as e:
+            logger.error("PUT slot-modell: plan.json nicht lesbar: %s", e)
+            return jsonify({"error": "plan.json nicht lesbar: %s" % e}), 500
 
-    # Multi-Sektion-Save: slots setzen UND defaults gelöschter/art-gewechselter
-    # Slots bereinigen. Ein Default-Eintrag bleibt NUR, wenn sein Slot im neuen
-    # Soll-Zustand existiert UND art == verantwortlich ist (PLAN-37). Ein Slot,
-    # der von verantwortlich → kalender-read wechselt, verliert seine Defaults
-    # genauso wie ein gelöschter — sonst wirft _parse_defaults beim nächsten
-    # load einen ConfigError (plan/config.py:351-354).
-    verantwortlich_keys = {
-        s["schluessel"] for s in sauber
-        if s.get("art") == config_mod.SLOT_VERANTWORTLICH
-    }
-    alte_defaults = obj.get("default_verantwortlichkeiten")
-    obj["slots"] = sauber
-    if isinstance(alte_defaults, dict):
-        obj["default_verantwortlichkeiten"] = {
-            k: v for k, v in alte_defaults.items() if k in verantwortlich_keys
+        # Multi-Sektion-Save: slots setzen UND defaults gelöschter/art-gewechselter
+        # Slots bereinigen. Ein Default-Eintrag bleibt NUR, wenn sein Slot im neuen
+        # Soll-Zustand existiert UND art == verantwortlich ist (PLAN-37). Ein Slot,
+        # der von verantwortlich → kalender-read wechselt, verliert seine Defaults
+        # genauso wie ein gelöschter — sonst wirft _parse_defaults beim nächsten
+        # load einen ConfigError (plan/config.py:351-354).
+        verantwortlich_keys = {
+            s["schluessel"] for s in sauber
+            if s.get("art") == config_mod.SLOT_VERANTWORTLICH
         }
+        alte_defaults = obj.get("default_verantwortlichkeiten")
+        obj["slots"] = sauber
+        if isinstance(alte_defaults, dict):
+            obj["default_verantwortlichkeiten"] = {
+                k: v for k, v in alte_defaults.items() if k in verantwortlich_keys
+            }
 
-    try:
-        _write_plan_json_obj(path, obj)
-    except OSError as e:
-        logger.error("PUT slot-modell: plan.json nicht schreibbar: %s", e)
-        return jsonify({"error": "plan.json nicht schreibbar: %s" % e}), 500
+        try:
+            _write_plan_json_obj(path, obj)
+        except OSError as e:
+            logger.error("PUT slot-modell: plan.json nicht schreibbar: %s", e)
+            return jsonify({"error": "plan.json nicht schreibbar: %s" % e}), 500
 
     try:
         reload_plan_config()
