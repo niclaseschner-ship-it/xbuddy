@@ -370,6 +370,8 @@ def woche():
         appointments=view["appointments"],
         appointment_overflow=view["appointment_overflow"],
         span_appointments=view["span_appointments"],
+        span_cover=view["span_cover"],
+        span_lanes=view["span_lanes"],
         show_appointments=view["show_appointments"],
         picker_options=view["picker_options"],
         variant=variant,

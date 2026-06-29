@@ -836,6 +836,42 @@ def test_span_lanes_im_view_und_template(demo_config, demo_registry):
     )
 
 
+def test_template_nutzt_server_span_cover_und_span_lanes(demo_config, demo_registry):
+    """T1112 (AC3): main.py reicht span_cover + span_lanes aus render.py ans
+    Template — kein Jinja-Recompute (CLAUDE.md §6, eine Geometrie-Quelle).
+
+    Nachweis: baue_view wird so gepatcht, dass span_lanes=3 bei leeren
+    span_appointments zurückkommt. Der alte Recompute (max(lane)+1 aus [])
+    ergäbe 0px; der neue Pfad (Server-Wert) ergibt 102px."""
+    from unittest.mock import patch
+
+    heute = date(2026, 5, 18)
+    # Echter Basis-View ohne Spans — alle Terminfelder konsistent leer.
+    kalender = kalender_mod.Kalender(FakeTransport([]), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    base_view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                     heute, 7, True, heute=heute)
+    conn.close()
+    # Manipulierter View: span_appointments=[], aber render.py liefert span_lanes=3.
+    # Template-Recompute aus [] → max_lane=-1 → span_lanes=0 → --span-band: 0px.
+    # Render.py-Wert durchgereicht → span_lanes=3 → --span-band: 102px.
+    fake_view = dict(base_view)
+    fake_view["span_appointments"] = []
+    fake_view["span_cover"] = [0, 1, 2]
+    fake_view["span_lanes"] = 3
+
+    plan_main.configure(demo_config, demo_registry, FakeTransport())
+    plan_main.app.testing = True
+    with patch.object(plan_main.render_mod, "baue_view", return_value=fake_view):
+        client = plan_main.app.test_client()
+        r = client.get("/display/plan/woche?ab=%s" % heute.isoformat())
+    assert r.status_code == 200
+    assert b"--span-band: 102px" in r.data, (
+        "span_lanes=3 (render.py-Quelle) → 102px; Recompute aus leeren "
+        "span_appointments ergäbe 0px — main.py reicht span_lanes nicht durch?"
+    )
+
+
 def test_n_sichtbar_reserviert_counter_kein_clip():
     """#1092 S5 (PLAN-13): N ist an die REALE Geometrie (944px nutzbar) gebunden
     und reserviert die Counter-Zeile EXPLIZIT. Ziel: bei der 7-Slot-Live-Config

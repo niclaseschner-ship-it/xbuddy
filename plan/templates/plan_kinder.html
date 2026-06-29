@@ -615,23 +615,9 @@
         {# PLAN-14 V1.3: Ein Board — Tagestermine je Spalte, Span-Balken als
            Overlay nur über die berührten Spalten. Span-lose Spalten reservieren
            keine Zeile → Tagestermine rutschen dort nach oben (kein Voll-Breite-
-           Band über das ganze Fenster). span_cover wird NUR aus
-           span_appointments (start_day..end_day) abgeleitet. #}
-        {% set span_cover = [] %}
-        {% for s in span_appointments %}
-          {% for di in range(s.start_day, s.end_day + 1) %}
-            {% if di not in span_cover %}{% set _ = span_cover.append(di) %}{% endif %}
-          {% endfor %}
-        {% endfor %}
-        {# #1092 S5: Anzahl belegter Span-Lanes lokal aus den gepackten Spans
-           (render.pack_span_lanes hat jedem Span `lane` gesetzt) — max(lane)+1.
-           So braucht das Template keine neue Render-Variable (main.py reicht nur
-           span_appointments durch, wie schon bei span_cover). #}
-        {% set ns = namespace(max_lane=-1) %}
-        {% for s in span_appointments %}
-          {% if s.lane > ns.max_lane %}{% set ns.max_lane = s.lane %}{% endif %}
-        {% endfor %}
-        {% set span_lanes = ns.max_lane + 1 %}
+           Band über das ganze Fenster). span_cover (sortierte Liste berührter
+           Tag-Indizes) und span_lanes (Anzahl belegter Lanes) kommen direkt aus
+           render.py via main.py — eine Geometrie-Quelle (CLAUDE.md §6, T1112). #}
         {# --span-band ist span_lanes × Lane-Höhe (34px) — berührte Spalten halten
            oben so viele Lane-Höhen frei, wie es belegte Lanes gibt. --span-lane-h
            ist die feste Lane-Zeilen-Höhe der Overlay-Schicht. Bei 0 Lanes bleibt
