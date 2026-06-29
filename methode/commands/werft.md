@@ -18,7 +18,7 @@ bündelst du auf **drei scharfe Gates** (A Spec · B Design · C Paket).
 
 > **Datenbasis dieses Rezepts: n=2** (WetterBuddy #137, RoutineBuddy) — **beide
 > display-only**, siehe „Grenzen" unten. (Verweise auf `RAT-`/`PW-`-Nummern + Specs
-> im Text sind Referenz-Projekt-Artefakte, kein Framework-Pflicht — siehe README.)
+> im Text sind Referenz-Projekt-Artefakte, keine Framework-Pflicht — siehe README.)
 
 ---
 
