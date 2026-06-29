@@ -96,5 +96,5 @@ Siehe [`CONTRIBUTING.md`](CONTRIBUTING.md). Sprache der Methode ist Deutsch
 - **Framework-Name** — Arbeitstitel „Die Methode"; ein echter Name fehlt (Nic).
 - **Lizenz** — OSS-Lizenz-Entscheid offen (Vorschlag: Apache-2.0 oder MIT). `LICENSE` fehlt noch.
 - **Extraktion** in ein eigenes Repo mit sauberer History (Roadmap: xbuddy-prozess#76).
-- Die `settings.fragment.json` + `MIGRATION-MANIFEST.md` sind Referenz-Setup-Artefakte
-  (Claude-Code-Verdrahtung / xbuddy-Migrations-Record), kein Framework-Kern.
+- Die `settings.fragment.json` ist ein Referenz-Setup-Artefakt (Claude-Code-Hook-
+  Verdrahtung), kein Framework-Kern.
