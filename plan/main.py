@@ -1047,7 +1047,8 @@ def admin_kalender():
         }), 500
 
     try:
-        _write_kalender_id(path, kalender_id)
+        with _plan_json_write_lock(path):
+            _write_kalender_id(path, kalender_id)
     except (OSError, ValueError) as e:
         logger.error("admin/kalender: plan.json konnte nicht geschrieben werden: %s", e)
         return jsonify({

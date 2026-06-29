@@ -4855,3 +4855,58 @@ def test_T1149_AC3_serial_rmw_bleibt_gruen(tmp_path):
     assert result["sektionA"] == "wert-a"
     assert result["sektionB"] == "wert-b"
     assert result["sektionC"] == "wert-c"
+
+
+def test_T1149_FX2_admin_kalender_betritt_write_lock(reload_client, monkeypatch):
+    """FX2 (#1149): Endpunkt-Wiring-Test — admin_kalender betritt den
+    _plan_json_write_lock-Kontext bei jedem echten Request-Pfad.
+
+    Strategie: _plan_json_write_lock mit einem wrapping-Spy patchen, der die
+    Original-Implementierung (inklusive flock) weiter ausführt und dabei
+    zählt, wie oft der Context-Manager betreten wurde.  So bleibt die
+    Integrität des Schreibvorgangs erhalten und der Test beweist das Wiring
+    — nicht nur die isolierte Helper-Funktion.
+    """
+    import contextlib
+    client, cfg_path, _ = reload_client
+
+    enter_count = []
+
+    original_lock = plan_main._plan_json_write_lock
+
+    @contextlib.contextmanager
+    def spy_lock(path):
+        enter_count.append(path)
+        with original_lock(path):
+            yield
+
+    monkeypatch.setattr(plan_main, "_plan_json_write_lock", spy_lock)
+
+    neue_id = "wiring-test@group.calendar.google.com"
+    r = client.put(KALENDER_ADMIN_URL,
+                   data=json.dumps({"kalender_id": neue_id}),
+                   content_type="application/json")
+    assert r.status_code == 200, r.get_json()
+
+    assert enter_count, (
+        "admin_kalender hat _plan_json_write_lock NICHT betreten — "
+        "Wiring-Regression (FX2, #1149)"
+    )
+    # Zweiter Endpunkt als Anker: admin_aktivitaeten POST ebenfalls geprüft.
+    enter_count.clear()
+    r2 = client.post(
+        "/api/v1/plan/admin/aktivitaeten",
+        data=json.dumps({
+            "art": "wiring-probe",
+            "label": "Wiring-Probe",
+            "keywords": ["wiring"],
+            "piktogramm": "\U0001f527",
+        }),
+        content_type="application/json",
+    )
+    # 200 oder 409 (falls art schon existiert) — beides bedeutet, Lock wurde betreten.
+    assert r2.status_code in (200, 409), r2.get_json()
+    assert enter_count, (
+        "admin_aktivitaeten POST hat _plan_json_write_lock NICHT betreten — "
+        "Wiring-Regression (FX2, #1149)"
+    )
