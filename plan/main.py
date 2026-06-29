@@ -25,7 +25,6 @@ ein Geschwister von router/ und familie/.
 import argparse
 import collections
 import contextlib
-import fcntl
 import hashlib
 import json
 import logging
@@ -33,6 +32,7 @@ import os
 import random
 import sys
 import tempfile
+import threading
 import time
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
@@ -1113,22 +1113,27 @@ def _write_plan_json_obj(path, obj):
         raise
 
 
+# Gemeinsamer In-Process-Lock für alle plan.json-Read-Modify-Write-Pfade
+# (PLAN-32/admin_kalender, PLAN-34/aktivitaeten POST+DELETE, PLAN-36/defaults,
+# PLAN-37/slot-modell).  Ein Datei-Lock ist nicht nötig — der Plan-Buddy läuft
+# als einzelner Prozess mit threaded=True (RAT-14, #1149).
+_PLAN_JSON_WRITE_LOCK = threading.Lock()
+
+
 @contextlib.contextmanager
 def _plan_json_write_lock(path):
-    """Exklusiver Datei-Lock (fcntl.LOCK_EX) für den Read-Modify-Write-Pfad.
+    """In-Process-Lock (threading.Lock) für den Read-Modify-Write-Pfad.
 
-    Serialisiert gleichzeitige Schreiber auf plan.json (PLAN-34).  Der Lock
-    liegt auf einer Neben-Datei (<path>.lock), sodass os.replace in
-    _write_plan_json_obj den Inode von plan.json nicht gefährdet.  Stdlib only
-    — keine externe Dependency.
+    Serialisiert gleichzeitige Schreiber auf plan.json.  Alle 5 RMW-Pfade
+    (admin_kalender, aktivitaeten POST, aktivitaeten DELETE, defaults,
+    slot-modell) nutzen denselben modul-globalen Lock — konsistent mit RAT-14.
+    Stdlib only, kein Datei-Lock-Sidecar.
     """
-    lock_path = str(path) + ".lock"
-    with open(lock_path, "a", encoding="utf-8") as lock_fh:
-        fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)
+    _PLAN_JSON_WRITE_LOCK.acquire()
+    try:
+        yield
+    finally:
+        _PLAN_JSON_WRITE_LOCK.release()
 
 
 def _current_aktivitaeten_list():
