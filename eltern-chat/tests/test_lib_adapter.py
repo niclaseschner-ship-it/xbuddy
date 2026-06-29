@@ -289,6 +289,26 @@ def test_mistral_slot_dict_usage_and_default_model(jsonl_path):
     assert line["correlation_id"] == "turn-99"
 
 
+# ----------------------------------------------------------------------
+#  max_tokens-Durchreichung (T1129)
+# ----------------------------------------------------------------------
+
+
+def test_lib_adapter_passes_max_tokens_4096_to_vendor(jsonl_path):
+    """LibAgentAdapter reicht max_tokens=4096 (Alt-Wert claude.py:32) an den
+    Anthropic-Vendor durch — messages.create wird mit max_tokens=4096 gerufen (AC2)."""
+    fake, client = _fake_anthropic()
+    client.messages.create.return_value = _anthropic_response([_text_block("Ok.")])
+
+    with patch.dict(sys.modules, {"anthropic": fake}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        adapter = LibAgentAdapter(provider="claude", provider_model="")
+        adapter.generate(_request([Message(role="user", blocks=[TextBlock("Hi")])]))
+
+    # Alt-treuer Wert 4096 muss im Create-Call landen (nicht 2048 Lib-Default).
+    assert client.messages.create.call_args.kwargs["max_tokens"] == 4096
+
+
 def test_missing_usage_yields_none(jsonl_path):
     """Fehlt usage in der Lib-Antwort → GenerationResponse.usage None (wie
     claude.py: dann hängt _call_provider keinen ProviderCall an)."""
