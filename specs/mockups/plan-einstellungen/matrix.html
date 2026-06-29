@@ -40,20 +40,21 @@
 </div></div>
 
 <script>
+// Demo-Familie (fiktiv) — reine Mockup-Daten, kein realer Bezug.
 const PERS = {
-  niclas:{n:"Niclas",r:"blue",f:"niclas.jpg"}, sophia:{n:"Sophia",r:"red",f:"sophia.jpg"},
-  julian:{n:"Julian",r:"green",f:"julian.png"}, vera:{n:"Vera",r:"orange",f:"vera.jpg"},
-  paula:{n:"Paula",r:"purple",f:"paula.jpg"}, neko:{n:"Neko",r:"teal",f:"neko.jpg"}, taro:{n:"Taro",r:"gray",f:"taro.jpg"}
+  a1:{n:"Elternteil 1",r:"blue",f:"demo-a1.jpg"}, k1:{n:"Kind 1",r:"red",f:"demo-k1.jpg"},
+  k2:{n:"Kind 2",r:"green",f:"demo-k2.jpg"}, a2:{n:"Elternteil 2",r:"orange",f:"demo-a2.jpg"},
+  k3:{n:"Kind 3",r:"purple",f:"demo-k3.jpg"}, k4:{n:"Kind 4",r:"teal",f:"demo-k4.jpg"}, k5:{n:"Kind 5",r:"gray",f:"demo-k5.jpg"}
 };
 const TAGE=["Mo","Di","Mi","Do","Fr","Sa","So"];
 const SLOTS=[
-  {key:"bring",label:"Bringen",typ:"verantwortlich",icon:"37807",def:["niclas","vera","sophia","julian","vera",null,null]},
-  {key:"pick",label:"Abholen",typ:"verantwortlich",icon:"39520",def:["vera","sophia","sophia","julian","niclas",null,null]},
-  {key:"cook",label:"Kochen",typ:"verantwortlich",icon:"2342",def:["julian","sophia","vera",null,null,null,null]},
-  {key:"bed1",label:"Schlafen Paula",typ:"verantwortlich",icon:"6027",kind:"paula",def:["sophia","niclas","sophia","niclas","sophia","sophia","niclas"]},
-  {key:"bed2",label:"Schlafen Neko",typ:"verantwortlich",icon:"6027",kind:"neko",def:["julian","julian","vera","vera","julian","julian","vera"]},
-  {key:"act1",label:"Termine Paula",typ:"kalender-read",icon:"3071",kind:"paula"},
-  {key:"act2",label:"Termine Neko",typ:"kalender-read",icon:"3071",kind:"neko"},
+  {key:"bring",label:"Bringen",typ:"verantwortlich",icon:"37807",def:["a1","a2","k1","k2","a2",null,null]},
+  {key:"pick",label:"Abholen",typ:"verantwortlich",icon:"39520",def:["a2","k1","k1","k2","a1",null,null]},
+  {key:"cook",label:"Kochen",typ:"verantwortlich",icon:"2342",def:["k2","k1","a2",null,null,null,null]},
+  {key:"bed1",label:"Schlafen Kind 3",typ:"verantwortlich",icon:"6027",kind:"k3",def:["k1","a1","k1","a1","k1","k1","a1"]},
+  {key:"bed2",label:"Schlafen Kind 4",typ:"verantwortlich",icon:"6027",kind:"k4",def:["k2","k2","a2","a2","k2","k2","a2"]},
+  {key:"act1",label:"Termine Kind 3",typ:"kalender-read",icon:"3071",kind:"k3"},
+  {key:"act2",label:"Termine Kind 4",typ:"kalender-read",icon:"3071",kind:"k4"},
 ];
 function ring(id,cls="ring"){ if(!id) return `<span class="${cls} leer"></span>`;
   const p=PERS[id]; return `<img class="${cls} ring-${p.r}" src="assets/fotos/${p.f}" alt="${p.n}" title="${p.n}">`; }
