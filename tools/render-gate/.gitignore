@@ -1,0 +1,3 @@
+# Abhaengigkeiten werden via `npm ci` aus package-lock.json reproduziert,
+# nicht eingecheckt (puppeteer-core, ~54 MB JS).
+node_modules/
