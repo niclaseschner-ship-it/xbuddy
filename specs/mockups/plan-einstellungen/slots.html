@@ -51,21 +51,22 @@
 </div>
 
 <script>
+// Demo-Familie (fiktiv) — reine Mockup-Daten, kein realer Bezug.
 const PERS = {
-  emil:{n:"Niclas",r:"blue",f:"emil.jpg"}, lena:{n:"Lena",r:"red",f:"lena.jpg"},
-  jonas:{n:"Jonas",r:"green",f:"jonas.png"}, petra:{n:"Petra",r:"orange",f:"petra.jpg"},
-  mia:{n:"Mia",r:"purple",f:"mia.jpg"}, finn:{n:"Finn",r:"teal",f:"finn.jpg"},
-  timo:{n:"Timo",r:"gray",f:"timo.jpg"}
+  a1:{n:"Elternteil 1",r:"blue",f:"demo-a1.jpg"}, k1:{n:"Kind 1",r:"red",f:"demo-k1.jpg"},
+  k2:{n:"Kind 2",r:"green",f:"demo-k2.jpg"}, a2:{n:"Elternteil 2",r:"orange",f:"demo-a2.jpg"},
+  k3:{n:"Kind 3",r:"purple",f:"demo-k3.jpg"}, k4:{n:"Kind 4",r:"teal",f:"demo-k4.jpg"},
+  k5:{n:"Kind 5",r:"gray",f:"demo-k5.jpg"}
 };
 const TAGE = ["Mo","Di","Mi","Do","Fr","Sa","So"];
 const SLOTS = [
-  {key:"bring",label:"Bringen",typ:"petrantwortlich",icon:"37807",def:["emil","petra","lena","jonas","petra",null,null]},
-  {key:"pick",label:"Abholen",typ:"petrantwortlich",icon:"39520",def:["petra","lena","lena","jonas","emil",null,null]},
-  {key:"cook",label:"Kochen",typ:"petrantwortlich",icon:"2342",def:["jonas","lena","petra",null,null,null,null]},
-  {key:"bed1",label:"Schlafen Mia",typ:"petrantwortlich",icon:"6027",kind:"mia",def:["lena","emil","lena","emil","lena","lena","emil"]},
-  {key:"bed2",label:"Schlafen Finn",typ:"petrantwortlich",icon:"6027",kind:"finn",def:["jonas","jonas","petra","petra","jonas","jonas","petra"]},
-  {key:"act1",label:"Termine Mia",typ:"kalender-read",icon:"3071",kind:"mia"},
-  {key:"act2",label:"Termine Finn",typ:"kalender-read",icon:"3071",kind:"finn"},
+  {key:"bring",label:"Bringen",typ:"petrantwortlich",icon:"37807",def:["a1","a2","k1","k2","a2",null,null]},
+  {key:"pick",label:"Abholen",typ:"petrantwortlich",icon:"39520",def:["a2","k1","k1","k2","a1",null,null]},
+  {key:"cook",label:"Kochen",typ:"petrantwortlich",icon:"2342",def:["k2","k1","a2",null,null,null,null]},
+  {key:"bed1",label:"Schlafen Kind 3",typ:"petrantwortlich",icon:"6027",kind:"k3",def:["k1","a1","k1","a1","k1","k1","a1"]},
+  {key:"bed2",label:"Schlafen Kind 4",typ:"petrantwortlich",icon:"6027",kind:"k4",def:["k2","k2","a2","a2","k2","k2","a2"]},
+  {key:"act1",label:"Termine Kind 3",typ:"kalender-read",icon:"3071",kind:"k3"},
+  {key:"act2",label:"Termine Kind 4",typ:"kalender-read",icon:"3071",kind:"k4"},
 ];
 const PICKER_ICONS = [
   {id:"6568",w:"schwimmen schwimmbad wasser"}, {id:"24791",w:"musik instrument"}, {id:"31945",w:"sport bewegung"},
