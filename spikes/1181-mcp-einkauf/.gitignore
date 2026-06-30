@@ -1,0 +1,4 @@
+# Spike-lokales venv (mcp-SDK) — NICHT committen, NICHT in Repo-Deps
+.venv/
+__pycache__/
+*.pyc
