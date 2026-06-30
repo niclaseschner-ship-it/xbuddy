@@ -171,6 +171,59 @@ Test-Anker (HTML): seiten/tests/test_heim_shell.py::test_shell10_url_in_uebersic
 
 ---
 
+## 6. PWA-Mantel (SHELL-PWA, #1212)
+
+### SHELL-PWA — Installierbare PWA analog essen-einkauf (ESSEN-33..35)
+
+Die Heim-Shell ist eine vollwertig installierbare PWA (WebAPK-Kandidat auf
+Android). Der Mantel spiegelt das essen-einkauf-Muster 1:1 (ESSEN-33..35).
+
+**Manifest** (`GET /shell/<panel_id>/manifest.json`, dynamisch je `panel_id`):
+- `display: "fullscreen"` — Vollbild ohne Browser-Chrome (WebAPK-Standard).
+- `scope: "/shell/"` — deckt alle Shell-Instanzen; SW-Scope passt.
+- `icons`: 192×192 any, 512×512 any, 512×512 maskable — je unter
+  `/shell/<panel_id>/icon-*.png` (aus `seiten/static/shell/`, Assets von
+  essen-einkauf wiederverwendet für den Pilot).
+- `start_url: "/shell/<panel_id>"` — PWA-Open nach Install öffnet genau
+  dieses Panel.
+
+**Service-Worker** (`seiten/static/shell/sw.js`, Scope `/shell/`):
+- Cacht Shell-Mantel-Assets (`heim-shell.css`, `platform.js`, Shell-HTML) per
+  cache-first. Panel-/Display-Iframes (`/controller/`, `/display/`) werden
+  **nicht** abgefangen — deren eigene SWs sind zuständig (stop_rule sw_scope).
+- BUILD_ID-Platzhalter wird beim Ausliefern durch `shell_asset_view` ersetzt
+  (Cache-Versionierung analog ESSEN-35).
+- Auslieferung: `/shell/<panel_id>/sw.js` mit `Service-Worker-Allowed: /shell/`
+  Header (Scope-Erweiterung über SW-Datei-Pfad hinaus).
+
+**Asset-Route** (`shell_asset_view`, `seiten/main.py`):
+- `GET /shell/<panel_id>/<asset>` liefert sw.js + icon-*.png aus
+  `seiten/static/shell/` mit Path-Traversal-Schutz (analog ESSEN-34).
+- `manifest.json` wird von `heim_shell_manifest` bedient (spezifischere
+  Flask-Route), nicht von dieser Asset-Route.
+- Test-Naht: `runtime["shell_asset_dir"]` überschreibbar (analog einkauf).
+
+**Kachel-Scaling** (`seiten/static/heim-shell.css`, SHELL-PWA AC3):
+- `.rail iframe` erhält `width:200%; height:200%; transform:scale(0.5);
+  transform-origin:top left`.
+- Mechanik: Panel rechnet Grid-Geometrie (PANEL-12) auf 560px Breite (2× Rail),
+  CSS-transform skaliert den Paint auf die sichtbaren 280px zurück → tiles
+  erscheinen ~50% kleiner als bei 100% Zoom. Panel-Code bleibt **unverändert**
+  (stop_rule panel_untouched; `controller/app-panel/**` nicht angefasst).
+
+Test-Anker:
+  seiten/tests/test_heim_shell.py::test_shell_pwa_ac1_icons_nicht_leer
+  seiten/tests/test_heim_shell.py::test_shell_pwa_ac1_display_fullscreen
+  seiten/tests/test_heim_shell.py::test_shell_pwa_ac1_scope
+  seiten/tests/test_heim_shell.py::test_shell_pwa_ac2_sw_route
+  seiten/tests/test_heim_shell.py::test_shell_pwa_ac2_sw_build_id_ersetzt
+  seiten/tests/test_heim_shell.py::test_shell_pwa_ac2_icon_routes
+  seiten/tests/test_heim_shell.py::test_shell_pwa_ac2_html_registriert_sw
+  seiten/tests/test_heim_shell.py::test_shell_pwa_ac3_kachel_scale_css
+  seiten/tests/test_heim_shell.py::test_shell_pwa_ac3_panel_unangetastet
+
+---
+
 ## Offene Schuld (sichtbar, nicht jetzt)
 - **GER-`beides`-Co-Location:** ein Gerät, das dauerhaft Panel UND Display
   trägt, „riecht nach `beides`" im GER-Modell (`geraete.md:60`); SREG nennt
