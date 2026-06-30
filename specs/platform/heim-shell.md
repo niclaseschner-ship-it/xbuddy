@@ -97,6 +97,18 @@ manuelle_probe: Render-Gate-Screenshot 1920×1200 mit Rail 280px gegen
 Live-Daten (Kill bei Overflow/Clipping/unbedienbar). Gate-B-Beleg:
 `specs/mockups/heim-shell/`.
 
+### SHELL-11 — Shell besitzt den Vollbild; eingebettetes Panel unterdrückt Eigen-Vollbild
+Die Shell ist der Vollbild-Besitzer: beim ersten Nutzer-Gesture (touchend/click)
+fordert die Shell `requestFullscreen` auf `document.documentElement` der **Shell**
+an (analog FIG-26, DC-11). Self-healing-Guard: tritt der Nutzer aus dem Vollbild,
+holt ihn der nächste Tap zurück. Das eingebettete Panel-Iframe (PANEL-10) hängt
+bei `window.self !== window.top` **keinen** Eigen-Vollbild-Listener an —
+standalone Panel-Geräte (self === top) behalten PANEL-10 unverändert
+(keine Regression). Umsetzung: Inline-Script in `seiten/templates/heim-shell.html`
+(SHELL-11-Block) + Guard in `controller/app-panel/app.js::attachFullscreenOnGesture`.
+Test-Anker: seiten/tests/test_heim_shell.py::test_shell11_panel_embedded_guard,
+             seiten/tests/test_heim_shell.py::test_shell11_shell_fullscreen_script
+
 ## 3. Audio-Seiteneffekt
 
 ### SHELL-7 — Panel-Audio-Prime überlebt die Einbettung

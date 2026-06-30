@@ -248,3 +248,39 @@ def test_shell10_manifest_route(client):
     assert data["start_url"] == "/shell/" + PANEL_ID
     assert data["display"] == "standalone"
     assert PANEL_ID in data["name"]
+
+
+# ============================================================
+#  test_shell11_* — SHELL-11: Shell-Vollbild-Besitz + Panel-embedded-Guard
+# ============================================================
+
+def test_shell11_panel_embedded_guard():
+    """SHELL-11/AC1: app.js enthält embedded-Guard (self===top) in attachFullscreenOnGesture."""
+    app_js_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "controller", "app-panel", "app.js",
+    )
+    with open(app_js_path, encoding="utf-8") as fh:
+        src = fh.read()
+    # Guard muss im Kontext von attachFullscreenOnGesture stehen (window.self === window.top)
+    assert "window.self" in src, "Guard-Ausdruck 'window.self' fehlt in app.js"
+    assert "window.top" in src, "Guard-Ausdruck 'window.top' fehlt in app.js"
+    # attachFullscreenImpl darf NUR aufgerufen werden wenn guard passiert —
+    # der Guard-Block muss vor attachFullscreenImpl.call erscheinen
+    guard_pos = src.find("window.self !== window.top")
+    attach_pos = src.find("attachFullscreenImpl", guard_pos)
+    assert guard_pos != -1, "Guard 'window.self !== window.top' nicht gefunden"
+    assert attach_pos != -1, (
+        "attachFullscreenImpl nach dem Guard nicht gefunden — Guard und Aufruf passen nicht zusammen"
+    )
+
+
+def test_shell11_shell_fullscreen_script(client):
+    """SHELL-11/AC2: Shell-HTML enthaelt Vollbild-Script (requestFullscreen auf Shell-Dokument)."""
+    body = client.get("/shell/" + PANEL_ID).get_data(as_text=True)
+    assert "requestFullscreen" in body or "webkitRequestFullscreen" in body, (
+        "Shell-HTML muss requestFullscreen enthalten (SHELL-11)"
+    )
+    assert "tryFullscreen" in body, (
+        "Shell-HTML muss tryFullscreen-Funktion enthalten (SHELL-11)"
+    )

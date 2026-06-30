@@ -42,5 +42,25 @@
     </div>
     {% endif %}
   </div>
+  {# SHELL-11: Shell besitzt den Vollbild — requestFullscreen auf document.documentElement
+     der Shell beim ersten Nutzer-Gesture. Self-healing-Guard: verlässt der Nutzer den
+     Vollbild, holt ihn der nächste Tap zurück (analog PANEL-10/DC-11/FIG-26). Das
+     eingebettete Panel unterdrückt seinen Eigen-Vollbild (PANEL-10 embedded-Ausnahme). #}
+  <script>
+    (function () {
+      function tryFullscreen() {
+        if (document.fullscreenElement || document.webkitFullscreenElement) return;
+        var el = document.documentElement;
+        var req = el.requestFullscreen || el.webkitRequestFullscreen;
+        if (!req) return;
+        try {
+          var p = req.call(el);
+          if (p && p.catch) p.catch(function () {});
+        } catch (e) {}
+      }
+      document.addEventListener('touchend', tryFullscreen, { passive: true });
+      document.addEventListener('click', tryFullscreen);
+    })();
+  </script>
 </body>
 </html>

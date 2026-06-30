@@ -346,13 +346,20 @@ gegen den geprüft werden müsste.
 
 ## 5. Kiosk-Absicherung
 
-### PANEL-10 — Vollbild & Bildschirm wach halten
+### PANEL-10 — Vollbild & Bildschirm wach halten (standalone-only)
 Das Panel ist eine Controller-PWA und erfüllt damit die Pflichten aus
 `conventions/pwa.md` (PWA-1 Pflicht-Dateien, PWA-2 Manifest-
 Pflichtfelder inkl. `display: fullscreen`, PWA-3 Wake-Lock +
 Fullscreen-API beim ersten User-Gesture, PWA-4 Selbstgenügsamkeit +
 Controller-Config-Lade-Konvention) — analog DC-11/DC-16 (Display-
 Client als zweiter PWA-Konsument) und FIG-24/FIG-26.
+
+**Embedded-Ausnahme (SHELL-11):** Wird das Panel als Iframe in die
+Heim-Shell eingebettet (`window.self !== window.top`), hängt es seinen
+Eigen-Vollbild-Listener **nicht** an — die Shell besitzt dann den
+Vollbild (SHELL-11). Standalone-Panel-Geräte (`window.self === window.top`)
+behalten PANEL-10 unverändert. Umsetzung in
+`controller/app-panel/app.js::attachFullscreenOnGesture`.
 
 **Hinweis:** **App-Pinning** ist Familien-Onboarding-Aufgabe und kein
 Code-Verhalten — wird in einem entsprechenden Onboarding-Schritt für
