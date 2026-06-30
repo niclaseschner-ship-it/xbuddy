@@ -170,7 +170,12 @@ def measure_http_idle():
 
 
 def measure_baseline():
-    """Direkt-Adapter: 0 Extra-Prozesse; RSS-Kosten = Import in-Prozess."""
+    """Direkt-Adapter: 0 Extra-Prozesse; RSS-Kosten = Import in-Prozess.
+
+    Importiert _essen_http (spike-lokaler Minimal-HTTP-Client) aus SERVER_DIR —
+    identische stdlib-Deps wie der vollständige EssenClient, daher gleicher
+    RAM-Delta-Wert (MOD-6-konform: kein Fremdmodul-Import).
+    """
     code = (
         "import os, sys\n"
         "sys.path.insert(0, %r)\n"
@@ -178,16 +183,14 @@ def measure_baseline():
         "with open('/proc/%%d/status' %% os.getpid()) as f:\n"
         "    for ln in f:\n"
         "        if ln.startswith('VmHWM:'): before = int(ln.split()[1])\n"
-        "import essen_client\n"
-        "c = essen_client.EssenClient('http://127.0.0.1:5152')\n"
+        "import _essen_http\n"
+        "c = _essen_http.EssenHttpClient('http://127.0.0.1:5152')\n"
         "after = None\n"
         "with open('/proc/%%d/status' %% os.getpid()) as f:\n"
         "    for ln in f:\n"
         "        if ln.startswith('VmHWM:'): after = int(ln.split()[1])\n"
         "print('%%d %%d' %% (before, after))\n"
-        % os.path.join(
-            os.path.dirname(SPIKE_ROOT), "..", "eltern-chat", "skills"
-        )
+        % SERVER_DIR
     )
     out = subprocess.run(
         [VENV_PY, "-c", code], capture_output=True, text=True
