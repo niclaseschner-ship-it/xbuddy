@@ -1,17 +1,17 @@
 {
-  "_doc": "Pilot-Registry des Render-Gates (RAT-24, #1160). origin = nginx-Live-Origin auf dem Pi (self-signed, :8443). Jede View hat eine voll-qualifizierte url (gegen die Live-Origin) und optional einen Tier-B-Kollisionsvertrag (contract, relativ zu diesem Verzeichnis). viewport ist der Pi-Display-Default 1920x1080; pro View ueberschreibbar.",
+  "_doc": "Pilot-Registry des Render-Gates (RAT-24, #1160). origin = nginx-Live-Origin auf dem Pi (self-signed, :8443) — die Pi-IP steht genau hier, nirgendwo sonst. Jeder View-Eintrag traegt nur einen relativen path (/display/...); check.js setzt die voll-qualifizierte Ziel-URL einmalig aus origin + path zusammen. Optionaler Tier-B-Kollisionsvertrag (contract, relativ zu diesem Verzeichnis). viewport ist der Pi-Display-Default 1920x1080; pro View ueberschreibbar.",
   "origin": "https://192.168.178.78:8443",
   "viewport": { "width": 1920, "height": 1080 },
   "views": {
     "plan/woche": {
-      "url": "https://192.168.178.78:8443/display/plan/woche",
+      "path": "/display/plan/woche",
       "contract": "contracts/plan-woche.json"
     },
     "plan/woche-klein": {
-      "url": "https://192.168.178.78:8443/display/plan/woche?ansicht=klein"
+      "path": "/display/plan/woche?ansicht=klein"
     },
     "kibuddy/frage": {
-      "url": "https://192.168.178.78:8443/display/kibuddy/frage"
+      "path": "/display/kibuddy/frage"
     }
   }
 }
