@@ -28,6 +28,7 @@ from typing import Any
 
 from .. import pricing, telemetry
 from .._types import ProviderError
+from ._base import VendorBase
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +52,15 @@ _MISTRAL_API_BASE = "https://api.mistral.ai/v1"
 _CHAT_ENDPOINT = _MISTRAL_API_BASE + "/chat/completions"
 
 
-class MistralVendor:
+class MistralVendor(VendorBase):
     """Mistral-Chat-Completions-Adapter — Agent-Sicht für `tools.llm` (LLMP-S1).
 
     Hält keinen SDK-Client (Mistral spricht reines REST); httpx wird lazy
     importiert (wie `eltern-chat/providers/mistral.py`), damit Tests die Lib
     ohne httpx-Last laden können.
+
+    ``agent_run`` und ``_tool_result_block`` werden von ``VendorBase`` geerbt
+    (T1130 — LLMP-S7 n=3-Extraktion; keine Copy mehr).
     """
 
     name = "mistral"
@@ -101,81 +105,6 @@ class MistralVendor:
             response_data, caller=caller, slot=slot, correlation_id=correlation_id,
             wall_ms=wall_ms,
         )
-
-    def agent_run(
-        self,
-        system: str,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]],
-        *,
-        caller: str,
-        slot: str,
-        tool_runner: Any = None,
-        max_iterations: int = 8,
-        correlation_id: str | None = None,
-    ) -> dict[str, Any]:
-        """Tool-Use-Loop über `agent_step` (LLMP-S1 `get_agent`, T1085).
-
-        Pro Iteration EIN `agent_step` (Single POST + Telemetrie, kein
-        Copy-Paste — LLMP-S7). Spiegelt assistant-`tool_use` + user-`tool_result`
-        in der NEUTRALEN Wire-Form zurück (die nächste `agent_step` übersetzt sie
-        nach Mistral). is_error-Härtung wie Anthropic: `tool_runner` darf String
-        ODER `{"content":…, "is_error": bool}` liefern. Jeder `agent_step` misst
-        seine Wandzeit und emittiert sie in die Telemetrie (LLMP-S4).
-        Liefert `{"text", "messages"}`.
-        """
-        convo = list(messages)
-        for _ in range(max_iterations):
-            step = self.agent_step(
-                system=system,
-                messages=convo,
-                tools=tools,
-                caller=caller,
-                slot=slot,
-                correlation_id=correlation_id,
-            )
-            if not step["tool_calls"]:
-                return {"text": step["text"], "messages": convo}
-
-            if tool_runner is None:
-                raise ProviderError(
-                    "mistral-vendor: agent_run bekam tool_use-Blöcke, aber "
-                    "keinen tool_runner (Caller muss Tool-Results liefern)"
-                )
-
-            convo.append({
-                "role": "assistant",
-                "content": [
-                    {"type": "tool_use", "id": tc["id"], "name": tc["name"], "input": tc["input"]}
-                    for tc in step["tool_calls"]
-                ],
-            })
-            convo.append({
-                "role": "user",
-                "content": [
-                    self._tool_result_block(tc["id"], tool_runner(tc["name"], tc["input"]))
-                    for tc in step["tool_calls"]
-                ],
-            })
-
-        raise ProviderError(
-            "mistral-vendor: agent_run erreichte max_iterations=%d ohne "
-            "Abschluss" % max_iterations
-        )
-
-    @staticmethod
-    def _tool_result_block(tool_use_id: str, runner_result: Any) -> dict[str, Any]:
-        """Neutraler `tool_result`-Block aus dem `tool_runner`-Rückgabewert
-        (String ODER `{"content":…, "is_error": bool}`). Spiegel zur
-        Anthropic-Variante — die Mistral-Übersetzung passiert in
-        `_to_mistral_message`."""
-        block: dict[str, Any] = {"type": "tool_result", "tool_use_id": tool_use_id}
-        if isinstance(runner_result, dict):
-            block["content"] = runner_result.get("content", "")
-            block["is_error"] = bool(runner_result.get("is_error", False))
-        else:
-            block["content"] = runner_result
-        return block
 
     # ------------------------------------------------------------------
     #  Sicht: get_singleshot — Structured Singleshot (hoerspiel, T1084)

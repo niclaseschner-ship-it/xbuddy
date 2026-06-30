@@ -23,6 +23,7 @@ from typing import Any
 
 from .. import pricing, telemetry
 from .._types import ProviderError
+from ._base import VendorBase
 
 logger = logging.getLogger(__name__)
 
@@ -48,13 +49,16 @@ DEFAULT_MODEL = "claude-haiku-4-5"
 DEFAULT_MAX_TOKENS = 2048
 
 
-class AnthropicVendor:
+class AnthropicVendor(VendorBase):
     """Anthropic-Messages-Adapter — gemeinsamer Kern aller drei Sichten (LLMP-S1).
 
     Hält genau **eine** SDK-Client-Instanz und stellt die drei Sicht-Methoden
     bereit, die die jeweiligen `get_*`-Fassaden in `public_api` aufrufen. Ein
     neuer Vendor entsteht durch eine neue Datei mit derselben Methoden-Liste
     (LLMP-2 Trade-off: Vendor-Wechsel ist ein File, kein Adapter pro Buddy).
+
+    ``agent_run`` und ``_tool_result_block`` werden von ``VendorBase`` geerbt
+    (T1130 — LLMP-S7 n=3-Extraktion; keine Copy mehr).
     """
 
     name = "anthropic"
@@ -272,87 +276,6 @@ class AnthropicVendor:
             "tool_calls": tool_calls,
             "usage": getattr(response, "usage", None),
         }
-
-    def agent_run(
-        self,
-        system: str,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]],
-        *,
-        caller: str,
-        slot: str,
-        tool_runner: Any = None,
-        max_iterations: int = 8,
-        correlation_id: str | None = None,
-    ) -> dict[str, Any]:
-        """Tool-Use-Loop mit Mid-Turn-Continuation (LLMP-S1 `get_agent`).
-        Required: `tool_use` + `multi_turn_assistant_prefill`
-        + `system_message_distinct`. Pro Iteration EIN `agent_step` (Single
-        Create + Telemetrie, kein Copy-Paste — LLMP-S7). Bei `tool_use`-Blöcken
-        ruft `tool_runner(name, input)`, spiegelt assistant-Prefill +
-        `tool_result` zurück, setzt fort. Liefert `{"text", "messages"}`.
-
-        is_error-Härtung (T1085, additiv): `tool_runner` darf einen String ODER
-        ein dict `{"content":…, "is_error": bool}` zurückgeben. Beim String ist
-        is_error=False (rückwärtskompatibel, test_fixture1 bleibt grün).
-        """
-        convo = list(messages)
-        for _ in range(max_iterations):
-            step = self.agent_step(
-                system=system,
-                messages=convo,
-                tools=tools,
-                caller=caller,
-                slot=slot,
-                correlation_id=correlation_id,
-            )
-            if not step["tool_calls"]:
-                return {"text": step["text"], "messages": convo}
-
-            if tool_runner is None:
-                raise ProviderError(
-                    "anthropic-vendor: agent_run bekam tool_use-Blöcke, aber "
-                    "keinen tool_runner (Caller muss Tool-Results liefern)"
-                )
-
-            # multi_turn_assistant_prefill: die Assistant-Tool-Use-Nachricht
-            # zurück in den Verlauf spiegeln, dann die Tool-Results als user.
-            convo.append({
-                "role": "assistant",
-                "content": [
-                    {"type": "tool_use", "id": tc["id"], "name": tc["name"], "input": tc["input"]}
-                    for tc in step["tool_calls"]
-                ],
-            })
-            convo.append({
-                "role": "user",
-                "content": [
-                    self._tool_result_block(tc["id"], tool_runner(tc["name"], tc["input"]))
-                    for tc in step["tool_calls"]
-                ],
-            })
-
-        raise ProviderError(
-            "anthropic-vendor: agent_run erreichte max_iterations=%d ohne "
-            "Abschluss" % max_iterations
-        )
-
-    @staticmethod
-    def _tool_result_block(tool_use_id: str, runner_result: Any) -> dict[str, Any]:
-        """Baut einen `tool_result`-Block aus dem `tool_runner`-Rückgabewert.
-
-        Akzeptiert einen String (is_error=False, rückwärtskompatibel) ODER ein
-        dict `{"content":…, "is_error": bool}` (T1085 is_error-Härtung). Der
-        Marker landet nur dann auf dem Block, wenn der Runner ihn liefert —
-        sonst bleibt der Block wie bisher (test_fixture1-kompatibel).
-        """
-        block: dict[str, Any] = {"type": "tool_result", "tool_use_id": tool_use_id}
-        if isinstance(runner_result, dict):
-            block["content"] = runner_result.get("content", "")
-            block["is_error"] = bool(runner_result.get("is_error", False))
-        else:
-            block["content"] = runner_result
-        return block
 
     # ------------------------------------------------------------------
     #  Telemetrie-Hilfen (LLMP-S4)
