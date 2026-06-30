@@ -24,8 +24,8 @@ bis dahin wäre der Hop Cloud-Reflex ohne Mehrwert
 (RAT-20 Sektion „Patch 1" → Form ist Lib; ENTSCHEID-File Sektion
 „Patch 1 — RAT-N überschreibt RAT-6-Wortlaut explizit").
 
-### LLMP-2 — Drei Public-API-Sichten
-`tools/llm` stellt genau drei Konsumenten-Sichten bereit, jede mit einem
+### LLMP-2 — Vier Public-API-Sichten
+`tools/llm` stellt genau vier Konsumenten-Sichten bereit, jede mit einem
 eigenen Vertrag, alle auf demselben `_vendor/<vendor>.py`-Kern:
 
 | Sicht             | Use-Case                                      | Heute belegt durch |
@@ -33,10 +33,11 @@ eigenen Vertrag, alle auf demselben `_vendor/<vendor>.py`-Kern:
 | `get_agent(slot)` | Tool-Loop mit Mid-Turn-Continuation           | eltern-chat        |
 | `get_singleshot(slot)` | Strukturierte Einzel-Antwort (Schema-erzwungen via Tool-Use) | hoerspiel |
 | `get_chat(slot)`  | Multi-Turn-Konversation mit History + System-Prompt | kibuddy      |
+| `get_completion(slot)` | Freitext-Singleshot (ein Absatz Prosa, kein Schema) | hoerspiel (Synopse, #1131) |
 
-Eine neue Vendor-Datei aktiviert automatisch alle drei Sichten — kein
-Adapter-Code pro Buddy. Eine vierte Sicht wird erst hinzugefügt, wenn ein
-vierter Use-Case mit eigenem Vertrag belegt ist (CLAUDE.md §6, „Vorschlagen,
+Eine neue Vendor-Datei aktiviert automatisch alle vier Sichten — kein
+Adapter-Code pro Buddy. Eine fünfte Sicht wird erst hinzugefügt, wenn ein
+fünfter Use-Case mit eigenem Vertrag belegt ist (CLAUDE.md §6, „Vorschlagen,
 wenn Werte sich vermehren"). Verschmelzung zweier Sichten ist Re-Litigation
 nach Vertrag-Drift-Schwelle (RAT-20 „Kill-Kriterium")
 (ENTSCHEID-File Sektion „Finale Landung — MACH ES" → Was sich ändert /
@@ -75,6 +76,10 @@ Die sechs ratifizierten Capabilities (V1):
   Vertrag).
 - `get_chat`: `{multi_turn_assistant_prefill, cache_control,
   system_message_distinct}`
+- `get_completion`: `{system_message_distinct}` — bewusst **kein**
+  `structured_output`/`cache_control`, damit die Freitext-Sicht dual-provider-
+  Slots (hoerspiel Claude+Mistral) ohne Boot-Fail trägt (#1131; `get_chat` wäre
+  auf dem Mistral-Slot boot-fatal).
 
 Erweiterung der Capability-Liste ist Spec-Änderung (`specs/platform/llm-providers.md`),
 nicht Convention-Drift.
@@ -102,7 +107,7 @@ fehlt sie, ist `LLMCapabilityError` der erste Fehler vor allem anderen
 (ENTSCHEID-File Sektion „Patch 2 — Capability-Matrix + harter Boot-Fail").
 
 Re-Export-Form analog `tools.zugangsdaten` (MOD-5): externer Zugriff
-**nur** über `from tools.llm import get_agent, get_singleshot, get_chat`,
+**nur** über `from tools.llm import get_agent, get_singleshot, get_chat, get_completion`,
 **nie** direkt aus `tools.llm._vendor.<vendor>`. Der Unterstrich vor
 `_vendor` macht die Privat-Natur sichtbar; ein analoger MOD-Contract
 (z. B. „LLM-Vendor-Module nur über Public-API") darf nach der dritten
