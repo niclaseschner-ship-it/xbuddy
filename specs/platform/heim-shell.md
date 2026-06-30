@@ -149,16 +149,25 @@ und `.../api/v1/displays/<id>/events` → muss scheitern/4xx; von Heim-LAN/Tailn
 ## 5. Registrierung & Schnittstelle
 
 ### SHELL-10 — Shell-URL in der Eltern-Seiten-Übersicht
-Die Shell-URL ist in der Eltern-Seiten-Übersicht auffindbar — wie Panel und
-Display, die dort als Geräte-Paare erscheinen (`/api/v1/seiten/uebersicht`,
-Hero-Sektion SREG-12, `seiten-registry.md:30`). Konkret: je Panel-Editor-Karte
-des Geräte-Paars zeigt die Übersicht **zusätzlich** eine Heim-Shell-URL
+Die Shell-URL ist in der Eltern-Seiten-Übersicht auffindbar — primär in der
+**MAU-Mini-App** (`/api/v1/seiten/mini-app-uebersicht`, Eltern öffnen sie als
+Telegram-Mini-App), zusätzlich in der HTML-Seite (`/api/v1/seiten/uebersicht`,
+Hero-Sektion SREG-12, `seiten-registry.md:30`). Konkret: je Panel des
+Geräte-Paars zeigen beide Übersichten **zusätzlich** eine Shell-URL
 `/shell/<panel_id>` in der SREG-12-Form **zwei kopierbare URLs** (Heimnetz +
 Tailscale). Die URL wird aus `panel_id` abgeleitet — **kein** GER-`beides`-
 Co-Location-Modell nötig (das bleibt Folge-Aufgabe, `seiten-registry.md:39`).
+
+**Datenpfad MAU:** `GET /api/v1/seiten` reichert Panel-Einträge server-seitig
+mit `shell_urls: {heim, tailscale}` an (aus `panel_id` + konfigurierten Origins,
+`seiten/main.py::get_seiten`); `mini-app-uebersicht.js` rendert sie als
+URL-Karten je Geräte-Paar. Kein JS-Hardcode der panel_id — abgeleitet aus dem
+`instanz`-Feld (SREG-4), Origins aus dem Runtime-Dict (SREG-7).
+
 Installierbarkeit als PWA (WebAPK) erfolgt über ein Shell-Manifest je
 `panel_id` (analog PWA-1); für den Pilot ist `start_url = /shell/mias-panel-01`.
-Test-Anker: seiten/tests/test_heim_shell.py::test_shell10_url_in_uebersicht
+Test-Anker (MAU): seiten/tests/test_mini_app_uebersicht.py::test_shell10_mau_panel_eintrag_hat_shell_urls
+Test-Anker (HTML): seiten/tests/test_heim_shell.py::test_shell10_url_in_uebersicht
 
 ---
 
