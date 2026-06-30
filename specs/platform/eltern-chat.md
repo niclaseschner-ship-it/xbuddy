@@ -1506,7 +1506,24 @@ unverändert. Wächst eine neue Mini-App in die Familie (n=5,
 beispielsweise ein Plan/Wochenplan-Buddy mit Eltern-Chat-Anschluss),
 trägt sie EC-40 ab Werft-Lauf.
 
-*Tickets:* #1075
+**Trigger-Heimat (Negativ-Geltung, Soll-Norm, Refs #1105).** Das
+positive Trigger-Vokabular der EC-40-Familie **gehört allein in die
+Tool-`description`** (Implementations-Pfad oben) und **darf nicht
+zusätzlich** als ausgeschriebene Phrasen-Liste im `SYSTEM_PROMPT` von
+`eltern-chat/agent.py` gepflegt werden. Für die Familie trägt der
+System-Prompt ausschließlich **Negativ-/Verweis-Routing**: eine
+beiläufige Settings-**Inhalts-/Änderungs**-Bitte (Voice/Modell/Tempo)
+beantwortet der Agent sprachlich ohne Tool-Call — die **Direkt-Settings-
+*Link*-Bitte** bleibt davon unberührt ein positiver Tool-Trigger in der
+`description` (z. B. HOE via E-HOE-2). Zwei gepflegte Heimaten desselben
+Vokabulars driften sonst auseinander (Live-Schmerz #1105: identische
+HOE-Settings-Phrasen standen sowohl im `agent.py`-System-Prompt als auch
+in der Tool-`description`). Die **Umsetzung** dieser Norm — Entfernen der
+verbliebenen HOE-Positiv-Dopplung aus dem System-Prompt — erfolgt über
+**#1105**; bis dahin ist die Code-Dopplung der dokumentierte
+Soll-Verstoß, den #1105 schließt.
+
+*Tickets:* #1075, #1105
 
 ### EC-41 — Mini-App-Knöpfe entstehen ausschließlich über Skill-Aufrufe
 
