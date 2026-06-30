@@ -1202,7 +1202,11 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # EC-10 A2-Receipt (#841): Store-Instanz für FotoSendenTask /
         # EinkaufHinzufuegenTask. None → Skills laufen ohne Receipt-Schreibung
         # (Backward-Compat für Test-Kataloge).
-        a2_receipt_store=a2_receipt_store)
+        a2_receipt_store=a2_receipt_store,
+        # WRO-8 / #1094: Origin des Wetter-Buddys (Mini-App-URL = Origin +
+        # /display/wetter/regeln, WRO-5). Leer/None → WetterRegelnOeffnenTask
+        # NICHT im Katalog (AND-Guard in tasks.py).
+        wetter_origin_url=getattr(cfg, "wetter_origin_url", None) or None)
 
     if cfg.provider_api_key:
         # KI-Modus — Anbieter steht; die Familien-Gruppe muss gesetzt sein (EC-2).
