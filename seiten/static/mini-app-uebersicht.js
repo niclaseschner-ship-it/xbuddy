@@ -119,6 +119,7 @@
     "Controller":      "🎛️",
     "Eltern":          "📄",
     "Seite":           "📄",
+    "Shell":           "🖥️",
   };
 
   /**
@@ -292,6 +293,31 @@
           panelIcon
         );
         paar.appendChild(panelKarte);
+
+        // Shell-URL-Karten (SHELL-10, SREG-12-Form: Heim + Tailscale).
+        // shell_urls kommt server-seitig aus dem Inventar-Eintrag (panel_id + origins,
+        // gebaut in seiten/main.py::get_seiten — kein Hardcode im JS).
+        const shellUrls = panelEintrag && panelEintrag.shell_urls;
+        if (shellUrls) {
+          if (shellUrls.heim) {
+            const shellKarteHeim = _bauUrlKarte(
+              "Shell Heim: " + ((panelEintrag && panelEintrag.label) || "Panel " + panelId),
+              "Shell",
+              shellUrls.heim,
+              null
+            );
+            paar.appendChild(shellKarteHeim);
+          }
+          if (shellUrls.tailscale) {
+            const shellKarteTailscale = _bauUrlKarte(
+              "Shell Tailscale: " + ((panelEintrag && panelEintrag.label) || "Panel " + panelId),
+              "Shell",
+              shellUrls.tailscale,
+              null
+            );
+            paar.appendChild(shellKarteTailscale);
+          }
+        }
 
         // Editor-Karte angedockt an dieses Panel (Lego via verknuepft_mit_panel).
         const editorView = editorByPanelId && editorByPanelId[panelId];
