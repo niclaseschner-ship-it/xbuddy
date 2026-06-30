@@ -38,3 +38,29 @@ Diese Frage gilt als **entschieden**. Neu aufmachen nur, wenn beides belegt ist:
 (a) der MCP-Connector wird **ZDR-fähig** (raus aus Beta, Datenretention geklärt),
 **und** (b) ein konkreter Use-Case zeigt, dass das kanonische `tool_use`-Skill-Adapter-Modell
 ihn nicht trägt. Andernfalls: schließen mit Verweis auf RAT-3.
+
+## Reopen — bedingt und eng geschnitten für einen Mess-Spike (2026-06-30, Nic)
+
+Nic hat RAT-3 am 2026-06-30 (beim `/arbeitstag-prep`) **bedingt reopnet**. Anlass:
+die **lokale, client-seitige MCP-Form** war 2026-05-31 nicht evaluiert — der
+damalige ZDR-Bruch betraf ausschließlich den **gehosteten** Anthropic-`mcp-client`-
+Connector. Bei einem MCP-Server, den der Pi selbst betreibt (Client lokal,
+Server auf `localhost`, **kein** gehosteter Connector, **kein** Zugangsdaten-Store
+als Tool), fließen die Daten dieselbe Grenze wie heute (`tool_use` → Skill-Adapter
+→ API). Diese neue Prämisse rechtfertigt einen **Mess-Spike**, um die Reopen-
+Bedingung (b) (belegter Use-Case-Nutzen) überhaupt mit Zahlen füllen zu können.
+
+**Scope des Reopen:** NUR der Mess-Spike **#1181** (Vehikel einkauf-Buddy, lokal,
+ohne ZD-Store, **kein** Produktiv-Rollout). Der Spike **muss** RAT-3s ursprüngliche
+Gründe **mitmessen**, nicht umgehen:
+- **EC-12/Datenretention** — wo fließen die Daten in der lokalen Form genau hin,
+  retainiert irgendetwas (auch lokal/Logs)? Belegen, dass die lokale Form den
+  EC-12-Bruch wirklich vermeidet.
+- **Provider-Adapter-Umbau** — zwingt der lokale MCP-Client Änderungen an
+  `model.py`/`providers/claude.py`/`agent.py` + EC-10-Tests, oder lebt er sauber
+  außerhalb des `ClaudeProvider`?
+
+**Weiterhin GESCHLOSSEN ohne neue Ratifizierung:** „MCP-Server pro App" als
+**Produktiv-Architektur** und der **gehostete** Anthropic-MCP-Connector. Die
+Architektur-Entscheidung (pro-Buddy / Aggregator / Hybrid) fällt erst nach den
+Spike-Zahlen über die #1164-Linie.
