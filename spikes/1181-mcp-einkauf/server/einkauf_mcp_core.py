@@ -17,20 +17,9 @@ Produktiv-5052. Die Origin kommt aus ESSEN_ORIGIN_URL (Default 5152).
 """
 
 import os
-import sys
 
-# Spike-lokaler Import des bestehenden EssenClient — ohne Repo-Deps anzufassen.
-# Repo-Wurzel ist vier Ebenen über dieser Datei
-# (spikes/1181-mcp-einkauf/server/einkauf_mcp_core.py).
-_REPO_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..", "..")
-)
-_SKILLS_DIR = os.path.join(_REPO_ROOT, "eltern-chat", "skills")
-if _SKILLS_DIR not in sys.path:
-    sys.path.insert(0, _SKILLS_DIR)
-
-from essen_client import EssenClient, EssenClientError  # noqa: E402
-from mcp.server.fastmcp import FastMCP  # noqa: E402
+from _essen_http import EssenHttpClient, EssenHttpError
+from mcp.server.fastmcp import FastMCP
 
 # Scratch-essen-Origin (PORT 5152) — NIE 5052 (Produktiv). stop_rule prod_data.
 ESSEN_ORIGIN_URL = os.environ.get("ESSEN_ORIGIN_URL", "http://127.0.0.1:5152")
@@ -40,7 +29,7 @@ HTTP_PORT = int(os.environ.get("MCP_HTTP_PORT", "5191"))
 
 
 def _client():
-    return EssenClient(ESSEN_ORIGIN_URL)
+    return EssenHttpClient(ESSEN_ORIGIN_URL)
 
 
 def build_server(name="einkauf-mcp-spike"):
@@ -57,7 +46,7 @@ def build_server(name="einkauf-mcp-spike"):
         """
         try:
             return _client().lese_wuensche(klasse="einkauf")
-        except EssenClientError as e:
+        except EssenHttpError as e:
             return [{"fehler": str(e)}]
 
     @mcp.tool()
@@ -78,7 +67,7 @@ def build_server(name="einkauf-mcp-spike"):
                 item_id=item_id,
                 kategorie=kategorie,
             )
-        except EssenClientError as e:
+        except EssenHttpError as e:
             return {"fehler": str(e), "marker": getattr(e, "marker", None)}
 
     return mcp
