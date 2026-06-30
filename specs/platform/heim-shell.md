@@ -1,0 +1,159 @@
+# Heim-Shell — Spec     (ID-Präfix: SHELL)
+
+> Status: V1-Pilot · Refs #1182
+> Architektur ratifiziert via /berater-runde 2026-06-30 (siehe RAT-25).
+> Deliberation: `brainstorm/berater-runde/20260630-151000-RATIFIZIERT-pwa-shell-mia.md`
+> Gate-B-Mockups: `specs/mockups/heim-shell/`
+
+Die Heim-Shell ist ein **dünner Split-Layout-Container**, der auf **einem**
+Familien-Gerät die heute getrennten Flächen co-loziert: **Panel-Kachel-Nav
+links, geroutete Buddy-View rechts**. Sie ist **kein neuer Routing-Kern** —
+sie bettet zwei bestehende, vom Router ausgelieferte Flächen als Iframes ein
+und überlässt ihnen ihre eigene Mechanik. Tile-Tap läuft unverändert
+`tile_selected` (PANEL-6) → Router → SSE (ROU-22) → Render im Display-Client.
+
+**V1-Pilot-Scope:** EIN Testgerät (Mia-Tablet `tablet-tablet-mia-01`,
+1920×1200), **LAN-only** (kein Funnel). Einstieg über `panel_id`; `display_id`
+per Router-Lookup (ROU-32). Reversibel: Rückbau = Shell-Route weg, Tablet zeigt
+wieder auf den klassischen Display-Client.
+
+**Out-of-Scope V1** (jeweils eigenes Ticket, sobald gebraucht): produktiver
+RAT-19-Phase-4-Rollout (Auth scharf, siehe SHELL-6) · zweites Shell-Gerät
+(GER-`beides`-Co-Location-Modell, `geraete.md:60` / `seiten-registry.md:39` —
+explizit als Schuld notiert) · RAT-24-Teil-Pane-Render-Vertrag · jede
+antizipative Shell-Konvention (n=1).
+
+---
+
+## 1. Einstieg & Auflösung
+
+### SHELL-1 — Einstieg über `panel_id`
+Das System liefert die Shell unter `GET /shell/<panel_id>` als HTML-Antwort
+aus. `panel_id` ist das load-bearing Segment (analog PANEL-2 / PREG-2). Eine
+unbekannte `panel_id` führt zu einem sichtbaren Fehler (kein Raten, kein
+stiller Fallback). Verortung: `seiten/`-Service (`seiten/static/` +
+`platform.js`); nginx routet `/shell/` zum seiten-Service.
+Test-Anker: seiten/tests/test_heim_shell.py::test_shell1_route_html
+
+### SHELL-2 — `display_id` per Router-Lookup, keine Reverse-Inferenz
+Die Shell ermittelt das Ziel-Display **ausschließlich** über den
+Panel→Display-Lookup `GET /api/v1/router/panels/app-panel:<panel_id>` (ROU-32,
+`router/main.py:671`) und nimmt `display_id` aus dessen Antwort. Es gibt
+**keine** Reverse-Inferenz „ein Display → genau ein Panel" (mehrere Panels
+dürfen ein Display steuern, `panel-registry.md` PREG-2 / `:55`). Liefert der
+Lookup kein `display_id` (unbekanntes Panel / kein gebundenes Display), zeigt
+die Shell einen sichtbaren Fehler und bettet **kein** rechtes Pane ein.
+Test-Anker: seiten/tests/test_heim_shell.py::test_shell2_lookup_display_id
+
+### SHELL-9 — IDs aus Daten, kein Hardcode (n=1)
+Weder `panel_id` noch `display_id` noch Geräte-IDs stehen im Shell-Code. Die
+`panel_id` kommt aus der URL, das `display_id` aus ROU-32; die konkreten
+Pilot-IDs (`mias-panel-01`, `tablet-tablet-mia-01`) leben in den
+Registry-Daten (xbuddy-data, GER-4 / PREG). Was je Familie variiert, ist
+Config/Daten, nicht Code (Familie-3-Probe).
+Test-Anker: seiten/tests/test_heim_shell.py::test_shell9_keine_hardcode_ids
+
+## 2. Layout & Einbettung
+
+### SHELL-3 — Split-Layout mit zwei Iframes, Rail 280px
+Die Shell rendert ein zweispaltiges Layout: links eine **Nav-Rail** mit einem
+Iframe auf `/controller/app-panel/<panel_id>` (`router/main.py:1368`), rechts
+ein **Buddy-Pane** mit einem Iframe auf `/display/<display_id>`
+(`router/main.py:880`). Beide Iframes füllen ihre Spalte (`width:100%;
+height:100%`). Die linke Rail hat eine **feste Breite von 280px** (Gate B
+2026-06-30); das Buddy-Pane füllt den Rest (auf 1920×1200 → 1637px).
+Bei dieser Rail-Breite legt das Panel seine Kacheln **selbst einspaltig**
+aus — das Panel berechnet die Grid-Geometrie adaptiv aus seiner eigenen
+Iframe-Breite (PANEL-12 / `app.js::computeGridGeometry`, 1 Spalte ab ≤ ~360px).
+Die Shell setzt nur die Rail-Breite; das Panel bleibt **unverändert** (kein
+1-Spalten-Modus nachzurüsten, Leitplanke „Panel unangetastet" gewahrt).
+Test-Anker: seiten/tests/test_heim_shell.py::test_shell3_zwei_iframes_src
+
+### SHELL-4 — Keine Stream-Fusion, kein Shell-Zustand
+Die Shell hält **keine** eigene `EventSource` und **keinen** Display-Zustand.
+Die beiden eingebetteten Views behalten je ihre **unabhängige** EventSource
+(Panel `app.js:757`, Display-Client `displib.js:62`); der zustandslose
+Router-Stream (ROU-22) bleibt gewahrt. Es gibt **keine** Cross-Iframe-Nachricht
+und keine Stream-Fusion: ein Tile-Tap läuft unverändert über den Router, der
+neue Display-Zustand erreicht das rechte Pane allein über dessen eigene
+EventSource.
+nicht_automatisiert: Live-SSE-Verhalten zweier Browser-EventSources hinter
+nginx-Proxy · manuelle_probe: Shell öffnen, 50 Tile-Taps + Display-iframe-Reload
++ Netz-Cut/-Wiederkehr; Active-Tile bleibt konsistent, keine Doppel-Reloads,
+EventSource-Zahl wächst nach Reconnects nicht (Kill-Kriterium).
+
+### SHELL-5 — Rechtes Pane ist reiner Iframe, keine Codekopie
+Das Buddy-Pane bettet den bestehenden Display-Client per Iframe ein. Es wird
+**keine** Display-Client-Logik (displib.js, DC-Render, DC-7-Reconnect) in die
+Shell kopiert oder nachgebaut.
+Test-Anker: seiten/tests/test_heim_shell.py::test_shell5_kein_displib_import
+
+### SHELL-8 — Render auf 1920×1200
+Bei Rail 280px rendert die Shell auf 1920×1200 ohne Overflow, ohne
+Text-Clipping und mit bedienbaren primären Touch-Zielen in beiden Panes
+(Panel-Tiles 280×115px, einspaltig).
+nicht_automatisiert: physische Render-/Touch-Wirkung auf dem Tablet ·
+manuelle_probe: Render-Gate-Screenshot 1920×1200 mit Rail 280px gegen
+Live-Daten (Kill bei Overflow/Clipping/unbedienbar). Gate-B-Beleg:
+`specs/mockups/heim-shell/`.
+
+## 3. Audio-Seiteneffekt
+
+### SHELL-7 — Panel-Audio-Prime überlebt die Einbettung
+Der Silent-Audio-Prime des Panels (PANEL-13, `app-panel.md:230`, `app.js:913`)
+ist ein Seiteneffekt des Tile-Tap und etabliert die Sticky-Activation für
+spätere HSP-Audio-Wiedergabe. Die Einbettung als Iframe darf diese
+User-Gesten-getragene Activation **nicht** brechen: der Tap im linken Iframe
+trägt weiterhin die Browser-Geste.
+nicht_automatisiert: Browser-Autoplay-Policy in eingebettetem Iframe ·
+manuelle_probe: Shell öffnen, HSP-Kachel tippen, prüfen dass Audio später ohne
+zusätzliche Geste startet (Autoplay-Test, Kill-Kriterium).
+
+## 4. Auth — Ein-Wege-Kante (LAN-only-Riegel)
+
+### SHELL-6 — LAN-only, AUTH-7 nicht ausgelöst
+Die Shell ist ein bewusst eingehegter **LAN-only-Pilot**, **kein**
+RAT-19-Phase-4-Rollout. `auth.md` bindet die Panel-/Display-Routen
+(`/api/v1/displays/<id>/events`, `/controller/app-panel/*`) an Phase 4 → AUTH-7
+(`auth.md:245`, `:338`). Solange der Pilot **LAN-only** bleibt (kein Funnel),
+wird der Phase-4-Trigger **nicht** ausgelöst. Shell-URL **und**
+Display-Event-Stream dürfen **nicht** über den Funnel erreichbar sein (nur
+Heim-LAN/Tailnet). Sobald ein zweites Gerät oder produktive Nutzung geplant
+ist: **erst AUTH-7 scharfziehen** (#948 bleibt Plan B / Auth-Schmerz-Trigger).
+nicht_automatisiert: Funnel-Erreichbarkeit (externe Realwelt, Hairpin-Falle —
+NIE vom Pi testen) · manuelle_probe (Pre-Merge-Experiment): von einem
+**externen** Client (nicht Pi, Hairpin täuscht) `curl https://<funnel-fqdn>/shell/<panel_id>`
+und `.../api/v1/displays/<id>/events` → muss scheitern/4xx; von Heim-LAN/Tailnet → 200.
+
+## 5. Registrierung & Schnittstelle
+
+### SHELL-10 — Shell-URL in der Eltern-Seiten-Übersicht
+Die Shell-URL ist in der Eltern-Seiten-Übersicht auffindbar — wie Panel und
+Display, die dort als Geräte-Paare erscheinen (`/api/v1/seiten/uebersicht`,
+Hero-Sektion SREG-12, `seiten-registry.md:30`). Konkret: je Panel-Editor-Karte
+des Geräte-Paars zeigt die Übersicht **zusätzlich** eine Heim-Shell-URL
+`/shell/<panel_id>` in der SREG-12-Form **zwei kopierbare URLs** (Heimnetz +
+Tailscale). Die URL wird aus `panel_id` abgeleitet — **kein** GER-`beides`-
+Co-Location-Modell nötig (das bleibt Folge-Aufgabe, `seiten-registry.md:39`).
+Installierbarkeit als PWA (WebAPK) erfolgt über ein Shell-Manifest je
+`panel_id` (analog PWA-1); für den Pilot ist `start_url = /shell/mias-panel-01`.
+Test-Anker: seiten/tests/test_heim_shell.py::test_shell10_url_in_uebersicht
+
+---
+
+## Offene Schuld (sichtbar, nicht jetzt)
+- **GER-`beides`-Co-Location:** ein Gerät, das dauerhaft Panel UND Display
+  trägt, „riecht nach `beides`" im GER-Modell (`geraete.md:60`); SREG nennt
+  physische Co-Location als Folge-Aufgabe (`seiten-registry.md:39`).
+  **Trigger: 2. Shell-Gerät.**
+- **RAT-24-Teil-Pane-Vertrag:** Render-Gate deckt heute nur Voll-Viewport-
+  Display-Views; Shell-Teil-Pane-Vertrag offen (Folge-Frage).
+
+## Familie-3-Probe
+Was variiert je Familie → **Daten/Config** (panel_id, display_id, Geräte-
+Registry in xbuddy-data), nicht Code (SHELL-9). ✔
+
+## Konventions-Aktivierung
+Keine. n=1, LAN-only — **keine** antizipative Shell-Konvention (Leitplanke
+#1182, RAT-25). `conventions/` entsteht erst beim 2. Vorkommen mit konkretem
+Schmerz.
