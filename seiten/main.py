@@ -80,6 +80,9 @@ runtime = {
     "inventar_path":     None,
     "panel_url":         "http://127.0.0.1:5041",
     "geraete_url":       "http://127.0.0.1:5040",
+    # SHELL-2: Router-Origin fuer Panel→Display-Lookup (ROU-32).
+    # Default: http://127.0.0.1:5000 (Router-Loopback, PORT-2).
+    "router_url":        "http://127.0.0.1:5000",
     "ttl":               30,
     "inventar":          None,
     "gebaut_um":         0.0,
@@ -104,7 +107,7 @@ def configure(root=None, inventar_path=None, panel_url=None,
               geraete_url=None, ttl=None,
               heim_origin=None, tailscale_origin=None,
               bot_token=None, init_data_config=None,
-              familie_client=None):
+              familie_client=None, router_url=None):
     """Setzt Aufbau-Wurzel, Inventar-Pfad, Upstream-Origins, TTL und
     Display-URL-Origins (SREG-3, SREG-7).
 
@@ -144,6 +147,8 @@ def configure(root=None, inventar_path=None, panel_url=None,
         runtime["init_data_config"] = init_data_config
     if familie_client is not None:
         runtime["familie_client"] = familie_client
+    if router_url is not None:
+        runtime["router_url"] = router_url
     runtime["inventar"] = None
     runtime["gebaut_um"] = 0.0
 
@@ -910,6 +915,98 @@ def hoerspiel_eltern_view(kind_id: str):
 
 
 # ============================================================
+#  SHELL-1..10 — Heim-Shell PWA (Split-Layout, Pilot Paula, #1182)
+# ============================================================
+#
+# Spec-Anker: specs/platform/heim-shell.md (SHELL-1..10, ratifiziert RAT-25).
+# Surface: GET /shell/<panel_id> (HTML) + GET /shell/<panel_id>/manifest.json.
+# LAN-only, KEIN AUTH-7/Phase-4-Rollout (SHELL-6, #948 bleibt Plan B).
+# nginx routet /shell/ zum seiten-Service (PORT-2, Loopback 5042) — Deploy-Schritt.
+#
+# SHELL-3: Split-Layout — linke Rail 280px Iframe → /controller/app-panel/<panel_id>/,
+#   rechts Iframe → /display/<display_id>/. Panel bleibt unveraendert (PANEL-12
+#   berechnet Grid-Geometrie adaptiv, kein 1-Spalten-Modus noetig).
+# SHELL-4: kein Shell-Zustand, keine eigene EventSource, kein Cross-Iframe-Nachricht.
+# SHELL-5: rechtes Pane reiner Iframe, keine displib-Kopie.
+# SHELL-9: IDs aus Daten (URL + ROU-32-Lookup), kein Hardcode im Code.
+
+
+def _lookup_display_id(panel_id):
+    """SHELL-2: display_id fuer panel_id via Router-Lookup (ROU-32).
+
+    Ruft GET /api/v1/router/panels/app-panel:<panel_id> am Router-Service auf
+    (DCOMP-1, analog hole_panels/hole_geraete). Liefert display_id-String bei
+    Erfolg oder None bei unbekanntem Panel, fehlendem display_id oder
+    Transport-/Parse-Fehler. Keine Reverse-Inferenz (SHELL-2: mehrere Panels
+    duerfen ein Display steuern — PREG-2). Als Funktion monkeypatching-bar
+    (Test-Naht).
+    """
+    source_id = "app-panel:" + panel_id
+    url = runtime["router_url"].rstrip("/") + "/api/v1/router/panels/" + source_id
+    try:
+        with urllib.request.urlopen(url, timeout=HTTP_TIMEOUT) as resp:
+            if resp.status != 200:
+                logging.warning("SHELL-2: Router-Lookup fuer %r liefert HTTP %s", source_id, resp.status)
+                return None
+            data = json.loads(resp.read().decode("utf-8"))
+            return data.get("display_id") or None
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        logging.warning("SHELL-2: Router-Lookup fuer %r nicht erreichbar: %s", source_id, exc)
+        return None
+
+
+@app.route("/shell/<panel_id>", methods=["GET"])
+def heim_shell(panel_id):
+    """SHELL-1: Heim-Shell Split-Layout — GET /shell/<panel_id> liefert HTML.
+
+    Ermittelt display_id per Router-Lookup (SHELL-2, ROU-32). Zeigt sichtbaren
+    Fehler ohne rechtes Pane, wenn Lookup kein display_id liefert (SHELL-1).
+    LAN-only (SHELL-6). Kein Shell-Zustand, keine EventSource (SHELL-4).
+    IDs aus Daten, kein Hardcode (SHELL-9). Cache-Control no-store (Mini-App-
+    Cache-Buster-Pattern).
+    """
+    display_id = _lookup_display_id(panel_id)
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    try:
+        build_id = str(int(os.path.getmtime(os.path.join(static_dir, "heim-shell.css"))))
+    except OSError:
+        build_id = "0"
+    resp = make_response(render_template(
+        "heim-shell.html",
+        panel_id=panel_id,
+        display_id=display_id,
+        build_id=build_id,
+    ))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
+
+
+@app.route("/shell/<panel_id>/manifest.json", methods=["GET"])
+def heim_shell_manifest(panel_id):
+    """SHELL-10: PWA-Manifest je panel_id (analog PWA-1).
+
+    start_url = /shell/<panel_id> — damit der PWA-Open nach Install die Shell
+    fuer genau dieses Panel oeffnet. display=standalone fuer Vollbild-Kiosk
+    (1920x1200, SHELL-8). Kein Icon V1 (n=1-Pilot). panel_id kommt aus der URL,
+    kein Hardcode (SHELL-9).
+    """
+    manifest = {
+        "name": "Heim-Shell · " + panel_id,
+        "short_name": "Heim-Shell",
+        "start_url": "/shell/" + panel_id,
+        "display": "standalone",
+        "background_color": "#F5F1E8",
+        "theme_color": "#47503C",
+        "icons": [],
+    }
+    resp = make_response(json.dumps(manifest, ensure_ascii=False))
+    resp.headers["Content-Type"] = "application/manifest+json"
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+# ============================================================
 #  Entrypoint
 # ============================================================
 
@@ -948,6 +1045,10 @@ def parse_args(argv):
                    help="Heimnetz-Origin für SREG-12-Seite (SREG-7, z.B. https://xbuddy-hub.local:8443)")
     p.add_argument("--seiten-tailscale-origin", dest="seiten_tailscale_origin",
                    help="Tailscale-Origin für SREG-12-Seite (SREG-7, leer = Banner)")
+    # SHELL-2: Router-Origin fuer Panel→Display-Lookup (ROU-32).
+    # ENV ROUTER_URL ueberschreibt Default; CLI-Flag schlaegt ENV.
+    p.add_argument("--router-url", dest="router_url",
+                   help="Origin des Router-Service fuer SHELL-2-Lookup (SHELL-2/ROU-32, Default http://127.0.0.1:5000)")
     return p.parse_args(argv)
 
 
@@ -984,6 +1085,10 @@ def resolved_config(args):
     cfg["tailscale_origin"] = (
         args.seiten_tailscale_origin
         or os.environ.get("SEITEN_TAILSCALE_ORIGIN", ""))
+    # SHELL-2: Router-Origin fuer Panel→Display-Lookup (ROU-32).
+    cfg["router_url"] = (
+        args.router_url
+        or os.environ.get("ROUTER_URL", "http://127.0.0.1:5000"))
     return cfg
 
 
@@ -996,7 +1101,8 @@ def main(argv=None):
               panel_url=cfg["panel_url"], geraete_url=cfg["geraete_url"],
               ttl=cfg["ttl"],
               heim_origin=cfg["heim_origin"],
-              tailscale_origin=cfg["tailscale_origin"])
+              tailscale_origin=cfg["tailscale_origin"],
+              router_url=cfg["router_url"])
     if not cfg["tailscale_origin"]:
         # SREG-7 V1-Soll: Tailscale leer → SREG-12 zeigt Banner statt
         # zweiter URL-Spalte. Warnung im Log, damit Deploy-Tracking sieht,
