@@ -486,6 +486,103 @@ body {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
+/* ── Typ-Toggle (ROUTINE-27): Punkt / Anker / Vorlauf ───────── */
+
+/* 3-Spalten-Variante von .toggle-quelle */
+.toggle-typ {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  background: #ede8de;
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.toggle-typ button {
+  font-family: inherit;
+  border: none;
+  background: transparent;
+  padding: 8px 2px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.1s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toggle-typ button.active {
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+/* ── Vorlauf-Stepper (ROUTINE-27) ────────────────────────── */
+
+.vorlauf-stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vorlauf-step-btn {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--ink);
+  font-size: 1.3rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s;
+  font-family: inherit;
+}
+
+.vorlauf-step-btn:active {
+  background: #e0dcd3;
+}
+
+.vorlauf-input {
+  width: 70px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+/* ── Zeit-Badge in Item-Cards (ROUTINE-27) ───────────────── */
+
+/* Label + Badge vertikal gestapelt (löst span.item-label ab wenn zeit vorliegt) */
+.item-label-gruppe {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.item-zeit-badge {
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* locked=true Anker: gedämpfte Warnung (ROUTINE-27, Migration via ROUTINE-28) */
+.item-zeit-locked {
+  color: var(--accent-2);
+  font-size: 0.7rem;
+  white-space: normal;
+}
+
 /* ── Icon-Picker (ROUTINE-21) ────────────────────────────── */
 
 .picker-search-wrap {

@@ -1,10 +1,11 @@
 /**
- * routine_anpassen_dom.test.js — ROUTINE-20/21 Verhaltens-Proben.
+ * routine_anpassen_dom.test.js — ROUTINE-20/21/27 Verhaltens-Proben.
  *
- * 6 Tests via node --test, manuelle DOM-Attrappe, kein jsdom, kein npm.
+ * 10 Tests via node --test, manuelle DOM-Attrappe, kein jsdom, kein npm.
  *
- * Exportierte Konstanten aus routine-anpassen.js:
+ * Exportierte Symbole aus routine-anpassen.js:
  *   esc, ANKER_AUFSTEHEN_ID, ANKER_ANZIEHEN_ID, ANKER_LOSGEHEN_ID, ZEIT_ANKER
+ *   _bauZeitBlock, _vorlaufUhrzeit, _labelMitZeit  (ROUTINE-27)
  */
 
 "use strict";
@@ -26,6 +27,8 @@ doc2._registerEl("sheet-overlay",  doc2.createElement("div"));
 doc2._registerEl("sheet-inhalt",   doc2.createElement("div"));
 doc2._registerEl("toast",          doc2.createElement("div"));
 
+// window.Telegram — optional chaining in routine-anpassen.js Z.68 braucht window als globale Variable
+global.window      = { Telegram: null };
 global.document    = doc2;
 global.fetch       = fetchSpy2;
 global.setTimeout  = () => {};
@@ -33,6 +36,8 @@ global.clearTimeout = () => {};
 global.Promise     = Promise;
 global.getPlatform = () => ({
   ready:          async () => {},
+  // ensureAuth: false → IIFE bricht sauber ab (kein TypeError, kein unhandled rejection)
+  ensureAuth:     async () => false,
   setMainButton:  () => {},
   hideMainButton: () => {},
   showMainButton: () => {},
@@ -45,6 +50,10 @@ const {
   ANKER_ANZIEHEN_ID,
   ANKER_LOSGEHEN_ID,
   ZEIT_ANKER,
+  // ROUTINE-27
+  _bauZeitBlock,
+  _vorlaufUhrzeit,
+  _labelMitZeit,
 } = routine;
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -222,4 +231,109 @@ test("ROUTINE-21d Save disabled ohne Pikto-Wahl: Anker-Piktogramm-IDs und esc() 
   const pickerSelectedIdMit = "9999";
   btn.disabled = !(hatLabel && pickerSelectedIdMit);
   assert.equal(btn.disabled, false, "Anlegen-Button enabled mit Pikto-Wahl + Label");
+});
+
+// ── ROUTINE-27 Tests ──────────────────────────────────────────────────────────
+
+/**
+ * Test 7 — ROUTINE-27 AC1/AC4 Typ-Toggle Punkt (Default):
+ * _bauZeitBlock('punkt') → null → kein zeit-Feld im POST-Payload.
+ */
+test("ROUTINE-27 AC1 Typ Punkt: _bauZeitBlock → null, kein zeit im Payload", () => {
+  const zeitBlock = _bauZeitBlock('punkt', '07:00', 10);
+  assert.equal(zeitBlock, null, "_bauZeitBlock('punkt') → null");
+
+  // Payload-Simulation: zeit nicht gesetzt wenn null (wie in _legeItemAn)
+  const payload = { label: 'Turnbeutel', piktogramm: '1234', quelle: 'default' };
+  if (zeitBlock) payload.zeit = zeitBlock;
+  assert.ok(!('zeit' in payload), "Punkt: kein zeit-Feld im POST-Body");
+});
+
+/**
+ * Test 8 — ROUTINE-27 AC2/AC4 Typ Anker:
+ * _bauZeitBlock('anker', '07:30') → {typ:'anker', uhrzeit:'07:30', locked:false}.
+ * POST-Body enthält zeit mit korrekten Feldern.
+ */
+test("ROUTINE-27 AC2 Typ Anker: zeit-Block mit uhrzeit + locked:false im Payload", () => {
+  const zeitBlock = _bauZeitBlock('anker', '07:30', 0);
+  assert.deepStrictEqual(
+    zeitBlock,
+    { typ: 'anker', uhrzeit: '07:30', locked: false },
+    "_bauZeitBlock('anker') → korrekter Block"
+  );
+
+  // POST-Payload enthält zeit
+  const payload = { label: 'Aufstehen', piktogramm: '8152', quelle: 'default' };
+  if (zeitBlock) payload.zeit = zeitBlock;
+  assert.ok('zeit' in payload,               "Anker: zeit-Feld im POST-Body");
+  assert.equal(payload.zeit.typ, 'anker',    "typ: anker");
+  assert.equal(payload.zeit.uhrzeit, '07:30',"uhrzeit: 07:30");
+  assert.equal(payload.zeit.locked, false,   "locked: false");
+});
+
+/**
+ * Test 9 — ROUTINE-27 AC2/AC4 Typ Vorlauf:
+ * _bauZeitBlock('vorlauf', '', 15) → {typ:'vorlauf', minuten:15, bezug:'vorheriger_anker'}.
+ */
+test("ROUTINE-27 AC2 Typ Vorlauf: zeit-Block mit minuten + bezug im Payload", () => {
+  const zeitBlock = _bauZeitBlock('vorlauf', '', 15);
+  assert.deepStrictEqual(
+    zeitBlock,
+    { typ: 'vorlauf', minuten: 15, bezug: 'vorheriger_anker' },
+    "_bauZeitBlock('vorlauf') → korrekter Block"
+  );
+
+  const payload = { label: 'Anziehen', piktogramm: '6627', quelle: 'default' };
+  if (zeitBlock) payload.zeit = zeitBlock;
+  assert.ok('zeit' in payload,                          "Vorlauf: zeit-Feld im POST-Body");
+  assert.equal(payload.zeit.typ, 'vorlauf',             "typ: vorlauf");
+  assert.equal(payload.zeit.minuten, 15,                "minuten: 15");
+  assert.equal(payload.zeit.bezug, 'vorheriger_anker',  "bezug: vorheriger_anker");
+
+  // Vorlauf Default 10 Min (kein minuten-Argument)
+  const def = _bauZeitBlock('vorlauf', '', 0);
+  assert.equal(def.minuten, 10, "Default minuten: 10 (Fallback aus || 10)");
+});
+
+/**
+ * Test 10 — ROUTINE-27 AC3/AC4 Render:
+ * _vorlaufUhrzeit berechnet korrekte abgeleitete Zeit (Anker − Minuten).
+ * _labelMitZeit: locked:true Anker → HTML mit Hinweis "V1-Anker, ändern in der Config".
+ */
+test("ROUTINE-27 AC3 Render: Vorlauf-Ableitung + locked-Anker-Hinweis in HTML", () => {
+  // Vorlauf-Ableitung: 07:00 Anker − 15 Min = 06:45
+  const ankerItem = {
+    id: 'a1', label: 'Aufstehen', piktogramm: '8152', quelle: 'default',
+    zeit: { typ: 'anker', uhrzeit: '07:00', locked: false },
+  };
+  const vorlaufItem = {
+    id: 'v1', label: 'Anziehen', piktogramm: '6627', quelle: 'default',
+    zeit: { typ: 'vorlauf', minuten: 15, bezug: 'vorheriger_anker' },
+  };
+  const items = [ankerItem, vorlaufItem];
+
+  const abgeleitet = _vorlaufUhrzeit(vorlaufItem, items);
+  assert.equal(abgeleitet, '06:45', "Vorlauf-Ableitung: 07:00 − 15 Min = 06:45");
+
+  // Kein vorangehender Anker → null
+  const ohneAnker = _vorlaufUhrzeit(vorlaufItem, [vorlaufItem]);
+  assert.equal(ohneAnker, null, "Kein vorangehender Anker → null");
+
+  // Nicht-Vorlauf-Item → null
+  assert.equal(_vorlaufUhrzeit(ankerItem, items), null, "Anker-Item → null (kein Vorlauf)");
+
+  // locked:true Anker: _labelMitZeit → HTML mit Hinweis
+  const lockedItem = {
+    id: 'a0', label: 'Aufstehen', piktogramm: '8152', quelle: 'default',
+    zeit: { typ: 'anker', uhrzeit: '07:00', locked: true },
+  };
+  const html = _labelMitZeit(lockedItem);
+  assert.ok(html.includes('V1-Anker'), "locked: V1-Anker-Hinweis im HTML");
+  assert.ok(html.includes('07:00'),    "locked: Uhrzeit im HTML");
+  assert.ok(html.includes('item-zeit-locked'), "locked: CSS-Klasse item-zeit-locked");
+
+  // Kein zeit-Block → einfaches span.item-label
+  const ohneZeitHtml = _labelMitZeit({ id: 'x', label: 'Punkt', piktogramm: '9999', quelle: 'default' });
+  assert.ok(ohneZeitHtml.includes('item-label'), "Ohne zeit: item-label span");
+  assert.ok(!ohneZeitHtml.includes('item-zeit-badge'), "Ohne zeit: kein zeit-Badge");
 });
