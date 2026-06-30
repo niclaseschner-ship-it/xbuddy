@@ -372,13 +372,16 @@ function rendereItemCard(item, istErste, istLetzte) {
   const delHtml = '<button class="del-btn" data-item-id="' + esc(item.id) + '" ' +
     'aria-label="' + esc(item.label) + ' entfernen" title="Entfernen">×</button>';
 
+  // ROUTINE-27: Label-Block mit optionalem Zeit-Badge
+  const labelHtml = _labelMitZeit(item);
+
   return (
     '<div class="item-card' + (istEinmalig ? " einmalig" : "") + '" ' +
          'data-item-id="' + esc(item.id) + '" ' +
          'data-quelle="' + esc(item.quelle) + '">' +
       pfeilHtml +
       '<img class="item-bild" src="' + esc(bildSrc) + '" alt="" loading="lazy">' +
-      '<span class="item-label">' + esc(item.label) + '</span>' +
+      labelHtml +
       markerHtml +
       delHtml +
     '</div>'
@@ -680,6 +683,7 @@ async function _fehlerText(resp, kontext) {
 function oeffneHinzufuegenSheet() {
   _pickerSelectedId = null;
   let quelleAuswahl = "default"; // Default: dauerhaft (ROUTINE-21)
+  let typAuswahl    = "punkt";   // ROUTINE-27: Default Punkt = kein zeit-Block
 
   const inhalt = document.getElementById("sheet-inhalt");
 
@@ -704,6 +708,36 @@ function oeffneHinzufuegenSheet() {
         '<button type="button" id="tog-einmalig">' +
           '🌅 nur heute' +
         '</button>' +
+      '</div>' +
+    '</div>' +
+
+    // Typ-Toggle (ROUTINE-27): Punkt / Anker / Vorlauf
+    '<div class="sheet-field">' +
+      '<label>Typ</label>' +
+      '<div class="toggle-typ">' +
+        '<button type="button" id="tog-typ-punkt" class="active">· Punkt</button>' +
+        '<button type="button" id="tog-typ-anker">⏰ Anker</button>' +
+        '<button type="button" id="tog-typ-vorlauf">⏱ Vorlauf</button>' +
+      '</div>' +
+    '</div>' +
+
+    // Zeit-Eingabe konditionell (ROUTINE-27): sichtbar je nach Typ-Toggle, kein Re-Render (T728 Bug-3)
+    '<div id="zeit-eingabe-section" hidden>' +
+      '<div id="anker-eingabe" class="sheet-field" hidden>' +
+        '<label for="sheet-uhrzeit">Uhrzeit</label>' +
+        '<input type="time" class="sheet-input" id="sheet-uhrzeit" value="07:00">' +
+      '</div>' +
+      '<div id="vorlauf-eingabe" class="sheet-field" hidden>' +
+        '<label>Minuten Vorlauf</label>' +
+        '<div class="vorlauf-stepper">' +
+          '<button type="button" class="vorlauf-step-btn" id="vorlauf-minus" ' +
+                 'aria-label="Weniger">−</button>' +
+          '<input type="number" class="sheet-input vorlauf-input" id="sheet-vorlauf-min" ' +
+                 'value="10" min="5" max="120" step="5" readonly ' +
+                 'aria-label="Vorlauf in Minuten">' +
+          '<button type="button" class="vorlauf-step-btn" id="vorlauf-plus" ' +
+                 'aria-label="Mehr">+</button>' +
+        '</div>' +
       '</div>' +
     '</div>' +
 
@@ -739,6 +773,44 @@ function oeffneHinzufuegenSheet() {
     inhalt.querySelector("#tog-einmalig").classList.add("active");
     inhalt.querySelector("#tog-default").classList.remove("active");
   });
+
+  // Typ-Toggle-Handler (ROUTINE-27: Punkt/Anker/Vorlauf, kein Re-Render, T728 Bug-3)
+  function _aktualisiereZeitEingabe() {
+    const sectionEl = inhalt.querySelector('#zeit-eingabe-section');
+    const ankerEl   = inhalt.querySelector('#anker-eingabe');
+    const vorlaufEl = inhalt.querySelector('#vorlauf-eingabe');
+    if (sectionEl)  sectionEl.hidden = typAuswahl === 'punkt';
+    if (ankerEl)    ankerEl.hidden   = typAuswahl !== 'anker';
+    if (vorlaufEl)  vorlaufEl.hidden = typAuswahl !== 'vorlauf';
+  }
+  [['#tog-typ-punkt', 'punkt'], ['#tog-typ-anker', 'anker'], ['#tog-typ-vorlauf', 'vorlauf']].forEach(([id, typ]) => {
+    const btn = inhalt.querySelector(id);
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      typAuswahl = typ;
+      ['#tog-typ-punkt', '#tog-typ-anker', '#tog-typ-vorlauf'].forEach(bid => {
+        const b = inhalt.querySelector(bid);
+        if (b) b.classList.remove('active');
+      });
+      btn.classList.add('active');
+      _aktualisiereZeitEingabe();
+    });
+  });
+  // Vorlauf-Stepper: −5 / +5 Minuten (ROUTINE-27, 5er-Schritte, Default 10)
+  const vorlaufMinusBtn = inhalt.querySelector('#vorlauf-minus');
+  const vorlaufPlusBtn  = inhalt.querySelector('#vorlauf-plus');
+  if (vorlaufMinusBtn) {
+    vorlaufMinusBtn.addEventListener('click', () => {
+      const inp = inhalt.querySelector('#sheet-vorlauf-min');
+      if (inp) inp.value = String(Math.max(5, (parseInt(inp.value, 10) || 10) - 5));
+    });
+  }
+  if (vorlaufPlusBtn) {
+    vorlaufPlusBtn.addEventListener('click', () => {
+      const inp = inhalt.querySelector('#sheet-vorlauf-min');
+      if (inp) inp.value = String(Math.min(120, (parseInt(inp.value, 10) || 10) + 5));
+    });
+  }
 
   // Label-Input: debounced ICONS-7 Auto-Suche (ROUTINE-21a)
   // T728 Bug-3: nur Galerie neu rendern, nicht das ganze Sheet
@@ -792,12 +864,21 @@ function oeffneHinzufuegenSheet() {
   // Abbrechen
   inhalt.querySelector("#sheet-abbrechen").addEventListener("click", schliesseSheet);
 
-  // Anlegen (ROUTINE-21d: disabled ohne Pikto-Wahl)
+  // Anlegen (ROUTINE-21d: disabled ohne Pikto-Wahl; ROUTINE-27: zeit-Block je Typ)
   inhalt.querySelector("#sheet-anlegen").addEventListener("click", async () => {
     const label = labelInput.value.trim();
     if (!label || !_pickerSelectedId) return;
 
-    await _legeItemAn(label, quelleAuswahl, _pickerSelectedId);
+    // ROUTINE-27: zeit-Block aus Typ-Toggle und Eingabe-Feldern aufbauen
+    const uhrzeitEl = inhalt.querySelector('#sheet-uhrzeit');
+    const vorlaufEl = inhalt.querySelector('#sheet-vorlauf-min');
+    const zeitBlock = _bauZeitBlock(
+      typAuswahl,
+      uhrzeitEl ? uhrzeitEl.value : '07:00',
+      vorlaufEl ? (parseInt(vorlaufEl.value, 10) || 10) : 10,
+    );
+
+    await _legeItemAn(label, quelleAuswahl, _pickerSelectedId, zeitBlock);
   });
 
   // Nach Render: Label fokussieren
@@ -904,8 +985,10 @@ function _aktualisiereAnlegenBtn() {
  * Erfolg: Bottom-Sheet schließen, Liste neu laden.
  * 4xx: ehrliche Fehlermeldung im Sheet, kein Schließen (ROUTINE-21d).
  */
-async function _legeItemAn(label, quelle, piktogramm) {
+async function _legeItemAn(label, quelle, piktogramm, zeitBlock) {
+  // ROUTINE-27: zeit-Block optional — nur anhängen wenn nicht null (Typ Anker/Vorlauf)
   const payload = { label, piktogramm, quelle };
+  if (zeitBlock) payload.zeit = zeitBlock;
 
   try {
     const resp = await postItem(payload);
@@ -1009,8 +1092,109 @@ function zeigeToast(msg) {
   setTimeout(() => toast.classList.remove("visible"), 3000);
 }
 
+// ── ROUTINE-27 — Typ-Toggle Hilfsfunktionen ───────────────────────────────────
+
+/**
+ * ROUTINE-27: Baut den zeit-Block für den POST /api/v1/routine/items Payload.
+ * Punkt (Default): kein zeit-Block (null).
+ * Anker: {typ:'anker', uhrzeit:HH:MM, locked:false}.
+ * Vorlauf: {typ:'vorlauf', minuten:N, bezug:'vorheriger_anker'}.
+ *
+ * @param {string} typ      - 'punkt' | 'anker' | 'vorlauf'
+ * @param {string} uhrzeit  - HH:MM-String (nur für typ='anker')
+ * @param {number} minuten  - Ganzzahl (5er-Schritte, Default 10; nur für typ='vorlauf')
+ * @returns {object|null}   - zeit-Block oder null für Punkt
+ */
+function _bauZeitBlock(typ, uhrzeit, minuten) {
+  if (typ === 'anker') {
+    return { typ: 'anker', uhrzeit: uhrzeit || '07:00', locked: false };
+  }
+  if (typ === 'vorlauf') {
+    return { typ: 'vorlauf', minuten: minuten || 10, bezug: 'vorheriger_anker' };
+  }
+  // typ === 'punkt' (Default) → kein zeit-Block
+  return null;
+}
+
+/**
+ * ROUTINE-27: Berechnet die abgeleitete Uhrzeit eines Vorlauf-Items.
+ * Sucht rückwärts in items nach dem letzten vorangehenden Anker und
+ * subtrahiert dessen minuten-Wert.
+ *
+ * @param {object} item   - Item mit item.zeit.typ='vorlauf'
+ * @param {Array}  items  - Gesamte Items-Liste (_editItems) für Kontext
+ * @returns {string|null} - "HH:MM" oder null wenn kein vorangehender Anker
+ */
+function _vorlaufUhrzeit(item, items) {
+  if (!item.zeit || item.zeit.typ !== 'vorlauf') return null;
+  const idx = items.indexOf(item);
+  let ankerUhrzeit = null;
+  for (let i = idx - 1; i >= 0; i--) {
+    const z = items[i].zeit;
+    if (z && z.typ === 'anker' && z.uhrzeit) {
+      ankerUhrzeit = z.uhrzeit;
+      break;
+    }
+  }
+  if (!ankerUhrzeit) return null;
+  const parts = ankerUhrzeit.split(':');
+  const totalMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10) - (item.zeit.minuten || 0);
+  if (totalMin < 0) return null;
+  const rH = String(Math.floor(totalMin / 60)).padStart(2, '0');
+  const rM = String(totalMin % 60).padStart(2, '0');
+  return rH + ':' + rM;
+}
+
+/**
+ * ROUTINE-27: Label-HTML mit optionalem Zeit-Badge für Item-Cards.
+ * Ohne zeit-Block: <span class="item-label">.
+ * Mit zeit-Block:  <div class="item-label-gruppe"> mit Badge-Sub-Zeile.
+ * locked=true Anker: Badge mit Hinweis "V1-Anker, ändern in der Config" (ROUTINE-27).
+ *
+ * @param {object} item - Item-Objekt {id, label, piktogramm, quelle, zeit?}
+ * @returns {string} - HTML-String
+ */
+function _labelMitZeit(item) {
+  if (!item.zeit) {
+    return '<span class="item-label">' + esc(item.label) + '</span>';
+  }
+  const z = item.zeit;
+  let badgeHtml = '';
+  if (z.typ === 'anker') {
+    if (z.locked) {
+      // locked=true: read-only mit Hinweis (ROUTINE-27; Migration auf editierbar in ROUTINE-28)
+      badgeHtml =
+        '<span class="item-zeit-badge item-zeit-locked">' +
+          '🔒 ' + esc(z.uhrzeit || '') + ' · V1-Anker, ändern in der Config' +
+        '</span>';
+    } else {
+      badgeHtml = '<span class="item-zeit-badge">⏰ ' + esc(z.uhrzeit || '') + '</span>';
+    }
+  } else if (z.typ === 'vorlauf') {
+    const abgeleitet = _vorlaufUhrzeit(item, _editItems);
+    const minStr = z.minuten != null
+      ? '−' + esc(String(z.minuten)) + ' Min'
+      : '− Min';
+    badgeHtml =
+      '<span class="item-zeit-badge">⏱ ' +
+        (abgeleitet ? esc(abgeleitet) + ' (' + minStr + ')' : minStr) +
+      '</span>';
+  }
+  return (
+    '<div class="item-label-gruppe">' +
+      '<span class="item-label">' + esc(item.label) + '</span>' +
+      badgeHtml +
+    '</div>'
+  );
+}
+
 // ── Exports (für Tests, wenn als Modul geladen) ───────────────────────────────
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { esc, ANKER_AUFSTEHEN_ID, ANKER_ANZIEHEN_ID, ANKER_LOSGEHEN_ID, ZEIT_ANKER };
+  module.exports = {
+    esc,
+    ANKER_AUFSTEHEN_ID, ANKER_ANZIEHEN_ID, ANKER_LOSGEHEN_ID, ZEIT_ANKER,
+    // ROUTINE-27
+    _bauZeitBlock, _vorlaufUhrzeit, _labelMitZeit,
+  };
 }
