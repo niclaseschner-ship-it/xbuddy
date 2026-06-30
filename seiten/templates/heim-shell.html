@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+{# SHELL-1: Heim-Shell Split-Layout unter GET /shell/<panel_id>.
+   SHELL-3: Rail 280px Iframe → Panel-Nav, Buddy-Pane Iframe → Display-Client.
+   SHELL-4: keine eigene EventSource, kein Shell-Zustand.
+   SHELL-5: rechtes Pane reiner Iframe, kein displib-Import.
+   SHELL-6: LAN-only, kein Funnel. Refs #1182. #}
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Heim-Shell · {{ panel_id }}</title>
+  {# SHELL-10: Shell-Manifest fuer PWA-Installierbarkeit je panel_id (analog PWA-1) #}
+  <link rel="manifest" href="/shell/{{ panel_id }}/manifest.json">
+  {# SHELL-3/8: Layout-CSS (Rail 280px, kein Overflow) #}
+  <link rel="stylesheet" href="/api/v1/seiten/static/heim-shell.css?v={{ build_id }}">
+</head>
+<body>
+  <div class="shell">
+    {# SHELL-3: linke Nav-Rail 280px — Panel bleibt unpetraendert (kein 1-Spalten-Nachruestung).
+       Panel berechnet Grid-Geometrie adaptiv aus eigener Iframe-Breite (PANEL-12). #}
+    <div class="rail">
+      <iframe src="/controller/app-panel/{{ panel_id }}/"
+              title="Panel-Nav {{ panel_id }}"
+              referrerpolicy="same-origin"
+              allow="autoplay">
+      </iframe>
+    </div>
+
+    {% if display_id %}
+    {# SHELL-3/5: rechtes Buddy-Pane — reiner Iframe, keine displib-Kopie (SHELL-5).
+       Die eigene EventSource des Display-Clients bleibt unpetraendert (SHELL-4). #}
+    <div class="buddy">
+      <iframe src="/display/{{ display_id }}/"
+              title="Buddy-View {{ display_id }}"
+              referrerpolicy="same-origin">
+      </iframe>
+    </div>
+    {% else %}
+    {# SHELL-1/2: sichtbarer Fehler, kein stiller Fallback, kein rechtes Pane #}
+    <div class="shell-fehler">
+      <p>Panel &#8222;{{ panel_id }}&#8220; ist keinem Display zugeordnet oder nicht bekannt.</p>
+    </div>
+    {% endif %}
+  </div>
+</body>
+</html>

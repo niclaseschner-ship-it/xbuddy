@@ -179,10 +179,16 @@ def _hero_paare(eintraege, heim_origin, tailscale_origin):
                     pid, display.get("instanz"))
                 continue
             editor = editor_by_panel_id.get(pid)
+            # SHELL-10: Shell-URL je panel_id in SREG-12-Form (Heim + Tailscale).
+            # URL aus panel_id abgeleitet — kein GER-beides-Co-Location-Modell noetig.
             panel_karten.append({
                 "panel": _karte_basis(panel, heim_origin, tailscale_origin),
                 "editor": (_karte_basis(editor, heim_origin, tailscale_origin)
                            if editor else None),
+                "shell_urls": {
+                    "heim": (heim_origin.rstrip("/") + "/shell/" + pid) if heim_origin else None,
+                    "tailscale": (tailscale_origin.rstrip("/") + "/shell/" + pid) if tailscale_origin else None,
+                },
             })
         paare.append({
             "display": _karte_basis(display, heim_origin, tailscale_origin),
