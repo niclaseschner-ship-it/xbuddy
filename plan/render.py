@@ -220,10 +220,12 @@ def aktivitaets_art(titel, config=None):
 
 
 def klassifiziere_event_multi(titel, kinder, config=None):
-    """PLAN-19 V1.2: liefert alle Kind-IDs in Erwähnungs-Reihenfolge (max 2),
-    plus art. Wenn kein Kind getroffen, None.
+    """PLAN-19 V1.2: liefert alle Personen-IDs in Erwähnungs-Reihenfolge (max 2),
+    plus art. Wenn keine Person getroffen, None.
 
-    Backward-Compat: `klassifiziere_event` bleibt als Wrapper (kind_id = first).
+    `kinder` ist die Match-Liste — seit T1178 alle Personen mit kalender-read-
+    Slot (Kind ODER Erwachsener); die Funktion ist art-agnostisch.
+    Backward-Compat: `klassifiziere_event` bleibt als Wrapper (person_id = first).
     """
     s = (titel or "").lower()
     treffer = []  # [(fundindex, kind_id), ...]
@@ -404,14 +406,17 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
     # PLAN-11 … PLAN-14: Kalender-Events einsortieren.
     appointments = {t["iso"]: [] for t in tage}
     span_appointments = []
-    kinder = [p for p in registry.alle() if p.is_kind()]
     aktivitaets_slots = cfg.aktivitaets_slots()
-    # kind_id -> [schluessel, …] — Liste aller kalender-read-Slots dieses Kindes.
-    # Ein Kind kann mehrere Slots haben (z.B. zwei Neko-Zeilen); alle müssen
-    # befüllt werden (#1145).
+    # person_id -> [schluessel, …] — alle kalender-read-Slots dieser Person.
+    # Kann Kinder UND Erwachsene enthalten (T1178). Eine Person kann mehrere
+    # Slots haben (z.B. zwei Neko-Zeilen); alle müssen befüllt werden (#1145).
     kind_zu_slot: dict = {}
     for _s in aktivitaets_slots:
         kind_zu_slot.setdefault(_s.kind, []).append(_s.schluessel)
+    # PLAN-12 T1178: Personen mit kalender-read-Slot — Kind ODER Erwachsener.
+    # kind_zu_slot.keys() enthält alle relevanten Person-IDs; registry.alle()
+    # liefert die zugehörigen Objekte für den Titel-Abgleich.
+    personen_mit_kal_slot = [p for p in registry.alle() if p.id in kind_zu_slot]
 
     events = kalender.events(anker, anzahl_tage)
     iso_index = {t["iso"]: i for i, t in enumerate(tage)}
@@ -427,7 +432,7 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
 
         ring = _ring_fuer_person(ev.person, registry) if ev.person else None
 
-        kid_act = klassifiziere_event_multi(ev.titel, kinder, cfg)
+        kid_act = klassifiziere_event_multi(ev.titel, personen_mit_kal_slot, cfg)
         if kid_act is not None:
             # PLAN-12 / PLAN-19 V1.2: Kind-Aktivität → Aktivitäts-Slot.
             # Ein Multi-Person-Event landet in JEDER betroffenen Kind-Slot-Zeile
@@ -440,7 +445,7 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
             chip = {
                 "type": art or GENERIC_ACT_FALLBACK,
                 "piktogramm": piktogramm,
-                "label": strip_kind_name(ev.titel, kinder),
+                "label": strip_kind_name(ev.titel, personen_mit_kal_slot),
                 "event_id": ev.id,
             }
             for kind_id in kind_ids:
