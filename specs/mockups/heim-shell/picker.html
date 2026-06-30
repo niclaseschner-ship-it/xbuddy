@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heim-Shell · Mia · Rail-Breiten-Picker (#1182)</title>
+<style>
+  :root{
+    --bg:#F5F1E8; --divider:#D5CDBF; --surface:#FFFFFF; --border:#E3DCCF;
+    --text:#2B2A28; --text-2:#6B6761; --primary:#47503C; --primary-ink:#2E3527;
+    --rail:280px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--bg);
+    font-family:Inter,system-ui,-apple-system,sans-serif;color:var(--text);overflow:hidden;}
+  .stage-wrap{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:center;
+    background:#2B2A28;overflow:auto;}
+  .stage{position:relative;width:1920px;height:1200px;flex:0 0 auto;
+    transform-origin:top center;background:var(--bg);box-shadow:0 0 0 1px #00000022;}
+  .shell{display:flex;width:1920px;height:1200px;}
+  .rail{flex:0 0 var(--rail);height:1200px;border-right:3px solid var(--divider);
+    background:var(--bg);overflow:hidden;}
+  .rail img{width:var(--rail);height:1200px;display:block;object-fit:cover;object-position:top left;}
+  .buddy{flex:1 1 auto;height:1200px;background:var(--bg);overflow:hidden;}
+  .buddy img{width:100%;height:1200px;display:block;object-fit:cover;object-position:top left;}
+  .bar{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:10;
+    display:flex;gap:10px;align-items:center;background:var(--surface);
+    border:1px solid var(--border);border-radius:999px;padding:8px 14px;
+    box-shadow:0 6px 24px #0003;font-size:15px;}
+  .opt{border:1px solid var(--border);background:var(--bg);border-radius:999px;
+    padding:8px 16px;cursor:pointer;font:inherit;color:var(--text);}
+  .opt.active{background:var(--primary);color:#fff;border-color:var(--primary);}
+  .readout{color:var(--text-2);font-variant-numeric:tabular-nums;min-width:300px;}
+  .tag{font-size:12px;color:var(--text-2);}
+</style>
+</head>
+<body>
+<div class="bar">
+  <span class="tag">Heim-Shell · Mia 1920×1200 · Rail:</span>
+  <button class="opt active" data-w="280" onclick="setW('280','assets/rail1col-280.png',this)">280 · 1 Spalte ✓</button>
+  <button class="opt" data-w="320" onclick="setW('320','assets/rail1col-320.png',this)">320 · 1 Spalte</button>
+  <button class="opt" data-w="600" onclick="setW('600','assets/panel-600.png',this)">600 · 2 Spalten</button>
+  <span class="readout" id="ro">Rail 280px · Buddy 1637px · 1 Spalte, 9 Tiles (Panel reflowt selbst)</span>
+</div>
+<div class="stage-wrap" id="wrap">
+  <div class="stage" id="stage">
+    <div class="shell">
+      <div class="rail"><img id="panelimg" src="assets/rail1col-280.png" alt="Panel-Nav (echtes Render)"></div>
+      <div class="buddy"><img src="assets/buddy-plan.png" alt="Buddy-View Wochenplan (echtes Render)"></div>
+    </div>
+  </div>
+</div>
+<script>
+  var INFO={"280":"Rail 280px · Buddy 1637px · 1 Spalte, 9 Tiles (Panel reflowt selbst)",
+            "320":"Rail 320px · Buddy 1597px · 1 Spalte, etwas größere Tiles",
+            "600":"Rail 600px · Buddy 1317px · 2 Spalten"};
+  function setW(w,img,btn){
+    document.documentElement.style.setProperty('--rail',w+'px');
+    document.getElementById('panelimg').src=img;
+    document.getElementById('ro').textContent=INFO[w];
+    document.querySelectorAll('.opt').forEach(function(o){o.classList.remove('active');});
+    if(btn)btn.classList.add('active');
+  }
+  function fit(){var s=Math.min(window.innerWidth/1920, window.innerHeight/1200);
+    if(s>1)s=1; document.getElementById('stage').style.transform='scale('+s+')';}
+  window.addEventListener('resize',fit); fit();
+</script>
+</body>
+</html>
