@@ -98,8 +98,13 @@ ratifiziert 2026-06-15).
 ## HOE-3 — Trigger-Phrasen (für LLM-Intent, Folgen-Klasse)
 
 Der Eltern-Chat-Agent erkennt eine Phrasen-Klasse als HOE-Aufruf
-(Beispiele, nicht abschließend — die LLM-Intent-Erkennung ist im
-Agent-Prompt petrankert, nicht im Skill, EC-30-Trennlinie):
+(Beispiele, nicht abschließend — die positiven HOE-Trigger gehören in die
+Tool-`description` als Teil der EC-40-Familie, nicht als ausgeschriebene
+Liste im Agent-Prompt (EC-40 Trigger-Heimat, Soll-Norm, Refs #1105); der
+`agent.py`-System-Prompt trägt für HOE nur das Negativ-Routing der
+Settings-**Inhalts-/Änderungs**-Bitten (Voice/Modell/Tempo, siehe unten).
+Die **Direkt-Settings-*Link*-Bitte** bleibt positiver Tool-Trigger gemäß
+E-HOE-2. EC-30-Trennlinie bleibt):
 
 **Folgen-Klasse → HOE-Aufruf:**
 
