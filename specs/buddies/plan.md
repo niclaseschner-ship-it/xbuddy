@@ -224,11 +224,14 @@ beim nächsten Aufruf den Kalender-Stand.
 *Tickets:* #40
 
 ### PLAN-12 — Aktivität einem Kind zuordnen
-Ein Kalender-Event wird genau dann als Kind-Aktivität in einen Aktivitäts-Slot
-einsortiert, wenn sein Titel den Namen eines Kindes der Registry trägt (PLAN-19).
+Ein Kalender-Event wird genau dann als Aktivitäts-Slot-Inhalt einsortiert, wenn
+sein Titel den Namen einer Person trägt, die einen kalender-read-Slot besitzt
+(PLAN-19). kalender-read-Slots dürfen Personen jeder Art referenzieren — Kind
+ODER Erwachsener; das Slot-Feld `kind` ist ein stabiler Personen-Identifier
+(FAM-3), kein Art-Filter (T1178).
 Die Art der Aktivität (Icon/Label) folgt aus einem Schlüsselwort im Titel.
-Trägt ein Event keinen Kindernamen, ist es kein Aktivitäts-Slot-Inhalt, sondern
-ein Termin (PLAN-13).
+Trägt ein Event keinen solchen Personennamen, ist es kein Aktivitäts-Slot-Inhalt,
+sondern ein Termin (PLAN-13).
 
 **Mehrere Slots pro Kind (#1145, #1150):** Hat ein Kind mehrere
 Aktivitäts-Slot-Zeilen (PLAN-11) — zwei Zeilen für dasselbe Kind —, erscheint
@@ -445,7 +448,14 @@ Pillenform; die Personen-Identität ist über die Zeile bereits gegeben (das
 ist der eigentliche Zweck der Aktivitäts-Slot-Zeilen pro Kind). Termin-
 Leiste behält die Doppel-Avatar-Form (s. o.).
 
-*Tickets:* #40, #473, #578
+**Personen-Match für kalender-read (T1178):** `klassifiziere_event_multi`
+erhält als Match-Liste alle Personen, die einen kalender-read-Slot besitzen
+— nicht ausschließlich Kinder. Das Slot-Feld `kind` ist ein stabiler
+Personen-Identifier (FAM-3); ein Slot kann Kind ODER Erwachsener zugeordnet
+sein. Die Funktion ist art-agnostisch — sie prüft Namens-Treffer im Titel
+gegen die übergebene Personen-Liste.
+
+*Tickets:* #40, #473, #578, #1178
 
 ### PLAN-20 — Kalender nicht erreichbar oder ohne Credentials
 Fehlen die OAuth-Daten oder ist Google nicht erreichbar, wirft die App keinen
