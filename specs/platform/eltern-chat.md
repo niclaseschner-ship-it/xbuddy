@@ -1451,7 +1451,7 @@ ein gemeinsames **Trigger-Vokabular**, damit das LLM die Familie
 geschlossen routet — auch über Anbieter-Wechsel hinweg. Das Vokabular
 besteht aus zwei Achsen, die kombinatorisch wirken:
 
-**Achse A — Aktions-Vokabular (familien-weit, identisch über alle vier
+**Achse A — Aktions-Vokabular (familien-weit, identisch über alle fünf
 Skills):**
 
 > *settings, einstellungen, anpassen, bearbeiten, ändern, öffnen,
@@ -1468,8 +1468,9 @@ sie nicht selbst):**
 - `HOE`: Hörspiel-/Hörbuch-Bezeichnungen aus HOE-3.
 - `RAO`: Routine-Bezeichnungen aus RAO-3.
 - `MAU`: Mini-App-Übersicht-Bezeichnungen aus MAU-10.
+- `WRO`: Wetter-Regeln-Bezeichnungen aus WRO-3.
 
-**Mechanik.** Jeder der vier Skill-Spec-Trigger-Abschnitte trägt die
+**Mechanik.** Jeder der fünf Skill-Spec-Trigger-Abschnitte trägt die
 identische **Disziplin-Klausel**: „Der Skill feuert auch, wenn die
 Eltern-Nachricht eine Aktion aus Achse A mit einer App-Bezeichnung aus
 Achse B kombiniert — auch ohne ein in der App-spezifischen Phrasen-
