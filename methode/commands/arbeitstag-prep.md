@@ -14,9 +14,19 @@ Du reifst Tickets von `status:spec` auf `status:ready` — das Handoff-Signal an
    im Nic-Block löst `gh issue edit … --add-label status:ready` aus
    (false-ready-Schutz, WORKFLOW.md#handoff). Der `watchdog-prep` urteilt, du zeigst,
    **Nic entscheidet**.
-2. **Nimm Nic mit, einer nach dem anderen.** Keine Karte ohne Verdikt, keine
-   Stapel-Entscheidung, keine autonomen Stempel. (Der Rückfall am 2026-06-05 war
-   genau autonomes Handeln statt einzeln mitnehmen — `feedback_ticket_review_modus`.)
+2. **Nic-Per-Karte-Verdikt ist Pflicht; du handelst nie autonom.** Das ist der
+   ROOT der Regel — **nicht** die literale Sequenz „eine Karte, dann die
+   nächste". Der Schutz ist dreiteilig: (a) **kein autonomes Handeln** —
+   keine Karte wird ausgeführt, die Nic nicht entschieden hat; (b) **jede Karte
+   trägt ein explizites Nic-Verdikt** (im Chat einzeln, im HTML-Loop per
+   Radio — beide erfassen ein Per-Karte-Verdikt); (c) der Skill **führt nur die
+   erfassten Verdikte aus und SURFACED Mid-Ausführungs-Funde** (Re-Verdict-Flip,
+   fehlgeschlagener Edit) **statt blind zu stempeln**. Der Rückfall am
+   2026-06-05 war genau autonomes Handeln OHNE Nic-Verdikt — nicht zu wenig
+   Sequenz (`feedback_ticket_review_modus`). Belegt: #1150 (erledigt-statt-
+   Stempel gefangen), #1172 (gefangener Fehl-Edit).
+   (ENTSCHEID-File Paket-Sektion „Die Gabel" Zweig A → Regel auf ihren ROOT
+   re-artikuliert; literale Sequenz-zwischen-Karten ist NICHT der Schutz)
 
 ## Die zwei Phasen — harter Riegel, kein Vorsatz
 
@@ -137,12 +147,33 @@ stempel-/wahl-/schließbar sind — keine `[zurück]`-Action. Wäre die Karte
 zurückzuschicken, geht sie gar nicht zu Nic; der Skill hat das im Koord-
 Block aufgefangen.
 
-1. Karten **einzeln** vorlegen, je auf Nics Verdikt warten:
+1. **Jede Karte trägt ein explizites Nic-Verdikt — das ist der Schutz, nicht
+   die literale Reihenfolge.** Im **Chat-Modus** (Default unter N≥7) legst du
+   die Karten einzeln vor und wartest je auf das Verdikt. Im **HTML-Loop**
+   (Default ab N≥7, siehe „HTML-Karten-Loop" unten) zeigt der Browser den
+   Stapel; Nic gibt **pro Karte** ein Radio-Verdikt und submittet als Batch.
+   Beide Wege erfassen ein Per-Karte-Verdikt — keine Stapel-*Entscheidung*
+   (Nic entscheidet jede einzeln), nur ein gebündelter *Transport*. Der Skill
+   führt danach nur die erfassten Verdikte aus.
+   (ENTSCHEID-File Paket-Sektion „Die Gabel" Zweig A → Radio = expliziter
+   Per-Karte-Verdikt; Batch ist Transport, nicht Stapel-Entscheidung)
+   Verdikt-Optionen je Klasse:
    - **Stempel-Karte:** `stempeln` / `parken`
    - **🔱 ARCH-WAHL:** `A` / `B` / `C` / `halt`
    - **⚠️ KOORD-WAHL:** `a` / `b` / `parken`
    - **Schließen-Karte:** `schließen` / `parken`
 2. **Einziger erlaubter Seiteneffekt in diesem Modus: Nics Verdikt ausführen.**
+   **SURFACE statt blind stempeln (Batch-Schutz):** Taucht beim Ausführen der
+   erfassten Verdikte ein Fund auf, den Nic so nicht entschieden hat —
+   Re-Verdict-Flip (ein Ticket ist inzwischen erledigt, vgl. #1150), ein
+   fehlgeschlagener Edit (#1172), ein Build-Claim (RAT-21) —, **hältst du an
+   und legst den Fund Nic vor**, statt das alte Verdikt blind auszuführen. Das
+   gilt im HTML-Batch besonders: Nic entscheidet alle N, bevor eine ausgeführt
+   ist; ein Flip, der erst NACH dem Batch-Submit auffällt, MUSS gesurfaced
+   werden, nicht weggestempelt. (Das ist zugleich das Kill-Kriterium des
+   HTML-Defaults — siehe „HTML-Karten-Loop".)
+   (ENTSCHEID-File Paket-Sektion „Die Gabel" Zweig A → Skill surfaced
+   Mid-Ausführungs-Funde statt blind zu stempeln)
    <a id="nic-stamp"></a>
    - `stempeln` → **ZWEI Schritte in der Reihenfolge** (PW-26-RATIFIZIERT
      2026-06-09 — der alte „Falls Spec-PR mergen"-Sub-Absatz fliegt, weil
@@ -203,14 +234,85 @@ geschärftem Befund. **Bei „Spec falsch"** (Nic findet Fehler im autonom
 gemergten Spec-PR): zusätzlich Rollback-Pfad starten (siehe „Rollback bei
 Spec-Fehlern" unten). Das ist eine Korrektur-Disziplin, nicht eine reguläre
 Aktion auf der Karte.
-3. **Jeder andere Tool-Call ist ein Bruch der Modus-Regel → Halt.** Kein
-   `gh issue list`, kein `git grep`, kein neuer Subagent-Dispatch **zwischen zwei
-   Karten**. Wenn du merkst, dass du koordinieren willst: Stop, das gehört in die
-   nächste Koordinations-Runde.
+3. **Keine neue Koordination im Nic-Block → Halt.** Der Schutz ist, dass du im
+   Nic-Block **nicht neu koordinierst** (kein `gh issue list`, kein `git grep`,
+   kein neuer Subagent-Dispatch, kein neues Verdikt erfinden) — **nicht** die
+   literale Lücke „zwischen zwei Karten". Im Chat-Modus heißt das: nichts
+   zwischen den Karten. Im HTML-Loop heißt es: während Nic den gerenderten
+   Stapel entscheidet und während du seine erfassten Verdikte ausführst, kommt
+   kein Koordinations-Tool-Call dazu. Merkst du, dass du koordinieren willst:
+   Stop, das gehört in die nächste Koordinations-Runde. (Einzige Ausnahme: ein
+   gesurfacedter Mid-Ausführungs-Fund nach Punkt 2 — der wird Nic vorgelegt,
+   nicht selbst koordiniert.)
+   (ENTSCHEID-File Paket-Sektion „Die Gabel" Zweig A → kein autonomes Handeln;
+   literale Sequenz-zwischen-Karten ist NICHT der Schutz)
 4. **Neu-Eingänge wandern auf die nächste Charge.** Fällt Nic mitten im Block
    etwas Neues ein, notier es als Karte für die **nächste** Koordinations-Runde —
    der laufende Stapel wird zuerst abgearbeitet (Vorbild `arbeitstag.md` „Aufgabe
    taucht mitten auf").
+
+## HTML-Karten-Loop (Render-Medium ab N≥7)
+
+Ab **N≥7 Karten** pro Prep-Lauf ist der HTML-Browser-Loop der **Default**-Weg,
+um den Stapel im Nic-Block zu rendern (darunter: Chat-Default, oder Nic-Wahl pro
+Lauf). Die v5-Felder und der Per-Karte-Verdikt-Schutz bleiben unverändert
+(`conventions/prep-lifecycle.md` PREP-10 „Render-Medium der v5-Karten"); der
+Browser ist nur die Anzeige, die durable Wahrheit bleibt das GitHub-Issue.
+(ENTSCHEID-File Paket-Sektion „Zweit-Gabel" → gethresholdeter Default ab N≥7)
+
+### Ablage + Aufruf
+
+- **Server-/Template-Code liegt unter `tools/prep-karten/`** — **NICHT** unter
+  `methode/`. `methode/` deployt (RAT-23) nur agents/commands/contracts/hooks an
+  den Runtime-Ort; ein `methode/tools/…` käme dort nie an. Der Command ruft den
+  Server über den **absoluten Pfad** (`~/repos/xbuddy/tools/prep-karten/…`).
+  (ENTSCHEID-File Paket-Sektion „Konvergiert" → Ablage `tools/prep-karten/`,
+  NICHT methode/; Command ruft absoluten Pfad)
+- **Port `:8765`** — ephemeres Operator-Tool, **außerhalb** des
+  Service-Bereichs 5000-5099 (`conventions/ports.md` PORT-1/2 bindet dort
+  nicht). Der Server lebt nur für die Dauer des Nic-Blocks, danach wird er
+  beendet. **Bindung:** der Server hört über Loopback hinaus, damit Nic ihn
+  übers Tailnet erreicht — bewusste Ausnahme zu PORT-3 (`127.0.0.1` für
+  Komponenten); das Bau-Ticket bindet auf das **Tailscale-Interface**
+  (Tailnet-IP), nicht offen auf `0.0.0.0`, um LAN-Exposition zu vermeiden.
+  (ENTSCHEID-File Paket-Sektion „Konvergiert" → :8765 ephemeres Operator-Tool,
+  außerhalb 5000-5099; Pass-2 PORT-3-Loopback-Hinweis)
+- **Mess-Naht:** Im HTML-Modus postet der Skill **pro Karte einen durablen
+  Issue-Comment** in der von `tools/card_form_quote.py` gelesenen **Form**:
+  erste Zeile der `<!-- card_pre_flight v1 … -->`-Marker, darunter die
+  textuelle Karte mit `#<nr>`-Header und der `→ [Aktion]`-Zeile (für
+  `over_14_lines`). `followup_pain` misst **spätere Korrektur-Comments nach**
+  dem Marker — nicht Nics Submit-Verdikt selbst; Marker und Verdikt dürfen
+  daher nicht im selben Comment kollabieren. So messen alle drei Metriken
+  korrekt (kein `preflight_missing`-False-Positive). Verbindlich in
+  `conventions/prep-lifecycle.md` PREP-10 „Mess-Naht im HTML-Modus".
+
+### Drei Pflicht-Härtungen (Klauseln)
+
+1. **Vor-Ausliefern-Check (Render-Probe vor Nic).** Bevor der gerenderte Stapel
+   Nic gezeigt wird, läuft `node --check` auf das Server-/Template-JS **und** ein
+   **DOM-Stub-Render** des kompletten Stapels (alle Karten-Klassen, headless).
+   Bricht das (Syntax oder Render), geht der Loop **nicht** an Nic — Fallback auf
+   Chat-Modus oder Fix-Runde. Das fängt den Klassen-Bug deutsche-Anführung
+   (`„…“`) vs. gerades JS-Quote (`"`), der eine Karte still leer rendern würde.
+   (ENTSCHEID-File Paket-Sektion „Konvergiert" → Vor-Render-Check: node --check +
+   DOM-Stub gegen deutsche-Quote-vs-gerades-Quote-JS-Bug)
+2. **Closes/Creates nur mit Freigabe.** Schreibt der Loop am Ende Issues
+   (`gh issue close`, `gh issue create`), braucht das eine **Chat-Freigabe pro
+   Runde** — der Auto-Mode-Classifier liest die HTML-Antwort-Datei **nicht** als
+   Intent. Kein stiller Massen-Schreibvorgang aus dem Browser heraus; der
+   Per-Karte-Verdikt-Schutz (Regel 2 oben) gilt auch für die Ausführung der
+   gebündelten Verdikte. (Label-Flips/Comments mit gültigem `prep_verdict`
+   laufen wie gehabt.) **Kein skill-petrankerter Auto-Mode-Freigabe-Pfad** —
+   RAT-22 hält „Auto-Mode" als Defer und die Regeln hart; eine etwaige
+   operatorseitige `autoMode`-Setzung ist Nics Umgebung, nicht Skill-Ledger.
+   (ENTSCHEID-File Paket-Sektion „Konvergiert" → Closes/Creates: Chat-Freigabe;
+   Pass-2 RAT-22-Patch)
+3. **Kein pkill-Selbstkill.** Zum Beenden des Servers **nie** ein `pkill`/
+   `kill`-Muster verwenden, das die **eigene** Bash-Zeile mit-matcht (Pattern
+   trifft den eigenen Prozess → `exit 144`). Server über die gemerkte **PID**
+   (aus dem Start) beenden, nicht über einen Namens-/Port-Pattern-Kill.
+   (ENTSCHEID-File Paket-Sektion „Konvergiert" → kein pkill-Selbstkill)
 
 ## Karten-Formate v5 (Anzeige-Artefakt; SSoT bleibt das GitHub-Issue)
 

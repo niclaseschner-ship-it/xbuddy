@@ -297,6 +297,56 @@ Karten-Form (33 Zeilen, SPEC-DIFF inline, EMPFEHLUNG in Zeile 20+)
 produzierte blindes „ok" mit nachfolgender Korrektur. v5 macht die
 Entscheidungsachsen in den ersten drei Zeilen sichtbar.
 
+### Render-Medium der v5-Karten (Chat ODER HTML-Browser-Loop)
+
+Die v5-**Felder** (TREIBER/EMPFEHLUNG/RISIKO/VERTRAUTHEIT/WIRKUNG/KONTEXT +
+Ampel-Stempel) sind **medien-agnostisch**: sie definieren *was* eine Karte
+trägt, nicht *wo* sie erscheint. Der PREP-10-Feld-Vertrag bleibt davon
+**unberührt** — er gilt unverändert in jedem Render-Medium.
+(ENTSCHEID-File Paket-Sektion „Konvergiert" → HTML ist Render-Medium über den
+v5-Feldern; PREP-10 unberührt)
+
+Zulässige Render-Medien:
+
+- **Chat** (Default unter der Schwelle): Karten als Text im Nic-Block, einzeln.
+- **HTML-Browser-Karten-Loop** (DEFAULT **ab N≥7 Karten** pro Prep-Lauf): ein
+  ephemeres Operator-Tool rendert den Stapel als Browser-Karten; Nic gibt pro
+  Karte ein explizites Verdikt (Radio). Mechanik in `arbeitstag-prep.md`.
+  (ENTSCHEID-File Paket-Sektion „Zweit-Gabel" → gethresholdeter Default ab N≥7;
+  darunter Chat-Default)
+
+Die Schwelle ist gethresholdet, weil der belegte Nutzen aus großen Stapeln
+kommt (30+-Karten-Läufe); für kleine Stapel kämen Server/Port/Browser ohne
+Beleg dazu (gegen Einfachheit, `constitution.md`). Unterhalb N≥7 ist Chat der
+Default; der HTML-Weg ist dort allenfalls Nic-Wahl pro Lauf.
+
+**Pflicht im HTML-Modus — Vollständigkeit:** Das HTML-Template rendert **ALLE**
+Karten-Klassen (Stempel, Wahl 🔱 ARCH-WAHL / ⚠️ KOORD-WAHL, Schließen) inkl.
+**Stempel-Ampel** (Risiko + Vertrautheit, beide Achsen sichtbar). Eine
+Render-Form, die eine Klasse oder die Ampel unterschlägt, ist nicht zulässig —
+sie würde die in den ersten drei Zeilen sichtbaren Entscheidungsachsen, die der
+Sinn von v5 sind, gerade im neuen Medium verlieren.
+(ENTSCHEID-File Paket-Sektion „Konvergiert" → Template rendert ALLE
+Karten-Klassen inkl. Stempel-Ampel + grüner Render-Test)
+
+**Mess-Naht im HTML-Modus (Pflicht):** Das Mess-Skript
+`tools/card_form_quote.py` liest Issue-Body + Comments (PREP-11
+„Mess-Pflicht"). Rendert der Loop die Karten nur im Browser, fehlen dem Skript
+der `card_pre_flight v1`-Marker (→ `preflight_missing`-False-Positive), der
+Karten-Header + Aktionszeile (→ `over_14_lines` misst nichts) und Nics
+Antwort (→ leeres `followup_pain`-Fenster). Deshalb postet der Skill im
+HTML-Modus **pro Karte einen durablen Issue-Comment** in der vom Skript
+gelesenen **Form**: erste Zeile der `card_pre_flight v1`-Marker, darunter die
+textuelle Karte mit `#<nr>`-Header und `→ [Aktion]`-Zeile. `followup_pain`
+misst die **späteren Korrektur-Comments nach** dem Marker (Folge-Schmerz auf
+Stempel-Karten), **nicht** Nics Submit-Verdikt selbst — Marker und Verdikt
+dürfen nicht in einem Comment kollabieren. So messen alle drei Metriken
+(`preflight_missing` / `over_14_lines` / `followup_pain`) korrekt und ein
+Audit-Trail entsteht. Der Browser ist die Anzeige, der Issue-Comment bleibt
+die durable Wahrheit (SSoT = GitHub-Issue, unverändert).
+(ENTSCHEID-File Paket-Sektion „Konvergiert" → HTML-Modus postet pro Karte einen
+durablen Issue-Comment → card_form_quote misst alle drei Metriken korrekt)
+
 ## PREP-11 — „Karte zu Nic ist FERTIG" + Pre-Flight-Disziplin
 
 ### FERTIG-Disziplin (Erweiterung von PREP-1)
