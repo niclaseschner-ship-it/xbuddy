@@ -449,6 +449,43 @@ def test_1145_kind_mit_zwei_slots_event_in_beiden_zeilen(tmp_path, demo_registry
     )
 
 
+def test_1178_erwachsener_kalender_read_slot_bekommt_event(tmp_path, demo_registry):
+    """T1178 AC1: Ein kalender-read-Slot mit kind=<Erwachsener-ID> (emil)
+    wird mit dessen Kalender-Terminen befüllt — ein Event 'Niclas Zahnarzt'
+    landet in schedule[iso][emil_kal].
+
+    AC2-Regression: Mias Kind-Slot bleibt leer; das Event ist kein Termin.
+    """
+    cfg = _config_mit_slots(tmp_path, [
+        {"schluessel": "emil_kal", "art": "kalender-read", "icon": "3071",
+         "kind": "emil"},
+        {"schluessel": "mia_kal", "art": "kalender-read", "icon": "3071",
+         "kind": "mia"},
+    ])
+    heute = date(2026, 5, 20)
+    raw = [gcal_allday("e_emil", "Niclas Zahnarzt", heute.isoformat())]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(cfg.db_datei)
+    view = render_mod.baue_view(cfg, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    iso = heute.isoformat()
+    # AC1: Niclas-Slot befüllt.
+    zelle = view["schedule"][iso]["emil_kal"]
+    assert zelle is not None, (
+        "Erwachsenen-kalender-read-Slot bleibt leer — T1178 nicht greift"
+    )
+    assert zelle["event_id"] == "e_emil"
+    # AC2: Mias Slot bleibt leer — kein Regress.
+    assert view["schedule"][iso]["mia_kal"] is None, (
+        "Mias Slot darf durch Niclas-Event nicht befüllt werden"
+    )
+    # Das Event ist KEIN Termin — es landet im Slot, nicht in der Leiste.
+    assert view["appointments"][iso] == [], (
+        "Slot-Event darf nicht zusätzlich als Termin erscheinen"
+    )
+
+
 # ============================================================
 #  PLAN-14 — Mehrtages-Termin als eine Spanne
 # ============================================================
