@@ -142,6 +142,14 @@ Das Manifest deklariert `display: fullscreen` (PWA-2); Wake-Lock und
 Fullscreen-Gesture folgen der Konvention `conventions/pwa.md`
 **PWA-3**.
 
+**DC-11 embedded-Ausnahme (SHELL-11):** Läuft der Display-Client als
+Iframe in der Heim-Shell (`window.self !== window.top`), wird
+`attachFullscreenOnGesture` *nicht* aufgerufen — die Shell besitzt den
+Vollbild-Kontext (SHELL-11). Wake-Lock bleibt aktiv. Standalone
+Display-Geräte (`window.self === window.top`) behalten DC-11
+unverändert. Der Guard sitzt ausschließlich an der Konsument-Aufrufstelle
+in `display-client/index.html`; `displib.js` bleibt unangetastet.
+
 Manifest-Icons (`icons[]`) sind Pflicht — Form folgt PWA-2
 (`conventions/pwa.md`): mindestens je ein PNG in 192×192 und
 512×512, mindestens eins mit `purpose: "maskable"`. Sonst bietet
