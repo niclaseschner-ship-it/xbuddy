@@ -1010,11 +1010,14 @@ Reorder per ▲/▼-Pfeile (`feedback_telegram_drag_vs_arrows`) bleibt; die
 Vorlauf-Uhrzeit aktualisiert sich automatisch im Render der Liste, weil
 sie auf den vorigen Anker bezogen ist.
 
-**`locked: true`-Anker im Bottom-Sheet sichtbar gesperrt:** der
-Uhrzeit-Picker zeigt den Wert read-only, mit Hinweis „V1-Anker, ändern
-in der Config" — Migration auf editierbar steht in `ROUTINE-28`.
+**`locked: true`-Anker in der Item-Karte sichtbar gesperrt:** die
+Item-Karte zeigt den Anker mit einer read-only Badge „🔒 V1-Anker, ändern
+in der Config" (`item-zeit-locked`, `seiten/static/routine-anpassen.js`).
+Es gibt **keinen** Edit-Sheet (das Hinzufügen-Sheet ist add-only) — ein
+Uhrzeit-Picker existiert für gesperrte Anker nicht; Migration auf
+editierbar steht in `ROUTINE-28`.
 
-*Tickets:* #726
+*Tickets:* #726, #1197
 
 ### ROUTINE-28 — Migration V1-Anker → items mit `zeit.typ=anker`
 
