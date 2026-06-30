@@ -274,8 +274,11 @@ negative Versicherung.
   `high_context_track: true` mit Begründung **und** Opus.
 - **Programmer Execution Protocol gestaffelt nach `risk_class`:**
   - `low` → ein kompakter Combined-Checkpoint im Handoff.
-  - `medium` → drei Checkpoints (analysis_plan, implementation_done,
-    validation_handoff), je 3–5 Felder, alle im finalen Handoff.
+  - `medium` → alle Pflichtfelder der drei Checkpoint-Gruppen (analysis_plan,
+    implementation_done, validation_handoff) im finalen Handoff; Drei-Block-
+    Gliederung empfohlen, nicht erzwungen.
+    (PW-79 RATIFIZIERT 2026-06-30; ENTSCHEID-File 20260630-2035-RATIFIZIERT-pw79-handoff-entzeremonialisieren
+    Sektion "Was sich ändert" → Entzeremonialisierung)
   - `high` → **three_compact + Re-Dispatch** (PW-8, xbuddy-prozess#8): Phase 1
     läuft als eigener Subagent-Dispatch nur mit `analysis_plan`. Du liest den
     Plan, bewertest, und startest Phase 2 als **frischen** Subagent mit dem

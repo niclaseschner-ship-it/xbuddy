@@ -117,7 +117,14 @@ modes:
     structure: "EIN Block, kompakt; alle Pflichtfelder aus den drei Checkpoints zusammengefasst."
   three_compact:
     when: "risk_class: medium"
-    structure: "Drei Blöcke (analysis_plan, implementation_done, validation_handoff), je 3–5 Felder."
+    structure: |
+      Alle Pflichtfelder aus den drei checkpoint_fields-Gruppen (analysis_plan,
+      implementation_done, validation_handoff) im finalen Handoff. Drei-Block-
+      Gliederung unter den Labels EMPFOHLEN für LLM-Lesbarkeit, NICHT erzwungen —
+      ein flacher Handoff mit allen required-Feldern ist konform. Substanz = die
+      required-Listen (checkpoint_fields, S1.3), nicht die Block-Labels.
+      (PW-79 RATIFIZIERT 2026-06-30; ENTSCHEID-File 20260630-2035-RATIFIZIERT-pw79-handoff-entzeremonialisieren
+      Sektion "Was sich ändert" → Entzeremonialisierung)
   two_phase:
     when: "risk_class: high"
     DEPRECATED: |
@@ -473,7 +480,16 @@ checkpoints:
     acceptance_criteria_status: "<knapp>"
     ready_for_watchdog: true
     needs_escalation: false
-  # mode: three_compact → drei Blöcke (analysis_plan, implementation_done, validation_handoff)
+  # mode: three_compact → alle Pflichtfelder der drei checkpoint_fields-Gruppen
+  #   (analysis_plan, implementation_done, validation_handoff) im finalen Handoff.
+  #   Drei-Block-Gliederung unter den Labels EMPFOHLEN für Lesbarkeit, NICHT
+  #   erzwungen — ein flacher Handoff mit allen required-Feldern ist konform.
+  #   Substanz = die required-Listen (S1.3), nicht die Block-Labels.
+  #   AUSNAHME High-Phase-1 (status: awaiting_orchestrator_review): expliziter
+  #   analysis_plan-Block bleibt Pflicht (preflight.md §B.3 Carve-out).
+  #   (PW-79 RATIFIZIERT 2026-06-30; ENTSCHEID-File
+  #   20260630-2035-RATIFIZIERT-pw79-handoff-entzeremonialisieren Sektion
+  #   "Was sich ändert" → Entzeremonialisierung; Antiberater-Pass-2 §3-SSoT-Fix)
   # mode: two_phase Phase 1 → DEPRECATED (PW-8). Empfohlen: three_compact + Re-Dispatch.
 
 # Pflicht im analysis_plan ODER (bei combined) hier auf Top-Level.
