@@ -184,7 +184,7 @@ def test_PLAN_6_slots_come_from_config(demo_config):
     # Jede Slot-Definition trägt Art und Icon direkt aus der Config.
     bring = demo_config.slot("bring")
     assert bring.art == config_mod.SLOT_PETRANTWORTLICH
-    assert bring.icon == "sun"
+    assert bring.icon == "37807"
     act1 = demo_config.slot("act1")
     assert act1.art == config_mod.SLOT_KALENDER_READ
     assert act1.kind == "mia"
@@ -1107,9 +1107,9 @@ def test_template_rendert_slot_icon_direkt(demo_config, demo_registry):
     assert r.status_code == 200
     html = r.data
     # Der Icon-Wert aus DEMO_CONFIG erscheint direkt in den ARASAAC-Pfaden.
-    assert b"arasaac/sun.png" in html, "bring-Slot-Icon (sun) fehlt im Rail"
-    assert b"arasaac/fork.png" in html, "cook-Slot-Icon (fork) fehlt im Rail"
-    assert b"arasaac/moon.png" in html, "bed-Slot-Icon (moon) fehlt im Rail"
+    assert b"arasaac/37807.png" in html, "bring-Slot-Icon (37807) fehlt im Rail"
+    assert b"arasaac/2342.png" in html, "cook-Slot-Icon (2342) fehlt im Rail"
+    assert b"arasaac/6027.png" in html, "bed-Slot-Icon (6027) fehlt im Rail"
     # Der entfernte Template-Mapper darf nicht mehr im HTML/Template-Output sein.
     assert b"SLOT_ICON_ID" not in html, (
         "SLOT_ICON_ID-Mapper noch vorhanden — zweite Icon-Quelle (PLAN-6-Verstoß)"
@@ -1701,11 +1701,11 @@ def test_PLAN_29_arasaac_migration_template_kein_svg_icon_macro(
             "Template-Migration unvollständig?" % artefakt
         )
     # Icon-Werte aus DEMO_CONFIG erscheinen direkt als ARASAAC-Pfade im HTML.
-    assert b"arasaac/sun.png"  in html, "Schedule-Rail bring-Icon (sun) fehlt"
-    assert b"arasaac/clock.png" in html, "Schedule-Rail pick-Icon (clock) fehlt"
-    assert b"arasaac/star.png" in html, "Schedule-Rail act-Icon (star) fehlt"
-    assert b"arasaac/fork.png" in html, "Schedule-Rail cook-Icon (fork) fehlt"
-    assert b"arasaac/moon.png" in html, "Schedule-Rail bed-Icon (moon) fehlt"
+    assert b"arasaac/37807.png"  in html, "Schedule-Rail bring-Icon (37807) fehlt"
+    assert b"arasaac/39520.png" in html, "Schedule-Rail pick-Icon (39520) fehlt"
+    assert b"arasaac/3071.png" in html, "Schedule-Rail act-Icon (3071) fehlt"
+    assert b"arasaac/2342.png" in html, "Schedule-Rail cook-Icon (2342) fehlt"
+    assert b"arasaac/6027.png" in html, "Schedule-Rail bed-Icon (6027) fehlt"
 
 
 # ============================================================
