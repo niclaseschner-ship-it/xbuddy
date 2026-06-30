@@ -422,7 +422,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   hoerspiel_url_origin=None,
                   hoerspiel_url_origin_neko: str = "",
                   kibuddy_origin_url=None,
-                  a2_receipt_store=None):
+                  a2_receipt_store=None,
+                  wetter_origin_url=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
@@ -997,5 +998,22 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             is_member_fn=_kpa_is_member,
             tg=tg,
             chat_id_getter=family_group_chat_id_getter))
+
+    # WRO-8 / #1094: »Wetter-Regeln öffnen« als lesende Aufgabe (EC-9, Klasse B).
+    # AND-Guard: wetter_origin_url UND family_group_chat_id_getter müssen BEIDE
+    # gesetzt sein — fehlt eine, erscheint die Aufgabe NICHT im Katalog (WRO-8).
+    # - wetter_origin_url: Wetter-Buddy-Origin; Mini-App-URL = wetter_origin_url +
+    #   /display/wetter/regeln (WRO-5, wetter/views.json slug "regeln").
+    #   Ein Lese-Origin-Guard wie bei RAO entfällt — WRO V1 macht keinen Lese-Call
+    #   (E-WRO-3).
+    # - family_group_chat_id_getter: Live-Berechtigung gegen die Familien-Gruppe
+    #   (WRO-2). is_member_fn analog der RAO-/EZG-Linie.
+    if wetter_origin_url is not None and family_group_chat_id_getter is not None:
+        from skills.wetter_regeln_oeffnen_task import WetterRegelnOeffnenTask
+        _wro_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
+        catalog.register(WetterRegelnOeffnenTask(
+            tg=tg,
+            is_member_fn=_wro_is_member,
+            mini_app_url=wetter_origin_url))
 
     return catalog
