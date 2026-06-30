@@ -6,8 +6,8 @@
 Die LLM-Provider-Schicht ist die **eine** Stelle, an der eine XBuddy-Instanz
 ihre Anthropic/Azure-OpenAI/OpenAI/Mistral-Aufrufe baut. Statt dass jeder
 Buddy (eltern-chat, hoerspiel, kibuddy) seinen eigenen Provider-Adapter
-pflegt, lesen und schreiben alle über diese geteilte Lib. Sie hält drei
-Public-API-Sichten (Agent, Singleshot, Chat) auf einem gemeinsamen
+pflegt, lesen und schreiben alle über diese geteilte Lib. Sie hält vier
+Public-API-Sichten (Agent, Singleshot, Chat, Completion) auf einem gemeinsamen
 Vendor-File-Kern.
 
 **Library-Status (DCOMP-1):** Die LLM-Provider-Schicht ist eine **Library** —
@@ -17,8 +17,8 @@ kein eigener Prozess, kein Service, kein HTTP-Endpoint. Code lebt unter
 keinen eigenen Port und keinen eigenen systemd-Service
 (`conventions/llm-providers.md` LLMP-1; RAT-20 Sektion „Patch 1").
 
-**V1-Scope:** Drei Public-API-Sichten auf einem `_vendor/<vendor>.py`-Kern
-(LLMP-2) · Capability-Matrix mit hartem Boot-Fail (LLMP-3/4) · synchrone
+**Scope:** Vier Public-API-Sichten auf einem `_vendor/<vendor>.py`-Kern
+(LLMP-2; die vierte Sicht `get_completion` mit #1131 belegt) · Capability-Matrix mit hartem Boot-Fail (LLMP-3/4) · synchrone
 Telemetrie-Projektion nach `var/llm/provider_calls.jsonl` zusätzlich zur
 bestehenden SQLite-Senke pro Buddy · Slot-Lookup über `tools.zugangsdaten`
 (LLMP-5). Vendor V1: Anthropic.
@@ -31,11 +31,11 @@ Fusion zweier Sichten (Re-Litigation nach Vertrag-Drift-Schwelle).
 
 ## 1. Public-API
 
-### LLMP-S1 — Drei Sichten, ein Vendor-File
-Die Lib stellt drei Funktionen bereit: `get_agent(slot)`, `get_singleshot(slot)`
-und `get_chat(slot)`. Jede gibt ein Sicht-Objekt zurück, das auf demselben
+### LLMP-S1 — Vier Sichten, ein Vendor-File
+Die Lib stellt vier Funktionen bereit: `get_agent(slot)`, `get_singleshot(slot)`,
+`get_chat(slot)` und `get_completion(slot)`. Jede gibt ein Sicht-Objekt zurück, das auf demselben
 `_vendor/<vendor>.py`-Kern aufsetzt. Ein neuer Vendor (eine Datei) aktiviert
-alle drei Sichten — kein Adapter-Code pro Buddy
+alle vier Sichten — kein Adapter-Code pro Buddy
 (RAT-20 Sektion „Finale Landung — MACH ES" → Was sich ändert).
 
 - **`get_agent(slot, model="", max_tokens=0)` — Agent-Tool-Loop.** Für Konversationen mit Tool-Use
@@ -68,8 +68,20 @@ alle drei Sichten — kein Adapter-Code pro Buddy
   (Sokratisch-Dialog mit Kind, Multi-Turn-Kontext). Required Capabilities:
   `multi_turn_assistant_prefill`, `cache_control`, `system_message_distinct`
   (LLMP-3).
+- **`get_completion(slot, model="", max_tokens=0)` — Freitext-Singleshot.** Eine
+  Anfrage (ein System + ein User), ein **Freitext-String** ohne Schema;
+  Sicht-Methode `.complete(system, user) -> str` (kein Tool, kein Schema, ein
+  Vendor-Call). Heutiger Use-Case: hoerspiel (Synopse-Fließtext, #1131 — der von dieser Klausel
+  vor-autorisierte vierte Use-Case). `model`/`max_tokens` optional und
+  durchgereicht (analog `get_singleshot`; hoerspiel reicht Provider-MAX_TOKENS
+  8192/4096 durch, sonst stiller Rückfall auf Lib-Default 2048 und ein kleineres
+  Modell). Required Capabilities: **nur** `system_message_distinct` — bewusst
+  **kein** `structured_output` und **kein** `cache_control`, damit die Sicht
+  beide Slots eines dual-provider-Buddys trägt (hoerspiel Claude **und** Mistral);
+  `get_chat` wäre auf dem Mistral-Slot boot-fatal (LLMP-S9: Mistral ⊥
+  `cache_control`).
 
-Eine vierte Sicht wird erst hinzugefügt, wenn ein vierter Use-Case mit
+Eine fünfte Sicht wird erst hinzugefügt, wenn ein fünfter Use-Case mit
 eigenem Vertrag belegt ist (CLAUDE.md §6, „Vorschlagen, wenn Werte sich
 vermehren").
 
@@ -268,7 +280,7 @@ Re-Evaluierungs-Klausel; Re-Order Nic 2026-06-24).
 Jede Anforderung mit Code-Verhalten hat einen automatisierten Test
 (CLAUDE.md §6), ohne Netz. Mindest-Abdeckung:
 
-- **LLMP-S1** — die drei Sichten existieren und liefern sicht-spezifische
+- **LLMP-S1** — die vier Sichten existieren und liefern sicht-spezifische
   Objekte mit dokumentierten Methoden.
 - **LLMP-S3** — Capability-Mismatch beim Boot wirft `LLMCapabilityError`
   (Fake-Vendor mit reduzierter `CAPABILITIES`-Frozenset; jede Sicht
