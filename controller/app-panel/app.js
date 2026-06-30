@@ -1007,6 +1007,10 @@
   }
 
   function attachFullscreenOnGesture() {
+    // PANEL-10 embedded-Ausnahme (SHELL-11): eingebettet in Shell-Iframe
+    // (window.self !== window.top) → kein Panel-Eigen-Vollbild anhängen.
+    // Standalone-Panel-Geräte (window.self === window.top) behalten PANEL-10 unverändert.
+    if (window.self !== window.top) return;
     panelLib.attachFullscreenImpl({ doc: document });
   }
 
