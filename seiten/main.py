@@ -526,11 +526,7 @@ def essen_einkauf_view():
     ESSEN-33: HTML bindet manifest.json + sw.js ein (PWA-Mantel). Asset-Routen
     leben unter /seiten/essen/einkauf/<asset> — siehe einkauf_asset_view.
     """
-    static_dir = os.path.join(os.path.dirname(__file__), "static")
-    try:
-        build_id = str(int(os.path.getmtime(os.path.join(static_dir, "essen-einkauf.js"))))
-    except OSError:
-        build_id = "0"
+    build_id = _mini_app_build_id("essen-einkauf.js")
     resp = make_response(render_template("essen-einkauf.html", build_id=build_id))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
@@ -585,6 +581,24 @@ def _current_build_id():
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     try:
         return str(int(os.path.getmtime(os.path.join(static_dir, "essen-einkauf.js"))))
+    except OSError:
+        return "0"
+
+
+def _mini_app_build_id(primary_js: str) -> str:
+    """build_id als max(mtime(primary_js), mtime(platform.js)).
+
+    Bezieht platform.js-mtime ein, damit eine platform.js-Änderung
+    den Telegram-Cache aller 4 platform.js-ladenden Mini-App-Routen
+    verlässlich invalidiert (T1229, MAD-5 / RAT-16).
+
+    OSError-Fallback: "0" (analog _current_build_id / _plan_einst_build_id).
+    """
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    try:
+        mtime_primary = os.path.getmtime(os.path.join(static_dir, primary_js))
+        mtime_platform = os.path.getmtime(os.path.join(static_dir, "platform.js"))
+        return str(int(max(mtime_primary, mtime_platform)))
     except OSError:
         return "0"
 
@@ -694,10 +708,10 @@ def plan_einstellungen_view():
     """PLAN-35: Plan-Einstellungs-PWA — HTML-Render-Route.
 
     PUBLIC / Netz-Trust (auth.md AUTH-6): kein Auth-Header, kein initData.
-    Cache-Buster: build_id aus mtime der plan-einstellungen.js.
+    Cache-Buster: build_id aus mtime der plan-einstellungen.js (platform.js einbezogen, T1229).
     PWA-Mantel: manifest.json + sw.js unter /seiten/plan/einstellungen/<asset>.
     """
-    build_id = _plan_einst_build_id()
+    build_id = _mini_app_build_id("plan-einstellungen.js")
     resp = make_response(render_template("plan-einstellungen.html", build_id=build_id))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
@@ -849,13 +863,7 @@ def mini_app_uebersicht_view():
     """
     # MAD-7-konform: HTML-Render-Route lädt Skeleton OHNE Auth (Telegram-WebView
     # sendet beim Initial-Load keinen Header). JS macht platform.ensureAuth().
-    static_dir = os.path.join(os.path.dirname(__file__), "static")
-    try:
-        build_id = str(int(os.path.getmtime(
-            os.path.join(static_dir, "mini-app-uebersicht.js"))))
-    except OSError:
-        build_id = "0"
-
+    build_id = _mini_app_build_id("mini-app-uebersicht.js")
     resp = make_response(render_template("mini-app-uebersicht.html", build_id=build_id))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
@@ -881,11 +889,7 @@ def routine_anpassen_view():
     holt.
     """
     # MAD-7-konform: HTML-Render-Route lädt Skeleton OHNE Auth. JS macht ensureAuth().
-    static_dir = os.path.join(os.path.dirname(__file__), "static")
-    try:
-        build_id = str(int(os.path.getmtime(os.path.join(static_dir, "routine-anpassen.js"))))
-    except OSError:
-        build_id = "0"
+    build_id = _mini_app_build_id("routine-anpassen.js")
     resp = make_response(render_template("routine-anpassen.html", build_id=build_id))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
