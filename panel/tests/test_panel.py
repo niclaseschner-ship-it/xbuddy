@@ -69,7 +69,10 @@ def stub_externe_dienste(monkeypatch):
     """PREG-12: Geräte-Registry + Router stubben — kein Netz.
 
     Default-Stub Geräte: kennt `BEKANNTE_DISPLAYS`, alles andere unbekannt.
-    Default-Stub Router: immer erfolgreich (gibt True zurück).
+    Default-Stub Router-Upsert: immer erfolgreich (gibt True zurück).
+    Default-Stub Router-Erreichbarkeits-Probe: immer erreichbar (True) —
+    damit PREG-17-Tests, die `repair_heal_on_boot` direkt aufrufen, keinen
+    echten HTTP-Aufruf in `router_reachable` auslösen (PREG-18 injizierbar).
     Einzelne Tests überschreiben diese Stubs (Fehlerfall, unbekanntes Display,
     nicht erreichbar).
     """
@@ -80,6 +83,10 @@ def stub_externe_dienste(monkeypatch):
     def fake_router(source_id, display_id):
         return True
     monkeypatch.setattr(panel_main, "router_panels_upsert", fake_router)
+
+    def fake_reachable():
+        return True
+    monkeypatch.setattr(panel_main, "router_reachable", fake_reachable)
 
 
 @pytest.fixture
