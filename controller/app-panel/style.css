@@ -110,9 +110,12 @@ body.xb {
 
 .tile-icon-img {
   /* PANEL-12: Icon skaliert mit Kachelhöhe; clamp stellt Mindestlesbarkeit sicher.
-     Layout-px erlaubt (DTOK-5). */
-  width: clamp(40px, 6vmin, 96px);
-  height: clamp(40px, 6vmin, 96px);
+     Layout-px erlaubt (DTOK-5).
+     T1219: vmin-Faktor 6→9, Max 96→120 — füllere Icon-Darstellung in Kacheln
+     (standalone-sicher: relative Einheit skaliert mit Viewport; .tile overflow:hidden
+     verhindert Überlauf; .tile-icons flex-shrink:1 erlaubt Kompression bei Engpass). */
+  width: clamp(40px, 9vmin, 120px);
+  height: clamp(40px, 9vmin, 120px);
   display: block;
   object-fit: contain;
   flex-shrink: 0;
