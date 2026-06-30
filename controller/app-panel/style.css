@@ -89,6 +89,9 @@ body.xb {
               background var(--dur-fast) var(--ease-out);
   /* PANEL-12: min-height entfernt — Kacheln skalieren mit dem Grid */
   overflow: hidden;
+  /* T1224: Container-Query-Anker — Icon+Label skalieren relativ zur Kachel,
+     nicht zum Viewport (Pi Chromium 148 unterstuetzt container-type:size). */
+  container-type: size;
 }
 
 .tile:active {
@@ -109,22 +112,25 @@ body.xb {
 }
 
 .tile-icon-img {
-  /* PANEL-12: Icon skaliert mit Kachelhöhe; clamp stellt Mindestlesbarkeit sicher.
-     Layout-px erlaubt (DTOK-5).
-     T1219: vmin-Faktor 6→9, Max 96→120 — füllere Icon-Darstellung in Kacheln
-     (standalone-sicher: relative Einheit skaliert mit Viewport; .tile overflow:hidden
-     verhindert Überlauf; .tile-icons flex-shrink:1 erlaubt Kompression bei Engpass). */
-  width: clamp(40px, 9vmin, 120px);
-  height: clamp(40px, 9vmin, 120px);
+  /* T1224: Icon skaliert KACHEL-RELATIV via Container-Query (cqmin = min(cqw,cqh)).
+     40cqmin = 40% der kleineren Kachel-Dimension — füllt die Kachel ohne Überlauf.
+     Floor 40px = Mindestlesbarkeit; Cap 120px = kein Riesensymbol bei großen Kacheln.
+     Standalone-sicher: große Kacheln bleiben unter 120px, .tile overflow:hidden
+     verhindert jeden Überlauf; .tile-icons flex-shrink:1 komprimiert bei Engpass.
+     Layout-px erlaubt (DTOK-5). */
+  width: clamp(40px, 40cqmin, 120px);
+  height: clamp(40px, 40cqmin, 120px);
   display: block;
   object-fit: contain;
   flex-shrink: 0;
 }
 
 .tile-label {
-  /* PANEL-12: Schriftgröße skaliert mit Viewport; Labels dürfen brechen
-     (clamp auf Mindestwert, Zeilenbruch erlaubt). */
-  font-size: clamp(11px, 1.8vmin, var(--fs-18));
+  /* T1224: Schriftgröße KACHEL-RELATIV via Container-Query (cqmin).
+     12cqmin = 12% der kleineren Kachel-Dimension — lesbar, skaliert mit der Kachel.
+     Floor 11px = Mindestlesbarkeit; Cap var(--fs-18) = kein Riesentext bei großen Kacheln.
+     Standalone-sicher: Cap greift bei großen Kacheln; Labels dürfen umbrechen. */
+  font-size: clamp(11px, 12cqmin, var(--fs-18));
   font-weight: var(--font-weight-semibold);
   text-align: center;
   color: var(--stage-ink);
