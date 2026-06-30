@@ -132,8 +132,15 @@
       // DC-11 — Bildschirm wach halten + Vollbild beim ersten Gesture.
       // Pattern aus FIG-26 (controller/figuren-erkennung). Beide Hooks sind
       // no-op-fähig: fehlt die API, läuft der Client einfach ohne weiter.
+      //
+      // DC-11 embedded-Ausnahme (SHELL-11): eingebettet in Heim-Shell-Iframe
+      // (window.self !== window.top) → kein DC-Eigen-Vollbild anhängen.
+      // Die Shell besitzt den Vollbild (SHELL-11); standalone Display-Geräte
+      // (window.self === window.top) behalten DC-11 unverändert.
       dispLib.attachWakeLock(document, navigator);
-      dispLib.attachFullscreenOnGesture(document);
+      if (window.self === window.top) {
+        dispLib.attachFullscreenOnGesture(document);
+      }
 
       // DC-9 — keine Konfiguration: die Identität ergibt sich aus der URL,
       // die Router-Herkunft aus derselben Origin, das Reconnect-Verhalten
