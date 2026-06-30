@@ -1196,5 +1196,9 @@ if (typeof module !== "undefined" && module.exports) {
     ANKER_AUFSTEHEN_ID, ANKER_ANZIEHEN_ID, ANKER_LOSGEHEN_ID, ZEIT_ANKER,
     // ROUTINE-27
     _bauZeitBlock, _vorlaufUhrzeit, _labelMitZeit,
+    // Handler-Kette (AC2: Handler-getriebene DOM-Tests — Glue-Abdeckung)
+    oeffneHinzufuegenSheet,
+    // Testhelfer: setzt _pickerSelectedId von außen (simuliert Icon-Wahl)
+    _testSetPickerSelectedId: (id) => { _pickerSelectedId = id; },
   };
 }
