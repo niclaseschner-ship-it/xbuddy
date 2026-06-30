@@ -12,6 +12,9 @@ name: closes-guard
 #                closingIssuesReferences — robuster als Regex, prüft Existenz+offen)
 #   2. Spec-PR:  `Refs #<nr>` UND ändert ausschließlich specs/ (oder Label type:docs)
 #                → kein Impl-Maskerade über Refs (schließt R3/R6)
+#   2b. Prozess-Entscheid-PR: `Refs <owner>/xbuddy-prozess#<nr>` (Cross-Repo, der
+#                Treiber lebt im getrennten Prozess-Repo) + Label type:docs
+#                (PW-79 RATIFIZIERT 2026-06-30, Nic-Mandat „Ausnahme für Prozess-Tickets")
 #   3. Infra:    Label `no-ticket` (bewusst ticketlos, selten)
 # Siehe WORKFLOW.md, decisions/RAT-10, conventions/reconcile.md.
 
@@ -75,5 +78,21 @@ jobs:
             exit 1
           fi
 
-          echo "::error::closes-guard: kein gültiger Ausgang. Impl-PR: 'Closes #<offenes-issue>' · Spec-PR (nur specs/): 'Refs #<nr>' · bewusst ticketlose Infra: Label 'no-ticket'."
+          # 2b. Prozess-Entscheid-PR (PW-79 RATIFIZIERT 2026-06-30, Nic-Mandat
+          #     „Ausnahme für Prozess-Tickets"): Eine /berater-runde-Formalisierung
+          #     landet methode/-Docs in xbuddy, ihr Treiber ist ein Prozess-Ticket
+          #     im STRIKT getrennten Repo xbuddy-prozess (kein xbuddy-Issue zum
+          #     Closen). Cross-Repo-Refs `Refs <owner>/xbuddy-prozess#<nr>` + Label
+          #     type:docs ist ein gültiger Ausgang. type:docs verhindert Impl-
+          #     Maskerade — Code-PRs tragen es nicht.
+          if printf '%s' "$BODY" | grep -qiE '(^|[^[:alnum:]])refs:?[[:space:]]+[A-Za-z0-9_.-]+/xbuddy-prozess#[0-9]+'; then
+            if printf ' %s ' "$LABELS" | grep -qE ' type:docs '; then
+              echo "✓ Prozess-Entscheid-PR — Refs xbuddy-prozess#<nr> + type:docs, kein Close erwartet."
+              exit 0
+            fi
+            echo "::error::Refs auf xbuddy-prozess gefunden, aber Label type:docs fehlt → Prozess-Entscheid-PRs brauchen type:docs."
+            exit 1
+          fi
+
+          echo "::error::closes-guard: kein gültiger Ausgang. Impl-PR: 'Closes #<offenes-issue>' · Spec-PR (nur specs/): 'Refs #<nr>' · Prozess-Entscheid: 'Refs <owner>/xbuddy-prozess#<nr>' + type:docs · bewusst ticketlose Infra: Label 'no-ticket'."
           exit 1

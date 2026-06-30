@@ -35,8 +35,9 @@ GitHub Issue
    │     high → three_compact + Re-Dispatch  (PW-8: two_phase DEPRECATED)
    ▼  (Agent-Dispatch, run_in_background, isolation: worktree)
 [4] SUB-AGENT EXECUTION
-   │   3 Checkpoints (analysis_plan / implementation_done / validation_handoff)
-   │   gestaffelt nach mode. Bei high → Phase 1 als eigener Subagent nur mit
+   │   3 Checkpoint-Feldgruppen (analysis_plan / implementation_done /
+   │   validation_handoff) gestaffelt nach mode; Block-Gliederung empfohlen,
+   │   nicht erzwungen (PW-79). Bei high → Phase 1 als eigener Subagent nur mit
    │   analysis_plan, Phase 2 als frischer Subagent mit eingebettetem Plan.
    ▼
 [5] STRUCTURED HANDOFF       → schemas.md §3
