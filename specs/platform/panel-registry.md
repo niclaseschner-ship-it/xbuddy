@@ -417,7 +417,38 @@ Scheduler, ohne neuen Endpunkt, ohne Bedien-Eingriff. Ein expliziter
 Welle (additiv nachrüstbar, falls „nicht bis zum Neustart warten" je echten
 Schmerz erzeugt — siehe „Offene Punkte" `repair_trigger`).
 
+Der einmalige Boot-Lauf setzt voraus, dass der Router beim Start des
+panel-Service erreichbar ist. Im realen Heim-Boot ist das **nicht garantiert**
+(der panel-Service startet schneller als / nebenläufig zum Router) — PREG-18
+macht den Boot-Lauf gegen diese Start-Reihenfolge robust.
+
 *Tickets:* #329
+
+### PREG-18 — Heal-on-Boot: Boot-Robustheit gegen nicht-erreichbaren Router
+Der einmalige Heal-on-Boot-Lauf (PREG-17) darf **nicht ins Leere feuern**, wenn
+der Router beim Start des panel-Service noch nicht erreichbar ist. Das ist der
+Boot-Race: der panel-Service startet schneller als oder nebenläufig zum Router,
+der erste (und einzige) Repair-Lauf trifft auf `Connection refused`, **alle**
+Instanzen bleiben `reconcile-pending` — und ohne weiteren Auslöser bis zum
+nächsten Neustart ungeheilt. Damit ist die PREG-17-Annahme „Neustart ist der
+natürliche Heil-Moment" verletzt: der Neustart heilt gerade **nicht**.
+
+- **Wenn** der Router beim Service-Start nicht erreichbar ist, **dann** pollt der
+  panel-Service die Router-Erreichbarkeit mit beschränktem Backoff (Werte aus
+  PREG-11) und führt den Repair-Lauf aus, **sobald** der Router antwortet.
+- **Wenn** der Router bis zum Ablauf des Backoff-Caps nicht antwortet, **dann**
+  fährt der Service **nicht-fatal** fort (der Service-Start wird **nie**
+  blockiert) und loggt die verbleibenden `reconcile-pending` wie in PREG-17.
+- Die Erreichbarkeits-Probe unterscheidet **„Router noch nicht oben"**
+  (transient → Backoff/Retry des ganzen Laufs) von **„einzelner ROU-29-Upsert
+  fehlgeschlagen"** (Instanz bleibt `reconcile-pending`, Lauf macht weiter —
+  PREG-17, unverändert).
+- Dies ist **kein** periodischer Repair und **kein** neuer Endpunkt — beide
+  bleiben verworfen (siehe `repair_trigger`). Robust gemacht wird **nur** die
+  einmalige Boot-Heilung gegen die Start-Reihenfolge. Kein Scheduler, kein Cron,
+  keine neue Oberfläche.
+
+*Tickets:* #1177
 
 ### PREG-11 — Konfigurationswerte
 Familienspezifische Werte (die Panel-Instanzen selbst) leben in `panels.json`
@@ -431,6 +462,13 @@ CONFIG-2: jeder Wert hat einen Default und eine Quelle.
 | Registry-Datei       | `panels.json` neben dem Code     | Env (`PANELS_REGISTRY`) · CLI (`--panels`)          |
 | Geräte-Registry-URL  | `http://127.0.0.1:5040`          | Env (`GERAETE_URL`) · CLI (`--geraete-url`)         |
 | Router-Origin        | `http://127.0.0.1:5000`          | Env (`ROUTER_URL`) · CLI (`--router-url`)           |
+| Boot-Retry-Backoffs  | `0.2, 1, 2, 5, 5, 5, 5, 5, 5, 5, 5, 5` s (Summe ≈ 50 s Cap) | Env (`HEAL_BOOT_BACKOFFS`) · CLI (`--heal-boot-backoffs`) |
+
+Die **Boot-Retry-Backoffs** (PREG-18) sind die Warteintervalle zwischen den
+Router-Erreichbarkeits-Proben des Heal-on-Boot-Laufs; ihre Summe ist der Cap,
+nach dem der Service nicht-fatal fortfährt. Familie-3-tauglich als Config, nicht
+Code (CONFIG-2: Default + Quelle). Leere Folge = sofort genau ein Versuch (kein
+Retry — Verhalten wie vor PREG-18).
 
 Die **Router-Origin** ist die Loopback-Adresse, an die der panel-Service die
 Schreib-Kante ROU-29 ruft (Forward/Repair, PREG-16/PREG-17). Sie kommt mit Welle
@@ -499,8 +537,14 @@ Mindest-Abdeckung:
   Upsert-gleicher Wert); scheitert ein einzelner ROU-29-Aufruf, bleibt die
   betroffene Instanz `reconcile-pending` und die übrigen werden trotzdem geheilt
   (kein Abbruch beim ersten Fehler).
+- **PREG-18** — ist der Router beim Boot-Lauf zunächst nicht erreichbar und wird
+  es während der Backoff-Folge, dann führt der panel-Service den Repair-Lauf nach
+  Erreichbarkeit aus und heilt die Instanzen (kein verpuffter Einzel-Schuss);
+  bleibt der Router über den ganzen Cap weg, fährt der Service nicht-fatal fort
+  und blockiert den Start nicht. Test mit injizierbarer Erreichbarkeits-Probe +
+  injizierbarem Sleep/Clock (kein Wall-Clock-`sleep` im Test).
 
-*Tickets:* #58, #329
+*Tickets:* #58, #329, #1177
 
 ---
 
@@ -589,6 +633,17 @@ Mindest-Abdeckung:
     warten" echten Schmerz erzeugt.
   - **Periodischer Repair** (Timer/Watchdog). Heilt ohne Neustart, ist aber ein
     Hintergrund-Loop mehr für ein selten änderndes Datum — überdimensioniert.
+
+  *Nachtrag (Nic-Entscheid 2026-06-30, #1177 — Boot-Robustheit, PREG-18):* Der
+  Heal-on-Boot-Trigger bleibt unverändert (einmal beim Start, kein Scheduler,
+  kein Endpunkt). **Falsifiziert** wurde aber die stillschweigende Annahme, der
+  Router sei beim Boot bereits erreichbar: im realen Heim-Boot feuert der eine
+  Lauf gegen `Connection refused` und verpufft (live belegt, alle Instanzen
+  `reconcile-pending`, Display tot bis manuell). PREG-18 macht **nur diesen einen
+  Boot-Lauf** gegen die Start-Reihenfolge robust (Erreichbarkeits-Backoff bis
+  Cap, dann nicht-fatal). Das ist **nicht** der oben unter „nicht bis zum
+  Neustart warten" verworfene Schmerz — die beiden Optionen oben
+  (`/reconcile`-Endpunkt, periodischer Repair) bleiben **verworfen**.
 
 ---
 
