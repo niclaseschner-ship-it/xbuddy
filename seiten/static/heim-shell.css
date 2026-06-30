@@ -29,10 +29,16 @@ html, body {
   background: #F5F1E8;
 }
 
-/* SHELL-3: Iframe fuellt Rail vollstaendig (width:100%; height:100%) */
+/* SHELL-PWA Kachel-Scaling: Panel-Iframe shell-seitig auf ~50%-Zoom-Optik skalieren.
+   Mechanik: Iframe bekommt 200%x200% Layout-Groesse (Panel rechnet auf 560px
+   Breite → PANEL-12 berechnet mehrspaltiges Grid) und wird via CSS transform
+   scale(0.5) / transform-origin:top left auf den sichtbaren Bereich zurueck-
+   skaliert. Panel bleibt unveraendert (SHELL-PWA AC3, stop_rule panel_untouched). */
 .rail iframe {
-  width: 100%;
-  height: 100%;
+  width: 200%;
+  height: 200%;
+  transform: scale(0.5);
+  transform-origin: top left;
   border: none;
   display: block;
 }

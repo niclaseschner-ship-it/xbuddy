@@ -9,8 +9,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Heim-Shell · {{ panel_id }}</title>
-  {# SHELL-10: Shell-Manifest fuer PWA-Installierbarkeit je panel_id (analog PWA-1) #}
+  <meta name="theme-color" content="#47503C">
+  {# SHELL-PWA: Manifest + Icons (analog ESSEN-33) #}
   <link rel="manifest" href="/shell/{{ panel_id }}/manifest.json">
+  <link rel="icon" href="/shell/{{ panel_id }}/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="/shell/{{ panel_id }}/icon-192.png">
   {# SHELL-3/8: Layout-CSS (Rail 280px, kein Overflow) #}
   <link rel="stylesheet" href="/api/v1/seiten/static/heim-shell.css?v={{ build_id }}">
 </head>
@@ -60,6 +63,24 @@
       }
       document.addEventListener('touchend', tryFullscreen, { passive: true });
       document.addEventListener('click', tryFullscreen);
+    })();
+  </script>
+  {# SHELL-PWA: Service-Worker registrieren (analog ESSEN-33/35).
+     Scope /shell/ deckt alle Shell-Instanzen. Service-Worker-Allowed-Header
+     erlaubt den erweiterten Scope (shell_asset_view, seiten/main.py). #}
+  <script>
+    (function () {
+      'use strict';
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker
+            .register('/shell/{{ panel_id }}/sw.js', { scope: '/shell/' })
+            .catch(function (err) {
+              // best-effort — kein UI-Bruch bei fehlender SW-Unterstuetzung.
+              console.warn('[shell-pwa] Service-Worker-Registrierung fehlgeschlagen:', err);
+            });
+        });
+      }
     })();
   </script>
 </body>
