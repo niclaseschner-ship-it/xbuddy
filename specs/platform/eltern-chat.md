@@ -487,13 +487,17 @@ folgenden Bedingungen erfüllen:
    ruft das Inverse-`DELETE` auf, prüft die Bestätigung der API. Ohne
    diesen Test darf der Skill nicht im Sofort-Write-Default laufen.
 
-**Konkret freigegeben unter A2:** `termin_eintragen`,
-`einkauf_hinzufuegen`, `foto_senden`. Alle anderen schreibenden
-Aufgaben bleiben **bei der zweistufigen Variante** (Vorab-Confirm,
-unten). **Explizit ausgenommen vom A2-Default** bleiben die
-Klasse-E-Auth-Loops `anbieter_wechseln` und `kalender_verbinden` —
-ihr eigener Abschluss-Gate-Pfad ist gewollt und wird durch A2 nicht
-ersetzt.
+**Konkret freigegeben unter A2:** `einkauf_hinzufuegen`,
+`foto_senden`. **A2-Kandidat (zweistufig bis Plan-Buddy-DELETE
+landet):** `termin_eintragen` — Bedingung 2 (idempotentes DELETE auf
+die Termin-ID) ist mangels Plan-Buddy-DELETE-Endpunkt noch nicht
+erfüllt (`specs/platform/termin-eintragen.md:44-47`); der Skill läuft
+daher `propose`/`execute`-zweistufig bis der Delete-Track landet.
+Alle anderen schreibenden Aufgaben bleiben **bei der zweistufigen
+Variante** (Vorab-Confirm, unten). **Explizit ausgenommen vom
+A2-Default** bleiben die Klasse-E-Auth-Loops `anbieter_wechseln` und
+`kalender_verbinden` — ihr eigener Abschluss-Gate-Pfad ist gewollt
+und wird durch A2 nicht ersetzt.
 
 **Undo-Wort-Disziplin — letzter Schreibakt, Versiegelung durch
 Folge-Anfrage.** Das Undo-Wort gilt **nur auf den letzten Schreibakt
