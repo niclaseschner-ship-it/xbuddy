@@ -76,6 +76,12 @@ DEFAULTS = {
     # ROUTINE-14). Per-Instanz-Wert; Default passt zum Pi-Setup
     # (PORT-2 Routine-Buddy auf 5050).
     "routine_origin_url": "http://127.0.0.1:5050",
+    # WRO-5 / #1094: Origin des Wetter-Buddys, über die der
+    # WetterRegelnOeffnenTask die Mini-App-URL aufbaut
+    # (`/display/wetter/regeln`, WRO-5). Per-Instanz-Wert; Default passt
+    # zum Pi-Setup (PORT-2 Wetter-Buddy auf 5030). Leer ⇒ Aufgabe NICHT
+    # im Katalog (WRO-8 AND-Guard).
+    "wetter_origin_url": "http://127.0.0.1:5030",
     # EC-15 / #443: Origin des Icon-Routers, über den der
     # RoutinePunkteSetzenTask die ICONS-7-Stichwort-Suche aufruft
     # (`GET /api/v1/icons/suche` ICONS-7). Per-Instanz-Wert; Default
@@ -195,7 +201,8 @@ class Config:
                  mini_app_base_url="",
                  hoerspiel_url_origin="",
                  hoerspiel_url_origin_neko="",
-                 kibuddy_origin_url=""):
+                 kibuddy_origin_url="",
+                 wetter_origin_url=""):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
         self.provider = provider
@@ -231,6 +238,8 @@ class Config:
         self.hoerspiel_url_origin_neko = hoerspiel_url_origin_neko  # leer → Neko-Fehler-Text
         # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts (KAQS-5, KIBUDDY-24/25).
         self.kibuddy_origin_url = kibuddy_origin_url      # leer → KAQS NICHT im Katalog
+        # WRO-5 / #1094: Origin des Garderoben-Editors (/display/wetter/regeln)
+        self.wetter_origin_url = wetter_origin_url        # leer → WRO NICHT im Katalog
 
 
 def _family_group_in_file(config_path):
@@ -370,4 +379,6 @@ def resolve(config_path, zd=None):
         hoerspiel_url_origin_neko=str(values["hoerspiel_url_origin_neko"]).strip().rstrip("/"),
         # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts (KAQS-5, KIBUDDY-25).
         kibuddy_origin_url=str(values["kibuddy_origin_url"]).strip().rstrip("/"),
+        # WRO-5 / #1094: Origin des Wetter-Buddys (WRO-8 AND-Guard).
+        wetter_origin_url=str(values["wetter_origin_url"]).strip().rstrip("/"),
     )

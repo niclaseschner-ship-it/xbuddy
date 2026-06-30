@@ -1206,7 +1206,7 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # WRO-8 / #1094: Origin des Wetter-Buddys (Mini-App-URL = Origin +
         # /display/wetter/regeln, WRO-5). Leer/None → WetterRegelnOeffnenTask
         # NICHT im Katalog (AND-Guard in tasks.py).
-        wetter_origin_url=getattr(cfg, "wetter_origin_url", None) or None)
+        wetter_origin_url=cfg.wetter_origin_url or None)
 
     if cfg.provider_api_key:
         # KI-Modus — Anbieter steht; die Familien-Gruppe muss gesetzt sein (EC-2).
