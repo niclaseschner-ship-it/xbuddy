@@ -189,8 +189,12 @@ Drei Stufen, gestaffelt nach Track-Klasse:
 - [ ] `programmer_execution_protocol.mode` ist gesetzt und passt zu
       `risk_class`:
       - `risk_class: low` → mode `combined` (1 Checkpoint-Block).
-      - `risk_class: medium` → mode `three_compact` (3 Checkpoint-Blöcke
-        im finalen Handoff).
+      - `risk_class: medium` → mode `three_compact` (alle Pflichtfelder der
+        drei Checkpoint-Gruppen im finalen Handoff; Drei-Block-Gliederung
+        empfohlen, nicht erzwungen).
+        (PW-79 RATIFIZIERT 2026-06-30; ENTSCHEID-File
+        20260630-2035-RATIFIZIERT-pw79-handoff-entzeremonialisieren Sektion "Was sich ändert" →
+        Entzeremonialisierung)
       - `risk_class: high` → mode `three_compact` + Re-Dispatch
         (PW-8: `two_phase` DEPRECATED). Phase 1 als eigener Subagent-
         Dispatch nur mit `analysis_plan`; Phase 2 als frischer Dispatch
@@ -261,12 +265,29 @@ Wenn das Feld **mit Inhalt** geliefert wird, muss der Inhalt sauber sein:
 - [ ] Mode `combined`: ein Block, alle Mindest-Felder gefüllt
       (`task_understanding`, `files_changed`, `acceptance_criteria_status`,
       `local_style_observed`).
-- [ ] Mode `three_compact`: drei Blöcke (`analysis_plan`,
-      `implementation_done`, `validation_handoff`), je 3–5 Felder.
+- [ ] Mode `three_compact`: alle Pflichtfelder der drei checkpoint_fields-
+      Gruppen (`analysis_plan`, `implementation_done`, `validation_handoff`)
+      vorhanden. **Reject NUR bei fehlenden Pflichtfeldern, NICHT bei flacher
+      Gliederung** — die Drei-Block-Gliederung unter den Labels ist EMPFOHLEN
+      für Lesbarkeit, nicht erzwungen; ein flacher Handoff mit allen required-
+      Feldern ist konform.
+      (PW-79 RATIFIZIERT 2026-06-30; ENTSCHEID-File
+      20260630-2035-RATIFIZIERT-pw79-handoff-entzeremonialisieren Sektion "Was sich ändert" →
+      Entzeremonialisierung)
+- [ ] **CARVE-OUT High-Phase-1** (`risk_class: high`, `status:
+      awaiting_orchestrator_review`, §B.6): Hier bleibt der **explizite
+      `analysis_plan`-Block PFLICHT** — der Phase-1-Plan ist realer operativer
+      Konsument der Plan-Abgrenzung (Orchestrator bewertet ihn, bevor Phase 2
+      dispatcht wird). Die PW-79-Lockerung der Gliederung gilt NICHT für
+      Phase-1; sie betrifft nur den medium-Final-Handoff und den
+      High-Phase-2-Final-Handoff.
+      (PW-79 RATIFIZIERT 2026-06-30; ENTSCHEID-File
+      20260630-2035-RATIFIZIERT-pw79-handoff-entzeremonialisieren Sektion "Was sich ändert" →
+      Entzeremonialisierung; Antiberater RISKANT-1 Carve-out)
 - [ ] Mode `two_phase` ist DEPRECATED (PW-8). Bei `risk_class: high` läuft
       stattdessen `three_compact + Re-Dispatch`: Phase 1 als eigener Subagent
-      nur mit `analysis_plan`-Block, Phase 2 als frischer Subagent mit
-      vollständigem three_compact-Output.
+      nur mit `analysis_plan`-Block (Block-Pflicht, siehe Carve-out oben),
+      Phase 2 als frischer Subagent mit vollständigem three_compact-Output.
 - [ ] `local_style_observed` ist gesetzt — entweder mit konsistenten
       Befunden oder `inconsistencies_found: [...]`-Liste.
 - [ ] `planned_files_to_change` (analysis_plan) ⊆ `write_allowed_files`.
