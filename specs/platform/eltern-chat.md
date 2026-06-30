@@ -1442,9 +1442,10 @@ antizipativ).
 **RATIFIZIERT 2026-06-22** (Refs #1075 — Mistral-Routing-Regression nach
 Anbieter-Wechsel zeigte App-spezifische Trigger-Listen als zu eng).
 
-Skills, die eine Mini-App via Telegram-Inline-Button öffnen (heute vier
+Skills, die eine Mini-App via Telegram-Inline-Button öffnen (heute fünf
 Skills: `einkauf_zeigen` EZG, `hoerspiel_oeffnen` HOE,
-`routine_anpassen_oeffnen` RAO, `seiten_uebersicht` MAU — alle mit
+`routine_anpassen_oeffnen` RAO, `seiten_uebersicht` MAU,
+`wetter_regeln_oeffnen` WRO — alle mit
 `web_app_url`-Inline-Button im Tool-Result, TASK-10c Form (b)), teilen
 ein gemeinsames **Trigger-Vokabular**, damit das LLM die Familie
 geschlossen routet — auch über Anbieter-Wechsel hinweg. Das Vokabular
@@ -1486,7 +1487,7 @@ halluzinierten Markdown-Knöpfen im Antwort-Text (siehe EC-41). EC-40
 schließt diese Routing-Lücke **anbieter-unabhängig** über das
 Skill-Description-Vokabular — EC-12-konform.
 
-**Implementations-Pfad.** Tool-`description` der vier Skills (im
+**Implementations-Pfad.** Tool-`description` der fünf Skills (im
 Eltern-Chat-`tasks.py`-Aufruf via `build_catalog`, indirekt über
 `*_task.py:description=(…)`) trägt am Ende eine identische
 Disziplin-Klausel mit der App-spezifischen Achse-B-Liste. Welche
