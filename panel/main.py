@@ -28,6 +28,7 @@ import logging
 import os
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 
@@ -81,6 +82,10 @@ def configure(reg, registry_path=None, geraete_url=None, router_url=None):
 # Das Lock klammert nur den Schreib-Pfad — Lesen bleibt lock-frei (DCOMP-2).
 _write_lock = threading.Lock()
 
+# PREG-11: Default-Backoff-Folge für die Heal-on-Boot-Erreichbarkeits-Probe
+# (PREG-18). Summe ≈ 50 s Cap. Werte exakt aus Spec.
+_DEFAULT_HEAL_BOOT_BACKOFFS = [0.2, 1, 2, 5, 5, 5, 5, 5, 5, 5, 5, 5]
+
 
 # ============================================================
 #  Geräte-Validierung (PREG-7, GER-14) — der eine Cross-Component-Teil
@@ -123,6 +128,29 @@ def display_existiert(display_id):
 
 class _RouterUnreachable(Exception):
     """Der Router ist nicht erreichbar oder antwortet mit 5xx — PREG-16."""
+
+
+def router_reachable():
+    """Erreichbarkeits-Probe: antwortet der Router auf HTTP? (PREG-18)
+
+    Gibt True zurück, wenn der Router irgendeine HTTP-Antwort liefert — auch
+    4xx/5xx zählen als „Router ist oben". Gibt False zurück bei Verbindungs-
+    fehlern (Connection refused, Timeout, kein Route-to-Host), die bedeuten,
+    dass der Router noch nicht gestartet ist (transient).
+
+    Bewusst über HTTP, KEIN Python-Import des Routers (DCOMP-1). Als Funktion
+    auf Modulebene, damit Tests sie stubben können (PREG-12: ohne Netz).
+    """
+    base = runtime["router_url"].rstrip("/")
+    url = "%s/" % base
+    try:
+        with urllib.request.urlopen(url, timeout=5):
+            return True
+    except urllib.error.HTTPError:
+        # Jede HTTP-Fehlerantwort (4xx/5xx) bedeutet: Router ist oben.
+        return True
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
 
 
 def router_tiles_changed(display_id):
@@ -180,8 +208,8 @@ def router_panels_upsert(source_id, display_id):
         raise _RouterUnreachable(str(e)) from e
 
 
-def repair_heal_on_boot(panels):
-    """Repair-Lauf (PREG-17): blind idempotenter Upsert für alle Panels.
+def _do_repair_loop(panels):
+    """Innerer Repair-Lauf (PREG-17): blind idempotenter Upsert für alle Panels.
 
     Jede Panel-Instanz in `panels` wird unbedingt via ROU-29 an den Router
     geschrieben — kein Zurücklesen des Ist-Stands, kein Lese-Endpunkt (Nic-
@@ -189,6 +217,9 @@ def repair_heal_on_boot(panels):
     diese Instanz reconcile-pending (Warnung im Log) und der Lauf macht mit
     den übrigen WEITER — kein Abbruch beim ersten Fehler (PREG-17 Robustheit).
     Repair ist nicht-fatal: Fehler blockieren den Service-Start nicht.
+
+    Separiert von repair_heal_on_boot(), damit der Probe/Retry-Wrapper (PREG-18)
+    und die Upsert-Schleife (PREG-17) unabhängig testbar sind.
     """
     ok = 0
     pending = 0
@@ -205,6 +236,69 @@ def repair_heal_on_boot(panels):
     logging.info(
         "Heal-on-Boot abgeschlossen: %d geheilt, %d reconcile-pending (PREG-17)",
         ok, pending)
+
+
+def repair_heal_on_boot(panels, backoffs=None, _sleep=None, _probe=None):
+    """Repair-Lauf (PREG-17) mit Boot-Robustheit gegen nicht-erreichbaren Router (PREG-18).
+
+    Ist der Router beim Start nicht erreichbar, pollt diese Funktion die
+    Erreichbarkeit mit den konfigurierten Backoff-Intervallen (PREG-11) und
+    führt den Repair aus, sobald der Router antwortet. Läuft der Cap ab ohne
+    Antwort, werden alle Panels als reconcile-pending geloggt und der Service
+    fährt nicht-fatal fort — der Start wird nie blockiert (PREG-18).
+
+    Leere Backoff-Folge (`backoffs=[]`) = genau ein Versuch ohne Probe/Retry
+    (Verhalten wie vor PREG-18, PREG-11: leere Folge = genau ein Versuch).
+
+    `_sleep` und `_probe` sind injizierbar, damit Tests keinen Wall-Clock-sleep
+    brauchen (PREG-12 / PREG-18: injizierbarer Sleep/Clock, keine echte Wartezeit
+    im Test).
+
+    Die Unterscheidung transient (Router noch nicht oben → Backoff/Retry des
+    GANZEN Laufs) vs einzelner ROU-29-Upsert-Fehler (Instanz reconcile-pending,
+    Lauf macht weiter) ist in _do_repair_loop() abgebildet — PREG-17 unverändert.
+    """
+    if backoffs is None:
+        backoffs = _DEFAULT_HEAL_BOOT_BACKOFFS
+    if _sleep is None:
+        _sleep = time.sleep
+    if _probe is None:
+        _probe = router_reachable
+
+    # Leere Folge = genau ein Versuch, kein Probe/Retry (PREG-11).
+    if not backoffs:
+        _do_repair_loop(panels)
+        return
+
+    # Erreichbarkeits-Probe mit beschränktem Backoff (PREG-18).
+    # Probe, bei Fehlschlag: sleep(backoffs[i]) + nächste Probe; nach Cap → nicht-fatal.
+    remaining = list(backoffs)
+    while True:
+        if _probe():
+            # Router erreichbar → Repair-Lauf ausführen (PREG-17).
+            _do_repair_loop(panels)
+            return
+        if not remaining:
+            # Backoff-Cap abgelaufen → nicht-fatal fortfahren (PREG-18).
+            logging.warning(
+                "Heal-on-Boot: Router nicht erreichbar nach Backoff-Cap — "
+                "%d Panel(s) reconcile-pending, Service fährt nicht-fatal fort (PREG-18)",
+                len(panels))
+            for p in panels:
+                logging.warning(
+                    "Heal-on-Boot: reconcile-pending für panel_id=%r source_id=%r"
+                    " — Router nicht erreichbar, Panel in panels.json gültig (PREG-17)",
+                    p.panel_id, p.source_id)
+            logging.info(
+                "Heal-on-Boot abgeschlossen: 0 geheilt, %d reconcile-pending (PREG-17)",
+                len(panels))
+            return
+        wait = remaining.pop(0)
+        logging.info(
+            "Heal-on-Boot: Router noch nicht erreichbar — warte %.1fs "
+            "(%d weitere Versuche, PREG-18)",
+            wait, len(remaining))
+        _sleep(wait)
 
 
 # ============================================================
@@ -576,6 +670,25 @@ RUNTIME_SCHEMA = {
 }
 
 
+def _parse_heal_boot_backoffs(raw):
+    """Parst die HEAL_BOOT_BACKOFFS-Konfiguration (PREG-11/PREG-18).
+
+    Erwartet eine kommagetrennte Folge von Sekunden-Zahlen (z. B. „0.2,1,2,5").
+    Leerer String → leere Liste (genau ein Versuch, kein Retry — PREG-11).
+    Parsefehler → Warnung + Default-Werte statt Absturz (defensiv).
+    """
+    stripped = raw.strip()
+    if not stripped:
+        return []
+    try:
+        return [float(s.strip()) for s in stripped.split(",") if s.strip()]
+    except ValueError:
+        logging.warning(
+            "HEAL_BOOT_BACKOFFS=%r nicht parsebar — Default-Werte werden verwendet",
+            raw)
+        return list(_DEFAULT_HEAL_BOOT_BACKOFFS)
+
+
 def parse_args(argv):
     p = argparse.ArgumentParser(description="XBuddy Panel-Registry V1")
     # PREG-11: Pfad zur Registry-Datei kann nicht in der Datei selbst stehen.
@@ -585,6 +698,10 @@ def parse_args(argv):
                    help="Origin der Geräte-Registry (PREG-7/11)")
     p.add_argument("--router-url", dest="router_url",
                    help="Origin des Routers für Forward/Repair via ROU-29 (PREG-11/16/17)")
+    p.add_argument("--heal-boot-backoffs", dest="heal_boot_backoffs",
+                   help="Kommagetrennte Backoff-Intervalle (Sekunden) für die "
+                        "Heal-on-Boot-Erreichbarkeits-Probe (PREG-11/18). "
+                        "Leer = genau ein Versuch, kein Retry.")
     p.add_argument("--host", help="Bind-Host")
     p.add_argument("--port", type=int, help="Bind-Port")
     p.add_argument("--log-level", dest="log_level",
@@ -601,7 +718,7 @@ def resolved_config(args):
     (Registry-Pfad, PREG-11), `geraete_url` (Geräte-Registry-Origin, PREG-7/11)
     und `router_url` (Router-Origin, PREG-11/16/17) bleiben außerhalb des
     Loader-Schemas — analog geraete/main.py. ENV-Overrides decken den Dev-Override
-    ab (`PANELS_REGISTRY`, `GERAETE_URL`, `ROUTER_URL`).
+    ab (`PANELS_REGISTRY`, `GERAETE_URL`, `ROUTER_URL`, `HEAL_BOOT_BACKOFFS`).
     """
     cfg = configloader.load(component="panel", schema=RUNTIME_SCHEMA)
     cfg["panels"] = os.environ.get("PANELS_REGISTRY", args.panels)
@@ -611,6 +728,17 @@ def resolved_config(args):
     cfg["router_url"] = (
         args.router_url
         or os.environ.get("ROUTER_URL", "http://127.0.0.1:5000"))
+    # PREG-11/PREG-18: Backoff-Folge (CLI > ENV > Default).
+    # Nur wenn CLI-Arg oder ENV explizit gesetzt → parsen; sonst Default.
+    _heal_raw = args.heal_boot_backoffs
+    if _heal_raw is None:
+        _heal_env = os.environ.get("HEAL_BOOT_BACKOFFS")
+        if _heal_env is not None:
+            cfg["heal_boot_backoffs"] = _parse_heal_boot_backoffs(_heal_env)
+        else:
+            cfg["heal_boot_backoffs"] = list(_DEFAULT_HEAL_BOOT_BACKOFFS)
+    else:
+        cfg["heal_boot_backoffs"] = _parse_heal_boot_backoffs(_heal_raw)
     if args.host:      cfg["listen_host"] = args.host
     if args.port:      cfg["listen_port"] = args.port
     if args.log_level: cfg["log_level"]   = args.log_level
@@ -626,15 +754,16 @@ def main(argv=None):
     configure(reg, registry_path=cfg["panels"],
               geraete_url=cfg["geraete_url"], router_url=cfg["router_url"])
 
-    # PREG-17 Heal-on-Boot: einmaliger Repair-Lauf VOR dem Annehmen von
-    # Anfragen. Schreibt jeden panels.json-Eintrag blind via ROU-29 (idempotenter
-    # Upsert — kein Zurücklesen des Router-Stands, kein Lese-Endpunkt). Fehler
-    # eines einzelnen Aufrufs sind nicht-fatal: Instanz bleibt reconcile-pending,
-    # der Lauf läuft über die übrigen Instanzen weiter. Service-Start darf nicht
-    # an einem unerreichbaren Router hängenbleiben (PREG-17 Robustheit).
+    # PREG-17/PREG-18 Heal-on-Boot: einmaliger Repair-Lauf VOR dem Annehmen
+    # von Anfragen. PREG-18 macht den Lauf robust gegen noch-nicht-gestarteten
+    # Router: pollt mit Backoff bis Router antwortet, bei Cap-Ablauf nicht-fatal.
+    # Schreibt jeden panels.json-Eintrag blind via ROU-29 (idempotenter Upsert —
+    # kein Zurücklesen des Router-Stands, kein Lese-Endpunkt, Nic-Entscheid 2026-
+    # 06-04). Einzelne Upsert-Fehler sind nicht-fatal (PREG-17 Robustheit).
     panels_beim_start = reg.list_all()
     if panels_beim_start:
-        repair_heal_on_boot(panels_beim_start)
+        repair_heal_on_boot(panels_beim_start,
+                            backoffs=cfg["heal_boot_backoffs"])
     else:
         logging.info("Heal-on-Boot: keine Panels in panels.json — kein Repair nötig")
 
