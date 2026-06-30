@@ -409,11 +409,11 @@ def test_shell_pwa_ac2_html_registriert_sw(client):
     assert "/shell/" in body, "SHELL-PWA AC2: SW-Scope /shell/ muss in HTML erscheinen"
 
 
-def test_shell_pwa_ac3_kachel_scale_css(client):
-    """SHELL-PWA AC3: heim-shell.css enthaelt CSS-Scale-Mechanik fuer Rail-Iframe (~50%-Optik).
+def test_shell_pwa_ac3_rail_iframe_nativ(client):
+    """T1224/AC1: heim-shell.css enthaelt KEINEN scale(0.5)/200%-Hack mehr.
 
-    Belegt: transform:scale(0.5) + transform-origin:top left auf .rail iframe
-    (shell-seitig, Panel unangetastet — stop_rule panel_untouched).
+    Rail-Iframe rendert nativ (width:100%; height:100%) — Panel-Inhalt skaliert
+    jetzt kachel-relativ via Container-Queries in controller/app-panel/style.css.
     """
     css_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -421,14 +421,26 @@ def test_shell_pwa_ac3_kachel_scale_css(client):
     )
     with open(css_path, encoding="utf-8") as fh:
         css = fh.read()
-    assert "scale(0.5)" in css, (
-        "SHELL-PWA AC3: CSS muss 'scale(0.5)' enthalten (Kachel-Scaling shell-seitig)"
+    assert "scale(0.5)" not in css, (
+        "T1224/AC1: scale(0.5)-Hack muss aus heim-shell.css entfernt sein"
     )
-    assert "200%" in css, (
-        "SHELL-PWA AC3: Rail-Iframe muss width:200%/height:200% fuer Scaling-Basis tragen"
+    assert "200%" not in css, (
+        "T1224/AC1: 200%-Ueberdimensionierung muss aus heim-shell.css entfernt sein"
     )
-    assert "transform-origin" in css, (
-        "SHELL-PWA AC3: transform-origin muss gesetzt sein (top left fuer korrekte Ausrichtung)"
+    # Rail-Iframe rendert nativ
+    assert ".rail iframe" in css, ".rail iframe-Regel muss weiter vorhanden sein"
+    # Container-Query in style.css (AC2)
+    style_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "controller", "app-panel", "style.css",
+    )
+    with open(style_path, encoding="utf-8") as fh:
+        style = fh.read()
+    assert "container-type" in style, (
+        "T1224/AC2: container-type muss in controller/app-panel/style.css gesetzt sein"
+    )
+    assert "cqmin" in style, (
+        "T1224/AC2: cqmin-Einheit muss in style.css fuer kachel-relatives Scaling verwendet werden"
     )
 
 
