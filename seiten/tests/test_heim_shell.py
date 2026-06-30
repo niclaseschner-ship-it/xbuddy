@@ -445,10 +445,16 @@ def test_shell_pwa_ac3_rail_iframe_nativ(client):
 
 
 def test_shell_pwa_ac3_panel_unangetastet():
-    """SHELL-PWA AC3 stop_rule panel_untouched: controller/app-panel/app.js unveraendert."""
+    """SHELL-PWA AC3 stop_rule: controller/app-panel/app.js (PANEL-12-Grid/JS) unveraendert.
+
+    Bewacht wird ausschliesslich app.js — die JS-seitige Grid-Geometrie darf nicht
+    angefasst werden. Panel-CSS (style.css) ist fuer die kachel-relative
+    Inhalts-Skalierung (Container-Query / cqmin) ausdruecklich erlaubt (T1224,
+    Nic-angewiesen 2026-06-30).
+    """
     import subprocess
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    # Git-Status pruefen: Datei darf keine ungestaged/staged Aenderungen haben.
+    # Git-Status pruefen: app.js darf keine ungestaged/staged Aenderungen haben.
     result = subprocess.run(
         ["git", "diff", "--name-only", "HEAD", "--", "controller/app-panel/app.js"],
         capture_output=True, text=True,
@@ -457,5 +463,5 @@ def test_shell_pwa_ac3_panel_unangetastet():
     changed = result.stdout.strip()
     assert changed == "", (
         "SHELL-PWA AC3 stop_rule: controller/app-panel/app.js darf NICHT geaendert sein "
-        "(Panel unangetastet — Kachel-Fix ist shell-seitig)"
+        "(PANEL-12-Grid/JS unveraendert — nur style.css fuer Container-Query erlaubt)"
     )

@@ -203,13 +203,18 @@ Android). Der Mantel spiegelt das essen-einkauf-Muster 1:1 (ESSEN-33..35).
   Flask-Route), nicht von dieser Asset-Route.
 - Test-Naht: `runtime["shell_asset_dir"]` überschreibbar (analog einkauf).
 
-**Kachel-Scaling** (`seiten/static/heim-shell.css`, SHELL-PWA AC3):
-- `.rail iframe` erhält `width:200%; height:200%; transform:scale(0.5);
-  transform-origin:top left`.
-- Mechanik: Panel rechnet Grid-Geometrie (PANEL-12) auf 560px Breite (2× Rail),
-  CSS-transform skaliert den Paint auf die sichtbaren 280px zurück → tiles
-  erscheinen ~50% kleiner als bei 100% Zoom. Panel-Code bleibt **unverändert**
-  (stop_rule panel_untouched; `controller/app-panel/**` nicht angefasst).
+**Kachel-Scaling** (`seiten/static/heim-shell.css` + `controller/app-panel/style.css`, SHELL-PWA AC3):
+- `.rail iframe` rendert **nativ** (`width:100%; height:100%`) — der alte
+  `scale(0.5)/200%`-Hack ist entfernt (Nic 2026-06-30, T1224).
+- Kachel-Inhalt (Icon + Label) skaliert **kachel-relativ** via Container-Query:
+  `.tile { container-type: size }` in `controller/app-panel/style.css`; Icon-/
+  Label-Größe in `cqmin`-Einheiten — robust skalierend je verfügbarem Platz,
+  unabhängig vom Viewport.
+- `controller/app-panel/app.js` (PANEL-12-Grid-Geometrie/JS) bleibt **unverändert**
+  (stop_rule gilt weiter für app.js). Panel-CSS (`style.css`) darf für die
+  kachel-relative Inhalts-Skalierung angefasst werden — die frühere Schranke
+  „`controller/app-panel/**` unberührt" gilt nur noch für app.js, nicht style.css
+  (Nic-angewiesen T1224).
 
 Test-Anker:
   seiten/tests/test_heim_shell.py::test_shell_pwa_ac1_icons_nicht_leer
@@ -219,7 +224,7 @@ Test-Anker:
   seiten/tests/test_heim_shell.py::test_shell_pwa_ac2_sw_build_id_ersetzt
   seiten/tests/test_heim_shell.py::test_shell_pwa_ac2_icon_routes
   seiten/tests/test_heim_shell.py::test_shell_pwa_ac2_html_registriert_sw
-  seiten/tests/test_heim_shell.py::test_shell_pwa_ac3_kachel_scale_css
+  seiten/tests/test_heim_shell.py::test_shell_pwa_ac3_rail_iframe_nativ
   seiten/tests/test_heim_shell.py::test_shell_pwa_ac3_panel_unangetastet
 
 ---
