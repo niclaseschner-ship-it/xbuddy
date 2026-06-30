@@ -12,6 +12,7 @@ import json
 import os
 import sys
 import threading
+import urllib.error
 
 import pytest
 
@@ -29,6 +30,7 @@ from panel import registry as registry_mod  # noqa: E402
 # `display_existiert` und `router_panels_upsert` ersetzen.
 _ECHTES_display_existiert = panel_main.display_existiert
 _ECHTES_router_panels_upsert = panel_main.router_panels_upsert
+_ECHTES_router_reachable = panel_main.router_reachable
 
 
 # ============================================================
@@ -273,6 +275,58 @@ def test_PREG_7_validates_against_geraete_not_known_displays(monkeypatch):
     assert _ECHTES_display_existiert("pi-display-flur-01") is True
     assert aufgerufene_urls == [
         "http://127.0.0.1:5040/api/v1/geraete/pi-display-flur-01"]
+
+
+# ============================================================
+#  PREG-18 — router_reachable() HTTPError/URLError-Semantik (PREG-18)
+# ============================================================
+
+def test_PREG_18_router_reachable_ok_response_returns_true(monkeypatch):
+    """urlopen liefert OK (2xx, Context-Manager) → router_reachable() == True."""
+    class FakeResp:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    def fake_urlopen(url, timeout=None):
+        return FakeResp()
+
+    monkeypatch.setattr(panel_main.urllib.request, "urlopen", fake_urlopen)
+    panel_main.runtime["router_url"] = "http://127.0.0.1:5000"
+    assert _ECHTES_router_reachable() is True
+
+
+def test_PREG_18_router_reachable_http_error_returns_true(monkeypatch):
+    """urlopen wirft HTTPError (4xx/5xx) → router_reachable() == True
+    (Router antwortet, bedeutet: oben)."""
+    def fake_urlopen(url, timeout=None):
+        raise urllib.error.HTTPError(url, 404, "Not Found", {}, None)
+
+    monkeypatch.setattr(panel_main.urllib.request, "urlopen", fake_urlopen)
+    panel_main.runtime["router_url"] = "http://127.0.0.1:5000"
+    assert _ECHTES_router_reachable() is True
+
+
+def test_PREG_18_router_reachable_urlerror_returns_false(monkeypatch):
+    """urlopen wirft URLError (Verbindungsfehler wie Connection refused)
+    → router_reachable() == False (transient, Router unten)."""
+    def fake_urlopen(url, timeout=None):
+        raise urllib.error.URLError("Connection refused")
+
+    monkeypatch.setattr(panel_main.urllib.request, "urlopen", fake_urlopen)
+    panel_main.runtime["router_url"] = "http://127.0.0.1:5000"
+    assert _ECHTES_router_reachable() is False
+
+
+def test_PREG_18_router_reachable_oserror_returns_false(monkeypatch):
+    """urlopen wirft OSError (low-level Connection refused / Timeout)
+    → router_reachable() == False (transient)."""
+    def fake_urlopen(url, timeout=None):
+        raise OSError("Connection refused")
+
+    monkeypatch.setattr(panel_main.urllib.request, "urlopen", fake_urlopen)
+    panel_main.runtime["router_url"] = "http://127.0.0.1:5000"
+    assert _ECHTES_router_reachable() is False
 
 
 # ============================================================
