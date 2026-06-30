@@ -257,6 +257,21 @@
       color: var(--ink-soft);
       font-style: italic;
     }
+    /* SHELL-10: Shell-URL-Block unter Panel-Karte in Hero-Paar-Boxen (SREG-12-Form) */
+    .shell-url-block {
+      margin-top: 6px;
+      padding: 6px 8px;
+      border: 1px solid var(--hero-rule);
+      border-radius: 6px;
+      background: var(--hero-bg);
+    }
+    .shell-url-titel {
+      font-size: 0.8rem;
+      color: var(--ink-soft);
+      font-weight: 600;
+      margin-bottom: 4px;
+      display: block;
+    }
     .toast {
       position: fixed;
       bottom: 30px;
@@ -359,6 +374,28 @@
               {% for pk in paar.panels %}
                 <div class="panel-karte-wrap">
                   {{ render_karte(pk.panel) }}
+                  {# SHELL-10: Shell-URL je panel_id in SREG-12-Form (zwei kopierbare URLs) #}
+                  {% if pk.shell_urls and (pk.shell_urls.heim or pk.shell_urls.tailscale) %}
+                  <div class="shell-url-block">
+                    <span class="shell-url-titel">&#127968; Heim-Shell</span>
+                    <div class="urls">
+                      {% if pk.shell_urls.heim %}
+                      <div class="url-row">
+                        <span class="url-label">Heim:</span>
+                        <a class="url-link" href="{{ pk.shell_urls.heim }}">{{ pk.shell_urls.heim }}</a>
+                        <button type="button" class="copy-btn" data-copy="{{ pk.shell_urls.heim }}">&#128203;</button>
+                      </div>
+                      {% endif %}
+                      {% if pk.shell_urls.tailscale %}
+                      <div class="url-row">
+                        <span class="url-label">Tailscale:</span>
+                        <a class="url-link" href="{{ pk.shell_urls.tailscale }}">{{ pk.shell_urls.tailscale }}</a>
+                        <button type="button" class="copy-btn" data-copy="{{ pk.shell_urls.tailscale }}">&#128203;</button>
+                      </div>
+                      {% endif %}
+                    </div>
+                  </div>
+                  {% endif %}
                   {% if pk.editor %}
                     <div class="editor-anhang" data-karten-typ="{{ pk.editor.typ }}" data-suchtext="{{ kartensuchtext(pk.editor) }}">
                       <div class="editor-titel">✏ Bearbeiten</div>
