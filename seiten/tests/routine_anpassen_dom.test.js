@@ -1,11 +1,24 @@
 /**
  * routine_anpassen_dom.test.js — ROUTINE-20/21/27 Verhaltens-Proben.
  *
- * 10 Tests via node --test, manuelle DOM-Attrappe, kein jsdom, kein npm.
+ * 13 Tests via node --test, manuelle DOM-Attrappe, kein jsdom, kein npm.
  *
  * Exportierte Symbole aus routine-anpassen.js:
  *   esc, ANKER_AUFSTEHEN_ID, ANKER_ANZIEHEN_ID, ANKER_LOSGEHEN_ID, ZEIT_ANKER
  *   _bauZeitBlock, _vorlaufUhrzeit, _labelMitZeit  (ROUTINE-27)
+ *   oeffneHinzufuegenSheet, _testSetPickerSelectedId  (AC2 Handler-Kette)
+ *
+ * Tests 11-13 — ROUTINE-27 AC2 Handler-Kette:
+ *   Treibt den ECHTEN #sheet-anlegen-Click mit typAuswahl=anker/vorlauf/punkt,
+ *   fängt den postItem-Payload ab und asserts das zeit-Feld je Typ.
+ *
+ *   DOM-Stub-Besonderheit: inhalt.querySelector('#id') schlägt in _elementsById
+ *   nach — Elemente aus innerHTML-String sind dort NICHT automatisch registriert.
+ *   Deshalb müssen alle von oeffneHinzufuegenSheet() ohne Null-Guard abgefragten
+ *   Elemente vorab über doc._registerEl() eingetragen werden. Ohne diese
+ *   Vorab-Registrierung bleibt typAuswahl='punkt' (Toggle-Handler nie gebunden)
+ *   und kein zeit-Block landet im POST-Payload — diese Tests wären VOR dem Fix
+ *   (fehlende Exports + fehlende Registrierung) rot gewesen. (Closes #1198)
  */
 
 "use strict";
@@ -54,7 +67,52 @@ const {
   _bauZeitBlock,
   _vorlaufUhrzeit,
   _labelMitZeit,
+  // AC2 Handler-Kette
+  oeffneHinzufuegenSheet,
+  _testSetPickerSelectedId,
 } = routine;
+
+// ── Hilfsfunktion für Handler-Ketten-Tests ────────────────────────────────────
+
+/**
+ * Registriert frische DOM-Elemente für einen handler-getriebenen Sheet-Test.
+ *
+ * Hintergrund: Der DOM-Stub sucht via querySelector('#id') in _elementsById —
+ * Elemente aus inhalt.innerHTML sind dort NICHT automatisch eingetragen. Ohne
+ * Vorab-Registrierung gibt jeder querySelector() in oeffneHinzufuegenSheet()
+ * null zurück. Elemente ohne Null-Guard würden TypeError werfen; Elemente mit
+ * Null-Guard (z.B. Toggle-Buttons im forEach) werden still übersprungen → ihre
+ * Click-Handler werden NIE gebunden → typAuswahl bleibt 'punkt' → kein zeit-Block.
+ *
+ * Diese Funktion meldet alle nötigen Elemente frisch an, damit oeffneHinzufuegenSheet()
+ * vollständig durchläuft und die Toggle-Handler korrekt bindet.
+ *
+ * @param {object} doc - makeDom()-Instanz mit _registerEl()
+ * @returns {object}   - Map id → Element für direkte Manipulation im Test
+ */
+function _registriereSheetElemente(doc) {
+  const els = {};
+  // Elemente OHNE Null-Guard in oeffneHinzufuegenSheet: müssen registriert sein,
+  // sonst TypeError bei querySelector(...).addEventListener(...)
+  const ohneGuard = [
+    'tog-default', 'tog-einmalig',
+    'sheet-label', 'picker-suche',
+    'sheet-abbrechen', 'sheet-anlegen',
+  ];
+  // Toggle-Typ-Buttons haben einen forEach-Null-Guard — aber für den Test-Klick
+  // müssen sie ebenfalls registriert sein, damit der Handler gebunden wird.
+  const toggleTyp = ['tog-typ-punkt', 'tog-typ-anker', 'tog-typ-vorlauf'];
+
+  for (const id of [...ohneGuard, ...toggleTyp]) {
+    const el = doc.createElement('button');
+    el.id = id;
+    el.value = '';        // Input-ähnliche Elemente: value-Property für label/picker
+    el.disabled = false;
+    doc._registerEl(id, el);
+    els[id] = el;
+  }
+  return els;
+}
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -336,4 +394,152 @@ test("ROUTINE-27 AC3 Render: Vorlauf-Ableitung + locked-Anker-Hinweis in HTML", 
   const ohneZeitHtml = _labelMitZeit({ id: 'x', label: 'Punkt', piktogramm: '9999', quelle: 'default' });
   assert.ok(ohneZeitHtml.includes('item-label'), "Ohne zeit: item-label span");
   assert.ok(!ohneZeitHtml.includes('item-zeit-badge'), "Ohne zeit: kein zeit-Badge");
+});
+
+// ── ROUTINE-27 AC2 — Handler-Ketten-Tests (Closes #1198) ─────────────────────
+
+/**
+ * Test 11 — ROUTINE-27 AC2 Handler-Kette Anker:
+ * Simuliert Toggle-Klick #tog-typ-anker + #sheet-anlegen-Click, fängt den
+ * postItem-Payload ab und prüft dass zeit:{typ:'anker',...} enthalten ist.
+ *
+ * Wäre VOR dem Fix rot: ohne Export von oeffneHinzufuegenSheet und ohne
+ * Vorab-Registrierung der Toggle-Elemente bleibt typAuswahl='punkt',
+ * kein zeit-Block → POST-Payload ohne zeit-Feld.
+ */
+test("ROUTINE-27 AC2 Handler-Kette Anker: Toggle→Anlegen-Click → POST-Payload hat zeit:{typ:'anker',...}", async () => {
+  // Frische Elemente registrieren (verhindert TypeError + ermöglicht Toggle-Binding)
+  const els = _registriereSheetElemente(doc2);
+  els['sheet-label'].value = 'Test-Anker';
+
+  // Lokaler fetch-Spy: fängt POST + nachfolgende GET-Aufrufe (ladeUndRendere) auf
+  const allCalls = [];
+  const prevFetch = global.fetch;
+  global.fetch = async (url, opts = {}) => {
+    allCalls.push({ url, method: opts.method || 'GET', body: opts.body });
+    const json = url.includes('/config')
+      ? {}
+      : { id: 'neu-1', default: [], einmalig_heute: [] };
+    return { ok: true, status: 200, json: async () => json, text: async () => '{}' };
+  };
+
+  try {
+    // Sheet öffnen: bindet alle Handler an die pre-registrierten Elemente
+    oeffneHinzufuegenSheet();
+
+    // Icon-Auswahl simulieren (setzt _pickerSelectedId, aktiviert Anlegen-Button)
+    _testSetPickerSelectedId('8152');
+
+    // Anker-Toggle klicken → typAuswahl wird auf 'anker' gesetzt
+    els['tog-typ-anker'].click();
+
+    // Anlegen klicken → startet den async Handler
+    els['sheet-anlegen'].click();
+
+    // Async-Handler abwarten: Microtask-Queue mehrfach leeren
+    // (POST → resp → schliesseSheet → ladeUndRendere → GET×2 → rendereInhalt)
+    for (let i = 0; i < 8; i++) {
+      await new Promise(resolve => setImmediate(resolve));
+    }
+
+    const postCall = allCalls.find(c => c.method === 'POST');
+    assert.ok(postCall, "mindestens 1 POST /api/v1/routine/items abgesetzt");
+    assert.ok(postCall.url.includes('/api/v1/routine/items'), "POST-URL korrekt");
+
+    const body = JSON.parse(postCall.body);
+    assert.ok('zeit' in body, "POST-Body enthält zeit-Feld (Anker-Typ muss zeit tragen)");
+    assert.equal(body.zeit.typ,    'anker', "zeit.typ: anker");
+    assert.equal(body.zeit.locked, false,   "zeit.locked: false");
+    assert.ok(body.zeit.uhrzeit,           "zeit.uhrzeit vorhanden");
+
+  } finally {
+    global.fetch = prevFetch;
+  }
+});
+
+/**
+ * Test 12 — ROUTINE-27 AC2 Handler-Kette Vorlauf:
+ * Simuliert Toggle-Klick #tog-typ-vorlauf + #sheet-anlegen-Click, prüft
+ * dass zeit:{typ:'vorlauf', minuten:N, bezug:'vorheriger_anker'} im Payload landet.
+ */
+test("ROUTINE-27 AC2 Handler-Kette Vorlauf: Toggle→Anlegen-Click → POST-Payload hat zeit:{typ:'vorlauf',...}", async () => {
+  const els = _registriereSheetElemente(doc2);
+  els['sheet-label'].value = 'Test-Vorlauf';
+
+  const allCalls = [];
+  const prevFetch = global.fetch;
+  global.fetch = async (url, opts = {}) => {
+    allCalls.push({ url, method: opts.method || 'GET', body: opts.body });
+    const json = url.includes('/config')
+      ? {}
+      : { id: 'neu-2', default: [], einmalig_heute: [] };
+    return { ok: true, status: 200, json: async () => json, text: async () => '{}' };
+  };
+
+  try {
+    oeffneHinzufuegenSheet();
+    _testSetPickerSelectedId('6627');
+
+    // Vorlauf-Toggle klicken → typAuswahl = 'vorlauf'
+    els['tog-typ-vorlauf'].click();
+
+    els['sheet-anlegen'].click();
+
+    for (let i = 0; i < 8; i++) {
+      await new Promise(resolve => setImmediate(resolve));
+    }
+
+    const postCall = allCalls.find(c => c.method === 'POST');
+    assert.ok(postCall, "mindestens 1 POST abgesetzt");
+
+    const body = JSON.parse(postCall.body);
+    assert.ok('zeit' in body,                        "POST-Body enthält zeit-Feld (Vorlauf-Typ muss zeit tragen)");
+    assert.equal(body.zeit.typ,    'vorlauf',         "zeit.typ: vorlauf");
+    assert.ok(typeof body.zeit.minuten === 'number',  "zeit.minuten ist Zahl");
+    assert.ok(body.zeit.minuten >= 5,                 "zeit.minuten >= 5 (5er-Schritte)");
+    assert.equal(body.zeit.bezug, 'vorheriger_anker', "zeit.bezug: vorheriger_anker");
+
+  } finally {
+    global.fetch = prevFetch;
+  }
+});
+
+/**
+ * Test 13 — ROUTINE-27 AC2 Handler-Kette Punkt (Default):
+ * Ohne Toggle-Klick bleibt typAuswahl='punkt' → kein zeit-Block → kein zeit-Feld im POST-Payload.
+ */
+test("ROUTINE-27 AC2 Handler-Kette Punkt: kein Toggle-Klick → POST-Payload hat KEIN zeit-Feld", async () => {
+  const els = _registriereSheetElemente(doc2);
+  els['sheet-label'].value = 'Test-Punkt';
+
+  const allCalls = [];
+  const prevFetch = global.fetch;
+  global.fetch = async (url, opts = {}) => {
+    allCalls.push({ url, method: opts.method || 'GET', body: opts.body });
+    const json = url.includes('/config')
+      ? {}
+      : { id: 'neu-3', default: [], einmalig_heute: [] };
+    return { ok: true, status: 200, json: async () => json, text: async () => '{}' };
+  };
+
+  try {
+    oeffneHinzufuegenSheet();
+    _testSetPickerSelectedId('9999');
+
+    // Kein Toggle-Klick → typAuswahl bleibt 'punkt' (Default)
+    els['sheet-anlegen'].click();
+
+    for (let i = 0; i < 8; i++) {
+      await new Promise(resolve => setImmediate(resolve));
+    }
+
+    const postCall = allCalls.find(c => c.method === 'POST');
+    assert.ok(postCall, "mindestens 1 POST abgesetzt");
+
+    const body = JSON.parse(postCall.body);
+    assert.ok(!('zeit' in body), "Punkt: KEIN zeit-Feld im POST-Body (Punkt = kein zeit-Block)");
+
+  } finally {
+    global.fetch = prevFetch;
+  }
 });
