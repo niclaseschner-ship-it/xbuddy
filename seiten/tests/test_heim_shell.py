@@ -240,13 +240,13 @@ def test_shell10_url_in_uebersicht(monkeypatch, tmp_path):
 
 
 def test_shell10_manifest_route(client):
-    """SHELL-10: GET /shell/<panel_id>/manifest.json liefert gueltiges PWA-Manifest."""
+    """SHELL-10 / SHELL-PWA: GET /shell/<panel_id>/manifest.json liefert gueltiges PWA-Manifest."""
     resp = client.get("/shell/" + PANEL_ID + "/manifest.json")
     assert resp.status_code == 200
     assert "manifest+json" in resp.headers.get("Content-Type", "")
     data = json.loads(resp.get_data(as_text=True))
     assert data["start_url"] == "/shell/" + PANEL_ID
-    assert data["display"] == "standalone"
+    assert data["display"] == "fullscreen", "SHELL-PWA AC1: display muss 'fullscreen' sein"
     assert PANEL_ID in data["name"]
 
 
@@ -316,4 +316,134 @@ def test_shell11_shell_fullscreen_script(client):
     )
     assert "tryFullscreen" in body, (
         "Shell-HTML muss tryFullscreen-Funktion enthalten (SHELL-11)"
+    )
+
+
+# ============================================================
+#  test_shell_pwa_ac* — SHELL-PWA (AC1..AC4, #1212)
+# ============================================================
+
+def test_shell_pwa_ac1_icons_nicht_leer(client):
+    """SHELL-PWA AC1: Manifest icons-Array ist nicht leer + enthaelt 192/512/maskable."""
+    resp = client.get("/shell/" + PANEL_ID + "/manifest.json")
+    assert resp.status_code == 200
+    data = json.loads(resp.get_data(as_text=True))
+    icons = data.get("icons", [])
+    assert len(icons) >= 3, "SHELL-PWA AC1: Manifest muss mindestens 3 Icons (192/512/maskable) tragen"
+    sizes = {i["sizes"] for i in icons}
+    assert "192x192" in sizes, "SHELL-PWA AC1: icon-192 fehlt"
+    assert "512x512" in sizes, "SHELL-PWA AC1: icon-512 fehlt"
+    purposes = {i.get("purpose", "any") for i in icons}
+    assert "maskable" in purposes, "SHELL-PWA AC1: maskable-Icon fehlt"
+
+
+def test_shell_pwa_ac1_display_fullscreen(client):
+    """SHELL-PWA AC1: Manifest.display ist 'fullscreen' (nicht standalone)."""
+    resp = client.get("/shell/" + PANEL_ID + "/manifest.json")
+    data = json.loads(resp.get_data(as_text=True))
+    assert data["display"] == "fullscreen", (
+        "SHELL-PWA AC1: display muss 'fullscreen' sein fuer WebAPK-Vollbild"
+    )
+
+
+def test_shell_pwa_ac1_scope(client):
+    """SHELL-PWA AC1: Manifest enthaelt scope /shell/."""
+    resp = client.get("/shell/" + PANEL_ID + "/manifest.json")
+    data = json.loads(resp.get_data(as_text=True))
+    assert "scope" in data, "SHELL-PWA AC1: Manifest muss scope-Feld tragen"
+    assert data["scope"] == "/shell/", "SHELL-PWA AC1: scope muss /shell/ sein"
+
+
+def test_shell_pwa_ac2_sw_route(client):
+    """SHELL-PWA AC2: GET /shell/<panel_id>/sw.js liefert JavaScript (Content-Type + Service-Worker-Allowed)."""
+    resp = client.get("/shell/" + PANEL_ID + "/sw.js")
+    assert resp.status_code == 200, "SHELL-PWA AC2: sw.js-Route muss 200 liefern"
+    assert "javascript" in resp.headers.get("Content-Type", ""), (
+        "SHELL-PWA AC2: sw.js muss als application/javascript ausgeliefert werden"
+    )
+    allowed = resp.headers.get("Service-Worker-Allowed", "")
+    assert "/shell/" in allowed, (
+        "SHELL-PWA AC2: Service-Worker-Allowed: /shell/ Header muss gesetzt sein "
+        "(erlaubt Scope jenseits des SW-Datei-Pfads)"
+    )
+
+
+def test_shell_pwa_ac2_sw_build_id_ersetzt(client):
+    """SHELL-PWA AC2: __BUILD_ID__-Platzhalter in sw.js wird beim Ausliefern ersetzt."""
+    resp = client.get("/shell/" + PANEL_ID + "/sw.js")
+    body = resp.get_data(as_text=True)
+    assert "__BUILD_ID__" not in body, (
+        "SHELL-PWA AC2: __BUILD_ID__-Platzhalter muss in sw.js ersetzt sein (Cache-Versionierung)"
+    )
+    assert "shell-pwa-" in body, "SHELL-PWA AC2: CACHE_NAME muss 'shell-pwa-' enthalten"
+
+
+def test_shell_pwa_ac2_icon_routes(client, monkeypatch, tmp_path):
+    """SHELL-PWA AC2: icon-*.png-Routen liefern image/png aus seiten/static/shell/."""
+    import shutil
+    # Test-Asset-Verzeichnis mit echten PNG-Kopien aufbauen.
+    shell_assets = tmp_path / "shell"
+    shell_assets.mkdir()
+    real_shell = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "static", "shell",
+    )
+    for fname in ("icon-192.png", "icon-512.png", "icon-maskable-512.png"):
+        shutil.copy(os.path.join(real_shell, fname), str(shell_assets / fname))
+    monkeypatch.setitem(seiten_main.runtime, "shell_asset_dir", str(shell_assets))
+
+    for fname in ("icon-192.png", "icon-512.png", "icon-maskable-512.png"):
+        resp = client.get("/shell/" + PANEL_ID + "/" + fname)
+        assert resp.status_code == 200, f"SHELL-PWA AC2: {fname}-Route muss 200 liefern"
+        assert "image/png" in resp.headers.get("Content-Type", ""), (
+            f"SHELL-PWA AC2: {fname} muss als image/png ausgeliefert werden"
+        )
+
+
+def test_shell_pwa_ac2_html_registriert_sw(client):
+    """SHELL-PWA AC2: Shell-HTML bindet Manifest + registriert sw.js via navigator.serviceWorker."""
+    body = client.get("/shell/" + PANEL_ID).get_data(as_text=True)
+    assert 'rel="manifest"' in body, "SHELL-PWA AC2: manifest-Link fehlt in Shell-HTML"
+    assert "serviceWorker" in body, "SHELL-PWA AC2: Service-Worker-Registrierung fehlt in Shell-HTML"
+    assert "sw.js" in body, "SHELL-PWA AC2: sw.js-Referenz fehlt in Shell-HTML"
+    assert "/shell/" in body, "SHELL-PWA AC2: SW-Scope /shell/ muss in HTML erscheinen"
+
+
+def test_shell_pwa_ac3_kachel_scale_css(client):
+    """SHELL-PWA AC3: heim-shell.css enthaelt CSS-Scale-Mechanik fuer Rail-Iframe (~50%-Optik).
+
+    Belegt: transform:scale(0.5) + transform-origin:top left auf .rail iframe
+    (shell-seitig, Panel unangetastet — stop_rule panel_untouched).
+    """
+    css_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "static", "heim-shell.css",
+    )
+    with open(css_path, encoding="utf-8") as fh:
+        css = fh.read()
+    assert "scale(0.5)" in css, (
+        "SHELL-PWA AC3: CSS muss 'scale(0.5)' enthalten (Kachel-Scaling shell-seitig)"
+    )
+    assert "200%" in css, (
+        "SHELL-PWA AC3: Rail-Iframe muss width:200%/height:200% fuer Scaling-Basis tragen"
+    )
+    assert "transform-origin" in css, (
+        "SHELL-PWA AC3: transform-origin muss gesetzt sein (top left fuer korrekte Ausrichtung)"
+    )
+
+
+def test_shell_pwa_ac3_panel_unangetastet():
+    """SHELL-PWA AC3 stop_rule panel_untouched: controller/app-panel/app.js unveraendert."""
+    import subprocess
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    # Git-Status pruefen: Datei darf keine ungestaged/staged Aenderungen haben.
+    result = subprocess.run(
+        ["git", "diff", "--name-only", "HEAD", "--", "controller/app-panel/app.js"],
+        capture_output=True, text=True,
+        cwd=repo_root,
+    )
+    changed = result.stdout.strip()
+    assert changed == "", (
+        "SHELL-PWA AC3 stop_rule: controller/app-panel/app.js darf NICHT geaendert sein "
+        "(Panel unangetastet — Kachel-Fix ist shell-seitig)"
     )

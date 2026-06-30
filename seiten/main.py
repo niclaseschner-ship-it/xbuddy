@@ -936,11 +936,12 @@ def hoerspiel_eltern_view(kind_id: str):
 
 
 # ============================================================
-#  SHELL-1..10 — Heim-Shell PWA (Split-Layout, Pilot Paula, #1182)
+#  SHELL-1..11 / SHELL-PWA — Heim-Shell PWA (Split-Layout, Pilot Paula, #1182)
 # ============================================================
 #
-# Spec-Anker: specs/platform/heim-shell.md (SHELL-1..10, ratifiziert RAT-25).
-# Surface: GET /shell/<panel_id> (HTML) + GET /shell/<panel_id>/manifest.json.
+# Spec-Anker: specs/platform/heim-shell.md (SHELL-1..11 + SHELL-PWA, RAT-25).
+# Surface: GET /shell/<panel_id> (HTML) + GET /shell/<panel_id>/<asset>
+#   (manifest.json dynamisch; sw.js + icon-*.png aus seiten/static/shell/).
 # LAN-only, KEIN AUTH-7/Phase-4-Rollout (SHELL-6, #948 bleibt Plan B).
 # nginx routet /shell/ zum seiten-Service (PORT-2, Loopback 5042) — Deploy-Schritt.
 #
@@ -950,6 +951,9 @@ def hoerspiel_eltern_view(kind_id: str):
 # SHELL-4: kein Shell-Zustand, keine eigene EventSource, kein Cross-Iframe-Nachricht.
 # SHELL-5: rechtes Pane reiner Iframe, keine displib-Kopie.
 # SHELL-9: IDs aus Daten (URL + ROU-32-Lookup), kein Hardcode im Code.
+# SHELL-PWA: PWA-Mantel analog ESSEN-33..35 — Manifest (Icons+display:fullscreen+
+#   scope /shell/), eigener SW (Scope /shell/, Service-Worker-Allowed-Header),
+#   Asset-Route analog einkauf_asset_view. Kachel-Scaling shell-seitig via CSS.
 
 
 def _lookup_display_id(panel_id):
@@ -1005,26 +1009,140 @@ def heim_shell(panel_id):
 
 @app.route("/shell/<panel_id>/manifest.json", methods=["GET"])
 def heim_shell_manifest(panel_id):
-    """SHELL-10: PWA-Manifest je panel_id (analog PWA-1).
+    """SHELL-10 / SHELL-PWA: PWA-Manifest je panel_id (analog PWA-1 / ESSEN-33).
 
     start_url = /shell/<panel_id> — damit der PWA-Open nach Install die Shell
-    fuer genau dieses Panel oeffnet. display=standalone fuer Vollbild-Kiosk
-    (1920x1200, SHELL-8). Kein Icon V1 (n=1-Pilot). panel_id kommt aus der URL,
-    kein Hardcode (SHELL-9).
+    fuer genau dieses Panel oeffnet. display=fullscreen (SHELL-PWA, AC1).
+    scope=/shell/ — deckt alle Shell-Instanzen (SW-Scope passt).
+    Icons unter /shell/<panel_id>/icon-*.png (shell_asset_view, SHELL-PWA AC1).
+    panel_id kommt aus der URL, kein Hardcode (SHELL-9).
     """
+    base = "/shell/" + panel_id
     manifest = {
         "name": "Heim-Shell · " + panel_id,
         "short_name": "Heim-Shell",
-        "start_url": "/shell/" + panel_id,
-        "display": "standalone",
+        "description": "Heim-Shell Panel-Navigator — " + panel_id,
+        "start_url": base,
+        "scope": "/shell/",
+        "display": "fullscreen",
+        "orientation": "landscape",
         "background_color": "#F5F1E8",
         "theme_color": "#47503C",
-        "icons": [],
+        "lang": "de",
+        "icons": [
+            {
+                "src": base + "/icon-192.png",
+                "sizes": "192x192",
+                "type": "image/png",
+                "purpose": "any",
+            },
+            {
+                "src": base + "/icon-512.png",
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "any",
+            },
+            {
+                "src": base + "/icon-maskable-512.png",
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "maskable",
+            },
+        ],
     }
     resp = make_response(json.dumps(manifest, ensure_ascii=False))
     resp.headers["Content-Type"] = "application/manifest+json"
     resp.headers["Cache-Control"] = "no-store"
     return resp
+
+
+# ── SHELL-PWA: Asset-Auslieferung (sw.js, icons) ─────────────────────────────
+#
+# Spec-Anker: SHELL-PWA (specs/platform/heim-shell.md). Analog ESSEN-34/PLAN-35.
+# manifest.json wird oben dynamisch erzeugt (panel_id im Pfad); diese Route
+# bedient alle statischen Mantel-Assets aus seiten/static/shell/.
+#
+# Flask routet /shell/<panel_id>/manifest.json zur spezifischeren Route oben
+# (Literal-Segment trumpft Variable); diese Route erhaelt sw.js und icon-*.png.
+
+_SHELL_MIME = {
+    ".js":  "application/javascript",
+    ".png": "image/png",
+}
+
+
+def _shell_asset_root():
+    """Wurzelverzeichnis fuer Shell-PWA-Mantel-Assets (SHELL-PWA).
+
+    Liegt unter seiten/static/shell/ (Lego-Trennung, analog einkauf/).
+    Test-Naht: ueberschreibbar via runtime['shell_asset_dir'].
+    """
+    override = runtime.get("shell_asset_dir") if isinstance(runtime, dict) else None
+    if override:
+        return override
+    return os.path.join(os.path.dirname(__file__), "static", "shell")
+
+
+def _shell_build_id():
+    """build_id aus mtime von heim-shell.css (analog _current_build_id ESSEN-35)."""
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    try:
+        return str(int(os.path.getmtime(os.path.join(static_dir, "heim-shell.css"))))
+    except OSError:
+        return "0"
+
+
+def _read_shell_sw_with_build_id(asset_path, build_id):
+    """Liest sw.js, ersetzt __BUILD_ID__-Platzhalter (analog ESSEN-35)."""
+    with open(asset_path, encoding="utf-8") as fh:
+        content = fh.read()
+    return content.replace("__BUILD_ID__", build_id)
+
+
+@app.route("/shell/<panel_id>/<path:asset>", methods=["GET"])
+def shell_asset_view(panel_id, asset):
+    """SHELL-PWA: PWA-Mantel-Asset-Auslieferung (analog ESSEN-34 / PLAN-35).
+
+    Antwortet auf /shell/<panel_id>/sw.js und /shell/<panel_id>/icon-*.png.
+    manifest.json wird von heim_shell_manifest bedient (spezifischere Flask-Route).
+    Path-Traversal-Schutz via realpath-Check (analog einkauf_asset_view).
+
+    Sonderfall sw.js:
+      - __BUILD_ID__-Platzhalter wird ersetzt (SHELL-PWA Cache-Versionierung).
+      - Service-Worker-Allowed: /shell/ — erlaubt Scope jenseits der SW-Datei-URL
+        (SW liegt unter /shell/<panel_id>/sw.js, Scope soll /shell/ sein).
+      - Cache-Control no-store, damit der Browser den Worker bei Updates neu holt.
+    """
+    from flask import abort, send_from_directory
+
+    # Manifest wird von heim_shell_manifest bedient — diese Route dient es nicht.
+    if asset == "manifest.json":
+        abort(404)
+
+    root = os.path.realpath(_shell_asset_root())
+    target = os.path.realpath(os.path.join(root, asset))
+    if target != root and not target.startswith(root + os.sep):
+        abort(404)
+    if not os.path.isfile(target):
+        abort(404)
+    if os.path.basename(target).startswith("_"):
+        abort(404)
+
+    ext = os.path.splitext(target)[1].lower()
+    mimetype = _SHELL_MIME.get(ext, "application/octet-stream")
+
+    if os.path.basename(target) == "sw.js":
+        build_id = _shell_build_id()
+        body = _read_shell_sw_with_build_id(target, build_id)
+        resp = make_response(body, 200)
+        resp.headers["Content-Type"] = mimetype + "; charset=utf-8"
+        # Service-Worker-Allowed: /shell/ — SW-Scope darf /shell/<panel_id>/ ueberschreiten.
+        # Ohne diesen Header erlaubt der Browser nur Scope <= /shell/<panel_id>/.
+        resp.headers["Service-Worker-Allowed"] = "/shell/"
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return resp
+
+    return send_from_directory(root, asset, mimetype=mimetype)
 
 
 # ============================================================
