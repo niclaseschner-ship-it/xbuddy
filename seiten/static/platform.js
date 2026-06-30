@@ -36,6 +36,10 @@ class TelegramPlatform {
 
   async ready() {
     this._wa.ready();
+    this._wa.expand();
+    if (typeof this._wa.disableVerticalSwipes === "function") {
+      this._wa.disableVerticalSwipes();
+    }
   }
 
   getCurrentUser() {
@@ -305,3 +309,6 @@ function getPlatform() {
   }
   return new BrowserPlatform();
 }
+
+// CommonJS-Export-Guard: ermoegliche require() in node --test (kein Einfluss auf Browser-Betrieb).
+if (typeof module !== "undefined") module.exports = { TelegramPlatform, BrowserPlatform, getPlatform };
