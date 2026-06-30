@@ -137,17 +137,11 @@ Termin-Leiste aus dem Frame drückte (heutige Form, Befund 2026-06-22).
 **Verworfen:** `vh`-Skalierung — auf fixem Tablet kein Viewport-Wechsel,
 nur Indirektion ohne Nutzen.
 
-**Icon-Migration-Lesephase (V1.3 — RAT-4-Auflösung 2026-06-22):** Damit die
-V1.2-ARASAAC-Form (siehe oben) im Live-Stand greift, trägt der Parser
-(`plan/config.py:_parse_slots`) eine **Migrations-Lesephase**: alte
-interne Keys (`sun`/`clock`/`fork`/`moon`/`star`) werden mit **WARN-Log**
-akzeptiert, neu geschriebene Slots tragen ARASAAC-IDs. Der Template-Mapper
-`SLOT_ICON_ID` (war zweite Icon-Quelle innerhalb der View, PLAN-6-Verstoß)
-entfällt; das Template rendert `slot.icon` direkt über den geteilten
-Icon-Pfad. Live-`plan.json`-Migration läuft **extern im Deploy-Schritt**
-(BUD-2: per-Instanz-Datei, nicht im Repo); `plan.example.json` wird im
-selben PR auf ARASAAC umgestellt. Die Lesephase ist Übergangshilfe —
-Folge-Ticket nach 2-3 Wochen Stabilität entfernt sie aus dem Parser.
+**Icon-Migration abgeschlossen (V1.3 → T1114, 2026-06-30):** Die
+Migrations-Lesephase für alte interne Icon-Keys (`sun`/`clock`/`fork`/`moon`/
+`star`) ist entfernt. Alle `plan.json`-Dateien tragen ARASAAC-IDs direkt
+(V1.2-Form). Das Template rendert `slot.icon` direkt über den geteilten
+Icon-Pfad; der Template-Mapper `SLOT_ICON_ID` ist entfallen.
 
 **Slot-Art-Lese-Toleranz (V1.4 — Sprint 2, Schema-Vereinheitlichung):** Die
 Slot-Art-Maschinen-Strings wurden umbenannt — `erwachsenen-slot` →

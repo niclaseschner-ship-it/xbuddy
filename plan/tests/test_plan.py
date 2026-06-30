@@ -181,12 +181,10 @@ def test_PLAN_6_slots_come_from_config(demo_config):
     """Die 7 Slot-Zeilen kommen aus der Config, nicht aus Code-Konstanten."""
     keys = [s.schluessel for s in demo_config.slots]
     assert keys == ["bring", "pick", "act1", "act2", "cook", "bed1", "bed2"]
-    # Jede Slot-Definition trägt Art und Icon. DEMO_CONFIG schreibt noch den
-    # alten Icon-Key 'sun'; die config.py-Migrations-Lesephase (PLAN-6 V1.3,
-    # T1092-Backend) übersetzt ihn beim Parsen auf die ARASAAC-id '37807'.
+    # Jede Slot-Definition trägt Art und Icon direkt aus der Config.
     bring = demo_config.slot("bring")
     assert bring.art == config_mod.SLOT_PETRANTWORTLICH
-    assert bring.icon == "37807"
+    assert bring.icon == "sun"
     act1 = demo_config.slot("act1")
     assert act1.art == config_mod.SLOT_KALENDER_READ
     assert act1.kind == "mia"
@@ -1046,39 +1044,6 @@ def test_termin_label_verbatim_ohne_personen_treffer(demo_registry):
     )
 
 
-def test_parser_akzeptiert_alte_und_arasaac_icons(tmp_path, caplog):
-    """PLAN-6 V1.3 (Icon-Migrations-Lesephase): Der Parser akzeptiert alte
-    interne Keys (mit WARN → ARASAAC-id übersetzt) UND bereits ARASAAC-förmige
-    ids (unverändert, kein WARN)."""
-    cfg_path = tmp_path / "plan.json"
-    data = dict(DEMO_CONFIG)
-    data["slots"] = [
-        {"schluessel": "alt",  "art": "petrantwortlich", "icon": "sun"},    # alt Icon-Key
-        {"schluessel": "neu",  "art": "petrantwortlich", "icon": "37807"},  # ARASAAC-id
-    ]
-    data["default_petrantwortlichkeiten"] = {}
-    data["db_datei"] = str(tmp_path / "plan.db")
-    cfg_path.write_text(json.dumps(data))
-    with caplog.at_level("WARNING"):
-        cfg = config_mod.resolve(str(cfg_path))
-    by_key = {s.schluessel: s for s in cfg.slots}
-    # Alter Key wurde auf seine ARASAAC-id übersetzt (sun → 37807).
-    assert by_key["alt"].icon == "37807", (
-        "alter Icon-Key 'sun' nicht auf ARASAAC-id 37807 migriert"
-    )
-    # ARASAAC-id blieb unverändert.
-    assert by_key["neu"].icon == "37807"
-    # WARN GENAU EINMAL — nur für den alten Key 'sun'; die bereits ARASAAC-
-    # förmige id '37807' löst keine Migrations-WARN aus.
-    migr_warns = [r.getMessage() for r in caplog.records
-                  if r.levelname == "WARNING" and "alter Icon-Key" in r.getMessage()]
-    assert len(migr_warns) == 1, (
-        "Genau eine Migrations-WARN (nur 'sun') erwartet, bekam %d: %r"
-        % (len(migr_warns), migr_warns)
-    )
-    assert "'sun'" in migr_warns[0], "WARN soll den alten Key 'sun' nennen"
-
-
 def test_PLAN_6_slot_art_lese_toleranz(tmp_path, caplog):
     """PLAN-6 V1.4 (Slot-Art-Migrations-Lesephase): Der Parser akzeptiert alte
     Art-Strings (erwachsenen-slot / aktivitaets-slot) mit WARN-Log UND neue
@@ -1131,21 +1096,20 @@ def test_PLAN_6_slot_art_lese_toleranz(tmp_path, caplog):
 
 
 def test_template_rendert_slot_icon_direkt(demo_config, demo_registry):
-    """PLAN-6 V1.3: Das Template rendert `slot.icon` DIREKT über den geteilten
+    """PLAN-6 V1.2: Das Template rendert `slot.icon` DIREKT über den geteilten
     ARASAAC-Pfad — der Template-Mapper `SLOT_ICON_ID` (zweite Icon-Quelle,
     PLAN-6-Verstoß) ist entfernt.
 
-    DEMO_CONFIG trägt noch alte Keys (sun/clock/star/fork/moon) → config.py
-    migriert sie in der Lesephase → die ARASAAC-URLs erscheinen im HTML, und
-    die Template-Mapper-Stelle `SLOT_ICON_ID` taucht nicht mehr auf."""
+    Der Parser reicht `slot.icon` unverändert durch; das Template baut die URL
+    `arasaac/<icon>.png`. `SLOT_ICON_ID` darf nicht mehr im Output erscheinen."""
     client = make_client(demo_config, demo_registry, FakeTransport())
     r = client.get("/display/plan/woche")
     assert r.status_code == 200
     html = r.data
-    # Migrierte Slot-Icons als ARASAAC-URLs (Schedule-Rail).
-    assert b"arasaac/37807.png" in html, "bring-Slot-Icon (37807) fehlt im Rail"
-    assert b"arasaac/2342.png" in html, "cook-Slot-Icon (2342) fehlt im Rail"
-    assert b"arasaac/6027.png" in html, "bed-Slot-Icon (6027) fehlt im Rail"
+    # Der Icon-Wert aus DEMO_CONFIG erscheint direkt in den ARASAAC-Pfaden.
+    assert b"arasaac/sun.png" in html, "bring-Slot-Icon (sun) fehlt im Rail"
+    assert b"arasaac/fork.png" in html, "cook-Slot-Icon (fork) fehlt im Rail"
+    assert b"arasaac/moon.png" in html, "bed-Slot-Icon (moon) fehlt im Rail"
     # Der entfernte Template-Mapper darf nicht mehr im HTML/Template-Output sein.
     assert b"SLOT_ICON_ID" not in html, (
         "SLOT_ICON_ID-Mapper noch vorhanden — zweite Icon-Quelle (PLAN-6-Verstoß)"
@@ -1736,13 +1700,12 @@ def test_PLAN_29_arasaac_migration_template_kein_svg_icon_macro(
             "Altes SVG-Macro-Artefakt %r noch im HTML — "
             "Template-Migration unvollständig?" % artefakt
         )
-    # ARASAAC-URLs sind vorhanden (Schedule-Rail, Slot-Icons).
-    # act1/act2: Werft #578 Revision (Nic 2026-06-10) → Kalender 3071 statt Stern 2752.
-    assert b"arasaac/37807.png" in html, "Schedule-Rail bring-Icon (37807) fehlt"
-    assert b"arasaac/39520.png" in html, "Schedule-Rail pick-Icon (39520) fehlt"
-    assert b"arasaac/3071.png"  in html, "Schedule-Rail act-Icon (3071) fehlt — Revision Nic 2026-06-10"
-    assert b"arasaac/2342.png"  in html, "Schedule-Rail cook-Icon (2342) fehlt"
-    assert b"arasaac/6027.png" in html, "Schedule-Rail bed-Icon (6027) fehlt"
+    # Icon-Werte aus DEMO_CONFIG erscheinen direkt als ARASAAC-Pfade im HTML.
+    assert b"arasaac/sun.png"  in html, "Schedule-Rail bring-Icon (sun) fehlt"
+    assert b"arasaac/clock.png" in html, "Schedule-Rail pick-Icon (clock) fehlt"
+    assert b"arasaac/star.png" in html, "Schedule-Rail act-Icon (star) fehlt"
+    assert b"arasaac/fork.png" in html, "Schedule-Rail cook-Icon (fork) fehlt"
+    assert b"arasaac/moon.png" in html, "Schedule-Rail bed-Icon (moon) fehlt"
 
 
 # ============================================================
