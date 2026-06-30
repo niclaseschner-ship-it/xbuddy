@@ -373,8 +373,29 @@ def get_seiten():
     < 50 ms). Die Antwort ist nie leer (die Manifest-Sorten tragen sie auch beim
     Kaltstart), Snapshot-Ausfälle erscheinen als `stale`/`snapshot_pending`
     statt als gekürzte Liste.
+
+    SHELL-10 (MAU-Erweiterung): Panel-Eintraege erhalten `shell_urls`
+    (Heim + Tailscale) server-seitig, abgeleitet aus panel_id + runtime-Origins
+    (SREG-7), analog render.py::_hero_paare. Der in-memory-Cache wird NICHT
+    mutiert (shallow copy je Panel-Eintrag, nur wenn Origins konfiguriert).
     """
-    return jsonify(_aktuelles_inventar())
+    inventar = _aktuelles_inventar()
+    heim_origin = runtime.get("heim_origin", "")
+    tailscale_origin = runtime.get("tailscale_origin", "")
+    if heim_origin or tailscale_origin:
+        eintraege = []
+        for e in inventar.get("eintraege", []):
+            if e.get("typ") == "panel" and e.get("instanz"):
+                pid = e["instanz"]
+                e = dict(e)  # shallow copy — keine Mutation des in-memory-Cache
+                e["shell_urls"] = {
+                    "heim": (heim_origin.rstrip("/") + "/shell/" + pid) if heim_origin else None,
+                    "tailscale": (tailscale_origin.rstrip("/") + "/shell/" + pid) if tailscale_origin else None,
+                }
+            eintraege.append(e)
+        return jsonify({"eintraege": eintraege,
+                        "snapshot_pending": inventar.get("snapshot_pending", [])})
+    return jsonify(inventar)
 
 
 @app.route("/api/v1/seiten/uebersicht", methods=["GET"])
