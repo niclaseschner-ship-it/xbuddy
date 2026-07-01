@@ -235,19 +235,24 @@ def _dom_stub_render(data: dict) -> list[str]:
 
 # Abbildung interner Entscheidungs-Werte auf ACTION_LINE_RE-konforme Zeichenketten.
 # ACTION_LINE_RE = r"^→\s*\[(stempeln|A|a|schließen|parken|Reihenfolge OK)"
+# Wahl-/Koord-Optionen b, c, d sind kein eigenes ACTION_LINE_RE-Token;
+# normieren auf "A" damit _card_line_count() > 0 (Mess-Naht PREP-10).
 _ACTION_MAP: dict[str, str] = {
     "stempeln": "stempeln",
     "schliessen": "schlie\xdfen",  # ACTION_LINE_RE erwartet "schließen" (mit sz)
     "parken": "parken",
     "reihenfolge_ok": "Reihenfolge OK",
     "a": "a",
-    "b": "b",
-    "c": "c",
-    "d": "d",
     "A": "A",
-    "B": "B",
-    "C": "C",
+    "b": "A",
+    "c": "A",
+    "d": "A",
+    "B": "A",
+    "C": "A",
 }
+
+# xbuddy-Repo fuer gh-CLI-Aufrufe (identisch mit card_form_quote.REPO)
+_XBUDDY_REPO = "emilsonntag-ship-it/xbuddy"
 
 
 def make_durable_comment(card: dict, decision: str) -> str:
@@ -300,6 +305,38 @@ def make_durable_comment(card: dict, decision: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Kanonischer Post-Pfad (einzige Quelle des Durable-Card-Comments, PREP-10)
+# ---------------------------------------------------------------------------
+
+def _post_durable_comment(
+    issue_number: int,
+    card: dict,
+    decision: str,
+    dry_run: bool = False,
+) -> str:
+    """Kanonische Quelle des Durable-Card-Comments (Mess-Naht PREP-10).
+
+    Ruft make_durable_comment() auf und postet den resultierenden Text via
+    `gh issue comment`. Mit dry_run=True wird nur der Text zurueckgegeben,
+    nichts gepostet — identischer Pfad wie live, daher von self_check nutzbar.
+
+    Diese Funktion ist der einzige Ort, der den Comment-Text produziert und
+    abschickt. self_check verifiziert denselben Code-Pfad (dry_run=True).
+    """
+    body = make_durable_comment(card, decision)
+    if not dry_run:
+        subprocess.run(
+            [
+                "gh", "issue", "comment", str(issue_number),
+                "--repo", _XBUDDY_REPO,
+                "--body", body,
+            ],
+            check=True,
+        )
+    return body
+
+
+# ---------------------------------------------------------------------------
 # card_form_quote-Parser-Verifikation
 # ---------------------------------------------------------------------------
 
@@ -345,12 +382,12 @@ def _verify_card_form_quote(comment: str, label: str) -> list[str]:
 # Selbst-Check (Einstiegspunkt: --self-check oder interner Start-Check)
 # ---------------------------------------------------------------------------
 
-_DECISION_BY_TYPE: dict[str, str] = {
-    "stempel": "stempeln",
-    "wahl": "a",
-    "koord": "a",
-    "schliessen": "schliessen",
-    "parken": "parken",
+_DECISION_BY_TYPE: dict[str, list[str]] = {
+    "stempel": ["stempeln"],
+    "wahl": ["a", "b"],       # b normiert auf "A" via _ACTION_MAP — beide Pfade pruefen
+    "koord": ["a"],
+    "schliessen": ["schliessen"],
+    "parken": ["parken"],
 }
 
 
@@ -382,16 +419,18 @@ def self_check(verbose: bool = True) -> int:
     all_ok = True
     for card in SYNTHETIC_CARDS_DATA["cards"]:
         kind = card["type"]
-        decision = _DECISION_BY_TYPE[kind]
-        comment = make_durable_comment(card, decision)
-        label = f"#{card['id']} {kind}"
-        errors = _verify_card_form_quote(comment, label)
-        if errors:
-            for err in errors:
-                print(f"[self-check] FEHLER: {err}", file=sys.stderr)
-            all_ok = False
-        elif verbose:
-            print(f"[self-check] {label}: preflight✓ lines✓ pain✓")
+        decisions = _DECISION_BY_TYPE[kind]
+        for decision in decisions:
+            # Testet exakt denselben Pfad wie der Live-Post-Endpunkt (_post_durable_comment).
+            comment = _post_durable_comment(card["id"], card, decision, dry_run=True)
+            label = f"#{card['id']} {kind}/{decision}"
+            errors = _verify_card_form_quote(comment, label)
+            if errors:
+                for err in errors:
+                    print(f"[self-check] FEHLER: {err}", file=sys.stderr)
+                all_ok = False
+            elif verbose:
+                print(f"[self-check] {label}: preflight✓ lines✓ pain✓")
 
     if not all_ok:
         return 1
@@ -449,27 +488,55 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, json.dumps({"error": "not found"}))
 
     def do_POST(self) -> None:
-        if self.path.split("?", 1)[0] != "/save":
+        path = self.path.split("?", 1)[0]
+
+        if path == "/save":
+            length = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(length) if length else b"{}"
+            try:
+                payload = json.loads(raw.decode("utf-8"))
+            except Exception as exc:
+                self._send(400, json.dumps({"error": f"bad json: {exc}"}))
+                return
+            os.makedirs(ANSWERS_DIR, exist_ok=True)
+            stamp = time.strftime("%Y%m%d-%H%M%S")
+            payload["_saved_at"] = stamp
+            pretty = json.dumps(payload, ensure_ascii=False, indent=2)
+            latest = os.path.join(ANSWERS_DIR, "answers-latest.json")
+            timestamped = os.path.join(ANSWERS_DIR, f"answers-{stamp}.json")
+            with open(latest, "w", encoding="utf-8") as fh:
+                fh.write(pretty)
+            with open(timestamped, "w", encoding="utf-8") as fh:
+                fh.write(pretty)
+            self._send(200, json.dumps({"ok": True, "saved_at": stamp}))
+
+        elif path == "/post-comment":
+            # Postet den Durable-Card-Comment via _post_durable_comment (PREP-10).
+            # Einziger Live-Pfad fuer den Mess-Comment — nutzt make_durable_comment().
+            length = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(length) if length else b"{}"
+            try:
+                payload = json.loads(raw.decode("utf-8"))
+            except Exception as exc:
+                self._send(400, json.dumps({"error": f"bad json: {exc}"}))
+                return
+            issue_number = payload.get("issue_number")
+            card = payload.get("card")
+            decision = payload.get("decision")
+            if not all([issue_number is not None, card, decision]):
+                self._send(
+                    400,
+                    json.dumps({"error": "Pflichtfelder: issue_number, card, decision"}),
+                )
+                return
+            try:
+                body = _post_durable_comment(int(issue_number), card, decision, dry_run=False)
+                self._send(200, json.dumps({"ok": True, "comment": body}))
+            except Exception as exc:
+                self._send(500, json.dumps({"error": str(exc)}))
+
+        else:
             self._send(404, json.dumps({"error": "not found"}))
-            return
-        length = int(self.headers.get("Content-Length", 0))
-        raw = self.rfile.read(length) if length else b"{}"
-        try:
-            payload = json.loads(raw.decode("utf-8"))
-        except Exception as exc:
-            self._send(400, json.dumps({"error": f"bad json: {exc}"}))
-            return
-        os.makedirs(ANSWERS_DIR, exist_ok=True)
-        stamp = time.strftime("%Y%m%d-%H%M%S")
-        payload["_saved_at"] = stamp
-        pretty = json.dumps(payload, ensure_ascii=False, indent=2)
-        latest = os.path.join(ANSWERS_DIR, "answers-latest.json")
-        timestamped = os.path.join(ANSWERS_DIR, f"answers-{stamp}.json")
-        with open(latest, "w", encoding="utf-8") as fh:
-            fh.write(pretty)
-        with open(timestamped, "w", encoding="utf-8") as fh:
-            fh.write(pretty)
-        self._send(200, json.dumps({"ok": True, "saved_at": stamp}))
 
     def log_message(self, *_args: object) -> None:
         pass  # ruhig
