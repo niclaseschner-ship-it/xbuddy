@@ -1,4 +1,4 @@
-"""Public-API der LLM-Provider-Lib — drei Sichten auf einem Vendor-Kern
+"""Public-API der LLM-Provider-Lib — vier Sichten auf einem Vendor-Kern
 (LLMP-S1, LLMP-2, LLMP-3, LLMP-5).
 
 Jede `get_*`-Funktion ist eine Factory: sie löst den Slot (LLMP-5), lädt das
@@ -36,6 +36,14 @@ REQUIRED_SINGLESHOT: frozenset[Capability] = frozenset({
 REQUIRED_CHAT: frozenset[Capability] = frozenset({
     "multi_turn_assistant_prefill",
     "cache_control",
+    "system_message_distinct",
+})
+# LLMP-S1 (#1131, vierte Sicht `get_completion`): Freitext-Singleshot. Boot-
+# Minimum ist bewusst NUR `system_message_distinct` — KEIN `structured_output`
+# und KEIN `cache_control` (llm-providers.md:78-82). So trägt die Sicht beide
+# Slots eines dual-provider-Buddys (hoerspiel Claude UND Mistral); `get_chat`
+# wäre auf dem Mistral-Slot boot-fatal (Mistral ⊥ `cache_control`, LLMP-S9).
+REQUIRED_COMPLETION: frozenset[Capability] = frozenset({
     "system_message_distinct",
 })
 
@@ -211,6 +219,40 @@ class _SingleshotFacade:
         )
 
 
+class _CompletionFacade:
+    """Sicht-Fassade für `get_completion` (LLMP-S1, hoerspiel-Synopse-Heimat).
+
+    Übersetzt den Freitext-Singleshot-Vertrag `complete(system, user) -> str`
+    auf den Vendor-Kern und injiziert die LLMP-S4-Telemetrie-Felder
+    (`caller`, `slot`) — der Konsument sieht sie nicht (analog
+    `_SingleshotFacade.complete_structured`). Ein System + ein User, ein
+    Vendor-Call, KEIN Tool und KEIN Schema (#1131).
+    """
+
+    def __init__(self, vendor: Any, caller: str, slot: str):
+        self._vendor = vendor
+        self._caller = caller
+        self._slot = slot
+        self.model = getattr(vendor, "model", "")
+        self.name = "completion"
+
+    def complete(
+        self,
+        system: str,
+        user: str,
+        *,
+        correlation_id: str | None = None,
+    ) -> str:
+        """Ein Call, Freitext-Antwort → str (LLMP-S1, kein Tool/Schema)."""
+        return self._vendor.singleshot_text(
+            system=system,
+            user=user,
+            caller=self._caller,
+            slot=self._slot,
+            correlation_id=correlation_id,
+        )
+
+
 class _AgentFacade:
     """Sicht-Fassade für `get_agent` (LLMP-S1, eltern-chat-Heimat).
 
@@ -275,7 +317,7 @@ class _AgentFacade:
 
 
 # ----------------------------------------------------------------------
-#  Public-API — die drei `get_*`-Sichten (LLMP-2)
+#  Public-API — die vier `get_*`-Sichten (LLMP-2)
 # ----------------------------------------------------------------------
 
 
@@ -310,6 +352,34 @@ def get_singleshot(slot: str, model: str = "", max_tokens: int = 0) -> Any:
         slot, "get_singleshot", REQUIRED_SINGLESHOT, model, max_tokens,
     )
     return _SingleshotFacade(vendor, caller, slot_name)
+
+
+def get_completion(slot: str, model: str = "", max_tokens: int = 0) -> Any:
+    """Liefert die Freitext-Singleshot-Sicht (LLMP-S1, hoerspiel-Synopse-Heimat).
+
+    Ein System + ein User → Freitext-String über `.complete(system, user)`;
+    kein Tool, kein Schema, ein Vendor-Call (#1131 — die von RAT-20/LLMP-S1
+    vor-autorisierte vierte Sicht).
+
+    Required Capabilities (LLMP-3): NUR `system_message_distinct` — bewusst
+    KEIN `structured_output` und KEIN `cache_control` (llm-providers.md:78-82),
+    damit die Sicht beide Slots eines dual-provider-Buddys trägt (hoerspiel
+    Claude UND Mistral); `get_chat` wäre auf dem Mistral-Slot boot-fatal
+    (LLMP-S9). Boot-Fail bei Mismatch.
+
+    `model` (analog `get_singleshot`): wählt das effektive Modell explizit; leer
+    (Default) nutzt den Vendor-`DEFAULT_MODEL` (rückwärtskompatibel).
+
+    `max_tokens` (analog `get_singleshot`/T1084): überschreibt das Vendor-
+    `DEFAULT_MAX_TOKENS` wenn >0; 0 (Default) erhält den Vendor-Default
+    (2048 Anthropic / 4096 Mistral). hoerspiel reicht hier die Provider-eigenen
+    MAX_TOKENS (8192 / 4096) durch, damit lange Synopse-Freitexte nicht beim
+    DEFAULT_MAX_TOKENS=2048 trunkiert werden (T1084-Parität).
+    """
+    vendor, caller, slot_name = _build_vendor(
+        slot, "get_completion", REQUIRED_COMPLETION, model, max_tokens,
+    )
+    return _CompletionFacade(vendor, caller, slot_name)
 
 
 def get_agent(slot: str, model: str = "", max_tokens: int = 0) -> Any:

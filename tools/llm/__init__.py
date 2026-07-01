@@ -6,7 +6,7 @@ Siehe `specs/platform/llm-providers.md` (LLMP-S1..S11) und
 Die LLM-Provider-Schicht lebt unter `tools/llm/`, weil sie eine **Library** ist
 — kein eigener Prozess, kein Service, kein HTTP-Endpoint (LLMP-1, DCOMP-1).
 Genau eine Stelle, an der eine XBuddy-Instanz Anthropic-/Azure-OpenAI-/…-Calls
-baut. Drei Public-API-Sichten auf demselben `_vendor/<vendor>.py`-Kern.
+baut. Vier Public-API-Sichten auf demselben `_vendor/<vendor>.py`-Kern.
 
 Typische Nutzung:
 
@@ -25,7 +25,7 @@ from ._types import (
     ProviderCallEvent,
     ProviderError,
 )
-from .public_api import get_agent, get_chat, get_singleshot
+from .public_api import get_agent, get_chat, get_completion, get_singleshot
 
 __all__ = [
     "LLMCapabilityError",
@@ -34,5 +34,6 @@ __all__ = [
     "ProviderError",
     "get_agent",
     "get_chat",
+    "get_completion",
     "get_singleshot",
 ]
