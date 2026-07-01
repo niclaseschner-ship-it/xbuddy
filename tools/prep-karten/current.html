@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>arbeitstag-prep</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#1a1d24; --card2:#20242d; --ink:#e8eaed; --dim:#9aa0aa;
+    --line:#2c313b; --accent:#4f8cff; --green:#2ea043; --yellow:#d4a017;
+    --orange:#e0833a; --red:#e5484d; --purple:#a371f7; --gray:#6b7280;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    padding:0 0 130px}
+  header{padding:20px 16px 8px;max-width:820px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;margin:0 0 6px}
+  .done{background:rgba(46,160,67,.1);border:1px solid rgba(46,160,67,.3);
+    border-radius:8px;padding:8px 12px;margin:8px 0;font-size:13px;color:#7ee29a}
+  .wrap{max-width:820px;margin:0 auto;padding:0 16px}
+
+  /* Karten */
+  .card{background:var(--card);border:1px solid var(--line);
+    border-left:5px solid var(--accent);border-radius:12px;
+    padding:16px 18px;margin:16px 0;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+  .card.stempel{border-left-color:var(--green)}
+  .card.wahl{border-left-color:var(--purple)}
+  .card.koord{border-left-color:var(--orange)}
+  .card.schliessen{border-left-color:var(--red)}
+  .card.parken{border-left-color:var(--gray)}
+
+  .chead{display:flex;justify-content:space-between;align-items:baseline;
+    gap:10px;flex-wrap:wrap}
+  .ctitle{font-size:16px;font-weight:650;margin:0}
+  .ctitle .num{color:var(--accent);font-variant-numeric:tabular-nums}
+  .badge{font-size:11px;font-weight:700;letter-spacing:.04em;padding:3px 9px;
+    border-radius:999px;white-space:nowrap;background:#262b35;
+    color:var(--dim);border:1px solid var(--line)}
+  .badge.wahl{background:rgba(163,113,247,.15);color:#c6a4ff;
+    border-color:rgba(163,113,247,.4)}
+  .badge.koord{background:rgba(224,131,58,.15);color:#f0a868;
+    border-color:rgba(224,131,58,.4)}
+  .badge.stempel{background:rgba(46,160,67,.15);color:#7ee29a;
+    border-color:rgba(46,160,67,.4)}
+  .badge.schliessen{background:rgba(229,72,77,.15);color:#ff8a8d;
+    border-color:rgba(229,72,77,.4)}
+  .badge.parken{background:rgba(107,114,128,.15);color:#9ca3af;
+    border-color:rgba(107,114,128,.4)}
+
+  .row{margin:10px 0;font-size:14px}
+  .k{color:var(--dim);font-weight:600;display:inline-block;min-width:96px;vertical-align:top}
+  .empf{font-weight:700;color:var(--purple)}
+  .empf.koord{color:var(--orange)}
+  .empf.stempel{color:var(--green)}
+
+  /* Stempel-Ampel (RISIKO + VERTRAUTHEIT) */
+  .ampel{display:flex;gap:10px;margin:10px 0;flex-wrap:wrap}
+  .ampel-item{padding:4px 10px;border-radius:6px;font-size:13px;font-weight:600;
+    border:1px solid transparent}
+  .ampel-item.gruen{background:rgba(46,160,67,.15);color:#7ee29a;
+    border-color:rgba(46,160,67,.4)}
+  .ampel-item.gelb{background:rgba(212,160,23,.15);color:#f0c040;
+    border-color:rgba(212,160,23,.4)}
+  .ampel-item.orange{background:rgba(224,131,58,.15);color:#f0a868;
+    border-color:rgba(224,131,58,.4)}
+  .ampel-item.rot{background:rgba(229,72,77,.15);color:#ff8a8d;
+    border-color:rgba(229,72,77,.4)}
+  .ampel-item.unbekannt{background:rgba(107,114,128,.15);color:#9ca3af;
+    border-color:rgba(107,114,128,.4)}
+
+  .kernfrage{font-weight:650;margin:12px 0 6px}
+  .opts{margin:6px 0}
+  .opt{background:var(--card2);border:1px solid var(--line);border-radius:8px;
+    padding:9px 12px;margin:6px 0;font-size:13.5px}
+  .opt .ok{font-weight:700;color:var(--purple);margin-right:6px}
+  .opt.reco{border-color:rgba(163,113,247,.5)}
+  .opt .reco-tag{color:#c6a4ff;font-size:12px;font-weight:700;float:right}
+  .note{background:rgba(79,140,255,.08);border:1px solid rgba(79,140,255,.3);
+    color:#b9d0ff;border-radius:8px;padding:8px 12px;margin:10px 0;font-size:13px}
+  .belege{color:var(--dim);font-size:12px;margin-top:10px;
+    font-family:ui-monospace,Menlo,monospace}
+
+  /* Entscheidungs-Bereich */
+  .decide{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}
+  .decide .lbl{font-size:12px;color:var(--dim);text-transform:uppercase;
+    letter-spacing:.05em;margin-bottom:6px}
+  .choices{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .choices label{cursor:pointer;background:var(--card2);border:1.5px solid var(--line);
+    border-radius:8px;padding:7px 13px;font-size:13.5px;font-weight:600;user-select:none}
+  .choices input{display:none}
+  .choices label:has(input:checked){border-color:var(--accent);
+    background:rgba(79,140,255,.15);color:#9cc0ff}
+  textarea{width:100%;background:var(--card2);border:1px solid var(--line);
+    border-radius:8px;color:var(--ink);padding:9px 11px;
+    font:14px/1.45 inherit;resize:vertical;min-height:46px}
+  textarea::placeholder{color:#6a717d}
+
+  /* Footer */
+  footer{position:fixed;left:0;right:0;bottom:0;background:rgba(15,17,21,.96);
+    border-top:1px solid var(--line);padding:14px 16px;backdrop-filter:blur(6px)}
+  .fwrap{max-width:820px;margin:0 auto;display:flex;align-items:center;gap:14px}
+  button{background:var(--accent);color:#fff;border:0;border-radius:10px;
+    padding:12px 22px;font-size:15px;font-weight:700;cursor:pointer}
+  .status{color:var(--dim);font-size:13px}
+  .status.ok{color:#5ed47a;font-weight:600}
+  .status.err{color:#ff8a8d}
+  .count{color:var(--dim);font-size:13px;margin-left:auto}
+</style>
+</head>
+<body>
+<header id="hdr">
+  <!-- Inhalt wird durch JS aus DATA befuellt -->
+</header>
+<div class="wrap" id="cards"></div>
+
+<footer>
+  <div class="fwrap">
+    <button id="save">Antworten schreiben</button>
+    <span class="status" id="status">noch nicht gespeichert</span>
+    <span class="count" id="count"></span>
+  </div>
+</footer>
+
+<script>
+/* Daten werden vom server.py via __CARDS_JSON__-Placeholder injiziert. */
+const DATA = __CARDS_JSON__;
+const CARDS = Array.isArray(DATA) ? DATA : (DATA.cards || []);
+const ROUND   = DATA.round   || "";
+const SUMMARY = DATA.summary || "";
+const SUBTITLE= DATA.subtitle|| "";
+
+/* Default-Badges je Karten-Typ */
+const TYPE_BADGES = {
+  stempel:   "✓ STEMPEL",
+  wahl:      "🔱 ARCH-WAHL",
+  koord:     "⚠️ KOORD-WAHL",
+  schliessen:"✗ SCHLIESSEN",
+  parken:    "⏸ PARKEN",
+};
+
+/* Ampel-CSS-Klasse aus Wert-String */
+function ampelClass(val) {
+  const known = {gruen:"gruen", gelb:"gelb", orange:"orange", rot:"rot"};
+  return known[val] || "unbekannt";
+}
+
+/* Header befuellen */
+(function(){
+  const hdr = document.getElementById("hdr");
+  let h = "";
+  if (ROUND) h += `<h1>arbeitstag-prep · Runde ${ROUND}</h1>`;
+  else        h += `<h1>arbeitstag-prep</h1>`;
+  if (SUMMARY)  h += `<div class="done">${SUMMARY}</div>`;
+  if (SUBTITLE) h += `<p class="sub">${SUBTITLE}</p>`;
+  hdr.innerHTML = h;
+})();
+
+/* Karten rendern */
+const el = document.getElementById("cards");
+
+CARDS.forEach(c => {
+  const card = document.createElement("div");
+  card.className = "card " + (c.type || "");
+  let h = "";
+
+  /* Karten-Kopf: Nummer, Titel, Badge */
+  const badge      = c.badge      || TYPE_BADGES[c.type] || "";
+  const badgeClass = c.badgeClass || c.type || "";
+  h += `<div class="chead">`;
+  h += `<p class="ctitle"><span class="num">#${c.id}</span> ${c.title}</p>`;
+  if (badge) h += `<span class="badge ${badgeClass}">${badge}</span>`;
+  h += `</div>`;
+
+  /* TREIBER (alle Typen) */
+  if (c.treiber) {
+    h += `<div class="row"><span class="k">TREIBER</span> ${c.treiber}</div>`;
+  }
+
+  /* EMPFEHLUNG (alle Typen die es tragen) */
+  if (c.empf) {
+    const empfClass = c.empfClass ? " " + c.empfClass : (c.type === "stempel" ? " stempel" : "");
+    h += `<div class="row"><span class="k">EMPFEHLUNG</span> <span class="empf${empfClass}">${c.empf}</span></div>`;
+  }
+
+  /* Stempel-Ampel: RISIKO + VERTRAUTHEIT (nur Typ "stempel") */
+  if (c.type === "stempel") {
+    h += `<div class="ampel">`;
+    h += `<span class="ampel-item ${ampelClass(c.risiko)}">RISIKO: ${c.risiko || "?"}</span>`;
+    h += `<span class="ampel-item ${ampelClass(c.vertrautheit)}">VERTRAUTHEIT: ${c.vertrautheit || "?"}</span>`;
+    h += `</div>`;
+  }
+
+  /* Kernfrage (wahl / koord) */
+  if (c.kernfrage) {
+    h += `<div class="kernfrage">${c.kernfrage}</div>`;
+  }
+
+  /* Optionen (wahl / koord) */
+  if (c.opts && c.opts.length) {
+    h += `<div class="opts">`;
+    c.opts.forEach(o => {
+      const reco = o[3];
+      h += `<div class="opt${reco ? " reco" : ""}">`;
+      h += `<span class="ok">${o[0]}</span><b>${o[1]}</b>`;
+      if (reco) h += `<span class="reco-tag">← empfohlen</span>`;
+      h += ` — ${o[2]}`;
+      h += `</div>`;
+    });
+    h += `</div>`;
+  }
+
+  /* Hinweis-Box (optional, alle Typen) */
+  if (c.note) {
+    h += `<div class="note">${c.note}</div>`;
+  }
+
+  /* Entscheidungs-Bereich: Radio-Buttons + Textarea */
+  h += `<div class="decide">`;
+  h += `<div class="lbl">deine Wahl</div>`;
+  h += `<div class="choices">`;
+  (c.actions || []).forEach(a => {
+    h += `<label><input type="radio" name="dec-${c.id}" value="${a[0]}"><span>${a[1]}</span></label>`;
+  });
+  h += `</div>`;
+  h += `<textarea id="cm-${c.id}" placeholder="Kommentar / Antwort / Rückfrage (optional) …"></textarea>`;
+  h += `</div>`;
+
+  /* Belege */
+  if (c.belege) {
+    h += `<div class="belege">Belege: ${c.belege}</div>`;
+  }
+
+  card.innerHTML = h;
+  el.appendChild(card);
+});
+
+/* Zähler */
+function collect() {
+  return CARDS.map(c => {
+    const r = document.querySelector(`input[name="dec-${c.id}"]:checked`);
+    const cm = document.getElementById(`cm-${c.id}`);
+    return {
+      id: c.id,
+      title: c.title,
+      type: c.type,
+      decision: r ? r.value : null,
+      comment: cm ? cm.value.trim() : "",
+    };
+  });
+}
+
+function updateCount() {
+  const n = collect().filter(x => x.decision).length;
+  document.getElementById("count").textContent = `${n}/${CARDS.length} entschieden`;
+}
+
+el.addEventListener("input", updateCount);
+el.addEventListener("change", updateCount);
+updateCount();
+
+/* Speichern */
+document.getElementById("save").addEventListener("click", async () => {
+  const st = document.getElementById("status");
+  const payload = {round: ROUND, answers: collect()};
+  st.textContent = "speichere …";
+  st.className = "status";
+  try {
+    const res = await fetch("/save", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload),
+    });
+    const j = await res.json();
+    if (j.ok) {
+      st.textContent = "✓ gespeichert (" + j.saved_at + ") — sag Claude weiter";
+      st.className = "status ok";
+    } else {
+      throw new Error(j.error || "unbekannt");
+    }
+  } catch (e) {
+    st.textContent = "✗ Server nicht erreichbar — JSON wird heruntergeladen";
+    st.className = "status err";
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {type: "application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `prep-antworten-runde${ROUND || "x"}.json`;
+    a.click();
+  }
+});
+</script>
+</body>
+</html>
