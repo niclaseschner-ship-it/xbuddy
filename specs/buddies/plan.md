@@ -344,7 +344,42 @@ wird erst ab ihrem **Start-Tag** im sichtbaren Fenster gerendert.
 (heutige Form, Befund 2026-06-22: blockiert die Anzeige an Tagen, an
 denen die Spanne noch nicht läuft).
 
-*Tickets:* #40
+**PLAN-14-PACKING — Termin-Packing als Puzzle-Fill (V1.4 — #1146, 2026-07-01):** Der
+Termin-Bereich ist ein 2D-Raster aus 7 Spalten × **R** Zeilen. R leitet sich aus
+der realen Tablet-Geometrie ab (verfügbare 1fr-Höhe nach Kopf, Slot-Zeilen,
+Chrome, reservierter Counter-Zeile und Marge, geteilt durch die Zeilenhöhe H);
+R ist **span-unabhängig** (der frühere globale Lane-Abzug war der Bug #1146).
+
+1. **Spans zuerst:** `pack_span_lanes` weist jeder Mehrtages-Spanne eine **Lane**
+   (oberste Zeilen) zu; der Balken belegt seine Lane-Zeile durchgehend über
+   `[start_day..end_day]`.
+2. **Freie Zellen pro Spalte von oben:** Eine Zelle (Zeile r, Tag d) ist **frei**,
+   wenn dort KEIN Span liegt — inkl. **Löcher in Lane-Zeilen** (eine Lane an einem
+   Tag belegt, an einem anderen frei) und aller Zeilen unter dem Lane-Band.
+3. **Tages-Termine zeitsortiert von oben in die freien Zellen:** früheste Zelle
+   zuerst. Ein Tages-Termin **darf über einem Span-Balken sitzen**, wenn das die
+   oberste freie Zelle ist (**Regel i**); die Zeitreihenfolge ist früh-oben
+   (**Regel ii**).
+4. **Sortier-Setzung (Orchestrator, #1146):** Innerhalb eines Tages kommen
+   **ganztägige/zeitlose** Termine ZUERST (oben), dann die getakteten aufsteigend
+   nach Beginn.
+5. **Überschuss pro Spalte:** Termine über die freien Zellen einer Spalte hinaus
+   fasst ein gedimmter `+N weitere`-Counter zusammen (V1.3-Mechanik, kein
+   Klick-Pfad), bündig unter der letzten belegten Zeile.
+
+**Invariante:** Eine Spalte clippt einen Termin **nur**, wenn ihre eigenen freien
+Zellen voll sind — **nie**, weil ein Span in einer **anderen** Spalte Platz kostet.
+
+**Geometrie-Kopplung:** H (Python `GEOMETRIE_PILLE_HOEHE`) ist die Zeilenhöhe des
+Termin-Rasters; die Overlay-Lane-Höhe (`GEOMETRIE_SPAN_LANE_HOEHE`) ist auf H
+angeglichen. Im Template tragen `.appts-col` (Tages-Termine) und `.appts-spans`
+(Balken-Overlay) dieselbe Zeilenhöhe (`grid-auto-rows: H`) und denselben
+Zeilen-Gap, damit ein Loch-Termin mit dem Balken der Nachbarspalte fluchtet. Der
+frühere globale Span-Band-Abzug (`GEOMETRIE_SPAN_GAP`, `--span-band`,
+`.under-span`-Padding) ist entfallen. **Verworfen:** globales Deckeln der
+Sichtbarkeit über alle Spalten (Bug #1146).
+
+*Tickets:* #40, #1146
 
 ## 6. Kalender-Anbindung (App-eigene Funktion)
 

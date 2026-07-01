@@ -285,19 +285,22 @@
     gap: 10px;
     align-items: start;
   }
-  /* Overlay-Schicht der durchgehenden Span-Balken — gleiches Spalten-Grid,
-     absolut über dem Board-Kopf. #1092 S5: mehrere LANES (Zeilen) — gepackte,
-     nicht-überlappende Spans teilen sich eine Lane (PLAN-14 Lane-Packing).
-     Die Lane-Zeilen sind feste --span-lane-h hoch; jeder Balken sitzt per
-     grid-row in seiner Lane und per grid-column über seine berührten Spalten.
-     Leere Lane-Zellen tragen nichts. */
+  /* PLAN-14-PACKING (#1146): Overlay-Schicht der durchgehenden Span-Balken —
+     gleiches Spalten-Grid, absolut über dem Board. Gepackte, nicht-überlappende
+     Spans teilen sich eine Lane (#1092 S5). Jeder Balken sitzt per grid-row in
+     seiner Lane und per grid-column über seine berührten Spalten.
+     KRITISCHE KOPPLUNG (Loch-Füllung fluchtet): Zeilenhöhe (grid-auto-rows: 37px
+     = H = GEOMETRIE_PILLE_HOEHE) UND Zeilen-Gap (row-gap: 0) sind EXAKT gleich
+     mit .appts-col. Nur so sitzt Zelle (r, d) in beiden Grids auf derselben
+     y-Höhe — ein Tages-Termin in einer freien Lane-Zelle (über einem Balken der
+     Nachbarspalte) fluchtet mit dem Balken. Column-Gap (10px) = Board-Column-Gap. */
   .appts-spans {
     position: absolute;
     top: 0; left: 0; right: 0;
     display: grid;
     grid-template-columns: repeat(var(--col-count, 7), minmax(0, 1fr));
-    grid-auto-rows: var(--span-lane-h, 34px);
-    gap: 4px 10px;
+    grid-auto-rows: 37px;
+    gap: 0 10px;
     pointer-events: none;
   }
   .appts-spans:empty { display: none; }
@@ -307,20 +310,22 @@
        seiner Lane (PLAN-14, Lane-Packing). */
     pointer-events: auto;
   }
+  /* PLAN-14-PACKING (#1146): Tages-Termine als 2D-Grid statt flex-Stack. Jede
+     .pill sitzt per inline `grid-row` in ihrer gepackten Zeile (row+1) — freie
+     Lane-Löcher werden explizit gefüllt (auch über einem Balken). Zeilenhöhe
+     37px (= H) und row-gap 0 sind DIESELBEN wie im .appts-spans-Overlay (s.o.),
+     damit Loch-Termin und Nachbar-Balken fluchten. align-items: start → die
+     Pille sitzt oben in ihrer Zeile (Zeilen-Pitch bleibt exakt 37px, kein
+     kumulativer Drift). Das frühere Span-Band-Reservierungs-Konstrukt (Vorlauf-
+     Padding je Spalte) ist entfallen — die Band-Reservierung folgt jetzt aus der
+     expliziten grid-row jeder Pille. */
   .appts-col {
-    display: flex; flex-direction: column; gap: 5px;
+    display: grid;
+    grid-auto-rows: 37px;
+    row-gap: 0;
+    align-items: start;
     min-height: 80px;
   }
-  /* PLAN-14 V1.3 + #1092 S5: Eine von einem Span-Balken berührte Spalte
-     reserviert oben genau so viele Lane-Höhen, wie es belegte Lanes gibt
-     (--span-band = span_lanes × Lane-Höhe), damit die Tagestermine UNTER allen
-     Balken beginnen. Span-LOSE Spalten haben diese Klasse nicht → ihre Termine
-     rutschen in den frei werdenden Platz von oben nach.
-     #1092 S6: +6px Gap zwischen Span-Balken-Unterkante und erster Pille —
-     konsistent zum 6px Pillen-Stack-Gap (.appts-col gap: 5px + Abrundung).
-     CSS↔Geometrie-Kopplung: GEOMETRIE_SPAN_GAP in render.py muss diesem Wert
-     entsprechen (6px). */
-  .appts-col.under-span { padding-top: calc(var(--span-band, 34px) + 6px); }
   .pill {
     display: flex; align-items: center; gap: 5px;
     padding: 3px 7px;
@@ -612,25 +617,22 @@
     <div class="appts">
       <div class="appts-grid">
         <div class="appts-rail">{{ arasaac_img('3071', 42) }}</div>
-        {# PLAN-14 V1.3: Ein Board — Tagestermine je Spalte, Span-Balken als
-           Overlay nur über die berührten Spalten. Span-lose Spalten reservieren
-           keine Zeile → Tagestermine rutschen dort nach oben (kein Voll-Breite-
-           Band über das ganze Fenster). span_cover (sortierte Liste berührter
-           Tag-Indizes) und span_lanes (Anzahl belegter Lanes) kommen direkt aus
-           render.py via main.py — eine Geometrie-Quelle (CLAUDE.md §6, T1112). #}
-        {# --span-band ist span_lanes × Lane-Höhe (34px) — berührte Spalten halten
-           oben so viele Lane-Höhen frei, wie es belegte Lanes gibt. --span-lane-h
-           ist die feste Lane-Zeilen-Höhe der Overlay-Schicht. Bei 0 Lanes bleibt
-           --span-band 0 (kein Vorlauf). #}
-        <div class="appts-board"
-             style="--span-band: {{ span_lanes * 34 }}px; --span-lane-h: 34px;">
-          {# Tagestermine je Spalte (PLAN-13). Eine von einem Span berührte
-             Spalte (span_cover) hält oben die Lane-Höhen frei (.under-span);
-             span-lose Spalten lassen die Termine nach oben rutschen. #}
+        {# PLAN-14-PACKING (#1146): Ein Board als 2D-Raster (7 Spalten × R Zeilen).
+           Tagestermine sitzen je Spalte per expliziter `grid-row` in ihrer
+           gepackten Zelle (render.py `a.row`), Span-Balken liegen als Overlay in
+           ihrer `lane`-Zeile über den berührten Spalten. Ein Tages-Termin kann in
+           einer freien Lane-Zelle sitzen (Loch über einem Balken der Nachbarspalte)
+           — Zeilenhöhe/Gap beider Grids sind gleich (s. CSS), also fluchtet das.
+           Die Platzierung ist die EINE Quelle aus render.py (kein Jinja-Recompute,
+           CLAUDE.md §6): `a.row` und `s.lane` kommen serverseitig gepackt. #}
+        <div class="appts-board">
+          {# Tagestermine je Spalte (PLAN-13/PLAN-14-PACKING). #}
           {% for d in days %}
-            <div class="appts-col{% if loop.index0 in span_cover %} under-span{% endif %}">
+            <div class="appts-col">
               {% for a in appointments[d.iso] %}
-                <div class="pill">
+                {# grid-row = gepackte 0-basierte Zeile + 1 (freie Zelle von oben,
+                   inkl. Lane-Löcher — Regel i/ii). #}
+                <div class="pill" style="grid-row: {{ a.row + 1 }};">
                   {{ arasaac_img(a.icon, 22) }}
                   <div class="pill-body">
                     {% if a.time %}<div class="pill-time">{{ a.time }}</div>{% endif %}
@@ -649,10 +651,16 @@
                   {% endif %}
                 </div>
               {% endfor %}
-              {# PLAN-13 V1.3: Termin-Überschuss — gedimmter Counter, kein Klick. #}
+              {# PLAN-14-PACKING (#1146): Termin-Überschuss — gedimmter Counter,
+                 kein Klick. Sitzt in der Zeile UNTER der letzten belegten Zelle.
+                 Überschuss tritt nur auf, wenn alle freien Zellen voll sind →
+                 die höchste belegte `row` ist die letzte, +2 = die Zeile danach
+                 (bündig unten). Abgeleitet aus den platzierten `row`-Werten —
+                 keine Geometrie-Neuberechnung im Template. #}
               {% set overflow = appointment_overflow.get(d.iso, 0) %}
               {% if overflow > 0 %}
-                <div class="appts-more">+{{ overflow }} weitere</div>
+                {% set letzte_zeile = appointments[d.iso] | map(attribute='row') | max | default(-1) %}
+                <div class="appts-more" style="grid-row: {{ letzte_zeile + 2 }};">+{{ overflow }} weitere</div>
               {% endif %}
             </div>
           {% endfor %}
