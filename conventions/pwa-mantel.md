@@ -1,6 +1,6 @@
 # PWA-Mantel — Konvention     (ID-Präfix: PWAM)
 
-*Status: ENTWURF (type:docs, #1215) — wartet auf Nic-Gate. Quelle der
+*Status: RATIFIZIERT 2026-07-01 (Nic-Gate + Codex Pass-2, #1215). Quelle der
 Ratifizierung: `berater-runde/20260701-164714-RATIFIZIERT-1215-pwa-mantel-unify.md`
 (Nic-Verdikt „Unify-Override"). Jede Klausel trägt ihren Herleitungs-Anker
 inline als `ENTSCHEID → <Sektion> → <Stichwort>`.*
