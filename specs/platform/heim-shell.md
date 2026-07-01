@@ -97,6 +97,30 @@ manuelle_probe: Render-Gate-Screenshot 1920×1200 mit Rail 280px gegen
 Live-Daten (Kill bei Overflow/Clipping/unbedienbar). Gate-B-Beleg:
 `specs/mockups/heim-shell/`.
 
+### SHELL-12 — Resume-Reload nach Device-Sleep (PWA-Standalone-Resume)
+Im installierten PWA-Standalone-Kontext lädt die Shell nach einem Tablet-Sleep
+(Bildschirm aus/an ohne Passwort-Unlock) die Seite **nicht** automatisch neu —
+die eingebetteten Iframes verlieren dadurch ihre SSE-/Event-Verbindungen still
+(Panel-Routing dead, Display-State eingefroren). Die Shell erkennt Device-Sleep
+und lädt **beide** Iframes automatisch neu, ohne das Browser-Tab-Verhalten zu
+stören.
+
+**Mechanik (Inline-Script in `seiten/templates/heim-shell.html`):**
+- `visibilitychange → hidden`: Zeitstempel merken (`_hiddenAt = Date.now()`).
+- `visibilitychange → visible`: Wenn Verdeckungsdauer > `RESUME_RELOAD_THRESHOLD_MS`
+  (3 000 ms, unterscheidet Device-Sleep von kurzem Wegschauen) → beide Iframes
+  per `iframe.src = iframe.src` neu laden (erzwingt frische EventSource /
+  Event-Verbindungen). Bei kurzer Verdeckung (< Schwelle) **kein** Reload
+  (kein visueller Flash).
+- `pageshow` mit `event.persisted = true` (bfcache-Restore) → ebenfalls Reload.
+- Iframe-Selektor: `.rail iframe, .buddy iframe` (null-guard via NodeList-Loop).
+
+**Panel/Display-Code unangetastet** (SHELL-4-Leitplanke): Der Fix ist
+ausschließlich shell-seitig; `controller/app-panel/**` und `display-client/**`
+bleiben unverändert.
+
+Test-Anker: seiten/tests/test_heim_shell.py::test_shell12_resume_reload_script
+
 ### SHELL-11 — Shell besitzt den Vollbild; eingebettete Iframes unterdrücken Eigen-Vollbild
 Die Shell ist der Vollbild-Besitzer: beim ersten Nutzer-Gesture (touchend/click)
 fordert die Shell `requestFullscreen` auf `document.documentElement` der **Shell**
