@@ -445,42 +445,90 @@ def test_shell_pwa_ac3_rail_iframe_nativ(client):
 
 
 def test_shell12_resume_reload_script(client):
-    """SHELL-12: Shell-HTML enthaelt Resume-Reload-Script (visibilitychange + pageshow.persisted).
+    """SHELL-12: Shell-HTML enthaelt Resume-Reload-Script (Clock-Drift + visibilitychange + pageshow).
 
-    AC1: visibilitychange-Handler laedt bei Resume nach Verdeckung > Schwelle BEIDE
-    Iframes neu; pageshow.persisted ebenso. Bei kurzer Verdeckung kein Reload.
+    AC1: Clock-Drift-Detektor (setInterval 2000ms, _lastTick, Gap>10000ms) ist primaerer Trigger.
+    AC2: Reload via window.location.reload(); _reloading-Guard verhindert Mehrfach-Reload.
+         visibilitychange(>3000ms) + pageshow.persisted als Fallback-Trigger. Refs #1239.
     """
     body = client.get("/shell/" + PANEL_ID).get_data(as_text=True)
-    # Threshold-Konstante muss im HTML erscheinen (Schwellen-Parameter sichtbar)
+
+    # --- AC1: Clock-Drift-Detektor ---
+    # setInterval-Tick-Schleife
+    assert "setInterval" in body, (
+        "SHELL-12/AC1: setInterval (Clock-Drift-Detektor) fehlt im Shell-HTML"
+    )
+    # _lastTick-Variable fuer Drift-Erkennung
+    assert "_lastTick" in body, (
+        "SHELL-12/AC1: _lastTick-Variable fehlt — Clock-Drift-Detektor nicht vorhanden"
+    )
+    # Drift-Schwelle (Gap > 10000ms) muss als Konstante sichtbar sein
+    assert "CLOCK_DRIFT_THRESHOLD_MS" in body, (
+        "SHELL-12/AC1: CLOCK_DRIFT_THRESHOLD_MS-Schwelle fehlt im Shell-HTML"
+    )
+
+    # --- AC2: Reload-Mechanismus + Guard ---
+    # Reload via window.location.reload() (NICHT iframe.src-Trick)
+    assert "window.location.reload()" in body, (
+        "SHELL-12/AC2: window.location.reload() fehlt — Reload muss ganze Shell neu laden"
+    )
+    # _reloading-Guard verhindert Mehrfach-Reload
+    assert "_reloading" in body, (
+        "SHELL-12/AC2: _reloading-Guard fehlt im Shell-HTML"
+    )
+
+    # --- Fallback-Trigger ---
+    # visibilitychange-Schwelle (RESUME_RELOAD_THRESHOLD_MS, 3000ms)
     assert "RESUME_RELOAD_THRESHOLD_MS" in body, (
         "SHELL-12: RESUME_RELOAD_THRESHOLD_MS-Konstante fehlt im Shell-HTML"
     )
-    # visibilitychange-Handler muss vorhanden sein
     assert "visibilitychange" in body, (
-        "SHELL-12: visibilitychange-Handler fehlt im Shell-HTML"
+        "SHELL-12: visibilitychange-Fallback-Handler fehlt im Shell-HTML"
     )
-    # pageshow mit persisted-Check muss vorhanden sein (bfcache-Resume)
+    # Kurzzeit-Verdeckung (< Schwelle) darf KEINEN Reload ausloesen
+    assert "_hiddenAt" in body, (
+        "SHELL-12: _hiddenAt-Zeitstempel fehlt — kein Flash bei kurzer Verdeckung"
+    )
+    # pageshow + persisted (bfcache-Resume)
     assert "pageshow" in body, (
-        "SHELL-12: pageshow-Handler fehlt im Shell-HTML"
+        "SHELL-12: pageshow-Fallback-Handler fehlt im Shell-HTML"
     )
     assert "persisted" in body, (
         "SHELL-12: persisted-Check fehlt im Shell-HTML (bfcache-Resume)"
     )
-    # Iframe-Reload muss beide Panes targetieren
-    assert ".rail iframe" in body, (
-        "SHELL-12: .rail iframe-Selektor fehlt (Rail-Iframe muss neu geladen werden)"
+
+
+def test_shell12_clock_drift_und_guard(client):
+    """SHELL-12/AC1+AC2 (Refs #1239): Clock-Drift-Parameter + location.reload + _reloading-Guard.
+
+    Prueft dass:
+    - setInterval mit TICK_INTERVAL_MS (2000ms) vorhanden ist
+    - CLOCK_DRIFT_THRESHOLD_MS (10000ms Gap) als Schwelle sichtbar ist
+    - window.location.reload() der Reload-Mechanismus ist (kein iframe.src-Trick)
+    - _reloading-Guard Mehrfach-Reload verhindert
+    - iframe.src = iframe.src NICHT mehr als Reload-Mechanismus vorhanden ist
+    """
+    body = client.get("/shell/" + PANEL_ID).get_data(as_text=True)
+
+    # Tick-Intervall 2000ms — direkt im setInterval-Aufruf
+    assert "2000" in body, (
+        "SHELL-12/AC1: Tick-Intervall 2000ms fehlt im Shell-HTML"
     )
-    assert ".buddy iframe" in body, (
-        "SHELL-12: .buddy iframe-Selektor fehlt (Buddy-Iframe muss neu geladen werden)"
+    # Drift-Schwelle 10000ms
+    assert "10000" in body, (
+        "SHELL-12/AC1: CLOCK_DRIFT_THRESHOLD_MS=10000ms fehlt im Shell-HTML"
     )
-    # Kurzzeit-Verdeckung (< Schwelle) darf KEINEN Reload ausloesen
-    # → Zeitstempel-Variable muss vorhanden sein
-    assert "_hiddenAt" in body, (
-        "SHELL-12: _hiddenAt-Zeitstempel fehlt — kein Flash bei kurzer Verdeckung (Schwellen-Pruefung)"
+    # window.location.reload() ist Reload-Mechanismus
+    assert "window.location.reload()" in body, (
+        "SHELL-12/AC2: window.location.reload() ist Pflicht-Reload-Mechanismus"
     )
-    # Reload-Mechanismus: iframes[i].src = iframes[i].src (Loop-Variable)
-    assert ".src = " in body and "iframes[i]" in body, (
-        "SHELL-12: Iframe-Reload-Pattern (iframes[i].src = iframes[i].src) fehlt im Shell-HTML"
+    # Guard vorhanden
+    assert "_reloading" in body, (
+        "SHELL-12/AC2: _reloading-Guard fehlt"
+    )
+    # Alter iframe.src = iframe.src-Trick darf NICHT mehr vorhanden sein
+    assert "iframes[i].src = iframes[i].src" not in body, (
+        "SHELL-12/AC2: iframe.src = iframe.src-No-Op-Trick muss entfernt sein (Refs #1239)"
     )
 
 
