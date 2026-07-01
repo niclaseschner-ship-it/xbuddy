@@ -65,6 +65,51 @@
       document.addEventListener('click', tryFullscreen);
     })();
   </script>
+  {# SHELL-12: Resume-Reload nach Device-Sleep (PWA-Standalone-Resume).
+     Problem: nach Tablet aus/an (ohne Passwort-Unlock) reconnecten die
+     eingebetteten Iframes ihre SSE-/Event-Verbindungen nicht automatisch
+     (Standalone-PWA-Resume laedt die Seite nicht neu). Manueller Reload
+     heilt — dieses Script automatisiert genau das.
+     Mechanik: bei →hidden Zeitstempel merken; bei →visible pruefen ob
+     Verdeckungsdauer > SCHWELLE (Device-Sleep) → beide Iframes neu laden
+     (iframe.src = iframe.src → frische EventSource/Event-Verbindungen).
+     Bei kurzer Verdeckung (< Schwelle) KEIN Reload (kein Flash).
+     Zusaetzlich: pageshow mit event.persisted (bfcache-Restore) → Reload. #}
+  <script>
+    (function () {
+      'use strict';
+      var RESUME_RELOAD_THRESHOLD_MS = 3000;
+      var _hiddenAt = null;
+
+      function reloadIframes() {
+        var iframes = document.querySelectorAll('.rail iframe, .buddy iframe');
+        for (var i = 0; i < iframes.length; i++) {
+          if (iframes[i]) {
+            // eslint-disable-next-line no-self-assign
+            iframes[i].src = iframes[i].src;
+          }
+        }
+      }
+
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'hidden') {
+          _hiddenAt = Date.now();
+        } else if (document.visibilityState === 'visible') {
+          if (_hiddenAt !== null && (Date.now() - _hiddenAt) > RESUME_RELOAD_THRESHOLD_MS) {
+            reloadIframes();
+          }
+          _hiddenAt = null;
+        }
+      });
+
+      // bfcache-Restore (Back/Forward-Cache-Resume im PWA-Standalone)
+      window.addEventListener('pageshow', function (e) {
+        if (e.persisted) {
+          reloadIframes();
+        }
+      });
+    })();
+  </script>
   {# SHELL-PWA: Service-Worker registrieren (analog ESSEN-33/35).
      Scope /shell/ deckt alle Shell-Instanzen. Service-Worker-Allowed-Header
      erlaubt den erweiterten Scope (shell_asset_view, seiten/main.py). #}
