@@ -444,6 +444,62 @@ def test_shell_pwa_ac3_rail_iframe_nativ(client):
     )
 
 
+def test_shell12_resume_reload_script(client):
+    """SHELL-12: Shell-HTML enthaelt Resume-Reload-Script (visibilitychange + pageshow.persisted).
+
+    AC1: visibilitychange-Handler laedt bei Resume nach Verdeckung > Schwelle BEIDE
+    Iframes neu; pageshow.persisted ebenso. Bei kurzer Verdeckung kein Reload.
+    """
+    body = client.get("/shell/" + PANEL_ID).get_data(as_text=True)
+    # Threshold-Konstante muss im HTML erscheinen (Schwellen-Parameter sichtbar)
+    assert "RESUME_RELOAD_THRESHOLD_MS" in body, (
+        "SHELL-12: RESUME_RELOAD_THRESHOLD_MS-Konstante fehlt im Shell-HTML"
+    )
+    # visibilitychange-Handler muss vorhanden sein
+    assert "visibilitychange" in body, (
+        "SHELL-12: visibilitychange-Handler fehlt im Shell-HTML"
+    )
+    # pageshow mit persisted-Check muss vorhanden sein (bfcache-Resume)
+    assert "pageshow" in body, (
+        "SHELL-12: pageshow-Handler fehlt im Shell-HTML"
+    )
+    assert "persisted" in body, (
+        "SHELL-12: persisted-Check fehlt im Shell-HTML (bfcache-Resume)"
+    )
+    # Iframe-Reload muss beide Panes targetieren
+    assert ".rail iframe" in body, (
+        "SHELL-12: .rail iframe-Selektor fehlt (Rail-Iframe muss neu geladen werden)"
+    )
+    assert ".buddy iframe" in body, (
+        "SHELL-12: .buddy iframe-Selektor fehlt (Buddy-Iframe muss neu geladen werden)"
+    )
+    # Kurzzeit-Verdeckung (< Schwelle) darf KEINEN Reload ausloesen
+    # → Zeitstempel-Variable muss vorhanden sein
+    assert "_hiddenAt" in body, (
+        "SHELL-12: _hiddenAt-Zeitstempel fehlt — kein Flash bei kurzer Verdeckung (Schwellen-Pruefung)"
+    )
+    # Reload-Mechanismus: iframes[i].src = iframes[i].src (Loop-Variable)
+    assert ".src = " in body and "iframes[i]" in body, (
+        "SHELL-12: Iframe-Reload-Pattern (iframes[i].src = iframes[i].src) fehlt im Shell-HTML"
+    )
+
+
+def test_shell12_panel_display_unangetastet():
+    """SHELL-12/AC2 stop_rule: controller/app-panel/** und display-client/** unangetastet."""
+    import subprocess
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    for path in ("controller/app-panel/app.js", "display-client/index.html"):
+        result = subprocess.run(
+            ["git", "diff", "--name-only", "HEAD", "--", path],
+            capture_output=True, text=True,
+            cwd=repo_root,
+        )
+        changed = result.stdout.strip()
+        assert changed == "", (
+            "SHELL-12/AC2 stop_rule: %s darf NICHT geaendert sein (Panel/Display unangetastet)" % path
+        )
+
+
 def test_shell_pwa_ac3_panel_unangetastet():
     """SHELL-PWA AC3 stop_rule: controller/app-panel/app.js (PANEL-12-Grid/JS) unveraendert.
 
