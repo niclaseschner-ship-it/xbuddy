@@ -251,10 +251,6 @@ _ACTION_MAP: dict[str, str] = {
     "C": "A",
 }
 
-# xbuddy-Repo fuer gh-CLI-Aufrufe (identisch mit card_form_quote.REPO)
-_XBUDDY_REPO = "niclaseschner-ship-it/xbuddy"
-
-
 def make_durable_comment(card: dict, decision: str) -> str:
     """Erzeugt den durablen Issue-Comment in card_form_quote-konformer Form.
 
@@ -325,10 +321,18 @@ def _post_durable_comment(
     """
     body = make_durable_comment(card, decision)
     if not dry_run:
+        # Lazy-Import damit der Server auch ohne card_form_quote startet (z.B. in Tests)
+        old_path = sys.path[:]
+        sys.path.insert(0, TOOLS_DIR)
+        try:
+            import card_form_quote as cfq
+            repo = cfq.REPO
+        finally:
+            sys.path[:] = old_path
         subprocess.run(
             [
                 "gh", "issue", "comment", str(issue_number),
-                "--repo", _XBUDDY_REPO,
+                "--repo", repo,
                 "--body", body,
             ],
             check=True,
