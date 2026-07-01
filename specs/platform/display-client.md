@@ -214,7 +214,12 @@ Design-Auflösung (DC-15) gesetzt ist. Das iframe wird per CSS
 
 So füllt der Inhalt das Display so groß wie möglich, ohne Verzerrung und
 ohne Überlauf. Verbleibender Raum (Letterbox/Pillarbox) trägt die
-Display-Ruhe-Farbe aus DC-5 (`#000000`) — kein weißer Rand.
+Standard-Hintergrundfarbe (`#F5F1E8`, `--bg`) — kein weißer Rand. Die
+Letterbox-Farbe ist von der DC-5-Ruhe-Farbe **entkoppelt**: im
+Ruhe-Zustand (state null) ist der Adapter-Container (`#scaler`) versteckt
+(`hidden`); sichtbar ist dann ausschließlich der `html/body`-Hintergrund
+(`#000000`, Constitution: nicht-invasiv). Damit bleibt DC-5 unberührt, und
+die Letterbox erscheint ausschließlich im View-Zustand in Sand-Linen.
 
 `transform-origin: center` — die Skalierung passiert um den Mittelpunkt
 des iframe-Layouts, damit die Letterbox/Pillarbox symmetrisch um den
@@ -236,7 +241,7 @@ zu müssen.
 Der Skalierungs-Adapter (DC-12) hat keine eigene UI-Schicht über dem
 Inhalt: kein Border-Glow, kein Label, kein Lade-Indikator, kein
 Debug-Overlay. Wer auf das Display schaut, sieht den gerouteten Inhalt
-und den schwarzen Restraum aus DC-5 — sonst nichts. Folge: ein gut
+und den Sand-Linen-Restraum (Letterbox/Pillarbox, `#F5F1E8`) — sonst nichts. Folge: ein gut
 skalierter Plan ist visuell ununterscheidbar von einem nativ in
 Design-Auflösung gerenderten Plan.
 
