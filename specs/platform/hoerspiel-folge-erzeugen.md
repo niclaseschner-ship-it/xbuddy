@@ -111,7 +111,7 @@ trägt zwei Pfade: a) `kind_id` ist aus dem Chat-Kontext eindeutig ableitbar
 — Agent übergibt den Wert direkt als Pflicht-Argument, keine Rückfrage;
 b) `kind_id` ist unklar — Agent fragt einmalig zurück: „Für welches Kind?"
 und wartet die Antwort ab, bevor er `propose()` aufruft. `propose()` ohne
-`kind_id` wirft `TypeError` (kein Default — E-HFE-6 / #910).
+`kind_id` wirft `ValueError` (kein Default — E-HFE-6 / #910).
 
 **Diskussions-Schleife** (Werft-Lauf 2026-06-15, Refs #848): `propose()`
 fungiert vor dem Vorschlag-Endpoint-Aufruf als zwei-stufiger Filter:
