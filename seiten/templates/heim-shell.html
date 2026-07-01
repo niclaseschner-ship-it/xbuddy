@@ -65,47 +65,67 @@
       document.addEventListener('click', tryFullscreen);
     })();
   </script>
-  {# SHELL-12: Resume-Reload nach Device-Sleep (PWA-Standalone-Resume).
-     Problem: nach Tablet aus/an (ohne Passwort-Unlock) reconnecten die
-     eingebetteten Iframes ihre SSE-/Event-Verbindungen nicht automatisch
-     (Standalone-PWA-Resume laedt die Seite nicht neu). Manueller Reload
-     heilt — dieses Script automatisiert genau das.
-     Mechanik: bei →hidden Zeitstempel merken; bei →visible pruefen ob
-     Verdeckungsdauer > SCHWELLE (Device-Sleep) → beide Iframes neu laden
-     (iframe.src = iframe.src → frische EventSource/Event-Verbindungen).
-     Bei kurzer Verdeckung (< Schwelle) KEIN Reload (kein Flash).
-     Zusaetzlich: pageshow mit event.persisted (bfcache-Restore) → Reload. #}
+  {# SHELL-12: Resume-Reload nach Device-Sleep — Clock-Drift-Detektor (primaer)
+     + visibilitychange / pageshow als Fallback-Trigger. Refs #1239.
+
+     Problem (v1 aus #1233): visibilitychange/pageshow feuern im
+     "Tablet aus/an ohne Unlock"-Fall nicht zuverlaessig; zudem ist
+     iframe.src = iframe.src ein No-Op bei gleicher URL (keine Navigation).
+
+     Loesung:
+     (1) Clock-Drift-Detektor (primaer, event-unabhaengig): setInterval(2000ms)
+         merkt _lastTick. Bei jedem Tick: wenn Luecke > CLOCK_DRIFT_THRESHOLD_MS
+         (10000ms) → Prozess war eingefroren/Device schlief → Wake erkannt →
+         Reload. Der Callback laeuft nach Wake garantiert weiter.
+     (2) visibilitychange → visible nach Verdeckung > RESUME_RELOAD_THRESHOLD_MS
+         (3000ms) → Reload (Fallback fuer sichtbare Wiederkehr).
+     (3) pageshow mit event.persisted → Reload (bfcache-Restore-Fallback).
+
+     Reload = window.location.reload() (ganzer Shell-Reload, wie manueller Reload).
+     Gemeinsamer _reloading-Guard verhindert Mehrfach-Reload bei gleichzeitigem
+     Feuern mehrerer Trigger (behebt auch #1233-Watchdog-Doppel-Reload-klein). #}
   <script>
     (function () {
       'use strict';
       var RESUME_RELOAD_THRESHOLD_MS = 3000;
+      var CLOCK_DRIFT_THRESHOLD_MS = 10000;
+      var TICK_INTERVAL_MS = 2000;
+      var _reloading = false;
       var _hiddenAt = null;
+      var _lastTick = Date.now();
 
-      function reloadIframes() {
-        var iframes = document.querySelectorAll('.rail iframe, .buddy iframe');
-        for (var i = 0; i < iframes.length; i++) {
-          if (iframes[i]) {
-            // eslint-disable-next-line no-self-assign
-            iframes[i].src = iframes[i].src;
-          }
-        }
+      function doReload() {
+        if (_reloading) return;
+        _reloading = true;
+        window.location.reload();
       }
 
+      // (1) Clock-Drift-Detektor — primaer, event-unabhaengig
+      setInterval(function () {
+        var now = Date.now();
+        if ((now - _lastTick) > CLOCK_DRIFT_THRESHOLD_MS) {
+          doReload();
+        } else {
+          _lastTick = now;
+        }
+      }, TICK_INTERVAL_MS);
+
+      // (2) visibilitychange — Fallback: sichtbare Wiederkehr nach Sleep
       document.addEventListener('visibilitychange', function () {
         if (document.visibilityState === 'hidden') {
           _hiddenAt = Date.now();
         } else if (document.visibilityState === 'visible') {
           if (_hiddenAt !== null && (Date.now() - _hiddenAt) > RESUME_RELOAD_THRESHOLD_MS) {
-            reloadIframes();
+            doReload();
           }
           _hiddenAt = null;
         }
       });
 
-      // bfcache-Restore (Back/Forward-Cache-Resume im PWA-Standalone)
+      // (3) pageshow mit event.persisted — bfcache-Restore
       window.addEventListener('pageshow', function (e) {
         if (e.persisted) {
-          reloadIframes();
+          doReload();
         }
       });
     })();
