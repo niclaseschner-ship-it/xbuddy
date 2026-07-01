@@ -28,9 +28,9 @@ Assets im Sinne der A2-Disziplin gibt es V1 nicht.
 
 **V1-Scope:** Eltern-Chat-Aufgabe als Trigger (EC-8, analog
 `termine-erfragen.md` TER-9) · Folgen-Idee aus dem Aufrufer-Text
-extrahieren · `POST /api/v1/hoerspiel/folgen-vorschlag` aufrufen ·
+extrahieren · `POST /api/v1/hoerspiel/<kind_id>/folgen-vorschlag` aufrufen ·
 strukturierter Vorschlag (Text + Voice-Default + Bestätigungs-Frage)
-zur Bestätigung vorlegen nach EC-10 zweistufig · `POST /api/v1/hoerspiel/alben`
+zur Bestätigung vorlegen nach EC-10 zweistufig · `POST /api/v1/hoerspiel/<kind_id>/alben`
 in `execute()` nach Bestätigung aufrufen · Erfolgs-Bubble mit Album-Link
 nach erfolgreichem Build.
 
@@ -70,7 +70,7 @@ Tool-Result-String, das LLM postet die Bot-Nachricht. **Eingang:** die
 Telegram-Chat-Identität, die Telegram-User-ID des Aufrufers, und eine
 **Folgen-Idee** als Text (1–2 Sätze, vom Agent aus der Eltern-Nachricht
 extrahiert). **Wirkung:** ein lesender Aufruf an `POST
-/api/v1/hoerspiel/folgen-vorschlag` (HFE-3), **keine** Familien-Daten-
+/api/v1/hoerspiel/<kind_id>/folgen-vorschlag` (HFE-3), **keine** Familien-Daten-
 Änderung — die Vorschlag-Erzeugung schreibt nichts (HSP-11). **Ausgang:**
 ein strukturierter Vorschlag mit Text-Vorschau, gewählter Voice (Default-
 Resolution HFE-4) und Bestätigungs-Frage in einer einzigen Tool-Result-
@@ -78,7 +78,7 @@ Antwort.
 
 **`execute()`** läuft **außerhalb** des Agent-Loops nach erfolgter
 EC-10-Bestätigung (TASK-10: der `execute()`-Frame darf nach Confirm
-selbst senden). **Wirkung:** ein Aufruf an `POST /api/v1/hoerspiel/alben`
+selbst senden). **Wirkung:** ein Aufruf an `POST /api/v1/hoerspiel/<kind_id>/alben`
 (HFE-5) und ein Erfolgs- oder Fehler-Bubble mit Album-Link über
 `tg.send_message`.
 
@@ -104,6 +104,14 @@ durch den Eltern-Chat-Agent-Prompt). Der Skill validiert nicht — er
 reicht den Wert in den kind_id-tragenden API-Pfad durch und gibt einen
 Fehler-Tool-Result-Text aus, wenn der Buddy HTTP 404 antwortet (Instanz
 unbekannt).
+
+**kind_id-Extraktionsregel a/b (RAT-17 / #910 / HFE-9):** Der Eltern-Chat-Agent
+trägt zwei Pfade: a) `kind_id` ist aus dem Chat-Kontext eindeutig ableitbar
+(aktive Mini-App-Face-Auswahl, oder Familie hat genau eine Hörspiel-Instanz)
+— Agent übergibt den Wert direkt als Pflicht-Argument, keine Rückfrage;
+b) `kind_id` ist unklar — Agent fragt einmalig zurück: „Für welches Kind?"
+und wartet die Antwort ab, bevor er `propose()` aufruft. `propose()` ohne
+`kind_id` wirft `ValueError` (kein Default — E-HFE-6 / #910).
 
 **Diskussions-Schleife** (Werft-Lauf 2026-06-15, Refs #848): `propose()`
 fungiert vor dem Vorschlag-Endpoint-Aufruf als zwei-stufiger Filter:
@@ -245,7 +253,7 @@ den Argumenten aus dem bestätigten Vorschlag (`titel`, `text`, `voice`,
 `idee`). Es ruft den Hörspiel-Buddy:
 
 ```
-POST /api/v1/hoerspiel/alben
+POST /api/v1/hoerspiel/<kind_id>/alben
 Body: {"titel": "<titel>", "text": "<text>", "voice": "<voice>", "idee": "<idee>"}
 → 200 {"album-id": "<id>", "manifest-pfad": "<pfad>", "dauer-sek-gesamt": <int>}
 ```
@@ -262,7 +270,7 @@ Chat:
 
 ```
 ✅ Folge <nr> ist in der App.
-http://<display-origin>/display/hoerspiel/alben
+http://<display-origin>/display/hoerspiel/<kind_id>/alben
 ```
 
 Die Display-Origin kommt aus der bestehenden Eltern-Chat-Config
@@ -381,7 +389,7 @@ wird durch einen kontrollierten Doppelten ersetzt):
   Vorschlag-Endpoint mit einem `POST /<kind_id>/folgen-vorschlag`)
 - HFE-3 (HTTP 503 / 5xx vom Vorschlag-Endpoint → Tool-Result trägt
   Klartext-Hinweis, **kein** Vorschlag-Block, EC-10-Gate löst nicht aus)
-- E-HFE-6 / #910 (`propose()` ohne `kind_id` → `TypeError`; `kind_id`
+- E-HFE-6 / #910 (`propose()` ohne `kind_id` → `ValueError`; `kind_id`
   ist Pflicht-Argument ohne Default)
 - HFE-4 (Tool-Result-Text trägt Titel + Vorschau-Text + Bestätigungs-
   Block mit Voice; Intro/Outro nicht im Vorschau-Text; **kein**

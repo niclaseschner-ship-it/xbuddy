@@ -146,8 +146,8 @@ erst startet).
 ```
 /api/v1/seiten/static/*                       (Mini-App-Assets)
 /api/v1/init-data/validate                    (Bootstrap; prüft selbst)
-/api/v1/hoerspiel/alben/<id>/audio/<file>     (Kind-Tablet-Player)
-/api/v1/hoerspiel/shared-assets/status        (Diagnose)
+/api/v1/hoerspiel/<kind_id>/alben/<id>/audio/<track>.mp3   (Kind-Tablet-Player)
+/api/v1/hoerspiel/<kind_id>/shared-assets/status   (Diagnose)
 /api/v1/icons/suche                           (Asset-Suche)
 /api/v1/diag                                  (Diagnose)
 /display/_shared/*                            (Mini-App-Icons, MAD-6)
@@ -197,7 +197,7 @@ Route ohne Identifikation durch; `g.init_data` ist `None`.
 
 ```
 /api/v1/events                                (Eltern-Chat → Router)
-/api/v1/hoerspiel/shared-assets/rebuild       (admin)
+/api/v1/hoerspiel/<kind_id>/shared-assets/rebuild   (admin)
 /api/v1/<komponente>/admin/*                  (nginx-404 für extern, xbuddy-origin.conf)
 ```
 
@@ -225,12 +225,12 @@ Eintrag nicht in AUTH-6, sondern in eine der ratifizierten Klassen.
 ```
 /api/v1/routine/items                         (Trigger: Phase 2 routine-anpassen-PWA)
 /api/v1/routine/config                        (Trigger: Phase 2)
-/api/v1/hoerspiel/config                      (Trigger: Phase 3 hörspiel-eltern-PWA)
-/api/v1/hoerspiel/alben                       (Trigger: Phase 3)
-/api/v1/hoerspiel/alben/<id>/manifest         (Trigger: Phase 3)
-/api/v1/hoerspiel/resume                      (Trigger: Phase 3)
-/api/v1/hoerspiel/themen                      (Trigger: Phase 3)
-/api/v1/hoerspiel/folgen-vorschlag            (Trigger: Phase 3)
+/api/v1/hoerspiel/<kind_id>/config            (Trigger: Phase 3 hörspiel-eltern-PWA)
+/api/v1/hoerspiel/<kind_id>/alben             (Trigger: Phase 3)
+/api/v1/hoerspiel/<kind_id>/alben/<id>/manifest  (Trigger: Phase 3)
+/api/v1/hoerspiel/<kind_id>/resume            (Trigger: Phase 3)
+/api/v1/hoerspiel/<kind_id>/themen            (Trigger: Phase 3)
+/api/v1/hoerspiel/<kind_id>/folgen-vorschlag  (Trigger: Phase 3)
 /api/v1/hoerspiel/<kind_id>/play-extern       (Trigger: Phase 4 HSP-Audio-Routing — HSP-42)
 /api/v1/hoerspiel/<kind_id>/audio-stream      (Trigger: Phase 4 HSP-Audio-Routing — HSP-42, SSE-Push an Panel-PWA)
 /api/v1/seiten                                (Trigger: Phase 2/3, mini-app-uebersicht-Migration)
