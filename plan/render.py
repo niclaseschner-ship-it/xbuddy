@@ -45,19 +45,21 @@ GEOMETRIE_KOPF_HOEHE = 110     # Header (gestrafft) + Day-Row + Trenner
 GEOMETRIE_SLOT_HOEHE = 80      # je Schedule-Slot eine fixe 80px-Zeile (Nic-
                                # Setzung: bleibt 80, Platz via Kompression)
 GEOMETRIE_APPTS_CHROME = 44    # .appts padding/border + Spaltenabstand (getrimmt)
-GEOMETRIE_SPAN_LANE_HOEHE = 34  # eine gepackte Span-Lane (Balken + gap, kompakt)
-GEOMETRIE_SPAN_GAP = 6         # Abstand Span-Band → erste Pille (.under-span
-                               # padding-top: calc(--span-band + 6px)).
-                               # CSS↔Geometrie-Kopplung: muss mit dem +6px in
-                               # plan_kinder.html übereinstimmen (#1092 S6).
-                               # Wird NUR abgezogen, wenn span_lanes > 0.
-GEOMETRIE_PILLE_HOEHE = 37     # eine Einzel-Termin-Pille inkl. gap (kompakter:
-                               # worst case mit Uhrzeit-Zeile)
+# PLAN-14-PACKING (#1146): Eine Span-Lane ist genau EINE Raster-Zeile hoch —
+# gleich der Termin-Pillen-Zeilenhöhe H. So sitzt ein durchgehender Balken in
+# derselben Zeile wie ein Tages-Termin der Nachbarspalte (Loch-Füllung fluchtet).
+# Angeglichen 34→37 an GEOMETRIE_PILLE_HOEHE; spiegelt --span-lane-h im Template.
+# Der frühere GEOMETRIE_SPAN_GAP (globaler Span-Band-Abzug) ist entfernt — die
+# Lane-Kosten sind seit #1146 per-Spalte (free_rows), nicht global.
+GEOMETRIE_SPAN_LANE_HOEHE = 37  # eine Lane-Zeile = eine Pillen-Zeile (H), s.o.
+GEOMETRIE_PILLE_HOEHE = 37     # H: eine Raster-Zeile im Termin-Bereich (Pille inkl.
+                               # gap; worst case mit Uhrzeit-Zeile). Spiegelt
+                               # grid-auto-rows der .appts-col / .appts-spans.
 GEOMETRIE_COUNTER_HOEHE = 22   # „+M weitere"-Counter-Zeile — IMMER reserviert
 GEOMETRIE_SICHERHEITS_MARGE = 8  # kleine Marge gegen Sub-Pixel-Rundung
-TERMIN_LEISTE_MIN = 2          # Untergrenze: selbst bei vielen Slots zeigt eine
-                               # Spalte mindestens 2 Termine, bevor der Counter
-                               # greift (sonst frisst der Counter die Sicht).
+TERMIN_LEISTE_MIN = 2          # Zieluntergrenze der Raster-Zeilen R; bei sehr
+                               # vielen Slots gewinnt die No-Clip-Invariante
+                               # (#1092 S5) — lieber 1 Zeile weniger als clippen.
 
 
 def pack_span_lanes(spans):
@@ -89,41 +91,44 @@ def pack_span_lanes(spans):
     return len(lane_belegt_bis)
 
 
-def sichtbare_termine(slot_count, span_lanes=0):
-    """Höhen-basiertes N: sichtbare Einzel-Termine pro Tagesspalte (PLAN-13 V1.3).
+def termin_zeilen(slot_count):
+    """Raster-Höhe R: Zeilen des Termin-Bereichs (PLAN-14-PACKING, #1146).
 
-    N ist KEINE Magic-Zahl, sondern eine Funktion der REALEN Tablet-Geometrie
-    (944px nutzbar, #1092 S5): verfügbare 1fr-Höhe des Termin-Bereichs, abzüglich
-    der EXPLIZIT reservierten Counter-Zeile und einer kleinen Marge, geteilt
-    durch die Pillen-Höhe. Mehr Slots → kleinere 1fr-Restzeile → kleineres N.
+    R ist KEINE Magic-Zahl, sondern eine Funktion der REALEN Tablet-Geometrie
+    (944px nutzbar, #1092 S5): die verfügbare 1fr-Höhe des Termin-Bereichs nach
+    Kopf, Slot-Zeilen, Chrome, EXPLIZIT reservierter Counter-Zeile und einer
+    kleinen Marge — geteilt durch die Zeilenhöhe H (GEOMETRIE_PILLE_HOEHE).
+    Mehr Slots → kleinere 1fr-Restzeile → kleineres R.
 
-    Laufen Mehrtages-Spannen (PLAN-14), kosten ihre gepackten Lanes Höhe:
-    `span_lanes` ist die Anzahl belegter Lanes (aus `pack_span_lanes`), nicht
-    mehr ein pauschales „hat_spans". So zahlt eine span-reiche Woche genau ihre
-    Lane-Zeilen, eine span-arme nichts.
+    #1146 (PLAN-14-PACKING): R ist SPAN-UNABHÄNGIG. Der frühere globale Abzug
+    `- lanes * GEOMETRIE_SPAN_LANE_HOEHE - GEOMETRIE_SPAN_GAP` FÄLLT WEG — das war
+    der globale Bug (#1146): eine Span in einer Spalte strafte JEDE Spalte. Die
+    Lane-Kosten sind jetzt per-Spalte: eine Lane belegt in ihren berührten
+    Spalten eine der R Zeilen (occupied_lanes/free_rows in baue_view), span-freie
+    Spalten behalten alle R Zeilen.
 
-    Backward-Compat: ein bool für `span_lanes` (altes hat_spans) zählt als 1 Lane.
-    Untergrenze TERMIN_LEISTE_MIN — ABER nur, solange das nicht clippt: in
-    extremen Konfigs (8 Slots + 2 Lanes) lässt der reservierte Platz weniger als
-    TERMIN_LEISTE_MIN Pillen zu; dann gewinnt die No-Clip-Invariante (#1092 S5:
-    „lieber 1 Pille weniger als clippen, der Counter ist IMMER voll sichtbar").
-    Unit-testbar (#1092 Defekt 1).
+    R ist die 2D-Raster-Höhe (Spans + Tages-Termine teilen sich dieselben R
+    Zeilen). No-Clip-Invariante (#1092 S5): nie mehr als R Zeilen, die vertikal
+    passen; der Rest wird per Spalte im '+M weitere'-Counter zusammengefasst.
     """
-    lanes = int(span_lanes)  # bool True → 1, False → 0 (Backward-Compat)
     verfuegbar = (GEOMETRIE_FRAME_HOEHE
                   - GEOMETRIE_KOPF_HOEHE
                   - slot_count * GEOMETRIE_SLOT_HOEHE
                   - GEOMETRIE_APPTS_CHROME
                   - GEOMETRIE_COUNTER_HOEHE
-                  - GEOMETRIE_SICHERHEITS_MARGE
-                  - lanes * GEOMETRIE_SPAN_LANE_HOEHE
-                  - (GEOMETRIE_SPAN_GAP if lanes > 0 else 0))
-    n = verfuegbar // GEOMETRIE_PILLE_HOEHE
-    # No-Clip-Invariante schlägt die Untergrenze: der Boden hebt N nur an, wenn
-    # der Platz das auch trägt — sonst clippte der (immer sichtbare) Counter.
-    if n < TERMIN_LEISTE_MIN:
-        return max(0, n)
-    return n
+                  - GEOMETRIE_SICHERHEITS_MARGE)
+    return max(0, verfuegbar // GEOMETRIE_PILLE_HOEHE)
+
+
+def sichtbare_termine(slot_count, span_lanes=0):
+    """Backward-Compat-Alias auf termin_zeilen (PLAN-14-PACKING, #1146).
+
+    Früher trug diese Funktion die globale Span-Strafe; seit #1146 sind die
+    Lane-Kosten per-Spalte (free_rows in baue_view), nicht global. `span_lanes`
+    wird daher IGNORIERT — die Raster-Höhe R ist span-unabhängig. Bestehende
+    Aufrufer/Tests (`sichtbare_termine(x, 0)`) erhalten weiter R = altes-no-span-N.
+    """
+    return termin_zeilen(slot_count)
 
 # PLAN-12: Fallback-Typ für einen Kind-Aktivitäts-Slot, dessen Titel kein
 # Katalog-Schlüsselwort trägt — ein Kind-Slot-Eintrag ist nie symbol-/typlos.
@@ -484,40 +489,60 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
         else:
             appointments[tag_isos[0]].append(_einzel_termin(ev, ring, cfg, registry))
 
-    # PLAN-13 V1.3: Termin-Überschuss. Pro Tagesspalte werden höchstens N
-    # Termine sichtbar gezeigt; N ist HÖHEN-BASIERT aus der fixen Tablet-
-    # Geometrie (sichtbare_termine — kein Magic-5), damit nichts über die
-    # 1fr-Höhe hinaus clippt. Weitere fasst ein gedimmter Counter `+M weitere`
-    # zusammen (reine Sichtbarkeits-Mechanik ohne Klick-Pfad — Tages-Overlay =
-    # QW4). Eine laufende Mehrtages-Spanne (PLAN-14) kostet eine Balken-Zeile
-    # und senkt N. Die berührten Span-Spalten verlieren diese Höhe ohnehin durch
-    # den Balken; in span-losen Spalten rutschen die Tagestermine in den frei
-    # bleibenden Platz nach (PLAN-14 „frei für andere Termine") — das übernimmt
-    # das Spalten-Stack-Layout im Template, hier wird nur die Zahl gedeckelt.
-    # PLAN-14 V1.3: welche Tag-Indizes ein durchgehender Span-Balken berührt.
-    # NUR diese Spalten reservieren oben die Balken-Zeile; span-lose Spalten
-    # bleiben „frei für andere Termine" — dort rutschen die Tagestermine nach
-    # oben (kein Voll-Breite-Band über das ganze Fenster, verworfene Form).
+    # PLAN-14-PACKING (#1146): Termin-Packing als 2D-Puzzle-Fill über ein Raster
+    # aus 7 Spalten × R Zeilen. (1) Spans zuerst: pack_span_lanes weist jeder
+    # Spanne eine Lane (oberste Zeilen) zu — der Balken belegt seine Lane-Zeile
+    # durchgehend über [start_day..end_day]. (2) Tages-Termine füllen pro Spalte
+    # die FREIEN Zellen von oben, inkl. Löcher in Lane-Zeilen (Lane an einem Tag
+    # belegt, am anderen frei). (3) Eine Spalte clippt NUR, wenn ihre eigenen
+    # freien Zellen voll sind — nie, weil eine Span in einer ANDEREN Spalte Platz
+    # kostet (das war der globale Bug #1146). Überschuss pro Spalte → '+M weitere'.
+
+    # #1092 S5 (PLAN-14): Mehrtages-Spans in minimal viele Lanes packen — nicht-
+    # überlappende Spans teilen eine Lane (Intervall-Scheduling). Jeder Span
+    # trägt danach `lane`; span_lanes ist die Zahl belegter Lanes.
+    span_lanes = pack_span_lanes(span_appointments)
+
+    # span_cover: welche Tag-Indizes ein durchgehender Span-Balken berührt —
+    # exponiert für Diagnose/Tests (das Template braucht es nach dem Packing-
+    # Umbau nicht mehr, die Zellen-Platzierung folgt aus `row`/`lane`).
     span_cover = set()
     for s in span_appointments:
         for di in range(s["start_day"], s["end_day"] + 1):
             span_cover.add(di)
 
-    # #1092 S5 (PLAN-14): Mehrtages-Spans in minimal viele Lanes packen — nicht-
-    # überlappende Spans teilen eine Lane (Intervall-Scheduling). Jeder Span
-    # trägt danach `lane`; span_lanes ist die Zahl belegter Lanes und fließt in
-    # die verfügbare Höhe ein (statt pauschal „hat_spans"). Der Balken bleibt
-    # durchgehend (grid-column start..end) — nur die Zeilen-Zahl sinkt.
-    span_lanes = pack_span_lanes(span_appointments)
+    # R: Raster-Höhe (Zeilen), span-UNABHÄNGIG (#1146). Spans und Tages-Termine
+    # teilen sich dieselben R Zeilen.
+    zeilen = termin_zeilen(len(slot_keys))
 
-    n_sichtbar = sichtbare_termine(len(slot_keys), span_lanes)
     appointment_overflow = {}
-    for iso, liste in appointments.items():
-        if len(liste) > n_sichtbar:
-            appointment_overflow[iso] = len(liste) - n_sichtbar
-            appointments[iso] = liste[:n_sichtbar]
-        else:
-            appointment_overflow[iso] = 0
+    for i_tag, t in enumerate(tage):
+        iso = t["iso"]
+        # occupied_lanes(d): Lanes, deren Balken diesen Tag berührt (Werte
+        # < span_lanes). free_rows(d): alle R Zeilen ohne Balken — Löcher in
+        # Lane-Zeilen (an diesem Tag keine Span) sind FREI, ebenso alle Zeilen
+        # r >= span_lanes. Aufsteigend → früheste Zelle oben (Regel ii).
+        occupied = {s["lane"] for s in span_appointments
+                    if s["start_day"] <= i_tag <= s["end_day"]}
+        free_rows = [r for r in range(zeilen) if r not in occupied]
+
+        # SORT-Regel (Orchestrator-Setzung, PLAN-14-PACKING): ganztags/zeitlose
+        # Termine ZUERST (oben), dann getaktete aufsteigend nach Beginn. `time`
+        # ist None bei ganztags/zeitlos; "HH:MM" sortiert lexikalisch = chrono.
+        sortiert = sorted(
+            appointments[iso],
+            key=lambda a: (0, "") if a["time"] is None else (1, a["time"]))
+
+        # Platzierung: i-ter Termin in die i-te freie Zelle (Regel i: darf ein
+        # Lane-Loch = über einem Balken der Nachbarspalte sein). Überschuss über
+        # die freien Zellen dieser Spalte → Counter (PER SPALTE, nicht global).
+        platziert = []
+        for i, a in enumerate(sortiert):
+            if i < len(free_rows):
+                a["row"] = free_rows[i]  # 0-basierte Grid-Zeile
+                platziert.append(a)
+        appointment_overflow[iso] = max(0, len(sortiert) - len(free_rows))
+        appointments[iso] = platziert
 
     return {
         "tage": tage,
@@ -525,17 +550,16 @@ def baue_view(cfg, conn, kalender, registry, anker, anzahl_tage, mit_terminen,
         "appointments": appointments,
         "appointment_overflow": appointment_overflow if mit_terminen else {},
         "span_appointments": span_appointments if mit_terminen else [],
-        # PLAN-14 V1.3: Tag-Indizes mit laufendem Span-Balken (nur diese Spalten
-        # reservieren die Balken-Zeile; span-lose Spalten lassen die Tagestermine
-        # nach oben rutschen). Sortierte Liste für das Template.
+        # PLAN-14-PACKING (#1146): Tag-Indizes mit laufendem Span-Balken —
+        # exponiert für Diagnose/Tests. Sortierte Liste.
         "span_cover": sorted(span_cover) if mit_terminen else [],
-        # #1092 S5 (PLAN-14): Anzahl belegter Span-Lanes nach dem Packing — das
-        # Template reserviert oben in span-berührten Spalten genau so viele
-        # Lane-Höhen, und die N-Geometrie zahlt ihre Lane-Zeilen.
+        # #1092 S5 (PLAN-14): Anzahl belegter Span-Lanes nach dem Packing —
+        # exponiert für Diagnose/Tests (die Balken tragen ihre `lane` selbst).
         "span_lanes": span_lanes if mit_terminen else 0,
-        # PLAN-13 V1.3: höhen-basiertes N (Geometrie-Funktion) — exponiert für
-        # Tests/Diagnose; das Template braucht es nicht (Counter ist vorgekappt).
-        "termine_sichtbar": n_sichtbar,
+        # PLAN-14-PACKING (#1146): Raster-Höhe R (Zeilen), span-unabhängig —
+        # exponiert für Tests/Diagnose; das Template leitet die Counter-Zeile aus
+        # den platzierten `row`-Werten ab (eine Quelle, kein Jinja-Recompute).
+        "termine_sichtbar": zeilen,
         "show_appointments": mit_terminen,
         "picker_options": baue_picker_options(cfg),
     }
