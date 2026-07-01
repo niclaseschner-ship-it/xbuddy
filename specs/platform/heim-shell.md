@@ -97,7 +97,7 @@ manuelle_probe: Render-Gate-Screenshot 1920×1200 mit Rail 280px gegen
 Live-Daten (Kill bei Overflow/Clipping/unbedienbar). Gate-B-Beleg:
 `specs/mockups/heim-shell/`.
 
-### SHELL-12 — Resume-Reload nach Device-Sleep (Clock-Drift-Detektor, Refs #1239)
+### SHELL-12 — Resume-Reload nach Device-Sleep (Clock-Drift + Connectivity-Gate, Refs #1239, #1245)
 Im installierten PWA-Standalone-Kontext lädt die Shell nach einem Tablet-Sleep
 (Bildschirm aus/an ohne Passwort-Unlock) die Seite **nicht** automatisch neu —
 die eingebetteten Iframes verlieren dadurch ihre SSE-/Event-Verbindungen still
@@ -105,23 +105,60 @@ die eingebetteten Iframes verlieren dadurch ihre SSE-/Event-Verbindungen still
 und lädt sich **vollständig** via `window.location.reload()` neu (exakt der
 manuelle Reload, der bei Nic funktioniert).
 
+**Wake gegen WLAN-Reconnect gehärtet (#1245):** Android friert/killt den
+PWA-Prozess im Sleep **inklusive WLAN**. Ein direkter Reload beim Wake rennt
+gegen den WLAN-Reconnect: die netz-abhängigen Iframes (`/controller`,
+`/display`) und das network-first Shell-HTML laufen ins Leere/hängen → mal lädt
+es, mal nicht, und **nicht alle Kacheln**. Deshalb wird beim Wake **nicht direkt
+reloadet**, sondern erst auf echtes Netz gewartet.
+
 **Mechanik (Inline-Script in `seiten/templates/heim-shell.html`):**
 1. **Clock-Drift-Detektor (primär, event-unabhängig):** `setInterval(fn, 2000ms)`
    merkt `_lastTick = Date.now()`. Bei jedem Tick: wenn
    `(Date.now() - _lastTick) > CLOCK_DRIFT_THRESHOLD_MS` (10 000 ms) → Prozess
-   war eingefroren / Device schlief → Wake erkannt → `doReload()`.
-   Der Interval-Callback läuft nach dem Wake garantiert wieder, deshalb feuert
-   das unabhängig von Browser-Events.
+   war eingefroren / Device schlief → Wake erkannt →
+   `waitForConnectivityThenReload()`. Der Interval-Callback läuft nach dem Wake
+   garantiert wieder, deshalb feuert das unabhängig von Browser-Events.
 2. `visibilitychange → hidden`: Zeitstempel merken (`_hiddenAt = Date.now()`).
    `visibilitychange → visible`: Wenn Verdeckungsdauer > `RESUME_RELOAD_THRESHOLD_MS`
-   (3 000 ms) → `doReload()`. Bei kurzer Verdeckung (< Schwelle) **kein** Reload
-   (kein visueller Flash).
-3. `pageshow` mit `event.persisted = true` (bfcache-Restore) → `doReload()`.
+   (3 000 ms) → `waitForConnectivityThenReload()`. Bei kurzer Verdeckung
+   (< Schwelle) **kein** Reload (kein visueller Flash).
+3. `pageshow` mit `event.persisted = true` (bfcache-Restore) →
+   `waitForConnectivityThenReload()`.
+4. **`online`-Event + Flap-Guard:** `offline`-Listener setzt
+   `_offlineSince = Date.now()`; `online`-Handler ruft
+   `waitForConnectivityThenReload()` **nur**, wenn
+   `_offlineSince !== null && (Date.now() - _offlineSince) > RESUME_RELOAD_THRESHOLD_MS`
+   (3 000 ms, dieselbe Konstante wie Trigger 2). Danach `_offlineSince = null`.
+   Kurze WLAN-Aussetzer auf Heim-WLAN (< 3 s) lösen **keinen** sichtbaren Flash
+   am Dauer-Display aus. Echter Sleep-Disconnect (Gerät + WLAN weg) läuft lang
+   genug → Reload. Der `online`-Trigger bildet die **primäre** Fresh-Process-Naht
+   (Gerät schläft, WLAN weg, Prozess-Neustart → `online` feuert zuverlässig).
+5. **Iframe-onerror (OS-Kill-dann-Relaunch, best-effort):** Die same-origin
+   Iframes (`.rail iframe`, `.buddy iframe`) werden beim initialen Load mit einem
+   `error`-Listener beobachtet. Lädt eine ins Leere (frischer Prozess-Neustart,
+   Netz noch weg, **kein** Clock-Drift aktiv) → `waitForConnectivityThenReload()`.
+   **Hinweis:** Browser feuern `error` auf Iframes bei Netz-/HTTP-Fehlern
+   **unzuverlässig** — dieser Trigger ist **best-effort**. Der `online`-Trigger (4)
+   ist die primäre Naht für den Fresh-Process-Wake-Pfad.
+
+**`waitForConnectivityThenReload()`:** probt eine leichtgewichtige, sicher
+vorhandene same-origin URL (`/api/v1/seiten/static/heim-shell.css`) via
+`fetch(url + '?ping=' + Date.now(), {method:'HEAD', cache:'no-store'})`.
+- `res.ok` → `_reloading`-Guard setzen + `window.location.reload()`.
+- Fehler / `!ok` → `setTimeout(…, 2000ms)`-Retry bis Netz da, mit
+  Versuchs-Cap (`PROBE_MAX_ATTEMPTS`, danach aufgeben — kein Endlos-Loop).
+Nach erfolgreichem Reload startet der Kontext frisch (`_lastTick`/`_reloading`
+neu). Gemeinsamer `_reloading`-Guard **und** `_probing`-Guard verhindern
+Mehrfach-Reload bzw. Parallel-Probe-Schleifen bei gleichzeitigem Feuern
+mehrerer Trigger.
 
 **Reload = `window.location.reload()`** (ganze Shell, kein iframe.src-Trick —
-gleiche URL wäre No-Op im Browser-Cache). Gemeinsamer `_reloading`-Guard
-(`if (_reloading) return; _reloading = true;`) verhindert Mehrfach-Reload bei
-gleichzeitigem Feuern mehrerer Trigger.
+gleiche URL wäre No-Op im Browser-Cache).
+
+**Diagnose:** knappe `console.log('[shell-wake] …')` an den Kernpunkten (drift
+erkannt, probe ok/fehler, reload) für späteres `chrome://inspect`-Remote-Debug.
+**Kein** sichtbares UI-Overlay (Familien-Display).
 
 **Panel/Display-Code unangetastet** (SHELL-4-Leitplanke): Der Fix ist
 ausschließlich shell-seitig; `controller/app-panel/**` und `display-client/**`
@@ -129,6 +166,8 @@ bleiben unverändert.
 
 Test-Anker: seiten/tests/test_heim_shell.py::test_shell12_resume_reload_script
             seiten/tests/test_heim_shell.py::test_shell12_clock_drift_und_guard
+            seiten/tests/test_heim_shell.py::test_shell12_connectivity_gated_reload
+            seiten/tests/test_heim_shell.py::test_shell12_online_und_iframe_error_trigger
 
 ### SHELL-11 — Shell besitzt den Vollbild; eingebettete Iframes unterdrücken Eigen-Vollbild
 Die Shell ist der Vollbild-Besitzer: beim ersten Nutzer-Gesture (touchend/click)
@@ -224,7 +263,7 @@ Android). Der Mantel spiegelt das essen-einkauf-Muster 1:1 (ESSEN-33..35).
 
 | Anfrage-Typ | Erkennungs-Signal | Strategie |
 |---|---|---|
-| Shell-HTML-Seite `/shell/<panel_id>` | `request.mode === 'navigate'` ODER kein zweites Pfad-Segment | **network-first** (fetch → cache-put; Offline: `caches.match`) |
+| Shell-HTML-Seite `/shell/<panel_id>` | `request.mode === 'navigate'` ODER kein zweites Pfad-Segment | **network-first mit Timeout** (`Promise.race([fetch, ~2000ms]`) → cache-put; Timeout/Offline: `caches.match`) |
 | Static-Assets: manifest.json, sw.js, icon-*.png (`/shell/<panel_id>/<asset>`), heim-shell.css, platform.js | zweites Segment vorhanden / `heim-shell`·`platform.js` unter `/api/v1/seiten/static/` | **cache-first** |
 | Panel-/Display-Iframes (`/controller/`, `/display/`) | Präfix-Match | **pass-through** (kein `respondWith`) |
 
@@ -236,13 +275,23 @@ sicher — Installierbarkeit (keep_installable, WebAPK) bleibt gewahrt.
 **Übergang:** einmaliges Site-Data-Löschen zum Aktivieren des neuen SW;
 danach greifen alle Updates sofort.
 
+**Timeout-Härtung (#1245):** Beim Tablet-Wake ist das WLAN oft noch nicht
+zurück. Ein reines network-first fetch würde dann am lahmen Netz hängen und die
+Shell weiß lassen. Deshalb rennt die HTML-Navigation gegen ein
+`~2000ms`-Timeout (`Promise.race([fetch, timeout])`); antwortet das Netz nicht
+rechtzeitig → `caches.match(req)` (Cache zeigt sofort, der SHELL-12-Connectivity-
+Probe holt danach frisch nach). Der bestehende Cache-Fallback bei echtem
+Netzfehler bleibt; Static-Assets/`cacheFirst` sind unverändert. Der Offline-
+Fallback (keep_installable) bleibt gewahrt.
+
 - BUILD_ID-Platzhalter wird beim Ausliefern durch `shell_asset_view` ersetzt
   (Cache-Versionierung analog ESSEN-35).
 - Auslieferung: `/shell/<panel_id>/sw.js` mit `Service-Worker-Allowed: /shell/`
   Header (Scope-Erweiterung über SW-Datei-Pfad hinaus).
 
 Test-Anker: seiten/tests/test_heim_shell.py::test_shell_pwa_sw_html_network_first,
-            seiten/tests/test_heim_shell.py::test_shell_pwa_sw_assets_cache_first
+            seiten/tests/test_heim_shell.py::test_shell_pwa_sw_assets_cache_first,
+            seiten/tests/test_heim_shell.py::test_shell_pwa_sw_html_timeout
 
 **Asset-Route** (`shell_asset_view`, `seiten/main.py`):
 - `GET /shell/<panel_id>/<asset>` liefert sw.js + icon-*.png aus
