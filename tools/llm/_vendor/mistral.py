@@ -177,6 +177,46 @@ class MistralVendor(VendorBase):
         )
 
     # ------------------------------------------------------------------
+    #  Sicht: get_completion — Freitext-Singleshot (hoerspiel-Synopse, #1131)
+    # ------------------------------------------------------------------
+
+    def singleshot_text(
+        self,
+        system: str,
+        user: str,
+        *,
+        caller: str,
+        slot: str,
+        correlation_id: str | None = None,
+    ) -> str:
+        """Ein Call, Freitext-Antwort → str (LLMP-S1 `get_completion`,
+        Spiegel `anthropic.singleshot_text`).
+
+        Baut den Mistral-Payload aus EINEM system + EINEM user-Message, OHNE
+        `tools`/`tool_choice`/`schema`, und gibt den Text-Content zurück
+        (`_parse_response(...)["text"]`, geteilt mit der Agent-Sicht). KEINE
+        Cache-Marker (Mistral kann kein Prompt-Caching). Telemetrie via
+        geteiltem `_emit_telemetry` (kein Copy-Paste — LLMP-S7).
+        """
+        payload: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": self.max_tokens,
+            "messages": [],
+        }
+        if system:
+            payload["messages"].append({"role": "system", "content": system})
+        payload["messages"].append({"role": "user", "content": user})
+
+        t_start = time.monotonic()
+        response_data = self._call_api(payload)
+        wall_ms = int((time.monotonic() - t_start) * 1000)
+        self._emit_telemetry(
+            response_data, caller=caller, slot=slot,
+            correlation_id=correlation_id, wall_ms=wall_ms,
+        )
+        return self._parse_response(response_data)["text"]
+
+    # ------------------------------------------------------------------
     #  neutrale Wire-Form -> Mistral-Payload
     # ------------------------------------------------------------------
 
