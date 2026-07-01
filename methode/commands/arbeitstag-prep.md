@@ -278,13 +278,18 @@ Browser ist nur die Anzeige, die durable Wahrheit bleibt das GitHub-Issue.
   (ENTSCHEID-File Paket-Sektion „Konvergiert" → :8765 ephemeres Operator-Tool,
   außerhalb 5000-5099; Pass-2 PORT-3-Loopback-Hinweis)
 - **Mess-Naht:** Im HTML-Modus postet der Skill **pro Karte einen durablen
-  Issue-Comment** in der von `tools/card_form_quote.py` gelesenen **Form**:
-  erste Zeile der `<!-- card_pre_flight v1 … -->`-Marker, darunter die
-  textuelle Karte mit `#<nr>`-Header und der `→ [Aktion]`-Zeile (für
-  `over_14_lines`). `followup_pain` misst **spätere Korrektur-Comments nach**
-  dem Marker — nicht Nics Submit-Verdikt selbst; Marker und Verdikt dürfen
-  daher nicht im selben Comment kollabieren. So messen alle drei Metriken
-  korrekt (kein `preflight_missing`-False-Positive). Verbindlich in
+  Issue-Comment** via `POST http://<tailscale-ip>:8765/post-comment` —
+  **einziger Live-Erzeugungs-Weg** (PREP-10, `make_durable_comment` im Tool
+  ist die einzige Quelle der Comment-Form). Payload:
+  `{"issue_number": <int>, "card": <card-Objekt>, "decision": "<Verdikt>"}`.
+  Der Skill prüft die 200-Antwort; bei Fehler bricht er die Runde ab.
+  Der Skill komponiert die `card_pre_flight`-Form **nicht mehr von Hand**
+  und ruft `gh issue comment` **nicht direkt** auf — das Tool übernimmt
+  beides vollständig (`<!-- card_pre_flight v1 … -->`-Marker + `#<nr>`-Header
+  + `→ [Aktion]`-Zeile). `followup_pain` misst **spätere Korrektur-Comments
+  nach** dem Marker — nicht Nics Submit-Verdikt selbst; Marker und Verdikt
+  dürfen daher nicht im selben Comment kollabieren. So messen alle drei
+  Metriken korrekt (kein `preflight_missing`-False-Positive). Verbindlich in
   `conventions/prep-lifecycle.md` PREP-10 „Mess-Naht im HTML-Modus".
 
 ### Drei Pflicht-Härtungen (Klauseln)
