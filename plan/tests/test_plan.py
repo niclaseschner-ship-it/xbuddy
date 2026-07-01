@@ -698,20 +698,21 @@ def test_termin_ueberschuss_zeigt_counter(demo_config, demo_registry):
 # ------------------------------------------------------------
 
 def test_n_sichtbar_sinkt_mit_mehr_slots():
-    """#1092 Defekt 1 (PLAN-13 V1.3): N ist HÖHEN-BASIERT — mehr Slots fressen
-    den 1fr-Termin-Bereich, also sinkt die sichtbare Termin-Zahl monoton (kein
-    fixes Magic-5). Eine laufende Spanne kostet zusätzlich Höhe → N ≤ N-ohne-Span."""
+    """#1092 Defekt 1 + PLAN-14-PACKING (#1146, migriert): R ist HÖHEN-BASIERT —
+    mehr Slots fressen den 1fr-Termin-Bereich, also sinkt die Raster-Zeilen-Zahl
+    monoton (kein fixes Magic-5). Der frühere globale Span-Abzug ist entfallen
+    (jetzt per-Spalte); die span-unabhängige Monotonie über die Slot-Zahl bleibt."""
     # Monoton fallend über die realistische Slot-Spanne.
     werte = [render_mod.sichtbare_termine(n, False) for n in range(5, 10)]
     assert werte == sorted(werte, reverse=True), (
         "N muss mit steigender Slot-Zahl monoton fallen (höhen-basiert), war %r" % werte
     )
     assert werte[0] > werte[-1], "mehr Slots → strikt kleineres N erwartet"
-    # Span kostet eine Balken-Zeile → N nicht größer als ohne Span.
+    # Span-Lanes senken R NICHT mehr global (#1146): gleiche Slot-Zahl, gleiches R.
     for n in range(5, 10):
         assert (render_mod.sichtbare_termine(n, True)
-                <= render_mod.sichtbare_termine(n, False)), (
-            "laufende Spanne darf N nicht erhöhen (Balken-Zeile kostet Höhe)"
+                == render_mod.sichtbare_termine(n, False)), (
+            "R ist span-unabhängig (Lane-Kosten sind per-Spalte, nicht global)"
         )
 
 
@@ -758,11 +759,11 @@ def test_n_sichtbar_nichts_clippt_ueber_1fr(tmp_path, demo_registry):
 
 
 def test_vorlauf_spalte_einer_spanne_traegt_tagestermine(demo_config, demo_registry):
-    """#1092 Defekt 2 (PLAN-14 V1.3): „in den Vorlauf-Spalten bleibt die
-    Termin-Zeile FREI FÜR ANDERE TERMINE." Eine Spanne beginnt erst ab Index 2;
-    ein Einzel-Termin an Tag 0 (Vorlauf-Spalte, ohne laufende Spanne) muss in
-    der Termin-Leiste erscheinen — die Spanne reserviert seine Zeile nicht, und
-    seine Spalte trägt im HTML KEIN .under-span (Nachrutschen von oben)."""
+    """PLAN-14-PACKING (#1146, migriert von #1092 Defekt 2): Eine Spanne beginnt
+    erst ab Index 2; ein Einzel-Termin an Tag 0 (span-freie Spalte) muss in der
+    Termin-Leiste erscheinen — in der OBERSTEN Zeile (row 0), weil Tag 0 keine
+    belegte Lane hat. Das frühere .under-span/--span-band-Band ist entfallen; die
+    Zeilen-Platzierung folgt jetzt aus expliziter grid-row."""
     heute = date(2026, 5, 20)  # Mi (Tag 0)
     spanne_start = heute + timedelta(days=2)  # Fr (Tag 2)
     raw = [
@@ -770,7 +771,7 @@ def test_vorlauf_spalte_einer_spanne_traegt_tagestermine(demo_config, demo_regis
         gcal_allday("span1", "Theaterwoche",
                     spanne_start.isoformat(),
                     (spanne_start + timedelta(days=2)).isoformat()),
-        # Einzel-Termin am Mi (Vorlauf-Spalte, Tag 0) — muss durchkommen.
+        # Einzel-Termin am Mi (span-freie Spalte, Tag 0) — muss durchkommen.
         gcal_timed("ev1", "Zahnarzt",
                    heute.isoformat() + "T09:00:00+02:00",
                    heute.isoformat() + "T09:30:00+02:00"),
@@ -780,29 +781,26 @@ def test_vorlauf_spalte_einer_spanne_traegt_tagestermine(demo_config, demo_regis
     view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
                                 heute, 7, True, heute=heute)
     conn.close()
-    # Spanne berührt Tag 2,3; Vorlauf-Spalten 0,1 sind frei.
+    # Spanne berührt Tag 2,3; span-freie Spalten 0,1.
     assert view["span_cover"] == [2, 3], (
         "span_cover muss NUR die berührten Spalten tragen (kein Voll-Breite-Band)"
     )
-    assert 0 not in view["span_cover"], "Vorlauf-Spalte 0 darf nicht reserviert sein"
-    # Der Vorlauf-Termin am Tag 0 ist in der Termin-Leiste.
+    assert 0 not in view["span_cover"], "Vorlauf-Spalte 0 darf nicht belegt sein"
+    # Der Termin am Tag 0 ist platziert — in der obersten Zeile (row 0).
     iso0 = heute.isoformat()
-    labels = [a["label"] for a in view["appointments"][iso0]]
-    assert "Zahnarzt" in labels, "Vorlauf-Termin fehlt — Zeile fälschlich reserviert?"
-    # Entry-Path: Tag-0-Spalte trägt KEIN .under-span (kein durchgehendes Band).
+    tag0 = view["appointments"][iso0]
+    assert [a["label"] for a in tag0] == ["Zahnarzt"], "Vorlauf-Termin fehlt/verdoppelt"
+    assert tag0[0]["row"] == 0, "span-freie Spalte → Termin in oberster Zeile (row 0)"
+    # Entry-Path: das entfallene Band-Konstrukt taucht nirgends mehr auf, die
+    # Zahnarzt-Pille trägt eine explizite grid-row, und die Span berührt 3/5.
     client = make_client(demo_config, demo_registry, FakeTransport(raw))
     r = client.get("/display/plan/woche?ab=%s" % iso0)
     assert r.status_code == 200
     html = r.data.decode("utf-8")
-    cols = html.split('class="appts-col')[1:]  # je Tag-Spalte ein Fragment
-    assert len(cols) == 7, "7 Tag-Spalten erwartet"
-    # Spalte 0 (Vorlauf): kein under-span; Spalte 2 (Span-Start): under-span.
-    assert "under-span" not in cols[0][:40], (
-        "Vorlauf-Spalte 0 trägt under-span — Voll-Breite-Band statt Nachrutschen"
-    )
-    assert "under-span" in cols[2][:40], (
-        "Span-berührte Spalte 2 reserviert die Balken-Zeile nicht (under-span fehlt)"
-    )
+    assert "under-span" not in html, "entfallenes .under-span-Band noch im HTML"
+    assert "--span-band" not in html, "entfallenes --span-band noch im HTML"
+    assert "grid-row: 1;" in html, "Tages-Termin ohne explizite grid-row platziert"
+    assert "grid-column: 3 / 5" in html, "Span-Balken nicht über Spalten 3/5 (Tag 2–3)"
 
 
 def test_span_lane_packing_nicht_ueberlappende_teilen_eine_lane():
@@ -844,9 +842,12 @@ def test_span_lane_packing_endet_genau_vor_naechstem_start():
 
 
 def test_span_lanes_im_view_und_template(demo_config, demo_registry):
-    """#1092 S5: baue_view packt die Spans (span_lanes im View-Modell), und das
-    Template reserviert oben span_lanes × Lane-Höhe (--span-band). Zwei nicht-
-    überlappende Spans → span_lanes == 1, --span-band: 34px im HTML."""
+    """#1092 S5 + PLAN-14-PACKING (#1146, migriert): baue_view packt die Spans
+    (span_lanes im View-Modell), und die Balken sitzen im Overlay in ihrer Lane.
+    Zwei nicht-überlappende Spans → span_lanes == 1, beide teilen Lane 0 →
+    grid-row: 1 im HTML. Das entfallene --span-band-Band gibt es nicht mehr; die
+    Overlay-Lane-Höhe ist auf die Pillen-Zeilenhöhe (37px) angeglichen (Fluchtung
+    Loch-Termin ↔ Balken)."""
     heute = date(2026, 5, 18)  # Mo
     raw = [
         # Theaterwoche Mo–Mi (allday end exklusiv → +3 = Do).
@@ -866,34 +867,41 @@ def test_span_lanes_im_view_und_template(demo_config, demo_registry):
     client = make_client(demo_config, demo_registry, FakeTransport(raw))
     r = client.get("/display/plan/woche?ab=%s" % heute.isoformat())
     assert r.status_code == 200
-    assert b"--span-band: 34px" in r.data, (
-        "--span-band muss span_lanes × 34px sein (1 Lane → 34px)"
+    html = r.data.decode("utf-8")
+    assert "--span-band" not in html, "entfallenes --span-band noch im HTML"
+    # Beide Balken teilen Lane 0 → grid-row: 1; Overlay-Zeilenhöhe = 37px (= H).
+    assert html.count("grid-row: 1;") >= 2, "beide Spans müssen in Lane 0 (grid-row 1) sitzen"
+    assert "grid-auto-rows: 37px" in html, (
+        "Overlay-Lane-Höhe muss auf 37px (= Pillen-Zeilenhöhe H) angeglichen sein"
     )
 
 
-def test_template_nutzt_server_span_cover_und_span_lanes(demo_config, demo_registry):
-    """T1112 (AC3): main.py reicht span_cover + span_lanes aus render.py ans
-    Template — kein Jinja-Recompute (CLAUDE.md §6, eine Geometrie-Quelle).
+def test_template_nutzt_server_termin_row(demo_config, demo_registry):
+    """PLAN-14-PACKING (#1146, migriert von T1112-AC3): Die Zell-Platzierung ist
+    die EINE Quelle aus render.py — das Template setzt grid-row DIREKT aus dem
+    serverseitig gepackten `a.row`, ohne Jinja-Recompute (CLAUDE.md §6).
 
-    Nachweis: baue_view wird so gepatcht, dass span_lanes=3 bei leeren
-    span_appointments zurückkommt. Der alte Recompute (max(lane)+1 aus [])
-    ergäbe 0px; der neue Pfad (Server-Wert) ergibt 102px."""
+    Nachweis: baue_view wird gepatcht, sodass ein einzelner Tages-Termin row=4
+    trägt (eine Zahl, die ein Template-Recompute aus einer 1-Element-Liste NIE
+    erfände — der ergäbe row 0 → grid-row 1). Kommt `grid-row: 5;` im HTML an,
+    stammt die Platzierung aus dem Server-Wert."""
     from unittest.mock import patch
 
     heute = date(2026, 5, 18)
-    # Echter Basis-View ohne Spans — alle Terminfelder konsistent leer.
     kalender = kalender_mod.Kalender(FakeTransport([]), demo_registry.alle())
     conn = db_mod.connect(demo_config.db_datei)
     base_view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
                                      heute, 7, True, heute=heute)
     conn.close()
-    # Manipulierter View: span_appointments=[], aber render.py liefert span_lanes=3.
-    # Template-Recompute aus [] → max_lane=-1 → span_lanes=0 → --span-band: 0px.
-    # Render.py-Wert durchgereicht → span_lanes=3 → --span-band: 102px.
+    iso0 = base_view["tage"][0]["iso"]
     fake_view = dict(base_view)
-    fake_view["span_appointments"] = []
-    fake_view["span_cover"] = [0, 1, 2]
-    fake_view["span_lanes"] = 3
+    fake_view["appointments"] = dict(base_view["appointments"])
+    # Ein einzelner Termin mit serverseitig gepackter row=4 (0-basiert).
+    fake_view["appointments"][iso0] = [{
+        "row": 4, "time": None, "label": "Gepackt", "icon": "3071",
+        "ring": None, "person": None, "personen": [], "allday": True,
+        "event_id": "srv1",
+    }]
 
     plan_main.configure(demo_config, demo_registry, FakeTransport())
     plan_main.app.testing = True
@@ -901,9 +909,9 @@ def test_template_nutzt_server_span_cover_und_span_lanes(demo_config, demo_regis
         client = plan_main.app.test_client()
         r = client.get("/display/plan/woche?ab=%s" % heute.isoformat())
     assert r.status_code == 200
-    assert b"--span-band: 102px" in r.data, (
-        "span_lanes=3 (render.py-Quelle) → 102px; Recompute aus leeren "
-        "span_appointments ergäbe 0px — main.py reicht span_lanes nicht durch?"
+    assert b"grid-row: 5;" in r.data, (
+        "row=4 (render.py-Quelle) → grid-row: 5; ein Jinja-Recompute aus einer "
+        "1-Element-Liste ergäbe grid-row 1 — Template rechnet die Zeile selbst?"
     )
 
 
@@ -927,41 +935,188 @@ def test_n_sichtbar_reserviert_counter_kein_clip():
     )
 
 
-def test_n_sichtbar_span_lanes_kosten_hoehe():
-    """#1092 S5: span_lanes (statt pauschal hat_spans) senkt N — mehr belegte
-    Lanes kosten mehr Höhe, also monoton fallendes N. 0 Lanes ≥ 1 Lane ≥ 2."""
-    n0 = render_mod.sichtbare_termine(7, 0)
-    n1 = render_mod.sichtbare_termine(7, 1)
-    n2 = render_mod.sichtbare_termine(7, 2)
-    assert n0 >= n1 >= n2, "mehr Span-Lanes müssen N senken, war %r" % [n0, n1, n2]
-    assert n0 > n2, "2 Lanes müssen N strikt unter 0 Lanes drücken"
-
-
-def test_under_span_reserve_groesser_als_reine_lane_hoehe():
-    """#1092 S6 (Span-Gap): Bei span_lanes > 0 ist die von der Geometrie
-    abgezogene Reserve größer als die reine Summe der Lane-Höhen — der
-    GEOMETRIE_SPAN_GAP (6px) zwischen Span-Band-Unterkante und erster Pille
-    wird MITGEZÄHLT, damit kein neuer Clip entsteht.
-
-    CSS↔Geometrie-Kopplung: GEOMETRIE_SPAN_GAP muss dem +6px in
-    .appts-col.under-span (plan_kinder.html) entsprechen."""
-    # Bei 0 Lanes: kein Gap abgezogen — Referenz-N.
-    n_ohne = render_mod.sichtbare_termine(7, 0)
-    # Bei 1 Lane: Lane-Höhe + Gap abgezogen → N strikt kleiner als n_ohne.
-    n_mit = render_mod.sichtbare_termine(7, 1)
-    # Die Differenz muss mehr kosten als eine reine Lane-Höhe allein, also
-    # muss n_mit < n_ohne gelten (nicht nur ≤) — der Gap macht den Unterschied.
-    assert n_mit < n_ohne, (
-        "span_lanes=1 muss N strikt senken (Lane + Gap zählen), n_ohne=%d n_mit=%d"
-        % (n_ohne, n_mit)
+def test_raster_hoehe_span_unabhaengig():
+    """PLAN-14-PACKING (#1146, migriert von #1092 S5 „span_lanes kosten Höhe"):
+    Die Raster-Höhe R ist SPAN-UNABHÄNGIG — der frühere globale Lane-Abzug ist der
+    Bug #1146 und ist entfallen. `sichtbare_termine(7, k)` liefert für jedes k
+    dasselbe R (span_lanes wird ignoriert); die Lane-Kosten sind jetzt per-Spalte
+    (free_rows in baue_view), nicht global."""
+    r0 = render_mod.sichtbare_termine(7, 0)
+    r1 = render_mod.sichtbare_termine(7, 1)
+    r2 = render_mod.sichtbare_termine(7, 2)
+    assert r0 == r1 == r2, (
+        "R muss span-unabhängig sein (globaler Lane-Abzug = Bug #1146), war %r"
+        % [r0, r1, r2]
     )
-    # Direkte Arithmetik: verfügbare Höhe bei 1 Lane muss den Gap enthalten.
-    reserve_mit_gap = (render_mod.GEOMETRIE_SPAN_LANE_HOEHE
-                       + render_mod.GEOMETRIE_SPAN_GAP)
-    reserve_ohne_gap = render_mod.GEOMETRIE_SPAN_LANE_HOEHE
-    assert reserve_mit_gap > reserve_ohne_gap, (
-        "GEOMETRIE_SPAN_GAP muss positiv sein und Reserve erhöhen"
+    # Die neue Namens-API liefert dasselbe R und ignoriert Span-Lanes ganz.
+    assert render_mod.termin_zeilen(7) == r0
+    # GEOMETRIE_SPAN_GAP (globaler Span-Band-Abzug) ist entfernt.
+    assert not hasattr(render_mod, "GEOMETRIE_SPAN_GAP"), (
+        "GEOMETRIE_SPAN_GAP (globaler Abzug) muss mit dem Packing-Umbau weg sein"
     )
+
+
+def test_raster_hoehe_faellt_mit_mehr_slots():
+    """PLAN-14-PACKING (#1146, migriert): R ist höhen-basiert — mehr Slot-Zeilen
+    fressen den 1fr-Termin-Bereich, also fällt R monoton mit der Slot-Zahl (die
+    einzige verbliebene Geometrie-Abhängigkeit; Spans wirken nur noch per-Spalte)."""
+    werte = [render_mod.termin_zeilen(n) for n in range(5, 10)]
+    assert werte == sorted(werte, reverse=True), (
+        "R muss mit steigender Slot-Zahl monoton fallen, war %r" % werte
+    )
+    assert werte[0] > werte[-1], "mehr Slots → strikt kleineres R erwartet"
+
+
+# ------------------------------------------------------------
+#  T1146 — PLAN-14-PACKING: Termin-Packing als Puzzle-Fill
+#  AC1 Repro (span-freie Spalte clippt nicht) · AC2 Loch-Füllung ·
+#  AC3 Zeitordnung (ganztags oben) + per-Spalte-Überschuss
+# ------------------------------------------------------------
+
+def test_1146_AC1_span_freie_spalte_clippt_nicht(demo_config, demo_registry):
+    """AC1 Repro (#1146-Kern): Eine Woche mit einer Mehrtages-Span (Tag 2–3) und
+    einem SPAN-FREIEN Tag 0, der mehr Tages-Termine trägt als das ALTE global
+    span-gestrafte N (7 Slots, 1 Lane → alt 4), aber in die volle Raster-Höhe R=5
+    passt → dieser Tag zeigt ALLE (overflow==0), clippt NICHT.
+
+    Unter der alten globalen Logik (n_sichtbar = sichtbare_termine(7, span_lanes=1)
+    = 4) hätte Tag 0 fälschlich 1 Termin geclippt → dieser Test färbte rot."""
+    heute = date(2026, 5, 20)  # Mi (Tag 0)
+    span_start = heute + timedelta(days=2)  # Fr (Tag 2)
+    R = render_mod.termin_zeilen(len(demo_config.slots))
+    assert R == 5, "Testannahme: 7-Slot-Config → R=5"
+    # Alte globale Straf-Logik hätte bei 1 Lane nur 4 gezeigt — hier 5 Termine.
+    raw = [
+        gcal_allday("span_ac1", "Theaterwoche",
+                    span_start.isoformat(),
+                    (span_start + timedelta(days=2)).isoformat()),
+    ] + [
+        gcal_timed("ac1_%d" % i, "Termin %d" % i,
+                   "%sT%02d:00:00+02:00" % (heute.isoformat(), 8 + i),
+                   "%sT%02d:30:00+02:00" % (heute.isoformat(), 8 + i))
+        for i in range(R)  # R = 5 Termine am span-freien Tag 0
+    ]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    iso0 = heute.isoformat()
+    assert 0 not in view["span_cover"], "Tag 0 muss span-frei sein"
+    assert view["appointment_overflow"][iso0] == 0, (
+        "span-freie Spalte darf NICHT wegen einer Span in ANDERER Spalte clippen "
+        "(globaler Bug #1146)"
+    )
+    assert len(view["appointments"][iso0]) == R, "alle R Termine sichtbar (kein Clip)"
+    assert {a["row"] for a in view["appointments"][iso0]} == set(range(R)), (
+        "die R Termine füllen die Zeilen 0..R-1 lückenlos"
+    )
+
+
+def test_1146_AC2_loch_fuellung_ueber_balken(demo_config, demo_registry):
+    """AC2 Loch-Füllung: Zwei überlappende Spans über verschiedene Tagesbereiche
+    (Theaterwoche Mo–Mi = Lane 0, Skitag Di–Do = Lane 1). Am Montag ist Lane 1 ein
+    LOCH (Skitag läuft dort noch nicht) → ein Montags-Tages-Termin bekommt row==1,
+    sitzt also in der freien Lane-Zelle ÜBER dem Di–Do-Balken (Regel i)."""
+    heute = date(2026, 5, 18)  # Mo (Tag 0)
+    raw = [
+        # Theaterwoche Mo–Mi → start_day 0, end_day 2 (allday end excl +3 = Do).
+        gcal_allday("th", "Theaterwoche",
+                    heute.isoformat(), (heute + timedelta(days=3)).isoformat()),
+        # Skitag Di–Do → start_day 1, end_day 3 (überlappt Di/Mi → Lane 1).
+        gcal_allday("sk", "Skilager",
+                    (heute + timedelta(days=1)).isoformat(),
+                    (heute + timedelta(days=4)).isoformat()),
+        # Montags-Tages-Termin — muss ins Lane-1-Loch (row 1).
+        gcal_timed("mo1", "Zahnarzt",
+                   heute.isoformat() + "T09:00:00+02:00",
+                   heute.isoformat() + "T09:30:00+02:00"),
+    ]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    assert view["span_lanes"] == 2, "überlappende Spans → 2 Lanes"
+    spans = {s["label"]: s for s in view["span_appointments"]}
+    assert spans["Theaterwoche"]["lane"] == 0 and spans["Skilager"]["lane"] == 1, (
+        "Theaterwoche Lane 0 (früherer Start), Skilager Lane 1"
+    )
+    iso0 = heute.isoformat()
+    mo = view["appointments"][iso0]
+    assert [a["label"] for a in mo] == ["Zahnarzt"]
+    assert mo[0]["row"] == 1, (
+        "Montags-Termin muss die freie Lane-1-Zelle füllen (row 1, über dem "
+        "Di–Do-Balken) — Lane 0 ist von der Theaterwoche belegt"
+    )
+    # Entry-Path: die Zahnarzt-Pille trägt grid-row: 2 (row 1 + 1).
+    client = make_client(demo_config, demo_registry, FakeTransport(raw))
+    r = client.get("/display/plan/woche?ab=%s" % iso0)
+    assert r.status_code == 200
+    assert b"grid-row: 2;" in r.data, "Loch-Termin nicht in Lane-Zelle 1 (grid-row 2)"
+
+
+def test_1146_AC3_zeitordnung_ganztags_oben(demo_config, demo_registry):
+    """AC3 Zeitordnung (Orchestrator-Setzung): ganztags/zeitlose Termine ZUERST
+    (oben), dann getaktete aufsteigend nach Beginn. Ein Tag mit allday + 15:00 +
+    08:00 → Reihenfolge [allday(row0), 08:00(row1), 15:00(row2)]."""
+    heute = date(2026, 5, 20)
+    raw = [
+        gcal_timed("t_spaet", "Spaet",
+                   heute.isoformat() + "T15:00:00+02:00",
+                   heute.isoformat() + "T15:30:00+02:00"),
+        gcal_allday("t_ganz", "Ganztags", heute.isoformat()),
+        gcal_timed("t_frueh", "Frueh",
+                   heute.isoformat() + "T08:00:00+02:00",
+                   heute.isoformat() + "T08:30:00+02:00"),
+    ]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    iso = heute.isoformat()
+    platziert = view["appointments"][iso]
+    assert [a["label"] for a in platziert] == ["Ganztags", "Frueh", "Spaet"], (
+        "ganztags oben, dann getaktet aufsteigend"
+    )
+    assert [a["row"] for a in platziert] == [0, 1, 2], "Zeilen 0,1,2 von oben"
+
+
+def test_1146_AC3_ueberschuss_pro_spalte(demo_config, demo_registry):
+    """AC3 per-Spalte-Überschuss: Der '+N weitere'-Counter ist PRO SPALTE. Tag 0
+    trägt R+2 Termine (overflow 2), Tag 1 nur einen (overflow 0) — die Spalten
+    beeinflussen sich nicht. Das HTML zeigt genau einen '+2 weitere'-Counter."""
+    heute = date(2026, 5, 20)
+    R = render_mod.termin_zeilen(len(demo_config.slots))
+    tag1 = heute + timedelta(days=1)
+    raw = [
+        gcal_timed("d0_%d" % i, "Termin %d" % i,
+                   "%sT%02d:00:00+02:00" % (heute.isoformat(), 7 + i),
+                   "%sT%02d:30:00+02:00" % (heute.isoformat(), 7 + i))
+        for i in range(R + 2)  # Tag 0: R+2 → overflow 2
+    ] + [
+        gcal_timed("d1", "Solo",
+                   tag1.isoformat() + "T09:00:00+02:00",
+                   tag1.isoformat() + "T09:30:00+02:00"),  # Tag 1: 1 → overflow 0
+    ]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(demo_config.db_datei)
+    view = render_mod.baue_view(demo_config, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    assert view["appointment_overflow"][heute.isoformat()] == 2
+    assert view["appointment_overflow"][tag1.isoformat()] == 0
+    assert len(view["appointments"][heute.isoformat()]) == R
+    # Entry-Path: genau ein Counter im HTML, mit korrektem N und bündig unten.
+    client = make_client(demo_config, demo_registry, FakeTransport(raw))
+    r = client.get("/display/plan/woche?ab=%s" % heute.isoformat())
+    assert r.status_code == 200
+    html = r.data.decode("utf-8")
+    assert html.count('class="appts-more"') == 1, "Überschuss-Counter nur in Tag-0-Spalte"
+    assert "+2 weitere" in html
+    # Counter sitzt in der Zeile unter der letzten belegten (row R-1 → grid-row R+1).
+    assert ("grid-row: %d;" % (R + 1)) in html, "Counter nicht bündig unter der letzten Zeile"
 
 
 def test_headline_mein_plan_nicht_sichtbar(demo_config, demo_registry):
