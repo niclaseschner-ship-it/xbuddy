@@ -101,7 +101,9 @@
   // dem ein iframe der Größe designW×designH per CSS-transform in ein
   // viewportW×viewportH-Viewport eingepasst wird. Der Inhalt wird so groß
   // wie möglich, ohne Verzerrung und ohne Überlauf — verbleibender Raum
-  // ist Letterbox/Pillarbox und trägt die Display-Ruhe-Farbe (DC-5).
+  // ist Letterbox/Pillarbox und trägt im View-Zustand die Standard-
+  // Hintergrundfarbe (#F5F1E8, --bg), entkoppelt von DC-5 (#000000,
+  // Ruhe-Zustand; dann ist der Adapter-Container versteckt).
   //
   //     s = min(viewport.w / design.w, viewport.h / design.h)
   //
