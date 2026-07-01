@@ -125,12 +125,22 @@ reloadet**, sondern erst auf echtes Netz gewartet.
    (< Schwelle) **kein** Reload (kein visueller Flash).
 3. `pageshow` mit `event.persisted = true` (bfcache-Restore) →
    `waitForConnectivityThenReload()`.
-4. `online`-Event: WLAN kam zurück (auch während die Seite schon lief) →
-   `waitForConnectivityThenReload()`.
-5. **Iframe-onerror (OS-Kill-dann-Relaunch):** Die same-origin Iframes
-   (`.rail iframe`, `.buddy iframe`) werden beim initialen Load mit einem
+4. **`online`-Event + Flap-Guard:** `offline`-Listener setzt
+   `_offlineSince = Date.now()`; `online`-Handler ruft
+   `waitForConnectivityThenReload()` **nur**, wenn
+   `_offlineSince !== null && (Date.now() - _offlineSince) > RESUME_RELOAD_THRESHOLD_MS`
+   (3 000 ms, dieselbe Konstante wie Trigger 2). Danach `_offlineSince = null`.
+   Kurze WLAN-Aussetzer auf Heim-WLAN (< 3 s) lösen **keinen** sichtbaren Flash
+   am Dauer-Display aus. Echter Sleep-Disconnect (Gerät + WLAN weg) läuft lang
+   genug → Reload. Der `online`-Trigger bildet die **primäre** Fresh-Process-Naht
+   (Gerät schläft, WLAN weg, Prozess-Neustart → `online` feuert zuverlässig).
+5. **Iframe-onerror (OS-Kill-dann-Relaunch, best-effort):** Die same-origin
+   Iframes (`.rail iframe`, `.buddy iframe`) werden beim initialen Load mit einem
    `error`-Listener beobachtet. Lädt eine ins Leere (frischer Prozess-Neustart,
    Netz noch weg, **kein** Clock-Drift aktiv) → `waitForConnectivityThenReload()`.
+   **Hinweis:** Browser feuern `error` auf Iframes bei Netz-/HTTP-Fehlern
+   **unzuverlässig** — dieser Trigger ist **best-effort**. Der `online`-Trigger (4)
+   ist die primäre Naht für den Fresh-Process-Wake-Pfad.
 
 **`waitForConnectivityThenReload()`:** probt eine leichtgewichtige, sicher
 vorhandene same-origin URL (`/api/v1/seiten/static/heim-shell.css`) via

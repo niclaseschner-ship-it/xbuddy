@@ -601,6 +601,56 @@ def test_shell12_online_und_iframe_error_trigger(client):
     )
 
 
+def test_shell12_online_flap_guard_variablen(client):
+    """SHELL-12/Flap-Guard: _offlineSince-Variable + offline-Listener vorhanden.
+
+    Prueft dass:
+    - _offlineSince als Guard-Variable im Script deklariert ist.
+    - Ein 'offline'-Event-Listener vorhanden ist (setzt _offlineSince).
+    - Der online-Handler _offlineSince prueft (Bedingung im Script sichtbar).
+    - RESUME_RELOAD_THRESHOLD_MS fuer den Flap-Guard wiederverwendet wird.
+    """
+    body = client.get("/shell/" + PANEL_ID).get_data(as_text=True)
+
+    # Guard-Variable muss deklariert sein
+    assert "_offlineSince" in body, (
+        "SHELL-12/Flap-Guard: _offlineSince-Variable fehlt im Shell-HTML"
+    )
+    # offline-Listener muss vorhanden sein
+    assert "'offline'" in body or '"offline"' in body, (
+        "SHELL-12/Flap-Guard: offline-Event-Listener fehlt — setzt _offlineSince"
+    )
+    # Bedingungspruefung im online-Handler: _offlineSince !== null
+    assert "_offlineSince !== null" in body, (
+        "SHELL-12/Flap-Guard: Bedingung '_offlineSince !== null' fehlt im online-Handler"
+    )
+    # RESUME_RELOAD_THRESHOLD_MS als Schwelle wiederverwenden (3000ms)
+    # Prueft dass die Schwellen-Variable auch im Flap-Guard-Kontext erscheint
+    # (mind. 2x im Body: einmal fuer visibilitychange, einmal fuer Flap-Guard)
+    assert body.count("RESUME_RELOAD_THRESHOLD_MS") >= 2, (
+        "SHELL-12/Flap-Guard: RESUME_RELOAD_THRESHOLD_MS muss im Flap-Guard-Kontext "
+        "erscheinen (visibilitychange + online-Flap-Guard = mind. 2 Vorkommen)"
+    )
+
+
+def test_shell12_online_flap_guard_reset(client):
+    """SHELL-12/Flap-Guard: _offlineSince wird nach online-Event zurueckgesetzt (null).
+
+    Nach dem online-Event (egal ob Reload ausgeloest oder Flap ignoriert) muss
+    _offlineSince = null gesetzt werden — sonst triggert ein spaeterer
+    online-Event faelschlicherweise einen Reload obwohl der Aussetzer kurz war.
+    """
+    body = client.get("/shell/" + PANEL_ID).get_data(as_text=True)
+
+    # _offlineSince = null muss im online-Handler-Kontext erscheinen
+    # (Prueft: der Reset existiert, nicht nur die Initialisierung)
+    # Mindestens 2 Vorkommen: Initialisierung (var _offlineSince = null) + Reset im Handler
+    assert body.count("_offlineSince = null") >= 2, (
+        "SHELL-12/Flap-Guard: _offlineSince = null muss mind. 2x erscheinen "
+        "(Initialisierung + Reset im online-Handler nach Pruefung)"
+    )
+
+
 def test_shell12_panel_display_unangetastet():
     """SHELL-12/AC2 stop_rule: controller/app-panel/** und display-client/** unangetastet."""
     import subprocess

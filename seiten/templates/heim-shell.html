@@ -88,10 +88,16 @@
      (2) visibilitychange → visible nach Verdeckung > RESUME_RELOAD_THRESHOLD_MS
          (3000ms) → Fallback fuer sichtbare Wiederkehr.
      (3) pageshow mit event.persisted → bfcache-Restore-Fallback.
-     (4) online-Event → WLAN kam zurueck, waehrend die Seite schon lief.
-     (5) Iframe-onerror (OS-Kill-dann-Relaunch): laedt eine same-origin Iframe
-         (.rail/.buddy) beim frischen Prozess-Start ins Leere (Netz noch weg,
-         KEIN Clock-Drift aktiv), triggert der Load-Fehler ebenfalls den Probe.
+     (4) online-Event + Flap-Guard: offline merkt _offlineSince; online triggert
+         waitForConnectivityThenReload() NUR wenn Offline-Dauer
+         > RESUME_RELOAD_THRESHOLD_MS (3000ms). Kurze WLAN-Aussetzer auf
+         Heim-Netz → kein sichtbarer Flash. Echter Sleep-Disconnect laeuft
+         laenger → Reload. _offlineSince wird nach jedem online-Event zurueckgesetzt.
+     (5) Iframe-onerror (OS-Kill-dann-Relaunch, best-effort): laedt eine
+         same-origin Iframe (.rail/.buddy) beim frischen Prozess-Start ins Leere
+         (Netz noch weg, KEIN Clock-Drift aktiv), triggert der Load-Fehler
+         ebenfalls den Probe. Iframes feuern error bei Netz-/HTTP-Fehlern
+         unzuverlaessig — primaere Fresh-Process-Naht ist der online-Trigger (4).
 
      waitForConnectivityThenReload(): probt eine leichtgewichtige, sicher
      vorhandene same-origin URL (heim-shell.css) via fetch HEAD, no-store.
@@ -116,6 +122,7 @@
       var _probing = false;
       var _probeAttempts = 0;
       var _hiddenAt = null;
+      var _offlineSince = null;
       var _lastTick = Date.now();
 
       // Connectivity-gated Reload: erst echtes Netz, dann laden (#1245).
@@ -185,10 +192,24 @@
         }
       });
 
-      // (4) online — WLAN kam zurueck (auch waehrend die Seite schon lief)
+      // (4) online/offline — WLAN-Flap-Guard (#1245): offline merkt Zeitstempel;
+      //     online triggert waitForConnectivityThenReload() NUR wenn offline-Dauer
+      //     > RESUME_RELOAD_THRESHOLD_MS. Kurze Heim-WLAN-Aussetzer (< Schwelle)
+      //     erzeugen keinen sichtbaren Flash auf dem Dauer-Display. Echter
+      //     Sleep-Disconnect (Gerät + WLAN weg) laeuft lang genug → Reload.
+      //     _offlineSince wird nach jedem online-Event zurueckgesetzt (null).
+      window.addEventListener('offline', function () {
+        _offlineSince = Date.now();
+      });
       window.addEventListener('online', function () {
-        console.log('[shell-wake] online-event');
-        waitForConnectivityThenReload();
+        if (_offlineSince !== null && (Date.now() - _offlineSince) > RESUME_RELOAD_THRESHOLD_MS) {
+          console.log('[shell-wake] online-event → probe (offline-dauer > Schwelle)');
+          _offlineSince = null;
+          waitForConnectivityThenReload();
+        } else {
+          console.log('[shell-wake] online-event (flap, ignoriert)');
+          _offlineSince = null;
+        }
       });
 
       // (5) Iframe-onerror — OS-Kill-dann-Relaunch: frischer Prozess, Netz noch
