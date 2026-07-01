@@ -97,29 +97,38 @@ manuelle_probe: Render-Gate-Screenshot 1920×1200 mit Rail 280px gegen
 Live-Daten (Kill bei Overflow/Clipping/unbedienbar). Gate-B-Beleg:
 `specs/mockups/heim-shell/`.
 
-### SHELL-12 — Resume-Reload nach Device-Sleep (PWA-Standalone-Resume)
+### SHELL-12 — Resume-Reload nach Device-Sleep (Clock-Drift-Detektor, Refs #1239)
 Im installierten PWA-Standalone-Kontext lädt die Shell nach einem Tablet-Sleep
 (Bildschirm aus/an ohne Passwort-Unlock) die Seite **nicht** automatisch neu —
 die eingebetteten Iframes verlieren dadurch ihre SSE-/Event-Verbindungen still
 (Panel-Routing dead, Display-State eingefroren). Die Shell erkennt Device-Sleep
-und lädt **beide** Iframes automatisch neu, ohne das Browser-Tab-Verhalten zu
-stören.
+und lädt sich **vollständig** via `window.location.reload()` neu (exakt der
+manuelle Reload, der bei Nic funktioniert).
 
 **Mechanik (Inline-Script in `seiten/templates/heim-shell.html`):**
-- `visibilitychange → hidden`: Zeitstempel merken (`_hiddenAt = Date.now()`).
-- `visibilitychange → visible`: Wenn Verdeckungsdauer > `RESUME_RELOAD_THRESHOLD_MS`
-  (3 000 ms, unterscheidet Device-Sleep von kurzem Wegschauen) → beide Iframes
-  per `iframe.src = iframe.src` neu laden (erzwingt frische EventSource /
-  Event-Verbindungen). Bei kurzer Verdeckung (< Schwelle) **kein** Reload
-  (kein visueller Flash).
-- `pageshow` mit `event.persisted = true` (bfcache-Restore) → ebenfalls Reload.
-- Iframe-Selektor: `.rail iframe, .buddy iframe` (null-guard via NodeList-Loop).
+1. **Clock-Drift-Detektor (primär, event-unabhängig):** `setInterval(fn, 2000ms)`
+   merkt `_lastTick = Date.now()`. Bei jedem Tick: wenn
+   `(Date.now() - _lastTick) > CLOCK_DRIFT_THRESHOLD_MS` (10 000 ms) → Prozess
+   war eingefroren / Device schlief → Wake erkannt → `doReload()`.
+   Der Interval-Callback läuft nach dem Wake garantiert wieder, deshalb feuert
+   das unabhängig von Browser-Events.
+2. `visibilitychange → hidden`: Zeitstempel merken (`_hiddenAt = Date.now()`).
+   `visibilitychange → visible`: Wenn Verdeckungsdauer > `RESUME_RELOAD_THRESHOLD_MS`
+   (3 000 ms) → `doReload()`. Bei kurzer Verdeckung (< Schwelle) **kein** Reload
+   (kein visueller Flash).
+3. `pageshow` mit `event.persisted = true` (bfcache-Restore) → `doReload()`.
+
+**Reload = `window.location.reload()`** (ganze Shell, kein iframe.src-Trick —
+gleiche URL wäre No-Op im Browser-Cache). Gemeinsamer `_reloading`-Guard
+(`if (_reloading) return; _reloading = true;`) verhindert Mehrfach-Reload bei
+gleichzeitigem Feuern mehrerer Trigger.
 
 **Panel/Display-Code unangetastet** (SHELL-4-Leitplanke): Der Fix ist
 ausschließlich shell-seitig; `controller/app-panel/**` und `display-client/**`
 bleiben unverändert.
 
 Test-Anker: seiten/tests/test_heim_shell.py::test_shell12_resume_reload_script
+            seiten/tests/test_heim_shell.py::test_shell12_clock_drift_und_guard
 
 ### SHELL-11 — Shell besitzt den Vollbild; eingebettete Iframes unterdrücken Eigen-Vollbild
 Die Shell ist der Vollbild-Besitzer: beim ersten Nutzer-Gesture (touchend/click)
