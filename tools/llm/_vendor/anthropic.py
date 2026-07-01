@@ -218,6 +218,49 @@ class AnthropicVendor(VendorBase):
         )
 
     # ------------------------------------------------------------------
+    #  Sicht: get_completion — Freitext-Singleshot (hoerspiel-Synopse, #1131)
+    # ------------------------------------------------------------------
+
+    def singleshot_text(
+        self,
+        system: str,
+        user: str,
+        *,
+        caller: str,
+        slot: str,
+        correlation_id: str | None = None,
+    ) -> str:
+        """Ein Call, Freitext-Antwort → str (LLMP-S1 `get_completion`).
+
+        Spiegel `singleshot_structured` OHNE `tools`/`tool_choice`/`schema` —
+        ein System + ein User, der reine Text-Content zurück (wie
+        `chat_multiturn`). Required: nur `system_message_distinct`; `cache_control`
+        ist NICHT Boot-Minimum (llm-providers.md:78-82), Anthropic setzt den
+        Cache-Marker am System-Block trotzdem weiter (LLMP-S9). Telemetrie +
+        ProviderError wie `chat_multiturn`/`singleshot_structured`.
+        """
+        t_start = time.monotonic()
+        response = self._create(
+            system=self._system_blocks(system),
+            messages=[{"role": "user", "content": user}],
+        )
+        wall_ms = int((time.monotonic() - t_start) * 1000)
+
+        self._emit_telemetry(
+            response=response,
+            caller=caller,
+            slot=slot,
+            correlation_id=correlation_id,
+            wall_ms=wall_ms,
+        )
+
+        text_parts = []
+        for block in response.content:
+            if getattr(block, "type", None) == "text":
+                text_parts.append(block.text)
+        return "\n".join(text_parts).strip()
+
+    # ------------------------------------------------------------------
     #  Sicht: get_agent — Agent-Tool-Loop (eltern-chat, T4)
     # ------------------------------------------------------------------
 
