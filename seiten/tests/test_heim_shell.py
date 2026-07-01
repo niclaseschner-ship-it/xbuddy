@@ -548,6 +548,120 @@ def test_shell12_panel_display_unangetastet():
         )
 
 
+# ============================================================
+#  test_shell_pwa_sw_* — SHELL-PWA-SW (#1241)
+#  Prueft: network-first fuer HTML-Navigation, cache-first fuer Static-Assets.
+# ============================================================
+
+def _read_sw_js():
+    """Liefert den sw.js-Quelltext (aus seiten/static/shell/sw.js)."""
+    sw_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "static", "shell", "sw.js",
+    )
+    with open(sw_path, encoding="utf-8") as fh:
+        return fh.read()
+
+
+def test_shell_pwa_sw_html_network_first():
+    """SHELL-PWA-SW/AC1 (#1241): sw.js verwendet network-first fuer Shell-HTML-Navigation.
+
+    Prueft:
+    - isShellHtmlNavigation (oder aequivalente Funktion) unterscheidet HTML von Assets.
+    - networkFirst-Funktion ist vorhanden und hat Offline-Fallback (caches.match).
+    - request.mode === 'navigate' wird als Erkennungs-Signal verwendet.
+    - HTML-Navigation ruft networkFirst auf, nicht cacheFirst.
+    """
+    src = _read_sw_js()
+    # Network-first-Funktion muss vorhanden sein
+    assert "networkFirst" in src, (
+        "SHELL-PWA-SW/AC1: networkFirst-Funktion fehlt in sw.js"
+    )
+    # Offline-Fallback (caches.match) muss in networkFirst vorhanden sein
+    # (keep_installable: Offline-Fallback darf nicht fehlen)
+    nf_start = src.find("function networkFirst")
+    assert nf_start != -1, "networkFirst-Funktion nicht gefunden"
+    # caches.match muss innerhalb der networkFirst-Funktion oder erreichbar sein
+    assert "caches.match" in src[nf_start:], (
+        "SHELL-PWA-SW/AC1: Offline-Fallback caches.match fehlt in networkFirst "
+        "(keep_installable: Installierbarkeit erfordert fetch-Handler mit Offline-Fallback)"
+    )
+    # request.mode === 'navigate' als primaeres HTML-Signal
+    assert "navigate" in src, (
+        "SHELL-PWA-SW/AC1: request.mode === 'navigate' fehlt — "
+        "HTML-Navigation muss per mode erkannt werden"
+    )
+    # isShellHtmlNavigation (oder analoge Erkennungs-Funktion) muss existieren
+    assert "isShellHtmlNavigation" in src, (
+        "SHELL-PWA-SW/AC1: isShellHtmlNavigation-Funktion fehlt in sw.js"
+    )
+    # HTML-Navigation muss networkFirst aufrufen (nicht cacheFirst)
+    # Prueft: respondWith(networkFirst(...)) erscheint im Kontext von isShellHtmlNavigation
+    html_nav_pos = src.find("isShellHtmlNavigation")
+    assert html_nav_pos != -1
+    # Suche networkFirst nach der HTML-Nav-Pruefung (im fetch-Handler-Zweig)
+    nf_call_pos = src.find("networkFirst", html_nav_pos)
+    assert nf_call_pos != -1, (
+        "SHELL-PWA-SW/AC1: networkFirst wird nach isShellHtmlNavigation nicht aufgerufen"
+    )
+
+
+def test_shell_pwa_sw_assets_cache_first():
+    """SHELL-PWA-SW/AC2 (#1241): sw.js behaelt cache-first fuer Static-Assets.
+
+    Prueft:
+    - isShellStaticAsset (oder aequivalente Funktion) matcht manifest.json,
+      icons, heim-shell.css, platform.js.
+    - cacheFirst-Funktion bleibt vorhanden.
+    - Static-Asset-Zweig ruft cacheFirst auf.
+    - /controller/ und /display/ bleiben pass-through (unpetraendert).
+    - BUILD_ID/CACHE_NAME-Versionierung + activate-Cleanup erhalten.
+    """
+    src = _read_sw_js()
+    # cacheFirst muss weiterhin vorhanden sein
+    assert "cacheFirst" in src, (
+        "SHELL-PWA-SW/AC2: cacheFirst-Funktion fehlt in sw.js"
+    )
+    # Statische Asset-Erkennung muss vorhanden sein
+    assert "isShellStaticAsset" in src, (
+        "SHELL-PWA-SW/AC2: isShellStaticAsset-Funktion fehlt in sw.js"
+    )
+    # manifest.json und icon werden per zweitem Pfad-Segment unterschieden
+    # (oder explizit geprueft) — 'includes' als Schluessel-Pattern
+    assert "manifest" in src or "includes('/')" in src, (
+        "SHELL-PWA-SW/AC2: Asset-Unterscheidung (manifest / zweites Segment) fehlt"
+    )
+    # heim-shell und platform.js muessen als statische Assets erkannt werden
+    assert "heim-shell" in src, (
+        "SHELL-PWA-SW/AC2: heim-shell-Asset fehlt in isShellStaticAsset"
+    )
+    assert "platform.js" in src, (
+        "SHELL-PWA-SW/AC2: platform.js fehlt in isShellStaticAsset"
+    )
+    # Static-Asset-Zweig ruft cacheFirst auf
+    static_pos = src.find("isShellStaticAsset")
+    assert static_pos != -1
+    cf_call_pos = src.find("cacheFirst", static_pos)
+    assert cf_call_pos != -1, (
+        "SHELL-PWA-SW/AC2: cacheFirst wird nach isShellStaticAsset nicht aufgerufen"
+    )
+    # pass-through fuer /controller/ und /display/ erhalten
+    assert "/controller/" in src, (
+        "SHELL-PWA-SW/AC2: /controller/ pass-through fehlt in sw.js"
+    )
+    assert "/display/" in src, (
+        "SHELL-PWA-SW/AC2: /display/ pass-through fehlt in sw.js"
+    )
+    # BUILD_ID/CACHE_NAME-Versionierung erhalten
+    assert "BUILD_ID" in src, "SHELL-PWA-SW/AC2: BUILD_ID fehlt"
+    assert "CACHE_NAME" in src, "SHELL-PWA-SW/AC2: CACHE_NAME fehlt"
+    assert "shell-pwa-" in src, "SHELL-PWA-SW/AC2: shell-pwa- Namespace-Prefix fehlt"
+    # activate-Cleanup erhalten
+    assert "caches.delete" in src, (
+        "SHELL-PWA-SW/AC2: activate-Cleanup (caches.delete alter Namespaces) fehlt"
+    )
+
+
 def test_shell_pwa_ac3_panel_unangetastet():
     """SHELL-PWA AC3 stop_rule: controller/app-panel/app.js (PANEL-12-Grid/JS) unpetraendert.
 
