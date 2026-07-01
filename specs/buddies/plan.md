@@ -344,7 +344,7 @@ wird erst ab ihrem **Start-Tag** im sichtbaren Fenster gerendert.
 (heutige Form, Befund 2026-06-22: blockiert die Anzeige an Tagen, an
 denen die Spanne noch nicht läuft).
 
-**Termin-Packing als Puzzle-Fill (V1.4 — #1146, 2026-07-01):** Der
+**PLAN-14-PACKING — Termin-Packing als Puzzle-Fill (V1.4 — #1146, 2026-07-01):** Der
 Termin-Bereich ist ein 2D-Raster aus 7 Spalten × **R** Zeilen. R leitet sich aus
 der realen Tablet-Geometrie ab (verfügbare 1fr-Höhe nach Kopf, Slot-Zeilen,
 Chrome, reservierter Counter-Zeile und Marge, geteilt durch die Zeilenhöhe H);

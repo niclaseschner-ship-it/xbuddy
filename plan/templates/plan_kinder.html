@@ -659,7 +659,7 @@
                  keine Geometrie-Neuberechnung im Template. #}
               {% set overflow = appointment_overflow.get(d.iso, 0) %}
               {% if overflow > 0 %}
-                {% set letzte_zeile = appointments[d.iso] | map(attribute='row') | max %}
+                {% set letzte_zeile = appointments[d.iso] | map(attribute='row') | max | default(-1) %}
                 <div class="appts-more" style="grid-row: {{ letzte_zeile + 2 }};">+{{ overflow }} weitere</div>
               {% endif %}
             </div>

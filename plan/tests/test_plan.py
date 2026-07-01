@@ -1119,6 +1119,39 @@ def test_1146_AC3_ueberschuss_pro_spalte(demo_config, demo_registry):
     assert ("grid-row: %d;" % (R + 1)) in html, "Counter nicht bündig unter der letzten Zeile"
 
 
+def test_1146_counter_r0_kein_crash(tmp_path, demo_registry):
+    """PLAN-14-PACKING Grenzfall R=0: Bei ≥10 Slots ist termin_zeilen=0 →
+    free_rows=[] → alle Termine im Überschuss, appointments[iso] leer. Das
+    Template darf nicht crashen (max-Filter auf leere Sequenz → Undefined);
+    der Counter muss trotzdem erscheinen.
+
+    Dieser Test bricht VOR dem Template-Guard (letzte_zeile=Undefined+2),
+    ist danach grün (default(-1) → grid-row:1)."""
+    # Precondition: 10 Slots → R=0
+    assert render_mod.termin_zeilen(10) == 0, "Precondition: R=0 bei 10 Slots"
+    cfg = _config_mit_slots(tmp_path, _n_erwachsenen_slots(10))
+    heute = date(2026, 5, 20)
+    raw = [
+        gcal_timed("ev%d" % i, "Termin %d" % i,
+                   "%sT%02d:00:00+02:00" % (heute.isoformat(), 8 + i),
+                   "%sT%02d:30:00+02:00" % (heute.isoformat(), 8 + i))
+        for i in range(3)
+    ]
+    kalender = kalender_mod.Kalender(FakeTransport(raw), demo_registry.alle())
+    conn = db_mod.connect(cfg.db_datei)
+    view = render_mod.baue_view(cfg, conn, kalender, demo_registry,
+                                heute, 7, True, heute=heute)
+    conn.close()
+    iso = heute.isoformat()
+    assert view["appointments"][iso] == [], "R=0: keine Termine platziert"
+    assert view["appointment_overflow"][iso] == 3, "R=0: alle 3 im Overflow"
+    # Entry-Path: Template darf nicht crashen; Counter erscheint.
+    client = make_client(cfg, demo_registry, FakeTransport(raw))
+    r = client.get("/display/plan/woche?ab=%s" % iso)
+    assert r.status_code == 200, "R=0: Template-Crash bei leerem max-Filter"
+    assert b"+3 weitere" in r.data, "R=0: Counter fehlt im HTML"
+
+
 def test_headline_mein_plan_nicht_sichtbar(demo_config, demo_registry):
     """#1092 Defekt 3: Die sichtbare Headline „mein Plan" (.brand-title) ist
     entfernt — die Kopf-Zeile schrumpft (Platz für den 1fr-Termin-Bereich).
