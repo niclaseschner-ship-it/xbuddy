@@ -1,16 +1,9 @@
 // sw.js — Service-Worker fuer Heim-Shell-PWA (SHELL-PWA).
 //
-// SHELL-PWA Cache-Strategie (SHELL-PWA-SW):
-//   - network-first mit Timeout fuer Shell-HTML-Navigation (/shell/<panel_id>,
-//     navigate-Modus). Online: neuer Code laed sofort; Cache-Put fuer Offline.
-//     Netz zu langsam (Wake, WLAN noch weg, > NETWORK_TIMEOUT_MS) → Cache-Fallback
-//     statt Haenger (#1245). Offline: caches.match (Installierbarkeit gewahrt,
-//     keep_installable).
-//   - cache-first fuer Static-Assets: manifest.json, sw.js, icon-*.png unter
-//     /shell/<panel_id>/<asset>; heim-shell.css und platform.js unter
-//     /api/v1/seiten/static/ — stabil bzw. per BUILD_ID versioniert.
+// SHELL-PWA Cache-Strategie:
+//   - cache-first fuer Shell-Mantel-Assets (HTML, CSS, manifest, icons).
 //   - pass-through (network-only) fuer Panel-Iframes (/controller, /display)
-//     und alles andere — die eingebetteten Surfaces haben eigene SWs.
+//     und API-Calls — die eingebetteten Surfaces haben eigene SWs.
 //
 // Scope: /shell/ (deckt alle Shell-Instanzen je panel_id).
 // Server sendet Service-Worker-Allowed: /shell/ Header (shell_asset_view,
@@ -69,41 +62,10 @@ self.addEventListener('activate', (event) => {
 
 // ── Strategien ───────────────────────────────────────────────────────────────
 
-/**
- * Erkennt Shell-HTML-Navigation: /shell/<panel_id> (die eigentliche HTML-Seite).
- *
- * Signale (OR-verknuepft, robust fuer alle Chromium-Versionen):
- *   1. request.mode === 'navigate'  — Browser-Navigation (Haupt-Dokument).
- *   2. Fallback: Pfad ist /shell/<panel_id> ohne zweites Segment (kein '/').
- *      Damit werden Manifest, SW, Icons (/shell/<pid>/<asset>) NICHT
- *      als HTML-Navigation gezaehlt.
- *
- * @param {URL} url
- * @param {Request} req
- * @returns {boolean}
- */
-function isShellHtmlNavigation(url, req) {
-  if (!url.pathname.startsWith('/shell/')) return false;
-  if (req.mode === 'navigate') return true;
-  // Fallback: kein weiteres Slash-Segment hinter /shell/ → HTML-Seite
-  const afterShell = url.pathname.slice('/shell/'.length);
-  return afterShell.length > 0 && !afterShell.includes('/');
-}
-
-/**
- * Erkennt statische Shell-Assets, die cache-first bedient werden:
- *   - /shell/<panel_id>/manifest.json, /sw.js, /icon-*.png (zweites Segment)
- *   - /api/v1/seiten/static/heim-shell*.css und platform.js
- *
- * @param {URL} url
- * @returns {boolean}
- */
-function isShellStaticAsset(url) {
-  if (url.pathname.startsWith('/shell/')) {
-    // Zweites Segment vorhanden → Asset (nicht HTML-Seite)
-    const afterShell = url.pathname.slice('/shell/'.length);
-    return afterShell.includes('/');
-  }
+function isShellMantel(url) {
+  // Shell-HTML und Shell-Assets (CSS, manifest, icons) cachen.
+  if (url.pathname.startsWith('/shell/')) return true;
+  // Eigene CSS/JS-Assets unter /api/v1/seiten/static/ cachen.
   if (url.pathname.startsWith('/api/v1/seiten/static/')) {
     return url.pathname.includes('heim-shell') ||
            url.pathname.includes('platform.js');
@@ -111,47 +73,6 @@ function isShellStaticAsset(url) {
   return false;
 }
 
-// Wake-Haertung (#1245): Beim Tablet-Wake ist das WLAN oft noch nicht zurueck.
-// Ein network-first fetch auf die Shell-HTML-Navigation haengt dann am lahmen
-// Netz → die Seite bleibt weiss. Deshalb rennt die Navigation gegen ein
-// Timeout; antwortet das Netz nicht rechtzeitig → Cache-Fallback (die Shell
-// zeigt sofort, der SHELL-12-Connectivity-Probe holt danach frisch nach).
-const NETWORK_TIMEOUT_MS = 2000;
-
-/**
- * Network-first mit Timeout + Cache-Fallback (SHELL-PWA-SW, HTML-Navigation).
- *
- * Online (rechtzeitig): fetch → cache-put → return Response.
- * Netz zu langsam (> NETWORK_TIMEOUT_MS): caches.match (Wake-Hang vermieden).
- * Offline/Fehler: caches.match (Offline-Fallback, keep_installable).
- *
- * @param {Request} req
- * @returns {Promise<Response>}
- */
-function networkFirst(req) {
-  const network = fetch(req).then((res) => {
-    if (res && res.ok) {
-      const copy = res.clone();
-      caches.open(CACHE_NAME).then((c) => c.put(req, copy)).catch(() => {});
-    }
-    return res;
-  });
-  const timeout = new Promise((resolve) => {
-    setTimeout(() => resolve(null), NETWORK_TIMEOUT_MS);
-  });
-  return Promise.race([network, timeout]).then((res) => {
-    if (res) return res;
-    // Timeout: Cache-Fallback; kein Cache → doch aufs Netz warten.
-    return caches.match(req).then((cached) => cached || network);
-  }).catch(() => caches.match(req));
-}
-
-/**
- * Cache-first (Static-Assets).
- *
- * @param {Request} req
- * @returns {Promise<Response>}
- */
 function cacheFirst(req) {
   return caches.match(req).then((cached) => {
     if (cached) return cached;
@@ -183,15 +104,7 @@ self.addEventListener('fetch', (event) => {
     return; // pass-through (kein respondWith)
   }
 
-  // Shell-HTML-Navigation → network-first (SHELL-PWA-SW: neuer Code sofort online,
-  // Offline-Fallback erhalten → Installierbarkeit gewahrt, keep_installable).
-  if (isShellHtmlNavigation(url, req)) {
-    event.respondWith(networkFirst(req));
-    return;
-  }
-
-  // Static-Assets (manifest, icons, CSS, platform.js) → cache-first.
-  if (isShellStaticAsset(url)) {
+  if (isShellMantel(url)) {
     event.respondWith(cacheFirst(req));
     return;
   }
