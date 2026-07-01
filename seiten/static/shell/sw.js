@@ -1,9 +1,11 @@
 // sw.js — Service-Worker fuer Heim-Shell-PWA (SHELL-PWA).
 //
 // SHELL-PWA Cache-Strategie (SHELL-PWA-SW):
-//   - network-first fuer Shell-HTML-Navigation (/shell/<panel_id>, navigate-Modus).
-//     Online: neuer Code laed sofort; Cache-Put fuer Offline-Fallback.
-//     Offline: caches.match als Fallback (Installierbarkeit gewahrt, keep_installable).
+//   - network-first mit Timeout fuer Shell-HTML-Navigation (/shell/<panel_id>,
+//     navigate-Modus). Online: neuer Code laed sofort; Cache-Put fuer Offline.
+//     Netz zu langsam (Wake, WLAN noch weg, > NETWORK_TIMEOUT_MS) → Cache-Fallback
+//     statt Haenger (#1245). Offline: caches.match (Installierbarkeit gewahrt,
+//     keep_installable).
 //   - cache-first fuer Static-Assets: manifest.json, sw.js, icon-*.png unter
 //     /shell/<panel_id>/<asset>; heim-shell.css und platform.js unter
 //     /api/v1/seiten/static/ — stabil bzw. per BUILD_ID versioniert.
@@ -109,22 +111,38 @@ function isShellStaticAsset(url) {
   return false;
 }
 
+// Wake-Haertung (#1245): Beim Tablet-Wake ist das WLAN oft noch nicht zurueck.
+// Ein network-first fetch auf die Shell-HTML-Navigation haengt dann am lahmen
+// Netz → die Seite bleibt weiss. Deshalb rennt die Navigation gegen ein
+// Timeout; antwortet das Netz nicht rechtzeitig → Cache-Fallback (die Shell
+// zeigt sofort, der SHELL-12-Connectivity-Probe holt danach frisch nach).
+const NETWORK_TIMEOUT_MS = 2000;
+
 /**
- * Network-first mit Cache-Fallback (SHELL-PWA-SW, HTML-Navigation).
+ * Network-first mit Timeout + Cache-Fallback (SHELL-PWA-SW, HTML-Navigation).
  *
- * Online: fetch → cache-put → return Response.
+ * Online (rechtzeitig): fetch → cache-put → return Response.
+ * Netz zu langsam (> NETWORK_TIMEOUT_MS): caches.match (Wake-Hang vermieden).
  * Offline/Fehler: caches.match (Offline-Fallback, keep_installable).
  *
  * @param {Request} req
  * @returns {Promise<Response>}
  */
 function networkFirst(req) {
-  return fetch(req).then((res) => {
+  const network = fetch(req).then((res) => {
     if (res && res.ok) {
       const copy = res.clone();
       caches.open(CACHE_NAME).then((c) => c.put(req, copy)).catch(() => {});
     }
     return res;
+  });
+  const timeout = new Promise((resolve) => {
+    setTimeout(() => resolve(null), NETWORK_TIMEOUT_MS);
+  });
+  return Promise.race([network, timeout]).then((res) => {
+    if (res) return res;
+    // Timeout: Cache-Fallback; kein Cache → doch aufs Netz warten.
+    return caches.match(req).then((cached) => cached || network);
   }).catch(() => caches.match(req));
 }
 
