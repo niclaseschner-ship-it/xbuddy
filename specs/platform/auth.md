@@ -147,7 +147,7 @@ erst startet).
 /api/v1/seiten/static/*                       (Mini-App-Assets)
 /api/v1/init-data/validate                    (Bootstrap; prüft selbst)
 /api/v1/hoerspiel/<kind_id>/alben/<id>/audio/<track>.mp3   (Kind-Tablet-Player)
-/api/v1/hoerspiel/shared-assets/status        (Diagnose)
+/api/v1/hoerspiel/<kind_id>/shared-assets/status   (Diagnose)
 /api/v1/icons/suche                           (Asset-Suche)
 /api/v1/diag                                  (Diagnose)
 /display/_shared/*                            (Mini-App-Icons, MAD-6)
@@ -197,7 +197,7 @@ Route ohne Identifikation durch; `g.init_data` ist `None`.
 
 ```
 /api/v1/events                                (Eltern-Chat → Router)
-/api/v1/hoerspiel/shared-assets/rebuild       (admin)
+/api/v1/hoerspiel/<kind_id>/shared-assets/rebuild   (admin)
 /api/v1/<komponente>/admin/*                  (nginx-404 für extern, xbuddy-origin.conf)
 ```
 
