@@ -220,14 +220,29 @@ Android). Der Mantel spiegelt das essen-einkauf-Muster 1:1 (ESSEN-33..35).
 - `start_url: "/shell/<panel_id>"` — PWA-Open nach Install öffnet genau
   dieses Panel.
 
-**Service-Worker** (`seiten/static/shell/sw.js`, Scope `/shell/`):
-- Cacht Shell-Mantel-Assets (`heim-shell.css`, `platform.js`, Shell-HTML) per
-  cache-first. Panel-/Display-Iframes (`/controller/`, `/display/`) werden
-  **nicht** abgefangen — deren eigene SWs sind zuständig (stop_rule sw_scope).
+**Service-Worker** (`seiten/static/shell/sw.js`, Scope `/shell/`, SHELL-PWA-SW):
+
+| Anfrage-Typ | Erkennungs-Signal | Strategie |
+|---|---|---|
+| Shell-HTML-Seite `/shell/<panel_id>` | `request.mode === 'navigate'` ODER kein zweites Pfad-Segment | **network-first** (fetch → cache-put; Offline: `caches.match`) |
+| Static-Assets: manifest.json, sw.js, icon-*.png (`/shell/<panel_id>/<asset>`), heim-shell.css, platform.js | zweites Segment vorhanden / `heim-shell`·`platform.js` unter `/api/v1/seiten/static/` | **cache-first** |
+| Panel-/Display-Iframes (`/controller/`, `/display/`) | Präfix-Match | **pass-through** (kein `respondWith`) |
+
+**Rationale network-first für HTML** (#1241): Shell-HTML enthält den Seiten-Code
+selbst (Inline-Scripts, Template). Bei cache-first erscheinen Änderungen am
+Tablet erst nach manuellem Site-Data-Löschen (stale HTML im Cache). Network-first
+lädt online immer den neuesten Code; der Cache-Put stellt offline Fallback
+sicher — Installierbarkeit (keep_installable, WebAPK) bleibt gewahrt.
+**Übergang:** einmaliges Site-Data-Löschen zum Aktivieren des neuen SW;
+danach greifen alle Updates sofort.
+
 - BUILD_ID-Platzhalter wird beim Ausliefern durch `shell_asset_view` ersetzt
   (Cache-Versionierung analog ESSEN-35).
 - Auslieferung: `/shell/<panel_id>/sw.js` mit `Service-Worker-Allowed: /shell/`
   Header (Scope-Erweiterung über SW-Datei-Pfad hinaus).
+
+Test-Anker: seiten/tests/test_heim_shell.py::test_shell_pwa_sw_html_network_first,
+            seiten/tests/test_heim_shell.py::test_shell_pwa_sw_assets_cache_first
 
 **Asset-Route** (`shell_asset_view`, `seiten/main.py`):
 - `GET /shell/<panel_id>/<asset>` liefert sw.js + icon-*.png aus
