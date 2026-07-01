@@ -389,7 +389,7 @@ wird durch einen kontrollierten Doppelten ersetzt):
   Vorschlag-Endpoint mit einem `POST /<kind_id>/folgen-vorschlag`)
 - HFE-3 (HTTP 503 / 5xx vom Vorschlag-Endpoint → Tool-Result trägt
   Klartext-Hinweis, **kein** Vorschlag-Block, EC-10-Gate löst nicht aus)
-- E-HFE-6 / #910 (`propose()` ohne `kind_id` → `TypeError`; `kind_id`
+- E-HFE-6 / #910 (`propose()` ohne `kind_id` → `ValueError`; `kind_id`
   ist Pflicht-Argument ohne Default)
 - HFE-4 (Tool-Result-Text trägt Titel + Vorschau-Text + Bestätigungs-
   Block mit Voice; Intro/Outro nicht im Vorschau-Text; **kein**
