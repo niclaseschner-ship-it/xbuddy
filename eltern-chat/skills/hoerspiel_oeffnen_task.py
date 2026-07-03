@@ -99,7 +99,7 @@ class HoerspielOeffnenTask(ReadTask):
         self._tg = tg
         self._hoerspiel_client = hoerspiel_client
         self._is_member_fn = is_member_fn
-        # HOE-5: fester Launcher /seiten/hoerspiel/mia/eltern (HSP-35 aggregiert)
+        # HOE-5/HSP-47/HSP-53: fester Player-Pfad /seiten/hoerspiel/player
         self._mini_app_url = (
             mini_app_url.rstrip("/") + _HOE_APP_PATH
             if mini_app_url
