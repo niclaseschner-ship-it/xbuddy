@@ -1,0 +1,784 @@
+/**
+ * player.js — Hörspiel-Player-PWA (HSP-48..55, Variante B "Regal").
+ *
+ * Ein Front-End, das per window.__HSP_INSTANZEN__ (HSP-49, Track-A2-Injektion)
+ * zwischen mehreren Kind-Instanzen umschaltet. Auth = PUBLIC (AUTH-6): KEIN
+ * Authorization:tma / initData-Header — die HSP-Datenrouten sind öffentlich.
+ *
+ * Screens (SPA, kein Reload):
+ *   - Regal        (HSP-48): 2-spaltiges Kachel-Raster + Sticky-Mini-Player.
+ *   - Voller Player(HSP-52): großes Cover, Play/Skip, −15/+15s, Kapitel-Liste.
+ *   - Settings     (HSP-34/50): Regler + PATCH /config, kein Schloss/PIN.
+ *
+ * Offline-Cache (HSP-54): Page-Context Cache API. Beim Laden + Kind-Wechsel
+ *   werden die Audio-Tracks (+Cover) der jüngsten N=3 Folgen je aktivem Kind
+ *   HART precacht (nicht lazy), LRU-Eviction je kind-Namensraum. Wiedergabe:
+ *   caches.match(trackUrl) → Treffer → URL.createObjectURL(blob), sonst Netz.
+ *   MP3 immutable (HSP-37) → kein Revalidate nötig.
+ *
+ * Bedienung: reines Tippen (HSP-19..21) — kein Wisch/Long-Press/Multi-Touch.
+ *
+ * Testbarkeit: die reinen Helfer, die Cache-API-Logik und die API-Wrapper
+ *   sind über module.exports exponiert (vanilla node:test, kein jsdom/npm).
+ */
+
+'use strict';
+
+/* ══════════════════════════════════════════════════════════════════
+   KONSTANTEN
+   ══════════════════════════════════════════════════════════════════ */
+
+const CACHE_N = 3;                       // HSP-54: jüngste N=3 Folgen je Kind
+const LRU_KEY = '/__hsp_lru__';          // Meta-Eintrag: LRU-Reihenfolge (Album-IDs)
+const ALBUM_META_PREFIX = '/__hsp_album__/';  // Meta-Eintrag pro Album: {urls:[]}
+
+function _buildId() {
+  return (typeof window !== 'undefined' && window.__HSP_BUILD_ID__) || 'dev';
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   REINE HELFER (exportiert, HSP-49/52)
+   ══════════════════════════════════════════════════════════════════ */
+
+/** Liste der Kind-Instanzen aus dem server-injizierten Fenster-Objekt (HSP-49). */
+function instanzen() {
+  if (typeof window !== 'undefined' && Array.isArray(window.__HSP_INSTANZEN__)) {
+    return window.__HSP_INSTANZEN__;
+  }
+  return [];
+}
+
+/**
+ * Aktives Kind beim Laden bestimmen (HSP-49): ?kind=<id> falls in der Liste,
+ * sonst 1. Eintrag, sonst Fallback 'mia' (Dev/Standalone).
+ * @param {Array} liste  window.__HSP_INSTANZEN__
+ * @param {string} search  location.search (z.B. "?kind=finn")
+ */
+function initialKindId(liste, search) {
+  const ids = (liste || []).map(i => i && i.kind_id).filter(Boolean);
+  const m = (search || '').match(/[?&]kind=([^&]+)/);
+  if (m) {
+    const wunsch = decodeURIComponent(m[1]);
+    if (ids.includes(wunsch)) return wunsch;
+  }
+  return ids.length > 0 ? ids[0] : 'mia';
+}
+
+/** Nächstes Kind im Ring (Umschalter iteriert die Liste, kein 2-Hardcode). */
+function nextKindId(liste, currentId) {
+  const ids = (liste || []).map(i => i && i.kind_id).filter(Boolean);
+  if (ids.length === 0) return currentId;
+  const idx = ids.indexOf(currentId);
+  return ids[(idx + 1) % ids.length];
+}
+
+/** Instanz-Objekt zu einer kind_id (name/foto_url). */
+function instanzFuer(liste, kindId) {
+  return (liste || []).find(i => i && i.kind_id === kindId) || { kind_id: kindId, name: kindId, foto_url: null };
+}
+
+/** Initialen für den Default-Avatar (foto_url ist V1 null → Pille zeigt Initiale). */
+function initialen(name) {
+  const s = String(name || '').trim();
+  return s ? s[0].toUpperCase() : '?';
+}
+
+/**
+ * Kapitel-Label (HSP-52): der Player erzeugt KEINE eigenen Track-Namen —
+ * er nutzt track.titel falls vorhanden, sonst art+position (Intro/Kapitel N/Outro).
+ * @param {object} track  {art:'intro'|'inhalt'|'outro', titel?}
+ * @param {number} kapNr  laufende Kapitel-Nummer (nur inhalt-Tracks zählen)
+ */
+function trackLabel(track, kapNr) {
+  if (!track) return '';
+  if (track.titel) return track.titel;
+  if (track.art === 'intro') return 'Intro';
+  if (track.art === 'outro') return 'Outro';
+  return 'Kapitel ' + kapNr;
+}
+
+/**
+ * ⏮/⏭-Deaktivierung an den Rändern (HSP-52): am ersten Track prev disabled,
+ * am letzten next disabled.
+ */
+function skipDisabled(idx, len) {
+  return { prev: idx <= 0, next: idx >= len - 1 };
+}
+
+/** Tracks stabil nach position sortieren. */
+function sortTracks(tracks) {
+  return [...(tracks || [])].sort((a, b) => (a.position || 0) - (b.position || 0));
+}
+
+/** Start-Index aus Resume-Track-Position (HSP-51); kein Treffer → 0. */
+function resumeStartIdx(tracks, resumeTrackPos) {
+  if (resumeTrackPos == null) return 0;
+  const idx = sortTracks(tracks).findIndex(t => t.position === resumeTrackPos);
+  return idx >= 0 ? idx : 0;
+}
+
+/** kind-getrennter Cache-Namensraum (HSP-54). */
+function audioCacheName(kindId, buildId) {
+  return 'hoerspiel-audio-' + kindId + '-v' + buildId;
+}
+
+/** mm:ss-Formatierung. */
+function fmtZeit(sek) {
+  if (!sek && sek !== 0) return '';
+  const s = Math.max(0, Math.floor(sek));
+  const m = Math.floor(s / 60);
+  return m + ':' + String(s % 60).padStart(2, '0');
+}
+
+/** HTML-Escaping (XSS-Schutz bei innerHTML-Rendering). */
+function esc(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   OFFLINE-CACHE — Page-Context Cache API (HSP-54)
+   ══════════════════════════════════════════════════════════════════ */
+
+async function _readJson(cache, key) {
+  try {
+    const r = await cache.match(key);
+    if (!r) return null;
+    return await r.json();
+  } catch (e) { return null; }
+}
+
+function _jsonResponse(obj) {
+  return new Response(JSON.stringify(obj), { headers: { 'Content-Type': 'application/json' } });
+}
+
+async function _writeJson(cache, key, obj) {
+  await cache.put(key, _jsonResponse(obj));
+}
+
+/** Löscht alle URLs eines Albums + seinen Meta-Eintrag (LRU-Eviction). */
+async function evictAlbum(cache, albumId) {
+  const meta = await _readJson(cache, ALBUM_META_PREFIX + albumId);
+  if (meta && Array.isArray(meta.urls)) {
+    for (const u of meta.urls) { await cache.delete(u); }
+  }
+  await cache.delete(ALBUM_META_PREFIX + albumId);
+}
+
+/** URLs eines Albums = Cover + alle Track-Audio-Assets (HSP-54). */
+function albumUrls(album, manifest) {
+  const urls = [];
+  if (album && album['cover-asset']) urls.push(album['cover-asset']);
+  for (const t of ((manifest && manifest.tracks) || [])) {
+    if (t['audio-asset']) urls.push(t['audio-asset']);
+  }
+  return urls;
+}
+
+/**
+ * HART precacht EIN Album und hält den kind-Namensraum auf N Folgen (LRU).
+ * Beim (N+1)-ten Album wird die am längsten nicht angefasste Folge geräumt.
+ * Gibt die neue LRU-Liste (jüngste zuerst) zurück.
+ */
+async function precacheAlbum(cache, album, manifest, N, fetchFn) {
+  fetchFn = fetchFn || (typeof fetch !== 'undefined' ? fetch : null);
+  const urls = albumUrls(album, manifest);
+  for (const u of urls) {
+    if (await cache.match(u)) continue;   // schon da (immutable MP3, HSP-37)
+    if (!fetchFn) continue;
+    try {
+      const r = await fetchFn(u);
+      if (r && r.ok) await cache.put(u, r);
+    } catch (e) { /* offline / Netzfehler → Track bleibt eben nur online spielbar */ }
+  }
+  await _writeJson(cache, ALBUM_META_PREFIX + album.id, { urls });
+
+  let lru = (await _readJson(cache, LRU_KEY)) || [];
+  lru = [album.id, ...lru.filter(id => id !== album.id)];
+  while (lru.length > N) {
+    await evictAlbum(cache, lru.pop());
+  }
+  await _writeJson(cache, LRU_KEY, lru);
+  return lru;
+}
+
+/**
+ * HART precacht die jüngsten N Folgen (HSP-54) — Reihenfolge: neueste zuerst.
+ * @param {Array<{album,manifest}>} albenMitManifest  bereits jüngste-zuerst sortiert
+ */
+async function precacheFolgen(cache, albenMitManifest, N, fetchFn) {
+  let lru = null;
+  // Rückwärts einspeisen, damit die jüngste Folge am Ende die frischeste
+  // LRU-Position (vorne) belegt.
+  const teil = (albenMitManifest || []).slice(0, N).reverse();
+  for (const e of teil) {
+    lru = await precacheAlbum(cache, e.album, e.manifest, N, fetchFn);
+  }
+  return lru || (await _readJson(cache, LRU_KEY)) || [];
+}
+
+/**
+ * Wiedergabe-Quelle auflösen (HSP-54): Cache-Treffer → Blob-Object-URL,
+ * sonst die Netz-URL direkt.
+ */
+async function resolveTrackSrc(cache, url) {
+  try {
+    if (cache) {
+      const hit = await cache.match(url);
+      if (hit) {
+        const blob = await hit.blob();
+        if (typeof URL !== 'undefined' && URL.createObjectURL) {
+          return URL.createObjectURL(blob);
+        }
+      }
+    }
+  } catch (e) { /* Fallback aufs Netz */ }
+  return url;
+}
+
+/** Ist ein Album (nach Cover-Präsenz) offline verfügbar? Für das Offline-Badge. */
+async function istGecacht(cache, album) {
+  if (!cache || !album) return false;
+  try {
+    return !!(await cache.match(ALBUM_META_PREFIX + album.id));
+  } catch (e) { return false; }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   API-WRAPPER (public, HSP-48..52) — KEIN Auth-Header (AUTH-6)
+   ══════════════════════════════════════════════════════════════════ */
+
+function _base(kindId) { return '/api/v1/hoerspiel/' + encodeURIComponent(kindId); }
+
+async function apiAlben(kindId) {
+  const r = await fetch(_base(kindId) + '/alben');
+  if (!r.ok) throw new Error('alben ' + r.status);
+  const data = await r.json();
+  return Array.isArray(data) ? data : [];
+}
+
+async function apiManifest(kindId, albumId) {
+  const r = await fetch(_base(kindId) + '/alben/' + encodeURIComponent(albumId) + '/manifest');
+  if (!r.ok) throw new Error('manifest ' + r.status);
+  return r.json();
+}
+
+/** Resume server-seitig lesen (HSP-51); status:'neu' → null (kein Stand). */
+async function apiResumeGet(kindId, albumId) {
+  const r = await fetch(_base(kindId) + '/resume?album=' + encodeURIComponent(albumId));
+  if (!r.ok) return null;
+  const data = await r.json();
+  if (data && data.status === 'neu') return null;
+  return data;
+}
+
+/** Resume server-seitig setzen (HSP-51). */
+async function apiResumeSet(kindId, albumId, trackPos) {
+  await fetch(_base(kindId) + '/resume', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ album: albumId, track: trackPos }),
+  });
+}
+
+async function apiConfigGet(kindId) {
+  const r = await fetch(_base(kindId) + '/config');
+  if (!r.ok) throw new Error('config ' + r.status);
+  return r.json();
+}
+
+/** Config PATCH (HSP-34). Gibt {ok,status,body} — Aufrufer toastet 422. */
+async function apiConfigPatch(kindId, patch) {
+  const r = await fetch(_base(kindId) + '/config', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  const body = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, body };
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   HTML-BAUSTEINE (rein, testbar)
+   ══════════════════════════════════════════════════════════════════ */
+
+/** Regal-Kachel (HSP-48). flags: {resume, cached}. */
+function kachelHtml(album, flags) {
+  flags = flags || {};
+  const cover = esc(album['cover-asset'] || '');
+  return '<button class="tile' + (flags.resume ? ' res' : '') + '" type="button"' +
+    ' data-album-id="' + esc(album.id) + '" aria-label="' + esc(album.titel) + '">' +
+    '<span class="cw">' +
+      '<img class="cover" src="' + cover + '" alt="" onerror="this.style.visibility=\'hidden\'">' +
+      '<span class="num">Folge ' + esc(album.nummer) + '</span>' +
+      (flags.resume ? '<span class="b badge resume">Weiter</span>' : '') +
+      (flags.cached ? '<span class="b badge cached">offline</span>' : '') +
+    '</span>' +
+    '<span class="t">' + esc(album.titel) + '</span>' +
+  '</button>';
+}
+
+/** Kapitel-Zeilen (HSP-52): antippbar, aktiver hervorgehoben. */
+function chapterRowsHtml(tracks, activeIdx) {
+  const sorted = sortTracks(tracks);
+  let kap = 0;
+  return sorted.map((t, i) => {
+    if (t.art === 'inhalt') kap++;
+    const dur = t['dauer-sek'] ? fmtZeit(t['dauer-sek']) : '—';
+    return '<button class="chrow' + (i === activeIdx ? ' active' : '') + '" type="button"' +
+      ' data-track-idx="' + i + '" role="listitem">' +
+      '<span class="cidx">' + (i + 1) + '</span>' +
+      '<span class="cname">' + esc(trackLabel(t, kap)) + '</span>' +
+      '<span class="cdur">' + esc(dur) + '</span>' +
+    '</button>';
+  }).join('');
+}
+
+/** Track-Anzeige "Track X/Y · Label" (HSP-52). */
+function trackAnzeige(tracks, idx) {
+  const sorted = sortTracks(tracks);
+  let kap = 0;
+  for (let i = 0; i <= idx && i < sorted.length; i++) {
+    if (sorted[i].art === 'inhalt') kap++;
+  }
+  const t = sorted[idx];
+  return 'Track ' + (idx + 1) + '/' + sorted.length + ' · ' + trackLabel(t, kap);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   MEDIASESSION (HSP-22) — Muster aus alben.js:512-529
+   ══════════════════════════════════════════════════════════════════ */
+
+function setupMediaSession(handlers) {
+  if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return false;
+  navigator.mediaSession.setActionHandler('play', handlers.play);
+  navigator.mediaSession.setActionHandler('pause', handlers.pause);
+  navigator.mediaSession.setActionHandler('previoustrack', handlers.prev);
+  navigator.mediaSession.setActionHandler('nexttrack', handlers.next);
+  return true;
+}
+
+function updateMediaSession(album, track, playing) {
+  if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+  if (typeof MediaMetadata === 'undefined') return;
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: track && track.titel ? track.titel : (album ? 'Folge ' + album.nummer : ''),
+    artist: album && album.voice ? 'Stigi & Co. (' + album.voice + ')' : 'Stigi & Co.',
+    album: album ? ('Folge ' + album.nummer + ': ' + album.titel) : '',
+    artwork: album && album['cover-asset']
+      ? [{ src: album['cover-asset'], sizes: '512x512', type: 'image/jpeg' }] : [],
+  });
+  navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   BROWSER-LAUFZEIT (SPA-Wiring) — nur im DOM aktiv
+   ══════════════════════════════════════════════════════════════════ */
+
+const S = {
+  liste: [],
+  kindId: 'mia',
+  alben: [],
+  cache: null,
+  aktivAlbum: null,      // {..album, tracks:[]}
+  tracks: [],
+  trackIdx: 0,
+  audio: null,
+  playing: false,
+  cfg: {},
+  cfgEdit: {},
+};
+
+function $(id) { return document.getElementById(id); }
+
+function zeigeScreen(name) {
+  ['regal', 'player', 'settings'].forEach(n => {
+    const el = $('screen-' + n);
+    if (el) el.classList.toggle('aktiv', n === name);
+  });
+}
+
+function toast(msg, fehler) {
+  const el = $('toast');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'toast sichtbar' + (fehler ? ' fehler' : '');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { el.className = 'toast'; }, 4000);
+}
+
+/* ── Regal ──────────────────────────────────────────────────────── */
+
+async function ladeKind(kindId) {
+  S.kindId = kindId;
+  const inst = instanzFuer(S.liste, kindId);
+  // Pille
+  const face = $('pille-face');
+  if (face) {
+    face.textContent = '';
+    if (inst.foto_url) {
+      const img = document.createElement('img');
+      img.src = inst.foto_url; img.alt = '';
+      face.appendChild(img);
+    } else {
+      face.textContent = initialen(inst.name);
+    }
+  }
+  if ($('pille-name')) $('pille-name').textContent = inst.name;
+  if ($('pille-swap')) $('pille-swap').style.display = S.liste.length > 1 ? '' : 'none';
+  if ($('regal-label')) $('regal-label').textContent = inst.name + 's Folgen';
+  if ($('settings-sub')) $('settings-sub').textContent = inst.name + ' · für Eltern';
+
+  // Cache-Namensraum je Kind (HSP-54)
+  if (typeof caches !== 'undefined') {
+    try { S.cache = await caches.open(audioCacheName(kindId, _buildId())); }
+    catch (e) { S.cache = null; }
+  }
+
+  // Alben laden (jüngste zuerst)
+  let alben = [];
+  try { alben = await apiAlben(kindId); }
+  catch (e) { toast(inst.name + 's Folgen konnten nicht geladen werden.', true); }
+  S.alben = alben.slice().sort((a, b) => (b.nummer || 0) - (a.nummer || 0));
+
+  await rendereRegal();
+  await initMini();
+  hartPrecache();   // HSP-54: jüngste N=3 hart precachen (fire-and-forget)
+}
+
+async function rendereRegal() {
+  const grid = $('grid');
+  if (!grid) return;
+  if (S.alben.length === 0) {
+    grid.innerHTML = '<div class="leer-hinweis">Noch keine Folgen da.<br>Neue Folgen entstehen im Eltern-Chat.</div>';
+    return;
+  }
+  // Resume- + Offline-Flags parallel ermitteln.
+  const flags = await Promise.all(S.alben.map(async (a) => {
+    const r = await apiResumeGet(S.kindId, a.id).catch(() => null);
+    const cached = await istGecacht(S.cache, a);
+    return { resume: !!(r && r.track != null), cached };
+  }));
+  grid.innerHTML = S.alben.map((a, i) => kachelHtml(a, flags[i])).join('');
+  grid.querySelectorAll('.tile[data-album-id]').forEach(el => {
+    el.addEventListener('click', () => oeffneAlbum(el.dataset.albumId));
+  });
+}
+
+async function initMini() {
+  const mini = $('mini');
+  if (!mini) return;
+  // Jüngste Folge mit Resume-Stand → Mini-Player.
+  for (const a of S.alben) {
+    const r = await apiResumeGet(S.kindId, a.id).catch(() => null);
+    if (r && r.track != null) {
+      if ($('mini-cover')) $('mini-cover').src = a['cover-asset'] || '';
+      if ($('mini-title')) $('mini-title').textContent = a.titel;
+      if ($('mini-sub')) $('mini-sub').textContent = 'Weiter hören · Folge ' + a.nummer;
+      mini.classList.remove('hidden');
+      mini.onclick = () => oeffneAlbum(a.id);
+      return;
+    }
+  }
+  mini.classList.add('hidden');
+}
+
+function hartPrecache() {
+  if (!S.cache) return;
+  const jung = S.alben.slice(0, CACHE_N);
+  Promise.all(jung.map(async (a) => {
+    try { return { album: a, manifest: await apiManifest(S.kindId, a.id) }; }
+    catch (e) { return null; }
+  })).then(list => {
+    const gut = list.filter(Boolean);
+    if (gut.length) precacheFolgen(S.cache, gut, CACHE_N).catch(() => {});
+  }).catch(() => {});
+}
+
+/* ── Voller Player (HSP-52) ─────────────────────────────────────── */
+
+async function oeffneAlbum(albumId) {
+  const album = S.alben.find(a => a.id === albumId);
+  if (!album) return;
+  let manifest;
+  try { manifest = await apiManifest(S.kindId, albumId); }
+  catch (e) { toast('Folge konnte nicht geladen werden.', true); return; }
+
+  S.aktivAlbum = Object.assign({}, album, manifest);
+  S.tracks = sortTracks(manifest.tracks || []);
+
+  const resume = await apiResumeGet(S.kindId, albumId).catch(() => null);
+  S.trackIdx = resumeStartIdx(S.tracks, resume ? resume.track : null);
+
+  // Auf Abruf sicherstellen, dass diese (evtl. ältere) Folge gecacht ist (LRU).
+  if (S.cache) precacheAlbum(S.cache, album, manifest, CACHE_N).catch(() => {});
+
+  renderedPlayer(!!(resume && resume.track != null));
+  zeigeScreen('player');
+  await ladeTrack(S.trackIdx, false);
+}
+
+function renderedPlayer(istResume) {
+  const inst = instanzFuer(S.liste, S.kindId);
+  if ($('player-kid')) $('player-kid').textContent = inst.name;
+  if ($('player-cover')) $('player-cover').src = S.aktivAlbum['cover-asset'] || '';
+  if ($('player-title')) $('player-title').textContent = S.aktivAlbum.titel || '';
+  if ($('player-meta')) {
+    $('player-meta').textContent = 'Folge ' + S.aktivAlbum.nummer + ' · ' +
+      S.tracks.length + ' Kapitel · Stimme ' + (S.aktivAlbum.voice || '—');
+  }
+  const badge = $('player-nowbadge');
+  if (badge) {
+    if (istResume) { badge.textContent = 'Weiter · ' + trackAnzeige(S.tracks, S.trackIdx); badge.classList.remove('hidden'); }
+    else { badge.classList.add('hidden'); }
+  }
+  const chap = $('player-chapters');
+  if (chap) {
+    chap.innerHTML = chapterRowsHtml(S.tracks, S.trackIdx);
+    chap.querySelectorAll('.chrow[data-track-idx]').forEach(el => {
+      el.addEventListener('click', () => ladeTrack(parseInt(el.dataset.trackIdx, 10), true));
+    });
+  }
+  aktualisiereRandDisabled();
+}
+
+function aktualisiereRandDisabled() {
+  const d = skipDisabled(S.trackIdx, S.tracks.length);
+  if ($('player-prev')) $('player-prev').disabled = d.prev;
+  if ($('player-next')) $('player-next').disabled = d.next;
+  if ($('player-prevkap')) $('player-prevkap').disabled = d.prev;
+  if ($('player-nextkap')) $('player-nextkap').disabled = d.next;
+}
+
+async function ladeTrack(idx, autoplay) {
+  if (idx < 0 || idx >= S.tracks.length) return;
+  S.trackIdx = idx;
+  const track = S.tracks[idx];
+
+  if (S.audio) { S.audio.pause(); S.audio.src = ''; }
+  const src = await resolveTrackSrc(S.cache, track['audio-asset']);
+  const audio = new Audio(src);
+  audio.playbackRate = S.cfg.playback_tempo || 1.0;
+  S.audio = audio;
+
+  audio.addEventListener('timeupdate', () => {
+    if (audio.duration > 0) {
+      const pct = (audio.currentTime / audio.duration * 100).toFixed(1) + '%';
+      if ($('player-fill')) $('player-fill').style.width = pct;
+    }
+  });
+  audio.addEventListener('play', () => {
+    S.playing = true; syncPlayIcon();
+    apiResumeSet(S.kindId, S.aktivAlbum.id, track.position).catch(() => {});
+    updateMediaSession(S.aktivAlbum, track, true);
+  });
+  audio.addEventListener('pause', () => { S.playing = false; syncPlayIcon(); });
+  audio.addEventListener('ended', () => {
+    if (S.trackIdx < S.tracks.length - 1) ladeTrack(S.trackIdx + 1, true);
+    else { S.playing = false; syncPlayIcon(); }
+  });
+
+  // Kapitel-Hervorhebung + Rand-Disabled aktualisieren.
+  const chap = $('player-chapters');
+  if (chap) {
+    chap.querySelectorAll('.chrow').forEach((el, i) => el.classList.toggle('active', i === idx));
+  }
+  aktualisiereRandDisabled();
+  updateMediaSession(S.aktivAlbum, track, autoplay);
+
+  if (autoplay) { try { await audio.play(); } catch (e) {} }
+}
+
+function syncPlayIcon() {
+  const p = document.querySelector('#player-play .ico-play');
+  const q = document.querySelector('#player-play .ico-pause');
+  if (p) p.classList.toggle('hidden', S.playing);
+  if (q) q.classList.toggle('hidden', !S.playing);
+}
+
+function togglePlay() {
+  if (!S.audio) { ladeTrack(S.trackIdx, true); return; }
+  if (S.playing) S.audio.pause();
+  else S.audio.play().catch(() => {});
+}
+
+/* ── Settings (HSP-34/50) ───────────────────────────────────────── */
+
+async function oeffneSettings() {
+  zeigeScreen('settings');
+  const list = $('settings-list');
+  if (!list) return;
+  list.innerHTML = '<div class="leer-hinweis">Lädt …</div>';
+  let cfg;
+  try { cfg = await apiConfigGet(S.kindId); }
+  catch (e) { list.innerHTML = '<div class="leer-hinweis">Einstellungen konnten nicht geladen werden.</div>'; return; }
+  S.cfg = cfg;
+  S.cfgEdit = {
+    playback_tempo: cfg.playback_tempo ?? 1.0,
+    pause_absatz_sek: cfg.pause_absatz_sek ?? 0.55,
+    pause_titel_sek: cfg.pause_titel_sek ?? 1.8,
+    default_voice: cfg.default_voice ?? 'shimmer',
+    llm_provider: cfg.llm_provider ?? 'claude',
+    llm_model: cfg.llm_model ?? '',
+    audio_ziel: cfg.audio_ziel ?? 'display',
+  };
+  rendereSettings(cfg);
+}
+
+function rendereSettings(cfg) {
+  const list = $('settings-list');
+  const voices = cfg.voices_verfuegbar || ['shimmer', 'onyx'];
+  const ziele = cfg.audio_ziel_verfuegbar || ['display', 'panel'];
+  const provider = cfg.provider_verfuegbar || [];
+  const modelle = cfg.modelle_je_anbieter || {};
+  const e = S.cfgEdit;
+
+  const voiceChips = voices.map(v =>
+    '<button class="chip' + (v === e.default_voice ? ' on' : '') + '" type="button" data-voice="' + esc(v) + '">' +
+    esc(v.charAt(0).toUpperCase() + v.slice(1)) + '</button>').join('');
+  const zielChips = ziele.map(z =>
+    '<button class="chip' + (z === e.audio_ziel ? ' on' : '') + '" type="button" data-ziel="' + esc(z) + '">' +
+    esc(z === 'display' ? 'Display (Kind-Tablet)' : z === 'panel' ? 'Panel (Wand-Gerät)' : z) + '</button>').join('');
+  const provOpts = provider.map(p =>
+    '<option value="' + esc(p) + '"' + (p === e.llm_provider ? ' selected' : '') + '>' + esc(p) + '</option>').join('');
+  const modOpts = (modelle[e.llm_provider] || []).map(m =>
+    '<option value="' + esc(m.id) + '"' + (m.id === e.llm_model ? ' selected' : '') + '>' + esc(m.label) + '</option>').join('');
+
+  list.innerHTML =
+    '<div class="setcard"><div class="lab">Playback-Tempo <span class="val" id="v-tempo">' + Number(e.playback_tempo).toFixed(2) + '×</span></div>' +
+      '<input type="range" id="s-tempo" min="0.7" max="1.3" step="0.05" value="' + esc(e.playback_tempo) + '"></div>' +
+    '<div class="setcard"><div class="lab">Pause nach Absatz <span class="val" id="v-absatz">' + Number(e.pause_absatz_sek).toFixed(2) + ' s</span></div>' +
+      '<input type="range" id="s-absatz" min="0" max="2" step="0.05" value="' + esc(e.pause_absatz_sek) + '"></div>' +
+    '<div class="setcard"><div class="lab">Pause nach Titel <span class="val" id="v-titel">' + Number(e.pause_titel_sek).toFixed(1) + ' s</span></div>' +
+      '<input type="range" id="s-titel" min="0.5" max="3" step="0.1" value="' + esc(e.pause_titel_sek) + '"></div>' +
+    '<div class="setcard"><div class="lab">Stimme</div><div class="twochip" id="voice-chips">' + voiceChips + '</div></div>' +
+    (provider.length ?
+      '<div class="setcard"><div class="lab">Vorlese-KI <span class="val">Anbieter + Modell</span></div>' +
+        '<select id="s-provider">' + provOpts + '</select>' +
+        '<select id="s-model" style="margin-top:10px">' + modOpts + '</select></div>' : '') +
+    '<div class="setcard"><div class="lab">Audio-Ausgabe <span class="val">gilt fürs Kind-Tablet</span></div>' +
+      '<div class="twochip" id="ziel-chips">' + zielChips + '</div></div>';
+
+  const markDirty = () => { if ($('settings-save')) $('settings-save').disabled = false; };
+  const bindSlider = (id, valId, feld, suffix, digits) => {
+    const s = $(id);
+    if (!s) return;
+    s.addEventListener('input', () => {
+      const v = parseFloat(s.value);
+      S.cfgEdit[feld] = v;
+      if ($(valId)) $(valId).textContent = v.toFixed(digits) + suffix;
+      markDirty();
+    });
+  };
+  bindSlider('s-tempo', 'v-tempo', 'playback_tempo', '×', 2);
+  bindSlider('s-absatz', 'v-absatz', 'pause_absatz_sek', ' s', 2);
+  bindSlider('s-titel', 'v-titel', 'pause_titel_sek', ' s', 1);
+
+  const vc = $('voice-chips');
+  if (vc) vc.addEventListener('click', ev => {
+    const b = ev.target.closest('.chip[data-voice]'); if (!b) return;
+    S.cfgEdit.default_voice = b.dataset.voice;
+    vc.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c.dataset.voice === b.dataset.voice));
+    markDirty();
+  });
+  const zc = $('ziel-chips');
+  if (zc) zc.addEventListener('click', ev => {
+    const b = ev.target.closest('.chip[data-ziel]'); if (!b) return;
+    S.cfgEdit.audio_ziel = b.dataset.ziel;
+    zc.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c.dataset.ziel === b.dataset.ziel));
+    markDirty();
+  });
+  const sp = $('s-provider');
+  if (sp) sp.addEventListener('change', () => {
+    S.cfgEdit.llm_provider = sp.value;
+    const opts = (modelle[sp.value] || []);
+    if ($('s-model')) {
+      $('s-model').innerHTML = opts.map(m => '<option value="' + esc(m.id) + '">' + esc(m.label) + '</option>').join('');
+      S.cfgEdit.llm_model = opts.length ? opts[0].id : '';
+    }
+    markDirty();
+  });
+  const sm = $('s-model');
+  if (sm) sm.addEventListener('change', () => { S.cfgEdit.llm_model = sm.value; markDirty(); });
+  if ($('settings-save')) $('settings-save').disabled = true;
+}
+
+async function speichereSettings() {
+  const btn = $('settings-save');
+  if (btn) btn.disabled = true;
+  const felder = ['playback_tempo', 'pause_absatz_sek', 'pause_titel_sek', 'default_voice', 'llm_provider', 'llm_model', 'audio_ziel'];
+  const patch = {};
+  for (const k of felder) {
+    if (String(S.cfgEdit[k]) !== String(S.cfg[k])) patch[k] = S.cfgEdit[k];
+  }
+  if (Object.keys(patch).length === 0) return;
+  const res = await apiConfigPatch(S.kindId, patch);
+  if (!res.ok) {
+    const msg = res.body && (res.body.fehler || res.body.error) || ('Fehler ' + res.status);
+    toast(msg, true);           // 422 → Toast (HSP-34)
+    if (btn) btn.disabled = false;
+    return;
+  }
+  S.cfg = res.body;
+  if (S.audio && patch.playback_tempo != null) S.audio.playbackRate = patch.playback_tempo;
+  toast('✓ Gespeichert.');
+}
+
+/* ── Init ───────────────────────────────────────────────────────── */
+
+function bindStatisch() {
+  const on = (id, ev, fn) => { const el = $(id); if (el) el.addEventListener(ev, fn); };
+  on('pille', 'click', () => ladeKind(nextKindId(S.liste, S.kindId)));
+  on('btn-settings', 'click', oeffneSettings);
+  on('settings-back', 'click', () => zeigeScreen('regal'));
+  on('settings-save', 'click', speichereSettings);
+  on('player-back', 'click', () => zeigeScreen('regal'));
+  on('player-play', 'click', togglePlay);
+  on('player-prev', 'click', () => ladeTrack(S.trackIdx - 1, true));
+  on('player-next', 'click', () => ladeTrack(S.trackIdx + 1, true));
+  on('player-prevkap', 'click', () => ladeTrack(S.trackIdx - 1, true));
+  on('player-nextkap', 'click', () => ladeTrack(S.trackIdx + 1, true));
+  on('player-minus15', 'click', () => { if (S.audio) S.audio.currentTime = Math.max(0, S.audio.currentTime - 15); });
+  on('player-plus15', 'click', () => { if (S.audio && S.audio.duration) S.audio.currentTime = Math.min(S.audio.duration, S.audio.currentTime + 15); });
+
+  setupMediaSession({
+    play: () => { if (S.audio) S.audio.play().catch(() => {}); },
+    pause: () => { if (S.audio) S.audio.pause(); },
+    prev: () => ladeTrack(S.trackIdx - 1, true),
+    next: () => ladeTrack(S.trackIdx + 1, true),
+  });
+}
+
+async function init() {
+  S.liste = instanzen();
+  bindStatisch();
+  const kindId = initialKindId(S.liste, typeof location !== 'undefined' ? location.search : '');
+  // Config des aktiven Kindes vorab für playback_tempo.
+  try { S.cfg = await apiConfigGet(kindId); } catch (e) { S.cfg = {}; }
+  await ladeKind(kindId);
+}
+
+if (typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('DOMContentLoaded', init);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   EXPORTS (node:test — kein jsdom/npm)
+   ══════════════════════════════════════════════════════════════════ */
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    // reine Helfer
+    instanzen, initialKindId, nextKindId, instanzFuer, initialen,
+    trackLabel, skipDisabled, sortTracks, resumeStartIdx, audioCacheName, fmtZeit, esc,
+    // Cache-API (HSP-54)
+    CACHE_N, LRU_KEY, ALBUM_META_PREFIX, albumUrls,
+    precacheAlbum, precacheFolgen, evictAlbum, resolveTrackSrc, istGecacht,
+    // API-Wrapper
+    apiAlben, apiManifest, apiResumeGet, apiResumeSet, apiConfigGet, apiConfigPatch,
+    // HTML-Bausteine
+    kachelHtml, chapterRowsHtml, trackAnzeige,
+    // MediaSession
+    setupMediaSession, updateMediaSession,
+  };
+}
