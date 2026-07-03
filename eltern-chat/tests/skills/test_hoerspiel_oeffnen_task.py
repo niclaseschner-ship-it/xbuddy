@@ -1,16 +1,16 @@
-"""Tests für HoerspielOeffnenTask — E-HOE-2 Schärfung (T1048).
+"""Tests für HoerspielOeffnenTask — HSP-53 Player-PWA-Umstellung (2026-07-03).
+
+**HSP-53:** Tab-Hash-Modell (E-HOE-2, #folgen/#einstellungen) ist superseded.
+HOE öffnet die Player-PWA (/seiten/hoerspiel/player, AUTH-6) per URL-Button.
 
 Abgedeckte ACs:
-  AC1-task — Task liefert bei arguments={'tab': 'einstellungen'} Button mit
-             #einstellungen-Hash.
-  AC2-task — Task liefert bei arguments={} / arguments={'tab': 'folgen'}
-             Button mit #folgen-Hash (kein #einstellungen).
-  AC3-task — tab-Default in Task ist 'folgen' (kein tab in arguments → #folgen).
-  AC_beschreibung — Task-Description enthält Direkt-Trigger-Hinweise und
+  AC_player_url  — Task liefert url auf /seiten/hoerspiel/player, kein Hash.
+  AC_url_button  — Button ist URL-Button (url-Feld), KEIN web_app_url.
+  AC_kein_tab    — 'tab' ist NICHT mehr als LLM-Parameter definiert.
+  AC_beschreibung — Task-Description enthält Folgen-Trigger und
                     beiläufige-Erwähnung-Warnung.
-  AC_tab_parameter — Task hat 'tab' als LLM-sichtbaren Parameter (enum).
-  AC_kein_tab_hint — Test aus Rückbau 2026-06-19: 'tab_hint' ist NICHT
-                     in den LLM-Parametern (alter Name, kassiert).
+  AC_kein_tab_hint — 'tab_hint' ist NICHT in den LLM-Parametern.
+  AC_vererbung   — HoerspielOeffnenTask ist ReadTask.
 
 Tests laufen ohne Netz (EC-17).
 """
@@ -40,7 +40,7 @@ def _album(nr, titel):
 
 
 _MINI_APP_BASE = "https://xbuddy.example.com"
-_HOE_APP_PATH = "/seiten/hoerspiel/paula/eltern"
+_HOE_APP_PATH = "/seiten/hoerspiel/player"
 
 
 def _make_task(alben_liste=None):
@@ -55,131 +55,102 @@ def _make_task(alben_liste=None):
 
 
 # ============================================================
-#  AC1-task — Direkt-Trigger mit tab='einstellungen'
+#  AC_player_url — Player-PWA-URL, kein Hash
 # ============================================================
 
 
-def test_AC1_task_einstellungen_liefert_einstellungen_hash():
-    """AC1-task: run({'tab': 'einstellungen'}) → Button mit #einstellungen-Hash."""
-    task, _, _ = _make_task()
-    ctx = TurnContext(chat_id=42, from_user_id=7)
-
-    result = task.run({"tab": "einstellungen"}, ctx)
-
-    assert "presentation" in result
-    assert "inline_button" in result["presentation"], (
-        "tab='einstellungen' muss einen Button liefern")
-    url = result["presentation"]["inline_button"]["web_app_url"]
-    assert url.endswith("#einstellungen"), (
-        "Button-URL muss auf #einstellungen enden, war: %r" % url)
-
-
-def test_AC1_task_einstellungen_kein_alben_call():
-    """AC1-task: tab='einstellungen' → kein /alben-Call."""
-    task, client, _ = _make_task()
-    ctx = TurnContext(chat_id=42, from_user_id=7)
-
-    task.run({"tab": "einstellungen"}, ctx)
-
-    assert client.alben_calls == 0, (
-        "tab='einstellungen' darf keinen /alben-Call auslösen")
-
-
-def test_AC1_task_einstellungen_kein_selbst_send():
-    """AC1-task: tab='einstellungen' → Task sendet NICHTS selbst."""
-    tg = MagicMock()
-    client = FakeHoerspielClient()
-    task = HoerspielOeffnenTask(
-        tg=tg, hoerspiel_client=client,
-        is_member_fn=lambda uid: True,
-        mini_app_url=_MINI_APP_BASE)
-    ctx = TurnContext(chat_id=42, from_user_id=7)
-
-    task.run({"tab": "einstellungen"}, ctx)
-
-    tg.send_inline_keyboard.assert_not_called()
-    tg.send_message.assert_not_called()
-
-
-# ============================================================
-#  AC2-task — Beiläufige Erwähnung / Default → #folgen
-# ============================================================
-
-
-def test_AC2_task_default_liefert_folgen_hash():
-    """AC2-task: run({}) → Default tab='folgen' → Button endet auf #folgen."""
+def test_AC_player_url_endet_auf_player_pfad():
+    """AC_player_url: run({}) → url enthält /seiten/hoerspiel/player."""
     task, _, _ = _make_task()
     ctx = TurnContext(chat_id=42, from_user_id=7)
 
     result = task.run({}, ctx)
 
-    url = result["presentation"]["inline_button"]["web_app_url"]
-    assert url.endswith("#folgen"), (
-        "Default-Aufruf muss #folgen liefern, war: %r" % url)
-    assert "#einstellungen" not in url
+    buttons = result["presentation"]["inline_buttons"]
+    assert len(buttons) == 1
+    url = buttons[0]["url"]
+    assert "/seiten/hoerspiel/player" in url, (
+        "url muss /seiten/hoerspiel/player enthalten: %r" % url)
 
 
-def test_AC2_task_folgen_explizit_kein_einstellungen():
-    """AC2-task: run({'tab': 'folgen'}) → Button endet auf #folgen, NICHT #einstellungen."""
+def test_AC_player_url_kein_hash():
+    """AC_player_url: run({}) → url enthält KEIN Hash-Fragment (kein Tab-Modell)."""
     task, _, _ = _make_task()
     ctx = TurnContext(chat_id=42, from_user_id=7)
 
-    result = task.run({"tab": "folgen"}, ctx)
+    result = task.run({}, ctx)
 
-    url = result["presentation"]["inline_button"]["web_app_url"]
-    assert "#einstellungen" not in url
-    assert url.endswith("#folgen")
+    url = result["presentation"]["inline_buttons"][0]["url"]
+    assert "#" not in url, (
+        "url darf kein Hash-Fragment enthalten (HSP-53): %r" % url)
 
 
-def test_AC2_task_none_arguments_liefert_folgen_hash():
-    """AC2-task: run(None, ctx) → Default tab='folgen' → #folgen."""
+def test_AC_player_url_startet_mit_https():
+    """AC_player_url: url startet mit https:// (Funnel-Domain)."""
+    task, _, _ = _make_task()
+    ctx = TurnContext(chat_id=42, from_user_id=7)
+
+    result = task.run({}, ctx)
+
+    url = result["presentation"]["inline_buttons"][0]["url"]
+    assert url.startswith("https://"), (
+        "url muss mit https:// beginnen: %r" % url)
+
+
+def test_AC_player_url_none_arguments_kein_fehler():
+    """AC_player_url: run(None, ctx) → kein Fehler, url auf Player-PWA."""
     task, _, _ = _make_task()
     ctx = TurnContext(chat_id=42, from_user_id=7)
 
     result = task.run(None, ctx)
 
-    url = result["presentation"]["inline_button"]["web_app_url"]
-    assert url.endswith("#folgen")
+    assert "inline_buttons" in result["presentation"]
+    url = result["presentation"]["inline_buttons"][0]["url"]
+    assert "/seiten/hoerspiel/player" in url
 
 
 # ============================================================
-#  AC3-task — Default tab='folgen'
+#  AC_url_button — URL-Button (nicht web_app)
 # ============================================================
 
 
-def test_AC3_task_default_tab_ist_folgen():
-    """AC3-task: kein tab-Argument → URL auf #folgen (Default 'folgen')."""
+def test_AC_url_button_kein_web_app_url():
+    """AC_url_button: Button hat url-Feld, KEIN web_app_url (HSP-53 AUTH-6)."""
     task, _, _ = _make_task()
     ctx = TurnContext(chat_id=42, from_user_id=7)
 
     result = task.run({}, ctx)
 
-    url = result["presentation"]["inline_button"]["web_app_url"]
-    assert url.endswith("#folgen"), (
-        "AC3: Default-tab muss 'folgen' sein")
+    btn = result["presentation"]["inline_buttons"][0]
+    assert "url" in btn, "Button muss url-Feld haben"
+    assert "web_app_url" not in btn, (
+        "Button darf kein web_app_url haben (PWA ist nicht tma)")
 
 
 # ============================================================
-#  AC_beschreibung — Task-Description enthält relevante Phrasen
+#  AC_kein_tab — kein tab-Parameter mehr
 # ============================================================
 
 
-def test_AC_beschreibung_enthaelt_direkt_trigger_hinweis():
-    """AC_beschreibung: Task-Description enthält 'einstellungen' und 'settings'."""
+def test_AC_kein_tab_parameter():
+    """AC_kein_tab: 'tab' ist NICHT als LLM-Parameter definiert (HSP-53)."""
     task, _, _ = _make_task()
-    desc = task.description.lower()
-    assert "einstellungen" in desc or "settings" in desc, (
-        "Description muss Direkt-Trigger-Hinweis enthalten")
+    props = task.parameters.get("properties", {})
+    assert "tab" not in props, (
+        "'tab' wurde durch HSP-53 kassiert — darf nicht mehr erscheinen")
 
 
-def test_AC_beschreibung_enthaelt_beilaeufig_warnung():
-    """AC_beschreibung: Description enthält Warnung vor beiläufiger Settings-Erwähnung."""
+def test_AC_kein_tab_hint_parameter():
+    """AC_kein_tab_hint: 'tab_hint' ist NICHT in den LLM-Parametern."""
     task, _, _ = _make_task()
-    desc = task.description.lower()
-    # Warnung dass beiläufige Settings → sprachlicher Verweis (kein Tool-Call)
-    assert "beiläufig" in desc, (
-        "Description muss das Wort 'beiläufig' enthalten — damit der LLM "
-        "bei beiläufiger Settings-Erwähnung KEINEN Tool-Call macht")
+    props = task.parameters.get("properties", {})
+    assert "tab_hint" not in props, (
+        "'tab_hint' wurde kassiert — darf nicht erscheinen")
+
+
+# ============================================================
+#  AC_beschreibung — Task-Description
+# ============================================================
 
 
 def test_AC_beschreibung_enthaelt_folgen_trigger():
@@ -189,79 +160,44 @@ def test_AC_beschreibung_enthaelt_folgen_trigger():
     assert "folgen" in desc or "hörbuch" in desc or "hörspiel" in desc
 
 
-# ============================================================
-#  AC_tab_parameter — 'tab' als LLM-sichtbarer Parameter
-# ============================================================
-
-
-def test_AC_tab_parameter_vorhanden():
-    """AC_tab_parameter: 'tab' ist als LLM-Parameter definiert (properties)."""
+def test_AC_beschreibung_enthaelt_beilaeufig_warnung():
+    """AC_beschreibung: Description enthält Warnung vor beiläufiger Settings-Erwähnung."""
     task, _, _ = _make_task()
-    props = task.parameters.get("properties", {})
-    assert "tab" in props, (
-        "Task muss 'tab' als LLM-Parameter haben")
+    desc = task.description.lower()
+    assert "beiläufig" in desc, (
+        "Description muss 'beiläufig' enthalten")
 
 
-def test_AC_tab_parameter_hat_enum():
-    """AC_tab_parameter: 'tab' hat enum mit 'folgen' und 'einstellungen'."""
+def test_AC_beschreibung_enthaelt_sofort_trigger():
+    """AC_beschreibung: Description enthält Sofort-Aufruf-Marker."""
     task, _, _ = _make_task()
-    props = task.parameters.get("properties", {})
-    tab_def = props.get("tab", {})
-    enum_vals = tab_def.get("enum", [])
-    assert "folgen" in enum_vals, "enum muss 'folgen' enthalten"
-    assert "einstellungen" in enum_vals, "enum muss 'einstellungen' enthalten"
-
-
-def test_AC_tab_parameter_nicht_required():
-    """AC_tab_parameter: 'tab' ist NICHT required (Default-Wert 'folgen')."""
-    task, _, _ = _make_task()
-    required = task.parameters.get("required", [])
-    assert "tab" not in required, (
-        "'tab' darf nicht required sein — Default ist 'folgen'")
+    desc = task.description.lower()
+    assert "sofort" in desc, "Description muss Sofort-Aufruf-Marker enthalten"
 
 
 # ============================================================
-#  AC_kein_tab_hint — alter Name 'tab_hint' kassiert
+#  AC_vererbung und Basis-Pattern
 # ============================================================
 
 
-def test_AC_kein_tab_hint_parameter():
-    """AC_kein_tab_hint: 'tab_hint' ist NICHT in den LLM-Parametern (Rückbau #1028)."""
-    task, _, _ = _make_task()
-    props = task.parameters.get("properties", {})
-    assert "tab_hint" not in props, (
-        "'tab_hint' wurde durch #1028 kassiert — darf nicht mehr erscheinen")
-
-
-# ============================================================
-#  Robustheit — unbekannter tab-Wert → Fallback 'folgen'
-# ============================================================
-
-
-def test_AC_unbekannter_tab_fallback_folgen():
-    """Unbekannter tab-Wert → defensiver Fallback auf 'folgen'."""
-    task, _, _ = _make_task()
-    ctx = TurnContext(chat_id=42, from_user_id=7)
-
-    result = task.run({"tab": "unbekannt_xyz"}, ctx)
-
-    url = result["presentation"]["inline_button"]["web_app_url"]
-    assert url.endswith("#folgen"), (
-        "Unbekannter tab-Wert muss auf 'folgen' fallen")
-
-
-# ============================================================
-#  Vererbung und Basis-Pattern
-# ============================================================
-
-
-def test_ist_read_task():
+def test_AC_ist_read_task():
     """HoerspielOeffnenTask ist ReadTask (EC-9, lesend)."""
     task, _, _ = _make_task()
     assert isinstance(task, ReadTask)
 
 
-def test_task_name():
+def test_AC_task_name():
     """Task-Name ist 'hoerspiel_oeffnen'."""
     task, _, _ = _make_task()
     assert task.name == "hoerspiel_oeffnen"
+
+
+def test_AC_task_sendet_nichts_selbst():
+    """TASK-10c: Task sendet NICHTS selbst (EC-29 Eine Stimme)."""
+    task, _, tg = _make_task()
+    ctx = TurnContext(chat_id=42, from_user_id=7)
+
+    task.run({}, ctx)
+
+    tg.send_inline_keyboard.assert_not_called()
+    tg.send_message.assert_not_called()

@@ -1,17 +1,20 @@
-"""Tests für E-HOE-2 Schärfung 2026-06-20 (Refs #1048) — Direkt-Trigger-Ausnahme.
+"""Tests für HOE — HSP-53 Ablösung der Tab-Form (2026-07-03, Refs #1294).
 
-Abgedeckte ACs (T1048):
-  AC1 — Direkt-Trigger-Phrase → hoerspiel_oeffnen liefert Button mit #einstellungen-Hash.
-  AC2 — Beiläufige Settings-Erwähnung → KEIN Button (kein Tool-Call-Szenario;
-         hier getestet: tab='folgen' / Default → #folgen, NICHT #einstellungen).
-  AC3-wortliste — Wortlisten-Drift: tab='folgen'-Antwort enthält NICHT die
-         Strings 'Knopf unten', 'klick', 'Button' (Vermeidung von Phantom-Button-
-         Versprechen wie im Familien-Test 2026-06-20).
-  AC3-default — tab-Parameter ist Default 'folgen' (AC3 aus Ticket).
-  AC_einstellungen_kein_alben_call — tab='einstellungen' macht KEINEN /alben-Aufruf.
+**HSP-53:** E-HOE-2 (Tab-Hash-Deeplink, #folgen/#einstellungen) ist superseded.
+HOE öffnet die Player-PWA (/seiten/hoerspiel/player, AUTH-6) per URL-Button.
+Kein tab-Parameter, kein Hash-Fragment.
+
+Abgedeckte ACs:
+  AC_kein_tab_arg       — hoerspiel_oeffnen akzeptiert KEIN tab-Argument mehr.
+  AC_player_url         — Aufruf → url auf /seiten/hoerspiel/player, kein Hash.
+  AC_kein_web_app_url   — Button hat url-Feld (nicht web_app_url, kein tma).
+  AC_kein_einstellungen — URL enthält KEIN #einstellungen (kein Tab-Modell).
+  AC_kein_knopf_text    — text-Feld enthält KEIN Phantom-Button-Versprechen.
 
 Tests laufen ohne Netz (EC-17).
 """
+
+import inspect
 
 from skills.hoerspiel_oeffnen import hoerspiel_oeffnen
 
@@ -23,23 +26,20 @@ from skills.hoerspiel_oeffnen import hoerspiel_oeffnen
 class FakeHoerspielClient:
     """Test-Doppelung für HoerspielClient."""
 
-    def __init__(self, alben_liste=None, alben_error=None):
+    def __init__(self, alben_liste=None):
         self.alben_calls = 0
         self._alben_liste = alben_liste if alben_liste is not None else []
-        self._alben_error = alben_error
 
     def alben_lesen(self):
         self.alben_calls += 1
-        if self._alben_error is not None:
-            raise self._alben_error
         return list(self._alben_liste)
 
 
 def _album(nr, titel):
-    return {"folgen_nr": nr, "titel": titel, "erstellt_am": "2026-06-20"}
+    return {"folgen_nr": nr, "titel": titel, "erstellt_am": "2026-07-03"}
 
 
-_MINI_APP_URL = "https://xbuddy.example.com/seiten/hoerspiel/paula/eltern"
+_MINI_APP_URL = "https://xbuddy.example.com/seiten/hoerspiel/player"
 
 
 def _immer_mitglied(uid):
@@ -47,12 +47,24 @@ def _immer_mitglied(uid):
 
 
 # ============================================================
-#  AC1 — Direkt-Trigger → Button mit #einstellungen-Hash
+#  AC_kein_tab_arg — HSP-53: kein tab-Parameter mehr
 # ============================================================
 
 
-def test_AC1_direkt_trigger_liefert_einstellungen_button():
-    """AC1: hoerspiel_oeffnen(tab='einstellungen') → Button mit #einstellungen-Hash."""
+def test_AC_kein_tab_parameter_in_signatur():
+    """AC_kein_tab_arg: hoerspiel_oeffnen hat KEIN 'tab'-Argument (HSP-53)."""
+    sig = inspect.signature(hoerspiel_oeffnen)
+    assert "tab" not in sig.parameters, (
+        "hoerspiel_oeffnen darf kein 'tab'-Parameter haben (HSP-53)")
+
+
+# ============================================================
+#  AC_player_url — URL zeigt auf Player-PWA
+# ============================================================
+
+
+def test_AC_player_url_enthaelt_player_pfad():
+    """AC_player_url: Aufruf → url enthält /seiten/hoerspiel/player."""
     client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
     result = hoerspiel_oeffnen(
         chat_id=42,
@@ -60,57 +72,119 @@ def test_AC1_direkt_trigger_liefert_einstellungen_button():
         hoerspiel_client=client,
         is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_URL,
-        tab="einstellungen",
     )
-    assert "presentation" in result
-    assert "inline_button" in result["presentation"], (
-        "Direkt-Trigger muss einen Button liefern")
-    url = result["presentation"]["inline_button"]["web_app_url"]
-    assert url.endswith("#einstellungen"), (
-        "Direkt-Trigger-Button muss auf #einstellungen enden, war: %r" % url)
+    buttons = result["presentation"]["inline_buttons"]
+    assert len(buttons) == 1
+    url = buttons[0]["url"]
+    assert "/seiten/hoerspiel/player" in url, (
+        "url muss /seiten/hoerspiel/player enthalten: %r" % url)
 
 
-def test_AC1_direkt_trigger_button_url_vollstaendig():
-    """AC1: #einstellungen-Button enthält korrekten Basis-URL-Pfad."""
-    client = FakeHoerspielClient()
+def test_AC_player_url_kein_hash():
+    """AC_player_url: url enthält KEIN Hash-Fragment (kein Tab-Modell)."""
+    client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
     result = hoerspiel_oeffnen(
         chat_id=42,
         from_user_id=7,
         hoerspiel_client=client,
         is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_URL,
-        tab="einstellungen",
     )
-    url = result["presentation"]["inline_button"]["web_app_url"]
-    assert url.startswith("https://")
-    assert "#einstellungen" in url
+    url = result["presentation"]["inline_buttons"][0]["url"]
+    assert "#" not in url, (
+        "url darf kein Hash-Fragment enthalten (HSP-53, kein Tab-Modell): %r" % url)
 
 
-def test_AC1_direkt_trigger_kein_settings_inhalt_im_text():
-    """AC1: text bei tab='einstellungen' enthält keine Settings-Werte — nur Link-Ankündigung."""
-    client = FakeHoerspielClient(alben_liste=[_album(2, "Neues Abenteuer")])
+def test_AC_player_url_startet_https():
+    """AC_player_url: url startet mit https://."""
+    client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
     result = hoerspiel_oeffnen(
         chat_id=42,
         from_user_id=7,
         hoerspiel_client=client,
         is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_URL,
-        tab="einstellungen",
+    )
+    url = result["presentation"]["inline_buttons"][0]["url"]
+    assert url.startswith("https://"), "url muss mit https:// beginnen"
+
+
+# ============================================================
+#  AC_kein_web_app_url — URL-Button, nicht tma
+# ============================================================
+
+
+def test_AC_kein_web_app_url_feld():
+    """AC_kein_web_app_url: Button hat url-Feld, KEIN web_app_url (AUTH-6, kein tma)."""
+    client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
+    result = hoerspiel_oeffnen(
+        chat_id=42,
+        from_user_id=7,
+        hoerspiel_client=client,
+        is_member_fn=_immer_mitglied,
+        mini_app_url=_MINI_APP_URL,
+    )
+    btn = result["presentation"]["inline_buttons"][0]
+    assert "url" in btn, "Button muss url-Feld haben"
+    assert "web_app_url" not in btn, "Button darf kein web_app_url haben (kein tma)"
+
+
+# ============================================================
+#  AC_kein_einstellungen — kein #einstellungen-Hash
+# ============================================================
+
+
+def test_AC_kein_einstellungen_hash():
+    """AC_kein_einstellungen: URL enthält KEIN #einstellungen (kein Tab-Modell)."""
+    client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
+    result = hoerspiel_oeffnen(
+        chat_id=42,
+        from_user_id=7,
+        hoerspiel_client=client,
+        is_member_fn=_immer_mitglied,
+        mini_app_url=_MINI_APP_URL,
+    )
+    url = result["presentation"]["inline_buttons"][0]["url"]
+    assert "#einstellungen" not in url, (
+        "url darf kein #einstellungen enthalten (HSP-53, kein Tab-Modell)")
+
+
+def test_AC_kein_folgen_hash():
+    """AC_kein_folgen: URL enthält KEIN #folgen-Hash (kein Tab-Modell)."""
+    client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
+    result = hoerspiel_oeffnen(
+        chat_id=42,
+        from_user_id=7,
+        hoerspiel_client=client,
+        is_member_fn=_immer_mitglied,
+        mini_app_url=_MINI_APP_URL,
+    )
+    url = result["presentation"]["inline_buttons"][0]["url"]
+    assert "#folgen" not in url, (
+        "url darf kein #folgen enthalten (HSP-53, kein Tab-Modell)")
+
+
+# ============================================================
+#  AC_kein_knopf_text — kein Phantom-Button-Versprechen im Text
+# ============================================================
+
+
+def test_AC_kein_knopf_unten_im_text():
+    """AC_kein_knopf_text: text enthält NICHT 'Knopf unten'."""
+    client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
+    result = hoerspiel_oeffnen(
+        chat_id=42,
+        from_user_id=7,
+        hoerspiel_client=client,
+        is_member_fn=_immer_mitglied,
+        mini_app_url=_MINI_APP_URL,
     )
     text = result.get("text", "")
-    # Kein Settings-Inhalt-Dump (Voice-Name, Modell-Name, Tempo-Stufe etc.)
-    for verboten in ("nova", "onyx", "shimmer", "mistral", "openai", "tempo"):
-        assert verboten.lower() not in text.lower(), (
-            "Settings-Inhalt %r darf nicht im Chat-Text stehen" % verboten)
+    assert "Knopf unten" not in text, "Text darf 'Knopf unten' nicht enthalten"
 
 
-# ============================================================
-#  AC2 — Beiläufige Settings-Erwähnung → KEIN #einstellungen-Button
-# ============================================================
-
-
-def test_AC2_default_tab_liefert_folgen_nicht_einstellungen():
-    """AC2: Default-Aufruf (kein tab) → Button endet auf #folgen, NICHT #einstellungen."""
+def test_AC_kein_button_im_text():
+    """AC_kein_knopf_text: text enthält NICHT das Wort 'Button'."""
     client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
     result = hoerspiel_oeffnen(
         chat_id=42,
@@ -118,156 +192,6 @@ def test_AC2_default_tab_liefert_folgen_nicht_einstellungen():
         hoerspiel_client=client,
         is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_URL,
-        # tab nicht gesetzt → Default 'folgen'
-    )
-    url = result["presentation"]["inline_button"]["web_app_url"]
-    assert url.endswith("#folgen"), (
-        "Beiläufige/keine Settings-Erwähnung → #folgen erwartet, war: %r" % url)
-    assert "#einstellungen" not in url
-
-
-def test_AC2_folgen_tab_explizit_kein_einstellungen_button():
-    """AC2: tab='folgen' explizit → kein #einstellungen-Button."""
-    client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
-    result = hoerspiel_oeffnen(
-        chat_id=42,
-        from_user_id=7,
-        hoerspiel_client=client,
-        is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_URL,
-        tab="folgen",
-    )
-    url = result["presentation"]["inline_button"]["web_app_url"]
-    assert "#einstellungen" not in url
-    assert url.endswith("#folgen")
-
-
-# ============================================================
-#  AC3 — Wortlisten-Drift: kein Phantom-Button-Versprechen
-# ============================================================
-
-
-def test_AC3_wortliste_kein_knopf_unten_in_folgen_antwort():
-    """AC3-wortliste: Folgen-Antwort enthält NICHT 'Knopf unten'."""
-    client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
-    result = hoerspiel_oeffnen(
-        chat_id=42,
-        from_user_id=7,
-        hoerspiel_client=client,
-        is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_URL,
-        tab="folgen",
     )
     text = result.get("text", "")
-    assert "Knopf unten" not in text, (
-        "Text darf 'Knopf unten' nicht enthalten (Phantom-Button-Versprechen)")
-
-
-def test_AC3_wortliste_kein_klick_in_folgen_antwort():
-    """AC3-wortliste: Folgen-Antwort enthält NICHT 'klick' (Groß-/Kleinschreibung)."""
-    client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
-    result = hoerspiel_oeffnen(
-        chat_id=42,
-        from_user_id=7,
-        hoerspiel_client=client,
-        is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_URL,
-        tab="folgen",
-    )
-    text = result.get("text", "").lower()
-    assert "klick" not in text, (
-        "Text darf 'klick' nicht enthalten (Phantom-Button-Versprechen)")
-
-
-def test_AC3_wortliste_kein_button_im_text_der_folgen_antwort():
-    """AC3-wortliste: Text-Feld der Folgen-Antwort enthält NICHT das Wort 'Button'."""
-    client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
-    result = hoerspiel_oeffnen(
-        chat_id=42,
-        from_user_id=7,
-        hoerspiel_client=client,
-        is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_URL,
-        tab="folgen",
-    )
-    text = result.get("text", "")
-    assert "Button" not in text, (
-        "Text-Feld darf 'Button' nicht enthalten (Phantom-Button-Versprechen)")
-
-
-def test_AC3_wortliste_kein_knopf_unten_in_einstellungen_antwort():
-    """AC3-wortliste: Einstellungen-Antwort enthält NICHT 'Knopf unten'."""
-    client = FakeHoerspielClient()
-    result = hoerspiel_oeffnen(
-        chat_id=42,
-        from_user_id=7,
-        hoerspiel_client=client,
-        is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_URL,
-        tab="einstellungen",
-    )
-    text = result.get("text", "")
-    assert "Knopf unten" not in text, (
-        "Text darf 'Knopf unten' nicht enthalten")
-
-
-# ============================================================
-#  AC3-default — tab Default ist 'folgen'
-# ============================================================
-
-
-def test_AC3_default_tab_ist_folgen():
-    """AC3: hoerspiel_oeffnen ohne tab → Default 'folgen' → #folgen-Hash."""
-    client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
-    result = hoerspiel_oeffnen(
-        chat_id=42,
-        from_user_id=7,
-        hoerspiel_client=client,
-        is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_URL,
-    )
-    url = result["presentation"]["inline_button"]["web_app_url"]
-    assert url.endswith("#folgen"), (
-        "Default-tab muss 'folgen' sein → URL auf #folgen, war: %r" % url)
-
-
-# ============================================================
-#  AC_einstellungen_kein_alben_call
-# ============================================================
-
-
-def test_AC_einstellungen_kein_alben_call():
-    """tab='einstellungen' macht KEINEN /alben-Lese-Call (kein unnötiger Netz-Call)."""
-    client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
-    hoerspiel_oeffnen(
-        chat_id=42,
-        from_user_id=7,
-        hoerspiel_client=client,
-        is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_URL,
-        tab="einstellungen",
-    )
-    assert client.alben_calls == 0, (
-        "tab='einstellungen' darf KEINEN /alben-Call auslösen, "
-        "aufgerufen: %d mal" % client.alben_calls)
-
-
-# ============================================================
-#  Robustheit — HOE-7 bei tab='einstellungen'
-# ============================================================
-
-
-def test_HOE7_mini_app_url_fehlt_einstellungen_kein_button():
-    """HOE-7: mini_app_url leer bei tab='einstellungen' → Klartext, presentation leer."""
-    client = FakeHoerspielClient()
-    result = hoerspiel_oeffnen(
-        chat_id=42,
-        from_user_id=7,
-        hoerspiel_client=client,
-        is_member_fn=_immer_mitglied,
-        mini_app_url="",
-        tab="einstellungen",
-    )
-    assert result["presentation"] == {}
-    text = result["text"]
-    assert "konfig" in text.lower() or "fehlt" in text.lower() or "url" in text.lower()
+    assert "Button" not in text, "Text darf 'Button' nicht enthalten"
