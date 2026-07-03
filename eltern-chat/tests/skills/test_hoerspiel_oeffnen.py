@@ -1,16 +1,15 @@
 """Tests für hoerspiel_oeffnen + HoerspielOeffnenTask — HOE-1 … HOE-7
 (specs/platform/hoerspiel-oeffnen.md).
 
-Nach Rückbau 2026-06-19 (Refs #1028, Anti-Redundanz E-HOE-2): HOE ist
-Folgen-only. Settings-Tab wird vom Agent sprachlich auf die Mini-App
-verwiesen, KEIN Tool-Call.
+HSP-53 (2026-07-03): Tab-Hash-Modell entfällt. HOE öffnet die Player-PWA
+(/seiten/hoerspiel/player, AUTH-6) per URL-Button (nicht web_app).
 
 Abgedeckte ACs:
   AC1 — HoerspielOeffnenTask erbt von ReadTask (Klasse-B-Pattern).
   AC2 — Task baut strukturiertes Ergebnis (TASK-10c Form (b)) mit Folgen-
-         Übersicht + Mini-App-Button-Spec.
-  AC3 — HOE-5: Folgen-Türöffner → Hash #folgen, Label 🎧, fester
-         /seiten/hoerspiel/paula/eltern-Pfad (HSP-35 aggregiert).
+         Übersicht + Player-PWA-URL-Button.
+  AC3 — HOE-5: Türöffner → URL auf /seiten/hoerspiel/player, kein Hash,
+         URL-Button (nicht web_app), Label 🎧.
   AC4 — E-HOE-3: Leerer Album-Bestand → Button wird trotzdem gepostet.
   AC5 — HOE-7: mini_app_url leer → Klartext, presentation leer.
          HOE-7: Buddy nicht erreichbar → Klartext, presentation leer.
@@ -86,17 +85,18 @@ def _album(nr, titel):
 
 
 _MINI_APP_BASE = "https://xbuddy.example.com"
-_HOE_APP_PATH = "/seiten/hoerspiel/paula/eltern"
+# HSP-47 / HSP-53: fester Pfad der Player-PWA
+_HOE_APP_PATH = "/seiten/hoerspiel/player"
 _MINI_APP_URL = _MINI_APP_BASE + _HOE_APP_PATH
 
 
 # ============================================================
-#  AC3 — Folgen-Türöffner → #folgen
+#  AC3 — Türöffner → Player-PWA URL (HSP-53)
 # ============================================================
 
 
-def test_HOE5_folgen_hash():
-    """AC3/HOE-5: HOE-Aufruf → web_app_url endet auf #folgen."""
+def test_HOE5_player_pwa_url():
+    """AC3/HOE-5: HOE-Aufruf → url zeigt auf Player-PWA, kein Hash."""
     client = FakeHoerspielClient(alben_liste=[_album(1, "Paulas erstes Abenteuer")])
     result = hoerspiel_oeffnen(
         chat_id=42,
@@ -105,9 +105,13 @@ def test_HOE5_folgen_hash():
         is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_URL,
     )
-    ib = result["presentation"]["inline_button"]
-    assert ib["web_app_url"].endswith("#folgen"), (
-        "web_app_url muss auf #folgen enden: %r" % ib["web_app_url"])
+    buttons = result["presentation"]["inline_buttons"]
+    assert len(buttons) == 1
+    btn_url = buttons[0]["url"]
+    assert "/seiten/hoerspiel/player" in btn_url, (
+        "url muss /seiten/hoerspiel/player enthalten: %r" % btn_url)
+    assert "#" not in btn_url, (
+        "url darf kein Hash-Fragment enthalten (kein Tab-Modell mehr): %r" % btn_url)
 
 
 def test_HOE1_ruft_alben_lesen():
@@ -161,7 +165,7 @@ def test_HOE4_folgen_label():
         hoerspiel_client=client, is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_URL,
     )
-    label = result["presentation"]["inline_button"]["label"]
+    label = result["presentation"]["inline_buttons"][0]["label"]
     assert "Folgen" in label or "anhören" in label.lower()
 
 
@@ -171,28 +175,30 @@ def test_HOE4_folgen_label():
 
 
 def test_EHOE3_leer_button_vorhanden():
-    """AC4/E-HOE-3: Leerer Album-Bestand → TROTZDEM inline_button (analog E-RAO-3)."""
+    """AC4/E-HOE-3: Leerer Album-Bestand → TROTZDEM inline_buttons (analog E-RAO-3)."""
     client = FakeHoerspielClient(alben_liste=[])
     result = hoerspiel_oeffnen(
         chat_id=42, from_user_id=7,
         hoerspiel_client=client, is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_URL,
     )
-    assert "inline_button" in result["presentation"]
+    assert "inline_buttons" in result["presentation"]
+    assert len(result["presentation"]["inline_buttons"]) == 1
     text = result["text"]
     assert "noch keine" in text.lower() or "vorhanden" in text.lower()
 
 
-def test_EHOE3_leer_button_endet_auf_folgen():
-    """AC4/E-HOE-3: Leerer Album-Bestand → Button-URL endet auf #folgen."""
+def test_EHOE3_leer_button_zeigt_auf_player():
+    """AC4/E-HOE-3: Leerer Album-Bestand → Button-URL zeigt auf Player-PWA, kein Hash."""
     client = FakeHoerspielClient(alben_liste=[])
     result = hoerspiel_oeffnen(
         chat_id=42, from_user_id=7,
         hoerspiel_client=client, is_member_fn=_immer_mitglied,
         mini_app_url=_MINI_APP_URL,
     )
-    url = result["presentation"]["inline_button"]["web_app_url"]
-    assert url.endswith("#folgen")
+    url = result["presentation"]["inline_buttons"][0]["url"]
+    assert "/seiten/hoerspiel/player" in url
+    assert "#" not in url
 
 
 # ============================================================
@@ -300,16 +306,16 @@ def test_AC2_task_folgen_returnt_form_b():
     assert isinstance(result, dict)
     assert "text" in result
     assert "presentation" in result
-    assert "inline_button" in result["presentation"]
+    assert "inline_buttons" in result["presentation"]
     # Task sendet NICHTS selbst
     assert len(tg.inline_sent) == 0
     assert len(tg.sent) == 0
 
 
-def test_AC2_task_mini_app_url_baut_pfad_folgen():
-    """AC2/HOE-5: Task baut web_app_url = base + /seiten/hoerspiel/paula/eltern#folgen.
+def test_AC2_task_mini_app_url_baut_pfad_player():
+    """AC2/HOE-5: Task baut url = base + /seiten/hoerspiel/player (HSP-47/HSP-53).
 
-    Fester paula-Launcher (HSP-35 aggregiert clientseitig).
+    Kein Hash-Fragment, URL-Button (nicht web_app).
     """
     client = FakeHoerspielClient(alben_liste=[_album(1, "Test")])
     tg = FakeTelegram()
@@ -320,10 +326,12 @@ def test_AC2_task_mini_app_url_baut_pfad_folgen():
 
     result = task.run({}, ctx)
 
-    url = result["presentation"]["inline_button"]["web_app_url"]
+    buttons = result["presentation"]["inline_buttons"]
+    assert len(buttons) == 1
+    url = buttons[0]["url"]
     assert url.startswith("https://")
-    assert "/seiten/hoerspiel/paula/eltern" in url
-    assert url.endswith("#folgen")
+    assert "/seiten/hoerspiel/player" in url
+    assert "#" not in url
 
 
 def test_AC2_task_description_enthaelt_folgen_trigger():

@@ -873,11 +873,11 @@ class _FakeHoerspielClientForAgent:
 
 
 def test_E_HOE_2_direkt_trigger_agent_ruft_hoerspiel_oeffnen_mit_einstellungen():
-    """E-HOE-2 / T1048 (AC7): Direkt-Trigger-Phrase → Agent macht Tool-Call
-    hoerspiel_oeffnen mit tab='einstellungen'.
+    """E-HOE-2 / T1048 (AC7) — HSP-53 Update (Refs #1294):
+    Tab-Hash-Modell superseded; hoerspiel_oeffnen hat kein tab-Argument mehr.
+    Agent-Tool-Call ohne tab → Task öffnet Player-PWA, alben_lesen() wird aufgerufen.
 
     Setup: FakeProvider skriptiert den Tool-Call (EC-17 — kein echtes LLM).
-    Prüft: welcher Task-Name + argument tab='einstellungen' wurde aufgerufen?
     """
     from unittest.mock import MagicMock
 
@@ -892,11 +892,12 @@ def test_E_HOE_2_direkt_trigger_agent_ruft_hoerspiel_oeffnen_mit_einstellungen()
         mini_app_url="https://xbuddy.example.com",
     )
 
+    # HSP-53: kein tab-Argument mehr; leere arguments
     provider = FakeProvider([
         task_call_response("hoerspiel_oeffnen",
-                           arguments={"tab": "einstellungen"},
+                           arguments={},
                            call_id="c-hoe-1"),
-        text_response("Hier ist der Link zu den Hörspiel-Einstellungen."),
+        text_response("Hier ist der Link zum Hörspiel-Player."),
     ])
     turn = TurnContext(chat_id=42, from_user_id=7)
     result = agent.run_turn(
@@ -907,11 +908,10 @@ def test_E_HOE_2_direkt_trigger_agent_ruft_hoerspiel_oeffnen_mit_einstellungen()
         turn,
     )
 
-    # Der Tool-Call mit tab='einstellungen' wurde an den Provider übergeben
-    # und vom Task ausgeführt — agent.run_turn liefert ein Ergebnis
+    # Task wurde ausgeführt — agent.run_turn liefert ein Ergebnis
     assert result.reply_text is not None
-    # kein tab='einstellungen' → kein /alben-Call (E-HOE-2 Invariante)
-    assert hoerspiel_client.alben_calls == 0
+    # HSP-53: Player-PWA-Pfad immer über alben_lesen() → alben_calls >= 1
+    assert hoerspiel_client.alben_calls >= 1
 
 
 def test_E_HOE_2_direkt_trigger_agent_text_enthaelt_nicht_knopf_unten():
@@ -935,10 +935,11 @@ def test_E_HOE_2_direkt_trigger_agent_text_enthaelt_nicht_knopf_unten():
     )
 
     # Skriptierter LLM-Text: so wie ein gut instruiertes Modell antworten würde
+    # HSP-53: kein tab-Argument mehr
     agent_antwort = "Hier ist der Link zu den Hörspiel-Einstellungen."
     provider = FakeProvider([
         task_call_response("hoerspiel_oeffnen",
-                           arguments={"tab": "einstellungen"},
+                           arguments={},
                            call_id="c-hoe-2"),
         text_response(agent_antwort),
     ])

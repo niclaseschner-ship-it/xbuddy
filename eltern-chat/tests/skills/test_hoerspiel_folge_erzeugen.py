@@ -507,7 +507,8 @@ def test_HFE5_erfolgreicher_build_sendet_erfolgs_bubble():
     assert "schreibe" in start_msg or "vertonen" in start_msg or "minuten" in start_msg
     msg = tg.sent[1]["text"]
     assert "alb-77" in msg or "✅" in msg
-    assert "app.example.com" in msg or "/display/hoerspiel" in msg
+    # HSP-53: Fertig-Link zeigt auf Player-PWA
+    assert "app.example.com" in msg or "/seiten/hoerspiel/player" in msg
 
 
 def test_HFE5_http_412_shared_asset_hinweis():
@@ -939,9 +940,12 @@ def test_HFE10_settings_beifang_nur_in_erster_antwort():
                or "⚙" in str(b.get("label", ""))
                for b in beifang_btn), (
         "HFE-10: Beifang-Button muss Label ⚙️ Einstellungen tragen")
-    assert any("#einstellungen" in str(b.get("web_app_url", ""))
+    # HSP-53: url-Feld (nicht web_app_url), zeigt auf Player-PWA, kein Hash
+    assert any("/seiten/hoerspiel/player" in str(b.get("url", ""))
                for b in beifang_btn), (
-        "HFE-10: Beifang-Button muss URL mit #einstellungen tragen")
+        "HFE-10: Beifang-Button muss url mit /seiten/hoerspiel/player tragen (HSP-53)")
+    assert not any("#" in str(b.get("url", "")) for b in beifang_btn), (
+        "HFE-10: Beifang-Button darf kein Hash-Fragment enthalten (kein Tab-Modell)")
 
     # Zweiter Aufruf: gleicher Turn, leere Idee → Sub-Case 1 → KEIN neuer Button
     with pytest.raises(ValueError, match=r"Worum|gehen|Paula|Abenteuer"):
