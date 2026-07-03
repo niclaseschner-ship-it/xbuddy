@@ -7,9 +7,6 @@
       "path": "/display/plan/woche",
       "contract": "contracts/plan-woche.json"
     },
-    "plan/woche-klein": {
-      "path": "/display/plan/woche?ansicht=klein"
-    },
     "kibuddy/frage": {
       "path": "/display/kibuddy/frage"
     }
