@@ -430,9 +430,7 @@ def test_ETAB6_V2_multimodal_provider_mistral_eingesteckt():
         def execute(self, args, turn_context):
             return ""
 
-    import tasks as tasks_mod
     import skills.termine_aus_bild_task as tab_mod
-    import importlib
 
     # Patch TermineAusBildTask in tasks-Modul-Namespace über den Import-Pfad.
     # build_catalog importiert lazy: `from skills.termine_aus_bild_task import
@@ -440,7 +438,7 @@ def test_ETAB6_V2_multimodal_provider_mistral_eingesteckt():
     original_cls = tab_mod.TermineAusBildTask
     tab_mod.TermineAusBildTask = _CapturingTermineAusBildTask
     try:
-        catalog = build_catalog(
+        build_catalog(
             FakeTelegram(),
             "/instanz/rootCA.pem",
             plan_origin_url="http://127.0.0.1:5000",
@@ -487,7 +485,7 @@ def test_ETAB6_V1_default_kein_multimodal_gesetzt_nutzt_text_provider():
     original_cls = tab_mod.TermineAusBildTask
     tab_mod.TermineAusBildTask = _CapturingTermineAusBildTask
     try:
-        catalog = build_catalog(
+        build_catalog(
             FakeTelegram(),
             "/instanz/rootCA.pem",
             plan_origin_url="http://127.0.0.1:5000",
@@ -671,3 +669,47 @@ def test_render_form_b_inline_buttons_plural_beide_urls_durchgereicht():
     assert "2" in result or "Buttons" in result or "Button" in result, (
         "Quittung soll Anzahl der Buttons nennen."
     )
+
+
+# ============================================================
+#  EC-42 — anzeige_copy: optionales Klassenattribut auf Task-Basis
+# ============================================================
+
+def test_ec42_anzeige_copy_default_none_und_gesetzt():
+    """EC-42 / TASK-11: anzeige_copy ist optionales Klassenattribut (Default None)
+    auf der Task-Basis; fehlt es, greift description-Fallback.
+
+    Test-Anker: eltern-chat/tests/test_tasks.py::test_ec42_anzeige_copy_default_none_und_gesetzt
+    """
+    # Default: FakeReadTask setzt kein anzeige_copy → None
+    task_ohne = FakeReadTask(name="ohne_anzeige_copy", result="x")
+    assert getattr(task_ohne, "anzeige_copy", "MISSING") is None, (
+        "EC-42: ohne explizite Deklaration muss anzeige_copy None sein"
+    )
+
+    # Unterklasse setzt anzeige_copy als Klassenattribut (analog TASK-11-Bauplan)
+    class TaskMitAnzeige(ReadTask):
+        anzeige_copy = "Ich kann dir die Einkaufsliste öffnen"
+
+        def __init__(self):
+            super().__init__(
+                name="mit_anzeige_copy",
+                description="Router-Jargon, ungeeignet für Eltern",
+                parameters={"type": "object", "properties": {}})
+
+        def run(self, arguments, turn_context):
+            return "ergebnis"
+
+    task_mit = TaskMitAnzeige()
+    assert task_mit.anzeige_copy == "Ich kann dir die Einkaufsliste öffnen", (
+        "EC-42: gesetztes anzeige_copy muss zurückgegeben werden"
+    )
+    # Fallback-Logik: anzeige_copy oder description (Leser-Muster EC-42)
+    assert (task_mit.anzeige_copy or task_mit.description) == task_mit.anzeige_copy
+    assert (task_ohne.anzeige_copy or task_ohne.description) == task_ohne.description
+
+    # Additiv: bestehende Aufgaben (FakeReadTask) sind durch das neue
+    # Klassenattribut NICHT gebrochen — name, description, kind unverändert.
+    from model import READ
+    assert task_ohne.kind == READ
+    assert task_ohne.name == "ohne_anzeige_copy"
