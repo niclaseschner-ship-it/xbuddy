@@ -5,8 +5,8 @@ Adapter-Import-Ort gepatcht). Geprüft:
   - complete_structured übersetzt die Signatur-Drift (user/input_schema →
     prompt/schema) und ruft die Fassade,
   - LibProviderError → hoerspiel ProviderError,
-  - complete (Synopse) läuft seit #1131 über die Lib-Completion-Sicht
-    (get_completion), NICHT mehr über den alt_provider,
+  - complete (Synopse) läuft über die Lib-Completion-Sicht
+    (get_completion), NICHT über die Singleshot-Fassade,
   - Entry-Path: erzeuge_folgen_vorschlag(llm=Adapter) liefert
     {titel, text, folgen-nr-vorschlag} über den realen llm_service-Pfad.
 """
@@ -19,7 +19,7 @@ from hoerspiel import llm_service
 from hoerspiel.providers.base import ProviderError
 
 
-def _make_adapter(facade, alt_provider=None, completion_facade=None):
+def _make_adapter(facade, completion_facade=None):
     """Baut einen LibSingleshotAdapter mit gemockten Lib-Fassaden.
 
     `facade` ist die Singleshot-Fassade (get_singleshot); `completion_facade`
@@ -34,12 +34,11 @@ def _make_adapter(facade, alt_provider=None, completion_facade=None):
         adapter = lib_adapter.LibSingleshotAdapter(
             slot="hoerspiel-anthropic-api-key",
             model="claude-opus-4-7",
-            alt_provider=alt_provider,
         )
     return adapter, gs
 
 
-def _make_adapter_with_max_tokens(facade, max_tokens=0, alt_provider=None):
+def _make_adapter_with_max_tokens(facade, max_tokens=0):
     """Baut einen LibSingleshotAdapter mit gemockten Lib-Fassaden + max_tokens."""
     from hoerspiel.providers import lib_adapter
     with patch.object(lib_adapter, "get_singleshot", return_value=facade) as gs, \
@@ -48,7 +47,6 @@ def _make_adapter_with_max_tokens(facade, max_tokens=0, alt_provider=None):
         adapter = lib_adapter.LibSingleshotAdapter(
             slot="hoerspiel-anthropic-api-key",
             model="claude-opus-4-7",
-            alt_provider=alt_provider,
             max_tokens=max_tokens,
         )
     return adapter, gs
@@ -99,22 +97,18 @@ def test_lib_provider_error_maps_to_hoerspiel_provider_error():
 
 
 def test_complete_routes_through_completion_facade():
-    """complete (Synopse, HSP-16) läuft seit #1131 über die Lib-Completion-Sicht
-    (get_completion), NICHT mehr über den alt_provider."""
+    """complete (Synopse, HSP-16) läuft über die Lib-Completion-Sicht
+    (get_completion), NICHT über die Singleshot-Fassade."""
     facade = MagicMock()
     facade.model = "claude-opus-4-7"
     completion = MagicMock(model="claude-opus-4-7")
     completion.complete.return_value = "Eine kurze Synopse."
-    alt = MagicMock()
-    adapter, _gs = _make_adapter(facade, alt_provider=alt,
-                                 completion_facade=completion)
+    adapter, _gs = _make_adapter(facade, completion_facade=completion)
 
     result = adapter.complete("SYS-SYNOPSE", "Folgentext")
     assert result == "Eine kurze Synopse."
     completion.complete.assert_called_once_with(
         system="SYS-SYNOPSE", user="Folgentext")
-    # Der Alt-Provider wird seit #1131 NICHT mehr angefasst.
-    alt.complete.assert_not_called()
     # Der Folgen-Pfad (Singleshot-Fassade) wurde NICHT angefasst.
     facade.complete_structured.assert_not_called()
 
@@ -183,13 +177,11 @@ def test_entry_path_erzeuge_folgen_vorschlag_through_adapter():
 
 def test_entry_path_erzeuge_synopse_through_adapter():
     """Entry-Path (#1131, AC3): erzeuge_synopse(llm=Adapter) → realer
-    llm_service-Pfad läuft über die Lib-Completion-Sicht, nicht den alt_provider."""
+    llm_service-Pfad läuft über die Lib-Completion-Sicht."""
     facade = MagicMock(model="claude-opus-4-7")
     completion = MagicMock(model="claude-opus-4-7")
     completion.complete.return_value = "  Stigi lernt Mut am Trübsee.  "
-    alt = MagicMock()
-    adapter, _gs = _make_adapter(facade, alt_provider=alt,
-                                 completion_facade=completion)
+    adapter, _gs = _make_adapter(facade, completion_facade=completion)
 
     out = llm_service.erzeuge_synopse(
         titel="Stigi und der Trübsee",
@@ -203,7 +195,6 @@ def test_entry_path_erzeuge_synopse_through_adapter():
     kwargs = completion.complete.call_args.kwargs
     assert kwargs["system"] == llm_service.SYNOPSE_PROMPT
     assert "Stigi und der Trübsee" in kwargs["user"]
-    alt.complete.assert_not_called()
 
 
 def test_adapter_passes_max_tokens_to_get_singleshot():
