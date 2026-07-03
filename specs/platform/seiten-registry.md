@@ -466,8 +466,7 @@ ins Repo, wenn sie bewusst angelegt werden (keine implizite Existenz wie
 ein noch-nicht-backfilled-`icons[]` an einer alten View); ein nachträglich
 gestaffeltes Einführen für Varianten würde Vorrats-Mechanik bedeuten
 (CLAUDE.md §6 „nichts auf Vorrat"), die heute keinen konkreten Schmerz
-löst — alle bestehenden Varianten (plan/woche-klein) sind vollständig
-gebackfillt. **Verworfen:** Variante folgt demselben `icons_erforderlich`-
+löst — alle bestehenden Varianten sind vollständig gebackfillt. **Verworfen:** Variante folgt demselben `icons_erforderlich`-
 Schalter (Weg B aus #440) — Vorrats-Mechanik ohne Trigger.
 
 ## SREG-11 — Editor-Eintrag je Panel-Instanz (zusätzlich zur Panel-Seite)
