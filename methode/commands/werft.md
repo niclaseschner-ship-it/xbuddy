@@ -299,8 +299,11 @@ NACH Design geschrieben, Reconcile wird trivial bis überflüssig.
   (F4). `/tmp/`- oder `brainstorm/werft-drafts/`-Pfade sind im Handoff
   verboten — sie verlassen die durable Repo-Heimat (`decisions/README.md:15-20`)
   und werden vom Hook `dispatch_status_guard.py` bei Subagent-Dispatch geblockt
-  (`stat()`-Existenz-Check auf `werft_mockup_path`). Nicht-UI-Tracks lassen
-  `werft_mockup_path` weg.
+  (`stat()`-Existenz-Check auf `werft_mockup_path`). **Ab PW-83 (2026-07-03) wird
+  das Feld zusätzlich am F5-Stempel selbst erzwungen** (`status_rollback_guard.py`,
+  `deliverable_kind: ui_build`): der Handoff kann UI nicht mehr ohne Mockup-Feld
+  verlassen. Nicht-UI-Tracks setzen `deliverable_kind: non_ui` + `deliverable_evidence`
+  (statt `werft_mockup_path` einfach wegzulassen).
 - Render-/Screenshot-Rezept zur Laufzeit notieren (z. B. Sonnet-Subagent rendert,
   `chromium --headless` schießt Screenshot, Vorschau via `python3 -m http.server`).
 
@@ -398,10 +401,28 @@ geparkt bis n=2 belegt.
     substanz: <verdikt>
     reconcile: <verdikt>
     ledger: <verdikt>
+    deliverable_kind: ui_build     # PW-83: ui_build | non_ui — Pflicht
+    werft_mockup_path: specs/mockups/<slug>/<variante>.html   # Pflicht bei ui_build
   ```
   Schema identisch zu `prep_verdict v1` (gleicher Hash-Compute-Pfad via
   `status_rollback_guard.py:compute_verdict_hash`). Nur Marker-Name + `werft: true`-Achse
   unterscheiden. Hook erkennt Werft-Pfad via `in-werft`-Label + Skip-Marker.
+
+  **PW-83 RATIFIZIERT 2026-07-03 (ENTSCHEID `20260703-232716-RATIFIZIERT-membran-
+  gate-am-akt.md` → „Fix B") — `deliverable_kind` ist Pflicht-Achse am F5-Stempel.**
+  Der PW-54-`werft_mockup_path`-`stat()`-Check saß bisher nur konsumenten-seitig
+  (`dispatch_status_guard` beim /arbeitstag-Dispatch, konditional auf Feld-Präsenz —
+  fehlte das Feld ganz, feuerte nichts). Jetzt erzwingt `status_rollback_guard.py`
+  ihn **am Werft-F5-Stempel selbst** (produzenten-seitig, am Akt):
+  - `deliverable_kind: ui_build` ⟹ `werft_mockup_path` ist **unbedingt** Pflicht
+    (present + `specs/mockups/`-Prefix + `.html` + `stat()`-Existenz). Fehlt es →
+    **Stempel-deny**. (F3-Ende persistiert das Mockup ohnehin — jetzt kommt der
+    zweite Halbschritt, das maschinen-lesbare Feld, nicht mehr weg.)
+  - `deliverable_kind: non_ui` ⟹ `deliverable_evidence: <Datei:Zeile/Body-Stelle,
+    warum kein UI>` ist Pflicht (kein ungeprüftes Selbst-Attest). `werft_mockup_path`
+    entfällt dann.
+  Beide Felder liegen unter `axes:` und gehen damit in `compute_verdict_hash` — nicht
+  nachträglich fälschbar.
 
   **Erst wenn Verdikt + Comment grün:** Label-Tausch in EINEM `gh issue edit`:
   ```
