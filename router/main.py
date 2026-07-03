@@ -1329,6 +1329,33 @@ def app_panel_dir():
     return DEFAULT_APP_PANEL_DIR
 
 
+def _app_panel_build_id():
+    """PANEL-14: build_id aus max(mtime) des vollständigen cache-relevanten
+    Runtime-Asset-Satzes (7 Pfade: app.js, style.css, sw.js, manifest.json,
+    silent.mp3, controller/_shared/config.js, display/_shared/design/tokens.css).
+
+    Begründung des vollen Satzes: config.js und tokens.css werden von index.html
+    referenziert und vom Service-Worker precacht (E-PANEL-6, sw.js STATIC_ASSETS)
+    — bei Ableitung nur aus CSS/JS bliebe ein geändertes Token- oder Config-Asset
+    unsichtbar (build_id unveränderlich, Stale-Asset überlebt).
+
+    OSError-Fallback: '0' (analog seiten/_mini_app_build_id)."""
+    panel_dir = app_panel_dir()
+    asset_paths = [
+        os.path.join(panel_dir, 'app.js'),
+        os.path.join(panel_dir, 'style.css'),
+        os.path.join(panel_dir, 'sw.js'),
+        os.path.join(panel_dir, 'manifest.json'),
+        os.path.join(panel_dir, 'silent.mp3'),
+        os.path.join(DEFAULT_CONTROLLER_SHARED_DIR, 'config.js'),
+        os.path.join(DEFAULT_DISPLAY_SHARED_DESIGN_DIR, 'tokens.css'),
+    ]
+    try:
+        return str(int(max(os.path.getmtime(p) for p in asset_paths)))
+    except OSError:
+        return '0'
+
+
 def _send_app_panel_asset(rel_path):
     root = os.path.realpath(app_panel_dir())
     target = os.path.realpath(os.path.join(root, rel_path))
@@ -1353,7 +1380,12 @@ def render_app_panel_index(panel_id):
     """PANEL-2: liefert index.html mit der Panel-Identität als data-source-id
     im <body>-Tag. Die Seite kennt damit ohne weiteren Roundtrip ihre eigene
     Identität — die Konsistenz-Prüfung (PANEL-8) vergleicht den Wert dann mit
-    der `source_id` aus config.json."""
+    der `source_id` aus config.json.
+
+    PANEL-14: ersetzt außerdem alle __BUILD_ID__-Platzhalter in den Asset-URLs
+    durch die aktuelle build_id (max mtime des Runtime-Asset-Satzes, vgl.
+    _app_panel_build_id). Keine zweite Templating-Schicht — beide Token-
+    Ersetzungen laufen über diesen bestehenden Seam."""
     index_path = os.path.join(app_panel_dir(), 'index.html')
     with open(index_path, encoding='utf-8') as f:
         html = f.read()
@@ -1362,7 +1394,10 @@ def render_app_panel_index(panel_id):
     # Substring-Match auf `<body>`, damit HTML-Kommentare nicht versehentlich
     # gematcht werden und das echte Tag leer bleibt.
     # IDENT-5 — Server-side-Identitäts-Token in HTML-Templates.
-    return html.replace('__PANEL_ID__', panel_id, 1)
+    build_id = _app_panel_build_id()
+    return (html
+            .replace('__PANEL_ID__', panel_id, 1)
+            .replace('__BUILD_ID__', build_id))
 
 
 @app.route('/controller/app-panel/<panel_id>', methods=['GET'])
@@ -1394,6 +1429,23 @@ def app_panel_asset(panel_id, asset):
     if asset in _PANEL_BEARBEITEN_VIEWS:
         body, content_type, status = _proxy_panel_bearbeiten(panel_id, asset)
         return Response(body, status=status, mimetype=content_type)
+    # PANEL-14: sw.js wird mit __BUILD_ID__-Substitution + no-cache-Headern
+    # ausgeliefert. Ohne den no-cache-Header hält der Browser die alte sw.js,
+    # kein neuer Worker registriert sich und der neue Cache-Name greift nicht.
+    # Defense-in-Depth-Path-Traversal-Schutz analog _send_app_panel_asset.
+    if asset == 'sw.js':
+        root = os.path.realpath(app_panel_dir())
+        target = os.path.realpath(os.path.join(root, 'sw.js'))
+        if not (target == root or target.startswith(root + os.sep)):
+            abort(404)
+        if not os.path.isfile(target):
+            abort(404)
+        with open(target, encoding='utf-8') as fh:
+            body = fh.read().replace('__BUILD_ID__', _app_panel_build_id())
+        resp = Response(body, status=200)
+        resp.headers['Content-Type'] = 'application/javascript; charset=utf-8'
+        resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        return resp
     return _send_app_panel_asset(asset)
 
 
