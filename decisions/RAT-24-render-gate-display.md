@@ -39,7 +39,7 @@ Form:
   Fenster). Kein Tag-1-Block (#40 starb an falscher Zuversicht).
 - **Piloten:** `plan/woche` (server-Jinja) + `hoerspiel/*/alben` ODER `kibuddy/frage`
   (echter Client-Render — NICHT `wetter/heute`, das ist server-gerendert).
-  `woche-klein`-Variante explizit mitmessen.
+  ~~`woche-klein`-Variante explizit mitmessen.~~ *(Amendment 2026-07-03: `plan/woche-klein` per Render-Paritäts-Entscheid 2026-07-01 / #1235 entfernt; Mess-Auftrag entfällt.)*
 - **KI-Vision-Schicht 2:** NOCH NICHT (Trigger: Gate live + ≥2 echte visuelle
   Regressionen, die nachweislich keine deterministische Invariante sind). Schicht 1
   bleibt deterministisch-unverhandelbar.
