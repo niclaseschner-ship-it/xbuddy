@@ -22,6 +22,7 @@ _REPO_ROOT = os.path.dirname(_SEITEN_DIR)
 sys.path.insert(0, _REPO_ROOT)
 
 from seiten import main as seiten_main  # noqa: E402  # isort:skip
+from seiten import pwa_mantel  # noqa: E402  # isort:skip
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -69,7 +70,7 @@ def test_ac1_primary_gewinnt_wenn_neuer(monkeypatch):
             return platform_mtime
         raise OSError(f"unerwarteter Pfad im Test: {path}")
 
-    monkeypatch.setattr(seiten_main.os.path, "getmtime", fake_getmtime)
+    monkeypatch.setattr(pwa_mantel.os.path, "getmtime", fake_getmtime)
     result = seiten_main._mini_app_build_id("essen-einkauf.js")
     assert result == str(int(primary_mtime)), \
         f"Erwartet {int(primary_mtime)!r}, erhalten {result!r} — primary_js sollte gewinnen"
@@ -89,7 +90,7 @@ def test_ac1_platform_gewinnt_wenn_neuer(monkeypatch):
             return platform_mtime
         raise OSError(f"unerwarteter Pfad im Test: {path}")
 
-    monkeypatch.setattr(seiten_main.os.path, "getmtime", fake_getmtime)
+    monkeypatch.setattr(pwa_mantel.os.path, "getmtime", fake_getmtime)
     result = seiten_main._mini_app_build_id("mini-app-uebersicht.js")
     assert result == str(int(platform_mtime)), \
         f"Erwartet {int(platform_mtime)!r}, erhalten {result!r} — platform.js sollte gewinnen"
@@ -97,7 +98,7 @@ def test_ac1_platform_gewinnt_wenn_neuer(monkeypatch):
 
 def test_ac1_oserror_fallback(monkeypatch):
     """AC1: OSError → Fallback 0 (analog _current_build_id / _plan_einst_build_id)."""
-    monkeypatch.setattr(seiten_main.os.path, "getmtime", lambda _: (_ for _ in ()).throw(OSError("nicht gefunden")))
+    monkeypatch.setattr(pwa_mantel.os.path, "getmtime", lambda _: (_ for _ in ()).throw(OSError("nicht gefunden")))
     result = seiten_main._mini_app_build_id("essen-einkauf.js")
     assert result == "0", f"Erwartet '0', erhalten {result!r}"
 
@@ -121,7 +122,7 @@ def test_ac2_platform_bump_aendert_build_id(monkeypatch):
             return 100.0
         raise OSError(path)
 
-    monkeypatch.setattr(seiten_main.os.path, "getmtime", getmtime_phase1)
+    monkeypatch.setattr(pwa_mantel.os.path, "getmtime", getmtime_phase1)
     build_id_phase1 = seiten_main._mini_app_build_id("routine-anpassen.js")
     assert build_id_phase1 == "300", \
         f"Phase 1: Erwartet '300', erhalten {build_id_phase1!r}"
@@ -134,7 +135,7 @@ def test_ac2_platform_bump_aendert_build_id(monkeypatch):
             return 500.0  # platform.js-Bump
         raise OSError(path)
 
-    monkeypatch.setattr(seiten_main.os.path, "getmtime", getmtime_phase2)
+    monkeypatch.setattr(pwa_mantel.os.path, "getmtime", getmtime_phase2)
     build_id_phase2 = seiten_main._mini_app_build_id("routine-anpassen.js")
     assert build_id_phase2 == "500", \
         f"Phase 2: Erwartet '500' (platform.js-Bump), erhalten {build_id_phase2!r}"
@@ -160,7 +161,7 @@ def test_ac2_platform_bump_sichtbar_in_route_html(monkeypatch, client):
         # Andere getmtime-Aufrufe (z.B. SW-Helfer) duerfen passieren
         return 1.0
 
-    monkeypatch.setattr(seiten_main.os.path, "getmtime", fake_getmtime)
+    monkeypatch.setattr(pwa_mantel.os.path, "getmtime", fake_getmtime)
     resp = client.get("/api/v1/seiten/mini-app-uebersicht")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)

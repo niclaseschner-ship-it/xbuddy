@@ -48,7 +48,7 @@ _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from seiten import aggregator, render  # noqa: E402
+from seiten import aggregator, pwa_mantel, render  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
 from tools import familie_client as _familie_client_mod  # noqa: E402
 from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # noqa: E402
@@ -564,43 +564,31 @@ def _einkauf_asset_root():
     return os.path.join(os.path.dirname(__file__), "static", "einkauf")
 
 
-def _read_sw_with_build_id(asset_path, build_id):
-    """Liest sw.js, ersetzt __BUILD_ID__-Platzhalter und gibt String zurueck.
-
-    ESSEN-35 Cache-Versionierung: der Service-Worker traegt den Cache-Namen
-    'einkauf-pwa-<build_id>'. Beim Deploy mit neuer build_id invalidiert
-    der activate-Event den alten Cache.
-    """
-    with open(asset_path, encoding="utf-8") as fh:
-        content = fh.read()
-    return content.replace("__BUILD_ID__", build_id)
-
-
 def _current_build_id():
-    """build_id aus mtime der essen-einkauf.js — identisch zu HTML-Route."""
+    """build_id fuer den einkauf-SW aus dem Source-Set [essen-einkauf.js,
+    platform.js] (PWAM-4/5, pwa_mantel.REGISTRY['einkauf']).
+
+    +platform.js gegenueber frueher (nur essen-einkauf.js): ein platform.js-Bump
+    invalidiert jetzt AUCH den SW-Cache, nicht nur die HTML-Route
+    (T1266 AC3-Kill-Kriterium, conventions/pwa-mantel.md PWAM-4).
+    """
     static_dir = os.path.join(os.path.dirname(__file__), "static")
-    try:
-        return str(int(os.path.getmtime(os.path.join(static_dir, "essen-einkauf.js"))))
-    except OSError:
-        return "0"
+    return pwa_mantel.build_id_for("einkauf", static_dir)
 
 
 def _mini_app_build_id(primary_js: str) -> str:
-    """build_id als max(mtime(primary_js), mtime(platform.js)).
+    """build_id als max(mtime(primary_js), mtime(platform.js)) (T1229, PWAM-4).
 
-    Bezieht platform.js-mtime ein, damit eine platform.js-Änderung
-    den Telegram-Cache aller 4 platform.js-ladenden Mini-App-Routen
-    verlässlich invalidiert (T1229, MAD-5 / RAT-16).
-
-    OSError-Fallback: "0" (analog _current_build_id / _plan_einst_build_id).
+    Generischer Mini-App-HTML-Helfer: bezieht platform.js-mtime ein, damit eine
+    platform.js-Änderung den Telegram-Cache aller 4 platform.js-ladenden
+    Mini-App-Routen verlässlich invalidiert (MAD-5 / RAT-16). Delegiert an
+    pwa_mantel.build_id_from_mtimes (OSError-Fallback "0").
     """
     static_dir = os.path.join(os.path.dirname(__file__), "static")
-    try:
-        mtime_primary = os.path.getmtime(os.path.join(static_dir, primary_js))
-        mtime_platform = os.path.getmtime(os.path.join(static_dir, "platform.js"))
-        return str(int(max(mtime_primary, mtime_platform)))
-    except OSError:
-        return "0"
+    return pwa_mantel.build_id_from_mtimes([
+        os.path.join(static_dir, primary_js),
+        os.path.join(static_dir, "platform.js"),
+    ])
 
 
 @app.route("/seiten/essen/einkauf/<path:asset>", methods=["GET"])
@@ -635,7 +623,7 @@ def einkauf_asset_view(asset):
     # damit der Browser den Worker bei jedem Update neu holt.
     if os.path.basename(target) == "sw.js":
         build_id = _current_build_id()
-        body = _read_sw_with_build_id(target, build_id)
+        body = pwa_mantel.read_sw_with_build_id(target, build_id)
         resp = make_response(body, 200)
         resp.headers["Content-Type"] = mimetype + "; charset=utf-8"
         # Browser muss sw.js fresh holen, sonst kein Update-Trigger.
@@ -677,19 +665,14 @@ def _plan_einst_asset_root():
 
 
 def _plan_einst_build_id():
-    """build_id aus mtime der plan-einstellungen.js (analog ESSEN-35)."""
+    """build_id fuer den plan-SW aus [plan-einstellungen.js, platform.js]
+    (PWAM-4/5, pwa_mantel.REGISTRY['plan']).
+
+    +platform.js gegenueber frueher: platform.js-Bump invalidiert jetzt AUCH den
+    SW-Cache (T1266 AC3-Fix, analog einkauf).
+    """
     static_dir = os.path.join(os.path.dirname(__file__), "static")
-    try:
-        return str(int(os.path.getmtime(os.path.join(static_dir, "plan-einstellungen.js"))))
-    except OSError:
-        return "0"
-
-
-def _read_plan_sw_with_build_id(asset_path, build_id):
-    """Liest sw.js, ersetzt __BUILD_ID__-Platzhalter (analog ESSEN-35)."""
-    with open(asset_path, encoding="utf-8") as fh:
-        content = fh.read()
-    return content.replace("__BUILD_ID__", build_id)
+    return pwa_mantel.build_id_for("plan", static_dir)
 
 
 @app.route("/seiten/plan/einstellungen/", methods=["GET"])
@@ -745,7 +728,7 @@ def plan_einstellungen_asset_view(asset):
     # Sonderfall sw.js: build_id-Platzhalter ersetzen.
     if os.path.basename(target) == "sw.js":
         build_id = _plan_einst_build_id()
-        body = _read_plan_sw_with_build_id(target, build_id)
+        body = pwa_mantel.read_sw_with_build_id(target, build_id)
         resp = make_response(body, 200)
         resp.headers["Content-Type"] = mimetype + "; charset=utf-8"
         resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -788,12 +771,14 @@ def _connector_asset_root():
 
 
 def _connector_build_id():
-    """build_id aus mtime der connector/index.html (Cache-Buster, analog PLAN-35)."""
-    try:
-        return str(int(os.path.getmtime(
-            os.path.join(_connector_asset_root(), "index.html"))))
-    except OSError:
-        return "0"
+    """build_id aus [index.html] (PWAM-4/5, pwa_mantel.REGISTRY['connector']).
+
+    Override-aware: base_dir = _connector_asset_root() (runtime-Override bleibt
+    erhalten). Verhalten unveraendert gegenueber frueher (mtime(index.html)) —
+    connector wird in #1266 nur mechanisch ueber die Lib geroutet, KEINE
+    Verhaltensaenderung (Set-Vorbehalt: style.css erst im Angleich-Folgetrack).
+    """
+    return pwa_mantel.build_id_for("connector", _connector_asset_root())
 
 
 def _connector_jsonl_source():
@@ -1088,19 +1073,12 @@ def _shell_asset_root():
 
 
 def _shell_build_id():
-    """build_id aus mtime von heim-shell.css (analog _current_build_id ESSEN-35)."""
+    """build_id aus [heim-shell.css] (PWAM-4/5, pwa_mantel.REGISTRY['shell']).
+
+    Verhalten unveraendert gegenueber frueher (mtime(heim-shell.css)).
+    """
     static_dir = os.path.join(os.path.dirname(__file__), "static")
-    try:
-        return str(int(os.path.getmtime(os.path.join(static_dir, "heim-shell.css"))))
-    except OSError:
-        return "0"
-
-
-def _read_shell_sw_with_build_id(asset_path, build_id):
-    """Liest sw.js, ersetzt __BUILD_ID__-Platzhalter (analog ESSEN-35)."""
-    with open(asset_path, encoding="utf-8") as fh:
-        content = fh.read()
-    return content.replace("__BUILD_ID__", build_id)
+    return pwa_mantel.build_id_for("shell", static_dir)
 
 
 @app.route("/shell/<panel_id>/<path:asset>", methods=["GET"])
@@ -1137,7 +1115,7 @@ def shell_asset_view(panel_id, asset):
 
     if os.path.basename(target) == "sw.js":
         build_id = _shell_build_id()
-        body = _read_shell_sw_with_build_id(target, build_id)
+        body = pwa_mantel.read_sw_with_build_id(target, build_id)
         resp = make_response(body, 200)
         resp.headers["Content-Type"] = mimetype + "; charset=utf-8"
         # Service-Worker-Allowed: /shell/ — SW-Scope darf /shell/<panel_id>/ ueberschreiten.
