@@ -676,10 +676,10 @@ def test_PANEL_10_manifest_declares_fullscreen():
 def test_PANEL_10_html_binds_manifest_and_registers_sw():
     html = read(HTML_PATH)
     assert re.search(
-        r'<link[^>]+rel=["\']manifest["\'][^>]+href=["\']\.\/manifest\.json["\']',
+        r'<link[^>]+rel=["\']manifest["\'][^>]+href=["\']\.\/manifest\.json(\?v=[^"\']*)?["\']',
         html)
     js = read(APPJS_PATH)
-    assert re.search(r"navigator\.serviceWorker\.register\(['\"]\.\/sw\.js['\"]\)",
+    assert re.search(r"navigator\.serviceWorker\.register\(['\"]\.\/sw\.js(\?v=[^\"']*)?['\"]\)",
                      js), 'SW-Registrierung fehlt'
 
 
