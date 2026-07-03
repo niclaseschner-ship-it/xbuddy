@@ -159,13 +159,14 @@ Wiedergabe-UI klingt, nutzt er HOE.
 
 Der Skill antwortet im selben Chat mit **einer Bot-Nachricht** und gibt
 einen **TASK-10c Form-(b)-Dict** zurück: `{text, presentation:
-{inline_button: {label, web_app_url}}}` (analog RAO-5). **Genau ein
-Button** pro Aufruf — fester `#folgen`-Hash, weil HOE Folgen-only ist:
+{inline_buttons: [{label, url}]}}` (analog RAO-5). **Genau ein
+Button** pro Aufruf — reguläre URL zur Player-PWA (kein Telegram-`web_app`,
+kein Hash; HOE-5):
 
 ```
 🎧 Hörspiel — N Folgen (zuletzt: Folge <nr> „<titel>")
 
-[🎧 Folgen anhören]   ← web_app-Inline-Button, Hash #folgen
+[🎧 Folgen anhören]   ← url-Button, öffnet Player-PWA
 ```
 
 Mit `N` = Album-Anzahl aus `GET /api/v1/hoerspiel/paula/alben` (fester
@@ -182,7 +183,7 @@ Zeile fällt weg, wenn `N = 0` (siehe E-HOE-3).
 ```
 
 Anders als EZG bei leerer Einkaufsliste posten wir hier **doch** den
-Inline-Button (analog RAO bei leerer Routine, E-HOE-3) — die Mini-App
+Inline-Button (analog RAO bei leerer Routine, E-HOE-3) — die Player-PWA
 ist genau der Ort, an dem Eltern den Folgen-Tab kennenlernen kann, auch
 wenn er heute leer ist. Eine leere Album-Liste ist Anfangszustand, kein
 Endzustand wie eine leere Einkaufsliste.
@@ -207,8 +208,9 @@ Die Funnel-Domain stammt aus der Buddy-übergreifenden Konfiguration
 (MVP-Sammler #678 / RAT-16 / EZG-6 / RAO-6 / HSP-53 — **identische Naht**,
 kein separater Slot je App). Konfig-Wert:
 `eltern-chat/config.json::mini_app_base_url` mit ENV-Override
-`ELTERNCHAT_MINI_APP_BASE_URL` (analog RAO). In `hoerspiel_oeffnen_task.py`
-wird `_HOE_APP_PATH = "/seiten/hoerspiel/player"` an die Base-URL gehängt.
+`ELTERNCHAT_MINI_APP_BASE_URL` (analog RAO). Die Player-PWA-URL ergibt
+sich aus Base-URL + festem Player-Pfad `/seiten/hoerspiel/player`
+(HSP-47/HSP-53); der genaue Konstantenname bleibt dem Code überlassen.
 
 **Auth:** Player-PWA nutzt Cookie-Auth (AUTH-6 / RAT-18), nicht `tma`.
 Der URL-Button öffnet die URL im Browser des Elternteils — kein
