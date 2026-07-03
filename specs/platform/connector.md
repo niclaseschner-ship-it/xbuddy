@@ -29,17 +29,29 @@ nginx-Funnel-deny + Spec-Patch + ggf. [#1030](../../README.md) (Hot-Swap).
 
 ## 1. Aufbau — zwei Sektionen als Tabelle
 
-### CONN-1 — Sektion „Schnittstellen & Tokens"
-Eine Tabellen-Zeile pro **externer Verbindung** (Vendor-Slot), nicht pro Buddy. Pro
-Zeile: Anbieter-Logo + Name, Status, **wer-bucht-darauf** (Chips der nutzenden Buddys),
-**Summe abgerechnet** (aggregiert über alle caller dieses Vendors). *Wenn* ein Slot
-einen Key trägt, *dann* Status „konfiguriert"; *wenn* nicht genutzt + von keinem aktiven
-Pfad referenziert (`hoerspiel-llm-provider-*`), *dann* „inaktiv / Altlast".
+### CONN-1 — Sektion „Schnittstellen & Tokens", eine Zeile pro (Anbieter, Zweck)-Route
+Eine Tabellen-Zeile pro **externer Verbindung**, gruppiert nach **(Vendor, Purpose)** —
+**nicht** allein nach Vendor-Slug und nicht pro Buddy (ENTSCHEID-1262 → „Patch D",
+Nic 2026-07-03: „eigene erkennbare Foto-Analyse-Zeile"). Zwei Slots desselben Vendors mit
+**unterschiedlichem Purpose** — z. B. `eltern-chat-anthropic-api-key` (Chat) und
+`eltern-chat-anthropic-foto-analyse-api-key` (Foto-Analyse) — ergeben **zwei**
+unterscheidbare Zeilen; zwei Slots mit gleichem (Vendor, Purpose) über verschiedene caller
+bleiben **eine** aggregierte Zeile. Pro Zeile: Anbieter-Logo + Name, ein **menschenlesbares
+Zweck-Label** (abgeleitet aus dem Purpose-Sub-Qualifier vor dem Schlüsseltyp-Suffix:
+`foto-analyse-api-key` → „Foto-Analyse"; ein Purpose nur aus dem Schlüsseltyp (`api-key`)
+→ Default-Label „Chat" — **nie** der ZD-Slot-Klartext, CONN-7), Status, **wer-bucht-darauf**
+(Chips der nutzenden Buddys), **Summe abgerechnet** (aggregiert über alle caller dieser
+(Vendor, Purpose)-Route). *Wenn* ein Slot einen Key trägt, *dann* Status „konfiguriert";
+*wenn* nicht genutzt + von keinem aktiven Pfad referenziert (`hoerspiel-llm-provider-*`),
+*dann* „inaktiv / Altlast".
+Test-Anker: seiten/tests/test_connector_schnittstellen.py::test_conn1_vendor_purpose_zwei_zeilen
 
 ### CONN-2 — Sektion „Je Buddy", eine Zeile pro Funktion
-Eine Tabellen-Zeile pro **Buddy × Funktion**: eltern-chat (LLM), hoerspiel (LLM **und**
-TTS — zwei Zeilen), kibuddy (LLM). Pro Zeile: Buddy-Icon (aus `<buddy>/views.json`),
-Funktion, **aktuell genutzt** (Vendor + Modell), Calls/Kosten, Edit-Aktion (CONN-6).
+Eine Tabellen-Zeile pro **Buddy × Funktion**: eltern-chat (LLM-Chat **und**
+LLM-Foto-Analyse — zwei Zeilen seit #1262, konsistent zur (Vendor,Purpose)-Route aus
+CONN-1), hoerspiel (LLM **und** TTS — zwei Zeilen), kibuddy (LLM). Pro Zeile: Buddy-Icon
+(aus `<buddy>/views.json`), Funktion, **aktuell genutzt** (Vendor + Modell), Calls/Kosten,
+Edit-Aktion (CONN-6).
 
 ### CONN-3 — TTS als aktive Verbindung, Verbrauch noch nicht erfasst
 *Wenn* ein Buddy einen TTS-Dienst nutzt (hoerspiel → Azure OpenAI, `hoerspiel/tts/azure.py`),
