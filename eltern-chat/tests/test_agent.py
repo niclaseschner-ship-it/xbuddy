@@ -958,3 +958,47 @@ def test_E_HOE_2_direkt_trigger_agent_text_enthaelt_nicht_knopf_unten():
         "Agent-Text darf 'klick' nicht enthalten")
     assert "Button" not in text, (
         "Agent-Text darf 'Button' nicht enthalten (Phantom-Button-Versprechen)")
+
+
+# ============================================================
+#  EC-40 / #1105 — Trigger-Vokabular-Heimat im SYSTEM_PROMPT
+#
+#  EC-40 Soll-Norm: positives Trigger-Vokabular gehört allein in
+#  die Tool-description; der System-Prompt trägt nur Negativ-/
+#  Verweis-Routing (eltern-chat.md:1513-1518).
+# ============================================================
+
+def test_EC40_1105_system_prompt_traegt_keine_positiven_trigger_phrasen():
+    """EC-40 / #1105 (AC3): Der SYSTEM_PROMPT enthält die positiven
+    Direkt-Settings-Trigger-Phrasen (»schick mir die settings« etc.) und
+    die Hörspiel-Folgen-Öffnen-Phrasen (»Hörbuch hören« etc.) NICHT mehr —
+    sie sind aus dem doppelten Pflege-Ort entfernt und leben allein in der
+    Tool-description von hoerspiel_oeffnen_task.py (EC-40 Implementations-Pfad).
+    """
+    prompt = agent.SYSTEM_PROMPT
+    # Positive Direkt-Settings-Phrasen dürfen NICHT im System-Prompt stehen.
+    assert "schick mir die Hörbuch settings" not in prompt, (
+        "EC-40/T1105: positive Settings-Trigger-Phrase darf nicht im SYSTEM_PROMPT stehen")
+    assert "Direkt-Trigger-Phrasen" not in prompt, (
+        "EC-40/T1105: positive Trigger-Phrasen-Liste darf nicht im SYSTEM_PROMPT stehen")
+    # Positive Hörspiel-Folgen-Phrasen dürfen NICHT im System-Prompt stehen.
+    assert "Hörspiel-Folgen-Öffnen" not in prompt, (
+        "EC-40/T1105: positive Folgen-Öffnen-Sektion darf nicht im SYSTEM_PROMPT stehen")
+    assert "Hörbuch hören" not in prompt, (
+        "EC-40/T1105: positive Folgen-Trigger-Phrase darf nicht im SYSTEM_PROMPT stehen")
+
+
+def test_EC40_1105_system_prompt_traegt_negativ_regel():
+    """EC-40 / #1105 (AC3): Der SYSTEM_PROMPT enthält weiter die
+    Negativ-/Anti-Redundanz-Regel (EC-40 Soll-Norm): kein Settings-Inhalt
+    im Chat-Text, beiläufige Erwähnung → sprachlicher Verweis OHNE Tool-Call.
+    """
+    prompt = agent.SYSTEM_PROMPT
+    # Anti-Redundanz: kein Settings-Inhalt im Chat-Text.
+    assert "kein Settings-Inhalt im Chat-Text" in prompt, (
+        "EC-40/T1105: Negativ-Regel 'kein Settings-Inhalt' muss im SYSTEM_PROMPT bleiben")
+    # Beiläufige-Erwähnung-Verweis-Regel bleibt.
+    assert "Beiläufige Settings-Erwähnung" in prompt, (
+        "EC-40/T1105: Anti-Redundanz-Grundregel 'Beiläufige Settings-Erwähnung' muss bleiben")
+    assert "sprachlicher Verweis OHNE Tool-Call" in prompt, (
+        "EC-40/T1105: Negativ-Routing 'sprachlicher Verweis OHNE Tool-Call' muss bleiben")
