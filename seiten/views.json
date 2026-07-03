@@ -58,6 +58,21 @@
         "service_worker": "/api/v1/seiten/static/connector/sw.js"
       },
       "auth": "public"
+    },
+    {
+      "slug": "hoerspiel-player",
+      "typ": "pwa",
+      "pfad": "/seiten/hoerspiel/player",
+      "label": "Hörspiel-Player",
+      "synonyme": ["hörspiel", "hoerspiel", "player", "abspielen", "folgen"],
+      "zeigt": "Installierbarer Hörspiel-Player: Folgen auswählen und abspielen.",
+      "zielgruppe": "kind",
+      "pwa": {
+        "manifest": "/seiten/hoerspiel/player/manifest.json",
+        "start_url": "/seiten/hoerspiel/player",
+        "service_worker": "/seiten/hoerspiel/player/sw.js"
+      },
+      "auth": "public"
     }
   ]
 }

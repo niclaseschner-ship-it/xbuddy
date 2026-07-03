@@ -925,6 +925,125 @@ def hoerspiel_eltern_view(kind_id: str):
 
 
 # ============================================================
+#  HSP-47 — Hörspiel-Player-PWA (erster Voll-Konsument der PWA-Mantel-Lib)
+# ============================================================
+#
+# Spec-Anker: specs/buddies/hoerspiel.md HSP-47 + specs/platform/pwa-mantel-lib.md
+# (PWML-1..5). Surface:
+#   GET /seiten/hoerspiel/player            — HTML-Shell (Template aus hoerspiel/)
+#   GET /seiten/hoerspiel/player/<asset>    — manifest.json (build_manifest),
+#       sw.js (render_sw + build_id), player.{css,js}/icon-*.png aus hoerspiel/static/.
+# AUTH-6 Netz-Trust / PUBLIC (analog plan_einstellungen_view) — KEIN tma, KEIN
+# 401. Die HSP-47-Cookie-401-Forderung ist auf #1292 deferred (Nic-Option-C).
+# nginx: /seiten/hoerspiel/ → seiten:5042 deckt den Pfad (KEINE nginx-Änderung).
+#
+# Manifest + sw.js kommen aus der Lib (pwa_mantel.REGISTRY['hoerspiel-player']),
+# NICHT von der Platte — deshalb kein manifest.json/sw.js in hoerspiel/static/.
+# player.html/player.{css,js}/Icons liefert der hoerspiel-Buddy (Track B).
+
+_HOERSPIEL_PLAYER_MIME = {
+    ".json": "application/manifest+json",
+    ".js":   "application/javascript",
+    ".css":  "text/css",
+    ".png":  "image/png",
+}
+
+_HOERSPIEL_PLAYER_COMPONENT = "hoerspiel-player"
+
+
+def _hoerspiel_static_dir():
+    """Asset-Wurzel des hoerspiel-Buddys (player.{css,js} + Icons, Track B).
+
+    hoerspiel/static/ — der seiten-Service liest (nicht schreibt) daraus.
+    Test-Naht: runtime['hoerspiel_player_asset_dir'].
+    """
+    override = (runtime.get("hoerspiel_player_asset_dir")
+               if isinstance(runtime, dict) else None)
+    if override:
+        return override
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(repo_root, "hoerspiel", "static")
+
+
+def _hoerspiel_player_build_id():
+    """build_id aus dem Player-Source-Set [player.js, player.css] in
+    hoerspiel/static/ (PWML-3, pwa_mantel.REGISTRY['hoerspiel-player'])."""
+    return pwa_mantel.build_id_for(_HOERSPIEL_PLAYER_COMPONENT, _hoerspiel_static_dir())
+
+
+@app.route("/seiten/hoerspiel/player", methods=["GET"])
+def hoerspiel_player_view():
+    """HSP-47: Hörspiel-Player-PWA — HTML-Render-Route.
+
+    PUBLIC / Netz-Trust (auth.md AUTH-6): kein Auth-Header, kein initData
+    (Cookie-401-Teil deferred #1292). Template liegt in hoerspiel/templates/
+    player.html (Track B) und wird via absolutem Pfad gerendert — analog
+    hoerspiel_eltern_view, aber OHNE dessen tma-Auth.
+
+    Cache-Buster: build_id aus dem Player-Source-Set (PWML-3).
+    """
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    hoerspiel_templates = os.path.join(repo_root, "hoerspiel", "templates")
+    build_id = _hoerspiel_player_build_id()
+
+    from jinja2 import Environment, FileSystemLoader
+    env = Environment(loader=FileSystemLoader(hoerspiel_templates), autoescape=True)
+    tmpl = env.get_template("player.html")
+    html = tmpl.render(build_id=build_id)
+
+    resp = make_response(html, 200)
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
+
+
+@app.route("/seiten/hoerspiel/player/<path:asset>", methods=["GET"])
+def hoerspiel_player_asset_view(asset):
+    """HSP-47: PWA-Mantel-Asset-Auslieferung über die Lib (PWML-1/2).
+
+    - manifest.json → pwa_mantel.build_manifest(REGISTRY['hoerspiel-player'])
+      (PWML-1: display:standalone, PNG-Icons 192/512/maskable).
+    - sw.js        → pwa_mantel.render_sw(...) mit substituiertem build_id
+      (PWML-2: zwei Knöpfe + __BUILD_ID__), no-store-Header.
+    - player.{css,js}/icon-*.png → statisch aus hoerspiel/static/ mit
+      realpath-Traversal-Guard (analog ESSEN-34); sonst 404.
+    """
+    from flask import abort, send_from_directory
+
+    cfg = pwa_mantel.REGISTRY[_HOERSPIEL_PLAYER_COMPONENT]
+
+    if asset == "manifest.json":
+        resp = make_response(json.dumps(pwa_mantel.build_manifest(cfg)), 200)
+        resp.headers["Content-Type"] = "application/manifest+json; charset=utf-8"
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return resp
+
+    if asset == "sw.js":
+        build_id = _hoerspiel_player_build_id()
+        body = pwa_mantel.render_sw(_HOERSPIEL_PLAYER_COMPONENT, build_id=build_id)
+        resp = make_response(body, 200)
+        resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
+        # sw.js fresh holen, sonst kein Update-Trigger.
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return resp
+
+    # Statische Player-Assets aus hoerspiel/static/ (Track B) mit Traversal-Guard.
+    root = os.path.realpath(_hoerspiel_static_dir())
+    target = os.path.realpath(os.path.join(root, asset))
+    if target != root and not target.startswith(root + os.sep):
+        abort(404)
+    if not os.path.isfile(target):
+        abort(404)
+    if os.path.basename(target).startswith("_"):
+        abort(404)
+
+    ext = os.path.splitext(target)[1].lower()
+    mimetype = _HOERSPIEL_PLAYER_MIME.get(ext, "application/octet-stream")
+    return send_from_directory(root, asset, mimetype=mimetype)
+
+
+# ============================================================
 #  SHELL-1..11 / SHELL-PWA — Heim-Shell PWA (Split-Layout, Pilot Paula, #1182)
 # ============================================================
 #
