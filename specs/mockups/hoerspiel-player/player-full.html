@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hörspiel-Player · Voller Player</title>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Patrick+Hand&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./assets/tokens.css">
+<link rel="stylesheet" href="./assets/base.css">
+<style>
+  .pcover { width:150px; height:150px; border-radius:24px; object-fit:cover; margin:2px auto 0; display:block; box-shadow:0 8px 24px rgba(0,0,0,.16); }
+  .ptitle { font-family:var(--font-display,'Caveat'); font-size:30px; text-align:center; line-height:1.05; margin:12px 20px 2px; }
+  .pmeta { font-family:var(--font-sans); font-size:12px; color:var(--kids-ink-soft,#6B6356); text-align:center; }
+  .nowbadge { display:flex; justify-content:center; margin:10px 0 2px; }
+  .pprogress { height:7px; border-radius:999px; background:rgba(0,0,0,.10); margin:8px 24px 0; overflow:hidden; }
+  .pprogress > i { display:block; height:100%; width:34%; background:var(--kids-ring-orange,#E58E3F); }
+  .pctl { display:flex; align-items:center; justify-content:center; gap:20px; margin:16px 0 4px; }
+</style>
+</head>
+<body>
+<div class="mock-caption"><b>Voller Player.</b> Öffnet sich beim Tap auf eine Folge. Großes Play/Skip <b>plus die Kapitel-Liste zum Antippen (HSP-51)</b> — jedes „Untertitel"/Kapitel direkt anspringbar, ⏮/⏭ zwischen Kapiteln, −15/+15 s im Kapitel. <i>Live-Manifest von „Der Körper-Feier-Tag" (6 Tracks).</i></div>
+<div class="phone">
+  <div class="screen">
+    <div class="statusbar"><span>9:41</span><span>◍ ▮▮▮</span></div>
+    <div class="schead">
+      <a class="back" href="./variante-b-regal.html">‹</a>
+      <div><div class="htitle" id="hkid">Paula</div><div class="hsub">zurück zum Regal</div></div>
+    </div>
+    <div class="scroll">
+      <img class="pcover" id="pcover" src="" alt="">
+      <div class="ptitle" id="ptitle">…</div>
+      <div class="pmeta" id="pmeta">…</div>
+      <div class="nowbadge"><span class="badge resume" id="nowtrack">Weiter · Track 2/6</span></div>
+      <div class="pprogress"><i></i></div>
+      <div class="pctl">
+        <button class="ctl sm"><span class="i-prev"></span></button>
+        <button class="ctl play weiter"><span class="i-play"></span></button>
+        <button class="ctl sm"><span class="i-next"></span></button>
+      </div>
+      <div class="skiprow">
+        <button class="skipbtn">−15 s</button>
+        <button class="skipbtn">Kapitel ⏮</button>
+        <button class="skipbtn">⏭ Kapitel</button>
+        <button class="skipbtn">+15 s</button>
+      </div>
+      <div class="chapters">
+        <h4>Kapitel dieser Folge</h4>
+        <div id="chlist"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="./assets/data.js"></script>
+<script>
+function fmt(s){ if(!s) return ''; const m=Math.floor(s/60), r=s%60; return m+':'+String(r).padStart(2,'0'); }
+function label(t, kapNr){
+  if(t.titel) return t.titel;
+  if(t.art==='intro') return 'Intro';
+  if(t.art==='outro') return 'Outro';
+  return 'Kapitel '+kapNr;
+}
+HSP.load().then(()=>{
+  document.querySelectorAll('.i-prev').forEach(e=>e.innerHTML=HSP.ICONS.prev);
+  document.querySelectorAll('.i-play').forEach(e=>e.innerHTML=HSP.ICONS.play);
+  document.querySelectorAll('.i-next').forEach(e=>e.innerHTML=HSP.ICONS.next);
+  const m=HSP.manifest(), al=HSP.alben(), cur=al[0];
+  document.getElementById('pcover').src=cur.cover;
+  document.getElementById('ptitle').textContent=m.titel||cur.titel;
+  const tracks=(m.tracks||[]);
+  document.getElementById('pmeta').textContent='Folge '+cur.nummer+' · '+tracks.length+' Kapitel · Stimme '+cur.voice;
+  const active=1; // Track-Index (0-basiert) = Kapitel 1 / Resume
+  const list=document.getElementById('chlist'); let kap=0;
+  tracks.forEach((t,i)=>{
+    if(t.art==='inhalt') kap++;
+    const row=document.createElement('div'); row.className='chrow'+(i===active?' active':'');
+    row.innerHTML='<span class="cidx">'+(i+1)+'</span>'
+      +'<span class="cname">'+label(t,kap)+'</span>'
+      +(t['dauer-sek']?'<span class="cdur">'+fmt(t['dauer-sek'])+'</span>':'<span class="cdur">—</span>')
+      +'<span class="cplay">'+HSP.ICONS.play+'</span>';
+    list.appendChild(row);
+  });
+});
+</script>
+</body>
+</html>
