@@ -1,6 +1,6 @@
 # Hörspiel-Buddy — Spec     (ID-Präfix: HSP)
 
-> Status: V1 · Refs #729, #907 (Mehr-Instanz-Cut Paula + Neko, RAT-17)
+> Status: V1 · Refs #729, #907 (Mehr-Instanz-Cut Paula + Neko, RAT-17), #1263 (dritte Instanz „Niclas" Erwachsener, n≥3-Modell, HSP-28a reaktiviert)
 
 ## Problem & North-Star-Bezug
 
@@ -33,11 +33,14 @@ Funktion (LLM-gestützte Folgen-Erzeugung, TTS-Album-Bau, Resume-
 Verwaltung) und stellt das Ergebnis über seine Display-View bereit
 (HSP-1, APP-1).
 
-V1 läuft mit **zwei expliziten Instanzen** Paula + Neko, handverdrahtet
-(zwei systemd-Units, zwei Ports, zwei Origin-Pfade nach URL-3a). Eine
-Instanz-Registry oder generische „Buddy-mit-n-Instanzen"-Konvention gibt
-es bewusst nicht (RAT-17, n=1-Klasse für diese Sorte). Details siehe
-HSP-28a.
+Der Buddy läuft mit **mehreren expliziten Instanzen** (V1: Paula + Neko;
+ab #1263 zusätzlich Niclas als gleichrangige Erwachsenen-Instanz),
+handverdrahtet je Instanz (eigene systemd-Unit, eigener Port, eigene
+Origin-Pfade nach URL-3a). Eine **hörspiel-lokale Instanz-Liste** trägt
+die Laufzeit-Iteration über die verdrahteten Instanzen (HSP-43); eine
+generische „Buddy-mit-n-Instanzen"-Registry gibt es bewusst weiterhin
+**nicht** (RAT-17 bleibt vertagt bis zur zweiten n-Instanz-Buddy-Klasse).
+Details siehe HSP-28a und Abschnitt 14 (HSP-43..HSP-46).
 
 **V1-Scope:** Single-Page-View `alben` (Kachel-Raster + Player auf einer
 Canvas) · Album-Modell mit geordneten Tracks · Voice-Casting je Album über
@@ -107,6 +110,12 @@ ID-Präfix HFE).
   `HOERSPIEL_KIND_ALTER` (V1-Übergang seit T4 #910) ablösen. Trigger:
   familie_client für Hörspiel-Service angebunden — gehört zur Welle
   „Hörspiel besitzt seinen familie-FK".
+- **OPEN-HSP-S** — Eltern-/Erwachsenen-Folgen aus der Kinder-View
+  ausblenden (Zielgruppen-Sicht-Trennung). Nic-Idee 2026-07-03 (#1263),
+  bewusst vertagt: erhöht die Komplexität (zusätzliche zu verwaltende
+  Sichtbarkeits-Option) und ist erst mit der als vollwertiger Player
+  gebauten Settings-App notwendig/leicht. Trigger: Settings-App-als-
+  Player steht. Bis dahin gilt HSP-46 (keine Trennung).
 
 ---
 
@@ -202,6 +211,15 @@ kein State-Wechsel innerhalb derselben Seite, keine Resume-Marken-
 Vermischung (localStorage-Namensräume sind URL-getrennt, HSP-23).
 Auf einem kind-eigenen Gerät ohne Sharing kann die Pille entfallen
 oder reine Anzeige sein.
+
+**n≥3-Form (#1263, HSP-43/HSP-46).** Bei drei und mehr Instanzen ist die
+Pille kein binärer Toggle mehr, sondern zeigt die **übrigen Instanzen
+aus der Instanz-Liste** (HSP-43) als antippbare Reihe — Niclas erscheint
+gleichrangig neben Paula und Neko (kein `zielgruppe`-Filter, HSP-46). Der
+Wechsel bleibt vollständige Navigation auf die jeweilige
+`/display/hoerspiel/<kind_id>/alben`-URL (getrennte localStorage-
+Namensräume, HSP-23). Ab ~5 Instanzen tritt an die Stelle der Pillen-
+Reihe ein Dropdown. (ENTSCHEID-1263 → F2 „Face-Pille".)
 
 **Bewusst keine Pille im Eltern-Mini-App-Header** (RAT-17 + #911 Nic-
 Wahl Variante C, 2026-06-16): die Eltern-Mini-App ist URL-parametrisch
@@ -1072,25 +1090,40 @@ Die Paula-Instanz läuft als eigener Prozess `xbuddy-hoerspiel.service`
 `127.0.0.1` (PORT-3). Port **5053** (PORT-2, `xbuddy-hoerspiel`,
 eingetragen in `conventions/ports.md`).
 
-### HSP-28a — Mehr-Instanz-Realität V1: Paula + Neko handverdrahtet (RAT-17)
-V1 läuft mit **zwei expliziten Hörspiel-Instanzen** Paula und Neko. Diese
-sind **handverdrahtet** — es gibt **keine** Instanz-Registry, **keinen**
-Port-Offset-Algorithmus, **keine** generische „Buddy-mit-n-Instanzen"-
-Konvention. Jede Instanz ist ein eigener Eintrag an vier Stellen
-(`conventions/ports.md`, `conventions/urls.md`, `deploy/nginx/xbuddy-
-origin.conf`, `eltern-chat/config.py`):
+### HSP-28a — Mehr-Instanz-Realität: Paula + Neko + Niclas handverdrahtet (RAT-17, reaktiviert #1263)
+
+**Reaktivierungs-Vermerk (#1263, RATIFIZIERT 2026-07-03).** Der in der
+V1-Fassung dieser Klausel gesetzte Wiederaufnahme-Trigger („wenn ein
+drittes Kind … hinzukommt, wird der Cut neu beraten") ist **gefeuert**:
+Niclas kommt als dritte, gleichrangige Hörspiel-Instanz (Erwachsener)
+hinzu. Nic-Verdikt: der Cut wird **hörspiel-lokal** über eine
+**Instanz-Liste mit Laufzeit-Iteration** (HSP-43) aufgelöst — **keine**
+generische RAT-17-Registry. (ENTSCHEID-1263 → Nic-Verdikt → „hörspiel-
+lokale Liste = nur Runtime-Iteration, keine RAT-17-Registry".)
+
+Der Buddy läuft mit **drei expliziten Hörspiel-Instanzen** Paula, Neko und
+Niclas. Diese sind **handverdrahtet** — kein Port-Offset-Algorithmus,
+keine generische „Buddy-mit-n-Instanzen"-Konvention. Jede Instanz ist ein
+eigener Eintrag an den bekannten Stellen (`conventions/ports.md`,
+`conventions/urls.md`, `deploy/nginx/xbuddy-origin.conf`,
+`eltern-chat/config.py`, `hoerspiel/views.json`); die vollständige
+Pflicht-Checkliste je neuer Instanz steht in HSP-44.
 
 | Instanz | systemd-Unit                       | Port | Daten-Pfad                          | Origin-Pfade (URL-3a)                                          |
 |---------|------------------------------------|------|-------------------------------------|----------------------------------------------------------------|
 | Paula   | `xbuddy-hoerspiel.service`         | 5053 | `xbuddy-data/hoerspiel/paula/`      | `/display/hoerspiel/paula/<view>` · `/api/v1/hoerspiel/paula/<resource>` |
-| Neko    | `xbuddy-hoerspiel-neko.service`    | 5054 oder nächster freier Port aus PORT-2-Block | `xbuddy-data/hoerspiel/neko/`       | `/display/hoerspiel/neko/<view>` · `/api/v1/hoerspiel/neko/<resource>`   |
+| Neko    | `xbuddy-hoerspiel-neko.service`    | 5055 | `xbuddy-data/hoerspiel/neko/`       | `/display/hoerspiel/neko/<view>` · `/api/v1/hoerspiel/neko/<resource>`   |
+| Niclas  | `xbuddy-hoerspiel-niclas.service`  | 5056 | `xbuddy-data/hoerspiel/niclas/`     | `/display/hoerspiel/niclas/<view>` · `/api/v1/hoerspiel/niclas/<resource>` |
 
-Die Konvention „Buddy-Klasse mit n Instanzen pro Pi" wird **nicht jetzt**
-ratifiziert — sie braucht zwei gebaute Buddy-Klassen mit n Instanzen
-(Hörbuchbuddy ist die erste; Kandidaten zweite Klasse: Kibuddy, Routine,
-mit derzeit nur offenen Punkten für Per-Kind). Wenn ein drittes Kind oder
-eine zweite n-Instanz-Buddy-Klasse hinzukommt, wird der Cut neu beraten
-und ggf. eine Registry-Konvention ratifiziert (n=2-Regel).
+*(Port-Reconcile #1263: Neko real 5055 laut `conventions/ports.md:27`, nicht 5054; Niclas 5056 als nächster freier aus dem PORT-2-Block.)*
+
+**RAT-17-Registry bleibt vertagt.** Die Wiederaufnahme in #1263 hat den
+Cut **hörspiel-lokal** aufgelöst (Instanz-Liste als Runtime-Iteration,
+HSP-43), **nicht** als plattformweite Registry-Konvention. Eine
+generische „Buddy-Klasse mit n Instanzen pro Pi"-Konvention braucht
+weiterhin zwei gebaute Buddy-Klassen mit n Instanzen (n=2-Regel);
+Hörspiel bleibt die erste. Erst eine zweite solche Klasse löst die
+Registry-Beratung aus.
 
 **Service-Vorlage-Ablage (Realitäts-Vermerk):** beide Hörspiel-Service-
 Vorlagen lagen am Repo-Root (`xbuddy-hoerspiel.service`,
@@ -1134,6 +1167,10 @@ Pro Instanz trägt `hoerspiel/views.json` einen eigenen Eintrag mit
 `kind_id`-tragender `pfad`-Form (URL-3a, RAT-17, #965). V1-Einträge:
 `slug: "alben-paula"` → `pfad: "/display/hoerspiel/paula/alben"` und
 `slug: "alben-neko"` → `pfad: "/display/hoerspiel/neko/alben"`.
+**#1263:** ein dritter Eintrag `slug: "alben-niclas"` →
+`pfad: "/display/hoerspiel/niclas/alben"` kommt hinzu (HSP-44-Checkliste
+Punkt 4). Sein `zielgruppe`-Feld ist **deskriptiv** — es blendet die
+Instanz nicht aus einer Ansicht aus (HSP-46).
 Jeder Eintrag trägt `icons[]` mit dem Pfad **`arasaac/5915.png`**
 (Kopfhörer-Piktogramm) relativ zur Icon-Basis
 `/display/_shared/icons/` (BUD-4, PANEL-3, ICONS-5). Das Kachel-Icon ist
@@ -1344,11 +1381,14 @@ Variante D"; Setzung 5 „KAQS-Symmetrie audio_ziel: display|panel")
 
 ### HSP-35 — Reiter „Folgen" (aggregierte Liste + Multi-Track-Player)
 
-**#973 (2026-06-16) · RAT-17 Option A handverdrahtet; Wiederaufnahme bei
-dritter Instanz oder zweiter Buddy-Klasse mit n Instanzen (RAT-17-Klausel):**
-Der Folgen-Tab lädt parallel die Folgen aller V1-Kinder (Paula und Neko),
-mergt sie und sortiert nach `erstellt-am` desc (gleicher Datumswert:
-`nummer` desc als Fallback).
+**#973 (2026-06-16) · RAT-17 Option A handverdrahtet. Wiederaufnahme-
+Trigger „dritte Instanz" gefeuert (#1263, RATIFIZIERT 2026-07-03) →
+Aggregation iteriert jetzt über die Instanz-Liste (HSP-43), nicht über
+eine 2-Element-Konstante (`KIND_IDS_V1`):** Der Folgen-Tab lädt parallel
+die Folgen **aller Instanzen** aus der Instanz-Liste (V1: Paula, Neko,
+Niclas — gleichrangig, kein `zielgruppe`-Filter, HSP-46), mergt sie und
+sortiert nach `erstellt-am` desc (gleicher Datumswert: `nummer` desc als
+Fallback).
 Jede Folge trägt ihre `kind_id` im JS-State — Player öffnet
 `/api/v1/hoerspiel/<folge.kind_id>/alben/<id>/manifest`, **nicht**
 URL-KIND_ID. Settings-Tab (HSP-34) bleibt instance-getrennt und
@@ -1663,6 +1703,129 @@ Tap-Priming"; Empirie-Test 2026-06-17)
 
 ---
 
+## 14. Mehr-Instanz-Modell (n≥3) — #1263
+
+> RATIFIZIERT 2026-07-03 (#1263, ENTSCHEID-1263). Reaktiviert den in
+> HSP-28a gesetzten Wiederaufnahme-Trigger: die dritte Instanz (Niclas,
+> Erwachsener) ist da. Der Cut wird **hörspiel-lokal** aufgelöst
+> (Instanz-Liste als Runtime-Iteration), **nicht** als plattformweite
+> RAT-17-Registry.
+
+### HSP-43 — Hörspiel-lokale Instanz-Liste (Runtime-Iteration) mit Scope-Grenze
+Der Buddy führt eine **hörspiel-lokale Instanz-Liste** der verdrahteten
+Instanzen (V1: `paula`, `neko`, `niclas`). Sie ersetzt die bisher
+binären „Paula-oder-Neko"-Annahmen durch eine **Iteration über die
+Liste** — überall dort, wo Code heute genau zwei Instanzen voraussetzt:
+Partner-/„andere Instanz"-Bezug (Face-Pille HSP-3a), Folgen-Aggregation
+(HSP-35 `KIND_IDS_V1`), HFE-Klassifikator-`enum` (`kind_id`-Auswahl),
+Audio-Ziel-Kollaps-Keys (HSP-34).
+
+**Wenn** eine View oder ein Skill „die anderen Instanzen" oder „alle
+Instanzen" braucht, **dann** liest er sie aus der Instanz-Liste, nicht
+aus einer 2-Element-Konstante.
+
+**Scope-Grenze (verbindlich — der Guard gegen die RAT-17-Registry durch
+die Hintertür).** Die Liste trägt **ausschließlich** Identität und
+UI-/Runtime-Iterations-Felder bereits verdrahteter Instanzen
+(`kind_id`, Anzeigename/Foto-FK über `familie.json`, `zielgruppe` als
+**deskriptives** Feld nach HSP-46). Sie trägt **keine** Betriebs-
+Andockpunkte: **kein** `port`, **kein** `origin`/`api_path`/
+`display_path`, **kein** `service`, **kein** Datei-Pfad. Diese bleiben
+in ihren Homes (`conventions/ports.md`, `conventions/urls.md`,
+`deploy/nginx/xbuddy-origin.conf`, systemd-Unit). **Sobald** die Liste
+eines dieser Felder bekäme oder nginx/eltern-chat daraus generiert
+würden, **ist** sie die vertagte RAT-17-Registry — das ist der
+Kill-/Verboten-Zustand dieser Klausel. RAT-17 bleibt vertagt bis zur
+zweiten n-Instanz-Buddy-Klasse (n=2-Regel, HSP-28a).
+
+(ENTSCHEID-1263 → F1 „hörspiel-lokale Instanz-Liste" + „Scope-Grenze" →
+„nur UI-/Runtime-Iteration, keine Ports/Origins/Services".)
+
+### HSP-44 — Provisioning-Checkliste je neuer Instanz (Pflicht-Cut)
+Eine neue Hörspiel-Instanz ist **erst dann öffentlich erreichbar und
+vollständig**, wenn **alle** folgenden Andockpunkte handverdrahtet
+gesetzt sind (RAT-17 Option A, kein Generator). Die Liste ist die
+Definition-of-Done für „Instanz X existiert":
+
+1. **Port** — Eintrag in `conventions/ports.md` (nächster freier aus
+   PORT-2-Block).
+2. **Origin-Routing / nginx** — URL-14-Registrierung inkl. der
+   **Audio-SSE-Exact-Location** mit `proxy_buffering off` für
+   `/api/v1/hoerspiel/<kind_id>/audio-stream` (HSP-42).
+3. **systemd-Service** — eigene Unit `xbuddy-hoerspiel-<kind_id>.service`
+   (SVC-1..4), Service-Vorlage neben dem Code (BUD-1a), inkl.
+   ZD-Store-Pfad-Drop-In pro Service.
+4. **views.json-Eintrag** — eigener Eintrag mit `kind_id`-tragender
+   `pfad`-Form (HSP-31).
+5. **eltern-chat-Verdrahtung** — Origin/Client-Map und Bot-Menü-Button
+   (HSP-33), plus HFE-Tool-Schema-`kind_id`-Wert (die `enum`-Liste zieht
+   aus der Instanz-Liste, HSP-43).
+6. **`hoerspiel_oeffnen`-Launcher** — Instanz ist über den Launcher-Skill
+   erreichbar (`specs/platform/hoerspiel-oeffnen.md`), nicht hart auf
+   Paula.
+7. **Daten-Bereich** — `xbuddy-data/hoerspiel/<kind_id>/instance.json`
+   (+ bible, Shared-Assets) nach HSP-25/HSP-27.
+8. **Tests** — instanz-tragende Tests fixieren nicht `paula`/`neko`
+   literal, sondern iterieren über die Instanz-Liste (HSP-43).
+
+(ENTSCHEID-1263 → F1 „der Cut ist GRÖSSER als 3 Stellen [BRICHT]" →
+Pflicht-Checkliste.)
+
+### HSP-45 — Erwachsenen-Instanz allein über Daten (kein App-UI-Alters-Achse)
+Der Zielgruppen-Ton einer Instanz (kindlich für Paula/Neko, erwachsen
+für Niclas) lebt **ausschließlich in den Instanz-Daten**, nicht in einer
+App-UI-Achse und nicht in Modul-Konstanten. Träger:
+
+- **instance.json (HSP-27)** trägt die zielgruppen-tragenden Felder
+  `zielgruppe` (z. B. `"kind"` | `"erwachsen"`), `ton`/`perspektive` und
+  das instanz-eigene `alter` (bei Niclas ein Erwachsenen-Wert). Diese
+  Felder sind Daten, je Instanz gepflegt.
+- **Story-Prompt parametrisiert (HSP-12).** Das Prompt-Template
+  `prompts/geschichtenbuddy.md` enthält **keinen** hartkodierten
+  Instanz-Namen, kein festes Alter, keinen festen Serien-Namen mehr.
+  Name, Alter, Perspektive/Ton und Serien-Name werden als
+  Eingabe-Variablen der aktiven Instanz durchgereicht.
+
+**Name-Drift-Fix (Pflicht-Vorbedingung, behebt bestehenden Bug).** Heute
+erreicht der Instanz-Name den Story-Prompt nicht: `geschichtenbuddy.md`
+ist auf „Paula (4 Jahre)" hartkodiert, sodass die Neko-Instanz aktuell
+im Paula-Rahmen erzählt. **Wenn** eine Folge erzeugt wird, **dann** trägt
+der an den LLM gereichte Prompt Name/Alter/Perspektive der **aufrufenden
+Instanz** (`kind_id`). Ohne diesen Fix erzählt auch Niclas „Paula" — der
+Fix ist Vorbedingung der dritten Instanz.
+
+**Validierung (Zwei-Wege-Tür, das Tun ist das Experiment).** Je eine
+Paula- und eine Niclas-Folge erzeugen und lesen. **Kill-Kriterium:**
+passt Ton/Länge/Sicherheitsrahmen bei einer Zielgruppe mit **einer**
+gemeinsamen Prompt-Schale nicht, dann **getrennte Prompt-Vorlagen je
+Zielgruppe** (weiter Daten-getrieben, weiterhin keine App-Achse).
+
+*Test-Implikation:* eine für `kind_id=niclas` erzeugte Folge nennt an
+keiner Stelle den Namen einer anderen Instanz („Paula"/„Neko"); der
+Prompt-Bau-Pfad ist ohne Netz gegen einen Mock-LLM testbar (Assertion
+auf die durchgereichten Variablen).
+
+(ENTSCHEID-1263 → Vorlauf „Name-Drift-Fix" + F3 „Erwachsener über Daten" +
+Prompt-Frage „zielgruppe/ton-Felder, Experiment Pflicht".)
+
+### HSP-46 — Keine Zielgruppen-Sicht-Trennung (Nic-Setzung 2026-07-03)
+Niclas erscheint als **gleichrangige** dritte Instanz in derselben
+Face-Pille (HSP-3a), derselben Folgen-Aggregation (HSP-35) und demselben
+View-Bestand (HSP-31) wie Paula und Neko. Es gibt **keinen**
+`zielgruppe`-Sichtbarkeits-Filter: das `zielgruppe`-Feld (HSP-45) ist
+**deskriptiv** (steuert Ton über Daten), **nicht** ein Achsen-Feld, das
+Instanzen aus einer Ansicht ausblendet. Kein App-UI-Element trennt
+„Eltern-" von „Kinder-Folgen".
+
+Die spätere Sicht-Trennung (Erwachsenen-Folgen aus der Kinder-View
+ausblenden) ist **bewusst vertagt** als OPEN-HSP-S; Trigger ist die als
+vollwertiger Player gebaute Settings-App. Bis dahin gilt HSP-46.
+
+(ENTSCHEID-1263 → Nic-Verdikt Punkt 3 „KEINE Eltern/Kinder-Unterscheidung
+— erstmal" + „Deferred Follow-up".)
+
+---
+
 ## Entscheidungen
 
 ### E-HSP-1 — TTS-Engine + Voices fixiert (Azure OpenAI tts-hd, shimmer/onyx)
@@ -1771,6 +1934,19 @@ buddy-eigenes Komponenten-Muster ohne Routine-Erdung (würde
 Geschwister-Drift produzieren). Eine plattformweite Konvention für die
 Komponente entsteht — wenn überhaupt — beim 2.–3. Vorkommen
 (Berater-Memory n=2-Regel).
+
+### E-HSP-12 — Dritte Instanz (Niclas): hörspiel-lokale Liste, Daten-Ton, keine Sicht-Trennung
+*Datum:* 2026-07-03 (#1263, ENTSCHEID-1263) · Nic-Verdikt: Hörspiel ist
+ein Familien-Ding, die Erwachsenen-Instanz ist dauerhaft gewollt (HSP-28a
+reaktiviert). Der Mehr-Instanz-Cut wird **hörspiel-lokal** über eine
+Runtime-Iterations-Liste gelöst (HSP-43), der Erwachsenen-Ton **rein über
+Instanz-Daten** (HSP-45), und Niclas erscheint **gleichrangig ohne
+Zielgruppen-Sicht-Filter** (HSP-46). **Verworfen:** (a) generische
+RAT-17-Registry mit Ports/Origins in der Liste — bleibt vertagt bis zur
+zweiten n-Instanz-Buddy-Klasse (Premature Generalization); (b) App-UI-
+Alters-/Zielgruppen-Achse — Einfachheit > Flexibilität, Ton gehört in
+Daten; (c) sofortige Eltern-/Kinder-Sicht-Trennung — vertagt als
+OPEN-HSP-S bis zur Settings-App-als-Player.
 
 ---
 
