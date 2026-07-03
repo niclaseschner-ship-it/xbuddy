@@ -167,15 +167,16 @@ Die Funktion extrahiert die Termin-Liste aus dem Bild über den **für die
 Instanz konfigurierten KI-Anbieter** (`eltern-chat.md` EC-11, EC-13), nicht
 über eine eigene OCR-Schicht. Konkret:
 
-- Der Aufruf an den Anbieter folgt der bestehenden Adapter-Form des
-  Eltern-Chats (`eltern-chat.md` EC-6 — derselbe Adapter, der Text-
-  Anfragen abwickelt). V1 nutzt den **bestehenden** Adapter mit einem
-  `image`-Content-Block (Anthropic Messages API, `type: "image"` mit
-  Base64-Quelle) und einem Tool-Schema (Tool-Use mit `input_schema`),
-  das die Antwort als JSON-Liste von Termin-Vorschlägen erzwingt
-  (`titel`, `beginn`, `ende?`, `ganztags`, `personen_hinweise?` — die
-  Felder spiegeln das PLAN-22-PUT-Schema, soweit aus dem Bild
-  ableitbar).
+- Der Aufruf läuft über die geteilte LLM-Provider-Lib `tools.llm` —
+  `get_singleshot(<foto-slot>).complete_structured(system, prompt, schema, images=[…])`
+  (LLMP-S1, Bild-Content additiv; **kein** eltern-chat-Text-Adapter, **kein**
+  skill-lokaler `_multimodal/`-Adapter mehr — E-TAB-8, #1262). Der Foto-Slot ist ein
+  **eigener** ZD-Slot (`eltern-chat-anthropic-foto-analyse-api-key`, ZD-2/LLMP-5),
+  gepinnt auf Claude; Anbieter-Wechsel via Vendor-Segment ohne Code. Übergeben werden
+  ein `image`-Content-Block (`bytes` + `media_type`) und ein hart-codiertes Tool-Schema
+  (forced `tool_use`), das die Antwort als JSON-Liste von Termin-Vorschlägen erzwingt
+  (`titel`, `beginn`, `ende?`, `ganztags`, `personen_hinweise?` — die Felder spiegeln
+  das PLAN-22-PUT-Schema, soweit aus dem Bild ableitbar).
 - Das Tool-Schema ist hart-codiert, nicht modell-formuliert (analog
   `termin-eintragen.md` TES-7). Damit ist die Schnittstelle stabil und
   testbar.
@@ -183,10 +184,11 @@ Instanz konfigurierten KI-Anbieter** (`eltern-chat.md` EC-11, EC-13), nicht
   Modells leben im Code; die Spec normiert das **Soll**: ein
   multimodaler Aufruf mit einem `image`-Block und einem Tool-Schema,
   das eine validierbare Liste zurückgibt.
-- V1 nutzt **nur** den konfigurierten Anbieter (EC-11). Eine zweite,
-  parallel laufbare Adapter-Slot „multimodal" — etwa weil der Text-
-  Anbieter keine Bilder kann oder ein anderer DSGVO-konformer Anbieter
-  belastbarer ist — ist V2 und additiv (E-TAB-6).
+- Die Foto-Route hat ihren **eigenen** Anbieter-Slot (E-TAB-8, #1262), entkoppelt
+  vom Text-Chat-Provider (EC-11): so kippt sie nicht mehr mit einem Wechsel des
+  Chat-Default-Providers mit. Der historische „zweite Adapter-Slot multimodal" aus
+  E-TAB-6 ist damit realisiert — jetzt als `tools.llm`-(vendor,purpose)-Slot statt als
+  skill-lokaler `_multimodal/`-Ordner.
 - **Begleittext (Telegram-Caption) als Verfeinerungs-Hinweis (#528).**
   Trägt die Nachricht einen Begleittext, ist dieser ein **User-Hinweis
   an die Extraktion** — Beispiele: „Jahr 2026 verwenden", „nur die
@@ -680,9 +682,11 @@ Familie nach „URL statt Foto" fragt.
 ## Offene Punkte
 
 - ~~**OPEN-TAB-Privacy — KI-Anbieter mit DSGVO-Belegen für Bild-Verarbeitung.**~~
-  **ERLEDIGT 2026-06-11 durch E-TAB-7 (Refs #486)** — V2-Anbieter Mistral
-  Medium 3.5 ratifiziert mit bewusster DE→EU-Aufweichung; konkrete
-  Festlegung + Begründung siehe E-TAB-7 unten.
+  **ERLEDIGT 2026-06-11 durch E-TAB-7 (Refs #486); Anbieter-Wahl aktualisiert
+  2026-07-03 durch E-TAB-8 (Refs #1262).** E-TAB-7 legte Auswahl-Katalog + DE→EU-
+  Aufweichung fest (weiter gültig als Auswahl-Regel); die **aktive** Foto-Route ist
+  seit E-TAB-8 **Claude über `tools.llm`** (eigener ZD-Slot), nicht mehr der
+  Mistral-`_multimodal/`-Adapter.
 
   Die **generelle** Frage „Wann endet die Bewertungsphase und deckt die
   Familien-Einwilligung Bilder?" wird **eltern-chat-weit** gelöst, nicht
@@ -903,6 +907,13 @@ Adapter nicht reicht.
 ### E-TAB-7 — V2-Anbieter Mistral Medium 3.5; DE→EU-Aufweichung des Hosting-Kriteriums bewusst ratifiziert
 *Datum:* 2026-06-11 · Refs #486
 
+> **HISTORISCH SUPERSEDED durch E-TAB-8 (2026-07-03, #1262):** Der hier ratifizierte
+> Mistral-Multimodal-Adapter (`eltern-chat/skills/_multimodal/mistral.py`) ist **nicht
+> mehr** der aktive TAB-Pfad. Die Foto-Analyse läuft jetzt über `tools.llm` mit **Claude**
+> gepinnt (eigener ZD-Slot). Der Anbieter-Auswahl-Katalog und die DE→EU-Hosting-Begründung
+> unten bleiben als **Auswahl-Regel** gültig; nur die konkrete Anbieter-Wahl
+> (Mistral → Claude) ist überholt.
+
 Der V2-Multimodal-Adapter-Slot (E-TAB-6 V2-Pfad) wird ratifiziert mit
 **Mistral Medium 3.5** (`mistral-medium-3504`, Frontier-class, multimodal-
 optimiert) als gewählter Anbieter. Code-Naht ist durch #508 deployed
@@ -977,6 +988,37 @@ Ratifikation):
 
 *Tickets:* #486 (Ratifikation), #508 (Code-Naht), #485 (eltern-chat-weite
 Privacy-Schärfung — parallel, getrennt).
+
+### E-TAB-8 — Multimodal-Route auf `tools.llm` gehoben, Anbieter Claude gepinnt (supersedes E-TAB-7-Deployment)
+*Datum:* 2026-07-03 · Refs #1262 (subsumiert #1119)
+
+**Neue Wahrheit:** Die Foto-Analyse/TAB-Extraktion (TAB-5) läuft über die geteilte
+LLM-Provider-Lib `tools.llm` — `get_singleshot(<foto-slot>).complete_structured(system,
+prompt=caption, schema=TOOL_SCHEMA, images=[…])` (LLMP-S1, Bild-Content additiv) — mit
+**Anthropic/Claude** als gepinntem Anbieter. Der ZD-Slot ist
+`eltern-chat-anthropic-foto-analyse-api-key` (ZD-2, LLMP-5): eine **eigene** Foto-Route,
+unabhängig vom Chat-Slot `eltern-chat-anthropic-api-key`.
+
+**Warum:** Die Foto-Analyse hing am globalen eltern-chat-Provider-Default und kippte mit
+einem Mistral-Default-Wechsel mit (#1262-Anlass). Eigene Route + eigener Slot entkoppeln
+die Bild-Verarbeitung von der Text-Chat-Anbieterwahl; **Anbieter-Wechsel** geschieht durch
+Tausch des Vendor-Segments im Slot, ohne Code (ENTSCHEID-1262 → „Anbieter wechseln können").
+
+**Supersedes:** E-TAB-7 ratifizierte den V2-Multimodal-Adapter mit **Mistral Medium 3.5**
+über `eltern-chat/skills/_multimodal/mistral.py` als deployed — das ist **historisch**;
+kein Soll-Satz führt Mistral-Multimodal mehr als aktiven TAB-Pfad. Die dort dokumentierte
+DE→EU-Hosting-Aufweichung und der Kriterien-Katalog (E-TAB-6/7) bleiben als
+**Anbieter-Auswahl-Regel** für die Foto-Route gültig.
+
+**Migration additiv-rückrollbar (LLMP-S8, ENTSCHEID-1262 → „Patch B"):** **PR 1** stellt
+TAB auf `tools.llm` um und markiert `skills/_multimodal/` als deprecated; **PR 2** löscht
+`skills/_multimodal/` erst nach grüner Live-Probe. Kein Migrieren-und-Löschen im selben PR.
+
+**Falsch, wenn:** ein zweiter multimodaler Rufer mit **Nicht-Singleshot**-Vertrag auftaucht
+— dann ist Bild-Input als Cross-Cutting-Mixin neu zu verhandeln, nie als fünfte Sicht
+(ENTSCHEID-1262 → Kill).
+
+*Tickets:* #1262 · subsumiert #1119
 
 ---
 
