@@ -11,13 +11,15 @@
 
 {# HSP-4: Token-Strang einbinden (DTOK-2/3) — keine lokale Kopie. #}
 <link rel="stylesheet" href="/display/_shared/design/tokens.css">
-{# Cache-Buster (Telegram/Chromium-WebView cached sonst aggressiv). #}
-<link rel="stylesheet" href="/display/hoerspiel/static/player.css?v={{ build_id }}">
+{# Cache-Buster (Telegram/Chromium-WebView cached sonst aggressiv).
+   HSP-47: PWA-Shell-Assets werden vom seiten-Service gehostet
+   (/seiten/hoerspiel/player/<asset>), NICHT vom Display-Kiosk-Buddy. #}
+<link rel="stylesheet" href="/seiten/hoerspiel/player/player.css?v={{ build_id }}">
 
-{# HSP-55: PWA-Install — Manifest + Icons. Die Manifest-Route (build_manifest)
-   liest icon-192/512/maskable-512 aus hoerspiel/static/ (Track A2). #}
-<link rel="manifest" href="/display/hoerspiel/static/manifest.webmanifest">
-<link rel="apple-touch-icon" href="/display/hoerspiel/static/icon-192.png">
+{# HSP-55: PWA-Install — Manifest + Icons über die seiten-Player-Route (PWML-1).
+   build_manifest liefert display:standalone; Icons kommen aus hoerspiel/static/. #}
+<link rel="manifest" href="/seiten/hoerspiel/player/manifest.json">
+<link rel="apple-touch-icon" href="/seiten/hoerspiel/player/icon-192.png">
 
 {# HSP-49: Instanz-Liste server-seitig injiziert (Track A2 rendert instanzen_json).
    Shape: [{"kind_id","name","foto_url"}]. player.js iteriert diese Liste
@@ -127,6 +129,14 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="/display/hoerspiel/static/player.js?v={{ build_id }}"></script>
+<script src="/seiten/hoerspiel/player/player.js?v={{ build_id }}"></script>
+
+{# HSP-55: Service-Worker registrieren → PWA installierbar + App-Shell offline.
+   SW wird von Track A über die seiten-Player-Route ausgeliefert (PWML-2). #}
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/seiten/hoerspiel/player/sw.js').catch(function () {});
+  }
+</script>
 </body>
 </html>

@@ -263,6 +263,32 @@ test('setupMediaSession: registriert play/pause/prev/next (HSP-22)', () => {
 
 /* ══ AC-B3: PWA-Icons valide (HSP-55) ═══════════════════════════ */
 
+/* ══ HSP-55: Entry-Path — Player-HTML verlinkt die seiten-Player-Route ══ */
+
+test('player.html: Manifest+SW+Shell-Assets über /seiten/hoerspiel/player, kein Kiosk-Präfix (HSP-47/55)', () => {
+  // Roh-Template als String lesen — {{ build_id }}-Platzhalter sind hier ok
+  // (kein Jinja-Render nötig, wir prüfen nur die Entry-Path-Verdrahtung).
+  const html = fs.readFileSync(
+    path.join(__dirname, '../templates/player.html'), 'utf8');
+
+  // (a) Manifest zeigt auf die seiten-Player-Route (nicht aufs alte Kiosk-Manifest).
+  assert.match(html, /<link\s+rel="manifest"\s+href="\/seiten\/hoerspiel\/player\/manifest\.json"/,
+    'Manifest-Link → /seiten/hoerspiel/player/manifest.json');
+
+  // (b) Service-Worker wird registriert (installierbare PWA) — seiten-Route.
+  assert.match(html, /serviceWorker\.register\(\s*['"]\/seiten\/hoerspiel\/player\/sw\.js['"]/,
+    'SW-Registrierung auf /seiten/hoerspiel/player/sw.js');
+
+  // (c) KEINE Shell-Assets mehr über den Kiosk-Buddy (HSP-47 „seiten-gehostet").
+  assert.doesNotMatch(html, /\/display\/hoerspiel\/static\//,
+    'kein /display/hoerspiel/static/-Asset-Ref mehr');
+
+  // Shell-Assets (css/js/icon) laufen über die seiten-Player-Route.
+  assert.match(html, /href="\/seiten\/hoerspiel\/player\/player\.css/, 'player.css seiten-gehostet');
+  assert.match(html, /src="\/seiten\/hoerspiel\/player\/player\.js/, 'player.js seiten-gehostet');
+  assert.match(html, /href="\/seiten\/hoerspiel\/player\/icon-192\.png"/, 'Icon seiten-gehostet');
+});
+
 test('PWA-Icons: 3 valide PNGs in korrekten Größen (HSP-55)', () => {
   const cases = [
     ['icon-192.png', 192],
