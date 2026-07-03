@@ -6,9 +6,11 @@
 
 'use strict';
 
-// HSP-42 / PANEL-13: silent.mp3 + neue app.js-Größe → Cache-Bust durch
-// Versions-Bump. v5: + PANEL-11-Watchdog für displays-SSE.
-const CACHE_NAME = 'app-panel-v6-t959-t1007-optimistic-multisegment';
+// PANEL-14: CACHE_NAME trägt keinen manuell gebumpten Suffix mehr.
+// Der Router ersetzt __BUILD_ID__ beim Ausliefern durch die aktuelle
+// build_id (max mtime des vollständigen Runtime-Asset-Satzes). Damit
+// invalidiert jede Asset-Änderung den Cache ohne manuellen Versions-Bump.
+const CACHE_NAME = 'app-panel-__BUILD_ID__';
 
 const STATIC_ASSETS = [
   './',

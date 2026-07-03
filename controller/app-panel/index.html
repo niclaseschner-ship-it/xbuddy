@@ -11,13 +11,15 @@
 <title>XBuddy · App-Panel</title>
 <!-- E-PANEL-6 / DTOK-3 — Token-Strang referenzieren, nicht kopieren.
      ROU-30 serviert die Datei same-origin. CDN-Schrift fällt auf --font-sans zurück. -->
-<link rel="stylesheet" href="/display/_shared/design/tokens.css">
+<!-- PANEL-14: ?v=__BUILD_ID__ wird vom Router (render_app_panel_index, PANEL-2-Seam)
+     beim Ausliefern ersetzt — Cache-Bust ohne zweite Templating-Schicht. -->
+<link rel="stylesheet" href="/display/_shared/design/tokens.css?v=__BUILD_ID__">
 <!-- PANEL-10 — installierbar als Vollbild-PWA (PWA-2: Icons + Manifest) -->
-<link rel="manifest" href="./manifest.json">
-<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
-<link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
-<link rel="apple-touch-icon" href="./icon-192.png">
-<link rel="stylesheet" href="./style.css">
+<link rel="manifest" href="./manifest.json?v=__BUILD_ID__">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png?v=__BUILD_ID__">
+<link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png?v=__BUILD_ID__">
+<link rel="apple-touch-icon" href="./icon-192.png?v=__BUILD_ID__">
+<link rel="stylesheet" href="./style.css?v=__BUILD_ID__">
 </head>
 <!-- DTOK-5 / E-PANEL-6: class="xb" data-stage="reader" aktiviert Reader-Stage-Tokens. -->
 <!-- PANEL-2 — Panel-Identität liegt als data-panel-id am body und wird vom
@@ -45,7 +47,7 @@
   <!-- PWA-4 — Shared Config-Lader (controller/_shared/config.js) muss vor
        app.js geladen werden, damit pwaShared.loadPwaConfig im Bootstrap
        verfügbar ist. -->
-  <script src="/controller/_shared/config.js"></script>
-  <script src="./app.js"></script>
+  <script src="/controller/_shared/config.js?v=__BUILD_ID__"></script>
+  <script src="./app.js?v=__BUILD_ID__"></script>
 </body>
 </html>
