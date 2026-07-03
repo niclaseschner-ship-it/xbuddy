@@ -1,40 +1,33 @@
 # Hoerspiel oeffnen -- specs/platform/hoerspiel-oeffnen.md (HOE-1 ... HOE-7).
 #
+# **HSP-53 (2026-07-03):** Die Telegram-Eltern-Mini-App (HSP-33--40, Tab-Form,
+# tma-Auth, Hash-Deeplink) ist superseded. Dieser Skill oeffnet jetzt die
+# **Hoerspiel-Player-PWA** (HSP-47, /seiten/hoerspiel/player, public AUTH-6).
+# Kein Tab-Parameter mehr, kein Hash-Fragment (#folgen/#einstellungen).
+#
 # Aufrufbare, trigger-agnostische Funktion (HOE-1, E-HOE-1 analog E-RAO-1):
 # liest die Album-Liste (GET /api/v1/hoerspiel/mia/alben) als festen
-# Launcher (HSP-35 aggregiert clientseitig), baut eine kompakte Folgen-
-# Uebersichts-Nachricht + Inline-Button auf die Hoerspiel-Eltern-Mini-App
-# (HOE-4/HOE-5) und gibt ein Form-(b)-Dict zurueck (TASK-10c).
+# Launcher, baut eine kompakte Folgen-Uebersichts-Nachricht + URL-Button auf
+# die Player-PWA (HOE-4) und gibt ein Form-(b)-Dict zurueck (TASK-10c).
 #
 # TASK-10c Form (b): der Skill returnt {text, presentation} -- der Task
 # reicht das Dict direkt weiter; das Framework (agent.py + render_form_b)
 # uebersetzt presentation in eine Telegram-Nachricht. Der Skill sendet
 # NICHTS selbst (EC-29 "Eine Stimme im Agent-Turn").
 #
-# Tab-Parameter (E-HOE-2 Schaerfung 2026-06-20, Refs #1048):
-#   - Default tab='folgen' -> URL endet auf #folgen (HOE-5).
-#   - tab='einstellungen' -> URL endet auf #einstellungen (E-HOE-2
-#     Direkt-Trigger-Ausnahme): nur bei expliziter Direkt-Bitte
-#     nach Settings-Link verwenden (z.B. "schick mir die Hoerbuch settings").
-#     Settings-INHALTE werden NICHT ausgegeben -- nur der Tueroeffner-Link.
-#     Beilaeufige Settings-Erwaehnung -> kein Tool-Call, sprachlicher Verweis.
-#
 # Eingang:
 #   chat_id          -- Telegram-Chat (HOE-1).
 #   from_user_id     -- Telegram-User-ID des Aufrufers (Berechtigung HOE-2).
 #   hoerspiel_client -- HoerspielClient-Instanz fuer mia (HOE-1, CLIENT-1).
 #   is_member_fn     -- Callable (user_id) -> bool (HOE-2, EC-2).
-#   mini_app_url     -- Basis-URL der Hoerspiel-Eltern-Mini-App (HOE-5).
+#   mini_app_url     -- URL der Player-PWA (HOE-5, HSP-47).
 #                       Leer -> Fehler-Text (HOE-7).
-#   tab              -- Ziel-Tab: 'folgen' (Default) oder 'einstellungen'
-#                       (E-HOE-2 Direkt-Trigger-Ausnahme).
 #
 # Ausgang: Form-(b)-Dict {text, presentation}:
-#   Mit Button: presentation: {inline_button: {label, web_app_url}}.
+#   Mit Button: presentation: {inline_buttons: [{label, url}]}.
 #   Ohne Button (Konfig-/Netz-Fehler): presentation: {}.
 #   E-HOE-3: Bei leerem Album-Bestand wird trotzdem ein Button zurueckgegeben
 #   (analog E-RAO-3 -- Anfangszustand, kein Endzustand).
-#   Gilt nur fuer tab='folgen'; tab='einstellungen' macht keinen /alben-Call.
 #
 # Wirft BerechtigungError bei HOE-2-Verletzung.
 #
@@ -48,16 +41,9 @@ from skills.hoerspiel_client import HoerspielClientError
 
 logger = logging.getLogger(__name__)
 
-# HOE-4: Labels fuer Folgen-Tab (E-HOE-3: auch bei leerem Bestand).
+# HOE-4: Labels fuer den Player-Button (E-HOE-3: auch bei leerem Bestand).
 _LABEL_FOLGEN = "\U0001f3a7 Folgen anhören"
-_LABEL_FOLGEN_LEER = "\U0001f3a7 Folgen-Tab öffnen"
-
-# E-HOE-2 Schaerfung: Label fuer Einstellungen-Direkt-Trigger.
-_LABEL_EINSTELLUNGEN = "⚙️ Hörspiel-Einstellungen öffnen"
-
-# Gueltige Tab-Werte (E-HOE-4 Hash-Tab-Deeplink).
-_TAB_FOLGEN = "folgen"
-_TAB_EINSTELLUNGEN = "einstellungen"
+_LABEL_FOLGEN_LEER = "\U0001f3a7 Player öffnen"
 
 
 def _baue_folgen_text(alben_liste):
@@ -82,17 +68,17 @@ def _baue_folgen_text(alben_liste):
     )
 
 
-def _baue_uebersicht(hoerspiel_client, mini_app_url, tab=_TAB_FOLGEN):
-    # HOE-4/HOE-5: baut Text + presentation fuer die Hoerspiel-Uebersichts-Nachricht.
+def _baue_uebersicht(hoerspiel_client, mini_app_url):
+    # HOE-4: baut Text + presentation fuer die Hoerspiel-Uebersichts-Nachricht.
+    #
+    # HSP-53: oeffnet die Player-PWA (kein Tab-Modell, kein Hash-Fragment).
     #
     # Liefert ein Form-(b)-Dict {text, presentation} (TASK-10c):
-    #   tab='folgen' (Default): Text mit Folgen-Uebersicht + inline_button mit #folgen-Hash.
-    #   tab='einstellungen' (E-HOE-2 Direkt-Trigger): Button mit #einstellungen-Hash,
-    #     kein /alben-Lese-Call, kein Settings-Inhalt im Text.
+    #   Normalfall: Text mit Folgen-Uebersicht + inline_buttons-URL-Button auf die PWA.
     #   HOE-7 mini_app_url leer: Fehler-Text, presentation leer.
-    #   HOE-7 Buddy nicht erreichbar (nur tab='folgen'): Fehler-Text, presentation leer.
+    #   HOE-7 Buddy nicht erreichbar: Fehler-Text, presentation leer.
 
-    # HOE-7: Mini-App-URL fehlt -> Fehler-Text, kein Button
+    # HOE-7: Player-URL fehlt -> Fehler-Text, kein Button
     if not mini_app_url:
         logger.warning("hoerspiel_oeffnen: mini_app_url fehlt in Konfig (HOE-7)")
         return {
@@ -100,21 +86,8 @@ def _baue_uebersicht(hoerspiel_client, mini_app_url, tab=_TAB_FOLGEN):
             "presentation": {},
         }
 
-    # E-HOE-2 Direkt-Trigger-Ausnahme: Einstellungen-Tab -- kein /alben-Aufruf
-    if tab == _TAB_EINSTELLUNGEN:
-        web_app_url = mini_app_url.rstrip("/") + "#einstellungen"
-        return {
-            "text": "Hier sind die Hörspiel-Einstellungen:",
-            "presentation": {
-                "inline_button": {
-                    "label": _LABEL_EINSTELLUNGEN,
-                    "web_app_url": web_app_url,
-                }
-            },
-        }
-
-    # HOE-5: fester #folgen-Hash an Mini-App-URL anhaengen (Default-Pfad)
-    web_app_url = mini_app_url.rstrip("/") + "#folgen"
+    # HSP-53: Player-PWA URL -- kein Hash-Fragment, kein Tab-Modell mehr
+    pwa_url = mini_app_url.rstrip("/")
 
     # HOE-4: Lese-Pfad /alben + Button-Label
     try:
@@ -134,33 +107,27 @@ def _baue_uebersicht(hoerspiel_client, mini_app_url, tab=_TAB_FOLGEN):
     # E-HOE-3: Button auch bei leerem Album-Bestand
     label = _LABEL_FOLGEN_LEER if n == 0 else _LABEL_FOLGEN
 
+    # HSP-53: URL-Button (nicht web_app), da Player-PWA oeffentlich (AUTH-6)
     presentation = {
-        "inline_button": {
-            "label": label,
-            "web_app_url": web_app_url,
-        }
+        "inline_buttons": [
+            {"label": label, "url": pwa_url}
+        ]
     }
     return {"text": text, "presentation": presentation}
 
 
 def hoerspiel_oeffnen(chat_id, from_user_id,
-                      hoerspiel_client, is_member_fn, mini_app_url,
-                      tab=_TAB_FOLGEN):
+                      hoerspiel_client, is_member_fn, mini_app_url):
     # Hoerspiel oeffnen -- aufrufbare Funktion (HOE-1, E-HOE-1).
     #
-    # Liest Album-Liste (bei tab='folgen'), baut Uebersichts-Text +
-    # Praesentations-Hinweis (HOE-4/HOE-5, TASK-10c Form (b)).
-    #
-    # tab-Parameter (E-HOE-2 Schaerfung 2026-06-20, Refs #1048):
-    #   'folgen' (Default): #folgen-Hash, Folgen-Uebersicht mit /alben-Lese-Call.
-    #   'einstellungen': #einstellungen-Hash, Einstellungen-Tueroeffner
-    #     (NUR bei explizitem Direkt-Trigger wie "schick mir die Hoerbuch settings").
-    #     Kein /alben-Call, kein Settings-Inhalt im Text.
+    # HSP-53: oeffnet die Player-PWA (/seiten/hoerspiel/player, AUTH-6).
+    # Kein Tab-Parameter mehr, kein Hash-Fragment. Liest Album-Liste,
+    # baut Uebersichts-Text + URL-Button (TASK-10c Form (b)).
     #
     # Returnt ein Form-(b)-Dict {text, presentation}:
-    #   Mit Button: presentation: {inline_button: {label, web_app_url}}.
+    #   Mit Button: presentation: {inline_buttons: [{label, url}]}.
     #   Ohne Button (Konfig-/Netz-Fehler): presentation: {}.
-    #   E-HOE-3: Bei leerem Album-Bestand (tab='folgen') trotzdem Button.
+    #   E-HOE-3: Bei leerem Album-Bestand trotzdem Button.
     #
     # Wirft BerechtigungError bei HOE-2-Verletzung.
 
@@ -171,11 +138,11 @@ def hoerspiel_oeffnen(chat_id, from_user_id,
             from_user_id)
         raise BerechtigungError("Das geht nur für Eltern.")
 
-    result = _baue_uebersicht(hoerspiel_client, mini_app_url, tab=tab)
+    result = _baue_uebersicht(hoerspiel_client, mini_app_url)
     presentation = result.get("presentation") or {}
-    button_count = 1 if "inline_button" in presentation else 0
+    button_count = len(presentation.get("inline_buttons", []))
     logger.info(
-        "hoerspiel_oeffnen: tab=%s, Tueroeffner fuer Chat %s, Buttons=%d",
-        tab, chat_id, button_count,
+        "hoerspiel_oeffnen: Player-Tueroeffner fuer Chat %s, Buttons=%d",
+        chat_id, button_count,
     )
     return result

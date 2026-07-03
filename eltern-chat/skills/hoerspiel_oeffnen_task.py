@@ -1,42 +1,33 @@
 """Hörspiel öffnen als Aufgaben-Katalog-Aufgabe — specs/platform/hoerspiel-oeffnen.md
 HOE-1 … HOE-7 und eltern-chat.md EC-8/EC-9/EC-29.
 
+**HSP-53 (2026-07-03):** Die Telegram-Eltern-Mini-App (HSP-33–40, Tab-Form,
+tma-Auth, Hash-Deeplink) ist superseded. Dieser Task öffnet jetzt die
+**Hörspiel-Player-PWA** (HSP-47, /seiten/hoerspiel/player, public AUTH-6).
+Kein `tab`-Parameter mehr. Der Skill gibt einen URL-Button (nicht web_app)
+zurück.
+
 Diese Aufgabe ist der Adapter der trigger-agnostischen Funktion
 `hoerspiel_oeffnen` (HOE-1): erkennt der Agent eine Folgen-Bitte
 („Hörbuch hören", „Folge abspielen"), ruft er sie auf.
 
 Eine **lesende** Aufgabe (EC-9): verändert keine Familien-Daten.
 
-**Tab-Parameter (E-HOE-2 Schärfung 2026-06-20, Refs #1048):**
-  - `tab='folgen'` (Default, LLM-Wert wenn nicht gesetzt): öffnet den
-    Folgen-Tab mit Folgen-Übersicht + #folgen-Hash. Settings-Trigger
-    die NICHT explizit nach dem Link fragen → kein Tool-Call, sprachlicher
-    Verweis (siehe System-Prompt).
-  - `tab='einstellungen'`: öffnet den Einstellungen-Tab mit #einstellungen-
-    Hash (NUR bei Direkt-Trigger: „schick mir die Hörbuch settings",
-    „öffne die einstellungen", „settings bitte"). Kein Settings-Inhalt
-    im Chat-Text — nur der Türöffner-Link. Beiläufige Settings-Erwähnung
-    (z. B. im HFE-Flow „wechsel auf onyx") → KEIN Tool-Call, sprachlicher
-    Verweis ohne Button.
-
 TASK-10c Form (b): run() returnt das Form-(b)-Dict
-`{text, presentation: {inline_button: {...}}}` direkt — das Framework
+`{text, presentation: {inline_buttons: [...]}}` direkt — das Framework
 (agent.py + render_form_b) übersetzt `presentation` in eine Telegram-
 Nachricht. Der Task sendet NICHTS selbst (EC-29 „Eine Stimme im Agent-Turn").
 
 RAT-16: Adapter-Disziplin — diese Datei koordiniert NICHT mehr Telegram-
 Senden; der Telegram-Aufruf liegt vollständig beim Framework.
 
-E-HOE-3: Im Unterschied zu EZG enthält das zurückgegebene Dict auch bei
-leerem Album-Bestand IMMER einen inline_button in der presentation —
-analog E-RAO-3 (Anfangszustand, kein Endzustand). Nur bei Konfig-/Netz-
-Fehler ist presentation leer. Gilt nur für tab='folgen'.
+E-HOE-3: Das zurückgegebene Dict enthält auch bei leerem Album-Bestand IMMER
+einen Button in der presentation — analog E-RAO-3 (Anfangszustand, kein
+Endzustand). Nur bei Konfig-/Netz-Fehler ist presentation leer.
 
-Mini-App-URL-Konfig: kommt aus `mini_app_base_url`-Konstruktor-Parameter
-(von build_catalog befüllt) + festem Launcher-Pfad
-`/seiten/hoerspiel/mia/eltern` (HOE-5, HSP-26 / URL-3a — HSP-35
-aggregiert clientseitig). Das Hash-Fragment (#folgen oder #einstellungen)
-wird im Skill angehängt.
+Player-PWA-URL-Konfig: kommt aus `mini_app_base_url`-Konstruktor-Parameter
+(von build_catalog befüllt) + festem Pfad `/seiten/hoerspiel/player`
+(HSP-47). Kein Hash-Fragment.
 Leer → Skill zeigt Fehler-Text ohne Button (HOE-7).
 """
 
@@ -48,17 +39,16 @@ from skills import hoerspiel_oeffnen as hoe_mod
 
 logger = logging.getLogger(__name__)
 
-# HOE-5 / HSP-26 / URL-3a: fester Launcher-Pfad der Hörspiel-Eltern-Mini-App
-# (mia als URL-Träger; HSP-35 aggregiert beide V1-Kinder clientseitig).
-_HOE_APP_PATH = "/seiten/hoerspiel/mia/eltern"
-
-# E-HOE-4 gültige Tab-Werte (analog hoe_mod._TAB_*)
-_TAB_FOLGEN = "folgen"
-_TAB_EINSTELLUNGEN = "einstellungen"
+# HSP-47 / HSP-53: fester Pfad der Hörspiel-Player-PWA.
+# Löst /seiten/hoerspiel/mia/eltern (HSP-26, superseded) ab.
+_HOE_APP_PATH = "/seiten/hoerspiel/player"
 
 
 class HoerspielOeffnenTask(ReadTask):
     """Lesende Katalog-Aufgabe (EC-9), die hoerspiel_oeffnen auslöst (HOE-8).
+
+    HSP-53: öffnet die Hörspiel-Player-PWA (/seiten/hoerspiel/player, AUTH-6).
+    Kein Tab-Parameter mehr.
 
     Die instanz-festen Abhängigkeiten — TelegramClient, HoerspielClient,
     is_member_fn und mini_app_url — werden im Konstruktor injiziert.
@@ -68,37 +58,31 @@ class HoerspielOeffnenTask(ReadTask):
     `presentation` in eine Telegram-Nachricht — kein Selbst-Send im Task.
 
     E-HOE-3: Button wird auch bei leerem Album-Bestand zurückgegeben (im Dict).
-    E-HOE-2 Schärfung: tab='einstellungen' liefert Button mit #einstellungen-Hash
-    (nur bei explizitem Direkt-Trigger; beiläufige Erwähnung → kein Tool-Call).
     """
 
     def __init__(self, tg, hoerspiel_client, is_member_fn, mini_app_url=""):
         super().__init__(
             name="hoerspiel_oeffnen",
             description=(
-                "Öffnet die Hörspiel-Eltern-Mini-App. "
-                "Folgen-Trigger (tab='folgen', Default): 'hörbuch hören', "
+                "Öffnet den Hörspiel-Player. "
+                "Folgen-Trigger: 'hörbuch hören', "
                 "'hörspiel hören', 'folge starten', 'folge abspielen', "
                 "'hörspiel-folge anhören', 'hörspiel auf dem handy', "
                 "'hörbuch auf dem handy', 'letzte folge weiterhören', "
                 "'hörspiel-app öffnen'. Sofort aufrufen — NICHT erst fragen. "
-                "Sendet Folgen-Übersicht + Knopf auf den Folgen-Tab. "
+                "Sendet Folgen-Übersicht + Link auf den Hörspiel-Player. "
                 "Auch bei leerem Album-Bestand wird der Button gesendet. "
-                "Direkt-Settings-Trigger (tab='einstellungen'): wenn der User "
-                "explizit nach dem Settings-LINK fragt — 'schick mir die "
-                "Hörbuch settings', 'öffne die einstellungen', 'settings bitte', "
-                "'Hörbuch settings' — dann tab='einstellungen' setzen. "
-                "Kein Settings-Inhalt im Chat-Text, NUR der Türöffner-Link. "
                 "WICHTIG — beiläufige Settings-Erwähnung (Voice-, Stimme-, "
                 "Anbieter-, Modell-, Tempo-, Pausen-Wechsel) → KEIN Tool-Call, "
-                "sprachlicher Verweis (siehe System-Prompt). "
+                "sprachlicher Verweis auf die Einstellungen im Player "
+                "(Zahnrad-Icon). "
                 "Auch ohne Aktions-Verb sofort aufrufen, wenn die Eltern-Nachricht "
-                "eine Aktion (settings/einstellungen/anpassen/bearbeiten/ändern/"
-                "öffnen/zeigen/schicken/geben/app/mini-app/löschen/umsortieren/"
+                "eine Aktion (anpassen/bearbeiten/ändern/"
+                "öffnen/zeigen/schicken/geben/app/player/löschen/umsortieren/"
                 "sortieren/hinzufügen) mit einer Hörspiel-Bezeichnung kombiniert: "
                 "Hörspiel · Hörbuch · Story · Folge · Geschichte. "
                 "Beispiele: 'gib mir die Hörbuch-App', 'Hörspiel öffnen', "
-                "'schick mir die Hörspiel mini-app', 'Folge zeigen'. "
+                "'schick mir den Hörspiel-Player', 'Folge zeigen'. "
                 "Schreibe in deiner Antwort NIEMALS einen Knopf als Markdown-Text "
                 "(z. B. '[**…öffnen**]') und versprich keinen 'Knopf unten' — "
                 "der Inline-Knopf kommt automatisch über den Tool-Call dieses Skills, "
@@ -107,19 +91,7 @@ class HoerspielOeffnenTask(ReadTask):
                 "'mach Mia ein neues Hörspiel') → hoerspiel_folge_erzeugen."),
             parameters={
                 "type": "object",
-                "properties": {
-                    "tab": {
-                        "type": "string",
-                        "enum": [_TAB_FOLGEN, _TAB_EINSTELLUNGEN],
-                        "description": (
-                            "Ziel-Tab der Hörspiel-Mini-App. "
-                            "'folgen' (Default): Folgen-Übersicht + #folgen-Hash. "
-                            "'einstellungen': Einstellungen-Türöffner + "
-                            "#einstellungen-Hash — NUR bei explizitem Direkt-"
-                            "Trigger wie 'schick mir die Hörbuch settings'."
-                        ),
-                    }
-                },
+                "properties": {},
                 "required": [],
             })
         # tg bleibt im Konstruktor für Rückwärts-Kompatibilität mit build_catalog
@@ -127,7 +99,7 @@ class HoerspielOeffnenTask(ReadTask):
         self._tg = tg
         self._hoerspiel_client = hoerspiel_client
         self._is_member_fn = is_member_fn
-        # HOE-5: fester Launcher /seiten/hoerspiel/mia/eltern (HSP-35 aggregiert)
+        # HOE-5/HSP-47/HSP-53: fester Player-Pfad /seiten/hoerspiel/player
         self._mini_app_url = (
             mini_app_url.rstrip("/") + _HOE_APP_PATH
             if mini_app_url
@@ -139,7 +111,8 @@ class HoerspielOeffnenTask(ReadTask):
 
         Zielchat kommt aus `turn_context.chat_id` (HOE-1).
         User-ID aus `turn_context.from_user_id` (HOE-2).
-        tab kommt aus `arguments.get('tab', 'folgen')` (E-HOE-2 Schärfung).
+
+        HSP-53: kein Tab-Parameter mehr. Öffnet die Player-PWA direkt.
 
         Returnt das Form-(b)-Dict `{text, presentation}` direkt — das
         Framework übersetzt `presentation` in eine Telegram-Nachricht
@@ -147,12 +120,6 @@ class HoerspielOeffnenTask(ReadTask):
         """
         chat_id = turn_context.chat_id if turn_context else None
         from_user_id = turn_context.from_user_id if turn_context else None
-        tab = arguments.get("tab", _TAB_FOLGEN) if arguments else _TAB_FOLGEN
-        # Unbekannte tab-Werte → Fallback auf 'folgen' (defensiv)
-        if tab not in (_TAB_FOLGEN, _TAB_EINSTELLUNGEN):
-            logger.warning(
-                "HoerspielOeffnenTask: unbekannter tab=%r, Fallback auf 'folgen'", tab)
-            tab = _TAB_FOLGEN
 
         result = hoe_mod.hoerspiel_oeffnen(
             chat_id=chat_id,
@@ -160,10 +127,9 @@ class HoerspielOeffnenTask(ReadTask):
             hoerspiel_client=self._hoerspiel_client,
             is_member_fn=self._is_member_fn,
             mini_app_url=self._mini_app_url,
-            tab=tab,
         )
 
         logger.info(
-            "HoerspielOeffnenTask: chat=%s, tab=%s, Türöffner zurückgegeben",
-            chat_id, tab)
+            "HoerspielOeffnenTask: chat=%s, Player-Türöffner zurückgegeben",
+            chat_id)
         return result
