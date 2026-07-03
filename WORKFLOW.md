@@ -39,9 +39,18 @@ Kein Project-Board nötig.
 | Ökosystem-Baustein | Label `area:*` | `display`, `controller`, `hub`, `buddy`, `infra` |
 | Priorität | Label `priority:*` | `high`, `medium`, `low` |
 | Blockiert | Label `blocked` | wartet auf etwas anderes (siehe Blocker-Zeile) |
+| Langlebige Initiative | Label `epic` | trägt KEIN `status:*` — Vertrag in `conventions/epics.md` |
 
 Faustregel: **alle Eigenschaften und die Workflow-Position sind Labels**.
 Eine Eigenschaft pro Achse — kein Issue trägt zwei `status:*` gleichzeitig.
+
+**Epic-Ausnahme.** Ein Issue mit Label `epic` läuft **nicht** durch den
+Lebenslauf unten: es trägt kein `status:*`, wird von `/arbeitstag-prep`,
+Watchdog und `ticket-status-flow` nicht angefasst und schließt nicht durch ein
+Kind. Es ist eine langlebige Initiative, die von einem **Herzschlag** in
+`/arbeitstag-prep` (Feature-Epics) bzw. `/prozesswerkstatt` (Prozess-Epics) mit
+Zwangs-Verdikt treiben/halten/töten getrieben wird. Vollständiger Vertrag:
+`conventions/epics.md`.
 
 **Blocker-Zeile (PW-13).** Ein `blocked`-Ticket trägt im Body eine Zeile, die den
 **aktuell nächsten** Blocker klassifiziert:
@@ -79,7 +88,8 @@ closed                    PR gemerged → Issue auto-closed durch "Closes #nr"
 ```
 
 Bei Ticket-Erstellung wird `status:spec` automatisch durch die
-`ticket-defaults`-Action gesetzt. `blocked`-Label setzen, wenn etwas wartet.
+`ticket-defaults`-Action gesetzt — **außer** das Issue trägt beim Anlegen bereits
+das Label `epic` (siehe Epic-Ausnahme oben). `blocked`-Label setzen, wenn etwas wartet.
 Schließen ohne Umsetzung → Grund `not planned`.
 
 ## Ein Ticket anlegen
