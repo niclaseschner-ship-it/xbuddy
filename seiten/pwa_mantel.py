@@ -21,7 +21,9 @@ Diese Lib zieht die n-fach kopierte Cache-Buster-Mechanik der Mantel-PWAs
 
 from __future__ import annotations
 
+import json
 import os
+import re
 from dataclasses import dataclass
 
 # ── PWAM-4 — build_id als Source-Set + sw.js-Substitution ────────────────────
@@ -82,6 +84,223 @@ class MantelConfig:
     stop_prefixes: tuple[str, ...] = ()        # PWAM-3 STOP_PREFIXES (SW lässt durch)
     sw_script_route: str | None = None         # PWAM-3 Route, unter der der SW liegt
     sw_scope: str | None = None                # PWAM-3 Scope (muss start_url umfassen)
+    short_name: str | None = None              # PWML-1 Manifest short_name (Home-Screen)
+    theme_color: str | None = None             # PWML-1 Manifest theme_color (Per-App-Daten)
+    background_color: str | None = None        # PWML-1 Manifest background_color (Per-App)
+
+
+# ── PWML-1 — Manifest-Erzeugung aus Registry-Eintrag ─────────────────────────
+
+def _icon_entries(cfg: MantelConfig) -> list[dict]:
+    """Baut die Manifest-`icons`-Liste aus `cfg.icons` (Dateinamen) + start_url.
+
+    PWAM-2-Konformität ist ein HARTER Test-/Boot-Fehler (PWML-1): jedes Icon muss
+    ein PNG sein, und das Set muss 192/512 (purpose any) **und** ein maskable-Icon
+    tragen. SVG oder ein fehlendes Pflicht-Format → ValueError (kein stiller
+    Durchlass).
+
+    `purpose`/`sizes` werden aus dem Dateinamen abgeleitet (Konvention
+    `icon-<n>.png` bzw. `icon-maskable-<n>.png`, wie bei einkauf/plan).
+    """
+    base = (cfg.start_url or "").rstrip("/")
+    entries: list[dict] = []
+    for fname in cfg.icons:
+        if not fname.lower().endswith(".png"):
+            raise ValueError(
+                f"PWAM-2: Icon {fname!r} ist kein PNG — SVG/fremd nicht erlaubt "
+                "(PWML-1 Boot-/Test-Fehler)."
+            )
+        m = re.search(r"(\d+)", fname)
+        if not m:
+            raise ValueError(f"PWAM-2: Icon {fname!r} trägt keine Größe im Namen.")
+        size = f"{m.group(1)}x{m.group(1)}"
+        purpose = "maskable" if "maskable" in fname.lower() else "any"
+        entries.append({
+            "src": f"{base}/{fname}",
+            "sizes": size,
+            "type": "image/png",
+            "purpose": purpose,
+        })
+    any_sizes = {e["sizes"] for e in entries if e["purpose"] == "any"}
+    if "192x192" not in any_sizes or "512x512" not in any_sizes:
+        raise ValueError(
+            "PWAM-2: Icon-Set braucht 192x192 UND 512x512 (purpose any) "
+            "(PWML-1 Boot-/Test-Fehler)."
+        )
+    if not any(e["purpose"] == "maskable" for e in entries):
+        raise ValueError(
+            "PWAM-2: Icon-Set braucht ein maskable-Icon (PWML-1 Boot-/Test-Fehler)."
+        )
+    return entries
+
+
+def build_manifest(cfg: MantelConfig) -> dict:
+    """Erzeugt das Web-App-Manifest-JSON (als dict) aus einem Registry-Eintrag
+    (PWML-1). Alle manifest-tragenden Felder sind **Per-App-Daten aus der
+    Registry**, nichts ist im Code hartkodiert.
+
+    Pflicht-Felder (PWML-1): name, short_name, start_url, display, scope,
+    theme_color, background_color, icons (PNG 192/512/maskable, PWAM-2).
+    Fehlt eines der Per-App-Daten → ValueError (Konformitäts-Gate).
+    """
+    fehlend = [
+        feld for feld, wert in (
+            ("name", cfg.name),
+            ("start_url", cfg.start_url),
+            ("display", cfg.display),
+            ("theme_color", cfg.theme_color),
+            ("background_color", cfg.background_color),
+        ) if not wert
+    ]
+    if fehlend:
+        raise ValueError(
+            f"PWML-1: Registry-Eintrag ohne Pflicht-Manifest-Daten: {fehlend}"
+        )
+    scope = cfg.sw_scope or cfg.start_url
+    return {
+        "name": cfg.name,
+        "short_name": cfg.short_name or cfg.name,
+        "start_url": cfg.start_url,
+        "scope": scope,
+        "display": cfg.display,
+        "orientation": "portrait",
+        "background_color": cfg.background_color,
+        "theme_color": cfg.theme_color,
+        "lang": "de",
+        "icons": _icon_entries(cfg),
+    }
+
+
+# ── PWML-2 — Ein Service-Worker-Skelett, zwei load-bearing Config-Knöpfe ──────
+
+# Genau ZWEI Config-Knöpfe kommen aus der Registry (PWML-2 / PWAM-3):
+# HTML_CACHE_MODE + STOP_PREFIXES. Der Build-Marker `__BUILD_ID__` wird
+# server-seitig substituiert (kein statisches `const BUILD='v1'`). PWML-5:
+# genau EINE optionale Runtime-Cache-Naht (`runtimeCacheResponse`), n=1 (Player),
+# ohne Precache-Logik — Track B / HSP-54 klinkt sich hier ein.
+_SW_SKELETON = """// sw.js — PWA-Mantel-Skelett (PWML-2 / PWAM-3), generiert von
+// seiten/pwa_mantel.render_sw() für Konsument %%COMPONENT%%.
+//
+// Genau ZWEI load-bearing Config-Knöpfe (aus pwa_mantel.REGISTRY):
+//   HTML_CACHE_MODE — cacht der Mantel-SW die HTML-Shell? ('cache-first' | 'network-only')
+//   STOP_PREFIXES   — Pfade, die der Mantel-SW UNBERÜHRT durchlässt (eigene SWs /
+//                     Streaming-Daten, die nie veralten dürfen).
+// __BUILD_ID__ wird beim Ausliefern von seiten/main.py substituiert (PWML-2).
+
+'use strict';
+
+const BUILD_ID = '__BUILD_ID__';
+const CACHE_NAME = '%%COMPONENT%%-pwa-' + BUILD_ID;
+
+// ── PWML-2 Knopf 1 ──
+const HTML_CACHE_MODE = '%%HTML_CACHE_MODE%%';
+// ── PWML-2 Knopf 2 ──
+const STOP_PREFIXES = %%STOP_PREFIXES%%;
+
+const SCOPE = '%%SCOPE%%';
+const START_URL = '%%START_URL%%';
+
+self.addEventListener('install', (event) => {
+  // Mantel-Skelett precached nur die Shell (start_url); App-Assets kommen
+  // network-first dazu. Best-effort — ein Fehler blockiert den Install nicht.
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) =>
+      cache.add(START_URL).catch(() => {})
+    )
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  // Alle Cache-Namespaces dieses Konsumenten mit fremdem BUILD_ID löschen.
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys
+          .filter((k) => k.startsWith('%%COMPONENT%%-pwa-') && k !== CACHE_NAME)
+          .map((k) => caches.delete(k))
+      )
+    )
+  );
+  self.clients.claim();
+});
+
+function isStopped(url) {
+  // STOP_PREFIXES: unberührt durchlassen (Streaming/API/fremde SWs).
+  return STOP_PREFIXES.some((p) => url.pathname.startsWith(p));
+}
+
+function inScope(url) {
+  return url.pathname === START_URL || url.pathname.startsWith(SCOPE);
+}
+
+function cacheFirst(req) {
+  return caches.match(req).then((cached) => {
+    if (cached) return cached;
+    return fetch(req).then((res) => {
+      if (res && res.ok) {
+        const copy = res.clone();
+        caches.open(CACHE_NAME).then((c) => c.put(req, copy)).catch(() => {});
+      }
+      return res;
+    });
+  });
+}
+
+// ── PWML-5 — optionale App-Runtime-Cache-Naht (n=1, HSP-54) ──
+// Default: kein Eingriff (null). Track B kann diese Funktion via zusätzlichem
+// importScripts()/Zuweisung überschreiben, um z. B. Folgen-Audio zu cachen —
+// OHNE das Skelett zu forken. Hier bewusst KEINE Precache-/Strategie-Logik.
+self.runtimeCacheResponse = self.runtimeCacheResponse || null;
+
+self.addEventListener('fetch', (event) => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+
+  if (isStopped(url)) return;  // pass-through
+
+  // PWML-5-Naht: App-spezifisches Runtime-Caching zuerst (falls eingehängt).
+  if (typeof self.runtimeCacheResponse === 'function') {
+    const handled = self.runtimeCacheResponse(event, url);
+    if (handled) { event.respondWith(handled); return; }
+  }
+
+  // Mantel-Shell: HTML_CACHE_MODE entscheidet, ob der Mantel HTML/Assets cacht.
+  if (HTML_CACHE_MODE === 'cache-first' && inScope(url)) {
+    event.respondWith(cacheFirst(req));
+    return;
+  }
+  // network-only / außerhalb Scope: pass-through (kein respondWith).
+});
+"""
+
+
+def render_sw(component: str, build_id: str | None = None) -> str:
+    """Rendert das sw.js-Skelett (PWML-2) für `component` aus REGISTRY.
+
+    Nur die zwei load-bearing Knöpfe (HTML_CACHE_MODE, STOP_PREFIXES) + Scope-
+    Daten des Konsumenten werden eingesetzt. `__BUILD_ID__` bleibt Platzhalter,
+    solange `build_id` None ist (server-seitige Substitution beim Ausliefern);
+    ist `build_id` gesetzt, wird er direkt substituiert.
+
+    NUR neuer Player-Pfad: einkauf/plan behalten ihre committed sw.js
+    (byte-frozen) — dieser Renderer erzeugt deren SW NICHT (E-PWML-1).
+    """
+    cfg = REGISTRY[component]
+    js = (
+        _SW_SKELETON
+        .replace("%%COMPONENT%%", component)
+        .replace("%%HTML_CACHE_MODE%%", cfg.html_cache_mode or "network-only")
+        .replace("%%STOP_PREFIXES%%", json.dumps(list(cfg.stop_prefixes)))
+        .replace("%%SCOPE%%", cfg.sw_scope or cfg.start_url or "/")
+        .replace("%%START_URL%%", cfg.start_url or "/")
+    )
+    if build_id is not None:
+        js = js.replace("__BUILD_ID__", build_id)
+    return js
 
 
 # Registrierte Konsumenten (conventions/pwa-mantel.md PWAM-1-Tabelle).
@@ -146,6 +365,28 @@ REGISTRY: dict[str, MantelConfig] = {
     ),
     "routine": MantelConfig(
         build_id_source_set=("routine-anpassen.js", "platform.js"),
+    ),
+    # ── Hörspiel-Player (HSP-47) — erster Voll-Konsument ÜBER die Lib ──
+    #    Manifest via build_manifest(), sw.js via render_sw() (kein sw.js/
+    #    manifest.json auf Platte). Assets (player.{css,js} + Icons) liefert
+    #    der hoerspiel-Buddy aus hoerspiel/static/, gehostet vom seiten-Service.
+    "hoerspiel-player": MantelConfig(
+        build_id_source_set=("player.js", "player.css"),
+        name="Hörspiel-Player",
+        short_name="Hörspiel",
+        start_url="/seiten/hoerspiel/player",
+        icons=("icon-192.png", "icon-512.png", "icon-maskable-512.png"),
+        display="standalone",
+        theme_color="#47503C",
+        background_color="#F5F1E8",
+        # HTML-Shell offline-fähig (installierbarer Player); die Folgen-Daten +
+        # Audio kommen über /api/v1/hoerspiel/ und bleiben UNBERÜHRT (STOP) —
+        # nie veralten, und der harte Audio-Cache (HSP-54) hängt an der PWML-5-
+        # Naht, nicht am Mantel.
+        html_cache_mode="cache-first",
+        stop_prefixes=("/api/v1/hoerspiel/",),
+        sw_script_route="/seiten/hoerspiel/player/sw.js",
+        sw_scope="/seiten/hoerspiel/player",
     ),
 }
 
