@@ -35,6 +35,7 @@ permissionDecision-Antwort, exit 0 bei Durchlass.
 """
 import hashlib
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -82,6 +83,31 @@ WERFT_VERDICT_MARKER_RE = re.compile(
 # Werft-F5 entfernt im selben gh-edit `status:spec` + `in-werft`, setzt `status:ready`.
 WERFT_STAMP_REMOVES = frozenset({"status:spec", "in-werft"})
 WERFT_STAMP_ADDS = frozenset({"status:ready"})
+
+# PW-83 RATIFIZIERT 2026-07-03 (ENTSCHEID 20260703-232716-RATIFIZIERT-membran-gate-
+# am-akt.md, „Fix B"): der PW-54-werft_mockup_path-stat()-Check sass bisher NUR
+# konsumenten-seitig (dispatch_status_guard, konditional auf Feld-Praesenz — fehlt
+# das Feld ganz, feuerte nichts). Hier wird er an den bereits existierenden
+# PRODUZENTEN-Stempel (Werft-F5) gezogen: bei delipetrable_kind=ui_build ist
+# werft_mockup_path unbedingt Pflicht. Form gespiegelt aus dispatch_status_guard PW-54.
+XBUDDY_REPO_ROOT = os.environ.get("XBUDDY_REPO", "/home/buddy/repos/xbuddy")
+WERFT_MOCKUP_REQUIRED_PREFIX = "specs/mockups/"
+WERFT_MOCKUP_REQUIRED_SUFFIX = ".html"
+
+# PW-82 RATIFIZIERT 2026-07-03 (ENTSCHEID …„Fix A"): mechanischer Negativ-Filter
+# (RAT-11-konform — gatet INS Urteil, entscheidet nicht). Traegt der Ticket-BODY
+# einen Vorwaerts-Entscheidungs-Marker, darf status:ready nur fallen, wenn das
+# prep_verdict axes.body_decision: geloest traegt. Marker-ABWESENHEIT ist kein
+# Freibrief (das semantische Urteil bleibt beim Watchdog, Default=wahl) — der Hook
+# prueft nur den Marker-POSITIV-Fall.
+BODY_DECISION_MARKER_RE = re.compile(
+    r"(/berater-runde"
+    r"|spec-mandatiert"
+    r"|Architektur-(?:Frage|Entscheidung|Wahl)"
+    r"|Option\s+[AB]\b[^\n]{0,80}?\bvs\.?\b"
+    r"|RAT-\d+[^\n]{0,80}?(?:Delta|Anwendung|offen))",
+    re.IGNORECASE,
+)
 # PW-26-RATIFIZIERT 2026-06-09: arch_choice-Marker am Issue erlaubt Spec-PR-Merge
 # fuer architecture_class=wahl-Karten. Hook prueft erste Zeile eines Comments,
 # Format `<!-- arch_choice v1 issue:NR choice:A -->` (A/B/halt sind moegliche
@@ -720,6 +746,93 @@ def _check_verdict_generic(
     return (True, "ok")
 
 
+def fetch_issue_body(repo: str, issue: str) -> str | None:
+    """Liest den reinen Issue-BODY (nicht Comments) via gh. PW-82: der
+    Body-Entscheidungs-Filter prueft die Frame-Prosa des Tickets, nicht die
+    Verdikt-/Werft-Comments."""
+    try:
+        result = subprocess.run(
+            ["gh", "issue", "view", issue, "--repo", repo, "--json", "body"],
+            capture_output=True, text=True, timeout=20, check=False,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+    if result.returncode != 0:
+        return None
+    try:
+        return (json.loads(result.stdout) or {}).get("body")
+    except json.JSONDecodeError:
+        return None
+
+
+def validate_werft_mockup_path_value(mockup_path: str) -> tuple[bool, str]:
+    """PW-83: Form-/Existenz-Probe fuer werft_mockup_path am F5-Stempel.
+    Spiegelt dispatch_status_guard.py PW-54 (specs/mockups/<slug>/*.html, kein
+    /tmp//brainstorm/, realpath im Repo, stat()-Existenz), aber produzenten-seitig
+    beim Werft-Stempel statt konsumenten-seitig beim Dispatch."""
+    if not mockup_path or mockup_path.lower() in ("none", "null"):
+        return (False, "werft_mockup_path leer/null")
+    if mockup_path.startswith(("/tmp/", "/home/buddy/brainstorm/", "brainstorm/")):
+        return (False,
+                f"werft_mockup_path zeigt auf nicht-durable Heimat ({mockup_path}) — "
+                f"Mockup muss nach {WERFT_MOCKUP_REQUIRED_PREFIX}<slug>/ ins xbuddy-Repo "
+                "(werft.md F3-Ende, decisions/README.md:15-20).")
+    if os.path.isabs(mockup_path):
+        if not mockup_path.startswith(XBUDDY_REPO_ROOT + os.sep):
+            return (False, f"werft_mockup_path absolut, ausserhalb xbuddy-Repo: {mockup_path}")
+        check_path = mockup_path
+        rel_path = mockup_path[len(XBUDDY_REPO_ROOT) + 1:]
+    else:
+        check_path = os.path.join(XBUDDY_REPO_ROOT, mockup_path)
+        rel_path = mockup_path
+    if not rel_path.startswith(WERFT_MOCKUP_REQUIRED_PREFIX):
+        return (False, f"werft_mockup_path muss unter {WERFT_MOCKUP_REQUIRED_PREFIX} liegen ({mockup_path})")
+    if not rel_path.endswith(WERFT_MOCKUP_REQUIRED_SUFFIX):
+        return (False, f"werft_mockup_path muss auf {WERFT_MOCKUP_REQUIRED_SUFFIX} enden ({mockup_path})")
+    try:
+        real_check = os.path.realpath(check_path)
+        real_root = os.path.realpath(XBUDDY_REPO_ROOT) + os.sep
+        if not real_check.startswith(real_root):
+            return (False, f"werft_mockup_path realpath verlaesst xbuddy-Repo ({real_check})")
+    except OSError:
+        pass
+    if not os.path.exists(check_path):
+        return (False, f"werft_mockup_path existiert nicht: {check_path} (angegeben als {mockup_path})")
+    return (True, "ok")
+
+
+def check_prep_body_decision(repo: str, issue: str, verdict_body: str | None) -> tuple[bool, str]:
+    """PW-82 RATIFIZIERT 2026-07-03: mechanischer Negativ-Filter (RAT-11-konform).
+
+    Traegt der Ticket-BODY einen Vorwaerts-Entscheidungs-Marker (/berater-runde,
+    Architektur-Frage, Option A vs B, RAT-N Delta/Anwendung), darf status:ready nur
+    fallen, wenn das prep_verdict axes.body_decision: geloest traegt. Der Filter
+    ENTSCHEIDET nichts — er erzwingt nur, dass das Urteil eine im Body sichtbare
+    offene Entscheidung adressiert hat, statt sie als nachzeichnen zu ueberspringen.
+
+    Marker-ABWESENHEIT ist KEIN Freibrief fuer geloest (Codex-RISKANT): das
+    semantische Urteil bleibt beim Watchdog (Default=wahl). Der Hook prueft nur den
+    Marker-POSITIV-Fall — der Boden, nicht die Decke.
+    """
+    body_text = fetch_issue_body(repo, issue)
+    if body_text is None:
+        # Best-effort: kein Body lesbar → Filter optimistisch (Watchdog-Urteil traegt).
+        return (True, "issue-body nicht lesbar — Filter optimistisch")
+    marker = BODY_DECISION_MARKER_RE.search(body_text)
+    if not marker:
+        return (True, "kein Body-Entscheidungs-Marker")
+    bd = _extract_axis_value(verdict_body, "body_decision") if verdict_body else None
+    if bd == "geloest":
+        return (True, "body_decision: geloest belegt")
+    return (False,
+            f"PW-82: Ticket-Body traegt Entscheidungs-Marker '{marker.group(0).strip()}', "
+            f"aber prep_verdict.axes.body_decision != geloest (gefunden: {bd!r}). "
+            "Ein Ticket mit offener Architektur-/Anwendungs-Entscheidung im Body ist NICHT "
+            "entscheidungsrein. /arbeitstag-prep neu urteilen: body_decision: offen => "
+            "architecture_class: wahl (nicht ready); ODER body_decision: geloest mit "
+            "body_decision_evidence (welcher Beschluss/PR die Frage schloss).")
+
+
 def check_prep_verdict(repo: str, issue: str) -> tuple[bool, str]:
     """PW-30-Pflicht-Check: prep_verdict-Comment am Ticket (Default-Marker)."""
     return _check_verdict_generic(repo, issue, VERDICT_MARKER_RE, "prep_verdict")
@@ -746,6 +859,35 @@ def check_werft_verdict(repo: str, issue: str) -> tuple[bool, str]:
                 f"PW-43: axes.werft != true (gefunden: {werft_axis!r}). "
                 "Werft-F5-Verdikt MUSS axes.werft: true tragen — geht in "
                 "compute_verdict_hash, schuetzt vor prep-Verwechslung.")
+    # PW-83 RATIFIZIERT 2026-07-03: delipetrable_kind + werft_mockup_path am F5-Stempel
+    # erzwingen (produzenten-seitiges Gate am Akt, nicht erst downstream beim Dispatch).
+    # delipetrable_kind geht unter axes: in compute_verdict_hash (Codex-Haertung: kein
+    # ungehashter Top-Level-Proxy).
+    delipetrable = _extract_axis_value(body, "delipetrable_kind")
+    if delipetrable is None:
+        return (False,
+                "PW-83: axes.delipetrable_kind fehlt (ui_build | non_ui). Werft-F5 MUSS "
+                "den Track klassifizieren: ui_build => werft_mockup_path Pflicht, "
+                "non_ui => delipetrable_evidence Pflicht (werft.md F5).")
+    if delipetrable == "ui_build":
+        mockup = _extract_axis_value(body, "werft_mockup_path")
+        if mockup is None:
+            return (False,
+                    "PW-83: delipetrable_kind=ui_build, aber axes.werft_mockup_path fehlt. "
+                    "UI-Bau-Uebergabe ohne persistiertes Mockup ist nicht uebergabereif "
+                    "(specs/mockups/<slug>/*.html, werft.md F3-Ende/F5).")
+        mok_ok, mok_reason = validate_werft_mockup_path_value(mockup)
+        if not mok_ok:
+            return (False, f"PW-83: {mok_reason}")
+    elif delipetrable == "non_ui":
+        if _extract_axis_value(body, "delipetrable_evidence") is None:
+            return (False,
+                    "PW-83: delipetrable_kind=non_ui verlangt axes.delipetrable_evidence "
+                    "(konkrete Datei:Zeile/Body-Stelle, warum kein UI gebaut wird) — sonst "
+                    "ist non_ui ein ungeprueftes Selbst-Attest (Codex-Haertung).")
+    else:
+        return (False,
+                f"PW-83: axes.delipetrable_kind='{delipetrable}' unbekannt (erlaubt: ui_build | non_ui).")
     return (True, "ok")
 
 
@@ -846,6 +988,11 @@ def main() -> None:
                 f"Schritt: /arbeitstag-prep durchlaufen, Verdikt-YAML als Comment posten "
                 f"(arbeitstag-prep.md#nic-stamp Schritt 2), DANN Label setzen."
             )
+        # PW-82: Body-Entscheidungs-Filter (Marker-Positiv-Fall) VOR dem Stempel.
+        vbody, _ = fetch_verdict_comment(repo, issue)
+        bd_ok, bd_reason = check_prep_body_decision(repo, issue, vbody)
+        if not bd_ok:
+            deny(bd_reason)
         sys.exit(0)
 
     # Pfad 2: prep-Claim (-spec +spec-in-progress) — PW-33.
@@ -865,6 +1012,11 @@ def main() -> None:
                     f"Grund: {verdict_reason} "
                     f"Schritt: prep_verdict-Comment posten (arbeitstag-prep.md#nic-stamp), DANN Label setzen."
                 )
+            # PW-82: Body-Entscheidungs-Filter (Marker-Positiv-Fall) VOR dem Stempel.
+            vbody, _ = fetch_verdict_comment(repo, issue)
+            bd_ok, bd_reason = check_prep_body_decision(repo, issue, vbody)
+            if not bd_ok:
+                deny(bd_reason)
         sys.exit(0)
 
     # Pfad 4: Werft-Stempel (-spec -in-werft +ready) — PW-25 + PW-43 RATIFIZIERT 2026-06-21.
