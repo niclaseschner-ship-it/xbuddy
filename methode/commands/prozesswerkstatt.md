@@ -28,6 +28,19 @@ getrennt** von Code-Tickets im `xbuddy`-Repo).
 
 ## Ablauf
 
+**0. Epic-Herzschlag (Prozess-Epics).** Auftakt vor dem Retro-Scan: hol die offenen
+Prozess-Initiativen und treib sie weiter, damit klein geredete Initiativen nicht
+versacken.
+```bash
+gh issue list -R emilsonntag-ship-it/xbuddy-prozess --label epic --state open --json number,title,body
+```
+Pro offenem Epic legst du Nic eine **Herzschlag-Karte** vor, die genau ein Verdikt
+**treiben/halten/töten** erzwingt. Regeln, Karten-Form und Verdikt-Aktionen (treiben
+→ Kind-Ticket `Part of #<epic>`; halten nur mit datiertem Re-Visit-Trigger; töten →
+schließen) stehen **vollständig in `xbuddy/conventions/epics.md` → „Der Herzschlag"**
+— hier NICHT duplizieren. Anmerkung Repo-Asymmetrie: xbuddy-prozess hat keine
+Workflow-Maschinerie, `epic` ist hier bloß der Query-Filter.
+
 **1. Scannen.** `ls ~/.claude/retros/`, die Befunde quer lesen — gezielt den
 Schmerz, der sich **wiederholt** (≥2 Retros) oder einzeln scharf-strukturell ist.
 
