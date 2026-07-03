@@ -3,12 +3,18 @@
 > Status: V1 · Refs #848 (Werft-Folge Hörspiel-Eltern-Mini-App), #678
 > (MVP-Sammler — Mini-App-Türöffner-Pattern), #708 (Mini-App-Auth-Header)
 >
+> **HSP-53 (2026-07-03):** Tab-Hash-Modell (HOE-5/E-HOE-2/E-HOE-4) ist
+> superseded. HOE öffnet jetzt die **Hörspiel-Player-PWA** (HSP-47,
+> `/seiten/hoerspiel/player`, public AUTH-6) per URL-Button (nicht `web_app`).
+> Kein `#folgen`/`#einstellungen`-Hash mehr. Alle Tab-bezogenen Klauseln
+> unten sind historisch — neue Arbeit gegen HSP-47..55.
+>
 > **Klassen-Einordnung (`conventions/eltern-chat-skills.md`):** HOE ist ein
 > **Klasse-B-Skill** (Read mit Button) — Stil-Anker
 > `routine_anpassen_oeffnen` (RAO) und `einkauf_zeigen` (EZG). Lese-Pfad
-> ohne Daten-Änderung; Bot-Antwort trägt einen Inline-`web_app`-Button auf
-> die eigene Mini-App (HSP-33). Bauplan-Lese-Reihenfolge: EC-29 →
-> TASK-10 / TASK-10c Form (b) → MAD-7 + MAD-10 (Launcher).
+> ohne Daten-Änderung; Bot-Antwort trägt einen Inline-URL-Button auf
+> die Player-PWA (HSP-47). Bauplan-Lese-Reihenfolge: EC-29 →
+> TASK-10 / TASK-10c Form (b).
 
 Damit ein Elternteil **im Eltern-Chat** die Hörspiel-Eltern-Mini-App
 (HSP-33) zum **Folgen-Anhören** auf dem eigenen Handy öffnen kann
@@ -181,44 +187,37 @@ ist genau der Ort, an dem Eltern den Folgen-Tab kennenlernen kann, auch
 wenn er heute leer ist. Eine leere Album-Liste ist Anfangszustand, kein
 Endzustand wie eine leere Einkaufsliste.
 
-## HOE-5 — Mini-App-URL inkl. URL-Hash-Fragment
+## HOE-5 — Player-PWA-URL (HSP-53)
 
-Der Button trägt das Telegram-`web_app`-Feld mit der Mini-App-URL plus
-festem `#folgen`-Hash:
+> **HSP-53:** Tab-Hash-Deeplink (HOE-5 alt: `#folgen`) entfällt.
+> HOE öffnet jetzt die Player-PWA als reguläre URL (nicht `web_app`).
+
+Der Button trägt ein reguläres `url`-Feld (kein Telegram-`web_app`)
+mit der Player-PWA-URL:
 
 ```
-https://<funnel-domain>/seiten/hoerspiel/mia/eltern#folgen
+https://<funnel-domain>/seiten/hoerspiel/player
 ```
 
-Fester `mia`-Pfad als Launcher (HSP-26 URL-3a-Form verlangt `<kind_id>`
-im Pfad; HSP-35 / #973 aggregiert dann clientseitig über alle V1-Kinder,
-sodass `mia` als URL-Träger fungiert, ohne die Folgen-Liste auf Mia
-zu filtern). Die Mini-App liest das Hash-Fragment beim Laden und
-aktiviert den Folgen-Tab (HSP-33 Tab-Deeplink-Klausel).
+Kein `#folgen`-Hash, kein `#einstellungen`-Hash — der Player lädt
+direkt mit dem Folgen-Regal (HSP-48). Settings sind über das
+Zahnrad-Icon im Player erreichbar (HSP-50).
 
 Die Funnel-Domain stammt aus der Buddy-übergreifenden Konfiguration
-(MVP-Sammler #678 / RAT-16 / EZG-6 / RAO-6 — **identische Naht**, kein
-separater Funnel-Eintrag je Mini-App). Konfig-Wert:
+(MVP-Sammler #678 / RAT-16 / EZG-6 / RAO-6 / HSP-53 — **identische Naht**,
+kein separater Slot je App). Konfig-Wert:
 `eltern-chat/config.json::mini_app_base_url` mit ENV-Override
-`ELTERNCHAT_MINI_APP_BASE_URL` (analog RAO).
+`ELTERNCHAT_MINI_APP_BASE_URL` (analog RAO). In `hoerspiel_oeffnen_task.py`
+wird `_HOE_APP_PATH = "/seiten/hoerspiel/player"` an die Base-URL gehängt.
 
-**`callback_data` fällt weg** — `web_app`-Buttons öffnen die Mini-App
-direkt, ohne Bot-Callback.
+**Auth:** Player-PWA nutzt Cookie-Auth (AUTH-6 / RAT-18), nicht `tma`.
+Der URL-Button öffnet die URL im Browser des Elternteils — kein
+Telegram-WebApp-Overlay, kein `initData`-Handshake.
 
-**Init-Data-Auth:** Telegram fügt beim Öffnen die signierte `initData`
-an die Mini-App-URL (`window.Telegram.WebApp.initData`-Property,
-MAD-7). Die Mini-App sendet sie als `Authorization: tma <initData>`-
-Header an jeden API-Call (HSP-33, MAD-7, #708-Härtung). Das Hash-
-Fragment wird **vom Client** gelesen (Browser-Standard, kein Server-
-Round-Trip) und ist nicht Teil der Auth-Signatur — `initData` deckt
-nur Query-Params ab.
-
-*Test-Implikation:* Skill-Test prüft, dass die gepostete Nachricht ein
-`reply_markup.inline_keyboard`-Feld mit genau einem Button-Eintrag
-enthält, dessen `web_app.url` mit `https://` beginnt, auf
-`/seiten/hoerspiel/mia/eltern` mündet und mit `#folgen` endet.
-Live-Probe: Eltern tippt Button im echten Telegram → Mini-App lädt mit
-gültiger initData und aktivem Folgen-Tab.
+*Test-Implikation:* Skill-Test prüft, dass `presentation` ein
+`inline_buttons`-Array mit genau einem Eintrag enthält, dessen `url`
+mit `https://` beginnt und auf `/seiten/hoerspiel/player` endet.
+Live-Probe: Eltern tippt Button im Telegram → Browser öffnet Player-PWA.
 
 ## HOE-6 — Out-of-Scope V1 (Wiederholung der Eingangsklauseln, konsolidiert)
 

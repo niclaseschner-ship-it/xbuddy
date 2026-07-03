@@ -128,10 +128,14 @@ DEFAULTS = {
     # Ansicht). Leer (Default) → EinkaufZeigenTask nutzt ENV-Fallback
     # MINI_APP_EINKAUF_URL (EZG-6) oder zeigt Fehler-Text ohne Button (EZG-7).
     "mini_app_einkauf_url": "",
-    # RAO-6 / T728-C: HTTPS-Basis-URL aller Mini-Apps (Funnel-Domain). Leer
-    # (Default) → RoutineAnpassenOeffnenTask wird NICHT im Katalog registriert
-    # (RAO-8 dreifacher Guard). Selbe Domain wie mini_app_einkauf_url-Basis,
-    # aber als separater Slot — kein String-Parsing der Einkauf-URL.
+    # RAO-6 / T728-C: HTTPS-Basis-URL aller Mini-Apps und PWAs (Funnel-Domain).
+    # Leer (Default) → RoutineAnpassenOeffnenTask und HoerspielOeffnenTask
+    # werden NICHT im Katalog registriert (RAO-8 / HOE-8 dreifacher Guard).
+    # HSP-53 (2026-07-03): wird auch für die Hörspiel-Player-PWA genutzt
+    # (mini_app_base_url + /seiten/hoerspiel/player, HOE-5 / HSP-47).
+    # Bot-Menü-Buttons (setChatMenuButton) zeigen künftig auf die PWA (HSP-53).
+    # Selbe Domain wie mini_app_einkauf_url-Basis, aber als separater Slot —
+    # kein String-Parsing der Einkauf-URL.
     "mini_app_base_url": "",
     # HFE-9 / #729: Origin des Hörspiel-Buddys (Mia-Instanz), über die die
     # HoerspielFolgeErzeugenTask Folgen-Vorschläge holt
@@ -230,8 +234,8 @@ class Config:
         self.multimodal_model = multimodal_model        # leer → Anbieter-Default
         # EZG-6 / EIN-8 / #653: Mini-App-URL für die Einkaufsliste (EZG-6).
         self.mini_app_einkauf_url = mini_app_einkauf_url  # leer → ENV-Fallback MINI_APP_EINKAUF_URL
-        # RAO-6 / T728-C: Basis-URL aller Mini-Apps (Funnel-Domain).
-        self.mini_app_base_url = mini_app_base_url  # leer → RAO NICHT im Katalog
+        # RAO-6 / T728-C / HSP-53: Basis-URL aller Mini-Apps und PWAs (Funnel-Domain).
+        self.mini_app_base_url = mini_app_base_url  # leer → RAO/HOE NICHT im Katalog
         # HFE-9 / #729: Origin des Hörspiel-Buddys Mia (HFE-3/HFE-5, HSP-17).
         self.hoerspiel_url_origin = hoerspiel_url_origin  # leer → HFE NICHT im Katalog
         # RAT-17 / #910: zweite Origin für Finn-Instanz (Option A handverdrahtet, E-HFE-6).
