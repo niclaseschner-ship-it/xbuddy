@@ -151,6 +151,11 @@ class Task:
 
     kind = None   # von der Unterklasse gesetzt
 
+    # EC-42 / TASK-11: Optionale eltern-taugliche Anzeige-Copy (str oder None).
+    # Default None — Fallback auf `description`. Reines Anzeige-Attribut;
+    # kein Trigger, keine Berechtigungs-/Sichtbarkeits-Semantik.
+    anzeige_copy = None
+
     def __init__(self, name, description, parameters):
         self.name = name
         self.description = description
@@ -1015,5 +1020,17 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             tg=tg,
             is_member_fn=_wro_is_member,
             mini_app_url=wetter_origin_url))
+
+    # EC-43 / #1102: »Fähigkeiten zeigen« als lesende Aufgabe (EC-9).
+    # Guard: family_group_chat_id_getter muss gesetzt sein — sonst keine
+    # Live-Mitgliedschafts-Prüfung möglich (EC-43-Berechtigung).
+    # Der Katalog wird nach der letzten Registrierung übergeben; run() liest
+    # ihn erst zur Anfrage-Zeit (Registrierungs-Reihenfolge irrelevant, EC-43).
+    if family_group_chat_id_getter is not None:
+        from skills.faehigkeiten_zeigen_task import FaehigkeitenZeigenTask
+        _fzg_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
+        catalog.register(FaehigkeitenZeigenTask(
+            catalog=catalog,
+            is_member_fn=_fzg_is_member))
 
     return catalog
