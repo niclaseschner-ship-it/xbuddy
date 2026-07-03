@@ -116,6 +116,18 @@ ID-Präfix HFE).
   Sichtbarkeits-Option) und ist erst mit der als vollwertiger Player
   gebauten Settings-App notwendig/leicht. Trigger: Settings-App-als-
   Player steht. Bis dahin gilt HSP-46 (keine Trennung).
+  *(Marginalie 2026-07-03: der „vollwertige Player" wird mit HSP-47..55
+  gebaut — die Sicht-Trennung selbst bleibt dennoch vertagt, da dieser Lauf
+  Front-End-only ist und das Backend keinen Sichtbarkeits-Flag trägt.)*
+- **OPEN-HSP-T** — Kind-Abweisung vor den Settings (V1: keine, nur Zahnrad,
+  HSP-50). Spätere Erweiterung (Long-Press / PIN / Eltern-Frage), Nic-Setzung
+  2026-07-03.
+- **OPEN-HSP-U** — Tablet-`alben`-View (localStorage-Resume, HSP-23) auf den
+  server-seitigen Resume-Stand (HSP-51) vereinheitlichen. Folge von OPEN-HSP-G;
+  Tablet bleibt V1 unangetastet.
+- **OPEN-HSP-V** — Reaktiviert OPEN-HSP-G teilweise: geteiltes Familien-Handy
+  ✓ (HSP-47..55); per-Kind-eigenes-Gerät + geräteübergreifender Resume-Sync
+  weiterhin offen.
 
 ---
 
@@ -1219,8 +1231,16 @@ und nicht Teil der V1-Standard-Test-Suite.
 
 ---
 
-## 12. Eltern-Mini-App (HSP-33..HSP-40)
+## 12. Eltern-Mini-App (HSP-33..HSP-40) — SUPERSEDED durch Abschnitt 15
 
+> **SUPERSEDED (Werft 2026-07-03, HSP-53).** Diese Telegram-Eltern-Mini-App
+> (Tab-Form, `tma`-Auth) wird durch die **Hörspiel-Player-PWA** (Abschnitt 15,
+> HSP-47..55, Cookie-Auth) abgelöst. HSP-33–40 bleiben als historischer Stand
+> dokumentiert, sind aber **nicht** mehr die Soll-Form. Neue Arbeit gegen
+> Abschnitt 15. Wiederverwendete Mechanik (Multi-Track-Player HSP-35, Resume
+> HSP-36, Streaming HSP-37) lebt inhaltlich weiter, nur nicht mehr in der
+> Telegram-Tab-Hülle.
+>
 > V1 nach Werft-Lauf 2026-06-15 (Refs #848). Vorbild für Wohnort und
 > Auslieferung: Routine-Anpassen-Mini-App (#728, `<funnel>/seiten/routine/anpassen`).
 > Auth-Pattern: `Authorization: tma <initData>`-Header analog #708.
@@ -1823,6 +1843,153 @@ vollwertiger Player gebaute Settings-App. Bis dahin gilt HSP-46.
 
 (ENTSCHEID-1263 → Nic-Verdikt Punkt 3 „KEINE Eltern/Kinder-Unterscheidung
 — erstmal" + „Deferred Follow-up".)
+
+---
+
+## 15. Hörspiel-Player-PWA (Handy-first) — HSP-47..HSP-55
+
+> Werft-Lauf 2026-07-03 (Gates A+B durch). Ersetzt Abschnitt 12 (Telegram-
+> Eltern-Mini-App, HSP-33–40 → superseded). Realisiert die in HSP-46 /
+> OPEN-HSP-S antizipierte **„als vollwertiger Player gebaute Settings-App"**.
+> **Front-End-only** (Nic-Setzung): bildet den vorhandenen Backend-Stand ab,
+> **kein** Folgen-/Kapitel-Builder-Delta. Fundament: `specs/platform/pwa-mantel-lib.md`
+> (PWML-1..6). Mockups: `specs/mockups/hoerspiel-player/`. Bezug Epic #1265.
+
+### HSP-47 — Wohnort, Auslieferung als PWA-Mantel-Kunde, Auth
+Der Hörspiel-Player ist eine **installierbare PWA**, PWA-Mantel-Konsument
+(PWML-1..4), registriert in `seiten/views.json` als `typ:pwa`
+(`pfad`, `label`, `zielgruppe`, `pwa{manifest,start_url,service_worker}`).
+Wohnort der View-Assets im Buddy-Bereich (`hoerspiel/templates/player.html`,
+`hoerspiel/static/player.{css,js}`), gehostet vom **seiten-Service** wie die
+anderen Eltern-PWAs.
+**Auth:** Cookie-Pairing (`xbuddy_session`, AUTH-2 / RAT-18) — **nicht** `tma`.
+Der **Kind-Umschalter ist kein Auth-Wechsel** (HSP-49): eine Eltern-Identität,
+der Umschalter tauscht nur den **Inhalts-Kontext** (`<kind_id>`).
+
+*Test-Implikation:* Manifest `display:standalone`, Service-Worker + Cache-Buster
+über die Lib (PWML); ohne gültigen Cookie 401, kein Render.
+
+### HSP-48 — Startfläche „Regal" + Mini-Player + voller Player (Gate-B-Wahl B)
+Zwei Player-Ebenen, kein Tab-Chrome, kein Menü auf der Startfläche (HSP-3-Prinzip
+„statisches Dashboard" für Kind-Frontends):
+
+- **Startfläche = Folgen-Regal:** Kachel-Raster der Folgen des aktiven Kindes
+  (2-spaltig, Hochkant), je Kachel Cover 1:1, Folgen-Nr, Titel, Resume-Badge
+  (orange), Offline-Badge (HSP-54). Oben Umschalter-Pille (HSP-49) links +
+  Zahnrad (HSP-50) rechts.
+- **Sticky-Mini-Player** unten: Cover-Thumb + Titel + „Weiter hören"-Zeile +
+  Play — immer sichtbar.
+- **Voller Player** (eigener Screen) bei Tap auf eine Kachel **oder** den
+  Mini-Player: großes Cover, Titel, großer Play/Pause + große ⏮/⏭, Fortschritt,
+  Zurück-Pfeil — plus Kapitel-Liste (HSP-52). Bedien-Regeln aus HSP-19/20/21
+  (Tap startet/setzt fort; kein Wisch/Long-Press/Multi-Touch).
+
+Layout-Robustheit analog HSP-4b (clamp, kein Clip, Cover 1:1). Design-Tokens
+DTOK-1..5 + Kids-Palette (`--kids-*`), Kids-Schrift (`--kids-font-body` /
+`--kids-font-display`), Stage aus `instance.json` (HSP-4).
+
+*Test-Implikation:* GET der Player-Route rendert Regal-Kacheln des aktiven
+Kindes + Mini-Player; die volle Player-Route rendert Controls + Kapitel-Liste.
+
+### HSP-49 — Kind-Umschalter (Inhalts-Kontext) über die Instanz-Liste
+Oben eine **Umschalter-Pille** (Foto+Name je Instanz aus `familie.json`, FAM-8,
+Muster wie Face-Pille HSP-3a). Tap wechselt den aktiven `<kind_id>` → Regal +
+Player laden das andere Instanz-Bündel (`/api/v1/hoerspiel/<kind_id>/…`).
+Die Instanz-Auswahl **iteriert die hörspiel-lokale Instanz-Liste (HSP-43)** —
+kein 2-Element-Hardcode; sie trägt V1 `mia`, `finn`, `emil`. `zielgruppe`
+ist deskriptiv (HSP-46) — die Erwachsenen-Instanz (Niclas, HSP-45) erscheint im
+Umschalter wie jede andere. Modell = **Umschalter je Kontext**, NICHT die
+aggregierte Cross-Kind-Liste des alten Folgen-Tabs (HSP-35). Resume-Namensräume
+sind `<kind_id>`-getrennt.
+
+### HSP-50 — Settings als eigener Vollbild-Screen hinter Zahnrad
+Ein **Zahnrad** oben rechts öffnet einen **eigenen Vollbild-Settings-Screen** mit
+Zurück-Pfeil. Inhalt = die HSP-34-Regler: Playback-Tempo, Pause-Absatz,
+Pause-Titel, Stimme, LLM Provider+Modell, Audio-Ziel. `PATCH /config`-Verhalten,
+422-Toasts, abhängiges Modell-Dropdown, Wirkungs-Hinweis + Audio-Ziel-Kollaps
+(alle Instanzen global) — **unverändert aus HSP-34** übernommen.
+
+**Kein Kind-Sperrgriff in V1 (Nic-Setzung 2026-07-03).** Nur das Zahnrad, keine
+Halte-/PIN-Hürde; **kein** Schloss-Symbol (würde eine nicht existierende Sperre
+andeuten). Kind-Abweisung ist eine spätere Erweiterung (OPEN-HSP-T). Der
+Eltern-Cookie (HSP-47) ist ohnehin die Auth-Membran.
+
+### HSP-51 — Resume server-seitig, geräteübergreifend
+Der Player nutzt das **server-seitige** Resume (`GET/PUT /resume`, HSP-17/36) —
+Handy-Sessions teilen den Stand untereinander und potenziell mit dem Tablet.
+Last-Write-Wins auf Track-Anfang (HSP-36). **V1:** der Player liest/schreibt
+server-seitig; die Unifikation des Tablet-`alben`-Views (heute localStorage,
+HSP-23) auf denselben Stand bleibt **OPEN-HSP-U** — Tablet unangetastet
+(Nic-Setzung).
+
+### HSP-52 — Kapitel-/Track-Wahl + Skip im Player („Untertitel")
+Jede Folge ist in **Tracks** unterteilt (Intro · Inhalts-Kapitel · Outro,
+HSP-6). Der volle Player (HSP-48) **muss** erlauben:
+- **Kapitel-Liste** unter dem Player: alle Tracks als antippbare Liste, aktiver
+  Track hervorgehoben. **Tap auf einen Track → springt direkt dorthin** und
+  spielt ab (aus HSP-35 in den Kind-Player gezogen).
+- **Track-Skip** ⏮ / ⏭ (voriger/nächster Track), am ersten/letzten Track
+  disabled (HSP-21).
+- **Feinsprung** −15 s / +15 s innerhalb des Tracks, getrennt von der
+  Track-Navigation (HSP-35).
+- Track-Anzeige `Track X/Y · <Label>`.
+
+**Track-Label = vorhandener Backend-Stand.** Tracks tragen heute kein `titel`
+(`titel: null`, HSP-6 optional). Label = aus `art` + `position` abgeleitet
+(„Intro", „Kapitel 1..N", „Outro"); trägt ein Track ein echtes `titel`, zeigt
+der Player dieses (+ optional Pikto-Wortblock HSP-6a). **Der Player erzeugt
+keine Track-Namen** und fasst den Folgen-Bauer (HFE/`album_builder.py`) **nicht**
+an — benannte Kapitel wären ein separates Backend-Thema, außerhalb dieses
+Front-End-Laufs (Nic-Setzung 2026-07-03).
+
+*Test-Implikation:* voller Player rendert die Track-Liste aus dem Manifest; Tap
+auf Track i setzt `<audio>.src` auf dessen `audio-asset` und startet; ⏮/⏭ am
+Rand disabled; −15/+15 s verschieben nur die Position im selben Track.
+
+### HSP-53 — Ablösung der Telegram-Eltern-Mini-App (HSP-33–40)
+Abschnitt 12 (HSP-33–40, Telegram-Tab-Form, `tma`-Auth, Hash-Deeplink) ist
+**superseded**. Die Bot-Menü-Buttons zeigen künftig auf die **PWA**
+(`setChatMenuButton`, `eltern-chat/config.py`). Die aggregierte Cross-Kind-
+Folgen-Verwaltung (HSP-35) entfällt als Tab — Folgen-Zugriff läuft über den
+Umschalter (HSP-49).
+
+**Eltern-Chat-Skills nachziehen (Multi-App-Cluster, APP-1).** Die Skills, die
+heute die alte Mini-App öffnen/verlinken, werden auf die PWA-Route angepasst —
+Delta an ihren Skill-/Spec-Dateien im selben Paket (Skill-Specs same PR):
+`eltern-chat/skills/hoerspiel_oeffnen.py` + `hoerspiel_oeffnen_task.py` +
+`specs/platform/hoerspiel-oeffnen.md` (Tab-Hash entfällt, kein Tab-Modell mehr);
+`eltern-chat/skills/seiten_uebersicht.py`; ggf.
+`eltern-chat/skills/hoerspiel_folge_erzeugen.py` (Fertig-Link → PWA-URL). Weil
+Eltern-Chat eine **andere App** ist, ist das ein **eigener Track** im F4-Schnitt,
+gebündelt über einen Bundle-Hinweis.
+
+### HSP-54 — Harter Offline-Cache der letzten N Folgen (Audio)
+Der Player legt die **Audio-Tracks der N zuletzt freigegebenen Folgen** je
+aktivem Kind **hart** in Cache Storage ab (Service-Worker, App-Hook PWML-5),
+sodass sie **sofort und offline** abspielbar sind. Sicher, weil die MP3s je
+`album-id` **immutable** sind (HSP-37, `Cache-Control: private, max-age=86400`).
+
+- **Precache-Strategie (hart, nicht lazy):** beim Player-Laden (und bei neuer
+  Folge) werden die Tracks der jüngsten N Folgen des aktiven Kindes vorgeladen —
+  nicht erst beim Antippen. Cover-Assets analog.
+- **Budget/Eviction:** N je Kind (Default **N=3**), LRU-Verdrängung. MP3 96 kbps
+  mono ⇒ wenige MB je Folge.
+- **Switcher-bewusst:** Cache-Namensraum je `<kind_id>`.
+
+**OPEN-HSP-W** — Precache-N-Wert (Default 3) + ob N/Budget Eltern-verstellbar in
+die HSP-Config gehört oder fixe Konstante bleibt (Bau-Entscheidung).
+
+*Test-Implikation:* nach Player-Load sind die Tracks der jüngsten N Folgen in
+Cache Storage (kind-getrennt); Offline-Fetch eines gecachten Tracks liefert 200
+aus dem Cache; die N+1-te Folge ist LRU-verdrängt.
+
+### HSP-55 — Tests
+JS-Unit (JSDOM) + Render-Gate (RAT-24, `hoerspiel/player`-Pilot): Startfläche =
+Regal + Mini-Player (kein Tab-Chrome); Umschalter iteriert die Instanz-Liste und
+wechselt `kind_id`; Zahnrad öffnet Settings-Vollbild; Resume server-seitig
+gelesen/geschrieben; Kapitel-Wahl + Skip (HSP-52); PWA-Manifest
+`display:standalone` + MediaSession (HSP-22); harter Folgen-Cache offline
+abspielbar (HSP-54).
 
 ---
 

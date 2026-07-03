@@ -1,0 +1,135 @@
+/* Basis für alle Hörspiel-Player-Mockups — bindet an echte Design-Tokens
+   (tokens.css) und die Kids-Palette. Handy-Hochkant-Rahmen. */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root { --pw: 390px; }  /* iPhone-Breite als Referenz */
+
+body {
+  background: #d8d2c4;
+  font-family: var(--kids-font-body, 'Patrick Hand', sans-serif);
+  color: var(--kids-ink, #2B2A26);
+  display: flex; flex-direction: column; align-items: center;
+  min-height: 100vh; padding: 20px 12px 40px;
+  -webkit-font-smoothing: antialiased;
+}
+.mock-caption {
+  width: var(--pw); max-width: 100%;
+  font-family: var(--font-sans); font-size: 13px; color: #4a463f;
+  margin-bottom: 10px; line-height: 1.4;
+}
+.mock-caption b { color: #1f1d19; }
+
+/* Handy-Rahmen */
+.phone {
+  width: var(--pw); max-width: 100%;
+  aspect-ratio: 390 / 844; overflow: hidden;
+  background: var(--kids-bg, #FBF2D4);
+  border-radius: 40px; border: 10px solid #16140f;
+  box-shadow: 0 24px 60px rgba(0,0,0,.35);
+  display: flex; flex-direction: column; position: relative;
+}
+.screen { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.scroll { flex: 1; overflow-y: auto; }
+
+/* Statusleiste (Deko) */
+.statusbar {
+  height: 30px; flex: none; display: flex; align-items: center;
+  justify-content: space-between; padding: 0 22px;
+  font-family: var(--font-sans); font-size: 12px; font-weight: 600;
+  color: var(--kids-ink);
+}
+
+/* Kopf: Umschalter-Pille + Zahnrad */
+.topbar {
+  flex: none; display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 14px 10px;
+}
+.pille {
+  display: flex; align-items: center; gap: 9px;
+  background: var(--kids-paper, #fff); border-radius: var(--radius-full, 999px);
+  padding: 5px 14px 5px 5px; box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
+.pille .face {
+  width: 34px; height: 34px; border-radius: 50%;
+  display: grid; place-items: center; color: #fff; font-weight: 700;
+  font-family: var(--font-sans); font-size: 15px;
+  box-shadow: 0 0 0 3px var(--paper,#fff), 0 0 0 5px var(--ring,#E58E3F);
+  background: var(--ring, #E58E3F);
+}
+.pille .who { font-family: var(--font-display, 'Caveat'); font-size: 22px; line-height: 1; }
+.pille .swap { font-family: var(--font-sans); font-size: 11px; color: var(--kids-ink-soft,#6B6356); margin-left: 2px; }
+.gear {
+  width: 42px; height: 42px; border-radius: 50%;
+  background: var(--kids-paper,#fff); box-shadow: 0 2px 8px rgba(0,0,0,.08);
+  display: grid; place-items: center; position: relative; color: #6B6356;
+}
+.gear svg { width: 22px; height: 22px; }
+.gear .lockbadge {
+  position: absolute; right: -2px; bottom: -2px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--kids-ink,#2B2A26); color: #fff;
+  display: grid; place-items: center; border: 2px solid var(--kids-bg,#FBF2D4);
+}
+.gear .lockbadge svg { width: 9px; height: 9px; }
+
+/* Cover + Badges */
+.cover { aspect-ratio: 1; width: 100%; object-fit: cover; background: var(--kids-tint-sky,#CFE6F5); display: block; }
+.badge {
+  font-family: var(--font-sans); font-size: 11px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: var(--radius-full,999px);
+}
+.badge.resume { background: var(--kids-ring-orange,#E58E3F); color: #fff; }
+.badge.cached { background: rgba(95,169,113,.16); color: #3d7350; }
+.badge.cached svg { width: 12px; height: 12px; }
+
+/* Controls */
+.controls { display: flex; align-items: center; justify-content: center; gap: 18px; }
+.ctl {
+  border: none; background: var(--kids-paper,#fff); color: var(--kids-ink,#2B2A26);
+  border-radius: 50%; display: grid; place-items: center; box-shadow: 0 3px 10px rgba(0,0,0,.12);
+}
+.ctl.sm { width: 58px; height: 58px; } .ctl.sm svg { width: 30px; height: 30px; }
+.ctl.play { width: 84px; height: 84px; background: var(--kids-ring-green,#5FA971); color:#fff; }
+.ctl.play svg { width: 44px; height: 44px; }
+.ctl.play.weiter { background: var(--kids-ring-orange,#E58E3F); }
+.progress { height: 7px; border-radius: 999px; background: rgba(0,0,0,.10); overflow: hidden; }
+.progress > i { display: block; height: 100%; background: var(--kids-ring-green,#5FA971); border-radius: 999px; }
+
+.tag-caveat { font-family: var(--font-display,'Caveat'); }
+.hidden { display: none; }
+a { text-decoration: none; color: inherit; }
+
+/* Screen-Kopf mit Zurück-Pfeil (voller Player / Settings) */
+.schead { flex:none; display:flex; align-items:center; gap:12px; padding:8px 14px 8px; }
+.schead .back { width:42px; height:42px; border-radius:50%; background:var(--kids-paper,#fff); box-shadow:0 2px 8px rgba(0,0,0,.08); display:grid; place-items:center; font-size:22px; color:var(--kids-ink,#2B2A26); flex:none; }
+.schead .htitle { font-family:var(--font-display,'Caveat'); font-size:26px; line-height:1; }
+.schead .hsub { font-family:var(--font-sans); font-size:12px; color:var(--kids-ink-soft,#6B6356); }
+
+/* Voller Player: Kapitel-Liste (HSP-51) */
+.chapters { padding: 4px 16px 24px; }
+.chapters h4 { font-family:var(--font-sans); font-size:12px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--kids-ink-soft,#6B6356); margin: 6px 4px 8px; }
+.chrow { display:flex; align-items:center; gap:12px; background:var(--kids-paper,#fff); border-radius:16px; padding:12px 14px; margin-bottom:9px; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+.chrow.active { box-shadow:0 0 0 2px var(--kids-ring-green,#5FA971); }
+.chrow .cidx { width:30px; height:30px; border-radius:9px; flex:none; display:grid; place-items:center; font-family:var(--font-sans); font-weight:700; font-size:14px; background:var(--surface-2,#F0EBE0); color:var(--kids-ink,#2B2A26); }
+.chrow.active .cidx { background:var(--kids-ring-green,#5FA971); color:#fff; }
+.chrow .cname { flex:1; font-family:var(--font-display,'Caveat'); font-size:22px; line-height:1; }
+.chrow .cdur { font-family:var(--font-sans); font-size:12px; color:var(--kids-ink-soft,#6B6356); }
+.chrow .cplay { color:var(--kids-ring-green,#5FA971); } .chrow .cplay svg { width:22px; height:22px; }
+
+/* Skip-Reihe */
+.skiprow { display:flex; align-items:center; justify-content:center; gap:10px; margin-top:8px; }
+.skipbtn { font-family:var(--font-sans); font-size:13px; font-weight:600; color:var(--kids-ink,#2B2A26); background:var(--kids-paper,#fff); border:none; border-radius:999px; padding:9px 14px; box-shadow:0 2px 8px rgba(0,0,0,.08); }
+
+/* Settings */
+.setlist { padding: 6px 16px 30px; }
+.setcard { background:var(--kids-paper,#fff); border-radius:18px; padding:14px 16px; margin-bottom:12px; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+.setcard .lab { font-family:var(--font-sans); font-size:14px; font-weight:600; color:var(--kids-ink,#2B2A26); display:flex; justify-content:space-between; align-items:baseline; }
+.setcard .lab .val { color:var(--kids-ink-soft,#6B6356); font-weight:500; }
+.setcard input[type=range]{ width:100%; margin-top:12px; accent-color:var(--kids-ring-green,#5FA971); }
+.twochip { display:flex; gap:10px; margin-top:12px; }
+.twochip .chip { flex:1; text-align:center; font-family:var(--font-sans); font-size:14px; font-weight:600; padding:11px; border-radius:14px; background:var(--surface-2,#F0EBE0); color:var(--kids-ink,#2B2A26); }
+.twochip .chip.on { background:var(--kids-ring-green,#5FA971); color:#fff; }
+.setcard select{ width:100%; margin-top:10px; font-family:var(--font-sans); font-size:14px; padding:11px; border-radius:12px; border:1px solid var(--surface-2,#F0EBE0); background:var(--surface-soft,#FAF7F2); color:var(--kids-ink,#2B2A26); }
+.hint { font-family:var(--font-sans); font-size:12px; color:var(--kids-ink-soft,#6B6356); padding: 2px 20px 12px; line-height:1.4; }
+.savebar { flex:none; padding:12px 16px calc(12px + env(safe-area-inset-bottom)); background:linear-gradient(transparent, var(--kids-bg,#FBF2D4) 30%); }
+.savebtn { width:100%; border:none; background:var(--kids-ring-green,#5FA971); color:#fff; font-family:var(--font-sans); font-weight:700; font-size:16px; padding:15px; border-radius:18px; }

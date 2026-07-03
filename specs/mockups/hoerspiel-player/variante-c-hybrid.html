@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hörspiel-Player · Variante C — Hybrid</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Patrick+Hand&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./assets/tokens.css">
+<link rel="stylesheet" href="./assets/base.css">
+<style>
+  .herocard {
+    margin: 4px 16px 0; background: var(--kids-paper,#fff);
+    border-radius: var(--radius-2xl,28px); box-shadow: 0 8px 24px rgba(0,0,0,.12);
+    padding: 12px; display:flex; gap:14px; align-items:center;
+    border: 2px solid var(--kids-ring-orange,#E58E3F);
+  }
+  .herocard img { width:96px; height:96px; border-radius:18px; object-fit:cover; flex:none; }
+  .herocard .info { flex:1; min-width:0; }
+  .herocard .kick { font-family:var(--font-sans); font-size:11px; font-weight:700; letter-spacing:.04em; color:var(--kids-ring-orange,#E58E3F); text-transform:uppercase; }
+  .herocard .tt { font-family:var(--font-display,'Caveat'); font-size:26px; line-height:1.02; margin:2px 0 4px; max-height:2.1em; overflow:hidden; }
+  .herocard .mt { font-family:var(--font-sans); font-size:12px; color:var(--kids-ink-soft,#6B6356); }
+  .herocard .go { margin-top:8px; display:inline-flex; align-items:center; gap:8px; background:var(--kids-ring-orange,#E58E3F); color:#fff; font-family:var(--font-sans); font-weight:600; font-size:14px; padding:8px 16px; border-radius:999px; border:none; }
+  .herocard .go svg { width:18px; height:18px; }
+  .sectionlabel { font-family:var(--font-display,'Caveat'); font-size:24px; padding: 16px 18px 2px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; padding: 4px 16px 24px; }
+  .tile .cw { position:relative; border-radius: var(--radius-lg,20px); overflow:hidden; box-shadow: 0 4px 14px rgba(0,0,0,.10); }
+  .tile .cw .b { position:absolute; }
+  .tile .cw .b.cached { bottom:8px; left:8px; background: rgba(255,255,255,.92); }
+  .tile .num { position:absolute; top:8px; left:8px; background:rgba(0,0,0,.55); color:#fff; font-family:var(--font-sans); font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; }
+  .tile .t { font-family: var(--font-display,'Caveat'); font-size: 20px; line-height:1.05; margin-top:6px; max-height:2.2em; overflow:hidden; }
+</style>
+</head>
+<body>
+<div class="mock-caption"><b>Variante C — „Weiter-Hero + Raster".</b> Oben immer groß „das hörst du gerade / weiter hören", darunter das ganze Regal zum Selber-Aussuchen. Kompromiss aus A und B. <i>Live-Daten + echtes Cover/Tokens; Foto = Initialen-Stand-in.</i></div>
+<div class="phone">
+  <div class="screen">
+    <div class="statusbar"><span>9:41</span><span>◍ ▮▮▮</span></div>
+    <div class="topbar">
+      <div class="pille" id="pille" role="button" title="Kind wechseln">
+        <span class="face" id="face">P</span>
+        <span class="who tag-caveat" id="who">Mia</span>
+        <span class="swap">↔ wechseln</span>
+      </div>
+      <div class="gear" title="Einstellungen (für Eltern)">
+        <span id="i-gear"></span><span class="lockbadge"><span id="i-lock"></span></span>
+      </div>
+    </div>
+    <div class="scroll">
+      <div class="herocard">
+        <img id="heroCover" src="" alt="">
+        <div class="info">
+          <div class="kick">Weiter hören</div>
+          <div class="tt" id="heroTitle">…</div>
+          <div class="mt" id="heroMeta">Track 2/6 · offline gespeichert</div>
+          <button class="go"><span class="i-play"></span> Weiter ab Track 2</button>
+        </div>
+      </div>
+      <div class="sectionlabel" id="secLabel">Alle Folgen von Mia</div>
+      <div class="grid" id="grid"></div>
+    </div>
+  </div>
+</div>
+<script src="./assets/data.js"></script>
+<script>
+function ico(){
+  document.getElementById('i-gear').innerHTML=HSP.ICONS.gear;
+  document.getElementById('i-lock').innerHTML=HSP.ICONS.lock;
+  document.querySelectorAll('.i-play').forEach(e=>e.innerHTML=HSP.ICONS.play);
+}
+function render(){
+  const k=HSP.current(), info=HSP.kinder()[k], al=HSP.alben();
+  document.getElementById('face').textContent=info.initiale;
+  document.getElementById('face').style.setProperty('--ring',info.ring);
+  document.getElementById('who').textContent=info.name;
+  document.getElementById('secLabel').textContent='Alle Folgen von '+info.name;
+  const cur=al[0];
+  document.getElementById('heroCover').src=cur.cover;
+  document.getElementById('heroTitle').textContent=cur.titel;
+  const grid=document.getElementById('grid'); grid.innerHTML='';
+  al.forEach((a,i)=>{
+    if(i===0) return; // Hero zeigt die jüngste
+    const t=document.createElement('div'); t.className='tile';
+    t.innerHTML='<div class="cw"><img class="cover" src="'+a.cover+'">'
+      +'<span class="num">Folge '+a.nummer+'</span>'
+      +(a.cached?'<span class="b badge cached">'+HSP.ICONS.dl+'</span>':'')
+      +'</div><div class="t">'+a.titel+'</div>';
+    grid.appendChild(t);
+  });
+}
+document.getElementById('pille').addEventListener('click',()=>{HSP.setKind(HSP.current()==='mia'?'finn':'mia');render();});
+HSP.load().then(()=>{ico();render();});
+</script>
+</body>
+</html>

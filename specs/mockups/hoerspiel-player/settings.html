@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hörspiel-Player · Einstellungen</title>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Patrick+Hand&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./assets/tokens.css">
+<link rel="stylesheet" href="./assets/base.css">
+</head>
+<body>
+<div class="mock-caption"><b>Einstellungen (hinter dem Zahnrad).</b> Eigener Vollbild-Screen mit Zurück-Pfeil (HSP-46). Die HSP-34-Regler, mit <b>echten Config-Werten</b> von Mia. Kein Sperrgriff in V1. <i>Mistral ist ausgegraut (kein Key gesetzt) — provider_verfuegbar = nur claude.</i></div>
+<div class="phone">
+  <div class="screen">
+    <div class="statusbar"><span>9:41</span><span>◍ ▮▮▮</span></div>
+    <div class="schead">
+      <a class="back" href="./variante-b-regal.html">‹</a>
+      <div><div class="htitle">Einstellungen</div><div class="hsub">Mia · für Eltern</div></div>
+    </div>
+    <div class="scroll">
+      <div class="setlist">
+        <div class="setcard">
+          <div class="lab">Playback-Tempo <span class="val">1.0×</span></div>
+          <input type="range" min="0.7" max="1.3" step="0.05" value="1.0">
+        </div>
+        <div class="setcard">
+          <div class="lab">Pause nach Absatz <span class="val">0.55 s</span></div>
+          <input type="range" min="0" max="2" step="0.05" value="0.55">
+        </div>
+        <div class="setcard">
+          <div class="lab">Pause nach Titel <span class="val">1.8 s</span></div>
+          <input type="range" min="0.5" max="3" step="0.1" value="1.8">
+        </div>
+        <div class="setcard">
+          <div class="lab">Stimme</div>
+          <div class="twochip"><div class="chip">Shimmer</div><div class="chip on">Onyx</div></div>
+        </div>
+        <div class="setcard">
+          <div class="lab">Vorlese-KI <span class="val">Anbieter + Modell</span></div>
+          <select><option>Claude</option><option disabled>Mistral (kein Schlüssel)</option></select>
+          <select><option>Opus 4.7 (kreativ, langsamer, teurer)</option><option>Sonnet 4.6 (ausgewogen)</option><option>Haiku 4.5 (schnell, günstig)</option></select>
+        </div>
+        <div class="setcard">
+          <div class="lab">Audio-Ausgabe <span class="val">gilt für Mia + Finn</span></div>
+          <div class="twochip"><div class="chip">Display</div><div class="chip on">Panel</div></div>
+        </div>
+      </div>
+      <div class="hint">Pausen, Stimme und Anbieter+Modell wirken bei der <b>nächsten Folge</b>. Playback-Tempo und Audio-Ausgabe wirken <b>sofort</b>.</div>
+    </div>
+    <div class="savebar"><button class="savebtn">Speichern</button></div>
+  </div>
+</div>
+</body>
+</html>
