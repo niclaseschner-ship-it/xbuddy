@@ -3,7 +3,7 @@
 > Wegweiser, kein Normativ-Speicher. Alle Norm-Aussagen leben in den
 > zitierten Quellen.
 
-Die Eltern-Chat-Skills (Stand 2026-06-15) werden hier nach **Fähigkeiten**
+Die Eltern-Chat-Skills (Stand 2026-07-03) werden hier nach **Fähigkeiten**
 beschrieben, nicht nach exklusiven Klassen. Wer einen neuen Skill baut
 oder einen bestehenden anfasst, liest sein **Fähigkeits-Profil** in der
 Tabelle ab und folgt der Lese-Reihenfolge der Bauplan-Anker, die zu den
@@ -42,24 +42,30 @@ Sechs Fähigkeits-Achsen pro Skill:
 **Zwei Skills können dasselbe Profil haben** und teilen den Bauplan;
 zwei Profile mit unterschiedlicher Belegung sind unterschiedliche Skills.
 
-## Heutige Skills nach Profil (Stand 2026-06-15)
+## Heutige Skills nach Profil (Stand 2026-07-03)
 
 | Skill | (1) schreibt | (2) Schreib-Pfad | (3) Anstoß | (4) Ressourcen | (5) Inverse | (6) Form | Alt-Klasse |
 |---|---|---|---|---|---|---|---|
-| `seiten_uebersicht` | nein | — | One-Shot | — | — | String | A |
+| `seiten_uebersicht` | nein | — | One-Shot | — | — | Button-Aufsatz | B |
 | `termine_erfragen` | nein | — | One-Shot | — | — | String | A |
 | `wuensche_zeigen` | nein | — | One-Shot | — | — | String | A |
 | `routine_punkte_lesen` | nein | — | One-Shot | — | — | String | A |
 | `essen_katalog_lesen` | nein | — | One-Shot | — | — | String | A |
-| `ca_verteilung` | nein | — | One-Shot | — | — | Anhang + String | B |
+| `faehigkeiten_zeigen` | nein | — | One-Shot | — | — | String | A |
+| `ca_verteilen` | nein | — | One-Shot | — | — | Anhang + String | B |
 | `einkauf_zeigen` | nein | — | One-Shot | — | — | Button-Aufsatz | B |
 | `routine_anpassen_oeffnen` | nein | — | One-Shot | — | — | Button-Aufsatz | B |
+| `hoerspiel_oeffnen` | nein | — | One-Shot | — | — | Button-Aufsatz | B |
+| `wetter_regeln_oeffnen` | nein | — | One-Shot | — | — | Button-Aufsatz | B |
 | `gericht_anlegen` | ja | zweistufig | One-Shot oder Mehrstufig | 1 | kein | String | C |
 | `plan_aktivitaeten_setzen` | ja | zweistufig | One-Shot oder Mehrstufig | 1 | kein | String | C |
 | `routine_punkte_setzen` | ja | zweistufig | One-Shot oder Mehrstufig | 1 | kein | String | C |
 | `routine_zeiten_setzen` | ja | zweistufig | One-Shot | 1 | kein | String | C |
 | `hoerspiel_folge_erzeugen` | ja | zweistufig | One-Shot | 1 | kein | String | C |
 | `essen_foto_setzen` | ja | zweistufig | One-Shot | 1 | kein | String | C |
+| `gericht_loeschen` | ja | zweistufig (Drei-Phasen-Klausel) | Mehrstufig (3 Phasen: liste → auswaehlen → loeschen) | N | DELETE da | String | C |
+| `kibuddy_aufnahme_quelle_setzen` | ja | zweistufig | One-Shot | 1 | kein | String | C |
+| `kibuddy_prompt_anpassen` | ja | zweistufig | One-Shot oder Mehrstufig (sokratischer Dialog, KPA-4) | 1 | kein | String | C |
 | `foto_senden` | ja | **sofort (A2)** | One-Shot | 1 | DELETE da | String | D |
 | `einkauf_hinzufuegen` | ja | **sofort (A2)** | One-Shot | N | DELETE da | String | D |
 | `termin_eintragen` | ja | **sofort (A2)** oder **zweistufig** je Anstoß | **gemischt**: One-Shot oder Mehrstufig | 1 | **kein** (Plan-Buddy hat keinen DELETE — `specs/platform/termin-eintragen.md:44-47`) | String | D + E |
@@ -162,9 +168,9 @@ deren Modul man die Cluster-Bauformen am klarsten gebaut sieht.
 
 | Cluster | Bestehende Skills (Module unter `eltern-chat/skills/`) |
 |---|---|
-| **A** Pure-Read | `seiten_uebersicht`, `termine_erfragen`, `wuensche_zeigen`, `routine_punkte_lesen`, `essen_katalog_lesen` |
-| **B** Read + Aufsatz | `ca_verteilung` (Datei-Anhang), `einkauf_zeigen` (Button-Aufsatz, TASK-10c Form-b), `routine_anpassen_oeffnen` (Türöffner-Skill, TASK-10c Form-b) |
-| **C** zweistufig-Confirm | `routine_punkte_setzen`, `gericht_anlegen`, `plan_aktivitaeten_setzen`, `routine_zeiten_setzen`, `hoerspiel_folge_erzeugen`, `essen_foto_setzen` |
+| **A** Pure-Read | `faehigkeiten_zeigen`, `termine_erfragen`, `wuensche_zeigen`, `routine_punkte_lesen`, `essen_katalog_lesen` |
+| **B** Read + Aufsatz | `ca_verteilen` (Datei-Anhang), `einkauf_zeigen` (Button-Aufsatz, TASK-10c Form-b), `routine_anpassen_oeffnen` (Türöffner-Skill, TASK-10c Form-b), `seiten_uebersicht` (Button-Aufsatz, TASK-10c Form-b), `hoerspiel_oeffnen` (Button-Aufsatz, TASK-10c Form-b), `wetter_regeln_oeffnen` (Button-Aufsatz, TASK-10c Form-b) |
+| **C** zweistufig-Confirm | `routine_punkte_setzen`, `gericht_anlegen`, `plan_aktivitaeten_setzen`, `routine_zeiten_setzen`, `hoerspiel_folge_erzeugen`, `essen_foto_setzen`, `gericht_loeschen`, `kibuddy_aufnahme_quelle_setzen`, `kibuddy_prompt_anpassen` |
 | **D** A2-Sofort-Write | `foto_senden` (Single-Item), `einkauf_hinzufuegen` (Multi-Item — Receipt mit N Zeilen) |
 | **C+E** zweistufig + Auth-Identität | `panel_anlegen` (Confirm + Worker-Identität) |
 | **E** Auth-Loop (Worker) | `familie_anlegen`, `geraet_anlegen`, `kalender_verbinden`, `anbieter_wechseln` |
