@@ -55,6 +55,18 @@ Hier sammelst und bereitest du vor — du darfst alles Read-only + Subagenten:
    **Verwaiste `in-werft`-Labels** (Werft-Lauf > 24h ohne F5-Stempel) bekommen
    zusätzlich Warn-Marker `⚠️` und werden Nic im Koord-Block vorgelegt — prep
    schließt das NICHT selbst (das ist Werft-F1-Cleanup-Job).
+
+   **Epic-Herzschlag (Feature-Epics):** Zusätzlich zu den `status:spec`-Kandidaten
+   sammelst du die offenen Initiativen:
+   `gh issue list --repo emilsonntag-ship-it/xbuddy --label epic --state open --json number,title,labels,body`.
+   Pro offenem Epic rendere eine **Herzschlag-Karte** für den Nic-Block, die genau
+   ein Verdikt **treiben/halten/töten** erzwingt (bei `needs-triage`: nur die
+   Klassifikations-Frage Prozess/Code). Regeln, Karten-Form und die
+   Verdikt-Aktionen (treiben → Kind-Ticket `status:spec` + `Part of #<epic>`;
+   halten nur mit datiertem Re-Visit-Trigger; töten → schließen) stehen
+   **vollständig in `conventions/epics.md` → „Der Herzschlag"** — hier NICHT
+   duplizieren. Epics tragen kein `status:*`, brauchen also **keinen prep-Claim
+   und keinen Watchdog-Dispatch**.
 2. **Pro Kandidat zuerst CLAIMEN, dann `xbuddy-watchdog-prep` dispatchen** (PW-33, 2026-06-09):
    - **Claim setzen** (Lock-Semantik — niemand anders prept dieses Ticket parallel):
      ```bash
