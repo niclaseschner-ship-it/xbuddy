@@ -368,6 +368,52 @@ Spec nennt das, fordert aber keinen Code dafür.
 
 *Tickets:* #58
 
+### PANEL-14 — Cache-Buster für App-Panel-Assets (build_id über den Router-Seam)
+Änderungen an den App-Panel-Assets (`app.js`, `style.css`, `sw.js` u. a.)
+müssen am Familien-Tablet **ohne manuellen Hard-Reload** sichtbar werden.
+Ohne Cache-Buster hält der Telegram-/Kiosk-Browser alte Versionen und
+Eltern sehen Iterationen nicht (Folge #1219). Das Panel folgt derselben
+`build_id`-Linie wie die Mini-Apps (Präzedenz ESSEN-35 in
+[`../buddies/essen.md`](../buddies/essen.md); SHELL-PWA-Cache-Versionierung
+in [`heim-shell.md`](heim-shell.md)).
+
+**`build_id`-Bildung (Runtime-Asset-Satz, kein Einzelpfad).** Der Router
+bildet einen `build_id` aus den **mtimes des vollständigen cache-relevanten
+Runtime-Satzes**, nicht nur aus `style.css`+`app.js`. Der Satz umfasst:
+`app.js`, `style.css`, `sw.js`, `manifest.json`, `silent.mp3`,
+`/controller/_shared/config.js`, `/display/_shared/design/tokens.css`.
+Begründung des vollen Satzes: `config.js` und `tokens.css` werden von
+`index.html` referenziert und vom Service-Worker precacht (E-PANEL-6,
+`sw.js` STATIC_ASSETS) — bei Ableitung nur aus CSS/JS ändert sich ein
+Token- oder Config-Asset, der `build_id` bleibt gleich und ein Stale-Asset
+überlebt.
+
+**HTML-Injektion über den bestehenden Seam.** Die Asset-URLs in `index.html`
+tragen ein `?v=<build_id>` an **allen** cache-relevanten URLs. Die Injektion
+läuft über den bereits vorhandenen Render-Seam `render_app_panel_index`
+(PANEL-2; ersetzt dort schon `__PANEL_ID__`) — es entsteht **keine** zweite
+Templating-Schicht.
+
+**`sw.js`-Auslieferung mit Substitution + no-cache-Header.** Der Cache-Name
+des Service-Workers wird **nicht mehr manuell gebumpt** (heute die
+`CACHE_NAME`-Konstante in `sw.js`), sondern der Router liefert `sw.js` mit
+einer `__BUILD_ID__`-Substitution aus. Die Auslieferung erfolgt als
+Custom-Response mit `Cache-Control: no-cache, no-store, must-revalidate`
+und `Content-Type: application/javascript; charset=utf-8` (analog den
+ratifizierten PWA-Pfaden des seiten-Service). Ohne den no-cache-Header
+hält der Browser die alte `sw.js`, es entsteht kein neuer Worker und der
+neue Cache-Name greift nicht — die `?v=`-Injektion am HTML allein
+invalidiert nur den HTTP-Cache, nicht den SW-Precache; **beide Schichten
+sind nötig**.
+
+Kein Convention-Hochzug: das App-Panel ist heute der **einzige**
+Controller-Typ mit diesem `mtime→build_id→sw.js`-Bedarf (n=1,
+CLAUDE.md §6, `conventions/README.md`). Sobald ein zweiter Controller-Typ
+(z. B. Figuren-Erkennung) denselben Mechanismus braucht, gehört das Muster
+nach `conventions/pwa.md` — nicht vorher.
+
+*Tickets:* #1226
+
 ## 6. Aktive-Kachel-Markierung
 
 ### PANEL-11 — Aktive Kachel im Panel-UI optisch markieren
@@ -575,6 +621,15 @@ Mindest-Abdeckung:
   `play()` im Test (gemockter Autoplay-Block), bleibt die Seite
   funktionsfähig — der Test prüft, dass kein User-sichtbarer Crash
   entsteht (Robustheits-Pflicht analog PANEL-10-Wake-Lock-Fehler).
+- PANEL-14 — Der Router rendert `index.html` mit `?v=<build_id>` an allen
+  Runtime-Asset-URLs; im ausgelieferten HTML bleibt **kein** `__BUILD_ID__`-
+  Token (Anker 1). Die ausgelieferte `sw.js` trägt einen `build_id`-
+  abhängigen Cache-Namen und **kein** `__BUILD_ID__`-Token (Anker 2). Die
+  `sw.js`-Antwort trägt den Header `Cache-Control: no-cache, no-store,
+  must-revalidate` (Anker 3). Ein mtime-Wechsel an einem Asset des
+  Runtime-Satzes (`/controller/_shared/config.js` **oder**
+  `/display/_shared/design/tokens.css`) ändert den `build_id` und damit
+  sowohl die `?v=`-Werte im HTML als auch den `sw.js`-Cache-Namen (Anker 4).
 
 *Tickets:* #58, #375
 
