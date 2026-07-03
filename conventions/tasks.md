@@ -437,6 +437,33 @@ gleiche Sub-ID-Form, gleicher Helper-Modul-Ort
 n=3-Trigger aus RAT-7, Welle-3 Eltern-Chat-Vereinheitlichung
 2026-06-15)
 
+### TASK-11 — Optionale `anzeige_copy`: eltern-taugliche Anzeige-Copy einer Aufgabe
+
+Eine Katalog-Aufgabe **darf** ein optionales Klassenattribut
+`anzeige_copy` (`str`) deklarieren — analog `is_async`, `auto_confirm`,
+`post_execute_hooks` (`tasks.py`) — mit einer kurzen, eltern-tauglichen
+Ein-Satz-Beschreibung der Fähigkeit. Default: nicht gesetzt. Das Attribut
+gehört auf die `Task`-Basis, damit auch lesende Aufgaben (`ReadTask`) es
+tragen können.
+
+**Bedeutung — eine Heimat.** Was das Feld ist (Anzeige-only, kein Trigger,
+keine Berechtigungs-/Sichtbarkeits-Semantik, Fallback auf `description`,
+heutige Leser), regelt `specs/platform/eltern-chat.md` EC-42. Diese
+Konvention nennt **nur** den Deklarations-Ort — sie wiederholt die Bedeutung
+nicht, um zwei gepflegte Heimaten desselben zu vermeiden.
+
+**Wann setzen.** Wer eine Aufgabe baut, deren Fähigkeit in der Selbstauskunft
+(`faehigkeiten_zeigen`, EC-43) oder im Onboarding-Teaser (#1104) sauber
+klingen soll, setzt `anzeige_copy`; sonst greift der `description`-Fallback
+(Router-Jargon, für Eltern ungeeignet).
+
+**Kein Vorrat.** Zwei Leser (faehigkeiten_zeigen, Onboarding) rechtfertigen
+das Feld heute. Eine committete Manifest-Registry, ein Drift-Test oder eine
+Capability-Karten-Generierung sind **nicht** Teil dieser Regel
+(capability-cluster-ENTSCHEID Landung 3, NOCH NICHT).
+
+*Tickets:* #1102, #1104
+
 ---
 
 **Hinweis (historisch, jetzt GEBAUT):** Das Privatchat-Session-Routing in
