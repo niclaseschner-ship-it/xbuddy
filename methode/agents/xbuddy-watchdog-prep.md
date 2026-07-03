@@ -91,7 +91,14 @@ Nic-Wahl wäre Vorgriff vor Ratifizierungs-Sequenz `decisions/README.md:34-39`.)
   Entscheidung. Skill darf den Spec-PR autonom mergen.
 - **`wahl`** — Issue-Body trägt A/B-Optionen oder „Variante X vs. Y"; OPEN-*-Spec
   ohne entscheidbaren Pfad; RAT-Konflikt-Verdacht (Ledger=`re-litigiert-RAT-N`
-  hat das schon); `eine_frage_an_nic` mit Architektur-Charakter (nicht
+  hat das schon); **offene ANWENDUNGS-Wahl gegen eine ratifizierte Konvention/RAT
+  (PW-82-RATIFIZIERT 2026-07-03, ENTSCHEID `20260703-232716-RATIFIZIERT-membran-
+  gate-am-akt.md` → „Fix A")** — der Body lässt eine Wahl offen, die eine RAT
+  *berührt/anwendet*, ohne ihr zu *widersprechen* (z. B. `get_multimodal(slot)`
+  vs. `get_singleshot`-Faltung an RAT-20/LLMP-2, #1262; Option-A-Handverdrahtung
+  vs. Instanz-Register an HSP-28a, #1263). Dieser Trigger ist von der LEDGER-Achse
+  ENTKOPPELT: LEDGER=`re-litigiert` feuert nur bei *Widerspruch* zu einer RAT und
+  fängt die offene *Anwendungs*-Wahl NICHT — deshalb hier eigenständig; `eine_frage_an_nic` mit Architektur-Charakter (nicht
   Wortlaut/Mechanik-Detail); neuer Buddy/Schnittstelle; Privacy- oder Familien-
   Setup-Frage; **EIGENTUM/Daten-Heimat** (PW-53-RATIFIZIERT 2026-06-15,
   ENTSCHEID-File Paket-Sektion „PW-53-A → Trigger-Bullet") — fremde App soll
@@ -116,6 +123,35 @@ zweiten Vorkommen (Beleg: ESSEN-22 V1.1 mit `in_library:bool` als n=1-Lock).
 
 **Default bei Unsicherheit: `wahl`** (RAT-11-Disziplin „im Zweifel nie Richtung
 `spec-gemergt` raten" 1:1 hier angewandt).
+
+**1c — BODY-ENTSCHEIDUNGS-FILTER** (PW-82-RATIFIZIERT 2026-07-03, ENTSCHEID
+`20260703-232716-RATIFIZIERT-membran-gate-am-akt.md` → „Fix A"). Bisher prüfte das
+Reife-Urteil die **Spec-Datei** (`check_spec_binding`) — NIE den Ticket-**BODY** auf
+eine mandatierte-aber-offene Entscheidung. #1262/#1263 fielen deshalb als
+`nachzeichnen`→`ready` durch, obwohl der Body eine offene Anwendungs-Wahl trug.
+- **Mechanischer Negativ-Filter (RAT-11-konform — gatet INS Urteil, entscheidet
+  NICHT):** Scanne den Issue-Body auf Vorwärts-Entscheidungs-Marker (`/berater-runde`,
+  `spec-mandatiert`, „Architektur-Frage/-Entscheidung/-Wahl", „Option A … vs …",
+  „RAT-N … Delta/Anwendung/offen"). **Ist ein Marker present, ist Auto-`nachzeichnen`
+  verboten** — du MUSST ein explizites `body_decision`-Urteil abgeben.
+- **`body_decision: offen`** — die referenzierte Entscheidung ist noch offen ⟹
+  `architecture_class: wahl`, Verdikt nicht `ready` (der Body-Trigger ist eine „echte
+  Entscheidung offen" i.S. der Verdikt-Priorität unten).
+- **`body_decision: geloest`** — die Frage ist nachweislich geschlossen (gemergter
+  Beschluss/PR/ENTSCHEID); `body_decision_evidence` zitiert den Beleg (Datei:Zeile/
+  Comment-URL). `nachzeichnen` dann erlaubt, aber auditierbar.
+- **`body_decision: kein-marker`** — kein Marker im Body (Normalfall).
+- **HARTE Klausel (Codex-RISKANT gefaltet): Marker-ABWESENHEIT ist KEIN Beweis für
+  `geloest`.** Der Filter ist ein **Boden**, keine **Decke**: du liest den Body
+  weiterhin semantisch, und eine offene Entscheidung OHNE Schlüsselwort bleibt
+  `wahl` über den Default-bei-Unsicherheit. `kein-marker` heißt nur „Filter nicht
+  ausgelöst", nicht „Entscheidung geklärt".
+- **Scope-Guard:** Dieser Filter erzwingt nur **Klassifikations-Ehrlichkeit**
+  (offen/geloest), KEINE Architektur-*Qualitäts*-Prüfung — die vier Achsen bleiben
+  Ticket-Reife, nicht Architektur-Bewertung.
+- **Mechanische Rückversicherung:** `status_rollback_guard.py` (PW-82) blockt den
+  `status:ready`-Stempel, wenn der Body einen Marker trägt und das prep_verdict
+  nicht `body_decision: geloest` führt — dein Urteil ist der Boden, der Hook der Zaun.
 
 **1b-WERFT-EICHUNG** (PW-43 RATIFIZIERT 2026-06-21, ENTSCHEID-File
 `2026-06-21-1600-RATIFIZIERT-werft-stempel-mechanik.md` Reparatur 2):
@@ -244,6 +280,11 @@ axes:
   blocked_evidence: "<Blocker (z. B. #296) lt. Label `blocked`, wenn ja | null | migrated_legacy_no_evidence>"
   ledger: neu | setzt-RAT-N-um | re-litigiert-RAT-N
   ledger_evidence: "<RAT-N + Beschluss-Zitat, wenn Treffer | null | migrated_legacy_no_evidence>"
+  # PW-82-RATIFIZIERT 2026-07-03: Body-Entscheidungs-Filter (Achse 1c). Geht unter
+  # axes: automatisch in compute_verdict_hash. body_decision=offen ⟹ architecture_class
+  # muss wahl sein (Verdikt nicht ready). Marker-Abwesenheit ist KEIN Beweis fuer geloest.
+  body_decision: offen | geloest | kein-marker
+  body_decision_evidence: "<bei geloest: gemergter Beschluss/PR/ENTSCHEID (Datei:Zeile/URL), der die Frage schloss; bei offen: welcher Marker + worum die Wahl geht; null bei kein-marker>"
   # Vom Skill nach Spec-PR-Merge ergaenzt (PW-26 Komponente E, fuer rollback-koord-Probe).
   spec_merge_sha: null
   # Vom Skill beim Stempel-Moment ergaenzt; verdict_repo_sha bleibt IMMUTABLE.
