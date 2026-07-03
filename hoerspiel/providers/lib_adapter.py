@@ -10,9 +10,6 @@ durch. Das anbieter-spezifische JSON lebt damit zentral in `tools/llm/_vendor/`
 Der Synopse-Pfad (`complete`, Freitext, HSP-16) läuft seit #1131 EBENFALLS über
 `tools.llm` — die vierte Sicht `get_completion` (Freitext-Singleshot,
 `.complete(system, user) -> str`, Required-Set nur `system_message_distinct`).
-Der `alt_provider`-Parameter bleibt rückwärtskompatibel im Konstruktor (der
-Caller `main.py:_build_llm` reicht ihn weiter), wird im `complete`-Pfad aber
-nicht mehr benutzt.
 
 Signatur-Drift (struktur): der hoerspiel-Vertrag heißt `complete_structured(system,
 user, *, tool_name, tool_description, input_schema)`, die Lib-Fassade
@@ -41,14 +38,12 @@ class LibSingleshotAdapter(LLMProvider):
 
     `slot` ist der Zugangsdaten-Slot (`hoerspiel-anthropic-api-key` /
     `hoerspiel-mistral-api-key`); `model` das konfigurierte Modell (leer →
-    Vendor-Default). `alt_provider` ist rückwärtskompatibel im Konstruktor (der
-    Caller `main.py` reicht ihn weiter) — seit #1131 nutzt der `complete`-Pfad
-    ihn NICHT mehr, sondern die Lib-Completion-Sicht.
+    Vendor-Default).
     """
 
     name = "lib-singleshot"
 
-    def __init__(self, slot, model="", alt_provider=None, max_tokens=0):
+    def __init__(self, slot, model="", max_tokens=0):
         # Beide Lib-Fassaden EINMAL bauen (Slot + effektives Modell + max_tokens).
         # Ein `LLMCapabilityError` hier ist ein Boot-Konfig-Fehler (fehlender Key,
         # Capability-Mismatch) — er propagiert klar und wird NICHT als
@@ -59,9 +54,6 @@ class LibSingleshotAdapter(LLMProvider):
         # #1131: Freitext-Synopse geht über die vierte Sicht `get_completion`
         # (Required-Set nur `system_message_distinct` → trägt Claude UND Mistral).
         self._completion = get_completion(slot, model, max_tokens=max_tokens)
-        # Rückwärtskompatibel: der Caller (main.py) reicht `alt_provider` weiter;
-        # der `complete`-Pfad benutzt ihn seit #1131 nicht mehr.
-        self._alt_provider = alt_provider
         self._slot = slot
         # Für Diagnose/Tests sichtbar (gleiche Modell-Quelle wie die Fassade).
         self.model = getattr(self._singleshot, "model", "") or model
