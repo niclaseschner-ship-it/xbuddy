@@ -56,13 +56,24 @@ alle vier Sichten — kein Adapter-Code pro Buddy
   Required-Set einen `LLMCapabilityError` beim Boot werfen. Vendoren mit
   Caching (Anthropic) setzen Cache-Marker weiterhin.
 - **`get_singleshot(slot, model="", max_tokens=0)` — Structured Singleshot.** Eine Anfrage, ein
-  Schema-konformer Antwort-Block. Heutiger Use-Case: hoerspiel
-  (Folgen-Beschreibung via JSON-Schema, heute via forced `tool_use`).
+  Schema-konformer Antwort-Block. Heutige Use-Cases: hoerspiel
+  (Folgen-Beschreibung via JSON-Schema, forced `tool_use`) und
+  Foto-Analyse/TAB (Termin-Liste aus einem Bild, forced `tool_use`, #1262).
   `model` ist optional (leer → Vendor-Default); Konsumenten mit eigenem Modell
   reichen es durch (analog `get_agent`). `max_tokens` ist optional (0 → Vendor-Default
   2048/4096); hoerspiel reicht Provider-MAX_TOKENS (8192/4096) durch, damit lange
-  Folgentexte nicht trunkiert werden (T1084). Required Capabilities:
-  `structured_output`, `system_message_distinct` (LLMP-3).
+  Folgentexte nicht trunkiert werden (T1084). Die Sicht-Methode ist
+  `.complete_structured(system, prompt, schema, *, images=None)`: **`images`** ist eine
+  optionale Liste von Bild-Blöcken (`{bytes, media_type}`), die neben dem Text an den
+  Vendor gehen. **`images=None` ist byte-identisch der bisherige Text-Pfad** (hoerspiel
+  unberührt; additiv wie `model`/`max_tokens`, T1084/T1129). Übergibt ein Rufer `images`,
+  prüft die Lib die Vendor-Capability `multimodal_input` (LLMP-3, per-Rufer-Opt-in) und
+  wirft `LLMCapabilityError`, falls der Slot-Vendor Bilder nicht kann. Required
+  Capabilities (Boot-Fail-Minimum): `structured_output`, `system_message_distinct`
+  (LLMP-3) — `multimodal_input` ist **nicht** im Required-Set (sonst würde jeder
+  Text-only-Singleshot-Slot beim Boot fatal). **Keine fünfte Sicht:** Foto-Analyse teilt
+  TABs strukturierten Singleshot-Vertrag (forced `tool_use` → Schema-dict); eine fünfte
+  Sicht käme erst bei eigenem Vertrag (ENTSCHEID-1262 → „KEINE fünfte Sicht").
 - **`get_chat(slot)` — Multi-Turn-Chat.** Konversation mit History und
   System-Prompt, ohne Tool-Use im Kern-Pfad. Heutiger Use-Case: kibuddy
   (Sokratisch-Dialog mit Kind, Multi-Turn-Kontext). Required Capabilities:
@@ -243,6 +254,17 @@ löschen (Zwei-Schritt-Migration analog ZD-Migration ONB-5→ZD,
 (ENTSCHEID-File Sektion „Migration nach Spike-Erfolg"; Verdikt Frage 6 —
 Nic 2026-06-21: „KIBuddy zuerst").
 
+**Skill-lokale Multimodal-Adapter folgen derselben Zwei-Schritt-Disziplin
+(ENTSCHEID-1262 → „Patch B").** Zieht ein eltern-chat-Skill seine eigene
+Vendor-Naht (`eltern-chat/skills/_multimodal/`, TAB, #1262) auf `tools.llm`, gilt die
+additiv-rückrollbare Sequenz wörtlich: **PR 1** stellt den Skill auf
+`get_singleshot(...).complete_structured(..., images=…)` um und markiert
+`skills/_multimodal/` als deprecated (Legacy bleibt lauffähig); **PR 2** löscht
+`skills/_multimodal/` erst **nach** grüner Live-Probe (keine produktive
+`skills._multimodal`-Nutzung, Tests grün, Foto-Telemetrie-Zeile sichtbar). Kein
+Migrieren-und-Löschen im selben PR (CLAUDE.md „deprecate → migrate → separater
+Lösch-PR").
+
 **Re-Order 2026-06-24 (Nic):** Nach KIBuddy (T1) wird **eltern-chat (T4) vor
 hoerspiel (T3) gezogen** — hoerspiel hat gerade andere Probleme und wird
 nachgezogen. Damit ist **eltern-chat der n=2-Beleg** der Vendor-Kern-These
@@ -282,6 +304,10 @@ Jede Anforderung mit Code-Verhalten hat einen automatisierten Test
 
 - **LLMP-S1** — die vier Sichten existieren und liefern sicht-spezifische
   Objekte mit dokumentierten Methoden.
+- **LLMP-S1 (Bild-Content)** — `complete_structured(..., images=[…])` reicht
+  Bild-Blöcke an den Vendor durch; `images=None` erzeugt einen byte-identischen
+  Text-only-Call (hoerspiel-Pfad unverändert). `images=[…]` gegen einen Fake-Vendor
+  ohne `multimodal_input` wirft `LLMCapabilityError` (ENTSCHEID-1262).
 - **LLMP-S3** — Capability-Mismatch beim Boot wirft `LLMCapabilityError`
   (Fake-Vendor mit reduzierter `CAPABILITIES`-Frozenset; jede Sicht
   separat getestet).

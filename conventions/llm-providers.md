@@ -81,6 +81,18 @@ Die sechs ratifizierten Capabilities (V1):
   Slots (hoerspiel Claude+Mistral) ohne Boot-Fail trägt (#1131; `get_chat` wäre
   auf dem Mistral-Slot boot-fatal).
 
+**`multimodal_input` ist per-Rufer-Opt-in — keine Sicht und kein Required-Set-
+Mitglied (ENTSCHEID-1262 → „multimodal_input = Capability, keine Sicht").**
+`get_singleshot` nimmt Bilder über den optionalen `images`-Parameter seiner
+`complete_structured`-Methode (LLMP-S1); die Sicht bleibt dieselbe. Die Lib prüft
+`multimodal_input` **nur, wenn ein Rufer `images` übergibt** — dann gegen das
+Available-Set des Slot-Vendors, mit `LLMCapabilityError` bei Fehlen. Läge
+`multimodal_input` im **Boot-Fail-Minimum** der Sicht (LLMP-S3), würde jeder
+Text-only-Singleshot-Slot ohne Bild-Fähigkeit beim Boot fatal — deshalb bleibt es
+Nutzungs-Zeit-Check. Es kommt **keine** fünfte Sicht dazu: Bild-Input ist eine
+Modalitäts-Capability quer über den Singleshot-Vertrag, kein eigener Vertrag (LLMP-2
+bleibt bei **vier** Sichten; Gate: fünfte Sicht nur bei eigenem Vertrag).
+
 Erweiterung der Capability-Liste ist Spec-Änderung (`specs/platform/llm-providers.md`),
 nicht Convention-Drift.
 
@@ -136,4 +148,13 @@ Slot via ZD-5, lädt `_vendor/anthropic.py`, prüft `CAPABILITIES` gegen das
 `get_agent`-Required-Set (LLMP-3) und liefert die Agent-Sicht — oder
 bricht mit `LLMCapabilityError` ab, falls der Vendor `tool_use` nicht
 unterstützt
+
+Zweites konkretes Beispiel (Multi-Slot pro Vendor, #1262): dieselbe Instanz kann **zwei**
+Anthropic-Slots halten — `eltern-chat-anthropic-api-key` (Chat/Agent) und
+`eltern-chat-anthropic-foto-analyse-api-key` (Foto-Analyse/TAB, Structured-Singleshot mit
+Bild). Der Parser liefert für den zweiten: caller `eltern-chat`, vendor `anthropic`,
+purpose `foto-analyse-api-key` (Suffix `api-key` = Schlüsseltyp nach ZD-2; `foto-analyse`
+= Sub-Purpose-Qualifier). Die Foto-Route ist damit ein **eigener Slot** — Anbieter-Wechsel
+durch Tausch des Vendor-Segments, ohne Code (ENTSCHEID-1262 → „Anbieter-Wechselbarkeit
+via ZD-Slot").
 (ENTSCHEID-File Sektion „Worum es geht" + Bezug ZD-2).

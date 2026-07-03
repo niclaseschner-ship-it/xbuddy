@@ -55,6 +55,7 @@ Purpose-Suffix beschreibt den Schlüsseltyp (`api-key`, `oauth-token`,
 | Konsument | Vendor | Purpose | Slot-Name |
 |---|---|---|---|
 | Eltern-Chat | Anthropic | API-Key | `eltern-chat-anthropic-api-key` |
+| Eltern-Chat | Anthropic | Foto-Analyse-API-Key | `eltern-chat-anthropic-foto-analyse-api-key` |
 | Eltern-Chat | Azure-OpenAI | API-Key | `eltern-chat-azure-openai-api-key` |
 | Eltern-Chat | OpenAI | API-Key | `eltern-chat-openai-api-key` |
 | Eltern-Chat | Mistral | API-Key | `eltern-chat-mistral-api-key` |
