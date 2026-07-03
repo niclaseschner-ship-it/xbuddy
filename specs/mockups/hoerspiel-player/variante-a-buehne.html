@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hörspiel-Player · Variante A — Bühne</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Patrick+Hand&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./assets/tokens.css">
+<link rel="stylesheet" href="./assets/base.css">
+<style>
+  .hero { padding: 4px 18px 0; }
+  .hero .coverwrap { position: relative; border-radius: var(--radius-2xl,28px); overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,.16); }
+  .hero .coverwrap .badge.cached { position: absolute; top: 12px; left: 12px; background: rgba(255,255,255,.92); }
+  .hero .title { font-family: var(--font-display,'Caveat'); font-size: 34px; line-height: 1.05; margin: 14px 2px 2px; }
+  .hero .meta { font-family: var(--font-sans); font-size: 13px; color: var(--kids-ink-soft,#6B6356); margin: 0 2px; }
+  .nowline { display:flex; align-items:center; justify-content:space-between; margin: 14px 2px 6px; }
+  .nowline .tk { font-family: var(--font-sans); font-size: 13px; font-weight:600; color: var(--kids-ink,#2B2A26); }
+  .hero .controls { margin: 18px 0 6px; }
+  .weiterhint { text-align:center; font-family: var(--font-sans); font-size:12px; color: var(--kids-ring-orange,#E58E3F); font-weight:600; margin-top:2px; }
+  .strip { margin-top: 18px; }
+  .strip h3 { font-family: var(--font-display,'Caveat'); font-size: 24px; padding: 0 18px 8px; }
+  .strip .rail { display:flex; gap:12px; overflow-x:auto; padding: 0 18px 18px; scroll-snap-type:x mandatory; }
+  .strip .card { flex:none; width: 116px; scroll-snap-align:start; }
+  .strip .card .cw { position:relative; border-radius: var(--radius-lg,20px); overflow:hidden; box-shadow: 0 4px 12px rgba(0,0,0,.10); }
+  .strip .card.res .cw { box-shadow: 0 0 0 3px var(--kids-ring-orange,#E58E3F); }
+  .strip .card .cw .b { position:absolute; }
+  .strip .card .cw .b.resume { top:7px; right:7px; }
+  .strip .card .cw .b.cached { bottom:7px; left:7px; background: rgba(255,255,255,.92); }
+  .strip .card .t { font-size: 15px; line-height:1.1; margin-top:6px; max-height:2.4em; overflow:hidden; }
+</style>
+</head>
+<body>
+<div class="mock-caption"><b>Variante A — „Bühne".</b> Der Player ist die ganze Startfläche: was zuletzt lief, groß und sofort weiterhörbar. Folgen-Wechsel über die Leiste unten. <i>Live-Daten (Paulas 13 / Nekos 8 Folgen), echtes Cover + Tokens; Kind-Foto = Initialen-Stand-in (FAM-8 real).</i></div>
+<div class="phone">
+  <div class="screen">
+    <div class="statusbar"><span>9:41</span><span>◍ ▮▮▮</span></div>
+    <div class="topbar">
+      <div class="pille" id="pille" role="button" title="Kind wechseln">
+        <span class="face" id="face">P</span>
+        <span class="who tag-caveat" id="who">Paula</span>
+        <span class="swap">↔ wechseln</span>
+      </div>
+      <div class="gear" title="Einstellungen (für Eltern)">
+        <span id="i-gear"></span>
+        <span class="lockbadge"><span id="i-lock"></span></span>
+      </div>
+    </div>
+    <div class="scroll">
+      <div class="hero">
+        <div class="coverwrap">
+          <img class="cover" id="heroCover" alt="">
+          <span class="badge cached"><span id="i-dl"></span> offline</span>
+        </div>
+        <div class="title" id="heroTitle">…</div>
+        <div class="meta" id="heroMeta">…</div>
+        <div class="nowline">
+          <span class="tk" id="heroTrack">Track 2/6 · Inhalt</span>
+          <span class="badge resume">Weiter hören</span>
+        </div>
+        <div class="progress"><i style="width:34%"></i></div>
+        <div class="controls">
+          <button class="ctl sm"><span class="i-prev"></span></button>
+          <button class="ctl play weiter"><span class="i-play"></span></button>
+          <button class="ctl sm"><span class="i-next"></span></button>
+        </div>
+        <div class="weiterhint">↳ weiter ab Track 2 von 6</div>
+      </div>
+      <div class="strip">
+        <h3 id="stripH">Paulas Folgen</h3>
+        <div class="rail" id="rail"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="./assets/data.js"></script>
+<script>
+function ico(){
+  document.getElementById('i-gear').innerHTML=HSP.ICONS.gear;
+  document.getElementById('i-lock').innerHTML=HSP.ICONS.lock;
+  document.getElementById('i-dl').innerHTML=HSP.ICONS.dl;
+  document.querySelectorAll('.i-prev').forEach(e=>e.innerHTML=HSP.ICONS.prev);
+  document.querySelectorAll('.i-play').forEach(e=>e.innerHTML=HSP.ICONS.play);
+  document.querySelectorAll('.i-next').forEach(e=>e.innerHTML=HSP.ICONS.next);
+}
+function render(){
+  const k=HSP.current(), info=HSP.kinder()[k], al=HSP.alben();
+  const pille=document.getElementById('pille');
+  pille.style.setProperty('--ring', info.ring);
+  document.getElementById('face').textContent=info.initiale;
+  document.getElementById('face').style.setProperty('--ring',info.ring);
+  document.getElementById('who').textContent=info.name;
+  document.getElementById('stripH').textContent=info.name+'s Folgen';
+  const cur=al[0];
+  document.getElementById('heroCover').src=cur.cover;
+  document.getElementById('heroTitle').textContent=cur.titel;
+  document.getElementById('heroMeta').textContent='Folge '+cur.nummer+' · Stimme '+cur.voice;
+  const rail=document.getElementById('rail'); rail.innerHTML='';
+  al.forEach(a=>{
+    const c=document.createElement('div'); c.className='card'+(a.resume?' res':'');
+    c.innerHTML='<div class="cw"><img class="cover" src="'+a.cover+'">'
+      +(a.resume?'<span class="b badge resume">Weiter</span>':'')
+      +(a.cached?'<span class="b badge cached">'+HSP.ICONS.dl+'</span>':'')
+      +'</div><div class="t tag-caveat">'+a.titel+'</div>';
+    rail.appendChild(c);
+  });
+}
+document.getElementById('pille').addEventListener('click',()=>{HSP.setKind(HSP.current()==='paula'?'neko':'paula');render();});
+HSP.load().then(()=>{ico();render();});
+</script>
+</body>
+</html>
