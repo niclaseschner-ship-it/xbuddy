@@ -2558,3 +2558,94 @@ def test_panel_bearbeiten_proxy_via_urllib_5xx_returns_502(client_with_panels, m
     monkeypatch.setattr(router_main.urllib.request, 'urlopen', fake_urlopen)
     r = client_with_panels.get('/controller/app-panel/kueche/bearbeiten')
     assert r.status_code == 502
+
+
+# ============================================================
+#  PANEL-14 — Cache-Buster für App-Panel-Assets
+# ============================================================
+
+def test_PANEL_14_build_id_uses_full_asset_satz(monkeypatch):
+    """AC1: build_id ist max(mtime) aller 7 Runtime-Assets, nicht nur
+    app.js/style.css. Eine geänderte tokens.css (Token-/Config-Asset
+    außerhalb des primären JS/CSS-Paars) ändert die build_id.
+
+    Testmuster: Phase 1 tokens.css-mtime am höchsten → build_id = '9999'.
+    Phase 2 alle gleich niedrig → build_id = '1000'. Beide verschieden."""
+    # Phase 1: tokens.css hat die höchste mtime — bestimmt die build_id.
+    monkeypatch.setattr(
+        router_main.os.path, 'getmtime',
+        lambda p: 9999.0 if p.endswith('tokens.css') else 1000.0,
+    )
+    build_id_new_tokens = router_main._app_panel_build_id()
+
+    # Phase 2: alle Assets haben die gleiche (ältere) mtime.
+    monkeypatch.setattr(router_main.os.path, 'getmtime', lambda p: 1000.0)
+    build_id_baseline = router_main._app_panel_build_id()
+
+    assert build_id_new_tokens == '9999', (
+        '_app_panel_build_id() muss tokens.css-mtime einbeziehen')
+    assert build_id_baseline == '1000'
+    assert build_id_new_tokens != build_id_baseline
+
+
+def test_PANEL_14_build_id_oserror_fallback(monkeypatch):
+    """AC1-Robustheit: fehlt ein Asset im Dateisystem (OSError), liefert
+    _app_panel_build_id() den Fallback-Wert '0' statt Exception."""
+    monkeypatch.setattr(
+        router_main.os.path, 'getmtime',
+        lambda p: (_ for _ in ()).throw(OSError('no such file')),
+    )
+    assert router_main._app_panel_build_id() == '0'
+
+
+def test_PANEL_14_index_html_asset_urls_have_cache_buster(client_with_panels):
+    """AC2: GET /controller/app-panel/<id>/ liefert HTML mit ?v=<build_id>
+    an allen cache-relevanten Asset-URLs. Kein nicht-ersetzter Platzhalter
+    __BUILD_ID__ im Output."""
+    r = client_with_panels.get('/controller/app-panel/kueche/')
+    assert r.status_code == 200
+    html = r.data.decode('utf-8')
+    # Alle bekannten Asset-URLs aus PANEL-14 müssen ?v= tragen.
+    for asset_fragment in [
+        'tokens.css?v=',
+        'manifest.json?v=',
+        'style.css?v=',
+        'config.js?v=',
+        'app.js?v=',
+    ]:
+        assert asset_fragment in html, (
+            f'Cache-Buster ?v= fehlt an {asset_fragment!r} in index.html')
+    # Kein nicht-ersetzter Platzhalter im gerenderten Output.
+    assert '__BUILD_ID__' not in html, (
+        '__BUILD_ID__-Platzhalter wurde nicht ersetzt (render_app_panel_index-Seam)')
+
+
+def test_PANEL_14_sw_js_served_with_build_id_substitution_and_no_cache(client_with_panels):
+    """AC3: sw.js wird mit __BUILD_ID__-Substitution ausgeliefert.
+    Cache-Control: no-cache, no-store, must-revalidate.
+    Content-Type: application/javascript; charset=utf-8."""
+    r = client_with_panels.get('/controller/app-panel/kueche/sw.js')
+    assert r.status_code == 200
+    # __BUILD_ID__-Platzhalter darf im ausgelieferten Body nicht literal vorkommen.
+    assert b'__BUILD_ID__' not in r.data, (
+        '__BUILD_ID__-Platzhalter wurde in sw.js nicht durch build_id ersetzt')
+    # CACHE_NAME muss existieren und eine konkrete build_id tragen.
+    assert b'CACHE_NAME' in r.data, 'sw.js-Inhalt fehlt im Response-Body'
+    assert b'app-panel-' in r.data, 'CACHE_NAME-Präfix app-panel- fehlt'
+    # Header.
+    cache_ctrl = r.headers.get('Cache-Control', '')
+    assert 'no-cache' in cache_ctrl, 'Cache-Control: no-cache fehlt'
+    assert 'no-store' in cache_ctrl, 'Cache-Control: no-store fehlt'
+    assert 'must-revalidate' in cache_ctrl, 'Cache-Control: must-revalidate fehlt'
+    assert r.content_type == 'application/javascript; charset=utf-8', (
+        f'Content-Type falsch: {r.content_type!r}')
+
+
+def test_PANEL_14_sw_js_cache_name_contains_numeric_build_id(client_with_panels):
+    """AC3-Sanity: der CACHE_NAME in der ausgelieferten sw.js endet auf eine
+    numerische build_id (Sekunden-Timestamp aus mtime), kein Literal-Platzhalter."""
+    r = client_with_panels.get('/controller/app-panel/kueche/sw.js')
+    body = r.data.decode('utf-8')
+    # CACHE_NAME = 'app-panel-<digits>'
+    assert re.search(r"CACHE_NAME = 'app-panel-\d+'", body), (
+        f'CACHE_NAME hat kein numerisches build_id-Suffix: {body[:200]!r}')
