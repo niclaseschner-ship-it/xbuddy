@@ -950,6 +950,16 @@ _HOERSPIEL_PLAYER_MIME = {
 
 _HOERSPIEL_PLAYER_COMPONENT = "hoerspiel-player"
 
+# HSP-43: autoritative Instanz-Liste der provisionierten Hörspiel-Dienste.
+# Quelle: PORT-2 / conventions/ports.md (paula 5053, neko 5055).
+# Niclas ist NICHT aufgenommen — dessen Service ist nicht provisioniert (#1263, deferred).
+# foto_url: None — tools.familie_client bietet keinen Foto-Zugang (FAM-8, stop_rule kein_familie_client).
+# KEIN generischer Instanz-Register (RAT-17, stop_rule kein_register, #1263).
+_HSP_INSTANZEN = [
+    {"kind_id": "paula", "name": "Paula", "foto_url": None},
+    {"kind_id": "neko",  "name": "Neko",  "foto_url": None},
+]
+
 
 def _hoerspiel_static_dir():
     """Asset-Wurzel des hoerspiel-Buddys (player.{css,js} + Icons, Track B).
@@ -965,6 +975,19 @@ def _hoerspiel_static_dir():
     return os.path.join(repo_root, "hoerspiel", "static")
 
 
+def _hoerspiel_player_template_dir():
+    """Template-Wurzel des Hörspiel-Players (player.html, Track B).
+
+    Test-Naht: runtime['hoerspiel_player_template_dir'].
+    """
+    override = (runtime.get("hoerspiel_player_template_dir")
+               if isinstance(runtime, dict) else None)
+    if override:
+        return override
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(repo_root, "hoerspiel", "templates")
+
+
 def _hoerspiel_player_build_id():
     """build_id aus dem Player-Source-Set [player.js, player.css] in
     hoerspiel/static/ (PWML-3, pwa_mantel.REGISTRY['hoerspiel-player'])."""
@@ -973,7 +996,7 @@ def _hoerspiel_player_build_id():
 
 @app.route("/seiten/hoerspiel/player", methods=["GET"])
 def hoerspiel_player_view():
-    """HSP-47: Hörspiel-Player-PWA — HTML-Render-Route.
+    """HSP-47/HSP-49: Hörspiel-Player-PWA — HTML-Render-Route.
 
     PUBLIC / Netz-Trust (auth.md AUTH-6): kein Auth-Header, kein initData
     (Cookie-401-Teil deferred #1292). Template liegt in hoerspiel/templates/
@@ -981,15 +1004,25 @@ def hoerspiel_player_view():
     hoerspiel_eltern_view, aber OHNE dessen tma-Auth.
 
     Cache-Buster: build_id aus dem Player-Source-Set (PWML-3).
+
+    Instanz-Liste (HSP-49 / HSP-43): window.__HSP_INSTANZEN__ wird als
+    server-serialisierter JSON-Blob in den Template-Kontext eingebettet.
+    Template: {{ instanzen_json }} — Markup-Objekt, kein HTML-Escape noetig.
     """
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    hoerspiel_templates = os.path.join(repo_root, "hoerspiel", "templates")
     build_id = _hoerspiel_player_build_id()
 
+    # HSP-49: Instanz-Blob — _HSP_INSTANZEN ist die autoritative Quelle (eine Stelle).
+    # </script>-Guard analog CONN-7.
+    from markupsafe import Markup
+    _instanzen_blob = json.dumps(
+        _HSP_INSTANZEN, ensure_ascii=False
+    ).replace("</", "<\\/")
+    instanzen_json = Markup(_instanzen_blob)
+
     from jinja2 import Environment, FileSystemLoader
-    env = Environment(loader=FileSystemLoader(hoerspiel_templates), autoescape=True)
+    env = Environment(loader=FileSystemLoader(_hoerspiel_player_template_dir()), autoescape=True)
     tmpl = env.get_template("player.html")
-    html = tmpl.render(build_id=build_id)
+    html = tmpl.render(build_id=build_id, instanzen_json=instanzen_json)
 
     resp = make_response(html, 200)
     resp.headers["Content-Type"] = "text/html; charset=utf-8"
