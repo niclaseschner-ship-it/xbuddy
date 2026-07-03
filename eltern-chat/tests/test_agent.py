@@ -1002,3 +1002,56 @@ def test_EC40_1105_system_prompt_traegt_negativ_regel():
         "EC-40/T1105: Anti-Redundanz-Grundregel 'Beiläufige Settings-Erwähnung' muss bleiben")
     assert "sprachlicher Verweis OHNE Tool-Call" in prompt, (
         "EC-40/T1105: Negativ-Routing 'sprachlicher Verweis OHNE Tool-Call' muss bleiben")
+
+
+# ============================================================
+#  EC-40 / #1283 — Positiv-Heimat: description trägt Trigger-Vokabular
+#
+#  EC-40 Positiv-Norm: die Tool-description von hoerspiel_oeffnen
+#  ist die einzige Heimat des positiven Trigger-Vokabulars.
+#  Dieser Test petrankert, dass sie die Kern-Begriffe beider
+#  Trigger-Familien enthält — schlägt beim Editieren der
+#  description fehl, wenn das Vokabular verloren geht.
+# ============================================================
+
+
+def test_EC40_1283_description_traegt_positives_trigger_vokabular():
+    """EC-40 / #1283 (AC1+AC2): Die Tool-description von HoerspielOeffnenTask
+    enthält das Kern-Trigger-Vokabular beider Familien:
+
+    - Folgen-Trigger: 'hörbuch hören' (kanonische Beispiel-Phrase) und 'folge'
+      (Kern-Begriff; deckt 'folge starten', 'folge abspielen', 'folge' ab).
+    - Direkt-Settings-Trigger: 'settings' und 'einstellungen'
+      (beide Schreibweisen aus dem Direkt-Settings-Abschnitt).
+
+    Geprüft an der realen task.description-Quelle — kein hartkodiertes
+    Duplikat der Phrasen-Liste im Test (AC2). Verliert eine spätere
+    description-Änderung das Kern-Vokabular, schlägt dieser Test fehl.
+    """
+    from unittest.mock import MagicMock
+
+    from skills.hoerspiel_oeffnen_task import HoerspielOeffnenTask
+
+    task = HoerspielOeffnenTask(
+        tg=MagicMock(),
+        hoerspiel_client=MagicMock(),
+        is_member_fn=lambda uid: True,
+        mini_app_url="https://xbuddy.example.com",
+    )
+    desc = task.description.lower()
+
+    # Folgen-Trigger-Vokabular (EC-40 Positiv-Heimat, Folgen-Familie)
+    assert "hörbuch hören" in desc, (
+        "EC-40/T1283: Folgen-Trigger 'hörbuch hören' fehlt in description — "
+        "positives Vokabular gehört allein in die Tool-description (eltern-chat.md:1513-1518)")
+    assert "folge" in desc, (
+        "EC-40/T1283: Kern-Begriff 'folge' fehlt in description — "
+        "Folgen-Trigger-Familie muss vertreten sein")
+
+    # Direkt-Settings-Trigger-Vokabular (EC-40 Positiv-Heimat, Settings-Familie)
+    assert "settings" in desc, (
+        "EC-40/T1283: Direkt-Settings-Trigger 'settings' fehlt in description — "
+        "positives Vokabular gehört allein in die Tool-description (eltern-chat.md:1513-1518)")
+    assert "einstellungen" in desc, (
+        "EC-40/T1283: Direkt-Settings-Trigger 'einstellungen' fehlt in description — "
+        "Settings-Trigger-Familie muss beide Schreibweisen tragen")
