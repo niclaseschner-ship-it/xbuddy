@@ -1587,6 +1587,95 @@ zugehörige Skill ausgelöst wurde.
 
 *Tickets:* #1075
 
+### EC-42 — `anzeige_copy`: kuratierte eltern-taugliche Anzeige-Copy einer Aufgabe
+
+Eine Katalog-Aufgabe (EC-8) **darf** ein optionales Feld `anzeige_copy`
+tragen: einen kurzen, eltern-tauglichen Ein-Satz-Text, der die Fähigkeit
+in der Familien-Sprache beschreibt (z. B. „Ich kann dir die Einkaufsliste
+öffnen"). Er steht neben — nicht statt — der `description`, die
+Router-/Trigger-Vokabular **für das LLM** trägt (EC-40) und für Eltern
+ungeeignet ist.
+
+**Optional/lazy — Fallback auf `description`.** Fehlt `anzeige_copy`,
+fällt jeder Leser auf `description` zurück. Kein Skill **muss** das Feld
+setzen; ohne Deklaration ändert sich am bisherigen Verhalten nichts.
+
+**Reines Anzeige-Attribut.** `anzeige_copy` ist **kein** Trigger und trägt
+**keine** Berechtigungs- oder Sichtbarkeits-Semantik. Es steuert **nicht**,
+ob eine Aufgabe im Katalog liegt, wer sie aufrufen darf oder ob das LLM sie
+auslöst — es liefert ausschließlich den Text, den ein Anzeige-Leser
+darstellt.
+
+**Leser heute (n=2):** `faehigkeiten_zeigen` (EC-43) und der
+Onboarding-Teaser (`eltern-chat-onboarding.md`, #1104). Zwei Leser
+rechtfertigen das Feld. Eine **committete Manifest-Registry**, ein
+**Drift-Test** oder eine **Capability-Karten-Generierung** sind bewusst
+**nicht** Teil davon — deferred, bis ein dritter Leser oder echter
+Drift-Schmerz am Feld auftritt (capability-cluster-ENTSCHEID Landung 3,
+NOCH NICHT).
+
+**Deklarations-Ort (Bau).** Das Feld ist ein Klassenattribut auf der
+`Task`-Basis (analog `is_async`/`auto_confirm`/`post_execute_hooks`) —
+Default: nicht gesetzt. Der Bau-Andockpunkt steht in `conventions/tasks.md`
+TASK-11; diese Spec normt das **Soll** des Feldes, nicht das Wie.
+
+Test-Anker: eltern-chat/tests/test_tasks.py::test_ec42_anzeige_copy_default_none_und_gesetzt
+
+### EC-43 — `faehigkeiten_zeigen`: Selbstauskunft aus dem Live-Katalog
+
+„Fähigkeiten zeigen" ist eine aufrufbare **lesende Funktion** (EC-9), die
+auf die Frage »Was kannst du?« antwortet. **Eingang:** die Telegram-Chat-
+Identität und die User-ID des Aufrufers. **Wirkung:** **keine**
+Familien-Daten-Änderung; die Funktion liest den EC-8-Katalog selbst.
+**Ausgang:** ein User-tauglicher Antwort-Text als Tool-Result mit der
+Fähigkeitsliste.
+
+**Quelle ist der live registrierte Katalog (EC-8) — die eine Wahrheit.**
+Der Skill zählt die tatsächlich registrierten Katalog-Aufgaben auf (sich
+selbst ausgenommen) und rendert je Aufgabe `anzeige_copy`; fehlt es, den
+`description`-Fallback (EC-42). Dadurch kann die Antwort **keine** Fähigkeit
+behaupten, die nicht im Katalog liegt (EC-7 — Ehrliche Grenze), und **keine**
+registrierte übergehen. Die Fähigkeits-Fakten stammen aus dem Katalog, nicht
+aus dem Modell-Welt-Wissen (EC-30-Trennlinie).
+
+**Deterministischer Inhalt, eine Stimme (EC-29).** Der Skill liefert die
+Liste als **deterministisch strukturierten** Tool-Result-Text; das LLM
+formuliert daraus die Bot-Nachricht im bestehenden Persona-Ton. Es gibt
+**keinen** neuen LLM-Freitext-Pfad, der Fähigkeiten frei formuliert oder
+zusammenstellt — nur der Ton kommt vom Modell, die Fähigkeits-Fakten sind
+Katalog-Wahrheit. Das hält das EC-7-Halluzinations-Risiko draußen (ein frei
+generierter Fähigkeits-Text könnte eine nicht vorhandene Fähigkeit
+versprechen).
+
+**Eltern-Chat ist Eltern-only (Setzung Nic 2026-07-01).** Der Skill listet
+schlicht die Eltern-Fähigkeiten. Es gibt **keinen** Rollen-Filter und
+**kein** `sichtbar_fuer`-Feld; eine Kinder-/Eltern-Sicht-Unterscheidung
+entfällt vollständig.
+
+**Berechtigung: Eltern.** Nur für Telegram-User mit Familien-Mitgliedschaft
+aufrufbar (analog EZG-2/HOE-2). Nicht-Mitglieder erhalten Klartext-Ablehnung
+über den geteilten `BerechtigungError` (`conventions/tasks.md` TASK-10).
+
+**SREG-5-Leitplanke (#1028).** Der Skill nennt **keine** konkrete Seite und
+**keine** Mini-App-URL. Er beschreibt Fähigkeiten; für »wo sehe ich X«
+verweist er sprachlich auf die Seiten-Übersicht-Fähigkeit
+(`seiten_uebersicht`), die selbst als Fähigkeit in der Liste steht — nicht
+auf einzelne Seiten-Adressen.
+
+**Skelett-Anker.** Der Skill folgt der Katalog-Aufgaben-Konvention:
+Skill-Datei `eltern-chat/skills/faehigkeiten_zeigen_task.py`
+(`ReadTask` mit `run`, `conventions/tasks.md` TASK-1/TASK-3), registriert in
+`build_catalog` (TASK-7), sprachlos im Agent-Loop (TASK-10/EC-29). Die
+Katalog-Referenz reicht `build_catalog` in den Task hinein; der Katalog ist
+zur Anfrage-Zeit vollständig registriert (die Registrierungs-Reihenfolge ist
+irrelevant, weil `run()` erst zur Laufzeit läuft). Das ist ein
+**n=1-Selbstlese-Pfad** — **keine** neue Konvention (kein Vorrat,
+CLAUDE.md §6).
+
+Test-Anker: eltern-chat/tests/skills/test_faehigkeiten_zeigen.py::test_ec43_listet_katalog_anzeige_copy_mit_description_fallback
+
+*Tickets:* #1102 (Refs #1164)
+
 ---
 
 ## Offene Punkte
