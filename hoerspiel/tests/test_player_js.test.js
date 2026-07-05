@@ -261,6 +261,63 @@ test('setupMediaSession: registriert play/pause/prev/next (HSP-22)', () => {
   } finally { global.navigator = savedNav; }
 });
 
+/* ══ T1272-B-BUGFIX: Player-Verhalten (Bug 1..4) ════════════════ */
+
+test('miniNowPlaying: läuft was → Now-Playing-Banner (global), sonst resume-Fallback (Bug 1/2, AC-BF1)', () => {
+  const album = { id: 'folge-22', nummer: 22, titel: 'Der See', 'cover-asset': '/c.jpg' };
+  // Spielt gerade → "Spielt gerade", Now-Playing-Cover/Titel/Album-id.
+  const spielt = P.miniNowPlaying(album, true, true, 1, [{}, {}]);
+  assert.equal(spielt.mode, 'now');
+  assert.equal(spielt.title, 'Der See');
+  assert.equal(spielt.cover, '/c.jpg');
+  assert.equal(spielt.sub, 'Spielt gerade');
+  assert.equal(spielt.albumId, 'folge-22');
+  // Album geladen, aber pausiert → "Weiter hören · Folge N".
+  const pausiert = P.miniNowPlaying(album, true, false, 1, [{}, {}]);
+  assert.equal(pausiert.mode, 'now');
+  assert.equal(pausiert.sub, 'Weiter hören · Folge 22');
+  // Kein Audio / kein aktives Album → resume-basierter Fallback.
+  assert.equal(P.miniNowPlaying(album, false, false, 0, []).mode, 'resume');
+  assert.equal(P.miniNowPlaying(null, true, false, 0, []).mode, 'resume');
+});
+
+test('istLaufendesAlbum: Tap-Guard nur beim gerade laufenden Album (Bug 3, AC-BF2)', () => {
+  const album = { id: 'folge-22' };
+  // Selbes Album + lebendes Audio → Guard greift (kein Reload).
+  assert.equal(P.istLaufendesAlbum(album, {}, 'folge-22'), true);
+  // Anderes Album → normal laden.
+  assert.equal(P.istLaufendesAlbum(album, {}, 'folge-21'), false);
+  // Kein Audio (nichts läuft) → normal laden.
+  assert.equal(P.istLaufendesAlbum(album, null, 'folge-22'), false);
+  // Kein aktives Album → normal laden.
+  assert.equal(P.istLaufendesAlbum(null, {}, 'folge-22'), false);
+});
+
+test('ensureAudio: EIN persistentes Element, Listener EINMALIG (Bug 4, AC-BF3)', () => {
+  const savedAudio = global.Audio;
+  let created = 0;
+  const listeners = [];
+  global.Audio = function () {
+    created++;
+    this.playbackRate = 1;
+    this.addEventListener = (typ) => listeners.push(typ);
+  };
+  P._S.audio = null;   // sauberer Startzustand
+  try {
+    const a1 = P.ensureAudio();
+    const a2 = P.ensureAudio();
+    assert.equal(created, 1, 'nur EIN Audio-Element über mehrere ladeTrack-Aufrufe');
+    assert.equal(a1, a2, 'derselbe persistente Element-Handle');
+    // Auto-Advance-Pfad (ended) genau einmal registriert → kein Listener-Leak/Doppelfeuer.
+    assert.equal(listeners.filter(t => t === 'ended').length, 1, 'ended-Listener nur einmal angehängt');
+    assert.ok(listeners.includes('play') && listeners.includes('pause') && listeners.includes('timeupdate'),
+      'play/pause/timeupdate einmalig registriert');
+  } finally {
+    global.Audio = savedAudio;
+    P._S.audio = null;
+  }
+});
+
 /* ══ AC-B3: PWA-Icons valide (HSP-55) ═══════════════════════════ */
 
 /* ══ HSP-55: Entry-Path — Player-HTML verlinkt die seiten-Player-Route ══ */
