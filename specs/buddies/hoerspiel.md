@@ -1963,7 +1963,7 @@ Delta an ihren Skill-/Spec-Dateien im selben Paket (Skill-Specs same PR):
 Eltern-Chat eine **andere App** ist, ist das ein **eigener Track** im F4-Schnitt,
 gebündelt über einen Bundle-Hinweis.
 
-### HSP-54 — Harter Offline-Cache der letzten N Folgen (Audio)
+### HSP-54 — Harter Offline-Cache der letzten N Folgen (Audio + Metadaten)
 Der Player legt die **Audio-Tracks der N zuletzt freigegebenen Folgen** je
 aktivem Kind **hart** in Cache Storage ab (Service-Worker, App-Hook PWML-5),
 sodass sie **sofort und offline** abspielbar sind. Sicher, weil die MP3s je
@@ -1972,8 +1972,14 @@ sodass sie **sofort und offline** abspielbar sind. Sicher, weil die MP3s je
 - **Precache-Strategie (hart, nicht lazy):** beim Player-Laden (und bei neuer
   Folge) werden die Tracks der jüngsten N Folgen des aktiven Kindes vorgeladen —
   nicht erst beim Antippen. Cover-Assets analog.
+- **Metadaten mit-cachen (HSP-54a):** die **Folgen-Liste**, die **Folgen-Manifeste**
+  (Track-Auflösung, HSP-6) und die **Instanz-/Config-Daten** des aktiven Kindes
+  werden **ebenfalls** hart gecacht. Ohne sie ist offline weder das Regal
+  aufbaubar noch ein Track auflösbar — Metadaten-Cache ist damit
+  *necessary-implementation* des „sofort und offline abspielbar", nicht optional.
 - **Budget/Eviction:** N je Kind (Default **N=3**), LRU-Verdrängung. MP3 96 kbps
-  mono ⇒ wenige MB je Folge.
+  mono ⇒ wenige MB je Folge. Metadaten sind klein und teilen den kind-getrennten
+  Namensraum.
 - **Switcher-bewusst:** Cache-Namensraum je `<kind_id>`.
 
 **OPEN-HSP-W** — Precache-N-Wert (Default 3) + ob N/Budget Eltern-verstellbar in
@@ -1981,7 +1987,10 @@ die HSP-Config gehört oder fixe Konstante bleibt (Bau-Entscheidung).
 
 *Test-Implikation:* nach Player-Load sind die Tracks der jüngsten N Folgen in
 Cache Storage (kind-getrennt); Offline-Fetch eines gecachten Tracks liefert 200
-aus dem Cache; die N+1-te Folge ist LRU-verdrängt.
+aus dem Cache; die N+1-te Folge ist LRU-verdrängt. **HSP-54a:** offline sind
+Folgen-Liste, Manifest und Config des aktiven Kindes aus dem Cache verfügbar
+(Regal + Track-Auflösung funktionieren ohne Netz). Test-Referenzen petrankern
+**HSP-54 / HSP-54a** (nicht eine frei erfundene AC-ID).
 
 ### HSP-55 — Tests
 JS-Unit (JSDOM) + Render-Gate (RAT-24, `hoerspiel/player`-Pilot): Startfläche =
