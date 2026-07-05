@@ -6,7 +6,7 @@
  * als Token. Boxen/Karten übernehmen die Buddy-Card-Optik des WetterBuddys
  * (E-ESSEN-9: .card / .card-label-Strang für gleiche Optik).
  *
- * Kiosk-Fläche: 1920×1080, overflow hidden (ESSEN-10).
+ * Fluid-Layout: 100 % des Viewports, overflow hidden (ESSEN-10, DC-18).
  */
 
 /* ── Reset / Shell ──────────────────────────────────────────────────────── */
@@ -14,8 +14,8 @@
 html, body {
   margin: 0;
   padding: 0;
-  width: 1920px;
-  height: 1080px;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   background: var(--kids-bg);
 }

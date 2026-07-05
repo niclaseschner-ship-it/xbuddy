@@ -383,7 +383,7 @@ nicht nur die Pure-Math `computeScale`, sondern auch die DOM-Anwendung
   (Split-Screen), wäre das eine echte zweite Ebene — eigene Spec, sobald
   relevant. Deckt sich mit der bewussten Nicht-Entscheidung in Ticket #24.
 
-- **OPEN-DC-B — Responsive Buddy-Templates (in Arbeit, #1218).** Der
+- **OPEN-DC-B — Responsive Buddy-Templates.** *(GESCHLOSSEN — #1218: `essen/wunsch` fluid live, Render-Gate prüft Füllung.)* Der
   Display-Client-*Mechanismus* dafür ist jetzt DC-18 (opt-in `?fit=viewport`).
   Die eigentliche Arbeit — ein Buddy-Template *echt* fluid bauen — beginnt mit
   `essen/wunsch` am Mia-Tablet (1920×1200, #1218-Pilot). Dieser Punkt wird
