@@ -438,6 +438,84 @@ gelandet ist, schreibt der `/arbeitstag-prep`-Retro die Bilanz-Zeile als
 erst mit der **ersten messbaren Bilanz** — nicht mit dem Skill-Edit-Merge.
 So kann die Reform nicht „stillschweigend laufen" ohne Falsifikator.
 
+## PREP-12 — Maturation-Berater-Mechanik (Antiberater-Floor)
+
+**Geltung:** prep-interne Berater-Läufe — die Reifung eines Tickets bis
+Stempelreife im Koordinations-Block (Wahl-Reifung, OPEN-*-Auflösung,
+Nachschärfung nach `halt: berater-runde`). NICHT die eigenständige
+`/berater-runde` auf Nic-Anlass — die behält ihre eigene Mechanik.
+
+### Kodifizierte Mechanik statt improvisierter Direkt-Spawns
+
+Jeder Maturation-Berater-Lauf fährt die **benannten** Teile der
+berater-runde-Mechanik — und nur diese:
+
+- **Subagent-Header** (`contract_kind`-Block + `mode:`, PW-31-konform),
+- **R1-Lese-Disziplin** (Bestandskarte vor Lösungs-Vokabular),
+- **BRICHT/RISKANT-Semantik** für Antiberater-Funde,
+- **Runden-Deckel** (kein unbegrenztes Pingpong).
+
+**KEINE automatische ENTSCHEID-/RAT-Landung pro Fund** — die gibt es nur bei
+echter Architektur-Entscheidung. Improvisierte Direkt-Spawns (Berater „mal
+eben" ohne Header/Deckel) sind abgeschafft.
+(ENTSCHEID pw84-antiberater-pflicht-prep, Sektion „Entscheidung — MACH ES" →
+keine improvisierten Direkt-Spawns; Sektion „Was sich ändert / Trade-off" →
+benannte berater-runde-Teile, Codex-RISKANT-2 gepatcht — keine automatische
+ENTSCHEID-/RAT-Landung für jeden Fund)
+
+### Antiberater-Floor (Pflicht in JEDER Runde)
+
+Ein **Codex-Sanity-Pass läuft in JEDER Maturation-Berater-Runde** — nie mehr
+optional. Der Codex-Aufruf trägt immer eine **Crawl-Schranke** (explizite
+Anker-Liste + max N Calls, sonst Repo-Crawl-Timeout). Läuft stattdessen der
+Opus-Fallback, wird er **als schwächer gekennzeichnet** (gleiche
+Modell-Familie, Echo-Risiko).
+(ENTSCHEID pw84-antiberater-pflicht-prep, Sektion „Entscheidung — MACH ES" →
+Codex-Sanity-Pass in JEDER Maturation-Berater-Runde; Sektion „Was sich ändert /
+Trade-off" → Crawl-Schranke Pflicht, Opus-Fallback als schwächer kennzeichnen)
+
+### Eskalation auf Voll-Pingpong (konditional, nicht Default)
+
+Das teure Voll-Pingpong (mehrere Berater↔Antiberater-Iterationen) nur bei:
+
+- **(a)** der Berater-Entwurf öffnet eine ratifizierte Entscheidung neu,
+- **(b)** eine neue Spec-ID wird geprägt,
+- **(c)** prep-Risiko-Ampel 🔴 ODER `architecture_class: wahl` mit
+  irreversibler Bewertung.
+
+(ENTSCHEID pw84-antiberater-pflicht-prep, Sektion „Was sich ändert /
+Trade-off" → Eskalation nur bei (a)–(c); Codex-BRICHT-3 gepatcht —
+`risk_class` ist arbeitstag-Vokabular, prep hat es nicht)
+
+### Mess-Pflicht in Welle 1 (befristet)
+
+Pro Maturation-Lauf postet der Skill einen durablen Marker als Issue-Comment
+oder Retro-Zeile:
+
+```
+antiberater_sanity: ran|skipped · engine: codex|opus-fallback · finding: none|riskant|bricht · latency_sec: <n>
+```
+
+Ohne Messspur ist das Kill-Kriterium nicht auswertbar.
+(ENTSCHEID pw84-antiberater-pflicht-prep, Sektion „Was sich ändert /
+Trade-off" → Messspur pro Maturation-Lauf, Codex-BRICHT-2 gepatcht)
+
+### Kill-Kriterium (Welle-1-Ausgang)
+
+Nach 6 GEMESSENEN Maturation-Läufen: 0× BRICHT und 0× substanzielles RISKANT
+bei klar störender Latenz → Floor zurück auf die konditionalen Trigger
+(a)–(c) (Revert der Klausel-Zeile).
+(ENTSCHEID pw84-antiberater-pflicht-prep, Sektion „Kill-Kriterium" → 6
+gemessene Läufe, 0× BRICHT und 0× substanzielles RISKANT)
+
+### Ehrlichkeit zur Datenlage
+
+Der Beleg ist EIN korrelierter Lauf (Maturation-Strecke 2026-07-03→05: 3 von
+4 über-reichte Berater-Entwürfe ohne Gegenkopf; n=1–2 unabhängig). Deshalb
+ist der Floor eine befristete Welle-1-Regel mit Messspur — **kein Hook**.
+(ENTSCHEID pw84-antiberater-pflicht-prep, Sektion „Was sich ändert /
+Trade-off" → Ehrlichkeit zur Datenlage, n=1–2)
+
 ## Warum tool-erzwungen statt Prosa
 
 Vor PW-26 lebte die Spec-PR-Pflicht im Koord-Block als „Pflicht, nicht
@@ -451,11 +529,16 @@ Cross-Spec/Wahl-Probe kein Spec-Merge.
 ## Implementations-Anker
 
 Die Konvention beschreibt die Bauregel; die Implementation lebt im
-Skill-Harness (außerhalb dieses Repos):
+Skill-Harness — SSoT repo-versioniert unter `methode/`, Laufzeit-Deploy-Ziel
+`~/.claude/` (RAT-23):
 
-- `~/.claude/commands/arbeitstag-prep.md` — Skill-Sequenz, Karten-Render
-- `~/.claude/agents/xbuddy-watchdog-prep.md` — Verdikt-Schema (PREP-2/3/4/5)
-- `~/.claude/hooks/status_rollback_guard.py` — vier Hook-Sperren (PREP-6)
+- `methode/commands/arbeitstag-prep.md` (deployt nach
+  `~/.claude/commands/arbeitstag-prep.md`) — Skill-Sequenz, Karten-Render,
+  Maturation-Berater-Mechanik (PREP-12)
+- `methode/agents/xbuddy-watchdog-prep.md` (deployt nach `~/.claude/agents/`)
+  — Verdikt-Schema (PREP-2/3/4/5)
+- `methode/hooks/status_rollback_guard.py` (deployt nach `~/.claude/hooks/`)
+  — vier Hook-Sperren (PREP-6)
 
 Spur:
 
@@ -465,3 +548,4 @@ Spur:
 - xbuddy-prozess#34 — Mess-Skript für Rollback-Quote (Folge-Ticket, vertagt)
 - Karten-Form-Reform RATIFIZIERT 2026-06-21: `brainstorm/berater-runde/20260621-1700-RATIFIZIERT-karten-form-reform-prep.md` — PREP-10 + PREP-11 + Erweiterung PREP-1 um KOORD-WAHL + Schließen-Karte
 - xbuddy-prozess#69 — Mess-Skript `tools/card_form_quote.py` (Welle-1-Beobachtung)
+- PW-84 Antiberater-Floor RATIFIZIERT 2026-07-05: `brainstorm/berater-runde/20260705-2145-RATIFIZIERT-pw84-antiberater-pflicht-prep.md` — PREP-12 Maturation-Berater-Mechanik (xbuddy-prozess#84)
