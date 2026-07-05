@@ -54,8 +54,9 @@ def _build_vendor(
     required: frozenset[Capability],
     model: str = "",
     max_tokens: int = 0,
-) -> tuple[Any, str, str]:
-    """Slot → (Vendor-Instanz, caller, slot-name) mit Capability-Boot-Fail (LLMP-S3).
+) -> tuple[Any, str, str, frozenset[Capability]]:
+    """Slot → (Vendor-Instanz, caller, slot-name, available-caps) mit Capability-
+    Boot-Fail (LLMP-S3).
 
     Verantwortlich für die vier mechanischen Schritte aus LLMP-5:
       1. Slot parsen (caller, vendor, purpose)
@@ -120,7 +121,11 @@ def _build_vendor(
     if max_tokens > 0:
         kwargs["max_tokens"] = max_tokens
     instance = vendor_cls(**kwargs)
-    return instance, caller, slot
+    # `available` (die Vendor-CAPABILITIES) wandert mit hinaus: die Singleshot-
+    # Fassade braucht sie zur Call-Zeit für das multimodal_input-Gate (T1262,
+    # LLMP-S11) — ein images-Aufruf gegen einen Vendor ohne `multimodal_input`
+    # wirft `LLMCapabilityError`, nicht Silent-Drop im Vendor.
+    return instance, caller, slot, available
 
 
 def _vendor_class(module: Any, vendor: str) -> type:
@@ -189,10 +194,14 @@ class _SingleshotFacade:
     `_ChatFacade.complete_multiturn`).
     """
 
-    def __init__(self, vendor: Any, caller: str, slot: str):
+    def __init__(self, vendor: Any, caller: str, slot: str,
+                 caps: frozenset[Capability] = frozenset()):
         self._vendor = vendor
         self._caller = caller
         self._slot = slot
+        # Vendor-CAPABILITIES für das Call-Zeit-Gate (T1262): ein images-Aufruf
+        # gegen einen Vendor ohne `multimodal_input` wirft LLMCapabilityError.
+        self._caps = caps
         self.model = getattr(vendor, "model", "")
         self.name = "singleshot"
 
@@ -204,9 +213,33 @@ class _SingleshotFacade:
         *,
         tool_name: str = "ergebnis",
         tool_description: str = "Strukturiertes Ergebnis-Objekt nach Schema.",
+        images: list[dict[str, Any]] | None = None,
         correlation_id: str | None = None,
     ) -> dict[str, Any]:
-        """Ein Call, forced `tool_use` → Schema-konformes dict (LLMP-S1)."""
+        """Ein Call, forced `tool_use` → Schema-konformes dict (LLMP-S1).
+
+        `images` (T1262-additiv, kw-only): neutrale Wire-Form
+        `[{"bytes": <raw>, "media_type": <str>}, …]`, an den Vendor durchgereicht
+        (base64-Kodierung IM Vendor). `images=None` ist byte-identisch der
+        heutige Text-Pfad (Regression-frei für hoerspiel/get_singleshot-Bestand).
+
+        Cap-Gate (LLMP-3/LLMP-S11): bei nicht-leerem `images` gegen einen Vendor
+        OHNE `multimodal_input` wird `LLMCapabilityError` geworfen — der Gate
+        sitzt in der LIB (zur Call-Zeit), nicht im Vendor. Der Text-Pfad
+        (`images=None`) bleibt für Vendoren ohne `multimodal_input` offen.
+        """
+        if images and "multimodal_input" not in self._caps:
+            raise LLMCapabilityError(
+                "tools.llm: complete_structured(images=…) verlangt Capability "
+                "'multimodal_input', der Vendor für Slot %r liefert sie nicht "
+                "(vorhanden: %s) — LLMP-3/LLMP-S11"
+                % (self._slot, sorted(self._caps))
+            )
+        # `images` NUR bei nicht-leerem Wert an den Vendor durchreichen: so
+        # bleibt der Text-Pfad (`images=None`) byte-identisch der Alt-Form —
+        # Vendoren, deren `singleshot_structured` (noch) kein `images`-Kwarg
+        # kennt (Mistral), bleiben unangetastet (Regression-frei).
+        extra: dict[str, Any] = {"images": images} if images else {}
         return self._vendor.singleshot_structured(
             system=system,
             prompt=prompt,
@@ -216,6 +249,7 @@ class _SingleshotFacade:
             tool_name=tool_name,
             tool_description=tool_description,
             correlation_id=correlation_id,
+            **extra,
         )
 
 
@@ -327,7 +361,7 @@ def get_chat(slot: str) -> LLMProvider:
     Required Capabilities (LLMP-3): `multi_turn_assistant_prefill`,
     `cache_control`, `system_message_distinct`. Boot-Fail bei Mismatch.
     """
-    vendor, caller, slot_name = _build_vendor(slot, "get_chat", REQUIRED_CHAT)
+    vendor, caller, slot_name, _caps = _build_vendor(slot, "get_chat", REQUIRED_CHAT)
     return _ChatFacade(vendor, caller, slot_name)
 
 
@@ -348,10 +382,10 @@ def get_singleshot(slot: str, model: str = "", max_tokens: int = 0) -> Any:
     hoerspiel reicht hier die Provider-eigenen MAX_TOKENS durch (8192 / 4096),
     damit lange Folgentexte nicht beim DEFAULT_MAX_TOKENS=2048 trunkiert werden.
     """
-    vendor, caller, slot_name = _build_vendor(
+    vendor, caller, slot_name, caps = _build_vendor(
         slot, "get_singleshot", REQUIRED_SINGLESHOT, model, max_tokens,
     )
-    return _SingleshotFacade(vendor, caller, slot_name)
+    return _SingleshotFacade(vendor, caller, slot_name, caps)
 
 
 def get_completion(slot: str, model: str = "", max_tokens: int = 0) -> Any:
@@ -376,7 +410,7 @@ def get_completion(slot: str, model: str = "", max_tokens: int = 0) -> Any:
     MAX_TOKENS (8192 / 4096) durch, damit lange Synopse-Freitexte nicht beim
     DEFAULT_MAX_TOKENS=2048 trunkiert werden (T1084-Parität).
     """
-    vendor, caller, slot_name = _build_vendor(
+    vendor, caller, slot_name, _caps = _build_vendor(
         slot, "get_completion", REQUIRED_COMPLETION, model, max_tokens,
     )
     return _CompletionFacade(vendor, caller, slot_name)
@@ -402,7 +436,7 @@ def get_agent(slot: str, model: str = "", max_tokens: int = 0) -> Any:
     damit lange Antworten nicht beim DEFAULT_MAX_TOKENS=2048 trunkiert werden
     (Spiegel `get_singleshot`, T1084).
     """
-    vendor, caller, slot_name = _build_vendor(
+    vendor, caller, slot_name, _caps = _build_vendor(
         slot, "get_agent", REQUIRED_AGENT, model, max_tokens,
     )
     return _AgentFacade(vendor, caller, slot_name)

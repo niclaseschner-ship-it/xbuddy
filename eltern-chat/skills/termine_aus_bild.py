@@ -41,7 +41,9 @@ from datetime import date, timedelta
 import confirm
 from telegram import TelegramError
 
-from skills._multimodal import MultimodalError
+# #1262: MultimodalError aus der neuen kanonischen Foto-Heimat (Re-Export der
+# base.py-Klasse — SELBE Identität, `except` fängt Legacy- wie Lib-Route).
+from skills.foto_analyse import MultimodalError
 from skills.plan_client import (
     PlanBulkNotReached,
     PlanBulkUnknown,

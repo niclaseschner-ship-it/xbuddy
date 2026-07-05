@@ -1,6 +1,16 @@
 """Multimodal-Provider-Naht für den TAB-Skill — specs/platform/termine-aus-bild.md
 TAB-5 (Refs #475).
 
+DEPRECATED (#1262, PR1): Der produktive TAB-Pfad läuft ab jetzt über den neuen
+Foto-Adapter `skills.foto_analyse.FotoAnalyseProvider` (→ `tools.llm`, LLMP-S1).
+`get_multimodal_provider` wird NICHT mehr aus `tasks.build_catalog` gerufen — es
+bleibt nur für Legacy-Tests (`test_multimodal*.py`) erhalten. Die Typen
+`ExtractedTermin`/`MultimodalError` sind unverändert HIER definiert (base.py),
+werden aber von `skills.foto_analyse` re-exportiert (kanonische Import-Heimat für
+neuen Code, SELBE Klassen-Identität). Löschung dieses Pakets (mitsamt base.py /
+claude.py / mistral.py und Verschieben der Typen-Definition nach foto_analyse.py)
+ist PR2 (#1334). Bis dahin: NICHT als neue Abhängigkeit importieren.
+
 Diese Naht ist **separat** vom Konversations-Pfad (`providers/`): der TAB-Skill
 ruft den multimodalen Anbieter mit einem hart-codierten Tool-Schema und einem
 `image`-Content-Block auf (TAB-5). Der bestehende `providers.claude.ClaudeProvider`
