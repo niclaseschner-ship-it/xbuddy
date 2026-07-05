@@ -21,8 +21,27 @@ from dataclasses import dataclass, field
 from _markdown_button_strip import strip_markdown_buttons
 from model import WRITE, GenerationRequest, Message, ProviderError, TaskResultBlock, TextBlock
 from providers.pricing import estimate_cost
-from tasks import render_form_b
+from tasks import HOERSPIEL_INSTANZEN, render_form_b
 from telemetry import ProviderCall, TurnTelemetry
+
+# HSP-43 / #1263: Prompt-Namensliste aus DERSELBEN Instanz-Konstante wie die
+# HFE-enum (tasks.HOERSPIEL_INSTANZEN) — kein separater paula/neko-Hardcode im
+# Prompt. Nimmt niclas automatisch mit (→ „Paula, Neko oder Niclas").
+_HSP_NAMEN = [i["name"] for i in HOERSPIEL_INSTANZEN]
+_HSP_IDS = [i["kind_id"] for i in HOERSPIEL_INSTANZEN]
+
+
+def _oder_liste(items) -> str:
+    """»a, b oder c« — Aufzählung für den System-Prompt (HSP-43)."""
+    items = list(items)
+    if len(items) <= 1:
+        return "".join(items)
+    return "%s oder %s" % (", ".join(items[:-1]), items[-1])
+
+
+_HSP_NAMEN_ODER = _oder_liste(_HSP_NAMEN)                       # "Paula, Neko oder Niclas"
+_HSP_NAMEN_GUILL = "/".join("»%s«" % n for n in _HSP_NAMEN)    # "»Paula«/»Neko«/»Niclas«"
+_HSP_IDS_BZW = " bzw. ".join("»%s«" % k for k in _HSP_IDS)     # "»paula« bzw. »neko« bzw. »niclas«"
 
 SYSTEM_PROMPT = (
     "Du bist der Eltern-Chat von XBuddy — ein freundlicher Assistent in der "
@@ -118,7 +137,7 @@ SYSTEM_PROMPT = (
     "<von Kindname>.« — wenn die Mutter ein Kind nennt (»Paula«/»Neko«), trage "
     "den Namen im Verweis explizit mit, weil die Settings pro Hörspiel-Instanz "
     "gepflegt werden (HSP-34 ist per-kind). Bei Mehrdeutigkeit ohne Kindname "
-    "stelle EINE kurze Rückfrage: »Für Paula oder Neko?« — analog HFE — und "
+    f"stelle EINE kurze Rückfrage: »Für {_HSP_NAMEN_ODER}?« — analog HFE — und "
     "antworte erst danach mit dem Verweis.\n"
     "Beispiele beiläufige Settings-Erwähnung (KEIN Tool-Call): »wechsel bei "
     "Neko auf mistral« → »Anbieter und Modell von Neko wählst du in der "
@@ -138,9 +157,9 @@ SYSTEM_PROMPT = (
     "Beiläufige Settings-Erwähnung (z. B. »Voice von Neko ändern«, "
     "»wechsel auf mistral«) → sprachlicher Verweis OHNE Tool-Call OHNE "
     "Button (Anti-Redundanz-Grundregel bleibt).\n"
-    "kind_id-Wahl (HFE-3, E-HFE-6): Nennt die Mutter ein Kind (»Paula« oder »Neko«), "
-    "setze kind_id entsprechend (»paula« bzw. »neko«). Bei Mehrdeutigkeit — kein "
-    "Kindname im Satz — stelle EINE kurze Rückfrage: »Für Paula oder Neko?«."
+    f"kind_id-Wahl (HFE-3, E-HFE-6): Nennt die Mutter einen Namen ({_HSP_NAMEN_GUILL}), "
+    f"setze kind_id entsprechend ({_HSP_IDS_BZW}). Bei Mehrdeutigkeit — kein "
+    f"Name im Satz — stelle EINE kurze Rückfrage: »Für {_HSP_NAMEN_ODER}?«."
 )
 
 # Obergrenze der Loop-Durchläufe — schützt vor einer Aufgaben-Schleife ohne Ende.

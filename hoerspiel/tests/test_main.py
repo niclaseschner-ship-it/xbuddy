@@ -781,3 +781,72 @@ def test_patch_config_persistiert_in_datei(tmp_path, runtime_cfg_with_mistral, d
         assert abs(persisted["playback_tempo"] - 1.2) < 0.01
     finally:
         del os.environ["HOERSPIEL_DATA_CONFIG_FILE"]
+
+
+# ============================================================
+#  HSP-43 / #1263 — Instanz-Liste treibt die Face-Pillen-Reihe (n≥3, niclas)
+# ============================================================
+
+
+def test_config_instanzen_traegt_niclas():
+    """HSP-43: config.INSTANZEN ist die autoritative hörspiel-lokale Liste und
+    trägt paula, neko UND niclas (kind_id/name; NIE port/origin)."""
+    kind_ids = {i["kind_id"] for i in config_mod.INSTANZEN}
+    assert {"paula", "neko", "niclas"} <= kind_ids
+    for i in config_mod.INSTANZEN:
+        assert i["kind_id"]
+        assert i["name"]
+        assert "port" not in i
+        assert "origin" not in i
+
+
+@pytest.fixture
+def client_familie_drei(runtime_cfg_with_mistral, data_cfg_mini, data_root_mini):
+    """Test-Client, dessen Familie-Snapshot paula + neko + niclas kennt."""
+    from hoerspiel import familie_client as fc_mod
+
+    transport = _make_familie_transport([
+        {"id": "paula", "name": "Paula", "ring": "orange", "art": "kinder",
+         "foto": "/display/_shared/fotos/paula.jpg"},
+        {"id": "neko", "name": "Neko", "ring": "blue", "art": "kinder",
+         "foto": "/display/_shared/fotos/neko.jpg"},
+        {"id": "niclas", "name": "Niclas", "ring": "green", "art": "erwachsene",
+         "foto": "/display/_shared/fotos/niclas.jpg"},
+    ])
+    mock_client = fc_mod.FamilieClient(
+        origin_url="http://127.0.0.1:5010", transport=transport)
+    main_mod.configure(
+        runtime_config=runtime_cfg_with_mistral,
+        data_config=data_cfg_mini,
+        data_root=data_root_mini,
+        llm=None, tts_engine=None,
+        bot_token="TEST",
+        familie_client=mock_client,
+    )
+    return main_mod.app.test_client()
+
+
+def test_face_pillen_reihe_gewinnt_niclas_additiv(client_familie_drei):
+    """HSP-43 / HSP-46 / HSP-3a n≥3: aus Paulas View zeigt die Pillen-Reihe BEIDE
+    anderen Instanzen — Neko UND Niclas (additiv, kein 2-Toggle)."""
+    resp = client_familie_drei.get("/display/hoerspiel/paula/alben")
+    assert resp.status_code == 200
+    html = resp.data.decode("utf-8")
+    # Beide Wechsel-Links vorhanden (vollständige Navigation, kein JS-State).
+    assert 'href="/display/hoerspiel/neko/alben"' in html
+    assert 'href="/display/hoerspiel/niclas/alben"' in html
+    assert "Neko" in html
+    assert "Niclas" in html
+    # Eigene kind_id (paula) taucht NICHT als Wechsel-Link auf.
+    assert 'href="/display/hoerspiel/paula/alben"' not in html
+
+
+def test_face_pillen_reihe_identisch_zu_zwei_hardcode(client_mit_familie):
+    """Regression: mit nur paula+neko im Snapshot verhält sich die Reihe wie der
+    alte 2-Hardcode — genau eine Pille (Neko), niclas fehlt (nicht im Snapshot)."""
+    resp = client_mit_familie.get("/display/hoerspiel/paula/alben")
+    html = resp.data.decode("utf-8")
+    assert 'href="/display/hoerspiel/neko/alben"' in html
+    # niclas ist NICHT im Familie-Snapshot → keine niclas-Pille (PLAN-20-Geist).
+    assert 'href="/display/hoerspiel/niclas/alben"' not in html
+    assert html.count('class="face-pille"') == 1

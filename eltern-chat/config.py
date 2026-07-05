@@ -156,6 +156,12 @@ DEFAULTS = {
     # Registry-Dict). Default 5055 = PORT-2-Slot Hörspiel-Buddy Neko. Leer ⇒
     # Neko-Anfragen scheitern mit Fehler-Text im Tool-Result.
     "hoerspiel_url_origin_neko": "http://127.0.0.1:5055",
+    # HSP-43 / #1263: dritte Hörspiel-Buddy-Origin (Niclas-Instanz, erwachsen).
+    # Resolution-Logik im Skill (HFE-3, E-HFE-6): kind_id="niclas" →
+    # hoerspiel_url_origin_niclas. Handverdrahtet wie neko (kein Registry-Dict).
+    # Default 5056 = PORT-2-Slot Hörspiel-Buddy Niclas (Backend manuell provisioniert,
+    # HSP-44). Leer ⇒ niclas-Anfragen scheitern mit Fehler-Text im Tool-Result.
+    "hoerspiel_url_origin_niclas": "http://127.0.0.1:5056",
     # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts, über den die
     # KibuddyAufnahmeQuelleSetzenTask die Aufnahme-Quelle schreibt
     # (PUT /api/v1/kibuddy/config KAQS-5). Per-Instanz-Wert; Default passt
@@ -211,6 +217,7 @@ class Config:
                  mini_app_base_url="",
                  hoerspiel_url_origin="",
                  hoerspiel_url_origin_neko="",
+                 hoerspiel_url_origin_niclas="",
                  kibuddy_origin_url="",
                  wetter_origin_url=""):
         self.bot_token = bot_token
@@ -251,6 +258,8 @@ class Config:
         self.hoerspiel_url_origin = hoerspiel_url_origin  # leer → HFE NICHT im Katalog
         # RAT-17 / #910: zweite Origin für Neko-Instanz (Option A handverdrahtet, E-HFE-6).
         self.hoerspiel_url_origin_neko = hoerspiel_url_origin_neko  # leer → Neko-Fehler-Text
+        # HSP-43 / #1263: dritte Origin für Niclas-Instanz (handverdrahtet wie neko).
+        self.hoerspiel_url_origin_niclas = hoerspiel_url_origin_niclas  # leer → Niclas-Fehler-Text
         # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts (KAQS-5, KIBUDDY-24/25).
         self.kibuddy_origin_url = kibuddy_origin_url      # leer → KAQS NICHT im Katalog
         # WRO-5 / #1094: Origin des Garderoben-Editors (/display/wetter/regeln)
@@ -392,6 +401,8 @@ def resolve(config_path, zd=None):
         hoerspiel_url_origin=str(values["hoerspiel_url_origin"]).strip().rstrip("/"),
         # RAT-17 / #910: zweite Origin für Neko-Instanz (Option A handverdrahtet).
         hoerspiel_url_origin_neko=str(values["hoerspiel_url_origin_neko"]).strip().rstrip("/"),
+        # HSP-43 / #1263: dritte Origin für Niclas-Instanz (handverdrahtet wie neko).
+        hoerspiel_url_origin_niclas=str(values["hoerspiel_url_origin_niclas"]).strip().rstrip("/"),
         # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts (KAQS-5, KIBUDDY-25).
         kibuddy_origin_url=str(values["kibuddy_origin_url"]).strip().rstrip("/"),
         # WRO-5 / #1094: Origin des Wetter-Buddys (WRO-8 AND-Guard).

@@ -25,11 +25,29 @@ import re
 import threading
 import time
 
-from tasks import Proposal, WriteTask
+from tasks import HOERSPIEL_INSTANZEN, Proposal, WriteTask
 
 import skills.hoerspiel_folge_erzeugen as hfe_mod
 
 logger = logging.getLogger(__name__)
+
+
+# HSP-43 / #1263: HFE-enum + Prompt-Namen aus der EINEN eltern-chat-Instanz-Liste
+# (tasks.HOERSPIEL_INSTANZEN) abgeleitet — kein separater paula/neko-Hardcode mehr.
+_HFE_KIND_IDS = [i["kind_id"] for i in HOERSPIEL_INSTANZEN]
+_HFE_NAMEN = [i["name"] for i in HOERSPIEL_INSTANZEN]
+
+
+def _oder_liste(items) -> str:
+    """»a, b oder c« — Aufzählung für Description/Rückfrage (HSP-43)."""
+    items = list(items)
+    if len(items) <= 1:
+        return "".join(items)
+    return "%s oder %s" % (", ".join(items[:-1]), items[-1])
+
+
+_HFE_NAMEN_ODER = _oder_liste(_HFE_NAMEN)       # z. B. "Paula, Neko oder Niclas"
+_HFE_IDS_ODER = _oder_liste(_HFE_KIND_IDS)      # z. B. "paula, neko oder niclas"
 
 
 # ============================================================
@@ -106,13 +124,15 @@ class HoerspielFolgeErzeugenTask(WriteTask):
                  family_group_chat_id_getter=None, is_member_fn=None,
                  mini_app_base_url: str = "",
                  hoerspiel_url_origin: str = "",
-                 hoerspiel_url_origin_neko: str = ""):
+                 hoerspiel_url_origin_neko: str = "",
+                 hoerspiel_url_origin_niclas: str = ""):
         super().__init__(
             name="hoerspiel_folge_erzeugen",
             description=(
-                "Erstellt eine neue Hörspiel-Folge für ein Kind (Paula oder "
-                "Neko): schreibt einen Folgentext per KI und vertont ihn als "
-                "Album.\n\n"
+                # HSP-43 / #1263: Namensliste aus der Instanz-Konstante.
+                f"Erstellt eine neue Hörspiel-Folge für eine Instanz "
+                f"({_HFE_NAMEN_ODER}): schreibt einen Folgentext per KI und "
+                "vertont ihn als Album.\n\n"
                 "Aufrufen, wenn jemand sagt »Schreib eine Folge über …«, "
                 "»Neue Folge«, »Neues Hörbuch«, »Neues Hörspiel«, »Hörbuch "
                 "anlegen«, »Hörspiel machen«, »Mach Paula eine Folge«, "
@@ -125,9 +145,9 @@ class HoerspielFolgeErzeugenTask(WriteTask):
                 "diesen Skill aufrufen — KEINE eigenen Rückfragen stellen, "
                 "der Skill macht die Diskussion und holt Themen-Vorschläge "
                 "selbst (HFE-3 Sub-Case 1).\n\n"
-                "Parameter `kind_id`: Pflicht-Parameter (paula oder neko) — "
-                "welches Kind die Folge bekommt (HFE-3, E-HFE-6). Bei "
-                "Mehrdeutigkeit Rückfrage stellen: »Für Paula oder Neko?«.\n\n"
+                f"Parameter `kind_id`: Pflicht-Parameter ({_HFE_IDS_ODER}) — "
+                "welche Instanz die Folge bekommt (HFE-3, E-HFE-6). Bei "
+                f"Mehrdeutigkeit Rückfrage stellen: »Für {_HFE_NAMEN_ODER}?«.\n\n"
                 "Parameter `idee`: die Folgen-Idee aus der Eltern-Nachricht "
                 "(1–2 Sätze). LEER STRING »« setzen, wenn die Eltern noch "
                 "keine konkrete Idee genannt haben (»Neues Hörbuch«, »Mach "
@@ -159,12 +179,13 @@ class HoerspielFolgeErzeugenTask(WriteTask):
                 "properties": {
                     "kind_id": {
                         "type": "string",
-                        "enum": ["paula", "neko"],
+                        # HSP-43 / #1263: enum aus der Instanz-Konstante abgeleitet.
+                        "enum": list(_HFE_KIND_IDS),
                         "description": (
-                            "Für welches Kind die Folge erzeugt werden soll: "
-                            "paula oder neko. Wenn die Mutter sagt 'für Paula', "
-                            "kind_id=paula; 'für Neko', kind_id=neko. "
-                            "Pflicht-Argument (HFE-3, E-HFE-6)."),
+                            "Für welche Instanz die Folge erzeugt werden soll: "
+                            f"{_HFE_IDS_ODER}. Wenn die Mutter einen Namen nennt "
+                            "(z. B. 'für Paula'), die passende kind_id setzen "
+                            "(paula/neko/niclas). Pflicht-Argument (HFE-3, E-HFE-6)."),
                     },
                     "idee": {
                         "type": "string",
@@ -190,24 +211,25 @@ class HoerspielFolgeErzeugenTask(WriteTask):
         self._family_group_chat_id_getter = family_group_chat_id_getter
         self._is_member_fn = is_member_fn
         self._mini_app_base_url = mini_app_base_url or ""
-        # E-HFE-6 / RAT-17 / #910: Mini-Map kind_id → HoerspielClient-Instanz.
-        # Ermöglicht dem Task, bei jedem propose()-Aufruf den passenden Client
-        # anhand der kind_id zu wählen (Option A: je Client eine Origin).
-        # hoerspiel_url_origin = Paula (5053), hoerspiel_url_origin_neko = Neko (5055).
-        # Leer → Paula-Client-Fallback (hoerspiel_client ist bereits Paula).
+        # E-HFE-6 / RAT-17 / #910 / HSP-43 (#1263): Mini-Map kind_id →
+        # HoerspielClient-Instanz. Ermöglicht dem Task, bei jedem propose()-Aufruf
+        # den passenden Client anhand der kind_id zu wählen (Option A: je Client eine
+        # Origin). Die kind_ids kommen aus der Instanz-Konstante (_HFE_KIND_IDS); die
+        # Origin je kind_id ist HANDVERDRAHTET (kein Registry-Dict): paula = 5053,
+        # neko = 5055, niclas = 5056. Leer → Paula-Client-Fallback (hoerspiel_client).
         from skills.hoerspiel_client import HoerspielClient as _HoerspielClient
-        _paula_origin = (hoerspiel_url_origin or "").rstrip("/")
-        _neko_origin = (hoerspiel_url_origin_neko or "").rstrip("/")
-        self._client_by_kind_id: dict = {
-            "paula": (
-                _HoerspielClient(origin_url=_paula_origin, kind_id="paula")
-                if _paula_origin else self._hoerspiel_client
-            ),
-            "neko": (
-                _HoerspielClient(origin_url=_neko_origin, kind_id="neko")
-                if _neko_origin else self._hoerspiel_client
-            ),
+        _origin_by_kind_id = {
+            "paula":  (hoerspiel_url_origin or "").rstrip("/"),
+            "neko":   (hoerspiel_url_origin_neko or "").rstrip("/"),
+            "niclas": (hoerspiel_url_origin_niclas or "").rstrip("/"),
         }
+        self._client_by_kind_id: dict = {}
+        for _kid in _HFE_KIND_IDS:
+            _origin = _origin_by_kind_id.get(_kid, "")
+            self._client_by_kind_id[_kid] = (
+                _HoerspielClient(origin_url=_origin, kind_id=_kid)
+                if _origin else self._hoerspiel_client
+            )
         # HFE-5: Session-State überbrückt propose→execute (Befund 1).
         # chat_id → {titel, text, voice, idee} aus dem Buddy-Vorschlag.
         # Nur eine offene Vorschlag-Session pro Chat — älter wird überschrieben.

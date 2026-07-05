@@ -939,14 +939,16 @@ _HOERSPIEL_PLAYER_MIME = {
 
 _HOERSPIEL_PLAYER_COMPONENT = "hoerspiel-player"
 
-# HSP-43: autoritative Instanz-Liste der provisionierten Hörspiel-Dienste.
-# Quelle: PORT-2 / conventions/ports.md (paula 5053, neko 5055).
-# Niclas ist NICHT aufgenommen — dessen Service ist nicht provisioniert (#1263, deferred).
-# foto_url: None — tools.familie_client bietet keinen Foto-Zugang (FAM-8, stop_rule kein_familie_client).
+# HSP-43: autoritative Instanz-Liste dieser Komponente (seiten-lokale Kopie).
+# Quelle: PORT-2 / conventions/ports.md (paula 5053, neko 5055, niclas 5056).
+# niclas ist aufgenommen (#1263); dessen Backend-Service wird MANUELL provisioniert
+# (HSP-44 — Deploy, nicht Code). foto_url: None — tools.familie_client bietet keinen
+# Foto-Zugang (FAM-8, stop_rule kein_familie_client).
 # KEIN generischer Instanz-Register (RAT-17, stop_rule kein_register, #1263).
 _HSP_INSTANZEN = [
-    {"kind_id": "paula", "name": "Paula", "foto_url": None},
-    {"kind_id": "neko",  "name": "Neko",  "foto_url": None},
+    {"kind_id": "paula",  "name": "Paula",  "foto_url": None},
+    {"kind_id": "neko",   "name": "Neko",   "foto_url": None},
+    {"kind_id": "niclas", "name": "Niclas", "foto_url": None},
 ]
 
 

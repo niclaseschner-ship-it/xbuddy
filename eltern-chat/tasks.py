@@ -34,6 +34,19 @@ from model import READ, WRITE, TaskDef
 logger = logging.getLogger(__name__)
 
 
+# HSP-43 / #1263: eltern-chat-LOKALE Hörspiel-Instanz-Liste (origin-frei; NUR
+# kind_id/name). Die eine autoritative Kopie DIESER Komponente — Muster
+# seiten/main.py:947 `_HSP_INSTANZEN`, hoerspiel/config.py `INSTANZEN`. KEINE
+# Registry, KEIN Cross-Service-Import (jede Komponente hält ihre Kopie). Aus ihr
+# leiten die HFE-`enum` (Skill) UND die Agent-Prompt-Namensliste ab; port/origin
+# stehen NIE hier (die Origins kommen aus config.py, handverdrahtet je kind_id).
+HOERSPIEL_INSTANZEN = [
+    {"kind_id": "paula",  "name": "Paula"},
+    {"kind_id": "neko",   "name": "Neko"},
+    {"kind_id": "niclas", "name": "Niclas"},   # #1263 (HSP-43)
+]
+
+
 def _make_is_member_fn(tg, fgcid_getter):
     """Factory für is_member_fn-Closures — prüft Live-Telegram-Mitgliedschaft.
 
@@ -429,6 +442,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   mini_app_base_url=None,
                   hoerspiel_url_origin=None,
                   hoerspiel_url_origin_neko: str = "",
+                  hoerspiel_url_origin_niclas: str = "",
                   kibuddy_origin_url=None,
                   a2_receipt_store=None,
                   wetter_origin_url=None):
@@ -912,7 +926,9 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             # _client_by_kind_id["neko"] einen echten HoerspielClient mit
             # Neko-Origin bekommt (statt stillschweigende Paula-Fallback, AC-1).
             hoerspiel_url_origin=hoerspiel_url_origin or "",
-            hoerspiel_url_origin_neko=hoerspiel_url_origin_neko or ""))
+            hoerspiel_url_origin_neko=hoerspiel_url_origin_neko or "",
+            # HSP-43 / #1263: Niclas-Origin durchreichen (handverdrahtet wie neko).
+            hoerspiel_url_origin_niclas=hoerspiel_url_origin_niclas or ""))
 
     # HOE-8 / #876: »Hörspiel öffnen« als lesende Aufgabe (EC-9, Cluster B / Capability-Karte).
     # Dreifacher AND-Guard: hoerspiel_url_origin UND mini_app_base_url UND

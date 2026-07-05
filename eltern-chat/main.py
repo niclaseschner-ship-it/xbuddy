@@ -1198,6 +1198,10 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # damit HoerspielFolgeErzeugenTask die Mini-Map mit echtem Neko-Client
         # befüllt (kind_id="neko" → hoerspiel_url_origin_neko, AC-1).
         hoerspiel_url_origin_neko=cfg.hoerspiel_url_origin_neko or "",
+        # HSP-43 / #1263: Niclas-Origin an build_catalog durchreichen, damit
+        # HoerspielFolgeErzeugenTask die Mini-Map mit echtem Niclas-Client befüllt
+        # (kind_id="niclas" → hoerspiel_url_origin_niclas, AC3).
+        hoerspiel_url_origin_niclas=cfg.hoerspiel_url_origin_niclas or "",
         # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts. Leer/None →
         # KibuddyAufnahmeQuelleSetzenTask NICHT im Katalog (AND-Guard KAQS-6).
         kibuddy_origin_url=cfg.kibuddy_origin_url or None,
