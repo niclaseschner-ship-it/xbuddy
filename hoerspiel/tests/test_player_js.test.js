@@ -293,28 +293,164 @@ test('istLaufendesAlbum: Tap-Guard nur beim gerade laufenden Album (Bug 3, AC-BF
   assert.equal(P.istLaufendesAlbum(null, {}, 'folge-22'), false);
 });
 
-test('ensureAudio: EIN persistentes Element, Listener EINMALIG (Bug 4, AC-BF3)', () => {
-  const savedAudio = global.Audio;
-  let created = 0;
-  const listeners = [];
-  global.Audio = function () {
-    created++;
+// Audio-Element-Attrappe für den Doppel-Puffer: sammelt Listener je Instanz,
+// erlaubt fn(ev) manuell zu feuern (ev.target-Guard testen).
+function makeAudioMock() {
+  const instances = [];
+  const Ctor = function () {
     this.playbackRate = 1;
-    this.addEventListener = (typ) => listeners.push(typ);
+    this.currentTime = 0;
+    this.duration = 0;
+    this.src = '';
+    this.preload = '';
+    this._listeners = {};
+    this.played = 0;
+    this.loaded = 0;
+    this.addEventListener = (typ, fn) => { (this._listeners[typ] = this._listeners[typ] || []).push(fn); };
+    this.play = () => { this.played++; return Promise.resolve(); };
+    this.load = () => { this.loaded++; };
+    this.fire = (typ, target) => (this._listeners[typ] || []).forEach(fn => fn({ target: target || this }));
+    instances.push(this);
   };
-  P._S.audio = null;   // sauberer Startzustand
+  Ctor.instances = instances;
+  return Ctor;
+}
+
+test('ensureAudio: ZWEI persistente Elemente (aktiv+idle), Listener je Element EINMALIG (#1304, AC-BG1)', () => {
+  const savedAudio = global.Audio;
+  const A = makeAudioMock();
+  global.Audio = A;
+  P._S.audio = null; P._S.audioIdle = null;   // sauberer Startzustand
   try {
-    const a1 = P.ensureAudio();
-    const a2 = P.ensureAudio();
-    assert.equal(created, 1, 'nur EIN Audio-Element über mehrere ladeTrack-Aufrufe');
-    assert.equal(a1, a2, 'derselbe persistente Element-Handle');
-    // Auto-Advance-Pfad (ended) genau einmal registriert → kein Listener-Leak/Doppelfeuer.
-    assert.equal(listeners.filter(t => t === 'ended').length, 1, 'ended-Listener nur einmal angehängt');
-    assert.ok(listeners.includes('play') && listeners.includes('pause') && listeners.includes('timeupdate'),
-      'play/pause/timeupdate einmalig registriert');
+    P.ensureAudio();
+    const a2 = P.ensureAudio();   // idempotent
+    assert.equal(A.instances.length, 2, 'genau zwei Elemente (Doppel-Puffer), kein Neubau beim 2. Aufruf');
+    assert.equal(P._S.audio, a2, 'aktiver Element-Handle stabil');
+    assert.ok(P._S.audioIdle && P._S.audio !== P._S.audioIdle, 'idle ist ein separates Element');
+    for (const el of A.instances) {
+      for (const typ of ['timeupdate', 'play', 'pause', 'ended']) {
+        assert.equal((el._listeners[typ] || []).length, 1, typ + '-Listener je Element genau einmal');
+      }
+    }
   } finally {
     global.Audio = savedAudio;
-    P._S.audio = null;
+    P._S.audio = null; P._S.audioIdle = null;
+  }
+});
+
+test('planNext: swap wenn nächster gepuffert, load bei Mismatch, stop am letzten Track (#1304, AC-BG1)', () => {
+  // trackIdx 0, len 3, preloaded 1 → nächster liegt im idle-Element → swap
+  assert.equal(P.planNext(0, 3, 1), 'swap');
+  // preloaded passt nicht (null oder falscher Index) → Fallback ladeTrack
+  assert.equal(P.planNext(0, 3, null), 'load');
+  assert.equal(P.planNext(0, 3, 2), 'load');
+  // letzter Track → Wiedergabe endet, egal was gepuffert ist
+  assert.equal(P.planNext(2, 3, 3), 'stop');
+  assert.equal(P.planNext(2, 3, null), 'stop');
+});
+
+test('preloadNext: puffert nächsten Track ins idle-Element (src+load+preloadedIdx), out-of-range null (#1304, AC-BG1)', async () => {
+  const savedAudio = global.Audio;
+  const A = makeAudioMock();
+  global.Audio = A;
+  P._S.audio = null; P._S.audioIdle = null;
+  P._S.cache = null;   // Miss → resolveTrackSrc gibt die Netz-URL
+  P._S.cfg = { playback_tempo: 1.1 };
+  P._S.tracks = [
+    { position: 1, 'audio-asset': '/audio/t1.mp3' },
+    { position: 2, 'audio-asset': '/audio/t2.mp3' },
+  ];
+  try {
+    P.ensureAudio();
+    const idle = P._S.audioIdle;
+    await P.preloadNext(1);
+    assert.equal(idle.src, '/audio/t2.mp3', 'idle-Element bekommt die nächste Quelle');
+    assert.equal(idle.preload, 'auto', 'preload=auto für Hintergrund-Puffern');
+    assert.equal(idle.loaded, 1, 'load() angestoßen');
+    assert.equal(idle.playbackRate, 1.1, 'Tempo auch aufs idle-Element');
+    assert.equal(P._S.preloadedIdx, 1, 'preloadedIdx gesetzt → planNext kann swappen');
+    // out of range (letzter Track hat keinen Nachfolger) → kein Puffer
+    await P.preloadNext(2);
+    assert.equal(P._S.preloadedIdx, null, 'kein Nachfolger → preloadedIdx zurückgesetzt');
+  } finally {
+    global.Audio = savedAudio;
+    P._S.audio = null; P._S.audioIdle = null;
+    P._S.cache = null; P._S.tracks = []; P._S.trackIdx = 0; P._S.preloadedIdx = null; P._S.cfg = {};
+  }
+});
+
+test('ended-Guard: nur das AKTIVE Element advanct; idle-ended ist ein No-Op (#1304, AC-BG1, kein_doppelfeuer)', () => {
+  const savedAudio = global.Audio;
+  const A = makeAudioMock();
+  global.Audio = A;
+  P._S.audio = null; P._S.audioIdle = null;
+  P._S.tracks = [{ position: 1 }, { position: 2 }, { position: 3 }];
+  P._S.trackIdx = 0;
+  P._S.preloadedIdx = 1;      // nächster ist gepuffert → aktives ended würde swappen
+  P._S.aktivAlbum = null;     // updateMediaSession/Resume no-op ohne navigator
+  P._S.cache = null; P._S.cfg = {};
+  try {
+    P.ensureAudio();
+    const idle = P._S.audioIdle;
+    // idle feuert 'ended' → Guard (ev.target !== S.audio) blockt → KEIN Advance.
+    idle.fire('ended', idle);
+    assert.equal(P._S.trackIdx, 0, 'idle-ended verändert den Track-Index NICHT (Anti-Doppelfeuer)');
+  } finally {
+    global.Audio = savedAudio;
+    P._S.audio = null; P._S.audioIdle = null;
+    P._S.tracks = []; P._S.trackIdx = 0; P._S.preloadedIdx = null; P._S.aktivAlbum = null; P._S.cache = null;
+  }
+});
+
+test('ended-swap: aktives ended swappt SYNCHRON ans gepufferte idle-Element + hält MediaSession playing (#1304, AC-BG2)', () => {
+  const savedAudio = global.Audio;
+  const savedNav = global.navigator;
+  const A = makeAudioMock();
+  global.Audio = A;
+  const msCalls = { playbackState: [], metadata: 0 };
+  global.navigator = {
+    mediaSession: {
+      get playbackState() { return this._ps; },
+      set playbackState(v) { this._ps = v; msCalls.playbackState.push(v); },
+      set metadata(v) { msCalls.metadata++; },
+      setActionHandler() {},
+      setPositionState() {},
+    },
+  };
+  global.MediaMetadata = function (o) { Object.assign(this, o); };
+  const savedDoc = global.document;
+  global.document = { getElementById: () => null, querySelector: () => null };  // DOM-Zugriffe im Swap sind No-Ops
+  P._S.audio = null; P._S.audioIdle = null;
+  P._S.tracks = [{ position: 1 }, { position: 2 }, { position: 3 }];
+  P._S.trackIdx = 0;
+  P._S.preloadedIdx = 1;
+  P._S.aktivAlbum = { id: 'folge-22', nummer: 22, titel: 'Der See' };
+  P._S.aktivKindId = 'mia'; P._S.kindId = 'mia';
+  P._S.cache = null; P._S.cfg = { playback_tempo: 1.0 };
+  const savedFetch = global.fetch;
+  global.fetch = async () => ({ ok: true, status: 200, json: async () => ({}) });
+  try {
+    P.ensureAudio();
+    const aktivVorher = P._S.audio;
+    const idleVorher = P._S.audioIdle;
+    // aktives Element feuert 'ended' → planNext=swap → synchroner Swap.
+    aktivVorher.fire('ended', aktivVorher);
+    assert.equal(P._S.trackIdx, 1, 'Track advanct auf den vorgepufferten Index');
+    assert.equal(P._S.audio, idleVorher, 'idle-Element ist jetzt aktiv (Rollen getauscht)');
+    assert.equal(P._S.audioIdle, aktivVorher, 'altes aktives Element ist jetzt idle');
+    assert.equal(idleVorher.played, 1, 'play() SYNCHRON am schon-gepufferten Element (kein await)');
+    assert.ok(msCalls.metadata >= 1, 'MediaSession-Metadata für den neuen Track gesetzt');
+    assert.ok(!msCalls.playbackState.includes('paused'), 'playbackState im Swap NIE auf paused gekippt');
+    assert.equal(global.navigator.mediaSession.playbackState, 'playing', 'playbackState über den Swap gehalten');
+  } finally {
+    global.Audio = savedAudio;
+    global.navigator = savedNav;
+    global.fetch = savedFetch;
+    global.document = savedDoc;
+    delete global.MediaMetadata;
+    P._S.audio = null; P._S.audioIdle = null;
+    P._S.tracks = []; P._S.trackIdx = 0; P._S.preloadedIdx = null; P._S.aktivAlbum = null;
+    P._S.aktivKindId = null; P._S.cache = null; P._S.cfg = {};
   }
 });
 
