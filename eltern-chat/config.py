@@ -47,11 +47,11 @@ DEFAULTS = {
     # E-TAB-6 V2 / #508: Multimodal-Anbieter-Slot (additiv). Default leer →
     # Fallback auf `provider` (V1-Kompatibilität: Claude übernimmt auch den
     # TAB-Pfad). Gesetzt → eigener Anbieter für Termin-Extraktion (DSGVO-Brücke).
-    # DEPRECATED (#1262): Der Foto-Pfad läuft jetzt über den Foto-Adapter
+    # DEPRECATED (#1262, PR1): Der Foto-Pfad läuft jetzt über den Foto-Adapter
     # (`skills.foto_analyse` → `tools.llm`); der Anbieter ist über den Vendor-
     # Teil des Foto-Slots (`eltern-chat-anthropic-foto-analyse-api-key`) gepinnt.
-    # `multimodal_provider` wird nicht mehr ausgewertet — Entfernen ist PR2.
-    "multimodal_provider": "",      # DEPRECATED #1262 (Vendor via Foto-Slot)
+    # `multimodal_provider` wird nicht mehr ausgewertet — Entfernen ist PR2 (#1334).
+    "multimodal_provider": "",      # DEPRECATED #1262 / Rückbau #1334
     # E-TAB-6 V2 / #508: Multimodal-Modell-Override. leer → Anbieter-Default.
     # #1262: weiterhin genutzt — reicht als `model` an FotoAnalyseProvider durch
     # (leer → Foto-Default claude-opus-4-7).
@@ -235,13 +235,13 @@ class Config:
         self.essen_origin_url = essen_origin_url       # EC-15 / #503: Origin des Essens-Buddys (ESSEN-15/ESSEN-19)
         self.log_level = log_level                 # LOG-4 (#166): Level-String für tools.logsetup
         # E-TAB-6 V2 / #508: Multimodal-Anbieter-Konfiguration (additiver Slot).
-        # DEPRECATED (#1262): der Foto-Pfad holt den Key jetzt aus dem
+        # DEPRECATED (#1262, PR1): der Foto-Pfad holt den Key jetzt aus dem
         # Zugangsdaten-Store über den Foto-Slot (ZD-5), nicht mehr aus
         # `multimodal_api_key`; `multimodal_provider` ist über den Slot-Vendor
-        # gepinnt. Beide bleiben in V1 als Feld erhalten (Entfernen = PR2).
+        # gepinnt. Beide bleiben in V1 als Feld erhalten (Entfernen in PR2 #1334).
         # `multimodal_model` wird weiter ausgewertet (Modell-Override, #1262).
-        self.multimodal_provider = multimodal_provider  # DEPRECATED #1262 (Slot-Vendor)
-        self.multimodal_api_key = multimodal_api_key    # DEPRECATED #1262 (Foto-Slot/ZD-5)
+        self.multimodal_provider = multimodal_provider  # DEPRECATED #1262 / Rückbau #1334
+        self.multimodal_api_key = multimodal_api_key    # DEPRECATED #1262 / Rückbau #1334
         self.multimodal_model = multimodal_model        # #1262: Modell-Override an Foto-Adapter
         # EZG-6 / EIN-8 / #653: Mini-App-URL für die Einkaufsliste (EZG-6).
         self.mini_app_einkauf_url = mini_app_einkauf_url  # leer → ENV-Fallback MINI_APP_EINKAUF_URL
