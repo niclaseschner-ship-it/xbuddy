@@ -682,6 +682,13 @@ im Ticket Contract, Merge-Reihenfolge aus Phase 0) auf **ein** Brett:
    Treppe" (Bausteine-Falle); ein Sub-Ticket nur zum Guard-Grünmachen ist
    Tooling-Wildwuchs. Nur ein **Spec**-Rückgrat landet vorab eigenständig
    (Spec-PR `Refs #`, der `closes-guard`-Spec-Ausgang).
+   **Closes-Mapping vorab (Brett mit mehreren parallel mergenden Stücken).**
+   `closes-guard` verlangt GENAU EIN offenes Issue pro Impl-PR. Schon in
+   Phase 0 festlegen: welches Stück trägt `Closes #<themen-ticket>`, welche
+   Stücke bekommen Sub-Tickets — und die Sub-Tickets VOR dem ersten
+   Merge-Gate anlegen, statt reaktiv am Gate PR-Bodys umzubiegen
+   (Belegfall #1272, 2026-07-05: Sub-Tickets #1293/#1294/#1296 in
+   Umbieg-Hektik am ersten Merge entstanden).
 2. **Stücke disjunkt parallel** gegen das gelandete Rückgrat — jedes auf
    disjunkten `write_allowed_files`, das Rückgrat als `read_context_files`,
    erfüllt die im Rückgrat geprägten Requirement-IDs. Das ist der Multi-Pfad-
@@ -805,6 +812,11 @@ haben; **abhängige** Tracks rebasen vor ihrem PR auf den neuen `origin/main`
    - **Verdikt `gesund`/`kleine Drift`, nur Schwere `klein`** → PASS.
      Befunde werden als Folge-Tickets in die Abschluss-Bilanz aufgenommen, sie
      blockieren das Gate nicht.
+     **Klein-Fixe batchen:** Sollen klein-Befunde direkt gefixt werden
+     (Nic-Vorgabe „fix klein direkt"), die Befunde EINES Watchdog-Laufs in
+     EINE Fix-Continuation bündeln und die Triage direkt-fixbar vs.
+     Folge-Ticket einmal vorab machen — nicht pro Befund eine serielle
+     Kette (#1263, 2026-07-05: vier Zyklen statt einem).
 
    **Dieser PR-scoped Lauf ersetzt nicht den periodischen Repo-Watchdog.**
    Linsen 2 (Familie-3 im Großen) und 5 (Lego/Sorten) entstehen typisch
@@ -1091,6 +1103,11 @@ CWD-relativ, Reader-Cache, Import-Stil). Reihenfolge:
    was schiefgeht, gehört der Fix zur laufenden Scheibe: durchziehen, nicht
    zumachen. Nur ein eigenständiges neues Thema ist eine Folge-Aufgabe
    (entscheide nach der Regel „Aufgabe taucht mitten im arbeitstag auf").
+   **Gerätenahe Scheiben (PWA/Audio/Offline):** der Post-Merge-Gerätetest ist
+   eine **Bau-Phase mit eigenem Budget**, kein Abschluss-Ritual — OS-/
+   Browser-Verhalten ist für Tests, Watchdog UND statischen Screenshot
+   unsichtbar (Hörspiel-Player 2026-07-05: ~7 echte Bugs in 3 Klassen, alle
+   NACH grünem Merge, keiner ohne Gerätetest gefunden).
 
 3. **Abschluss-Bilanz** — erst nach Nic-OK: was gemergt, was offen, welche
    Provisorium-Risiken bewusst akzeptiert wurden (mit Begründung), was in

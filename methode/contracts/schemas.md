@@ -428,6 +428,12 @@ operational:
   # setup_reflex: siehe Schicht 1 (S1.2).
   test_command: "pytest tests/test_router.py -k wetter"
   # Nur Python-Tracks. Spec-/Doku-/JSON-Tracks: weglassen → lint_clean: not_applicable.
+  # Scope-Regel (2026-07-05, #1262/test_ETAB6_V1): Ändert der Diff Signatur/Guard/
+  # Default einer breit-konsumierten Funktion (z. B. build_catalog), MUSS
+  # test_command die Testdateien ALLER Konsumenten einschließen (grep der
+  # Aufrufer, analog blast_radius_probe) — der eng gescopte Self-Gate ist bis
+  # #1310 (pytest-CI) der EINZIGE Test-Enforcer; ein verpasster Konsument
+  # landet sonst unsichtbar rot auf main.
   # Zweistufig (STYLE-2): Ruff && lint-imports — die Konjunktion blockt den Handoff,
   # sobald entweder Code-Stil (Ruff) oder Modul-Grenzen (MOD-1..5) verletzt sind.
   # Form fix: NIE --diff auf Ruff (das ist Fix-Preview, exit 0 trotz Fehler).
