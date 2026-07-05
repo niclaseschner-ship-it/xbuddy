@@ -346,6 +346,35 @@ function trackAnzeige(tracks, idx) {
   return 'Track ' + (idx + 1) + '/' + sorted.length + ' · ' + trackLabel(t, kap);
 }
 
+/**
+ * Now-Playing-Entscheidung für den Mini-Player (Bug 1/2, HSP-48). Rein/testbar.
+ * Läuft gerade ein Album (aktivAlbum + Audio vorhanden), ist der Mini der GLOBALE
+ * Now-Playing-Banner ("was läuft gerade") — unabhängig vom angezeigten Kind-Regal.
+ * Sonst mode:'resume' → Aufrufer fällt auf die resume-basierte Kind-Logik zurück.
+ * @returns {{mode:'now',cover,title,sub,albumId}|{mode:'resume'}}
+ */
+function miniNowPlaying(aktivAlbum, hasAudio, playing, trackIdx, tracks) {
+  if (aktivAlbum && hasAudio) {
+    return {
+      mode: 'now',
+      cover: aktivAlbum['cover-asset'] || '',
+      title: aktivAlbum.titel || '',
+      sub: playing ? 'Spielt gerade' : ('Weiter hören · Folge ' + aktivAlbum.nummer),
+      albumId: aktivAlbum.id,
+    };
+  }
+  return { mode: 'resume' };
+}
+
+/**
+ * Tap-Guard (Bug 3, HSP-52): Ist das getippte Album genau das gerade laufende
+ * (aktivAlbum + lebendes Audio)? Dann NICHT neu laden — nur den Player zeigen,
+ * Wiedergabe läuft ungestört weiter.
+ */
+function istLaufendesAlbum(aktivAlbum, hasAudio, albumId) {
+  return !!(aktivAlbum && hasAudio && aktivAlbum.id === albumId);
+}
+
 /* ══════════════════════════════════════════════════════════════════
    MEDIASESSION (HSP-22) — Muster aus alben.js:512-529
    ══════════════════════════════════════════════════════════════════ */
@@ -382,9 +411,10 @@ const S = {
   alben: [],
   cache: null,
   aktivAlbum: null,      // {..album, tracks:[]}
+  aktivKindId: null,     // Kind, dem das laufende Album gehört (bleibt beim Kind-Toggle stabil)
   tracks: [],
   trackIdx: 0,
-  audio: null,
+  audio: null,           // EIN persistentes Audio-Element über alle Tracks (Bug 4)
   playing: false,
   cfg: {},
   cfgEdit: {},
@@ -443,7 +473,7 @@ async function ladeKind(kindId) {
   S.alben = alben.slice().sort((a, b) => (b.nummer || 0) - (a.nummer || 0));
 
   await rendereRegal();
-  await initMini();
+  await syncMini();  // Bug 1/2: läuft was → Now-Playing-Banner, sonst resume-basiert
   hartPrecache();   // HSP-54: jüngste N=3 hart precachen (fire-and-forget)
 }
 
@@ -484,6 +514,27 @@ async function initMini() {
   mini.classList.add('hidden');
 }
 
+/**
+ * Mini-Player als "was läuft gerade" rendern (Bug 1/2, HSP-48).
+ * Sichtbar sobald ein Album aktiv/geladen ist — GLOBAL, unabhängig vom gerade
+ * angezeigten Kind-Regal. Tap öffnet den vollen Player OHNE Reload (Bug 3).
+ * Läuft nichts → resume-basierter Fallback fürs aktive Kind (initMini).
+ */
+function syncMini() {
+  const mini = $('mini');
+  if (!mini) return;
+  const m = miniNowPlaying(S.aktivAlbum, !!S.audio, S.playing, S.trackIdx, S.tracks);
+  if (m.mode === 'now') {
+    if ($('mini-cover')) $('mini-cover').src = m.cover;
+    if ($('mini-title')) $('mini-title').textContent = m.title;
+    if ($('mini-sub')) $('mini-sub').textContent = m.sub;
+    mini.classList.remove('hidden');
+    mini.onclick = () => oeffneAlbum(m.albumId);
+    return;
+  }
+  return initMini();  // nichts läuft → resume-basiert (async)
+}
+
 function hartPrecache() {
   if (!S.cache) return;
   const jung = S.alben.slice(0, CACHE_N);
@@ -499,6 +550,15 @@ function hartPrecache() {
 /* ── Voller Player (HSP-52) ─────────────────────────────────────── */
 
 async function oeffneAlbum(albumId) {
+  // Bug 3: läuft dieses Album schon (Tap auf Mini/Kachel des Now-Playing)?
+  // → NUR den Player zeigen, Audio NICHT neu laden — Wiedergabe läuft weiter.
+  if (istLaufendesAlbum(S.aktivAlbum, S.audio, albumId)) {
+    renderedPlayer(false);
+    zeigeScreen('player');
+    syncMini();
+    return;
+  }
+
   const album = S.alben.find(a => a.id === albumId);
   if (!album) return;
   let manifest;
@@ -506,6 +566,7 @@ async function oeffneAlbum(albumId) {
   catch (e) { toast('Folge konnte nicht geladen werden.', true); return; }
 
   S.aktivAlbum = Object.assign({}, album, manifest);
+  S.aktivKindId = S.kindId;   // Kind merken → Resume-Writes bleiben nach Kind-Toggle korrekt
   S.tracks = sortTracks(manifest.tracks || []);
 
   const resume = await apiResumeGet(S.kindId, albumId).catch(() => null);
@@ -551,33 +612,67 @@ function aktualisiereRandDisabled() {
   if ($('player-nextkap')) $('player-nextkap').disabled = d.next;
 }
 
-async function ladeTrack(idx, autoplay) {
-  if (idx < 0 || idx >= S.tracks.length) return;
-  S.trackIdx = idx;
-  const track = S.tracks[idx];
-
-  if (S.audio) { S.audio.pause(); S.audio.src = ''; }
-  const src = await resolveTrackSrc(S.cache, track['audio-asset']);
-  const audio = new Audio(src);
-  audio.playbackRate = S.cfg.playback_tempo || 1.0;
+/**
+ * EIN persistentes Audio-Element über alle Tracks (Bug 4, HSP-22).
+ * Lazy erzeugt, Listener EINMALIG angehängt — die Handler lesen den Zustand
+ * dynamisch aus S (S.trackIdx/S.tracks/S.aktivAlbum), damit ein user-aktiviertes,
+ * durchlaufendes Element im Hintergrund (Bildschirm aus) den nächsten Track per
+ * ended→src=next+play() weiterspielt. Ein pro-Track frisch erzeugtes Element
+ * würde vom Browser im Hintergrund blockiert.
+ */
+function ensureAudio() {
+  if (S.audio) return S.audio;
+  const audio = (typeof Audio !== 'undefined') ? new Audio() : null;
   S.audio = audio;
+  if (!audio) return null;
 
   audio.addEventListener('timeupdate', () => {
     if (audio.duration > 0) {
       const pct = (audio.currentTime / audio.duration * 100).toFixed(1) + '%';
       if ($('player-fill')) $('player-fill').style.width = pct;
+      if ($('mini-fill')) $('mini-fill').style.width = pct;
+      // Lockscreen-Scrubber (HSP-22), best effort.
+      try {
+        if (typeof navigator !== 'undefined' && navigator.mediaSession &&
+            navigator.mediaSession.setPositionState && isFinite(audio.duration)) {
+          navigator.mediaSession.setPositionState({
+            duration: audio.duration,
+            playbackRate: audio.playbackRate || 1,
+            position: Math.min(audio.currentTime, audio.duration),
+          });
+        }
+      } catch (e) { /* setPositionState nicht überall verfügbar */ }
     }
   });
   audio.addEventListener('play', () => {
     S.playing = true; syncPlayIcon();
-    apiResumeSet(S.kindId, S.aktivAlbum.id, track.position).catch(() => {});
-    updateMediaSession(S.aktivAlbum, track, true);
+    const track = S.tracks[S.trackIdx];
+    if (S.aktivAlbum && track) {
+      // Resume-Write ans EIGENTÜMER-Kind (nicht ans evtl. umgeschaltete S.kindId).
+      apiResumeSet(S.aktivKindId || S.kindId, S.aktivAlbum.id, track.position).catch(() => {});
+      updateMediaSession(S.aktivAlbum, track, true);
+    }
+    syncMini();
   });
-  audio.addEventListener('pause', () => { S.playing = false; syncPlayIcon(); });
+  audio.addEventListener('pause', () => { S.playing = false; syncPlayIcon(); syncMini(); });
   audio.addEventListener('ended', () => {
     if (S.trackIdx < S.tracks.length - 1) ladeTrack(S.trackIdx + 1, true);
-    else { S.playing = false; syncPlayIcon(); }
+    else { S.playing = false; syncPlayIcon(); syncMini(); }
   });
+  return audio;
+}
+
+async function ladeTrack(idx, autoplay) {
+  if (idx < 0 || idx >= S.tracks.length) return;
+  S.trackIdx = idx;
+  const track = S.tracks[idx];
+
+  const audio = ensureAudio();
+  if (!audio) return;
+  const src = await resolveTrackSrc(S.cache, track['audio-asset']);
+  // Selbes Element wiederverwenden — nur die Quelle wechseln (Bug 4).
+  audio.src = src;
+  audio.playbackRate = S.cfg.playback_tempo || 1.0;
 
   // Kapitel-Hervorhebung + Rand-Disabled aktualisieren.
   const chap = $('player-chapters');
@@ -586,6 +681,7 @@ async function ladeTrack(idx, autoplay) {
   }
   aktualisiereRandDisabled();
   updateMediaSession(S.aktivAlbum, track, autoplay);
+  syncMini();
 
   if (autoplay) { try { await audio.play(); } catch (e) {} }
 }
@@ -731,9 +827,9 @@ function bindStatisch() {
   const on = (id, ev, fn) => { const el = $(id); if (el) el.addEventListener(ev, fn); };
   on('pille', 'click', () => ladeKind(nextKindId(S.liste, S.kindId)));
   on('btn-settings', 'click', oeffneSettings);
-  on('settings-back', 'click', () => zeigeScreen('regal'));
+  on('settings-back', 'click', () => { zeigeScreen('regal'); syncMini(); });
   on('settings-save', 'click', speichereSettings);
-  on('player-back', 'click', () => zeigeScreen('regal'));
+  on('player-back', 'click', () => { zeigeScreen('regal'); syncMini(); });
   on('player-play', 'click', togglePlay);
   on('player-prev', 'click', () => ladeTrack(S.trackIdx - 1, true));
   on('player-next', 'click', () => ladeTrack(S.trackIdx + 1, true));
@@ -780,5 +876,7 @@ if (typeof module !== 'undefined' && module.exports) {
     kachelHtml, chapterRowsHtml, trackAnzeige,
     // MediaSession
     setupMediaSession, updateMediaSession,
+    // Player-Verhalten (Bug 1..4, T1272-B-BUGFIX) — rein + Test-Seams
+    miniNowPlaying, istLaufendesAlbum, ensureAudio, _S: S,
   };
 }
