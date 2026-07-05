@@ -576,19 +576,30 @@ def _current_build_id():
     return pwa_mantel.build_id_for("einkauf", static_dir)
 
 
-def _mini_app_build_id(primary_js: str) -> str:
-    """build_id als max(mtime(primary_js), mtime(platform.js)) (T1229, PWAM-4).
+# PWAM-5-Routing-Tabelle: primary_js-Dateiname → Registry-Komponente (T1284-AC1).
+# Löst den Direktbezug auf Dateipfade ab; build_id_source_set (inkl. platform.js)
+# kommt aus pwa_mantel.REGISTRY, nicht hartkodiert.
+_MINI_APP_JS_TO_COMPONENT: dict[str, str] = {
+    "essen-einkauf.js":       "einkauf",
+    "plan-einstellungen.js":  "plan",
+    "mini-app-uebersicht.js": "mini-app-uebersicht",
+    "routine-anpassen.js":    "routine",
+}
 
-    Generischer Mini-App-HTML-Helfer: bezieht platform.js-mtime ein, damit eine
-    platform.js-Änderung den Telegram-Cache aller 4 platform.js-ladenden
-    Mini-App-Routen verlässlich invalidiert (MAD-5 / RAT-16). Delegiert an
-    pwa_mantel.build_id_from_mtimes (OSError-Fallback "0").
+
+def _mini_app_build_id(primary_js: str) -> str:
+    """build_id für Mini-App-HTML-Routen via PWAM-5-Registry (T1229/T1284-AC1).
+
+    Delegiert an pwa_mantel.build_id_for(component, static_dir) — Single-Source
+    über SW- und HTML-Pfade (PWAM-5). build_id_source_set (inkl. platform.js)
+    kommt aus der Registry, nicht hartkodiert. OSError-Fallback "0" liegt in
+    build_id_from_mtimes (aufgerufen durch build_id_for).
+
+    Aufruf-Muster bleibt stabil (_mini_app_build_id("essen-einkauf.js") etc.),
+    Auflösung passiert jetzt über _MINI_APP_JS_TO_COMPONENT + REGISTRY.
     """
     static_dir = os.path.join(os.path.dirname(__file__), "static")
-    return pwa_mantel.build_id_from_mtimes([
-        os.path.join(static_dir, primary_js),
-        os.path.join(static_dir, "platform.js"),
-    ])
+    return pwa_mantel.build_id_for(_MINI_APP_JS_TO_COMPONENT[primary_js], static_dir)
 
 
 @app.route("/seiten/essen/einkauf/<path:asset>", methods=["GET"])
@@ -1138,10 +1149,7 @@ def heim_shell(panel_id):
     """
     display_id = _lookup_display_id(panel_id)
     static_dir = os.path.join(os.path.dirname(__file__), "static")
-    try:
-        build_id = str(int(os.path.getmtime(os.path.join(static_dir, "heim-shell.css"))))
-    except OSError:
-        build_id = "0"
+    build_id = pwa_mantel.build_id_for("shell", static_dir)  # PWAM-5-Registry (T1284-AC1)
     resp = make_response(render_template(
         "heim-shell.html",
         panel_id=panel_id,
