@@ -1878,7 +1878,11 @@ Zwei Player-Ebenen, kein Tab-Chrome, kein Menü auf der Startfläche (HSP-3-Prin
   (orange), Offline-Badge (HSP-54). Oben Umschalter-Pille (HSP-49) links +
   Zahnrad (HSP-50) rechts.
 - **Sticky-Mini-Player** unten: Cover-Thumb + Titel + „Weiter hören"-Zeile +
-  Play — immer sichtbar.
+  Play — immer sichtbar. Der Mini ist ein **globaler Now-Playing-Banner**: läuft
+  eine Folge, zeigt er sie **über den Kind-Umschalter hinweg** (Cross-Kind, auch
+  wenn das Regal eines anderen Kindes offen ist) und beschriftet sie mit dem
+  **Eigentümer-Kind** der laufenden Folge (nicht dem gerade offenen Regal-Kind,
+  HSP-49).
 - **Voller Player** (eigener Screen) bei Tap auf eine Kachel **oder** den
   Mini-Player: großes Cover, Titel, großer Play/Pause + große ⏮/⏭, Fortschritt,
   Zurück-Pfeil — plus Kapitel-Liste (HSP-52). Bedien-Regeln aus HSP-19/20/21
