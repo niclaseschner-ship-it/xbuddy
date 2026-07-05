@@ -21,8 +21,27 @@ from dataclasses import dataclass, field
 from _markdown_button_strip import strip_markdown_buttons
 from model import WRITE, GenerationRequest, Message, ProviderError, TaskResultBlock, TextBlock
 from providers.pricing import estimate_cost
-from tasks import render_form_b
+from tasks import HOERSPIEL_INSTANZEN, render_form_b
 from telemetry import ProviderCall, TurnTelemetry
+
+# HSP-43 / #1263: Prompt-Namensliste aus DERSELBEN Instanz-Konstante wie die
+# HFE-enum (tasks.HOERSPIEL_INSTANZEN) — kein separater mia/finn-Hardcode im
+# Prompt. Nimmt emil automatisch mit (→ „Mia, Finn oder Niclas").
+_HSP_NAMEN = [i["name"] for i in HOERSPIEL_INSTANZEN]
+_HSP_IDS = [i["kind_id"] for i in HOERSPIEL_INSTANZEN]
+
+
+def _oder_liste(items) -> str:
+    """»a, b oder c« — Aufzählung für den System-Prompt (HSP-43)."""
+    items = list(items)
+    if len(items) <= 1:
+        return "".join(items)
+    return "%s oder %s" % (", ".join(items[:-1]), items[-1])
+
+
+_HSP_NAMEN_ODER = _oder_liste(_HSP_NAMEN)                       # "Mia, Finn oder Niclas"
+_HSP_NAMEN_GUILL = "/".join("»%s«" % n for n in _HSP_NAMEN)    # "»Mia«/»Finn«/»Niclas«"
+_HSP_IDS_BZW = " bzw. ".join("»%s«" % k for k in _HSP_IDS)     # "»mia« bzw. »finn« bzw. »emil«"
 
 SYSTEM_PROMPT = (
     "Du bist der Eltern-Chat von XBuddy — ein freundlicher Assistent in der "
@@ -115,15 +134,15 @@ SYSTEM_PROMPT = (
     "LLM-Modell, Playback-Tempo, Pausen zwischen Absätzen, Audio-Ausgabe / "
     "audio_ziel `display` vs `panel`, HSP-34 Karte 6) sind KEIN HFE- und KEIN "
     "HOE-Trigger. Antwort: »<Was>… wählst/änderst du in der Hörspiel-Mini-App "
-    "<von Kindname>.« — wenn die Mutter ein Kind nennt (»Mia«/»Finn«), trage "
+    f"<von Kindname>.« — wenn die Mutter ein Kind nennt ({_HSP_NAMEN_GUILL}), trage "
     "den Namen im Verweis explizit mit, weil die Settings pro Hörspiel-Instanz "
     "gepflegt werden (HSP-34 ist per-kind). Bei Mehrdeutigkeit ohne Kindname "
-    "stelle EINE kurze Rückfrage: »Für Mia oder Finn?« — analog HFE — und "
+    f"stelle EINE kurze Rückfrage: »Für {_HSP_NAMEN_ODER}?« — analog HFE — und "
     "antworte erst danach mit dem Verweis.\n"
     "Beispiele beiläufige Settings-Erwähnung (KEIN Tool-Call): »wechsel bei "
     "Finn auf mistral« → »Anbieter und Modell von Finn wählst du in der "
     "Hörspiel-Mini-App von Finn.«; »wechsel auf onyx«, »mit shimmer vertonen«, "
-    "»andere Stimme« (#995) → Rückfrage »Für Mia oder Finn?«, dann »Voice "
+    f"»andere Stimme« (#995) → Rückfrage »Für {_HSP_NAMEN_ODER}?«, dann »Voice "
     "wählst du in der Hörspiel-Mini-App von <Name>.«; »Tempo ändern« / "
     "»Pausen tunen« → analog mit Kind-Verweis; »Audio aufs Display schicken« "
     "/ »Audio aufs Panel« → »Audio-Ausgabe wählst du in der Hörspiel-Mini-App "
@@ -138,9 +157,9 @@ SYSTEM_PROMPT = (
     "Beiläufige Settings-Erwähnung (z. B. »Voice von Finn ändern«, "
     "»wechsel auf mistral«) → sprachlicher Verweis OHNE Tool-Call OHNE "
     "Button (Anti-Redundanz-Grundregel bleibt).\n"
-    "kind_id-Wahl (HFE-3, E-HFE-6): Nennt die Mutter ein Kind (»Mia« oder »Finn«), "
-    "setze kind_id entsprechend (»mia« bzw. »finn«). Bei Mehrdeutigkeit — kein "
-    "Kindname im Satz — stelle EINE kurze Rückfrage: »Für Mia oder Finn?«."
+    f"kind_id-Wahl (HFE-3, E-HFE-6): Nennt die Mutter einen Namen ({_HSP_NAMEN_GUILL}), "
+    f"setze kind_id entsprechend ({_HSP_IDS_BZW}). Bei Mehrdeutigkeit — kein "
+    f"Name im Satz — stelle EINE kurze Rückfrage: »Für {_HSP_NAMEN_ODER}?«."
 )
 
 # Obergrenze der Loop-Durchläufe — schützt vor einer Aufgaben-Schleife ohne Ende.

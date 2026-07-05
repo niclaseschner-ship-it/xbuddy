@@ -23,9 +23,11 @@ const KIND_ID = (() => {
   return m ? m[1] : 'mia';
 })();
 
-// ── KIND_IDS_V1: V1-Hardcode für Folgen-Tab-Aggregation (HSP-35, #973) ──────
-// FAM-7-Generalisierung (dynamisch aus Familie-Registry) ist Folge-Ticket.
-const KIND_IDS_V1 = ["mia", "finn"]; // V1-Hardcode, FAM-7-Generalisierung im Folge-Ticket
+// ── KIND_IDS_V1: hörspiel-lokale Instanz-Liste (HSP-35 / HSP-43, #973 / #1263) ──
+// Treibt Folgen-Tab-Aggregation UND den audio_ziel-UI-Kollaps. Kopie der Instanz-
+// Liste (kind_id-Only) — Muster seiten `_HSP_INSTANZEN`, keine Registry, kein
+// API-Endpoint (in-file, HSP-43). FAM-7-Generalisierung bleibt Folge-Ticket.
+const KIND_IDS_V1 = ["mia", "finn", "emil"]; // +emil #1263 (HSP-43)
 
 // ── MAD-7 Auth-Header ────────────────────────────────────────────────────────
 // initData aus Telegram-WebApp — bei jedem fetch()-Call als Header gesendet.
@@ -214,10 +216,16 @@ async function _setzeResume(kindId, albumId, trackPos) {
 
 // ── Reiter Einstellungen (HSP-34) ────────────────────────────────────────────
 
-// HSP-41 — UI-Kollaps-State: kollabierter audio_ziel-Wert (gemeinsam für
-// Mia+Finn) plus Drift-Indikator wenn die beiden Backend-Configs
-// auseinander laufen.
-let _audioZielKollabiert = { value: null, drift: false, mia: null, finn: null };
+// HSP-41 / HSP-43 — UI-Kollaps-State: kollabierter audio_ziel-Wert (gemeinsam
+// für ALLE Instanzen aus KIND_IDS_V1) plus Drift-Indikator, wenn die Backend-
+// Configs auseinander laufen. `perKind` ist eine generische kind_id→Wert-Map
+// (kein fester mia/finn-Zweikeys mehr, #1263).
+let _audioZielKollabiert = { value: null, drift: false, perKind: {} };
+
+/** Kind-Name für Anzeige (Capitalize der kind_id, HSP-43 generisch). */
+function _kindName(kindId) {
+  return String(kindId || "").charAt(0).toUpperCase() + String(kindId || "").slice(1);
+}
 
 async function _ladeEinstellungen() {
   const container = document.getElementById("panel-einstellungen");
@@ -227,11 +235,13 @@ async function _ladeEinstellungen() {
     _serverConfig = config;
     _editConfig = { ...config };
 
-    // HSP-41 UI-Kollaps: beide Configs holen und audio_ziel kollabieren.
+    // HSP-41/43 UI-Kollaps: alle Instanz-Configs holen und audio_ziel kollabieren.
     try {
       const beide = await _holeBeideConfigs();
-      _audioZielKollabiert.mia = beide.mia?.audio_ziel ?? null;
-      _audioZielKollabiert.finn = beide.finn?.audio_ziel ?? null;
+      _audioZielKollabiert.perKind = {};
+      for (const kindId of KIND_IDS_V1) {
+        _audioZielKollabiert.perKind[kindId] = beide[kindId]?.audio_ziel ?? null;
+      }
       const werte = Object.values(beide).filter(c => c).map(c => c.audio_ziel);
       const unique = [...new Set(werte)];
       _audioZielKollabiert.drift = unique.length > 1;
@@ -247,7 +257,7 @@ async function _ladeEinstellungen() {
     _rendereEinstellungen(container, config);
 
     if (_audioZielKollabiert.drift) {
-      zeigeToast("Audio-Ausgabe weicht zwischen Mia und Finn ab — Speichern setzt beide gleich.", false);
+      zeigeToast("Audio-Ausgabe weicht zwischen den Kindern ab — Speichern setzt alle gleich.", false);
     }
   } catch (err) {
     container.innerHTML = '<p class="lade-hinweis">Einstellungen konnten nicht geladen werden.</p>';
@@ -333,12 +343,14 @@ function _rendereEinstellungen(container, config) {
     '<div class="einstellung-karte">' +
       '<div class="einstellung-label">Audio-Ausgabe' +
         (_audioZielKollabiert.drift ?
-          ' <span style="color:#c00; font-size:0.85em;">(Mia: ' +
-            esc(_audioZielKollabiert.mia || "?") + ', Finn: ' +
-            esc(_audioZielKollabiert.finn || "?") + ')</span>'
+          ' <span style="color:#c00; font-size:0.85em;">(' +
+            KIND_IDS_V1.map(kindId =>
+              esc(_kindName(kindId)) + ': ' +
+              esc(_audioZielKollabiert.perKind[kindId] || "?")).join(", ") +
+          ')</span>'
           : '') +
       '</div>' +
-      '<div class="einstellung-wert">Wo der Ton beim Tippen am Kind-Tablet rauskommt (gilt für Mia+Finn)</div>' +
+      '<div class="einstellung-wert">Wo der Ton beim Tippen am Kind-Tablet rauskommt (gilt für alle Instanzen)</div>' +
       '<div class="voice-kacheln" id="audio-ziel-kacheln">' +
         audioZielVerfuegbar.map(z => {
           const pressed = (z === _editConfig.audio_ziel) ? "true" : "false";
@@ -512,17 +524,25 @@ async function _onSpeichern() {
       const ergebnisse = await _patchBeideConfigs({ audio_ziel: _editConfig.audio_ziel });
       const fehler = [];
       for (const kindId of KIND_IDS_V1) {
-        if (!ergebnisse[kindId].ok) {
-          fehler.push(kindId + ": " + (ergebnisse[kindId].body.fehler || "HTTP " + ergebnisse[kindId].status));
+        const r = ergebnisse[kindId];
+        // Nicht-provisionierte Instanz (unerreichbar / 404) soft-skippen — #1263 Befund-4.
+        // Eine fehlende emil-Instanz darf mia/finn-Speichern nicht als Fehler melden.
+        if (!r.ok && (r.status === 0 || r.status === 404)) {
+          console.warn("eltern.js: audio_ziel-Patch für " + kindId + " nicht erreichbar (status " + r.status + ") — übersprungen");
+          continue;
+        }
+        if (!r.ok) {
+          fehler.push(kindId + ": " + (r.body.fehler || "HTTP " + r.status));
         }
       }
       if (fehler.length > 0) {
         zeigeToast("Audio-Ausgabe teilweise gesetzt — Fehler: " + fehler.join("; "), true);
       } else {
-        // Kollaps-State aktualisieren auf den neuen Wert.
+        // Kollaps-State aktualisieren auf den neuen Wert (alle Instanzen gleich).
         _audioZielKollabiert.value = _editConfig.audio_ziel;
-        _audioZielKollabiert.mia = _editConfig.audio_ziel;
-        _audioZielKollabiert.finn = _editConfig.audio_ziel;
+        for (const kindId of KIND_IDS_V1) {
+          _audioZielKollabiert.perKind[kindId] = _editConfig.audio_ziel;
+        }
         _audioZielKollabiert.drift = false;
       }
     }
@@ -990,5 +1010,5 @@ function esc(str) {
 
 // ── Exports (für Tests) ──────────────────────────────────────────────────────
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { esc, _leseHashTab, zeigeToast, KIND_ID, KIND_IDS_V1, _mergeUndSortiereAlben, _rendereWarnBanner };
+  module.exports = { esc, _leseHashTab, zeigeToast, KIND_ID, KIND_IDS_V1, _mergeUndSortiereAlben, _rendereWarnBanner, _patchBeideConfigs };
 }

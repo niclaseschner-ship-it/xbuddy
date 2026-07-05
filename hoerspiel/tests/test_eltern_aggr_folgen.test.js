@@ -73,7 +73,7 @@ global.getPlatform = () => ({
 });
 
 const eltern = require(path.join(__dirname, "../static/eltern.js"));
-const { KIND_IDS_V1, _mergeUndSortiereAlben, _rendereWarnBanner } = eltern;
+const { KIND_IDS_V1, _mergeUndSortiereAlben, _rendereWarnBanner, _patchBeideConfigs } = eltern;
 
 // ── Fixture-Daten ─────────────────────────────────────────────────────────────
 
@@ -96,7 +96,7 @@ function makeAlbum(overrides = {}) {
  * sortierten 4er-Liste; jeder Eintrag trägt seine kind_id.
  */
 test("HSP-35-Aggregation: zwei Quellen (mia+finn) ergeben sortierte 4er-Liste mit kind_id", () => {
-  assert.deepEqual(KIND_IDS_V1, ["mia", "finn"], "KIND_IDS_V1 enthält genau mia+finn");
+  assert.deepEqual(KIND_IDS_V1, ["mia", "finn", "emil"], "KIND_IDS_V1 enthält mia+finn+emil (#1263)");
 
   const alleAlben = [
     {
@@ -302,5 +302,63 @@ test("HSP-40: einseitiger fetch-404 → teilweise Liste + Warn-Banner für fehlg
   assert.ok(
     bannerIdx < playerIdx,
     "Warn-Banner (Index " + bannerIdx + ") steht VOR dem Player (Index " + playerIdx + ") — insertBefore korrekt"
+  );
+});
+
+/**
+ * Test 3 — Befund-4 (#1263): Audio-Speichern tolerant bei unserviertem emil.
+ *
+ * mia + finn antworten mit 200, emil mit 404 (nicht-provisioniert).
+ * Der Fehler-Filter in _onSpeichern (status 0 + status 404 = soft-skip) muss
+ * dafür sorgen, dass kein harter Fehler-Toast ausgelöst wird — die erreichbaren
+ * Instanzen gelten als gespeichert.
+ *
+ * Prüft _patchBeideConfigs (exportiert) + die Fehler-Filter-Logik aus _onSpeichern.
+ * Ref: #1263 Befund-4, HSP-43.
+ */
+test("Befund-4 (#1263): audio_ziel-Speichern tolerant bei emil-404 — kein harter Fehler", async () => {
+  // Routed fetch: mia+finn config PATCH → 200; emil → 404 (nicht provisioniert).
+  const routedFetch = makeRoutedFetchSpy([
+    { match: /\/hoerspiel\/mia\/config/, status: 200, json: { audio_ziel: "display" } },
+    { match: /\/hoerspiel\/finn\/config/,  status: 200, json: { audio_ziel: "display" } },
+    { match: /\/hoerspiel\/emil\/config/, status: 404, json: { fehler: "nicht gefunden" } },
+  ], { audio_ziel: "display" });
+
+  const prevFetch = global.fetch;
+  global.fetch = routedFetch;
+
+  // _patchBeideConfigs iteriert über KIND_IDS_V1 und PATCHt jede Instanz.
+  const ergebnisse = await _patchBeideConfigs({ audio_ziel: "display" });
+
+  global.fetch = prevFetch;
+
+  // AC1: Fetch-Calls für alle drei Instanzen.
+  const miaCall  = routedFetch.calls.find(c => c.url.includes("/mia/config"));
+  const finnCall   = routedFetch.calls.find(c => c.url.includes("/finn/config"));
+  const emilCall = routedFetch.calls.find(c => c.url.includes("/emil/config"));
+  assert.ok(miaCall,  "fetch für mia/config aufgerufen");
+  assert.ok(finnCall,   "fetch für finn/config aufgerufen");
+  assert.ok(emilCall, "fetch für emil/config aufgerufen");
+
+  // AC2: mia + finn ok, emil 404.
+  assert.ok(ergebnisse["mia"].ok,                       "mia gespeichert (ok=true)");
+  assert.ok(ergebnisse["finn"].ok,                        "finn gespeichert (ok=true)");
+  assert.equal(ergebnisse["emil"].ok, false,            "emil nicht ok (404)");
+  assert.equal(ergebnisse["emil"].status, 404,          "emil-Status ist 404");
+
+  // AC3: Fehler-Filter analog _onSpeichern — status 0 und 404 werden soft-geskippt.
+  // Kein harter Fehler-Toast darf ausgelöst werden.
+  const fehler = [];
+  for (const kindId of KIND_IDS_V1) {
+    const r = ergebnisse[kindId];
+    if (!r.ok && (r.status === 0 || r.status === 404)) {
+      continue; // soft-skip: nicht-provisionierte Instanz
+    }
+    if (!r.ok) {
+      fehler.push(kindId + ": " + (r.body.fehler || "HTTP " + r.status));
+    }
+  }
+  assert.equal(fehler.length, 0,
+    "fehler-Array muss leer sein — emil-404 darf paul/finn-Speichern nicht als Fehler melden; fehler=" + JSON.stringify(fehler)
   );
 });
