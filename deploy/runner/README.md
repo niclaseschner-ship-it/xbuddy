@@ -36,6 +36,20 @@ Kill-Safety-Fälle (busy-Runner mit alter Queue → `no_action`; idle-Runner ohn
 Stau → `no_action`). Der reale `gh api`-Aufruf, `systemctl is-active` und
 `systemctl restart` sind eine dünne I/O-Schale drumherum.
 
+## Bekannte Einschränkung — Queued-Runs ohne Label-Filter
+
+`gather_state` zählt **alle** queued Workflow-Runs aus der GitHub-API, unabhängig
+davon, welches `runs-on`-Label ein Run benötigt. Runs für GitHub-hosted-Runner
+(`ubuntu-latest` o. ä.) fließen ununterschieden in `queued_ages_seconds` ein
+und können den Stuck-Threshold erreichen.
+
+Das ist bewusst akzeptiert, weil **pi5-buddy der einzige Self-Hosted-Runner**
+in diesem Repo ist: jeder queued Run muss von pi5-buddy bedient werden, ein
+Label-Filter wäre redundant. Bei einem gemischten Setup (mehrere Self-Hosted-Runner
+oder GitHub-hosted-Runs für andere Labels) würde der Check zu früh feuern —
+dann müsste `gather_state` pro queued Run die Jobs-Endpoint abfragen
+(`actions/runs/{id}/jobs`) und Labels abgleichen.
+
 ## Warum NICHT `Restart=always` (verworfen)
 
 Naheliegend, aber falsch: `Restart=always` bzw. eine `WatchdogSec`-Watchdog-Logik
@@ -62,8 +76,14 @@ python3 deploy/runner/runner_health.py --dry-run
 ```
 
 Jeder Lauf schreibt eine JSON-Zeile nach stdout (journald ist die Quelle der
-Wahrheit): `action`, `reason`, `runner_busy`, `max_queue_age_seconds`,
-`threshold_seconds`, `dry_run`. Bei `--dry-run` wird nie restartet.
+Wahrheit): `action`, `reason`, `runner_found`, `runner_busy`,
+`max_queue_age_seconds`, `threshold_seconds`, `dry_run`. Bei `--dry-run` wird
+nie restartet.
+
+`runner_found: false` im Log bedeutet: der konfigurierte Runner-Name wurde
+nicht in der GitHub-API-Antwort gefunden — wahrscheinlich ein Namens-Tippfehler
+in `--runner-name` oder der Service-Unit. In diesem Fall wird immer `no_action`
+zurückgegeben (kein stiller Restart).
 
 Flags / ENV-Overrides (nichts hartkodiert):
 `--repo` (Default `emilsonntag-ship-it/xbuddy`), `--service`,
@@ -117,6 +137,8 @@ sudo sed \
   -e 's|__XBUDDY_REPO__|/home/buddy/repos/xbuddy|g' \
   -e 's|__XBUDDY_PYTHON__|/home/buddy/apps/venv/bin/python|g' \
   -e 's|__XBUDDY_DATA__|/home/buddy/xbuddy-data|g' \
+  -e 's|__XBUDDY_RUNNER_NAME__|pi5-buddy|g' \
+  -e 's|__XBUDDY_RUNNER_SERVICE__|actions.runner.emilsonntag-ship-it-xbuddy.pi5-buddy.service|g' \
   deploy/runner/xbuddy-runner-health.service \
   | sudo tee /etc/systemd/system/xbuddy-runner-health.service >/dev/null
 

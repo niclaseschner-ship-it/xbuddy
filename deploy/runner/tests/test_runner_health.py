@@ -98,3 +98,71 @@ def test_age_seconds_rechnet_vergangenheit():
     now = datetime(2026, 7, 3, 12, 0, 0, tzinfo=UTC)
     vor10min = (now - timedelta(minutes=10)).isoformat().replace("+00:00", "Z")
     assert rh._age_seconds(vor10min, now) == 600
+
+
+# --- AC2: find_runner-Hilfsfunktion (testbarer Kern des Runner-Matchings) ----
+
+def test_find_runner_findet_bekannten_runner():
+    """find_runner gibt den Runner-Dict zurück wenn der Name übereinstimmt."""
+    payload = {"runners": [{"name": "pi5-buddy", "busy": False, "status": "online"}]}
+    runner = rh.find_runner(payload, "pi5-buddy")
+    assert runner is not None
+    assert runner["name"] == "pi5-buddy"
+
+
+def test_find_runner_kein_match_gibt_none():
+    """find_runner gibt None bei Namens-Tippfehler — signalisiert dem Aufrufer
+    einen potenziellen Konfigurationsfehler."""
+    payload = {"runners": [{"name": "pi5-buddy", "busy": False}]}
+    assert rh.find_runner(payload, "pi5-buddy-tippfehler") is None
+
+
+def test_find_runner_leere_liste_gibt_none():
+    """find_runner gibt None wenn keine Runner in der API-Antwort vorhanden."""
+    assert rh.find_runner({"runners": []}, "pi5-buddy") is None
+
+
+def test_runner_nicht_gefunden_keine_aktion():
+    """runner_found=False → no_action (möglicher Namens-Tippfehler, kein stiller Restart).
+
+    Ohne diesen Guard würde runner_busy=False (Fallback bei None) + alte Queue
+    einen Restart auslösen, obwohl der Runner-Name schlicht falsch geschrieben ist.
+    Der Reason-String enthält 'runner_nicht_gefunden' zur Diagnose im journald.
+    """
+    state = rh.RunnerState(
+        service_active=True,
+        runner_busy=False,
+        queued_ages_seconds=(N + 1,),
+        runner_found=False,
+    )
+    d = rh.decide(state, N)
+    assert d.action == "no_action"
+    assert "runner_nicht_gefunden" in d.reason
+
+
+# --- AC1: Vereinfachung queued-Run-Filterung dokumentiert -------------------
+
+def test_alle_queued_runs_zaehlen_kein_label_filter():
+    """Vereinfachung (README 'Bekannte Einschränkung — Queued-Runs ohne Label-Filter'):
+
+    gather_state filtert queued Runs NICHT nach runs-on-Label. decide() sieht
+    nur das Alter der Runs, kein Label — Runs für fremde Runner (z. B.
+    ubuntu-latest) fließen ununterschieden in queued_ages_seconds ein.
+
+    Das ist akzeptiert, weil pi5-buddy der einzige Self-Hosted-Runner in diesem
+    Repo ist: jeder queued Run ist implizit für pi5-buddy bestimmt. Bei einem
+    gemischten Runner-Setup könnte das zu False-Positives führen (dokumentiert
+    in README).
+    """
+    # decide() wertet das Alter aus, unabhängig davon, welcher Runner den Run
+    # bedienen würde. Ein alter Run mit runner_found=True → restart.
+    state = rh.RunnerState(
+        service_active=True,
+        runner_busy=False,
+        queued_ages_seconds=(N + 60,),
+        runner_found=True,
+    )
+    d = rh.decide(state, N)
+    assert d.action == "restart"
+    # Doku: decide() kennt kein Label — der Label-Filter (oder sein bewusstes
+    # Fehlen) ist Aufgabe von gather_state (I/O-Schale), die README-Satz hat.
