@@ -25,6 +25,7 @@ import logging
 from tasks import ReadTask
 
 from skills import foto_senden as fs_mod
+from skills._quittungen import nicht_erreichbar as _q_nicht_erreichbar
 from skills.foto_senden import (
     AKTION_HOCHLADEN,
     AKTION_WIDERRUFEN,
@@ -52,9 +53,7 @@ _QUITTUNG_GRENZE = (
 _QUITTUNG_GRENZE_WIDERRUF = (
     "Den Widerruf konnte ich nicht ausführen — die id ist dem Photo-Buddy "
     "nicht (mehr) bekannt.")
-_QUITTUNG_NICHT_ERREICHBAR = (
-    "Der Photo-Buddy ist gerade nicht erreichbar — bitte gleich nochmal "
-    "versuchen.")
+_QUITTUNG_NICHT_ERREICHBAR = _q_nicht_erreichbar("Photo-Buddy")
 _QUITTUNG_NICHTS_ZU_TUN = (
     "Ich habe gerade kein Foto oder Video — schick mir bitte ein Medium "
     "ohne Begleittext.")

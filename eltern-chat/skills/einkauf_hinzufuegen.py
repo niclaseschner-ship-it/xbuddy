@@ -369,7 +369,7 @@ def einkauf_hinzufuegen(text, from_user_id, essen_client, icon_client,
                 if not e.marker or e.marker not in (FEHLER_DUPLIKAT, FEHLER_GRENZE):
                     return ("Die Liste ist gerade nicht erreichbar — "
                             "versuch's gleich nochmal.")
-                return "Hat nicht geklappt: %s. Schreib's nochmal." % e
+                return "Das hat leider nicht geklappt — bitte versuch's gleich nochmal."
 
     # EC-10 A2-Receipt (#841): alle erfolgreich angelegten Items atomar receipten.
     # insert_many() siegelt Vorgänger-Receipts desselben chat_id und schreibt

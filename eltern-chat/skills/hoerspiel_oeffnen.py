@@ -37,6 +37,7 @@
 import logging
 
 from skills._errors import BerechtigungError
+from skills._quittungen import nicht_erreichbar as _q_nicht_erreichbar
 from skills.hoerspiel_client import HoerspielClientError
 
 logger = logging.getLogger(__name__)
@@ -96,10 +97,7 @@ def _baue_uebersicht(hoerspiel_client, mini_app_url):
         logger.warning(
             "hoerspiel_oeffnen: Hoerspiel-Buddy (alben) nicht erreichbar — %s", e)
         return {
-            "text": (
-                "Der Hörspiel-Buddy ist gerade nicht erreichbar — "
-                "versuch's gleich nochmal."
-            ),
+            "text": _q_nicht_erreichbar("Hörspiel-Buddy"),
             "presentation": {},
         }
     n = len(alben_liste)
