@@ -95,7 +95,17 @@ def test_config_slot_niclas_default_5056():
 
 
 def test_agent_prompt_kennt_niclas():
-    """AC3: der Agent-System-Prompt nennt niclas (Namensliste aus der Konstante)."""
+    """AC3: der Agent-System-Prompt nennt niclas (Namensliste aus der Konstante).
+
+    Prüft auch die Abwesenheit der binären Hardcode-Phrase (Befund-2, #1263):
+    »Für Paula oder Neko« darf nicht mehr wörtlich im Prompt stehen —
+    stattdessen wird die Dreiliste dynamisch aus HOERSPIEL_INSTANZEN gebaut.
+    """
     import agent
     assert "Niclas" in agent.SYSTEM_PROMPT
     assert "Paula, Neko oder Niclas" in agent.SYSTEM_PROMPT
+    # Abwesenheits-Assertion: Binär-Hardcode wurde auf Instanz-Namensliste umgestellt
+    assert "Für Paula oder Neko" not in agent.SYSTEM_PROMPT, (
+        "Der SYSTEM_PROMPT darf »Für Paula oder Neko« nicht mehr hardcoden — "
+        "Rückfrage muss aus _HSP_NAMEN_ODER (Instanz-Konstante) generiert werden"
+    )

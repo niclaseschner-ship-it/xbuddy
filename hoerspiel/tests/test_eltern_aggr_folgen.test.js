@@ -73,7 +73,7 @@ global.getPlatform = () => ({
 });
 
 const eltern = require(path.join(__dirname, "../static/eltern.js"));
-const { KIND_IDS_V1, _mergeUndSortiereAlben, _rendereWarnBanner } = eltern;
+const { KIND_IDS_V1, _mergeUndSortiereAlben, _rendereWarnBanner, _patchBeideConfigs } = eltern;
 
 // ── Fixture-Daten ─────────────────────────────────────────────────────────────
 
@@ -302,5 +302,63 @@ test("HSP-40: einseitiger fetch-404 → teilweise Liste + Warn-Banner für fehlg
   assert.ok(
     bannerIdx < playerIdx,
     "Warn-Banner (Index " + bannerIdx + ") steht VOR dem Player (Index " + playerIdx + ") — insertBefore korrekt"
+  );
+});
+
+/**
+ * Test 3 — Befund-4 (#1263): Audio-Speichern tolerant bei unserviertem niclas.
+ *
+ * paula + neko antworten mit 200, niclas mit 404 (nicht-provisioniert).
+ * Der Fehler-Filter in _onSpeichern (status 0 + status 404 = soft-skip) muss
+ * dafür sorgen, dass kein harter Fehler-Toast ausgelöst wird — die erreichbaren
+ * Instanzen gelten als gespeichert.
+ *
+ * Prüft _patchBeideConfigs (exportiert) + die Fehler-Filter-Logik aus _onSpeichern.
+ * Ref: #1263 Befund-4, HSP-43.
+ */
+test("Befund-4 (#1263): audio_ziel-Speichern tolerant bei niclas-404 — kein harter Fehler", async () => {
+  // Routed fetch: paula+neko config PATCH → 200; niclas → 404 (nicht provisioniert).
+  const routedFetch = makeRoutedFetchSpy([
+    { match: /\/hoerspiel\/paula\/config/, status: 200, json: { audio_ziel: "display" } },
+    { match: /\/hoerspiel\/neko\/config/,  status: 200, json: { audio_ziel: "display" } },
+    { match: /\/hoerspiel\/niclas\/config/, status: 404, json: { fehler: "nicht gefunden" } },
+  ], { audio_ziel: "display" });
+
+  const prevFetch = global.fetch;
+  global.fetch = routedFetch;
+
+  // _patchBeideConfigs iteriert über KIND_IDS_V1 und PATCHt jede Instanz.
+  const ergebnisse = await _patchBeideConfigs({ audio_ziel: "display" });
+
+  global.fetch = prevFetch;
+
+  // AC1: Fetch-Calls für alle drei Instanzen.
+  const paulaCall  = routedFetch.calls.find(c => c.url.includes("/paula/config"));
+  const nekoCall   = routedFetch.calls.find(c => c.url.includes("/neko/config"));
+  const niclasCall = routedFetch.calls.find(c => c.url.includes("/niclas/config"));
+  assert.ok(paulaCall,  "fetch für paula/config aufgerufen");
+  assert.ok(nekoCall,   "fetch für neko/config aufgerufen");
+  assert.ok(niclasCall, "fetch für niclas/config aufgerufen");
+
+  // AC2: paula + neko ok, niclas 404.
+  assert.ok(ergebnisse["paula"].ok,                       "paula gespeichert (ok=true)");
+  assert.ok(ergebnisse["neko"].ok,                        "neko gespeichert (ok=true)");
+  assert.equal(ergebnisse["niclas"].ok, false,            "niclas nicht ok (404)");
+  assert.equal(ergebnisse["niclas"].status, 404,          "niclas-Status ist 404");
+
+  // AC3: Fehler-Filter analog _onSpeichern — status 0 und 404 werden soft-geskippt.
+  // Kein harter Fehler-Toast darf ausgelöst werden.
+  const fehler = [];
+  for (const kindId of KIND_IDS_V1) {
+    const r = ergebnisse[kindId];
+    if (!r.ok && (r.status === 0 || r.status === 404)) {
+      continue; // soft-skip: nicht-provisionierte Instanz
+    }
+    if (!r.ok) {
+      fehler.push(kindId + ": " + (r.body.fehler || "HTTP " + r.status));
+    }
+  }
+  assert.equal(fehler.length, 0,
+    "fehler-Array muss leer sein — niclas-404 darf paul/neko-Speichern nicht als Fehler melden; fehler=" + JSON.stringify(fehler)
   );
 });
