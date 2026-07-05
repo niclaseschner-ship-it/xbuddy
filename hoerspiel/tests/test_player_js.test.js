@@ -316,25 +316,23 @@ function makeAudioMock() {
   return Ctor;
 }
 
-test('ensureAudio: ZWEI persistente Elemente (aktiv+idle), Listener je Element EINMALIG (#1304, AC-BG1)', () => {
+test('ensureAudio: EIN persistentes, ton-autorisiertes Element, Listener EINMALIG, kein audioIdle (#1306, AC-IOS1)', () => {
   const savedAudio = global.Audio;
   const A = makeAudioMock();
   global.Audio = A;
-  P._S.audio = null; P._S.audioIdle = null;   // sauberer Startzustand
+  P._S.audio = null;   // sauberer Startzustand
   try {
     P.ensureAudio();
     const a2 = P.ensureAudio();   // idempotent
-    assert.equal(A.instances.length, 2, 'genau zwei Elemente (Doppel-Puffer), kein Neubau beim 2. Aufruf');
-    assert.equal(P._S.audio, a2, 'aktiver Element-Handle stabil');
-    assert.ok(P._S.audioIdle && P._S.audio !== P._S.audioIdle, 'idle ist ein separates Element');
-    for (const el of A.instances) {
-      for (const typ of ['timeupdate', 'play', 'pause', 'ended']) {
-        assert.equal((el._listeners[typ] || []).length, 1, typ + '-Listener je Element genau einmal');
-      }
+    assert.equal(A.instances.length, 1, 'genau EIN Element (iOS-Ton), kein zweites idle-Element');
+    assert.equal(P._S.audio, a2, 'Element-Handle stabil');
+    assert.equal(P._S.audioIdle, undefined, 'kein audioIdle mehr im State');
+    for (const typ of ['timeupdate', 'play', 'pause', 'ended']) {
+      assert.equal((P._S.audio._listeners[typ] || []).length, 1, typ + '-Listener genau einmal (kein Doppel-Anhängen)');
     }
   } finally {
     global.Audio = savedAudio;
-    P._S.audio = null; P._S.audioIdle = null;
+    P._S.audio = null;
   }
 });
 
@@ -349,60 +347,47 @@ test('planNext: swap wenn nächster gepuffert, load bei Mismatch, stop am letzte
   assert.equal(P.planNext(2, 3, null), 'stop');
 });
 
-test('preloadNext: puffert nächsten Track ins idle-Element (src+load+preloadedIdx), out-of-range null (#1304, AC-BG1)', async () => {
+test('preloadNext: löst nächsten Track als Blob-Object-URL vorab (preloadedSrc+Idx), KEIN zweites Element, out-of-range revoke+null (#1306, AC-IOS1)', async () => {
   const savedAudio = global.Audio;
   const A = makeAudioMock();
   global.Audio = A;
-  P._S.audio = null; P._S.audioIdle = null;
-  P._S.cache = null;   // Miss → resolveTrackSrc gibt die Netz-URL
+  const savedURL = global.URL;
+  let revoked = 0;
+  global.URL = {
+    createObjectURL: (b) => 'blob:pre/' + (b && b.size != null ? b.size : 'x'),
+    revokeObjectURL: () => { revoked++; },
+  };
+  P._S.audio = null;
+  const cache = new FakeCache();
+  await cache.put('/audio/t2.mp3', new Response('MP3'));   // Cache-Treffer → Blob-Object-URL
+  P._S.cache = cache;
   P._S.cfg = { playback_tempo: 1.1 };
+  P._S.preloadedSrc = null; P._S.preloadedIdx = null;
   P._S.tracks = [
     { position: 1, 'audio-asset': '/audio/t1.mp3' },
     { position: 2, 'audio-asset': '/audio/t2.mp3' },
   ];
   try {
     P.ensureAudio();
-    const idle = P._S.audioIdle;
     await P.preloadNext(1);
-    assert.equal(idle.src, '/audio/t2.mp3', 'idle-Element bekommt die nächste Quelle');
-    assert.equal(idle.preload, 'auto', 'preload=auto für Hintergrund-Puffern');
-    assert.equal(idle.loaded, 1, 'load() angestoßen');
-    assert.equal(idle.playbackRate, 1.1, 'Tempo auch aufs idle-Element');
+    assert.match(P._S.preloadedSrc, /^blob:pre\//, 'nächster Track als Blob-Object-URL vorab aufgelöst');
     assert.equal(P._S.preloadedIdx, 1, 'preloadedIdx gesetzt → planNext kann swappen');
-    // out of range (letzter Track hat keinen Nachfolger) → kein Puffer
+    assert.equal(A.instances.length, 1, 'KEIN zweites Audio-Element für die Vorauflösung');
+    // out of range (letzter Track hat keinen Nachfolger) → freigeben + null
     await P.preloadNext(2);
     assert.equal(P._S.preloadedIdx, null, 'kein Nachfolger → preloadedIdx zurückgesetzt');
+    assert.equal(P._S.preloadedSrc, null, 'preloadedSrc bei out-of-range freigegeben');
+    assert.ok(revoked >= 1, 'veraltete Blob-Object-URL revoked (Leak-Härtung)');
   } finally {
     global.Audio = savedAudio;
-    P._S.audio = null; P._S.audioIdle = null;
-    P._S.cache = null; P._S.tracks = []; P._S.trackIdx = 0; P._S.preloadedIdx = null; P._S.cfg = {};
+    global.URL = savedURL;
+    P._S.audio = null;
+    P._S.cache = null; P._S.tracks = []; P._S.trackIdx = 0;
+    P._S.preloadedIdx = null; P._S.preloadedSrc = null; P._S.cfg = {};
   }
 });
 
-test('ended-Guard: nur das AKTIVE Element advanct; idle-ended ist ein No-Op (#1304, AC-BG1, kein_doppelfeuer)', () => {
-  const savedAudio = global.Audio;
-  const A = makeAudioMock();
-  global.Audio = A;
-  P._S.audio = null; P._S.audioIdle = null;
-  P._S.tracks = [{ position: 1 }, { position: 2 }, { position: 3 }];
-  P._S.trackIdx = 0;
-  P._S.preloadedIdx = 1;      // nächster ist gepuffert → aktives ended würde swappen
-  P._S.aktivAlbum = null;     // updateMediaSession/Resume no-op ohne navigator
-  P._S.cache = null; P._S.cfg = {};
-  try {
-    P.ensureAudio();
-    const idle = P._S.audioIdle;
-    // idle feuert 'ended' → Guard (ev.target !== S.audio) blockt → KEIN Advance.
-    idle.fire('ended', idle);
-    assert.equal(P._S.trackIdx, 0, 'idle-ended verändert den Track-Index NICHT (Anti-Doppelfeuer)');
-  } finally {
-    global.Audio = savedAudio;
-    P._S.audio = null; P._S.audioIdle = null;
-    P._S.tracks = []; P._S.trackIdx = 0; P._S.preloadedIdx = null; P._S.aktivAlbum = null; P._S.cache = null;
-  }
-});
-
-test('ended-swap: aktives ended swappt SYNCHRON ans gepufferte idle-Element + hält MediaSession playing (#1304, AC-BG2)', () => {
+test('ended-swap: aktives ended setzt SYNCHRON preloadedSrc am SELBEN Element + play, hält MediaSession playing, löst übernächsten vorab (#1306, AC-IOS2)', async () => {
   const savedAudio = global.Audio;
   const savedNav = global.navigator;
   const A = makeAudioMock();
@@ -420,36 +405,43 @@ test('ended-swap: aktives ended swappt SYNCHRON ans gepufferte idle-Element + h�
   global.MediaMetadata = function (o) { Object.assign(this, o); };
   const savedDoc = global.document;
   global.document = { getElementById: () => null, querySelector: () => null };  // DOM-Zugriffe im Swap sind No-Ops
-  P._S.audio = null; P._S.audioIdle = null;
-  P._S.tracks = [{ position: 1 }, { position: 2 }, { position: 3 }];
+  P._S.audio = null;
+  P._S.tracks = [
+    { position: 1, 'audio-asset': '/audio/t1.mp3' },
+    { position: 2, 'audio-asset': '/audio/t2.mp3' },
+    { position: 3, 'audio-asset': '/audio/t3.mp3' },
+  ];
   P._S.trackIdx = 0;
   P._S.preloadedIdx = 1;
+  P._S.preloadedSrc = 'blob:PRE1';   // Track 1 (idx) vorab aufgelöst
   P._S.aktivAlbum = { id: 'folge-22', nummer: 22, titel: 'Der See' };
   P._S.aktivKindId = 'paula'; P._S.kindId = 'paula';
-  P._S.cache = null; P._S.cfg = { playback_tempo: 1.0 };
+  P._S.cache = null; P._S.cfg = { playback_tempo: 1.0 };   // cache=null → resolveTrackSrc = Netz-URL
   const savedFetch = global.fetch;
   global.fetch = async () => ({ ok: true, status: 200, json: async () => ({}) });
   try {
     P.ensureAudio();
-    const aktivVorher = P._S.audio;
-    const idleVorher = P._S.audioIdle;
-    // aktives Element feuert 'ended' → planNext=swap → synchroner Swap.
-    aktivVorher.fire('ended', aktivVorher);
-    assert.equal(P._S.trackIdx, 1, 'Track advanct auf den vorgepufferten Index');
-    assert.equal(P._S.audio, idleVorher, 'idle-Element ist jetzt aktiv (Rollen getauscht)');
-    assert.equal(P._S.audioIdle, aktivVorher, 'altes aktives Element ist jetzt idle');
-    assert.equal(idleVorher.played, 1, 'play() SYNCHRON am schon-gepufferten Element (kein await)');
+    const el = P._S.audio;
+    // aktives Element feuert 'ended' → planNext=swap → synchroner Swap am selben Element.
+    el.fire('ended', el);
+    assert.equal(P._S.trackIdx, 1, 'Track advanct auf den vorgelösten Index');
+    assert.equal(P._S.audio, el, 'SELBES Element bleibt aktiv (kein Rollentausch, iOS-Ton)');
+    assert.equal(el.src, 'blob:PRE1', 'src SYNCHRON auf die vorgelöste Object-URL gesetzt (kein await)');
+    assert.equal(el.played, 1, 'play() SYNCHRON am selben Element (kein await davor)');
     assert.ok(msCalls.metadata >= 1, 'MediaSession-Metadata für den neuen Track gesetzt');
     assert.ok(!msCalls.playbackState.includes('paused'), 'playbackState im Swap NIE auf paused gekippt');
     assert.equal(global.navigator.mediaSession.playbackState, 'playing', 'playbackState über den Swap gehalten');
+    // Übernächster (idx 2) wird per fire-and-forget preloadNext(next+1) vorab aufgelöst (async) → Microtask abwarten.
+    await new Promise((r) => setTimeout(r));
+    assert.equal(P._S.preloadedIdx, 2, 'übernächster Track vorab aufgelöst (preloadNext(next+1))');
   } finally {
     global.Audio = savedAudio;
     global.navigator = savedNav;
     global.fetch = savedFetch;
     global.document = savedDoc;
     delete global.MediaMetadata;
-    P._S.audio = null; P._S.audioIdle = null;
-    P._S.tracks = []; P._S.trackIdx = 0; P._S.preloadedIdx = null; P._S.aktivAlbum = null;
+    P._S.audio = null;
+    P._S.tracks = []; P._S.trackIdx = 0; P._S.preloadedIdx = null; P._S.preloadedSrc = null; P._S.aktivAlbum = null;
     P._S.aktivKindId = null; P._S.cache = null; P._S.cfg = {};
   }
 });
