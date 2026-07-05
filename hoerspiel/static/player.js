@@ -558,6 +558,18 @@ async function rendereRegal() {
   });
 }
 
+/**
+ * Setzt das src eines Cover-<img> mit Fallback: bei Ladefehler (offline/404)
+ * wird das Element versteckt (kein kaputtes Bild-Icon). Vor dem Setzen wird
+ * visibility zurückgesetzt, damit ein späteres erfolgreiches Cover wieder
+ * erscheint (Kind-Wechsel, anderes Album). Analog Regal-Kachel (player.js:373).
+ */
+function _setCoverSrc(el, src) {
+  el.style.visibility = '';
+  el.onerror = function () { el.style.visibility = 'hidden'; };
+  el.src = src;
+}
+
 async function initMini() {
   const mini = $('mini');
   if (!mini) return;
@@ -565,7 +577,7 @@ async function initMini() {
   for (const a of S.alben) {
     const r = await apiResumeGet(S.kindId, a.id).catch(() => null);
     if (r && r.track != null) {
-      if ($('mini-cover')) $('mini-cover').src = a['cover-asset'] || '';
+      const mc = $('mini-cover'); if (mc) _setCoverSrc(mc, a['cover-asset'] || '');
       if ($('mini-title')) $('mini-title').textContent = a.titel;
       if ($('mini-sub')) $('mini-sub').textContent = 'Weiter hören · Folge ' + a.nummer;
       mini.classList.remove('hidden');
@@ -587,7 +599,7 @@ function syncMini() {
   if (!mini) return;
   const m = miniNowPlaying(S.aktivAlbum, !!S.audio, S.playing, S.trackIdx, S.tracks);
   if (m.mode === 'now') {
-    if ($('mini-cover')) $('mini-cover').src = m.cover;
+    const mc = $('mini-cover'); if (mc) _setCoverSrc(mc, m.cover);
     if ($('mini-title')) $('mini-title').textContent = m.title;
     if ($('mini-sub')) $('mini-sub').textContent = m.sub;
     mini.classList.remove('hidden');
@@ -645,7 +657,7 @@ async function oeffneAlbum(albumId) {
 function renderedPlayer(istResume) {
   const inst = instanzFuer(S.liste, S.kindId);
   if ($('player-kid')) $('player-kid').textContent = inst.name;
-  if ($('player-cover')) $('player-cover').src = S.aktivAlbum['cover-asset'] || '';
+  const pc = $('player-cover'); if (pc) _setCoverSrc(pc, S.aktivAlbum['cover-asset'] || '');
   if ($('player-title')) $('player-title').textContent = S.aktivAlbum.titel || '';
   if ($('player-meta')) {
     $('player-meta').textContent = 'Folge ' + S.aktivAlbum.nummer + ' · ' +
@@ -1052,5 +1064,7 @@ if (typeof module !== 'undefined' && module.exports) {
     miniNowPlaying, istLaufendesAlbum, ensureAudio,
     // Doppel-Puffer / Hintergrund-Auto-Advance (#1304) — rein + Test-Seams
     preloadNext, _S: S,
+    // Cover-Fallback (T1272-COV)
+    _setCoverSrc,
   };
 }
