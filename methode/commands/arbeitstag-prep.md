@@ -146,6 +146,17 @@ Hier sammelst und bereitest du vor — du darfst alles Read-only + Subagenten:
    `verdict_repo_sha = origin/main` und ergänztem `spec_merge_sha`).
    Die Karte trägt am Ende den **finalen** Stand, nicht den Anfangs-Stand.
 
+### Maturation-Runden (Berater-Mechanik — PREP-12)
+
+Braucht ein Ticket auf dem Weg zur Stempelreife einen Berater-Lauf (Wahl-
+Reifung, OPEN-*-Auflösung, Nachschärfung nach `halt: berater-runde`), gilt
+`conventions/prep-lifecycle.md` **PREP-12**: benannte berater-runde-Teile
+(Subagent-Header, R1-Lese-Disziplin, BRICHT/RISKANT-Semantik, Runden-Deckel),
+**Codex-Sanity-Pass in JEDER Runde** (Crawl-Schranke Pflicht; Opus-Fallback als
+schwächer kennzeichnen), Voll-Pingpong nur bei den PREP-12-Triggern (a)–(c),
+pro Lauf den `antiberater_sanity:`-Marker als Issue-Comment oder Retro-Zeile
+(Mess-Pflicht Welle 1). Details wohnen in der Konvention — hier nicht duplizieren.
+
 ### Das GATE (Übergang Koordination → Nic)
 **Der Nic-Block startet erst, wenn JEDE Karte des Stapels ein Verdikt trägt.**
 Solange auch nur eine Karte `watchdog-prep: pending` hat, bleibst du im
