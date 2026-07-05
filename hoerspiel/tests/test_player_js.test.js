@@ -536,6 +536,15 @@ test('player.html: Manifest+SW+Shell-Assets über /seiten/hoerspiel/player, kein
   // (b) Service-Worker wird registriert (installierbare PWA) — seiten-Route.
   assert.match(html, /serviceWorker\.register\(\s*['"]\/seiten\/hoerspiel\/player\/sw\.js['"]/,
     'SW-Registrierung auf /seiten/hoerspiel/player/sw.js');
+  // (b2) scope-Option muss in der Registrierung stehen (AC-T2, T1320 GAP-1-Naht).
+  // Ohne scope wird der SW auf /seiten/hoerspiel/player/ (mit Slash) fixiert und
+  // kontrolliert das Dokument /seiten/hoerspiel/player (ohne Slash) NIE — der Fix
+  // geht stumm verloren wenn die Option fehlt.
+  assert.match(
+    html,
+    /serviceWorker\.register\([^)]+\{\s*scope:\s*['"]\/seiten\/hoerspiel\/player['"]/,
+    "SW-register()-scope-Option { scope: '/seiten/hoerspiel/player' } fehlt in player.html (GAP-1-Naht, T1320)",
+  );
 
   // (c) KEINE Shell-Assets mehr über den Kiosk-Buddy (HSP-47 „seiten-gehostet").
   assert.doesNotMatch(html, /\/display\/hoerspiel\/static\//,
