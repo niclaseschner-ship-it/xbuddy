@@ -524,8 +524,15 @@ async function _onSpeichern() {
       const ergebnisse = await _patchBeideConfigs({ audio_ziel: _editConfig.audio_ziel });
       const fehler = [];
       for (const kindId of KIND_IDS_V1) {
-        if (!ergebnisse[kindId].ok) {
-          fehler.push(kindId + ": " + (ergebnisse[kindId].body.fehler || "HTTP " + ergebnisse[kindId].status));
+        const r = ergebnisse[kindId];
+        // Nicht-provisionierte Instanz (unerreichbar / 404) soft-skippen — #1263 Befund-4.
+        // Eine fehlende emil-Instanz darf mia/finn-Speichern nicht als Fehler melden.
+        if (!r.ok && (r.status === 0 || r.status === 404)) {
+          console.warn("eltern.js: audio_ziel-Patch für " + kindId + " nicht erreichbar (status " + r.status + ") — übersprungen");
+          continue;
+        }
+        if (!r.ok) {
+          fehler.push(kindId + ": " + (r.body.fehler || "HTTP " + r.status));
         }
       }
       if (fehler.length > 0) {
@@ -1003,5 +1010,5 @@ function esc(str) {
 
 // ── Exports (für Tests) ──────────────────────────────────────────────────────
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { esc, _leseHashTab, zeigeToast, KIND_ID, KIND_IDS_V1, _mergeUndSortiereAlben, _rendereWarnBanner };
+  module.exports = { esc, _leseHashTab, zeigeToast, KIND_ID, KIND_IDS_V1, _mergeUndSortiereAlben, _rendereWarnBanner, _patchBeideConfigs };
 }

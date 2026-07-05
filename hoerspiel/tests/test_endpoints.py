@@ -6,10 +6,20 @@ Cross-kind-Test: Anfrage an fremde kind_id → 404 (HSP-26-Self-Check).
 
 import json
 import os
+import pathlib
 
 
-def test_folgen_vorschlag_happy_path(client, fake_llm):
-    """ENTRY-PATH-PROBE: POST /folgen-vorschlag mit FakeLLM → 200 + spec-Form."""
+def test_folgen_vorschlag_happy_path(client, fake_llm, data_root):
+    """ENTRY-PATH-PROBE: POST /folgen-vorschlag mit FakeLLM → 200 + spec-Form.
+
+    Schreibt instance.json mit kind_id=mia und bekanntem name → beweist
+    Route→load_instance→LLM-Naht: Name muss im User-Kontext des LLM-Calls landen.
+    """
+    # instance.json schreiben BEVOR der Request geht — load_instance liest lazy.
+    (pathlib.Path(data_root) / "instance.json").write_text(
+        json.dumps({"kind_id": "mia", "name": "Mia", "alter": 7,
+                    "serien_name": "Stigi & Co."})
+    )
     response = client.post("/api/v1/hoerspiel/mia/folgen-vorschlag",
                            json={"idee": "Stigi findet eine Feder."})
     assert response.status_code == 200
@@ -20,6 +30,11 @@ def test_folgen_vorschlag_happy_path(client, fake_llm):
     assert isinstance(body["folgen-nr-vorschlag"], int)
     # LLM wurde genau einmal aufgerufen (Vorschlag, keine Synopse)
     assert len(fake_llm.calls) == 1
+    # Route→load_instance→LLM-Naht: geladener Name taucht im User-Kontext auf
+    # (fake_llm.calls[0] = (system, user); user enthält "# Instanz-Kontext" + "Für: Mia")
+    assert "Mia" in fake_llm.calls[0][1], (
+        "load_instance-Name muss im User-Kontext des LLM-Calls stehen"
+    )
 
 
 def test_folgen_vorschlag_leere_idee(client):
