@@ -23,12 +23,15 @@ Bauen eines neuen schreibenden Skills: „Wirkung schmerzlos rückgängig?" → 
 `auto_confirm = True`. Nein: Standard EC-10. Spec-Anker: E-EIN-1, EIN-5.
 """
 
+import logging
 import os
 from dataclasses import dataclass
 
 from authz import MEMBER_STATUSES
 from hooks import HookContext, HookFailure, summarize_failures
 from model import READ, WRITE, TaskDef
+
+logger = logging.getLogger(__name__)
 
 
 def _make_is_member_fn(tg, fgcid_getter):
@@ -541,34 +544,44 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             family_group_chat_id_getter=family_group_chat_id_getter,
             is_member_fn=_tes_is_member))
 
-    # TAB-12 / #475: »Termine aus Bild« als async-schreibende Aufgabe (EC-10,
-    # TASK-4 propose+execute, TASK-5 is_async=True). AND-Guard analog TES:
+    # TAB-12 / #475 / #1262: »Termine aus Bild« als async-schreibende Aufgabe
+    # (EC-10, TASK-4 propose+execute, TASK-5 is_async=True). AND-Guard analog TES:
     # plan_origin_url (PLAN-33 Bulk-PUT), family_group_chat_id_getter (TAB-2
-    # Live-Berechtigung), tab_sessions (Lego-Falle TASK-7 — geteilte Map)
-    # UND provider_api_key (TAB-5 multimodaler Anbieter; ohne Key kein
-    # Adapter → Aufgabe NICHT im Katalog, EC-15-Schema). Im Onboarding-Modus
-    # (kein API-Key) ist der Skill abgeschaltet, der bestehende Katalog bleibt
-    # unberührt.
+    # Live-Berechtigung) UND tab_sessions (Lego-Falle TASK-7 — geteilte Map).
+    #
+    # #1262: Der multimodale Anbieter läuft jetzt über den Foto-Adapter
+    # (`FotoAnalyseProvider` → `tools.llm`). Der API-Key kommt NICHT mehr aus
+    # `config.multimodal_api_key`, sondern lazy aus dem Zugangsdaten-Store über
+    # den Foto-Slot (`eltern-chat-anthropic-foto-analyse-api-key`, ZD-5). Die
+    # frühere `provider_api_key`-Bedingung entfällt: der Adapter-Bau selbst ist
+    # der Gate — fehlt der Foto-Slot (oder Capability-Mismatch), wirft
+    # `get_singleshot` beim Bau `LLMCapabilityError`; dann bleibt der Skill wie im
+    # Onboarding-Modus abgeschaltet (Aufgabe NICHT im Katalog), der übrige
+    # Katalog unberührt (Spiegel `providers/lib_adapter.py`-Boot-Semantik).
     if plan_origin_url is not None \
             and family_group_chat_id_getter is not None \
-            and tab_sessions is not None \
-            and provider_api_key:
-        from skills._multimodal import get_multimodal_provider
+            and tab_sessions is not None:
+        from skills.foto_analyse import FotoAnalyseProvider, LLMCapabilityError
         from skills.plan_client import PlanClient as _TabPlanClient
         from skills.termine_aus_bild_task import TermineAusBildTask
-        _tab_plan_client = _TabPlanClient(origin_url=plan_origin_url)
-        _tab_multimodal = get_multimodal_provider(
-            multimodal_provider or provider_name or "claude",
-            multimodal_api_key or provider_api_key,
-            multimodal_model or "")
-        _tab_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
-        catalog.register(TermineAusBildTask(
-            tg=tg,
-            multimodal_provider=_tab_multimodal,
-            plan_client=_tab_plan_client,
-            sessions=tab_sessions,
-            family_group_chat_id_getter=family_group_chat_id_getter,
-            is_member_fn=_tab_is_member))
+        try:
+            _tab_multimodal = FotoAnalyseProvider(model=multimodal_model or "")
+        except LLMCapabilityError as e:
+            # Foto-Slot fehlt / Capability-Mismatch → Skill abschalten (kein
+            # Katalog-Eintrag), wie der bisherige Onboarding-Pfad ohne Key.
+            logger.info(
+                "TAB-12/#1262: Foto-Analyse-Adapter nicht baubar (%s) — "
+                "»Termine aus Bild« bleibt abgeschaltet", e)
+        else:
+            _tab_plan_client = _TabPlanClient(origin_url=plan_origin_url)
+            _tab_is_member = _make_is_member_fn(tg, family_group_chat_id_getter)
+            catalog.register(TermineAusBildTask(
+                tg=tg,
+                multimodal_provider=_tab_multimodal,
+                plan_client=_tab_plan_client,
+                sessions=tab_sessions,
+                family_group_chat_id_getter=family_group_chat_id_getter,
+                is_member_fn=_tab_is_member))
 
     # PAA-5/PAA-6: »Panel anlegen« als async-schreibende Aufgabe (EC-10).
     # Guard analog der SUE-Linie: panel_origin_url (PREG-15-Schreiben),
