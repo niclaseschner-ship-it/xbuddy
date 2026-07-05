@@ -61,6 +61,7 @@ class RunnerState:
     runner_busy: bool              # gh api: Runner arbeitet gerade an einem Job
     queued_ages_seconds: tuple[int, ...] = ()  # Alter der queued Workflow-Runs
     runner_online: bool | None = None          # nur fürs Log, nicht Teil des Gates
+    runner_found: bool = True      # False = Name nicht in API-Response (möglicher Tippfehler) → Gate
 
 
 @dataclass(frozen=True)
@@ -70,17 +71,32 @@ class Decision:
     max_queue_age_seconds: int = 0
 
 
+def find_runner(runners_payload: dict, runner_name: str) -> dict | None:
+    """Runner-Eintrag aus dem gh-API-Payload suchen.
+
+    Gibt den Runner-Dict zurück wenn der Name übereinstimmt, sonst None.
+    None signalisiert einen potenziellen Namens-Tippfehler — der Aufrufer
+    soll das im Log markieren (runner_found=false) und keinen Restart auslösen.
+    """
+    return next(
+        (r for r in runners_payload.get("runners", []) if r.get("name") == runner_name),
+        None,
+    )
+
+
 def decide(state: RunnerState, threshold_seconds: int = DEFAULT_THRESHOLD_SECONDS) -> Decision:
     """Kill-safe Entscheidung: 'restart' NUR bei active + busy:false + Queue-Alter > N.
 
     Reihenfolge der Guards ist die Sicherheits-Logik:
       1. Service nicht active  → no_action (Stuck-Restart ist nur für aktive
          Services gedacht; ein toter Service ist ein anderer Fehlerpfad).
-      2. Runner busy           → no_action (KILL-SAFETY: arbeitet an einem Job,
+      2. Runner nicht gefunden → no_action (SICHERHEITS-GUARD: möglicher
+         Namens-Tippfehler, Runner-Zustand unbekannt — kein stiller Restart).
+      3. Runner busy           → no_action (KILL-SAFETY: arbeitet an einem Job,
          ein Restart würde ihn abwürgen).
-      3. Queue-Alter <= N      → no_action (gesunder idle-Runner ODER kurze,
+      4. Queue-Alter <= N      → no_action (gesunder idle-Runner ODER kurze,
          normale Pickup-Latenz).
-      4. sonst                 → restart (active + busy:false + gestaute Queue).
+      5. sonst                 → restart (active + busy:false + gestaute Queue).
     """
     max_age = max(state.queued_ages_seconds) if state.queued_ages_seconds else 0
 
@@ -88,6 +104,12 @@ def decide(state: RunnerState, threshold_seconds: int = DEFAULT_THRESHOLD_SECOND
         return Decision(
             "no_action",
             "service_not_active: Stuck-Restart nur bei aktivem Service (toter Service ist anderer Fehlerpfad).",
+            max_age,
+        )
+    if not state.runner_found:
+        return Decision(
+            "no_action",
+            "runner_nicht_gefunden: Runner nicht in API-Response — möglicher Namens-Tippfehler, kein Restart.",
             max_age,
         )
     if state.runner_busy:
@@ -143,12 +165,10 @@ def gather_state(repo: str, runner_name: str, service: str, now: datetime | None
     service_active = read_service_active(service)
 
     runners = _gh_api(repo, "actions/runners")
-    runner = next(
-        (r for r in runners.get("runners", []) if r.get("name") == runner_name),
-        None,
-    )
+    runner = find_runner(runners, runner_name)
     runner_busy = bool(runner.get("busy")) if runner else False
     runner_online = (runner.get("status") == "online") if runner else None
+    runner_found = runner is not None
 
     runs = _gh_api(repo, "actions/runs?status=queued&per_page=100")
     ages = tuple(
@@ -161,6 +181,7 @@ def gather_state(repo: str, runner_name: str, service: str, now: datetime | None
         runner_busy=runner_busy,
         queued_ages_seconds=ages,
         runner_online=runner_online,
+        runner_found=runner_found,
     )
 
 
@@ -194,6 +215,7 @@ def main(argv: list[str] | None = None) -> int:
         "service": args.service,
         "runner": args.runner_name,
         "service_active": state.service_active,
+        "runner_found": state.runner_found,
         "runner_online": state.runner_online,
         "runner_busy": state.runner_busy,
         "queued_count": len(state.queued_ages_seconds),
