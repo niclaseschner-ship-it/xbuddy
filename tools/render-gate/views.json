@@ -9,6 +9,11 @@
     },
     "kibuddy/frage": {
       "path": "/display/kibuddy/frage"
+    },
+    "essen/wunsch": {
+      "path": "/display/essen/wunsch",
+      "viewport": { "width": 1920, "height": 1200 },
+      "_doc": "DC-18 fluid pilot (Paula-Tablet 1920x1200). viewport 1920x1200 als Vorbereitungs-Daten hinterlegt — per-View-Viewport-Konsum in check.js noch NICHT enforced (check.js liest diesen Wert derzeit nicht). Tier-A prueft nur Overflow (root-overflow+viewport-overflow), NICHT Fuellung (Overflow != Underflow). Fuellinvariante (Content-Bounding-Box == Viewport, kein Leerband) ausstehend → Folge-Chore #1322."
     }
   }
 }

@@ -383,13 +383,14 @@ nicht nur die Pure-Math `computeScale`, sondern auch die DOM-Anwendung
   (Split-Screen), wäre das eine echte zweite Ebene — eigene Spec, sobald
   relevant. Deckt sich mit der bewussten Nicht-Entscheidung in Ticket #24.
 
-- **OPEN-DC-B — Responsive Buddy-Templates (in Arbeit, #1218).** Der
-  Display-Client-*Mechanismus* dafür ist jetzt DC-18 (opt-in `?fit=viewport`).
-  Die eigentliche Arbeit — ein Buddy-Template *echt* fluid bauen — beginnt mit
-  `essen/wunsch` am Paula-Tablet (1920×1200, #1218-Pilot). Dieser Punkt wird
-  geschlossen, sobald der erste fluide Content live steht und das Render-Gate
-  Füllung (nicht nur Breite) grün prüft; weitere Views ziehen bei konkretem
-  Schmerz nach.
+- **OPEN-DC-B — Responsive Buddy-Templates.** `essen/wunsch` ist fluid live
+  (Fit-Modus `?fit=viewport` funktioniert, DC-18-Pilot #1218 abgeschlossen);
+  der Display-Client-*Mechanismus* ist DC-18 (opt-in `?fit=viewport`). **Noch
+  offen:** die Render-Gate-Füll-Invariante (Content-Bounding-Box == Viewport,
+  kein Leerband, kein Overflow) ist noch nicht gebaut — das Render-Gate prüft
+  derzeit nur Overflow, nicht Füllung (Underflow). Folge-Chore #1322. Dieser
+  Punkt wird geschlossen, sobald das Render-Gate Füllung grün prüft; weitere
+  fluid Views ziehen bei konkretem Schmerz nach.
 
 - **OPEN-DC-C — Konsumenten-spezifische *fixe* Design-Auflösung.** Der
   *responsive* Weg ist jetzt DC-18. Eine abweichende *fixe* Auflösung (statt
