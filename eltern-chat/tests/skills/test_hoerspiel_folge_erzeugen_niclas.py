@@ -12,7 +12,7 @@ import os
 
 from skills.hoerspiel_folge_erzeugen_task import HoerspielFolgeErzeugenTask
 from tasks import HOERSPIEL_INSTANZEN, TurnContext
-from tests.skills.test_hoerspiel_folge_erzeugen import (
+from test_hoerspiel_folge_erzeugen import (
     FakeHoerspielClient,
     FakeTelegram,
     _immer_mitglied,
