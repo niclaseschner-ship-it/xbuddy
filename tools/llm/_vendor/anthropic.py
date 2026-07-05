@@ -16,6 +16,7 @@ trägt `cache_control: ephemeral`), damit die KIBuddy-Spike-Stufe-1 später
 ohne SDK-Anpassung hoerspiel/eltern-chat mit übernimmt.
 """
 
+import base64
 import logging
 import time
 from datetime import UTC, datetime
@@ -155,6 +156,35 @@ class AnthropicVendor(VendorBase):
         """System-Block (distinct) mit Cache-Marker — wie `chat_multiturn`."""
         return [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
 
+    def _user_content(
+        self, prompt: str, images: list[dict[str, Any]] | None,
+    ) -> Any:
+        """Baut den user-Content (T1262 multimodal_input).
+
+        Ohne `images` byte-identisch der Alt-Form (der reine `prompt`-String).
+        Mit `images` `[image-Block(s), text-Block]`: jedes Bild wird aus der
+        neutralen Wire-Form `{"bytes", "media_type"}` in einen Anthropic-
+        `image`-Block mit base64-`source` gehoben (base64 IM Vendor, wie
+        `_multimodal/claude.py:186`). Der text-Block trägt den `prompt`.
+        """
+        if not images:
+            return prompt
+        blocks: list[dict[str, Any]] = []
+        for img in images:
+            raw = img["bytes"]
+            media_type = img.get("media_type") or "image/jpeg"
+            data_b64 = base64.standard_b64encode(raw).decode("ascii")
+            blocks.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": media_type,
+                    "data": data_b64,
+                },
+            })
+        blocks.append({"type": "text", "text": prompt})
+        return blocks
+
     def _create(self, **kwargs: Any) -> Any:
         """`messages.create` mit APIError→ProviderError (wie `chat_multiturn`)."""
         try:
@@ -179,12 +209,20 @@ class AnthropicVendor(VendorBase):
         slot: str,
         tool_name: str = "ergebnis",
         tool_description: str = "Strukturiertes Ergebnis-Objekt nach Schema.",
+        images: list[dict[str, Any]] | None = None,
         correlation_id: str | None = None,
     ) -> dict[str, Any]:
         """Ein Call, forced `tool_use` → Schema-konformes dict (LLMP-S1
         `get_singleshot`). Required: `structured_output` +
         `system_message_distinct` (+ `cache_control`). Telemetrie + ProviderError
         wie `chat_multiturn`.
+
+        `images` (T1262-additiv, multimodal_input): neutrale Wire-Form
+        `[{"bytes": <raw>, "media_type": <str>}, …]`. Bei nicht-leerem `images`
+        wird der user-Content zu `[image-Block(s), text-Block]` — die base64-
+        Kodierung geschieht HIER im Vendor (wie Legacy `_multimodal/claude.py:186`,
+        der Konsument reicht nur Rohbytes). `images=None`/leer → byte-identischer
+        Text-Pfad (`content=prompt`, Regression-frei für hoerspiel).
         """
         tools = [{
             "name": tool_name,
@@ -196,7 +234,7 @@ class AnthropicVendor(VendorBase):
         t_start = time.monotonic()
         response = self._create(
             system=self._system_blocks(system),
-            messages=[{"role": "user", "content": prompt}],
+            messages=[{"role": "user", "content": self._user_content(prompt, images)}],
             tools=tools,
             tool_choice={"type": "tool", "name": tool_name},
         )

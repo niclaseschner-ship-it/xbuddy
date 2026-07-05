@@ -4,7 +4,7 @@ Analog `test_termin_eintragen_task.py`:
 - WriteTask-Klassifikation: is_async=True, propose() liefert kontextabhängigen
   Vorschlag, execute() startet die Session.
 - Catalog-Probe: AND-Guard auf plan_origin_url + family_group_chat_id_getter +
-  tab_sessions + provider_api_key.
+  tab_sessions + Foto-Slot (LLMCapabilityError-Gate via FotoAnalyseProvider, #1262).
 - handle_update-Routing-Test (Lego-Falle TASK-7): Privatchat-Nachrichten
   während laufender TAB-Session erreichen die Session — analog TES.
 - TAB-4: Tool-Description enthält die hart-codierte Signalwort-Liste.
@@ -14,6 +14,7 @@ import contextlib
 import os
 import tempfile
 import time
+from unittest.mock import patch
 
 from confirm import PendingStore
 from fakes import (
@@ -224,20 +225,19 @@ def _make_ca_pem():
 
 
 def test_TAB12_registriert_wenn_alle_guards_gesetzt():
-    """TAB-12 AND-Guard: plan_origin_url + family_group_chat_id_getter +
-    tab_sessions + provider_api_key alle gesetzt → Task im Katalog."""
+    """TAB-12 AND-Guard (#1262): plan_origin_url + family_group_chat_id_getter +
+    tab_sessions alle gesetzt UND Foto-Slot vorhanden (resolve_api_key→Fake-Key)
+    → FotoAnalyseProvider baut → Task im Katalog."""
     ca_pem = _make_ca_pem()
     try:
         tg = FakeTelegram()
-        catalog = build_catalog(
-            tg=tg, ca_pem_path=ca_pem,
-            plan_origin_url="http://127.0.0.1:5020",
-            family_group_chat_id_getter=_family_getter(),
-            tab_sessions={},
-            provider_name="claude",
-            provider_api_key="fake-key",
-            provider_model="",
-        )
+        with patch("tools.llm.public_api.resolve_api_key", return_value="fake-key"):
+            catalog = build_catalog(
+                tg=tg, ca_pem_path=ca_pem,
+                plan_origin_url="http://127.0.0.1:5020",
+                family_group_chat_id_getter=_family_getter(),
+                tab_sessions={},
+            )
         task = catalog.get("termine_aus_bild")
         assert task is not None
         assert isinstance(task, WriteTask)
@@ -246,18 +246,20 @@ def test_TAB12_registriert_wenn_alle_guards_gesetzt():
             os.unlink(ca_pem)
 
 
-def test_TAB12_nicht_registriert_ohne_provider_api_key():
-    """AND-Guard: ohne provider_api_key (Onboarding-Modus) kein TAB-Task."""
+def test_TAB12_nicht_registriert_ohne_foto_slot():
+    """AND-Guard (#1262): Foto-Slot fehlt (resolve_api_key → None) →
+    FotoAnalyseProvider wirft LLMCapabilityError → TAB-Task NICHT im Katalog
+    (Onboarding-Modus, kein Skill)."""
     ca_pem = _make_ca_pem()
     try:
         tg = FakeTelegram()
-        catalog = build_catalog(
-            tg=tg, ca_pem_path=ca_pem,
-            plan_origin_url="http://127.0.0.1:5020",
-            family_group_chat_id_getter=_family_getter(),
-            tab_sessions={},
-            # provider_api_key fehlt
-        )
+        with patch("tools.llm.public_api.resolve_api_key", return_value=None):
+            catalog = build_catalog(
+                tg=tg, ca_pem_path=ca_pem,
+                plan_origin_url="http://127.0.0.1:5020",
+                family_group_chat_id_getter=_family_getter(),
+                tab_sessions={},
+            )
         assert catalog.get("termine_aus_bild") is None
     finally:
         with contextlib.suppress(OSError):
@@ -270,10 +272,9 @@ def test_TAB12_nicht_registriert_ohne_plan_origin():
         tg = FakeTelegram()
         catalog = build_catalog(
             tg=tg, ca_pem_path=ca_pem,
-            # plan_origin_url fehlt
+            # plan_origin_url fehlt → Guard-Short-Circuit vor FotoAnalyseProvider
             family_group_chat_id_getter=_family_getter(),
             tab_sessions={},
-            provider_api_key="fake-key",
         )
         assert catalog.get("termine_aus_bild") is None
     finally:
@@ -288,9 +289,8 @@ def test_TAB12_nicht_registriert_ohne_fgcid():
         catalog = build_catalog(
             tg=tg, ca_pem_path=ca_pem,
             plan_origin_url="http://127.0.0.1:5020",
-            # family_group_chat_id_getter fehlt
+            # family_group_chat_id_getter fehlt → Guard-Short-Circuit
             tab_sessions={},
-            provider_api_key="fake-key",
         )
         assert catalog.get("termine_aus_bild") is None
     finally:
@@ -306,8 +306,7 @@ def test_TAB12_nicht_registriert_ohne_tab_sessions():
             tg=tg, ca_pem_path=ca_pem,
             plan_origin_url="http://127.0.0.1:5020",
             family_group_chat_id_getter=_family_getter(),
-            # tab_sessions fehlt
-            provider_api_key="fake-key",
+            # tab_sessions fehlt → Guard-Short-Circuit
         )
         assert catalog.get("termine_aus_bild") is None
     finally:
@@ -347,13 +346,13 @@ def _ctx_with_tab_session(tmp_path, tg, tab_sessions, family_group_chat_id="-100
     TES). Der Catalog muss tab_sessions als geteilte Map kennen — handle_update
     routet auf dieser EINEN Referenz (Lego-Falle TASK-7).
     """
-    catalog = build_catalog(
-        tg, "/instanz/rootCA.pem",
-        plan_origin_url="http://test-plan",
-        family_group_chat_id_getter=lambda: family_group_chat_id,
-        tab_sessions=tab_sessions,
-        provider_api_key="fake-key",
-    )
+    with patch("tools.llm.public_api.resolve_api_key", return_value="fake-key"):
+        catalog = build_catalog(
+            tg, "/instanz/rootCA.pem",
+            plan_origin_url="http://test-plan",
+            family_group_chat_id_getter=lambda: family_group_chat_id,
+            tab_sessions=tab_sessions,
+        )
     return Context(
         tg=tg,
         bot_username="mybot",
@@ -467,15 +466,13 @@ def _ctx_with_real_tab_task(tmp_path, tg, provider, tab_sessions,
     allen AND-Guards), damit `handle_update` über den Provider den Task
     aufruft und main.py die Proposal-Persistenz fährt.
     """
-    catalog = build_catalog(
-        tg, "/instanz/rootCA.pem",
-        plan_origin_url="http://test-plan",
-        family_group_chat_id_getter=lambda: family_group_chat_id,
-        tab_sessions=tab_sessions,
-        provider_api_key="fake-key",
-        provider_name="claude",
-        provider_model="",
-    )
+    with patch("tools.llm.public_api.resolve_api_key", return_value="fake-key"):
+        catalog = build_catalog(
+            tg, "/instanz/rootCA.pem",
+            plan_origin_url="http://test-plan",
+            family_group_chat_id_getter=lambda: family_group_chat_id,
+            tab_sessions=tab_sessions,
+        )
     return Context(
         tg=tg,
         bot_username="mybot",
