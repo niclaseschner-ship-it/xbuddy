@@ -89,12 +89,28 @@
       var setup    = document.getElementById('setup');
       var setupMsg = document.getElementById('setup-msg');
 
-      // DC-14 — Re-Skalierung bei Viewport-Änderung. `applyScale` ist eine
-      // reine DOM-Anwendung der Pure-Function `computeScale` (DC-10).
-      // Re-Aufruf wechselt nur die transform-Eigenschaft; die iframe.src
-      // bleibt unangetastet — der gerouteten Inhalt behält seinen Zustand
-      // (DC-2).
+      // DC-18 — Viewport-Fit-Guard: trackt den aktuellen Fit-Modus.
+      // Wird in showContent() aus der Content-URL gesetzt; rescale() liest
+      // ihn bei jedem Aufruf (resize, orientationchange, showContent).
+      var fitViewport = false;
+
+      // DC-14 / DC-18 — Re-Skalierung bei Viewport-Änderung.
+      // ?fit=viewport (DC-18): iframe 100%×100%, transform:none, kein
+      //   applyScale — Inhalt ist selbst fluid (responsive CSS).
+      // Default (fixed, DC-12/DC-15): applyScale wie bisher (Letterbox).
       function rescale() {
+        if (fitViewport) {
+          scaler.style.display   = 'block';
+          iframe.style.width     = '100%';
+          iframe.style.height    = '100%';
+          iframe.style.transform = 'none';
+          return;
+        }
+        // Restore für fixed-Pfad (auch bei Wechsel viewport-fit → fixed)
+        scaler.style.display   = '';
+        iframe.style.width     = '';
+        iframe.style.height    = '';
+        iframe.style.transform = '';
         dispLib.applyScale(iframe, window.innerWidth, window.innerHeight);
       }
       window.addEventListener('resize', rescale);
@@ -104,12 +120,18 @@
       // View — die DOM-Seite des Clients. dispLib ruft genau diese drei
       // Methoden; getestet wird die Logik gegen eine Doppelung (DC-10).
       var view = {
-        // DC-3 / DC-4 / DC-12 — gerouteten Inhalt im iframe zeigen,
-        // innerhalb des Clients. dispLib ruft das nur bei echtem Wechsel
-        // (Dedup liegt dort). Re-Skalierung sicherstellen, falls das
-        // Viewport sich vor dem ersten Inhalt geändert hat.
+        // DC-3 / DC-4 / DC-12 / DC-18 — gerouteten Inhalt im iframe zeigen.
+        // Erkennt ?fit=viewport an der Content-URL (DC-18) und schaltet
+        // rescale() in den Viewport-Fit-Modus. dispLib ruft das nur bei
+        // echtem Wechsel (Dedup liegt dort).
         showContent: function (url) {
           setup.classList.remove('show');
+          // DC-18: ?fit=viewport-Erkennung in der Content-URL
+          try {
+            fitViewport = new URL(url, location.origin).searchParams.get('fit') === 'viewport';
+          } catch (_) {
+            fitViewport = /[?&]fit=viewport(?:[&#]|$)/.test(url);
+          }
           iframe.src = url;
           scaler.hidden = false;
           rescale();

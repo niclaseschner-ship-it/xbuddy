@@ -2,7 +2,7 @@
   "views": [
     {
       "slug": "wunsch",
-      "pfad": "/display/essen/wunsch",
+      "pfad": "/display/essen/wunsch?fit=viewport",
       "label": "Essens-Wünsche",
       "synonyme": [
         "essen",

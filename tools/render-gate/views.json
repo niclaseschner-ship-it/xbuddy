@@ -9,6 +9,11 @@
     },
     "kibuddy/frage": {
       "path": "/display/kibuddy/frage"
+    },
+    "essen/wunsch": {
+      "path": "/display/essen/wunsch",
+      "viewport": { "width": 1920, "height": 1200 },
+      "_doc": "DC-18 fluid pilot (Paula-Tablet 1920x1200). Füllung via Tier-A root-overflow+viewport-overflow."
     }
   }
 }
