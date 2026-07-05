@@ -526,7 +526,8 @@ def essen_einkauf_view():
     ESSEN-33: HTML bindet manifest.json + sw.js ein (PWA-Mantel). Asset-Routen
     leben unter /seiten/essen/einkauf/<asset> — siehe einkauf_asset_view.
     """
-    build_id = _mini_app_build_id("essen-einkauf.js")
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    build_id = pwa_mantel.build_id_for("einkauf", static_dir)
     resp = make_response(render_template("essen-einkauf.html", build_id=build_id))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
@@ -574,21 +575,6 @@ def _current_build_id():
     """
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     return pwa_mantel.build_id_for("einkauf", static_dir)
-
-
-def _mini_app_build_id(primary_js: str) -> str:
-    """build_id als max(mtime(primary_js), mtime(platform.js)) (T1229, PWAM-4).
-
-    Generischer Mini-App-HTML-Helfer: bezieht platform.js-mtime ein, damit eine
-    platform.js-Änderung den Telegram-Cache aller 4 platform.js-ladenden
-    Mini-App-Routen verlässlich invalidiert (MAD-5 / RAT-16). Delegiert an
-    pwa_mantel.build_id_from_mtimes (OSError-Fallback "0").
-    """
-    static_dir = os.path.join(os.path.dirname(__file__), "static")
-    return pwa_mantel.build_id_from_mtimes([
-        os.path.join(static_dir, primary_js),
-        os.path.join(static_dir, "platform.js"),
-    ])
 
 
 @app.route("/seiten/essen/einkauf/<path:asset>", methods=["GET"])
@@ -694,7 +680,8 @@ def plan_einstellungen_view():
     Cache-Buster: build_id aus mtime der plan-einstellungen.js (platform.js einbezogen, T1229).
     PWA-Mantel: manifest.json + sw.js unter /seiten/plan/einstellungen/<asset>.
     """
-    build_id = _mini_app_build_id("plan-einstellungen.js")
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    build_id = pwa_mantel.build_id_for("plan", static_dir)
     resp = make_response(render_template("plan-einstellungen.html", build_id=build_id))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
@@ -848,7 +835,8 @@ def mini_app_uebersicht_view():
     """
     # MAD-7-konform: HTML-Render-Route lädt Skeleton OHNE Auth (Telegram-WebView
     # sendet beim Initial-Load keinen Header). JS macht platform.ensureAuth().
-    build_id = _mini_app_build_id("mini-app-uebersicht.js")
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    build_id = pwa_mantel.build_id_for("mini-app-uebersicht", static_dir)
     resp = make_response(render_template("mini-app-uebersicht.html", build_id=build_id))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
@@ -874,7 +862,8 @@ def routine_anpassen_view():
     holt.
     """
     # MAD-7-konform: HTML-Render-Route lädt Skeleton OHNE Auth. JS macht ensureAuth().
-    build_id = _mini_app_build_id("routine-anpassen.js")
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    build_id = pwa_mantel.build_id_for("routine", static_dir)
     resp = make_response(render_template("routine-anpassen.html", build_id=build_id))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
@@ -1138,10 +1127,7 @@ def heim_shell(panel_id):
     """
     display_id = _lookup_display_id(panel_id)
     static_dir = os.path.join(os.path.dirname(__file__), "static")
-    try:
-        build_id = str(int(os.path.getmtime(os.path.join(static_dir, "heim-shell.css"))))
-    except OSError:
-        build_id = "0"
+    build_id = pwa_mantel.build_id_for("shell", static_dir)  # PWAM-5-Registry (T1284-AC1)
     resp = make_response(render_template(
         "heim-shell.html",
         panel_id=panel_id,
