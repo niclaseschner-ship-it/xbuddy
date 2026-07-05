@@ -781,3 +781,72 @@ def test_patch_config_persistiert_in_datei(tmp_path, runtime_cfg_with_mistral, d
         assert abs(persisted["playback_tempo"] - 1.2) < 0.01
     finally:
         del os.environ["HOERSPIEL_DATA_CONFIG_FILE"]
+
+
+# ============================================================
+#  HSP-43 / #1263 — Instanz-Liste treibt die Face-Pillen-Reihe (n≥3, emil)
+# ============================================================
+
+
+def test_config_instanzen_traegt_emil():
+    """HSP-43: config.INSTANZEN ist die autoritative hörspiel-lokale Liste und
+    trägt mia, finn UND emil (kind_id/name; NIE port/origin)."""
+    kind_ids = {i["kind_id"] for i in config_mod.INSTANZEN}
+    assert {"mia", "finn", "emil"} <= kind_ids
+    for i in config_mod.INSTANZEN:
+        assert i["kind_id"]
+        assert i["name"]
+        assert "port" not in i
+        assert "origin" not in i
+
+
+@pytest.fixture
+def client_familie_drei(runtime_cfg_with_mistral, data_cfg_mini, data_root_mini):
+    """Test-Client, dessen Familie-Snapshot mia + finn + emil kennt."""
+    from hoerspiel import familie_client as fc_mod
+
+    transport = _make_familie_transport([
+        {"id": "mia", "name": "Mia", "ring": "orange", "art": "kinder",
+         "foto": "/display/_shared/fotos/mia.jpg"},
+        {"id": "finn", "name": "Finn", "ring": "blue", "art": "kinder",
+         "foto": "/display/_shared/fotos/finn.jpg"},
+        {"id": "emil", "name": "Niclas", "ring": "green", "art": "erwachsene",
+         "foto": "/display/_shared/fotos/emil.jpg"},
+    ])
+    mock_client = fc_mod.FamilieClient(
+        origin_url="http://127.0.0.1:5010", transport=transport)
+    main_mod.configure(
+        runtime_config=runtime_cfg_with_mistral,
+        data_config=data_cfg_mini,
+        data_root=data_root_mini,
+        llm=None, tts_engine=None,
+        bot_token="TEST",
+        familie_client=mock_client,
+    )
+    return main_mod.app.test_client()
+
+
+def test_face_pillen_reihe_gewinnt_emil_additiv(client_familie_drei):
+    """HSP-43 / HSP-46 / HSP-3a n≥3: aus Mias View zeigt die Pillen-Reihe BEIDE
+    anderen Instanzen — Finn UND Niclas (additiv, kein 2-Toggle)."""
+    resp = client_familie_drei.get("/display/hoerspiel/mia/alben")
+    assert resp.status_code == 200
+    html = resp.data.decode("utf-8")
+    # Beide Wechsel-Links vorhanden (vollständige Navigation, kein JS-State).
+    assert 'href="/display/hoerspiel/finn/alben"' in html
+    assert 'href="/display/hoerspiel/emil/alben"' in html
+    assert "Finn" in html
+    assert "Niclas" in html
+    # Eigene kind_id (mia) taucht NICHT als Wechsel-Link auf.
+    assert 'href="/display/hoerspiel/mia/alben"' not in html
+
+
+def test_face_pillen_reihe_identisch_zu_zwei_hardcode(client_mit_familie):
+    """Regression: mit nur mia+finn im Snapshot verhält sich die Reihe wie der
+    alte 2-Hardcode — genau eine Pille (Finn), emil fehlt (nicht im Snapshot)."""
+    resp = client_mit_familie.get("/display/hoerspiel/mia/alben")
+    html = resp.data.decode("utf-8")
+    assert 'href="/display/hoerspiel/finn/alben"' in html
+    # emil ist NICHT im Familie-Snapshot → keine emil-Pille (PLAN-20-Geist).
+    assert 'href="/display/hoerspiel/emil/alben"' not in html
+    assert html.count('class="face-pille"') == 1

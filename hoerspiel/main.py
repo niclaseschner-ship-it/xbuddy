@@ -76,12 +76,10 @@ logger = logging.getLogger(__name__)
 #  Laufzeit-Zustand (Test-Naht analog wetter/main.py)
 # ============================================================
 
-# HSP-3a Variante C / RAT-17 Option A: handverdrahtete Kind-Paarung (zwei Instanzen).
-# KEINE Registry, KEINE automatische Erkennung. V1 zwei explizite Einträge.
-_OTHER_KIND: dict[str, str] = {
-    "mia": "finn",
-    "finn": "mia",
-}
+# HSP-3a / HSP-43 (#1263): die „anderen Kinder" ergeben sich aus der hörspiel-
+# lokalen Instanz-Liste `config.INSTANZEN` (alle Einträge außer der eigenen
+# kind_id) — kein binärer mia↔finn-Toggle mehr, damit n≥3 (emil) additiv
+# trägt (HSP-3a n≥3, HSP-46). KEINE Registry, KEIN Cross-Service-Import.
 
 # ENV-Key für den Familie-Service-Origin (DCOMP-1 / CLIENT-1).
 # Default kommt aus tools.familie_client.DEFAULT_ORIGIN (zentral, CLIENT-1).
@@ -327,20 +325,34 @@ def _get_familie_client() -> "familie_client_mod.FamilieClient":
 
 
 def _pille_vars(kind_id: str) -> dict:
-    """Holt aktives Kind + anderes Kind aus Familie-Service (HSP-3a).
+    """Holt aktives Kind + andere Kinder aus Familie-Service (HSP-3a / HSP-43).
 
-    Gibt dict mit 'aktives_kind' (Person | None) und 'anderes_kind'
-    (Person | None) zurück. Bei Fehler oder nicht gefundenen Personen:
-    beide None → Template rendert ohne Pille (PLAN-20-Geist).
+    Gibt dict mit 'aktives_kind' (Person | None) und 'andere_kinder' (Liste von
+    {'person': Person, 'url': str}) zurück — ein Eintrag je Instanz aus
+    `config.INSTANZEN`, deren kind_id != aktive kind_id UND die im Familie-
+    Snapshot als Person vorliegt (HSP-3a n≥3, #1263). Fehlt eine Person im
+    Snapshot (z. B. emil vor Provisionierung) oder ist der Familie-Service
+    unerreichbar, fällt der jeweilige Eintrag weg — Template rendert dann die
+    verbleibenden Pillen bzw. gar keine (PLAN-20-Geist).
     """
-    other_id = _OTHER_KIND.get(kind_id)
     client = _get_familie_client()
     registry = client.snapshot()
 
     aktives_kind = registry.get(kind_id)
-    anderes_kind = registry.get(other_id) if other_id else None
+    andere_kinder = []
+    for inst in config_mod.INSTANZEN:
+        other_id = inst["kind_id"]
+        if other_id == kind_id:
+            continue
+        person = registry.get(other_id)
+        if person is None:
+            continue
+        andere_kinder.append({
+            "person": person,
+            "url": "/display/hoerspiel/%s/alben" % other_id,
+        })
 
-    return {"aktives_kind": aktives_kind, "anderes_kind": anderes_kind}
+    return {"aktives_kind": aktives_kind, "andere_kinder": andere_kinder}
 
 
 # ============================================================
@@ -445,15 +457,12 @@ def display_alben(kind_id: str):
     err = _assert_self_kind(kind_id)
     if err is not None:
         return err
-    # HSP-3a Variante C: Face-Pille-Vars aus Familie-Service holen.
+    # HSP-3a / HSP-43: Face-Pillen-Reihe aus Familie-Service holen (n≥3, #1263).
     pille = _pille_vars(kind_id)
-    other_id = _OTHER_KIND.get(kind_id)
-    other_url = ("/display/hoerspiel/%s/alben" % other_id) if other_id else None
     return render_template(
         "alben.html",
         aktives_kind=pille["aktives_kind"],
-        anderes_kind=pille["anderes_kind"],
-        anderes_kind_url=other_url,
+        andere_kinder=pille["andere_kinder"],
     )
 
 
@@ -521,10 +530,21 @@ def folgen_vorschlag(kind_id: str):
     historie = data_io.read_text_or_empty(
         os.path.join(_data_root(), "folgen-historie.md"))
     naechste = _naechste_nummer_aus_historie(historie)
+    # HSP-45 / #1263: Instanz-Rahmung der aktiven Instanz in den Story-Prompt
+    # reichen (Name-Drift-Fix — Muster wie themen_endpoint :846). Leere Felder
+    # fängt der transitionale Fallback in llm_service ab (mia/finn byte-gleich).
+    instance = config_mod.load_instance(
+        data_root=_data_root(),
+        kind_id=_self_kind_id(),
+        data_cfg=_data_cfg(),
+    )
     try:
         vorschlag = llm_service.erzeuge_folgen_vorschlag(
             idee=idee, bible=bible_text, historie=historie,
-            naechste_nummer=naechste, llm=llm)
+            naechste_nummer=naechste, llm=llm,
+            name=instance.name, alter=instance.alter,
+            ton=instance.ton, perspektive=instance.perspektive,
+            serien_name=instance.serien_name)
     except ProviderError as e:
         return jsonify({"fehler": "llm-provider nicht erreichbar: %s" % e}), 503
     except llm_service.LLMServiceError as e:

@@ -53,6 +53,19 @@ DEFAULT_LLM_MODEL = "claude-opus-4-7"
 DEFAULT_VOICE = "onyx"
 DEFAULT_SERIEN_NAME = "Stigi & Co."
 
+# HSP-43 / #1263: hörspiel-LOKALE Instanz-Liste (origin-frei; NUR kind_id/name).
+# Muster: seiten/main.py:947 `_HSP_INSTANZEN` — die eine autoritative Kopie DIESER
+# Komponente. KEINE plattformweite Registry, KEIN Cross-Service-Import (jede
+# Komponente hält ihre eigene Kopie, RAT-17 stop_rule kein_register). Scope-Grenze
+# der Liste: NIE port/origin/service/pfad — diese leben in conventions/ports.md
+# bzw. der Runtime-Config. emil ist erwachsen-zielgruppig (HSP-45); der Backend-
+# Service wird MANUELL provisioniert (HSP-44, nicht Code).
+INSTANZEN = [
+    {"kind_id": "mia",  "name": "Mia"},
+    {"kind_id": "finn",   "name": "Finn"},
+    {"kind_id": "emil", "name": "Niclas"},   # #1263 (HSP-43/HSP-44)
+]
+
 # HSP-14 / HSP-27 — Pausen-Defaults (familien-konfigurierbar in hoerspiel.json).
 DEFAULT_PAUSE_ABSATZ_SEK: float = 0.55
 DEFAULT_PAUSE_TITEL_SEK: float = 1.8
@@ -83,15 +96,28 @@ class InstanceConfig:
     - name      — Anzeige-Name des Kindes (z. B. "Mia")
     - alter     — Alter als int (aus instance.json oder ENV HOERSPIEL_KIND_ALTER)
     - themen_je_alter — Map alter-str → list[str] (aus instance.json oder DataConfig)
+    - zielgruppe   — deskriptiv "kind" | "erwachsen" (HSP-45, rein informativ)
+    - ton          — Erzähl-Ton der Serie (HSP-45, Story-Prompt-Kontext)
+    - perspektive  — Erzähl-Perspektive (HSP-45, Story-Prompt-Kontext)
+    - serien_name  — Serien-Rahmung dieser Instanz (HSP-45, Name-Drift-Fix)
+
+    zielgruppe/ton/perspektive/serien_name kommen aus instance.json (HSP-27); leer
+    → der Story-Prompt-Fallback in llm_service greift (transitionale Rahmung, #1263).
     """
 
     def __init__(self, kind_id: str, name: str, alter: int,
-                 themen_je_alter: dict[str, list[str]] | None = None):
+                 themen_je_alter: dict[str, list[str]] | None = None,
+                 zielgruppe: str = "kind", ton: str = "",
+                 perspektive: str = "", serien_name: str = ""):
         self.kind_id = kind_id
         self.name = name
         self.alter = alter
         self.themen_je_alter = themen_je_alter if themen_je_alter is not None \
             else dict(DEFAULT_THEMEN_JE_ALTER)
+        self.zielgruppe = zielgruppe
+        self.ton = ton
+        self.perspektive = perspektive
+        self.serien_name = serien_name
 
 
 def load_instance(data_root: str, kind_id: str,
@@ -134,11 +160,17 @@ def load_instance(data_root: str, kind_id: str,
         else:
             themen_je_alter = dict(DEFAULT_THEMEN_JE_ALTER)
 
+        # HSP-45 / #1263: Erwachsenen-Achse + Name-Drift-Kontext rein aus Daten.
+        # Leer → Story-Prompt-Fallback in llm_service (transitionale Rahmung).
         return InstanceConfig(
             kind_id=kind_id,
             name=name,
             alter=alter,
             themen_je_alter=themen_je_alter,
+            zielgruppe=str(raw.get("zielgruppe") or "kind").strip(),
+            ton=str(raw.get("ton") or "").strip(),
+            perspektive=str(raw.get("perspektive") or "").strip(),
+            serien_name=str(raw.get("serien_name") or "").strip(),
         )
 
     # Fallback: instance.json fehlt oder für andere kind_id — ENV-Overgangs-Werte.

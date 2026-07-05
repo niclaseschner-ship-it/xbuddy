@@ -30,16 +30,19 @@
       </div>
     </div>
 
-    {# HSP-3a Variante C: Face-Pille top-right — vollständige Navigation auf andere kind_id-URL.
-       Kein JS-State-Wechsel (RAT-17 Option A handverdrahtet zwei Instanzen). #}
-    {% if anderes_kind and anderes_kind_url %}
-    <a class="face-pille" href="{{ anderes_kind_url }}"
-       aria-label="Zu {{ anderes_kind.name }} wechseln">
-      <div class="face size-54 ring-{{ anderes_kind.ring }}">
-        <img src="/api/v1/familie/foto/{{ anderes_kind.id }}" alt="{{ anderes_kind.name }}">
+    {# HSP-3a / HSP-43 (#1263): Face-Pillen-Reihe top-right — je andere Instanz eine
+       Pille mit vollständiger Navigation auf deren kind_id-URL. Kein JS-State-Wechsel;
+       die Liste `andere_kinder` iteriert config.INSTANZEN (n≥3, kein 2-Toggle). #}
+    {% if andere_kinder %}
+    {% for k in andere_kinder %}
+    <a class="face-pille" href="{{ k.url }}"
+       aria-label="Zu {{ k.person.name }} wechseln">
+      <div class="face size-54 ring-{{ k.person.ring }}">
+        <img src="/api/v1/familie/foto/{{ k.person.id }}" alt="{{ k.person.name }}">
       </div>
-      <span class="face-pille-name">{{ anderes_kind.name }}</span>
+      <span class="face-pille-name">{{ k.person.name }}</span>
     </a>
+    {% endfor %}
     {% elif aktives_kind %}
     {# Nur Anzeige des aktiven Kindes, kein Wechsel-Link — Pille ist sichtbar inaktiv. #}
     <div class="face-pille face-pille--solo" aria-label="{{ aktives_kind.name }}">

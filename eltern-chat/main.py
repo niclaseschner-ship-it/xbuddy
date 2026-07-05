@@ -1198,6 +1198,10 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # damit HoerspielFolgeErzeugenTask die Mini-Map mit echtem Finn-Client
         # befüllt (kind_id="finn" → hoerspiel_url_origin_finn, AC-1).
         hoerspiel_url_origin_finn=cfg.hoerspiel_url_origin_finn or "",
+        # HSP-43 / #1263: Niclas-Origin an build_catalog durchreichen, damit
+        # HoerspielFolgeErzeugenTask die Mini-Map mit echtem Niclas-Client befüllt
+        # (kind_id="emil" → hoerspiel_url_origin_emil, AC3).
+        hoerspiel_url_origin_emil=cfg.hoerspiel_url_origin_emil or "",
         # KAQS-6 / #825: Origin des KIBuddy-Config-Endpunkts. Leer/None →
         # KibuddyAufnahmeQuelleSetzenTask NICHT im Katalog (AND-Guard KAQS-6).
         kibuddy_origin_url=cfg.kibuddy_origin_url or None,
