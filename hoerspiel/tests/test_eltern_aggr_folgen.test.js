@@ -96,7 +96,7 @@ function makeAlbum(overrides = {}) {
  * sortierten 4er-Liste; jeder Eintrag trägt seine kind_id.
  */
 test("HSP-35-Aggregation: zwei Quellen (paula+neko) ergeben sortierte 4er-Liste mit kind_id", () => {
-  assert.deepEqual(KIND_IDS_V1, ["paula", "neko"], "KIND_IDS_V1 enthält genau paula+neko");
+  assert.deepEqual(KIND_IDS_V1, ["paula", "neko", "niclas"], "KIND_IDS_V1 enthält paula+neko+niclas (#1263)");
 
   const alleAlben = [
     {
