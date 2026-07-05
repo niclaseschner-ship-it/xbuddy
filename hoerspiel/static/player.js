@@ -105,6 +105,19 @@ function skipDisabled(idx, len) {
   return { prev: idx <= 0, next: idx >= len - 1 };
 }
 
+/**
+ * Auto-Advance-Entscheidung beim `ended` (Doppel-Puffer, #1304). Rein/testbar.
+ *   'swap' — der nächste Track (trackIdx+1) liegt schon im idle-Element gepuffert
+ *            → synchron am gepufferten Element weiterspielen (Hintergrund-Garantie).
+ *   'load' — Puffer fehlt/passt nicht → Fallback über ladeTrack (mit await, Vordergrund).
+ *   'stop' — letzter Track → Wiedergabe endet.
+ */
+function planNext(trackIdx, len, preloadedIdx) {
+  if (trackIdx >= len - 1) return 'stop';
+  if (preloadedIdx === trackIdx + 1) return 'swap';
+  return 'load';
+}
+
 /** Tracks stabil nach position sortieren. */
 function sortTracks(tracks) {
   return [...(tracks || [])].sort((a, b) => (a.position || 0) - (b.position || 0));
@@ -414,7 +427,9 @@ const S = {
   aktivKindId: null,     // Kind, dem das laufende Album gehört (bleibt beim Kind-Toggle stabil)
   tracks: [],
   trackIdx: 0,
-  audio: null,           // EIN persistentes Audio-Element über alle Tracks (Bug 4)
+  audio: null,           // AKTIVES Audio-Element (Doppel-Puffer, #1304)
+  audioIdle: null,       // VORLADE-Element: puffert den nächsten Track element-seitig
+  preloadedIdx: null,    // Track-Index, der aktuell im idle-Element vorgepuffert ist
   playing: false,
   cfg: {},
   cfgEdit: {},
@@ -613,55 +628,154 @@ function aktualisiereRandDisabled() {
 }
 
 /**
- * EIN persistentes Audio-Element über alle Tracks (Bug 4, HSP-22).
- * Lazy erzeugt, Listener EINMALIG angehängt — die Handler lesen den Zustand
- * dynamisch aus S (S.trackIdx/S.tracks/S.aktivAlbum), damit ein user-aktiviertes,
- * durchlaufendes Element im Hintergrund (Bildschirm aus) den nächsten Track per
- * ended→src=next+play() weiterspielt. Ein pro-Track frisch erzeugtes Element
- * würde vom Browser im Hintergrund blockiert.
+ * Quelle an EIN Element hängen und die alte Blob-Object-URL freigeben (#1304).
+ * resolveTrackSrc erzeugt pro Aufruf eine frische createObjectURL — ohne Revoke
+ * leckt jeder Track-Wechsel einen Blob. Wir merken die zuletzt gesetzte Blob-URL
+ * je Element (el._objUrl) und geben sie beim nächsten Wechsel frei.
+ */
+function setAudioSrc(el, src) {
+  if (!el) return;
+  if (el._objUrl && el._objUrl !== src) {
+    try { if (typeof URL !== 'undefined' && URL.revokeObjectURL) URL.revokeObjectURL(el._objUrl); }
+    catch (e) { /* revoke best effort */ }
+    el._objUrl = null;
+  }
+  el.src = src;
+  if (typeof src === 'string' && src.indexOf('blob:') === 0) el._objUrl = src;
+}
+
+/** Lockscreen-Scrubber (HSP-22) mit der aktuellen aktiven Element-Dauer, best effort. */
+function updatePositionState() {
+  try {
+    const a = S.audio;
+    if (a && typeof navigator !== 'undefined' && navigator.mediaSession &&
+        navigator.mediaSession.setPositionState && isFinite(a.duration) && a.duration > 0) {
+      navigator.mediaSession.setPositionState({
+        duration: a.duration,
+        playbackRate: a.playbackRate || 1,
+        position: Math.min(a.currentTime || 0, a.duration),
+      });
+    }
+  } catch (e) { /* setPositionState nicht überall verfügbar */ }
+}
+
+/* Guarded Handler-Fabrik: Listener hängen an BEIDEN Elementen, aber nur das
+   gerade AKTIVE (ev.target === S.audio) petrarbeitet play/pause/timeupdate/ended.
+   Sonst würde das idle-Element Doppel-Advance/Doppel-Resume auslösen (#1304). */
+function _onTimeupdate(ev) {
+  if (ev.target !== S.audio) return;
+  const audio = S.audio;
+  if (audio.duration > 0) {
+    const pct = (audio.currentTime / audio.duration * 100).toFixed(1) + '%';
+    if ($('player-fill')) $('player-fill').style.width = pct;
+    if ($('mini-fill')) $('mini-fill').style.width = pct;
+    updatePositionState();
+  }
+}
+function _onPlay(ev) {
+  if (ev.target !== S.audio) return;
+  S.playing = true; syncPlayIcon();
+  const track = S.tracks[S.trackIdx];
+  if (S.aktivAlbum && track) {
+    // Resume-Write ans EIGENTÜMER-Kind (nicht ans evtl. umgeschaltete S.kindId).
+    apiResumeSet(S.aktivKindId || S.kindId, S.aktivAlbum.id, track.position).catch(() => {});
+    updateMediaSession(S.aktivAlbum, track, true);
+  }
+  syncMini();
+}
+function _onPause(ev) {
+  if (ev.target !== S.audio) return;
+  S.playing = false; syncPlayIcon(); syncMini();
+}
+function _onEnded(ev) {
+  if (ev.target !== S.audio) return;
+  const plan = planNext(S.trackIdx, S.tracks.length, S.preloadedIdx);
+  if (plan === 'swap') swapToNext();
+  else if (plan === 'load') ladeTrack(S.trackIdx + 1, true);   // Puffer fehlt → Vordergrund-Fallback
+  else { S.playing = false; syncPlayIcon(); syncMini(); }      // letzter Track
+}
+
+function _attachAudioListeners(el) {
+  el.addEventListener('timeupdate', _onTimeupdate);
+  el.addEventListener('play', _onPlay);
+  el.addEventListener('pause', _onPause);
+  el.addEventListener('ended', _onEnded);
+}
+
+/**
+ * Doppel-Puffer aus ZWEI persistenten Audio-Elementen (#1304, HSP-22).
+ * `S.audio` ist aktiv, `S.audioIdle` puffert den nächsten Track element-seitig
+ * (nicht nur im Cache Storage) — das ist die Hintergrund-Garantie: beim `ended`
+ * kann synchron am schon-geladenen Element weitergespielt werden, ohne im
+ * Hintergrund (Bildschirm aus) einen frischen Netz-Fetch anzustoßen, den der
+ * Browser blockieren würde. Listener werden je Element EINMALIG angehängt und
+ * petrarbeiten nur, wenn ev.target das aktive Element ist (Anti-Doppelfeuer).
  */
 function ensureAudio() {
   if (S.audio) return S.audio;
-  const audio = (typeof Audio !== 'undefined') ? new Audio() : null;
-  S.audio = audio;
-  if (!audio) return null;
-
-  audio.addEventListener('timeupdate', () => {
-    if (audio.duration > 0) {
-      const pct = (audio.currentTime / audio.duration * 100).toFixed(1) + '%';
-      if ($('player-fill')) $('player-fill').style.width = pct;
-      if ($('mini-fill')) $('mini-fill').style.width = pct;
-      // Lockscreen-Scrubber (HSP-22), best effort.
-      try {
-        if (typeof navigator !== 'undefined' && navigator.mediaSession &&
-            navigator.mediaSession.setPositionState && isFinite(audio.duration)) {
-          navigator.mediaSession.setPositionState({
-            duration: audio.duration,
-            playbackRate: audio.playbackRate || 1,
-            position: Math.min(audio.currentTime, audio.duration),
-          });
-        }
-      } catch (e) { /* setPositionState nicht überall verfügbar */ }
-    }
-  });
-  audio.addEventListener('play', () => {
-    S.playing = true; syncPlayIcon();
-    const track = S.tracks[S.trackIdx];
-    if (S.aktivAlbum && track) {
-      // Resume-Write ans EIGENTÜMER-Kind (nicht ans evtl. umgeschaltete S.kindId).
-      apiResumeSet(S.aktivKindId || S.kindId, S.aktivAlbum.id, track.position).catch(() => {});
-      updateMediaSession(S.aktivAlbum, track, true);
-    }
-    syncMini();
-  });
-  audio.addEventListener('pause', () => { S.playing = false; syncPlayIcon(); syncMini(); });
-  audio.addEventListener('ended', () => {
-    if (S.trackIdx < S.tracks.length - 1) ladeTrack(S.trackIdx + 1, true);
-    else { S.playing = false; syncPlayIcon(); syncMini(); }
-  });
-  return audio;
+  if (typeof Audio === 'undefined') return null;
+  S.audio = new Audio();
+  S.audioIdle = new Audio();
+  _attachAudioListeners(S.audio);
+  _attachAudioListeners(S.audioIdle);
+  return S.audio;
 }
 
+/**
+ * Nächsten Track ins idle-Element vorpuffern (#1304). Setzt src + preload='auto'
+ * + load(), damit der Browser das Audio schon während des aktiven Tracks lädt.
+ * Merkt den vorgepufferten Index (S.preloadedIdx) für die planNext-Entscheidung.
+ */
+async function preloadNext(idx) {
+  if (idx < 0 || idx >= S.tracks.length) { S.preloadedIdx = null; return; }
+  const idle = S.audioIdle;
+  if (!idle) { S.preloadedIdx = null; return; }
+  const track = S.tracks[idx];
+  const src = await resolveTrackSrc(S.cache, track['audio-asset']);
+  setAudioSrc(idle, src);
+  idle.preload = 'auto';
+  idle.playbackRate = S.cfg.playback_tempo || 1.0;
+  try { if (idle.load) idle.load(); } catch (e) { /* load best effort */ }
+  S.preloadedIdx = idx;
+}
+
+/**
+ * SWAP-Pfad des Auto-Advance (#1304): Rollen tauschen (idle → aktiv) und SYNCHRON
+ * am schon-gepufferten Element weiterspielen — KEIN await vor play(), damit der
+ * play()-Aufruf am Media-`ended`-Event hängt (Hintergrund-Autoplay-Erlaubnis).
+ * MediaSession-playbackState wird über den Swap 'playing' gehalten.
+ */
+function swapToNext() {
+  const next = S.audioIdle;
+  if (!next) { ladeTrack(S.trackIdx + 1, true); return; }
+  // Rollen tauschen.
+  S.audioIdle = S.audio;
+  S.audio = next;
+  S.trackIdx = S.trackIdx + 1;
+  const track = S.tracks[S.trackIdx];
+
+  // MediaSession-Hold: Metadata neu, playbackState bleibt 'playing' (kein Paused-Flackern).
+  updateMediaSession(S.aktivAlbum, track, true);
+
+  S.audio.playbackRate = S.cfg.playback_tempo || 1.0;
+  try { if (S.audio.play) S.audio.play(); } catch (e) { /* Hintergrund/iOS kann ablehnen */ }
+
+  // Kapitel-Hervorhebung + Rand-Disabled.
+  const chap = $('player-chapters');
+  if (chap) chap.querySelectorAll('.chrow').forEach((el, i) => el.classList.toggle('active', i === S.trackIdx));
+  aktualisiereRandDisabled();
+  syncMini();
+  updatePositionState();
+
+  // Übernächsten Track ins jetzt-idle Element vorpuffern.
+  preloadNext(S.trackIdx + 1);
+}
+
+/**
+ * Autoritativer Lade-Pfad für Kapitel-Tap/⏮⏭/Direktsprung/Resume (#1304).
+ * Setzt Quelle + play() am AKTIVEN Element und puffert danach den nächsten Track
+ * ins idle-Element, damit das folgende `ended` wieder synchron swappen kann.
+ */
 async function ladeTrack(idx, autoplay) {
   if (idx < 0 || idx >= S.tracks.length) return;
   S.trackIdx = idx;
@@ -670,9 +784,8 @@ async function ladeTrack(idx, autoplay) {
   const audio = ensureAudio();
   if (!audio) return;
   const src = await resolveTrackSrc(S.cache, track['audio-asset']);
-  // Selbes Element wiederverwenden — nur die Quelle wechseln (Bug 4).
-  audio.src = src;
-  audio.playbackRate = S.cfg.playback_tempo || 1.0;
+  setAudioSrc(S.audio, src);
+  S.audio.playbackRate = S.cfg.playback_tempo || 1.0;
 
   // Kapitel-Hervorhebung + Rand-Disabled aktualisieren.
   const chap = $('player-chapters');
@@ -683,7 +796,10 @@ async function ladeTrack(idx, autoplay) {
   updateMediaSession(S.aktivAlbum, track, autoplay);
   syncMini();
 
-  if (autoplay) { try { await audio.play(); } catch (e) {} }
+  if (autoplay) { try { await S.audio.play(); } catch (e) {} }
+
+  // Puffer fürs nächste `ended` warm halten (auch bei manueller Navigation).
+  preloadNext(idx + 1);
 }
 
 function syncPlayIcon() {
@@ -817,7 +933,11 @@ async function speichereSettings() {
     return;
   }
   S.cfg = res.body;
-  if (S.audio && patch.playback_tempo != null) S.audio.playbackRate = patch.playback_tempo;
+  if (patch.playback_tempo != null) {
+    // Tempo auf BEIDE Puffer-Elemente (aktiv + idle), sonst spränge der Swap-Track zurück (#1304).
+    if (S.audio) S.audio.playbackRate = patch.playback_tempo;
+    if (S.audioIdle) S.audioIdle.playbackRate = patch.playback_tempo;
+  }
   toast('✓ Gespeichert.');
 }
 
@@ -866,7 +986,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     // reine Helfer
     instanzen, initialKindId, nextKindId, instanzFuer, initialen,
-    trackLabel, skipDisabled, sortTracks, resumeStartIdx, audioCacheName, fmtZeit, esc,
+    trackLabel, skipDisabled, planNext, sortTracks, resumeStartIdx, audioCacheName, fmtZeit, esc,
     // Cache-API (HSP-54)
     CACHE_N, LRU_KEY, ALBUM_META_PREFIX, albumUrls,
     precacheAlbum, precacheFolgen, evictAlbum, resolveTrackSrc, istGecacht,
@@ -877,6 +997,8 @@ if (typeof module !== 'undefined' && module.exports) {
     // MediaSession
     setupMediaSession, updateMediaSession,
     // Player-Verhalten (Bug 1..4, T1272-B-BUGFIX) — rein + Test-Seams
-    miniNowPlaying, istLaufendesAlbum, ensureAudio, _S: S,
+    miniNowPlaying, istLaufendesAlbum, ensureAudio,
+    // Doppel-Puffer / Hintergrund-Auto-Advance (#1304) — rein + Test-Seams
+    preloadNext, _S: S,
   };
 }
