@@ -299,20 +299,51 @@ hilft auch dieser Pi-Kiosk-Flag nichts.
 
 *Tickets:* #819, #960
 
-### DC-15 — Design-Auflösung des Inhalts
-Der Adapter braucht die Design-Auflösung des gerouteten Inhalts, um den
-Skalierungs-Faktor (DC-12) zu bestimmen. V1 verwendet hartcodiert
-**1920×1080** — das ist der heutige Plan-Buddy-Standard und gleichzeitig
-der einzige produzierende Konsument des Display-Clients. Eine
-konsumenten-spezifische Design-Auflösung (Meta-Header, Query-Parameter,
-Registry-Eintrag) ist V2 und liegt außerhalb dieser Spec (OPEN-DC-B).
+### DC-15 — Fit-Vertrag des gerouteten Inhalts
+Der geroutete Inhalt bestimmt, wie er ins Display-Viewport passt — in einem
+von zwei Modi:
 
-Begründung: V1 hat genau einen Inhaltstyp; den Adapter erst dann
-konfigurierbar zu machen, wenn ein zweiter Konsument mit anderer
-Design-Auflösung existiert, vermeidet Antizipations-Komplexität
-(CLAUDE.md §6, „Lege nichts auf Vorrat an").
+- **fixed (Default).** Der Inhalt ist für eine feste Design-Auflösung gebaut;
+  der Skalierungs-Adapter (DC-12) passt ihn proportional ins Viewport ein
+  (Letterbox/Pillarbox). Design-Auflösung V1 = **1920×1080** (heutiger
+  Standard von plan/woche, kibuddy/frage u. a.). Trägt die Content-URL kein
+  Fit-Signal, gilt dieser Modus — verhaltensidentisch zum bisherigen DC-15.
 
-*Tickets:* #107
+- **responsive (opt-in, DC-18).** Der Inhalt füllt das volle Viewport und
+  reflowt selbst per CSS; der Skalierungs-Adapter greift nicht. Signal: der
+  Query-Parameter `?fit=viewport` an der gerouteten Content-URL.
+
+Der fixed-Default ist unbefristet gültig: kein Konsument muss auf responsive
+migrieren (CLAUDE.md §6, „Lege nichts auf Vorrat an"). Eine
+konsumenten-spezifische *fixe* Auflösung abweichend von 1920×1080 bleibt
+ununterlegt (OPEN-DC-C).
+
+*Tickets:* #107, #1218
+
+### DC-18 — Viewport-Fit-Modus (responsive)
+Trägt die geroutete Content-URL `?fit=viewport`, dimensioniert der Adapter
+das Inhalts-iframe auf 100 %×100 % des Viewports, setzt `transform: none`
+(kein DC-12-Skalieren) und zeigt keinen Letterbox-Rahmen. Die
+Layout-Verantwortung liegt vollständig beim Inhalt (responsive CSS,
+viewport-Einheiten/Media-Queries); der Display-Client bleibt ein dummer
+Rahmen. Der `rescale()`-Guard fällt bei fehlendem Param exakt auf den
+bisherigen `applyScale`-Pfad zurück — die fixed-Views bleiben unberührt.
+
+Der Router speichert `payload.url` verbatim (ROU-10) — der Parameter
+überlebt den Round-Trip; keine URL-Normalisierung darf ihn strippen.
+
+**Vertrags-Bedingung (verbindlich).** `responsive` gilt nur für Inhalte, die
+tatsächlich fluid gebaut sind. Ein fixed-Canvas (`width:1920px`, kein
+`@media`) unter `?fit=viewport` ist ein Vertragsbruch — er zeigt Leerband
+statt Reflow. Das Render-Gate (RAT-24) einer responsive-View prüft daher
+**Füllung** (Content-Bounding-Box == Viewport, kein Leerband, kein Overflow),
+nicht nur Breite.
+
+Pilot dieser Iteration: `essen/wunsch` am Paula-Tablet (1920×1200, RAT-25) —
+der Content wird im Zuge von #1218 fluid gebaut, alle übrigen Views bleiben
+fixed (DC-15).
+
+*Tickets:* #1218
 
 ## 6. Einrichtung
 
@@ -352,17 +383,18 @@ nicht nur die Pure-Math `computeScale`, sondern auch die DOM-Anwendung
   (Split-Screen), wäre das eine echte zweite Ebene — eigene Spec, sobald
   relevant. Deckt sich mit der bewussten Nicht-Entscheidung in Ticket #24.
 
-- **OPEN-DC-B — Echte responsive Plan-Templates.** Der Skalierungs-Adapter
-  (DC-12) ist geometrisch: bei sehr kleinen Displays wird die Schrift klein,
-  bei sehr großen unscharf-skaliert. Solange das niemandem konkret weh tut,
-  bleibt es dabei. Sobald ein realer Display-Standort (kleines Tablet, alter
-  Monitor) das spürbar macht, ist die Antwort *nicht* mehr Adapter,
-  sondern responsive Templates im jeweiligen Buddy — eigenes Ticket.
+- **OPEN-DC-B — Responsive Buddy-Templates (in Arbeit, #1218).** Der
+  Display-Client-*Mechanismus* dafür ist jetzt DC-18 (opt-in `?fit=viewport`).
+  Die eigentliche Arbeit — ein Buddy-Template *echt* fluid bauen — beginnt mit
+  `essen/wunsch` am Paula-Tablet (1920×1200, #1218-Pilot). Dieser Punkt wird
+  geschlossen, sobald der erste fluide Content live steht und das Render-Gate
+  Füllung (nicht nur Breite) grün prüft; weitere Views ziehen bei konkretem
+  Schmerz nach.
 
-- **OPEN-DC-C — Konsumenten-spezifische Design-Auflösung.** DC-15 hartcodiert
-  1920×1080. Erst wenn ein zweiter Inhaltstyp mit anderer Design-Auflösung
-  existiert, wird der Weg dahin (Meta-Header im gerouteten Dokument,
-  Query-Parameter, Eintrag in der Geräte-Registry #105) Spec-relevant.
+- **OPEN-DC-C — Konsumenten-spezifische *fixe* Design-Auflösung.** Der
+  *responsive* Weg ist jetzt DC-18. Eine abweichende *fixe* Auflösung (statt
+  1920×1080) bleibt ununterlegt, bis ein zweiter Inhaltstyp sie braucht
+  (Meta-Header, Eintrag in der Geräte-Registry #105).
 
 - **OPEN-DC-D — Mobile Tab-Suspend & Reconnect-Watchdog.** Auf iOS-/Android-
   Tablets pausiert `EventSource` im Hintergrund-Tab oder Standby ohne sauberen
