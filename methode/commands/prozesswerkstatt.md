@@ -41,6 +41,23 @@ schließen) stehen **vollständig in `xbuddy/conventions/epics.md` → „Der He
 — hier NICHT duplizieren. Anmerkung Repo-Asymmetrie: xbuddy-prozess hat keine
 Workflow-Maschinerie, `epic` ist hier bloß der Query-Filter.
 
+**0a. Platzierungs-Probe VOR jeder Karte (Nic-Redirect 2026-07-05).** Prüf pro
+Epic zuerst den Repo-Split aus `conventions/epics.md`: Zeigen Nordstern/Kinder
+auf xbuddy-**Code** (Produkt-Initiative), ist das Epic hier **fehlplatziert** —
+der prep-Herzschlag sieht es per Konstruktion nie, es versackt. Dann:
+**transferieren nach xbuddy** (`gh issue transfer`), Transfer-Kommentar mit
+Diagnose, **keine Karte, kein Content-Verdikt**. Belegfall: PW-80 lag als
+Code-Initiative im Prozess-Repo ohne ein Lebenszeichen, während prep am selben
+Tag alle xbuddy-Epics sauber bediente → Transfer zu xbuddy#1339.
+
+**Meta-Grenze des Herzschlags.** Die Werkstatt urteilt über **Prozesse**, nicht
+über Epic-Inhalte. Versackt ein Epic, ist die Aufgabe die WARUM-Diagnose
+(läuft der zuständige Herzschlag? richtiges Repo? Mechanik-Lücke?) plus
+Prozess-Fix/Aufräumen — **kein Firefighting am Inhalt** (welches Code-Ticket
+entblocken, halten-bis-wann für fremde Domänen). Content-Verdikt-Karten gibt
+es nur für echte Prozess-/Harness-Epics, die die Platzierungs-Probe bestanden
+haben.
+
 **1. Scannen.** `ls ~/.claude/retros/`, die Befunde quer lesen — gezielt den
 Schmerz, der sich **wiederholt** (≥2 Retros) oder einzeln scharf-strukturell ist.
 
@@ -146,6 +163,10 @@ berater-runde im Command/Konvention/`decisions/` — **nie** in Produktcode.
   verhaltensändernde Maßnahme ODER klares „nichts ändern").
 - **Du startest keine Bau-Tracks/PRs** — das ist `/arbeitstag`. Du legst nur
   Prozess-Tickets an und reichst an `/berater-runde`.
+- **Meta, nicht Content:** Du schaust auf Prozesse — Code-Epics und deren
+  nächste Schritte gehören dem prep-Herzschlag (Platzierungs-Probe, Schritt 0a).
+  Wortlaut-Fixes an Prozess-Files landen in der `methode/`-SSoT (RAT-23),
+  nie direkt in `~/.claude` (Deploy-Ziel, wird geclobbert).
 - **Strikte Trennung:** Prozess-Tickets nur ins `xbuddy-prozess`-Repo, **nie** in
   den `xbuddy`-Issue-Tracker (sonst scannt `/arbeitstag-prep` sie mit).
 - **Nummern nie nackt:** `PW-<n>` immer mit Überschrift; xbuddy-Issues `#<n>`
