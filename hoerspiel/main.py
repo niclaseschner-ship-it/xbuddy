@@ -27,6 +27,7 @@ Port: 5053 (HSP-28). Service-Topologie: schlanke eigenständige Flask-App
 """
 
 import argparse
+import contextlib
 import functools
 import json
 import logging
@@ -687,11 +688,8 @@ def _audio_register_subscriber() -> queue.Queue:
 
 
 def _audio_unregister_subscriber(q: queue.Queue) -> None:
-    with _audio_subscribers_lock:
-        try:
-            _audio_subscribers.remove(q)
-        except ValueError:
-            pass
+    with _audio_subscribers_lock, contextlib.suppress(ValueError):
+        _audio_subscribers.remove(q)
 
 
 def _audio_broadcast(event: dict) -> None:
@@ -699,10 +697,8 @@ def _audio_broadcast(event: dict) -> None:
     with _audio_subscribers_lock:
         subs = list(_audio_subscribers)
     for q in subs:
-        try:
+        with contextlib.suppress(queue.Full):
             q.put_nowait(event)
-        except queue.Full:
-            pass
 
 
 def _sse_pack(event: dict | None) -> str:
@@ -812,7 +808,7 @@ def play_extern(kind_id: str):
     # Audio-URL über offizielle HSP-37-API-Form (kind_id-tragend)
     audio_filename = track.get("audio-asset") or track.get("filename") or ""
     # audio-asset könnte schon vollständige URL sein, oder nur Dateiname
-    if audio_filename.startswith("/api/v1/") or audio_filename.startswith("/display/"):
+    if audio_filename.startswith(("/api/v1/", "/display/")):
         audio_url = audio_filename
     else:
         # Fallback: Dateiname aus track-N.mp3-Konvention bauen
@@ -1007,23 +1003,28 @@ _LIB_SLOT_FOR_PROVIDER = {
     "mistral": "hoerspiel-mistral-api-key",
 }
 
+# T1281: MAX_TOKENS aus den entfernten Alt-Providern hier zentralisiert.
+# claude=8192 — Sicherheits-Puffer für ~3500-Token-Folge.
+# mistral=4096 — ratifizierter Wert HSP-27b.
+_MAX_TOKENS_FOR_PROVIDER = {
+    "claude": 8192,
+    "mistral": 4096,
+}
+
 
 def _build_llm(cfg) -> LLMProvider | None:
     if cfg.llm_provider == "claude":
         if not cfg.anthropic_key:
             return None
-        from .providers.claude import MAX_TOKENS as _CLAUDE_MAX_TOKENS
-        max_tokens = _CLAUDE_MAX_TOKENS  # 8192 — Sicherheits-Puffer für ~3500-Token-Folge
     elif cfg.llm_provider == "mistral":
         if not cfg.mistral_key:
             return None
-        from .providers.mistral import MAX_TOKENS as _MISTRAL_MAX_TOKENS
-        max_tokens = _MISTRAL_MAX_TOKENS  # 4096
     else:
         return None
 
     from .providers.lib_adapter import LibSingleshotAdapter
     slot = _LIB_SLOT_FOR_PROVIDER[cfg.llm_provider]
+    max_tokens = _MAX_TOKENS_FOR_PROVIDER[cfg.llm_provider]
     # `model` + `max_tokens` durchreichen: Modell-Erhalt (z. B. claude-opus-4-7)
     # und Token-Limit (T1084: DEFAULT_MAX_TOKENS=2048 < ~3500 Token Folgentext).
     return LibSingleshotAdapter(
