@@ -1180,9 +1180,11 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # TAB-5 / E-TAB-6: V1 nutzt denselben Anbieter wie der Text-Pfad
         # (cfg.provider). V2 (E-TAB-6): multimodal_* können unabhängig
         # gesetzt werden — leere Werte fallen auf den Text-Pfad zurück.
-        # build_catalog baut den multimodalen Adapter lazy über
-        # `_multimodal.get_multimodal_provider`, wenn provider_api_key
-        # gesetzt ist (Onboarding-Modus ⇒ kein Adapter, AND-Guard greift).
+        # T1262 PR1: build_catalog baut jetzt FotoAnalyseProvider
+        # (skills.foto_analyse → tools.llm) über den Foto-Slot
+        # `eltern-chat-anthropic-foto-analyse-api-key` (ZD-5, Registrierung am
+        # Foto-Slot-Gate LLMCapabilityError). Die übergebenen Kwargs
+        # `multimodal_provider=`/`multimodal_api_key=` sind tote Felder (Rückbau #1334).
         provider_name=cfg.provider,
         provider_api_key=cfg.provider_api_key,
         provider_model=cfg.provider_model,
