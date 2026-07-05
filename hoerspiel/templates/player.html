@@ -135,7 +135,7 @@
    SW wird von Track A über die seiten-Player-Route ausgeliefert (PWML-2). #}
 <script>
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/seiten/hoerspiel/player/sw.js').catch(function () {});
+    navigator.serviceWorker.register('/seiten/hoerspiel/player/sw.js', { scope: '/seiten/hoerspiel/player' }).catch(function () {});
   }
 </script>
 </body>
