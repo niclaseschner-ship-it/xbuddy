@@ -1057,6 +1057,11 @@ def hoerspiel_player_asset_view(asset):
         body = pwa_mantel.render_sw(_HOERSPIEL_PLAYER_COMPONENT, build_id=build_id)
         resp = make_response(body, 200)
         resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
+        # Service-Worker-Allowed: /seiten/hoerspiel/player — SW-Scope darf ueber
+        # das Skript-Verzeichnis /seiten/hoerspiel/player/ hinaus das Shell-
+        # Dokument /seiten/hoerspiel/player (OHNE Slash) decken. Ohne diesen
+        # Header kontrolliert der SW die Seite nie -> offline alles tot (GAP-1).
+        resp.headers["Service-Worker-Allowed"] = "/seiten/hoerspiel/player"
         # sw.js fresh holen, sonst kein Update-Trigger.
         resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         return resp

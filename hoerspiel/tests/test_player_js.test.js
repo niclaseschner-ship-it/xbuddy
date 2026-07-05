@@ -174,6 +174,79 @@ test('LRU: (N+1)-tes Album räumt die älteste Folge (HSP-54, AC-B3)', async () 
   assert.ok(await cache.match('/audio/23/t1.mp3'), 'neue Folge gecacht');
 });
 
+/* ══ GAP-2 (#1320): Metadaten-Write-Through-Cache + Offline-Fallback ═══ */
+
+// fetch, das immer wirft (Offline / Netzfehler simulieren).
+function offlineFetch() {
+  const fn = async () => { throw new TypeError('Failed to fetch'); };
+  return fn;
+}
+
+test('apiAlben: online schreibt Alben-Liste write-through in den Cache (GAP-2, AC-OFF2)', async () => {
+  const cache = new FakeCache();
+  const online = makeFetch(() => ({ json: [{ id: 'folge-22' }, { id: 'folge-21' }] }));
+  const alben = await P.apiAlben('paula', { fetch: online, cache });
+  assert.equal(alben.length, 2, 'online-Ergebnis durchgereicht');
+  // write-through: unter META_ALBEN_KEY liegt die JSON-Liste
+  const gecacht = await cache.match(P.META_ALBEN_KEY);
+  assert.ok(gecacht, 'Alben-Liste unter META_ALBEN_KEY gecacht');
+  assert.deepEqual(await gecacht.json(), [{ id: 'folge-22' }, { id: 'folge-21' }]);
+});
+
+test('apiAlben: offline (fetch wirft) liest die Liste aus dem Cache — Regal rendert (GAP-2, AC-OFF2)', async () => {
+  const cache = new FakeCache();
+  // Vorlauf: online einmal cachen …
+  await P.apiAlben('paula', { fetch: makeFetch(() => ({ json: [{ id: 'folge-22' }] })), cache });
+  // … dann offline: fetch wirft → cache-fallback greift.
+  const alben = await P.apiAlben('paula', { fetch: offlineFetch(), cache });
+  assert.deepEqual(alben, [{ id: 'folge-22' }], 'offline aus dem Cache statt leerem Regal');
+});
+
+test('apiAlben: offline OHNE Cache wirft weiter (Aufrufer-Vertrag ladeKind bleibt, GAP-2)', async () => {
+  const cache = new FakeCache();   // leer, nie befüllt
+  await assert.rejects(
+    () => P.apiAlben('paula', { fetch: offlineFetch(), cache }),
+    /Failed to fetch/, 'ohne gecachte Liste bleibt der Fehler sichtbar');
+});
+
+test('apiManifest: online write-through, offline aus Cache pro Album (GAP-2, AC-OFF2)', async () => {
+  const cache = new FakeCache();
+  const manifest = { tracks: [{ position: 1, 'audio-asset': '/audio/22/t1.mp3' }] };
+  await P.apiManifest('paula', 'folge-22', { fetch: makeFetch(() => ({ json: manifest })), cache });
+  // eigener Schlüssel pro Album
+  assert.ok(await cache.match(P.META_MANIFEST_PREFIX + 'folge-22'), 'Manifest unter album-eigenem Key gecacht');
+  const offline = await P.apiManifest('paula', 'folge-22', { fetch: offlineFetch(), cache });
+  assert.deepEqual(offline, manifest, 'manifest.tracks lösen offline auf');
+});
+
+test('apiConfigGet: online write-through, offline aus Cache (GAP-2, AC-OFF2)', async () => {
+  const cache = new FakeCache();
+  const cfg = { playback_tempo: 1.1, voice: 'stigi' };
+  await P.apiConfigGet('paula', { fetch: makeFetch(() => ({ json: cfg })), cache });
+  assert.ok(await cache.match(P.META_CONFIG_KEY), 'Config unter META_CONFIG_KEY gecacht');
+  const offline = await P.apiConfigGet('paula', { fetch: offlineFetch(), cache });
+  assert.deepEqual(offline, cfg, 'Config offline aus dem Cache');
+});
+
+test('evictAlbum lässt die Metadaten-Schlüssel unangetastet (LRU trifft /__hsp_*__ nie, GAP-2, AC-OFF2)', async () => {
+  const cache = new FakeCache();
+  // Metadaten-Cache füllen …
+  await P.apiAlben('paula', { fetch: makeFetch(() => ({ json: [{ id: 'folge-22' }] })), cache });
+  await P.apiConfigGet('paula', { fetch: makeFetch(() => ({ json: { playback_tempo: 1 } })), cache });
+  await P.apiManifest('paula', 'folge-22', { fetch: makeFetch(() => ({ json: { tracks: [] } })), cache });
+  // … und ein Audio-Album precachen, dann evicten.
+  const a = albumMitManifest(22);
+  await P.precacheAlbum(cache, a.album, a.manifest, P.CACHE_N, makeFetch(() => ({ status: 200, body: 'MP3' })));
+  await P.evictAlbum(cache, 'folge-22');
+  // Audio-Meta + Track-URLs sind weg …
+  assert.equal(await cache.match(P.ALBUM_META_PREFIX + 'folge-22'), undefined, 'Audio-Album-Meta geräumt');
+  assert.equal(await cache.match('/audio/22/t1.mp3'), undefined, 'Track-Blob geräumt');
+  // … aber die Metadaten-Schlüssel überleben die Audio-LRU.
+  assert.ok(await cache.match(P.META_ALBEN_KEY), 'Alben-Liste überlebt evictAlbum');
+  assert.ok(await cache.match(P.META_CONFIG_KEY), 'Config überlebt evictAlbum');
+  assert.ok(await cache.match(P.META_MANIFEST_PREFIX + 'folge-22'), 'Manifest-Meta überlebt evictAlbum');
+});
+
 test('resolveTrackSrc: Cache-Treffer → Object-URL(blob), Miss → Netz-URL (HSP-54, AC-B1)', async () => {
   const cache = new FakeCache();
   await cache.put('/audio/hit.mp3', new Response('MP3'));
@@ -463,6 +536,15 @@ test('player.html: Manifest+SW+Shell-Assets über /seiten/hoerspiel/player, kein
   // (b) Service-Worker wird registriert (installierbare PWA) — seiten-Route.
   assert.match(html, /serviceWorker\.register\(\s*['"]\/seiten\/hoerspiel\/player\/sw\.js['"]/,
     'SW-Registrierung auf /seiten/hoerspiel/player/sw.js');
+  // (b2) scope-Option muss in der Registrierung stehen (AC-T2, T1320 GAP-1-Naht).
+  // Ohne scope wird der SW auf /seiten/hoerspiel/player/ (mit Slash) fixiert und
+  // kontrolliert das Dokument /seiten/hoerspiel/player (ohne Slash) NIE — der Fix
+  // geht stumm verloren wenn die Option fehlt.
+  assert.match(
+    html,
+    /serviceWorker\.register\([^)]+\{\s*scope:\s*['"]\/seiten\/hoerspiel\/player['"]/,
+    "SW-register()-scope-Option { scope: '/seiten/hoerspiel/player' } fehlt in player.html (GAP-1-Naht, T1320)",
+  );
 
   // (c) KEINE Shell-Assets mehr über den Kiosk-Buddy (HSP-47 „seiten-gehostet").
   assert.doesNotMatch(html, /\/display\/hoerspiel\/static\//,

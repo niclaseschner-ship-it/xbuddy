@@ -32,6 +32,14 @@ const CACHE_N = 3;                       // HSP-54: jüngste N=3 Folgen je Kind
 const LRU_KEY = '/__hsp_lru__';          // Meta-Eintrag: LRU-Reihenfolge (Album-IDs)
 const ALBUM_META_PREFIX = '/__hsp_album__/';  // Meta-Eintrag pro Album: {urls:[]}
 
+// GAP-2 (#1320): Write-Through-Metadaten-Cache. Eigener Schlüssel-Namensraum
+// im kind-Cache — von der Audio-LRU (evictAlbum) NIE angetastet, weil evictAlbum
+// nur meta.urls (echte Audio-/Cover-URLs) + ALBUM_META_PREFIX-Keys löscht.
+// Ohne diesen Cache wirft apiAlben offline → leeres Regal (HSP-54-Enabler).
+const META_ALBEN_KEY = '/__hsp_alben__';           // gecachte Alben-Liste
+const META_MANIFEST_PREFIX = '/__hsp_manifest__/'; // gecachtes Manifest pro Album
+const META_CONFIG_KEY = '/__hsp_config__';         // gecachte Kind-Config
+
 function _buildId() {
   return (typeof window !== 'undefined' && window.__HSP_BUILD_ID__) || 'dev';
 }
@@ -265,17 +273,56 @@ async function istGecacht(cache, album) {
 
 function _base(kindId) { return '/api/v1/hoerspiel/' + encodeURIComponent(kindId); }
 
-async function apiAlben(kindId) {
-  const r = await fetch(_base(kindId) + '/alben');
-  if (!r.ok) throw new Error('alben ' + r.status);
-  const data = await r.json();
-  return Array.isArray(data) ? data : [];
+/**
+ * GAP-2 (#1320): Metadaten-Cache des Kindes on-demand öffnen (kind-Namensraum,
+ * gleiche Cache wie Audio). init() ruft apiConfigGet VOR ladeKind (das S.cache
+ * öffnet), darum öffnen die Wrapper ihren Cache selbst statt S.cache zu nutzen.
+ * Degradiert lautlos zu null wenn caches nicht verfügbar (SSR/Test/kein SW).
+ */
+async function _metaCache(kindId) {
+  if (typeof caches === 'undefined' || !caches || !caches.open) return null;
+  try { return await caches.open(audioCacheName(kindId, _buildId())); }
+  catch (e) { return null; }
 }
 
-async function apiManifest(kindId, albumId) {
-  const r = await fetch(_base(kindId) + '/alben/' + encodeURIComponent(albumId) + '/manifest');
-  if (!r.ok) throw new Error('manifest ' + r.status);
-  return r.json();
+/**
+ * Network-first mit Write-Through + Offline-cache-fallback (GAP-2).
+ * Online: fetch → transform → in den Metadaten-Cache schreiben → zurück.
+ * Offline/Fehler: aus dem Cache lesen; nichts gecacht → ursprünglichen Fehler
+ * werfen (Aufrufer-Verträge in ladeKind/init bleiben erhalten).
+ * opts: { fetch, cache } — Test-Nähte; sonst globales fetch + _metaCache.
+ */
+async function _networkFirstJson(url, key, kindId, errLabel, opts, transform) {
+  opts = opts || {};
+  const fetchFn = opts.fetch || (typeof fetch !== 'undefined' ? fetch : null);
+  const cache = opts.cache !== undefined ? opts.cache : await _metaCache(kindId);
+  try {
+    if (!fetchFn) throw new Error(errLabel + ' kein fetch');
+    const r = await fetchFn(url);
+    if (!r.ok) throw new Error(errLabel + ' ' + r.status);
+    const data = await r.json();
+    const out = transform ? transform(data) : data;
+    if (cache) { try { await _writeJson(cache, key, out); } catch (e) { /* Cache best-effort */ } }
+    return out;
+  } catch (e) {
+    if (cache) {
+      const cached = await _readJson(cache, key);
+      if (cached !== null && cached !== undefined) return cached;
+    }
+    throw e;
+  }
+}
+
+async function apiAlben(kindId, opts) {
+  return _networkFirstJson(
+    _base(kindId) + '/alben', META_ALBEN_KEY, kindId, 'alben', opts,
+    (data) => (Array.isArray(data) ? data : []));
+}
+
+async function apiManifest(kindId, albumId, opts) {
+  return _networkFirstJson(
+    _base(kindId) + '/alben/' + encodeURIComponent(albumId) + '/manifest',
+    META_MANIFEST_PREFIX + albumId, kindId, 'manifest', opts, null);
 }
 
 /** Resume server-seitig lesen (HSP-51); status:'neu' → null (kein Stand). */
@@ -296,10 +343,9 @@ async function apiResumeSet(kindId, albumId, trackPos) {
   });
 }
 
-async function apiConfigGet(kindId) {
-  const r = await fetch(_base(kindId) + '/config');
-  if (!r.ok) throw new Error('config ' + r.status);
-  return r.json();
+async function apiConfigGet(kindId, opts) {
+  return _networkFirstJson(
+    _base(kindId) + '/config', META_CONFIG_KEY, kindId, 'config', opts, null);
 }
 
 /** Config PATCH (HSP-34). Gibt {ok,status,body} — Aufrufer toastet 422. */
@@ -994,6 +1040,8 @@ if (typeof module !== 'undefined' && module.exports) {
     // Cache-API (HSP-54)
     CACHE_N, LRU_KEY, ALBUM_META_PREFIX, albumUrls,
     precacheAlbum, precacheFolgen, evictAlbum, resolveTrackSrc, istGecacht,
+    // Metadaten-Write-Through-Cache (GAP-2, #1320)
+    META_ALBEN_KEY, META_MANIFEST_PREFIX, META_CONFIG_KEY,
     // API-Wrapper
     apiAlben, apiManifest, apiResumeGet, apiResumeSet, apiConfigGet, apiConfigPatch,
     // HTML-Bausteine

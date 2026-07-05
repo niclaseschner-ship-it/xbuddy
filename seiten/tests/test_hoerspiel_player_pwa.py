@@ -135,3 +135,26 @@ def test_traversal_guard_gibt_404(client):
     """AC2r: Path-Traversal über das Asset-Verzeichnis hinaus → 404."""
     resp = client.get("/seiten/hoerspiel/player/..%2f..%2fmain.py")
     assert resp.status_code == 404
+
+
+# ── AC-T1 (T1320) — Service-Worker-Allowed-Header-Naht (GAP-1 Root-Cause) ───
+
+def test_sw_route_service_worker_allowed_header(client):
+    """AC-T1 (T1320): GET /seiten/hoerspiel/player/sw.js setzt den Header
+    Service-Worker-Allowed: /seiten/hoerspiel/player.
+
+    Root-Cause-Naht fuer GAP-1 (Watchdog #1320): Ohne diesen Header kann der
+    SW seinen Scope /seiten/hoerspiel/player (OHNE abschliessenden Slash) NICHT
+    deklarieren — das Dokument bleibt uncontrolled, alle Offline-Promises fallen
+    aus. Ein stiller Refactor, der den Header entfernt, soll hier scheitern.
+
+    Anker: seiten/main.py (Z.1064) + hoerspiel/templates/player.html (Z.138).
+    Praezedenz-Muster: test_heim_shell.py::test_shell_pwa_ac2_sw_route (SHELL-PWA AC2).
+    """
+    resp = client.get(_SW_URL)
+    assert resp.status_code == 200, "sw.js-Route muss 200 liefern"
+    allowed = resp.headers.get("Service-Worker-Allowed", "")
+    assert allowed == "/seiten/hoerspiel/player", (
+        "Service-Worker-Allowed muss exakt '/seiten/hoerspiel/player' sein — "
+        "SW-Scope darf sonst nie das Dokument /seiten/hoerspiel/player decken (GAP-1)."
+    )
