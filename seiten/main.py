@@ -526,7 +526,8 @@ def essen_einkauf_view():
     ESSEN-33: HTML bindet manifest.json + sw.js ein (PWA-Mantel). Asset-Routen
     leben unter /seiten/essen/einkauf/<asset> — siehe einkauf_asset_view.
     """
-    build_id = _mini_app_build_id("essen-einkauf.js")
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    build_id = pwa_mantel.build_id_for("einkauf", static_dir)
     resp = make_response(render_template("essen-einkauf.html", build_id=build_id))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
@@ -574,32 +575,6 @@ def _current_build_id():
     """
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     return pwa_mantel.build_id_for("einkauf", static_dir)
-
-
-# PWAM-5-Routing-Tabelle: primary_js-Dateiname → Registry-Komponente (T1284-AC1).
-# Löst den Direktbezug auf Dateipfade ab; build_id_source_set (inkl. platform.js)
-# kommt aus pwa_mantel.REGISTRY, nicht hartkodiert.
-_MINI_APP_JS_TO_COMPONENT: dict[str, str] = {
-    "essen-einkauf.js":       "einkauf",
-    "plan-einstellungen.js":  "plan",
-    "mini-app-uebersicht.js": "mini-app-uebersicht",
-    "routine-anpassen.js":    "routine",
-}
-
-
-def _mini_app_build_id(primary_js: str) -> str:
-    """build_id für Mini-App-HTML-Routen via PWAM-5-Registry (T1229/T1284-AC1).
-
-    Delegiert an pwa_mantel.build_id_for(component, static_dir) — Single-Source
-    über SW- und HTML-Pfade (PWAM-5). build_id_source_set (inkl. platform.js)
-    kommt aus der Registry, nicht hartkodiert. OSError-Fallback "0" liegt in
-    build_id_from_mtimes (aufgerufen durch build_id_for).
-
-    Aufruf-Muster bleibt stabil (_mini_app_build_id("essen-einkauf.js") etc.),
-    Auflösung passiert jetzt über _MINI_APP_JS_TO_COMPONENT + REGISTRY.
-    """
-    static_dir = os.path.join(os.path.dirname(__file__), "static")
-    return pwa_mantel.build_id_for(_MINI_APP_JS_TO_COMPONENT[primary_js], static_dir)
 
 
 @app.route("/seiten/essen/einkauf/<path:asset>", methods=["GET"])
@@ -705,7 +680,8 @@ def plan_einstellungen_view():
     Cache-Buster: build_id aus mtime der plan-einstellungen.js (platform.js einbezogen, T1229).
     PWA-Mantel: manifest.json + sw.js unter /seiten/plan/einstellungen/<asset>.
     """
-    build_id = _mini_app_build_id("plan-einstellungen.js")
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    build_id = pwa_mantel.build_id_for("plan", static_dir)
     resp = make_response(render_template("plan-einstellungen.html", build_id=build_id))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
@@ -859,7 +835,8 @@ def mini_app_uebersicht_view():
     """
     # MAD-7-konform: HTML-Render-Route lädt Skeleton OHNE Auth (Telegram-WebView
     # sendet beim Initial-Load keinen Header). JS macht platform.ensureAuth().
-    build_id = _mini_app_build_id("mini-app-uebersicht.js")
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    build_id = pwa_mantel.build_id_for("mini-app-uebersicht", static_dir)
     resp = make_response(render_template("mini-app-uebersicht.html", build_id=build_id))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
@@ -885,7 +862,8 @@ def routine_anpassen_view():
     holt.
     """
     # MAD-7-konform: HTML-Render-Route lädt Skeleton OHNE Auth. JS macht ensureAuth().
-    build_id = _mini_app_build_id("routine-anpassen.js")
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    build_id = pwa_mantel.build_id_for("routine", static_dir)
     resp = make_response(render_template("routine-anpassen.html", build_id=build_id))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
