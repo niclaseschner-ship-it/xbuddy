@@ -556,6 +556,33 @@ test('player.html: Manifest+SW+Shell-Assets über /seiten/hoerspiel/player, kein
   assert.match(html, /href="\/seiten\/hoerspiel\/player\/icon-192\.png"/, 'Icon seiten-gehostet');
 });
 
+/* ══ AC-COV (T1272-COV): Cover-onerror-Fallback ═════════════════ */
+
+test('_setCoverSrc: onerror versteckt Cover bei Ladefehler, neue src setzt visibility zurück (AC-COV)', () => {
+  // Simuliert ein <img> ohne jsdom — nur die relevanten Felder.
+  const el = { src: '', style: { visibility: 'hidden' }, onerror: null };
+
+  // Erstes src setzen (z.B. Album geöffnet).
+  P._setCoverSrc(el, '/cover-22.jpg');
+  assert.equal(el.style.visibility, '', 'visibility vor dem neuen src zurückgesetzt');
+  assert.equal(el.src, '/cover-22.jpg', 'src korrekt gesetzt');
+  assert.ok(typeof el.onerror === 'function', 'onerror-Handler gesetzt');
+
+  // onerror feuern (Ladefehler / offline).
+  el.onerror();
+  assert.equal(el.style.visibility, 'hidden', 'onerror setzt visibility=hidden — kein kaputtes Icon');
+
+  // Kind-Wechsel / neues Album: zweiter src-Call resettet visibility wieder.
+  P._setCoverSrc(el, '/cover-21.jpg');
+  assert.equal(el.style.visibility, '', 'zweiter src-Aufruf setzt visibility zurück — neues Cover erscheint');
+  assert.equal(el.src, '/cover-21.jpg', 'neues src gesetzt');
+
+  // Leerer src (kein Cover-Asset vorhanden): onerror versteckt trotzdem.
+  P._setCoverSrc(el, '');
+  el.onerror();
+  assert.equal(el.style.visibility, 'hidden', 'onerror bei leerem src versteckt das Element');
+});
+
 test('PWA-Icons: 3 valide PNGs in korrekten Größen (HSP-55)', () => {
   const cases = [
     ['icon-192.png', 192],
