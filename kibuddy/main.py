@@ -35,6 +35,7 @@ if _REPO_ROOT not in sys.path:
 
 from tools import logsetup  # noqa: E402
 from tools.llm import LLMProvider  # noqa: E402 — LLMP-S8 Migration (T1082)
+from tools.service_diagnostics import register_version  # noqa: E402
 
 if __package__:
     from . import config as config_mod
@@ -154,6 +155,10 @@ def _get_or_create_session() -> tuple[str, SessionMemory]:
 # ============================================================
 
 app = Flask(__name__, template_folder="templates", static_url_path="/display/kibuddy/static")
+
+
+# ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
+register_version(app)
 
 
 @app.after_request

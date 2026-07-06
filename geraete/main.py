@@ -38,6 +38,7 @@ if _REPO_ROOT not in sys.path:
 # `python -m geraete.main` aus dem Repo-Root funktioniert.
 from geraete import registry as registry_mod  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
+from tools.service_diagnostics import register_version  # noqa: E402
 
 # ============================================================
 #  Laufzeit-Zustand
@@ -77,6 +78,10 @@ _write_lock = threading.Lock()
 # ============================================================
 
 app = Flask(__name__)
+
+
+# ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
+register_version(app)
 
 
 def _aktuelle_registry():

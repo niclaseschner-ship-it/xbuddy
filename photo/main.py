@@ -36,6 +36,7 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from tools import configloader, logsetup  # noqa: E402
+from tools.service_diagnostics import register_version  # noqa: E402
 
 # Das photo-Paket als Paket importieren, damit die relativen Imports in
 # config/store/ingest/render greifen — auch beim Direktstart von main.py.
@@ -112,6 +113,10 @@ def _current_config():
 # der einen Origin geroutet werden (der Flask-Default `/static` läge außerhalb
 # der URL-Prefixe).
 app = Flask(__name__, static_url_path="/display/photo/static")
+
+
+# ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
+register_version(app)
 
 
 def _bad_request(msg, status=400):

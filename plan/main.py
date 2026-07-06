@@ -50,6 +50,7 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from tools import configloader, logsetup  # noqa: E402
+from tools.service_diagnostics import register_version  # noqa: E402
 from tools.zugangsdaten import Zugangsdaten, resolve_store_path  # noqa: E402
 
 # Das plan-Paket wird als Paket importiert, damit die relativen Imports in
@@ -301,6 +302,10 @@ def _is_uuid4(value: str) -> bool:
 # Namensraum. So werden sie hinter der einen Origin (URL-12) geroutet —
 # der Flask-Default `/static` läge außerhalb der URL-1-Prefixe (#61).
 app = Flask(__name__, static_url_path="/display/plan/static")
+
+
+# ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
+register_version(app)
 
 # FAM-8: der HTTP-Endpunkt der Familien-Registry, der Profilfotos liefert.
 # Eine stabile Cross-Komponenten-URL (URL-8) — der Plan-Buddy verlinkt

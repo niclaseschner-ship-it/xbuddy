@@ -31,6 +31,7 @@ if _REPO_ROOT not in sys.path:
 
 from router import config as router_config  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
+from tools.service_diagnostics import register_version  # noqa: E402
 
 # ============================================================
 #  Zustand (in-memory, V1)
@@ -853,6 +854,97 @@ def diag():
             ', '.join(sorted(current_known)) or '(keine)',
             len(current_entries),
             ''.join(rows) or '<p>(noch nichts)</p>')
+
+
+# ============================================================
+#  Diagnose: /health (Fan-in) + /version (SVC-6)
+# ============================================================
+#
+# SVC-6: Jeder HTTP-Service exponiert `/healthz` (Readiness) und `/version`
+# (Deploy-SHA). Der Router aggregiert die Per-Service-`/healthz` zu einem
+# Fan-in-`/health` — echter Loopback-Ping der Upstreams statt der bisherigen
+# 404-Doku-Fiktion (deploy/nginx/README.md dokumentierte `/health`, der Router
+# lieferte real 404). T1311/#1311.
+#
+# Der Upstream-Katalog ist ein Spiegel von conventions/ports.md PORT-2 — dort
+# steht die Wahrheit (PORT-1: nicht der Code als wahre Quelle). Hier nur die
+# Loopback-Ziele des Fan-ins, verbatim aus PORT-2 übernommen: ohne den
+# Router-Selbstport (5000 — der Router beantwortet diesen Request selbst) und
+# ohne eltern-chat (kein HTTP-Port, PORT-2/systemd-README).
+
+_HEALTH_UPSTREAMS = (
+    (5010, 'xbuddy-familie'),
+    (5020, 'xbuddy-plan'),
+    (5030, 'xbuddy-wetter'),
+    (5040, 'xbuddy-geraete'),
+    (5041, 'xbuddy-panel'),
+    (5042, 'xbuddy-seiten'),
+    (5050, 'xbuddy-routine'),
+    (5051, 'xbuddy-photo'),
+    (5052, 'xbuddy-essen'),
+    (5053, 'xbuddy-hoerspiel'),
+    (5054, 'xbuddy-kibuddy'),
+    (5055, 'xbuddy-hoerspiel-finn'),
+)
+
+# Loopback ist schnell; ein hängender Upstream darf den Fan-in nicht blockieren.
+_HEALTH_PROBE_TIMEOUT = 2
+
+
+def _probe_healthz(port):
+    """Pingt http://127.0.0.1:<port>/healthz (SVC-6) und klassifiziert:
+
+    - reachable: der Prozess antwortet überhaupt (Connect + HTTP-Antwort).
+    - healthz:   HTTP-Code der Antwort (oder None bei Connect-Fehler).
+    - healthy:   healthz == 200.
+
+    Ein 404 heißt „Prozess läuft, aber der SVC-6-`/healthz` fehlt noch"
+    (Rollout offen) → reachable=True, healthy=False. Connection-refused/Timeout
+    → reachable=False (Prozess tot / bindet nicht)."""
+    url = 'http://127.0.0.1:%d/healthz' % port
+    try:
+        with urllib.request.urlopen(url, timeout=_HEALTH_PROBE_TIMEOUT) as resp:
+            code = resp.status
+    except urllib.error.HTTPError as e:
+        # HTTP-Antwort erhalten (404/5xx) → Prozess lebt, Endpoint-Status != ok.
+        code = e.code
+    except (urllib.error.URLError, OSError):
+        return {'reachable': False, 'healthz': None, 'healthy': False}
+    return {'reachable': True, 'healthz': code, 'healthy': code == 200}
+
+
+@app.route('/health', methods=['GET'])
+def health():
+    """SVC-6 Fan-in: echter Loopback-Status aller Upstreams (PORT-2).
+
+    200, wenn jeder Upstream-Prozess erreichbar ist; sonst 503 (mindestens
+    einer bindet nicht / ist tot). Der Router selbst ist implizit ok — er
+    beantwortet diesen Request. Kein 404 mehr (AC1)."""
+    upstreams = []
+    all_reachable = True
+    for port, name in _HEALTH_UPSTREAMS:
+        probe = _probe_healthz(port)
+        if not probe['reachable']:
+            all_reachable = False
+        upstreams.append({
+            'service':   name,
+            'port':      port,
+            'reachable': probe['reachable'],
+            'healthz':   probe['healthz'],
+            'healthy':   probe['healthy'],
+        })
+    body = {
+        'status':     'ok' if all_reachable else 'degraded',
+        'checked_at': now_iso(),
+        'upstreams':  upstreams,
+    }
+    return jsonify(body), (200 if all_reachable else 503)
+
+
+# /version teilt sich die EINE Naht mit allen 11 Buddy-Services (T1311/#1311):
+# tools/service_diagnostics.register_version — file-based, kein git rev-parse
+# (SVC-6). Der /health-Fan-in oben bleibt Router-eigen.
+register_version(app)
 
 
 # ============================================================

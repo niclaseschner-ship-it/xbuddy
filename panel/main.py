@@ -44,6 +44,7 @@ if _REPO_ROOT not in sys.path:
 
 from panel import registry as registry_mod  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
+from tools.service_diagnostics import register_version  # noqa: E402
 
 # ============================================================
 #  Laufzeit-Zustand
@@ -306,6 +307,10 @@ def repair_heal_on_boot(panels, backoffs=None, _sleep=None, _probe=None):
 # ============================================================
 
 app = Flask(__name__)
+
+
+# ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
+register_version(app)
 
 
 def _aktuelle_registry():

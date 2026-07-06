@@ -48,6 +48,7 @@ if _REPO_ROOT not in sys.path:
 from tools import familie_client as _tools_familie_client_mod  # noqa: E402
 from tools import logsetup  # noqa: E402
 from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # noqa: E402
+from tools.service_diagnostics import register_version  # noqa: E402
 
 if __package__:
     from . import album_builder, data_io, llm_service, tts_service
@@ -431,6 +432,10 @@ def _validate_llm_model(provider: str, model: str) -> bool:
 # ============================================================
 
 app = Flask(__name__, static_url_path="/display/hoerspiel/static")
+
+
+# ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
+register_version(app)
 
 
 # ---- Display-View (HSP-2, HSP-3 — Single-Page-Splitscreen Mia-View) ----
