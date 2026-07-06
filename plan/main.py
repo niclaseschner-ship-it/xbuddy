@@ -25,6 +25,7 @@ ein Geschwister von router/ und familie/.
 import argparse
 import collections
 import contextlib
+import functools
 import hashlib
 import json
 import logging
@@ -37,7 +38,7 @@ import time
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, g, jsonify, make_response, render_template, request
 
 # Repo-Wurzel auf den Importpfad — die App konsumiert die Library
 # `tools.zugangsdaten` (PLAN-16, DCOMP-1-Ausnahme: `tools/` ist gemeinsamer
@@ -50,6 +51,10 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from tools import configloader, logsetup  # noqa: E402
+from tools import familie_client as _familie_client_mod  # noqa: E402
+from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # noqa: E402
+from tools.initdata import init_data as _init_data_mod  # noqa: E402
+from tools.initdata import session_cookie as _session_cookie  # noqa: E402
 from tools.service_diagnostics import register_version  # noqa: E402
 from tools.zugangsdaten import Zugangsdaten, resolve_store_path  # noqa: E402
 
@@ -89,11 +94,16 @@ runtime = {
     "transport": None,         # plan.kalender.GoogleTransport (oder Fake in Tests)
     "config_path": None,       # Pfad zur plan.json — Naht für DCOMP-2 + Reload-Endpoint (#140)
     "transport_factory": None, # cfg -> transport — neu binden, wenn kalender_id wechselt
+    "bot_token": None,          # AUTH-3 (T1321): Bot-Token — Test-Naht oder ENV
+    "init_data_config": None,   # AUTH-3 (T1321): tma-Header-Validierungs-Config
+    "auth_familie_client": None,  # AUTH-3 (T1321): FAM-7-Client (get_telegram_ids)
 }
 
 
 def configure(cfg, registry, transport, familie_client=None,
-              config_path=None, transport_factory=None):
+              config_path=None, transport_factory=None,
+              bot_token=None, init_data_config=None,
+              auth_familie_client=None):
     """Setzt Konfiguration, Familien-Zugang und Kalender-Transport.
 
     `transport` ist die Test-Naht (PLAN-29): in Produktion ein
@@ -131,6 +141,18 @@ def configure(cfg, registry, transport, familie_client=None,
     runtime["transport"] = transport
     runtime["config_path"] = config_path
     runtime["transport_factory"] = transport_factory
+
+    # AUTH-3 Hart-Auth (T1321): Test-Naht analog essen. `bot_token` /
+    # `init_data_config` steuern die tma-Header-Prüfung, `auth_familie_client`
+    # ist der FAM-7-Client mit `get_telegram_ids()` — bewusst ein EIGENER Slot
+    # (nicht `familie_client`, der hier den RegistryView-`snapshot()`-Client
+    # für die Personen-Sicht trägt und KEIN `get_telegram_ids()` hat).
+    if bot_token is not None:
+        runtime["bot_token"] = bot_token
+    if init_data_config is not None:
+        runtime["init_data_config"] = init_data_config
+    if auth_familie_client is not None:
+        runtime["auth_familie_client"] = auth_familie_client
 
 
 def _aktuelle_registry():
@@ -295,6 +317,141 @@ def _is_uuid4(value: str) -> bool:
 
 
 # ============================================================
+#  AUTH-3 Hart-Auth (T1321 — auth.md AUTH-2/3/5/8/9)
+# ============================================================
+#
+# Wörtliche Übernahme des essen-Decorators (essen/main.py, T948). Der
+# Audit-Funnel-Befund #1338 klassifiziert die /api/v1/plan/*-Datenrouten neu
+# als AUTH-3 (hart geschützt): extern über den Funnel waren sie schreibbar.
+# Plan ist Nicht-Mini-App (PWA): der Cookie-Pfad ist der Regel-Pfad; der
+# tma-Zweig bleibt kopiert (harmlos, greift nur bei gesetztem tma-Header).
+
+# ENV-Variable für Bot-Token (APP-7 / MAD-9): cluster-weit, wie essen.
+_ENV_BOT_TOKEN = "ELTERNCHAT_BOT_TOKEN"
+# CONFIG-5: Familie-Service-Origin per Komponenten-ENV.
+_ENV_FAMILIE_ORIGIN = "PLAN_FAMILIE_ORIGIN"
+
+
+def _get_bot_token():
+    """Bot-Token aus runtime-Dict (Test-Naht) oder ENV (APP-7)."""
+    return runtime.get("bot_token") or os.environ.get(_ENV_BOT_TOKEN)
+
+
+def _get_familie_client():
+    """Liefert den AUTH-3-FAM-Client — gecacht im runtime-Dict oder frisch (T1015).
+
+    Test-Naht: ``configure(auth_familie_client=...)`` setzt direkt einen Stub
+    mit ``get_telegram_ids()``. Produktiv-Pfad: ``tools.familie_client.FamilieClient``
+    aus ENV ``PLAN_FAMILIE_ORIGIN``. Bewusst ein EIGENER Slot — der
+    ``familie_client``-Slot trägt hier den RegistryView-``snapshot()``-Client
+    (Personen-Sicht) und hat KEIN ``get_telegram_ids()``.
+    """
+    cached = runtime.get("auth_familie_client")
+    if cached is not None:
+        return cached
+    origin = os.environ.get(_ENV_FAMILIE_ORIGIN, _FAMILIE_DEFAULT_ORIGIN)
+    return _familie_client_mod.FamilieClient(origin_url=origin)
+
+
+# AUTH-8: 401 rendert eine Anweisungsseite statt eines rohen Status-Codes.
+_AUTH_401_HTML = (
+    "<!doctype html>\n"
+    "<html lang=\"de\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+    "<title>Gerät neu verbinden</title></head>"
+    "<body style=\"font-family:system-ui,sans-serif;max-width:32rem;"
+    "margin:3rem auto;padding:0 1rem;line-height:1.5\">"
+    "<h1>Dieses Gerät muss neu verbunden werden.</h1>"
+    "<p>Öffne im Familien-Bot den Befehl "
+    "<code>/gerät_neu_pairen &lt;display_id&gt;</code> und folge dem Link "
+    "auf diesem Gerät.</p>"
+    "</body></html>"
+)
+
+
+def _auth_401():
+    """AUTH-8: 401 mit HTML-Anweisungsseite (nicht roher Status-Code)."""
+    resp = make_response(_AUTH_401_HTML, 401)
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    return resp
+
+
+def require_init_data(fn):
+    """Decorator: HART-AUTH (T948/T1321, auth.md AUTH-2/3/5/8).
+
+    Eine valide Quelle reicht (AUTH-2, additive Akzeptanz); fehlt jede,
+    antwortet die Route HART mit 401 + AUTH-8-Anweisungsseite:
+
+    - **AUTH-5 Loopback** (127.0.0.1/::1, kein X-Forwarded-For): Server-zu-
+      Server → pass-through, g.init_data = None.
+    - **AUTH-2 Cookie `xbuddy_session`**: valide HMAC-Signatur reicht;
+      Rolling-Refresh mit frischem `exp` (auth.md AUTH-2:78). g.init_data = None.
+    - **AUTH-2 tma-Header** (MAD-7): valide + Familien-Mitglied → g.init_data;
+      valide + Nicht-Mitglied → 403; ungültig → 401.
+    - **Sonst**: HART 401 (AUTH-8).
+    """
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        # AUTH-5: Loopback-Bypass für Internal-Service-Calls.
+        if (not request.headers.get("X-Forwarded-For")
+                and request.remote_addr in ("127.0.0.1", "::1")):
+            g.init_data = None
+            return fn(*args, **kwargs)
+
+        bot_token = _get_bot_token()
+        if not bot_token:
+            logger.error("AUTH: %s nicht gesetzt — Route nicht nutzbar.", _ENV_BOT_TOKEN)
+            return ("", 500)
+
+        # AUTH-2: Session-Cookie. Valide Signatur (+ nicht abgelaufen) reicht.
+        cookie_val = request.cookies.get(_session_cookie.COOKIE_NAME)
+        if cookie_val:
+            subject = _session_cookie.verify_session(cookie_val, bot_token)
+            if subject is not None:
+                g.init_data = None
+                # Rolling-Refresh (AUTH-2:78): Cookie mit frischem exp neu setzen.
+                resp = make_response(fn(*args, **kwargs))
+                resp.set_cookie(
+                    _session_cookie.COOKIE_NAME,
+                    _session_cookie.sign_session(subject, bot_token),
+                    **_session_cookie.session_cookie_kwargs(),
+                )
+                return resp
+
+        # AUTH-2: tma-Header (MAD-7). Leerer/fehlender "tma "-Wert zählt als
+        # „keine tma-Quelle" (Mini-App-JS außerhalb Telegram sendet "tma " leer).
+        auth_header = request.headers.get("Authorization", "").strip()
+        tma_leer = (
+            not auth_header
+            or auth_header.lower() in ("tma", "tma ")
+            or (auth_header.lower().startswith("tma ") and not auth_header[4:].strip())
+        )
+        if not tma_leer:
+            cfg = runtime.get("init_data_config")
+            if cfg is None:
+                cfg = _init_data_mod.load_config()
+                runtime["init_data_config"] = cfg
+            try:
+                init_data = _init_data_mod.validate_header(
+                    auth_header, bot_token, cfg["max_age_seconds"])
+            except _init_data_mod.InitDataError:
+                return _auth_401()
+
+            # FAM-7/8: User-ID gegen Familien-Registry prüfen (HTTP-Pfad, T1015).
+            familie_ids = _get_familie_client().get_telegram_ids()
+            if familie_ids is not None and init_data.user_id not in familie_ids:
+                logger.warning("FAM-7: user_id %s ist kein Familien-Mitglied → 403", init_data.user_id)
+                return ("", 403)
+
+            g.init_data = init_data
+            return fn(*args, **kwargs)
+
+        # AUTH-3: weder Loopback noch Cookie noch tma → HART 401 (AUTH-8).
+        return _auth_401()
+    return wrapper
+
+
+# ============================================================
 #  Flask-App
 # ============================================================
 
@@ -385,6 +542,7 @@ def woche():
 
 
 @app.route("/api/v1/plan/zuteilung", methods=["GET"])
+@require_init_data
 def api_zuteilung_lesen():
     """PLAN-30: Lese-API fuer Wochenzuteilungen (analog FAM-7-Form).
 
@@ -439,6 +597,7 @@ def api_zuteilung_lesen():
 
 
 @app.route("/api/v1/plan/zuteilung", methods=["PUT"])
+@require_init_data
 def api_zuteilung():
     """Weist einem Erwachsenen-Slot eine Person zu (PLAN-7, PLAN-8).
 
@@ -473,6 +632,7 @@ def api_zuteilung():
 
 
 @app.route("/api/v1/plan/aktivitaet", methods=["PUT", "DELETE"])
+@require_init_data
 def api_aktivitaet():
     """Setzt oder löscht eine Kind-Aktivität im Kalender (PLAN-11, PLAN-18).
 
@@ -604,6 +764,7 @@ def _parse_beginn_ende(body):
 
 
 @app.route("/api/v1/plan/termine", methods=["GET", "PUT"])
+@require_init_data
 def api_termine():
     """Termin-Schnittstelle für andere XBuddy-Apps (PLAN-22).
 
@@ -649,6 +810,7 @@ def api_termine():
 
 
 @app.route("/api/v1/plan/termine/bulk", methods=["POST"])
+@require_init_data
 def api_termine_bulk():
     """Bulk-Termin-Schnittstelle: mehrere Termine in einem Aufruf anlegen
     (PLAN-33).
@@ -947,6 +1109,7 @@ def _is_loopback(remote_addr):
 
 
 @app.route("/api/v1/plan/admin/reload", methods=["POST"])
+@require_init_data
 def admin_reload():
     if not _is_loopback(request.remote_addr or ""):
         # 403 statt 404, damit Bedienfehler im LAN sichtbar sind: ein
@@ -1023,6 +1186,7 @@ def _write_kalender_id(path, kalender_id):
 
 
 @app.route("/api/v1/plan/admin/kalender", methods=["PUT"])
+@require_init_data
 def admin_kalender():
     """PLAN-32: setzt die `kalender_id` im Plan-Buddy (KAV → dieser Endpoint).
 
@@ -1156,6 +1320,7 @@ def _current_aktivitaeten_list():
 
 
 @app.route("/api/v1/plan/aktivitaeten", methods=["GET"])
+@require_init_data
 def api_aktivitaeten_lesen():
     """PLAN-34: öffentlicher GET — liefert den aktiven Aktivitäts-Katalog.
 
@@ -1166,6 +1331,7 @@ def api_aktivitaeten_lesen():
 
 
 @app.route("/api/v1/plan/admin/aktivitaeten", methods=["POST"])
+@require_init_data
 def api_aktivitaeten_hinzufuegen():
     """PLAN-34: loopback POST — fügt einen Eintrag zum Aktivitäts-Katalog hinzu.
 
@@ -1253,6 +1419,7 @@ def api_aktivitaeten_hinzufuegen():
 
 
 @app.route("/api/v1/plan/admin/aktivitaeten/<art>", methods=["DELETE"])
+@require_init_data
 def api_aktivitaeten_loeschen(art):
     """PLAN-34: loopback DELETE — entfernt einen Eintrag aus dem Katalog.
 
@@ -1342,6 +1509,7 @@ def _defaults_aus_config():
 
 
 @app.route("/api/v1/plan/defaults", methods=["GET"])
+@require_init_data
 def api_defaults_lesen():
     """PLAN-36: PUBLIC GET — Default-Petrantwortlichkeiten (PLAN-10).
 
@@ -1352,6 +1520,7 @@ def api_defaults_lesen():
 
 
 @app.route("/api/v1/plan/defaults", methods=["PUT"])
+@require_init_data
 def api_defaults_schreiben():
     """PLAN-36: PUBLIC PUT — setzt die Default-Petrantwortlichkeiten (PLAN-10).
 
@@ -1437,6 +1606,7 @@ def api_defaults_schreiben():
 
 
 @app.route("/api/v1/plan/slot-modell", methods=["GET"])
+@require_init_data
 def api_slot_modell_lesen():
     """PLAN-37: PUBLIC GET — die aktuelle Slot-Liste (PLAN-6).
 
@@ -1449,6 +1619,7 @@ def api_slot_modell_lesen():
 
 
 @app.route("/api/v1/plan/slot-modell", methods=["PUT"])
+@require_init_data
 def api_slot_modell_schreiben():
     """PLAN-37: PUBLIC PUT — setzt die Gesamt-Slot-Liste (PLAN-6).
 

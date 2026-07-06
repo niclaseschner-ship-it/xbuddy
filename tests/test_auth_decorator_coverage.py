@@ -6,12 +6,12 @@ jeweiligen Service-Moduls, dass **jede** gelistete Route den Auth-Decorator
 (`@require_init_data` oder seine Cookie-Variante) im Source trägt. Fehlt der
 Decorator an einer AUTH-3-Route, ist der Test rot (auth.md AUTH-9).
 
-Phase 1 (#948) deckt **essen** ab. Die method-explizite AUTH-3-Liste enthält
-zusätzlich photo/kibuddy/plan-Routen (Phase-1-Nachtrag 2026-07-06, #1321-Bau);
-deren Module wandern in `MODULE_MAP`, sobald ihr Bau-Track den Decorator legt.
-Bis dahin prüft dieser Test die gemappten Buddies (essen) vollständig und
-meldet ungemappte AUTH-3-Buddies sichtbar als „noch nicht verriegelt" — ohne
-den essen-Vertrag zu verwässern.
+Phase 1 (#948) deckte **essen** ab. Der #1321-Bau (2026-07-06) hat die
+method-explizite AUTH-3-Endliste um **photo/kibuddy/plan** ergänzt und den
+Decorator in den drei Service-Modulen gelegt — sie sind jetzt in `MODULE_MAP`
+und werden vollständig geprüft. Weitere AUTH-3-Buddies (routine/hörspiel-
+eltern) wandern mit ihrem Bau-Track hinzu; bis dahin meldet der Test einen
+ungemappten AUTH-3-Buddy sichtbar als „noch nicht verriegelt".
 """
 
 from __future__ import annotations
@@ -23,9 +23,12 @@ import re
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 AUTH_MD = REPO_ROOT / "specs" / "platform" / "auth.md"
 
-# Buddy-Slug → Service-Modul (Phase 1: nur essen). #1321 ergänzt photo/kibuddy/plan.
+# Buddy-Slug → Service-Modul. Phase 1 (#948): essen. #1321: photo/kibuddy/plan.
 MODULE_MAP = {
     "essen": REPO_ROOT / "essen" / "main.py",
+    "photo": REPO_ROOT / "photo" / "main.py",
+    "kibuddy": REPO_ROOT / "kibuddy" / "main.py",
+    "plan": REPO_ROOT / "plan" / "main.py",
 }
 
 # Der Auth-Decorator-Name (essen/main.py `require_init_data`; auth.md AUTH-9
@@ -39,10 +42,10 @@ _ROUTE_LINE = re.compile(r"^(/\S+)\s+\((GET|POST|PATCH|PUT|DELETE)\)\s*$")
 def _auth3_routes() -> list[tuple[str, str]]:
     """Extrahiert die method-expliziten (pfad, methode)-Paare der AUTH-3-Liste.
 
-    Liest ausschließlich die ```-gefencten Codeblöcke im AUTH-3-Abschnitt
-    (die essen-V1-Liste ist method-explizit; die photo/kibuddy/plan-Ergänzung
-    steht als Prosa-Aufzählung und wird bewusst nicht mitgeparst — sie ist
-    #1321-Sache und noch nicht method-explizit)."""
+    Liest ALLE ```-gefencten Codeblöcke im AUTH-3-Abschnitt: die essen-V1-Liste
+    UND die #1321-Endliste (photo/kibuddy/plan, method-explizit gegen die realen
+    `@app.route`-Strings). Die Prosa-Aufzählung im Nachtrag bleibt unbewertet —
+    Wahrheit ist der Fence."""
     text = AUTH_MD.read_text(encoding="utf-8")
     # AUTH-3-Abschnitt herausschneiden: von "### AUTH-3" bis zum nächsten "### AUTH-".
     start = text.index("### AUTH-3")

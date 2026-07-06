@@ -20,12 +20,13 @@ Geschwister von router/, familie/, plan/, wetter/. Statische Assets unter
 """
 
 import argparse
+import functools
 import logging
 import os
 import sys
 import threading
 
-from flask import Flask, jsonify, render_template, request, send_file
+from flask import Flask, g, jsonify, make_response, render_template, request, send_file
 
 # Repo-Wurzel auf den Importpfad — die App konsumiert die Library
 # `tools.configloader`/`tools.logsetup` (DCOMP-1-Ausnahme: `tools/` ist
@@ -36,6 +37,10 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from tools import configloader, logsetup  # noqa: E402
+from tools import familie_client as _familie_client_mod  # noqa: E402
+from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # noqa: E402
+from tools.initdata import init_data as _init_data_mod  # noqa: E402
+from tools.initdata import session_cookie as _session_cookie  # noqa: E402
 from tools.service_diagnostics import register_version  # noqa: E402
 
 # Das photo-Paket als Paket importieren, damit die relativen Imports in
@@ -67,6 +72,9 @@ logger = logging.getLogger(__name__)
 runtime = {
     "config": None,         # photo.config.Config — Last-Known-Good-Snapshot
     "config_path": None,    # Pfad zur photo.json — Naht für DCOMP-2
+    "bot_token": None,          # AUTH-3 (T1321): Bot-Token — Test-Naht oder ENV
+    "init_data_config": None,   # AUTH-3 (T1321): tma-Header-Validierungs-Config
+    "familie_client": None,     # AUTH-3 (T1321): FAM-7-Client (get_telegram_ids)
 }
 
 # Schreib-Serialisierung (PHOTO-10/13/16): Read-Modify-Write des library.json-
@@ -76,15 +84,27 @@ runtime = {
 _write_lock = threading.Lock()
 
 
-def configure(cfg, config_path=None):
+def configure(cfg, config_path=None,
+              bot_token=None, init_data_config=None, familie_client=None):
     """Setzt die Konfiguration (Test-Naht, DCOMP-2).
 
     Ohne `config_path` bleibt das übergebene `cfg` die Quelle (Test-Modus, kein
     Disk-Reload). Mit `config_path` liest der Buddy `photo.json` pro Aufruf
     frisch (Reload-on-Read).
+
+    `bot_token` / `init_data_config` / `familie_client` (AUTH-3, T1321):
+    Auth-Naht für Tests (Muster essen); im Produktiv-Betrieb aus ENV.
     """
     runtime["config"] = cfg
     runtime["config_path"] = config_path
+
+    # AUTH-3 Hart-Auth (T1321): Test-Naht analog essen.
+    if bot_token is not None:
+        runtime["bot_token"] = bot_token
+    if init_data_config is not None:
+        runtime["init_data_config"] = init_data_config
+    if familie_client is not None:
+        runtime["familie_client"] = familie_client
 
 
 def _current_config():
@@ -103,6 +123,138 @@ def _current_config():
     except (config_mod.ConfigError, OSError) as e:
         logger.debug("reload-on-read fiel auf snapshot zurück (%s)", e)
         return snapshot
+
+
+# ============================================================
+#  AUTH-3 Hart-Auth (T1321 — auth.md AUTH-2/3/5/8/9)
+# ============================================================
+#
+# Wörtliche Übernahme des essen-Decorators (essen/main.py, T948). Der
+# Audit-Funnel-Befund #1338 klassifiziert die /api/v1/photo/*-Datenrouten neu
+# als AUTH-3 (hart geschützt): extern über den Funnel waren Fotos abruf-/löschbar.
+
+# ENV-Variable für Bot-Token (APP-7 / MAD-9): cluster-weit, wie essen.
+_ENV_BOT_TOKEN = "ELTERNCHAT_BOT_TOKEN"
+# CONFIG-5: Familie-Service-Origin per Komponenten-ENV.
+_ENV_FAMILIE_ORIGIN = "PHOTO_FAMILIE_ORIGIN"
+
+
+def _get_bot_token():
+    """Bot-Token aus runtime-Dict (Test-Naht) oder ENV (APP-7)."""
+    return runtime.get("bot_token") or os.environ.get(_ENV_BOT_TOKEN)
+
+
+def _get_familie_client():
+    """Liefert einen FamilieClient — gecacht im runtime-Dict oder frisch (T1015).
+
+    Test-Naht: ``configure(familie_client=...)`` setzt direkt einen Stub.
+    Produktiv-Pfad: ``tools.familie_client.FamilieClient`` aus ENV
+    ``PHOTO_FAMILIE_ORIGIN`` (Default ``http://127.0.0.1:5010``).
+    """
+    cached = runtime.get("familie_client")
+    if cached is not None:
+        return cached
+    origin = os.environ.get(_ENV_FAMILIE_ORIGIN, _FAMILIE_DEFAULT_ORIGIN)
+    return _familie_client_mod.FamilieClient(origin_url=origin)
+
+
+# AUTH-8: 401 rendert eine Anweisungsseite statt eines rohen Status-Codes.
+_AUTH_401_HTML = (
+    "<!doctype html>\n"
+    "<html lang=\"de\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+    "<title>Gerät neu verbinden</title></head>"
+    "<body style=\"font-family:system-ui,sans-serif;max-width:32rem;"
+    "margin:3rem auto;padding:0 1rem;line-height:1.5\">"
+    "<h1>Dieses Gerät muss neu verbunden werden.</h1>"
+    "<p>Öffne im Familien-Bot den Befehl "
+    "<code>/gerät_neu_pairen &lt;display_id&gt;</code> und folge dem Link "
+    "auf diesem Gerät.</p>"
+    "</body></html>"
+)
+
+
+def _auth_401():
+    """AUTH-8: 401 mit HTML-Anweisungsseite (nicht roher Status-Code)."""
+    resp = make_response(_AUTH_401_HTML, 401)
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    return resp
+
+
+def require_init_data(fn):
+    """Decorator: HART-AUTH (T948/T1321, auth.md AUTH-2/3/5/8).
+
+    Eine valide Quelle reicht (AUTH-2, additive Akzeptanz); fehlt jede,
+    antwortet die Route HART mit 401 + AUTH-8-Anweisungsseite:
+
+    - **AUTH-5 Loopback** (127.0.0.1/::1, kein X-Forwarded-For): Server-zu-
+      Server → pass-through, g.init_data = None.
+    - **AUTH-2 Cookie `xbuddy_session`**: valide HMAC-Signatur reicht;
+      Rolling-Refresh mit frischem `exp` (auth.md AUTH-2:78). g.init_data = None.
+    - **AUTH-2 tma-Header** (MAD-7): valide + Familien-Mitglied → g.init_data;
+      valide + Nicht-Mitglied → 403; ungültig → 401.
+    - **Sonst**: HART 401 (AUTH-8).
+    """
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        # AUTH-5: Loopback-Bypass für Internal-Service-Calls.
+        if (not request.headers.get("X-Forwarded-For")
+                and request.remote_addr in ("127.0.0.1", "::1")):
+            g.init_data = None
+            return fn(*args, **kwargs)
+
+        bot_token = _get_bot_token()
+        if not bot_token:
+            logger.error("AUTH: %s nicht gesetzt — Route nicht nutzbar.", _ENV_BOT_TOKEN)
+            return ("", 500)
+
+        # AUTH-2: Session-Cookie. Valide Signatur (+ nicht abgelaufen) reicht.
+        cookie_val = request.cookies.get(_session_cookie.COOKIE_NAME)
+        if cookie_val:
+            subject = _session_cookie.verify_session(cookie_val, bot_token)
+            if subject is not None:
+                g.init_data = None
+                # Rolling-Refresh (AUTH-2:78): Cookie mit frischem exp neu setzen.
+                # make_response wrappt auch send_file-Binary-Responses korrekt.
+                resp = make_response(fn(*args, **kwargs))
+                resp.set_cookie(
+                    _session_cookie.COOKIE_NAME,
+                    _session_cookie.sign_session(subject, bot_token),
+                    **_session_cookie.session_cookie_kwargs(),
+                )
+                return resp
+
+        # AUTH-2: tma-Header (MAD-7). Leerer/fehlender "tma "-Wert zählt als
+        # „keine tma-Quelle" (Mini-App-JS außerhalb Telegram sendet "tma " leer).
+        auth_header = request.headers.get("Authorization", "").strip()
+        tma_leer = (
+            not auth_header
+            or auth_header.lower() in ("tma", "tma ")
+            or (auth_header.lower().startswith("tma ") and not auth_header[4:].strip())
+        )
+        if not tma_leer:
+            cfg = runtime.get("init_data_config")
+            if cfg is None:
+                cfg = _init_data_mod.load_config()
+                runtime["init_data_config"] = cfg
+            try:
+                init_data = _init_data_mod.validate_header(
+                    auth_header, bot_token, cfg["max_age_seconds"])
+            except _init_data_mod.InitDataError:
+                return _auth_401()
+
+            # FAM-7/8: User-ID gegen Familien-Registry prüfen (HTTP-Pfad, T1015).
+            familie_ids = _get_familie_client().get_telegram_ids()
+            if familie_ids is not None and init_data.user_id not in familie_ids:
+                logger.warning("FAM-7: user_id %s ist kein Familien-Mitglied → 403", init_data.user_id)
+                return ("", 403)
+
+            g.init_data = init_data
+            return fn(*args, **kwargs)
+
+        # AUTH-3: weder Loopback noch Cookie noch tma → HART 401 (AUTH-8).
+        return _auth_401()
+    return wrapper
 
 
 # ============================================================
@@ -127,6 +279,7 @@ def _bad_request(msg, status=400):
 # ── API: Ingest (PHOTO-13) ─────────────────────────────────────────────────
 
 @app.route("/api/v1/photo/medien", methods=["POST"])
+@require_init_data
 def post_medium():
     """PHOTO-13: Medium aufnehmen. Multipart-Feld `medium` (Muster FAM-13).
 
@@ -162,6 +315,7 @@ def post_medium():
 # ── API: Liste (PHOTO-14) ───────────────────────────────────────────────────
 
 @app.route("/api/v1/photo/medien", methods=["GET"])
+@require_init_data
 def get_medien():
     """PHOTO-14: Library-Metadaten, geordnet nach PHOTO-11 — Datenquelle der View."""
     cfg = _current_config()
@@ -176,6 +330,7 @@ def get_medien():
 # ── API: Einzelmedium & Thumbnail (PHOTO-15) ────────────────────────────────
 
 @app.route("/api/v1/photo/medien/<medium_id>", methods=["GET"])
+@require_init_data
 def get_medium(medium_id):
     """PHOTO-15: Vollmedium (JPEG|MP4) mit korrektem Content-Type (send_file)."""
     cfg = _current_config()
@@ -186,6 +341,7 @@ def get_medium(medium_id):
 
 
 @app.route("/api/v1/photo/medien/<medium_id>/thumbnail", methods=["GET"])
+@require_init_data
 def get_thumbnail(medium_id):
     """PHOTO-15: Thumbnail/Poster-Frame (JPEG) mit korrektem Content-Type (FAM-8)."""
     cfg = _current_config()
@@ -198,6 +354,7 @@ def get_thumbnail(medium_id):
 # ── API: Löschen (PHOTO-16) ─────────────────────────────────────────────────
 
 @app.route("/api/v1/photo/medien/<medium_id>", methods=["DELETE"])
+@require_init_data
 def delete_medium(medium_id):
     """PHOTO-16: Vollmedium + Thumbnail + Index-Eintrag atomar entfernen (PHOTO-10)."""
     cfg = _current_config()
