@@ -60,9 +60,28 @@ Eine API-Route der AUTH-3-Liste antwortet `200`, wenn **eine** der beiden
 Identitätsquellen valide ist:
 
 - **Cookie `xbuddy_session`** — HMAC-SHA256 über `user_id + exp`, Sign-Key
-  ist der Bot-Token (kein zweites Geheimnis). Same-Site `Lax`, HTTPS-Only,
-  90 Tage rolling. Bezug der Cookie: Pairing-Endpoint (AUTH-2.a) nach Geräte-
-  Anlage (`geraet-anlegen.md` GAA-3.8).
+  ist der Bot-Token (kein zweites Geheimnis). **`HttpOnly`, `Secure` (HTTPS-Only),
+  `SameSite=Lax`**, 90 Tage **rolling**. Bezug der Cookie: Pairing-Endpoint
+  (AUTH-2.a) nach Geräte-Anlage (`geraet-anlegen.md` GAA-3.8).
+
+  **`HttpOnly` ist Pflicht — Sicherheit UND iOS-Persistenz.** Der Cookie wird
+  ausschließlich server-seitig per `Set-Cookie`-Header gesetzt (nie per JS). Das
+  hält ihn (a) XSS-unlesbar und (b) außerhalb der Safari-ITP-Deckelung, die nur
+  *client-seitige* (`document.cookie`) Cookies auf 7 Tage — bzw. 24 h bei
+  Link-Decoration (der `?token=`-Query aus dem Telegram-Pairing-Link) — begrenzt.
+  Server-gesetzte `HttpOnly`-First-Party-Cookies halten bis zum Browser-Cap
+  (~400 Tage), sofern PWA und `/auth/pair` auf **derselben Funnel-FQDN** liegen
+  (echte First-Party). `SameSite=Lax` ist nötig, damit der Cookie die
+  Top-Level-Redirect-Navigation aus dem Pairing-Link überlebt.
+
+  **Rolling-Refresh (Auffrischung über die PWA):** jede AUTH-3-Route mit valider
+  Cookie-Quelle setzt den Cookie mit frischem 90-Tage-`exp` neu (`Set-Cookie` auf
+  der Antwort). Damit rollt **jeder PWA-Start** den Cookie vor; aktiv genutzte
+  Geräte laufen faktisch nie ab. Bei fehlendem/abgelaufenem Cookie greift die
+  AUTH-8-Re-Pair-Seite (401). **Empirisches Bau-Gate:** ein echter-iPhone-Test
+  (≥8 Tage Leerlauf noch authentifiziert) auf der Funnel-Topologie **vor** der
+  Familien-Zusage — die Theorie sagt persistent, der Tailscale-Edge ist
+  ungewöhnlich; testen statt wetten.
 - **Header `Authorization: tma <initData>`** — wie `conventions/mini-app-design.md`
   MAD-7 beschrieben, HMAC-Validierung über `eltern-chat/init_data.py`.
 
