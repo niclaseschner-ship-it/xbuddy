@@ -28,16 +28,16 @@ _PRICES_USD_PER_MILLION = {
     "claude-haiku-4-5":  (1.00, 0.10, 5.00),
     # Mistral (T1085): EU-Anbieter, kein Prompt-Caching → cached_input == input
     # (Spiegel zu `eltern-chat/providers/pricing.py`, Stand Mistral-Pricing
-    # 2026-06-10). mistral-medium-2508 = Konversations-Default, -3504 = Multimodal.
-    "mistral-medium-2508": (1.50, 1.50, 7.50),
-    "mistral-medium-3504": (1.50, 1.50, 7.50),
+    # 2026-06-10, korrigiert 2026-07-07). mistral-medium-2508 = Konversations-Default, -3504 = Multimodal.
+    "mistral-medium-2508": (0.40, 0.40, 2.00),
+    "mistral-medium-3504": (0.40, 0.40, 2.00),
 }
 
 # V1-Vereinfachung (analog `eltern-chat/providers/pricing.EUR_PER_USD`): fester
-# Wechselkurs 1.0. Die JSONL-Telemetrie ist Diagnose-Werkzeug für die
+# Wechselkurs 0.92. Die JSONL-Telemetrie ist Diagnose-Werkzeug für die
 # Bewertungsphase — eine schwankende Live-Rate wäre Bau ohne belegte
 # Notwendigkeit (E-EC-11).
-EUR_PER_USD = 1.0
+EUR_PER_USD = 0.92
 
 
 def compute_eur(
