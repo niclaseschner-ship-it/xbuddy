@@ -470,7 +470,7 @@ test('preloadNext: löst nächsten Track als Blob-Object-URL vorab (preloadedSrc
   }
 });
 
-test('preloadNext: Cache-Miss → fetcht Blob vor, S.preloadedSrc ist Blob-Object-URL (AC3, #1308)', async () => {
+test('preloadNext: Cache-Miss → fetcht Blob vor, S.preloadedSrc ist Blob-Object-URL, kein Cache-Write (HSP-54, #1308)', async () => {
   const savedURL = global.URL;
   let revoked = 0;
   global.URL = {
@@ -489,6 +489,9 @@ test('preloadNext: Cache-Miss → fetcht Blob vor, S.preloadedSrc ist Blob-Objec
     assert.equal(P._S.preloadedIdx, 0, 'preloadedIdx gesetzt');
     assert.equal(fetchFn.calls.length, 1, 'genau ein fetch-Aufruf für den Track');
     assert.equal(fetchFn.calls[0].url, '/audio/miss.mp3', 'korrekte Track-URL gefetcht');
+    // HSP-54: preloadNext darf NICHT in den Cache schreiben — das würde Album-Meta/LRU_KEY umgehen
+    // und unbegrenzt Waisen-Einträge im Budget erzeugen.
+    assert.equal(await P._S.cache.match('/audio/miss.mp3'), undefined, 'preloadNext schreibt NICHT in den Cache (HSP-54-Budget)');
   } finally {
     global.URL = savedURL;
     P._S.cache = null; P._S.tracks = []; P._S.trackIdx = 0;

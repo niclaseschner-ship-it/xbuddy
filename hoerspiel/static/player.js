@@ -786,9 +786,9 @@ function ensureAudio() {
  * Während der aktuelle Track spielt: resolveTrackSrc prüft den Cache (HSP-54).
  *   Cache-Treffer → Blob-Object-URL direkt.
  *   Cache-Miss  → resolveTrackSrc gibt die Netz-URL zurück (kein Fetch dort);
- *                 preloadNext fetcht den Track selbst (fetch→blob→objectURL,
- *                 optional write-through in den Cache), damit S.preloadedSrc immer
- *                 eine Blob-Object-URL ist und swapToNext netzfrei bleibt.
+ *                 preloadNext fetcht den Track selbst (fetch→blob→objectURL),
+ *                 damit S.preloadedSrc immer eine Blob-Object-URL ist und
+ *                 swapToNext netzfrei bleibt. Kein Cache-Write (HSP-54-Budget).
  * Eine noch nicht verbrauchte, petraltete Vorauflösung wird revoked (Leak-Härtung).
  * @param {number}   idx       Track-Index in S.tracks
  * @param {Function} [_fetchFn] Test-Nähe: fetch-Ersatz; sonst globales fetch
@@ -809,11 +809,8 @@ async function preloadNext(idx, _fetchFn) {
         if (resp.ok) {
           const blob = await resp.blob();
           src = URL.createObjectURL(blob);
-          // Optional write-through: künftige resolveTrackSrc-Aufrufe treffen den Cache.
-          if (S.cache && typeof Response !== 'undefined') {
-            try { await S.cache.put(url, new Response(blob, { status: 200 })); }
-            catch (e) { /* Cache-Write best-effort */ }
-          }
+          // Kein Cache-Write: S.preloadedSrc (blob:-URL) reicht für netzfreies swapToNext.
+          // Ein Write-Through ohne Album-Meta/LRU_KEY würde HSP-54-Budget-Waisen erzeugen.
         }
       }
     } catch (e) { /* Netz nicht erreichbar → Fallback bleibt Netz-URL */ }
