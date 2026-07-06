@@ -337,6 +337,28 @@ def require_init_data(fn):
 app = Flask(__name__, static_url_path="/display/routine/static")
 
 
+# ── Version-Endpoint (SVC-6) ──────────────────────────────────────────────
+
+def _deploy_version():
+    """SVC-6: laufende Commit-SHA aus der beim Deploy geschriebenen Datei
+    `__XBUDDY_DATA__/deploy/version` (Default /home/buddy/xbuddy-data, ENV
+    XBUDDY_DATA_DIR). Kein `git rev-parse` zur Laufzeit. Fehlt die Datei
+    (noch kein Deploy), liefert /version null."""
+    data_dir = os.environ.get("XBUDDY_DATA_DIR", "/home/buddy/xbuddy-data")
+    path = os.path.join(data_dir, "deploy", "version")
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
+
+
+@app.route("/version", methods=["GET"])
+def version():
+    """SVC-6: liefert die laufende Deploy-Commit-SHA (oder null)."""
+    return jsonify({"version": _deploy_version()}), 200
+
+
 @app.route("/display/routine/morgen", methods=["GET", "POST"])
 def morgen():
     """View `morgen` — Routine-Checkliste + ablaufende Uhr (ROUTINE-2).

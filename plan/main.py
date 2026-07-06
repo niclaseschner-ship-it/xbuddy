@@ -302,6 +302,28 @@ def _is_uuid4(value: str) -> bool:
 # der Flask-Default `/static` läge außerhalb der URL-1-Prefixe (#61).
 app = Flask(__name__, static_url_path="/display/plan/static")
 
+
+# ── Version-Endpoint (SVC-6) ──────────────────────────────────────────────
+
+def _deploy_version():
+    """SVC-6: laufende Commit-SHA aus der beim Deploy geschriebenen Datei
+    `__XBUDDY_DATA__/deploy/version` (Default /home/buddy/xbuddy-data, ENV
+    XBUDDY_DATA_DIR). Kein `git rev-parse` zur Laufzeit. Fehlt die Datei
+    (noch kein Deploy), liefert /version null."""
+    data_dir = os.environ.get("XBUDDY_DATA_DIR", "/home/buddy/xbuddy-data")
+    path = os.path.join(data_dir, "deploy", "version")
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
+
+
+@app.route("/version", methods=["GET"])
+def version():
+    """SVC-6: liefert die laufende Deploy-Commit-SHA (oder null)."""
+    return jsonify({"version": _deploy_version()}), 200
+
 # FAM-8: der HTTP-Endpunkt der Familien-Registry, der Profilfotos liefert.
 # Eine stabile Cross-Komponenten-URL (URL-8) — der Plan-Buddy verlinkt
 # darauf, statt Fotos selbst auszuliefern (MIGRATION.md §2).
