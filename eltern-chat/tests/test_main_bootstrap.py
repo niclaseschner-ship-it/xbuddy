@@ -79,9 +79,10 @@ def test_bootstrap_gan_absent_without_icon_origin_url():
     assert "gericht_anlegen" not in catalog._tasks
 
 
-def test_bootstrap_gan_absent_without_photo_origin_url():
-    """GAN erscheint NICHT im Katalog, wenn photo_origin_url=None
-    (ESSEN-22 Pfad 1 AND-Guard)."""
+def test_bootstrap_gan_present_without_photo_origin_url():
+    """GAN erscheint im Katalog auch OHNE photo_origin_url (Welle 2 von #804,
+    T810): der Foto-Upload läuft über essen_client.post_foto (MEDIEN-1), der
+    AND-Guard verlangt nur essen+icon+fgcid — kein Photo-Buddy mehr."""
     tg = FakeTelegram()
     catalog = build_catalog(
         tg, "/instanz/rootCA.pem",
@@ -90,7 +91,7 @@ def test_bootstrap_gan_absent_without_photo_origin_url():
         photo_origin_url=None,
         family_group_chat_id_getter=lambda: "-100",
     )
-    assert "gericht_anlegen" not in catalog._tasks
+    assert "gericht_anlegen" in catalog._tasks
 
 
 def test_bootstrap_cfg_essen_origin_url_is_per_instance_config_value():

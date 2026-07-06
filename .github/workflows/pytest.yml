@@ -1,0 +1,37 @@
+name: pytest
+
+# Test-Gate: fährt die repo-weite pytest-Suite (pytest.ini/testpaths). Läuft
+# bei jedem PR und auf main. Bricht der Lauf ab, ist ein Test rot oder eine
+# Suite hat einen Collect-Fehler. Lokal identisch via `make test` (Makefile).
+#
+# Der Guard tests/test_testpaths_vollstaendig.py hält testpaths gegen die
+# Realität — eine neu angelegte Suite, die nicht in pytest.ini steht, lässt
+# diesen Job rot werden (T1310, gegen unsichtbar-nicht-gelaufene Tests).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: [self-hosted, ARM64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: venv + Test-Abhängigkeiten
+        # --system-site-packages: der Pi-Runner trägt die Laufzeit-Pakete der
+        # Services global (flask, Pillow, …); das venv erbt sie und pip
+        # ergänzt pytest + die deklarierten requirements reproduzierbar.
+        run: |
+          python3 -m venv --system-site-packages .venv-pytest
+          .venv-pytest/bin/pip install --quiet pytest
+          .venv-pytest/bin/pip install --quiet \
+            -r eltern-chat/requirements.txt \
+            -r photo/requirements.txt
+
+      - name: pytest (repo-weit)
+        run: .venv-pytest/bin/python -m pytest -q

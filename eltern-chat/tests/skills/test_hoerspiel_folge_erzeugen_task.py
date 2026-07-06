@@ -25,8 +25,11 @@ from skills.hoerspiel_folge_erzeugen_task import (
 )
 from tasks import TurnContext
 
-# Reuse Fakes aus den existierenden Tests — gleicher Stil.
-from tests.skills.test_hoerspiel_folge_erzeugen import (
+# Reuse Fakes aus den existierenden Tests — gleicher Stil. Bare-Modulname
+# (analog test_hoerspiel_folge_erzeugen_emil.py): eltern-chat/tests/skills
+# liegt im prepend-Importpfad; der ambige `tests.skills.`-Paketpfad kollidiert
+# im repo-weiten Lauf mit dem Wurzel-`tests`-Namespace (#52-Muster, T1310).
+from test_hoerspiel_folge_erzeugen import (
     FakeHoerspielClient,
     FakeTelegram,
     _immer_mitglied,
