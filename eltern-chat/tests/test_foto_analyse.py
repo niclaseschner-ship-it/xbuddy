@@ -8,8 +8,8 @@ an die Singleshot-Sicht von `tools.llm` durchreicht:
   an die Lib-Fassade; `.get("termine")`-Auspacken → list[ExtractedTermin];
 - Fehlerpfade → `MultimodalError` (TAB-5 provider_fehler); Bau-Fehler
   (`LLMCapabilityError`) propagiert als Boot-Fehler (NICHT als MultimodalError);
-- Typen-Identität: `ExtractedTermin`/`MultimodalError` sind (Objekt-Identität)
-  die aus `skills._multimodal` — der Duck-Type über beide Import-Wege gewahrt;
+- Typen-Heimat: `ExtractedTermin`/`MultimodalError` sind physisch in
+  `foto_analyse` definiert (#1334, PR2); Felder + Signatur korrekt;
 - write_verification (AC3): ein Durchlauf durch den ECHTEN Anthropic-Vendor
   (mockiertes SDK) schreibt eine `provider_calls.jsonl`-Zeile mit dem Foto-Slot.
 
@@ -174,16 +174,26 @@ def test_foto_slot_name_woertlich():
     assert FOTO_ANALYSE_SLOT == "eltern-chat-anthropic-foto-analyse-api-key"
 
 
-def test_typen_identitaet_zu_legacy_multimodal():
-    """AC2: ExtractedTermin/MultimodalError aus foto_analyse sind (Objekt-
-    Identität) dieselben wie aus skills._multimodal — der Duck-Type über beide
-    Import-Wege ist gewahrt (`except`/`isinstance` passen)."""
-    from skills._multimodal import ExtractedTermin as BaseET
-    from skills._multimodal import MultimodalError as BaseME
-    from skills.foto_analyse import ExtractedTermin as FotoET
-    from skills.foto_analyse import MultimodalError as FotoME
-    assert FotoET is BaseET
-    assert FotoME is BaseME
+def test_typen_physisch_in_foto_analyse_definiert():
+    """AC2 (#1334): ExtractedTermin/MultimodalError sind physisch in
+    foto_analyse definiert (kein Re-Export aus _multimodal). Prüft Felder
+    und Signatur der kanonischen Heimat."""
+    from dataclasses import fields as dc_fields
+
+    from skills.foto_analyse import ExtractedTermin, MultimodalError
+    # ExtractedTermin ist ein Dataclass.
+    field_names = {f.name for f in dc_fields(ExtractedTermin)}
+    assert "titel" in field_names
+    assert "beginn" in field_names
+    assert "ende" in field_names
+    assert "ganztags" in field_names
+    assert "personen_hinweise" in field_names
+    assert "fehlende_felder" in field_names
+    # MultimodalError ist eine Exception.
+    assert issubclass(MultimodalError, Exception)
+    # Modul-Heimat ist foto_analyse, nicht _multimodal.
+    assert "foto_analyse" in ExtractedTermin.__module__
+    assert "foto_analyse" in MultimodalError.__module__
 
 
 def test_tool_schema_ist_hart_codiert():
