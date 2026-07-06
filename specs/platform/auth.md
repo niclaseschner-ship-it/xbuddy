@@ -239,9 +239,28 @@ ratifiziert wird. **Phase 1** kopiert das Verhalten je Buddy-Decorator
 konsistent; **n=3-Trigger** (z. B. `routine/main.py` + `hoerspiel/main.py`
 folgen) löst die Lib-Auslagerung aus.
 
-Der Decorator-Code (egal in welchem Buddy) prüft zuerst
-`request.remote_addr in ('127.0.0.1', '::1')`. Trifft das zu, läuft die
-Route ohne Identifikation durch; `g.init_data` ist `None`.
+Der Decorator-Code (egal in welchem Buddy) prüft zuerst — **verbindlich und
+load-bearing** — BEIDE Bedingungen zusammen:
+
+```python
+if (not request.headers.get("X-Forwarded-For")
+        and request.remote_addr in ("127.0.0.1", "::1")):
+    g.init_data = None
+    return fn(*args, **kwargs)   # AUTH-5-Pass-through
+```
+
+Der `X-Forwarded-For`-Ausschluss ist **kein optionaler Zusatz**, sondern das
+Herz des Bypass: nginx setzt bei JEDER von außen kommenden Anfrage
+`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for`
+(`deploy/nginx/xbuddy-origin.conf`), während `remote_addr` gegenüber dem Buddy
+immer `127.0.0.1` ist (nginx proxyt lokal). Ein Browser-Request von außen sieht
+für den Buddy also aus wie Loopback — nur das Fehlen von `X-Forwarded-For`
+unterscheidet einen echten Server-zu-Server-Call (Eltern-Chat → Buddy, kein
+Proxy dazwischen) von einem durchgereichten Fremd-Request. Wer beim n=3-Kopieren
+in einen neuen Buddy-Decorator nur `remote_addr` prüft und den
+`X-Forwarded-For`-Ausschluss weglässt, reißt ein Auth-Bypass-Loch: dann käme
+JEDER externe Request am Cookie/tma-Check vorbei. Trifft die Doppel-Bedingung
+zu, läuft die Route ohne Identifikation durch; `g.init_data` ist `None`.
 
 **V1-Liste:**
 

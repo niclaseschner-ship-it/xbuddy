@@ -1134,6 +1134,13 @@ def build_context(cfg, db_path, zd_cli_path=None):
         gaa_sessions=gaa_sessions,
         cav_call_hook=_cav_hook,
         display_url_origin=cfg.display_url_origin,
+        # GAA-3.8 / auth.md AUTH-2.a (T948): Pairing-Link-Zustellweg live.
+        # pairing_bot_token = per-Instanz-Bot-Token (HMAC-Sign-Key, cfg.bot_token).
+        # pairing_origin = Funnel-FQDN, unter der /auth/pair (seiten) + PWA liegen
+        # (cfg.mini_app_base_url, AUTH-2 First-Party-Cookie-Origin). Leer/None →
+        # GAA postet keinen Pairing-Link (E-GAA-5-Agnostik).
+        pairing_bot_token=cfg.bot_token,
+        pairing_origin=cfg.mini_app_base_url or None,
         zd_store_getter=lambda: zd_store,
         kav_sessions=kav_sessions,
         plan_origin_url=cfg.plan_origin_url,

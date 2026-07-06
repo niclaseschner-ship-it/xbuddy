@@ -86,12 +86,22 @@ class GeraetAnlegenTask(WriteTask):
 
     def __init__(self, tg, geraete_origin_url, sessions,
                  family_group_chat_id_getter, cav_call_hook=None,
-                 display_url_origin=None, client=None):
+                 display_url_origin=None, client=None,
+                 pairing_bot_token=None, pairing_origin=None):
         """`geraete_origin_url` ist die Origin der Geraete-Komponente (z. B.
         `http://127.0.0.1:5040`). `client` ist die Test-Naht: liefert ein
         vorgefertigter `GeraeteClient` (mit `transport=`-Callable) hereingegeben,
         nutzt der Task diesen statt einer neuen Instanz — symmetrisch zur
-        FAA-Aufgabe."""
+        FAA-Aufgabe.
+
+        `pairing_bot_token` / `pairing_origin` (GAA-3.8 / auth.md AUTH-2.a):
+        der per-Instanz-Bot-Token (HMAC-Sign-Key) und die Funnel-FQDN-Origin,
+        unter der `/auth/pair` (seiten) + die PWA liegen. Der Task reicht beide
+        an `geraet_anlegen` durch → `_poste_pairing_link` feuert (postet den
+        15-Minuten-Pairing-Link in den Privatchat). Fehlt einer, entfällt der
+        Pairing-Link-Schritt in `geraet_anlegen` stillschweigend (E-GAA-5-
+        Agnostik) — die Quelle im Live-Betrieb ist der Aufrufer (build_catalog:
+        cfg.bot_token + cfg.mini_app_base_url)."""
         super().__init__(
             name="geraet_anlegen",
             description=(
@@ -109,6 +119,8 @@ class GeraetAnlegenTask(WriteTask):
         self._family_group_chat_id_getter = family_group_chat_id_getter
         self._cav_call_hook = cav_call_hook
         self._display_url_origin = display_url_origin
+        self._pairing_bot_token = pairing_bot_token
+        self._pairing_origin = pairing_origin
 
     def propose(self, arguments, turn_context):
         """EC-10-Vorschlag — kontextabhängiger Wortlaut (EC-10 #266):
@@ -144,6 +156,8 @@ class GeraetAnlegenTask(WriteTask):
         sessions = self._sessions
         cav_call_hook = self._cav_call_hook
         display_url_origin = self._display_url_origin
+        pairing_bot_token = self._pairing_bot_token
+        pairing_origin = self._pairing_origin
 
         # EC-25 / Issue #285: Typing-Indikator vor jeder send_message-Phase im
         # Privatchat. Best-Effort: Fehler werden in fire_typing geschluckt.
@@ -157,7 +171,10 @@ class GeraetAnlegenTask(WriteTask):
                     client, session.next_message,
                     cav_call_hook=cav_call_hook,
                     display_url_origin=display_url_origin,
-                    typing_fn=typing_fn)
+                    typing_fn=typing_fn,
+                    # GAA-3.8 / AUTH-2.a: Pairing-Link-Zustellung durchreichen.
+                    pairing_bot_token=pairing_bot_token,
+                    pairing_origin=pairing_origin)
                 logging.info(
                     "GAA-Session in Chat %s beendet — authorized=%s, ids=%s",
                     private_chat_id, result.authorized,

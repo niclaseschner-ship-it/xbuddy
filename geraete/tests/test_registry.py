@@ -608,3 +608,106 @@ def test_GER_10_every_requirement_has_a_test():
     quelle = open(os.path.abspath(__file__), encoding="utf-8").read()
     for ger in range(1, 10):
         assert "def test_GER_%d_" % ger in quelle, "GER-%d ungetestet" % ger
+
+
+# ============================================================
+#  OD3 / T948 — paired_at round-trip-treu (optionales Feld)
+# ============================================================
+#
+# Der Pairing-Endpoint /auth/pair (seiten/main.py::_markiere_paired_at)
+# stempelt `paired_at` (ISO-8601) additiv in geraete.json. Kennt die Registry
+# das Feld nicht, DROPPT der nächste geraete-Write (GER-15 add/save) es für
+# ALLE Einträge. Diese Tests belegen die Round-Trip-Treue.
+
+_PAIRED_STAMP = "2026-07-06T09:15:00+00:00"
+
+
+def _geraete_mit_paired_at():
+    """DEMO_GERAETE, aber das erste Gerät trägt einen paired_at-Stempel —
+    genau die Form, die /auth/pair schreibt (Stempel als letzter Schlüssel)."""
+    import copy
+    data = copy.deepcopy(DEMO_GERAETE)
+    data["geraete"][0]["paired_at"] = _PAIRED_STAMP
+    return data
+
+
+def test_OD3_paired_at_survives_load_save_roundtrip(tmp_path):
+    """Kern-AC: geraete.json MIT paired_at laden, save aufrufen, neu laden —
+    der Stempel überlebt, die übrigen Felder bleiben unberührt."""
+    p = tmp_path / "geraete.json"
+    p.write_text(json.dumps(_geraete_mit_paired_at()), encoding="utf-8")
+
+    reg = registry_mod.load(str(p))
+    assert reg.get("tablet-elias-01").paired_at == _PAIRED_STAMP
+    assert reg.get("tablet-elias-01").to_dict()["paired_at"] == _PAIRED_STAMP
+
+    registry_mod.save(reg, str(p))
+
+    reg2 = registry_mod.load(str(p))
+    assert reg2.get("tablet-elias-01").paired_at == _PAIRED_STAMP, \
+        "paired_at wurde beim save gedroppt (OD3-Regression)"
+    # Übrige Felder unberührt.
+    g = reg2.get("tablet-elias-01").to_dict()
+    assert g["name"] == "Tablet Elias"
+    assert g["status"] == "aktiv"
+
+
+def test_OD3_paired_at_survives_add_of_another_geraet(tmp_path):
+    """Der reale GER-15-Pfad (geraete/main.py post_geraet): load → add(neues
+    Gerät) → save. Das bereits gepaarte Gerät behält seinen Stempel — der neue
+    Eintrag hat keinen (nie gepaart)."""
+    p = tmp_path / "geraete.json"
+    p.write_text(json.dumps(_geraete_mit_paired_at()), encoding="utf-8")
+
+    reg = registry_mod.load(str(p))
+    reg.add(registry_mod.Geraet(
+        id="monitor-buero-01", typ="monitor", name="Monitor Büro",
+        aufloesung={"w": 3840, "h": 2160}, os="linux",
+        verwendung="display", status="aktiv"))
+    registry_mod.save(reg, str(p))
+
+    roh = json.loads(p.read_text(encoding="utf-8"))
+    paired = next(g for g in roh["geraete"] if g["id"] == "tablet-elias-01")
+    neu = next(g for g in roh["geraete"] if g["id"] == "monitor-buero-01")
+    assert paired["paired_at"] == _PAIRED_STAMP
+    assert "paired_at" not in neu, \
+        "neu angelegtes Gerät darf kein null/leeres paired_at bekommen"
+
+
+def test_OD3_paired_at_survives_update(tmp_path):
+    """update() eines anderen Feldes am gepaarten Gerät lässt paired_at
+    unberührt (to_dict → _validate_dict → to_dict round-trip)."""
+    p = tmp_path / "geraete.json"
+    p.write_text(json.dumps(_geraete_mit_paired_at()), encoding="utf-8")
+
+    reg = registry_mod.load(str(p))
+    reg.update("tablet-elias-01", status="inaktiv")
+    assert reg.get("tablet-elias-01").paired_at == _PAIRED_STAMP
+    assert reg.get("tablet-elias-01").is_aktiv() is False
+
+
+def test_OD3_paired_at_optional_fehlend_ist_ok(tmp_path):
+    """paired_at ist OPTIONAL: eine geraete.json OHNE das Feld lädt weiter
+    fehlerfrei, und to_dict trägt dann KEIN paired_at (kein null-Feld,
+    byte-stabile Diffs für nie gepaarte Geräte)."""
+    p = tmp_path / "geraete.json"
+    p.write_text(json.dumps(DEMO_GERAETE), encoding="utf-8")  # ohne paired_at
+
+    reg = registry_mod.load(str(p))
+    g = reg.get("tablet-elias-01")
+    assert g.paired_at is None
+    assert "paired_at" not in g.to_dict()
+
+
+def test_OD3_paired_at_leer_oder_falscher_typ_ist_dateifehler(tmp_path):
+    """Vorhandenes paired_at muss ein nicht-leerer String sein — leerer String
+    oder falscher Typ ist ein Datei-Fehler (RegistryError), analog zur strengen
+    Pflichtfeld-Behandlung. Fehlend bleibt separat davon erlaubt (Test oben)."""
+    for kaputt in ("", 12345, {"x": 1}):
+        import copy
+        data = copy.deepcopy(DEMO_GERAETE)
+        data["geraete"][0]["paired_at"] = kaputt
+        p = tmp_path / "geraete.json"
+        p.write_text(json.dumps(data), encoding="utf-8")
+        with pytest.raises(registry_mod.RegistryError):
+            registry_mod.load(str(p))
