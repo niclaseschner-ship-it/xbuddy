@@ -423,6 +423,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   faa_sessions=None, family_group_chat_id_getter=None,
                   geraete_origin_url=None, gaa_sessions=None,
                   cav_call_hook=None, display_url_origin=None,
+                  pairing_bot_token=None, pairing_origin=None,
                   zd_store_getter=None, kav_sessions=None,
                   plan_origin_url=None,
                   tes_sessions=None, panel_origin_url=None,
@@ -498,7 +499,12 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             tg, geraete_origin_url, gaa_sessions,
             family_group_chat_id_getter,
             cav_call_hook=cav_call_hook,
-            display_url_origin=display_url_origin))
+            display_url_origin=display_url_origin,
+            # GAA-3.8 / auth.md AUTH-2.a (T948): Pairing-Link-Zustellung.
+            # bot_token = HMAC-Sign-Key; origin = Funnel-FQDN (/auth/pair + PWA).
+            # Fehlt einer, entfällt der Pairing-Schritt still (E-GAA-5-Agnostik).
+            pairing_bot_token=pairing_bot_token,
+            pairing_origin=pairing_origin))
 
     if zd_store_getter is not None and kav_sessions is not None \
             and family_group_chat_id_getter is not None:
