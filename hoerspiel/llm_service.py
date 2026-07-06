@@ -146,8 +146,8 @@ def _build_user_context(idee: str, bible: str, historie: str,
 
     Der „# Instanz-Kontext"-Block ersetzt die früher im Template hartkodierten
     Angaben (Kind-Name, Alter, Serien-Name) — so nennt eine niclas-Folge nie
-    Paula/Neko und eine paula-Folge trägt Paula + den Serien-Namen (#1263).
-    Die Idee-Rückfall-Zeile ist instanz-neutral (kein „überrasche Paula" mehr).
+    Leerer serien_name → keine „Serie:"-Zeile (DEFAULT_SERIEN_RAHMEN='' neutral, T1336/OPEN-HSP-W).
+    Die Idee-Rückfall-Zeile ist instanz-neutral; kein fester Paula-/Serien-Default.
 
     `recherche_block` (HSP-57): der Fakten+Quellen-Block des Recherche-
     Vorschritts. Leer (Kind-Pfad / Degradation) → der Kontext ist BYTE-GLEICH
