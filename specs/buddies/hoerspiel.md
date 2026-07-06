@@ -2008,6 +2008,53 @@ gelesen/geschrieben; Kapitel-Wahl + Skip (HSP-52); PWA-Manifest
 `display:standalone` + MediaSession (HSP-22); harter Folgen-Cache offline
 abspielbar (HSP-54).
 
+## 16. Recherchierte Erwachsenen-Generierung (niclas) — HSP-56..HSP-60
+
+Die Erwachsenen-Instanz (niclas, `zielgruppe:erwachsen`) generiert einen
+**recherchierten Zwei-Host-Deep-Dive** (Dialog-Skript `KIM:`/`RUBEN:`). Ratifiziert
+berater-runde 2026-07-05/06 (Nic-Verdikt: Recherche-Vorschritt + externer Such-Provider
+Tavily). Single-Voice-Wiedergabe ist bewusst V0 (kein Multi-Voice-TTS).
+
+### HSP-56 — Zielgruppe-bewusster System-Prompt-Schnitt
+Zwei Prompt-Dateien `geschichtenbuddy-kind.md` / `geschichtenbuddy-erwachsen.md`;
+`_load_system_prompt(zielgruppe)` (`hoerspiel/llm_service.py`) wählt je Instanz. Die
+Kind-Datei ist die **byte-gleiche Umbenennung** der heutigen (Golden/Diff-Guard —
+paula/neko-Folgen bleiben identisch). Die Erwachsen-Datei **erlaubt düster** (niclas
+`ton`) und **erzwingt Dialog-Skript** (`KIM:`/`RUBEN:`) + META-Block statt narrativer
+Story-Absätze.
+
+### HSP-57 — Recherche-Vorschritt (kein agentischer Loop in V0)
+Ein Recherche-Service als **Vorschritt** vor dem bestehenden Single-Shot: Query-Gen
+(`get_completion`) aus dem `thema` → externe Such-API → Distill (`get_completion`) zu
+einem **Fakten+Quellen-Block**, der in den `complete_structured`-Single-Shot
+(`llm_service.py:150`) gespeist wird — der Single-Shot-Vertrag bleibt **unverändert**.
+`get_agent` (agentisch, tool_use-Loop) ist bewusst **deferiert** (der hoerspiel-Slot
+trägt die Agent-Caps bereits; späterer Drop-in, wenn der Loop belegten Mehrwert zeigt).
+
+### HSP-58 — Erwachsen-Invariante + Datenabfluss-Klassifikation
+Der Recherche-Vorschritt ist **hart an `zielgruppe:erwachsen` gebunden** (Config-
+Invariante) — **nie** bei einer Kind-Instanz. Es fließen **ausschließlich
+thema-abgeleitete Tech-Suchanfragen** an die externe Such-Cloud ab, **keine Personen-/
+Familiendaten** (Constitution §3 / RAT-26). **Provider V0: Tavily** (Nic-Setzung
+2026-07-06), hinter `tools/zugangsdaten`-Slot `tavily-api-key` + ZD-Pfad-Drop-In pro
+hoerspiel-Service. N-Suchen **hart gedeckelt** (Vorschlag 3–5, an `tiefe` gekoppelt).
+**Degradations-Pfad** bei Quota/Netz-Fehler: Folge **ohne** Recherche generieren +
+Log-Marker, kein harter Abbruch.
+
+### HSP-59 — Anti-Slop als Self-Check im Single-Shot
+Die Anti-Slop-Kriterien des Kits (Gedankenstrich-Stilmittel, unbelegte Zahl, doppelt
+erklärter Begriff, „Hallo-und-willkommen"-Einstieg, Kim/Ruben durchgehend einig,
+Weichspül-Landung) werden als **Self-Check in den Single-Shot-Prompt** gegossen — **0
+Zusatz-Calls**. Die zweite Berater/Antiberater-Gate-Schleife (eigener Prüf-Pass) ist
+**deferiert bis zu einem echten n=1-Slop-Schmerz**.
+
+### HSP-60 — Betrieb + Persistierung
+Log-Zähler `suchen_pro_folge`. Endpoint- **und** nginx-`proxy_read_timeout` gegen die
+**gemessene** neue Oberlänge (Query-Gen + N Suchen + Distill + Single-Shot) abgleichen —
+messen, nicht schätzen. `VOICES` bleibt Single-Voice (`album_manifest.py:17`, V0 ok).
+META-Block (`quellen[]`/`these`/`schnitt`/`begriffe_neu[]`) schreibt in
+`folgen-historie.md` fort.
+
 ---
 
 ## Entscheidungen
