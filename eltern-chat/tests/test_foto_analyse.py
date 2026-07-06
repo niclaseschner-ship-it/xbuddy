@@ -278,3 +278,23 @@ def test_foto_durchlauf_schreibt_telemetrie_mit_foto_slot(tmp_path, monkeypatch)
     assert client.messages.create.call_args.kwargs["model"] == "claude-opus-4-7"
     assert client.messages.create.call_args.kwargs["tool_choice"] == {
         "type": "tool", "name": "extract_termine"}
+
+
+# ----------------------------------------------------------------------
+#  TAB-5 Content-Guard (#528): Verfeinerungs-/Jahr-Klausel im System-Prompt
+# ----------------------------------------------------------------------
+
+def test_TAB5_system_prompt_enthaelt_verfeinerungs_klausel():
+    """TAB-5 / #528: _SYSTEM_PROMPT muss die Verfeinerungs-Klausel tragen, die
+    Jahres-Ableitung aus dem Begleittext erlaubt (ohne Termine zu erfinden).
+    Guard stellt sicher, dass zukünftige Prompt-Refactorings die Klausel nicht
+    stillschweigend verlieren."""
+    from skills.foto_analyse import _SYSTEM_PROMPT as prompt
+
+    # Kernaussage: Begleittext als zulässige Quelle für fehlende Infos (Jahreszahl)
+    assert "Begleittext" in prompt, "_SYSTEM_PROMPT fehlt 'Begleittext'-Referenz"
+    assert "Verfeinerungs" in prompt, "_SYSTEM_PROMPT fehlt Verfeinerungs-Hinweis-Klausel"
+    # Explizite Nennung von Jahreszahl-Ableitung aus dem Begleittext
+    assert "Jahreszahl" in prompt, "_SYSTEM_PROMPT fehlt Jahreszahl-Klausel"
+    # Keine Erfindung von Terminen (Anti-Halluzinations-Guard)
+    assert "erfindet" in prompt, "_SYSTEM_PROMPT fehlt Erfindungs-Verbot-Klausel"
