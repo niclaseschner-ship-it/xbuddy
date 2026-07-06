@@ -39,6 +39,7 @@ from telegram import TelegramError
 
 from skills.geraete_client import GeraeteClientError
 from skills.typing_indicator import fire_typing
+from tools.initdata import session_cookie
 
 # ============================================================
 #  Konstanten (GER-2/GER-3 spiegelnde Werte fuer die Konversation)
@@ -96,6 +97,14 @@ CAV_FAILED = ("Das Gerät ist angelegt, aber das Zertifikat konnte ich gerade "
 CANCELLED = "Ok, abgebrochen — das Gerät wurde nicht gespeichert."
 DONE_SINGLE_FMT = ("Geschafft, %s ist angelegt. Display-URL: %s")
 DONE_MULTI_FMT = ("Geschafft — angelegt: %s.")
+
+# GAA-3.8: Pairing-Anweisung nach Registry-Schreiben. Zwei Zeilen (Anweisung +
+# Hinweis) wie in specs/platform/geraet-anlegen.md GAA-3.8 (2) beschrieben.
+PAIRING_ANWEISUNG_FMT = (
+    "Öffne diesen Link **auf dem soeben angelegten Gerät**:\n"
+    "%s\n(gilt 15 Minuten)\n"
+    "Nach dem Öffnen kannst du die Mini-Apps und den Display-Renderer dieses "
+    "Geräts ohne weiteren Login benutzen.")
 
 # V1: einzig zulässiger Verwendungs-Wert (Spec-Schnitt GAA-3.5 / OPEN-GAA-D).
 # Wir fragen trotzdem (Quick-Reply mit nur dieser einen Option) — so bleibt
@@ -156,7 +165,8 @@ class GeraetAnlegenResult:
 def geraet_anlegen(tg, chat_id, user_id, family_group_chat_id,
                    client, next_message,
                    cav_call_hook=None, display_url_origin=None,
-                   typing_fn: Callable[[], None] | None = None):
+                   typing_fn: Callable[[], None] | None = None,
+                   pairing_bot_token=None, pairing_origin=None):
     """Legt ein oder mehrere Geräte an (GAA-1).
 
     `tg`                    — Telegram-Kanal (mit `send_message`,
@@ -187,6 +197,14 @@ def geraet_anlegen(tg, chat_id, user_id, family_group_chat_id,
                               send_message-Phase aufgerufen (EC-25: Typing-Indikator,
                               Best-Effort, Fehler werden geschluckt). Default None →
                               No-op (Backward-Compat). Vgl. skills/typing_indicator.py.
+    `pairing_bot_token`     — optional (GAA-3.8): Bot-Token als HMAC-Sign-Key für
+                              den Pairing-Token. Fehlt er (oder `pairing_origin`),
+                              entfällt der Pairing-Link-Schritt stillschweigend.
+    `pairing_origin`        — optional (GAA-3.8): Funnel-FQDN-Origin für den
+                              Pairing-Link (`<origin>/auth/pair?token=…`), z. B.
+                              „https://buddyboard.demo-tailnet.ts.net". Muss die
+                              öffentliche Origin sein, unter der /auth/pair (seiten)
+                              und die PWA liegen (auth.md AUTH-2 First-Party-Cookie).
 
     Liefert ein `GeraetAnlegenResult`. Schreibt ausschließlich über die
     HTTP-Schreib-Schnittstelle der Geraete-Komponente (GAA-3.7, GER-15).
@@ -209,6 +227,11 @@ def geraet_anlegen(tg, chat_id, user_id, family_group_chat_id,
             fire_typing(typing_fn)
             _antworte_display_url(tg, chat_id, outcome.display_id,
                                   display_url_origin)
+            # GAA-3.8: Pairing-Link posten (nach Registry-Schreiben, vor der
+            # „noch ein Gerät?"-Schleife). Ohne Pairing-Setup (bot_token/origin
+            # fehlt) entfällt der Schritt stillschweigend.
+            _poste_pairing_link(tg, chat_id, outcome.display_id,
+                                pairing_bot_token, pairing_origin, typing_fn)
             # GAA-6: optional CA-Verteilung anstoßen — erst nach erfolgreicher
             # Anlage, vor der Schleifen-Frage. Ablehnung oder CAV-Fehler bricht
             # die Schleife nicht ab.
@@ -444,6 +467,26 @@ def _frage_und_rufe_cav(tg, chat_id, user_id, os_wert,
 # ============================================================
 #  Helpers
 # ============================================================
+
+def _poste_pairing_link(tg, chat_id, display_id, bot_token, origin,
+                        typing_fn=None):
+    """GAA-3.8: generiert den Pairing-Token und postet die Anweisung.
+
+    Der Token ist stateless (HMAC-SHA256 mit dem Bot-Token als Sign-Key,
+    kodiert die `display_id`, 15 Minuten gültig — `tools.initdata.session_cookie`,
+    auth.md AUTH-2.a / OD4). Die Funktion baut daraus den Pairing-Link
+    `<origin>/auth/pair?token=<X>` und postet Anweisung + Hinweis (GAA-3.8 (2)).
+
+    Ohne `bot_token`/`origin` (Tests ohne Pairing-Setup oder noch nicht am
+    Trigger verdrahtet) entfällt der Schritt stillschweigend — die Funktion
+    bleibt ohne HMAC-Setup aufrufbar (Agnostik analog CAV, E-GAA-5)."""
+    if not bot_token or not origin:
+        return
+    token = session_cookie.sign_pairing(display_id, bot_token)
+    link = "%s/auth/pair?token=%s" % (origin.rstrip("/"), token)
+    fire_typing(typing_fn)
+    _send(tg, chat_id, PAIRING_ANWEISUNG_FMT % link)
+
 
 def _antworte_display_url(tg, chat_id, display_id, origin):
     """GAA-3.7 zweiter Teil: Display-URL zurück an den Aufrufer."""

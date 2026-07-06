@@ -405,3 +405,88 @@ def test_T285_S1_gaa_typing_fn_fires_per_session_step():
         "send_chat_action wurde an family_group_chat_id=%s gesendet — "
         "typing_fn-Lambda schließt falsche ID ein. Aufrufe: %r"
         % (_GAA_FAMILY_GROUP_ID, tg.chat_actions))
+
+
+# ============================================================
+#  GAA-3.8 / auth.md AUTH-2.a — Pairing-Params-Durchreichung (T948)
+# ============================================================
+
+def _fake_gaa_capturing(captured):
+    """Ersetzt geraet_anlegen.geraet_anlegen durch ein Doppel, das die Kwargs
+    aufzeichnet und sofort ein leeres Ergebnis liefert (kein Dialog)."""
+    def fake_geraet_anlegen(*args, **kwargs):
+        captured.update(kwargs)
+        return geraet_anlegen.GeraetAnlegenResult(vergebene_display_ids=[])
+    return fake_geraet_anlegen
+
+
+def test_GAA_38_task_reicht_pairing_params_an_geraet_anlegen_durch(monkeypatch):
+    """T948 / GAA-3.8: der Task reicht pairing_bot_token + pairing_origin an
+    die trigger-agnostische geraet_anlegen-Funktion durch. Ohne diese
+    Durchreichung entfällt _poste_pairing_link still (Watchdog-Befund: das
+    Kind-Tablet bekommt keinen Pairing-Link und kann nicht gepaart werden).
+    Beleg: die durchgereichten Werte kommen bei geraet_anlegen an."""
+    captured = {}
+    monkeypatch.setattr(geraet_anlegen, "geraet_anlegen",
+                        _fake_gaa_capturing(captured))
+
+    user_id = 7
+    tg = FakeTelegram(members=_members(user_id))
+    sessions = {}
+    task = GeraetAnlegenTask(
+        tg, "http://test",
+        sessions=sessions,
+        family_group_chat_id_getter=lambda: "-100",
+        client=FakeGeraeteClient(),
+        pairing_bot_token="BOT:TOKEN-123",
+        pairing_origin="https://buddyboard.demo-tailnet.ts.net")
+    task.execute(
+        arguments={}, turn_context=TurnContext(
+            chat_id=user_id, from_user_id=user_id, private_chat_id=user_id))
+    _wait_until_session_done(sessions, user_id)
+
+    assert captured.get("pairing_bot_token") == "BOT:TOKEN-123"
+    assert captured.get("pairing_origin") == \
+        "https://buddyboard.demo-tailnet.ts.net"
+
+
+def test_GAA_38_pairing_params_default_none_backward_compat(monkeypatch):
+    """Ohne pairing_*-Argumente reicht der Task None durch (Backward-Compat /
+    E-GAA-5-Agnostik): geraet_anlegen entfällt den Pairing-Schritt dann still.
+    Belegt, dass bestehende Aufrufer (ohne Pairing-Setup) unverändert laufen."""
+    captured = {}
+    monkeypatch.setattr(geraet_anlegen, "geraet_anlegen",
+                        _fake_gaa_capturing(captured))
+
+    user_id = 7
+    tg = FakeTelegram(members=_members(user_id))
+    sessions = {}
+    task = GeraetAnlegenTask(
+        tg, "http://test",
+        sessions=sessions,
+        family_group_chat_id_getter=lambda: "-100",
+        client=FakeGeraeteClient())
+    task.execute(
+        arguments={}, turn_context=TurnContext(
+            chat_id=user_id, from_user_id=user_id, private_chat_id=user_id))
+    _wait_until_session_done(sessions, user_id)
+
+    assert captured.get("pairing_bot_token") is None
+    assert captured.get("pairing_origin") is None
+
+
+def test_GAA_38_build_catalog_wires_pairing_params_into_task():
+    """T948 Entry-Path: build_catalog reicht pairing_bot_token + pairing_origin
+    bis in die konstruierte GeraetAnlegenTask durch (live-Zustellweg, nicht nur
+    isoliert testbar). Ohne diese Verdrahtung bekäme die GAA-Funktion die Params
+    nie und _poste_pairing_link bliebe im Live-Betrieb stumm."""
+    catalog = build_catalog(
+        FakeTelegram(), "/instanz/rootCA.pem",
+        geraete_origin_url="http://127.0.0.1:5040",
+        gaa_sessions={},
+        family_group_chat_id_getter=lambda: "-100",
+        pairing_bot_token="BOT:TOKEN-123",
+        pairing_origin="https://buddyboard.demo-tailnet.ts.net")
+    task = catalog._tasks["geraet_anlegen"]
+    assert task._pairing_bot_token == "BOT:TOKEN-123"
+    assert task._pairing_origin == "https://buddyboard.demo-tailnet.ts.net"
