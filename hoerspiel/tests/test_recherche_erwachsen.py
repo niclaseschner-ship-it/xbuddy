@@ -1,15 +1,16 @@
-"""HSP-56..60 — Recherchierte Erwachsenen-Generierung (T1340).
+"""HSP-56..60 — Recherchierte Erwachsenen-Generierung (T1340/T1371).
 
 Belegt den zielgruppe-bewussten Prompt-Schnitt (HSP-56), den Recherche-
-Vorschritt (HSP-57), die HARTE Datenabfluss-Invariante (HSP-58), den Anti-Slop-
-Self-Check + META-Block (HSP-59/HSP-60).
+Vorschritt über server-seitiges `web_search` (HSP-57, Form B1/T1371), die HARTE
+Datenabfluss-Invariante (HSP-58), den Anti-Slop-Self-Check + META-Block
+(HSP-59/HSP-60).
 
-SICHERHEITS-GATE (HSP-58): kein Live-Tavily-Call — der Such-Client ist immer
-gedoppelt. Die Payload-Inspektion (AC3c) prüft, dass NUR thema-abgeleitete
-Begriffe an Tavily gehen, NIE Bible/Historie/Personen-Daten.
+T1371-Pivot: der externe Tavily-Client ist entfernt. Die Recherche läuft über
+EINEN `get_agent`-Call mit aktiviertem `web_search` (Anthropic-Infra). Die Tests
+doppeln die Agent-Sicht (`FakeAgent`) — KEIN Live-Netz. Die Payload-Inspektion
+(AC3c) prüft, dass NUR das thema an web_search geht, NIE Bible/Historie/Personen.
 """
 
-import json
 import os
 import sys
 
@@ -17,41 +18,25 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__f
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-import pytest  # noqa: E402
-
 from hoerspiel import llm_service, research_service  # noqa: E402
 from hoerspiel.providers.base import LLMProvider  # noqa: E402
-from hoerspiel.tavily_client import (  # noqa: E402
-    TavilyClient,
-    TavilyError,
-    resolve_tavily_key,
-)
 
 # ============================================================
 #  Doppelungen (kein Netz, kein Live-LLM)
 # ============================================================
 
 class FakeLLM(LLMProvider):
-    """Deckt beide Nähte: `complete` (Query-Gen + Distill, HSP-57) und
-    `complete_structured` (Folgen-Vorschlag, HSP-11). Merkt sich alle Calls.
+    """Deckt den Single-Shot (`complete_structured`, HSP-11). Der Recherche-
+    Vorschritt läuft NICHT mehr über diesen Provider, sondern über `agent`
+    (get_agent-Sicht mit web_search) — hier separat gedoppelt (`FakeAgent`).
     """
 
     name = "fake"
     model = "fake-model"
 
-    def __init__(self, queries="quantencomputing risiken\nquantencomputing studien",
-                 fakten="- Fakt A (belegt)\n\nQuellen:\n- https://example.org/a"):
-        self._queries = queries
-        self._fakten = fakten
-        self.complete_calls = []          # (system, user)
+    def __init__(self):
         self.last_structured_user = None
         self.last_structured_schema = None
-
-    def complete(self, system, user):
-        self.complete_calls.append((system, user))
-        if "Suchanfragen" in system or "Recherche-Assistent" in system:
-            return self._queries
-        return self._fakten
 
     def complete_structured(self, system, user, *, tool_name,
                             tool_description, input_schema):
@@ -73,20 +58,47 @@ class FakeLLM(LLMProvider):
         return antwort
 
 
-class SpyTavily:
-    """Merkt sich JEDE gesuchte query (AC3c-Payload-Inspektion)."""
+class FakeAgent:
+    """Doppelung der `get_agent`-Sicht (`.step` + `.capabilities`).
 
-    def __init__(self, results=None, fehler=None):
-        self.queries = []
-        self._results = results if results is not None else [
-            {"title": "T", "url": "https://example.org/a", "content": "Inhalt"}]
-        self._fehler = fehler
+    Merkt sich JEDEN `.step`-Aufruf (AC3c-Payload-Inspektion). `raises` simuliert
+    einen web_search-/Provider-Fehler; `caps` steuert das opt-in-Gate (Vendor
+    ohne `web_search` → Degradation).
+    """
 
-    def suche(self, query):
-        self.queries.append(query)
-        if self._fehler is not None:
-            raise self._fehler
-        return list(self._results)
+    def __init__(self, *, text="- Fakt A (belegt)", sources=None,
+                 requests=None, raises=None, caps=frozenset({"web_search"})):
+        self._text = text
+        self._sources = sources if sources is not None else [
+            {"url": "https://example.org/a", "title": "T", "page_age": None}]
+        self._requests = requests
+        self._raises = raises
+        self.capabilities = caps
+        self.step_calls = []          # (system, messages, tools)
+
+    def step(self, system, messages, tools):
+        self.step_calls.append((system, messages, tools))
+        if self._raises is not None:
+            raise self._raises
+        req = self._requests if self._requests is not None else len(self._sources)
+        return {
+            "text": self._text,
+            "tool_calls": [],
+            "usage": None,
+            "web_search": list(self._sources),
+            "web_search_requests": req,
+        }
+
+
+def _step_user(agent):
+    """Zieht die reine User-Nachricht (das thema) aus dem letzten step-Call."""
+    _system, messages, _tools = agent.step_calls[-1]
+    return messages[-1]["content"]
+
+
+def _step_tool_max_uses(agent):
+    _system, _messages, tools = agent.step_calls[-1]
+    return tools[0]["max_uses"]
 
 
 class FakeStore:
@@ -99,7 +111,7 @@ class FakeStore:
         return self._werte.get(name, default)
 
 
-# Bible/Historie mit Familien-Daten — dürfen NIE in die Suchanfrage geraten.
+# Bible/Historie mit Familien-Daten — dürfen NIE in die web_search-Anfrage geraten.
 _BIBLE_MIT_FAMILIE = ("Paula (4 Jahre) wohnt im Dreisamtal. Geheimwort: "
                       "Vögelchen. Neko ist die Katze der Familie Eschner.")
 _HISTORIE_MIT_FAMILIE = "## Folge 1: Paula und Neko im Garten"
@@ -143,56 +155,51 @@ def test_kind_prompt_byte_gleich_dateipfad():
 
 
 # ============================================================
-#  HSP-57 — Recherche-Vorschritt verdrahtet
+#  HSP-57 — Recherche-Vorschritt (web_search) verdrahtet
 # ============================================================
 
 def test_erwachsen_speist_recherche_block_in_single_shot():
-    """AC2: Query-Gen → Tavily → Distill → Fakten-Block landet im Single-Shot-User."""
+    """AC2: web_search-Fakten+Quellen landen im Single-Shot-User-Kontext."""
     llm = FakeLLM()
-    tavily = SpyTavily()
+    agent = FakeAgent()
     vorschlag = llm_service.erzeuge_folgen_vorschlag(
         idee="Quantencomputing und seine Risiken",
         bible="", historie="", naechste_nummer=1, llm=llm,
-        zielgruppe="erwachsen", tavily=tavily)
+        zielgruppe="erwachsen", agent=agent)
     # Der Recherche-Block ist im User-Kontext des Single-Shots.
     assert "# Recherche (Fakten & Quellen)" in llm.last_structured_user
     assert "Fakt A (belegt)" in llm.last_structured_user
+    assert "https://example.org/a" in llm.last_structured_user
     # Single-Shot-Vertrag: complete_structured mit erwachsen-Schema.
     assert "meta" in llm.last_structured_schema["properties"]
-    # Query-Gen + Distill = 2 Freitext-Calls; Tavily lief.
-    assert len(llm.complete_calls) == 2
-    assert tavily.queries
+    # EIN web_search-Call (Form B1), kein Zwei-Stufen-Query-Gen/Distill mehr.
+    assert len(agent.step_calls) == 1
     assert vorschlag["meta"]["these"] == "Die zentrale These."
 
 
 def test_kind_bleibt_single_shot_ohne_recherche_schema():
     """AC2/AC3a: Kind-Pfad nutzt das UNVERÄNDERTE Kind-Schema, kein meta."""
     llm = FakeLLM()
-    tavily = SpyTavily()
+    agent = FakeAgent()
     vorschlag = llm_service.erzeuge_folgen_vorschlag(
         idee="Stigi findet eine Feder", bible="", historie="",
         naechste_nummer=1, llm=llm, name="Paula", alter=4,
-        zielgruppe="kind", tavily=tavily)
+        zielgruppe="kind", agent=agent)
     assert llm.last_structured_schema == llm_service.FOLGEN_INPUT_SCHEMA
     assert "meta" not in llm.last_structured_schema["properties"]
     assert "meta" not in vorschlag
     assert "# Recherche" not in llm.last_structured_user
 
 
-def test_n_suchen_hart_gedeckelt():
-    """AC2: N-Suchen hart gedeckelt in [3,5], an tiefe gekoppelt."""
-    # Query-Gen liefert 20 Zeilen — es dürfen NIE mehr als MAX_SUCHEN abgehen.
-    viele = "\n".join("suche %d" % i for i in range(20))
-    llm = FakeLLM(queries=viele)
-    tavily = SpyTavily()
-    research_service.recherchiere(
-        thema="thema", llm=llm, tavily=tavily, tiefe="tief")
-    assert len(tavily.queries) == research_service.MAX_SUCHEN == 5
+def test_n_suchen_hart_gedeckelt_ueber_max_uses():
+    """AC2: N-Suchen hart gedeckelt in [3,5] via web_search `max_uses`, an tiefe."""
+    agent_tief = FakeAgent()
+    research_service.recherchiere(thema="thema", agent=agent_tief, tiefe="tief")
+    assert _step_tool_max_uses(agent_tief) == research_service.MAX_SUCHEN == 5
 
-    tavily2 = SpyTavily()
-    research_service.recherchiere(
-        thema="thema", llm=FakeLLM(queries=viele), tavily=tavily2, tiefe="flach")
-    assert len(tavily2.queries) == research_service.MIN_SUCHEN == 3
+    agent_flach = FakeAgent()
+    research_service.recherchiere(thema="thema", agent=agent_flach, tiefe="flach")
+    assert _step_tool_max_uses(agent_flach) == research_service.MIN_SUCHEN == 3
 
     # Unbekannte tiefe → Default, immer in [MIN,MAX].
     assert research_service.MIN_SUCHEN <= research_service._n_fuer_tiefe(
@@ -206,64 +213,57 @@ def test_n_suchen_hart_gedeckelt():
 def test_recherche_laeuft_NIE_bei_kind():
     """AC3a (HART): Recherche läuft NIE bei zielgruppe:kind (Config-Invariante)."""
     llm = FakeLLM()
-    tavily = SpyTavily()
+    agent = FakeAgent()
     llm_service.erzeuge_folgen_vorschlag(
         idee="Eine harmlose Kinder-Idee", bible=_BIBLE_MIT_FAMILIE,
         historie=_HISTORIE_MIT_FAMILIE, naechste_nummer=1, llm=llm,
-        name="Paula", alter=4, zielgruppe="kind", tavily=tavily)
-    assert tavily.queries == [], "HSP-58-BRUCH: Tavily lief bei Kind-Instanz"
-    # Auch kein Query-Gen/Distill-Call für Kind.
-    assert llm.complete_calls == []
+        name="Paula", alter=4, zielgruppe="kind", agent=agent)
+    assert agent.step_calls == [], "HSP-58-BRUCH: web_search lief bei Kind-Instanz"
 
 
-def test_tavily_payload_enthaelt_KEINE_familiendaten():
-    """AC3c (HART): die an Tavily gesendete Suchanfrage enthält NUR thema-
-    abgeleitete Begriffe — NIE Bible/Historie/Personen-Daten (§3/RAT-26)."""
-    # Query-Gen würde (im Fake) genau das thema echoen; selbst wenn ein echtes
-    # Modell driftet, kann es nur aus dem thema schöpfen — Bible/Historie werden
-    # dem Recherche-Service STRUKTURELL nicht übergeben.
-    llm = FakeLLM(queries="quantencomputing risiken\nquantencomputing studienlage")
-    tavily = SpyTavily()
+def test_websearch_payload_enthaelt_KEINE_familiendaten():
+    """AC3c (HART): die an web_search gesendete Nachricht enthält NUR das thema —
+    NIE Bible/Historie/Personen-Daten (§3/RAT-26)."""
+    llm = FakeLLM()
+    agent = FakeAgent()
     llm_service.erzeuge_folgen_vorschlag(
         idee="Quantencomputing und seine gesellschaftlichen Risiken",
         bible=_BIBLE_MIT_FAMILIE, historie=_HISTORIE_MIT_FAMILIE,
         naechste_nummer=1, llm=llm, name="Niclas", alter=39,
-        zielgruppe="erwachsen", tavily=tavily)
+        zielgruppe="erwachsen", agent=agent)
 
-    assert tavily.queries, "Recherche muss gelaufen sein"
-    gesamt_payload = " ".join(tavily.queries)
+    assert agent.step_calls, "Recherche muss gelaufen sein"
+    payload = _step_user(agent)
+    # Der web_search-Call bekam AUSSCHLIESSLICH das thema — kein bible/historie.
+    assert payload == "Quantencomputing und seine gesellschaftlichen Risiken"
     for token in _FAMILIEN_TOKEN:
-        assert token.lower() not in gesamt_payload.lower(), (
-            "HSP-58-BRUCH: Familien-Token %r floss in die Tavily-Suchanfrage: %r"
-            % (token, tavily.queries))
-
-    # Zusätzlich: der Query-Gen-Call bekam AUSSCHLIESSLICH das thema als User —
-    # NIE bible/historie (strukturelle Absicherung der Invariante).
-    query_gen_user = llm.complete_calls[0][1]
-    for token in _FAMILIEN_TOKEN:
-        assert token.lower() not in query_gen_user.lower(), (
-            "HSP-58-BRUCH: Query-Gen bekam Familien-Daten im User-Input")
+        assert token.lower() not in payload.lower(), (
+            "HSP-58-BRUCH: Familien-Token %r floss in die web_search-Anfrage: %r"
+            % (token, payload))
 
 
-def test_degradation_bei_fehlendem_key():
-    """AC3b (HART): fehlender Key → Folge OHNE Recherche + Marker, kein Abbruch."""
-    # tavily=None simuliert „kein Default-Client" (Key-Slot leer).
-    llm = FakeLLM()
-    # _default_tavily_client greift NUR wenn tavily nicht injiziert wird; wir
-    # testen die research-Ebene direkt mit tavily=None.
-    ergebnis = research_service.recherchiere(
-        thema="thema", llm=llm, tavily=None)
+def test_degradation_bei_fehlender_agent_sicht():
+    """AC3b (HART): keine Agent-Sicht → Folge OHNE Recherche + Marker, kein Abbruch."""
+    ergebnis = research_service.recherchiere(thema="thema", agent=None)
     assert ergebnis.degraded is True
     assert ergebnis.block == ""
     assert ergebnis.suchen_count == 0
 
 
-def test_degradation_bei_netz_oder_quota_fehler():
-    """AC3b (HART): Netz-/Quota-Fehler → Degradation, kein harter Abbruch."""
-    llm = FakeLLM()
-    tavily = SpyTavily(fehler=TavilyError("HTTP 429 (Quota)"))
-    ergebnis = research_service.recherchiere(
-        thema="thema", llm=llm, tavily=tavily)
+def test_degradation_bei_vendor_ohne_web_search():
+    """AC3b/AC4 (HART): Slot-Vendor ohne `web_search`-Capability (z. B. Mistral)
+    → Degradation, KEIN Silent-Send eines unbekannten Server-Tools."""
+    agent = FakeAgent(caps=frozenset({"tool_use", "system_message_distinct"}))
+    ergebnis = research_service.recherchiere(thema="thema", agent=agent)
+    assert ergebnis.degraded is True
+    assert ergebnis.block == ""
+    assert agent.step_calls == [], "web_search darf ohne Capability NICHT laufen"
+
+
+def test_degradation_bei_websearch_fehler():
+    """AC3b (HART): web_search-/Provider-Fehler → Degradation, kein harter Abbruch."""
+    agent = FakeAgent(raises=RuntimeError("HTTP 429 (Quota)"))
+    ergebnis = research_service.recherchiere(thema="thema", agent=agent)
     assert ergebnis.degraded is True
     assert ergebnis.block == ""
 
@@ -271,8 +271,18 @@ def test_degradation_bei_netz_oder_quota_fehler():
     vorschlag = llm_service.erzeuge_folgen_vorschlag(
         idee="thema", bible="", historie="", naechste_nummer=1,
         llm=FakeLLM(), zielgruppe="erwachsen",
-        tavily=SpyTavily(fehler=TavilyError("Netz weg")))
+        agent=FakeAgent(raises=RuntimeError("Netz weg")))
     assert vorschlag["titel"]
+
+
+def test_degradation_bei_leeren_treffern():
+    """AC3b: web_search ohne Treffer → Degradation (keine belegte Recherche)."""
+    agent = FakeAgent(sources=[], requests=2)
+    ergebnis = research_service.recherchiere(thema="thema", agent=agent)
+    assert ergebnis.degraded is True
+    assert ergebnis.block == ""
+    # Der Zähler hält die (leer gebliebenen) Suchen trotzdem fest.
+    assert ergebnis.suchen_count == 2
 
 
 def test_degradation_folge_kommt_trotzdem_ohne_block():
@@ -280,58 +290,8 @@ def test_degradation_folge_kommt_trotzdem_ohne_block():
     llm = FakeLLM()
     llm_service.erzeuge_folgen_vorschlag(
         idee="thema", bible="", historie="", naechste_nummer=1, llm=llm,
-        zielgruppe="erwachsen", tavily=SpyTavily(fehler=TavilyError("weg")))
+        zielgruppe="erwachsen", agent=FakeAgent(raises=RuntimeError("weg")))
     assert "# Recherche (Fakten & Quellen)" not in llm.last_structured_user
-
-
-# ============================================================
-#  Tavily-Client — Key-Read + Payload + Degradation
-# ============================================================
-
-def test_resolve_tavily_key_liest_slot():
-    """AC2: der Key kommt über die Zugangsdaten-Naht aus dem tavily-api-key-Slot."""
-    store = FakeStore({"tavily-api-key": "geheim-123"})
-    assert resolve_tavily_key(store) == "geheim-123"
-    assert resolve_tavily_key(FakeStore({})) is None
-
-
-def test_tavily_client_payload_nur_query_und_key():
-    """AC3c: der HTTP-Payload trägt query + technische Parameter, sonst nichts."""
-    erfasst = {}
-
-    def transport(url, payload_bytes):
-        erfasst["url"] = url
-        erfasst["payload"] = json.loads(payload_bytes.decode("utf-8"))
-        return json.dumps({"results": [
-            {"title": "T", "url": "https://x/y", "content": "c"}]}).encode()
-
-    client = TavilyClient(api_key="k", transport=transport)
-    treffer = client.suche("nur diese suchanfrage")
-    assert erfasst["payload"]["query"] == "nur diese suchanfrage"
-    assert erfasst["payload"]["api_key"] == "k"
-    # Nur erwartete Schlüssel — kein Bible/Historie/Context-Feld.
-    assert set(erfasst["payload"].keys()) <= {
-        "api_key", "query", "max_results", "search_depth"}
-    assert treffer[0]["url"] == "https://x/y"
-
-
-def test_tavily_client_ohne_key_wirft():
-    """AC3b: fehlender Key → TavilyError (Aufrufer degradiert)."""
-    client = TavilyClient(api_key=None)
-    with pytest.raises(TavilyError):
-        client.suche("x")
-
-
-def test_tavily_client_http_fehler_wirft_tavilyerror():
-    """AC3b: HTTP-/Netz-Fehler → TavilyError (kein roher urllib-Fehler nach oben)."""
-    import urllib.error
-
-    def transport(url, payload_bytes):
-        raise urllib.error.URLError("connection refused")
-
-    client = TavilyClient(api_key="k", transport=transport)
-    with pytest.raises(TavilyError):
-        client.suche("x")
 
 
 # ============================================================
@@ -343,7 +303,7 @@ def test_meta_block_wird_gefuellt_und_formatiert():
     llm = FakeLLM()
     vorschlag = llm_service.erzeuge_folgen_vorschlag(
         idee="thema", bible="", historie="", naechste_nummer=1, llm=llm,
-        zielgruppe="erwachsen", tavily=SpyTavily())
+        zielgruppe="erwachsen", agent=FakeAgent())
     meta = vorschlag["meta"]
     assert meta["these"]
     assert meta["schnitt"]
@@ -365,9 +325,15 @@ def test_meta_fehlt_reisst_folge_nicht_ab():
 
 
 def test_suchen_pro_folge_zaehler():
-    """AC4/HSP-60: Log-Zähler suchen_pro_folge = Anzahl gelaufener Suchen."""
-    llm = FakeLLM(queries="a\nb\nc\nd\ne")
-    tavily = SpyTavily()
+    """AC4/HSP-60: Log-Zähler suchen_pro_folge = web_search_requests."""
+    agent = FakeAgent(
+        sources=[
+            {"url": "https://a/1", "title": "1", "page_age": None},
+            {"url": "https://a/2", "title": "2", "page_age": None},
+            {"url": "https://a/3", "title": "3", "page_age": None},
+        ],
+        requests=3)
     ergebnis = research_service.recherchiere(
-        thema="thema", llm=llm, tavily=tavily, tiefe="tief")
-    assert ergebnis.suchen_count == len(tavily.queries) == 5
+        thema="thema", agent=agent, tiefe="tief")
+    assert ergebnis.suchen_count == 3
+    assert ergebnis.quellen == ["https://a/1", "https://a/2", "https://a/3"]

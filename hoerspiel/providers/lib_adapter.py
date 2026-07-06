@@ -25,7 +25,7 @@ Beide Lib-Fassaden werden EINMAL im `__init__` gebaut (Slot + effektives Modell
 
 import logging
 
-from tools.llm import LLMCapabilityError, get_completion, get_singleshot
+from tools.llm import LLMCapabilityError, get_agent, get_completion, get_singleshot
 from tools.llm import ProviderError as LibProviderError
 
 from .base import LLMProvider, ProviderError
@@ -55,6 +55,12 @@ class LibSingleshotAdapter(LLMProvider):
         # (Required-Set nur `system_message_distinct` → trägt Claude UND Mistral).
         self._completion = get_completion(slot, model, max_tokens=max_tokens)
         self._slot = slot
+        self._model = model
+        self._max_tokens = max_tokens
+        # T1371: Agent-Sicht (mit opt-in web_search) wird LAZY beim ersten
+        # Recherche-Bedarf gebaut — Kind-Instanzen (paula/neko) recherchieren nie
+        # und ziehen keine dritte Fassade beim Boot.
+        self._agent = None
         # Für Diagnose/Tests sichtbar (gleiche Modell-Quelle wie die Fassade).
         self.model = getattr(self._singleshot, "model", "") or model
 
@@ -77,6 +83,21 @@ class LibSingleshotAdapter(LLMProvider):
         except LibProviderError as e:
             logger.warning("tools.llm-Anbieter nicht erreichbar: %s", e)
             raise ProviderError(str(e)) from e
+
+    def recherche_agent(self):
+        """Liefert die `get_agent`-Sicht für den Recherche-Vorschritt (T1371).
+
+        Form B1: EIN Agent-Call mit server-seitigem `web_search` (dieselbe
+        `tools.llm`-Route, derselbe Slot/Key/Modell wie der Single-Shot — hält
+        die Recherche beim Anthropic-Vendor, keine Dritt-Cloud). Wird lazy beim
+        ersten Aufruf gebaut (nur erwachsen-Instanzen recherchieren). Ob der
+        Slot-Vendor `web_search` deklariert, prüft der `research_service` über
+        `agent.capabilities` — bei Mistral degradiert der Vorschritt.
+        """
+        if self._agent is None:
+            self._agent = get_agent(
+                self._slot, self._model, max_tokens=self._max_tokens)
+        return self._agent
 
     def complete(self, system, user):
         """Freitext-Synopse (HSP-16) über die Lib-Completion-Sicht (#1131).

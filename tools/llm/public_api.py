@@ -295,10 +295,16 @@ class _AgentFacade:
     analog `_ChatFacade`.
     """
 
-    def __init__(self, vendor: Any, caller: str, slot: str):
+    def __init__(self, vendor: Any, caller: str, slot: str,
+                 caps: frozenset[Capability] = frozenset()):
         self._vendor = vendor
         self._caller = caller
         self._slot = slot
+        # T1371: die Vendor-CAPABILITIES sichtbar machen, damit ein Konsument
+        # das opt-in `web_search`-Server-Tool NUR aktiviert, wenn der Slot-Vendor
+        # es deklariert (Anthropic ja, Mistral nein). `web_search` ist KEIN
+        # Boot-Minimum (REQUIRED_AGENT unverändert) — der Gate sitzt beim Rufer.
+        self.capabilities = caps
         self.model = getattr(vendor, "model", "")
         self.name = "agent"
 
@@ -337,8 +343,11 @@ class _AgentFacade:
         Für Konsumenten wie eltern-chat, die ihren eigenen Loop behalten und pro
         Iteration genau einen Create wollen (vgl. `run()`, das den Loop selbst
         fährt). Liefert die geparste Provider-Antwort
-        `{"text", "tool_calls", "usage"}` durch — Tool-Use-Blöcke werden NICHT
-        ausgeführt, nur geparst. Telemetrie pro Create am Vendor (LLMP-S4).
+        `{"text", "tool_calls", "usage", "web_search", "web_search_requests"}`
+        durch — Tool-Use-Blöcke werden NICHT ausgeführt, nur geparst. Die beiden
+        `web_search`-Schlüssel sind additiv (T1371): ohne aktiviertes
+        `web_search`-Server-Tool bleiben sie `[]`/`0`. Telemetrie pro Create am
+        Vendor (LLMP-S4).
         """
         return self._vendor.agent_step(
             system=system,
@@ -424,6 +433,12 @@ def get_agent(slot: str, model: str = "", max_tokens: int = 0) -> Any:
     ist NICHT mehr Boot-Minimum (R0). Liefert `.run()` (Tool-Loop) und
     `.step()` (Single-Turn, ein Create).
 
+    Opt-in `web_search` (T1371): die Fassade legt die Vendor-`CAPABILITIES` als
+    `.capabilities` offen. Ein Konsument aktiviert das server-seitige
+    `web_search`-Tool NUR, wenn `"web_search" in agent.capabilities` (Anthropic
+    ja, Mistral nein) — `web_search` ist KEIN Required-Set-Mitglied, also nie
+    Boot-Minimum; der Gate sitzt beim Rufer, nicht im Boot.
+
     `model` (T1085-additiv): wählt das effektive Modell explizit; leer (Default)
     nutzt den Vendor-`DEFAULT_MODEL` (rückwärtskompatibel — `get_agent(slot)`
     bleibt unverändert). eltern-chat reicht hier das alte effektive Modell durch
@@ -436,7 +451,7 @@ def get_agent(slot: str, model: str = "", max_tokens: int = 0) -> Any:
     damit lange Antworten nicht beim DEFAULT_MAX_TOKENS=2048 trunkiert werden
     (Spiegel `get_singleshot`, T1084).
     """
-    vendor, caller, slot_name, _caps = _build_vendor(
+    vendor, caller, slot_name, caps = _build_vendor(
         slot, "get_agent", REQUIRED_AGENT, model, max_tokens,
     )
-    return _AgentFacade(vendor, caller, slot_name)
+    return _AgentFacade(vendor, caller, slot_name, caps)
