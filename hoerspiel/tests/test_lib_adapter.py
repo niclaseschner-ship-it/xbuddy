@@ -52,6 +52,34 @@ def _make_adapter_with_max_tokens(facade, max_tokens=0):
     return adapter, gs
 
 
+def test_recherche_agent_lazy_baut_get_agent_facade():
+    """T1371: `recherche_agent()` baut die get_agent-Sicht LAZY (Slot+Modell+
+    max_tokens), cached sie und baut sie nicht beim __init__ (Kind-Instanzen
+    ziehen keine Agent-Fassade)."""
+    from hoerspiel.providers import lib_adapter
+
+    facade = MagicMock(model="claude-opus-4-7")
+    agent_facade = MagicMock(name="agent", capabilities=frozenset({"web_search"}))
+    with patch.object(lib_adapter, "get_singleshot", return_value=facade), \
+         patch.object(lib_adapter, "get_completion",
+                      return_value=MagicMock(model="claude-opus-4-7")), \
+         patch.object(lib_adapter, "get_agent",
+                      return_value=agent_facade) as ga:
+        adapter = lib_adapter.LibSingleshotAdapter(
+            slot="hoerspiel-anthropic-api-key", model="claude-opus-4-7",
+            max_tokens=8192)
+        # __init__ baut die Agent-Sicht NICHT (lazy).
+        ga.assert_not_called()
+        first = adapter.recherche_agent()
+        second = adapter.recherche_agent()
+
+    ga.assert_called_once_with(
+        "hoerspiel-anthropic-api-key", "claude-opus-4-7", max_tokens=8192)
+    assert first is agent_facade
+    assert second is agent_facade  # gecacht
+    assert "web_search" in first.capabilities
+
+
 def test_complete_structured_translates_signature_drift():
     """user→prompt, input_schema→schema; correlation_id NICHT durchgereicht."""
     facade = MagicMock()

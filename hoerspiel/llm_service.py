@@ -21,7 +21,6 @@ from typing import Any
 
 from . import research_service
 from .providers.base import LLMProvider
-from .tavily_client import TavilyClient, resolve_tavily_key
 
 logger = logging.getLogger(__name__)
 
@@ -193,17 +192,20 @@ def _build_user_context(idee: str, bible: str, historie: str,
     return "\n".join(parts)
 
 
-def _default_tavily_client():
-    """Baut den Default-Tavily-Client aus dem ZD-Slot (HSP-58) — oder None.
+def _default_agent(llm):
+    """Holt die `get_agent`-Sicht für den Recherche-Vorschritt vom Provider.
 
-    Fehlt der Key (Slot leer), liefert die Funktion None → der Recherche-
-    Vorschritt degradiert (Folge ohne Recherche, HSP-58). Der Key-Read läuft
-    über die Zugangsdaten-Naht (ZD-5), nie über eigenen Datei-Zugriff.
+    Form B1 (T1371): die Recherche läuft über EINEN `get_agent`-Call mit
+    server-seitigem `web_search` — kein externer Such-Client, kein ZD-Slot mehr.
+    Der `LibSingleshotAdapter` (Produktiv-Pfad) baut die Agent-Sicht aus
+    demselben Slot/Modell wie den Single-Shot (`recherche_agent()`). Trägt der
+    Provider die Methode nicht (Alt-/Test-Doppelung), liefert die Funktion None
+    → der Recherche-Vorschritt degradiert (HSP-58).
     """
-    key = resolve_tavily_key()
-    if not key:
+    fn = getattr(llm, "recherche_agent", None)
+    if not callable(fn):
         return None
-    return TavilyClient(api_key=key)
+    return fn()
 
 
 def _extrahiere_meta(data: dict) -> dict:
@@ -260,7 +262,7 @@ def erzeuge_folgen_vorschlag(*, idee: str, bible: str, historie: str,
                              serien_name: str = "",
                              zielgruppe: str = "kind",
                              tiefe: str = "mittel",
-                             tavily=None,
+                             agent=None,
                              recherche=research_service) -> dict[str, Any]:
     """Holt einen Folgen-Vorschlag vom konfigurierten Provider (HSP-11/HSP-56..58).
 
@@ -279,24 +281,28 @@ def erzeuge_folgen_vorschlag(*, idee: str, bible: str, historie: str,
 
     HSP-58-Invariante (HART): Der Recherche-Vorschritt läuft AUSSCHLIESSLICH bei
     `zielgruppe:erwachsen` — NIE bei einer Kind-Instanz. Er bekommt als Input
-    NUR das `idee`/`thema` — NIE `bible`/`historie`/`name`; so kann keine
-    Familien-Daten in die Tavily-Suchanfrage geraten (Constitution §3 / RAT-26).
+    NUR das `idee`/`thema` — NIE `bible`/`historie`/`name`; so können keine
+    Familien-Daten in die web_search-Anfrage geraten (Constitution §3 / RAT-26).
 
-    tavily/recherche: Test-Nähte (Doppelung des Tavily-Clients bzw. des
-    Recherche-Service); im Produktiv-Pfad baut die Funktion den Tavily-Client
-    lazy aus dem ZD-Slot (Degradation bei fehlendem Key).
+    agent/recherche: Test-Nähte (Doppelung der `get_agent`-Sicht bzw. des
+    Recherche-Service); im Produktiv-Pfad holt die Funktion die Agent-Sicht (mit
+    server-seitigem `web_search`, Form B1/T1371) lazy vom Provider — Degradation,
+    wenn der Provider keine Agent-Sicht trägt oder der Slot-Vendor kein
+    `web_search` deklariert.
     """
     ist_erwachsen = (zielgruppe or "").strip().lower() == ZIELGRUPPE_ERWACHSEN
     system = _load_system_prompt(zielgruppe)
 
     # HSP-57/58: Recherche-Vorschritt NUR für erwachsen. Der Vorschritt bekommt
     # AUSSCHLIESSLICH `idee` als thema — kein bible/historie/name (Datenabfluss-
-    # Invariante). Degradation (kein Key / Netz-Fehler) → leerer Block.
+    # Invariante). Form B1 (T1371): EIN get_agent-Call mit server-seitigem
+    # web_search. Degradation (keine Agent-Sicht / kein web_search / Fehler)
+    # → leerer Block.
     recherche_block = ""
     if ist_erwachsen:
-        client = tavily if tavily is not None else _default_tavily_client()
+        rech_agent = agent if agent is not None else _default_agent(llm)
         ergebnis = recherche.recherchiere(
-            thema=idee, llm=llm, tavily=client, tiefe=tiefe)
+            thema=idee, agent=rech_agent, tiefe=tiefe)
         recherche_block = ergebnis.block
         logger.info(
             "recherche-vorschritt: suchen_pro_folge=%d, degraded=%s",

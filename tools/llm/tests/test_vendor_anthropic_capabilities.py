@@ -8,8 +8,9 @@ def test_capabilities_is_frozenset():
     assert isinstance(anthropic_vendor.CAPABILITIES, frozenset)
 
 
-def test_capabilities_contains_six_ratified_capabilities():
-    """LLMP-3: Anthropic deklariert alle sechs ratifizierten Capabilities."""
+def test_capabilities_contains_seven_ratified_capabilities():
+    """LLMP-3: Anthropic deklariert alle sieben ratifizierten Capabilities
+    (die sechs V1 + `web_search`, T1371 additiv)."""
     expected = frozenset({
         "tool_use",
         "multi_turn_assistant_prefill",
@@ -17,6 +18,7 @@ def test_capabilities_contains_six_ratified_capabilities():
         "cache_control",
         "multimodal_input",
         "system_message_distinct",
+        "web_search",
     })
     assert expected == anthropic_vendor.CAPABILITIES
 
