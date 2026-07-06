@@ -114,3 +114,55 @@ def test_mark_done_fehlende_logdatei_ist_ok(tmp_path):
     res = _run("--mark-done", "x..y",
                env={"RESTART_PENDING_LOG": str(tmp_path / "does-not-exist.jsonl")})
     assert res.returncode == 0, res.stderr
+
+
+# ── service_port / port_class gegen ports.md (SVC-6, verify_service-Fix) ────
+# Der frühere verify_service übersprang bei leerem service_port /healthz STUMM
+# → Falsch-grün. port_class trennt jetzt: PORT (prüfen) / PORTLESS (ok skip) /
+# UNKNOWN (Drift/Tippfehler → Fehler).
+
+def _port_class(svc):
+    return _run("--port-class", svc)
+
+
+def test_port_class_service_mit_port():
+    """Ein Service aus PORT-2 liefert seinen Loopback-Port, rc 0."""
+    res = _port_class("xbuddy-essen")
+    assert res.returncode == 0, res.stderr
+    assert res.stdout.strip() == "PORT:5052"
+
+
+def test_port_class_router_port():
+    res = _port_class("xbuddy-router")
+    assert res.returncode == 0, res.stderr
+    assert res.stdout.strip() == "PORT:5000"
+
+
+def test_port_class_alle_ports_stimmen_mit_ports_md():
+    """Jeder Service mit HTTP-Port kommt exakt mit dem PORT-2-Wert zurück."""
+    erwartet = {
+        "xbuddy-router": 5000, "xbuddy-familie": 5010, "xbuddy-plan": 5020,
+        "xbuddy-wetter": 5030, "xbuddy-geraete": 5040, "xbuddy-panel": 5041,
+        "xbuddy-seiten": 5042, "xbuddy-routine": 5050, "xbuddy-photo": 5051,
+        "xbuddy-essen": 5052, "xbuddy-hoerspiel": 5053, "xbuddy-kibuddy": 5054,
+        "xbuddy-hoerspiel-finn": 5055,
+    }
+    for svc, port in erwartet.items():
+        res = _port_class(svc)
+        assert res.returncode == 0, f"{svc}: {res.stderr}"
+        assert res.stdout.strip() == f"PORT:{port}", svc
+
+
+def test_port_class_bekannt_portlos_eltern_chat():
+    """eltern-chat: leerer Port ist ERWARTET → PORTLESS, rc 0 (kein Falsch-grün)."""
+    res = _port_class("xbuddy-eltern-chat")
+    assert res.returncode == 0, res.stderr
+    assert res.stdout.strip() == "PORTLESS"
+
+
+def test_port_class_unbekannter_service_ist_fehler():
+    """Tippfehler/Drift: nicht in ports.md und nicht portlos → UNKNOWN, rc 1.
+    Genau der Fall, der früher stumm übersprungen wurde (Falsch-grün)."""
+    res = _port_class("xbuddy-tippfehler")
+    assert res.returncode == 1
+    assert res.stdout.strip() == "UNKNOWN"

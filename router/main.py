@@ -31,6 +31,7 @@ if _REPO_ROOT not in sys.path:
 
 from router import config as router_config  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
+from tools.service_diagnostics import register_version  # noqa: E402
 
 # ============================================================
 #  Zustand (in-memory, V1)
@@ -940,25 +941,10 @@ def health():
     return jsonify(body), (200 if all_reachable else 503)
 
 
-def _deploy_version():
-    """SVC-6: laufende Commit-SHA aus der beim Deploy geschriebenen Datei
-    `__XBUDDY_DATA__/deploy/version` (Default /home/buddy/xbuddy-data, ENV
-    XBUDDY_DATA_DIR — wie tools/llm/telemetry.py). KEIN `git rev-parse` zur
-    Laufzeit: ein paralleler Worktree/Branch-Rest würde sonst einen falschen
-    SHA einfrieren. Fehlt die Datei (noch kein Deploy), liefert /version null."""
-    data_dir = os.environ.get('XBUDDY_DATA_DIR', '/home/buddy/xbuddy-data')
-    path = os.path.join(data_dir, 'deploy', 'version')
-    try:
-        with open(path, encoding='utf-8') as f:
-            return f.read().strip() or None
-    except OSError:
-        return None
-
-
-@app.route('/version', methods=['GET'])
-def version():
-    """SVC-6: liefert die laufende Deploy-Commit-SHA (oder null)."""
-    return jsonify({'version': _deploy_version()}), 200
+# /version teilt sich die EINE Naht mit allen 11 Buddy-Services (T1311/#1311):
+# tools/service_diagnostics.register_version — file-based, kein git rev-parse
+# (SVC-6). Der /health-Fan-in oben bleibt Router-eigen.
+register_version(app)
 
 
 # ============================================================

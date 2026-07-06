@@ -129,7 +129,10 @@ def test_version_is_file_based_not_git_rev_parse(monkeypatch, tmp_path):
     deploy_dir.mkdir()
     (deploy_dir / 'version').write_text('nicht-ein-echter-git-sha\n')
     monkeypatch.setenv('XBUDDY_DATA_DIR', str(tmp_path))
-    assert router_main._deploy_version() == 'nicht-ein-echter-git-sha'
+    # T1311: /version ist die EINE geteilte Naht (tools.service_diagnostics),
+    # nicht mehr ein router-lokaler _deploy_version-Block.
+    from tools import service_diagnostics
+    assert service_diagnostics._deploy_version() == 'nicht-ein-echter-git-sha'
 
 
 def test_health_body_is_json_serialisable(client, monkeypatch):
