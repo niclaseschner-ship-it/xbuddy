@@ -949,11 +949,43 @@ def connector_view():
     blob = _json.dumps(context, ensure_ascii=False).replace("</", "<\\/")
     html = html.replace("__CONNECTOR_DATA__", blob)
     html = html.replace("__BUILD_ID__", _connector_build_id())
+    # PWAM-3 / CONN-8: SW-Scope aus REGISTRY — kein hartkodierter String.
+    html = html.replace("__SW_SCOPE__", pwa_mantel.REGISTRY["connector"].sw_scope)
 
     resp = make_response(html)
     resp.headers["Content-Type"] = "text/html; charset=utf-8"
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
+    return resp
+
+
+@app.route("/api/v1/seiten/static/connector/sw.js", methods=["GET"])
+def connector_sw_view():
+    """CONN-8 / PWAM-3: Service-Worker mit build_id-Substitution + Scope-Header.
+
+    Steht VOR dem Flask-static-Catch-all fuer /api/v1/seiten/static/ — Werkzeug
+    gibt der vollstaendig-statischen Rule hoehere Prioritaet als dem
+    <path:filename>-Muster (mehr Fixed-Parts gewinnt).
+
+    Service-Worker-Allowed: REGISTRY['connector'].sw_scope — erlaubt dem Browser,
+    den SW fuer /api/v1/seiten/connector/ zu registrieren, obwohl die SW-Datei
+    selbst unter /api/v1/seiten/static/connector/ liegt (PWAM-3-Scope-Fix,
+    T1365).
+
+    Liegt unter /api/v1/seiten/static/... → vom views.json-Eigentest via
+    '/static/'-Pruefregel ausgenommen (keine Extra-Rule in views.json noetig).
+    """
+    sw_path = os.path.join(_connector_asset_root(), "sw.js")
+    if not os.path.isfile(sw_path):
+        from flask import abort
+        abort(404)
+    build_id = _connector_build_id()
+    body = pwa_mantel.read_sw_with_build_id(sw_path, build_id)
+    scope = pwa_mantel.REGISTRY["connector"].sw_scope
+    resp = make_response(body, 200)
+    resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
+    resp.headers["Service-Worker-Allowed"] = scope
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return resp
 
 

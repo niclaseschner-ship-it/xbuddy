@@ -144,10 +144,12 @@
   var LOGO_BASE = '/api/v1/seiten/static/connector/logos/';
 
   // ── PWA-Mantel: Service-Worker registrieren (best-effort) ───────────────────
+  // __SW_SCOPE__ wird beim Ausliefern von seiten/main.py aus
+  // pwa_mantel.REGISTRY['connector'].sw_scope ersetzt (PWAM-3 / CONN-8).
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
       navigator.serviceWorker
-        .register('/api/v1/seiten/static/connector/sw.js')
+        .register('/api/v1/seiten/static/connector/sw.js', { scope: '__SW_SCOPE__' })
         .catch(function (e) { console.warn('[connector] SW-Register fehlgeschlagen', e); });
     });
   }
