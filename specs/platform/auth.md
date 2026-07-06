@@ -169,7 +169,7 @@ Route den Auth-Decorator trägt. Die `/display/…`-Renderer-Routen
 (Phase 4, V1 nicht ratifiziert). `/healthz` (SVC-6) bleibt unauthentifiziert.
 
 **Bau-Gate:** der Rollout wartet auf das Cookie-iPhone-Persistenz-Gate (AUTH-2).
-#1292 (Player-Cookie/401) wird NICHT vorgezogen (Phasen-Reihenfolge unten).
+#1292 (Player-Cookie/401) ist gebaut (2026-07-07, HSP-47 AUTH-2 Cookie-only).
 
 Jede Zeile ist eine eindeutige Flask-Route mit konkretem URL-Pfad und HTTP-
 Methode — keine Sammel-Zeilen mehr (eine Zeile pro tatsächlich registrierter
@@ -219,6 +219,26 @@ enumeriert die oben klassifizierten Routen byte-gleich gegen die realen
 → E1 „V1-Scope eng — nur essen-einkauf-API-Routen"]
 
 *Tickets:* #948, #1321
+
+### AUTH-2 (Cookie-only) — Hörspiel-Player-PWA
+
+Routen, die **ausschließlich den Session-Cookie** akzeptieren — kein tma-Header
+(Player ist eine Browser-PWA, kein Telegram-Mini-App), kein Loopback-Bypass
+(browser-only Route, keine internen Server-Caller). Ein ungültiger oder fehlender
+`xbuddy_session`-Cookie → `401`, kein Render. Der Gate lebt **inline** in der
+View-Funktion (kein geteilter Decorator, da n=1 — AUTH-9-Coverage-Test gilt
+**nicht** für diese Routen).
+
+**V1-Liste (#1292, gebaut 2026-07-07):**
+
+```
+/seiten/hoerspiel/player                      (GET) — HTML-Shell
+/seiten/hoerspiel/player/<path:asset>         (GET) — manifest.json, sw.js, player.{css,js}, Icons
+```
+
+[Quelle: HSP-47 Spec + #1292 Player-Cookie-401; auth.md AUTH-2 Cookie-Mechanik]
+
+*Tickets:* #1292
 
 ### AUTH-4 — Public-Assets, kein Decorator
 

@@ -1096,8 +1096,9 @@ def hoerspiel_eltern_view(kind_id: str):
 #   GET /seiten/hoerspiel/player            — HTML-Shell (Template aus hoerspiel/)
 #   GET /seiten/hoerspiel/player/<asset>    — manifest.json (build_manifest),
 #       sw.js (render_sw + build_id), player.{css,js}/icon-*.png aus hoerspiel/static/.
-# AUTH-6 Netz-Trust / PUBLIC (analog plan_einstellungen_view) — KEIN tma, KEIN
-# 401. Die HSP-47-Cookie-401-Forderung ist auf #1292 deferred (Nic-Option-C).
+# AUTH-2 Cookie-only (HSP-47, #1292 gebaut 2026-07-07). Kein tma-Fallback
+# (PWA, kein Mini-App). Kein Loopback-Bypass (browser-only Route, kein
+# interner Server-Caller — grep bestätigt keine internen Aufrufer).
 # nginx: /seiten/hoerspiel/ → seiten:5042 deckt den Pfad (KEINE nginx-Änderung).
 #
 # Manifest + sw.js kommen aus der Lib (pwa_mantel.REGISTRY['hoerspiel-player']),
@@ -1163,10 +1164,9 @@ def _hoerspiel_player_build_id():
 def hoerspiel_player_view():
     """HSP-47/HSP-49: Hörspiel-Player-PWA — HTML-Render-Route.
 
-    PUBLIC / Netz-Trust (auth.md AUTH-6): kein Auth-Header, kein initData
-    (Cookie-401-Teil deferred #1292). Template liegt in hoerspiel/templates/
-    player.html (Track B) und wird via absolutem Pfad gerendert — analog
-    hoerspiel_eltern_view, aber OHNE dessen tma-Auth.
+    AUTH-2 Cookie-only (auth.md AUTH-2, #1292). Template liegt in
+    hoerspiel/templates/player.html (Track B) und wird via absolutem Pfad
+    gerendert — analog hoerspiel_eltern_view, aber OHNE dessen tma-Auth.
 
     Cache-Buster: build_id aus dem Player-Source-Set (PWML-3).
 
@@ -1174,6 +1174,14 @@ def hoerspiel_player_view():
     server-serialisierter JSON-Blob in den Template-Kontext eingebettet.
     Template: {{ instanzen_json }} — Markup-Objekt, kein HTML-Escape noetig.
     """
+    # AUTH-2: Cookie-Gate (HSP-47, #1292). PWA ist browser-only — kein
+    # tma-Fallback, kein Loopback-Bypass (keine internen Caller dieser Route).
+    _bot_token = _get_bot_token()
+    _cookie_val = request.cookies.get(_session_cookie.COOKIE_NAME)
+    if (not _bot_token
+            or _session_cookie.verify_session(_cookie_val, _bot_token) is None):
+        return ("", 401)
+
     build_id = _hoerspiel_player_build_id()
 
     # HSP-49: Instanz-Blob — _HSP_INSTANZEN ist die autoritative Quelle (eine Stelle).
@@ -1200,6 +1208,9 @@ def hoerspiel_player_view():
 def hoerspiel_player_asset_view(asset):
     """HSP-47: PWA-Mantel-Asset-Auslieferung über die Lib (PWML-1/2).
 
+    AUTH-2 Cookie-only (auth.md AUTH-2, #1292). Alle Player-Assets benötigen
+    einen gültigen xbuddy_session-Cookie — kein öffentliches Asset.
+
     - manifest.json → pwa_mantel.build_manifest(REGISTRY['hoerspiel-player'])
       (PWML-1: display:standalone, PNG-Icons 192/512/maskable).
     - sw.js        → pwa_mantel.render_sw(...) mit substituiertem build_id
@@ -1207,6 +1218,14 @@ def hoerspiel_player_asset_view(asset):
     - player.{css,js}/icon-*.png → statisch aus hoerspiel/static/ mit
       realpath-Traversal-Guard (analog ESSEN-34); sonst 404.
     """
+    # AUTH-2: Cookie-Gate (HSP-47, #1292). PWA ist browser-only — kein
+    # tma-Fallback, kein Loopback-Bypass (keine internen Caller dieser Route).
+    _bot_token = _get_bot_token()
+    _cookie_val = request.cookies.get(_session_cookie.COOKIE_NAME)
+    if (not _bot_token
+            or _session_cookie.verify_session(_cookie_val, _bot_token) is None):
+        return ("", 401)
+
     from flask import abort, send_from_directory
 
     cfg = pwa_mantel.REGISTRY[_HOERSPIEL_PLAYER_COMPONENT]
