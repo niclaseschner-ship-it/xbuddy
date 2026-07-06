@@ -10,7 +10,7 @@ from datetime import date
 
 import pytest
 from fakes import FakeTelegram
-from skills._multimodal import ExtractedTermin, MultimodalError
+from skills.foto_analyse import ExtractedTermin, MultimodalError
 from skills.plan_client import (
     PlanBulkNotReached,
     PlanBulkUnknown,
