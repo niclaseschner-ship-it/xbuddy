@@ -470,6 +470,32 @@ test('preloadNext: löst nächsten Track als Blob-Object-URL vorab (preloadedSrc
   }
 });
 
+test('preloadNext: Cache-Miss → fetcht Blob vor, S.preloadedSrc ist Blob-Object-URL (AC3, #1308)', async () => {
+  const savedURL = global.URL;
+  let revoked = 0;
+  global.URL = {
+    createObjectURL: (b) => 'blob:miss/' + (b && b.size != null ? b.size : 'x'),
+    revokeObjectURL: () => { revoked++; },
+  };
+  const fetchFn = makeFetch(() => ({ status: 200, body: 'PREFETCH' }));
+  P._S.cache = new FakeCache();  // leer → Cache-Miss für jede URL
+  P._S.tracks = [
+    { position: 1, 'audio-asset': '/audio/miss.mp3' },
+  ];
+  P._S.preloadedSrc = null; P._S.preloadedIdx = null;
+  try {
+    await P.preloadNext(0, fetchFn);
+    assert.match(P._S.preloadedSrc, /^blob:miss\//, 'Cache-Miss → Blob vorab gefetcht, preloadedSrc ist Blob-Object-URL');
+    assert.equal(P._S.preloadedIdx, 0, 'preloadedIdx gesetzt');
+    assert.equal(fetchFn.calls.length, 1, 'genau ein fetch-Aufruf für den Track');
+    assert.equal(fetchFn.calls[0].url, '/audio/miss.mp3', 'korrekte Track-URL gefetcht');
+  } finally {
+    global.URL = savedURL;
+    P._S.cache = null; P._S.tracks = []; P._S.trackIdx = 0;
+    P._S.preloadedIdx = null; P._S.preloadedSrc = null;
+  }
+});
+
 test('ended-swap: aktives ended setzt SYNCHRON preloadedSrc am SELBEN Element + play, hält MediaSession playing, löst übernächsten vorab (#1306, AC-IOS2)', async () => {
   const savedAudio = global.Audio;
   const savedNav = global.navigator;
