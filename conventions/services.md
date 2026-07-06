@@ -83,3 +83,27 @@ sqlite „readonly database").
 Wie die korrekte Ownership hergestellt wird (ExecStartPre, Migrations-Skript,
 Reset-Runbook …) bleibt Implementierungs-Spielraum und wird nicht hier
 festgelegt.
+
+### SVC-6 — Health- und Version-Endpunkt je Service
+
+Jeder HTTP-Service exponiert zwei unauthentifizierte Diagnose-Endpunkte:
+
+- **`GET /healthz`** — liefert `200` mit `{"status":"ok"}`, sobald der Service
+  request-bereit ist (Readiness, kein Deep-Check). Vereinheitlicht die bereits
+  gebaute Präzedenz (`essen/main.py`, `kibuddy/main.py` — n=2); **kein** zweiter
+  Name `/health` am Service selbst. Der Router aggregiert die Per-Service-`/healthz`
+  optional zu einem Fan-in-`/health` (anderer Typ: Readiness-Aggregat, nicht
+  Per-Service-Endpunkt).
+- **`GET /version`** — liefert die **beim Deploy geschriebene** Commit-SHA aus
+  einer Datei (`__XBUDDY_DATA__/deploy/version`), **nicht** `git rev-parse` zur
+  Laufzeit (ein paralleler Worktree/Branch-Rest würde sonst einen falschen SHA
+  einfrieren).
+
+Der Deploy-Regelkreis (`deploy/update.sh`, Stufe 1) leitet aus dem gemergten Diff
+die betroffenen Services ab — **geteilter Mapper** mit
+`methode/hooks/restart_pending_log.py:services_for_paths`, inklusive
+**Shared-Pfad-Fan-out**: eine Änderung unter `tools/`, `tools/llm/` oder
+`conventions/` trifft **alle** HTTP-Services —, startet sie neu und verifiziert
+`is-active` **und** Service-Start-TS > Merge-TS **und** `/healthz`==200
+(Falsch-grün-Schutz). Der Release-Worktree (RAT-14-b2) bleibt außerhalb Stufe 1;
+Runner-Health (#1113) ist eine eigene Autonomie-Zeile mit 48h-Dry-Run.
