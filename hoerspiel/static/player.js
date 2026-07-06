@@ -782,17 +782,43 @@ function ensureAudio() {
 }
 
 /**
- * Nächsten Track als Blob-Object-URL VORAUSLÖSEN (#1306) — KEIN zweites Element.
- * Während der aktuelle Track spielt: sicherstellen, dass der nächste Track als
- * Blob im Cache liegt (resolveTrackSrc fetcht/cacht bei Bedarf über HSP-54) und
- * die fertige Object-URL in S.preloadedSrc + S.preloadedIdx ablegen. So ist der
- * `ended`-Übergang synchron: src+play am selben Element ohne Netz-Fetch.
+ * Nächsten Track als Blob-Object-URL VORAUSLÖSEN (#1306, #1308) — KEIN zweites Element.
+ * Während der aktuelle Track spielt: resolveTrackSrc prüft den Cache (HSP-54).
+ *   Cache-Treffer → Blob-Object-URL direkt.
+ *   Cache-Miss  → resolveTrackSrc gibt die Netz-URL zurück (kein Fetch dort);
+ *                 preloadNext fetcht den Track selbst (fetch→blob→objectURL,
+ *                 optional write-through in den Cache), damit S.preloadedSrc immer
+ *                 eine Blob-Object-URL ist und swapToNext netzfrei bleibt.
  * Eine noch nicht verbrauchte, veraltete Vorauflösung wird revoked (Leak-Härtung).
+ * @param {number}   idx       Track-Index in S.tracks
+ * @param {Function} [_fetchFn] Test-Nähe: fetch-Ersatz; sonst globales fetch
  */
-async function preloadNext(idx) {
+async function preloadNext(idx, _fetchFn) {
   if (idx < 0 || idx >= S.tracks.length) { _revokePreload(); S.preloadedIdx = null; return; }
   const track = S.tracks[idx];
-  const src = await resolveTrackSrc(S.cache, track['audio-asset']);   // async VORAB (während Wiedergabe)
+  const url = track['audio-asset'];
+  let src = await resolveTrackSrc(S.cache, url);   // async VORAB (während Wiedergabe)
+
+  // Cache-Miss: resolveTrackSrc gibt die Netz-URL zurück (kein Fetch dort).
+  // Hier vorab fetchen → Blob → Object-URL, damit swapToNext immer netzfrei bleibt.
+  if (src === url) {
+    try {
+      const doFetch = _fetchFn || (typeof fetch !== 'undefined' ? fetch : null);
+      if (doFetch && typeof URL !== 'undefined' && URL.createObjectURL) {
+        const resp = await doFetch(url);
+        if (resp.ok) {
+          const blob = await resp.blob();
+          src = URL.createObjectURL(blob);
+          // Optional write-through: künftige resolveTrackSrc-Aufrufe treffen den Cache.
+          if (S.cache && typeof Response !== 'undefined') {
+            try { await S.cache.put(url, new Response(blob, { status: 200 })); }
+            catch (e) { /* Cache-Write best-effort */ }
+          }
+        }
+      }
+    } catch (e) { /* Netz nicht erreichbar → Fallback bleibt Netz-URL */ }
+  }
+
   if (S.preloadedSrc !== src) _revokePreload();   // alte, nicht verbrauchte Vorauflösung freigeben
   S.preloadedSrc = src;
   S.preloadedIdx = idx;
