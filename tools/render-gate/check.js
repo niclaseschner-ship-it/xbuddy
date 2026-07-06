@@ -171,8 +171,11 @@ async function checkView(browser, key, viewCfg, viewport) {
 
   result.stabil = await defaultWait(page);
 
-  // Tier-A DOM/Geometrie im Browser-Kontext
-  const domFindings = await page.evaluate(domInvariantsFn, viewport);
+  // Tier-A DOM/Geometrie im Browser-Kontext.
+  // opts.checkUnderfill: nur bei responsiven Views (viewCfg.responsive === true,
+  // DC-18). Fixe Views (Letterbox) erhalten keinen underfill-Befund.
+  const domOpts = { checkUnderfill: !!viewCfg.responsive };
+  const domFindings = await page.evaluate(domInvariantsFn, viewport, domOpts);
 
   // Tier-B Kollisionsvertrag (falls vorhanden)
   let tierBFindings = [];
