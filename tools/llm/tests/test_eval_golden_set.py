@@ -105,7 +105,7 @@ def test_privacy_gate_blocks_real_email(tmp_path: Path) -> None:
     bad_fixture.write_text(
         f"{SYNTHETIC_MARKER}\n"
         "# Synthetisches Fixture\n"
-        'TEXT = "Schreib an niclas_eschner@gmx.de"\n',
+        'TEXT = "Schreib an erfundene.familie@gmx.de"\n',
         encoding="utf-8",
     )
     vs = scan_file(bad_fixture)
@@ -140,3 +140,28 @@ def test_privacy_gate_clean_file_passes(tmp_path: Path) -> None:
     )
     vs = scan_file(clean)
     assert not vs, f"Saubere Datei hat Verletzungen: {vs}"
+
+
+# ===========================================================================
+#  5. Verzeichnis-Trennung — Fixtures nur in eval/
+# ===========================================================================
+
+def test_fixtures_live_in_eval_only() -> None:
+    """AC2: Fixture-/Daten-Module gehören nur in eval/, nicht in tests/.
+
+    Test-Dateien (test_*.py, *_test.py) und __init__.py dürfen in tests/
+    existieren; alle anderen .py-Module (Fixture-Inhalte, Daten-Module) müssen
+    nach eval/ verschoben werden, damit das Privacy-Gate sie lückenlos abdeckt.
+    """
+    tests_dir = Path(__file__).parent
+    non_test_py = [
+        f for f in tests_dir.glob("*.py")
+        if f.name not in ("__init__.py", "conftest.py")
+        and not f.name.startswith("test_")
+        and not f.name.endswith("_test.py")
+    ]
+    assert not non_test_py, (
+        "Fixture-/Daten-Module in tests/ gefunden — bitte nach eval/ verschieben "
+        "(Privacy-Gate scannt nur eval/):\n"
+        + "\n".join(f"  {f}" for f in non_test_py)
+    )
