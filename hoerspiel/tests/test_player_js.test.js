@@ -60,6 +60,16 @@ test('initialKindId: ?kind= gewinnt, sonst 1. Eintrag, sonst paula (HSP-49)', ()
   assert.equal(P.initialKindId([], ''), 'paula'); // Fallback Standalone
 });
 
+test('labelKindId: Fremd-Album → aktivKindId, eigenes Album/null → kindId (AC1, HSP-48/49)', () => {
+  // kein aktivKindId → Regal-Kind bleibt
+  assert.equal(P.labelKindId('paula', null), 'paula');
+  // aktivKindId == kindId → kein Fremd-Album
+  assert.equal(P.labelKindId('paula', 'paula'), 'paula');
+  // Cross-Kind: aktivKindId != kindId → Eigentümer
+  assert.equal(P.labelKindId('paula', 'neko'), 'neko');
+  assert.equal(P.labelKindId('neko', 'paula'), 'paula');
+});
+
 test('nextKindId iteriert die Liste (kein 2-Hardcode, HSP-49)', () => {
   const liste = [{ kind_id: 'paula' }, { kind_id: 'neko' }, { kind_id: 'mila' }];
   assert.equal(P.nextKindId(liste, 'paula'), 'neko');

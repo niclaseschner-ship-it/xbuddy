@@ -407,6 +407,16 @@ function trackAnzeige(tracks, idx) {
 }
 
 /**
+ * Welches Kind wird im player-kid-Label (voller Player) angezeigt?
+ * Läuft ein Fremd-Album (aktivKindId != kindId), zeigt das Label den Eigentümer.
+ * Bei eigenem Album oder leerem aktivKindId bleibt das Regal-Kind.
+ * Rein/testbar (AC1, HSP-48/49).
+ */
+function labelKindId(kindId, aktivKindId) {
+  return (aktivKindId && aktivKindId !== kindId) ? aktivKindId : kindId;
+}
+
+/**
  * Now-Playing-Entscheidung für den Mini-Player (Bug 1/2, HSP-48). Rein/testbar.
  * Läuft gerade ein Album (aktivAlbum + Audio vorhanden), ist der Mini der GLOBALE
  * Now-Playing-Banner ("was läuft gerade") — unabhängig vom angezeigten Kind-Regal.
@@ -655,7 +665,7 @@ async function oeffneAlbum(albumId) {
 }
 
 function renderedPlayer(istResume) {
-  const inst = instanzFuer(S.liste, S.kindId);
+  const inst = instanzFuer(S.liste, labelKindId(S.kindId, S.aktivKindId));
   if ($('player-kid')) $('player-kid').textContent = inst.name;
   const pc = $('player-cover'); if (pc) _setCoverSrc(pc, S.aktivAlbum['cover-asset'] || '');
   if ($('player-title')) $('player-title').textContent = S.aktivAlbum.titel || '';
@@ -1061,7 +1071,7 @@ if (typeof module !== 'undefined' && module.exports) {
     // MediaSession
     setupMediaSession, updateMediaSession,
     // Player-Verhalten (Bug 1..4, T1272-B-BUGFIX) — rein + Test-Seams
-    miniNowPlaying, istLaufendesAlbum, ensureAudio,
+    miniNowPlaying, istLaufendesAlbum, ensureAudio, labelKindId,
     // Doppel-Puffer / Hintergrund-Auto-Advance (#1304) — rein + Test-Seams
     preloadNext, _S: S,
     // Cover-Fallback (T1272-COV)
