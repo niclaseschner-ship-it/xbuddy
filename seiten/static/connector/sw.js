@@ -1,24 +1,29 @@
 // sw.js — Service-Worker fuer die Connector-PWA (CONN-8).
 //
-// Spiegel von seiten/static/plan/sw.js (PLAN-35). Wird als statisches Asset
-// unter /api/v1/seiten/static/connector/sw.js ausgeliefert (Flask-static) —
-// daher KEINE Server-Substitution der Cache-Version; sie steht als Konstante
-// BUILD (bumpen, wenn der Mantel sich aendert).
-//
 // Cache-Strategie:
-//   - cache-first fuer statische Mantel-Assets (style.css, manifest, Logos).
+//   - cache-first fuer statische Mantel-Assets (style.css, manifest, Logos, Icons).
 //   - pass-through (network-only) fuer die HTML-Shell /api/v1/seiten/connector/ —
 //     sie traegt das server-gerenderte Aggregat (CONN-8) und darf NIE veralten.
+//
+// Cache-Versionierung (PWAM-4 / reference_mini_app_cache_buster.md):
+//   __BUILD_ID__ wird beim Ausliefern via connector_sw_view (seiten/main.py)
+//   durch den aktuellen build_id-Wert ersetzt. Das invalidiert den alten Cache
+//   (activate-Event loescht fremde Namespaces).
 
 'use strict';
 
-const BUILD = 'v1';
-const CACHE_NAME = 'connector-pwa-' + BUILD;
+// BUILD_ID-Platzhalter — wird beim Ausliefern von seiten/main.py substituiert
+// (connector_sw_view, read_sw_with_build_id, PWAM-4). Default beim Lokal-Test: "0".
+const BUILD_ID = '__BUILD_ID__';
+const CACHE_NAME = 'connector-pwa-' + BUILD_ID;
 
 // Statische Mantel-Assets (cache-first). Die HTML-Shell ist bewusst NICHT dabei.
 const MANTEL_ASSETS = [
   '/api/v1/seiten/static/connector/manifest.json',
   '/api/v1/seiten/static/connector/style.css',
+  '/api/v1/seiten/static/connector/icon-192.png',
+  '/api/v1/seiten/static/connector/icon-512.png',
+  '/api/v1/seiten/static/connector/icon-maskable-512.png',
   '/api/v1/seiten/static/connector/logos/anthropic.svg',
   '/api/v1/seiten/static/connector/logos/mistral.svg',
   '/api/v1/seiten/static/connector/logos/azure.svg',
@@ -85,5 +90,5 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Shell + alles andere: pass-through (network-only — Aggregat nie veralten).
+  // HTML-Shell + alles andere: pass-through (network-only — Aggregat nie veralten).
 });
