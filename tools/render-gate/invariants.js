@@ -142,7 +142,9 @@ export function rectSignatureFn() {
 
 /**
  * Selbst-enthaltene Browser-Funktion. Gibt ein Array von Befunden zurueck.
- * Argument `viewport` = { width, height }.
+ * Argumente:
+ *   `viewport` = { width, height }
+ *   `opts`     = { checkUnderfill: boolean }  (optional, default: kein underfill)
  *
  * Geprueft (datenunabhaengig):
  *  - broken-img:        sichtbares <img> mit naturalWidth===0
@@ -152,13 +154,21 @@ export function rectSignatureFn() {
  *                       ODER Hoehe 0
  *  - text-clipping:     Text-Knoten mit ellipsis/overflow:hidden, scrollWidth >
  *                       clientWidth
+ *  - underfill:         Body-Bounding-Box deutlich KLEINER als Viewport
+ *                       (Leerband/Letterbox, DC-18-Vertragsbruch).
+ *                       Nur bei responsiven Views (opts.checkUnderfill === true,
+ *                       DC-18). Fixe Views (Letterbox DC-12/DC-15) erhalten
+ *                       keinen underfill-Befund.
+ *                       Toleranz 5 % je Dimension. Scroll-Container-Inhalt
+ *                       (z. B. .liste-eintraege overflow-y:auto) zaehlt nicht
+ *                       ein — geprueft wird der Body-Rect, nicht tiefere Kinder.
  *
  * Sichtbarkeits-Filter (Pflicht, RAT-24): [hidden], display:none,
  * visibility:hidden/collapse, <script>, <template>, SVG <defs> (und deren
  * Nachfahren) zaehlen als legitim unsichtbar und erzeugen KEINEN Befund.
  * KIBuddys hidden-Startzustaende fallen damit heraus.
  */
-export function domInvariantsFn(viewport) {
+export function domInvariantsFn(viewport, opts) {
   const W = viewport.width;
   const H = viewport.height;
   const EPS = 1.0; // px-Toleranz gegen Sub-Pixel-/Border-Rundung
@@ -309,6 +319,41 @@ export function domInvariantsFn(viewport) {
         detail: oneLineB((el.textContent || "").trim()),
         messwert: "abgeschnitten:" + Math.round(over) + "px",
       });
+    }
+  }
+
+  // ── 6) Underfill (Fuellinvariante — Leerband / Content deutlich < Viewport) ─
+  // DC-18: Responsive Views muessen das Viewport vollstaendig fuellen
+  // (display-client.md DC-18). Bleibt die Body-Bounding-Box deutlich kleiner als
+  // das Viewport, liegt ein Leerband (Letterbox) vor — Vertragsbruch.
+  //
+  // Gate: Nur wenn opts.checkUnderfill === true (d. h. die View ist als
+  // responsiv / fit=viewport markiert). Fixe Views (Letterbox DC-12/DC-15)
+  // duerfen einen kleineren Body haben — kein underfill-Befund dort.
+  //
+  // Strategie: document.body.getBoundingClientRect(). Scroll-Container wie
+  // .liste-eintraege (overflow-y:auto) werden NICHT einzeln geprueft — ihr
+  // Inhalt darf kuerzer sein als der Scroll-Bereich; der Body-Rect zaehlt.
+  //
+  // Toleranz: FILL_EPS = 5 % je Viewport-Dimension (deckt Sub-Pixel, Borders,
+  // marginale Padding ab; faengt echtes Leerband >=5 % sicher).
+  if (opts && opts.checkUnderfill) {
+    const FILL_EPS = 0.05;
+    const bodyEl = document.body;
+    if (bodyEl) {
+      const br = bodyEl.getBoundingClientRect();
+      const unterW = W - br.width;
+      const unterH = H - br.height;
+      if (unterW > W * FILL_EPS || unterH > H * FILL_EPS) {
+        findings.push({
+          typ: "underfill",
+          selektor: cssPath(bodyEl),
+          detail: "Content-Bounding-Box kleiner als Viewport " + W + "x" + H +
+                  " (DC-18: Fuellung erwartet)",
+          messwert: "leerband_breite:" + Math.round(Math.max(0, unterW)) +
+                    "px,leerband_hoehe:" + Math.round(Math.max(0, unterH)) + "px",
+        });
+      }
     }
   }
 

@@ -171,8 +171,11 @@ async function checkView(browser, key, viewCfg, viewport) {
 
   result.stabil = await defaultWait(page);
 
-  // Tier-A DOM/Geometrie im Browser-Kontext
-  const domFindings = await page.evaluate(domInvariantsFn, viewport);
+  // Tier-A DOM/Geometrie im Browser-Kontext.
+  // opts.checkUnderfill: nur bei responsiven Views (viewCfg.responsive === true,
+  // DC-18). Fixe Views (Letterbox) erhalten keinen underfill-Befund.
+  const domOpts = { checkUnderfill: !!viewCfg.responsive };
+  const domFindings = await page.evaluate(domInvariantsFn, viewport, domOpts);
 
   // Tier-B Kollisionsvertrag (falls vorhanden)
   let tierBFindings = [];
@@ -279,7 +282,10 @@ async function main() {
   try {
     for (const key of keys) {
       const viewCfg = cfg.views[key];
-      const r = await checkView(browser, key, viewCfg, viewport);
+      // Per-View-Viewport (AC2, #1322): viewCfg.viewport ueberschreibt den
+      // globalen Default. Fallback: globaler viewport aus views.json (1920x1080).
+      const effectiveViewport = viewCfg.viewport || viewport;
+      const r = await checkView(browser, key, viewCfg, effectiveViewport);
       results.push(r);
     }
   } finally {
