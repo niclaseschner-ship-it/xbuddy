@@ -33,6 +33,7 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 from tools import configloader, logsetup  # noqa: E402
+from tools.service_diagnostics import register_version  # noqa: E402
 
 # Das wetter-Paket wird als Paket importiert, damit die relativen Imports in
 # config/meteo/clothing/render greifen — auch wenn main.py direkt gestartet wird.
@@ -148,6 +149,10 @@ def _anbindung(cfg):
 # (URL-12) geroutet werden — der Flask-Default `/static` läge außerhalb der
 # URL-1-Prefixe.
 app = Flask(__name__, static_url_path="/display/wetter/static")
+
+
+# ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
+register_version(app)
 
 
 def _zielTag(cfg, jetzt):

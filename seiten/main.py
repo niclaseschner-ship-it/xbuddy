@@ -57,6 +57,7 @@ from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # no
 # (vorher per sys.path-Hack aus eltern-chat/init_data.py — Cluster-A-Option-B
 # 2026-06-18-1720 heilt MOD-4 / MOD-6).
 from tools.initdata import init_data as _init_data_mod  # noqa: E402
+from tools.service_diagnostics import register_version  # noqa: E402
 
 # DCOMP-4: Dateirechte auf den Eigentümer beschränkt — analog PREG-4 / GER-4.
 FILE_MODE = 0o600
@@ -363,6 +364,10 @@ def _check_familie_mitglied(user_id):
 app = Flask(__name__, template_folder="templates",
             static_folder="static",
             static_url_path="/api/v1/seiten/static")
+
+
+# ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
+register_version(app)
 
 
 @app.route("/api/v1/seiten", methods=["GET"])

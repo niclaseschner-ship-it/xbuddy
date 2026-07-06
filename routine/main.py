@@ -50,6 +50,7 @@ from tools import configloader, logsetup  # noqa: E402
 from tools import familie_client as _familie_client_mod  # noqa: E402
 from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # noqa: E402
 from tools.initdata import init_data as _init_data_mod  # noqa: E402
+from tools.service_diagnostics import register_version  # noqa: E402
 
 if __package__:
     from . import config as config_mod
@@ -335,6 +336,10 @@ def require_init_data(fn):
 
 # URL-13: statische Assets im Display-Namensraum des Buddys (ROUTINE-2, BUD-1).
 app = Flask(__name__, static_url_path="/display/routine/static")
+
+
+# ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
+register_version(app)
 
 
 @app.route("/display/routine/morgen", methods=["GET", "POST"])
