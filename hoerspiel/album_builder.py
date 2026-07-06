@@ -279,9 +279,17 @@ def _historie_path(data_root: str) -> str:
 
 
 def _format_historie_entry(*, nummer: int, titel: str, datum: str,
-                           synopse: str) -> str:
-    return "\n## Folge %d: %s\n*Erschienen:* %s\n\n%s\n" % (
+                           synopse: str, meta: "dict | None" = None) -> str:
+    entry = "\n## Folge %d: %s\n*Erschienen:* %s\n\n%s\n" % (
         nummer, titel.strip(), datum, synopse.strip() or "(keine Synopse)")
+    # HSP-60: META-Block (these/schnitt/quellen/begriffe_neu) anhängen, wenn
+    # vorhanden. format_meta_historie liefert leeren String bei leerem META →
+    # Kind-Einträge bleiben byte-gleich zur alten Form (kein Anhang, kein Drift).
+    if meta:
+        meta_block = llm_service.format_meta_historie(meta)
+        if meta_block:
+            entry = entry.rstrip("\n") + "\n\n" + meta_block + "\n"
+    return entry
 
 
 def baue_album(*, titel: str, text: str, voice: str, idee: str,
@@ -292,6 +300,7 @@ def baue_album(*, titel: str, text: str, voice: str, idee: str,
                now: Callable[[], datetime],
                pause_absatz_sek: float = PARAGRAPH_SILENCE_SEK,
                pause_titel_sek: float = TITLE_SILENCE_SEK,
+               meta: "dict | None" = None,
                ) -> BaueErgebnis:
     """Führt die HSP-15-Pipeline atomar aus.
 
@@ -383,6 +392,7 @@ def baue_album(*, titel: str, text: str, voice: str, idee: str,
 
     addendum = _format_historie_entry(
         nummer=nummer, titel=titel, datum=erstellt_am, synopse=synopse,
+        meta=meta,
     )
     data_io.append_text_atomic(historie_pfad, addendum)
 
