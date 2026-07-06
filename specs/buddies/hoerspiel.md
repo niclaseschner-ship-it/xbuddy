@@ -128,6 +128,11 @@ ID-Präfix HFE).
 - **OPEN-HSP-V** — Reaktiviert OPEN-HSP-G teilweise: geteiltes Familien-Handy
   ✓ (HSP-47..55); per-Kind-eigenes-Gerät + geräteübergreifender Resume-Sync
   weiterhin offen.
+- **OPEN-HSP-W** — Orchestrator-Deploy: `instance.json` je Instanz
+  (mia/finn/emil) mit `serien_name`/`ton`/`perspektive` befüllen,
+  damit die `Serie:`-Zeile im LLM-Prompt erscheint. Folge von T1336
+  (DEFAULT_SERIEN_RAHMEN neutralisiert, HSP-45-Abschnitt). Trigger: Deploy-
+  Runbook nach T1336-Merge.
 
 ---
 
@@ -1827,6 +1832,18 @@ auf die durchgereichten Variablen).
 
 (ENTSCHEID-1263 → Vorlauf „Name-Drift-Fix" + F3 „Erwachsener über Daten" +
 Prompt-Frage „zielgruppe/ton-Felder, Experiment Pflicht".)
+
+**OPEN-HSP-W (T1336, 2026-07-07) — DEFAULT_SERIEN_RAHMEN neutralisiert.**
+Der Code-Default in `hoerspiel/llm_service.py` war Mia-spezifisch
+(`"Stigi, Malini & Vögelchen …"`) — was für `finn` und jede weitere Instanz
+ohne gesetzte `instance.json` zu einem Mia-Serien-Leak führte.
+*Auflösung:* `DEFAULT_SERIEN_RAHMEN = ""` (leer); `_build_user_context`
+lässt die `Serie:`-Zeile bei leerem `serien_name` weg (minimal-neutral).
+Instanzen tragen ihren `serien_name` ausschließlich via `instance.json`;
+der Orchestrator-Deploy (T1336) provisioniert die Datei-Werte für
+`mia`/`finn`/`emil`. *Restschuld:* bis die Live-`instance.json` je
+Instanz den `serien_name` trägt, erscheint keine `Serie:`-Zeile im Prompt
+(Folgen bleiben generisch gerahmt, nicht falsch gerahmt).
 
 ### HSP-46 — Keine Zielgruppen-Sicht-Trennung (Nic-Setzung 2026-07-03)
 Niclas erscheint als **gleichrangige** dritte Instanz in derselben
