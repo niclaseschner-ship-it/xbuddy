@@ -206,25 +206,27 @@ längste Prefix gewinnt, das ist Teil der Spec, nicht nur eine nginx-Marotte):
 | 5 | `/display/essen/`               | Essens-Buddy        | Display-View des Essens-Buddys (ESSEN-2): `/display/essen/wunsch`. Upstream: xbuddy-essen (:5052, PORT-2). |
 | 6 | `/display/hoerspiel/paula/`     | Hörspiel-Buddy (Paula) | Display-View Paula-Instanz (HSP-3a, HSP-26, RAT-17, URL-3a). Schließt `/display/hoerspiel/paula/static/` (URL-13) und `/display/hoerspiel/paula/data/<sub>` (Per-Instanz-Audio/Cover) ein. Upstream: xbuddy-hoerspiel (:5053, PORT-2). |
 | 7 | `/display/hoerspiel/neko/`      | Hörspiel-Buddy (Neko)  | Display-View Neko-Instanz (HSP-28a, RAT-17, URL-3a). Schließt `/display/hoerspiel/neko/static/` (URL-13) und `/display/hoerspiel/neko/data/<sub>` (Per-Instanz-Audio/Cover) ein. Upstream: xbuddy-hoerspiel-neko (:5055, PORT-2). |
-| 8 | `/display/hoerspiel/`           | Hörspiel-Buddy (Paula, Fallback) | Fallback ohne `<kind_id>`-Segment (z.B. `/display/hoerspiel/alben` und `/display/hoerspiel/themen` vor T4 #910). Übergangs-Provisorium — T4 #910 hebt diese Route auf kind_id-tragende Form. Upstream: xbuddy-hoerspiel (:5053, PORT-2). |
-| 9 | `/display/kibuddy/`             | KI-Buddy            | Display-View des KI-Buddys (KIBUDDY-2): `/display/kibuddy/frage`. Schließt `/display/kibuddy/static/` (URL-13) ein. Upstream: xbuddy-kibuddy (:5054, PORT-2). |
-| 10 | `/api/v1/plan/`                | Plan-Buddy          | Plan-Buddy-Backend: `GET\|PUT /api/v1/plan/termine` (PLAN-22), `GET /api/v1/plan/zuteilung` (PLAN-30), `PUT /api/v1/plan/zuteilung` (PLAN-31), `PUT\|DELETE /api/v1/plan/aktivitaet` (PLAN-11). |
-| 11 | `/api/v1/familie/`             | Familie             | Familien-Mit-Host (Personen, Foto).                                       |
-| 12 | `/api/v1/geraete/`             | Geräte              | Geräte-Registry (GER-13/14/15) — Liste, Einzeln, Anlegen.                 |
-| 13 | `/api/v1/photo/`               | Photo-Buddy         | Photo-Buddy-Backend: Medien-Library + interface-first Ingest (PHOTO-13..16): `POST\|GET /api/v1/photo/medien`, `GET /api/v1/photo/medien/<id>[/thumbnail]`, `DELETE /api/v1/photo/medien/<id>`. |
-| 14 | `/api/v1/essen/`               | Essens-Buddy        | Essens-Buddy-Backend: Wunsch-Liste (ESSEN-15..17) + Katalog (ESSEN-18..19). Upstream: xbuddy-essen (:5052, PORT-2). |
-| 15 | `/api/v1/routine/`             | Routine-Buddy       | Routine-Buddy-Backend: Schreib-API für Zeiten/Items (ROUTINE-14). Upstream: xbuddy-routine (:5050, PORT-2). |
-| 16 | `/api/v1/hoerspiel/paula/`     | Hörspiel-Buddy (Paula) | Hörspiel-Backend Paula-Instanz (HSP-17, HSP-26, RAT-17, URL-3a): Bible/Historie-Read, Alben-Liste + Manifest, Folgen-Vorschlag, Album-Bau, Config (PATCH), Shared-Assets-Status/Rebuild. Upstream: xbuddy-hoerspiel (:5053, PORT-2). |
-| 17 | `/api/v1/hoerspiel/neko/`      | Hörspiel-Buddy (Neko)  | Hörspiel-Backend Neko-Instanz (HSP-28a, RAT-17, URL-3a): gleiche API-Surface wie Paula. Upstream: xbuddy-hoerspiel-neko (:5055, PORT-2). |
-| 18 | `/api/v1/hoerspiel/`           | Hörspiel-Buddy (Paula, Fallback) | Fallback ohne `<kind_id>`-Segment (z.B. `/api/v1/hoerspiel/themen` vor T4 #910). Übergangs-Provisorium — T4 #910 hebt diese Route auf kind_id-tragende Form. Upstream: xbuddy-hoerspiel (:5053, PORT-2). |
-| 19 | `/api/v1/kibuddy/`             | KI-Buddy            | KI-Buddy-Backend (KIBUDDY-24): Frage-Verarbeitung (`POST /api/v1/kibuddy/frage`), Audio-Cache-Replay (`GET /api/v1/kibuddy/audio/<id>.mp3`), TTS-Replay (`POST /api/v1/kibuddy/vorlesen`), Session-Reset (`POST /api/v1/kibuddy/reset`), Prompt (`GET\|PUT /api/v1/kibuddy/prompt`, KIBUDDY-15), Config (`GET\|PUT /api/v1/kibuddy/config`). Upstream: xbuddy-kibuddy (:5054, PORT-2). |
-| 20 | `/api/v1/displays/<id>/events` | Router              | SSE-Zustands-Stream (ROU-22); Long-Lived, ohne Proxy-Puffer.              |
-| 21 | `/display/`                    | Router              | Display-Views (außer den oben abgefangenen spezifischen Buddy-Prefixen). Schließt geteilte Display-Assets unter `/display/_shared/` ein (URL-16): Per-Instanz-Assets wie `/display/_shared/icons/` (ARASAAC-Piktogramme, ROU-26, #135) und repo-servierte Assets wie `/display/_shared/design/` (Design-Tokens, ROU-30, #323) — kein eigener nginx-Block. |
-| 22 | `/controller/`                 | Router              | Controller-Aktionen (URL-3).                                              |
-| 23 | `/api/v1/panels/`              | Panel-Registry      | Panel-Registry-API (PREG-13/14/15) — Liste, Einzeln, Anlegen. Upstream: xbuddy-panel (:5041, PORT-2). |
-| 24 | `/api/v1/seiten`               | Seiten-Registry     | Seiten-/Adress-Registry (SREG): `GET /api/v1/seiten` = Inventar aller aufrufbaren Views. Upstream: xbuddy-seiten (:5042, PORT-2). |
-| 25 | `/api/v1/`                     | Router              | Hub-Backend (State, Events, Diagnose).                                    |
-| 26 | `/` (alles übrige)             | —                   | 404 (URL-1: andere Top-Level-Pfade sind nicht erlaubt).                   |
+| 8 | `/display/hoerspiel/niclas/`    | Hörspiel-Buddy (Niclas)  | Display-View Niclas-Instanz (HSP-28a, RAT-17, URL-3a, T1347). Schließt `/display/hoerspiel/niclas/static/` (URL-13) und `/display/hoerspiel/niclas/data/<sub>` (Per-Instanz-Audio/Cover) ein. Upstream: xbuddy-hoerspiel-niclas (:5056, PORT-2). |
+| 9 | `/display/hoerspiel/`           | Hörspiel-Buddy (Paula, Fallback) | Fallback ohne `<kind_id>`-Segment (z.B. `/display/hoerspiel/alben` und `/display/hoerspiel/themen` vor T4 #910). Übergangs-Provisorium — T4 #910 hebt diese Route auf kind_id-tragende Form. Upstream: xbuddy-hoerspiel (:5053, PORT-2). |
+| 10 | `/display/kibuddy/`             | KI-Buddy            | Display-View des KI-Buddys (KIBUDDY-2): `/display/kibuddy/frage`. Schließt `/display/kibuddy/static/` (URL-13) ein. Upstream: xbuddy-kibuddy (:5054, PORT-2). |
+| 11 | `/api/v1/plan/`                | Plan-Buddy          | Plan-Buddy-Backend: `GET\|PUT /api/v1/plan/termine` (PLAN-22), `GET /api/v1/plan/zuteilung` (PLAN-30), `PUT /api/v1/plan/zuteilung` (PLAN-31), `PUT\|DELETE /api/v1/plan/aktivitaet` (PLAN-11). |
+| 12 | `/api/v1/familie/`             | Familie             | Familien-Mit-Host (Personen, Foto).                                       |
+| 13 | `/api/v1/geraete/`             | Geräte              | Geräte-Registry (GER-13/14/15) — Liste, Einzeln, Anlegen.                 |
+| 14 | `/api/v1/photo/`               | Photo-Buddy         | Photo-Buddy-Backend: Medien-Library + interface-first Ingest (PHOTO-13..16): `POST\|GET /api/v1/photo/medien`, `GET /api/v1/photo/medien/<id>[/thumbnail]`, `DELETE /api/v1/photo/medien/<id>`. |
+| 15 | `/api/v1/essen/`               | Essens-Buddy        | Essens-Buddy-Backend: Wunsch-Liste (ESSEN-15..17) + Katalog (ESSEN-18..19). Upstream: xbuddy-essen (:5052, PORT-2). |
+| 16 | `/api/v1/routine/`             | Routine-Buddy       | Routine-Buddy-Backend: Schreib-API für Zeiten/Items (ROUTINE-14). Upstream: xbuddy-routine (:5050, PORT-2). |
+| 17 | `/api/v1/hoerspiel/paula/`     | Hörspiel-Buddy (Paula) | Hörspiel-Backend Paula-Instanz (HSP-17, HSP-26, RAT-17, URL-3a): Bible/Historie-Read, Alben-Liste + Manifest, Folgen-Vorschlag, Album-Bau, Config (PATCH), Shared-Assets-Status/Rebuild. Upstream: xbuddy-hoerspiel (:5053, PORT-2). |
+| 18 | `/api/v1/hoerspiel/neko/`      | Hörspiel-Buddy (Neko)  | Hörspiel-Backend Neko-Instanz (HSP-28a, RAT-17, URL-3a): gleiche API-Surface wie Paula. Upstream: xbuddy-hoerspiel-neko (:5055, PORT-2). |
+| 19 | `/api/v1/hoerspiel/niclas/`    | Hörspiel-Buddy (Niclas)  | Hörspiel-Backend Niclas-Instanz (HSP-28a, RAT-17, URL-3a, T1347): gleiche API-Surface wie Paula und Neko. Upstream: xbuddy-hoerspiel-niclas (:5056, PORT-2). |
+| 20 | `/api/v1/hoerspiel/`           | Hörspiel-Buddy (Paula, Fallback) | Fallback ohne `<kind_id>`-Segment (z.B. `/api/v1/hoerspiel/themen` vor T4 #910). Übergangs-Provisorium — T4 #910 hebt diese Route auf kind_id-tragende Form. Upstream: xbuddy-hoerspiel (:5053, PORT-2). |
+| 21 | `/api/v1/kibuddy/`             | KI-Buddy            | KI-Buddy-Backend (KIBUDDY-24): Frage-Verarbeitung (`POST /api/v1/kibuddy/frage`), Audio-Cache-Replay (`GET /api/v1/kibuddy/audio/<id>.mp3`), TTS-Replay (`POST /api/v1/kibuddy/vorlesen`), Session-Reset (`POST /api/v1/kibuddy/reset`), Prompt (`GET\|PUT /api/v1/kibuddy/prompt`, KIBUDDY-15), Config (`GET\|PUT /api/v1/kibuddy/config`). Upstream: xbuddy-kibuddy (:5054, PORT-2). |
+| 22 | `/api/v1/displays/<id>/events` | Router              | SSE-Zustands-Stream (ROU-22); Long-Lived, ohne Proxy-Puffer.              |
+| 23 | `/display/`                    | Router              | Display-Views (außer den oben abgefangenen spezifischen Buddy-Prefixen). Schließt geteilte Display-Assets unter `/display/_shared/` ein (URL-16): Per-Instanz-Assets wie `/display/_shared/icons/` (ARASAAC-Piktogramme, ROU-26, #135) und repo-servierte Assets wie `/display/_shared/design/` (Design-Tokens, ROU-30, #323) — kein eigener nginx-Block. |
+| 24 | `/controller/`                 | Router              | Controller-Aktionen (URL-3).                                              |
+| 25 | `/api/v1/panels/`              | Panel-Registry      | Panel-Registry-API (PREG-13/14/15) — Liste, Einzeln, Anlegen. Upstream: xbuddy-panel (:5041, PORT-2). |
+| 26 | `/api/v1/seiten`               | Seiten-Registry     | Seiten-/Adress-Registry (SREG): `GET /api/v1/seiten` = Inventar aller aufrufbaren Views. Upstream: xbuddy-seiten (:5042, PORT-2). |
+| 27 | `/api/v1/`                     | Router              | Hub-Backend (State, Events, Diagnose).                                    |
+| 28 | `/` (alles übrige)             | —                   | 404 (URL-1: andere Top-Level-Pfade sind nicht erlaubt).                   |
 
 Diese Tabelle ist die Quelle für (a) die nginx-Origin-Konfiguration in
 `deploy/nginx/xbuddy-origin.conf` und (b) Onboarding-Schritte, die Origin-Routing
@@ -233,14 +235,14 @@ laufen). Konsumenten dieser Tabelle: #85 (nginx-Origin-Conf: Familie-Upstream
 ergänzen), #60 (Familie anlegen agentisch — schreibt Familie in den Routing-Plan
 einer Instanz), #82 (Geräte-Profil im Onboarding — wählt aus dieser Tabelle die
 Prefixe, die auf der Instanz aktiv sind), #135 (Icon-Bibliothek: geteilte
-Display-Assets vom Router serviert, URL-16, ROU-26), #909 (zweite Hörspiel-Instanz Paula+Neko).
+Display-Assets vom Router serviert, URL-16, ROU-26), #909 (zweite Hörspiel-Instanz Paula+Neko), #1347 (dritte Hörspiel-Instanz Niclas).
 
 Eine neue Komponente, die einen eigenen Prozess hinter der Origin betreibt,
 muss zuerst hier eine Zeile bekommen — dann nginx, dann Code. Reihenfolge
 spezifisch-vor-allgemein wird beibehalten; spezifischere Prefixe (`/api/v1/plan/`,
 `/api/v1/familie/`) stehen immer vor allgemeineren (`/api/v1/`).
 
-*Tickets:* #85, #135, #909
+*Tickets:* #85, #135, #909, #1347
 
 ### URL-15 — Origin im LAN erreichbar, nicht nur lokal
 
