@@ -58,12 +58,18 @@ class Geraet:
     """Ein Gerät der Familien-Registry (GER-3).
 
     Pflichtfelder: `id`, `typ`, `name`, `aufloesung`, `os`, `verwendung`,
-    `status`. Es gibt V1 keine optionalen Felder — alle GER-3-Felder sind
-    Pflicht. Konsumenten lesen nur über `to_dict()`, nicht über interne
-    Attribute (CLAUDE.md §6 einseitige Abhängigkeiten).
+    `status`. Dazu EIN optionales Feld: `paired_at` (OD3 / T948) — der
+    ISO-8601-Zeitstempel, den der Pairing-Endpoint `/auth/pair` additiv in
+    geraete.json stempelt (seiten/main.py::_markiere_paired_at). Es ist
+    optional (fehlend = nie gepaart) und round-trip-treu: ein Gerät, das den
+    Stempel trägt, behält ihn über einen add/update/save der Registry
+    (sonst dropt der nächste GER-15-Write den vom Pairing gesetzten Stempel).
+    Konsumenten lesen nur über `to_dict()`, nicht über interne Attribute
+    (CLAUDE.md §6 einseitige Abhängigkeiten).
     """
 
-    def __init__(self, id, typ, name, aufloesung, os, verwendung, status):
+    def __init__(self, id, typ, name, aufloesung, os, verwendung, status,
+                 paired_at=None):
         self.id = id
         self.typ = typ
         self.name = name
@@ -71,6 +77,8 @@ class Geraet:
         self.os = os
         self.verwendung = verwendung
         self.status = status
+        # OD3: optionaler Pairing-Stempel (ISO-8601) oder None (nie gepaart).
+        self.paired_at = paired_at
 
     def is_aktiv(self):
         return self.status == "aktiv"
@@ -79,9 +87,12 @@ class Geraet:
         """Geräte-Daten für die Schnittstelle (GER-5) und die Datei (GER-6).
 
         Bewusst stabile Feld-Reihenfolge, damit save() byte-stabile Diffs
-        produziert (FAM-11-Analogie).
+        produziert (FAM-11-Analogie). `paired_at` erscheint NUR, wenn gesetzt —
+        ein nie gepaartes Gerät bleibt byte-gleich (kein null-Feld), und der
+        Stempel steht als letzter Schlüssel, genau dort, wo der Raw-JSON-Write
+        aus /auth/pair ihn anhängt (round-trip-treu, OD3).
         """
-        return {
+        d = {
             "id": self.id,
             "typ": self.typ,
             "name": self.name,
@@ -90,6 +101,9 @@ class Geraet:
             "verwendung": self.verwendung,
             "status": self.status,
         }
+        if self.paired_at is not None:
+            d["paired_at"] = self.paired_at
+        return d
 
 
 class Registry:
@@ -293,6 +307,17 @@ def _validate_dict(raw):
             "Gerät %r: status %r nicht in %r (GER-3)"
             % (geraet_id, raw["status"], list(STATUS_WERTE)))
     aufloesung = _validate_aufloesung(raw["aufloesung"], geraet_id)
+    # OD3 / T948: `paired_at` ist OPTIONAL — fehlend (oder None) ist gültig
+    # (Gerät nie gepaart). Ist es vorhanden, muss es ein nicht-leerer String
+    # sein (ISO-8601-Stempel); alles andere ist ein Datei-Fehler, analog zur
+    # strengen Behandlung der Pflichtfelder (falsche Daten = Datei-Fehler).
+    # WICHTIG: hier KEIN _require — das würde alle bestehenden geraete.json
+    # ohne Pairing-Stempel brechen.
+    paired_at = raw.get("paired_at")
+    if paired_at is not None and (not isinstance(paired_at, str) or not paired_at):
+        raise RegistryError(
+            "Gerät %r: paired_at muss ein nicht-leerer ISO-8601-String sein, "
+            "ist %r (OD3)" % (geraet_id, paired_at))
     return Geraet(
         id=geraet_id,
         typ=raw["typ"],
@@ -301,6 +326,7 @@ def _validate_dict(raw):
         os=raw["os"],
         verwendung=raw["verwendung"],
         status=raw["status"],
+        paired_at=paired_at,
     )
 
 
