@@ -13,7 +13,8 @@
     "essen/wunsch": {
       "path": "/display/essen/wunsch",
       "viewport": { "width": 1920, "height": 1200 },
-      "_doc": "DC-18 fluid pilot (Paula-Tablet 1920x1200). viewport 1920x1200 wird jetzt per-View-Viewport in check.js konsumiert (#1322, AC2). Tier-A prueft Overflow UND Underfill (Fuellinvariante, #1322 AC1): Content-Bounding-Box < Viewport → Befund underfill."
+      "responsive": true,
+      "_doc": "DC-18 fluid pilot (Paula-Tablet 1920x1200). responsive:true aktiviert underfill-Pruefung (DC-18, #1322 AC2). viewport 1920x1200 wird per-View-Viewport in check.js konsumiert (#1322). Tier-A prueft Overflow UND Underfill (Fuellinvariante): Content-Bounding-Box < Viewport → Befund underfill."
     }
   }
 }
