@@ -401,22 +401,20 @@ def test_TASK7_make_is_member_fn_late_evaluation_of_fgcid():
 
 
 # ============================================================
-#  E-TAB-6 V2 — multimodal_provider im build_catalog-Live-Pfad
+#  TAB-12 / #1262 — Foto-Analyse-Adapter im build_catalog-Live-Pfad
 # ============================================================
 
-def test_ETAB6_V2_multimodal_provider_mistral_eingesteckt():
-    """E-TAB-6 V2 / Linse 7 — Live-Pfad-Probe:
-    Wenn provider='claude' aber multimodal_provider='mistral' gesetzt ist,
-    baut build_catalog den TermineAusBildTask mit einem MistralMultimodalProvider,
-    NICHT mit ClaudeMultimodalProvider.
-
-    Verifiziert AC1+AC2 aus T508: build_catalog-Signatur trägt multimodal_*;
-    der TAB-Guard greift korrekt und reicht den separaten Multimodal-Adapter durch.
+def test_TAB1262_foto_analyse_provider_eingesteckt():
+    """TAB-12 / #1262 — Live-Pfad-Probe:
+    build_catalog baut den TermineAusBildTask mit dem FotoAnalyseProvider
+    (tools.llm-Adapter, Foto-Slot). Die frühere multimodal_provider-Auswahl
+    (Mistral vs. Claude im build_catalog, Legacy _multimodal) entfiel mit #1262
+    — der Anbieter kommt jetzt aus dem Zugangsdaten-Foto-Slot über get_singleshot;
+    multimodal_model wird an FotoAnalyseProvider(model=...) durchgereicht.
     """
-    from skills._multimodal.mistral import MistralMultimodalProvider
+    import skills.foto_analyse as fa_mod
+    import skills.termine_aus_bild_task as tab_mod
 
-    # Wir brauchen eine funktionierende plan_origin_url, tab_sessions und
-    # family_group_chat_id_getter, damit der TAB-Guard greift.
     captured = []
 
     class _CapturingTermineAusBildTask(ReadTask):
@@ -430,13 +428,19 @@ def test_ETAB6_V2_multimodal_provider_mistral_eingesteckt():
         def execute(self, args, turn_context):
             return ""
 
-    import skills.termine_aus_bild_task as tab_mod
+    class _FakeFotoAnalyseProvider:
+        """Baubarer Foto-Analyse-Adapter (Foto-Slot vorhanden)."""
 
-    # Patch TermineAusBildTask in tasks-Modul-Namespace über den Import-Pfad.
-    # build_catalog importiert lazy: `from skills.termine_aus_bild_task import
-    # TermineAusBildTask` — wir patchen das Modul, bevor build_catalog lädt.
-    original_cls = tab_mod.TermineAusBildTask
+        def __init__(self, model=""):
+            self.model = model
+
+    # build_catalog importiert lazy: `from skills.foto_analyse import
+    # FotoAnalyseProvider` und `from skills.termine_aus_bild_task import
+    # TermineAusBildTask` — wir patchen beide Modul-Attribute vor dem Aufruf.
+    original_tab = tab_mod.TermineAusBildTask
+    original_fa = fa_mod.FotoAnalyseProvider
     tab_mod.TermineAusBildTask = _CapturingTermineAusBildTask
+    fa_mod.FotoAnalyseProvider = _FakeFotoAnalyseProvider
     try:
         build_catalog(
             FakeTelegram(),
@@ -447,45 +451,37 @@ def test_ETAB6_V2_multimodal_provider_mistral_eingesteckt():
             provider_name="claude",
             provider_api_key="claude-key",
             provider_model="",
-            multimodal_provider="mistral",
-            multimodal_api_key="mistral-key",
-            multimodal_model="mistral-medium-3504",
+            multimodal_model="claude-foto-modell",
         )
     finally:
-        tab_mod.TermineAusBildTask = original_cls
+        tab_mod.TermineAusBildTask = original_tab
+        fa_mod.FotoAnalyseProvider = original_fa
 
     assert len(captured) == 1, "TermineAusBildTask wurde nicht gebaut"
     adapter = captured[0]
-    assert isinstance(adapter, MistralMultimodalProvider), (
-        "E-TAB-6 V2: multimodal_provider='mistral' muss MistralMultimodalProvider "
-        "liefern, nicht %r" % type(adapter).__name__
+    assert isinstance(adapter, _FakeFotoAnalyseProvider), (
+        "TAB-12/#1262: der TAB-Guard muss den FotoAnalyseProvider durchreichen, "
+        "nicht %r" % type(adapter).__name__
     )
+    assert adapter.model == "claude-foto-modell", (
+        "multimodal_model muss an FotoAnalyseProvider(model=...) durchgereicht werden")
 
 
-def test_ETAB6_V1_default_kein_multimodal_gesetzt_nutzt_text_provider():
-    """E-TAB-6 V1 / AC5 — Rückwärts-Kompatibilität:
-    Ist kein multimodal_provider gesetzt, fällt build_catalog auf provider_name
-    zurück — V1-Default unverändert (kein multimodal_* gesetzt → wie heute).
+def test_TAB1262_capability_error_skill_abgeschaltet():
+    """TAB-12 / #1262 — negativer Pfad: wirft FotoAnalyseProvider beim Bau
+    LLMCapabilityError (Foto-Slot fehlt / Capability-Mismatch), bleibt »Termine
+    aus Bild« abgeschaltet (kein Katalog-Eintrag) — wie der frühere Onboarding-
+    Pfad ohne Key. Der übrige Katalog bleibt unberührt.
     """
-    from skills._multimodal.claude import ClaudeMultimodalProvider
+    import skills.foto_analyse as fa_mod
 
-    captured = []
+    def _boom(model=""):
+        raise fa_mod.LLMCapabilityError("Foto-Slot fehlt (Test)")
 
-    class _CapturingTermineAusBildTask(ReadTask):
-        name = "termine_aus_bild"
-
-        def __init__(self, tg, multimodal_provider, plan_client,
-                     sessions, family_group_chat_id_getter, is_member_fn):
-            captured.append(multimodal_provider)
-
-        def execute(self, args, turn_context):
-            return ""
-
-    import skills.termine_aus_bild_task as tab_mod
-    original_cls = tab_mod.TermineAusBildTask
-    tab_mod.TermineAusBildTask = _CapturingTermineAusBildTask
+    original_fa = fa_mod.FotoAnalyseProvider
+    fa_mod.FotoAnalyseProvider = _boom
     try:
-        build_catalog(
+        catalog = build_catalog(
             FakeTelegram(),
             "/instanz/rootCA.pem",
             plan_origin_url="http://127.0.0.1:5000",
@@ -494,17 +490,15 @@ def test_ETAB6_V1_default_kein_multimodal_gesetzt_nutzt_text_provider():
             provider_name="claude",
             provider_api_key="claude-key",
             provider_model="",
-            # multimodal_* absichtlich nicht gesetzt → V1-Default
         )
     finally:
-        tab_mod.TermineAusBildTask = original_cls
+        fa_mod.FotoAnalyseProvider = original_fa
 
-    assert len(captured) == 1, "TermineAusBildTask wurde nicht gebaut"
-    adapter = captured[0]
-    assert isinstance(adapter, ClaudeMultimodalProvider), (
-        "V1-Default: ohne multimodal_provider muss ClaudeMultimodalProvider "
-        "gebaut werden, nicht %r" % type(adapter).__name__
-    )
+    assert catalog.get("termine_aus_bild") is None, (
+        "TAB-12/#1262: bei LLMCapabilityError darf »Termine aus Bild« NICHT "
+        "im Katalog sein")
+    # Übriger Katalog unberührt (Smoke: ca_verteilen bleibt registriert).
+    assert catalog.get("ca_verteilen") is not None
 
 
 # ============================================================

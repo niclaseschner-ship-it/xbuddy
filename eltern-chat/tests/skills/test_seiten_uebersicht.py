@@ -87,15 +87,17 @@ def test_AC1_inline_button_vorhanden():
 
 
 def test_AC1_web_app_url_korrekt():
-    """AC1/MAU-1: web_app_url = mini_app_url + /api/v1/seiten/mini-app-uebersicht."""
+    """AC1/MAU-1: web_app_url ist die übergebene MAU-URL (fix(850): der Skill
+    hängt den Pfad NICHT mehr selbst an — das macht der Task-Konstruktor aus
+    mini_app_base_url + _MAU_APP_PATH; der Skill gibt die volle URL 1:1 zurück)."""
     result = seiten_uebersicht(
         chat_id=42, from_user_id=7,
         is_member_fn=_immer_mitglied,
-        mini_app_url=_MINI_APP_BASE,
+        mini_app_url=_MAU_URL,
     )
     ib = result["presentation"]["inline_button"]
     assert ib["web_app_url"] == _MAU_URL, (
-        "web_app_url muss auf MAU-Pfad zeigen: %r" % ib["web_app_url"])
+        "web_app_url muss die übergebene MAU-URL sein: %r" % ib["web_app_url"])
 
 
 def test_AC1_web_app_url_enthaelt_mau_pfad():

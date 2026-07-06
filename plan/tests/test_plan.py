@@ -12,7 +12,7 @@ import threading
 from datetime import date, datetime, timedelta
 
 import pytest
-from conftest import DEMO_CONFIG, FakeTransport
+from _plan_fakes import DEMO_CONFIG, FakeTransport
 
 from plan import aktivitaeten as aktivitaeten_mod
 from plan import config as config_mod
