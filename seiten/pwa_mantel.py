@@ -331,19 +331,27 @@ REGISTRY: dict[str, MantelConfig] = {
         sw_scope="/seiten/plan/einstellungen/",
     ),
     "connector": MantelConfig(
-        # KEIN style.css — Vorbehalt (PWAM-4 offene Frage 2, Set final erst
-        # nach Install-/Diff-Probe im connector-Angleich-Folgetrack).
-        build_id_source_set=("index.html",),
+        # PWAM-4: build_id trackt alle precachten MANTEL_ASSETS (sw.js, style.css,
+        # Icons) — ändert sich einer, bumpt build_id → SW wechselt Cache-Namespace.
+        # Logos (SVG unter logos/) sind bewusst ausgelassen: selten geändert, kein
+        # eigener PWAM-Install-Pfad. index.html bleibt Anker für den HTML-Buster.
+        # (T1365-Befund-2: Vorbehalt erledigt.)
+        build_id_source_set=("index.html", "style.css",
+                             "icon-192.png", "icon-512.png", "icon-maskable-512.png"),
         name="Connector · KI-Anbieter · XBuddy",
         start_url="/api/v1/seiten/connector/",
-        icons=(),                              # PWAM-2: SVG-Drift → PNG-Angleich (Folgetrack)
+        # PWAM-2: connector fährt File-Manifest (manifest.json auf Platte ist SSoT);
+        # build_manifest() wird NICHT aufgerufen. icons spiegelt das manifest.json
+        # für Registry-Konsistenz — nicht der generative Pfad wie bei einkauf/plan.
+        # (T1365-Befund-3: PNG-Angleich erledigt.)
+        icons=("icon-192.png", "icon-512.png", "icon-maskable-512.png"),
         display="standalone",
         html_cache_mode="network-only",        # PWAM-3: server-Aggregat nie cache-first
         stop_prefixes=(),
-        # PWAM-3 Angleichungs-Ziel: live liefert connector den SW heute noch
-        # unter /api/v1/seiten/static/connector/sw.js (Scope-Bruch) — der Fix
-        # gehört in den connector-Angleich-Folgetrack, nicht in #1266.
-        sw_script_route="/api/v1/seiten/connector/sw.js",
+        # PWAM-3: SW liegt unter /static/ (Flask-static-Prefix); Browser registriert
+        # via sw_scope mit Service-Worker-Allowed-Header (connector_sw_view, main.py).
+        # (T1365-Befund-1: sw_script_route auf realen Serve-Pfad gezogen.)
+        sw_script_route="/api/v1/seiten/static/connector/sw.js",
         sw_scope="/api/v1/seiten/connector/",
     ),
     "shell": MantelConfig(
