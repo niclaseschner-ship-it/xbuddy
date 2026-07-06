@@ -13,14 +13,11 @@ import os
 import sys
 from unittest.mock import patch
 
-import pytest
-
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from hoerspiel import album_builder, config as config_mod  # noqa: E402
-from hoerspiel import data_io, llm_service, main as main_mod  # noqa: E402
+from hoerspiel import album_builder, data_io, llm_service  # noqa: E402  # noqa: E402
 
 # ============================================================
 #  Hilfsfunktionen
