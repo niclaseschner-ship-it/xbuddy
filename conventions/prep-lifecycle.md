@@ -217,7 +217,10 @@ Die PW-26-Mechanik wird **nicht** stillschweigend erweitert. Reopen-Trigger
    `over_14_lines > 20%`, **oder** `followup_pain ≥ 62%` (alte Baseline aus
    29-Sample-Messung 2026-06-21) → neue `/berater-runde` entscheidet zwischen
    mechanischem Hook und Pre-Flight-Form-Überarbeitung (siehe PREP-11
-   Welle-2-Ausgang).
+   Welle-2-Ausgang). **Ausgesetzt bei `rendered_card_total = 0`** (PW-86-RATIFIZIERT
+   2026-07-06): läuft ein Prep-Lauf rein über Koordinations-Override (keine
+   HTML-Karte gerendert), ist der leere Form-Nenner kein Qualitäts-Signal — der
+   Schwellen-Riss ist dann ein Mess-Artefakt, kein berater-runden-Auslöser.
 
 ## PREP-10 — Karten-Form v5 (Pflicht-Felder, Ampel-Stempel)
 
@@ -408,6 +411,12 @@ Prep-Lauf:
 
 Output: einzeilige Bilanz, von /arbeitstag-prep am Ende jeder Retro
 abrufbar (`cards=N preflight_missing=X over_14_lines=Y followup_pain=Z%`).
+
+**Getrennte Nenner** (PW-86-RATIFIZIERT 2026-07-06, `brainstorm/berater-runde/20260706-154616-RATIFIZIERT-pw86-prep11-messnaht.md` Paket-Sektion „Die gedrehte Form"): Der bisherige gemeinsame Nenner (alle `status:ready`-Tickets im Fenster) verdünnt die **Form**-Metriken bis zur Bedeutungslosigkeit — Tickets, die **ohne Karten-Render** ready wurden (Werft-Stempel mit `werft_verdict`, Koordinations-Override mit direktem `prep_verdict`), haben nie eine gerenderte Karte und dürfen die Kartenform nicht mitzählen (Bug-Beleg 2026-07-06: 0 gerenderte Karten unter 16 ready-Tickets → Formmetriken maßen Rauschen). Daher:
+- `rendered_card_total` = im Prep-Lauf zu Nic gerenderte Karten (getragen vom `card_pre_flight v1`-Marker). **`over_14_lines` und `followup_pain`** messen die Qualität *dieser* Karten und teilen durch `rendered_card_total`; `followup_pain` zählt nur auf Karten mit `card_pre_flight`.
+- **`preflight_missing` bleibt semantisch unverändert** (Karten *ohne* `card_pre_flight` — ratifiziert: entdünnen, nicht abschalten). Es darf **nicht** über `rendered_card_total` laufen (Zähler und Nenner wären disjunkt → strukturell 0, der Trigger-4-Falsifikator stürbe still). Sein Fehlalarm im reinen Override-Betrieb wird stattdessen über die **Trigger-4-Aussetzung bei `rendered_card_total = 0`** gefangen. **Offen (Bau xbuddy#1359):** ein Nenner, der marker-lose *gerenderte* Karten von nie-gerenderten Nicht-Kartenpfad-Tickets trennt — der Marker allein kann beide nicht unterscheiden; die Nenner-Regel für `preflight_missing` im Misch-Lauf klärt das Bau-Ticket empirisch. (Bau: xbuddy#1359.)
+
+- `gate_provenance_missing` — **neue Audit-/Canary-Metrik, kein PREP-11-Form-Ersatz**: offene `status:ready`-Tickets ohne `card_pre_flight` **oder** `prep_verdict` **oder** `werft_verdict` (Nenner `ready_total`). Sie ist der Observability-Zwilling zu RECON-3s Create-Kanten-Guard (`prep-reconcile.yml`, PW-85): `> 0` heißt, ein Ticket erreichte die Bau-Membran **ohne** Gate-Provenienz — ein Guard-/UI-Bypass-Fund, keine Kartenform-Aussage. Erwartung bei aktivem Guard: `= 0`. (Bau: xbuddy#1359.)
 
 ### Welle-2-Auslöser (Hook ODER Form-Überarbeitung)
 
