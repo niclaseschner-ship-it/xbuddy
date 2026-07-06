@@ -57,6 +57,7 @@ from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # no
 # (vorher per sys.path-Hack aus eltern-chat/init_data.py — Cluster-A-Option-B
 # 2026-06-18-1720 heilt MOD-4 / MOD-6).
 from tools.initdata import init_data as _init_data_mod  # noqa: E402
+from tools.service_diagnostics import register_version  # noqa: E402
 
 # DCOMP-4: Dateirechte auf den Eigentümer beschränkt — analog PREG-4 / GER-4.
 FILE_MODE = 0o600
@@ -365,26 +366,8 @@ app = Flask(__name__, template_folder="templates",
             static_url_path="/api/v1/seiten/static")
 
 
-# ── Version-Endpoint (SVC-6) ──────────────────────────────────────────────
-
-def _deploy_version():
-    """SVC-6: laufende Commit-SHA aus der beim Deploy geschriebenen Datei
-    `__XBUDDY_DATA__/deploy/version` (Default /home/buddy/xbuddy-data, ENV
-    XBUDDY_DATA_DIR). Kein `git rev-parse` zur Laufzeit. Fehlt die Datei
-    (noch kein Deploy), liefert /version null."""
-    data_dir = os.environ.get("XBUDDY_DATA_DIR", "/home/buddy/xbuddy-data")
-    path = os.path.join(data_dir, "deploy", "version")
-    try:
-        with open(path, encoding="utf-8") as f:
-            return f.read().strip() or None
-    except OSError:
-        return None
-
-
-@app.route("/version", methods=["GET"])
-def version():
-    """SVC-6: liefert die laufende Deploy-Commit-SHA (oder null)."""
-    return jsonify({"version": _deploy_version()}), 200
+# ── Version-Endpoint (SVC-6) — geteilte Naht in tools/service_diagnostics ──
+register_version(app)
 
 
 @app.route("/api/v1/seiten", methods=["GET"])

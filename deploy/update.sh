@@ -93,13 +93,44 @@ write_version_file() {
 }
 
 # Loopback-Port eines Service aus conventions/ports.md PORT-2 (SSoT, PORT-1).
-# Leer, wenn der Service keinen HTTP-Port hat (z. B. eltern-chat).
+# Leer, wenn der Service NICHT in der PORT-2-Tabelle steht (portlos ODER unbekannt).
 service_port() {
     local svc="$1"
     awk -F'|' -v s="$svc" '
         { gsub(/[[:space:]]/, "", $2); gsub(/[[:space:]]/, "", $4) }
         $4 == s && $2 ~ /^[0-9]+$/ { print $2; exit }
     ' "$REPO/conventions/ports.md"
+}
+
+# Services ohne HTTP-Port (SVC-1/PORT-2, deploy/systemd/README.md): eltern-chat
+# geht nur RAUS zu Telegram, bindet keinen Port. Für diese ist ein leerer
+# service_port ERWARTET — nicht zu verwechseln mit einem Tippfehler/Drift.
+is_known_portless() {
+    case "$1" in
+        xbuddy-eltern-chat) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Klassifiziert einen Service für den /healthz-Verify (Falsch-grün-Schutz, SVC-6):
+#   PORT:<n> — HTTP-Port in PORT-2 → /healthz MUSS geprüft werden (rc 0)
+#   PORTLESS — bekannt portlos (eltern-chat) → /healthz zu Recht übersprungen (rc 0)
+#   UNKNOWN  — leerer Port bei NICHT-portlosem Service → Drift/Tippfehler (rc 1)
+# Trennt so den früher stumm übersprungenen Fall (leerer Port ⇒ Falsch-grün)
+# vom legitim portlosen Fall.
+port_class() {
+    local svc="$1" port
+    port="$(service_port "$svc")"
+    if [ -n "$port" ]; then
+        printf 'PORT:%s\n' "$port"
+        return 0
+    fi
+    if is_known_portless "$svc"; then
+        echo "PORTLESS"
+        return 0
+    fi
+    echo "UNKNOWN"
+    return 1
 }
 
 # Start-Zeitpunkt eines Service als Unix-Epoch (ActiveEnterTimestamp).
@@ -133,25 +164,39 @@ verify_service() {
         return 1
     fi
 
-    port="$(service_port "$svc")"
-    if [ -n "$port" ]; then
-        code="$(healthz_code "$port")"
-        case "$code" in
-            200) ;;
-            404)
-                # Prozess erreichbar, aber SVC-6-/healthz noch nicht ausgerollt.
-                echo "    ⚠ $svc: /healthz fehlt (HTTP 404, SVC-6-Rollout offen) — Prozess erreichbar"
-                ;;
-            000 | "")
-                echo "    ✗ $svc: /healthz nicht erreichbar (Prozess tot / bindet nicht?)"
-                return 1
-                ;;
-            *)
-                echo "    ✗ $svc: /healthz HTTP $code"
-                return 1
-                ;;
-        esac
-    fi
+    local class
+    class="$(port_class "$svc")"
+    case "$class" in
+        PORT:*)
+            port="${class#PORT:}"
+            code="$(healthz_code "$port")"
+            case "$code" in
+                200) ;;
+                404)
+                    # Prozess erreichbar, aber SVC-6-/healthz noch nicht ausgerollt.
+                    echo "    ⚠ $svc: /healthz fehlt (HTTP 404, SVC-6-Rollout offen) — Prozess erreichbar"
+                    ;;
+                000 | "")
+                    echo "    ✗ $svc: /healthz nicht erreichbar (Prozess tot / bindet nicht?)"
+                    return 1
+                    ;;
+                *)
+                    echo "    ✗ $svc: /healthz HTTP $code"
+                    return 1
+                    ;;
+            esac
+            ;;
+        PORTLESS)
+            # eltern-chat u. Ä.: kein HTTP-Port (PORT-2) — /healthz zu Recht übersprungen.
+            echo "    ℹ $svc: kein HTTP-Port (PORT-2) — /healthz-Verify übersprungen"
+            ;;
+        UNKNOWN)
+            # Früher stiller Skip → Falsch-grün. Jetzt harter Fehler: der Service
+            # steht nicht in ports.md und ist nicht bekannt-portlos (Drift/Tippfehler).
+            echo "    ✗ $svc: kein Port in ports.md (PORT-2) und nicht bekannt-portlos — Drift/Tippfehler? /healthz-Verify nicht möglich"
+            return 1
+            ;;
+    esac
     return 0
 }
 
@@ -274,11 +319,15 @@ main() {
             shift
             mark_restart_done "${1:?commit_range fehlt}"
             ;;
+        --port-class)
+            shift
+            port_class "${1:?Service-Name fehlt}"
+            ;;
         "")
             run_full
             ;;
         *)
-            echo "usage: update.sh [--derive PATH... | --write-version SHA | --mark-done RANGE]" >&2
+            echo "usage: update.sh [--derive PATH... | --write-version SHA | --mark-done RANGE | --port-class SVC]" >&2
             exit 2
             ;;
     esac
