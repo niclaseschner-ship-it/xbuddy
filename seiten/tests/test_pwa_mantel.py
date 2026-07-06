@@ -116,8 +116,10 @@ def test_registry_einkauf_plan_tragen_platform_js():
     assert "essen-einkauf.js" in pwa_mantel.REGISTRY["einkauf"].build_id_source_set
     assert "platform.js" in pwa_mantel.REGISTRY["plan"].build_id_source_set
     assert "plan-einstellungen.js" in pwa_mantel.REGISTRY["plan"].build_id_source_set
-    # connector traegt bewusst KEIN style.css (PWAM-4 Vorbehalt).
-    assert "style.css" not in pwa_mantel.REGISTRY["connector"].build_id_source_set
+    # connector traegt style.css + Icons im build_id_source_set (T1365-Angleich,
+    # PWAM-4 Vorbehalt erledigt — dies ist der connector-Angleich-Folgetrack).
+    assert "style.css" in pwa_mantel.REGISTRY["connector"].build_id_source_set
+    assert "icon-192.png" in pwa_mantel.REGISTRY["connector"].build_id_source_set
 
 
 def test_build_id_for_loest_source_set_gegen_base_dir_auf(monkeypatch):
