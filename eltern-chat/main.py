@@ -1187,16 +1187,13 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # TAB-5 / E-TAB-6: V1 nutzt denselben Anbieter wie der Text-Pfad
         # (cfg.provider). V2 (E-TAB-6): multimodal_* können unabhängig
         # gesetzt werden — leere Werte fallen auf den Text-Pfad zurück.
-        # T1262 PR1: build_catalog baut jetzt FotoAnalyseProvider
-        # (skills.foto_analyse → tools.llm) über den Foto-Slot
-        # `eltern-chat-anthropic-foto-analyse-api-key` (ZD-5, Registrierung am
-        # Foto-Slot-Gate LLMCapabilityError). Die übergebenen Kwargs
-        # `multimodal_provider=`/`multimodal_api_key=` sind tote Felder (Rückbau #1334).
+        # T1262 PR1: build_catalog baut FotoAnalyseProvider intern über den
+        # Foto-Slot (`eltern-chat-anthropic-foto-analyse-api-key`, ZD-5);
+        # multimodal_provider/multimodal_api_key wurden als tote Felder entfernt
+        # (#1334 Rückbau).
         provider_name=cfg.provider,
         provider_api_key=cfg.provider_api_key,
         provider_model=cfg.provider_model,
-        multimodal_provider=getattr(cfg, "multimodal_provider", "") or "",
-        multimodal_api_key=getattr(cfg, "multimodal_api_key", "") or "",
         multimodal_model=getattr(cfg, "multimodal_model", "") or "",
         # HFE-9 / #729: Origin des Hörspiel-Buddys. Leer/None → HFE NICHT im
         # Katalog (AND-Guard in tasks.py).
