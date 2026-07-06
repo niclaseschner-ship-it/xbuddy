@@ -343,8 +343,11 @@ class _AgentFacade:
         Für Konsumenten wie eltern-chat, die ihren eigenen Loop behalten und pro
         Iteration genau einen Create wollen (vgl. `run()`, das den Loop selbst
         fährt). Liefert die geparste Provider-Antwort
-        `{"text", "tool_calls", "usage"}` durch — Tool-Use-Blöcke werden NICHT
-        ausgeführt, nur geparst. Telemetrie pro Create am Vendor (LLMP-S4).
+        `{"text", "tool_calls", "usage", "web_search", "web_search_requests"}`
+        durch — Tool-Use-Blöcke werden NICHT ausgeführt, nur geparst. Die beiden
+        `web_search`-Schlüssel sind additiv (T1371): ohne aktiviertes
+        `web_search`-Server-Tool bleiben sie `[]`/`0`. Telemetrie pro Create am
+        Vendor (LLMP-S4).
         """
         return self._vendor.agent_step(
             system=system,
