@@ -383,14 +383,14 @@ nicht nur die Pure-Math `computeScale`, sondern auch die DOM-Anwendung
   (Split-Screen), wäre das eine echte zweite Ebene — eigene Spec, sobald
   relevant. Deckt sich mit der bewussten Nicht-Entscheidung in Ticket #24.
 
-- **OPEN-DC-B — Responsive Buddy-Templates.** `essen/wunsch` ist fluid live
-  (Fit-Modus `?fit=viewport` funktioniert, DC-18-Pilot #1218 abgeschlossen);
-  der Display-Client-*Mechanismus* ist DC-18 (opt-in `?fit=viewport`). **Noch
-  offen:** die Render-Gate-Füll-Invariante (Content-Bounding-Box == Viewport,
-  kein Leerband, kein Overflow) ist noch nicht gebaut — das Render-Gate prüft
-  derzeit nur Overflow, nicht Füllung (Underflow). Folge-Chore #1322. Dieser
-  Punkt wird geschlossen, sobald das Render-Gate Füllung grün prüft; weitere
-  fluid Views ziehen bei konkretem Schmerz nach.
+- **~~OPEN-DC-B~~  geschlossen (#1322) — Responsive Buddy-Templates.**
+  `essen/wunsch` ist fluid live (Fit-Modus `?fit=viewport` funktioniert,
+  DC-18-Pilot #1218 abgeschlossen); der Display-Client-*Mechanismus* ist DC-18
+  (opt-in `?fit=viewport`). **Gebaut (#1322):** das Render-Gate prüft jetzt
+  Füllung via `underfill`-Invariante (Content-Bounding-Box < Viewport →
+  Befund; Toleranz 5 % je Dimension). Per-View-Viewport in `check.js`
+  enforced (`essen/wunsch` 1920×1200). Weitere fluid Views ziehen bei
+  konkretem Schmerz nach.
 
 - **OPEN-DC-C — Konsumenten-spezifische *fixe* Design-Auflösung.** Der
   *responsive* Weg ist jetzt DC-18. Eine abweichende *fixe* Auflösung (statt
