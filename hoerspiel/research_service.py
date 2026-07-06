@@ -16,8 +16,8 @@ Ablauf (drei Schritte, zwei LLM-Freitext-Calls + N Tavily-Suchen):
 ## HSP-58 — Datenabfluss-Invariante (SICHERHEITSKRITISCH)
 Der **einzige** inhaltliche Input dieses Service ist das `thema`. Bible,
 Historie, Personen-/Familiennamen fließen hier **nicht** ein und können darum
-auch nicht in die an Tavily gesendete Suchanfrage geraten (Constitution §3 /
-RAT-26). Der Query-Gen-Prompt bekommt ausschließlich das `thema`.
+auch nicht in die an Tavily gesendete Suchanfrage geraten (Constitution §3).
+Der Query-Gen-Prompt bekommt ausschließlich das `thema`.
 
 ## Degradation (HSP-58)
 Fehlt der Tavily-Key oder ist die Such-Cloud nicht erreichbar / Quota
