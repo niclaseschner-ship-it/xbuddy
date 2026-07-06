@@ -78,10 +78,14 @@ Identitätsquellen valide ist:
   Cookie-Quelle setzt den Cookie mit frischem 90-Tage-`exp` neu (`Set-Cookie` auf
   der Antwort). Damit rollt **jeder PWA-Start** den Cookie vor; aktiv genutzte
   Geräte laufen faktisch nie ab. Bei fehlendem/abgelaufenem Cookie greift die
-  AUTH-8-Re-Pair-Seite (401). **Empirisches Bau-Gate:** ein echter-iPhone-Test
-  (≥8 Tage Leerlauf noch authentifiziert) auf der Funnel-Topologie **vor** der
-  Familien-Zusage — die Theorie sagt persistent, der Tailscale-Edge ist
-  ungewöhnlich; testen statt wetten.
+  AUTH-8-Re-Pair-Seite (401). **Persistenz-Validierung im echten Betrieb — kein
+  Vor-Gate (Nic-Setzung 2026-07-06):** die iOS-Persistenz wird an einer **bereits
+  installierten Live-PWA** (Hörspiel-Player, auf Familien-iOS+Android in täglicher
+  Nutzung) beobachtet, **nicht** in einem vorgeschalteten 8-Tage-Labortest. Der
+  Rolling-Refresh (jeder App-Start rollt vor) + die AUTH-8-Seite fangen einen
+  etwaigen ITP-Drop ab; fällt der Cookie in echter Nutzung wiederholt, ist das das
+  Signal für einen Re-Pair-Nudge (AUTH-8 V2, `tg://`-Deep-Link). Gebaut wird ohne
+  Wartezeit, getestet wird durch Benutzen.
 - **Header `Authorization: tma <initData>`** — wie `conventions/mini-app-design.md`
   MAD-7 beschrieben, HMAC-Validierung über `eltern-chat/init_data.py`.
 
