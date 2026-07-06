@@ -35,16 +35,14 @@ PROMPT_GESCHICHTENBUDDY = PROMPT_KIND
 
 ZIELGRUPPE_ERWACHSEN = "erwachsen"
 
-# HSP-45 / #1263 — Name-Drift-Fix (REGRESSION-GUARD).
+# HSP-45 / #1263 / T1336 — Serien-Rahmung instanz-neutral (REGRESSION-GUARD).
 # geschichtenbuddy-kind.md ist entkernt (kein „Paula (4 Jahre)", kein fixer Serien-Name):
-# die Instanz-Rahmung reicht `_build_user_context` als „# Instanz-Kontext"-Block
-# nach. Diese transitionalen Defaults IM CODE (nicht im Prompt-Template) fangen den
-# Fall ab, dass instance.json (paula/neko) die Felder noch NICHT trägt — so bleiben
-# paula/neko byte-gleich zur alten, fest verdrahteten Serien-Rahmung, bis die Daten
-# gepflegt sind. Sobald instance.json serien_name/ton/perspektive setzt, gewinnt die
-# Instanz (niclas trägt seine eigene Rahmung, kein Paula/Neko-Leak).
-DEFAULT_SERIEN_RAHMEN = (
-    "Stigi, Malini & Vögelchen — Geschichten aus dem Garten im Dreisamtal")
+# die Instanz-Rahmung reicht `_build_user_context` als „# Instanz-Kontext"-Block nach.
+# T1336: DEFAULT_SERIEN_RAHMEN ist jetzt leer — `_build_user_context` lässt die
+# „Serie:"-Zeile bei leerem serien_name weg (minimal-neutral, kein Paula-Leak für neko).
+# Instanzen (paula/neko/niclas) tragen ihren serien_name ausschließlich via instance.json;
+# der Orchestrator (T1336-Deploy) provisioniert die Datei-Werte.
+DEFAULT_SERIEN_RAHMEN = ""  # instanz-neutral seit T1336 (kein Paula-Leak)
 DEFAULT_TON = "warmherzig, ruhig, kindgerecht; kurze Sätze, konkrete Bilder"
 DEFAULT_PERSPEKTIVE = "auktorial, nah bei den Figuren"
 
@@ -156,11 +154,15 @@ def _build_user_context(idee: str, bible: str, historie: str,
     zur früheren Form (kein Anhang), sonst wird der Block am Ende angefügt.
     """
     name = (name or "").strip()
-    serien_name = (serien_name or "").strip() or DEFAULT_SERIEN_RAHMEN
+    # T1336: serien_name leer → „Serie:"-Zeile entfällt (minimal-neutral, kein Paula-Leak).
+    # Instanz muss serien_name via instance.json setzen; DEFAULT_SERIEN_RAHMEN = "" (neutral).
+    serien_name = (serien_name or "").strip()
     ton = (ton or "").strip() or DEFAULT_TON
     perspektive = (perspektive or "").strip() or DEFAULT_PERSPEKTIVE
 
-    kontext = ["# Instanz-Kontext (verbindlich)", "Serie: %s" % serien_name]
+    kontext = ["# Instanz-Kontext (verbindlich)"]
+    if serien_name:
+        kontext.append("Serie: %s" % serien_name)
     if name:
         wer = "%s (%d Jahre)" % (name, alter) if alter else name
         kontext.append("Für: %s" % wer)
