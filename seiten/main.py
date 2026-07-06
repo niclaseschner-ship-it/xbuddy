@@ -38,7 +38,7 @@ import time
 import urllib.error
 import urllib.request
 
-from flask import Flask, jsonify, make_response, render_template, request
+from flask import Flask, jsonify, make_response, redirect, render_template, request
 
 # Repo-Wurzel auf den Importpfad, damit `tools.configloader` (CONFIG-1),
 # `tools.logsetup` (LOG-4) und `seiten.aggregator` auch beim Direktstart
@@ -57,6 +57,7 @@ from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # no
 # (vorher per sys.path-Hack aus eltern-chat/init_data.py — Cluster-A-Option-B
 # 2026-06-18-1720 heilt MOD-4 / MOD-6).
 from tools.initdata import init_data as _init_data_mod  # noqa: E402
+from tools.initdata import session_cookie as _session_cookie  # noqa: E402
 from tools.service_diagnostics import register_version  # noqa: E402
 
 # DCOMP-4: Dateirechte auf den Eigentümer beschränkt — analog PREG-4 / GER-4.
@@ -101,6 +102,10 @@ runtime = {
     # Familie-Service-API (FAM-7 / DCOMP-1) statt familie.json direkt zu lesen.
     # familie_client darf eine FamilieClient-Instanz oder ein Test-Doppel sein.
     "familie_client":    None,
+    # T948 / AUTH-2.a: Pfad zur geraete.json (GER-4) für den paired_at-Write
+    # aus /auth/pair (OD3). Derselbe Store wie geraete/main.py — Auflösung über
+    # dieselbe ENV GERAETE_REGISTRY (Store-Truth, kein Blind-Overwrite).
+    "geraete_registry_path": None,
 }
 
 
@@ -108,7 +113,8 @@ def configure(root=None, inventar_path=None, panel_url=None,
               geraete_url=None, ttl=None,
               heim_origin=None, tailscale_origin=None,
               bot_token=None, init_data_config=None,
-              familie_client=None, router_url=None):
+              familie_client=None, router_url=None,
+              geraete_registry_path=None):
     """Setzt Aufbau-Wurzel, Inventar-Pfad, Upstream-Origins, TTL und
     Display-URL-Origins (SREG-3, SREG-7).
 
@@ -150,6 +156,8 @@ def configure(root=None, inventar_path=None, panel_url=None,
         runtime["familie_client"] = familie_client
     if router_url is not None:
         runtime["router_url"] = router_url
+    if geraete_registry_path is not None:
+        runtime["geraete_registry_path"] = geraete_registry_path
     runtime["inventar"] = None
     runtime["gebaut_um"] = 0.0
 
@@ -501,6 +509,135 @@ def init_data_validate():
         "user_first_name": getattr(init_data, "user_first_name", None),
         "family_member": True,
     }), 200
+
+
+# ============================================================
+#  AUTH-2.a — Pairing-Endpoint /auth/pair (T948, OD2 auf seiten)
+# ============================================================
+#
+# Spec-Anker: specs/platform/auth.md AUTH-2.a + specs/platform/geraet-anlegen.md
+# GAA-3.8. Der Pairing-Token (15min, HMAC mit Bot-Token, kodiert display_id,
+# stateless — OD4) wird verifiziert; bei Erfolg setzt der Endpoint den
+# xbuddy_session-Cookie (AUTH-2), schreibt paired_at in geraete.json (additiv,
+# OD3) und redirected den Browser auf /display/<display_id>.
+
+# AUTH-2.a: 400-Anweisung bei ungültigem/abgelaufenem Token (statt rohem Code).
+_PAIR_400_HTML = (
+    "<!doctype html>\n"
+    "<html lang=\"de\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+    "<title>Pairing-Link ungültig</title></head>"
+    "<body style=\"font-family:system-ui,sans-serif;max-width:32rem;"
+    "margin:3rem auto;padding:0 1rem;line-height:1.5\">"
+    "<h1>Dieser Pairing-Link ist ungültig oder abgelaufen.</h1>"
+    "<p>Fordere im Familien-Bot einen neuen Pairing-Link an und öffne ihn "
+    "innerhalb von 15 Minuten auf diesem Gerät.</p>"
+    "</body></html>"
+)
+
+
+def _markiere_paired_at(display_id, jetzt_iso=None):
+    """OD3 / GER-3: schreibt `paired_at` (ISO-8601) für `display_id` additiv in
+    geraete.json — denselben Store wie geraete/main.py (GERAETE_REGISTRY).
+
+    Raw-JSON-Read-Modify-Write pro Eintrag: ALLE bestehenden Felder bleiben
+    erhalten (kein Blind-Overwrite, Store-Truth). Atomarer 0600-Write wie
+    save_inventar / geraete.save. Fehlt die Datei oder der Eintrag, wird eine
+    Warnung geloggt — der Cookie ist der funktionale Teil des Pairings, der
+    paired_at-Stempel ist additive Diagnose. Gibt True bei geschriebenem
+    Stempel zurück, sonst False.
+    """
+    import datetime
+    import tempfile
+
+    path = runtime.get("geraete_registry_path")
+    if not path:
+        logging.warning("AUTH-2.a: geraete_registry_path nicht gesetzt — "
+                        "paired_at für %s nicht geschrieben", display_id)
+        return False
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, OSError) as e:
+        logging.warning("AUTH-2.a: geraete.json (%s) nicht lesbar (%s) — "
+                        "paired_at für %s nicht geschrieben", path, e, display_id)
+        return False
+
+    geraete = data.get("geraete") if isinstance(data, dict) else None
+    if not isinstance(geraete, list):
+        logging.warning("AUTH-2.a: geraete.json ohne `geraete`-Liste — "
+                        "paired_at für %s nicht geschrieben", display_id)
+        return False
+
+    eintrag = next((g for g in geraete
+                    if isinstance(g, dict) and g.get("id") == display_id), None)
+    if eintrag is None:
+        logging.warning("AUTH-2.a: display_id %s nicht in geraete.json — "
+                        "Cookie gesetzt, paired_at nicht", display_id)
+        return False
+
+    if jetzt_iso is None:
+        jetzt_iso = datetime.datetime.now(datetime.UTC).isoformat()
+    eintrag["paired_at"] = jetzt_iso  # additiv, überschreibt kein anderes Feld
+
+    target_dir = os.path.dirname(os.path.abspath(path))
+    if target_dir and not os.path.isdir(target_dir):
+        os.makedirs(target_dir, exist_ok=True)
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        prefix=".geraete.", suffix=".json.tmp", dir=target_dir)
+    os.close(tmp_fd)
+    try:
+        fd = os.open(tmp_path, os.O_WRONLY | os.O_TRUNC, FILE_MODE)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False, sort_keys=False)
+            f.write("\n")
+        os.chmod(tmp_path, FILE_MODE)
+        os.replace(tmp_path, path)
+    except OSError as e:
+        with contextlib.suppress(OSError):
+            os.remove(tmp_path)
+        logging.warning("AUTH-2.a: paired_at-Write für %s fehlgeschlagen: %s",
+                        display_id, e)
+        return False
+    os.chmod(path, FILE_MODE)
+    return True
+
+
+@app.route("/auth/pair", methods=["GET"])
+def auth_pair():
+    """AUTH-2.a: `GET /auth/pair?token=<X>` — Pairing-Token → Cookie → redirect.
+
+    Verifiziert den stateless 15-Minuten-Pairing-Token (OD4). Bei Erfolg:
+    setzt den xbuddy_session-Cookie (AUTH-2, HttpOnly/Secure/SameSite=Lax),
+    schreibt paired_at in geraete.json (OD3, additiv) und redirected auf
+    /display/<display_id> (Display-Verwendung — der stateless Token kodiert nur
+    die display_id, kein separates Ziel; Controller-Ziel ist V2). Bei
+    ungültigem/abgelaufenem Token: 400 mit Anweisungsseite (AUTH-2.a).
+    """
+    bot_token = _get_bot_token()
+    if not bot_token:
+        logging.error("AUTH-2.a: ELTERNCHAT_BOT_TOKEN nicht gesetzt — "
+                      "/auth/pair nicht nutzbar.")
+        return ("Serverkonfiguration unvollständig (Bot-Token fehlt)", 500)
+
+    token = request.args.get("token", "")
+    display_id = _session_cookie.verify_pairing(token, bot_token)
+    if display_id is None:
+        resp = make_response(_PAIR_400_HTML, 400)
+        resp.headers["Content-Type"] = "text/html; charset=utf-8"
+        return resp
+
+    # OD3: paired_at additiv stempeln (best-effort — Cookie ist funktionaler Teil).
+    _markiere_paired_at(display_id)
+
+    # AUTH-2.a: Ziel-URL. Stateless Token trägt nur display_id → Display-Pfad.
+    resp = redirect("/display/%s" % display_id)
+    resp.set_cookie(
+        _session_cookie.COOKIE_NAME,
+        _session_cookie.sign_session(display_id, bot_token),
+        **_session_cookie.session_cookie_kwargs(),
+    )
+    return resp
 
 
 @app.route("/seiten/essen/einkauf/", methods=["GET"])
@@ -1360,6 +1497,10 @@ def resolved_config(args):
     cfg["router_url"] = (
         args.router_url
         or os.environ.get("ROUTER_URL", "http://127.0.0.1:5000"))
+    # T948 / AUTH-2.a: Pfad zur geraete.json für den paired_at-Write (OD3).
+    # Derselbe Store wie geraete/main.py — dieselbe ENV GERAETE_REGISTRY
+    # (Store-Truth). Default "geraete.json" (analog geraete/main.py GER-9).
+    cfg["geraete_registry_path"] = os.environ.get("GERAETE_REGISTRY", "geraete.json")
     return cfg
 
 
@@ -1373,7 +1514,8 @@ def main(argv=None):
               ttl=cfg["ttl"],
               heim_origin=cfg["heim_origin"],
               tailscale_origin=cfg["tailscale_origin"],
-              router_url=cfg["router_url"])
+              router_url=cfg["router_url"],
+              geraete_registry_path=cfg["geraete_registry_path"])
     if not cfg["tailscale_origin"]:
         # SREG-7 V1-Soll: Tailscale leer → SREG-12 zeigt Banner statt
         # zweiter URL-Spalte. Warnung im Log, damit Deploy-Tracking sieht,
