@@ -192,7 +192,7 @@ function offlineFetch() {
   return fn;
 }
 
-test('apiAlben: online schreibt Alben-Liste write-through in den Cache (GAP-2, AC-OFF2)', async () => {
+test('apiAlben: online schreibt Alben-Liste write-through in den Cache (GAP-2, HSP-54a)', async () => {
   const cache = new FakeCache();
   const online = makeFetch(() => ({ json: [{ id: 'folge-22' }, { id: 'folge-21' }] }));
   const alben = await P.apiAlben('mia', { fetch: online, cache });
@@ -203,7 +203,7 @@ test('apiAlben: online schreibt Alben-Liste write-through in den Cache (GAP-2, A
   assert.deepEqual(await gecacht.json(), [{ id: 'folge-22' }, { id: 'folge-21' }]);
 });
 
-test('apiAlben: offline (fetch wirft) liest die Liste aus dem Cache — Regal rendert (GAP-2, AC-OFF2)', async () => {
+test('apiAlben: offline (fetch wirft) liest die Liste aus dem Cache — Regal rendert (GAP-2, HSP-54a)', async () => {
   const cache = new FakeCache();
   // Vorlauf: online einmal cachen …
   await P.apiAlben('mia', { fetch: makeFetch(() => ({ json: [{ id: 'folge-22' }] })), cache });
@@ -219,7 +219,7 @@ test('apiAlben: offline OHNE Cache wirft weiter (Aufrufer-Vertrag ladeKind bleib
     /Failed to fetch/, 'ohne gecachte Liste bleibt der Fehler sichtbar');
 });
 
-test('apiManifest: online write-through, offline aus Cache pro Album (GAP-2, AC-OFF2)', async () => {
+test('apiManifest: online write-through, offline aus Cache pro Album (GAP-2, HSP-54a)', async () => {
   const cache = new FakeCache();
   const manifest = { tracks: [{ position: 1, 'audio-asset': '/audio/22/t1.mp3' }] };
   await P.apiManifest('mia', 'folge-22', { fetch: makeFetch(() => ({ json: manifest })), cache });
@@ -229,7 +229,7 @@ test('apiManifest: online write-through, offline aus Cache pro Album (GAP-2, AC-
   assert.deepEqual(offline, manifest, 'manifest.tracks lösen offline auf');
 });
 
-test('apiConfigGet: online write-through, offline aus Cache (GAP-2, AC-OFF2)', async () => {
+test('apiConfigGet: online write-through, offline aus Cache (GAP-2, HSP-54a)', async () => {
   const cache = new FakeCache();
   const cfg = { playback_tempo: 1.1, voice: 'stigi' };
   await P.apiConfigGet('mia', { fetch: makeFetch(() => ({ json: cfg })), cache });
@@ -238,7 +238,7 @@ test('apiConfigGet: online write-through, offline aus Cache (GAP-2, AC-OFF2)', a
   assert.deepEqual(offline, cfg, 'Config offline aus dem Cache');
 });
 
-test('evictAlbum lässt die Metadaten-Schlüssel unangetastet (LRU trifft /__hsp_*__ nie, GAP-2, AC-OFF2)', async () => {
+test('evictAlbum lässt die Metadaten-Schlüssel unangetastet (LRU trifft /__hsp_*__ nie, GAP-2, HSP-54a)', async () => {
   const cache = new FakeCache();
   // Metadaten-Cache füllen …
   await P.apiAlben('mia', { fetch: makeFetch(() => ({ json: [{ id: 'folge-22' }] })), cache });
