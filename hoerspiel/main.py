@@ -523,6 +523,8 @@ def folgen_vorschlag(kind_id: str):
     idee = (body.get("idee") or "").strip()
     if not idee:
         return jsonify({"fehler": "idee fehlt"}), 400
+    # HSP-57/58: tiefe optional aus dem Request-Body; Default "mittel".
+    tiefe = (body.get("tiefe") or "").strip() or "mittel"
 
     llm = _llm()
     if llm is None:
@@ -549,7 +551,13 @@ def folgen_vorschlag(kind_id: str):
             naechste_nummer=naechste, llm=llm,
             name=instance.name, alter=instance.alter,
             ton=instance.ton, perspektive=instance.perspektive,
-            serien_name=instance.serien_name)
+            serien_name=instance.serien_name,
+            # HSP-56/57: zielgruppe steuert Prompt-Wahl + Recherche-Vorschritt.
+            # niclas-Instanz (zielgruppe=erwachsen) löst den Recherche-Pfad aus;
+            # Kind-Instanzen (paula/neko, zielgruppe=kind) bleiben unverändert.
+            zielgruppe=instance.zielgruppe,
+            tiefe=tiefe,
+        )
     except ProviderError as e:
         return jsonify({"fehler": "llm-provider nicht erreichbar: %s" % e}), 503
     except llm_service.LLMServiceError as e:
@@ -569,6 +577,10 @@ def _post_alben():
     text = (body.get("text") or "").strip()
     voice = (body.get("voice") or "").strip().lower()
     idee = (body.get("idee") or "").strip()
+    # HSP-60: META-Block optional; wird vom Client aus dem /folgen-vorschlag-
+    # Response übernommen und an baue_album weitergereicht für den Historic-Eintrag.
+    meta_raw = body.get("meta")
+    meta = meta_raw if isinstance(meta_raw, dict) else None
     if not titel or not text or voice not in config_mod.VALID_VOICES:
         return jsonify({"fehler": "pflichtfeld fehlt oder voice ungültig"}), 400
 
@@ -593,6 +605,7 @@ def _post_alben():
             now=runtime["now"],
             pause_absatz_sek=pause_absatz,
             pause_titel_sek=pause_titel,
+            meta=meta,
         )
     except tts_service.SharedAssetsMissing as e:
         return jsonify({"fehler": str(e)}), 412
