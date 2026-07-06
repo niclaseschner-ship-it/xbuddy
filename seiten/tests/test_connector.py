@@ -424,6 +424,60 @@ def test_ac3_sw_service_worker_allowed_aus_registry(client):
     )
 
 
+# ── PWAM-4-Guard: build_id bumpt bei Asset-Aenderung (T1365-Befund-2) ─────────
+
+def test_pwam4_build_id_bumpt_bei_style_css_aenderung(tmp_path):
+    """PWAM-4-Guard: build_id('connector') aendert sich, wenn style.css eine
+    neuere mtime bekommt — absichert Befund 2 aus T1365 (style.css + Icons jetzt
+    im build_id_source_set). Stale-SW-Bug wuerde auftreten, wenn build_id NICHT
+    bumpt obwohl ein precachtes Asset geaendert wurde."""
+    source_set = pwa_mantel.REGISTRY["connector"].build_id_source_set
+    assert "style.css" in source_set, (
+        "Vorbedingung: style.css muss im build_id_source_set sein (T1365-Befund-2)"
+    )
+    # Stub-Dateien anlegen; alle auf identische mtime setzen
+    base_time = 1_700_000_000.0
+    for name in source_set:
+        p = tmp_path / name
+        p.write_bytes(b"stub")
+        os.utime(str(p), (base_time, base_time))
+    id_vorher = pwa_mantel.build_id_for("connector", str(tmp_path))
+    assert id_vorher == str(int(base_time)), (
+        f"Unerwartete initiale build_id: {id_vorher!r} (erwartet: {int(base_time)})"
+    )
+    # style.css bekommt neuere mtime (simuliert Deployment-Aenderung)
+    new_time = base_time + 1000.0
+    os.utime(str(tmp_path / "style.css"), (new_time, new_time))
+    id_nachher = pwa_mantel.build_id_for("connector", str(tmp_path))
+    assert id_nachher != id_vorher, (
+        "PWAM-4: build_id hat sich NICHT geaendert nach style.css-mtime-Update "
+        "(T1365-Befund-2: style.css muss im build_id_source_set sein)"
+    )
+    assert id_nachher == str(int(new_time))
+
+
+def test_pwam4_build_id_bumpt_bei_icon_aenderung(tmp_path):
+    """PWAM-4-Guard: build_id('connector') aendert sich, wenn icon-192.png eine
+    neuere mtime bekommt (T1365-Befund-2: Icons in build_id_source_set)."""
+    source_set = pwa_mantel.REGISTRY["connector"].build_id_source_set
+    assert "icon-192.png" in source_set, (
+        "Vorbedingung: icon-192.png muss im build_id_source_set sein (T1365-Befund-2)"
+    )
+    base_time = 1_700_000_000.0
+    for name in source_set:
+        p = tmp_path / name
+        p.write_bytes(b"stub")
+        os.utime(str(p), (base_time, base_time))
+    id_vorher = pwa_mantel.build_id_for("connector", str(tmp_path))
+    new_time = base_time + 500.0
+    os.utime(str(tmp_path / "icon-192.png"), (new_time, new_time))
+    id_nachher = pwa_mantel.build_id_for("connector", str(tmp_path))
+    assert id_nachher != id_vorher, (
+        "PWAM-4: build_id hat sich NICHT geaendert nach icon-192.png-mtime-Update "
+        "(T1365-Befund-2: Icons muessen im build_id_source_set sein)"
+    )
+
+
 def test_ac3_sw_scope_in_html_aus_registry(client):
     """AC3 / PWAM-3: gerendertes HTML enthaelt den SW-Scope aus der REGISTRY —
     __SW_SCOPE__-Platzhalter wurde ersetzt und ist identisch mit
