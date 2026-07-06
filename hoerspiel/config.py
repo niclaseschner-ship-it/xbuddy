@@ -96,7 +96,7 @@ class InstanceConfig:
     - name      — Anzeige-Name des Kindes (z. B. "Paula")
     - alter     — Alter als int (aus instance.json oder ENV HOERSPIEL_KIND_ALTER)
     - themen_je_alter — Map alter-str → list[str] (aus instance.json oder DataConfig)
-    - zielgruppe   — deskriptiv "kind" | "erwachsen" (HSP-45, rein informativ)
+    - zielgruppe   — deskriptiv "kind" | "erwachsen" — steuert Prompt-Schnitt + Recherche-Vorschritt (HSP-56/58)
     - ton          — Erzähl-Ton der Serie (HSP-45, Story-Prompt-Kontext)
     - perspektive  — Erzähl-Perspektive (HSP-45, Story-Prompt-Kontext)
     - serien_name  — Serien-Rahmung dieser Instanz (HSP-45, Name-Drift-Fix)

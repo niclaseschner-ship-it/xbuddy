@@ -2035,11 +2035,18 @@ trägt die Agent-Caps bereits; späterer Drop-in, wenn der Loop belegten Mehrwer
 Der Recherche-Vorschritt ist **hart an `zielgruppe:erwachsen` gebunden** (Config-
 Invariante) — **nie** bei einer Kind-Instanz. Es fließen **ausschließlich
 thema-abgeleitete Tech-Suchanfragen** an die externe Such-Cloud ab, **keine Personen-/
-Familiendaten** (Constitution §3 / RAT-26). **Provider V0: Tavily** (Nic-Setzung
+Familiendaten** (Constitution §3). **Provider V0: Tavily** (Nic-Setzung
 2026-07-06), hinter `tools/zugangsdaten`-Slot `tavily-api-key` + ZD-Pfad-Drop-In pro
 hoerspiel-Service. N-Suchen **hart gedeckelt** (Vorschlag 3–5, an `tiefe` gekoppelt).
 **Degradations-Pfad** bei Quota/Netz-Fehler: Folge **ohne** Recherche generieren +
 Log-Marker, kein harter Abbruch.
+
+**V0-Rest-Kanal-Klausel (niclas-Instanz, Nic-Setzung 2026-07-06):** Das `thema` ist
+ein Freitext-Feld und kann PII tragen (Betreiber tippt z. B. Namen oder Ort ins Thema),
+was ohne Scrub-Schritt ungefiltert an Tavily fließt. Für die **niclas-Instanz (V0)** ist
+dieses Risiko **bewusst akzeptiert**: NUR der Betreiber (Nic) tippt Themen — kein Kind-
+oder Fremd-Input. Ein `thema`-Scrub/Ack-Schritt wird **PFLICHT**, sobald
+Nicht-Betreiber-Recherche-Instanzen entstehen (neuer Buddy, Familien-Multi-Tenancy o. ä.).
 
 ### HSP-59 — Anti-Slop als Self-Check im Single-Shot
 Die Anti-Slop-Kriterien des Kits (Gedankenstrich-Stilmittel, unbelegte Zahl, doppelt
