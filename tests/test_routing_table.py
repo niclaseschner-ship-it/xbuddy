@@ -48,6 +48,14 @@ ALLOWED_DRIFT_IN_URLS = {
                                 # aber kein Kommentar-Eintrag im Routing-Block.
                                 # Catch-all 404 gemäß URL-1 — kein Upstream.
                                 # Dokumentierte Lücke im nginx-Kommentar (#589).
+    "/display/kibuddy/",        # nginx hat location /display/kibuddy/ (Z. 282,
+                                # proxy_pass xbuddy_kibuddy), aber kein
+                                # Kommentar-Eintrag im Routing-Block. KIBUDDY-2.
+                                # Dokumentierte Lücke im nginx-Kommentar (#589).
+    "/api/v1/kibuddy/",         # nginx hat location /api/v1/kibuddy/ (Z. 285,
+                                # proxy_pass xbuddy_kibuddy), aber kein
+                                # Kommentar-Eintrag im Routing-Block. KIBUDDY-24.
+                                # Dokumentierte Lücke im nginx-Kommentar (#589).
 }
 
 

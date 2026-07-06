@@ -61,10 +61,21 @@ class FakeTelegramMitAlbum(FakeTelegram):
 
 
 class FakeEssenClient:
-    def __init__(self, post_response=None, post_error=None):
+    """EssenClient-Doppelung — post_gericht + post_foto (Welle 2 von #804).
+
+    Welle 2 von #804 (T810): der Foto-Upload läuft über den Essen-Buddy
+    (post_foto → POST /api/v1/essen/fotos, MEDIEN-1), nicht mehr über einen
+    separaten Photo-Buddy. post_foto liefert die foto_ref (medien_id).
+    """
+
+    def __init__(self, post_response=None, post_error=None,
+                 foto_id="foto-42", post_foto_error=None):
         self.post_calls = []
+        self.post_foto_calls = []
         self._post_response = post_response or {"id": "1"}
         self._post_error = post_error
+        self._foto_id = foto_id
+        self._post_foto_error = post_foto_error
 
     def post_gericht(self, name, icon_id=None, foto_ref=None):
         self.post_calls.append({"name": name, "icon_id": icon_id,
@@ -72,6 +83,16 @@ class FakeEssenClient:
         if self._post_error is not None:
             raise self._post_error
         return dict(self._post_response)
+
+    def post_foto(self, rohbytes, dateiname, content_type="image/jpeg"):
+        self.post_foto_calls.append({
+            "rohbytes": rohbytes,
+            "dateiname": dateiname,
+            "content_type": content_type,
+        })
+        if self._post_foto_error is not None:
+            raise self._post_foto_error
+        return self._foto_id
 
 
 class FakeIconClient:
@@ -96,32 +117,12 @@ def _kein_mitglied(uid):
     return False
 
 
-class FakePhotoClient:
-    """PhotoClient-Doppelung für GAN-Tests (ESSEN-22 Pfad 1)."""
-
-    def __init__(self, upload_response=None, upload_error=None):
-        self.upload_calls = []
-        self._upload_response = upload_response or {"id": "foto-42", "typ": "image"}
-        self._upload_error = upload_error
-
-    def upload_medium(self, medium_bytes, filename, content_type):
-        self.upload_calls.append({
-            "medium_bytes": medium_bytes,
-            "filename": filename,
-            "content_type": content_type,
-        })
-        if self._upload_error is not None:
-            raise self._upload_error
-        return dict(self._upload_response)
-
-
-def _make_task(essen_client=None, icon_client=None, photo_client=None,
+def _make_task(essen_client=None, icon_client=None,
                is_member_fn=None, tg=None, icon_origin_url="http://icons.test"):
     return GerichtAnlegenTask(
         tg=tg or FakeTelegramMitAlbum(),
         essen_client=essen_client or FakeEssenClient(),
         icon_client=icon_client or FakeIconClient(),
-        photo_client=photo_client or FakePhotoClient(),
         family_group_chat_id_getter=lambda: 200,
         is_member_fn=is_member_fn or _immer_mitglied,
         icon_origin_url=icon_origin_url,
@@ -485,17 +486,9 @@ def test_AC3_konstruktor_ohne_icon_origin_url_ist_leer():
         tg=FakeTelegramMitAlbum(),
         essen_client=FakeEssenClient(),
         icon_client=FakeIconClient(),
-        photo_client=FakePhotoClient(),
         family_group_chat_id_getter=lambda: 200,
     )
     assert task._icon_origin_url == ""
-
-
-def test_AC_foto_konstruktor_speichert_photo_client():
-    """ESSEN-22 Pfad 1: Konstruktor speichert photo_client als _photo_client."""
-    pc = FakePhotoClient()
-    task = _make_task(photo_client=pc)
-    assert task._photo_client is pc
 
 
 # ============================================================
@@ -526,12 +519,15 @@ def _ctx_foto(chat_id=42, file_id="tg-file-123", medium_typ="photo"):
 
 
 def test_FOTO_happy_path_execute_angelegt():
-    """ESSEN-22 Pfad 1: execute(foto_hinzufuegen) → Upload + POST → Quittung mit ID."""
+    """ESSEN-22 Pfad 1: execute(foto_hinzufuegen) → Upload + POST → Quittung mit ID.
+
+    Welle 2 von #804 (T810): der Upload läuft über essen_client.post_foto
+    (POST /api/v1/essen/fotos), die zurückgegebene foto_ref landet im post_gericht.
+    """
     foto_bytes = b"\xff\xd8\xff\x00" * 5
     tg = FakeTelegramMitDownload(file_bytes=foto_bytes)
-    pc = FakePhotoClient(upload_response={"id": "foto-7"})
-    ec = FakeEssenClient(post_response={"id": "42"})
-    task = _make_task(tg=tg, photo_client=pc, essen_client=ec)
+    ec = FakeEssenClient(post_response={"id": "42"}, foto_id="foto-7")
+    task = _make_task(tg=tg, essen_client=ec)
 
     quittung = task.execute({"aktion": "foto_hinzufuegen", "label": "Lasagne"},
                             _ctx_foto(file_id="tg-123"))
@@ -539,8 +535,10 @@ def test_FOTO_happy_path_execute_angelegt():
     assert "42" in quittung
     assert len(tg.download_calls) == 1
     assert tg.download_calls[0] == "tg-123"
-    assert len(pc.upload_calls) == 1
-    assert pc.upload_calls[0]["medium_bytes"] == foto_bytes
+    # Upload an den Essen-Buddy (MEDIEN-1).
+    assert len(ec.post_foto_calls) == 1
+    assert ec.post_foto_calls[0]["rohbytes"] == foto_bytes
+    # Gericht angelegt mit der zurückgegebenen foto_ref.
     assert len(ec.post_calls) == 1
     assert ec.post_calls[0]["foto_ref"] == "foto-7"
 
@@ -583,13 +581,13 @@ def test_FOTO_nicht_mitglied_kein_upload():
     """GAN-2 / ESSEN-22 Pfad 1: Nicht-Mitglied → kein Upload, Ablehnung."""
     foto_bytes = b"\xff\xd8" * 5
     tg = FakeTelegramMitDownload(file_bytes=foto_bytes)
-    pc = FakePhotoClient()
-    task = _make_task(tg=tg, photo_client=pc, is_member_fn=_kein_mitglied)
+    ec = FakeEssenClient()
+    task = _make_task(tg=tg, essen_client=ec, is_member_fn=_kein_mitglied)
 
     quittung = task.execute({"aktion": "foto_hinzufuegen", "label": "Lasagne"},
                             _ctx_foto())
 
-    assert pc.upload_calls == []
+    assert ec.post_foto_calls == []
     assert "Familien-Gruppe" in quittung or "Mitglied" in quittung
 
 
@@ -615,28 +613,6 @@ def test_AC3_build_catalog_reicht_icon_origin_url_durch():
         task = catalog.get("gericht_anlegen")
         assert task is not None
         assert task._icon_origin_url == "http://127.0.0.1:5000"
-    finally:
-        with contextlib.suppress(OSError):
-            os.unlink(ca)
-
-
-def test_AC_build_catalog_injiziert_photo_client():
-    """ESSEN-22 Pfad 1: tasks.build_catalog injiziert photo_client in GerichtAnlegenTask."""
-    from skills.photo_client import PhotoClient
-    ca = _ca_pem()
-    try:
-        catalog = build_catalog(
-            tg=FakeTelegramMitAlbum(),
-            ca_pem_path=ca,
-            essen_origin_url="http://127.0.0.1:5052",
-            icon_origin_url="http://127.0.0.1:5000",
-            photo_origin_url="http://127.0.0.1:5070",
-            family_group_chat_id_getter=lambda: 200,
-        )
-        task = catalog.get("gericht_anlegen")
-        assert task is not None
-        assert isinstance(task._photo_client, PhotoClient)
-        assert task._photo_client._origin == "http://127.0.0.1:5070"
     finally:
         with contextlib.suppress(OSError):
             os.unlink(ca)
@@ -703,8 +679,11 @@ def test_GAN7_guard_ohne_icon_origin_nicht_registriert():
             os.unlink(ca)
 
 
-def test_GAN7_guard_ohne_photo_origin_nicht_registriert():
-    """GAN-7 Guard (ESSEN-22 Pfad 1): ohne photo_origin_url → keine Registrierung."""
+def test_GAN7_guard_ohne_photo_origin_trotzdem_registriert():
+    """GAN-7 Guard / Welle 2 von #804 (T810): photo_origin_url ist NICHT mehr
+    Teil des AND-Guards — der Foto-Upload läuft über essen_client.post_foto
+    (MEDIEN-1). OHNE photo_origin_url wird der Task trotzdem registriert,
+    sofern essen+icon+fgcid gesetzt sind."""
     ca = _ca_pem()
     try:
         catalog = build_catalog(
@@ -712,9 +691,12 @@ def test_GAN7_guard_ohne_photo_origin_nicht_registriert():
             ca_pem_path=ca,
             essen_origin_url="http://127.0.0.1:5052",
             icon_origin_url="http://127.0.0.1:5000",
+            # photo_origin_url bewusst NICHT gesetzt
             family_group_chat_id_getter=lambda: 200,
         )
-        assert catalog.get("gericht_anlegen") is None
+        assert catalog.get("gericht_anlegen") is not None, (
+            "GerichtAnlegenTask muss ohne photo_origin_url registriert sein "
+            "(Welle 2 von #804 — Photo-Buddy raus)")
     finally:
         with contextlib.suppress(OSError):
             os.unlink(ca)

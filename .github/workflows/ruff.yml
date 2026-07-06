@@ -1,0 +1,23 @@
+name: ruff
+
+# Style-Gate: prüft den repo-weiten Ruff-Lint gegen pyproject.toml
+# ([tool.ruff.lint] select/ignore + per-file-ignores). Läuft bei jedem PR und
+# auf main. Ruff-Version gepinnt (0.15.15) — identisch zum lokalen Selbst-Gate
+# `uvx ruff@0.15.15 check`. Kein Autofix im CI: der Lauf meldet nur.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ruff:
+    runs-on: [self-hosted, ARM64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ruff check (repo-weit)
+        run: uvx ruff@0.15.15 check
