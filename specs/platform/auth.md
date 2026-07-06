@@ -179,10 +179,46 @@ eindeutig prüfen).
 Weitere Routen kommen mit jeder Power-Flow-Migration (Phase 2: routine,
 Phase 3: hörspiel-eltern). Bis dahin sind sie in AUTH-6 dokumentiert.
 
+**#1321-Endliste (method-explizit, photo/kibuddy/plan).** Der #1321-Bau
+enumeriert die oben klassifizierten Routen byte-gleich gegen die realen
+`@app.route`-Strings; der AUTH-9-Coverage-Test parst diesen Fence mit:
+
+```
+/api/v1/photo/medien                          (POST)
+/api/v1/photo/medien                          (GET)
+/api/v1/photo/medien/<medium_id>              (GET)
+/api/v1/photo/medien/<medium_id>/thumbnail    (GET)
+/api/v1/photo/medien/<medium_id>              (DELETE)
+/api/v1/kibuddy/frage                         (POST)
+/api/v1/kibuddy/vorlesen                      (POST)
+/api/v1/kibuddy/reset                         (POST)
+/api/v1/kibuddy/config                        (GET)
+/api/v1/kibuddy/config                        (PUT)
+/api/v1/kibuddy/prompt                        (GET)
+/api/v1/kibuddy/prompt                        (PUT)
+/api/v1/kibuddy/audio/<path:audio_filename>   (GET)
+/api/v1/plan/zuteilung                        (GET)
+/api/v1/plan/zuteilung                        (PUT)
+/api/v1/plan/aktivitaet                       (PUT)
+/api/v1/plan/aktivitaet                       (DELETE)
+/api/v1/plan/termine                          (GET)
+/api/v1/plan/termine                          (PUT)
+/api/v1/plan/termine/bulk                     (POST)
+/api/v1/plan/aktivitaeten                     (GET)
+/api/v1/plan/defaults                         (GET)
+/api/v1/plan/defaults                         (PUT)
+/api/v1/plan/slot-modell                      (GET)
+/api/v1/plan/slot-modell                      (PUT)
+/api/v1/plan/admin/reload                     (POST)
+/api/v1/plan/admin/kalender                   (PUT)
+/api/v1/plan/admin/aktivitaeten               (POST)
+/api/v1/plan/admin/aktivitaeten/<art>         (DELETE)
+```
+
 [Quelle: ENTSCHEID 2026-06-16-1123 Paket-Sektion „Nic-Verdikte 2026-06-16"
 → E1 „V1-Scope eng — nur essen-einkauf-API-Routen"]
 
-*Tickets:* #948
+*Tickets:* #948, #1321
 
 ### AUTH-4 — Public-Assets, kein Decorator
 
@@ -305,7 +341,6 @@ Eintrag nicht in AUTH-6, sondern in eine der ratifizierten Klassen.
 /api/v1/seiten                                (Trigger: Phase 2/3, mini-app-uebersicht-Migration)
 /api/v1/seiten/uebersicht                     (Trigger: Phase 2/3)
 /api/v1/seiten/mini-app-uebersicht            (Trigger: Phase 2/3)
-/api/v1/plan/*                                (→ AUTH-3 gewandert: Trigger „belegter Auth-Schmerz" gefeuert 2026-07-06, Audit-Funnel-Befund #1338)
 /api/v1/familie/personen*                     (Trigger: Familien-Personen-Editor-Mini-App)
 /api/v1/familie/foto/*                        (Trigger: Familien-Foto-Mini-App)
 /api/v1/panels/*                              (Trigger: Phase 4 Panel-Mini-App)

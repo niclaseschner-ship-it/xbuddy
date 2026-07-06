@@ -21,6 +21,21 @@ from plan import familie_client as familie_client_mod
 from plan import kalender as kalender_mod
 from plan import main as plan_main
 from plan import render as render_mod
+from tools.initdata import session_cookie as _sc
+
+# AUTH-3 (T1321): die admin/*-Routen tragen jetzt @require_init_data VOR ihrem
+# eigenen Loopback-403-Guard. Externe (nicht-loopback) Aufrufe müssen daher
+# zuerst die Auth-Tür passieren (valider Session-Cookie), damit der DAHINTER
+# liegende Loopback-Guard weiterhin sein 403 + JSON liefern kann. Ohne Cookie
+# gäbe die Auth-Tür 401 (AUTH-8) zurück — die Loopback-Contract-Prüfung bliebe
+# ungetestet. Der Cookie ändert NICHTS am Loopback-Verdikt (remote_addr-basiert).
+_AUTH_TEST_BOT_TOKEN = "123456:ABCdef_testtoken"
+
+
+def _auth_cookie_setzen(client):
+    """Setzt einen validen xbuddy_session-Cookie (AUTH-2) für externe Admin-Tests."""
+    client.set_cookie(_sc.COOKIE_NAME,
+                      _sc.sign_session("plan-admin-test", _AUTH_TEST_BOT_TOKEN))
 
 # ============================================================
 #  Helpers
@@ -2364,7 +2379,8 @@ def reload_client(tmp_path, demo_registry):
     transport = factory(cfg)
     plan_main.configure(cfg, demo_registry, transport,
                         config_path=str(cfg_path),
-                        transport_factory=factory)
+                        transport_factory=factory,
+                        bot_token=_AUTH_TEST_BOT_TOKEN)
     plan_main.app.testing = True
     client = plan_main.app.test_client()
     return client, cfg_path, built_transports
@@ -2475,6 +2491,7 @@ def test_140_reload_endpoint_rejects_non_loopback(reload_client):
     Flask-Testclient erlaubt environ_overrides, um remote_addr zu setzen —
     das simuliert einen Aufruf, der NICHT von 127.0.0.1 kommt."""
     client, _, _ = reload_client
+    _auth_cookie_setzen(client)  # AUTH-3: Auth-Tür passieren, Loopback-Guard testen
     r = client.post(RELOAD_URL, environ_overrides={"REMOTE_ADDR": "10.0.0.5"})
     assert r.status_code == 403
     body = r.get_json()
@@ -3055,6 +3072,7 @@ def test_PLAN_32_non_loopback_returns_403(reload_client):
     — analog admin/reload (#140). nginx leitet /admin/-Pfade nicht weiter;
     der Guard hier ist die zweite Schicht."""
     client, _, _ = reload_client
+    _auth_cookie_setzen(client)  # AUTH-3: Auth-Tür passieren, Loopback-Guard testen
     r = client.put(KALENDER_ADMIN_URL,
                    data=json.dumps({"kalender_id": "x@group.calendar.google.com"}),
                    content_type="application/json",
@@ -3779,7 +3797,8 @@ def akt_client(tmp_path, demo_registry):
     config_path gesetzt → Admin-Endpoints können plan.json schreiben."""
     cfg, cfg_path = _make_plan_json(tmp_path, include_aktivitaeten=True)
     transport = FakeTransport()
-    plan_main.configure(cfg, demo_registry, transport, config_path=str(cfg_path))
+    plan_main.configure(cfg, demo_registry, transport, config_path=str(cfg_path),
+                        bot_token=_AUTH_TEST_BOT_TOKEN)
     plan_main.app.testing = True
     return plan_main.app.test_client(), cfg_path
 
@@ -4093,6 +4112,7 @@ def test_PLAN_34_delete_atomar_persistiert(akt_client):
 def test_PLAN_34_post_loopback_only_403(akt_client):
     """AC4: POST von nicht-Loopback → 403."""
     client, _ = akt_client
+    _auth_cookie_setzen(client)  # AUTH-3: Auth-Tür passieren, Loopback-Guard testen
     # Flask-Testclient simuliert 127.0.0.1 per Default — wir müssen remote_addr
     # auf eine externe IP setzen.
     with plan_main.app.test_request_context():
@@ -4109,6 +4129,7 @@ def test_PLAN_34_post_loopback_only_403(akt_client):
 def test_PLAN_34_delete_loopback_only_403(akt_client):
     """AC4: DELETE von nicht-Loopback → 403."""
     client, _ = akt_client
+    _auth_cookie_setzen(client)  # AUTH-3: Auth-Tür passieren, Loopback-Guard testen
     r = client.delete(AKT_DELETE_URL + "klettern",
                       environ_base={"REMOTE_ADDR": "10.0.0.1"})
     assert r.status_code == 403, (

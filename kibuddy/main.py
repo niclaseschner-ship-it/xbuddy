@@ -21,19 +21,34 @@ Icon-Lookup: clientseitig via Browser-Fetch-API (KIBUDDY-17 Buzzword-Render, T86
 """
 
 import argparse
+import functools
 import json
 import logging
 import os
 import sys
 
-from flask import Flask, Response, g, jsonify, render_template, request, send_from_directory, stream_with_context
+from flask import (
+    Flask,
+    Response,
+    g,
+    jsonify,
+    make_response,
+    render_template,
+    request,
+    send_from_directory,
+    stream_with_context,
+)
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
+from tools import familie_client as _familie_client_mod  # noqa: E402
 from tools import logsetup  # noqa: E402
+from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # noqa: E402
+from tools.initdata import init_data as _init_data_mod  # noqa: E402
+from tools.initdata import session_cookie as _session_cookie  # noqa: E402
 from tools.llm import LLMProvider  # noqa: E402 — LLMP-S8 Migration (T1082)
 from tools.service_diagnostics import register_version  # noqa: E402
 
@@ -68,6 +83,9 @@ runtime: dict = {
     "stt_engine": None,        # AzureWhisperSTT (oder Fake in Tests)
     "tts_engine": None,        # AzureTTSEngine (oder Fake in Tests)
     "session_registry": None,  # SessionRegistry (KIBUDDY-16 Cookie-Session)
+    "bot_token": None,          # AUTH-3 (T1321): Bot-Token — Test-Naht oder ENV
+    "init_data_config": None,   # AUTH-3 (T1321): tma-Header-Validierungs-Config
+    "familie_client": None,     # AUTH-3 (T1321): FAM-7-Client (get_telegram_ids)
 }
 
 
@@ -80,6 +98,9 @@ def configure(
     stt_engine=None,
     tts_engine=None,
     session_registry=None,     # Registry-Injection (Test-Naht, KIBUDDY-16)
+    bot_token=None,            # AUTH-3 (T1321): Bot-Token — Test-Naht oder ENV
+    init_data_config=None,     # AUTH-3 (T1321): tma-Header-Validierungs-Config
+    familie_client=None,       # AUTH-3 (T1321): FAM-7-Client (get_telegram_ids)
 ) -> None:
     """Setzt Konfiguration und Adapter-Fabriken (Test-Naht).
 
@@ -88,6 +109,9 @@ def configure(
 
     `session_registry` (SessionRegistry) ist die Test-Naht — erlaubt Injection
     einer vorbereiteten Registry mit fest gesetzten SIDs via Cookie.
+
+    `bot_token` / `init_data_config` / `familie_client` (AUTH-3, T1321):
+    Auth-Naht für Tests (Muster essen); im Produktiv-Betrieb aus ENV.
     """
     runtime["runtime_config"] = runtime_config
     runtime["data_root"] = data_root
@@ -96,6 +120,14 @@ def configure(
     runtime["stt_engine"] = stt_engine
     runtime["tts_engine"] = tts_engine
     runtime["session_registry"] = session_registry if session_registry is not None else SessionRegistry()
+
+    # AUTH-3 Hart-Auth (T1321): Test-Naht analog essen.
+    if bot_token is not None:
+        runtime["bot_token"] = bot_token
+    if init_data_config is not None:
+        runtime["init_data_config"] = init_data_config
+    if familie_client is not None:
+        runtime["familie_client"] = familie_client
 
 
 def _runtime_cfg():
@@ -148,6 +180,141 @@ def _get_or_create_session() -> tuple[str, SessionMemory]:
         sid = registry.new_sid()
         g._kibuddy_new_sid = sid  # Signal für after_request-Hook (FIX-5)
     return sid, registry.get_or_create(sid)
+
+
+# ============================================================
+#  AUTH-3 Hart-Auth (T1321 — auth.md AUTH-2/3/5/8/9)
+# ============================================================
+#
+# Wörtliche Übernahme des essen-Decorators (essen/main.py, T948). Der
+# Audit-Funnel-Befund #1338 klassifiziert die /api/v1/kibuddy/*-Datenrouten
+# neu als AUTH-3 (hart geschützt): extern war der KiBuddy-Prompt überschreibbar.
+# Der `kibuddy_sid`-after_request-Hook (ANDERER Cookie-Name) koexistiert
+# konfliktfrei mit `xbuddy_session`.
+
+# ENV-Variable für Bot-Token (APP-7 / MAD-9): cluster-weit, wie essen.
+_ENV_BOT_TOKEN = "ELTERNCHAT_BOT_TOKEN"
+# CONFIG-5: Familie-Service-Origin per Komponenten-ENV.
+_ENV_FAMILIE_ORIGIN = "KIBUDDY_FAMILIE_ORIGIN"
+
+
+def _get_bot_token():
+    """Bot-Token aus runtime-Dict (Test-Naht) oder ENV (APP-7)."""
+    return runtime.get("bot_token") or os.environ.get(_ENV_BOT_TOKEN)
+
+
+def _get_familie_client():
+    """Liefert einen FamilieClient — gecacht im runtime-Dict oder frisch (T1015).
+
+    Test-Naht: ``configure(familie_client=...)`` setzt direkt einen Stub.
+    Produktiv-Pfad: ``tools.familie_client.FamilieClient`` aus ENV
+    ``KIBUDDY_FAMILIE_ORIGIN`` (Default ``http://127.0.0.1:5010``).
+    """
+    cached = runtime.get("familie_client")
+    if cached is not None:
+        return cached
+    origin = os.environ.get(_ENV_FAMILIE_ORIGIN, _FAMILIE_DEFAULT_ORIGIN)
+    return _familie_client_mod.FamilieClient(origin_url=origin)
+
+
+# AUTH-8: 401 rendert eine Anweisungsseite statt eines rohen Status-Codes.
+_AUTH_401_HTML = (
+    "<!doctype html>\n"
+    "<html lang=\"de\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+    "<title>Gerät neu verbinden</title></head>"
+    "<body style=\"font-family:system-ui,sans-serif;max-width:32rem;"
+    "margin:3rem auto;padding:0 1rem;line-height:1.5\">"
+    "<h1>Dieses Gerät muss neu verbunden werden.</h1>"
+    "<p>Öffne im Familien-Bot den Befehl "
+    "<code>/gerät_neu_pairen &lt;display_id&gt;</code> und folge dem Link "
+    "auf diesem Gerät.</p>"
+    "</body></html>"
+)
+
+
+def _auth_401():
+    """AUTH-8: 401 mit HTML-Anweisungsseite (nicht roher Status-Code)."""
+    resp = make_response(_AUTH_401_HTML, 401)
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    return resp
+
+
+def require_init_data(fn):
+    """Decorator: HART-AUTH (T948/T1321, auth.md AUTH-2/3/5/8).
+
+    Eine valide Quelle reicht (AUTH-2, additive Akzeptanz); fehlt jede,
+    antwortet die Route HART mit 401 + AUTH-8-Anweisungsseite:
+
+    - **AUTH-5 Loopback** (127.0.0.1/::1, kein X-Forwarded-For): Server-zu-
+      Server → pass-through, g.init_data = None.
+    - **AUTH-2 Cookie `xbuddy_session`**: valide HMAC-Signatur reicht;
+      Rolling-Refresh mit frischem `exp` (auth.md AUTH-2:78). g.init_data = None.
+      `make_response` wrappt auch die NDJSON-Streaming-Response von /frage
+      (stream_with_context) korrekt — der Set-Cookie-Header steht vor dem Body.
+    - **AUTH-2 tma-Header** (MAD-7): valide + Familien-Mitglied → g.init_data;
+      valide + Nicht-Mitglied → 403; ungültig → 401.
+    - **Sonst**: HART 401 (AUTH-8).
+    """
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        # AUTH-5: Loopback-Bypass für Internal-Service-Calls.
+        if (not request.headers.get("X-Forwarded-For")
+                and request.remote_addr in ("127.0.0.1", "::1")):
+            g.init_data = None
+            return fn(*args, **kwargs)
+
+        bot_token = _get_bot_token()
+        if not bot_token:
+            logger.error("AUTH: %s nicht gesetzt — Route nicht nutzbar.", _ENV_BOT_TOKEN)
+            return ("", 500)
+
+        # AUTH-2: Session-Cookie. Valide Signatur (+ nicht abgelaufen) reicht.
+        cookie_val = request.cookies.get(_session_cookie.COOKIE_NAME)
+        if cookie_val:
+            subject = _session_cookie.verify_session(cookie_val, bot_token)
+            if subject is not None:
+                g.init_data = None
+                # Rolling-Refresh (AUTH-2:78): Cookie mit frischem exp neu setzen.
+                resp = make_response(fn(*args, **kwargs))
+                resp.set_cookie(
+                    _session_cookie.COOKIE_NAME,
+                    _session_cookie.sign_session(subject, bot_token),
+                    **_session_cookie.session_cookie_kwargs(),
+                )
+                return resp
+
+        # AUTH-2: tma-Header (MAD-7). Leerer/fehlender "tma "-Wert zählt als
+        # „keine tma-Quelle" (Mini-App-JS außerhalb Telegram sendet "tma " leer).
+        auth_header = request.headers.get("Authorization", "").strip()
+        tma_leer = (
+            not auth_header
+            or auth_header.lower() in ("tma", "tma ")
+            or (auth_header.lower().startswith("tma ") and not auth_header[4:].strip())
+        )
+        if not tma_leer:
+            cfg = runtime.get("init_data_config")
+            if cfg is None:
+                cfg = _init_data_mod.load_config()
+                runtime["init_data_config"] = cfg
+            try:
+                init_data = _init_data_mod.validate_header(
+                    auth_header, bot_token, cfg["max_age_seconds"])
+            except _init_data_mod.InitDataError:
+                return _auth_401()
+
+            # FAM-7/8: User-ID gegen Familien-Registry prüfen (HTTP-Pfad, T1015).
+            familie_ids = _get_familie_client().get_telegram_ids()
+            if familie_ids is not None and init_data.user_id not in familie_ids:
+                logger.warning("FAM-7: user_id %s ist kein Familien-Mitglied → 403", init_data.user_id)
+                return ("", 403)
+
+            g.init_data = init_data
+            return fn(*args, **kwargs)
+
+        # AUTH-3: weder Loopback noch Cookie noch tma → HART 401 (AUTH-8).
+        return _auth_401()
+    return wrapper
 
 
 # ============================================================
@@ -204,6 +371,7 @@ def display_frage():
 # ---- Audio-Cache-Auslieferung (KIBUDDY-24) ----
 
 @app.route("/api/v1/kibuddy/audio/<path:audio_filename>", methods=["GET"])
+@require_init_data
 def audio_file(audio_filename: str):
     """Liefert MP3 aus dem Audio-Cache (KIBUDDY-24)."""
     audio_dir = data_io.audio_dir(_data_root())
@@ -213,6 +381,7 @@ def audio_file(audio_filename: str):
 # ---- Haupt-Endpoint: Frage (KIBUDDY-24) ----
 
 @app.route("/api/v1/kibuddy/frage", methods=["POST"])
+@require_init_data
 def frage():
     """POST audio → NDJSON-Stream: Stage 1 (kind) sofort nach STT, Stage 2 (buddy) nach LLM+TTS.
 
@@ -335,6 +504,7 @@ def frage():
 # ---- Vorlesen-Endpoint (KIBUDDY-24, KIBUDDY-31) ----
 
 @app.route("/api/v1/kibuddy/vorlesen", methods=["POST"])
+@require_init_data
 def vorlesen():
     """POST {text} oder {tts_audio_id} → TTS-Audio.
 
@@ -380,6 +550,7 @@ def vorlesen():
 # ---- Reset-Endpoint (KIBUDDY-24, KIBUDDY-29) ----
 
 @app.route("/api/v1/kibuddy/reset", methods=["POST"])
+@require_init_data
 def reset():
     """Löscht Session-Memory des Aufrufers + Audio-Cache (KIBUDDY-16/29).
 
@@ -398,6 +569,7 @@ def reset():
 # ---- Config-Endpoints (KIBUDDY-24, KIBUDDY-21) ----
 
 @app.route("/api/v1/kibuddy/config", methods=["GET", "PUT"])
+@require_init_data
 def config_endpoint():
     _get_or_create_session()  # Cookie konsistent setzen (FIX-5, KIBUDDY-16)
     cfg = _runtime_cfg()
@@ -422,6 +594,7 @@ def config_endpoint():
 # ---- Prompt-Endpoints (KIBUDDY-15, KIBUDDY-24) ----
 
 @app.route("/api/v1/kibuddy/prompt", methods=["GET"])
+@require_init_data
 def prompt_get():
     """Liest den aktuell wirksamen System-Prompt (KIBUDDY-15/24)."""
     _get_or_create_session()  # Cookie konsistent setzen (FIX-5, KIBUDDY-16)
@@ -446,6 +619,7 @@ def prompt_get():
 
 
 @app.route("/api/v1/kibuddy/prompt", methods=["PUT"])
+@require_init_data
 def prompt_put():
     """Schreibt neuen System-Prompt atomar (KIBUDDY-15/24)."""
     _get_or_create_session()  # Cookie konsistent setzen (FIX-5, KIBUDDY-16)
