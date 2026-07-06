@@ -34,6 +34,7 @@ sys.path.insert(0, _REPO_ROOT)
 
 from seiten import connector as connector_modul  # noqa: E402
 from seiten import main as seiten_main  # noqa: E402
+from seiten import pwa_mantel  # noqa: E402
 
 _HTML_PATH = "/api/v1/seiten/connector/"
 _STATIC_PREFIX = "/api/v1/seiten/static/connector/"
@@ -349,8 +350,89 @@ def test_connector_route_im_inventar_listbar():
 # ── Asset-Verzeichnis: Pflicht-Dateien ────────────────────────────────────────
 
 def test_connector_asset_dir_pflicht_dateien():
-    pflichten = ["index.html", "style.css", "manifest.json", "sw.js",
-                 "logos/anthropic.svg", "logos/mistral.svg", "logos/azure.svg"]
+    pflichten = [
+        "index.html", "style.css", "manifest.json", "sw.js",
+        "logos/anthropic.svg", "logos/mistral.svg", "logos/azure.svg",
+        # PWAM-2 PNG-Icons (T1365-AC1)
+        "icon-192.png", "icon-512.png", "icon-maskable-512.png",
+    ]
     fehlt = [p for p in pflichten
              if not os.path.isfile(os.path.join(_CONNECTOR_ASSET_DIR, p))]
     assert not fehlt, f"Connector-PWA-Pflicht-Dateien fehlen: {fehlt}"
+
+
+# ── T1365-AC1: Manifest-Icons sind PNG (PWAM-2) ───────────────────────────────
+
+def test_ac1_manifest_icons_sind_png(client):
+    """AC1 / PWAM-2: manifest.json-Icons sind PNG, kein SVG; Pflicht-Groessen vorhanden."""
+    resp = client.get(_STATIC_PREFIX + "manifest.json")
+    assert resp.status_code == 200
+    body = json.loads(resp.get_data(as_text=True))
+    icons = body.get("icons", [])
+    assert icons, "manifest.json enthaelt keine Icons"
+    for icon in icons:
+        assert icon.get("type") == "image/png", (
+            f"Icon {icon.get('src')!r} ist kein PNG (PWAM-2 verletzt)"
+        )
+        assert not (icon.get("src") or "").lower().endswith(".svg"), (
+            f"SVG-Icon in manifest.json (PWAM-2 verletzt): {icon.get('src')!r}"
+        )
+    sizes = {i["sizes"] for i in icons if i.get("purpose") != "maskable"}
+    assert "192x192" in sizes, "manifest.json fehlt 192x192-Icon (PWAM-2)"
+    assert "512x512" in sizes, "manifest.json fehlt 512x512-Icon (PWAM-2)"
+    assert any(i.get("purpose") == "maskable" for i in icons), (
+        "manifest.json fehlt maskable-Icon (PWAM-2)"
+    )
+
+
+def test_ac1_png_icon_dateien_lesbar(client):
+    """AC1: PNG-Icon-Dateien existieren + werden via Flask-static ausgeliefert."""
+    for fname in ("icon-192.png", "icon-512.png", "icon-maskable-512.png"):
+        resp = client.get(_STATIC_PREFIX + fname)
+        assert resp.status_code == 200, f"PNG-Icon {fname} nicht erreichbar (PWAM-2)"
+        # PNG-Magic-Bytes: 0x89 0x50 0x4E 0x47
+        data = resp.get_data()
+        assert data[:4] == b'\x89PNG', f"{fname} ist kein gueltiges PNG"
+
+
+# ── T1365-AC2: build_id-Substitution in sw.js ────────────────────────────────
+
+def test_ac2_sw_build_id_nicht_im_response(client):
+    """AC2 / PWAM-4: sw.js-Response enthaelt KEIN hartes '__BUILD_ID__'
+    (connector_sw_view substituiert den Platzhalter)."""
+    resp = client.get(_STATIC_PREFIX + "sw.js")
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    assert "__BUILD_ID__" not in body, (
+        "sw.js: __BUILD_ID__-Platzhalter wurde NICHT substituiert (PWAM-4)"
+    )
+    assert "connector-pwa-" in body, "sw.js: CACHE_NAME-Prefix fehlt"
+
+
+# ── T1365-AC3: SW-Scope aus REGISTRY ─────────────────────────────────────────
+
+def test_ac3_sw_service_worker_allowed_aus_registry(client):
+    """AC3 / PWAM-3: sw.js-Response traegt Service-Worker-Allowed-Header
+    mit dem Wert aus pwa_mantel.REGISTRY['connector'].sw_scope."""
+    resp = client.get(_STATIC_PREFIX + "sw.js")
+    assert resp.status_code == 200
+    erwartet_scope = pwa_mantel.REGISTRY["connector"].sw_scope
+    header_val = resp.headers.get("Service-Worker-Allowed", "")
+    assert header_val == erwartet_scope, (
+        f"Service-Worker-Allowed-Header falsch: {header_val!r} != {erwartet_scope!r} "
+        "(PWAM-3 Scope-Herkunft aus REGISTRY)"
+    )
+
+
+def test_ac3_sw_scope_in_html_aus_registry(client):
+    """AC3 / PWAM-3: gerendertes HTML enthaelt den SW-Scope aus der REGISTRY —
+    __SW_SCOPE__-Platzhalter wurde ersetzt und ist identisch mit
+    pwa_mantel.REGISTRY['connector'].sw_scope."""
+    body = client.get(_HTML_PATH).get_data(as_text=True)
+    assert "__SW_SCOPE__" not in body, (
+        "HTML enthaelt noch '__SW_SCOPE__'-Platzhalter — Substitution fehlgeschlagen"
+    )
+    erwartet_scope = pwa_mantel.REGISTRY["connector"].sw_scope
+    assert erwartet_scope in body, (
+        f"SW-Scope {erwartet_scope!r} aus REGISTRY fehlt im gerenderten HTML (PWAM-3)"
+    )
