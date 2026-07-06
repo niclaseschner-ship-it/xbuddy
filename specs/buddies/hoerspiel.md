@@ -1885,7 +1885,9 @@ Zwei Player-Ebenen, kein Tab-Chrome, kein Menü auf der Startfläche (HSP-3-Prin
   HSP-49).
 - **Voller Player** (eigener Screen) bei Tap auf eine Kachel **oder** den
   Mini-Player: großes Cover, Titel, großer Play/Pause + große ⏮/⏭, Fortschritt,
-  Zurück-Pfeil — plus Kapitel-Liste (HSP-52). Bedien-Regeln aus HSP-19/20/21
+  Zurück-Pfeil — plus Kapitel-Liste (HSP-52). Das Kind-Label (`player-kid`)
+  zeigt den **Eigentümer** der laufenden Folge (nicht das gerade offene Regal-Kind,
+  Cross-Kind-Fall; HSP-49). Bedien-Regeln aus HSP-19/20/21
   (Tap startet/setzt fort; kein Wisch/Long-Press/Multi-Touch).
 
 Layout-Robustheit analog HSP-4b (clamp, kein Clip, Cover 1:1). Design-Tokens
@@ -1904,7 +1906,9 @@ kein 2-Element-Hardcode; sie trägt V1 `mia`, `finn`, `emil`. `zielgruppe`
 ist deskriptiv (HSP-46) — die Erwachsenen-Instanz (Niclas, HSP-45) erscheint im
 Umschalter wie jede andere. Modell = **Umschalter je Kontext**, NICHT die
 aggregierte Cross-Kind-Liste des alten Folgen-Tabs (HSP-35). Resume-Namensräume
-sind `<kind_id>`-getrennt.
+sind `<kind_id>`-getrennt. Läuft beim Kind-Wechsel noch ein Fremd-Album weiter,
+bleibt `aktivKindId` stabil — Mini-Player und voller Player zeigen den Eigentümer
+(nicht das neu gewählte Regal-Kind).
 
 ### HSP-50 — Settings als eigener Vollbild-Screen hinter Zahnrad
 Ein **Zahnrad** oben rechts öffnet einen **eigenen Vollbild-Settings-Screen** mit
