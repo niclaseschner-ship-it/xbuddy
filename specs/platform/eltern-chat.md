@@ -1911,6 +1911,40 @@ tatsächlich aussieht — ein Anonymisierungs-Layer davor wäre Bau ohne belegte
 Grundlage. Die Aktivierung ist als OPEN-EC-A festgehalten und bleibt eine
 Voraussetzung für den Regelbetrieb über die Testphase hinaus.
 
+### E-EC-9-V2 — Regelbetrieb-Privacy: Hybrid-Egress statt Voll-Anonymisierung
+*Datum:* 2026-07-06 · *löst OPEN-EC-A für den Regelbetrieb* (RATIFIZIERT berater-runde 2026-07-05, Nic-Verdikt „a")
+
+E-EC-9 („V1 ohne Anonymisierung") war auf die Prototyp-/Bewertungsphase befristet.
+Für den Regelbetrieb gilt: **kein** Voll-Anonymisierungs-Layer (der würde die
+Erkennungsqualität aus E-EC-6 zerstören), sondern **gezielte Feld-Redaction** —
+konkrete PII (Adresse, Telefon) wird dort entfernt, wo der Agent sie zur Aufgabe
+nicht braucht — **plus EU-Region-Routing** als Egress-Hook in `tools/llm`, vor dem
+Verlassen der Geräte-Ebene (erfüllt Constitution §3, die unverändert bleibt).
+
+**Nicht nur `tools/llm`:** es gibt **≥3 Egress-Fronten** — Chat/Foto (über
+`tools/llm`), sowie STT und TTS (`kibuddy/tts`, `hoerspiel/tts`, STT-Pfad), die
+ebenfalls Familientext senden und je einen eigenen Region-/Redaction-Entscheid
+brauchen. Bild-PII (Gesichter, Aushang-Klarnamen) bleibt vom Text-Redaction-Pfad
+unberührt und ist ein eigener Punkt.
+
+**Lösch-/Export-Pfad — Granularität `chat_id` (Familie), nicht `kind_id`**
+(Nic-Setzung 2026-07-06): „Familie löschen/exportieren" läuft über die
+SVC-5-Wurzel `xbuddy-data/` (eltern-chat-SQLite `history.py` auf `chat_id`,
+TTS-Cache, `provider_calls.jsonl`) **inklusive der B2-Backup-Löschkette**.
+Empirisch belegt löschbar: restic `forget --prune` räumt den B2-Bucket täglich
+erfolgreich, **kein wirksames Object-Lock** — die Familie wird also **sofort
+mitgelöscht**, nicht erst nach Retention-Ablauf. `kind_id`-Granularität ist
+bewusst **nicht** vorgebaut (`history.py` kennt nur `chat_id`; eine Nachrüstung
+wäre eine teure Datenmodell-Migration ohne belegten Bedarf).
+
+**Ein-Wege-Commit erst nach drei Pflicht-Spikes** (diese Setzung ist die
+Richtung, nicht der fertige Bau): (1) **Quali-Spike** — gezielte Redaction auf
+realer Konversation ohne Erkennungs-Einbruch; (2) **Region/AVV-Spike** — ist ein
+realer sensibler Fluss EU-routbar und ein AVV beschaffbar; (3)
+**kind-Achsen-Inventar** der xbuddy-data-Dirs. Retention-Fristen (Chat-Historie +
+`provider_calls.jsonl`) bleiben OPEN bis zum Spike.
+
+
 **Ende der Bewertungsphase (Trigger):** Nic schließt OPEN-EC-A bewusst — das
 ist der einzige Trigger. Ein messbarer Auto-Trigger (z. B. „nach N Monaten"
 oder „bei erster Nicht-Test-Familie") ist **bewusst verworfen**: der
