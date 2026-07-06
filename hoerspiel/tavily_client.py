@@ -13,7 +13,7 @@ Fehlerbehandlung.
 ## HSP-58 — Datenabfluss-Invariante (SICHERHEITSKRITISCH)
 An die externe Such-Cloud fließen **ausschließlich thema-abgeleitete
 Tech-Suchanfragen** ab — **niemals** Personen-/Familiendaten (Bible, Historie,
-Namen; Constitution §3 / RAT-26). Dieses Modul kennt nur die fertige
+Namen; Constitution §3). Dieses Modul kennt nur die fertige
 `query`-Zeichenkette, die der `research_service` aus dem `thema` erzeugt hat;
 es hat **keinen** Zugriff auf Bible/Historie und reicht nichts weiter, was der
 Aufrufer nicht als `query` übergibt.
