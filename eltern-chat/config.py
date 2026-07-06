@@ -44,14 +44,6 @@ DEFAULTS = {
     "provider":       "claude",     # KI-Anbieter (EC-11)
     "provider_model": "",           # leer → Anbieter-Default des Adapters
     "context_depth":  40,           # Gesprächskontext-Tiefe (EC-6, #312)
-    # E-TAB-6 V2 / #508: Multimodal-Anbieter-Slot (additiv). Default leer →
-    # Fallback auf `provider` (V1-Kompatibilität: Claude übernimmt auch den
-    # TAB-Pfad). Gesetzt → eigener Anbieter für Termin-Extraktion (DSGVO-Brücke).
-    # DEPRECATED (#1262, PR1): Der Foto-Pfad läuft jetzt über den Foto-Adapter
-    # (`skills.foto_analyse` → `tools.llm`); der Anbieter ist über den Vendor-
-    # Teil des Foto-Slots (`eltern-chat-anthropic-foto-analyse-api-key`) gepinnt.
-    # `multimodal_provider` wird nicht mehr ausgewertet — Entfernen ist PR2 (#1334).
-    "multimodal_provider": "",      # DEPRECATED #1262 / Rückbau #1334
     # E-TAB-6 V2 / #508: Multimodal-Modell-Override. leer → Anbieter-Default.
     # #1262: weiterhin genutzt — reicht als `model` an FotoAnalyseProvider durch
     # (leer → Foto-Default claude-opus-4-7).
@@ -184,7 +176,6 @@ DEFAULTS = {
 # Loader vorbei (CONFIG-3) — Geheimnisse berührt der Loader nicht.
 ENV_BOT_TOKEN             = "ELTERNCHAT_BOT_TOKEN"               # Geheimnis, Pflicht
 ENV_PROVIDER_API_KEY      = "ELTERNCHAT_PROVIDER_API_KEY"        # Geheimnis, optional
-ENV_MULTIMODAL_API_KEY    = "ELTERNCHAT_MULTIMODAL_API_KEY"      # Geheimnis, optional (#508)
 ENV_FAMILY_GROUP          = "ELTERNCHAT_FAMILY_GROUP_CHAT_ID"
 
 
@@ -210,8 +201,6 @@ class Config:
                  display_url_origin_tailscale,
                  essen_origin_url,
                  log_level,
-                 multimodal_provider="",
-                 multimodal_api_key="",
                  multimodal_model="",
                  mini_app_einkauf_url="",
                  mini_app_base_url="",
@@ -241,14 +230,10 @@ class Config:
         self.display_url_origin_tailscale = display_url_origin_tailscale  # SREG-7 / #476: Tailscale-Origin
         self.essen_origin_url = essen_origin_url       # EC-15 / #503: Origin des Essens-Buddys (ESSEN-15/ESSEN-19)
         self.log_level = log_level                 # LOG-4 (#166): Level-String für tools.logsetup
-        # E-TAB-6 V2 / #508: Multimodal-Anbieter-Konfiguration (additiver Slot).
-        # DEPRECATED (#1262, PR1): der Foto-Pfad holt den Key jetzt aus dem
-        # Zugangsdaten-Store über den Foto-Slot (ZD-5), nicht mehr aus
-        # `multimodal_api_key`; `multimodal_provider` ist über den Slot-Vendor
-        # gepinnt. Beide bleiben in V1 als Feld erhalten (Entfernen in PR2 #1334).
-        # `multimodal_model` wird weiter ausgewertet (Modell-Override, #1262).
-        self.multimodal_provider = multimodal_provider  # DEPRECATED #1262 / Rückbau #1334
-        self.multimodal_api_key = multimodal_api_key    # DEPRECATED #1262 / Rückbau #1334
+        # E-TAB-6 V2 / #508: Multimodal-Modell-Override (#1262, PR2 #1334).
+        # `multimodal_provider` + `multimodal_api_key` entfernt (#1334): der
+        # Foto-Pfad holt den Key aus dem ZD-Store (Foto-Slot), Anbieter ist
+        # über den Slot-Vendor gepinnt. Nur `multimodal_model` bleibt.
         self.multimodal_model = multimodal_model        # #1262: Modell-Override an Foto-Adapter
         # EZG-6 / EIN-8 / #653: Mini-App-URL für die Einkaufsliste (EZG-6).
         self.mini_app_einkauf_url = mini_app_einkauf_url  # leer → ENV-Fallback MINI_APP_EINKAUF_URL
@@ -339,10 +324,6 @@ def resolve(config_path, zd=None):
                         or store.get(KEY_PROVIDER_API_KEY)
                         or "").strip()
 
-    # Multimodal-API-Key: nur Env (Geheimnis, CONFIG-3). Leer → Fallback auf
-    # provider_api_key beim Aufbau des Adapters (Aufrufer-Verantwortung).
-    multimodal_api_key = os.environ.get(ENV_MULTIMODAL_API_KEY, "").strip()
-
     # Familien-Gruppe: Env > Datei > Onboarding-Speicher > leer.
     # Per Env/Datei gesetzt → gesperrt, hat Vorrang vor Onboarding-Bindung (ONB-6).
     # Der Loader-Output liefert den ENV-/Datei-/Default-Wert; das Sperr-Bit
@@ -389,9 +370,7 @@ def resolve(config_path, zd=None):
             values["display_url_origin_tailscale"]).strip().rstrip("/"),
         essen_origin_url=str(values["essen_origin_url"]).strip().rstrip("/"),
         log_level=str(values["log_level"]).strip(),
-        # E-TAB-6 V2 / #508: Multimodal-Adapter-Konfiguration.
-        multimodal_provider=str(values["multimodal_provider"]).strip(),
-        multimodal_api_key=multimodal_api_key,
+        # E-TAB-6 V2 / #508: Multimodal-Modell-Override (#1262, PR2 #1334).
         multimodal_model=str(values["multimodal_model"]).strip(),
         # EZG-6 / EIN-8 / #653: Mini-App-URL für die Einkaufsliste.
         mini_app_einkauf_url=str(values["mini_app_einkauf_url"]).strip(),

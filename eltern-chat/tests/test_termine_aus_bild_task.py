@@ -25,7 +25,7 @@ from fakes import (
 )
 from history import History
 from main import Context, handle_update
-from skills._multimodal import ExtractedTermin
+from skills.foto_analyse import ExtractedTermin
 from skills.termine_aus_bild import SIGNAL_WORDS
 from skills.termine_aus_bild_task import (
     TabInput,

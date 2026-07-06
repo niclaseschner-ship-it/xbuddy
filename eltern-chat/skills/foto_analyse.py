@@ -15,14 +15,11 @@ Warum eine eigene Datei statt `providers/lib_adapter.py`: der TAB-Pfad braucht d
 den Konversations-Pfad (EC-6) gehört — dieselbe Trennung, die schon `_multimodal/`
 gegenüber `providers/` hielt.
 
-Typen-Heimat (#1262): Diese Datei ist ab jetzt die kanonische IMPORT-Heimat der
+Typen-Heimat (#1262, PR2 #1334): Diese Datei ist die kanonische HEIMAT der
 Typen `ExtractedTermin` und `MultimodalError` für den Foto-Pfad — neuer Code
-importiert sie von HIER (`termine_aus_bild.py` repointet). Die physischen
-Klassen-Objekte liegen für PR1 noch in `_multimodal/base.py` (nicht editierbar,
-für die Legacy-Adapter/-Tests lauffähig) und werden ausschließlich von hier
-re-exportiert — SELBE Klassen-Identität für alle Konsumenten (Legacy wie Lib-
-Route). PR2 (Löschung von `_multimodal/`) verschiebt die Definition physisch
-hierher (Folge-Ticket).
+importiert sie von HIER (`termine_aus_bild.py` zeigt hierher). Die physischen
+Klassen-Definitionen sind in dieser Datei (Löschung von `_multimodal/` in #1334
+abgeschlossen).
 
 ZD-Slot (TAB-5, E-TAB-8): der API-Key kommt aus dem `tools.zugangsdaten`-Store
 über den Slot `eltern-chat-anthropic-foto-analyse-api-key` (die Lib holt ihn
@@ -34,17 +31,61 @@ Bild wird nach der Extraktion verworfen (kein Photo-Buddy-Aufruf).
 """
 
 import logging
+from dataclasses import dataclass, field
 
-# #1262: die Typen bleiben (Klassen-Identität!) die aus `_multimodal/base.py` —
-# diese Datei ist nur ihre neue kanonische IMPORT-Heimat (Re-Export). So teilen
-# Legacy-Adapter (base-Import) und Lib-Route (foto_analyse-Import) EIN
-# Klassen-Objekt; `except MultimodalError`/`isinstance(x, ExtractedTermin)`
-# passen über beide Pfade. PR2 verschiebt die Definition physisch hierher.
-from skills._multimodal.base import ExtractedTermin, MultimodalError
 from tools.llm import LLMCapabilityError, get_singleshot
 from tools.llm import ProviderError as LibProviderError
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+#  Typen-Heimat (#1262, PR2 #1334): ExtractedTermin + MultimodalError sind
+#  ab jetzt PHYSISCH hier definiert (Löschung von _multimodal/). Alle
+#  Konsumenten importieren von hier — keine Re-Export-Ebene mehr nötig.
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ExtractedTermin:
+    """Ein einzelner Termin-Vorschlag aus dem multimodalen Extraktions-Aufruf
+    (TAB-5). Anbieter-neutral; der konkrete Adapter füllt die Felder aus seiner
+    Tool-Use-Antwort.
+
+    Pflicht-Felder (V1, vor Plausi-Filter TAB-6):
+    - `titel`     — nicht-leerer Termin-Titel.
+    - `beginn`    — ISO-Datum (`YYYY-MM-DD`) oder ISO-Datetime
+                    (`YYYY-MM-DDTHH:MM:SS±HH:MM`) als String.
+
+    Optionale Felder:
+    - `ende`      — Pflicht für zeitgebundene Termine (PLAN-22); wenn das LLM
+                    es leer lässt, wandert der Termin in den Lücken-Sammler
+                    (TAB-8.1).
+    - `ganztags`  — `True`/`False`. Falls leer → vom `beginn`-Format abgeleitet
+                    (kein `T` → ganztägig).
+    - `personen_hinweise` — frei formulierte Personen-Hinweise (TAB-8.2);
+                    **nie** Pflicht, **nie** automatisch in den Titel
+                    eingearbeitet (OPEN-TES-B respektiert).
+    """
+    titel: str = ""
+    beginn: str = ""
+    ende: str = ""
+    ganztags: object = None       # bool | None
+    personen_hinweise: str = ""
+
+    # Interne Lückenfeld-Markierung (TAB-8.1) — Plausi-Filter setzt sie, der
+    # Lücken-Sammler liest sie. Liste fehlender Felder als kanonische Namen
+    # (z. B. ["titel"], ["ende"]).
+    fehlende_felder: list = field(default_factory=list)
+
+
+class MultimodalError(Exception):
+    """Der multimodale Anbieter war nicht erreichbar oder hat keine verwertbare
+    Antwort geliefert (TAB-5, EC-14-analog).
+
+    Der TAB-Skill fängt das und liefert das Ergebnis-Signal `provider_fehler`
+    zurück (TAB-1 / EC-7).
+    """
 
 
 # TAB-5 (E-TAB-8): ZD-Slot-Name — EINE Wahrheitsquelle. `tools.zugangsdaten`-Store
@@ -231,9 +272,9 @@ TOOL_DESCRIPTION = _TOOL_DESCRIPTION
 TOOL_SCHEMA = _TOOL_SCHEMA
 SYSTEM_PROMPT = _SYSTEM_PROMPT
 
-# Re-Export: kanonische Import-Heimat der Typen für den Foto-Pfad (#1262) +
-# des Boot-Konfig-Fehler-Typs (analog lib_adapter). `ExtractedTermin`/
-# `MultimodalError` bleiben (Identität!) die aus `_multimodal/base.py`.
+# Öffentliche Typen: kanonische Definitionen für den Foto-Pfad (#1262, #1334) +
+# Boot-Konfig-Fehler-Typ (analog lib_adapter). `ExtractedTermin`/
+# `MultimodalError` sind physisch hier definiert (keine Re-Export-Ebene mehr).
 __all__ = [
     "FOTO_ANALYSE_SLOT",
     "SYSTEM_PROMPT",
