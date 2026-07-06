@@ -140,6 +140,32 @@ durch Spec-Änderung in dieser Liste ergänzt (kein Implementierungs-Detail).
 /api/v1/essen/fotos/<medium_id>/thumbnail     (GET)
 ```
 
+**Phase-1-Nachtrag — Trigger gefeuert (2026-07-06, Nic-Setzung).** Der
+Audit-Funnel-Befund (#1338: `/api/v1/photo/*`, `/api/v1/kibuddy/*` und
+`/api/v1/plan/*` extern über den Funnel erreichbar — Fotos abruf-/löschbar, Plan
+schreibbar, KiBuddy-Prompt überschreibbar) IST der in AUTH-6 geforderte
+„belegte Auth-Schmerz". Damit werden neu in AUTH-3 (hart geschützt) klassifiziert:
+
+- **photo:** `/api/v1/photo/medien`, `/api/v1/photo/medien/<medium_id>`,
+  `/api/v1/photo/medien/<medium_id>/thumbnail`
+- **kibuddy:** `/api/v1/kibuddy/config`, `/api/v1/kibuddy/frage`,
+  `/api/v1/kibuddy/prompt`, `/api/v1/kibuddy/reset`, `/api/v1/kibuddy/vorlesen`,
+  `/api/v1/kibuddy/audio/<datei>`
+- **plan:** die `/api/v1/plan/*`-Routen (aus AUTH-6 hierher gewandert):
+  `admin/aktivitaeten[/<art>]`, `admin/kalender`, `admin/reload`, `aktivitaet`,
+  `aktivitaeten`, `defaults`, `slot-modell`, `termine[/bulk]`, `zuteilung`.
+
+Die **method-explizite** Endliste (GET/POST/PATCH/DELETE je Pfad) enumeriert der
+**#1321-Bau** gegen die realen Routen; der AUTH-9-Copetrage-Test
+(`tests/test_auth_decorator_copetrage.py`) verifiziert, dass **jede** gelistete
+Route den Auth-Decorator trägt. Die `/display/…`-Renderer-Routen
+(`/display/photo/rahmen`, `/display/kibuddy/frage`, `/display/plan/woche`) bleiben
+**außerhalb** AUTH-3 — ihre Funnel-Exposition ist die separate AUTH-7-Frage
+(Phase 4, V1 nicht ratifiziert). `/healthz` (SVC-6) bleibt unauthentifiziert.
+
+**Bau-Gate:** der Rollout wartet auf das Cookie-iPhone-Persistenz-Gate (AUTH-2).
+#1292 (Player-Cookie/401) wird NICHT vorgezogen (Phasen-Reihenfolge unten).
+
 Jede Zeile ist eine eindeutige Flask-Route mit konkretem URL-Pfad und HTTP-
 Methode — keine Sammel-Zeilen mehr (eine Zeile pro tatsächlich registrierter
 Route, sonst kann der AUTH-9-Test den Decorator-Anwendungs-Stand nicht
@@ -255,7 +281,7 @@ Eintrag nicht in AUTH-6, sondern in eine der ratifizierten Klassen.
 /api/v1/seiten                                (Trigger: Phase 2/3, mini-app-uebersicht-Migration)
 /api/v1/seiten/uebersicht                     (Trigger: Phase 2/3)
 /api/v1/seiten/mini-app-uebersicht            (Trigger: Phase 2/3)
-/api/v1/plan/*                                (Trigger: belegter Auth-Schmerz ODER Familie-2-Instanz — härtet dann nach AUTH-3 via Cookie-Pairing #948; PWA-Auslieferung allein ist KEIN Trigger)
+/api/v1/plan/*                                (→ AUTH-3 gewandert: Trigger „belegter Auth-Schmerz" gefeuert 2026-07-06, Audit-Funnel-Befund #1338)
 /api/v1/familie/personen*                     (Trigger: Familien-Personen-Editor-Mini-App)
 /api/v1/familie/foto/*                        (Trigger: Familien-Foto-Mini-App)
 /api/v1/panels/*                              (Trigger: Phase 4 Panel-Mini-App)
