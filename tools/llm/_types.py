@@ -17,7 +17,10 @@ unten ist und nichts oberhalb lädt (MOD-1/MOD-3).
 
 from typing import Any, Literal, Protocol, TypedDict, runtime_checkable
 
-# LLMP-3: die sechs ratifizierten Capabilities (V1).
+# LLMP-3: die ratifizierten Capabilities. V1 waren es sechs; `web_search` ist
+# die 7. (T1371, additiv) — server-seitiges Anthropic-`web_search`-Tool
+# (`web_search_20260209`), opt-in in der Agent-Sicht. KEIN Required-Set-Mitglied
+# (nie Boot-Minimum): nur Anthropic deklariert sie, Mistral nicht.
 Capability = Literal[
     "tool_use",
     "multi_turn_assistant_prefill",
@@ -25,6 +28,7 @@ Capability = Literal[
     "cache_control",
     "multimodal_input",
     "system_message_distinct",
+    "web_search",
 ]
 
 

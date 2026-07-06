@@ -50,7 +50,8 @@ wirft die Lib beim Boot `LLMCapabilityError` und bricht den Service-Start
 ab — **kein** Runtime-Silent-Fallback auf ein Untermenge-Verhalten
 (ENTSCHEID-File Sektion „Patch 2 — Capability-Matrix + harter Boot-Fail").
 
-Die sechs ratifizierten Capabilities (V1):
+Die sieben ratifizierten Capabilities (V1 = sechs; `web_search` ist die 7.,
+T1371 additiv):
 
 | Capability                       | Bedeutung                                                                 |
 |----------------------------------|---------------------------------------------------------------------------|
@@ -60,6 +61,7 @@ Die sechs ratifizierten Capabilities (V1):
 | `cache_control`                  | Vendor unterstützt expliziten Cache-Block-Marker                          |
 | `multimodal_input`               | Vendor akzeptiert Bild-/Audio-Input neben Text                            |
 | `system_message_distinct`        | Vendor trennt System-Prompt von User/Assistant-Turns (eigener Parameter)  |
+| `web_search`                     | Vendor bietet ein **server-seitiges** `web_search`-Tool (Suche auf Anbieter-Infra, als `tools`-Array-Eintrag; kein externer Such-Provider, kein neuer Key) |
 
 **Required-Sets pro Sicht (V1):**
 
@@ -80,6 +82,17 @@ Die sechs ratifizierten Capabilities (V1):
   `structured_output`/`cache_control`, damit die Freitext-Sicht dual-provider-
   Slots (hoerspiel Claude+Mistral) ohne Boot-Fail trägt (#1131; `get_chat` wäre
   auf dem Mistral-Slot boot-fatal).
+
+**`web_search` ist per-Rufer-Opt-in in der `get_agent`-Sicht — keine eigene
+Sicht und kein Required-Set-Mitglied (T1371, ratifizierte Analyse 2026-07-05/06).**
+Nur Anthropic deklariert sie (Tool-Version `web_search_20260209`, Opus 4.8/4.7/4.6
++ Sonnet 4.6); Mistral **nicht**. Läge `web_search` im Boot-Fail-Minimum von
+`get_agent`, würde jeder Mistral-Agent-Slot (eltern-chat dual-provider) beim Boot
+fatal — deshalb bleibt sie Nutzungs-Opt-in (Spiegel `multimodal_input`). Der
+Rufer aktiviert das Server-Tool NUR, wenn `"web_search" in agent.capabilities`
+(die `get_agent`-Fassade legt die Vendor-`CAPABILITIES` offen); ein Slot-Vendor
+ohne `web_search` degradiert sauber (kein Silent-Send eines unbekannten Tools).
+Erster Konsument: hoerspiel-Recherche-Vorschritt (HSP-57, niclas-erwachsen).
 
 **`multimodal_input` ist per-Rufer-Opt-in — keine Sicht und kein Required-Set-
 Mitglied (ENTSCHEID-1262 → „multimodal_input = Capability, keine Sicht").**
@@ -108,6 +121,7 @@ CAPABILITIES = frozenset({
     # optional je nach Vendor:
     # "structured_output",
     # "multimodal_input",
+    # "web_search",   # nur Anbieter mit server-seitigem Such-Tool (T1371)
 })
 ```
 

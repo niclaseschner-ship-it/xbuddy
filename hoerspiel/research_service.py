@@ -3,43 +3,41 @@
 Ein **Vorschritt** vor dem bestehenden Single-Shot der Folgen-Erzeugung: er
 liefert einen **Fakten+Quellen-Block**, der in den `complete_structured`-Single-
 Shot (`llm_service.py`) gespeist wird. Der Single-Shot-Vertrag bleibt
-**unverändert** (HSP-57). `get_agent` (agentischer tool_use-Loop) ist bewusst
-deferiert.
+**unverändert** (HSP-57).
 
-Ablauf (drei Schritte, zwei LLM-Freitext-Calls + N Tavily-Suchen):
-
-  1. **Query-Gen** (`llm.complete`) — erzeugt aus dem **thema** N Suchanfragen.
-  2. **Suche** (`TavilyClient.suche`) — N externe Suchen (hart gedeckelt).
-  3. **Distill** (`llm.complete`) — verdichtet die Treffer zu einem Fakten+
-     Quellen-Block.
+## Form B1 (T1371, ratifiziert 2026-07-05/06)
+Die Recherche läuft über **EINEN** `get_agent`-Call (`tools.llm`) mit aktiviertem
+server-seitigem **`web_search`**-Tool (Anthropic-Infra) — **kein** externer
+Such-Provider, **kein** neuer ZD-Slot. Der Agent sucht selbst und synthetisiert
+zitierte Fakten zum `thema`; wir sammeln daraus den Fakten+Quellen-Block. Der
+frühere Tavily-Pfad (Query-Gen → externe Such-Cloud → Distill, zwei Freitext-
+Calls + N HTTP-Suchen) ist damit **entfernt** — die Recherche fließt an denselben
+Anthropic-Vendor wie die Generierung, keine Dritt-Cloud.
 
 ## HSP-58 — Datenabfluss-Invariante (SICHERHEITSKRITISCH)
 Der **einzige** inhaltliche Input dieses Service ist das `thema`. Bible,
 Historie, Personen-/Familiennamen fließen hier **nicht** ein und können darum
-auch nicht in die an Tavily gesendete Suchanfrage geraten (Constitution §3).
-Der Query-Gen-Prompt bekommt ausschließlich das `thema`.
+auch nicht in die web_search-Anfrage geraten (Constitution §3). Der `web_search`-
+Call bekommt ausschließlich das `thema` als User-Nachricht; die Suchen laufen
+gegen denselben anthropic-Key wie die Folge selbst (keine zusätzliche
+Egress-Fläche gegenüber der ohnehin genutzten Generierung).
 
 ## Degradation (HSP-58)
-Fehlt der Tavily-Key oder ist die Such-Cloud nicht erreichbar / Quota
-erschöpft, liefert `recherchiere()` ein Ergebnis mit `degraded=True` und
-**leerem** Block — die Folge wird dann **ohne** Recherche generiert. Kein
-harter Abbruch; ein Log-Marker hält den Fall fest.
+Fehlt die Agent-Sicht, deklariert der Slot-Vendor kein `web_search`, oder
+liefert der Call keine Suchergebnisse / einen Fehler, liefert `recherchiere()`
+ein Ergebnis mit `degraded=True` und **leerem** Block — die Folge wird dann
+**ohne** Recherche generiert. Kein harter Abbruch; ein Log-Marker hält den Fall
+fest.
 """
 
 import logging
-import re
 from dataclasses import dataclass, field
-
-from .tavily_client import TavilyError
-
-# Aufzählungs-/Nummern-Präfix am Zeilenanfang ("1. ", "1) ", "- ", "* ", "• ").
-_LIST_PREFIX = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s*")
 
 logger = logging.getLogger(__name__)
 
-# HSP-58: N-Suchen hart gedeckelt (Vorschlag 3–5, an `tiefe` gekoppelt).
-# Untere/obere Schranke sind HART — jeder abgeleitete N wird in [MIN, MAX]
-# geklemmt, egal was Query-Gen liefert oder welche `tiefe` gewählt ist.
+# HSP-58: N-Suchen hart gedeckelt (Vorschlag 3–5, an `tiefe` gekoppelt). Der
+# Wert wird als `max_uses` an das web_search-Tool gereicht — die Anthropic-Infra
+# führt NIE mehr als `max_uses` Suchen aus (harte obere Schranke der Egress-Menge).
 MIN_SUCHEN = 3
 MAX_SUCHEN = 5
 
@@ -51,6 +49,11 @@ _TIEFE_ZU_N = {
     "tief": 5,
 }
 _DEFAULT_N = 4
+
+# LLMP-3 7. Capability: nur ein Slot-Vendor, der `web_search` deklariert
+# (Anthropic), trägt den Recherche-Vorschritt. Fehlt sie (Mistral-Slot),
+# degradiert der Vorschritt sauber (kein Silent-Send eines unbekannten Tools).
+WEB_SEARCH_CAPABILITY = "web_search"
 
 
 def _n_fuer_tiefe(tiefe: str) -> int:
@@ -65,7 +68,8 @@ class RechercheErgebnis:
     - `block` — der Fakten+Quellen-Block (Markdown) für den Single-Shot; leer
       bei Degradation oder wenn keine Treffer.
     - `quellen` — die genutzten Quellen-URLs (für den META-Block, HSP-60).
-    - `suchen_count` — Zähler `suchen_pro_folge` (HSP-60).
+    - `suchen_count` — Zähler `suchen_pro_folge` (HSP-60) = Anzahl der von der
+      web_search-Infra ausgeführten Suchen (`web_search_requests`).
     - `degraded` — True, wenn ohne Recherche generiert wird (HSP-58).
     """
 
@@ -75,54 +79,23 @@ class RechercheErgebnis:
     degraded: bool = False
 
 
-QUERY_GEN_PROMPT = """\
-Du bist ein Recherche-Assistent. Du bekommst ein THEMA für einen erwachsenen
-Podcast-Deep-Dive und formulierst daraus %(min)d–%(max)d präzise, sachliche
-Web-Suchanfragen, die belastbare Fakten, Studien und Hintergründe zum THEMA
-finden.
+# Der System-Prompt für den web_search-Call. Er bekommt AUSSCHLIESSLICH das
+# `thema` als User-Nachricht (HSP-58) — Bible/Historie/Namen sind dem Service
+# strukturell nicht übergeben.
+RESEARCH_SYSTEM_PROMPT = """\
+Du bist ein Recherche-Assistent für einen erwachsenen Podcast-Deep-Dive. Du
+bekommst ein THEMA und recherchierst mit dem Web-Suche-Werkzeug belastbare
+Fakten, Studien und Hintergründe dazu.
 
 Regeln:
-- Jede Suchanfrage steht in einer eigenen Zeile, ohne Nummerierung, ohne
-  Aufzählungszeichen.
-- Nur sachliche, thema-bezogene Suchbegriffe. Keine Namen von Privatpersonen,
-  keine Familien- oder Kontext-Daten erfinden — arbeite ausschließlich mit dem
-  THEMA.
-- Antworte NUR mit den Suchanfragen, eine pro Zeile, sonst nichts.
+- Nutze die Web-Suche für aktuelle, belegbare Fakten zum THEMA.
+- Antworte mit knappen Fakten-Stichpunkten (jeweils eine Zeile, beginnend mit
+  „- "). Nur, was durch die Suchtreffer gedeckt ist; keine Zahl und keine
+  Behauptung dazuerfinden.
+- Arbeite ausschließlich mit dem THEMA. Erfinde keine Namen von Privatpersonen,
+  keine Familien- oder Kontext-Daten.
+- Gib KEINE eigene Quellen-Liste aus — die Quellen werden separat erfasst.
 """
-
-DISTILL_PROMPT = """\
-Du bekommst Web-Suchtreffer (Titel, URL, Auszug) zu einem Thema. Verdichte sie
-zu einem kompakten Fakten+Quellen-Block für einen Podcast-Autor.
-
-Form:
-- Zuerst die belastbaren Fakten als knappe Stichpunkte (jeweils eine Zeile,
-  beginnend mit „- "). Nur, was durch die Treffer gedeckt ist; keine Zahl und
-  keine Behauptung dazuerfinden.
-- Danach eine Zeile „Quellen:" gefolgt von den genutzten URLs, je eine pro
-  Zeile.
-
-Antworte NUR mit diesem Block, ohne Vorrede.
-"""
-
-
-def _parse_queries(raw: str, n: int) -> list:
-    """Parst die Query-Gen-Freitext-Antwort zu maximal `n` Suchanfragen.
-
-    Robustheit: leere Zeilen raus, Aufzählungs-/Nummern-Präfixe strippen,
-    Duplikate raus, HART auf `n` deckeln (HSP-58 — nie mehr Suchen als N).
-    """
-    queries = []
-    seen = set()
-    for zeile in (raw or "").splitlines():
-        # Aufzählungs-/Nummern-Präfixe entfernen (falls das Modell sie doch setzt).
-        q = _LIST_PREFIX.sub("", zeile).strip()
-        if not q or q.lower() in seen:
-            continue
-        seen.add(q.lower())
-        queries.append(q)
-        if len(queries) >= n:
-            break
-    return queries
 
 
 def _format_block(fakten_text: str, quellen: list) -> str:
@@ -135,76 +108,67 @@ def _format_block(fakten_text: str, quellen: list) -> str:
     return "\n".join(teile).strip()
 
 
-def recherchiere(*, thema: str, llm, tavily, tiefe: str = "mittel"
+def recherchiere(*, thema: str, agent, tiefe: str = "mittel"
                  ) -> RechercheErgebnis:
-    """Führt den Recherche-Vorschritt aus (HSP-57).
+    """Führt den Recherche-Vorschritt über web_search aus (HSP-57, Form B1).
 
     `thema` ist der EINZIGE inhaltliche Input (HSP-58 — kein Bible/Historie/
-    Namen). `llm` ist ein `LLMProvider` mit `.complete(system, user) -> str`
-    (Freitext, HSP-16-Naht) für Query-Gen + Distill. `tavily` ist der
-    `TavilyClient` (oder eine Test-Doppelung mit `.suche(query)`).
+    Namen). `agent` ist eine `tools.llm`-`get_agent`-Sicht (mit `.step(system,
+    messages, tools)` und `.capabilities`); im Test eine Doppelung. `tiefe`
+    koppelt an `max_uses` (N-Suchen hart gedeckelt).
 
-    Degradation (HSP-58): fehlender Key / Netz-/Quota-Fehler → `degraded=True`,
-    leerer Block, kein Abbruch.
+    Degradation (HSP-58): leeres thema / keine Agent-Sicht / Slot-Vendor ohne
+    `web_search` / Call-Fehler / keine Suchergebnisse → `degraded=True`, leerer
+    Block, kein Abbruch.
     """
     thema = (thema or "").strip()
     if not thema:
         logger.info("recherche: leeres thema — ohne Recherche (degradiert)")
         return RechercheErgebnis(degraded=True)
 
-    if tavily is None:
+    if agent is None:
         logger.warning(
-            "recherche: kein Tavily-Client (Key fehlt?) — Folge ohne Recherche "
-            "(degradiert, HSP-58)")
+            "recherche: keine Agent-Sicht (Slot/Key fehlt?) — Folge ohne "
+            "Recherche (degradiert, HSP-58)")
+        return RechercheErgebnis(degraded=True)
+
+    # HSP-58 / LLMP-3: das opt-in web_search-Tool NUR aktivieren, wenn der
+    # Slot-Vendor die Capability deklariert (Anthropic ja, Mistral nein). Sonst
+    # degradieren — kein Silent-Send eines dem Vendor unbekannten Server-Tools.
+    caps = getattr(agent, "capabilities", frozenset())
+    if WEB_SEARCH_CAPABILITY not in caps:
+        logger.warning(
+            "recherche: Slot-Vendor deklariert kein '%s' — Folge ohne Recherche "
+            "(degradiert, HSP-58)", WEB_SEARCH_CAPABILITY)
         return RechercheErgebnis(degraded=True)
 
     n = _n_fuer_tiefe(tiefe)
 
-    # Schritt 1: Query-Gen — NUR das thema als Input (HSP-58).
-    query_system = QUERY_GEN_PROMPT % {"min": MIN_SUCHEN, "max": MAX_SUCHEN}
+    # Lazy-Import des Vendor-Tool-Builders: der Konsument reicht den web_search-
+    # Server-Tool-Eintrag ins tools-Array (max_uses deckelt die Suchen hart).
+    from tools.llm._vendor.anthropic import web_search_tool
+
+    tools = [web_search_tool(max_uses=n)]
     try:
-        roh_queries = llm.complete(query_system, thema)
-    except Exception as e:  # Query-Gen-Fehler darf nicht abreißen (Degradation)
-        logger.warning("recherche: Query-Gen fehlgeschlagen (%s) — degradiert", e)
+        out = agent.step(
+            system=RESEARCH_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": thema}],
+            tools=tools,
+        )
+    except Exception as e:  # web_search-/Provider-Fehler reißt NICHT ab (Degradation)
+        logger.warning("recherche: web_search-Call fehlgeschlagen (%s) — degradiert", e)
         return RechercheErgebnis(degraded=True)
 
-    queries = _parse_queries(roh_queries, n)
-    if not queries:
-        logger.warning("recherche: keine Suchanfragen erzeugt — degradiert")
-        return RechercheErgebnis(degraded=True)
+    quellen_roh = out.get("web_search") or []
+    suchen_count = int(out.get("web_search_requests") or 0)
+    quellen = [q["url"] for q in quellen_roh if isinstance(q, dict) and q.get("url")]
+    fakten = (out.get("text") or "").strip()
 
-    # Schritt 2: N Suchen (hart auf `n` gedeckelt durch _parse_queries).
-    treffer = []
-    quellen = []
-    suchen_count = 0
-    for q in queries:
-        try:
-            ergebnisse = tavily.suche(q)
-        except TavilyError as e:
-            # HSP-58: Degradation — Netz/Quota/Key-Fehler reißt NICHT ab.
-            logger.warning(
-                "recherche: Tavily-Suche fehlgeschlagen (%s) — Folge ohne "
-                "Recherche (degradiert)", e)
-            return RechercheErgebnis(degraded=True, suchen_count=suchen_count)
-        suchen_count += 1
-        for r in ergebnisse:
-            treffer.append(r)
-            if r.get("url") and r["url"] not in quellen:
-                quellen.append(r["url"])
-
-    if not treffer:
-        logger.info("recherche: keine Treffer (suchen=%d) — ohne Recherche",
-                    suchen_count)
-        return RechercheErgebnis(suchen_count=suchen_count, degraded=True)
-
-    # Schritt 3: Distill (Freitext) → Fakten+Quellen-Block.
-    treffer_text = "\n\n".join(
-        "Titel: %s\nURL: %s\nAuszug: %s" % (t["title"], t["url"], t["content"])
-        for t in treffer)
-    try:
-        fakten = llm.complete(DISTILL_PROMPT, treffer_text)
-    except Exception as e:  # Distill-Fehler darf nicht abreißen (Degradation)
-        logger.warning("recherche: Distill fehlgeschlagen (%s) — degradiert", e)
+    if not quellen or not fakten:
+        # HSP-58: web_search leer / kein Fakten-Text → keine belegte Recherche.
+        logger.info(
+            "recherche: keine belegten Treffer (suchen=%d, quellen=%d) — ohne "
+            "Recherche (degradiert)", suchen_count, len(quellen))
         return RechercheErgebnis(suchen_count=suchen_count, degraded=True)
 
     block = _format_block(fakten, quellen)

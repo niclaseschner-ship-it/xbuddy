@@ -55,6 +55,19 @@ alle vier Sichten — kein Adapter-Code pro Buddy
   `eltern-chat/providers/mistral.py:77-80`) und würde mit `cache_control` im
   Required-Set einen `LLMCapabilityError` beim Boot werfen. Vendoren mit
   Caching (Anthropic) setzen Cache-Marker weiterhin.
+  **Opt-in `web_search` (T1371):** die Agent-Sicht darf ein **server-seitiges**
+  `web_search`-Tool (Anthropic `web_search_20260209`, Opus 4.8/4.7/4.6 + Sonnet
+  4.6) als Eintrag im `tools`-Array deklarieren — Suche auf Anbieter-Infra, **kein**
+  externer Such-Provider und **kein** neuer ZD-Slot (nutzt den vorhandenen
+  Vendor-Key). `web_search` ist die **7. ratifizierte Capability** (LLMP-3), aber
+  **kein** Required-Set-Mitglied (nie Boot-Minimum — Mistral deklariert sie nicht,
+  sonst wäre jeder Mistral-Agent-Slot boot-fatal). Die Fassade legt die
+  Vendor-`CAPABILITIES` als `.capabilities` offen; der Rufer aktiviert das Tool
+  NUR bei `"web_search" in agent.capabilities`. `.step(...)` extrahiert additiv
+  `web_search` (Quellen `{url,title,page_age}` aus den `web_search_tool_result`-
+  Blöcken) + `web_search_requests` (Anzahl der Suchen); ohne aktiviertes Tool
+  bleiben beide `[]`/`0` (eltern-chat unberührt). Erster Konsument:
+  hoerspiel-Recherche-Vorschritt (HSP-57).
 - **`get_singleshot(slot, model="", max_tokens=0)` — Structured Singleshot.** Eine Anfrage, ein
   Schema-konformer Antwort-Block. Heutige Use-Cases: hoerspiel
   (Folgen-Beschreibung via JSON-Schema, forced `tool_use`) und
@@ -207,15 +220,16 @@ Erfolg = alle drei grün **mit derselben** Vendor-Datei. Der Vertrag wird
 Paket-Sektion „Drei Lego-Bruch-Tests" → Kill-Kriterium):
 
 1. **Capability-Flucht:** Eine Sicht zwingt den Kern, eine Capability außerhalb
-   der **sechs ratifizierten** LLMP-3-Capabilities (`CAPABILITIES`-frozenset) zu
+   der **ratifizierten** LLMP-3-Capabilities (`CAPABILITIES`-frozenset) zu
    nutzen — die Ein-File-These versteckt dann echte Vendor-Divergenz. Das
    Required-Set einer Sicht ist nur das **Boot-Fail-Minimum** (LLMP-S3), **kein**
    Nutzungs-Whitelist: dass `get_chat`/`get_singleshot`/`get_agent` zusätzlich
-   eine der sechs ratifizierten Capabilities nutzen, die nicht in *ihrem*
-   Required-Set steht (z. B. `cache_control` in Singleshot), ist erlaubt.
-   Erweitern der sechs ist selbst eine Spec-Änderung (LLMP-3) und damit der
+   eine ratifizierte Capability nutzen, die nicht in *ihrem*
+   Required-Set steht (z. B. `cache_control` in Singleshot, `web_search` in Agent),
+   ist erlaubt. Erweitern der Liste ist selbst eine Spec-Änderung (LLMP-3) und der
    eigentliche Bruch-Pfad (ENTSCHEID Paket-Sektion „Capability-Bruch scharf"
-   → Capability-Flucht).
+   → Capability-Flucht). So geschehen bei `web_search` (7. Capability, T1371):
+   ratifiziert und additiv aufgenommen, kein Required-Set berührt.
 2. **Adapter-Wildwuchs:** Eine Sicht erfordert Vendor-Verzweigung pro
    Buddy/Konsument im Kern (`if caller == …`) statt sicht-uniformer
    Behandlung — der „kein Adapter-Code pro Buddy"-Anspruch (LLMP-S1) ist

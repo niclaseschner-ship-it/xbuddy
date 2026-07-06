@@ -2012,8 +2012,11 @@ abspielbar (HSP-54).
 
 Die Erwachsenen-Instanz (niclas, `zielgruppe:erwachsen`) generiert einen
 **recherchierten Zwei-Host-Deep-Dive** (Dialog-Skript `KIM:`/`RUBEN:`). Ratifiziert
-berater-runde 2026-07-05/06 (Nic-Verdikt: Recherche-Vorschritt + externer Such-Provider
-Tavily). Single-Voice-Wiedergabe ist bewusst V0 (kein Multi-Voice-TTS).
+berater-runde 2026-07-05/06. **Recherche-Pivot (T1371, 2026-07-06):** der externe
+Such-Provider (Tavily) ist **entfernt**; die Recherche läuft über das
+**server-seitige `web_search`-Tool** desselben Anthropic-Vendors (LLMP-3 7.
+Capability) — kein externer Such-Account, kein `tavily-api-key`-Slot, keine
+Dritt-Cloud. Single-Voice-Wiedergabe ist bewusst V0 (kein Multi-Voice-TTS).
 
 ### HSP-56 — Zielgruppe-bewusster System-Prompt-Schnitt
 Zwei Prompt-Dateien `geschichtenbuddy-kind.md` / `geschichtenbuddy-erwachsen.md`;
@@ -2023,30 +2026,40 @@ paula/neko-Folgen bleiben identisch). Die Erwachsen-Datei **erlaubt düster** (n
 `ton`) und **erzwingt Dialog-Skript** (`KIM:`/`RUBEN:`) + META-Block statt narrativer
 Story-Absätze.
 
-### HSP-57 — Recherche-Vorschritt (kein agentischer Loop in V0)
-Ein Recherche-Service als **Vorschritt** vor dem bestehenden Single-Shot: Query-Gen
-(`get_completion`) aus dem `thema` → externe Such-API → Distill (`get_completion`) zu
-einem **Fakten+Quellen-Block**, der in den `complete_structured`-Single-Shot
-(`llm_service.py:150`) gespeist wird — der Single-Shot-Vertrag bleibt **unverändert**.
-`get_agent` (agentisch, tool_use-Loop) ist bewusst **deferiert** (der hoerspiel-Slot
-trägt die Agent-Caps bereits; späterer Drop-in, wenn der Loop belegten Mehrwert zeigt).
+### HSP-57 — Recherche-Vorschritt (Form B1: EIN web_search-Call, kein agentischer Loop)
+Ein Recherche-Service als **Vorschritt** vor dem bestehenden Single-Shot. **Form B1
+(T1371, ratifiziert 2026-07-05/06):** EIN `get_agent`-Call (`tools.llm`) mit
+aktiviertem server-seitigem **`web_search`**-Tool bekommt AUSSCHLIESSLICH das `thema`
+als User-Nachricht, sucht selbst und synthetisiert einen **Fakten+Quellen-Block** —
+die Quellen werden aus den `web_search_tool_result`-Blöcken (`{url,title,page_age}`)
+erfasst, der Zähler `suchen_pro_folge` aus `web_search_requests`. Der Block wird in den
+`complete_structured`-Single-Shot gespeist; der Single-Shot-Vertrag bleibt
+**unverändert**. Der frühere Zwei-Stufen-Pfad (Query-Gen → externe Such-API →
+Distill, zwei Freitext-Calls + N HTTP-Suchen) ist damit **abgelöst**. Der voll-
+agentische tool_use-Loop bleibt weiterhin **deferiert** (B1 ist ein einzelner
+Vorschritt-Call, kein Mehr-Turn-Loop).
 
 ### HSP-58 — Erwachsen-Invariante + Datenabfluss-Klassifikation
 Der Recherche-Vorschritt ist **hart an `zielgruppe:erwachsen` gebunden** (Config-
 Invariante) — **nie** bei einer Kind-Instanz. Es fließen **ausschließlich
-thema-abgeleitete Tech-Suchanfragen** an die externe Such-Cloud ab, **keine Personen-/
-Familiendaten** (Constitution §3). **Provider V0: Tavily** (Nic-Setzung
-2026-07-06), hinter `tools/zugangsdaten`-Slot `tavily-api-key` + ZD-Pfad-Drop-In pro
-hoerspiel-Service. N-Suchen **hart gedeckelt** (Vorschlag 3–5, an `tiefe` gekoppelt).
-**Degradations-Pfad** bei Quota/Netz-Fehler: Folge **ohne** Recherche generieren +
-Log-Marker, kein harter Abbruch.
+thema-abgeleitete Suchanfragen** ab, **keine Personen-/Familiendaten**
+(Constitution §3). **Egress-Entschärfung (T1371):** die Suche läuft über das
+server-seitige `web_search`-Tool **desselben Anthropic-Vendors**, der die Folge
+ohnehin schreibt — **keine zusätzliche Dritt-Cloud, kein externer Such-Account,
+kein `tavily-api-key`-Slot**. Der Vorschritt läuft nur, wenn der Slot-Vendor die
+`web_search`-Capability deklariert (Anthropic ja, Mistral nein — sonst Degradation).
+N-Suchen **hart gedeckelt** über `max_uses` am web_search-Tool (Vorschlag 3–5, an
+`tiefe` gekoppelt). **Degradations-Pfad** bei fehlender Agent-Sicht / fehlender
+`web_search`-Capability / Quota-/Netz-Fehler / leeren Treffern: Folge **ohne**
+Recherche generieren + Log-Marker, kein harter Abbruch.
 
 **V0-Rest-Kanal-Klausel (niclas-Instanz, Nic-Setzung 2026-07-06):** Das `thema` ist
 ein Freitext-Feld und kann PII tragen (Betreiber tippt z. B. Namen oder Ort ins Thema),
-was ohne Scrub-Schritt ungefiltert an Tavily fließt. Für die **niclas-Instanz (V0)** ist
-dieses Risiko **bewusst akzeptiert**: NUR der Betreiber (Nic) tippt Themen — kein Kind-
-oder Fremd-Input. Ein `thema`-Scrub/Ack-Schritt wird **PFLICHT**, sobald
-Nicht-Betreiber-Recherche-Instanzen entstehen (neuer Buddy, Familien-Multi-Tenancy o. ä.).
+was ohne Scrub-Schritt ungefiltert in die `web_search`-Anfrage fließt. Für die
+**niclas-Instanz (V0)** ist dieses Risiko **bewusst akzeptiert**: NUR der Betreiber
+(Nic) tippt Themen — kein Kind- oder Fremd-Input. Ein `thema`-Scrub/Ack-Schritt wird
+**PFLICHT**, sobald Nicht-Betreiber-Recherche-Instanzen entstehen (neuer Buddy,
+Familien-Multi-Tenancy o. ä.).
 
 ### HSP-59 — Anti-Slop als Self-Check im Single-Shot
 Die Anti-Slop-Kriterien des Kits (Gedankenstrich-Stilmittel, unbelegte Zahl, doppelt
@@ -2056,9 +2069,9 @@ Zusatz-Calls**. Die zweite Berater/Antiberater-Gate-Schleife (eigener Prüf-Pass
 **deferiert bis zu einem echten n=1-Slop-Schmerz**.
 
 ### HSP-60 — Betrieb + Persistierung
-Log-Zähler `suchen_pro_folge`. Endpoint- **und** nginx-`proxy_read_timeout` gegen die
-**gemessene** neue Oberlänge (Query-Gen + N Suchen + Distill + Single-Shot) abgleichen —
-messen, nicht schätzen. `VOICES` bleibt Single-Voice (`album_manifest.py:17`, V0 ok).
+Log-Zähler `suchen_pro_folge` (= `web_search_requests`). Endpoint- **und**
+nginx-`proxy_read_timeout` gegen die **gemessene** neue Oberlänge (web_search-Call
+mit bis zu N Suchen + Single-Shot) abgleichen — messen, nicht schätzen. `VOICES` bleibt Single-Voice (`album_manifest.py:17`, V0 ok).
 META-Block (`quellen[]`/`these`/`schnitt`/`begriffe_neu[]`) schreibt in
 `folgen-historie.md` fort.
 

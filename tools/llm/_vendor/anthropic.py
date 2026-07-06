@@ -40,7 +40,72 @@ CAPABILITIES = frozenset({
     "cache_control",
     "multimodal_input",
     "system_message_distinct",
+    # LLMP-3 7. Capability (T1371, additiv): server-seitiges `web_search`-Tool.
+    # Läuft auf Anthropic-Infra (kein externer Such-Provider, kein neuer ZD-Slot,
+    # nutzt den vorhandenen anthropic-Key). Opt-in in der Agent-Sicht, KEIN
+    # Boot-Minimum irgendeiner Sicht — Mistral deklariert sie bewusst nicht.
+    "web_search",
 })
+
+# T1371: das server-seitige web_search-Tool wird als Eintrag im `tools`-Array
+# deklariert (kein Client-tool_use). Version `web_search_20260209` (Opus
+# 4.8/4.7/4.6 + Sonnet 4.6; ratifizierte Analyse 2026-07-05/06, im SDK als
+# `WebSearchTool20260209Param`). Der Konsument (research_service) baut den
+# Eintrag über `web_search_tool(max_uses=…)` und reicht ihn in `tools` durch.
+WEB_SEARCH_TOOL_TYPE = "web_search_20260209"
+WEB_SEARCH_TOOL_NAME = "web_search"
+
+
+def web_search_tool(*, max_uses: int) -> dict[str, Any]:
+    """Baut den `web_search`-Server-Tool-Eintrag fürs `tools`-Array (T1371).
+
+    `max_uses` deckelt die Anzahl der Suchen HART (HSP-58-Analogon: N-Suchen
+    gedeckelt) — der Konsument klemmt den Wert vor dem Aufruf. Der Eintrag ist
+    ein reiner Dict (keine SDK-Typ-Abhängigkeit); der Vendor reicht ihn im
+    `tools`-Array durch, die API validiert `type`/`name`.
+    """
+    return {
+        "type": WEB_SEARCH_TOOL_TYPE,
+        "name": WEB_SEARCH_TOOL_NAME,
+        "max_uses": max_uses,
+    }
+
+
+def _extract_web_search(response: Any) -> tuple[list[dict[str, Any]], int]:
+    """Zieht Quellen + Such-Zahl aus den `web_search_tool_result`-Blöcken (T1371).
+
+    Der heutige `agent_step`-Parse VERLIERT diese Blöcke (nur text/tool_use).
+    Hier werden sie additiv extrahiert: je `web_search_tool_result`-Block ist
+    EINE Suche (Zähler), sein `.content` ist entweder ein Fehler-Objekt oder
+    eine Liste `web_search_result`-Items mit `url`/`title`/`page_age`.
+
+    Liefert `(quellen, such_zahl)`: `quellen` eine deduplizierte Liste
+    `{"url","title","page_age"}` (Reihenfolge stabil), `such_zahl` die Anzahl
+    der Such-Result-Blöcke (= `web_search_requests`).
+    """
+    quellen: list[dict[str, Any]] = []
+    gesehen: set[str] = set()
+    such_zahl = 0
+    for block in getattr(response, "content", None) or []:
+        if getattr(block, "type", None) != "web_search_tool_result":
+            continue
+        such_zahl += 1
+        inhalt = getattr(block, "content", None)
+        # Fehler-Block (`web_search_tool_result_error`) hat kein Listen-Content —
+        # er zählt als Suche, liefert aber keine Quelle (Degradation-Signal).
+        if not isinstance(inhalt, list):
+            continue
+        for item in inhalt:
+            url = str(getattr(item, "url", "") or "").strip()
+            if not url or url in gesehen:
+                continue
+            gesehen.add(url)
+            quellen.append({
+                "url": url,
+                "title": str(getattr(item, "title", "") or "").strip(),
+                "page_age": getattr(item, "page_age", None),
+            })
+    return quellen, such_zahl
 
 # Vendor-Default-Modell, falls der Konsument keines wählt. V1 verwendet das
 # kibuddy-Default-Modell aus `kibuddy/providers/claude.py` (DEFAULT_MODEL =
@@ -319,13 +384,20 @@ class AnthropicVendor(VendorBase):
         `eltern-chat/providers/claude.py:66-68`), emittiert Telemetrie pro Call
         (LLMP-S4) und PARST die Antwort, ohne Tool-Use auszuführen. Bild-Input:
         `messages` wird unverändert durchgereicht (image-Blöcke bleiben). Liefert
-        `{"text": <str>, "tool_calls": [{"id","name","input"}…], "usage": <raw>}`.
+        `{"text": <str>, "tool_calls": [{"id","name","input"}…], "usage": <raw>,
+        "web_search": [{"url","title","page_age"}…], "web_search_requests": <int>}`.
+        Die beiden `web_search`-Schlüssel sind additiv (T1371): ohne aktiviertes
+        `web_search`-Server-Tool bleiben sie `[]`/`0` — eltern-chat (Client-Tools)
+        ist strukturell unberührt.
         """
         system_blocks = self._system_blocks(system)
         # Cache-Marker auf letzten Tool-Eintrag (markiert implizit alle —
-        # Anthropic-Semantik, `eltern-chat/providers/claude.py:66-68`).
+        # Anthropic-Semantik, `eltern-chat/providers/claude.py:66-68`). Server-
+        # Tools (T1371 `web_search`, erkennbar am `type`-Feld) werden davon
+        # AUSGENOMMEN: sie sind keine Client-Tool-Definitionen und tragen ihren
+        # eigenen optionalen Cache-Param — kein Prefix-Cache-Marker von uns.
         wire_tools = [dict(t) for t in tools]
-        if wire_tools:
+        if wire_tools and "type" not in wire_tools[-1]:
             wire_tools[-1] = {**wire_tools[-1], "cache_control": {"type": "ephemeral"}}
 
         t_start = time.monotonic()
@@ -352,10 +424,15 @@ class AnthropicVendor(VendorBase):
             for b in response.content
             if getattr(b, "type", None) == "tool_use"
         ]
+        # T1371: server-seitige web_search-Ergebnisse additiv extrahieren
+        # (die Blöcke gingen sonst verloren — B1-Fakten-in-Kontext trägt sonst nicht).
+        web_search, web_search_requests = _extract_web_search(response)
         return {
             "text": text,
             "tool_calls": tool_calls,
             "usage": getattr(response, "usage", None),
+            "web_search": web_search,
+            "web_search_requests": web_search_requests,
         }
 
     # ------------------------------------------------------------------
