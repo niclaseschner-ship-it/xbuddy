@@ -102,7 +102,7 @@ class InstanceConfig:
     - serien_name  — Serien-Rahmung dieser Instanz (HSP-45, Name-Drift-Fix)
 
     zielgruppe/ton/perspektive/serien_name kommen aus instance.json (HSP-27); leer
-    → der Story-Prompt-Fallback in llm_service greift (transitionale Rahmung, #1263).
+    → keine Serien-Zeile im Prompt (DEFAULT_SERIEN_RAHMEN='' neutral, T1336/OPEN-HSP-W).
     """
 
     def __init__(self, kind_id: str, name: str, alter: int,
@@ -161,7 +161,7 @@ def load_instance(data_root: str, kind_id: str,
             themen_je_alter = dict(DEFAULT_THEMEN_JE_ALTER)
 
         # HSP-45 / #1263: Erwachsenen-Achse + Name-Drift-Kontext rein aus Daten.
-        # Leer → Story-Prompt-Fallback in llm_service (transitionale Rahmung).
+        # Leer → keine „Serie:"-Zeile (DEFAULT_SERIEN_RAHMEN='' neutral, T1336/OPEN-HSP-W).
         return InstanceConfig(
             kind_id=kind_id,
             name=name,
