@@ -164,6 +164,86 @@ def test_get_agent_uses_explicit_model_not_default(jsonl_path):
     assert client.messages.create.call_args.kwargs["model"] == DEFAULT_MODEL
 
 
+def _web_search_result_item(url, title, page_age=None):
+    it = MagicMock()
+    it.type = "web_search_result"
+    it.url = url
+    it.title = title
+    it.page_age = page_age
+    return it
+
+
+def _web_search_result_block(items):
+    b = MagicMock()
+    b.type = "web_search_tool_result"
+    b.content = items
+    return b
+
+
+# T1371: server-seitiges web_search-Tool (Anthropic-Infra) als tools-Array-Eintrag.
+WEB_SEARCH_TOOL = {"type": "web_search_20260209", "name": "web_search", "max_uses": 5}
+
+
+def test_step_extracts_web_search_results_and_count(jsonl_path):
+    """T1371: `.step(...)` extrahiert additiv `web_search` (url/title/page_age)
+    + `web_search_requests` (Anzahl der web_search_tool_result-Blöcke)."""
+    fake, client = _fake_anthropic()
+    client.messages.create.return_value = _response([
+        _web_search_result_block([
+            _web_search_result_item("https://a/1", "Erste Quelle", "2 days"),
+            _web_search_result_item("https://a/1", "Dup-URL", None),  # dedup
+            _web_search_result_item("https://a/2", "Zweite Quelle"),
+        ]),
+        _text_block("- Fakt A (belegt)\n- Fakt B (belegt)"),
+    ])
+
+    with patch.dict(sys.modules, {"anthropic": fake}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_agent
+        agent = get_agent(slot="hoerspiel-anthropic-api-key")
+        out = agent.step(
+            system="Recherchiere.",
+            messages=[{"role": "user", "content": "Quantencomputing Risiken"}],
+            tools=[WEB_SEARCH_TOOL],
+        )
+
+    assert out["text"] == "- Fakt A (belegt)\n- Fakt B (belegt)"
+    assert out["web_search_requests"] == 1
+    assert out["web_search"] == [
+        {"url": "https://a/1", "title": "Erste Quelle", "page_age": "2 days"},
+        {"url": "https://a/2", "title": "Zweite Quelle", "page_age": None},
+    ]
+
+
+def test_step_server_tool_gets_no_cache_marker(jsonl_path):
+    """T1371: der web_search-Server-Tool-Eintrag (`type`-Feld) bekommt KEINEN
+    ephemeral-Cache-Marker (er ist keine Client-Tool-Definition)."""
+    fake, client = _fake_anthropic()
+    client.messages.create.return_value = _response([_text_block("- Fakt.")])
+
+    with patch.dict(sys.modules, {"anthropic": fake}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_agent
+        agent = get_agent(slot="hoerspiel-anthropic-api-key")
+        agent.step(system="S", messages=[{"role": "user", "content": "x"}],
+                   tools=[WEB_SEARCH_TOOL])
+
+    sent_tools = client.messages.create.call_args.kwargs["tools"]
+    assert "cache_control" not in sent_tools[-1]
+    assert sent_tools[-1]["type"] == "web_search_20260209"
+
+
+def test_get_agent_facade_exposes_web_search_capability(jsonl_path):
+    """T1371: die get_agent-Fassade legt die Vendor-CAPABILITIES offen (opt-in
+    Gate für den Rufer) — Anthropic deklariert `web_search`."""
+    fake, _client = _fake_anthropic()
+    with patch.dict(sys.modules, {"anthropic": fake}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_agent
+        agent = get_agent(slot="hoerspiel-anthropic-api-key")
+    assert "web_search" in agent.capabilities
+
+
 def test_agent_run_sets_is_error_on_tool_result_block(jsonl_path):
     """`agent_run` mit dict-tool_runner {content, is_error} setzt is_error auf
     den tool_result-Block; String-Runner bleibt rückwärtskompatibel (kein Flag)."""
