@@ -138,6 +138,7 @@ durch Spec-Änderung in dieser Liste ergänzt (kein Implementierungs-Detail).
 /api/v1/essen/katalog                         (GET)
 /api/v1/essen/katalog/gerichte                (POST)
 /api/v1/essen/katalog/gerichte/<gericht_id>   (PATCH)
+/api/v1/essen/katalog/gerichte/<gericht_id>   (DELETE)
 /api/v1/essen/fotos                           (POST)
 /api/v1/essen/fotos/<medium_id>               (GET)
 /api/v1/essen/fotos/<medium_id>               (DELETE)

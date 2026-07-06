@@ -38,7 +38,7 @@ import threading
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from flask import Flask, g, jsonify, render_template, request, send_file
+from flask import Flask, g, jsonify, make_response, render_template, request, send_file
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_HERE)
@@ -52,6 +52,7 @@ from tools import configloader, logsetup  # noqa: E402
 from tools import familie_client as _familie_client_mod  # noqa: E402
 from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # noqa: E402
 from tools.initdata import init_data as _init_data_mod  # noqa: E402
+from tools.initdata import session_cookie as _session_cookie  # noqa: E402
 from tools.service_diagnostics import register_version  # noqa: E402
 
 if __package__:
@@ -411,68 +412,111 @@ def _get_familie_client():
     return _familie_client_mod.FamilieClient(origin_url=origin)
 
 
-def require_init_data(fn):
-    """Decorator: SOFT-AUTH (V3, #898) — Header optional.
+# AUTH-8: 401 rendert eine Anweisungsseite statt eines rohen Status-Codes.
+# Essen-API-Routen tragen keine display_id im Pfad → neutraler Geräte-Hinweis
+# (auth.md AUTH-8: „sonst neutraler Hinweis"). V1 reine Text-Anweisung; der
+# `tg://`-Deep-Link ist V2 (auth.md AUTH-8).
+_AUTH_401_HTML = (
+    "<!doctype html>\n"
+    "<html lang=\"de\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+    "<title>Gerät neu verbinden</title></head>"
+    "<body style=\"font-family:system-ui,sans-serif;max-width:32rem;"
+    "margin:3rem auto;padding:0 1rem;line-height:1.5\">"
+    "<h1>Dieses Gerät muss neu verbunden werden.</h1>"
+    "<p>Öffne im Familien-Bot den Befehl "
+    "<code>/gerät_neu_pairen &lt;display_id&gt;</code> und folge dem Link "
+    "auf diesem Gerät.</p>"
+    "</body></html>"
+)
 
-    Verhalten:
-    - Fehlt Authorization-Header: pass-through, g.init_data = None.
-      Grund: Kind-Tablet (/display/essen/wunsch-JS) hat kein initData, ruft
-      aber dieselben /api/v1/essen/*-Routen wie die Eltern-Mini-App.
-    - Header vorhanden, ungültig: 401 (explizites Sicherheits-Signal).
-    - Header vorhanden, gültig + Familien-Mitglied: g.init_data = InitData.
-    - Header vorhanden, gültig + Nicht-Mitglied: 403.
-    - Localhost-Bypass (Server-zu-Server, eltern-chat → essen): pass-through.
+
+def _auth_401():
+    """AUTH-8: 401 mit HTML-Anweisungsseite (nicht roher Status-Code)."""
+    resp = make_response(_AUTH_401_HTML, 401)
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    return resp
+
+
+def require_init_data(fn):
+    """Decorator: HART-AUTH (T948, auth.md AUTH-2/3/5/8).
+
+    Eine valide Quelle reicht (AUTH-2, additive Akzeptanz); fehlt jede,
+    antwortet die Route HART mit 401 + AUTH-8-Anweisungsseite. Reihenfolge
+    ist Implementierungs-Detail (auth.md AUTH-2:94):
+
+    - **AUTH-5 Loopback** (127.0.0.1/::1, kein X-Forwarded-For): Server-zu-
+      Server (eltern-chat → essen) → pass-through, g.init_data = None.
+    - **AUTH-2 Cookie `xbuddy_session`**: valide HMAC-Signatur reicht (der
+      Cookie wurde vom Pairing-Endpoint gesetzt = Vertrauensanker). Rolling-
+      Refresh: der Cookie wird mit frischem 90-Tage-`exp` neu gesetzt
+      (auth.md AUTH-2:78). g.init_data = None.
+    - **AUTH-2 tma-Header** (MAD-7): valide + Familien-Mitglied → g.init_data;
+      valide + Nicht-Mitglied → 403; ungültig → 401.
+    - **Sonst**: HART 401 (AUTH-8). Der frühere SOFT-Pass-through (#898) ist
+      mit T948 (Nic-Setzung 2026-07-06) auf HART geflippt — Kind-Tablets
+      laufen über GAA-3.8-Pairing und tragen dann den Cookie.
 
     Routes, die Eltern-only-Verhalten brauchen, prüfen explizit g.init_data.
     """
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
-        # Localhost-Bypass für Internal-Service-Calls (V1, RFC).
+        # AUTH-5: Loopback-Bypass für Internal-Service-Calls.
         if (not request.headers.get("X-Forwarded-For")
                 and request.remote_addr in ("127.0.0.1", "::1")):
             g.init_data = None
             return fn(*args, **kwargs)
 
-        # V3 Soft-Auth: Header optional. Fehlt ODER leerer "tma "-Wert
-        # (Mini-App-JS außerhalb Telegram-Kontext sendet "tma " mit leerem
-        # initData) → pass-through ohne 401.
-        auth_header = request.headers.get("Authorization", "").strip()
-        if not auth_header or auth_header.lower() in ("tma", "tma "):
-            g.init_data = None
-            return fn(*args, **kwargs)
-        # Auch: Header beginnt mit "tma " aber initData-Teil ist leer.
-        if auth_header.lower().startswith("tma ") and not auth_header[4:].strip():
-            g.init_data = None
-            return fn(*args, **kwargs)
-
-        # Header da → validieren (Bot-Token + HMAC + FAM)
         bot_token = _get_bot_token()
         if not bot_token:
-            logger.error("MAD-7: %s nicht gesetzt — Mini-App-Route nicht nutzbar.", _ENV_BOT_TOKEN)
+            logger.error("AUTH: %s nicht gesetzt — Route nicht nutzbar.", _ENV_BOT_TOKEN)
             return ("", 500)
 
-        cfg = runtime.get("init_data_config")
-        if cfg is None:
-            cfg = _init_data_mod.load_config()
-            runtime["init_data_config"] = cfg
+        # AUTH-2: Session-Cookie. Valide Signatur (+ nicht abgelaufen) reicht.
+        cookie_val = request.cookies.get(_session_cookie.COOKIE_NAME)
+        if cookie_val:
+            subject = _session_cookie.verify_session(cookie_val, bot_token)
+            if subject is not None:
+                g.init_data = None
+                # Rolling-Refresh (AUTH-2:78): Cookie mit frischem exp neu setzen.
+                resp = make_response(fn(*args, **kwargs))
+                resp.set_cookie(
+                    _session_cookie.COOKIE_NAME,
+                    _session_cookie.sign_session(subject, bot_token),
+                    **_session_cookie.session_cookie_kwargs(),
+                )
+                return resp
 
-        try:
-            init_data = _init_data_mod.validate_header(
-                auth_header,
-                bot_token,
-                cfg["max_age_seconds"],
-            )
-        except _init_data_mod.InitDataError:
-            return ("", 401)
+        # AUTH-2: tma-Header (MAD-7). Leerer/fehlender "tma "-Wert zählt als
+        # „keine tma-Quelle" (Mini-App-JS außerhalb Telegram sendet "tma " leer).
+        auth_header = request.headers.get("Authorization", "").strip()
+        tma_leer = (
+            not auth_header
+            or auth_header.lower() in ("tma", "tma ")
+            or (auth_header.lower().startswith("tma ") and not auth_header[4:].strip())
+        )
+        if not tma_leer:
+            cfg = runtime.get("init_data_config")
+            if cfg is None:
+                cfg = _init_data_mod.load_config()
+                runtime["init_data_config"] = cfg
+            try:
+                init_data = _init_data_mod.validate_header(
+                    auth_header, bot_token, cfg["max_age_seconds"])
+            except _init_data_mod.InitDataError:
+                return _auth_401()
 
-        # FAM-7/8: User-ID gegen Familien-Registry prüfen (HTTP-Pfad, T1015).
-        familie_ids = _get_familie_client().get_telegram_ids()
-        if familie_ids is not None and init_data.user_id not in familie_ids:
-            logger.warning("FAM-7: user_id %s ist kein Familien-Mitglied → 403", init_data.user_id)
-            return ("", 403)
+            # FAM-7/8: User-ID gegen Familien-Registry prüfen (HTTP-Pfad, T1015).
+            familie_ids = _get_familie_client().get_telegram_ids()
+            if familie_ids is not None and init_data.user_id not in familie_ids:
+                logger.warning("FAM-7: user_id %s ist kein Familien-Mitglied → 403", init_data.user_id)
+                return ("", 403)
 
-        g.init_data = init_data
-        return fn(*args, **kwargs)
+            g.init_data = init_data
+            return fn(*args, **kwargs)
+
+        # AUTH-3: weder Loopback noch Cookie noch tma → HART 401 (AUTH-8).
+        return _auth_401()
     return wrapper
 
 
@@ -526,6 +570,7 @@ def wunsch_view():
 # ── API: Wünsche (ESSEN-15..17, ESSEN-32) ────────────────────────────────
 
 @app.route("/api/v1/essen/wuensche", methods=["GET"])
+@require_init_data
 def wuensche_lesen():
     """GET /api/v1/essen/wuensche — Liste lesen (ESSEN-15).
 
@@ -574,6 +619,7 @@ def wuensche_lesen():
 
 
 @app.route("/api/v1/essen/wuensche", methods=["POST"])
+@require_init_data
 def wunsch_hinzufuegen():
     """POST /api/v1/essen/wuensche — Wunsch/Einkauf hinzufügen (ESSEN-16).
 
@@ -722,6 +768,7 @@ def wunsch_hinzufuegen():
 
 
 @app.route("/api/v1/essen/wuensche/<wunsch_id>", methods=["PATCH"])
+@require_init_data
 def wunsch_patchen(wunsch_id):
     """PATCH /api/v1/essen/wuensche/<id> — sparse update (ESSEN-32).
 
@@ -816,6 +863,7 @@ def wunsch_patchen(wunsch_id):
 
 
 @app.route("/api/v1/essen/wuensche/<wunsch_id>", methods=["DELETE"])
+@require_init_data
 def wunsch_loeschen(wunsch_id):
     """DELETE /api/v1/essen/wuensche/<id> — Wunsch/Einkauf entfernen (ESSEN-17).
 
@@ -846,6 +894,7 @@ def wunsch_loeschen(wunsch_id):
 # ── API: Katalog (ESSEN-18/19) ────────────────────────────────────────────
 
 @app.route("/api/v1/essen/katalog", methods=["GET"])
+@require_init_data
 def katalog_lesen():
     """GET /api/v1/essen/katalog — Katalog lesen (ESSEN-18).
 
@@ -857,6 +906,7 @@ def katalog_lesen():
 
 
 @app.route("/api/v1/essen/katalog/gerichte", methods=["POST"])
+@require_init_data
 def gericht_anlegen():
     """POST /api/v1/essen/katalog/gerichte — Gericht anlegen (ESSEN-19).
 
@@ -930,6 +980,7 @@ def gericht_anlegen():
 
 
 @app.route("/api/v1/essen/katalog/gerichte/<gericht_id>", methods=["DELETE"])
+@require_init_data
 def gericht_loeschen(gericht_id):
     """DELETE /api/v1/essen/katalog/gerichte/<id> — Gericht löschen (ESSEN-19b).
 
@@ -991,6 +1042,7 @@ def gericht_loeschen(gericht_id):
 
 
 @app.route("/api/v1/essen/katalog/gerichte/<gericht_id>", methods=["PATCH"])
+@require_init_data
 def gericht_bild_patchen(gericht_id):
     """PATCH /api/v1/essen/katalog/gerichte/<id> — Gericht-Bild ändern (ESSEN-19a).
 
@@ -1057,6 +1109,7 @@ def _bad_request(msg, status=400):
 
 
 @app.route("/api/v1/essen/fotos", methods=["POST"])
+@require_init_data
 def post_foto():
     """ESSEN-22 V1.2: Foto aufnehmen. Multipart-Feld `medium`.
 
@@ -1087,6 +1140,7 @@ def post_foto():
 
 
 @app.route("/api/v1/essen/fotos/<medium_id>", methods=["GET"])
+@require_init_data
 def get_foto(medium_id):
     """ESSEN-22 V1.2: Vollbild (JPEG) mit korrektem Content-Type (send_file)."""
     fotos_verz = _paths()["fotos_verzeichnis"]
@@ -1097,6 +1151,7 @@ def get_foto(medium_id):
 
 
 @app.route("/api/v1/essen/fotos/<medium_id>/thumbnail", methods=["GET"])
+@require_init_data
 def get_foto_thumbnail(medium_id):
     """ESSEN-22 V1.2: Thumbnail-JPEG mit korrektem Content-Type."""
     fotos_verz = _paths()["fotos_verzeichnis"]
@@ -1107,6 +1162,7 @@ def get_foto_thumbnail(medium_id):
 
 
 @app.route("/api/v1/essen/fotos/<medium_id>", methods=["DELETE"])
+@require_init_data
 def delete_foto(medium_id):
     """ESSEN-22 V1.2: Vollbild + Thumbnail + Index-Eintrag atomar entfernen."""
     fotos_verz = _paths()["fotos_verzeichnis"]
