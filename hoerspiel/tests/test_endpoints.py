@@ -278,3 +278,78 @@ def test_post_alben_manifest_url_kind_id_verdrahtung(client):
     assert "/display/hoerspiel/paula/data/" in track_asset, (
         "inhalt-track audio-asset muss paula/data/ enthalten, nicht: %r" % track_asset
     )
+
+
+def test_t1382_get_config_kein_stigi_ohne_instanz_serienname(runtime_config, data_root, fake_tts):
+    """T1382/AC1+AC2: GET /config ohne serien_name in hoerspiel.json und instance.json
+    → serien_name im Response ist neutral leer, kein 'Stigi & Co.'-Leak.
+
+    rot vor Fix: resolve_data-Default war DEFAULT_SERIEN_NAME='Stigi & Co.',
+    _build_config_response spiegelte dcfg.serien_name direkt in die Antwort.
+    grün nach Fix: neutraler Default '' + instance.json-Vorrang (wie LLM-Pfad :543).
+    """
+    from hoerspiel import config as config_mod
+    from hoerspiel import main as main_mod
+
+    # DataConfig ohne serien_name in hoerspiel.json — Default nach T1382-Fix: ""
+    # (vor Fix: "Stigi & Co." aus DEFAULT_SERIEN_NAME).
+    neutral_dcfg = config_mod.DataConfig(default_voice="shimmer", serien_name="")
+    main_mod.configure(
+        runtime_config=runtime_config,
+        data_config=neutral_dcfg,
+        data_root=data_root,
+        llm=None,
+        tts_engine=fake_tts,
+        bot_token="TEST",
+    )
+    client = main_mod.app.test_client()
+
+    # instance.json ohne serien_name → instance_cfg.serien_name = ""
+    (pathlib.Path(data_root) / "instance.json").write_text(
+        json.dumps({"kind_id": "paula", "name": "Paula", "alter": 4})
+    )
+
+    resp = client.get("/api/v1/hoerspiel/paula/config")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["serien_name"] != "Stigi & Co.", (
+        "T1382/AC1: kein 'Stigi & Co.'-Leak wenn weder hoerspiel.json "
+        "noch instance.json einen serien_name tragen"
+    )
+    assert body["serien_name"] == "", (
+        "T1382/AC2: Display-serien_name muss neutral ('') sein ohne instance.json-serien_name"
+    )
+
+
+def test_t1382_get_config_instance_serienname_hat_vorrang(runtime_config, data_root, fake_tts):
+    """T1382: instance.json serien_name überschreibt hoerspiel.json (wie LLM-Pfad).
+
+    Wenn instance.json serien_name='Quasiluxi' trägt und hoerspiel.json keinen
+    serien_name setzt, muss GET /config 'Quasiluxi' liefern — nie 'Stigi & Co.'.
+    """
+    from hoerspiel import config as config_mod
+    from hoerspiel import main as main_mod
+
+    neutral_dcfg = config_mod.DataConfig(default_voice="shimmer", serien_name="")
+    main_mod.configure(
+        runtime_config=runtime_config,
+        data_config=neutral_dcfg,
+        data_root=data_root,
+        llm=None,
+        tts_engine=fake_tts,
+        bot_token="TEST",
+    )
+    client = main_mod.app.test_client()
+
+    neko_serie = "Quasiluxi, Alpaki & Haski"
+    (pathlib.Path(data_root) / "instance.json").write_text(
+        json.dumps({"kind_id": "paula", "name": "Paula", "alter": 4,
+                    "serien_name": neko_serie})
+    )
+
+    resp = client.get("/api/v1/hoerspiel/paula/config")
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["serien_name"] == neko_serie, (
+        "T1382: instance.json serien_name muss im Display-Pfad erscheinen (wie LLM-Pfad)"
+    )

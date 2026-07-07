@@ -371,7 +371,10 @@ def resolve_data(config_path: str | None = None,
         raise ConfigError(
             "default_voice %r ist V1 nicht unterstützt — erlaubt: %s (HSP-13)"
             % (default_voice, ", ".join(VALID_VOICES)))
-    serien_name = str(file_cfg.get("serien_name") or DEFAULT_SERIEN_NAME)
+    # T1382/HSP-45: neutral leer statt 'Stigi & Co.' als Default — kein Paula-Leak
+    # auf Nicht-Paula-Instanzen. Instanz-spezifischer serien_name lebt in instance.json
+    # (HSP-27); hoerspiel.json trägt nur PATCH-gesetzten Override (DEFAULT_SERIEN_RAHMEN='').
+    serien_name = str(file_cfg.get("serien_name") or "")
 
     # Pausen-Werte (Range-Validierung analog PATCH /config).
     try:
