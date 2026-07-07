@@ -624,12 +624,21 @@ def _post_alben():
 
 # ---- Config-Endpoints (HSP-17, V2-Provider-Wechsel-Vorgriff) ----
 
-def _build_config_response(cfg, dcfg) -> dict:
-    """Baut die vollständige GET /config-Antwort (HSP-17/34/41)."""
+def _build_config_response(cfg, dcfg, instance_cfg=None) -> dict:
+    """Baut die vollständige GET /config-Antwort (HSP-17/34/41).
+
+    T1382/OPEN-HSP-X: instance_cfg.serien_name hat Vorrang (spiegelt LLM-Pfad
+    OPEN-HSP-W, :543); dcfg.serien_name als Fallback (PATCH-gesetzt); neutral
+    ("") wenn beides leer — kein Modul-Default (Display/config-Neutralisierung).
+    """
     public = cfg.to_public_dict()
     if dcfg is not None:
         public["default_voice"] = dcfg.default_voice
-        public["serien_name"] = dcfg.serien_name
+        public["serien_name"] = (
+            instance_cfg.serien_name
+            if instance_cfg and instance_cfg.serien_name
+            else dcfg.serien_name
+        )
         public["pause_absatz_sek"] = dcfg.pause_absatz_sek
         public["pause_titel_sek"] = dcfg.pause_titel_sek
         public["playback_tempo"] = dcfg.playback_tempo
@@ -657,7 +666,9 @@ def config_endpoint(kind_id: str):
         return jsonify({"fehler": "runtime-config nicht geladen"}), 503
 
     if request.method == "GET":
-        return jsonify(_build_config_response(cfg, _data_cfg()))
+        # T1382: instance.json serien_name reichen — wie LLM-Pfad (:543).
+        _instance = config_mod.load_instance(_data_root(), _self_kind_id(), data_cfg=_data_cfg())
+        return jsonify(_build_config_response(cfg, _data_cfg(), _instance))
 
     body = request.get_json(silent=True) or {}
 
@@ -699,7 +710,9 @@ def config_endpoint(kind_id: str):
             # Kein 5xx an den Client — Memory-Stand bleibt aktuell, nur Restart-Persistenz
             # ist betroffen. Eltern sehen den Wert sofort, nach Restart fällt er zurück.
 
-    return jsonify(_build_config_response(new_cfg, new_dcfg))
+    # T1382: instance.json serien_name reichen — wie LLM-Pfad (:543).
+    _instance = config_mod.load_instance(_data_root(), _self_kind_id(), data_cfg=new_dcfg)
+    return jsonify(_build_config_response(new_cfg, new_dcfg, _instance))
 
 
 # ---- Audio-Stream-SSE + play-extern (HSP-42, RATIFIZIERT 2026-06-17) ----
