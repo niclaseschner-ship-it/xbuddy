@@ -5,47 +5,59 @@ name: prep-reconcile
 # /arbeitstag nimmt NUR status:ready (siehe WORKFLOW.md — Handoff an
 # Implementierer). Damit ist der Stempel die Trennmembran zwischen
 # /arbeitstag-prep (reift Tickets) und /arbeitstag (implementiert) — und muss
-# verlässlich sein. Diese Action fängt die mechanische "schon-erledigt"-Klasse:
-# ein GESCHLOSSENES Issue darf nie status:ready tragen (die Arbeit ist getan
-# oder verworfen). Genau das passierte sonst von Hand — Tickets, deren Arbeit
-# längst gemerged war, bekamen versehentlich den Stempel.
+# verlässlich sein.
 #
-# GRENZE (bewusst): inhaltliche Reife (genug Substanz? re-litigiert es eine schon
-# ratifizierte Entscheidung in decisions/?) kann eine Action NICHT entscheiden —
-# das bleibt watchdog-prep (Agent-Urteil) + Nic. Hier nur das Mechanische.
+# PW-85 RATIFIZIERT 2026-07-06 (brainstorm/berater-runde/
+# 20260706-153129-RATIFIZIERT-pw85-ready-create-kante.md):
+# Die Membran deckt jetzt BEIDE Kanten ab:
+#  - labeled-Kante: gh issue edit ... --add-label status:ready
+#  - opened-Kante:  gh issue create --label status:ready
+#
+# Mechanische Validierung (zwei Schritte):
+#  1. State-Check: geschlossenes Issue darf nie status:ready tragen (wie bisher).
+#  2. Verdikt-Membran: offenes Issue ohne gültigen prep_verdict ODER werft_verdict
+#     verliert das Label. Volle Hash-/Issue-Binding-Validierung via verdict_check.py
+#     (PW-30/PW-43 — identische Logik wie im PreToolUse-Hook status_rollback_guard.py).
+#
+# GRENZE (bewusst): inhaltliche Reife (genug Substanz? re-litigiert Entscheidungen?)
+# bleibt watchdog-prep + Nic. Hier nur das Mechanische.
 
 on:
   issues:
-    types: [labeled]
+    types: [opened, labeled]
 
 permissions:
+  contents: read
   issues: write
 
 jobs:
   reconcile:
-    # Nur feuern, wenn genau das Handoff-Label gesetzt wurde.
-    if: github.event.label.name == 'status:ready'
+    # Feuert nur bei status:ready-Ereignissen:
+    #   - labeled: github.event.label.name == 'status:ready' (eindeutig)
+    #   - opened:  github.event.label ist null → alte label.name-Bedingung
+    #              wäre false; toJson-Suche deckt die opened-Kante (PW-85 Codex-Bruch 3).
+    if: >
+      (github.event.action == 'labeled' && github.event.label.name == 'status:ready') ||
+      (github.event.action == 'opened' && contains(toJson(github.event.issue.labels), '"name":"status:ready"'))
     runs-on: [self-hosted, ARM64]
     steps:
-      - name: status-ready gegen Issue-State abgleichen
+      - uses: actions/checkout@v4
+
+      - name: status-ready validieren (State + Verdikt-Membran)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           ISSUE: ${{ github.event.issue.number }}
           STATE: ${{ github.event.issue.state }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
 
-          if [ "$STATE" != "closed" ]; then
-            echo "Issue #$ISSUE ist offen — status:ready bleibt."
-            exit 0
-          fi
+          # ── Schritt 1: State-Check ──────────────────────────────────────────
+          if [ "$STATE" = "closed" ]; then
+            echo "Issue #$ISSUE ist geschlossen — status:ready ist falsch, entferne."
+            gh issue edit "$ISSUE" --repo "$REPO" --remove-label "status:ready"
 
-          echo "Issue #$ISSUE ist geschlossen — status:ready ist falsch, entferne."
-          # Entfernen löst nur 'unlabeled' aus, nie 'labeled' → kein Re-Trigger/Loop.
-          gh issue edit "$ISSUE" --repo "$REPO" --remove-label "status:ready"
-
-          cat > /tmp/prep-reconcile-comment.md <<'EOF'
+            cat > /tmp/prep-reconcile-comment.md <<'EOF'
           🤖 **prep-reconcile:** `status:ready` wieder entfernt — dieses Issue ist
           bereits **geschlossen** (Arbeit erledigt oder verworfen). `/arbeitstag` nimmt
           nur offene, gestempelte Tickets; ein geschlossenes Ticket gehört nicht in die
@@ -53,4 +65,39 @@ jobs:
 
           Falls die Arbeit doch noch offen ist: Issue **wieder öffnen**, dann erneut stempeln.
           EOF
-          gh issue comment "$ISSUE" --repo "$REPO" --body-file /tmp/prep-reconcile-comment.md
+            gh issue comment "$ISSUE" --repo "$REPO" --body-file /tmp/prep-reconcile-comment.md
+            exit 0
+          fi
+
+          echo "Issue #$ISSUE ist offen — state-check ok."
+
+          # ── Schritt 2: Verdikt-Membran (PW-85) ─────────────────────────────
+          # verdict_check.py prueft: prep_verdict ODER werft_verdict am Issue.
+          # Volle mechanische Validierung: Hash-Match + verdict:ready + Issue-Bindung
+          # + Drift-Check (identisch zu status_rollback_guard.py, PW-30/PW-43).
+          if python3 methode/hooks/verdict_check.py; then
+            echo "Verdikt gueltig (prep_verdict oder werft_verdict) — status:ready bleibt."
+            exit 0
+          fi
+
+          echo "Issue #$ISSUE: kein gueltiges Verdikt — status:ready wird entfernt."
+          gh issue edit "$ISSUE" --repo "$REPO" --remove-label "status:ready"
+
+          cat > /tmp/prep-reconcile-verdict-comment.md <<'EOF'
+          🤖 **prep-reconcile:** `status:ready` entfernt — kein mechanisch gültiges
+          Verdikt gefunden.
+
+          **Was fehlt:** Ein gültiger `prep_verdict`- oder `werft_verdict`-Comment am
+          Issue (PW-30/PW-43). Der Comment muss als erste Zeile den Marker
+          `<!-- prep_verdict v1 issue:<NR> sha:<16hex> -->` bzw.
+          `<!-- werft_verdict v1 issue:<NR> sha:<16hex> -->` tragen, und
+          `verdict: ready` mit korrekt berechnetem Hash enthalten.
+
+          **Vorgehen:** `/arbeitstag-prep` auf das Ticket anwenden (postet `prep_verdict`),
+          oder Werft-F5-Stempel durchführen (postet `werft_verdict`). Danach erneut
+          `status:ready` setzen.
+
+          *Hinweis: Inhaltliche Reife (Spec gemergt? re-litigiert?) prüft der
+          `/watchdog-prep`-Agent separat. Hier nur mechanische Verdikt-Pflicht.*
+          EOF
+          gh issue comment "$ISSUE" --repo "$REPO" --body-file /tmp/prep-reconcile-verdict-comment.md
