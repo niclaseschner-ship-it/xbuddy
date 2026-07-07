@@ -9,6 +9,9 @@ Kill-Kriterien (Pflicht vor Handoff):
   (b) Fake-Marker falscher Hash -> zurueckgerollt
   (c) opened mit status:ready-Label -> Job laeuft; ohne Label -> skippt
       (AC3 - YAML-Trigger-Logik, hier durch CLI-Pfad belegt)
+  (d) AC1-Gate: opened-if nutzt .*.name-Form, nicht toJson-Kompakt-Nadel
+      (Regressions-Guard: toJson() liefert pretty-printed JSON mit Leerzeichen
+      nach Doppelpunkt -> kompakter Nadel-String faengt nie)
 """
 import importlib.util
 import os
@@ -255,3 +258,86 @@ def test_srg_backward_compat_compute_verdict_hash():
     h = srg.compute_verdict_hash("verdict: ready\naxes:\n  reif: keine-spec-noetig\n")
     assert h is not None, "compute_verdict_hash lieferte None"
     assert len(h) == 16, f"compute_verdict_hash soll 16-Zeichen-Hex liefern, war: {h!r}"
+
+
+# ---------------------------------------------------------------------------
+# Kill-Kriterium (d): AC1-Gate — opened-if nutzt .*.name-Form, nicht toJson
+# ---------------------------------------------------------------------------
+
+def test_kill_d_opened_gate_uses_object_filter_not_tojson():
+    """AC1-Regressions-Guard: opened-Gate-Bedingung darf NICHT toJson+Kompakt-Nadel nutzen.
+
+    GitHub Actions liefert toJson() als pretty-printed JSON mit Leerzeichen nach
+    dem Doppelpunkt ('"name": "status:ready"'), waehrend der kompakte Nadel-String
+    '"name":"status:ready"' (ohne Leerzeichen) NIE matchen wuerde.
+    Die korrekte Form ist die Objekt-Filter-Form: contains(github.event.issue.labels.*.name, 'status:ready').
+
+    Dieser Test:
+    1. Parst die YAML-Datei und prueft, dass die if-Bedingung die .*.name-Form enthaelt.
+    2. Prueft, dass toJson NICHT fuer den opened-Zweig genutzt wird.
+    3. Belegt die semantische Korrektheit: eine Python-Liste (analoge Semantik zu
+       GH-Expression labels.*.name) erkennt 'status:ready' korrekt — mit UND ohne
+       Leerzeichen im simulierten pretty-printed JSON-Format.
+    """
+    import yaml  # stdlib, immer verfuegbar in CI
+
+    # HERE = methode/hooks/tests -> up 3 -> repo root
+    yaml_path = os.path.normpath(
+        os.path.join(HERE, "..", "..", "..", ".github", "workflows", "prep-reconcile.yml")
+    )
+    assert os.path.exists(yaml_path), f"prep-reconcile.yml nicht gefunden: {yaml_path}"
+
+    with open(yaml_path) as f:
+        doc = yaml.safe_load(f)
+
+    job_if = doc["jobs"]["reconcile"]["if"]
+    assert isinstance(job_if, str), "jobs.reconcile.if ist kein String"
+
+    # Guard 1: .*.name-Form MUSS enthalten sein (whitespace-robuste Objekt-Filter-Form)
+    assert "labels.*.name" in job_if, (
+        "opened-Gate MUSS 'labels.*.name' nutzen (whitespace-robust), "
+        f"enthielt: {job_if!r}"
+    )
+
+    # Guard 2: toJson-Kompakt-Nadel darf NICHT mehr genutzt werden
+    assert 'toJson' not in job_if or '"name":"status:ready"' not in job_if, (
+        "opened-Gate nutzt noch den toJson+Kompakt-Nadel-Antipattern — "
+        "GH liefert pretty-printed JSON, Nadel matcht nie. "
+        f"if-Ausdruck: {job_if!r}"
+    )
+
+    # Guard 3: Semantischer Beleg — Python-Analogon zu GH-Expression labels.*.name:
+    # Simuliert GitHub's labels-Array (wie es der API-Response / toJson liefert),
+    # plus die .*.name-Extraktion (Python-Aequivalent: [l['name'] for l in labels]).
+    labels_with_ready = [
+        {"id": 1, "name": "status:ready", "color": "abc"},
+        {"id": 2, "name": "bug", "color": "def"},
+    ]
+    labels_without_ready = [
+        {"id": 3, "name": "status:spec", "color": "ghi"},
+    ]
+
+    def gh_labels_star_name(labels):
+        """GH-Expression labels.*.name: extrahiert alle 'name'-Werte."""
+        return [lbl["name"] for lbl in labels]
+
+    # Mit status:ready-Label: contains(..., 'status:ready') == True
+    assert "status:ready" in gh_labels_star_name(labels_with_ready), (
+        "Semantischer Beleg: labels.*.name mit status:ready-Label soll 'status:ready' enthalten"
+    )
+
+    # Ohne status:ready-Label: contains(..., 'status:ready') == False
+    assert "status:ready" not in gh_labels_star_name(labels_without_ready), (
+        "Semantischer Beleg: labels.*.name ohne status:ready-Label darf 'status:ready' NICHT enthalten"
+    )
+
+    # Anti-Regression: kompakter toJson-Substring wuerde bei pretty-printed JSON NICHT matchen
+    import json
+    pretty_labels_json = json.dumps(labels_with_ready, indent=2)
+    assert '"name":"status:ready"' not in pretty_labels_json, (
+        "Anti-Regression bestaetigt: kompakter Nadel-String fehlt im pretty-printed JSON "
+        "(wuerde NIE matchen — genau der Bug, den dieser Guard fixt)"
+    )
+    assert '"name": "status:ready"' in pretty_labels_json, (
+        "pretty-printed JSON hat Leerzeichen nach Doppelpunkt — nur .*.name-Form ist robust"
+    )
