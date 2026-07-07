@@ -51,7 +51,8 @@ VALID_AUDIO_ZIEL = ("display", "panel")
 
 DEFAULT_LLM_MODEL = "claude-opus-4-7"
 DEFAULT_VOICE = "onyx"
-DEFAULT_SERIEN_NAME = "Stigi & Co."
+# T1382/OPEN-HSP-W/-X: kein Code-Default-Serien-Name mehr (Paula-Leak). serien_name
+# ist rein instanz-getragen (instance.json, HSP-27); neutral leer wenn ungesetzt.
 
 # HSP-43 / #1263: hörspiel-LOKALE Instanz-Liste (origin-frei; NUR kind_id/name).
 # Muster: seiten/main.py:947 `_HSP_INSTANZEN` — die eine autoritative Kopie DIESER
@@ -371,7 +372,10 @@ def resolve_data(config_path: str | None = None,
         raise ConfigError(
             "default_voice %r ist V1 nicht unterstützt — erlaubt: %s (HSP-13)"
             % (default_voice, ", ".join(VALID_VOICES)))
-    serien_name = str(file_cfg.get("serien_name") or DEFAULT_SERIEN_NAME)
+    # T1382/HSP-45: neutral leer statt 'Stigi & Co.' als Default — kein Paula-Leak
+    # auf Nicht-Paula-Instanzen. Instanz-spezifischer serien_name lebt in instance.json
+    # (HSP-27); hoerspiel.json trägt nur PATCH-gesetzten Override (DEFAULT_SERIEN_RAHMEN='').
+    serien_name = str(file_cfg.get("serien_name") or "")
 
     # Pausen-Werte (Range-Validierung analog PATCH /config).
     try:
