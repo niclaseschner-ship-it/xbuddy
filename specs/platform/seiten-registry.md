@@ -317,6 +317,7 @@ am Handy funktioniert**, müssen beide Origins als Config-Werte gesetzt sein:
 |---|---|---|
 | `display_url_origin_heim` | Heimnetz-Origin (Bot-Default für SREG-5; tritt an die Stelle des bestehenden `display_url_origin`, GAA-3.7) | leer |
 | `display_url_origin_tailscale` | Tailscale-Origin (zusätzlich auf SREG-12-Seite kopierbar) | leer |
+| `display_url_origin_funnel` | Funnel-FQDN-Origin (LE-Cert, extern erreichbar; für Familien-**User-Geräte** über den Funnel, AUTH-7b) — **RAT-27-Entwurf** | leer |
 
 **V1-Pflicht:** `display_url_origin_heim` muss gesetzt sein, sonst kann der
 SREG-5-Skill keinen tippbaren Link liefern und die SREG-12-Seite hat keine
@@ -324,6 +325,31 @@ SREG-5-Skill keinen tippbaren Link liefern und die SREG-12-Seite hat keine
 zeigt SREG-12 nur die Heim-Spalte mit explizitem Banner-Hinweis statt zweier
 Spalten, die Seite bleibt nutzbar. Kein Auto-Fallback auf Heim als Tailscale
 (falsche Origin = nicht-erreichbarer Link).
+
+> **SREG-7 · dritte Origin `display_url_origin_funnel` — RAT-27-ENTWURF, noch
+> nicht ratifiziert** (#1388, Epic #1338; zur Nic-Ratifizierung). Bindewirkung
+> erst mit RAT-27.
+
+Mit dem Auth-Funnel-Rollout (AUTH-7b, `auth.md`) kommt eine **dritte**
+Origin hinzu: `display_url_origin_funnel` trägt die **Funnel-FQDN mit
+LE-Zertifikat** (`buddyboard.demo-tailnet.ts.net`-Muster,
+`reference_tailscale_buddyboard`), über die **Familien-User-Geräte** die
+Shell/Views von außerhalb des Heimnetzes erreichen. Sie steht **neben** heim
+(LAN-Direktzugang) und tailscale (Tailnet-IP), ersetzt sie **nicht**: heim
+bleibt der schnellste Weg im Haus, die Funnel-Origin ist der externe
+User-Geräte-Weg. Der **Pairing-Redirect** (`/auth/pair`, AUTH-2.a) muss
+**same-origin/relativ** bleiben — landet der Cookie-Setz-Redirect auf einer
+anderen Origin als der aufrufenden PWA, sitzt der `HttpOnly`-First-Party-Cookie
+im falschen Jar (AUTH-2 iOS-Persistenz-Bedingung: PWA **und** `/auth/pair` auf
+**derselben** Funnel-FQDN). Die Origin, unter der ein User-Gerät die Shell
+öffnet, ist damit dieselbe, unter der es pairt.
+
+**Zuordnung Gerät → Origin:** Operator-Pi (AUTH-7a) nutzt heim/tailscale
+(IP-Trust, kein Cookie); Familien-User-Geräte (AUTH-7b) bekommen die
+Funnel-Origin für den externen Zugang. Fehlt `display_url_origin_funnel`,
+ist der externe User-Geräte-Zugang schlicht nicht angeboten (kein
+Auto-Fallback auf heim/tailscale — falsche Origin = Cookie im falschen Jar
++ nicht-erreichbarer Link).
 
 **Migration des existierenden `display_url_origin`** (`eltern-chat/config.py:85`,
 GAA-3.7): wird in einem **eigenen Folge-Ticket der Implementierung** zu
