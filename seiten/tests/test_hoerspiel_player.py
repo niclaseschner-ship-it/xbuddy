@@ -84,11 +84,17 @@ def test_sw_kein_cookie_gibt_401(client):
 
 
 def test_html_gueltiger_cookie_gibt_200(client):
-    """AC2: GET HTML-Shell mit gültigem Cookie → 200."""
+    """AC2: GET HTML-Shell mit gültigem Cookie → 200 + Rolling-Refresh."""
     client.set_cookie(sc.COOKIE_NAME, _VALID_COOKIE)
     resp = client.get(_HTML_URL)
     assert resp.status_code == 200
     assert resp.headers["Content-Type"].startswith("text/html")
+    # Rolling-Refresh: Antwort setzt xbuddy_session neu (auth.md AUTH-2, #1292).
+    set_cookie = resp.headers.get("Set-Cookie", "")
+    assert sc.COOKIE_NAME in set_cookie
+    assert "HttpOnly" in set_cookie
+    assert "Secure" in set_cookie
+    assert "SameSite=Lax" in set_cookie
 
 
 def test_manifest_gueltiger_cookie_gibt_200(client):

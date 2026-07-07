@@ -74,10 +74,12 @@ Identitätsquellen valide ist:
   (echte First-Party). `SameSite=Lax` ist nötig, damit der Cookie die
   Top-Level-Redirect-Navigation aus dem Pairing-Link überlebt.
 
-  **Rolling-Refresh (Auffrischung über die PWA):** jede AUTH-3-Route mit valider
-  Cookie-Quelle setzt den Cookie mit frischem 90-Tage-`exp` neu (`Set-Cookie` auf
-  der Antwort). Damit rollt **jeder PWA-Start** den Cookie vor; aktiv genutzte
-  Geräte laufen faktisch nie ab. Bei fehlendem/abgelaufenem Cookie greift die
+  **Rolling-Refresh (Auffrischung über die PWA):** jede Route mit valider
+  Cookie-Quelle — AUTH-3-Routen (über den `require_init_data`-Decorator) **und**
+  AUTH-2-Cookie-only-Routen (Hörspiel-Player als iOS-Persistenz-Vehikel, #1292,
+  Nic-Option-B 2026-07-07) — setzt den Cookie mit frischem 90-Tage-`exp` neu
+  (`Set-Cookie` auf der Antwort). Damit rollt **jeder PWA-Start** den Cookie vor;
+  aktiv genutzte Geräte laufen faktisch nie ab. Bei fehlendem/abgelaufenem Cookie greift die
   AUTH-8-Re-Pair-Seite (401). **Persistenz-Validierung im echten Betrieb — kein
   Vor-Gate (Nic-Setzung 2026-07-06):** die iOS-Persistenz wird an einer **bereits
   installierten Live-PWA** (Hörspiel-Player, auf Familien-iOS+Android in täglicher
