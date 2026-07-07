@@ -27,11 +27,15 @@ sys.path.insert(0, _REPO_ROOT)
 
 from seiten import main as seiten_main  # noqa: E402
 from seiten import pwa_mantel  # noqa: E402
+from tools.initdata import session_cookie as sc  # noqa: E402
 
 _COMPONENT = "hoerspiel-player"
 _MANIFEST_URL = "/seiten/hoerspiel/player/manifest.json"
 _SW_URL = "/seiten/hoerspiel/player/sw.js"
 _HTML_URL = "/seiten/hoerspiel/player"
+
+_TEST_BOT_TOKEN = "testtoken-t1272"
+_VALID_COOKIE = sc.sign_session("tablet-player-t1272", _TEST_BOT_TOKEN)
 
 
 @pytest.fixture(autouse=True)
@@ -40,7 +44,7 @@ def reset_runtime():
     seiten_main.configure(
         root=_REPO_ROOT,
         inventar_path=None,
-        bot_token="testtoken-t1272",
+        bot_token=_TEST_BOT_TOKEN,
         init_data_config={"max_age_seconds": 86400},
     )
     seiten_main.app.config["TESTING"] = True
@@ -49,7 +53,10 @@ def reset_runtime():
 
 @pytest.fixture
 def client():
-    return seiten_main.app.test_client()
+    """Test-Client mit vorgesetztem gültigem Cookie (AUTH-2, #1292)."""
+    c = seiten_main.app.test_client()
+    c.set_cookie(sc.COOKIE_NAME, _VALID_COOKIE)
+    return c
 
 
 # ── AC1 — Registry + build_manifest (Lib-Ebene) ──────────────────────────────

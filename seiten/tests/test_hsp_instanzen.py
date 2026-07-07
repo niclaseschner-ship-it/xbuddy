@@ -22,6 +22,10 @@ _REPO_ROOT = os.path.dirname(_SEITEN_DIR)
 sys.path.insert(0, _REPO_ROOT)
 
 from seiten import main as seiten_main  # noqa: E402
+from tools.initdata import session_cookie as sc  # noqa: E402
+
+_TEST_BOT_TOKEN = "testtoken-hsp43"
+_VALID_COOKIE = sc.sign_session("hsp-test-client-hsp43", _TEST_BOT_TOKEN)
 
 
 @pytest.fixture(autouse=True)
@@ -47,7 +51,9 @@ def client(tmp_path):
     )
     seiten_main.runtime["hoerspiel_player_template_dir"] = str(tmp_path)
     seiten_main.runtime["hoerspiel_player_asset_dir"] = str(tmp_path)
-    return seiten_main.app.test_client()
+    c = seiten_main.app.test_client()
+    c.set_cookie(sc.COOKIE_NAME, _VALID_COOKIE)
+    return c
 
 
 def _lese_instanzen(client):
