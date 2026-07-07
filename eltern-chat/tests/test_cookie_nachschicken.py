@@ -6,7 +6,10 @@ Doppelungen ersetzt (Pattern wie test_geraet_anlegen): FakeTelegram aus
 fakes.py, ein lokaler FakeGeraeteClient mit `liste()`.
 """
 
-from fakes import FakeTelegram
+from confirm import PendingProposal, PendingStore
+from fakes import FakeProvider, FakeTelegram, make_message
+from history import History
+from main import Context, _execute_confirmed
 from skills.cookie_nachschicken import baue_pairing_link, finde_geraet
 from skills.cookie_nachschicken_task import (
     GERAET_NICHT_GEFUNDEN_FMT,
@@ -16,7 +19,7 @@ from skills.cookie_nachschicken_task import (
     CookieNachschickenTask,
 )
 from skills.geraete_client import GeraeteClientError
-from tasks import TurnContext
+from tasks import Catalog, TurnContext
 
 # Test-Fixwerte.
 MASTER = 7
@@ -192,3 +195,82 @@ def test_lookup_fehler_klare_nachricht_kein_send():
     reply = task.execute({"geraet_name": "Paula"}, _turn(from_user_id=MASTER))
     assert reply == LOOKUP_FEHLER
     assert tg.sent == []
+
+
+# ============================================================
+#  CNS-1 — Entry-Path: realer Confirm→Execute-Orchestrierungspfad
+# ============================================================
+#
+# Die anderen CNS-1-Tests rufen `task.execute(...)` mit einem selbst gebauten
+# TurnContext direkt auf. Dieser Reflex-Test schließt die Orchestrierungs-Lücke:
+# er fährt den echten Bestätigungs-Pfad `main._execute_confirmed` →
+# `Catalog.execute_write_task` → `task.execute`. Genau hier wird
+# `from_user_id=msg.from_user_id` in den TurnContext verdrahtet
+# (main.py:_execute_confirmed) — der Master-Gate liest exakt dieses Feld. Baut
+# jemand die Naht falsch (z. B. from_user_id nicht durchgereicht), fiele ein
+# Nicht-Master hier durch und der Pairing-Link (ein Credential) ginge raus.
+
+def _entry_ctx(tmp_path, task, family_tg):
+    """Realer Context wie zur Laufzeit — Katalog trägt die CNS-1-Aufgabe.
+
+    `family_tg` ist der Bot-Kanal, über den `_execute_confirmed` die Quittung
+    an die Familie schickt (getrennt vom aufgabeneigenen `tg`, über den der
+    Pairing-Link als DM ginge)."""
+    catalog = Catalog()
+    catalog.register(task)
+    return Context(
+        tg=family_tg, bot_username="mybot", family_group_chat_id="-100",
+        context_depth=20, provider=FakeProvider([]), catalog=catalog,
+        history=History(str(tmp_path / "cns.db")), pending=PendingStore())
+
+
+def test_entry_path_nicht_master_confirm_kein_link_gesendet(tmp_path):
+    """Über den realen `_execute_confirmed`-Pfad bekommt ein Nicht-Master
+    keinen Pairing-Link: 0 Sends auf dem aufgabeneigenen Kanal, kein Lookup."""
+    client = FakeGeraeteClient([_tablet()])
+    task_tg = FakeTelegram()          # Kanal, über den der Link (DM) ginge
+    family_tg = FakeTelegram()        # Kanal für die Familien-Quittung
+    task = _task(client, task_tg)     # master_user_id == MASTER
+    ctx = _entry_ctx(tmp_path, task, family_tg)
+
+    # Bestätigter Vorschlag eines Nicht-Master-Absenders im Privatchat.
+    pending = PendingProposal(
+        chat_id=99, proposal_message_id=4242,
+        task_name="cookie_nachschicken", arguments={"geraet_name": "Paula"})
+    msg = make_message(
+        "ja", chat_id=99, chat_type="private", from_user_id=NICHT_MASTER)
+
+    _execute_confirmed(pending, msg, ctx)
+
+    # Kernwache: KEIN Pairing-Link (Credential) über den Aufgaben-Kanal raus …
+    assert task_tg.sent == []
+    # … und der Lookup wurde gar nicht erst angestoßen (Gate short-circuited).
+    assert client.liste_calls == 0
+    # Beleg, dass der Master-Gate über die verdrahtete from_user_id feuerte:
+    # die Familien-Quittung trägt genau die Nicht-autorisiert-Nachricht.
+    assert len(family_tg.sent) == 1
+    assert family_tg.sent[0]["text"] == NICHT_AUTORISIERT
+
+
+def test_entry_path_master_confirm_link_geht_raus(tmp_path):
+    """Gegenprobe: derselbe reale Pfad liefert dem Master den Link — belegt,
+    dass die from_user_id-Naht auch die erlaubte Seite korrekt durchreicht."""
+    client = FakeGeraeteClient([_tablet()])
+    task_tg = FakeTelegram()
+    family_tg = FakeTelegram()
+    task = _task(client, task_tg)
+    ctx = _entry_ctx(tmp_path, task, family_tg)
+
+    pending = PendingProposal(
+        chat_id=99, proposal_message_id=4242,
+        task_name="cookie_nachschicken", arguments={"geraet_name": "Paula"})
+    msg = make_message(
+        "ja", chat_id=99, chat_type="private", from_user_id=MASTER)
+
+    _execute_confirmed(pending, msg, ctx)
+
+    # Genau eine Link-DM über den Aufgaben-Kanal, in den Privatchat des Masters
+    # (private_chat_id == chat_id bei chat_type == "private").
+    assert len(task_tg.sent) == 1
+    assert ORIGIN + "/auth/pair?token=" in task_tg.sent[0]["text"]
+    assert task_tg.sent[0]["chat_id"] == 99
