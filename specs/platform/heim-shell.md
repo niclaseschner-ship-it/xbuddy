@@ -146,6 +146,40 @@ NIE vom Pi testen) · manuelle_probe (Pre-Merge-Experiment): von einem
 **externen** Client (nicht Pi, Hairpin täuscht) `curl https://<funnel-fqdn>/shell/<panel_id>`
 und `.../api/v1/displays/<id>/events` → muss scheitern/4xx; von Heim-LAN/Tailnet → 200.
 
+### SHELL-6.a — Funnel-Cookie-Rollout löst den LAN-only-Riegel ab (RAT-27-Entwurf)
+
+> **RAT-27-ENTWURF — noch nicht ratifiziert** (#1388, Epic #1338; zur
+> Nic-Ratifizierung). Bindewirkung erst mit RAT-27. **Bis dahin gilt SHELL-6
+> unverändert** (LAN-only-Riegel scharf, Funnel verboten).
+
+RAT-25 wird durch den Auth-Funnel-Rollout **superseded, nicht getötet**: der
+LAN-only-Riegel war die bewusst eingehegte **Ein-Wege-Kante** des Pilots
+(RAT-25 „eine Ein-Wege-Kante = Auth"), solange AUTH-7 nur eine unratifizierte
+IP-Skizze war. Mit der AUTH-7-Ratifizierung (7a/7b-Gabel, RAT-27) fällt genau
+diese Kante — der Grund für den Riegel (kein sicherer Funnel-Pfad) existiert
+dann nicht mehr.
+
+- **Die Heim-Shell darf über den Funnel laufen** — als AUTH-7b-Konsument:
+  `/shell/<panel_id>` und `/api/v1/displays/<id>/events` sind über den Funnel
+  erreichbar, **gated durch den Dual-Gate** (Cookie ODER Operator-IP,
+  `auth.md` AUTH-7). Ein User-Gerät mit `xbuddy_session`-Cookie erreicht die
+  Shell extern; ein cookie-loser fremder Funnel-Client bekommt `401`.
+- **Heim-LAN bleibt Fallback, kein Funnel-Zwang.** Der schnellste Weg im Haus
+  ist weiter der LAN-Direktzugang (`display_url_origin_heim`); der
+  Operator-Pi trägt die Shell weiterhin über die 7a-IP-Allowlist **ohne**
+  Cookie. Der Funnel-Weg ist **additiv** für externe User-Geräte, nicht die
+  einzige erlaubte Origin (`seiten-registry.md` SREG-7:
+  heim/tailscale/funnel).
+
+**Was RAT-25 behält:** die gesamte Split-Layout-/Iframe-/Zwei-EventSource-
+Architektur (SHELL-1..SHELL-11) bleibt unverändert — SHELL-6.a berührt
+**nur** die Auth-/Exposure-Kante, nicht den Renderer-Kern. Der
+Pre-Merge-Funnel-Test (SHELL-6, externer Client) kehrt sich um: nach RAT-27
+muss `curl https://<funnel-fqdn>/shell/<panel_id>` **mit** gültigem Cookie
+`200` liefern und **ohne** Cookie/Operator-IP `401` — statt pauschal `4xx`.
+
+*Tickets:* #1388, #1338
+
 ## 5. Registrierung & Schnittstelle
 
 ### SHELL-10 — Shell-URL in der Eltern-Seiten-Übersicht
