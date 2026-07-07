@@ -116,10 +116,20 @@ Verwendung, Mini-App-Start-URL für Controller-Verwendung).
 Bei ungültigem oder abgelaufenem Token antwortet der Endpoint `400` mit
 einer Anweisung, einen neuen Pairing-Link im Bot anzufordern.
 
-[Quelle: ENTSCHEID 2026-06-16-1123 Paket-Sektion „R2-Patches"
-→ Patch B Pairing-Cookie-Mechanik]
+**Familien-Geräte — Link auf Funnel-FQDN, kein Zertifikat (#1380):** Der
+nachgeschickte Pairing-Link (`geraet-anlegen.md` GAA-3.9,
+`cookie_nachschicken`) zeigt auf die **Funnel-FQDN** (PWA, LE-Cert), NICHT
+auf `:8443` — so brauchen Familien-Geräte kein Zertifikat, nur den
+`xbuddy_session`-Cookie (AUTH-2, First-Party auf derselben Origin). **Geräte-
+Autorisierung nur über die Master-Telegram-ID:** einen frischen Pairing-Link
+für ein bestehendes Gerät darf ausschließlich das Master-Konto anfordern
+(`master_telegram_user_id`) — strenger als die Familien-Gruppen-
+Mitgliedschaft, weil der Link ein Credential ist.
 
-*Tickets:* #948
+[Quelle: ENTSCHEID 2026-06-16-1123 Paket-Sektion „R2-Patches"
+→ Patch B Pairing-Cookie-Mechanik · Nic-Setzung 2026-07-07 (#1380)]
+
+*Tickets:* #948, #1380
 
 ## 3. Klassifikation der Routen
 
