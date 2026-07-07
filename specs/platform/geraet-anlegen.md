@@ -149,8 +149,10 @@ Zielgeräts braucht den `xbuddy_session`-Cookie aus
 
 **Aufruf-Vertrag:** GAA-3.8 ist Teil der GAA-1-Funktion und blockiert die
 „noch ein Gerät?"-Schleife (GAA-4) nicht — Eltern darf den Pairing-Link
-später öffnen. Solange `paired_at` `null` ist, kann ein Pairing-Link
-**neu angefordert** werden — siehe GAA-3.9.
+später öffnen. Ein frischer Pairing-Link kann **jederzeit neu angefordert**
+werden — unabhängig davon, ob `paired_at` schon gesetzt ist (Re-Send eines
+noch nicht geöffneten Links **und** Re-Pair eines bereits gepairten Geräts) —
+siehe GAA-3.9.
 
 ### GAA-3.9 — Pairing-Link nachschicken (Re-Send / Re-Pair)
 
