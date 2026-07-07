@@ -51,7 +51,8 @@ VALID_AUDIO_ZIEL = ("display", "panel")
 
 DEFAULT_LLM_MODEL = "claude-opus-4-7"
 DEFAULT_VOICE = "onyx"
-DEFAULT_SERIEN_NAME = "Stigi & Co."
+# T1382/OPEN-HSP-W/-X: kein Code-Default-Serien-Name mehr (Paula-Leak). serien_name
+# ist rein instanz-getragen (instance.json, HSP-27); neutral leer wenn ungesetzt.
 
 # HSP-43 / #1263: hörspiel-LOKALE Instanz-Liste (origin-frei; NUR kind_id/name).
 # Muster: seiten/main.py:947 `_HSP_INSTANZEN` — die eine autoritative Kopie DIESER

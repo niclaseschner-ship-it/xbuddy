@@ -627,8 +627,9 @@ def _post_alben():
 def _build_config_response(cfg, dcfg, instance_cfg=None) -> dict:
     """Baut die vollständige GET /config-Antwort (HSP-17/34/41).
 
-    T1382/HSP-27: instance_cfg.serien_name hat Vorrang (spiegelt LLM-Pfad, :543);
-    dcfg.serien_name als Fallback (PATCH-gesetzt); neutral ("") wenn beides leer.
+    T1382/OPEN-HSP-X: instance_cfg.serien_name hat Vorrang (spiegelt LLM-Pfad
+    OPEN-HSP-W, :543); dcfg.serien_name als Fallback (PATCH-gesetzt); neutral
+    ("") wenn beides leer — kein Modul-Default (Display/config-Neutralisierung).
     """
     public = cfg.to_public_dict()
     if dcfg is not None:

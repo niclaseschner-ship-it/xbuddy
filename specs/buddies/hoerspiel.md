@@ -951,11 +951,15 @@ Drei Konfig-Ebenen, klar getrennt nach Lebenszyklus (RAT-17):
   Daten-Konfig** (kind-spezifische Werte, je Instanz eigene Datei).
   Heimat aller Werte, die zwischen Paula und Neko unterschiedlich sind:
   Serien-Name, Voice-Default, kognitive Stufe, Themen-Liste je Alter,
-  Cover-Pfad-Override. Beispiel:
+  Cover-Pfad-Override. Alle diese Werte sind **instanz-eigen** — es gibt
+  für sie **keinen** plattformweiten Code-Default (für `serien_name` gilt
+  OPEN-HSP-W/-X: leer statt eines konkreten Serien-Namens). Der `serien_name`
+  im folgenden Beispiel ist daher ein **instanz-spezifischer Platzhalter**,
+  kein Default. Beispiel:
   ```json
   {
     "kind_id": "paula",
-    "serien_name": "Stigi & Co.",
+    "serien_name": "<serien-name-dieser-instanz>",
     "default_voice": "shimmer",
     "stage": "toddler",
     "kognitiv_stufe": "5-6",
@@ -1014,7 +1018,7 @@ Vorbild #84 + #336):**
 | Pause nach Titel | `1.8` | `pause_titel_sek` | Eltern (Mini-App PATCH, HSP-34) |
 | Playback-Tempo | `1.0` | `playback_tempo` | Eltern (Mini-App PATCH, HSP-34) |
 | Themen je Alter | siehe HSP-27a | `themen_je_alter` | Familie (handgepflegt, V1 Alter 4) |
-| Serien-Name | `Stigi & Co.` | `serien_name` | Familie (Daten-Konfig) |
+| Serien-Name | (leer, kein Code-Default — OPEN-HSP-W/-X) | `serien_name` | Instanz (`instance.json`, HSP-45) |
 | Anthropic-Key | (Pflicht wenn `llm_provider=claude`) | — | ZD-Slot `hoerspiel-anthropic-api-key` (ZD-5); Welle-A-Übergang: ENV `HOERSPIEL_ANTHROPIC_KEY` als Fallback |
 | Mistral-Key | (Pflicht wenn `llm_provider=mistral`) | — | ZD-Slot `hoerspiel-mistral-api-key` (ZD-5); ENV `HOERSPIEL_MISTRAL_KEY` als Fallback |
 | Azure-Endpoint | (Pflicht) | `azure_openai_endpoint` | ENV `HOERSPIEL_AZURE_OPENAI_ENDPOINT` (kein Geheimnis, bleibt ENV) |
@@ -1844,6 +1848,19 @@ der Orchestrator-Deploy (T1336) provisioniert die Datei-Werte für
 `paula`/`neko`/`niclas`. *Restschuld:* bis die Live-`instance.json` je
 Instanz den `serien_name` trägt, erscheint keine `Serie:`-Zeile im Prompt
 (Folgen bleiben generisch gerahmt, nicht falsch gerahmt).
+
+**OPEN-HSP-X (T1382, 2026-07-07) — Display/`/config`-serien_name neutralisiert.**
+Parallel zum LLM-Pfad (OPEN-HSP-W) trug auch der **zweite** `serien_name`-
+Ausgabepfad — die Display-/Mini-App-Konfig-Antwort (`GET`/`PATCH /config`
+→ `_build_config_response`, `hoerspiel/main.py:627`) — einen Paula-Default
+(`hoerspiel/config.py` `DEFAULT_SERIEN_NAME = "Stigi & Co."`), sodass eine
+Instanz ohne gesetzten `serien_name` „Stigi & Co." zurückspiegelte.
+*Auflösung:* der Code-Default ist **entfernt** (kein `DEFAULT_SERIEN_NAME`
+mehr); `_build_config_response` liefert `instance_cfg.serien_name` mit
+Vorrang, `dcfg.serien_name` (PATCH-gesetzt) als Fallback, **neutral `""`**
+wenn beides leer — dieselbe minimal-neutrale Regel wie OPEN-HSP-W im
+LLM-Pfad. Damit tragen **beide** `serien_name`-Pfade (LLM + Display/config)
+den Namen ausschließlich aus `instance.json`; kein Modul-Default leakt mehr.
 
 ### HSP-46 — Keine Zielgruppen-Sicht-Trennung (Nic-Setzung 2026-07-03)
 Niclas erscheint als **gleichrangige** dritte Instanz in derselben
