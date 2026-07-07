@@ -44,6 +44,16 @@ TYP_ELTERN = "eltern"
 TYP_CONTROLLER = "controller"
 TYP_PANEL = "panel"
 TYP_DISPLAY_CLIENT = "display-client"
+# SREG-14: Mini-App-Sorte (Spiegel zu seiten.aggregator.TYP_MINI_APP).
+TYP_MINI_APP = "mini-app"
+
+# #1210 / SREG-15-Erweiterung: audience-Flag am Eintrag. Die EINE Ableitung
+# (baue_layout) markiert je Karte, welche familienseitige Uebersichts-/Registry-
+# Oberflaeche sie rendert. Abweichende Sichten FILTERN deklarativ ueber dieses
+# Feld — sie forken NICHT die Ableitung (kein zweiter Gruppierungs-Code je View).
+AUDIENCE_UEBERSICHT = "uebersicht"          # server-gerenderte Grossbild-Uebersicht
+AUDIENCE_MINI_APP = "mini-app-uebersicht"   # Telegram-Mini-App-Uebersicht
+_ALLE_AUDIENCES = (AUDIENCE_UEBERSICHT, AUDIENCE_MINI_APP)
 
 # SREG-12 Icon-Fallback je Sorte. Pfade unter /api/v1/seiten/static/icons/
 # (Flask static_url_path, SREG-12 #467) — passt zum nginx-Sub-Pfad-Block
@@ -88,6 +98,12 @@ def _karte_basis(eintrag, heim_origin, tailscale_origin):
         "/display/_shared/icons/" + icons[0] if icons
         else _FALLBACK_ICON.get(typ, _FALLBACK_ICON[TYP_ELTERN])
     )
+    # #1210: Mini-App-Karten erscheinen in der Mini-App-Uebersicht in der
+    # dedizierten Sektion `mini_apps` (mit Telegram-Deep-Link), NICHT in den
+    # Buddy-Gruppen. Darum tragen sie IN den Buddy-Gruppen nur die Grossbild-
+    # audience. Das ist ein deklaratives Feld (wie `icon`), KEIN Fork-Zweig.
+    audience = ([AUDIENCE_UEBERSICHT] if typ == TYP_MINI_APP
+                else list(_ALLE_AUDIENCES))
     return {
         "key": eintrag.get("key", ""),
         "label": eintrag.get("label", ""),
@@ -101,6 +117,11 @@ def _karte_basis(eintrag, heim_origin, tailscale_origin):
         "app": eintrag.get("app", ""),
         "stale": bool(eintrag.get("stale", False)),
         "urls": _urls(eintrag, heim_origin, tailscale_origin),
+        # SREG-14: Mini-App-Deep-Links (leer bei Nicht-Mini-Apps). Der Aggregator
+        # komponiert sie; der Renderer reicht sie nur durch (URL-12-Disziplin).
+        "web_app_url": eintrag.get("web_app_url", ""),
+        "funnel_url": eintrag.get("funnel_url", ""),
+        "audience": audience,
     }
 
 
@@ -137,6 +158,10 @@ def _varianten_karten(eintrag, heim_origin, tailscale_origin):
                 "heim": (heim_origin.rstrip("/") + v_pfad) if heim_origin else None,
                 "tailscale": (tailscale_origin.rstrip("/") + v_pfad) if tailscale_origin else None,
             },
+            # Varianten sind nie Mini-Apps: keine Deep-Links, beide Audiences.
+            "web_app_url": "",
+            "funnel_url": "",
+            "audience": list(_ALLE_AUDIENCES),
             "variante": True,
         }
         karten.append(karte)
@@ -250,6 +275,29 @@ def _buddy_gruppen(eintraege, hero_paare, heim_origin, tailscale_origin):
 
 
 # ============================================================
+#  Mini-App-Sektion (SREG-14) — dedizierte Telegram-App-Liste
+# ============================================================
+
+def _mini_apps(eintraege, heim_origin, tailscale_origin):
+    """Baut die dedizierte Mini-Telegram-App-Sektion (SREG-14, MAU-4 Punkt 1).
+
+    Dieselbe Ableitung wie fuer die Buddy-Gruppen (`_karte_basis`), nur als
+    eigene Liste — damit eine Oberflaeche die Mini-Apps mit ihrem Telegram-
+    Deep-Link (`web_app_url`) in einer eigenen Sektion zeigen kann. Die
+    Grossbild-Uebersicht rendert Mini-Apps stattdessen als gewoehnliche
+    Buddy-Karte (pfad-URL); das ist die einzige ratifiziert-legitime Sicht-
+    Asymmetrie (#1210, Berater-Constraint 4). Dieselben Karten-Objekte tauchen
+    darum bewusst in beiden Ableitungs-Zweigen auf (Buddy-Gruppe: audience
+    nur `uebersicht`; hier: volle Mini-App-Sektion).
+
+    Reihenfolge: alphabetisch nach `label` (deterministisch fuer den Guard).
+    """
+    apps = [_karte_basis(e, heim_origin, tailscale_origin)
+            for e in eintraege if e.get("typ") == TYP_MINI_APP]
+    return sorted(apps, key=lambda k: (k.get("label") or "").lower())
+
+
+# ============================================================
 #  Layout-Aufbau (V2)
 # ============================================================
 
@@ -263,9 +311,17 @@ def baue_layout(inventar, heim_origin, tailscale_origin):
             string oder None loest den Tailscale-Banner aus.
 
     Returns:
-        Dict mit `hero_paare`, `buddy_gruppen`, `tailscale_banner` (bool),
-        `snapshot_pending` (Liste), `heim_origin`, `tailscale_origin`. Direkt
-        an `render_template("uebersicht.html", **layout)` reichbar.
+        Dict mit `hero_paare`, `buddy_gruppen`, `mini_apps`, `tailscale_banner`
+        (bool), `snapshot_pending` (Liste), `heim_origin`, `tailscale_origin`.
+        Direkt an `render_template("uebersicht.html", **layout)` reichbar (das
+        Template ignoriert `mini_apps` — additiv) UND als JSON-Kontrakt fuer
+        `GET /api/v1/seiten/layout` (#1210 Daten-SSoT).
+
+    #1210 (Daten-SSoT): Dieses Dict ist die EINE angereicherte Ableitung, die
+    ALLE familienseitigen Uebersichts-/Registry-Oberflaechen konsumieren
+    (Jinja `/uebersicht` UND die Mini-App). Keine Oberflaeche re-derived
+    Gruppierung/Anreicherung lokal; abweichende Sichten filtern deklarativ
+    ueber das `audience`-Feld je Karte (SREG-15-Erweiterung).
     """
     eintraege = (inventar or {}).get("eintraege", []) or []
     hero = _hero_paare(eintraege, heim_origin, tailscale_origin)
@@ -273,6 +329,9 @@ def baue_layout(inventar, heim_origin, tailscale_origin):
     return {
         "hero_paare": hero,
         "buddy_gruppen": buddies,
+        # SREG-14 / #1210: dedizierte Mini-App-Sektion (additiv — Jinja liest sie
+        # nicht; die Mini-App-Uebersicht rendert sie mit Telegram-Deep-Link).
+        "mini_apps": _mini_apps(eintraege, heim_origin, tailscale_origin),
         "tailscale_banner": not bool(tailscale_origin),
         "snapshot_pending": list((inventar or {}).get("snapshot_pending", []) or []),
         "heim_origin": heim_origin or "",
