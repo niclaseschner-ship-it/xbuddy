@@ -34,11 +34,13 @@ jobs:
   reconcile:
     # Feuert nur bei status:ready-Ereignissen:
     #   - labeled: github.event.label.name == 'status:ready' (eindeutig)
-    #   - opened:  github.event.label ist null → alte label.name-Bedingung
-    #              wäre false; toJson-Suche deckt die opened-Kante (PW-85 Codex-Bruch 3).
+    #   - opened:  github.event.label ist null → Objekt-Filter-Form (whitespace-robust,
+    #              identisch zu ticket-defaults.yml:19). toJson() liefert pretty-printed
+    #              JSON mit Leerzeichen nach dem Doppelpunkt — kompakter Nadel-String
+    #              würde nie matchen (PW-85 AC1).
     if: >
       (github.event.action == 'labeled' && github.event.label.name == 'status:ready') ||
-      (github.event.action == 'opened' && contains(toJson(github.event.issue.labels), '"name":"status:ready"'))
+      (github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'status:ready'))
     runs-on: [self-hosted, ARM64]
     steps:
       - uses: actions/checkout@v4
