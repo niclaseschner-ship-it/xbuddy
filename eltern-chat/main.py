@@ -1216,7 +1216,12 @@ def build_context(cfg, db_path, zd_cli_path=None):
         # WRO-8 / #1094: Origin des Wetter-Buddys (Mini-App-URL = Origin +
         # /display/wetter/regeln, WRO-5). Leer/None → WetterRegelnOeffnenTask
         # NICHT im Katalog (AND-Guard in tasks.py).
-        wetter_origin_url=cfg.wetter_origin_url or None)
+        wetter_origin_url=cfg.wetter_origin_url or None,
+        # CNS-1 / #1380: Master-Telegram-User-ID (harte Autorisierungs-Grenze
+        # für »Cookie nachschicken«). Leer/None → CookieNachschickenTask NICHT
+        # im Katalog (AND-Guard mit pairing_bot_token + pairing_origin +
+        # geraete_origin_url in tasks.py).
+        master_user_id=cfg.master_telegram_user_id or None)
 
     if cfg.provider_api_key:
         # KI-Modus — Anbieter steht; die Familien-Gruppe muss gesetzt sein (EC-2).
