@@ -33,7 +33,6 @@ Skip (PW-23-haerte, 2026-06-09):
 Schema folgt dispatch_status_guard.py (RAT-15): stdin-JSON,
 permissionDecision-Antwort, exit 0 bei Durchlass.
 """
-import hashlib
 import json
 import os
 import re
@@ -41,6 +40,24 @@ import shlex
 import subprocess
 import sys
 from urllib.parse import urlparse
+
+# PW-85 RATIFIZIERT 2026-07-06: Verdikt-Pruef-Logik in geteiltes Modul extrahiert
+# (Duplikations-Gegenmittel — prep-reconcile.yml nutzt verdict_check.py direkt,
+# brainstorm/berater-runde/20260706-153129-RATIFIZIERT-pw85-ready-create-kante.md).
+# sys.path-Erweiterung: beim importlib-Ladeweg (z. B. Tests) ist das Hook-
+# Verzeichnis nicht automatisch in sys.path.
+# isort: off
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from verdict_check import (
+    VERDICT_MARKER_RE,
+    WERFT_VERDICT_MARKER_RE,
+    _check_verdict_generic,
+    _extract_axis_value,
+    compute_verdict_hash,  # noqa: F401 — re-exportiert; Tests greifen via srg.compute_verdict_hash
+    fetch_verdict_comment,
+)
+# isort: on
 
 # Lifecycle-Labels, deren Schreiben/Entfernen durch Agent RECON-3-widrig ist.
 # PW-33 (2026-06-09): `status:spec-in-progress` als prep-Lock neu hinzu — der
@@ -65,20 +82,10 @@ PREP_RELEASE_REMOVES = frozenset({"status:spec-in-progress"})
 PREP_RELEASE_ADDS_SPEC = frozenset({"status:spec"})      # zurueck (kein Stempel)
 PREP_RELEASE_ADDS_READY = frozenset({"status:ready"})    # weiter (Nic stempelt)
 
-# PW-30 (xbuddy-prozess#31, 2026-06-09): prep_verdict-Comment-Pflicht.
-# Vor jedem status:ready-Stempel muss ein gueltiges prep_verdict am Ticket
-# als Comment liegen — sonst deny. Schema: ~/.claude/agents/xbuddy-watchdog-prep.md.
-VERDICT_MARKER_RE = re.compile(
-    r"^<!--\s*prep_verdict\s+v1\s+issue:(\d+)\s+sha:([0-9a-f]{16})\s*-->",
-    re.MULTILINE,
-)
-# PW-43 RATIFIZIERT 2026-06-21: werft_verdict-Comment-Pflicht fuer Werft-F5-Stempel.
-# Schema identisch zu prep_verdict v1 (gleicher Hash-Compute-Pfad), aber separater
-# Marker fuer Provenienz + Werft-only-Sperren spaeter (Drift-Anker-SHA).
-WERFT_VERDICT_MARKER_RE = re.compile(
-    r"^<!--\s*werft_verdict\s+v1\s+issue:(\d+)\s+sha:([0-9a-f]{16})\s*-->",
-    re.MULTILINE,
-)
+# PW-30 (xbuddy-prozess#31, 2026-06-09): prep_verdict-Comment-Pflicht vor jedem
+# status:ready-Stempel. PW-43 RATIFIZIERT 2026-06-21: werft_verdict-Pendant fuer
+# Werft-F5-Stempel. VERDICT_MARKER_RE + WERFT_VERDICT_MARKER_RE: importiert aus
+# verdict_check (PW-85).
 # PW-25 + PW-43 RATIFIZIERT 2026-06-21: Werft-Stempel-Pfad.
 # Werft-F5 entfernt im selben gh-edit `status:spec` + `in-werft`, setzt `status:ready`.
 WERFT_STAMP_REMOVES = frozenset({"status:spec", "in-werft"})
@@ -116,22 +123,8 @@ ARCH_CHOICE_MARKER_RE = re.compile(
     r"^<!--\s*arch_choice\s+v1\s+issue:(\d+)\s+choice:(\w+)\s*-->",
     re.MULTILINE,
 )
-# Bestand-Migration vor Hook-Scharfschaltung: Tickets ohne prep_verdict bekommen
-# einen Backfill-Comment mit migrated: true. Hook akzeptiert das nur, wenn
-# das status:ready-Event vor diesem Timestamp liegt (Sperre gegen Missbrauch).
-MIGRATION_CUTOFF_ISO = "2026-06-09T16:00:00Z"
-XBUDDY_REPO_PATH = "/home/buddy/repos/xbuddy"
-DRIFT_PATHS = ("specs/", "decisions/")
-# PW-26-RATIFIZIERT 2026-06-09 (Codex-Bruch 1): RAT-11-Negativfilter mechanisch.
-# Eine reif_section_heading, die mit einem dieser Strings beginnt, ist NIE
-# bindend — Hook deniert auch wenn reif_binding: true gesetzt war (Disziplin-
-# Doppelung verboten).
-SPEC_NONBINDING_HEADINGS = (
-    "## Offene Punkte",
-    "## ENTWURF",
-    "### ENTWURF",
-)
-SPEC_NONBINDING_ID_PREFIX = "OPEN-"
+# MIGRATION_CUTOFF_ISO, XBUDDY_REPO_PATH, DRIFT_PATHS,
+# SPEC_NONBINDING_HEADINGS, SPEC_NONBINDING_ID_PREFIX: importiert aus verdict_check (PW-85).
 
 
 def deny(reason: str) -> None:
@@ -395,355 +388,14 @@ def is_prep_release(adds, removes) -> bool:
     """
     rem = frozenset(removes)
     add = frozenset(adds)
-    return rem == PREP_RELEASE_REMOVES and (
-        add == PREP_RELEASE_ADDS_SPEC or add == PREP_RELEASE_ADDS_READY
-    )
+    return rem == PREP_RELEASE_REMOVES and add in (PREP_RELEASE_ADDS_SPEC, PREP_RELEASE_ADDS_READY)
 
 
-def compute_verdict_hash(verdict_body: str) -> str | None:
-    """Liest aus dem verdict-Comment-Body die `verdict:`, `axes:` (und optional
-    `verdict_repo_sha:` + `architecture_class:`) und berechnet den 16-Zeichen-
-    Hex-Hash, der mit dem Marker-Hash uebereinstimmen muss.
-
-    Schema-Detection (PW-26-RATIFIZIERT 2026-06-09, Codex-Bruch 4):
-      - Wenn `architecture_class:` im Body ist (= PW-26-Schema):
-        Hash umfasst {verdict, axes, verdict_repo_sha, architecture_class}.
-        Damit kann verdict_repo_sha nicht „gewaschen" werden (Replace-Pfad
-        invalidiert den Hash).
-      - Sonst (Legacy PW-30-Schema): Hash umfasst {verdict, axes}.
-        Backwards-Kompat fuer Tickets, die vor PW-26 gestempelt wurden.
-
-    Zur Defensive: Parsing per Regex, kein YAML-Lib (Hook bleibt dependency-arm).
-    """
-    verdict_m = re.search(r"^verdict:\s*(\S+)\s*$", verdict_body, re.MULTILINE)
-    if not verdict_m:
-        return None
-    verdict_val = verdict_m.group(1)
-
-    # axes-Block: alle Zeilen ab "axes:" bis zur naechsten Top-Level-Key (Spaltenanfang)
-    axes_m = re.search(r"^axes:\s*\n((?:[ \t]+.+\n)+)", verdict_body, re.MULTILINE)
-    if not axes_m:
-        return None
-    axes_lines = axes_m.group(1)
-    axes_dict = {}
-    for line in axes_lines.splitlines():
-        m = re.match(r"\s+(\w+):\s*(.+?)\s*$", line)
-        if m:
-            key, val = m.group(1), m.group(2).strip().strip('"').strip("'")
-            axes_dict[key] = val
-
-    # PW-26-Schema-Detection: architecture_class als Top-Level-Key signalisiert,
-    # dass der neue, erweiterte Hash erwartet wird.
-    arch_m = re.search(r"^architecture_class:\s*(\S+)\s*$", verdict_body, re.MULTILINE)
-    sha_m = re.search(r"^verdict_repo_sha:\s*[\"']?([0-9a-fA-F]{7,40})[\"']?\s*$",
-                       verdict_body, re.MULTILINE)
-
-    payload_dict = {"verdict": verdict_val, "axes": axes_dict}
-    if arch_m:
-        # PW-26-Schema: SHA + architecture_class in Hash-Payload.
-        payload_dict["verdict_repo_sha"] = sha_m.group(1) if sha_m else ""
-        payload_dict["architecture_class"] = arch_m.group(1)
-
-    payload = json.dumps(payload_dict, sort_keys=True)
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
-
-
-def fetch_verdict_comment(
-    repo: str, issue: str, marker_re=VERDICT_MARKER_RE,
-) -> tuple[str, dict] | tuple[None, None]:
-    """Iteriert Issue-Comments rueckwaerts und findet den ersten mit gueltigem
-    Marker als erste Zeile.
-
-    Default marker_re = VERDICT_MARKER_RE (prep_verdict v1, PW-30).
-    Fuer Werft-Pfad: marker_re=WERFT_VERDICT_MARKER_RE (werft_verdict v1, PW-43).
-
-    Liefert (comment_body, parsed_marker_dict) oder (None, None).
-    parsed_marker_dict: {"issue": NR, "sha": HASH}.
-    """
-    try:
-        result = subprocess.run(
-            ["gh", "issue", "view", issue, "--repo", repo,
-             "--json", "comments"],
-            capture_output=True, text=True, timeout=20, check=False,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return (None, None)
-    if result.returncode != 0:
-        return (None, None)
-    try:
-        data = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return (None, None)
-    comments = data.get("comments") or []
-    # Rueckwaerts iterieren (juengster zuerst)
-    for comment in reversed(comments):
-        body = comment.get("body", "")
-        if not isinstance(body, str):
-            continue
-        # Marker MUSS erste Zeile sein (analog SKIP_MARKER-Disziplin PW-23).
-        first_line = body.lstrip().split("\n", 1)[0]
-        marker_m = marker_re.match(first_line)
-        if marker_m:
-            return (body, {"issue": marker_m.group(1), "sha": marker_m.group(2)})
-    return (None, None)
-
-
-def _extract_axis_value(body: str, key: str) -> str | None:
-    """Liest einen flachen axes.<key>-Wert aus dem Verdikt-Body.
-
-    Erkennt Zeilen wie `  key: value` oder `  key: "quoted value"`.
-    Liefert None bei null/missing.
-    """
-    m = re.search(rf"^\s+{re.escape(key)}:\s*(.+?)\s*$", body, re.MULTILINE)
-    if not m:
-        return None
-    val = m.group(1).strip().strip('"').strip("'")
-    if val in ("null", "None", ""):
-        return None
-    return val
-
-
-def check_spec_binding(body: str, verdict_repo_sha: str) -> tuple[bool, str]:
-    """PW-26-RATIFIZIERT 2026-06-09 (Codex-Bruch 1): semantische Probe der
-    reif_*-Felder gegen die Spec auf verdict_repo_sha (NICHT origin/main —
-    Drift-Check ist separat in check_drift).
-
-    Erlaubt zwei Sub-Klassen bei `keine-spec-noetig`:
-      - Drift-gegen-Spec: reif_* zeigt auf bindende Spec, plus drift_target gefuellt.
-      - Reines Chore: reif_* alle null, dafuer chore_evidence gefuellt + Datei
-        existiert auf verdict_repo_sha.
-
-    Bei `spec-gemergt`: reif_* zwingend gefuellt.
-    Bei `spec-fehlt`: nicht geprueft (Stempel haette eh keinen Pfad — `verdict: ready`
-    mit `reif: spec-fehlt` ist Hook-Bug, kein Realfall).
-
-    Liefert (ok, reason). ok=True = darf gestempelt werden.
-    """
-    reif = _extract_axis_value(body, "reif")
-    if reif is None:
-        return (False, "axes.reif fehlt im Verdikt")
-
-    if reif == "spec-gemergt":
-        return _check_reif_structured(body, verdict_repo_sha, allow_drift_target=False)
-
-    if reif == "keine-spec-noetig":
-        # Zwei Sub-Klassen: Drift-gegen-Spec ODER reines Chore.
-        spec_path = _extract_axis_value(body, "reif_spec_path")
-        chore_ev = _extract_axis_value(body, "chore_evidence")
-        if spec_path and chore_ev:
-            return (False, "keine-spec-noetig: reif_spec_path UND chore_evidence "
-                           "gesetzt — eine der zwei Sub-Klassen waehlen, nicht beide.")
-        if spec_path:
-            # Sub-Klasse Drift-gegen-Spec: bindende Spec + drift_target Pflicht.
-            return _check_reif_structured(body, verdict_repo_sha, allow_drift_target=True)
-        if chore_ev:
-            return _check_chore_evidence(body, verdict_repo_sha)
-        # Legacy-Pfad (PW-30-Schema vor PW-26): reif_evidence-Freitext akzeptieren,
-        # solange verdict_body keine PW-26-strukturierten Felder traegt.
-        if "architecture_class:" not in body:
-            return (True, "legacy_pre_pw26: keine-spec-noetig ohne strukturierte Felder")
-        return (False, "keine-spec-noetig: weder reif_spec_path noch chore_evidence "
-                       "gefuellt — eine Sub-Klasse waehlen (Drift-gegen-Spec ODER reines Chore).")
-
-    if reif == "spec-fehlt":
-        # Stempel mit spec-fehlt ist hier ein Hook-Bug — verdict: ready impliziert
-        # spec-gemergt oder keine-spec-noetig. Aber defensiv: deny mit Hinweis.
-        return (False, "axes.reif=spec-fehlt — Stempel auf ready nur nach Spec-PR-Merge "
-                       "(Skill arbeitstag-prep.md Komponente A) ODER keine-spec-noetig.")
-
-    return (False, f"axes.reif='{reif}' nicht erkannt")
-
-
-def _check_reif_structured(body: str, verdict_repo_sha: str,
-                            allow_drift_target: bool) -> tuple[bool, str]:
-    """Strukturierte reif_*-Probe: alle fuenf Pflicht-Felder + Heading-Negativfilter
-    + git-Existenz-Probe auf verdict_repo_sha.
-
-    allow_drift_target: bei keine-spec-noetig (Drift-Klasse) ist drift_target Pflicht.
-    """
-    spec_path = _extract_axis_value(body, "reif_spec_path")
-    req_id = _extract_axis_value(body, "reif_requirement_id")
-    def_line = _extract_axis_value(body, "reif_definition_line")
-    heading = _extract_axis_value(body, "reif_section_heading")
-    binding = _extract_axis_value(body, "reif_binding")
-
-    # Legacy-Toleranz: wenn PW-26-Schema fehlt (kein architecture_class), Freitext zulassen.
-    if "architecture_class:" not in body:
-        if not spec_path:
-            return (True, "legacy_pre_pw26: kein strukturiertes reif_evidence — Freitext akzeptiert")
-
-    missing = [name for name, val in (
-        ("reif_spec_path", spec_path),
-        ("reif_requirement_id", req_id),
-        ("reif_definition_line", def_line),
-        ("reif_section_heading", heading),
-        ("reif_binding", binding),
-    ) if val is None]
-    if missing:
-        return (False, f"reif_*-Felder fehlen: {', '.join(missing)} — strukturierte "
-                       "reif_evidence Pflicht (xbuddy-watchdog-prep.md Output-Schema).")
-
-    # specs/ ODER conventions/ (Codex-Bruch 1: beide gleichberechtigt).
-    if not (spec_path.startswith("specs/") or spec_path.startswith("conventions/")):
-        return (False, f"reif_spec_path='{spec_path}' liegt nicht unter specs/ oder conventions/.")
-
-    # Heading-Negativfilter (RAT-11-Disziplin mechanisch).
-    for nonbinding in SPEC_NONBINDING_HEADINGS:
-        if heading.startswith(nonbinding):
-            return (False, f"reif_section_heading='{heading}' ist nicht-bindend "
-                           f"(RAT-11 — Semantisches Prep-Reife-Gate). Spec-PR mergen "
-                           "(Komponente A) oder Mini-Wahl-Karte vorlegen (Komponente B).")
-    if req_id.startswith(SPEC_NONBINDING_ID_PREFIX):
-        return (False, f"reif_requirement_id='{req_id}' ist OPEN-* — per Namens-"
-                       "Konvention skizziert, nicht bindend (RAT-11).")
-    if binding != "true":
-        return (False, f"reif_binding='{binding}' — Hook akzeptiert nur 'true' als bindend.")
-
-    # Drift-Klasse-spezifisch: drift_target Pflicht bei Drift-gegen-Spec.
-    if allow_drift_target:
-        drift_target = _extract_axis_value(body, "drift_target")
-        if not drift_target:
-            return (False, "keine-spec-noetig (Drift-gegen-Spec): drift_target Pflicht "
-                           "(welche Code-Stelle weicht ab).")
-
-    # Git-Existenz: Spec auf verdict_repo_sha existiert + enthaelt requirement_id.
-    try:
-        show = subprocess.run(
-            ["git", "-C", XBUDDY_REPO_PATH, "show", f"{verdict_repo_sha}:{spec_path}"],
-            capture_output=True, text=True, timeout=10, check=False,
-        )
-        if show.returncode != 0:
-            return (False, f"Spec '{spec_path}' existiert nicht auf verdict_repo_sha "
-                           f"{verdict_repo_sha[:8]} — Spec-PR mergen.")
-        if req_id not in show.stdout:
-            return (False, f"Requirement '{req_id}' nicht in '{spec_path}' auf "
-                           f"{verdict_repo_sha[:8]} gefunden — Spec-PR mergen.")
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        # Best-effort wie check_drift: ohne git optimistisch.
-        return (True, "git unavailable, spec-binding optimistisch behalten")
-
-    return (True, "ok")
-
-
-def _check_chore_evidence(body: str, verdict_repo_sha: str) -> tuple[bool, str]:
-    """PW-26 Pfad 2: reines Chore ohne Spec-Anker. chore_evidence Pflicht +
-    erste Komponente (Datei:Zeile) muss auf verdict_repo_sha existieren.
-    """
-    chore_ev = _extract_axis_value(body, "chore_evidence")
-    if not chore_ev:
-        return (False, "chore_evidence leer bei keine-spec-noetig ohne reif_spec_path.")
-    # chore_evidence-Form: "<datei:zeile> + <Grund>". Erste Datei:Zeile extrahieren.
-    m = re.match(r"([^\s:]+):(\d+)", chore_ev)
-    if not m:
-        return (False, f"chore_evidence='{chore_ev}' ohne erkennbare datei:zeile-Naht. "
-                       "Form: '<datei:zeile> + <Grund>'.")
-    file_path = m.group(1)
-    # Erlaubte Drift-Pfade: alles im Repo (relativ). Absolute Pfade ablehnen.
-    if file_path.startswith("/"):
-        return (False, f"chore_evidence-Datei '{file_path}' ist absoluter Pfad — "
-                       "relativ zu Repo-Wurzel erwartet.")
-    try:
-        show = subprocess.run(
-            ["git", "-C", XBUDDY_REPO_PATH, "show", f"{verdict_repo_sha}:{file_path}"],
-            capture_output=True, text=True, timeout=10, check=False,
-        )
-        if show.returncode != 0:
-            return (False, f"chore_evidence-Datei '{file_path}' existiert nicht auf "
-                           f"verdict_repo_sha {verdict_repo_sha[:8]}.")
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return (True, "git unavailable, chore_evidence optimistisch behalten")
-    return (True, "ok")
-
-
-def check_drift(verdict_repo_sha: str) -> tuple[bool, str]:
-    """Prueft, ob Commits zwischen verdict_repo_sha und current origin/main
-    Dateien unter `specs/` oder `decisions/` beruehrt haben.
-
-    Liefert (is_drifted, reason). is_drifted=False = OK, Verdict noch gueltig.
-    """
-    try:
-        # fetch quiet (best-effort, kein Fail bei Netz-Problem — Verdict bleibt gueltig)
-        subprocess.run(
-            ["git", "-C", XBUDDY_REPO_PATH, "fetch", "origin", "main", "--quiet"],
-            capture_output=True, text=True, timeout=15, check=False,
-        )
-        ancestor_check = subprocess.run(
-            ["git", "-C", XBUDDY_REPO_PATH, "merge-base",
-             "--is-ancestor", verdict_repo_sha, "origin/main"],
-            capture_output=True, text=True, timeout=10, check=False,
-        )
-        if ancestor_check.returncode != 0:
-            # Verdict-SHA ist nicht in main-Linie → Verdikt invalide
-            return (True, f"verdict_repo_sha={verdict_repo_sha[:8]} nicht (mehr) Vorfahre von origin/main")
-        diff = subprocess.run(
-            ["git", "-C", XBUDDY_REPO_PATH, "diff", "--name-only",
-             f"{verdict_repo_sha}..origin/main", "--"] + list(DRIFT_PATHS),
-            capture_output=True, text=True, timeout=15, check=False,
-        )
-        if diff.returncode != 0:
-            return (False, "git-diff-Probe fehlgeschlagen, Verdict optimistisch behalten")
-        touched = [p for p in diff.stdout.splitlines() if p.strip()]
-        if touched:
-            return (True, f"Spec-/Ledger-Drift seit Verdict: {', '.join(touched[:3])}{'...' if len(touched) > 3 else ''}")
-        return (False, "ok")
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        # Best-effort: kein git-Zugriff → Verdict gilt
-        return (False, "git unavailable, verdict optimistisch behalten")
-
-
-def _check_verdict_generic(
-    repo: str, issue: str, marker_re, marker_name: str,
-) -> tuple[bool, str]:
-    """Gemeinsame Verdikt-Pruef-Logik fuer prep_verdict (PW-30) und werft_verdict (PW-43).
-
-    Schema-identisch: derselbe Hash-Compute-Pfad, dieselbe verdict:ready-Pflicht,
-    dieselbe SHA-Drift-/Spec-Binding-Probe. Nur Marker-Name unterscheidet.
-    Liefert (ok, reason). ok=True = darf gestempelt werden.
-    """
-    if not repo or not issue:
-        return (False, f"Repo/Issue nicht erkannt — kann {marker_name} nicht pruefen")
-    body, marker = fetch_verdict_comment(repo, issue, marker_re)
-    if not body or not marker:
-        return (False,
-                f"kein {marker_name}-Comment gefunden. Erwartete erste Zeile: "
-                f"'<!-- {marker_name} v1 issue:<NR> sha:<16hex> -->'. "
-                f"Bitte zustaendigen Skill durchlaufen + Verdikt-YAML posten.")
-    if marker["issue"] != issue:
-        return (False, f"verdict-Marker issue={marker['issue']} != Stempel-Issue {issue}")
-    # Migration: Backfill-Marker akzeptiert, aber nur bei Pre-Cutoff-Tickets.
-    # (Migrations-Sweep posted noch keinen — Erweiterungs-Punkt.)
-    migrated_m = re.search(r"^migrated:\s*true\s*$", body, re.MULTILINE)
-    if migrated_m:
-        # Cutoff-Check: status:ready-Event muss vor MIGRATION_CUTOFF_ISO liegen.
-        # Implementiert minimal — vollstaendiger timelineItems-Check ist Folge.
-        return (True, "migrated_legacy_backfill")
-    # Hash-Verifikation
-    computed = compute_verdict_hash(body)
-    if not computed:
-        return (False, "Verdict-Body unleserlich (verdict:/axes: nicht parsbar)")
-    if computed != marker["sha"]:
-        return (False, f"Hash mismatch: marker.sha={marker['sha']} vs. computed={computed} → "
-                       "verdict-Body wurde nach Posten geaendert oder Marker stimmt nicht.")
-    # verdict: ready ist Pflicht
-    verdict_m = re.search(r"^verdict:\s*ready\s*$", body, re.MULTILINE)
-    if not verdict_m:
-        verdict_val_m = re.search(r"^verdict:\s*(\S+)\s*$", body, re.MULTILINE)
-        actual = verdict_val_m.group(1) if verdict_val_m else "<unknown>"
-        return (False, f"Verdict ist '{actual}', nicht 'ready'. Kein Stempel.")
-    # SHA-Drift-Check (Spec-/Ledger-Drift seit Verdict)
-    sha_m = re.search(r"^verdict_repo_sha:\s*[\"']?([0-9a-fA-F]{7,40})[\"']?\s*$", body, re.MULTILINE)
-    if sha_m:
-        drifted, reason = check_drift(sha_m.group(1))
-        if drifted:
-            return (False, f"Verdict stale: {reason}. /arbeitstag-prep neu durchlaufen.")
-    # PW-26-RATIFIZIERT 2026-06-09 (Codex-Bruch 1): semantische Spec-Binding-Probe.
-    # Nur bei PW-26-Schema (architecture_class vorhanden) — Legacy-Verdikte
-    # durchlaufen die Probe als no-op.
-    if "architecture_class:" in body and sha_m:
-        binding_ok, binding_reason = check_spec_binding(body, sha_m.group(1))
-        if not binding_ok:
-            return (False, f"PW-26 Spec-Binding: {binding_reason}")
-    return (True, "ok")
+# ---------------------------------------------------------------------------
+# compute_verdict_hash, fetch_verdict_comment, _extract_axis_value,
+# check_spec_binding, _check_reif_structured, _check_chore_evidence,
+# check_drift, _check_verdict_generic: importiert aus verdict_check (PW-85).
+# ---------------------------------------------------------------------------
 
 
 def fetch_issue_body(repo: str, issue: str) -> str | None:
@@ -921,15 +573,14 @@ def handle_gh_pr_merge(cmd: str) -> None:
     if verdict_body:
         arch_m = re.search(r"^architecture_class:\s*(\S+)\s*$",
                            verdict_body, re.MULTILINE)
-        if arch_m and arch_m.group(1) == "wahl":
-            if not check_arch_choice_for_issue(repo, issue):
-                deny(
-                    f"PW-26 Komponente B: Spec-PR-Merge fuer architecture_class=wahl "
-                    f"(#{issue}) blockiert — kein arch_choice-Marker am Issue. "
-                    f"Mini-Wahl-Karte vorlegen, Nic waehlt, dann mergen. "
-                    f"Marker-Form erste Zeile eines Comments: "
-                    f"`<!-- arch_choice v1 issue:{issue} choice:A -->` (A oder B)."
-                )
+        if arch_m and arch_m.group(1) == "wahl" and not check_arch_choice_for_issue(repo, issue):
+            deny(
+                f"PW-26 Komponente B: Spec-PR-Merge fuer architecture_class=wahl "
+                f"(#{issue}) blockiert — kein arch_choice-Marker am Issue. "
+                f"Mini-Wahl-Karte vorlegen, Nic waehlt, dann mergen. "
+                f"Marker-Form erste Zeile eines Comments: "
+                f"`<!-- arch_choice v1 issue:{issue} choice:A -->` (A oder B)."
+            )
 
     # A-Probe: Cross-Spec-Konflikt.
     files = meta.get("files") or []
