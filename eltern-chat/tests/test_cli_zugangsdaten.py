@@ -79,6 +79,7 @@ def _make_cfg():
     cfg.hoerspiel_url_origin_emil = ""
     cfg.kibuddy_origin_url = ""  # KAQS: leer = nicht im Katalog
     cfg.wetter_origin_url = ""  # WRO: leer = nicht im Katalog
+    cfg.master_telegram_user_id = ""  # CNS-1 / #1380: leer = nicht im Katalog
     return cfg
 
 

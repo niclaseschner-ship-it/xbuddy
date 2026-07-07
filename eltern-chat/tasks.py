@@ -445,7 +445,8 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   hoerspiel_url_origin_emil: str = "",
                   kibuddy_origin_url=None,
                   a2_receipt_store=None,
-                  wetter_origin_url=None):
+                  wetter_origin_url=None,
+                  master_user_id=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
@@ -504,6 +505,22 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             # Fehlt einer, entfällt der Pairing-Schritt still (E-GAA-5-Agnostik).
             pairing_bot_token=pairing_bot_token,
             pairing_origin=pairing_origin))
+
+    # CNS-1 / #1380: »Cookie nachschicken« — frischer Pairing-Link für ein
+    # bestehendes Gerät, per DM, NUR für das Master-Konto. AND-Guard: braucht
+    # pairing_bot_token (HMAC-Sign-Key) + pairing_origin (Funnel-FQDN) +
+    # master_user_id (harte Autorisierungs-Grenze) + geraete_origin_url (Lookup).
+    # Fehlt einer, entfällt die Aufgabe still (kein halb-verdrahteter Credential-
+    # Pfad).
+    if pairing_bot_token and pairing_origin and master_user_id \
+            and geraete_origin_url is not None:
+        from skills.cookie_nachschicken_task import CookieNachschickenTask
+        catalog.register(CookieNachschickenTask(
+            tg,
+            master_user_id=master_user_id,
+            pairing_bot_token=pairing_bot_token,
+            pairing_origin=pairing_origin,
+            geraete_origin_url=geraete_origin_url))
 
     if zd_store_getter is not None and kav_sessions is not None \
             and family_group_chat_id_getter is not None:
