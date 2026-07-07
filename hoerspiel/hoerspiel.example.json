@@ -1,7 +1,8 @@
 {
   "_comment": "HSP-27 — Hörspiel-Buddy-Daten-Konfiguration einer Instanz. Kopiere als hoerspiel.json (per .gitignore aus dem Repo ausgeschlossen, je Instanz separat gepflegt). Alle Felder sind optional — Code-Defaults greifen bei fehlendem Wert.",
   "default_voice": "shimmer",
-  "serien_name": "Stigi & Co.",
+  "_serien_name": "Serien-Rahmung DIESER Instanz (HSP-45). Leer lassen → keine Serie:-Zeile im Prompt (minimal-neutral, OPEN-HSP-W). Kein plattformweiter Default.",
+  "serien_name": "",
   "_pause_absatz_sek": "Stille zwischen Inhalts-Absätzen + am Bündel-Ende. Range 0.0–2.0 s. Default 0.55.",
   "pause_absatz_sek": 0.55,
   "_pause_titel_sek": "Stille nach Titel-Absatz (Folge N: <Titel>). Range 0.5–3.0 s. Default 1.8.",
