@@ -117,3 +117,59 @@ def test_delete_medium_ist_geschuetzt(raw_client):
     # DELETE-Binary-Löschpfad trägt den Decorator → 401 ohne Auth.
     resp = raw_client.delete("/api/v1/photo/medien/xyz", headers=_XFF)
     assert resp.status_code == 401
+
+
+def test_get_medium_gueltiger_cookie_200_und_rolling_refresh(
+        raw_client, tmp_path, monkeypatch):
+    """PHOTO-15/AUTH-2: send_file-Binary (get_medium) trägt Rolling-Refresh-Set-Cookie.
+
+    Belegt den vollständigen Pfad: Cookie-Auth → require_init_data →
+    make_response(send_file) → Set-Cookie Rolling-Refresh (AUTH-2:78).
+    """
+    # Echte Datei anlegen — send_file braucht eine existierende Datei auf Disk.
+    bild_datei = tmp_path / "foto.jpg"
+    bild_datei.write_bytes(b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00" + b"\x00" * 10)
+    # serve_pfad stubben: Library-Lookup überspringen, direkt die Fake-Datei liefern.
+    monkeypatch.setattr(photo_main.store, "serve_pfad",
+                        lambda _lib, _mid: str(bild_datei))
+
+    raw_client.set_cookie(sc.COOKIE_NAME,
+                          sc.sign_session("tablet-elias-01", TEST_BOT_TOKEN))
+    resp = raw_client.get("/api/v1/photo/medien/abc123", headers=_XFF)
+
+    assert resp.status_code == 200
+    assert len(resp.data) > 0  # Binär-Body vorhanden
+    set_cookie = resp.headers.get("Set-Cookie", "")
+    assert sc.COOKIE_NAME in set_cookie, \
+        "Rolling-Refresh-Set-Cookie fehlt auf Binär-Route get_medium"
+    assert "HttpOnly" in set_cookie
+    assert "Secure" in set_cookie
+    assert "SameSite=Lax" in set_cookie
+
+
+def test_get_thumbnail_gueltiger_cookie_200_und_rolling_refresh(
+        raw_client, tmp_path, monkeypatch):
+    """PHOTO-15/AUTH-2: send_file-Thumbnail (get_thumbnail) trägt Rolling-Refresh-Set-Cookie.
+
+    Belegt den vollständigen Pfad: Cookie-Auth → require_init_data →
+    make_response(send_file) → Set-Cookie Rolling-Refresh (AUTH-2:78).
+    """
+    # Echte Datei anlegen — send_file braucht eine existierende Datei auf Disk.
+    thumb_datei = tmp_path / "thumb.jpg"
+    thumb_datei.write_bytes(b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00" + b"\x00" * 10)
+    # thumb_pfad stubben: Library-Lookup überspringen, direkt die Fake-Datei liefern.
+    monkeypatch.setattr(photo_main.store, "thumb_pfad",
+                        lambda _lib, _mid: str(thumb_datei))
+
+    raw_client.set_cookie(sc.COOKIE_NAME,
+                          sc.sign_session("tablet-elias-01", TEST_BOT_TOKEN))
+    resp = raw_client.get("/api/v1/photo/medien/abc123/thumbnail", headers=_XFF)
+
+    assert resp.status_code == 200
+    assert len(resp.data) > 0  # Binär-Body vorhanden
+    set_cookie = resp.headers.get("Set-Cookie", "")
+    assert sc.COOKIE_NAME in set_cookie, \
+        "Rolling-Refresh-Set-Cookie fehlt auf Binär-Route get_thumbnail"
+    assert "HttpOnly" in set_cookie
+    assert "Secure" in set_cookie
+    assert "SameSite=Lax" in set_cookie
