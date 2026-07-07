@@ -961,6 +961,50 @@ müssen.
 
 *Tickets:* #1126 (Refs #259)
 
+## SREG-16 — Ein Layout-Kontrakt (`/layout`) für alle Übersichts-/Registry-Oberflächen
+
+> **Berater-Runde 2026-07-06 (#1210, RATIFIZIERT):** Anlass war der
+> wiederkehrende Zwei-Sichten-Render-Drift (#1208 SHELL-10 landete nur in einer
+> Oberfläche; #920 „MAU-UI-Drift"). Die Fang-Mechanik ist der Paritäts-Guard
+> (SREG-9-Familie); SREG-16 ist die zugehörige **Struktur-Regel**, die den Drift
+> an der Wurzel unmöglich macht statt ihn nur zu melden.
+
+**Es gibt genau EINE Ableitung des angereicherten Layout-Baums:**
+`render.baue_layout(inventar, heim_origin, tailscale_origin)`. Sie liefert die
+Hero-Paare (Display↔Panel↔Editor↔Shell-URLs, SREG-11/SHELL-10), die
+Buddy-Gruppen, die dedizierte Mini-App-Sektion (SREG-14), die Origin-URLs
+(SREG-7) und die Icon-Auflösung (SREG-10) — fertig gruppiert und angereichert.
+
+**Regel:**
+- **Jede** familienseitige Übersichts-/Registry-Oberfläche konsumiert **diesen
+  einen Kontrakt.** Der Server-Jinja-Pfad (`/api/v1/seiten/uebersicht`, SREG-12)
+  rendert ihn direkt; die Telegram-Mini-App (MAU) holt ihn als JSON über
+  **`GET /api/v1/seiten/layout`** und rendert **dumm** (nur Darstellung).
+- **Keine Oberfläche re-derived Gruppierung/Anreicherung lokal.** Der frühere
+  clientseitige MAU-Ableitungscode (Hero-Gruppierung, Editor-/Shell-Lookup,
+  lokale URL-Bildung aus `window.location`) ist gelöscht — genau dort entstand
+  der Drift.
+- **Abweichende Sichten filtern deklarativ** über ein **`audience`-Feld je
+  Karte** (`render.py` `AUDIENCE_UEBERSICHT` / `AUDIENCE_MINI_APP`), **nie per
+  geforktem Ableitungscode.** Beispiel: Mini-Apps erscheinen in der Grossbild-
+  Übersicht als gewöhnliche Buddy-Karte (pfad-URL), in der Mini-App aber in der
+  dedizierten `mini_apps`-Sektion mit Telegram-Deep-Link — dieselbe Ableitung,
+  zwei deklarativ gefilterte Sichten. Das ist die **einzige** legitime
+  Sicht-Asymmetrie (Berater-Constraint 4); sie wird über `audience` gesteuert,
+  nicht über einen zweiten Gruppierungs-Zweig.
+
+**`/layout` ist ein Daten-Endpunkt, kein View** — Geschwister zu
+`GET /api/v1/seiten` (SREG-3). Er listet sich darum **nicht** in `views.json`
+(Ausnahme im Manifest-Eigentest, analog zum Inventar-Endpunkt selbst).
+
+**Durchsetzung:** registry-abgeleiteter Paritäts-Guard (`test_render_parity.py`
++ `render_parity_dom.test.js`). Die erwartete Typ-Menge wird aus den
+`TYP_*`-Konstanten des Aggregators (SREG-4/14) **aufgezählt**, nicht
+handgepflegt — ein neuer Eintrags-Typ, der nur in einem Render-Pfad landet, wird
+ROT (kein #1208-Blindfleck durch eine statische Liste).
+
+*Tickets:* #1210 (Refs #1208, #920, #608) · Prozess-Wurzel xbuddy-prozess#80
+
 ## Offene Punkte
 
 ### OPEN-SREG-Kategorie — Kategorisierung der Seiten-/Add-Liste

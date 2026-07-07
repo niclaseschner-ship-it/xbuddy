@@ -433,6 +433,32 @@ def get_seiten_uebersicht():
     return render_template("uebersicht.html", **layout)
 
 
+@app.route("/api/v1/seiten/layout", methods=["GET"])
+def get_seiten_layout():
+    """#1210 (Daten-SSoT): der EINE angereicherte Layout-Kontrakt als JSON.
+
+    Liefert exakt `render.baue_layout(...)` — dieselbe Ableitung, die der
+    Jinja-Pfad `/uebersicht` rendert. So konsumieren ALLE familienseitigen
+    Uebersichts-/Registry-Oberflaechen (Grossbild + Mini-App) EINE Quelle;
+    keine Oberflaeche re-derived Gruppierung/Anreicherung lokal (SREG-15).
+
+    Das ist ein DATEN-Endpunkt (kein View) — Geschwister zu `GET /api/v1/seiten`
+    (SREG-3). Er listet sich darum NICHT in views.json (siehe die Ausnahme in
+    test_views_manifest_eigentest.py, analog zum Inventar-Endpunkt selbst).
+
+    Auth (MAD-11-Muster): wie /uebersicht public — die HTML-Skeletons laden
+    ohne Header, die JS-Seite prueft via /api/v1/init-data/validate. Der
+    Kontrakt traegt keine Geheimnisse (nur Labels/Pfade/URLs aus dem Inventar).
+    """
+    inventar = _aktuelles_inventar()
+    layout = render.baue_layout(
+        inventar,
+        heim_origin=runtime["heim_origin"],
+        tailscale_origin=runtime["tailscale_origin"],
+    )
+    return jsonify(layout)
+
+
 def _get_bot_token():
     """Liest den Bot-Token aus runtime-Dict oder ENV (MAD-7 / APP-7).
 
