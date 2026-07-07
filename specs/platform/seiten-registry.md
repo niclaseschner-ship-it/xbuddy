@@ -317,7 +317,7 @@ am Handy funktioniert**, müssen beide Origins als Config-Werte gesetzt sein:
 |---|---|---|
 | `display_url_origin_heim` | Heimnetz-Origin (Bot-Default für SREG-5; tritt an die Stelle des bestehenden `display_url_origin`, GAA-3.7) | leer |
 | `display_url_origin_tailscale` | Tailscale-Origin (zusätzlich auf SREG-12-Seite kopierbar) | leer |
-| `display_url_origin_funnel` | Funnel-FQDN-Origin (LE-Cert, extern erreichbar; für Familien-**User-Geräte** über den Funnel, AUTH-7b) — **RAT-27-Entwurf** | leer |
+| `display_url_origin_funnel` | Funnel-FQDN-Origin (LE-Cert, extern erreichbar; für Familien-**User-Geräte** über den Funnel, AUTH-7b) — **RAT-27 (RATIFIZIERT 2026-07-07)** | leer |
 
 **V1-Pflicht:** `display_url_origin_heim` muss gesetzt sein, sonst kann der
 SREG-5-Skill keinen tippbaren Link liefern und die SREG-12-Seite hat keine
@@ -326,8 +326,8 @@ zeigt SREG-12 nur die Heim-Spalte mit explizitem Banner-Hinweis statt zweier
 Spalten, die Seite bleibt nutzbar. Kein Auto-Fallback auf Heim als Tailscale
 (falsche Origin = nicht-erreichbarer Link).
 
-> **SREG-7 · dritte Origin `display_url_origin_funnel` — RAT-27-ENTWURF, noch
-> nicht ratifiziert** (#1388, Epic #1338; zur Nic-Ratifizierung). Bindewirkung
+> **SREG-7 · dritte Origin `display_url_origin_funnel` — RAT-27 (RATIFIZIERT 2026-07-07), noch
+> nicht ratifiziert** (#1388, Epic #1338; ratifiziert (RAT-27)). Bindewirkung
 > erst mit RAT-27.
 
 Mit dem Auth-Funnel-Rollout (AUTH-7b, `auth.md`) kommt eine **dritte**

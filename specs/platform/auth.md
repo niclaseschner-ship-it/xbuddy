@@ -222,9 +222,9 @@ enumeriert die oben klassifizierten Routen byte-gleich gegen die realen
 
 *Tickets:* #948, #1321
 
-### AUTH-3.a — Soft→Hard-Observe-Leiter beim Route-Rollout (RAT-27-Entwurf)
+### AUTH-3.a — Soft→Hard-Observe-Leiter beim Route-Rollout (RAT-27 (RATIFIZIERT 2026-07-07))
 
-> **RAT-27-ENTWURF — noch nicht ratifiziert.** Diese Klausel steht zur
+> **RAT-27 (RATIFIZIERT 2026-07-07) — noch nicht ratifiziert.** Diese Klausel steht zur
 > Nic-Ratifizierung (#1388, Epic #1338). Sie gewinnt Bindewirkung erst mit
 > RAT-27. Bis dahin bleibt der Rollout wie in der Phasen-Tabelle (Abschnitt 6).
 
@@ -428,11 +428,11 @@ Auslaufens-Hinweis aktiv.
 
 *Tickets:* #948
 
-### AUTH-7 — Display-/Shell-Renderer: zwei Zugangs-Klassen (RAT-27-Entwurf)
+### AUTH-7 — Display-/Shell-Renderer: zwei Zugangs-Klassen (RAT-27 (RATIFIZIERT 2026-07-07))
 
-> **RAT-27-ENTWURF — noch nicht ratifiziert.** Diese Klausel ersetzt die
+> **RAT-27 (RATIFIZIERT 2026-07-07) — noch nicht ratifiziert.** Diese Klausel ersetzt die
 > frühere V1-Skizze (nur-IP-Allowlist) und gabelt AUTH-7 in **7a Operator-Pi**
-> und **7b User-Shell (Cookie)**. Sie steht zur Nic-Ratifizierung (#1388,
+> und **7b User-Shell (Cookie)**. Sie wurde ratifiziert (RAT-27) (#1388,
 > Epic #1338) und gewinnt Bindewirkung erst mit RAT-27. Bis dahin sind die
 > Display-/Shell-Renderer-Routen wie in AUTH-6 dokumentiert (Phase-4-offen);
 > `heim-shell.md` SHELL-6 hält den LAN-only-Riegel bis zur RAT-27-Ablösung.
@@ -464,6 +464,21 @@ Konsumenten dieselben Renderer-Routen ansprechen:
    /controller/*                                  (Panel-Controller-Apps)
    /api/v1/displays/<display_id>/events           (SSE-Event-Stream)
    ```
+
+**Einheitlicher Eltern-Auth-Pfad (RAT-27 Nic-Bedingung).** 7b ist NICHT auf die
+Heim-Shell begrenzt: Cookie-über-Funnel ist **derselbe** Auth-Pfad wie AUTH-3 für
+die Eltern-**PWA-Mini-Apps** (essen-einkauf u. a., #948). Damit gilt EIN Modell für
+alle Eltern-Geräte — *Eltern-Gerät → Funnel → `xbuddy_session`-Cookie* — für die
+**aktuellen und zukünftigen** Eltern-PWA-Mini-Apps (AUTH-3-Datenrouten) **und** die
+Shell/Display-Renderer (7b). Eine neue Eltern-PWA-Mini-App dockt ohne Sonder-Auth
+an denselben Cookie-Pfad an (kein zweites Auth-Modell).
+
+**Priorität + Auslauf (RAT-27 Nic-Setzung).** Primär ist das **User-Gerät
+(Handy/Tablet) per Cookie**; der **7a-Operator-Pi ist Auslaufmodell** (aktuell ein
+Familien-Kiosk-Sonderfall). Die 7a-IP-Allowlist wird gepflegt, solange der Pi-Kiosk
+existiert, ist aber **kein Ausbau-Ziel** — die cookie-losen Pi-Buddy-/Display-Routen
+bleiben vorerst über den Operator-IP-Pfad erreichbar und werden **nachträglich**
+gelöst, sobald der Pi ersetzt ist.
 
 **Dual-Gate (Cookie ODER Operator-IP) — verbindlich.** Die 7b-Routen prüfen
 **beide** Quellen additiv: eine Anfrage ist berechtigt, wenn **entweder** ein

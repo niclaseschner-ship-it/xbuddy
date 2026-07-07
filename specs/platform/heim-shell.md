@@ -146,9 +146,9 @@ NIE vom Pi testen) · manuelle_probe (Pre-Merge-Experiment): von einem
 **externen** Client (nicht Pi, Hairpin täuscht) `curl https://<funnel-fqdn>/shell/<panel_id>`
 und `.../api/v1/displays/<id>/events` → muss scheitern/4xx; von Heim-LAN/Tailnet → 200.
 
-### SHELL-6.a — Funnel-Cookie-Rollout löst den LAN-only-Riegel ab (RAT-27-Entwurf)
+### SHELL-6.a — Funnel-Cookie-Rollout löst den LAN-only-Riegel ab (RAT-27 (RATIFIZIERT 2026-07-07))
 
-> **RAT-27-ENTWURF — noch nicht ratifiziert** (#1388, Epic #1338; zur
+> **RAT-27 (RATIFIZIERT 2026-07-07) — noch nicht ratifiziert** (#1388, Epic #1338; zur
 > Nic-Ratifizierung). Bindewirkung erst mit RAT-27. **Bis dahin gilt SHELL-6
 > unverändert** (LAN-only-Riegel scharf, Funnel verboten).
 
