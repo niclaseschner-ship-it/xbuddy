@@ -169,7 +169,9 @@ def parse_gh_pr_merge(command_str: str):
     while i < len(norm):
         t = norm[i]
         if t in ("--repo", "-R") and i + 1 < len(norm):
-            repo = norm[i + 1]; i += 2; continue
+            repo = norm[i + 1]
+            i += 2
+            continue
         if t.startswith("https://github.com/"):
             try:
                 p = urlparse(t).path.strip("/").split("/")
@@ -319,11 +321,17 @@ def parse_gh_edit(command_str: str):
     while i < len(norm):
         t = norm[i]
         if t == "--add-label" and i + 1 < len(norm):
-            adds.append(norm[i + 1]); i += 2; continue
+            adds.append(norm[i + 1])
+            i += 2
+            continue
         if t == "--remove-label" and i + 1 < len(norm):
-            removes.append(norm[i + 1]); i += 2; continue
+            removes.append(norm[i + 1])
+            i += 2
+            continue
         if t in ("--repo", "-R") and i + 1 < len(norm):
-            repo = norm[i + 1]; i += 2; continue
+            repo = norm[i + 1]
+            i += 2
+            continue
         if t.startswith("https://github.com/"):
             try:
                 p = urlparse(t).path.strip("/").split("/")
@@ -619,7 +627,7 @@ def main() -> None:
     issue, repo, adds, removes = parsed
 
     # Klasse 1: jedes status:*-Schreiben/Entfernen durch Agent ist RECON-3-widrig.
-    bad_lifecycle = [l for l in (adds + removes) if is_lifecycle(l)]
+    bad_lifecycle = [lbl for lbl in (adds + removes) if is_lifecycle(lbl)]
     if not bad_lifecycle:
         # Keine status:*-Beruehrung → Klasse 2 (blocked, defer) erreicht den
         # Hook hier nicht. Durchlassen.
