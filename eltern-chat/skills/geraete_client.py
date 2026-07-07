@@ -85,6 +85,30 @@ class GeraeteClient:
             raise GeraeteClientError(
                 "Geraete-Service: Anlage-Antwort nicht parsebar (%s)" % e)
 
+    def liste(self):
+        """Listet alle Geraete der Familie (GER-13, `GET /api/v1/geraete/`).
+
+        Liefert eine Liste von Geraete-Dicts (Felder u. a. `id` = display_id,
+        `name`, `typ` — siehe geraete/registry.py `to_dict`). Hebt
+        `GeraeteClientError` bei 4xx/5xx oder unparsebarer Antwort — die Skill
+        formuliert daraus die Bot-Nachricht (analog `geraet_anlegen`-Fehlerpfad).
+        """
+        status_code, response = self._call("GET", PFAD_GERAETE)
+        if status_code != 200:
+            raise GeraeteClientError(
+                "Geraete-Service: HTTP %s beim Listen (%s)"
+                % (status_code, _kurz(response)))
+        try:
+            data = json.loads(response.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise GeraeteClientError(
+                "Geraete-Service: Listen-Antwort nicht parsebar (%s)" % e)
+        if not isinstance(data, list):
+            raise GeraeteClientError(
+                "Geraete-Service: Listen-Antwort ist keine Liste (%s)"
+                % type(data).__name__)
+        return data
+
     def _call(self, method, path, body=None, content_type=None):
         """Fuehrt einen HTTP-Aufruf aus oder delegiert an `transport`.
 

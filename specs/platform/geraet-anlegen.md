@@ -150,8 +150,37 @@ Zielgeräts braucht den `xbuddy_session`-Cookie aus
 **Aufruf-Vertrag:** GAA-3.8 ist Teil der GAA-1-Funktion und blockiert die
 „noch ein Gerät?"-Schleife (GAA-4) nicht — Eltern darf den Pairing-Link
 später öffnen. Solange `paired_at` `null` ist, kann ein Pairing-Link
-**neu angefordert** werden (eigene Eltern-Chat-Aufgabe, V2-Aufstockung —
-nicht V1-Bestandteil).
+**neu angefordert** werden — siehe GAA-3.9.
+
+### GAA-3.9 — Pairing-Link nachschicken (Re-Send / Re-Pair)
+
+Der 15-Minuten-Link aus GAA-3.8 kann ablaufen, bevor Eltern ihn am
+Zielgerät öffnen. Eine eigene Eltern-Chat-Aufgabe (`cookie_nachschicken`,
+`skills/cookie_nachschicken_task.py`) erzeugt für ein **bestehendes** Gerät
+einen **frischen** Pairing-Link und schickt ihn dem Aufrufer per Privatchat-
+DM. Trigger natürlichsprachig: „schick nochmal cookies für <Gerät>",
+„erneuere das Pairing für <Tablet>", „<Gerät> neu koppeln".
+
+**Mechanik:** Gerät über die HTTP-Liste der Geraete-Komponente finden
+(GER-13, `GET /api/v1/geraete/`, DCOMP-1 — kein `import geraete`), Fuzzy-
+Match über den Anzeigenamen (case-insensitive, exakt vor Substring). Dann
+Token + Link identisch zu GAA-3.8 (`session_cookie.sign_pairing`, Funnel-
+FQDN, `auth.md` AUTH-2/AUTH-2.a).
+
+**Harte Autorisierungs-Grenze (analog CAV-6-Nachhol-Muster, aber strenger):**
+NUR das **Master-Telegram-Konto** darf diese Aufgabe auslösen — nicht jedes
+Familien-Mitglied. Ein Pairing-Link ist ein Credential; kein Kind soll ihn
+selbst anfordern können. Der Master-ID-Gate steht vor jeder Token-Erzeugung:
+für Nicht-Master wird **kein Token erzeugt und nichts gesendet**. Die Master-
+ID ist ein Per-Instanz-Konfigurationswert (`master_telegram_user_id`, ENV
+`ELTERNCHAT_MASTER_TELEGRAM_USER_ID`); ist er leer, wird die Aufgabe **nicht**
+in den Katalog aufgenommen (AND-Guard mit Bot-Token + Funnel-FQDN +
+Geraete-Origin).
+
+[Quelle: Nic-Setzung 2026-07-07 — Re-Send/Re-Pair mit Master-ID-Gate,
+PWA-only (keine Mini-App-Pfade), Link auf Funnel-FQDN.]
+
+*Tickets:* #1380
 
 **Geräte-Typ-Abhängigkeit:** Die Anweisung in (2) ist für jeden GER-2-
 Geräte-Typ-mit-Telegram gleich — `tablet`, `handy`, `monitor` (sofern als
