@@ -79,6 +79,16 @@ function makeDom() {
       el._children = el._children.filter(x => x !== c);
     };
 
+    el._attrs = {};
+    el.setAttribute = function(name, value) {
+      el._attrs[name] = String(value);
+      if (name === "id") { el.id = String(value); }
+    };
+    el.getAttribute = function(name) {
+      return Object.prototype.hasOwnProperty.call(el._attrs, name)
+        ? el._attrs[name] : null;
+    };
+
     el.addEventListener = function(ev, cb, opts) {
       if (!el._listeners[ev]) el._listeners[ev] = [];
       el._listeners[ev].push({ cb, opts });
