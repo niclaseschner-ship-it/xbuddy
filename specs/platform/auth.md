@@ -222,6 +222,52 @@ enumeriert die oben klassifizierten Routen byte-gleich gegen die realen
 
 *Tickets:* #948, #1321
 
+### AUTH-3.a — Soft→Hard-Observe-Leiter beim Route-Rollout (RAT-27 (RATIFIZIERT 2026-07-07))
+
+> **RAT-27 (RATIFIZIERT 2026-07-07) — noch nicht ratifiziert.** Diese Klausel steht zur
+> Nic-Ratifizierung (#1388, Epic #1338). Sie gewinnt Bindewirkung erst mit
+> RAT-27. Bis dahin bleibt der Rollout wie in der Phasen-Tabelle (Abschnitt 6).
+
+Wenn eine bisher PUBLIC-Route (AUTH-6) neu unter den Auth-Decorator gezogen
+wird, ist der Übergang **route-granular** und **nicht** für alle Routen
+symmetrisch. Es gibt zwei Kanten:
+
+- **READ-Routen (GET, idempotent, keine Zustands-Änderung):** dürfen eine
+  **Observe/Log-only-Grace** durchlaufen. In dieser Phase prüft der Decorator
+  die Identitätsquelle (AUTH-2), **loggt** das Ergebnis (valide Quelle
+  vorhanden? `paired_at` gesetzt?), gibt aber **weiter `200` zurück** —
+  kein `401`. Sinn: der Rollout beobachtet an echten Requests, ob die
+  gepairten Geräte tatsächlich die Cookie/tma-Quelle mitschicken, **bevor**
+  er hart zumacht und ein still fehlgepairtes Gerät aussperrt.
+- **WRITE-Routen (POST/PUT/PATCH/DELETE) — und die #1321-Flächen
+  (photo/kibuddy/plan) unabhängig von der Methode — bleiben HART ab Tag 0.**
+  Keine Grace, kein Observe-Fenster: fehlende/ungültige Quelle → `401`
+  (AUTH-8). Die #1321-Routen sind **live bereits geschlossen** (#1321 CLOSED,
+  extern über den Funnel hart) — die Observe-Leiter darf sie **nicht**
+  regressieren, sonst öffnet sie eine schon geschlossene Datenroute wieder.
+  Eine schreibende Route ohne Auth ist eine offene Schreib-Fläche; die gibt
+  es in keiner Grace-Phase.
+
+**Flip-Gate (Observe → Hard) je READ-Route:** die Route wechselt von
+Observe auf Hart, wenn (a) die anvisierten Geräte einen `paired_at`-Zeitstempel
+tragen (das Pairing hat stattgefunden) **und** (b) das Observe-Log über ein
+Beobachtungsfenster **keine** valide-Quelle-fehlt-Treffer mehr für erwartete
+Geräte zeigt (sauberes Log). Der Flip ist eine **Zwei-Wege-Tür** pro Route
+(Decorator-Modus umschalten, sofort zurückrollbar) — nicht eine
+Alles-oder-nichts-Schleuse.
+
+**Kill-Kriterium:** liefert eine READ-Route nach dem Flip einem gepairten
+Gerät, das vorher `200` (Observe) bekam, ein `401`, wird die Route sofort auf
+Observe zurückgeschaltet und das Observe-Log auf das fehlgepairte Gerät hin
+untersucht. Eine WRITE-/#1321-Route, die je `200` ohne valide Quelle liefert,
+ist ein Regressions-Bug (nie beabsichtigt).
+
+[Quelle: Rollout-Plan Auth-Funnel #1388 (Epic #1338) + Absicherung, zur
+RAT-27-Ratifizierung; Bezug RATIFIZIERT-1338-auth-flow (#1321 hart, live
+geschlossen)]
+
+*Tickets:* #1388, #1338
+
 ### AUTH-2 (Cookie-only) — Hörspiel-Player-PWA
 
 Routen, die **ausschließlich den Session-Cookie** akzeptieren — kein tma-Header
@@ -382,27 +428,98 @@ Auslaufens-Hinweis aktiv.
 
 *Tickets:* #948
 
-### AUTH-7 — Display-Renderer (Phase-4-Vorbereitung, NICHT V1)
+### AUTH-7 — Display-/Shell-Renderer: zwei Zugangs-Klassen (RAT-27 (RATIFIZIERT 2026-07-07))
 
-> **Hinweis:** AUTH-7 ist V1 nicht ratifiziert. Die Klausel steht hier als
-> Vorbereitung für Phase 4 (Kind-Tablet + Pi-Display) und gewinnt
-> Bindewirkung erst, wenn der entsprechende Phase-4-Track läuft.
+> **RAT-27 (RATIFIZIERT 2026-07-07) — noch nicht ratifiziert.** Diese Klausel ersetzt die
+> frühere V1-Skizze (nur-IP-Allowlist) und gabelt AUTH-7 in **7a Operator-Pi**
+> und **7b User-Shell (Cookie)**. Sie wurde ratifiziert (RAT-27) (#1388,
+> Epic #1338) und gewinnt Bindewirkung erst mit RAT-27. Bis dahin sind die
+> Display-/Shell-Renderer-Routen wie in AUTH-6 dokumentiert (Phase-4-offen);
+> `heim-shell.md` SHELL-6 hält den LAN-only-Riegel bis zur RAT-27-Ablösung.
 
-**Skizze:** Display-Renderer-Routen (`/display/<display_id>` und `/api/v1/displays/<id>/events`)
-sind LAN/Tailnet-only — nginx prüft Quell-IP gegen `192.168.0.0/16`,
-`10.0.0.0/8`, `100.64.0.0/10` (Tailnet). Funnel-Anfragen (Host
-`*.ts.net`) auf Display-Routen → `403`. Die nginx-Konfiguration trägt
-zwei Ausnahmen vor dem Renderer-Match: `^~ /display/_shared/`
-(Mini-App-Icons) und `^~ /display/<buddy>/` (Buddy-Views) — beide bleiben
-öffentlich über Funnel.
+Die frühere Skizze kannte nur **eine** Zugangs-Klasse (nginx-IP-Allowlist,
+Funnel → `403`). Der Rollout braucht **zwei**, weil zwei verschiedene
+Konsumenten dieselben Renderer-Routen ansprechen:
 
-Für Phase 4 wird AUTH-7 in eine Voll-Klausel ausgebaut. Bis dahin: Display-
-Renderer-Routen sind in AUTH-6 als PUBLIC dokumentiert.
+1. **7a — Operator-Pi (headless, kein User in der Hand).** Der Pi-Stick im
+   Wohnzimmer hat kein Telegram, keinen Cookie, keinen Pairing-Pfad
+   (`geraet-anlegen.md` GAA-3.8-Operator-Pfad; Cookie-UX-Flow (d),
+   `ENTSCHEID-OFFEN-948-cookie-verteilung-ux`). Er wird über **Quell-IP**
+   identifiziert: nginx lässt die Renderer-Routen aus dem Heim-LAN/Tailnet
+   (`192.168.0.0/16`, `10.0.0.0/8`, `100.64.0.0/10`) durch — das ist Bestand
+   aus der alten Skizze. **Zusatz:** die heute unter AUTH-4 PUBLIC laufenden
+   `/display/<buddy>/*`-Buddy-Views (auth.md AUTH-4 V1-Klarstellung) werden
+   als **explizite Operator-Ausnahme** hier geführt — sie bleiben für den
+   headless Renderer erreichbar, ohne Cookie.
 
-[Quelle: ENTSCHEID 2026-06-16-1123 Paket-Sektion „R2-Patches"
-→ Patch B nginx-Map mit Buddy-Asset-Ausnahmen]
+2. **7b — User-Shell (Cookie).** Familien-User-Geräte (Eltern-Handy/-Tablet/
+   -Laptop, Kind-Tablet als Klasse A) erreichen die Shell **über den Funnel**
+   mit `xbuddy_session`-Cookie (AUTH-2) — genau der Pfad, den die Heim-Shell
+   für den produktiven Rollout braucht (RAT-25-Ablösung, `heim-shell.md`
+   SHELL-6). 7b umfasst:
 
-*Tickets:* #948
+   ```
+   /shell/<panel_id>                             (GET, HTML-Shell)
+   /display/<display_id>                          (GET, instanz-spezifischer Display-Client)
+   /controller/*                                  (Panel-Controller-Apps)
+   /api/v1/displays/<display_id>/events           (SSE-Event-Stream)
+   ```
+
+**Einheitlicher Eltern-Auth-Pfad (RAT-27 Nic-Bedingung).** 7b ist NICHT auf die
+Heim-Shell begrenzt: Cookie-über-Funnel ist **derselbe** Auth-Pfad wie AUTH-3 für
+die Eltern-**PWA-Mini-Apps** (essen-einkauf u. a., #948). Damit gilt EIN Modell für
+alle Eltern-Geräte — *Eltern-Gerät → Funnel → `xbuddy_session`-Cookie* — für die
+**aktuellen und zukünftigen** Eltern-PWA-Mini-Apps (AUTH-3-Datenrouten) **und** die
+Shell/Display-Renderer (7b). Eine neue Eltern-PWA-Mini-App dockt ohne Sonder-Auth
+an denselben Cookie-Pfad an (kein zweites Auth-Modell).
+
+**Priorität + Auslauf (RAT-27 Nic-Setzung).** Primär ist das **User-Gerät
+(Handy/Tablet) per Cookie**; der **7a-Operator-Pi ist Auslaufmodell** (aktuell ein
+Familien-Kiosk-Sonderfall). Die 7a-IP-Allowlist wird gepflegt, solange der Pi-Kiosk
+existiert, ist aber **kein Ausbau-Ziel** — die cookie-losen Pi-Buddy-/Display-Routen
+bleiben vorerst über den Operator-IP-Pfad erreichbar und werden **nachträglich**
+gelöst, sobald der Pi ersetzt ist.
+
+**Dual-Gate (Cookie ODER Operator-IP) — verbindlich.** Die 7b-Routen prüfen
+**beide** Quellen additiv: eine Anfrage ist berechtigt, wenn **entweder** ein
+valider `xbuddy_session`-Cookie vorliegt (User-Gerät über Funnel) **oder** die
+Quell-IP in der 7a-Operator-Allowlist liegt (headless Pi im LAN/Tailnet).
+**Ohne dieses ODER würde das cookie-lose Pi-Kiosk beim Öffnen einer
+7b-Route `401` bekommen** — der Operator-Pi rendert `/display/<id>` und
+`/controller/*` ohne je einen Cookie besessen zu haben. Der Dual-Gate ist
+das Herz von AUTH-7: Cookie deckt die User-Geräte, IP deckt den Operator,
+und nur wer **keins von beiden** hat (fremder Funnel-Client ohne Cookie),
+wird `401` (AUTH-8).
+
+**7b-Public-Ausnahmen (Pflicht, sonst 401-Schleife für Ungepairte).** Zwei
+Flächen müssen **public über den Funnel** erreichbar bleiben, auch ohne
+Cookie und ohne Operator-IP:
+
+- **die AUTH-8-Re-Pair-Anweisungsseite** — ein ungepairtes Gerät bekommt sonst
+  `401` auf die Re-Pair-Seite selbst und sitzt in einer Schleife fest;
+- **`/display/_shared/*`** (Mini-App-Icons, MAD-6) — inhaltlich öffentlich
+  (AUTH-4), von den 7b-Renderer-Views als Asset geladen; hinter den Dual-Gate
+  gezogen würde es die Views brechen.
+
+**Bau-Notiz (nicht Spec-Kern, für #1388-Track):** der AUTH-9-Coverage-Test
+(`tests/test_auth_decorator_coverage.py`) muss um die 7b-Routen erweitert
+werden, sobald 7b gebaut wird — sonst landet der Dual-Gate-Decorator still an
+**null** Routen (der Zustand, gegen den AUTH-9 überhaupt existiert). 7a bleibt
+eine nginx-/IP-Sache und ist **nicht** über den Python-Decorator-Test
+prüfbar; für 7a ist die Verriegelung ein nginx-Conf-Test bzw. das
+SHELL-6-Pre-Merge-Funnel-Experiment.
+
+**Reversibilität:** Der Dual-Gate ist route-granular (Decorator pro Route =
+Zwei-Wege-Tür, billig zurückzurollen). Die **Origin-/Exposure-Entscheidung**
+(Shell über Funnel statt nur LAN) ist die Ein-Wege-Kante — sie hängt an der
+RAT-27-Ratifizierung und am SHELL-6-Funnel-Experiment (externer Client, nicht
+vom Pi — Hairpin-Falle).
+
+[Quelle: Rollout-Plan Auth-Funnel #1388 (Epic #1338) + Absicherung, zur
+RAT-27-Ratifizierung; Bezug alte AUTH-7-Skizze (nginx-Map), RAT-25
+(Heim-Shell-LAN-only), Cookie-UX-Flow ENTSCHEID-OFFEN-948]
+
+*Tickets:* #948, #1388, #1338
 
 ## 4. Auth-Verlust-Behandlung
 
