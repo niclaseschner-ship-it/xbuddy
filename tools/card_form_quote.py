@@ -5,12 +5,30 @@ Mess-Skript für `conventions/prep-lifecycle.md` PREP-10/11 (RATIFIZIERT
 2026-06-21, xbuddy#1055 + xbuddy-prozess#69).
 
 Liest die status:ready-Tickets der letzten N Tage aus dem xbuddy-Repo via
-`gh` und zählt drei Schwellen:
+`gh` und zählt vier Metriken:
 
-  - preflight_missing — Anteil Tickets ohne <!-- card_pre_flight v1 -->-Marker
-  - over_14_lines    — Anteil Karten > 14 Zeilen (Substanz, ohne Aktionszeile)
-  - followup_pain    — Anteil ready-Tickets mit Frust/Korrektur-Marker in den
-                       nächsten 15 Comments nach dem Pre-Flight-Block
+  - preflight_missing   — Anteil ready-Tickets ohne <!-- card_pre_flight v1 -->
+                          Nenner: ready_total (ratifizierte Semantik, PREP-11)
+  - over_14_lines       — Anteil gerenderter Karten > 14 Zeilen (Substanz, ohne
+                          Aktionszeile). Nenner: rendered_card_total (PW-86).
+  - followup_pain       — Anteil gerenderter Karten mit Frust/Korrektur-Marker
+                          in den nächsten 15 Comments nach dem Pre-Flight-Block.
+                          Nenner: rendered_card_total (PW-86).
+  - gate_provenance_missing — Anteil OFFENER ready-Tickets ohne jede Provenienz
+                          (kein card_pre_flight, kein prep_verdict, kein
+                          werft_verdict). Nenner: ready_total. Audit-/Canary-
+                          Metrik: >0 = Create-Kanten-Bypass (PW-86, xbuddy#1359).
+
+Getrennte Nenner (PW-86-RATIFIZIERT 2026-07-06,
+brainstorm/berater-runde/20260706-154616-RATIFIZIERT-pw86-prep11-messnaht.md):
+`over_14_lines`/`followup_pain` messen Kartenform und teilen nur durch
+`rendered_card_total` (Tickets mit card_pre_flight v1). Werft-/Override-/
+manuell-ready-Tickets ohne gerenderte Karte verfälschen die Form-Metriken
+nicht mehr.
+
+PREP-9-Trigger-4-Aussetzung: `preflight_missing > 10%` löst keine
+berater-runde aus, solange rendered_card_total = 0 (kein echter HTML-Loop-
+Lauf im Fenster → Fehlalarm). Im Output als [TRIGGER4-SUSPENDED] markiert.
 
 Ausgabe: eine Bilanz-Zeile.
 
@@ -33,6 +51,8 @@ import sys
 REPO = "niclaseschner-ship-it/xbuddy"
 
 PREFLIGHT_RE = re.compile(r"<!--\s*card_pre_flight\s+v1\b")
+PREP_VERDICT_RE = re.compile(r"prep_verdict")
+WERFT_VERDICT_RE = re.compile(r"werft_verdict")
 KARTE_HEADER_RE = re.compile(r"^#\d+\s+\S", re.MULTILINE)
 ACTION_LINE_RE = re.compile(
     r"^→\s*\[(stempeln|A|a|schließen|parken|Reihenfolge OK)",
@@ -80,69 +100,97 @@ def measure(days: int) -> dict[str, object]:
             "--label", "status:ready",
             "--state", "all",
             "--search", f"updated:>={since}",
-            "--json", "number,title,body,comments",
+            "--json", "number,title,body,comments,state",
             "--limit", "100",
         ],
     ) or []
 
-    cards = len(issues)
-    if cards == 0:
+    ready_total = len(issues)
+    if ready_total == 0:
         return {
-            "cards": 0,
+            "ready_total": 0,
+            "rendered_card_total": 0,
             "preflight_missing_pct": 0,
             "over_14_lines_pct": 0,
             "followup_pain_pct": 0,
+            "gate_provenance_missing_pct": 0,
+            "trigger4_suspended": True,
             "days": days,
         }
 
     preflight_missing = 0
     over_14 = 0
     followup_pain = 0
+    rendered_card_total = 0
+    gate_provenance_missing = 0
 
     for issue in issues:
         body = issue.get("body") or ""
         comments = issue.get("comments") or []
+        state = (issue.get("state") or "").lower()
         all_text = body + "\n" + "\n".join(c.get("body", "") for c in comments)
 
-        if not PREFLIGHT_RE.search(all_text):
+        has_preflight = bool(PREFLIGHT_RE.search(all_text))
+        has_prep_verdict = bool(PREP_VERDICT_RE.search(all_text))
+        has_werft_verdict = bool(WERFT_VERDICT_RE.search(all_text))
+
+        # preflight_missing: Nenner ready_total (ratifizierte Semantik, PREP-11)
+        if not has_preflight:
             preflight_missing += 1
 
-        max_card_lines = 0
-        pf_index = None
-        for index, comment in enumerate(comments):
-            cbody = comment.get("body", "")
-            card_lines = _card_line_count(cbody)
-            if card_lines > max_card_lines:
-                max_card_lines = card_lines
-            if pf_index is None and PREFLIGHT_RE.search(cbody):
-                pf_index = index
-        if max_card_lines > 14:
-            over_14 += 1
+        # gate_provenance_missing: offene Tickets ohne jede Provenienz (PW-86-Canary)
+        if state == "open" and not has_preflight and not has_prep_verdict and not has_werft_verdict:
+            gate_provenance_missing += 1
 
-        if pf_index is not None:
-            window = comments[pf_index + 1 : pf_index + 16]
-            if any(PAIN_RE.search(c.get("body", "")) for c in window):
-                followup_pain += 1
+        # over_14_lines + followup_pain: nur über gerenderte Karten (Nenner rendered_card_total)
+        if has_preflight:
+            rendered_card_total += 1
+            max_card_lines = 0
+            pf_index = None
+            for index, comment in enumerate(comments):
+                cbody = comment.get("body", "")
+                card_lines = _card_line_count(cbody)
+                if card_lines > max_card_lines:
+                    max_card_lines = card_lines
+                if pf_index is None and PREFLIGHT_RE.search(cbody):
+                    pf_index = index
+            if max_card_lines > 14:
+                over_14 += 1
+            if pf_index is not None:
+                window = comments[pf_index + 1 : pf_index + 16]
+                if any(PAIN_RE.search(c.get("body", "")) for c in window):
+                    followup_pain += 1
 
-    def pct(numerator: int) -> int:
-        return round(100 * numerator / cards)
+    def pct(numerator: int, denominator: int) -> int:
+        if denominator == 0:
+            return 0
+        return round(100 * numerator / denominator)
+
+    # PREP-9-Trigger-4: aussetzen wenn rendered_card_total=0 (kein HTML-Loop-Lauf)
+    trigger4_suspended = rendered_card_total == 0
 
     return {
-        "cards": cards,
-        "preflight_missing_pct": pct(preflight_missing),
-        "over_14_lines_pct": pct(over_14),
-        "followup_pain_pct": pct(followup_pain),
+        "ready_total": ready_total,
+        "rendered_card_total": rendered_card_total,
+        "preflight_missing_pct": pct(preflight_missing, ready_total),
+        "over_14_lines_pct": pct(over_14, rendered_card_total),
+        "followup_pain_pct": pct(followup_pain, rendered_card_total),
+        "gate_provenance_missing_pct": pct(gate_provenance_missing, ready_total),
+        "trigger4_suspended": trigger4_suspended,
         "days": days,
     }
 
 
 def _format(bilanz: dict[str, object]) -> str:
+    trigger4 = " [TRIGGER4-SUSPENDED]" if bilanz.get("trigger4_suspended") else ""
     return (
-        f"cards={bilanz['cards']} "
+        f"ready_total={bilanz['ready_total']} "
+        f"rendered_card_total={bilanz['rendered_card_total']} "
         f"preflight_missing={bilanz['preflight_missing_pct']}% "
         f"over_14_lines={bilanz['over_14_lines_pct']}% "
         f"followup_pain={bilanz['followup_pain_pct']}% "
-        f"(last {bilanz['days']} days)"
+        f"gate_provenance_missing={bilanz['gate_provenance_missing_pct']}% "
+        f"(last {bilanz['days']} days){trigger4}"
     )
 
 
