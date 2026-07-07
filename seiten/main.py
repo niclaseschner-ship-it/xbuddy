@@ -1178,8 +1178,10 @@ def hoerspiel_player_view():
     # tma-Fallback, kein Loopback-Bypass (keine internen Caller dieser Route).
     _bot_token = _get_bot_token()
     _cookie_val = request.cookies.get(_session_cookie.COOKIE_NAME)
-    if (not _bot_token
-            or _session_cookie.verify_session(_cookie_val, _bot_token) is None):
+    if not _bot_token:
+        return ("", 401)
+    _subject = _session_cookie.verify_session(_cookie_val, _bot_token)
+    if _subject is None:
         return ("", 401)
 
     build_id = _hoerspiel_player_build_id()
@@ -1201,6 +1203,13 @@ def hoerspiel_player_view():
     resp.headers["Content-Type"] = "text/html; charset=utf-8"
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
+    # Rolling-Refresh (auth.md AUTH-2, Nic-Option-B #1292): Cookie mit frischem
+    # 90-Tage-exp neu setzen — jeder App-Start rollt vor, ITP-Drop abgefangen.
+    resp.set_cookie(
+        _session_cookie.COOKIE_NAME,
+        _session_cookie.sign_session(_subject, _bot_token),
+        **_session_cookie.session_cookie_kwargs(),
+    )
     return resp
 
 
