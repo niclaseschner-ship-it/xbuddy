@@ -326,34 +326,55 @@ def _get_familie_client() -> "familie_client_mod.FamilieClient":
 
 
 def _pille_vars(kind_id: str) -> dict:
-    """Holt aktives Kind + andere Kinder aus Familie-Service (HSP-3a / HSP-43).
+    """Holt aktives Kind + Cycle-Ziel (naechstes_kind) aus Familie-Service.
 
-    Gibt dict mit 'aktives_kind' (Person | None) und 'andere_kinder' (Liste von
-    {'person': Person, 'url': str}) zurück — ein Eintrag je Instanz aus
-    `config.INSTANZEN`, deren kind_id != aktive kind_id UND die im Familie-
-    Snapshot als Person vorliegt (HSP-3a n≥3, #1263). Fehlt eine Person im
-    Snapshot (z. B. emil vor Provisionierung) oder ist der Familie-Service
-    unerreichbar, fällt der jeweilige Eintrag weg — Template rendert dann die
-    verbleibenden Pillen bzw. gar keine (PLAN-20-Geist).
+    HSP-3a / HSP-43 — Nic-Setzung 2026-07-08 (supersedes ENTSCHEID-1263 F2):
+    EIN Cycle-Toggle statt Face-Pillen-Reihe bei n≥3.
+
+    Gibt dict zurück:
+    - 'aktives_kind'  — Person | None (das in der URL adressierte Kind)
+    - 'naechstes_kind' — {'person': Person, 'url': str} | None
+        Nächste Instanz im Ring (wrap-around) nach dem aktiven kind_id,
+        iteriert über config.INSTANZEN-Reihenfolge (mia→finn→emil→mia),
+        gefiltert auf im Familie-Snapshot vorhandene Personen.
+        None bei Solo-Betrieb (nur 1 Instanz im Snapshot) oder wenn aktives
+        Kind selbst nicht im Snapshot ist.
+    - 'andere_kinder' — Leer-Liste (nur noch für Template-Kompatibilität;
+        der n≥3-Cycle-Toggle nutzt 'naechstes_kind').
+
+    Fehlt eine Person im Snapshot (z. B. emil vor Provisionierung) oder ist
+    der Familie-Service unerreichbar, fällt sie aus dem Ring — das naechstes_kind
+    überspringt sie (PLAN-20-Geist).
     """
     client = _get_familie_client()
     registry = client.snapshot()
 
     aktives_kind = registry.get(kind_id)
-    andere_kinder = []
-    for inst in config_mod.INSTANZEN:
-        other_id = inst["kind_id"]
-        if other_id == kind_id:
-            continue
-        person = registry.get(other_id)
-        if person is None:
-            continue
-        andere_kinder.append({
-            "person": person,
-            "url": "/display/hoerspiel/%s/alben" % other_id,
-        })
 
-    return {"aktives_kind": aktives_kind, "andere_kinder": andere_kinder}
+    # Ring: nur Instanzen, die im Snapshot vorhanden sind (PLAN-20-Geist).
+    ring_ids = [
+        inst["kind_id"]
+        for inst in config_mod.INSTANZEN
+        if registry.get(inst["kind_id"]) is not None
+    ]
+
+    # Naechstes Kind im Ring (wrap-around), Muster: player.js nextKindId.
+    naechstes_kind = None
+    if len(ring_ids) > 1 and kind_id in ring_ids:
+        idx = ring_ids.index(kind_id)
+        next_id = ring_ids[(idx + 1) % len(ring_ids)]
+        next_person = registry.get(next_id)
+        if next_person is not None:
+            naechstes_kind = {
+                "person": next_person,
+                "url": "/display/hoerspiel/%s/alben" % next_id,
+            }
+
+    return {
+        "aktives_kind": aktives_kind,
+        "naechstes_kind": naechstes_kind,
+        "andere_kinder": [],  # Cycle-Toggle ersetzt Reihe (Nic-Setzung 2026-07-08).
+    }
 
 
 # ============================================================
@@ -462,12 +483,12 @@ def display_alben(kind_id: str):
     err = _assert_self_kind(kind_id)
     if err is not None:
         return err
-    # HSP-3a / HSP-43: Face-Pillen-Reihe aus Familie-Service holen (n≥3, #1263).
+    # HSP-3a / HSP-43: Cycle-Toggle aus Familie-Service holen (Nic-Setzung 2026-07-08).
     pille = _pille_vars(kind_id)
     return render_template(
         "alben.html",
         aktives_kind=pille["aktives_kind"],
-        andere_kinder=pille["andere_kinder"],
+        naechstes_kind=pille["naechstes_kind"],
     )
 
 

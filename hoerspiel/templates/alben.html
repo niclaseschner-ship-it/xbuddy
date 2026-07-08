@@ -30,21 +30,22 @@
       </div>
     </div>
 
-    {# HSP-3a / HSP-43 (#1263): Face-Pillen-Reihe top-right — je andere Instanz eine
-       Pille mit vollständiger Navigation auf deren kind_id-URL. Kein JS-State-Wechsel;
-       die Liste `andere_kinder` iteriert config.INSTANZEN (n≥3, kein 2-Toggle). #}
-    {% if andere_kinder %}
-    {% for k in andere_kinder %}
-    <a class="face-pille" href="{{ k.url }}"
-       aria-label="Zu {{ k.person.name }} wechseln">
-      <div class="face size-54 ring-{{ k.person.ring }}">
-        <img src="/api/v1/familie/foto/{{ k.person.id }}" alt="{{ k.person.name }}">
+    {# HSP-3a / HSP-43 — Cycle-Toggle (Nic-Setzung 2026-07-08, supersedes ENTSCHEID-1263 F2):
+       EIN Toggle statt Pillen-Reihe: zeigt das AKTIVE Kind (Ring + Foto + Name) + einen
+       "wechseln"-Hinweis. Tap = vollständige Navigation zu naechstes_kind.url (Ring,
+       wrap-around mia→finn→emil→mia). Kein JS-State-Wechsel (RAT-17 Option A);
+       localStorage-Namensräume bleiben URL-getrennt (HSP-23). #}
+    {% if aktives_kind and naechstes_kind %}
+    <a class="face-pille" href="{{ naechstes_kind.url }}"
+       aria-label="Zu {{ naechstes_kind.person.name }} wechseln">
+      <div class="face size-54 ring-{{ aktives_kind.ring }}">
+        <img src="/api/v1/familie/foto/{{ aktives_kind.id }}" alt="{{ aktives_kind.name }}">
       </div>
-      <span class="face-pille-name">{{ k.person.name }}</span>
+      <span class="face-pille-name">{{ aktives_kind.name }}</span>
+      <span class="face-pille-swap">&#x21C4; wechseln</span>
     </a>
-    {% endfor %}
     {% elif aktives_kind %}
-    {# Nur Anzeige des aktiven Kindes, kein Wechsel-Link — Pille ist sichtbar inaktiv. #}
+    {# Solo-Betrieb: nur Anzeige des aktiven Kindes, kein Wechsel-Link (AC3). #}
     <div class="face-pille face-pille--solo" aria-label="{{ aktives_kind.name }}">
       <div class="face size-54 ring-{{ aktives_kind.ring }}">
         <img src="/api/v1/familie/foto/{{ aktives_kind.id }}" alt="{{ aktives_kind.name }}">
