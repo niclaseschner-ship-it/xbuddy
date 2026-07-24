@@ -420,6 +420,34 @@ def test_shell_pwa_ac2_icon_routes(client, monkeypatch, tmp_path):
         )
 
 
+def test_shell_pwa_ac2_icon_public_ohne_operator(client, monkeypatch, tmp_path):
+    """SHELL-PWA AC2 / AUTH-4: icon-192.png liefert 200 OHNE Cookie und OHNE Operator-IP.
+
+    T1448-S3-fix: shell_asset_view ist AUTH-4-public (kein Decorator); WebAPK-Installer
+    holt Icons credential-los (Fetch-Spec). Dieser Test petrankert die Public-Eigenschaft
+    in der seiten-Suite (ohne Header → 200, nicht 401).
+    """
+    import shutil
+    shell_assets = tmp_path / "shell"
+    shell_assets.mkdir()
+    real_shell = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "static", "shell",
+    )
+    shutil.copy(os.path.join(real_shell, "icon-192.png"), str(shell_assets / "icon-192.png"))
+    monkeypatch.setitem(seiten_main.runtime, "shell_asset_dir", str(shell_assets))
+
+    # Kein Operator-IP, kein Cookie — Icon muss trotzdem 200 zurueckgeben (AUTH-4).
+    resp = client.get("/shell/" + PANEL_ID + "/icon-192.png")
+    assert resp.status_code == 200, (
+        "SHELL-PWA AC2 / AUTH-4: icon-192.png muss public 200 zurueckgeben "
+        "(kein Cookie, kein Operator-IP), got %d" % resp.status_code
+    )
+    assert "image/png" in resp.headers.get("Content-Type", ""), (
+        "SHELL-PWA AC2: icon-192.png muss image/png Content-Type liefern"
+    )
+
+
 def test_shell_pwa_ac2_html_registriert_sw(client):
     """SHELL-PWA AC2: Shell-HTML bindet Manifest + registriert sw.js via navigator.serviceWorker.
     T1448: Operator-IP als Auth-Quelle (opt-in)."""
