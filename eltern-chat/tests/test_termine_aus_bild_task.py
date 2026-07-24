@@ -212,6 +212,52 @@ def test_TAB4_tool_description_listet_signalworte():
     assert "foto_senden" in desc
 
 
+def test_TAB4_tool_description_verbietet_kontext_antwort():
+    """#1334 Regression (AC2): die Tool-Beschreibung weist das LLM ausdrücklich
+    an, bei Foto + Signalwort NICHT aus dem Gesprächs-Kontext zu antworten —
+    auch wenn Termine dort bereits bekannt sind.
+
+    Ohne diese Anweisung halluziniert das Modell Termine aus früheren Turns
+    statt das Bild auszuwerten (Live-Befund #1334: »kannst du das bild die
+    termine analysieren« → Bot antwortete mit Kontext-Terminen statt TAB).
+    """
+    task = _make_task()
+    desc = task.description.lower()
+    # Die Beschreibung muss eine Pflicht-Formulierung enthalten.
+    assert "pflicht" in desc or "immer" in desc or "sofort" in desc, (
+        "Tool-Description fehlt Pflicht-Anweisung bei Foto + Signalwort "
+        "(TAB-4 / #1334-Fix)")
+    # Die Beschreibung muss explizit Kontext-Antworten verbieten.
+    assert "kontext" in desc, (
+        "Tool-Description fehlt Verbot der Kontext-Antwort (#1334-Fix)")
+
+
+def test_TAB4_system_prompt_enthält_tab_sofort_regel():
+    """#1334 Regression (AC2): der SYSTEM_PROMPT enthält die TAB-4-Pflicht-Regel
+    — Foto + Signalwort → SOFORT »termine_aus_bild« aufrufen, keine
+    Kontext-Antwort.
+
+    Analoges Muster zu HFE-6 (»bei JEDER Hörspiel-Anfrage SOFORT aufrufen«).
+    Diese Regel ist der zweite Fixpunkt neben der Tool-Beschreibung — sie
+    verhindert, dass das Modell bei bekanntem Kontext in eine Freitext-Antwort
+    abbiegt statt das Werkzeug zu rufen (#1334 Live-Befund).
+    """
+    from agent import SYSTEM_PROMPT
+    prompt = SYSTEM_PROMPT.lower()
+    # Der Prompt muss auf »termine_aus_bild« (den echten Werkzeug-Namen) zeigen.
+    assert "termine_aus_bild" in prompt, (
+        "SYSTEM_PROMPT nennt »termine_aus_bild« nicht — TAB-4-Pflicht-Regel fehlt "
+        "(#1334-Fix)")
+    # Der Prompt muss das Kontext-Halluzinations-Verbot enthalten.
+    assert "kontext" in prompt, (
+        "SYSTEM_PROMPT enthält kein Kontext-Halluzinations-Verbot für TAB "
+        "(#1334-Fix)")
+    # Der Prompt muss eine Pflicht-Formulierung bei Foto + Signalwort enthalten.
+    assert "signalwort" in prompt or "termin-signalwort" in prompt, (
+        "SYSTEM_PROMPT nennt das TAB-Signalwort-Konzept nicht — TAB-4-Pflicht-Regel "
+        "fehlt (#1334-Fix)")
+
+
 # ============================================================
 #  TAB-12 / TASK-7 — Catalog-Registrierung mit AND-Guard
 # ============================================================
