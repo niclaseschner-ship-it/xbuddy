@@ -185,17 +185,38 @@ diese weiter (Doppelschreibung)
 (`__XBUDDY_DATA__/llm/provider_calls.jsonl` in der Repo-Form;
 `services.md` SVC-5). Rotation: siehe `OPEN-LLMP-E`.
 
-## 3. TTS/STT — Abgrenzung
+## 3. TTS/STT — in Scope via LiteLLM (RAT-28)
 
-### LLMP-S6 — TTS/STT sind nicht Teil dieser Spec
-Diese Spec ratifiziert ausschließlich die LLM-Provider-Schicht. TTS- und
-STT-Schichten sind **nicht Teil** und werden hier auch nicht antizipiert
-(kein `tools/tts/`, keine „Schwester-Lib im selben Stil"-Behauptung). Die
-TTS-Reibung in `kibuddy.md:487` ist real, aber eigene Frage mit eigenen
-Anchors (Asset-Lifecycle bei hoerspiel, speed-Cache bei kibuddy) — eigene
-Folge-Werft mit eigener Berater-Runde
-(RAT-20 Sektion „Patch 4 — TTS aus Scope";
-ENTSCHEID-File Sektion „Patch 4 — TTS aus Scope").
+### LLMP-S6 — TTS und STT via LiteLLM in Scope (Umkehr RAT-20)
+
+> **RAT-28 (2026-07-24)** kehrt den RAT-20-Ausschluss um. Der ursprüngliche
+> Grund war „eigene Frage mit eigenen Anchors" — das entfällt, da LiteLLM
+> beide Modalitäten abdeckt (`litellm.speech()` / `litellm.transcription()`).
+> LLMP-S6 bleibt als Paragraph erhalten, sein Inhalt ist jetzt umgekehrt.
+
+TTS und STT sind **Teil dieser Spec**. Provider wird Config-Sache analog Chat
+(LLMP-5-Slot). Der Buchhalter (`write_call`) bleibt SSoT auch für Audio-Calls
+— LiteLLM-native-Callbacks / `completion_cost()` für Audio werden **nicht**
+genutzt (Zahl-Stabilität bei Rollback, RAT-26 §5). Akzeptierter Gap:
+Dauer-/Kosten-Präzision für Audio-Calls ist weniger streng als für Chat
+(Nic: „Telemetrie sauber nicht so wichtig", RAT-28).
+
+**TTS** (`litellm.speech(text, voice=..., model=...)`): Provider per Slot
+(Azure als Default; ElevenLabs/Groq/OpenAI testbar). Kein Provider-Code mehr
+direkt in kibuddy/eltern-chat.
+
+**STT** (`litellm.transcription(file=..., model=...)`): Provider per Slot
+(analog TTS). berater-runde-1268-Defer „NOCH NICHT" durch LiteLLM-Doktrin
+aufgehoben (RAT-28).
+
+**Was NICHT in dieser Spec liegt:** kibuddy-speed-Cache (technischer Vorteil
+durch lokale Zwischenspeicherung), hoerspiel-Asset-Lifecycle (Kapitelschnitt,
+Transkript-Pipeline). Diese wohnen UM den LiteLLM-Call herum in den
+Buddy-Specs (`specs/buddies/kibuddy.md`, `specs/buddies/hoerspiel.md`).
+
+Kill-Kriterium: `litellm.speech()` zeigt Inkompatibilität mit
+Azure-TTS-Parametern, die kibuddy-speed-Cache oder hoerspiel-Vorauflösungs-Pfad
+brechen → Slot fällt zurück auf direkten Azure-SDK-Call. Bau: #1410.
 
 ## 4. Migrationspfad
 
