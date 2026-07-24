@@ -33,7 +33,9 @@ GitHub Issue
    │   risk_class steuert programmer_execution_protocol.mode:
    │     low → combined, medium → three_compact,
    │     high → three_compact + Re-Dispatch  (PW-8: two_phase DEPRECATED)
-   ▼  (Agent-Dispatch, run_in_background, isolation: worktree)
+   ▼  (Agent-Dispatch, run_in_background, isolation: worktree —
+   │   ODER manueller RAT-21-Worktree `t<nr>` ohne isolation, PW-87; Pfad-
+   │   Vertrag beider Modi in preflight.md §A.2 / schemas.md S1.2)
 [4] SUB-AGENT EXECUTION
    │   3 Checkpoint-Feldgruppen (analysis_plan / implementation_done /
    │   validation_handoff) gestaffelt nach mode; Block-Gliederung empfohlen,
