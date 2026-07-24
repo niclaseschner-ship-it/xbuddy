@@ -59,7 +59,12 @@
     // Zustand löst keinen erneuten Wechsel aus — kein Reload (DC-2).
     var current;
 
-    var source = new EventSourceImpl(streamUrl(displayId));
+    // #1423 / AUTH-7b: withCredentials=true stellt sicher, dass der Browser
+    // den xbuddy_session-Cookie auch über Funnel-URLs (cross-origin-ähnlich)
+    // und bei same-origin SSE zuverlässig mitschickt. Ohne diese Option log-
+    // te der Router weiter cookie_vorhanden=False, weil EventSource Cookies
+    // in manchen Browsern/Proxy-Kontexten standardmäßig weglässt.
+    var source = new EventSourceImpl(streamUrl(displayId), { withCredentials: true });
 
     // DC-3 / DC-4 / DC-5 — der Zustand beim Verbinden und jede folgende
     // Änderung kommen als SSE-Nachricht. Der Inhalt wird innerhalb des
