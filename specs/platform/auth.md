@@ -122,11 +122,14 @@ nachgeschickte Pairing-Link (`geraet-anlegen.md` GAA-3.9,
 auf `:8443` — so brauchen Familien-Geräte kein Zertifikat, nur den
 `xbuddy_session`-Cookie (AUTH-2, First-Party auf derselben Origin). Die
 Cert-Verteilung bleibt dem `:8443`-Operator-Pfad vorbehalten. **Geräte-
-Autorisierung nur über die Master-Telegram-ID:** einen frischen Pairing-Link
-für ein bestehendes Gerät darf ausschließlich das Master-Konto anfordern
-(`master_telegram_user_id`) — strenger als die Familien-Gruppen-
-Mitgliedschaft, weil der Link ein Credential ist. [Nic-Setzung 2026-07-07,
-#1380 — Bezug #948]
+Autorisierung für alle Erwachsenen der Familie (CNS-2, #1401):** einen
+frischen Pairing-Link für ein bestehendes Gerät dürfen alle Erwachsenen
+(`art=erwachsene` in der Familien-Registry) anfordern — strenger als die
+Familien-Gruppen-Mitgliedschaft (Kinder ausgeschlossen), weil der Link ein
+Credential ist. Die Erwachsenen-Liste wird live vom Familie-Service geholt;
+ist er nicht erreichbar, lehnt die Aufgabe defensiv ab (fail-closed). [Nic-
+Setzung 2026-07-07, #1380 — ursprünglich Master-ID-only; auf alle Erwachsenen
+erweitert #1401 — Bezug #948]
 
 [Quelle: ENTSCHEID 2026-06-16-1123 Paket-Sektion „R2-Patches"
 → Patch B Pairing-Cookie-Mechanik]
