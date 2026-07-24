@@ -8,13 +8,92 @@ Tests laufen ohne Netz: der Adapter wird durch FakeSTTEngine in der
 Test-Suite ersetzt (KIBUDDY-28).
 """
 
+import contextlib
 import logging
+import os
+import subprocess
+import tempfile
+from datetime import UTC, datetime
 
 from .azure_whisper import STTError  # einzige STTError-Klasse (Schnitt analog LLM ProviderError)
 
 logger = logging.getLogger(__name__)
 
 __all__ = ["OpenAIWhisperSTT", "STTError"]
+
+
+def _normalize_audio(audio_bytes: bytes, filename: str = "audio.webm") -> tuple[bytes, str]:
+    """Transcodiert audio_bytes via ffmpeg zu MP3; bei Fehler Fallback auf Roh-Bytes.
+
+    Hintergrund: Browser-MediaRecorder-webm enthält einen Seek-Index, den Whisper
+    ablehnt (400 Invalid file format). ffmpeg ist toleranter und liest auch beschädigte
+    webm-Container zuverlässig. Der Transcode zu MP3 umgeht das Problem ursachen-unabhängig.
+
+    Gibt (mp3_bytes, 'audio.mp3') bei Erfolg zurück.
+    Fallback: (audio_bytes, filename) wenn ffmpeg fehlt oder fehlschlägt — kein Crash,
+    kein Regress auf das heutige Verhalten.
+    """
+    tmpin = None
+    tmpout = None
+    try:
+        # Input über temporäre Datei — webm braucht Seek, pipe:0 kann brechen.
+        with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as f:
+            tmpin = f.name
+            f.write(audio_bytes)
+
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+            tmpout = f.name
+
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel", "error",
+                "-y",
+                "-i", tmpin,
+                "-f", "mp3",
+                "-c:a", "libmp3lame",
+                "-q:a", "4",
+                tmpout,
+            ],
+            capture_output=True,
+            timeout=20,
+        )
+
+        if result.returncode != 0:
+            logger.warning(
+                "ffmpeg-Transcode fehlgeschlagen (returncode=%d, stderr=%s) — Fallback auf Roh-Bytes",
+                result.returncode,
+                result.stderr.decode(errors="replace"),
+            )
+            return audio_bytes, filename
+
+        with open(tmpout, "rb") as f:
+            mp3_bytes = f.read()
+
+        if not mp3_bytes:
+            logger.warning("ffmpeg lieferte leere MP3-Datei — Fallback auf Roh-Bytes")
+            return audio_bytes, filename
+
+        logger.debug(
+            "ffmpeg-Transcode OK: %d Bytes webm → %d Bytes mp3", len(audio_bytes), len(mp3_bytes)
+        )
+        return mp3_bytes, "audio.mp3"
+
+    except FileNotFoundError:
+        logger.warning("ffmpeg nicht gefunden — Fallback auf Roh-Bytes (kein Regress)")
+        return audio_bytes, filename
+    except subprocess.TimeoutExpired:
+        logger.warning("ffmpeg-Timeout — Fallback auf Roh-Bytes")
+        return audio_bytes, filename
+    except Exception as exc:
+        logger.warning("ffmpeg-Fehler: %s — Fallback auf Roh-Bytes", exc)
+        return audio_bytes, filename
+    finally:
+        for path in (tmpin, tmpout):
+            if path and os.path.exists(path):
+                with contextlib.suppress(OSError):
+                    os.unlink(path)
 
 
 class OpenAIWhisperSTT:
@@ -47,11 +126,15 @@ class OpenAIWhisperSTT:
         `filename`: Dateiname mit Extension — Whisper leitet das Audio-Format daraus ab.
         Gibt den transkribierten Text zurück. Wirft STTError bei Anbieter-Fehler.
         """
+        # Normalisierung: Browser-webm → MP3 (verhindert Whisper-400-Fehler, T1442).
+        # Bei ffmpeg-Fehler/-Abwesenheit: Fallback auf Roh-Bytes (kein Regress).
+        norm_bytes, norm_filename = _normalize_audio(audio_bytes, filename)
+
         try:
             import io
 
-            audio_file = io.BytesIO(audio_bytes)
-            audio_file.name = filename
+            audio_file = io.BytesIO(norm_bytes)
+            audio_file.name = norm_filename
             response = self._client.audio.transcriptions.create(
                 model=self._model,
                 file=audio_file,
@@ -60,6 +143,19 @@ class OpenAIWhisperSTT:
             )
         except Exception as e:
             logger.warning("OpenAI-Whisper nicht erreichbar: %s", e)
+            # Diagnose-Netz: Roh-Bytes best-effort nach /tmp/kibuddy-stt-debug/ schreiben.
+            try:
+                debug_dir = "/tmp/kibuddy-stt-debug"
+                os.makedirs(debug_dir, exist_ok=True)
+                ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+                debug_path = os.path.join(debug_dir, f"{ts}.bin")
+                with open(debug_path, "wb") as f:
+                    f.write(audio_bytes)
+                logger.debug(
+                    "STTError-Diagnose: %d Bytes nach %s geschrieben", len(audio_bytes), debug_path
+                )
+            except Exception:
+                pass  # Diagnose-Fehler dürfen keinen Sekundär-Crash auslösen.
             raise STTError(str(e)) from e
         # OpenAI-API gibt bei response_format="text" den Transkript-Text direkt zurück.
         return str(response).strip()
