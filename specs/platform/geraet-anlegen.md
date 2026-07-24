@@ -169,20 +169,22 @@ Match über den Anzeigenamen (case-insensitive, exakt vor Substring). Dann
 Token + Link identisch zu GAA-3.8 (`session_cookie.sign_pairing`, Funnel-
 FQDN, `auth.md` AUTH-2/AUTH-2.a).
 
-**Harte Autorisierungs-Grenze (analog CAV-6-Nachhol-Muster, aber strenger):**
-NUR das **Master-Telegram-Konto** darf diese Aufgabe auslösen — nicht jedes
-Familien-Mitglied. Ein Pairing-Link ist ein Credential; kein Kind soll ihn
-selbst anfordern können. Der Master-ID-Gate steht vor jeder Token-Erzeugung:
-für Nicht-Master wird **kein Token erzeugt und nichts gesendet**. Die Master-
-ID ist ein Per-Instanz-Konfigurationswert (`master_telegram_user_id`, ENV
-`ELTERNCHAT_MASTER_TELEGRAM_USER_ID`); ist er leer, wird die Aufgabe **nicht**
-in den Katalog aufgenommen (AND-Guard mit Bot-Token + Funnel-FQDN +
-Geraete-Origin).
+**Autorisierungs-Grenze (CNS-2, #1401):**
+Alle **Erwachsenen der Familie** (`art=erwachsene` in der Familien-Registry)
+dürfen diese Aufgabe auslösen — nicht nur ein einzelnes Master-Konto, aber
+auch keine Kinder. Ein Pairing-Link ist ein Credential; kein Kind soll ihn
+selbst anfordern können. Der Erwachsenen-Gate steht vor jeder Token-Erzeugung:
+für Nicht-Erwachsene wird **kein Token erzeugt und nichts gesendet**. Die
+Erwachsenen-Liste wird live aus dem Familie-Service geholt
+(`GET /api/v1/familie/personen`, FAM-7); ist der Service nicht erreichbar,
+lehnt der Gate **defensiv ab** (fail-closed, weil ein Credential auf dem
+Spiel steht). Die Aufgabe wird **nicht** in den Katalog aufgenommen, wenn
+Bot-Token, Funnel-FQDN, Geraete-Origin oder Familie-Origin fehlen (AND-Guard).
 
-[Quelle: Nic-Setzung 2026-07-07 — Re-Send/Re-Pair mit Master-ID-Gate,
-PWA-only (keine Mini-App-Pfade), Link auf Funnel-FQDN.]
+[Quelle: Nic-Setzung 2026-07-07 — Re-Send/Re-Pair, PWA-only, Funnel-FQDN;
+#1401 — Erweiterung auf alle Erwachsenen (war zuvor Master-ID-only, #1380).]
 
-*Tickets:* #1380
+*Tickets:* #1380, #1401
 
 **Geräte-Typ-Abhängigkeit:** Die Anweisung in (2) ist für jeden GER-2-
 Geräte-Typ-mit-Telegram gleich — `tablet`, `handy`, `monitor` (sofern als
