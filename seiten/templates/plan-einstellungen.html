@@ -119,7 +119,7 @@
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
           navigator.serviceWorker
-            .register('/seiten/plan/einstellungen/sw.js', { scope: '/seiten/plan/einstellungen/' })
+            .register('/seiten/plan/einstellungen/sw.js', { scope: '{{ sw_scope }}' })
             .catch(function (err) {
               console.warn('[pwa] Service-Worker-Registrierung fehlgeschlagen:', err);
             });

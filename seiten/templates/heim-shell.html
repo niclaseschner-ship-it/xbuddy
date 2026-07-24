@@ -74,7 +74,7 @@
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function () {
           navigator.serviceWorker
-            .register('/shell/{{ panel_id }}/sw.js', { scope: '/shell/' })
+            .register('/shell/{{ panel_id }}/sw.js', { scope: '{{ sw_scope }}' })
             .catch(function (err) {
               // best-effort — kein UI-Bruch bei fehlender SW-Unterstuetzung.
               console.warn('[shell-pwa] Service-Worker-Registrierung fehlgeschlagen:', err);
