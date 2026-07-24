@@ -202,6 +202,67 @@ def test_tailscale_banner_nicht_bei_gesetztem_tailscale(client):
 
 
 # ============================================================
+#  SREG-7 dritte Origin: funnel_origin (ENV + CLI + Default)
+# ============================================================
+
+FUNNEL = "https://buddyboard.taile235cf.ts.net"
+
+
+def test_funnel_origin_config_aus_env(monkeypatch):
+    monkeypatch.setenv("SEITEN_FUNNEL_ORIGIN", FUNNEL)
+    monkeypatch.delenv("SEITEN_HEIM_ORIGIN", raising=False)
+    monkeypatch.delenv("SEITEN_TAILSCALE_ORIGIN", raising=False)
+    monkeypatch.delenv("PANEL_URL", raising=False)
+    monkeypatch.delenv("GERAETE_URL", raising=False)
+    monkeypatch.delenv("SEITEN_INVENTAR", raising=False)
+    monkeypatch.delenv("SEITEN_ROOT", raising=False)
+    args = seiten_main.parse_args([])
+    cfg = seiten_main.resolved_config(args)
+    assert cfg["funnel_origin"] == FUNNEL
+
+
+def test_funnel_origin_config_aus_cli(monkeypatch):
+    monkeypatch.delenv("SEITEN_FUNNEL_ORIGIN", raising=False)
+    args = seiten_main.parse_args([
+        "--seiten-funnel-origin", FUNNEL,
+    ])
+    cfg = seiten_main.resolved_config(args)
+    assert cfg["funnel_origin"] == FUNNEL
+
+
+def test_funnel_origin_config_cli_schlaegt_env(monkeypatch):
+    monkeypatch.setenv("SEITEN_FUNNEL_ORIGIN", "https://env.funnel")
+    args = seiten_main.parse_args([
+        "--seiten-funnel-origin", FUNNEL,
+    ])
+    cfg = seiten_main.resolved_config(args)
+    assert cfg["funnel_origin"] == FUNNEL
+
+
+def test_funnel_origin_config_default_leer(monkeypatch):
+    monkeypatch.delenv("SEITEN_FUNNEL_ORIGIN", raising=False)
+    args = seiten_main.parse_args([])
+    cfg = seiten_main.resolved_config(args)
+    assert cfg["funnel_origin"] == ""
+
+
+def test_funnel_origin_im_layout_json(manifest_root, tmp_path, monkeypatch):
+    """funnel_origin taucht im /api/v1/seiten/layout-Kontrakt auf (SREG-7)."""
+    inventar_path = str(tmp_path / "inventar.json")
+    monkeypatch.setattr(seiten_main, "hole_panels", list)
+    monkeypatch.setattr(seiten_main, "hole_geraete", list)
+    seiten_main.configure(root=manifest_root, inventar_path=inventar_path, ttl=30,
+                          heim_origin=HEIM, tailscale_origin=TAIL,
+                          funnel_origin=FUNNEL)
+    seiten_main.app.config["TESTING"] = True
+    c = seiten_main.app.test_client()
+    resp = c.get("/api/v1/seiten/layout")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["funnel_origin"] == FUNNEL
+
+
+# ============================================================
 #  Bestand: /api/v1/seiten (SREG-3) unverändert (related_echo)
 # ============================================================
 
