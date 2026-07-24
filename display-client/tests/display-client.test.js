@@ -18,8 +18,9 @@ const disp = require('../displib.js');
 // ============================================================
 
 class FakeEventSource {
-  constructor(url) {
+  constructor(url, init) {
     this.url = url;
+    this.init = init || {};             // #1423: options (z. B. withCredentials) festhalten
     this.readyState = FakeEventSource.CONNECTING;
     this.onmessage = null;
     this.onerror = null;
@@ -207,4 +208,19 @@ test('DC-9 — Stream-URL ist relativ: same-origin, keine Router-Adresse', () =>
   assert.equal(u, '/api/v1/displays/default/events');
   assert.ok(u.startsWith('/'));
   assert.ok(!/^[a-z]+:\/\//.test(u));
+});
+
+// ============================================================
+//  AUTH-7b / #1423 — EventSource sendet Cookie mit (withCredentials)
+// ============================================================
+//
+// Ohne { withCredentials: true } schickt der Browser den xbuddy_session-Cookie
+// bei SSE-Requests über Funnel-URLs (Tailscale HTTPS) nicht mit — der Router
+// loggete cookie_vorhanden=False. Same-origin ist withCredentials harmlos;
+// cross-origin (Funnel) ist es zwingend. Ref: AUTH-3 / AUTH-7b.
+
+test('#1423 — EventSource wird mit { withCredentials: true } geöffnet', () => {
+  const { es } = setup('/display/default');
+  assert.ok(es.init && es.init.withCredentials === true,
+    'EventSource muss withCredentials: true übergeben bekommen (Cookie-Auth)');
 });
