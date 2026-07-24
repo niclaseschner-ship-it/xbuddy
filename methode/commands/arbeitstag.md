@@ -571,7 +571,8 @@ zur unabhängigen Nic-Sichtprobe.
 ## PARALLELISIERUNGS-VERTRAG  (die Regel — NICHT „parallelisiere wo möglich")
 
 - Aufgaben mit **disjunkten** Dateien laufen parallel: je eigener Branch, je
-  eigener Worktree (Subagent mit `isolation: worktree`).
+  eigener Worktree (Auto: Subagent mit `isolation: worktree`; bei claim-early
+  reservierten Tickets der bestehende manuelle RAT-21-`t<nr>`-Worktree, PW-87).
 - Jede Änderung an einer **geteilten** Datei läuft **seriell**: eigener kleiner PR,
   der **zuerst** merged; danach rebasen alle offenen Branches darauf.
 - Eine abhängige Aufgabe startet erst, wenn ihre Voraussetzung gemergt ist.
@@ -593,6 +594,9 @@ Subagent hat „nur eben kurz" in einer geteilten Datei mitgeschraubt, ein
 zweiter Track ebenfalls, und beim Merge fiel eine Seite heraus.
 
 **Worktree-Pfad statt Shared-Root im Subagent-Prompt — hart.**
+_(Gilt für den **Auto-Worktree**-Modus. Der manuelle RAT-21-`t<nr>`-Pfad hat
+seine eigene Regel — Pfad explizit im Prompt + positiver `cd`-Erst-Call, siehe
+`preflight.md §A.2(b)` / Schicht 1 S1.2, PW-87.)_
 Wenn du einen Subagent mit `isolation: worktree` startest, **nenne im Prompt
 NICHT den Shared-Root-Pfad** (z. B. `/home/buddy/repos/xbuddy`) als
 Arbeitsort. Der Subagent muss in seinem eigenen Worktree arbeiten — der
@@ -608,9 +612,10 @@ in den eigenen Working Tree. Stattdessen im Prompt klar:
   `cd /home/buddy/repos/xbuddy`** — das ist der Shared-Root, in dem andere
   Subagenten parallel arbeiten."
 - **Setup-Reflex** als allererster Bash-Tool-Call: `pwd &&
-  git rev-parse --show-toplevel`. Landet der Pfad **nicht** auf
-  `.claude/worktrees/agent-…`, **stoppe und melde zurück** — nicht selbst
-  zu reparieren versuchen (Recovery ist nicht garantiert).
+  git rev-parse --show-toplevel`. Erwartungswert + die zwei Worktree-Familien
+  (Auto `agent-<id>` | RAT-21-Manuell `t<nr>`) siehe **Schicht 1 S1.2** (SSoT,
+  PW-87). Landet der Pfad auf **keiner** Familie, **stoppe und melde zurück** —
+  nicht selbst zu reparieren versuchen (Recovery ist nicht garantiert).
 
 Dieser Fall ist am 2026-05-27 (Tag 2 Lego-Cluster) bei vier von acht
 parallel laufenden Subagenten aufgetreten. Alle vier haben es selbst
@@ -1125,8 +1130,12 @@ CWD-relativ, Reader-Cache, Import-Stil). Reihenfolge:
    und überraschten Worktree-Locks. Pflicht-Schritte zum Abschluss:
 
    - **Hauptrepo auf `main` zurück** + `git pull origin main`.
-   - **Alle Worktrees aus `.claude/worktrees/agent-*`** entfernen
+   - **Auto-Worktrees `.claude/worktrees/agent-*`** immer entfernen
      (`git worktree unlock <pfad> && git worktree remove --force <pfad>`).
+   - **Manuelle RAT-21-Worktrees `.claude/worktrees/t<nr>`** nur entfernen, wenn ihr
+     Ticket **gemergt/geschlossen** ist. Reservierte/live/handoff/review-`t<nr>`
+     (Lebenszeichen-Marker `phase: reserviert|live|…`) **bleiben stehen** — sonst
+     bricht die RAT-21-Cross-Session-Reservierung (PW-87: nicht pauschal löschen).
    - **Alle Tages-Feature/Chore-Branches löschen** (lokal, mit `git branch -D`).
      Sie sind alle nach Merge stale; gh hat sie auf origin bei `pr merge --delete-branch`
      schon entfernt, nur lokal hängen sie noch.
