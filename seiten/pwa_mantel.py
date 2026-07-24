@@ -334,7 +334,9 @@ REGISTRY: dict[str, MantelConfig] = {
         start_url="/seiten/essen/einkauf/",
         icons=("icon-192.png", "icon-512.png", "icon-maskable-512.png"),
         display="fullscreen",
-        html_cache_mode="cache-first",
+        # network-first: HTML frisch vom Server (Stale-Cache-Härtung #1455);
+        # Offline-Fallback bleibt über den Cache erhalten.
+        html_cache_mode="network-first",
         stop_prefixes=(),
         sw_script_route="/seiten/essen/einkauf/sw.js",
         sw_scope="/seiten/essen/einkauf/",
@@ -345,7 +347,9 @@ REGISTRY: dict[str, MantelConfig] = {
         start_url="/seiten/plan/einstellungen/",
         icons=("icon-192.png", "icon-512.png", "icon-maskable-512.png"),
         display="fullscreen",
-        html_cache_mode="cache-first",
+        # network-first: HTML frisch vom Server (Stale-Cache-Härtung #1455);
+        # Offline-Fallback bleibt über den Cache erhalten.
+        html_cache_mode="network-first",
         stop_prefixes=(),
         sw_script_route="/seiten/plan/einstellungen/sw.js",
         sw_scope="/seiten/plan/einstellungen/",

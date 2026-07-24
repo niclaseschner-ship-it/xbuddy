@@ -72,9 +72,22 @@
     (function () {
       'use strict';
       if ('serviceWorker' in navigator) {
+        // #1455 — festhängenden alten SW beim nächsten Load zwangs-ersetzen:
+        // Lief schon ein Controller (alter SW), dann beim SW-Wechsel EINMAL neu
+        // laden. Cookie bleibt unberührt (separater Speicher); nur Cache/SW
+        // werden frisch. updateViaCache:'none' + update() ziehen die neue sw.js
+        // sofort statt erst nach ~24 h.
+        var __hadController = !!navigator.serviceWorker.controller;
+        var __reloaded = false;
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          if (!__hadController || __reloaded) return;
+          __reloaded = true;
+          window.location.reload();
+        });
         window.addEventListener('load', function () {
           navigator.serviceWorker
-            .register('/shell/{{ panel_id }}/sw.js', { scope: '{{ sw_scope }}' })
+            .register('/shell/{{ panel_id }}/sw.js', { scope: '{{ sw_scope }}', updateViaCache: 'none' })
+            .then(function (reg) { reg.update(); })
             .catch(function (err) {
               // best-effort — kein UI-Bruch bei fehlender SW-Unterstuetzung.
               console.warn('[shell-pwa] Service-Worker-Registrierung fehlgeschlagen:', err);
