@@ -1132,7 +1132,13 @@ def display_asset(display_id, asset):
     # entspricht dem Pattern der Eltern-Route (ROU-20) — der Browser löst
     # relative Pfade (./manifest.json, ./icon-*.png) relativ zur id-URL auf.
     # Path-Traversal-Schutz via _send_display_asset (realpath-Check).
-    return _send_display_asset(asset)
+    resp = _send_display_asset(asset)
+    # #1455: sw.js no-store — sonst hält der Browser die alte sw.js aus dem
+    # HTTP-Cache und der Update-Trigger (neuer CACHE_NAME) greift nie.
+    if os.path.basename(asset) == 'sw.js':
+        resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        resp.headers['Pragma'] = 'no-cache'
+    return resp
 
 
 # ============================================================
