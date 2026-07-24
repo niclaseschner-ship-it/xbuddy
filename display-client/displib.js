@@ -59,11 +59,14 @@
     // Zustand löst keinen erneuten Wechsel aus — kein Reload (DC-2).
     var current;
 
-    // #1423 / AUTH-7b: withCredentials=true stellt sicher, dass der Browser
-    // den xbuddy_session-Cookie auch über Funnel-URLs (cross-origin-ähnlich)
-    // und bei same-origin SSE zuverlässig mitschickt. Ohne diese Option log-
-    // te der Router weiter cookie_vorhanden=False, weil EventSource Cookies
-    // in manchen Browsern/Proxy-Kontexten standardmäßig weglässt.
+    // #1423 / AUTH-7b: withCredentials=true behebt eine EventSource-Default-
+    // Eigenheit: der SSE-Stream (/api/v1/displays/<id>/events) lädt same-origin
+    // unter der Funnel-FQDN, trägt aber eine SameSite=Lax-Cookie. In manchen
+    // Browser/Proxy-Kontexten lässt EventSource Credentials defaultmäßig weg —
+    // ohne withCredentials:true würde der Router den xbuddy_session-Cookie
+    // nicht sehen. Cross-origin-Fälle (Display-Origin ≠ Funnel-Origin) brauchen
+    // zusätzlich CORS (Access-Control-Allow-Credentials), das heute fehlt —
+    // nicht getragen in V1.
     var source = new EventSourceImpl(streamUrl(displayId), { withCredentials: true });
 
     // DC-3 / DC-4 / DC-5 — der Zustand beim Verbinden und jede folgende
