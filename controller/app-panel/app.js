@@ -1064,10 +1064,22 @@
 
   // Service Worker (PANEL-10 PWA-Begleitdatei). Fehler still ignorieren.
   if ('serviceWorker' in navigator) {
+    // #1455 — klebenden alten SW beim nächsten Load zwangs-ersetzen; Cookie
+    // bleibt (separater Speicher). updateViaCache:'none' + update() ziehen die
+    // neue sw.js sofort, controllerchange lädt beim SW-Wechsel EINMAL neu.
+    var __hadController = !!navigator.serviceWorker.controller;
+    var __reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!__hadController || __reloaded) return;
+      __reloaded = true;
+      window.location.reload();
+    });
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('./sw.js').catch(function (err) {
-        console.warn('SW-Registrierung fehlgeschlagen:', err);
-      });
+      navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
+        .then(function (reg) { reg.update(); })
+        .catch(function (err) {
+          console.warn('SW-Registrierung fehlgeschlagen:', err);
+        });
     });
   }
 })();
