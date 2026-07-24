@@ -514,23 +514,28 @@ def client_ohne_familie(runtime_cfg_with_mistral, data_cfg_mini, data_root_mini)
 
 
 def test_face_pille_rendert_mit_aktivem_kind(client_mit_familie):
-    """HSP-3a Variante C / ENTRY-PATH-PROBE:
-    GET /display/hoerspiel/mia/alben → 200 HTML enthält Face-Pille
-    mit anderes-Kind-Name „Finn" und href zum Finn-Alben-View.
-
-    Vollständige Navigation via <a href> — kein JS-State-Wechsel (RAT-17 Option A).
+    """HSP-3a / E-HSP-13 / ENTRY-PATH-PROBE:
+    GET /display/hoerspiel/mia/alben → 200 HTML enthält Cycle-Pille mit:
+    - Aktives Kind (Mia): Ring-Orange + Foto + Name in der Pille.
+    - href zum naechsten Kind im Ring (Finn) — vollständige Navigation (RAT-17 Option A).
+    - aria-label zeigt Ziel-Kind (Finn) an.
+    KEINE Reihe von Pillen der übrigen Kinder (AC1, Nic-Setzung 2026-07-08).
     """
     resp = client_mit_familie.get("/display/hoerspiel/mia/alben")
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
-    # Face-Pille: Link auf anderes Kind (Finn) — vollständige Navigation (HSP-3a).
+    # Cycle-Pille: Link auf nächstes Kind im Ring (Finn).
     assert 'href="/display/hoerspiel/finn/alben"' in html
-    # Name des anderen Kindes in der Pille sichtbar.
-    assert "Finn" in html
+    # Aktives Kind (Mia) in der Pille sichtbar — NICHT das Ziel-Kind.
+    assert "Mia" in html
     # face-pille CSS-Klasse vorhanden.
     assert "face-pille" in html
-    # face-Klasse mit ring-blue (Finns Ring) vorhanden.
-    assert "ring-blue" in html
+    # Ring des AKTIVEN Kinds (Mia = orange) — NICHT Finns ring-blue.
+    assert "ring-orange" in html
+    # Foto des aktiven Kinds (Mia).
+    assert '/api/v1/familie/foto/mia' in html
+    # aria-label nennt das Ziel-Kind (Finn).
+    assert 'aria-label="Zu Finn wechseln"' in html
 
 
 def test_face_pille_andere_kind_url_korrekt(client_mit_familie):
@@ -641,19 +646,19 @@ def test_alben_js_uses_kind_id_in_fetch(client_mit_familie):
 
 
 def test_face_pille_foto_url_absolute(client_mit_familie):
-    """FAM-8 / ENTRY-PATH-PROBE / T950:
-    GET /display/hoerspiel/mia/alben → <img src="/api/v1/familie/foto/finn">
-    in der Face-Pille (anderes_kind ist finn wenn aktiv mia).
+    """FAM-8 / ENTRY-PATH-PROBE / T950 / E-HSP-13:
+    GET /display/hoerspiel/mia/alben → <img src="/api/v1/familie/foto/mia">
+    in der Cycle-Pille (aktives_kind=mia; Pille zeigt AKIVES Kind, nicht Ziel).
 
-    Relativer Pfad (z.B. "finn.jpg") wäre Bug — Browser resolved zu
-    /display/hoerspiel/mia/finn.jpg → 404 → Broken-Img (Vorbefund T950).
+    Relativer Pfad wäre Bug — Browser resolved zu /display/hoerspiel/mia/mia.jpg
+    → 404 → Broken-Img (Vorbefund T950). Foto-URL muss absolut sein (FAM-8).
     """
     resp = client_mit_familie.get("/display/hoerspiel/mia/alben")
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
 
-    # FAM-8 absolute Foto-URL — anderes_kind=finn.
-    assert '/api/v1/familie/foto/finn' in html
+    # FAM-8 absolute Foto-URL — Cycle-Pille zeigt aktives_kind=mia.
+    assert '/api/v1/familie/foto/mia' in html
 
     # Kein relativer Pfad (relativer Pfad wäre Bug, HSP-3a FAM-8).
     import re
@@ -826,27 +831,120 @@ def client_familie_drei(runtime_cfg_with_mistral, data_cfg_mini, data_root_mini)
     return main_mod.app.test_client()
 
 
-def test_face_pillen_reihe_gewinnt_emil_additiv(client_familie_drei):
-    """HSP-43 / HSP-46 / HSP-3a n≥3: aus Mias View zeigt die Pillen-Reihe BEIDE
-    anderen Instanzen — Finn UND Niclas (additiv, kein 2-Toggle)."""
+def test_cycle_toggle_n3_zeigt_aktives_kind_href_naechstes(client_familie_drei):
+    """HSP-43 / E-HSP-13 / AC1+AC2: n≥3 — EIN Cycle-Toggle.
+    Aus Mias View: Pille zeigt Mia (aktiv), href=finn (nächster im Ring).
+    KEIN zweiter href auf emil — Pillen-Reihe ist abgelöst (Nic-Setzung 2026-07-08).
+    Ring-Reihenfolge aus config.INSTANZEN: mia→finn→emil→mia (AC2).
+    """
     resp = client_familie_drei.get("/display/hoerspiel/mia/alben")
     assert resp.status_code == 200
     html = resp.data.decode("utf-8")
-    # Beide Wechsel-Links vorhanden (vollständige Navigation, kein JS-State).
+    # EINE Cycle-Pille — href zeigt auf nächsten im Ring (finn).
     assert 'href="/display/hoerspiel/finn/alben"' in html
-    assert 'href="/display/hoerspiel/emil/alben"' in html
-    assert "Finn" in html
-    assert "Niclas" in html
-    # Eigene kind_id (mia) taucht NICHT als Wechsel-Link auf.
+    # Niclas-href darf NICHT erscheinen (KEINE Reihe mehr, AC1).
+    assert 'href="/display/hoerspiel/emil/alben"' not in html
+    # Aktives Kind (Mia) in der Pille sichtbar.
+    assert "Mia" in html
+    # ring-orange (Mias Ring) vorhanden.
+    assert "ring-orange" in html
+    # Eigene kind_id (mia) taucht nicht als Wechsel-Href auf.
     assert 'href="/display/hoerspiel/mia/alben"' not in html
+    # Genau eine face-pille (AC1: EINE Pille, nicht mehrere).
+    assert html.count('class="face-pille"') == 1
 
 
-def test_face_pillen_reihe_identisch_zu_zwei_hardcode(client_mit_familie):
-    """Regression: mit nur mia+finn im Snapshot verhält sich die Reihe wie der
-    alte 2-Hardcode — genau eine Pille (Finn), emil fehlt (nicht im Snapshot)."""
+def test_cycle_toggle_ring_wrap_around():
+    """AC2: Ring-Wrap-around — emil (letzter in INSTANZEN) → naechstes = mia.
+    Verifiziert die vollständige Ring-Kette via _pille_vars direkt (URL-3a: jede
+    Instanz dient nur ihrer eigenen kind_id — HTTP-Test wäre 404 bei Fremd-kind_id).
+    Ring: mia→finn→emil→mia (config.INSTANZEN-Reihenfolge, wrap-around).
+    """
+    from hoerspiel import familie_client as fc_mod
+    from hoerspiel import main as main_mod
+
+    transport = _make_familie_transport([
+        {"id": "mia", "name": "Mia", "ring": "orange", "art": "kinder",
+         "foto": "/display/_shared/fotos/mia.jpg"},
+        {"id": "finn", "name": "Finn", "ring": "blue", "art": "kinder",
+         "foto": "/display/_shared/fotos/finn.jpg"},
+        {"id": "emil", "name": "Niclas", "ring": "green", "art": "erwachsene",
+         "foto": "/display/_shared/fotos/emil.jpg"},
+    ])
+    mock_client = fc_mod.FamilieClient(
+        origin_url="http://127.0.0.1:5010", transport=transport)
+
+    # Direkt _pille_vars aufrufen — Test-Naht via runtime['familie_client'].
+    main_mod.runtime["familie_client"] = mock_client
+
+    try:
+        # mia → finn
+        pille_mia = main_mod._pille_vars("mia")
+        assert pille_mia["naechstes_kind"] is not None
+        assert pille_mia["naechstes_kind"]["url"] == "/display/hoerspiel/finn/alben"
+        assert pille_mia["naechstes_kind"]["person"].id == "finn"
+
+        # finn → emil
+        pille_finn = main_mod._pille_vars("finn")
+        assert pille_finn["naechstes_kind"] is not None
+        assert pille_finn["naechstes_kind"]["url"] == "/display/hoerspiel/emil/alben"
+        assert pille_finn["naechstes_kind"]["person"].id == "emil"
+
+        # emil → mia (wrap-around, AC2)
+        pille_emil = main_mod._pille_vars("emil")
+        assert pille_emil["naechstes_kind"] is not None
+        assert pille_emil["naechstes_kind"]["url"] == "/display/hoerspiel/mia/alben"
+        assert pille_emil["naechstes_kind"]["person"].id == "mia"
+    finally:
+        main_mod.runtime.pop("familie_client", None)
+
+
+def test_cycle_toggle_solo_bleibt_unpetraendert(client_mit_familie):
+    """AC3: 1-Instanz-Fall (nur mia im Snapshot ohne Finn) → Solo-Anzeige.
+    Kein Wechsel-Link, face-pille--solo bleibt.
+    Verwende client ohne finn im Snapshot (nur mia).
+    """
+    from hoerspiel import familie_client as fc_mod
+
+    transport = _make_familie_transport([
+        {"id": "mia", "name": "Mia", "ring": "orange", "art": "kinder",
+         "foto": "/display/_shared/fotos/mia.jpg"},
+        # finn FEHLT im Snapshot — Niclas auch.
+    ])
+    mock_client = fc_mod.FamilieClient(
+        origin_url="http://127.0.0.1:5010", transport=transport)
+    from hoerspiel import config as config_mod
+    from hoerspiel import main as main_mod
+    main_mod.configure(
+        runtime_config=config_mod.RuntimeConfig(
+            listen_host="127.0.0.1", listen_port=5053, log_level="INFO",
+            llm_provider="claude", llm_model="claude-opus-4-7",
+            anthropic_key="test-anthropic-key",
+        ),
+        data_config=config_mod.DataConfig(
+            default_voice="shimmer", serien_name="Stigi & Co."),
+        data_root="/tmp",
+        llm=None, tts_engine=None,
+        bot_token="TEST",
+        familie_client=mock_client,
+    )
+    client = main_mod.app.test_client()
+    resp = client.get("/display/hoerspiel/mia/alben")
+    assert resp.status_code == 200
+    html = resp.data.decode("utf-8")
+    # Solo: face-pille--solo vorhanden, kein Wechsel-Link.
+    assert "face-pille--solo" in html
+    assert 'href="/display/hoerspiel/finn/alben"' not in html
+    assert 'href="/display/hoerspiel/emil/alben"' not in html
+
+
+def test_face_pille_identisch_zwei_instanzen(client_mit_familie):
+    """Regression (ex test_face_pillen_reihe_identisch_zu_zwei_hardcode):
+    Mit mia+finn im Snapshot: EINE Cycle-Pille, href=finn (nächster nach mia).
+    emil fehlt im Snapshot → kein emil-Href (PLAN-20-Geist)."""
     resp = client_mit_familie.get("/display/hoerspiel/mia/alben")
     html = resp.data.decode("utf-8")
     assert 'href="/display/hoerspiel/finn/alben"' in html
-    # emil ist NICHT im Familie-Snapshot → keine emil-Pille (PLAN-20-Geist).
+    # emil ist NICHT im Familie-Snapshot → kein emil-Href (PLAN-20-Geist).
     assert 'href="/display/hoerspiel/emil/alben"' not in html
     assert html.count('class="face-pille"') == 1

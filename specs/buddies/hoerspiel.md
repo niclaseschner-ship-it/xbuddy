@@ -229,14 +229,17 @@ Vermischung (localStorage-Namensräume sind URL-getrennt, HSP-23).
 Auf einem kind-eigenen Gerät ohne Sharing kann die Pille entfallen
 oder reine Anzeige sein.
 
-**n≥3-Form (#1263, HSP-43/HSP-46).** Bei drei und mehr Instanzen ist die
-Pille kein binärer Toggle mehr, sondern zeigt die **übrigen Instanzen
-aus der Instanz-Liste** (HSP-43) als antippbare Reihe — Niclas erscheint
-gleichrangig neben Mia und Finn (kein `zielgruppe`-Filter, HSP-46). Der
-Wechsel bleibt vollständige Navigation auf die jeweilige
-`/display/hoerspiel/<kind_id>/alben`-URL (getrennte localStorage-
-Namensräume, HSP-23). Ab ~5 Instanzen tritt an die Stelle der Pillen-
-Reihe ein Dropdown. (ENTSCHEID-1263 → F2 „Face-Pille".)
+**n≥3-Form — Cycle-Toggle (Nic-Setzung 2026-07-08, HSP-43/HSP-46, supersedes ENTSCHEID-1263 F2).**
+Statt einer Pillen-Reihe der übrigen Instanzen zeigt die Pille immer das
+**aktive Kind** (Ring + Foto + Name) mit einem „wechseln"-Hinweis.
+Ein Tap führt per **vollständiger Navigation** zum **nächsten Kind im Ring**
+(Ring-Reihenfolge aus `config.INSTANZEN`, wrap-around, z. B. mia→finn→emil→mia),
+gefiltert auf im Familie-Snapshot vorhandene Personen (PLAN-20-Geist).
+EINE Pille statt Reihe beseitigt den visuellen Widerspruch bei n≥3
+(„zwei Knöpfe die sich widersprechen"). Die getrennte localStorage-
+Namensräume-Semantik (HSP-23) ist unverändert: der Wechsel ist ein
+echter URL-Wechsel, kein JS-State. (Nic-Setzung 2026-07-08 →
+fix/hoerspiel-switcher-cycle, supersedes ENTSCHEID-1263 F2.)
 
 **Bewusst keine Pille im Eltern-Mini-App-Header** (RAT-17 + #911 Nic-
 Wahl Variante C, 2026-06-16): die Eltern-Mini-App ist URL-parametrisch
@@ -2232,6 +2235,20 @@ zweiten n-Instanz-Buddy-Klasse (Premature Generalization); (b) App-UI-
 Alters-/Zielgruppen-Achse — Einfachheit > Flexibilität, Ton gehört in
 Daten; (c) sofortige Eltern-/Kinder-Sicht-Trennung — vertagt als
 OPEN-HSP-S bis zur Settings-App-als-Player.
+
+### E-HSP-13 — Face-Pille n≥3: Cycle-Toggle statt Reihe (Nic-Setzung 2026-07-08)
+*Datum:* 2026-07-08 (fix/hoerspiel-switcher-cycle, #1406) ·
+*Supersedes ENTSCHEID-1263 F2 „Face-Pille als Reihe bei n≥3".*
+Nic-Verdikt: „zwei Knöpfe die sich widersprechen" — die additiven Pillen
+der übrigen Instanzen (Finn + Niclas) erzeugen aus Mias View einen
+visuellen Widerspruch ohne klare Semantik. **Lösung: EIN Cycle-Toggle.**
+Die Pille zeigt das **aktive Kind** (Ring + Foto + Name) und einen
+„↔ wechseln"-Hinweis; Tap führt per vollständiger Navigation zur
+**nächsten Instanz im Ring** (`config.INSTANZEN`-Reihenfolge, wrap-around,
+z. B. mia→finn→emil→mia), gefiltert auf Registry-vorhandene Personen.
+Muster: analog `nextKindId` in `hoerspiel/static/player.js`. Kein JS-State
+(RAT-17 Option A), localStorage-Namensräume unverändert URL-getrennt (HSP-23).
+**1-Instanz-Solo-Fall bleibt unverändert** (kein Wechsel-Link, `face-pille--solo`).
 
 ---
 
