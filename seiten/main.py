@@ -90,11 +90,16 @@ runtime = {
     "ttl":               30,
     "inventar":          None,
     "gebaut_um":         0.0,
-    # SREG-7: zwei Display-URL-Origins (Heim + Tailscale).
+    # SREG-7: drei Display-URL-Origins (Heim + Tailscale + Funnel).
     # Heim ist Pflicht fuer SREG-5-Link und SREG-12-Seite.
     # Tailscale ist V1-Soll — fehlt, zeigt SREG-12 nur Heim + Banner.
+    # Funnel ist fuer Familien-User-Geraete ueber den Tailscale-Funnel (AUTH-7b,
+    # RAT-27 RATIFIZIERT 2026-07-07). Fehlt, ist der externe User-Geraete-Zugang
+    # schlicht nicht angeboten (kein Auto-Fallback auf heim/tailscale — falsche
+    # Origin = Cookie im falschen Jar + nicht-erreichbarer Link, SREG-7).
     "heim_origin":       "",
     "tailscale_origin":  "",
+    "funnel_origin":     "",
     # MAD-7 / EZG-6 / ESSEN-31: Init-Data-Auth fuer Mini-App-Routen.
     # bot_token: aus ENV ELTERNCHAT_BOT_TOKEN (systemd EnvironmentFile, APP-7).
     # init_data_config: dict aus init_data.load_config() — cached nach erstem Lauf.
@@ -114,6 +119,7 @@ runtime = {
 def configure(root=None, inventar_path=None, panel_url=None,
               geraete_url=None, ttl=None,
               heim_origin=None, tailscale_origin=None,
+              funnel_origin=None,
               bot_token=None, init_data_config=None,
               familie_client=None, router_url=None,
               geraete_registry_path=None):
@@ -124,9 +130,11 @@ def configure(root=None, inventar_path=None, panel_url=None,
     der Request liest von dort. Ohne `inventar_path` (Test-Modus) bleibt das
     in-memory-`inventar` die Quelle, ohne Disk-Schreiben.
 
-    `heim_origin` und `tailscale_origin` werden fuer die SREG-12-Seite
-    benoetigt (render.baue_layout). Leer = Wert bleibt unveraendert (None
-    ueberschreibt auf leeren String — explizit loeschbar).
+    `heim_origin`, `tailscale_origin` und `funnel_origin` werden fuer die
+    SREG-12-Seite benoetigt (render.baue_layout). Leer = Wert bleibt
+    unveraendert (None ueberschreibt auf leeren String — explizit loeschbar).
+    `funnel_origin` ist die Funnel-FQDN fuer Familien-User-Geraete (AUTH-7b,
+    SREG-7 dritte Origin, RAT-27 RATIFIZIERT 2026-07-07).
 
     `bot_token` und `init_data_config` werden fuer die MAD-7-Mini-App-Auth
     benoetigt. Im Test-Modus werden sie direkt gesetzt;
@@ -150,6 +158,8 @@ def configure(root=None, inventar_path=None, panel_url=None,
         runtime["heim_origin"] = heim_origin
     if tailscale_origin is not None:
         runtime["tailscale_origin"] = tailscale_origin
+    if funnel_origin is not None:
+        runtime["funnel_origin"] = funnel_origin
     if bot_token is not None:
         runtime["bot_token"] = bot_token
     if init_data_config is not None:
@@ -420,8 +430,9 @@ def get_seiten_uebersicht():
     Baut die V2-Layout-Datenstruktur via render.baue_layout und liefert das
     gerendertes HTML (Jinja2, Template uebersicht.html). Origins kommen aus dem
     runtime-Dict (SREG-7): ENV-Overrides SEITEN_HEIM_ORIGIN /
-    SEITEN_TAILSCALE_ORIGIN oder CLI-Flags --seiten-heim-origin /
-    --seiten-tailscale-origin, gesetzt beim Start (resolved_config).
+    SEITEN_TAILSCALE_ORIGIN / SEITEN_FUNNEL_ORIGIN oder CLI-Flags
+    --seiten-heim-origin / --seiten-tailscale-origin / --seiten-funnel-origin,
+    gesetzt beim Start (resolved_config).
 
     Fehlende Tailscale-Origin loest einen Banner-Hinweis auf der Seite aus
     (tailscale_banner=True via render.baue_layout — keine leere Seite).
@@ -432,6 +443,11 @@ def get_seiten_uebersicht():
         heim_origin=runtime["heim_origin"],
         tailscale_origin=runtime["tailscale_origin"],
     )
+    # SREG-7 dritte Origin: funnel_origin additiv in den Layout-Kontrakt
+    # — render.py benoetigt keine Kenntnis (keine URL-Bau-Aenderung fuer die
+    # Uebersichts-Seite selbst); der Wert ist fuer SREG-5-Skill-Konsumenten
+    # und die Mini-App-Uebersicht per Layout-SSoT zugaenglich.
+    layout["funnel_origin"] = runtime["funnel_origin"]
     return render_template("uebersicht.html", **layout)
 
 
@@ -458,6 +474,9 @@ def get_seiten_layout():
         heim_origin=runtime["heim_origin"],
         tailscale_origin=runtime["tailscale_origin"],
     )
+    # SREG-7 dritte Origin: funnel_origin additiv in den Daten-Kontrakt
+    # (analog get_seiten_uebersicht — kein render.py-Eingriff noetig).
+    layout["funnel_origin"] = runtime["funnel_origin"]
     return jsonify(layout)
 
 
@@ -1645,6 +1664,9 @@ def parse_args(argv):
                    help="Heimnetz-Origin für SREG-12-Seite (SREG-7, z.B. https://xbuddy-hub.local:8443)")
     p.add_argument("--seiten-tailscale-origin", dest="seiten_tailscale_origin",
                    help="Tailscale-Origin für SREG-12-Seite (SREG-7, leer = Banner)")
+    p.add_argument("--seiten-funnel-origin", dest="seiten_funnel_origin",
+                   help="Funnel-FQDN-Origin für Familien-User-Geräte (SREG-7 dritte Origin,"
+                        " AUTH-7b, RAT-27; z.B. https://buddyboard.taile235cf.ts.net)")
     # SHELL-2: Router-Origin fuer Panel→Display-Lookup (ROU-32).
     # ENV ROUTER_URL ueberschreibt Default; CLI-Flag schlaegt ENV.
     p.add_argument("--router-url", dest="router_url",
@@ -1685,6 +1707,12 @@ def resolved_config(args):
     cfg["tailscale_origin"] = (
         args.seiten_tailscale_origin
         or os.environ.get("SEITEN_TAILSCALE_ORIGIN", ""))
+    # SREG-7 dritte Origin: Funnel-FQDN fuer Familien-User-Geraete (AUTH-7b,
+    # RAT-27 RATIFIZIERT 2026-07-07). CLI schlaegt ENV schlaegt Default (leer).
+    # Leer = externer User-Geraete-Zugang nicht angeboten (kein Auto-Fallback).
+    cfg["funnel_origin"] = (
+        args.seiten_funnel_origin
+        or os.environ.get("SEITEN_FUNNEL_ORIGIN", ""))
     # SHELL-2: Router-Origin fuer Panel→Display-Lookup (ROU-32).
     cfg["router_url"] = (
         args.router_url
@@ -1706,6 +1734,7 @@ def main(argv=None):
               ttl=cfg["ttl"],
               heim_origin=cfg["heim_origin"],
               tailscale_origin=cfg["tailscale_origin"],
+              funnel_origin=cfg["funnel_origin"],
               router_url=cfg["router_url"],
               geraete_registry_path=cfg["geraete_registry_path"])
     if not cfg["tailscale_origin"]:
@@ -1714,6 +1743,13 @@ def main(argv=None):
         # ob die Per-Instanz-Datei den Wert noch ergaenzen muss.
         logging.warning(
             "SEITEN_TAILSCALE_ORIGIN leer — SREG-12 zeigt nur Heim-Spalte mit Banner.")
+    if not cfg["funnel_origin"]:
+        # SREG-7 dritte Origin: Funnel leer → externer User-Geraete-Zugang (AUTH-7b)
+        # nicht angeboten. Warnung damit Deploy-Tracking erkennt, ob die
+        # Per-Instanz-Datei SEITEN_FUNNEL_ORIGIN noch benoetigt.
+        logging.warning(
+            "SEITEN_FUNNEL_ORIGIN leer — Familien-User-Geraete erhalten keinen"
+            " Funnel-Origin-Link (SREG-7, AUTH-7b).")
 
     # Kaltstart-Aufbau (SREG-3): das Inventar sofort einmal bauen, damit der
     # erste Request schon eine vollständige Manifest-Sorte aus der Platte sieht.

@@ -88,6 +88,19 @@ Identitätsquellen valide ist:
   etwaigen ITP-Drop ab; fällt der Cookie in echter Nutzung wiederholt, ist das das
   Signal für einen Re-Pair-Nudge (AUTH-8 V2, `tg://`-Deep-Link). Gebaut wird ohne
   Wartezeit, getestet wird durch Benutzen.
+
+  **OQ-1 — Kiosk-Dauerbetrieb Rolling-Refresh-Heartbeat (#1390):** Kiosk-Geräte
+  (Display-Client `/display/<display_id>/`) laufen 24/7 ohne Nutzer-Interaktion.
+  Die SSE-Verbindung (`/api/v1/displays/<display_id>/events`) ist eine einzige
+  long-lived HTTP-Antwort — das `Set-Cookie` beim initialen Connect rollt den Cookie
+  **nicht** täglich vor. Ohne Gegenmaßnahme könnte der Cookie nach 90 Tagen ablaufen
+  und der Kiosk sieht die AUTH-8-Seite (silent break über Nacht). **Lösung:** der
+  Display-Client (`display-client/index.html`) sendet einmal täglich (86 400 s)
+  einen authentifizierten HEAD-Request an `location.href` (`/display/<display_id>/`).
+  Diese Route trägt `require_dual_gate(mode='observe')` — bei validem Cookie setzt
+  der Decorator ein frisches `Set-Cookie` (Rolling-Refresh). Keine neue Route nötig:
+  der bestehende authentifizierte Traffic reicht. Best-Effort (kein UI-Bruch bei
+  Netzfehler; Fetch-API-Check vor setInterval). Refs #1390.
 - **Header `Authorization: tma <initData>`** — wie `conventions/mini-app-design.md`
   MAD-7 beschrieben, HMAC-Validierung über `eltern-chat/init_data.py`.
 
@@ -599,6 +612,35 @@ Die Spec wird **phasenweise** ausgebaut, je Power-Flow eine Phase:
 
 [Quelle: ENTSCHEID 2026-06-16-1123 Paket-Sektion „Konsequenz Phase 1"
 → Reihenfolge der Folge-Phasen]
+
+## 7. Operative Abläufe
+
+### PWA-Reinstall über Funnel-Origin (Familien-User-Geräte, #1390)
+
+Wenn ein Familien-Gerät (Eltern-Phone/-Tablet, Kind-Tablet) die PWA neu
+installieren muss (z. B. nach Geräte-Reset oder Cookie-Verlust), ist der
+Ablauf über die **Funnel-FQDN** (SREG-7 `display_url_origin_funnel`):
+
+1. **Neuen Pairing-Link anfordern** — Elternteil schreibt dem Familien-Bot
+   `[Cookie nachschicken für <Gerätename>]`; der Bot antwortet per Privatchat
+   mit einem frischen 15-Minuten-Link auf die Funnel-FQDN
+   (`https://<funnel-fqdn>/auth/pair?token=<X>`).
+2. **Link auf dem Zielgerät öffnen** — Browser (nicht ein anderes Gerät) öffnet
+   den Link; `/auth/pair` prüft das Token, setzt den `xbuddy_session`-Cookie
+   (HttpOnly, First-Party auf der Funnel-FQDN) und leitet auf die Ziel-URL
+   (Shell oder Mini-App-Start) weiter. **Same-Origin-Pflicht:** PWA und
+   `/auth/pair` müssen unter derselben Funnel-FQDN laufen; wechselt die
+   Origin, sitzt der Cookie im falschen Jar (AUTH-2 iOS-Persistenz-Bedingung).
+3. **PWA (re-)installieren** — Browser zeigt „Zum Startbildschirm hinzufügen"
+   (iOS: Teilen → Zum Startbildschirm; Android: ⋮ → App installieren). Die PWA
+   wird von der Funnel-FQDN installiert und damit First-Party auf dieser Origin.
+4. **Verifizieren** — PWA öffnen → Auth-3-Route antwortet `200` (kein 401-Banner).
+   Kiosk-Heartbeat (OQ-1) sorgt ab diesem Zeitpunkt täglich für Rolling-Refresh.
+
+**Nicht nötig:** Zertifikat-Install auf dem Gerät (Funnel hat LE-Cert). Der
+Pairing-Link ist 15 Minuten gültig; läuft er ab, erneut Schritt 1 auslösen.
+
+*Tickets:* #1390, #948
 
 ## Offene Fragen
 
