@@ -182,7 +182,11 @@ _SW_SKELETON = """// sw.js — PWA-Mantel-Skelett (PWML-2 / PWAM-3), generiert v
 // seiten/pwa_mantel.render_sw() für Konsument %%COMPONENT%%.
 //
 // Genau ZWEI load-bearing Config-Knöpfe (aus pwa_mantel.REGISTRY):
-//   HTML_CACHE_MODE — cacht der Mantel-SW die HTML-Shell? ('cache-first' | 'network-only')
+//   HTML_CACHE_MODE — cacht der Mantel-SW die HTML-Shell?
+//                     'cache-first'   — Cache schlägt zuerst zu (Offline + schnell)
+//                     'network-first' — Netz zuerst, Cache-Fallback bei Netz-Fehler
+//                                       (HTML immer frisch, Offline-Fallback erhalten)
+//                     'network-only'  — immer Netz (kein HTML-Cache)
 //   STOP_PREFIXES   — Pfade, die der Mantel-SW UNBERÜHRT durchlässt (eigene SWs /
 //                     Streaming-Daten, die nie petralten dürfen).
 // __BUILD_ID__ wird beim Ausliefern von seiten/main.py substituiert (PWML-2).
@@ -247,6 +251,17 @@ function cacheFirst(req) {
   });
 }
 
+function networkFirst(req) {
+  // Netz zuerst — HTML immer frisch; bei Netz-Fehler Cache-Fallback (Offline).
+  return fetch(req).then((res) => {
+    if (res && res.ok) {
+      const copy = res.clone();
+      caches.open(CACHE_NAME).then((c) => c.put(req, copy)).catch(() => {});
+    }
+    return res;
+  }).catch(() => caches.match(req).then((cached) => cached || Response.error()));
+}
+
 // ── PWML-5 — optionale App-Runtime-Cache-Naht (n=1, HSP-54) ──
 // Default: kein Eingriff (null). Track B kann diese Funktion via zusätzlichem
 // importScripts()/Zuweisung überschreiben, um z. B. Folgen-Audio zu cachen —
@@ -271,6 +286,11 @@ self.addEventListener('fetch', (event) => {
   // Mantel-Shell: HTML_CACHE_MODE entscheidet, ob der Mantel HTML/Assets cacht.
   if (HTML_CACHE_MODE === 'cache-first' && inScope(url)) {
     event.respondWith(cacheFirst(req));
+    return;
+  }
+  if (HTML_CACHE_MODE === 'network-first' && inScope(url)) {
+    // Netz zuerst — HTML ist immer frisch; offline fällt auf Cache zurück.
+    event.respondWith(networkFirst(req));
     return;
   }
   // network-only / außerhalb Scope: pass-through (kein respondWith).
@@ -360,7 +380,9 @@ REGISTRY: dict[str, MantelConfig] = {
         start_url="/shell/<panel_id>",         # dynamisch je panel_id (PWAM-5 offene Frage 3)
         icons=("icon-192.png", "icon-512.png", "icon-maskable-512.png"),
         display="fullscreen",
-        html_cache_mode="cache-first",
+        # network-first: HTML immer frisch vom Server (stale-Cache-Fix, T1448);
+        # bei Netz-Fehler greift Cache-Fallback (Offline bleibt nutzbar).
+        html_cache_mode="network-first",
         stop_prefixes=("/controller/", "/display/"),  # PWAM-3: Panel-Iframes durchlassen
         sw_script_route="/shell/<panel_id>/sw.js",
         sw_scope="/shell/",
