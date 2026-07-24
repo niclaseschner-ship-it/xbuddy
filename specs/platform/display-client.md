@@ -57,6 +57,18 @@ Inhalt — innerhalb des laufenden Clients, ohne Neuladen (DC-2).
 
 *Tickets:* #30
 
+### DC-19 — Cookie-Credentials am SSE-Stream
+Der SSE-Stream (`/api/v1/displays/<id>/events`, ROU-22) ist ein AUTH-7b-Konsument:
+der Client öffnet den Stream mit `withCredentials: true`, damit der Browser den
+`xbuddy_session`-Cookie same-origin mitschickt. Dies ist notwendig, weil die
+EventSource-API in manchen Browser/Proxy-Kontexten Credentials standardmäßig
+weglässt, auch bei Same-Origin-Anfragen. Der Dual-Gate (AUTH-7b) am Stream
+prüft den Cookie, um die Display-Identität zu validieren. Cross-origin-Fälle
+(Display-Origin ≠ Funnel-Origin) sind noch nicht getragen — sie bräuchten
+serverseitig CORS (`Access-Control-Allow-Credentials`), das in V1 fehlt.
+
+*Tickets:* #1423
+
 ### DC-5 — Ruhe-Zustand ohne Inhalt
 Ist dem Display kein Inhalt zugeordnet — der Zustand ist `null` (ROU-10/12) —
 zeigt der Client einen Ruhe-Zustand: eine **vollständig schwarze Fläche**
