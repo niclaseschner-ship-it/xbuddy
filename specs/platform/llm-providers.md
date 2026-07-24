@@ -234,12 +234,22 @@ Fassade — kein neuer API-Vertrag.
 
 **Gestaffelte Migration (drei Slots):**
 
-1. **Slot 1 — Chat + Singleshot** (`get_chat`, `get_singleshot`, `get_completion`):
-   `seiten`/`hoerspiel`-Slots zuerst (cache-frei, geringeres Blast-Radius).
+> **Revision 2026-07-24 (Nic-Setzung):** Revidiert die ursprüngliche
+> RAT-26-§3-Sequenz (cache-frei zuerst). kibuddy-Chat (`get_chat`) wird als
+> bewusster Slot-1-Pilot vorgezogen (#1433, gemergt 2026-07-24). Die
+> Cache-Passthrough-Verifikation ist nachgelagert: der Live-Test hat
+> `cache_control`-Marker-Akzeptanz + `usage`-Mapping bereits belegt; volle
+> Multi-Turn-Cache-Hit-Prüfung (`cache_read_tokens>0`) erfolgt via
+> #1315-Golden-Fixture (nicht als Slot-1-Vorbedingung).
+
+1. **Slot 1 — kibuddy-Chat** (`get_chat`): `kibuddy`-Slot als bewusster
+   Erstmigrant (#1433, gemergt 2026-07-24). Cache-abhängig, aber bewusst
+   vorgezogen: `cache_control`-Marker-Akzeptanz und `usage`-Mapping per
+   Live-Test belegt; vollständige Multi-Turn-Cache-Hit-Prüfung nachgelagert
+   (#1315-Golden).
+2. **Slot 2 — Chat + Singleshot (Rest)** (`get_chat`, `get_singleshot`,
+   `get_completion`): verbleibende `seiten`/`hoerspiel`-Slots sowie `eltern-chat`.
    Voraussetzung: Golden-Set #1315 grün.
-2. **Slot 2 — Agent** (`get_agent`): `kibuddy` und `eltern-chat` — cache-abhängige
-   Slots, zuletzt, weil `cache_read_tokens>0` im Multi-Turn Beleg des
-   LiteLLM-Cache-Passthrough ist (Golden-Pflicht-Fixture, RAT-26 Kill-Kriterium a).
 3. **Slot 3 — Vendor-Cleanup:** Hand-Vendor-Files (`_vendor/anthropic.py`,
    `_vendor/mistral.py`) werden erst gelöscht + Dependency-Pin gesetzt,
    nachdem alle Slots mehrere Wochen grün auf LiteLLM laufen. Der Lösch-Schritt
