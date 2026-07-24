@@ -80,7 +80,7 @@ class MantelConfig:
     start_url: str | None = None               # PWAM-2 absoluter Präfix (= scope)
     icons: tuple[str, ...] = ()                # PWAM-2 Icon-Set (PNG 192/512/maskable)
     display: str | None = None                 # PWAM-2 fullscreen|standalone
-    html_cache_mode: str | None = None         # PWAM-3 HTML_CACHE_MODE
+    html_cache_mode: str | None = None         # PWAM-3 HTML_CACHE_MODE (cache-first|network-first|network-only)
     stop_prefixes: tuple[str, ...] = ()        # PWAM-3 STOP_PREFIXES (SW lässt durch)
     sw_script_route: str | None = None         # PWAM-3 Route, unter der der SW liegt
     sw_scope: str | None = None                # PWAM-3 Scope (muss start_url umfassen)

@@ -1588,14 +1588,29 @@ def _shell_build_id():
     return pwa_mantel.build_id_for("shell", static_dir)
 
 
+def _is_shell_icon(asset):
+    """Prueft, ob `asset` ein Shell-PWA-Icon ist (icon-*.png, AUTH-4-Public).
+
+    WebAPK-Installer holt Manifest-Icons credential-los (Fetch-Spec) — diese
+    Assets sind inhaltlich oeffentlich (AUTH-4-Kategorie analog manifest.json).
+    sw.js und alle anderen Assets bleiben gated (hard, AUTH-7b).
+    """
+    import re as _re
+    return bool(_re.match(r"^icon-[a-z0-9_-]+\.png$", asset))
+
+
 @app.route("/shell/<panel_id>/<path:asset>", methods=["GET"])
-@require_dual_gate(mode="hard")  # AUTH-7b: Shell-Flotte gepairt (Nic/Paula-LAN) — hard enforced (T1448).
 def shell_asset_view(panel_id, asset):
     """SHELL-PWA: PWA-Mantel-Asset-Auslieferung (analog ESSEN-34 / PLAN-35).
 
     Antwortet auf /shell/<panel_id>/sw.js und /shell/<panel_id>/icon-*.png.
     manifest.json wird von heim_shell_manifest bedient (spezifischere Flask-Route).
     Path-Traversal-Schutz via realpath-Check (analog einkauf_asset_view).
+
+    Auth-Klassifikation (AUTH-4 / AUTH-7b):
+      - icon-*.png:  PUBLIC (AUTH-4) — WebAPK-Installer holt Icons credential-los
+                     (Fetch-Spec); gegated 401 ueber den Funnel bricht PWA-Install.
+      - sw.js + alle anderen Assets: HARD (AUTH-7b) — 401 ohne Cookie/Operator-IP.
 
     Sonderfall sw.js:
       - __BUILD_ID__-Platzhalter wird ersetzt (SHELL-PWA Cache-Versionierung).
@@ -1608,6 +1623,27 @@ def shell_asset_view(panel_id, asset):
     # Manifest wird von heim_shell_manifest bedient — diese Route dient es nicht.
     if asset == "manifest.json":
         abort(404)
+
+    # AUTH-4 vs AUTH-7b — Icon-public-Entscheidung (T1448/AC2):
+    #   icon-*.png:  PUBLIC (AUTH-4) — WebAPK-Installer holt Icons ohne Credentials
+    #                (Fetch-Spec); gegated 401 ueber Funnel bricht PWA-Install.
+    #   sw.js + andere Assets: HARD (AUTH-7b) — 401 ohne Cookie/Operator-IP.
+    # Rolling-Refresh-Subject wird nur im Cookie-Pfad befuellt (fuer spaeteres
+    # set_cookie auf der fertigen Response — nach Asset-Erzeugung).
+    _refresh_cookie_subject = None
+    if not _is_shell_icon(asset):
+        bot_token = _get_bot_token()
+        cookie_val = request.cookies.get(_session_cookie.COOKIE_NAME)
+        cookie_ok = bool(bot_token) and _auth_gate.hat_gueltigen_cookie(
+            cookie_val, bot_token)
+        operator_ok = _auth_gate.ist_operator_ip(_client_ip())
+        if cookie_ok:
+            # Cookie-Pfad: Rolling-Refresh-Subject fuer spaeteres set_cookie merken.
+            _refresh_cookie_subject = _session_cookie.verify_session(cookie_val, bot_token)
+        elif not operator_ok:
+            resp = make_response(_DUAL_GATE_401_HTML, 401)
+            resp.headers["Content-Type"] = "text/html; charset=utf-8"
+            return resp
 
     root = os.path.realpath(_shell_asset_root())
     target = os.path.realpath(os.path.join(root, asset))
@@ -1631,9 +1667,18 @@ def shell_asset_view(panel_id, asset):
         # nur Scope <= /shell/<panel_id>/. (T1324: SSoT aus REGISTRY, analog CONN-8.)
         resp.headers["Service-Worker-Allowed"] = pwa_mantel.REGISTRY["shell"].sw_scope
         resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        return resp
+    else:
+        resp = make_response(send_from_directory(root, asset, mimetype=mimetype))
 
-    return send_from_directory(root, asset, mimetype=mimetype)
+    # Rolling-Refresh (AUTH-2:78): Cookie mit frischem exp neu setzen (nur Cookie-Pfad).
+    if _refresh_cookie_subject is not None:
+        bot_token = _get_bot_token()
+        resp.set_cookie(
+            _session_cookie.COOKIE_NAME,
+            _session_cookie.sign_session(_refresh_cookie_subject, bot_token),
+            **_session_cookie.session_cookie_kwargs(),
+        )
+    return resp
 
 
 # ============================================================
