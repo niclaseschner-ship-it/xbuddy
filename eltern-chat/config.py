@@ -160,14 +160,6 @@ DEFAULTS = {
     # zum Pi-Setup (PORT-2 KIBuddy auf 5054, KIBUDDY-25). Leer ⇒ Aufgabe
     # NICHT im Katalog (AND-Guard mit family_group_chat_id_getter, KAQS-6).
     "kibuddy_origin_url": "http://127.0.0.1:5054",
-    # CNS-1 / #1380: Telegram-User-ID des Master-Kontos. Harte Autorisierungs-
-    # Grenze für sensible Geräte-Akte (heute: Pairing-Cookie nachschicken,
-    # `cookie_nachschicken`). NUR diese ID darf für ein bestehendes Gerät einen
-    # frischen Pairing-Link anfordern (auth.md: Geräte-Autorisierung nur Master-
-    # Telegram-ID). Per-Instanz-Wert; ENV/Datei via configloader-Konvention
-    # (`ELTERNCHAT_MASTER_TELEGRAM_USER_ID`). Leer (Default) ⇒ die Aufgabe wird
-    # NICHT im Katalog registriert (AND-Guard in tasks.py).
-    "master_telegram_user_id": "",
     # ONB-6 / EC-15: Familien-Gruppen-Chat-ID. Default leer = Onboarding-
     # Bindung. Über ENV oder Datei gesetzt → gesperrt (Vorrang vor
     # Onboarding-Bindung) — die Sperr-Logik sitzt in `resolve`, nicht im
@@ -216,8 +208,7 @@ class Config:
                  hoerspiel_url_origin_finn="",
                  hoerspiel_url_origin_emil="",
                  kibuddy_origin_url="",
-                 wetter_origin_url="",
-                 master_telegram_user_id=""):
+                 wetter_origin_url=""):
         self.bot_token = bot_token
         self.provider_api_key = provider_api_key
         self.provider = provider
@@ -258,8 +249,6 @@ class Config:
         self.kibuddy_origin_url = kibuddy_origin_url      # leer → KAQS NICHT im Katalog
         # WRO-5 / #1094: Origin des Garderoben-Editors (/display/wetter/regeln)
         self.wetter_origin_url = wetter_origin_url        # leer → WRO NICHT im Katalog
-        # CNS-1 / #1380: Master-Telegram-User-ID (harte Autorisierungs-Grenze).
-        self.master_telegram_user_id = master_telegram_user_id  # leer → CNS NICHT im Katalog
 
 
 def _family_group_in_file(config_path):
@@ -397,6 +386,4 @@ def resolve(config_path, zd=None):
         kibuddy_origin_url=str(values["kibuddy_origin_url"]).strip().rstrip("/"),
         # WRO-5 / #1094: Origin des Wetter-Buddys (WRO-8 AND-Guard).
         wetter_origin_url=str(values["wetter_origin_url"]).strip().rstrip("/"),
-        # CNS-1 / #1380: Master-Telegram-User-ID (harte Autorisierungs-Grenze).
-        master_telegram_user_id=str(values["master_telegram_user_id"]).strip(),
     )

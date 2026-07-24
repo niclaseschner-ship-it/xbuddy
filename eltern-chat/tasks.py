@@ -506,20 +506,21 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
             pairing_bot_token=pairing_bot_token,
             pairing_origin=pairing_origin))
 
-    # CNS-1 / #1380: »Cookie nachschicken« — frischer Pairing-Link für ein
-    # bestehendes Gerät, per DM, NUR für das Master-Konto. AND-Guard: braucht
-    # pairing_bot_token (HMAC-Sign-Key) + pairing_origin (Funnel-FQDN) +
-    # master_user_id (harte Autorisierungs-Grenze) + geraete_origin_url (Lookup).
+    # CNS-2 / #1401: »Cookie nachschicken« — frischer Pairing-Link für ein
+    # bestehendes Gerät, per DM, NUR für Erwachsene der Familie. AND-Guard:
+    # braucht pairing_bot_token (HMAC-Sign-Key) + pairing_origin (Funnel-FQDN)
+    # + geraete_origin_url (Lookup) + familie_origin_url (Erwachsenen-Gate).
     # Fehlt einer, entfällt die Aufgabe still (kein halb-verdrahteter Credential-
     # Pfad).
-    if pairing_bot_token and pairing_origin and master_user_id \
-            and geraete_origin_url is not None:
+    if pairing_bot_token and pairing_origin \
+            and geraete_origin_url is not None \
+            and familie_origin_url is not None:
         from skills.cookie_nachschicken_task import CookieNachschickenTask
         catalog.register(CookieNachschickenTask(
             tg,
-            master_user_id=master_user_id,
             pairing_bot_token=pairing_bot_token,
             pairing_origin=pairing_origin,
+            familie_origin_url=familie_origin_url,
             geraete_origin_url=geraete_origin_url))
 
     if zd_store_getter is not None and kav_sessions is not None \
