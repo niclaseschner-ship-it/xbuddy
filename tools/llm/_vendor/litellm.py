@@ -16,9 +16,14 @@ LiteLLM-`ModelResponse`-Objekte statt dict.get). Sie übersetzt die neutrale
 Form, setzt `cache_control: ephemeral` am System-Block (Kosten-Parität zum
 Alt-eltern-chat-Pfad) und liefert die neutrale
 `{"text", "tool_calls", "usage", "web_search", "web_search_requests"}`-Form
-(web_search leer/0 — der Vendor deklariert kein web_search). `singleshot_*`
-bleibt `NotImplementedError` (Slot 2-Rest, #1316); wer es heute ruft, sieht
-klar, dass die Sicht auf diesem Vendor noch nicht migriert ist.
+(web_search leer/0 — der Vendor deklariert kein web_search).
+
+Slot 3 (#1454) migriert die Singleshot-Sichten: `singleshot_structured(...)`
+(forced tool_choice named form, Spiegel `_vendor/mistral.py`) und
+`singleshot_text(...)` (Freitext) sind jetzt implementiert — getattr-Zugriff
+gegen die LiteLLM-`ModelResponse` statt dict.get (wie `agent_step`). Damit
+trägt der litellm-Vendor die hoerspiel-Folgen-/Synopse-Pfade (get_singleshot /
+get_completion); `structured_output` ist in CAPABILITIES aufgenommen.
 
 Cache-Marker-Strategie (LLMP-S1 `get_chat` Required `cache_control`): identisch
 zur Anthropic-Hand-Form — der **System-Prompt** trägt `cache_control:
@@ -54,8 +59,12 @@ logger = logging.getLogger(__name__)
 # ist damit gedeckt (tool_use + multi_turn_assistant_prefill +
 # system_message_distinct). `web_search` wird BEWUSST NICHT deklariert: der
 # server-seitige web_search-Pfad bleibt auf dem anthropic-Vendor (hoerspiel);
-# eltern-chat fährt reine Client-Tools. structured_output/multimodal_input
-# folgen mit den noch nicht migrierten singleshot-Sichten (#1316).
+# eltern-chat fährt reine Client-Tools.
+# Slot 3 (#1454) migriert die Singleshot-Sichten (`singleshot_structured` +
+# `singleshot_text`) und fügt `structured_output` hinzu — REQUIRED_SINGLESHOT
+# (structured_output + system_message_distinct) und REQUIRED_COMPLETION
+# (system_message_distinct) sind damit gedeckt. `multimodal_input` bleibt
+# undekariert (hoerspiel nutzt keine Bilder auf diesem Pfad).
 # `speech` + `transcription` (T1410, LLMP-S6/RAT-28): dieser Vendor implementiert
 # beide Audio-Modalitäten über `litellm.speech()` / `litellm.transcription()` —
 # darum werden sie hier deklariert (REQUIRED_SPEECH / REQUIRED_TRANSCRIPTION in
@@ -64,6 +73,7 @@ CAPABILITIES = frozenset({
     "tool_use",
     "multi_turn_assistant_prefill",
     "cache_control",
+    "structured_output",
     "system_message_distinct",
     "speech",
     "transcription",
@@ -76,22 +86,13 @@ CAPABILITIES = frozenset({
 DEFAULT_MODEL = "claude-haiku-4-5"
 DEFAULT_MAX_TOKENS = 2048
 
-# Hinweis für die noch nicht migrierten singleshot-Sichten (#1316).
-_NOT_IMPLEMENTED_HINT = (
-    "litellm-vendor: %s ist noch nicht auf LiteLLM migriert — "
-    "chat_multiturn (get_chat) und agent_step (get_agent) sind migriert. "
-    "singleshot folgt mit #1316. Nutze bis dahin den anthropic-Slot."
-)
-
-
 class LitellmVendor(VendorBase):
-    """LiteLLM-Messages-Adapter — `chat_multiturn` + `agent_step` + Audio.
+    """LiteLLM-Messages-Adapter — `chat_multiturn` + `agent_step` + singleshot + Audio.
 
     Hält den lazy-importierten `litellm`-SDK-Handle. `agent_step` (Slot 2,
-    #1449/#1452) ist implementiert; die `singleshot_*`-Sichten werfen weiterhin
-    `NotImplementedError` mit klarem Slot-Hinweis, damit ein versehentlicher
-    `get_singleshot`-Ruf gegen diesen Vendor sofort sichtbar wird (Spiegel
-    Anthropic-V1-Ansatz).
+    #1449/#1452) UND die `singleshot_*`-Sichten (Slot 3, #1454) sind
+    implementiert — der Vendor trägt damit alle vier Text-Sichten
+    (get_chat/get_agent/get_singleshot/get_completion) sowie Audio.
 
     `agent_run` und `_tool_result_block` werden von `VendorBase` geerbt (LLMP-S7,
     kein Copy — Spiegel `_vendor/mistral.py`); der Loop dort ruft `agent_step`
@@ -374,16 +375,148 @@ class LitellmVendor(VendorBase):
         return self._parse_agent_response(response)
 
     # ------------------------------------------------------------------
-    #  Slot 2-Rest — singleshot noch nicht migriert (#1316)
+    #  Sicht: get_singleshot — Structured Singleshot (hoerspiel, Slot 3/#1454)
     # ------------------------------------------------------------------
 
-    def singleshot_structured(self, *args: Any, **kwargs: Any) -> Any:
-        """Slot 2 (get_singleshot) — noch nicht auf LiteLLM migriert (#1316)."""
-        raise NotImplementedError(_NOT_IMPLEMENTED_HINT % "singleshot_structured")
+    def singleshot_structured(
+        self,
+        system: str,
+        prompt: str,
+        schema: dict[str, Any],
+        *,
+        caller: str,
+        slot: str,
+        tool_name: str = "ergebnis",
+        tool_description: str = "Strukturiertes Ergebnis-Objekt nach Schema.",
+        correlation_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Ein Call, forced `tool_use` → Schema-konformes dict (LLMP-S1
+        `get_singleshot`, Spiegel `_vendor/mistral.py:singleshot_structured`).
 
-    def singleshot_text(self, *args: Any, **kwargs: Any) -> Any:
-        """Slot 2 (get_completion) — noch nicht auf LiteLLM migriert (#1316)."""
-        raise NotImplementedError(_NOT_IMPLEMENTED_HINT % "singleshot_text")
+        Baut den OpenAI-Chat-Completions-Payload aus EINER user-Message
+        (`prompt`) + EINEM Tool (`_to_litellm_tool` — geteilt mit der Agent-
+        Sicht) und erzwingt es über die **benannte** `tool_choice`-Form
+        (`{"type":"function","function":{"name":tool_name}}`, OpenAI-Parität,
+        wie mistral). KEIN images-Kwarg (hoerspiel nutzt hier keine Bilder;
+        `multimodal_input` ist nicht deklariert).
+
+        Der System-Prompt wird als eigene `{"role":"system", …}`-Message
+        vorangestellt (system_message_distinct). ANDERS als `chat_multiturn`/
+        `agent_step` wird HIER KEIN `cache_control`-Marker gesetzt: ein
+        Singleshot ist ein Ein-Turn-Call ohne Cache-Nutzen (Spiegel mistral,
+        das ebenfalls keinen Cache-Marker setzt).
+
+        Parst die LiteLLM-`ModelResponse` per getattr (NICHT dict.get wie
+        mistral): `response.choices[i].message.tool_calls[j].function.name/
+        arguments`. `json.loads(function.arguments)` defensiv (JSONDecodeError/
+        TypeError → {}). Kein `tool_call` mit `name==tool_name` →
+        `ProviderError` (Spiegel `mistral.py:175-177`). Telemetrie via
+        geteiltem `_emit_telemetry` (kein Copy-Paste — LLMP-S7). LiteLLM-API-
+        Fehler → `ProviderError` (analog `chat_multiturn`/`agent_step`).
+        """
+        messages: list[dict[str, Any]] = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
+        completion_kwargs: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "api_key": self._api_key,
+            "max_tokens": self.max_tokens,
+            "tools": [self._to_litellm_tool({
+                "name": tool_name,
+                "description": tool_description,
+                "input_schema": schema,
+            })],
+            # Benannte Form (OpenAI-Parität, Spiegel mistral) — pinnt das EINE
+            # Schema-Tool statt "auto"/"required".
+            "tool_choice": {"type": "function", "function": {"name": tool_name}},
+        }
+
+        t_start = time.monotonic()
+        try:
+            response = self._litellm.completion(**completion_kwargs)
+        except self._litellm.exceptions.APIError as e:
+            logger.warning("litellm-vendor: singleshot-API-Fehler: %s", e)
+            raise ProviderError(str(e)) from e
+        wall_ms = int((time.monotonic() - t_start) * 1000)
+
+        self._emit_telemetry(
+            response=response,
+            caller=caller,
+            slot=slot,
+            correlation_id=correlation_id,
+            wall_ms=wall_ms,
+        )
+
+        for choice in getattr(response, "choices", None) or []:
+            message = getattr(choice, "message", None)
+            if message is None:
+                continue
+            for tc in getattr(message, "tool_calls", None) or []:
+                fn = getattr(tc, "function", None)
+                if getattr(fn, "name", None) != tool_name:
+                    continue
+                raw_args = getattr(fn, "arguments", None) or "{}"
+                try:
+                    args = json.loads(raw_args)
+                except (json.JSONDecodeError, TypeError):
+                    args = {}
+                return args if isinstance(args, dict) else {}
+        raise ProviderError(
+            "litellm-vendor: forced tool_use lieferte keinen %r-Block" % tool_name
+        )
+
+    # ------------------------------------------------------------------
+    #  Sicht: get_completion — Freitext-Singleshot (hoerspiel-Synopse, Slot 3/#1454)
+    # ------------------------------------------------------------------
+
+    def singleshot_text(
+        self,
+        system: str,
+        user: str,
+        *,
+        caller: str,
+        slot: str,
+        correlation_id: str | None = None,
+    ) -> str:
+        """Ein Call, Freitext-Antwort → str (LLMP-S1 `get_completion`, Spiegel
+        `_vendor/mistral.py:singleshot_text`).
+
+        Baut den Payload aus EINEM system + EINEM user-Message, OHNE
+        `tools`/`tool_choice`/`schema`, und gibt den Text-Content zurück
+        (`_extract_text` — geteilt mit `chat_multiturn`). KEIN
+        `cache_control`-Marker (Ein-Turn-Singleshot, Spiegel mistral).
+        Telemetrie via geteiltem `_emit_telemetry` (kein Copy-Paste — LLMP-S7).
+        LiteLLM-API-Fehler → `ProviderError` (analog `chat_multiturn`).
+        """
+        messages: list[dict[str, Any]] = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": user})
+
+        t_start = time.monotonic()
+        try:
+            response = self._litellm.completion(
+                model=self.model,
+                messages=messages,
+                api_key=self._api_key,
+                max_tokens=self.max_tokens,
+            )
+        except self._litellm.exceptions.APIError as e:
+            logger.warning("litellm-vendor: completion-API-Fehler: %s", e)
+            raise ProviderError(str(e)) from e
+        wall_ms = int((time.monotonic() - t_start) * 1000)
+
+        self._emit_telemetry(
+            response=response,
+            caller=caller,
+            slot=slot,
+            correlation_id=correlation_id,
+            wall_ms=wall_ms,
+        )
+        return self._extract_text(response)
 
     # ------------------------------------------------------------------
     #  neutrale (Anthropic-shaped) Wire-Form -> OpenAI-Payload (agent_step)
