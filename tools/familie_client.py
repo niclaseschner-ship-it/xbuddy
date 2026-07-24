@@ -95,6 +95,43 @@ class FamilieClient:
         Parse- (json/Unicode) und Schema-Fehler (keine Liste, kein dict je Person).
         Logging als Warnung; kein Exception-Durchbruch.
         """
+        personen = self._fetch_personen()
+        if personen is None:
+            return None
+        return self._extract_telegram_ids(personen)
+
+    def get_erwachsene_telegram_ids(self) -> set[int] | None:
+        """Liefert die Menge der Telegram-IDs aller Erwachsenen (art=erwachsene).
+
+        Filtert aus ``GET /api/v1/familie/personen`` nur Einträge mit
+        ``art == "erwachsene"`` heraus. Personen ohne ``telegram_id`` werden
+        übersprungen. Kinder (``art == "kinder"``) und Personen mit unbekannter
+        ``art`` werden ausgeschlossen.
+
+        Returns:
+            ``set[int]`` mit den Telegram-IDs aller Erwachsenen.
+            ``None`` bei Service-Ausfall oder Parse-Fehler (fail-open, analog
+            ``get_telegram_ids``).
+
+        Refs: #1401 — CNS-2: cookie_nachschicken öffnet sich für alle Erwachsenen.
+        """
+        personen = self._fetch_personen()
+        if personen is None:
+            return None
+        return self._extract_telegram_ids(
+            [p for p in personen if isinstance(p, dict) and p.get("art") == "erwachsene"]
+        )
+
+    # ------------------------------------------------------------------ #
+    #  Interne Helpers
+    # ------------------------------------------------------------------ #
+
+    def _fetch_personen(self) -> list | None:
+        """Holt und parst ``GET /api/v1/familie/personen``.
+
+        Liefert die rohe Liste der Personen-Dicts oder ``None`` bei Fehler.
+        Fehler-Logging analog zum früheren inline-Kod in ``get_telegram_ids``.
+        """
         url = self._origin + PFAD_PERSONEN
         try:
             raw_bytes = self._fetch(url)
@@ -127,8 +164,13 @@ class FamilieClient:
             )
             return None
 
+        return data
+
+    def _extract_telegram_ids(self, personen: list) -> set[int]:
+        """Extrahiert ``telegram_id``-Werte aus einer Personen-Liste als ``set[int]``."""
+        url = self._origin + PFAD_PERSONEN
         ids: set[int] = set()
-        for person in data:
+        for person in personen:
             if not isinstance(person, dict):
                 continue
             tg_id = person.get("telegram_id")
