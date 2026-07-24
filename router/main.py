@@ -1126,6 +1126,7 @@ def _send_display_asset(rel_path):
 
 
 @app.route('/display/<display_id>/<path:asset>', methods=['GET'])
+@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (Display-Assets, initial Observe)
 def display_asset(display_id, asset):
     # ROU-33: Auslieferung von Display-Client-Assets (manifest.json, Icons)
     # unter /display/<display_id>/<asset>. Die <display_id> im Pfad-Präfix
@@ -1439,6 +1440,7 @@ def controller_index(app):
 
 
 @app.route('/controller/<app>/<path:asset>', methods=['GET'])
+@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (Controller-Assets, initial Observe)
 def controller_asset(app, asset):
     # ROU-23: alle Statik-Pfade unter /controller/<app>/ aus controller_dir().
     # send_from_directory + realpath-Check verhindern Path-Traversal.
@@ -1634,6 +1636,7 @@ def app_panel_index_slash(panel_id):
 
 
 @app.route('/controller/app-panel/<panel_id>/<path:asset>', methods=['GET'])
+@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (App-Panel-Assets, initial Observe)
 def app_panel_asset(panel_id, asset):
     # ROU-27 / PREG-9: config.json und tiles.json werden an den panel-Service
     # geproxt + Last-Known-Good-gecacht. Alle anderen Assets kommen weiter

@@ -211,6 +211,98 @@ def test_shell_keine_quelle_observe_gibt_200(seiten_client, caplog):
 
 
 # ---------------------------------------------------------------------------
+# T1418 — Asset-Unterrouten: observe→200+Log, hard→401
+# entry_path_probe: GET /display/<id>/<asset> + /shell/<id>/<asset> durch den Gate
+# ---------------------------------------------------------------------------
+
+
+def test_display_asset_observe_gibt_200_und_loggt(router_client, caplog):
+    """entry_path_probe (router): GET /display/<id>/<asset> läuft im Observe-Modus
+    durch (200) — kein 401 trotz fehlender Auth-Quelle. Log-Eintrag belegt Gate."""
+    with caplog.at_level(logging.WARNING):
+        resp = router_client.get(
+            "/display/%s/manifest.json" % DISPLAY_ID, headers=_EXTERN
+        )
+    assert resp.status_code == 200, (
+        "Display-Asset-Route muss im Observe-Modus 200 zurückgeben, got %d"
+        % resp.status_code
+    )
+    assert any("AUTH-3.a Observe" in r.message for r in caplog.records), (
+        "Observe-Log-Eintrag fehlt für /display/<id>/<asset>"
+    )
+
+
+def test_display_asset_operator_ip_gibt_200(router_client):
+    """entry_path_probe (router): Operator-IP reicht als Auth-Quelle für
+    /display/<id>/<asset> — 200 ohne Cookie."""
+    resp = router_client.get(
+        "/display/%s/manifest.json" % DISPLAY_ID, headers=_OPERATOR
+    )
+    assert resp.status_code == 200
+
+
+def test_display_asset_cookie_gibt_200(router_client):
+    """entry_path_probe (router): valider Cookie reicht als Auth-Quelle für
+    /display/<id>/<asset> — 200 + Rolling-Refresh."""
+    router_client.set_cookie(sc.COOKIE_NAME, sc.sign_session(DISPLAY_ID, BOT_TOKEN))
+    resp = router_client.get(
+        "/display/%s/manifest.json" % DISPLAY_ID, headers=_EXTERN
+    )
+    assert resp.status_code == 200
+    assert sc.COOKIE_NAME in resp.headers.get("Set-Cookie", ""), (
+        "Rolling-Refresh fehlt bei Display-Asset mit Cookie"
+    )
+
+
+def test_shell_manifest_observe_gibt_200_und_loggt(seiten_client, caplog):
+    """entry_path_probe (seiten): GET /shell/<id>/manifest.json läuft im Observe-
+    Modus durch (200) — kein 401 trotz fehlender Auth-Quelle. Log-Eintrag belegt Gate."""
+    with caplog.at_level(logging.WARNING):
+        resp = seiten_client.get(
+            "/shell/%s/manifest.json" % PANEL_ID, headers=_EXTERN
+        )
+    assert resp.status_code == 200, (
+        "Shell-Manifest-Route muss im Observe-Modus 200 zurückgeben, got %d"
+        % resp.status_code
+    )
+    assert any("AUTH-3.a Observe" in r.message for r in caplog.records), (
+        "Observe-Log-Eintrag fehlt für /shell/<id>/manifest.json"
+    )
+
+
+def test_shell_asset_observe_gibt_200_und_loggt(seiten_client, caplog):
+    """entry_path_probe (seiten): GET /shell/<id>/sw.js läuft im Observe-Modus
+    durch (200) — kein 401 trotz fehlender Auth-Quelle."""
+    with caplog.at_level(logging.WARNING):
+        resp = seiten_client.get(
+            "/shell/%s/sw.js" % PANEL_ID, headers=_EXTERN
+        )
+    assert resp.status_code == 200, (
+        "Shell-Asset-Route (sw.js) muss im Observe-Modus 200 zurückgeben, got %d"
+        % resp.status_code
+    )
+    assert any("AUTH-3.a Observe" in r.message for r in caplog.records), (
+        "Observe-Log-Eintrag fehlt für /shell/<id>/sw.js"
+    )
+
+
+def test_asset_hard_mode_ohne_quelle_gibt_401(router_client):
+    """hard-Mode-Probe für Asset-Route: require_dual_gate(mode='hard') liefert
+    401 + AUTH-8-HTML, wenn keine Quelle vorliegt (analog test_hard_mode_ohne_quelle).
+    Belegt, dass der Decorator auf Asset-Routen funktional aktiv ist."""
+    @router_main.require_dual_gate(mode="hard")
+    def _asset_dummy():
+        return "asset-content"
+
+    with router_main.app.test_request_context(
+        "/display/%s/sw.js" % DISPLAY_ID, headers=_EXTERN
+    ):
+        resp = router_main.app.make_response(_asset_dummy())
+    assert resp.status_code == 401
+    assert "neu verbunden" in resp.get_data(as_text=True)
+
+
+# ---------------------------------------------------------------------------
 # entry_path_probe — paired_at-Write-Proof (auth.md AUTH-2.a / OD3)
 # ---------------------------------------------------------------------------
 
