@@ -96,13 +96,16 @@ def _bau_tool_description():
     return (
         "Liest mehrere Termine aus einem fotografierten Plan (Schulplan, "
         "Kursplan, Vereins-Saisonübersicht) und trägt sie nach Bestätigung "
-        "im Familien-Kalender ein. NUR aufrufen, wenn die Nachricht ein "
-        "Foto MIT einem Signalwort im Begleittext enthält. Signalwörter "
-        "(mindestens eines im Begleittext): %s. Ohne Signalwort NICHT "
-        "aufrufen — dann ist `foto_senden` gemeint (kommentarloses Foto "
-        "in den Bilderrahmen). Bild kommt nicht über die Tool-Argumente, "
-        "sondern aus dem TurnContext (deterministisch). Der Begleittext "
-        "wird als `caption` durchgereicht." % signalwoerter)
+        "im Familien-Kalender ein. "
+        "⚠️ PFLICHT: bei Foto + Signalwort im Begleittext IMMER aufrufen — "
+        "KEINE Kontext-Antwort, auch wenn Termine im Gesprächsverlauf "
+        "bekannt sind (das Bild kann weitere Termine enthalten). "
+        "Signalwörter (mindestens eines muss im Begleittext stehen): %s. "
+        "Ohne Signalwort NICHT aufrufen — dann ist `foto_senden` gemeint "
+        "(kommentarloses Foto in den Bilderrahmen). "
+        "Bild kommt nicht über die Tool-Argumente, sondern aus dem "
+        "TurnContext (deterministisch). Der Begleittext wird als `caption` "
+        "durchgereicht." % signalwoerter)
 
 
 class TermineAusBildTask(WriteTask):
