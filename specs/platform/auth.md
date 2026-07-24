@@ -559,9 +559,9 @@ mindestens:
 
 - Geräte-Name (aus `geraete.json`, falls die Quell-URL eine `display_id`
   trägt; sonst neutraler Hinweis).
-- Anweisung: „Dieses Gerät muss neu verbunden werden. Öffne im Familien-
-  Bot den Befehl `/gerät_neu_pairen <display_id>` und folge dem Link auf
-  diesem Gerät."
+- Anweisung: „Dieses Gerät muss neu verbunden werden. Frag den
+  Familien-Chatbot einfach nach einem neuen Cookie für dein Gerät — dann
+  geht es wieder. Oder pair im Chat ein neues Gerät."
 
 **V1** ist eine reine Text-Anweisungsseite. **V2** ergänzt einen `tg://`-
 Deep-Link (`tg://resolve?domain=<bot>&start=neu_pairen_<display_id>`), der
