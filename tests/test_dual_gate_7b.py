@@ -112,6 +112,23 @@ def test_display_cookie_gibt_200_und_rolling_refresh(router_client):
     assert "Secure" in set_cookie
 
 
+def test_display_head_cookie_rolling_refresh_oq1(router_client):
+    """OQ-1 / #1390 — HEAD auf /display/<id>/ mit gültigem Cookie.
+
+    Flask leitet HEAD automatisch an die GET-Route weiter (RFC 7231 §4.3.2).
+    require_dual_gate muss im Cookie-Pfad unabhängig von der HTTP-Methode
+    einen frischen Set-Cookie-Header (Rolling-Refresh, AUTH-2:78) liefern.
+    HEAD-Antworten dürfen keinen Body haben — der Status muss 200 sein.
+    """
+    router_client.set_cookie(sc.COOKIE_NAME, sc.sign_session(DISPLAY_ID, BOT_TOKEN))
+    resp = router_client.head("/display/%s/" % DISPLAY_ID, headers=_EXTERN)
+    assert resp.status_code == 200
+    set_cookie = resp.headers.get("Set-Cookie", "")
+    assert sc.COOKIE_NAME in set_cookie, "Rolling-Refresh fehlt im HEAD-Response (AUTH-2:78)"
+    assert "HttpOnly" in set_cookie
+    assert "Secure" in set_cookie
+
+
 def test_display_keine_quelle_observe_gibt_200_und_loggt(router_client, caplog):
     with caplog.at_level(logging.WARNING):
         resp = router_client.get("/display/%s/" % DISPLAY_ID, headers=_EXTERN)
