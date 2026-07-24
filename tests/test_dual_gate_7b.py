@@ -203,15 +203,17 @@ def test_shell_cookie_gibt_200_und_rolling_refresh(seiten_client):
     assert sc.COOKIE_NAME in resp.headers.get("Set-Cookie", "")
 
 
-def test_shell_keine_quelle_observe_gibt_200(seiten_client, caplog):
-    with caplog.at_level(logging.WARNING):
-        resp = seiten_client.get("/shell/%s" % PANEL_ID, headers=_EXTERN)
-    assert resp.status_code == 200  # Observe, kein 401
-    assert any("AUTH-3.a Observe" in r.message for r in caplog.records)
+def test_shell_keine_quelle_hard_gibt_401(seiten_client):
+    """T1448: /shell/<panel_id> ist auf hard gesetzt — 401 ohne Auth-Quelle."""
+    resp = seiten_client.get("/shell/%s" % PANEL_ID, headers=_EXTERN)
+    assert resp.status_code == 401  # hard — kein Durchlass ohne Cookie/Operator-IP
+    assert "neu verbunden" in resp.get_data(as_text=True)
 
 
 # ---------------------------------------------------------------------------
-# T1418 — Asset-Unterrouten: observe→200+Log, hard→401
+# T1418 / T1448 — Asset- und Manifest-Routen
+# T1418: display-Assets observe→200+Log
+# T1448: shell-Manifest public→200 (kein Gate); shell-Assets hard→401
 # entry_path_probe: GET /display/<id>/<asset> + /shell/<id>/<asset> durch den Gate
 # ---------------------------------------------------------------------------
 
@@ -254,35 +256,59 @@ def test_display_asset_cookie_gibt_200(router_client):
     )
 
 
-def test_shell_manifest_observe_gibt_200_und_loggt(seiten_client, caplog):
-    """entry_path_probe (seiten): GET /shell/<id>/manifest.json läuft im Observe-
-    Modus durch (200) — kein 401 trotz fehlender Auth-Quelle. Log-Eintrag belegt Gate."""
+def test_shell_manifest_public_gibt_200_ohne_gate(seiten_client, caplog):
+    """T1448/AC2: GET /shell/<id>/manifest.json ist public (kein Gate-Decorator).
+
+    Browser holt PWA-Manifeste credential-los (Fetch-Spec) → gegated 401 über den
+    Funnel bricht PWA-Install (#1437). Manifest gibt 200 OHNE Auth-Quelle zurück —
+    UND trägt keinen AUTH-3.a-Observe-Log (kein Gate aktiv).
+    """
     with caplog.at_level(logging.WARNING):
         resp = seiten_client.get(
             "/shell/%s/manifest.json" % PANEL_ID, headers=_EXTERN
         )
     assert resp.status_code == 200, (
-        "Shell-Manifest-Route muss im Observe-Modus 200 zurückgeben, got %d"
+        "Shell-Manifest-Route muss public 200 zurückgeben (kein Gate), got %d"
         % resp.status_code
     )
-    assert any("AUTH-3.a Observe" in r.message for r in caplog.records), (
-        "Observe-Log-Eintrag fehlt für /shell/<id>/manifest.json"
+    # Kein Gate-Decorator → kein AUTH-3.a-Log.
+    assert not any("AUTH-3.a Observe" in r.message for r in caplog.records), (
+        "AUTH-3.a-Observe-Log darf NICHT erscheinen — Manifest-Route ist public (kein Gate)"
     )
 
 
-def test_shell_asset_observe_gibt_200_und_loggt(seiten_client, caplog):
-    """entry_path_probe (seiten): GET /shell/<id>/sw.js läuft im Observe-Modus
-    durch (200) — kein 401 trotz fehlender Auth-Quelle."""
-    with caplog.at_level(logging.WARNING):
-        resp = seiten_client.get(
-            "/shell/%s/sw.js" % PANEL_ID, headers=_EXTERN
-        )
+def test_shell_asset_hard_ohne_quelle_gibt_401(seiten_client):
+    """T1448/AC3: GET /shell/<id>/sw.js ohne Auth-Quelle → 401 (hard enforced).
+
+    sw.js ist eine Shell-Asset-Route (shell_asset_view) mit mode='hard'.
+    Ohne Cookie oder Operator-IP → 401 + AUTH-8-HTML.
+    """
+    resp = seiten_client.get("/shell/%s/sw.js" % PANEL_ID, headers=_EXTERN)
+    assert resp.status_code == 401, (
+        "Shell-Asset-Route (sw.js) muss im hard-Modus 401 zurückgeben, got %d"
+        % resp.status_code
+    )
+    assert "neu verbunden" in resp.get_data(as_text=True), (
+        "AUTH-8-Re-Pair-HTML ('neu verbunden') fehlt in 401-Antwort"
+    )
+
+
+def test_shell_asset_operator_ip_gibt_200(seiten_client):
+    """T1448/AC3: Operator-IP reicht als Auth-Quelle für Shell-Assets — 200 ohne Cookie."""
+    resp = seiten_client.get("/shell/%s/sw.js" % PANEL_ID, headers=_OPERATOR)
     assert resp.status_code == 200, (
-        "Shell-Asset-Route (sw.js) muss im Observe-Modus 200 zurückgeben, got %d"
+        "Shell-Asset-Route (sw.js) mit Operator-IP muss 200 liefern, got %d"
         % resp.status_code
     )
-    assert any("AUTH-3.a Observe" in r.message for r in caplog.records), (
-        "Observe-Log-Eintrag fehlt für /shell/<id>/sw.js"
+
+
+def test_shell_asset_cookie_gibt_200(seiten_client):
+    """T1448/AC3: valider Cookie reicht als Auth-Quelle für Shell-Assets — 200 + Rolling-Refresh."""
+    seiten_client.set_cookie(sc.COOKIE_NAME, sc.sign_session(DISPLAY_ID, BOT_TOKEN))
+    resp = seiten_client.get("/shell/%s/sw.js" % PANEL_ID, headers=_EXTERN)
+    assert resp.status_code == 200, (
+        "Shell-Asset-Route (sw.js) mit Cookie muss 200 liefern, got %d"
+        % resp.status_code
     )
 
 
@@ -300,6 +326,100 @@ def test_asset_hard_mode_ohne_quelle_gibt_401(router_client):
         resp = router_main.app.make_response(_asset_dummy())
     assert resp.status_code == 401
     assert "neu verbunden" in resp.get_data(as_text=True)
+
+
+# ---------------------------------------------------------------------------
+# T1448/AC1 — Live-Pfad-Test: GET /shell/<panel>/sw.js body traegt network-first
+# ---------------------------------------------------------------------------
+
+
+def test_shell_sw_js_live_pfad_traegt_network_first_body(seiten_client):
+    """AC1 entry_path_probe: GET /shell/<panel_id>/sw.js liefert im Body network-first-Logik.
+
+    Prueft den ECHTEN Serve-Pfad (shell_asset_view via read_sw_with_build_id),
+    NICHT den Skelett-String aus render_sw(). Belegt, dass die committete
+    seiten/static/shell/sw.js network-first implementiert — die Datei ist die
+    Wahrheit fuer die Shell (Approach B, T1448-S2-fix).
+
+    Operator-IP als Auth-Quelle (shell_asset_view ist hard).
+    """
+    resp = seiten_client.get("/shell/%s/sw.js" % PANEL_ID, headers=_OPERATOR)
+    assert resp.status_code == 200, (
+        "GET /shell/<panel>/sw.js muss 200 liefern (Operator-IP), got %d"
+        % resp.status_code
+    )
+    body = resp.get_data(as_text=True)
+    assert "networkFirst" in body or "network-first" in body, (
+        "sw.js-Body muss network-first-Logik enthalten (T1448/AC1); "
+        "body enthaelt weder 'networkFirst' noch 'network-first'"
+    )
+    # Sicherstellen: cache-first fuer Shell-HTML ist NICHT die alleinige Strategie.
+    # (cacheFirst-Funktion kann fuer statische Assets existieren — das ist OK;
+    #  aber der HTML-Pfad muss network-first sein.)
+    assert "function networkFirst" in body, (
+        "sw.js-Body muss eine networkFirst-Funktion definieren (T1448/AC1)"
+    )
+    assert "__BUILD_ID__" not in body, (
+        "BUILD_ID-Platzhalter darf im ausgelieferten sw.js-Body nicht mehr stehen"
+    )
+
+
+# ---------------------------------------------------------------------------
+# T1448/AC2 — Icons public, sw.js bleibt gated
+# ---------------------------------------------------------------------------
+
+
+def test_shell_icon_public_ohne_quelle_gibt_200(seiten_client):
+    """AC2 entry_path_probe: GET /shell/<panel_id>/icon-192.png ohne Auth-Quelle → 200.
+
+    WebAPK-Installer holt Manifest-Icons credential-los (Fetch-Spec, AUTH-4).
+    Icons muessen auch ohne Cookie und ohne Operator-IP 200 zurueckgeben.
+    """
+    resp = seiten_client.get("/shell/%s/icon-192.png" % PANEL_ID, headers=_EXTERN)
+    assert resp.status_code == 200, (
+        "Shell-Icon muss public 200 zurueckgeben (AUTH-4, kein Gate), got %d"
+        % resp.status_code
+    )
+    assert resp.content_type.startswith("image/png"), (
+        "Shell-Icon muss image/png Content-Type liefern, got: %s" % resp.content_type
+    )
+
+
+def test_shell_sw_js_bleibt_gated_ohne_quelle(seiten_client):
+    """AC2: GET /shell/<panel_id>/sw.js ohne Auth-Quelle → 401 (nicht public).
+
+    sw.js ist kein inhaltlich oeffentliches Asset — der SW-Fetch traegt Credentials.
+    Sicherstellt, dass die Icons-public-Ausnahme NICHT auf sw.js ausgeweitet wurde.
+    """
+    resp = seiten_client.get("/shell/%s/sw.js" % PANEL_ID, headers=_EXTERN)
+    assert resp.status_code == 401, (
+        "sw.js muss hard-gated bleiben (401 ohne Quelle), got %d"
+        % resp.status_code
+    )
+
+
+def test_shell_icon_512_public_ohne_quelle_gibt_200(seiten_client):
+    """AC2: GET /shell/<panel_id>/icon-512.png ohne Auth-Quelle → 200 (AUTH-4).
+
+    Prueft alle Icon-Varianten: icon-512.png (any purpose) ebenfalls public.
+    """
+    resp = seiten_client.get("/shell/%s/icon-512.png" % PANEL_ID, headers=_EXTERN)
+    assert resp.status_code == 200, (
+        "icon-512.png muss public 200 zurueckgeben (AUTH-4), got %d"
+        % resp.status_code
+    )
+
+
+def test_shell_icon_maskable_public_ohne_quelle_gibt_200(seiten_client):
+    """AC2: GET /shell/<panel_id>/icon-maskable-512.png ohne Auth-Quelle → 200 (AUTH-4).
+
+    Prueft die maskable-Icon-Variante — ebenfalls credential-los via WebAPK-Installer.
+    """
+    resp = seiten_client.get("/shell/%s/icon-maskable-512.png" % PANEL_ID, headers=_EXTERN)
+    assert resp.status_code == 200, (
+        "icon-maskable-512.png muss public 200 zurueckgeben (AUTH-4), got %d"
+        % resp.status_code
+    )
 
 
 # ---------------------------------------------------------------------------

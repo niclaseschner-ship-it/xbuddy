@@ -126,6 +126,7 @@ def test_heim_shell_build_id_nutzt_shell_registry(monkeypatch, client):
     heim-shell.css-Bump setzt neuen ?v=<build_id> in HTML. Die Route darf kein
     inline getmtime mehr enthalten — build_id kommt jetzt aus
     pwa_mantel.build_id_for('shell', static_dir) (T1284-AC1).
+    T1448: /shell/ ist hard enforced — Operator-IP als Auth-Quelle (opt-in).
     """
     static_dir = os.path.join(_SEITEN_DIR, "static")
 
@@ -137,7 +138,7 @@ def test_heim_shell_build_id_nutzt_shell_registry(monkeypatch, client):
     monkeypatch.setattr(pwa_mantel.os.path, "getmtime", fake_getmtime)
     monkeypatch.setattr(seiten_main, "_lookup_display_id", lambda panel_id: None)
 
-    resp = client.get("/shell/testpanel")
+    resp = client.get("/shell/testpanel", headers={"X-Real-IP": "192.0.2.10"})
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "?v=777" in body, (

@@ -1474,7 +1474,7 @@ def _lookup_display_id(panel_id):
 
 
 @app.route("/shell/<panel_id>", methods=["GET"])
-@require_dual_gate(mode="observe")  # AUTH-7b: Cookie ODER Operator-IP (initial Observe, AUTH-3.a)
+@require_dual_gate(mode="hard")  # AUTH-7b: Shell-Flotte gepairt (Nic/Mia-LAN) — hard enforced (T1448).
 def heim_shell(panel_id):
     """SHELL-1: Heim-Shell Split-Layout — GET /shell/<panel_id> liefert HTML.
 
@@ -1502,7 +1502,8 @@ def heim_shell(panel_id):
 
 
 @app.route("/shell/<panel_id>/manifest.json", methods=["GET"])
-@require_dual_gate(mode="observe")  # AUTH-7b: Cookie ODER Operator-IP (Shell-Manifest, initial Observe)
+# manifest.json bleibt public — Browser holt PWA-Manifeste credential-los (Fetch-Spec).
+# Gegated 401 über den Funnel würde PWA-Install brechen (#1437). sw.js/Icons unberührt.
 def heim_shell_manifest(panel_id):
     """SHELL-10 / SHELL-PWA: PWA-Manifest je panel_id (analog PWA-1 / ESSEN-33).
 
@@ -1551,14 +1552,18 @@ def heim_shell_manifest(panel_id):
     return resp
 
 
-# ── SHELL-PWA: Asset-Auslieferung (sw.js, icons) ─────────────────────────────
+# ── SHELL-PWA: Asset-Auslieferung (sw.js gated, icons/manifest public) ───────
 #
 # Spec-Anker: SHELL-PWA (specs/platform/heim-shell.md). Analog ESSEN-34/PLAN-35.
-# manifest.json wird oben dynamisch erzeugt (panel_id im Pfad); diese Route
-# bedient alle statischen Mantel-Assets aus seiten/static/shell/.
+# Auth-Klassifikation (AUTH-4 / AUTH-7b, T1448-S3-fix):
+#   manifest.json — heim_shell_manifest (public, AUTH-4): Browser-Fetch spec.
+#   sw.js         — shell_sw_view (gated, AUTH-7b hard): eigene Literal-Route,
+#                   Literal-Segment trumpft Variable → Flask bevorzugt diese Route.
+#   icon-*.png    — shell_asset_view (public, AUTH-4): WebAPK-Installer credential-los.
 #
-# Flask routet /shell/<panel_id>/manifest.json zur spezifischeren Route oben
-# (Literal-Segment trumpft Variable); diese Route erhaelt sw.js und icon-*.png.
+# Flask-Routing-Prioritaet: Literal > String-Variable > Path-Variable.
+# /shell/<panel_id>/sw.js (Literal "sw.js") wird IMMER vor
+# /shell/<panel_id>/<path:asset> ausgewaehlt, wenn der Request auf sw.js endet.
 
 _SHELL_MIME = {
     ".js":  "application/javascript",
@@ -1587,25 +1592,78 @@ def _shell_build_id():
     return pwa_mantel.build_id_for("shell", static_dir)
 
 
-@app.route("/shell/<panel_id>/<path:asset>", methods=["GET"])
-@require_dual_gate(mode="observe")  # AUTH-7b: Cookie ODER Operator-IP (Shell-Assets, initial Observe)
-def shell_asset_view(panel_id, asset):
-    """SHELL-PWA: PWA-Mantel-Asset-Auslieferung (analog ESSEN-34 / PLAN-35).
+def _is_shell_icon(asset):
+    """Prueft, ob `asset` ein Shell-PWA-Icon ist (icon-*.png, AUTH-4-Public).
 
-    Antwortet auf /shell/<panel_id>/sw.js und /shell/<panel_id>/icon-*.png.
-    manifest.json wird von heim_shell_manifest bedient (spezifischere Flask-Route).
-    Path-Traversal-Schutz via realpath-Check (analog einkauf_asset_view).
+    WebAPK-Installer holt Manifest-Icons credential-los (Fetch-Spec) — diese
+    Assets sind inhaltlich oeffentlich (AUTH-4-Kategorie analog manifest.json).
+    sw.js und alle anderen Assets bleiben gated (hard, AUTH-7b).
+    """
+    import re as _re
+    return bool(_re.match(r"^icon-[a-z0-9_-]+\.png$", asset))
+
+
+@app.route("/shell/<panel_id>/sw.js", methods=["GET"])
+@require_dual_gate(mode="hard")  # AUTH-7b hard (T1448-S3-fix): sw.js bleibt gated.
+def shell_sw_view(panel_id):
+    """SHELL-PWA: Service-Worker-Auslieferung (gated, AUTH-7b hard).
+
+    Eigene Literal-Route fuer sw.js — Flask-Prioritaet: Literal-Segment ("sw.js")
+    trumpft Path-Variable (<path:asset>), deshalb landen sw.js-Requests IMMER hier
+    und NICHT in shell_asset_view. Das macht den require_dual_gate-Decorator per
+    AST sichtbar (AUTH-9-Membran, T1448-S3-fix).
 
     Sonderfall sw.js:
-      - __BUILD_ID__-Platzhalter wird ersetzt (SHELL-PWA Cache-Versionierung).
-      - Service-Worker-Allowed: /shell/ — erlaubt Scope jenseits der SW-Datei-URL
-        (SW liegt unter /shell/<panel_id>/sw.js, Scope soll /shell/ sein).
+      - __BUILD_ID__-Platzhalter wird ersetzt (SHELL-PWA Cache-Versionierung, PWAM-4/5).
+      - Service-Worker-Allowed: /shell/ — erlaubt Scope jenseits der SW-Datei-URL.
       - Cache-Control no-store, damit der Browser den Worker bei Updates neu holt.
+    """
+    from flask import abort
+
+    root = os.path.realpath(_shell_asset_root())
+    target = os.path.realpath(os.path.join(root, "sw.js"))
+    if not target.startswith(root + os.sep) and target != root:
+        abort(404)
+    if not os.path.isfile(target):
+        abort(404)
+
+    build_id = _shell_build_id()
+    body = pwa_mantel.read_sw_with_build_id(target, build_id)
+    resp = make_response(body, 200)
+    resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
+    # Service-Worker-Allowed: REGISTRY['shell'].sw_scope — SW-Scope darf
+    # /shell/<panel_id>/ ueberschreiten. Ohne diesen Header erlaubt der Browser
+    # nur Scope <= /shell/<panel_id>/. (T1324: SSoT aus REGISTRY, analog CONN-8.)
+    resp.headers["Service-Worker-Allowed"] = pwa_mantel.REGISTRY["shell"].sw_scope
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return resp
+
+
+@app.route("/shell/<panel_id>/<path:asset>", methods=["GET"])
+# PUBLIC (AUTH-4): icon-*.png — WebAPK-Installer holt Icons credential-los (Fetch-Spec,
+# auth.md AUTH-4). Gegated 401 ueber den Funnel bricht PWA-Install (#1437, T1448-S2).
+# sw.js wird von shell_sw_view (Literal-Route, gated) bedient — nicht hier.
+# manifest.json wird von heim_shell_manifest bedient — nicht hier.
+# AST-Membran: shell_sw_view traegt require_dual_gate (sichtbar per AUTH-9-Test);
+#   shell_asset_view ist als AUTH-4-Public-Route explizit ausgenommen (test_auth_decorator_copetrage.py).
+def shell_asset_view(panel_id, asset):
+    """SHELL-PWA: PWA-Icon-Auslieferung (public, AUTH-4, analog ESSEN-34 / PLAN-35).
+
+    Bedient /shell/<panel_id>/icon-*.png (und weitere statische Shell-Assets, falls
+    kuenftig ergaenzt). sw.js wird per Literal-Route shell_sw_view gated ausgeliefert
+    (Flask-Prioritaet: Literal > Path-Variable). manifest.json geht an heim_shell_manifest.
+
+    Path-Traversal-Schutz via realpath-Check (analog einkauf_asset_view).
+    Kein Gate-Decorator: AUTH-4-Public-Kategorie (WebAPK credential-los).
     """
     from flask import abort, send_from_directory
 
     # Manifest wird von heim_shell_manifest bedient — diese Route dient es nicht.
     if asset == "manifest.json":
+        abort(404)
+    # sw.js wird von shell_sw_view (Literal-Route, gated) bedient.
+    # Flask routet sw.js-Requests dorthin; dieser Guard ist defensiv.
+    if asset == "sw.js":
         abort(404)
 
     root = os.path.realpath(_shell_asset_root())
@@ -1619,20 +1677,7 @@ def shell_asset_view(panel_id, asset):
 
     ext = os.path.splitext(target)[1].lower()
     mimetype = _SHELL_MIME.get(ext, "application/octet-stream")
-
-    if os.path.basename(target) == "sw.js":
-        build_id = _shell_build_id()
-        body = pwa_mantel.read_sw_with_build_id(target, build_id)
-        resp = make_response(body, 200)
-        resp.headers["Content-Type"] = mimetype + "; charset=utf-8"
-        # Service-Worker-Allowed: REGISTRY['shell'].sw_scope — SW-Scope darf
-        # /shell/<panel_id>/ ueberschreiten. Ohne diesen Header erlaubt der Browser
-        # nur Scope <= /shell/<panel_id>/. (T1324: SSoT aus REGISTRY, analog CONN-8.)
-        resp.headers["Service-Worker-Allowed"] = pwa_mantel.REGISTRY["shell"].sw_scope
-        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        return resp
-
-    return send_from_directory(root, asset, mimetype=mimetype)
+    return make_response(send_from_directory(root, asset, mimetype=mimetype))
 
 
 # ============================================================

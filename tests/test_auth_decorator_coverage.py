@@ -299,14 +299,29 @@ _REDIRECT_EXEMPT = frozenset({
     "/controller/app-panel/<panel_id>",  # 301 → /controller/app-panel/<id>/
 })
 
+# AUTH-4-Public-Routen unter /shell/ (T1448-S3-fix, auth.md AUTH-4):
+#   manifest.json — Browser holt PWA-Manifeste credential-los (Fetch-Spec);
+#                   gegated 401 bricht PWA-Install (#1437).
+#   <path:asset>  — icon-*.png (WebAPK-Installer credential-los, SHELL-PWA AC2).
+#                   sw.js laeuft ueber die Literal-Route shell_sw_view (gated, require_dual_gate
+#                   AST-sichtbar); shell_asset_view bedient nur public Icons (AUTH-4).
+#   Behavioral-Membran: test_shell_sw_js_bleibt_gated_ohne_quelle (tests/test_dual_gate_7b.py)
+#   belegt, dass sw.js trotz public-asset-Route 401 liefert (Literal-Route greift zuerst).
+_AUTH4_PUBLIC_SEITEN_EXEMPT = frozenset({
+    "/shell/<panel_id>/manifest.json",  # AUTH-4: PWA-Manifest public (heim_shell_manifest)
+    "/shell/<panel_id>/<path:asset>",   # AUTH-4: icon-*.png public (shell_asset_view)
+})
+
 
 def _is_7b_candidate(route: dict, prefixes: tuple) -> bool:
     """True, wenn die Route unter einem 7b-Präfix liegt, nicht _shared und nicht
-    ein 301-Redirect-Stub ist, und GET bedient."""
+    ein 301-Redirect-Stub oder AUTH-4-Public-Route ist, und GET bedient."""
     path = route["path"]
     if "GET" not in route["methods"]:
         return False
     if path in _REDIRECT_EXEMPT:
+        return False
+    if path in _AUTH4_PUBLIC_SEITEN_EXEMPT:
         return False
     if not any(path.startswith(p) for p in prefixes):
         return False
@@ -332,8 +347,14 @@ def test_alle_nichtshared_7b_router_routen_tragen_dual_gate():
 
 
 def test_alle_nichtshared_7b_seiten_routen_tragen_dual_gate():
-    """AUTH-9-Schärfung: ALLE GET-Routen unter /shell/* müssen require_dual_gate
-    tragen — HTML-Shell, manifest.json und Asset-Unterrouten (/sw.js, icons)."""
+    """AUTH-9-Schärfung: ALLE GET-Routen unter /shell/* müssen require_dual_gate tragen.
+
+    Ausnahmen (AUTH-4-Public, T1448-S3-fix):
+      - manifest.json  → heim_shell_manifest (public, Fetch-Spec, #1437)
+      - <path:asset>   → shell_asset_view (public, icon-*.png AUTH-4)
+    sw.js traegt den Gate ueber die Literal-Route shell_sw_view (AST-sichtbar).
+    Behavioral-Membran: test_shell_sw_js_bleibt_gated_ohne_quelle (test_dual_gate_7b.py).
+    """
     dekoriert = _decorated_routes(MODULE_MAP_7B["seiten"])
     kandidaten = [r for r in dekoriert if _is_7b_candidate(r, _7B_SEITEN_PREFIXES)]
     assert kandidaten, (
@@ -342,6 +363,6 @@ def test_alle_nichtshared_7b_seiten_routen_tragen_dual_gate():
     fehlend = [r["path"] for r in kandidaten if not r["auth"]]
     assert not fehlend, (
         "AUTH-9-Schärfung (seiten): diese 7b-Routen tragen require_dual_gate NICHT "
-        "(manifest.json und Asset-Unterrouten müssen ebenfalls gegatet sein):\n  "
+        "(HTML-Shell und sw.js-Literal-Route muessen gegatet sein):\n  "
         + "\n  ".join(fehlend)
     )
