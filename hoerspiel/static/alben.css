@@ -109,6 +109,16 @@ body.xb[data-stage="toddler"] {
   white-space: nowrap;
 }
 
+/* Cycle-Wechsel-Hinweis (HSP-3a Nic-Setzung 2026-07-08). */
+.face-pille-swap {
+  font-family: var(--font-display);
+  font-size: var(--fs-12, 12px);
+  color: var(--kids-ink);
+  opacity: 0.55;
+  white-space: nowrap;
+  line-height: 1;
+}
+
 .topbar-icon {
   width: 88px; height: 88px;
   background: var(--kids-paper);
