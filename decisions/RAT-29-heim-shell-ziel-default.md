@@ -1,4 +1,4 @@
-# RAT-29 — Heim-Shell als Ziel-Default: Zwei-Geräte-Modell wird durch Shell auf einem Gerät ersetzt
+# RAT-29 — Heim-Shell als Ziel-Default: Der Zwei-Geräte-Default entfällt, ein Gerät vereint Panel und Display
 
 **Datum:** 2026-07-24 · **Ratifiziert:** Nic-Setzung 2026-07-24 · **Refs:** #1182, #1409 · **Supersedes:** RAT-25 (Pilot-Scope) · **Extends:** RAT-27
 
@@ -8,19 +8,19 @@ RAT-25 (2026-06-30) ratifizierte die Heim-Shell bewusst als **LAN-only-Pilot** (
 
 RAT-27 (2026-07-07) hob den LAN-only-Riegel via Auth-Funnel (AUTH-7b) auf: die Shell ist jetzt extern erreichbar für Geräte mit `xbuddy_session`-Cookie.
 
-**Nic-Setzung 2026-07-24** (#1409-Kommentar): Die Heim-Shell ist die neue PWA, die Panel und Display in einer URL vereint. Sie wird zum **neuen Default** — ein Gerät reicht, zwei sind nicht mehr nötig. Was „nach und nach abgebaut" wird, ist das **Zwei-Geräte-Modell**, nicht die Apps.
+**Nic-Setzung 2026-07-24** (#1409-Kommentar, Klarstellung): Der bisherige **Default „es braucht zwei Geräte (Gerät 1: Panel, Gerät 2: Display)"** entfällt. Künftig reicht **ein Gerät**, das Panel und Display vereint. Was abgebaut wird, ist dieser Zwei-Geräte-Default — nicht die Apps.
 
 ## Entscheidung
 
 ### 1. Heim-Shell = strategischer Ziel-Zustand (Pilot → Default)
 
-`/shell/<panel_id>` ist der primäre Einstiegspunkt für Familien-Geräte. Ein Gerät, das Panel und Buddy braucht, wird langfristig über die Shell bedient. Die Split-Layout-Architektur (SHELL-1..SHELL-11, RAT-25) bleibt vollständig unverändert — RAT-29 ändert den Scope, nicht den technischen Kern.
+`/shell/<panel_id>` ist der primäre Einstiegspunkt für Familien-Geräte. Der bisherige Default (zwei Geräte) wird durch die Shell auf einem Gerät abgelöst. Die Split-Layout-Architektur (SHELL-1..SHELL-11, RAT-25) bleibt vollständig unverändert — RAT-29 ändert den Default, nicht den technischen Kern.
 
-### 2. Zwei-Geräte-Modell entfällt als Normalfall
+### 2. Der Zwei-Geräte-Default entfällt
 
-Das bisherige Modell: **Gerät 1** zeigt das Panel (Controller), **Gerät 2** zeigt den Display-Client (Buddy-View). Die Shell ersetzt das: **ein Gerät** zeigt beides — Panel-Nav links, Buddy-View rechts.
+Das bisherige Modell war der implizite **Default**: Gerät 1 zeigt das Panel (Controller), Gerät 2 zeigt den Display-Client (Buddy-View). Die Shell löst diesen Default ab: **ein Gerät** zeigt beides — Panel-Nav links, Buddy-View rechts. Zwei Geräte bleiben weiterhin möglich, sind aber kein Normalfall mehr.
 
-**Alle Apps bleiben vollständig erhalten.** essen-einkauf, plan, hoerspiel-player, connector, routine und alle weiteren Views existieren unverändert als Buddy-Views im rechten Pane der Shell. Keine App, keine Route, keine Funktionalität entfällt. Was entfällt ist der **separate Display-Klient auf einem zweiten Gerät** als Normalfall für Familien-Geräte — nicht die Apps selbst.
+**Alle Apps bleiben vollständig erhalten.** essen-einkauf, plan, hoerspiel-player, connector, routine und alle weiteren Views existieren unverändert als Buddy-Views im rechten Pane der Shell. Keine App, keine Route, keine Funktionalität entfällt. Was entfällt ist der **Default „zwei Geräte nötig"** — nicht die Apps, und nicht die Möglichkeit, zwei Geräte zu nutzen.
 
 ### 3. Shell wird REGISTRY-First-Class-Eintrag
 
