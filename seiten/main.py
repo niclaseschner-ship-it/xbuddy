@@ -1495,6 +1495,7 @@ def heim_shell(panel_id):
 
 
 @app.route("/shell/<panel_id>/manifest.json", methods=["GET"])
+@require_dual_gate(mode="observe")  # AUTH-7b: Cookie ODER Operator-IP (Shell-Manifest, initial Observe)
 def heim_shell_manifest(panel_id):
     """SHELL-10 / SHELL-PWA: PWA-Manifest je panel_id (analog PWA-1 / ESSEN-33).
 
@@ -1580,6 +1581,7 @@ def _shell_build_id():
 
 
 @app.route("/shell/<panel_id>/<path:asset>", methods=["GET"])
+@require_dual_gate(mode="observe")  # AUTH-7b: Cookie ODER Operator-IP (Shell-Assets, initial Observe)
 def shell_asset_view(panel_id, asset):
     """SHELL-PWA: PWA-Mantel-Asset-Auslieferung (analog ESSEN-34 / PLAN-35).
 
