@@ -16,7 +16,45 @@ from .tts.azure import TTSError
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["TTSError", "clear_audio_cache", "synthetisiere"]
+__all__ = ["LitellmTTSEngine", "TTSError", "clear_audio_cache", "synthetisiere"]
+
+
+class LitellmTTSEngine:
+    """TTS-Engine über `tools.llm.get_speech` (LLMP-S6/RAT-28, T1410).
+
+    Duck-Type-kompatibel zu `AzureTTSEngine`: bietet dieselbe
+    `synthese(*, text, voice, speed) -> bytes`-Signatur, damit `synthetisiere()`
+    und die Fake-Engine-Tests unverändert bleiben (der Service-Vertrag ist
+    identisch). Der Provider-Code lebt jetzt in der Lib hinter dem Slot — kein
+    Azure-SDK-Aufruf mehr direkt in kibuddy (LLMP-S6).
+
+    `model` trägt das effektive TTS-Modell (z. B. `azure/tts-1-hd`) und wird an
+    `get_speech(slot, model=...)` durchgereicht. TTSError bei Provider-Fehler
+    (die Lib wirft `tools.llm.ProviderError`; hier auf `TTSError` gemappt, damit
+    der bestehende 503-Übersetzungs-Pfad im Caller erhalten bleibt).
+    """
+
+    name = "litellm"
+
+    def __init__(self, slot: str, model: str = ""):
+        from tools.llm import get_speech
+
+        self._speech = get_speech(slot, model=model)
+
+    def synthese(self, *, text: str, voice: str, speed: float = 0.9) -> bytes:
+        """Synthetisiert text zu MP3-Bytes über die get_speech-Fassade (LLMP-S6)."""
+        from tools.llm import ProviderError
+
+        try:
+            return self._speech.synth(
+                text,
+                voice=voice,
+                speed=speed,
+                response_format="mp3",
+            )
+        except ProviderError as e:
+            logger.warning("litellm-TTS nicht erreichbar: %s", e)
+            raise TTSError(str(e)) from e
 
 
 def _audio_id(text: str, voice: str, speed: float) -> str:
