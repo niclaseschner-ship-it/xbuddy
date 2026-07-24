@@ -46,6 +46,17 @@ REQUIRED_CHAT: frozenset[Capability] = frozenset({
 REQUIRED_COMPLETION: frozenset[Capability] = frozenset({
     "system_message_distinct",
 })
+# LLMP-S6/RAT-28 (T1410): Audio-Sichten. Boot-Minimum ist genau die eine
+# Audio-Capability — Spiegel REQUIRED_COMPLETION. Nur der litellm-Vendor
+# deklariert `speech`/`transcription`; ein Text-Hand-Vendor (anthropic/mistral)
+# unter einem Audio-Slot wäre boot-fatal (LLMP-S3), was korrekt ist — er kann
+# kein Audio.
+REQUIRED_SPEECH: frozenset[Capability] = frozenset({
+    "speech",
+})
+REQUIRED_TRANSCRIPTION: frozenset[Capability] = frozenset({
+    "transcription",
+})
 
 
 def _build_vendor(
@@ -359,6 +370,85 @@ class _AgentFacade:
         )
 
 
+class _SpeechFacade:
+    """Sicht-Fassade für `get_speech` (LLMP-S6/RAT-28, KIBuddy-TTS-Heimat).
+
+    Übersetzt `synth(text, *, voice, model, speed, response_format,
+    correlation_id) -> bytes` auf `vendor.speech(...)` und injiziert die
+    LLMP-S4-Telemetrie-Felder (`caller`, `slot`) — der Konsument sieht sie
+    nicht (analog `_ChatFacade`).
+    """
+
+    def __init__(self, vendor: Any, caller: str, slot: str):
+        self._vendor = vendor
+        self._caller = caller
+        self._slot = slot
+        self.model = getattr(vendor, "model", "")
+        self.name = "speech"
+
+    def synth(
+        self,
+        text: str,
+        *,
+        voice: str,
+        model: str = "",
+        speed: float = 1.0,
+        response_format: str = "mp3",
+        correlation_id: str | None = None,
+    ) -> bytes:
+        """Ein TTS-Call → Audio-Bytes (LLMP-S6)."""
+        return self._vendor.speech(
+            text,
+            voice=voice,
+            model=model,
+            speed=speed,
+            response_format=response_format,
+            caller=self._caller,
+            slot=self._slot,
+            correlation_id=correlation_id,
+        )
+
+
+class _TranscriptionFacade:
+    """Sicht-Fassade für `get_transcription` (LLMP-S6/RAT-28, KIBuddy-STT-Heimat).
+
+    Übersetzt `transcribe(audio, *, filename, model, language, correlation_id)
+    -> str` auf `vendor.transcription(...)` und injiziert `caller`/`slot`
+    (LLMP-S4), analog `_SpeechFacade`.
+    """
+
+    def __init__(self, vendor: Any, caller: str, slot: str):
+        self._vendor = vendor
+        self._caller = caller
+        self._slot = slot
+        self.model = getattr(vendor, "model", "")
+        self.name = "transcription"
+
+    def transcribe(
+        self,
+        audio: bytes,
+        *,
+        filename: str = "audio.mp3",
+        model: str = "",
+        language: str = "de",
+        correlation_id: str | None = None,
+    ) -> str:
+        """Ein STT-Call → Transkript-Text (LLMP-S6).
+
+        `audio` ist bereits normalisiert (ffmpeg-#1442 sitzt im STT-Engine-
+        Adapter VOR diesem Call, nicht in der Lib).
+        """
+        return self._vendor.transcription(
+            audio,
+            filename=filename,
+            model=model,
+            language=language,
+            caller=self._caller,
+            slot=self._slot,
+            correlation_id=correlation_id,
+        )
+
+
 # ----------------------------------------------------------------------
 #  Public-API — die vier `get_*`-Sichten (LLMP-2)
 # ----------------------------------------------------------------------
@@ -455,3 +545,35 @@ def get_agent(slot: str, model: str = "", max_tokens: int = 0) -> Any:
         slot, "get_agent", REQUIRED_AGENT, model, max_tokens,
     )
     return _AgentFacade(vendor, caller, slot_name, caps)
+
+
+def get_speech(slot: str, model: str = "") -> Any:
+    """Liefert die TTS-Sicht (LLMP-S6/RAT-28, KIBuddy-TTS-Heimat).
+
+    Required Capability (LLMP-3): `speech`. Boot-Fail bei Mismatch — ein
+    Text-Hand-Vendor unter dem Slot kann kein Audio (korrekt boot-fatal,
+    LLMP-S3).
+
+    `model` (analog `get_singleshot`): wählt das effektive TTS-Modell explizit
+    (z. B. `azure/tts-1-hd`); leer nutzt den Vendor-`DEFAULT_MODEL`. `max_tokens`
+    entfällt (kein Text-Generierungs-Limit bei Audio).
+    """
+    vendor, caller, slot_name, _caps = _build_vendor(
+        slot, "get_speech", REQUIRED_SPEECH, model,
+    )
+    return _SpeechFacade(vendor, caller, slot_name)
+
+
+def get_transcription(slot: str, model: str = "") -> Any:
+    """Liefert die STT-Sicht (LLMP-S6/RAT-28, KIBuddy-STT-Heimat).
+
+    Required Capability (LLMP-3): `transcription`. Boot-Fail bei Mismatch
+    (LLMP-S3).
+
+    `model` (analog `get_speech`): wählt das effektive STT-Modell explizit
+    (z. B. `azure/whisper-1`); leer nutzt den Vendor-`DEFAULT_MODEL`.
+    """
+    vendor, caller, slot_name, _caps = _build_vendor(
+        slot, "get_transcription", REQUIRED_TRANSCRIPTION, model,
+    )
+    return _TranscriptionFacade(vendor, caller, slot_name)

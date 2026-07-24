@@ -6,10 +6,59 @@ Orchestriert den STT-Adapter. V1 synchron (KIBUDDY-13).
 import logging
 
 from .stt.azure_whisper import STTError
+from .stt.openai_whisper import _normalize_audio
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["STTError", "ist_stille_halluzination", "transkribiere"]
+__all__ = ["LitellmSTTEngine", "STTError", "ist_stille_halluzination", "transkribiere"]
+
+
+class LitellmSTTEngine:
+    """STT-Engine über `tools.llm.get_transcription` (LLMP-S6/RAT-28, T1410).
+
+    Duck-Type-kompatibel zu `AzureWhisperSTT`/`OpenAIWhisperSTT`: bietet dieselbe
+    `transkribiere(audio_bytes, filename) -> str`-Signatur, damit `transkribiere()`
+    und die Fake-Engine-Tests unverändert bleiben. Der Provider-Code lebt jetzt in
+    der Lib hinter dem Slot (LLMP-S6).
+
+    #1442-Erhalt: die ffmpeg-`_normalize_audio`-Transcodierung des Browser-webm
+    läuft HIER, VOR dem `get_transcription`-Call — genau wie im Alt-Adapter
+    `OpenAIWhisperSTT.transkribiere`. Ohne sie lehnt Whisper das MediaRecorder-webm
+    mit „400 Invalid file format" ab. Fällt ffmpeg aus, liefert `_normalize_audio`
+    die Roh-Bytes zurück (kein Regress).
+
+    `model` trägt das effektive STT-Modell (z. B. `azure/whisper-1`), `sprache`
+    die Transkriptions-Sprache (Default `de`). ProviderError → STTError (503-Pfad).
+    """
+
+    name = "litellm"
+
+    def __init__(self, slot: str, model: str = "", sprache: str = "de"):
+        from tools.llm import get_transcription
+
+        self._transcription = get_transcription(slot, model=model)
+        self._sprache = sprache
+
+    def transkribiere(self, audio_bytes: bytes, filename: str = "audio.webm") -> str:
+        """Transkribiert audio_bytes über die get_transcription-Fassade (LLMP-S6).
+
+        Normalisiert zuerst via ffmpeg (#1442), reicht dann die normalisierten
+        Bytes + den (ggf. angepassten) Dateinamen an die Lib durch.
+        """
+        from tools.llm import ProviderError
+
+        # #1442: Browser-webm → MP3 VOR dem Provider-Call (kein Regress bei
+        # ffmpeg-Abwesenheit — dann Roh-Bytes).
+        norm_bytes, norm_filename = _normalize_audio(audio_bytes, filename)
+        try:
+            return self._transcription.transcribe(
+                norm_bytes,
+                filename=norm_filename,
+                language=self._sprache,
+            )
+        except ProviderError as e:
+            logger.warning("litellm-STT nicht erreichbar: %s", e)
+            raise STTError(str(e)) from e
 
 
 # Whisper-Halluzinations-Phrasen (KIBUDDY-12-H, T952).
