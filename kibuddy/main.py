@@ -666,9 +666,15 @@ def parse_args(argv):
 
 
 def _build_llm(cfg) -> LLMProvider | None:
-    """Baut die LLM-Sicht über `tools.llm.get_chat` (LLMP-S8 KIBuddy-Migration, T1082).
+    """Baut die LLM-Sicht über `tools.llm.get_chat` (LLMP-S8/LLMP-S12, T1082/T1433).
 
-    Slot folgt LLMP-5: `kibuddy-anthropic-api-key` (Konsument-Vendor-Purpose).
+    Slot folgt LLMP-5: `kibuddy-litellm-api-key` (Konsument-Vendor-Purpose).
+    Motor-Swap RAT-26/LLMP-S12 Slot 1 — like-for-like: gleiches Modell
+    (`claude-haiku-4-5`), Route `litellm` statt `anthropic`. Die Fassade
+    (`get_chat`) ist unverändert; nur das Vendor-Segment im Slot-Namen wechselt.
+    Rückweg ohne Code-Change: Slot-Segment zurück auf `anthropic` (der
+    Hand-Vendor läuft bis Slot-3-Cleanup parallel weiter, LLMP-S12).
+
     Der API-Key kommt aus dem Zugangsdaten-Speicher (ZD-5); die heutige ENV-
     `ANTHROPIC_API_KEY`-Quelle bleibt in `config.py` für die Boot-Lebendigkeits-
     Probe (`if cfg.anthropic_key`), damit die Spike-Stufe-1 ohne ZD-Migration
@@ -678,7 +684,7 @@ def _build_llm(cfg) -> LLMProvider | None:
         if not cfg.anthropic_key:
             return None
         from tools.llm import get_chat
-        return get_chat(slot="kibuddy-anthropic-api-key")
+        return get_chat(slot="kibuddy-litellm-api-key")
     return None
 
 
