@@ -25,7 +25,14 @@ from ._types import (
     ProviderCallEvent,
     ProviderError,
 )
-from .public_api import get_agent, get_chat, get_completion, get_singleshot
+from .public_api import (
+    get_agent,
+    get_chat,
+    get_completion,
+    get_singleshot,
+    get_speech,
+    get_transcription,
+)
 
 __all__ = [
     "LLMCapabilityError",
@@ -36,4 +43,6 @@ __all__ = [
     "get_chat",
     "get_completion",
     "get_singleshot",
+    "get_speech",
+    "get_transcription",
 ]

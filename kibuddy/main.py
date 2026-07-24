@@ -701,6 +701,14 @@ def _build_llm(cfg) -> LLMProvider | None:
 
 
 def _build_stt(cfg):
+    if cfg.stt_provider == "litellm":
+        # LLMP-S6/RAT-28 (T1410): STT über die tools.llm-Fassade hinter einem
+        # ZD-Slot. ffmpeg-#1442 sitzt im LitellmSTTEngine VOR dem Provider-Call.
+        return stt_service.LitellmSTTEngine(
+            slot=cfg.litellm_stt_slot,
+            model=cfg.litellm_stt_model,
+            sprache=cfg.stt_sprache,
+        )
     if cfg.stt_provider == "openai":
         if not cfg.openai_key:
             return None
@@ -724,6 +732,15 @@ def _build_stt(cfg):
 
 
 def _build_tts(cfg):
+    if cfg.tts_provider == "litellm":
+        # LLMP-S6/RAT-28 (T1410): TTS über die tools.llm-Fassade hinter einem
+        # ZD-Slot. Die Voice/Speed kommen weiter aus der Config (durchgereicht im
+        # synthetisiere()-Aufruf, tts_service.py).
+        return tts_service.LitellmTTSEngine(
+            slot=cfg.litellm_tts_slot,
+            model=cfg.litellm_tts_model,
+        )
+    # azure_openai (Default)
     if not (cfg.azure_endpoint and cfg.azure_key):
         return None
     from .tts.azure import AzureTTSEngine

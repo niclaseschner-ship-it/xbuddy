@@ -24,6 +24,7 @@ förmig (`prompt_tokens`/`completion_tokens`); diese werden auf das interne
 `input`/`output`-Schema gemappt, `pricing.compute_eur` rechnet mit `self.model`.
 """
 
+import io
 import logging
 import time
 from datetime import UTC, datetime
@@ -40,14 +41,20 @@ logger = logging.getLogger(__name__)
 # multi_turn_assistant_prefill + cache_control + system_message_distinct.
 # LiteLLM routet auf Anthropic (Modell `claude-haiku-4-5`), das alle drei nativ
 # trägt — cache_control wird als Content-Block-Marker zum Backend durchgereicht.
-# Weitere Capabilities (tool_use, structured_output, multimodal_input,
+# Weitere Text-Capabilities (tool_use, structured_output, multimodal_input,
 # web_search) folgen mit Slot 2/3 (#1316), sobald deren Sicht-Methoden hier
 # migriert sind; heute NICHT deklarieren (sonst versprächen wir eine Sicht, die
 # der Vendor noch NotImplementedError wirft).
+# `speech` + `transcription` (T1410, LLMP-S6/RAT-28): dieser Vendor implementiert
+# beide Audio-Modalitäten über `litellm.speech()` / `litellm.transcription()` —
+# darum werden sie hier deklariert (REQUIRED_SPEECH / REQUIRED_TRANSCRIPTION in
+# public_api.py gaten die get_speech/get_transcription-Sichten dagegen).
 CAPABILITIES = frozenset({
     "multi_turn_assistant_prefill",
     "cache_control",
     "system_message_distinct",
+    "speech",
+    "transcription",
 })
 
 # Vendor-Default-Modell, falls der Konsument keines wählt. Like-for-like zur
@@ -166,6 +173,126 @@ class LitellmVendor(VendorBase):
         return self._extract_text(response)
 
     # ------------------------------------------------------------------
+    #  Sicht: get_speech / get_transcription — Audio (KIBuddy, T1410)
+    # ------------------------------------------------------------------
+
+    def speech(
+        self,
+        text: str,
+        *,
+        voice: str,
+        caller: str,
+        slot: str,
+        model: str = "",
+        speed: float = 1.0,
+        response_format: str = "mp3",
+        correlation_id: str | None = None,
+    ) -> bytes:
+        """TTS über `litellm.speech()` → Audio-Bytes (LLMP-S6/RAT-28).
+
+        Mappt auf `litellm.speech(model, voice, input=text, speed,
+        response_format, api_key)`. `model` überschreibt den Vendor-Default
+        (leer → self.model); `speed` und `response_format` werden explizit
+        durchgereicht (Azure-tts-1-hd akzeptiert beide, Spiegel des Alt-
+        Azure-SDK-Pfads `audio.speech.create`).
+
+        Azure-Routing (dokumentierte Annahme, echter Byte-Beweis am Nic-Deploy):
+        das effektive Modell trägt das LiteLLM-Präfix `azure/<deployment>`
+        (z. B. `azure/tts-1-hd`); `api_base`/`api_version` reicht LiteLLM aus den
+        ENV-Variablen `AZURE_API_BASE`/`AZURE_API_VERSION` bzw. wird vom Konsumenten
+        gesetzt — dieser Vendor gibt nur model/voice/api_key vor.
+
+        Robuster Byte-Extraktor: LiteLLM liefert je nach Provider ein Objekt mit
+        `.content` (bytes), sonst mit `.read()` (Stream), sonst bereits raw bytes.
+        Telemetrie synchron im selben Call (modality=tts). LiteLLM-API-Fehler →
+        `ProviderError`.
+        """
+        eff_model = model or self.model
+        t_start = time.monotonic()
+        try:
+            response = self._litellm.speech(
+                model=eff_model,
+                voice=voice,
+                input=text,
+                speed=speed,
+                response_format=response_format,
+                api_key=self._api_key,
+            )
+        except self._litellm.exceptions.APIError as e:
+            logger.warning("litellm-vendor: speech-API-Fehler: %s", e)
+            raise ProviderError(str(e)) from e
+        wall_ms = int((time.monotonic() - t_start) * 1000)
+
+        audio_bytes = self._extract_audio_bytes(response)
+
+        self._emit_audio_telemetry(
+            modality="tts",
+            model_id=eff_model,
+            caller=caller,
+            slot=slot,
+            correlation_id=correlation_id,
+            wall_ms=wall_ms,
+        )
+        return audio_bytes
+
+    def transcription(
+        self,
+        audio: bytes,
+        *,
+        caller: str,
+        slot: str,
+        model: str = "",
+        filename: str = "audio.mp3",
+        language: str = "de",
+        correlation_id: str | None = None,
+    ) -> str:
+        """STT über `litellm.transcription()` → Transkript-Text (LLMP-S6/RAT-28).
+
+        Verpackt `audio` in einen `io.BytesIO` mit `.name = filename` (LiteLLM/
+        OpenAI leiten das Audio-Format aus der Extension ab), mappt auf
+        `litellm.transcription(model, file, language, api_key)` und zieht `.text`
+        aus der Response. `model` überschreibt den Vendor-Default (leer →
+        self.model).
+
+        Azure-Routing (dokumentierte Annahme, echter Byte-Beweis am Nic-Deploy):
+        das effektive Modell trägt das LiteLLM-Präfix `azure/<deployment>` (z. B.
+        `azure/whisper-1`); `api_base`/`api_version` wie bei `speech()`.
+
+        Wichtig (#1442): die ffmpeg-Normalisierung des Browser-webm läuft VOR
+        diesem Call — sie sitzt im STT-Engine-Adapter (kibuddy/stt_service.py),
+        nicht hier, damit der Vendor Provider-neutral bleibt. Telemetrie synchron
+        (modality=stt). LiteLLM-API-Fehler → `ProviderError`.
+        """
+        eff_model = model or self.model
+        audio_file = io.BytesIO(audio)
+        audio_file.name = filename
+
+        t_start = time.monotonic()
+        try:
+            response = self._litellm.transcription(
+                model=eff_model,
+                file=audio_file,
+                language=language,
+                api_key=self._api_key,
+            )
+        except self._litellm.exceptions.APIError as e:
+            logger.warning("litellm-vendor: transcription-API-Fehler: %s", e)
+            raise ProviderError(str(e)) from e
+        wall_ms = int((time.monotonic() - t_start) * 1000)
+
+        text = self._extract_transcript(response)
+
+        self._emit_audio_telemetry(
+            modality="stt",
+            model_id=eff_model,
+            caller=caller,
+            slot=slot,
+            correlation_id=correlation_id,
+            wall_ms=wall_ms,
+        )
+        return text
+
+    # ------------------------------------------------------------------
     #  Slot 2/3 — noch nicht migriert (#1316)
     # ------------------------------------------------------------------
 
@@ -252,6 +379,82 @@ class LitellmVendor(VendorBase):
             "cache_creation_tokens": cache_creation_tokens,
             "wall_ms": wall_ms,
             "est_cost_eur": est_cost_eur,
+        }
+        if correlation_id is not None:
+            event["correlation_id"] = correlation_id
+
+        telemetry.write_call(event)
+
+    # ------------------------------------------------------------------
+    #  Audio-Response-Parse + Audio-Telemetrie (T1410, LLMP-S6)
+    # ------------------------------------------------------------------
+
+    def _extract_audio_bytes(self, response: Any) -> bytes:
+        """Zieht die Audio-Bytes robust aus der LiteLLM-`speech()`-Response.
+
+        LiteLLM/Provider-SDKs liefern hier heterogen: mal ein Objekt mit
+        `.content` (bytes, OpenAI-`HttpxBinaryResponseContent`), mal ein Stream
+        mit `.read()`, mal bereits `bytes`. Wir probieren in dieser Reihenfolge;
+        schlägt alles fehl → `ProviderError` (kein stiller Leer-Blob, damit ein
+        Wire-Bruch sichtbar wird — Spiegel `_extract_text`).
+        """
+        if isinstance(response, (bytes, bytearray)):
+            return bytes(response)
+        content = getattr(response, "content", None)
+        if isinstance(content, (bytes, bytearray)):
+            return bytes(content)
+        read = getattr(response, "read", None)
+        if callable(read):
+            data = read()
+            if isinstance(data, (bytes, bytearray)):
+                return bytes(data)
+        raise ProviderError(
+            "litellm-vendor: unerwartete speech()-Response-Form, keine Bytes "
+            "über .content / .read() / raw (Typ: %s)" % type(response).__name__
+        )
+
+    def _extract_transcript(self, response: Any) -> str:
+        """Zieht den Transkript-Text aus der LiteLLM-`transcription()`-Response.
+
+        LiteLLM liefert ein Objekt mit `.text` (str). Fehlt es, wird die
+        Response defensiv per `str(...)` verwendet (OpenAI-Text-Direktform),
+        analog Alt-Azure-Adapter. Leer/None → leerer String (kein Crash;
+        die Stille-Halluzinations-Filterung sitzt im STT-Service).
+        """
+        text = getattr(response, "text", None)
+        if text is None:
+            text = response
+        return str(text or "").strip()
+
+    def _emit_audio_telemetry(
+        self,
+        *,
+        modality: str,
+        model_id: str,
+        caller: str,
+        slot: str,
+        correlation_id: str | None,
+        wall_ms: int,
+    ) -> None:
+        """Schreibt einen Audio-`ProviderCallEvent` (LLMP-S4/LLMP-S6, RAT-28).
+
+        Eigener Pfad neben `_emit_telemetry` (NICHT geteilt): Audio-Responses
+        tragen KEINE `usage.prompt_tokens` — input/output_tokens bleiben 0,
+        `est_cost_eur` ist `None` (die Pricing-Tabelle kennt keine Audio-Modelle,
+        `completion_cost()` wird für Audio bewusst nicht genutzt, LLMP-S6). Das
+        `modality`-Feld ("tts"|"stt") unterscheidet den Eintrag im JSONL.
+        `write_call` bleibt SSoT (serialisiert beliebige Felder).
+        """
+        event = {
+            "ts": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "caller": caller,
+            "slot": slot,
+            "model_id": model_id,
+            "modality": modality,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "wall_ms": wall_ms,
+            "est_cost_eur": None,
         }
         if correlation_id is not None:
             event["correlation_id"] = correlation_id
