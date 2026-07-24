@@ -528,9 +528,6 @@ Cookie und ohne Operator-IP:
 - **`/display/_shared/*`** (Mini-App-Icons, MAD-6) — inhaltlich öffentlich
   (AUTH-4), von den 7b-Renderer-Views als Asset geladen; hinter den Dual-Gate
   gezogen würde es die Views brechen.
-- **`/controller/_shared/*`** (geteilte, buddy-unabhängige Controller-Assets,
-  AUTH-4/ROU-23) — analog `/display/_shared/*`; beide `*/_shared/*`-Pfade sind
-  public und tragen keinen Dual-Gate-Decorator.
 
 **Bau-Notiz (nicht Spec-Kern, für #1388-Track):** der AUTH-9-Coverage-Test
 (`tests/test_auth_decorator_coverage.py`) muss um die 7b-Routen erweitert
