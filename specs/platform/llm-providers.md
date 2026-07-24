@@ -6,9 +6,11 @@
 Die LLM-Provider-Schicht ist die **eine** Stelle, an der eine XBuddy-Instanz
 ihre Anthropic/Azure-OpenAI/OpenAI/Mistral-Aufrufe baut. Statt dass jeder
 Buddy (eltern-chat, hoerspiel, kibuddy) seinen eigenen Provider-Adapter
-pflegt, lesen und schreiben alle über diese geteilte Lib. Sie hält vier
-Public-API-Sichten (Agent, Singleshot, Chat, Completion) auf einem gemeinsamen
-Vendor-File-Kern.
+pflegt, lesen und schreiben alle über diese geteilte Lib. Sie hält sechs
+Public-API-Sichten (Agent, Singleshot, Chat, Completion + Speech, Transcription)
+auf einem gemeinsamen Vendor-File-Kern. Die vier Text-Sichten sind V1; die zwei
+Audio-Sichten (Speech/Transcription) kommen mit T1410 additiv über LiteLLM dazu
+(LLMP-S6/RAT-28).
 
 **Library-Status (DCOMP-1):** Die LLM-Provider-Schicht ist eine **Library** —
 kein eigener Prozess, kein Service, kein HTTP-Endpoint. Code lebt unter
@@ -17,8 +19,9 @@ kein eigener Prozess, kein Service, kein HTTP-Endpoint. Code lebt unter
 keinen eigenen Port und keinen eigenen systemd-Service
 (`conventions/llm-providers.md` LLMP-1; RAT-20 Sektion „Patch 1").
 
-**Scope:** Vier Public-API-Sichten auf einem `_vendor/<vendor>.py`-Kern
-(LLMP-2; die vierte Sicht `get_completion` mit #1131 belegt) · Capability-Matrix mit hartem Boot-Fail (LLMP-3/4) · synchrone
+**Scope:** Sechs Public-API-Sichten auf einem `_vendor/<vendor>.py`-Kern
+(LLMP-2; die vierte Sicht `get_completion` mit #1131 belegt; die fünfte + sechste
+`get_speech`/`get_transcription` mit T1410/RAT-28 belegt) · Capability-Matrix mit hartem Boot-Fail (LLMP-3/4) · synchrone
 Telemetrie-Projektion nach `var/llm/provider_calls.jsonl` zusätzlich zur
 bestehenden SQLite-Senke pro Buddy · Slot-Lookup über `tools.zugangsdaten`
 (LLMP-5). Vendor V1: Anthropic.
@@ -31,11 +34,13 @@ Fusion zweier Sichten (Re-Litigation nach Vertrag-Drift-Schwelle).
 
 ## 1. Public-API
 
-### LLMP-S1 — Vier Sichten, ein Vendor-File
-Die Lib stellt vier Funktionen bereit: `get_agent(slot)`, `get_singleshot(slot)`,
-`get_chat(slot)` und `get_completion(slot)`. Jede gibt ein Sicht-Objekt zurück, das auf demselben
+### LLMP-S1 — Sechs Sichten, ein Vendor-File
+Die Lib stellt sechs Funktionen bereit: `get_agent(slot)`, `get_singleshot(slot)`,
+`get_chat(slot)`, `get_completion(slot)` (die vier Text-Sichten, V1) sowie
+`get_speech(slot)` und `get_transcription(slot)` (die zwei Audio-Sichten, T1410
+additiv via LiteLLM, LLMP-S6/RAT-28). Jede gibt ein Sicht-Objekt zurück, das auf demselben
 `_vendor/<vendor>.py`-Kern aufsetzt. Ein neuer Vendor (eine Datei) aktiviert
-alle vier Sichten — kein Adapter-Code pro Buddy
+alle sechs Sichten — kein Adapter-Code pro Buddy
 (RAT-20 Sektion „Finale Landung — MACH ES" → Was sich ändert).
 
 - **`get_agent(slot, model="", max_tokens=0)` — Agent-Tool-Loop.** Für Konversationen mit Tool-Use
@@ -104,10 +109,27 @@ alle vier Sichten — kein Adapter-Code pro Buddy
   beide Slots eines dual-provider-Buddys trägt (hoerspiel Claude **und** Mistral);
   `get_chat` wäre auf dem Mistral-Slot boot-fatal (LLMP-S9: Mistral ⊥
   `cache_control`).
+- **`get_speech(slot, model="")` — TTS (T1410, LLMP-S6/RAT-28).** Sicht-Methode
+  `.synth(text, *, voice, model="", speed=1.0, response_format="mp3") -> bytes`;
+  ein Vendor-Call (`litellm.speech()`), Audio-Bytes zurück. Heutiger Use-Case:
+  kibuddy-TTS (Motor-Swap weg von direktem Azure-SDK). Required Capability
+  (LLMP-3): **nur** `speech`. `model` optional (leer → Vendor-Default); `max_tokens`
+  entfällt (kein Text-Generierungs-Limit bei Audio). Ein Text-Hand-Vendor unter
+  dem Slot ist boot-fatal (LLMP-S3) — er kann kein Audio, und das ist korrekt.
+- **`get_transcription(slot, model="")` — STT (T1410, LLMP-S6/RAT-28).**
+  Sicht-Methode `.transcribe(audio, *, filename="audio.mp3", model="", language="de")
+  -> str`; ein Vendor-Call (`litellm.transcription()`), Transkript-Text zurück.
+  Heutiger Use-Case: kibuddy-STT. `audio` ist bereits normalisiert — die
+  ffmpeg-Transcodierung (#1442) sitzt im STT-Engine-Adapter VOR diesem Call, nicht
+  in der Lib. Required Capability (LLMP-3): **nur** `transcription`. Boot-Fail bei
+  Text-Hand-Vendor (LLMP-S3).
 
-Eine fünfte Sicht wird erst hinzugefügt, wenn ein fünfter Use-Case mit
-eigenem Vertrag belegt ist (CLAUDE.md §6, „Vorschlagen, wenn Werte sich
-vermehren").
+Eine siebte Sicht wird erst hinzugefügt, wenn ein weiterer Use-Case mit
+**eigenem** Vertrag belegt ist (CLAUDE.md §6, „Vorschlagen, wenn Werte sich
+vermehren"). Die zwei Audio-Sichten haben einen eigenen Modalitäts-Ein-/Ausgabe-
+Vertrag (`bytes` rein/raus statt Text) — genau das rechtfertigt sie als Sicht
+statt als Capability-Opt-in innerhalb einer Text-Sicht (Gegenprobe
+`multimodal_input`, LLMP-2/Convention).
 
 ### LLMP-S2 — Slot-Lookup über ZD
 Der Slot-Parameter folgt der `<konsument>-<vendor>-<purpose>`-Konvention
@@ -203,11 +225,21 @@ Dauer-/Kosten-Präzision für Audio-Calls ist weniger streng als für Chat
 
 **TTS** (`litellm.speech(text, voice=..., model=...)`): Provider per Slot
 (Azure als Default; ElevenLabs/Groq/OpenAI testbar). Kein Provider-Code mehr
-direkt in kibuddy/eltern-chat.
+direkt in kibuddy/eltern-chat. Public-Sicht: `get_speech(slot)` (LLMP-S1);
+Required Capability `speech` (LLMP-3).
 
 **STT** (`litellm.transcription(file=..., model=...)`): Provider per Slot
 (analog TTS). berater-runde-1268-Defer „NOCH NICHT" durch LiteLLM-Doktrin
-aufgehoben (RAT-28).
+aufgehoben (RAT-28). Public-Sicht: `get_transcription(slot)` (LLMP-S1);
+Required Capability `transcription` (LLMP-3).
+
+**Ratifiziert (T1410, RAT-28):** die zwei Audio-Sichten (`get_speech`,
+`get_transcription`) und die zwei Audio-Capabilities (`speech`, `transcription`)
+sind Teil der Public-API-Matrix (LLMP-S1/LLMP-2) und der Capability-Liste
+(LLMP-3). Nur der litellm-Vendor deklariert die zwei Capabilities; ein Text-
+Hand-Vendor unter einem Audio-Slot ist boot-fatal (LLMP-S3), was korrekt ist.
+Kein Text-Vertrag (Agent/Singleshot/Chat/Completion) ändert sich durch die
+Erweiterung.
 
 **Was NICHT in dieser Spec liegt:** kibuddy-speed-Cache (technischer Vorteil
 durch lokale Zwischenspeicherung), hoerspiel-Asset-Lifecycle (Kapitelschnitt,
@@ -402,6 +434,13 @@ Jede Anforderung mit Code-Verhalten hat einen automatisierten Test
   separat getestet).
 - **LLMP-S4** — JSONL-Schreibung enthält alle Pflichtfelder; Schreibfehler
   führt zu Warning, nicht zu Crash (Fake-FS mit ReadOnly).
+- **LLMP-S6 (Audio-Dispatch, T1410)** — `get_speech`/`get_transcription`
+  liefern Sicht-Objekte mit `.synth`/`.transcribe`; der Runtime-Dispatch
+  `cfg.{stt,tts}_provider=="litellm"` → `kibuddy.main._build_{stt,tts}` baut die
+  `Litellm*Engine` mit dem konfigurierten Slot/Modell (Entry-Path, nicht nur
+  isolierte Engine-Konstruktion); unbekannter Provider-Wert → `ConfigError` beim
+  `resolve_runtime` (Whitelist `VALID_{STT,TTS}_PROVIDERS`). Beleg:
+  `kibuddy/tests/test_litellm_dispatch.py` + `kibuddy/tests/test_stt_litellm.py`.
 
 Watchdog-Regel (mechanisch, analog `module-boundaries.md`): jeder File
 unter `tools/llm/_vendor/` ohne `CAPABILITIES`-Frozenset am Modulkopf

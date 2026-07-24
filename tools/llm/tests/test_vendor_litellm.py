@@ -278,3 +278,129 @@ def test_agent_step_not_implemented():
     vendor = _make_vendor()
     with pytest.raises(NotImplementedError):
         vendor.agent_step("s", [], [])
+
+
+# ----------------------------------------------------------------------
+#  T1410 — Audio: CAPABILITIES + speech() + transcription() (LLMP-S6/RAT-28)
+# ----------------------------------------------------------------------
+
+
+def test_capabilities_covers_audio():
+    """AC1: CAPABILITIES deckt REQUIRED_SPEECH + REQUIRED_TRANSCRIPTION ab."""
+    assert public_api.REQUIRED_SPEECH <= litellm_vendor.CAPABILITIES
+    assert public_api.REQUIRED_TRANSCRIPTION <= litellm_vendor.CAPABILITIES
+
+
+def _make_audio_sdk(*, speech_return=None, transcription_return=None,
+                    speech_side_effect=None, transcription_side_effect=None):
+    """Gemocktes litellm-SDK mit .speech + .transcription."""
+    fake = MagicMock()
+    fake.exceptions.APIError = _FakeAPIError
+    if speech_side_effect is not None:
+        fake.speech.side_effect = speech_side_effect
+    else:
+        fake.speech.return_value = speech_return
+    if transcription_side_effect is not None:
+        fake.transcription.side_effect = transcription_side_effect
+    else:
+        fake.transcription.return_value = transcription_return
+    return fake
+
+
+def test_get_speech_facade_boot_and_call(jsonl_path):
+    """AC2: get_speech('kibuddy-litellm-tts-key').synth(...) → Bytes + GENAU EINE
+    JSONL-Zeile mit modality=tts (LLMP-S6)."""
+    speech_resp = MagicMock()
+    speech_resp.content = b"ID3-mp3-bytes"
+    fake = _make_audio_sdk(speech_return=speech_resp)
+
+    with patch.dict(sys.modules, {"litellm": fake}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_speech
+        speech = get_speech(slot="kibuddy-litellm-tts-key", model="azure/tts-1-hd")
+        out = speech.synth("Hallo Kind", voice="onyx", speed=0.9)
+
+    assert out == b"ID3-mp3-bytes"
+    call = fake.speech.call_args
+    assert call.kwargs["model"] == "azure/tts-1-hd"
+    assert call.kwargs["voice"] == "onyx"
+    assert call.kwargs["input"] == "Hallo Kind"
+    assert call.kwargs["speed"] == 0.9
+    assert call.kwargs["response_format"] == "mp3"
+    assert call.kwargs["api_key"] == "sk-fake"
+
+    parsed = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
+    assert parsed["modality"] == "tts"
+    assert parsed["caller"] == "kibuddy"
+    assert parsed["slot"] == "kibuddy-litellm-tts-key"
+    assert parsed["model_id"] == "azure/tts-1-hd"
+    assert parsed["input_tokens"] == 0
+    assert parsed["output_tokens"] == 0
+    assert parsed["est_cost_eur"] is None
+
+
+def test_speech_byte_extractor_read_and_raw():
+    """AC1: der Byte-Extraktor deckt .content, .read() und raw bytes ab."""
+    vendor = _make_vendor()
+    # .read()-Stream-Form
+    stream = MagicMock(spec=["read"])
+    stream.read.return_value = b"via-read"
+    assert vendor._extract_audio_bytes(stream) == b"via-read"
+    # raw bytes
+    assert vendor._extract_audio_bytes(b"raw") == b"raw"
+    # unerwartete Form → ProviderError
+    from tools.llm import ProviderError
+    with pytest.raises(ProviderError):
+        vendor._extract_audio_bytes(object())
+
+
+def test_get_transcription_facade_boot_and_call(jsonl_path):
+    """AC2: get_transcription(...).transcribe(...) → Text + GENAU EINE JSONL-Zeile
+    mit modality=stt; file trägt .name (Format-Ableitung); language durchgereicht."""
+    trans_resp = MagicMock()
+    trans_resp.text = "Warum ist der Himmel blau?"
+    fake = _make_audio_sdk(transcription_return=trans_resp)
+
+    with patch.dict(sys.modules, {"litellm": fake}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import get_transcription
+        stt = get_transcription(slot="kibuddy-litellm-stt-key", model="azure/whisper-1")
+        text = stt.transcribe(b"mp3-bytes", filename="audio.mp3", language="de")
+
+    assert text == "Warum ist der Himmel blau?"
+    call = fake.transcription.call_args
+    assert call.kwargs["model"] == "azure/whisper-1"
+    assert call.kwargs["language"] == "de"
+    assert call.kwargs["api_key"] == "sk-fake"
+    audio_file = call.kwargs["file"]
+    assert getattr(audio_file, "name", None) == "audio.mp3"
+
+    parsed = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
+    assert parsed["modality"] == "stt"
+    assert parsed["caller"] == "kibuddy"
+    assert parsed["slot"] == "kibuddy-litellm-stt-key"
+    assert parsed["model_id"] == "azure/whisper-1"
+
+
+def test_transcription_api_error_propagates_no_jsonl(jsonl_path):
+    """AC2: transcription-APIError → ProviderError; KEIN JSONL (Fehler vor Telemetrie)."""
+    fake = _make_audio_sdk(transcription_side_effect=_FakeAPIError("tot"))
+    with patch.dict(sys.modules, {"litellm": fake}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import ProviderError, get_transcription
+        stt = get_transcription(slot="kibuddy-litellm-stt-key")
+        with pytest.raises(ProviderError):
+            stt.transcribe(b"x", filename="audio.mp3")
+    assert not jsonl_path.exists()
+
+
+def test_speech_api_error_propagates_no_jsonl(jsonl_path):
+    """AC2: speech-APIError → ProviderError; KEIN JSONL."""
+    fake = _make_audio_sdk(speech_side_effect=_FakeAPIError("tot"))
+    with patch.dict(sys.modules, {"litellm": fake}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        from tools.llm import ProviderError, get_speech
+        speech = get_speech(slot="kibuddy-litellm-tts-key")
+        with pytest.raises(ProviderError):
+            speech.synth("t", voice="onyx")
+    assert not jsonl_path.exists()

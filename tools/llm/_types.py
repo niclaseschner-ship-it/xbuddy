@@ -21,6 +21,10 @@ from typing import Any, Literal, Protocol, TypedDict, runtime_checkable
 # die 7. (T1371, additiv) — server-seitiges Anthropic-`web_search`-Tool
 # (`web_search_20260209`), opt-in in der Agent-Sicht. KEIN Required-Set-Mitglied
 # (nie Boot-Minimum): nur Anthropic deklariert sie, Mistral nicht.
+# `speech` + `transcription` (T1410, additiv, LLMP-S6/RAT-28) — Audio-Modalitäten
+# über `litellm.speech()` / `litellm.transcription()`. Eigene Required-Sets
+# (REQUIRED_SPEECH / REQUIRED_TRANSCRIPTION in public_api.py); nur der litellm-
+# Vendor deklariert sie (Text-Hand-Vendoren nicht — die können kein Audio).
 Capability = Literal[
     "tool_use",
     "multi_turn_assistant_prefill",
@@ -29,6 +33,8 @@ Capability = Literal[
     "multimodal_input",
     "system_message_distinct",
     "web_search",
+    "speech",
+    "transcription",
 ]
 
 
@@ -87,6 +93,12 @@ class ProviderCallEvent(TypedDict, total=False):
     episode_id, kibuddy=chat_id), `cache_read_tokens`,
     `cache_creation_tokens`, `est_cost_eur` (None bei unbekanntem Modell,
     analog `eltern-chat/providers/pricing.estimate_cost`).
+
+    `modality` (T1410, additiv, LLMP-S6): "tts" | "stt" für Audio-Calls
+    (`get_speech` / `get_transcription`). Chat-/Text-Calls setzen es nicht —
+    das Feld fehlt dann im JSONL (total=False). Audio-Einträge tragen
+    input/output_tokens=0 und est_cost_eur=None (Pricing kennt keine Audio-
+    Modelle; Telemetrie für Audio bewusst lockerer, RAT-28).
     """
 
     ts: str
@@ -100,3 +112,4 @@ class ProviderCallEvent(TypedDict, total=False):
     cache_creation_tokens: int
     wall_ms: int
     est_cost_eur: float | None
+    modality: str

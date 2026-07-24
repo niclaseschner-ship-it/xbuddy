@@ -24,9 +24,11 @@ bis dahin wäre der Hop Cloud-Reflex ohne Mehrwert
 (RAT-20 Sektion „Patch 1" → Form ist Lib; ENTSCHEID-File Sektion
 „Patch 1 — RAT-N überschreibt RAT-6-Wortlaut explizit").
 
-### LLMP-2 — Vier Public-API-Sichten
-`tools/llm` stellt genau vier Konsumenten-Sichten bereit, jede mit einem
-eigenen Vertrag, alle auf demselben `_vendor/<vendor>.py`-Kern:
+### LLMP-2 — Sechs Public-API-Sichten
+`tools/llm` stellt sechs Konsumenten-Sichten bereit, jede mit einem
+eigenen Vertrag, alle auf demselben `_vendor/<vendor>.py`-Kern (V1 = vier
+Text-Sichten; `get_speech`/`get_transcription` sind die 5. + 6., T1410 additiv
+via LiteLLM, LLMP-S6/RAT-28):
 
 | Sicht             | Use-Case                                      | Heute belegt durch |
 |-------------------|-----------------------------------------------|--------------------|
@@ -34,14 +36,26 @@ eigenen Vertrag, alle auf demselben `_vendor/<vendor>.py`-Kern:
 | `get_singleshot(slot)` | Strukturierte Einzel-Antwort (Schema-erzwungen via Tool-Use) | hoerspiel |
 | `get_chat(slot)`  | Multi-Turn-Konversation mit History + System-Prompt | kibuddy      |
 | `get_completion(slot)` | Freitext-Singleshot (ein Absatz Prosa, kein Schema) | hoerspiel (Synopse, #1131) |
+| `get_speech(slot)` | TTS: Text → Audio-Bytes (`.synth(text, *, voice, …)`) | kibuddy (T1410, RAT-28) |
+| `get_transcription(slot)` | STT: Audio-Bytes → Transkript (`.transcribe(audio, *, …)`) | kibuddy (T1410, RAT-28) |
 
-Eine neue Vendor-Datei aktiviert automatisch alle vier Sichten — kein
-Adapter-Code pro Buddy. Eine fünfte Sicht wird erst hinzugefügt, wenn ein
-fünfter Use-Case mit eigenem Vertrag belegt ist (CLAUDE.md §6, „Vorschlagen,
+Eine neue Vendor-Datei aktiviert automatisch alle sechs Sichten — kein
+Adapter-Code pro Buddy. Eine siebte Sicht wird erst hinzugefügt, wenn ein
+weiterer Use-Case mit **eigenem** Vertrag belegt ist (CLAUDE.md §6, „Vorschlagen,
 wenn Werte sich vermehren"). Verschmelzung zweier Sichten ist Re-Litigation
 nach Vertrag-Drift-Schwelle (RAT-20 „Kill-Kriterium")
 (ENTSCHEID-File Sektion „Finale Landung — MACH ES" → Was sich ändert /
 Trade-off; Verdikt Frage 6).
+
+Die zwei Audio-Sichten sind **eigene Verträge**, keine Untervariante der vier
+Text-Sichten: `get_speech` liefert `bytes` (Audio), `get_transcription` nimmt
+`bytes` und liefert `str` — beide haben eine Modalitäts-Ein-/Ausgabe, die keine
+Text-Sicht teilt. Genau das rechtfertigt sie als 5. + 6. Sicht statt als
+Capability-Opt-in innerhalb einer Text-Sicht (Gegenprobe `multimodal_input`:
+Bild-Input ist eine Modalität **quer über** den Singleshot-Text-Vertrag und
+bleibt deshalb Capability, keine Sicht — Audio hingegen hat einen eigenen
+Ein-/Ausgabe-Vertrag). Provider ist Config-Sache (LLMP-5-Slot); LiteLLM ist der
+Motor (`litellm.speech()` / `litellm.transcription()`, LLMP-S12/S6).
 
 ### LLMP-3 — Capability-Matrix mit hartem Boot-Fail
 Jede Sicht deklariert ihr **Required-Capability-Set**; jeder Vendor-File
@@ -50,8 +64,9 @@ wirft die Lib beim Boot `LLMCapabilityError` und bricht den Service-Start
 ab — **kein** Runtime-Silent-Fallback auf ein Untermenge-Verhalten
 (ENTSCHEID-File Sektion „Patch 2 — Capability-Matrix + harter Boot-Fail").
 
-Die sieben ratifizierten Capabilities (V1 = sechs; `web_search` ist die 7.,
-T1371 additiv):
+Die neun ratifizierten Capabilities (V1 = sechs; `web_search` ist die 7.,
+T1371 additiv; `speech` + `transcription` sind die 8. + 9., T1410 additiv via
+LiteLLM, LLMP-S6/RAT-28):
 
 | Capability                       | Bedeutung                                                                 |
 |----------------------------------|---------------------------------------------------------------------------|
@@ -62,6 +77,8 @@ T1371 additiv):
 | `multimodal_input`               | Vendor akzeptiert Bild-/Audio-Input neben Text                            |
 | `system_message_distinct`        | Vendor trennt System-Prompt von User/Assistant-Turns (eigener Parameter)  |
 | `web_search`                     | Vendor bietet ein **server-seitiges** `web_search`-Tool (Suche auf Anbieter-Infra, als `tools`-Array-Eintrag; kein externer Such-Provider, kein neuer Key) |
+| `speech`                         | Vendor kann Text-zu-Sprache (`litellm.speech()`; nur der litellm-Vendor deklariert sie, Text-Hand-Vendoren nicht) |
+| `transcription`                  | Vendor kann Sprache-zu-Text (`litellm.transcription()`; nur der litellm-Vendor deklariert sie) |
 
 **Required-Sets pro Sicht (V1):**
 
@@ -82,6 +99,10 @@ T1371 additiv):
   `structured_output`/`cache_control`, damit die Freitext-Sicht dual-provider-
   Slots (hoerspiel Claude+Mistral) ohne Boot-Fail trägt (#1131; `get_chat` wäre
   auf dem Mistral-Slot boot-fatal).
+- `get_speech`: `{speech}` (T1410, LLMP-S6) — genau die eine Audio-Capability.
+  Ein Text-Hand-Vendor (anthropic/mistral) unter einem TTS-Slot ist boot-fatal
+  (LLMP-S3), was korrekt ist: er kann kein Audio.
+- `get_transcription`: `{transcription}` (T1410, LLMP-S6) — Spiegel `get_speech`.
 
 **`web_search` ist per-Rufer-Opt-in in der `get_agent`-Sicht — keine eigene
 Sicht und kein Required-Set-Mitglied (T1371, ratifizierte Analyse 2026-07-05/06).**
@@ -103,8 +124,10 @@ Available-Set des Slot-Vendors, mit `LLMCapabilityError` bei Fehlen. Läge
 `multimodal_input` im **Boot-Fail-Minimum** der Sicht (LLMP-S3), würde jeder
 Text-only-Singleshot-Slot ohne Bild-Fähigkeit beim Boot fatal — deshalb bleibt es
 Nutzungs-Zeit-Check. Es kommt **keine** fünfte Sicht dazu: Bild-Input ist eine
-Modalitäts-Capability quer über den Singleshot-Vertrag, kein eigener Vertrag (LLMP-2
-bleibt bei **vier** Sichten; Gate: fünfte Sicht nur bei eigenem Vertrag).
+Modalitäts-Capability quer über den Singleshot-Vertrag, kein eigener Vertrag (Gate:
+neue Sicht nur bei eigenem Vertrag — das unterscheidet `multimodal_input` von
+`speech`/`transcription`, die genau **wegen** ihres eigenen Audio-Ein-/Ausgabe-
+Vertrags als 5. + 6. Sicht aufgenommen wurden, LLMP-2).
 
 Erweiterung der Capability-Liste ist Spec-Änderung (`specs/platform/llm-providers.md`),
 nicht Convention-Drift.
@@ -121,7 +144,9 @@ CAPABILITIES = frozenset({
     # optional je nach Vendor:
     # "structured_output",
     # "multimodal_input",
-    # "web_search",   # nur Anbieter mit server-seitigem Such-Tool (T1371)
+    # "web_search",       # nur Anbieter mit server-seitigem Such-Tool (T1371)
+    # "speech",           # nur Anbieter mit litellm.speech()-Route (T1410)
+    # "transcription",    # nur Anbieter mit litellm.transcription()-Route (T1410)
 })
 ```
 

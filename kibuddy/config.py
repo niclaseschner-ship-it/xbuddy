@@ -5,6 +5,9 @@ Geheimnisse (Anthropic-Key, Azure-Key, OpenAI-Key) kommen ausschließlich aus EN
 
 V1: einziger gültiger `llm_provider` ist `claude` (KIBUDDY-14).
 V1: `stt_provider` ist `openai` (Default) oder `azure_openai` (KIBUDDY-12).
+T1410 (LLMP-S6/RAT-28): `stt_provider`/`tts_provider` können auf `litellm`
+gesetzt werden — dann läuft Audio über `tools.llm.get_transcription` /
+`get_speech` hinter einem ZD-Slot statt über direkten Provider-SDK-Code.
 """
 
 import json
@@ -31,17 +34,32 @@ ENV_OPENAI_KEY = "OPENAI_API_KEY"
 DEFAULT_AZURE_API_VERSION = "2024-10-01-preview"
 
 VALID_PROVIDERS = ("claude",)
-VALID_STT_PROVIDERS = ("openai", "azure_openai")
+# T1410 (LLMP-S6/RAT-28): `litellm` als zusätzlicher Audio-Provider — Audio läuft
+# dann über die tools.llm-Fassade (get_speech/get_transcription) hinter einem
+# ZD-Slot, kein direkter Provider-SDK-Code mehr in kibuddy.
+VALID_STT_PROVIDERS = ("openai", "azure_openai", "litellm")
+VALID_TTS_PROVIDERS = ("azure_openai", "litellm")
 VALID_VOICES = ("alloy", "echo", "fable", "onyx", "nova", "shimmer")
 
 DEFAULT_LLM_PROVIDER = "claude"
 DEFAULT_LLM_MODEL = "claude-haiku-4-5"
 DEFAULT_STT_PROVIDER = "openai"
+# TTS-Default bleibt `azure_openai` (heutiges Live-Verhalten, kein Zwangs-Umzug);
+# `litellm` ist opt-in per config/ENV (LLMP-S6/RAT-28, Rückweg = Provider-Wechsel).
+DEFAULT_TTS_PROVIDER = "azure_openai"
 DEFAULT_TTS_VOICE = "onyx"
 DEFAULT_TTS_MODEL = "tts-1-hd"
 DEFAULT_TTS_SPEED = 0.9
 DEFAULT_STT_MODEL = "whisper-1"
 DEFAULT_STT_SPRACHE = "de"
+
+# T1410: ZD-Slots + LiteLLM-Modelle für den Audio-Pfad (LLMP-5/LLMP-S6). Die
+# `azure/`-Präfixe routen LiteLLM auf Azure-OpenAI-Deployments (api_base/
+# api_version aus der ENV — dokumentierte Annahme, Byte-Beweis am Nic-Deploy).
+DEFAULT_LITELLM_TTS_SLOT = "kibuddy-litellm-tts-key"
+DEFAULT_LITELLM_STT_SLOT = "kibuddy-litellm-stt-key"
+DEFAULT_LITELLM_TTS_MODEL = "azure/tts-1-hd"
+DEFAULT_LITELLM_STT_MODEL = "azure/whisper-1"
 DEFAULT_AUFNAHME_QUELLE = "display"
 DEFAULT_AUFNAHME_MAX_SEK = 30
 DEFAULT_INAKTIVITAET_SEK = 60
@@ -85,18 +103,32 @@ class RuntimeConfig:
         azure_key: str | None,
         azure_api_version: str,
         openai_key: str | None,
+        # T1410 (LLMP-S6): additive Audio-Provider-Felder mit Defaults — so
+        # bleiben bestehende positionale RuntimeConfig(...)-Konstruktionen
+        # (kibuddy/tests/conftest.py) rückwärtskompatibel. resolve_runtime
+        # reicht die aufgelösten Werte per Keyword durch.
+        tts_provider: str = DEFAULT_TTS_PROVIDER,
+        litellm_tts_slot: str = DEFAULT_LITELLM_TTS_SLOT,
+        litellm_stt_slot: str = DEFAULT_LITELLM_STT_SLOT,
+        litellm_tts_model: str = DEFAULT_LITELLM_TTS_MODEL,
+        litellm_stt_model: str = DEFAULT_LITELLM_STT_MODEL,
     ):
         self.listen_host = listen_host
         self.listen_port = listen_port
         self.log_level = log_level
         self.llm_provider = llm_provider
         self.llm_model = llm_model
+        self.tts_provider = tts_provider
         self.tts_voice = tts_voice
         self.tts_model = tts_model
         self.tts_speed = tts_speed
         self.stt_provider = stt_provider
         self.stt_model = stt_model
         self.stt_sprache = stt_sprache
+        self.litellm_tts_slot = litellm_tts_slot
+        self.litellm_stt_slot = litellm_stt_slot
+        self.litellm_tts_model = litellm_tts_model
+        self.litellm_stt_model = litellm_stt_model
         self.aufnahme_quelle = aufnahme_quelle
         self.aufnahme_max_sek = aufnahme_max_sek
         self.inaktivitaet_sek = inaktivitaet_sek
@@ -116,6 +148,7 @@ class RuntimeConfig:
         return {
             "llm_provider": self.llm_provider,
             "llm_model": self.llm_model,
+            "tts_provider": self.tts_provider,
             "tts_voice": self.tts_voice,
             "tts_model": self.tts_model,
             "tts_speed": self.tts_speed,
@@ -171,12 +204,23 @@ def _resolve_provider(raw: Any) -> str:
 
 
 def _resolve_stt_provider(raw: Any) -> str:
-    """Validiert den `stt_provider`-Wert gegen die V1-Whitelist (KIBUDDY-12)."""
+    """Validiert den `stt_provider`-Wert gegen die Whitelist (KIBUDDY-12/T1410)."""
     val = (str(raw) if raw is not None else DEFAULT_STT_PROVIDER).strip().lower()
     if val not in VALID_STT_PROVIDERS:
         raise ConfigError(
-            "stt_provider %r ist V1 nicht unterstützt — erlaubt: %s (KIBUDDY-12)"
+            "stt_provider %r ist V1 nicht unterstützt — erlaubt: %s (KIBUDDY-12/T1410)"
             % (val, ", ".join(VALID_STT_PROVIDERS))
+        )
+    return val
+
+
+def _resolve_tts_provider(raw: Any) -> str:
+    """Validiert den `tts_provider`-Wert gegen die Whitelist (T1410, LLMP-S6)."""
+    val = (str(raw) if raw is not None else DEFAULT_TTS_PROVIDER).strip().lower()
+    if val not in VALID_TTS_PROVIDERS:
+        raise ConfigError(
+            "tts_provider %r ist V1 nicht unterstützt — erlaubt: %s (T1410)"
+            % (val, ", ".join(VALID_TTS_PROVIDERS))
         )
     return val
 
@@ -210,6 +254,12 @@ def resolve_runtime(
     llm_model = str(env.get("KIBUDDY_LLM_MODEL") or file_cfg.get("llm_model") or DEFAULT_LLM_MODEL).strip()
 
     stt_provider = _resolve_stt_provider(env.get("KIBUDDY_STT_PROVIDER") or file_cfg.get("stt_provider") or DEFAULT_STT_PROVIDER)
+    tts_provider = _resolve_tts_provider(env.get("KIBUDDY_TTS_PROVIDER") or file_cfg.get("tts_provider") or DEFAULT_TTS_PROVIDER)
+
+    litellm_tts_slot = str(env.get("KIBUDDY_LITELLM_TTS_SLOT") or file_cfg.get("litellm_tts_slot") or DEFAULT_LITELLM_TTS_SLOT).strip()
+    litellm_stt_slot = str(env.get("KIBUDDY_LITELLM_STT_SLOT") or file_cfg.get("litellm_stt_slot") or DEFAULT_LITELLM_STT_SLOT).strip()
+    litellm_tts_model = str(env.get("KIBUDDY_LITELLM_TTS_MODEL") or file_cfg.get("litellm_tts_model") or DEFAULT_LITELLM_TTS_MODEL).strip()
+    litellm_stt_model = str(env.get("KIBUDDY_LITELLM_STT_MODEL") or file_cfg.get("litellm_stt_model") or DEFAULT_LITELLM_STT_MODEL).strip()
 
     tts_voice = str(env.get("KIBUDDY_VOICE") or file_cfg.get("tts_voice") or DEFAULT_TTS_VOICE).strip().lower()
     tts_model = str(env.get("KIBUDDY_TTS_MODEL") or file_cfg.get("tts_model") or DEFAULT_TTS_MODEL).strip()
@@ -265,12 +315,17 @@ def resolve_runtime(
         log_level=log_level,
         llm_provider=llm_provider,
         llm_model=llm_model,
+        tts_provider=tts_provider,
         tts_voice=tts_voice,
         tts_model=tts_model,
         tts_speed=tts_speed,
         stt_provider=stt_provider,
         stt_model=stt_model,
         stt_sprache=stt_sprache,
+        litellm_tts_slot=litellm_tts_slot,
+        litellm_stt_slot=litellm_stt_slot,
+        litellm_tts_model=litellm_tts_model,
+        litellm_stt_model=litellm_stt_model,
         aufnahme_quelle=aufnahme_quelle,
         aufnahme_max_sek=aufnahme_max_sek,
         inaktivitaet_sek=inaktivitaet_sek,
@@ -300,12 +355,17 @@ def patch_aufnahme_quelle(cfg: RuntimeConfig, neue_quelle: str) -> RuntimeConfig
         log_level=cfg.log_level,
         llm_provider=cfg.llm_provider,
         llm_model=cfg.llm_model,
+        tts_provider=cfg.tts_provider,
         tts_voice=cfg.tts_voice,
         tts_model=cfg.tts_model,
         tts_speed=cfg.tts_speed,
         stt_provider=cfg.stt_provider,
         stt_model=cfg.stt_model,
         stt_sprache=cfg.stt_sprache,
+        litellm_tts_slot=cfg.litellm_tts_slot,
+        litellm_stt_slot=cfg.litellm_stt_slot,
+        litellm_tts_model=cfg.litellm_tts_model,
+        litellm_stt_model=cfg.litellm_stt_model,
         aufnahme_quelle=neue_quelle,
         aufnahme_max_sek=cfg.aufnahme_max_sek,
         inaktivitaet_sek=cfg.inaktivitaet_sek,
