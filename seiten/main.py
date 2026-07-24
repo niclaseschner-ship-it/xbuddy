@@ -1552,14 +1552,18 @@ def heim_shell_manifest(panel_id):
     return resp
 
 
-# ── SHELL-PWA: Asset-Auslieferung (sw.js, icons) ─────────────────────────────
+# ── SHELL-PWA: Asset-Auslieferung (sw.js gated, icons/manifest public) ───────
 #
 # Spec-Anker: SHELL-PWA (specs/platform/heim-shell.md). Analog ESSEN-34/PLAN-35.
-# manifest.json wird oben dynamisch erzeugt (panel_id im Pfad); diese Route
-# bedient alle statischen Mantel-Assets aus seiten/static/shell/.
+# Auth-Klassifikation (AUTH-4 / AUTH-7b, T1448-S3-fix):
+#   manifest.json — heim_shell_manifest (public, AUTH-4): Browser-Fetch spec.
+#   sw.js         — shell_sw_view (gated, AUTH-7b hard): eigene Literal-Route,
+#                   Literal-Segment trumpft Variable → Flask bevorzugt diese Route.
+#   icon-*.png    — shell_asset_view (public, AUTH-4): WebAPK-Installer credential-los.
 #
-# Flask routet /shell/<panel_id>/manifest.json zur spezifischeren Route oben
-# (Literal-Segment trumpft Variable); diese Route erhaelt sw.js und icon-*.png.
+# Flask-Routing-Prioritaet: Literal > String-Variable > Path-Variable.
+# /shell/<panel_id>/sw.js (Literal "sw.js") wird IMMER vor
+# /shell/<panel_id>/<path:asset> ausgewaehlt, wenn der Request auf sw.js endet.
 
 _SHELL_MIME = {
     ".js":  "application/javascript",
@@ -1599,51 +1603,68 @@ def _is_shell_icon(asset):
     return bool(_re.match(r"^icon-[a-z0-9_-]+\.png$", asset))
 
 
-@app.route("/shell/<panel_id>/<path:asset>", methods=["GET"])
-def shell_asset_view(panel_id, asset):
-    """SHELL-PWA: PWA-Mantel-Asset-Auslieferung (analog ESSEN-34 / PLAN-35).
+@app.route("/shell/<panel_id>/sw.js", methods=["GET"])
+@require_dual_gate(mode="hard")  # AUTH-7b hard (T1448-S3-fix): sw.js bleibt gated.
+def shell_sw_view(panel_id):
+    """SHELL-PWA: Service-Worker-Auslieferung (gated, AUTH-7b hard).
 
-    Antwortet auf /shell/<panel_id>/sw.js und /shell/<panel_id>/icon-*.png.
-    manifest.json wird von heim_shell_manifest bedient (spezifischere Flask-Route).
-    Path-Traversal-Schutz via realpath-Check (analog einkauf_asset_view).
-
-    Auth-Klassifikation (AUTH-4 / AUTH-7b):
-      - icon-*.png:  PUBLIC (AUTH-4) — WebAPK-Installer holt Icons credential-los
-                     (Fetch-Spec); gegated 401 ueber den Funnel bricht PWA-Install.
-      - sw.js + alle anderen Assets: HARD (AUTH-7b) — 401 ohne Cookie/Operator-IP.
+    Eigene Literal-Route fuer sw.js — Flask-Prioritaet: Literal-Segment ("sw.js")
+    trumpft Path-Variable (<path:asset>), deshalb landen sw.js-Requests IMMER hier
+    und NICHT in shell_asset_view. Das macht den require_dual_gate-Decorator per
+    AST sichtbar (AUTH-9-Membran, T1448-S3-fix).
 
     Sonderfall sw.js:
-      - __BUILD_ID__-Platzhalter wird ersetzt (SHELL-PWA Cache-Versionierung).
-      - Service-Worker-Allowed: /shell/ — erlaubt Scope jenseits der SW-Datei-URL
-        (SW liegt unter /shell/<panel_id>/sw.js, Scope soll /shell/ sein).
+      - __BUILD_ID__-Platzhalter wird ersetzt (SHELL-PWA Cache-Versionierung, PWAM-4/5).
+      - Service-Worker-Allowed: /shell/ — erlaubt Scope jenseits der SW-Datei-URL.
       - Cache-Control no-store, damit der Browser den Worker bei Updates neu holt.
+    """
+    from flask import abort
+
+    root = os.path.realpath(_shell_asset_root())
+    target = os.path.realpath(os.path.join(root, "sw.js"))
+    if not target.startswith(root + os.sep) and target != root:
+        abort(404)
+    if not os.path.isfile(target):
+        abort(404)
+
+    build_id = _shell_build_id()
+    body = pwa_mantel.read_sw_with_build_id(target, build_id)
+    resp = make_response(body, 200)
+    resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
+    # Service-Worker-Allowed: REGISTRY['shell'].sw_scope — SW-Scope darf
+    # /shell/<panel_id>/ ueberschreiten. Ohne diesen Header erlaubt der Browser
+    # nur Scope <= /shell/<panel_id>/. (T1324: SSoT aus REGISTRY, analog CONN-8.)
+    resp.headers["Service-Worker-Allowed"] = pwa_mantel.REGISTRY["shell"].sw_scope
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return resp
+
+
+@app.route("/shell/<panel_id>/<path:asset>", methods=["GET"])
+# PUBLIC (AUTH-4): icon-*.png — WebAPK-Installer holt Icons credential-los (Fetch-Spec,
+# auth.md AUTH-4). Gegated 401 ueber den Funnel bricht PWA-Install (#1437, T1448-S2).
+# sw.js wird von shell_sw_view (Literal-Route, gated) bedient — nicht hier.
+# manifest.json wird von heim_shell_manifest bedient — nicht hier.
+# AST-Membran: shell_sw_view traegt require_dual_gate (sichtbar per AUTH-9-Test);
+#   shell_asset_view ist als AUTH-4-Public-Route explizit ausgenommen (test_auth_decorator_coverage.py).
+def shell_asset_view(panel_id, asset):
+    """SHELL-PWA: PWA-Icon-Auslieferung (public, AUTH-4, analog ESSEN-34 / PLAN-35).
+
+    Bedient /shell/<panel_id>/icon-*.png (und weitere statische Shell-Assets, falls
+    kuenftig ergaenzt). sw.js wird per Literal-Route shell_sw_view gated ausgeliefert
+    (Flask-Prioritaet: Literal > Path-Variable). manifest.json geht an heim_shell_manifest.
+
+    Path-Traversal-Schutz via realpath-Check (analog einkauf_asset_view).
+    Kein Gate-Decorator: AUTH-4-Public-Kategorie (WebAPK credential-los).
     """
     from flask import abort, send_from_directory
 
     # Manifest wird von heim_shell_manifest bedient — diese Route dient es nicht.
     if asset == "manifest.json":
         abort(404)
-
-    # AUTH-4 vs AUTH-7b — Icon-public-Entscheidung (T1448/AC2):
-    #   icon-*.png:  PUBLIC (AUTH-4) — WebAPK-Installer holt Icons ohne Credentials
-    #                (Fetch-Spec); gegated 401 ueber Funnel bricht PWA-Install.
-    #   sw.js + andere Assets: HARD (AUTH-7b) — 401 ohne Cookie/Operator-IP.
-    # Rolling-Refresh-Subject wird nur im Cookie-Pfad befuellt (fuer spaeteres
-    # set_cookie auf der fertigen Response — nach Asset-Erzeugung).
-    _refresh_cookie_subject = None
-    if not _is_shell_icon(asset):
-        bot_token = _get_bot_token()
-        cookie_val = request.cookies.get(_session_cookie.COOKIE_NAME)
-        cookie_ok = bool(bot_token) and _auth_gate.hat_gueltigen_cookie(
-            cookie_val, bot_token)
-        operator_ok = _auth_gate.ist_operator_ip(_client_ip())
-        if cookie_ok:
-            # Cookie-Pfad: Rolling-Refresh-Subject fuer spaeteres set_cookie merken.
-            _refresh_cookie_subject = _session_cookie.verify_session(cookie_val, bot_token)
-        elif not operator_ok:
-            resp = make_response(_DUAL_GATE_401_HTML, 401)
-            resp.headers["Content-Type"] = "text/html; charset=utf-8"
-            return resp
+    # sw.js wird von shell_sw_view (Literal-Route, gated) bedient.
+    # Flask routet sw.js-Requests dorthin; dieser Guard ist defensiv.
+    if asset == "sw.js":
+        abort(404)
 
     root = os.path.realpath(_shell_asset_root())
     target = os.path.realpath(os.path.join(root, asset))
@@ -1656,29 +1677,7 @@ def shell_asset_view(panel_id, asset):
 
     ext = os.path.splitext(target)[1].lower()
     mimetype = _SHELL_MIME.get(ext, "application/octet-stream")
-
-    if os.path.basename(target) == "sw.js":
-        build_id = _shell_build_id()
-        body = pwa_mantel.read_sw_with_build_id(target, build_id)
-        resp = make_response(body, 200)
-        resp.headers["Content-Type"] = mimetype + "; charset=utf-8"
-        # Service-Worker-Allowed: REGISTRY['shell'].sw_scope — SW-Scope darf
-        # /shell/<panel_id>/ ueberschreiten. Ohne diesen Header erlaubt der Browser
-        # nur Scope <= /shell/<panel_id>/. (T1324: SSoT aus REGISTRY, analog CONN-8.)
-        resp.headers["Service-Worker-Allowed"] = pwa_mantel.REGISTRY["shell"].sw_scope
-        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    else:
-        resp = make_response(send_from_directory(root, asset, mimetype=mimetype))
-
-    # Rolling-Refresh (AUTH-2:78): Cookie mit frischem exp neu setzen (nur Cookie-Pfad).
-    if _refresh_cookie_subject is not None:
-        bot_token = _get_bot_token()
-        resp.set_cookie(
-            _session_cookie.COOKIE_NAME,
-            _session_cookie.sign_session(_refresh_cookie_subject, bot_token),
-            **_session_cookie.session_cookie_kwargs(),
-        )
-    return resp
+    return make_response(send_from_directory(root, asset, mimetype=mimetype))
 
 
 # ============================================================
