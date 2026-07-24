@@ -5,11 +5,20 @@ eigener Service — RAT-20 unangetastet). Diese Datei ist ein separates Vendor-
 Modul neben `_vendor/anthropic.py`; die vier Public-Sichten, der Slot-Resolver,
 die Capability-Matrix und die Telemetrie (LLMP-S4) bleiben unverändert.
 
-V1 (Slot 1, #1316/#1433) implementiert NUR `chat_multiturn(...)` für die
+V1 (Slot 1, #1316/#1433) implementierte NUR `chat_multiturn(...)` für die
 KIBuddy-Migration — like-for-like Motor-Swap (gleiches Modell
-`claude-haiku-4-5`, Route `litellm` statt `anthropic`). `singleshot_*` und
-`agent_step` bleiben `NotImplementedError` (Slot 2/3, #1316); wer sie heute
-ruft, sieht klar, dass die Sicht auf diesem Vendor noch nicht migriert ist.
+`claude-haiku-4-5`, Route `litellm` statt `anthropic`).
+
+Slot 2 (#1449/#1452) migriert die Agent-Sicht: `agent_step(...)` ist jetzt
+implementiert (Spiegel `_vendor/mistral.py`, aber getattr-Zugriff gegen die
+LiteLLM-`ModelResponse`-Objekte statt dict.get). Sie übersetzt die neutrale
+(Anthropic-shaped) Wire-Form beidseitig auf/von der OpenAI-Chat-Completions-
+Form, setzt `cache_control: ephemeral` am System-Block (Kosten-Parität zum
+Alt-eltern-chat-Pfad) und liefert die neutrale
+`{"text", "tool_calls", "usage", "web_search", "web_search_requests"}`-Form
+(web_search leer/0 — der Vendor deklariert kein web_search). `singleshot_*`
+bleibt `NotImplementedError` (Slot 2-Rest, #1316); wer es heute ruft, sieht
+klar, dass die Sicht auf diesem Vendor noch nicht migriert ist.
 
 Cache-Marker-Strategie (LLMP-S1 `get_chat` Required `cache_control`): identisch
 zur Anthropic-Hand-Form — der **System-Prompt** trägt `cache_control:
@@ -25,6 +34,7 @@ förmig (`prompt_tokens`/`completion_tokens`); diese werden auf das interne
 """
 
 import io
+import json
 import logging
 import time
 from datetime import UTC, datetime
@@ -37,19 +47,21 @@ from ._base import VendorBase
 logger = logging.getLogger(__name__)
 
 # LLMP-4 / LLMP-3: maschinell prüfbare Capability-Deklaration am Modulkopf.
-# V1 deklariert genau das `get_chat`-Boot-Minimum (REQUIRED_CHAT):
+# V1 (Slot 1) deklarierte das `get_chat`-Boot-Minimum (REQUIRED_CHAT):
 # multi_turn_assistant_prefill + cache_control + system_message_distinct.
-# LiteLLM routet auf Anthropic (Modell `claude-haiku-4-5`), das alle drei nativ
-# trägt — cache_control wird als Content-Block-Marker zum Backend durchgereicht.
-# Weitere Text-Capabilities (tool_use, structured_output, multimodal_input,
-# web_search) folgen mit Slot 2/3 (#1316), sobald deren Sicht-Methoden hier
-# migriert sind; heute NICHT deklarieren (sonst versprächen wir eine Sicht, die
-# der Vendor noch NotImplementedError wirft).
+# Slot 2 (#1449/#1452) migriert die Agent-Sicht (`agent_step`) auf LiteLLM und
+# fügt darum `tool_use` hinzu — das `get_agent`-Boot-Minimum (REQUIRED_AGENT)
+# ist damit gedeckt (tool_use + multi_turn_assistant_prefill +
+# system_message_distinct). `web_search` wird BEWUSST NICHT deklariert: der
+# server-seitige web_search-Pfad bleibt auf dem anthropic-Vendor (hoerspiel);
+# eltern-chat fährt reine Client-Tools. structured_output/multimodal_input
+# folgen mit den noch nicht migrierten singleshot-Sichten (#1316).
 # `speech` + `transcription` (T1410, LLMP-S6/RAT-28): dieser Vendor implementiert
 # beide Audio-Modalitäten über `litellm.speech()` / `litellm.transcription()` —
 # darum werden sie hier deklariert (REQUIRED_SPEECH / REQUIRED_TRANSCRIPTION in
 # public_api.py gaten die get_speech/get_transcription-Sichten dagegen).
 CAPABILITIES = frozenset({
+    "tool_use",
     "multi_turn_assistant_prefill",
     "cache_control",
     "system_message_distinct",
@@ -64,21 +76,26 @@ CAPABILITIES = frozenset({
 DEFAULT_MODEL = "claude-haiku-4-5"
 DEFAULT_MAX_TOKENS = 2048
 
-# Slot-2/3-Hinweis für die noch nicht migrierten Sichten (#1316).
+# Hinweis für die noch nicht migrierten singleshot-Sichten (#1316).
 _NOT_IMPLEMENTED_HINT = (
-    "litellm-vendor: %s ist in V1 (Slot 1, #1433) nicht implementiert — "
-    "nur chat_multiturn (get_chat) ist migriert. singleshot/agent folgen mit "
-    "Slot 2/3 (#1316). Nutze bis dahin den anthropic-Slot."
+    "litellm-vendor: %s ist noch nicht auf LiteLLM migriert — "
+    "chat_multiturn (get_chat) und agent_step (get_agent) sind migriert. "
+    "singleshot folgt mit #1316. Nutze bis dahin den anthropic-Slot."
 )
 
 
 class LitellmVendor(VendorBase):
-    """LiteLLM-Messages-Adapter — V1 nur `chat_multiturn` (get_chat, LLMP-S12).
+    """LiteLLM-Messages-Adapter — `chat_multiturn` + `agent_step` + Audio.
 
-    Hält den lazy-importierten `litellm`-SDK-Handle. Die drei anderen Sicht-
-    Methoden werfen `NotImplementedError` mit klarem Slot-2/3-Hinweis, damit
-    ein versehentlicher `get_singleshot`/`get_agent`-Ruf gegen diesen Vendor
-    sofort sichtbar wird (Spiegel Anthropic-V1-Ansatz).
+    Hält den lazy-importierten `litellm`-SDK-Handle. `agent_step` (Slot 2,
+    #1449/#1452) ist implementiert; die `singleshot_*`-Sichten werfen weiterhin
+    `NotImplementedError` mit klarem Slot-Hinweis, damit ein versehentlicher
+    `get_singleshot`-Ruf gegen diesen Vendor sofort sichtbar wird (Spiegel
+    Anthropic-V1-Ansatz).
+
+    `agent_run` und `_tool_result_block` werden von `VendorBase` geerbt (LLMP-S7,
+    kein Copy — Spiegel `_vendor/mistral.py`); der Loop dort ruft `agent_step`
+    dynamisch.
     """
 
     name = "litellm"
@@ -293,7 +310,71 @@ class LitellmVendor(VendorBase):
         return text
 
     # ------------------------------------------------------------------
-    #  Slot 2/3 — noch nicht migriert (#1316)
+    #  Sicht: get_agent — Single-Turn + Tool-Loop (eltern-chat, Slot 2/#1452)
+    # ------------------------------------------------------------------
+
+    def agent_step(
+        self,
+        system: str,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        *,
+        caller: str,
+        slot: str,
+        correlation_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Single-Turn-Create gegen LiteLLM: EIN Call, kein interner Loop.
+
+        Spiegel `_vendor/mistral.py:agent_step` — übersetzt die neutrale
+        (Anthropic-shaped) Wire-Form → OpenAI-Chat-Completions-Payload, ruft
+        `litellm.completion`, emittiert Telemetrie (LLMP-S4) und parst die
+        LiteLLM-`ModelResponse` (Attribut-/getattr-Zugriff, NICHT dict.get) in
+        die neutrale Rückgabe. `agent_run` (VendorBase) fährt den Tool-Loop und
+        ruft diese Methode pro Iteration.
+
+        Cache-Parität (LLMP-S1): der System-Prompt trägt `cache_control:
+        ephemeral` als eigene `{"role":"system", …}`-Message (Muster
+        `chat_multiturn`), damit der Anthropic-Backend-Cache über Turns trägt —
+        wie der Alt-eltern-chat-Pfad (`providers/claude.py:66-68`) cachte.
+
+        Liefert die neutrale Anthropic-shaped Form
+        `{"text", "tool_calls":[{"id","name","input"}…], "usage": <raw>,
+        "web_search": [], "web_search_requests": 0}`. Die beiden web_search-
+        Schlüssel sind additiv-konstant leer/0 (dieser Vendor deklariert kein
+        web_search; eltern-chat fährt reine Client-Tools). LiteLLM-API-Fehler →
+        `ProviderError` (analog `chat_multiturn`).
+        """
+        wire_messages = self._to_litellm_messages(system, messages)
+        wire_tools = [self._to_litellm_tool(t) for t in tools]
+
+        completion_kwargs: dict[str, Any] = {
+            "model": self.model,
+            "messages": wire_messages,
+            "api_key": self._api_key,
+            "max_tokens": self.max_tokens,
+        }
+        if wire_tools:
+            completion_kwargs["tools"] = wire_tools
+
+        t_start = time.monotonic()
+        try:
+            response = self._litellm.completion(**completion_kwargs)
+        except self._litellm.exceptions.APIError as e:
+            logger.warning("litellm-vendor: agent-API-Fehler: %s", e)
+            raise ProviderError(str(e)) from e
+        wall_ms = int((time.monotonic() - t_start) * 1000)
+
+        self._emit_telemetry(
+            response=response,
+            caller=caller,
+            slot=slot,
+            correlation_id=correlation_id,
+            wall_ms=wall_ms,
+        )
+        return self._parse_agent_response(response)
+
+    # ------------------------------------------------------------------
+    #  Slot 2-Rest — singleshot noch nicht migriert (#1316)
     # ------------------------------------------------------------------
 
     def singleshot_structured(self, *args: Any, **kwargs: Any) -> Any:
@@ -304,9 +385,172 @@ class LitellmVendor(VendorBase):
         """Slot 2 (get_completion) — noch nicht auf LiteLLM migriert (#1316)."""
         raise NotImplementedError(_NOT_IMPLEMENTED_HINT % "singleshot_text")
 
-    def agent_step(self, *args: Any, **kwargs: Any) -> Any:
-        """Slot 3 (get_agent) — noch nicht auf LiteLLM migriert (#1316)."""
-        raise NotImplementedError(_NOT_IMPLEMENTED_HINT % "agent_step")
+    # ------------------------------------------------------------------
+    #  neutrale (Anthropic-shaped) Wire-Form -> OpenAI-Payload (agent_step)
+    # ------------------------------------------------------------------
+
+    def _to_litellm_messages(
+        self,
+        system: str,
+        messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Baut die OpenAI-Message-Liste aus der neutralen Agent-Wire-Form.
+
+        Der System-Prompt wird als eigene `{"role":"system", …}`-Message mit
+        `cache_control: ephemeral` auf dem Content-Block vorangestellt
+        (system_message_distinct + Cache-Parität, Muster `chat_multiturn`). Jede
+        neutrale Message wird über `_to_litellm_message` in eine Liste OpenAI-
+        Nachrichten übersetzt (tool_result-Blöcke expandieren zu je einer
+        `{"role":"tool", …}`-Nachricht — daher `.extend()`).
+        """
+        wire: list[dict[str, Any]] = []
+        if system:
+            wire.append({
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": system,
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
+            })
+        for m in messages:
+            wire.extend(self._to_litellm_message(m))
+        return wire
+
+    @classmethod
+    def _to_litellm_message(cls, message: dict[str, Any]) -> list[dict[str, Any]]:
+        """Neutrale Message → Liste OpenAI-Nachrichten (Spiegel
+        `mistral._to_mistral_message`, gleiche Block-Semantik).
+
+        String-`content` bleibt String. Block-`content` (Anthropic-shaped) wird
+        je Block-Typ übersetzt: `tool_use` → assistant-`tool_calls`,
+        `tool_result` → je Block eine eigene `{"role":"tool", …}`-Nachricht
+        (is_error-Prefix wie mistral), `text`/`image` → OpenAI-content-parts
+        (image_url data-URL).
+        """
+        role = message.get("role", "user")
+        content = message.get("content")
+
+        if isinstance(content, str):
+            return [{"role": role, "content": content}]
+
+        blocks = content or []
+
+        # Assistant mit tool_use-Blöcken → OpenAI tool_calls.
+        tool_use_blocks = [b for b in blocks if b.get("type") == "tool_use"]
+        if tool_use_blocks:
+            tool_calls = [
+                {
+                    "id": b.get("id", ""),
+                    "type": "function",
+                    "function": {
+                        "name": b.get("name", ""),
+                        "arguments": json.dumps(b.get("input") or {}),
+                    },
+                }
+                for b in tool_use_blocks
+            ]
+            text_parts = [b["text"] for b in blocks if b.get("type") == "text"]
+            msg: dict[str, Any] = {"role": "assistant", "tool_calls": tool_calls}
+            # OpenAI erlaubt content=None bei reinen tool_calls; Text-Prefill
+            # (falls vorhanden) als String durchreichen.
+            msg["content"] = "\n".join(text_parts).strip() if text_parts else None
+            return [msg]
+
+        # User/Tool mit tool_result-Blöcken → je Result eine tool-Nachricht.
+        tool_results = [b for b in blocks if b.get("type") == "tool_result"]
+        if tool_results:
+            return [cls._tool_result_to_litellm(b) for b in tool_results]
+
+        # Normale Text-/Bild-Nachricht → OpenAI content-parts.
+        parts: list[dict[str, Any]] = []
+        for b in blocks:
+            if b.get("type") == "text":
+                parts.append({"type": "text", "text": b.get("text", "")})
+            elif b.get("type") == "image":
+                # Neutrale Form: {type:image, source:{type:base64, media_type, data}}
+                source = b.get("source") or {}
+                data_url = "data:%s;base64,%s" % (
+                    source.get("media_type", ""), source.get("data", ""),
+                )
+                parts.append({"type": "image_url", "image_url": {"url": data_url}})
+        if len(parts) == 1 and parts[0].get("type") == "text":
+            return [{"role": role, "content": parts[0]["text"]}]
+        return [{"role": role, "content": parts}]
+
+    @staticmethod
+    def _tool_result_to_litellm(block: dict[str, Any]) -> dict[str, Any]:
+        """Neutraler tool_result-Block → OpenAI-`{"role":"tool", …}`-Nachricht.
+
+        `tool_call_id` bindet das Result an den Aufruf; is_error-Wissen wird wie
+        in `mistral._tool_result_to_mistral` in den Inhalt gehoben (OpenAI-tool-
+        Messages tragen kein eigenes Fehler-Flag).
+        """
+        content = block.get("content", "")
+        msg = {
+            "role": "tool",
+            "tool_call_id": block.get("tool_use_id", ""),
+            "content": str(content),
+        }
+        if block.get("is_error"):
+            msg["content"] = "[FEHLER] " + msg["content"]
+        return msg
+
+    @staticmethod
+    def _to_litellm_tool(tool: dict[str, Any]) -> dict[str, Any]:
+        """Neutrales `{name, description, input_schema}` → OpenAI-function-Form
+        (Spiegel `mistral._to_mistral_tool`)."""
+        return {
+            "type": "function",
+            "function": {
+                "name": tool.get("name", ""),
+                "description": tool.get("description", ""),
+                "parameters": tool.get("input_schema", {}),
+            },
+        }
+
+    def _parse_agent_response(self, response: Any) -> dict[str, Any]:
+        """LiteLLM-`ModelResponse` → neutrale Anthropic-shaped Agent-Form.
+
+        Attribut-/getattr-Zugriff gegen das ModelResponse-Objekt (NICHT dict.get
+        wie mistral, das gegen `response.json()` arbeitet):
+        `response.choices[0].message.content` (Text, kann None sein),
+        `.message.tool_calls[i].id / .function.name / .function.arguments`.
+        `input = json.loads(arguments or "{}")` defensiv (JSONDecodeError/
+        TypeError → {}). `usage` bleibt das RAW-LiteLLM-Objekt (der Konsument
+        liest es getattr-förmig, Spiegel anthropic). web_search konstant leer/0
+        (dieser Vendor deklariert kein web_search).
+        """
+        text_parts: list[str] = []
+        tool_calls: list[dict[str, Any]] = []
+        for choice in getattr(response, "choices", None) or []:
+            message = getattr(choice, "message", None)
+            if message is None:
+                continue
+            content = getattr(message, "content", None)
+            if content:
+                text_parts.append(content)
+            for tc in getattr(message, "tool_calls", None) or []:
+                fn = getattr(tc, "function", None)
+                raw_args = getattr(fn, "arguments", None) or "{}"
+                try:
+                    args = json.loads(raw_args)
+                except (json.JSONDecodeError, TypeError):
+                    args = {}
+                tool_calls.append({
+                    "id": getattr(tc, "id", "") or "",
+                    "name": getattr(fn, "name", "") or "",
+                    "input": args if isinstance(args, dict) else {},
+                })
+        return {
+            "text": "\n".join(text_parts).strip(),
+            "tool_calls": tool_calls,
+            "usage": getattr(response, "usage", None),
+            "web_search": [],
+            "web_search_requests": 0,
+        }
 
     # ------------------------------------------------------------------
     #  Response-Parse + Telemetrie-Hilfen (LLMP-S4)

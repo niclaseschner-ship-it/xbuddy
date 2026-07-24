@@ -6,7 +6,8 @@ Belegt:
     mit gemocktem `litellm.completion` → Text zurück + GENAU EINE JSONL-Zeile
     (caller=kibuddy, LLMP-S4 Tier-2-Projektion), Usage OpenAI→intern gemappt,
     cache_control-Marker auf dem System-Block (LiteLLM-Passthrough).
-  - AC3: singleshot/agent werfen NotImplementedError mit Slot-2/3-Hinweis.
+  - AC3: singleshot werfen NotImplementedError; agent_step ist migriert
+    (Slot 2, #1452) — Wire-Übersetzung, Parse, is_error-Prefix, JSONL, Loop-E2E.
 
 `litellm` ist NICHT installiert → das SDK wird als MagicMock über sys.modules
 eingehängt und `litellm.completion` gemockt (Spiegel test_chat_jsonl_endtoend,
@@ -273,11 +274,224 @@ def test_singleshot_text_not_implemented():
         vendor.singleshot_text("s", "u")
 
 
-def test_agent_step_not_implemented():
-    """AC3: agent_step wirft NotImplementedError."""
-    vendor = _make_vendor()
-    with pytest.raises(NotImplementedError):
-        vendor.agent_step("s", [], [])
+# ----------------------------------------------------------------------
+#  Slot 2 (#1452) — agent_step: Wire-Übersetzung + Parse + Loop-E2E
+# ----------------------------------------------------------------------
+
+
+def _make_agent_response(text, *, tool_calls=None, prompt_tokens=100,
+                         completion_tokens=50):
+    """OpenAI-förmige LiteLLM-ModelResponse für agent_step: `.choices[0].message`
+    mit `.content` + `.tool_calls[i].{id, function.{name, arguments}}`."""
+    message = MagicMock()
+    message.content = text
+    tc_objs = []
+    for tc in tool_calls or []:
+        tc_obj = MagicMock()
+        tc_obj.id = tc["id"]
+        fn = MagicMock()
+        fn.name = tc["name"]
+        fn.arguments = tc["arguments"]
+        tc_obj.function = fn
+        tc_objs.append(tc_obj)
+    message.tool_calls = tc_objs
+    choice = MagicMock()
+    choice.message = message
+    resp = MagicMock()
+    resp.choices = [choice]
+    resp.usage = MagicMock()
+    resp.usage.prompt_tokens = prompt_tokens
+    resp.usage.completion_tokens = completion_tokens
+    resp.usage.cache_read_input_tokens = 0
+    resp.usage.cache_creation_input_tokens = 0
+    return resp
+
+
+def test_agent_step_capabilities_covers_required_agent():
+    """AC1: CAPABILITIES deckt REQUIRED_AGENT ab (tool_use dabei),
+    web_search NICHT deklariert (out of scope)."""
+    assert public_api.REQUIRED_AGENT <= litellm_vendor.CAPABILITIES
+    assert "tool_use" in litellm_vendor.CAPABILITIES
+    assert "web_search" not in litellm_vendor.CAPABILITIES
+
+
+def test_agent_step_parses_text_only():
+    """AC2: reine Text-Antwort → neutrale Form, tool_calls leer, web_search leer/0."""
+    fake_litellm = _make_fake_litellm_sdk(_make_agent_response("Hallo Welt."))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        out = vendor.agent_step("S.", [{"role": "user", "content": "Hi"}], [],
+                                caller="eltern-chat", slot="eltern-chat-litellm-api-key")
+    assert out["text"] == "Hallo Welt."
+    assert out["tool_calls"] == []
+    assert out["web_search"] == []
+    assert out["web_search_requests"] == 0
+
+
+def test_agent_step_parses_tool_call():
+    """AC2: tool_call → {id,name,input}; arguments-JSON defensiv geparst."""
+    fake_litellm = _make_fake_litellm_sdk(_make_agent_response(
+        "Ich schaue.",
+        tool_calls=[{"id": "call-7", "name": "wetter",
+                     "arguments": '{"ort": "Berlin"}'}],
+    ))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        out = vendor.agent_step(
+            "S.", [{"role": "user", "content": "Wetter?"}],
+            [{"name": "wetter", "description": "Wetter.",
+              "input_schema": {"type": "object"}}],
+            caller="eltern-chat", slot="eltern-chat-litellm-api-key")
+    assert out["text"] == "Ich schaue."
+    assert out["tool_calls"] == [
+        {"id": "call-7", "name": "wetter", "input": {"ort": "Berlin"}}
+    ]
+
+
+def test_agent_step_bad_arguments_json_yields_empty_input():
+    """AC2-Defensive: kaputtes arguments-JSON → input {} (kein Crash)."""
+    fake_litellm = _make_fake_litellm_sdk(_make_agent_response(
+        "", tool_calls=[{"id": "c1", "name": "t", "arguments": "{nicht-json"}],
+    ))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        out = vendor.agent_step("S.", [], [], caller="eltern-chat",
+                                slot="eltern-chat-litellm-api-key")
+    assert out["tool_calls"][0]["input"] == {}
+
+
+def test_agent_step_wire_in_translation_and_cache_control():
+    """AC2/AC4: neutrale Anthropic-shaped messages IN → OpenAI-Form; System als
+    eigene Message mit cache_control:ephemeral; tools → function-Form."""
+    fake_litellm = _make_fake_litellm_sdk(_make_agent_response("ok"))
+    messages = [
+        {"role": "user", "content": "Wetter?"},
+        {"role": "assistant", "content": [
+            {"type": "text", "text": "Ich schaue."},
+            {"type": "tool_use", "id": "call-1", "name": "wetter",
+             "input": {"ort": "Berlin"}},
+        ]},
+        {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "call-1",
+             "content": "18 Grad", "is_error": False},
+        ]},
+    ]
+    tools = [{"name": "wetter", "description": "Wetter.",
+              "input_schema": {"type": "object", "properties": {}}}]
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        vendor.agent_step("Du bist Assistent.", messages, tools,
+                          caller="eltern-chat", slot="eltern-chat-litellm-api-key")
+
+    call = fake_litellm.completion.call_args
+    sent = call.kwargs["messages"]
+    # System als eigene erste Message mit cache_control.
+    assert sent[0]["role"] == "system"
+    assert sent[0]["content"][0]["cache_control"] == {"type": "ephemeral"}
+    assert sent[0]["content"][0]["text"] == "Du bist Assistent."
+    # user-String bleibt String.
+    assert sent[1] == {"role": "user", "content": "Wetter?"}
+    # assistant tool_use → OpenAI tool_calls, arguments JSON-serialisiert.
+    assistant = sent[2]
+    assert assistant["role"] == "assistant"
+    assert assistant["tool_calls"][0]["id"] == "call-1"
+    assert assistant["tool_calls"][0]["type"] == "function"
+    assert assistant["tool_calls"][0]["function"]["name"] == "wetter"
+    assert json.loads(assistant["tool_calls"][0]["function"]["arguments"]) == {"ort": "Berlin"}
+    # tool_result → eigene tool-Message mit tool_call_id.
+    tool_msg = sent[3]
+    assert tool_msg["role"] == "tool"
+    assert tool_msg["tool_call_id"] == "call-1"
+    assert tool_msg["content"] == "18 Grad"
+    # tools → OpenAI function-Form.
+    assert call.kwargs["tools"][0]["type"] == "function"
+    assert call.kwargs["tools"][0]["function"]["name"] == "wetter"
+
+
+def test_agent_step_tool_result_is_error_prefix():
+    """AC2: is_error=True am tool_result → '[FEHLER] '-Prefix im content
+    (mistral-Parität)."""
+    fake_litellm = _make_fake_litellm_sdk(_make_agent_response("ok"))
+    messages = [{"role": "user", "content": [
+        {"type": "tool_result", "tool_use_id": "c1",
+         "content": "Sensor offline", "is_error": True},
+    ]}]
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        vendor.agent_step("S.", messages, [], caller="eltern-chat",
+                          slot="eltern-chat-litellm-api-key")
+    sent = fake_litellm.completion.call_args.kwargs["messages"]
+    tool_msg = sent[-1]
+    assert tool_msg["role"] == "tool"
+    assert tool_msg["content"] == "[FEHLER] Sensor offline"
+
+
+def test_agent_step_writes_single_jsonl(jsonl_path):
+    """AC2: agent_step emittiert GENAU EINE JSONL-Zeile (LLMP-S4), Usage
+    OpenAI→intern gemappt."""
+    fake_litellm = _make_fake_litellm_sdk(_make_agent_response(
+        "ok", prompt_tokens=321, completion_tokens=12))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        vendor.agent_step("S.", [{"role": "user", "content": "Hi"}], [],
+                          caller="eltern-chat", slot="eltern-chat-litellm-api-key",
+                          correlation_id="turn-abc")
+    lines = jsonl_path.read_text(encoding="utf-8").strip().split("\n")
+    assert len(lines) == 1
+    parsed = json.loads(lines[0])
+    assert parsed["caller"] == "eltern-chat"
+    assert parsed["input_tokens"] == 321
+    assert parsed["output_tokens"] == 12
+    assert parsed["correlation_id"] == "turn-abc"
+
+
+def test_agent_step_api_error_propagates():
+    """AC2: litellm.exceptions.APIError → ProviderError."""
+    fake_litellm = _make_fake_litellm_sdk(side_effect=_FakeAPIError("tot"))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        from tools.llm import ProviderError
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        with pytest.raises(ProviderError):
+            vendor.agent_step("S.", [], [], caller="eltern-chat",
+                              slot="eltern-chat-litellm-api-key")
+
+
+def test_agent_run_loop_e2e_with_tool_runner():
+    """AC2: agent_run (VendorBase-Loop) über litellm-agent_step — erst tool_call,
+    dann tool_runner-Ergebnis, dann finale Text-Antwort."""
+    resp_tool = _make_agent_response(
+        "", tool_calls=[{"id": "c1", "name": "wetter",
+                         "arguments": '{"ort": "Berlin"}'}])
+    resp_final = _make_agent_response("Es sind 18 Grad in Berlin.")
+    fake_litellm = _make_fake_litellm_sdk()
+    fake_litellm.completion.side_effect = [resp_tool, resp_final]
+
+    calls = []
+
+    def tool_runner(name, args):
+        calls.append((name, args))
+        return "18 Grad"
+
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        out = vendor.agent_run(
+            "Du bist Assistent.",
+            [{"role": "user", "content": "Wetter in Berlin?"}],
+            [{"name": "wetter", "description": "Wetter.",
+              "input_schema": {"type": "object"}}],
+            caller="eltern-chat", slot="eltern-chat-litellm-api-key",
+            tool_runner=tool_runner,
+        )
+
+    assert out["text"] == "Es sind 18 Grad in Berlin."
+    assert calls == [("wetter", {"ort": "Berlin"})]
+    # Zwei litellm-Calls: tool-Turn + finaler Turn.
+    assert fake_litellm.completion.call_count == 2
+    # Zweiter Call trägt die zurückgespiegelte assistant-tool_use + tool-Message.
+    second_messages = fake_litellm.completion.call_args_list[1].kwargs["messages"]
+    roles = [m["role"] for m in second_messages]
+    assert "assistant" in roles
+    assert "tool" in roles
 
 
 # ----------------------------------------------------------------------
