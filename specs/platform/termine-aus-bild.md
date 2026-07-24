@@ -142,7 +142,10 @@ beider Aufgaben so geschnitten, dass sie sich **nicht überlappen**:
   `kursplan` — der Code hält die exakte Liste, die Spec normiert das
   **Soll**: die Liste ist hart-codiert, deutsch, und enthält mindestens
   diese Wörter). Die Beschreibung weist das LLM ausdrücklich an: trifft
-  **kein** Signalwort, **nicht** TAB aufrufen.
+  **kein** Signalwort, **nicht** TAB aufrufen. Umgekehrt: **bei Foto mit
+  Termin-Signalwort ruft das LLM `termine_aus_bild` zwingend auf und
+  erfindet keine Termine aus dem Gesprächskontext oder eigenem Wissen** —
+  das Bild ist die alleinige Quelle (Ref #1334, #1387).
 
 Die Signalwort-Liste lebt im Code als hart-codierter String-Tupel und
 fließt **in die Tool-Schema-Beschreibung** ein (nicht in einen
