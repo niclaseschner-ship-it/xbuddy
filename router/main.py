@@ -218,9 +218,8 @@ _DUAL_GATE_401_HTML = (
     "<body style=\"font-family:system-ui,sans-serif;max-width:32rem;"
     "margin:3rem auto;padding:0 1rem;line-height:1.5\">"
     "<h1>Dieses Gerät muss neu verbunden werden.</h1>"
-    "<p>Öffne im Familien-Bot den Befehl "
-    "<code>/gerät_neu_pairen &lt;display_id&gt;</code> und folge dem Link "
-    "auf diesem Gerät.</p>"
+    "<p>Frag den Familien-Chatbot einfach nach einem neuen Cookie für dein "
+    "Gerät — dann geht es wieder. Oder pair im Chat ein neues Gerät.</p>"
     "</body></html>"
 )
 
