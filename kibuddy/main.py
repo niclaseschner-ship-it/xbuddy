@@ -199,8 +199,20 @@ _ENV_FAMILIE_ORIGIN = "KIBUDDY_FAMILIE_ORIGIN"
 
 
 def _get_bot_token():
-    """Bot-Token aus runtime-Dict (Test-Naht) oder ENV (APP-7)."""
-    return runtime.get("bot_token") or os.environ.get(_ENV_BOT_TOKEN)
+    """Bot-Token aus runtime-Dict (Test-Naht), ENV (APP-7) oder Zugangsdaten-Store (T1440).
+
+    Reihenfolge: runtime['bot_token'] → os.environ[ELTERNCHAT_BOT_TOKEN] → Store-Slot
+    'eltern-chat-bot-token'. Der Store-Read ist lazy und defensiv — fehlt der Store
+    oder schlägt der Import fehl, wird None zurückgegeben (kein Crash).
+    """
+    token = runtime.get("bot_token") or os.environ.get(_ENV_BOT_TOKEN)
+    if token:
+        return token
+    try:
+        from tools.zugangsdaten import Zugangsdaten, resolve_store_path
+        return Zugangsdaten(resolve_store_path()).get("eltern-chat-bot-token")
+    except Exception:
+        return None
 
 
 def _get_familie_client():

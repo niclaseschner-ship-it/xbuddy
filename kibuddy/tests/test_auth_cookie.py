@@ -149,3 +149,30 @@ def test_frage_ohne_auth_gibt_401(raw_client):
         content_type="multipart/form-data",
     )
     assert resp.status_code == 401
+
+
+def test_get_bot_token_liest_store_als_fallback(tmp_path, monkeypatch):
+    """T1440/AC1: _get_bot_token() liefert Store-Slot wenn runtime + ENV leer.
+
+    Der Store wird als temporäre JSON-Datei angelegt; resolve_store_path liest
+    ZUGANGSDATEN_STORE_FILE aus os.environ, kein Reload nötig (Wert zur
+    Aufruf-Zeit ausgelesen).
+    """
+    import json as _json
+
+    store_file = tmp_path / "zd.json"
+    store_file.write_text(
+        _json.dumps({"eltern-chat-bot-token": "store_token_abc"}),
+        encoding="utf-8",
+    )
+    store_file.chmod(0o600)
+
+    # runtime-Dict + ENV leer halten.
+    monkeypatch.delitem(kibuddy_main.runtime, "bot_token", raising=False)
+    monkeypatch.delenv("ELTERNCHAT_BOT_TOKEN", raising=False)
+
+    # resolve_store_path auf tmp-Datei zeigen lassen.
+    monkeypatch.setenv("ZUGANGSDATEN_STORE_FILE", str(store_file))
+
+    result = kibuddy_main._get_bot_token()
+    assert result == "store_token_abc"
