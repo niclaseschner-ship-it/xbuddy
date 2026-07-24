@@ -1,6 +1,6 @@
 # RAT-28 — LiteLLM-first für Audio: TTS + STT in Scope (LLMP-S6 Umkehr)
 
-**Datum:** 2026-07-08 · **Ratifiziert:** ENTWURF — Nic-Ratifizierung ausstehend · **Epic:** #1268 · **Ticket:** #1410
+**Datum:** 2026-07-24 · **Ratifiziert:** Nic-Verdikt „a" (arbeitstag-prep 2026-07-24) · **Epic:** #1268 · **Ticket:** #1410
 
 ## Kontext — warum LLMP-S6 jetzt umgekehrt wird
 
