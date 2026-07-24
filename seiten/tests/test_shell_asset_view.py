@@ -11,6 +11,12 @@ Deckt:
          application/manifest+json via heim_shell_manifest (Literal-Segment trumpft
          Variable <path:asset> — verhindert Manifest-Shadowing durch shell_asset_view).
 
+T1448: shell_asset_view ist hard enforced (mode='hard'). Alle Tests, die den
+Sicherheits-Code in der Route (realpath-Check, _-Prefix-Guard usw.) prüfen,
+müssen als Operator-IP durchgehen — sonst schneidet der Gate vorher auf 401 ab
+und die eigentliche Prüflogik läuft nie. Opt-in _OPERATOR_HEADERS (kein autouse,
+#1428-Fail-Open-Risiko). manifest.json ist public (AC3, kein Header nötig).
+
 Test-Naht: runtime["shell_asset_dir"] (_shell_asset_root, main.py:1069)
   ueberschreibbar via monkeypatch.setitem(seiten_main.runtime, "shell_asset_dir", ...).
 """
@@ -30,6 +36,12 @@ from seiten import main as seiten_main  # noqa: E402
 # Test-Panel-ID — nie im Produktiv-Code (SHELL-9).
 _PANEL_ID = "test-panel-asset-99"
 _PREFIX = "/shell/" + _PANEL_ID + "/"
+
+# Operator-IP-Header (opt-in, kein autouse) — T1448: shell_asset_view ist hard.
+# Sicherheits-Tests (realpath, _-Prefix) müssen als Operator-IP durchgehen,
+# damit der Gate-Schnitt auf 401 die eigentliche Prüflogik nicht abschneidet.
+# manifest.json (AC3) ist public — dort kein Header nötig.
+_OPERATOR_HEADERS = {"X-Real-IP": "192.168.178.42"}
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -73,8 +85,9 @@ def test_ac1_path_traversal_url_encoded_404(client, shell_tmp):
     %2F kodiert '/' im URL-Pfad; der <path:asset>-Converter gibt '../../etc/passwd'
     (dekodiert) an shell_asset_view. Der realpath-Check erkennt, dass das Ziel
     ausserhalb des Shell-Asset-Roots liegt, und bricht mit 404 ab.
+    T1448: Operator-IP damit der Gate-Schnitt (401) den realpath-Check nicht abschneidet.
     """
-    resp = client.get(_PREFIX + "..%2F..%2Fetc%2Fpasswd")
+    resp = client.get(_PREFIX + "..%2F..%2Fetc%2Fpasswd", headers=_OPERATOR_HEADERS)
     assert resp.status_code == 404
 
 
@@ -83,8 +96,9 @@ def test_ac1_path_traversal_literal_dots_404_or_redirect(client, shell_tmp):
 
     Werkzeug kann ../ vor dem Routing normalisieren (Redirect) oder die Route verfehlen
     (→ 404 aus dem Router). Beides beweist, dass kein sensitiver Inhalt ausgeliefert wird.
+    T1448: Operator-IP als Auth-Quelle (opt-in).
     """
-    resp = client.get(_PREFIX + "../main.py")
+    resp = client.get(_PREFIX + "../main.py", headers=_OPERATOR_HEADERS)
     assert resp.status_code in (301, 308, 404)
 
 
@@ -93,8 +107,9 @@ def test_ac1_traversal_bleibt_im_shell_root(client, shell_tmp):
 
     Sicherstellt: realpath-Check greift NUR bei echten Traversal-Versuchen,
     nicht bei gueltigen Assets im Verzeichnis (kein false-positive).
+    T1448: Operator-IP als Auth-Quelle (opt-in).
     """
-    resp = client.get(_PREFIX + "sw.js")
+    resp = client.get(_PREFIX + "sw.js", headers=_OPERATOR_HEADERS)
     # sw.js ist ein gueltiges Asset — muss ausgeliefert werden (kein realpath-Fehler)
     assert resp.status_code == 200
 
@@ -107,8 +122,9 @@ def test_ac2_nonexistent_asset_404(client, shell_tmp):
     Eine Datei, die nicht im shell/-Verzeichnis liegt, wird mit 404 abgewiesen.
     Der isfile-Check (main.py:1108) laeuft nach dem realpath-Check (main.py:1106)
     und faengt alle legitimen Pfade ab, die einfach nicht vorhanden sind.
+    T1448: Operator-IP damit der Gate-Schnitt (401) den isfile-Check nicht abschneidet.
     """
-    resp = client.get(_PREFIX + "gibt-es-nicht.txt")
+    resp = client.get(_PREFIX + "gibt-es-nicht.txt", headers=_OPERATOR_HEADERS)
     assert resp.status_code == 404
 
 
@@ -120,8 +136,9 @@ def test_ac2_underscore_prefix_datei_404(client, shell_tmp):
     selbst wenn sie im shell/-Verzeichnis liegen. Die Datei _private.js wurde
     explizit in shell_tmp erstellt, damit der isfile-Check (main.py:1108) passiert
     und der _-Prefix-Guard (main.py:1110) greift.
+    T1448: Operator-IP damit der Gate-Schnitt (401) den _-Prefix-Guard nicht abschneidet.
     """
-    resp = client.get(_PREFIX + "_private.js")
+    resp = client.get(_PREFIX + "_private.js", headers=_OPERATOR_HEADERS)
     assert resp.status_code == 404
 
 

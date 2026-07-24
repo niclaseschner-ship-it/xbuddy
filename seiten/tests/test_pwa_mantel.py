@@ -110,6 +110,43 @@ def test_registry_hat_sechs_keys_mit_source_set():
             f"{name}: build_id_source_set ist leer (PWAM-4)"
 
 
+def test_registry_shell_html_cache_mode_network_first():
+    """T1448/AC1: shell-Eintrag traegt html_cache_mode='network-first' (stale-Cache-Fix).
+
+    network-first: Browser holt HTML immer frisch vom Server; Cache dient nur als
+    Offline-Fallback. Verhindert das Kleben von stale-Cache trotz Deploy.
+    """
+    cfg = pwa_mantel.REGISTRY["shell"]
+    assert cfg.html_cache_mode == "network-first", (
+        "REGISTRY['shell'].html_cache_mode muss 'network-first' sein (T1448-AC1), "
+        f"ist: {cfg.html_cache_mode!r}"
+    )
+
+
+def test_render_sw_shell_enthaelt_network_first_logik():
+    """T1448/AC1: render_sw('shell') erzeugt SW-JS mit networkFirst-Funktion und -Zweig.
+
+    Belegt, dass das SW-Skelett den network-first-Modus tatsaechlich implementiert
+    (nicht nur als Konstante traegt), und dass der Fetch-Handler den Zweig nutzt.
+    """
+    js = pwa_mantel.render_sw("shell", build_id="test-nf")
+    assert "HTML_CACHE_MODE = 'network-first'" in js, (
+        "SW muss HTML_CACHE_MODE='network-first' tragen (T1448-AC1)"
+    )
+    assert "function networkFirst" in js, (
+        "SW muss networkFirst-Funktion enthalten (T1448-AC1)"
+    )
+    assert "HTML_CACHE_MODE === 'network-first'" in js, (
+        "Fetch-Handler muss network-first-Zweig enthalten (T1448-AC1)"
+    )
+    # cache-first darf fuer shell NICHT als Fetch-Strategie greifen
+    # (die Funktion cacheFirst existiert weiter fuer andere Konsumenten, das ist OK;
+    #  aber der Zweig 'cache-first' && inScope darf nicht die alleinige Strategie sein)
+    assert "HTML_CACHE_MODE === 'network-first' && inScope" in js, (
+        "network-first-Zweig muss im Fetch-Handler via inScope abgesichert sein (T1448-AC1)"
+    )
+
+
 def test_registry_einkauf_plan_tragen_platform_js():
     """PWAM-4-Kern: einkauf/plan-Source-Set enthaelt platform.js (SW-Fix-Basis)."""
     assert "platform.js" in pwa_mantel.REGISTRY["einkauf"].build_id_source_set

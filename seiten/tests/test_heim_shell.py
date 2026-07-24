@@ -36,9 +36,19 @@ DISPLAY_ID = "tablet-tablet-paula-01"
 #  Shared Fixture
 # ============================================================
 
+# Operator-IP-Header (opt-in, nicht autouse) — T1448: /shell/ ist hard enforced.
+# Nur Tests, die explizit dieses dict übergeben, fahren als Operator-IP durch.
+# Kein blanket-autouse (#1428-Fail-Open-Risiko).
+_OPERATOR_HEADERS = {"X-Real-IP": "192.168.178.42"}
+
+
 @pytest.fixture
 def client(monkeypatch):
-    """Testclient mit gemocktem display_id-Lookup (SHELL-2) und Origin-Config."""
+    """Testclient mit gemocktem display_id-Lookup (SHELL-2) und Origin-Config.
+
+    T1448: /shell/ ist hard enforced. Tests müssen _OPERATOR_HEADERS übergeben
+    ODER einen gültigen Cookie setzen, um 200 zu erhalten.
+    """
     monkeypatch.setattr(
         seiten_main, "_lookup_display_id",
         lambda pid: DISPLAY_ID if pid == PANEL_ID else None,
@@ -53,15 +63,17 @@ def client(monkeypatch):
 # ============================================================
 
 def test_shell1_route_html(client):
-    """SHELL-1: GET /shell/<panel_id> liefert HTTP 200 + text/html."""
-    resp = client.get("/shell/" + PANEL_ID)
+    """SHELL-1: GET /shell/<panel_id> liefert HTTP 200 + text/html.
+    T1448: /shell/ ist hard enforced — Operator-IP als Auth-Quelle (opt-in)."""
+    resp = client.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS)
     assert resp.status_code == 200, "Route muss 200 liefern"
     assert "text/html" in resp.mimetype, "Antwort muss text/html sein"
 
 
 def test_shell1_route_html_enthaelt_panel_id(client):
-    """SHELL-1: HTML enthaelt panel_id (im Iframe-Src oder Titel)."""
-    body = client.get("/shell/" + PANEL_ID).get_data(as_text=True)
+    """SHELL-1: HTML enthaelt panel_id (im Iframe-Src oder Titel).
+    T1448: Operator-IP als Auth-Quelle (opt-in)."""
+    body = client.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS).get_data(as_text=True)
     assert PANEL_ID in body
 
 
@@ -70,7 +82,8 @@ def test_shell1_route_html_enthaelt_panel_id(client):
 # ============================================================
 
 def test_shell2_lookup_display_id(monkeypatch):
-    """SHELL-2: _lookup_display_id wird mit panel_id aufgerufen; Ergebnis im HTML."""
+    """SHELL-2: _lookup_display_id wird mit panel_id aufgerufen; Ergebnis im HTML.
+    T1448: Operator-IP als Auth-Quelle (opt-in)."""
     calls = []
 
     def fake_lookup(pid):
@@ -80,7 +93,7 @@ def test_shell2_lookup_display_id(monkeypatch):
     monkeypatch.setattr(seiten_main, "_lookup_display_id", fake_lookup)
     seiten_main.app.config["TESTING"] = True
     c = seiten_main.app.test_client()
-    resp = c.get("/shell/" + PANEL_ID)
+    resp = c.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS)
     assert resp.status_code == 200
     assert calls == [PANEL_ID], "Lookup muss genau einmal mit panel_id aufgerufen werden"
     body = resp.get_data(as_text=True)
@@ -135,19 +148,21 @@ def test_shell2_lookup_gibt_none_bei_404(monkeypatch):
 # ============================================================
 
 def test_shell3_zwei_iframes_src(client):
-    """SHELL-3: HTML enthaelt genau zwei Iframes (Panel-Nav + Buddy-View) mit korrekten srcs."""
-    body = client.get("/shell/" + PANEL_ID).get_data(as_text=True)
+    """SHELL-3: HTML enthaelt genau zwei Iframes (Panel-Nav + Buddy-View) mit korrekten srcs.
+    T1448: Operator-IP als Auth-Quelle (opt-in)."""
+    body = client.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS).get_data(as_text=True)
     assert "/controller/app-panel/" + PANEL_ID + "/" in body, "Linker Panel-Iframe-Src fehlt"
     assert "/display/" + DISPLAY_ID + "/" in body, "Rechter Display-Iframe-Src fehlt"
     assert body.count("<iframe") == 2, "Genau zwei Iframes erwartet"
 
 
 def test_shell3_kein_iframe_ohne_display(monkeypatch):
-    """SHELL-3: Kein Display-Iframe wenn Lookup None liefert — sichtbarer Fehler."""
+    """SHELL-3: Kein Display-Iframe wenn Lookup None liefert — sichtbarer Fehler.
+    T1448: Operator-IP als Auth-Quelle (opt-in)."""
     monkeypatch.setattr(seiten_main, "_lookup_display_id", lambda pid: None)
     seiten_main.app.config["TESTING"] = True
     c = seiten_main.app.test_client()
-    body = c.get("/shell/" + PANEL_ID).get_data(as_text=True)
+    body = c.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS).get_data(as_text=True)
     # Linker Panel-Iframe bleibt
     assert "/controller/app-panel/" + PANEL_ID + "/" in body
     # Kein rechter Display-Iframe
@@ -172,8 +187,9 @@ def test_shell3_rail_css_enthaelt_280px(client):
 # ============================================================
 
 def test_shell5_kein_displib_import(client):
-    """SHELL-5: Shell-HTML enthaelt keinen displib-Import (keine Display-Client-Codekopie)."""
-    body = client.get("/shell/" + PANEL_ID).get_data(as_text=True)
+    """SHELL-5: Shell-HTML enthaelt keinen displib-Import (keine Display-Client-Codekopie).
+    T1448: Operator-IP als Auth-Quelle (opt-in)."""
+    body = client.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS).get_data(as_text=True)
     assert "displib" not in body, "displib darf NICHT in Shell-HTML erscheinen (SHELL-5)"
     assert "displib.js" not in body
 
@@ -309,8 +325,9 @@ def test_shell11_display_client_embedded_guard():
 
 
 def test_shell11_shell_fullscreen_script(client):
-    """SHELL-11/AC2: Shell-HTML enthaelt Vollbild-Script (requestFullscreen auf Shell-Dokument)."""
-    body = client.get("/shell/" + PANEL_ID).get_data(as_text=True)
+    """SHELL-11/AC2: Shell-HTML enthaelt Vollbild-Script (requestFullscreen auf Shell-Dokument).
+    T1448: Operator-IP als Auth-Quelle (opt-in)."""
+    body = client.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS).get_data(as_text=True)
     assert "requestFullscreen" in body or "webkitRequestFullscreen" in body, (
         "Shell-HTML muss requestFullscreen enthalten (SHELL-11)"
     )
@@ -355,8 +372,9 @@ def test_shell_pwa_ac1_scope(client):
 
 
 def test_shell_pwa_ac2_sw_route(client):
-    """SHELL-PWA AC2: GET /shell/<panel_id>/sw.js liefert JavaScript (Content-Type + Service-Worker-Allowed)."""
-    resp = client.get("/shell/" + PANEL_ID + "/sw.js")
+    """SHELL-PWA AC2: GET /shell/<panel_id>/sw.js liefert JavaScript (Content-Type + Service-Worker-Allowed).
+    T1448: Operator-IP als Auth-Quelle (opt-in)."""
+    resp = client.get("/shell/" + PANEL_ID + "/sw.js", headers=_OPERATOR_HEADERS)
     assert resp.status_code == 200, "SHELL-PWA AC2: sw.js-Route muss 200 liefern"
     assert "javascript" in resp.headers.get("Content-Type", ""), (
         "SHELL-PWA AC2: sw.js muss als application/javascript ausgeliefert werden"
@@ -369,8 +387,9 @@ def test_shell_pwa_ac2_sw_route(client):
 
 
 def test_shell_pwa_ac2_sw_build_id_ersetzt(client):
-    """SHELL-PWA AC2: __BUILD_ID__-Platzhalter in sw.js wird beim Ausliefern ersetzt."""
-    resp = client.get("/shell/" + PANEL_ID + "/sw.js")
+    """SHELL-PWA AC2: __BUILD_ID__-Platzhalter in sw.js wird beim Ausliefern ersetzt.
+    T1448: Operator-IP als Auth-Quelle (opt-in)."""
+    resp = client.get("/shell/" + PANEL_ID + "/sw.js", headers=_OPERATOR_HEADERS)
     body = resp.get_data(as_text=True)
     assert "__BUILD_ID__" not in body, (
         "SHELL-PWA AC2: __BUILD_ID__-Platzhalter muss in sw.js ersetzt sein (Cache-Versionierung)"
@@ -379,7 +398,8 @@ def test_shell_pwa_ac2_sw_build_id_ersetzt(client):
 
 
 def test_shell_pwa_ac2_icon_routes(client, monkeypatch, tmp_path):
-    """SHELL-PWA AC2: icon-*.png-Routen liefern image/png aus seiten/static/shell/."""
+    """SHELL-PWA AC2: icon-*.png-Routen liefern image/png aus seiten/static/shell/.
+    T1448: Operator-IP als Auth-Quelle (opt-in)."""
     import shutil
     # Test-Asset-Verzeichnis mit echten PNG-Kopien aufbauen.
     shell_assets = tmp_path / "shell"
@@ -393,7 +413,7 @@ def test_shell_pwa_ac2_icon_routes(client, monkeypatch, tmp_path):
     monkeypatch.setitem(seiten_main.runtime, "shell_asset_dir", str(shell_assets))
 
     for fname in ("icon-192.png", "icon-512.png", "icon-maskable-512.png"):
-        resp = client.get("/shell/" + PANEL_ID + "/" + fname)
+        resp = client.get("/shell/" + PANEL_ID + "/" + fname, headers=_OPERATOR_HEADERS)
         assert resp.status_code == 200, f"SHELL-PWA AC2: {fname}-Route muss 200 liefern"
         assert "image/png" in resp.headers.get("Content-Type", ""), (
             f"SHELL-PWA AC2: {fname} muss als image/png ausgeliefert werden"
@@ -401,8 +421,9 @@ def test_shell_pwa_ac2_icon_routes(client, monkeypatch, tmp_path):
 
 
 def test_shell_pwa_ac2_html_registriert_sw(client):
-    """SHELL-PWA AC2: Shell-HTML bindet Manifest + registriert sw.js via navigator.serviceWorker."""
-    body = client.get("/shell/" + PANEL_ID).get_data(as_text=True)
+    """SHELL-PWA AC2: Shell-HTML bindet Manifest + registriert sw.js via navigator.serviceWorker.
+    T1448: Operator-IP als Auth-Quelle (opt-in)."""
+    body = client.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS).get_data(as_text=True)
     assert 'rel="manifest"' in body, "SHELL-PWA AC2: manifest-Link fehlt in Shell-HTML"
     assert "serviceWorker" in body, "SHELL-PWA AC2: Service-Worker-Registrierung fehlt in Shell-HTML"
     assert "sw.js" in body, "SHELL-PWA AC2: sw.js-Referenz fehlt in Shell-HTML"

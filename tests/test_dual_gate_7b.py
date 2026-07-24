@@ -203,15 +203,17 @@ def test_shell_cookie_gibt_200_und_rolling_refresh(seiten_client):
     assert sc.COOKIE_NAME in resp.headers.get("Set-Cookie", "")
 
 
-def test_shell_keine_quelle_observe_gibt_200(seiten_client, caplog):
-    with caplog.at_level(logging.WARNING):
-        resp = seiten_client.get("/shell/%s" % PANEL_ID, headers=_EXTERN)
-    assert resp.status_code == 200  # Observe, kein 401
-    assert any("AUTH-3.a Observe" in r.message for r in caplog.records)
+def test_shell_keine_quelle_hard_gibt_401(seiten_client):
+    """T1448: /shell/<panel_id> ist auf hard gesetzt — 401 ohne Auth-Quelle."""
+    resp = seiten_client.get("/shell/%s" % PANEL_ID, headers=_EXTERN)
+    assert resp.status_code == 401  # hard — kein Durchlass ohne Cookie/Operator-IP
+    assert "neu verbunden" in resp.get_data(as_text=True)
 
 
 # ---------------------------------------------------------------------------
-# T1418 — Asset-Unterrouten: observe→200+Log, hard→401
+# T1418 / T1448 — Asset- und Manifest-Routen
+# T1418: display-Assets observe→200+Log
+# T1448: shell-Manifest public→200 (kein Gate); shell-Assets hard→401
 # entry_path_probe: GET /display/<id>/<asset> + /shell/<id>/<asset> durch den Gate
 # ---------------------------------------------------------------------------
 
@@ -254,35 +256,59 @@ def test_display_asset_cookie_gibt_200(router_client):
     )
 
 
-def test_shell_manifest_observe_gibt_200_und_loggt(seiten_client, caplog):
-    """entry_path_probe (seiten): GET /shell/<id>/manifest.json läuft im Observe-
-    Modus durch (200) — kein 401 trotz fehlender Auth-Quelle. Log-Eintrag belegt Gate."""
+def test_shell_manifest_public_gibt_200_ohne_gate(seiten_client, caplog):
+    """T1448/AC2: GET /shell/<id>/manifest.json ist public (kein Gate-Decorator).
+
+    Browser holt PWA-Manifeste credential-los (Fetch-Spec) → gegated 401 über den
+    Funnel bricht PWA-Install (#1437). Manifest gibt 200 OHNE Auth-Quelle zurück —
+    UND trägt keinen AUTH-3.a-Observe-Log (kein Gate aktiv).
+    """
     with caplog.at_level(logging.WARNING):
         resp = seiten_client.get(
             "/shell/%s/manifest.json" % PANEL_ID, headers=_EXTERN
         )
     assert resp.status_code == 200, (
-        "Shell-Manifest-Route muss im Observe-Modus 200 zurückgeben, got %d"
+        "Shell-Manifest-Route muss public 200 zurückgeben (kein Gate), got %d"
         % resp.status_code
     )
-    assert any("AUTH-3.a Observe" in r.message for r in caplog.records), (
-        "Observe-Log-Eintrag fehlt für /shell/<id>/manifest.json"
+    # Kein Gate-Decorator → kein AUTH-3.a-Log.
+    assert not any("AUTH-3.a Observe" in r.message for r in caplog.records), (
+        "AUTH-3.a-Observe-Log darf NICHT erscheinen — Manifest-Route ist public (kein Gate)"
     )
 
 
-def test_shell_asset_observe_gibt_200_und_loggt(seiten_client, caplog):
-    """entry_path_probe (seiten): GET /shell/<id>/sw.js läuft im Observe-Modus
-    durch (200) — kein 401 trotz fehlender Auth-Quelle."""
-    with caplog.at_level(logging.WARNING):
-        resp = seiten_client.get(
-            "/shell/%s/sw.js" % PANEL_ID, headers=_EXTERN
-        )
+def test_shell_asset_hard_ohne_quelle_gibt_401(seiten_client):
+    """T1448/AC3: GET /shell/<id>/sw.js ohne Auth-Quelle → 401 (hard enforced).
+
+    sw.js ist eine Shell-Asset-Route (shell_asset_view) mit mode='hard'.
+    Ohne Cookie oder Operator-IP → 401 + AUTH-8-HTML.
+    """
+    resp = seiten_client.get("/shell/%s/sw.js" % PANEL_ID, headers=_EXTERN)
+    assert resp.status_code == 401, (
+        "Shell-Asset-Route (sw.js) muss im hard-Modus 401 zurückgeben, got %d"
+        % resp.status_code
+    )
+    assert "neu verbunden" in resp.get_data(as_text=True), (
+        "AUTH-8-Re-Pair-HTML ('neu verbunden') fehlt in 401-Antwort"
+    )
+
+
+def test_shell_asset_operator_ip_gibt_200(seiten_client):
+    """T1448/AC3: Operator-IP reicht als Auth-Quelle für Shell-Assets — 200 ohne Cookie."""
+    resp = seiten_client.get("/shell/%s/sw.js" % PANEL_ID, headers=_OPERATOR)
     assert resp.status_code == 200, (
-        "Shell-Asset-Route (sw.js) muss im Observe-Modus 200 zurückgeben, got %d"
+        "Shell-Asset-Route (sw.js) mit Operator-IP muss 200 liefern, got %d"
         % resp.status_code
     )
-    assert any("AUTH-3.a Observe" in r.message for r in caplog.records), (
-        "Observe-Log-Eintrag fehlt für /shell/<id>/sw.js"
+
+
+def test_shell_asset_cookie_gibt_200(seiten_client):
+    """T1448/AC3: valider Cookie reicht als Auth-Quelle für Shell-Assets — 200 + Rolling-Refresh."""
+    seiten_client.set_cookie(sc.COOKIE_NAME, sc.sign_session(DISPLAY_ID, BOT_TOKEN))
+    resp = seiten_client.get("/shell/%s/sw.js" % PANEL_ID, headers=_EXTERN)
+    assert resp.status_code == 200, (
+        "Shell-Asset-Route (sw.js) mit Cookie muss 200 liefern, got %d"
+        % resp.status_code
     )
 
 
