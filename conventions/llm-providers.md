@@ -140,6 +140,17 @@ Re-Export-Form analog `tools.zugangsdaten` (MOD-5): externer Zugriff
 Vendor-Datei mechanisch nachgezogen werden — heute ist n=1 (Anthropic),
 keine antizipative Generalisierung.
 
+**`_vendor/litellm.py` ist der sanktionierte Motor- und Anbieter-Weg (RAT-26).**
+Er muss dieselbe LLMP-4-Bauform erfüllen wie jede andere Vendor-Datei:
+`CAPABILITIES = frozenset({…})` am Modulkopf, `<Vendor>Vendor`-Klasse,
+kein direkter Konsumenten-Code außerhalb der Public-API. Hand-Vendor-Files
+(`_vendor/anthropic.py`, `_vendor/mistral.py`) laufen bis zum Slot-3-Cleanup
+(LLMP-S12) parallel weiter — sie sind weder deprecated noch zu entfernen,
+solange nicht alle Slots auf LiteLLM grün sind. Neue Anbieter oder
+Provider-Experimente gehen über `_vendor/litellm.py`, **nicht** als neues
+Hand-Vendor-File (Ausnahme: ein Anbieter ist explizit nicht über LiteLLM
+verfügbar — dann eigene Werft vor Hand-Vendor-Anlage).
+
 ### LLMP-5 — Slot-Konvention-Brücke zu ZD
 Slot-Namen folgen der `<konsument>-<vendor>-<purpose>`-Namens-Konvention aus
 ZD-2 (`specs/platform/zugangsdaten.md:48-53`). Die Lib selbst kennt keine
