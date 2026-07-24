@@ -176,6 +176,36 @@
         view: view,
         EventSourceImpl: window.EventSource
       });
+
+      // OQ-1 — Kiosk Rolling-Refresh-Heartbeat (auth.md AUTH-2 Rolling-Refresh).
+      // Der Kiosk laeuft im Dauerbetrieb (24/7). Die SSE-Verbindung ist eine
+      // einzige HTTP-Antwort — nach dem initialen Set-Cookie erfolgt kein
+      // erneuter Rolling-Refresh ueber den Stream. Ohne periodischen Request
+      // koennte der xbuddy_session-Cookie nach 90 Tagen ablaufen und der Kiosk
+      // sieht die AUTH-8-Seite (silent break ueber Nacht).
+      //
+      // Mechanik: einmal taeglich (86 400 000 ms = 24 h) wird ein HEAD-Request
+      // an die eigene Display-Client-Route (/display/<display_id>/) geschickt.
+      // Diese Route traegt require_dual_gate(mode='observe') — bei validem Cookie
+      // setzt der Decorator ein frisches Set-Cookie (Rolling-Refresh, AUTH-2:78).
+      // Der HEAD-Request ist no-op fuer den Server (kein Body), aber die Antwort
+      // traegt den neuen Set-Cookie-Header, den der Browser uebernimmt.
+      //
+      // Keine neue Route noetig — der bestehende authentifizierte Traffic reicht.
+      // Fehlt die Fetch-API (sehr alter Browser) oder scheitert der Request, ist
+      // das kein Fehler: der Kiosk laeuft weiter, nur ohne Cookie-Auffrischung.
+      (function startHeartbeat() {
+        var HEARTBEAT_MS = 86400000; // 24 Stunden
+        function ping() {
+          try {
+            fetch(location.href, { method: 'HEAD', credentials: 'same-origin' })
+              .catch(function () {}); // best-effort, kein UI-Bruch bei Netzfehler
+          } catch (e) { /* Fetch-API nicht verfuegbar */ }
+        }
+        if (typeof fetch !== 'undefined') {
+          setInterval(ping, HEARTBEAT_MS);
+        }
+      })();
     })();
   </script>
 </body>
