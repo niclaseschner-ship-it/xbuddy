@@ -1,3 +1,27 @@
+[project]
+name = "xbuddy"
+version = "0.1.0"
+requires-python = ">=3.13"
+# Runtime-Deps: nur belegbar importierte Third-Party-Libs (grep-belegt, keine Spekulation).
+# Pinning-Strategie: ~= (kompatibel) — erlaubt Patch-Updates, sperrt gegen Breaking-Changes.
+# Quellen: `pip list` auf der Pi 2026-07-24; litellm aus PyPI (RAT-26/RAT-28, #1433, noch
+# nicht importiert — wird mit dem ersten litellm-Vendor-Modul aktiv).
+dependencies = [
+    # Web-Framework: alle Service-main.py-Dateien (Flask 3.x ist Breaking-Change zu 2.x).
+    "flask~=3.1",
+    # Anthropic SDK: tools/llm/_vendor/anthropic.py + eltern-chat/providers/claude.py.
+    "anthropic~=0.104",
+    # HTTP-Client: tools/llm/_vendor/mistral.py (lazy import, kein SDK-Dep auf mistralai).
+    "httpx~=0.28",
+    # Bild-Petrarbeitung: tools/medien_store/normalize.py (JPEG/Thumbnail).
+    "Pillow~=11.1",
+    # HEIC/HEIF-Dekodierung: tools/medien_store/normalize.py (pillow_heif.register_heif_opener).
+    "pillow-heif~=1.3",
+    # LiteLLM-Motor: RAT-26 + RAT-28, #1433 — Vendor-Modul tools/llm/_vendor/litellm.py.
+    # Noch nicht im Code aktiv; hier vordeklariert, damit der Deploy-Schritt keine Überraschung ist.
+    "litellm~=1.93",
+]
+
 [tool.ruff]
 target-version = "py313"
 line-length = 120              # Zielbreite; E501 ist NICHT erzwungen (siehe ignore) —
