@@ -110,8 +110,10 @@ class FamilieClient:
 
         Returns:
             ``set[int]`` mit den Telegram-IDs aller Erwachsenen.
-            ``None`` bei Service-Ausfall oder Parse-Fehler (fail-open, analog
-            ``get_telegram_ids``).
+            ``None`` bei Service-Ausfall oder Parse-Fehler. Der Aufrufer
+            entscheidet, ob ``None`` als fail-open oder fail-closed
+            interpretiert wird — z.B. cookie_nachschicken behandelt ``None``
+            als fail-closed (keine Cookies bei Fehler, sicher).
 
         Refs: #1401 — CNS-2: cookie_nachschicken öffnet sich für alle Erwachsenen.
         """
