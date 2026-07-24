@@ -768,7 +768,7 @@ def get_state(display_id):
 
 
 @app.route('/api/v1/displays/<display_id>/events', methods=['GET'])
-@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (SSE, initial Observe)
+@require_dual_gate(mode='hard')  # AUTH-7b: Cookie ODER Operator-IP (SSE, Hard Enforcement)
 def display_events(display_id):
     # ROU-22: SSE-Zustands-Stream. Unbekannte id → 404 (wie ROU-12).
     # DCOMP-2: frisch lesen, damit neu angelegte Displays auch hier
@@ -1102,7 +1102,7 @@ def display_no_slash(display_id):
 
 
 @app.route('/display/<display_id>/', methods=['GET'])
-@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (Display-Client, initial Observe)
+@require_dual_gate(mode='hard')  # AUTH-7b: Cookie ODER Operator-IP (Display-Client, Hard Enforcement)
 def display(display_id):
     # ROU-20: liefert den Display-Client unabhängig davon, ob <display_id>
     # bekannt ist. Ob das Display existiert, klärt der Client beim Verbinden
@@ -1126,7 +1126,7 @@ def _send_display_asset(rel_path):
 
 
 @app.route('/display/<display_id>/<path:asset>', methods=['GET'])
-@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (Display-Assets, initial Observe)
+@require_dual_gate(mode='hard')  # AUTH-7b: Cookie ODER Operator-IP (Display-Assets, Hard Enforcement)
 def display_asset(display_id, asset):
     # ROU-33: Auslieferung von Display-Client-Assets (manifest.json, Icons)
     # unter /display/<display_id>/<asset>. Die <display_id> im Pfad-Präfix
@@ -1430,7 +1430,7 @@ def icons_suche():
 
 
 @app.route('/controller/<app>/', methods=['GET'])
-@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (Controller-Index, initial Observe)
+@require_dual_gate(mode='hard')  # AUTH-7b: Cookie ODER Operator-IP (Controller-Index, Hard Enforcement)
 def controller_index(app):
     # ROU-23: /controller/<app>/ → index.html mit text/html.
     # Nur der konfigurierte App-Slug ist gültig (URL-3, zwei Segmente).
@@ -1440,7 +1440,7 @@ def controller_index(app):
 
 
 @app.route('/controller/<app>/<path:asset>', methods=['GET'])
-@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (Controller-Assets, initial Observe)
+@require_dual_gate(mode='hard')  # AUTH-7b: Cookie ODER Operator-IP (Controller-Assets, Hard Enforcement)
 def controller_asset(app, asset):
     # ROU-23: alle Statik-Pfade unter /controller/<app>/ aus controller_dir().
     # send_from_directory + realpath-Check verhindern Path-Traversal.
@@ -1629,14 +1629,14 @@ def app_panel_index_no_slash(panel_id):
 
 
 @app.route('/controller/app-panel/<panel_id>/', methods=['GET'])
-@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (App-Panel-Index, initial Observe)
+@require_dual_gate(mode='hard')  # AUTH-7b: Cookie ODER Operator-IP (App-Panel-Index, Hard Enforcement)
 def app_panel_index_slash(panel_id):
     return render_app_panel_index(panel_id), 200, {
         'Content-Type': 'text/html; charset=utf-8'}
 
 
 @app.route('/controller/app-panel/<panel_id>/<path:asset>', methods=['GET'])
-@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (App-Panel-Assets, initial Observe)
+@require_dual_gate(mode='hard')  # AUTH-7b: Cookie ODER Operator-IP (App-Panel-Assets, Hard Enforcement)
 def app_panel_asset(panel_id, asset):
     # ROU-27 / PREG-9: config.json und tiles.json werden an den panel-Service
     # geproxt + Last-Known-Good-gecacht. Alle anderen Assets kommen weiter

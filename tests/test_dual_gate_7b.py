@@ -9,8 +9,8 @@ Prüft den geteilten Dual-Gate über beide Service-Seiten:
 Achsen (auth.md AUTH-7:495-504 Dual-Gate + AUTH-3.a:247-253 Observe-Leiter):
   - valider xbuddy_session-Cookie  → 200 + Rolling-Refresh (AUTH-2:78).
   - Operator-IP (X-Real-IP in CIDR) → 200, ohne Cookie.
-  - keine Quelle + Observe          → 200 + Log (kein 401, Grace).
   - keine Quelle + Hard             → 401 mit AUTH-8-Re-Pair-HTML.
+  - Observe-Modus (via Dummy-Route) → 200 + Log (AUTH-3.a Grace, kein 401).
   - /display/_shared/* bleibt public (AUTH-7:512, kein Gate).
   - SSE-Stream im Pass-Fall bleibt Streaming-Response (kein Buffering).
 
@@ -129,11 +129,12 @@ def test_display_head_cookie_rolling_refresh_oq1(router_client):
     assert "Secure" in set_cookie
 
 
-def test_display_keine_quelle_observe_gibt_200_und_loggt(router_client, caplog):
-    with caplog.at_level(logging.WARNING):
-        resp = router_client.get("/display/%s/" % DISPLAY_ID, headers=_EXTERN)
-    assert resp.status_code == 200  # AUTH-3.a Observe: kein 401
-    assert any("AUTH-3.a Observe" in r.message for r in caplog.records)
+def test_display_keine_quelle_hard_gibt_401(router_client):
+    """AUTH-3.a Hard (Enforcement): /display/<id>/ ohne Quelle → 401 + AUTH-8-HTML."""
+    resp = router_client.get("/display/%s/" % DISPLAY_ID, headers=_EXTERN)
+    assert resp.status_code == 401
+    assert "neu verbunden" in resp.get_data(as_text=True)
+    assert resp.headers["Content-Type"].startswith("text/html")
 
 
 def test_controller_app_panel_operator_gibt_200(router_client):
@@ -160,6 +161,23 @@ def test_sse_pass_bleibt_streaming_response(router_client):
     erster = next(resp.response)
     assert b"data:" in (erster if isinstance(erster, bytes) else erster.encode())
     resp.close()
+
+
+def test_observe_mode_ohne_quelle_gibt_200_und_loggt(router_client, caplog):
+    """AUTH-3.a Observe-Grace via Dummy-Route: ohne Quelle → 200 + Log (kein 401).
+
+    Die echten 7b-Routen laufen jetzt im Hard-Modus. Dieser Test belegt
+    den Observe-Pfad des Decorators über eine isolierte Dummy-View, sodass
+    die Observe-Leiter (AUTH-3.a) weiterhin in der Suite abgedeckt ist.
+    """
+    @router_main.require_dual_gate(mode="observe")
+    def _observe_dummy():
+        return "ok"
+
+    with router_main.app.test_request_context("/observe-test", headers=_EXTERN), caplog.at_level(logging.WARNING):
+        resp = router_main.app.make_response(_observe_dummy())
+    assert resp.status_code == 200
+    assert any("AUTH-3.a Observe" in r.message for r in caplog.records)
 
 
 def test_hard_mode_ohne_quelle_gibt_401_mit_auth8(router_client):
@@ -203,11 +221,12 @@ def test_shell_cookie_gibt_200_und_rolling_refresh(seiten_client):
     assert sc.COOKIE_NAME in resp.headers.get("Set-Cookie", "")
 
 
-def test_shell_keine_quelle_observe_gibt_200(seiten_client, caplog):
-    with caplog.at_level(logging.WARNING):
-        resp = seiten_client.get("/shell/%s" % PANEL_ID, headers=_EXTERN)
-    assert resp.status_code == 200  # Observe, kein 401
-    assert any("AUTH-3.a Observe" in r.message for r in caplog.records)
+def test_shell_keine_quelle_hard_gibt_401(seiten_client):
+    """AUTH-3.a Hard (Enforcement): /shell/<id> ohne Quelle → 401 + AUTH-8-HTML."""
+    resp = seiten_client.get("/shell/%s" % PANEL_ID, headers=_EXTERN)
+    assert resp.status_code == 401
+    assert "neu verbunden" in resp.get_data(as_text=True)
+    assert resp.headers["Content-Type"].startswith("text/html")
 
 
 # ---------------------------------------------------------------------------
@@ -216,20 +235,17 @@ def test_shell_keine_quelle_observe_gibt_200(seiten_client, caplog):
 # ---------------------------------------------------------------------------
 
 
-def test_display_asset_observe_gibt_200_und_loggt(router_client, caplog):
-    """entry_path_probe (router): GET /display/<id>/<asset> läuft im Observe-Modus
-    durch (200) — kein 401 trotz fehlender Auth-Quelle. Log-Eintrag belegt Gate."""
-    with caplog.at_level(logging.WARNING):
-        resp = router_client.get(
-            "/display/%s/manifest.json" % DISPLAY_ID, headers=_EXTERN
-        )
-    assert resp.status_code == 200, (
-        "Display-Asset-Route muss im Observe-Modus 200 zurückgeben, got %d"
+def test_display_asset_hard_ohne_quelle_gibt_401(router_client):
+    """entry_path_probe (router): GET /display/<id>/<asset> ohne Quelle → 401 + AUTH-8-HTML.
+    Hard-Enforcement ist jetzt aktiv (AUTH-3.a Flip-Gate)."""
+    resp = router_client.get(
+        "/display/%s/manifest.json" % DISPLAY_ID, headers=_EXTERN
+    )
+    assert resp.status_code == 401, (
+        "Display-Asset-Route muss im Hard-Modus 401 zurückgeben, got %d"
         % resp.status_code
     )
-    assert any("AUTH-3.a Observe" in r.message for r in caplog.records), (
-        "Observe-Log-Eintrag fehlt für /display/<id>/<asset>"
-    )
+    assert "neu verbunden" in resp.get_data(as_text=True)
 
 
 def test_display_asset_operator_ip_gibt_200(router_client):
@@ -254,36 +270,30 @@ def test_display_asset_cookie_gibt_200(router_client):
     )
 
 
-def test_shell_manifest_observe_gibt_200_und_loggt(seiten_client, caplog):
-    """entry_path_probe (seiten): GET /shell/<id>/manifest.json läuft im Observe-
-    Modus durch (200) — kein 401 trotz fehlender Auth-Quelle. Log-Eintrag belegt Gate."""
-    with caplog.at_level(logging.WARNING):
-        resp = seiten_client.get(
-            "/shell/%s/manifest.json" % PANEL_ID, headers=_EXTERN
-        )
-    assert resp.status_code == 200, (
-        "Shell-Manifest-Route muss im Observe-Modus 200 zurückgeben, got %d"
+def test_shell_manifest_hard_ohne_quelle_gibt_401(seiten_client):
+    """entry_path_probe (seiten): GET /shell/<id>/manifest.json ohne Quelle → 401 + AUTH-8-HTML.
+    Hard-Enforcement ist jetzt aktiv (AUTH-3.a Flip-Gate)."""
+    resp = seiten_client.get(
+        "/shell/%s/manifest.json" % PANEL_ID, headers=_EXTERN
+    )
+    assert resp.status_code == 401, (
+        "Shell-Manifest-Route muss im Hard-Modus 401 zurückgeben, got %d"
         % resp.status_code
     )
-    assert any("AUTH-3.a Observe" in r.message for r in caplog.records), (
-        "Observe-Log-Eintrag fehlt für /shell/<id>/manifest.json"
+    assert "neu verbunden" in resp.get_data(as_text=True)
+
+
+def test_shell_asset_hard_ohne_quelle_gibt_401(seiten_client):
+    """entry_path_probe (seiten): GET /shell/<id>/sw.js ohne Quelle → 401 + AUTH-8-HTML.
+    Hard-Enforcement ist jetzt aktiv (AUTH-3.a Flip-Gate)."""
+    resp = seiten_client.get(
+        "/shell/%s/sw.js" % PANEL_ID, headers=_EXTERN
     )
-
-
-def test_shell_asset_observe_gibt_200_und_loggt(seiten_client, caplog):
-    """entry_path_probe (seiten): GET /shell/<id>/sw.js läuft im Observe-Modus
-    durch (200) — kein 401 trotz fehlender Auth-Quelle."""
-    with caplog.at_level(logging.WARNING):
-        resp = seiten_client.get(
-            "/shell/%s/sw.js" % PANEL_ID, headers=_EXTERN
-        )
-    assert resp.status_code == 200, (
-        "Shell-Asset-Route (sw.js) muss im Observe-Modus 200 zurückgeben, got %d"
+    assert resp.status_code == 401, (
+        "Shell-Asset-Route (sw.js) muss im Hard-Modus 401 zurückgeben, got %d"
         % resp.status_code
     )
-    assert any("AUTH-3.a Observe" in r.message for r in caplog.records), (
-        "Observe-Log-Eintrag fehlt für /shell/<id>/sw.js"
-    )
+    assert "neu verbunden" in resp.get_data(as_text=True)
 
 
 def test_asset_hard_mode_ohne_quelle_gibt_401(router_client):
