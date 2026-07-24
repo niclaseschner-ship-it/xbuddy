@@ -277,3 +277,71 @@ def test_display_shared_bleibt_public_ungegatet():
         "AUTH-7:512-Verletzung — /display/_shared/* trägt den Dual-Gate "
         "(muss public bleiben): %s" % verletzer
     )
+
+
+# ---------------------------------------------------------------------------
+# AUTH-9 (7b) — Schärfung: ALLE nicht-_shared-7b-Routen müssen den Gate tragen
+# ---------------------------------------------------------------------------
+# Diese Tests prüfen nicht nur ob EINE dekorierte Route je Präfix existiert
+# (wie _hat_dekorierte_route), sondern dass JEDE GET-Route unter einem 7b-Präfix
+# den Dual-Gate trägt — Asset-Unterrouten eingeschlossen.
+# auth.md AUTH-9 + AUTH-7 Bau-Notiz (7b-Copetrage-Schärfung).
+
+_7B_ROUTER_PREFIXES = ("/display/", "/controller/")
+_7B_SEITEN_PREFIXES = ("/shell/",)
+# 301-Redirect-Routen und _shared-Pfade sind explizit ausgenommen:
+#   /display/<id> ohne Slash → 301 (kein Gate, kein Content — AUTH-7:461 Anmerkung)
+#   /display/_shared/* → public (AUTH-4, AUTH-7:512)
+#   /controller/_shared/* → public (AUTH-4, ROU-23)
+_SHARED_EXEMPT = ("/_shared/",)
+_REDIRECT_EXEMPT = frozenset({
+    "/display/<display_id>",           # 301 → /display/<id>/
+    "/controller/app-panel/<panel_id>",  # 301 → /controller/app-panel/<id>/
+})
+
+
+def _is_7b_candidate(route: dict, prefixes: tuple) -> bool:
+    """True, wenn die Route unter einem 7b-Präfix liegt, nicht _shared und nicht
+    ein 301-Redirect-Stub ist, und GET bedient."""
+    path = route["path"]
+    if "GET" not in route["methods"]:
+        return False
+    if path in _REDIRECT_EXEMPT:
+        return False
+    if not any(path.startswith(p) for p in prefixes):
+        return False
+    return not any(exempt in path for exempt in _SHARED_EXEMPT)
+
+
+def test_alle_nichtshared_7b_router_routen_tragen_dual_gate():
+    """AUTH-9-Schärfung: ALLE GET-Routen unter /display/* und /controller/*
+    (außer _shared und 301-Redirect) müssen require_dual_gate tragen.
+    Asset-Unterrouten (/display/<id>/<asset>, /controller/<app>/<asset>,
+    /controller/app-panel/<id>/<asset>) sind eingeschlossen."""
+    dekoriert = _decorated_routes(MODULE_MAP_7B["router"])
+    kandidaten = [r for r in dekoriert if _is_7b_candidate(r, _7B_ROUTER_PREFIXES)]
+    assert kandidaten, (
+        "Keine 7b-Router-Kandidaten gefunden — Präfix-Liste oder AST-Scan prüfen"
+    )
+    fehlend = [r["path"] for r in kandidaten if not r["auth"]]
+    assert not fehlend, (
+        "AUTH-9-Schärfung (router): diese 7b-Routen tragen require_dual_gate NICHT "
+        "(Asset-Unterrouten müssen ebenfalls gegatet sein):\n  "
+        + "\n  ".join(fehlend)
+    )
+
+
+def test_alle_nichtshared_7b_seiten_routen_tragen_dual_gate():
+    """AUTH-9-Schärfung: ALLE GET-Routen unter /shell/* müssen require_dual_gate
+    tragen — HTML-Shell, manifest.json und Asset-Unterrouten (/sw.js, icons)."""
+    dekoriert = _decorated_routes(MODULE_MAP_7B["seiten"])
+    kandidaten = [r for r in dekoriert if _is_7b_candidate(r, _7B_SEITEN_PREFIXES)]
+    assert kandidaten, (
+        "Keine 7b-Seiten-Kandidaten gefunden — Präfix-Liste oder AST-Scan prüfen"
+    )
+    fehlend = [r["path"] for r in kandidaten if not r["auth"]]
+    assert not fehlend, (
+        "AUTH-9-Schärfung (seiten): diese 7b-Routen tragen require_dual_gate NICHT "
+        "(manifest.json und Asset-Unterrouten müssen ebenfalls gegatet sein):\n  "
+        + "\n  ".join(fehlend)
+    )
