@@ -222,9 +222,14 @@ Android). Der Mantel spiegelt das essen-einkauf-Muster 1:1 (ESSEN-33..35).
   dieses Panel.
 
 **Service-Worker** (`seiten/static/shell/sw.js`, Scope `/shell/`):
-- Cacht Shell-Mantel-Assets (`heim-shell.css`, `platform.js`, Shell-HTML) per
-  cache-first. Panel-/Display-Iframes (`/controller/`, `/display/`) werden
-  **nicht** abgefangen — deren eigene SWs sind zuständig (stop_rule sw_scope).
+- Shell-HTML (`/shell/<panel_id>`) wird **network-first** behandelt (T1448
+  stale-Cache-Fix): Netz zuerst, Cache-Fallback bei Netz-Fehler. Stellt sicher,
+  dass die HTML-Shell nach einem Deploy immer frisch geladen wird; Offline bleibt
+  durch den Cache-Fallback nutzbar. 5xx-Antworten werden nicht gecacht.
+- Statische Mantel-Assets (`heim-shell.css`, `platform.js`) werden cache-first
+  behandelt — sie sind BUILD_ID-versioniert und invalidieren über `CACHE_NAME`.
+- Panel-/Display-Iframes (`/controller/`, `/display/`) werden **nicht** abgefangen
+  — deren eigene SWs sind zuständig (stop_rule sw_scope).
 - BUILD_ID-Platzhalter wird beim Ausliefern durch `shell_asset_view` ersetzt
   (Cache-Versionierung analog ESSEN-35).
 - Auslieferung: `/shell/<panel_id>/sw.js` mit `Service-Worker-Allowed: /shell/`
