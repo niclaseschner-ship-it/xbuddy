@@ -218,7 +218,51 @@ Kill-Kriterium: `litellm.speech()` zeigt Inkompatibilität mit
 Azure-TTS-Parametern, die kibuddy-speed-Cache oder hoerspiel-Vorauflösungs-Pfad
 brechen → Slot fällt zurück auf direkten Azure-SDK-Call. Bau: #1410.
 
-## 4. Migrationspfad
+## 4. Motor = LiteLLM (in-Prozess, RAT-20 unangetastet)
+
+### LLMP-S12 — LiteLLM als Vendor-Motor unter der Fassade (RAT-26)
+
+> **RAT-26 (2026-07-05)** ratifiziert LiteLLM als neues, separates Vendor-Modul
+> `tools/llm/_vendor/litellm.py` — in-Prozess, kein HTTP-Hop, kein eigener
+> Service, kein eigener Port. RAT-20 bleibt in allen anderen Punkten vollständig
+> gültig (Lib-Form, keine Service-Fassade, keine HTTP-Fassade, LLMP-1).
+
+Die vier Public-Sichten (`get_chat`, `get_singleshot`, `get_completion`,
+`get_agent`), der LLMP-5-Slot-Resolver, die Capability-Matrix (LLMP-3) und die
+Telemetrie (LLMP-S4) bleiben **unverändert**. LiteLLM ist Motor **unter** der
+Fassade — kein neuer API-Vertrag.
+
+**Gestaffelte Migration (drei Slots):**
+
+1. **Slot 1 — Chat + Singleshot** (`get_chat`, `get_singleshot`, `get_completion`):
+   `seiten`/`hoerspiel`-Slots zuerst (cache-frei, geringeres Blast-Radius).
+   Voraussetzung: Golden-Set #1315 grün.
+2. **Slot 2 — Agent** (`get_agent`): `kibuddy` und `eltern-chat` — cache-abhängige
+   Slots, zuletzt, weil `cache_read_tokens>0` im Multi-Turn Beleg des
+   LiteLLM-Cache-Passthrough ist (Golden-Pflicht-Fixture, RAT-26 Kill-Kriterium a).
+3. **Slot 3 — Vendor-Cleanup:** Hand-Vendor-Files (`_vendor/anthropic.py`,
+   `_vendor/mistral.py`) werden erst gelöscht + Dependency-Pin gesetzt,
+   nachdem alle Slots mehrere Wochen grün auf LiteLLM laufen. Der Lösch-Schritt
+   ist die Ein-Wege-Tür — Rückweg über Slot-Segment-Tausch bleibt bis dahin
+   offen.
+
+**Hand-Vendoren laufen bis Slot-3-Cleanup parallel weiter.** Kein Buddy-Code
+ändert sich durch den Motor-Wechsel (Fassade unverändert). Rückweg: Slot-Segment
+im ZD-Slot-Namen zurück auf Hand-Vendor-Segment, ohne Code-Change.
+
+**Telemetrie bleibt Hand:** `telemetry.write_call` → `provider_calls.jsonl`
+(LLMP-S4/SVC-5) bleibt SSoT — LiteLLM-native-Callbacks / `completion_cost()`
+werden **nicht** genutzt (Zahl-Stabilität bei Rollback, RAT-26 §5).
+
+**LLMP-4-Spannung:** `_vendor/litellm.py` frontet mehrere Anbieter mit
+divergenten Capabilities — die Aufhängung der `CAPABILITIES`-frozenset an einen
+Multi-Anbieter-Motor ist eine offene Convention-Delta-Frage (RAT-26 Offene
+Folge-Punkte; Convention-Delta-Runde noch ausstehend).
+
+Bau-Ticket: #1316. Ratifiziertes Paket:
+`brainstorm/berater-runde/20260705-2223-RATIFIZIERT-1316-litellm-rat26.md`.
+
+## 5. Migrationspfad (Buddy-Abfolge)
 
 ### LLMP-S7 — Spike-Stufe-1 vor zweitem Buddy
 KIBuddy ist die Spike-Umgebung (LLMP-S8) und gleichzeitig der erste
@@ -331,7 +375,7 @@ Migration zusammen, nicht mit einem davorliegenden dritten Buddy
 (ENTSCHEID-File Sektion „Spike-Experiment (2 Stufen)" → Stufe 2 +
 Re-Evaluierungs-Klausel; Re-Order Nic 2026-06-24).
 
-## 5. Tests
+## 6. Tests
 
 ### LLMP-S11 — Automatisierte Tests je Anforderung
 Jede Anforderung mit Code-Verhalten hat einen automatisierten Test
