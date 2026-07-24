@@ -819,7 +819,9 @@ def essen_einkauf_view():
     """
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     build_id = pwa_mantel.build_id_for("einkauf", static_dir)
-    resp = make_response(render_template("essen-einkauf.html", build_id=build_id))
+    # T1324: sw_scope aus REGISTRY — Template nutzt {{ sw_scope }} statt hartkodiertem Literal.
+    sw_scope = pwa_mantel.REGISTRY["einkauf"].sw_scope
+    resp = make_response(render_template("essen-einkauf.html", build_id=build_id, sw_scope=sw_scope))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     return resp
@@ -973,7 +975,9 @@ def plan_einstellungen_view():
     """
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     build_id = pwa_mantel.build_id_for("plan", static_dir)
-    resp = make_response(render_template("plan-einstellungen.html", build_id=build_id))
+    # T1324: sw_scope aus REGISTRY — Template nutzt {{ sw_scope }} statt hartkodiertem Literal.
+    sw_scope = pwa_mantel.REGISTRY["plan"].sw_scope
+    resp = make_response(render_template("plan-einstellungen.html", build_id=build_id, sw_scope=sw_scope))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     return resp
@@ -1399,11 +1403,12 @@ def hoerspiel_player_asset_view(asset):
         body = pwa_mantel.render_sw(_HOERSPIEL_PLAYER_COMPONENT, build_id=build_id)
         resp = make_response(body, 200)
         resp.headers["Content-Type"] = "application/javascript; charset=utf-8"
-        # Service-Worker-Allowed: /seiten/hoerspiel/player — SW-Scope darf ueber
-        # das Skript-Verzeichnis /seiten/hoerspiel/player/ hinaus das Shell-
-        # Dokument /seiten/hoerspiel/player (OHNE Slash) decken. Ohne diesen
+        # Service-Worker-Allowed: REGISTRY['hoerspiel-player'].sw_scope — SW-Scope
+        # darf ueber das Skript-Verzeichnis /seiten/hoerspiel/player/ hinaus das
+        # Shell-Dokument /seiten/hoerspiel/player (OHNE Slash) decken. Ohne diesen
         # Header kontrolliert der SW die Seite nie -> offline alles tot (GAP-1).
-        resp.headers["Service-Worker-Allowed"] = "/seiten/hoerspiel/player"
+        # (T1324: SSoT aus REGISTRY statt hartkodiertem String, analog CONN-8.)
+        resp.headers["Service-Worker-Allowed"] = pwa_mantel.REGISTRY["hoerspiel-player"].sw_scope
         # sw.js fresh holen, sonst kein Update-Trigger.
         resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         return resp
@@ -1482,11 +1487,14 @@ def heim_shell(panel_id):
     display_id = _lookup_display_id(panel_id)
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     build_id = pwa_mantel.build_id_for("shell", static_dir)  # PWAM-5-Registry (T1284-AC1)
+    # T1324: sw_scope aus REGISTRY — Template nutzt {{ sw_scope }} statt hartkodiertem Literal.
+    sw_scope = pwa_mantel.REGISTRY["shell"].sw_scope
     resp = make_response(render_template(
         "heim-shell.html",
         panel_id=panel_id,
         display_id=display_id,
         build_id=build_id,
+        sw_scope=sw_scope,
     ))
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
@@ -1617,9 +1625,10 @@ def shell_asset_view(panel_id, asset):
         body = pwa_mantel.read_sw_with_build_id(target, build_id)
         resp = make_response(body, 200)
         resp.headers["Content-Type"] = mimetype + "; charset=utf-8"
-        # Service-Worker-Allowed: /shell/ — SW-Scope darf /shell/<panel_id>/ ueberschreiten.
-        # Ohne diesen Header erlaubt der Browser nur Scope <= /shell/<panel_id>/.
-        resp.headers["Service-Worker-Allowed"] = "/shell/"
+        # Service-Worker-Allowed: REGISTRY['shell'].sw_scope — SW-Scope darf
+        # /shell/<panel_id>/ ueberschreiten. Ohne diesen Header erlaubt der Browser
+        # nur Scope <= /shell/<panel_id>/. (T1324: SSoT aus REGISTRY, analog CONN-8.)
+        resp.headers["Service-Worker-Allowed"] = pwa_mantel.REGISTRY["shell"].sw_scope
         resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         return resp
 

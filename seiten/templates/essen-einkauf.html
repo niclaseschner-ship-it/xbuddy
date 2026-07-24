@@ -57,7 +57,7 @@
         // dort, der Default-Scope passt also, aber explizit ist klarer.
         window.addEventListener('load', function () {
           navigator.serviceWorker
-            .register('/seiten/essen/einkauf/sw.js', { scope: '/seiten/essen/einkauf/' })
+            .register('/seiten/essen/einkauf/sw.js', { scope: '{{ sw_scope }}' })
             .catch(function (err) {
               console.warn('[pwa] Service-Worker-Registrierung fehlgeschlagen:', err);
             });
