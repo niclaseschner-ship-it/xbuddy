@@ -29,6 +29,7 @@ Cross-Component-HTTP (DCOMP-1 — kein Python-Import):
 
 import argparse
 import contextlib
+import functools
 import json
 import logging
 import os
@@ -56,6 +57,7 @@ from tools.familie_client import DEFAULT_ORIGIN as _FAMILIE_DEFAULT_ORIGIN  # no
 # EZG-6 / ESSEN-31 / T1015: Init-Data-Validierung aus tools.initdata
 # (vorher per sys.path-Hack aus eltern-chat/init_data.py — Cluster-A-Option-B
 # 2026-06-18-1720 heilt MOD-4 / MOD-6).
+from tools.initdata import auth_gate as _auth_gate  # noqa: E402
 from tools.initdata import init_data as _init_data_mod  # noqa: E402
 from tools.initdata import session_cookie as _session_cookie  # noqa: E402
 from tools.service_diagnostics import register_version  # noqa: E402
@@ -473,6 +475,106 @@ def _get_bot_token():
     )
 
 
+# ============================================================
+#  AUTH-7b — Dual-Gate-Decorator (Cookie ODER Operator-IP)
+# ============================================================
+#
+# Spec-Anker: specs/platform/auth.md AUTH-7 (Dual-Gate, 495-504) +
+# AUTH-3.a (Observe→Hard-Leiter, 237-281) + AUTH-8 (401-Anweisungsseite).
+# Die pure Prüf-Mechanik (CIDR-Mitgliedschaft, Cookie-Verifikation) lebt
+# Flask-frei in tools/initdata/auth_gate.py (RAT-16); dieser Decorator ist der
+# Flask-Glue. Er wird — wie require_init_data (essen/photo/kibuddy/plan) —
+# PRO SERVICE dupliziert (auth.md AUTH-5:347: Loopback/Decorator je Buddy
+# kopiert bis n=3). Der Zwilling steht in router/main.py.
+
+# AUTH-8: 401 rendert die Re-Pair-Anweisungsseite statt eines rohen Codes.
+# Die 401-Antwort IST die Re-Pair-Anweisung (7b-Public-Ausnahme, auth.md
+# AUTH-7:510) — keine separate Re-Pair-Route. 7b-Renderer-Routen tragen keine
+# API-display_id im Auth-Kontext → neutraler Geräte-Hinweis (auth.md AUTH-8).
+_DUAL_GATE_401_HTML = (
+    "<!doctype html>\n"
+    "<html lang=\"de\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+    "<title>Gerät neu verbinden</title></head>"
+    "<body style=\"font-family:system-ui,sans-serif;max-width:32rem;"
+    "margin:3rem auto;padding:0 1rem;line-height:1.5\">"
+    "<h1>Dieses Gerät muss neu verbunden werden.</h1>"
+    "<p>Öffne im Familien-Bot den Befehl "
+    "<code>/gerät_neu_pairen &lt;display_id&gt;</code> und folge dem Link "
+    "auf diesem Gerät.</p>"
+    "</body></html>"
+)
+
+
+def _client_ip():
+    """Client-IP für die Operator-IP-Prüfung (AUTH-7 7a).
+
+    `X-Real-IP` vom Origin-nginx ist die vertrauenswürdige Quelle (ESC-2:
+    seiten bindet Loopback, nginx überschreibt den Header — ein externer
+    Client kann die Operator-CIDR nicht spoofen). Fallback: erstes Token aus
+    `X-Forwarded-For`; zuletzt `request.remote_addr`.
+    """
+    real_ip = request.headers.get("X-Real-IP", "").strip()
+    if real_ip:
+        return real_ip
+    xff = request.headers.get("X-Forwarded-For", "").strip()
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.remote_addr
+
+
+def require_dual_gate(mode: str = "observe"):
+    """AUTH-7b-Decorator: Cookie ODER Operator-IP (auth.md AUTH-7 Dual-Gate).
+
+    `mode="observe"` (AUTH-3.a Soft-Rollout, Default für alle 7b-READ-Routen im
+    Erstbau): fehlt jede Quelle, läuft die Route trotzdem (`200`) und der
+    Decorator LOGGT (valide Quelle vorhanden? aus welcher Quelle?) — kein `401`.
+    Der Flip auf `mode="hard"` ist eine spätere operative Zwei-Wege-Tür (Nic am
+    Gerätetest, auth.md AUTH-3.a:263-269), nicht Teil dieses Baus.
+
+    `mode="hard"`: fehlt jede Quelle → `401` mit AUTH-8-Re-Pair-HTML (auth.md
+    AUTH-7:510 — die 401-Antwort IST die Re-Pair-Anweisung).
+
+    Bei validem Cookie wird der Cookie rolling-refreshed (auth.md AUTH-2:78,
+    wie require_init_data / seiten essen-Pfad).
+    """
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            bot_token = _get_bot_token()
+            cookie_val = request.cookies.get(_session_cookie.COOKIE_NAME)
+            cookie_ok = bool(bot_token) and _auth_gate.hat_gueltigen_cookie(
+                cookie_val, bot_token)
+            operator_ok = _auth_gate.ist_operator_ip(_client_ip())
+
+            if cookie_ok:
+                # Rolling-Refresh (AUTH-2:78): Cookie mit frischem exp neu setzen.
+                subject = _session_cookie.verify_session(cookie_val, bot_token)
+                resp = make_response(fn(*args, **kwargs))
+                resp.set_cookie(
+                    _session_cookie.COOKIE_NAME,
+                    _session_cookie.sign_session(subject, bot_token),
+                    **_session_cookie.session_cookie_kwargs(),
+                )
+                return resp
+            if operator_ok:
+                return fn(*args, **kwargs)
+
+            # Keine Quelle.
+            if mode == "hard":
+                resp = make_response(_DUAL_GATE_401_HTML, 401)
+                resp.headers["Content-Type"] = "text/html; charset=utf-8"
+                return resp
+            # AUTH-3.a Observe: 200 + Log (kein 401), Beobachtungs-Rollout.
+            logging.warning(
+                "AUTH-3.a Observe (7b): %s — keine valide Quelle "
+                "(cookie_vorhanden=%s, operator_ip=%s) → 200 (Grace, kein 401)",
+                request.path, bool(cookie_val), operator_ok)
+            return fn(*args, **kwargs)
+        return wrapper
+    return deco
+
+
 def _validate_mini_app_request():
     """Validiert den Authorization-Header für Mini-App-Requests (MAD-7).
 
@@ -657,7 +759,10 @@ def auth_pair():
     _markiere_paired_at(display_id)
 
     # AUTH-2.a: Ziel-URL. Stateless Token trägt nur display_id → Display-Pfad.
-    resp = redirect("/display/%s" % display_id)
+    # Trailing-Slash: der Router leitet /display/<id> per 301 auf /display/<id>/
+    # um (router:972). Direkt auf /<id>/ zeigen vermeidet den 301-Doppelhop
+    # (ESC-3) — same-origin/relativ bleibt erhalten (auth.md AUTH-7b).
+    resp = redirect("/display/%s/" % display_id)
     resp.set_cookie(
         _session_cookie.COOKIE_NAME,
         _session_cookie.sign_session(display_id, bot_token),
@@ -1346,6 +1451,7 @@ def _lookup_display_id(panel_id):
 
 
 @app.route("/shell/<panel_id>", methods=["GET"])
+@require_dual_gate(mode="observe")  # AUTH-7b: Cookie ODER Operator-IP (initial Observe, AUTH-3.a)
 def heim_shell(panel_id):
     """SHELL-1: Heim-Shell Split-Layout — GET /shell/<panel_id> liefert HTML.
 
