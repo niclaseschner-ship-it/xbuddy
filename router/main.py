@@ -8,6 +8,7 @@ State pro Display in-memory (ROU-10).
 """
 
 import argparse
+import functools
 import json
 import logging
 import os
@@ -20,7 +21,16 @@ import urllib.request
 from datetime import UTC, datetime
 from urllib.parse import urlencode
 
-from flask import Flask, Response, abort, jsonify, redirect, request, send_from_directory
+from flask import (
+    Flask,
+    Response,
+    abort,
+    jsonify,
+    make_response,
+    redirect,
+    request,
+    send_from_directory,
+)
 
 # Repo-Wurzel auf den Importpfad, damit `tools.configloader` (CONFIG-1, #179)
 # auch beim Direktstart `python3 router/main.py` gefunden wird.
@@ -31,6 +41,8 @@ if _REPO_ROOT not in sys.path:
 
 from router import config as router_config  # noqa: E402
 from tools import configloader, logsetup  # noqa: E402
+from tools.initdata import auth_gate as _auth_gate  # noqa: E402
+from tools.initdata import session_cookie as _session_cookie  # noqa: E402
 from tools.service_diagnostics import register_version  # noqa: E402
 
 # ============================================================
@@ -181,7 +193,116 @@ runtime_config = {
     'icon_root':         '',              # ROU-26: leer = Default aus DEFAULT_ICON_ROOT
     'panel_service_url': '',             # ROU-27: leer = Default 127.0.0.1:5041
     'geraete_url':       '',             # ROU-29: leer = Default aus DEFAULT_GERAETE_URL
+    'bot_token':         '',              # AUTH-7b: Cookie-Verifikation (Test-Naht/ENV)
 }
+
+
+# ============================================================
+#  AUTH-7b — Dual-Gate-Decorator (Cookie ODER Operator-IP)
+# ============================================================
+#
+# Spec-Anker: specs/platform/auth.md AUTH-7 (Dual-Gate, 495-504) +
+# AUTH-3.a (Observe→Hard-Leiter, 237-281) + AUTH-8 (401-Anweisungsseite).
+# Die pure Prüf-Mechanik (CIDR-Mitgliedschaft, Cookie-Verifikation) lebt
+# Flask-frei in tools/initdata/auth_gate.py (RAT-16); dieser Decorator ist der
+# Flask-Glue. Er wird — wie require_init_data (essen/…) und require_dual_gate
+# in seiten/main.py — PRO SERVICE dupliziert (auth.md AUTH-5:347).
+
+# AUTH-8: 401 rendert die Re-Pair-Anweisungsseite statt eines rohen Codes
+# (7b-Public-Ausnahme, auth.md AUTH-7:510 — die 401-Antwort IST die Anweisung).
+_DUAL_GATE_401_HTML = (
+    "<!doctype html>\n"
+    "<html lang=\"de\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+    "<title>Gerät neu verbinden</title></head>"
+    "<body style=\"font-family:system-ui,sans-serif;max-width:32rem;"
+    "margin:3rem auto;padding:0 1rem;line-height:1.5\">"
+    "<h1>Dieses Gerät muss neu verbunden werden.</h1>"
+    "<p>Öffne im Familien-Bot den Befehl "
+    "<code>/gerät_neu_pairen &lt;display_id&gt;</code> und folge dem Link "
+    "auf diesem Gerät.</p>"
+    "</body></html>"
+)
+
+
+def _get_bot_token():
+    """Bot-Token für die Cookie-Verifikation (AUTH-7b), analog seiten.
+
+    Reihenfolge: runtime_config (Test-Naht) → ELTERNCHAT_BOT_TOKEN
+    (CONFIG-5-Schema aus eltern-chat/.env via systemd EnvironmentFile, #684) →
+    TELEGRAM_BOT_TOKEN (Fallback-Name).
+    """
+    return (
+        runtime_config.get('bot_token')
+        or os.environ.get('ELTERNCHAT_BOT_TOKEN')
+        or os.environ.get('TELEGRAM_BOT_TOKEN')
+    )
+
+
+def _client_ip():
+    """Client-IP für die Operator-IP-Prüfung (AUTH-7 7a).
+
+    `X-Real-IP` vom Origin-nginx ist die vertrauenswürdige Quelle (ESC-2:
+    Router bindet 127.0.0.1 (router.service), nginx überschreibt den Header —
+    ein externer Client kann die Operator-CIDR nicht spoofen). Fallback: erstes
+    Token aus `X-Forwarded-For`; zuletzt `request.remote_addr`.
+    """
+    real_ip = request.headers.get('X-Real-IP', '').strip()
+    if real_ip:
+        return real_ip
+    xff = request.headers.get('X-Forwarded-For', '').strip()
+    if xff:
+        return xff.split(',')[0].strip()
+    return request.remote_addr
+
+
+def require_dual_gate(mode: str = 'observe'):
+    """AUTH-7b-Decorator: Cookie ODER Operator-IP (auth.md AUTH-7 Dual-Gate).
+
+    `mode="observe"` (AUTH-3.a Soft-Rollout, Default für alle 7b-READ-Routen im
+    Erstbau): fehlt jede Quelle, läuft die Route trotzdem (`200`) und der
+    Decorator LOGGT — kein `401`. Der Flip auf `mode="hard"` ist eine spätere
+    operative Zwei-Wege-Tür (auth.md AUTH-3.a:263-269), nicht Teil dieses Baus.
+
+    `mode="hard"`: fehlt jede Quelle → `401` mit AUTH-8-Re-Pair-HTML.
+
+    Bei validem Cookie wird der Cookie rolling-refreshed (AUTH-2:78). Der
+    Streaming-Fall (SSE) bleibt unversehrt: im Operator-/Observe-Pfad läuft die
+    Route unverpackt durch; im Cookie-Pfad reicht `make_response` das bereits
+    fertige Response-Objekt durch (kein Buffering des Generators).
+    """
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            bot_token = _get_bot_token()
+            cookie_val = request.cookies.get(_session_cookie.COOKIE_NAME)
+            cookie_ok = bool(bot_token) and _auth_gate.hat_gueltigen_cookie(
+                cookie_val, bot_token)
+            operator_ok = _auth_gate.ist_operator_ip(_client_ip())
+
+            if cookie_ok:
+                subject = _session_cookie.verify_session(cookie_val, bot_token)
+                resp = make_response(fn(*args, **kwargs))
+                resp.set_cookie(
+                    _session_cookie.COOKIE_NAME,
+                    _session_cookie.sign_session(subject, bot_token),
+                    **_session_cookie.session_cookie_kwargs(),
+                )
+                return resp
+            if operator_ok:
+                return fn(*args, **kwargs)
+
+            if mode == 'hard':
+                resp = make_response(_DUAL_GATE_401_HTML, 401)
+                resp.headers['Content-Type'] = 'text/html; charset=utf-8'
+                return resp
+            logging.warning(
+                "AUTH-3.a Observe (7b): %s — keine valide Quelle "
+                "(cookie_vorhanden=%s, operator_ip=%s) → 200 (Grace, kein 401)",
+                request.path, bool(cookie_val), operator_ok)
+            return fn(*args, **kwargs)
+        return wrapper
+    return deco
 
 # ROU-27 / PREG-9: Last-Known-Good-Cache für Panel-Instanz-Serving.
 # Schlüssel: (panel_id, sicht) — sicht ist 'config.json' oder 'tiles.json'.
@@ -647,6 +768,7 @@ def get_state(display_id):
 
 
 @app.route('/api/v1/displays/<display_id>/events', methods=['GET'])
+@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (SSE, initial Observe)
 def display_events(display_id):
     # ROU-22: SSE-Zustands-Stream. Unbekannte id → 404 (wie ROU-12).
     # DCOMP-2: frisch lesen, damit neu angelegte Displays auch hier
@@ -980,6 +1102,7 @@ def display_no_slash(display_id):
 
 
 @app.route('/display/<display_id>/', methods=['GET'])
+@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (Display-Client, initial Observe)
 def display(display_id):
     # ROU-20: liefert den Display-Client unabhängig davon, ob <display_id>
     # bekannt ist. Ob das Display existiert, klärt der Client beim Verbinden
@@ -1306,6 +1429,7 @@ def icons_suche():
 
 
 @app.route('/controller/<app>/', methods=['GET'])
+@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (Controller-Index, initial Observe)
 def controller_index(app):
     # ROU-23: /controller/<app>/ → index.html mit text/html.
     # Nur der konfigurierte App-Slug ist gültig (URL-3, zwei Segmente).
@@ -1503,6 +1627,7 @@ def app_panel_index_no_slash(panel_id):
 
 
 @app.route('/controller/app-panel/<panel_id>/', methods=['GET'])
+@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (App-Panel-Index, initial Observe)
 def app_panel_index_slash(panel_id):
     return render_app_panel_index(panel_id), 200, {
         'Content-Type': 'text/html; charset=utf-8'}
