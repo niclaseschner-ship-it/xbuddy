@@ -36,25 +36,37 @@ logger = logging.getLogger(__name__)
 class LibSingleshotAdapter(LLMProvider):
     """Übersetzt den hoerspiel-Provider-Vertrag <-> `tools.llm`-Singleshot-Sicht.
 
-    `slot` ist der Zugangsdaten-Slot (`hoerspiel-anthropic-api-key` /
-    `hoerspiel-mistral-api-key`); `model` das konfigurierte Modell (leer →
-    Vendor-Default).
+    `slot` ist der Zugangsdaten-Slot der Struktur-/Synopse-Pfade — seit T1454
+    der litellm-Motor-Slot (`hoerspiel-litellm-claude-api-key` /
+    `hoerspiel-litellm-eu-api-key`); `model` das konfigurierte Modell (leer →
+    Vendor-Default). `agent_slot` (kw-only) trägt den entkoppelten Recherche-
+    Agent-Slot (`hoerspiel-anthropic-api-key`, web_search-nativ); ohne ihn
+    fällt der Recherche-Agent auf `slot` zurück (Alt-/Test-Pfad).
     """
 
     name = "lib-singleshot"
 
-    def __init__(self, slot, model="", max_tokens=0):
+    def __init__(self, slot, model="", max_tokens=0, *, agent_slot=None):
         # Beide Lib-Fassaden EINMAL bauen (Slot + effektives Modell + max_tokens).
         # Ein `LLMCapabilityError` hier ist ein Boot-Konfig-Fehler (fehlender Key,
         # Capability-Mismatch) — er propagiert klar und wird NICHT als
         # ProviderError verschluckt (Spiegel eltern-chat/lib_adapter.py:78-81).
         # `max_tokens` (T1084-additiv): 0 → Vendor-Default; >0 → Durchreich an
         # Vendor (verhindert Trunkierung langer Folgentexte bei DEFAULT_MAX_TOKENS=2048).
+        # `slot` trägt seit T1454 den Motor-Slot der Struktur-/Synopse-Pfade
+        # (litellm-Slot); `agent_slot` (kw-only, T1454) ENTKOPPELT den Recherche-
+        # Agent-Slot davon — der Recherche-Vorschritt nutzt server-seitiges
+        # web_search und MUSS auf dem anthropic-Vendor bleiben. Ohne
+        # `agent_slot` (Test-/Alt-Pfad) fällt der Recherche-Agent auf `slot`
+        # zurück (Rückwärtskompatibilität).
         self._singleshot = get_singleshot(slot, model, max_tokens=max_tokens)
         # #1131: Freitext-Synopse geht über die vierte Sicht `get_completion`
         # (Required-Set nur `system_message_distinct` → trägt Claude UND Mistral).
         self._completion = get_completion(slot, model, max_tokens=max_tokens)
         self._slot = slot
+        # T1454: eigener Slot für den Recherche-Agenten (web_search → anthropic).
+        # Entkoppelt vom Struktur-/Synopse-Slot, der jetzt auf litellm zeigt.
+        self._agent_slot = agent_slot or slot
         self._model = model
         self._max_tokens = max_tokens
         # T1371: Agent-Sicht (mit opt-in web_search) wird LAZY beim ersten
@@ -87,16 +99,19 @@ class LibSingleshotAdapter(LLMProvider):
     def recherche_agent(self):
         """Liefert die `get_agent`-Sicht für den Recherche-Vorschritt (T1371).
 
-        Form B1: EIN Agent-Call mit server-seitigem `web_search` (dieselbe
-        `tools.llm`-Route, derselbe Slot/Key/Modell wie der Single-Shot — hält
-        die Recherche beim Anthropic-Vendor, keine Dritt-Cloud). Wird lazy beim
-        ersten Aufruf gebaut (nur erwachsen-Instanzen recherchieren). Ob der
-        Slot-Vendor `web_search` deklariert, prüft der `research_service` über
-        `agent.capabilities` — bei Mistral degradiert der Vorschritt.
+        Form B1: EIN Agent-Call mit server-seitigem `web_search`. Seit T1454
+        ist der Agent-Slot vom Struktur-/Synopse-Slot ENTKOPPELT: `slot` fährt
+        die Folgen-/Synopse-Pfade jetzt über den litellm-Motor, der Recherche-
+        Agent bleibt aber auf `self._agent_slot` (hoerspiel-anthropic-api-key),
+        weil der `web_search`-Server-Pfad Anthropic-nativ ist und der litellm-
+        Vendor kein `web_search` deklariert. Wird lazy beim ersten Aufruf
+        gebaut (nur erwachsen-Instanzen recherchieren). Ob der Slot-Vendor
+        `web_search` deklariert, prüft der `research_service` über
+        `agent.capabilities`.
         """
         if self._agent is None:
             self._agent = get_agent(
-                self._slot, self._model, max_tokens=self._max_tokens)
+                self._agent_slot, self._model, max_tokens=self._max_tokens)
         return self._agent
 
     def complete(self, system, user):
