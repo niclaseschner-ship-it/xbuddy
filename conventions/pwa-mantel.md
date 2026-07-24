@@ -310,10 +310,11 @@ Mini-App-Fläche.
    Set **und** `sw_script_route`/`sw_scope` gemeinsam; die WebAPK-Install-Probe
    ist die Abnahme.
 
-3. **heim-shell dynamisches Manifest (PWAM-2/5).** `heim_shell_manifest`
-   (`seiten/main.py:1015`) baut das Manifest per `panel_id` zur Laufzeit statt
-   aus einer statischen Registry-Zeile. Ob die Registry diesen Dynamik-Fall als
-   deklarative Daten trägt oder shell eine dokumentierte Variante bleibt, ist im
-   Berater-Kill-Kriterium offen gelassen und im Folge-Bau (shell zuletzt, meiste
-   Vorsicht) zu entscheiden. `ENTSCHEID → "Kill-Kriterium" → shell bleibt ggf.
-   dokumentierte Variante`.
+3. **heim-shell dynamisches Manifest (PWAM-2/5) — RAT-29 entschieden.**
+   `heim_shell_manifest` (`seiten/main.py:1015`) baut das Manifest per `panel_id`
+   zur Laufzeit. **RAT-29 (2026-07-24)** hat die offene Frage aufgelöst:
+   `REGISTRY["shell"]` ist ein **First-Class-Eintrag** (kein Spezialfall-Kommentar).
+   `build_manifest()` bekommt einen `panel_id`-Ast für die dynamische `start_url`;
+   alle anderen PWAM-5-Felder (`name`, `sw_scope` etc.) trägt der Registry-Eintrag
+   statisch. `ENTSCHEID → "Kill-Kriterium" → shell ist REGISTRY-First-Class,
+   panel_id-Ast in build_manifest()`. Refs #1409.
