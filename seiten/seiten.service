@@ -36,6 +36,11 @@ Environment=HOME=__XBUDDY_HOME__
 # durch die echten Origins ersetzt (deploy/systemd/README.md).
 Environment=SEITEN_HEIM_ORIGIN=__XBUDDY_DISPLAY_ORIGIN_HEIM__
 Environment=SEITEN_TAILSCALE_ORIGIN=__XBUDDY_DISPLAY_ORIGIN_TAILSCALE__
+# T948 / AUTH-2.a: derselbe geraete.json-Store wie geraete/main.py (GERAETE_REGISTRY,
+# GER-9, deploy/migrate-xbuddy-data.sh). /auth/pair schreibt hier den paired_at-Stempel
+# (OD3, additiv). Ohne diese ENV zeigt der Default relativ auf ./geraete.json im
+# Checkout (Repo-Phantom) — der Stempel landet dann nie im echten xbuddy-data-Store.
+Environment=GERAETE_REGISTRY=__XBUDDY_DATA__/geraete/geraete.json
 ExecStart=__XBUDDY_PYTHON__ -m seiten.main --host 127.0.0.1 --port 5042 --root __XBUDDY_REPO__ --inventar __XBUDDY_DATA__/seiten/inventar.json --panel-url http://127.0.0.1:5041 --geraete-url http://127.0.0.1:5040
 Restart=on-failure
 RestartSec=10

@@ -31,12 +31,26 @@ MODULE_MAP = {
     "plan": REPO_ROOT / "plan" / "main.py",
 }
 
+# T1389 / AUTH-7b: die Renderer-Routen (Shell/Display) leben nicht unter
+# /api/v1/<buddy>/, sondern in seiten (Shell) und router (Display/Controller/SSE).
+# Eigener Resolver + eigene Modul-Map, damit der _buddy_of-Pfad unberührt bleibt.
+MODULE_MAP_7B = {
+    "seiten": REPO_ROOT / "seiten" / "main.py",
+    "router": REPO_ROOT / "router" / "main.py",
+}
+
 # Der Auth-Decorator-Name (essen/main.py `require_init_data`; auth.md AUTH-9
-# nennt die Cookie-Variante ausdrücklich mit).
-_AUTH_DECORATORS = {"require_init_data"}
+# nennt die Cookie-Variante ausdrücklich mit). AUTH-7b ergänzt require_dual_gate
+# (mode-parametrisiert → ast.Call, nicht ast.Name).
+_AUTH_DECORATORS = {"require_init_data", "require_dual_gate"}
 
 # Method-explizite AUTH-3-Zeile: "<pfad>   (METHOD)".
 _ROUTE_LINE = re.compile(r"^(/\S+)\s+\((GET|POST|PATCH|PUT|DELETE)\)\s*$")
+
+# AUTH-7b-Fence-Zeile (auth.md AUTH-7:473-478): "<pfad>   (Prosa…)". Anderes
+# Format als AUTH-3 — der Rest-Text ist Prosa (HTML-Shell / SSE / Wildcard),
+# nur der Pfad (erstes Token) zählt. /controller/* ist eine Prefix-Wildcard.
+_ROUTE_7B_LINE = re.compile(r"^(/\S+)\s+\(")
 
 
 def _auth3_routes() -> list[tuple[str, str]]:
@@ -89,6 +103,10 @@ def _decorated_routes(module_path: pathlib.Path) -> list[dict]:
         for deco in node.decorator_list:
             # @require_init_data (bare Name)
             if isinstance(deco, ast.Name) and deco.id in _AUTH_DECORATORS:
+                hat_auth = True
+            # @require_dual_gate(mode=...) — parametrisiert → ast.Call mit Name-func
+            if isinstance(deco, ast.Call) and isinstance(deco.func, ast.Name) \
+                    and deco.func.id in _AUTH_DECORATORS:
                 hat_auth = True
             # @app.route("...", methods=[...])
             if isinstance(deco, ast.Call) and isinstance(deco.func, ast.Attribute) \
@@ -146,4 +164,116 @@ def test_delete_gericht_ist_in_auth3_gelistet():
     routen = _auth3_routes()
     assert ("/api/v1/essen/katalog/gerichte/<gericht_id>", "DELETE") in routen, (
         "DELETE gericht_loeschen fehlt in der AUTH-3-Liste (auth.md, OD5)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# T1389 / AUTH-7b — Dual-Gate-Renderer-Routen (Shell/Display/Controller/SSE)
+# ---------------------------------------------------------------------------
+
+
+def _auth7b_routes() -> list[str]:
+    """Extrahiert die Pfade der AUTH-7-7b-Fence-Liste (auth.md AUTH-7:473-478).
+
+    Liest ausschließlich den ```-Fence unmittelbar nach dem 7b-Absatz („7b —
+    User-Shell (Cookie)") im „### AUTH-7"-Abschnitt. Der Fence hat ein anderes
+    Format als AUTH-3 (Pfad + Prosa in Klammern) — nur der Pfad zählt."""
+    text = AUTH_MD.read_text(encoding="utf-8")
+    start = text.index("### AUTH-7")
+    rest = text[start + len("### AUTH-7"):]
+    m = re.search(r"\n### AUTH-", rest)
+    section = rest[: m.start()] if m else rest
+
+    pfade: list[str] = []
+    in_fence = False
+    for line in section.splitlines():
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if not in_fence:
+            continue
+        treffer = _ROUTE_7B_LINE.match(line.strip())
+        if treffer:
+            pfade.append(treffer.group(1))
+    return pfade
+
+
+# Route→Modul-Resolver für 7b (auth.md AUTH-7 Bau-Notiz): /shell/* → seiten,
+# /display/<id> + /controller/* + /api/v1/displays/*/events → router.
+def _module_of_7b(pfad: str) -> str | None:
+    if pfad.startswith("/shell/"):
+        return "seiten"
+    if pfad.startswith(("/display/", "/controller/")) \
+            or (pfad.startswith("/api/v1/displays/") and pfad.endswith("/events")):
+        return "router"
+    return None
+
+
+def _normalize(pfad: str) -> str:
+    """Vergleichsbasis: Platzhalter-Namen und Trailing-Slash abstreifen.
+
+    Spec schreibt /display/<display_id>, Flask /display/<display_id>/; Spec
+    /shell/<panel_id>, Flask ebenso. Wir vergleichen auf Segment-Präfix mit
+    normalisierten <…>-Platzhaltern, damit Namens-/Slash-Drift nicht fehlschlägt.
+    """
+    p = re.sub(r"<[^>]+>", "<>", pfad)
+    return p.rstrip("/")
+
+
+def _hat_dekorierte_route(dekoriert: list[dict], spec_pfad: str) -> bool:
+    """True, wenn eine dekorierte GET-Route den 7b-Spec-Pfad deckt.
+
+    Wildcard /controller/* deckt jede dekorierte Route unter /controller/;
+    sonst Präfix-Vergleich auf normalisierten Pfaden (Slash/Platzhalter-tolerant)."""
+    if spec_pfad == "/controller/*":
+        return any(r["auth"] and r["path"].startswith("/controller/")
+                   and "GET" in r["methods"] for r in dekoriert)
+    ziel = _normalize(spec_pfad)
+    for r in dekoriert:
+        if not r["auth"] or "GET" not in r["methods"]:
+            continue
+        if _normalize(r["path"]).startswith(ziel):
+            return True
+    return False
+
+
+def test_jede_auth7b_route_traegt_den_dual_gate():
+    """AUTH-9 (7b): jede AUTH-7-7b-Renderer-Route trägt require_dual_gate im
+    Source ihres Moduls (seiten Shell / router Display+Controller+SSE)."""
+    pfade = _auth7b_routes()
+    assert pfade, "AUTH-7-7b-Fence leer geparst — auth.md-Format prüfen"
+
+    dekoriert = {mod: _decorated_routes(pfad)
+                 for mod, pfad in MODULE_MAP_7B.items()}
+
+    fehlend = []
+    geprueft = 0
+    for pfad in pfade:
+        modul = _module_of_7b(pfad)
+        assert modul is not None, "7b-Pfad %s ohne Modul-Resolver" % pfad
+        geprueft += 1
+        if not _hat_dekorierte_route(dekoriert[modul], pfad):
+            fehlend.append("%s — keine require_dual_gate-Route in %s/main.py"
+                           % (pfad, modul))
+
+    assert geprueft >= 4, (
+        "Erwartet ≥4 AUTH-7-7b-Routen (shell/display/controller/events), "
+        "geprüft: %d" % geprueft
+    )
+    assert not fehlend, (
+        "AUTH-9-Verletzung (7b) — diese Renderer-Routen tragen den Dual-Gate "
+        "nicht:\n  " + "\n  ".join(fehlend)
+    )
+
+
+def test_display_shared_bleibt_public_ungegatet():
+    """auth.md AUTH-7:512 — /display/_shared/* bleibt public (kein Dual-Gate),
+    sonst brechen die 7b-Views (Icons/Design-Tokens als Asset geladen)."""
+    dekoriert = _decorated_routes(MODULE_MAP_7B["router"])
+    shared = [r for r in dekoriert if r["path"].startswith("/display/_shared/")]
+    assert shared, "/display/_shared/*-Routen im Router nicht gefunden — Test stale?"
+    verletzer = [r["path"] for r in shared if r["auth"]]
+    assert not verletzer, (
+        "AUTH-7:512-Verletzung — /display/_shared/* trägt den Dual-Gate "
+        "(muss public bleiben): %s" % verletzer
     )
