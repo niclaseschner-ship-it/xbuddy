@@ -68,7 +68,9 @@ def test_gueltiger_token_setzt_cookie_und_redirected(client):
     resp = client.get("/auth/pair?token=%s" % token)
 
     assert resp.status_code == 302
-    assert resp.headers["Location"].endswith("/display/%s" % DISPLAY_ID)
+    # T1389 / ESC-3: Ziel trägt Trailing-Slash (/display/<id>/), um den
+    # 301-Doppelhop am Router zu vermeiden (auth.md AUTH-7b, router:972).
+    assert resp.headers["Location"].endswith("/display/%s/" % DISPLAY_ID)
 
     set_cookie = resp.headers.get("Set-Cookie", "")
     assert sc.COOKIE_NAME in set_cookie
