@@ -6,8 +6,10 @@ Belegt:
     mit gemocktem `litellm.completion` → Text zurück + GENAU EINE JSONL-Zeile
     (caller=kibuddy, LLMP-S4 Tier-2-Projektion), Usage OpenAI→intern gemappt,
     cache_control-Marker auf dem System-Block (LiteLLM-Passthrough).
-  - AC3: singleshot werfen NotImplementedError; agent_step ist migriert
-    (Slot 2, #1452) — Wire-Übersetzung, Parse, is_error-Prefix, JSONL, Loop-E2E.
+  - AC3: agent_step ist migriert (Slot 2, #1452) — Wire-Übersetzung, Parse,
+    is_error-Prefix, JSONL, Loop-E2E. Slot 3 (#1454): singleshot_structured
+    (forced tool_choice named form) + singleshot_text (Freitext) migriert,
+    CAPABILITIES ⊇ REQUIRED_SINGLESHOT/COMPLETION.
 
 `litellm` ist NICHT installiert → das SDK wird als MagicMock über sys.modules
 eingehängt und `litellm.completion` gemockt (Spiegel test_chat_jsonl_endtoend,
@@ -259,19 +261,224 @@ def _make_vendor():
         return litellm_vendor.LitellmVendor(api_key="sk-fake")
 
 
-def test_singleshot_structured_not_implemented():
-    """AC3: singleshot_structured wirft NotImplementedError mit Slot-Hinweis."""
-    vendor = _make_vendor()
-    with pytest.raises(NotImplementedError) as exc:
-        vendor.singleshot_structured("s", "p", {})
-    assert "Slot 2/3" in str(exc.value) or "#1316" in str(exc.value)
+# ----------------------------------------------------------------------
+#  Slot 3 (#1454) — singleshot_structured + singleshot_text
+# ----------------------------------------------------------------------
 
 
-def test_singleshot_text_not_implemented():
-    """AC3: singleshot_text wirft NotImplementedError."""
-    vendor = _make_vendor()
-    with pytest.raises(NotImplementedError):
-        vendor.singleshot_text("s", "u")
+def _make_singleshot_response(*, tool_calls=None, content=None,
+                              prompt_tokens=100, completion_tokens=50):
+    """OpenAI-förmige LiteLLM-ModelResponse für singleshot: `.choices[0].message`
+    mit `.tool_calls[i].function.{name, arguments}` (structured) bzw. `.content`
+    (text)."""
+    message = MagicMock()
+    message.content = content
+    tc_objs = []
+    for tc in tool_calls or []:
+        tc_obj = MagicMock()
+        tc_obj.id = tc.get("id", "")
+        fn = MagicMock()
+        fn.name = tc["name"]
+        fn.arguments = tc["arguments"]
+        tc_obj.function = fn
+        tc_objs.append(tc_obj)
+    message.tool_calls = tc_objs
+    choice = MagicMock()
+    choice.message = message
+    resp = MagicMock()
+    resp.choices = [choice]
+    resp.usage = MagicMock()
+    resp.usage.prompt_tokens = prompt_tokens
+    resp.usage.completion_tokens = completion_tokens
+    resp.usage.cache_read_input_tokens = 0
+    resp.usage.cache_creation_input_tokens = 0
+    return resp
+
+
+def test_capabilities_covers_required_singleshot_and_completion():
+    """AC1: CAPABILITIES deckt REQUIRED_SINGLESHOT (structured_output +
+    system_message_distinct) UND REQUIRED_COMPLETION ab."""
+    assert public_api.REQUIRED_SINGLESHOT <= litellm_vendor.CAPABILITIES
+    assert public_api.REQUIRED_COMPLETION <= litellm_vendor.CAPABILITIES
+    assert "structured_output" in litellm_vendor.CAPABILITIES
+
+
+def test_singleshot_structured_parses_tool_call():
+    """AC2: forced tool_use → geparstes dict aus function.arguments (getattr)."""
+    fake_litellm = _make_fake_litellm_sdk(_make_singleshot_response(
+        tool_calls=[{"id": "c1", "name": "ergebnis",
+                     "arguments": '{"titel": "T", "text": "X"}'}],
+    ))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        out = vendor.singleshot_structured(
+            "SYS", "PROMPT", {"type": "object"},
+            caller="hoerspiel", slot="hoerspiel-litellm-claude-api-key")
+    assert out == {"titel": "T", "text": "X"}
+
+
+def test_singleshot_structured_forces_named_tool_choice():
+    """AC2: der Payload trägt die BENANNTE tool_choice-Form + das EINE Tool
+    (system als eigene Message, KEIN cache_control auf Singleshot)."""
+    fake_litellm = _make_fake_litellm_sdk(_make_singleshot_response(
+        tool_calls=[{"id": "c1", "name": "folge",
+                     "arguments": '{"n": 1}'}],
+    ))
+    schema = {"type": "object", "properties": {"n": {"type": "integer"}}}
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        vendor.singleshot_structured(
+            "Du bist Autor.", "Schreib Folge 1.", schema,
+            caller="hoerspiel", slot="hoerspiel-litellm-claude-api-key",
+            tool_name="folge", tool_description="Eine Folge.")
+    call = fake_litellm.completion.call_args
+    assert call.kwargs["tool_choice"] == {
+        "type": "function", "function": {"name": "folge"}}
+    tools = call.kwargs["tools"]
+    assert len(tools) == 1
+    assert tools[0]["function"]["name"] == "folge"
+    assert tools[0]["function"]["parameters"] == schema
+    sent = call.kwargs["messages"]
+    assert sent[0]["role"] == "system"
+    # Singleshot: KEIN cache_control-Marker (Ein-Turn, Spiegel mistral).
+    assert sent[0]["content"] == "Du bist Autor."
+    assert sent[1] == {"role": "user", "content": "Schreib Folge 1."}
+
+
+def test_singleshot_structured_bad_json_yields_empty_dict():
+    """AC2-Defensive: kaputtes arguments-JSON → {} (kein Crash)."""
+    fake_litellm = _make_fake_litellm_sdk(_make_singleshot_response(
+        tool_calls=[{"id": "c1", "name": "ergebnis", "arguments": "{kaputt"}],
+    ))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        out = vendor.singleshot_structured(
+            "S", "P", {}, caller="hoerspiel",
+            slot="hoerspiel-litellm-claude-api-key")
+    assert out == {}
+
+
+def test_singleshot_structured_no_matching_tool_raises():
+    """AC2: kein tool_call mit name==tool_name → ProviderError (Spiegel mistral)."""
+    from tools.llm import ProviderError
+    fake_litellm = _make_fake_litellm_sdk(_make_singleshot_response(
+        tool_calls=[{"id": "c1", "name": "anderes", "arguments": "{}"}],
+    ))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        with pytest.raises(ProviderError):
+            vendor.singleshot_structured(
+                "S", "P", {}, caller="hoerspiel",
+                slot="hoerspiel-litellm-claude-api-key", tool_name="ergebnis")
+
+
+def test_singleshot_structured_writes_single_jsonl(jsonl_path):
+    """AC2/AC4: genau EINE JSONL-Zeile (LLMP-S4), caller/slot durchgereicht."""
+    fake_litellm = _make_fake_litellm_sdk(_make_singleshot_response(
+        tool_calls=[{"id": "c1", "name": "ergebnis", "arguments": '{"ok": 1}'}],
+    ))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        vendor.singleshot_structured(
+            "S", "P", {}, caller="hoerspiel",
+            slot="hoerspiel-litellm-claude-api-key")
+    lines = jsonl_path.read_text().strip().splitlines()
+    assert len(lines) == 1
+    rec = json.loads(lines[0])
+    assert rec["caller"] == "hoerspiel"
+    assert rec["slot"] == "hoerspiel-litellm-claude-api-key"
+
+
+def test_singleshot_structured_api_error_propagates():
+    """AC4: litellm-APIError → ProviderError (analog chat/agent)."""
+    from tools.llm import ProviderError
+    fake_litellm = _make_fake_litellm_sdk(side_effect=_FakeAPIError("tot"))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        with pytest.raises(ProviderError):
+            vendor.singleshot_structured(
+                "S", "P", {}, caller="hoerspiel",
+                slot="hoerspiel-litellm-claude-api-key")
+
+
+def test_singleshot_text_returns_content():
+    """AC2: Freitext-Singleshot → str aus .choices[0].message.content."""
+    fake_litellm = _make_fake_litellm_sdk(
+        _make_singleshot_response(content="  Eine Synopse.  "))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        out = vendor.singleshot_text(
+            "SYS", "USER", caller="hoerspiel",
+            slot="hoerspiel-litellm-claude-api-key")
+    assert out == "Eine Synopse."
+
+
+def test_singleshot_text_no_tools_in_payload():
+    """AC2: Completion-Payload trägt KEIN tools/tool_choice (Freitext)."""
+    fake_litellm = _make_fake_litellm_sdk(
+        _make_singleshot_response(content="ok"))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        vendor.singleshot_text(
+            "SYS", "USER", caller="hoerspiel",
+            slot="hoerspiel-litellm-claude-api-key")
+    call = fake_litellm.completion.call_args
+    assert "tools" not in call.kwargs
+    assert "tool_choice" not in call.kwargs
+    sent = call.kwargs["messages"]
+    assert sent == [
+        {"role": "system", "content": "SYS"},
+        {"role": "user", "content": "USER"},
+    ]
+
+
+def test_singleshot_text_writes_single_jsonl(jsonl_path):
+    """AC2/AC4: Completion schreibt genau EINE JSONL-Zeile (LLMP-S4)."""
+    fake_litellm = _make_fake_litellm_sdk(
+        _make_singleshot_response(content="ok"))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        vendor.singleshot_text(
+            "S", "U", caller="hoerspiel",
+            slot="hoerspiel-litellm-claude-api-key")
+    lines = jsonl_path.read_text().strip().splitlines()
+    assert len(lines) == 1
+
+
+def test_singleshot_text_api_error_propagates():
+    """AC4: completion-APIError → ProviderError."""
+    from tools.llm import ProviderError
+    fake_litellm = _make_fake_litellm_sdk(side_effect=_FakeAPIError("tot"))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        with pytest.raises(ProviderError):
+            vendor.singleshot_text(
+                "S", "U", caller="hoerspiel",
+                slot="hoerspiel-litellm-claude-api-key")
+
+
+def test_get_singleshot_facade_boot_and_call_via_litellm(jsonl_path):
+    """AC2/AC4: Boot über die get_singleshot-Fassade gegen einen litellm-Slot —
+    Capability-Gate grün (structured_output deklariert), E2E-Parse."""
+    fake_litellm = _make_fake_litellm_sdk(_make_singleshot_response(
+        tool_calls=[{"id": "c1", "name": "ergebnis", "arguments": '{"a": 1}'}],
+    ))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        ss = public_api.get_singleshot(slot="hoerspiel-litellm-claude-api-key")
+        out = ss.complete_structured("S", "P", {"type": "object"})
+    assert out == {"a": 1}
+
+
+def test_get_completion_facade_boot_and_call_via_litellm(jsonl_path):
+    """AC2/AC4: Boot über die get_completion-Fassade gegen einen litellm-Slot."""
+    fake_litellm = _make_fake_litellm_sdk(
+        _make_singleshot_response(content="Synopse."))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        comp = public_api.get_completion(slot="hoerspiel-litellm-claude-api-key")
+        out = comp.complete("S", "U")
+    assert out == "Synopse."
 
 
 # ----------------------------------------------------------------------

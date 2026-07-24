@@ -1068,11 +1068,26 @@ def parse_args(argv):
 
 
 # T1084: Der strukturierte Folgen-Pfad (HSP-11) läuft seit #1084 über
-# `tools.llm` (Singleshot-Sicht). Slot pro Brand-Vendor — derselbe ZD-Slot, den
-# die Alt-Provider nutzen (hoerspiel-<vendor>-api-key, HSP-27).
+# `tools.llm` (Singleshot-Sicht).
+# T1454: Der Struktur-/Synopse-Motor wandert von den Hand-Vendoren
+# (anthropic/mistral) auf den litellm-Motor. Slot pro Brand-Vendor.
+# WICHTIG parse_slot-Falle (LLMP-5, _resolver.py): der purpose-Teil darf KEIN
+# Vendor-Slug (`mistral`/`anthropic`) enthalten, sonst matcht parse_slot ZWEI
+# Vendoren (litellm UND mistral) → mehrdeutig → Boot-fatal. Darum trägt der
+# Mistral-Backend-Slot `eu` (EU-Region-Marker) statt `mistral` im purpose.
 _LIB_SLOT_FOR_PROVIDER = {
+    "claude": "hoerspiel-litellm-claude-api-key",
+    "mistral": "hoerspiel-litellm-eu-api-key",
+}
+
+# T1454: Der Recherche-Agent (web_search-Vorschritt, HSP/T1371) bleibt auf dem
+# anthropic-Hand-Vendor — der litellm-Vendor deklariert kein `web_search`.
+# Entkoppelt vom Struktur-/Synopse-Slot oben (`agent_slot`-Param im Adapter).
+# Nur der Claude-Brand recherchiert (der Mistral-Brand degradiert den
+# Vorschritt bereits über `agent.capabilities`, T1371).
+_AGENT_SLOT_FOR_PROVIDER = {
     "claude": "hoerspiel-anthropic-api-key",
-    "mistral": "hoerspiel-mistral-api-key",
+    "mistral": "hoerspiel-anthropic-api-key",
 }
 
 # T1281: MAX_TOKENS aus den entfernten Alt-Providern hier zentralisiert.
@@ -1096,11 +1111,21 @@ def _build_llm(cfg) -> LLMProvider | None:
 
     from .providers.lib_adapter import LibSingleshotAdapter
     slot = _LIB_SLOT_FOR_PROVIDER[cfg.llm_provider]
+    agent_slot = _AGENT_SLOT_FOR_PROVIDER[cfg.llm_provider]
     max_tokens = _MAX_TOKENS_FOR_PROVIDER[cfg.llm_provider]
     # `model` + `max_tokens` durchreichen: Modell-Erhalt (z. B. claude-opus-4-7)
     # und Token-Limit (T1084: DEFAULT_MAX_TOKENS=2048 < ~3500 Token Folgentext).
+    # T1454 Mistral-Präfix-Annahme (Deploy-Config, Nic-gegatet): litellm routet
+    # Mistral-Modelle NUR mit `mistral/`-Präfix (die Hand-Vendoren nutzten blanke
+    # Namen wie `mistral-medium-2508`). Die hoerspiel-AVAILABLE_MODELS führen
+    # blanke Mistral-Namen — ob der Deploy sie mit `mistral/`-Präfix konfiguriert
+    # oder LiteLLM-`model_alias` nutzt, ist eine Deploy-Config-Frage, NICHT hier
+    # geraten. Claude-Modelle (Default `claude-opus-4-7`) erkennt litellm am
+    # blanken Namen — der Claude-Pfad ist unverändert.
+    # `agent_slot` (T1454): Recherche-Agent bleibt anthropic (web_search-nativ).
     return LibSingleshotAdapter(
         slot=slot, model=cfg.llm_model, max_tokens=max_tokens,
+        agent_slot=agent_slot,
     )
 
 
