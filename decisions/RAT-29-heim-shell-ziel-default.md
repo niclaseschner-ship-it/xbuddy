@@ -1,4 +1,4 @@
-# RAT-29 — Heim-Shell als Ziel-Default: Panel+Display-Union ersetzt Einzel-PWA-Modell
+# RAT-29 — Heim-Shell als Ziel-Default: Zwei-Geräte-Modell wird durch Shell auf einem Gerät ersetzt
 
 **Datum:** 2026-07-24 · **Ratifiziert:** Nic-Setzung 2026-07-24 · **Refs:** #1182, #1409 · **Supersedes:** RAT-25 (Pilot-Scope) · **Extends:** RAT-27
 
@@ -8,19 +8,19 @@ RAT-25 (2026-06-30) ratifizierte die Heim-Shell bewusst als **LAN-only-Pilot** (
 
 RAT-27 (2026-07-07) hob den LAN-only-Riegel via Auth-Funnel (AUTH-7b) auf: die Shell ist jetzt extern erreichbar für Geräte mit `xbuddy_session`-Cookie.
 
-**Nic-Setzung 2026-07-24** (#1409-Kommentar): Die Heim-Shell ist die neue PWA, die Panel und Display in einer URL vereint. Sie wird zum **neuen Default** — alle anderen Einzel-PWAs werden schrittweise abgebaut.
-
-Der „wir bauen alles andere nach und nach ab"-Wortlaut ist keine Wegwerfstrategie, sondern eine Konvergenzdisziplin: statt N parallel gepflegte installierbare PWAs gibt es langfristig **eine** Install-Oberfläche (die Shell) und N Views darin.
+**Nic-Setzung 2026-07-24** (#1409-Kommentar): Die Heim-Shell ist die neue PWA, die Panel und Display in einer URL vereint. Sie wird zum **neuen Default** — ein Gerät reicht, zwei sind nicht mehr nötig. Was „nach und nach abgebaut" wird, ist das **Zwei-Geräte-Modell**, nicht die Apps.
 
 ## Entscheidung
 
 ### 1. Heim-Shell = strategischer Ziel-Zustand (Pilot → Default)
 
-`/shell/<panel_id>` ist der primäre Einstiegspunkt für Familien-Geräte. Jedes Gerät, das Panel und Buddy braucht, wird langfristig über die Shell bedient. Die Split-Layout-Architektur (SHELL-1..SHELL-11, RAT-25) bleibt vollständig unverändert — RAT-29 ändert den Scope, nicht den technischen Kern.
+`/shell/<panel_id>` ist der primäre Einstiegspunkt für Familien-Geräte. Ein Gerät, das Panel und Buddy braucht, wird langfristig über die Shell bedient. Die Split-Layout-Architektur (SHELL-1..SHELL-11, RAT-25) bleibt vollständig unverändert — RAT-29 ändert den Scope, nicht den technischen Kern.
 
-### 2. Einzel-PWAs werden sukzessive abgebaut
+### 2. Zwei-Geräte-Modell entfällt als Normalfall
 
-Alle eigenständig installierbaren Mini-App-PWAs (essen-einkauf, plan, hoerspiel-player, connector, routine, mini-app-uebersicht) werden **nicht mehr als separate WebAPK-Kandidaten positioniert**. Sie bleiben als URLs erreichbar und als Views funktionstüchtig; ihre eigenständige Install-Empfehlung entfällt. Abbau-Reihenfolge folgt Nutzungsfrequenz und Auth-Konvergenz — kein harter Stichtag.
+Das bisherige Modell: **Gerät 1** zeigt das Panel (Controller), **Gerät 2** zeigt den Display-Client (Buddy-View). Die Shell ersetzt das: **ein Gerät** zeigt beides — Panel-Nav links, Buddy-View rechts.
+
+**Alle Apps bleiben vollständig erhalten.** essen-einkauf, plan, hoerspiel-player, connector, routine und alle weiteren Views existieren unverändert als Buddy-Views im rechten Pane der Shell. Keine App, keine Route, keine Funktionalität entfällt. Was entfällt ist der **separate Display-Klient auf einem zweiten Gerät** als Normalfall für Familien-Geräte — nicht die Apps selbst.
 
 ### 3. Shell wird REGISTRY-First-Class-Eintrag
 
@@ -32,7 +32,7 @@ Konkret: `REGISTRY["shell"]` trägt alle Standard-Felder (`name`, `sw_scope`, et
 
 1. **Auth scharf** — #1389 (Auth-Enforcement) + #1390 (Onboarding-Rollout), beide `status:ready`, nächster Arbeitstag. Ohne AUTH-7b funktioniert der Funnel-Zugang zur Shell nicht.
 2. **Shell-Rollout** — nach #1389/#1390 auf alle Familien-Geräte (AUTH-7b aktiv); Shell-URL in MAU-Mini-App als Primär-Link (SHELL-10).
-3. **Einzel-PWA-Konvergenz** — sukzessiver Abbau der eigenständigen Install-Empfehlungen; Ticket per Buddy wenn Abbau aktiv wird.
+3. **Zwei-Geräte-Ablösung** — sobald Shell auf einem Gerät stabil läuft, entfällt der zweite Display-Klient als Pflicht; kein Stichtag, kein Ticket erzwingen.
 
 ### 5. Konvention (n=2-Trigger bleibt)
 
@@ -40,17 +40,17 @@ Konkret: `REGISTRY["shell"]` trägt alle Standard-Felder (`name`, `sw_scope`, et
 
 ## Nicht-Implikationen
 
+- **Alle Apps bleiben** — essen-einkauf, plan, hoerspiel-player, connector, routine etc. sind vollständig erhalten als Buddy-Views. Keine Route, keine Funktionalität, kein Ticket für „App X abbauen".
 - **Architektur unverändert** — Split-Layout, zwei Iframes, kein neuer Routing-Kern, keine Stream-Fusion (SHELL-4). RAT-25 bleibt maßgeblich für den technischen Kern.
-- **URLs bleiben** — `/display/<id>`, `/essen-einkauf/` etc. sind keine Fehler; abgebaut wird die *Install-Empfehlung*, nicht die Route.
 - **Auth-Modell unverändert** — RAT-27 gilt weiter: EIN Cookie über alle Familien-PWAs; Dual-Gate (Cookie ODER Operator-IP). Shell ist AUTH-7b-Konsument.
 - **GER-`beides`-Schuld bleibt offen** — Co-Location-Modell (2. Shell-Gerät) ist Folge-Aufgabe (Trigger: 2. Gerät).
 
 ## Kill-Kriterium
 
-Zwei Familien-Geräte zeigen konsistent schlechtere UX mit der Shell als mit dem klassischen Display-Client (Lag > 200ms, Audio-Glitch, Split-Layout-Verlust) → Shell bleibt additiv, kein Pflichtweg; Einzel-PWAs bleiben installierbar.
+Familien-Geräte zeigen konsistent schlechtere UX mit der Shell als mit dem klassischen Display-Client (Lag > 200ms, Audio-Glitch, Split-Layout-Verlust) → Shell bleibt additiv, kein Pflichtweg; klassisches Zwei-Geräte-Modell bleibt parallel nutzbar.
 
 ## Belege
 
-Nic-Setzung 2026-07-24 (#1409-Kommentar, arbeitstag-prep Lauf). RAT-25 (Pilot-Architektur). RAT-27 (Auth-Funnel-Rollout, AUTH-7b). specs/platform/heim-shell.md (SHELL-1..SHELL-11). pwa_mantel.py REGISTRY (7 Einträge). conventions/pwa-mantel.md (PWAM-5 Frage 3).
+Nic-Setzung 2026-07-24 (#1409-Kommentar, arbeitstag-prep Lauf, Klarstellung „die einzelnen apps bleiben natürlich alle erhalten"). RAT-25 (Pilot-Architektur). RAT-27 (Auth-Funnel-Rollout, AUTH-7b). specs/platform/heim-shell.md (SHELL-1..SHELL-11). pwa_mantel.py REGISTRY (7 Einträge). conventions/pwa-mantel.md (PWAM-5 Frage 3).
 
 Refs #1182 #1409 #1338 #1339
