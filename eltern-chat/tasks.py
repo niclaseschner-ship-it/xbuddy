@@ -445,8 +445,7 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   hoerspiel_url_origin_niclas: str = "",
                   kibuddy_origin_url=None,
                   a2_receipt_store=None,
-                  wetter_origin_url=None,
-                  master_user_id=None):
+                  wetter_origin_url=None):
     """Baut den Katalog für eine laufende Instanz.
 
     Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
