@@ -80,6 +80,57 @@ def test_recherche_agent_lazy_baut_get_agent_facade():
     assert "web_search" in first.capabilities
 
 
+def test_recherche_agent_slot_decoupled_from_singleshot_slot():
+    """T1454/AC3: `agent_slot` ENTKOPPELT den Recherche-Agent-Slot vom
+    Struktur-/Synopse-Slot. singleshot/completion bekommen den (litellm-)`slot`,
+    recherche_agent den anthropic-`agent_slot` (web_search bleibt Anthropic)."""
+    from hoerspiel.providers import lib_adapter
+
+    facade = MagicMock(model="claude-opus-4-7")
+    agent_facade = MagicMock(name="agent", capabilities=frozenset({"web_search"}))
+    with patch.object(lib_adapter, "get_singleshot", return_value=facade) as gs, \
+         patch.object(lib_adapter, "get_completion",
+                      return_value=MagicMock(model="claude-opus-4-7")) as gc, \
+         patch.object(lib_adapter, "get_agent",
+                      return_value=agent_facade) as ga:
+        adapter = lib_adapter.LibSingleshotAdapter(
+            slot="hoerspiel-litellm-claude-api-key",
+            model="claude-opus-4-7",
+            max_tokens=8192,
+            agent_slot="hoerspiel-anthropic-api-key",
+        )
+        adapter.recherche_agent()
+
+    # Struktur-/Synopse-Pfad läuft über den litellm-Motor-Slot.
+    gs.assert_called_once_with(
+        "hoerspiel-litellm-claude-api-key", "claude-opus-4-7", max_tokens=8192)
+    gc.assert_called_once_with(
+        "hoerspiel-litellm-claude-api-key", "claude-opus-4-7", max_tokens=8192)
+    # Recherche-Agent bleibt auf dem anthropic-Slot (web_search-nativ).
+    ga.assert_called_once_with(
+        "hoerspiel-anthropic-api-key", "claude-opus-4-7", max_tokens=8192)
+
+
+def test_recherche_agent_slot_defaults_to_slot_when_unset():
+    """T1454: ohne `agent_slot` fällt der Recherche-Agent auf `slot` zurück
+    (Rückwärtskompatibilität — Alt-/Test-Pfad)."""
+    from hoerspiel.providers import lib_adapter
+
+    facade = MagicMock(model="claude-opus-4-7")
+    agent_facade = MagicMock(name="agent")
+    with patch.object(lib_adapter, "get_singleshot", return_value=facade), \
+         patch.object(lib_adapter, "get_completion",
+                      return_value=MagicMock(model="claude-opus-4-7")), \
+         patch.object(lib_adapter, "get_agent",
+                      return_value=agent_facade) as ga:
+        adapter = lib_adapter.LibSingleshotAdapter(
+            slot="hoerspiel-litellm-claude-api-key", model="claude-opus-4-7")
+        adapter.recherche_agent()
+
+    ga.assert_called_once_with(
+        "hoerspiel-litellm-claude-api-key", "claude-opus-4-7", max_tokens=0)
+
+
 def test_complete_structured_translates_signature_drift():
     """user→prompt, input_schema→schema; correlation_id NICHT durchgereicht."""
     facade = MagicMock()

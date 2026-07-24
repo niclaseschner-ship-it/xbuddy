@@ -436,6 +436,52 @@ def test_claude_available_models_konstante():
 
 
 # ============================================================
+#  T1454 — _build_llm verdrahtet litellm-Motor-Slot + entkoppelten Agent-Slot
+# ============================================================
+
+
+def test_build_llm_claude_uses_litellm_slot_and_anthropic_agent_slot(monkeypatch):
+    """T1454/AC2+AC3: _build_llm(claude) baut den Adapter mit dem litellm-
+    Struktur-/Synopse-Slot UND dem entkoppelten anthropic-Recherche-Slot."""
+    from hoerspiel.providers import lib_adapter
+
+    captured = {}
+
+    def _fake_adapter(*, slot, model, max_tokens, agent_slot):
+        captured.update(slot=slot, model=model, max_tokens=max_tokens,
+                        agent_slot=agent_slot)
+        return object()
+
+    monkeypatch.setattr(lib_adapter, "LibSingleshotAdapter", _fake_adapter)
+
+    cfg = config_mod.RuntimeConfig(
+        listen_host="127.0.0.1", listen_port=5053, log_level="INFO",
+        llm_provider="claude", llm_model="claude-opus-4-7",
+        anthropic_key="ak", mistral_key=None,
+        azure_endpoint="", azure_deployment="", azure_key="",
+    )
+    main_mod._build_llm(cfg)
+
+    assert captured["slot"] == "hoerspiel-litellm-claude-api-key"
+    assert captured["agent_slot"] == "hoerspiel-anthropic-api-key"
+    assert captured["model"] == "claude-opus-4-7"
+    assert captured["max_tokens"] == 8192
+
+
+def test_build_llm_mistral_slot_purpose_has_no_vendor_slug():
+    """T1454: der Mistral-Backend-Slot trägt `eu` (nicht `mistral`) im purpose,
+    sonst matcht parse_slot ZWEI Vendoren (litellm + mistral) → Boot-fatal."""
+    slot = main_mod._LIB_SLOT_FOR_PROVIDER["mistral"]
+    assert slot == "hoerspiel-litellm-eu-api-key"
+    # parse_slot muss GENAU litellm auflösen (nicht mehrdeutig).
+    from tools.llm._resolver import parse_slot
+    _caller, vendor, purpose = parse_slot(slot)
+    assert vendor == "litellm"
+    assert "mistral" not in purpose
+    assert "anthropic" not in purpose
+
+
+# ============================================================
 #  HSP-3a Variante C — Face-Pille im Kinder-View (#911)
 # ============================================================
 #
