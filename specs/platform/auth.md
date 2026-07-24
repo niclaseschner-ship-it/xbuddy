@@ -334,6 +334,8 @@ erst startet).
 /api/v1/diag                                  (Diagnose)
 /display/_shared/*                            (Mini-App-Icons, MAD-6)
 /display/<buddy>/*                            (Buddy-Views)
+/shell/<panel_id>/manifest.json               (PWA-Manifest; credential-los per Fetch-Spec, T1448)
+/shell/<panel_id>/icon-*.png                  (PWA-Icons; WebAPK-Installer holt credential-los, T1448)
 ```
 
 Eine Route gehört in AUTH-4, wenn sie **inhaltlich öffentlich** ist — der

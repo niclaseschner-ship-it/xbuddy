@@ -329,6 +329,100 @@ def test_asset_hard_mode_ohne_quelle_gibt_401(router_client):
 
 
 # ---------------------------------------------------------------------------
+# T1448/AC1 — Live-Pfad-Test: GET /shell/<panel>/sw.js body traegt network-first
+# ---------------------------------------------------------------------------
+
+
+def test_shell_sw_js_live_pfad_traegt_network_first_body(seiten_client):
+    """AC1 entry_path_probe: GET /shell/<panel_id>/sw.js liefert im Body network-first-Logik.
+
+    Prueft den ECHTEN Serve-Pfad (shell_asset_view via read_sw_with_build_id),
+    NICHT den Skelett-String aus render_sw(). Belegt, dass die committete
+    seiten/static/shell/sw.js network-first implementiert — die Datei ist die
+    Wahrheit fuer die Shell (Approach B, T1448-S2-fix).
+
+    Operator-IP als Auth-Quelle (shell_asset_view ist hard).
+    """
+    resp = seiten_client.get("/shell/%s/sw.js" % PANEL_ID, headers=_OPERATOR)
+    assert resp.status_code == 200, (
+        "GET /shell/<panel>/sw.js muss 200 liefern (Operator-IP), got %d"
+        % resp.status_code
+    )
+    body = resp.get_data(as_text=True)
+    assert "networkFirst" in body or "network-first" in body, (
+        "sw.js-Body muss network-first-Logik enthalten (T1448/AC1); "
+        "body enthaelt weder 'networkFirst' noch 'network-first'"
+    )
+    # Sicherstellen: cache-first fuer Shell-HTML ist NICHT die alleinige Strategie.
+    # (cacheFirst-Funktion kann fuer statische Assets existieren — das ist OK;
+    #  aber der HTML-Pfad muss network-first sein.)
+    assert "function networkFirst" in body, (
+        "sw.js-Body muss eine networkFirst-Funktion definieren (T1448/AC1)"
+    )
+    assert "__BUILD_ID__" not in body, (
+        "BUILD_ID-Platzhalter darf im ausgelieferten sw.js-Body nicht mehr stehen"
+    )
+
+
+# ---------------------------------------------------------------------------
+# T1448/AC2 — Icons public, sw.js bleibt gated
+# ---------------------------------------------------------------------------
+
+
+def test_shell_icon_public_ohne_quelle_gibt_200(seiten_client):
+    """AC2 entry_path_probe: GET /shell/<panel_id>/icon-192.png ohne Auth-Quelle → 200.
+
+    WebAPK-Installer holt Manifest-Icons credential-los (Fetch-Spec, AUTH-4).
+    Icons muessen auch ohne Cookie und ohne Operator-IP 200 zurueckgeben.
+    """
+    resp = seiten_client.get("/shell/%s/icon-192.png" % PANEL_ID, headers=_EXTERN)
+    assert resp.status_code == 200, (
+        "Shell-Icon muss public 200 zurueckgeben (AUTH-4, kein Gate), got %d"
+        % resp.status_code
+    )
+    assert resp.content_type.startswith("image/png"), (
+        "Shell-Icon muss image/png Content-Type liefern, got: %s" % resp.content_type
+    )
+
+
+def test_shell_sw_js_bleibt_gated_ohne_quelle(seiten_client):
+    """AC2: GET /shell/<panel_id>/sw.js ohne Auth-Quelle → 401 (nicht public).
+
+    sw.js ist kein inhaltlich oeffentliches Asset — der SW-Fetch traegt Credentials.
+    Sicherstellt, dass die Icons-public-Ausnahme NICHT auf sw.js ausgeweitet wurde.
+    """
+    resp = seiten_client.get("/shell/%s/sw.js" % PANEL_ID, headers=_EXTERN)
+    assert resp.status_code == 401, (
+        "sw.js muss hard-gated bleiben (401 ohne Quelle), got %d"
+        % resp.status_code
+    )
+
+
+def test_shell_icon_512_public_ohne_quelle_gibt_200(seiten_client):
+    """AC2: GET /shell/<panel_id>/icon-512.png ohne Auth-Quelle → 200 (AUTH-4).
+
+    Prueft alle Icon-Varianten: icon-512.png (any purpose) ebenfalls public.
+    """
+    resp = seiten_client.get("/shell/%s/icon-512.png" % PANEL_ID, headers=_EXTERN)
+    assert resp.status_code == 200, (
+        "icon-512.png muss public 200 zurueckgeben (AUTH-4), got %d"
+        % resp.status_code
+    )
+
+
+def test_shell_icon_maskable_public_ohne_quelle_gibt_200(seiten_client):
+    """AC2: GET /shell/<panel_id>/icon-maskable-512.png ohne Auth-Quelle → 200 (AUTH-4).
+
+    Prueft die maskable-Icon-Variante — ebenfalls credential-los via WebAPK-Installer.
+    """
+    resp = seiten_client.get("/shell/%s/icon-maskable-512.png" % PANEL_ID, headers=_EXTERN)
+    assert resp.status_code == 200, (
+        "icon-maskable-512.png muss public 200 zurueckgeben (AUTH-4), got %d"
+        % resp.status_code
+    )
+
+
+# ---------------------------------------------------------------------------
 # entry_path_probe — paired_at-Write-Proof (auth.md AUTH-2.a / OD3)
 # ---------------------------------------------------------------------------
 
