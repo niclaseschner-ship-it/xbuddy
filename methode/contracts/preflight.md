@@ -118,10 +118,12 @@ Ticket-Comment-Contract am Issue): erst Backfill, dann §A.1.
 - [ ] `read_context_files` dürfen sich zwischen parallelen Tracks
       überschneiden — sie sind nur Lese-Kontext für Stil-/Schnittstellen-
       Prüfung, nicht Edit-Erlaubnis.
-- [ ] Subagent wird mit `isolation: worktree` gestartet — Worktree-Pfad
-      steht NICHT im Subagent-Prompt; der Subagent findet ihn via `pwd` /
-      `git rev-parse --show-toplevel`.
-- [ ] **Orchestrator steht im Repo-Root — im selben Aktions-Batch wie der
+- [ ] **Dispatch-Modus bestimmt den Worktree-Pfad-Vertrag (PW-87 — zwei Modi):**
+- [ ] **(a) Auto-Worktree** (`isolation: worktree`, Standard-Parallel-Tracks):
+      Subagent wird mit `isolation: worktree` gestartet — Worktree-Pfad steht
+      NICHT im Subagent-Prompt; der Subagent findet ihn via `pwd` /
+      `git rev-parse --show-toplevel` (erwartet `/home/buddy/.claude/worktrees/agent-<id>`).
+      **Orchestrator steht im Repo-Root — im selben Aktions-Batch wie der
       Dispatch.** Unmittelbar vor jedem `isolation: worktree`-Dispatch eine
       **standalone** `cd /home/buddy/repos/xbuddy` (kein mehrzeiliges
       `cd X\n…`). Wichtig: Die Harness setzt die Shell-CWD zwischen Aktionen
@@ -131,6 +133,15 @@ Ticket-Comment-Contract am Issue): erst Backfill, dann §A.1.
       `/home/buddy` (kein Repo → Worktree-Erstellung scheitert mit „not in a
       git repository"). (Datenbelegt durch Vererbungstest 2026-06-02; Symptom
       Retro 2026-06-02a, 2×.)
+- [ ] **(b) Manueller RAT-21-Worktree** (claim-early, `.claude/worktrees/t<nr>`,
+      **kein** `isolation: worktree`): der Worktree existiert schon (bei Plan-Ende
+      alloziert). Der Orchestrator **nennt den Pfad explizit im Prompt** und der
+      **erste Bash-Call des Subagenten ist**
+      `cd /home/buddy/repos/xbuddy/.claude/worktrees/t<nr> && pwd` (positives Muster).
+      Das negative `Niemals cd`-Verbot des Auto-Modus gilt hier NICHT — der
+      `t<nr>`-Pfad liegt bewusst unter dem Repo-Root. Kein Orchestrator-`cd` vor
+      Dispatch nötig (es wird kein Auto-Worktree erzeugt). (PW-87: weak-model-
+      Fehllesung „keinen xbuddy-Pfad anfassen" → wrong_worktree, ~12 Retros.)
 
 ### A.3 Modellwahl plausibel?
 
@@ -246,7 +257,8 @@ Direkt nach Subagent-Rückkehr, vor Merge-Gate. Mangel → einmaliger Reject
 - [ ] `related_echoes_checked` mit einer Aussage pro Anker (oder Null-Fall, siehe B.5).
 - [ ] `entry_path_probe_result` gesetzt (siehe B.5).
 - [ ] `watchdog_hints` gesetzt (`lenses_relevant` + `diff_summary`).
-- [ ] `worktree_path` enthält `.claude/worktrees/agent-`.
+- [ ] `worktree_path` matcht eine der zwei Worktree-Familien gemäß **Schicht 1 S1.2**
+      (Auto `agent-<id>` ODER RAT-21-Manuell `t<nr>`, PW-87; Regex-Literal nur dort).
 - [ ] `lint_clean` gesetzt (`true` / `false` / `not_applicable`). Bei
       Python-Tracks mit `lint_command` (§2): `false` ohne Begründung → **Reject**
       (Selbst-Gate vor Watchdog, STYLE-2). Nicht-Python-Tracks: `not_applicable`.

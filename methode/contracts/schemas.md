@@ -62,13 +62,31 @@ standard_stop_rules:
 
 ### S1.2 Setup-Reflex-Template
 
-Allererster Bash-Call jedes Subagenten:
+Der **erste Bash-Call** hängt vom Dispatch-Modus ab (Gabel in `preflight.md §A.2`,
+PW-87) — pro Modus genau **ein** zulässiger Erst-Call:
 
-```bash
-pwd && git rev-parse --show-toplevel
-# Pfad MUSS .claude/worktrees/agent-… enthalten.
-# Wenn nicht: STOP (stop_reason: wrong_worktree).
+- **Auto** (`isolation: worktree`):
+  ```bash
+  pwd && git rev-parse --show-toplevel
+  ```
+- **Manuell** (RAT-21, claim-early, `t<nr>`, KEIN `isolation`): der Pfad steht im
+  Prompt; der Erst-Call cd't zuerst hinein — das `Niemals cd`-Verbot des Auto-Modus
+  gilt hier NICHT (der `t<nr>`-Pfad liegt bewusst unter dem Repo-Root):
+  ```bash
+  cd /home/buddy/repos/xbuddy/.claude/worktrees/t<nr> && pwd && git rev-parse --show-toplevel
+  ```
+
+Der aufgelöste Toplevel-Pfad MUSS EINE der zwei Worktree-Familien enthalten:
 ```
+  Auto:    /home/buddy/.claude/worktrees/agent-<id>
+  Manuell: /home/buddy/repos/xbuddy/.claude/worktrees/t<nr>
+```
+Regex (**SSoT — nur hier als Literal**; andere Stellen verweisen auf S1.2):
+- POSIX ERE (`grep -E`): `\.claude/worktrees/(agent-[^/[:space:]]+|t[0-9]+)`
+- Python `re`:           `\.claude/worktrees/(agent-[^/\s]+|t[0-9]+)`
+
+Prüf-Beispiele: `agent-7f3a`, `t1418` passieren; Shared-Root, leer, `tbd`, `tXYZ`
+fallen. Kein Match → STOP (`stop_reason: wrong_worktree`).
 
 ### S1.3 Programmer Execution Protocol — Feld-Vorlagen
 
@@ -179,7 +197,7 @@ handoff_form_pflichten:
     form: "letzter inhaltlicher Block, beginnt mit `contract_kind: handoff`"
     reject_klasse: fence_missing
   worktree_path:
-    form: "/home/buddy/.claude/worktrees/agent-<id>; nicht 'tbd', nicht leer"
+    form: "/home/buddy/.claude/worktrees/agent-<id> (Auto) ODER /home/buddy/repos/xbuddy/.claude/worktrees/t<nr> (RAT-21-Manuell, PW-87); nicht 'tbd', nicht leer"
     reject_klasse: worktree_path_unset
   files_changed:
     form: "exakt git diff --name-only origin/main...<branch>"
@@ -519,7 +537,7 @@ local_style_observed:
 #         additional_files: [...]
 #         reason: "..."
 
-worktree_path: /home/buddy/.claude/worktrees/agent-<id>
+worktree_path: /home/buddy/.claude/worktrees/agent-<id>   # Auto-Beispiel; RAT-21-Manuell wäre …/xbuddy/.claude/worktrees/t<nr> (siehe S1.2)
 branch: feature/137-wetter-routing
 
 files_changed:                      # exakt git diff --name-only origin/main...<branch>
@@ -593,7 +611,7 @@ oben — die SSoT für die Felder bleibt §3 selbst.
 | `evidence_unspecific` | `acceptance_criteria_met[*].evidence` ist Stub („siehe Tests", „passed", leer) | kein Bezug auf konkrete Datei/Test-ID/Befehl |
 | `probe_status_without_entry_point` | `entry_path_probe_result.status: probed` ohne `entry_point` UND `evidence`; oder `lower_level` ohne `reason` | Probe behauptet, aber kein konkreter Treffer/Beleg |
 | `files_changed_diff_mismatch` | `files_changed` ≠ `git diff --name-only origin/main...<branch>` | Liste aus Plan übernommen statt aus Diff |
-| `worktree_path_unset` | `worktree_path` ist leer, `tbd`, oder keine `/home/buddy/.claude/worktrees/agent-*`-Form | Subagent hat im Shared-Root gearbeitet |
+| `worktree_path_unset` | `worktree_path` ist leer, `tbd`, oder matcht **keine** der zwei Worktree-Familien gemäß **Schicht 1 S1.2** (Auto `agent-<id>` \| RAT-21-Manuell `t<nr>`, PW-87; Regex-Literal nur dort) | Subagent hat im Shared-Root gearbeitet |
 | `related_echoes_skipped` | §2 `related_echo_anchors` nicht-leer UND (a) `related_echoes_checked` leer ODER Cardinalität ≠ Anker-Zahl, ODER (b) `related_echoes_reason` ist gesetzt obwohl §2-Anker vorhanden | Anker übergangen / `reason`-Marker zweckentfremdet |
 
 Trifft eine Klasse, wird der Handoff vom Orchestrator abgelehnt (Backfill-
