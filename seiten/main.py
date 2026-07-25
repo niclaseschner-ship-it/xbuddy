@@ -1473,6 +1473,55 @@ def _lookup_display_id(panel_id):
         return None
 
 
+_HARD_RESET_HTML = """<!doctype html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Frisch laden</title></head>
+<body style="font-family:system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1rem;line-height:1.5">
+<h1>App wird frisch geladen</h1>
+<p id="s">Service-Worker und Zwischenspeicher werden geleert &mdash; dein Login (Cookie) bleibt erhalten.</p>
+<script>
+(function(){
+  var s=document.getElementById('s');
+  var TO="__TO__";
+  (async function(){
+    try{
+      if('serviceWorker' in navigator){
+        var regs=await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(function(r){return r.unregister();}));
+      }
+      if(window.caches){
+        var keys=await caches.keys();
+        await Promise.all(keys.map(function(k){return caches.delete(k);}));
+      }
+      s.textContent='Fertig \\u2014 lade frisch\\u2026';
+    }catch(e){ s.textContent='Konnte nicht ganz leeren ('+e+') \\u2014 lade trotzdem neu\\u2026'; }
+    setTimeout(function(){ location.replace(TO); }, 700);
+  })();
+})();
+</script>
+</body></html>"""
+
+
+@app.route("/api/v1/seiten/reset", methods=["GET"])
+# PUBLIC (AUTH-4): reiner Client-Reset (deregistriert ALLE Service-Worker +
+# loescht ALLE Cache-Storage-Eintraege dieses Origins), keine Datenexposition.
+# Muss auch bei klebendem/kaputtem SW laden -> liegt ausserhalb aller SW-Scopes
+# + no-store. Der xbuddy_session-Cookie bleibt unberuehrt (separater Speicher).
+# (#1461 — "wirklich echtes, hartes Neu-Laden von allem")
+def hard_reset_purge():
+    to = request.args.get("to", "/shell/paulas-panel-01")
+    # Open-Redirect-Schutz: nur eigene relative Pfade, Zeichen-Allowlist.
+    to = "".join(c for c in to if c.isalnum() or c in "/_-")
+    if not to.startswith("/") or to.startswith("//"):
+        to = "/shell/paulas-panel-01"
+    resp = make_response(_HARD_RESET_HTML.replace("__TO__", to))
+    resp.headers["Content-Type"] = "text/html; charset=utf-8"
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    return resp
+
+
 @app.route("/shell/<panel_id>", methods=["GET"])
 @require_dual_gate(mode="hard")  # AUTH-7b: Shell-Flotte gepairt (Nic/Paula-LAN) — hard enforced (T1448).
 def heim_shell(panel_id):
