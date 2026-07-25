@@ -89,9 +89,10 @@ alle sechs Sichten — kein Adapter-Code pro Buddy
   wirft `LLMCapabilityError`, falls der Slot-Vendor Bilder nicht kann. Required
   Capabilities (Boot-Fail-Minimum): `structured_output`, `system_message_distinct`
   (LLMP-3) — `multimodal_input` ist **nicht** im Required-Set (sonst würde jeder
-  Text-only-Singleshot-Slot beim Boot fatal). **Keine fünfte Sicht:** Foto-Analyse teilt
-  TABs strukturierten Singleshot-Vertrag (forced `tool_use` → Schema-dict); eine fünfte
-  Sicht käme erst bei eigenem Vertrag (ENTSCHEID-1262 → „KEINE fünfte Sicht").
+  Text-only-Singleshot-Slot beim Boot fatal). **Keine eigene Text-Sicht für Foto-Analyse:**
+  Foto-Analyse teilt TABs strukturierten Singleshot-Vertrag (forced `tool_use` → Schema-dict);
+  eine eigene Text-Sicht käme erst bei eigenem Vertrag (ENTSCHEID-1262 → „KEINE fünfte
+  Text-Sicht"); die fünfte und sechste Sicht sind `get_speech`/`get_transcription` (LLMP-S6).
 - **`get_chat(slot)` — Multi-Turn-Chat.** Konversation mit History und
   System-Prompt, ohne Tool-Use im Kern-Pfad. Heutiger Use-Case: kibuddy
   (Sokratisch-Dialog mit Kind, Multi-Turn-Kontext). Required Capabilities:
@@ -259,7 +260,7 @@ brechen → Slot fällt zurück auf direkten Azure-SDK-Call. Bau: #1410.
 > Service, kein eigener Port. RAT-20 bleibt in allen anderen Punkten vollständig
 > gültig (Lib-Form, keine Service-Fassade, keine HTTP-Fassade, LLMP-1).
 
-Die vier Public-Sichten (`get_chat`, `get_singleshot`, `get_completion`,
+Die vier Text-Sichten (`get_chat`, `get_singleshot`, `get_completion`,
 `get_agent`), der LLMP-5-Slot-Resolver, die Capability-Matrix (LLMP-3) und die
 Telemetrie (LLMP-S4) bleiben **unverändert**. LiteLLM ist Motor **unter** der
 Fassade — kein neuer API-Vertrag.
@@ -423,8 +424,9 @@ Re-Evaluierungs-Klausel; Re-Order Nic 2026-06-24).
 Jede Anforderung mit Code-Verhalten hat einen automatisierten Test
 (CLAUDE.md §6), ohne Netz. Mindest-Abdeckung:
 
-- **LLMP-S1** — die vier Sichten existieren und liefern sicht-spezifische
-  Objekte mit dokumentierten Methoden.
+- **LLMP-S1** — die vier Text-Sichten existieren und liefern sicht-spezifische
+  Objekte mit dokumentierten Methoden; `get_speech`/`get_transcription` (LLMP-S6)
+  decken die zwei Audio-Sichten ab.
 - **LLMP-S1 (Bild-Content)** — `complete_structured(..., images=[…])` reicht
   Bild-Blöcke an den Vendor durch; `images=None` erzeugt einen byte-identischen
   Text-only-Call (hoerspiel-Pfad unverändert). `images=[…]` gegen einen Fake-Vendor
