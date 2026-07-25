@@ -26,6 +26,7 @@ _REPO_ROOT = os.path.dirname(_SEITEN_DIR)
 sys.path.insert(0, _REPO_ROOT)
 
 from seiten import main as seiten_main  # noqa: E402
+from seiten import pwa_mantel  # noqa: E402
 
 # Pilot-IDs — nur in Tests, nie im Produktiv-Code (SHELL-9).
 PANEL_ID = "mias-panel-01"
@@ -513,4 +514,27 @@ def test_shell_pwa_ac3_panel_unangetastet():
     assert changed == "", (
         "SHELL-PWA AC3 stop_rule: controller/app-panel/app.js darf NICHT geaendert sein "
         "(PANEL-12-Grid/JS unpetraendert — nur style.css fuer Container-Query erlaubt)"
+    )
+
+
+# ============================================================
+#  test_sw_scope_in_html_aus_registry — T1324 / PWAM-3
+# ============================================================
+
+def test_sw_scope_in_html_aus_registry(client):
+    """T1324 / PWAM-3: gerendertes HTML enthaelt den SW-Scope aus REGISTRY['shell'].
+
+    Kein hartkodiertes Literal im Template — {{ sw_scope }} wird mit dem
+    pwa_mantel.REGISTRY['shell'].sw_scope-Wert substituiert.
+    Muster analog test_connector.py::test_ac3_sw_scope_in_html_aus_registry.
+    T1448: Operator-IP als Auth-Quelle (opt-in).
+    """
+    body = client.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS).get_data(as_text=True)
+    # Jinja2-Platzhalter muss ersetzt sein
+    assert "{{ sw_scope }}" not in body, (
+        "HTML enthaelt noch '{{ sw_scope }}'-Platzhalter — Jinja2-Substitution fehlgeschlagen"
+    )
+    erwartet_scope = pwa_mantel.REGISTRY["shell"].sw_scope
+    assert erwartet_scope in body, (
+        f"SW-Scope {erwartet_scope!r} aus REGISTRY fehlt im gerenderten HTML (PWAM-3 / T1324)"
     )
