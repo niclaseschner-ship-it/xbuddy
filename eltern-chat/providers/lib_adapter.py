@@ -63,20 +63,13 @@ class LibAgentAdapter:
     def __init__(self, provider, provider_model=""):
         # Lokaler Import: bricht keinen Zyklus, hält den Modulkopf schlank und
         # spiegelt das Lazy-Muster der Alt-Adapter (anthropic/httpx lazy).
-        from onboarding_store import vendor_slug_for_adapter
+        from onboarding_store import vendor_slug_for_adapter, zd_name_provider_api_key
 
-        # Slot 2 (#1449/#1452): der Agent-Pfad fährt jetzt fest über den
-        # litellm-Motor — EIN Vendor-Slot `eltern-chat-litellm-api-key`, nicht
-        # mehr der brand-spezifische `eltern-chat-<vendor>-api-key`. Der Motor
-        # (LiteLLM) routet intern auf das effektive Modell (claude-opus-4-7); der
-        # Slot bindet nur den API-Key im Zugangsdaten-Speicher (ZD-5).
-        slot = "eltern-chat-litellm-api-key"
-        # `vendor_slug_for_adapter` bleibt NUR für den Alt-Modell-Default-Lookup:
-        # `claude` → `anthropic` → `claude-opus-4-7` (EC-15, exakt der Alt-Pfad
-        # claude.py:36). Der Slug wird NICHT mehr in den Slot-Namen gebaut.
         vendor = vendor_slug_for_adapter(provider)
+        slot = zd_name_provider_api_key(provider)
         # Effektives Modell: konfiguriertes Modell, sonst Anbieter-Default des
-        # Brand-Vendors (EC-15) — bleibt effektiv `claude-opus-4-7`.
+        # Brand-Vendors (EC-15) — exakt der Alt-Pfad (claude.py:36 /
+        # mistral.py:DEFAULT_MODEL).
         self._model = (provider_model or "").strip() or _VENDOR_DEFAULT_MODEL.get(vendor, "")
         self._provider = provider
         self._slot = slot
@@ -181,19 +174,12 @@ class LibAgentAdapter:
         return response
 
     def _to_provider_usage(self, usage):
-        """Neutrale `usage` → `ProviderUsage` — alle Vendor-Formen (T1085/#1452).
+        """Neutrale `usage` → `ProviderUsage` — beide Vendor-Formen (T1085-Befund).
 
-        Drei Formen:
-          - Mistral: DICT (`prompt_tokens`/`completion_tokens`, cache=0).
-          - Anthropic: RAW-Objekt (`input_tokens`/`output_tokens`/
-            `cache_read_input_tokens`/`cache_creation_input_tokens`).
-          - LiteLLM (Slot 2, #1452): RAW-Objekt in OpenAI-Form
-            (`prompt_tokens`/`completion_tokens`), Anthropic-Cache-Zahlen additiv
-            (`cache_read_input_tokens`/`cache_creation_input_tokens`, Prompt-
-            Caching-Passthrough). Darum liest der getattr-Zweig BEIDE Token-
-            Namen — `input_tokens` bevorzugt, sonst `prompt_tokens` (analog
-            output). Fehlt usage komplett → None (wie claude.py: dann hängt
-            _call_provider keinen ProviderCall an).
+        Anthropic liefert ein RAW-Objekt (`getattr` input_tokens/output_tokens/
+        cache_read_input_tokens/cache_creation_input_tokens), Mistral ein DICT
+        (`prompt_tokens`/`completion_tokens`, cache=0). Fehlt usage komplett →
+        None (wie claude.py: dann hängt _call_provider keinen ProviderCall an).
         """
         if usage is None:
             return None
@@ -206,18 +192,10 @@ class LibAgentAdapter:
                 cache_creation_tokens=int(usage.get("cache_creation_tokens", 0) or 0),
                 model_id=self._model,
             )
-        # RAW-Objekt (Anthropic ODER LiteLLM/OpenAI-förmig). Token-Namen je
-        # nach Backend: Anthropic `input_tokens`, LiteLLM `prompt_tokens` —
-        # der bevorzugte Name gewinnt, sonst der Alternativname.
-        input_tokens = getattr(usage, "input_tokens", None)
-        if input_tokens is None:
-            input_tokens = getattr(usage, "prompt_tokens", 0)
-        output_tokens = getattr(usage, "output_tokens", None)
-        if output_tokens is None:
-            output_tokens = getattr(usage, "completion_tokens", 0)
+        # Anthropic-Form: RAW-Objekt mit getattr-Feldern.
         return ProviderUsage(
-            input_tokens=int(input_tokens or 0),
-            output_tokens=int(output_tokens or 0),
+            input_tokens=int(getattr(usage, "input_tokens", 0) or 0),
+            output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
             cache_read_tokens=int(getattr(usage, "cache_read_input_tokens", 0) or 0),
             cache_creation_tokens=int(getattr(usage, "cache_creation_input_tokens", 0) or 0),
             model_id=self._model,
