@@ -9,11 +9,16 @@ und **URL-1** (die vier Top-Level-Prefixe).
 
 ## Was die Config tut
 
-nginx terminiert TLS auf **Port 8443** mit dem CA-signierten
-Server-Zertifikat (`tools/ca/make-ca.sh`) und reverse-proxyt jede Anfrage
-nach Pfad-Prefix an die getrennten Komponenten-Prozesse. Die Komponenten
-bleiben eigenständige Prozesse hinter dem Proxy — same-origin nach außen,
-getrennt nach innen.
+nginx terminiert TLS auf **Port 8443** mit dem **Tailscale-LE-Zertifikat**
+(`tailscale cert`, erneuert durch `xbuddy-cert-renew.timer`, #1458) und
+reverse-proxyt jede Anfrage nach Pfad-Prefix an die getrennten
+Komponenten-Prozesse. Die Komponenten bleiben eigenständige Prozesse
+hinter dem Proxy — same-origin nach außen, getrennt nach innen.
+
+> **self-signed (make-ca.sh) abgelöst (#1458):** Das frühere Dev-CA-Zertifikat
+> unter `/etc/xbuddy/tls/` wird nicht mehr verwendet. Stattdessen greift nginx
+> auf das von Tailscale ausgestellte Let's-Encrypt-Cert zurück, das ohne CA-
+> Install auf den Endgeräten gültig ist.
 
 ## Routing-Tabelle
 
@@ -50,29 +55,57 @@ bewusst **nicht** Teil dieser Origin.
 Die folgenden Schritte führt der Instanz-Betreiber aus; sie sind kein Teil
 des Repos.
 
-1. **Server-Zertifikat erzeugen** (falls noch nicht geschehen):
+1. **LE-Zertifikat holen** (Tailscale muss laufen, FQDN bekannt):
 
    ```bash
-   tools/ca/make-ca.sh --san "DNS:xbuddy-hub.local,IP:<pi-lan-ip>"
+   FQDN="buddyboard.taile235cf.ts.net"   # Instanz-FQDN anpassen
+   sudo mkdir -p /var/lib/tailscale/certs
+   sudo tailscale cert \
+       --cert-file /var/lib/tailscale/certs/${FQDN}.crt \
+       --key-file  /var/lib/tailscale/certs/${FQDN}.key \
+       ${FQDN}
+   sudo chmod 640 /var/lib/tailscale/certs/${FQDN}.key
+   sudo chown root:www-data /var/lib/tailscale/certs/${FQDN}.key
    ```
 
-2. **Zertifikat + Schlüssel ablegen**, am Ort, auf den die Config zeigt:
+   Das Cert ist 90 Tage gültig; der Renewal-Timer (Schritt 2) erneuert es
+   automatisch, sobald weniger als 30 Tage Restlaufzeit verbleiben.
+
+2. **Renewal-Timer installieren** (einmalig, läuft dann täglich):
 
    ```bash
-   sudo mkdir -p /etc/xbuddy/tls
-   sudo cp tools/ca/out/server-cert.pem /etc/xbuddy/tls/
-   sudo cp tools/ca/out/server-key.pem  /etc/xbuddy/tls/
-   sudo chmod 600 /etc/xbuddy/tls/server-key.pem
-   ```
+   FQDN="buddyboard.taile235cf.ts.net"   # Instanz-FQDN anpassen
 
-   Weichen die Ablage-Pfade ab, die beiden `ssl_certificate*`-Zeilen in
-   `xbuddy-origin.conf` entsprechend anpassen.
+   # Units ins System kopieren und FQDN-Platzhalter ersetzen
+   sudo cp deploy/nginx/xbuddy-cert-renew.service /etc/systemd/system/
+   sudo cp deploy/nginx/xbuddy-cert-renew.timer   /etc/systemd/system/
+   sudo sed -i "s/__XBUDDY_TAILSCALE_FQDN__/${FQDN}/g" \
+       /etc/systemd/system/xbuddy-cert-renew.service
+
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now xbuddy-cert-renew.timer
+
+   # Sofort-Test (optional):
+   sudo systemctl start xbuddy-cert-renew.service
+   sudo systemctl status xbuddy-cert-renew.service
+   ```
 
 3. **Config installieren** und nginx neu laden — über das Deploy-Skript
    `install.sh` (#164):
 
    ```bash
+   FQDN="buddyboard.taile235cf.ts.net"   # Instanz-FQDN anpassen
+
+   # Live-FQDN merken (aus laufender Conf, falls schon deployed):
+   # FQDN=$(grep -oP '[\w.-]+\.ts\.net' /etc/nginx/conf.d/xbuddy-origin.conf | head -1)
+
    ./deploy/nginx/install.sh
+
+   # Platzhalter ersetzen (sed-Fill-Schritt, STOP-DEPLOY-WARNUNG in conf):
+   sudo sed -i "s/__XBUDDY_TAILSCALE_FQDN__/${FQDN}/g" \
+       /etc/nginx/conf.d/xbuddy-origin.conf
+
+   sudo nginx -t && sudo systemctl reload nginx
    ```
 
    Das Skript ist explizit, idempotent und reload-sicher:
@@ -98,11 +131,8 @@ des Repos.
    nur auf `127.0.0.1` — von außen ist allein die Origin auf `:8443`
    erreichbar.
 
-5. **Root-CA auf den Geräten** der Familie installieren, damit Browser
-   dem Server-Cert vertrauen (siehe `tools/ca/README.md`).
-
 `nginx -t` braucht Root-Rechte und prüft auch, ob die referenzierten
-Zertifikats-Dateien existieren — daher erst nach Schritt 2 ausführbar.
+Zertifikats-Dateien existieren — daher erst nach Schritt 1 ausführbar.
 
 ## Icon-Bibliothek seeden (Ops — durch Nic)
 
