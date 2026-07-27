@@ -100,24 +100,18 @@ def test_shell1_route_html_enthaelt_panel_id(client):
 #  test_shell2_lookup_display_id — SHELL-2
 # ============================================================
 
-def test_shell2_lookup_display_id(monkeypatch):
-    """SHELL-2: _lookup_display_id wird mit panel_id aufgerufen; Ergebnis im HTML.
-    T1448: Operator-IP als Auth-Quelle (opt-in)."""
-    calls = []
-
-    def fake_lookup(pid):
-        calls.append(pid)
-        return DISPLAY_ID
-
-    monkeypatch.setattr(seiten_main, "_lookup_display_id", fake_lookup)
-    seiten_main.app.config["TESTING"] = True
-    c = _auth_client()
-    resp = c.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS)
-    assert resp.status_code == 200
-    assert calls == [PANEL_ID], "Lookup muss genau einmal mit panel_id aufgerufen werden"
-    body = resp.get_data(as_text=True)
-    # display_id aus Lookup muss im rechten Iframe-Src erscheinen
-    assert "/display/" + DISPLAY_ID + "/" in body
+def test_shell4_pane_bindet_seiten_sse(client):
+    """SHELL-4 (RAT-31 E2): Das rechte Pane hat eine EIGENE EventSource auf den
+    seiten-seitigen SSE-Stream /shell/<panel_id>/events — kein statischer
+    /display/<display_id>/-Iframe mehr (SHELL-2 überholt durch RAT-31)."""
+    body = client.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS).get_data(as_text=True)
+    # Same-origin SSE-Stream statt Router-Lookup-Iframe:
+    assert "/shell/" + PANEL_ID + "/events" in body, "Same-origin SSE-Stream-URL fehlt"
+    assert "EventSource" in body, "Eigene EventSource im rechten Pane fehlt (SHELL-4 RAT-31 E2)"
+    # Kein statischer Display-Client-Iframe mehr — der swap läuft über iframe.src:
+    assert "/display/" + DISPLAY_ID + "/" not in body, (
+        "Rechtes Pane darf keinen statischen /display/<display_id>/-Iframe mehr tragen"
+    )
 
 
 def test_shell2_lookup_real_url(monkeypatch):
@@ -166,28 +160,28 @@ def test_shell2_lookup_gibt_none_bei_404(monkeypatch):
 #  test_shell3_zwei_iframes_src — SHELL-3
 # ============================================================
 
-def test_shell3_zwei_iframes_src(client):
-    """SHELL-3: HTML enthaelt genau zwei Iframes (Panel-Nav + Buddy-View) mit korrekten srcs.
+def test_shell3_zwei_iframes(client):
+    """SHELL-3: HTML enthaelt genau zwei Iframes (Panel-Nav-Rail + Buddy-Pane).
+    RAT-31 E2: der Panel-Nav-Iframe trägt weiter seinen statischen src, das
+    rechte Buddy-Pane bekommt seinen src erst per SSE-Swap (kein statischer src).
     T1448: Operator-IP als Auth-Quelle (opt-in)."""
     body = client.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS).get_data(as_text=True)
     assert "/controller/app-panel/" + PANEL_ID + "/" in body, "Linker Panel-Iframe-Src fehlt"
-    assert "/display/" + DISPLAY_ID + "/" in body, "Rechter Display-Iframe-Src fehlt"
-    assert body.count("<iframe") == 2, "Genau zwei Iframes erwartet"
+    assert 'id="buddy-pane"' in body, "Rechtes Buddy-Pane-Iframe fehlt"
+    assert body.count("<iframe") == 2, "Genau zwei Iframes erwartet (Rail + Buddy-Pane)"
 
 
-def test_shell3_kein_iframe_ohne_display(monkeypatch):
-    """SHELL-3: Kein Display-Iframe wenn Lookup None liefert — sichtbarer Fehler.
-    T1448: Operator-IP als Auth-Quelle (opt-in)."""
-    monkeypatch.setattr(seiten_main, "_lookup_display_id", lambda pid: None)
-    seiten_main.app.config["TESTING"] = True
-    c = _auth_client()
-    body = c.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS).get_data(as_text=True)
-    # Linker Panel-Iframe bleibt
+def test_shell4_pane_ohne_statischen_src(client):
+    """SHELL-4 (RAT-31 E2): Das rechte Buddy-Pane trägt KEINEN statischen src —
+    der Inhalt kommt ausschließlich per SSE-getriebenem iframe.src-Swap. Der
+    frühere display_id-gegatete Fehler-Pfad (SHELL-2) entfällt (RAT-31)."""
+    body = client.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS).get_data(as_text=True)
+    # Linker Panel-Iframe bleibt unverändert:
     assert "/controller/app-panel/" + PANEL_ID + "/" in body
-    # Kein rechter Display-Iframe
+    # Kein statischer /display/-Iframe-Src im initialen HTML:
     assert "/display/" not in body
-    # Sichtbarer Fehler vorhanden (kein stiller Fallback)
-    assert "nicht bekannt" in body or "zugeordnet" in body or "fehler" in body.lower()
+    # Der Swap läuft über pane.src im Empfänger-Script:
+    assert "pane.src" in body, "iframe.src-Swap-Empfänger fehlt (SHELL-5 RAT-31 E2)"
 
 
 def test_shell3_rail_css_enthaelt_280px(client):
