@@ -107,3 +107,34 @@ die betroffenen Services ab — **geteilter Mapper** mit
 `is-active` **und** Service-Start-TS > Merge-TS **und** `/healthz`==200
 (Falsch-grün-Schutz). Der Release-Worktree (RAT-14-b2) bleibt außerhalb Stufe 1;
 Runner-Health (#1113) ist eine eigene Autonomie-Zeile mit 48h-Dry-Run.
+
+### SVC-7 — Startup-Secret-Preflight: fehlende Secrets brechen sichtbar, nicht still
+
+Jeder Service, der zum Betrieb bestimmte Secrets/Zugangsdaten braucht (Bot-Token,
+Anbieter-Keys, o. Ä.), prüft **beim Start**, ob alle von ihm benötigten Secrets
+auflösbar sind — aus dem zentralen Zugangsdaten-Store bzw. dem definierten
+Env-Fallback. Fehlt eines, **failt der Start sichtbar und laut** (Prozess startet
+nicht bzw. beendet sich mit klarer Fehlermeldung im Log), statt request-bereit zu
+werden und erst beim ersten Nutzer-Request still einen `500` zu liefern.
+
+**Warum.** Der #1440-Vorfall (kibuddy hing 17 Tage vom `ELTERNCHAT_BOT_TOKEN` ab,
+der Deploy rollte ihn nie aus → `/frage` gab für **alle** Nutzer `500`, 17 Tage
+unbemerkt) zeigte: eine reine Onboarding-/Runbook-Disziplin (»denk daran, das
+Secret mitzurollen«) bricht in der Praxis. Die Prüfung gehört **mechanisch an den
+Service selbst** (fail-fast beim Start), nicht in einen Handzettel.
+
+**Form.**
+
+- Der Service kennt seine **Pflicht-Secrets** (Liste der benötigten Slots/Env-Namen)
+  und löst sie beim Start auf. Nicht-auflösbar → **kein** `is-active`, klare
+  Log-Zeile (`FEHLT: <slot/env-name>`).
+- Der Preflight nutzt dieselbe Auflösungsreihenfolge wie der Laufzeit-Zugriff
+  (Store bevorzugt, Env als Fallback — siehe zugangsdaten.md und E-ONB-5).
+- **Nur Präsenz**, kein Gültigkeits-Deep-Check (kein Test-Call gegen den Anbieter);
+  ein präsentes-aber-falsches Secret ist ein anderes Problem.
+- Greift mit **SVC-6** ineinander: der Deploy-Regelkreis verifiziert bereits
+  `is-active` + `/healthz`==200; ein am Preflight gescheiterter Service wird damit
+  automatisch als roter Deploy sichtbar, statt als stiller Dauerausfall.
+
+Präzedenz/Anlass: #1440 (kibuddy-Bot-Token-Lücke), #1447 (diese Konvention),
+Nic-Setzung 2026-07-25 (Variante A: »Dienst prüft beim Start selbst«).
