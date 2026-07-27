@@ -305,6 +305,32 @@ Folge-Punkte; Convention-Delta-Runde noch ausstehend).
 Bau-Ticket: #1316. Ratifiziertes Paket:
 `brainstorm/berater-runde/20260705-2223-RATIFIZIERT-1316-litellm-rat26.md`.
 
+### LLMP-S13 — `mistral/`-Modell-Präfix zentral normalisieren; Store-Slots anbieter-benannt
+
+**Anlass:** Deploy-Regression #1452 — LiteLLM erwartet für Mistral-Modelle den
+Modellnamen mit dem Präfix `mistral/`; ohne diese Normalisierung schlug ein
+Deploy fehl und musste zurückgerollt werden.
+
+**Präfix-Normalisierung — zentral (Nic-Setzung 2026-07-25, Variante A, #1463).**
+Die Ergänzung des anbieter-spezifischen Modell-Präfixes (`mistral/…`) passiert
+**zentral in der Modell-Auflösung, vor den `get_*`-Sichten** — an **einer** Stelle
+für alle Anbieter, **nicht** pro Vendor-File. So gibt es genau einen Ort, an dem
+Modellnamen anbieter-korrekt normalisiert werden, und der Aufrufer muss das
+Präfix nicht kennen.
+
+**Store-Slot-Benennung — nach Anbieter (Nic-Setzung 2026-07-27, #1463).**
+Die Zugangsdaten-Store-Slots für Anbieter-Keys werden **nach dem Anbieter**
+benannt (`Mistral`, `Claude`, …) — kein kompliziertes Pro-App-Pro-Backend-Slug.
+**Welchen Anbieter-Zugang eine App nutzt, ist ein app-lokaler Parameter**
+(App-Config): jede App entscheidet selbst, welchen Zugang sie sich aus dem
+zentralen Speicher holt. Dies gilt als Interim, **bis der begonnene zentrale
+Routing-/Zugangs-Service** diese Wahl übernimmt; danach kann die Zuordnung dorthin
+wandern. Löst die parse_slot-Vendor-Slug-Mehrdeutigkeit, die #1463 aufwarf.
+
+**Setzt RAT-26/LLMP-S12 um** (keine Re-Litigation) — konkretisiert nur die
+mistral-Präfix-Verortung und die Slot-Namen für die Slot-2-Migration
+(`eltern-chat` dual-provider). Bau: #1463.
+
 ## 5. Migrationspfad (Buddy-Abfolge)
 
 ### LLMP-S7 — Spike-Stufe-1 vor zweitem Buddy
