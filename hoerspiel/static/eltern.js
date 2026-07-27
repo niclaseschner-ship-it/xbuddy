@@ -24,9 +24,9 @@ const KIND_ID = (() => {
 })();
 
 // ── KIND_IDS_V1: hörspiel-lokale Instanz-Liste (HSP-35 / HSP-43, #973 / #1263) ──
-// Treibt Folgen-Tab-Aggregation UND den audio_ziel-UI-Kollaps. Kopie der Instanz-
-// Liste (kind_id-Only) — Muster seiten `_HSP_INSTANZEN`, keine Registry, kein
-// API-Endpoint (in-file, HSP-43). FAM-7-Generalisierung bleibt Folge-Ticket.
+// Treibt Folgen-Tab-Aggregation. Kopie der Instanz-Liste (kind_id-Only) —
+// Muster seiten `_HSP_INSTANZEN`, keine Registry, kein API-Endpoint (in-file, HSP-43).
+// FAM-7-Generalisierung bleibt Folge-Ticket.
 const KIND_IDS_V1 = ["mia", "finn", "emil"]; // +emil #1263 (HSP-43)
 
 // ── MAD-7 Auth-Header ────────────────────────────────────────────────────────
@@ -216,12 +216,6 @@ async function _setzeResume(kindId, albumId, trackPos) {
 
 // ── Reiter Einstellungen (HSP-34) ────────────────────────────────────────────
 
-// HSP-41 / HSP-43 — UI-Kollaps-State: kollabierter audio_ziel-Wert (gemeinsam
-// für ALLE Instanzen aus KIND_IDS_V1) plus Drift-Indikator, wenn die Backend-
-// Configs auseinander laufen. `perKind` ist eine generische kind_id→Wert-Map
-// (kein fester mia/finn-Zweikeys mehr, #1263).
-let _audioZielKollabiert = { value: null, drift: false, perKind: {} };
-
 /** Kind-Name für Anzeige (Capitalize der kind_id, HSP-43 generisch). */
 function _kindName(kindId) {
   return String(kindId || "").charAt(0).toUpperCase() + String(kindId || "").slice(1);
@@ -230,35 +224,11 @@ function _kindName(kindId) {
 async function _ladeEinstellungen() {
   const container = document.getElementById("panel-einstellungen");
   try {
-    // Single-kind_id-Config (für die kind-spezifischen Felder wie playback_tempo)
     const config = await _holeConfig();
     _serverConfig = config;
     _editConfig = { ...config };
 
-    // HSP-41/43 UI-Kollaps: alle Instanz-Configs holen und audio_ziel kollabieren.
-    try {
-      const beide = await _holeBeideConfigs();
-      _audioZielKollabiert.perKind = {};
-      for (const kindId of KIND_IDS_V1) {
-        _audioZielKollabiert.perKind[kindId] = beide[kindId]?.audio_ziel ?? null;
-      }
-      const werte = Object.values(beide).filter(c => c).map(c => c.audio_ziel);
-      const unique = [...new Set(werte)];
-      _audioZielKollabiert.drift = unique.length > 1;
-      _audioZielKollabiert.value = _audioZielKollabiert.drift
-        ? (config.audio_ziel ?? "display")  // bei Drift: aktuelle kind_id-Wert anzeigen
-        : (werte[0] ?? "display");
-    } catch (e) {
-      console.warn("eltern.js: Kollaps-Fetch fehlgeschlagen — Fallback Single-Config", e);
-      _audioZielKollabiert.value = config.audio_ziel ?? "display";
-      _audioZielKollabiert.drift = false;
-    }
-
     _rendereEinstellungen(container, config);
-
-    if (_audioZielKollabiert.drift) {
-      zeigeToast("Audio-Ausgabe weicht zwischen den Kindern ab — Speichern setzt alle gleich.", false);
-    }
   } catch (err) {
     container.innerHTML = '<p class="lade-hinweis">Einstellungen konnten nicht geladen werden.</p>';
     console.error("eltern.js: Einstellungen Ladefehler", err);
@@ -274,11 +244,7 @@ function _rendereEinstellungen(container, config) {
     default_voice: config.default_voice ?? "shimmer",
     llm_provider: config.llm_provider ?? "claude",
     llm_model: config.llm_model ?? "",
-    // HSP-41 — audio_ziel ist global für Mia+Finn (UI-Kollaps):
-    // Wert wird aus _audioZielKollabiert ermittelt, kommt aus beiden Configs.
-    audio_ziel: _audioZielKollabiert.value || (config.audio_ziel ?? "display"),
   };
-  const audioZielVerfuegbar = config.audio_ziel_verfuegbar || ["display", "panel"];
 
   const providerVerfuegbar = config.provider_verfuegbar || [];
   const modelleJeAnbieter = config.modelle_je_anbieter || {};
@@ -339,30 +305,6 @@ function _rendereEinstellungen(container, config) {
       '<div class="voice-kacheln" id="voice-kacheln">' + voiceKachelnHtml + '</div>' +
     '</div>' +
 
-    // HSP-41 — Audio-Ausgabe (Display/Panel-Wahl, global für Mia+Finn)
-    '<div class="einstellung-karte">' +
-      '<div class="einstellung-label">Audio-Ausgabe' +
-        (_audioZielKollabiert.drift ?
-          ' <span style="color:#c00; font-size:0.85em;">(' +
-            KIND_IDS_V1.map(kindId =>
-              esc(_kindName(kindId)) + ': ' +
-              esc(_audioZielKollabiert.perKind[kindId] || "?")).join(", ") +
-          ')</span>'
-          : '') +
-      '</div>' +
-      '<div class="einstellung-wert">Wo der Ton beim Tippen am Kind-Tablet rauskommt (gilt für alle Instanzen)</div>' +
-      '<div class="voice-kacheln" id="audio-ziel-kacheln">' +
-        audioZielVerfuegbar.map(z => {
-          const pressed = (z === _editConfig.audio_ziel) ? "true" : "false";
-          const label = z === "display" ? "Display (Kind-Tablet)"
-                      : z === "panel" ? "Panel (Wand-/Eltern-Gerät)"
-                      : esc(z);
-          return '<button type="button" class="voice-kachel" data-audio-ziel="' + esc(z) + '" ' +
-                 'aria-pressed="' + pressed + '">' + label + '</button>';
-        }).join("") +
-      '</div>' +
-    '</div>' +
-
     // LLM (Anbieter + Modell)
     (providerVerfuegbar.length > 0 ?
     '<div class="einstellung-karte">' +
@@ -375,7 +317,7 @@ function _rendereEinstellungen(container, config) {
 
     // Hinweis-Block
     '<p class="einstellung-hinweis">Pausen, Stimme und Anbieter+Modell wirken bei der ' +
-    '<strong>nächsten Folge</strong> — Playback-Tempo und Audio-Ausgabe wirken <strong>sofort</strong>, ' +
+    '<strong>nächsten Folge</strong> — Playback-Tempo wirkt <strong>sofort</strong>, ' +
     'auch für bestehende Alben.</p>' +
 
     // Sticky Speichern-Knopf
@@ -427,19 +369,6 @@ function _rendereEinstellungen(container, config) {
     _aktualisiereSpeichernBtn();
   });
 
-  // HSP-41 — Audio-Ziel-Kacheln (Display/Panel)
-  const audioZielContainer = document.getElementById("audio-ziel-kacheln");
-  audioZielContainer && audioZielContainer.addEventListener("click", (e) => {
-    const btn = e.target.closest(".voice-kachel[data-audio-ziel]");
-    if (!btn) return;
-    _editConfig.audio_ziel = btn.dataset.audioZiel;
-    audioZielContainer.querySelectorAll(".voice-kachel").forEach(b => {
-      b.setAttribute("aria-pressed",
-        b.dataset.audioZiel === _editConfig.audio_ziel ? "true" : "false");
-    });
-    _aktualisiereSpeichernBtn();
-  });
-
   // Anbieter-Dropdown → Modell-Dropdown neu befüllen
   const selectAnbieter = document.getElementById("select-anbieter");
   selectAnbieter && selectAnbieter.addEventListener("change", () => {
@@ -480,8 +409,6 @@ function _hatDiff() {
   for (const k of felder) {
     if (String(_editConfig[k]) !== String(_serverConfig[k])) return true;
   }
-  // HSP-41 — audio_ziel hat eigene Drift-Logik (Kollaps-Wert vergleichen).
-  if (String(_editConfig.audio_ziel) !== String(_audioZielKollabiert.value)) return true;
   return false;
 }
 
@@ -489,7 +416,7 @@ async function _onSpeichern() {
   const btn = document.getElementById("speichern-btn");
   if (btn) btn.disabled = true;
 
-  // Nur geänderte Felder senden — kind-spezifische Felder.
+  // Nur geänderte Felder senden.
   const patchEinzeln = {};
   const felder = ["playback_tempo", "pause_absatz_sek", "pause_titel_sek",
                   "default_voice", "llm_provider", "llm_model"];
@@ -499,12 +426,7 @@ async function _onSpeichern() {
     }
   }
 
-  // HSP-41 — audio_ziel wird per UI-Kollaps an BEIDE Configs geschrieben.
-  const audioZielGeaendert =
-    String(_editConfig.audio_ziel) !== String(_audioZielKollabiert.value);
-
   try {
-    // Schritt 1: Kind-spezifische Felder (single PATCH).
     if (Object.keys(patchEinzeln).length > 0) {
       const resp = await _patchConfig(patchEinzeln);
       if (!resp.ok) {
@@ -516,38 +438,10 @@ async function _onSpeichern() {
       }
       const neueConfig = await resp.json();
       _serverConfig = neueConfig;
-      _editConfig = { ...neueConfig, audio_ziel: _editConfig.audio_ziel };
+      _editConfig = { ...neueConfig };
     }
 
-    // Schritt 2: audio_ziel an alle V1-Kinder parallel.
-    if (audioZielGeaendert) {
-      const ergebnisse = await _patchBeideConfigs({ audio_ziel: _editConfig.audio_ziel });
-      const fehler = [];
-      for (const kindId of KIND_IDS_V1) {
-        const r = ergebnisse[kindId];
-        // Nicht-provisionierte Instanz (unerreichbar / 404) soft-skippen — #1263 Befund-4.
-        // Eine fehlende emil-Instanz darf mia/finn-Speichern nicht als Fehler melden.
-        if (!r.ok && (r.status === 0 || r.status === 404)) {
-          console.warn("eltern.js: audio_ziel-Patch für " + kindId + " nicht erreichbar (status " + r.status + ") — übersprungen");
-          continue;
-        }
-        if (!r.ok) {
-          fehler.push(kindId + ": " + (r.body.fehler || "HTTP " + r.status));
-        }
-      }
-      if (fehler.length > 0) {
-        zeigeToast("Audio-Ausgabe teilweise gesetzt — Fehler: " + fehler.join("; "), true);
-      } else {
-        // Kollaps-State aktualisieren auf den neuen Wert (alle Instanzen gleich).
-        _audioZielKollabiert.value = _editConfig.audio_ziel;
-        for (const kindId of KIND_IDS_V1) {
-          _audioZielKollabiert.perKind[kindId] = _editConfig.audio_ziel;
-        }
-        _audioZielKollabiert.drift = false;
-      }
-    }
-
-    zeigeToast("✓ Gespeichert — Playback-Tempo + Audio-Ausgabe wirken sofort, Stimme/Pausen/Modell ab nächster Folge.");
+    zeigeToast("✓ Gespeichert — Playback-Tempo wirkt sofort, Stimme/Pausen/Modell ab nächster Folge.");
     if (btn) btn.disabled = true;
   } catch (err) {
     zeigeToast("Buddy nicht erreichbar — versuch es gleich nochmal.", true);
