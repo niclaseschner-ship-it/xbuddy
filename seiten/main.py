@@ -442,12 +442,8 @@ def get_seiten_uebersicht():
         inventar,
         heim_origin=runtime["heim_origin"],
         tailscale_origin=runtime["tailscale_origin"],
+        funnel_origin=runtime["funnel_origin"],
     )
-    # SREG-7 dritte Origin: funnel_origin additiv in den Layout-Kontrakt
-    # — render.py benoetigt keine Kenntnis (keine URL-Bau-Aenderung fuer die
-    # Uebersichts-Seite selbst); der Wert ist fuer SREG-5-Skill-Konsumenten
-    # und die Mini-App-Uebersicht per Layout-SSoT zugaenglich.
-    layout["funnel_origin"] = runtime["funnel_origin"]
     return render_template("uebersicht.html", **layout)
 
 
@@ -473,10 +469,8 @@ def get_seiten_layout():
         inventar,
         heim_origin=runtime["heim_origin"],
         tailscale_origin=runtime["tailscale_origin"],
+        funnel_origin=runtime["funnel_origin"],
     )
-    # SREG-7 dritte Origin: funnel_origin additiv in den Daten-Kontrakt
-    # (analog get_seiten_uebersicht — kein render.py-Eingriff noetig).
-    layout["funnel_origin"] = runtime["funnel_origin"]
     return jsonify(layout)
 
 
