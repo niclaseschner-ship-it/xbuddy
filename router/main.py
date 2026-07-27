@@ -255,20 +255,29 @@ def _client_ip():
     return request.remote_addr
 
 
+# RAT-32 (Amendment RAT-27): ENV-Toggle für den Observe→Hard-Flip. Default
+# 'observe' → verhaltensneutraler Deploy; `XBUDDY_AUTH_MODE=hard` flippt alle
+# 7b-READ-Routen auf Cookie-only-hart. ENV+restart = Zwei-Wege-Tür in Sekunden
+# (#1430-Lehre: der Rückroll ist KEIN Code-Revert). auth.md AUTH-3.a.
+_AUTH_MODE = os.environ.get('XBUDDY_AUTH_MODE', 'observe')
+
+
 def require_dual_gate(mode: str = 'observe'):
-    """AUTH-7b-Decorator: Cookie ODER Operator-IP (auth.md AUTH-7 Dual-Gate).
+    """AUTH-7b-Decorator: Cookie-only-hart (auth.md AUTH-7 7b, RAT-32).
 
-    `mode="observe"` (AUTH-3.a Soft-Rollout, Default für alle 7b-READ-Routen im
-    Erstbau): fehlt jede Quelle, läuft die Route trotzdem (`200`) und der
-    Decorator LOGGT — kein `401`. Der Flip auf `mode="hard"` ist eine spätere
-    operative Zwei-Wege-Tür (auth.md AUTH-3.a:263-269), nicht Teil dieses Baus.
+    `mode="observe"` (AUTH-3.a Soft-Rollout): fehlt eine valide Cookie-Quelle,
+    läuft die Route trotzdem (`200`) und der Decorator LOGGT — kein `401`.
 
-    `mode="hard"`: fehlt jede Quelle → `401` mit AUTH-8-Re-Pair-HTML.
+    `mode="hard"` (RAT-32, via `XBUDDY_AUTH_MODE=hard`): fehlt ein valider
+    Cookie → `401` mit AUTH-8-Re-Pair-HTML. **Operator-IP (AUTH-7a) entfällt
+    als Zugangs-Alternative** — der Cookie ist der einzige nicht-Loopback-Pfad.
+    (Die PWA-Manifest-Public-Ausnahme lebt route-lokal in seiten, nicht hier:
+    die Shell-PWA-Manifest-Route ist bereits ungegatet; das Display-Manifest ist
+    Legacy-Vor-Shell und braucht keine Ausnahme.)
 
     Bei validem Cookie wird der Cookie rolling-refreshed (AUTH-2:78). Der
-    Streaming-Fall (SSE) bleibt unversehrt: im Operator-/Observe-Pfad läuft die
-    Route unverpackt durch; im Cookie-Pfad reicht `make_response` das bereits
-    fertige Response-Objekt durch (kein Buffering des Generators).
+    Streaming-Fall (SSE) bleibt unversehrt: im Cookie-Pfad reicht `make_response`
+    das bereits fertige Response-Objekt durch (kein Buffering des Generators).
     """
     def deco(fn):
         @functools.wraps(fn)
@@ -277,6 +286,8 @@ def require_dual_gate(mode: str = 'observe'):
             cookie_val = request.cookies.get(_session_cookie.COOKIE_NAME)
             cookie_ok = bool(bot_token) and _auth_gate.hat_gueltigen_cookie(
                 cookie_val, bot_token)
+            # RAT-32: Operator-IP entfällt als Zugangs-Alternative (AUTH-7a
+            # gestrichen); ist_operator_ip nur noch fürs Observe-Log.
             operator_ok = _auth_gate.ist_operator_ip(_client_ip())
 
             if cookie_ok:
@@ -288,8 +299,6 @@ def require_dual_gate(mode: str = 'observe'):
                     **_session_cookie.session_cookie_kwargs(),
                 )
                 return resp
-            if operator_ok:
-                return fn(*args, **kwargs)
 
             if mode == 'hard':
                 resp = make_response(_DUAL_GATE_401_HTML, 401)
@@ -767,7 +776,7 @@ def get_state(display_id):
 
 
 @app.route('/api/v1/displays/<display_id>/events', methods=['GET'])
-@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (SSE, initial Observe)
+@require_dual_gate(mode=_AUTH_MODE)  # AUTH-7b: Cookie-only-hart (RAT-32), ENV-getoggelt (SSE, initial Observe)
 def display_events(display_id):
     # ROU-22: SSE-Zustands-Stream. Unbekannte id → 404 (wie ROU-12).
     # DCOMP-2: frisch lesen, damit neu angelegte Displays auch hier
@@ -1101,7 +1110,7 @@ def display_no_slash(display_id):
 
 
 @app.route('/display/<display_id>/', methods=['GET'])
-@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (Display-Client, initial Observe)
+@require_dual_gate(mode=_AUTH_MODE)  # AUTH-7b: Cookie-only-hart (RAT-32), ENV-getoggelt (Display-Client, initial Observe)
 def display(display_id):
     # ROU-20: liefert den Display-Client unabhängig davon, ob <display_id>
     # bekannt ist. Ob das Display existiert, klärt der Client beim Verbinden
@@ -1125,7 +1134,7 @@ def _send_display_asset(rel_path):
 
 
 @app.route('/display/<display_id>/<path:asset>', methods=['GET'])
-@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (Display-Assets, initial Observe)
+@require_dual_gate(mode=_AUTH_MODE)  # AUTH-7b: Cookie-only-hart (RAT-32), ENV-getoggelt (Display-Assets, initial Observe)
 def display_asset(display_id, asset):
     # ROU-33: Auslieferung von Display-Client-Assets (manifest.json, Icons)
     # unter /display/<display_id>/<asset>. Die <display_id> im Pfad-Präfix
@@ -1435,7 +1444,7 @@ def icons_suche():
 
 
 @app.route('/controller/<app>/', methods=['GET'])
-@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (Controller-Index, initial Observe)
+@require_dual_gate(mode=_AUTH_MODE)  # AUTH-7b: Cookie-only-hart (RAT-32), ENV-getoggelt (Controller-Index, initial Observe)
 def controller_index(app):
     # ROU-23: /controller/<app>/ → index.html mit text/html.
     # Nur der konfigurierte App-Slug ist gültig (URL-3, zwei Segmente).
@@ -1445,7 +1454,7 @@ def controller_index(app):
 
 
 @app.route('/controller/<app>/<path:asset>', methods=['GET'])
-@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (Controller-Assets, initial Observe)
+@require_dual_gate(mode=_AUTH_MODE)  # AUTH-7b: Cookie-only-hart (RAT-32), ENV-getoggelt (Controller-Assets, initial Observe)
 def controller_asset(app, asset):
     # ROU-23: alle Statik-Pfade unter /controller/<app>/ aus controller_dir().
     # send_from_directory + realpath-Check verhindern Path-Traversal.
@@ -1634,14 +1643,14 @@ def app_panel_index_no_slash(panel_id):
 
 
 @app.route('/controller/app-panel/<panel_id>/', methods=['GET'])
-@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (App-Panel-Index, initial Observe)
+@require_dual_gate(mode=_AUTH_MODE)  # AUTH-7b: Cookie-only-hart (RAT-32), ENV-getoggelt (App-Panel-Index, initial Observe)
 def app_panel_index_slash(panel_id):
     return render_app_panel_index(panel_id), 200, {
         'Content-Type': 'text/html; charset=utf-8'}
 
 
 @app.route('/controller/app-panel/<panel_id>/<path:asset>', methods=['GET'])
-@require_dual_gate(mode='observe')  # AUTH-7b: Cookie ODER Operator-IP (App-Panel-Assets, initial Observe)
+@require_dual_gate(mode=_AUTH_MODE)  # AUTH-7b: Cookie-only-hart (RAT-32), ENV-getoggelt (App-Panel-Assets, initial Observe)
 def app_panel_asset(panel_id, asset):
     # ROU-27 / PREG-9: config.json und tiles.json werden an den panel-Service
     # geproxt + Last-Known-Good-gecacht. Alle anderen Assets kommen weiter

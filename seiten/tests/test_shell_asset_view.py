@@ -32,26 +32,39 @@ _REPO_ROOT = os.path.dirname(_SEITEN_DIR)
 sys.path.insert(0, _REPO_ROOT)
 
 from seiten import main as seiten_main  # noqa: E402
+from tools.initdata import session_cookie as _sc  # noqa: E402
 
 # Test-Panel-ID — nie im Produktiv-Code (SHELL-9).
 _PANEL_ID = "test-panel-asset-99"
 _PREFIX = "/shell/" + _PANEL_ID + "/"
 
-# Operator-IP-Header (opt-in, kein autouse) — T1448: shell_asset_view ist hard.
-# Sicherheits-Tests (realpath, _-Prefix) müssen als Operator-IP durchgehen,
-# damit der Gate-Schnitt auf 401 die eigentliche Prüflogik nicht abschneidet.
-# manifest.json (AC3) ist public — dort kein Header nötig.
-_OPERATOR_HEADERS = {"X-Real-IP": "192.168.178.42"}
+# RAT-32: shell_asset_view ist Cookie-only-hart (Operator-IP gestrichen).
+# Sicherheits-Tests (realpath, _-Prefix) authentifizieren via gültigem Cookie
+# am Testclient (set_cookie), damit der Gate-Schnitt auf 401 die eigentliche
+# Prüflogik nicht abschneidet. Das leere _OPERATOR_HEADERS bleibt Platzhalter,
+# damit die vielen `headers=_OPERATOR_HEADERS`-Aufrufstellen unberührt bleiben.
+_BOT_TOKEN = "123456:ABCdef_testtoken"
+_OPERATOR_HEADERS: dict = {}
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
+@pytest.fixture(autouse=True)
+def _bot_token_konfiguriert():
+    """RAT-32: Cookie-Gate braucht konfigurierten Bot-Token für die Signatur-Prüfung."""
+    seiten_main.configure(bot_token=_BOT_TOKEN)
+    return
+
+
 @pytest.fixture
 def client():
-    """Basis-Testclient; kein display_id-Lookup noetig (shell_asset_view unabhaengig)."""
+    """Cookie-authentifizierter Basis-Testclient (RAT-32 Cookie-only-hart);
+    kein display_id-Lookup noetig (shell_asset_view unabhaengig)."""
     seiten_main.configure(heim_origin="http://heim.test", tailscale_origin="https://tail.test")
     seiten_main.app.config["TESTING"] = True
-    return seiten_main.app.test_client()
+    c = seiten_main.app.test_client()
+    c.set_cookie(_sc.COOKIE_NAME, _sc.sign_session("test-display-asset", _BOT_TOKEN))
+    return c
 
 
 @pytest.fixture
