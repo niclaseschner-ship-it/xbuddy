@@ -1,6 +1,16 @@
 # Seiten-Registry — Spec     (ID-Präfix: SREG)
 
-> Status: V1-Entwurf · Refs #347 · ratifiziert RAT-13 (berater-runde 2026-06-06)
+> ⚠️ **ZIEL-ZUSTAND geändert durch RAT-31 (2026-07-27) — Wirbelsäule-Abriss.**
+> Setup ist fest **ein Gerät** (Heim-Shell). Damit entfallen die Multi-Geräte-
+> Annahmen: die Übersicht (`/api/v1/seiten/uebersicht`, SREG-12) zieht ihre
+> Kachel-Daten künftig aus den **committeten Buddy-View-Manifesten** statt aus
+> den `panel/`- und `geraete/`-Registry-Snapshots (die sterben), und das
+> „Geräte-Paar"-Box-Modell (SREG-12) kollabiert auf ein Gerät. Die Umschreibung
+> erfolgt in Etappe #1496 (E3 Aggregator-Umbau) + #1499 (E7 Spec-Cleanup). Bis
+> dahin ist **RAT-31 der bindende Ziel-Zustand**. Governance:
+> `decisions/RAT-31-wirbelsaeule-abriss.md`, Epic #1339.
+>
+> Status: V1-Entwurf · Refs #347 #1339 · ratifiziert RAT-13 (berater-runde 2026-06-06), fortgeschrieben RAT-31
 > Pivot + SREG-12-Ratifizierung 2026-06-08 (Werft + Berater-Runde,
 > ENTSCHEID `brainstorm/berater-runde/20260608-RATIFIZIERT-seiten-uebersicht-platform-genre.md`)
 > SREG-12 Gate B (Design-Wahl) 2026-06-08: Variante „gemeinsame Box pro

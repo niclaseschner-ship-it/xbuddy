@@ -1,8 +1,23 @@
 # Heim-Shell — Spec     (ID-Präfix: SHELL)
 
-> Status: V1-Pilot · Refs #1182
-> Architektur ratifiziert via /berater-runde 2026-06-30 (siehe RAT-25).
-> Deliberation: `brainstorm/berater-runde/20260630-151000-RATIFIZIERT-pwa-shell-mia.md`
+> ⚠️ **ZIEL-ZUSTAND geändert durch RAT-31 (2026-07-27) — Wirbelsäule-Abriss.**
+> Nic-Setzung „ein Gerät für immer, Boote verbrennen": Die Heim-Shell wird
+> **self-contained** — linke Panel-Nav + rechtes Buddy-Pane + Tile-Tap + Live-
+> Refresh laufen alle **same-origin über `seiten/`**. Der Router-Fanout stirbt.
+> Damit sind **überholt** und werden in den RAT-31-Etappen (Epic #1339) umgebaut:
+> SHELL-1 „vom Router ausgelieferte Iframes", SHELL-2 „`display_id` per ROU-32-
+> Router-Lookup", die Mechanik „`tile_selected` → Router → SSE → Display-Client"
+> (wird same-device SSE über `seiten/`), sowie jeder `router/`-/`display-client/`-
+> Verweis. Panel `tiles`+Editor bleiben (re-home same-origin); Kind/Eltern-Redirect
+> aus dem Pairing-Token statt `geraete.json`. Die Per-Requirement-Umschreibung
+> erfolgt in den Etappen #1495 (E2 SSE-Erbe), #1498 (E6 Dienst-Abriss) und #1499
+> (E7 Spec-Cleanup). Bis dahin ist **RAT-31 der bindende Ziel-Zustand**, nicht der
+> unten stehende Pilot-Text. Governance: `decisions/RAT-31-wirbelsaeule-abriss.md`.
+>
+> Status: V1-Pilot (RAT-25) → Ziel-Default (RAT-29) → self-contained (RAT-31) · Refs #1182 #1339
+> Architektur ratifiziert via /berater-runde 2026-06-30 (siehe RAT-25), fortgeschrieben RAT-29/RAT-31.
+> Deliberation: `brainstorm/berater-runde/20260630-151000-RATIFIZIERT-pwa-shell-mia.md`,
+> `brainstorm/berater-runde/20260727-144443-RATIFIZIERT-wirbelsaeule-abriss.md`
 > Gate-B-Mockups: `specs/mockups/heim-shell/`
 
 Die Heim-Shell ist ein **dünner Split-Layout-Container**, der auf **einem**
