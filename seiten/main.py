@@ -659,7 +659,9 @@ def init_data_validate():
 # GAA-3.8. Der Pairing-Token (15min, HMAC mit Bot-Token, kodiert display_id,
 # stateless — OD4) wird verifiziert; bei Erfolg setzt der Endpoint den
 # xbuddy_session-Cookie (AUTH-2), schreibt paired_at in geraete.json (additiv,
-# OD3) und redirected den Browser auf /display/<display_id>.
+# OD3) und redirected den Browser verwendungs-abhängig: Display-Geräte
+# (verwendung == "display" oder "beides", GER-3) → /display/<display_id>/;
+# alle anderen (Controller u. a.) → /api/v1/seiten/uebersicht (SREG-12).
 
 # AUTH-2.a: 400-Anweisung bei ungültigem/abgelaufenem Token (statt rohem Code).
 _PAIR_400_HTML = (
@@ -674,6 +676,36 @@ _PAIR_400_HTML = (
     "innerhalb von 15 Minuten auf diesem Gerät.</p>"
     "</body></html>"
 )
+
+
+def _geraete_eintrag(display_id):
+    """GER-3 / AC1: liest geraete.json EINMAL und gibt den Roh-Dict-Eintrag für
+    `display_id` zurück — oder (None, None) bei Fehler / fehlendem Eintrag.
+
+    Rückgabe: (data, eintrag) — `data` ist das vollständige JSON-Dict
+    (für Schreibvorgänge benötigt), `eintrag` zeigt auf das Gerät-Dict
+    innerhalb von data["geraete"] (In-place-Mutation möglich). Bei
+    Lesefehler oder fehlendem Eintrag: (None, None). Best-effort —
+    Fehler werden geloggt, kein Crash.
+    """
+    path = runtime.get("geraete_registry_path")
+    if not path:
+        return None, None
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, OSError) as e:
+        logging.warning("AUTH-2.a: geraete.json (%s) nicht lesbar (%s) — "
+                        "Eintrag für %s nicht verfügbar", path, e, display_id)
+        return None, None
+
+    geraete = data.get("geraete") if isinstance(data, dict) else None
+    if not isinstance(geraete, list):
+        return None, None
+
+    eintrag = next((g for g in geraete
+                    if isinstance(g, dict) and g.get("id") == display_id), None)
+    return data, eintrag
 
 
 def _markiere_paired_at(display_id, jetzt_iso=None):
@@ -695,22 +727,12 @@ def _markiere_paired_at(display_id, jetzt_iso=None):
         logging.warning("AUTH-2.a: geraete_registry_path nicht gesetzt — "
                         "paired_at für %s nicht geschrieben", display_id)
         return False
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError, OSError) as e:
-        logging.warning("AUTH-2.a: geraete.json (%s) nicht lesbar (%s) — "
-                        "paired_at für %s nicht geschrieben", path, e, display_id)
-        return False
 
-    geraete = data.get("geraete") if isinstance(data, dict) else None
-    if not isinstance(geraete, list):
-        logging.warning("AUTH-2.a: geraete.json ohne `geraete`-Liste — "
+    data, eintrag = _geraete_eintrag(display_id)
+    if data is None:
+        logging.warning("AUTH-2.a: geraete.json nicht lesbar — "
                         "paired_at für %s nicht geschrieben", display_id)
         return False
-
-    eintrag = next((g for g in geraete
-                    if isinstance(g, dict) and g.get("id") == display_id), None)
     if eintrag is None:
         logging.warning("AUTH-2.a: display_id %s nicht in geraete.json — "
                         "Cookie gesetzt, paired_at nicht", display_id)
@@ -743,16 +765,38 @@ def _markiere_paired_at(display_id, jetzt_iso=None):
     return True
 
 
+def _lese_verwendung(display_id):
+    """GER-3: liest `verwendung` für `display_id` aus geraete.json.
+
+    Gibt den `verwendung`-String des Geräts zurück ("display", "controller"
+    oder "beides") oder None, wenn die Datei nicht erreichbar ist, der
+    Eintrag fehlt oder das Feld nicht gesetzt ist. Best-effort — Fehler
+    werden geloggt, kein Crash (analog _markiere_paired_at).
+    """
+    path = runtime.get("geraete_registry_path")
+    if not path:
+        logging.warning("AUTH-2.a: geraete_registry_path nicht gesetzt — "
+                        "verwendung für %s unbekannt", display_id)
+        return None
+
+    _data, eintrag = _geraete_eintrag(display_id)
+    if eintrag is None:
+        return None
+    return eintrag.get("verwendung") or None
+
+
 @app.route("/auth/pair", methods=["GET"])
 def auth_pair():
     """AUTH-2.a: `GET /auth/pair?token=<X>` — Pairing-Token → Cookie → redirect.
 
     Verifiziert den stateless 15-Minuten-Pairing-Token (OD4). Bei Erfolg:
     setzt den xbuddy_session-Cookie (AUTH-2, HttpOnly/Secure/SameSite=Lax),
-    schreibt paired_at in geraete.json (OD3, additiv) und redirected auf
-    /display/<display_id> (Display-Verwendung — der stateless Token kodiert nur
-    die display_id, kein separates Ziel; Controller-Ziel ist V2). Bei
-    ungültigem/abgelaufenem Token: 400 mit Anweisungsseite (AUTH-2.a).
+    schreibt paired_at in geraete.json (OD3, additiv) und redirected
+    verwendungs-abhängig (GER-3): Display-Geräte (verwendung == "display"
+    oder "beides") → /display/<display_id>/; Nicht-Display-Geräte (Controller
+    u. a.) oder Geräte ohne lesbaren Eintrag → /api/v1/seiten/uebersicht
+    (SREG-12). Bei ungültigem/abgelaufenem Token: 400 mit Anweisungsseite
+    (AUTH-2.a).
     """
     bot_token = _get_bot_token()
     if not bot_token:
@@ -770,11 +814,20 @@ def auth_pair():
     # OD3: paired_at additiv stempeln (best-effort — Cookie ist funktionaler Teil).
     _markiere_paired_at(display_id)
 
-    # AUTH-2.a: Ziel-URL. Stateless Token trägt nur display_id → Display-Pfad.
-    # Trailing-Slash: der Router leitet /display/<id> per 301 auf /display/<id>/
-    # um (router:972). Direkt auf /<id>/ zeigen vermeidet den 301-Doppelhop
-    # (ESC-3) — same-origin/relativ bleibt erhalten (auth.md AUTH-7b).
-    resp = redirect("/display/%s/" % display_id)
+    # AUTH-2.a: Ziel-URL verwendungs-abhängig (GER-3, Nic-Setzung 2026-07-27 #1372).
+    # Quelle: verwendung-Feld in geraete.json (belegte Quelle, kein geratenes Default).
+    # Display-Geräte (display/beides) → /display/<id>/ (Trailing-Slash: ESC-3 / AUTH-7b).
+    # Nicht-Display oder Eintrag nicht lesbar → /api/v1/seiten/uebersicht (SREG-12).
+    verwendung = _lese_verwendung(display_id)
+    if verwendung in aggregator._DISPLAY_VERWENDUNGEN:
+        ziel = "/display/%s/" % display_id
+    else:
+        ziel = "/api/v1/seiten/uebersicht"
+        if verwendung is None:
+            logging.warning(
+                "AUTH-2.a: verwendung für %s unbekannt — "
+                "redirect auf Übersichtsseite (SREG-12)", display_id)
+    resp = redirect(ziel)
     resp.set_cookie(
         _session_cookie.COOKIE_NAME,
         _session_cookie.sign_session(display_id, bot_token),
