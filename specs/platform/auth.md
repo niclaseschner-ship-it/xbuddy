@@ -264,9 +264,9 @@ enumeriert die oben klassifizierten Routen byte-gleich gegen die realen
 
 ### AUTH-3.a — Soft→Hard-Observe-Leiter beim Route-Rollout (RAT-27 (RATIFIZIERT 2026-07-07))
 
-> **RAT-27 (RATIFIZIERT 2026-07-07) — noch nicht ratifiziert.** Diese Klausel steht zur
-> Nic-Ratifizierung (#1388, Epic #1338). Sie gewinnt Bindewirkung erst mit
-> RAT-27. Bis dahin bleibt der Rollout wie in der Phasen-Tabelle (Abschnitt 6).
+> **RAT-27 (RATIFIZIERT 2026-07-07).** Diese Klausel wurde mit RAT-27 (#1388,
+> Epic #1338) ratifiziert und ist bindend. Der Rollout folgt der Phasen-Tabelle
+> (Abschnitt 6).
 
 Wenn eine bisher PUBLIC-Route (AUTH-6) neu unter den Auth-Decorator gezogen
 wird, ist der Übergang **route-granular** und **nicht** für alle Routen
@@ -472,12 +472,11 @@ Auslaufens-Hinweis aktiv.
 
 ### AUTH-7 — Display-/Shell-Renderer: zwei Zugangs-Klassen (RAT-27 (RATIFIZIERT 2026-07-07))
 
-> **RAT-27 (RATIFIZIERT 2026-07-07) — noch nicht ratifiziert.** Diese Klausel ersetzt die
-> frühere V1-Skizze (nur-IP-Allowlist) und gabelt AUTH-7 in **7a Operator-Pi**
-> und **7b User-Shell (Cookie)**. Sie wurde ratifiziert (RAT-27) (#1388,
-> Epic #1338) und gewinnt Bindewirkung erst mit RAT-27. Bis dahin sind die
-> Display-/Shell-Renderer-Routen wie in AUTH-6 dokumentiert (Phase-4-offen);
-> `heim-shell.md` SHELL-6 hält den LAN-only-Riegel bis zur RAT-27-Ablösung.
+> **RAT-27 (RATIFIZIERT 2026-07-07).** Diese Klausel ersetzt die frühere V1-Skizze
+> (nur-IP-Allowlist) und gabelt AUTH-7 in **7a Operator-Pi** und **7b User-Shell
+> (Cookie)**. Sie wurde mit RAT-27 (#1388, Epic #1338) ratifiziert und ist
+> bindend. Die Display-/Shell-Renderer-Routen folgen AUTH-6 (Phase-4-offen);
+> `heim-shell.md` SHELL-6 hält den LAN-only-Riegel bis zur Phase-4-Umsetzung.
 
 Die frühere Skizze kannte nur **eine** Zugangs-Klasse (nginx-IP-Allowlist,
 Funnel → `403`). Der Rollout braucht **zwei**, weil zwei verschiedene
