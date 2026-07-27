@@ -680,21 +680,21 @@ def test_AC5_bestehende_guards_unveraendert():
         # Jeder der fünf Guards kann die Registrierung verhindern (bestehende Guards).
         for fehlendes_arg, kwargs in [
             ("panel_origin_url",
-             dict(geraete_origin_url="http://x", seiten_origin_url="http://x",
-                  paa_sessions={}, family_group_chat_id_getter=lambda: 200)),
+             {"geraete_origin_url": "http://x", "seiten_origin_url": "http://x",
+              "paa_sessions": {}, "family_group_chat_id_getter": lambda: 200}),
             ("geraete_origin_url",
-             dict(panel_origin_url="http://x", seiten_origin_url="http://x",
-                  paa_sessions={}, family_group_chat_id_getter=lambda: 200)),
+             {"panel_origin_url": "http://x", "seiten_origin_url": "http://x",
+              "paa_sessions": {}, "family_group_chat_id_getter": lambda: 200}),
             ("seiten_origin_url",
-             dict(panel_origin_url="http://x", geraete_origin_url="http://x",
-                  paa_sessions={}, family_group_chat_id_getter=lambda: 200)),
+             {"panel_origin_url": "http://x", "geraete_origin_url": "http://x",
+              "paa_sessions": {}, "family_group_chat_id_getter": lambda: 200}),
             ("paa_sessions",
-             dict(panel_origin_url="http://x", geraete_origin_url="http://x",
-                  seiten_origin_url="http://x",
-                  family_group_chat_id_getter=lambda: 200)),
+             {"panel_origin_url": "http://x", "geraete_origin_url": "http://x",
+              "seiten_origin_url": "http://x",
+              "family_group_chat_id_getter": lambda: 200}),
             ("family_group_chat_id_getter",
-             dict(panel_origin_url="http://x", geraete_origin_url="http://x",
-                  seiten_origin_url="http://x", paa_sessions={})),
+             {"panel_origin_url": "http://x", "geraete_origin_url": "http://x",
+              "seiten_origin_url": "http://x", "paa_sessions": {}}),
         ]:
             c = build_catalog(FakeTelegram(), ca_pem, **kwargs)
             assert c.get("panel_anlegen") is None, (

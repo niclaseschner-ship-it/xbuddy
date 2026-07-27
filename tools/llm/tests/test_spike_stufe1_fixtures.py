@@ -18,7 +18,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ----------------------------------------------------------------------
 #  Mock-Helfer — SDK-ähnliche Responses mit .type/.text bzw. tool_use
 # ----------------------------------------------------------------------

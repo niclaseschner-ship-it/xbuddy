@@ -5,11 +5,11 @@ name: main-health
 # EINEM Job — damit main bei einem Cross-PR-Konflikt genau EINE Meldung erzeugt
 # statt dreier separater roter Läufe + drei Mails.
 #
-# Jeder Prüf-Schritt trägt `if: always()`, damit ein früher Fehler die späteren
+# Jeder Schritt trägt `if: always()`, damit ein früher Fehler die späteren
 # nicht überspringt (Codex-Härtung PW-88): auch bei rotem ruff laufen
-# lint-imports und pytest, und ein einziges rotes main-health-Signal deckt alle
-# drei Achsen ab. Der venv-Setup-Schritt läuft ohne `always()` — schlägt er
-# fehl, ist die Umgebung kaputt und die pytest-Aussage ohnehin bedeutungslos.
+# lint-imports, venv-Setup und pytest, und ein einziges rotes main-health-Signal
+# deckt alle drei Achsen ab. Der venv-Setup-Schritt trägt `if: always()` — ohne
+# ihn würde ein roter ruff-Schritt pytest mit exit 127 feuern (T1483-AC1).
 #
 # Watcher-Vertrag (RAT-30, Teil 2): main-health ist kein passives Signal. Der
 # arbeitstag-Reflex „main-health-Status prüfen" (Merge-Gate/Session-Start,
@@ -54,6 +54,7 @@ jobs:
             pip-pytest-
 
       - name: venv + Test-Abhängigkeiten
+        if: always()
         # --system-site-packages: der Pi-Runner trägt die Laufzeit-Pakete der
         # Services global (flask, Pillow, …); das venv erbt sie und pip
         # ergänzt pytest + die deklarierten requirements reproduzierbar.
