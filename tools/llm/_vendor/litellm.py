@@ -25,6 +25,14 @@ gegen die LiteLLM-`ModelResponse` statt dict.get (wie `agent_step`). Damit
 trägt der litellm-Vendor die hoerspiel-Folgen-/Synopse-Pfade (get_singleshot /
 get_completion); `structured_output` ist in CAPABILITIES aufgenommen.
 
+Slot 4 (#1509, multimodal_input): `singleshot_structured` nimmt jetzt das
+optionale `images`-Kwarg (neutrale Wire-Form `[{"bytes": <raw>, "media_type":
+<str>}, …]`) und übersetzt Bild-Blocks in das OpenAI-Vision-Format
+(`image_url` mit `data:<media_type>;base64,<data>`-URL). Die base64-Kodierung
+geschieht im Vendor (Spiegel `_vendor/anthropic.py:235-245`). `multimodal_input`
+ist damit in CAPABILITIES aufgenommen. `foto_analyse` nutzt jetzt diesen Slot
+statt des anthropic-Hand-Vendors (LLMP-S1, TAB-5, E-TAB-8).
+
 Cache-Marker-Strategie (LLMP-S1 `get_chat` Required `cache_control`): identisch
 zur Anthropic-Hand-Form — der **System-Prompt** trägt `cache_control:
 ephemeral`. LiteLLM reicht `cache_control`-Marker auf Content-Blöcken zum
@@ -38,6 +46,7 @@ förmig (`prompt_tokens`/`completion_tokens`); diese werden auf das interne
 `input`/`output`-Schema gemappt, `pricing.compute_eur` rechnet mit `self.model`.
 """
 
+import base64
 import io
 import json
 import logging
@@ -63,8 +72,13 @@ logger = logging.getLogger(__name__)
 # Slot 3 (#1454) migriert die Singleshot-Sichten (`singleshot_structured` +
 # `singleshot_text`) und fügt `structured_output` hinzu — REQUIRED_SINGLESHOT
 # (structured_output + system_message_distinct) und REQUIRED_COMPLETION
-# (system_message_distinct) sind damit gedeckt. `multimodal_input` bleibt
-# undekariert (hoerspiel nutzt keine Bilder auf diesem Pfad).
+# (system_message_distinct) sind damit gedeckt.
+# Slot 4 (#1509, multimodal_input): `singleshot_structured` nimmt jetzt das
+# optionale `images`-Kwarg und übersetzt Bild-Blocks ins OpenAI-Vision-Format.
+# LiteLLM routet `image_url data-URL`-Blocks transparent zum Anthropic-Backend
+# durch (offizielles Multimodal-Passthrough). `multimodal_input` wird darum jetzt
+# deklariert — der Capability-Gate in `public_api._SingleshotFacade` lässt
+# images-Aufrufe gegen diesen Vendor durch (LLMP-3/LLMP-S11).
 # `speech` + `transcription` (T1410, LLMP-S6/RAT-28): dieser Vendor implementiert
 # beide Audio-Modalitäten über `litellm.speech()` / `litellm.transcription()` —
 # darum werden sie hier deklariert (REQUIRED_SPEECH / REQUIRED_TRANSCRIPTION in
@@ -73,6 +87,7 @@ CAPABILITIES = frozenset({
     "tool_use",
     "multi_turn_assistant_prefill",
     "cache_control",
+    "multimodal_input",
     "structured_output",
     "system_message_distinct",
     "speech",
@@ -378,6 +393,40 @@ class LitellmVendor(VendorBase):
     #  Sicht: get_singleshot — Structured Singleshot (hoerspiel, Slot 3/#1454)
     # ------------------------------------------------------------------
 
+    def _user_content(
+        self,
+        prompt: str,
+        images: list[dict[str, Any]] | None,
+    ) -> Any:
+        """Baut den user-Content für singleshot_structured (Slot 4, #1509).
+
+        Ohne `images` byte-identisch der Alt-Form (der reine `prompt`-String,
+        KEIN Cap-Gate-Eingriff, Regression-frei für den Text-Pfad).
+        Mit `images` OpenAI-Vision-Content-Liste `[image_url-Block(s),
+        text-Block]`: jedes Bild aus der neutralen Wire-Form `{"bytes",
+        "media_type"}` wird als base64-Data-URL in einen
+        `{"type":"image_url","image_url":{"url":"data:<t>;base64,<d>"}}` gehoben
+        (base64-Kodierung IM Vendor, Spiegel `_vendor/anthropic.py:235-245`).
+        Der text-Block trägt den `prompt` als letzten Eintrag (LLM-Konvention:
+        Bild(er) zuerst, dann Instruktion). LiteLLM routet `image_url`-Blocks
+        transparent zum Anthropic-Backend durch (OpenAI-Vision-Passthrough).
+        """
+        if not images:
+            return prompt
+        parts: list[dict[str, Any]] = []
+        for img in images:
+            raw = img["bytes"]
+            media_type = img.get("media_type") or "image/jpeg"
+            data_b64 = base64.standard_b64encode(raw).decode("ascii")
+            parts.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": "data:%s;base64,%s" % (media_type, data_b64),
+                },
+            })
+        parts.append({"type": "text", "text": prompt})
+        return parts
+
     def singleshot_structured(
         self,
         system: str,
@@ -388,6 +437,7 @@ class LitellmVendor(VendorBase):
         slot: str,
         tool_name: str = "ergebnis",
         tool_description: str = "Strukturiertes Ergebnis-Objekt nach Schema.",
+        images: list[dict[str, Any]] | None = None,
         correlation_id: str | None = None,
     ) -> dict[str, Any]:
         """Ein Call, forced `tool_use` → Schema-konformes dict (LLMP-S1
@@ -397,8 +447,14 @@ class LitellmVendor(VendorBase):
         (`prompt`) + EINEM Tool (`_to_litellm_tool` — geteilt mit der Agent-
         Sicht) und erzwingt es über die **benannte** `tool_choice`-Form
         (`{"type":"function","function":{"name":tool_name}}`, OpenAI-Parität,
-        wie mistral). KEIN images-Kwarg (hoerspiel nutzt hier keine Bilder;
-        `multimodal_input` ist nicht deklariert).
+        wie mistral).
+
+        `images` (Slot 4/#1509, multimodal_input): neutrale Wire-Form
+        `[{"bytes": <raw>, "media_type": <str>}, …]`. Bei nicht-leerem `images`
+        wird der user-Content zu `[image_url-Block(s), text-Block]` (OpenAI-
+        Vision-Format) — die base64-Kodierung geschieht HIER im Vendor (Spiegel
+        `_vendor/anthropic.py`; der Konsument reicht nur Rohbytes). `images=None`
+        → byte-identischer Text-Pfad (`content=prompt`, Regression-frei).
 
         Der System-Prompt wird als eigene `{"role":"system", …}`-Message
         vorangestellt (system_message_distinct). ANDERS als `chat_multiturn`/
@@ -417,7 +473,7 @@ class LitellmVendor(VendorBase):
         messages: list[dict[str, Any]] = []
         if system:
             messages.append({"role": "system", "content": system})
-        messages.append({"role": "user", "content": prompt})
+        messages.append({"role": "user", "content": self._user_content(prompt, images)})
 
         completion_kwargs: dict[str, Any] = {
             "model": self.model,
