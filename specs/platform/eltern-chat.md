@@ -941,7 +941,7 @@ nicht — ONB-6) sind Komponenten-spezifisch und liegen daneben.
 
 | Name                       | Default                                     | Datei-Schlüssel         | Gesetzt durch (Onboarding-Schritt)             |
 |----------------------------|---------------------------------------------|-------------------------|------------------------------------------------|
-| Telegram-Bot-Token         | (Pflicht, kein Default)                     | — (nur ENV, Geheimnis)  | manuell beim Deployment (Geheimnis, CLAUDE.md §8) |
+| Telegram-Bot-Token         | (Pflicht, kein Default)                     | — (nur ENV/Store `eltern-chat-bot-token`, Geheimnis) | manuell beim Deployment (Geheimnis, CLAUDE.md §8) |
 | Anbieter-API-Key           | (kein Default → Onboarding-Modus)           | — (nur ENV/Store, Geheimnis) | ONB-5 (Onboarding-Speicher)               |
 | Familien-Gruppen-Chat-ID   | leer (→ ONB-6 bindet)                       | `family_group_chat_id`  | ONB-6 (Onboarding-Speicher; ENV/Datei sperren) |
 | KI-Anbieter                | `claude`                                    | `provider`              | n/a (Default reicht)                           |
