@@ -50,6 +50,33 @@ def test_EC_15_bot_token_from_env(tmp_path, monkeypatch):
     assert cfg.bot_token == "bot-secret"
 
 
+def test_T1445_bot_token_from_store_when_env_missing(tmp_path, monkeypatch):
+    """T1445 AC2a: leeres ENV + gefüllter Store-Slot 'eltern-chat-bot-token'
+    ⇒ Token aus Store, kein ConfigError."""
+    monkeypatch.delenv("ELTERNCHAT_BOT_TOKEN", raising=False)
+    zd = _zd(tmp_path)
+    zd.set("eltern-chat-bot-token", "tok-from-store")
+    cfg = config_mod.resolve(_missing(tmp_path), zd=zd)
+    assert cfg.bot_token == "tok-from-store"
+
+
+def test_T1445_env_beats_store_for_bot_token(tmp_path, monkeypatch):
+    """T1445: ENV-Token hat Vorrang vor Store-Slot (ENV-Pfad unverändert)."""
+    monkeypatch.setenv("ELTERNCHAT_BOT_TOKEN", "tok-from-env")
+    zd = _zd(tmp_path)
+    zd.set("eltern-chat-bot-token", "tok-from-store")
+    cfg = config_mod.resolve(_missing(tmp_path), zd=zd)
+    assert cfg.bot_token == "tok-from-env"
+
+
+def test_T1445_both_empty_raises_EC15(tmp_path, monkeypatch):
+    """T1445 AC2b: ENV leer + Store leer ⇒ ConfigError EC-15 wie bisher."""
+    monkeypatch.delenv("ELTERNCHAT_BOT_TOKEN", raising=False)
+    zd = _zd(tmp_path)  # Store ohne eltern-chat-bot-token-Slot
+    with pytest.raises(config_mod.ConfigError):
+        config_mod.resolve(_missing(tmp_path), zd=zd)
+
+
 # -- Anbieter-Key: Env > Onboarding-Speicher > leer --------------
 
 def test_EC_15_provider_key_from_env(tmp_path, monkeypatch):
