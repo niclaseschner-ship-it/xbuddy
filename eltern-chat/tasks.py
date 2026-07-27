@@ -448,18 +448,18 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                   wetter_origin_url=None):
     """Baut den Katalog für eine laufende Instanz.
 
-    Registriert die CA-Verteilungs-Aufgabe (`ca_verteilung.md` CAV-6, lesend),
-    — wenn die FAA-Abhängigkeiten vorliegen — die »Familie anlegen«-Aufgabe
-    (`familie-anlegen.md` FAA-12, schreibend), — wenn die GAA-Abhängigkeiten
-    vorliegen — die »Gerät anlegen«-Aufgabe (`geraet-anlegen.md` GAA-5,
-    schreibend), — wenn die KAV-Abhängigkeiten vorliegen — die »Kalender
-    verbinden«-Aufgabe (`kalender-verbinden.md` KAV-3, schreibend) und —
-    wenn `plan_origin_url` gesetzt ist — die »Termine erfragen«-Aufgabe
-    (`termine-erfragen.md` TER-10, lesend). Die instanz-festen Abhängigkeiten
-    reicht die Orchestrierung hier herein; das ermöglicht einer Test-Umgebung,
-    den Katalog ohne FAA-/GAA-/KAV-Setup zu bauen (`build_catalog(tg, ca_path)`
-    bleibt unverändert kompatibel zu den CAV-Tests). Weitere Aufgaben werden
-    additiv ergänzt (EC-8).
+    Registriert — wenn die FAA-Abhängigkeiten vorliegen — die »Familie
+    anlegen«-Aufgabe (`familie-anlegen.md` FAA-12, schreibend), — wenn die
+    GAA-Abhängigkeiten vorliegen — die »Gerät anlegen«-Aufgabe
+    (`geraet-anlegen.md` GAA-5, schreibend), — wenn die KAV-Abhängigkeiten
+    vorliegen — die »Kalender verbinden«-Aufgabe (`kalender-verbinden.md`
+    KAV-3, schreibend) und — wenn `plan_origin_url` gesetzt ist — die
+    »Termine erfragen«-Aufgabe (`termine-erfragen.md` TER-10, lesend). Die
+    instanz-festen Abhängigkeiten reicht die Orchestrierung hier herein; das
+    ermöglicht einer Test-Umgebung, den Katalog ohne FAA-/GAA-/KAV-Setup zu
+    bauen (`build_catalog(tg, ca_pem_path)` bleibt als Signatur unverändert
+    aufrufbar — `ca_pem_path` ist seit RAT-31 E1 vestigial). Weitere Aufgaben
+    werden additiv ergänzt (EC-8).
 
     FSE-8 / #393: Setzt der Aufrufer `photo_origin_url`, registriert
     build_catalog zusätzlich die »Foto/Video senden«-Aufgabe (TASK-9,
@@ -477,12 +477,14 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
     Aufgabe (EC-10, KAQS-4 propose→confirm) — hinter dem AND-Guard auf
     `kibuddy_origin_url` + `family_group_chat_id_getter` (KAQS-3-Berechtigung).
     """
-    # Lokale Imports: brechen den Import-Zyklus tasks <-> ca_task/faa_task/
-    # gaa_task/kav_task — nicht hochziehen.
-    from skills.ca_task import CaVerteilungTask
-
+    # RAT-31 E1 (#1470): Unter Cookie-only-hart (RAT-32) sind die
+    # Onboarding-Skills »Panel anlegen« (PanelAnlegenTask) und »CA verteilen«
+    # (CaVerteilungTask) entfallen. Die Parameter `ca_pem_path`, `cav_call_hook`,
+    # `panel_origin_url` und `paa_sessions` bleiben in der Signatur (vestigial),
+    # damit die ~40 build_catalog-Caller + die Rückwärtskompat-Tests
+    # `build_catalog(tg, ca_pem_path)` unberührt bleiben — sie werden hier nicht
+    # mehr konsumiert.
     catalog = Catalog()
-    catalog.register(CaVerteilungTask(tg, ca_pem_path))
 
     if familie_origin_url is not None and faa_sessions is not None \
             and family_group_chat_id_getter is not None:
@@ -497,7 +499,6 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
         catalog.register(GeraetAnlegenTask(
             tg, geraete_origin_url, gaa_sessions,
             family_group_chat_id_getter,
-            cav_call_hook=cav_call_hook,
             display_url_origin=display_url_origin,
             # GAA-3.8 / auth.md AUTH-2.a (T948): Pairing-Link-Zustellung.
             # bot_token = HMAC-Sign-Key; origin = Funnel-FQDN (/auth/pair + PWA).
@@ -619,28 +620,10 @@ def build_catalog(tg, ca_pem_path, familie_origin_url=None,
                 family_group_chat_id_getter=family_group_chat_id_getter,
                 is_member_fn=_tab_is_member))
 
-    # PAA-5/PAA-6: »Panel anlegen« als async-schreibende Aufgabe (EC-10).
-    # Guard analog der SUE-Linie: panel_origin_url (PREG-15-Schreiben),
-    # geraete_origin_url (GER-13-Display-Lese), seiten_origin_url (SREG-3-Lesen,
-    # PAA-3.3-Kandidaten-Liste), paa_sessions (die Map, die handle_update für
-    # das Routing liest, PAA-6) UND family_group_chat_id_getter (Live-Berechtigung,
-    # PAA-2) müssen gesetzt sein. `paa_sessions` ist die externe Session-Registry
-    # aus main.build_context — DIESELBE Map, die der PAA-Worker füllt und
-    # handle_update für das Routing liest (PAA-6/TASK-7; die stille Lego-Falle,
-    # wenn hier eine andere Map landete).
-    # seiten_origin_url ist Pflicht im Guard (nicht optional): ohne sie liefert
-    # get_kandidaten() eine leere Liste → Dialog-Falle (AC4 nennt es, aber das
-    # Scheitern käme zu spät, erst im Dialog — besser nicht im Katalog erscheinen).
-    if panel_origin_url is not None and geraete_origin_url is not None \
-            and seiten_origin_url is not None \
-            and paa_sessions is not None \
-            and family_group_chat_id_getter is not None:
-        from skills.panel_anlegen_task import PanelAnlegenTask
-        catalog.register(PanelAnlegenTask(
-            tg, panel_origin_url, geraete_origin_url, paa_sessions,
-            family_group_chat_id_getter,
-            controller_url_origin=controller_url_origin,
-            seiten_origin_url=seiten_origin_url))
+    # RAT-31 E1 (#1470): »Panel anlegen« (PanelAnlegenTask) ist unter
+    # Cookie-only-hart (RAT-32) entfallen. Die Signatur-Parameter
+    # `panel_origin_url` und `paa_sessions` bleiben vestigial erhalten
+    # (Caller-/Fixture-Rückwärtskompat), werden hier aber nicht mehr konsumiert.
 
     # RZS-7: »Routine-Zeiten setzen« als synchrone schreibende Aufgabe (EC-10).
     # AND-Guard: routine_origin_url UND family_group_chat_id_getter müssen gesetzt

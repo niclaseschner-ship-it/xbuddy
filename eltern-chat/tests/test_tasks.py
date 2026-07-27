@@ -59,13 +59,14 @@ def test_EC_10_write_task_kind_is_write():
     assert FakeWriteTask().kind == WRITE
 
 
-def test_EC_8_build_catalog_registers_the_ca_task():
-    """#63/CAV-6: build_catalog registriert die CA-Verteilungs-Aufgabe als
-    erste konkrete Katalog-Aufgabe — lesend (EC-9)."""
+def test_RAT31_E1_build_catalog_ca_pem_path_signature_still_works():
+    """RAT-31 E1 (#1470): `build_catalog(tg, ca_pem_path)` bleibt aufrufbar,
+    aber die »CA verteilen«-Aufgabe ist unter Cookie-only-hart (RAT-32)
+    entfallen — `ca_verteilen` erscheint nicht mehr im Katalog. `ca_pem_path`
+    bleibt vestigial in der Signatur (AC4)."""
     catalog = build_catalog(FakeTelegram(), "/instanz/rootCA.pem")
     defs = {d.name: d for d in catalog.task_defs()}
-    assert "ca_verteilen" in defs
-    assert defs["ca_verteilen"].kind == READ
+    assert "ca_verteilen" not in defs
 
 
 # ============================================================
@@ -497,8 +498,9 @@ def test_TAB1262_capability_error_skill_abgeschaltet():
     assert catalog.get("termine_aus_bild") is None, (
         "TAB-12/#1262: bei LLMCapabilityError darf »Termine aus Bild« NICHT "
         "im Katalog sein")
-    # Übriger Katalog unberührt (Smoke: ca_verteilen bleibt registriert).
-    assert catalog.get("ca_verteilen") is not None
+    # Übriger Katalog unberührt (Smoke: eine plan-gebundene Aufgabe bleibt
+    # registriert — ca_verteilen ist seit RAT-31 E1 (#1470) entfallen).
+    assert catalog.get("termine_erfragen") is not None
 
 
 # ============================================================
