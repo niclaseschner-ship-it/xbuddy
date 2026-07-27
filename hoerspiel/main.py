@@ -1115,13 +1115,13 @@ def _build_llm(cfg) -> LLMProvider | None:
     max_tokens = _MAX_TOKENS_FOR_PROVIDER[cfg.llm_provider]
     # `model` + `max_tokens` durchreichen: Modell-Erhalt (z. B. claude-opus-4-7)
     # und Token-Limit (T1084: DEFAULT_MAX_TOKENS=2048 < ~3500 Token Folgentext).
-    # T1454 Mistral-Präfix-Annahme (Deploy-Config, Nic-gegatet): litellm routet
-    # Mistral-Modelle NUR mit `mistral/`-Präfix (die Hand-Vendoren nutzten blanke
-    # Namen wie `mistral-medium-2508`). Die hoerspiel-AVAILABLE_MODELS führen
-    # blanke Mistral-Namen — ob der Deploy sie mit `mistral/`-Präfix konfiguriert
-    # oder LiteLLM-`model_alias` nutzt, ist eine Deploy-Config-Frage, NICHT hier
-    # geraten. Claude-Modelle (Default `claude-opus-4-7`) erkennt litellm am
-    # blanken Namen — der Claude-Pfad ist unverändert.
+    # LLMP-S13 (#1463): der Mistral-`mistral/`-Präfix ist jetzt ZENTRAL gelöst —
+    # `tools.llm` normalisiert den blanken Mistral-Modellnamen
+    # (`mistral-medium-2508` → `mistral/mistral-medium-2508`) vor den `get_*`-
+    # Sichten (`_resolver.normalize_model`, gegatet auf den litellm-Motor). Die
+    # hoerspiel-AVAILABLE_MODELS führen weiter blanke Namen — dieser Pfad reicht
+    # sie unverändert durch (früher #1454-Deploy-Config-Frage, jetzt am Motor
+    # normalisiert). Claude-Modelle bleiben blank — litellm erkennt sie so.
     # `agent_slot` (T1454): Recherche-Agent bleibt anthropic (web_search-nativ).
     return LibSingleshotAdapter(
         slot=slot, model=cfg.llm_model, max_tokens=max_tokens,

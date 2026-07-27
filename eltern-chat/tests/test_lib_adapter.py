@@ -1,15 +1,23 @@
-"""LibAgentAdapter — eltern-chat-Chat-Agent über `tools.llm` (T1085, PR2).
+"""LibAgentAdapter — eltern-chat-Chat-Agent über `tools.llm` (T1085, #1463).
 
 Deckt den `generate(GenerationRequest) -> GenerationResponse`-Vertrag des
-Lib-Adapters ab: kanonisch → neutrale (Anthropic-shaped) Wire-Form, beide
-usage-Formen → ProviderUsage (SQLite-Pfad EC-23), die JSONL-Doppelschreibung der
-Lib (caller=eltern-chat, correlation_id=turn_id), Slot-Wahl (claude→anthropic),
-ProviderError-Mapping (tools.llm → model) und das effektive Modell.
+Lib-Adapters ab: kanonisch → neutrale (Anthropic-shaped) Wire-Form, die
+LiteLLM-OpenAI-usage → ProviderUsage (SQLite-Pfad EC-23), die JSONL-
+Doppelschreibung der Lib (caller=eltern-chat, correlation_id=turn_id), die
+anbieter-benannte litellm-Slot-Wahl (LLMP-S13: claude→eltern-chat-litellm-claude,
+mistral→eltern-chat-litellm-eu), ProviderError-Mapping (tools.llm → model) und
+das effektive Modell.
 
-Mock-Naht: das Vendor-SDK wird über `patch.dict(sys.modules, {"anthropic": …})`
-bzw. `{"httpx": …}` ersetzt (kein Netz), `tools.llm.public_api.resolve_api_key`
-wird gestubt (kein echter Key nötig). `XBUDDY_DATA_DIR` lenkt die JSONL-Datei
-auf `tmp_path` (die autouse-conftest-Fixture isoliert nur den ZD-Store).
+Seit #1463 (LLMP-S13) fährt der eltern-chat-Agent über den litellm-Motor. Die
+Mock-Naht ist darum das `litellm`-SDK (nicht mehr anthropic/httpx): es wird über
+`patch.dict(sys.modules, {"litellm": …})` als MagicMock eingehängt (kein Netz),
+`tools.llm.public_api.resolve_api_key` wird gestubt (kein echter Key nötig).
+`XBUDDY_DATA_DIR` lenkt die JSONL-Datei auf `tmp_path`.
+
+AC3 (#1463): `test_mistral_provider_prefixes_model_at_litellm` beweist an der
+litellm-Grenze — NICHT weggemockt —, dass provider=mistral ein `mistral/`-
+präfixiertes Modell an `litellm.completion` gibt (die Naht, die #1452 live erst
+brach).
 """
 
 import json
@@ -29,66 +37,65 @@ from model import (
 from providers.lib_adapter import LibAgentAdapter
 
 # ----------------------------------------------------------------------
-#  Fakes — Anthropic-SDK (RAW-usage) + Mistral-HTTP (dict-usage)
+#  Fakes — LiteLLM-SDK (OpenAI-förmige ModelResponse)
 # ----------------------------------------------------------------------
 
 
-def _anthropic_usage(*, input_tokens=120, output_tokens=40, cache_read=5, cache_creation=7):
-    u = MagicMock()
-    u.input_tokens = input_tokens
-    u.output_tokens = output_tokens
-    u.cache_read_input_tokens = cache_read
-    u.cache_creation_input_tokens = cache_creation
-    return u
-
-
-def _text_block(text):
-    b = MagicMock()
-    b.type = "text"
-    b.text = text
-    return b
-
-
-def _tool_use_block(name, input_obj, call_id="tu-1"):
-    b = MagicMock()
-    b.type = "tool_use"
-    b.name = name
-    b.input = input_obj
-    b.id = call_id
-    return b
+class _FakeAPIError(Exception):
+    """Steht für `litellm.exceptions.APIError` im Test."""
 
 
 _NO_USAGE = object()
 
 
-def _anthropic_response(blocks, usage=_NO_USAGE):
+def _litellm_usage(*, prompt_tokens=120, completion_tokens=40, cache_read=5,
+                   cache_creation=7):
+    """LiteLLM-OpenAI-Usage: `prompt_tokens`/`completion_tokens` (+ Anthropic-Cache-
+    Passthrough). `input_tokens`/`output_tokens` fehlen bewusst (None), damit der
+    Adapter-getattr-Zweig auf die OpenAI-Namen zurückfällt (echte LiteLLM-Usage-
+    Objekte tragen die Anthropic-Namen nicht)."""
+    u = MagicMock()
+    u.input_tokens = None
+    u.output_tokens = None
+    u.prompt_tokens = prompt_tokens
+    u.completion_tokens = completion_tokens
+    u.cache_read_input_tokens = cache_read
+    u.cache_creation_input_tokens = cache_creation
+    return u
+
+
+def _tool_call(name, arguments_json, call_id="tc-1"):
+    tc = MagicMock()
+    tc.id = call_id
+    tc.function = MagicMock()
+    tc.function.name = name
+    tc.function.arguments = arguments_json
+    return tc
+
+
+def _litellm_response(text, *, tool_calls=None, usage=_NO_USAGE):
+    """OpenAI-förmige LiteLLM-`ModelResponse`: `.choices[0].message.content`
+    (+ `.tool_calls`) und `.usage` (getattr-Zugriff wie im litellm-Vendor)."""
+    message = MagicMock()
+    message.content = text
+    message.tool_calls = tool_calls or []
+    choice = MagicMock()
+    choice.message = message
+
     resp = MagicMock()
-    resp.content = blocks
-    # `usage=None` heißt explizit "Antwort ohne usage"; Default = RAW-usage-Mock.
-    resp.usage = _anthropic_usage() if usage is _NO_USAGE else usage
+    resp.choices = [choice]
+    resp.usage = _litellm_usage() if usage is _NO_USAGE else usage
     return resp
 
 
-def _fake_anthropic():
+def _fake_litellm(response=None, *, side_effect=None):
+    """Gemocktes `litellm`-SDK: `.completion` + `.exceptions.APIError`."""
     fake = MagicMock()
-    client = MagicMock()
-    fake.Anthropic.return_value = client
-    fake.APIError = Exception
-    return fake, client
-
-
-def _fake_httpx(response_json, status_code=200):
-    fake = MagicMock()
-    resp = MagicMock()
-    resp.status_code = status_code
-    resp.json.return_value = response_json
-    resp.text = json.dumps(response_json)
-    fake.post.return_value = resp
-
-    class _RequestError(Exception):
-        pass
-
-    fake.RequestError = _RequestError
+    fake.exceptions.APIError = _FakeAPIError
+    if side_effect is not None:
+        fake.completion.side_effect = side_effect
+    else:
+        fake.completion.return_value = response
     return fake
 
 
@@ -114,40 +121,39 @@ def _request(messages, *, system="Du bist ein Assistent.", correlation_id="turn-
 
 
 # ----------------------------------------------------------------------
-#  Claude-Pfad (anthropic-Vendor, RAW-usage)
+#  Claude-Pfad (litellm-Motor, Claude-Slot)
 # ----------------------------------------------------------------------
 
 
 def test_claude_slot_and_effective_model_opus(jsonl_path):
-    """provider='claude' wählt Slot eltern-chat-anthropic-api-key; leeres
-    provider_model → effektives Modell claude-opus-4-7 (Alt-Adapter-Default)."""
-    fake, client = _fake_anthropic()
-    client.messages.create.return_value = _anthropic_response([_text_block("Hallo.")])
+    """provider='claude' wählt Slot eltern-chat-litellm-claude-api-key (LLMP-S13);
+    leeres provider_model → effektives Modell claude-opus-4-7 (Alt-Adapter-Default,
+    blank an litellm — litellm erkennt Claude ohne Präfix)."""
+    fake = _fake_litellm(_litellm_response("Hallo."))
 
-    with patch.dict(sys.modules, {"anthropic": fake}), \
+    with patch.dict(sys.modules, {"litellm": fake}), \
          patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
         adapter = LibAgentAdapter(provider="claude", provider_model="")
         adapter.generate(_request([Message(role="user", blocks=[TextBlock("Hi")])]))
 
-    # Effektives Modell = opus-4-7 (nicht der Vendor-Haiku-Default).
-    assert client.messages.create.call_args.kwargs["model"] == "claude-opus-4-7"
-    # Slot landet im JSONL als eltern-chat-anthropic-api-key.
+    # Effektives Modell = opus-4-7 (blank, kein Präfix für Claude).
+    assert fake.completion.call_args.kwargs["model"] == "claude-opus-4-7"
+    # Slot landet im JSONL als anbieter-benannter litellm-Claude-Slot.
     line = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
-    assert line["slot"] == "eltern-chat-anthropic-api-key"
+    assert line["slot"] == "eltern-chat-litellm-claude-api-key"
     assert line["caller"] == "eltern-chat"
 
 
-def test_claude_tool_use_roundtrip_and_raw_usage(jsonl_path):
-    """tool_use-Antwort → TaskCallBlock; RAW-usage (Anthropic) → ProviderUsage
-    (SQLite-Pfad EC-23). Plus: Doppelschreibung — usage gefüllt UND ein JSONL-
-    Eintrag mit correlation_id=turn_id."""
-    fake, client = _fake_anthropic()
-    client.messages.create.return_value = _anthropic_response([
-        _text_block("Ich schaue."),
-        _tool_use_block("wetter", {"ort": "Berlin"}, call_id="call-7"),
-    ])
+def test_claude_tool_use_roundtrip_and_usage(jsonl_path):
+    """tool_use-Antwort → TaskCallBlock; LiteLLM-usage (prompt/completion + cache)
+    → ProviderUsage (SQLite-Pfad EC-23). Plus: Doppelschreibung — usage gefüllt
+    UND ein JSONL-Eintrag mit correlation_id=turn_id."""
+    fake = _fake_litellm(_litellm_response(
+        "Ich schaue.",
+        tool_calls=[_tool_call("wetter", '{"ort": "Berlin"}', call_id="call-7")],
+    ))
 
-    with patch.dict(sys.modules, {"anthropic": fake}), \
+    with patch.dict(sys.modules, {"litellm": fake}), \
          patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
         adapter = LibAgentAdapter(provider="claude", provider_model="")
         resp = adapter.generate(_request(
@@ -162,7 +168,7 @@ def test_claude_tool_use_roundtrip_and_raw_usage(jsonl_path):
     assert resp.task_calls[0].task == "wetter"
     assert resp.task_calls[0].arguments == {"ort": "Berlin"}
 
-    # EC-23 SQLite-Pfad: usage gefüllt aus RAW-Objekt (cache-Felder gemappt).
+    # EC-23 SQLite-Pfad: usage gefüllt aus LiteLLM-Objekt (cache-Felder gemappt).
     assert resp.usage is not None
     assert resp.usage.input_tokens == 120
     assert resp.usage.output_tokens == 40
@@ -178,10 +184,9 @@ def test_claude_tool_use_roundtrip_and_raw_usage(jsonl_path):
 
 
 def test_claude_image_and_tool_result_to_wire(jsonl_path):
-    """ImageBlock → {type:image,source:base64,…}; TaskResultBlock mit is_error
-    → {type:tool_result,tool_use_id,content,is_error} in der Wire-Form."""
-    fake, client = _fake_anthropic()
-    client.messages.create.return_value = _anthropic_response([_text_block("Ein Hund.")])
+    """ImageBlock → OpenAI image_url-part; TaskResultBlock mit is_error →
+    {"role":"tool", …, "[FEHLER] …"} in der litellm-Wire-Form."""
+    fake = _fake_litellm(_litellm_response("Ein Hund."))
 
     messages = [
         Message(role="user", blocks=[
@@ -193,47 +198,43 @@ def test_claude_image_and_tool_result_to_wire(jsonl_path):
         ]),
     ]
 
-    with patch.dict(sys.modules, {"anthropic": fake}), \
+    with patch.dict(sys.modules, {"litellm": fake}), \
          patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
         adapter = LibAgentAdapter(provider="claude", provider_model="")
         adapter.generate(_request(messages))
 
-    sent = client.messages.create.call_args.kwargs["messages"]
-    # ImageBlock → neutrale image-Wire-Form (unverändert durchgereicht).
-    img = sent[0]["content"][1]
-    assert img["type"] == "image"
-    assert img["source"] == {"type": "base64", "media_type": "image/png", "data": "AAAA"}
-    # TaskResultBlock mit is_error → tool_result-Wire-Form.
-    tr = sent[1]["content"][0]
-    assert tr["type"] == "tool_result"
-    assert tr["tool_use_id"] == "call-1"
-    assert tr["content"] == "Sensor offline"
-    assert tr["is_error"] is True
+    sent = fake.completion.call_args.kwargs["messages"]
+    # System als eigene erste Message (system_message_distinct), dann der User-Turn.
+    assert sent[0]["role"] == "system"
+    # ImageBlock → OpenAI image_url-content-part.
+    img_parts = sent[1]["content"]
+    img = next(p for p in img_parts if p.get("type") == "image_url")
+    assert img["image_url"]["url"] == "data:image/png;base64,AAAA"
+    # TaskResultBlock mit is_error → tool-Nachricht mit [FEHLER]-Prefix.
+    tool_msg = next(m for m in sent if m.get("role") == "tool")
+    assert tool_msg["tool_call_id"] == "call-1"
+    assert tool_msg["content"] == "[FEHLER] Sensor offline"
 
 
 def test_claude_explicit_provider_model_overrides_default(jsonl_path):
     """Konfiguriertes provider_model schlägt den Anbieter-Default (Verhalten
-    erhalten: provider_model durchgereicht)."""
-    fake, client = _fake_anthropic()
-    client.messages.create.return_value = _anthropic_response([_text_block("Ok.")])
+    erhalten: provider_model durchgereicht, blank für Claude)."""
+    fake = _fake_litellm(_litellm_response("Ok."))
 
-    with patch.dict(sys.modules, {"anthropic": fake}), \
+    with patch.dict(sys.modules, {"litellm": fake}), \
          patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
         adapter = LibAgentAdapter(provider="claude", provider_model="claude-sonnet-4-5")
         adapter.generate(_request([Message(role="user", blocks=[TextBlock("Hi")])]))
 
-    assert client.messages.create.call_args.kwargs["model"] == "claude-sonnet-4-5"
+    assert fake.completion.call_args.kwargs["model"] == "claude-sonnet-4-5"
 
 
 def test_lib_provider_error_maps_to_model_provider_error(jsonl_path):
     """tools.llm.ProviderError aus dem .step()-Call → model.ProviderError
     (run_turn._call_provider fängt model.ProviderError, EC-14)."""
-    fake, client = _fake_anthropic()
-    # APIError = Exception (siehe _fake_anthropic) → der Vendor übersetzt sie
-    # in tools.llm.ProviderError; der Adapter mappt weiter auf model.ProviderError.
-    client.messages.create.side_effect = fake.APIError("boom")
+    fake = _fake_litellm(side_effect=_FakeAPIError("boom"))
 
-    with patch.dict(sys.modules, {"anthropic": fake}), \
+    with patch.dict(sys.modules, {"litellm": fake}), \
          patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
         adapter = LibAgentAdapter(provider="claude", provider_model="")
         with pytest.raises(ProviderError):
@@ -241,24 +242,22 @@ def test_lib_provider_error_maps_to_model_provider_error(jsonl_path):
 
 
 # ----------------------------------------------------------------------
-#  Mistral-Pfad (mistral-Vendor, dict-usage)
+#  Mistral-Pfad (litellm-Motor, EU-Slot, mistral/-Präfix — AC2 + AC3)
 # ----------------------------------------------------------------------
 
 
-def test_mistral_slot_dict_usage_and_default_model(jsonl_path):
-    """provider='mistral' wählt Slot eltern-chat-mistral-api-key; dict-usage
-    (prompt_/completion_tokens) → ProviderUsage; leeres provider_model →
-    mistral-medium-2508 (Alt-Adapter-Default)."""
-    response_json = {
-        "choices": [{"message": {"content": "Servus.", "tool_calls": [
-            {"id": "mc-1", "type": "function",
-             "function": {"name": "wetter", "arguments": "{\"ort\": \"Wien\"}"}},
-        ]}}],
-        "usage": {"prompt_tokens": 200, "completion_tokens": 30},
-    }
-    fake_httpx = _fake_httpx(response_json)
+def test_mistral_slot_usage_and_default_model(jsonl_path):
+    """provider='mistral' wählt Slot eltern-chat-litellm-eu-api-key (LLMP-S13,
+    anbieter-benannt, purpose OHNE Vendor-Slug); LiteLLM-usage → ProviderUsage;
+    leeres provider_model → mistral-medium-2508 (Alt-Adapter-Default)."""
+    fake = _fake_litellm(_litellm_response(
+        "Servus.",
+        tool_calls=[_tool_call("wetter", '{"ort": "Wien"}', call_id="mc-1")],
+        usage=_litellm_usage(prompt_tokens=200, completion_tokens=30,
+                             cache_read=0, cache_creation=0),
+    ))
 
-    with patch.dict(sys.modules, {"httpx": fake_httpx}), \
+    with patch.dict(sys.modules, {"litellm": fake}), \
          patch("tools.llm.public_api.resolve_api_key", return_value="sk-mistral"):
         adapter = LibAgentAdapter(provider="mistral", provider_model="")
         resp = adapter.generate(_request(
@@ -270,7 +269,8 @@ def test_mistral_slot_dict_usage_and_default_model(jsonl_path):
     assert resp.task_calls[0].task == "wetter"
     assert resp.task_calls[0].arguments == {"ort": "Wien"}
 
-    # dict-usage → ProviderUsage (cache=0, model_id = Mistral-Default).
+    # usage → ProviderUsage (cache=0, model_id = blanker Mistral-Default —
+    # `_model` bleibt blank; das Präfix ergänzt nur die litellm-Grenze).
     assert resp.usage is not None
     assert resp.usage.input_tokens == 200
     assert resp.usage.output_tokens == 30
@@ -278,15 +278,41 @@ def test_mistral_slot_dict_usage_and_default_model(jsonl_path):
     assert resp.usage.cache_creation_tokens == 0
     assert resp.usage.model_id == "mistral-medium-2508"
 
-    # Payload nutzt das effektive Default-Modell.
-    sent_payload = json.loads(fake_httpx.post.call_args.kwargs["content"])
-    assert sent_payload["model"] == "mistral-medium-2508"
-
-    # JSONL: caller=eltern-chat, Slot=mistral, correlation_id=turn_id.
+    # JSONL: caller=eltern-chat, Slot = anbieter-benannter EU-litellm-Slot.
     line = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
     assert line["caller"] == "eltern-chat"
-    assert line["slot"] == "eltern-chat-mistral-api-key"
+    assert line["slot"] == "eltern-chat-litellm-eu-api-key"
     assert line["correlation_id"] == "turn-99"
+
+
+def test_mistral_provider_prefixes_model_at_litellm(jsonl_path):
+    """AC3 (#1463): provider=mistral gibt ein `mistral/`-präfixiertes Modell an
+    `litellm.completion` — die Naht, die #1452 live erst brach (`LLM Provider NOT
+    provided`). Diese Grenze wird NICHT weggemockt: `litellm.completion` selbst
+    ist der Mock, und wir lesen sein `model`-kwarg."""
+    fake = _fake_litellm(_litellm_response("Ok."))
+
+    with patch.dict(sys.modules, {"litellm": fake}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-mistral"):
+        adapter = LibAgentAdapter(provider="mistral", provider_model="")
+        adapter.generate(_request([Message(role="user", blocks=[TextBlock("Hi")])]))
+
+    # Blanker Default `mistral-medium-2508` → zentral zu `mistral/…` normalisiert.
+    assert fake.completion.call_args.kwargs["model"] == "mistral/mistral-medium-2508"
+
+
+def test_mistral_explicit_model_also_prefixed(jsonl_path):
+    """AC3: auch ein explizit konfiguriertes blankes Mistral-Modell wird an der
+    litellm-Grenze präfixiert (die Normalisierung greift auf dem Modellnamen,
+    nicht nur auf dem Default)."""
+    fake = _fake_litellm(_litellm_response("Ok."))
+
+    with patch.dict(sys.modules, {"litellm": fake}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-mistral"):
+        adapter = LibAgentAdapter(provider="mistral", provider_model="mistral-large-2411")
+        adapter.generate(_request([Message(role="user", blocks=[TextBlock("Hi")])]))
+
+    assert fake.completion.call_args.kwargs["model"] == "mistral/mistral-large-2411"
 
 
 # ----------------------------------------------------------------------
@@ -296,27 +322,23 @@ def test_mistral_slot_dict_usage_and_default_model(jsonl_path):
 
 def test_lib_adapter_passes_max_tokens_4096_to_vendor(jsonl_path):
     """LibAgentAdapter reicht max_tokens=4096 (Alt-Wert claude.py:32) an den
-    Anthropic-Vendor durch — messages.create wird mit max_tokens=4096 gerufen (AC2)."""
-    fake, client = _fake_anthropic()
-    client.messages.create.return_value = _anthropic_response([_text_block("Ok.")])
+    litellm-Motor durch — completion wird mit max_tokens=4096 gerufen."""
+    fake = _fake_litellm(_litellm_response("Ok."))
 
-    with patch.dict(sys.modules, {"anthropic": fake}), \
+    with patch.dict(sys.modules, {"litellm": fake}), \
          patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
         adapter = LibAgentAdapter(provider="claude", provider_model="")
         adapter.generate(_request([Message(role="user", blocks=[TextBlock("Hi")])]))
 
-    # Alt-treuer Wert 4096 muss im Create-Call landen (nicht 2048 Lib-Default).
-    assert client.messages.create.call_args.kwargs["max_tokens"] == 4096
+    assert fake.completion.call_args.kwargs["max_tokens"] == 4096
 
 
 def test_missing_usage_yields_none(jsonl_path):
     """Fehlt usage in der Lib-Antwort → GenerationResponse.usage None (wie
     claude.py: dann hängt _call_provider keinen ProviderCall an)."""
-    fake, client = _fake_anthropic()
-    client.messages.create.return_value = _anthropic_response(
-        [_text_block("Ok.")], usage=None)
+    fake = _fake_litellm(_litellm_response("Ok.", usage=None))
 
-    with patch.dict(sys.modules, {"anthropic": fake}), \
+    with patch.dict(sys.modules, {"litellm": fake}), \
          patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
         adapter = LibAgentAdapter(provider="claude", provider_model="")
         resp = adapter.generate(_request([Message(role="user", blocks=[TextBlock("Hi")])]))
