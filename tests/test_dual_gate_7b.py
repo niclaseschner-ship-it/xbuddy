@@ -432,7 +432,7 @@ def test_paired_at_write_proof(tmp_path):
     Store (GER-3), before/after des tmp-Files zeigen den Stempel."""
     geraete_path = str(tmp_path / "geraete.json")
     before = {"geraete": [{"id": DISPLAY_ID, "name": "Wohnzimmer",
-                           "status": "aktiv"}]}
+                           "status": "aktiv", "verwendung": "display"}]}
     with open(geraete_path, "w", encoding="utf-8") as f:
         json.dump(before, f)
 
