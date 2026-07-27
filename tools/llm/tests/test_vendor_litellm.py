@@ -482,6 +482,38 @@ def test_get_completion_facade_boot_and_call_via_litellm(jsonl_path):
 
 
 # ----------------------------------------------------------------------
+#  LLMP-S13 (#1463) — zentrale mistral/-Präfix-Normalisierung an _build_vendor
+# ----------------------------------------------------------------------
+
+
+def test_litellm_slot_prefixes_bare_mistral_model(jsonl_path):
+    """LLMP-S13/AC1: ein blankes Mistral-Modell auf einem litellm-Slot bekommt
+    das `mistral/`-Präfix ZENTRAL an `_build_vendor` (vor den get_*-Sichten) —
+    `litellm.completion` sieht `mistral/mistral-medium-2508` (die #1452-Naht)."""
+    fake_litellm = _make_fake_litellm_sdk(
+        _make_singleshot_response(content="ok"))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        comp = public_api.get_completion(
+            slot="hoerspiel-litellm-eu-api-key", model="mistral-medium-2508")
+        comp.complete("S", "U")
+    assert fake_litellm.completion.call_args.kwargs["model"] == "mistral/mistral-medium-2508"
+
+
+def test_litellm_slot_leaves_claude_model_bare(jsonl_path):
+    """LLMP-S13/AC1: ein Claude-Modell auf einem litellm-Slot bleibt blank —
+    litellm erkennt es am Namen, kein doppeltes/falsches Präfix."""
+    fake_litellm = _make_fake_litellm_sdk(
+        _make_singleshot_response(content="ok"))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        comp = public_api.get_completion(
+            slot="hoerspiel-litellm-claude-api-key", model="claude-opus-4-7")
+        comp.complete("S", "U")
+    assert fake_litellm.completion.call_args.kwargs["model"] == "claude-opus-4-7"
+
+
+# ----------------------------------------------------------------------
 #  Slot 2 (#1452) — agent_step: Wire-Übersetzung + Parse + Loop-E2E
 # ----------------------------------------------------------------------
 

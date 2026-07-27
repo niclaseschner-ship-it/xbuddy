@@ -48,28 +48,48 @@ _VENDOR_DEFAULT_MODEL = {
     "mistral": "mistral-medium-2508",
 }
 
+# LLMP-S13 (#1463): per-Backend litellm-Slot nach effektivem Provider — anbieter-
+# benannt, KEIN fester Ein-Slug (#1452-Fehler). Der Agent-Pfad fährt über den
+# litellm-Motor; der Slot bindet nur den API-Key im Zugangsdaten-Speicher (ZD-5).
+# parse_slot-Falle (LLMP-5): der purpose-Teil trägt KEINEN Vendor-Slug
+# (`mistral`/`anthropic`) — sonst matcht parse_slot ZWEI Vendoren (litellm UND
+# mistral) → mehrdeutig → Boot-fatal. Darum `eu` (EU-Region-Marker) statt
+# `mistral` (identisch zu hoerspiel/main.py:_LIB_SLOT_FOR_PROVIDER, T1454).
+_LIB_SLOT_FOR_PROVIDER = {
+    "claude": "eltern-chat-litellm-claude-api-key",
+    "mistral": "eltern-chat-litellm-eu-api-key",
+}
+
 
 class LibAgentAdapter:
     """Übersetzt das kanonische Modell <-> `tools.llm`-Agent-Sicht (T1085).
 
     `provider` ist der eltern-chat-Adapter-Name (`claude`/`mistral`), wie ihn
     config liefert; `provider_model` ist das konfigurierte Modell (leer →
-    Anbieter-Default). Der Konstruktor löst den Brand-Vendor-Slug auf
-    (`vendor_slug_for_adapter` / `zd_name_provider_api_key` → Slot
-    `eltern-chat-<vendor>-api-key`) und baut die Lib-Fassade einmal — den
-    API-Key holt die Lib selbst aus dem Zugangsdaten-Speicher (ZD-5).
+    Anbieter-Default). Der Konstruktor wählt den anbieter-benannten litellm-Slot
+    (`_LIB_SLOT_FOR_PROVIDER`, LLMP-S13) und baut die Lib-Fassade einmal — den
+    API-Key holt die Lib selbst aus dem Zugangsdaten-Speicher (ZD-5). Das
+    `mistral/`-Präfix ergänzt die Lib zentral (LLMP-S13, `_build_vendor`); der
+    Adapter reicht den blanken Modellnamen durch.
     """
 
     def __init__(self, provider, provider_model=""):
         # Lokaler Import: bricht keinen Zyklus, hält den Modulkopf schlank und
         # spiegelt das Lazy-Muster der Alt-Adapter (anthropic/httpx lazy).
-        from onboarding_store import vendor_slug_for_adapter, zd_name_provider_api_key
+        # `vendor_slug_for_adapter` NUR für den Alt-Modell-Default-Lookup:
+        # `claude` → `anthropic` → `claude-opus-4-7`, `mistral` → `mistral` →
+        # `mistral-medium-2508` (EC-15, exakt der Alt-Pfad). Der Slug wird NICHT
+        # in den Slot-Namen gebaut — der Slot ist anbieter-benannt (LLMP-S13).
+        from onboarding_store import vendor_slug_for_adapter
 
         vendor = vendor_slug_for_adapter(provider)
-        slot = zd_name_provider_api_key(provider)
+        # LLMP-S13: Slot nach effektivem Provider. Unbekannter Provider ist ein
+        # Konfig-Fehler (KeyError) — sichtbar am Boot, kein Silent-Fallback.
+        slot = _LIB_SLOT_FOR_PROVIDER[provider]
         # Effektives Modell: konfiguriertes Modell, sonst Anbieter-Default des
         # Brand-Vendors (EC-15) — exakt der Alt-Pfad (claude.py:36 /
-        # mistral.py:DEFAULT_MODEL).
+        # mistral.py:DEFAULT_MODEL). BLANK (`mistral-medium-2508`); das
+        # `mistral/`-Präfix ergänzt `tools.llm` zentral (LLMP-S13).
         self._model = (provider_model or "").strip() or _VENDOR_DEFAULT_MODEL.get(vendor, "")
         self._provider = provider
         self._slot = slot
@@ -174,12 +194,20 @@ class LibAgentAdapter:
         return response
 
     def _to_provider_usage(self, usage):
-        """Neutrale `usage` → `ProviderUsage` — beide Vendor-Formen (T1085-Befund).
+        """Neutrale `usage` → `ProviderUsage` — alle Vendor-Formen (T1085/#1463).
 
-        Anthropic liefert ein RAW-Objekt (`getattr` input_tokens/output_tokens/
-        cache_read_input_tokens/cache_creation_input_tokens), Mistral ein DICT
-        (`prompt_tokens`/`completion_tokens`, cache=0). Fehlt usage komplett →
-        None (wie claude.py: dann hängt _call_provider keinen ProviderCall an).
+        Drei Formen:
+          - Mistral (Hand-Vendor): DICT (`prompt_tokens`/`completion_tokens`,
+            kein Caching).
+          - Anthropic (Hand-Vendor): RAW-Objekt (`input_tokens`/`output_tokens`/
+            `cache_read_input_tokens`/`cache_creation_input_tokens`).
+          - LiteLLM (Motor seit #1452/#1463): RAW-Objekt in OpenAI-Form
+            (`prompt_tokens`/`completion_tokens`), Anthropic-Cache-Zahlen additiv
+            (`cache_read_input_tokens`/`cache_creation_input_tokens`, Prompt-
+            Caching-Passthrough). Darum liest der getattr-Zweig BEIDE Token-
+            Namen — `input_tokens` bevorzugt, sonst `prompt_tokens` (analog
+            output). Fehlt usage komplett → None (wie claude.py: dann hängt
+            _call_provider keinen ProviderCall an).
         """
         if usage is None:
             return None
@@ -192,10 +220,18 @@ class LibAgentAdapter:
                 cache_creation_tokens=int(usage.get("cache_creation_tokens", 0) or 0),
                 model_id=self._model,
             )
-        # Anthropic-Form: RAW-Objekt mit getattr-Feldern.
+        # RAW-Objekt (Anthropic ODER LiteLLM/OpenAI-förmig). Token-Namen je nach
+        # Backend: Anthropic `input_tokens`, LiteLLM `prompt_tokens` — der
+        # bevorzugte Name gewinnt, sonst der Alternativname.
+        input_tokens = getattr(usage, "input_tokens", None)
+        if input_tokens is None:
+            input_tokens = getattr(usage, "prompt_tokens", 0)
+        output_tokens = getattr(usage, "output_tokens", None)
+        if output_tokens is None:
+            output_tokens = getattr(usage, "completion_tokens", 0)
         return ProviderUsage(
-            input_tokens=int(getattr(usage, "input_tokens", 0) or 0),
-            output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
+            input_tokens=int(input_tokens or 0),
+            output_tokens=int(output_tokens or 0),
             cache_read_tokens=int(getattr(usage, "cache_read_input_tokens", 0) or 0),
             cache_creation_tokens=int(getattr(usage, "cache_creation_input_tokens", 0) or 0),
             model_id=self._model,

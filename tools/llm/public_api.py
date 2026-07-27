@@ -13,7 +13,7 @@ Externe Importe gehen ausschließlich über `from tools.llm import get_chat, …
 
 from typing import Any
 
-from ._resolver import load_vendor_module, parse_slot, resolve_api_key
+from ._resolver import load_vendor_module, normalize_model, parse_slot, resolve_api_key
 from ._types import Capability, LLMCapabilityError, LLMProvider
 
 # LLMP-3: Required-Capability-Sets pro Sicht (V1, sechs ratifizierte
@@ -121,6 +121,15 @@ def _build_vendor(
         )
 
     vendor_cls = _vendor_class(module, vendor)
+    # LLMP-S13 (#1463): anbieter-spezifische Modell-Präfix-Normalisierung ZENTRAL
+    # hier — der EINE Ort vor den `get_*`-Sichten. Nur der litellm-Motor
+    # (Multi-Anbieter-Router) braucht das `provider/`-Präfix; die Hand-Vendoren
+    # (`anthropic`/`mistral`) sprechen ihre API direkt mit blanken Namen. Diese
+    # eine Gate-Zeile ersetzt die vom Incident #1452 geforderte Verortung — sie
+    # trägt eltern-chat UND hoerspiel-mistral gemeinsam, ohne Pro-Vendor-`if`
+    # über mehrere Files (Stop-Rule no_vendor_branching).
+    if vendor == "litellm":
+        model = normalize_model(model)
     # `model` und `max_tokens` nur durchreichen, wenn der Konsument sie wählt —
     # so bleibt der Default-Pfad `vendor_cls(api_key=…)` exakt wie bisher
     # (rückwärtskompatibel für Vendoren/Test-Fakes ohne diese Kwargs).
