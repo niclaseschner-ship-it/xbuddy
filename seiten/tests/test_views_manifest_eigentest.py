@@ -103,6 +103,8 @@ def test_alle_seiten_subpfade_routen_im_manifest_gelistet():
         if pfad == "/api/v1/seiten/layout":
             continue  # #1210 Daten-SSoT-Kontrakt (JSON), kein View —
             #           Geschwister zu /api/v1/seiten (Ableitung, nicht Seite)
+        if pfad == "/api/v1/seiten/reset":
+            continue  # #1461 Utility-Route (Client-Reset), kein View
         if "/static/" in pfad:
             continue  # Flask-static, kein View
         if pfad not in manifest_pfade:

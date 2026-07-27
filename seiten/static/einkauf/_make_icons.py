@@ -15,7 +15,6 @@ Dann:  PNG-Dateien committen, Skript bleibt als Quelle der Wahrheit
 
 from PIL import Image, ImageDraw
 
-
 # XBuddy-Brand-Tokens (analog controller/app-panel/manifest.json)
 THEME_COLOR  = "#47503C"   # Olivgruen — Vordergrund-Symbol
 ACCENT_COLOR = "#D87A3E"   # warmes Orange — Akzent (Korb-Griff)

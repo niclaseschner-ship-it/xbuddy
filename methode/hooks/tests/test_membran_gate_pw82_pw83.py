@@ -57,7 +57,8 @@ with tempfile.TemporaryDirectory() as tmp:
     mockdir = os.path.join(tmp, "specs", "mockups", "demo")
     os.makedirs(mockdir)
     real = os.path.join(mockdir, "variante-b.html")
-    open(real, "w").write("<html></html>")
+    with open(real, "w") as fh:
+        fh.write("<html></html>")
 
     ok, _ = srg.validate_werft_mockup_path_value("specs/mockups/demo/variante-b.html")
     check("PW-83 gueltiger Mockup-Pfad -> ok", ok is True)
@@ -86,8 +87,10 @@ def run_werft(axes_body):
 
 with tempfile.TemporaryDirectory() as tmp:
     srg.XBUDDY_REPO_ROOT = tmp
-    mockdir = os.path.join(tmp, "specs", "mockups", "demo"); os.makedirs(mockdir)
-    open(os.path.join(mockdir, "v.html"), "w").write("x")
+    mockdir = os.path.join(tmp, "specs", "mockups", "demo")
+    os.makedirs(mockdir)
+    with open(os.path.join(mockdir, "v.html"), "w") as fh:
+        fh.write("x")
 
     ok, _ = run_werft("  werft: true\n  delipetrable_kind: ui_build\n  werft_mockup_path: specs/mockups/demo/v.html\n")
     check("PW-83 ui_build + gueltiges Mockup -> allow", ok is True)
