@@ -12,7 +12,7 @@ import types
 import pytest
 
 from tools.llm import LLMCapabilityError
-from tools.llm._resolver import parse_slot
+from tools.llm._resolver import normalize_model, parse_slot
 
 
 def _install_fake_vendor(name: str):
@@ -123,3 +123,40 @@ def test_parse_slot_vendor_only_raises():
     """Slot ohne caller-Teil (Vendor am Anfang) → ValueError."""
     with pytest.raises(ValueError, match="leeren caller-Teil"):
         parse_slot("anthropic-foo-bar")
+
+
+# ----------------------------------------------------------------------
+#  LLMP-S13 (#1463): normalize_model — zentrale Präfix-Normalisierung
+# ----------------------------------------------------------------------
+
+
+def test_normalize_model_prefixes_bare_mistral():
+    """LLMP-S13: blanker Mistral-Modellname bekommt das LiteLLM-`mistral/`-Präfix."""
+    assert normalize_model("mistral-medium-2508") == "mistral/mistral-medium-2508"
+    assert normalize_model("mistral-large-2411") == "mistral/mistral-large-2411"
+
+
+def test_normalize_model_prefixes_further_mistral_families():
+    """LLMP-S13: weitere Mistral-Familien (magistral/codestral/pixtral/ministral)."""
+    assert normalize_model("magistral-medium-2506") == "mistral/magistral-medium-2506"
+    assert normalize_model("codestral-2501") == "mistral/codestral-2501"
+    assert normalize_model("pixtral-large-2411") == "mistral/pixtral-large-2411"
+
+
+def test_normalize_model_leaves_claude_bare():
+    """LLMP-S13: Claude-Modelle bleiben blank — LiteLLM erkennt sie am Namen."""
+    assert normalize_model("claude-opus-4-7") == "claude-opus-4-7"
+    assert normalize_model("claude-haiku-4-5") == "claude-haiku-4-5"
+
+
+def test_normalize_model_leaves_already_prefixed_untouched():
+    """LLMP-S13: ein bereits präfixierter Name (`azure/…`, `mistral/…`) bleibt
+    unverändert — kein Doppel-Präfix."""
+    assert normalize_model("mistral/mistral-medium-2508") == "mistral/mistral-medium-2508"
+    assert normalize_model("azure/tts-1-hd") == "azure/tts-1-hd"
+    assert normalize_model("azure/whisper-1") == "azure/whisper-1"
+
+
+def test_normalize_model_empty_stays_empty():
+    """LLMP-S13: leerer Name (Vendor-Default greift) bleibt leer."""
+    assert normalize_model("") == ""

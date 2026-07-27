@@ -140,6 +140,25 @@ def test_step_translates_and_parses(jsonl_path):
     assert parsed["est_cost_eur"] is not None
 
 
+def test_mistral_hand_vendor_model_stays_bare(jsonl_path):
+    """LLMP-S13-Gate-Grenze (#1463): die zentrale `mistral/`-Präfix-Normalisierung
+    greift NUR am litellm-Motor. Der HAND-Mistral-Vendor spricht die Mistral-API
+    direkt mit blanken Namen — sein Payload trägt `mistral-medium-2508` OHNE
+    Präfix (sonst würde `mistral/mistral-…` an die native Mistral-API gehen)."""
+    fake_httpx = _fake_httpx(_mistral_response(text="ok"))
+
+    with patch.dict(sys.modules, {"httpx": fake_httpx}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="key-fake"):
+        from tools.llm import get_agent
+        agent = get_agent(slot="eltern-chat-mistral-api-key",
+                          model="mistral-medium-2508")
+        agent.step(system="S", messages=[{"role": "user", "content": "Hi"}],
+                   tools=TOOLS, correlation_id="turn-1")
+
+    sent = json.loads(fake_httpx.post.call_args.kwargs["content"])
+    assert sent["model"] == "mistral-medium-2508"
+
+
 def test_agent_run_loops_over_step(jsonl_path):
     """agent_run nutzt agent_step pro Iteration und führt den Tool-Loop:
     erster POST → tool_call, zweiter POST → finaler Text."""

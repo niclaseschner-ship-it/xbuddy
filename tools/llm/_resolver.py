@@ -118,6 +118,43 @@ def parse_slot(slot: str) -> tuple[str, str, str]:
     return caller, vendor, purpose
 
 
+# LLMP-S13 (#1463): der EINE zentrale Ort für die anbieter-spezifische Modell-
+# Präfix-Normalisierung. LiteLLM (der Multi-Anbieter-Motor) routet ein
+# Mistral-Modell NUR mit dem Präfix `mistral/<modell>`; das Repo führt aber blanke
+# Namen (`mistral-medium-2508`, HSP-27). Ohne dieses Präfix brach der #1452-Deploy
+# (`LLM Provider NOT provided`). Die Normalisierung sitzt hier — vor den
+# `get_*`-Sichten, an einer Stelle für alle Anbieter, NICHT pro Vendor-File. Der
+# Aufrufer muss das Präfix nicht kennen.
+#
+# Erkennung per Modellnamen-Signatur (nicht per Vendor-Verzweigung): ein blanker
+# Mistral-Modellname beginnt mit `mistral-` (bzw. den weiteren Mistral-Familien).
+# Trägt der Name bereits ein `provider/`-Präfix (`azure/…`, `mistral/…`), bleibt
+# er unangetastet; Claude-Modelle (`claude-…`) erkennt LiteLLM am blanken Namen
+# und bleiben ebenfalls unberührt.
+_MISTRAL_MODEL_PREFIXES = ("mistral-", "magistral-", "codestral-", "pixtral-", "ministral-")
+
+
+def normalize_model(model: str) -> str:
+    """Ergänzt das LiteLLM-Anbieter-Präfix am Modellnamen (LLMP-S13, #1463).
+
+    Zentral vor den `get_*`-Sichten aufgerufen (`public_api._build_vendor`), an
+    genau EINEM Ort für alle Anbieter — keine Pro-Vendor-Verzweigung. Regeln:
+
+      - leerer Name (Vendor-Default greift) → unverändert leer zurück.
+      - Name trägt bereits ein `provider/`-Präfix (`azure/…`, `mistral/…`) →
+        unverändert (nicht doppelt präfixen).
+      - blanker Mistral-Modellname (`mistral-…`, `magistral-…`, …) →
+        `mistral/<name>` (LiteLLM-Routing).
+      - alles andere (Claude `claude-…` u. a.) → unverändert; LiteLLM erkennt es
+        am blanken Namen.
+    """
+    if not model or "/" in model:
+        return model
+    if model.startswith(_MISTRAL_MODEL_PREFIXES):
+        return "mistral/" + model
+    return model
+
+
 def load_vendor_module(vendor: str) -> ModuleType:
     """Importiert `tools.llm._vendor.<vendor>` (LLMP-4 Re-Export-Form).
 
