@@ -1,15 +1,15 @@
 name: lint-imports
 
 # Architektur-Gate: prüft die Modul-Grenzen (conventions/module-boundaries.md,
-# MOD-*) mit import-linter gegen .importlinter. Läuft bei jedem PR und auf
-# main. Bricht der Lauf ab, ist eine Modul-Grenze verletzt (Zyklus,
+# MOD-*) mit import-linter gegen .importlinter. Läuft bei jedem PR.
+# Bricht der Lauf ab, ist eine Modul-Grenze verletzt (Zyklus,
 # Service↔Service-Python-Import, Zugriff an der zugangsdaten-Public-API vorbei).
 # Lokal identisch via `make lint`.
+# push:[main] entfernt (RAT-30, Teil 2): der post-merge-main-Lauf wird von
+# main-health.yml konsolidiert, damit main nicht dreifach feuert.
 
 on:
   pull_request:
-  push:
-    branches: [main]
 
 permissions:
   contents: read

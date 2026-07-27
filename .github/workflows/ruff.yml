@@ -1,14 +1,14 @@
 name: ruff
 
 # Style-Gate: prüft den repo-weiten Ruff-Lint gegen pyproject.toml
-# ([tool.ruff.lint] select/ignore + per-file-ignores). Läuft bei jedem PR und
-# auf main. Ruff-Version gepinnt (0.15.15) — identisch zum lokalen Selbst-Gate
+# ([tool.ruff.lint] select/ignore + per-file-ignores). Läuft bei jedem PR.
+# Ruff-Version gepinnt (0.15.15) — identisch zum lokalen Selbst-Gate
 # `uvx ruff@0.15.15 check`. Kein Autofix im CI: der Lauf meldet nur.
+# push:[main] entfernt (RAT-30, Teil 2): der post-merge-main-Lauf wird von
+# main-health.yml konsolidiert, damit main nicht dreifach feuert.
 
 on:
   pull_request:
-  push:
-    branches: [main]
 
 permissions:
   contents: read
