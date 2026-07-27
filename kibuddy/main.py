@@ -215,6 +215,20 @@ def _get_bot_token():
         return None
 
 
+def _secret_preflight():
+    """SVC-7 — Startup-Secret-Preflight: Pflicht-Secrets vor app.run prüfen (#1447).
+
+    Löst alle Pflicht-Secrets mit derselben Reihenfolge wie zur Laufzeit auf
+    (runtime-Dict → ENV → Zugangsdaten-Store, via _get_bot_token).
+    Nur Präsenz-Prüfung — kein Test-Call gegen den Anbieter (SVC-7).
+    Fehlt ein Secret: Log-Zeile 'FEHLT: <slot/env-name>' + sys.exit(1).
+    """
+    token = _get_bot_token()
+    if not token:
+        logger.critical("FEHLT: eltern-chat-bot-token (ELTERNCHAT_BOT_TOKEN)")
+        sys.exit(1)
+
+
 def _get_familie_client():
     """Liefert einen FamilieClient — gecacht im runtime-Dict oder frisch (T1015).
 
@@ -783,6 +797,9 @@ def main(argv=None):
         stt_engine=_build_stt(runtime_cfg),
         tts_engine=_build_tts(runtime_cfg),
     )
+
+    # SVC-7: Startup-Secret-Preflight — fehlende Pflicht-Secrets brechen sichtbar (#1447).
+    _secret_preflight()
 
     logger.info(
         "KIBuddy hört auf http://%s:%s (llm=%s model=%s stt=%s voice=%s speed=%.1f data=%s)",
