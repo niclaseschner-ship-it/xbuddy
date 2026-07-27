@@ -50,6 +50,62 @@ def test_EC_15_bot_token_from_env(tmp_path, monkeypatch):
     assert cfg.bot_token == "bot-secret"
 
 
+def test_T1445_bot_token_from_store_when_env_missing(tmp_path, monkeypatch):
+    """T1445 AC2a: leeres ENV + gefüllter Store-Slot 'eltern-chat-bot-token'
+    ⇒ Token aus Store, kein ConfigError."""
+    monkeypatch.delenv("ELTERNCHAT_BOT_TOKEN", raising=False)
+    zd = _zd(tmp_path)
+    zd.set("eltern-chat-bot-token", "tok-from-store")
+    cfg = config_mod.resolve(_missing(tmp_path), zd=zd)
+    assert cfg.bot_token == "tok-from-store"
+
+
+def test_T1445_env_beats_store_for_bot_token(tmp_path, monkeypatch):
+    """T1445: ENV-Token hat Vorrang vor Store-Slot (ENV-Pfad unverändert)."""
+    monkeypatch.setenv("ELTERNCHAT_BOT_TOKEN", "tok-from-env")
+    zd = _zd(tmp_path)
+    zd.set("eltern-chat-bot-token", "tok-from-store")
+    cfg = config_mod.resolve(_missing(tmp_path), zd=zd)
+    assert cfg.bot_token == "tok-from-env"
+
+
+def test_T1445_both_empty_raises_EC15(tmp_path, monkeypatch):
+    """T1445 AC2b: ENV leer + Store leer ⇒ ConfigError EC-15 wie bisher."""
+    monkeypatch.delenv("ELTERNCHAT_BOT_TOKEN", raising=False)
+    zd = _zd(tmp_path)  # Store ohne eltern-chat-bot-token-Slot
+    with pytest.raises(config_mod.ConfigError):
+        config_mod.resolve(_missing(tmp_path), zd=zd)
+
+
+def test_T1445_live_path_bot_token_from_store_no_zd_injection(tmp_path, monkeypatch):
+    """T1445 AC2 (Live-Pfad): resolve() OHNE zd-Injektion — deckt den echten
+    Entry-Path aus main.py (Z.1253: config_mod.resolve(args.config) ohne zd).
+    resolve_store_path() wird auf einen tmp-Store gemonkeypatcht, der den Slot
+    'eltern-chat-bot-token' enthält → cfg.bot_token == Store-Wert."""
+    monkeypatch.delenv("ELTERNCHAT_BOT_TOKEN", raising=False)
+    # tmp-Store mit gefülltem Slot anlegen.
+    zd_path = str(tmp_path / "live_zd.json")
+    live_zd = Zugangsdaten(zd_path)
+    live_zd.set("eltern-chat-bot-token", "tok-live-store")
+    # resolve_store_path() in tools.zugangsdaten auf den tmp-Pfad umleiten.
+    monkeypatch.setattr("tools.zugangsdaten.resolve_store_path", lambda: zd_path)
+    cfg = config_mod.resolve(_missing(tmp_path))  # kein zd= → Live-Zweig
+    assert cfg.bot_token == "tok-live-store"
+
+
+def test_T1445_live_path_missing_store_raises_EC15(tmp_path, monkeypatch):
+    """T1445 AC2 (defensiver Live-Pfad): kein/leerer Store → kein Crash,
+    ConfigError EC-15 (except-Zweig greift, token bleibt leer)."""
+    monkeypatch.delenv("ELTERNCHAT_BOT_TOKEN", raising=False)
+    # resolve_store_path() zeigt auf nicht-existierenden Store.
+    monkeypatch.setattr(
+        "tools.zugangsdaten.resolve_store_path",
+        lambda: str(tmp_path / "nonexistent.json"),
+    )
+    with pytest.raises(config_mod.ConfigError, match="EC-15"):
+        config_mod.resolve(_missing(tmp_path))  # kein zd= → Live-Zweig
+
+
 # -- Anbieter-Key: Env > Onboarding-Speicher > leer --------------
 
 def test_EC_15_provider_key_from_env(tmp_path, monkeypatch):
