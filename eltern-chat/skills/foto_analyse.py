@@ -7,8 +7,8 @@ E-TAB-8): erfüllt denselben `MultimodalProvider`-Duck-Type wie der Legacy-Adapt
 selbst aus. Er reicht Bild + Prompt + hart-codiertes Tool-Schema an die geteilte
 LLM-Provider-Library `tools.llm` (Singleshot-Sicht `get_singleshot(...)
 .complete_structured(..., images=[…])`) durch. Das anbieter-spezifische JSON
-(base64-Bild-Block, forced tool_use, Telemetrie) lebt damit zentral in
-`tools/llm/_vendor/anthropic.py`, nicht mehr pro eltern-chat-Adapter (LLMP-S1).
+(base64-Bild-Block, forced tool_use, Telemetrie) lebt damit zentral im Vendor-
+Modul, nicht mehr pro eltern-chat-Adapter (LLMP-S1).
 
 Warum eine eigene Datei statt `providers/lib_adapter.py`: der TAB-Pfad braucht das
 **domänenspezifische** `extract_termine`-Tool-Schema (Termin-Liste), das nicht in
@@ -21,10 +21,15 @@ importiert sie von HIER (`termine_aus_bild.py` zeigt hierher). Die physischen
 Klassen-Definitionen sind in dieser Datei (Löschung von `_multimodal/` in #1334
 abgeschlossen).
 
-ZD-Slot (TAB-5, E-TAB-8): der API-Key kommt aus dem `tools.zugangsdaten`-Store
-über den Slot `eltern-chat-anthropic-foto-analyse-api-key` (die Lib holt ihn
-selbst, ZD-5) — NICHT mehr aus `config.multimodal_api_key`. Claude ist über den
-Vendor-Teil des Slots (`anthropic`) gepinnt.
+ZD-Slot (#1509, TAB-5, E-TAB-8): der API-Key kommt aus dem
+`tools.zugangsdaten`-Store über den Slot
+`eltern-chat-litellm-foto-analyse-api-key` (die Lib holt ihn selbst, ZD-5) —
+NICHT mehr aus `config.multimodal_api_key`. Claude ist weiterhin gepinnt (über
+das `_FOTO_MODEL`-Feld und den LiteLLM-Router, der Anthropic-Modellnamen
+transparent routet). Der Vendor-Teil des Slots (`litellm`) aktiviert den
+LiteLLM-Motor (RAT-20/RAT-26), der `multimodal_input` deklariert (#1509).
+NICHT mehr `anthropic` (Hand-Vendor) — dieser bleibt bis zum vollständigen
+anthropic-Abriss (#1511) erhalten; `foto_analyse` importiert ihn NICHT.
 
 Datenlinie (EC-13 / E-TAB-5): nur Bild + Caption + Tool-Schema gehen raus; das
 Bild wird nach der Extraktion verworfen (kein Photo-Buddy-Aufruf).
@@ -89,8 +94,10 @@ class MultimodalError(Exception):
 
 
 # TAB-5 (E-TAB-8): ZD-Slot-Name — EINE Wahrheitsquelle. `tools.zugangsdaten`-Store
-# via `tools.llm`-Resolver (ZD-5). Vendor-Segment `anthropic` pinnt Claude.
-FOTO_ANALYSE_SLOT = "eltern-chat-anthropic-foto-analyse-api-key"
+# via `tools.llm`-Resolver (ZD-5). Vendor-Segment `litellm` aktiviert den
+# LiteLLM-Motor (#1509), der `multimodal_input` deklariert und Bild-Blocks ins
+# OpenAI-Vision-Format übersetzt (LiteLLM routet transparent zum Anthropic-Backend).
+FOTO_ANALYSE_SLOT = "eltern-chat-litellm-foto-analyse-api-key"
 
 # TAB-5 / E-TAB-6: Foto-Modell. Spiegelt den Legacy-Fallback
 # (`_multimodal/claude.py:119` `_FALLBACK_MODEL = "claude-opus-4-7"`), damit der

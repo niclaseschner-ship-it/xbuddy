@@ -1,10 +1,11 @@
 # SYNTHETIC - kein echter Familientext (Privacy-Gate-Marker, T1315)
-"""12 synthetische Golden-Set-Fixtures für `tools.llm` (T1315, AC1).
+"""14 synthetische Golden-Set-Fixtures für `tools.llm` (T1315, AC1, #1509).
 
-Drei Regressions-Klassen:
+Drei Regressions-Klassen + Multimodal-Erweiterung:
   A) hoerspiel-502 Token-Cutoff  — Klasse: still truncated output
   B) eltern-chat Fehlpfad        — Klasse: wrong tool / forbidden string
   C) Anti-Redundanz / Schema     — Klasse: schema-Lücke / fehlender Keyword
+  D) Multimodal (#1509)          — Klasse: images-Pfad / Cap-Gate / Schema
 
 Fixture-Format (GoldenFixture):
   id               str  — eindeutiger Bezeichner
@@ -467,6 +468,102 @@ _C4: dict[str, Any] = {
 
 
 # ===========================================================================
+#  KLASSE D — Multimodal / foto_analyse-Pfad (#1509, 2 Fixtures)
+# ===========================================================================
+
+_SCHEMA_TERMINE = {
+    "type": "object",
+    "properties": {
+        "termine": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "titel": {"type": "string"},
+                    "beginn": {"type": "string"},
+                },
+                "required": ["titel", "beginn"],
+            },
+        },
+    },
+    "required": ["termine"],
+}
+
+_D1: dict[str, Any] = {
+    "id": "mm_foto_singleshot_termine_schema_valid",
+    "description": (
+        "GREEN (#1509): Multimodaler Singleshot (foto-analyse-Slot, 4096 Token-Budget) "
+        "liefert alle Schema-Pflichtfelder {'termine':[{titel,beginn}]} → "
+        "json_schema_valid-Assertion grün. Regressions-Netz für den images-Pfad: "
+        "Vendor-Params (max_tokens=4096) müssen erhalten bleiben (hoerspiel-502-Lektion)."
+    ),
+    "regression_class": "multimodal-foto-pfad",
+    "sicht": "singleshot",
+    "slot": "eltern-chat-anthropic-foto-analyse-api-key",
+    "max_tokens": 4096,
+    "input": {
+        "system": "Du bist ein präziser Termin-Extraktor.",
+        "prompt": "Begleittext: Jahr 2026.\n\nBitte extrahiere ALLE Termine aus dem Bild.",
+        "schema": _SCHEMA_TERMINE,
+        "tool_name": "extract_termine",
+    },
+    "synthetic_response": {
+        "tool_name": "extract_termine",
+        "tool_input": {
+            "termine": [
+                {"titel": "Sportfest", "beginn": "2026-09-15"},
+                {"titel": "Elternabend", "beginn": "2026-09-22T18:00:00+02:00",
+                 "ende": "2026-09-22T20:00:00+02:00", "ganztags": False},
+            ],
+        },
+        "tool_id": "tu-d1",
+        "input_tokens": 320,
+        "output_tokens": 180,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+    },
+    "assertion_kind": "json_schema_valid",
+    "assertion_params": {"required_keys": ["termine"]},
+    "expect_pass": True,
+}
+
+_D2: dict[str, Any] = {
+    "id": "mm_foto_singleshot_token_cutoff",
+    "description": (
+        "RED (#1509): Multimodaler Singleshot mit max_tokens=2048 (zu niedrig) + "
+        "output_tokens=2048 → AT LIMIT → not_truncated-Assertion rot. "
+        "Regressions-Netz gegen das hoerspiel-502-Muster im Foto-Pfad: wer "
+        "max_tokens nicht explizit übergibt, landet bei DEFAULT_MAX_TOKENS=2048 "
+        "und trunkiert lange Termin-Listen stillschweigend."
+    ),
+    "regression_class": "multimodal-foto-pfad",
+    "sicht": "singleshot",
+    "slot": "eltern-chat-anthropic-foto-analyse-api-key",
+    "max_tokens": 2048,
+    "input": {
+        "system": "Du bist ein präziser Termin-Extraktor.",
+        "prompt": "Begleittext: Jahr 2026.\n\nBitte extrahiere ALLE Termine aus dem Bild.",
+        "schema": _SCHEMA_TERMINE,
+        "tool_name": "extract_termine",
+    },
+    "synthetic_response": {
+        "tool_name": "extract_termine",
+        "tool_input": {
+            "termine": [{"titel": "Teilweise Liste", "beginn": "2026-09-15"}],
+        },
+        "tool_id": "tu-d2",
+        "input_tokens": 320,
+        "output_tokens": 2048,   # AT LIMIT = truncation signal
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+    },
+    "assertion_kind": "not_truncated",
+    "assertion_params": {"max_tokens": 2048},
+    "expect_pass": False,  # Assertion soll rot werden
+}
+
+
+# ===========================================================================
 #  Exportiertes Golden-Set
 # ===========================================================================
 
@@ -474,6 +571,7 @@ GOLDEN_FIXTURES: list[dict[str, Any]] = [
     _A1, _A2, _A3, _A4,
     _B1, _B2, _B3, _B4,
     _C1, _C2, _C3, _C4,
+    _D1, _D2,
 ]
 
 # Bequeme Subsets für parametrierte Tests
