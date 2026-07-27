@@ -929,7 +929,6 @@ async function oeffneSettings() {
     default_voice: cfg.default_voice ?? 'shimmer',
     llm_provider: cfg.llm_provider ?? 'claude',
     llm_model: cfg.llm_model ?? '',
-    audio_ziel: cfg.audio_ziel ?? 'display',
   };
   rendereSettings(cfg);
 }
@@ -937,7 +936,6 @@ async function oeffneSettings() {
 function rendereSettings(cfg) {
   const list = $('settings-list');
   const voices = cfg.voices_verfuegbar || ['shimmer', 'onyx'];
-  const ziele = cfg.audio_ziel_verfuegbar || ['display', 'panel'];
   const provider = cfg.provider_verfuegbar || [];
   const modelle = cfg.modelle_je_anbieter || {};
   const e = S.cfgEdit;
@@ -945,9 +943,6 @@ function rendereSettings(cfg) {
   const voiceChips = voices.map(v =>
     '<button class="chip' + (v === e.default_voice ? ' on' : '') + '" type="button" data-voice="' + esc(v) + '">' +
     esc(v.charAt(0).toUpperCase() + v.slice(1)) + '</button>').join('');
-  const zielChips = ziele.map(z =>
-    '<button class="chip' + (z === e.audio_ziel ? ' on' : '') + '" type="button" data-ziel="' + esc(z) + '">' +
-    esc(z === 'display' ? 'Display (Kind-Tablet)' : z === 'panel' ? 'Panel (Wand-Gerät)' : z) + '</button>').join('');
   const provOpts = provider.map(p =>
     '<option value="' + esc(p) + '"' + (p === e.llm_provider ? ' selected' : '') + '>' + esc(p) + '</option>').join('');
   const modOpts = (modelle[e.llm_provider] || []).map(m =>
@@ -964,9 +959,7 @@ function rendereSettings(cfg) {
     (provider.length ?
       '<div class="setcard"><div class="lab">Vorlese-KI <span class="val">Anbieter + Modell</span></div>' +
         '<select id="s-provider">' + provOpts + '</select>' +
-        '<select id="s-model" style="margin-top:10px">' + modOpts + '</select></div>' : '') +
-    '<div class="setcard"><div class="lab">Audio-Ausgabe <span class="val">gilt fürs Kind-Tablet</span></div>' +
-      '<div class="twochip" id="ziel-chips">' + zielChips + '</div></div>';
+        '<select id="s-model" style="margin-top:10px">' + modOpts + '</select></div>' : '');
 
   const markDirty = () => { if ($('settings-save')) $('settings-save').disabled = false; };
   const bindSlider = (id, valId, feld, suffix, digits) => {
@@ -990,13 +983,6 @@ function rendereSettings(cfg) {
     vc.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c.dataset.voice === b.dataset.voice));
     markDirty();
   });
-  const zc = $('ziel-chips');
-  if (zc) zc.addEventListener('click', ev => {
-    const b = ev.target.closest('.chip[data-ziel]'); if (!b) return;
-    S.cfgEdit.audio_ziel = b.dataset.ziel;
-    zc.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c.dataset.ziel === b.dataset.ziel));
-    markDirty();
-  });
   const sp = $('s-provider');
   if (sp) sp.addEventListener('change', () => {
     S.cfgEdit.llm_provider = sp.value;
@@ -1015,7 +1001,7 @@ function rendereSettings(cfg) {
 async function speichereSettings() {
   const btn = $('settings-save');
   if (btn) btn.disabled = true;
-  const felder = ['playback_tempo', 'pause_absatz_sek', 'pause_titel_sek', 'default_voice', 'llm_provider', 'llm_model', 'audio_ziel'];
+  const felder = ['playback_tempo', 'pause_absatz_sek', 'pause_titel_sek', 'default_voice', 'llm_provider', 'llm_model'];
   const patch = {};
   for (const k of felder) {
     if (String(S.cfgEdit[k]) !== String(S.cfg[k])) patch[k] = S.cfgEdit[k];

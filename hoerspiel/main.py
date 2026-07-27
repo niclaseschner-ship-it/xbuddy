@@ -663,15 +663,12 @@ def _build_config_response(cfg, dcfg, instance_cfg=None) -> dict:
         public["pause_absatz_sek"] = dcfg.pause_absatz_sek
         public["pause_titel_sek"] = dcfg.pause_titel_sek
         public["playback_tempo"] = dcfg.playback_tempo
-        public["audio_ziel"] = dcfg.audio_ziel
     else:
         public.setdefault("default_voice", config_mod.DEFAULT_VOICE)
         public.setdefault("pause_absatz_sek", config_mod.DEFAULT_PAUSE_ABSATZ_SEK)
         public.setdefault("pause_titel_sek", config_mod.DEFAULT_PAUSE_TITEL_SEK)
         public.setdefault("playback_tempo", config_mod.DEFAULT_PLAYBACK_TEMPO)
-        public.setdefault("audio_ziel", config_mod.DEFAULT_AUDIO_ZIEL)
     public["voices_verfuegbar"] = list(config_mod.VALID_VOICES)
-    public["audio_ziel_verfuegbar"] = list(config_mod.VALID_AUDIO_ZIEL)
     public["provider_verfuegbar"] = _provider_verfuegbar(cfg)
     public["modelle_je_anbieter"] = _modelle_je_anbieter()
     return public
@@ -712,7 +709,7 @@ def config_endpoint(kind_id: str):
     if (new_cfg.llm_provider, new_cfg.llm_model) != (cfg.llm_provider, cfg.llm_model):
         runtime["llm"] = None
 
-    # Daten-Konfig-Felder (default_voice, pause_*, playback_tempo, audio_ziel HSP-41).
+    # Daten-Konfig-Felder (default_voice, pause_*, playback_tempo).
     dcfg = _data_cfg()
     try:
         new_dcfg = config_mod.patch_data(dcfg, body) if dcfg is not None else dcfg
@@ -720,7 +717,7 @@ def config_endpoint(kind_id: str):
         return jsonify({"fehler": str(e)}), 422
     runtime["data_config"] = new_dcfg
 
-    # Persistenz (DCOMP-4, HSP-27/HSP-41): Werte überleben Restart.
+    # Persistenz (DCOMP-4, HSP-27): Werte überleben Restart.
     # Vorher schrieb PATCH nur den Memory-Snapshot — playback_tempo, default_voice
     # etc. fielen nach systemctl restart auf Datei-Default zurück.
     if new_dcfg is not None:
@@ -736,16 +733,13 @@ def config_endpoint(kind_id: str):
     return jsonify(_build_config_response(new_cfg, new_dcfg, _instance))
 
 
-# ---- Audio-Stream-SSE + play-extern (HSP-42, RATIFIZIERT 2026-06-17) ----
+# ---- Audio-Stream-SSE + play-extern (HSP-42) ----
 #
-# Bei audio_ziel=panel pusht der HSP-Service über SSE an die Panel-PWA.
-# Pattern aus router/main.py:106-161 wiederverwendet — Subscribers in einer
-# Queue-Liste pro Prozess, Lock für Thread-Safety, 15s-Heartbeat.
-#
-# Auth: PUBLIC heute (AUTH-6-Backlog, Trigger „Phase 4 HSP-Audio-Routing").
-# Caller von /play-extern ist alben.js am Kinder-Tablet (Display-Renderer-
-# Klasse AUTH-7); Caller von /audio-stream ist die Panel-PWA. Browser über
-# nginx ist kein Loopback (X-Forwarded-For greift).
+# HSP-41 ist aufgehoben — Audio immer lokal am App-Gerät.
+# Die SSE-Infrastruktur (/audio-stream, /play-extern) und das Routing-Skelett
+# bleiben als Basis für künftige Erweiterungen erhalten, werden aber nicht
+# mehr vom Frontend genutzt. Caller: keiner aktiv (alben.js panel-Zweig entfernt).
+# Auth: PUBLIC (AUTH-6-Backlog).
 
 SSE_HEARTBEAT_SECONDS = 15
 _audio_subscribers: list[queue.Queue] = []
@@ -833,7 +827,7 @@ def play_extern(kind_id: str):
     }
     Antwort: 200 {"ok": true} bei Erfolg, 404 unbekanntes album, 422 ungültige Felder.
 
-    Caller: alben.js am Kinder-Tablet bei audio_ziel=panel (HSP-22-Erweiterung).
+    Caller: keiner aktiv (HSP-41 aufgehoben, alben.js panel-Zweig entfernt).
     Auth: PUBLIC (AUTH-6, Trigger „Phase 4 HSP-Audio-Routing").
     """
     err = _assert_self_kind(kind_id)
