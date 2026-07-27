@@ -306,29 +306,28 @@ test("HSP-40: einseitiger fetch-404 → teilweise Liste + Warn-Banner für fehlg
 });
 
 /**
- * Test 3 — Befund-4 (#1263): Audio-Speichern tolerant bei unserviertem emil.
+ * Test 3 — Befund-4 (#1263): Multi-Kind-PATCH tolerant bei unserviertem emil.
  *
  * mia + finn antworten mit 200, emil mit 404 (nicht-provisioniert).
- * Der Fehler-Filter in _onSpeichern (status 0 + status 404 = soft-skip) muss
- * dafür sorgen, dass kein harter Fehler-Toast ausgelöst wird — die erreichbaren
- * Instanzen gelten als gespeichert.
+ * _patchBeideConfigs iteriert über alle KIND_IDS_V1 — Status-0- und
+ * Status-404-Ergebnisse sind soft-skip-würdig (nicht-provisionierte Instanz).
  *
- * Prüft _patchBeideConfigs (exportiert) + die Fehler-Filter-Logik aus _onSpeichern.
+ * Prüft _patchBeideConfigs (exportiert) + die Fehler-Filter-Logik.
  * Ref: #1263 Befund-4, HSP-43.
  */
-test("Befund-4 (#1263): audio_ziel-Speichern tolerant bei emil-404 — kein harter Fehler", async () => {
+test("Befund-4 (#1263): _patchBeideConfigs tolerant bei emil-404 — kein harter Fehler", async () => {
   // Routed fetch: mia+finn config PATCH → 200; emil → 404 (nicht provisioniert).
   const routedFetch = makeRoutedFetchSpy([
-    { match: /\/hoerspiel\/mia\/config/, status: 200, json: { audio_ziel: "display" } },
-    { match: /\/hoerspiel\/finn\/config/,  status: 200, json: { audio_ziel: "display" } },
+    { match: /\/hoerspiel\/mia\/config/, status: 200, json: { playback_tempo: 1.0 } },
+    { match: /\/hoerspiel\/finn\/config/,  status: 200, json: { playback_tempo: 1.0 } },
     { match: /\/hoerspiel\/emil\/config/, status: 404, json: { fehler: "nicht gefunden" } },
-  ], { audio_ziel: "display" });
+  ], { playback_tempo: 1.0 });
 
   const prevFetch = global.fetch;
   global.fetch = routedFetch;
 
   // _patchBeideConfigs iteriert über KIND_IDS_V1 und PATCHt jede Instanz.
-  const ergebnisse = await _patchBeideConfigs({ audio_ziel: "display" });
+  const ergebnisse = await _patchBeideConfigs({ playback_tempo: 1.0 });
 
   global.fetch = prevFetch;
 

@@ -19,7 +19,7 @@
       "sichtbar": true
     },
     {
-      "_comment": "HSP-Beispiel-Kacheln (HSP-42 audio_ziel=panel). Beim Tap baut der Router /display/<app>/<view> = /display/hoerspiel/mia/alben (URL-3a, RAT-17). primeSilentAudio() im Panel-PWA setzt User-Activation, danach werden audio_play-SSE-Events ohne weitere Geste abgespielt. Eine Kachel pro Kind.",
+      "_comment": "HSP-Beispiel-Kacheln. Beim Tap baut der Router /display/<app>/<view> = /display/hoerspiel/mia/alben (URL-3a, RAT-17). Audio läuft immer lokal am App-Gerät (HSP-41 aufgehoben). Eine Kachel pro Kind.",
       "key":      "hoerspiel-mia",
       "app":      "hoerspiel",
       "view":     "mia/alben",
