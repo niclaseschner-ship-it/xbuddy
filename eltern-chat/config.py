@@ -306,8 +306,18 @@ def resolve(config_path, zd=None):
     if context_depth < 1:
         raise ConfigError("context_depth muss >= 1 sein, ist %d" % context_depth)
 
-    # Bot-Token: nur Env, Pflicht (Henne-Ei — siehe E-ONB-5).
+    # Bot-Token: ENV(ELTERNCHAT_BOT_TOKEN) → Store-Slot 'eltern-chat-bot-token'
+    # → ConfigError EC-15 (T1445, additiv-rückrollbar; ENV-Pfad unverändert).
+    # Store-Read ist lazy und defensiv — fehlt der Store oder schlägt der Import
+    # fehl, wird None zurückgegeben und der ConfigError greift wie bisher.
     bot_token = os.environ.get(ENV_BOT_TOKEN, "").strip()
+    if not bot_token:
+        try:
+            from tools.zugangsdaten import Zugangsdaten, resolve_store_path
+            _zd = zd if zd is not None else Zugangsdaten(resolve_store_path())
+            bot_token = (_zd.get("eltern-chat-bot-token") or "").strip()
+        except Exception:
+            bot_token = ""
     if not bot_token:
         raise ConfigError("%s ist nicht gesetzt (Pflicht, EC-15)" % ENV_BOT_TOKEN)
 
