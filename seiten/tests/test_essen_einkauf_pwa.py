@@ -97,7 +97,8 @@ def test_essen34_manifest_json(client):
     for feld in ("name", "short_name", "start_url", "display", "icons", "theme_color"):
         assert feld in body, f"manifest.json fehlt Pflichtfeld '{feld}' (PWA-2)"
     assert body["display"] == "fullscreen"
-    assert isinstance(body["icons"], list) and len(body["icons"]) >= 2
+    assert isinstance(body["icons"], list)
+    assert len(body["icons"]) >= 2
     # Mindestens ein Icon mit purpose=maskable (PWA-2).
     purposes = [icon.get("purpose", "") for icon in body["icons"]]
     assert any("maskable" in p for p in purposes), \
@@ -248,7 +249,8 @@ def test_essen35_sw_post_nicht_gecached(client):
     """ESSEN-35: GET-Filter im fetch-Handler — POST/PATCH wird nie gecached."""
     body = client.get(_ASSET_PREFIX + "sw.js").get_data(as_text=True)
     # Heuristik: irgendwo wird method !== 'GET' (oder == 'GET') geprueft, bevor cache.put greift.
-    assert "method" in body and "GET" in body
+    assert "method" in body
+    assert "GET" in body
 
 
 # ── ESSEN-36 / MAD-5 Stell-Probe ─────────────────────────────────────────────

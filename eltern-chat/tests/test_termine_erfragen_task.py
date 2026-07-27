@@ -15,8 +15,8 @@ import tempfile
 
 import pytest
 from fakes import FakeTelegram
-from skills.plan_client import PlanClientError
 from skills._errors import BerechtigungError
+from skills.plan_client import PlanClientError
 from skills.termine_erfragen_task import TermineErfragenTask
 from tasks import ReadTask, TurnContext, build_catalog
 

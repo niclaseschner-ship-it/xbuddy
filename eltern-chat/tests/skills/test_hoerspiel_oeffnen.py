@@ -347,7 +347,8 @@ def test_AC2_task_description_enthaelt_folgen_trigger():
     assert "sofort aufrufen" in desc or "sofort" in desc
     assert "folgen" in desc or "hörbuch" in desc
     # Anti-Redundanz: Settings-Trigger sind ausgeschlossen
-    assert "nicht" in desc and ("voice" in desc or "stimme" in desc or "settings" in desc)
+    assert "nicht" in desc
+    assert "voice" in desc or "stimme" in desc or "settings" in desc
 
 
 # ============================================================
