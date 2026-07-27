@@ -27,6 +27,7 @@ sys.path.insert(0, _REPO_ROOT)
 
 from seiten import main as seiten_main  # noqa: E402
 from seiten import pwa_mantel  # noqa: E402
+from tools.initdata import session_cookie as _sc  # noqa: E402
 
 # Pilot-IDs — nur in Tests, nie im Produktiv-Code (SHELL-9).
 PANEL_ID = "mias-panel-01"
@@ -37,26 +38,43 @@ DISPLAY_ID = "tablet-tablet-mia-01"
 #  Shared Fixture
 # ============================================================
 
-# Operator-IP-Header (opt-in, nicht autouse) — T1448: /shell/ ist hard enforced.
-# Nur Tests, die explizit dieses dict übergeben, fahren als Operator-IP durch.
-# Kein blanket-autouse (#1428-Fail-Open-Risiko).
-_OPERATOR_HEADERS = {"X-Real-IP": "192.0.2.10"}
+# RAT-32: /shell/ ist Cookie-only-hart (Operator-IP als Zugangs-Alternative
+# gestrichen). Tests authentifizieren via gültigem xbuddy_session-Cookie am
+# Testclient (set_cookie — Werkzeug liest kein manuelles Cookie-Header). Das
+# leere _OPERATOR_HEADERS bleibt als Platzhalter, damit die vielen
+# `headers=_OPERATOR_HEADERS`-Aufrufstellen unberührt bleiben.
+BOT_TOKEN = "123456:ABCdef_testtoken"
+_OPERATOR_HEADERS: dict = {}
+
+
+def _auth_client():
+    """Testclient mit gültigem xbuddy_session-Cookie (RAT-32 Cookie-only-hart)."""
+    seiten_main.app.config["TESTING"] = True
+    c = seiten_main.app.test_client()
+    c.set_cookie(_sc.COOKIE_NAME, _sc.sign_session(DISPLAY_ID, BOT_TOKEN))
+    return c
+
+
+@pytest.fixture(autouse=True)
+def _bot_token_konfiguriert():
+    """RAT-32: der Cookie-Gate braucht einen konfigurierten Bot-Token, damit
+    hat_gueltigen_cookie die Signatur prüfen kann (gilt für alle Tests hier,
+    auch die mit Inline-Client). configure() setzt bot_token nur when-not-None,
+    also überschreibt die client-Fixture-Konfiguration ihn nicht."""
+    seiten_main.configure(bot_token=BOT_TOKEN)
+    return
 
 
 @pytest.fixture
 def client(monkeypatch):
-    """Testclient mit gemocktem display_id-Lookup (SHELL-2) und Origin-Config.
-
-    T1448: /shell/ ist hard enforced. Tests müssen _OPERATOR_HEADERS übergeben
-    ODER einen gültigen Cookie setzen, um 200 zu erhalten.
-    """
+    """Cookie-authentifizierter Testclient mit gemocktem display_id-Lookup
+    (SHELL-2) und Origin-Config. RAT-32: /shell/ ist Cookie-only-hart."""
     monkeypatch.setattr(
         seiten_main, "_lookup_display_id",
         lambda pid: DISPLAY_ID if pid == PANEL_ID else None,
     )
     seiten_main.configure(heim_origin="http://heim.test", tailscale_origin="https://tail.test")
-    seiten_main.app.config["TESTING"] = True
-    return seiten_main.app.test_client()
+    return _auth_client()
 
 
 # ============================================================
@@ -93,7 +111,7 @@ def test_shell2_lookup_display_id(monkeypatch):
 
     monkeypatch.setattr(seiten_main, "_lookup_display_id", fake_lookup)
     seiten_main.app.config["TESTING"] = True
-    c = seiten_main.app.test_client()
+    c = _auth_client()
     resp = c.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS)
     assert resp.status_code == 200
     assert calls == [PANEL_ID], "Lookup muss genau einmal mit panel_id aufgerufen werden"
@@ -162,7 +180,7 @@ def test_shell3_kein_iframe_ohne_display(monkeypatch):
     T1448: Operator-IP als Auth-Quelle (opt-in)."""
     monkeypatch.setattr(seiten_main, "_lookup_display_id", lambda pid: None)
     seiten_main.app.config["TESTING"] = True
-    c = seiten_main.app.test_client()
+    c = _auth_client()
     body = c.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS).get_data(as_text=True)
     # Linker Panel-Iframe bleibt
     assert "/controller/app-panel/" + PANEL_ID + "/" in body
@@ -219,7 +237,7 @@ def test_shell9_keine_hardcode_ids():
 
     # Manifest-Route pruefen: liefert panel_id aus URL, kein Hardcode
     seiten_main.app.config["TESTING"] = True
-    c = seiten_main.app.test_client()
+    c = _auth_client()
     manifest_resp = c.get("/shell/test-panel-99/manifest.json")
     assert manifest_resp.status_code == 200
     data = json.loads(manifest_resp.get_data(as_text=True))
@@ -248,7 +266,7 @@ def test_shell10_url_in_uebersicht(monkeypatch, tmp_path):
         tailscale_origin="https://tail.test",
     )
     seiten_main.app.config["TESTING"] = True
-    c = seiten_main.app.test_client()
+    c = _auth_client()
     body = c.get("/api/v1/seiten/uebersicht").get_data(as_text=True)
     # SHELL-10: Shell-URL muss im HTML der Uebersicht erscheinen
     assert "/shell/" + PANEL_ID in body, (
@@ -438,6 +456,10 @@ def test_shell_pwa_ac2_icon_public_ohne_operator(client, monkeypatch, tmp_path):
     shutil.copy(os.path.join(real_shell, "icon-192.png"), str(shell_assets / "icon-192.png"))
     monkeypatch.setitem(seiten_main.runtime, "shell_asset_dir", str(shell_assets))
 
+    # RAT-32: expliziter UN-authentifizierter Client (kein Cookie), damit dieser
+    # Test die Public-Eigenschaft (AUTH-4) echt prüft und nicht über den
+    # Cookie der _auth_client-Fixture grün wird.
+    client = seiten_main.app.test_client()
     # Kein Operator-IP, kein Cookie — Icon muss trotzdem 200 zurueckgeben (AUTH-4).
     resp = client.get("/shell/" + PANEL_ID + "/icon-192.png")
     assert resp.status_code == 200, (
