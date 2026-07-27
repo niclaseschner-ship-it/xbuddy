@@ -28,6 +28,12 @@ ausschließlich Nics persönlicher Sicht-und-Test-Gate vor Push.
 - **PRs bleiben** — sie tragen die Ticket-Automatik (`.github/workflows/ticket-status-flow.yml`
   reagiert nur auf PR-Events + `Closes`). CI-Gates / Pflicht-Reviewer bleiben draußen
   (Solo-Overhead). Watchdog IST die Review.
+  > **Amendment RAT-30 (2026-07-27):** Die „Solo-Overhead"-Prämisse ist bei n=10
+  > parallelen Sessions tot (die hier :41-42 versprochene Folge-Runde). Billige
+  > deterministische Checks (ruff + lint-imports) werden **bindend** (required),
+  > pytest bleibt still bis gemessen; push:[main]-Dreifachläufe werden zu EINEM
+  > beobachteten `main-health.yml` dedupliziert. Kein Bruch — `origin`=SSoT,
+  > PR-Pflicht, `closes-guard` unverändert. Siehe RAT-30.
 - **Merge-Gate-Mechanik:** Branch → `push origin` → Leer-Diff-Riegel → Watchdog →
   Rebase-Rendezvous auf `origin/main` (`--force-with-lease` nur auf eigenen Branch) →
   `gh pr merge --merge --delete-branch` → lokal `pull --ff-only`.

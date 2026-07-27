@@ -262,6 +262,10 @@ Direkt nach Subagent-Rückkehr, vor Merge-Gate. Mangel → einmaliger Reject
 - [ ] `lint_clean` gesetzt (`true` / `false` / `not_applicable`). Bei
       Python-Tracks mit `lint_command` (§2): `false` ohne Begründung → **Reject**
       (Selbst-Gate vor Watchdog, STYLE-2). Nicht-Python-Tracks: `not_applicable`.
+      **RAT-30, Teil 5:** Der Self-Gate (ruff + lint-imports) ist bindend UND — solange
+      pytest advisory ist (nur `closes-guard` required) — muss vor dem Merge zusätzlich
+      die **volle pytest-Suite lokal grün** sein (`python3 -m pytest -q`, repo-weit,
+      kein `-k`-Filter). Siehe Merge-Gate in `commands/arbeitstag.md`.
 
 **Optional-Felder** — fehlen ist **kein** Reject-Grund, leeres `[]` ist
 verschwendete Output-Token. Wenn inhaltslos, wird das Feld weggelassen.

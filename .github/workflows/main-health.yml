@@ -1,0 +1,69 @@
+name: main-health
+
+# Post-Merge-Health für main (RAT-30, Teil 2). Konsolidiert die früheren drei
+# push:[main]-Läufe (ruff.yml/lint-imports.yml/pytest.yml) in EINEN Workflow mit
+# EINEM Job — damit main bei einem Cross-PR-Konflikt genau EINE Meldung erzeugt
+# statt dreier separater roter Läufe + drei Mails.
+#
+# Jeder Prüf-Schritt trägt `if: always()`, damit ein früher Fehler die späteren
+# nicht überspringt (Codex-Härtung PW-88): auch bei rotem ruff laufen
+# lint-imports und pytest, und ein einziges rotes main-health-Signal deckt alle
+# drei Achsen ab. Der venv-Setup-Schritt läuft ohne `always()` — schlägt er
+# fehl, ist die Umgebung kaputt und die pytest-Aussage ohnehin bedeutungslos.
+#
+# Watcher-Vertrag (RAT-30, Teil 2): main-health ist kein passives Signal. Der
+# arbeitstag-Reflex „main-health-Status prüfen" (Merge-Gate/Session-Start,
+# methode/commands/arbeitstag.md) ist der benannte Beobachter; ein rotes
+# main-health wird binnen eines Arbeitstags triagiert, sonst greift die
+# Kill-Klausel (zurück zu getrennten push-Jobs).
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  main-health:
+    runs-on: [self-hosted, ARM64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ruff check (repo-weit)
+        if: always()
+        run: uvx ruff@0.15.15 check
+
+      - name: import-linter installieren
+        if: always()
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet "import-linter==2.11.*"
+
+      - name: Modul-Grenzen prüfen (lint-imports)
+        if: always()
+        run: .venv/bin/lint-imports
+
+      - name: pip-Cache (RAT-30, Teil 3)
+        if: always()
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-pytest-${{ hashFiles('eltern-chat/requirements.txt', 'photo/requirements.txt') }}
+          restore-keys: |
+            pip-pytest-
+
+      - name: venv + Test-Abhängigkeiten
+        # --system-site-packages: der Pi-Runner trägt die Laufzeit-Pakete der
+        # Services global (flask, Pillow, …); das venv erbt sie und pip
+        # ergänzt pytest + die deklarierten requirements reproduzierbar.
+        run: |
+          python3 -m venv --system-site-packages .venv-pytest
+          .venv-pytest/bin/pip install --quiet pytest
+          .venv-pytest/bin/pip install --quiet \
+            -r eltern-chat/requirements.txt \
+            -r photo/requirements.txt
+
+      - name: pytest (repo-weit)
+        if: always()
+        run: .venv-pytest/bin/python -m pytest -q

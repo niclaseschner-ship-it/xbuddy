@@ -459,6 +459,10 @@ operational:
   # AKTIV seit #324 (pyproject.toml [tool.ruff] auf main, 2026-06-05) +
   # PW-15 (xbuddy-prozess#15, 2026-06-08): lint_command ist für Python-Tracks Pflicht,
   # lint_clean: false blockt den Handoff (STYLE-2).
+  # RAT-30, Teil 5 (2026-07-27): Der Self-Gate (ruff && lint-imports) bleibt Handoff-
+  # Blocker; ZUSÄTZLICH gilt am Merge-Gate die lokale Volllauf-Pflicht — solange pytest
+  # advisory ist (nur closes-guard required), muss vor dem Merge `python3 -m pytest -q`
+  # repo-weit grün sein. Details: commands/arbeitstag.md (Merge-Gate), decisions/RAT-30.
   lint_command: "uvx ruff@0.15.15 check $(git diff --name-only --diff-filter=d origin/main...HEAD -- '*.py') && uvx --from import-linter==2.11.* lint-imports --no-cache"
 
 # expected_handoff: siehe §3. Pflichtfelder kommen aus Schicht 1.
