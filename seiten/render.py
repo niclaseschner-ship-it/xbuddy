@@ -69,26 +69,29 @@ _FALLBACK_ICON = {
 }
 
 
-def _urls(eintrag, heim_origin, tailscale_origin):
-    """Bildet die zwei Origin-URLs (Heim/Tailscale) je Eintrag (SREG-12).
+def _urls(eintrag, heim_origin, tailscale_origin, funnel_origin=""):
+    """Bildet die drei Origin-URLs (Heim/Tailscale/Funnel) je Eintrag (SREG-7).
 
     Pfad-Anhaengung an die Origin — Origins ohne trailing Slash, Pfade mit
     fuehrendem Slash. Tailscale-URL ist None, wenn `tailscale_origin` leer
-    (SREG-7 V1-Soll: dann Banner-Hinweis statt zwei Spalten).
+    (SREG-7 V1-Soll: dann Banner-Hinweis statt zwei Spalten). Funnel-URL ist
+    None, wenn `funnel_origin` leer (SREG-7 dritte Origin, RAT-27 — User-Geraete
+    externer Zugang; fehlt der Wert, wird die Spalte nicht angeboten).
     """
     pfad = eintrag.get("pfad", "")
     heim = (heim_origin.rstrip("/") + pfad) if heim_origin else None
     tail = (tailscale_origin.rstrip("/") + pfad) if tailscale_origin else None
-    return {"heim": heim, "tailscale": tail}
+    funnel = (funnel_origin.rstrip("/") + pfad) if funnel_origin else None
+    return {"heim": heim, "tailscale": tail, "funnel": funnel}
 
 
-def _karte_basis(eintrag, heim_origin, tailscale_origin):
+def _karte_basis(eintrag, heim_origin, tailscale_origin, funnel_origin=""):
     """Baut eine Karten-Datenstruktur fuer das Template (SREG-12 Inhalt je Karte).
 
     Pflichtfelder am Template-Modell: `label`, `zeigt`, `pfad`, `typ`, `icon`,
-    `urls.heim`, `urls.tailscale`, plus `synonyme[]` (fuer die clientseitige
-    Volltextsuche in SREG-12). `key` und `instanz` sind als data-attribute
-    nuetzlich (Suche, Hero-Anker), wandern als `key`/`instanz` mit.
+    `urls.heim`, `urls.tailscale`, `urls.funnel`, plus `synonyme[]` (fuer die
+    clientseitige Volltextsuche in SREG-12). `key` und `instanz` sind als
+    data-attribute nuetzlich (Suche, Hero-Anker), wandern als `key`/`instanz` mit.
     """
     typ = eintrag.get("typ", "")
     icons = eintrag.get("icons") or []
@@ -116,7 +119,7 @@ def _karte_basis(eintrag, heim_origin, tailscale_origin):
         "instanz": eintrag.get("instanz", ""),
         "app": eintrag.get("app", ""),
         "stale": bool(eintrag.get("stale", False)),
-        "urls": _urls(eintrag, heim_origin, tailscale_origin),
+        "urls": _urls(eintrag, heim_origin, tailscale_origin, funnel_origin),
         # SREG-14: Mini-App-Deep-Links (leer bei Nicht-Mini-Apps). Der Aggregator
         # komponiert sie; der Renderer reicht sie nur durch (URL-12-Disziplin).
         "web_app_url": eintrag.get("web_app_url", ""),
@@ -125,7 +128,7 @@ def _karte_basis(eintrag, heim_origin, tailscale_origin):
     }
 
 
-def _varianten_karten(eintrag, heim_origin, tailscale_origin):
+def _varianten_karten(eintrag, heim_origin, tailscale_origin, funnel_origin=""):
     """SREG-12 Varianten: je Variante eine eigene Karte mit voller query-Anhaengung.
 
     Pfad-Bildung: `<eintrag.pfad>?<k>=<v>&…` (flaches Query-Objekt, BUD-4).
@@ -157,6 +160,8 @@ def _varianten_karten(eintrag, heim_origin, tailscale_origin):
             "urls": {
                 "heim": (heim_origin.rstrip("/") + v_pfad) if heim_origin else None,
                 "tailscale": (tailscale_origin.rstrip("/") + v_pfad) if tailscale_origin else None,
+                # SREG-7 dritte Origin (RAT-27): Funnel-URL fuer User-Geraete.
+                "funnel": (funnel_origin.rstrip("/") + v_pfad) if funnel_origin else None,
             },
             # Varianten sind nie Mini-Apps: keine Deep-Links, beide Audiences.
             "web_app_url": "",
@@ -172,7 +177,7 @@ def _varianten_karten(eintrag, heim_origin, tailscale_origin):
 #  Hero-Sektion „Geraete-Paare" (SREG-12 Punkt 2)
 # ============================================================
 
-def _hero_paare(eintraege, heim_origin, tailscale_origin):
+def _hero_paare(eintraege, heim_origin, tailscale_origin, funnel_origin=""):
     """Baut die Hero-Paar-Boxen (Display + Panels + Editor-Anhang).
 
     Ein Paar entsteht, sobald ein Display-Client `verknuepft_mit_panels` traegt
@@ -204,19 +209,21 @@ def _hero_paare(eintraege, heim_origin, tailscale_origin):
                     pid, display.get("instanz"))
                 continue
             editor = editor_by_panel_id.get(pid)
-            # SHELL-10: Shell-URL je panel_id in SREG-12-Form (Heim + Tailscale).
-            # URL aus panel_id abgeleitet — kein GER-beides-Co-Location-Modell noetig.
+            # SHELL-10: Shell-URL je panel_id in SREG-12-Form (Heim + Tailscale +
+            # SREG-7 Funnel). URL aus panel_id abgeleitet — kein GER-Co-Location.
             panel_karten.append({
-                "panel": _karte_basis(panel, heim_origin, tailscale_origin),
-                "editor": (_karte_basis(editor, heim_origin, tailscale_origin)
+                "panel": _karte_basis(panel, heim_origin, tailscale_origin, funnel_origin),
+                "editor": (_karte_basis(editor, heim_origin, tailscale_origin, funnel_origin)
                            if editor else None),
                 "shell_urls": {
                     "heim": (heim_origin.rstrip("/") + "/shell/" + pid) if heim_origin else None,
                     "tailscale": (tailscale_origin.rstrip("/") + "/shell/" + pid) if tailscale_origin else None,
+                    # SREG-7 dritte Origin (RAT-27): Funnel-Shell-URL fuer User-Geraete.
+                    "funnel": (funnel_origin.rstrip("/") + "/shell/" + pid) if funnel_origin else None,
                 },
             })
         paare.append({
-            "display": _karte_basis(display, heim_origin, tailscale_origin),
+            "display": _karte_basis(display, heim_origin, tailscale_origin, funnel_origin),
             "panel_anzahl": len(panel_karten),
             "panels": panel_karten,
         })
@@ -245,7 +252,7 @@ def _ist_im_hero(eintrag, hero_paare):
     return False
 
 
-def _buddy_gruppen(eintraege, hero_paare, heim_origin, tailscale_origin):
+def _buddy_gruppen(eintraege, hero_paare, heim_origin, tailscale_origin, funnel_origin=""):
     """Gruppiert die uebrigen Eintraege nach `app` (Buddy/Service-Slug).
 
     Eintraege in Hero-Paar-Boxen werden ausgeschlossen (sie haengen dort). Sorten
@@ -264,8 +271,8 @@ def _buddy_gruppen(eintraege, hero_paare, heim_origin, tailscale_origin):
             # Sorten d/e ohne app — Sammelgruppe „instanz"
             app = "instanz"
         gruppe = gruppen.setdefault(app, [])
-        gruppe.append(_karte_basis(e, heim_origin, tailscale_origin))
-        gruppe.extend(_varianten_karten(e, heim_origin, tailscale_origin))
+        gruppe.append(_karte_basis(e, heim_origin, tailscale_origin, funnel_origin))
+        gruppe.extend(_varianten_karten(e, heim_origin, tailscale_origin, funnel_origin))
     # SREG-12 Reihenfolge: Anzahl absteigend, dann alphabetisch
     return [
         {"app": app, "karten": karten, "anzahl": len(karten)}
@@ -278,7 +285,7 @@ def _buddy_gruppen(eintraege, hero_paare, heim_origin, tailscale_origin):
 #  Mini-App-Sektion (SREG-14) — dedizierte Telegram-App-Liste
 # ============================================================
 
-def _mini_apps(eintraege, heim_origin, tailscale_origin):
+def _mini_apps(eintraege, heim_origin, tailscale_origin, funnel_origin=""):
     """Baut die dedizierte Mini-Telegram-App-Sektion (SREG-14, MAU-4 Punkt 1).
 
     Dieselbe Ableitung wie fuer die Buddy-Gruppen (`_karte_basis`), nur als
@@ -292,7 +299,7 @@ def _mini_apps(eintraege, heim_origin, tailscale_origin):
 
     Reihenfolge: alphabetisch nach `label` (deterministisch fuer den Guard).
     """
-    apps = [_karte_basis(e, heim_origin, tailscale_origin)
+    apps = [_karte_basis(e, heim_origin, tailscale_origin, funnel_origin)
             for e in eintraege if e.get("typ") == TYP_MINI_APP]
     return sorted(apps, key=lambda k: (k.get("label") or "").lower())
 
@@ -301,7 +308,7 @@ def _mini_apps(eintraege, heim_origin, tailscale_origin):
 #  Layout-Aufbau (V2)
 # ============================================================
 
-def baue_layout(inventar, heim_origin, tailscale_origin):
+def baue_layout(inventar, heim_origin, tailscale_origin, funnel_origin=""):
     """Bereitet die V2-Layout-Datenstruktur fuer das Template auf (SREG-12).
 
     Args:
@@ -309,13 +316,16 @@ def baue_layout(inventar, heim_origin, tailscale_origin):
         heim_origin: `display_url_origin_heim` (Pflicht, SREG-7).
         tailscale_origin: `display_url_origin_tailscale` (V1-Soll, SREG-7) — leer
             string oder None loest den Tailscale-Banner aus.
+        funnel_origin: `display_url_origin_funnel` (SREG-7, RAT-27) — leer string
+            oder None unterdrueckt die Funnel-Spalte in der Uebersicht (kein Auto-
+            Fallback auf heim/tailscale — falsche Origin waere Cookie im falschen Jar).
 
     Returns:
         Dict mit `hero_paare`, `buddy_gruppen`, `mini_apps`, `tailscale_banner`
-        (bool), `snapshot_pending` (Liste), `heim_origin`, `tailscale_origin`.
-        Direkt an `render_template("uebersicht.html", **layout)` reichbar (das
-        Template ignoriert `mini_apps` — additiv) UND als JSON-Kontrakt fuer
-        `GET /api/v1/seiten/layout` (#1210 Daten-SSoT).
+        (bool), `snapshot_pending` (Liste), `heim_origin`, `tailscale_origin`,
+        `funnel_origin`. Direkt an `render_template("uebersicht.html", **layout)`
+        reichbar UND als JSON-Kontrakt fuer `GET /api/v1/seiten/layout` (#1210
+        Daten-SSoT). Jede Karte traegt `urls.funnel` (None wenn leer).
 
     #1210 (Daten-SSoT): Dieses Dict ist die EINE angereicherte Ableitung, die
     ALLE familienseitigen Uebersichts-/Registry-Oberflaechen konsumieren
@@ -324,16 +334,19 @@ def baue_layout(inventar, heim_origin, tailscale_origin):
     ueber das `audience`-Feld je Karte (SREG-15-Erweiterung).
     """
     eintraege = (inventar or {}).get("eintraege", []) or []
-    hero = _hero_paare(eintraege, heim_origin, tailscale_origin)
-    buddies = _buddy_gruppen(eintraege, hero, heim_origin, tailscale_origin)
+    hero = _hero_paare(eintraege, heim_origin, tailscale_origin, funnel_origin)
+    buddies = _buddy_gruppen(eintraege, hero, heim_origin, tailscale_origin, funnel_origin)
     return {
         "hero_paare": hero,
         "buddy_gruppen": buddies,
         # SREG-14 / #1210: dedizierte Mini-App-Sektion (additiv — Jinja liest sie
         # nicht; die Mini-App-Uebersicht rendert sie mit Telegram-Deep-Link).
-        "mini_apps": _mini_apps(eintraege, heim_origin, tailscale_origin),
+        "mini_apps": _mini_apps(eintraege, heim_origin, tailscale_origin, funnel_origin),
         "tailscale_banner": not bool(tailscale_origin),
         "snapshot_pending": list((inventar or {}).get("snapshot_pending", []) or []),
         "heim_origin": heim_origin or "",
         "tailscale_origin": tailscale_origin or "",
+        # SREG-7 dritte Origin (RAT-27): Funnel-FQDN fuer User-Geraete.
+        # Leer wenn nicht konfiguriert — kein Auto-Fallback (Cookie-Jar-Integritat).
+        "funnel_origin": funnel_origin or "",
     }

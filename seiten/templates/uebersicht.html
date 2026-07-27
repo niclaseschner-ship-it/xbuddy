@@ -350,6 +350,15 @@
             <button type="button" class="copy-btn" data-copy="{{ k.urls.tailscale }}">📋</button>
           </div>
         {% endif %}
+        {# SREG-7 dritte Origin (RAT-27): Funnel-URL fuer externe User-Geraete.
+           Nur sichtbar wenn gesetzt — kein Banner, leer = Spalte weggelassen. #}
+        {% if k.urls.funnel %}
+          <div class="url-row">
+            <span class="url-label">Funnel:</span>
+            <a class="url-link" href="{{ k.urls.funnel }}">{{ k.urls.funnel }}</a>
+            <button type="button" class="copy-btn" data-copy="{{ k.urls.funnel }}">📋</button>
+          </div>
+        {% endif %}
       </div>
     </div>
   {% endmacro %}
