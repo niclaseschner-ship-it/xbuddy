@@ -678,6 +678,36 @@ _PAIR_400_HTML = (
 )
 
 
+def _geraete_eintrag(display_id):
+    """GER-3 / AC1: liest geraete.json EINMAL und gibt den Roh-Dict-Eintrag für
+    `display_id` zurück — oder (None, None) bei Fehler / fehlendem Eintrag.
+
+    Rückgabe: (data, eintrag) — `data` ist das vollständige JSON-Dict
+    (für Schreibvorgänge benötigt), `eintrag` zeigt auf das Gerät-Dict
+    innerhalb von data["geraete"] (In-place-Mutation möglich). Bei
+    Lesefehler oder fehlendem Eintrag: (None, None). Best-effort —
+    Fehler werden geloggt, kein Crash.
+    """
+    path = runtime.get("geraete_registry_path")
+    if not path:
+        return None, None
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, OSError) as e:
+        logging.warning("AUTH-2.a: geraete.json (%s) nicht lesbar (%s) — "
+                        "Eintrag für %s nicht verfügbar", path, e, display_id)
+        return None, None
+
+    geraete = data.get("geraete") if isinstance(data, dict) else None
+    if not isinstance(geraete, list):
+        return None, None
+
+    eintrag = next((g for g in geraete
+                    if isinstance(g, dict) and g.get("id") == display_id), None)
+    return data, eintrag
+
+
 def _markiere_paired_at(display_id, jetzt_iso=None):
     """OD3 / GER-3: schreibt `paired_at` (ISO-8601) für `display_id` additiv in
     geraete.json — denselben Store wie geraete/main.py (GERAETE_REGISTRY).
@@ -697,22 +727,12 @@ def _markiere_paired_at(display_id, jetzt_iso=None):
         logging.warning("AUTH-2.a: geraete_registry_path nicht gesetzt — "
                         "paired_at für %s nicht geschrieben", display_id)
         return False
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError, OSError) as e:
-        logging.warning("AUTH-2.a: geraete.json (%s) nicht lesbar (%s) — "
-                        "paired_at für %s nicht geschrieben", path, e, display_id)
-        return False
 
-    geraete = data.get("geraete") if isinstance(data, dict) else None
-    if not isinstance(geraete, list):
-        logging.warning("AUTH-2.a: geraete.json ohne `geraete`-Liste — "
+    data, eintrag = _geraete_eintrag(display_id)
+    if data is None:
+        logging.warning("AUTH-2.a: geraete.json nicht lesbar — "
                         "paired_at für %s nicht geschrieben", display_id)
         return False
-
-    eintrag = next((g for g in geraete
-                    if isinstance(g, dict) and g.get("id") == display_id), None)
     if eintrag is None:
         logging.warning("AUTH-2.a: display_id %s nicht in geraete.json — "
                         "Cookie gesetzt, paired_at nicht", display_id)
@@ -758,19 +778,8 @@ def _lese_verwendung(display_id):
         logging.warning("AUTH-2.a: geraete_registry_path nicht gesetzt — "
                         "verwendung für %s unbekannt", display_id)
         return None
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError, OSError) as e:
-        logging.warning("AUTH-2.a: geraete.json (%s) nicht lesbar (%s) — "
-                        "verwendung für %s unbekannt", path, e, display_id)
-        return None
 
-    geraete = data.get("geraete") if isinstance(data, dict) else None
-    if not isinstance(geraete, list):
-        return None
-    eintrag = next((g for g in geraete
-                    if isinstance(g, dict) and g.get("id") == display_id), None)
+    _data, eintrag = _geraete_eintrag(display_id)
     if eintrag is None:
         return None
     return eintrag.get("verwendung") or None
@@ -810,7 +819,7 @@ def auth_pair():
     # Display-Geräte (display/beides) → /display/<id>/ (Trailing-Slash: ESC-3 / AUTH-7b).
     # Nicht-Display oder Eintrag nicht lesbar → /api/v1/seiten/uebersicht (SREG-12).
     verwendung = _lese_verwendung(display_id)
-    if verwendung in ("display", "beides"):
+    if verwendung in aggregator._DISPLAY_VERWENDUNGEN:
         ziel = "/display/%s/" % display_id
     else:
         ziel = "/api/v1/seiten/uebersicht"
