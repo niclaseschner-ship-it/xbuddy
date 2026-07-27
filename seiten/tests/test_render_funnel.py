@@ -4,10 +4,13 @@ Prueft AC1: render.py baut aus funnel_origin eine funnel_url analog zum
 bestehenden heim/tailscale-URL-Bau (EIN Ort, kein Sonderpfad).
 Prueft AC2: urls.funnel ist None wenn funnel_origin leer (Template zeigt
 dann keine Funnel-Spalte).
+Prueft AC2-Live: seiten/main.py reicht funnel_origin durchgaengig an
+baue_layout weiter (Ende-zu-Ende-Wiring: configure → Flask-Route → JSON).
 
 Lauf: python3 -m pytest seiten/tests/test_render_funnel.py -v
 """
 
+import json
 import os
 import sys
 
@@ -15,6 +18,7 @@ _SEITEN_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _REPO_ROOT = os.path.dirname(_SEITEN_DIR)
 sys.path.insert(0, _REPO_ROOT)
 
+from seiten import main as seiten_main  # noqa: E402
 from seiten import render  # noqa: E402
 
 HEIM = "https://heim.example"
@@ -193,3 +197,53 @@ def test_bestehende_aufrufe_ohne_funnel_origin_brechen_nicht():
     assert karte["urls"]["heim"] == HEIM + "/display/wetter/heute"
     assert karte["urls"]["tailscale"] == TAIL + "/display/wetter/heute"
     assert karte["urls"]["funnel"] is None
+
+
+# ============================================================
+#  AC2-Live: Live-Pfad main.py → baue_layout → urls.funnel nicht-leer
+#  (Ende-zu-Ende-Wiring: configure(funnel_origin) → Flask-Route → JSON)
+# ============================================================
+
+def _schreibe_manifest(root, app_slug, views):
+    d = os.path.join(root, app_slug)
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "views.json"), "w", encoding="utf-8") as f:
+        json.dump({"views": views}, f)
+
+
+def test_live_pfad_funnel_origin_nicht_leer(tmp_path, monkeypatch):
+    """AC2-Live: seiten/main.py uebergibt funnel_origin an baue_layout.
+
+    Pfad: configure(funnel_origin=FUNNEL) → GET /api/v1/seiten/layout →
+    JSON["funnel_origin"] nicht leer UND erste Karte traegt urls.funnel.
+
+    Beweist, dass main.py (nicht nur render.baue_layout direkt) die
+    Ende-zu-Ende-Verkabelung korrekt herstellt (AC2).
+    """
+    root = str(tmp_path / "repo")
+    _schreibe_manifest(root, "wetter", [
+        {"slug": "heute", "pfad": "/display/wetter/heute",
+         "label": "Wetter", "synonyme": ["wetter"], "zeigt": "Z", "zielgruppe": "kind"},
+    ])
+    inventar_path = str(tmp_path / "inventar.json")
+    monkeypatch.setattr(seiten_main, "hole_panels", list)
+    monkeypatch.setattr(seiten_main, "hole_geraete", list)
+    seiten_main.configure(
+        root=root,
+        inventar_path=inventar_path,
+        ttl=30,
+        heim_origin=HEIM,
+        tailscale_origin=TAIL,
+        funnel_origin=FUNNEL,
+    )
+    seiten_main.app.config["TESTING"] = True
+    c = seiten_main.app.test_client()
+    resp = c.get("/api/v1/seiten/layout")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    # funnel_origin muss im Layout-Kontrakt landen (nicht leer)
+    assert data["funnel_origin"] == FUNNEL
+    # Mindestens eine Karte muss urls.funnel tragen (nicht None)
+    alle_karten = [k for g in data.get("buddy_gruppen", []) for k in g.get("karten", [])]
+    assert alle_karten, "Keine Karten im Layout — Manifest-Setup fehlgeschlagen"
+    assert alle_karten[0]["urls"]["funnel"] == FUNNEL + "/display/wetter/heute"
