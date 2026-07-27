@@ -716,6 +716,22 @@ Parallel **arbeiten** ist okay. **Mergen erledigt GitHub** (Auto-Merge, sobald
 haben; **abhängige** Tracks rebasen vor ihrem PR auf den neuen `origin/main`
 (Rebase-Rendezvous), damit nichts gegen veraltete Basis merget. Ablauf pro PR:
 
+**HARTES MERGE-GATE — lokale Volllauf-Pflicht, solange pytest advisory (RAT-30, Teil 5).**
+Nur `closes-guard` ist required (`reference_main_ruleset_nur_closes_guard`); ruff/pytest/
+lint-imports gaten den Merge **nicht** auf GitHub (RAT-30 Teil 1 pending Messung, Teil 4
+NOCH NICHT). Deshalb MUSS vor jedem Merge die **volle Suite lokal grün** sein — der
+Self-Gate ist der einzige echte Enforcer bis der required-Flip steht:
+```
+python3 -m pytest -q            # repo-weit, KEIN -k/Modul-Filter (pytest.ini-Kollision)
+uvx ruff@0.15.15 check
+uvx --from import-linter==2.11.* lint-imports
+```
+Alle drei grün → Merge. Eines rot → **kein Merge**, zurück an den Track-Subagenten.
+**Watcher-Reflex (RAT-30, Teil 2):** post-merge den `main-health`-Status prüfen
+(`gh run list --workflow main-health.yml -L 1`) — ein rotes main-health binnen des
+Arbeitstags triagieren, nicht liegen lassen (sonst greift die Kill-Klausel, zurück zu
+getrennten push-Jobs).
+
 1. **Watchdog auf den Branch-Diff** — bevor sonst irgendwas. **Immer**, kein
    Skip, auch nicht bei „kleinen" oder „nur EIGEN-Dateien"-PRs (genau dort
    schlüpft neues Verhalten ohne Spec rein).

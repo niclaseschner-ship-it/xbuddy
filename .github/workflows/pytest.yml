@@ -1,8 +1,13 @@
 name: pytest
 
 # Test-Gate: fährt die repo-weite pytest-Suite (pytest.ini/testpaths). Läuft
-# bei jedem PR und auf main. Bricht der Lauf ab, ist ein Test rot oder eine
+# bei jedem PR. Bricht der Lauf ab, ist ein Test rot oder eine
 # Suite hat einen Collect-Fehler. Lokal identisch via `make test` (Makefile).
+# KEIN -k/Modul-/testpaths-Filter — die Suite bleibt repo-weit (RAT-30, Teil 3;
+# Codex-BRICHT: pytest.ini Cross-Suite-Import-Kollision, Einzelsuiten grün ⇒
+# Gesamtlauf kann rot sein).
+# push:[main] entfernt (RAT-30, Teil 2): der post-merge-main-Lauf wird von
+# main-health.yml konsolidiert.
 #
 # Der Guard tests/test_testpaths_vollstaendig.py hält testpaths gegen die
 # Realität — eine neu angelegte Suite, die nicht in pytest.ini steht, lässt
@@ -10,8 +15,6 @@ name: pytest
 
 on:
   pull_request:
-  push:
-    branches: [main]
 
 permissions:
   contents: read
@@ -21,6 +24,17 @@ jobs:
     runs-on: [self-hosted, ARM64]
     steps:
       - uses: actions/checkout@v4
+
+      - name: pip-Cache (RAT-30, Teil 3)
+        # Cacht den pip-Download-Ordner; Key aus Hash der requirements-Dateien,
+        # damit ein requirements-Diff den Cache invalidiert. Spart den Netz-
+        # Roundtrip der pytest-/requirements-Wheels auf dem einen Pi-Runner.
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-pytest-${{ hashFiles('eltern-chat/requirements.txt', 'photo/requirements.txt') }}
+          restore-keys: |
+            pip-pytest-
 
       - name: venv + Test-Abhängigkeiten
         # --system-site-packages: der Pi-Runner trägt die Laufzeit-Pakete der

@@ -32,6 +32,11 @@ entschieden (Variante 1) gegen Variante 2 (free Halb-Lösung) und Variante 3 (pu
   (Bot merget eigene PRs, kein Mensch-Engpass). **Linear history NICHT** aktivieren — sie
   kollidiert mit RAT-9 `gh pr merge --merge`; `--merge` bleibt.
 - **`closes-guard` als required status check** mit DREI Ausgängen (sonst blockt er valide PRs):
+  > **Amendment RAT-30 (2026-07-27):** `closes-guard` bleibt der einzige required Check —
+  > **bis** die RAT-30-Teil-1-Messung (letzte 10 PR-Läufe grün) `ruff` + `lint-imports`
+  > zusätzlich required macht. Der Flip erweitert genau dieses Ruleset (`main-verriegelung`,
+  > id 17352637) um zwei `required_status_checks`-Kontexte; Brick-Notausgang = beide wieder
+  > entfernen. pytest bleibt advisory (Teil 4, NOCH NICHT). Siehe RAT-30.
   1. Impl-PR: `Closes/Fixes/Resolves #<offenes-issue>` → grün.
   2. Spec-PR: `Refs #<nr>` (pull_request_template) → grün (kein Closing erwartet).
   3. Infra/Chore-PR ticketlos: Label `infra`/`chore` am PR → grün.
