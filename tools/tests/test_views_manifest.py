@@ -18,7 +18,6 @@ import pytest  # noqa: E402
 
 from tools import views_manifest  # noqa: E402
 
-
 # ============================================================
 #  Hilfsfunktionen
 # ============================================================

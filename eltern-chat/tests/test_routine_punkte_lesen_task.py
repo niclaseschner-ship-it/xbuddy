@@ -10,11 +10,9 @@ import contextlib
 import os
 import tempfile
 
-import pytest
 from fakes import FakeTelegram
 from skills.routine_punkte_lesen_task import RoutinePunkteLesenTask
 from tasks import ReadTask, TurnContext, build_catalog
-
 
 # ============================================================
 #  Doppelungen
@@ -205,12 +203,15 @@ def test_AC4_loop_dispatch_ist_read_kein_write():
 
 def test_setzen_task_hat_kein_liste_im_schema():
     """AC3: RoutinePunkteSetzenTask enthält 'liste' NICHT mehr im aktion-Enum."""
-    from skills.routine_punkte_setzen_task import RoutinePunkteSetzenTask
     from fakes import FakeTelegram
     from skills.routine_punkte_setzen import (
-        AKTION_HINZUFUEGEN, AKTION_EINMALIG, AKTION_LOESCHEN,
-        AKTION_NEU_ORDNEN, AKTION_ICON_SUCHEN,
+        AKTION_EINMALIG,
+        AKTION_HINZUFUEGEN,
+        AKTION_ICON_SUCHEN,
+        AKTION_LOESCHEN,
+        AKTION_NEU_ORDNEN,
     )
+    from skills.routine_punkte_setzen_task import RoutinePunkteSetzenTask
 
     class FakeIconClient:
         def suche(self, stichwort, max_treffer=3):

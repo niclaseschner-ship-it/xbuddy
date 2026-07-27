@@ -679,7 +679,7 @@ def test_PANEL_10_html_binds_manifest_and_registers_sw():
         r'<link[^>]+rel=["\']manifest["\'][^>]+href=["\']\.\/manifest\.json(\?v=[^"\']*)?["\']',
         html)
     js = read(APPJS_PATH)
-    assert re.search(r"navigator\.serviceWorker\.register\(['\"]\.\/sw\.js(\?v=[^\"']*)?['\"]\)",
+    assert re.search(r"navigator\.serviceWorker\.register\(['\"]\.\/sw\.js(\?v=[^\"']*)?['\"](\s*,\s*\{[^}]*\})?\s*\)",
                      js), 'SW-Registrierung fehlt'
 
 

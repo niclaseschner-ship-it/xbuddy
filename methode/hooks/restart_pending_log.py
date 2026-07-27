@@ -24,7 +24,7 @@ import os
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 LOG_PATH = "/home/buddy/.claude/logs/restart_pending.jsonl"
 XBUDDY_REPO = "/home/buddy/repos/xbuddy"
@@ -53,7 +53,7 @@ def load_mapping():
     (path_prefix, restart_cmd) tuples. Bei Fehler: leere Liste (Default-
     Sicherheit, kein false-positive)."""
     try:
-        with open(SSOT_FILE, "r", encoding="utf-8") as f:
+        with open(SSOT_FILE, encoding="utf-8") as f:
             content = f.read()
     except Exception:
         return []
@@ -98,7 +98,7 @@ def log_entry(services, commit_range, changed_paths, raw_command):
     try:
         os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
         entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             "services": sorted(services),
             "commit_range": commit_range,
             "changed_paths": sorted(changed_paths),
@@ -147,11 +147,7 @@ def main():
     #      ohne -C oder cd (Codex-Pass-2-Fix: arbeitstag-Cleanup-Fall).
     repo_arg = pull_match.group(1)
     is_xbuddy_pull = False
-    if repo_arg and os.path.abspath(repo_arg).startswith(XBUDDY_REPO):
-        is_xbuddy_pull = True
-    elif XBUDDY_REPO in command:
-        is_xbuddy_pull = True
-    elif XBUDDY_REMOTE_RE.search(stdout):
+    if (repo_arg and os.path.abspath(repo_arg).startswith(XBUDDY_REPO)) or XBUDDY_REPO in command or XBUDDY_REMOTE_RE.search(stdout):
         is_xbuddy_pull = True
 
     if not is_xbuddy_pull:

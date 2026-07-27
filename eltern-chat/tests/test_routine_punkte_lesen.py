@@ -12,7 +12,6 @@ from skills.routine_punkte_lesen import (
     routine_punkte_lesen,
 )
 
-
 # ============================================================
 #  Doppelungen — CLIENT-1 Transport-Stub-Naht
 # ============================================================

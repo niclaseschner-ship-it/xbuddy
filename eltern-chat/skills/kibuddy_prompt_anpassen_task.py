@@ -146,16 +146,16 @@ def _build_diff(alter_text, neuer_text):
         teile = []
         if kontext_vor:
             teile.append("Kontext davor:\n" + "\n".join(
-                "  " + l for l in kontext_vor))
+                "  " + zeile for zeile in kontext_vor))
         if entfernt:
             teile.append("Wird ENTFERNT:\n" + "\n".join(
-                "  › " + l for l in entfernt))
+                "  › " + zeile for zeile in entfernt))
         if hinzugefuegt:
             teile.append("Wird HINZUGEFÜGT:\n" + "\n".join(
-                "  › " + l for l in hinzugefuegt))
+                "  › " + zeile for zeile in hinzugefuegt))
         if kontext_nach:
             teile.append("Kontext danach:\n" + "\n".join(
-                "  " + l for l in kontext_nach))
+                "  " + zeile for zeile in kontext_nach))
         if teile:
             hunks.append("\n".join(teile))
 

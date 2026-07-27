@@ -16,8 +16,8 @@ import tempfile
 
 import pytest
 from fakes import FakeTelegram
-from skills.essen_client import EssenClientError
 from skills._errors import BerechtigungError
+from skills.essen_client import EssenClientError
 from skills.wuensche_zeigen_task import WuenscheZeigenTask
 from tasks import ReadTask, TurnContext, build_catalog
 

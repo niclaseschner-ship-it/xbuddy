@@ -29,7 +29,7 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 LOG_PATH = "/home/buddy/.claude/logs/handoff_misses.jsonl"
 EXCERPT_LEN = 200
@@ -64,9 +64,7 @@ def has_handoff_as_last_yaml_fence(response_str: str) -> bool:
     if not HANDOFF_IN_FENCE_RE.search(last_match.group(1)):
         return False
     tail = response_str[last_match.end():].strip()
-    if len(tail) > 50:
-        return False
-    return True
+    return not len(tail) > 50
 # PW-54 V1 (2026-06-16 RATIFIZIERT; ENTSCHEID-File 20260616-1715-RATIFIZIERT-
 # pw54-werft-mockup-anker.md Sektion "Konvergenz/Brueche/Reparatur" →
 # "(C) mockup_visual_probe-Slot"): Wenn werft_mockup_path im Subagent-Prompt
@@ -118,7 +116,7 @@ def log_miss(klass: str, mode: str, parent_ticket: str, response_excerpt: str) -
     try:
         os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
         entry = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             "class": klass,
             "mode": mode,
             "parent_ticket": parent_ticket,
