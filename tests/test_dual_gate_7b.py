@@ -6,11 +6,12 @@ Prüft den geteilten Dual-Gate über beide Service-Seiten:
   router  — /display/<id>/, /controller/app-panel/<id>/,
             /api/v1/displays/<id>/events (SSE)
 
-Achsen (auth.md AUTH-7:495-504 Dual-Gate + AUTH-3.a:247-253 Observe-Leiter):
+Achsen (auth.md AUTH-7 7b Cookie-only-hart + AUTH-3.a Observe-Leiter, RAT-32):
   - valider xbuddy_session-Cookie  → 200 + Rolling-Refresh (AUTH-2:78).
-  - Operator-IP (X-Real-IP in CIDR) → 200, ohne Cookie.
-  - keine Quelle + Observe          → 200 + Log (kein 401, Grace).
-  - keine Quelle + Hard             → 401 mit AUTH-8-Re-Pair-HTML.
+  - keine Cookie-Quelle + Observe   → 200 + Log (kein 401, Grace).
+  - keine Cookie-Quelle + Hard      → 401 mit AUTH-8-Re-Pair-HTML.
+  - Operator-IP (RAT-32): entfällt als Zugangs-Alternative — in Hard → 401,
+    in Observe → 200 (Grace für ALLE, nicht wegen Operator-IP).
   - /display/_shared/* bleibt public (AUTH-7:512, kein Gate).
   - SSE-Stream im Pass-Fall bleibt Streaming-Response (kein Buffering).
 
@@ -177,6 +178,48 @@ def test_hard_mode_ohne_quelle_gibt_401_mit_auth8(router_client):
     assert resp.headers["Content-Type"].startswith("text/html")
 
 
+def test_hard_mode_operator_ip_ohne_cookie_gibt_401_rat32():
+    """RAT-32: im hard-Modus grantet Operator-IP KEINEN Zugang mehr — nur der
+    Cookie. Operator-CIDR ohne Cookie → 401 (AUTH-7a gestrichen)."""
+    @router_main.require_dual_gate(mode="hard")
+    def _dummy():
+        return "ok"
+
+    with router_main.app.test_request_context("/x", headers=_OPERATOR):
+        resp = router_main.app.make_response(_dummy())
+    assert resp.status_code == 401, (
+        "hard + Operator-IP ohne Cookie muss 401 sein (RAT-32), got %d"
+        % resp.status_code
+    )
+    assert "neu verbunden" in resp.get_data(as_text=True)
+
+
+def test_hard_mode_cookie_gibt_200_rat32():
+    """RAT-32: im hard-Modus reicht der valide Cookie (einziger Zugangspfad)."""
+    @router_main.require_dual_gate(mode="hard")
+    def _dummy():
+        return "ok"
+
+    router_main.runtime_config["bot_token"] = BOT_TOKEN
+    try:
+        cookie = sc.sign_session(DISPLAY_ID, BOT_TOKEN)
+        with router_main.app.test_request_context(
+            "/x", headers={**_EXTERN, "Cookie": "%s=%s" % (sc.COOKIE_NAME, cookie)}
+        ):
+            resp = router_main.app.make_response(_dummy())
+        assert resp.status_code == 200
+    finally:
+        router_main.runtime_config["bot_token"] = ""
+
+
+def test_auth_mode_env_seam_default_observe():
+    """RAT-32: der Flip läuft über die ENV-Naht XBUDDY_AUTH_MODE (Default
+    'observe' → verhaltensneutraler Deploy), damit Flip/Rückroll ENV+restart
+    sind statt Code-Revert (#1430-Lehre). Die 7b-READ-Routen sind ENV-getoggelt."""
+    assert os.environ.get("XBUDDY_AUTH_MODE", "observe") == router_main._AUTH_MODE
+    assert router_main._AUTH_MODE in ("observe", "hard")
+
+
 # ---------------------------------------------------------------------------
 # Seiten-Seite: /shell/<panel_id>
 # ---------------------------------------------------------------------------
@@ -191,9 +234,12 @@ def seiten_client(monkeypatch):
     return seiten_main.app.test_client()
 
 
-def test_shell_operator_ip_gibt_200(seiten_client):
+def test_shell_operator_ip_ohne_cookie_gibt_401_rat32(seiten_client):
+    # RAT-32: Operator-IP entfällt als Zugangs-Alternative — die hard-Shell
+    # gibt ohne gültigen Cookie 401, auch aus dem Operator-CIDR.
     resp = seiten_client.get("/shell/%s" % PANEL_ID, headers=_OPERATOR)
-    assert resp.status_code == 200
+    assert resp.status_code == 401
+    assert "neu verbunden" in resp.get_data(as_text=True)
 
 
 def test_shell_cookie_gibt_200_und_rolling_refresh(seiten_client):
@@ -293,12 +339,12 @@ def test_shell_asset_hard_ohne_quelle_gibt_401(seiten_client):
     )
 
 
-def test_shell_asset_operator_ip_gibt_200(seiten_client):
-    """T1448/AC3: Operator-IP reicht als Auth-Quelle für Shell-Assets — 200 ohne Cookie."""
+def test_shell_asset_operator_ip_ohne_cookie_gibt_401_rat32(seiten_client):
+    """RAT-32: Operator-IP entfällt — hard Shell-Asset (sw.js) ohne Cookie → 401."""
     resp = seiten_client.get("/shell/%s/sw.js" % PANEL_ID, headers=_OPERATOR)
-    assert resp.status_code == 200, (
-        "Shell-Asset-Route (sw.js) mit Operator-IP muss 200 liefern, got %d"
-        % resp.status_code
+    assert resp.status_code == 401, (
+        "Shell-Asset (sw.js) aus dem Operator-CIDR ohne Cookie muss 401 liefern "
+        "(RAT-32: Operator-IP gestrichen), got %d" % resp.status_code
     )
 
 
@@ -341,11 +387,12 @@ def test_shell_sw_js_live_pfad_traegt_network_first_body(seiten_client):
     seiten/static/shell/sw.js network-first implementiert — die Datei ist die
     Wahrheit fuer die Shell (Approach B, T1448-S2-fix).
 
-    Operator-IP als Auth-Quelle (shell_asset_view ist hard).
+    Cookie als Auth-Quelle (shell_asset_view ist hard; Operator-IP entfällt, RAT-32).
     """
-    resp = seiten_client.get("/shell/%s/sw.js" % PANEL_ID, headers=_OPERATOR)
+    seiten_client.set_cookie(sc.COOKIE_NAME, sc.sign_session(DISPLAY_ID, BOT_TOKEN))
+    resp = seiten_client.get("/shell/%s/sw.js" % PANEL_ID, headers=_EXTERN)
     assert resp.status_code == 200, (
-        "GET /shell/<panel>/sw.js muss 200 liefern (Operator-IP), got %d"
+        "GET /shell/<panel>/sw.js muss 200 liefern (Cookie), got %d"
         % resp.status_code
     )
     body = resp.get_data(as_text=True)

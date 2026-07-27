@@ -23,6 +23,7 @@ sys.path.insert(0, _REPO_ROOT)
 
 from seiten import main as seiten_main  # noqa: E402  # isort:skip
 from seiten import pwa_mantel  # noqa: E402  # isort:skip
+from tools.initdata import session_cookie as _sc  # noqa: E402  # isort:skip
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -138,7 +139,9 @@ def test_heim_shell_build_id_nutzt_shell_registry(monkeypatch, client):
     monkeypatch.setattr(pwa_mantel.os.path, "getmtime", fake_getmtime)
     monkeypatch.setattr(seiten_main, "_lookup_display_id", lambda panel_id: None)
 
-    resp = client.get("/shell/testpanel", headers={"X-Real-IP": "192.0.2.10"})
+    # RAT-32: /shell/ ist Cookie-only-hart (Operator-IP gestrichen) — via Cookie auth.
+    client.set_cookie(_sc.COOKIE_NAME, _sc.sign_session("testpanel-display", "testtoken-t1284"))
+    resp = client.get("/shell/testpanel")
     assert resp.status_code == 200
     body = resp.get_data(as_text=True)
     assert "?v=777" in body, (
