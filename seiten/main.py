@@ -557,6 +557,8 @@ def require_dual_gate(mode: str = "observe"):
             cookie_val = request.cookies.get(_session_cookie.COOKIE_NAME)
             cookie_ok = bool(bot_token) and _auth_gate.hat_gueltigen_cookie(
                 cookie_val, bot_token)
+            # RAT-32: Operator-IP entfällt als Zugangs-Alternative (AUTH-7a
+            # gestrichen); ist_operator_ip nur noch fürs Observe-Log.
             operator_ok = _auth_gate.ist_operator_ip(_client_ip())
 
             if cookie_ok:
@@ -569,10 +571,8 @@ def require_dual_gate(mode: str = "observe"):
                     **_session_cookie.session_cookie_kwargs(),
                 )
                 return resp
-            if operator_ok:
-                return fn(*args, **kwargs)
 
-            # Keine Quelle.
+            # Keine Cookie-Quelle.
             if mode == "hard":
                 resp = make_response(_DUAL_GATE_401_HTML, 401)
                 resp.headers["Content-Type"] = "text/html; charset=utf-8"

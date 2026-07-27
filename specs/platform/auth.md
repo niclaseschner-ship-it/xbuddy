@@ -302,6 +302,22 @@ Observe zurückgeschaltet und das Observe-Log auf das fehlgepairte Gerät hin
 untersucht. Eine WRITE-/#1321-Route, die je `200` ohne valide Quelle liefert,
 ist ein Regressions-Bug (nie beabsichtigt).
 
+> **Amendment RAT-32 (RATIFIZIERT 2026-07-27, Nic-Setzung „direkt-heute").**
+> Der Dual-Gate wird **Cookie-only-hart** — **AUTH-7a (Operator-IP) entfällt**
+> als Zugangs-Alternative. Der Cookie ist der einzige nicht-Loopback-Pfad; der
+> **Loopback-Bypass (AUTH-5)** und die **tma/initData-Quelle** (Eltern-Mini-Apps
+> essen/plan/photo/routine/kibuddy) bleiben **unberührt** — „Cookie-only" meint
+> die 7b-Renderer, NICHT das Streichen von tma. Der Observe→Hard-Flip läuft
+> nicht mehr über einen Code-Diff (vgl. #1427 → #1430-Revert), sondern über die
+> **ENV-Naht `XBUDDY_AUTH_MODE=observe|hard`** (Default `observe` →
+> verhaltensneutraler Deploy; Flip/Rückroll = ENV+restart, echte Zwei-Wege-Tür,
+> #1430-Lehre). Scope: die 7b-Renderer (seiten `/shell`, router
+> `/display` · `/controller` · `/api/v1/displays/<id>/events`). Die
+> decorator-freien Services (wetter/familie/geraete/panel/hoerspiel) bleiben
+> **ausgeklammert** — sie sind die Multi-Geräte-Wirbelsäule (RAT-31-Abriss,
+> Epic #1339), dort geschnitten statt hier decorator-nachgerüstet.
+> [Quelle: `brainstorm/berater-runde/20260727-160000-RATIFIZIERT-auth-cookie-hart-flip.md`]
+
 [Quelle: Rollout-Plan Auth-Funnel #1388 (Epic #1338) + Absicherung, zur
 RAT-27-Ratifizierung; Bezug RATIFIZIERT-1338-auth-flow (#1321 hart, live
 geschlossen)]
