@@ -122,9 +122,21 @@ durch Cookie, wenn AUTH-6 leer ist).
 
 Der Endpoint `GET /auth/pair?token=<X>` prüft den 15-Minuten-Pairing-Token
 gegen den Bot-State (Token via Bot-Skill aus GAA-3.8 generiert), setzt bei
-Erfolg den Cookie `xbuddy_session` und redirected den Browser auf die in
-der Pairing-Anfrage hinterlegte Ziel-URL (`/display/<id>` für Display-
-Verwendung, Mini-App-Start-URL für Controller-Verwendung).
+Erfolg den Cookie `xbuddy_session` und redirected den Browser auf das
+verwendungs-abhängige Ziel:
+
+- **Display-Verwendung** → `/display/<id>` (der Display-Client der Anzeige).
+- **Nicht-Display-Geräte** (Laptop, Handy, Controller u. a.) → die
+  **Geräte-/URL-Übersichtsseite** `/api/v1/seiten/uebersicht` (SREG-12), die
+  alle verfügbaren Adressen auflistet. Von dort wählt der Nutzer selbst, was er
+  öffnen will. (Nic-Setzung 2026-07-27, #1372: ein Nicht-Display-Gerät hat kein
+  sinnvolles einzelnes `/display/<id>`-Ziel; die Übersicht ist der neutrale
+  Landepunkt.)
+
+Damit ist der bisher hartkodierte `/display/<id>`-Redirect für alle Verwendungen
+(seiten/main.py:783) aufgehoben: nur Display-Geräte landen auf `/display/<id>`,
+alle anderen auf der Übersichtsseite. Die frühere Formulierung
+„Mini-App-Start-URL für Controller-Verwendung" ist damit ersetzt.
 
 Bei ungültigem oder abgelaufenem Token antwortet der Endpoint `400` mit
 einer Anweisung, einen neuen Pairing-Link im Bot anzufordern.
