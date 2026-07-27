@@ -374,9 +374,25 @@ weiterhin nie im Repo.
 Das Onboarding richtet den **Anbieter-Key** ein, nicht den Telegram-Bot-Token.
 
 Der Bot-Token kann nicht per Chat eingerichtet werden: ohne ihn gäbe es den Bot
-und damit den Chat-Kanal überhaupt nicht (Henne-Ei). Er bleibt daher zwingend
-über eine Umgebungsvariable gesetzt (EC-15). Das Onboarding setzt genau dort an,
-wo ein Chat-Kanal bereits existiert, aber noch kein KI-Zugang.
+und damit den Chat-Kanal überhaupt nicht (Henne-Ei). Er ist daher über eine
+Umgebungsvariable gesetzt (EC-15) — siehe die Ergänzung unten zur zusätzlichen
+Auflösung aus dem zentralen Zugangsdaten-Store. Das Onboarding setzt genau dort
+an, wo ein Chat-Kanal bereits existiert, aber noch kein KI-Zugang.
+
+**Ergänzung 2026-07-27 (Nic-Setzung — zentraler Store als Zusatz-Quelle, Env als Fallback).**
+Der Bot-Token **darf zusätzlich aus dem zentralen Zugangsdaten-Store** aufgelöst
+werden (Konsistenz mit der Setzung »Secrets zentral aus der Datenbank«, analog
+zum kibuddy-Bot-Token nach #1440). Die Auflösung ist **additiv und rückrollbar**:
+
+- Bevorzugte Quelle ist der Store-Slot (anbieter-/dienst-benannt, siehe
+  zugangsdaten.md).
+- **Die Umgebungsvariable (EC-15) bleibt der garantierte Fallback** und löst das
+  Henne-Ei-Problem weiterhin: kann der Store nicht gelesen werden (z. B. beim
+  Erst-Boot, bevor er befüllt ist), greift zwingend die Env-Variable. Damit
+  bleibt der Bot immer startfähig.
+
+Der Token liegt weiterhin **nie im Repo**. Diese Ergänzung hebt die frühere
+»zwingend nur Env«-Formulierung additiv auf, ohne die Startfähigkeit zu gefährden.
 
 ### E-ONB-6 — Im Onboarding-Modus auf jede Gruppennachricht antworten
 *Datum:* 2026-05-22
