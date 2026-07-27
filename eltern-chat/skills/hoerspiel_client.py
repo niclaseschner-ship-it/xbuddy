@@ -27,7 +27,8 @@ logger = logging.getLogger(__name__)
 HTTP_TIMEOUT_SECONDS = 2.0
 
 # Folgen-Vorschlag triggert LLM-Call (Claude-Opus, 20–90 s laut HFE-3).
-HTTP_TIMEOUT_VORSCHLAG_SEKUNDEN = 180.0
+# niclas-Recherche-Vorschlag ~180s+ (2026-07-27, #1467); async ist der Folge-Fix (OPEN-HSP-L).
+HTTP_TIMEOUT_VORSCHLAG_SEKUNDEN = 360.0
 
 # Album-Bau blockiert 1–5 min (V1 synchron, OPEN-HSP-L) — eigener Timeout.
 HTTP_TIMEOUT_ALBUM_SEKUNDEN = 600.0
