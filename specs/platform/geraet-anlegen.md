@@ -1,6 +1,21 @@
 # Gerät anlegen — Spec     (ID-Präfix: GAA)
 
-> Status: V1 · Refs #106
+> ⚠️ **ZIEL-ZUSTAND geändert durch RAT-31 (2026-07-27) — Wirbelsäule-Abriss.**
+> Setup ist fest **ein Gerät** (Heim-Shell). „Gerät anlegen" bleibt als Eltern-
+> Chat-Grundfunktion erhalten, wird aber **eingedampft**: statt Typ/OS/Auflösung/
+> Name abzufragen und einen `geraete.json`-Registry-Eintrag zu schreiben, fragt
+> die Funktion nur noch **eine Binär-Wahl — Kind-Gerät oder Eltern-Gerät —** und
+> mintet den **Pairing-Link** mit dem passenden Ziel (Kind → `/shell/<panel_id>`,
+> Eltern → Cookie + Mini-App-Übersicht). Damit **überholt**: der `GeraeteClient`-
+> Registry-Write (GAA-3.7), die Abfrage von `typ`/`os`/`aufloesung`/`name`
+> (GAA-3.x), das `paired_at`-Tracking. **Kein Registry-Tracking mehr, welche
+> Geräte gepaart sind.** Die eltern-chat-Skills `panel_anlegen`,
+> `cookie_nachschicken`, `ca-verteilung` entfallen (Etappe #1470). Die Per-
+> Requirement-Umschreibung erfolgt in Etappe #1470 (E1). Bis dahin ist **RAT-31
+> der bindende Ziel-Zustand**. Governance: `decisions/RAT-31-wirbelsaeule-abriss.md`,
+> Epic #1339.
+>
+> Status: V1 (RAT-18/GER) → eingedampft auf Binär {Kind|Eltern} (RAT-31) · Refs #106 #1339
 
 Damit eine Familie ihre Geräte in die Geräte-Registry (`geraete.md` GER-6)
 bekommt, ohne `geraete.json` von Hand zu pflegen, definiert diese Spec
