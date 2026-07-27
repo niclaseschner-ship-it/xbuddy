@@ -13,7 +13,6 @@ import logging
 import os
 import subprocess
 import tempfile
-from datetime import UTC, datetime
 
 from .azure_whisper import STTError  # einzige STTError-Klasse (Schnitt analog LLM ProviderError)
 
@@ -143,19 +142,6 @@ class OpenAIWhisperSTT:
             )
         except Exception as e:
             logger.warning("OpenAI-Whisper nicht erreichbar: %s", e)
-            # Diagnose-Netz: Roh-Bytes best-effort nach /tmp/kibuddy-stt-debug/ schreiben.
-            try:
-                debug_dir = "/tmp/kibuddy-stt-debug"
-                os.makedirs(debug_dir, exist_ok=True)
-                ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
-                debug_path = os.path.join(debug_dir, f"{ts}.bin")
-                with open(debug_path, "wb") as f:
-                    f.write(audio_bytes)
-                logger.debug(
-                    "STTError-Diagnose: %d Bytes nach %s geschrieben", len(audio_bytes), debug_path
-                )
-            except Exception:
-                pass  # Diagnose-Fehler dürfen keinen Sekundär-Crash auslösen.
             raise STTError(str(e)) from e
         # OpenAI-API gibt bei response_format="text" den Transkript-Text direkt zurück.
         return str(response).strip()
