@@ -61,9 +61,9 @@ DEFAULTS = {
     # GeraetAnlegenTask Geraete schreibt (`POST /api/v1/geraete/` GER-15).
     # Per-Instanz-Wert; Default passt zum Pi-Setup (PORT-2 Geraete auf 5040).
     "geraete_origin_url": "http://127.0.0.1:5040",
-    # PAA-5 / #183: Origin der Panel-Registry, über die die PanelAnlegenTask
-    # Panel-Instanzen schreibt (`POST /api/v1/panels/` PREG-15). Per-Instanz-
-    # Wert; Default passt zum Pi-Setup (PORT-2 Panel-Registry auf 5041).
+    # `panel_origin_url` vestigial seit RAT-31 E1 — PanelAnlegenTask entfallen
+    # (#1470, panel_anlegen-Skill gelöscht). Feld + Default bleiben strukturell
+    # erhalten (config bleibt unangetastet). PAA-5 / #183.
     "panel_origin_url": "http://127.0.0.1:5041",
     # EC-21 / Auftrag #215: Origin der Plan-Buddy-Reload-Schnittstelle
     # (`POST /api/v1/plan/admin/reload`, #151). Per-Instanz-Wert; Default
