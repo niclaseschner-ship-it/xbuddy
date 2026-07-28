@@ -39,12 +39,14 @@ html, body {
   display: block;
 }
 
-/* SHELL-3/5: rechtes Buddy-Pane — fuellt den Rest (1637px bei 1920px Gesamt) */
+/* SHELL-3/5: rechtes Buddy-Pane — fuellt den Rest (1637px bei 1920px Gesamt).
+   T1551: background:#000 liefert den schwarzen Ruhe-Zustand (Aus/Cleared),
+   wenn der Buddy-Iframe versteckt wird (display:none im cleared-Zweig). */
 .buddy {
   flex: 1 1 auto;
   height: 100%;
   overflow: hidden;
-  background: #F5F1E8;
+  background: #000;
 }
 
 /* SHELL-5: reiner Iframe, keine displib-Kopie */
