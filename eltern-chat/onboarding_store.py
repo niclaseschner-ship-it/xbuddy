@@ -59,21 +59,18 @@ def vendor_slug_for_adapter(adapter_name):
 
 
 def zd_name_provider_api_key(adapter_name):
-    """Vendor-spezifischer ZD-Slot-Name für den API-Key (T663 Welle A).
+    """Vendor-spezifischer ZD-Slot-Name für den API-Key (ECP-1, ZD-2).
 
-    Welle A führt pro Brand-Vendor einen eigenen Slot ein
-    (`eltern-chat-anthropic-api-key`, `eltern-chat-mistral-api-key`). Der
-    Single-Slot-Name (`eltern-chat-provider-api-key`) bleibt Fallback —
-    `load(provider_name=...)` liest vendor-Slot zuerst, fällt auf Single-Slot
-    zurück. Welle B (späteres Ticket) entfernt den Single-Slot.
+    Baut den Brand-Vendor-Slot-Namen (`eltern-chat-anthropic-api-key`,
+    `eltern-chat-mistral-api-key`) aus dem Adapter-Namen. `adapter_name` ist der
+    app-lokale Anbieter-Name (`claude`, `mistral`); intern wird er über
+    `vendor_slug_for_adapter` auf den Brand-Vendor aufgelöst — die Spec ZD-2
+    bindet den Slot-Namen an den Brand-Vendor.
 
-    `adapter_name` ist der app-lokale Anbieter-Name (`claude`, `mistral`).
-    Intern wird er über `vendor_slug_for_adapter` auf den Brand-Vendor
-    aufgelöst — die Spec ZD-2 bindet den Slot-Namen an den Brand-Vendor
-    (Watchdog B2).
-
-    Helper ist hier zentral, damit der Skill `anbieter_wechseln` denselben
-    Namens-Bauer importiert (eine Wahrheitsquelle, CLAUDE.md §6).
+    Helper ist hier zentral (eine Wahrheitsquelle, CLAUDE.md §6). Konsumenten:
+    die Drift-Sperre (ECP-1) und `anbieter_wechseln`-Tests. Der Laufzeit-Read
+    läuft seit #1510 über den litellm-Slot (`litellm_slot_for_provider`), nicht
+    mehr über diesen Slot.
     """
     vendor = vendor_slug_for_adapter(adapter_name)
     return "eltern-chat-%s-api-key" % vendor
@@ -92,47 +89,21 @@ class OnboardingStore:
     def __init__(self, zd=None):
         self._zd = zd if zd is not None else Zugangsdaten(resolve_store_path())
 
-    def load(self, provider_name=None):
+    def load(self):
         """Liefert die gespeicherten Werte als dict — direkt aus dem ZD-Speicher
         (#336, ZD-only). Fehlt ein Wert, taucht der Schlüssel im Ergebnis nicht
         auf (wie zuvor).
 
-        `provider_name` (T663 Welle A): wenn gesetzt, wird der vendor-spezifische
-        Slot zuerst gelesen (`eltern-chat-<vendor>-api-key`, Brand-Vendor —
-        ZD-2-Tabelle, `vendor_slug_for_adapter`). Liegt dort kein truthy-Wert,
-        fällt der Aufruf auf den Single-Slot (`eltern-chat-provider-api-key`)
-        zurück. Default `None` bewahrt das alte Verhalten: nur Single-Slot
-        lesen — kein Bruch für Aufrufer, die den Vendor nicht kennen.
-
-        Lazy-Migration (T663 Welle A, ONB-13, Watchdog B3): ist
-        `provider_name` gesetzt UND der vendor-Slot leer UND der Single-Slot
-        gefüllt, schreibt diese Methode den Single-Slot-Wert einmalig in den
-        vendor-Slot. Der Single-Slot bleibt unverändert (Welle B entfernt ihn
-        in einem späteren Ticket). Die Migration ist idempotent: läuft sie
-        nach dem Schreiben erneut, ist der vendor-Slot bereits gefüllt und
-        kein Schreibvorgang nötig.
+        Gelesen wird ausschließlich der Single-Slot
+        (`eltern-chat-provider-api-key`). Der vendor-spezifische Slot-Read +
+        Lazy-Migration (T663 Welle A) wurde mit #1537 entfernt: nach #1510 setzt
+        kein produktiver Aufrufer mehr `provider_name` (einziger Aufrufer ist
+        `config.py`, das ohne Vendor lädt), und der Laufzeit-Key kommt über den
+        litellm-Slot (`litellm_slot_for_provider`), nicht über die alten
+        vendor-Slots.
         """
         data = {}
-        provider = None
-        if provider_name is not None:
-            # Welle A: vendor-Slot bevorzugt, truthy-Check (R8) — leere Strings
-            # gelten als nicht gesetzt und triggern den Fallback.
-            vendor_slot = zd_name_provider_api_key(provider_name)
-            vendor_value = self._zd.get(vendor_slot)
-            if vendor_value:
-                provider = vendor_value
-            else:
-                # Lazy-Migration: vendor-Slot leer, Single-Slot prüfen.
-                single_value = self._zd.get(ZD_NAME_PROVIDER_API_KEY)
-                if single_value:
-                    # Einmalig in den vendor-Slot schreiben — Single-Slot bleibt
-                    # stehen (Welle B entfernt ihn). Idempotent: beim nächsten
-                    # Aufruf gewinnt der vendor-Slot direkt oben.
-                    self._zd.set(vendor_slot, single_value)
-                    provider = single_value
-        if provider is None:
-            # Fallback (Welle A) / Default-Pfad: Single-Slot lesen.
-            provider = self._zd.get(ZD_NAME_PROVIDER_API_KEY)
+        provider = self._zd.get(ZD_NAME_PROVIDER_API_KEY)
         if provider is not None:
             data[KEY_PROVIDER_API_KEY] = provider
         family = self._zd.get(ZD_NAME_FAMILY_GROUP)
