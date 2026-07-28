@@ -1,7 +1,7 @@
 """Tests fuer GET /api/v1/seiten/mini-app-uebersicht — MAU-1..10.
 
 Testet:
-  AC1  — HTML mit 3 collapsed Accordion-Sektionen (Mini Telegram Apps, Geraete-Paare, Buddy-Seiten).
+  AC1  — HTML mit 2 collapsed Accordion-Sektionen (Mini Telegram Apps, Buddy-Seiten; RAT-31 E3 entfernte Geraete-Paare).
   AC2  — platform.js hat openLink und copyText in beiden Klassen.
   AC3  — Route gibt 200 mit Auth, 401 ohne Auth, 500 ohne Bot-Token.
   AC4  — FAM-7/8: fremde User-ID → 403; bekannte User-ID → 200.
@@ -227,12 +227,12 @@ def test_ac4_bekannte_user_id_liefert_200(client, tmp_path):
 
 # ── AC1 — HTML-Struktur: 3 Accordion-Sektionen ───────────────────────────────
 
-def test_ac1_html_enthaelt_drei_accordion_sektionen(client):
-    """AC1 (MAU-4): HTML hat 3 <details>-Elemente fuer die drei Accordion-Sektionen."""
+def test_ac1_html_enthaelt_zwei_accordion_sektionen(client):
+    """AC1 (MAU-4, RAT-31 E3): HTML hat 2 <details>-Elemente fuer die zwei Accordion-Sektionen."""
     body = _get_html(client).get_data(as_text=True)
-    # details-Elemente fuer die drei Sektionen
-    assert body.count("<details") >= 3, \
-        "Weniger als 3 <details>-Elemente im HTML — MAU-4 Accordion fehlt"
+    # details-Elemente fuer die zwei Sektionen (Mini-Apps + Buddy-Seiten)
+    assert body.count("<details") >= 2, \
+        "Weniger als 2 <details>-Elemente im HTML — MAU-4 Accordion fehlt"
 
 
 def test_ac1_html_enthaelt_mini_apps_sektion(client):
@@ -242,18 +242,11 @@ def test_ac1_html_enthaelt_mini_apps_sektion(client):
         "Mini-Telegram-Apps-Sektion fehlt — MAU-4 Punkt 1 nicht erfuellt"
 
 
-def test_ac1_html_enthaelt_geraete_paare_sektion(client):
-    """AC1 (MAU-4 Punkt 2): HTML enthaelt Geraete-Paare-Sektion."""
-    body = _get_html(client).get_data(as_text=True)
-    assert "Ger" in body, \
-        "Geraete-Paare-Sektion fehlt im HTML — MAU-4 Punkt 2"
-
-
 def test_ac1_html_enthaelt_buddy_seiten_sektion(client):
-    """AC1 (MAU-4 Punkt 3): HTML enthaelt Buddy-Seiten-Sektion."""
+    """AC1 (MAU-4 Punkt 2): HTML enthaelt Buddy-Seiten-Sektion."""
     body = _get_html(client).get_data(as_text=True)
     assert "Buddy-Seiten" in body, \
-        "Buddy-Seiten-Sektion fehlt im HTML — MAU-4 Punkt 3"
+        "Buddy-Seiten-Sektion fehlt im HTML — MAU-4 Punkt 2"
 
 
 def test_ac1_details_haben_kein_open_attribut(client):
