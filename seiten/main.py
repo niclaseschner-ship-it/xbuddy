@@ -1118,10 +1118,9 @@ def mini_app_uebersicht_view():
 
     JS laedt das Inventar bei Boot via:
       GET /api/v1/seiten  (SREG-3, aggregiertes Inventar)
-    und rendert drei Accordion-Sektionen (MAU-4):
+    und rendert zwei Accordion-Sektionen (MAU-4, RAT-31 E3 #1496 — Geraete-Paare entfernt):
       1. Mini Telegram Apps (typ: mini-app)
-      2. Geraete-Paare (typ: display-client + verknuepft_mit_panels)
-      3. Buddy-Seiten (typ: eltern)
+      2. Buddy-Seiten (typ: eltern)
 
     Cache-Buster (Mini-App-Cache-Buster-Pattern): build_id aus mtime der JS-Datei
     haengt am CSS+JS als ?v=... — Telegram cached Mini-App-Assets sonst aggressiv.
