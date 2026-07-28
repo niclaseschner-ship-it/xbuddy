@@ -257,32 +257,11 @@ def test_shell9_keine_hardcode_ids():
 
 
 # ============================================================
-#  test_shell10_url_in_uebersicht — SHELL-10
+#  test_shell10_url_in_uebersicht — SHELL-10 (RAT-31 E3: entfernt)
 # ============================================================
-
-def test_shell10_url_in_uebersicht(monkeypatch, tmp_path):
-    """SHELL-10: Shell-URL /shell/<panel_id> erscheint in GET /api/v1/seiten/uebersicht."""
-    inventar_path = str(tmp_path / "inventar.json")
-    # Snapshot: ein Display gesteuert von einem Panel (Hero-Paar)
-    monkeypatch.setattr(seiten_main, "hole_panels",
-                        lambda: [{"panel_id": PANEL_ID, "display_id": DISPLAY_ID}])
-    monkeypatch.setattr(seiten_main, "hole_geraete",
-                        lambda: [{"id": DISPLAY_ID, "verwendung": "display",
-                                  "status": "aktiv"}])
-    seiten_main.configure(
-        root=str(tmp_path),
-        inventar_path=inventar_path,
-        ttl=30,
-        heim_origin="http://heim.test",
-        tailscale_origin="https://tail.test",
-    )
-    seiten_main.app.config["TESTING"] = True
-    c = _auth_client()
-    body = c.get("/api/v1/seiten/uebersicht").get_data(as_text=True)
-    # SHELL-10: Shell-URL muss im HTML der Uebersicht erscheinen
-    assert "/shell/" + PANEL_ID in body, (
-        "Shell-URL /shell/%s muss in /api/v1/seiten/uebersicht erscheinen (SHELL-10)" % PANEL_ID
-    )
+# test_shell10_url_in_uebersicht entfernt: SHELL-10 shell_urls-Enrichment-Loop
+# in get_seiten() wurde mit RAT-31 E3 (#1496) entfernt (Loop enrichierte nur
+# typ=panel-Einträge, die nicht mehr existieren).
 
 
 def test_shell10_manifest_route(client):

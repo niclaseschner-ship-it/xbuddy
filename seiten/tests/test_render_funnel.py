@@ -226,8 +226,6 @@ def test_live_pfad_funnel_origin_nicht_leer(tmp_path, monkeypatch):
          "label": "Wetter", "synonyme": ["wetter"], "zeigt": "Z", "zielgruppe": "kind"},
     ])
     inventar_path = str(tmp_path / "inventar.json")
-    monkeypatch.setattr(seiten_main, "hole_panels", list)
-    monkeypatch.setattr(seiten_main, "hole_geraete", list)
     seiten_main.configure(
         root=root,
         inventar_path=inventar_path,

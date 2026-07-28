@@ -1,12 +1,16 @@
-"""Tests für den Seiten-Registry-Aggregator (SREG-1..4/SREG-10/SREG-11, #347, #366, #387).
+"""Tests für den Seiten-Registry-Aggregator (SREG-1..3/SREG-10/SREG-14, #347, #366, #387).
+
+RAT-31 E3 (#1496): Snapshot-Sorten d/e (Panel-Instanz, Display-Client) entfernt.
+Das Inventar ist jetzt rein manifest-basiert (SREG-2). Tests für panel_eintraege,
+display_client_eintraege, LKG/stale, snapshot_pending und SREG-4-Verknüpfungs-
+felder (verknuepft_mit_display etc.) wurden entfernt — diese Konzepte sterben
+mit der panel/geraete-Registry-Abhängigkeit.
 
 Lauf: python3 -m pytest seiten/tests/ -v
 
 Diese Suite ist rein und netzlos: die Manifest-Sorten kommen aus tmp-Dir-
 Fixtures (NICHT aus den echten wetter/routine/photo-Manifesten — die liegen auf
-anderen Branches), die Snapshot-Sorten (d/e) werden als injizierte Python-
-Strukturen hereingereicht. So hängt kein Test an Live-HTTP oder am Stand eines
-fremden Buddy-Branches.
+anderen Branches).
 """
 
 import json
@@ -148,100 +152,38 @@ def test_kaputtes_manifest_wird_uebersprungen(tmp_path, caplog):
 
 
 # ============================================================
-#  Snapshot-Sorte d (Panel) + e (Display-Client) (SREG-1/SREG-4)
+#  Inventar-Aufbau: Vollständigkeit, Kaltstart (SREG-2/SREG-3)
+#  RAT-31 E3: keine Snapshot-Sorten d/e mehr — rein manifest-basiert.
 # ============================================================
 
-def test_panel_eintraege_aus_snapshot():
-    panels = [{"panel_id": "kueche-01", "display_id": "pi-display-flur-01"}]
-    eintraege = aggregator.panel_eintraege(panels)
-    assert eintraege[0]["typ"] == aggregator.TYP_PANEL
-    assert eintraege[0]["pfad"] == "/controller/app-panel/kueche-01"
-    assert eintraege[0]["instanz"] == "kueche-01"
-    assert eintraege[0]["key"] == "panel-kueche-01"
-
-
-def test_display_client_filter():
-    # SREG-1 (e)-Filter: nur display|beides & aktiv erscheinen.
-    geraete = [
-        {"id": "tablet-flur-01", "verwendung": "controller", "status": "aktiv"},
-        {"id": "pi-display-kueche-01", "verwendung": "display", "status": "aktiv"},
-        {"id": "tablet-bad-01", "verwendung": "beides", "status": "aktiv"},
-        {"id": "monitor-alt-01", "verwendung": "display", "status": "inaktiv"},
-    ]
-    eintraege = aggregator.display_client_eintraege(geraete)
-    ids = {e["instanz"] for e in eintraege}
-    assert ids == {"pi-display-kueche-01", "tablet-bad-01"}
-    for e in eintraege:
-        assert e["typ"] == aggregator.TYP_DISPLAY_CLIENT
-        assert e["pfad"] == "/display/%s" % e["instanz"]
-
-
-# ============================================================
-#  Inventar-Aufbau: Vollständigkeit, Kaltstart, LKG (SREG-3)
-# ============================================================
-
-def test_inventar_vollstaendig_mit_allen_sorten(manifest_root):
-    panels = [{"panel_id": "kueche-01"}]
-    geraete = [{"id": "pi-display-01", "verwendung": "display", "status": "aktiv"}]
-    inv = aggregator.baue_inventar(manifest_root, panels=panels, geraete=geraete)
+def test_inventar_vollstaendig_manifest_sorten(manifest_root):
+    """RAT-31 E3 (SREG-2): das Inventar enthält alle Manifest-Sorten (a/b/c),
+    kein snapshot_pending, keine panel/display-client-Einträge."""
+    inv = aggregator.baue_inventar(manifest_root)
     typen = {e["typ"] for e in inv["eintraege"]}
     assert aggregator.TYP_DISPLAY in typen
     assert aggregator.TYP_ELTERN in typen
     assert aggregator.TYP_CONTROLLER in typen
-    assert aggregator.TYP_PANEL in typen
-    assert aggregator.TYP_DISPLAY_CLIENT in typen
+    # Snapshot-Sorten sterben per RAT-31
+    assert "panel" not in typen
+    assert "display-client" not in typen
     assert inv["snapshot_pending"] == []
 
 
-def test_vollstaendigkeit_bei_buddy_ausfall(manifest_root):
-    # SREG-2: Buddy-Prozess aus → Manifest-Seiten bleiben gelistet (Platte!).
-    # Wir holen GAR keinen Snapshot, die Manifeste tragen das Inventar.
-    inv = aggregator.baue_inventar(manifest_root, panels=[], geraete=[])
+def test_vollstaendigkeit_manifest_sorten_ohne_prozesse(manifest_root):
+    # SREG-2: Manifest auf der Platte → Seiten gelistet, auch ohne laufende Prozesse.
+    inv = aggregator.baue_inventar(manifest_root)
     assert any(e["pfad"] == "/display/plan/woche" for e in inv["eintraege"])
     assert any(e["pfad"] == "/display/wetter/regeln" for e in inv["eintraege"])
 
 
-def test_kaltstart_snapshot_pending_nie_leer(manifest_root):
-    # SREG-3 Kaltstart: Snapshot-Holer scheitern (None), nie erfolgreich gewesen
-    # → Manifest-Sorten vollständig, (d/e) fehlen mit snapshot_pending, nie leer.
-    inv = aggregator.baue_inventar(
-        manifest_root, panels=None, geraete=None, vorheriges=None)
+def test_kaltstart_nie_leer(manifest_root):
+    # SREG-3 Kaltstart: Manifest-Sorten sind sofort da, snapshot_pending leer.
+    inv = aggregator.baue_inventar(manifest_root)
     assert inv["eintraege"], "Antwort darf nie leer sein (Manifest-Sorten tragen sie)"
-    assert aggregator.TYP_PANEL in inv["snapshot_pending"]
-    assert aggregator.TYP_DISPLAY_CLIENT in inv["snapshot_pending"]
-    # Manifest-Sorten sind trotzdem da.
+    assert inv["snapshot_pending"] == []
+    # Manifest-Sorten sind da.
     assert any(e["typ"] == aggregator.TYP_DISPLAY for e in inv["eintraege"])
-
-
-def test_last_known_good_stale(manifest_root):
-    # SREG-3: war die Sorte vorher da, bleibt der letzte Snapshot mit stale=true.
-    panels = [{"panel_id": "kueche-01"}]
-    erstes = aggregator.baue_inventar(manifest_root, panels=panels, geraete=[])
-    # Jetzt scheitert der Panel-Holer (None) — LKG greift.
-    zweites = aggregator.baue_inventar(
-        manifest_root, panels=None, geraete=[], vorheriges=erstes)
-    panel_e = [e for e in zweites["eintraege"] if e["typ"] == aggregator.TYP_PANEL]
-    assert panel_e, "Last-Known-Good muss den vorigen Panel-Snapshot behalten"
-    assert panel_e[0]["stale"] is True
-    # Panel war vorher da → NICHT snapshot_pending.
-    assert aggregator.TYP_PANEL not in zweites["snapshot_pending"]
-
-
-def test_nie_da_gewesen_bleibt_pending_trotz_vorheriges(manifest_root):
-    # Vorheriges Inventar OHNE Panel-Sorte + Holer scheitert → weiter pending.
-    erstes = aggregator.baue_inventar(manifest_root, panels=None, geraete=[])
-    zweites = aggregator.baue_inventar(
-        manifest_root, panels=None, geraete=[], vorheriges=erstes)
-    assert aggregator.TYP_PANEL in zweites["snapshot_pending"]
-
-
-def test_neues_panel_erscheint_im_naechsten_aufbau(manifest_root):
-    # SREG-3 Aktualität: ein neu angelegtes Panel ist beim nächsten Aufbau drin.
-    inv0 = aggregator.baue_inventar(manifest_root, panels=[], geraete=[])
-    assert not any(e["typ"] == aggregator.TYP_PANEL for e in inv0["eintraege"])
-    inv1 = aggregator.baue_inventar(
-        manifest_root, panels=[{"panel_id": "neu-01"}], geraete=[])
-    assert any(e.get("instanz") == "neu-01" for e in inv1["eintraege"])
 
 
 # ============================================================
@@ -318,42 +260,20 @@ def test_sorte_c_controller_kein_icons_feld(manifest_root_mit_icons):
         "Sorte c (Controller) trägt kein icons-Feld (BUD-4 / CLAUDE.md §6)")
 
 
-def test_sorte_d_panel_kein_icons_feld():
-    """SREG-10/BUD-4: Sorte d (Panel) trägt kein icons-Feld — weder am
-    Panel-Seiten-Eintrag noch am abgeleiteten Editor-Eintrag (SREG-11)."""
-    panels = [{"panel_id": "kueche-01"}, {"panel_id": "bad-01"}]
-    eintraege = aggregator.panel_eintraege(panels)
-    assert len(eintraege) == 4  # 2N: Panel + Editor je Instanz
-    for e in eintraege:
-        assert "icons" not in e, (
-            "Sorte d (Panel/Editor) trägt kein icons-Feld (BUD-4): %r" % e)
-
-
-def test_sorte_e_display_client_kein_icons_feld():
-    """SREG-10/BUD-4: Sorte e (Display-Client) trägt kein icons-Feld."""
-    geraete = [
-        {"id": "pi-display-kueche-01", "verwendung": "display", "status": "aktiv"},
-        {"id": "tablet-bad-01", "verwendung": "beides", "status": "aktiv"},
-    ]
-    eintraege = aggregator.display_client_eintraege(geraete)
-    assert eintraege  # mindestens ein Eintrag
-    for e in eintraege:
-        assert "icons" not in e, (
-            "Sorte e (Display-Client) trägt kein icons-Feld (BUD-4): %r" % e)
+# test_sorte_d_panel_kein_icons_feld und test_sorte_e_display_client_kein_icons_feld
+# entfernt (RAT-31 E3, #1496): Sorten d/e und panel_eintraege()/display_client_eintraege()
+# existieren nicht mehr.
 
 
 def test_inventar_nur_sorte_a_traegt_icons_feld(manifest_root_mit_icons):
     """SREG-10/BUD-4 zusammenfassend: im vollständigen Inventar trägt NUR
-    Sorte a (Display, mit Manifest-icons) das icons-Feld — b/c/d/e nie."""
+    Sorte a (Display, mit Manifest-icons) das icons-Feld — b/c nie."""
     # Controller-Manifest in die Fixture ergänzen, damit Sorte c auch im
     # Vollinventar liegt (die Default-Fixture hat nur a/b).
     _schreibe_manifest(manifest_root_mit_icons, "figuren-erkennung", [
         _view("figuren-erkennung", "/controller/figuren-erkennung/"),
     ], ist_controller=True)
-    panels = [{"panel_id": "kueche-01"}]
-    geraete = [{"id": "pi-01", "verwendung": "display", "status": "aktiv"}]
-    inv = aggregator.baue_inventar(
-        manifest_root_mit_icons, panels=panels, geraete=geraete)
+    inv = aggregator.baue_inventar(manifest_root_mit_icons)
     for e in inv["eintraege"]:
         if "icons" in e:
             assert e["typ"] == aggregator.TYP_DISPLAY, (
@@ -397,11 +317,9 @@ def test_sorte_b_kein_icons_feld_auch_mit_schalter(manifest_root_mit_icons):
 def test_icons_erforderlich_schalter_in_baue_inventar(manifest_root_mit_icons):
     """SREG-10: baue_inventar reicht icons_erforderlich an manifest_eintraege durch."""
     inv_false = aggregator.baue_inventar(
-        manifest_root_mit_icons, panels=[], geraete=[],
-        icons_erforderlich=False)
+        manifest_root_mit_icons, icons_erforderlich=False)
     inv_true = aggregator.baue_inventar(
-        manifest_root_mit_icons, panels=[], geraete=[],
-        icons_erforderlich=True)
+        manifest_root_mit_icons, icons_erforderlich=True)
     keys_false = {e["key"] for e in inv_false["eintraege"]}
     keys_true = {e["key"] for e in inv_true["eintraege"]}
     assert "routine-morgen" in keys_false
@@ -409,192 +327,21 @@ def test_icons_erforderlich_schalter_in_baue_inventar(manifest_root_mit_icons):
 
 
 # ============================================================
-#  SREG-11 — Editor-Eintrag je Panel-Instanz
+#  SREG-11 + SREG-4 — entfernt (RAT-31 E3, Closes #1496)
+#  Sorten d (Panel-Instanz) und e (Display-Client) existieren nicht mehr.
+#  panel_eintraege(), display_client_eintraege() und alle Verknüpfungs-Felder
+#  (verknuepft_mit_display, verknuepft_mit_panels, verknuepft_mit_panel) sind
+#  mit den sterbenden Registries (panel/geraete) weggefallen.
 # ============================================================
 
-def test_panel_eintraege_2n_eintraege_sreg11():
-    """SREG-11 AC3: N Panel-Instanzen → 2N Einträge (Panel-Seite + Editor je Panel)."""
-    panels = [
-        {"panel_id": "kueche-01"},
-        {"panel_id": "wohnzimmer-01"},
-    ]
-    eintraege = aggregator.panel_eintraege(panels)
-    assert len(eintraege) == 4, "2 Panels → 4 Einträge (2N)"
-
-    by_key = {e["key"]: e for e in eintraege}
-
-    # Panel-Seiten-Eintrag (Sorte d)
-    kueche = by_key["panel-kueche-01"]
-    assert kueche["typ"] == aggregator.TYP_PANEL
-    assert kueche["pfad"] == "/controller/app-panel/kueche-01"
-
-    # Editor-Eintrag (SREG-11)
-    kueche_ed = by_key["kueche-01-bearbeiten"]
-    assert kueche_ed["typ"] == aggregator.TYP_ELTERN
-    assert kueche_ed["pfad"] == "/controller/app-panel/kueche-01/bearbeiten"
-    assert kueche_ed["label"] == "Panel kueche-01 bearbeiten"
-    assert kueche_ed["instanz"] == "kueche-01"
-
-    # Distinkte Keys — keine Kollision
-    assert kueche["key"] != kueche_ed["key"]
-
-
-def test_editor_eintrag_distinkt_vom_panel_eintrag():
-    """SREG-11: Editor-Eintrag hat distinkte key und pfad vom Panel-Seiten-Eintrag."""
-    panels = [{"panel_id": "test-01"}]
-    eintraege = aggregator.panel_eintraege(panels)
-    assert len(eintraege) == 2
-    keys = {e["key"] for e in eintraege}
-    pfade = {e["pfad"] for e in eintraege}
-    assert "panel-test-01" in keys
-    assert "test-01-bearbeiten" in keys
-    assert "/controller/app-panel/test-01" in pfade
-    assert "/controller/app-panel/test-01/bearbeiten" in pfade
-
-
-def test_inventar_2n_panel_eintraege_sreg11(manifest_root):
-    """SREG-11 AC3: inventar enthält 2N Panel-Einträge für N Panel-Instanzen."""
-    panels = [{"panel_id": "kueche-01"}, {"panel_id": "bad-01"}]
-    inv = aggregator.baue_inventar(manifest_root, panels=panels, geraete=[])
-    panel_und_editor = [
-        e for e in inv["eintraege"]
-        if e.get("instanz") in ("kueche-01", "bad-01")
-    ]
-    assert len(panel_und_editor) == 4, "2 Panels → 4 Inventar-Einträge"
-    typen = {e["typ"] for e in panel_und_editor}
-    assert aggregator.TYP_PANEL in typen
-    assert aggregator.TYP_ELTERN in typen
-
-
-# ============================================================
-#  SREG-4 — Verknüpfungs-Felder (T467 AC1)
-#  Mengen-AC: alle DREI Felder (verknuepft_mit_display, verknuepft_mit_panels[],
-#  verknuepft_mit_panel) + Null-Träger-Tests für alle Sorten.
-# ============================================================
-
-def test_sreg4_verknuepft_mit_display_an_panel_eintrag():
-    """SREG-4: Panel-Instanz (Sorte d) trägt `verknuepft_mit_display` aus PREG-display_id."""
-    panels = [
-        {"panel_id": "kueche-01", "display_id": "pi-display-kueche-01"},
-        {"panel_id": "bad-01",    "display_id": "pi-display-bad-01"},
-    ]
-    eintraege = aggregator.panel_eintraege(panels)
-    by_key = {e["key"]: e for e in eintraege}
-    assert by_key["panel-kueche-01"]["verknuepft_mit_display"] == "pi-display-kueche-01"
-    assert by_key["panel-bad-01"]["verknuepft_mit_display"] == "pi-display-bad-01"
-
-
-def test_sreg4_verknuepft_mit_panel_an_editor_eintrag():
-    """SREG-4: Editor-Eintrag (Sorte b, SREG-11) trägt `verknuepft_mit_panel`."""
-    panels = [{"panel_id": "kueche-01", "display_id": "pi-display-01"}]
-    eintraege = aggregator.panel_eintraege(panels)
-    by_key = {e["key"]: e for e in eintraege}
-    editor = by_key["kueche-01-bearbeiten"]
-    assert editor["verknuepft_mit_panel"] == "kueche-01"
-
-
-def test_sreg4_verknuepft_mit_panels_an_display_client():
-    """SREG-4: Display-Client (Sorte e) trägt `verknuepft_mit_panels[]` per Reverse-Lookup."""
-    panels = [
-        {"panel_id": "mama-iphone", "display_id": "pi-display-wohnzimmer"},
-        {"panel_id": "papa-iphone", "display_id": "pi-display-wohnzimmer"},
-        {"panel_id": "kueche-tab",  "display_id": "pi-display-kueche"},
-    ]
-    geraete = [
-        {"id": "pi-display-wohnzimmer", "verwendung": "display", "status": "aktiv"},
-        {"id": "pi-display-kueche",     "verwendung": "display", "status": "aktiv"},
-        {"id": "pi-display-flur",       "verwendung": "display", "status": "aktiv"},
-    ]
-    eintraege = aggregator.display_client_eintraege(geraete, panels=panels)
-    by_key = {e["key"]: e for e in eintraege}
-    # Wohnzimmer-Display: zwei Panels (Mengen-AC: mehrere möglich)
-    assert by_key["display-pi-display-wohnzimmer"]["verknuepft_mit_panels"] == [
-        "mama-iphone", "papa-iphone"]
-    # Küchen-Display: genau ein Panel
-    assert by_key["display-pi-display-kueche"]["verknuepft_mit_panels"] == ["kueche-tab"]
-
-
-# --- Null-Träger: das Feld FEHLT (kein null, kein "") bei Nicht-Trägern ----
-
-def test_sreg4_kein_verknuepft_mit_display_bei_nicht_panel():
-    """SREG-4 Null-Träger: Manifest-Sorten (a/b/c) tragen KEIN `verknuepft_mit_display`."""
-    geraete = [{"id": "pi-01", "verwendung": "display", "status": "aktiv"}]
-    panels_e = aggregator.panel_eintraege([{"panel_id": "k-01"}])
-    display_e = aggregator.display_client_eintraege(geraete)
-    # Editor-Eintrag (b) — kein verknuepft_mit_display
-    editor = next(e for e in panels_e if e["key"] == "k-01-bearbeiten")
-    assert "verknuepft_mit_display" not in editor
-    # Display-Client (e) — kein verknuepft_mit_display
-    for e in display_e:
-        assert "verknuepft_mit_display" not in e
-
-
-def test_sreg4_kein_verknuepft_mit_panel_an_panel_seite():
-    """SREG-4 Null-Träger: die Panel-SEITE (Sorte d) trägt KEIN `verknuepft_mit_panel` —
-    nur der abgeleitete Editor-Eintrag (b/SREG-11) hat dieses Feld."""
-    panels = [{"panel_id": "k-01", "display_id": "d-01"}]
-    eintraege = aggregator.panel_eintraege(panels)
-    panel_seite = next(e for e in eintraege if e["key"] == "panel-k-01")
-    assert "verknuepft_mit_panel" not in panel_seite
-
-
-def test_sreg4_kein_verknuepft_mit_panels_bei_nicht_display():
-    """SREG-4 Null-Träger: Panel/Editor tragen KEIN `verknuepft_mit_panels[]`."""
-    panels = [{"panel_id": "k-01", "display_id": "d-01"}]
-    eintraege = aggregator.panel_eintraege(panels)
-    for e in eintraege:
-        assert "verknuepft_mit_panels" not in e
-
-
-def test_sreg4_panel_ohne_display_id_traegt_kein_feld():
-    """SREG-4: fehlt `display_id` im PREG-Snapshot (defensiv), FEHLT
-    `verknuepft_mit_display` am Eintrag (kein null, kein leerer String)."""
-    panels = [{"panel_id": "ohne-display-01"}]
-    eintraege = aggregator.panel_eintraege(panels)
-    panel_seite = next(e for e in eintraege if e["key"] == "panel-ohne-display-01")
-    assert "verknuepft_mit_display" not in panel_seite
-
-
-def test_sreg4_display_ohne_panels_traegt_kein_feld():
-    """SREG-4: Display ohne gekoppeltes Panel → Feld FEHLT (kein `[]`)."""
-    panels = [{"panel_id": "k-01", "display_id": "pi-display-A"}]
-    geraete = [
-        {"id": "pi-display-A", "verwendung": "display", "status": "aktiv"},
-        {"id": "pi-display-B", "verwendung": "display", "status": "aktiv"},
-    ]
-    eintraege = aggregator.display_client_eintraege(geraete, panels=panels)
-    by_key = {e["key"]: e for e in eintraege}
-    assert by_key["display-pi-display-A"]["verknuepft_mit_panels"] == ["k-01"]
-    # B ist ungepaart → Feld FEHLT, ist NICHT `[]`
-    assert "verknuepft_mit_panels" not in by_key["display-pi-display-B"]
-
-
-def test_sreg4_display_panels_none_traegt_kein_feld():
-    """SREG-4: PREG-Snapshot aus (panels=None) → kein Reverse-Lookup,
-    Feld FEHLT (würde sonst falsche `[]`-Aussage am Display erzeugen)."""
-    geraete = [{"id": "pi-display-01", "verwendung": "display", "status": "aktiv"}]
-    eintraege = aggregator.display_client_eintraege(geraete, panels=None)
-    assert "verknuepft_mit_panels" not in eintraege[0]
-
-
-def test_sreg4_manifest_sorten_tragen_keines_der_drei_felder(manifest_root):
-    """SREG-4 Null-Träger erschöpfend: Sorten a/b/c (Manifest) tragen KEINES
-    der drei Verknüpfungs-Felder."""
+def test_sreg4_manifest_sorten_tragen_keine_verknuepfungsfelder(manifest_root):
+    """RAT-31 E3 / SREG-4: Manifest-Sorten (a/b/c) tragen KEINES der drei
+    Verknüpfungs-Felder — die Felder sind mit Sorten d/e weggefallen."""
     eintraege = aggregator.manifest_eintraege(manifest_root)
     for e in eintraege:
         assert "verknuepft_mit_display" not in e
         assert "verknuepft_mit_panels" not in e
         assert "verknuepft_mit_panel" not in e
-
-
-def test_sreg4_baue_inventar_durchreicht_panels_an_display_lookup(manifest_root):
-    """SREG-4: baue_inventar reicht `panels` an die display_client_eintraege-Ableitung
-    durch — Reverse-Lookup funktioniert auch über den orchestrierenden Aufruf."""
-    panels = [{"panel_id": "k-01", "display_id": "pi-A"}]
-    geraete = [{"id": "pi-A", "verwendung": "display", "status": "aktiv"}]
-    inv = aggregator.baue_inventar(manifest_root, panels=panels, geraete=geraete)
-    display = next(e for e in inv["eintraege"] if e["key"] == "display-pi-A")
-    assert display["verknuepft_mit_panels"] == ["k-01"]
 
 
 # ============================================================

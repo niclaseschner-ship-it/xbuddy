@@ -78,7 +78,7 @@ def _baue_init_data_manipuliert():
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 @pytest.fixture(autouse=True)
-def reset_runtime(monkeypatch):
+def reset_runtime():
     """Setzt runtime-Dict vor jedem Test zurueck (Test-Modus)."""
     seiten_main.configure(
         root=_REPO_ROOT,
@@ -87,8 +87,7 @@ def reset_runtime(monkeypatch):
         init_data_config={"max_age_seconds": 86400},
     )
     seiten_main.app.config["TESTING"] = True
-    monkeypatch.setattr(seiten_main, "hole_panels", list)
-    monkeypatch.setattr(seiten_main, "hole_geraete", list)
+    # RAT-31 E3 (#1496): hole_panels/hole_geraete entfernt, kein Stub nötig.
 
 
 @pytest.fixture
@@ -474,69 +473,7 @@ def test_ac5_js_laedt_inventar_von_seiten_api():
         "/api/v1/seiten fehlt in mini-app-uebersicht.js — MAU-2: Inventar vom Aggregator"
 
 
-# ── AC3 (SHELL-10 MAU) — shell_urls in Panel-Eintraegen im Inventar ──────────
-
-def test_shell10_mau_panel_eintrag_hat_shell_urls(monkeypatch):
-    """AC3 (SHELL-10, AC2): GET /api/v1/seiten gibt Panel-Eintraegen shell_urls
-    (Heim + Funnel, Tailscale aufgegeben seit #1458) wenn origins konfiguriert
-    sind — server-seitig gebaut aus panel_id + origins in seiten/main.py::get_seiten
-    (kein JS-Hardcode)."""
-    seiten_main.configure(
-        heim_origin="http://192.168.1.1:8443",
-        tailscale_origin="https://buddyboard.taile235cf.ts.net",  # ignoriert seit #1458
-    )
-    monkeypatch.setattr(
-        seiten_main, "hole_panels",
-        lambda: [{"panel_id": "paulas-panel-01", "display_id": "tablet-01"}]
-    )
-    client = seiten_main.app.test_client()
-    resp = client.get("/api/v1/seiten")
-    assert resp.status_code == 200
-    data = resp.get_json()
-    panel_eintraege = [e for e in data["eintraege"] if e.get("typ") == "panel"]
-    assert panel_eintraege, "Kein Panel-Eintrag im Inventar — SHELL-10 MAU (AC3)"
-    panel = panel_eintraege[0]
-    assert "shell_urls" in panel, \
-        "shell_urls fehlt im Panel-Eintrag — SHELL-10 MAU (AC2/AC3)"
-    assert panel["shell_urls"]["heim"] == "http://192.168.1.1:8443/shell/paulas-panel-01", \
-        "shell_urls.heim hat falschen Wert — SHELL-10 MAU"
-    # #1458: tailscale_origin-Param wird ignoriert — tailscale ist immer None
-    assert panel["shell_urls"]["tailscale"] is None, \
-        "shell_urls.tailscale muss None sein seit #1458 (Funnel-only)"
-
-
-def test_shell10_mau_shell_url_aus_panel_id_abgeleitet(monkeypatch):
-    """AC3 (SHELL-10, AC2): shell_url ist aus panel_id abgeleitet, nicht hardkodiert.
-    Zwei verschiedene Panels ergeben zwei verschiedene shell_urls."""
-    seiten_main.configure(heim_origin="http://192.168.1.1:8443")
-    monkeypatch.setattr(
-        seiten_main, "hole_panels",
-        lambda: [
-            {"panel_id": "panel-alpha", "display_id": "display-1"},
-            {"panel_id": "panel-beta", "display_id": "display-2"},
-        ]
-    )
-    client = seiten_main.app.test_client()
-    resp = client.get("/api/v1/seiten")
-    data = resp.get_json()
-    panels = [e for e in data["eintraege"] if e.get("typ") == "panel"]
-    panel_urls = {p["instanz"]: p.get("shell_urls", {}).get("heim") for p in panels}
-    assert panel_urls.get("panel-alpha") == "http://192.168.1.1:8443/shell/panel-alpha", \
-        "shell_url fuer panel-alpha falsch — panel_id nicht korrekt abgeleitet (AC2)"
-    assert panel_urls.get("panel-beta") == "http://192.168.1.1:8443/shell/panel-beta", \
-        "shell_url fuer panel-beta falsch — panel_id nicht korrekt abgeleitet (AC2)"
-
-
-def test_shell10_mau_js_rendert_shell_urls():
-    """AC3 (SHELL-10): mini-app-uebersicht.js referenziert shell_urls fuer
-    Shell-URL-Karten je Geraete-Paar — server-seitig bereitgestellt, client-seitig
-    gerendert (SREG-12-Form Heim + Tailscale, MAU-Pfad)."""
-    js_path = os.path.join(_SEITEN_DIR, "static", "mini-app-uebersicht.js")
-    with open(js_path, encoding="utf-8") as f:
-        inhalt = f.read()
-    assert "shell_urls" in inhalt, \
-        "shell_urls fehlt in mini-app-uebersicht.js — SHELL-10 MAU-Rendering nicht implementiert"
-    assert "shellUrls.heim" in inhalt, \
-        "shellUrls.heim fehlt — SHELL-10 Heim-URL-Karte nicht gerendert"
-    assert "shellUrls.tailscale" in inhalt, \
-        "shellUrls.tailscale fehlt — SHELL-10 Tailscale-URL-Karte nicht gerendert"
+# ── AC3 (SHELL-10 MAU) — entfernt (RAT-31 E3, Closes #1496) ─────────────────
+# test_shell10_mau_panel_eintrag_hat_shell_urls, test_shell10_mau_shell_url_aus_panel_id_abgeleitet,
+# test_shell10_mau_js_rendert_shell_urls: shell_urls-Enrichment-Loop in get_seiten() entfernt
+# (Loop enrichierte nur typ=panel-Einträge, die mit RAT-31 nicht mehr existieren).

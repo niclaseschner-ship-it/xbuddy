@@ -102,8 +102,6 @@ def reset_runtime(monkeypatch):
     )
     seiten_main.app.config["TESTING"] = True
     # Stub fuer Holer: keine echten HTTP-Calls
-    monkeypatch.setattr(seiten_main, "hole_panels", list)
-    monkeypatch.setattr(seiten_main, "hole_geraete", list)
 
 
 @pytest.fixture
