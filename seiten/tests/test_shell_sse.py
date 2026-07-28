@@ -250,7 +250,7 @@ def test_ac3_adapt_shell_event_akzeptiert_body_mit_query():
     }
     result, err = seiten_main._adapt_shell_event(body)
     assert err is None, "Body mit query darf nicht abgelehnt werden: %r" % err
-    kind, descriptor = result
+    _kind, descriptor = result
     assert descriptor.get("query") == {"tag": "montag"}
 
 

@@ -355,28 +355,25 @@ aber das `views.json`-Format**: das BUD-3-Manifest ist die Datenquelle, aus der
 ## SREG-9 — Automatisierte Tests je Anforderung
 - **Vollständigkeit-bei-Ausfall:** Buddy-Prozess gestoppt → seine Manifest-Seiten
   bleiben in `GET /api/v1/seiten` gelistet (SREG-2).
-- **Kaltstart:** kein `inventar.json` + Panel-/Geräte-Service aus + Buddy-Prozesse
-  aus → `GET` liefert die Manifest-Sorten (a/b/c) vollständig, (d/e) mit
-  `snapshot_pending: true`; Antwort gültig und **nie leer** (SREG-3).
+- **Kaltstart:** kein `inventar.json` + Buddy-Prozesse aus → `GET` liefert die
+  Manifest-Sorten (a/b/c/f/g) vollständig; Antwort gültig und **nie leer**
+  (SREG-3). `snapshot_pending: []` für Rückwärtskompatibilität.
 - **Kaputtes Manifest:** ein `views.json` mit JSON-/Pflichtfeld-Fehler → wird
   übersprungen (Warnung), das übrige Inventar bleibt vollständig (SREG-3/DCOMP-3).
-- **Aktualität/TTL:** ein während des Betriebs neu angelegtes Panel erscheint
-  **binnen TTL** in `GET /api/v1/seiten` (SREG-3).
+- **Aktualität/TTL:** ein während des Betriebs neu committetes Manifest
+  erscheint **binnen TTL** in `GET /api/v1/seiten` (SREG-3).
 - **Schnelle, nie-leere Antwort:** `GET /api/v1/seiten` antwortet aus
-  `inventar.json` ohne Upstream-Call; bei Panel-/Geräte-Snapshot-Ausfall
-  `stale: true` statt leerer/gekürzter Liste (SREG-3).
+  `inventar.json` ohne Upstream-Call; Antwort nie leer (SREG-3).
+  ~~`stale: true` bei Snapshot-Ausfall~~ — entfernt RAT-31 E3 (#1496).
 - **Varianten:** ein Eintrag mit `varianten[]` löst sowohl Default als auch
   Variante auf; `?ab=<datum>` erzeugt keinen Eintrag (SREG-1).
 - **Icon-Durchreichung + Schalter:** ein Sorte-a-Manifest mit `icons[]`
   (+ `varianten[].icons[]`) erscheint byte-gleich im Eintrag; bei
   `icons_erforderlich=false` bleibt eine View ohne `icons[]` gelistet (Warnung),
   bei `icons_erforderlich=true` wird genau diese View übersprungen (Rest bleibt);
-  Sorten b/c/d/e tragen kein `icons`-Feld (SREG-10).
-- **Editor-Eintrag je Panel:** Snapshot mit N Panel-Instanzen → **2N**
-  Panel-Einträge (N Panel-Seiten + N Editor-Einträge), je distinkter `key`/`pfad`,
-  Editor-`pfad` = `/controller/app-panel/<panel_id>/bearbeiten` (SREG-11).
-- **(e)-Filter:** Geräte-Snapshot mit `controller`/`display`/`beides`/`inaktiv`
-  → nur `display|beides` & `aktiv` erscheinen (SREG-1).
+  Sorten b/c/f/g tragen kein `icons`-Feld (SREG-10). ~~d/e~~ — entfernt RAT-31 E3.
+- ~~**Editor-Eintrag je Panel** (d/e, SREG-11)~~ — **entfernt RAT-31 E3 (#1496)**.
+- ~~**(e)-Filter** (Geräte-Snapshot)~~ — **entfernt RAT-31 E3 (#1496)**.
 - **Manifest⇔Route-Bindung:** je Buddy der BUD-3-Eigentest (kanonische
   HTML-GET-Route ⇔ Eintrag; Alias-/POST-Routen ausgenommen; Controller gegen
   Slug-Existenz) — `conventions/buddies.md` BUD-3.
@@ -387,21 +384,10 @@ aber das `views.json`-Format**: das BUD-3-Manifest ist die Datenquelle, aus der
   `GET /api/v1/seiten` nicht selbst auf.
 - **Übersichts-Seite rendert:** `GET /api/v1/seiten/uebersicht` antwortet mit
   HTML (`Content-Type: text/html`); `GET /api/v1/seiten` (ohne Sub-Pfad) bleibt
-  JSON-only. Hero-Sektion „Geräte-Paare" am Seitenkopf, darunter die übrigen
-  Sorten nach Buddy/App gruppiert (SREG-12).
-- **Geräte-Paar Aggregator:** Im Inventar trägt ein Panel-Sorte-(d)-Eintrag
-  `verknuepft_mit_display: <display_id>` (Wert kommt aus `panels.json`), ein
-  Sorte-(e)-Eintrag `verknuepft_mit_panels: [<panel_id>, …]` (Reverse-Lookup),
-  ein Panel-Editor-Eintrag (Sorte b, SREG-11) `verknuepft_mit_panel:
-  <panel_id>` (abgeleitet aus Pfad-Segment). Zwei Panels auf demselben Display
-  → ein (e)-Eintrag mit zwei `panel_id` in `verknuepft_mit_panels[]` (SREG-1).
-- **Paar-Hero rendert (V2 nach Gate B):** Ein Display mit
-  `verknuepft_mit_panels: [p1]` erscheint in der Hero-Sektion als gemeinsame
-  Box (Header `📺 <display_id>` + „wird gesteuert von 1 Panel") mit
-  Display-Karte oben und Panel-Karte für `p1` als Hauptkarte unten, der Editor
-  als Anhang **innerhalb** der Panel-Karte; `[p1, p2]` rendert die Box mit
-  zwei Panel-Karten im Grid (je mit Editor-Anhang); `[]` (kein Panel)
-  erscheint nicht im Hero, sondern unten in der „instanz"-Buddy-Gruppe.
+  JSON-only. Manifest-Sorten a/b/c/f/g nach Buddy/App gruppiert (SREG-12).
+  ~~Hero-Sektion „Geräte-Paare"~~ — **entfernt RAT-31 E3 (#1496)**.
+- ~~**Geräte-Paar Aggregator** (d/e + Verknüpfungs-Felder)~~ — **entfernt RAT-31 E3 (#1496)**.
+- ~~**Paar-Hero rendert (V2 nach Gate B)**~~ — **entfernt RAT-31 E3 (#1496)**.
 - **Buddy-Gruppen-Aggregator:** Sekundäre Karten werden nach `app`-Feld
   gruppiert; pro Gruppe ein gemeinsamer Rahmen mit Slug-Header. Varianten
   (`varianten[]`) rendern als eigene Geschwister-Karten in derselben Gruppe
@@ -420,18 +406,14 @@ aber das `views.json`-Format**: das BUD-3-Manifest ist die Datenquelle, aus der
   Zwischenablage; eine Smoketest-Assertion sichert, dass die `<a>`-Elemente
   natives Text-Selektieren erlauben (kein `user-select: none` auf Link-Text)
   (SREG-12).
-- **Volltextsuche (Karten-Match):** Eingabe „garderobe" filtert sowohl
-  Paar-Hero als auch sekundäre Karten auf passende Einträge (Match gegen
-  `label`/`synonyme`/`zeigt`) — clientseitig, keine Server-Roundtrip
-  (SREG-12).
+- **Volltextsuche (Karten-Match):** Eingabe „garderobe" filtert Karten auf
+  passende Einträge (Match gegen `label`/`synonyme`/`zeigt`) — clientseitig,
+  keine Server-Roundtrip (SREG-12).
 - **Volltextsuche (Buddy-Header-Match):** Eingabe „wetter" matcht den
   Gruppen-Header und macht **alle** Karten der Wetter-Gruppe sichtbar
   (Kontext-Erhalt), auch wenn einzelne Karten den Suchbegriff im
   `label`/`synonyme` nicht tragen würden (SREG-12).
-- **Hero-Paar-Kontext-Erhalt:** Eingabe „bearbeiten" matcht einen
-  Editor-Anhang in der Paar-Box; die ganze Paar-Box (inkl. Display-Karte
-  und anderer Panel-Karten) bleibt sichtbar, weil Treffer innerhalb der Box
-  die Box als ganze gegen Ausblendung schützt (SREG-12).
+- ~~**Hero-Paar-Kontext-Erhalt**~~ — **entfernt RAT-31 E3 (#1496)** (keine Hero-Boxen mehr).
 - **Manifest⇔Route-Bindung für Platform-Service:** Eigentest in
   `seiten/views.json` ⇔ `seiten/main.py` analog BUD-3 — der `pfad`
   `/api/v1/seiten/uebersicht` muss eine echte Flask-Route mit HTML-Antwort
@@ -506,11 +488,11 @@ Sie ist die **alternative Darstellung** der Registry — Daten liegen in
 `/api/v1/seiten` (JSON), Rendering unter `/api/v1/seiten/uebersicht` (HTML).
 Eine Datenquelle, zwei Darstellungen.
 
-**Hauptzweck = Geräte-Paare auf einen Blick.** Eltern öffnen die Seite primär,
-um zu sehen, **welcher Panel-Controller welches Display steuert** — z. B. „mit
-welchem Panel bediene ich gerade das Wohnzimmer-Display?". Das Paar steht
-deshalb in einer **Hero-Sektion am Seitenkopf**, prominent und ohne Suche
-auffindbar; die übrigen Sorten kommen darunter als sekundäre Liste.
+**RAT-31 E3 (#1496) — Hauptzweck geändert:** Die Hero-Sektion „Geräte-Paare"
+(ursprünglicher Hauptzweck der Seite) ist entfernt — sie setzte Sorten d/e
+voraus, die durch RAT-31 E3 wegfallen. **Neuer Hauptzweck:** Inventar aller
+aufrufbaren Manifest-Seiten (Sorten a/b/c/f/g) auf einen Blick, nach
+Buddy/App gruppiert, mit kopierbaren URLs. Volltextsuche filtert live.
 
 **Route / Manifest / Sorte:**
 - Pfad: **`/api/v1/seiten/uebersicht`** — neben der Registry-API unter URL-4
@@ -524,36 +506,13 @@ auffindbar; die übrigen Sorten kommen darunter als sekundäre Liste.
   `label: "Alle Seiten"`, `zielgruppe: "eltern"` listet. Die Übersicht listet
   sich darüber **selbst** — kein handgepflegter Sonderfall im Aggregator.
 
-**Layout (V1, von oben nach unten — nach Gate B Wahl 2026-06-08
-„gemeinsame Box pro Geräte-Paar"):**
+**Layout (RAT-31 E3, #1496 — manifest-only):**
 
 1. **Suchfeld** (Volltextsuche, clientseitig, filtert alle Sektionen live).
-2. **Hero-Sektion „Geräte-Paare"** (Hauptzweck):
-   - Für jeden Display-Client mit `verknuepft_mit_panels: [<panel_id>, …]`
-     (mindestens ein Eintrag) wird **eine gemeinsame Box** pro Paar gerendert
-     — eine umschließende Container-Karte mit Header und visuell klarer
-     Außengrenze (Box-Rahmen + abgesetzter Hintergrund), die als
-     zusammengehörige Einheit lesbar ist:
-     - **Header der Box**: Display-Identifier prominent (`📺 <display_id>`)
-       + Sub-Zeile „wird gesteuert von N Panel(s)".
-     - **Display-Karte oben** in der Box (Display-Pfad + zwei kopierbare URLs).
-     - **Visueller Trenner** („↑ Display · Panel-Controller ↓") als
-       Hierarchie-Marker.
-     - **Panel-Controller-Karten unten** in der Box, als Grid (je Panel-
-       Instanz eine Hauptkarte). Die Panel-Instanz (Sorte d,
-       `/controller/app-panel/<panel_id>`) ist die Hauptkarte — der eigentliche
-       Steuerer — **nicht** der Editor.
-     - **Editor-Anhang** an jeder Panel-Karte (gestrichelter Trenner +
-       gepunkteter linker Rand): „✏ Bearbeiten" mit den beiden Editor-URLs
-       (Heim/Tailscale). Der Editor ist **visuell innerhalb** der Panel-Karte
-       als Sub-Element angedockt, nicht als separate Geschwister-Karte —
-       damit die Hierarchie Display ↔ Panel ↔ Editor sichtbar wird.
-       Datenquelle: `verknuepft_mit_panel` am Editor-Eintrag (SREG-4).
-   - Reihenfolge: Displays alphabetisch nach `display_id`.
-   - *Wenn* kein Display ein gekoppeltes Panel hat (Kaltstart, oder keine
-     Panels angelegt), *dann* fehlt der Hero-Block; ein Hinweis „Noch keine
-     Geräte-Paare angelegt" reicht — keine leere Box.
-3. **Sekundäre Sektion „Andere Seiten"**, nach **Buddy/App gruppiert**:
+2. ~~**Hero-Sektion „Geräte-Paare"**~~ — **entfernt RAT-31 E3 (#1496).**
+   Setzte Sorten d/e mit Verknüpfungs-Feldern voraus; diese existieren nicht
+   mehr. `hero_paare` ist immer `[]` im Layout-Kontrakt (Rückwärtskompatibilität).
+3. **Sektion „Andere Seiten"**, nach **Buddy/App gruppiert**:
    - Pro `app`-Slug (= BUD-1-Buddy oder Platform-Service mit
      `seiten/views.json`) wird **eine gemeinsame Buddy-Gruppe** gerendert
      — Rahmen mit Header (Slug im Monospace mit führendem `/`, Anzahl Views
@@ -564,11 +523,11 @@ auffindbar; die übrigen Sorten kommen darunter als sekundäre Liste.
      Variante überschrieben, sonst Eintrags-Icons), vollem `pfad` + `query`-
      Anhängung (z. B. `/display/plan/woche?ansicht=klein`). Visuelle
      Variant-Markierung: gestrichelter linker Rand + „Variante"-Tag im Titel.
-   - **Snapshot-Sorten (d/e) ohne `app`-Feld** werden in einer Sammelplatz-
-     Gruppe „instanz" gerendert, falls sie nicht im Hero (= ungepaart) sind.
-   - **Typ-Filter-Chips** „Alle · Anzeigen · Eltern · Controller · Panels ·
-     Displays" wirken über Karten hinweg; Buddy-Gruppen, deren Karten alle
-     ausgefiltert sind, werden ebenfalls ausgeblendet.
+   - ~~Snapshot-Sorten (d/e) ohne `app`-Feld in Sammelgruppe „instanz"~~ —
+     **entfernt RAT-31 E3 (#1496)** (Sorten d/e existieren nicht mehr).
+   - **Typ-Filter-Chips** „Alle · Anzeigen · Eltern · Controller" wirken über
+     Karten hinweg; Buddy-Gruppen, deren Karten alle ausgefiltert sind, werden
+     ebenfalls ausgeblendet.
    - Reihenfolge der Buddy-Gruppen: Anzahl Karten absteigend, dann
      alphabetisch.
 
@@ -601,20 +560,17 @@ damit Eltern die für sie gewohnte Geste nutzen können.
 
 **Suche:** Volltextsuche (clientseitig) gegen `label`, `synonyme[]`, `zeigt` —
 ein Eingabefeld am Seitenkopf, Live-Filter. Suche wirkt auf alle Sektionen.
-**Kontext-Erhalt** an zwei Stellen:
-- **Hero-Paar-Box bleibt sichtbar**, wenn entweder das Display, eine
-  Panel-Instanz **oder** ein Editor-Anhang in der Box den Suchbegriff trifft
-  — sonst verliert man die Paar-Information.
+**Kontext-Erhalt:**
+- ~~Hero-Paar-Box-Erhalt~~ — **entfernt RAT-31 E3 (#1496)** (keine Hero-Boxen).
 - **Buddy-Gruppe expandiert komplett**, wenn der Suchbegriff im Gruppen-
   Header (`app`-Slug) trifft (z. B. „wetter" zeigt **alle** Wetter-Views in
   der Gruppe); andernfalls werden Karten gefiltert und die Gruppe wird nur
   ausgeblendet, wenn keine Karte mehr passt.
 
-**Icon-Fallback** (SREG-4-Lücke: Sorten b/c/d/e tragen meist kein `icons[]`):
-- Sorte b/c (Eltern-Settings, Controller): generisches Default-Piktogramm aus
-  `seiten/static/icons/<typ>.png` (kleine B-Liste in der Implementierung).
-- Sorte d/e (Panel-Instanz, Display-Client): Default-Piktogramm + die `key`
-  als Untertitel der Karte (Panel-/Display-ID).
+**Icon-Fallback** (SREG-4-Lücke: Sorten b/c/f/g tragen meist kein `icons[]`):
+- Sorte b/c/f/g (Eltern-Settings, Controller, PWA, Mini-App): generisches
+  Default-Piktogramm aus `seiten/static/icons/<typ>.png`.
+  ~~Sorte d/e~~ — **entfernt RAT-31 E3 (#1496)**.
 - *Nicht* den `icons_erforderlich`-Schalter (SREG-10) bemühen — der gehört zum
   Aggregator-Manifest-Bau, nicht zur Anzeige-Schicht.
 
@@ -675,20 +631,15 @@ Wahrheit (CLAUDE.md §6). Aktualität folgt SREG-3 (TTL ≤ 30 s).
 **Auth/Exposure:** erbt SREG-6 — EC-2-Mitgliedschaft + Netzgrenze, kein
 zusätzliches Auth-Gate, kein `intern`-Flag.
 
-**Vertikale Scheibe (Abend-Test):**
+**Vertikale Scheibe (Abend-Test, RAT-31 E3):**
 1. Eltern öffnen `<heim-origin>/api/v1/seiten/uebersicht` am Handy.
-2. **Ohne Suche/Filter** sehen sie sofort die Geräte-Paar-Boxen am
-   Seitenkopf: eine Box pro Display, mit Header „📺 <display_id> · wird
-   gesteuert von N Panel(s)", Display-Karte oben in der Box, darunter die
-   Panel-Controller-Karten als Grid; an jeder Panel-Karte ein angedockter
-   „✏ Bearbeiten"-Anhang mit zwei Editor-URLs (Heim/Tailscale).
-3. Klick auf Copy-Button „Tailscale" am Editor-Anhang einer Panel-Karte →
-   URL in Zwischenablage → in einen anderen Browser-Tab am Laptop einfügen
-   → die `/controller/app-panel/<panel_id>/bearbeiten`-Seite öffnet sich.
-4. Suche „wetter" expandiert die `wetter`-Buddy-Gruppe in der sekundären
-   Sektion (alle Views der `app: wetter` werden sichtbar — `heute` +
-   `regeln`); andere Buddy-Gruppen blenden aus; gepaarte Geräte-Paar-Boxen
-   im Hero ohne Wetter-Bezug verschwinden ebenfalls.
+2. **Ohne Suche/Filter** sehen sie die Buddy-Gruppen aller Manifest-Seiten
+   (Sorten a/b/c/f/g), nach App gruppiert mit kopierbaren Heim- und Funnel-URLs.
+   ~~Geräte-Paar-Boxen~~ — entfernt RAT-31 E3 (#1496).
+3. Klick auf Copy-Button „Heim" → URL in Zwischenablage → im Browser öffnen.
+4. Suche „wetter" expandiert die `wetter`-Buddy-Gruppe (alle Views der
+   `app: wetter` werden sichtbar — `heute` + `regeln`); andere Buddy-Gruppen
+   blenden aus.
 5. Suche „kleinkind" zeigt nur die Plan-Variant-Karte
    `/display/plan/woche?ansicht=klein` in der `plan`-Buddy-Gruppe; die
    Default-Wochenplan-Karte daneben verschwindet (Variant-Match unabhängig

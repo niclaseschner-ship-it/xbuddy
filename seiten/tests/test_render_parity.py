@@ -63,24 +63,18 @@ def _bekannte_typen():
 def _fixture_eintraege():
     """Baut ein Inventar mit je einem Eintrag pro bekanntem Typ.
 
-    Das Test-Modul deckt ab: Hero-Paar (display-client + panel + eltern-Editor)
-    plus Buddy-Repraesentanten (display, controller) plus eine Mini-App. Die
-    Vollstaendigkeitspruefung (test_fixture_deckt_jeden_registry_typ) stellt
-    sicher, dass diese Liste JEDEN aufgezaehlten Typ erzeugt — sonst ROT.
+    RAT-31 E3 (#1496): display-client + panel entfernt (Sorten d/e weg).
+    Die Fixture deckt ab: Manifest-Sorten a/b/c/f/g als Buddy-Repraesentanten
+    plus eine Mini-App. Die Vollstaendigkeitspruefung
+    (test_fixture_deckt_jeden_registry_typ) stellt sicher, dass diese Liste
+    JEDEN aufgezaehlten Typ erzeugt — sonst ROT.
     """
     return [
-        # Hero-Paar → deckt display-client, panel, eltern (Editor) in BEIDEN Render.
-        {"typ": "display-client", "key": "display-wohnzimmer", "pfad": "/display/wohnzimmer",
-         "label": "Wohnzimmer", "zeigt": "Kind-Display", "instanz": "wohnzimmer",
-         "verknuepft_mit_panels": ["mama"]},
-        {"typ": "panel", "key": "panel-mama", "pfad": "/controller/app-panel/mama",
-         "label": "Mama-Panel", "zeigt": "Panel", "instanz": "mama"},
-        {"typ": "eltern", "key": "mama-bearbeiten",
-         "pfad": "/controller/app-panel/mama/bearbeiten", "label": "Mama bearbeiten",
-         "zeigt": "Editor", "instanz": "mama", "verknuepft_mit_panel": "mama"},
-        # Buddy-Repraesentanten.
+        # Buddy-Repraesentanten (Sorten a/b/c/f/g).
         {"typ": "display", "key": "wetter/heute", "pfad": "/display/wetter/heute",
          "label": "Wetter heute", "zeigt": "Wetter", "app": "wetter"},
+        {"typ": "eltern", "key": "wetter/regeln", "pfad": "/display/wetter/regeln",
+         "label": "Regeln", "zeigt": "Eltern-Settings", "app": "wetter"},
         {"typ": "controller", "key": "regeln/x", "pfad": "/controller/regeln/x",
          "label": "Regeln", "zeigt": "Controller", "app": "regeln"},
         # Mini-App → mini_apps-Sektion (MAU) + Buddy-Gruppe (Jinja).
@@ -158,17 +152,15 @@ def _mau_karten(layout, tmp_path):
 
 def test_fixture_deckt_jeden_registry_typ():
     """Anti-#1208-Blindfleck: die Fixture MUSS jeden aus der Registry
-    aufgezaehlten Typ erzeugen. Neuer TYP_* ohne Fixture-Repraesentant → ROT."""
+    aufgezaehlten Typ erzeugen. Neuer TYP_* ohne Fixture-Repraesentant → ROT.
+
+    RAT-31 E3 (#1496): hero_paare ist immer [] — Typ-Abdeckung nur via
+    buddy_gruppen und mini_apps.
+    """
     layout = _layout()
     erzeugte = set()
     for g in layout["buddy_gruppen"]:
         erzeugte.update(k["typ"] for k in g["karten"])
-    for p in layout["hero_paare"]:
-        erzeugte.add(p["display"]["typ"])
-        for pk in p["panels"]:
-            erzeugte.add(pk["panel"]["typ"])
-            if pk["editor"]:
-                erzeugte.add(pk["editor"]["typ"])
     erzeugte.update(k["typ"] for k in layout["mini_apps"])
     fehlend = _bekannte_typen() - erzeugte
     assert not fehlend, (
