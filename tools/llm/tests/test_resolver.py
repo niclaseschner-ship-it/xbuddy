@@ -12,7 +12,7 @@ import types
 import pytest
 
 from tools.llm import LLMCapabilityError
-from tools.llm._resolver import normalize_model, parse_slot
+from tools.llm._resolver import litellm_slot_for_provider, normalize_model, parse_slot
 
 
 def _install_fake_vendor(name: str):
@@ -155,6 +155,53 @@ def test_normalize_model_leaves_already_prefixed_untouched():
     assert normalize_model("mistral/mistral-medium-2508") == "mistral/mistral-medium-2508"
     assert normalize_model("azure/tts-1-hd") == "azure/tts-1-hd"
     assert normalize_model("azure/whisper-1") == "azure/whisper-1"
+
+
+# ----------------------------------------------------------------------
+#  T1492 (LLMP-S13 n=2-Naht): litellm_slot_for_provider
+# ----------------------------------------------------------------------
+
+
+def test_litellm_slot_for_provider_claude_eltern_chat():
+    """T1492: caller=eltern-chat, provider=claude → eltern-chat-litellm-claude-api-key."""
+    assert (
+        litellm_slot_for_provider("eltern-chat", "claude")
+        == "eltern-chat-litellm-claude-api-key"
+    )
+
+
+def test_litellm_slot_for_provider_mistral_eltern_chat():
+    """T1492: caller=eltern-chat, provider=mistral → eltern-chat-litellm-eu-api-key.
+
+    purpose-Teil trägt KEINEN Vendor-Slug (`mistral`) — sonst matcht parse_slot
+    ZWEI Vendoren (litellm UND mistral) → boot-fatal (LLMP-5-Falle).
+    """
+    assert (
+        litellm_slot_for_provider("eltern-chat", "mistral")
+        == "eltern-chat-litellm-eu-api-key"
+    )
+
+
+def test_litellm_slot_for_provider_claude_hoerspiel():
+    """T1492: caller=hoerspiel, provider=claude → hoerspiel-litellm-claude-api-key."""
+    assert (
+        litellm_slot_for_provider("hoerspiel", "claude")
+        == "hoerspiel-litellm-claude-api-key"
+    )
+
+
+def test_litellm_slot_for_provider_mistral_hoerspiel():
+    """T1492: caller=hoerspiel, provider=mistral → hoerspiel-litellm-eu-api-key."""
+    assert (
+        litellm_slot_for_provider("hoerspiel", "mistral")
+        == "hoerspiel-litellm-eu-api-key"
+    )
+
+
+def test_litellm_slot_for_provider_unknown_provider_raises():
+    """T1492: unbekannter provider → KeyError (sichtbar am Boot, kein Silent-Fallback)."""
+    with pytest.raises(KeyError):
+        litellm_slot_for_provider("eltern-chat", "openai")
 
 
 def test_normalize_model_empty_stays_empty():
