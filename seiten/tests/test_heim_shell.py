@@ -550,3 +550,80 @@ def test_sw_scope_in_html_aus_registry(client):
     assert erwartet_scope in body, (
         f"SW-Scope {erwartet_scope!r} aus REGISTRY fehlt im gerenderten HTML (PWAM-3 / T1324)"
     )
+
+
+# ============================================================
+#  T1543 — Klebende SWs robust ersetzen (Auto-Heal + Reset-Link)
+# ============================================================
+
+def test_t1543_ac1_auto_heal_in_seite_mit_loop_guard(client):
+    """T1543 AC1/AC4 (Baustein 1): die SEITE (nicht der SW) enthaelt den Auto-Heal:
+    build_id-Mismatch → alle SWs deregistrieren + alle Caches loeschen + EIN Reload,
+    gegen Reload-Loop geschuetzt.
+
+    Der Auto-Heal MUSS in der Seite liegen (ein kaputter SW darf ihn nicht erwuergen)
+    und darf hoechstens EINMAL heilen (sessionStorage-Riegel + localStorage-Angleich).
+    """
+    body = client.get("/shell/" + PANEL_ID, headers=_OPERATOR_HEADERS).get_data(as_text=True)
+    # Selbstheil-Bausteine im Seiten-Body (nicht im SW):
+    assert "getRegistrations" in body, "Auto-Heal muss ALLE SW-Registrierungen erfassen"
+    assert "unregister" in body, "Auto-Heal muss Registrierungen deregistrieren"
+    assert "caches.keys" in body, "Auto-Heal muss ALLE Cache-Namespaces erfassen"
+    assert "caches.delete" in body, "Auto-Heal muss Caches loeschen"
+    assert "location.reload" in body, "Auto-Heal muss neu laden"
+    # Vergleich gegen server-gerenderte build_id (nicht den SW befragen):
+    static_dir = os.path.join(os.path.dirname(seiten_main.__file__), "static")
+    erwartet_build_id = pwa_mantel.build_id_for("shell", static_dir)
+    assert erwartet_build_id in body, (
+        "Server-build_id muss in die Seite gerendert sein (Mismatch-Vergleich, Baustein 1)"
+    )
+    # Reload-Loop-Schutz: sessionStorage-Riegel muss vorhanden sein.
+    assert "sessionStorage" in body, "Reload-Loop-Schutz (sessionStorage-Riegel) fehlt"
+    assert "shell_heal_done" in body, "Reload-Loop-Schutz-Flag fehlt (nur EINMAL heilen)"
+
+
+def test_t1543_ac2_reset_route_liefert_kill_js(client):
+    """T1543 AC2/AC4 (Baustein 2): die Reset-Route liefert 2xx + die Kill-JS,
+    die ALLE SWs deregistriert + ALLE Caches loescht + zur Shell zurueckleitet.
+
+    Route liegt AUSSERHALB der /shell/-SW-Scope (unter /api/v1/seiten/), damit ein
+    klebender /shell/-SW sie nie kontrolliert; no-store, damit sie immer frisch laedt.
+    """
+    resp = client.get("/api/v1/seiten/reset")
+    assert resp.status_code == 200, "Reset-Route muss 2xx liefern"
+    assert "text/html" in resp.headers.get("Content-Type", ""), "Reset-Route muss HTML liefern"
+    body = resp.get_data(as_text=True)
+    assert "getRegistrations" in body, "Reset-JS muss ALLE SWs erfassen (auch app-panel-Scope)"
+    assert "unregister" in body, "Reset-JS muss SWs deregistrieren"
+    assert "caches.keys" in body, "Reset-JS muss ALLE Caches erfassen"
+    assert "caches.delete" in body, "Reset-JS muss Caches loeschen"
+    assert "location.replace" in body or "location.href" in body, (
+        "Reset-JS muss nach dem Purge zur Shell zurueckleiten"
+    )
+    # Route liegt ausserhalb der /shell/-SW-Scope (Scope-Praefix nicht im Pfad).
+    assert not "/api/v1/seiten/reset".startswith("/shell/"), (
+        "Reset-Pfad muss AUSSERHALB der /shell/-SW-Scope liegen"
+    )
+    assert "no-store" in resp.headers.get("Cache-Control", ""), (
+        "Reset-Route muss no-store sein (klebender SW/Cache darf sie nicht abfangen)"
+    )
+
+
+def test_t1543_ac2_reset_route_ist_public(monkeypatch):
+    """T1543 AC2: die Reset-Seite zeigt keine Familiendaten und muss auch ohne
+    gueltigen Cookie laden — sie ist genau der Rettungspfad fuer ein Geraet, dessen
+    Auth/SW gerade klemmt. Public (AUTH-4, analog shell_asset_view/manifest)."""
+    seiten_main.configure(bot_token=BOT_TOKEN)
+    c = seiten_main.app.test_client()  # KEIN Session-Cookie
+    resp = c.get("/api/v1/seiten/reset")
+    assert resp.status_code == 200, (
+        "Reset-Route muss public sein (kein Cookie noetig — Rettungspfad fuer klemmendes Geraet)"
+    )
+
+
+def test_t1543_ac2_reset_redirect_open_redirect_schutz(client):
+    """T1543 AC2: der ?to=-Redirect ist auf eigene relative Pfade begrenzt
+    (Open-Redirect-Schutz) — ein externer Ziel-Host wird verworfen."""
+    resp = client.get("/api/v1/seiten/reset?to=https://evil.example/x")
+    body = resp.get_data(as_text=True)
+    assert "evil.example" not in body, "Open-Redirect: externes Ziel darf nicht durchreichen"
