@@ -1,14 +1,14 @@
 """get_singleshot — Modell-Durchreichung + forced-tool end-to-end (T1084, LLMP-S11).
 
 Ohne Netz: Anthropic über einen Fake-SDK-Client, Mistral über gemocktes
-httpx.post. Spiegel test_spike_stufe1_fixtures (Anthropic) +
-test_vendor_mistral (Mistral).
+litellm-SDK (Motor-Weg, #1536 — Hand-Vendor `_vendor/mistral.py` entfernt).
+Spiegel test_spike_stufe1_fixtures (Anthropic) + test_vendor_litellm (litellm).
 
 - get_singleshot(slot, model="claude-opus-4-7") reicht model an den Vendor durch
   (vendor.model == opus).
 - get_singleshot(slot) ohne model → Vendor-DEFAULT_MODEL.
-- Anthropic- + Mistral-Pfad: forced tool_use end-to-end gegen Fake-Client /
-  Fake-httpx → Schema-konformes dict.
+- Anthropic- + litellm-Mistral-Pfad: forced tool_use end-to-end gegen Fake-Client /
+  Fake-litellm → Schema-konformes dict.
 """
 
 import json
@@ -73,17 +73,45 @@ def _fake_anthropic():
 
 
 # ----------------------------------------------------------------------
-#  Mistral-Fakes (Spiegel test_vendor_mistral)
+#  litellm-Fakes (Spiegel test_vendor_litellm — Mistral via Motor-Weg, #1536)
 # ----------------------------------------------------------------------
 
-def _fake_httpx(response_json, *, status_code=200):
-    fake = MagicMock()
+def _make_litellm_tool_call(name, payload):
+    tc = MagicMock()
+    tc.id = "call-lit-1"
+    fn = MagicMock()
+    fn.name = name
+    fn.arguments = json.dumps(payload)
+    tc.function = fn
+    return tc
+
+
+def _make_litellm_singleshot_response(*, tool_name=None, payload=None):
+    """OpenAI-förmige LiteLLM-ModelResponse für singleshot_structured."""
+    message = MagicMock()
+    message.content = ""
+    if tool_name and payload is not None:
+        message.tool_calls = [_make_litellm_tool_call(tool_name, payload)]
+    else:
+        message.tool_calls = []
+    choice = MagicMock()
+    choice.message = message
     resp = MagicMock()
-    resp.status_code = status_code
-    resp.json.return_value = response_json
-    resp.text = json.dumps(response_json)
-    fake.post.return_value = resp
-    fake.RequestError = Exception
+    resp.choices = [choice]
+    resp.usage = MagicMock()
+    resp.usage.prompt_tokens = 90
+    resp.usage.completion_tokens = 25
+    resp.usage.cache_read_input_tokens = 0
+    resp.usage.cache_creation_input_tokens = 0
+    return resp
+
+
+def _fake_litellm(response=None):
+    """Gemocktes litellm-SDK für den litellm-Motor-Pfad."""
+    fake = MagicMock()
+    fake.exceptions.APIError = Exception
+    if response is not None:
+        fake.completion.return_value = response
     return fake
 
 
@@ -141,26 +169,28 @@ def test_get_singleshot_without_max_tokens_keeps_vendor_default_anthropic():
     assert ss._vendor.max_tokens == DEFAULT_MAX_TOKENS
 
 
-def test_get_singleshot_passes_max_tokens_to_vendor_mistral():
-    """get_singleshot(slot, max_tokens=4096) reicht max_tokens an den Mistral-Vendor
-    durch — vendor.max_tokens == 4096 (AC1, Mistral-Pfad)."""
-    fake_httpx = _fake_httpx({})
-    with patch.dict(sys.modules, {"httpx": fake_httpx}), \
+def test_get_singleshot_passes_max_tokens_to_vendor_litellm_mistral():
+    """get_singleshot(slot, max_tokens=4096) reicht max_tokens an den litellm-Vendor
+    durch — vendor.max_tokens == 4096 (AC1, Mistral-via-litellm-Pfad, #1536).
+    Slot ist `hoerspiel-litellm-eu-api-key` (litellm_slot_for_provider)."""
+    fake_lit = _fake_litellm()
+    with patch.dict(sys.modules, {"litellm": fake_lit}), \
          patch("tools.llm.public_api.resolve_api_key", return_value="key-fake"):
         from tools.llm import get_singleshot
-        ss = get_singleshot(slot="hoerspiel-mistral-api-key", max_tokens=4096)
+        ss = get_singleshot(slot="hoerspiel-litellm-eu-api-key", max_tokens=4096)
     assert ss._vendor.max_tokens == 4096
 
 
-def test_get_singleshot_without_max_tokens_keeps_vendor_default_mistral():
-    """get_singleshot(slot) ohne max_tokens → Mistral-Vendor-DEFAULT_MAX_TOKENS=4096 (AC1)."""
-    fake_httpx = _fake_httpx({})
-    with patch.dict(sys.modules, {"httpx": fake_httpx}), \
+def test_get_singleshot_without_max_tokens_keeps_vendor_default_litellm():
+    """get_singleshot(slot) ohne max_tokens → litellm-Vendor-DEFAULT_MAX_TOKENS unverändert
+    (AC1, #1536: Mistral läuft über litellm-Motor, kein Hand-Vendor mehr)."""
+    fake_lit = _fake_litellm()
+    with patch.dict(sys.modules, {"litellm": fake_lit}), \
          patch("tools.llm.public_api.resolve_api_key", return_value="key-fake"):
         from tools.llm import get_singleshot
-        from tools.llm._vendor.mistral import DEFAULT_MAX_TOKENS as MISTRAL_DEFAULT_MAX_TOKENS
-        ss = get_singleshot(slot="hoerspiel-mistral-api-key")
-    assert ss._vendor.max_tokens == MISTRAL_DEFAULT_MAX_TOKENS
+        from tools.llm._vendor.litellm import DEFAULT_MAX_TOKENS as LITELLM_DEFAULT_MAX_TOKENS
+        ss = get_singleshot(slot="hoerspiel-litellm-eu-api-key")
+    assert ss._vendor.max_tokens == LITELLM_DEFAULT_MAX_TOKENS
 
 
 def test_anthropic_singleshot_max_tokens_in_create_call(jsonl_path):
@@ -219,23 +249,19 @@ def test_anthropic_singleshot_forced_tool_end_to_end(jsonl_path):
 
 
 def test_mistral_singleshot_forced_tool_end_to_end(jsonl_path):
-    """Mistral-Pfad: forced (benannte) tool_choice → Schema-konformes dict
-    end-to-end gegen Fake-httpx."""
-    tool_call = {
-        "id": "call-1",
-        "type": "function",
-        "function": {"name": "folgen_vorschlag", "arguments": json.dumps(ERGEBNIS)},
-    }
-    response_json = {
-        "choices": [{"message": {"content": "", "tool_calls": [tool_call]}}],
-        "usage": {"prompt_tokens": 90, "completion_tokens": 25},
-    }
-    fake_httpx = _fake_httpx(response_json)
+    """Mistral-via-litellm-Pfad: forced (benannte) tool_choice → Schema-konformes dict
+    end-to-end gegen Fake-litellm-SDK (#1536 — Hand-Vendor entfernt, Motor-Weg).
+    Slot ist `hoerspiel-litellm-eu-api-key`; Modell `mistral-large-2411` bekommt
+    das `mistral/`-Präfix (LLMP-S13/normalize_model)."""
+    lit_response = _make_litellm_singleshot_response(
+        tool_name="folgen_vorschlag", payload=ERGEBNIS,
+    )
+    fake_lit = _fake_litellm(lit_response)
 
-    with patch.dict(sys.modules, {"httpx": fake_httpx}), \
+    with patch.dict(sys.modules, {"litellm": fake_lit}), \
          patch("tools.llm.public_api.resolve_api_key", return_value="key-fake"):
         from tools.llm import get_singleshot
-        ss = get_singleshot(slot="hoerspiel-mistral-api-key",
+        ss = get_singleshot(slot="hoerspiel-litellm-eu-api-key",
                             model="mistral-large-2411")
         out = ss.complete_structured(
             system="Du erfindest Folgen.",
@@ -245,9 +271,7 @@ def test_mistral_singleshot_forced_tool_end_to_end(jsonl_path):
         )
 
     assert out == ERGEBNIS
-    sent = json.loads(fake_httpx.post.call_args.kwargs["content"])
-    assert sent["model"] == "mistral-large-2411"
-    assert sent["tool_choice"] == {"type": "function",
-                                   "function": {"name": "folgen_vorschlag"}}
+    # LLMP-S13: normalize_model hat das `mistral/`-Präfix ergänzt.
+    assert fake_lit.completion.call_args.kwargs["model"] == "mistral/mistral-large-2411"
     parsed = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
     assert parsed["caller"] == "hoerspiel"

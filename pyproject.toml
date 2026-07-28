@@ -11,7 +11,7 @@ dependencies = [
     "flask~=3.1",
     # Anthropic SDK: tools/llm/_vendor/anthropic.py + eltern-chat/providers/claude.py.
     "anthropic~=0.104",
-    # HTTP-Client: tools/llm/_vendor/mistral.py (lazy import, kein SDK-Dep auf mistralai).
+    # HTTP-Client: eltern-chat/telegram.py + diverse Service-HTTP-Calls (kein SDK-Dep auf mistralai).
     "httpx~=0.28",
     # Bild-Verarbeitung: tools/medien_store/normalize.py (JPEG/Thumbnail).
     "Pillow~=11.1",
