@@ -317,58 +317,51 @@ Gate: würde ein Kind Mitglied der Familien-Gruppe, wäre es nach EC-2 berechtig
 ein eigener Kinder-Chat entsteht), ist die Exposure-Frage neu zu stellen — dann
 wird ein `intern`-Flag oder eine echte Rolle fällig. Bis dahin nicht auf Vorrat.
 
-## SREG-7 — Vorbedingung: zwei Display-URL-Origins (Heimnetz + Tailscale)
-Familien greifen über **zwei Wege** auf XBuddy zu: lokales Heimnetz (z. B.
-`https://xbuddy-hub.local:8443`) und Tailscale (z. B.
-`https://xbuddy-hub.tailnet-xxxx.ts.net`). Damit eine angebotene URL **wirklich
-am Handy funktioniert**, müssen beide Origins als Config-Werte gesetzt sein:
+## SREG-7 — Display-URL-Origins: Funnel-only (seit #1458)
+
+> **Nic-Setzung 2026-07-25 (#1458, enacted):** Self-signed-Tailnet-IP-Origins
+> werden aufgegeben. Alle Geräte erreichen die Shell über den Funnel-FQDN
+> (`buddyboard.taile235cf.ts.net`) mit LE-Zertifikat + Cookie. Die
+> `display_url_origin_tailscale`-Slot wurde entfernt.
 
 | Config-Schlüssel | Bedeutung | Default |
 |---|---|---|
-| `display_url_origin_heim` | Heimnetz-Origin (Bot-Default für SREG-5; tritt an die Stelle des bestehenden `display_url_origin`, GAA-3.7) | leer |
-| `display_url_origin_tailscale` | Tailscale-Origin (zusätzlich auf SREG-12-Seite kopierbar) | leer |
+| `display_url_origin_heim` | Heimnetz-Origin für den Operator-Pi (LAN-Direktzugang, IP-Trust, kein Cookie; Bot-Default für SREG-5, tritt an die Stelle des bestehenden `display_url_origin`, GAA-3.7) | leer |
 | `display_url_origin_funnel` | Funnel-FQDN-Origin (LE-Cert, extern erreichbar; für Familien-**User-Geräte** über den Funnel, AUTH-7b) — **RAT-27 (RATIFIZIERT 2026-07-07)** | leer |
+
+**`display_url_origin_tailscale` entfernt** (Slot existiert nicht mehr in
+`eltern-chat/config.py` nach #1458). `SEITEN_TAILSCALE_ORIGIN` wird in
+`seiten/main.py` nicht mehr gelesen (`resolved_config` setzt den Wert immer
+auf Leer-String). `tailscale_origin` bleibt als Parameter in `seiten/render.py`
+und `configure()` für Rückwärtskompatibilität, wird aber ignoriert —
+`urls.tailscale` ist in jeder Karte immer `None`, `tailscale_banner` ist immer
+`True`. ENV-Variable `SEITEN_TAILSCALE_ORIGIN` am Pi kann Nic beim nächsten
+Deploy-Aufräumen entfernen (kein Effekt mehr).
 
 **V1-Pflicht:** `display_url_origin_heim` muss gesetzt sein, sonst kann der
 SREG-5-Skill keinen tippbaren Link liefern und die SREG-12-Seite hat keine
-„Heim"-Spalte. **`display_url_origin_tailscale` ist V1-Soll** — fehlt sie,
-zeigt SREG-12 nur die Heim-Spalte mit explizitem Banner-Hinweis statt zweier
-Spalten, die Seite bleibt nutzbar. Kein Auto-Fallback auf Heim als Tailscale
-(falsche Origin = nicht-erreichbarer Link).
+„Heim"-Spalte. Fehlt `display_url_origin_funnel`, ist der externe
+User-Geräte-Zugang nicht angeboten (kein Auto-Fallback — falsche Origin =
+Cookie im falschen Jar + nicht-erreichbarer Link).
 
-> **SREG-7 · dritte Origin `display_url_origin_funnel` — RAT-27 (RATIFIZIERT 2026-07-07), noch
-> nicht ratifiziert** (#1388, Epic #1338; ratifiziert (RAT-27)). Bindewirkung
-> erst mit RAT-27.
-
-Mit dem Auth-Funnel-Rollout (AUTH-7b, `auth.md`) kommt eine **dritte**
-Origin hinzu: `display_url_origin_funnel` trägt die **Funnel-FQDN mit
-LE-Zertifikat** (`buddyboard.taile235cf.ts.net`-Muster,
+**Funnel-FQDN mit LE-Zertifikat** (`buddyboard.taile235cf.ts.net`-Muster,
 `reference_tailscale_buddyboard`), über die **Familien-User-Geräte** die
-Shell/Views von außerhalb des Heimnetzes erreichen. Sie steht **neben** heim
-(LAN-Direktzugang) und tailscale (Tailnet-IP), ersetzt sie **nicht**: heim
-bleibt der schnellste Weg im Haus, die Funnel-Origin ist der externe
-User-Geräte-Weg. Der **Pairing-Redirect** (`/auth/pair`, AUTH-2.a) muss
-**same-origin/relativ** bleiben — landet der Cookie-Setz-Redirect auf einer
-anderen Origin als der aufrufenden PWA, sitzt der `HttpOnly`-First-Party-Cookie
-im falschen Jar (AUTH-2 iOS-Persistenz-Bedingung: PWA **und** `/auth/pair` auf
-**derselben** Funnel-FQDN). Die Origin, unter der ein User-Gerät die Shell
-öffnet, ist damit dieselbe, unter der es pairt.
+Shell/Views erreichen (AUTH-7b). Der **Pairing-Redirect** (`/auth/pair`,
+AUTH-2.a) muss **same-origin/relativ** bleiben — landet der
+Cookie-Setz-Redirect auf einer anderen Origin als der aufrufenden PWA, sitzt
+der `HttpOnly`-First-Party-Cookie im falschen Jar (AUTH-2 iOS-Persistenz-
+Bedingung: PWA **und** `/auth/pair` auf **derselben** Funnel-FQDN).
 
-**Zuordnung Gerät → Origin:** Operator-Pi (AUTH-7a) nutzt heim/tailscale
-(IP-Trust, kein Cookie); Familien-User-Geräte (AUTH-7b) bekommen die
-Funnel-Origin für den externen Zugang. Fehlt `display_url_origin_funnel`,
-ist der externe User-Geräte-Zugang schlicht nicht angeboten (kein
-Auto-Fallback auf heim/tailscale — falsche Origin = Cookie im falschen Jar
-+ nicht-erreichbarer Link).
+**Zuordnung Gerät → Origin:** Operator-Pi (AUTH-7a) nutzt heim (LAN-IP-Trust,
+kein Cookie); Familien-User-Geräte (AUTH-7b) bekommen ausschließlich die
+Funnel-Origin.
 
-**Migration des existierenden `display_url_origin`** (`eltern-chat/config.py:85`,
-GAA-3.7): wird in einem **eigenen Folge-Ticket der Implementierung** zu
-`display_url_origin_heim` umbenannt — **nicht** im Spec-PR. Tests in
-eltern-chat akzeptieren während der Migration beide Namen.
+**Migration des existierenden `display_url_origin`** (`eltern-chat/config.py`,
+GAA-3.7): Doppel-Akzeptanz bleibt — `display_url_origin_heim` hat Vorrang,
+fällt auf `display_url_origin` zurück. Folge-Aufräum via separatem Ticket.
 
 **OPEN-EC-Origin** (eltern-chat.md EC-15) bleibt der Auflöse-Track für den
-Onboarding-/Config-Schritt, der diese Werte aus der Hub-Auslieferung zieht;
-SREG-7-V1 erweitert ihn um die zweite Origin.
+Onboarding-/Config-Schritt, der diese Werte aus der Hub-Auslieferung zieht.
 
 ## SREG-8 — Verhältnis zu #325 (App-Discovery): getrennt, teilt das Format
 #325 enumeriert **anlegbare Apps** (was *kann* in eine Panel-Kachel — schreibend,
@@ -620,13 +613,15 @@ gerendert (V1 Zwei-Spalten, V2 gemeinsame Box, V3 Verbinder-Chip). Nic-Wahl:
 V2. Die hier spezifizierten Layout-Pflichten entsprechen V2-Reconcile.
 
 **Inhalt je Karte (Pflicht):** `label` · `zeigt` (1 Satz) · `icons[]` (oder
-Fallback, s. u.) · `typ`-Badge · **zwei kopierbare URLs** mit Copy-Button:
+Fallback, s. u.) · `typ`-Badge · **kopierbare URLs** mit Copy-Button (Funnel-only
+seit #1458, Nic-Setzung 2026-07-25):
 - **„Heim"** = `display_url_origin_heim` + `pfad` (SREG-7)
-- **„Tailscale"** = `display_url_origin_tailscale` + `pfad` (SREG-7)
+- **„Funnel"** = `display_url_origin_funnel` + `pfad` (SREG-7, RAT-27) — *wenn* Wert konfiguriert
 
-*Wenn* `display_url_origin_tailscale` leer ist, *dann* wird die Tailscale-Spalte
-**weggelassen** und ein einmaliger Banner-Hinweis am Seitenkopf erklärt, dass
-nur die Heim-Variante verfügbar ist.
+~~**„Tailscale"** = `display_url_origin_tailscale` + `pfad`~~ — **entfernt (#1458)**:
+self-signed Tailnet-IP-Origins werden nicht mehr angeboten. Die Tailscale-Spalte
+wird nie gerendert; ein Banner-Hinweis am Seitenkopf ist dauerhaft aktiv
+(`tailscale_banner = True`).
 
 **Varianten:** ein Eintrag mit `varianten[]` (SREG-1) rendert **je Variante eine
 eigene Karte** mit der vollständigen `query`-Anhängung am Pfad (z. B.

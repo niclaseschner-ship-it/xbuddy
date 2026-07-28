@@ -67,7 +67,7 @@ def _make_cfg():
     cfg.essen_origin_url = "http://127.0.0.1:5052"     # WZE-8/GAN-7 / #503
     cfg.display_url_origin = "https://example.test"
     cfg.display_url_origin_heim = "https://example.test"        # SREG-7 / #476
-    cfg.display_url_origin_tailscale = ""                        # SREG-7 / #476
+    # display_url_origin_tailscale entfernt (#1458, Funnel-only)
     cfg.provider_api_key = None
     cfg.provider = "anthropic"
     cfg.provider_model = "test-model"
