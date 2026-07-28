@@ -838,6 +838,45 @@ def test_PANEL_10_fullscreen_rejected_promise_does_not_throw():
     assert out['caught'] is True, 'attachFullscreenImpl muss .catch auf das Promise haengen'
 
 
+def test_PANEL_10_embedded_suppresses_own_fullscreen_T1529():
+    """SHELL-11 / T1529-Regression: das Panel darf im eingebetteten Kontext
+    (Heim-Shell-Iframe, window.self !== window.top) seinen Eigen-Vollbild NICHT
+    attachen — sonst frisst ein requestFullscreen auf touchend im
+    allowfullscreen-losen Iframe den folgenden Kachel-Click (jede Kachel zwei Taps,
+    #1529). Der Guard muss VOR dem attachFullscreenImpl-Aufruf im Bootstrap-Wrapper
+    attachFullscreenOnGesture stehen; Standalone-Panel (self === top) behält PANEL-10.
+
+    Verhaltens-Beleg für attachFullscreenImpl selbst liefert
+    test_PANEL_10_request_fullscreen_on_first_gesture; hier pinnen wir die
+    embedded-Ausnahme (nur im Bootstrap, nicht als Node-Logik testbar, weil
+    window/document fehlen). Ground-Truth-Repro (puppeteer, T1529) bestätigt:
+    embedded === true → attachFullscreenImpl wird nicht verdrahtet."""
+    js = read(APPJS_PATH)
+    # Guard-Ausdruck muss existieren.
+    assert 'window.self !== window.top' in js, (
+        'app.js muss den embedded-Guard "window.self !== window.top" tragen (SHELL-11/T1529)')
+    # Der Guard muss VOR dem attachFullscreenImpl-Aufruf im Wrapper stehen und
+    # mit einem frühen return greifen (kein Attach im embedded-Fall).
+    m = re.search(
+        r'function\s+attachFullscreenOnGesture\s*\(\s*\)\s*\{(.*?)\n\s*\}',
+        js, re.DOTALL)
+    assert m, 'attachFullscreenOnGesture-Wrapper nicht gefunden'
+    body = m.group(1)
+    # Der Guard muss ein echtes `if (window.self !== window.top) return;`-Statement
+    # sein (nicht bloß eine Erwähnung im Kommentar).
+    guard_stmt = re.search(
+        r'if\s*\(\s*window\.self\s*!==\s*window\.top\s*\)\s*return\s*;', body)
+    assert guard_stmt, (
+        'app.js muss "if (window.self !== window.top) return;" im '
+        'attachFullscreenOnGesture-Wrapper tragen (SHELL-11/T1529 embedded-Ausnahme)')
+    attach_pos = body.find('attachFullscreenImpl')
+    assert attach_pos != -1, (
+        'attachFullscreenImpl-Aufruf fehlt im attachFullscreenOnGesture-Wrapper')
+    assert guard_stmt.start() < attach_pos, (
+        'embedded-Guard muss VOR attachFullscreenImpl stehen — sonst attacht das '
+        'eingebettete Panel seinen Eigen-Vollbild und frisst den ersten Kachel-Tap (#1529)')
+
+
 # ============================================================
 #  PANEL-11 — Aktiv-Markierung aus SSE-Stream
 # ============================================================
