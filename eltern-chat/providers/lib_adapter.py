@@ -33,7 +33,7 @@ from model import (
     TextBlock,
 )
 
-from tools.llm import LLMCapabilityError, get_agent
+from tools.llm import LLMCapabilityError, get_agent, litellm_slot_for_provider
 from tools.llm import ProviderError as LibProviderError
 
 logger = logging.getLogger(__name__)
@@ -48,17 +48,13 @@ _VENDOR_DEFAULT_MODEL = {
     "mistral": "mistral-medium-2508",
 }
 
-# LLMP-S13 (#1463): per-Backend litellm-Slot nach effektivem Provider — anbieter-
-# benannt, KEIN fester Ein-Slug (#1452-Fehler). Der Agent-Pfad fährt über den
-# litellm-Motor; der Slot bindet nur den API-Key im Zugangsdaten-Speicher (ZD-5).
-# parse_slot-Falle (LLMP-5): der purpose-Teil trägt KEINEN Vendor-Slug
-# (`mistral`/`anthropic`) — sonst matcht parse_slot ZWEI Vendoren (litellm UND
-# mistral) → mehrdeutig → Boot-fatal. Darum `eu` (EU-Region-Marker) statt
-# `mistral` (identisch zu hoerspiel/main.py:_LIB_SLOT_FOR_PROVIDER, T1454).
-_LIB_SLOT_FOR_PROVIDER = {
-    "claude": "eltern-chat-litellm-claude-api-key",
-    "mistral": "eltern-chat-litellm-eu-api-key",
-}
+# T1492 (LLMP-S13 n=2-Naht): Slot-Namensbildung über die geteilte Lib-Funktion
+# (tools.llm.litellm_slot_for_provider), statt lokaler Tabelle. Die Funktion
+# baut `eltern-chat-litellm-<purpose>` nach LLMP-5 — kein Vendor-Slug im purpose,
+# damit parse_slot nicht zwei Vendoren matcht (LLMP-5-Falle; `eu` statt `mistral`
+# für Mistral). Identische Tabelle war in hoerspiel/main.py:_LIB_SLOT_FOR_PROVIDER
+# dupliziert (T1454); n=2 → Naht zentralisiert.
+_CALLER = "eltern-chat"
 
 
 class LibAgentAdapter:
@@ -83,9 +79,10 @@ class LibAgentAdapter:
         from onboarding_store import vendor_slug_for_adapter
 
         vendor = vendor_slug_for_adapter(provider)
-        # LLMP-S13: Slot nach effektivem Provider. Unbekannter Provider ist ein
+        # LLMP-S13 / T1492: Slot nach effektivem Provider über die geteilte
+        # Lib-Naht (litellm_slot_for_provider). Unbekannter Provider ist ein
         # Konfig-Fehler (KeyError) — sichtbar am Boot, kein Silent-Fallback.
-        slot = _LIB_SLOT_FOR_PROVIDER[provider]
+        slot = litellm_slot_for_provider(_CALLER, provider)
         # Effektives Modell: konfiguriertes Modell, sonst Anbieter-Default des
         # Brand-Vendors (EC-15) — exakt der Alt-Pfad (claude.py:36 /
         # mistral.py:DEFAULT_MODEL). BLANK (`mistral-medium-2508`); das

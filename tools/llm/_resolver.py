@@ -186,6 +186,39 @@ def resolve_api_key(slot: str) -> str | None:
     return speicher.get(slot)
 
 
+# T1492 (LLMP-S13 n=2-Naht): purpose-Marker pro Brand-Vendor (eltern-chat
+# und hoerspiel duplizieren diese Tabelle — n=2 ist erreicht, Naht zentralisiert).
+# `claude` → `claude-api-key` (kein Vendor-Slug-Konflikt in purpose, LLMP-5).
+# `mistral` → `eu-api-key` (EU-Rechenzentrum-Marker, NICHT `mistral` —
+# sonst matcht parse_slot zwei Vendoren: litellm UND mistral → boot-fatal).
+_LITELLM_PURPOSE_FOR_PROVIDER: dict[str, str] = {
+    "claude": "claude-api-key",
+    "mistral": "eu-api-key",
+}
+
+
+def litellm_slot_for_provider(caller: str, provider: str) -> str:
+    """Baut den litellm-Motor-Slot nach LLMP-5 (T1492, LLMP-S13).
+
+    `<caller>-litellm-<purpose>` — das Vendor-Segment ist immer `litellm`
+    (der sanktionierte Motor-Slug, LLMP-4/RAT-26). Der purpose-Teil trägt
+    KEINEN Anbieter-Slug (kein `mistral`/`anthropic`), damit parse_slot nicht
+    zwei Vendoren matcht (LLMP-5-Falle; `eu` statt `mistral` für Mistral-Slots).
+
+    Beispiele:
+      litellm_slot_for_provider("eltern-chat", "claude")
+        → "eltern-chat-litellm-claude-api-key"
+      litellm_slot_for_provider("hoerspiel", "mistral")
+        → "hoerspiel-litellm-eu-api-key"
+
+    `provider` ist der app-lokale Brand-Name (`claude`/`mistral`) — nicht der
+    Vendor-Slug aus dem Slot-Namen. Unbekannter Provider → `KeyError` (sichtbar
+    am Boot, kein Silent-Fallback, analog _LIB_SLOT_FOR_PROVIDER-Fehler).
+    """
+    purpose = _LITELLM_PURPOSE_FOR_PROVIDER[provider]
+    return f"{caller}-litellm-{purpose}"
+
+
 def slot_present(slot: str) -> bool:
     """Reine Präsenz-Prüfung eines Slots im Zugangsdaten-Speicher (SVC-7).
 
