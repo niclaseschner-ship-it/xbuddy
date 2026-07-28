@@ -204,3 +204,72 @@ def test_ac3_smoke_tap_links_refresh_rechts_ohne_router():
         "Tap-links muss als payload.url im SSE-Event des rechten Panes ankommen"
     )
     stream.response.close()
+
+
+# ============================================================
+#  AC3 — Body-Kompatibilität: makeTileSelected-Form → seiten-Ingest (T1519)
+# ============================================================
+
+def test_ac3_adapt_shell_event_akzeptiert_tile_selected_body():
+    """AC3 (T1519): _adapt_shell_event akzeptiert den Body, den app.js
+    via makeTileSelected baut (type/app/view Pflichtfelder, PANEL-6).
+
+    Der sendEvent-Aufruf in app.js liefert genau diese Felder; seiten-Ingest
+    muss ihn ohne 400 durchlassen. Kein router-Hop, kein source_id-Match —
+    seiten nimmt jedes valide tile_selected (ein Gerät = ein Ziel)."""
+    # Repräsentativer Body wie makeTileSelected ihn erzeugt (PANEL-6):
+    body = {
+        "source_id": "app-panel:mias-panel-01",
+        "ts": "2026-07-28T10:00:00.000Z",
+        "type": "tile_selected",
+        "app": "hoerspiel",
+        "view": "player",
+    }
+    result, err = seiten_main._adapt_shell_event(body)
+    assert err is None, (
+        "_adapt_shell_event muss den makeTileSelected-Body ohne Fehler akzeptieren, "
+        "bekommen: %r" % err
+    )
+    kind, descriptor = result
+    assert kind == "trigger", "tile_selected muss 'trigger'-Kind liefern"
+    assert descriptor["app"] == "hoerspiel"
+    assert descriptor["view"] == "player"
+
+
+def test_ac3_adapt_shell_event_akzeptiert_body_mit_query():
+    """AC3 (T1519): _adapt_shell_event akzeptiert tile_selected mit optionalem
+    query-Dict (PANEL-6/PANEL-7 — flaches Objekt) — wie app.js makeTileSelected
+    es sendet, wenn tile.query gesetzt ist."""
+    body = {
+        "source_id": "app-panel:mias-panel-01",
+        "ts": "2026-07-28T10:00:00.000Z",
+        "type": "tile_selected",
+        "app": "essen",
+        "view": "liste",
+        "query": {"tag": "montag"},
+    }
+    result, err = seiten_main._adapt_shell_event(body)
+    assert err is None, "Body mit query darf nicht abgelehnt werden: %r" % err
+    kind, descriptor = result
+    assert descriptor.get("query") == {"tag": "montag"}
+
+
+def test_ac3_ingest_endpunkt_akzeptiert_tile_selected_body():
+    """AC3 (T1519): POST /shell/<panel_id>/events mit dem makeTileSelected-Body
+    liefert HTTP 204 — server-seitiger Endpunkt-Beweis fuer die Sender/Empfaenger-
+    Kompatibilitaet (Entry-Path-Probe ohne Tap auf echtem Tablet)."""
+    c = _auth_client()
+    body = {
+        "source_id": "app-panel:mias-panel-01",
+        "ts": "2026-07-28T10:00:00.000Z",
+        "type": "tile_selected",
+        "app": "hoerspiel",
+        "view": "player",
+    }
+    r = c.post("/shell/" + PANEL_ID + "/events", json=body)
+    assert r.status_code == 204, (
+        "POST /shell/<panel_id>/events mit makeTileSelected-Body muss 204 liefern "
+        "(Sender-Empfaenger-Kompatibilitaet T1519 AC3), got %d" % r.status_code
+    )
+    assert seiten_main._shell_state is not None
+    assert seiten_main._shell_state["payload"]["url"] == "/display/hoerspiel/player"
