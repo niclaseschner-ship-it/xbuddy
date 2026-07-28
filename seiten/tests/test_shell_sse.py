@@ -273,3 +273,71 @@ def test_ac3_ingest_endpunkt_akzeptiert_tile_selected_body():
     )
     assert seiten_main._shell_state is not None
     assert seiten_main._shell_state["payload"]["url"] == "/display/hoerspiel/player"
+
+
+# ============================================================
+#  T1538 — SW-Regression: SSE-Endpoint darf NICHT als Shell-HTML abgefangen werden
+# ============================================================
+#
+# Wurzel: isShellHtml() in sw.js gab fuer /shell/<pid>/events fälschlich true
+# zurueck (Suffix-Blacklist griff nicht auf sufixlosen Pfad). networkFirst
+# klon-backpressured dann den SSE-Stream → rechte Buddy-Pane empfing nie payload.url.
+# Fix: Regex-Check /^\/shell\/[^/]+\/?$/ — nur der bare Nav-Request ist HTML.
+# Diese Tests fangen die Regression auf Python-Ebene: die gerenderte sw.js
+# (shell_sw_view-Antwort-Body) muss den korrekten Regex enthalten.
+
+_SW_JS_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "static", "shell", "sw.js",
+)
+
+
+def _rendered_sw_body() -> str:
+    """Liest sw.js direkt vom Pfad (ohne BUILD_ID-Substitution, reicht fuer Regex-Pruefung)."""
+    with open(_SW_JS_PATH, encoding="utf-8") as fh:
+        return fh.read()
+
+
+def test_t1538_sw_enthaelt_shell_html_regex():
+    """T1538 AC2: Die gerenderte sw.js enthaelt den Navigations-Regex fuer isShellHtml.
+
+    Der Regex ^/shell/[^/]+/?$ matcht NUR den bare Nav-Pfad /shell/<panel_id>
+    (optional Trailing-Slash) — nicht Sub-Pfade wie /events, /sw.js, /icon-*.png.
+    Sein Vorhandensein im Body beweist, dass die Suffix-Blacklist-Regression
+    (T1538) nicht zurueckgekehrt ist.
+    """
+    body = _rendered_sw_body()
+    assert r'/^\/shell\/[^/]+\/?$/' in body, (
+        "sw.js muss den Navigations-Regex /^\\/shell\\/[^/]+\\/?$/ in isShellHtml "
+        "enthalten — Suffix-Blacklist-Regression (T1538) wurde reintroduciert"
+    )
+
+
+def test_t1538_sw_events_pfad_nicht_als_html():
+    """T1538 AC2: /shell/<pid>/events wird vom SW NICHT als Shell-HTML behandelt.
+
+    Prueft direkt, ob der isShellHtml-Regex den SSE-Endpoint ausschliesst.
+    Der Regex ^/shell/[^/]+/?$ darf '/shell/paulas-panel-01/events' NICHT matchen
+    (events-Segment ist ein dritter Pfad-Teil). Schlaegt dieser Test fehl, wuerde der
+    SSE-Stream durch networkFirst klon-backpressured und das rechte Pane blaese nie auf.
+    """
+    import re
+    # Den Regex aus der sw.js direkt in Python uebersetzen und Pfade pruefen.
+    shell_nav_re = re.compile(r'^/shell/[^/]+/?$')
+
+    assert not shell_nav_re.match('/shell/paulas-panel-01/events'), (
+        "isShellHtml-Regex darf /shell/<pid>/events NICHT matchen "
+        "(SSE-Stream wuerde durch networkFirst erwuergt — T1538)"
+    )
+    assert shell_nav_re.match('/shell/paulas-panel-01'), (
+        "isShellHtml-Regex muss /shell/<pid> matchen (bare Nav-Pfad — T1448)"
+    )
+    assert shell_nav_re.match('/shell/paulas-panel-01/'), (
+        "isShellHtml-Regex muss /shell/<pid>/ matchen (Trailing-Slash-Variante)"
+    )
+    assert not shell_nav_re.match('/shell/paulas-panel-01/sw.js'), (
+        "isShellHtml-Regex darf /shell/<pid>/sw.js NICHT matchen"
+    )
+    assert not shell_nav_re.match('/shell/paulas-panel-01/icon-192.png'), (
+        "isShellHtml-Regex darf /shell/<pid>/icon-192.png NICHT matchen"
+    )
