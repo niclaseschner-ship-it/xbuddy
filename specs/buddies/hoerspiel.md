@@ -1560,16 +1560,24 @@ entfernt (Konstante anpassen, kein Spec-Update — HSP-27b).
 
 ## 13. Audio-Ziel-Routing — SUPERSEDED (2026-07-27, Ein-App-Default)
 
-**Diese Sektion (HSP-41 `audio_ziel`, HSP-42 `/play-extern`) ist aufgehoben.**
-Nic-Setzung 2026-07-27: Der neue Default ist EINE App (Heim-Shell). Das Gerät,
-auf dem die App läuft, ist die Audio-Ausgabe — es gibt keine Wiedergabe auf einem
-*anderen* Gerät mehr. Die Zwei-Werte-Weiche `audio_ziel = "display" | "panel"`
+**Das `audio_ziel`-Routing (HSP-41) und `/play-extern` (HSP-42) sind aufgehoben.**
+Nic-Setzung 2026-07-27 (Option B): Der neue Default ist EINE App (Heim-Shell). Das
+Gerät, auf dem die App läuft, ist die Audio-Ausgabe — es gibt keine Wiedergabe auf
+einem *anderen* Gerät mehr. Die Zwei-Werte-Weiche `audio_ziel = "display" | "panel"`
 und der Panel-Push (`POST /play-extern`, HSP-42) entfallen ersatzlos; Audio läuft
-immer **lokal am App-Gerät**.
+immer **lokal am App-Gerät**. `/play-extern` ist aus `main.py` entfernt (kein
+Nicht-Test-Caller).
+
+**`/audio-stream` (SSE) bleibt als aktive PANEL-13-Naht.**
+`controller/app-panel/app.js:819-966` öffnet pro HSP-Instanz eine EventSource auf
+`/api/v1/hoerspiel/<kind_id>/audio-stream` (audio_play-Events für Silent-Audio-Prime).
+Dieser Endpoint ist nicht Teil der aufgehobenen `audio_ziel`-Weiche und wird daher
+durch Option B nicht berührt.
 
 Damit entfallen auch die zwei Folge-Klauseln zu HSP-41 (Audio-Ziel-Weiche in
 `alben.js` und der Audio-Ziel-Schalter im Einstellungen-Reiter) — beide sind an
-ihren Stellen als SUPERSEDED markiert. Der Code-/UI-Rückbau erfolgt über #1471.
+ihren Stellen als SUPERSEDED markiert. Der Code-/UI-Rückbau für `audio_ziel` und
+`play-extern` erfolgt über #1471.
 
 (Aufhebung der RATIFIZIERUNG 2026-06-17 „audio-output-routing" durch Nic-Setzung
 2026-07-27 „Ein-App-Default, App-Gerät = Ausgabe".)
@@ -1622,7 +1630,7 @@ Definition-of-Done für „Instanz X existiert":
    PORT-2-Block).
 2. **Origin-Routing / nginx** — URL-14-Registrierung inkl. der
    **Audio-SSE-Exact-Location** mit `proxy_buffering off` für
-   `/api/v1/hoerspiel/<kind_id>/audio-stream` (PANEL-13; HSP-42 §13-SUPERSEDED, Endpoint aktiv).
+   `/api/v1/hoerspiel/<kind_id>/audio-stream` (PANEL-13; Endpoint aktiv — audio_ziel-Routing §13 SUPERSEDED, /audio-stream nicht).
 3. **systemd-Service** — eigene Unit `xbuddy-hoerspiel-<kind_id>.service`
    (SVC-1..4), Service-Vorlage neben dem Code (BUD-1a), inkl.
    ZD-Store-Pfad-Drop-In pro Service.
