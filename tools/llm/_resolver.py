@@ -24,9 +24,21 @@ from types import ModuleType
 
 from ._types import LLMCapabilityError
 
+# LLMP-S13 (#1555): kanonische, litellm-bediente Vendor-Slugs, die KEIN
+# Hand-`_vendor/<slug>.py`-Modul (mehr) haben, aber weiter gültige Slot-
+# Vendor-Segmente sind. #1536 entfernte den Hand-Vendor `mistral` (läuft jetzt
+# über den `litellm`-Motor via `hoerspiel-litellm-eu-api-key`), ließ aber
+# `hoerspiel-mistral-api-key`-Slots im ZD-Store bestehen. Die Vendor-ERKENNUNG
+# (`parse_slot`) muss diese Slugs weiter kennen, sonst fällt der Slot aus dem
+# connector-Inventar + wird als Legacy fehlklassifiziert. Quelle der Wahrheit
+# ist die litellm-Provider-Route (`litellm_slot_for_provider`/LLMP-S13); die
+# Modell-Präfix-Familien in `_MISTRAL_MODEL_PREFIXES` bestätigen `mistral` als
+# echten, nur-noch-litellm-bedienten Anbieter.
+_LITELLM_SERVED_VENDOR_SLUGS: frozenset[str] = frozenset({"mistral"})
+
 
 def _known_vendors() -> list[str]:
-    """Listet die `_vendor/<vendor>.py`-Module zur Boot-Zeit (LLMP-4).
+    """Listet die bekannten Vendor-Slugs zur Boot-Zeit (LLMP-4/LLMP-S13).
 
     Quelle ist primär das Filesystem-Verzeichnis `tools/llm/_vendor/`
     (jede `.py`-Datei außer `__init__.py` ist ein Vendor-Slug). Zusätzlich
@@ -34,9 +46,14 @@ def _known_vendors() -> list[str]:
     Module mitgenommen — das deckt Test-Fixtures ab, die Vendor-Module
     dynamisch ein-/aushängen (LLMP-S11 Test-Pfad), und ist konsistent mit
     `load_vendor_module`, das letztlich `sys.modules` befüllt.
+
+    Ergänzt um `_LITELLM_SERVED_VENDOR_SLUGS` (#1555): litellm-bediente
+    Anbieter (z. B. `mistral`) bleiben gültige Vendor-Slugs, auch nachdem ihr
+    Hand-`_vendor/<slug>.py` entfernt wurde — die Vendor-ERKENNUNG ist von der
+    Hand-Vendor-Modul-Existenz entkoppelt.
     """
     from . import _vendor
-    vendors = set()
+    vendors = set(_LITELLM_SERVED_VENDOR_SLUGS)
     for info in pkgutil.iter_modules(_vendor.__path__):
         if info.ispkg:
             continue
