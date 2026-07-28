@@ -3,13 +3,16 @@
  *
  * #1210 (Daten-SSoT): Diese Datei holt den EINEN angereicherten Layout-Kontrakt
  * von GET /api/v1/seiten/layout (render.baue_layout) und RENDERT NUR. Sie
- * gruppiert/anreichert NICHTS mehr lokal — die Gruppierung (Hero-Paare,
- * Buddy-Gruppen), die Editor-Verknuepfung, die Shell-URLs und die Origin-URLs
- * kommen fertig aus dem Server (dieselbe Ableitung, die der Jinja-Pfad
- * /uebersicht rendert). So koennen die zwei Oberflaechen nicht mehr driften.
- * Abweichende Sichten filtern DEKLARATIV ueber das `audience`-Feld je Karte.
+ * gruppiert/anreichert NICHTS mehr lokal — die Buddy-Gruppen und die
+ * Origin-URLs kommen fertig aus dem Server (dieselbe Ableitung, die der
+ * Jinja-Pfad /uebersicht rendert). So koennen die zwei Oberflaechen nicht
+ * mehr driften. Abweichende Sichten filtern DEKLARATIV ueber das
+ * `audience`-Feld je Karte.
  *
- * MAU-4: drei Accordion-Sektionen (mini_apps, hero_paare, buddy_gruppen).
+ * RAT-31 E3 (#1496): rendereGeraetePaare entfernt (Sorten d/e weg;
+ * hero_paare ist immer [] im Kontrakt).
+ *
+ * MAU-4: zwei Accordion-Sektionen (mini_apps, buddy_gruppen).
  * MAU-5: Mini-App-Kachel-Tap → t.me-Deep-Link via openTelegramLink; Fallback funnel.
  * MAU-6: URL-Karten — Oeffnen via platform.openLink; Kopieren via platform.copyText + Toast.
  * MAU-8: Loading-State, 401-Fehler, 5xx-Fehler, snapshot_pending-Banner.
@@ -23,10 +26,9 @@
 const AUDIENCE_MINI_APP = "mini-app-uebersicht";
 
 // Fallback-Icons je (Roh-)Typ, wenn der Eintrag kein icons[] traegt.
+// RAT-31 E3 (#1496): display-client + panel entfernt (Geraete-Paare-Sorte weg).
 const _TYP_FALLBACK_EMOJI = {
   "display":         "📺",
-  "display-client":  "📺",
-  "panel":           "📱",
   "eltern":          "📄",
   "controller":      "🎛️",
   "mini-app":        "🟦",
@@ -34,10 +36,9 @@ const _TYP_FALLBACK_EMOJI = {
 };
 
 // Menschenlesbares Typ-Badge je Roh-Typ (nur Praesentation).
+// RAT-31 E3 (#1496): display-client + panel entfernt (Geraete-Paare-Sorte weg).
 const _TYP_BADGE = {
   "display":         "Display",
-  "display-client":  "Display-Client",
-  "panel":           "Panel",
   "eltern":          "Eltern",
   "controller":      "Controller",
   "mini-app":        "Mini-App",
@@ -185,68 +186,7 @@ function rendereMinApps(platform, zeigeToast, container, miniApps) {
   }
 }
 
-// ── Sektion 2: Geraete-Paare (MAU-4 Punkt 2) ────────────────────────────────
-
-/**
- * DUMM: rendert die vom Server vorberechneten hero_paare (render.py::_hero_paare).
- * KEINE lokale Gruppierung/Editor-/Shell-Ableitung mehr — alles kommt fertig:
- * paar.display, paar.panels[].panel/.editor/.shell_urls.
- */
-function rendereGeraetePaare(platform, zeigeToast, container, heroPaare) {
-  if (!heroPaare || !heroPaare.length) {
-    const leer = _doc().createElement("p");
-    leer.className = "leer-hinweis";
-    leer.textContent = "Keine gekoppelten Display-Panel-Paare gefunden.";
-    container.appendChild(leer);
-    return;
-  }
-
-  for (const paar of heroPaare) {
-    const paarEl = _doc().createElement("div");
-    paarEl.className = "geraete-paar";
-
-    const paarLabel = _doc().createElement("div");
-    paarLabel.className = "geraete-paar-label";
-    paarLabel.textContent =
-      paar.display.label || paar.display.instanz || "Display";
-    paarEl.appendChild(paarLabel);
-
-    // Display-Karte(n) (Heim + Tailscale aus dem Kontrakt).
-    _emitViewKarten(platform, zeigeToast, paarEl, paar.display, {
-      badge: "Display",
-      label: paar.display.label || paar.display.instanz,
-    });
-
-    for (const pk of (paar.panels || [])) {
-      _emitViewKarten(platform, zeigeToast, paarEl, pk.panel, { badge: "Panel" });
-
-      // Shell-URL-Karten (SHELL-10) — server-seitig in hero_paare vorberechnet.
-      const shellUrls = pk.shell_urls || {};
-      const shellLabel = "Shell: " + (pk.panel.label || pk.panel.instanz || "Panel");
-      if (shellUrls.heim) {
-        paarEl.appendChild(_bauUrlKarte(
-          platform, zeigeToast, shellLabel + " (Heim)", "Shell",
-          shellUrls.heim, null, "shell"));
-      }
-      if (shellUrls.tailscale) {
-        paarEl.appendChild(_bauUrlKarte(
-          platform, zeigeToast, shellLabel + " (Tailscale)", "Shell",
-          shellUrls.tailscale, null, "shell"));
-      }
-
-      if (pk.editor) {
-        _emitViewKarten(platform, zeigeToast, paarEl, pk.editor, {
-          badge: "Editor",
-          label: pk.editor.label || "Bearbeiten",
-        });
-      }
-    }
-
-    container.appendChild(paarEl);
-  }
-}
-
-// ── Sektion 3: Buddy-Seiten (MAU-4 Punkt 3) ─────────────────────────────────
+// ── Sektion 2: Buddy-Seiten (MAU-4 Punkt 2) ─────────────────────────────────
 
 /**
  * DUMM: rendert die vom Server vorgruppierten buddy_gruppen
@@ -318,8 +258,8 @@ async function boot() {
     return;
   }
 
+  // RAT-31 E3 (#1496): sec-geraete-paare entfernt (hero_paare immer []).
   const secMiniApps    = document.getElementById("sec-mini-apps");
-  const secGeraete     = document.getElementById("sec-geraete-paare");
   const secBuddySeiten = document.getElementById("sec-buddy-seiten");
   const hauptInhalt    = document.getElementById("uebersicht-inhalt");
   const fehlerBanner   = document.getElementById("fehler-banner");
@@ -393,10 +333,7 @@ async function boot() {
     body1.innerHTML = "";
     rendereMinApps(platform, zeigeToast, body1, layout.mini_apps || []);
 
-    const body2 = secGeraete.querySelector(".accordion-body");
-    body2.innerHTML = "";
-    rendereGeraetePaare(platform, zeigeToast, body2, layout.hero_paare || []);
-
+    // RAT-31 E3 (#1496): Geraete-Paare-Sektion entfernt (hero_paare immer []).
     const body3 = secBuddySeiten.querySelector(".accordion-body");
     body3.innerHTML = "";
     rendereBuddySeiten(platform, zeigeToast, body3, layout.buddy_gruppen || []);
@@ -418,7 +355,6 @@ async function boot() {
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     rendereMinApps,
-    rendereGeraetePaare,
     rendereBuddySeiten,
     _bauUrlKarte,
     _emitViewKarten,

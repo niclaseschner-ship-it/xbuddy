@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-{# SREG-12 V2-Layout: Hero-Paar-Boxen + Buddy-Gruppen, beide kopierbare URLs.
+{# SREG-12 V2-Layout: Buddy-Gruppen mit kopierbaren URLs.
+   RAT-31 E3 (#1496): Hero-Paar-Sektion entfernt (Sorten d/e weg).
    Reine Präsentations-Schicht; Daten kommen aus render.baue_layout(). #}
 <html lang="de">
 <head>
@@ -15,12 +16,9 @@
       --ink: #1a1a1a;
       --ink-soft: #555;
       --rule: #d8d8d8;
-      --hero-bg: #eef3ff;
-      --hero-rule: #b6c7e8;
       --accent: #2d62d8;
       --warn-bg: #fff4d6;
       --warn-rule: #e0b900;
-      --editor-rule: #8a8a8a;
       --variante-rule: #b07cd6;
     }
     * { box-sizing: border-box; }
@@ -98,43 +96,6 @@
       letter-spacing: 0.05em;
       font-weight: 600;
     }
-    .hero-paar {
-      background: var(--hero-bg);
-      border: 2px solid var(--hero-rule);
-      border-radius: 10px;
-      padding: 14px;
-      margin-bottom: 16px;
-    }
-    .hero-paar > header {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      flex-wrap: wrap;
-      gap: 4px 12px;
-      margin-bottom: 10px;
-    }
-    .hero-paar > header .display-id {
-      font-size: 1.1rem;
-      font-weight: 600;
-    }
-    .hero-paar > header .panel-anzahl {
-      font-size: 0.85rem;
-      color: var(--ink-soft);
-    }
-    .hierarchie-marker {
-      text-align: center;
-      font-size: 0.8rem;
-      color: var(--ink-soft);
-      padding: 6px 0;
-    }
-    .panel-grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 12px;
-    }
-    @media (min-width: 720px) {
-      .panel-grid { grid-template-columns: 1fr 1fr; }
-    }
     .karte {
       background: var(--card);
       border: 1px solid var(--rule);
@@ -210,18 +171,6 @@
       min-width: 44px;
     }
     .copy-btn[data-copied="1"] { background: #d4f4dd; border-color: #6abf83; }
-    .editor-anhang {
-      margin-top: 10px;
-      padding-top: 8px;
-      border-top: 1px dashed var(--editor-rule);
-      border-left: 3px dotted var(--editor-rule);
-      padding-left: 8px;
-    }
-    .editor-anhang .editor-titel {
-      font-size: 0.85rem;
-      color: var(--ink-soft);
-      margin-bottom: 4px;
-    }
     .buddy-gruppe {
       background: var(--card);
       border: 1px solid var(--rule);
@@ -256,21 +205,6 @@
       padding: 20px;
       color: var(--ink-soft);
       font-style: italic;
-    }
-    /* SHELL-10: Shell-URL-Block unter Panel-Karte in Hero-Paar-Boxen (SREG-12-Form) */
-    .shell-url-block {
-      margin-top: 6px;
-      padding: 6px 8px;
-      border: 1px solid var(--hero-rule);
-      border-radius: 6px;
-      background: var(--hero-bg);
-    }
-    .shell-url-titel {
-      font-size: 0.8rem;
-      color: var(--ink-soft);
-      font-weight: 600;
-      margin-bottom: 4px;
-      display: block;
     }
     .toast {
       position: fixed;
@@ -316,8 +250,6 @@
     <button type="button" class="typ-chip" data-typ="display" aria-pressed="false">Anzeigen</button>
     <button type="button" class="typ-chip" data-typ="eltern" aria-pressed="false">Eltern</button>
     <button type="button" class="typ-chip" data-typ="controller" aria-pressed="false">Controller</button>
-    <button type="button" class="typ-chip" data-typ="panel" aria-pressed="false">Panels</button>
-    <button type="button" class="typ-chip" data-typ="display-client" aria-pressed="false">Displays</button>
   </nav>
 
   {# Macros für Karten — Jinja2 (vor erster Verwendung definiert) #}
@@ -364,63 +296,6 @@
   {% endmacro %}
 
   <main>
-    {# Hero-Sektion „Geräte-Paare" — Box pro Paar #}
-    <section class="sektion" data-sektion="hero">
-      <h2>Geräte-Paare</h2>
-      {% if hero_paare %}
-        {% for paar in hero_paare %}
-          <article class="hero-paar" data-paar-key="{{ paar.display.key }}">
-            <header>
-              <span class="display-id">📺 {{ paar.display.instanz }}</span>
-              <span class="panel-anzahl">wird gesteuert von {{ paar.panel_anzahl }} Panel{% if paar.panel_anzahl != 1 %}s{% endif %}</span>
-            </header>
-
-            {{ render_karte(paar.display) }}
-
-            <div class="hierarchie-marker">↑ Display · Panel-Controller ↓</div>
-
-            <div class="panel-grid">
-              {% for pk in paar.panels %}
-                <div class="panel-karte-wrap">
-                  {{ render_karte(pk.panel) }}
-                  {# SHELL-10: Shell-URL je panel_id in SREG-12-Form (zwei kopierbare URLs) #}
-                  {% if pk.shell_urls and (pk.shell_urls.heim or pk.shell_urls.tailscale) %}
-                  <div class="shell-url-block">
-                    <span class="shell-url-titel">&#127968; Heim-Shell</span>
-                    <div class="urls">
-                      {% if pk.shell_urls.heim %}
-                      <div class="url-row">
-                        <span class="url-label">Heim:</span>
-                        <a class="url-link" href="{{ pk.shell_urls.heim }}">{{ pk.shell_urls.heim }}</a>
-                        <button type="button" class="copy-btn" data-copy="{{ pk.shell_urls.heim }}">&#128203;</button>
-                      </div>
-                      {% endif %}
-                      {% if pk.shell_urls.tailscale %}
-                      <div class="url-row">
-                        <span class="url-label">Tailscale:</span>
-                        <a class="url-link" href="{{ pk.shell_urls.tailscale }}">{{ pk.shell_urls.tailscale }}</a>
-                        <button type="button" class="copy-btn" data-copy="{{ pk.shell_urls.tailscale }}">&#128203;</button>
-                      </div>
-                      {% endif %}
-                    </div>
-                  </div>
-                  {% endif %}
-                  {% if pk.editor %}
-                    <div class="editor-anhang" data-karten-typ="{{ pk.editor.typ }}" data-suchtext="{{ kartensuchtext(pk.editor) }}">
-                      <div class="editor-titel">✏ Bearbeiten</div>
-                      {{ render_karte(pk.editor, kompakt=true) }}
-                    </div>
-                  {% endif %}
-                </div>
-              {% endfor %}
-            </div>
-          </article>
-        {% endfor %}
-      {% else %}
-        <p class="leer-hinweis">Noch keine Geräte-Paare angelegt.</p>
-      {% endif %}
-    </section>
-
     {# Sekundäre Sektion „Andere Seiten" — Buddy-Gruppen #}
     <section class="sektion" data-sektion="buddy">
       <h2>Andere Seiten</h2>
@@ -445,7 +320,7 @@
   <script>
     // SREG-12 clientseitige Volltextsuche + Typ-Filter.
     // Karten tragen data-karten-typ und data-suchtext; Buddy-Gruppen data-app.
-    // Hero-Paar-Boxen bleiben sichtbar, wenn IRGENDEINE Karte in ihnen trifft.
+    // RAT-31 E3 (#1496): Hero-Paar-Boxen entfernt — nur noch Buddy-Gruppen.
     // Buddy-Gruppe expandiert komplett, wenn data-app dem Suchterm matched.
 
     const sucheInput = document.querySelector(".suche");
@@ -460,18 +335,12 @@
     function filter() {
       const q = normalize(sucheInput.value);
       // Karten einzeln
-      const karten = document.querySelectorAll(".karte, .editor-anhang");
+      const karten = document.querySelectorAll(".karte");
       karten.forEach(k => {
         const typMatch = aktiverTyp === "alle" || k.dataset.kartenTyp === aktiverTyp;
         const textMatch = !q || normalize(k.dataset.suchtext).includes(q);
         const visible = typMatch && textMatch;
         k.hidden = !visible;
-      });
-
-      // Hero-Paar-Boxen: sichtbar wenn ≥1 Karte/Editor in ihnen sichtbar ist
-      document.querySelectorAll(".hero-paar").forEach(p => {
-        const hat = p.querySelectorAll(".karte:not([hidden]), .editor-anhang:not([hidden])").length;
-        p.hidden = hat === 0;
       });
 
       // Buddy-Gruppen: app-Slug-Match → alle Karten sichtbar machen; sonst per-Karten-Filter

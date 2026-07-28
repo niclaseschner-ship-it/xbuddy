@@ -55,15 +55,12 @@ def manifest_root(tmp_path):
 
 
 @pytest.fixture
-def client(manifest_root, tmp_path, monkeypatch):
-    """Testclient mit gestubbten Snapshots + Heim+Tailscale Origin."""
+def client(manifest_root, tmp_path):
+    """Testclient mit Heim+Tailscale Origin.
+
+    RAT-31 E3 (#1496): keine Snapshot-Holer-Stubs mehr nötig.
+    """
     inventar_path = str(tmp_path / "inventar.json")
-    # Hero-Paar: 1 Display + 1 Panel
-    monkeypatch.setattr(seiten_main, "hole_panels",
-                        lambda: [{"panel_id": "mama", "display_id": "wohnzimmer"}])
-    monkeypatch.setattr(seiten_main, "hole_geraete",
-                        lambda: [{"id": "wohnzimmer", "verwendung": "display",
-                                  "status": "aktiv"}])
     seiten_main.configure(root=manifest_root, inventar_path=inventar_path, ttl=30,
                           heim_origin=HEIM, tailscale_origin=TAIL)
     seiten_main.app.config["TESTING"] = True
@@ -86,11 +83,10 @@ def test_html_traegt_suchfeld(client):
     assert 'type="search"' in body
 
 
-def test_html_traegt_hero_geraete_paar_box(client):
+def test_html_traegt_karten(client):
+    # RAT-31 E3 (#1496): hero-paar/Display-Konzept entfallen; HTML enthält Karten.
     body = client.get("/api/v1/seiten/uebersicht").get_data(as_text=True)
-    assert "hero-paar" in body
-    assert "wohnzimmer" in body
-    assert "Panel" in body  # "wird gesteuert von N Panel(s)"
+    assert "karte" in body
 
 
 def test_html_traegt_buddy_gruppen(client):
@@ -140,8 +136,6 @@ def test_origin_config_aus_env(monkeypatch):
     """#1458: SEITEN_TAILSCALE_ORIGIN wird ignoriert — immer Leer-String zurück."""
     monkeypatch.setenv("SEITEN_HEIM_ORIGIN", "https://env.heim")
     monkeypatch.setenv("SEITEN_TAILSCALE_ORIGIN", "https://env.tail")
-    monkeypatch.delenv("PANEL_URL", raising=False)
-    monkeypatch.delenv("GERAETE_URL", raising=False)
     monkeypatch.delenv("SEITEN_INVENTAR", raising=False)
     monkeypatch.delenv("SEITEN_ROOT", raising=False)
     args = seiten_main.parse_args([])
@@ -187,11 +181,12 @@ def test_origin_config_default_leer(monkeypatch):
     assert cfg["tailscale_origin"] == ""
 
 
-def test_tailscale_banner_immer_im_html(manifest_root, tmp_path, monkeypatch):
-    """#1458: tailscale_banner ist immer True — Banner erscheint immer."""
+def test_tailscale_banner_immer_im_html(manifest_root, tmp_path):
+    """#1458: tailscale_banner ist immer True — Banner erscheint immer.
+
+    RAT-31 E3 (#1496): keine Snapshot-Holer-Stubs mehr nötig.
+    """
     inventar_path = str(tmp_path / "inventar.json")
-    monkeypatch.setattr(seiten_main, "hole_panels", list)
-    monkeypatch.setattr(seiten_main, "hole_geraete", list)
     seiten_main.configure(root=manifest_root, inventar_path=inventar_path, ttl=30,
                           heim_origin=HEIM, tailscale_origin="")
     seiten_main.app.config["TESTING"] = True
@@ -221,8 +216,6 @@ def test_funnel_origin_config_aus_env(monkeypatch):
     monkeypatch.setenv("SEITEN_FUNNEL_ORIGIN", FUNNEL)
     monkeypatch.delenv("SEITEN_HEIM_ORIGIN", raising=False)
     monkeypatch.delenv("SEITEN_TAILSCALE_ORIGIN", raising=False)
-    monkeypatch.delenv("PANEL_URL", raising=False)
-    monkeypatch.delenv("GERAETE_URL", raising=False)
     monkeypatch.delenv("SEITEN_INVENTAR", raising=False)
     monkeypatch.delenv("SEITEN_ROOT", raising=False)
     args = seiten_main.parse_args([])
@@ -255,11 +248,12 @@ def test_funnel_origin_config_default_leer(monkeypatch):
     assert cfg["funnel_origin"] == ""
 
 
-def test_funnel_origin_im_layout_json(manifest_root, tmp_path, monkeypatch):
-    """funnel_origin taucht im /api/v1/seiten/layout-Kontrakt auf (SREG-7)."""
+def test_funnel_origin_im_layout_json(manifest_root, tmp_path):
+    """funnel_origin taucht im /api/v1/seiten/layout-Kontrakt auf (SREG-7).
+
+    RAT-31 E3 (#1496): keine Snapshot-Holer-Stubs mehr nötig.
+    """
     inventar_path = str(tmp_path / "inventar.json")
-    monkeypatch.setattr(seiten_main, "hole_panels", list)
-    monkeypatch.setattr(seiten_main, "hole_geraete", list)
     seiten_main.configure(root=manifest_root, inventar_path=inventar_path, ttl=30,
                           heim_origin=HEIM, tailscale_origin=TAIL,
                           funnel_origin=FUNNEL)

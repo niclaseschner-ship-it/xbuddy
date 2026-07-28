@@ -39,7 +39,8 @@ function _walk(el, out) {
 }
 
 /**
- * Rendert alle drei MAU-Sektionen ueber den Kontrakt und sammelt die Karten.
+ * Rendert alle zwei MAU-Sektionen ueber den Kontrakt und sammelt die Karten.
+ * RAT-31 E3 (#1496): rendereGeraetePaare entfernt (hero_paare immer []).
  * @param {object} layout - render.baue_layout-Ausgabe.
  * @returns {Array<{typ:string,url:string}>}
  */
@@ -56,14 +57,12 @@ function sammleKarten(layout) {
   const c1 = doc.createElement("div");
   mau.rendereMinApps(platform, zeigeToast, c1, layout.mini_apps || []);
 
-  const c2 = doc.createElement("div");
-  mau.rendereGeraetePaare(platform, zeigeToast, c2, layout.hero_paare || []);
-
+  // RAT-31 E3 (#1496): rendereGeraetePaare entfernt (Sorten d/e weg).
   const c3 = doc.createElement("div");
   mau.rendereBuddySeiten(platform, zeigeToast, c3, layout.buddy_gruppen || []);
 
   const cards = [];
-  [c1, c2, c3].forEach((c) => _walk(c, cards));
+  [c1, c3].forEach((c) => _walk(c, cards));
   return cards;
 }
 

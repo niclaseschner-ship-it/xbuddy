@@ -36,32 +36,6 @@ def _view(app, slug, pfad, typ="display"):
     return _eintrag(typ, app + "/" + slug, pfad, app=app)
 
 
-def _display(display_id, panels=None):
-    e = _eintrag(
-        "display-client",
-        "display-" + display_id,
-        "/display/" + display_id,
-        instanz=display_id,
-        zielgruppe="kind",
-    )
-    if panels:
-        e["verknuepft_mit_panels"] = panels
-    return e
-
-
-def _panel(panel_id, display_id=None):
-    e = _eintrag(
-        "panel",
-        "panel-" + panel_id,
-        "/controller/app-panel/" + panel_id,
-        instanz=panel_id,
-        zielgruppe="eltern",
-    )
-    if display_id:
-        e["verknuepft_mit_display"] = display_id
-    return e
-
-
 # ============================================================
 #  AC1: baue_layout baut funnel_url analog heim/tailscale
 # ============================================================
@@ -137,52 +111,9 @@ def test_funnel_url_in_variante_none_bei_leerem_funnel():
 
 
 # ============================================================
-#  AC1: Funnel-URL in Hero-Paar-Karten + shell_urls
+#  RAT-31 E3 (#1496): Hero-Paar-Funnel-Tests entfernt (hero_paare immer []).
+#  shell_urls sind entfernt (keine Sorten d/e mehr).
 # ============================================================
-
-def test_funnel_url_in_hero_display_karte():
-    """Hero-Display-Karten tragen urls.funnel."""
-    eintraege = [
-        _display("wohnzimmer", panels=["mama"]),
-        _panel("mama", display_id="wohnzimmer"),
-    ]
-    out = render.baue_layout({"eintraege": eintraege}, HEIM, TAIL, funnel_origin=FUNNEL)
-    display_karte = out["hero_paare"][0]["display"]
-    assert display_karte["urls"]["funnel"] == FUNNEL + "/display/wohnzimmer"
-
-
-def test_funnel_url_in_hero_panel_karte():
-    """Hero-Panel-Karten tragen urls.funnel."""
-    eintraege = [
-        _display("wohnzimmer", panels=["mama"]),
-        _panel("mama", display_id="wohnzimmer"),
-    ]
-    out = render.baue_layout({"eintraege": eintraege}, HEIM, TAIL, funnel_origin=FUNNEL)
-    panel_karte = out["hero_paare"][0]["panels"][0]["panel"]
-    assert panel_karte["urls"]["funnel"] == FUNNEL + "/controller/app-panel/mama"
-
-
-def test_funnel_shell_url_in_hero_panel():
-    """shell_urls.funnel wird analog heim/tailscale gebaut (SHELL-10 + SREG-7)."""
-    eintraege = [
-        _display("wohnzimmer", panels=["mama"]),
-        _panel("mama", display_id="wohnzimmer"),
-    ]
-    out = render.baue_layout({"eintraege": eintraege}, HEIM, TAIL, funnel_origin=FUNNEL)
-    shell_urls = out["hero_paare"][0]["panels"][0]["shell_urls"]
-    assert shell_urls["funnel"] == FUNNEL + "/shell/mama"
-
-
-def test_funnel_shell_url_none_bei_leerem_funnel():
-    """shell_urls.funnel ist None wenn funnel_origin leer."""
-    eintraege = [
-        _display("wohnzimmer", panels=["mama"]),
-        _panel("mama", display_id="wohnzimmer"),
-    ]
-    out = render.baue_layout({"eintraege": eintraege}, HEIM, TAIL, funnel_origin="")
-    shell_urls = out["hero_paare"][0]["panels"][0]["shell_urls"]
-    assert shell_urls["funnel"] is None
-
 
 # ============================================================
 #  Rueckwaertskompatibilitaet: bestehende Aufrufer ohne funnel_origin
@@ -226,8 +157,6 @@ def test_live_pfad_funnel_origin_nicht_leer(tmp_path, monkeypatch):
          "label": "Wetter", "synonyme": ["wetter"], "zeigt": "Z", "zielgruppe": "kind"},
     ])
     inventar_path = str(tmp_path / "inventar.json")
-    monkeypatch.setattr(seiten_main, "hole_panels", list)
-    monkeypatch.setattr(seiten_main, "hole_geraete", list)
     seiten_main.configure(
         root=root,
         inventar_path=inventar_path,

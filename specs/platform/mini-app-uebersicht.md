@@ -7,8 +7,8 @@
 
 Die Mini-App-Übersicht ist die **Telegram-Mini-App-Variante** der Eltern-
 Übersicht: ein WebView, der vom Familien-Bot per `web_app`-Inline-Button
-geöffnet wird und das vollständige Inventar (Mini-Apps + Geräte-Paare +
-Buddy-Seiten) als Kachel-Liste rendert. Tap auf eine Buddy-Seiten-Karte
+geöffnet wird und das vollständige Inventar (Mini-Apps + Buddy-Seiten)
+als Kachel-Liste rendert. (Geräte-Paare-Sektion entfernt RAT-31 E3 #1496.) Tap auf eine Buddy-Seiten-Karte
 öffnet die URL im System-Browser des Handys (`WebApp.openLink`); Tap auf
 eine Mini-App-Karte startet die Ziel-Mini-App im selben WebView-Overlay.
 
@@ -63,9 +63,14 @@ Mini-Apps lesen `initData` von der JS-Property und senden sie als Header
 *Test (Unit):* mock initData → 200; abgelaufenes initData → 401;
 fehlender Header → 401.
 
-## MAU-4 — Layout: drei Accordion-Sektionen, default geschlossen
+## MAU-4 — Layout: zwei Accordion-Sektionen, default geschlossen
 
-Die Mini-App-Übersicht rendert drei `<details>`-Accordion-Sektionen
+> **RAT-31 E3 (#1496):** Die ursprüngliche Sektion 2 „Geräte-Paare"
+> (`typ: display-client` + `verknuepft_mit_panels`, Hero-Box-Pattern)
+> wurde entfernt. Der Code (`rendereGeraetePaare`, `_hero_paare`) ist
+> weg; seiten-registry.md SREG-12 dokumentiert den Rückbau.
+
+Die Mini-App-Übersicht rendert zwei `<details>`-Accordion-Sektionen
 **von oben nach unten**, **alle initial collapsed** (Gate-B-Wahl
 2026-06-15: „erst alles eingeklappt und ich klappe dann aus für die
 Details"):
@@ -73,17 +78,10 @@ Details"):
 1. **📱 Mini Telegram Apps** — `typ: "mini-app"` aus dem Inventar.
    Karten mit Icon + Label + Kurzbeschreibung + **„▶︎ Öffnen"**-Tap-
    Affordanz. Tap → öffnet die Ziel-Mini-App (siehe MAU-5).
-2. **📺 Geräte-Paare** — Display-Client mit
-   `verknuepft_mit_panels: [<panel_id>, …]`. Hero-Box pro Paar (analog
-   SREG-12 V2): Display-Karte oben + Panel-Karte/n unten, mit
-   Hierarchie-Marker dazwischen. URL-Karten tragen **„🔗 Öffnen"** und
-   **„📋 Kopieren"** (siehe MAU-6) statt Tap-direkt-Navigation, weil
-   die URL ans Pi-Tablet weitergereicht wird, nicht im Telegram-WebView
-   anzuzeigen ist.
-3. **📄 Buddy-Seiten** — read-only Eltern-Views, gruppiert nach `app`-
-   Slug (Buddy-Gruppen analog SREG-12). Karten wie Geräte-Paare mit
-   Öffnen/Kopieren, **kein** direkter Tap-Wechsel (Buddy-Seiten sind
-   keine Mini-Apps).
+2. **📄 Buddy-Seiten** — read-only Eltern-Views, gruppiert nach `app`-
+   Slug (Buddy-Gruppen analog SREG-12). URL-Karten tragen **„🔗 Öffnen"**
+   und **„📋 Kopieren"** (siehe MAU-6); **kein** direkter Tap-Wechsel
+   (Buddy-Seiten sind keine Mini-Apps).
 
 **Accordion-Mechanik:** `<details>` ohne `open`-Attribut. Tap auf
 `<summary>` toggelt. Chevron-Indikator rotiert beim Öffnen. Standard-
@@ -92,7 +90,6 @@ Browser-Verhalten, kein JavaScript-Toggle nötig.
 **Sortierung innerhalb Sektionen:**
 - Mini-Apps: Manifest-Discovery-Reihenfolge (analog Sorten a/b/c im
   Aggregator).
-- Geräte-Paare: alphabetisch nach `display_id`.
 - Buddy-Seiten: Buddy-Gruppen nach Karten-Anzahl absteigend, dann
   alphabetisch (analog SREG-12).
 
@@ -120,7 +117,10 @@ Telegram-Back-Geste zurück zur Übersicht, weiter zu `essen-einkauf`.
 
 ## MAU-6 — URL-Karten: 🔗 Öffnen + 📋 Kopieren (Setup-Hilfe)
 
-Karten mit URL (Geräte-Paare, Buddy-Seiten) bieten zwei Buttons. Tap
+> **RAT-31 E3 (#1496):** Gilt nur noch für Buddy-Seiten. Die ursprüngliche
+> Geräte-Paare-Anwendung (Hero-Box mit Display + Panel-Karten) ist entfernt.
+
+Karten mit URL (Buddy-Seiten) bieten zwei Buttons. Tap
 auf die Karte selbst löst **keine** Default-Aktion aus — der Eltern
 wählt bewusst Öffnen oder Kopieren:
 

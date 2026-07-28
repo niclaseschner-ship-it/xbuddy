@@ -40,22 +40,7 @@ function _kontrakt() {
         audience: ["uebersicht"],
       }),
     ],
-    hero_paare: [
-      {
-        display: karte("display-client", "display-wohnzimmer", "/display/wohnzimmer",
-          { instanz: "wohnzimmer" }),
-        panel_anzahl: 1,
-        panels: [
-          {
-            panel: karte("panel", "panel-mama", "/controller/app-panel/mama",
-              { instanz: "mama" }),
-            editor: karte("eltern", "mama-bearbeiten",
-              "/controller/app-panel/mama/bearbeiten"),
-            shell_urls: { heim: HEIM + "/shell/mama", tailscale: TAIL + "/shell/mama" },
-          },
-        ],
-      },
-    ],
+    hero_paare: [],
     buddy_gruppen: [
       { app: "wetter", anzahl: 1, karten: [karte("display", "wetter/heute", "/display/wetter/heute")] },
       { app: "regeln", anzahl: 1, karten: [karte("controller", "regeln/x", "/controller/regeln/x")] },
@@ -75,7 +60,7 @@ function _kontrakt() {
 test("MAU rendert je bekanntem Roh-Typ mindestens eine Karte", () => {
   const cards = sammleKarten(_kontrakt());
   const typen = new Set(cards.map((c) => c.typ));
-  for (const erwartet of ["mini-app", "display-client", "panel", "eltern", "display", "controller", "shell"]) {
+  for (const erwartet of ["mini-app", "eltern", "display", "controller"]) {
     assert.ok(typen.has(erwartet), "Roh-Typ fehlt in MAU-Render: " + erwartet);
   }
 });
@@ -95,7 +80,7 @@ test("URL-Werte kommen aus dem Kontrakt (Heim + Tailscale), nicht aus window.loc
   const urls = new Set(cards.map((c) => c.url));
   assert.ok(urls.has(HEIM + "/display/wetter/heute"), "Heim-URL aus Kontrakt fehlt");
   assert.ok(urls.has(TAIL + "/display/wetter/heute"), "Tailscale-URL aus Kontrakt fehlt");
-  assert.ok(urls.has(HEIM + "/shell/mama"), "Shell-Heim-URL (SHELL-10) aus Kontrakt fehlt");
+  // SHELL-10: Shell-URLs kamen aus hero_paare panels (display-client/panel), die in RAT-31 E3 entfernt wurden
 });
 
 test("Teeth-Probe: fehlt ein Typ im Kontrakt, fehlt er auch im MAU-Render (kein Blind-Gruen)", () => {
