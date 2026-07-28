@@ -1622,7 +1622,7 @@ Definition-of-Done für „Instanz X existiert":
    PORT-2-Block).
 2. **Origin-Routing / nginx** — URL-14-Registrierung inkl. der
    **Audio-SSE-Exact-Location** mit `proxy_buffering off` für
-   `/api/v1/hoerspiel/<kind_id>/audio-stream` (HSP-42).
+   `/api/v1/hoerspiel/<kind_id>/audio-stream` (PANEL-13; HSP-42 §13-SUPERSEDED, Endpoint aktiv).
 3. **systemd-Service** — eigene Unit `xbuddy-hoerspiel-<kind_id>.service`
    (SVC-1..4), Service-Vorlage neben dem Code (BUD-1a), inkl.
    ZD-Store-Pfad-Drop-In pro Service.
