@@ -9,10 +9,11 @@
 > Eltern → Cookie + Mini-App-Übersicht). Damit **überholt**: der `GeraeteClient`-
 > Registry-Write (GAA-3.7), die Abfrage von `typ`/`os`/`aufloesung`/`name`
 > (GAA-3.x), das `paired_at`-Tracking. **Kein Registry-Tracking mehr, welche
-> Geräte gepaart sind.** Die eltern-chat-Skills `panel_anlegen`,
-> `cookie_nachschicken`, `ca-verteilung` entfallen (Etappe #1470). Die Per-
-> Requirement-Umschreibung erfolgt in Etappe #1470 (E1). Bis dahin ist **RAT-31
-> der bindende Ziel-Zustand**. Governance: `decisions/RAT-31-wirbelsaeule-abriss.md`,
+> Geräte gepaart sind.** Die eltern-chat-Skills `panel_anlegen` und
+> `ca-verteilung` entfallen (Etappe #1470, E1 umgesetzt). `cookie_nachschicken`
+> **bleibt** — Grundfunktion der Cookie-Zustellung (Nic-Entscheid 2026-07-27).
+> Bis zur vollen Per-Requirement-Umschreibung ist **RAT-31 der bindende
+> Ziel-Zustand**. Governance: `decisions/RAT-31-wirbelsaeule-abriss.md`,
 > Epic #1339.
 >
 > Status: V1 (RAT-18/GER) → eingedampft auf Binär {Kind|Eltern} (RAT-31) · Refs #106 #1339
@@ -279,34 +280,18 @@ bestehende Katalog bleibt unberührt.
 
 *Tickets:* #106
 
-## 5. CA-Verteilung anstoßen
+## 5. CA-Verteilung anstoßen — ENTFALLEN (RAT-31 E1, #1470)
 
-### GAA-6 — Nach Erfolg optional CA-Verteilung für das neue Gerät anstoßen
-Nach jedem erfolgreich angelegten Gerät (GAA-3.7) **ruft** die Funktion die
-CA-Verteilung (`ca-verteilung.md` CAV-1) für dieses Gerät auf — ein neu
-angelegtes Gerät hat die Root-CA der Instanz vermutlich noch nicht
-installiert, ohne sie öffnet es die Display-URL aus GAA-3.7 mit
-Browser-Warnung (`ca-verteilung.md` CAV-2). Der Aufruf erfolgt mit den
-Daten, die die Funktion bereits hat: Privatchat-ID des Aufrufers,
-Telegram-User-ID, gebundene Familien-Gruppen-ID und das gerade angelegte
-Gerät (insbesondere `os` für die plattformspezifische Anleitung
-`ca-verteilung.md` CAV-5). Die CA-Verteilung läuft als eigenständige
-Funktion (E-CAV-1) — GAA inlinet nichts aus ihr und übernimmt keine ihrer
-Pflichten.
+### GAA-6 — ~~Nach Erfolg optional CA-Verteilung für das neue Gerät anstoßen~~ ENTFALLEN
+> **RAT-31 E1 (#1470), Nic-Entscheid 2026-07-27:** Unter Cookie-only-hart
+> (RAT-32) verteilt das Onboarding **keine CA mehr**. Der Skill `ca-verteilung`
+> ist entfernt, und `geraet_anlegen` ruft **keinen** `cav_call_hook` mehr auf.
+> Der frühere GAA-6-Schritt (nach erfolgreicher Anlage optional das Zertifikat
+> anbieten) ist ersatzlos gestrichen — die Pairing-Link-Zustellung (GAA-3.8)
+> bleibt der einzige Nach-Anlage-Schritt. `E-GAA-5` (CA-Verteilung als Aufruf)
+> ist damit gegenstandslos.
 
-Der CA-Aufruf ist **optional**: die Funktion bietet dem Aufrufer im
-Privatchat an, das Zertifikat jetzt zu schicken, und ruft CAV nur bei
-Bestätigung (Pattern `eltern-chat.md` E-EC-7) auf. Lehnt der Aufrufer ab
-oder schlägt der CAV-Aufruf fehl, ist das Gerät trotzdem in der Registry
-— GAA-6 ist eine Komfort-Erweiterung, kein Teil der Geräte-Anlage selbst.
-Der Aufrufer kann die CA-Verteilung später jederzeit über ihre eigene
-EC-8-Aufgabe (CAV-6) nachholen.
-
-Die „Noch ein Gerät?"-Schleife (GAA-4) ist von GAA-6 unabhängig: erst der
-CAV-Aufruf (oder dessen Ablehnung) für das aktuelle Gerät, dann die
-Schleifen-Frage.
-
-*Tickets:* #106
+*Tickets:* #106 · #1470 (E1)
 
 ## 6. Fehlerfälle
 
@@ -371,12 +356,9 @@ Doppelung ersetzt. Mindest-Abdeckung:
   Familien-Gruppe, Registry-Zugriff) und reicht das Ergebnis-Signal an
   den Aufrufer zurück; ein Aufruf aus dem Familien-Gruppen-Chat
   adressiert die Anlage im Privatchat, nicht in der Gruppe.
-- **GAA-6** — nach erfolgreicher Anlage wird der CA-Verteilung-Aufruf
-  angeboten; eine Bestätigung ruft CAV mit den GAA-Daten und dem `os`
-  des neuen Geräts auf; eine Ablehnung beendet den GAA-6-Schritt ohne
-  CAV-Aufruf; ein simulierter CAV-Fehler ändert nichts an `geraete.json`
-  (das Gerät bleibt angelegt) und führt nicht zum Abbruch der GAA-4-
-  Schleife.
+- **GAA-6** — ENTFALLEN (RAT-31 E1, #1470): nach erfolgreicher Anlage wird
+  **kein** CA-Verteilung-Aufruf mehr angeboten (kein `cav_call_hook`); das
+  Onboarding stellt unter Cookie-only-hart (RAT-32) keine CA mehr zu.
 - **GAA-7** — die in GAA-7 genannten Fehlerklassen führen zu den dort
   beschriebenen Reaktionen, ohne `geraete.json` zu mutieren.
 
@@ -505,19 +487,18 @@ zwischenzeitlich denselben Effekt ohne Tippbefehl. Eine spätere
 Erweiterung nimmt die Aufgabe nicht weg, sondern setzt einen zweiten
 Aufrufer neben sie — die Funktion (GAA-1) bleibt unverändert.
 
-### E-GAA-5 — CA-Verteilung als Aufruf, nicht inline
-*Datum:* 2026-05-24
+### E-GAA-5 — ~~CA-Verteilung als Aufruf, nicht inline~~ GEGENSTANDSLOS (RAT-31 E1, #1470)
+*Datum:* 2026-05-24 · *entfallen:* 2026-07-27
 
-GAA-6 stößt die CA-Verteilung (`ca-verteilung.md` CAV-1) für das gerade
-angelegte Gerät an, indem es CAV als eigenständige Funktion **aufruft** —
-nicht, indem es deren Logik (Zertifikatsdatei, OS-Anleitung) selbst
-ausführt. Memory-Anchor: [[feedback-funktion-nicht-schritt]].
-
-**Verworfen:** das Zertifikat und die Anleitung direkt aus GAA heraus
-auszuliefern. Dann würde GAA die Verantwortung von CAV duplizieren
-(CLAUDE.md §6: ein Modul = eine Verantwortung), und jede Änderung an der
-CA-Verteilung (etwa eine neue OS-Anleitung, CAV-5) müsste an zwei Orten
-nachgezogen werden.
+> **RAT-31 E1 (#1470):** Diese Entscheidung ist gegenstandslos — die
+> CA-Verteilung (`ca-verteilung.md`) ist unter Cookie-only-hart (RAT-32)
+> entfernt, GAA-6 entfallen, und `geraet_anlegen` ruft keinen `cav_call_hook`
+> mehr auf. Historischer Wortlaut zur Nachvollziehbarkeit belassen:
+>
+> GAA-6 stieß die CA-Verteilung (`ca-verteilung.md` CAV-1) für das gerade
+> angelegte Gerät an, indem es CAV als eigenständige Funktion **aufrief** —
+> nicht, indem es deren Logik selbst ausführte. Memory-Anchor:
+> [[feedback-funktion-nicht-schritt]].
 
 ---
 
