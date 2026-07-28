@@ -100,10 +100,12 @@ def test_html_traegt_buddy_gruppen(client):
     assert "/plan" in body
 
 
-def test_html_traegt_beide_origin_urls_pro_karte(client):
+def test_html_traegt_heim_origin_url_pro_karte(client):
+    """#1458 Funnel-only: Heim-URL erscheint; Tailscale-URL wird nicht mehr gerendert."""
     body = client.get("/api/v1/seiten/uebersicht").get_data(as_text=True)
     assert HEIM + "/display/wetter/heute" in body
-    assert TAIL + "/display/wetter/heute" in body
+    # tailscale-URL darf nicht erscheinen (auch nicht wenn tailscale_origin gesetzt war)
+    assert TAIL + "/display/wetter/heute" not in body
 
 
 def test_html_traegt_copy_buttons(client):
@@ -135,6 +137,7 @@ def test_html_kein_pointer_events_none_auf_links(client):
 # ============================================================
 
 def test_origin_config_aus_env(monkeypatch):
+    """#1458: SEITEN_TAILSCALE_ORIGIN wird ignoriert — immer Leer-String zurück."""
     monkeypatch.setenv("SEITEN_HEIM_ORIGIN", "https://env.heim")
     monkeypatch.setenv("SEITEN_TAILSCALE_ORIGIN", "https://env.tail")
     monkeypatch.delenv("PANEL_URL", raising=False)
@@ -144,10 +147,12 @@ def test_origin_config_aus_env(monkeypatch):
     args = seiten_main.parse_args([])
     cfg = seiten_main.resolved_config(args)
     assert cfg["heim_origin"] == "https://env.heim"
-    assert cfg["tailscale_origin"] == "https://env.tail"
+    # tailscale_origin ist immer leer seit #1458, auch wenn ENV gesetzt ist
+    assert cfg["tailscale_origin"] == ""
 
 
 def test_origin_config_aus_cli(monkeypatch):
+    """#1458: --seiten-tailscale-origin CLI-Flag wird ignoriert — immer Leer-String."""
     monkeypatch.delenv("SEITEN_HEIM_ORIGIN", raising=False)
     monkeypatch.delenv("SEITEN_TAILSCALE_ORIGIN", raising=False)
     args = seiten_main.parse_args([
@@ -156,10 +161,12 @@ def test_origin_config_aus_cli(monkeypatch):
     ])
     cfg = seiten_main.resolved_config(args)
     assert cfg["heim_origin"] == "https://cli.heim"
-    assert cfg["tailscale_origin"] == "https://cli.tail"
+    # tailscale_origin ist immer leer seit #1458
+    assert cfg["tailscale_origin"] == ""
 
 
 def test_origin_config_cli_schlaegt_env(monkeypatch):
+    """Heim: CLI schlägt ENV. Tailscale: immer leer seit #1458."""
     monkeypatch.setenv("SEITEN_HEIM_ORIGIN", "https://env.heim")
     monkeypatch.setenv("SEITEN_TAILSCALE_ORIGIN", "https://env.tail")
     args = seiten_main.parse_args([
@@ -168,7 +175,7 @@ def test_origin_config_cli_schlaegt_env(monkeypatch):
     ])
     cfg = seiten_main.resolved_config(args)
     assert cfg["heim_origin"] == "https://cli.heim"
-    assert cfg["tailscale_origin"] == "https://cli.tail"
+    assert cfg["tailscale_origin"] == ""
 
 
 def test_origin_config_default_leer(monkeypatch):
@@ -180,7 +187,8 @@ def test_origin_config_default_leer(monkeypatch):
     assert cfg["tailscale_origin"] == ""
 
 
-def test_tailscale_banner_im_html_bei_leerem_tailscale(manifest_root, tmp_path, monkeypatch):
+def test_tailscale_banner_immer_im_html(manifest_root, tmp_path, monkeypatch):
+    """#1458: tailscale_banner ist immer True — Banner erscheint immer."""
     inventar_path = str(tmp_path / "inventar.json")
     monkeypatch.setattr(seiten_main, "hole_panels", list)
     monkeypatch.setattr(seiten_main, "hole_geraete", list)
@@ -189,16 +197,17 @@ def test_tailscale_banner_im_html_bei_leerem_tailscale(manifest_root, tmp_path, 
     seiten_main.app.config["TESTING"] = True
     c = seiten_main.app.test_client()
     body = c.get("/api/v1/seiten/uebersicht").get_data(as_text=True)
-    # Banner-Element (nicht nur CSS-Klassen-Definition) muss da sein
+    # Banner-Element muss immer da sein (kein Tailscale mehr)
     assert '<p class="banner-tailscale"' in body
     assert "Nur Heim-URL" in body
 
 
-def test_tailscale_banner_nicht_bei_gesetztem_tailscale(client):
+def test_tailscale_banner_auch_bei_gesetztem_tailscale_origin(client):
+    """#1458 Kerngarantie: Banner erscheint auch wenn tailscale_origin an configure()
+    übergeben wurde — der Param wird ignoriert, Banner ist immer aktiv."""
     body = client.get("/api/v1/seiten/uebersicht").get_data(as_text=True)
-    # CSS-Klassendefinition (.banner-tailscale {...}) ist immer im Style-Block;
-    # geprüft wird, dass das Banner-Element selbst NICHT gerendert wird.
-    assert '<p class="banner-tailscale"' not in body
+    # Banner-Element muss auch beim 'client'-Fixture da sein (das setzt tailscale_origin=TAIL)
+    assert '<p class="banner-tailscale"' in body
 
 
 # ============================================================
