@@ -136,26 +136,8 @@ async function _patchConfig(patch) {
   return resp;
 }
 
-// HSP-41/34 — UI-Kollaps für Mia+Finn: parallele Fetches/PATCHes über
-// alle V1-Kinder (KIND_IDS_V1). HSP-28a hält die Backend-Configs getrennt;
-// die UI macht sie als ein Setting sichtbar. Drift-Anzeige bei
-// unterschiedlichen Werten.
-
-async function _holeBeideConfigs() {
-  const results = await Promise.allSettled(
-    KIND_IDS_V1.map(kindId =>
-      fetch("/api/v1/hoerspiel/" + kindId + "/config", {
-        headers: _authHeader(),
-      }).then(r => r.ok ? r.json() : Promise.reject("status " + r.status))
-    )
-  );
-  const map = {};
-  KIND_IDS_V1.forEach((kindId, i) => {
-    const r = results[i];
-    map[kindId] = (r.status === "fulfilled") ? r.value : null;
-  });
-  return map;
-}
+// HSP-34 — parallele PATCH-Helfer über alle V1-Kinder (KIND_IDS_V1).
+// _holeBeideConfigs entfernt (#1491, war nach audio_ziel-Rückbau #1471 aufruferlos).
 
 async function _patchBeideConfigs(patch) {
   const results = await Promise.allSettled(
