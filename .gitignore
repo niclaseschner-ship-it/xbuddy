@@ -25,6 +25,16 @@ desktop.ini
 .pytest_cache/
 __pycache__/
 
+# Packaging-Artefakte: `pip install .` aus pyproject (CI/Deploy, RAT-33/#1534)
+# schreibt beim setuptools-Build ein *.egg-info/ in den Baum. Nicht committen —
+# pyproject ist DEPENDENCY-SSoT, kein Distributions-Paket.
+*.egg-info/
+
+# venv, das der CI-pytest-Job im Checkout anlegt (.venv-pytest) bzw. main-health
+# (.venv) — auch lokal beim CI-Spiegeln nicht committen.
+.venv/
+.venv-pytest/
+
 # Defense-in-depth: CA-Artefakte bleiben ausgeschlossen, auch wenn make-ca.sh
 # per --out in einen anderen Repo-Pfad schreibt. Das spezifische
 # tools/ca/out/-Verzeichnis lebt in tools/ca/.gitignore (BUD-2b).

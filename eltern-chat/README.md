@@ -12,7 +12,9 @@ Telegram-Familien-Gruppe, der Eltern-Aufgaben aus einem definierten Katalog
 ## Start
 
 ```bash
-pip install -r eltern-chat/requirements.txt
+# Laufzeit-Abhängigkeiten kommen aus dem EINEN Dependency-SSoT pyproject.toml
+# (RAT-33 Option A, #1534) — installiere sie repo-weit in dein venv:
+pip install /home/buddy/repos/xbuddy   # bzw. den Pfad deines Checkouts (pip install .)
 
 # Pflicht: der Telegram-Bot-Token (nur über Umgebungsvariable, EC-15).
 export ELTERNCHAT_BOT_TOKEN="<telegram-bot-token>"
