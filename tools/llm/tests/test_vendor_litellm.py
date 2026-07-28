@@ -303,6 +303,13 @@ def test_capabilities_covers_required_singleshot_and_completion():
     assert "structured_output" in litellm_vendor.CAPABILITIES
 
 
+def test_capabilities_includes_multimodal_input():
+    """AC1 (#1509): CAPABILITIES enthält `multimodal_input` — Voraussetzung für
+    den images-Pfad in singleshot_structured und das Cap-Gate in
+    public_api._SingleshotFacade (LLMP-3/LLMP-S11)."""
+    assert "multimodal_input" in litellm_vendor.CAPABILITIES
+
+
 def test_singleshot_structured_parses_tool_call():
     """AC2: forced tool_use → geparstes dict aus function.arguments (getattr)."""
     fake_litellm = _make_fake_litellm_sdk(_make_singleshot_response(
@@ -455,6 +462,82 @@ def test_singleshot_text_api_error_propagates():
             vendor.singleshot_text(
                 "S", "U", caller="hoerspiel",
                 slot="hoerspiel-litellm-claude-api-key")
+
+
+def test_singleshot_structured_images_reicht_bildblock_durch():
+    """AC1 (#1509, multimodal_input): `images=[{bytes, media_type}]` → user-Content
+    ist eine OpenAI-Vision-Liste [image_url-Block, text-Block]; base64-Kodierung
+    geschieht IM Vendor. Text-Pfad (`images=None`) bleibt str-Content."""
+    import base64 as b64_mod
+    raw = b"\x89PNG-rohbytes"
+    fake_litellm = _make_fake_litellm_sdk(_make_singleshot_response(
+        tool_calls=[{"id": "c1", "name": "ergebnis",
+                     "arguments": '{"termine": []}'}],
+    ))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        vendor.singleshot_structured(
+            "SYS", "Extrahiere Termine.",
+            {"type": "object"},
+            caller="eltern-chat",
+            slot="eltern-chat-litellm-foto-analyse-api-key",
+            images=[{"bytes": raw, "media_type": "image/png"}],
+        )
+
+    call = fake_litellm.completion.call_args
+    messages = call.kwargs["messages"]
+    user_content = messages[-1]["content"]
+    assert isinstance(user_content, list), "user-Content soll Liste bei images sein"
+    assert len(user_content) == 2
+    image_block, text_block = user_content
+    assert image_block["type"] == "image_url"
+    expected_url = "data:image/png;base64,%s" % b64_mod.standard_b64encode(raw).decode("ascii")
+    assert image_block["image_url"]["url"] == expected_url
+    assert text_block["type"] == "text"
+    assert text_block["text"] == "Extrahiere Termine."
+
+
+def test_singleshot_structured_images_none_ist_textpfad():
+    """AC1 (#1509): `images=None` → user-Content ist der reine prompt-String
+    (Regression-frei für den Text-Pfad, KEIN image_url-Block)."""
+    fake_litellm = _make_fake_litellm_sdk(_make_singleshot_response(
+        tool_calls=[{"id": "c1", "name": "ergebnis", "arguments": '{"a": 1}'}],
+    ))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        vendor.singleshot_structured(
+            "SYS", "PROMPT", {"type": "object"},
+            caller="hoerspiel", slot="hoerspiel-litellm-claude-api-key",
+        )
+    call = fake_litellm.completion.call_args
+    user_content = call.kwargs["messages"][-1]["content"]
+    assert user_content == "PROMPT"
+    assert isinstance(user_content, str)
+
+
+def test_singleshot_structured_images_max_tokens_erhalten(jsonl_path):
+    """AC3 Migrations-Disziplin (#1509, hoerspiel-502-Lektion): max_tokens wird
+    durchgereicht — kein stilles Trunkieren bei langen Ausgaben. Hier mit 4096
+    (Token-Budget des Foto-Pfads, _MAX_TOKENS in foto_analyse.py)."""
+    fake_litellm = _make_fake_litellm_sdk(_make_singleshot_response(
+        tool_calls=[{"id": "c1", "name": "ergebnis", "arguments": '{"ok": 1}'}],
+        # Simuliere reale Ausgabe-Länge nahe dem Token-Budget (Migrations-Beweis).
+        completion_tokens=3800,
+    ))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}), \
+         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
+        ss = public_api.get_singleshot(
+            slot="eltern-chat-litellm-foto-analyse-api-key",
+            model="claude-opus-4-7",
+            max_tokens=4096,
+        )
+        ss.complete_structured("SYS", "PROMPT", {"type": "object"})
+
+    call = fake_litellm.completion.call_args
+    assert call.kwargs["max_tokens"] == 4096
+    # Telemetrie spiegelt reale Ausgabe-Länge (Regressions-Sicherheit).
+    parsed = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
+    assert parsed["output_tokens"] == 3800
 
 
 def test_get_singleshot_facade_boot_and_call_via_litellm(jsonl_path):

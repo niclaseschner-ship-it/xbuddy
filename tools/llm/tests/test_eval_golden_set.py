@@ -59,20 +59,23 @@ def test_red_fixture_trips(fixture: dict, tmp_path: Path) -> None:
 # ===========================================================================
 
 def test_golden_set_fixture_count() -> None:
-    """AC1: 8-12 Fixtures (8 grün, 4 rot = 12 total)."""
-    assert 8 <= len(GOLDEN_FIXTURES) <= 12, (
-        f"Fixture-Count {len(GOLDEN_FIXTURES)} außerhalb 8-12 (AC1)"
+    """AC1: mindestens 12 Fixtures (ursprüngliche 12 + ≥2 Multimodal-Fixtures
+    aus #1509); Untergrenze 8 grün, 4 rot (aus der ursprünglichen Spec —
+    das Multimodal-Set erhöht den Gesamtcount auf 14+)."""
+    assert len(GOLDEN_FIXTURES) >= 8, (
+        f"Fixture-Count {len(GOLDEN_FIXTURES)} < 8 (AC1)"
     )
     assert len(GREEN_FIXTURES) >= 6, f"Zu wenige Green-Fixtures: {len(GREEN_FIXTURES)}"
     assert len(RED_FIXTURES) >= 2, f"Zu wenige Red-Fixtures: {len(RED_FIXTURES)}"
 
 
 def test_golden_set_covers_regression_classes() -> None:
-    """AC1: Alle drei Regressions-Klassen sind abgedeckt."""
+    """AC1: Alle vier Regressions-Klassen sind abgedeckt (inkl. Multimodal #1509)."""
     classes = {f["regression_class"] for f in GOLDEN_FIXTURES}
     assert "hoerspiel-502-token-cutoff" in classes, "hoerspiel-502-Klasse fehlt"
     assert "eltern-chat-fehlpfad" in classes, "eltern-chat-Fehlpfad-Klasse fehlt"
     assert "anti-redundanz-schema" in classes, "Anti-Redundanz-Klasse fehlt"
+    assert "multimodal-foto-pfad" in classes, "Multimodal-Klasse (#1509) fehlt"
 
 
 def test_golden_set_ids_unique() -> None:

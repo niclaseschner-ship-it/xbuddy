@@ -1,4 +1,4 @@
-"""FotoAnalyseProvider — TAB-Foto-Pfad über `tools.llm` (#1262, T1262).
+"""FotoAnalyseProvider — TAB-Foto-Pfad über `tools.llm` (#1262, T1262, #1509).
 
 Deckt den neuen Foto-Adapter ab (specs/platform/termine-aus-bild.md TAB-5,
 E-TAB-8), der den `MultimodalProvider`-Duck-Type erfüllt, den Anbieter-Call aber
@@ -10,13 +10,14 @@ an die Singleshot-Sicht von `tools.llm` durchreicht:
   (`LLMCapabilityError`) propagiert als Boot-Fehler (NICHT als MultimodalError);
 - Typen-Heimat: `ExtractedTermin`/`MultimodalError` sind physisch in
   `foto_analyse` definiert (#1334, PR2); Felder + Signatur korrekt;
-- write_verification (AC3): ein Durchlauf durch den ECHTEN Anthropic-Vendor
-  (mockiertes SDK) schreibt eine `provider_calls.jsonl`-Zeile mit dem Foto-Slot.
+- write_verification (AC3): ein Durchlauf durch den ECHTEN LiteLLM-Vendor
+  (mockiertes litellm-SDK) schreibt eine `provider_calls.jsonl`-Zeile mit dem
+  Foto-Slot (#1509-Migration: `eltern-chat-litellm-foto-analyse-api-key`).
 
 Mock-Naht: für die Adapter-Logik wird `skills.foto_analyse.get_singleshot` durch
-eine Fake-Fassade ersetzt; für den Telemetrie-/Wire-Beweis das anthropic-SDK
+eine Fake-Fassade ersetzt; für den Telemetrie-/Wire-Beweis das litellm-SDK
 via `patch.dict(sys.modules, …)` + gestubtes `resolve_api_key` (Spiegel
-test_lib_adapter.py).
+test_vendor_litellm.py).
 """
 
 import json
@@ -169,9 +170,13 @@ def test_build_llmcapabilityerror_propagiert_als_boot_fehler(monkeypatch):
 # ----------------------------------------------------------------------
 
 def test_foto_slot_name_woertlich():
-    """AC2 echo_check: der ZD-Slot-Name ist wörtlich fixiert (TAB-5/E-TAB-8)."""
+    """AC2 echo_check: der ZD-Slot-Name ist wörtlich fixiert (#1509/TAB-5/E-TAB-8).
+
+    Vendor-Segment `litellm` (nicht mehr `anthropic`) — LiteLLM-Motor mit
+    `multimodal_input`-Capability (LLMP-3/LLMP-S11, #1509).
+    """
     from skills.foto_analyse import FOTO_ANALYSE_SLOT
-    assert FOTO_ANALYSE_SLOT == "eltern-chat-anthropic-foto-analyse-api-key"
+    assert FOTO_ANALYSE_SLOT == "eltern-chat-litellm-foto-analyse-api-key"
 
 
 def test_typen_physisch_in_foto_analyse_definiert():
@@ -209,48 +214,61 @@ def test_tool_schema_ist_hart_codiert():
 #  AC3 write_verification — echter Vendor (mockiertes SDK) schreibt Telemetrie
 # ----------------------------------------------------------------------
 
-def _fake_anthropic():
-    fake = MagicMock()
-    client = MagicMock()
-    fake.Anthropic.return_value = client
-    fake.APIError = Exception
-    return fake, client
+
+class _FakeAPIError(Exception):
+    """Steht für `litellm.exceptions.APIError` im Test."""
 
 
-def _tool_use_block(name, payload):
-    b = MagicMock()
-    b.type = "tool_use"
-    b.name = name
-    b.input = payload
-    return b
-
-
-def _anthropic_response(blocks):
+def _make_litellm_singleshot_response(tool_name, tool_input):
+    """OpenAI-förmige LiteLLM-ModelResponse für singleshot mit forced tool_use."""
+    fn = MagicMock()
+    fn.name = tool_name
+    fn.arguments = json.dumps(tool_input)
+    tc = MagicMock()
+    tc.function = fn
+    message = MagicMock()
+    message.content = None
+    message.tool_calls = [tc]
+    choice = MagicMock()
+    choice.message = message
     resp = MagicMock()
-    resp.content = blocks
-    usage = MagicMock()
-    usage.input_tokens = 210
-    usage.output_tokens = 45
-    usage.cache_read_input_tokens = 0
-    usage.cache_creation_input_tokens = 0
-    resp.usage = usage
+    resp.choices = [choice]
+    resp.usage = MagicMock()
+    resp.usage.prompt_tokens = 210
+    resp.usage.completion_tokens = 45
+    resp.usage.cache_read_input_tokens = 0
+    resp.usage.cache_creation_input_tokens = 0
     return resp
 
 
+def _fake_litellm_sdk(response):
+    fake = MagicMock()
+    fake.exceptions.APIError = _FakeAPIError
+    fake.completion.return_value = response
+    return fake
+
+
 def test_foto_durchlauf_schreibt_telemetrie_mit_foto_slot(tmp_path, monkeypatch):
-    """AC3: EIN Durchlauf durch FotoAnalyseProvider (echter Anthropic-Vendor,
-    mockiertes SDK) schreibt eine provider_calls.jsonl-Zeile mit caller=
-    eltern-chat und dem Foto-Slot — die Grundlage der Connector-Zeile. Beweist
-    zugleich, dass der Bild-Block im echten Create-Call landet (AC2)."""
+    """AC3 (#1509): EIN Durchlauf durch FotoAnalyseProvider (echter LiteLLM-
+    Vendor, mockiertes litellm-SDK) schreibt eine provider_calls.jsonl-Zeile
+    mit caller=eltern-chat und dem Foto-Slot (litellm-Vendor-Segment).
+
+    Beweist zugleich:
+    - Bild-Block landet im litellm.completion-Call als OpenAI-image_url (AC1);
+    - Slot trägt `litellm` (nicht mehr `anthropic`, #1509-Migration, AC2);
+    - max_tokens wird durchgereicht (Token-Budget-Parität, Migrations-Disziplin).
+    """
     monkeypatch.setenv("XBUDDY_DATA_DIR", str(tmp_path))
     jsonl = tmp_path / "llm" / "provider_calls.jsonl"
 
-    fake, client = _fake_anthropic()
-    client.messages.create.return_value = _anthropic_response(
-        [_tool_use_block("extract_termine",
-                         {"termine": [{"titel": "Sportfest", "beginn": "2026-09-15"}]})])
+    fake_litellm = _fake_litellm_sdk(
+        _make_litellm_singleshot_response(
+            "extract_termine",
+            {"termine": [{"titel": "Sportfest", "beginn": "2026-09-15"}]},
+        )
+    )
 
-    with patch.dict(sys.modules, {"anthropic": fake}), \
+    with patch.dict(sys.modules, {"litellm": fake_litellm}), \
          patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake"):
         from skills.foto_analyse import FOTO_ANALYSE_SLOT, FotoAnalyseProvider
         prov = FotoAnalyseProvider()
@@ -266,18 +284,30 @@ def test_foto_durchlauf_schreibt_telemetrie_mit_foto_slot(tmp_path, monkeypatch)
     assert line["caller"] == "eltern-chat"
     assert line["slot"] == FOTO_ANALYSE_SLOT
     assert "foto-analyse" in line["slot"]
+    assert "litellm" in line["slot"]  # #1509: LiteLLM-Vendor-Segment
     assert line["model_id"] == "claude-opus-4-7"
 
-    # Bild-Block landete im echten Create-Call (AC2 Wire-Form).
-    content = client.messages.create.call_args.kwargs["messages"][0]["content"]
-    assert content[0]["type"] == "image"
-    assert content[0]["source"]["media_type"] == "image/png"
-    assert content[1]["type"] == "text"
-    assert content[1]["text"].startswith("Begleittext der Familie:")
-    # Claude gepinnt + forced tool.
-    assert client.messages.create.call_args.kwargs["model"] == "claude-opus-4-7"
-    assert client.messages.create.call_args.kwargs["tool_choice"] == {
-        "type": "tool", "name": "extract_termine"}
+    # Bild-Block landete im litellm.completion-Call (AC1 OpenAI-Vision-Wire-Form).
+    call = fake_litellm.completion.call_args
+    # max_tokens muss durchgereicht werden (Migrations-Disziplin, hoerspiel-502-Lektion).
+    assert call.kwargs["max_tokens"] == 4096
+    messages = call.kwargs["messages"]
+    # System als eigene Message (system_message_distinct).
+    assert messages[0]["role"] == "system"
+    # User-Content ist die content-Liste [image_url-Block, text-Block].
+    user_content = messages[1]["content"]
+    assert isinstance(user_content, list)
+    assert len(user_content) == 2
+    image_block = user_content[0]
+    text_block = user_content[1]
+    assert image_block["type"] == "image_url"
+    assert "image/png" in image_block["image_url"]["url"]
+    assert image_block["image_url"]["url"].startswith("data:image/png;base64,")
+    assert text_block["type"] == "text"
+    assert text_block["text"].startswith("Begleittext der Familie:")
+    # Forced tool_use (benannte Form).
+    assert call.kwargs["tool_choice"] == {
+        "type": "function", "function": {"name": "extract_termine"}}
 
 
 # ----------------------------------------------------------------------
