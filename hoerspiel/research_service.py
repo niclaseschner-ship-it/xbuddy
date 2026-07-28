@@ -5,7 +5,7 @@ liefert einen **Fakten+Quellen-Block**, der in den `complete_structured`-Single-
 Shot (`llm_service.py`) gespeist wird. Der Single-Shot-Vertrag bleibt
 **unverändert** (HSP-57).
 
-## Form B1 (T1371, ratifiziert 2026-07-05/06)
+## Form B1 (T1371, ratifiziert 2026-07-05/06; T1511-Motor-Umstellung)
 Die Recherche läuft über **EINEN** `get_agent`-Call (`tools.llm`) mit aktiviertem
 server-seitigem **`web_search`**-Tool (Anthropic-Infra) — **kein** externer
 Such-Provider, **kein** neuer ZD-Slot. Der Agent sucht selbst und synthetisiert
@@ -13,6 +13,17 @@ zitierte Fakten zum `thema`; wir sammeln daraus den Fakten+Quellen-Block. Der
 frühere Tavily-Pfad (Query-Gen → externe Such-Cloud → Distill, zwei Freitext-
 Calls + N HTTP-Suchen) ist damit **entfernt** — die Recherche fließt an denselben
 Anthropic-Vendor wie die Generierung, keine Dritt-Cloud.
+
+Seit T1511 (#1316 Abriss-3, Weg A) läuft der `web_search`-Call über den
+**litellm-Motor** statt über den handgepflegten anthropic-Vendor: der native
+`web_search`-Server-Tool-Block wird durch litellm zum Anthropic-Backend
+durchgereicht, die Zitat-Detailtiefe (url/title/page_age) + der Such-Zähler
+kommen über `provider_specific_fields.web_search_results` /
+`usage.server_tool_use.web_search_requests` zurück (litellm-Standardfunktion,
+in `_vendor/litellm.py:agent_step` gemappt). Der Recherche-Service baut den
+nativen Tool-Block selbst (kein Hand-Vendor-Import mehr) und reicht ihn ins
+`tools`-Array; der `.step()`-Output-Vertrag (`web_search`/`web_search_requests`)
+ist unverändert (Parität über das Golden-Set belegt, tools/llm/eval).
 
 ## HSP-58 — Datenabfluss-Invariante (SICHERHEITSKRITISCH)
 Der **einzige** inhaltliche Input dieses Service ist das `thema`. Bible,
@@ -51,9 +62,35 @@ _TIEFE_ZU_N = {
 _DEFAULT_N = 4
 
 # LLMP-3 7. Capability: nur ein Slot-Vendor, der `web_search` deklariert
-# (Anthropic), trägt den Recherche-Vorschritt. Fehlt sie (Mistral-Slot),
-# degradiert der Vorschritt sauber (kein Silent-Send eines unbekannten Tools).
+# (litellm→Anthropic-Backend), trägt den Recherche-Vorschritt. Fehlt sie
+# (Mistral-Slot), degradiert der Vorschritt sauber (kein Silent-Send eines
+# unbekannten Tools).
 WEB_SEARCH_CAPABILITY = "web_search"
+
+# T1511 (#1316 Abriss-3, Weg A): das server-seitige web_search-Tool wird als
+# Eintrag im `tools`-Array deklariert (kein Client-tool_use). Version
+# `web_search_20260209` (Opus 4.8/4.7/4.6 + Sonnet 4.6). Der Service baut den
+# Eintrag selbst (früher: `_vendor.anthropic.web_search_tool`, dieser Hand-Vendor
+# ist mit T1511 gelöscht) und reicht ihn ins `tools`-Array; litellm reicht den
+# nativen Block zum Anthropic-Backend durch (`agent_step` erkennt Server-Tools am
+# `type`-Feld und übersetzt sie NICHT in Function-Tools). `max_uses` deckelt die
+# Anzahl der Suchen HART (HSP-58 — N-Suchen gedeckelt).
+WEB_SEARCH_TOOL_TYPE = "web_search_20260209"
+WEB_SEARCH_TOOL_NAME = "web_search"
+
+
+def _web_search_tool(*, max_uses: int) -> dict:
+    """Baut den nativen `web_search`-Server-Tool-Eintrag fürs `tools`-Array (T1511).
+
+    Reiner Dict (keine SDK-Typ-Abhängigkeit); litellm reicht ihn ins Anthropic-
+    Backend durch. `max_uses` klemmt die Egress-Menge hart (HSP-58); der Konsument
+    reicht bereits einen geklemmten Wert (`_n_fuer_tiefe`).
+    """
+    return {
+        "type": WEB_SEARCH_TOOL_TYPE,
+        "name": WEB_SEARCH_TOOL_NAME,
+        "max_uses": max_uses,
+    }
 
 
 def _n_fuer_tiefe(tiefe: str) -> int:
@@ -144,11 +181,10 @@ def recherchiere(*, thema: str, agent, tiefe: str = "mittel"
 
     n = _n_fuer_tiefe(tiefe)
 
-    # Lazy-Import des Vendor-Tool-Builders: der Konsument reicht den web_search-
-    # Server-Tool-Eintrag ins tools-Array (max_uses deckelt die Suchen hart).
-    from tools.llm._vendor.anthropic import web_search_tool
-
-    tools = [web_search_tool(max_uses=n)]
+    # T1511: der Konsument baut den nativen web_search-Server-Tool-Eintrag selbst
+    # und reicht ihn ins tools-Array (max_uses deckelt die Suchen hart). litellm
+    # reicht den Block zum Anthropic-Backend durch; kein Hand-Vendor-Import mehr.
+    tools = [_web_search_tool(max_uses=n)]
     try:
         out = agent.step(
             system=RESEARCH_SYSTEM_PROMPT,

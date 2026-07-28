@@ -3,15 +3,22 @@
 
 `run_fixture(fixture, tmp_path)` führt einen Fixture-Lauf durch:
 
-  1. Baut einen Fake-Anthropic-Client aus fixture["synthetic_response"]
-     (kein echter API-Call, kein Netz).
-  2. Patcht sys.modules["anthropic"] + resolve_api_key + XBUDDY_DATA_DIR.
+  1. Baut einen Fake-Vendor-Client aus fixture["synthetic_response"]
+     (kein echter API-Call, kein Netz). Default: Fake-Anthropic-Client
+     (messages.create); für web_search-Fixtures (`vendor == "litellm"`) ein
+     Fake-litellm-Modul (`litellm.completion`) mit provider_specific_fields.
+  2. Patcht sys.modules[<vendor-sdk>] + resolve_api_key + XBUDDY_DATA_DIR.
   3. Ruft die passende Facade-Methode auf (completion / singleshot /
      agent_step).
   4. Liest den Telemetrie-JSONL-Eintrag (für not_truncated-Assertions).
   5. Delegiert an `assertions.run_assertion` und liefert (passed, reason).
 
 Kein Pytest-spezifischer Code — aufrufbar aus Tests oder Standalone.
+
+T1511 (#1316 Abriss-3): der litellm-web_search-Pfad (hoerspiel-Recherche) wird
+über eine `vendor: "litellm"` + `synthetic_response.web_search_results`-Fixture
+belegt — das offline-Regressions-Netz für das Zitat-Mapping (url/title/page_age)
++ den Such-Zähler, VOR dem Abriss des anthropic-Hand-Vendors.
 """
 
 import json
@@ -96,6 +103,53 @@ def _build_fake_anthropic(
     return fake, client
 
 
+def _build_fake_litellm(sr: dict[str, Any]) -> MagicMock:
+    """Baut ein Fake-`litellm`-Modul für den web_search-agent_step-Pfad (T1511).
+
+    Bildet die litellm-`ModelResponse`-Passthrough-Form nach, die der
+    `LitellmVendor.agent_step` parst:
+      - `choices[0].message.content`  — der synthetisierte Fakten-Text
+      - `choices[0].message.provider_specific_fields["web_search_results"]`
+        — Liste der RAW `web_search_tool_result`-Blöcke (Dicts mit `content` =
+        Liste `web_search_result`-Items `{url,title,page_age}`), genau wie
+        litellm den Anthropic-web_search durchreicht.
+      - `usage.server_tool_use.web_search_requests` — der Such-Zähler.
+      - `usage.prompt_tokens`/`completion_tokens` — für die Telemetrie.
+
+    Kein echter Netz-Call: `litellm.completion` gibt diese Fake-Response zurück.
+    """
+    fake = MagicMock()
+
+    # exceptions.APIError muss eine echte Exception-Klasse sein (except-Ziel).
+    fake.exceptions.APIError = Exception
+
+    # Message mit provider_specific_fields (web_search_results als RAW-Dict-Blöcke).
+    message = MagicMock()
+    message.content = sr.get("text", "")
+    message.tool_calls = []
+    message.provider_specific_fields = {
+        "web_search_results": sr.get("web_search_results", []),
+    }
+    choice = MagicMock()
+    choice.message = message
+
+    # Usage OpenAI-förmig + server_tool_use.web_search_requests (Anthropic-Passthrough).
+    usage = MagicMock()
+    usage.prompt_tokens = sr.get("input_tokens", 100)
+    usage.completion_tokens = sr.get("output_tokens", 50)
+    usage.cache_read_input_tokens = sr.get("cache_read_input_tokens", 0)
+    usage.cache_creation_input_tokens = sr.get("cache_creation_input_tokens", 0)
+    server_tool_use = MagicMock()
+    server_tool_use.web_search_requests = sr.get("web_search_requests", 0)
+    usage.server_tool_use = server_tool_use
+
+    resp = MagicMock()
+    resp.choices = [choice]
+    resp.usage = usage
+    fake.completion.return_value = resp
+    return fake
+
+
 # ---------------------------------------------------------------------------
 #  Facade-Call
 # ---------------------------------------------------------------------------
@@ -159,13 +213,20 @@ def run_fixture(
     """
     sr = fixture["synthetic_response"]
     sicht = fixture["sicht"]
-    fake_anthropic, _fake_client = _build_fake_anthropic(sr, sicht)
+    vendor = fixture.get("vendor", "anthropic")
 
     jsonl_path = tmp_path / "llm" / "provider_calls.jsonl"
 
+    # T1511: web_search-agent_step-Fixtures laufen über den litellm-Motor
+    # (Fake-`litellm.completion`); alle anderen über den Fake-Anthropic-Client.
+    if vendor == "litellm":
+        sdk_name, fake_sdk = "litellm", _build_fake_litellm(sr)
+    else:
+        sdk_name, (fake_sdk, _fake_client) = "anthropic", _build_fake_anthropic(sr, sicht)
+
     with (
         patch.dict(os.environ, {"XBUDDY_DATA_DIR": str(tmp_path)}),
-        patch.dict(sys.modules, {"anthropic": fake_anthropic}),
+        patch.dict(sys.modules, {sdk_name: fake_sdk}),
         patch("tools.llm.public_api.resolve_api_key", return_value="sk-fake-key"),
     ):
         output = _call_facade(fixture)

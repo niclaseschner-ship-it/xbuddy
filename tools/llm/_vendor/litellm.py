@@ -73,6 +73,16 @@ logger = logging.getLogger(__name__)
 # `singleshot_text`) und fügt `structured_output` hinzu — REQUIRED_SINGLESHOT
 # (structured_output + system_message_distinct) und REQUIRED_COMPLETION
 # (system_message_distinct) sind damit gedeckt.
+# T1511 (#1316 Abriss-3, Weg A): `web_search` wird JETZT deklariert — der
+# server-seitige web_search-Pfad (hoerspiel-Recherche) läuft über diesen
+# litellm-Motor. `agent_step` reicht den nativen web_search-Server-Tool-Block
+# (erkennbar am `type`-Feld) unübersetzt zum Anthropic-Backend durch und mappt
+# die Ergebnisse aus `message.provider_specific_fields["web_search_results"]`
+# (Quellen: url/title/page_age) + `usage.server_tool_use.web_search_requests`
+# (Such-Zähler) in die neutrale `{web_search, web_search_requests}`-Form — same
+# shape wie zuvor der anthropic-Hand-Vendor (mit T1511 gelöscht). `web_search`
+# ist opt-in (KEIN Boot-Minimum irgendeiner Sicht); der Gate sitzt beim Rufer
+# (`agent.capabilities`, research_service).
 # Slot 4 (#1509, multimodal_input): `singleshot_structured` nimmt jetzt das
 # optionale `images`-Kwarg und übersetzt Bild-Blocks ins OpenAI-Vision-Format.
 # LiteLLM routet `image_url data-URL`-Blocks transparent zum Anthropic-Backend
@@ -92,7 +102,17 @@ CAPABILITIES = frozenset({
     "system_message_distinct",
     "speech",
     "transcription",
+    # T1511 (#1316 Abriss-3): server-seitiges web_search über das Anthropic-
+    # Backend (litellm reicht den nativen Server-Tool-Block durch). Opt-in in der
+    # Agent-Sicht, KEIN Boot-Minimum — hoerspiel-Recherche gated am Rufer.
+    "web_search",
 })
+
+# T1511: das server-seitige web_search-Tool wird als reiner Dict-Eintrag im
+# `tools`-Array deklariert (`type: web_search_20260209`). `agent_step` erkennt
+# Server-Tools am `type`-Feld und reicht sie unübersetzt durch (kein
+# `_to_litellm_tool`-Function-Wrapping, kein Cache-Marker).
+_SERVER_TOOL_MARKER = "type"
 
 # Vendor-Default-Modell, falls der Konsument keines wählt. Like-for-like zur
 # KIBuddy-Alt-Form (Anthropic-Hand-Vendor DEFAULT_MODEL): `claude-haiku-4-5`.
@@ -355,13 +375,22 @@ class LitellmVendor(VendorBase):
 
         Liefert die neutrale Anthropic-shaped Form
         `{"text", "tool_calls":[{"id","name","input"}…], "usage": <raw>,
-        "web_search": [], "web_search_requests": 0}`. Die beiden web_search-
-        Schlüssel sind additiv-konstant leer/0 (dieser Vendor deklariert kein
-        web_search; eltern-chat fährt reine Client-Tools). LiteLLM-API-Fehler →
-        `ProviderError` (analog `chat_multiturn`).
+        "web_search":[{"url","title","page_age"}…], "web_search_requests": <int>}`.
+        Die beiden web_search-Schlüssel sind additiv (T1511): ohne aktiviertes
+        server-seitiges web_search-Tool bleiben sie `[]`/`0` (eltern-chat fährt
+        reine Client-Tools); mit dem nativen web_search-Server-Tool-Block mappt
+        `_parse_agent_response` sie aus `message.provider_specific_fields
+        ["web_search_results"]` + `usage.server_tool_use.web_search_requests`
+        (hoerspiel-Recherche). LiteLLM-API-Fehler → `ProviderError` (analog
+        `chat_multiturn`).
         """
         wire_messages = self._to_litellm_messages(system, messages)
-        wire_tools = [self._to_litellm_tool(t) for t in tools]
+        # T1511: Server-Tools (native `web_search`-Block, erkennbar am `type`-Feld)
+        # unübersetzt durchreichen; nur Client-Function-Tools durch `_to_litellm_tool`.
+        wire_tools = [
+            dict(t) if _SERVER_TOOL_MARKER in t else self._to_litellm_tool(t)
+            for t in tools
+        ]
 
         completion_kwargs: dict[str, Any] = {
             "model": self.model,
@@ -709,11 +738,16 @@ class LitellmVendor(VendorBase):
         `.message.tool_calls[i].id / .function.name / .function.arguments`.
         `input = json.loads(arguments or "{}")` defensiv (JSONDecodeError/
         TypeError → {}). `usage` bleibt das RAW-LiteLLM-Objekt (der Konsument
-        liest es getattr-förmig, Spiegel anthropic). web_search konstant leer/0
-        (dieser Vendor deklariert kein web_search).
+        liest es getattr-förmig, Spiegel anthropic).
+
+        T1511: web_search wird aus `message.provider_specific_fields
+        ["web_search_results"]` (Quellen url/title/page_age) +
+        `usage.server_tool_use.web_search_requests` (Such-Zähler) gemappt — ohne
+        aktiviertes web_search-Tool bleibt beides leer/0.
         """
         text_parts: list[str] = []
         tool_calls: list[dict[str, Any]] = []
+        message: Any = None
         for choice in getattr(response, "choices", None) or []:
             message = getattr(choice, "message", None)
             if message is None:
@@ -733,13 +767,71 @@ class LitellmVendor(VendorBase):
                     "name": getattr(fn, "name", "") or "",
                     "input": args if isinstance(args, dict) else {},
                 })
+        web_search, web_search_requests = self._extract_web_search(message, response)
         return {
             "text": "\n".join(text_parts).strip(),
             "tool_calls": tool_calls,
             "usage": getattr(response, "usage", None),
-            "web_search": [],
-            "web_search_requests": 0,
+            "web_search": web_search,
+            "web_search_requests": web_search_requests,
         }
+
+    @staticmethod
+    def _extract_web_search(
+        message: Any, response: Any,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Zieht Quellen + Such-Zahl aus der litellm-web_search-Passthrough-Form (T1511).
+
+        litellm reicht die nativen `web_search_tool_result`-Blöcke als RAW-DICTS
+        durch — in `message.provider_specific_fields["web_search_results"]` (Liste
+        der Result-Blöcke; jeder Block hat `content` = Liste von
+        `web_search_result`-Items mit `url`/`title`/`page_age`, oder ein
+        Fehler-Objekt). Die Such-Zahl (`web_search_requests`) hängt an
+        `usage.server_tool_use.web_search_requests` (Anthropic-Server-Tool-Usage).
+
+        Liefert `(quellen, such_zahl)`: `quellen` eine deduplizierte Liste
+        `{"url","title","page_age"}` (Reihenfolge stabil, url-dedupliziert) —
+        Form-identisch zum früheren anthropic-Hand-Vendor `_extract_web_search`.
+        Fehlt provider_specific_fields (kein web_search aktiv / anderer Provider)
+        → `([], 0)`.
+        """
+        psf = getattr(message, "provider_specific_fields", None) if message is not None else None
+        results = (psf or {}).get("web_search_results") if isinstance(psf, dict) else None
+
+        quellen: list[dict[str, Any]] = []
+        gesehen: set[str] = set()
+        for block in results or []:
+            # Jeder Result-Block ist ein Dict; sein `content` ist entweder eine
+            # Liste `web_search_result`-Items oder ein Fehler-Objekt (kein List).
+            inhalt = block.get("content") if isinstance(block, dict) else None
+            if not isinstance(inhalt, list):
+                continue
+            for item in inhalt:
+                if not isinstance(item, dict):
+                    continue
+                url = str(item.get("url") or "").strip()
+                if not url or url in gesehen:
+                    continue
+                gesehen.add(url)
+                quellen.append({
+                    "url": url,
+                    "title": str(item.get("title") or "").strip(),
+                    "page_age": item.get("page_age"),
+                })
+
+        # Such-Zahl aus usage.server_tool_use.web_search_requests (Anthropic-Usage).
+        usage = getattr(response, "usage", None)
+        stu = getattr(usage, "server_tool_use", None) if usage is not None else None
+        req = None
+        if isinstance(stu, dict):
+            req = stu.get("web_search_requests")
+        elif stu is not None:
+            req = getattr(stu, "web_search_requests", None)
+        # Nur ECHTE Ganzzahlen zählen (bool ist int-Subklasse → ausschließen):
+        # ohne aktives web_search bleibt der Zähler 0 (kein Leak aus Test-Mocks
+        # oder anderen Providern, die kein server_tool_use liefern).
+        such_zahl = req if isinstance(req, int) and not isinstance(req, bool) else 0
+        return quellen, such_zahl
 
     # ------------------------------------------------------------------
     #  Response-Parse + Telemetrie-Hilfen (LLMP-S4)

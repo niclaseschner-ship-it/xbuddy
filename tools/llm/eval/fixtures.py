@@ -1,23 +1,27 @@
 # SYNTHETIC - kein echter Familientext (Privacy-Gate-Marker, T1315)
-"""14 synthetische Golden-Set-Fixtures für `tools.llm` (T1315, AC1, #1509).
+"""15 synthetische Golden-Set-Fixtures für `tools.llm` (T1315, AC1, #1509, #1511).
 
-Drei Regressions-Klassen + Multimodal-Erweiterung:
+Vier Regressions-Klassen + Multimodal + web_search:
   A) hoerspiel-502 Token-Cutoff  — Klasse: still truncated output
   B) eltern-chat Fehlpfad        — Klasse: wrong tool / forbidden string
   C) Anti-Redundanz / Schema     — Klasse: schema-Lücke / fehlender Keyword
   D) Multimodal (#1509)          — Klasse: images-Pfad / Cap-Gate / Schema
+  E) hoerspiel web_search (#1511)— Klasse: litellm-web_search-Zitat-Mapping
 
 Fixture-Format (GoldenFixture):
   id               str  — eindeutiger Bezeichner
   description      str  — was der Fixture prüft
   regression_class str  — Bug-Klassen-Label
   sicht            str  — "singleshot" | "completion" | "agent_step"
+  vendor           str  — optional; "anthropic" (Default) | "litellm".
+                          Steuert, welchen SDK-Fake der Runner patcht (T1511).
   slot             str  — Slot im Format <caller>-<vendor>-<purpose>
   max_tokens       int  — max_tokens für den Facade-Call
   input            dict — sicht-spezifische Eingabe
   synthetic_response dict — synthetische Fake-Antwort (kein echter LLM-Call)
   assertion_kind   str  — "not_truncated" | "json_schema_valid" | "tool_called"
                           | "required_string" | "forbidden_string"
+                          | "web_search_sources"
   assertion_params dict — Parameter für die Assertion
   expect_pass      bool — True: Assertion soll grün sein; False: soll rot werden
 
@@ -564,6 +568,102 @@ _D2: dict[str, Any] = {
 
 
 # ===========================================================================
+#  KLASSE E — hoerspiel web_search / litellm-Zitat-Mapping (#1511, 1 Fixture)
+# ===========================================================================
+
+# Der native web_search-Server-Tool-Block, den research_service ins tools-Array
+# reicht (Form-identisch zu `research_service._web_search_tool`).
+_WEB_SEARCH_TOOL = [{
+    "type": "web_search_20260209",
+    "name": "web_search",
+    "max_uses": 5,
+}]
+
+# Realistische litellm-Passthrough-Form: `provider_specific_fields
+# ["web_search_results"]` ist eine Liste RAW `web_search_tool_result`-Blöcke.
+# Jeder Block trägt `content` = Liste `web_search_result`-Items (url/title/
+# page_age). Der zweite Item wiederholt eine URL (Deduplizierungs-Probe).
+_WEB_SEARCH_RESULTS = [
+    {
+        "type": "web_search_tool_result",
+        "tool_use_id": "srvtoolu-e1",
+        "content": [
+            {
+                "type": "web_search_result",
+                "url": "https://example.org/quanten-studie",
+                "title": "Quantencomputing-Studie 2026",
+                "page_age": "2 months",
+            },
+            {
+                "type": "web_search_result",
+                "url": "https://example.org/risiken",
+                "title": "Gesellschaftliche Risiken",
+                "page_age": None,
+            },
+            {
+                # Duplikat-URL — muss dedupliziert werden (nur EIN Eintrag).
+                "type": "web_search_result",
+                "url": "https://example.org/quanten-studie",
+                "title": "Quantencomputing-Studie 2026 (Kopie)",
+                "page_age": "2 months",
+            },
+        ],
+    },
+]
+
+_E1: dict[str, Any] = {
+    "id": "hsp_agent_web_search_source_mapping",
+    "description": (
+        "GREEN (#1511): agent_step über den litellm-Motor mit nativem web_search-"
+        "Server-Tool-Block. Das Zitat-Mapping (url/title/page_age) kommt über "
+        "provider_specific_fields.web_search_results, der Such-Zähler über "
+        "usage.server_tool_use.web_search_requests — dieselbe Form wie zuvor der "
+        "anthropic-Hand-Vendor. Deckt url-Deduplizierung UND page_age-Erhalt ab. "
+        "Pflicht-Regressions-Netz vor dem anthropic-Abriss (litellm multi-turn "
+        "web_search Bug-Historie PR#17746/Issue#17737)."
+    ),
+    "regression_class": "hoerspiel-web-search-litellm",
+    "sicht": "agent_step",
+    "vendor": "litellm",
+    "slot": "hoerspiel-litellm-web-search-api-key",
+    "max_tokens": 4096,
+    "input": {
+        "system": "Du bist ein Recherche-Assistent für einen Podcast-Deep-Dive.",
+        "messages": [
+            {"role": "user", "content": "Quantencomputing und seine Risiken"},
+        ],
+        "tools": _WEB_SEARCH_TOOL,
+    },
+    "synthetic_response": {
+        "text": "- Quantencomputer bedrohen aktuelle Verschlüsselung (belegt).",
+        "web_search_results": _WEB_SEARCH_RESULTS,
+        "web_search_requests": 2,
+        "input_tokens": 210,
+        "output_tokens": 90,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+    },
+    "assertion_kind": "web_search_sources",
+    "assertion_params": {
+        "expected_sources": [
+            {
+                "url": "https://example.org/quanten-studie",
+                "title": "Quantencomputing-Studie 2026",
+                "page_age": "2 months",
+            },
+            {
+                "url": "https://example.org/risiken",
+                "title": "Gesellschaftliche Risiken",
+                "page_age": None,
+            },
+        ],
+        "expected_requests": 2,
+    },
+    "expect_pass": True,
+}
+
+
+# ===========================================================================
 #  Exportiertes Golden-Set
 # ===========================================================================
 
@@ -572,6 +672,7 @@ GOLDEN_FIXTURES: list[dict[str, Any]] = [
     _B1, _B2, _B3, _B4,
     _C1, _C2, _C3, _C4,
     _D1, _D2,
+    _E1,
 ]
 
 # Bequeme Subsets für parametrierte Tests

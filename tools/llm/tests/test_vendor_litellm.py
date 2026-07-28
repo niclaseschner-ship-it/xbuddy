@@ -630,11 +630,12 @@ def _make_agent_response(text, *, tool_calls=None, prompt_tokens=100,
 
 
 def test_agent_step_capabilities_covers_required_agent():
-    """AC1: CAPABILITIES deckt REQUIRED_AGENT ab (tool_use dabei),
-    web_search NICHT deklariert (out of scope)."""
+    """AC1: CAPABILITIES deckt REQUIRED_AGENT ab (tool_use dabei); seit T1511
+    (#1316 Abriss-3) ist `web_search` deklariert — der server-seitige web_search-
+    Pfad (hoerspiel-Recherche) läuft jetzt über den litellm-Motor (Weg A)."""
     assert public_api.REQUIRED_AGENT <= litellm_vendor.CAPABILITIES
     assert "tool_use" in litellm_vendor.CAPABILITIES
-    assert "web_search" not in litellm_vendor.CAPABILITIES
+    assert "web_search" in litellm_vendor.CAPABILITIES
 
 
 def test_agent_step_parses_text_only():
@@ -680,6 +681,98 @@ def test_agent_step_bad_arguments_json_yields_empty_input():
         out = vendor.agent_step("S.", [], [], caller="eltern-chat",
                                 slot="eltern-chat-litellm-api-key")
     assert out["tool_calls"][0]["input"] == {}
+
+
+def _make_web_search_response(text, *, web_search_results, web_search_requests):
+    """LiteLLM-ModelResponse mit web_search-Passthrough (T1511, #1316 Abriss-3):
+    `message.provider_specific_fields["web_search_results"]` (RAW-Dict-Blöcke) +
+    `usage.server_tool_use.web_search_requests` (Anthropic-Server-Tool-Usage)."""
+    message = MagicMock()
+    message.content = text
+    message.tool_calls = []
+    message.provider_specific_fields = {"web_search_results": web_search_results}
+    choice = MagicMock()
+    choice.message = message
+    resp = MagicMock()
+    resp.choices = [choice]
+    usage = MagicMock()
+    usage.prompt_tokens = 200
+    usage.completion_tokens = 80
+    usage.cache_read_input_tokens = 0
+    usage.cache_creation_input_tokens = 0
+    server_tool_use = MagicMock()
+    server_tool_use.web_search_requests = web_search_requests
+    usage.server_tool_use = server_tool_use
+    resp.usage = usage
+    return resp
+
+
+def test_agent_step_web_search_maps_sources_and_count():
+    """T1511: web_search-Passthrough → Quellen {url,title,page_age} (url-dedupliziert,
+    Reihenfolge stabil) + Such-Zähler aus server_tool_use — same shape wie der
+    frühere anthropic-Hand-Vendor."""
+    results = [{
+        "type": "web_search_tool_result",
+        "content": [
+            {"type": "web_search_result", "url": "https://ex.org/a",
+             "title": "A", "page_age": "3 days"},
+            {"type": "web_search_result", "url": "https://ex.org/b",
+             "title": "B", "page_age": None},
+            # Duplikat-URL → wird dedupliziert.
+            {"type": "web_search_result", "url": "https://ex.org/a",
+             "title": "A-Kopie", "page_age": "3 days"},
+        ],
+    }]
+    fake_litellm = _make_fake_litellm_sdk(
+        _make_web_search_response("Fakten.", web_search_results=results,
+                                  web_search_requests=2))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        out = vendor.agent_step(
+            "S.", [{"role": "user", "content": "thema"}],
+            [{"type": "web_search_20260209", "name": "web_search", "max_uses": 5}],
+            caller="hoerspiel", slot="hoerspiel-litellm-web-search-api-key")
+    assert out["web_search"] == [
+        {"url": "https://ex.org/a", "title": "A", "page_age": "3 days"},
+        {"url": "https://ex.org/b", "title": "B", "page_age": None},
+    ]
+    assert out["web_search_requests"] == 2
+
+
+def test_agent_step_web_search_server_tool_passed_through_raw():
+    """T1511: der native web_search-Server-Tool-Block (mit `type`) wird NICHT in
+    einen OpenAI-function-Tool übersetzt — er geht unverändert ins tools-Array."""
+    fake_litellm = _make_fake_litellm_sdk(
+        _make_web_search_response("x", web_search_results=[], web_search_requests=0))
+    server_tool = {"type": "web_search_20260209", "name": "web_search", "max_uses": 3}
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        vendor.agent_step("S.", [{"role": "user", "content": "t"}], [server_tool],
+                          caller="hoerspiel", slot="hoerspiel-litellm-web-search-api-key")
+    sent_tools = fake_litellm.completion.call_args.kwargs["tools"]
+    assert sent_tools == [server_tool]  # unübersetzt, kein function-Wrapper
+
+
+def test_agent_step_web_search_error_block_counts_but_no_source():
+    """T1511: ein web_search_tool_result-Fehler-Block (content kein List) liefert
+    KEINE Quelle, der Such-Zähler bleibt aber aus server_tool_use erhalten
+    (Degradations-Signal, HSP-58)."""
+    results = [{
+        "type": "web_search_tool_result",
+        "content": {"type": "web_search_tool_result_error",
+                    "error_code": "max_uses_exceeded"},
+    }]
+    fake_litellm = _make_fake_litellm_sdk(
+        _make_web_search_response("", web_search_results=results,
+                                  web_search_requests=1))
+    with patch.dict(sys.modules, {"litellm": fake_litellm}):
+        vendor = litellm_vendor.LitellmVendor(api_key="sk-fake")
+        out = vendor.agent_step("S.", [{"role": "user", "content": "t"}],
+                                [{"type": "web_search_20260209", "name": "web_search",
+                                  "max_uses": 1}],
+                                caller="hoerspiel", slot="hoerspiel-litellm-web-search-api-key")
+    assert out["web_search"] == []
+    assert out["web_search_requests"] == 1
 
 
 def test_agent_step_wire_in_translation_and_cache_control():

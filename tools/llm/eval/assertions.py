@@ -21,6 +21,9 @@ Assertion-Arten:
                        Erkennt fehlende Pflicht-Inhalte.
   forbidden_string   — Needle NICHT im Text-Output vorhanden.
                        Erkennt verbotene Fehler-Strings.
+  web_search_sources — Zitat-Mapping (url/title/page_age) + Such-Zähler der
+                       agent_step-web_search-Antwort. Erkennt Regressionen im
+                       litellm-web_search-Passthrough (T1511, #1316 Abriss-3).
 """
 
 from typing import Any
@@ -119,6 +122,49 @@ def assert_forbidden_string(
     )
 
 
+def assert_web_search_sources(
+    output: Any,
+    telemetry: dict[str, Any] | None,
+    params: dict[str, Any],
+) -> tuple[bool, str]:
+    """Prüft das web_search-Zitat-Mapping der agent_step-Antwort (T1511).
+
+    `output` ist die neutrale agent_step-Form; geprüft werden:
+      - `web_search` — Liste `{url,title,page_age}` (Reihenfolge + Werte exakt
+        gegen `params["expected_sources"]`; deckt das url/title/page_age-Mapping
+        UND die url-Deduplizierung ab).
+      - `web_search_requests` — Such-Zähler == `params["expected_requests"]`.
+
+    Regressions-Netz für den litellm-web_search-Passthrough (multi-turn
+    web_search Bug-Historie): das Mapping muss dieselbe Form liefern wie zuvor
+    der anthropic-Hand-Vendor.
+    """
+    if not isinstance(output, dict):
+        return False, f"output is not a dict (type={type(output).__name__})"
+
+    expected_sources: list[dict[str, Any]] = params.get("expected_sources", [])
+    expected_requests: int = params.get("expected_requests", 0)
+
+    actual_sources = output.get("web_search")
+    actual_requests = output.get("web_search_requests")
+
+    if actual_sources != expected_sources:
+        return False, (
+            "web_search source mapping mismatch:\n"
+            f"  expected: {expected_sources}\n"
+            f"  actual:   {actual_sources}"
+        )
+    if actual_requests != expected_requests:
+        return False, (
+            f"web_search_requests mismatch: expected={expected_requests}, "
+            f"actual={actual_requests}"
+        )
+    return True, (
+        f"web_search mapping ok: {len(expected_sources)} source(s), "
+        f"{expected_requests} request(s)"
+    )
+
+
 # ---------------------------------------------------------------------------
 #  Dispatcher
 # ---------------------------------------------------------------------------
@@ -129,6 +175,7 @@ _ASSERTION_MAP = {
     "tool_called": assert_tool_called,
     "required_string": assert_required_string,
     "forbidden_string": assert_forbidden_string,
+    "web_search_sources": assert_web_search_sources,
 }
 
 

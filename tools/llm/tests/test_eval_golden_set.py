@@ -70,12 +70,17 @@ def test_golden_set_fixture_count() -> None:
 
 
 def test_golden_set_covers_regression_classes() -> None:
-    """AC1: Alle vier Regressions-Klassen sind abgedeckt (inkl. Multimodal #1509)."""
+    """AC1: Alle Regressions-Klassen abgedeckt (inkl. Multimodal #1509 + web_search #1511)."""
     classes = {f["regression_class"] for f in GOLDEN_FIXTURES}
     assert "hoerspiel-502-token-cutoff" in classes, "hoerspiel-502-Klasse fehlt"
     assert "eltern-chat-fehlpfad" in classes, "eltern-chat-Fehlpfad-Klasse fehlt"
     assert "anti-redundanz-schema" in classes, "Anti-Redundanz-Klasse fehlt"
     assert "multimodal-foto-pfad" in classes, "Multimodal-Klasse (#1509) fehlt"
+    # T1511 (#1316 Abriss-3): das litellm-web_search-Zitat-Mapping ist das
+    # Pflicht-Regressions-Netz vor dem anthropic-Hand-Vendor-Abriss.
+    assert "hoerspiel-web-search-litellm" in classes, (
+        "web_search-Klasse (#1511) fehlt — Regressions-Netz vor anthropic-Abriss"
+    )
 
 
 def test_golden_set_ids_unique() -> None:
