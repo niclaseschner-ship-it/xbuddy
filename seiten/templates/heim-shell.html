@@ -67,6 +67,10 @@
         if (next === current) return;                        // unverändert: kein Reload
         current = next;
         if (next) {
+          // T1551: Pane vor dem Src-Swap sichtbar schalten (Gegenstück zu
+          // display:none im cleared-Zweig), damit der neue Buddy-View sofort
+          // sichtbar ist. Reihenfolge: erst sichtbar, dann src setzen.
+          pane.style.display = '';
           pane.src = next;
           // T1529 Doppel-Tap-Härtung: der Kachel-Tap links löst rechts einen
           // iframe.src-Swap aus. Lädt der neue Buddy-View, kann der Fokus zum
@@ -83,6 +87,10 @@
           // T1547: panel_cleared → Ruhe-Zustand. Pane leeren ohne Fokus-Logik
           // (kein Buddy-View aktiv, Rail-Fokus ohnehin korrekt).
           pane.removeAttribute('src');
+          // T1551: Iframe verstecken damit der schwarze .buddy-Container
+          // (background:#000 in heim-shell.css) durchscheint — Aus-Anmutung.
+          // about:blank- und leere Iframes rendern sonst weiß/beige.
+          pane.style.display = 'none';
         }
       };
     })();

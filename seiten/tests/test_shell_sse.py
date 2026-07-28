@@ -433,3 +433,57 @@ def test_t1547_truthy_event_setzt_url_in_state():
         )
     finally:
         seiten_main._shell_unsubscribe(q)
+
+
+# ============================================================
+#  T1551 — Aus/Cleared → schwarzer Bildschirm (Display-aus-Anmutung)
+# ============================================================
+
+def test_t1551_css_buddy_hintergrund_schwarz():
+    """T1551 AC1: heim-shell.css setzt background:#000 auf .buddy — der Ruhe-
+    Zustand scheint schwarz durch, wenn der Iframe (display:none) versteckt ist.
+    """
+    css_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "static", "heim-shell.css",
+    )
+    with open(css_path, encoding="utf-8") as fh:
+        css = fh.read()
+    assert "background: #000" in css, (
+        "heim-shell.css muss 'background: #000' auf .buddy setzen "
+        "(T1551: schwarzer Ruhe-Zustand wenn Iframe versteckt ist)"
+    )
+
+
+def test_t1551_template_cleared_zweig_display_none():
+    """T1551 AC1/AC3: Der cleared-Zweig im Template setzt pane.style.display='none',
+    damit der schwarze .buddy-Container (background:#000) durchscheint.
+
+    Ein leerer oder about:blank-Iframe rendert standardmaessig weiss/beige;
+    display:none + schwarzer Elterncontainer liefert die Aus-Anmutung zuverlaessig.
+    """
+    body = _template_body()
+    assert "pane.style.display = 'none'" in body, (
+        "heim-shell.html muss pane.style.display='none' im cleared-Zweig enthalten "
+        "(T1551: Iframe verstecken sodass .buddy background:#000 sichtbar wird)"
+    )
+
+
+def test_t1551_template_truthy_zweig_stellt_display_wieder_her():
+    """T1551 AC2: Der truthy-Zweig setzt pane.style.display='' (zurueck auf Block)
+    BEVOR pane.src=next, damit der neue Buddy-View sofort sichtbar ist.
+
+    Kein Regress am normalen Swap: Sichtbarkeit kommt VOR dem Src-Swap.
+    """
+    body = _template_body()
+    assert "pane.style.display = '';" in body, (
+        "heim-shell.html muss pane.style.display='' im truthy-Zweig enthalten "
+        "(T1551: Sichtbarkeit vor pane.src=next wiederherstellen)"
+    )
+    # Sicherstellen, dass display-Reset VOR pane.src=next steht (Reihenfolge).
+    idx_display = body.index("pane.style.display = '';")
+    idx_src = body.index("pane.src = next;")
+    assert idx_display < idx_src, (
+        "pane.style.display='' muss im Template VOR pane.src=next stehen "
+        "(T1551: erst sichtbar, dann src, kein Flash)"
+    )
