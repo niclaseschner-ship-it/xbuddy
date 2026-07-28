@@ -115,20 +115,25 @@ def test_EC_15_provider_key_from_env(tmp_path, monkeypatch):
     assert cfg.provider_api_key == "sk-env"
 
 
-def test_EC_15_provider_key_from_store_when_no_env(tmp_path, monkeypatch):
+def test_EC_15_provider_key_from_litellm_slot_when_no_env(tmp_path, monkeypatch):
+    """#1510: Boot-Gate liest den litellm-Slot (via `litellm_key_present`). Ist
+    er präsent, gilt KI-Modus (`provider_api_key` truthy — Präsenz-Marker, nicht
+    der rohe Key; den holt die Lib selbst aus dem Slot)."""
     _set_bot_token(monkeypatch)
     monkeypatch.delenv("ELTERNCHAT_PROVIDER_API_KEY", raising=False)
     zd = _zd(tmp_path)
-    OnboardingStore(zd=zd).save(provider_api_key="sk-store")
+    # provider bleibt Default "claude" → litellm-Slot für claude befüllen.
+    OnboardingStore(zd=zd).litellm_probe_write("claude", "sk-litellm")
     cfg = config_mod.resolve(_missing(tmp_path), zd=zd)
-    assert cfg.provider_api_key == "sk-store"
+    assert cfg.provider_api_key   # truthy → KI-Modus
 
 
-def test_EC_15_env_provider_key_beats_store(tmp_path, monkeypatch):
+def test_EC_15_env_provider_key_beats_litellm_slot(tmp_path, monkeypatch):
+    """ENV-Key hat Vorrang und wird wörtlich durchgereicht (Legacy-ENV-Pfad)."""
     _set_bot_token(monkeypatch)
     monkeypatch.setenv("ELTERNCHAT_PROVIDER_API_KEY", "sk-env")
     zd = _zd(tmp_path)
-    OnboardingStore(zd=zd).save(provider_api_key="sk-store")
+    OnboardingStore(zd=zd).litellm_probe_write("claude", "sk-litellm")
     cfg = config_mod.resolve(_missing(tmp_path), zd=zd)
     assert cfg.provider_api_key == "sk-env"
 
@@ -141,46 +146,38 @@ def test_ONB_1_missing_provider_key_is_not_an_error(tmp_path, monkeypatch):
     assert cfg.provider_api_key == ""
 
 
-# -- T663 Welle A: Bootstrap nutzt read-both (Watchdog B1) -------
+# -- #1510: Boot-Gate liest den litellm-Slot ---------------------
 
-def test_T663_bootstrap_reads_vendor_slot_for_active_provider(tmp_path, monkeypatch):
-    """T663 Welle A / Watchdog B1: config.resolve ruft
-    OnboardingStore.load(provider_name=values['provider']) — der vendor-Slot
-    (`eltern-chat-anthropic-api-key` für Adapter `claude`) wird primär gelesen.
-    Ein im Single-Slot liegender Alt-Wert darf NICHT gewinnen, wenn der
-    vendor-Slot gesetzt ist."""
+def test_1510_bootstrap_reads_litellm_slot_for_active_provider(tmp_path, monkeypatch):
+    """#1510: config.resolve prüft den litellm-Slot des aktiven Anbieters
+    (`litellm_key_present`). Präsent → KI-Modus. Ein ALTER vendor/single-Slot
+    speist den Boot-Gate NICHT mehr (der Laufzeit-Pfad las ohnehin nur den
+    litellm-Slot)."""
     _set_bot_token(monkeypatch)
     monkeypatch.delenv("ELTERNCHAT_PROVIDER_API_KEY", raising=False)
     zd = _zd(tmp_path)
-    # Vendor-Slot (Brand-Vendor anthropic für Adapter claude) UND Single-Slot.
-    zd.set("eltern-chat-anthropic-api-key", "sk-vendor-wins")
-    zd.set("eltern-chat-provider-api-key", "sk-single-loses")
+    # provider bleibt Default "claude" → dessen litellm-Slot befüllen.
+    OnboardingStore(zd=zd).litellm_probe_write("claude", "sk-litellm")
 
-    # provider bleibt Default "claude" (DEFAULTS).
     cfg = config_mod.resolve(_missing(tmp_path), zd=zd)
 
-    assert cfg.provider_api_key == "sk-vendor-wins", (
-        "Welle A Bootstrap: vendor-Slot muss vor Single-Slot gewinnen")
+    assert cfg.provider_api_key, "litellm-Slot präsent → KI-Modus"
 
 
-def test_T663_bootstrap_falls_back_to_single_slot(tmp_path, monkeypatch):
-    """T663 Welle A / Watchdog B1+B3: leerer vendor-Slot + gefüllter
-    Single-Slot → Bootstrap liest den Single-Slot (Fallback in
-    OnboardingStore.load) und triggert die lazy-Migration."""
+def test_1510_bootstrap_ignores_old_slots(tmp_path, monkeypatch):
+    """#1510: ein NUR in den ALTEN Slots liegender Key führt NICHT mehr in den
+    KI-Modus — der Boot-Gate liest ausschließlich den litellm-Slot (Verhalten
+    entspricht der Laufzeit, kein Auseinanderdriften)."""
     _set_bot_token(monkeypatch)
     monkeypatch.delenv("ELTERNCHAT_PROVIDER_API_KEY", raising=False)
     zd = _zd(tmp_path)
-    # Nur Single-Slot — vendor-Slot leer.
-    zd.set("eltern-chat-provider-api-key", "sk-single-fallback")
+    zd.set("eltern-chat-anthropic-api-key", "sk-old-vendor")
+    zd.set("eltern-chat-provider-api-key", "sk-old-single")
 
     cfg = config_mod.resolve(_missing(tmp_path), zd=zd)
 
-    assert cfg.provider_api_key == "sk-single-fallback"
-    # Lazy-Migration hat den vendor-Slot beim Bootstrap befüllt (Brand-Vendor).
-    assert zd.get("eltern-chat-anthropic-api-key") == "sk-single-fallback", (
-        "Lazy-Migration muss beim Bootstrap den vendor-Slot füllen")
-    # Single-Slot bleibt stehen (Welle B-Aufgabe).
-    assert zd.get("eltern-chat-provider-api-key") == "sk-single-fallback"
+    assert cfg.provider_api_key == "", (
+        "Alt-Slots dürfen den litellm-basierten Boot-Gate nicht mehr triggern")
 
 
 # -- Familien-Gruppe: Env > Datei > Store; Env/Datei sperren -----

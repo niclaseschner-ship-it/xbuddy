@@ -1,7 +1,10 @@
-"""Tests für den Onboarding-Flow — ONB-1…ONB-8 (Refs #33).
+"""Tests für den Onboarding-Flow — ONB-1…ONB-8 (Refs #33, #1510).
 
-Der KI-Anbieter ist eine kontrollierte Doppelung (ONB-9): `onboarding.get_provider`
-wird je Test ersetzt, der Validierungs-Aufruf läuft so ohne Netz.
+Der Motor-Adapter ist eine kontrollierte Doppelung (ONB-9): seit #1510
+validiert der Flow über den litellm-Slot (probeweise schreiben → Motor-Ping →
+bei Fehler löschen). `onboarding.get_lib_agent_provider` wird je Test ersetzt,
+der Validierungs-Ping läuft so ohne Netz — der reale Probe-Schreib/-Löschvorgang
+gegen den (tmp-)ZD-Speicher läuft echt.
 """
 
 import onboarding
@@ -19,10 +22,14 @@ from onboarding import (
 )
 from onboarding_store import OnboardingStore
 
+from tools.llm import litellm_slot_for_provider
 from tools.zugangsdaten import Zugangsdaten
 
 # Ein realistisch geformter Schlüssel: langes Token ohne Leerzeichen (ONB-3).
 _KEY = "sk-ant-api03-0123456789abcdefABCDEFxyz"
+
+# #1510: der litellm-Slot, in den der Probe-Schreib landet (Adapter claude).
+_LITELLM_SLOT = litellm_slot_for_provider("eltern-chat", "claude")
 
 
 def _ctx(tmp_path, tg, family_group="", locked=False):
@@ -37,17 +44,17 @@ def _ctx(tmp_path, tg, family_group="", locked=False):
 
 
 def _provider_ok(monkeypatch):
-    """get_provider liefert einen Anbieter, dessen Validierungs-Aufruf gelingt."""
+    """get_lib_agent_provider liefert einen Motor-Adapter, dessen Ping gelingt."""
     validated = FakeProvider([text_response("ok")])
-    monkeypatch.setattr(onboarding, "get_provider",
-                        lambda name, key, model="": validated)
+    monkeypatch.setattr(onboarding, "get_lib_agent_provider",
+                        lambda name, model="": validated)
     return validated
 
 
 def _provider_bad(monkeypatch):
-    """get_provider liefert einen Anbieter, dessen Aufruf einen Fehler wirft."""
-    monkeypatch.setattr(onboarding, "get_provider",
-                        lambda name, key, model="": FakeProvider([ProviderError("401")]))
+    """get_lib_agent_provider liefert einen Adapter, dessen Ping einen Fehler wirft."""
+    monkeypatch.setattr(onboarding, "get_lib_agent_provider",
+                        lambda name, model="": FakeProvider([ProviderError("401")]))
 
 
 # -- ONB-1: im Onboarding-Modus läuft der Onboarding-Flow --------
@@ -123,7 +130,7 @@ def test_ONB_3_private_non_key_message_asks_for_key(tmp_path, monkeypatch):
     """Eine Privatnachricht, die kein Schlüssel ist (Begrüßung/Frage), wird
     NICHT validiert — der Bot leitet an, statt fälschlich »ungültig« zu melden."""
     validated = []
-    monkeypatch.setattr(onboarding, "get_provider",
+    monkeypatch.setattr(onboarding, "get_lib_agent_provider",
                         lambda *a, **k: validated.append(1) or FakeProvider([]))
     tg = FakeTelegram(members={7: {"status": "member"}})
     ctx = _ctx(tmp_path, tg)
@@ -147,7 +154,10 @@ def test_ONB_4_invalid_key_reported_stays_in_onboarding(tmp_path, monkeypatch):
     assert tg.sent[-1]["text"] == KEY_INVALID
     assert ctx.onboarding is not None        # bleibt im Onboarding-Modus
     assert ctx.provider is None
-    assert store.load() == {}                # nichts gespeichert
+    assert store.load() == {}                # kein Alt-Slot geschrieben
+    # #1510: der Probe-Schreib wurde bei Fehler wieder abgeräumt (leerer Slot
+    # zählt als nicht präsent — SVC-7-Boot-Check greift bei diesem Rest).
+    assert not store.litellm_key_present("claude")
 
 
 # -- ONB-4/5/6/7: erfolgreicher Abschluss ------------------------
@@ -165,9 +175,10 @@ def test_ONB_567_valid_key_completes_onboarding(tmp_path, monkeypatch):
     assert ctx.provider is validated
     # ONB-6: Onboarding-Gruppe als Familien-Gruppe gebunden
     assert ctx.family_group_chat_id == "-100"
-    # ONB-5: Key und Gruppe persistent gespeichert
+    # ONB-5/#1510: Key liegt im litellm-Slot (Probe-Schreib verschmolzen),
+    # die Gruppe im Alt-Slot (family_group).
+    assert store.litellm_key_present("claude")
     saved = store.load()
-    assert saved["provider_api_key"] == _KEY
     assert saved["family_group_chat_id"] == "-100"
     # Bestätigung privat (ONB) und in der Familien-Gruppe (ONB-7)
     texts = [s["text"] for s in tg.sent]
@@ -185,8 +196,8 @@ def test_ONB_6_locked_family_group_is_not_rebound(tmp_path, monkeypatch):
     ctx.onboarding.pending_group_chat_id = -100
     dispatch(make_message(_KEY, chat_type="private", from_user_id=7), ctx)
     assert ctx.family_group_chat_id == "-999"            # gesperrte Gruppe bleibt
+    assert store.litellm_key_present("claude")           # #1510: Key im litellm-Slot
     saved = store.load()
-    assert saved["provider_api_key"] == _KEY
     assert "family_group_chat_id" not in saved           # keine abweichende Bindung
 
 

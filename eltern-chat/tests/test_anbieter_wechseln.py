@@ -102,13 +102,44 @@ def _stream(*texts):
 
 
 def _validate_ok(name, key):
-    """Validierungs-Doppelung: immer erfolgreich."""
+    """Validierungs-Doppelung: immer erfolgreich (kein Slot-Effekt).
+
+    Für Tests, die den Key-Slot NICHT inspizieren. Wo die #1510-Verschmelzung
+    (Probe-Schreib bleibt im litellm-Slot stehen) belegt werden soll, nutzt der
+    Test `_validate_ok_writes(zd)`.
+    """
     return True
 
 
 def _validate_fail(name, key):
-    """Validierungs-Doppelung: immer fehlgeschlagen."""
+    """Validierungs-Doppelung: immer fehlgeschlagen (kein Slot-Effekt)."""
     return False
+
+
+def _litellm_slot(provider):
+    """Der litellm-Slot, in den der reale `_do_validate` probeweise schreibt."""
+    from tools.llm import litellm_slot_for_provider
+    return litellm_slot_for_provider("eltern-chat", provider)
+
+
+def _validate_ok_writes(zd):
+    """Validierungs-Doppelung mit realem Slot-Effekt (#1510): schreibt den Key
+    probeweise in den litellm-Slot und lässt ihn stehen — spiegelt, dass der
+    echte `_do_validate` den Key bei Erfolg persistiert (Schreibschritt
+    verschmilzt)."""
+    def _v(name, key):
+        zd.set(_litellm_slot(name), key)
+        return True
+    return _v
+
+
+def _validate_fail_deletes(zd):
+    """Validierungs-Doppelung mit realem Slot-Effekt (#1510): räumt den
+    litellm-Slot bei Fehler wieder ab (leerer String)."""
+    def _v(name, key):
+        zd.set(_litellm_slot(name), "")
+        return False
+    return _v
 
 
 # ============================================================
@@ -124,10 +155,10 @@ def test_happy_path_claude_to_mistral():
     beide in einem `set_multi`-Aufruf.
     """
     tg = FakeTelegram(members=_members(42))
-    # Alter claude-Slot ist gesetzt (vendor-spezifisch, Welle A). Mistral-Slot
-    # leer → Pfad B wird durchlaufen.
+    # #1510: alter claude-litellm-Slot ist gesetzt. Mistral-litellm-Slot leer
+    # → Pfad B wird durchlaufen.
     zd = FakeZd(initial={
-        zd_name_provider_api_key("claude"): "old-claude-key",
+        _litellm_slot("claude"): "old-claude-key",
         ZD_NAME_PROVIDER_NAME: "claude",
     })
     fgcid = 99
@@ -137,16 +168,17 @@ def test_happy_path_claude_to_mistral():
         family_group_chat_id=fgcid,
         zd=zd, next_message=_stream("mistral", "new-mistral-key-xxxxxxxxxxxx"),
         current_provider_name="claude",
-        _validate=_validate_ok)
+        _validate=_validate_ok_writes(zd))
 
     assert result.ergebnis == ERGEBNIS_GEWECHSELT
     assert result.neuer_anbieter == "mistral"
 
-    # ZD-Speicher gesetzt (ONB-12 V2): vendor-spezifischer Slot + provider-name.
-    assert zd.get(zd_name_provider_api_key("mistral")) == "new-mistral-key-xxxxxxxxxxxx"
+    # #1510: der validierte Key liegt im litellm-Slot (Probe-Schreib
+    # verschmolzen); provider-name umgeschaltet.
+    assert zd.get(_litellm_slot("mistral")) == "new-mistral-key-xxxxxxxxxxxx"
     assert zd.get(ZD_NAME_PROVIDER_NAME) == "mistral"
-    # Alter vendor-Slot bleibt erhalten (für späteren Rückwechsel — Pfad A).
-    assert zd.get(zd_name_provider_api_key("claude")) == "old-claude-key"
+    # Alter Anbieter-litellm-Slot bleibt erhalten (für späteren Rückwechsel — Pfad A).
+    assert zd.get(_litellm_slot("claude")) == "old-claude-key"
 
     # Bestätigung im Privatchat.
     privat_texte = [m["text"] for m in tg.sent if m["chat_id"] == 11]
@@ -168,7 +200,7 @@ def test_happy_path_mistral_to_claude():
     Richtung. Welle A: Claude-Slot leer → Pfad B."""
     tg = FakeTelegram(members=_members(42))
     zd = FakeZd(initial={
-        zd_name_provider_api_key("mistral"): "old-mistral-key",
+        _litellm_slot("mistral"): "old-mistral-key",
         ZD_NAME_PROVIDER_NAME: "mistral",
     })
 
@@ -177,14 +209,14 @@ def test_happy_path_mistral_to_claude():
         family_group_chat_id=99,
         zd=zd, next_message=_stream("claude", "sk-ant-new-claude-xxxxxxxxxxxx"),
         current_provider_name="mistral",
-        _validate=_validate_ok)
+        _validate=_validate_ok_writes(zd))
 
     assert result.ergebnis == ERGEBNIS_GEWECHSELT
     assert result.neuer_anbieter == "claude"
-    assert zd.get(zd_name_provider_api_key("claude")) == "sk-ant-new-claude-xxxxxxxxxxxx"
+    assert zd.get(_litellm_slot("claude")) == "sk-ant-new-claude-xxxxxxxxxxxx"
     assert zd.get(ZD_NAME_PROVIDER_NAME) == "claude"
-    # Alter mistral-Slot bleibt erhalten.
-    assert zd.get(zd_name_provider_api_key("mistral")) == "old-mistral-key"
+    # Alter mistral-litellm-Slot bleibt erhalten.
+    assert zd.get(_litellm_slot("mistral")) == "old-mistral-key"
 
     # ONB-8: Key nirgendwo im Output.
     for m in tg.sent:
@@ -282,11 +314,17 @@ def test_validierungsfehler_retry_danach_erfolg():
     call_count = [0]
 
     def validate_second_ok(name, key):
+        # #1510: spiegelt den realen _do_validate-Slot-Effekt — erster Ping
+        # scheitert (Slot abräumen), zweiter gelingt (Key bleibt im Slot).
         call_count[0] += 1
-        return call_count[0] >= 2   # erster Aufruf fehlschlägt, zweiter ok
+        if call_count[0] >= 2:
+            zd.set(_litellm_slot(name), key)
+            return True
+        zd.set(_litellm_slot(name), "")
+        return False
 
     tg = FakeTelegram(members=_members(42))
-    zd = FakeZd(initial={zd_name_provider_api_key("claude"): "old"})
+    zd = FakeZd(initial={_litellm_slot("claude"): "old"})
 
     result = anbieter_wechseln(
         tg=tg, chat_id=11, user_id=42,
@@ -299,7 +337,7 @@ def test_validierungsfehler_retry_danach_erfolg():
         _validate=validate_second_ok)
 
     assert result.ergebnis == ERGEBNIS_GEWECHSELT
-    assert zd.get(zd_name_provider_api_key("mistral")) == "good-key-xxxxxxxxxxxx"
+    assert zd.get(_litellm_slot("mistral")) == "good-key-xxxxxxxxxxxx"
 
 
 # ============================================================
@@ -502,10 +540,11 @@ def test_pfad_a_quittung_unterscheidet_sich_von_pfad_b():
     sagen. Pfad A sendet DONE_PRIVAT_PFAD_A, Pfad B sendet DONE_PRIVAT.
     """
     tg = FakeTelegram(members=_members(42))
-    # Beide Vendor-Slots vorgefüllt → Wahl mistral → Pfad A (Mistral-Slot truthy).
+    # #1510: beide litellm-Slots vorgefüllt → Wahl mistral → Pfad A (Mistral-
+    # litellm-Slot truthy, kein Re-Key, kein Probe-Ping).
     zd = FakeZd(initial={
-        zd_name_provider_api_key("claude"): "existing-claude-key",
-        zd_name_provider_api_key("mistral"): "existing-mistral-key",
+        _litellm_slot("claude"): "existing-claude-key",
+        _litellm_slot("mistral"): "existing-mistral-key",
         ZD_NAME_PROVIDER_NAME: "claude",
     })
 
@@ -642,10 +681,11 @@ def test_caplog_kein_key_bei_happy_path(caplog):
 # ============================================================
 
 def test_do_validate_baut_GenerationRequest_mit_task_defs(monkeypatch):
-    """Regression #639-Hotfix: _do_validate baute GenerationRequest mit
-    ungültigem Keyword `tasks=` statt `task_defs=` — TypeError im Live-Pfad,
-    der von den Test-Doppelungen (`_validate=_validate_ok`) verdeckt wurde.
-    Validierungs-Ping schlug deshalb in Produktion immer fehl."""
+    """Regression #639-Hotfix + #1510: _do_validate baut GenerationRequest mit
+    `task_defs=` (nicht `tasks=`) — TypeError im Live-Pfad, den die Test-
+    Doppelungen (`_validate=_validate_ok`) verdecken. #1510: der Ping läuft über
+    den Motor-Adapter (`get_lib_agent_provider`); der probeweise geschriebene
+    Slot bleibt bei Erfolg stehen (Schreibschritt verschmilzt)."""
     from skills import anbieter_wechseln as aw_mod
 
     captured = {}
@@ -655,10 +695,13 @@ def test_do_validate_baut_GenerationRequest_mit_task_defs(monkeypatch):
             captured["task_defs"] = request.task_defs
             return None
 
-    monkeypatch.setattr(aw_mod, "get_provider",
-                        lambda name, api_key: _FakeProvider())
+    monkeypatch.setattr(aw_mod, "get_lib_agent_provider",
+                        lambda name, *a, **k: _FakeProvider())
 
-    result = aw_mod._do_validate("mistral", "dummy-key")
+    zd = FakeZd()
+    result = aw_mod._do_validate(zd, "mistral", "dummy-key")
 
     assert result is True
     assert captured["task_defs"] == []
+    # #1510: der probeweise geschriebene Key bleibt bei Erfolg im litellm-Slot.
+    assert zd.get(_litellm_slot("mistral")) == "dummy-key"

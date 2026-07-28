@@ -1267,10 +1267,20 @@ def _secret_preflight(cfg):
                 "FEHLT: gültiger Anbieter — provider=%r hat keinen LLM-Slot "
                 "(SVC-7/#1493)", cfg.provider)
             sys.exit(1)
+        # `slot_present` = bool(resolve_api_key): ein LEERER Slot-Wert zählt als
+        # nicht präsent. #1510-Härtung des Probe-Crash-Fensters: bricht das
+        # Onboarding/der Wechsel zwischen Probe-Schreib und Ping ab, räumt
+        # `litellm_probe_delete` den Slot auf den leeren String — dieser Boot-
+        # Check fängt genau diesen present-but-invalid-Rest (leerer Slot → FEHLT
+        # → Exit → nächster Start läuft ins Onboarding, statt mit kaputtem Key
+        # in den KI-Modus zu booten). Ein nicht-leerer, aber inhaltlich falscher
+        # Key bleibt SVC-7-konform ungeprüft (kein Anbieter-Call am Boot) und
+        # fällt erst im ersten Turn — bewusst (RATIFIZIERT 20260728-1510).
         if not slot_present(slot):
             logging.critical(
-                "FEHLT: %s — Chat-Agent-Slot fehlt im Zugangsdaten-Speicher "
-                "(provider=%s, KI-Modus) (SVC-7/#1493)", slot, cfg.provider)
+                "FEHLT: %s — Chat-Agent-Slot fehlt/leer im Zugangsdaten-Speicher "
+                "(provider=%s, KI-Modus) (SVC-7/#1493, #1510-Probe-Rest)",
+                slot, cfg.provider)
             sys.exit(1)
 
 
