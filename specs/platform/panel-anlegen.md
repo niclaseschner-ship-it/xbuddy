@@ -1,8 +1,13 @@
 # Panel anlegen — Spec     (ID-Präfix: PAA)
 
-> Status: RATIFIZIERT (Nic 2026-06-03 — Entscheidungen siehe „Ratifizierte Entscheidungen") ·
-> Refs #183 (PANEL-8-config-Setup), #138 (Apps als Kacheln/`tiles`),
-> #141 (Controller-Setup) · erfüllt `panel-registry.md` OPEN-PREG-C
+> ⚠️ **ENTFALLEN durch Cookie-only-hart (RAT-32), RAT-31 E1 #1470.**
+> Der `panel_anlegen`-Skill ist gelöscht. Panel-Anlage über den Eltern-Chat-
+> Konversationsfluss entfällt; das Feature ist nicht mehr lebendig. Diese Spec
+> beschreibt einen **nicht mehr lebenden Zustand**; sie bleibt als historischer
+> Anker erhalten. Governance: `decisions/RAT-31-wirbelsaeule-abriss.md`,
+> Epic #1339.
+>
+> Status: RATIFIZIERT (ENTFALLEN) · Refs #183 #138 #141
 
 Damit eine Familie eine **Panel-Instanz** (App-Panel-Controller, `app-panel.md`
 PANEL-2) anlegen kann, ohne `panels.json` von Hand zu pflegen, definiert diese
