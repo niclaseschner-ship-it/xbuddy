@@ -122,7 +122,17 @@ bleibt klar.
 
 1. **Repo auf der Instanz checken** an den Pfad, den `__XBUDDY_REPO__` benennt;
    Python-Abhängigkeiten in das Venv installieren, das `__XBUDDY_PYTHON__`
-   nutzt.
+   nutzt. Der EINE Dependency-SSoT ist `pyproject.toml` (RAT-33 Option A,
+   #1534) — installiert wird repo-weit daraus:
+
+   ```bash
+   /home/buddy/apps/venv/bin/pip install /home/buddy/repos/xbuddy
+   ```
+
+   Denselben Schritt fährt der Deploy-Regelkreis bei jedem Vollauf automatisch
+   (`deploy/update.sh` → `sync_deps`, VOR den Restarts), sodass neu gestartete
+   Services neue/geänderte Deps direkt sehen. Es gibt KEINE per-Service-
+   `requirements.txt` mehr (Hand-Pflege-Divergenz war die #1515-Klasse).
 
 2. **`.env` für den Eltern-Chat-Bot** an `__XBUDDY_DATA__/eltern-chat/.env`
    anlegen (siehe „Geheimnisse").
