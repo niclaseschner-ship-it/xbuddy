@@ -79,6 +79,10 @@
             if (pane.blur) pane.blur();
             if (rail && rail.focus) rail.focus({ preventScroll: true });
           } catch (e) { /* Fokus-Steuerung ist best-effort */ }
+        } else {
+          // T1547: panel_cleared → Ruhe-Zustand. Pane leeren ohne Fokus-Logik
+          // (kein Buddy-View aktiv, Rail-Fokus ohnehin korrekt).
+          pane.removeAttribute('src');
         }
       };
     })();
