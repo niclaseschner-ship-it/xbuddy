@@ -239,7 +239,7 @@ derselben Browser-User-Geste, die den Tap getragen hat.
 **Sinn.** Das versteckt-laufende `<audio>`-Element verschafft dem
 Panel-Tab eine durch User-Geste etablierte Sticky-Activation. Spätere
 Audio-Source-Updates auf demselben Element (durch buddy-eigene
-Mechaniken, z. B. HSP-42) lösen Browser-Wiedergabe **ohne weitere
+Mechaniken, z. B. PANEL-13 HSP-Audio-Stream) lösen Browser-Wiedergabe **ohne weitere
 User-Geste** aus. Ohne diesen Prime blockieren Mobile-Browser ein neu
 gestartetes `<audio>` mit Autoplay-Policy — empirisch bestätigt
 2026-06-17 am Panel-Browser des Familien-Tablets.
