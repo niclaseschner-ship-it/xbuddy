@@ -3,3 +3,4 @@
 # restliche Code und die reproduzierbare Test-Suite kommen mit der
 # Python-Standardbibliothek aus.
 anthropic>=0.40
+litellm~=1.93
