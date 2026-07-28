@@ -2,12 +2,13 @@
 
 Lauf: python3 -m pytest seiten/tests/ -v
 
-Reine Datenstruktur-Tests ohne Flask/Jinja2. Sie prüfen die zwei Hauptsektionen
-(Hero-Paare + Buddy-Gruppen), die Origin-URL-Bildung (Heim+Tailscale),
-den Tailscale-Banner-Schalter und die SREG-12-Hierarchie (Display↔Panel↔Editor).
+Reine Datenstruktur-Tests ohne Flask/Jinja2. Sie prüfen die Buddy-Gruppen,
+die Origin-URL-Bildung (Heim+Funnel) und den Tailscale-Banner-Schalter.
+
+RAT-31 E3 (#1496): Hero-Paar-Tests entfernt (Sorten d/e weg; hero_paare immer []).
 
 Eingabe ist immer ein Inventar-Dict in der Form, die `seiten.aggregator.baue_inventar`
-liefert: `{"eintraege": [...], "snapshot_pending": [...]}`.
+liefert: `{"eintraege": [...], "snapshot_pending": []}`.
 """
 
 import os
@@ -31,47 +32,6 @@ def _eintrag(typ, key, pfad, **extra):
     base = {"typ": typ, "key": key, "pfad": pfad, "label": "L-" + key, "zeigt": "Z-" + key}
     base.update(extra)
     return base
-
-
-def _display(display_id, panels=None):
-    return _eintrag(
-        "display-client",
-        "display-" + display_id,
-        "/display/" + display_id,
-        instanz=display_id,
-        zielgruppe="kind",
-        verknuepft_mit_panels=panels,
-    ) if panels else _eintrag(
-        "display-client",
-        "display-" + display_id,
-        "/display/" + display_id,
-        instanz=display_id,
-        zielgruppe="kind",
-    )
-
-
-def _panel(panel_id, display_id=None):
-    e = _eintrag(
-        "panel",
-        "panel-" + panel_id,
-        "/controller/app-panel/" + panel_id,
-        instanz=panel_id,
-        zielgruppe="eltern",
-    )
-    if display_id:
-        e["verknuepft_mit_display"] = display_id
-    return e
-
-
-def _editor(panel_id):
-    return _eintrag(
-        "eltern",
-        panel_id + "-bearbeiten",
-        "/controller/app-panel/" + panel_id + "/bearbeiten",
-        instanz=panel_id,
-        zielgruppe="eltern",
-        verknuepft_mit_panel=panel_id,
-    )
 
 
 def _view(app, slug, pfad, typ="display", synonyme=None, varianten=None):
@@ -133,79 +93,6 @@ def test_snapshot_pending_durchgereicht():
 
 
 # ============================================================
-#  Hero-Sektion
-# ============================================================
-
-def test_hero_paar_aus_display_und_panel_und_editor():
-    eintraege = [
-        _display("wohnzimmer", panels=["mama"]),
-        _panel("mama", display_id="wohnzimmer"),
-        _editor("mama"),
-    ]
-    out = render.baue_layout({"eintraege": eintraege}, HEIM, TAIL)
-    assert len(out["hero_paare"]) == 1
-    paar = out["hero_paare"][0]
-    assert paar["display"]["instanz"] == "wohnzimmer"
-    assert paar["panel_anzahl"] == 1
-    assert len(paar["panels"]) == 1
-    panel_block = paar["panels"][0]
-    assert panel_block["panel"]["instanz"] == "mama"
-    assert panel_block["editor"] is not None
-    assert panel_block["editor"]["key"] == "mama-bearbeiten"
-
-
-def test_hero_paar_ohne_editor_geht_durch():
-    eintraege = [
-        _display("kueche", panels=["papa"]),
-        _panel("papa", display_id="kueche"),
-    ]
-    out = render.baue_layout({"eintraege": eintraege}, HEIM, TAIL)
-    paar = out["hero_paare"][0]
-    assert paar["panels"][0]["editor"] is None
-
-
-def test_hero_mehrere_panels_pro_display_in_reihenfolge():
-    eintraege = [
-        _display("wohnzimmer", panels=["mama", "papa"]),
-        _panel("mama", display_id="wohnzimmer"),
-        _panel("papa", display_id="wohnzimmer"),
-        _editor("mama"),
-        _editor("papa"),
-    ]
-    out = render.baue_layout({"eintraege": eintraege}, HEIM, TAIL)
-    paar = out["hero_paare"][0]
-    assert paar["panel_anzahl"] == 2
-    assert paar["panels"][0]["panel"]["instanz"] == "mama"
-    assert paar["panels"][1]["panel"]["instanz"] == "papa"
-
-
-def test_hero_displays_alphabetisch_sortiert():
-    eintraege = [
-        _display("wohnzimmer", panels=["mama"]), _panel("mama", "wohnzimmer"),
-        _display("kueche", panels=["papa"]), _panel("papa", "kueche"),
-    ]
-    out = render.baue_layout({"eintraege": eintraege}, HEIM, TAIL)
-    instanzen = [p["display"]["instanz"] for p in out["hero_paare"]]
-    assert instanzen == ["kueche", "wohnzimmer"]
-
-
-def test_hero_displays_ohne_panels_kommen_nicht_ins_hero():
-    eintraege = [_display("kueche")]  # KEIN verknuepft_mit_panels
-    out = render.baue_layout({"eintraege": eintraege}, HEIM, TAIL)
-    assert out["hero_paare"] == []
-
-
-def test_hero_panel_im_link_aber_fehlt_im_inventar_wird_uebersprungen():
-    """Defensiv: Display nennt Panel, aber Panel-Sorte fehlt → Skip mit Warning."""
-    eintraege = [_display("wohnzimmer", panels=["geist", "mama"]),
-                 _panel("mama", display_id="wohnzimmer")]
-    out = render.baue_layout({"eintraege": eintraege}, HEIM, TAIL)
-    paar = out["hero_paare"][0]
-    assert len(paar["panels"]) == 1
-    assert paar["panels"][0]["panel"]["instanz"] == "mama"
-
-
-# ============================================================
 #  Buddy-Gruppen-Sektion
 # ============================================================
 
@@ -233,26 +120,6 @@ def test_buddy_gruppe_anzahl_zaehlt_varianten_mit():
     assert gruppe["anzahl"] == 2  # Default + Variante
 
 
-def test_buddy_gruppe_eintraege_aus_hero_ausgeschlossen():
-    """Display+Panel+Editor stecken in Hero — dürfen NICHT zusätzlich in Buddy-Gruppe."""
-    eintraege = [
-        _display("wohnzimmer", panels=["mama"]),
-        _panel("mama", display_id="wohnzimmer"),
-        _editor("mama"),
-        _view("wetter", "heute", "/display/wetter/heute"),
-    ]
-    out = render.baue_layout({"eintraege": eintraege}, HEIM, TAIL)
-    # Nur wetter darf in Buddy-Gruppen sein
-    apps = [g["app"] for g in out["buddy_gruppen"]]
-    assert apps == ["wetter"]
-
-
-def test_buddy_eintraege_ohne_app_landen_in_instanz_gruppe():
-    """Sorten d/e ohne app-Feld + ohne Hero-Bindung → Sammelplatz 'instanz'."""
-    eintraege = [_panel("waise")]  # kein display_id, kein verknuepft_mit_display, kein app
-    out = render.baue_layout({"eintraege": eintraege}, HEIM, TAIL)
-    apps = [g["app"] for g in out["buddy_gruppen"]]
-    assert "instanz" in apps
 
 
 def test_varianten_als_eigene_karten_in_gruppe():
@@ -321,50 +188,36 @@ def test_icon_aus_eintrag_icons_wird_uebernommen():
     assert karte["icon"] == "/display/_shared/icons/wetter-heute.png"
 
 
-def test_icon_fallback_panel_typ():
-    out = render.baue_layout({"eintraege": [_panel("waise")]}, HEIM, TAIL)
-    karte = out["buddy_gruppen"][0]["karten"][0]
-    assert karte["icon"] == "/api/v1/seiten/static/icons/panel.png"
-
-
-def test_icon_fallback_display_client_typ():
-    out = render.baue_layout({"eintraege": [_display("solo")]}, HEIM, TAIL)
-    # solo ist ohne Panel → nicht im Hero, sondern Buddy-Gruppe "instanz"
-    karte = out["buddy_gruppen"][0]["karten"][0]
-    assert karte["icon"] == "/api/v1/seiten/static/icons/display-client.png"
 
 
 def test_icon_fallback_eltern_typ():
-    e = _eintrag("eltern", "elt-x", "/eltern/x", label="Eltern-X")
+    e = _eintrag("eltern", "elt-x", "/eltern/x", label="Eltern-X", app="seiten")
     out = render.baue_layout({"eintraege": [e]}, HEIM, TAIL)
     karte = out["buddy_gruppen"][0]["karten"][0]
     assert karte["icon"] == "/api/v1/seiten/static/icons/eltern.png"
 
 
 def test_icon_fallback_controller_typ():
-    e = _eintrag("controller", "ctrl-x", "/controller/x", label="C-X")
+    e = _eintrag("controller", "ctrl-x", "/controller/x", label="C-X", app="figuren")
     out = render.baue_layout({"eintraege": [e]}, HEIM, TAIL)
     karte = out["buddy_gruppen"][0]["karten"][0]
     assert karte["icon"] == "/api/v1/seiten/static/icons/controller.png"
 
 
 # ============================================================
-#  Hero+Buddy gemeinsam
+#  Manifest-Sorten a/b/c gemeinsam (RAT-31 E3 #1496 Full-Stack)
 # ============================================================
 
-def test_hero_und_buddy_gemeinsam_full_stack():
+def test_manifest_sorten_full_stack():
+    """RAT-31 E3: Alle Manifest-Eintraege (Sorten a/b/c) landen in Buddy-Gruppen.
+    hero_paare ist immer leer."""
     eintraege = [
-        # Hero-Paar
-        _display("wohnzimmer", panels=["mama"]),
-        _panel("mama", display_id="wohnzimmer"),
-        _editor("mama"),
-        # Buddy-Gruppen
         _view("wetter", "heute", "/display/wetter/heute"),
         _view("wetter", "regeln", "/display/wetter/regeln"),
         _view("plan", "woche", "/display/plan/woche"),
     ]
     out = render.baue_layout({"eintraege": eintraege}, HEIM, TAIL)
-    assert len(out["hero_paare"]) == 1
+    assert out["hero_paare"] == []
     apps = [g["app"] for g in out["buddy_gruppen"]]
     # wetter(2) > plan(1)
     assert apps == ["wetter", "plan"]
