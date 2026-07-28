@@ -215,17 +215,56 @@ def _get_bot_token():
         return None
 
 
-def _secret_preflight():
-    """SVC-7 — Startup-Secret-Preflight: Pflicht-Secrets vor app.run prüfen (#1447).
+def _secret_preflight(cfg=None):
+    """SVC-7 — Startup-Secret-Preflight: Pflicht-Secrets vor app.run prüfen (#1447, #1493).
 
     Löst alle Pflicht-Secrets mit derselben Reihenfolge wie zur Laufzeit auf
     (runtime-Dict → ENV → Zugangsdaten-Store, via _get_bot_token).
     Nur Präsenz-Prüfung — kein Test-Call gegen den Anbieter (SVC-7).
     Fehlt ein Secret: Log-Zeile 'FEHLT: <slot/env-name>' + sys.exit(1).
+
+    #1493: zusätzlich die config-gated LLM-Slots auf PRÄSENZ prüfen — jeweils NUR,
+    wenn der zugehörige Pfad beim Boot auch wirklich einen `tools.llm`-Slot eager
+    zieht. So bricht ein fehlender LLM-Slot hier sichtbar (FEHLT: <slot> + exit)
+    statt als roher `LLMCapabilityError` im `_build_*`-Pfad. `cfg` ist der
+    RuntimeConfig-Snapshot (main() reicht ihn durch); None überspringt die
+    LLM-Slot-Prüfung (Rückwärtskompat für Alt-Aufrufe/Tests, die nur das
+    Bot-Token prüfen).
     """
     token = _get_bot_token()
     if not token:
         logger.critical("FEHLT: eltern-chat-bot-token (ELTERNCHAT_BOT_TOKEN)")
+        sys.exit(1)
+
+    if cfg is None:
+        return
+
+    from tools.llm import slot_present
+
+    # LLM-Chat-Slot: NUR im claude-Pfad MIT anthropic_key (exakt der `_build_llm`-
+    # Gate, main:709-713) — sonst baut kibuddy die get_chat-Fassade beim Boot gar
+    # nicht, und der Slot ist nicht boot-kritisch.
+    if cfg.llm_provider == "claude" and cfg.anthropic_key \
+            and not slot_present("kibuddy-litellm-api-key"):
+        logger.critical(
+            "FEHLT: kibuddy-litellm-api-key — LLM-Chat-Slot fehlt im "
+            "Zugangsdaten-Speicher (llm_provider=claude) (SVC-7/#1493)")
+        sys.exit(1)
+
+    # STT-Slot: NUR wenn stt_provider=='litellm' (LitellmSTTEngine zieht ihn,
+    # main:717-725).
+    if cfg.stt_provider == "litellm" and not slot_present(cfg.litellm_stt_slot):
+        logger.critical(
+            "FEHLT: %s — STT-Slot fehlt im Zugangsdaten-Speicher "
+            "(stt_provider=litellm) (SVC-7/#1493)", cfg.litellm_stt_slot)
+        sys.exit(1)
+
+    # TTS-Slot: NUR wenn tts_provider=='litellm' (LitellmTTSEngine zieht ihn,
+    # main:748-756).
+    if cfg.tts_provider == "litellm" and not slot_present(cfg.litellm_tts_slot):
+        logger.critical(
+            "FEHLT: %s — TTS-Slot fehlt im Zugangsdaten-Speicher "
+            "(tts_provider=litellm) (SVC-7/#1493)", cfg.litellm_tts_slot)
         sys.exit(1)
 
 
@@ -790,6 +829,13 @@ def main(argv=None):
     # KIBUDDY-20: Audio-Cache beim Service-Start leeren.
     tts_service.clear_audio_cache_dir(data_root)
 
+    # SVC-7: Startup-Secret-Preflight — fehlende Pflicht-Secrets/LLM-Slots brechen
+    # sichtbar (#1447, #1493). MUSS VOR `configure(...)` laufen: `_build_stt`/
+    # `_build_tts` bauen die Litellm-Engines eager (get_transcription/get_speech),
+    # die bei fehlendem Slot sonst hier schon `LLMCapabilityError` würfen — der
+    # Preflight fängt das vorher mit einer klaren FEHLT-Zeile ab.
+    _secret_preflight(runtime_cfg)
+
     configure(
         runtime_config=runtime_cfg,
         data_root=data_root,
@@ -797,9 +843,6 @@ def main(argv=None):
         stt_engine=_build_stt(runtime_cfg),
         tts_engine=_build_tts(runtime_cfg),
     )
-
-    # SVC-7: Startup-Secret-Preflight — fehlende Pflicht-Secrets brechen sichtbar (#1447).
-    _secret_preflight()
 
     logger.info(
         "KIBuddy hört auf http://%s:%s (llm=%s model=%s stt=%s voice=%s speed=%.1f data=%s)",
