@@ -50,7 +50,9 @@ def _test_verzeichnisse() -> set[str]:
     """Findet alle Verzeichnisse mit mindestens einer `test_*.py`-Datei."""
     gefunden = set()
     for pfad in REPO_ROOT.rglob("test_*.py"):
-        if any(teil in _PRUNE for teil in pfad.relative_to(REPO_ROOT).parts):
+        rel_parts = pfad.relative_to(REPO_ROOT).parts
+        # Überspringe, wenn ein Teil in _PRUNE exakt ist oder mit .venv beginnt oder site-packages enthält.
+        if any(teil in _PRUNE or teil.startswith(".venv") or "site-packages" in teil for teil in rel_parts):
             continue
         rel = pfad.parent.relative_to(REPO_ROOT).as_posix()
         gefunden.add(rel)
