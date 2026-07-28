@@ -111,10 +111,6 @@ DEFAULTS = {
     # kein tippbarer Übersichts-Link geliefert werden. Leer (Default) →
     # resolve() fällt auf display_url_origin zurück (Migration).
     "display_url_origin_heim": "",
-    # SREG-7 / #476: Tailscale-Origin (zusätzlich auf SREG-12-Seite kopierbar).
-    # V1-Soll: fehlt sie, zeigt SREG-12 nur die Heim-Spalte. Kein Auto-
-    # Fallback auf Heim (falsche Origin = nicht-erreichbarer Link, SREG-7).
-    "display_url_origin_tailscale": "",
     # EC-15 / #503: Origin des Essens-Buddys, über die die
     # WuenscheZeigenTask die Wunschliste liest (`GET /api/v1/essen/wuensche`
     # ESSEN-15) und die GerichtAnlegenTask Gerichte anlegt
@@ -198,7 +194,6 @@ class Config:
                  panel_origin_url, plan_origin_url, display_url_origin,
                  routine_origin_url, icon_origin_url, photo_origin_url,
                  seiten_origin_url, display_url_origin_heim,
-                 display_url_origin_tailscale,
                  essen_origin_url,
                  log_level,
                  multimodal_model="",
@@ -226,8 +221,7 @@ class Config:
         self.icon_origin_url = icon_origin_url         # EC-15 / #443: Origin des Icon-Routers (ICONS-7)
         self.photo_origin_url = photo_origin_url       # FSE-7 / #393: Origin des Photo-Buddys (PHOTO-13/PHOTO-16)
         self.seiten_origin_url = seiten_origin_url     # SREG-6 / #453: Origin der Seiten-Registry (SREG-3)
-        self.display_url_origin_heim = display_url_origin_heim         # SREG-7 / #476: Heimnetz-Origin
-        self.display_url_origin_tailscale = display_url_origin_tailscale  # SREG-7 / #476: Tailscale-Origin
+        self.display_url_origin_heim = display_url_origin_heim         # SREG-7 / #476: Heimnetz-Origin (Funnel-only nach #1458)
         self.essen_origin_url = essen_origin_url       # EC-15 / #503: Origin des Essens-Buddys (ESSEN-15/ESSEN-19)
         self.log_level = log_level                 # LOG-4 (#166): Level-String für tools.logsetup
         # E-TAB-6 V2 / #508: Multimodal-Modell-Override (#1262, PR2 #1334).
@@ -368,16 +362,14 @@ def resolve(config_path, zd=None):
         icon_origin_url=str(values["icon_origin_url"]).strip().rstrip("/"),
         photo_origin_url=str(values["photo_origin_url"]).strip().rstrip("/"),
         seiten_origin_url=str(values["seiten_origin_url"]).strip().rstrip("/"),
-        # SREG-7 Migration: display_url_origin_heim hat Vorrang; fällt auf
-        # display_url_origin zurück, wenn display_url_origin_heim leer ist
-        # (Doppel-Akzeptanz während Migration). display_url_origin_tailscale
-        # hat keinen Fallback (falsche Origin = nicht-erreichbarer Link, SREG-7).
+        # SREG-7 Migration (abgeschlossen #1458): display_url_origin_heim hat
+        # Vorrang; fällt auf display_url_origin zurück (Doppel-Akzeptanz).
+        # display_url_origin_tailscale entfernt — Funnel-only (Nic-Setzung
+        # 2026-07-25, #1458). Tailnet-IP-Self-Signed-Origin aufgegeben.
         display_url_origin_heim=(
             str(values["display_url_origin_heim"]).strip().rstrip("/")
             or str(values["display_url_origin"]).strip().rstrip("/")
         ),
-        display_url_origin_tailscale=str(
-            values["display_url_origin_tailscale"]).strip().rstrip("/"),
         essen_origin_url=str(values["essen_origin_url"]).strip().rstrip("/"),
         log_level=str(values["log_level"]).strip(),
         # E-TAB-6 V2 / #508: Multimodal-Modell-Override (#1262, PR2 #1334).

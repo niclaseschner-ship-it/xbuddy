@@ -340,7 +340,8 @@ def baue_layout(inventar, heim_origin, tailscale_origin, funnel_origin=""):
     Args:
         inventar: das Aggregator-Ergebnis ({"eintraege": […], "snapshot_pending": […]}).
         heim_origin: `display_url_origin_heim` (Pflicht, SREG-7).
-        tailscale_origin: `display_url_origin_tailscale` (V1-Soll, SREG-7) — leer
+        tailscale_origin: Tailnet-IP-Origin (self-signed, SREG-7 V1-Soll,
+            DEPRECATED nach #1458 — Funnel ist der externe Origin). Leer
             string oder None loest den Tailscale-Banner aus.
         funnel_origin: `display_url_origin_funnel` (SREG-7, RAT-27) — leer string
             oder None unterdrueckt die Funnel-Spalte in der Uebersicht (kein Auto-
