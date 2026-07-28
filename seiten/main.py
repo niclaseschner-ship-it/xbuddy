@@ -1686,13 +1686,11 @@ def shell_ingest(panel_id):
 def heim_shell(panel_id):
     """SHELL-1: Heim-Shell Split-Layout — GET /shell/<panel_id> liefert HTML.
 
-    Ermittelt display_id per Router-Lookup (SHELL-2, ROU-32). Zeigt sichtbaren
-    Fehler ohne rechtes Pane, wenn Lookup kein display_id liefert (SHELL-1).
-    LAN-only (SHELL-6). Kein Shell-Zustand, keine EventSource (SHELL-4).
+    LAN-only (SHELL-6). Live-Refresh same-origin ueber seiten/-SSE-Stream
+    (SHELL-4, RAT-31 E2); kein Router-Fanout, kein display_id-Lookup mehr.
     IDs aus Daten, kein Hardcode (SHELL-9). Cache-Control no-store (Mini-App-
     Cache-Buster-Pattern).
     """
-    display_id = _lookup_display_id(panel_id)
     static_dir = os.path.join(os.path.dirname(__file__), "static")
     build_id = pwa_mantel.build_id_for("shell", static_dir)  # PWAM-5-Registry (T1284-AC1)
     # T1324: sw_scope aus REGISTRY — Template nutzt {{ sw_scope }} statt hartkodiertem Literal.
@@ -1700,7 +1698,6 @@ def heim_shell(panel_id):
     resp = make_response(render_template(
         "heim-shell.html",
         panel_id=panel_id,
-        display_id=display_id,
         build_id=build_id,
         sw_scope=sw_scope,
     ))
