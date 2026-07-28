@@ -95,51 +95,30 @@ def test_ONB_5_persists_across_instances(tmp_path):
         zd=Zugangsdaten(zd_path)).load()["provider_api_key"] == "sk-x"
 
 
-# -- T663 Welle A: load(provider_name=...) read-both ---------------------
+# -- #1537: load() liest nur noch den Single-Slot -----------------------
+# Der vendor-spezifische Slot-Read + die Lazy-Migration (T663 Welle A) sind mit
+# #1537 entfernt: nach #1510 setzt kein produktiver Aufrufer mehr provider_name,
+# und der Laufzeit-Key kommt über den litellm-Slot (nicht die alten vendor-Slots).
 
-def test_load_reads_vendor_slot_first(tmp_path):
-    """T663 Welle A: load(provider_name='claude') liest vendor-Slot zuerst
-    (`eltern-chat-claude-api-key`), nicht den Single-Slot."""
+def test_load_reads_only_single_slot_ignoring_vendor_slot(tmp_path):
+    """#1537: load() liest ausschließlich den Single-Slot — ein gesetzter
+    vendor-Slot (`eltern-chat-anthropic-api-key`) wird NICHT mehr gelesen."""
     zd = _zd(tmp_path)
-    zd.set(zd_name_provider_api_key("claude"), "sk-ant-vendor-key")
-    zd.set(ZD_NAME_PROVIDER_API_KEY, "sk-ant-single-slot-key")   # darf NICHT gewinnen
-    loaded = OnboardingStore(zd=zd).load(provider_name="claude")
-    assert loaded["provider_api_key"] == "sk-ant-vendor-key", (
-        "Welle A: vendor-Slot muss vor Single-Slot kommen")
-
-
-def test_load_falls_back_to_single_slot(tmp_path):
-    """T663 Welle A: vendor-Slot leer/fehlend → Fallback auf Single-Slot
-    (Welle B entfernt diesen Pfad später)."""
-    zd = _zd(tmp_path)
-    # Nur Single-Slot gesetzt — kein vendor-Slot.
-    zd.set(ZD_NAME_PROVIDER_API_KEY, "sk-mistral-single-only")
-    loaded = OnboardingStore(zd=zd).load(provider_name="mistral")
-    assert loaded["provider_api_key"] == "sk-mistral-single-only", (
-        "Welle A: Fallback auf Single-Slot wenn vendor-Slot leer")
-
-
-def test_load_falls_back_when_vendor_slot_empty_string(tmp_path):
-    """R8 truthy-Check: leerer String im vendor-Slot zählt als nicht gesetzt
-    und triggert Fallback auf Single-Slot."""
-    zd = _zd(tmp_path)
-    zd.set(zd_name_provider_api_key("claude"), "")   # leer → truthy-False
-    zd.set(ZD_NAME_PROVIDER_API_KEY, "sk-single-wins")
-    loaded = OnboardingStore(zd=zd).load(provider_name="claude")
-    assert loaded["provider_api_key"] == "sk-single-wins", (
-        "R8: leerer vendor-Slot muss Fallback auslösen, nicht als Wert gelten")
-
-
-def test_load_default_no_provider_name_unchanged(tmp_path):
-    """Default-Verhalten: load() ohne provider_name liest weiterhin nur den
-    Single-Slot (kein Bruch für config.py-Bootstrap)."""
-    zd = _zd(tmp_path)
-    zd.set(zd_name_provider_api_key("claude"), "sk-ant-vendor-key")   # da, aber ignoriert
+    zd.set(zd_name_provider_api_key("claude"), "sk-ant-vendor-key")   # ignoriert
     # Kein Single-Slot gesetzt → kein provider-Key im Ergebnis.
     loaded = OnboardingStore(zd=zd).load()
     assert "provider_api_key" not in loaded, (
-        "Default-Verhalten: ohne provider_name darf der vendor-Slot NICHT "
-        "gelesen werden — sonst Bruch für config.py-Bootstrap")
+        "#1537: vendor-Slot darf nicht mehr gelesen werden — nur Single-Slot")
+
+
+def test_load_does_not_write_vendor_slot(tmp_path):
+    """#1537: load() ist wieder rein lesend — die alte Lazy-Migration
+    (Single→vendor) ist weg, ein gefüllter Single-Slot löst KEINEN Schreib aus."""
+    zd = _zd(tmp_path)
+    zd.set(ZD_NAME_PROVIDER_API_KEY, "sk-single")
+    OnboardingStore(zd=zd).load()
+    assert zd.get(zd_name_provider_api_key("claude")) is None, (
+        "#1537: load() darf keinen vendor-Slot mehr schreiben (Lazy-Migration weg)")
 
 
 def test_zd_name_provider_api_key_helper():
@@ -186,75 +165,39 @@ def test_vendor_slug_for_adapter_rejects_empty():
         vendor_slug_for_adapter("")
 
 
-# -- T663 Welle A: Lazy-Migration Single→Vendor (Watchdog B3, ONB-13) ----
+# -- ECP-1 (#1537): Drift-Sperre Adapter-Map ↔ ZD-2-Tabelle -------------
 
-def test_lazy_migration_writes_vendor_slot(tmp_path):
-    """T663 Welle A / Watchdog B3 / ONB-13: Bootstrap-Migration. Liegt ein
-    vorbefüllter Single-Slot vor und der vendor-Slot ist leer, schreibt
-    `load(provider_name=...)` den Single-Slot-Wert einmalig in den vendor-Slot.
-    Single-Slot bleibt stehen (Welle B entfernt ihn)."""
-    zd = _zd(tmp_path)
-    zd.set(ZD_NAME_PROVIDER_API_KEY, "sk-ant-existing-single-slot")
-    # vendor-Slot anthropic noch nicht gesetzt.
-    vendor_slot = zd_name_provider_api_key("claude")
-    assert zd.get(vendor_slot) is None
+def test_ECP_1_adapter_map_is_single_source_of_truth():
+    """ECP-1-Drift-Sperre (#1537): jeder Eintrag der `_ADAPTER_BRAND_VENDOR`-Map
+    hat einen nicht-leeren String-Slug, und der daraus abgeleitete ZD-Slot-Name
+    (`eltern-chat-<brand_vendor>-api-key`) steht wörtlich in der ZD-2-Tabelle
+    (`specs/platform/zugangsdaten.md`). Sperrt Drift zwischen der Map und der
+    Spec-Tabelle — die Map ist die eine Wahrheitsquelle."""
+    import os
 
-    loaded = OnboardingStore(zd=zd).load(provider_name="claude")
+    from onboarding_store import _ADAPTER_BRAND_VENDOR
 
-    # Wert kommt korrekt aus dem Store zurück.
-    assert loaded["provider_api_key"] == "sk-ant-existing-single-slot"
-    # Vendor-Slot wurde lazy befüllt (Brand-Vendor anthropic — Watchdog B2).
-    assert zd.get(vendor_slot) == "sk-ant-existing-single-slot"
-    assert zd.get("eltern-chat-anthropic-api-key") == "sk-ant-existing-single-slot"
-    # Single-Slot bleibt unverändert (Welle B-Aufgabe).
-    assert zd.get(ZD_NAME_PROVIDER_API_KEY) == "sk-ant-existing-single-slot"
+    # ZD-2-Tabelle (Repo-Root/specs/platform/zugangsdaten.md) einlesen. Der Test
+    # liegt in eltern-chat/tests/ → drei Ebenen hoch zum Repo-Root.
+    repo_root = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", ".."))
+    zd_spec = os.path.join(repo_root, "specs", "platform", "zugangsdaten.md")
+    with open(zd_spec, encoding="utf-8") as fh:
+        zd_text = fh.read()
 
-
-def test_lazy_migration_idempotent(tmp_path):
-    """Lazy-Migration ist idempotent: bereits gefüllter vendor-Slot löst keinen
-    weiteren Schreibvorgang aus — beim zweiten Aufruf wird der vendor-Slot
-    direkt gelesen."""
-    zd = _zd(tmp_path)
-    zd.set(ZD_NAME_PROVIDER_API_KEY, "sk-single")
-    store = OnboardingStore(zd=zd)
-
-    # Erster Aufruf: lazy-Migration füllt vendor-Slot.
-    store.load(provider_name="claude")
-    assert zd.get("eltern-chat-anthropic-api-key") == "sk-single"
-
-    # Manuelles Überschreiben des vendor-Slots, um zu prüfen, dass der zweite
-    # Aufruf den vendor-Slot direkt liest und NICHT mit dem Single-Slot
-    # überschreibt.
-    zd.set("eltern-chat-anthropic-api-key", "sk-vendor-overwritten")
-    loaded = store.load(provider_name="claude")
-    assert loaded["provider_api_key"] == "sk-vendor-overwritten"
-
-
-def test_lazy_migration_skipped_when_single_slot_empty(tmp_path):
-    """Lazy-Migration läuft NICHT, wenn der Single-Slot leer ist — kein
-    Schreibvorgang, vendor-Slot bleibt leer."""
-    zd = _zd(tmp_path)
-    # Weder Single- noch vendor-Slot gesetzt.
-
-    loaded = OnboardingStore(zd=zd).load(provider_name="claude")
-
-    assert "provider_api_key" not in loaded
-    assert zd.get("eltern-chat-anthropic-api-key") is None
-    assert zd.get(ZD_NAME_PROVIDER_API_KEY) is None
-
-
-def test_lazy_migration_uses_brand_vendor_slot(tmp_path):
-    """T663 Welle A / Watchdog B2+B3: die lazy-Migration schreibt in den
-    Brand-Vendor-Slot (`eltern-chat-anthropic-api-key`), NICHT in den
-    Adapter-Slot (`eltern-chat-claude-api-key`)."""
-    zd = _zd(tmp_path)
-    zd.set(ZD_NAME_PROVIDER_API_KEY, "sk-from-single")
-
-    OnboardingStore(zd=zd).load(provider_name="claude")
-
-    assert zd.get("eltern-chat-anthropic-api-key") == "sk-from-single"
-    assert zd.get("eltern-chat-claude-api-key") is None, (
-        "Watchdog B2: Slot muss Brand-Vendor heißen, nicht Adapter-Name")
+    assert _ADAPTER_BRAND_VENDOR, "Adapter-Map darf nicht leer sein"
+    for adapter_name, vendor in _ADAPTER_BRAND_VENDOR.items():
+        assert isinstance(vendor, str) and vendor, (
+            "ECP-1: Brand-Vendor-Slug für %r muss nicht-leerer String sein"
+            % adapter_name)
+        # Abgeleiteter Slug muss über den Helper konsistent sein.
+        assert vendor_slug_for_adapter(adapter_name) == vendor
+        slot = zd_name_provider_api_key(adapter_name)
+        assert slot == "eltern-chat-%s-api-key" % vendor
+        assert slot in zd_text, (
+            "ECP-1: ZD-Slot %r (aus Adapter %r) fehlt in der ZD-2-Tabelle "
+            "specs/platform/zugangsdaten.md — Map und Spec sind gedriftet"
+            % (slot, adapter_name))
 
 
 def test_zd_name_provider_name_constant_is_centralized():
