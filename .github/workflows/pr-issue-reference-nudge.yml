@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   nudge:
-    runs-on: [self-hosted, ARM64]
+    runs-on: [self-hosted]
     steps:
       - name: Hinweis posten, wenn keine Issue-Referenz im Body
         env:

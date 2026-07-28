@@ -29,7 +29,7 @@ permissions:
 
 jobs:
   closes-guard:
-    runs-on: [self-hosted, ARM64]
+    runs-on: [self-hosted]
     steps:
       - name: Ticket-Bezug validieren (offenes Issue / Spec / no-ticket)
         env:

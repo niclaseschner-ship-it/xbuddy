@@ -27,7 +27,7 @@ permissions:
 
 jobs:
   flow:
-    runs-on: [self-hosted, ARM64]
+    runs-on: [self-hosted]
     steps:
       - name: Determine target status and apply
         env:
