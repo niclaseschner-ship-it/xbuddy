@@ -98,14 +98,26 @@ re-prompted.
 
 *Tickets:* #33
 
-### ONB-4 — Validierung vor Speicherung
-Bevor ein eingegebener Key gespeichert wird, prüft das System ihn mit einem
-minimalen Aufruf gegen den gewählten Anbieter. Schlägt der Aufruf fehl —
-ungültiger Key oder Anbieter nicht erreichbar —, wird der Key nicht gespeichert,
-die Instanz bleibt im Onboarding-Modus, und das System antwortet mit einem
-klaren, hart-codierten Hinweis samt der Möglichkeit, es erneut zu versuchen.
+### ONB-4 — Validierung durch probeweises Speichern
+Das System validiert einen eingegebenen Key, indem es ihn **probeweise
+speichert** — in den litellm-Motor-Slot des gewählten Anbieters
+(`eltern-chat-litellm-<purpose>-api-key`) — und ihn dann **über den Motor**
+mit einem minimalen Aufruf prüft. Gültig: der Key bleibt im Slot stehen und ist
+damit gespeichert (der separate Speicherschritt ONB-5 verschmilzt mit der
+Validierung). Ungültig — falscher Key oder Anbieter nicht erreichbar —: der
+probeweise geschriebene Slot wird **wieder gelöscht**, die Instanz bleibt im
+Onboarding-Modus, und das System antwortet mit einem klaren, hart-codierten
+Hinweis samt der Möglichkeit, es erneut zu versuchen.
 
-*Tickets:* #33
+Der Grund für »probeweise speichern → über den Motor validieren → bei Fehler
+löschen« (statt »erst testen, dann speichern«): der Motor liest den Key
+ausschließlich aus dem Slot (ein Motor-Weg, RAT-20); ein Ad-hoc-Key ohne Slot
+ließe sich nicht über den Motor pingen. Das Crash-Fenster zwischen Schreiben
+und Löschen-bei-ungültig ist durch den Boot-Check gegen present-but-invalid
+(SVC-7, leerer Slot zählt als nicht präsent) und das Überschreiben beim
+nächsten Onboarding abgedeckt (lokaler Ein-Nutzer-Pi, 0600).
+
+*Tickets:* #33, #1510
 
 ### ONB-5 — Persistente Speicherung außerhalb des Repos
 Ein validierter Key und die gebundene Familien-Gruppe (ONB-6) werden persistent
@@ -153,11 +165,12 @@ Statt einer hart-codierten Anbieter-Festlegung listet die Einstiegs-Nachricht
 Privatchat-Dialog (ONB-3) fragt der Bot **zuerst** nach dem gewünschten
 Anbieter, dann nach dem Key.
 
-Die Anbieter-Liste lebt als zentrale Konstante im Code (Schwester der
-Provider-Factory in `eltern-chat/providers/`); je Anbieter trägt sie: Name,
-Anzeige-Beschreibung, Account-/Console-URL, Key-Format-Hinweis (z. B. „beginnt
-mit `sk-ant-`"), und den zugehörigen Validierungs-Adapter (ONB-4). Eine
-zusätzliche Anbieter-Aufnahme ist heute Repo-Edit; eine Familien-seitige
+Die Anbieter-Liste lebt als zentrale Konstante im Code (`ANBIETER_LISTE` im
+Wechsel-Skill); je Anbieter trägt sie: Name, Anzeige-Beschreibung. Der
+Validierungs-Ping (ONB-4) läuft seit #1510 nicht mehr über einen Hand-Vendor-
+Adapter, sondern über den geteilten Motor (`tools.llm`, litellm-Slot des
+Anbieters). Eine zusätzliche Anbieter-Aufnahme ist heute Repo-Edit; eine
+Familien-seitige
 Aufnahme/Entfernung ist Out-of-Scope.
 
 Die Privatchat-Konversation folgt weiterhin dem Session-Muster aus
@@ -183,9 +196,9 @@ Familien-Mitglied (EC-2).
 Der Skill führt im **Privatchat** (E-ONB-2 / ONB-3) durch — zwei Pfade
 je nach Slot-Befund (`zugangsdaten.md` ZD-2 Multi-Slot-Schema):
 
-**Pfad A — Bekannter Anbieter (kein Re-Key).** Existiert für den
-gewählten Anbieter bereits ein vendor-spezifischer Slot (z. B.
-`eltern-chat-anthropic-api-key`), wird der aktive Vendor in der
+**Pfad A — Bekannter Anbieter (kein Re-Key).** Liegt für den
+gewählten Anbieter bereits ein Key im litellm-Slot (z. B.
+`eltern-chat-litellm-claude-api-key`, #1510), wird der aktive Vendor in der
 Konfiguration umgeschaltet, **ohne** den Key erneut zu erfragen. Der
 Wechsel ist deterministisch und sofort: keine Eingabe, kein
 Validierungs-Ping (der Key hat schon einmal funktioniert; ein erneutes
@@ -194,20 +207,23 @@ Ping wäre Reibung ohne Nutzen). Quittung in der Familien-Gruppe:
 wählt, bekommt die harte Same-Provider-Quittung („Du nutzt diesen
 Anbieter bereits — nichts geändert.").
 
-**Pfad B — Neuer Anbieter (Re-Key-Sequenz).** Existiert für den
-gewählten Anbieter noch kein Slot, läuft die heutige Initial-Sequenz:
+**Pfad B — Neuer Anbieter (Re-Key-Sequenz).** Ist der litellm-Slot des
+gewählten Anbieters noch leer, läuft die Initial-Sequenz:
 
 1. Wahl des neuen Anbieters aus der zentralen Liste (ONB-10).
 2. Eingabe des neuen Keys (analog ONB-3 — Privatchat, Schutz vor
    Gruppen-Sichtbarkeit).
-3. Validierungs-Ping gegen den neuen Anbieter (ONB-4) mit dessen Adapter.
-4. Atomares Schreiben des neuen Slots im Zugangsdaten-Speicher (ONB-12).
-5. Aktiv-Vendor-Umschaltung in der Konfiguration.
-6. Bestätigung in der Familien-Gruppe analog ONB-7 — der Key wird nicht
+3. Validierung nach ONB-4: der Key wird **probeweise** in den litellm-Slot des
+   neuen Anbieters geschrieben und **über den Motor** validiert; bei Fehler wird
+   der Slot wieder gelöscht.
+4. Der validierte Key liegt damit bereits im Slot (der Schreibschritt
+   verschmilzt mit der Validierung, ONB-12) — es folgt nur noch die
+   Aktiv-Vendor-Umschaltung in der Konfiguration (`provider-name`-Slot).
+5. Bestätigung in der Familien-Gruppe analog ONB-7 — der Key wird nicht
    zurückgespiegelt (ONB-8).
 
-**Pfad-Wahl deterministisch ohne LLM.** Der Skill prüft den Slot-Befund
-über die ZD-Library (`tools.zugangsdaten.has(slot_name)`); das LLM
+**Pfad-Wahl deterministisch ohne LLM.** Der Skill prüft den litellm-Slot-Befund
+des gewählten Anbieters (truthy-Check über die ZD-Library); das LLM
 entscheidet nicht zwischen Pfad A und Pfad B.
 
 Der Skill nutzt das Schreib-Aufgaben-Pattern aus EC-10 (propose→confirm) nicht

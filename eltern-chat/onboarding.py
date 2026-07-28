@@ -5,8 +5,10 @@ KI-Zugang« zu »KI aktiv«. Zu diesem Zeitpunkt steht noch kein Sprachmodell zu
 Verfügung — daher kein LLM, nur feste Nachrichten und feste Abläufe (E-ONB-1).
 
 Ablauf: Bot wird einer Gruppe hinzugefügt (ONB-2) → Einstiegs-Nachricht →
-Key-Eingabe im Privatchat (ONB-3) → Validierung (ONB-4) → Speicherung (ONB-5) →
-Bindung der Familien-Gruppe (ONB-6) → Moduswechsel in den KI-Modus (ONB-7).
+Key-Eingabe im Privatchat (ONB-3) → Validierung durch probeweises Speichern im
+litellm-Slot + Motor-Ping (ONB-4, #1510: der Speicherschritt ONB-5 verschmilzt
+mit der Validierung) → Bindung der Familien-Gruppe (ONB-6) → Moduswechsel in den
+KI-Modus (ONB-7).
 """
 
 import logging
@@ -14,7 +16,7 @@ from dataclasses import dataclass
 
 import authz
 from model import GenerationRequest, Message, ProviderError, TextBlock
-from providers import get_provider
+from providers import get_lib_agent_provider
 from telegram import TelegramError
 
 # ============================================================
@@ -148,15 +150,16 @@ def handle_update(update, ctx):
         _send(ctx, msg.chat_id, ASK_FOR_KEY)
         return
 
-    # ONB-4: Validierung per minimalem Anbieter-Aufruf.
+    # ONB-4: Validierung — probeweise in den litellm-Slot schreiben, über den
+    # Motor pingen, bei Fehler wieder abräumen (#1510, RATIFIZIERT 20260728).
     logging.info("Onboarding: Key im Privatchat empfangen — Validierung läuft (ONB-4)")
-    provider = _validate_key(st.provider_name, st.provider_model, key)
+    provider = _validate_key(ctx.store, st.provider_name, st.provider_model, key)
     if provider is None:
         logging.info("Onboarding: Key-Validierung fehlgeschlagen — bleibe im Onboarding-Modus")
         _send(ctx, msg.chat_id, KEY_INVALID)
         return
 
-    _complete(ctx, key, provider)
+    _complete(ctx, provider)
     _send(ctx, msg.chat_id, KEY_OK_PRIVATE)
 
 
@@ -168,32 +171,46 @@ def _looks_like_key(text):
             and not any(ch.isspace() for ch in text))
 
 
-def _validate_key(provider_name, provider_model, key):
-    """ONB-4: prüft den Key mit einem minimalen Aufruf gegen den Anbieter.
+def _validate_key(store, provider_name, provider_model, key):
+    """ONB-4: prüft den Key mit einem minimalen Aufruf gegen den Motor (#1510).
 
-    Liefert das einsatzbereite Provider-Objekt bei Erfolg, sonst None. Der Key
-    wird nie geloggt (ONB-8).
+    Der Key wird PROBEWEISE in den litellm-Slot des Anbieters geschrieben
+    (`store.litellm_probe_write`), dann feuert der reguläre Motor-Adapter
+    (`get_lib_agent_provider`, der den Key selbst aus dem Slot holt, ZD-5) einen
+    Minimal-Ping. Gültig → der Slot bleibt gefüllt (er IST damit der
+    persistierte Key, der separate ONB-5/ONB-12-Schreibschritt verschmilzt) und
+    das Adapter-Objekt kommt zurück. Ungültig → der Slot wird wieder abgeräumt
+    (`litellm_probe_delete`), Rückgabe None. Der Key wird nie geloggt (ONB-8).
     """
     try:
-        provider = get_provider(provider_name, key, provider_model)
+        store.litellm_probe_write(provider_name, key)
+    except Exception as e:  # z. B. unbekannter Anbieter-Name (KeyError)
+        logging.warning("Key-Validierung: Probe-Schreiben fehlgeschlagen: %s", e)
+        return None
+    try:
+        provider = get_lib_agent_provider(provider_name, provider_model)
         provider.generate(GenerationRequest(
             system=_VALIDATION_SYSTEM,
             messages=[Message("user", [TextBlock(_VALIDATION_PING)])],
             task_defs=[]))
         return provider
     except ProviderError:
+        store.litellm_probe_delete(provider_name)
         return None
-    except Exception as e:  # z. B. unbekannter Anbieter-Name
+    except Exception as e:  # z. B. LLMCapabilityError, unbekannter Anbieter
         logging.warning("Key-Validierung fehlgeschlagen: %s", e)
+        store.litellm_probe_delete(provider_name)
         return None
 
 
-def _complete(ctx, key, provider):
-    """ONB-5/6/7: Key speichern, Familien-Gruppe binden, Modus wechseln."""
-    st = ctx.onboarding
+def _complete(ctx, provider):
+    """ONB-6/7: Familien-Gruppe binden, Modus wechseln (#1510).
 
-    # ONB-5: Key persistent außerhalb des Repos speichern.
-    ctx.store.save(provider_api_key=key)
+    Der Key ist bereits persistent im litellm-Slot (die ONB-4-Validierung ließ
+    ihn dort stehen) — kein separater `store.save(provider_api_key=...)`-Schritt
+    mehr (ONB-5-Schreibschritt verschmilzt mit ONB-4).
+    """
+    st = ctx.onboarding
 
     # ONB-6: Onboarding-Gruppe als Familien-Gruppe binden — außer eine
     # Env-/Config-Bindung hat Vorrang.

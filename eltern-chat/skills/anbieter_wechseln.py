@@ -47,12 +47,13 @@ import authz
 from model import GenerationRequest, Message, ProviderError, TextBlock
 from onboarding_store import (
     ZD_NAME_PROVIDER_NAME,
-    zd_name_provider_api_key,
+    OnboardingStore,
 )
-from providers import get_provider
+from providers import get_lib_agent_provider
 from telegram import TelegramError
 
 from skills.typing_indicator import fire_typing
+from tools.llm import litellm_slot_for_provider
 from tools.zugangsdaten import StoreError
 
 # ============================================================
@@ -75,9 +76,9 @@ from tools.zugangsdaten import StoreError
 #  Verfügbare Anbieter (ONB-10 / ONB-11)
 # ============================================================
 
-# Zentrale Liste der verfügbaren Anbieter — analog der Provider-Factory in
-# `providers/__init__.py`. Je Eintrag: interner Name (wie `get_provider` ihn
-# kennt) und Anzeige-Name für den Dialog.
+# Zentrale Liste der verfügbaren Anbieter (ONB-10). Je Eintrag: interner Name
+# (wie `litellm_slot_for_provider` ihn kennt: `claude`/`mistral`) und
+# Anzeige-Name für den Dialog.
 ANBIETER_LISTE = [
     {"name": "claude",  "anzeige": "Claude (Anthropic)"},
     {"name": "mistral", "anzeige": "Mistral"},
@@ -215,7 +216,12 @@ def anbieter_wechseln(tg, chat_id, user_id, family_group_chat_id,
     Liefert ein `AnbieterWechselnResult`.
     """
     if _validate is None:
-        _validate = _do_validate
+        # #1510: der echte Validierungs-Ping schreibt den Key probeweise in den
+        # litellm-Slot und pingt über den Motor — er braucht dafür den ZD-
+        # Speicher. Die Test-Naht bleibt `(name, key) -> bool` (die Tests
+        # injizieren `_validate_ok`/`_validate_fail`); der Default bindet `zd`.
+        def _validate(name, key):
+            return _do_validate(zd, name, key)
 
     # EC-2: Live-Berechtigung gegen die Familien-Gruppe.
     if not authz.is_authorized(tg, family_group_chat_id, user_id):
@@ -249,14 +255,18 @@ def anbieter_wechseln(tg, chat_id, user_id, family_group_chat_id,
         return AnbieterWechselnResult(ergebnis=ERGEBNIS_UNVERAENDERT)
 
     anzeige = _anzeige(neuer_name)
-    vendor_slot = zd_name_provider_api_key(neuer_name)
+    # #1510: Pfad-Diskriminante + Persistenz laufen über den litellm-Motor-Slot
+    # (`eltern-chat-litellm-<purpose>-api-key`) — GENAU den Slot, den die
+    # Laufzeit liest. Die ALTEN vendor-Slots (`eltern-chat-<vendor>-api-key`)
+    # sind für Wechsel/Validierung nicht mehr im Spiel.
+    litellm_slot = litellm_slot_for_provider("eltern-chat", neuer_name)
 
-    # ONB-11 V2 Pfad-A-Wahl (T663 Welle A): liegt für den gewählten Vendor
-    # bereits ein truthy Key im vendor-Slot, springen wir die Re-Key-Schleife.
-    # Nur der provider_name wird umgeschaltet — der alte vendor-Slot bleibt
-    # unverändert (Lookup-Modell). Truthy-Check (R8): leere Strings zählen
-    # als nicht gesetzt und triggern Pfad B.
-    if zd.get(vendor_slot):
+    # ONB-11 V2 Pfad-A-Wahl: liegt für den gewählten Anbieter bereits ein truthy
+    # Key im litellm-Slot, springen wir die Re-Key-Schleife. Nur der
+    # provider_name wird umgeschaltet — der Key-Slot bleibt unverändert
+    # (Lookup-Modell). Truthy-Check (R8): leere Strings zählen als nicht gesetzt
+    # und triggern Pfad B.
+    if zd.get(litellm_slot):
         # Pfad A: kein Validierungs-Ping (SD5), kein Re-Key.
         try:
             zd.set_multi({ZD_NAME_PROVIDER_NAME: neuer_name})
@@ -291,8 +301,10 @@ def anbieter_wechseln(tg, chat_id, user_id, family_group_chat_id,
             _send(tg, chat_id, KEY_INVALID % anzeige)
             continue
 
-        # ONB-11 Schritt 3: Validierungs-Ping gegen den NEUEN Anbieter (AC5).
-        # Nur bei Erfolg → Schritt 4 (atomares Ersetzen).
+        # ONB-11 Schritt 3: Validierungs-Ping gegen den NEUEN Anbieter (#1510).
+        # Der Ping schreibt den Key PROBEWEISE in den litellm-Slot und lässt ihn
+        # bei Erfolg stehen (der Schreibschritt verschmilzt, ONB-12). Schlägt er
+        # fehl, hat `_do_validate` den Slot bereits wieder abgeräumt.
         if not _validate(neuer_name, key):
             # ZD-6: Key nie im Log.
             logging.info("anbieter_wechseln: Validierungs-Ping fuer %s fehlgeschlagen "
@@ -301,16 +313,13 @@ def anbieter_wechseln(tg, chat_id, user_id, family_group_chat_id,
             _send(tg, chat_id, KEY_INVALID % anzeige)
             continue
 
-        # ONB-11 Schritt 4: atomares Schreiben in den ZD-Speicher (ONB-12 V2).
-        # `set_multi` schreibt beide Werte in EINEM `_write`-Vorgang
-        # (DCOMP-4): vendor-Slot (eltern-chat-<vendor>-api-key) und
-        # provider-name. Scheitert der Schreibvorgang, bleibt die alte Datei
-        # byte-gleich — Race-Fenster aus #639/V1 ist geschlossen (T663 Welle A).
+        # ONB-11 Schritt 4/5: der Key liegt bereits validiert im litellm-Slot
+        # (Probe-Schreib verschmolzen); nur noch den aktiven Anbieter-Namen
+        # umschalten. Scheitert das, bleibt der Key-Slot gefüllt, aber der
+        # provider-name unverändert — der Wechsel gilt erst nach erfolgreichem
+        # Namen-Schreiben (WRITE_FAILED).
         try:
-            zd.set_multi({
-                vendor_slot: key,
-                ZD_NAME_PROVIDER_NAME: neuer_name,
-            })
+            zd.set_multi({ZD_NAME_PROVIDER_NAME: neuer_name})
         except StoreError as e:
             logging.error("anbieter_wechseln: ZD-Schreibvorgang fehlgeschlagen (%s) "
                           "— alter Eintrag bleibt", e)
@@ -336,16 +345,24 @@ def anbieter_wechseln(tg, chat_id, user_id, family_group_chat_id,
 #  Validierungs-Ping (ONB-11 Schritt 3 / ONB-4-Analogie)
 # ============================================================
 
-def _do_validate(provider_name, api_key):
-    """Validierungs-Ping gegen den neuen Anbieter (ONB-11 Schritt 3).
+def _do_validate(zd, provider_name, api_key):
+    """Validierungs-Ping gegen den neuen Anbieter (ONB-11 Schritt 3, #1510).
 
-    Nutzt den Adapter des NEUEN Anbieters (`providers.get_provider`, AC5).
-    Gibt True zurück bei erfolgreichem Ping, False bei `ProviderError` oder
-    `ValueError` (unbekannter Anbieter). Key wird nie ins Log gespiegelt
-    (ZD-6 / ONB-8).
+    Schreibt `api_key` PROBEWEISE in den litellm-Slot des Anbieters, pingt über
+    den Motor-Adapter (`get_lib_agent_provider`, der den Key selbst aus dem Slot
+    holt, ZD-5) und lässt den Slot bei Erfolg GEFÜLLT — er ist damit der
+    persistierte Key (der ONB-12-Schreibschritt verschmilzt). Bei Fehler wird
+    der Slot wieder abgeräumt (`litellm_probe_delete`). Gibt True/False zurück;
+    der Key wird nie ins Log gespiegelt (ZD-6 / ONB-8).
     """
+    store = OnboardingStore(zd=zd)
     try:
-        provider = get_provider(provider_name, api_key)
+        store.litellm_probe_write(provider_name, api_key)
+    except Exception as e:  # z. B. unbekannter Anbieter-Name (KeyError)
+        logging.warning("anbieter_wechseln: Probe-Schreiben fehlgeschlagen (%s)", e)
+        return False
+    try:
+        provider = get_lib_agent_provider(provider_name)
         provider.generate(GenerationRequest(
             system=_VALIDATION_SYSTEM,
             messages=[Message(role="user",
@@ -354,12 +371,11 @@ def _do_validate(provider_name, api_key):
         return True
     except ProviderError as e:
         logging.info("anbieter_wechseln: Validierungs-Ping fehlgeschlagen (%s)", e)
-        return False
-    except ValueError as e:
-        logging.warning("anbieter_wechseln: unbekannter Anbieter (%s)", e)
+        store.litellm_probe_delete(provider_name)
         return False
     except Exception as e:
         logging.warning("anbieter_wechseln: Validierungs-Ping Ausnahme (%s)", e)
+        store.litellm_probe_delete(provider_name)
         return False
 
 
