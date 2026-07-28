@@ -79,8 +79,6 @@ def seiten_with_real_client(monkeypatch):
         "familie_client": seiten_main.runtime.get("familie_client"),
         "inventar_path": seiten_main.runtime.get("inventar_path"),
     }
-    monkeypatch.setattr(seiten_main, "hole_panels", list)
-    monkeypatch.setattr(seiten_main, "hole_geraete", list)
     seiten_main.configure(
         root=_REPO_ROOT,
         inventar_path=None,

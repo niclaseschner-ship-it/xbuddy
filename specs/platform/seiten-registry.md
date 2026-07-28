@@ -35,19 +35,20 @@ aus den schon existierenden Quellen **aggregiert**, nicht handgepflegt
 war schon falsch, bevor sie existierte: #347 nannte den überholten Pfad
 `/display/wetter/garderobe` statt `/display/wetter/regeln`).
 
-**V1-Scope:** das Inventar aller fünf Seiten-Sorten (SREG-1) · Aggregator-
-Service `xbuddy-seiten` mit gecachtem `inventar.json` (SREG-3) · eine
-**gerenderte Eltern-Übersichts-Seite** unter `/api/v1/seiten/uebersicht` mit
-**Geräte-Paaren als Hero-Sektion am Seitenkopf** (Display als Anker, daran
-Panel-Editor-Karten — Verknüpfung aus PREG, SREG-12) und je Eintrag **zwei
-kopierbare URLs** (Heimnetz + Tailscale) · ein **Trigger-Skill
-`seiten_uebersicht`** im Eltern-Chat, der nur diesen einen Link liefert
-(SREG-5 — Pivot). **Out-of-Scope V1:** das Schreiben/Ausblenden einzelner
-Seiten über die Registry (sie ist rein lesend); App-Discovery „was ist
-installierbar" (das ist #325, eigene Linie, SREG-8); KI-Matching gegen
-`label`/`synonyme` im Chat (durch SREG-12-Seite + Volltextsuche abgelöst);
-Co-Lokations-Verknüpfung („Panel und Display laufen auf demselben Hardware-
-Gerät", würde GER-Erweiterung verlangen — Folge-Aufgabe).
+**V1-Scope (RAT-31 E3 Stand, #1496):** das Inventar der Manifest-Sorten a/b/c/f/g
+(SREG-1) · Aggregator-Service `xbuddy-seiten` mit gecachtem `inventar.json`
+(SREG-3) · eine **gerenderte Eltern-Übersichts-Seite** unter
+`/api/v1/seiten/uebersicht` mit kopierbaren URLs je Eintrag (Heimnetz +
+Funnel) · ein **Trigger-Skill `seiten_uebersicht`** im Eltern-Chat, der nur
+diesen einen Link liefert (SREG-5 — Pivot). **Out-of-Scope V1:** das
+Schreiben/Ausblenden einzelner Seiten über die Registry (sie ist rein lesend);
+App-Discovery „was ist installierbar" (das ist #325, eigene Linie, SREG-8);
+KI-Matching gegen `label`/`synonyme` im Chat (durch SREG-12-Seite +
+Volltextsuche abgelöst). **RAT-31 E3 (#1496) entfernt:** Sorten d (Panel-Instanz)
+und e (Display-Client), `panel_eintraege()`, `display_client_eintraege()`, alle
+Verknüpfungs-Felder (`verknuepft_mit_display`/`verknuepft_mit_panels`/
+`verknuepft_mit_panel`), `snapshot_pending`-Mechanismus (bleibt als `[]` in
+der Antwort für Rückwärtskompatibilität).
 
 ---
 
@@ -62,15 +63,16 @@ Einstiegspunkt mit HTML-Antwort** — nicht „jede mögliche URL". Konkret:
   `query`, `label`), damit „die Wochenansicht" und „die Kleinkind-Wochenansicht"
   beide auflösbar sind, ohne dass freie Filter die Registry sprengen.
 
-**Sieben Sorten** aufrufbarer Seiten, ein gemeinsames Eintrags-Schema (SREG-4):
+**Fünf Sorten** aufrufbarer Seiten (RAT-31 E3: d/e entfernt), ein gemeinsames
+Eintrags-Schema (SREG-4):
 
 | Sorte | Beispiel | instanz-spezifisch | Wahrheitsquelle |
 |-------|----------|--------------------|-----------------|
 | (a) Display-View (Kind) | `/display/plan/woche` | nein | Buddy-Manifest (BUD-3) |
 | (b) Eltern-/Settings-View | `/display/wetter/regeln`, `/api/v1/seiten/uebersicht` | nein | Buddy- **oder Platform-Service-Manifest** (BUD-3 analog: `<komponente>/views.json`) |
 | (c) Controller-App | `/controller/figuren-erkennung/` | nein | Controller-Manifest (BUD-3) |
-| (d) Panel-Instanz | `/controller/app-panel/<panel_id>` | **ja** | `panels.json`-Snapshot (PREG) |
-| (e) Display-Client | `/display/<display_id>` | **ja** | Geräte-Registry-Snapshot (GER), gefiltert |
+| ~~(d) Panel-Instanz~~ | ~~`/controller/app-panel/<panel_id>`~~ | ~~**ja**~~ | ~~`panels.json`-Snapshot (PREG)~~ — **entfernt RAT-31 E3 (#1496)** |
+| ~~(e) Display-Client~~ | ~~`/display/<display_id>`~~ | ~~**ja**~~ | ~~Geräte-Registry-Snapshot (GER)~~ — **entfernt RAT-31 E3 (#1496)** |
 | (f) Homescreen-PWA | `/seiten/plan/einstellungen` | nein | Buddy- **oder Platform-Service-Manifest** (`views.json`, typ: "pwa"); Form SREG-15 |
 | (g) Mini-App (Telegram) | `/seiten/mini-app-uebersicht` | nein | Buddy- **oder Platform-Service-Manifest** (`views.json`, typ: "mini-app"); Form SREG-14 |
 
@@ -84,17 +86,6 @@ Sorte (b) deckt zwei Eigentümer-Klassen:
   `/api/v1/diag` als HTML im Router). Beispiel: SREG-12 unter
   `/api/v1/seiten/uebersicht`. Die View ist eine **alternative Darstellung der
   Registry-Daten** — sie wohnt darum am Service, der die Daten hält.
-
-Filter für (e): nur Geräte mit `verwendung ∈ {display, beides}` **und**
-`status = aktiv` (`geraete.md` GER-Modell) — ein reines Controller-Gerät ist
-keine Display-Seite, ein stillgelegtes Tablet kein nutzbarer Link.
-
-**Verknüpfung Panel ↔ Display** ist bereits in PREG hinterlegt: jeder
-Panel-Eintrag trägt pflichtmäßig `display_id` (PREG-Tabelle, E-PANEL-5: „genau
-eines"). Der Aggregator reicht diese Verknüpfung am SREG-4-Eintrag durch
-(Sorte d: `verknuepft_mit_display`; Sorte e: per Reverse-Lookup
-`verknuepft_mit_panels[]` — mehrere Panels können dasselbe Display steuern,
-PREG-Beispiel „Mama-iPhone" + „Papa-iPhone" auf Wohnzimmer-Display).
 
 ## SREG-2 — Wahrheit aus committeten Manifesten, nicht aus laufenden Prozessen
 Die Sorten (a)(b)(c) kommen aus dem **committeten `views.json`-Manifest** jeder
@@ -116,11 +107,10 @@ Schema. Die Selbst-Aufnahme („die Übersicht listet sich selbst") fällt damit
 aus der Manifest-Wahrheit, **kein** handgepflegter Sonderfall im
 Aggregator-Code.
 
-Die instanz-spezifischen Sorten (d)(e) kommen aus den **Snapshots** der schon
-bestehenden Registries (Panel-Registry PREG, Geräte-Registry GER), nicht aus
-einer dritten Wahrheit (CLAUDE.md §6). Die Panel↔Display-Verknüpfung
-(SREG-1) wird ebenfalls aus PREG geliefert (`panels.json` Pflichtfeld
-`display_id`), nicht aus einer dritten Quelle erfunden.
+**RAT-31 E3 (#1496):** Die instanz-spezifischen Sorten (d)(e) — Panel-Instanz
+(PREG-Snapshot) und Display-Client (GER-Snapshot) — sind entfernt. Der
+Aggregator kennt nur noch die drei Manifest-Sorten a/b/c (plus f/g) und liefert
+`snapshot_pending: []` für Rückwärtskompatibilität.
 
 ## SREG-3 — Aggregator-Service `xbuddy-seiten` mit gecachtem Inventar
 Die Registry läuft als **eigener schlanker Plattform-Service** `xbuddy-seiten`
@@ -145,13 +135,10 @@ Routing.
   Warnung **übersprungen** (DCOMP-3 — JSON-/Pflichtfeld-Fehler), das übrige
   Inventar bleibt vollständig; nie fällt das ganze Inventar wegen eines
   Manifests.
-- **Snapshot-Sorten (d/e) Fehlermodell (Last-Known-Good, ROU-27):** bei
-  Timeout/500/nicht-laufendem Upstream bleibt der **letzte erfolgreiche
-  Teil-Snapshot** erhalten, markiert `stale: true`. **Kaltstart ohne je
-  erfolgreichen Snapshot** (Panel-/Geräte-Service noch nie erreicht): die Sorte
-  fehlt mit explizitem `snapshot_pending: true` in der Antwort — die Antwort ist
-  trotzdem **gültig und nie leer** (die Manifest-Sorten tragen sie) und
-  blockiert nicht. Nie eine leere/falsch-gekürzte Liste.
+- **RAT-31 E3 (#1496) — kein Snapshot-Fehlermodell mehr:** Sorten (d/e) und
+  der zugehörige Last-Known-Good-Mechanismus (`stale: true`, `snapshot_pending`)
+  sind entfernt. Die Antwort enthält `snapshot_pending: []` für
+  Rückwärtskompatibilität (externe Konsumenten lesen das Feld, ignorieren es).
 
 ## SREG-4 — Eintrags-Schema (Manifest-Feld vs. abgeleitet)
 Jeder Eintrag in `inventar.json`. Klar getrennt, was die Quelle (BUD-3-Manifest
@@ -169,24 +156,18 @@ kann ein Externer aus einem Manifest deterministisch einen Eintrag erzeugen:
 | `varianten[]` | Manifest (opt.) | endliche bekannte Varianten (`slug`, `query` **als flaches Objekt**, `label`, eigenes `icons[]` falls abweichend; BUD-4) |
 | `zeigt` | Manifest | 1 Satz, was die Seite zeigt |
 | `zielgruppe` | Manifest | `kind` / `eltern` — **deskriptiv**, KEIN Berechtigungs-Gate (SREG-6) |
-| `verknuepft_mit_display` | **abgeleitet** (Sorte d) | `display_id` aus PREG `panels.json` (Pflichtfeld, E-PANEL-5). Trägt **nur** Sorte (d) — die Panel-Instanz, der eigentliche Steuerer. Leer/fehlend bei (a)(b)(c)(e). |
-| `verknuepft_mit_panels[]` | **abgeleitet** (Sorte e) | Liste der `panel_id`s, die dieses Display steuern (Reverse-Lookup über PREG-Snapshot). Trägt **nur** Sorte (e). Leer (`[]`), wenn kein Panel auf dieses Display zeigt. |
-| `verknuepft_mit_panel` | **abgeleitet** (Sorte b, Panel-Editor-Eintrag SREG-11) | `panel_id` aus dem Editor-Pfad-Segment `/controller/app-panel/<panel_id>/bearbeiten`. Trägt nur der Editor-Eintrag — verbindet den Editor mit seiner Panel-Instanz, sodass die SREG-12-Hero den Editor visuell an der Panel-Instanz andocken kann (Display ↔ Panel ↔ Editor-Kette). Leer bei allen anderen (b)-Einträgen. |
+| ~~`verknuepft_mit_display`~~ | ~~abgeleitet (Sorte d)~~ | **entfernt RAT-31 E3 (#1496)** — Sorte d existiert nicht mehr. |
+| ~~`verknuepft_mit_panels[]`~~ | ~~abgeleitet (Sorte e)~~ | **entfernt RAT-31 E3 (#1496)** — Sorte e existiert nicht mehr. |
+| ~~`verknuepft_mit_panel`~~ | ~~abgeleitet (Sorte b, SREG-11)~~ | **entfernt RAT-31 E3 (#1496)** — SREG-11 Panel-Editor-Einträge existieren nicht mehr. |
 
 Die manifest-gelieferten Felder sind genau die BUD-3-Felder (`conventions/buddies.md`).
-Die Snapshot-Sorten (d/e) tragen im **heutigen PREG/GER-Schema kein
-menschenlesbares Label** (`panels.json`: `panel_id`/`source_id`/`router_url`,
-PREG-3; Geräte-Modell: `id`/`typ`/`verwendung`/`status` — kein Anzeige-Name):
-ihr `pfad` kommt aus der Instanz-ID (`panel_id` → `/controller/app-panel/<id>`,
-`display_id` → `/display/<id>`), ihr `label` wird **aus der Instanz-ID
-abgeleitet** (z. B. „Panel <panel_id>"); `synonyme`/`varianten`/`zeigt`
-entfallen für (d/e). Ein reicheres Anzeige-Label für Panels/Displays bräuchte
-ein PREG/GER-Namensfeld → **Folge-Aufgabe, nicht V1**: in V1 greift die freie
-Text-Auflösung (SREG-5) voll für die Manifest-Sorten a–c; (d/e) sind auflistbar
-und per ID/abgeleitetem Label adressierbar. Die **volle URL wird nicht
-gespeichert** — sie entsteht erst beim Konsumenten aus `display_url_origin +
-pfad` (URL-12: eine Origin; der Pfad ist die Wahrheit, die Origin ist
-Per-Instanz-Deployment).
+Die **volle URL wird nicht gespeichert** — sie entsteht erst beim Konsumenten
+aus `display_url_origin + pfad` (URL-12: eine Origin; der Pfad ist die
+Wahrheit, die Origin ist Per-Instanz-Deployment).
+
+**RAT-31 E3 (#1496):** Sorten d/e existieren nicht mehr; die drei
+`verknuepft_mit_*`-Felder sind entfernt. Alle Einträge kommen aus Manifesten
+(Sorten a/b/c/f/g).
 
 ## SREG-5 — Skill `seiten_uebersicht` (Trigger, `web_app`-Launcher)
 
@@ -464,8 +445,10 @@ Der Aggregator übernimmt `icons[]` (BUD-4) und `varianten[].icons[]` **1:1** au
 dem Manifest in den `inventar.json`-Eintrag — wie er `varianten` durchreicht
 (SREG-2), **ohne** zu komponieren oder abzuleiten. Im SREG-4-Schema ist `icons`
 ein **manifest-geliefertes** Feld (Herkunft = Manifest, analog `label`), getragen
-**nur von Display-Views (Sorte a)** (BUD-4). Die Sorten b/c und die
-Snapshot-Sorten d/e tragen **kein** `icons` — das Feld **fehlt** (nicht `null`).
+**nur von Display-Views (Sorte a)** (BUD-4). Die Sorten b/c/f/g tragen
+**kein** `icons` — das Feld **fehlt** (nicht `null`).
+**RAT-31 E3 (#1496):** Sorten d/e entfernt; ihr Icon-Fehlen ist damit nicht
+mehr relevant.
 
 **Durchsetzung über den Schalter `icons_erforderlich`** (Aggregator-Config,
 Default `false`) — das ist der **maschinenlesbare Phasenwechsel** der gestaffelten
@@ -498,31 +481,13 @@ gestaffeltes Einführen für Varianten würde Vorrats-Mechanik bedeuten
 löst — alle bestehenden Varianten sind vollständig gebackfillt. **Verworfen:** Variante folgt demselben `icons_erforderlich`-
 Schalter (Weg B aus #440) — Vorrats-Mechanik ohne Trigger.
 
-## SREG-11 — Editor-Eintrag je Panel-Instanz (zusätzlich zur Panel-Seite)
-Für jede Panel-Instanz (Snapshot-Sorte d) erzeugt der Aggregator **einen
-zusätzlichen, abgeleiteten Eintrag** für deren Editor-Seite — **neben** dem
-bestehenden Panel-Seiten-Eintrag (Sorte d), der unverändert bleibt. Felder des
-Editor-Eintrags (alle deterministisch aus der `panel_id`, kein neues PREG-Feld):
+## SREG-11 — Editor-Eintrag je Panel-Instanz (**entfernt RAT-31 E3, #1496**)
 
-| SREG-4-Feld | Wert des Editor-Eintrags |
-|------|------|
-| `pfad` | `/controller/app-panel/<panel_id>/bearbeiten` (PBE-2) |
-| `key` | `<panel_id>-bearbeiten` — **distinkt** vom Panel-Seiten-`key` (`<panel_id>`), keine Kollision |
-| `typ` | `eltern` (eltern-seitige Settings-View) |
-| `label` | abgeleitet, z. B. „Panel `<panel_id>` bearbeiten" |
-| `icons`/`varianten`/`zeigt`/`synonyme` | entfallen (wie bei Sorte d, SREG-4) |
-
-*Wenn* die Registry N Panel-Instanzen kennt, *dann* enthält das Inventar **2N**
-Panel-bezogene Einträge: N Panel-Seiten (Sorte d) **und** N Editor-Einträge, je
-mit distinktem `key` und `pfad`. Beide tragen `verknuepft_mit_display`
-(SREG-4) — die SREG-12-Hero-Sektion gruppiert sie am gemeinsamen Display-Anker.
-
-Konsument: `specs/platform/panel-bearbeiten.md` PBE-2 (#330). Der frühere
-Konsumenten-Pfad „Eltern-Chat liefert je Panel direkt den Editor-Link" wird
-durch SREG-12 mit-bedient: der Editor-Eintrag liegt auf der Übersichtsseite
-direkt neben dem gepaarten Display, kopierbar — ein Tipp mehr als der
-ehemalige Direkt-Link aus dem Chat, dafür konsistent für alle Eintrags-Sorten
-und ohne KI-Matching im Skill.
+> **RAT-31 E3 (#1496) — entfernt.** Sorte d (Panel-Instanz) und die abgeleiteten
+> Panel-Editor-Einträge existieren nicht mehr. `panel_eintraege()` ist aus dem
+> Aggregator entfernt. Der zugehörige Test-Block (SREG-11-Tests) ist entfernt.
+> Konsumenten-Pfad `specs/platform/panel-bearbeiten.md` PBE-2 ist durch
+> RAT-31 nicht mehr relevant.
 
 ## SREG-12 — Gerenderte Eltern-Übersichts-Seite (HTML, neben der Registry-API)
 

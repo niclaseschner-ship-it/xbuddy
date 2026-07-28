@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Seiten-Registry — HTTP-Schnittstelle + Entrypoint (SREG-3).
 
-Siehe specs/platform/seiten-registry.md (Refs #347, ratifiziert RAT-13). Diese
-Datei ist die echte Komponente um `seiten/aggregator.py` herum: Flask-App +
-systemd-Service-Entrypoint. Konsumenten (der Eltern-Chat-Skill `seiten_finden`,
-SREG-5) reden über HTTP (DCOMP-1), nicht über `import seiten`.
+Siehe specs/platform/seiten-registry.md (Refs #347, ratifiziert RAT-13,
+RAT-31 E3 Umbau #1496). Diese Datei ist die echte Komponente um
+`seiten/aggregator.py` herum: Flask-App + systemd-Service-Entrypoint.
+Konsumenten (der Eltern-Chat-Skill `seiten_finden`, SREG-5) reden über HTTP
+(DCOMP-1), nicht über `import seiten`.
 
 Endpunkt:
   GET /api/v1/seiten   — das aggregierte Inventar (SREG-3), IMMER aus
@@ -12,19 +13,13 @@ Endpunkt:
                           Laufzeit < 50 ms.
 
 Service-Topologie (Lego-Prinzip): die Registry läuft als schlanker
-eigenständiger Flask-Prozess auf Loopback-Port 5042 (PORT-2), Schwester der
-Panel-Registry (PREG/5041) und Geräte-Registry (GER/5040). nginx-Origin matcht
-`= /api/v1/seiten` exakt auf diesen Prozess (URL-14, `xbuddy_seiten`).
+eigenständiger Flask-Prozess auf Loopback-Port 5042 (PORT-2). nginx-Origin
+matcht `= /api/v1/seiten` exakt auf diesen Prozess (URL-14, `xbuddy_seiten`).
 
 Aktualität (TTL, SREG-3): `inventar.json` wird neu gebaut, sobald es älter als
-der TTL ist (Default 30 s). Der Rebuild läuft on-demand beim nächsten Request,
-NACHDEM die schnelle Antwort schon aus der Platte serviert wurde — er holt die
-Snapshot-Sorten (d/e) per HTTP von Panel-/Geräte-Registry. Scheitert ein Holer,
-greift Last-Known-Good (SREG-3) — er blockiert nie den Request-Pfad.
-
-Cross-Component-HTTP (DCOMP-1 — kein Python-Import):
-  - Panel-Snapshot (Sorte d): GET <panel_url>/api/v1/panels/   (PREG-13)
-  - Geräte-Snapshot (Sorte e): GET <geraete_url>/api/v1/geraete/ (GER-13)
+der TTL ist (Default 30 s). Der Rebuild läuft on-demand beim nächsten Request —
+er liest die committeten Manifeste von der Platte (SREG-2). Kein HTTP zu
+anderen Services nötig (RAT-31 E3: Panel-/Geräte-Registry-Snapshots entfernt).
 """
 
 import argparse
@@ -66,9 +61,9 @@ from tools.service_diagnostics import register_version  # noqa: E402
 # DCOMP-4: Dateirechte auf den Eigentümer beschränkt — analog PREG-4 / GER-4.
 FILE_MODE = 0o600
 
-# CLIENT-2: Snapshot-Holer-Timeout (SREG-3). Ein langsamer/defekter Upstream
-# blockiert den Rebuild nie länger als das — und der Rebuild läuft ohnehin
-# außerhalb des Request-Pfads (LKG fängt das Scheitern ab).
+# CLIENT-2: HTTP-Timeout für Cross-Component-Calls (SHELL-2 Router-Lookup).
+# RAT-31 E3: Panel-/Geräte-Registry-Calls entfernt; Router-Lookup (SHELL-2)
+# bleibt (SSE-Pane braucht display_id für den Panel→Display-Pfad).
 HTTP_TIMEOUT = 2.0
 
 
@@ -83,8 +78,6 @@ HTTP_TIMEOUT = 2.0
 runtime = {
     "root":              _REPO_ROOT,
     "inventar_path":     None,
-    "panel_url":         "http://127.0.0.1:5041",
-    "geraete_url":       "http://127.0.0.1:5040",
     # SHELL-2: Router-Origin fuer Panel→Display-Lookup (ROU-32).
     # Default: http://127.0.0.1:5000 (Router-Loopback, PORT-2).
     "router_url":        "http://127.0.0.1:5000",
@@ -119,15 +112,17 @@ runtime = {
 }
 
 
-def configure(root=None, inventar_path=None, panel_url=None,
-              geraete_url=None, ttl=None,
+def configure(root=None, inventar_path=None, ttl=None,
               heim_origin=None, tailscale_origin=None,
               funnel_origin=None,
               bot_token=None, init_data_config=None,
               familie_client=None, router_url=None,
               geraete_registry_path=None):
-    """Setzt Aufbau-Wurzel, Inventar-Pfad, Upstream-Origins, TTL und
-    Display-URL-Origins (SREG-3, SREG-7).
+    """Setzt Aufbau-Wurzel, Inventar-Pfad, TTL und Display-URL-Origins
+    (SREG-3, SREG-7).
+
+    RAT-31 E3: `panel_url`/`geraete_url` entfernt — keine Snapshot-Sorten
+    mehr; das Inventar kommt ausschließlich aus committeten Manifesten (#1496).
 
     Wird `inventar_path` gesetzt, persistiert jeder Rebuild atomar dorthin und
     der Request liest von dort. Ohne `inventar_path` (Test-Modus) bleibt das
@@ -151,10 +146,6 @@ def configure(root=None, inventar_path=None, panel_url=None,
     if root is not None:
         runtime["root"] = root
     runtime["inventar_path"] = inventar_path
-    if panel_url is not None:
-        runtime["panel_url"] = panel_url
-    if geraete_url is not None:
-        runtime["geraete_url"] = geraete_url
     if ttl is not None:
         runtime["ttl"] = ttl
     if heim_origin is not None:
@@ -183,55 +174,9 @@ def configure(root=None, inventar_path=None, panel_url=None,
 _rebuild_lock = threading.Lock()
 
 
-# ============================================================
-#  Snapshot-Holer (SREG-3) — die einzigen Cross-Component-Teile (DCOMP-1)
-# ============================================================
-
-class SnapshotUnreachable(Exception):
-    """Ein Snapshot-Upstream (Panel-/Geräte-Registry) ist nicht erreichbar oder
-    antwortet ungültig (SREG-3). Wird NICHT im Request-Pfad geworfen — der
-    Holer gibt bei Fehler None zurück, der Aggregator greift dann auf
-    Last-Known-Good zurück."""
-
-
-def _hole_json_liste(url):
-    """Holt eine JSON-Array-Antwort von `url` (CLIENT-2, Timeout 2.0s).
-
-    Liefert die Liste bei Erfolg. Jeder Transport-/Parse-/Schema-Fehler wird als
-    `SnapshotUnreachable` geworfen — der Aufrufer (`hole_panels`/`hole_geraete`)
-    fängt sie ab und gibt None zurück. Bewusst über HTTP, KEIN Python-Import der
-    Upstream-Komponente (DCOMP-1). Als Funktion stubbar (Tests ohne Netz).
-    """
-    try:
-        with urllib.request.urlopen(url, timeout=HTTP_TIMEOUT) as resp:
-            if resp.status != 200:
-                raise SnapshotUnreachable("%s antwortet mit %s" % (url, resp.status))
-            data = json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, OSError, ValueError) as e:
-        raise SnapshotUnreachable(str(e)) from e
-    if not isinstance(data, list):
-        raise SnapshotUnreachable("%s liefert kein JSON-Array" % url)
-    return data
-
-
-def hole_panels():
-    """Holt den Panel-Snapshot (Sorte d, PREG-13) oder None bei Ausfall (SREG-3)."""
-    url = runtime["panel_url"].rstrip("/") + "/api/v1/panels/"
-    try:
-        return _hole_json_liste(url)
-    except SnapshotUnreachable as e:
-        logging.warning("Panel-Snapshot nicht geholt: %s — Last-Known-Good (SREG-3)", e)
-        return None
-
-
-def hole_geraete():
-    """Holt den Geräte-Snapshot (Sorte e, GER-13) oder None bei Ausfall (SREG-3)."""
-    url = runtime["geraete_url"].rstrip("/") + "/api/v1/geraete/"
-    try:
-        return _hole_json_liste(url)
-    except SnapshotUnreachable as e:
-        logging.warning("Geräte-Snapshot nicht geholt: %s — Last-Known-Good (SREG-3)", e)
-        return None
+# RAT-31 E3 (#1496): SnapshotUnreachable, _hole_json_liste, hole_panels und
+# hole_geraete entfernt — das Inventar kommt ausschließlich aus committeten
+# Manifesten (SREG-2). Kein HTTP zu panel/geraete-Registries mehr nötig.
 
 
 # ============================================================
@@ -283,18 +228,14 @@ def load_inventar(path):
 #  Rebuild + Lese-Zugriff (SREG-3)
 # ============================================================
 
-def rebuild(vorheriges=None):
-    """Baut das Inventar neu (SREG-3): Manifeste von der Platte + frisch geholte
-    Snapshots. Persistiert atomar, wenn ein `inventar_path` gesetzt ist.
+def rebuild():
+    """Baut das Inventar neu (SREG-3): liest committete Manifeste von der Platte.
 
-    Holt die Snapshot-Sorten (d/e) per HTTP; ein Holer-Ausfall liefert None und
-    der Aggregator greift auf `vorheriges` (Last-Known-Good) zurück. Aktualisiert
-    den in-memory-Cache und den Bauzeitstempel.
+    RAT-31 E3 (#1496): kein HTTP zu panel/geraete-Registries mehr — rein
+    manifest-basiert (SREG-2). Persistiert atomar, wenn `inventar_path` gesetzt.
+    Aktualisiert den in-memory-Cache und den Bauzeitstempel.
     """
-    panels = hole_panels()
-    geraete = hole_geraete()
-    inventar = aggregator.baue_inventar(
-        runtime["root"], panels=panels, geraete=geraete, vorheriges=vorheriges)
+    inventar = aggregator.baue_inventar(runtime["root"])
 
     path = runtime.get("inventar_path")
     if path is not None:
@@ -317,9 +258,8 @@ def _aktuelles_inventar():
     Request-Pfad. Ist das Inventar abgelaufen (älter als TTL) oder noch nie
     gebaut (Kaltstart), löst genau dieser Request EINEN Rebuild aus (on-demand,
     hinter `_rebuild_lock`); die schnelle Antwort kommt danach aus dem frisch
-    geschriebenen Inventar. Beim Kaltstart sind die Manifest-Sorten sofort da,
-    die Snapshot-Sorten kommen mit `snapshot_pending`, falls die Upstreams aus
-    sind — nie eine leere Antwort.
+    geschriebenen Inventar. Die Manifest-Sorten kommen frisch von der Platte —
+    nie eine leere Antwort.
     """
     path = runtime.get("inventar_path")
     inventar = runtime.get("inventar")
@@ -331,11 +271,11 @@ def _aktuelles_inventar():
     if inventar is None or abgelaufen:
         with _rebuild_lock:
             # Doppelcheck unter Lock: ein paralleler Request kann gerade gebaut
-            # haben — dann nicht erneut holen.
+            # haben — dann nicht erneut bauen.
             inventar = runtime.get("inventar")
             abgelaufen = (time.monotonic() - runtime["gebaut_um"]) >= runtime["ttl"]
             if inventar is None or abgelaufen:
-                inventar = rebuild(vorheriges=inventar)
+                inventar = rebuild()
     return inventar
 
 
@@ -399,33 +339,9 @@ def get_seiten():
 
     Serviert IMMER aus `inventar.json` (kein Upstream-Call im Request-Pfad,
     < 50 ms). Die Antwort ist nie leer (die Manifest-Sorten tragen sie auch beim
-    Kaltstart), Snapshot-Ausfälle erscheinen als `stale`/`snapshot_pending`
-    statt als gekürzte Liste.
-
-    SHELL-10 (MAU-Erweiterung): Panel-Eintraege erhalten `shell_urls`
-    (Heim + Funnel, Tailscale aufgegeben seit #1458) server-seitig, abgeleitet
-    aus panel_id + runtime-Origins (SREG-7), analog render.py::_hero_paare.
-    Der in-memory-Cache wird NICHT mutiert (shallow copy je Panel-Eintrag,
-    nur wenn Origins konfiguriert).
+    Kaltstart). RAT-31 E3: keine Snapshot-Sorten mehr, kein stale/pending.
     """
     inventar = _aktuelles_inventar()
-    heim_origin = runtime.get("heim_origin", "")
-    funnel_origin = runtime.get("funnel_origin", "")
-    if heim_origin or funnel_origin:
-        eintraege = []
-        for e in inventar.get("eintraege", []):
-            if e.get("typ") == "panel" and e.get("instanz"):
-                pid = e["instanz"]
-                e = dict(e)  # shallow copy — keine Mutation des in-memory-Cache
-                e["shell_urls"] = {
-                    "heim": (heim_origin.rstrip("/") + "/shell/" + pid) if heim_origin else None,
-                    # tailscale aufgegeben seit #1458 (Funnel-only)
-                    "tailscale": None,
-                    "funnel": (funnel_origin.rstrip("/") + "/shell/" + pid) if funnel_origin else None,
-                }
-            eintraege.append(e)
-        return jsonify({"eintraege": eintraege,
-                        "snapshot_pending": inventar.get("snapshot_pending", [])})
     return jsonify(inventar)
 
 
@@ -823,7 +739,7 @@ def auth_pair():
     # Display-Geräte (display/beides) → /display/<id>/ (Trailing-Slash: ESC-3 / AUTH-7b).
     # Nicht-Display oder Eintrag nicht lesbar → /api/v1/seiten/uebersicht (SREG-12).
     verwendung = _lese_verwendung(display_id)
-    if verwendung in aggregator._DISPLAY_VERWENDUNGEN:
+    if verwendung in {"display", "beides"}:  # RAT-31 E3: früher aggregator._DISPLAY_VERWENDUNGEN
         ziel = "/display/%s/" % display_id
     else:
         ziel = "/api/v1/seiten/uebersicht"
@@ -1504,7 +1420,7 @@ def _lookup_display_id(panel_id):
     """SHELL-2: display_id fuer panel_id via Router-Lookup (ROU-32).
 
     Ruft GET /api/v1/router/panels/app-panel:<panel_id> am Router-Service auf
-    (DCOMP-1, analog hole_panels/hole_geraete). Liefert display_id-String bei
+    (DCOMP-1). Liefert display_id-String bei
     Erfolg oder None bei unbekanntem Panel, fehlendem display_id oder
     Transport-/Parse-Fehler. Keine Reverse-Inferenz (SHELL-2: mehrere Panels
     duerfen ein Display steuern — PREG-2). Als Funktion monkeypatching-bar
@@ -1982,10 +1898,6 @@ def parse_args(argv):
     p.add_argument("--root", help="Repo-Wurzel für die Manifest-Discovery (SREG-2)")
     p.add_argument("--inventar", default="inventar.json",
                    help="Pfad zum gecachten Inventar (SREG-3)")
-    p.add_argument("--panel-url", dest="panel_url",
-                   help="Origin der Panel-Registry für Sorte d (SREG-3)")
-    p.add_argument("--geraete-url", dest="geraete_url",
-                   help="Origin der Geräte-Registry für Sorte e (SREG-3)")
     p.add_argument("--ttl", type=int, help="Inventar-TTL in Sekunden (SREG-3)")
     p.add_argument("--host", help="Bind-Host")
     p.add_argument("--port", type=int, help="Bind-Port")
@@ -2014,18 +1926,13 @@ def resolved_config(args):
     """Auflösung der RUNTIME-Konfiguration: Datei < ENV < CLI (CONFIG-1).
 
     Host/Port/Log-Level/TTL kommen vom gemeinsamen `tools.configloader`. `root`
-    (Manifest-Wurzel), `inventar` (Cache-Pfad, SREG-3), `panel_url`/`geraete_url`
-    (Snapshot-Origins) bleiben außerhalb des Loader-Schemas — analog
-    panel/main.py. ENV-Overrides decken den Dev-Override ab (`SEITEN_INVENTAR`,
-    `PANEL_URL`, `GERAETE_URL`, `SEITEN_ROOT`).
+    (Manifest-Wurzel) und `inventar` (Cache-Pfad, SREG-3) bleiben außerhalb des
+    Loader-Schemas. ENV-Overrides: `SEITEN_INVENTAR`, `SEITEN_ROOT`.
+    RAT-31 E3: PANEL_URL/GERAETE_URL entfernt (#1496).
     """
     cfg = configloader.load(component="seiten", schema=RUNTIME_SCHEMA)
     cfg["root"] = args.root or os.environ.get("SEITEN_ROOT", _REPO_ROOT)
     cfg["inventar"] = os.environ.get("SEITEN_INVENTAR", args.inventar)
-    cfg["panel_url"] = (
-        args.panel_url or os.environ.get("PANEL_URL", "http://127.0.0.1:5041"))
-    cfg["geraete_url"] = (
-        args.geraete_url or os.environ.get("GERAETE_URL", "http://127.0.0.1:5040"))
     if args.ttl is not None:
         cfg["ttl"] = args.ttl
     if args.host:
@@ -2068,7 +1975,6 @@ def main(argv=None):
     logsetup.setup(cfg["log_level"])
 
     configure(root=cfg["root"], inventar_path=cfg["inventar"],
-              panel_url=cfg["panel_url"], geraete_url=cfg["geraete_url"],
               ttl=cfg["ttl"],
               heim_origin=cfg["heim_origin"],
               tailscale_origin=cfg["tailscale_origin"],
@@ -2086,7 +1992,6 @@ def main(argv=None):
 
     # Kaltstart-Aufbau (SREG-3): das Inventar sofort einmal bauen, damit der
     # erste Request schon eine vollständige Manifest-Sorte aus der Platte sieht.
-    # Snapshot-Ausfälle sind nicht-fatal (snapshot_pending / Last-Known-Good).
     rebuild()
 
     ssl_context = None
@@ -2095,9 +2000,9 @@ def main(argv=None):
         ssl_context = (args.cert, args.key)
         scheme = "https"
     logging.info(
-        "Seiten-Registry hört auf %s://%s:%s (inventar=%s, panel=%s, geraete=%s, ttl=%ss)",
+        "Seiten-Registry hört auf %s://%s:%s (inventar=%s, ttl=%ss, RAT-31-E3-manifest-only)",
         scheme, cfg["listen_host"], cfg["listen_port"],
-        cfg["inventar"], cfg["panel_url"], cfg["geraete_url"], cfg["ttl"])
+        cfg["inventar"], cfg["ttl"])
     app.run(host=cfg["listen_host"], port=cfg["listen_port"],
             debug=False, threaded=True, ssl_context=ssl_context)
 

@@ -39,8 +39,6 @@ def reset_runtime(monkeypatch):
         init_data_config={"max_age_seconds": 86400},
     )
     seiten_main.app.config["TESTING"] = True
-    monkeypatch.setattr(seiten_main, "hole_panels", list)
-    monkeypatch.setattr(seiten_main, "hole_geraete", list)
 
 
 @pytest.fixture

@@ -1,18 +1,25 @@
-"""Seiten-Registry — Aggregator-Kern (SREG-1/SREG-3/SREG-4/SREG-10/SREG-11).
+"""Seiten-Registry — Aggregator-Kern (SREG-1/SREG-2/SREG-3/SREG-4/SREG-10).
 
-Siehe specs/platform/seiten-registry.md (Refs #347, ratifiziert RAT-13). Dieses
-Modul baut das **Inventar aller aufrufbaren View-Einstiegspunkte** aus den schon
-existierenden Quellen zusammen — es ist die EINE Stelle, die aus den committeten
-`views.json`-Manifesten (Sorten a/b/c) und den PREG/GER-Snapshots (Sorten d/e)
-das `inventar.json`-Schema (SREG-4) ableitet.
+Siehe specs/platform/seiten-registry.md (Refs #347, ratifiziert RAT-13,
+RAT-31 E3 Umbau #1496). Dieses Modul baut das **Inventar aller aufrufbaren
+View-Einstiegspunkte** ausschließlich aus den committeten
+`views.json`-Manifesten — es ist die EINE Stelle, die aus Buddy-/Platform-
+Manifesten (Sorten a/b/c/mini-app/pwa) das `inventar.json`-Schema (SREG-4)
+ableitet.
 
-Dieses Modul ist **rein und testbar ohne HTTP**: die Manifest-Sorten kommen aus
-der Platte (`tools.views_manifest.load`), die Snapshot-Sorten reicht der Aufrufer
-als schon-geholte Python-Strukturen herein (`panels`, `geraete` — Listen von
-Dicts). Wer sie holt (urllib in `seiten/main.py`) und wie der TTL-Rebuild
-getaktet ist, ist NICHT hier — hier wohnt nur die Ableitung. So testen die
-Aggregator-Tests gegen tmp-Dir-Manifeste + injizierte Snapshots, ohne Netz und
-ohne Abhängigkeit von den echten Buddy-Manifesten anderer Branches.
+**RAT-31 E3 (Closes #1496):** Die instanz-spezifischen Snapshot-Sorten d
+(Panel-Instanz aus PREG-HTTP) und e (Display-Client aus GER-HTTP) sind
+entfernt. Das Inventar ist jetzt rein manifest-basiert (SREG-2 — Wahrheit
+aus committeten Manifesten, nicht aus laufenden Prozessen). Die ehemals
+PREG/GER-abhängigen Felder `verknuepft_mit_display`, `verknuepft_mit_panels`,
+`verknuepft_mit_panel` (SREG-4) und der `snapshot_pending`-Mechanismus
+(LKG) entfallen ersatzlos — die `panel/`- und `geraete/`-Registries sterben
+per RAT-31.
+
+Dieses Modul ist **rein und testbar ohne HTTP**: alle Manifest-Sorten kommen
+aus der Platte (`tools.views_manifest.load`). Die Aggregator-Tests laufen
+gegen tmp-Dir-Manifeste, ohne Netz und ohne Abhängigkeit von den echten
+Buddy-Manifesten anderer Branches.
 
 ## Discovery (SREG-2)
 
@@ -28,47 +35,15 @@ Ein kaputtes/schema-inkompatibles Einzel-Manifest (`tools.views_manifest`
 wirft `ManifestError`) wird mit Warnung **übersprungen** — das übrige Inventar
 bleibt vollständig, nie crasht das ganze Inventar wegen eines Manifests.
 
-## Snapshot-Fehlermodell (SREG-3, Last-Known-Good)
-
-Der Aufrufer reicht je Snapshot-Sorte entweder die geholten Daten (`list`) oder
-`None` (Holer scheiterte) herein. Aus dem vorigen Inventar (`vorheriges`)
-übernimmt der Aggregator bei `None` den letzten erfolgreichen Teil-Snapshot
-und markiert ihn `stale: true`; war die Sorte **nie** da, fehlt sie mit
-`snapshot_pending: true`. Die Antwort ist dadurch **nie leer** und nie
-falsch-gekürzt.
-
 ## Icon-Durchreichung (SREG-10)
 
 `icons[]` und `varianten[].icons[]` aus Display-Manifesten (Sorte a) werden 1:1
-durchgereicht — kein Komponieren, kein Ableiten. Sorten b/c/d/e tragen kein
+durchgereicht — kein Komponieren, kein Ableiten. Sorten b/c tragen kein
 `icons`-Feld (das Feld fehlt, ist nicht `null`).
 
 Der Schalter `icons_erforderlich` (Default `False`) steuert die Durchsetzung:
 - `False` (Migration): fehlendes `icons[]` → Warnung, Eintrag bleibt gelistet.
 - `True` (nach Backfill): fehlendes `icons[]` → per-View-Skip, Warnung.
-
-## Editor-Eintrag je Panel-Instanz (SREG-11)
-
-Für jede Panel-Instanz (Sorte d) erzeugt `panel_eintraege` zusätzlich einen
-abgeleiteten Editor-Eintrag (`typ=eltern`, `pfad=/controller/app-panel/<id>/bearbeiten`,
-`key=<panel_id>-bearbeiten`). Das Ergebnis sind 2N Einträge für N Panel-Instanzen.
-
-## Verknüpfungs-Felder (SREG-4)
-
-Drei abgeleitete Felder verknüpfen die Snapshot-Sorten d/e und den
-Editor-Eintrag (b/SREG-11), damit die Übersichtsseite (SREG-12) die
-Hero-Paar-Boxen Display↔Panel↔Editor zeichnen kann:
-
-- `verknuepft_mit_display` (Sorte d): `display_id` aus `panels.json`
-  (PREG-Pflichtfeld E-PANEL-5). Trägt **nur** die Panel-Instanz.
-- `verknuepft_mit_panels[]` (Sorte e): Reverse-Lookup über den
-  PREG-Snapshot — Liste aller `panel_id`s, die dieses Display steuern.
-  Trägt **nur** der Display-Client; mehrere Panels pro Display möglich.
-- `verknuepft_mit_panel` (Sorte b, Editor-Eintrag SREG-11): die
-  `panel_id` aus dem Editor-Pfad-Segment. Trägt **nur** der Editor-Eintrag.
-
-Alle drei Felder **fehlen** bei Nicht-Trägern (analog `icons` — kein
-`null`, kein leerer String; das Feld ist schlicht nicht da).
 """
 
 import glob
@@ -81,17 +56,14 @@ from tools import views_manifest
 logger = logging.getLogger(__name__)
 
 # SREG-4: die `typ`-Wertemenge eines Eintrags. Abgeleitet, nie frei vergeben.
+# RAT-31 E3: TYP_PANEL und TYP_DISPLAY_CLIENT entfernt — Sorten d/e sterben
+# mit der panel/geraete-Registry-Abhängigkeit (#1496).
 TYP_DISPLAY = "display"
 TYP_ELTERN = "eltern"
 TYP_CONTROLLER = "controller"
-TYP_PANEL = "panel"
-TYP_DISPLAY_CLIENT = "display-client"
 # SREG-14: Mini-App-Sorte — explizit aus dem Manifest-Feld `typ`, nie aus
 # `zielgruppe` abgeleitet (Sonderfall in `_typ_for_view`).
 TYP_MINI_APP = "mini-app"
-
-# SREG-1 (e)-Filter: nur diese `verwendung`-Werte zählen als Display-Seite.
-_DISPLAY_VERWENDUNGEN = ("display", "beides")
 
 
 # ============================================================
@@ -334,159 +306,19 @@ def manifest_eintraege(root, icons_erforderlich=False, funnel_domain=""):
 
 
 # ============================================================
-#  Snapshot-Sorten d/e (SREG-1/SREG-4)
+#  Inventar-Aufbau (SREG-3 / RAT-31 E3: rein manifest-basiert)
 # ============================================================
 
-def panel_eintraege(panels):
-    """Leitet die Panel-Instanz-Einträge (Sorte d) + Editor-Einträge aus einem PREG-Snapshot ab.
+def baue_inventar(root, icons_erforderlich=False, funnel_domain=""):
+    """Baut das vollständige Inventar aus committeten Manifesten (SREG-2/SREG-3).
 
-    `panels` ist die Liste aus `GET /api/v1/panels/` (je Eintrag mit `panel_id`).
-    `pfad` kommt aus der Instanz-ID (`/controller/app-panel/<panel_id>`), `label`
-    wird aus ihr abgeleitet (SREG-4: PREG kennt kein Anzeige-Label).
-    `synonyme`/`varianten`/`zeigt` entfallen für (d).
-
-    SREG-4-Verknüpfung: Trägt das PREG-Panel `display_id` (Pflichtfeld
-    E-PANEL-5), erhält der Panel-Eintrag `verknuepft_mit_display: <display_id>`.
-    Das Feld fehlt, wenn `display_id` im Snapshot leer/fehlt (defensiv —
-    PREG-Pflichtfeld, sollte immer da sein).
-
-    SREG-11: Für jede Panel-Instanz entsteht zusätzlich ein abgeleiteter
-    Editor-Eintrag (`typ=eltern`, `pfad=/controller/app-panel/<panel_id>/bearbeiten`,
-    `key=<panel_id>-bearbeiten`). Das Ergebnis sind 2N Einträge für N Panels.
-    Der Editor-Eintrag trägt `verknuepft_mit_panel: <panel_id>` (SREG-4),
-    damit die Übersichtsseite (SREG-12) ihn als Anhang an seine Panel-Karte
-    rendern kann.
-    """
-    eintraege = []
-    for p in panels:
-        panel_id = p.get("panel_id")
-        if not panel_id:
-            continue
-        # Panel-Seiten-Eintrag (Sorte d)
-        panel_e = {
-            "key": "panel-%s" % panel_id,
-            "typ": TYP_PANEL,
-            "instanz": panel_id,
-            "pfad": "/controller/app-panel/%s" % panel_id,
-            "label": "Panel %s" % panel_id,
-            "zielgruppe": "eltern",
-        }
-        # SREG-4: verknuepft_mit_display — nur wenn PREG das Feld trägt
-        # (E-PANEL-5 Pflichtfeld; defensiv, falls Snapshot/Migration). Das
-        # Feld FEHLT bei leerem display_id — kein null/leerer String.
-        display_id = p.get("display_id")
-        if display_id:
-            panel_e["verknuepft_mit_display"] = display_id
-        eintraege.append(panel_e)
-        # Editor-Eintrag (SREG-11): typ=eltern, distinkt via -bearbeiten-Key
-        eintraege.append({
-            "key": "%s-bearbeiten" % panel_id,
-            "typ": TYP_ELTERN,
-            "instanz": panel_id,
-            "pfad": "/controller/app-panel/%s/bearbeiten" % panel_id,
-            "label": "Panel %s bearbeiten" % panel_id,
-            "zielgruppe": "eltern",
-            # SREG-4: verknuepft_mit_panel — abgeleitet aus dem Pfad-Segment,
-            # verbindet den Editor mit seiner Panel-Instanz (Display ↔ Panel
-            # ↔ Editor-Kette in SREG-12).
-            "verknuepft_mit_panel": panel_id,
-        })
-    return eintraege
-
-
-def display_client_eintraege(geraete, panels=None):
-    """Leitet die Display-Client-Einträge (Sorte e) aus einem GER-Snapshot ab.
-
-    `geraete` ist die Liste aus `GET /api/v1/geraete/`. (e)-Filter (SREG-1):
-    nur Geräte mit `verwendung ∈ {display, beides}` UND `status = aktiv` —
-    ein reines Controller-Gerät ist keine Display-Seite, ein stillgelegtes
-    Tablet kein nutzbarer Link. `pfad`/`label` aus der Instanz-ID (`display_id`).
-
-    SREG-4-Verknüpfung: Ist `panels` gegeben, wird je Display ein Reverse-
-    Lookup über die PREG-Panel-Liste gemacht — alle `panel_id`s, deren
-    `display_id` auf dieses Display zeigt, landen als `verknuepft_mit_panels[]`
-    am Eintrag. Mehrere Panels pro Display sind möglich (PREG-Beispiel
-    Mama+Papa-iPhone auf Wohnzimmer-Display). Das Feld FEHLT, wenn `panels=None`
-    (Snapshot-Ausfall, soll die Verknüpfung nicht mit `[]` täuschen);
-    `panels=[]` liefert dagegen einen leeren Reverse-Lookup → das Feld fehlt
-    bei ungepaarten Displays, ist `[panel_id, …]` bei gepaarten.
-    """
-    if panels is not None:
-        # Reverse-Lookup einmalig vorberechnen (display_id → [panel_id, …]).
-        # PREG-Pflichtfeld E-PANEL-5: jedes Panel trägt genau eine display_id.
-        # Reihenfolge in der Liste folgt der Snapshot-Reihenfolge — deterministisch.
-        reverse = {}
-        for p in panels:
-            pid = p.get("panel_id")
-            did = p.get("display_id")
-            if pid and did:
-                reverse.setdefault(did, []).append(pid)
-    else:
-        reverse = None
-    eintraege = []
-    for g in geraete:
-        display_id = g.get("id")
-        if not display_id:
-            continue
-        if g.get("verwendung") not in _DISPLAY_VERWENDUNGEN:
-            continue
-        if g.get("status") != "aktiv":
-            continue
-        e = {
-            "key": "display-%s" % display_id,
-            "typ": TYP_DISPLAY_CLIENT,
-            "instanz": display_id,
-            "pfad": "/display/%s" % display_id,
-            "label": "Display %s" % display_id,
-            "zielgruppe": "kind",
-        }
-        # SREG-4: verknuepft_mit_panels — nur setzen, wenn PREG-Snapshot vorlag.
-        # Bei panels=None (Snapshot-Ausfall) keine Verknüpfung suggerieren.
-        if reverse is not None:
-            verbundene = reverse.get(display_id, [])
-            if verbundene:
-                e["verknuepft_mit_panels"] = verbundene
-        eintraege.append(e)
-    return eintraege
-
-
-# ============================================================
-#  Inventar-Aufbau (SREG-3 LKG / nie leer)
-# ============================================================
-
-def _snapshot_sorte(neu, ableiter, vorheriges, typ):
-    """Wendet das Last-Known-Good-Fehlermodell auf eine Snapshot-Sorte an (SREG-3).
-
-    `neu` ist der frisch geholte Snapshot (`list`) oder `None` (Holer scheiterte).
-    - frische Daten → abgeleitete Einträge (ableiter ist eine 0-arg-Closure
-      über `neu` + ggf. weitere Snapshots), kein Stale-/Pending-Marker.
-    - `None` + im `vorheriges`-Inventar lag schon mal ein erfolgreicher
-      Teil-Snapshot dieser Sorte → diese Einträge erhalten, `stale: true`.
-    - `None` + nie da gewesen → leere Liste + `pending=True`-Signal, sodass der
-      Aufrufer `snapshot_pending` setzt.
-
-    Liefert `(eintraege, pending)`.
-    """
-    if neu is not None:
-        return ableiter(neu), False
-    behalten = [dict(e) for e in (vorheriges or []) if e.get("typ") == typ]
-    if behalten:
-        for e in behalten:
-            e["stale"] = True
-        return behalten, False
-    # Nie ein erfolgreicher Snapshot dieser Sorte — sie fehlt explizit.
-    return [], True
-
-
-def baue_inventar(root, panels=None, geraete=None, vorheriges=None,
-                  icons_erforderlich=False, funnel_domain=""):
-    """Baut das vollständige Inventar (SREG-3/SREG-4/SREG-10/SREG-11/SREG-14) — Kern-Aufruf.
+    RAT-31 E3 (Closes #1496): die ehemals PREG/GER-abhängigen Snapshot-Sorten
+    d (Panel-Instanz) und e (Display-Client) entfallen. Das Inventar ist
+    ausschließlich aus committeten `views.json`-Manifesten abgeleitet —
+    kein HTTP, kein LKG, kein snapshot_pending.
 
     Args:
         root: Repo-Wurzel, unter der die `views.json`-Manifeste liegen (SREG-2).
-        panels: PREG-Snapshot (`list`) oder `None`, wenn der Holer scheiterte.
-        geraete: GER-Snapshot (`list`) oder `None`, wenn der Holer scheiterte.
-        vorheriges: das vorige `inventar`-Dict (für Last-Known-Good), oder None.
         icons_erforderlich: SREG-10-Schalter (Default False = Migrationsphase;
             True = nach Backfill, per-View-Skip bei fehlendem icons[]).
         funnel_domain: Tailscale-Funnel-Domain für `funnel_url`-Komposition bei
@@ -495,41 +327,12 @@ def baue_inventar(root, panels=None, geraete=None, vorheriges=None,
 
     Returns:
         Ein `inventar`-Dict mit:
-          - `eintraege`: Manifest-Sorten (immer vollständig, auch Kaltstart)
-            + Snapshot-Sorten (LKG/stale/leer je Holer-Ergebnis).
-          - `snapshot_pending`: Liste der Snapshot-`typ`s, die NIE da waren
-            (Kaltstart ohne je erfolgreichen Snapshot) — die Antwort ist
-            trotzdem gültig und nie leer (die Manifest-Sorten tragen sie).
-
-    Die Manifest-Sorten kommen IMMER frisch von der Platte — sie sind auch beim
-    Kaltstart verfügbar (SREG-3). Nur die Snapshot-Sorten tragen das
-    LKG-Fehlermodell.
+          - `eintraege`: alle Manifest-Sorten (immer vollständig, auch beim
+            Kaltstart — committete Manifeste sind auch ohne laufende Prozesse
+            lesbar, SREG-2).
+          - `snapshot_pending`: immer leere Liste (keine Snapshot-Sorten mehr).
     """
-    vorherige_eintraege = (vorheriges or {}).get("eintraege", [])
-
     eintraege = list(manifest_eintraege(
         root, icons_erforderlich=icons_erforderlich,
         funnel_domain=funnel_domain))
-
-    pending = []
-    panel_e, panel_pending = _snapshot_sorte(
-        panels, panel_eintraege, vorherige_eintraege, TYP_PANEL)
-    if panel_pending:
-        pending.append(TYP_PANEL)
-    eintraege.extend(panel_e)
-
-    # SREG-4: Display-Client braucht den PREG-Snapshot für den
-    # `verknuepft_mit_panels[]`-Reverse-Lookup. Wenn PREG ausfällt
-    # (panels=None), kommt None durch — die Verknüpfung fehlt dann (keine
-    # falsche `[]`-Aussage). Wenn nur GER ausfällt, läuft LKG für Sorte e und
-    # `panels` ist trotzdem da — die Verknüpfung bleibt korrekt am LKG-Eintrag,
-    # weil _snapshot_sorte den vorigen Eintrag inklusive `verknuepft_mit_panels`
-    # 1:1 übernimmt (dict-Copy).
-    display_e, display_pending = _snapshot_sorte(
-        geraete, lambda g: display_client_eintraege(g, panels=panels),
-        vorherige_eintraege, TYP_DISPLAY_CLIENT)
-    if display_pending:
-        pending.append(TYP_DISPLAY_CLIENT)
-    eintraege.extend(display_e)
-
-    return {"eintraege": eintraege, "snapshot_pending": pending}
+    return {"eintraege": eintraege, "snapshot_pending": []}
