@@ -1,5 +1,7 @@
 # Eltern-Chat: KI-Anbieter-Adapter
 
+> **⚠️ ÜBERHOLT durch #1510 (2026-07-28).** Die Provider-Klassen (`providers/{claude,mistral}.py`) sind gelöscht; `brand_vendor` lebt jetzt in der Map `_ADAPTER_BRAND_VENDOR` (`onboarding_store.py`), nicht mehr als Klassen-Attribut. Der `get_provider_class`-Lookup und die `test_providers.py`-Drift-Sperre existieren nicht mehr. Vollständiger Convention-Rewrite: #1537. Bis dahin ist der Text unten historisch.
+
 Konvention für die KI-Anbieter-Adapter unter `eltern-chat/providers/`. Refs
 specs/platform/eltern-chat.md (EC-11), specs/platform/zugangsdaten.md (ZD-2),
 RAT-7 (Konventionen entstehen bei wiederkehrender Sache).
