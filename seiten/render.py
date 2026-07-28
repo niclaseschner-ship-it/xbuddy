@@ -96,19 +96,22 @@ _FALLBACK_ICON = {
 
 
 def _urls(eintrag, heim_origin, tailscale_origin, funnel_origin=""):
-    """Bildet die drei Origin-URLs (Heim/Tailscale/Funnel) je Eintrag (SREG-7).
+    """Bildet die Origin-URLs (Heim/Funnel) je Eintrag (SREG-7, Funnel-only seit #1458).
 
     Pfad-Anhaengung an die Origin — Origins ohne trailing Slash, Pfade mit
-    fuehrendem Slash. Tailscale-URL ist None, wenn `tailscale_origin` leer
-    (SREG-7 V1-Soll: dann Banner-Hinweis statt zwei Spalten). Funnel-URL ist
-    None, wenn `funnel_origin` leer (SREG-7 dritte Origin, RAT-27 — User-Geraete
-    externer Zugang; fehlt der Wert, wird die Spalte nicht angeboten).
+    fuehrendem Slash. Funnel-URL ist None, wenn `funnel_origin` leer (SREG-7
+    dritte Origin, RAT-27 — User-Geraete externer Zugang; fehlt der Wert, wird
+    die Spalte nicht angeboten).
+
+    `tailscale_origin` ist seit #1458 aufgegeben (Nic-Setzung 2026-07-25:
+    self-signed IP-Origins werden nicht mehr geliefert). Der Parameter bleibt
+    in der Signatur fuer Rueckwaertskompatibilitaet, wird aber ignoriert —
+    `urls["tailscale"]` ist immer None.
     """
     pfad = eintrag.get("pfad", "")
     heim = (heim_origin.rstrip("/") + pfad) if heim_origin else None
-    tail = (tailscale_origin.rstrip("/") + pfad) if tailscale_origin else None
     funnel = (funnel_origin.rstrip("/") + pfad) if funnel_origin else None
-    return {"heim": heim, "tailscale": tail, "funnel": funnel}
+    return {"heim": heim, "tailscale": None, "funnel": funnel}
 
 
 def _karte_basis(eintrag, heim_origin, tailscale_origin, funnel_origin=""):
@@ -185,7 +188,8 @@ def _varianten_karten(eintrag, heim_origin, tailscale_origin, funnel_origin=""):
             "stale": bool(eintrag.get("stale", False)),
             "urls": {
                 "heim": (heim_origin.rstrip("/") + v_pfad) if heim_origin else None,
-                "tailscale": (tailscale_origin.rstrip("/") + v_pfad) if tailscale_origin else None,
+                # tailscale aufgegeben seit #1458 (Funnel-only, Nic-Setzung 2026-07-25)
+                "tailscale": None,
                 # SREG-7 dritte Origin (RAT-27): Funnel-URL fuer User-Geraete.
                 "funnel": (funnel_origin.rstrip("/") + v_pfad) if funnel_origin else None,
             },
@@ -235,15 +239,16 @@ def _hero_paare(eintraege, heim_origin, tailscale_origin, funnel_origin=""):
                     pid, display.get("instanz"))
                 continue
             editor = editor_by_panel_id.get(pid)
-            # SHELL-10: Shell-URL je panel_id in SREG-12-Form (Heim + Tailscale +
-            # SREG-7 Funnel). URL aus panel_id abgeleitet — kein GER-Co-Location.
+            # SHELL-10: Shell-URL je panel_id in SREG-12-Form (Heim + Funnel,
+            # Tailscale aufgegeben seit #1458). URL aus panel_id abgeleitet.
             panel_karten.append({
                 "panel": _karte_basis(panel, heim_origin, tailscale_origin, funnel_origin),
                 "editor": (_karte_basis(editor, heim_origin, tailscale_origin, funnel_origin)
                            if editor else None),
                 "shell_urls": {
                     "heim": (heim_origin.rstrip("/") + "/shell/" + pid) if heim_origin else None,
-                    "tailscale": (tailscale_origin.rstrip("/") + "/shell/" + pid) if tailscale_origin else None,
+                    # tailscale aufgegeben seit #1458 (Funnel-only, Nic-Setzung 2026-07-25)
+                    "tailscale": None,
                     # SREG-7 dritte Origin (RAT-27): Funnel-Shell-URL fuer User-Geraete.
                     "funnel": (funnel_origin.rstrip("/") + "/shell/" + pid) if funnel_origin else None,
                 },
@@ -340,19 +345,21 @@ def baue_layout(inventar, heim_origin, tailscale_origin, funnel_origin=""):
     Args:
         inventar: das Aggregator-Ergebnis ({"eintraege": […], "snapshot_pending": […]}).
         heim_origin: `display_url_origin_heim` (Pflicht, SREG-7).
-        tailscale_origin: Tailnet-IP-Origin (self-signed, SREG-7 V1-Soll,
-            DEPRECATED nach #1458 — Funnel ist der externe Origin). Leer
-            string oder None loest den Tailscale-Banner aus.
+        tailscale_origin: DEPRECATED seit #1458 (Nic-Setzung 2026-07-25: self-signed
+            IP-Origins aufgegeben, Funnel-only). Parameter bleibt in der Signatur
+            fuer Rueckwaertskompatibilitaet; wird ignoriert — urls.tailscale ist
+            in allen Karten immer None. tailscale_banner ist immer True.
         funnel_origin: `display_url_origin_funnel` (SREG-7, RAT-27) — leer string
             oder None unterdrueckt die Funnel-Spalte in der Uebersicht (kein Auto-
-            Fallback auf heim/tailscale — falsche Origin waere Cookie im falschen Jar).
+            Fallback — falsche Origin waere Cookie im falschen Jar).
 
     Returns:
         Dict mit `hero_paare`, `buddy_gruppen`, `mini_apps`, `tailscale_banner`
-        (bool), `snapshot_pending` (Liste), `heim_origin`, `tailscale_origin`,
-        `funnel_origin`. Direkt an `render_template("uebersicht.html", **layout)`
-        reichbar UND als JSON-Kontrakt fuer `GET /api/v1/seiten/layout` (#1210
-        Daten-SSoT). Jede Karte traegt `urls.funnel` (None wenn leer).
+        (immer True seit #1458), `snapshot_pending` (Liste), `heim_origin`,
+        `tailscale_origin` (immer leer), `funnel_origin`. Direkt an
+        `render_template("uebersicht.html", **layout)` reichbar UND als
+        JSON-Kontrakt fuer `GET /api/v1/seiten/layout` (#1210 Daten-SSoT).
+        Jede Karte traegt `urls.funnel` (None wenn leer).
 
     #1210 (Daten-SSoT): Dieses Dict ist die EINE angereicherte Ableitung, die
     ALLE familienseitigen Uebersichts-/Registry-Oberflaechen konsumieren
@@ -369,10 +376,11 @@ def baue_layout(inventar, heim_origin, tailscale_origin, funnel_origin=""):
         # SREG-14 / #1210: dedizierte Mini-App-Sektion (additiv — Jinja liest sie
         # nicht; die Mini-App-Uebersicht rendert sie mit Telegram-Deep-Link).
         "mini_apps": _mini_apps(eintraege, heim_origin, tailscale_origin, funnel_origin),
-        "tailscale_banner": not bool(tailscale_origin),
+        # tailscale_banner: seit #1458 immer True (Funnel-only, keine Tailscale-Spalte).
+        "tailscale_banner": True,
         "snapshot_pending": list((inventar or {}).get("snapshot_pending", []) or []),
         "heim_origin": heim_origin or "",
-        "tailscale_origin": tailscale_origin or "",
+        "tailscale_origin": "",  # immer leer seit #1458; tailscale_origin-Param ignoriert
         # SREG-7 dritte Origin (RAT-27): Funnel-FQDN fuer User-Geraete.
         # Leer wenn nicht konfiguriert — kein Auto-Fallback (Cookie-Jar-Integritat).
         "funnel_origin": funnel_origin or "",

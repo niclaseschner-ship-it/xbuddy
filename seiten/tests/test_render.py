@@ -90,9 +90,16 @@ def test_leeres_inventar_liefert_leere_sektionen():
     assert out["hero_paare"] == []
     assert out["buddy_gruppen"] == []
     assert out["snapshot_pending"] == []
-    assert out["tailscale_banner"] is False  # tailscale gesetzt → kein Banner
+    # #1458 Funnel-only: tailscale_banner ist immer True, tailscale_origin immer leer
+    assert out["tailscale_banner"] is True
     assert out["heim_origin"] == HEIM
-    assert out["tailscale_origin"] == TAIL
+    assert out["tailscale_origin"] == ""
+
+
+def test_tailscale_banner_immer_an_auch_wenn_tailscale_param_gesetzt():
+    """#1458: tailscale_origin-Param wird ignoriert — Banner immer True."""
+    out = render.baue_layout({"eintraege": []}, HEIM, TAIL)
+    assert out["tailscale_banner"] is True
 
 
 def test_tailscale_banner_an_bei_leerem_tailscale():
@@ -102,6 +109,20 @@ def test_tailscale_banner_an_bei_leerem_tailscale():
 
 def test_tailscale_banner_an_bei_none():
     out = render.baue_layout({"eintraege": []}, HEIM, None)
+    assert out["tailscale_banner"] is True
+
+
+def test_karten_urls_tailscale_immer_none_auch_mit_tailscale_origin():
+    """#1458 Kerngarantie: urls.tailscale ist None auch wenn tailscale_origin gesetzt.
+
+    Beweist, dass die ENV SEITEN_TAILSCALE_ORIGIN keine self-signed-IP-Spalte
+    mehr erzeugen kann — auch wenn sie noch am Pi gesetzt ist.
+    """
+    eintraege = [_view("wetter", "heute", "/display/wetter/heute")]
+    # tailscale_origin explizit gesetzt — darf trotzdem keine Tailscale-URL produzieren
+    out = render.baue_layout({"eintraege": eintraege}, HEIM, TAIL)
+    karte = out["buddy_gruppen"][0]["karten"][0]
+    assert karte["urls"]["tailscale"] is None
     assert out["tailscale_banner"] is True
 
 
@@ -253,12 +274,13 @@ def test_varianten_als_eigene_karten_in_gruppe():
 #  URL-Bildung
 # ============================================================
 
-def test_karten_urls_heim_und_tailscale_beide_da():
+def test_karten_urls_heim_da_tailscale_immer_none():
+    """#1458: tailscale-URL wird nie mehr gebaut, auch wenn tailscale_origin gesetzt."""
     eintraege = [_view("wetter", "heute", "/display/wetter/heute")]
     out = render.baue_layout({"eintraege": eintraege}, HEIM, TAIL)
     karte = out["buddy_gruppen"][0]["karten"][0]
     assert karte["urls"]["heim"] == HEIM + "/display/wetter/heute"
-    assert karte["urls"]["tailscale"] == TAIL + "/display/wetter/heute"
+    assert karte["urls"]["tailscale"] is None
 
 
 def test_karten_urls_tailscale_none_bei_leerem_tailscale():
@@ -274,7 +296,8 @@ def test_karten_urls_heim_none_bei_leerem_heim():
     out = render.baue_layout({"eintraege": eintraege}, "", TAIL)
     karte = out["buddy_gruppen"][0]["karten"][0]
     assert karte["urls"]["heim"] is None
-    assert karte["urls"]["tailscale"] == TAIL + "/display/wetter/heute"
+    # tailscale ist immer None seit #1458, auch wenn tailscale_origin param gesetzt
+    assert karte["urls"]["tailscale"] is None
 
 
 def test_origins_mit_trailing_slash_werden_normalisiert():
@@ -282,7 +305,8 @@ def test_origins_mit_trailing_slash_werden_normalisiert():
     out = render.baue_layout({"eintraege": eintraege}, HEIM + "/", TAIL + "/")
     karte = out["buddy_gruppen"][0]["karten"][0]
     assert karte["urls"]["heim"] == HEIM + "/display/wetter/heute"
-    assert karte["urls"]["tailscale"] == TAIL + "/display/wetter/heute"
+    # tailscale immer None seit #1458
+    assert karte["urls"]["tailscale"] is None
 
 
 # ============================================================

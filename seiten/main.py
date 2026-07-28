@@ -91,15 +91,17 @@ runtime = {
     "ttl":               30,
     "inventar":          None,
     "gebaut_um":         0.0,
-    # SREG-7: drei Display-URL-Origins (Heim + Tailscale + Funnel).
+    # SREG-7: zwei Display-URL-Origins (Heim + Funnel, Funnel-only seit #1458).
     # Heim ist Pflicht fuer SREG-5-Link und SREG-12-Seite.
-    # Tailscale ist V1-Soll — fehlt, zeigt SREG-12 nur Heim + Banner.
+    # Tailscale-Origin aufgegeben (Nic-Setzung 2026-07-25, #1458): self-signed
+    # IP-Verbindungen werden nicht mehr angeboten; Slot bleibt als Leer-String
+    # damit configure()-Aufrufe mit tailscale_origin=... nicht brechen.
     # Funnel ist fuer Familien-User-Geraete ueber den Tailscale-Funnel (AUTH-7b,
     # RAT-27 RATIFIZIERT 2026-07-07). Fehlt, ist der externe User-Geraete-Zugang
-    # schlicht nicht angeboten (kein Auto-Fallback auf heim/tailscale — falsche
-    # Origin = Cookie im falschen Jar + nicht-erreichbarer Link, SREG-7).
+    # schlicht nicht angeboten (kein Auto-Fallback — falsche Origin = Cookie im
+    # falschen Jar + nicht-erreichbarer Link, SREG-7).
     "heim_origin":       "",
-    "tailscale_origin":  "",
+    "tailscale_origin":  "",   # immer leer seit #1458 (Funnel-only)
     "funnel_origin":     "",
     # MAD-7 / EZG-6 / ESSEN-31: Init-Data-Auth fuer Mini-App-Routen.
     # bot_token: aus ENV ELTERNCHAT_BOT_TOKEN (systemd EnvironmentFile, APP-7).
@@ -401,14 +403,15 @@ def get_seiten():
     statt als gekürzte Liste.
 
     SHELL-10 (MAU-Erweiterung): Panel-Eintraege erhalten `shell_urls`
-    (Heim + Tailscale) server-seitig, abgeleitet aus panel_id + runtime-Origins
-    (SREG-7), analog render.py::_hero_paare. Der in-memory-Cache wird NICHT
-    mutiert (shallow copy je Panel-Eintrag, nur wenn Origins konfiguriert).
+    (Heim + Funnel, Tailscale aufgegeben seit #1458) server-seitig, abgeleitet
+    aus panel_id + runtime-Origins (SREG-7), analog render.py::_hero_paare.
+    Der in-memory-Cache wird NICHT mutiert (shallow copy je Panel-Eintrag,
+    nur wenn Origins konfiguriert).
     """
     inventar = _aktuelles_inventar()
     heim_origin = runtime.get("heim_origin", "")
-    tailscale_origin = runtime.get("tailscale_origin", "")
-    if heim_origin or tailscale_origin:
+    funnel_origin = runtime.get("funnel_origin", "")
+    if heim_origin or funnel_origin:
         eintraege = []
         for e in inventar.get("eintraege", []):
             if e.get("typ") == "panel" and e.get("instanz"):
@@ -416,7 +419,9 @@ def get_seiten():
                 e = dict(e)  # shallow copy — keine Mutation des in-memory-Cache
                 e["shell_urls"] = {
                     "heim": (heim_origin.rstrip("/") + "/shell/" + pid) if heim_origin else None,
-                    "tailscale": (tailscale_origin.rstrip("/") + "/shell/" + pid) if tailscale_origin else None,
+                    # tailscale aufgegeben seit #1458 (Funnel-only)
+                    "tailscale": None,
+                    "funnel": (funnel_origin.rstrip("/") + "/shell/" + pid) if funnel_origin else None,
                 }
             eintraege.append(e)
         return jsonify({"eintraege": eintraege,
@@ -431,12 +436,10 @@ def get_seiten_uebersicht():
     Baut die V2-Layout-Datenstruktur via render.baue_layout und liefert das
     gerendertes HTML (Jinja2, Template uebersicht.html). Origins kommen aus dem
     runtime-Dict (SREG-7): ENV-Overrides SEITEN_HEIM_ORIGIN /
-    SEITEN_TAILSCALE_ORIGIN / SEITEN_FUNNEL_ORIGIN oder CLI-Flags
-    --seiten-heim-origin / --seiten-tailscale-origin / --seiten-funnel-origin,
-    gesetzt beim Start (resolved_config).
+    SEITEN_FUNNEL_ORIGIN oder CLI-Flags --seiten-heim-origin /
+    --seiten-funnel-origin, gesetzt beim Start (resolved_config).
 
-    Fehlende Tailscale-Origin loest einen Banner-Hinweis auf der Seite aus
-    (tailscale_banner=True via render.baue_layout — keine leere Seite).
+    SEITEN_TAILSCALE_ORIGIN wird seit #1458 nicht mehr gelesen (Funnel-only).
     """
     inventar = _aktuelles_inventar()
     layout = render.baue_layout(
@@ -2032,14 +2035,16 @@ def resolved_config(args):
     if args.log_level:
         cfg["log_level"] = args.log_level
     # SREG-7: Display-URL-Origins für die SREG-12-Seite.
-    # CLI-Flag schlägt ENV schlägt Default (leer). Leerer Tailscale-Origin
-    # ist zulässig → render.baue_layout setzt tailscale_banner=True.
+    # CLI-Flag schlägt ENV schlägt Default (leer).
     cfg["heim_origin"] = (
         args.seiten_heim_origin
         or os.environ.get("SEITEN_HEIM_ORIGIN", ""))
-    cfg["tailscale_origin"] = (
-        args.seiten_tailscale_origin
-        or os.environ.get("SEITEN_TAILSCALE_ORIGIN", ""))
+    # SREG-7 / #1458 Funnel-only: SEITEN_TAILSCALE_ORIGIN wird nicht mehr gelesen.
+    # Self-signed-Tailnet-IP-Origins wurden aufgegeben (Nic-Setzung 2026-07-25).
+    # Der Slot bleibt im runtime-Dict als leerer String (Nullwert), damit
+    # configure()-Aufrufe und render.baue_layout nicht brechen — die tailscale_
+    # Spalte rendert bei leerem Wert ohnehin nicht (urls.tailscale == None).
+    cfg["tailscale_origin"] = ""
     # SREG-7 dritte Origin: Funnel-FQDN fuer Familien-User-Geraete (AUTH-7b,
     # RAT-27 RATIFIZIERT 2026-07-07). CLI schlaegt ENV schlaegt Default (leer).
     # Leer = externer User-Geraete-Zugang nicht angeboten (kein Auto-Fallback).
@@ -2070,12 +2075,7 @@ def main(argv=None):
               funnel_origin=cfg["funnel_origin"],
               router_url=cfg["router_url"],
               geraete_registry_path=cfg["geraete_registry_path"])
-    if not cfg["tailscale_origin"]:
-        # SREG-7 V1-Soll: Tailscale leer → SREG-12 zeigt Banner statt
-        # zweiter URL-Spalte. Warnung im Log, damit Deploy-Tracking sieht,
-        # ob die Per-Instanz-Datei den Wert noch ergaenzen muss.
-        logging.warning(
-            "SEITEN_TAILSCALE_ORIGIN leer — SREG-12 zeigt nur Heim-Spalte mit Banner.")
+    # SREG-7 / #1458: SEITEN_TAILSCALE_ORIGIN ist aufgegeben — kein Warning mehr.
     if not cfg["funnel_origin"]:
         # SREG-7 dritte Origin: Funnel leer → externer User-Geraete-Zugang (AUTH-7b)
         # nicht angeboten. Warnung damit Deploy-Tracking erkennt, ob die
