@@ -713,44 +713,9 @@ def test_face_pille_foto_url_absolute(client_mit_familie):
 
 
 # ============================================================
-#  HSP-42 — play-extern + SSE Audio-Stream
+#  HSP-42 / PANEL-13 — SSE Audio-Stream
+#  (play-extern entfernt — kein Nicht-Test-Caller, Option B Nic 2026-07-27)
 # ============================================================
-
-def test_play_extern_unbekanntes_album_404(client_mini):
-    """HSP-42: POST /play-extern mit unbekanntem album_id → 404."""
-    resp = client_mini.post("/api/v1/hoerspiel/mia/play-extern",
-                            json={"album_id": "folge-99999", "track_idx": 0})
-    assert resp.status_code == 404
-
-
-def test_play_extern_track_idx_out_of_range_422(client_mini, data_root_mini):
-    """HSP-42: POST /play-extern mit track_idx außerhalb Bereich → 422."""
-    # Album mit manifest.json anlegen
-    import json
-    album_dir = os.path.join(data_root_mini, "alben", "folge-test")
-    os.makedirs(album_dir, exist_ok=True)
-    manifest = {"tracks": [{"audio-asset": "track-01.mp3"}]}
-    with open(os.path.join(album_dir, "manifest.json"), "w") as f:
-        json.dump(manifest, f)
-
-    # Test-Client mit data_root setzen
-    main_mod.configure(
-        runtime_config=main_mod._runtime_cfg(),
-        data_config=main_mod._data_cfg(),
-        data_root=data_root_mini,
-        bot_token="TEST",
-    )
-    client = main_mod.app.test_client()
-    resp = client.post("/api/v1/hoerspiel/mia/play-extern",
-                       json={"album_id": "folge-test", "track_idx": 99})
-    assert resp.status_code == 422
-
-
-def test_play_extern_fehlende_felder_422(client_mini):
-    """HSP-42: POST /play-extern ohne album_id → 422."""
-    resp = client_mini.post("/api/v1/hoerspiel/mia/play-extern", json={})
-    assert resp.status_code == 422
-
 
 def test_audio_stream_endpoint_existiert(client_mini):
     """HSP-42: GET /audio-stream antwortet mit text/event-stream Content-Type."""

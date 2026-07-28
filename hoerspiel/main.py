@@ -733,12 +733,12 @@ def config_endpoint(kind_id: str):
     return jsonify(_build_config_response(new_cfg, new_dcfg, _instance))
 
 
-# ---- Audio-Stream-SSE + play-extern (HSP-42) ----
+# ---- Audio-Stream-SSE (HSP-42 / PANEL-13) ----
 #
-# HSP-41 ist aufgehoben — Audio immer lokal am App-Gerät.
-# Die SSE-Infrastruktur (/audio-stream, /play-extern) und das Routing-Skelett
-# bleiben als Basis für künftige Erweiterungen erhalten, werden aber nicht
-# mehr vom Frontend genutzt. Caller: keiner aktiv (alben.js panel-Zweig entfernt).
+# HSP-41 (audio_ziel-Routing-Weiche) ist aufgehoben — Audio immer lokal am App-Gerät.
+# /audio-stream (SSE) bleibt als aktive PANEL-13-Naht: controller/app-panel/app.js:819-966
+# öffnet pro HSP-Instanz eine EventSource auf diesen Endpoint (audio_play-Events).
+# /play-extern (keine Nicht-Test-Caller) wurde mit HSP-42 Option B (Nic 2026-07-27) entfernt.
 # Auth: PUBLIC (AUTH-6-Backlog).
 
 SSE_HEARTBEAT_SECONDS = 15
@@ -814,82 +814,6 @@ def audio_stream(kind_id: str):
     response.headers["Cache-Control"] = "no-cache"
     response.headers["X-Accel-Buffering"] = "no"  # nginx-Buffering aus
     return response
-
-
-@app.route("/api/v1/hoerspiel/<kind_id>/play-extern", methods=["POST"])
-def play_extern(kind_id: str):
-    """HSP-42: Audio-Steuerung an Panel-PWA via SSE-Broadcast.
-
-    Body: {
-      "action": "play" | "pause" | "resume",  // Default "play"
-      "album_id": <str>,                       // Pflicht bei action=play
-      "track_idx": <int>                       // Pflicht bei action=play
-    }
-    Antwort: 200 {"ok": true} bei Erfolg, 404 unbekanntes album, 422 ungültige Felder.
-
-    Caller: keiner aktiv (HSP-41 aufgehoben, alben.js panel-Zweig entfernt).
-    Auth: PUBLIC (AUTH-6, Trigger „Phase 4 HSP-Audio-Routing").
-    """
-    err = _assert_self_kind(kind_id)
-    if err is not None:
-        return err
-
-    body = request.get_json(silent=True) or {}
-    action = body.get("action", "play")
-
-    if action not in ("play", "pause", "resume"):
-        return jsonify({"fehler": "action muss play|pause|resume sein"}), 422
-
-    # pause/resume sind body-frei (kein album_id/track_idx nötig).
-    if action in ("pause", "resume"):
-        event = {"type": "audio_" + action, "kind_id": kind_id}
-        _audio_broadcast(event)
-        return jsonify({"ok": True})
-
-    # action=play braucht album_id + track_idx + Audio-URL-Auflösung
-    album_id = body.get("album_id")
-    track_idx = body.get("track_idx")
-
-    if not isinstance(album_id, str) or not album_id:
-        return jsonify({"fehler": "album_id (string) fehlt"}), 422
-    if not isinstance(track_idx, int):
-        return jsonify({"fehler": "track_idx (int) fehlt"}), 422
-
-    # Manifest holen, um Track-Filename + Audio-URL zu bauen
-    manifest_path = os.path.join(_data_root(), "alben", album_id, "manifest.json")
-    if not os.path.isfile(manifest_path):
-        return jsonify({"fehler": "album_id nicht gefunden"}), 404
-    try:
-        with open(manifest_path, encoding="utf-8") as f:
-            manifest = json.load(f)
-    except (OSError, json.JSONDecodeError) as e:
-        logger.warning("play-extern: manifest %s nicht lesbar — %s", album_id, e)
-        return jsonify({"fehler": "manifest nicht lesbar"}), 500
-
-    tracks = manifest.get("tracks") or []
-    if not isinstance(tracks, list) or track_idx < 0 or track_idx >= len(tracks):
-        return jsonify({"fehler": "track_idx außerhalb des Track-Bereichs"}), 422
-
-    track = tracks[track_idx]
-    # Audio-URL über offizielle HSP-37-API-Form (kind_id-tragend)
-    audio_filename = track.get("audio-asset") or track.get("filename") or ""
-    # audio-asset könnte schon vollständige URL sein, oder nur Dateiname
-    if audio_filename.startswith(("/api/v1/", "/display/")):
-        audio_url = audio_filename
-    else:
-        # Fallback: Dateiname aus track-N.mp3-Konvention bauen
-        audio_url = "/api/v1/hoerspiel/%s/alben/%s/audio/%s" % (
-            kind_id, album_id, os.path.basename(audio_filename))
-
-    event = {
-        "type": "audio_play",
-        "kind_id": kind_id,
-        "album_id": album_id,
-        "track_idx": track_idx,
-        "audio_url": audio_url,
-    }
-    _audio_broadcast(event)
-    return jsonify({"ok": True})
 
 
 # ---- Themen-Endpoint (HSP-38, URL-3a, RAT-17) ----
