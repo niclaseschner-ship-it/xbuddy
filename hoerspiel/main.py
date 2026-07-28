@@ -759,7 +759,13 @@ def _audio_unregister_subscriber(q: queue.Queue) -> None:
 
 
 def _audio_broadcast(event: dict) -> None:
-    """Pusht das Event an alle aktuell verbundenen Panel-PWAs."""
+    """Ruhende Naht: Pusht ein audio_play-Event an alle verbundenen Panel-PWAs.
+
+    Der einzige Producer (/play-extern, HSP-42) wurde 2026-07-27 entfernt.
+    Diese Funktion ist aktuell aufruferlos — /audio-stream sendet nur Heartbeats.
+    Reaktivierung gebunden an #1471-Rückbau / HSP-44 (neuer Producer-Trigger).
+    Consumer: controller/app-panel/app.js:819-966 (PANEL-13 Silent-Audio-Prime).
+    """
     with _audio_subscribers_lock:
         subs = list(_audio_subscribers)
     for q in subs:
