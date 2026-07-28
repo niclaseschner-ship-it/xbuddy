@@ -33,6 +33,7 @@ import functools
 import json
 import logging
 import os
+import queue
 import sys
 import threading
 import time
@@ -1567,6 +1568,187 @@ def hard_reset_purge():
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     resp.headers["Pragma"] = "no-cache"
     return resp
+
+
+# ============================================================
+#  SHELL-4 (RAT-31 E2) — Same-device Live-Refresh in seiten/
+# ============================================================
+#
+# Verpflanzt aus router/main.py (ROU-22 SSE + POST /events tile_selected-Ingest),
+# BEVOR der Router-Fanout stirbt (heim-shell.md E0-Banner, decisions/RAT-31).
+# Kernunterschied zum Router: EIN Gerät = EIN Ziel — es gibt KEINEN
+# routing.json-Lookup und KEINEN display_id-Key. Ein prozess-weiter Zustand +
+# EINE Subscriber-Menge. Mehrere offene Shell-Tabs teilen sich per Ein-Gerät-
+# Setzung denselben Stream (RAT-31 „ein Gerät für immer"). Reine Intra-Prozess-
+# Verdrahtung (queue.Queue, threading.Lock) — kein Broker, keine Topics
+# (E-DC-1 grenzt SSE vom verschobenen MQTT-Transport ab).
+
+# Prozess-weiter Shell-Zustand (Analog ROU-10, aber KEIN display_id-Dict):
+# der zuletzt getriggerte Zustand des einen Panes, oder None (Ruhe-Zustand).
+_shell_state = None
+_shell_subscribers = set()          # set[queue.Queue]
+_shell_subscribers_lock = threading.Lock()
+
+# Heartbeat: hält die Verbindung über nginx offen und lässt den Generator
+# abgebrochene Clients erkennen (sonst bliebe die Queue für immer blockiert).
+SHELL_SSE_HEARTBEAT_SECONDS = 15
+
+
+def _shell_now_iso():
+    """UTC-Zeitstempel im ROU-10-Format (sekundengenau, Z-Suffix)."""
+    import datetime as _dt
+    return (_dt.datetime.now(_dt.UTC)
+            .replace(microsecond=0).isoformat().replace("+00:00", "Z"))
+
+
+def _shell_subscribe():
+    q = queue.Queue()
+    with _shell_subscribers_lock:
+        _shell_subscribers.add(q)
+    return q
+
+
+def _shell_unsubscribe(q):
+    with _shell_subscribers_lock:
+        _shell_subscribers.discard(q)
+
+
+def _shell_publish(shell_state):
+    """Legt den neuen Zustand in jede offene Stream-Queue (Analog ROU-22 publish)."""
+    with _shell_subscribers_lock:
+        subs = list(_shell_subscribers)
+    for q in subs:
+        q.put(shell_state)
+
+
+def _shell_sse_pack(shell_state):
+    """Formatiert einen Shell-State als SSE-Nachricht (Analog ROU-22 sse_pack)."""
+    return "data: " + json.dumps(shell_state, ensure_ascii=False) + "\n\n"
+
+
+def _shell_event_stream():
+    """Generator für den Shell-SSE-Stream (Analog ROU-22 display_event_stream):
+    liefert den aktuellen Zustand beim Verbinden, danach jede Änderung.
+    Heartbeats sind data-Events `{"type":"heartbeat"}` statt SSE-Comments,
+    damit Mobile-Browser-EventSource sie als Lebenszeichen sieht (R6 Track-E
+    2026-06-18). Der Empfänger im Template ignoriert den heartbeat-Typ."""
+    q = _shell_subscribe()
+    try:
+        yield _shell_sse_pack(_shell_state)        # Zustand beim Verbinden
+        while True:
+            try:
+                s = q.get(timeout=SHELL_SSE_HEARTBEAT_SECONDS)
+            except queue.Empty:
+                yield 'data: {"type":"heartbeat"}\n\n'
+                continue
+            yield _shell_sse_pack(s)
+    finally:
+        _shell_unsubscribe(q)
+
+
+def _adapt_shell_event(event):
+    """SHELL-4: Validiert ein Shell-Ingest-Event (Analog router adapt_app_panel).
+
+    Zwei Event-Typen (PANEL-6): `tile_selected` mit Pflichtfeldern `app`,
+    `view` (Strings/Zahlen) und optional flachem `query`; `panel_cleared`
+    (Ruhe-Zustand, kein Descriptor). Liefert (kind, descriptor) oder
+    (None, fehler-string). Nur flache query-Werte (PANEL-7) — verschachtelte
+    Objekte/Listen werden abgewiesen.
+    """
+    t = event.get("type")
+    if t == "panel_cleared":
+        return ("end", None), None
+    if t == "tile_selected":
+        if "app" not in event:
+            return None, "app fehlt"
+        if "view" not in event:
+            return None, "view fehlt"
+        app_val = event["app"]
+        view_val = event["view"]
+        if not isinstance(app_val, (str, int, float)) or isinstance(app_val, bool):
+            return None, "app muss String oder Zahl sein"
+        if not isinstance(view_val, (str, int, float)) or isinstance(view_val, bool):
+            return None, "view muss String oder Zahl sein"
+        query = event.get("query")
+        if query is not None:
+            if not isinstance(query, dict):
+                return None, "query muss ein flaches Objekt sein"
+            for k, v in query.items():
+                if isinstance(v, bool) or not isinstance(v, (str, int, float)):
+                    return None, ("query.%s muss String oder Zahl sein "
+                                  "(keine verschachtelten Objekte/Listen)" % k)
+        descriptor = {"app": app_val, "view": view_val}
+        if query:
+            descriptor["query"] = dict(query)
+        return ("trigger", descriptor), None
+    return None, 'unbekannter type "%s"' % t
+
+
+def _apply_shell_trigger(descriptor):
+    """SHELL-4: setzt den Shell-Zustand aus dem Descriptor und publiziert ihn
+    an den SSE-Stream. payload.url per Konvention (render.build_panel_url,
+    byte-gleich zum Router). KEIN routing.json/display_id-Lookup — ein Gerät =
+    ein Ziel (Analog router apply_panel_trigger, ohne den panels-Hop)."""
+    global _shell_state
+    url = render.build_panel_url(
+        descriptor["app"], descriptor["view"], descriptor.get("query"))
+    _shell_state = {
+        "descriptor": descriptor,
+        "payload": {"url": url},
+        "since": _shell_now_iso(),
+    }
+    _shell_publish(_shell_state)
+
+
+def _apply_shell_end():
+    """SHELL-4: Ruhe-Zustand (panel_cleared) — Zustand auf None, publizieren."""
+    global _shell_state
+    _shell_state = None
+    _shell_publish(None)
+
+
+@app.route("/shell/<panel_id>/events", methods=["GET"])
+@require_dual_gate(mode="hard")  # AUTH-7b: Shell-Flotte gepairt (Nic/Paula-LAN) — hard enforced, wie /shell/<panel_id>.
+def shell_events(panel_id):
+    """SHELL-4 (RAT-31 E2): SSE-Zustands-Stream des Ein-Gerät-Panes.
+
+    Analog ROU-22, aber OHNE routing.json/display_id-Match — ein Gerät = ein
+    Ziel (RAT-31). `panel_id` ist load-bearing für Auth/URL-Symmetrie zu
+    /shell/<panel_id>, wird aber NICHT als State-Key benutzt (ein prozess-weiter
+    Zustand). same-origin unter der seiten-Origin (kein router-Hop).
+    """
+    resp = app.response_class(_shell_event_stream(),
+                              mimetype="text/event-stream")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
+@app.route("/shell/<panel_id>/events", methods=["POST"])
+@require_dual_gate(mode="hard")  # AUTH-7b: Shell-Flotte gepairt — hard enforced (Ingest same-origin).
+def shell_ingest(panel_id):
+    """SHELL-4 (RAT-31 E2): tile_selected-Ingest same-origin, publiziert an den
+    Shell-SSE-Stream — OHNE router-Hop (Analog router POST /api/v1/events, aber
+    ohne routing.json). Die linke Panel-Nav postet bei leerem router_url an die
+    ORIGIN der Seite (app.js:985, #128) → die Nav braucht KEINE Änderung, nur
+    diesen Ingest unter der seiten-Origin.
+
+    Ein Gerät = ein Ziel: kein source_id/display_id-Match — jedes valide
+    tile_selected trifft den einen Shell-Zustand.
+    """
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({"error": "JSON-Body fehlt oder ungültig"}), 400
+    if "type" not in body:
+        return jsonify({"error": "type ist Pflicht"}), 400
+    adapted, err = _adapt_shell_event(body)
+    if err:
+        return jsonify({"error": err}), 400
+    kind, descriptor = adapted
+    if kind == "end":
+        _apply_shell_end()
+        return "", 204
+    _apply_shell_trigger(descriptor)
+    return "", 204
 
 
 @app.route("/shell/<panel_id>", methods=["GET"])

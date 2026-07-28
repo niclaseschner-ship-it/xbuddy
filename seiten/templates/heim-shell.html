@@ -1,9 +1,12 @@
 <!DOCTYPE html>
 {# SHELL-1: Heim-Shell Split-Layout unter GET /shell/<panel_id>.
-   SHELL-3: Rail 280px Iframe → Panel-Nav, Buddy-Pane Iframe → Display-Client.
-   SHELL-4: keine eigene EventSource, kein Shell-Zustand.
-   SHELL-5: rechtes Pane reiner Iframe, kein displib-Import.
-   SHELL-6: LAN-only, kein Funnel. Refs #1182. #}
+   SHELL-3: Rail 280px Iframe → Panel-Nav, Buddy-Pane Content-Iframe (same-origin).
+   SHELL-4 (RAT-31 E2): rechtes Pane hat eine EIGENE EventSource auf den seiten-
+     seitigen SSE-Stream (/shell/<panel_id>/events) — kein router-Hop, ein Gerät =
+     ein Ziel. Tile-Tap links → seiten-Ingest → SSE → iframe.src-Swap rechts.
+   SHELL-5: rechtes Pane swappt nur iframe.src (Heartbeat-Skip, unverändert-kein-
+     Reload-Guard) — KEINE displib-Kopie, keine DC-Render-Logik nachgebaut.
+   SHELL-6: LAN-only, kein Funnel. Refs #1182 #1339 (RAT-31). #}
 <html lang="de">
 <head>
   <meta charset="utf-8">
@@ -29,22 +32,40 @@
       </iframe>
     </div>
 
-    {% if display_id %}
-    {# SHELL-3/5: rechtes Buddy-Pane — reiner Iframe, keine displib-Kopie (SHELL-5).
-       Die eigene EventSource des Display-Clients bleibt unveraendert (SHELL-4). #}
+    {# SHELL-4 (RAT-31 E2): rechtes Buddy-Pane — same-origin Content-Iframe, dessen
+       src eine EIGENE EventSource auf den seiten-seitigen SSE-Stream swappt. Kein
+       router-Hop, ein Gerät = ein Ziel; kein display_id-Lookup mehr nötig. #}
     <div class="buddy">
-      <iframe src="/display/{{ display_id }}/"
-              title="Buddy-View {{ display_id }}"
+      <iframe id="buddy-pane"
+              title="Buddy-View {{ panel_id }}"
               referrerpolicy="same-origin">
       </iframe>
     </div>
-    {% else %}
-    {# SHELL-1/2: sichtbarer Fehler, kein stiller Fallback, kein rechtes Pane #}
-    <div class="shell-fehler">
-      <p>Panel &#8222;{{ panel_id }}&#8220; ist keinem Display zugeordnet oder nicht bekannt.</p>
-    </div>
-    {% endif %}
   </div>
+  {# SHELL-4/5 (RAT-31 E2): Empfänger — same-origin SSE + iframe.src-Swap.
+     Muster aus display-client/displib.js (SHELL-5: nur der ~30-Zeilen-Swap wird
+     nachgezeichnet, KEINE displib-Datei importiert). withCredentials trägt den
+     same-origin xbuddy_session-Cookie (vgl. displib.js #1423). Heartbeat-Events
+     ({"type":"heartbeat"}) sind reine Lebenszeichen — kein Swap. Ein unveränderter
+     Zustand löst keinen erneuten Swap aus (DC-2, kein Reload). #}
+  <script>
+    (function () {
+      'use strict';
+      var pane = document.getElementById('buddy-pane');
+      if (!pane || typeof EventSource === 'undefined') return;
+      var current;   // zuletzt gesetzte Inhalts-URL oder null (Ruhe-Zustand)
+      var src = new EventSource('/shell/{{ panel_id }}/events', { withCredentials: true });
+      src.onmessage = function (ev) {
+        var st;
+        try { st = JSON.parse(ev.data); } catch (e) { return; }
+        if (st && st.type === 'heartbeat') return;          // Lebenszeichen, kein Swap
+        var next = (st && st.payload && st.payload.url) ? st.payload.url : null;
+        if (next === current) return;                        // unverändert: kein Reload
+        current = next;
+        if (next) pane.src = next;
+      };
+    })();
+  </script>
   {# SHELL-11: Shell besitzt den Vollbild — requestFullscreen auf document.documentElement
      der Shell beim ersten Nutzer-Gesture. Self-healing-Guard: verlässt der Nutzer den
      Vollbild, holt ihn der nächste Tap zurück (analog PANEL-10/DC-11/FIG-26). Das
