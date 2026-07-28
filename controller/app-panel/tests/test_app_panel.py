@@ -2225,3 +2225,71 @@ def test_PANEL_11_parse_display_url_trailing_slash_ac3():
     assert out['result'] is None, (
         'parseDisplayUrl muss bei trailing slash ohne view null zurückgeben, '
         'bekommen: %r' % out['result'])
+
+
+# ============================================================
+#  SHELL-4 / E2-Sender (T1519) — ingest_url-Sender-Logik (AC1 + AC2)
+# ============================================================
+
+def test_T1519_AC1_appjs_liest_ingest_url_aus_urlparams():
+    """AC1 (T1519): app.js enthält URLSearchParams-Lesestelle für ingest_url.
+
+    Der DOM-Initialisierungs-Block liest `?ingest_url=`-Query-Param via
+    URLSearchParams und speichert ihn in _ingestUrlFromParam. Code-Level-Beweis
+    (Pattern-Grep), da der Block unter `if (typeof document === 'undefined') return`
+    im Node-Kontext übersprungen wird. Endabnahme = Nics Tablet-Re-Test."""
+    js = read(APPJS_PATH)
+    assert 'URLSearchParams' in js, (
+        "app.js muss URLSearchParams für ingest_url-Param enthalten (T1519 AC1)"
+    )
+    assert "ingest_url" in js, (
+        "app.js muss 'ingest_url' als Query-Param-Schlüssel referenzieren (T1519 AC1)"
+    )
+    assert '_ingestUrlFromParam' in js, (
+        "app.js muss _ingestUrlFromParam als Variable definieren (T1519 AC1)"
+    )
+
+
+def test_T1519_AC2_sendEvent_nutzt_ingest_url_wenn_vorhanden():
+    """AC2 (T1519 Kein-Regress): sendEvent-Logik in app.js nutzt _ingestUrlFromParam,
+    wenn gesetzt, sonst unverändertes base+'/api/v1/events'-Fallback (Router-Pfad).
+
+    Code-Level-Beweis — DOM-Abschnitt ist in Node nicht erreichbar (kein document).
+    Standalone-Panel ohne ingest_url-Param MUSS weiter an /api/v1/events posten."""
+    js = read(APPJS_PATH)
+    # ingest_url-Zweig muss in sendEvent vorhanden sein:
+    assert '_ingestUrlFromParam' in js, (
+        "sendEvent muss _ingestUrlFromParam referenzieren (T1519 AC2)"
+    )
+    # Fallback (Router-Pfad) darf nicht verschwunden sein — AC2 Kein-Regress:
+    assert "/api/v1/events" in js, (
+        "Fallback-Pfad /api/v1/events (Router, Standalone-Panel) muss erhalten bleiben "
+        "(T1519 AC2 Kein-Regress)"
+    )
+    # Der Router-Fallback muss im else-Zweig unter _ingestUrlFromParam stehen:
+    ingest_pos = js.find('_ingestUrlFromParam')
+    api_events_pos = js.find('/api/v1/events', ingest_pos)
+    assert ingest_pos != -1 and api_events_pos != -1, (
+        "_ingestUrlFromParam-Zweig und /api/v1/events-Fallback müssen beide in sendEvent "
+        "vorhanden sein (T1519 AC1+AC2)"
+    )
+
+
+def test_T1519_AC3_makeTileSelected_body_hat_pflichtfelder():
+    """AC3 (T1519): makeTileSelected-Body enthält alle Pflichtfelder des seiten-
+    Ingest (_adapt_shell_event: type/app/view). Node-Aufruf via panelLib.
+
+    Beweis, dass der Client-Body strukturell kompatibel mit dem Empfänger ist.
+    Endabnahme = Nics Tablet-Re-Test (server-seitig in test_shell_sse.py::
+    test_ac3_ingest_endpunkt_akzeptiert_tile_selected_body)."""
+    out = run_node('''
+        const tile = { key: 'k1', app: 'hoerspiel', view: 'player',
+                       label: 'Musik', icons: ['arasaac/test.png'] };
+        const body = panelLib.makeTileSelected('app-panel:paulas-panel-01', tile);
+        console.log(JSON.stringify(body));
+    ''')
+    assert out.get('type') == 'tile_selected', "body.type muss 'tile_selected' sein"
+    assert 'app' in out, "body.app Pflichtfeld fehlt (PANEL-6 / _adapt_shell_event)"
+    assert 'view' in out, "body.view Pflichtfeld fehlt (PANEL-6 / _adapt_shell_event)"
+    assert out['app'] == 'hoerspiel', "body.app muss tile.app widerspiegeln"
+    assert out['view'] == 'player', "body.view muss tile.view widerspiegeln"
