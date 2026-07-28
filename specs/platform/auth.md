@@ -671,6 +671,83 @@ Pairing-Link ist 15 Minuten gültig; läuft er ab, erneut Schritt 1 auslösen.
 
 *Tickets:* #1390, #948
 
+## 8. User-Endgerät-Flow (Nic-Setzung 2026-07-25, #1338)
+
+### AUTH-10 — Telegram-Deep-Link-Pairing ist der einzige Auth-Pfad für User-Endgeräte
+
+> **ENTSCHIEDEN 2026-07-25 (Nic-Setzung, #1338).** Dies ist kein offener
+> Entscheid — der Flow ist ratifiziert und wird hier festgeschrieben.
+> Refs: RAT-32 (Cookie-only-hart, 2026-07-27), RAT-27 (Dual-Gate-Basis,
+> 2026-07-07), #1338 (Auth-Härtungs-Epic), #1458 (Funnel-Origin).
+
+Jedes **User-Endgerät** (Eltern-Phone, Eltern-Tablet, Eltern-Laptop,
+Kind-Tablet) durchläuft **exakt einen** Auth-Pfad:
+
+1. **Pairing-Link über Telegram-Bot anfordern** — das Elternteil schreibt
+   dem Familien-Bot (oder nutzt den Geräte-Anlage-Flow `geraet-anlegen.md`
+   GAA-3.8); der Bot antwortet mit einem 15-Minuten-Link auf die
+   Funnel-FQDN: `https://<funnel-fqdn>/auth/pair?token=<X>`.
+2. **Link auf dem Ziel-Gerät öffnen** — Browser öffnet den Link; der
+   `/auth/pair`-Endpoint (AUTH-2.a) prüft das Token, setzt den
+   `xbuddy_session`-Cookie (HttpOnly, Secure, SameSite=Lax, 90 Tage
+   rolling, AUTH-2) und leitet auf das verwendungs-abhängige Ziel weiter
+   (Display → `/display/<id>`; Nicht-Display → Übersichtsseite, Nic-Setzung
+   2026-07-27, #1372).
+3. **Danach: Cookie ist die Identität.** Jeder folgende Zugriff auf
+   AUTH-3-Routen oder 7b-Renderer-Routen verwendet den `xbuddy_session`-Cookie
+   (RAT-32 Cookie-only-hart); `tma`/`initData` bleibt parallel gültig für
+   Telegram-Mini-App-Kontexte (AUTH-2, additiv).
+
+**Telegram ist Voraussetzung — kein alternativer Onboarding-Pfad.**
+Kein User-Endgerät erhält Zugang ohne vorherigen Telegram-Pairing-Schritt.
+Es gibt keinen alternativen User-Onboarding-Pfad (kein
+QR-Code-only-Onboarding, kein lokales Passwort, kein Zertifikat-Install als
+User-Auth). Onboarding ohne Telegram findet nicht statt (Setzung 2026-06-12,
+Memory `project_xbuddy_telegram_endgerate_pflicht`).
+
+[Quelle: Nic-Setzung 2026-07-25 (#1338); auth.md AUTH-2.a (Pairing-Endpoint);
+AUTH-1 Pfad-1-Reichweite; RAT-32 Cookie-only-hart (2026-07-27);
+`project_xbuddy_telegram_endgerate_pflicht` Memory.]
+
+*Tickets:* #1338, #1469
+
+### AUTH-10.a — Pi/Operator-Sticks: bewusste Ausnahme vom Telegram-Pfad
+
+**Der Pi-Kiosk (und andere headless Operator-Sticks) ist kein User-Endgerät**
+— er wird NICHT über Telegram gekoppelt. Er ist ein HDMI-Stick im Wohnzimmer
+ohne interaktive Telegram-Bedienung.
+
+**Post-RAT-32-Stand (2026-07-27):** Der Pi ist auf Cookie umgestellt
+(headless-Pairing via `buddyboard-core/deploy/pi-display/pair-kiosk.sh`) und
+verwendet ebenfalls den `xbuddy_session`-Cookie — aber über den
+**Operator-Pfad**, nicht den Telegram-User-Pfad:
+
+- **Operator-Pairing:** `pair-kiosk.sh` (SSH-Zugang auf den Pi, Oper-Ebene)
+  generiert direkt einen Pairing-Token und ruft `/auth/pair` lokal auf — kein
+  Telegram-Bot-Interaktion, kein User-Schritt.
+- **Kein Telegram installiert, kein Telegram-Pairing** — die
+  GAA-3.8-Sequenz (Familien-Bot → Privatchat-Link → Gerät öffnet Link) gilt
+  für User-Endgeräte, **nicht** für den Pi.
+- **AUTH-7a entfällt (RAT-32):** Die frühere Operator-IP-Alternative (Auth
+  ohne Cookie über Quell-IP im Heim-LAN) ist gestrichen; AUTH-7a ist nicht
+  mehr als Zugangs-Alternative aktiv. Der Pi kommt heute — wie User-Endgeräte
+  — ausschließlich per Cookie in die 7b-Renderer-Routen.
+- **AUTH-5 Loopback-Bypass bleibt unberührt** (Server-zu-Server, nicht
+  Operator-Pi-Zugang).
+
+**Warum explizit hier:** Der Telegram-Pfad (AUTH-10) ist normativ für
+User-Endgeräte. Die Pi/Operator-Ausnahme ist **keine Lücke**, sondern eine
+bewusste Klasse: headless Hardware, die kein menschliches Telegram-Konto hat,
+braucht einen Operator-Werkzeug-Pfad. Die Klasse ist geschlossen — neue
+Familien-Kiosk-Sticks folgen demselben Operator-Pfad (pair-kiosk.sh-Muster),
+nicht dem User-Telegram-Pfad.
+
+[Quelle: RAT-32 (Cookie-only-hart, AUTH-7a-Streichung, headless-Pairing via
+pair-kiosk.sh, 2026-07-27); AUTH-1 „Pi-Display ist explizit kein
+User-Endgerät — Operator-Pfad"; AUTH-7 7a-Auslaufmodell-Notiz; #1338 Epic.]
+
+*Tickets:* #1338, #1469
+
 ## Offene Fragen
 
 (Keine offenen Punkte in V1 — alle Klauseln haben Paket-Quelle im ENTSCHEID-
