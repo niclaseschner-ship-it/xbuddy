@@ -14,9 +14,14 @@ ist kein reiner GET-Endpunkt und damit automatisch ausgenommen.
 """
 
 import os
+import re
 
 from tools import views_manifest
 from wetter import main as wetter_main
+
+_CSS_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "static", "wetter.css")
 
 _VIEWS_JSON = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "views.json")
@@ -64,3 +69,48 @@ def test_wetter_routes_match_manifest():
     """
     eintraege = views_manifest.load(_VIEWS_JSON)
     views_manifest.assert_routes_match(wetter_main.app, eintraege, "wetter")
+
+
+def test_wetter_css_pane_responsiv():
+    """T1541 AC1/AC3: wetter.css darf keine fixen 1920px-Breiten auf html/body
+    oder .diptychon setzen — die View muss sich der Pane-Breite anpassen.
+
+    Responsive Naht (analog routine.css DC-15):
+    - html, body: width: 100% (nicht 1920px)
+    - .diptychon: width: 100% (nicht 1920px)
+    - max-width vorhanden (schützt Vollbild-Kiosk-Fall)
+    """
+    with open(_CSS_PATH, encoding="utf-8") as f:
+        css = f.read()
+
+    # html/body-Block: kein fixer 1920px-Wert für width
+    html_body_match = re.search(r'html\s*,\s*body\s*\{([^}]+)\}', css, re.DOTALL)
+    assert html_body_match, "html, body muss in wetter.css definiert sein"
+    html_body_block = html_body_match.group(1)
+    # width muss fluid sein (100%), kein hartcodierter px-Wert
+    assert "width: 100%" in html_body_block, (
+        "T1541: html/body in wetter.css muss width:100% haben, nicht fixen px-Wert"
+    )
+    # width-Zeile darf nicht 1920px sein
+    for line in html_body_block.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("width:") and "max" not in stripped:
+            assert "1920px" not in stripped, (
+                f"T1541: html/body width darf kein fixer 1920px-Wert sein: {stripped!r}"
+            )
+
+    # max-width schützt den Vollbild-Fall
+    assert "max-width" in html_body_block, (
+        "T1541: html/body in wetter.css muss max-width enthalten (Vollbild-Schutz)"
+    )
+
+    # .diptychon: kein fixer 1920px-Wert für width
+    diptychon_match = re.search(r'\.diptychon\s*\{([^}]+)\}', css, re.DOTALL)
+    assert diptychon_match, ".diptychon muss in wetter.css definiert sein"
+    diptychon_block = diptychon_match.group(1)
+    for line in diptychon_block.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("width:") and "max" not in stripped:
+            assert "1920px" not in stripped, (
+                f"T1541: .diptychon width darf kein fixer 1920px-Wert sein: {stripped!r}"
+            )
