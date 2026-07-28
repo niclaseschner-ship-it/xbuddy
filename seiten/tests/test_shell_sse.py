@@ -341,3 +341,95 @@ def test_t1538_sw_events_pfad_nicht_als_html():
     assert not shell_nav_re.match('/shell/paulas-panel-01/icon-192.png'), (
         "isShellHtml-Regex darf /shell/<pid>/icon-192.png NICHT matchen"
     )
+
+
+# ============================================================
+#  T1547 — Aus-Kachel / panel_cleared → Pane leeren (JS-Template-Fix)
+# ============================================================
+
+_TEMPLATE_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "templates", "heim-shell.html",
+)
+
+
+def _template_body() -> str:
+    with open(_TEMPLATE_PATH, encoding="utf-8") as fh:
+        return fh.read()
+
+
+def test_t1547_template_enthaelt_remove_attribute_src():
+    """T1547 AC1: Das Template hat einen else-/null-Zweig mit removeAttribute('src').
+
+    Beweist, dass cleared (next===null) die Pane leert statt sie zu ignorieren.
+    Der Guard muss NACH dem if(next){...}-Block stehen, damit der truthy-Pfad
+    (pane.src=next + Fokus) unberuehrt bleibt (AC2).
+    """
+    body = _template_body()
+    assert "pane.removeAttribute('src')" in body, (
+        "heim-shell.html muss pane.removeAttribute('src') im null-Zweig enthalten "
+        "(T1547: Aus-Kachel leert die Pane)"
+    )
+
+
+def test_t1547_template_truthy_pfad_unveraendert():
+    """T1547 AC2: Der truthy-Pfad (pane.src = next) bleibt im Template erhalten.
+
+    Stellt sicher, dass der Fix den existing Swap-Pfad nicht entfernt hat.
+    """
+    body = _template_body()
+    assert "pane.src = next;" in body, (
+        "heim-shell.html muss weiterhin 'pane.src = next;' im truthy-Zweig enthalten "
+        "(T1547: truthy-Pfad darf nicht veraendert werden)"
+    )
+    # Fokus-Logik ebenfalls unveraendert vorhanden:
+    assert "pane.blur" in body, (
+        "Fokus-Logik (pane.blur) darf durch T1547-Fix nicht entfernt worden sein"
+    )
+
+
+def test_t1547_cleared_event_setzt_shell_state_auf_none():
+    """T1547 AC3 (Backend): panel_cleared publiziert None — der SSE-Null-Trigger,
+    den der Browser-Client als 'next===null' auswertet und mit removeAttribute('src')
+    beantwortet.
+
+    Prueft den seiten-seitigen Publish-Pfad: nach Cleared ist _shell_state==None
+    und der publizierte Wert in der Queue ebenfalls None.
+    """
+    seiten_main._apply_shell_trigger({"app": "hoerspiel", "view": "player"})
+    q = seiten_main._shell_subscribe()
+    try:
+        c = _auth_client()
+        r = c.post("/shell/" + PANEL_ID + "/events", json={"type": "panel_cleared"})
+        assert r.status_code == 204
+        assert seiten_main._shell_state is None, (
+            "_shell_state muss nach panel_cleared None sein"
+        )
+        published = q.get(timeout=1.0)
+        assert published is None, (
+            "publizierter Wert nach panel_cleared muss None sein "
+            "(Browser empfaengt null → next===null → removeAttribute('src'))"
+        )
+    finally:
+        seiten_main._shell_unsubscribe(q)
+
+
+def test_t1547_truthy_event_setzt_url_in_state():
+    """T1547 AC3 (Backend): tile_selected publiziert payload.url — der truthy-Trigger,
+    den der Browser-Client als 'next!==null' auswertet und mit pane.src=next beantwortet.
+    """
+    q = seiten_main._shell_subscribe()
+    try:
+        c = _auth_client()
+        r = c.post(
+            "/shell/" + PANEL_ID + "/events",
+            json={"type": "tile_selected", "app": "essen", "view": "liste"},
+        )
+        assert r.status_code == 204
+        published = q.get(timeout=1.0)
+        assert published is not None, "truthy Event muss einen nicht-None-State publizieren"
+        assert published["payload"]["url"] == "/display/essen/liste", (
+            "payload.url muss /display/essen/liste sein"
+        )
+    finally:
+        seiten_main._shell_unsubscribe(q)
