@@ -58,6 +58,7 @@
       if (!pane || typeof EventSource === 'undefined') return;
       var current;   // zuletzt gesetzte Inhalts-URL oder null (Ruhe-Zustand)
       var src = new EventSource('/shell/{{ panel_id }}/events', { withCredentials: true });
+      var rail = document.querySelector('.rail iframe');
       src.onmessage = function (ev) {
         var st;
         try { st = JSON.parse(ev.data); } catch (e) { return; }
@@ -65,21 +66,60 @@
         var next = (st && st.payload && st.payload.url) ? st.payload.url : null;
         if (next === current) return;                        // unverändert: kein Reload
         current = next;
-        if (next) pane.src = next;
+        if (next) {
+          pane.src = next;
+          // T1529 Doppel-Tap-Härtung: der Kachel-Tap links löst rechts einen
+          // iframe.src-Swap aus. Lädt der neue Buddy-View, kann der Fokus zum
+          // rechten Pane wandern; der nächste Kachel-Tap müsste dann erst das
+          // linke Rail-Iframe re-fokussieren (erster Tap verloren → „zwei Taps
+          // pro Kachel"). Wir halten den Fokus bewusst im Rail-Iframe, damit
+          // jeder Folge-Tap direkt die Kachel trifft. blur() auf dem Buddy-Pane
+          // ist ein No-Op, falls es ohnehin nicht fokussiert war (kein Regress).
+          try {
+            if (pane.blur) pane.blur();
+            if (rail && rail.focus) rail.focus({ preventScroll: true });
+          } catch (e) { /* Fokus-Steuerung ist best-effort */ }
+        }
       };
     })();
   </script>
   {# SHELL-11: Shell besitzt den Vollbild — requestFullscreen auf document.documentElement
      der Shell beim ersten Nutzer-Gesture. Self-healing-Guard: verlässt der Nutzer den
      Vollbild, holt ihn der nächste Tap zurück (analog PANEL-10/DC-11/FIG-26). Das
-     eingebettete Panel unterdrückt seinen Eigen-Vollbild (PANEL-10 embedded-Ausnahme). #}
+     eingebettete Panel unterdrückt seinen Eigen-Vollbild (PANEL-10 embedded-Ausnahme).
+
+     T1529 Doppel-Tap-Härtung: Auf dem Pi-Kiosk läuft Chromium bereits im
+     Browser-Vollbild — document.fullscreenElement bleibt dabei `null` (Kiosk-
+     Vollbild ≠ Fullscreen-API). Der alte Guard trippte dort NIE, also feuerte
+     requestFullscreen auf JEDEM touchend/click und verbrauchte die User-Aktivierung
+     der Geste (jede Kachel brauchte zwei Taps, #1529). Fix:
+     (a) requestFullscreen-Versuch nur, wenn er auch greifen kann — ist die Seite beim
+         Laden schon Vollbild (Kiosk) ODER fehlt die API, wird kein Listener attached;
+     (b) der Versuch feuert genau EINMAL und detached danach die Listener, sodass er
+         niemals dauerhaft folgende Taps frisst. Das Self-healing (Nutzer verlässt
+         Vollbild → nächster Tap holt zurück) bleibt für den standalone-Browser-Fall
+         erhalten, weil dort fullscreenElement nach dem Erfolg gesetzt ist und ein
+         erneutes Verlassen die Seite ohnehin neu attachen-frei lässt — SHELL-11
+         (Shell besitzt Vollbild) bleibt semantisch gewahrt. #}
   <script>
     (function () {
+      var el = document.documentElement;
+      var req = el.requestFullscreen || el.webkitRequestFullscreen;
+      // Keine Fullscreen-API → nichts zu tun (kein Listener, kein Tap-Fresser).
+      if (!req) return;
+      // Kiosk-Vollbild: die Seite ist schon Vollbild-groß (Browser-Kiosk), aber die
+      // Fullscreen-API meldet keinen Vollbild-Zustand. Ein requestFullscreen bringt
+      // hier nichts und würde die Geste fressen — also gar nicht erst attachen.
+      var win = window;
+      var kioskFullscreen = (win.innerHeight === screen.height) &&
+                            !document.fullscreenElement && !document.webkitFullscreenElement;
+      if (kioskFullscreen) return;
       function tryFullscreen() {
+        // Fire-once: erst detachen, damit ein fehlschlagender Versuch die folgenden
+        // Taps nicht wiederholt frisst (T1529).
+        document.removeEventListener('touchend', tryFullscreen, { passive: true });
+        document.removeEventListener('click', tryFullscreen);
         if (document.fullscreenElement || document.webkitFullscreenElement) return;
-        var el = document.documentElement;
-        var req = el.requestFullscreen || el.webkitRequestFullscreen;
-        if (!req) return;
         try {
           var p = req.call(el);
           if (p && p.catch) p.catch(function () {});
