@@ -1,6 +1,0 @@
-# Eltern-Chat V1 — Laufzeit-Abhängigkeiten (Refs #27).
-# Nur der Claude-Adapter (providers/claude.py) braucht das anthropic-SDK; der
-# restliche Code und die reproduzierbare Test-Suite kommen mit der
-# Python-Standardbibliothek aus.
-anthropic>=0.40
-litellm~=1.93

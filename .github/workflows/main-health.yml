@@ -49,21 +49,20 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: pip-pytest-${{ hashFiles('eltern-chat/requirements.txt', 'photo/requirements.txt') }}
+          key: pip-pytest-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
             pip-pytest-
 
-      - name: venv + Test-Abhängigkeiten
+      - name: venv + Test-Abhängigkeiten (pyproject-SSoT)
         if: always()
-        # --system-site-packages: der Pi-Runner trägt die Laufzeit-Pakete der
-        # Services global (flask, Pillow, …); das venv erbt sie und pip
-        # ergänzt pytest + die deklarierten requirements reproduzierbar.
+        # Install AUSSCHLIESSLICH aus pyproject.toml (RAT-33 Option A, #1534):
+        # KEIN --system-site-packages mehr — das isolierte venv erzwingt, dass
+        # [project.dependencies] vollständig ist (deckt die #1515-Klasse). pytest
+        # ist Test-, kein Runtime-Dep und wird separat installiert.
         run: |
-          python3 -m venv --system-site-packages .venv-pytest
+          python3 -m venv .venv-pytest
+          .venv-pytest/bin/pip install --quiet .
           .venv-pytest/bin/pip install --quiet pytest
-          .venv-pytest/bin/pip install --quiet \
-            -r eltern-chat/requirements.txt \
-            -r photo/requirements.txt
 
       - name: pytest (repo-weit)
         if: always()

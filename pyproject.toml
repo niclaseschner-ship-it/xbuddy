@@ -6,6 +6,12 @@ requires-python = ">=3.13"
 # Pinning-Strategie: ~= (kompatibel) — erlaubt Patch-Updates, sperrt gegen Breaking-Changes.
 # Quellen: `pip list` auf der Pi 2026-07-24; litellm aus PyPI (RAT-26/RAT-28, #1433, noch
 # nicht importiert — wird mit dem ersten litellm-Vendor-Modul aktiv).
+# EINZIGER Dependency-SSoT (RAT-33 Option A, #1534): CI (.github/workflows/pytest.yml +
+# main-health.yml) und Deploy (deploy/update.sh sync_deps) installieren AUSSCHLIESSLICH
+# hieraus (`pip install .`) — keine requirements.txt mehr. Vollständigkeits-Beweis:
+# frisches venv nur aus pyproject → volle pytest-Suite grün (kein ModuleNotFoundError).
+# jinja2/markupsafe/openai/python-telegram-bot ergänzt (#1534): direkt importiert, waren
+# aber nur transitiv/über --system-site-packages verfügbar (die #1515-Divergenz-Klasse).
 dependencies = [
     # Web-Framework: alle Service-main.py-Dateien (Flask 3.x ist Breaking-Change zu 2.x).
     "flask~=3.1",
@@ -20,7 +26,29 @@ dependencies = [
     # LiteLLM-Motor: RAT-26 + RAT-28, #1433 — Vendor-Modul tools/llm/_vendor/litellm.py.
     # Noch nicht im Code aktiv; hier vordeklariert, damit der Deploy-Schritt keine Überraschung ist.
     "litellm~=1.93",
+    # Jinja2/MarkupSafe: seiten/main.py rendert Templates direkt (nicht nur via Flask).
+    "jinja2~=3.1",
+    "markupsafe~=3.0",
+    # OpenAI-SDK: kibuddy/ + hoerspiel/ Azure-TTS/STT-Adapter (tts/azure.py, stt/*).
+    "openai~=2.32",
+    # Telegram-Bot: eltern-chat/ (authz.py, main.py, skills/*) — python-telegram-bot.
+    "python-telegram-bot~=21.11",
 ]
+
+# --------------------------------------------------------------------------
+# Packaging: xbuddy ist KEIN installierbares Distributions-Paket — die Services
+# laufen aus dem Checkout (systemd WorkingDirectory), nicht aus site-packages.
+# pyproject dient hier ausschließlich als DEPENDENCY-SSoT (RAT-33 Option A,
+# #1534): `pip install .` (CI/Deploy) zieht [project.dependencies], baut aber
+# KEIN Paket. `py-modules = []` schaltet die setuptools-Auto-Discovery des
+# flach-mehrpaketigen Repos ab (sonst: "Multiple top-level packages discovered").
+# --------------------------------------------------------------------------
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = []
 
 [tool.ruff]
 target-version = "py313"

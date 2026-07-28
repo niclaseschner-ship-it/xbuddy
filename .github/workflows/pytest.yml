@@ -31,26 +31,28 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: pip-Cache (RAT-30, Teil 3)
-        # Cacht den pip-Download-Ordner; Key aus Hash der requirements-Dateien,
-        # damit ein requirements-Diff den Cache invalidiert. Spart den Netz-
-        # Roundtrip der pytest-/requirements-Wheels auf dem einen Pi-Runner.
+        # Cacht den pip-Download-Ordner; Key aus dem Hash der pyproject.toml
+        # (der EINEN Dependency-SSoT, RAT-33/#1534), damit ein Dep-Diff den
+        # Cache invalidiert. Spart den Netz-Roundtrip der Wheels auf dem einen
+        # Pi-Runner.
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: pip-pytest-${{ hashFiles('eltern-chat/requirements.txt', 'photo/requirements.txt') }}
+          key: pip-pytest-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
             pip-pytest-
 
-      - name: venv + Test-Abhängigkeiten
-        # --system-site-packages: der Pi-Runner trägt die Laufzeit-Pakete der
-        # Services global (flask, Pillow, …); das venv erbt sie und pip
-        # ergänzt pytest + die deklarierten requirements reproduzierbar.
+      - name: venv + Test-Abhängigkeiten (pyproject-SSoT)
+        # Install AUSSCHLIESSLICH aus pyproject.toml (RAT-33 Option A, #1534):
+        # KEIN --system-site-packages mehr — das isolierte venv erzwingt, dass
+        # [project.dependencies] vollständig ist (jeder fehlende direkte Dep
+        # macht diesen Job rot, statt still über globale Pakete kaschiert zu
+        # werden — genau die #1515-Klasse). pytest ist Test-, kein Runtime-Dep
+        # und wird separat installiert.
         run: |
-          python3 -m venv --system-site-packages .venv-pytest
+          python3 -m venv .venv-pytest
+          .venv-pytest/bin/pip install --quiet .
           .venv-pytest/bin/pip install --quiet pytest
-          .venv-pytest/bin/pip install --quiet \
-            -r eltern-chat/requirements.txt \
-            -r photo/requirements.txt
 
       - name: pytest (repo-weit)
         run: .venv-pytest/bin/python -m pytest -q
