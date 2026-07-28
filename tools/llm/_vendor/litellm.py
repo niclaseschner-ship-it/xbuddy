@@ -10,20 +10,19 @@ KIBuddy-Migration — like-for-like Motor-Swap (gleiches Modell
 `claude-haiku-4-5`, Route `litellm` statt `anthropic`).
 
 Slot 2 (#1449/#1452) migriert die Agent-Sicht: `agent_step(...)` ist jetzt
-implementiert (Spiegel `_vendor/mistral.py`, aber getattr-Zugriff gegen die
-LiteLLM-`ModelResponse`-Objekte statt dict.get). Sie übersetzt die neutrale
-(Anthropic-shaped) Wire-Form beidseitig auf/von der OpenAI-Chat-Completions-
-Form, setzt `cache_control: ephemeral` am System-Block (Kosten-Parität zum
-Alt-eltern-chat-Pfad) und liefert die neutrale
+implementiert (getattr-Zugriff gegen die LiteLLM-`ModelResponse`-Objekte statt
+dict.get). Sie übersetzt die neutrale (Anthropic-shaped) Wire-Form beidseitig
+auf/von der OpenAI-Chat-Completions-Form, setzt `cache_control: ephemeral` am
+System-Block (Kosten-Parität zum Alt-eltern-chat-Pfad) und liefert die neutrale
 `{"text", "tool_calls", "usage", "web_search", "web_search_requests"}`-Form
 (web_search leer/0 — der Vendor deklariert kein web_search).
 
 Slot 3 (#1454) migriert die Singleshot-Sichten: `singleshot_structured(...)`
-(forced tool_choice named form, Spiegel `_vendor/mistral.py`) und
-`singleshot_text(...)` (Freitext) sind jetzt implementiert — getattr-Zugriff
-gegen die LiteLLM-`ModelResponse` statt dict.get (wie `agent_step`). Damit
-trägt der litellm-Vendor die hoerspiel-Folgen-/Synopse-Pfade (get_singleshot /
-get_completion); `structured_output` ist in CAPABILITIES aufgenommen.
+(forced tool_choice named form) und `singleshot_text(...)` (Freitext) sind jetzt
+implementiert — getattr-Zugriff gegen die LiteLLM-`ModelResponse` statt dict.get
+(wie `agent_step`). Damit trägt der litellm-Vendor die hoerspiel-Folgen-/Synopse-
+Pfade (get_singleshot / get_completion); `structured_output` ist in CAPABILITIES
+aufgenommen.
 
 Slot 4 (#1509, multimodal_input): `singleshot_structured` nimmt jetzt das
 optionale `images`-Kwarg (neutrale Wire-Form `[{"bytes": <raw>, "media_type":
@@ -110,8 +109,7 @@ class LitellmVendor(VendorBase):
     (get_chat/get_agent/get_singleshot/get_completion) sowie Audio.
 
     `agent_run` und `_tool_result_block` werden von `VendorBase` geerbt (LLMP-S7,
-    kein Copy — Spiegel `_vendor/mistral.py`); der Loop dort ruft `agent_step`
-    dynamisch.
+    kein Copy); der Loop dort ruft `agent_step` dynamisch.
     """
 
     name = "litellm"
@@ -341,12 +339,12 @@ class LitellmVendor(VendorBase):
     ) -> dict[str, Any]:
         """Single-Turn-Create gegen LiteLLM: EIN Call, kein interner Loop.
 
-        Spiegel `_vendor/mistral.py:agent_step` — übersetzt die neutrale
-        (Anthropic-shaped) Wire-Form → OpenAI-Chat-Completions-Payload, ruft
-        `litellm.completion`, emittiert Telemetrie (LLMP-S4) und parst die
-        LiteLLM-`ModelResponse` (Attribut-/getattr-Zugriff, NICHT dict.get) in
-        die neutrale Rückgabe. `agent_run` (VendorBase) fährt den Tool-Loop und
-        ruft diese Methode pro Iteration.
+        Übersetzt die neutrale (Anthropic-shaped) Wire-Form →
+        OpenAI-Chat-Completions-Payload, ruft `litellm.completion`, emittiert
+        Telemetrie (LLMP-S4) und parst die LiteLLM-`ModelResponse`
+        (Attribut-/getattr-Zugriff, NICHT dict.get) in die neutrale Rückgabe.
+        `agent_run` (VendorBase) fährt den Tool-Loop und ruft diese Methode pro
+        Iteration.
 
         Cache-Parität (LLMP-S1): der System-Prompt trägt `cache_control:
         ephemeral` als eigene `{"role":"system", …}`-Message (Muster
@@ -441,13 +439,12 @@ class LitellmVendor(VendorBase):
         correlation_id: str | None = None,
     ) -> dict[str, Any]:
         """Ein Call, forced `tool_use` → Schema-konformes dict (LLMP-S1
-        `get_singleshot`, Spiegel `_vendor/mistral.py:singleshot_structured`).
+        `get_singleshot`).
 
         Baut den OpenAI-Chat-Completions-Payload aus EINER user-Message
         (`prompt`) + EINEM Tool (`_to_litellm_tool` — geteilt mit der Agent-
         Sicht) und erzwingt es über die **benannte** `tool_choice`-Form
-        (`{"type":"function","function":{"name":tool_name}}`, OpenAI-Parität,
-        wie mistral).
+        (`{"type":"function","function":{"name":tool_name}}`, OpenAI-Parität).
 
         `images` (Slot 4/#1509, multimodal_input): neutrale Wire-Form
         `[{"bytes": <raw>, "media_type": <str>}, …]`. Bei nicht-leerem `images`
@@ -459,15 +456,13 @@ class LitellmVendor(VendorBase):
         Der System-Prompt wird als eigene `{"role":"system", …}`-Message
         vorangestellt (system_message_distinct). ANDERS als `chat_multiturn`/
         `agent_step` wird HIER KEIN `cache_control`-Marker gesetzt: ein
-        Singleshot ist ein Ein-Turn-Call ohne Cache-Nutzen (Spiegel mistral,
-        das ebenfalls keinen Cache-Marker setzt).
+        Singleshot ist ein Ein-Turn-Call ohne Cache-Nutzen.
 
-        Parst die LiteLLM-`ModelResponse` per getattr (NICHT dict.get wie
-        mistral): `response.choices[i].message.tool_calls[j].function.name/
-        arguments`. `json.loads(function.arguments)` defensiv (JSONDecodeError/
-        TypeError → {}). Kein `tool_call` mit `name==tool_name` →
-        `ProviderError` (Spiegel `mistral.py:175-177`). Telemetrie via
-        geteiltem `_emit_telemetry` (kein Copy-Paste — LLMP-S7). LiteLLM-API-
+        Parst die LiteLLM-`ModelResponse` per getattr:
+        `response.choices[i].message.tool_calls[j].function.name/arguments`.
+        `json.loads(function.arguments)` defensiv (JSONDecodeError/TypeError →
+        {}). Kein `tool_call` mit `name==tool_name` → `ProviderError`. Telemetrie
+        via geteiltem `_emit_telemetry` (kein Copy-Paste — LLMP-S7). LiteLLM-API-
         Fehler → `ProviderError` (analog `chat_multiturn`/`agent_step`).
         """
         messages: list[dict[str, Any]] = []
@@ -537,13 +532,12 @@ class LitellmVendor(VendorBase):
         slot: str,
         correlation_id: str | None = None,
     ) -> str:
-        """Ein Call, Freitext-Antwort → str (LLMP-S1 `get_completion`, Spiegel
-        `_vendor/mistral.py:singleshot_text`).
+        """Ein Call, Freitext-Antwort → str (LLMP-S1 `get_completion`).
 
         Baut den Payload aus EINEM system + EINEM user-Message, OHNE
         `tools`/`tool_choice`/`schema`, und gibt den Text-Content zurück
         (`_extract_text` — geteilt mit `chat_multiturn`). KEIN
-        `cache_control`-Marker (Ein-Turn-Singleshot, Spiegel mistral).
+        `cache_control`-Marker (Ein-Turn-Singleshot).
         Telemetrie via geteiltem `_emit_telemetry` (kein Copy-Paste — LLMP-S7).
         LiteLLM-API-Fehler → `ProviderError` (analog `chat_multiturn`).
         """
@@ -610,13 +604,12 @@ class LitellmVendor(VendorBase):
 
     @classmethod
     def _to_litellm_message(cls, message: dict[str, Any]) -> list[dict[str, Any]]:
-        """Neutrale Message → Liste OpenAI-Nachrichten (Spiegel
-        `mistral._to_mistral_message`, gleiche Block-Semantik).
+        """Neutrale Message → Liste OpenAI-Nachrichten.
 
         String-`content` bleibt String. Block-`content` (Anthropic-shaped) wird
         je Block-Typ übersetzt: `tool_use` → assistant-`tool_calls`,
         `tool_result` → je Block eine eigene `{"role":"tool", …}`-Nachricht
-        (is_error-Prefix wie mistral), `text`/`image` → OpenAI-content-parts
+        (is_error-Prefix), `text`/`image` → OpenAI-content-parts
         (image_url data-URL).
         """
         role = message.get("role", "user")
@@ -673,9 +666,8 @@ class LitellmVendor(VendorBase):
     def _tool_result_to_litellm(block: dict[str, Any]) -> dict[str, Any]:
         """Neutraler tool_result-Block → OpenAI-`{"role":"tool", …}`-Nachricht.
 
-        `tool_call_id` bindet das Result an den Aufruf; is_error-Wissen wird wie
-        in `mistral._tool_result_to_mistral` in den Inhalt gehoben (OpenAI-tool-
-        Messages tragen kein eigenes Fehler-Flag).
+        `tool_call_id` bindet das Result an den Aufruf; is_error-Wissen wird in
+        den Inhalt gehoben (OpenAI-tool-Messages tragen kein eigenes Fehler-Flag).
         """
         content = block.get("content", "")
         msg = {
@@ -689,8 +681,7 @@ class LitellmVendor(VendorBase):
 
     @staticmethod
     def _to_litellm_tool(tool: dict[str, Any]) -> dict[str, Any]:
-        """Neutrales `{name, description, input_schema}` → OpenAI-function-Form
-        (Spiegel `mistral._to_mistral_tool`)."""
+        """Neutrales `{name, description, input_schema}` → OpenAI-function-Form."""
         return {
             "type": "function",
             "function": {

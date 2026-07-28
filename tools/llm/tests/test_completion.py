@@ -1,15 +1,16 @@
 """get_completion — Freitext-Singleshot, beide Vendoren (#1131, LLMP-S1).
 
 Ohne Netz: Anthropic über einen Fake-SDK-Client, Mistral über gemocktes
-httpx.post. Spiegel `test_singleshot` (get_singleshot), aber für die vierte
-Sicht: kein Tool, kein Schema, ein Vendor-Call, Freitext-String zurück.
+litellm-SDK (Motor-Weg, #1536 — Hand-Vendor `_vendor/mistral.py` entfernt).
+Spiegel `test_singleshot` (get_singleshot), aber für die vierte Sicht: kein
+Tool, kein Schema, ein Vendor-Call, Freitext-String zurück.
 
 - get_completion(slot, model=…) reicht model an den Vendor durch.
 - get_completion(slot) ohne model → Vendor-DEFAULT_MODEL.
 - Required-Set NUR system_message_distinct → bootet auf Claude UND Mistral
-  (kein cache_control-Boot-Fail auf dem Mistral-Slot).
+  (kein cache_control-Boot-Fail auf dem litellm-Slot).
 - max_tokens-Durchreichung (T1084-Parität) auf beiden Vendoren.
-- Anthropic- + Mistral-Pfad: Freitext end-to-end (kein tool_choice im Payload).
+- Anthropic- + litellm-Mistral-Pfad: Freitext end-to-end (kein tool_choice im Payload).
 """
 
 import json
@@ -60,17 +61,26 @@ def _fake_anthropic():
 
 
 # ----------------------------------------------------------------------
-#  Mistral-Fakes (Spiegel test_vendor_mistral)
+#  litellm-Fakes (Spiegel test_vendor_litellm — Mistral via Motor-Weg, #1536)
 # ----------------------------------------------------------------------
 
-def _fake_httpx(response_json, *, status_code=200):
-    fake = MagicMock()
+def _fake_litellm(text=""):
+    """Gemocktes litellm-SDK: `.completion` liefert OpenAI-förmige Response."""
+    message = MagicMock()
+    message.content = text
+    message.tool_calls = []
+    choice = MagicMock()
+    choice.message = message
     resp = MagicMock()
-    resp.status_code = status_code
-    resp.json.return_value = response_json
-    resp.text = json.dumps(response_json)
-    fake.post.return_value = resp
-    fake.RequestError = Exception
+    resp.choices = [choice]
+    resp.usage = MagicMock()
+    resp.usage.prompt_tokens = 110
+    resp.usage.completion_tokens = 35
+    resp.usage.cache_read_input_tokens = 0
+    resp.usage.cache_creation_input_tokens = 0
+    fake = MagicMock()
+    fake.exceptions.APIError = Exception
+    fake.completion.return_value = resp
     return fake
 
 
@@ -88,14 +98,15 @@ def test_get_completion_boots_on_anthropic():
     assert comp.name == "completion"
 
 
-def test_get_completion_boots_on_mistral():
-    """Mistral-Slot bootet — Required-Set OHNE cache_control (LLMP-S9), sonst
-    wäre die Sicht auf Mistral boot-fatal (#1131)."""
-    fake_httpx = _fake_httpx({})
-    with patch.dict(sys.modules, {"httpx": fake_httpx}), \
+def test_get_completion_boots_on_litellm_mistral():
+    """litellm-Mistral-Slot bootet — Required-Set OHNE cache_control (LLMP-S9), sonst
+    wäre die Sicht boot-fatal (#1131). Slot ist `hoerspiel-litellm-eu-api-key`
+    (litellm_slot_for_provider — #1536, Hand-Vendor entfernt)."""
+    fake_lit = _fake_litellm()
+    with patch.dict(sys.modules, {"litellm": fake_lit}), \
          patch("tools.llm.public_api.resolve_api_key", return_value="key-fake"):
         from tools.llm import get_completion
-        comp = get_completion(slot="hoerspiel-mistral-api-key")
+        comp = get_completion(slot="hoerspiel-litellm-eu-api-key")
     assert comp.name == "completion"
 
 
@@ -135,13 +146,14 @@ def test_get_completion_passes_max_tokens_anthropic():
     assert comp._vendor.max_tokens == 8192
 
 
-def test_get_completion_passes_max_tokens_mistral():
-    """get_completion(slot, max_tokens=4096) → Mistral vendor.max_tokens == 4096 (AC3)."""
-    fake_httpx = _fake_httpx({})
-    with patch.dict(sys.modules, {"httpx": fake_httpx}), \
+def test_get_completion_passes_max_tokens_litellm_mistral():
+    """get_completion(slot, max_tokens=4096) → litellm vendor.max_tokens == 4096 (AC3,
+    #1536: Mistral läuft über litellm-Motor, slot=hoerspiel-litellm-eu-api-key)."""
+    fake_lit = _fake_litellm()
+    with patch.dict(sys.modules, {"litellm": fake_lit}), \
          patch("tools.llm.public_api.resolve_api_key", return_value="key-fake"):
         from tools.llm import get_completion
-        comp = get_completion(slot="hoerspiel-mistral-api-key", max_tokens=4096)
+        comp = get_completion(slot="hoerspiel-litellm-eu-api-key", max_tokens=4096)
     assert comp._vendor.max_tokens == 4096
 
 
@@ -180,30 +192,24 @@ def test_anthropic_completion_freitext_end_to_end(jsonl_path):
 
 
 def test_mistral_completion_freitext_end_to_end(jsonl_path):
-    """Mistral: .complete(system, user) → Freitext-String aus message.content;
-    KEIN tools/tool_choice im Payload; Telemetrie geschrieben."""
-    response_json = {
-        "choices": [{"message": {"content": SYNOPSE}}],
-        "usage": {"prompt_tokens": 110, "completion_tokens": 35},
-    }
-    fake_httpx = _fake_httpx(response_json)
+    """Mistral-via-litellm: .complete(system, user) → Freitext-String;
+    KEIN tool_choice; Telemetrie geschrieben; LLMP-S13: `mistral/`-Präfix am Modell.
+    (#1536 — Hand-Vendor entfernt, Motor-Weg über hoerspiel-litellm-eu-api-key)."""
+    fake_lit = _fake_litellm(text=SYNOPSE)
 
-    with patch.dict(sys.modules, {"httpx": fake_httpx}), \
+    with patch.dict(sys.modules, {"litellm": fake_lit}), \
          patch("tools.llm.public_api.resolve_api_key", return_value="key-fake"):
         from tools.llm import get_completion
-        comp = get_completion(slot="hoerspiel-mistral-api-key",
+        comp = get_completion(slot="hoerspiel-litellm-eu-api-key",
                               model="mistral-large-2411")
         out = comp.complete(system="Fasse zusammen.", user="Der Folgentext …")
 
     assert out == SYNOPSE
-    sent = json.loads(fake_httpx.post.call_args.kwargs["content"])
-    assert sent["model"] == "mistral-large-2411"
-    # Freitext-Singleshot: KEIN Tool, KEIN tool_choice.
-    assert "tools" not in sent
-    assert "tool_choice" not in sent
-    # system_message_distinct: eigener system-Message-Eintrag.
-    assert sent["messages"][0] == {"role": "system", "content": "Fasse zusammen."}
-    assert sent["messages"][1] == {"role": "user", "content": "Der Folgentext …"}
+    # LLMP-S13: normalize_model hat `mistral/`-Präfix ergänzt.
+    assert fake_lit.completion.call_args.kwargs["model"] == "mistral/mistral-large-2411"
+    # Freitext-Singleshot: KEIN tool_choice (LiteLLM-Vendor lässt es weg wenn kein Tool).
+    call_kwargs = fake_lit.completion.call_args.kwargs
+    assert "tool_choice" not in call_kwargs or call_kwargs.get("tool_choice") is None
     parsed = json.loads(jsonl_path.read_text(encoding="utf-8").strip())
     assert parsed["caller"] == "hoerspiel"
 
