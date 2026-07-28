@@ -45,13 +45,13 @@ _ADAPTER_BRAND_VENDOR = {
 
 
 def vendor_slug_for_adapter(adapter_name):
-    """Löst einen Adapter-Namen auf den Brand-Vendor-Slug auf (ECP-1, T1022).
+    """Löst einen Adapter-Namen auf den Brand-Vendor-Slug auf (T1022).
 
     `claude` → `anthropic`, `mistral` → `mistral`. Der Slug kommt aus der
     zentralen `_ADAPTER_BRAND_VENDOR`-Map (#1510: früher `brand_vendor` an der
-    Provider-Klasse). Unbekannte Adapter-Namen werden 1:1 zurückgegeben —
+    Provider-Klasse, gelöscht). Unbekannte Adapter-Namen werden 1:1 zurückgegeben —
     Pragmatik für künftige Adapter, deren Adapter-Name dem Brand-Vendor
-    entspricht.
+    entspricht. Convention-Rewrite (ECP-1) tracked #1537.
     """
     if not isinstance(adapter_name, str) or not adapter_name:
         raise ValueError("adapter_name muss ein nicht-leerer String sein")

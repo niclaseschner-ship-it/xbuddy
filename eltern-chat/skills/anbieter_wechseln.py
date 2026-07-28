@@ -30,10 +30,12 @@ Anbieter-Wahl per truthy-Check auf den vendor-spezifischen Slot:
     provider_name: vendor})`. Beide Werte landen in genau einem
     Schreibvorgang (DCOMP-4) — Race-Fenster aus #639 ist geschlossen.
 
-**Atomares Ersetzen (ONB-12) — V2:** Pfad B nutzt `zd.set_multi(...)` mit
-beiden Slots als einzelnen atomaren `_write`-Vorgang. Scheitert er, bleibt
-der Speicher byte-gleich (DCOMP-4). Das ist der Fix der ONB-12-V1-Race-Lücke,
-die in #639 als bekannter Schwachpunkt markiert war.
+**Atomares Schreiben (ONB-12/ONB-13) — #1510:** Der API-Key liegt seit #1510
+validiert im litellm-Slot (`eltern-chat-litellm-<purpose>-api-key`). Der
+Anbieter-Wechsel schreibt über `zd.set_multi({provider_name: vendor})` nur
+noch den aktiven Anbieter-Namen, nicht den Key selbst (dieser wurde bereits
+probeweise geschrieben und bleibt stehen). Ein gültiger Probe-Wert ist damit
+sofort persistiert (Schreibschritt verschmolzen, DCOMP-4).
 
 **ONB-8-Schutz:** Keys werden zu keinem Zeitpunkt im Klartext in
 Bestätigungen, Fehlermeldungen oder Logs gespiegelt (ZD-6).
