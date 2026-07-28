@@ -26,10 +26,9 @@
 const AUDIENCE_MINI_APP = "mini-app-uebersicht";
 
 // Fallback-Icons je (Roh-)Typ, wenn der Eintrag kein icons[] traegt.
+// RAT-31 E3 (#1496): display-client + panel entfernt (Geraete-Paare-Sorte weg).
 const _TYP_FALLBACK_EMOJI = {
   "display":         "📺",
-  "display-client":  "📺",
-  "panel":           "📱",
   "eltern":          "📄",
   "controller":      "🎛️",
   "mini-app":        "🟦",
@@ -37,10 +36,9 @@ const _TYP_FALLBACK_EMOJI = {
 };
 
 // Menschenlesbares Typ-Badge je Roh-Typ (nur Praesentation).
+// RAT-31 E3 (#1496): display-client + panel entfernt (Geraete-Paare-Sorte weg).
 const _TYP_BADGE = {
   "display":         "Display",
-  "display-client":  "Display-Client",
-  "panel":           "Panel",
   "eltern":          "Eltern",
   "controller":      "Controller",
   "mini-app":        "Mini-App",
