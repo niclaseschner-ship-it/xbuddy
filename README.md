@@ -25,6 +25,23 @@ dort.
 - **[`WORKFLOW.md`](WORKFLOW.md)** — Ticket-/PR-Workflow
 - **[`CLAUDE.md`](CLAUDE.md)** — Repo-Arbeitsregeln
 
+## Abhängigkeiten
+
+`pyproject.toml` ist der **einzige** Dependency-SSoT (`[project.dependencies]`,
+RAT-33 Option A, #1534). CI und Deploy installieren daraus (`pip install .`);
+es gibt keine per-Service-`requirements.txt` mehr. Ein lokales venv richtest du
+so ein:
+
+```
+python3 -m venv .venv
+.venv/bin/pip install .   # zieht die Laufzeit-Deps aus pyproject.toml
+.venv/bin/pip install pytest   # Test-Dep, kein Runtime-Dep
+```
+
+`pyproject` deklariert nur die **direkt importierten** Third-Party-Libs; jeder
+fehlende direkte Dep macht das isolierte CI-venv (kein `--system-site-packages`)
+rot, statt still über globale Pakete kaschiert zu werden.
+
 ## Tests & Lint
 
 Die repo-weite Test-Suite läuft über `pytest.ini` (`testpaths` listet alle

@@ -1,8 +1,0 @@
-# Photo-Buddy V1 — Laufzeit-Abhängigkeiten (PHOTO-8/9, OPEN-PHOTO-E).
-#
-# Bild: Pillow (JPEG/Thumbnail) + pillow-heif (HEIC-/HEIF-Decode).
-# Video: ffmpeg + ffprobe sind eine SYSTEM-Dependency (apt: ffmpeg), KEIN
-#   pip-Paket — Transcode HEVC/MOV->MP4 und Poster-Frame laufen über das
-#   System-Binary unter /usr/bin (siehe photo/normalize.py).
-Pillow>=11
-pillow-heif>=1.0

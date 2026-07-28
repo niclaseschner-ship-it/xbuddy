@@ -23,13 +23,22 @@
 #   update.sh --derive PATH...     → druckt die abgeleiteten Service-Namen
 #   update.sh --write-version SHA  → schreibt nur die deploy/version-Datei
 #   update.sh --mark-done RANGE    → markiert restart_pending.jsonl-Eintrag
+#   update.sh --sync-deps          → installiert pyproject-Deps in den Service-venv
 # Der Live-Restart läuft im Orchestrator-Deploy (sudo/systemctl nötig).
+#
+# Dependency-Sync (RAT-33 Option A, #1534): VOR den Restarts installiert der
+# Vollauf [project.dependencies] aus pyproject.toml (EIN Dependency-SSoT) in den
+# Service-venv, damit neu gestartete Services neue/geänderte Deps direkt sehen —
+# statt Hand-Pflege des venv (die #1515-Klasse: litellm fehlte). Idempotent: pip
+# ist bei unverändertem pyproject ein No-Op-Roundtrip.
 #
 # Konfigurierbar über ENV (Test + Instanz):
 #   XBUDDY_REPO           Repo-Wurzel (Default: das Elternverzeichnis von deploy/)
 #   XBUDDY_DATA_DIR       Datenwurzel für deploy/version (Default /home/buddy/xbuddy-data)
 #   RESTART_PENDING_LOG   JSONL des restart_pending-Hooks
 #                         (Default /home/buddy/.claude/logs/restart_pending.jsonl)
+#   XBUDDY_VENV           Service-venv für den Dep-Sync (Default /home/buddy/apps/venv).
+#                         "none" überspringt den Sync (Test-Naht ohne pip/Netz).
 
 set -euo pipefail
 
@@ -37,6 +46,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="${XBUDDY_REPO:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 DATA_DIR="${XBUDDY_DATA_DIR:-/home/buddy/xbuddy-data}"
 RESTART_LOG="${RESTART_PENDING_LOG:-/home/buddy/.claude/logs/restart_pending.jsonl}"
+VENV="${XBUDDY_VENV:-/home/buddy/apps/venv}"
 
 # ---------------------------------------------------------------------------
 # Service-Ableitung: geteilter Mapper + Shared-Pfad-Fan-out.
@@ -90,6 +100,30 @@ write_version_file() {
     fi
     printf '%s\n' "$sha" >"$dir/version"
     echo "update: deploy/version = $sha"
+}
+
+# Dependency-Sync in den Service-venv aus pyproject.toml (RAT-33 Option A,
+# #1534). EIN Dependency-SSoT: `pip install .` zieht [project.dependencies] und
+# ergänzt fehlende/geänderte Pakete idempotent. `pip` selbst baut KEIN xbuddy-
+# Paket in den Import-Pfad ein (pyproject: py-modules = [] / kein Distributions-
+# Paket); die Services laufen weiter aus dem Checkout. Rückgabe 0 = ok/übersprungen.
+sync_deps() {
+    if [ -z "$VENV" ] || [ "$VENV" = "none" ]; then
+        echo "update: Dep-Sync übersprungen (XBUDDY_VENV=none)"
+        return 0
+    fi
+    local pip="$VENV/bin/pip"
+    if [ ! -x "$pip" ]; then
+        echo "update: Dep-Sync übersprungen — kein pip unter $pip" >&2
+        return 0
+    fi
+    echo "update: Dep-Sync aus pyproject.toml → $VENV"
+    if "$pip" install --quiet "$REPO"; then
+        echo "update: Dep-Sync ok"
+        return 0
+    fi
+    echo "    ✗ Dep-Sync (pip install) fehlgeschlagen — Deps evtl. veraltet" >&2
+    return 1
 }
 
 # Loopback-Port eines Service aus conventions/ports.md PORT-2 (SSoT, PORT-1).
@@ -274,6 +308,13 @@ run_full() {
     # Services beim Boot direkt den neuen SHA über /version melden.
     write_version_file "$post"
 
+    # Dependency-Sync aus pyproject VOR den Restarts (#1534): neu gestartete
+    # Services sehen so neue/geänderte Deps. Ein Fehlschlag setzt rc, blockt aber
+    # nicht die Restarts (bestehende Deps bleiben verfügbar; Verify meldet Bruch).
+    if ! sync_deps; then
+        rc=1
+    fi
+
     mapfile -t services < <(derive_services "${changed_arr[@]}")
     if [ "${#services[@]}" -eq 0 ]; then
         echo "update: keine ratifizierten Service-Pfade betroffen — kein Restart."
@@ -323,11 +364,14 @@ main() {
             shift
             port_class "${1:?Service-Name fehlt}"
             ;;
+        --sync-deps)
+            sync_deps
+            ;;
         "")
             run_full
             ;;
         *)
-            echo "usage: update.sh [--derive PATH... | --write-version SHA | --mark-done RANGE | --port-class SVC]" >&2
+            echo "usage: update.sh [--derive PATH... | --write-version SHA | --mark-done RANGE | --port-class SVC | --sync-deps]" >&2
             exit 2
             ;;
     esac
