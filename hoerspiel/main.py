@@ -1062,17 +1062,11 @@ def parse_args(argv):
 
 
 # T1084: Der strukturierte Folgen-Pfad (HSP-11) läuft seit #1084 über
-# `tools.llm` (Singleshot-Sicht).
-# T1454: Der Struktur-/Synopse-Motor wandert von den Hand-Vendoren
-# (anthropic/mistral) auf den litellm-Motor. Slot pro Brand-Vendor.
-# WICHTIG parse_slot-Falle (LLMP-5, _resolver.py): der purpose-Teil darf KEIN
-# Vendor-Slug (`mistral`/`anthropic`) enthalten, sonst matcht parse_slot ZWEI
-# Vendoren (litellm UND mistral) → mehrdeutig → Boot-fatal. Darum trägt der
-# Mistral-Backend-Slot `eu` (EU-Region-Marker) statt `mistral` im purpose.
-_LIB_SLOT_FOR_PROVIDER = {
-    "claude": "hoerspiel-litellm-claude-api-key",
-    "mistral": "hoerspiel-litellm-eu-api-key",
-}
+# T1492 (LLMP-S13 n=2-Naht): Slot-Namensbildung über tools.llm.litellm_slot_for_provider
+# (statt lokaler Tabelle _LIB_SLOT_FOR_PROVIDER, die strukturell identisch mit
+# eltern-chat/providers/lib_adapter.py war — n=2 → Naht zentralisiert).
+# Lazy-Import in _build_llm analog LibSingleshotAdapter (kein Modul-Load-Zyklus).
+_CALLER = "hoerspiel"
 
 # T1454: Der Recherche-Agent (web_search-Vorschritt, HSP/T1371) bleibt auf dem
 # anthropic-Hand-Vendor — der litellm-Vendor deklariert kein `web_search`.
@@ -1103,8 +1097,10 @@ def _build_llm(cfg) -> LLMProvider | None:
     else:
         return None
 
+    from tools.llm import litellm_slot_for_provider
+
     from .providers.lib_adapter import LibSingleshotAdapter
-    slot = _LIB_SLOT_FOR_PROVIDER[cfg.llm_provider]
+    slot = litellm_slot_for_provider(_CALLER, cfg.llm_provider)
     agent_slot = _AGENT_SLOT_FOR_PROVIDER[cfg.llm_provider]
     max_tokens = _MAX_TOKENS_FOR_PROVIDER[cfg.llm_provider]
     # `model` + `max_tokens` durchreichen: Modell-Erhalt (z. B. claude-opus-4-7)

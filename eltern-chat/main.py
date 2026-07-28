@@ -1239,7 +1239,7 @@ def _secret_preflight(cfg):
 
     Config-gated: geprüft wird ausschließlich der Slot, den `build_context` beim
     aktuellen Boot auch wirklich eager braucht:
-      - Der Chat-Agent-Slot (`_LIB_SLOT_FOR_PROVIDER[cfg.provider]`) NUR im
+      - Der Chat-Agent-Slot (`litellm_slot_for_provider("eltern-chat", cfg.provider)`) NUR im
         KI-Modus (`cfg.provider_api_key` gesetzt). Im Onboarding-Modus baut
         `build_context` KEINEN Adapter → kein Slot nötig.
     Der Foto-Analyse-Slot (`FOTO_ANALYSE_SLOT`) ist bewusst NICHT boot-kritisch:
@@ -1251,20 +1251,21 @@ def _secret_preflight(cfg):
     config.py:322) — hier nicht doppelt geprüft; der Boot kommt ohne Token gar
     nicht bis zum Preflight.
     """
-    from providers.lib_adapter import _LIB_SLOT_FOR_PROVIDER
-
-    from tools.llm import slot_present
+    from tools.llm import litellm_slot_for_provider, slot_present
 
     if cfg.provider_api_key:
         # KI-Modus: build_context baut den LibAgentAdapter eager (main:1217) —
         # der Slot MUSS präsent sein, sonst Boot-Crash. Unbekannter Provider ist
-        # ein Konfig-Fehler (spiegelt den KeyError im Adapter, aber sichtbar hier).
-        slot = _LIB_SLOT_FOR_PROVIDER.get(cfg.provider)
+        # ein Konfig-Fehler (spiegelt den KeyError aus litellm_slot_for_provider,
+        # aber sichtbar hier als FEHLT-Zeile statt rohem KeyError). T1492: Naht.
+        try:
+            slot = litellm_slot_for_provider("eltern-chat", cfg.provider)
+        except KeyError:
+            slot = None
         if slot is None:
             logging.critical(
                 "FEHLT: gültiger Anbieter — provider=%r hat keinen LLM-Slot "
-                "(bekannt: %s) (SVC-7/#1493)",
-                cfg.provider, ", ".join(sorted(_LIB_SLOT_FOR_PROVIDER)))
+                "(SVC-7/#1493)", cfg.provider)
             sys.exit(1)
         if not slot_present(slot):
             logging.critical(
