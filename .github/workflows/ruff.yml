@@ -15,6 +15,11 @@ permissions:
 
 jobs:
   ruff:
+    # Leere Null-Diff-Claim-Flip-PRs überspringen (RAT-34, Amendment RAT-30
+    # Teil 3/4). fail-open `!= 0`, NICHT `> 0`: changed_files ist async/lazy
+    # (am opened-Event transient null); `!= 0` lässt null/fehlend LAUFEN und
+    # nimmt so nie Code aus (RAT-30:36 „Code nie versehentlich ausnehmen").
+    if: ${{ github.event.pull_request.changed_files != 0 }}
     runs-on: [self-hosted]
     steps:
       - uses: actions/checkout@v4
