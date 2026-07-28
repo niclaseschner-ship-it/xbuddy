@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   lint-imports:
-    runs-on: [self-hosted, ARM64]
+    runs-on: [self-hosted]
     steps:
       - uses: actions/checkout@v4
 
