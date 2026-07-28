@@ -184,3 +184,20 @@ def resolve_api_key(slot: str) -> str | None:
     from tools.zugangsdaten import Zugangsdaten, resolve_store_path
     speicher = Zugangsdaten(resolve_store_path())
     return speicher.get(slot)
+
+
+def slot_present(slot: str) -> bool:
+    """Reine Präsenz-Prüfung eines Slots im Zugangsdaten-Speicher (SVC-7).
+
+    Liefert `True`, wenn zum Slot ein nicht-leerer API-Key im Speicher liegt,
+    sonst `False`. Wrapper um `resolve_api_key` — KEIN Anbieter-Call, KEIN
+    Vendor-Bau, KEINE Capability-Prüfung (das erledigt erst `get_*`/`_build_vendor`
+    beim echten Nutzungs-Zeitpunkt).
+
+    Gedacht für den Startup-Preflight LLM-nutzender Services (SVC-7): der Service
+    prüft die Präsenz seiner Pflicht-Slots VOR dem eager Vendor-Bau und bricht mit
+    einer klaren `FEHLT: <slot>`-Zeile + Exit ab, statt mitten im Boot einen
+    `LLMCapabilityError` zu werfen. So fangen die Services fehlende Slots am
+    Boot-Zeitpunkt (sichtbar), nicht erst im n-ten Turn.
+    """
+    return bool(resolve_api_key(slot))
