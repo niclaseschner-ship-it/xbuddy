@@ -58,7 +58,7 @@ Panel→Display-Lookup `GET /api/v1/router/panels/app-panel:<panel_id>` (ROU-32,
 dürfen ein Display steuern, `panel-registry.md` PREG-2 / `:55`). Liefert der
 Lookup kein `display_id` (unbekanntes Panel / kein gebundenes Display), zeigt
 die Shell einen sichtbaren Fehler und bettet **kein** rechtes Pane ein.
-Test-Anker: seiten/tests/test_heim_shell.py::test_shell2_lookup_display_id
+Test-Anker: seiten/tests/test_heim_shell.py::test_shell2_lookup_real_url
 
 ### SHELL-9 — IDs aus Daten, kein Hardcode (n=1)
 Weder `panel_id` noch `display_id` noch Geräte-IDs stehen im Shell-Code. Die

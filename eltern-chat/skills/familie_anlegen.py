@@ -2,7 +2,7 @@
 Refs #60).
 
 »Familie anlegen« ist eine aufrufbare, **trigger-agnostische** Funktion
-(E-FAA-1) — analog `ca_verteilung.verteile_ca` (E-CAV-1). Aufgerufen, führt
+(E-FAA-1) — analog `geraet_anlegen.geraet_anlegen` (E-GAA-1). Aufgerufen, führt
 sie ein Familienmitglied im Privatchat durch die Anlage einer oder mehrerer
 Personen und ergänzt sie nach Bestätigungswort (FAA-7, `eltern-chat.md`
 E-EC-7) atomar über die HTTP-Schreib-Schnittstelle der Familien-Komponente

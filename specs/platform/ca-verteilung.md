@@ -1,6 +1,13 @@
 # CA-Verteilung — Spec     (ID-Präfix: CAV)
 
-> Status: V1 · Refs #39
+> ⚠️ **ENTFALLEN durch RAT-31 E1 (#1470) / RAT-32.**
+> Der `ca_verteilung`-Skill (CAV-1…CAV-6) ist gelöscht. Geräte werden nicht
+> mehr über ein CA-Install ongeboardet — Funnel-LE-Cookie (RAT-32) löst das
+> ab. Diese Spec beschreibt einen **nicht mehr lebenden Zustand**; sie bleibt
+> als historischer Anker erhalten. Governance:
+> `decisions/RAT-31-wirbelsaeule-abriss.md`, Epic #1339.
+>
+> Status: V1 (ENTFALLEN) · Refs #39
 
 Damit die Geräte einer Familie die XBuddy-HTTPS-Origin ohne Browser-Warnung
 erreichen (URL-11, URL-12), müssen sie der lokalen Root-CA der Instanz

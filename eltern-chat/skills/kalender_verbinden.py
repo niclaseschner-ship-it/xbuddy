@@ -3,7 +3,7 @@
 
 »Kalender verbinden« ist eine aufrufbare, **trigger-agnostische** Funktion
 (E-KAV-1, analog `familie_anlegen.familie_anlegen` E-FAA-1 und
-`ca_verteilung.verteile_ca` E-CAV-1). Aufgerufen, führt sie ein
+`geraet_anlegen.geraet_anlegen` E-GAA-1). Aufgerufen, führt sie ein
 Familien­mitglied im Telegram-Privatchat durch den Google-OAuth-Login, fängt
 den Authorization-Code via Loopback-Redirect (`http://localhost:1`) ab,
 tauscht ihn beim Google-Token-Endpunkt gegen ein Refresh- und Access-Token
