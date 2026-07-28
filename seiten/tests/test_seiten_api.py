@@ -1,12 +1,7 @@
 """Tests für die Seiten-Registry-HTTP-Schnittstelle (SREG-3, #347, #366).
 
-Lauf: python3 -m pytest seiten/tests/ -v
-
-Die Suite läuft ohne Netz: die Snapshot-Holer (`hole_panels`/`hole_geraete`,
-DCOMP-1) werden gestubbt — kein echter HTTP-Aufruf. Der Endpoint wird über den
-Flask-Testclient geprüft (analog panel/tests/, geraete/tests/). Die Manifest-
-Sorten kommen aus einem tmp-Dir-Root, NICHT aus echten Buddy-Manifesten.
-
+RAT-31 E3 (#1496): hole_panels/hole_geraete entfernt; Snapshots gibt es nicht mehr.
+Die Suite läuft ohne Netz: Manifest-Sorten kommen aus einem tmp-Dir-Root.
 Entry-Path-Probe (AC-E1): GET /api/v1/seiten → seiten/main.py → inventar.json.
 """
 
@@ -49,15 +44,12 @@ def manifest_root(tmp_path):
 
 
 @pytest.fixture
-def client(manifest_root, tmp_path, monkeypatch):
-    """Flask-Testclient mit gestubbten Snapshot-Holern + tmp inventar.json.
+def client(manifest_root, tmp_path):
+    """Flask-Testclient mit tmp inventar.json.
 
-    Default-Stub: beide Snapshots erreichbar und leer ([]). Einzelne Tests
-    überschreiben die Stubs für Ausfall (None) oder gefüllte Snapshots.
+    RAT-31 E3 (#1496): keine Snapshot-Holer-Stubs mehr nötig.
     """
     inventar_path = str(tmp_path / "inventar.json")
-    monkeypatch.setattr(seiten_main, "hole_panels", list)
-    monkeypatch.setattr(seiten_main, "hole_geraete", list)
     seiten_main.configure(root=manifest_root, inventar_path=inventar_path, ttl=30)
     seiten_main.app.config["TESTING"] = True
     c = seiten_main.app.test_client()
@@ -87,67 +79,49 @@ def test_get_seiten_persistiert_inventar_json_0600(client):
     assert on_disk["eintraege"]
 
 
-def test_get_seiten_kein_upstream_im_request_pfad(client, monkeypatch):
+def test_get_seiten_kein_rebuild_innerhalb_ttl(client):
     # SREG-3: nach dem ersten Bau (TTL frisch) löst ein zweiter GET KEINEN
-    # weiteren Snapshot-Holer-Aufruf aus — er serviert aus inventar.json.
+    # weiteren rebuild() aus — er serviert aus inventar.json.
     client.get("/api/v1/seiten")  # baut einmal
 
-    aufrufe = {"n": 0}
+    rebuild_aufrufe = {"n": 0}
+    orig_rebuild = seiten_main.rebuild
 
-    def _zaehl_panels():
-        aufrufe["n"] += 1
-        return []
+    def _zaehle_rebuild():
+        rebuild_aufrufe["n"] += 1
+        return orig_rebuild()
 
-    monkeypatch.setattr(seiten_main, "hole_panels", _zaehl_panels)
-    client.get("/api/v1/seiten")  # TTL noch frisch → kein Rebuild
-    assert aufrufe["n"] == 0, "GET im Request-Pfad darf keinen Upstream-Call auslösen"
+    import unittest.mock as mock
+    with mock.patch.object(seiten_main, "rebuild", side_effect=_zaehle_rebuild):
+        client.get("/api/v1/seiten")  # TTL noch frisch → kein Rebuild
+    assert rebuild_aufrufe["n"] == 0, "GET im Request-Pfad darf keinen Rebuild auslösen"
 
 
-def test_kaltstart_snapshot_pending_nie_leer(manifest_root, tmp_path, monkeypatch):
-    # SREG-3 Kaltstart: kein inventar.json + Snapshot-Holer scheitern (None).
+def test_kaltstart_snapshot_pending_leer(manifest_root, tmp_path):
+    # RAT-31 E3 (#1496): Kaltstart liefert eintraege + snapshot_pending==[].
     inventar_path = str(tmp_path / "inventar.json")
-    monkeypatch.setattr(seiten_main, "hole_panels", lambda: None)
-    monkeypatch.setattr(seiten_main, "hole_geraete", lambda: None)
     seiten_main.configure(root=manifest_root, inventar_path=inventar_path, ttl=30)
     c = seiten_main.app.test_client()
     inv = c.get("/api/v1/seiten").get_json()
     assert inv["eintraege"], "Antwort nie leer (Manifest-Sorten tragen sie)"
-    assert "panel" in inv["snapshot_pending"]
-    assert "display-client" in inv["snapshot_pending"]
+    assert inv["snapshot_pending"] == [], "snapshot_pending muss leere Liste sein"
 
 
-def test_ttl_rebuild_holt_neuen_snapshot(manifest_root, tmp_path, monkeypatch):
-    # SREG-3 Aktualität: nach Ablauf der TTL holt der nächste GET frisch — ein
-    # zwischenzeitlich angelegtes Panel erscheint binnen TTL.
-    inventar_path = str(tmp_path / "inventar.json")
-    panels_state = {"liste": []}
-    monkeypatch.setattr(seiten_main, "hole_panels", lambda: list(panels_state["liste"]))
-    monkeypatch.setattr(seiten_main, "hole_geraete", list)
+def test_ttl_rebuild_holt_neue_manifeste(manifest_root, tmp_path):
+    # SREG-3 Aktualität: nach Ablauf der TTL holt der nächste GET frisch —
+    # ein zwischenzeitlich angelegtes Manifest erscheint binnen TTL.
     # TTL=0 → jeder Request baut neu (deterministisch testbar ohne sleep).
+    inventar_path = str(tmp_path / "inventar.json")
     seiten_main.configure(root=manifest_root, inventar_path=inventar_path, ttl=0)
     c = seiten_main.app.test_client()
 
     inv0 = c.get("/api/v1/seiten").get_json()
-    assert not any(e["typ"] == "panel" for e in inv0["eintraege"])
+    pfade0 = {e["pfad"] for e in inv0["eintraege"]}
+    assert "/display/plan/woche" in pfade0
 
-    panels_state["liste"] = [{"panel_id": "neu-01"}]
+    # Neues Manifest hinzufügen
+    _schreibe_manifest(manifest_root, "neu-buddy",
+                       [_view("start", "/display/neu-buddy/start")])
     inv1 = c.get("/api/v1/seiten").get_json()
-    assert any(e.get("instanz") == "neu-01" for e in inv1["eintraege"])
-
-
-def test_snapshot_ausfall_stale_statt_leer(manifest_root, tmp_path, monkeypatch):
-    # SREG-3: Panel-Snapshot war da, fällt dann aus → stale:true, nicht gekürzt.
-    inventar_path = str(tmp_path / "inventar.json")
-    panel_state = {"wert": [{"panel_id": "kueche-01"}]}
-    monkeypatch.setattr(seiten_main, "hole_panels", lambda: panel_state["wert"])
-    monkeypatch.setattr(seiten_main, "hole_geraete", list)
-    seiten_main.configure(root=manifest_root, inventar_path=inventar_path, ttl=0)
-    c = seiten_main.app.test_client()
-
-    c.get("/api/v1/seiten")  # erfolgreicher Panel-Snapshot
-    panel_state["wert"] = None  # Holer scheitert jetzt
-    monkeypatch.setattr(seiten_main, "hole_panels", lambda: None)
-    inv = c.get("/api/v1/seiten").get_json()
-    panel_e = [e for e in inv["eintraege"] if e["typ"] == "panel"]
-    assert panel_e
-    assert panel_e[0]["stale"] is True
+    pfade1 = {e["pfad"] for e in inv1["eintraege"]}
+    assert "/display/neu-buddy/start" in pfade1
